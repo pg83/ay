@@ -278,7 +278,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 
 	scanCfg := d.cc.ScanCfg
 
-	var out []VFS
+	out := ctx.prClosureScratch[:0]
 
 	ridesMainHeader := func(ccRel string) bool {
 		return isHeaderSource(mainRel) && relStem(ccRel) == relStem(mainRel)
@@ -395,10 +395,15 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 	}
 
 	if len(out) == 0 {
+		ctx.prClosureScratch = out
+
 		return nil
 	}
 
-	return dedup(out, nil)
+	res := dedup(out, nil)
+	ctx.prClosureScratch = out
+
+	return res
 }
 
 func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) ParsedIncludeSet {

@@ -9,6 +9,26 @@ import (
 	"testing"
 )
 
+
+func objcopyHash(paths []string, keysB64 []string, kvs []string, unitPath string, moduleTag STR) string {
+	list := make([]string, 0, len(paths)+len(keysB64)+len(kvs)+1)
+
+	list = append(list, paths...)
+	list = append(list, keysB64...)
+	list = append(list, kvs...)
+	list = append(list, "$S/"+unitPath)
+
+	tag := ""
+
+	if moduleTag != 0 {
+		tag = moduleTag.string()
+	}
+
+	hash, _ := resourceHashInto(nil, list, tag)
+
+	return hash
+}
+
 func TestObjcopyHashCerts(t *testing.T) {
 	paths := []string{"cacert.pem"}
 	keysB64 := []string{encb64.StdEncoding.EncodeToString([]byte("/builtin/cacert"))}
