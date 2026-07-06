@@ -77,12 +77,14 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	}
 
 	if d.moduleStmt.Name == tokGoProgram {
-		addPeer(goStdPrefix + "/runtime")
 		addPeer(goStdPrefix + "/runtime/cgo")
+		addPeer(goStdPrefix + "/runtime")
 		addPeer("library/go/core/buildinfo")
 	}
 
 	if len(d.cgoSrcs) > 0 {
+		addPeer("build/internal/platform/clang_toolchain_info")
+		addPeer("build/platform/lld")
 		addPeer(goStdPrefix + "/runtime/cgo")
 	}
 
@@ -642,21 +644,6 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 	sbomRefs, sbomPaths := e.goToolchainSboms(false)
 
 	if len(d.cgoSrcs) > 0 {
-		lldRes := genModule(ctx, ModuleInstance{Path: source("build/platform/lld"), Kind: KindLib, Language: LangCPP, Platform: instance.Platform})
-
-		if lldRes.SbomComponentRef != nil && lldRes.SbomComponentPath != nil {
-			sbomRefs = append(sbomRefs, *lldRes.SbomComponentRef)
-			sbomPaths = append(sbomPaths, *lldRes.SbomComponentPath)
-
-			block := ctx.vfsSlices.alloc(len(srcClosure) + 1)
-			k := copy(block, srcClosure)
-
-			block[k] = *lldRes.SbomComponentPath
-			srcClosure = ctx.vfsSlices.intern(block[:k+1])
-		}
-	}
-
-	if len(d.cgoSrcs) > 0 {
 		inputs = append(inputs, build(dir, "/_cgo_main.c", instance.Platform.objectSuffix()))
 	}
 
@@ -812,11 +799,12 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	inputs = append(inputs, peerArchivePaths...)
 
 
-	sbomRefs, _ := e.goToolchainSboms(true)
+	deps := append(make([]NodeRef, 0, len(peerArchiveRefs)+len(peerSbomRefs)+1), peerArchiveRefs...)
 
-	deps := append(append(make([]NodeRef, 0, len(peerArchiveRefs)+len(peerSbomRefs)+len(sbomRefs)+1), peerArchiveRefs...), peerSbomRefs...)
+	if instance.Platform.BuildRelease && sbomActive(ctx, instance) {
+		deps = append(deps, peerSbomRefs...)
+	}
 
-	deps = append(deps, sbomRefs...)
 	deps = append(deps, ctx.vcsRef)
 
 	env := goCmdEnv(instance.Platform, d.tc)
