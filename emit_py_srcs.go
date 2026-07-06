@@ -621,7 +621,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 		}
 
 		r, o := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(e.pyResEntriesFor(ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
-			return e.rawAuxInputClosure(aux, pyProtoSourceInputs(inputs, nil), ref)
+			return e.rawAuxInputClosure(aux, dedupSourceVFS(inputs, nil), ref)
 		}})
 
 		refs = append(refs, r...)
@@ -781,32 +781,6 @@ func pyGenResourceItems(entries []PyGenResEntry) []ResourceItem {
 	}
 
 	return items
-}
-
-func pyProtoSourceInputs(inputs []VFS, extra [][]VFS) []VFS {
-	out := make([]VFS, 0, len(inputs))
-
-	deduper.reset()
-
-	keep := func(input VFS) {
-		if !input.isSource() {
-			return
-		}
-
-		if !deduper.add(input.strID()) {
-			return
-		}
-
-		out = append(out, input)
-	}
-
-	for _, input := range inputs {
-		keep(input)
-	}
-
-	eachBucketVFS(extra, keep)
-
-	return out
 }
 
 func yaConfFormulaResources(fs FS, confPath string) []string {
