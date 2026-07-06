@@ -182,19 +182,8 @@ func (e *EmitContext) flushGoSrcs() {
 		internStr("$(SOURCE_ROOT)=>/-S;$(BUILD_ROOT)=>/-B;$(TOOL_ROOT)=>/-T"),
 	}
 
-	if instance.Platform.PIC {
-		for _, incl := range e.goCgoIncludeArgs() {
-			args = append(args, internStr("-I"), internStr(strings.TrimPrefix(incl.string(), "-I")))
-		}
-	} else {
-		args = append(args,
-			internStr("-I"), strB,
-			internStr("-I"), strS,
-			internStr("-I"), internV("$(S)/", goStdPrefix, "/runtime").str(),
-			internStr("-I"), internV("$(S)/", "build/scripts/go_fake_include").str(),
-			internStr("-I"), internV("$(S)/", "contrib/libs/linux-headers").str(),
-			internStr("-I"), internV("$(S)/", "contrib/libs/linux-headers/_nf").str(),
-		)
+	for _, incl := range e.goCgoIncludeArgs() {
+		args = append(args, internStr("-I"), internStr(strings.TrimPrefix(incl.string(), "-I")))
 	}
 
 	args = append(args,
