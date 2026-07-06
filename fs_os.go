@@ -20,6 +20,8 @@ func hashSourceFile(srcRoot, rel string) uint64 {
 	return xxh3.Hash(data)
 }
 
+const mmapReadThreshold = 2 << 20
+
 type OsFS struct {
 	srcRoot       string
 	rootSlash     string
@@ -28,6 +30,7 @@ type OsFS struct {
 	dirEntries    *IntSet
 	contentHashes PageVec[uint64]
 	readBuf       []byte
+	mmapCur       []byte
 	direntBuf     []byte
 	rootFD        int
 	pathBuf       []byte
@@ -37,6 +40,7 @@ func newFS(srcRoot string) FS {
 	fs := &OsFS{
 		srcRoot:    srcRoot,
 		rootSlash:  srcRoot + "/",
+		readBuf:    make([]byte, 0, mmapReadThreshold),
 		dirNames:   newBumpAllocator[uint32](1 << 12),
 		dirEntries: newIntSet(1 << 12),
 	}
@@ -195,10 +199,15 @@ func (fs *OsFS) listdirRel(rel string) DirView {
 }
 
 func (fs *OsFS) read(rel string) []byte {
-	fs.readBuf = fs.readIntoRaw(rel, fs.readBuf)
-	fs.recordContentHash(rel, fs.readBuf)
+	data := fs.readIntoRaw(rel, fs.readBuf)
 
-	return fs.readBuf
+	if fs.mmapCur == nil {
+		fs.readBuf = data
+	}
+
+	fs.recordContentHash(rel, data)
+
+	return data
 }
 
 func (fs *OsFS) readIntoRaw(rel string, buf []byte) []byte {

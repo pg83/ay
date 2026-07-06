@@ -52,6 +52,12 @@ func (fs *OsFS) openatRel(rel string, flags int) (int, syscall.Errno) {
 }
 
 func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
+	if fs.mmapCur != nil {
+		throw(syscall.Munmap(fs.mmapCur))
+
+		fs.mmapCur = nil
+	}
+
 	fd, errno := fs.openatRel(rel, syscall.O_RDONLY|syscall.O_CLOEXEC)
 
 	if errno != 0 {
@@ -66,6 +72,12 @@ func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
 
 	if statErr := syscall.Fstat(fd, &st); statErr == nil {
 		sz := int(st.Size)
+
+		if sz >= mmapReadThreshold {
+			fs.mmapCur = throw2(syscall.Mmap(fd, 0, sz, syscall.PROT_READ, syscall.MAP_PRIVATE|syscall.MAP_POPULATE))
+
+			return fs.mmapCur
+		}
 
 		if sz > cap(buf) {
 			buf = make([]byte, 0, sz)
