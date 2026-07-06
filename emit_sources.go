@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"fmt"
 )
 
@@ -31,7 +32,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			e.collectGoSource(meta, false)
 		}
 	case srcExtAsm:
-		if isGoModuleType(e.d.unit.Type) {
+		if isGoModuleType(e.d.unit.Type) && strings.HasSuffix(meta.Source.string(), ".s") {
 			e.collectGoSource(meta, true)
 		} else {
 			e.emitLibraryAsmSource(meta)

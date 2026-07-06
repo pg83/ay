@@ -1613,12 +1613,19 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokCgoSrcs:
 
 		d.cgoSrcs = append(d.cgoSrcs, expandStmtTokensSTR(v.Args, env)...)
+		d.peerdirs = append(d.peerdirs, internStr(goStdPrefix+"/syscall"))
 	case tokCgoLdflags:
 
 		d.cgoLdflags = append(d.cgoLdflags, expandStmtTokensSTR(v.Args, env)...)
 	case tokCgoCflags:
 
-		d.cgoCflags = append(d.cgoCflags, expandStmtTokensSTR(v.Args, env)...)
+		expanded := expandStmtTokensSTR(v.Args, env)
+
+		d.cgoCflags = append(d.cgoCflags, expanded...)
+
+		for _, f := range expanded {
+			d.cFlags = append(d.cFlags, internArgSTR(f))
+		}
 	case tokMavenGroupId:
 
 	case tokLicense:

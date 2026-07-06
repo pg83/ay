@@ -24,10 +24,6 @@ func isGoModuleType(name TOK) bool {
 }
 
 func goImportPathFor(dir string) string {
-	if rest, ok := strings.CutPrefix(dir, goStdPrefix+"/vendor/"); ok {
-		return rest
-	}
-
 	if rest, ok := strings.CutPrefix(dir, goStdPrefix+"/"); ok {
 		return rest
 	}
@@ -86,6 +82,10 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		addPeer("library/go/core/buildinfo")
 	}
 
+	if len(d.cgoSrcs) > 0 {
+		addPeer(goStdPrefix + "/runtime/cgo")
+	}
+
 	for _, src := range d.srcs {
 		rel := src.string()
 
@@ -100,8 +100,48 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		}
 	}
 
+	for _, src := range d.cgoSrcs {
+		data := ctx.fs.read(dir + "/" + src.string())
+
+		for _, imp := range parseGoImports(data) {
+			addPeer(goImportDir(ctx, dir, imp))
+		}
+	}
+
 	addPeer(goToolsPeer)
 	addPeer(goYolintPeer)
+
+	goIncl := make([]VFS, 0, 3)
+
+	goIncl = append(goIncl, source(goStdPrefix+"/runtime"))
+
+	hasDotS := false
+
+	for _, src := range d.srcs {
+		if strings.HasSuffix(src.string(), ".s") {
+			hasDotS = true
+
+			break
+		}
+	}
+
+	if hasDotS {
+		goIncl = append(goIncl, source("build/scripts/go_fake_include"))
+	}
+
+	if goModuleUsesCgoC(d) {
+		goIncl = append(goIncl, instance.Path)
+	}
+
+	d.addIncl = append(goIncl, d.addIncl...)
+
+	for _, src := range goModuleCgoSFiles(d) {
+		if d.perSrcCFlags == nil {
+			d.perSrcCFlags = map[STR][]ARG{}
+		}
+
+		d.perSrcCFlags[src] = goCgoCFlags(d)
+	}
 }
 
 type GoSrcsResult struct {
@@ -140,19 +180,38 @@ func (e *EmitContext) flushGoSrcs() {
 		internV(resourcePatternRef("GO_TOOLS"), "/pkg/tool/linux_amd64/asm"),
 		internStr("-trimpath"),
 		internStr("$(SOURCE_ROOT)=>/-S;$(BUILD_ROOT)=>/-B;$(TOOL_ROOT)=>/-T"),
-		internStr("-I"), strB,
-		internStr("-I"), strS,
-		internStr("-I"), internV("$(S)/", goStdPrefix, "/runtime").str(),
-		internStr("-I"), internV("$(S)/", "build/scripts/go_fake_include").str(),
-		internStr("-I"), internV("$(S)/", "contrib/libs/linux-headers").str(),
-		internStr("-I"), internV("$(S)/", "contrib/libs/linux-headers/_nf").str(),
+	}
+
+	if instance.Platform.PIC {
+		for _, incl := range e.goCgoIncludeArgs() {
+			args = append(args, internStr("-I"), internStr(strings.TrimPrefix(incl.string(), "-I")))
+		}
+	} else {
+		args = append(args,
+			internStr("-I"), strB,
+			internStr("-I"), strS,
+			internStr("-I"), internV("$(S)/", goStdPrefix, "/runtime").str(),
+			internStr("-I"), internV("$(S)/", "build/scripts/go_fake_include").str(),
+			internStr("-I"), internV("$(S)/", "contrib/libs/linux-headers").str(),
+			internStr("-I"), internV("$(S)/", "contrib/libs/linux-headers/_nf").str(),
+		)
+	}
+
+	args = append(args,
 		internStr("-I"), internV(resourcePatternRef("GO_TOOLS"), "/pkg/include").str(),
 		internStr("-D"), internStr("GOOS_linux"),
 		internStr("-D"), internStr("GOARCH_amd64"),
 		internStr("-p"), internStr(goImportPathFor(dir)),
+	)
+
+	if instance.Platform.PIC {
+		args = append(args, internStr("-shared"))
+	}
+
+	args = append(args,
 		internStr("-gensymabis"),
 		internStr("-o"), out.str(),
-	}
+	)
 
 	inputs := make([]VFS, 0, len(e.goRes.AsmFiles)+1)
 
@@ -323,7 +382,16 @@ func goExtldflagsArgs(p *Platform, tc ModuleToolchain, useArcadiaLibm bool) []ST
 
 	out = append(out, p.LinkPreludeExtra...)
 	out = append(out, argWlNoAsNeeded.str())
+
+	if p.PIC {
+		out = append(out, argFPIC.str())
+	}
+
 	out = appendInternStrs(out, p.linkerSelectionGDBIndexFlags())
+
+	if p.PIC {
+		out = append(out, argFPIC.str())
+	}
 	out = append(out,
 		internStr("-fuse-ld=lld"),
 		internV("--ld-path=", tc.LLD.string()),
@@ -420,7 +488,7 @@ func goPeerSrcClosure(ctx *GenCtx, resolved []resolvedPeer, own []VFS, extra []V
 	return ctx.vfsSlices.intern(block[:k])
 }
 
-func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS, []VFS) {
+func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, ownSbomRef *NodeRef, ownSbomPath *VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS, []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.rel()
@@ -441,29 +509,99 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 		inputs = append(inputs, goRes.SymabisOut)
 	}
 
-	for _, o := range objOuts {
-		args = append(args, o.str())
-		inputs = append(inputs, o)
+	addSrc := func(p VFS) {
+		args = append(args, p.str())
+		inputs = append(inputs, p)
 	}
 
-	for _, src := range goRes.GoFiles {
-		args = append(args, src.str())
-		inputs = append(inputs, src)
+	if len(d.cgoSrcs) > 0 {
+		objSuf := instance.Platform.objectSuffix()
+		isCgoObj := func(p VFS) bool {
+			rel := p.rel()
+
+			return strings.HasSuffix(rel, ".cgo2.c"+objSuf) || strings.HasSuffix(rel, "/_cgo_export.c"+objSuf)
+		}
+		isDotSObj := func(p VFS) bool {
+			return strings.HasSuffix(p.rel(), ".S.o")
+		}
+
+		for _, o := range objOuts {
+			if !isCgoObj(o) && !isDotSObj(o) {
+				addSrc(o)
+			}
+		}
+
+		for _, o := range objOuts {
+			if isDotSObj(o) {
+				addSrc(o)
+			}
+		}
+
+		importGoRel := dir + "/_cgo_import.go"
+
+		for _, src := range goRes.GoFiles {
+			if src.isBuild() && src.rel() != importGoRel {
+				addSrc(src)
+			}
+		}
+
+		for _, o := range objOuts {
+			if isCgoObj(o) {
+				addSrc(o)
+			}
+		}
+
+		for _, src := range goRes.GoFiles {
+			if src.isBuild() && src.rel() == importGoRel {
+				addSrc(src)
+			}
+		}
+
+		for _, src := range goRes.GoFiles {
+			if src.isSource() {
+				addSrc(src)
+			}
+		}
+	} else {
+		for _, o := range objOuts {
+			addSrc(o)
+		}
+
+		for _, src := range goRes.GoFiles {
+			addSrc(src)
+		}
 	}
 
 	for _, src := range goRes.AsmFiles {
-		args = append(args, src.str())
-		inputs = append(inputs, src)
+		addSrc(src)
+	}
+
+	args = append(args, internStr("++asm-flags"))
+
+	if instance.Platform.PIC {
+		args = append(args, internStr("-shared"))
+	}
+
+	args = append(args, internStr("++compile-flags"))
+
+	if instance.Platform.PIC {
+		args = append(args, internStr("-shared"))
 	}
 
 	args = append(args,
-		internStr("++asm-flags"),
-		internStr("++compile-flags"),
 		internStr("++link-flags"),
 		internStr("-linkmode=external"),
 		internStr("++cgo-srcs"),
-		internStr("++peers"),
 	)
+
+	for _, f := range d.cgoSrcs {
+		cgoSrc := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
+
+		args = append(args, cgoSrc.str())
+		inputs = append(inputs, cgoSrc)
+	}
+
+	args = append(args, internStr("++peers"))
 
 	localARs, _, _ := goClassifyClosure(resolved, peerArchivePaths)
 
@@ -476,7 +614,29 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 	inputs = append(inputs, goToolScriptInputs()...)
 	inputs = append(inputs, peerArchivePaths...)
 
-	srcClosure := goPeerSrcClosure(ctx, resolved, inputs, goRes.AsmInclSrcs)
+	srcClosureExtras := goRes.AsmInclSrcs
+
+	if len(d.cgoSrcs) > 0 {
+		srcClosureExtras = append(append([]VFS{}, srcClosureExtras...), cgo1WrapperVFS, wrapccPyVFS)
+		srcClosureExtras = append(srcClosureExtras, ctx.scripts[copyFsToolsVFS]...)
+		srcClosureExtras = append(srcClosureExtras, ctx.scripts[linkOScriptVFS]...)
+
+		for _, f := range append(goModuleCgoCFiles(d), goModuleCgoSFiles(d)...) {
+			src := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
+
+			srcClosureExtras = append(srcClosureExtras, src)
+
+			cv := walkClosure(e.scanner, src, d.cc.ScanCfg)
+
+			cv.each(func(p VFS) {
+				if p.isSource() {
+					srcClosureExtras = append(srcClosureExtras, p)
+				}
+			})
+		}
+	}
+
+	srcClosure := goPeerSrcClosure(ctx, resolved, inputs, srcClosureExtras)
 
 	deduper.reset()
 
@@ -492,14 +652,69 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 
 	sbomRefs, sbomPaths := e.goToolchainSboms(false)
 
-	inputs = append(inputs, peerSbomPaths...)
-	inputs = append(inputs, sbomPaths...)
+	if len(d.cgoSrcs) > 0 {
+		lldRes := genModule(ctx, ModuleInstance{Path: source("build/platform/lld"), Kind: KindLib, Language: LangCPP, Platform: instance.Platform})
+
+		if lldRes.SbomComponentRef != nil && lldRes.SbomComponentPath != nil {
+			sbomRefs = append(sbomRefs, *lldRes.SbomComponentRef)
+			sbomPaths = append(sbomPaths, *lldRes.SbomComponentPath)
+
+			block := ctx.vfsSlices.alloc(len(srcClosure) + 1)
+			k := copy(block, srcClosure)
+
+			block[k] = *lldRes.SbomComponentPath
+			srcClosure = ctx.vfsSlices.intern(block[:k+1])
+		}
+	}
+
+	if len(d.cgoSrcs) > 0 {
+		inputs = append(inputs, build(dir, "/_cgo_main.c", instance.Platform.objectSuffix()))
+	}
+
+	deduper.reset()
+
+	mergedSbomRefs := make([]NodeRef, 0, len(peerSbomRefs)+len(sbomRefs)+1)
+	mergedSbomPaths := make([]VFS, 0, len(peerSbomPaths)+len(sbomPaths)+1)
+	addSbom := func(ref NodeRef, p VFS) {
+		if deduper.add(p.strID()) {
+			mergedSbomRefs = append(mergedSbomRefs, ref)
+			mergedSbomPaths = append(mergedSbomPaths, p)
+		}
+	}
+
+	for i, p := range peerSbomPaths {
+		addSbom(peerSbomRefs[i], p)
+	}
+
+	for i, p := range sbomPaths {
+		addSbom(sbomRefs[i], p)
+	}
+
+	if ownSbomPath != nil && ownSbomRef != nil {
+		addSbom(*ownSbomRef, *ownSbomPath)
+	}
+
+	inputs = append(inputs, mergedSbomPaths...)
+
+	hasGoSbom := ownSbomPath != nil
+
+	for _, p := range mergedSbomPaths {
+		if strings.HasSuffix(p.rel(), ".GO.component.sbom") {
+			hasGoSbom = true
+
+			break
+		}
+	}
+
+	if hasGoSbom {
+		inputs = append(inputs, source(sbomGenScriptRel))
+	}
 
 	deps := append(depRefs(goRes.SymabisRef), objRefs...)
 
 	deps = append(deps, peerArchiveRefs...)
-	deps = append(deps, peerSbomRefs...)
-	deps = append(deps, sbomRefs...)
+	deps = append(deps, mergedSbomRefs...)
+	deps = resolveCodegenDepRefsIncl(ctx, instance, na, inputs, deps...)
 
 	env := goCmdEnv(instance.Platform, d.tc)
 
@@ -531,12 +746,12 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	}
 
 	vcsCPath := build(dir, "/__vcs_version__.c")
-	vcsOPath := build(dir, "/__vcs_version__.c.o")
+	vcsOPath := build(dir, "/__vcs_version__.c", instance.Platform.objectSuffix())
 	vcsGoPath := build(dir, "/__vcs_version__.go")
 
 	vcsEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	cmd0 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsInfo(d.tc, vcsCPath.string())), Env: vcsEnv}
-	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath.string(), vcsOPath.string(), d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)), Env: instance.Platform.ToolEnvVars}
+	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(instance.Platform, d.tc, vcsCPath.string(), vcsOPath.string(), d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars}
 	cmd2 := Cmd{CmdArgs: na.chunkList(na.strList(
 		wrapccPython3STR,
 		internV("$(S)/", "build/scripts/vcs_info.py").str(),
@@ -555,9 +770,19 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 		inputs = append(inputs, src)
 	}
 
+	args = append(args, internStr("++asm-flags"))
+
+	if instance.Platform.PIC {
+		args = append(args, internStr("-shared"))
+	}
+
+	args = append(args, internStr("++compile-flags"))
+
+	if instance.Platform.PIC {
+		args = append(args, internStr("-shared"))
+	}
+
 	args = append(args,
-		internStr("++asm-flags"),
-		internStr("++compile-flags"),
 		internStr("++link-flags"),
 		internStr("-linkmode=external"),
 		internStr("++cgo-srcs"),
@@ -597,19 +822,6 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	inputs = append(inputs, ctx.scripts[ldFsToolsVFS]...)
 	inputs = append(inputs, peerArchivePaths...)
 
-	srcClosure := goPeerSrcClosure(ctx, resolved, inputs, goRes.AsmInclSrcs)
-
-	deduper.reset()
-
-	for _, p := range inputs {
-		deduper.add(p.strID())
-	}
-
-	for _, p := range srcClosure {
-		if deduper.add(p.strID()) {
-			inputs = append(inputs, p)
-		}
-	}
 
 	sbomRefs, _ := e.goToolchainSboms(true)
 
@@ -621,9 +833,28 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	env := goCmdEnv(instance.Platform, d.tc)
 	goCmd := Cmd{CmdArgs: na.chunkList(args), Env: env}
 
+	cmds := na.cmdList(cmd0, cmd1, cmd2)
+
+	sbomEmbed := instance.Platform.BuildRelease && sbomActive(ctx, instance) && len(peerSbomPaths) > 0
+	sbomJSON := build(dir, "/__sbomdata.json").string()
+
+	if sbomEmbed {
+		linkSbom := composeLDCmdLinkSbom(d.tc, internStr("GO"), dir, sbomJSON, peerSbomPaths)
+
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(linkSbom), Cwd: strB, Env: vcsEnv})
+	}
+
+	cmds = append(cmds, goCmd)
+
+	if sbomEmbed {
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outPath.string())), Env: vcsEnv})
+		inputs = append(inputs, peerSbomPaths...)
+		inputs = append(inputs, linkSbomScriptVFS)
+	}
+
 	node := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(cmd0, cmd1, cmd2, goCmd),
+		Cmds:         cmds,
 		Env:          env,
 		Inputs:       na.inputList(inputs),
 		KV:           &goLdKV,

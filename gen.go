@@ -222,6 +222,7 @@ type GenCtx struct {
 	tarjan          TarjanCtx
 	parsedFiles     map[string]*MakeFile
 	prodOuts        IdValueMap
+	py3NoStripDebug bool
 }
 
 func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, includeInputs []VFS, incl ...NodeRef) []NodeRef {
@@ -340,6 +341,8 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 		autoincludeIdx: loadAutoincludeIndex(fs),
 		parsedFiles:    map[string]*MakeFile{},
+
+		py3NoStripDebug: confPy3NoStripOnDebug(fs),
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
@@ -406,6 +409,14 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	}
 
 	return root.LDRef
+}
+
+func confPy3NoStripOnDebug(fs FS) bool {
+	if !fs.isFile(srcRootVFS, "build/conf/python.conf") {
+		return false
+	}
+
+	return strings.Contains(string(fs.read("build/conf/python.conf")), "NO_STRIP=yes")
 }
 
 func isFinalTargetModuleType(name TOK) bool {
@@ -656,7 +667,6 @@ type resolvedPeer struct {
 }
 
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
-
 	if existing := ctx.memo.get(ctx.instanceKey(instance)); existing != nil {
 		return *existing
 	}
@@ -1484,6 +1494,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		BisonGenExt: d.bisonGenExt.string(),
 		NoOptimize:  d.noOptimize,
 		TC:          d.tc,
+
+		ForceConsistentDebug: isGoModuleType(d.moduleStmt.Name),
 	}
 
 	d.cc.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
@@ -1557,7 +1569,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ownRPathFlags = append([]ARG(nil), peerRPathFlagsGlobal...)
 		}
 
-		wantsStrip := (d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Program) && !d.noStrip
+		wantsStrip := (d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Program) && !d.noStrip &&
+		!(ctx.py3NoStripDebug && !instance.Platform.BuildRelease)
 
 		var programModuleTag STR
 
@@ -1613,7 +1626,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			d.splitDwarf,
 			programModuleTag,
 			d.unit.SbomLang,
-			len(d.bundles) > 0,
+			len(d.bundles) > 0 && !pyModuleTypeUsesPython3(d.moduleStmt.Name),
 			d.tc,
 			ctx.host,
 			ctx.scripts,
@@ -1692,8 +1705,16 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	var goSrcClosure []VFS
 
+	var ownSbomRef *NodeRef
+	var ownSbomPath *VFS
+
 	if isGoModuleType(d.moduleStmt.Name) {
-		goRef, goPath, srcClosure := e.emitGoPackage(resolved, local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
+		if sbomActive(ctx, instance) && sbomQualifies(d) {
+			rel := instance.Path.rel()
+			ownSbomRef, ownSbomPath = e.emitSbomComponent(rel[strings.LastIndexByte(rel, '/')+1:])
+		}
+
+		goRef, goPath, srcClosure := e.emitGoPackage(resolved, local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths, ownSbomRef, ownSbomPath, resourceGlobalsClosure)
 
 		arRef = goRef
 		arPath = vfsPtr(goPath)
@@ -1708,16 +1729,8 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		arPath = vfsPtr(build(instance.Path.rel(), "/", arBaseName))
 	}
 
-	var ownSbomRef *NodeRef
-	var ownSbomPath *VFS
-
-	if sbomActive(ctx, instance) && sbomQualifies(d) && d.unit.Tag != unitTagPy3BinLib {
+	if sbomActive(ctx, instance) && sbomQualifies(d) && d.unit.Tag != unitTagPy3BinLib && !isGoModuleType(d.moduleStmt.Name) {
 		realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", archiveName), ".a")
-
-		if isGoModuleType(d.moduleStmt.Name) {
-			rel := instance.Path.rel()
-			realPrjName = rel[strings.LastIndexByte(rel, '/')+1:]
-		}
 
 		ownSbomRef, ownSbomPath = e.emitSbomComponent(realPrjName)
 	}

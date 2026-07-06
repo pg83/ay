@@ -248,6 +248,10 @@ func composeLDCmdVcsInfo(tc ModuleToolchain, vcsCPath string) []STR {
 }
 
 func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings, noOptimize bool) []STR {
+	return composeLDCmdVcsCompileForced(p, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize, false)
+}
+
+func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings, noOptimize, forceConsistentDebug bool) []STR {
 	bundle := compileFlagBundleFor(p)
 
 	if noOptimize {
@@ -268,6 +272,10 @@ func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath 
 	)
 
 	cmdArgs = append(cmdArgs, argIS.str())
+
+	if forceConsistentDebug {
+		cmdArgs = appendArgStr(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir)
+	}
 
 	preNoLibcExtras := concat(p.CFlags, moduleCFlags, peerCFlagsGlobal)
 
