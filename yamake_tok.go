@@ -3,9 +3,12 @@ package main
 var tokName = [...]STR{
 	tokInvalid:                            0,
 	tokAddInclSelf:                        internStr("ADDINCLSELF"),
+	tokAliceCapability:                    internStr("ALICE_CAPABILITY"),
+	tokAliceTypedCallback:                 internStr("ALICE_TYPED_CALLBACK"),
 	tokAllocator:                          internStr("ALLOCATOR"),
 	tokAllocatorImpl:                      internStr("ALLOCATOR_IMPL"),
 	tokAllPySrcs:                          internStr("ALL_PY_SRCS"),
+	tokApphost:                            internStr("APPHOST"),
 	tokArchive:                            internStr("ARCHIVE"),
 	tokArchiveAsm:                         internStr("ARCHIVE_ASM"),
 	tokArPlugin:                           internStr("AR_PLUGIN"),
@@ -29,6 +32,7 @@ var tokName = [...]STR{
 	tokCudaNvccFlags:                      internStr("CUDA_NVCC_FLAGS"),
 	tokSetAppendWithGlobal:                internStr("SET_APPEND_WITH_GLOBAL"),
 	tokData:                               internStr("DATA"),
+	tokDeclareInDirs:                      internStr("DECLARE_IN_DIRS"),
 	tokDeclareExternalResource:            kwDECLARE_EXTERNAL_RESOURCE,
 	tokDeclareExternalHostResourcesBundle: kwDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE,
 	tokDeclareExternalHostResourcesBundleByJson: kwDECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON,
@@ -141,6 +145,9 @@ var tokName = [...]STR{
 	tokRecurseForTests:                 internStr("RECURSE_FOR_TESTS"),
 	tokRecurseRootRelative:             internStr("RECURSE_ROOT_RELATIVE"),
 	tokRequirements:                    internStr("REQUIREMENTS"),
+	tokRunProtoShaperStub:              internStr("RUN_PROTO_SHAPER_STUB"),
+	tokSourceGroup:                     internStr("SOURCE_GROUP"),
+	tokTsProtoOpt:                      internStr("TS_PROTO_OPT"),
 	tokResourcesLibrary:                kwRESOURCES_LIBRARY,
 	tokRestrictPath:                    internStr("RESTRICT_PATH"),
 	tokSetAppend:                       internStr("SET_APPEND"),
@@ -196,6 +203,8 @@ var tokName = [...]STR{
 	tokYqlUdfContrib:                   kwYQL_UDF_CONTRIB,
 	tokYqlUdfYdb:                       kwYQL_UDF_YDB,
 	tokGoLibrary:                       internStr("GO_LIBRARY"),
+	tokGoPackageName:                   internStr("GO_PACKAGE_NAME"),
+	tokGoGrpcGatewayV2OpenapiSrcs:      internStr("GO_GRPC_GATEWAY_V2_OPENAPI_SRCS"),
 	tokGoProgram:                       internStr("GO_PROGRAM"),
 	tokGoTestSrcs:                      internStr("GO_TEST_SRCS"),
 	tokGoXtestSrcs:                     internStr("GO_XTEST_SRCS"),
@@ -236,9 +245,12 @@ var tokByName = func() map[string]TOK {
 const (
 	tokInvalid TOK = iota
 	tokAddInclSelf
+	tokAliceCapability
+	tokAliceTypedCallback
 	tokAllocator
 	tokAllocatorImpl
 	tokAllPySrcs
+	tokApphost
 	tokArchive
 	tokArchiveAsm
 	tokArPlugin
@@ -260,6 +272,7 @@ const (
 	tokCppProtoPlugin0
 	tokCppProtoPlugin2
 	tokData
+	tokDeclareInDirs
 	tokDeclareExternalResource
 	tokDeclareExternalHostResourcesBundle
 	tokDeclareExternalHostResourcesBundleByJson
@@ -373,6 +386,9 @@ const (
 	tokRequirements
 	tokResourcesLibrary
 	tokRestrictPath
+	tokRunProtoShaperStub
+	tokSourceGroup
+	tokTsProtoOpt
 	tokSetAppend
 	tokSetResourceUriFromJson
 	tokSize
@@ -426,6 +442,8 @@ const (
 	tokYqlUdfContrib
 	tokYqlUdfYdb
 	tokGoLibrary
+	tokGoPackageName
+	tokGoGrpcGatewayV2OpenapiSrcs
 	tokGoProgram
 	tokGoTestSrcs
 	tokGoXtestSrcs

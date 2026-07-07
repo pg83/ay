@@ -279,6 +279,7 @@ type FromSandboxStmt struct {
 }
 
 type RunPythonStmt struct {
+	Lua            bool
 	ScriptPath     STR
 	Args           []STR
 	INFiles        []STR
@@ -498,7 +499,7 @@ func isWordByte(b byte) bool {
 		return true
 	}
 
-	return false
+	return b >= 0x80
 }
 
 func (l *Lexer) skipTrivia() {
@@ -984,6 +985,9 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		"GO_LIBRARY", "GO_PROGRAM",
 		"UNITTEST_FOR":
 		return &ModuleStmt{Name: internTok(name), Args: args, Line: line}
+	case "PROTO_SCHEMA":
+
+		return &ModuleStmt{Name: tokProtoLibrary, Args: args, Line: line}
 	case "DECLARE_EXTERNAL_RESOURCE",
 		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE",
 		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON":
@@ -1119,6 +1123,16 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		}
 
 		return parseRunPython(args, line)
+	case "RUN_LUA":
+		if len(args) == 0 {
+			fail("RUN_LUA expects at least 1 argument (script path)")
+		}
+
+		stmt := parseRunPython(args, line)
+
+		stmt.Lua = true
+
+		return stmt
 	case "SPLIT_CODEGEN":
 		if len(args) < 2 {
 			fail("SPLIT_CODEGEN expects at least 2 arguments (tool prefix), got %d", len(args))

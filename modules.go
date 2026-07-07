@@ -1458,6 +1458,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}()
 
 	switch v.Name {
+	case tokDeclareInDirs:
+		applyDeclareInDirs(fs, modulePath, v, env)
 	case tokAddInclSelf:
 
 		self := source(modulePath)
@@ -2346,6 +2348,43 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
+	case tokAliceCapability:
+		addCPPProtoPlugin(d, CppProtoPlugin{
+			Name:           "alice_capability_cpp",
+			ToolPath:       "yandex_io/tools/capability_gen",
+			OutputSuffixes: []string{".cap.h"},
+			Deps:           []string{"yandex_io/libs/protobuf_utils"},
+		})
+	case tokApphost:
+		itemDispatcher := ""
+		itemDispatcherHeader := ""
+
+		for i := 0; i < len(v.Args); i++ {
+			switch v.Args[i].string() {
+			case "ITEM_DISPATCHER":
+				i++
+
+				if i < len(v.Args) {
+					itemDispatcher = v.Args[i].string()
+				}
+			case "ITEM_DISPATCHER_HEADER":
+				i++
+
+				if i < len(v.Args) {
+					itemDispatcherHeader = v.Args[i].string()
+				}
+			default:
+				throwFmt("gen: %s: APPHOST: unexpected argument %q", modulePath, v.Args[i])
+			}
+		}
+
+		addCPPProtoPlugin(d, CppProtoPlugin{
+			Name:           "cpp_plugin",
+			ToolPath:       "apphost/tools/stub_generator/cpp_plugin",
+			OutputSuffixes: []string{".apphost.h"},
+			Deps:           []string{"apphost/tools/stub_generator/cpp_includes"},
+			ExtraOutFlag:   "item_dispatcher=" + itemDispatcher + ",item_dispatcher_header=" + itemDispatcherHeader,
+		})
 	case tokCppEvlog:
 
 		addCPPProtoPlugin(d, CppProtoPlugin{
@@ -3030,6 +3069,10 @@ func parseModulePathVFS(path string) VFS {
 }
 
 func expandStmtToken(s string, env Environment) string {
+	if strings.Contains(s, "\\$") {
+		s = strings.ReplaceAll(s, "\\$", "$")
+	}
+
 	if s == "$S" {
 		return "$(S)"
 	}
@@ -3195,6 +3238,139 @@ func expandStmtTokenSTR(item STR, env Environment) STR {
 	}
 
 	return internStr(expandStmtToken(item.string(), env))
+}
+
+func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment) {
+	if len(v.Args) < 2 {
+		throwFmt("gen: %s: DECLARE_IN_DIRS expects a var prefix and a pattern", modulePath)
+	}
+
+	prefix := v.Args[0].string()
+	pattern := v.Args[1].string()
+
+	var dirs, excludes []string
+
+	srcdir := ""
+	recursive := false
+	section := ""
+
+	for _, a := range v.Args[2:] {
+		t := a.string()
+
+		switch t {
+		case "DIRS", "EXCLUDES", "SRCDIR":
+			section = t
+		case "RECURSIVE":
+			recursive = true
+		default:
+			switch section {
+			case "DIRS":
+				dirs = append(dirs, t)
+			case "EXCLUDES":
+				excludes = append(excludes, t)
+			case "SRCDIR":
+				srcdir = t
+			default:
+				throwFmt("gen: %s: DECLARE_IN_DIRS: unexpected argument %q", modulePath, t)
+			}
+		}
+	}
+
+	rootRel := func(dir string) string {
+		switch {
+		case srcdir == "${ARCADIA_ROOT}":
+			return path.Clean(dir)
+		case srcdir == "":
+			return path.Clean(modulePath + "/" + dir)
+		default:
+			return path.Clean(modulePath + "/" + srcdir + "/" + dir)
+		}
+	}
+
+	filePrefix := func(dirRel string) string {
+		if srcdir == "${ARCADIA_ROOT}" {
+			return "${ARCADIA_ROOT}/" + dirRel + "/"
+		}
+
+		return strings.TrimPrefix(dirRel+"/", modulePath+"/")
+	}
+
+	excluded := func(dirRel, name string) bool {
+		for _, ex := range excludes {
+			if ok, _ := path.Match(ex, name); ok {
+				return true
+			}
+
+			if ok, _ := path.Match(ex, dirRel+"/"+name); ok {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	var files []string
+
+	matchDir := func(dirRel string) {
+		view := fs.listdir(dirKey(dirRel))
+		names := make([]string, 0, len(view.names))
+
+		for _, packed := range view.names {
+			if packed&1 != 0 {
+				continue
+			}
+
+			name := STR(packed >> 1).string()
+
+			if ok, _ := path.Match(pattern, name); !ok || excluded(dirRel, name) {
+				continue
+			}
+
+			names = append(names, name)
+		}
+
+		sort.Strings(names)
+
+		for _, name := range names {
+			files = append(files, filePrefix(dirRel)+name)
+		}
+	}
+
+	subDirsSorted := func(dirRel string) []string {
+		view := fs.listdir(dirKey(dirRel))
+
+		var subs []string
+
+		for _, packed := range view.names {
+			if packed&1 == 0 {
+				continue
+			}
+
+			subs = append(subs, dirRel+"/"+STR(packed>>1).string())
+		}
+
+		sort.Strings(subs)
+
+		return subs
+	}
+
+	for _, dir := range dirs {
+		root := rootRel(dir)
+
+		if !recursive {
+			matchDir(root)
+
+			continue
+		}
+
+		for queue := []string{root}; len(queue) > 0; queue = queue[1:] {
+			matchDir(queue[0])
+			queue = append(queue, subDirsSorted(queue[0])...)
+		}
+	}
+
+	env.setFromString(internEnv(prefix+"_FILES"), strings.Join(files, " "))
+	env.setFromString(internEnv(prefix+"_SRCDIR"), srcdir)
 }
 
 func expandStmtTokens(items []string, env Environment) []string {

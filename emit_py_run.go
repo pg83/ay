@@ -6,6 +6,10 @@ import (
 
 var pyRunKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 
+var luaRunKV = KV{P: pkLU, PC: pcYellow, ShowOut: true}
+
+var argToolsLua = internArg("tools/lua")
+
 func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 	instance := e.instance
 
@@ -116,7 +120,24 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	inputClosure := e.pyInputClosure(stmt)
 	extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputClosure)
 
-	return emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, d.cc.TC, ctx.emit)
+	interp := d.cc.TC.Python3
+	kv := &pyRunKV
+	resources := usesPython3
+
+	var interpInput *VFS
+	var toolRefs []NodeRef
+
+	if stmt.Lua {
+		luaLDRef, luaBinVFS := ctx.tool(argToolsLua)
+
+		interp = luaBinVFS.str()
+		interpInput = &luaBinVFS
+		toolRefs = depRefs(luaLDRef)
+		kv = &luaRunKV
+		resources = nil
+	}
+
+	return emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, interp, interpInput, toolRefs, kv, resources, ctx.emit)
 }
 
 func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
@@ -158,6 +179,13 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 
 		if stmt.StdoutFile != nil && generatedOutputCarriesIncludes(stmt.StdoutFile.string()) {
 			walkOne(stmt.StdoutFile.string())
+		}
+
+		for _, f := range stmt.OutputIncludes {
+			cv := walkClosure(e.scanner, e.runProgramInputVFS(f.string()), scanCfg)
+
+			selves = append(selves, cv.self)
+			groups = append(groups, cv.buckets)
 		}
 	}
 
@@ -310,7 +338,11 @@ func emitPYRun(
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
 	id NodeRef,
-	tc ModuleToolchain,
+	interp STR,
+	interpInput *VFS,
+	toolRefs []NodeRef,
+	kv *KV,
+	resources []STR,
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
@@ -326,21 +358,33 @@ func emitPYRun(
 		}
 	}
 
-	cmdArgs := []STR{tc.Python3, (scriptVFS).str()}
+	cmdArgs := []STR{interp, (scriptVFS).str()}
 
 	for _, aTok := range stmt.Args {
 		a := aTok.string()
+
+		if a == "${ARCADIA_ROOT}" {
+			a = "$(S)"
+		}
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.string()
 		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
 			a = vfs.string()
+		} else if k, val, ok := strings.Cut(a, "="); ok && !strings.HasPrefix(a, "-") {
+			if vfs, ok := inVFSByToken[val]; ok {
+				a = k + "=" + vfs.string()
+			}
 		}
 
 		cmdArgs = append(cmdArgs, internStr(a))
 	}
 
-	head := make([]VFS, 0, 1+len(stmt.INFiles))
+	head := make([]VFS, 0, 2+len(stmt.INFiles))
+
+	if interpInput != nil {
+		head = append(head, *interpInput)
+	}
 
 	head = append(head, scriptVFS)
 
@@ -377,15 +421,16 @@ func emitPYRun(
 	}
 
 	node := Node{
-		Platform:     instance.Platform,
-		Cmds:         na.cmdList(cmd),
-		Env:          env,
-		Inputs:       inputs,
-		KV:           &pyRunKV,
-		Outputs:      outputs,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:      extraDepRefs,
-		Resources:    usesPython3,
+		Platform:       instance.Platform,
+		Cmds:           na.cmdList(cmd),
+		Env:            env,
+		Inputs:         inputs,
+		KV:             kv,
+		Outputs:        outputs,
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:        extraDepRefs,
+		ForeignDepRefs: toolRefs,
+		Resources:      resources,
 	}
 
 	emit.emitReservedNode(node, id)
