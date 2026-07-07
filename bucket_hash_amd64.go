@@ -12,8 +12,6 @@ func cpuHasAVX2() bool
 func bucketAccumAVX2(p *VFS, n int) (sum, xr, sq uint32)
 
 func bucketHashPlatform(elems []VFS) (sum, xr, sq uint32) {
-	sum = uint32(len(elems))
-
 	tail := elems
 
 	if useBucketHashAVX2 && len(elems) >= bucketHashSIMDMin {

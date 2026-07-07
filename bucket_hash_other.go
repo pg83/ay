@@ -3,8 +3,6 @@
 package main
 
 func bucketHashPlatform(elems []VFS) (sum, xr, sq uint32) {
-	sum = uint32(len(elems))
-
 	for _, v := range elems {
 		x := uint32(v)
 
