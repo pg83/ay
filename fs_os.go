@@ -24,7 +24,7 @@ func hashSourceFile(srcRoot, rel string) uint64 {
 type OsFS struct {
 	srcRoot       string
 	rootSlash     string
-	dirs          DenseMap[STR, DirView]
+	dirs          DenseMap[VFS, DirView]
 	dirNames      *BumpAllocator[uint32]
 	dirEntries    *IntSet
 	contentHashes PageVec[uint64]
@@ -58,15 +58,13 @@ func (fs *OsFS) contentHash(v VFS) uint64 {
 }
 
 func (fs *OsFS) listdir(dir VFS) DirView {
-	key := STR(dir.strID())
-
-	if cached, ok := fs.dirs.get(key); ok {
+	if cached, ok := fs.dirs.get(dir); ok {
 		return cached
 	}
 
-	v := fs.readDirViewRel(key, dir.relString())
+	v := fs.readDirViewRel(dir, dir.relString())
 
-	fs.dirs.put(key, v)
+	fs.dirs.put(dir, v)
 
 	return v
 }

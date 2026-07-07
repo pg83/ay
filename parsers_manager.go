@@ -34,7 +34,7 @@ func (set ParsedIncludeSet) bucket(bucket ParsedIncludeBucket) []IncludeDirectiv
 type SharedParseCache struct {
 	ambiguous  map[uint64]ParsedIncludeSet
 	directives *BumpAllocator[IncludeDirective]
-	parsed     DenseMap[STR, ParsedIncludeSet]
+	parsed     DenseMap[VFS, ParsedIncludeSet]
 }
 
 func newSharedParseCache() *SharedParseCache {
@@ -68,7 +68,7 @@ func (pm *IncludeParserManager) protoParser() ProtoIncludeDirectiveParser {
 }
 
 func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser IncludeDirectiveParser) ParsedIncludeSet {
-	key := STR(vfsPath.strID())
+	key := vfsPath
 	rel := vfsPath.relString()
 	parser := pm.registry.registeredParserFor(rel)
 

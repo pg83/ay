@@ -20,7 +20,7 @@ func dirKey(dir string) VFS {
 }
 
 type DirView struct {
-	dir   STR
+	dir   VFS
 	names []uint32
 }
 

@@ -49,7 +49,7 @@ type IncludeScanner struct {
 	parsers          *IncludeParserManager
 	buckets          *BucketCache
 	closureArena     *BumpAllocator[VFS]
-	scanCache        DenseMap2[STR, []VFS, Closure]
+	scanCache        DenseMap2[VFS, []VFS, Closure]
 	searchTierFlat   *IntMap[VFS]
 	searchTierSeen   BitSet
 	sourceUnderCache *IntMap[VFS]
@@ -72,19 +72,19 @@ type ScanCtx struct {
 }
 
 func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
-	return s.scanCache.get2(STR(v.strID()))
+	return s.scanCache.get2(v)
 }
 
 func (s *IncludeScanner) putClosure(v VFS, cl Closure) {
-	s.scanCache.put2(STR(v.strID()), cl)
+	s.scanCache.put2(v, cl)
 }
 
 func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
-	return s.scanCache.get1(STR(v.strID()))
+	return s.scanCache.get1(v)
 }
 
 func (s *IncludeScanner) putChildren(v VFS, children []VFS) {
-	s.scanCache.put1(STR(v.strID()), children)
+	s.scanCache.put1(v, children)
 }
 
 func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
