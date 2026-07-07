@@ -547,7 +547,13 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 		}
 
 		if !toolReplaced {
-			if rooted, ok := rootBareFileArg(a, fileTokens); ok {
+			if rooted, vfs, ok := rootBareFileArg(a, fileTokens); ok {
+				if vfs != 0 {
+					cmdArgs = append(cmdArgs, vfs.any())
+
+					continue
+				}
+
 				key = internStr(rooted)
 			}
 		}
@@ -645,6 +651,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 type prFileToken struct {
 	token  string
 	rooted string
+	vfs    VFS
 }
 
 func prBareFileTokens(stmt *RunProgramStmt, inVFSs []VFS, outVFSByToken map[STR]VFS) []prFileToken {
@@ -657,7 +664,7 @@ func prBareFileTokens(stmt *RunProgramStmt, inVFSs []VFS, outVFSByToken map[STR]
 			return
 		}
 
-		toks = append(toks, prFileToken{token: t, rooted: vfs.string()})
+		toks = append(toks, prFileToken{token: t, rooted: vfs.string(), vfs: vfs})
 	}
 
 	for i, f := range stmt.INFiles {
@@ -679,7 +686,7 @@ func prBareFileTokens(stmt *RunProgramStmt, inVFSs []VFS, outVFSByToken map[STR]
 	return toks
 }
 
-func rootBareFileArg(arg string, toks []prFileToken) (string, bool) {
+func rootBareFileArg(arg string, toks []prFileToken) (string, VFS, bool) {
 	for _, c := range toks {
 		idx := strings.Index(arg, c.token)
 
@@ -692,11 +699,15 @@ func rootBareFileArg(arg string, toks []prFileToken) (string, bool) {
 		afterOK := end == len(arg) || isBareTokenBoundary(arg[end])
 
 		if beforeOK && afterOK {
-			return arg[:idx] + c.rooted + arg[end:], true
+			if idx == 0 && end == len(arg) {
+				return "", c.vfs, true
+			}
+
+			return arg[:idx] + c.rooted + arg[end:], 0, true
 		}
 	}
 
-	return arg, false
+	return arg, 0, false
 }
 
 func isBareTokenBoundary(c byte) bool {
