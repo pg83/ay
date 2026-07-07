@@ -24,16 +24,16 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	base := filepath.Base(prefix)
 	prefixCpp := build(moduleDir, "/", base, ".cpp")
 	prefixH := build(moduleDir, "/", base, ".h")
-	cmdArgs := make([]STR, 0, 4+len(bc.Opts))
+	cmdArgs := make([]ANY, 0, 4+len(bc.Opts))
 
 	cmdArgs = append(cmdArgs,
-		toolBin.fullSTR(),
-		inputIn.fullSTR(),
-		prefixCpp.fullSTR(),
-		prefixH.fullSTR(),
+		toolBin.fullSTR().any(),
+		inputIn.fullSTR().any(),
+		prefixCpp.fullSTR().any(),
+		prefixH.fullSTR().any(),
 	)
 
-	cmdArgs = append(cmdArgs, bc.Opts...)
+	cmdArgs = appendAnys(cmdArgs, bc.Opts)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	bcRef := ctx.emit.reserve()
@@ -63,7 +63,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 
 	node := Node{
 		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs), Env: env}),
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
 		Outputs:        []VFS{prefixCpp, prefixH},

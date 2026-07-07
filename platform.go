@@ -41,34 +41,34 @@ type Platform struct {
 	DebugInfoFlags        []ARG
 	CompileCFlags         []ARG
 	CompressDebugSections bool
-	SystemLibs            []STR
-	LinkPreludeExtra      []STR
+	SystemLibs            []ANY
+	LinkPreludeExtra      []ANY
 	ClangVer              string
 	ClangVerSTR           STR
 	BuildTypeUpperSTR     STR
-	WrapccHead            []STR
-	WrapccTail            []STR
+	WrapccHead            []ANY
+	WrapccTail            []ANY
 	CCUsesResources       []STR
 	UsesPython3Clang      []STR
 	UsesLinkResources     []STR
 	UsesClangOnly         []STR
 	ToolEnvVars           EnvVars
-	CCHead                []STR
-	SysrootArgs           []STR
+	CCHead                []ANY
+	SysrootArgs           []ANY
 	UsesSDKRoot           bool
 	ifEnv                 Environment
-	CompileCFlagsStr      []STR
-	DefinesStr            []STR
-	NoLibcBlockStr        []STR
+	CompileCFlagsStr      []ANY
+	DefinesStr            []ANY
+	NoLibcBlockStr        []ANY
 }
 
 func platformUsesSDKRoot(os OS, flags map[string]string) bool {
 	return os == OSLinux && flags["OS_SDK"] != "local" && flags["OPENSOURCE"] != "yes"
 }
 
-func sysrootArgsFor(os OS, flags map[string]string) []STR {
+func sysrootArgsFor(os OS, flags map[string]string) []ANY {
 	if !platformUsesSDKRoot(os, flags) {
-		return []STR{argDashBBin}
+		return []ANY{argDashBBin.any()}
 	}
 
 	sdkRoot := "$(B)/resources/" + resourcePatternOSSDKRoot
@@ -78,16 +78,16 @@ func sysrootArgsFor(os OS, flags map[string]string) []STR {
 		sysroot = "--sysroot=/nowhere"
 	}
 
-	return []STR{internStr(sysroot), internV("-B", sdkRoot, "/usr/bin")}
+	return []ANY{internStr(sysroot).any(), internV("-B", sdkRoot, "/usr/bin").any()}
 }
 
-func wrapccPrefixFor(flags map[string]string) (head, tail []STR) {
+func wrapccPrefixFor(flags map[string]string) (head, tail []ANY) {
 	if flags["OPENSOURCE"] == "yes" {
 		return nil, nil
 	}
 
-	head = []STR{wrapccPython3STR, wrapccPyVFS.fullSTR(), wrapccArgSrcFile.str()}
-	tail = []STR{argSourceRoot.str(), strS, argBuildRoot.str(), strB, wrapccArgEnd.str()}
+	head = []ANY{wrapccPython3STR.any(), wrapccPyVFS.any(), wrapccArgSrcFile.any()}
+	tail = []ANY{argSourceRoot.any(), strS.any(), argBuildRoot.any(), strB.any(), wrapccArgEnd.any()}
 
 	return head, tail
 }
@@ -134,8 +134,8 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 		March:             marchFor(isa),
 		CFlags:            internArgs(splitShellWords(cflagsEnv)),
 		CXXFlags:          internArgs(splitShellWords(cxxflagsEnv)),
-		SystemLibs:        internStrs(systemLibs),
-		LinkPreludeExtra:  internStrs(linkPreludeExtra),
+		SystemLibs:        internAnys(systemLibs),
+		LinkPreludeExtra:  internAnys(linkPreludeExtra),
 		ClangVer:          platformClangVersion(flags),
 		ClangVerSTR:       internStr(platformClangVersion(flags)),
 		BuildTypeUpperSTR: internStr(strings.ToUpper(buildType)),
@@ -171,7 +171,7 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 		p.MarchArgs = []ARG{internArg("-march=" + p.March)}
 	}
 
-	p.CCHead = append(appendArgStr([]STR{p.TargetArg}, p.MarchArgs), p.SysrootArgs...)
+	p.CCHead = append(appendArgAny([]ANY{p.TargetArg.any()}, p.MarchArgs), p.SysrootArgs...)
 
 	p.ToolEnvVars = EnvVars{
 		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},

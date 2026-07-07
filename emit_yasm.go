@@ -6,13 +6,13 @@ import (
 
 var yasmBinaryPath = yasmBinaryVFS.string()
 
-var yasmConstHead = []STR{
-	internStr(yasmBinaryPath),
-	argF.str(), argElf64.str(),
-	argD.str(), argUnix.str(),
-	argReplaceBB.str(),
-	argReplaceSS.str(),
-	argReplaceToolRootT.str(),
+var yasmConstHead = []ANY{
+	internStr(yasmBinaryPath).any(),
+	argF.any(), argElf64.any(),
+	argD.any(), argUnix.any(),
+	argReplaceBB.any(),
+	argReplaceSS.any(),
+	argReplaceToolRootT.any(),
 }
 
 func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, emit *StreamingEmitter) (NodeRef, VFS) {
@@ -42,36 +42,36 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		predefinedFlags = []string{"-g", "dwarf2"}
 	}
 
-	cmdArgs := make([]STR, 0, 20+len(predefinedFlags))
+	cmdArgs := make([]ANY, 0, 20+len(predefinedFlags))
 
 	cmdArgs = append(cmdArgs, yasmConstHead...)
 
 	cmdArgs = append(cmdArgs,
-		argD.str(), internV("_", string(instance.Platform.ISA), "_"),
-		argDYasm.str(),
+		argD.any(), internV("_", string(instance.Platform.ISA), "_").any(),
+		argDYasm.any(),
 	)
 
-	cmdArgs = appendInternStrs(cmdArgs, predefinedFlags)
+	cmdArgs = appendInternAnys(cmdArgs, predefinedFlags)
 
 	cmdArgs = append(cmdArgs,
-		argI.str(), argB.str(),
-		argI.str(), argS.str(),
+		argI.any(), argB.any(),
+		argI.any(), argS.any(),
 	)
 
 	for _, p := range in.AddIncl {
-		cmdArgs = append(cmdArgs, argI.str(), (p).fullSTR())
+		cmdArgs = append(cmdArgs, argI.any(), (p).any())
 	}
 
 	cmdArgs = append(cmdArgs,
-		argDashO.str(), internStr(outputPath),
-		internStr(inputPath),
+		argDashO.any(), internStr(outputPath).any(),
+		internStr(inputPath).any(),
 	)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envYASM_TEST_SUITE, Value: strOne}}
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(na.vfsList(yasmBinaryVFS, in.IncludeView.self), in.IncludeView.buckets...),

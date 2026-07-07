@@ -218,7 +218,7 @@ type ModuleToolchain struct {
 	Objcopy       STR
 	Strip         STR
 	LLDRoot       STR
-	ARCmdHead     []STR
+	ARCmdHead     []ANY
 	LLD           STR
 	Python3       STR
 }
@@ -251,15 +251,15 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 		}
 	}
 
-	tc.ARCmdHead = []STR{
-		tc.Python3,
-		(buildScriptsLinkLibPy).fullSTR(),
-		tc.AR,
-		internStr(arTypeLLVM),
-		internStr(arFormatGNU),
-		argB.str(),
-		argNone.str(),
-		arg2.str(),
+	tc.ARCmdHead = []ANY{
+		tc.Python3.any(),
+		(buildScriptsLinkLibPy).any(),
+		tc.AR.any(),
+		internStr(arTypeLLVM).any(),
+		internStr(arFormatGNU).any(),
+		argB.any(),
+		argNone.any(),
+		arg2.any(),
 	}
 
 	return tc
@@ -382,12 +382,12 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR([]STR{
-			wrapccPython3STR,
-			copyFsToolsVFS.fullSTR(),
-			argCopy.str(),
-			srcVFS.fullSTR(),
-			dst.fullSTR(),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]ANY{
+			wrapccPython3STR.any(),
+			copyFsToolsVFS.any(),
+			argCopy.any(),
+			srcVFS.any(),
+			dst.any(),
 		}), Env: env}),
 		Env:          env,
 		Inputs:       inputs,

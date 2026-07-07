@@ -79,14 +79,14 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR([]STR{
-			wrapccPython3STR,
-			scriptVFS.fullSTR(),
-			strOutput, out.fullSTR(),
-			strType, strLibrary,
-			strPath, internStr(moddir),
-			strVer, internStr(modver),
-			strLang, internStr(lang),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]ANY{
+			wrapccPython3STR.any(),
+			scriptVFS.any(),
+			strOutput.any(), out.any(),
+			strType.any(), strLibrary.any(),
+			strPath.any(), internStr(moddir).any(),
+			strVer.any(), internStr(modver).any(),
+			strLang.any(), internStr(lang).any(),
 		}), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList([]VFS{scriptVFS}),
@@ -115,13 +115,13 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR([]STR{
-			wrapccPython3STR,
-			scriptVFS.fullSTR(),
-			strOutput, out.fullSTR(),
-			strType, strToolchain,
-			strToolchainName, internStr(toolchainName),
-			strVer, internStr(ver),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]ANY{
+			wrapccPython3STR.any(),
+			scriptVFS.any(),
+			strOutput.any(), out.any(),
+			strType.any(), strToolchain.any(),
+			strToolchainName.any(), internStr(toolchainName).any(),
+			strVer.any(), internStr(ver).any(),
 		}), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList([]VFS{scriptVFS}),

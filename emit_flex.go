@@ -67,10 +67,10 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) {
 func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 
-	cmdArgs := na.chunkListSTR(na.strList(
-		flexBin.fullSTR(),
-		internV(argDashO.string(), outVFS.string()),
-		srcVFS.fullSTR(),
+	cmdArgs := na.chunkList(na.anyList(
+		flexBin.any(),
+		internV(argDashO.string(), outVFS.string()).any(),
+		srcVFS.any(),
 	))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

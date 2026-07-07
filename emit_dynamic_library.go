@@ -75,16 +75,16 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 
 	cmds := make([]Cmd, 0, 5)
 
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkListSTR(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkListSTR(cmd1), Env: envFull})
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
 	if sbomEmbed {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkListSTR(composeLDCmdLinkSbom(d.tc, d.unit.SbomLang, instance.Path.relString(), sbomJSON, ldSbomPaths)), Cwd: bldRootDirVFS, Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, d.unit.SbomLang, instance.Path.relString(), sbomJSON, ldSbomPaths)), Cwd: bldRootDirVFS, Env: envVcsOnly})
 	}
 
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkListSTR(cmd2), Cwd: bldRootDirVFS, Env: envFull})
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
 
 	if sbomEmbed {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkListSTR(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outputPath)), Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outputPath)), Env: envVcsOnly})
 	}
 
 	inputs := InputChunks{peerArchivePaths, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS], ctx.scripts[ldLinkDynLibVFS]}
@@ -319,7 +319,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	n := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkListSTR(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkListSTR(cmd2), Cwd: bldRootDirVFS, Env: envFull}, Cmd{CmdArgs: na.chunkListSTR(cmd3), Env: envVcsOnly}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly}),
 		Env:          envFull,
 		Inputs:       inputs,
 		Outputs:      na.vfsList(build(instance.Path.relString(), "/", outputName)),
@@ -362,94 +362,94 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	}
 }
 
-func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, outputName, vcsOPath string, ownObjects, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []STR {
-	cmdArgs := []STR{
-		tc.Python3,
-		internStr(ldLinkDynLibPath),
-		argTarget.str(), internStr(outputPath),
+func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, outputName, vcsOPath string, ownObjects, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []ANY {
+	cmdArgs := []ANY{
+		tc.Python3.any(),
+		internStr(ldLinkDynLibPath).any(),
+		argTarget.any(), internStr(outputPath).any(),
 	}
 
-	cmdArgs = append(cmdArgs, argStartPlugins.str())
+	cmdArgs = append(cmdArgs, argStartPlugins.any())
 
 	for _, p := range pluginPaths {
-		cmdArgs = append(cmdArgs, (p).fullSTR())
+		cmdArgs = append(cmdArgs, (p).fullSTR().any())
 	}
 
-	cmdArgs = append(cmdArgs, argEndPlugins.str())
+	cmdArgs = append(cmdArgs, argEndPlugins.any())
 
 	for _, peer := range wholeArchivePeers {
-		cmdArgs = append(cmdArgs, argWholeArchivePeers.str(), internStr(peer))
+		cmdArgs = append(cmdArgs, argWholeArchivePeers.any(), internStr(peer).any())
 	}
 
 	cmdArgs = append(cmdArgs,
-		argSourceRoot.str(), argS.str(),
-		argBuildRoot.str(), argB.str(),
-		argArchLinux.str(),
-		argObjcopyExe.str(), tc.Objcopy,
-		argFixElf.str(), internStr(fixElfPath),
-		tc.CXX,
-		argWlWholeArchive.str(),
-		argYaStartCommandFile.str(),
-		argYaEndCommandFile.str(),
-		argWlNoWholeArchive.str(),
-		internStr(vcsOPath),
+		argSourceRoot.any(), argS.any(),
+		argBuildRoot.any(), argB.any(),
+		argArchLinux.any(),
+		argObjcopyExe.any(), tc.Objcopy.any(),
+		argFixElf.any(), internStr(fixElfPath).any(),
+		tc.CXX.any(),
+		argWlWholeArchive.any(),
+		argYaStartCommandFile.any(),
+		argYaEndCommandFile.any(),
+		argWlNoWholeArchive.any(),
+		internStr(vcsOPath).any(),
 	)
 
 	for _, o := range ownObjects {
-		cmdArgs = append(cmdArgs, (o).fullSTR())
+		cmdArgs = append(cmdArgs, (o).fullSTR().any())
 	}
 
 	cmdArgs = append(cmdArgs,
-		argDashO.str(), internStr(outputPath),
-		argShared.str(),
-		internV("-Wl,-soname,", outputName),
-		p.TargetArg,
+		argDashO.any(), internStr(outputPath).any(),
+		argShared.any(),
+		internV("-Wl,-soname,", outputName).any(),
+		p.TargetArg.any(),
 	)
 
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
-	cmdArgs = append(cmdArgs, argWlStartGroup.str())
+	cmdArgs = append(cmdArgs, argWlStartGroup.any())
 
 	for _, p := range peerLibPaths {
-		cmdArgs = append(cmdArgs, internStr(p.relString()))
+		cmdArgs = append(cmdArgs, internStr(p.relString()).any())
 	}
 
-	cmdArgs = append(cmdArgs, argWlEndGroup.str())
+	cmdArgs = append(cmdArgs, argWlEndGroup.any())
 
 	cmdArgs = append(cmdArgs,
-		argRdynamic.str(),
-		internV("-Wl,--version-script=$(S)/", modulePath, "/", exportsScript),
+		argRdynamic.any(),
+		internV("-Wl,--version-script=$(S)/", modulePath, "/", exportsScript).any(),
 	)
 
 	if !p.PIC && p.CompressDebugSections {
-		cmdArgs = append(cmdArgs, argWlCompressDebugSectionsZstd.str())
+		cmdArgs = append(cmdArgs, argWlCompressDebugSectionsZstd.any())
 	}
 
 	cmdArgs = append(cmdArgs, p.LinkPreludeExtra...)
-	cmdArgs = append(cmdArgs, argWlNoAsNeeded.str())
+	cmdArgs = append(cmdArgs, argWlNoAsNeeded.any())
 
 	if p.PIC {
-		cmdArgs = append(cmdArgs, (argFPIC).str())
+		cmdArgs = append(cmdArgs, (argFPIC).any())
 	}
 
 	cmdArgs = append(cmdArgs,
-		argWlGdbIndex.str(),
-		argWlZNotext.str(),
+		argWlGdbIndex.any(),
+		argWlZNotext.any(),
 	)
 
 	if p.PIC {
-		cmdArgs = append(cmdArgs, (argFPIC).str())
+		cmdArgs = append(cmdArgs, (argFPIC).any())
 	}
 
 	cmdArgs = append(cmdArgs,
-		argFuseLdLld.str(),
-		internV("--ld-path=", tc.LLD.string()),
-		argWlNoRosegment.str(),
-		argWlBuildIdSha1.str(),
+		argFuseLdLld.any(),
+		internV("--ld-path=", tc.LLD.string()).any(),
+		argWlNoRosegment.any(),
+		argWlBuildIdSha1.any(),
 	)
 
 	cmdArgs = append(cmdArgs, p.SystemLibs...)
-	cmdArgs = append(cmdArgs, argLm.str(), argWlGcSections.str())
-	cmdArgs = appendInternStrs(cmdArgs, p.linkerSelectionNoPieFlags())
+	cmdArgs = append(cmdArgs, argLm.any(), argWlGcSections.any())
+	cmdArgs = appendInternAnys(cmdArgs, p.linkerSelectionNoPieFlags())
 
 	return cmdArgs
 }

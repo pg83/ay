@@ -97,7 +97,7 @@ func TestGen_ScSourceAddsNoAddIncl(t *testing.T) {
 		for _, v := range scope.dirs {
 			if v == genDir {
 				t.Fatalf("%s contains the .sc generated build dir %q; _SRC(\"sc\") adds no addincl (got %v)",
-					scope.name, genDir.fullSTR().string(), vfsStrings(scope.dirs))
+					scope.name, genDir.any().string(), vfsStrings(scope.dirs))
 			}
 		}
 	}

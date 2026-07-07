@@ -54,14 +54,14 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 	ctx, instance := e.ctx, e.instance
 	na := ctx.emit.nodeArenas()
 
-	cmdArgs := na.chunkListSTR(na.strList(
-		sprotocBinary.fullSTR(),
-		internV("-I=./", outRoot),
-		internV("-I=$(S)/", outRoot),
-		argIB2.str(),
-		argISContribLibsProtobufSrc.str(),
-		internV("--sproto_out=$(B)/", outRoot),
-		internStr(p.protoRelPath),
+	cmdArgs := na.chunkList(na.anyList(
+		sprotocBinary.any(),
+		internV("-I=./", outRoot).any(),
+		internV("-I=$(S)/", outRoot).any(),
+		argIB2.any(),
+		argISContribLibsProtobufSrc.any(),
+		internV("--sproto_out=$(B)/", outRoot).any(),
+		internStr(p.protoRelPath).any(),
 	))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

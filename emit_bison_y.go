@@ -118,25 +118,25 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	head := make([]STR, 0, 6+len(d.cc.BisonFlags))
+	head := make([]ANY, 0, 6+len(d.cc.BisonFlags))
 
-	head = append(head, internStr(bisonBin), argV.str())
-	head = appendArgStr(head, d.cc.BisonFlags)
+	head = append(head, internStr(bisonBin).any(), argV.any())
+	head = appendArgAny(head, d.cc.BisonFlags)
 
 	head = append(head,
-		internV("--defines=", headerVFS.string()),
-		argDashO.str(),
-		(generatedVFS).fullSTR(),
-		(srcVFS).fullSTR())
+		internV("--defines=", headerVFS.string()).any(),
+		argDashO.any(),
+		(generatedVFS).fullSTR().any(),
+		(srcVFS).fullSTR().any())
 
-	cmds := na.cmdList(Cmd{CmdArgs: na.chunkListSTR(head), Env: env})
+	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env})
 	inputs := []VFS{bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS}
 
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
-			CmdArgs: na.chunkListSTR(na.strList(d.cc.TC.Python3,
-				(bisonPreprocessPyVFS).fullSTR(),
-				(headerVFS).fullSTR())),
+			CmdArgs: na.chunkList(na.anyList(d.cc.TC.Python3.any(),
+				(bisonPreprocessPyVFS).any(),
+				(headerVFS).any())),
 			Env: preprocessEnv,
 		})
 

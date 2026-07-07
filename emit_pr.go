@@ -523,9 +523,9 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 		}
 	}
 
-	cmdArgs := make([]STR, 0, 1+len(stmt.Args))
+	cmdArgs := make([]ANY, 0, 1+len(stmt.Args))
 
-	cmdArgs = append(cmdArgs, spec.toolBinPath.fullSTR())
+	cmdArgs = append(cmdArgs, spec.toolBinPath.any())
 
 	fileTokens := prBareFileTokens(stmt, spec.inVFSs, spec.outVFSByToken)
 
@@ -552,7 +552,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 			}
 		}
 
-		cmdArgs = append(cmdArgs, key)
+		cmdArgs = append(cmdArgs, key.any())
 	}
 
 	head := make([]VFS, 0, 1+len(spec.auxTools)+len(stmt.INFiles))
@@ -615,7 +615,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	toolRefs = append(toolRefs, depRefs(spec.toolLDRef)...)
 
 	cmd := Cmd{
-		CmdArgs: na.chunkListSTR(cmdArgs),
+		CmdArgs: na.chunkList(cmdArgs),
 		Env:     env,
 	}
 

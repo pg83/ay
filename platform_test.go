@@ -15,12 +15,12 @@ func TestWrapccPrefixFor_GateOnOpensource(t *testing.T) {
 	}
 	wantTail := []string{"--source-root", "$(S)", "--build-root", "$(B)", "--wrapcc-end"}
 
-	if !reflect.DeepEqual(strStrs(head), wantHead) {
-		t.Errorf("wrapcc head = %v, want %v", strStrs(head), wantHead)
+	if !reflect.DeepEqual(anyStrs(head), wantHead) {
+		t.Errorf("wrapcc head = %v, want %v", anyStrs(head), wantHead)
 	}
 
-	if !reflect.DeepEqual(strStrs(tail), wantTail) {
-		t.Errorf("wrapcc tail = %v, want %v", strStrs(tail), wantTail)
+	if !reflect.DeepEqual(anyStrs(tail), wantTail) {
+		t.Errorf("wrapcc tail = %v, want %v", anyStrs(tail), wantTail)
 	}
 
 	head, tail = wrapccPrefixFor(map[string]string{"OPENSOURCE": "yes"})
@@ -57,15 +57,15 @@ func TestNewPlatform_WrapccVectorsAndResources(t *testing.T) {
 func TestSysrootArgsFor(t *testing.T) {
 	sdk := "$(B)/resources/OS_SDK_ROOT"
 
-	if got := strStrs(sysrootArgsFor(OSLinux, map[string]string{})); !reflect.DeepEqual(got, []string{"--sysroot=" + sdk, "-B" + sdk + "/usr/bin"}) {
+	if got := anyStrs(sysrootArgsFor(OSLinux, map[string]string{})); !reflect.DeepEqual(got, []string{"--sysroot=" + sdk, "-B" + sdk + "/usr/bin"}) {
 		t.Errorf("linux default = %v", got)
 	}
 
-	if got := strStrs(sysrootArgsFor(OSLinux, map[string]string{"MUSL": "yes"})); !reflect.DeepEqual(got, []string{"--sysroot=/nowhere", "-B" + sdk + "/usr/bin"}) {
+	if got := anyStrs(sysrootArgsFor(OSLinux, map[string]string{"MUSL": "yes"})); !reflect.DeepEqual(got, []string{"--sysroot=/nowhere", "-B" + sdk + "/usr/bin"}) {
 		t.Errorf("musl = %v", got)
 	}
 
-	if got := strStrs(sysrootArgsFor(OSLinux, map[string]string{"OS_SDK": "local"})); !reflect.DeepEqual(got, []string{"-B/usr/bin"}) {
+	if got := anyStrs(sysrootArgsFor(OSLinux, map[string]string{"OS_SDK": "local"})); !reflect.DeepEqual(got, []string{"-B/usr/bin"}) {
 		t.Errorf("local = %v", got)
 	}
 }

@@ -56,7 +56,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 		node := Node{
 			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(bcArgs), Env: env}),
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(bcArgs), Env: env}),
 			Env:          env,
 			Inputs:       allInputs,
 			Outputs:      na.vfsList(bcOut),
@@ -73,13 +73,13 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	}
 
 	mergedOut := build(instance.Path.relString(), "/", stmt.Name, "_merged", stmt.Suffix, ".bc")
-	ldArgs := []STR{internStr(llvmLink)}
+	ldArgs := []ANY{internStr(llvmLink).any()}
 
 	for _, p := range bcPaths {
-		ldArgs = append(ldArgs, (p).fullSTR())
+		ldArgs = append(ldArgs, (p).any())
 	}
 
-	ldArgs = append(ldArgs, argDashO.str(), (mergedOut).fullSTR())
+	ldArgs = append(ldArgs, argDashO.any(), (mergedOut).any())
 
 	mergeInputs := na.inputList(bcPaths)
 
@@ -89,7 +89,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	ldNode := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(ldArgs), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
 		Env:          env,
 		Inputs:       mergeInputs,
 		Outputs:      na.vfsList(mergedOut),
@@ -102,15 +102,15 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	ldRef := ctx.emit.emitNode(ldNode)
 	optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 	optOut := build(instance.Path.relString(), "/", optOutName)
-	optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).fullSTR(), argDashO.str(), (optOut).fullSTR()}
+	optArgs := []ANY{internStr(python).any(), internStr(optWrapper).any(), internStr(opt).any(), (mergedOut).any(), argDashO.any(), (optOut).any()}
 	passes := []string{"default<O2>", "globalopt", "globaldce"}
 
 	if len(stmt.Symbols) > 0 {
 		passes = append(passes, "internalize")
-		optArgs = append(optArgs, internV("-internalize-public-api-list=", strings.Join(stmt.Symbols, "#")))
+		optArgs = append(optArgs, internV("-internalize-public-api-list=", strings.Join(stmt.Symbols, "#")).any())
 	}
 
-	optArgs = append(optArgs, internV(`-passes="`, strings.Join(passes, ","), `"`))
+	optArgs = append(optArgs, internV(`-passes="`, strings.Join(passes, ","), `"`).any())
 
 	optInputs := make([]VFS, 0, 2+len(bcSourceInputs))
 
@@ -121,7 +121,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	optNode := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(optArgs), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
 		Env:          env,
 		Inputs:       optChunks,
 		Outputs:      na.vfsList(optOut),
@@ -150,7 +150,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	})
 }
 
-func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []STR {
+func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []ANY {
 	bundle := compileFlagBundleFor(platform)
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in.ModuleCompileEnv, platform)
@@ -161,30 +161,30 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 		ownExtras = concat(ownExtras, platform.CXXFlags)
 	}
 
-	args := make([]STR, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+
+	args := make([]ANY, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+
 		len(bundle.Defines)+len(ownCFlags)+2*len(bundle.NoLibcBlock)+
 		len(in.ModuleScopeCFlags)+len(ownExtras)+len(ownGlobalBucket)+
 		len(bundle.ArchArgs)+len(bundle.CFlags)+len(warningBundle))
 
-	args = append(args, internStr(python), internStr(clangWrapper), argNo.str(), internStr(clangBC))
-	args = appendArgStr(args, ccIncludesPrefix)
+	args = append(args, internStr(python).any(), internStr(clangWrapper).any(), argNo.any(), internStr(clangBC).any())
+	args = appendArgAny(args, ccIncludesPrefix)
 	args = appendAddIncl(args, in.AddIncl, in.InclArgs)
 
 	peerAddIncl := in.PeerAddInclGlobal
 
 	if len(peerAddIncl) > 0 && peerAddIncl[0] == googleapisCommonProtosAddIncl {
-		args = append(args, in.InclArgs.arg(peerAddIncl[0]))
+		args = append(args, in.InclArgs.arg(peerAddIncl[0]).any())
 		peerAddIncl = peerAddIncl[1:]
 	}
 
 	args = appendAddIncl(args, peerAddIncl, in.InclArgs)
 	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(platform))
 	args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
-	args = appendArgStr(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket))
-	args = append(args, platform.TargetArg)
-	args = appendArgStr(args, bundle.ArchArgs)
-	args = append(args, argDashBBin)
-	args = append(args, argWnoUnknownWarningOption.str(), argEmitLlvm.str(), argDashC.str(), (inVFS).fullSTR(), argDashO.str(), (outVFS).fullSTR())
+	args = appendArgAny(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket))
+	args = append(args, platform.TargetArg.any())
+	args = appendArgAny(args, bundle.ArchArgs)
+	args = append(args, argDashBBin.any())
+	args = append(args, argWnoUnknownWarningOption.any(), argEmitLlvm.any(), argDashC.any(), (inVFS).any(), argDashO.any(), (outVFS).any())
 
 	return args
 }

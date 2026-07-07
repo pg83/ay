@@ -37,8 +37,8 @@ type PyPBModuleEmission struct {
 	mypyRef      NodeRef
 	grpcPyBinary VFS
 	mypyBinary   VFS
-	head         []STR
-	mid          []STR
+	head         []ANY
+	mid          []ANY
 	tail         []STR
 }
 
@@ -66,42 +66,42 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 
 	protoRoot := protoPythonOutputRoot(d)
 
-	head := []STR{
-		d.tc.Python3,
-		internStr(pbPyWrapperPath),
-		argPyVer.str(), argPy3.str(),
-		argSuffixes.str(),
+	head := []ANY{
+		d.tc.Python3.any(),
+		internStr(pbPyWrapperPath).any(),
+		argPyVer.any(), argPy3.any(),
+		argSuffixes.any(),
 	}
 
-	head = appendInternStrs(head, suffixes)
-	pe.head = append(head, argInput.str())
+	head = appendInternAnys(head, suffixes)
+	pe.head = append(head, argInput.any())
 
-	mid := make([]STR, 0, 16)
+	mid := make([]ANY, 0, 16)
 
 	mid = append(mid,
-		argNs.str(), internStr(protoPythonNamespaceArg(d)),
-		arg2.str(),
-		(protocBinary).fullSTR(),
-		internV("-I=./", protoRoot),
-		internV("-I=$(S)/", protoRoot),
-		argIB2.str(),
-		argIS3.str(),
+		argNs.any(), internStr(protoPythonNamespaceArg(d)).any(),
+		arg2.any(),
+		(protocBinary).any(),
+		internV("-I=./", protoRoot).any(),
+		internV("-I=$(S)/", protoRoot).any(),
+		argIB2.any(),
+		argIS3.any(),
 	)
 
 	if d.useCommonGoogleAPIs {
-		mid = append(mid, strISContribLibsGoogleapisCommonProtos)
+		mid = append(mid, strISContribLibsGoogleapisCommonProtos.any())
 	}
 
 	if protoRoot != "" {
-		mid = append(mid, internV("-I=$(S)/", protoRoot))
+		mid = append(mid, internV("-I=$(S)/", protoRoot).any())
 
 		if duplicateOutputRootInclude {
-			mid = append(mid, internV("-I=$(S)/", protoRoot))
+			mid = append(mid, internV("-I=$(S)/", protoRoot).any())
 		}
 	}
 
 	for _, p := range protoInclude {
-		token := internV("-I=", p.string())
+		token := internV("-I=", p.string()).any()
 
 		if slices.Contains(mid, token) {
 			continue
@@ -110,17 +110,17 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 		mid = append(mid, token)
 	}
 
-	if d.needGoogleProtoPeerdirs && !slices.Contains(mid, argISContribLibsProtocSrc.str()) {
-		mid = append(mid, argISContribLibsProtocSrc.str())
+	if d.needGoogleProtoPeerdirs && !slices.Contains(mid, argISContribLibsProtocSrc.any()) {
+		mid = append(mid, argISContribLibsProtocSrc.any())
 	}
 
 	pe.mid = append(mid,
-		argIB2.str(),
-		argISContribLibsProtobufSrc.str(),
-		internV("--python_out=$(B)/", protoRoot),
+		argIB2.any(),
+		argISContribLibsProtobufSrc.any(),
+		internV("--python_out=$(B)/", protoRoot).any(),
 	)
 
-	pe.mid = appendArgStr(pe.mid, d.protocFlags)
+	pe.mid = appendArgAny(pe.mid, d.protocFlags)
 
 	if d.grpc {
 		pe.tail = append(pe.tail,
@@ -177,8 +177,8 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR, srcGroup int) {
 		suffixes = append(suffixes, "_pb2.pyi")
 	}
 
-	relChunk := []STR{internStr(protoRelPath)}
-	cmdArgs := na.chunkListSTR(pe.head, relChunk, pe.mid, relChunk)
+	relChunk := []ANY{internStr(protoRelPath).any()}
+	cmdArgs := na.chunkList(pe.head, relChunk, pe.mid, relChunk)
 
 	if len(pe.tail) > 0 {
 		cmdArgs = append(cmdArgs, na.anyChunk(pe.tail))
@@ -342,13 +342,13 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
 	yapycOut := e.pyProtoYapycOut(ps)
 
-	yapycCmd := []STR{
-		(py3ccBinary).fullSTR(),
-		argSlowPy3cc.str(),
-		(py3ccSlowBin).fullSTR(),
-		internV(token, "-"),
-		(ps.Path).fullSTR(),
-		(yapycOut).fullSTR(),
+	yapycCmd := []ANY{
+		(py3ccBinary).any(),
+		argSlowPy3cc.any(),
+		(py3ccSlowBin).any(),
+		internV(token, "-").any(),
+		(ps.Path).any(),
+		(yapycOut).any(),
 	}
 
 	nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path), info.SourceInputs)
@@ -363,7 +363,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 
 	yapycNode := Node{
 		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkListSTR(yapycCmd), Env: yapycEnv}),
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(yapycCmd), Env: yapycEnv}),
 		Env:            yapycEnv,
 		Inputs:         nodeInputs,
 		Outputs:        na.vfsList(yapycOut),

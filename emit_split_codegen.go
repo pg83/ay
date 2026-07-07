@@ -40,18 +40,18 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	outputs = append(outputs, prefixCpp, prefixH)
 
 	cppParts := sc.OutNum - splitCodegenStreamCount
-	cmdArgs := make([]STR, 0, 6+len(sc.Opts))
+	cmdArgs := make([]ANY, 0, 6+len(sc.Opts))
 
 	cmdArgs = append(cmdArgs,
-		toolBin.fullSTR(),
-		inputIn.fullSTR(),
-		prefixCpp.fullSTR(),
-		prefixH.fullSTR(),
-		strCppParts,
-		internStr(strconv.Itoa(cppParts)),
+		toolBin.any(),
+		inputIn.any(),
+		prefixCpp.any(),
+		prefixH.any(),
+		strCppParts.any(),
+		internStr(strconv.Itoa(cppParts)).any(),
 	)
 
-	cmdArgs = append(cmdArgs, sc.Opts...)
+	cmdArgs = appendAnys(cmdArgs, sc.Opts)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	scRef := ctx.emit.reserve()
@@ -98,7 +98,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 
 	node := Node{
 		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs), Env: env}),
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
 		Outputs:        outputs,

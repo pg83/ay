@@ -14,7 +14,7 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: bldRootDirVFS,
 			Env: env}),
 		Env:          env,
@@ -56,7 +56,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	return build(outRel), srcVFS
 }
 
-func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []STR {
+func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []ANY {
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 2 + len(bundle.ArchArgs) + len(instance.Platform.SysrootArgs)
 	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
@@ -70,29 +70,29 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(ownCFlags) +
 		len(bundle.NoLibcBlock) + betweenBlocks + len(bundle.NoLibcBlock) + len(in.SFlags) + len(in.PerSourceCFlags) + 4
 
-	cmdArgs := make([]STR, 0, fixed+len(includes))
+	cmdArgs := make([]ANY, 0, fixed+len(includes))
 
-	cmdArgs = append(cmdArgs, in.TC.CC, instance.Platform.TargetArg)
-	cmdArgs = appendArgStr(cmdArgs, bundle.ArchArgs)
+	cmdArgs = append(cmdArgs, in.TC.CC.any(), instance.Platform.TargetArg.any())
+	cmdArgs = appendArgAny(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, instance.Platform.SysrootArgs...)
 
 	if in.ForceConsistentDebug {
-		cmdArgs = appendArgStr(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir)
+		cmdArgs = appendArgAny(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir)
 	}
 
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(instance.Platform))
-	cmdArgs = appendArgStr(cmdArgs, in.SFlags)
-	cmdArgs = appendArgStr(cmdArgs, in.PerSourceCFlags)
-	cmdArgs = append(cmdArgs, argDashC.str(), argDashO.str(), (outVFS).fullSTR(), (inVFS).fullSTR())
+	cmdArgs = appendArgAny(cmdArgs, in.SFlags)
+	cmdArgs = appendArgAny(cmdArgs, in.PerSourceCFlags)
+	cmdArgs = append(cmdArgs, argDashC.any(), argDashO.any(), (outVFS).fullSTR().any(), (inVFS).fullSTR().any())
 	cmdArgs = append(cmdArgs, includes...)
 
 	return cmdArgs
 }
 
-func composeASIncludes(in ModuleCCInputs) []STR {
-	out := make([]STR, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
+func composeASIncludes(in ModuleCCInputs) []ANY {
+	out := make([]ANY, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
 
-	out = appendArgStr(out, ccIncludesPrefix)
+	out = appendArgAny(out, ccIncludesPrefix)
 	out = appendAddIncl(out, in.AddIncl, in.InclArgs)
 	out = appendAddIncl(out, in.PeerAddInclGlobal, in.InclArgs)
 

@@ -101,8 +101,8 @@ func rootrelInputPath(kv string) (string, bool) {
 }
 
 type ObjcopyArgBlocks struct {
-	pre  []STR
-	post []STR
+	pre  []ANY
+	post []ANY
 }
 
 type ObjcopyEmitCtx struct {
@@ -124,21 +124,21 @@ func newObjcopyEmitCtx(ctx *GenCtx, d *ModuleData, p *Platform) *ObjcopyEmitCtx 
 
 func composeObjcopyArgBlocks(tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
 	return ObjcopyArgBlocks{
-		pre: []STR{
-			tc.Python3,
-			internStr(objcopyScriptPath),
-			argCompiler.str(), tc.CXX,
-			argObjcopy.str(), tc.Objcopy,
-			argCompressor.str(), internStr(rescompressorBinPath),
-			argRescompiler.str(), internStr(rescompilerBinPath),
-			argOutputObj.str(),
+		pre: []ANY{
+			tc.Python3.any(),
+			internStr(objcopyScriptPath).any(),
+			argCompiler.any(), tc.CXX.any(),
+			argObjcopy.any(), tc.Objcopy.any(),
+			argCompressor.any(), internStr(rescompressorBinPath).any(),
+			argRescompiler.any(), internStr(rescompilerBinPath).any(),
+			argOutputObj.any(),
 		},
-		post: []STR{argTarget.str(), internStr(p.Triple)},
+		post: []ANY{argTarget.any(), internStr(p.Triple).any()},
 	}
 }
 
-func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []STR) ArgChunks {
-	return oc.na.chunkListSTR(oc.blocks.pre, oc.na.strList((outputObj).fullSTR()), oc.blocks.post, payload)
+func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []ANY) ArgChunks {
+	return oc.na.chunkList(oc.blocks.pre, oc.na.anyList((outputObj).any()), oc.blocks.post, payload)
 }
 
 type ResolvedResource struct {
@@ -164,7 +164,7 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 	return ResolvedResource{Input: fallback}
 }
 
-func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []STR, inputs InputChunks, deps []NodeRef) NodeRef {
+func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs InputChunks, deps []NodeRef) NodeRef {
 	na := oc.na
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -308,21 +308,21 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 			payloadCap += 1 + nKvs
 		}
 
-		payload := make([]STR, 0, payloadCap)
+		payload := make([]ANY, 0, payloadCap)
 
 		hashScratch = hashScratch[:0]
 
 		if nPaths > 0 {
-			payload = append(payload, argInputs.str())
+			payload = append(payload, argInputs.any())
 
 			for _, it := range chunk {
 				if it.Path != "-" {
-					payload = append(payload, it.Input.fullSTR())
+					payload = append(payload, it.Input.any())
 					hashScratch = append(hashScratch, it.Path)
 				}
 			}
 
-			payload = append(payload, argKeys.str())
+			payload = append(payload, argKeys.any())
 
 			for _, it := range chunk {
 				if it.Path != "-" {
@@ -330,18 +330,18 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 					key := internBytes(b64Scratch)
 
-					payload = append(payload, key)
+					payload = append(payload, key.any())
 					hashScratch = append(hashScratch, key.string())
 				}
 			}
 		}
 
 		if nKvs > 0 {
-			payload = append(payload, argKvs.str())
+			payload = append(payload, argKvs.any())
 
 			for _, it := range chunk {
 				if it.Path == "-" {
-					payload = append(payload, internStr(it.Cmd))
+					payload = append(payload, internStr(it.Cmd).any())
 					hashScratch = append(hashScratch, it.Key)
 				}
 			}
@@ -466,15 +466,15 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		auxRef := ctx.emit.reserve()
 		auxClosure := p.RawClosure(aux, adjacent, auxRef)
 		auxLen := auxClosure.len()
-		nodeCmd := make([]STR, 0, 2+2*len(chunk))
+		nodeCmd := make([]ANY, 0, 2+2*len(chunk))
 
-		nodeCmd = append(nodeCmd, internStr(rescompilerBinPath), aux.fullSTR())
+		nodeCmd = append(nodeCmd, internStr(rescompilerBinPath).any(), aux.any())
 
 		for _, it := range chunk {
 			if it.Path == "-" {
-				nodeCmd = append(nodeCmd, dash, internStr(it.Cmd))
+				nodeCmd = append(nodeCmd, dash.any(), internStr(it.Cmd).any())
 			} else {
-				nodeCmd = append(nodeCmd, it.Input.fullSTR(), internV("-", it.Key))
+				nodeCmd = append(nodeCmd, it.Input.any(), internV("-", it.Key).any())
 			}
 		}
 
@@ -505,7 +505,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		ctx.emit.emitReservedNode(Node{
 			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(nodeCmd), Env: env}),
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
 			Env:          env,
 			Inputs:       na.inputList(adjacent, tail),
 			Outputs:      na.vfsList(aux),

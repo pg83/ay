@@ -12,20 +12,20 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 		statsPlatform = p
 	}
 
-	cmdArgs := make([]STR, 0, 4+len(sources))
+	cmdArgs := make([]ANY, 0, 4+len(sources))
 
 	cmdArgs = append(cmdArgs,
-		tc.Python3,
-		(joinSrcs).fullSTR(),
-		(outVFS).fullSTR(),
-		argYaStartCommandFile.str(),
+		tc.Python3.any(),
+		(joinSrcs).any(),
+		(outVFS).any(),
+		argYaStartCommandFile.any(),
 	)
 
 	for _, s := range sources {
-		cmdArgs = append(cmdArgs, internV(instance.Path.relString(), "/", s))
+		cmdArgs = append(cmdArgs, internV(instance.Path.relString(), "/", s).any())
 	}
 
-	cmdArgs = append(cmdArgs, argYaEndCommandFile.str())
+	cmdArgs = append(cmdArgs, argYaEndCommandFile.any())
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	srcVFSs := make([]VFS, 0, len(sources))
@@ -38,7 +38,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	node := Node{
 		Platform: statsPlatform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:          env,
 		Inputs:       inputs,

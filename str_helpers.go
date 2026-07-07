@@ -9,21 +9,11 @@ func strBytes(s string) []byte {
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
-func appendArgStr(dst []STR, srcs ...[]ARG) []STR {
-	for _, s := range srcs {
-		for _, a := range s {
-			dst = append(dst, a.str())
-		}
-	}
-
-	return dst
-}
-
-func appendArgGroupStr(dst []STR, srcs ...[]ARG) []STR {
+func appendArgGroupStr(dst []ANY, srcs ...[]ARG) []ANY {
 	for _, s := range srcs {
 		for _, a := range s {
 			for _, tok := range strings.Fields(a.string()) {
-				dst = append(dst, internStr(tok))
+				dst = append(dst, internStr(tok).any())
 			}
 		}
 	}
@@ -109,4 +99,30 @@ func strsContain(items []STR, s string) bool {
 	}
 
 	return false
+}
+
+func appendArgAny(dst []ANY, srcs ...[]ARG) []ANY {
+	for _, src := range srcs {
+		for _, a := range src {
+			dst = append(dst, a.any())
+		}
+	}
+
+	return dst
+}
+
+func appendAnys(dst []ANY, ss []STR) []ANY {
+	for _, s := range ss {
+		dst = append(dst, s.any())
+	}
+
+	return dst
+}
+
+func appendInternAnys(dst []ANY, ss []string) []ANY {
+	for _, s := range ss {
+		dst = append(dst, internStr(s).any())
+	}
+
+	return dst
 }

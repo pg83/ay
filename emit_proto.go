@@ -643,13 +643,13 @@ func emitPB(
 		outputs = []VFS{pbCC, pbH}
 	}
 
-	outsChunk := make([]STR, 0, len(outputs))
+	outsChunk := make([]ANY, 0, len(outputs))
 
 	for _, output := range outputs {
-		outsChunk = append(outsChunk, (output).fullSTR())
+		outsChunk = append(outsChunk, (output).any())
 	}
 
-	cmdArgs := na.chunkListSTR(blocks.head, outsChunk, blocks.mid, na.strList(internStr(protoRelPath)))
+	cmdArgs := na.chunkList(blocks.head, outsChunk, blocks.mid, na.anyList(internStr(protoRelPath).any()))
 
 	if len(blocks.tail) > 0 {
 		cmdArgs = append(cmdArgs, na.anyChunk(blocks.tail))
@@ -790,8 +790,8 @@ func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src strin
 }
 
 type PbArgBlocks struct {
-	head []STR
-	mid  []STR
+	head []ANY
+	mid  []ANY
 	tail []STR
 }
 
@@ -799,10 +799,10 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 	grpc bool, cppOutRoot string, liteHeaders bool,
 	extraProtocFlags []ARG, extraPlugins []ResolvedCPPProtoPlugin,
 	protoInclude []VFS) *PbArgBlocks {
-	head := []STR{
-		tc.Python3,
-		internStr(pbWrapperPath),
-		argOutputs.str(),
+	head := []ANY{
+		tc.Python3.any(),
+		internStr(pbWrapperPath).any(),
+		argOutputs.any(),
 	}
 
 	includeRoot := ""
@@ -811,44 +811,44 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		includeRoot = cppOutRoot
 	}
 
-	mid := make([]STR, 0, 12+len(protoInclude)+len(extraProtocFlags))
+	mid := make([]ANY, 0, 12+len(protoInclude)+len(extraProtocFlags))
 
 	mid = append(mid,
-		arg2.str(),
-		(protocBinary).fullSTR(),
-		internV("-I=./", includeRoot),
-		internV("-I=$(S)/", includeRoot),
-		argIB2.str(),
-		argIS3.str(),
+		arg2.any(),
+		(protocBinary).any(),
+		internV("-I=./", includeRoot).any(),
+		internV("-I=$(S)/", includeRoot).any(),
+		argIB2.any(),
+		argIS3.any(),
 	)
 
 	if cppOutRoot != "" {
-		mid = append(mid, internV("-I=$(S)/", cppOutRoot))
+		mid = append(mid, internV("-I=$(S)/", cppOutRoot).any())
 	}
 
 	for _, p := range protoInclude {
-		mid = append(mid, internV("-I=", p.string()))
+		mid = append(mid, internV("-I=", p.string()).any())
 	}
 
 	if liteHeaders {
 		mid = append(mid,
-			argIB2.str(),
-			argISContribLibsProtobufSrc.str(),
-			internV("--cpp_out=proto_h=true:$(B)/", cppOutRoot),
+			argIB2.any(),
+			argISContribLibsProtobufSrc.any(),
+			internV("--cpp_out=proto_h=true:$(B)/", cppOutRoot).any(),
 		)
 	} else {
 		mid = append(mid,
-			argIB2.str(),
-			argISContribLibsProtobufSrc.str(),
-			internV("--cpp_out=:$(B)/", cppOutRoot),
+			argIB2.any(),
+			argISContribLibsProtobufSrc.any(),
+			internV("--cpp_out=:$(B)/", cppOutRoot).any(),
 		)
 	}
 
-	mid = appendArgStr(mid, extraProtocFlags)
+	mid = appendArgAny(mid, extraProtocFlags)
 
 	mid = append(mid,
-		internV("--cpp_styleguide_out=:$(B)/", cppOutRoot),
-		internV("--plugin=protoc-gen-cpp_styleguide=", cppStyleguideBinary.string()),
+		internV("--cpp_styleguide_out=:$(B)/", cppOutRoot).any(),
+		internV("--plugin=protoc-gen-cpp_styleguide=", cppStyleguideBinary.string()).any(),
 	)
 
 	var tail []STR

@@ -329,7 +329,7 @@ func TestComposeProgramLinkTrailer_NonPICRPathTrailerKeepsNoPie(t *testing.T) {
 		"-Wl,-no-pie",
 	}
 
-	if !slices.Equal(strStrs(got), want) {
+	if !slices.Equal(anyStrs(got), want) {
 		t.Fatalf("composeProgramLinkTrailer mismatch:\n got: %#v\nwant: %#v", got, want)
 	}
 }

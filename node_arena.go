@@ -36,6 +36,63 @@ func (na *NodeArenas) strList(ss ...STR) []STR {
 	return na.strs.list(ss...)
 }
 
+func (na *NodeArenas) anyList(as ...ANY) []ANY {
+	return na.anys.list(as...)
+}
+
+func (na *NodeArenas) anyConcat(parts ...[]ANY) []ANY {
+	n := 0
+
+	for _, p := range parts {
+		n += len(p)
+	}
+
+	block := na.anys.alloc(n)
+	k := 0
+
+	for _, p := range parts {
+		k += copy(block[k:], p)
+	}
+
+	na.anys.commit(n)
+
+	return block[:n:n]
+}
+
+func (na *NodeArenas) argAnyList(groups ...[]ARG) []ANY {
+	n := 0
+
+	for _, g := range groups {
+		n += len(g)
+	}
+
+	block := na.anys.alloc(n)
+	k := 0
+
+	for _, g := range groups {
+		for _, a := range g {
+			block[k] = a.any()
+			k++
+		}
+	}
+
+	na.anys.commit(n)
+
+	return block[:n:n]
+}
+
+func (na *NodeArenas) inclAnyList(addIncl []VFS, memo InclArgMemo) []ANY {
+	block := na.anys.alloc(len(addIncl))
+
+	for i, p := range addIncl {
+		block[i] = memo.arg(p).any()
+	}
+
+	na.anys.commit(len(addIncl))
+
+	return block[:len(addIncl):len(addIncl)]
+}
+
 func (na *NodeArenas) chunkList(ch ...[]ANY) ArgChunks {
 	return ArgChunks(na.chunks.list(ch...))
 }
@@ -50,6 +107,10 @@ func (na *NodeArenas) anyChunk(ss []STR) []ANY {
 	na.anys.commit(len(ss))
 
 	return block[:len(ss):len(ss)]
+}
+
+func (na *NodeArenas) anyChunkAny(as []ANY) []ANY {
+	return na.anys.list(as...)
 }
 
 func (na *NodeArenas) chunkListSTR(ch ...[]STR) ArgChunks {

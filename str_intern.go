@@ -245,6 +245,20 @@ func internStrs(ss []string) []STR {
 	return out
 }
 
+func internAnys(ss []string) []ANY {
+	if len(ss) == 0 {
+		return nil
+	}
+
+	out := make([]ANY, len(ss))
+
+	for i, s := range ss {
+		out[i] = internStr(s).any()
+	}
+
+	return out
+}
+
 func interned(s string) STR {
 	h := xxh3.HashString128(s)
 

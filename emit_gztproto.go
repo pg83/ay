@@ -28,7 +28,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{
-			CmdArgs: na.chunkListSTR(gztCmdArgs(converterBin, protoInclude, gztSource, genProto)),
+			CmdArgs: na.chunkList(gztCmdArgs(converterBin, protoInclude, gztSource, genProto)),
 			Env:     env,
 		}),
 		Env:            env,
@@ -77,11 +77,11 @@ func (e *EmitContext) emitLibraryGztProtoCompile(src STR) {
 	e.emitLibraryGztProtoSource(src.string(), d.cc.ProtoInclude)
 }
 
-func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []STR {
-	args := make([]STR, 0, 6+len(protoInclude))
+func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []ANY {
+	args := make([]ANY, 0, 6+len(protoInclude))
 
-	args = append(args, converterBin.fullSTR())
-	args = append(args, internV("-I", pbRuntimeBaseVFS.string()))
+	args = append(args, converterBin.any())
+	args = append(args, internV("-I", pbRuntimeBaseVFS.string()).any())
 
 	seen := make(map[string]struct{}, 2+len(protoInclude))
 
@@ -91,7 +91,7 @@ func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) [
 		}
 
 		seen[path] = struct{}{}
-		args = append(args, internV("-I", path))
+		args = append(args, internV("-I", path).any())
 	}
 
 	emitI(strB.string())
@@ -101,8 +101,8 @@ func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) [
 		emitI(p.string())
 	}
 
-	args = append(args, internV("-I", strS.string()))
-	args = append(args, gztSource.fullSTR(), genProto.fullSTR())
+	args = append(args, internV("-I", strS.string()).any())
+	args = append(args, gztSource.any(), genProto.any())
 
 	return args
 }

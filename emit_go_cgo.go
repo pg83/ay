@@ -6,29 +6,29 @@ import (
 
 var (
 	goCgoBaseCFlags    = []ARG{internArg("-w"), internArg("-pthread"), internArg("-fpic")}
-	goCgoBaseCFlagsStr = []STR{internStr("-w"), internStr("-pthread"), internStr("-fpic")}
-	goCgoCopyCmdHead   = []STR{wrapccPython3STR, copyFsToolsVFS.fullSTR(), internStr("copy")}
-	goCgo1ToolChunk    = []STR{str3, strGoCgoTool, internStr("-objdir")}
-	goCgoImportStd     = []STR{internStr("-import_runtime_cgo=false"), internStr("-import_syscall=false")}
-	goCgoImportDefault = []STR{internStr("-import_runtime_cgo=true"), internStr("-import_syscall=true")}
+	goCgoBaseCFlagsStr = []ANY{internStr("-w").any(), internStr("-pthread").any(), internStr("-fpic").any()}
+	goCgoCopyCmdHead   = []ANY{wrapccPython3STR.any(), copyFsToolsVFS.fullSTR().any(), internStr("copy").any()}
+	goCgo1ToolChunk    = []ANY{str3.any(), strGoCgoTool.any(), internStr("-objdir").any()}
+	goCgoImportStd     = []ANY{internStr("-import_runtime_cgo=false").any(), internStr("-import_syscall=false").any()}
+	goCgoImportDefault = []ANY{internStr("-import_runtime_cgo=true").any(), internStr("-import_syscall=true").any()}
 )
 
-var goCgo1Head = []STR{
-	wrapccPython3STR,
-	cgo1WrapperVFS.fullSTR(),
-	internStr("--build-prefix=/-B"),
-	internStr("--source-prefix=/-S"),
-	internStr("--build-root"), strB,
-	internStr("--source-root"), strS,
-	internStr("--cgo1-files"),
+var goCgo1Head = []ANY{
+	wrapccPython3STR.any(),
+	cgo1WrapperVFS.any(),
+	internStr("--build-prefix=/-B").any(),
+	internStr("--source-prefix=/-S").any(),
+	internStr("--build-root").any(), strB.any(),
+	internStr("--source-root").any(), strS.any(),
+	internStr("--cgo1-files").any(),
 }
 
-var goCgoLinkOPostLd = []STR{
-	internStr("-Wl,--no-rosegment"),
-	internStr("-Wl,--build-id=sha1"),
-	internStr("-Wl,--unresolved-symbols=ignore-all"),
-	internStr("-nodefaultlibs"),
-	internStr("-lc"),
+var goCgoLinkOPostLd = []ANY{
+	internStr("-Wl,--no-rosegment").any(),
+	internStr("-Wl,--build-id=sha1").any(),
+	internStr("-Wl,--unresolved-symbols=ignore-all").any(),
+	internStr("-nodefaultlibs").any(),
+	internStr("-lc").any(),
 }
 
 func goModuleCgoCFiles(d *ModuleData) []STR {
@@ -77,24 +77,24 @@ func goCgoCFlags(d *ModuleData) []ARG {
 	return out
 }
 
-func (e *EmitContext) goCgoCFlagsStr() []STR {
+func (e *EmitContext) goCgoCFlagsStr() []ANY {
 	if len(e.d.cgoCflags) == 0 {
 		return goCgoBaseCFlagsStr
 	}
 
-	return e.ctx.na.strConcat(goCgoBaseCFlagsStr, e.d.cgoCflags)
+	return e.ctx.na.anyConcat(goCgoBaseCFlagsStr, e.ctx.na.anyChunk(e.d.cgoCflags))
 }
 
-func (e *EmitContext) goCgoIncludeArgs() []STR {
+func (e *EmitContext) goCgoIncludeArgs() []ANY {
 	if e.goInclJoined != nil {
 		return e.goInclJoined
 	}
 
 	d := e.d
 	na := e.ctx.na
-	block := na.strs.alloc(2 + len(d.cc.AddIncl) + len(d.cc.PeerAddInclGlobal))
+	block := na.anys.alloc(2 + len(d.cc.AddIncl) + len(d.cc.PeerAddInclGlobal))
 	k := 0
-	push := func(x STR) { block[k] = x; k++ }
+	push := func(x STR) { block[k] = x.any(); k++ }
 
 	push(strIB)
 	push(strIS)
@@ -113,14 +113,14 @@ func (e *EmitContext) goCgoIncludeArgs() []STR {
 		}
 	}
 
-	na.strs.commit(k)
+	na.anys.commit(k)
 
 	e.goInclJoined = block[:k:k]
 
 	return e.goInclJoined
 }
 
-func goCgoImportPathFlags(dir string) []STR {
+func goCgoImportPathFlags(dir string) []ANY {
 	if dir == goStdPrefix+"/runtime/cgo" {
 		return goCgoImportStd
 	}
@@ -212,11 +212,11 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel STR) {
 
 		na.vfs.commit(k)
 
-		args := na.strList(srcVFS.fullSTR(), dstVFS.fullSTR())
+		args := na.anyList(srcVFS.any(), dstVFS.any())
 
 		node := Node{
 			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(goCgoCopyCmdHead, args), Env: goVcsEnv}),
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(goCgoCopyCmdHead, args), Env: goVcsEnv}),
 			Env:          goVcsEnv,
 			Inputs:       na.inputList(block[:k:k]),
 			KV:           &cpKV,
@@ -256,31 +256,31 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	exportC := build(dir, "/_cgo_export.c")
 	gotypes := build(dir, "/_cgo_gotypes.go")
 	mainC := build(dir, "/_cgo_main.c")
-	pathBlock := na.strs.alloc(2*len(files) + 1)
+	pathBlock := na.anys.alloc(2*len(files) + 1)
 	k := 0
 
 	for _, f := range files {
-		pathBlock[k] = f.cgo1.fullSTR()
+		pathBlock[k] = f.cgo1.any()
 		k++
 	}
 
-	pathBlock[k] = strCgo2Files
+	pathBlock[k] = strCgo2Files.any()
 	k++
 
 	for _, f := range files {
-		pathBlock[k] = f.cgo2C.fullSTR()
+		pathBlock[k] = f.cgo2C.any()
 		k++
 	}
 
-	na.strs.commit(k)
+	na.anys.commit(k)
 
-	srcsBlock := na.strs.alloc(len(files))[:len(files):len(files)]
+	srcsBlock := na.anys.alloc(len(files))[:len(files):len(files)]
 
 	for i, f := range files {
-		srcsBlock[i] = f.src.fullSTR()
+		srcsBlock[i] = f.src.any()
 	}
 
-	na.strs.commit(len(files))
+	na.anys.commit(len(files))
 
 	inclArgs := e.goCgoIncludeArgs()
 	cflagsStr := e.goCgoCFlagsStr()
@@ -342,13 +342,13 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(
 			goCgo1Head,
 			pathBlock[:k:k],
 			goCgo1ToolChunk,
-			na.strList(build(dir).fullSTR(), strImportpath, internStr(goImportPathFor(dir))),
+			na.anyList(build(dir).any(), strImportpath.any(), internStr(goImportPathFor(dir)).any()),
 			goCgoImportPathFlags(dir),
-			na.strList(str3, instance.Platform.TargetArg),
+			na.anyList(str3.any(), instance.Platform.TargetArg.any()),
 			instance.Platform.SysrootArgs,
 			inclArgs,
 			cflagsStr,
@@ -412,33 +412,33 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	e.enqueueSrc(SrcMeta{Source: strCgoGotypesGo, Prio: stmtPrioDefault, Generated: true})
 }
 
-func (e *EmitContext) goCgoLinkOFlags() []STR {
+func (e *EmitContext) goCgoLinkOFlags() []ANY {
 	p := e.instance.Platform
 	tc := e.d.tc
 	na := e.ctx.na
-	block := na.strs.alloc(6 + len(p.LinkPreludeExtra))
+	block := na.anys.alloc(6 + len(p.LinkPreludeExtra))
 	k := 0
-	push := func(x STR) { block[k] = x; k++ }
+	push := func(x ANY) { block[k] = x; k++ }
 
 	if p.CompressDebugSections {
-		push(argWlCompressDebugSectionsZstd.str())
+		push(argWlCompressDebugSectionsZstd.any())
 	}
 
 	for _, s := range p.LinkPreludeExtra {
 		push(s)
 	}
 
-	push(argWlNoAsNeeded.str())
+	push(argWlNoAsNeeded.any())
 
 	if p.PIC {
-		push(argFPIC.str())
-		push(argFPIC.str())
+		push(argFPIC.any())
+		push(argFPIC.any())
 	}
 
-	push(argFuseLdLld.str())
-	push(internV("--ld-path=", tc.LLD.string()))
+	push(argFuseLdLld.any())
+	push(internV("--ld-path=", tc.LLD.string()).any())
 
-	na.strs.commit(k)
+	na.anys.commit(k)
 
 	return block[:k:k]
 }
@@ -581,17 +581,17 @@ func (e *EmitContext) flushGoCgo2() {
 
 	na.vfs.commit(ni)
 
-	objArgs := na.strs.alloc(1 + nObjs + len(d.cgoLdflags))
+	objArgs := na.anys.alloc(1 + nObjs + len(d.cgoLdflags))
 	kd := 0
 
-	objArgs[kd] = mainO.fullSTR()
+	objArgs[kd] = mainO.any()
 	kd++
 
 	deps := na.noderefs.alloc(nObjs)
 	nd := 0
 
 	for _, o := range objOrder[:ko] {
-		objArgs[kd] = o.fullSTR()
+		objArgs[kd] = o.any()
 		kd++
 
 		if ref, ok := objByPath[o]; ok {
@@ -601,19 +601,19 @@ func (e *EmitContext) flushGoCgo2() {
 	}
 
 	for _, f := range d.cgoLdflags {
-		objArgs[kd] = f
+		objArgs[kd] = f.any()
 		kd++
 	}
 
-	na.strs.commit(kd)
+	na.anys.commit(kd)
 	na.noderefs.commit(nd)
 
-	cmd2Args := na.strList(
-		strGoCgoTool,
-		strDynpackage, internStr(dir[strings.LastIndexByte(dir, '/')+1:]),
-		strDynimport, cgoO.fullSTR(),
-		strDynout, importGo.fullSTR(),
-		strDynlinker,
+	cmd2Args := na.anyList(
+		strGoCgoTool.any(),
+		strDynpackage.any(), internStr(dir[strings.LastIndexByte(dir, '/')+1:]).any(),
+		strDynimport.any(), cgoO.any(),
+		strDynout.any(), importGo.any(),
+		strDynlinker.any(),
 	)
 
 	goEnv := goCmdEnv(ctx, p, d.tc)
@@ -621,23 +621,23 @@ func (e *EmitContext) flushGoCgo2() {
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(
-			Cmd{CmdArgs: na.chunkListSTR(
-				na.strList(d.tc.CC.str(), p.TargetArg),
+			Cmd{CmdArgs: na.chunkList(
+				na.anyList(d.tc.CC.any(), p.TargetArg.any()),
 				p.SysrootArgs,
 				inclArgs,
 				cflagsStr,
-				na.strList(mainC.fullSTR(), strC2, strO, mainO.fullSTR()),
+				na.anyList(mainC.any(), strC2.any(), strO.any(), mainO.any()),
 			), Env: goVcsEnv},
-			Cmd{CmdArgs: na.chunkListSTR(
-				na.strList(wrapccPython3STR, linkOScriptVFS.fullSTR(), d.tc.CC.str(), p.TargetArg),
+			Cmd{CmdArgs: na.chunkList(
+				na.anyList(wrapccPython3STR.any(), linkOScriptVFS.any(), d.tc.CC.any(), p.TargetArg.any()),
 				p.SysrootArgs,
 				inclArgs,
-				na.strList(strO, cgoO.fullSTR()),
+				na.anyList(strO.any(), cgoO.any()),
 				linkOFlags,
 				goCgoLinkOPostLd,
 				objArgs[:kd:kd],
 			), Env: goVcsEnv},
-			Cmd{CmdArgs: na.chunkListSTR(cmd2Args), Env: goEnv},
+			Cmd{CmdArgs: na.chunkList(cmd2Args), Env: goEnv},
 		),
 		Env:          goEnv,
 		Inputs:       na.inputList(inputs[:ni:ni]),

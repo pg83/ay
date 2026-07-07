@@ -55,11 +55,11 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 		k++
 	}
 
-	chunks[k] = na.anyChunk(blocks.includes)
+	chunks[k] = na.anyChunkAny(blocks.includes)
 	chunks[k+1] = na.anyChunk(na.strList(cudaCflagsStr))
-	chunks[k+2] = na.anyChunk(p.CCHead)
-	chunks[k+3] = na.anyChunk(blocks.flags)
-	chunks[k+4] = na.anyChunk(cuCxxTail)
+	chunks[k+2] = na.anyChunkAny(p.CCHead)
+	chunks[k+3] = na.anyChunkAny(blocks.flags)
+	chunks[k+4] = na.anyChunkAny(cuCxxTail)
 	chunks[k+5] = na.anyChunk(na.strList(cudaNvccStdStr))
 	k += 6
 	na.chunks.commit(k)

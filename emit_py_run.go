@@ -361,7 +361,7 @@ func emitPYRun(
 		}
 	}
 
-	cmdArgs := []STR{interp, (scriptVFS).fullSTR()}
+	cmdArgs := []ANY{interp.any(), (scriptVFS).any()}
 
 	for _, aTok := range stmt.Args {
 		a := aTok.string()
@@ -380,7 +380,7 @@ func emitPYRun(
 			}
 		}
 
-		cmdArgs = append(cmdArgs, internStr(a))
+		cmdArgs = append(cmdArgs, internStr(a).any())
 	}
 
 	head := make([]VFS, 0, 2+len(stmt.INFiles))
@@ -413,7 +413,7 @@ func emitPYRun(
 		outputs = append(outputs, outVFSByToken[f.string()])
 	}
 
-	cmd := Cmd{CmdArgs: na.chunkListSTR(cmdArgs), Env: env}
+	cmd := Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}
 
 	if stdoutPath != 0 {
 		cmd.Stdout = stdoutPath

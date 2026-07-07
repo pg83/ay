@@ -238,26 +238,26 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 	k := 0
 
 	if wrapcc {
-		chunks[k] = na.anyChunk(instance.Platform.WrapccHead)
+		chunks[k] = na.anyChunkAny(instance.Platform.WrapccHead)
 		chunks[k+1] = na.anyChunk(inChunk)
-		chunks[k+2] = na.anyChunk(instance.Platform.WrapccTail)
+		chunks[k+2] = na.anyChunkAny(instance.Platform.WrapccTail)
 		k += 3
 	}
 
-	chunks[k] = na.anyChunk(compiler)
-	chunks[k+1] = na.anyChunk(instance.Platform.CCHead)
+	chunks[k] = na.anyChunkAny(compiler)
+	chunks[k+1] = na.anyChunkAny(instance.Platform.CCHead)
 	chunks[k+2] = na.anyChunk(tok[1:4])
-	chunks[k+3] = na.anyChunk(blocks.includes)
-	chunks[k+4] = na.anyChunk(blocks.flags)
+	chunks[k+3] = na.anyChunkAny(blocks.includes)
+	chunks[k+4] = na.anyChunkAny(blocks.flags)
 	k += 5
 
 	if len(tail) > 0 {
-		chunks[k] = na.anyChunk(tail)
+		chunks[k] = na.anyChunkAny(tail)
 		k++
 	}
 
-	chunks[k] = na.anyChunk(builtinMacroDateTimeStr)
-	chunks[k+1] = na.anyChunk(macroPrefixMapFlagsStr)
+	chunks[k] = na.anyChunkAny(builtinMacroDateTimeStr)
+	chunks[k+1] = na.anyChunkAny(macroPrefixMapFlagsStr)
 	k += 2
 
 	if len(in.PerSourceCFlags) > 0 {
@@ -266,7 +266,7 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 	}
 
 	if !isCxx && len(blocks.cPost) > 0 {
-		chunks[k] = na.anyChunk(blocks.cPost)
+		chunks[k] = na.anyChunkAny(blocks.cPost)
 		k++
 	}
 
@@ -420,20 +420,20 @@ func pickWarningFlags(noCompilerWarnings bool, noWShadow bool) []ARG {
 	return warningFlags
 }
 
-func appendCxxStdAndOwn(cmdArgs []STR, isCxx bool, noCompilerWarnings bool, injectCxxWarningBundle bool, ownExtras []ARG) []STR {
+func appendCxxStdAndOwn(cmdArgs []ANY, isCxx bool, noCompilerWarnings bool, injectCxxWarningBundle bool, ownExtras []ARG) []ANY {
 	if isCxx {
-		cmdArgs = append(cmdArgs, (cxxStandardFlag).str())
+		cmdArgs = append(cmdArgs, (cxxStandardFlag).any())
 
 		if injectCxxWarningBundle {
 			if noCompilerWarnings {
-				cmdArgs = appendArgStr(cmdArgs, noWarningsBundle)
+				cmdArgs = appendArgAny(cmdArgs, noWarningsBundle)
 			} else {
-				cmdArgs = appendArgStr(cmdArgs, cxxStandardWarnings)
+				cmdArgs = appendArgAny(cmdArgs, cxxStandardWarnings)
 			}
 		}
 	}
 
-	cmdArgs = appendArgStr(cmdArgs, ownExtras)
+	cmdArgs = appendArgAny(cmdArgs, ownExtras)
 
 	return cmdArgs
 }
@@ -485,32 +485,32 @@ func composePostCatboostBucket(preBucket []ARG) []ARG {
 	return out
 }
 
-func appendCompileFlagPipeline(cmdArgs []STR, bundle CompileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags, catboost []ARG) []STR {
-	return appendArgStr(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboost, moduleScopeCFlags, bundle.NoLibcBlock)
+func appendCompileFlagPipeline(cmdArgs []ANY, bundle CompileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags, catboost []ARG) []ANY {
+	return appendArgAny(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir, bundle.CFlags, warningBundle, defineBundle, preNoLibcExtras, bundle.NoLibcBlock, catboost, moduleScopeCFlags, bundle.NoLibcBlock)
 }
 
 type CcModuleArgBlocks struct {
-	cHead    []STR
-	cxxHead  []STR
-	includes []STR
-	flags    []STR
-	cTail    []STR
-	cxxTail  []STR
-	cPost    []STR
+	cHead    []ANY
+	cxxHead  []ANY
+	includes []ANY
+	flags    []ANY
+	cTail    []ANY
+	cxxTail  []ANY
+	cPost    []ANY
 }
 
-func cWarningChunk(na *NodeArenas, noCompilerWarnings, noWShadow bool) []STR {
+func cWarningChunk(na *NodeArenas, noCompilerWarnings, noWShadow bool) []ANY {
 	switch {
 	case noCompilerWarnings:
 		return noWarningsBundleStr
 	case noWShadow:
-		return na.argStrList(warningFlags, []ARG{argNoShadow})
+		return na.argAnyList(warningFlags, []ARG{argNoShadow})
 	default:
 		return warningFlagsStr
 	}
 }
 
-func cxxWarningChunk(noCompilerWarnings bool) []STR {
+func cxxWarningChunk(noCompilerWarnings bool) []ANY {
 	if noCompilerWarnings {
 		return noWarningsBundleStr
 	}
@@ -518,7 +518,7 @@ func cxxWarningChunk(noCompilerWarnings bool) []STR {
 	return cxxStandardWarningsStr
 }
 
-func catboostOpenSourceChunk(p *Platform) []STR {
+func catboostOpenSourceChunk(p *Platform) []ANY {
 	if p.Flags[envOPENSOURCE] == strYes {
 		return catboostOpenSourceDefineStr
 	}
@@ -545,50 +545,50 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 	cflagsStr := p.CompileCFlagsStr
 
 	if in.NoOptimize {
-		cflagsStr = na.argStrList(suppressOptimize(p.CompileCFlags))
+		cflagsStr = na.argAnyList(suppressOptimize(p.CompileCFlags))
 	}
 
 	catboostStr := catboostOpenSourceChunk(p)
 	noLibc := p.NoLibcBlockStr
-	incl := na.strs.alloc(len(ccIncludesPrefixStr) + len(in.AddIncl) + len(in.PeerAddInclGlobal))
+	incl := na.anys.alloc(len(ccIncludesPrefixStr) + len(in.AddIncl) + len(in.PeerAddInclGlobal))
 	k := copy(incl, ccIncludesPrefixStr)
 
 	for _, pt := range in.AddIncl {
-		incl[k] = in.InclArgs.arg(pt)
+		incl[k] = in.InclArgs.arg(pt).any()
 		k++
 	}
 
 	for _, pt := range in.PeerAddInclGlobal {
-		incl[k] = in.InclArgs.arg(pt)
+		incl[k] = in.InclArgs.arg(pt).any()
 		k++
 	}
 
-	na.strs.commit(k)
+	na.anys.commit(k)
 
 	includes := incl[:k:k]
 	warnC := cWarningChunk(na, in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	forceDebug := [][]STR(nil)
+	forceDebug := [][]ANY(nil)
 
 	if in.ForceConsistentDebug {
-		forceDebug = [][]STR{debugPrefixMapFlagsStr, xclangDebugCompilationDirStr}
+		forceDebug = [][]ANY{debugPrefixMapFlagsStr, xclangDebugCompilationDirStr}
 	}
 
-	flagParts := [][]STR{
-		na.argStrList(in.ClangWarnings),
+	flagParts := [][]ANY{
+		na.argAnyList(in.ClangWarnings),
 	}
 
 	flagParts = append(flagParts, forceDebug...)
 
-	flagParts = append(flagParts, [][]STR{
+	flagParts = append(flagParts, [][]ANY{
 		debugPrefixMapFlagsStr,
 		xclangDebugCompilationDirStr,
 		cflagsStr,
 		warnC,
 		p.DefinesStr,
-		na.argStrList(p.CFlags, in.CFlags, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal),
+		na.argAnyList(p.CFlags, in.CFlags, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal),
 		noLibc,
 		catboostStr,
-		na.argStrList(in.ModuleScopeCFlags),
+		na.argAnyList(in.ModuleScopeCFlags),
 		noLibc,
 	}...)
 
@@ -600,29 +600,29 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 
 	cxxBucket := composeOwnAndPeerGlobalBucket(*in, true)
 
-	cxxTailParts := [][]STR{
+	cxxTailParts := [][]ANY{
 		cxxStandardFlagStr,
 		cxxWarningChunk(in.Flags.NoCompilerWarnings),
-		na.argStrList(cxxOwnExtras),
-		na.argStrList(cxxBucket),
+		na.argAnyList(cxxOwnExtras),
+		na.argAnyList(cxxBucket),
 		catboostStr,
-		na.argStrList(composePostCatboostBucket(cxxBucket)),
+		na.argAnyList(composePostCatboostBucket(cxxBucket)),
 	}
 
 	return &CcModuleArgBlocks{
-		cHead:    na.strList(in.TC.CC),
-		cxxHead:  na.strList(in.TC.CXX),
+		cHead:    na.anyList(in.TC.CC.any()),
+		cxxHead:  na.anyList(in.TC.CXX.any()),
 		includes: includes,
-		flags:    na.strConcat(flagParts...),
-		cTail:    na.argStrList(in.PeerCOnlyFlagsGlobal),
-		cxxTail:  na.strConcat(cxxTailParts...),
-		cPost:    na.argStrList(in.COnlyFlags),
+		flags:    na.anyConcat(flagParts...),
+		cTail:    na.argAnyList(in.PeerCOnlyFlagsGlobal),
+		cxxTail:  na.anyConcat(cxxTailParts...),
+		cPost:    na.argAnyList(in.COnlyFlags),
 	}
 }
 
-func appendAddIncl(cmdArgs []STR, addIncl []VFS, memo InclArgMemo) []STR {
+func appendAddIncl(cmdArgs []ANY, addIncl []VFS, memo InclArgMemo) []ANY {
 	for _, p := range addIncl {
-		cmdArgs = append(cmdArgs, memo.arg(p))
+		cmdArgs = append(cmdArgs, memo.arg(p).any())
 	}
 
 	return cmdArgs

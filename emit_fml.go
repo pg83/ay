@@ -13,13 +13,13 @@ func (e *EmitContext) emitLibraryFmlSource(src STR) {
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(
-			toolBin.fullSTR(),
-			strB2,
-			argDashO.str(),
-			outVFS.fullSTR(),
-			strT,
-			srcVFS.fullSTR(),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
+			toolBin.any(),
+			strB2.any(),
+			argDashO.any(),
+			outVFS.any(),
+			strT.any(),
+			srcVFS.any(),
 		)), Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(toolBin, srcVFS)),

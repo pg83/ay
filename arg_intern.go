@@ -80,11 +80,11 @@ func argStrs(as []ARG) []string {
 	return out
 }
 
-func argSTRs(as []ARG) []STR {
-	out := make([]STR, len(as))
+func argSTRs(as []ARG) []ANY {
+	out := make([]ANY, len(as))
 
 	for i, a := range as {
-		out[i] = a.str()
+		out[i] = a.any()
 	}
 
 	return out

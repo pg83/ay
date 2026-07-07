@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	gperfFlags = []STR{argGpCtTLANSIC.str(), argGpDk.str(), argDashC.str()}
+	gperfFlags = []ANY{argGpCtTLANSIC.any(), argGpDk.any(), argDashC.any()}
 	gperfKV    = KV{P: pkGP, PC: pcYellow}
 )
 
@@ -27,15 +27,15 @@ func gperfSymbolName(srcRel string) string {
 func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, ref NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	head := make([]STR, 0, 3+len(gperfFlags))
+	head := make([]ANY, 0, 3+len(gperfFlags))
 
-	head = append(head, (gperfBin).fullSTR())
+	head = append(head, (gperfBin).any())
 	head = append(head, gperfFlags...)
-	head = append(head, internStr(gperfSymbolName(srcRel)), (srcVFS).fullSTR())
+	head = append(head, internStr(gperfSymbolName(srcRel)).any(), (srcVFS).any())
 
 	node := Node{
 		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkListSTR(head), Env: env, Stdout: genVFS.fullSTR()}),
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env, Stdout: genVFS.fullSTR()}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(gperfBin), srcInputs),
 		Outputs:        na.vfsList(genVFS),

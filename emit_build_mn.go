@@ -20,16 +20,16 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(
-			d.tc.Python3,
-			buildMnScriptVFS.fullSTR(),
-			strBuildmnf,
-			strS,
-			archiverBin.fullSTR(),
-			infoVFS.fullSTR(),
-			internStr(stmt.Name),
-			strRankingSuffix,
-			cppVFS.fullSTR(),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
+			d.tc.Python3.any(),
+			buildMnScriptVFS.any(),
+			strBuildmnf.any(),
+			strS.any(),
+			archiverBin.any(),
+			infoVFS.any(),
+			internStr(stmt.Name).any(),
+			strRankingSuffix.any(),
+			cppVFS.any(),
 		)), Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(archiverBin, buildMnScriptVFS, infoVFS)),
