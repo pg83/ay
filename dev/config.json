@@ -173,7 +173,7 @@
       "devtools/yamaker"
     ],
     "target": "devtools/yamaker",
-    "xfail": "auto",
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12687148441",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12687148769"
   },
@@ -191,8 +191,26 @@
       "search/daemons/basesearch"
     ],
     "target": "search/daemons/basesearch",
-    "xfail": "auto",
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12695071273",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12695073975"
+  },
+  {
+    "id": "search_daemons_ranking_middlesearch",
+    "vcs": "arc",
+    "remote": "arcadia",
+    "sha": "20e866ddbfdcc132c16f91ae7bafdf4f6ca0973f",
+    "command": [
+      "ya",
+      "make",
+      "-j0",
+      "-G",
+      "--sandboxing",
+      "search/daemons/ranking_middlesearch"
+    ],
+    "target": "search/daemons/ranking_middlesearch",
+    "xfail": "auto",
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/12703685538",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/12703687865"
   }
 ]
