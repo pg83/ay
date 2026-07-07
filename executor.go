@@ -38,9 +38,11 @@ type Executor struct {
 	grbDir      string
 	futs        *PageVec[*NodeFuture]
 	fetchRefs   *DenseMap[STR, NodeRef]
+	uidSet      map[string]struct{}
+	uidSetReady chan struct{}
 	events      *EventQueue
 	stats       map[string][]time.Duration
-	hashMu      sync.Mutex
+	canon       CanonBuf
 	localHash   map[STR]uint64
 	pending     atomic.Uint64
 	done        atomic.Uint64
@@ -69,7 +71,7 @@ type NodeFuture struct {
 }
 
 func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ninja bool, sandboxing bool, cmdPrefixes []CmdPrefix, events *EventQueue) *Executor {
-	return &Executor{
+	ex := &Executor{
 		srcRoot:     srcRoot,
 		bldRoot:     bldRoot,
 		fs:          fs,
@@ -84,6 +86,53 @@ func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ni
 		stats:       map[string][]time.Duration{},
 		localHash:   map[STR]uint64{},
 	}
+
+	ex.canon = CanonBuf{hash: ex.contentHash, futs: ex.futs, chunkMemo: map[chunkKey]chunkAccum{}}
+
+	if osfs, ok := fs.(*OsFS); ok {
+		ex.canon.fsHashes = &osfs.contentHashes
+	}
+
+	ex.uidSetReady = make(chan struct{})
+
+	go ex.loadUidSet()
+
+	return ex
+}
+
+func (ex *Executor) loadUidSet() {
+	set := map[string]struct{}{}
+	base := filepath.Join(ex.bldRoot, "uid")
+
+	if tops, err := os.ReadDir(base); err == nil {
+		for _, top := range tops {
+			entries, err := os.ReadDir(filepath.Join(base, top.Name()))
+
+			if err != nil {
+				continue
+			}
+
+			for _, e := range entries {
+				set[e.Name()] = struct{}{}
+			}
+		}
+	}
+
+	ex.uidSet = set
+
+	close(ex.uidSetReady)
+}
+
+func (ex *Executor) uidCached(uid UID) bool {
+	<-ex.uidSetReady
+
+	if _, ok := ex.uidSet[uid.string()]; ok {
+		return true
+	}
+
+	_, err := os.Stat(ex.uidPath(uid))
+
+	return err == nil
 }
 
 func (ex *Executor) contentHash(v VFS) uint64 {
@@ -92,10 +141,6 @@ func (ex *Executor) contentHash(v VFS) uint64 {
 	}
 
 	s := v.str()
-
-	ex.hashMu.Lock()
-
-	defer ex.hashMu.Unlock()
 
 	if h, ok := ex.localHash[s]; ok {
 		return h
@@ -118,6 +163,33 @@ func (ex *Executor) onNode(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
 	f := &NodeFuture{node: n, ref: n.Ref}
 
 	ex.futs.set(uint32(n.Ref), f)
+	ex.events.post(func() { ex.prepare(f) })
+}
+
+func (ex *Executor) prepare(f *NodeFuture) {
+	exc := try(func() {
+		f.uid = ex.uidOf(f.node)
+	})
+
+	if exc != nil {
+		f.err = exc
+
+		f.once.Do(func() {})
+
+		if !ex.keepGoing {
+			fatalException(exc)
+		}
+
+		return
+	}
+
+	if ex.uidCached(f.uid) {
+		f.once.Do(func() {})
+
+		return
+	}
+
+	ex.pending.Add(1)
 
 	go ex.fire(f)
 }
@@ -137,9 +209,9 @@ func (ex *Executor) uidOf(n *Node) UID {
 		return *n.PresetUID
 	}
 
-	c := CanonBuf{hash: ex.contentHash, futs: ex.futs, fetchRefs: ex.fetchRefs}
+	ex.canon.fetchRefs = ex.fetchRefs
 
-	return c.calcUID(n)
+	return ex.canon.calcUID(n)
 }
 
 func fatalException(e *Exception) {
@@ -152,6 +224,8 @@ func fatalException(e *Exception) {
 }
 
 func (ex *Executor) run(roots []NodeRef) {
+	ex.events.sync()
+
 	for _, r := range roots {
 		ex.visit(r)
 	}
@@ -212,15 +286,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 		}
 	}
 
-	f.uid = ex.uidOf(n)
-
 	cachePath := ex.uidPath(f.uid)
-
-	if _, err := os.Stat(cachePath); err == nil {
-		return
-	}
-
-	ex.pending.Add(1)
 
 	defer ex.done.Add(1)
 
