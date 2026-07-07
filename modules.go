@@ -990,6 +990,11 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
+
+			if v.Schema && d.unit.Tag == unitTagPy3Proto {
+				d.unit.HashTag = internStr("PY_PROTO_FROM_SCHEMA")
+			}
+
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
 
 			if d.moduleStmt.Name == tokProtoLibrary {
@@ -1357,6 +1362,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 type ModuleUnit struct {
 	Type        TOK
 	Tag         STR
+	HashTag     STR
 	CCTag       STR
 	ARPrefix    string
 	GlobalARTag STR
@@ -1364,6 +1370,14 @@ type ModuleUnit struct {
 }
 
 func resolveModuleUnit(name TOK, kind ModuleKind, language Language) ModuleUnit {
+	u := resolveModuleUnitBare(name, kind, language)
+
+	u.HashTag = u.Tag
+
+	return u
+}
+
+func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleUnit {
 	if name == tokPy3Program && kind == KindLib {
 		name = tokPy3Library
 

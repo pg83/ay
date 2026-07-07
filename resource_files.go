@@ -120,6 +120,8 @@ func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *All
 
 	rfArgs = append(rfArgs, "STRIP", "${ARCADIA_ROOT}/"+modulePath+"/"+strip)
 
+	deduper.reset()
+
 	for _, dir := range dirs {
 		rel, ok := allResourceDir(modulePath, expandStmtTokenSTR(dir, env).string())
 
@@ -128,7 +130,9 @@ func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *All
 		}
 
 		for _, match := range globMatch(fs, rel+"/*"+suffix) {
-			rfArgs = append(rfArgs, "${ARCADIA_ROOT}/"+match)
+			if deduper.add(internStr(match).strID()) {
+				rfArgs = append(rfArgs, "${ARCADIA_ROOT}/"+match)
+			}
 		}
 	}
 

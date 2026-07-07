@@ -325,7 +325,7 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 		}
 
 		if len(entries) > 0 {
-			groupRefs, groupOuts := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries)})
+			groupRefs, groupOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: pyGenResourceItems(entries)})
 
 			res.Refs = append(res.Refs, groupRefs...)
 			res.Outputs = append(res.Outputs, groupOuts...)
@@ -497,7 +497,7 @@ func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
 
 	outRefs := make([]NodeRef, 0, len(resources))
 	outPaths := make([]VFS, 0, len(resources))
-	moduleTag := d.unit.Tag
+	moduleTag := d.unit.HashTag
 
 	for _, res := range resources {
 		key := "resfs/file/" + res.keyPath
@@ -525,7 +525,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 			continue
 		}
 
-		r, o := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(e.pyResEntriesFor(ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
+		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: pyGenResourceItems(e.pyResEntriesFor(ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
 			return e.rawAuxInputClosure(aux, dedupSourceVFS(inputs, nil), ref)
 		}})
 

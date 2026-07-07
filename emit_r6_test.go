@@ -20,7 +20,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 
 	inst := targetInstance("util")
 	r6Ref := e.reserve()
-	emitR6(inst, "datetime/parser.rl6", ragel6LD, intern("$(B)/contrib/tools/ragel6/ragel6"), nil, nil, r6Ref, e)
+	emitR6(inst, "datetime/parser.rl6", source("util/datetime/parser.rl6"), ragel6LD, intern("$(B)/contrib/tools/ragel6/ragel6"), nil, nil, nil, r6Ref, e)
 	outPath := ragel6OutVFS(inst, "datetime/parser.rl6")
 
 	wantOut := "$(B)/util/_/datetime/parser.rl6.cpp"
@@ -107,9 +107,11 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	emitR6(
 		targetInstance("devtools/ymake/lang/makelists"),
 		"makefile_lang.rl6",
+		source("devtools/ymake/lang/makelists/makefile_lang.rl6"),
 		ragel6LD,
 		intern("$(B)/contrib/tools/ragel6/ragel6"),
 		internArgs([]string{"-lF1"}),
+		nil,
 		nil,
 		r6Ref,
 		e,
@@ -162,8 +164,10 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 			Platform: releaseHost,
 		},
 		"datetime/parser.rl6",
+		source("util/datetime/parser.rl6"),
 		ragel6LD,
 		intern("$(B)/contrib/tools/ragel6/ragel6"),
+		nil,
 		nil,
 		nil,
 		r6Ref,
@@ -195,7 +199,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	}
 
 	r6Ref := e.reserve()
-	emitR6(targetInstance("util"), "datetime/parser.rl6", ragel6LD, intern("$(B)/contrib/tools/ragel6/ragel6"), nil, closure, r6Ref, e)
+	emitR6(targetInstance("util"), "datetime/parser.rl6", source("util/datetime/parser.rl6"), ragel6LD, intern("$(B)/contrib/tools/ragel6/ragel6"), nil, closure, nil, r6Ref, e)
 
 	got := e.nodes.s[r6Ref]
 
