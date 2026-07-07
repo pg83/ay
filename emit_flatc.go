@@ -114,20 +114,20 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	headerVFS := build(srcRel, ".h")
 	cppVFS := build(srcRel, ".cpp")
 	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt), v.bfbsExt)
-	cmdArgs := na.chunkList(na.strList(tc.Python3, (flatcWrapperVFS).fullSTR(), (flatcBinary).fullSTR()), v.constFlags)
+	cmdArgs := na.chunkListSTR(na.strList(tc.Python3, (flatcWrapperVFS).fullSTR(), (flatcBinary).fullSTR()), v.constFlags)
 
 	if len(flatcFlags) > 0 {
-		cmdArgs = append(cmdArgs, appendArgStr(nil, flatcFlags))
+		cmdArgs = append(cmdArgs, na.anyChunk(appendArgStr(nil, flatcFlags)))
 	}
 
-	cmdArgs = append(cmdArgs, v.ioLeadArgs, []STR{(headerVFS).fullSTR(), (srcVFS).fullSTR()})
+	cmdArgs = append(cmdArgs, na.anyChunk(v.ioLeadArgs), []ANY{headerVFS.any(), srcVFS.any()})
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Cwd: strB,
+			Cwd: bldRootDirVFS,
 			Env: env}),
 		Env:            env,
 		DepRefs:        genDeps,

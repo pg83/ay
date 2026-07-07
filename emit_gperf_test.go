@@ -42,7 +42,7 @@ END()
 		"$(S)/gpmod/tags.gperf",
 	}
 
-	if got := strStrs(gp.Cmds[0].CmdArgs.flat()); !reflect.DeepEqual(got, wantCmd) {
+	if got := anyStrs(gp.Cmds[0].CmdArgs.flat()); !reflect.DeepEqual(got, wantCmd) {
 		t.Fatalf("gperf cmd_args mismatch:\n  got:  %#v\n  want: %#v", got, wantCmd)
 	}
 

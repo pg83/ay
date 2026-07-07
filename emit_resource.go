@@ -138,7 +138,7 @@ func composeObjcopyArgBlocks(tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
 }
 
 func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []STR) ArgChunks {
-	return oc.na.chunkList(oc.blocks.pre, oc.na.strList((outputObj).fullSTR()), oc.blocks.post, payload)
+	return oc.na.chunkListSTR(oc.blocks.pre, oc.na.strList((outputObj).fullSTR()), oc.blocks.post, payload)
 }
 
 type ResolvedResource struct {
@@ -505,7 +505,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		ctx.emit.emitReservedNode(Node{
 			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(nodeCmd), Env: env}),
 			Env:          env,
 			Inputs:       na.inputList(adjacent, tail),
 			Outputs:      na.vfsList(aux),

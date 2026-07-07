@@ -155,12 +155,41 @@ func (v VFS) isBuild() bool {
 	return uint32(v)&1 != 0
 }
 
+var (
+	srcRootDirVFS = source("")
+	bldRootDirVFS = build("")
+)
+
+func cwdVFS(s string) VFS {
+	switch {
+	case s == "$(B)":
+		return bldRootDirVFS
+	case s == "$(S)":
+		return srcRootDirVFS
+	case vfsHasPrefix(s):
+		return intern(s)
+	}
+
+	throwFmt("cwdVFS: unexpected cwd %q", s)
+
+	return 0
+}
+
 func (v VFS) fullSTR() STR {
 	if s, ok := vfsFull.get(v); ok {
 		return s
 	}
 
-	s := internPrefixed(v.prefix(), v.relString())
+	rel := v.relString()
+	s := internPrefixed(v.prefix(), rel)
+
+	if rel == "" {
+		if v.isBuild() {
+			s = strB
+		} else {
+			s = strS
+		}
+	}
 
 	vfsFull.put(v, s)
 
@@ -172,7 +201,13 @@ func (v VFS) string() string {
 }
 
 func (v VFS) sharedString() string {
-	return v.prefix() + v.sharedRel()
+	rel := v.sharedRel()
+
+	if rel == "" {
+		return v.prefix()[:vfsPrefixLen-1]
+	}
+
+	return v.prefix() + rel
 }
 
 func (v VFS) String() string {

@@ -41,12 +41,12 @@ END()
 	}
 
 	if len(cmd) != len(wantCmd) {
-		t.Fatalf("cmd = %v, want %v", strStrings(cmd), wantCmd)
+		t.Fatalf("cmd = %v, want %v", genericStrs(cmd), wantCmd)
 	}
 
 	for i, w := range wantCmd {
 		if cmd[i].string() != w {
-			t.Fatalf("cmd[%d] = %q, want %q (full %v)", i, cmd[i].string(), w, strStrings(cmd))
+			t.Fatalf("cmd[%d] = %q, want %q (full %v)", i, cmd[i].string(), w, genericStrs(cmd))
 		}
 	}
 

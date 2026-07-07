@@ -37,8 +37,8 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(tc.Python3), rodataConstArgs, na.strList(internStr(toolName), (srcVFS).fullSTR(), (asmVFS).fullSTR())),
-			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.strList(argD.str(), internV("_", string(instance.Platform.ISA), "_")), rodataYasmConstArgs, na.strList((outVFS).fullSTR(), (asmVFS).fullSTR())),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(tc.Python3), rodataConstArgs, na.strList(internStr(toolName), (srcVFS).fullSTR(), (asmVFS).fullSTR())),
+			Env: pythonEnv}, Cmd{CmdArgs: na.chunkListSTR(yasmConstHead, na.strList(argD.str(), internV("_", string(instance.Platform.ISA), "_")), rodataYasmConstArgs, na.strList((outVFS).fullSTR(), (asmVFS).fullSTR())),
 			Env: yasmEnv}),
 		Env: yasmEnv,
 		Inputs: na.inputList(na.vfsList(yasmBinaryVFS,

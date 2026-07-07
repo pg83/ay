@@ -28,7 +28,7 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 		t.Errorf("producer kv = %+v, want pc=yellow show_out=yes", sv.KV)
 	}
 
-	args := strings.Join(strStrs(sv.Cmds[0].CmdArgs.flat()), " ")
+	args := strings.Join(anyStrs(sv.Cmds[0].CmdArgs.flat()), " ")
 
 	for _, want := range []string{
 		"build/scripts/decimal_md5.py",
@@ -99,7 +99,7 @@ func TestEmitDecimalMD5_GeneratedSourceEntersArchive(t *testing.T) {
 
 	ar := mustNodeByOutput(t, g, "$(B)/mod/libmod.a")
 
-	arArgs := strings.Join(strStrs(ar.Cmds[0].CmdArgs.flat()), " ")
+	arArgs := strings.Join(anyStrs(ar.Cmds[0].CmdArgs.flat()), " ")
 
 	if !strings.Contains(arArgs, "$(B)/mod/hash.auto.cpp.o") {
 		t.Errorf("archive cmd_args missing $(B)/mod/hash.auto.cpp.o; got: %s", arArgs)

@@ -37,7 +37,7 @@ END()
 		"$(B)/consumer/events.ev.pb.h",
 	)
 
-	args := strStrs(ev.Cmds[0].CmdArgs.flat())
+	args := anyStrs(ev.Cmds[0].CmdArgs.flat())
 
 	ytCount := 0
 
@@ -103,7 +103,7 @@ END()
 		"$(B)/consumer/events.ev.pb.h",
 	)
 
-	args := strStrs(ev.Cmds[0].CmdArgs.flat())
+	args := anyStrs(ev.Cmds[0].CmdArgs.flat())
 
 	if !containsString(args, "--cpp_out=proto_h=true:$(B)/") {
 		t.Fatalf("EV cmd missing lite-header cpp_out --cpp_out=proto_h=true:$(B)/: %v", args)

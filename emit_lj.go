@@ -6,14 +6,14 @@ var ljKV = KV{P: pkLJ, PC: pcLightCyan}
 
 const luajit21CwdRel = "contrib/libs/luajit_21"
 
-func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLDRef NodeRef, cwd STR, emit *StreamingEmitter) NodeRef {
+func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLDRef NodeRef, cwd VFS, emit *StreamingEmitter) NodeRef {
 	na := emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{
-			CmdArgs: na.chunkList(na.strList(compilerBin.fullSTR(), argB2.str(), argDashG.str(), luaSrc.fullSTR(), rawOut.fullSTR())),
+			CmdArgs: na.chunkListSTR(na.strList(compilerBin.fullSTR(), argB2.str(), argDashG.str(), luaSrc.fullSTR(), rawOut.fullSTR())),
 			Cwd:     cwd,
 			Env:     env,
 		}),
@@ -37,7 +37,7 @@ func (e *EmitContext) emitLuaJit21() {
 
 	compilerLDRef, compilerBin := ctx.tool(argLuajit21Compiler)
 	reg := e.codegen
-	cwd := source(luajit21CwdRel).fullSTR()
+	cwd := source(luajit21CwdRel)
 
 	for _, lua := range d.lj21.Luas {
 		luaSrc := resolveSourceVFS(ctx, instance, lua, d.srcDirs)

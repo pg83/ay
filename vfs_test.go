@@ -251,6 +251,29 @@ func VFSesFromStrings(ss []string) []VFS {
 	return out
 }
 
+func genericStrs[T interface {
+	~uint32
+	string() string
+}](as []T) []string {
+	out := make([]string, 0, len(as))
+
+	for _, a := range as {
+		out = append(out, a.string())
+	}
+
+	return out
+}
+
+func ToAnySlice(ss []STR) []ANY {
+	out := make([]ANY, len(ss))
+
+	for i, s := range ss {
+		out[i] = s.any()
+	}
+
+	return out
+}
+
 func ToVFSSlice(ss []string) []VFS {
 	out := make([]VFS, len(ss))
 

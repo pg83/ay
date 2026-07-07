@@ -90,8 +90,6 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 	}
 
-
-
 	reg.register(headerInfo)
 
 	generatedParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.relString())}}
@@ -131,12 +129,12 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		(generatedVFS).fullSTR(),
 		(srcVFS).fullSTR())
 
-	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env})
+	cmds := na.cmdList(Cmd{CmdArgs: na.chunkListSTR(head), Env: env})
 	inputs := []VFS{bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS}
 
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
-			CmdArgs: na.chunkList(na.strList(d.cc.TC.Python3,
+			CmdArgs: na.chunkListSTR(na.strList(d.cc.TC.Python3,
 				(bisonPreprocessPyVFS).fullSTR(),
 				(headerVFS).fullSTR())),
 			Env: preprocessEnv,

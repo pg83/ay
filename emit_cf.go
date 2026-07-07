@@ -54,7 +54,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 
 	cfRef := ctx.emit.emitNode(Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(na.vfsList(configureFilePyVFS, cv.self), cv.buckets...),
 		KV:           &cfKV,

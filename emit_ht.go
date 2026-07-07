@@ -44,7 +44,7 @@ func (e *EmitContext) emitLibraryAspSource(src STR) {
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 		node := Node{
 			Platform:       instance.Platform,
-			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(toolBin.fullSTR(), srcVFS.fullSTR(), outVFS.fullSTR())), Env: env}),
+			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(toolBin.fullSTR(), srcVFS.fullSTR(), outVFS.fullSTR())), Env: env}),
 			Env:            env,
 			Inputs:         na.inputList(block[:k:k]),
 			KV:             &htKV,

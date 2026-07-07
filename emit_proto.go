@@ -649,14 +649,14 @@ func emitPB(
 		outsChunk = append(outsChunk, (output).fullSTR())
 	}
 
-	cmdArgs := na.chunkList(blocks.head, outsChunk, blocks.mid, na.strList(internStr(protoRelPath)))
+	cmdArgs := na.chunkListSTR(blocks.head, outsChunk, blocks.mid, na.strList(internStr(protoRelPath)))
 
 	if len(blocks.tail) > 0 {
-		cmdArgs = append(cmdArgs, blocks.tail)
+		cmdArgs = append(cmdArgs, na.anyChunk(blocks.tail))
 	}
 
 	if len(spec.optsTail) > 0 {
-		cmdArgs = append(cmdArgs, spec.optsTail)
+		cmdArgs = append(cmdArgs, na.anyChunk(spec.optsTail))
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -701,7 +701,7 @@ func emitPB(
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Cwd: internStr(protocCwd),
+			Cwd: cwdVFS(protocCwd),
 			Env: env}),
 		Env: env,
 

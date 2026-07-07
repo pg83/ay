@@ -4,7 +4,8 @@ type NodeArenas struct {
 	cmds     *BumpAllocator[Cmd]
 	vfs      *BumpAllocator[VFS]
 	strs     *BumpAllocator[STR]
-	chunks   *BumpAllocator[[]STR]
+	chunks   *BumpAllocator[[]ANY]
+	anys     *BumpAllocator[ANY]
 	inputs   *BumpAllocator[[]VFS]
 	noderefs *BumpAllocator[NodeRef]
 	nodes    *BumpAllocator[Node]
@@ -15,7 +16,8 @@ func newNodeArenas() *NodeArenas {
 		cmds:     newBumpAllocator[Cmd](1 << 8),
 		vfs:      newBumpAllocator[VFS](1 << 12),
 		strs:     newBumpAllocator[STR](1 << 12),
-		chunks:   newBumpAllocator[[]STR](1 << 10),
+		chunks:   newBumpAllocator[[]ANY](1 << 10),
+		anys:     newBumpAllocator[ANY](1 << 12),
 		inputs:   newBumpAllocator[[]VFS](1 << 10),
 		noderefs: newBumpAllocator[NodeRef](1 << 12),
 		nodes:    newBumpAllocator[Node](1 << 10),
@@ -34,8 +36,32 @@ func (na *NodeArenas) strList(ss ...STR) []STR {
 	return na.strs.list(ss...)
 }
 
-func (na *NodeArenas) chunkList(ch ...[]STR) ArgChunks {
+func (na *NodeArenas) chunkList(ch ...[]ANY) ArgChunks {
 	return ArgChunks(na.chunks.list(ch...))
+}
+
+func (na *NodeArenas) anyChunk(ss []STR) []ANY {
+	block := na.anys.alloc(len(ss))
+
+	for i, s := range ss {
+		block[i] = s.any()
+	}
+
+	na.anys.commit(len(ss))
+
+	return block[:len(ss):len(ss)]
+}
+
+func (na *NodeArenas) chunkListSTR(ch ...[]STR) ArgChunks {
+	block := na.chunks.alloc(len(ch))
+
+	for i, c := range ch {
+		block[i] = na.anyChunk(c)
+	}
+
+	na.chunks.commit(len(ch))
+
+	return ArgChunks(block[:len(ch):len(ch)])
 }
 
 func (na *NodeArenas) inputList(first []VFS, rest ...[]VFS) InputChunks {

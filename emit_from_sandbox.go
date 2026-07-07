@@ -75,7 +75,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	node := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: build(instance.Path.relString()).fullSTR(), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(args), Cwd: build(instance.Path.relString()), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(fromSandboxScriptInputs),
 		KV:           &fromSandboxKV,

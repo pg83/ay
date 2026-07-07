@@ -79,7 +79,7 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR([]STR{
 			wrapccPython3STR,
 			scriptVFS.fullSTR(),
 			strOutput, out.fullSTR(),
@@ -115,7 +115,7 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR([]STR{
 			wrapccPython3STR,
 			scriptVFS.fullSTR(),
 			strOutput, out.fullSTR(),

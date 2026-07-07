@@ -37,7 +37,7 @@ END()
 		"-o$(B)/lex/lexer.l.cpp",
 		"$(S)/lex/lexer.l",
 	}
-	got := strStrs(lx.Cmds[0].CmdArgs.flat())
+	got := anyStrs(lx.Cmds[0].CmdArgs.flat())
 
 	if len(got) != len(wantCmd) {
 		t.Fatalf("LX cmd_args = %#v, want %#v", got, wantCmd)
@@ -73,7 +73,7 @@ END()
 	}
 
 	if !cmdHasArg(cc, "-I$(S)/contrib/tools/flex-old") {
-		t.Errorf("generated CC missing -I$(S)/contrib/tools/flex-old: %#v", strStrs(cc.Cmds[0].CmdArgs.flat()))
+		t.Errorf("generated CC missing -I$(S)/contrib/tools/flex-old: %#v", anyStrs(cc.Cmds[0].CmdArgs.flat()))
 	}
 
 	ar := mustNodeByOutput(t, g, "$(B)/lex/liblex.a")

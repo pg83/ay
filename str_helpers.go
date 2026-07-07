@@ -47,6 +47,16 @@ func appendStrStrs(dst []string, as []STR) []string {
 	return dst
 }
 
+func anyStrs(as []ANY) []string {
+	out := make([]string, 0, len(as))
+
+	for _, a := range as {
+		out = append(out, a.string())
+	}
+
+	return out
+}
+
 func strStrs(as []STR) []string {
 	return appendStrStrs(make([]string, 0, len(as)), as)
 }

@@ -216,7 +216,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel STR) {
 
 		node := Node{
 			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(goCgoCopyCmdHead, args), Env: goVcsEnv}),
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(goCgoCopyCmdHead, args), Env: goVcsEnv}),
 			Env:          goVcsEnv,
 			Inputs:       na.inputList(block[:k:k]),
 			KV:           &cpKV,
@@ -342,7 +342,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(
 			goCgo1Head,
 			pathBlock[:k:k],
 			goCgo1ToolChunk,
@@ -353,7 +353,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 			inclArgs,
 			cflagsStr,
 			srcsBlock,
-		), Env: env, Cwd: strS}),
+		), Env: env, Cwd: srcRootDirVFS}),
 		Env:          env,
 		Inputs:       na.inputList(inputs[:ni:ni]),
 		KV:           &goToolKV,
@@ -621,14 +621,14 @@ func (e *EmitContext) flushGoCgo2() {
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(
-			Cmd{CmdArgs: na.chunkList(
+			Cmd{CmdArgs: na.chunkListSTR(
 				na.strList(d.tc.CC.str(), p.TargetArg),
 				p.SysrootArgs,
 				inclArgs,
 				cflagsStr,
 				na.strList(mainC.fullSTR(), strC2, strO, mainO.fullSTR()),
 			), Env: goVcsEnv},
-			Cmd{CmdArgs: na.chunkList(
+			Cmd{CmdArgs: na.chunkListSTR(
 				na.strList(wrapccPython3STR, linkOScriptVFS.fullSTR(), d.tc.CC.str(), p.TargetArg),
 				p.SysrootArgs,
 				inclArgs,
@@ -637,7 +637,7 @@ func (e *EmitContext) flushGoCgo2() {
 				goCgoLinkOPostLd,
 				objArgs[:kd:kd],
 			), Env: goVcsEnv},
-			Cmd{CmdArgs: na.chunkList(cmd2Args), Env: goEnv},
+			Cmd{CmdArgs: na.chunkListSTR(cmd2Args), Env: goEnv},
 		),
 		Env:          goEnv,
 		Inputs:       na.inputList(inputs[:ni:ni]),

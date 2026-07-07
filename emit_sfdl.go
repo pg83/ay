@@ -19,7 +19,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src STR) {
 	toolEnv := instance.Platform.ToolEnvVars
 	blocks := d.cc.CCBlocks
 
-	cmd0 := Cmd{CmdArgs: na.chunkList(
+	cmd0 := Cmd{CmdArgs: na.chunkListSTR(
 		blocks.cxxHead,
 		instance.Platform.CCHead,
 		blocks.flags,
@@ -36,7 +36,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src STR) {
 		),
 	), Env: plainEnv}
 
-	cmd1 := Cmd{CmdArgs: na.chunkList(na.strList(
+	cmd1 := Cmd{CmdArgs: na.chunkListSTR(na.strList(
 		toolBin.fullSTR(),
 		strI2,
 		tmpVFS.fullSTR(),

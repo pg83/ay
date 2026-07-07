@@ -51,7 +51,7 @@ func emitTestRunNodes(ctxEmit *StreamingEmitter, runEmit *StreamingEmitter, p *P
 func buildTestCtxNode(na *NodeArenas, p *Platform) *Node {
 	return &Node{
 		Platform: p,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(testYMakePython3),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(internStr(testYMakePython3),
 			(source(testAppendFileScriptRel)).fullSTR(),
 			internStr(testContextPath),
 			arg3.str(),
@@ -127,8 +127,8 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 
 	return &Node{
 		Platform: p,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
-			Cwd: internStr(testBuildRoot)}),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+			Cwd: cwdVFS(testBuildRoot)}),
 		Env:    testEnv(p, "unittest"),
 		Inputs: na.inputList(na.vfsList(source(info.ProjectPath))),
 		KV: &KV{
@@ -227,8 +227,8 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 
 	return &Node{
 		Platform: p,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
-			Cwd: internStr(testBuildRoot)}),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+			Cwd: cwdVFS(testBuildRoot)}),
 		Env:    testEnv(p, "clang_format"),
 		Inputs: na.inputList(inputs),
 		KV: &KV{

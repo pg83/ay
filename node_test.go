@@ -72,7 +72,7 @@ func extractKeyOrder(t *testing.T, raw []byte) []string {
 
 func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 	n := Node{
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"echo"})}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"echo"}))}, Env: nil}},
 
 		Env:          EnvVars{{Name: internEnv("FOO"), Value: internStr("bar")}},
 		Inputs:       InputChunks{ToVFSSlice([]string{"in"})},
@@ -166,7 +166,7 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 }
 
 func TestCmdJSONKeyOrder(t *testing.T) {
-	c := Cmd{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"echo", "hi"})}, Env: EnvVars{{Name: internEnv("K"), Value: internStr("V")}}}
+	c := Cmd{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"echo", "hi"}))}, Env: EnvVars{{Name: internEnv("K"), Value: internStr("V")}}}
 	raw, err := json.Marshal(c)
 
 	if err != nil {

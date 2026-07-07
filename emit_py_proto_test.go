@@ -347,7 +347,7 @@ END()
 		var args []string
 
 		for _, c := range n.Cmds {
-			args = append(args, strStrs(c.CmdArgs.flat())...)
+			args = append(args, anyStrs(c.CmdArgs.flat())...)
 		}
 
 		return args

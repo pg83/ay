@@ -11,7 +11,7 @@ import (
 func build3NodeDAG() (*StreamingEmitter, NodeRef, NodeRef, NodeRef) {
 	e := newStreamingEmitter(nil)
 	c := e.emitNode(Node{
-		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "C"})}, Env: nil}},
+		Cmds:         []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"build", "C"}))}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{"c.in"})},
 		KV:           &KV{Name: "C"},
@@ -20,7 +20,7 @@ func build3NodeDAG() (*StreamingEmitter, NodeRef, NodeRef, NodeRef) {
 		Requirements: Requirements{},
 	})
 	b := e.emitNode(Node{
-		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "B"})}, Env: nil}},
+		Cmds:         []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"build", "B"}))}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{"b.in"})},
 		KV:           &KV{Name: "B"},
@@ -30,7 +30,7 @@ func build3NodeDAG() (*StreamingEmitter, NodeRef, NodeRef, NodeRef) {
 		DepRefs:      []NodeRef{c},
 	})
 	a := e.emitNode(Node{
-		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"build", "A"})}, Env: nil}},
+		Cmds:         []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"build", "A"}))}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{"a.in"})},
 		KV:           &KV{Name: "A"},
@@ -122,7 +122,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	e := newStreamingEmitter(nil)
 	mkLeaf := func(name string) NodeRef {
 		return e.emitNode(Node{Platform: &Platform{},
-			Cmds:   []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{name})}, Env: nil}},
+			Cmds:   []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{name}))}, Env: nil}},
 			Env:    nil,
 			Inputs: InputChunks{ToVFSSlice([]string{})}, KV: &KV{Name: name},
 			Outputs:      ToVFSSlice([]string{}),
@@ -134,7 +134,7 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	z := mkLeaf("Z")
 
 	a := e.emitNode(Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"A"}))}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 		KV: &KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{},
@@ -175,13 +175,13 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 	e := newStreamingEmitter(nil)
 	c := e.emitNode(Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"C"})}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"C"}))}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 		KV: &KV{Name: "C"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{},
 	})
 	a := e.emitNode(Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"A"}))}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 		KV: &KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{},
@@ -231,7 +231,7 @@ func TestFinalize_KeepsIdenticalEmits(t *testing.T) {
 	e := newStreamingEmitter(nil)
 	mk := func() NodeRef {
 		return e.emitNode(Node{Platform: &Platform{},
-			Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"identical"})}, Env: nil}},
+			Cmds: []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"identical"}))}, Env: nil}},
 			Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 			KV: &KV{Name: "L"}, Outputs: ToVFSSlice([]string{}),
 			Requirements: Requirements{},
@@ -266,7 +266,7 @@ func TestFinalize_SecondCallErrors(t *testing.T) {
 func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 	e := newStreamingEmitter(nil)
 	a := e.emitNode(Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"A"}))}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 		KV: &KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements:   Requirements{},
@@ -302,7 +302,7 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 func TestFinalize_DedupesDuplicateResultCalls(t *testing.T) {
 	e := newStreamingEmitter(nil)
 	a := e.emitNode(Node{Platform: &Platform{},
-		Cmds: []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"A"})}, Env: nil}},
+		Cmds: []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"A"}))}, Env: nil}},
 		Env:  nil, Inputs: InputChunks{ToVFSSlice([]string{})},
 		KV: &KV{Name: "A"}, Outputs: ToVFSSlice([]string{}),
 		Requirements: Requirements{},

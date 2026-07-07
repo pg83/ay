@@ -31,7 +31,7 @@ func TestEmitBundle_GeneratedFileWiresProducerDep(t *testing.T) {
 		t.Errorf("BN node inputs missing the bundled primary output $(B)/dep/libdep.a: %v", vfsStringsT3(bn.flatInputs()))
 	}
 
-	cmd := strings.Join(strStrs(bn.Cmds[0].CmdArgs.flat()), " ")
+	cmd := strings.Join(anyStrs(bn.Cmds[0].CmdArgs.flat()), " ")
 
 	if !strings.Contains(cmd, "fs_tools.py rename $(B)/dep/libdep.a $(B)/cons/x.bundle") {
 		t.Errorf("BN cmd = %q, want a fs_tools.py rename of the bundled output into the destination", cmd)

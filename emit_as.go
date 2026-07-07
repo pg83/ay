@@ -14,8 +14,8 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
-			Cwd: strB,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+			Cwd: bldRootDirVFS,
 			Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.buckets...),

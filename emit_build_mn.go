@@ -20,7 +20,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(
 			d.tc.Python3,
 			buildMnScriptVFS.fullSTR(),
 			strBuildmnf,

@@ -59,7 +59,7 @@ func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef,
 	head = append(head, (ragel6BinaryPath).fullSTR())
 	head = appendArgStr(head, effectiveFlags)
 
-	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.strList((outVFS).fullSTR(), (inVFS).fullSTR()))
+	cmdArgs := na.chunkListSTR(head, ragel6ConstArgs, na.strList((outVFS).fullSTR(), (inVFS).fullSTR()))
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	head2 := na.vfsList(ragel6BinaryPath)
 

@@ -351,7 +351,7 @@ func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
 	composeCCNode(inst, internStr("lib.cpp"), srcVFS, withCCBlocks(inst.Platform, ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{TC: testToolchain()}, IncludeInputs: []VFS{srcVFS}}), testHostP, emit)
 
 	node := emit.nodes.s[0]
-	args := strStrs(node.Cmds[0].CmdArgs.flat())
+	args := anyStrs(node.Cmds[0].CmdArgs.flat())
 
 	wantPrefix := []string{
 		"$(B)/resources/YMAKE_PYTHON3/bin/python3",
@@ -395,7 +395,7 @@ func TestEmitCC_NoWrapcc_Opensource(t *testing.T) {
 	composeCCNode(targetInstance("mod"), internStr("lib.cpp"), intern("$(S)/mod/lib.cpp"), withCCBlocks(targetInstance("mod").Platform, ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{TC: testToolchain()}}), testHostP, emit)
 
 	node := emit.nodes.s[0]
-	args := strStrs(node.Cmds[0].CmdArgs.flat())
+	args := anyStrs(node.Cmds[0].CmdArgs.flat())
 
 	if args[0] != testToolchain().CXX.string() {
 		t.Errorf("opensource CC cmd_args[0] = %q, want the compiler (no wrapcc prefix)", args[0])
@@ -410,7 +410,10 @@ func TestEmitCC_NoWrapcc_Opensource(t *testing.T) {
 	}
 }
 
-func contains(xs []STR, target string) bool {
+func contains[T interface {
+	~uint32
+	string() string
+}](xs []T, target string) bool {
 	for _, x := range xs {
 		if x.string() == target {
 			return true
@@ -563,7 +566,7 @@ END()
 
 	for _, n := range g.Graph {
 		if len(n.Outputs) == 1 && n.Outputs[0].string() == "$(B)/bridge/x.cpp.o" {
-			args = strStrs(n.Cmds[0].CmdArgs.flat())
+			args = anyStrs(n.Cmds[0].CmdArgs.flat())
 
 			break
 		}
@@ -606,7 +609,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 
 		nostdinccCount := 0
 
-		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs.flat()) {
+		for _, arg := range anyStrs(ccNode.Cmds[0].CmdArgs.flat()) {
 			if arg == "GLOBAL" {
 				t.Errorf("CC cmd_args contains literal %q — GLOBAL modifier leaked into own node", arg)
 			}
@@ -646,7 +649,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 			t.Fatal("CC node has no Cmds")
 		}
 
-		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs.flat()) {
+		for _, arg := range anyStrs(ccNode.Cmds[0].CmdArgs.flat()) {
 			if arg == "GLOBAL" {
 				t.Errorf("CC cmd_args contains literal %q — GLOBAL modifier leaked into own node", arg)
 			}
@@ -680,7 +683,7 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 
 		found := false
 
-		for _, arg := range strStrs(ccNode.Cmds[0].CmdArgs.flat()) {
+		for _, arg := range anyStrs(ccNode.Cmds[0].CmdArgs.flat()) {
 			if arg == "-DMINE" {
 				found = true
 
@@ -913,7 +916,7 @@ END()
 
 	g := testGen(fs, "mod")
 	cc := mustNodeByOutput(t, g, "$(B)/mod/lib.cpp.o")
-	args := strings.Join(strStrs(cc.Cmds[0].CmdArgs.flat()), " ")
+	args := strings.Join(anyStrs(cc.Cmds[0].CmdArgs.flat()), " ")
 
 	for _, want := range []string{
 		"-DMKQL_RUNTIME_VERSION=42",
@@ -1028,7 +1031,7 @@ func ccArgsForOutput(t *testing.T, g *Graph, output string) []string {
 	t.Helper()
 	n := mustNodeByOutput(t, g, output)
 
-	return strStrs(n.Cmds[0].CmdArgs.flat())
+	return anyStrs(n.Cmds[0].CmdArgs.flat())
 }
 
 func argsContain(args []string, want string) bool {
@@ -1068,7 +1071,7 @@ func TestGen_NoOptimizeSuppressesOptimization(t *testing.T) {
 	}
 
 	ld := mustNodeByOutput(t, g, "$(B)/contrib/tools/gperf/gperf")
-	vcs := strStrs(ld.Cmds[1].CmdArgs.flat())
+	vcs := anyStrs(ld.Cmds[1].CmdArgs.flat())
 
 	if !argsContain(vcs, "-O0") || argsContain(vcs, "-O3") {
 		t.Fatalf("NO_OPTIMIZE vcs compile not suppressed: %v", vcs)

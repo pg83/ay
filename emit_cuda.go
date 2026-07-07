@@ -48,14 +48,19 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 
 	total := len(head) + 6
 	chunks := na.chunks.alloc(total)
-	k := copy(chunks, head)
+	k := 0
 
-	chunks[k] = blocks.includes
-	chunks[k+1] = na.strList(cudaCflagsStr)
-	chunks[k+2] = p.CCHead
-	chunks[k+3] = blocks.flags
-	chunks[k+4] = cuCxxTail
-	chunks[k+5] = na.strList(cudaNvccStdStr)
+	for _, h := range head {
+		chunks[k] = na.anyChunk(h)
+		k++
+	}
+
+	chunks[k] = na.anyChunk(blocks.includes)
+	chunks[k+1] = na.anyChunk(na.strList(cudaCflagsStr))
+	chunks[k+2] = na.anyChunk(p.CCHead)
+	chunks[k+3] = na.anyChunk(blocks.flags)
+	chunks[k+4] = na.anyChunk(cuCxxTail)
+	chunks[k+5] = na.anyChunk(na.strList(cudaNvccStdStr))
 	k += 6
 	na.chunks.commit(k)
 

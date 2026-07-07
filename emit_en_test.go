@@ -36,8 +36,8 @@ func TestGen_CppEnumsSerialization(t *testing.T) {
 
 	ar := mustNodeByOutput(t, g, "$(B)/pe/proto/libpe-proto.a")
 
-	if !containsString(strStrs(ar.Cmds[0].CmdArgs.flat()), "$(B)/pe/proto/package.pb.h_serialized.cpp.o") {
-		t.Fatalf("archive missing serialized-enum object; cmd_args=%#v", strStrs(ar.Cmds[0].CmdArgs.flat()))
+	if !containsString(anyStrs(ar.Cmds[0].CmdArgs.flat()), "$(B)/pe/proto/package.pb.h_serialized.cpp.o") {
+		t.Fatalf("archive missing serialized-enum object; cmd_args=%#v", anyStrs(ar.Cmds[0].CmdArgs.flat()))
 	}
 }
 

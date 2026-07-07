@@ -13,7 +13,7 @@ func (e *EmitContext) emitLibraryFmlSource(src STR) {
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(
 			toolBin.fullSTR(),
 			strB2,
 			argDashO.str(),

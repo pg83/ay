@@ -132,8 +132,8 @@ func TestEmitLD_SyntheticPROGRAM(t *testing.T) {
 		t.Errorf("outputs = %#v, want [%q]", got.Outputs, wantOut)
 	}
 
-	startIdx := slices.Index(strStrs(got.Cmds[2].CmdArgs.flat()), "--start-plugins")
-	endIdx := slices.Index(strStrs(got.Cmds[2].CmdArgs.flat()), "--end-plugins")
+	startIdx := slices.Index(anyStrs(got.Cmds[2].CmdArgs.flat()), "--start-plugins")
+	endIdx := slices.Index(anyStrs(got.Cmds[2].CmdArgs.flat()), "--end-plugins")
 
 	if startIdx < 0 || endIdx != startIdx+1 {
 		t.Fatalf("synthetic LD plugin markers = %v, want adjacent empty --start-plugins/--end-plugins", got.Cmds[2].CmdArgs.flat())
@@ -212,15 +212,15 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 		}
 	}
 
-	if !slices.Equal(strStrs(got.Cmds[4].CmdArgs.flat()), []string{testToolchain().Objcopy.string(), "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
+	if !slices.Equal(anyStrs(got.Cmds[4].CmdArgs.flat()), []string{testToolchain().Objcopy.string(), "--only-keep-debug", "$(B)/some/prog/prog", "$(B)/some/prog/prog.debug"}) {
 		t.Fatalf("cmd[4].cmd_args = %#v", got.Cmds[4].CmdArgs.flat())
 	}
 
-	if !slices.Equal(strStrs(got.Cmds[5].CmdArgs.flat()), []string{testToolchain().Strip.string(), "--strip-debug", "$(B)/some/prog/prog"}) {
+	if !slices.Equal(anyStrs(got.Cmds[5].CmdArgs.flat()), []string{testToolchain().Strip.string(), "--strip-debug", "$(B)/some/prog/prog"}) {
 		t.Fatalf("cmd[5].cmd_args = %#v", got.Cmds[5].CmdArgs.flat())
 	}
 
-	if !slices.Equal(strStrs(got.Cmds[6].CmdArgs.flat()), []string{testToolchain().Objcopy.string(), "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
+	if !slices.Equal(anyStrs(got.Cmds[6].CmdArgs.flat()), []string{testToolchain().Objcopy.string(), "--remove-section=.gnu_debuglink", "--add-gnu-debuglink", "$(B)/some/prog/prog.debug", "$(B)/some/prog/prog"}) {
 		t.Fatalf("cmd[6].cmd_args = %#v", got.Cmds[6].CmdArgs.flat())
 	}
 
@@ -399,7 +399,7 @@ func TestEmitLD_ThreadsWholeArchiveLibsToInputsAndDeps(t *testing.T) {
 		t.Fatalf("whole-archive/peer ref in DepRefs %d times, want 1: %#v", depCount, got.DepRefs)
 	}
 
-	cmdArgs := strStrs(got.Cmds[2].CmdArgs.flat())
+	cmdArgs := anyStrs(got.Cmds[2].CmdArgs.flat())
 	found := false
 
 	for i := 0; i+1 < len(cmdArgs); i++ {
@@ -487,7 +487,7 @@ func TestEmitLD_DedupsBuildRootInputsAcrossPeerAndWholeArchivePaths(t *testing.T
 		t.Fatalf("peer/whole-archive ref in DepRefs %d times, want 1: %#v", depCount, got.DepRefs)
 	}
 
-	cmdArgs := strStrs(got.Cmds[2].CmdArgs.flat())
+	cmdArgs := anyStrs(got.Cmds[2].CmdArgs.flat())
 	found := false
 
 	for i := 0; i+1 < len(cmdArgs); i++ {
@@ -767,7 +767,7 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 
 	g := testGen(newMemFS(files), "app")
 
-	var linkArgs []STR
+	var linkArgs []ANY
 
 	for _, c := range resultRootNode(g).Cmds {
 		args := c.CmdArgs.flat()
@@ -826,7 +826,10 @@ func TestGen_EnumSerializationRuntimePrecedesProtoLibraryArchive(t *testing.T) {
 	}
 }
 
-func argStrs2(args []STR) []string {
+func argStrs2[T interface {
+	~uint32
+	string() string
+}](args []T) []string {
 	out := make([]string, len(args))
 
 	for i, a := range args {
@@ -872,7 +875,7 @@ func libmOrderingProgramFiles() map[string]string {
 	return files
 }
 
-func ccArgsOfSuffix(t *testing.T, g *Graph, suffix string) []STR {
+func ccArgsOfSuffix(t *testing.T, g *Graph, suffix string) []ANY {
 	t.Helper()
 
 	n := mustNodeByOutputSuffix(t, g, suffix)
@@ -884,7 +887,7 @@ func ccArgsOfSuffix(t *testing.T, g *Graph, suffix string) []STR {
 	return n.Cmds[0].CmdArgs.flat()
 }
 
-func linkArgsOf(t *testing.T, g *Graph) []STR {
+func linkArgsOf(t *testing.T, g *Graph) []ANY {
 	t.Helper()
 
 	for _, n := range g.Graph {
