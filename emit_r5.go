@@ -61,7 +61,7 @@ func emitR5(
 	return emit.emitNode(node), tmpVFS, cppVFS
 }
 
-func (e *EmitContext) emitLibraryRagel5Source(src STR) {
+func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 
@@ -89,7 +89,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 		OutputPath:     r5CppOut,
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  []NodeRef{ragel5LDRef, rlgenCdLDRef},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: append([]IncludeDirective{{kind: includeQuoted, target: internStr(r5TmpOut.relString())}}, r5Parsed...)},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(internStr(r5TmpOut.relString()))}}, r5Parsed...)},
 		Compile: &CompileSpec{
 			FlatOutput: d.flatSrc(src),
 			CFlags:     concat(psc, []ARG{argWnoImplicitFallthrough}),
@@ -99,6 +99,6 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	meta.Source = r5CppOut.fullSTR()
+	meta.Source = r5CppOut.any()
 	e.enqueueSrc(meta)
 }

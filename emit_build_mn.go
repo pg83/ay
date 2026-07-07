@@ -41,7 +41,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	}
 
 	ref := ctx.emit.emitNode(node)
-	mnSSEInclude := IncludeDirective{kind: includeQuoted, target: strKernelMatrixnetMnSseH}
+	mnSSEInclude := IncludeDirective{kind: includeQuoted, target: includeTarget(strKernelMatrixnetMnSseH)}
 
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     cppVFS,
@@ -54,9 +54,9 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		OutputPath:     rodataVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{archiverRef},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: internStr(cppVFS.relString())}}},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: includeTarget(internStr(cppVFS.relString()))}}},
 	})
 
-	e.enqueueSrc(SrcMeta{Source: cppVFS.fullSTR(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
-	e.enqueueSrc(SrcMeta{Source: internV("MN_External_", stmt.Name, ".rodata"), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
+	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
+	e.enqueueSrc(SrcMeta{Source: internV("MN_External_", stmt.Name, ".rodata").any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
 }

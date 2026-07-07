@@ -39,10 +39,10 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		cpRef := ctx.emit.reserve()
 		emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
 
-		emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.relString())})
+		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(antlr4RuntimeHeaderVFS.relString()))})
 
 		for _, h := range outputIncludes {
-			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(h)})
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(h))})
 		}
 
 		leaves := append([]VFS{jvPrimary, srcH}, ctx.scripts[antlr4FsToolsVFS]...)
@@ -55,7 +55,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 			ClosureLeaves:  leaves,
-			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.fullSTR()), CFlags: []ARG{argWnoUnusedVariable}},
+			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.any()), CFlags: []ARG{argWnoUnusedVariable}},
 		})
 
 		leafSet := make(map[VFS]bool, len(leaves))
@@ -70,7 +70,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 
 		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, d.cc.TC, ctx.scripts, ctx.emit)
 
-		e.enqueueSrc(SrcMeta{Source: g4CppPath.fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
+		e.enqueueSrc(SrcMeta{Source: g4CppPath.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
 	}
 }
 

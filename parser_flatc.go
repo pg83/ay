@@ -19,7 +19,7 @@ func (FlatbuffersIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAll
 			return
 		}
 
-		k = addDirective(block, k, IncludeDirective{kind: includeQuoted, target: internStr(string(m[1]))})
+		k = addDirective(block, k, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(string(m[1])))})
 	})
 
 	a.commit(k)

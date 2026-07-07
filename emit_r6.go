@@ -83,7 +83,7 @@ func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef,
 	emit.emitReservedNode(node, id)
 }
 
-func (e *EmitContext) emitLibraryRagel6Source(src STR) {
+func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
@@ -123,7 +123,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) {
 		meta := d.srcMetaOf(src)
 
 		meta.Generated = true
-		meta.Source = r6Out.fullSTR()
+		meta.Source = r6Out.any()
 		e.enqueueSrc(meta)
 	}
 

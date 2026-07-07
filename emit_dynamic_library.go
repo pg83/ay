@@ -372,7 +372,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	cmdArgs = append(cmdArgs, argStartPlugins.any())
 
 	for _, p := range pluginPaths {
-		cmdArgs = append(cmdArgs, (p).fullSTR().any())
+		cmdArgs = append(cmdArgs, (p).any())
 	}
 
 	cmdArgs = append(cmdArgs, argEndPlugins.any())
@@ -396,7 +396,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	)
 
 	for _, o := range ownObjects {
-		cmdArgs = append(cmdArgs, (o).fullSTR().any())
+		cmdArgs = append(cmdArgs, (o).any())
 	}
 
 	cmdArgs = append(cmdArgs,

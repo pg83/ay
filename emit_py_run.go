@@ -26,9 +26,9 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 	for _, out := range outs {
 		switch {
 		case isCCSourceExt(out) || isAsmSourceExt(out):
-			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
+			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
 		case isCodegenProducingSrc(out):
-			e.enqueueSrc(SrcMeta{Source: internStr(out), Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
+			e.enqueueSrc(SrcMeta{Source: pathAny(internStr(out)), Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
 		}
 	}
 }
@@ -289,11 +289,11 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 			includes := make([]IncludeDirective, 0, capacity)
 
 			if isNonFirst && firstShardVFS != 0 {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(firstShardVFS.relString())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(firstShardVFS.relString()))})
 			}
 
 			for _, src := range splitSrcs {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(src.relString())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(src.relString()))})
 			}
 
 			return includes
@@ -303,21 +303,21 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 			includes := make([]IncludeDirective, 0, 1+len(splitSrcs))
 
 			if firstShardVFS != 0 {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(firstShardVFS.relString())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(firstShardVFS.relString()))})
 			}
 
 			for _, src := range splitSrcs {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(src.relString())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(src.relString()))})
 			}
 
 			return includes
 		}
 	}
 
-	includes := []IncludeDirective{{kind: includeQuoted, target: internStr(scriptVFS.relString())}}
+	includes := []IncludeDirective{{kind: includeQuoted, target: includeTarget(internStr(scriptVFS.relString()))}}
 
 	for _, f := range stmt.INFiles {
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(e.runProgramInputVFS(f.string()).relString())})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(e.runProgramInputVFS(f.string()).relString()))})
 	}
 
 	for _, f := range stmt.OutputIncludes {
@@ -325,7 +325,7 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 			f = internStr(intern(f.string()).relString())
 		}
 
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(f.string())})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(f.string()))})
 	}
 
 	return includes

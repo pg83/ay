@@ -20,7 +20,7 @@ func (e *EmitContext) emitExplicitCF(cf *ConfigureFileStmt) {
 	e.emitConfigureFile(srcVFS, outVFS)
 }
 
-func (e *EmitContext) emitLibraryHInSource(src STR) {
+func (e *EmitContext) emitLibraryHInSource(src ANY) {
 	_, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
@@ -38,7 +38,7 @@ func (e *EmitContext) emitLibraryCInSource(meta SrcMeta) {
 	e.emitConfigureFile(srcVFS, outVFS)
 
 	meta.Generated = true
-	meta.Source = outVFS.fullSTR()
+	meta.Source = outVFS.any()
 	e.enqueueSrc(meta)
 }
 
@@ -46,7 +46,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	cmdArgs := []ANY{d.cc.TC.Python3.any(), configureFilePyVFS.fullSTR().any(), srcVFS.fullSTR().any(), outVFS.fullSTR().any()}
+	cmdArgs := []ANY{d.cc.TC.Python3.any(), configureFilePyVFS.any(), srcVFS.any(), outVFS.any()}
 
 	cmdArgs = appendInternAnys(cmdArgs, buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
 

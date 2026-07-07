@@ -69,7 +69,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 
 	var psc []ARG
 
-	if p := d.perSrcCFlagsFor(joinOutVFS.fullSTR()); p != nil {
+	if p := d.perSrcCFlagsFor(joinOutVFS.any()); p != nil {
 		psc = *p
 	}
 
@@ -77,10 +77,10 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 		OutputPath:    joinOutVFS,
 		ProducerRef:   jsRef,
 		ClosureLeaves: ccIncl[1:],
-		Compile:       &CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.fullSTR()), CFlags: psc},
+		Compile:       &CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.any()), CFlags: psc},
 	})
 
-	e.enqueueSrc(SrcMeta{Source: joinOutVFS.fullSTR(), Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
+	e.enqueueSrc(SrcMeta{Source: joinOutVFS.any(), Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
 }
 
 func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []string, scanCfg ScanContext) []VFS {

@@ -48,7 +48,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			parsed := make([]IncludeDirective, 0, len(witnessIncludes))
 
 			for _, include := range witnessIncludes {
-				parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.relString())})
+				parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(include.relString()))})
 			}
 
 			e.codegen.register(&GeneratedFileInfo{
@@ -110,7 +110,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			parsed := make([]IncludeDirective, 0, len(witnessIncludes))
 
 			for _, include := range witnessIncludes {
-				parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.relString())})
+				parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(include.relString()))})
 			}
 
 			e.codegen.register(&GeneratedFileInfo{

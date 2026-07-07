@@ -98,11 +98,11 @@ func (e *EmitContext) ccInputsFor(srcVFS VFS) ModuleCCInputs {
 
 	srcID := internStr(trimModulePrefix(srcVFS.relString(), instance.Path.relString()))
 
-	if extras := d.perSrcCFlagsFor(srcID); extras != nil {
+	if extras := d.perSrcCFlagsFor(srcID.any()); extras != nil {
 		in.PerSourceCFlags = *extras
 	}
 
-	if d.flatSrc(srcID) {
+	if d.flatSrc(srcID.any()) {
 		in.FlatOutput = true
 	}
 
@@ -113,12 +113,8 @@ func (e *EmitContext) emitCC(srcVFS VFS) (NodeRef, VFS) {
 	return e.emitCCWith(srcVFS, e.ccInputsFor(srcVFS))
 }
 
-func (e *EmitContext) moduleSourceVFS(src STR) VFS {
+func (e *EmitContext) moduleSourceVFS(src ANY) VFS {
 	_, _, d := e.ctx, e.instance, e.d
-
-	if v := src.vfs(); v != 0 {
-		return v
-	}
 
 	return e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 }

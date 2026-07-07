@@ -85,7 +85,7 @@ func (e *EmitContext) registerCollectPySrcs() {
 
 		for _, srcRel := range group.Srcs {
 			if extIsProto(srcRel.string()) {
-				e.emitPyProtoSource(srcRel, gi)
+				e.emitPyProtoSource(srcRel.any(), gi)
 
 				continue
 			}
@@ -542,12 +542,12 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 	emits := make([]IncludeDirective, 0, len(seed))
 
 	for _, v := range seed {
-		emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(v.relString())})
+		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(v.relString()))})
 	}
 
 	var psc []ARG
 
-	if p := d.perSrcCFlagsFor(aux.fullSTR()); p != nil {
+	if p := d.perSrcCFlagsFor(aux.any()); p != nil {
 		psc = *p
 	}
 
@@ -556,7 +556,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-		Compile:        &CompileSpec{FlatOutput: d.flatSrc(aux.fullSTR()), ForceCxx: true, CFlags: concat(psc, []ARG{argX, argC})},
+		Compile:        &CompileSpec{FlatOutput: d.flatSrc(aux.any()), ForceCxx: true, CFlags: concat(psc, []ARG{argX, argC})},
 	})
 
 	return walkClosure(e.scanner, aux, d.cc.ScanCfg)

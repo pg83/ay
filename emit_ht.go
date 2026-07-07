@@ -2,7 +2,7 @@ package main
 
 var htKV = KV{P: pkHT, PC: pcYellow}
 
-func (e *EmitContext) emitLibraryAspSource(src STR) {
+func (e *EmitContext) emitLibraryAspSource(src ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	module := instance.Path.relString()
@@ -59,6 +59,6 @@ func (e *EmitContext) emitLibraryAspSource(src STR) {
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	meta.Source = outVFS.fullSTR()
+	meta.Source = outVFS.any()
 	e.enqueueSrc(meta)
 }

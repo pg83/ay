@@ -94,8 +94,14 @@ func (e *EmitContext) generatedModuleSourceVFS(srcRel string) *VFS {
 	return nil
 }
 
-func (e *EmitContext) resolveModuleSourceVFS(src STR, srcDirs []VFS) VFS {
+func (e *EmitContext) resolveModuleSourceVFS(srcAny ANY, srcDirs []VFS) VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
+	if v := srcAny.vfs(); v != 0 {
+		return v
+	}
+
+	src := srcAny.str()
 
 	if buildVFS := copyFileAutoSourceVFS(instance.Path.relString(), d, src); buildVFS != nil {
 		return *buildVFS

@@ -102,7 +102,7 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, srcRel string)
 	for _, imp := range direct {
 		out = append(out, IncludeDirective{
 			kind:   includeQuoted,
-			target: internV(imp, ".h"),
+			target: includeTarget(internV(imp, ".h")),
 		})
 	}
 
@@ -168,7 +168,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 		ClosureLeaves:  headerLeaves,
 	})
 
-	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.relString())}}
+	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: includeTarget(internStr(headerVFS.relString()))}}
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     cppVFS,
@@ -203,6 +203,6 @@ func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant
 
 	cpp.SecondLevel = meta.SecondLevel || meta.Generated
 	cpp.Generated = true
-	cpp.Source = build(srcVFS.relString(), ".cpp").fullSTR()
+	cpp.Source = build(srcVFS.relString(), ".cpp").any()
 	e.enqueueSrc(cpp)
 }

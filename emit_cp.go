@@ -20,10 +20,10 @@ func emitJVCPG4(
 
 	cmdArgs := []ANY{
 		tc.Python3.any(),
-		(fsTools).fullSTR().any(),
+		(fsTools).any(),
 		argCopy.any(),
-		(src).fullSTR().any(),
-		(dst).fullSTR().any(),
+		(src).any(),
+		(dst).any(),
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -67,10 +67,10 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	cmdArgs := []ANY{
 		tc.Python3.any(),
-		(fsTools).fullSTR().any(),
+		(fsTools).any(),
 		argCopy.any(),
-		(src).fullSTR().any(),
-		(dst).fullSTR().any(),
+		(src).any(),
+		(dst).any(),
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

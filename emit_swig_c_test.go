@@ -58,11 +58,11 @@ func TestCollectSwigInducedIncludes_UnionAcrossClosure(t *testing.T) {
 	got := collectSwigInducedIncludes(ctx, intern("$(S)/mod/src.swg"), closure)
 
 	want := []IncludeDirective{
-		{kind: includeSystem, target: internStr("Python.h")},
-		{kind: includeQuoted, target: internStr("archive.h")},
-		{kind: includeSystem, target: internStr("jni.h")},
-		{kind: includeSystem, target: internStr("Python.h")},
-		{kind: includeQuoted, target: internStr("archive_entry.h")},
+		{kind: includeSystem, target: includeTarget(internStr("Python.h"))},
+		{kind: includeQuoted, target: includeTarget(internStr("archive.h"))},
+		{kind: includeSystem, target: includeTarget(internStr("jni.h"))},
+		{kind: includeSystem, target: includeTarget(internStr("Python.h"))},
+		{kind: includeQuoted, target: includeTarget(internStr("archive_entry.h"))},
 	}
 
 	if !reflect.DeepEqual(got, want) {

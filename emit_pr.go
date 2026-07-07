@@ -44,7 +44,7 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 		}
 
 		e.enqueueSrc(SrcMeta{
-			Source:    copyFileOutputVFS(e.instance.Path.relString(), out).fullSTR(),
+			Source:    copyFileOutputVFS(e.instance.Path.relString(), out).any(),
 			Prio:      stmtPrioDefault,
 			Seq:       rp.DeclSeq,
 			Generated: true,
@@ -116,7 +116,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			return IncludeDirective{}, false
 		}
 
-		return IncludeDirective{kind: includeQuoted, target: internStr(mainOutputVFS.relString())}, true
+		return IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(mainOutputVFS.relString()))}, true
 	}
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet, ridesHeaderViaParsed bool) {
@@ -420,7 +420,7 @@ func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, pro
 			f = internStr(v.relString())
 		}
 
-		local = append(local, IncludeDirective{kind: includeQuoted, target: f})
+		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
 	}
 
 	carryProtoImportPbH := isHeaderSource(outFile.string()) && !extIsPbH(outFile.string())
@@ -442,7 +442,7 @@ func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, pro
 				continue
 			}
 
-			compile = append(compile, IncludeDirective{kind: includeQuoted, target: internStr(v.relString())})
+			compile = append(compile, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(v.relString()))})
 		}
 	}
 
@@ -505,7 +505,7 @@ func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 		return source(rel)
 	}
 
-	return e.resolveModuleSourceVFS(internStr(rel), d.srcDirs)
+	return e.resolveModuleSourceVFS(internStr(rel).any(), d.srcDirs)
 }
 
 func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *StreamingEmitter) {

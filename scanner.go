@@ -33,7 +33,11 @@ type IncludeKind int
 
 type IncludeDirective struct {
 	kind   IncludeKind
-	target STR
+	target ANY
+}
+
+func includeTarget(s STR) ANY {
+	return pathAny(s)
 }
 
 func (d IncludeDirective) quotedLike() bool {
@@ -480,7 +484,7 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 
 	var mappings []VFS
 	var hasMultiTarget bool
-	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerRel, d.target)
+	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerRel, d.target.str())
 
 	if d.quotedLike() && len(searchOut) > 0 {
 		bypass := !hasMultiTarget
@@ -839,7 +843,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	}
 
 	if includerAbs.isBuild() {
-		if info := s.codegen.lookupSTR(d.target); info != nil && !outHas(info.OutputPath) {
+		if info := s.codegen.lookupSTR(d.target.str()); info != nil && !outHas(info.OutputPath) {
 			out = append(out, info.OutputPath)
 			searchPathFound = true
 		}
@@ -847,7 +851,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 	if d.quotedLike() {
 		matched := false
-		sv := s.resolveSourceUnder(incDir, d.target)
+		sv := s.resolveSourceUnder(incDir, d.target.str())
 
 		if sv != 0 {
 			out = append(out, sv)
@@ -856,7 +860,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		}
 
 		if !matched {
-			if info := s.codegen.lookupSplit(incDir, d.target); info != nil {
+			if info := s.codegen.lookupSplit(incDir, d.target.str()); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true
@@ -866,7 +870,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	}
 
 	if !searchPathFound {
-		tier := sc.resolveContextSearchTier(d.target)
+		tier := sc.resolveContextSearchTier(d.target.str())
 
 		if tier != 0 {
 			out = append(out, tier)
@@ -940,7 +944,7 @@ func quotedDirectives(headers []VFS) []IncludeDirective {
 	out := make([]IncludeDirective, len(headers))
 
 	for i, h := range headers {
-		out[i] = IncludeDirective{kind: includeQuoted, target: internStr(h.relString())}
+		out[i] = IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(h.relString()))}
 	}
 
 	return out
