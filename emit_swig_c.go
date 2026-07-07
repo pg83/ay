@@ -40,19 +40,19 @@ func (e *EmitContext) emitSwigC() {
 		prefix := swigOutputPrefix(stmt.Src, stmt.Module)
 		cOutRel := prefix + ".swg.c"
 		pyOutRel := prefix + ".py"
-		srcVFS := source(instance.Path.rel(), "/", stmt.Src)
-		cOutVFS := build(instance.Path.rel(), "/", cOutRel)
-		pyOutVFS := build(instance.Path.rel(), "/", pyOutRel)
-		cv := walkClosure(e.scanner, srcVFS, newScanContext(ctx.parsers, swigAddIncls, nil, includeScannerBasePaths(), instance.Path.rel()))
+		srcVFS := source(instance.Path.relString(), "/", stmt.Src)
+		cOutVFS := build(instance.Path.relString(), "/", cOutRel)
+		pyOutVFS := build(instance.Path.relString(), "/", pyOutRel)
+		cv := walkClosure(e.scanner, srcVFS, newScanContext(ctx.parsers, swigAddIncls, nil, includeScannerBasePaths(), instance.Path.relString()))
 		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), cv.buckets...)
 		swigClosure := collectBucketVFS(cv.buckets, func(VFS) bool { return true })
 
-		cmdArgs := na.chunkList(na.strList(swigBin.str()), swigConstArgs, na.strList(internStr(swigModuleName(stmt.Module)),
+		cmdArgs := na.chunkList(na.strList(swigBin.fullSTR()), swigConstArgs, na.strList(internStr(swigModuleName(stmt.Module)),
 			argInterface.str(),
 			internV(swigModuleName(stmt.Module), "_swg"),
 			argDashO.str(),
-			(cOutVFS).str(),
-			(srcVFS).str()))
+			(cOutVFS).fullSTR(),
+			(srcVFS).fullSTR()))
 
 		swRef := ctx.emit.emitNode(Node{
 			Platform: instance.Platform,
@@ -70,7 +70,7 @@ func (e *EmitContext) emitSwigC() {
 
 		var psc []ARG
 
-		if p := d.perSrcCFlagsFor(cOutVFS.str()); p != nil {
+		if p := d.perSrcCFlagsFor(cOutVFS.fullSTR()); p != nil {
 			psc = *p
 		}
 
@@ -80,7 +80,7 @@ func (e *EmitContext) emitSwigC() {
 			GeneratorRefs:  []NodeRef{swigRef},
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(ctx, srcVFS, swigClosure)},
 			ClosureLeaves:  append(append([]VFS{}, swigClosure...), srcVFS),
-			Compile:        &CompileSpec{FlatOutput: d.flatSrc(cOutVFS.str()), CFlags: psc},
+			Compile:        &CompileSpec{FlatOutput: d.flatSrc(cOutVFS.fullSTR()), CFlags: psc},
 		})
 
 		reg.register(&GeneratedFileInfo{
@@ -92,12 +92,12 @@ func (e *EmitContext) emitSwigC() {
 
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{
 			Path:   pyOutVFS,
-			Module: internStr(generatedPyResourceKey(instance.Path.rel(), d, pyOutRel)),
-			Token:  internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.rel()),
+			Module: internStr(generatedPyResourceKey(instance.Path.relString(), d, pyOutRel)),
+			Token:  internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.relString()),
 			Group:  pyGroupGenAux,
 		})
 
-		e.enqueueSrc(SrcMeta{Source: cOutVFS.str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkSwig})
+		e.enqueueSrc(SrcMeta{Source: cOutVFS.fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkSwig})
 	}
 }
 

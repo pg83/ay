@@ -56,7 +56,7 @@ func (c *CanonBuf) inputVal(v VFS) uint64 {
 	}
 
 	if !c.eSeen[id] {
-		e := internTable.cells.get(id).lo
+		e := internTable.cells.get(id >> 1).lo ^ uint64(id&1)
 
 		if v.isSource() {
 			e ^= c.sourceHash(v)
@@ -224,7 +224,7 @@ func (c *CanonBuf) writeVFSSlice(vs []VFS) {
 
 func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 	for _, v := range vs {
-		c.writeSTR(v.str())
+		c.writeSTR(v.fullSTR())
 
 		if v.isSource() {
 			c.writeUint64(c.hash(v))

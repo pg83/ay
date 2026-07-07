@@ -15,7 +15,7 @@ var (
 func (e *EmitContext) emitExplicitCF(cf *ConfigureFileStmt) {
 	ctx, instance := e.ctx, e.instance
 	srcVFS := e.requireProducedInput("CONFIGURE_FILE src", cf.Src, copyFileInputVFS(ctx.fs, instance.Path, cf.Src))
-	outVFS := copyFileOutputVFS(instance.Path.rel(), cf.Dst)
+	outVFS := copyFileOutputVFS(instance.Path.relString(), cf.Dst)
 
 	e.emitConfigureFile(srcVFS, outVFS)
 }
@@ -24,7 +24,7 @@ func (e *EmitContext) emitLibraryHInSource(src STR) {
 	_, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
-	outVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".in"))
+	outVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, ".in"))
 
 	e.emitConfigureFile(srcVFS, outVFS)
 }
@@ -33,12 +33,12 @@ func (e *EmitContext) emitLibraryCInSource(meta SrcMeta) {
 	_, instance, d := e.ctx, e.instance, e.d
 	srcRel := meta.Source.string()
 	srcVFS := e.resolveModuleSourceVFS(meta.Source, d.cc.SrcDirs)
-	outVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, ".in"))
+	outVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, ".in"))
 
 	e.emitConfigureFile(srcVFS, outVFS)
 
 	meta.Generated = true
-	meta.Source = outVFS.str()
+	meta.Source = outVFS.fullSTR()
 	e.enqueueSrc(meta)
 }
 
@@ -46,9 +46,9 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	cmdArgs := []STR{d.cc.TC.Python3, configureFilePyVFS.str(), srcVFS.str(), outVFS.str()}
+	cmdArgs := []STR{d.cc.TC.Python3, configureFilePyVFS.fullSTR(), srcVFS.fullSTR(), outVFS.fullSTR()}
 
-	cmdArgs = appendInternStrs(cmdArgs, buildCFGVars(ctx.fs, srcVFS.rel(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
+	cmdArgs = appendInternStrs(cmdArgs, buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
 
 	cv := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
 
@@ -69,7 +69,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		ProducerRef:    cfRef,
 		GeneratorRefs:  nil,
 		SourceInputs:   []VFS{srcVFS, configureFilePyVFS},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cfTemplateParsedIncludes(ctx.parsers, srcVFS.rel())},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cfTemplateParsedIncludes(ctx.parsers, srcVFS.relString())},
 		ClosureLeaves:  []VFS{srcVFS, configureFilePyVFS},
 	})
 

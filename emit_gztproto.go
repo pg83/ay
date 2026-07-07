@@ -10,8 +10,8 @@ var gztprotoKV = KV{P: pkGZ, PC: pcYellow}
 func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VFS) (NodeRef, string) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	gztSource := e.resolveModuleSourceVFS(internStr(srcRel), d.srcDirs)
-	moddir := instance.Path.rel()
-	base := strings.TrimSuffix(filepath.Base(gztSource.rel()), filepath.Ext(gztSource.rel()))
+	moddir := instance.Path.relString()
+	base := strings.TrimSuffix(filepath.Base(gztSource.relString()), filepath.Ext(gztSource.relString()))
 	genProtoName := base + ".proto"
 	genProto := build(moddir, "/", genProtoName)
 	converterRef, converterBin := ctx.tool(argDictGazetteerConverter)
@@ -45,7 +45,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	sourceInputs = append(sourceInputs, gztSource)
 
 	eachBucketVFS(imports.buckets, func(v VFS) {
-		if v.isSource() && extIsGztproto(v.rel()) {
+		if v.isSource() && extIsGztproto(v.relString()) {
 			sourceInputs = append(sourceInputs, v)
 		}
 	})
@@ -64,7 +64,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 func (e *EmitContext) gztGenProtoName(srcRel string) string {
 	gztSource := e.resolveModuleSourceVFS(internStr(srcRel), e.d.srcDirs)
 
-	return strings.TrimSuffix(filepath.Base(gztSource.rel()), filepath.Ext(gztSource.rel())) + ".proto"
+	return strings.TrimSuffix(filepath.Base(gztSource.relString()), filepath.Ext(gztSource.relString())) + ".proto"
 }
 
 func (e *EmitContext) emitLibraryGztProtoCompile(src STR) {
@@ -80,7 +80,7 @@ func (e *EmitContext) emitLibraryGztProtoCompile(src STR) {
 func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []STR {
 	args := make([]STR, 0, 6+len(protoInclude))
 
-	args = append(args, converterBin.str())
+	args = append(args, converterBin.fullSTR())
 	args = append(args, internV("-I", pbRuntimeBaseVFS.string()))
 
 	seen := make(map[string]struct{}, 2+len(protoInclude))
@@ -102,7 +102,7 @@ func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) [
 	}
 
 	args = append(args, internV("-I", strS.string()))
-	args = append(args, gztSource.str(), genProto.str())
+	args = append(args, gztSource.fullSTR(), genProto.fullSTR())
 
 	return args
 }
@@ -140,7 +140,7 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) []I
 	local := make([]IncludeDirective, 0, len(inducedProtos)+len(gztLocal))
 
 	for _, v := range inducedProtos {
-		local = append(local, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
+		local = append(local, IncludeDirective{kind: includeQuoted, target: internStr(v.relString())})
 	}
 
 	for _, dir := range gztLocal {

@@ -138,7 +138,7 @@ func protoInducedPbH(pm *IncludeParserManager, local []IncludeDirective) []Inclu
 func pbHEmitsIncludesExtras() []IncludeDirective {
 	out := make([]IncludeDirective, 0, len(pbDescriptorImporterDirectives)+1)
 
-	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.relString())})
 	out = append(out, pbDescriptorImporterDirectives...)
 
 	return out
@@ -292,7 +292,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
 	}
 
-	transitiveImports := walkClosure(e.scanner, protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.rel()))
+	transitiveImports := walkClosure(e.scanner, protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.relString()))
 
 	extraProtoDeps = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, transitiveImports, extraProtoDeps...)
 
@@ -328,7 +328,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	if !needsGRPCParsed {
 		for _, out := range extraOutputPaths {
-			if out.rel() == grpcPbH.rel() || out.rel() == grpcPbCC.rel() {
+			if out.relString() == grpcPbH.relString() || out.relString() == grpcPbCC.relString() {
 				needsGRPCParsed = true
 
 				break
@@ -395,7 +395,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			return
 		}
 
-		pbHCompile = append(pbHCompile, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
+		pbHCompile = append(pbHCompile, IncludeDirective{kind: includeQuoted, target: internStr(ti.relString())})
 	})
 
 	pbGenRefs := []NodeRef{pe.protocLDRef, pe.cppStyleguideLDRef}
@@ -437,7 +437,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		var yaffHParsed []IncludeDirective
 
 		if plugin.processesFile(protoBaseName) {
-			yaffHParsed = yaffGeneratedHeaderIncludes(plugin.isExperimental(protoBaseName), pbH.rel())
+			yaffHParsed = yaffGeneratedHeaderIncludes(plugin.isExperimental(protoBaseName), pbH.relString())
 		}
 
 		reg.register(&GeneratedFileInfo{
@@ -448,7 +448,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		})
 
 		yaffCCParsed := append(append([]IncludeDirective(nil), yaffHParsed...),
-			IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
+			IncludeDirective{kind: includeQuoted, target: internStr(pbH.relString())})
 
 		reg.register(&GeneratedFileInfo{
 			OutputPath:     yaffCC,
@@ -461,7 +461,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	if pe.liteHeaders {
 		depsParsed := make([]IncludeDirective, 0, 1+len(directImports))
 
-		depsParsed = append(depsParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
+		depsParsed = append(depsParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.relString())})
 		depsParsed = append(depsParsed, directImports...)
 
 		reg.register(&GeneratedFileInfo{
@@ -474,13 +474,13 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	pbCCParsed := make([]IncludeDirective, 0, 3+len(directImports))
 
-	pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
+	pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.relString())})
 
 	if pe.liteHeaders {
 		pbCCParsed = append(pbCCParsed, directImports...)
 	}
 
-	pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
+	pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.relString())})
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     pbCC,
@@ -493,11 +493,11 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	if needsGRPCParsed {
 		grpcCCParsed = make([]IncludeDirective, 0, 2)
-		grpcCCParsed = append(grpcCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
-		grpcCCParsed = append(grpcCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
+		grpcCCParsed = append(grpcCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.relString())})
+		grpcCCParsed = append(grpcCCParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.relString())})
 
 		grpcHParsed = make([]IncludeDirective, 0, 3+len(directImports))
-		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.rel())})
+		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: internStr(pbH.relString())})
 		grpcHParsed = append(grpcHParsed, directImports...)
 		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: internV(pbRuntimeBase, "google/protobuf/port_def.inc")})
 	}
@@ -521,7 +521,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	orderedCC := make([]VFS, 0, 2+len(extraOutputPaths))
 
 	for _, out := range assembleProtoCmdOutputs(protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, pe.extraPlugins, pe.liteHeaders, cfg.grpc) {
-		if isCCSourceExt(out.rel()) {
+		if isCCSourceExt(out.relString()) {
 			orderedCC = append(orderedCC, out)
 		}
 	}
@@ -573,7 +573,7 @@ func (e *EmitContext) emitCppProtoFamilySource(meta SrcMeta, spec *ProtoSpec) {
 	for _, cc := range pb.orderedCC {
 		child := meta
 
-		child.Source = cc.str()
+		child.Source = cc.fullSTR()
 
 		e.enqueueSrc(child)
 	}
@@ -646,7 +646,7 @@ func emitPB(
 	outsChunk := make([]STR, 0, len(outputs))
 
 	for _, output := range outputs {
-		outsChunk = append(outsChunk, (output).str())
+		outsChunk = append(outsChunk, (output).fullSTR())
 	}
 
 	cmdArgs := na.chunkList(blocks.head, outsChunk, blocks.mid, na.strList(internStr(protoRelPath)))
@@ -815,7 +815,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 
 	mid = append(mid,
 		arg2.str(),
-		(protocBinary).str(),
+		(protocBinary).fullSTR(),
 		internV("-I=./", includeRoot),
 		internV("-I=$(S)/", includeRoot),
 		argIB2.str(),

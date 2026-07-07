@@ -69,7 +69,7 @@ func (pm *IncludeParserManager) protoParser() ProtoIncludeDirectiveParser {
 
 func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser IncludeDirectiveParser) ParsedIncludeSet {
 	key := STR(vfsPath.strID())
-	rel := vfsPath.rel()
+	rel := vfsPath.relString()
 	parser := pm.registry.registeredParserFor(rel)
 
 	var ambKey uint64
@@ -116,7 +116,7 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 }
 
 func (pm *IncludeParserManager) indexAddincl(a VFS) {
-	if a.isBuild() || a.rel() == "" {
+	if a.isBuild() || a.relString() == "" {
 		return
 	}
 
@@ -126,7 +126,7 @@ func (pm *IncludeParserManager) indexAddincl(a VFS) {
 
 	pm.addinclIndexed.add(uint32(a))
 
-	base := a.rel()
+	base := a.relString()
 
 	pm.fs.walk(base, func(rel string, isDir bool) bool {
 		if isDir {

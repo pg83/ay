@@ -20,11 +20,11 @@ func (e *EmitContext) emitArchive(
 ) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := emit.nodeArenas()
-	archiveVFS := build(instance.Path.rel(), "/", a.Name)
+	archiveVFS := build(instance.Path.relString(), "/", a.Name)
 	archivePath := archiveVFS.string()
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
 
-	cmdArgs = append(cmdArgs, (toolBinPath).str(), argQ.str(), argX.str())
+	cmdArgs = append(cmdArgs, (toolBinPath).fullSTR(), argQ.str(), argX.str())
 
 	if a.DontCompress {
 		cmdArgs = append(cmdArgs, argP.str())
@@ -39,7 +39,7 @@ func (e *EmitContext) emitArchive(
 	for _, f := range a.Files {
 		isPRProduced := false
 
-		if info := reg.lookup(copyFileOutputVFS(instance.Path.rel(), f)); info != nil {
+		if info := reg.lookup(copyFileOutputVFS(instance.Path.relString(), f)); info != nil {
 			isPRProduced = true
 
 			if deduper.add(info.ProducerRef.strID()) {
@@ -50,7 +50,7 @@ func (e *EmitContext) emitArchive(
 		var absVFS VFS
 
 		if isPRProduced {
-			absVFS = copyFileOutputVFS(instance.Path.rel(), f)
+			absVFS = copyFileOutputVFS(instance.Path.relString(), f)
 		} else {
 			absVFS = e.requireProducedInput("ARCHIVE member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))
 		}

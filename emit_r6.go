@@ -16,7 +16,7 @@ const (
 )
 
 func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
-	dir := instance.Path.rel() + "/"
+	dir := instance.Path.relString() + "/"
 	base := srcRel
 
 	if i := strings.LastIndexByte(srcRel, '/'); i >= 0 {
@@ -56,10 +56,10 @@ func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef,
 
 	head := make([]STR, 0, 1+len(effectiveFlags))
 
-	head = append(head, (ragel6BinaryPath).str())
+	head = append(head, (ragel6BinaryPath).fullSTR())
 	head = appendArgStr(head, effectiveFlags)
 
-	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.strList((outVFS).str(), (inVFS).str()))
+	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.strList((outVFS).fullSTR(), (inVFS).fullSTR()))
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	head2 := na.vfsList(ragel6BinaryPath)
 
@@ -119,17 +119,17 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) {
 		},
 	})
 
-	if isCxxSource(r6Out.rel()) {
+	if isCxxSource(r6Out.relString()) {
 		meta := d.srcMetaOf(src)
 
 		meta.Generated = true
-		meta.Source = r6Out.str()
+		meta.Source = r6Out.fullSTR()
 		e.enqueueSrc(meta)
 	}
 
 	e.deferPass2(func() {
 		rl6Closure := walkClosure(e.scanner, r6Out, d.cc.ScanCfg).collect(func(v VFS) bool {
-			return v.isSource() && !extIsEnumSerialized(v.rel())
+			return v.isSource() && !extIsEnumSerialized(v.relString())
 		})
 
 		var producerRefs []NodeRef

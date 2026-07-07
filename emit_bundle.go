@@ -7,7 +7,7 @@ func (e *EmitContext) emitBundles() {
 	reg := e.codegen
 
 	for _, b := range d.bundles {
-		dst := copyFileOutputVFS(instance.Path.rel(), b.Name)
+		dst := copyFileOutputVFS(instance.Path.relString(), b.Name)
 
 		if reg.lookup(dst) != nil {
 			continue
@@ -65,13 +65,13 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst 
 	fsTools := copyFsToolsVFS
 	cmdArgs := make([]STR, 0, 5)
 
-	cmdArgs = append(cmdArgs, python3, fsTools.str(), argRename.str())
+	cmdArgs = append(cmdArgs, python3, fsTools.fullSTR(), argRename.str())
 
 	if resolved {
-		cmdArgs = append(cmdArgs, src.str())
+		cmdArgs = append(cmdArgs, src.fullSTR())
 	}
 
-	cmdArgs = append(cmdArgs, dst.str())
+	cmdArgs = append(cmdArgs, dst.fullSTR())
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

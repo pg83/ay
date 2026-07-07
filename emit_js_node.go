@@ -5,7 +5,7 @@ var jsNodeKV = KV{P: pkJS, PC: pcMagenta}
 func emitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) (NodeRef, VFS) {
 	na := emit.nodeArenas()
 	joinSrcs := buildScriptsGenJoinSrcsPy
-	outVFS := build(instance.Path.rel(), "/", allName)
+	outVFS := build(instance.Path.relString(), "/", allName)
 	statsPlatform := instance.Platform
 
 	if p != nil {
@@ -16,13 +16,13 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	cmdArgs = append(cmdArgs,
 		tc.Python3,
-		(joinSrcs).str(),
-		(outVFS).str(),
+		(joinSrcs).fullSTR(),
+		(outVFS).fullSTR(),
 		argYaStartCommandFile.str(),
 	)
 
 	for _, s := range sources {
-		cmdArgs = append(cmdArgs, internV(instance.Path.rel(), "/", s))
+		cmdArgs = append(cmdArgs, internV(instance.Path.relString(), "/", s))
 	}
 
 	cmdArgs = append(cmdArgs, argYaEndCommandFile.str())
@@ -31,7 +31,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	srcVFSs := make([]VFS, 0, len(sources))
 
 	for _, s := range sources {
-		srcVFSs = append(srcVFSs, source(instance.Path.rel(), "/", s))
+		srcVFSs = append(srcVFSs, source(instance.Path.relString(), "/", s))
 	}
 
 	inputs := na.inputList(scripts[joinSrcs], srcVFSs, closure)
@@ -59,7 +59,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 
 	if instance.Platform.ISA == ISAX8664 {
 		jsPeerAddInclGlobal := rebasePerArchPeerAddIncl(d.cc.PeerAddInclGlobal, instance.Platform.ISA, ctx.target.ISA)
-		jsScanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, jsPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+		jsScanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, jsPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
 
 		joinClosure = e.joinSrcsIncludeClosure(ctx.target, jsSources, jsScanCfg)
 	}
@@ -69,7 +69,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 
 	var psc []ARG
 
-	if p := d.perSrcCFlagsFor(joinOutVFS.str()); p != nil {
+	if p := d.perSrcCFlagsFor(joinOutVFS.fullSTR()); p != nil {
 		psc = *p
 	}
 
@@ -77,10 +77,10 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 		OutputPath:    joinOutVFS,
 		ProducerRef:   jsRef,
 		ClosureLeaves: ccIncl[1:],
-		Compile:       &CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.str()), CFlags: psc},
+		Compile:       &CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.fullSTR()), CFlags: psc},
 	})
 
-	e.enqueueSrc(SrcMeta{Source: joinOutVFS.str(), Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
+	e.enqueueSrc(SrcMeta{Source: joinOutVFS.fullSTR(), Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
 }
 
 func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []string, scanCfg ScanContext) []VFS {
@@ -88,7 +88,7 @@ func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []s
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	visited := scanner.visitedIDPool.Get().(*IdSet)
 
-	visited.reset(strBound())
+	visited.reset(vfsBound())
 
 	defer scanner.visitedIDPool.Put(visited)
 
@@ -96,12 +96,12 @@ func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []s
 	srcRels := make([]string, len(sources))
 
 	for i, src := range sources {
-		srcRelOnDisk := srcInstance.Path.rel() + "/" + src
+		srcRelOnDisk := srcInstance.Path.relString() + "/" + src
 
 		if !ctx.fs.isFile(modDirKey, src) {
 			for _, dir := range d.cc.SrcDirs {
 				if dir != modDirKey && ctx.fs.isFile(dir, src) {
-					srcRelOnDisk = dir.rel() + "/" + src
+					srcRelOnDisk = dir.relString() + "/" + src
 
 					break
 				}
@@ -144,7 +144,7 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, joinOut VFS, sources []string
 	out = append(out, scripts[buildScriptsGenJoinSrcsPy]...)
 
 	for _, s := range sources {
-		out = append(out, source(srcInstance.Path.rel(), "/", s))
+		out = append(out, source(srcInstance.Path.relString(), "/", s))
 	}
 
 	out = append(out, closure...)

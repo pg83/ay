@@ -17,13 +17,13 @@ func TestResolveSourceVFS_RootRelativeSrc(t *testing.T) {
 	got := resolveSourceVFS(ctx, instance, "geobase/library/asset.cpp", srcDirs)
 
 	if want := source("geobase/library/asset.cpp"); got != want {
-		t.Fatalf("root-relative src: got %s, want %s", got.rel(), want.rel())
+		t.Fatalf("root-relative src: got %s, want %s", got.relString(), want.relString())
 	}
 
 	got = resolveSourceVFS(ctx, instance, "local.cpp", srcDirs)
 
 	if want := source("geobase/library/abi/local.cpp"); got != want {
-		t.Fatalf("module-relative src: got %s, want %s", got.rel(), want.rel())
+		t.Fatalf("module-relative src: got %s, want %s", got.relString(), want.relString())
 	}
 
 	fs2 := newMemFS(map[string]string{
@@ -34,7 +34,7 @@ func TestResolveSourceVFS_RootRelativeSrc(t *testing.T) {
 	got = resolveSourceVFS(ctx2, instance, "shared.cpp", srcDirs)
 
 	if want := source("geobase/library/abi/shared.cpp"); got != want {
-		t.Fatalf("ambiguous src: got %s, want %s", got.rel(), want.rel())
+		t.Fatalf("ambiguous src: got %s, want %s", got.relString(), want.relString())
 	}
 }
 

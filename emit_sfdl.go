@@ -12,9 +12,9 @@ func (e *EmitContext) emitLibrarySfdlSource(src STR) {
 	na := ctx.na
 	srcRel := src.string()
 	toolRef, toolBin := ctx.tool(argToolsCalcstaticopt)
-	srcVFS := source(instance.Path.rel(), "/", srcRel)
-	tmpVFS := build(instance.Path.rel(), "/", srcRel, ".tmp")
-	incVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)))
+	srcVFS := source(instance.Path.relString(), "/", srcRel)
+	tmpVFS := build(instance.Path.relString(), "/", srcRel, ".tmp")
+	incVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)))
 	plainEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	toolEnv := instance.Platform.ToolEnvVars
 	blocks := d.cc.CCBlocks
@@ -31,18 +31,18 @@ func (e *EmitContext) emitLibrarySfdlSource(src STR) {
 			strC4,
 			strQunusedArguments,
 			argDashO.str(),
-			tmpVFS.str(),
-			srcVFS.str(),
+			tmpVFS.fullSTR(),
+			srcVFS.fullSTR(),
 		),
 	), Env: plainEnv}
 
 	cmd1 := Cmd{CmdArgs: na.chunkList(na.strList(
-		toolBin.str(),
+		toolBin.fullSTR(),
 		strI2,
-		tmpVFS.str(),
+		tmpVFS.fullSTR(),
 		strA,
 		strS,
-	)), Env: toolEnv, Stdout: incVFS.str()}
+	)), Env: toolEnv, Stdout: incVFS.fullSTR()}
 
 	node := Node{
 		Platform:       instance.Platform,

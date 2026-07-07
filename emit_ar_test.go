@@ -393,7 +393,7 @@ END()
 	var consumerAR *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].rel(), "lib_consumer/") {
+		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].relString(), "lib_consumer/") {
 			consumerAR = n
 
 			break
@@ -465,7 +465,7 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	var arNode *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].rel(), "consumer/") {
+		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].relString(), "consumer/") {
 			arNode = n
 
 			break
@@ -552,7 +552,7 @@ END()
 
 	hasObject := func(n *Node) bool {
 		for _, in := range n.flatInputs() {
-			if strings.HasSuffix(in.rel(), ".o") {
+			if strings.HasSuffix(in.relString(), ".o") {
 				return true
 			}
 		}
@@ -1280,7 +1280,7 @@ func EmitAR(
 		throwFmt("EmitAR: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := build(instance.Path.rel() + "/" + archiveName(instance.Path.rel()))
+	archivePath := build(instance.Path.relString() + "/" + archiveName(instance.Path.relString()))
 
 	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, nil, testToolchain(), hostP, emit)
 }

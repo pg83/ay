@@ -136,8 +136,8 @@ func (e *EmitContext) defaultPeerdirsForWithState() []string {
 	flags := d.flags
 	noPlatform := effectiveNoPlatform(flags)
 
-	addLinuxHeaders := instance.Path.rel() != "contrib/libs/linux-headers" &&
-		!strings.HasPrefix(instance.Path.rel(), "contrib/libs/linux-headers/")
+	addLinuxHeaders := instance.Path.relString() != "contrib/libs/linux-headers" &&
+		!strings.HasPrefix(instance.Path.relString(), "contrib/libs/linux-headers/")
 
 	if d.moduleStmt != nil && isGoModuleType(d.moduleStmt.Name) {
 		if addLinuxHeaders {
@@ -168,32 +168,32 @@ func (e *EmitContext) defaultPeerdirsForWithState() []string {
 	}
 
 	if !flags.NoRuntime && !noPlatform {
-		if instance.Path.rel() != "contrib/libs/cxxsupp/libcxx" && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/cxxsupp/libcxx/") {
+		if instance.Path.relString() != "contrib/libs/cxxsupp/libcxx" && !strings.HasPrefix(instance.Path.relString(), "contrib/libs/cxxsupp/libcxx/") {
 			peers = append(peers, "contrib/libs/cxxsupp/libcxx")
 		}
 
-		if instance.Path.rel() != "contrib/libs/cxxsupp/libcxxrt" {
+		if instance.Path.relString() != "contrib/libs/cxxsupp/libcxxrt" {
 			peers = append(peers, "contrib/libs/cxxsupp/libcxxrt")
 		}
 
-		if instance.Path.rel() != "contrib/libs/libunwind" {
+		if instance.Path.relString() != "contrib/libs/libunwind" {
 			peers = append(peers, "contrib/libs/libunwind")
 		}
 	}
 
 	if !flags.NoUtil && !noPlatform {
-		if instance.Path.rel() != "util" && !strings.HasPrefix(instance.Path.rel(), "util/") {
+		if instance.Path.relString() != "util" && !strings.HasPrefix(instance.Path.relString(), "util/") {
 			peers = append(peers, "util")
 		}
 	}
 
 	peers = appendImplicitPeers(peers, unitImplicitPeers, rc)
 
-	if !flags.NoRuntime && !noPlatform && useArcadiaCompilerRuntime(ctx, instance) && instance.Path.rel() != "library/cpp/sanitizer/include" {
+	if !flags.NoRuntime && !noPlatform && useArcadiaCompilerRuntime(ctx, instance) && instance.Path.relString() != "library/cpp/sanitizer/include" {
 		peers = append(peers, "library/cpp/sanitizer/include")
 	}
 
-	if !strings.HasPrefix(instance.Path.rel(), "build/platform/") {
+	if !strings.HasPrefix(instance.Path.relString(), "build/platform/") {
 		peers = append(peers,
 			"build/platform/clang",
 			"build/platform/clang/clang-format",
@@ -318,8 +318,8 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 	var peers []string
 
 	if !postUser {
-		if d.useArcadiaLibm && instance.Path.rel() != "contrib/libs/libm" &&
-			!strings.HasPrefix(instance.Path.rel(), "contrib/libs/libm/") {
+		if d.useArcadiaLibm && instance.Path.relString() != "contrib/libs/libm" &&
+			!strings.HasPrefix(instance.Path.relString(), "contrib/libs/libm/") {
 			peers = append(peers, "contrib/libs/libm")
 		}
 

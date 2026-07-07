@@ -132,13 +132,13 @@ func newVFSMapNonGeneric(cap int) VfsMapNonGeneric {
 }
 
 func (m VfsMapNonGeneric) has(v VFS) bool {
-	_, ok := m[uint32(v)&1][v.rel()]
+	_, ok := m[uint32(v)&1][v.relString()]
 
 	return ok
 }
 
 func (m VfsMapNonGeneric) add(v VFS) {
-	m[uint32(v)&1][v.rel()] = struct{}{}
+	m[uint32(v)&1][v.relString()] = struct{}{}
 }
 
 type VfsMap[T any] [2]map[string]T
@@ -151,13 +151,13 @@ func newVFSMap[T any](cap int) VfsMap[T] {
 }
 
 func (m VfsMap[T]) get(v VFS) (T, bool) {
-	val, ok := m[uint32(v)&1][v.rel()]
+	val, ok := m[uint32(v)&1][v.relString()]
 
 	return val, ok
 }
 
 func (m VfsMap[T]) set(v VFS, val T) {
-	m[uint32(v)&1][v.rel()] = val
+	m[uint32(v)&1][v.relString()] = val
 }
 
 func BenchmarkMapAccess_VFS2Bucket_NonGeneric(b *testing.B) {
@@ -227,7 +227,7 @@ func BenchmarkMapAccess_VFS2Bucket_Inline(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		v := probes[i%bvN]
 
-		if _, ok := m[uint32(v)&1][v.rel()]; !ok {
+		if _, ok := m[uint32(v)&1][v.relString()]; !ok {
 			b.Fatalf("miss")
 		}
 	}

@@ -72,7 +72,7 @@ func TestBuildScriptTable_ImportsOnly_NoFalsePositives(t *testing.T) {
 		gotRel := make([]string, len(got))
 
 		for i, v := range got {
-			gotRel[i] = v.rel()
+			gotRel[i] = v.relString()
 		}
 
 		if !reflect.DeepEqual(gotRel, want) {

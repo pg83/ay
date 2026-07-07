@@ -72,14 +72,14 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		bcPaths = append(bcPaths, bcOut)
 	}
 
-	mergedOut := build(instance.Path.rel(), "/", stmt.Name, "_merged", stmt.Suffix, ".bc")
+	mergedOut := build(instance.Path.relString(), "/", stmt.Name, "_merged", stmt.Suffix, ".bc")
 	ldArgs := []STR{internStr(llvmLink)}
 
 	for _, p := range bcPaths {
-		ldArgs = append(ldArgs, (p).str())
+		ldArgs = append(ldArgs, (p).fullSTR())
 	}
 
-	ldArgs = append(ldArgs, argDashO.str(), (mergedOut).str())
+	ldArgs = append(ldArgs, argDashO.str(), (mergedOut).fullSTR())
 
 	mergeInputs := na.inputList(bcPaths)
 
@@ -101,8 +101,8 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	ldRef := ctx.emit.emitNode(ldNode)
 	optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
-	optOut := build(instance.Path.rel(), "/", optOutName)
-	optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).str(), argDashO.str(), (optOut).str()}
+	optOut := build(instance.Path.relString(), "/", optOutName)
+	optArgs := []STR{internStr(python), internStr(optWrapper), internStr(opt), (mergedOut).fullSTR(), argDashO.str(), (optOut).fullSTR()}
 	passes := []string{"default<O2>", "globalopt", "globaldce"}
 
 	if len(stmt.Symbols) > 0 {
@@ -184,7 +184,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	args = append(args, platform.TargetArg)
 	args = appendArgStr(args, bundle.ArchArgs)
 	args = append(args, argDashBBin)
-	args = append(args, argWnoUnknownWarningOption.str(), argEmitLlvm.str(), argDashC.str(), (inVFS).str(), argDashO.str(), (outVFS).str())
+	args = append(args, argWnoUnknownWarningOption.str(), argEmitLlvm.str(), argDashC.str(), (inVFS).fullSTR(), argDashO.str(), (outVFS).fullSTR())
 
 	return args
 }
@@ -192,7 +192,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 func (e *EmitContext) llvmBcSourceInfo(src string) (inputVFS VFS, producer NodeRef) {
 	ctx, instance := e.ctx, e.instance
 	reg := e.codegen
-	outVFS := copyFileOutputVFS(instance.Path.rel(), src)
+	outVFS := copyFileOutputVFS(instance.Path.relString(), src)
 
 	if info := reg.lookup(outVFS); info != nil {
 		return outVFS, info.ProducerRef
@@ -214,7 +214,7 @@ func (e *EmitContext) llvmBcSourceInfo(src string) (inputVFS VFS, producer NodeR
 func (e *EmitContext) llvmBcRootRelArcSrc(src string) string {
 	ctx, instance := e.ctx, e.instance
 
-	if reg := e.codegen; reg.lookup(copyFileOutputVFS(instance.Path.rel(), src)) != nil {
+	if reg := e.codegen; reg.lookup(copyFileOutputVFS(instance.Path.relString(), src)) != nil {
 		return src
 	}
 
@@ -223,7 +223,7 @@ func (e *EmitContext) llvmBcRootRelArcSrc(src string) string {
 	}
 
 	if sourceInputVFS(ctx.fs, instance.Path, src) != nil {
-		return instance.Path.rel() + "/" + src
+		return instance.Path.relString() + "/" + src
 	}
 
 	return src

@@ -11,10 +11,10 @@ const flexDefaultGenExt = ".cpp"
 
 func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	if strings.Contains(srcRel, "/") {
-		return build(instance.Path.rel(), "/_/", srcRel, flexDefaultGenExt)
+		return build(instance.Path.relString(), "/_/", srcRel, flexDefaultGenExt)
 	}
 
-	return build(instance.Path.rel(), "/", srcRel, flexDefaultGenExt)
+	return build(instance.Path.relString(), "/", srcRel, flexDefaultGenExt)
 }
 
 func (e *EmitContext) emitLibraryFlexSource(src STR) {
@@ -37,7 +37,7 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) {
 	cflags := psc
 
 	if extIsFlexL(srcRel) {
-		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(srcVFS.rel())})
+		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(srcVFS.relString())})
 		cflags = concat(psc, []ARG{argWnoUnusedVariable})
 	}
 
@@ -54,7 +54,7 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) {
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	meta.Source = outVFS.str()
+	meta.Source = outVFS.fullSTR()
 	e.enqueueSrc(meta)
 
 	e.deferPass2(func() {
@@ -68,9 +68,9 @@ func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, o
 	na := emit.nodeArenas()
 
 	cmdArgs := na.chunkList(na.strList(
-		flexBin.str(),
+		flexBin.fullSTR(),
 		internV(argDashO.string(), outVFS.string()),
-		srcVFS.str(),
+		srcVFS.fullSTR(),
 	))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

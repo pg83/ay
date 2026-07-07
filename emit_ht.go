@@ -5,7 +5,7 @@ var htKV = KV{P: pkHT, PC: pcYellow}
 func (e *EmitContext) emitLibraryAspSource(src STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	module := instance.Path.rel()
+	module := instance.Path.relString()
 	srcRel := src.string()
 	toolRef, toolBin := ctx.tool(argToolsHtml2cpp)
 	srcVFS := resolveSourceVFS(ctx, instance, srcRel, d.srcDirs)
@@ -44,7 +44,7 @@ func (e *EmitContext) emitLibraryAspSource(src STR) {
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 		node := Node{
 			Platform:       instance.Platform,
-			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(toolBin.str(), srcVFS.str(), outVFS.str())), Env: env}),
+			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(toolBin.fullSTR(), srcVFS.fullSTR(), outVFS.fullSTR())), Env: env}),
 			Env:            env,
 			Inputs:         na.inputList(block[:k:k]),
 			KV:             &htKV,
@@ -59,6 +59,6 @@ func (e *EmitContext) emitLibraryAspSource(src STR) {
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	meta.Source = outVFS.str()
+	meta.Source = outVFS.fullSTR()
 	e.enqueueSrc(meta)
 }

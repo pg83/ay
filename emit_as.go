@@ -33,10 +33,10 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 }
 
 func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs) (out, input VFS) {
-	if srcVFS.isSource() && srcVFS.rel() != instance.Path.rel()+"/"+srcRel {
-		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
+	if srcVFS.isSource() && srcVFS.relString() != instance.Path.relString()+"/"+srcRel {
+		outputRel := composeSrcDirOutputRel(instance.Path.relString(), srcVFS.relString())
 
-		return build(instance.Path.rel(), "/", outputRel, ".o"), srcVFS
+		return build(instance.Path.relString(), "/", outputRel, ".o"), srcVFS
 	}
 
 	var outRel string
@@ -48,9 +48,9 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	}
 
 	if strings.Contains(srcRel, "/") {
-		outRel = instance.Path.rel() + "/_/" + outName
+		outRel = instance.Path.relString() + "/_/" + outName
 	} else {
-		outRel = instance.Path.rel() + "/" + outName
+		outRel = instance.Path.relString() + "/" + outName
 	}
 
 	return build(outRel), srcVFS
@@ -83,7 +83,7 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(instance.Platform))
 	cmdArgs = appendArgStr(cmdArgs, in.SFlags)
 	cmdArgs = appendArgStr(cmdArgs, in.PerSourceCFlags)
-	cmdArgs = append(cmdArgs, argDashC.str(), argDashO.str(), (outVFS).str(), (inVFS).str())
+	cmdArgs = append(cmdArgs, argDashC.str(), argDashO.str(), (outVFS).fullSTR(), (inVFS).fullSTR())
 	cmdArgs = append(cmdArgs, includes...)
 
 	return cmdArgs
@@ -108,7 +108,7 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta) {
 	if srcVFS == 0 {
 		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	} else {
-		srcRel = trimModulePrefix(srcVFS.rel(), instance.Path.rel())
+		srcRel = trimModulePrefix(srcVFS.relString(), instance.Path.relString())
 	}
 
 	in := e.ccInputsFor(srcVFS)
@@ -117,7 +117,7 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta) {
 
 	if len(d.asmAddIncl) > 0 {
 		scanIn.AddIncl = dedup(in.AddIncl, d.asmAddIncl)
-		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
 
 		asIn.AddIncl = scanIn.AddIncl
 	}

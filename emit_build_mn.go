@@ -11,7 +11,7 @@ var mnKV = KV{P: pkMN, PC: pcYellow}
 func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	module := instance.Path.rel()
+	module := instance.Path.relString()
 	archiverRef, archiverBin := ctx.tool(argToolsArchiver)
 	infoVFS := resolveSourceVFS(ctx, instance, stmt.Info.string(), d.srcDirs)
 	cppVFS := build(module, "/mn.", stmt.Name, ".cpp")
@@ -22,14 +22,14 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(
 			d.tc.Python3,
-			buildMnScriptVFS.str(),
+			buildMnScriptVFS.fullSTR(),
 			strBuildmnf,
 			strS,
-			archiverBin.str(),
-			infoVFS.str(),
+			archiverBin.fullSTR(),
+			infoVFS.fullSTR(),
 			internStr(stmt.Name),
 			strRankingSuffix,
-			cppVFS.str(),
+			cppVFS.fullSTR(),
 		)), Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(archiverBin, buildMnScriptVFS, infoVFS)),
@@ -54,9 +54,9 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		OutputPath:     rodataVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{archiverRef},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: internStr(cppVFS.rel())}}},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: internStr(cppVFS.relString())}}},
 	})
 
-	e.enqueueSrc(SrcMeta{Source: cppVFS.str(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
+	e.enqueueSrc(SrcMeta{Source: cppVFS.fullSTR(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
 	e.enqueueSrc(SrcMeta{Source: internV("MN_External_", stmt.Name, ".rodata"), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
 }

@@ -138,7 +138,7 @@ func composeObjcopyArgBlocks(tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
 }
 
 func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []STR) ArgChunks {
-	return oc.na.chunkList(oc.blocks.pre, oc.na.strList((outputObj).str()), oc.blocks.post, payload)
+	return oc.na.chunkList(oc.blocks.pre, oc.na.strList((outputObj).fullSTR()), oc.blocks.post, payload)
 }
 
 type ResolvedResource struct {
@@ -150,7 +150,7 @@ type ResolvedResource struct {
 
 func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) ResolvedResource {
 	_, instance := e.ctx, e.instance
-	output := resourceOutputVFS(instance.Path.rel(), rawPath)
+	output := resourceOutputVFS(instance.Path.relString(), rawPath)
 
 	if info := e.codegen.lookup(output); info != nil {
 		return ResolvedResource{
@@ -262,7 +262,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
-	unitElem := "$S/" + instance.Path.rel()
+	unitElem := "$S/" + instance.Path.relString()
 	tag := ""
 
 	if p.Tag != 0 {
@@ -317,7 +317,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 			for _, it := range chunk {
 				if it.Path != "-" {
-					payload = append(payload, it.Input.str())
+					payload = append(payload, it.Input.fullSTR())
 					hashScratch = append(hashScratch, it.Path)
 				}
 			}
@@ -389,7 +389,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		hash, hashBuf = resourceHashInto(hashBuf, hashScratch, tag)
 
-		outputObj := build(instance.Path.rel(), "/objcopy_", hash, ".o")
+		outputObj := build(instance.Path.relString(), "/objcopy_", hash, ".o")
 		dataInputs := concat(adjacent, tail)
 		deps := resolveCodegenDepRefsIncl(ctx, instance, na, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
 
@@ -405,11 +405,11 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 	na := ctx.na
 
 	if p.RawClosure == nil {
-		throwFmt("packResources: %s has raw-routed resource items but no RawClosure", instance.Path.rel())
+		throwFmt("packResources: %s has raw-routed resource items but no RawClosure", instance.Path.relString())
 	}
 
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-	unitElem := "$S/" + instance.Path.rel()
+	unitElem := "$S/" + instance.Path.relString()
 	dash := str2
 	tag := ""
 
@@ -462,19 +462,19 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		hash, hashBuf = resourceHashInto(hashBuf, hashScratch, tag)
 
-		aux := build(instance.Path.rel(), "/", hash, "_raw.auxcpp")
+		aux := build(instance.Path.relString(), "/", hash, "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
 		auxClosure := p.RawClosure(aux, adjacent, auxRef)
 		auxLen := auxClosure.len()
 		nodeCmd := make([]STR, 0, 2+2*len(chunk))
 
-		nodeCmd = append(nodeCmd, internStr(rescompilerBinPath), aux.str())
+		nodeCmd = append(nodeCmd, internStr(rescompilerBinPath), aux.fullSTR())
 
 		for _, it := range chunk {
 			if it.Path == "-" {
 				nodeCmd = append(nodeCmd, dash, internStr(it.Cmd))
 			} else {
-				nodeCmd = append(nodeCmd, it.Input.str(), internV("-", it.Key))
+				nodeCmd = append(nodeCmd, it.Input.fullSTR(), internV("-", it.Key))
 			}
 		}
 
@@ -562,7 +562,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			if inner, ok := rootrelInputPath(entry.Key); ok {
 				r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
 
-				it.Cmd = renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.rel()))
+				it.Cmd = renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.relString()))
 				it.Aux = []VFS{r.Input, r.ProducerMainOut}
 			} else {
 				it.Cmd = renderResourceKvCmd(entry.Key)
@@ -583,7 +583,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 				})
 
 				for _, v := range r.SourceInputs {
-					if v.isSource() && objcopySourceLeafKept(v.rel()) {
+					if v.isSource() && objcopySourceLeafKept(v.relString()) {
 						it.Aux = append(it.Aux, v)
 					}
 				}

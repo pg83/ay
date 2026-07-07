@@ -47,14 +47,14 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	outputs := make([]VFS, 0, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
 
 	for _, outTok := range run.OUTFiles {
-		vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
+		vfs := copyFileOutputVFS(instance.Path.relString(), outTok.string())
 
 		outVFSByToken[outTok.string()] = vfs
 		outputs = append(outputs, vfs)
 	}
 
 	for _, outTok := range run.OUTNoAutoFiles {
-		vfs := copyFileOutputVFS(instance.Path.rel(), outTok.string())
+		vfs := copyFileOutputVFS(instance.Path.relString(), outTok.string())
 
 		outVFSByToken[outTok.string()] = vfs
 		outputs = append(outputs, vfs)
@@ -83,7 +83,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		reg.register(&GeneratedFileInfo{
 			OutputPath:     outVFS,
 			ProducerRef:    jvRef,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: antlrParsedIncludes(instance.Path.rel(), run, outTok, outVFSByToken, inputs, jarVFS)},
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: antlrParsedIncludes(instance.Path.relString(), run, outTok, outVFSByToken, inputs, jarVFS)},
 			SourceInputs:   jvSourceInputs,
 		})
 	}
@@ -94,9 +94,9 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		}
 
 		outVFS := outVFSByToken[outTok.string()]
-		cppRel := antlrOutputModuleRel(instance.Path.rel(), outVFS)
+		cppRel := antlrOutputModuleRel(instance.Path.relString(), outVFS)
 
-		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.rel(), cppRel).str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkAntlr})
+		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), cppRel).fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkAntlr})
 	}
 }
 
@@ -142,7 +142,7 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 		if parserBase, isLexer := strings.CutSuffix(base, "Lexer"); isLexer {
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
-					appendUnique(parserVFS.rel())
+					appendUnique(parserVFS.relString())
 
 					break
 				}
@@ -154,7 +154,7 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 		if parserBase, isLexerH := strings.CutSuffix(base, "Lexer"); isLexerH {
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
-					appendUnique(parserVFS.rel())
+					appendUnique(parserVFS.relString())
 
 					break
 				}
@@ -162,7 +162,7 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 		} else {
 			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
 				if cppVFS, ok := outVFSByToken[base+ext]; ok {
-					appendUnique(cppVFS.rel())
+					appendUnique(cppVFS.relString())
 
 					break
 				}
@@ -175,11 +175,11 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 			continue
 		}
 
-		appendUnique(input.rel())
+		appendUnique(input.relString())
 	}
 
-	appendUnique(stdout2stderrVFS.rel())
-	appendUnique(jarVFS.rel())
+	appendUnique(stdout2stderrVFS.relString())
+	appendUnique(jarVFS.relString())
 
 	for _, include := range run.OutputIncludes {
 		appendUnique(copyFileIncludeTarget(modulePath, include.string()))
@@ -195,11 +195,11 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 func antlrOutputModuleRel(modulePath string, outVFS VFS) string {
 	prefix := modulePath + "/"
 
-	if strings.HasPrefix(outVFS.rel(), prefix) {
-		return strings.TrimPrefix(outVFS.rel(), prefix)
+	if strings.HasPrefix(outVFS.relString(), prefix) {
+		return strings.TrimPrefix(outVFS.relString(), prefix)
 	}
 
-	throwFmt("gen: antlr output %q is outside module %q", outVFS.rel(), modulePath)
+	throwFmt("gen: antlr output %q is outside module %q", outVFS.relString(), modulePath)
 
 	return ""
 }

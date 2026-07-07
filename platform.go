@@ -86,7 +86,7 @@ func wrapccPrefixFor(flags map[string]string) (head, tail []STR) {
 		return nil, nil
 	}
 
-	head = []STR{wrapccPython3STR, wrapccPyVFS.str(), wrapccArgSrcFile.str()}
+	head = []STR{wrapccPython3STR, wrapccPyVFS.fullSTR(), wrapccArgSrcFile.str()}
 	tail = []STR{argSourceRoot.str(), strS, argBuildRoot.str(), strB, wrapccArgEnd.str()}
 
 	return head, tail

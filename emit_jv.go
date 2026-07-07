@@ -34,12 +34,12 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 	for _, pair := range cpccPairs {
 		srcCpp := pair.cpp
 		srcH := pair.h
-		base := strings.TrimSuffix(filepath.Base(srcCpp.rel()), ".cpp")
-		g4CppPath := build(instance.Path.rel(), "/", base, ".g4.cpp")
+		base := strings.TrimSuffix(filepath.Base(srcCpp.relString()), ".cpp")
+		g4CppPath := build(instance.Path.relString(), "/", base, ".g4.cpp")
 		cpRef := ctx.emit.reserve()
 		emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
 
-		emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.rel())})
+		emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(antlr4RuntimeHeaderVFS.relString())})
 
 		for _, h := range outputIncludes {
 			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(h)})
@@ -55,7 +55,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 			ClosureLeaves:  leaves,
-			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.str()), CFlags: []ARG{argWnoUnusedVariable}},
+			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.fullSTR()), CFlags: []ARG{argWnoUnusedVariable}},
 		})
 
 		leafSet := make(map[VFS]bool, len(leaves))
@@ -70,7 +70,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 
 		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, d.cc.TC, ctx.scripts, ctx.emit)
 
-		e.enqueueSrc(SrcMeta{Source: g4CppPath.str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
+		e.enqueueSrc(SrcMeta{Source: g4CppPath.fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
 	}
 }
 
@@ -106,8 +106,8 @@ func emitJV(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
-	grammarVFS := source(instance.Path.rel(), "/", grammar)
-	outDirVFS := build(instance.Path.rel())
+	grammarVFS := source(instance.Path.relString(), "/", grammar)
+	outDirVFS := build(instance.Path.relString())
 	outDir := outDirVFS.string()
 	cmdArgs := make([]STR, 0, 8+len(antlrJavaConstHead))
 
@@ -115,7 +115,7 @@ func emitJV(
 	cmdArgs = append(cmdArgs, antlrJavaConstHead...)
 
 	cmdArgs = append(cmdArgs,
-		(grammarVFS).str(),
+		(grammarVFS).fullSTR(),
 		argDlanguageCpp.str(),
 		argDashO.str(),
 		internStr(outDir),
@@ -138,7 +138,7 @@ func emitJV(
 		antlr4JarVFS))
 
 	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
-	outPrefix := instance.Path.rel() + "/" + base
+	outPrefix := instance.Path.relString() + "/" + base
 
 	outputs := []VFS{
 		build(outPrefix, "Lexer.cpp"),
@@ -163,9 +163,9 @@ func emitJVSplit(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
-	lexerVFS := source(instance.Path.rel(), "/", lexer)
-	parserVFS := source(instance.Path.rel(), "/", parser)
-	outDirVFS := build(instance.Path.rel())
+	lexerVFS := source(instance.Path.relString(), "/", lexer)
+	parserVFS := source(instance.Path.relString(), "/", parser)
+	outDirVFS := build(instance.Path.relString())
 	outDir := outDirVFS.string()
 
 	cmdArgs := []STR{
@@ -174,8 +174,8 @@ func emitJVSplit(
 		internStr(jdkResourcePath),
 		argJar.str(),
 		internStr(antlr4JarPath),
-		(lexerVFS).str(),
-		(parserVFS).str(),
+		(lexerVFS).fullSTR(),
+		(parserVFS).fullSTR(),
 		argDlanguageCpp.str(),
 		argDashO.str(),
 		internStr(outDir),
@@ -199,7 +199,7 @@ func emitJVSplit(
 	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
 	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
 	visitorBase := parserBase
-	outPrefix := instance.Path.rel() + "/"
+	outPrefix := instance.Path.relString() + "/"
 
 	outputs := []VFS{
 		build(outPrefix, lexerBase, ".cpp"),
@@ -233,7 +233,7 @@ func emitJVGeneral(
 		internStr(stdout2stderrPath),
 		internStr(jdkResourcePath),
 		argJar.str(),
-		(jarVFS).str(),
+		(jarVFS).fullSTR(),
 	)
 
 	cmdArgs = appendInternStrs(cmdArgs, args)

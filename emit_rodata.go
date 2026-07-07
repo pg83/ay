@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	rodataConstArgs = []STR{(rodataScriptVFS).str(), argElf.str()}
+	rodataConstArgs = []STR{(rodataScriptVFS).fullSTR(), argElf.str()}
 	rodataKV        = KV{P: pkRD, PC: pcLightGreen}
 )
 
@@ -19,10 +19,10 @@ var rodataYasmConstArgs = []STR{
 }
 
 func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
-	base := instance.Path.rel() + "/" + srcRel
+	base := instance.Path.relString() + "/" + srcRel
 
 	if strings.Contains(srcRel, "/") {
-		base = instance.Path.rel() + "/_/" + srcRel
+		base = instance.Path.relString() + "/_/" + srcRel
 	}
 
 	return build(base, ".asm"), build(base, instance.Platform.objectSuffix())
@@ -37,8 +37,8 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(tc.Python3), rodataConstArgs, na.strList(internStr(toolName), (srcVFS).str(), (asmVFS).str())),
-			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.strList(argD.str(), internV("_", string(instance.Platform.ISA), "_")), rodataYasmConstArgs, na.strList((outVFS).str(), (asmVFS).str())),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(tc.Python3), rodataConstArgs, na.strList(internStr(toolName), (srcVFS).fullSTR(), (asmVFS).fullSTR())),
+			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.strList(argD.str(), internV("_", string(instance.Platform.ISA), "_")), rodataYasmConstArgs, na.strList((outVFS).fullSTR(), (asmVFS).fullSTR())),
 			Env: yasmEnv}),
 		Env: yasmEnv,
 		Inputs: na.inputList(na.vfsList(yasmBinaryVFS,

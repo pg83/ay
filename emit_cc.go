@@ -96,7 +96,7 @@ func (e *EmitContext) ccInputsFor(srcVFS VFS) ModuleCCInputs {
 		return in
 	}
 
-	srcID := internStr(trimModulePrefix(srcVFS.rel(), instance.Path.rel()))
+	srcID := internStr(trimModulePrefix(srcVFS.relString(), instance.Path.relString()))
 
 	if extras := d.perSrcCFlagsFor(srcID); extras != nil {
 		in.PerSourceCFlags = *extras
@@ -144,7 +144,7 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 		in.IncludeView = Closure{}
 	}
 
-	ref, outPath, _ := composeCCNode(instance, srcVFS.str(), srcVFS, in, ctx.host, ctx.emit)
+	ref, outPath, _ := composeCCNode(instance, srcVFS.fullSTR(), srcVFS, in, ctx.host, ctx.emit)
 
 	return ref, outPath
 }
@@ -175,7 +175,7 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 
 	if v := src.vfs(); v != 0 {
 		srcVFS = v
-		srcRel = trimModulePrefix(v.rel(), instance.Path.rel())
+		srcRel = trimModulePrefix(v.relString(), instance.Path.relString())
 	}
 
 	suffix := ".o"
@@ -205,7 +205,7 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, suffix)
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
 	blocks := in.CCBlocks
-	tok := na.strList((inVFS).str(), argDashC.str(), argDashO.str(), (outVFS).str())
+	tok := na.strList((inVFS).fullSTR(), argDashC.str(), argDashO.str(), (outVFS).fullSTR())
 	inChunk := tok[0:1]
 	wrapcc := len(instance.Platform.WrapccHead) > 0
 	compiler, tail := blocks.cHead, blocks.cxxTail
@@ -317,25 +317,25 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 
 	canonMatches := func() bool {
 		if srcRel != "" && pathIsClean(srcRel) {
-			rel, dir := srcVFS.rel(), instance.Path.rel()
+			rel, dir := srcVFS.relString(), instance.Path.relString()
 
 			return len(rel) == len(dir)+1+len(srcRel) &&
 				rel[:len(dir)] == dir && rel[len(dir)] == '/' && rel[len(dir)+1:] == srcRel
 		}
 
-		return srcVFS.rel() == filepath.ToSlash(filepath.Clean(instance.Path.rel()+"/"+srcRel))
+		return srcVFS.relString() == filepath.ToSlash(filepath.Clean(instance.Path.relString()+"/"+srcRel))
 	}
 
 	if srcVFS.isSource() && !canonMatches() {
-		outputRel := composeSrcDirOutputRel(instance.Path.rel(), srcVFS.rel())
+		outputRel := composeSrcDirOutputRel(instance.Path.relString(), srcVFS.relString())
 
-		out = build(instance.Path.rel(), "/", outputRel, suffix)
+		out = build(instance.Path.relString(), "/", outputRel, suffix)
 
 		return out, input
 	}
 
 	if srcVFS.isBuild() && !in.FlatOutput {
-		rel, dir := srcVFS.rel(), instance.Path.rel()
+		rel, dir := srcVFS.relString(), instance.Path.relString()
 
 		if rel != dir && !strings.HasPrefix(rel, dir+"/") {
 			outputRel := composeSrcDirOutputRel(dir, rel)
@@ -348,17 +348,17 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 
 	switch {
 	case in.FlatOutput:
-		return build(instance.Path.rel(), "/", srcRel, suffix), input
+		return build(instance.Path.relString(), "/", srcRel, suffix), input
 	case strings.Contains(srcRel, "/"):
 		body, underscore := normalizeDotDotSegments(srcRel)
 
 		if underscore {
-			return build(instance.Path.rel(), "/_/", body, suffix), input
+			return build(instance.Path.relString(), "/_/", body, suffix), input
 		}
 
-		return build(instance.Path.rel(), "/", body, suffix), input
+		return build(instance.Path.relString(), "/", body, suffix), input
 	default:
-		return build(instance.Path.rel(), "/", srcRel, suffix), input
+		return build(instance.Path.relString(), "/", srcRel, suffix), input
 	}
 }
 
@@ -639,7 +639,7 @@ func (m InclArgMemo) arg(path VFS) STR {
 
 	a := internV("-I", path.string())
 
-	if path.rel() == "" {
+	if path.relString() == "" {
 		a = internV("-I", strings.TrimSuffix(path.string(), "/"))
 	}
 

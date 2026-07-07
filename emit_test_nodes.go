@@ -52,7 +52,7 @@ func buildTestCtxNode(na *NodeArenas, p *Platform) *Node {
 	return &Node{
 		Platform: p,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(testYMakePython3),
-			(source(testAppendFileScriptRel)).str(),
+			(source(testAppendFileScriptRel)).fullSTR(),
 			internStr(testContextPath),
 			arg3.str(),
 			internStr(`  "build_type": "`+p.BuildType+`",`),
@@ -76,10 +76,10 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 		internStr(testToolHostPath),
 		argRunTest.str(),
 		argYaStartCommandFile.str(),
-		argMeta.str(), (build(path.Join(resultsDir, "meta.json"))).str(),
-		argTrace.str(), (build(path.Join(resultsDir, "ytest.report.trace"))).str(),
+		argMeta.str(), (build(path.Join(resultsDir, "meta.json"))).fullSTR(),
+		argTrace.str(), (build(path.Join(resultsDir, "ytest.report.trace"))).fullSTR(),
 		argTimeout.str(), arg60.str(),
-		argLogPath.str(), (build(path.Join(resultsDir, "run_test.log"))).str(),
+		argLogPath.str(), (build(path.Join(resultsDir, "run_test.log"))).fullSTR(),
 		argTestSize.str(), argSmall.str(),
 		argTestType.str(), argUnittest.str(),
 		argTestCiType.str(), argTest.str(),
@@ -88,7 +88,7 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 		argBuildRoot.str(), internStr(testBuildRoot),
 		argTestSuiteName.str(), argUnittest.str(),
 		argProjectPath.str(), internStr(info.ProjectPath),
-		argTestRelatedPath.str(), (source(info.ProjectPath)).str(),
+		argTestRelatedPath.str(), (source(info.ProjectPath)).fullSTR(),
 		argTargetPlatformDescriptor.str(), internStr(targetPlatformDescriptor(p)),
 		argRemoveTos.str(),
 		argGdbPath.str(), internStr(testGDBPath),
@@ -109,12 +109,12 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 
 	cmdArgs = append(cmdArgs,
 		argRamLimitGb.str(), arg8.str(),
-		argTar.str(), (build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))).str(),
+		argTar.str(), (build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))).fullSTR(),
 		internStr(testToolHostPath),
 		argRunUt.str(),
 		argBinary.str(), internStr(info.BinaryPath),
-		argTracePath.str(), (build(path.Join(resultsDir, "ytest.report.trace"))).str(),
-		argOutputDir.str(), (build(path.Join(resultsDir, "testing_out_stuff"))).str(),
+		argTracePath.str(), (build(path.Join(resultsDir, "ytest.report.trace"))).fullSTR(),
+		argOutputDir.str(), (build(path.Join(resultsDir, "testing_out_stuff"))).fullSTR(),
 		argModulo.str(), arg1.str(),
 		argModuloIndex.str(), arg0.str(),
 		argPartitionMode.str(), argSequential.str(),
@@ -157,10 +157,10 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 		internStr(testToolHostPath),
 		argRunTest.str(),
 		argYaStartCommandFile.str(),
-		argMeta.str(), (build(path.Join(resultsDir, "meta.json"))).str(),
-		argTrace.str(), (build(path.Join(resultsDir, "ytest.report.trace"))).str(),
+		argMeta.str(), (build(path.Join(resultsDir, "meta.json"))).fullSTR(),
+		argTrace.str(), (build(path.Join(resultsDir, "ytest.report.trace"))).fullSTR(),
 		argTimeout.str(), arg60.str(),
-		argLogPath.str(), (build(path.Join(resultsDir, "run_test.log"))).str(),
+		argLogPath.str(), (build(path.Join(resultsDir, "run_test.log"))).fullSTR(),
 		argTestSize.str(), argSmall.str(),
 		argTestType.str(), argClangFormat.str(),
 		argTestCiType.str(), argStyle.str(),
@@ -169,16 +169,16 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 		argBuildRoot.str(), internStr(testBuildRoot),
 		argTestSuiteName.str(), argClangFormat.str(),
 		argProjectPath.str(), internStr(info.ProjectPath),
-		argTestRelatedPath.str(), (source(testSVNInterfaceRel)).str(),
+		argTestRelatedPath.str(), (source(testSVNInterfaceRel)).fullSTR(),
 	}
 
 	for _, src := range info.CppSources {
-		cmdArgs = append(cmdArgs, argTestRelatedPath.str(), (source(src)).str())
+		cmdArgs = append(cmdArgs, argTestRelatedPath.str(), (source(src)).fullSTR())
 	}
 
 	cmdArgs = append(cmdArgs,
-		argTestRelatedPath.str(), (source(testClangFormatConfigRel)).str(),
-		argTestRelatedPath.str(), (source(testClangFormatWrapperRel)).str(),
+		argTestRelatedPath.str(), (source(testClangFormatConfigRel)).fullSTR(),
+		argTestRelatedPath.str(), (source(testClangFormatWrapperRel)).fullSTR(),
 		argTargetPlatformDescriptor.str(), internStr(targetPlatformDescriptor(p)),
 		argRemoveTos.str(),
 		argGdbPath.str(), internStr(testGDBPath),
@@ -192,24 +192,24 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 		argCompressionLevel.str(), arg1.str(),
 		argGlobalResource.str(), internStr(testClangFormatResource),
 		argRamLimitGb.str(), arg8.str(),
-		argTar.str(), (build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))).str(),
+		argTar.str(), (build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))).fullSTR(),
 		internStr(testToolHostPath),
 		argRunCustomLint.str(),
 		argSourceRoot.str(), internStr(testSourceRoot),
 		argBuildRoot.str(), internStr(testBuildRoot),
-		argProjectPath.str(), (source(info.ProjectPath)).str(),
-		argTracePath.str(), (build(path.Join(resultsDir, "ytest.report.trace"))).str(),
-		argOutPath.str(), (build(path.Join(resultsDir, "testing_out_stuff"))).str(),
+		argProjectPath.str(), (source(info.ProjectPath)).fullSTR(),
+		argTracePath.str(), (build(path.Join(resultsDir, "ytest.report.trace"))).fullSTR(),
+		argOutPath.str(), (build(path.Join(resultsDir, "testing_out_stuff"))).fullSTR(),
 		argLintName.str(), argClangFormat.str(),
 		argWrapperScript.str(), internStr(testClangFormatWrapperRel),
 		argDepends.str(), internStr(info.ProjectPath),
-		argConfig.str(), (source(testClangFormatConfigRel)).str(),
+		argConfig.str(), (source(testClangFormatConfigRel)).fullSTR(),
 		argGlobalResource.str(), internStr(testClangFormatResource),
-		(source(testSVNInterfaceRel)).str(),
+		(source(testSVNInterfaceRel)).fullSTR(),
 	)
 
 	for _, src := range info.CppSources {
-		cmdArgs = append(cmdArgs, (source(src)).str())
+		cmdArgs = append(cmdArgs, (source(src)).fullSTR())
 	}
 
 	cmdArgs = append(cmdArgs, argYaEndCommandFile.str())
@@ -291,7 +291,7 @@ func buildTestSuiteInfo(instance ModuleInstance, d *ModuleData, ldPath VFS) *Tes
 		return nil
 	}
 
-	srcBase := instance.Path.rel()
+	srcBase := instance.Path.relString()
 
 	if d.moduleStmt.Name == tokUnittestFor && len(d.moduleStmt.Args) > 0 {
 		srcBase = path.Clean(d.moduleStmt.Args[0].string())
@@ -307,7 +307,7 @@ func buildTestSuiteInfo(instance ModuleInstance, d *ModuleData, ldPath VFS) *Tes
 	}
 
 	return &TestSuiteInfo{
-		ProjectPath: instance.Path.rel(),
+		ProjectPath: instance.Path.relString(),
 		BinaryPath:  ldPath.string(),
 		CppSources:  cppSources,
 	}

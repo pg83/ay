@@ -16,8 +16,8 @@ func checkConfigHGeneratedVFS(modulePath string, conf STR) VFS {
 func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	generatedVFS := checkConfigHGeneratedVFS(instance.Path.rel(), conf)
-	confVFS := source(instance.Path.rel(), "/", conf.string())
+	generatedVFS := checkConfigHGeneratedVFS(instance.Path.relString(), conf)
+	confVFS := source(instance.Path.relString(), "/", conf.string())
 	cv := walkClosure(e.scanner, confVFS, d.cc.ScanCfg)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -25,8 +25,8 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 		Platform: ctx.target,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(d.tc.Python3,
 			argSBuildScriptsCheckConfigHPy.str(),
-			internV(instance.Path.rel(), "/", conf.string()),
-			(generatedVFS).str())),
+			internV(instance.Path.relString(), "/", conf.string()),
+			(generatedVFS).fullSTR())),
 			Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.buckets...),
@@ -38,7 +38,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 
 	var psc []ARG
 
-	if p := d.perSrcCFlagsFor(generatedVFS.str()); p != nil {
+	if p := d.perSrcCFlagsFor(generatedVFS.fullSTR()); p != nil {
 		psc = *p
 	}
 
@@ -46,11 +46,11 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 		OutputPath:  generatedVFS,
 		ProducerRef: chRef,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{
-			{kind: includeQuoted, target: internStr(confVFS.rel())},
+			{kind: includeQuoted, target: internStr(confVFS.relString())},
 		}},
 		ClosureLeaves: []VFS{buildScriptsCheckConfigHPy},
-		Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.str()), CFlags: psc},
+		Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.fullSTR()), CFlags: psc},
 	})
 
-	e.enqueueSrc(SrcMeta{Source: generatedVFS.str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCheckConfig})
+	e.enqueueSrc(SrcMeta{Source: generatedVFS.fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCheckConfig})
 }

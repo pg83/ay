@@ -9,7 +9,7 @@ func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, ru
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{
-			CmdArgs: na.chunkList(na.strList(domschemecBinary.str(), argDashIn.str(), srcVFS.str(), argDashOut.str(), headerVFS.str())),
+			CmdArgs: na.chunkList(na.strList(domschemecBinary.fullSTR(), argDashIn.str(), srcVFS.fullSTR(), argDashOut.str(), headerVFS.fullSTR())),
 			Env:     env,
 		}),
 		Env:            env,
@@ -28,10 +28,10 @@ func (e *EmitContext) emitLibrarySCSource(src STR) {
 	domRes := ctx.toolResult(argToolsDomschemec)
 	domLDRef, domBinary := domRes.LDRef, *domRes.LDPath
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
-	headerVFS := build(srcVFS.rel(), ".h")
+	headerVFS := build(srcVFS.relString(), ".h")
 	runtimeClosure := walkClosure(e.scanner, domschemeRuntimeVFS, d.cc.ScanCfg)
 	scRef := emitSC(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, ctx.emit)
-	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: internStr(domschemeRuntimeVFS.rel())}}
+	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: internStr(domschemeRuntimeVFS.relString())}}
 
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     headerVFS,

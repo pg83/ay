@@ -65,9 +65,9 @@ func relUnderDir(rel, dir string) bool {
 }
 
 func (e *EmitContext) requireProducedInput(kind, token string, vfs VFS) VFS {
-	module := e.instance.Path.rel()
+	module := e.instance.Path.relString()
 
-	if vfs.isBuild() && e.codegen.lookup(vfs) == nil && relUnderDir(vfs.rel(), module) {
+	if vfs.isBuild() && e.codegen.lookup(vfs) == nil && relUnderDir(vfs.relString(), module) {
 		throwFmt("gen: %s: %s %q resolves to build file %s that no declared macro produces", module, kind, token, vfs.string())
 	}
 
@@ -118,7 +118,7 @@ func (e *EmitContext) srcPositionOuts(tok STR) []VFS {
 			return nil
 		}
 
-		return []VFS{build(e.instance.Path.rel(), "/", e.gztGenProtoName(tok.string()))}
+		return []VFS{build(e.instance.Path.relString(), "/", e.gztGenProtoName(tok.string()))}
 	}
 
 	return nil
@@ -133,7 +133,7 @@ func srcInsCandidate(module string, tok STR) []VFS {
 }
 
 func (e *EmitContext) srcPositionIns(tok STR) []VFS {
-	module := e.instance.Path.rel()
+	module := e.instance.Path.relString()
 	ins := srcInsCandidate(module, tok)
 
 	switch srcExtClassOf(tok) {
@@ -166,7 +166,7 @@ func (e *EmitContext) srcPositionIns(tok STR) []VFS {
 
 func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMeta) {
 	d := e.d
-	module := e.instance.Path.rel()
+	module := e.instance.Path.relString()
 
 	n := len(d.copyFiles) + len(d.configureFiles) + len(d.antlrRuns) + len(d.antlr4Grammars) +
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
@@ -497,7 +497,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 			kind:  prodEnum,
 			index: i,
 			outs:  outs,
-			ins:   []VFS{build(e.enumHeaderSourceInput(stmt.Header, d.srcDirs).rel())},
+			ins:   []VFS{build(e.enumHeaderSourceInput(stmt.Header, d.srcDirs).relString())},
 		})
 	}
 
@@ -640,7 +640,7 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		return
 	}
 
-	for _, pi := range scheduleProducers(&e.ctx.prodOuts, positions, e.instance.Path.rel()) {
+	for _, pi := range scheduleProducers(&e.ctx.prodOuts, positions, e.instance.Path.relString()) {
 		pos := positions[pi]
 
 		switch pos.kind {

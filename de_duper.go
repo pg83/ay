@@ -13,7 +13,7 @@ type DeDuper struct {
 }
 
 func (dd *DeDuper) reset() {
-	if dd.gen.freshLen(int(strBound())) {
+	if dd.gen.freshLen(int(vfsBound())) {
 		dd.epoch = 1
 
 		return

@@ -29,7 +29,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	na := ctx.na
 
 	if d.exportsScript == nil {
-		throwFmt("gen: %s DLL requires EXPORTS_SCRIPT(...)", instance.Path.rel())
+		throwFmt("gen: %s DLL requires EXPORTS_SCRIPT(...)", instance.Path.relString())
 	}
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
@@ -44,17 +44,17 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	}
 
 	outputName := dllOutputName(d.moduleStmt)
-	outputPath := build(instance.Path.rel(), "/", outputName).string()
-	vcsCPath := build(instance.Path.rel(), "/__vcs_version__.c").string()
-	vcsOPath := build(instance.Path.rel(), "/__vcs_version__.c", instance.Platform.objectSuffix()).string()
+	outputPath := build(instance.Path.relString(), "/", outputName).string()
+	vcsCPath := build(instance.Path.relString(), "/__vcs_version__.c").string()
+	vcsOPath := build(instance.Path.relString(), "/__vcs_version__.c", instance.Platform.objectSuffix()).string()
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
-	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.rel(), outputPath, outputName, vcsOPath, ccOutputs, peerArchivePaths, nil, nil, d.exportsScript.string(), fixElfPath.string())
+	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.relString(), outputPath, outputName, vcsOPath, ccOutputs, peerArchivePaths, nil, nil, d.exportsScript.string(), fixElfPath.string())
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := ctx.host.toolEnv()
 	ldSbomRefs := peerSbomRefs
 	ldSbomPaths := peerSbomPaths
-	sbomJSON := build(instance.Path.rel(), "/__sbomdata.json").string()
+	sbomJSON := build(instance.Path.relString(), "/__sbomdata.json").string()
 	sbomEmbed := false
 
 	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
@@ -78,7 +78,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
 	if sbomEmbed {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, d.unit.SbomLang, instance.Path.rel(), sbomJSON, ldSbomPaths)), Cwd: strB, Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, d.unit.SbomLang, instance.Path.relString(), sbomJSON, ldSbomPaths)), Cwd: strB, Env: envVcsOnly})
 	}
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull})
@@ -89,7 +89,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 
 	inputs := InputChunks{peerArchivePaths, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS], ctx.scripts[ldLinkDynLibVFS]}
 
-	inputs = append(inputs, []VFS{ldSvnInterfaceVFS, ldSvnversionHVFS, source(instance.Path.rel(), "/", d.exportsScript.string())})
+	inputs = append(inputs, []VFS{ldSvnInterfaceVFS, ldSvnversionHVFS, source(instance.Path.relString(), "/", d.exportsScript.string())})
 	inputs = append(inputs, ccOutputs)
 
 	if sbomEmbed {
@@ -113,7 +113,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 		Cmds:         na.cmdList(cmds...),
 		Env:          envFull,
 		Inputs:       inputs,
-		Outputs:      na.vfsList(build(instance.Path.rel(), "/", outputName)),
+		Outputs:      na.vfsList(build(instance.Path.relString(), "/", outputName)),
 		KV:           &dynamicLibraryKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
@@ -126,7 +126,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 
 	return &ModuleEmitResult{
 		LDRef:          ref,
-		LDPath:         vfsPtr(build(instance.Path.rel(), "/", outputName)),
+		LDPath:         vfsPtr(build(instance.Path.relString(), "/", outputName)),
 		ModuleStmtName: d.moduleStmt.Name,
 		InducedDeps:    d.inducedDeps,
 	}
@@ -137,15 +137,15 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	na := ctx.na
 
 	if len(d.moduleStmt.Args) == 0 {
-		throwFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path.rel())
+		throwFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path.relString())
 	}
 
 	if len(d.dynamicLibraryFrom) == 0 {
-		throwFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path.rel())
+		throwFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path.relString())
 	}
 
 	if d.exportsScript == nil {
-		throwFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path.rel())
+		throwFmt("gen: %s DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)", instance.Path.relString())
 	}
 
 	dynLibRPathHelperPeers := []string{"build/platform/local_so"}
@@ -301,16 +301,16 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 	outputName := "lib" + d.moduleStmt.Args[0].string() + ".so"
-	outputPath := build(instance.Path.rel(), "/", outputName).string()
-	vcsCPath := build(instance.Path.rel(), "/__vcs_version__.c").string()
-	vcsOPath := build(instance.Path.rel(), "/__vcs_version__.c.pic.o").string()
+	outputPath := build(instance.Path.relString(), "/", outputName).string()
+	vcsCPath := build(instance.Path.relString(), "/__vcs_version__.c").string()
+	vcsOPath := build(instance.Path.relString(), "/__vcs_version__.c.pic.o").string()
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
-	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.rel(), outputPath, outputName, vcsOPath, nil, peerArchivePaths, pluginPaths, strStrings(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath.string())
-	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.rel())
+	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.relString(), outputPath, outputName, vcsOPath, nil, peerArchivePaths, pluginPaths, strStrings(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath.string())
+	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.relString())
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := ctx.host.toolEnv()
-	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.rel(), d.exportsScript.string(), ctx.scripts)
+	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.relString(), d.exportsScript.string(), ctx.scripts)
 	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)
 
 	deps = append(deps, peerArchiveRefs...)
@@ -322,7 +322,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly}),
 		Env:          envFull,
 		Inputs:       inputs,
-		Outputs:      na.vfsList(build(instance.Path.rel(), "/", outputName)),
+		Outputs:      na.vfsList(build(instance.Path.relString(), "/", outputName)),
 		KV:           &dynamicLibraryKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
@@ -341,7 +341,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		ARPath:                       nil,
 		isPROGRAM:                    false,
 		LDRef:                        ref,
-		LDPath:                       vfsPtr(build(instance.Path.rel(), "/", outputName)),
+		LDPath:                       vfsPtr(build(instance.Path.relString(), "/", outputName)),
 		AddInclGlobal:                addInclGlobal,
 		OwnAddInclGlobal:             cloneVFSs(d.addInclGlobal),
 		CFlagsGlobal:                 cFlagsGlobal,
@@ -372,7 +372,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	cmdArgs = append(cmdArgs, argStartPlugins.str())
 
 	for _, p := range pluginPaths {
-		cmdArgs = append(cmdArgs, (p).str())
+		cmdArgs = append(cmdArgs, (p).fullSTR())
 	}
 
 	cmdArgs = append(cmdArgs, argEndPlugins.str())
@@ -396,7 +396,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	)
 
 	for _, o := range ownObjects {
-		cmdArgs = append(cmdArgs, (o).str())
+		cmdArgs = append(cmdArgs, (o).fullSTR())
 	}
 
 	cmdArgs = append(cmdArgs,
@@ -410,7 +410,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	cmdArgs = append(cmdArgs, argWlStartGroup.str())
 
 	for _, p := range peerLibPaths {
-		cmdArgs = append(cmdArgs, internStr(p.rel()))
+		cmdArgs = append(cmdArgs, internStr(p.relString()))
 	}
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.str())

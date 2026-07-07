@@ -26,13 +26,13 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry
 	} else if entry.WithContext {
 		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
 
-		out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(srcVFS.rel())})
+		out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(srcVFS.relString())})
 	}
 
 	for _, include := range entry.OutputIncludes {
 		out = append(out, IncludeDirective{
 			kind:   includeQuoted,
-			target: internStr(copyFileIncludeTarget(moduleDir.rel(), include)),
+			target: internStr(copyFileIncludeTarget(moduleDir.relString(), include)),
 		})
 	}
 
@@ -59,7 +59,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 	scanner := e.scanner
 	reg := e.codegen
 	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
-	dstVFS := copyFileOutputVFS(instance.Path.rel(), entry.Dst)
+	dstVFS := copyFileOutputVFS(instance.Path.relString(), entry.Dst)
 
 	if srcVFS != dstVFS {
 		e.requireProducedInput("COPY_FILE src", entry.Src, srcVFS)

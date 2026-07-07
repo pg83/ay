@@ -37,7 +37,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	args := []STR{
 		d.tc.Python3,
-		buildScriptsFetchFromSandboxPy.str(),
+		buildScriptsFetchFromSandboxPy.fullSTR(),
 		argYaStartCommandFile.str(),
 		strResourceFile,
 		internV("$(RESOURCE_ROOT)/sbr/", id, "/resource"),
@@ -61,12 +61,12 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	for _, f := range stmt.OUTFiles {
 		args = append(args, f)
-		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.rel(), f.string()))
+		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.relString(), f.string()))
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
 		args = append(args, f)
-		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.rel(), f.string()))
+		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.relString(), f.string()))
 	}
 
 	args = append(args, argYaEndCommandFile.str())
@@ -75,7 +75,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	node := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: build(instance.Path.rel()).str(), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: build(instance.Path.relString()).fullSTR(), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(fromSandboxScriptInputs),
 		KV:           &fromSandboxKV,
@@ -117,7 +117,7 @@ func fromSandboxOutputIncludes(stmt *FromSandboxStmt) []IncludeDirective {
 
 	for _, f := range stmt.OutputIncludes {
 		if v := f.vfs(); v != 0 {
-			f = internStr(v.rel())
+			f = internStr(v.relString())
 		}
 
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: f})

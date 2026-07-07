@@ -88,10 +88,10 @@ func TestGen_FlexDoesNotPerturbBisonOrPlainCpp(t *testing.T) {
 	addToolchainPeers(files)
 	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.relString(), "print('stub')\n")
 
 	for _, input := range bisonCppSkeletonInputs {
-		writeTestModuleFile(files, input.rel(), "")
+		writeTestModuleFile(files, input.relString(), "")
 	}
 
 	writeTestModuleFile(files, "y/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(g.y)\nEND()\n")

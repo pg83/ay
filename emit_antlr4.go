@@ -7,14 +7,14 @@ import (
 
 func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	outPrefix := instance.Path.rel() + "/"
+	outPrefix := instance.Path.relString() + "/"
 
 	if g.IsSplit {
 		jvRef := emitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, d.unit.CCTag, d.tc, ctx.emit)
 		lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 		parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
-		lexerG4 := source(instance.Path.rel(), "/", g.Lexer)
-		parserG4 := source(instance.Path.rel(), "/", g.Parser)
+		lexerG4 := source(instance.Path.relString(), "/", g.Lexer)
+		parserG4 := source(instance.Path.relString(), "/", g.Parser)
 		lexerCpp := build(outPrefix, lexerBase, ".cpp")
 		parserCpp := build(outPrefix, parserBase, ".cpp")
 
@@ -48,7 +48,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			parsed := make([]IncludeDirective, 0, len(witnessIncludes))
 
 			for _, include := range witnessIncludes {
-				parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
+				parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.relString())})
 			}
 
 			e.codegen.register(&GeneratedFileInfo{
@@ -60,8 +60,8 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		}
 
 		jvInputs := []VFS{
-			source(instance.Path.rel(), "/", g.Lexer),
-			source(instance.Path.rel(), "/", g.Parser),
+			source(instance.Path.relString(), "/", g.Lexer),
+			source(instance.Path.relString(), "/", g.Parser),
 			stdout2stderrVFS,
 			antlr4JarVFS,
 		}
@@ -77,7 +77,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 	} else {
 		jvRef := emitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, d.unit.CCTag, d.tc, ctx.emit)
 		base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
-		grammarG4 := source(instance.Path.rel(), "/", g.Grammar)
+		grammarG4 := source(instance.Path.relString(), "/", g.Grammar)
 		lexerCpp := build(outPrefix, base, "Lexer.cpp")
 		parserCpp := build(outPrefix, base, "Parser.cpp")
 
@@ -110,7 +110,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			parsed := make([]IncludeDirective, 0, len(witnessIncludes))
 
 			for _, include := range witnessIncludes {
-				parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
+				parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.relString())})
 			}
 
 			e.codegen.register(&GeneratedFileInfo{
@@ -122,7 +122,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		}
 
 		jvInputs := []VFS{
-			source(instance.Path.rel(), "/", g.Grammar),
+			source(instance.Path.relString(), "/", g.Grammar),
 			stdout2stderrVFS,
 			antlr4JarVFS,
 		}

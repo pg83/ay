@@ -546,14 +546,14 @@ func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn 
 
 func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 	if moduleStmt != nil && moduleStmt.Name == tokUnittestFor {
-		return strings.ReplaceAll(path.Clean(instance.Path.rel()), "/", "-")
+		return strings.ReplaceAll(path.Clean(instance.Path.relString()), "/", "-")
 	}
 
 	if moduleStmt != nil && len(moduleStmt.Args) > 0 {
 		return moduleStmt.Args[0].string()
 	}
 
-	return baseName(instance.Path.rel())
+	return baseName(instance.Path.relString())
 }
 
 func programSourceDir(moduleStmt *ModuleStmt) *string {
@@ -591,8 +591,8 @@ func (ctx *GenCtx) parseFileCached(rel string) []Stmt {
 func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 	stmts := ctx.parseFileCached(joinRel(dir, "ya.make"))
 
-	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootVFS, inc.rel()) {
-		incStmts := ctx.parseFileCached(inc.rel())
+	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootVFS, inc.relString()) {
+		incStmts := ctx.parseFileCached(inc.relString())
 
 		return concat(stmts, incStmts)
 	}
@@ -620,8 +620,8 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 			}
 		}
 
-		if hasProtoSrc && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/protobuf/builtin_proto") &&
-			!strings.HasPrefix(instance.Path.rel(), "contrib/python/protobuf") {
+		if hasProtoSrc && !strings.HasPrefix(instance.Path.relString(), "contrib/libs/protobuf/builtin_proto") &&
+			!strings.HasPrefix(instance.Path.relString(), "contrib/python/protobuf") {
 			d.peerdirs = append(d.peerdirs, strContribPythonProtobuf)
 		}
 
@@ -637,9 +637,9 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 
 	py3ProtoVariant := d.moduleStmt.Name == tokProtoLibrary && d.usePython3
 
-	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.rel() != "contrib/libs/python" {
+	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
 		d.peerdirs = append([]STR{strContribLibsPython}, d.peerdirs...)
-	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path.rel() != "contrib/libs/python" {
+	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
 		if moduleExcludesTag(d, "CPP_PROTO") {
 			d.peerdirs = append([]STR{strContribLibsPython}, d.peerdirs...)
 		} else {
@@ -656,7 +656,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 
 		earlyPeers = append(earlyPeers, "library/python/runtime_py3/main")
 
-		if !d.noImportTracing && instance.Path.rel() != "library/python/import_tracing/constructor" {
+		if !d.noImportTracing && instance.Path.relString() != "library/python/import_tracing/constructor" {
 			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
 		}
 
@@ -676,7 +676,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 			filteredEarly := earlyPeers[:0]
 
 			for _, peer := range earlyPeers {
-				if instance.Path.rel() != peer {
+				if instance.Path.relString() != peer {
 					filteredEarly = append(filteredEarly, peer)
 				}
 			}
@@ -690,36 +690,36 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 			d.peerdirs = spliced
 		} else {
 			for _, peer := range earlyPeers {
-				if instance.Path.rel() != peer {
+				if instance.Path.relString() != peer {
 					d.peerdirs = append(d.peerdirs, internStr(peer))
 				}
 			}
 		}
 
 		for _, peer := range latePeers {
-			if instance.Path.rel() != peer {
+			if instance.Path.relString() != peer {
 				d.peerdirs = append(d.peerdirs, internStr(peer))
 			}
 		}
 	}
 
-	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path.rel() != "library/python/import_tracing/constructor" {
+	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path.relString() != "library/python/import_tracing/constructor" {
 		d.peerdirs = append(d.peerdirs, strLibraryPythonImportTracingConstructor)
 	}
 
-	if d.hasFbs && instance.Path.rel() != "contrib/libs/flatbuffers" {
+	if d.hasFbs && instance.Path.relString() != "contrib/libs/flatbuffers" {
 		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers)
 	}
 
-	if d.hasFbs64 && instance.Path.rel() != "contrib/libs/flatbuffers64" {
+	if d.hasFbs64 && instance.Path.relString() != "contrib/libs/flatbuffers64" {
 		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers64)
 	}
 
-	if d.hasBisonY && instance.Path.rel() != strBuildInducedByBison.string() {
+	if d.hasBisonY && instance.Path.relString() != strBuildInducedByBison.string() {
 		d.peerdirs = append(d.peerdirs, strBuildInducedByBison)
 	}
 
-	if ctx.sbomEnabled && !d.flags.NoRuntime && !effectiveNoPlatform(d.flags) && !isGoModuleType(d.moduleStmt.Name) && !strings.HasPrefix(instance.Path.rel(), "contrib/libs/cxxsupp") {
+	if ctx.sbomEnabled && !d.flags.NoRuntime && !effectiveNoPlatform(d.flags) && !isGoModuleType(d.moduleStmt.Name) && !strings.HasPrefix(instance.Path.relString(), "contrib/libs/cxxsupp") {
 		d.peerdirs = append(d.peerdirs, strContribLibsCxxsupp)
 	}
 }
@@ -737,7 +737,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if ctx.walking[instance] {
 		ctx.cyclesTolerated++
-		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path.rel())
+		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path.relString())
 
 		return &ModuleEmitResult{}
 	}
@@ -746,7 +746,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	defer delete(ctx.walking, instance)
 
-	stmts := moduleStmts(ctx, instance.Path.rel())
+	stmts := moduleStmts(ctx, instance.Path.relString())
 	env := buildIfEnv(instance)
 	d := collectModule(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn)
 	e := newEmitContext(ctx, instance, d, nil)
@@ -764,15 +764,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	for _, stmt := range d.allPySrcs {
-		applyAllPySrcs(ctx.fs, instance.Path.rel(), stmt, d)
+		applyAllPySrcs(ctx.fs, instance.Path.relString(), stmt, d)
 	}
 
 	if d.conflictMod != nil {
-		throwFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path.rel(), d.moduleStmt.Name, d.conflictMod.Name)
+		throwFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path.relString(), d.moduleStmt.Name, d.conflictMod.Name)
 	}
 
 	if d.moduleStmt == nil {
-		throwFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path.rel())
+		throwFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path.relString())
 	}
 
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDescProto {
@@ -812,7 +812,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt.Name != tokLibrary && d.moduleStmt.Name != tokFbsLibrary && d.moduleStmt.Name != tokDllTool && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) && d.moduleStmt.Name != tokGoLibrary && d.moduleStmt.Name != tokGoProgram {
-		throwFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path.rel(), d.moduleStmt.Name)
+		throwFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path.relString(), d.moduleStmt.Name)
 	}
 
 	applyImplicitPeerdirs(ctx, instance, d)
@@ -851,7 +851,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	languageDefaults = suppressMallocAPIDefault(languageDefaults, d.allocatorName)
 
-	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path.rel())
+	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path.relString())
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
 
 	var preUserProgDefaults []string
@@ -876,7 +876,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	const googleapisPeer = "contrib/libs/googleapis-common-protos"
 
-	internStr(instance.Path.rel())
+	internStr(instance.Path.relString())
 	internStr(googleapisPeer)
 
 	if unitTestPeer != "" {
@@ -898,12 +898,12 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	preResolved := make([]resolvedPeer, 0, 2)
 
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
-		peerSeen(instance.Path.rel())
+		peerSeen(instance.Path.relString())
 
 		cppSelf := instance
 
 		cppSelf.Language = LangCPP
-		preResolved = append(preResolved, resolvedPeer{path: instance.Path.rel(), result: genModule(ctx, cppSelf), kind: peerKindLangDefault})
+		preResolved = append(preResolved, resolvedPeer{path: instance.Path.relString(), result: genModule(ctx, cppSelf), kind: peerKindLangDefault})
 	}
 
 	if d.moduleStmt.Name == tokProtoLibrary && d.useCommonGoogleAPIs && instance.Language == LangCPP {
@@ -1013,7 +1013,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		peerResult := genModule(ctx, peerInstance)
 
 		if peerResult.isPROGRAM {
-			throwFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path.rel(), peerPath)
+			throwFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path.relString(), peerPath)
 		}
 
 		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
@@ -1470,7 +1470,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.rel()] {
+	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.relString()] {
 		hasNostdinc := false
 
 		for _, a := range peerCXXFlagsGlobal {
@@ -1509,7 +1509,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, d.unit.ARPrefix, archiveName) }
 	globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, d.unit.ARPrefix, archiveName) }
 
-	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.rel(), peerAddInclGlobal, dedupedAddIncl)
+	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.relString(), peerAddInclGlobal, dedupedAddIncl)
 
 	if d.moduleStmt.Name == tokProtoLibrary {
 		selfPeerAddInclGlobal = peerAddInclGlobal
@@ -1564,7 +1564,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ForceConsistentDebug: isGoModuleType(d.moduleStmt.Name),
 	}
 
-	d.cc.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	d.cc.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 
 	e = newEmitContext(ctx, instance, d, &PeerContext{
@@ -1728,13 +1728,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	var arRef NodeRef
 
-	arBaseName := arNameFn(instance.Path.rel())
+	arBaseName := arNameFn(instance.Path.relString())
 	arInstance := instance
 
 	var arPluginVFS *VFS
 
 	if d.arPlugin != nil {
-		v := source(instance.Path.rel(), "/", d.arPlugin.string())
+		v := source(instance.Path.relString(), "/", d.arPlugin.string())
 
 		arPluginVFS = &v
 	}
@@ -1775,7 +1775,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if isGoModuleType(d.moduleStmt.Name) {
 		if sbomActive(ctx, instance) && sbomQualifies(d) {
-			rel := instance.Path.rel()
+			rel := instance.Path.relString()
 
 			ownSbomRef, ownSbomPath = e.emitSbomComponent(rel[strings.LastIndexByte(rel, '/')+1:])
 		}
@@ -1792,11 +1792,11 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			arRef = emitARNamed(arInstance, arBaseName, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		}
 
-		arPath = vfsPtr(build(instance.Path.rel(), "/", arBaseName))
+		arPath = vfsPtr(build(instance.Path.relString(), "/", arBaseName))
 	}
 
 	if sbomActive(ctx, instance) && sbomQualifies(d) && d.unit.Tag != unitTagPy3BinLib && !isGoModuleType(d.moduleStmt.Name) {
-		realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.rel(), "", archiveName), ".a")
+		realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.relString(), "", archiveName), ".a")
 
 		ownSbomRef, ownSbomPath = e.emitSbomComponent(realPrjName)
 	}
@@ -1813,7 +1813,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	result.GoSrcClosure = goSrcClosure
 
 	if len(globalRefs) > 0 {
-		globalBaseName := globalArNameFn(instance.Path.rel())
+		globalBaseName := globalArNameFn(instance.Path.relString())
 		globalTag := d.unit.GlobalARTag
 
 		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, globalMetas)
@@ -1821,7 +1821,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		globalRef := emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 
 		result.GlobalRef = &globalRef
-		result.GlobalPath = vfsPtr(build(instance.Path.rel(), "/", globalBaseName))
+		result.GlobalPath = vfsPtr(build(instance.Path.relString(), "/", globalBaseName))
 	}
 
 	if protoResult := e.protoRes; protoResult != nil {
@@ -1852,7 +1852,7 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	matched := false
 
 	for _, p := range own {
-		if p.isBuild() && (p == ownPrefix || strings.HasPrefix(p.rel(), ownPrefix.rel()+"/")) {
+		if p.isBuild() && (p == ownPrefix || strings.HasPrefix(p.relString(), ownPrefix.relString()+"/")) {
 			deduper.add(p.strID())
 			matched = true
 		}

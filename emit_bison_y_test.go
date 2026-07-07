@@ -12,16 +12,16 @@ func TestGen_BisonGeneratedHeaderPreprocessAndPeerBuildRootInclude(t *testing.T)
 
 	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.relString(), "print('stub')\n")
 
 	for _, input := range bisonCppSkeletonInputs {
 		body := ""
 
-		if strings.HasSuffix(input.rel(), "/stack.hh") {
+		if strings.HasSuffix(input.relString(), "/stack.hh") {
 			body = `#include "skeleton-helper.h"` + "\n"
 		}
 
-		writeTestModuleFile(files, input.rel(), body)
+		writeTestModuleFile(files, input.relString(), body)
 	}
 
 	writeTestModuleFile(files, "contrib/tools/bison/data/skeletons/skeleton-helper.h", "")
@@ -129,10 +129,10 @@ func TestGen_BisonYppFlatOutputAndSiblingInclude(t *testing.T) {
 	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
 	writeTestModuleFile(files, "contrib/tools/ragel6/ya.make", "PROGRAM(ragel6)\nSRCS(main.cpp)\nEND()\n")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.relString(), "print('stub')\n")
 
 	for _, input := range bisonCppSkeletonInputs {
-		writeTestModuleFile(files, input.rel(), "")
+		writeTestModuleFile(files, input.relString(), "")
 	}
 
 	writeTestModuleFile(files, "a/b/qbase/ya.make", `LIBRARY()
@@ -177,10 +177,10 @@ func TestGen_BisonYFlatOutputPath(t *testing.T) {
 
 	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.relString(), "print('stub')\n")
 
 	for _, input := range bisonCppSkeletonInputs {
-		writeTestModuleFile(files, input.rel(), "")
+		writeTestModuleFile(files, input.relString(), "")
 	}
 
 	writeTestModuleFile(files, "req/ya.make", `LIBRARY()
@@ -204,10 +204,10 @@ func TestGen_BisonFlagsReachProducerCommand(t *testing.T) {
 
 	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.relString(), "print('stub')\n")
 
 	for _, input := range bisonCppSkeletonInputs {
-		writeTestModuleFile(files, input.rel(), "")
+		writeTestModuleFile(files, input.relString(), "")
 	}
 
 	writeTestModuleFile(files, "qbase/ya.make", `LIBRARY()
@@ -260,10 +260,10 @@ func TestGen_BisonCppFlags(t *testing.T) {
 
 	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.relString(), "print('stub')\n")
 
 	for _, input := range bisonCppSkeletonInputs {
-		writeTestModuleFile(files, input.rel(), "")
+		writeTestModuleFile(files, input.relString(), "")
 	}
 
 	writeTestModuleFile(files, "genlib/ya.make", `LIBRARY()
@@ -291,10 +291,10 @@ func TestGen_BisonHeaderConsumerIncludesSourceY(t *testing.T) {
 
 	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.relString(), "print('stub')\n")
 
 	for _, input := range bisonCppSkeletonInputs {
-		writeTestModuleFile(files, input.rel(), "")
+		writeTestModuleFile(files, input.relString(), "")
 	}
 
 	writeTestModuleFile(files, "genlib/ya.make", `LIBRARY()
@@ -334,10 +334,10 @@ func TestGen_BisonGeneratedSourceCarriesGeneratedProtoProducerDep(t *testing.T) 
 
 	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.relString(), "print('stub')\n")
 
 	for _, input := range bisonCppSkeletonInputs {
-		writeTestModuleFile(files, input.rel(), "")
+		writeTestModuleFile(files, input.relString(), "")
 	}
 
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")

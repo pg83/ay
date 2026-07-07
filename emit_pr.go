@@ -44,7 +44,7 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 		}
 
 		e.enqueueSrc(SrcMeta{
-			Source:    copyFileOutputVFS(e.instance.Path.rel(), out).str(),
+			Source:    copyFileOutputVFS(e.instance.Path.relString(), out).fullSTR(),
 			Prio:      stmtPrioDefault,
 			Seq:       rp.DeclSeq,
 			Generated: true,
@@ -78,17 +78,17 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	outVFSByToken := make(map[STR]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f.string())
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.relString(), f.string())
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outVFSByToken[f] = copyFileOutputVFS(instance.Path.rel(), f.string())
+		outVFSByToken[f] = copyFileOutputVFS(instance.Path.relString(), f.string())
 	}
 
 	var stdoutVFS *VFS
 
 	if stmt.StdoutFile != nil {
-		vfs := copyFileOutputVFS(instance.Path.rel(), stmt.StdoutFile.string())
+		vfs := copyFileOutputVFS(instance.Path.relString(), stmt.StdoutFile.string())
 
 		stdoutVFS = &vfs
 		outVFSByToken[*stmt.StdoutFile] = vfs
@@ -109,14 +109,14 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	protoImportPbH := prProtoImportPbH(ctx.parsers, inVFSs)
 	prRef := ctx.emit.reserve()
 	registeredPROut := map[VFS]bool{}
-	mainIsHeader := mainOutputVFS != 0 && isHeaderSource(mainOutputVFS.rel())
+	mainIsHeader := mainOutputVFS != 0 && isHeaderSource(mainOutputVFS.relString())
 
 	mainHeaderInclude := func(ccOutRel string) (IncludeDirective, bool) {
-		if !mainIsHeader || relStem(ccOutRel) != relStem(mainOutputVFS.rel()) {
+		if !mainIsHeader || relStem(ccOutRel) != relStem(mainOutputVFS.relString()) {
 			return IncludeDirective{}, false
 		}
 
-		return IncludeDirective{kind: includeQuoted, target: internStr(mainOutputVFS.rel())}, true
+		return IncludeDirective{kind: includeQuoted, target: internStr(mainOutputVFS.relString())}, true
 	}
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet, ridesHeaderViaParsed bool) {
@@ -146,7 +146,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		parsed := prOutputParsedIncludes(f, stmt, inVFSs, protoImportPbH)
 
 		if auto && isCCSourceExt(f.string()) {
-			if inc, ok := mainHeaderInclude(out.rel()); ok {
+			if inc, ok := mainHeaderInclude(out.relString()); ok {
 				return appendParsedDirectives(parsed, parsedIncludesCpp, inc), true
 			}
 		}
@@ -231,8 +231,8 @@ func prProtoImportPbH(pm *IncludeParserManager, inVFSs []VFS) []IncludeDirective
 	var out []IncludeDirective
 
 	for _, v := range inVFSs {
-		if v.isSource() && extIsProto(v.rel()) {
-			out = append(out, protoDirectPbHIncludes(pm, v.rel(), "")...)
+		if v.isSource() && extIsProto(v.relString()) {
+			out = append(out, protoDirectPbHIncludes(pm, v.relString(), "")...)
 		}
 	}
 
@@ -243,8 +243,8 @@ func pbhBasenameSet(vs []VFS) map[string]bool {
 	m := map[string]bool{}
 
 	for _, v := range vs {
-		if extIsPbH(v.rel()) {
-			m[filepath.Base(v.rel())] = true
+		if extIsPbH(v.relString()) {
+			m[filepath.Base(v.relString())] = true
 		}
 	}
 
@@ -289,7 +289,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 				return
 			}
 
-			cv := walkClosure(e.scanner, copyFileOutputVFS(instance.Path.rel(), rel), scanCfg)
+			cv := walkClosure(e.scanner, copyFileOutputVFS(instance.Path.relString(), rel), scanCfg)
 
 			eachBucketVFS(cv.buckets, func(v VFS) { out = append(out, v) })
 		}
@@ -323,7 +323,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 				continue
 			}
 
-			cv := walkClosure(e.scanner, copyFileOutputVFS(instance.Path.rel(), f.string()), scanCfg)
+			cv := walkClosure(e.scanner, copyFileOutputVFS(instance.Path.relString(), f.string()), scanCfg)
 
 			eachBucketVFS(cv.buckets, func(v VFS) {
 				if v.isSource() {
@@ -338,7 +338,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 			return v.isSource()
 		}
 
-		return extIsProto(v.rel())
+		return extIsProto(v.relString())
 	}
 
 	pbhSeen := pbhBasenameSet(out)
@@ -347,7 +347,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		target := oi
 
 		if vfsHasPrefix(target.string()) {
-			target = internStr(intern(target.string()).rel())
+			target = internStr(intern(target.string()).relString())
 		}
 
 		var sub Closure
@@ -371,12 +371,12 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 
 			out = append(out, v)
 
-			if extIsPbH(v.rel()) {
-				pbhSeen[filepath.Base(v.rel())] = true
+			if extIsPbH(v.relString()) {
+				pbhSeen[filepath.Base(v.relString())] = true
 			}
 
-			if !fullSourceClosure && !hasProtoIN && v.isSource() && extIsProto(v.rel()) {
-				sibling := strings.TrimSuffix(v.rel(), ".proto") + ".pb.h"
+			if !fullSourceClosure && !hasProtoIN && v.isSource() && extIsProto(v.relString()) {
+				sibling := strings.TrimSuffix(v.relString(), ".proto") + ".pb.h"
 				sibDir, sibBase := splitDirName(sibling)
 
 				if ctx.fs.isFile(dirKey(sibDir), sibBase) && !pbhSeen[sibBase] {
@@ -417,7 +417,7 @@ func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, pro
 
 	for _, f := range stmt.OutputIncludes {
 		if v := f.vfs(); v != 0 {
-			f = internStr(v.rel())
+			f = internStr(v.relString())
 		}
 
 		local = append(local, IncludeDirective{kind: includeQuoted, target: f})
@@ -442,7 +442,7 @@ func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, pro
 				continue
 			}
 
-			compile = append(compile, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
+			compile = append(compile, IncludeDirective{kind: includeQuoted, target: internStr(v.relString())})
 		}
 	}
 
@@ -472,7 +472,7 @@ func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxT
 		modulePath := toolPath
 
 		if rooted {
-			modulePath = intern(toolPath).rel()
+			modulePath = intern(toolPath).relString()
 		}
 
 		res := ctx.toolResult(internArg(filepath.Clean(modulePath)))
@@ -495,7 +495,7 @@ func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 		return e.requireProducedInput("IN", rel, copyFileInputVFS(ctx.fs, instance.Path, rel))
 	}
 
-	buildVFS := build(filepath.ToSlash(filepath.Clean(instance.Path.rel() + "/" + rel)))
+	buildVFS := build(filepath.ToSlash(filepath.Clean(instance.Path.relString() + "/" + rel)))
 
 	if e.codegen.lookup(buildVFS) != nil {
 		return buildVFS
@@ -525,7 +525,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 
 	cmdArgs := make([]STR, 0, 1+len(stmt.Args))
 
-	cmdArgs = append(cmdArgs, spec.toolBinPath.str())
+	cmdArgs = append(cmdArgs, spec.toolBinPath.fullSTR())
 
 	fileTokens := prBareFileTokens(stmt, spec.inVFSs, spec.outVFSByToken)
 
@@ -594,7 +594,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	}
 
 	if spec.stdoutVFS != nil {
-		stdoutPath = spec.stdoutVFS.str()
+		stdoutPath = spec.stdoutVFS.fullSTR()
 		appendOutput(*spec.stdoutVFS)
 	}
 

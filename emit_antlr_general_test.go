@@ -26,15 +26,15 @@ func TestAntlrParsedIncludes_ExcludesBuildIntermediateInputs(t *testing.T) {
 		got[d.target.string()] = struct{}{}
 	}
 
-	if _, leaked := got[stgBuild.rel()]; leaked {
-		t.Errorf("antlrParsedIncludes leaked $(B) generator intermediate %q: %v", stgBuild.rel(), keysOf(got))
+	if _, leaked := got[stgBuild.relString()]; leaked {
+		t.Errorf("antlrParsedIncludes leaked $(B) generator intermediate %q: %v", stgBuild.relString(), keysOf(got))
 	}
 
 	for _, want := range []string{
 		"yql/essentials/sql/v0/SQL.g",
 		"yql/essentials/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in",
-		stdout2stderrVFS.rel(),
-		antlr3JarVFS.rel(),
+		stdout2stderrVFS.relString(),
+		antlr3JarVFS.relString(),
 	} {
 		if _, ok := got[want]; !ok {
 			t.Errorf("antlrParsedIncludes missing $(S) source %q: %v", want, keysOf(got))
@@ -63,10 +63,10 @@ func TestAntlrParsedIncludes_LexerCrossIncludesParserCpp(t *testing.T) {
 		return got
 	}
 
-	lexerRel := outByTok["JsonPathLexer.cpp"].rel()
-	parserRel := outByTok["JsonPathParser.cpp"].rel()
-	lexerHRel := outByTok["JsonPathLexer.h"].rel()
-	parserHRel := outByTok["JsonPathParser.h"].rel()
+	lexerRel := outByTok["JsonPathLexer.cpp"].relString()
+	parserRel := outByTok["JsonPathParser.cpp"].relString()
+	lexerHRel := outByTok["JsonPathLexer.h"].relString()
+	parserHRel := outByTok["JsonPathParser.h"].relString()
 
 	lex := induced("JsonPathLexer.cpp")
 

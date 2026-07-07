@@ -529,7 +529,7 @@ parsedFlags:
 }
 
 func sourceInputVFS(fs FS, moduleDir VFS, path string) *VFS {
-	modulePath := moduleDir.rel()
+	modulePath := moduleDir.relString()
 
 	if vfs := moduleRootedVFS(modulePath, path); vfs != nil {
 		return vfs
@@ -568,7 +568,7 @@ func copyFileInputVFS(fs FS, moduleDir VFS, src string) VFS {
 		return *vfs
 	}
 
-	return source(filepath.ToSlash(filepath.Clean(moduleDir.rel() + "/" + src)))
+	return source(filepath.ToSlash(filepath.Clean(moduleDir.relString() + "/" + src)))
 }
 
 func moduleRootedVFS(modulePath string, path string) *VFS {
@@ -614,7 +614,7 @@ func resourceOutputVFS(modulePath string, path string) VFS {
 
 func copyFileIncludeTarget(modulePath string, target string) string {
 	if vfsHasPrefix(target) {
-		return intern(target).rel()
+		return intern(target).relString()
 	}
 
 	switch {
@@ -652,7 +652,7 @@ func (d *ModuleData) materializeAddIncl() {
 
 func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn)) *ModuleData {
 	fs := pm.fs
-	modulePath := instance.Path.rel()
+	modulePath := instance.Path.relString()
 	kind := instance.Kind
 
 	env.setString(envMODDIR, modulePath)
@@ -852,7 +852,7 @@ func filterOwnAddIncl(fs FS, paths []VFS, modulePath string, onWarn func(Warn)) 
 		if shouldCheckSourceDir(path) && !fs.isDir(path, "") {
 			onWarn(Warn{
 				Kind:    WarnMissingAddincl,
-				Message: fmt.Sprintf("%s: ADDINCL to non existent source directory %s", modulePath, path.rel()),
+				Message: fmt.Sprintf("%s: ADDINCL to non existent source directory %s", modulePath, path.relString()),
 			})
 
 			if !copied {
@@ -876,11 +876,11 @@ func shouldCheckSourceDir(path VFS) bool {
 		return false
 	}
 
-	if path.rel() == "" {
+	if path.relString() == "" {
 		return false
 	}
 
-	if strings.Contains(path.rel(), "$") {
+	if strings.Contains(path.relString(), "$") {
 		return false
 	}
 
@@ -1434,7 +1434,7 @@ func moduleStmtForKind(stmt *ModuleStmt, unitType TOK) *ModuleStmt {
 
 func generatedIncludeDir(modulePath, dst string) string {
 	outVFS := copyFileOutputVFS(modulePath, dst)
-	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.rel())))
+	dir := filepath.ToSlash(filepath.Clean(filepath.Dir(outVFS.relString())))
 
 	if dir != "." && dir != "" {
 		return filepath.ToSlash(filepath.Clean(dir))
@@ -1780,8 +1780,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
 			prefix := modulePath + "/"
 
-			if strings.HasPrefix(dstVFS.rel(), prefix) {
-				dstRel := strings.TrimPrefix(dstVFS.rel(), prefix)
+			if strings.HasPrefix(dstVFS.relString(), prefix) {
+				dstRel := strings.TrimPrefix(dstVFS.relString(), prefix)
 
 				if isSourceEligibleForCopyAuto(dstRel) && !strsContain(d.srcs, dstRel) {
 					d.srcs = append(d.srcs, internStr(dstRel))
@@ -1802,8 +1802,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
 				prefix := modulePath + "/"
 
-				if strings.HasPrefix(dstVFS.rel(), prefix) {
-					dstRel := strings.TrimPrefix(dstVFS.rel(), prefix)
+				if strings.HasPrefix(dstVFS.relString(), prefix) {
+					dstRel := strings.TrimPrefix(dstVFS.relString(), prefix)
 
 					if isSourceEligibleForCopyAuto(dstRel) && !strsContain(d.srcs, dstRel) {
 						d.srcs = append(d.srcs, internStr(dstRel))
@@ -3056,8 +3056,8 @@ func buildIfEnv(instance ModuleInstance) Environment {
 
 	if instance.Path != 0 {
 		env.setString(envCURDIR, instance.Path.string())
-		env.setString(envBINDIR, build(instance.Path.rel()).string())
-		env.setString(envMODDIR, instance.Path.rel())
+		env.setString(envBINDIR, build(instance.Path.relString()).string())
+		env.setString(envMODDIR, instance.Path.relString())
 	}
 
 	return env

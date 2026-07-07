@@ -17,16 +17,16 @@ func emitR5(
 	emit *StreamingEmitter,
 ) (NodeRef, VFS, VFS) {
 	na := emit.nodeArenas()
-	srcVFS := source(instance.Path.rel(), "/", srcRel)
-	tmpVFS := build(instance.Path.rel(), "/", srcRel, ".tmp")
-	cppVFS := build(instance.Path.rel(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".rl5.cpp")
+	srcVFS := source(instance.Path.relString(), "/", srcRel)
+	tmpVFS := build(instance.Path.relString(), "/", srcRel, ".tmp")
+	cppVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".rl5.cpp")
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmd0 := Cmd{
-		CmdArgs: na.chunkList(na.strList((ragel5BinPath).str(),
+		CmdArgs: na.chunkList(na.strList((ragel5BinPath).fullSTR(),
 			argDashO.str(),
-			(tmpVFS).str(),
-			(srcVFS).str())),
+			(tmpVFS).fullSTR(),
+			(srcVFS).fullSTR())),
 		Env: env,
 	}
 
@@ -37,11 +37,11 @@ func emitR5(
 	}
 
 	cmd1 := Cmd{
-		CmdArgs: na.chunkList(na.strList((rlgenCdBinPath).str(),
+		CmdArgs: na.chunkList(na.strList((rlgenCdBinPath).fullSTR(),
 			rlgenMode.str(),
 			argDashO.str(),
-			(cppVFS).str(),
-			(tmpVFS).str())),
+			(cppVFS).fullSTR(),
+			(tmpVFS).fullSTR())),
 		Env: env,
 	}
 
@@ -74,7 +74,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 	ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
 	rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
 	r5Ref, r5TmpOut, r5CppOut := emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
-	rlSourceVFS := source(instance.Path.rel(), "/", srcRel)
+	rlSourceVFS := source(instance.Path.relString(), "/", srcRel)
 	reg := e.codegen
 
 	reg.register(&GeneratedFileInfo{
@@ -89,7 +89,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 		OutputPath:     r5CppOut,
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  []NodeRef{ragel5LDRef, rlgenCdLDRef},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: append([]IncludeDirective{{kind: includeQuoted, target: internStr(r5TmpOut.rel())}}, r5Parsed...)},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: append([]IncludeDirective{{kind: includeQuoted, target: internStr(r5TmpOut.relString())}}, r5Parsed...)},
 		Compile: &CompileSpec{
 			FlatOutput: d.flatSrc(src),
 			CFlags:     concat(psc, []ARG{argWnoImplicitFallthrough}),
@@ -99,6 +99,6 @@ func (e *EmitContext) emitLibraryRagel5Source(src STR) {
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	meta.Source = r5CppOut.str()
+	meta.Source = r5CppOut.fullSTR()
 	e.enqueueSrc(meta)
 }
