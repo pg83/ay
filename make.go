@@ -291,7 +291,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
-		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:"),
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:,jobs:,ninja,define:"),
 		Mode:     getopt.ModeInOrder,
 		Func:     getopt.FuncGetOptLong,
 	}
@@ -324,7 +324,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.stats = true
 		case opt.Name == "musl":
 			parseKV(mf.tflags, "MUSL=yes")
-		case opt.Char == 'T':
+		case opt.Char == 'T' || opt.Name == "ninja":
 			mf.ninja = true
 		case opt.Char == 't':
 			mf.testLevel++
@@ -338,9 +338,9 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.srcRoot = opt.OptArg
 		case opt.Name == "cmd-prefix":
 			mf.cmdPrefixes = append(mf.cmdPrefixes, parseCmdPrefix(opt.OptArg))
-		case opt.Char == 'D':
+		case opt.Char == 'D' || opt.Name == "define":
 			parseKV(mf.tflags, opt.OptArg)
-		case opt.Char == 'j':
+		case opt.Char == 'j' || opt.Name == "jobs":
 			n, perr := strconv.Atoi(opt.OptArg)
 
 			throw(perr)
@@ -430,6 +430,7 @@ func parseKV(into map[string]string, kv string) {
 func printMakeUsage(w io.Writer) {
 	const usage = `usage: ay make [flags] [targets...]
   Build the targets in dependency order, executing per-node cmds.
+  Without targets, builds the current directory relative to the source root.
 
 layout flags:
   --source-root <path>          Source tree root.
@@ -439,7 +440,7 @@ layout flags:
 
 execution flags:
   -h, --help                    Show this help.
-  -j, --jobs <N>                Parallel exec slots (default: NumCPU); 0 = build-only.
+  -j, --jobs <N>                Parallel exec slots (default: NumCPU); 0 = generate the graph only, no execution.
   -k, --keep-going              Continue past per-node failures.
   --clear                       Move cas/tmp/uid into grb at start (fresh build cache).
   --cmd-prefix <suffix>=<pfx>   Prepend <pfx> tokens before any command arg whose path
@@ -451,7 +452,8 @@ execution flags:
   -G, --dump-graph              With -j 0, write the generated graph as JSON to stdout.
   --dump-ignored-macros         With -j 0, print service-keyword macro args no handler models.
   --verbose                     Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
-  --sandboxing                  Run test nodes under the filesystem sandbox.
+  --sandboxing                  Set SANDBOXING=yes and run every node in an isolated
+                                source/build sandbox; with -G, keep $(S) inputs in the dump.
 
 configuration flags:
   -r, --release                 GG_BUILD_TYPE=release.
