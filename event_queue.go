@@ -25,6 +25,13 @@ func (q *EventQueue) post(fn func()) {
 	q.ch <- fn
 }
 
+func (q *EventQueue) sync() {
+	done := make(chan struct{})
+
+	q.post(func() { close(done) })
+	<-done
+}
+
 func (q *EventQueue) close() {
 	close(q.ch)
 	<-q.done

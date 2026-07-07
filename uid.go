@@ -1,7 +1,6 @@
 package main
 
 import (
-
 	"github.com/zeebo/xxh3"
 )
 
@@ -20,11 +19,64 @@ func resourceFetchUID(uri, output string) *UID {
 	return &UID{Hi: sum.Hi, Lo: sum.Lo}
 }
 
+type chunkAccum struct {
+	sum, xor, sq uint64
+}
+
+type chunkKey struct {
+	p *VFS
+	n int
+}
+
 type CanonBuf struct {
 	buf       []byte
+	scratch   []uint64
+	eVals     []uint64
+	eSeen     []bool
+	chunkMemo map[chunkKey]chunkAccum
 	hash      func(VFS) uint64
+	fsHashes  *PageVec[uint64]
 	futs      *PageVec[*NodeFuture]
 	fetchRefs *DenseMap[STR, NodeRef]
+}
+
+func (c *CanonBuf) inputVal(v VFS) uint64 {
+	id := v.strID()
+
+	if int(id) >= len(c.eSeen) {
+		n := int(id) + 1 + len(c.eSeen)
+
+		eVals := make([]uint64, n)
+		eSeen := make([]bool, n)
+
+		copy(eVals, c.eVals)
+		copy(eSeen, c.eSeen)
+		c.eVals = eVals
+		c.eSeen = eSeen
+	}
+
+	if !c.eSeen[id] {
+		e := internTable.cells.get(id).lo
+
+		if v.isSource() {
+			e ^= c.sourceHash(v)
+		}
+
+		c.eVals[id] = e
+		c.eSeen[id] = true
+	}
+
+	return c.eVals[id]
+}
+
+func (c *CanonBuf) sourceHash(v VFS) uint64 {
+	if c.fsHashes != nil {
+		if h := c.fsHashes.getSafe(v.strID()); h != 0 {
+			return h
+		}
+	}
+
+	return c.hash(v)
 }
 
 func (c *CanonBuf) writeByte(b byte) {
@@ -125,22 +177,42 @@ func (c *CanonBuf) writeVFSChunks(chunks InputChunks) {
 	var sum, xor, sq uint64
 
 	for _, ch := range chunks {
-		for _, v := range ch {
-			e := internTable.cells.get(v.strID()).lo
-
-			if v.isSource() {
-				e ^= c.hash(v)
-			}
-
-			sum += e
-			xor ^= e
-			sq += e * e
+		if len(ch) == 0 {
+			continue
 		}
+
+		key := chunkKey{p: &ch[0], n: len(ch)}
+		a, ok := c.chunkMemo[key]
+
+		if !ok {
+			a = c.chunkAccumOf(ch)
+			c.chunkMemo[key] = a
+		}
+
+		sum += a.sum
+		xor ^= a.xor
+		sq += a.sq
 	}
 
 	c.writeUint64(sum)
 	c.writeUint64(xor)
 	c.writeUint64(sq)
+}
+
+func (c *CanonBuf) chunkAccumOf(ch []VFS) chunkAccum {
+	if cap(c.scratch) < len(ch) {
+		c.scratch = make([]uint64, len(ch))
+	}
+
+	es := c.scratch[:len(ch)]
+
+	for i, v := range ch {
+		es[i] = c.inputVal(v)
+	}
+
+	sum, xor, sq := uidAccum(es)
+
+	return chunkAccum{sum: sum, xor: xor, sq: sq}
 }
 
 func (c *CanonBuf) writeVFSSlice(vs []VFS) {
