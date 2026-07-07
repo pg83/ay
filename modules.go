@@ -568,7 +568,7 @@ func copyFileInputVFS(fs FS, moduleDir VFS, src string) VFS {
 		return *vfs
 	}
 
-	return source(filepath.ToSlash(filepath.Clean(moduleDir.relString() + "/" + src)))
+	return sourceJoinClean(moduleDir.relString(), src)
 }
 
 func moduleRootedVFS(modulePath string, path string) *VFS {
@@ -578,13 +578,13 @@ func moduleRootedVFS(modulePath string, path string) *VFS {
 
 	switch {
 	case strings.HasPrefix(path, "${ARCADIA_ROOT}/"):
-		return vfsPtr(source(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(path, "${ARCADIA_ROOT}/")))))
+		return vfsPtr(sourceClean(strings.TrimPrefix(path, "${ARCADIA_ROOT}/")))
 	case strings.HasPrefix(path, "${CURDIR}/"):
-		return vfsPtr(source(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(path, "${CURDIR}/")))))
+		return vfsPtr(sourceJoinClean(modulePath, strings.TrimPrefix(path, "${CURDIR}/")))
 	case strings.HasPrefix(path, "${ARCADIA_BUILD_ROOT}/"):
-		return vfsPtr(build(filepath.ToSlash(filepath.Clean(strings.TrimPrefix(path, "${ARCADIA_BUILD_ROOT}/")))))
+		return vfsPtr(buildClean(strings.TrimPrefix(path, "${ARCADIA_BUILD_ROOT}/")))
 	case strings.HasPrefix(path, "${BINDIR}/"):
-		return vfsPtr(build(filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(path, "${BINDIR}/")))))
+		return vfsPtr(buildJoinClean(modulePath, strings.TrimPrefix(path, "${BINDIR}/")))
 	default:
 		return nil
 	}
@@ -595,7 +595,7 @@ func copyFileOutputVFS(modulePath string, dst string) VFS {
 		return *vfs
 	}
 
-	return build(filepath.ToSlash(filepath.Clean(modulePath + "/" + dst)))
+	return buildJoinClean(modulePath, dst)
 }
 
 func resourceOutputVFS(modulePath string, path string) VFS {
@@ -609,7 +609,7 @@ func resourceOutputVFS(modulePath string, path string) VFS {
 		return build(clean)
 	}
 
-	return build(filepath.ToSlash(filepath.Clean(modulePath + "/" + clean)))
+	return buildJoinClean(modulePath, clean)
 }
 
 func copyFileIncludeTarget(modulePath string, target string) string {
@@ -1051,7 +1051,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 					addGeneratedOwnHeaderInclude(modulePath, strings.TrimSuffix(src, filepath.Ext(src))+".h", d)
 				case srcExtFlex:
 
-					d.addLocalIncl(prioAddIncl, source(argContribToolsFlexOld.string()))
+					d.addLocalIncl(prioAddIncl, argContribToolsFlexOld.str().source())
 				}
 			}
 
@@ -3055,9 +3055,9 @@ func buildIfEnv(instance ModuleInstance) Environment {
 	env := instance.Platform.ifEnv.clone()
 
 	if instance.Path != 0 {
-		env.setString(envCURDIR, instance.Path.string())
-		env.setString(envBINDIR, build(instance.Path.relString()).string())
-		env.setString(envMODDIR, instance.Path.relString())
+		env.setStringID(envCURDIR, instance.Path.fullSTR())
+		env.setStringID(envBINDIR, instance.Path.rel().build().fullSTR())
+		env.setStringID(envMODDIR, instance.Path.rel())
 	}
 
 	return env

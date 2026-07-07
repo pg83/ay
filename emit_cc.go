@@ -140,7 +140,7 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 		in.IncludeView = Closure{}
 	}
 
-	ref, outPath, _ := composeCCNode(instance, srcVFS.fullSTR(), srcVFS, in, ctx.host, ctx.emit)
+	ref, outPath, _ := composeCCNode(instance, srcVFS, in, ctx.host, ctx.emit)
 
 	return ref, outPath
 }
@@ -165,14 +165,9 @@ func (e *EmitContext) mainOutInducedInputs(includeView Closure) []VFS {
 	return append(out, extra...)
 }
 
-func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
+func composeCCNode(instance ModuleInstance, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
 	na := emit.nodeArenas()
-	srcRel := src.string()
-
-	if v := src.vfs(); v != 0 {
-		srcVFS = v
-		srcRel = trimModulePrefix(v.relString(), instance.Path.relString())
-	}
+	srcRel := trimModulePrefix(srcVFS.relString(), instance.Path.relString())
 
 	suffix := ".o"
 
@@ -333,7 +328,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	if srcVFS.isBuild() && !in.FlatOutput {
 		rel, dir := srcVFS.relString(), instance.Path.relString()
 
-		if rel != dir && !strings.HasPrefix(rel, dir+"/") {
+		if rel != dir && !(len(rel) > len(dir) && rel[len(dir)] == '/' && rel[:len(dir)] == dir) {
 			outputRel := composeSrcDirOutputRel(dir, rel)
 
 			return build(dir, "/", outputRel, suffix), input
@@ -633,10 +628,10 @@ func (m InclArgMemo) arg(path VFS) STR {
 		return a
 	}
 
-	a := internV("-I", path.string())
+	a := internV("-I", path.prefix(), path.relString())
 
 	if path.relString() == "" {
-		a = internV("-I", strings.TrimSuffix(path.string(), "/"))
+		a = internV("-I", path.prefix()[:vfsPrefixLen-1])
 	}
 
 	m.m.put(path, a)

@@ -101,7 +101,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 	}
 
 	for _, p := range protoInclude {
-		token := internV("-I=", p.string()).any()
+		token := internV("-I=", p.prefix(), p.relString()).any()
 
 		if slices.Contains(mid, token) {
 			continue
@@ -124,14 +124,14 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 
 	if d.grpc {
 		pe.tail = append(pe.tail,
-			internV("--plugin=protoc-gen-grpc_py=", pe.grpcPyBinary.string()).any(),
+			internV("--plugin=protoc-gen-grpc_py=", pe.grpcPyBinary.prefix(), pe.grpcPyBinary.relString()).any(),
 			internV("--grpc_py_out=$(B)/", protoRoot).any(),
 		)
 	}
 
 	if !d.noMypy {
 		pe.tail = append(pe.tail,
-			internV("--plugin=protoc-gen-mypy=", pe.mypyBinary.string()).any(),
+			internV("--plugin=protoc-gen-mypy=", pe.mypyBinary.prefix(), pe.mypyBinary.relString()).any(),
 			internV("--mypy_out=$(B)/", protoRoot).any(),
 		)
 	}

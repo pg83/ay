@@ -52,7 +52,7 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 		kv:          &evKV,
 		ccFirstOuts: true,
 		optsTail: []ANY{
-			internV("--plugin=protoc-gen-event2cpp=", event2cppBinary.string()).any(),
+			internV("--plugin=protoc-gen-event2cpp=", event2cppBinary.prefix(), event2cppBinary.relString()).any(),
 			argEvent2cppOutB.any(),
 			internV("-I=", evEventlogIncludePath).any(),
 		},

@@ -939,8 +939,8 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	vcsCPath := build(dir, "/__vcs_version__.c")
 	vcsOPath := build(dir, "/__vcs_version__.c", instance.Platform.objectSuffix())
 	vcsGoPath := build(dir, "/__vcs_version__.go")
-	cmd0 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsInfo(d.tc, vcsCPath.string())), Env: goVcsEnv}
-	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(instance.Platform, d.tc, vcsCPath.string(), vcsOPath.string(), d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars}
+	cmd0 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsInfo(d.tc, vcsCPath)), Env: goVcsEnv}
+	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars}
 
 	cmd2 := Cmd{CmdArgs: na.chunkList(na.anyList(
 		wrapccPython3STR.any(),
@@ -1050,13 +1050,13 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 		goToolCmdEnd,
 	), Env: env}
 
-	sbomJSON := build(dir, "/__sbomdata.json").string()
+	sbomJSON := build(dir, "/__sbomdata.json")
 
 	var linkSbomCmd, sbomObjcopyCmd Cmd
 
 	if sbomEmbed {
-		linkSbomCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, strGo, dir, sbomJSON, peerSbomPaths)), Cwd: bldRootDirVFS, Env: goVcsEnv}
-		sbomObjcopyCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outPath.string())), Env: goVcsEnv}
+		linkSbomCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, strGo, instance.Path.rel(), sbomJSON, peerSbomPaths)), Cwd: bldRootDirVFS, Env: goVcsEnv}
+		sbomObjcopyCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outPath)), Env: goVcsEnv}
 	}
 
 	cmds := na.cmds.alloc(6)

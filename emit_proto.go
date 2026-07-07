@@ -827,7 +827,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 	}
 
 	for _, p := range protoInclude {
-		mid = append(mid, internV("-I=", p.string()).any())
+		mid = append(mid, internV("-I=", p.prefix(), p.relString()).any())
 	}
 
 	if liteHeaders {
@@ -848,21 +848,21 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 
 	mid = append(mid,
 		internV("--cpp_styleguide_out=:$(B)/", cppOutRoot).any(),
-		internV("--plugin=protoc-gen-cpp_styleguide=", cppStyleguideBinary.string()).any(),
+		internV("--plugin=protoc-gen-cpp_styleguide=", cppStyleguideBinary.prefix(), cppStyleguideBinary.relString()).any(),
 	)
 
 	var tail []ANY
 
 	if grpc {
 		tail = append(tail,
-			internV("--plugin=protoc-gen-grpc_cpp=", grpcCppBinary.string()).any(),
+			internV("--plugin=protoc-gen-grpc_cpp=", grpcCppBinary.prefix(), grpcCppBinary.relString()).any(),
 			internV("--grpc_cpp_out=$(B)/", cppOutRoot).any(),
 		)
 	}
 
 	for _, plugin := range extraPlugins {
 		tail = append(tail,
-			internV("--plugin=protoc-gen-", plugin.Spec.Name, "=", plugin.Binary.string()).any(),
+			internV("--plugin=protoc-gen-", plugin.Spec.Name, "=", plugin.Binary.prefix(), plugin.Binary.relString()).any(),
 			internV("--", plugin.Spec.Name, "_out=$(B)/", cppOutRoot).any(),
 		)
 

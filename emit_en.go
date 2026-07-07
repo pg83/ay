@@ -51,7 +51,7 @@ func (e *EmitContext) enumHeaderSourceInput(headerRel string, srcDirs []VFS) VFS
 
 func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VFS {
 	headerInput := e.enumHeaderSourceInput(headerRel, srcDirs)
-	buildHeader := build(headerInput.relString())
+	buildHeader := headerInput.rel().build()
 
 	if e.codegen.lookup(buildHeader) != nil {
 		return buildHeader

@@ -439,7 +439,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 				base := strings.TrimSuffix(f.string(), ".go")
 
 				outs = append(outs, build(module, "/", base, ".cgo1.go"), build(module, "/", base, ".cgo2.c"))
-				ins = append(ins, source(module+"/"+f.string()))
+				ins = append(ins, source(module, "/", f.string()))
 			}
 
 			outs = append(outs,

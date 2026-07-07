@@ -44,17 +44,17 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	}
 
 	outputName := dllOutputName(d.moduleStmt)
-	outputPath := build(instance.Path.relString(), "/", outputName).string()
-	vcsCPath := build(instance.Path.relString(), "/__vcs_version__.c").string()
-	vcsOPath := build(instance.Path.relString(), "/__vcs_version__.c", instance.Platform.objectSuffix()).string()
-	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
-	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.relString(), outputPath, outputName, vcsOPath, ccOutputs, peerArchivePaths, nil, nil, d.exportsScript.string(), fixElfPath.string())
+	outputVFS := build(instance.Path.relString(), "/", outputName)
+	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")
+	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c", instance.Platform.objectSuffix())
+	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCVFS)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
+	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, ccOutputs, peerArchivePaths, nil, nil, d.exportsScript.string(), fixElfPath)
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := ctx.host.toolEnv()
 	ldSbomRefs := peerSbomRefs
 	ldSbomPaths := peerSbomPaths
-	sbomJSON := build(instance.Path.relString(), "/__sbomdata.json").string()
+	sbomJSON := build(instance.Path.relString(), "/__sbomdata.json")
 	sbomEmbed := false
 
 	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
@@ -78,13 +78,13 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
 	if sbomEmbed {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, d.unit.SbomLang, instance.Path.relString(), sbomJSON, ldSbomPaths)), Cwd: bldRootDirVFS, Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, d.unit.SbomLang, instance.Path.rel(), sbomJSON, ldSbomPaths)), Cwd: bldRootDirVFS, Env: envVcsOnly})
 	}
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
 
 	if sbomEmbed {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outputPath)), Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outputVFS)), Env: envVcsOnly})
 	}
 
 	inputs := InputChunks{peerArchivePaths, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS], ctx.scripts[ldLinkDynLibVFS]}
@@ -301,12 +301,12 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 	outputName := "lib" + d.moduleStmt.Args[0].string() + ".so"
-	outputPath := build(instance.Path.relString(), "/", outputName).string()
-	vcsCPath := build(instance.Path.relString(), "/__vcs_version__.c").string()
-	vcsOPath := build(instance.Path.relString(), "/__vcs_version__.c.pic.o").string()
-	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
-	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.relString(), outputPath, outputName, vcsOPath, nil, peerArchivePaths, pluginPaths, strStrings(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath.string())
+	outputVFS := build(instance.Path.relString(), "/", outputName)
+	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")
+	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c.pic.o")
+	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCVFS)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
+	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, nil, peerArchivePaths, pluginPaths, strStrings(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath)
 	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.relString())
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := ctx.host.toolEnv()
@@ -362,11 +362,11 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	}
 }
 
-func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, outputName, vcsOPath string, ownObjects, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript, fixElfPath string) []ANY {
+func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath string, output VFS, outputName string, vcsO VFS, ownObjects, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript string, fixElf VFS) []ANY {
 	cmdArgs := []ANY{
 		tc.Python3.any(),
-		internStr(ldLinkDynLibPath).any(),
-		argTarget.any(), internStr(outputPath).any(),
+		ldLinkDynLibVFS.any(),
+		argTarget.any(), output.any(),
 	}
 
 	cmdArgs = append(cmdArgs, argStartPlugins.any())
@@ -386,13 +386,13 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 		argBuildRoot.any(), argB.any(),
 		argArchLinux.any(),
 		argObjcopyExe.any(), tc.Objcopy.any(),
-		argFixElf.any(), internStr(fixElfPath).any(),
+		argFixElf.any(), fixElf.any(),
 		tc.CXX.any(),
 		argWlWholeArchive.any(),
 		argYaStartCommandFile.any(),
 		argYaEndCommandFile.any(),
 		argWlNoWholeArchive.any(),
-		internStr(vcsOPath).any(),
+		vcsO.any(),
 	)
 
 	for _, o := range ownObjects {
@@ -400,7 +400,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	}
 
 	cmdArgs = append(cmdArgs,
-		argDashO.any(), internStr(outputPath).any(),
+		argDashO.any(), output.any(),
 		argShared.any(),
 		internV("-Wl,-soname,", outputName).any(),
 		p.TargetArg.any(),

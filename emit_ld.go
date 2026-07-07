@@ -120,21 +120,18 @@ func emitLD(
 	outputVFS := build(binPrefix, binaryName)
 	vcsCVFS := build(binPrefix, "__vcs_version__.c")
 	vcsOVFS := build(binPrefix, "__vcs_version__.c", instance.Platform.objectSuffix())
-	vcsCPath := vcsCVFS.string()
-	vcsOPath := vcsOVFS.string()
-	outputPath := outputVFS.string()
-	cmd0 := composeLDCmdVcsInfo(tc, vcsCPath)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
-	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, outputPath, vcsOPath, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm)
-	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputPath, wantsSplitDwarf)
+	cmd0 := composeLDCmdVcsInfo(tc, vcsCVFS)
+	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCVFS, vcsOVFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
+	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, outputVFS, vcsOVFS, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm)
+	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputVFS, wantsSplitDwarf)
 	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	envFull := hostP.toolEnv()
 	sbomEmbed := len(sbomPaths) > 0
-	sbomJSON := build(binPrefix, "__sbomdata.json").string()
+	sbomJSON := build(binPrefix, "__sbomdata.json")
 	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
 	if sbomEmbed {
-		linkSbom := composeLDCmdLinkSbom(tc, sbomLang, binaryDir, sbomJSON, sbomPaths)
+		linkSbom := composeLDCmdLinkSbom(tc, sbomLang, instance.Path.rel(), sbomJSON, sbomPaths)
 
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(linkSbom), Cwd: bldRootDirVFS, Env: envVcsOnly})
 	}
@@ -156,7 +153,7 @@ func emitLD(
 	cmds = append(cmds, splitDwarfCmds...)
 
 	if sbomEmbed {
-		objcopy := composeLDCmdSbomObjcopy(tc, sbomJSON, outputPath)
+		objcopy := composeLDCmdSbomObjcopy(tc, sbomJSON, outputVFS)
 
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(objcopy), Env: envVcsOnly})
 	}
@@ -167,7 +164,7 @@ func emitLD(
 	inputTail = append(inputTail, ldSvnversionHVFS)
 
 	if exportsScript != nil {
-		inputTail = append(inputTail, source(exportsScript.string()))
+		inputTail = append(inputTail, exportsScript.source())
 	}
 
 	inputs = append(inputs, inputTail)
@@ -238,21 +235,21 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 	return emit.emitNode(node)
 }
 
-func composeLDCmdVcsInfo(tc ModuleToolchain, vcsCPath string) []ANY {
+func composeLDCmdVcsInfo(tc ModuleToolchain, vcsC VFS) []ANY {
 	return []ANY{
 		tc.Python3.any(),
 		(ldVcsInfoVFS).any(),
 		argVcsVcsJson.any(),
-		internStr(vcsCPath).any(),
+		vcsC.any(),
 		(ldSvnInterfaceVFS).any(),
 	}
 }
 
-func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings, noOptimize bool) []ANY {
-	return composeLDCmdVcsCompileForced(p, tc, vcsCPath, vcsOPath, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize, false)
+func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings, noOptimize bool) []ANY {
+	return composeLDCmdVcsCompileForced(p, tc, vcsC, vcsO, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize, false)
 }
 
-func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsCPath, vcsOPath string, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings, noOptimize, forceConsistentDebug bool) []ANY {
+func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings, noOptimize, forceConsistentDebug bool) []ANY {
 	bundle := compileFlagBundleFor(p)
 
 	if noOptimize {
@@ -268,8 +265,8 @@ func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsCPath, vcs
 	cmdArgs = append(cmdArgs,
 		argDashC.any(),
 		argDashO.any(),
-		internStr(vcsOPath).any(),
-		internStr(vcsCPath).any(),
+		vcsO.any(),
+		vcsC.any(),
 	)
 
 	cmdArgs = append(cmdArgs, argIS.any())
@@ -285,7 +282,7 @@ func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsCPath, vcs
 	return cmdArgs
 }
 
-func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath string, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
+func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
@@ -340,13 +337,13 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 		cmdArgs = append(cmdArgs, op.rel().any())
 	}
 
-	cmdArgs = append(cmdArgs, internStr(vcsOPath).any())
+	cmdArgs = append(cmdArgs, vcsO.any())
 
 	for _, cp := range ccPaths {
 		cmdArgs = append(cmdArgs, (cp).any())
 	}
 
-	cmdArgs = append(cmdArgs, argDashO.any(), internStr(outputPath).any())
+	cmdArgs = append(cmdArgs, argDashO.any(), output.any())
 
 	bundle := compileFlagBundleFor(p)
 
@@ -414,15 +411,15 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	return trailer
 }
 
-func composeLDCmdLinkSbom(tc ModuleToolchain, lang STR, moddir, sbomJSON string, sbomPaths []VFS) []ANY {
+func composeLDCmdLinkSbom(tc ModuleToolchain, lang, moddir STR, sbomJSON VFS, sbomPaths []VFS) []ANY {
 	cmd := make([]ANY, 0, 10+len(sbomPaths))
 
 	cmd = append(cmd,
 		tc.Python3.any(),
 		linkSbomScriptVFS.any(),
 		strLang.any(), lang.any(),
-		strModPath.any(), internStr(moddir).any(),
-		strOutput.any(), internStr(sbomJSON).any(),
+		strModPath.any(), moddir.any(),
+		strOutput.any(), sbomJSON.any(),
 		strVcsInfo.any(), argVcsVcsJson.any(),
 	)
 
@@ -433,12 +430,12 @@ func composeLDCmdLinkSbom(tc ModuleToolchain, lang STR, moddir, sbomJSON string,
 	return cmd
 }
 
-func composeLDCmdSbomObjcopy(tc ModuleToolchain, sbomJSON, targetPath string) []ANY {
+func composeLDCmdSbomObjcopy(tc ModuleToolchain, sbomJSON, target VFS) []ANY {
 	return []ANY{
 		tc.Objcopy.any(),
 		strAddSection.any(),
-		internV(".rosbomdata=", sbomJSON).any(),
-		internStr(targetPath).any(),
+		internV(".rosbomdata=", sbomJSON.prefix(), sbomJSON.relString()).any(),
+		target.any(),
 	}
 }
 
@@ -459,14 +456,14 @@ func composeLDCmdLinkOrCopy(tc ModuleToolchain, modulePath string, dynamicPaths 
 	return cmd
 }
 
-func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, outputPath string, enabled bool) []Cmd {
+func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, output VFS, enabled bool) []Cmd {
 	if !enabled {
 		return nil
 	}
 
-	debugPath := outputPath + ".debug"
+	debug := internV(output.relString(), ".debug").build()
 
-	return na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Objcopy.any(), argOnlyKeepDebug.any(), internStr(outputPath).any(), internStr(debugPath).any()))}, Cmd{CmdArgs: na.chunkList(na.anyList(tc.Strip.any(), argStripDebug.any(), internStr(outputPath).any()))}, Cmd{CmdArgs: na.chunkList(na.anyList(tc.Objcopy.any(), argRemoveSectionGnuDebuglink.any(), argAddGnuDebuglink.any(), internStr(debugPath).any(), internStr(outputPath).any()))})
+	return na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Objcopy.any(), argOnlyKeepDebug.any(), output.any(), debug.any()))}, Cmd{CmdArgs: na.chunkList(na.anyList(tc.Strip.any(), argStripDebug.any(), output.any()))}, Cmd{CmdArgs: na.chunkList(na.anyList(tc.Objcopy.any(), argRemoveSectionGnuDebuglink.any(), argAddGnuDebuglink.any(), debug.any(), output.any()))})
 }
 
 func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool) InputChunks {

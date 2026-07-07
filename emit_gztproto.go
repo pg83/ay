@@ -81,7 +81,7 @@ func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) [
 	args := make([]ANY, 0, 6+len(protoInclude))
 
 	args = append(args, converterBin.any())
-	args = append(args, internV("-I", pbRuntimeBaseVFS.string()).any())
+	args = append(args, internV("-I", pbRuntimeBaseVFS.prefix(), pbRuntimeBaseVFS.relString()).any())
 
 	seen := make(map[string]struct{}, 2+len(protoInclude))
 
@@ -115,14 +115,23 @@ func gztConverterInducedProtos(ctx *GenCtx) []VFS {
 	seen := make(map[VFS]struct{}, 2)
 
 	for _, dir := range res.InducedDeps.bucket(parsedIncludesCpp) {
-		t := dir.target.string()
+		var v VFS
 
-		if !extIsProto(t) {
-			continue
+		if tv := dir.target.vfs(); tv != 0 {
+			if !extIsProto(tv.relString()) {
+				continue
+			}
+
+			v = tv.rel().source()
+		} else {
+			t := dir.target.string()
+
+			if !extIsProto(t) {
+				continue
+			}
+
+			v = source(strings.TrimPrefix(strings.TrimPrefix(t, "$(S)/"), "$(B)/"))
 		}
-
-		rel := strings.TrimPrefix(strings.TrimPrefix(t, "$(S)/"), "$(B)/")
-		v := source(rel)
 
 		if _, ok := seen[v]; ok {
 			continue

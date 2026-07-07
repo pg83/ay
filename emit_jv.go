@@ -107,7 +107,7 @@ func emitJV(
 ) NodeRef {
 	na := emit.nodeArenas()
 	grammarVFS := source(instance.Path.relString(), "/", grammar)
-	outDirVFS := build(instance.Path.relString())
+	outDirVFS := instance.Path.rel().build()
 	outDir := outDirVFS.string()
 	cmdArgs := make([]ANY, 0, 8+len(antlrJavaConstHead))
 
@@ -165,7 +165,7 @@ func emitJVSplit(
 	na := emit.nodeArenas()
 	lexerVFS := source(instance.Path.relString(), "/", lexer)
 	parserVFS := source(instance.Path.relString(), "/", parser)
-	outDirVFS := build(instance.Path.relString())
+	outDirVFS := instance.Path.rel().build()
 	outDir := outDirVFS.string()
 
 	cmdArgs := []ANY{
