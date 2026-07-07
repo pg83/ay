@@ -20,7 +20,7 @@ func resourceFetchUID(uri, output string) *UID {
 }
 
 type chunkAccum struct {
-	sum, xor, sq uint64
+	sum, xor, sq, cb uint64
 }
 
 type chunkKey struct {
@@ -174,7 +174,7 @@ func (c *CanonBuf) writeVFSChunks(chunks InputChunks) {
 
 	c.writeUint32(uint32(total))
 
-	var sum, xor, sq uint64
+	var sum, xor, sq, cb uint64
 
 	for _, ch := range chunks {
 		if len(ch) == 0 {
@@ -192,11 +192,13 @@ func (c *CanonBuf) writeVFSChunks(chunks InputChunks) {
 		sum += a.sum
 		xor ^= a.xor
 		sq += a.sq
+		cb += a.cb
 	}
 
 	c.writeUint64(sum)
 	c.writeUint64(xor)
 	c.writeUint64(sq)
+	c.writeUint64(cb)
 }
 
 func (c *CanonBuf) chunkAccumOf(ch []VFS) chunkAccum {
@@ -210,9 +212,9 @@ func (c *CanonBuf) chunkAccumOf(ch []VFS) chunkAccum {
 		es[i] = c.inputVal(v)
 	}
 
-	sum, xor, sq := uidAccum(es)
+	sum, xor, sq, cb := uidAccum(es)
 
-	return chunkAccum{sum: sum, xor: xor, sq: sq}
+	return chunkAccum{sum: sum, xor: xor, sq: sq, cb: cb}
 }
 
 func (c *CanonBuf) writeVFSSlice(vs []VFS) {

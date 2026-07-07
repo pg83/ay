@@ -2,12 +2,15 @@
 
 package main
 
-func uidAccum(es []uint64) (sum, xor, sq uint64) {
+func uidAccum(es []uint64) (sum, xor, sq, cb uint64) {
 	for _, e := range es {
+		t := e * e
+
 		sum += e
 		xor ^= e
-		sq += e * e
+		sq += t
+		cb += t * e
 	}
 
-	return sum, xor, sq
+	return sum, xor, sq, cb
 }
