@@ -31,7 +31,19 @@ func bucketHash(elems []VFS) (uint64, uint64) {
 
 	var xr, sq uint32
 
-	for _, v := range elems {
+	tail := elems
+
+	if useBucketHashAVX2 && len(elems) >= bucketHashSIMDMin {
+		k := len(elems) &^ 7
+		s, x, q := bucketAccumAVX2(&elems[0], k)
+
+		sum += s
+		xr ^= x
+		sq += q
+		tail = elems[k:]
+	}
+
+	for _, v := range tail {
 		x := uint32(v)
 
 		sum += x
