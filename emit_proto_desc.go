@@ -278,7 +278,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	collect = append(collect, wrapccPython3STR.any(), collectRawprotoVFS.any(), strOutput.any(), protosrc.any())
 
 	for _, r := range rawprotoOutputs {
-		collect = append(collect, internStr(r.relString()).any())
+		collect = append(collect, r.rel().any())
 	}
 
 	inputs := concat(descOutputs, rawprotoOutputs, producerSourceInputs)
@@ -322,7 +322,7 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 
 	for _, p := range closure {
 		merge = append(merge, p.SelfProtodesc.any())
-		collect = append(collect, internStr(p.SelfProtodesc.relString()).any())
+		collect = append(collect, p.SelfProtodesc.rel().any())
 		inputs = append(inputs, p.SelfProtodesc)
 		deps = append(deps, p.MergeRef)
 	}

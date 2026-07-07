@@ -410,7 +410,7 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath, outputPath, o
 	cmdArgs = append(cmdArgs, argWlStartGroup.any())
 
 	for _, p := range peerLibPaths {
-		cmdArgs = append(cmdArgs, internStr(p.relString()).any())
+		cmdArgs = append(cmdArgs, p.rel().any())
 	}
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.any())

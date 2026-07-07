@@ -39,7 +39,7 @@ type PyPBModuleEmission struct {
 	mypyBinary   VFS
 	head         []ANY
 	mid          []ANY
-	tail         []STR
+	tail         []ANY
 }
 
 func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS, duplicateOutputRootInclude bool) *PyPBModuleEmission {
@@ -124,15 +124,15 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 
 	if d.grpc {
 		pe.tail = append(pe.tail,
-			internV("--plugin=protoc-gen-grpc_py=", pe.grpcPyBinary.string()),
-			internV("--grpc_py_out=$(B)/", protoRoot),
+			internV("--plugin=protoc-gen-grpc_py=", pe.grpcPyBinary.string()).any(),
+			internV("--grpc_py_out=$(B)/", protoRoot).any(),
 		)
 	}
 
 	if !d.noMypy {
 		pe.tail = append(pe.tail,
-			internV("--plugin=protoc-gen-mypy=", pe.mypyBinary.string()),
-			internV("--mypy_out=$(B)/", protoRoot),
+			internV("--plugin=protoc-gen-mypy=", pe.mypyBinary.string()).any(),
+			internV("--mypy_out=$(B)/", protoRoot).any(),
 		)
 	}
 
@@ -181,7 +181,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	cmdArgs := na.chunkList(pe.head, relChunk, pe.mid, relChunk)
 
 	if len(pe.tail) > 0 {
-		cmdArgs = append(cmdArgs, na.anyChunk(pe.tail))
+		cmdArgs = append(cmdArgs, pe.tail)
 	}
 
 	toolRefs := depRefs(protocLDRef, pe.grpcPyRef)
@@ -491,7 +491,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 
 	for _, in := range seed {
 		if in.isSource() {
-			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(in.relString()))})
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(in.rel())})
 		}
 	}
 

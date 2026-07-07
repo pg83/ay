@@ -37,7 +37,7 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 	cflags := psc
 
 	if extIsFlexL(srcRel) {
-		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(srcVFS.relString()))})
+		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel())})
 		cflags = concat(psc, []ARG{argWnoUnusedVariable})
 	}
 

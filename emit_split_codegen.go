@@ -56,7 +56,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	scRef := ctx.emit.reserve()
 	part0 := build(moduleDir, "/", partRels[0])
-	part0Inc := IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(part0.relString()))}
+	part0Inc := IncludeDirective{kind: includeQuoted, target: includeTarget(part0.rel())}
 	headerParsed := make([]IncludeDirective, 0, len(sc.OutputIncludes))
 
 	for _, oi := range sc.OutputIncludes {

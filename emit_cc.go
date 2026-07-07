@@ -12,7 +12,7 @@ var (
 
 type ModuleCompileEnv struct {
 	Flags                FlagSet
-	CudaNvccFlags        []STR
+	CudaNvccFlags        []ANY
 	AddIncl              []VFS
 	InclArgs             InclArgMemo
 	CCBlocks             *CcModuleArgBlocks
@@ -201,7 +201,7 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, suffix)
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
 	blocks := in.CCBlocks
-	tok := na.strList((inVFS).fullSTR(), argDashC.str(), argDashO.str(), (outVFS).fullSTR())
+	tok := na.anyList(inVFS.any(), argDashC.any(), argDashO.any(), outVFS.any())
 	inChunk := tok[0:1]
 	wrapcc := len(instance.Platform.WrapccHead) > 0
 	compiler, tail := blocks.cHead, blocks.cxxTail
@@ -234,39 +234,39 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 	k := 0
 
 	if wrapcc {
-		chunks[k] = na.anyChunkAny(instance.Platform.WrapccHead)
-		chunks[k+1] = na.anyChunk(inChunk)
-		chunks[k+2] = na.anyChunkAny(instance.Platform.WrapccTail)
+		chunks[k] = instance.Platform.WrapccHead
+		chunks[k+1] = inChunk
+		chunks[k+2] = instance.Platform.WrapccTail
 		k += 3
 	}
 
-	chunks[k] = na.anyChunkAny(compiler)
-	chunks[k+1] = na.anyChunkAny(instance.Platform.CCHead)
-	chunks[k+2] = na.anyChunk(tok[1:4])
-	chunks[k+3] = na.anyChunkAny(blocks.includes)
-	chunks[k+4] = na.anyChunkAny(blocks.flags)
+	chunks[k] = compiler
+	chunks[k+1] = instance.Platform.CCHead
+	chunks[k+2] = tok[1:4]
+	chunks[k+3] = blocks.includes
+	chunks[k+4] = blocks.flags
 	k += 5
 
 	if len(tail) > 0 {
-		chunks[k] = na.anyChunkAny(tail)
+		chunks[k] = tail
 		k++
 	}
 
-	chunks[k] = na.anyChunkAny(builtinMacroDateTimeStr)
-	chunks[k+1] = na.anyChunkAny(macroPrefixMapFlagsStr)
+	chunks[k] = builtinMacroDateTimeStr
+	chunks[k+1] = macroPrefixMapFlagsStr
 	k += 2
 
 	if len(in.PerSourceCFlags) > 0 {
-		chunks[k] = na.anyChunk(na.argStrList(in.PerSourceCFlags))
+		chunks[k] = na.argAnyList(in.PerSourceCFlags)
 		k++
 	}
 
 	if !isCxx && len(blocks.cPost) > 0 {
-		chunks[k] = na.anyChunkAny(blocks.cPost)
+		chunks[k] = blocks.cPost
 		k++
 	}
 
-	chunks[k] = na.anyChunk(inChunk)
+	chunks[k] = inChunk
 	k++
 	na.chunks.commit(k)
 

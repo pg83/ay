@@ -54,7 +54,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		OutputPath:     rodataVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{archiverRef},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: includeTarget(internStr(cppVFS.relString()))}}},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: includeTarget(cppVFS.rel())}}},
 	})
 
 	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})

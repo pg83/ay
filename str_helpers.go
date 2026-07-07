@@ -126,3 +126,17 @@ func appendInternAnys(dst []ANY, ss []string) []ANY {
 
 	return dst
 }
+
+func strsAny(ss []STR) []ANY {
+	if len(ss) == 0 {
+		return nil
+	}
+
+	out := make([]ANY, len(ss))
+
+	for i, s := range ss {
+		out[i] = s.any()
+	}
+
+	return out
+}

@@ -92,7 +92,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	enRef := ctx.emit.reserve()
 
 	cppParsed := []IncludeDirective{
-		{kind: includeQuoted, target: includeTarget(internStr(headerInput.relString()))},
+		{kind: includeQuoted, target: includeTarget(headerInput.rel())},
 		{kind: includeQuoted, target: includeTarget(strUtilGenericSerializedEnumH)},
 	}
 
@@ -109,8 +109,8 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	if withHeader {
 		hParsed := []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(internStr(headerInput.relString()))},
-			{kind: includeQuoted, target: includeTarget(internStr(serializedCPPPath.relString()))},
+			{kind: includeQuoted, target: includeTarget(headerInput.rel())},
+			{kind: includeQuoted, target: includeTarget(serializedCPPPath.rel())},
 		}
 
 		sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
@@ -185,7 +185,7 @@ func emitEN(
 		(enumParserBin).any(),
 		(headerInput).any(),
 		argIncludePath.any(),
-		internStr(headerInput.relString()).any(),
+		headerInput.rel().any(),
 		argOutput.any(),
 		(serializedCPPVFS).any(),
 	}
