@@ -26,16 +26,12 @@ func newBucketCache() *BucketCache {
 	}
 }
 
-func m4(a, b, c, d, e uint32) uint64 {
-    return mix64((uint64(a)<<32 | uint64(b)) ^ (uint64(c)<<32 | uint64(d)) ^ uint64(e))
-}
-
 func bucketHash(elems []VFS) (uint64, uint64) {
 	sm, xr, sq, cb := bucketHashPlatform(elems)
 
-	nm := uint32(len(elems) + 1)
-	h1 := m4(sm, xr, sq, cb, nm)
-	h2 := m4(xr, sq, cb, nm, sm)
+	nm := mix64(uint64(len(elems)) + 1)
+	h1 := mix64(nm ^ (uint64(sq)<<32 | uint64(xr^sm)))
+	h2 := mix64(nm ^ (uint64(cb)<<32 | uint64(xr^sq)))
 
 	if h1 == 0 {
 		h1 = 1
