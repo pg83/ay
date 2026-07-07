@@ -398,7 +398,7 @@ func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
 
 	peerAddIncl := e.peers.PeerAddInclGlobal
 
-	return e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
+	return e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
 		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
 	}})
 }
@@ -435,7 +435,7 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		peerAddIncl = dedup(cppSibling.AddInclGlobal, e.peers.PeerAddInclGlobal)
 	}
 
-	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.Tag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
+	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
 		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
 	}})
 

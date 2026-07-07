@@ -41,10 +41,9 @@ func ragel6OutName(base string) string {
 	return stem + ragel6DefaultOutExt
 }
 
-func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, id NodeRef, emit *StreamingEmitter) {
+func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, producerRefs []NodeRef, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 	outVFS := ragel6OutVFS(instance, srcRel)
-	inVFS := source(instance.Path.rel(), "/", srcRel)
 	effectiveFlags := ragel6Flags
 
 	if len(effectiveFlags) == 0 {
@@ -62,16 +61,22 @@ func emitR6(instance ModuleInstance, srcRel string, ragel6LD NodeRef, ragel6Bina
 
 	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.strList((outVFS).str(), (inVFS).str()))
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	head2 := na.vfsList(ragel6BinaryPath)
+
+	if inVFS.isBuild() {
+		head2 = na.vfsList(ragel6BinaryPath, inVFS)
+	}
 
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
 		Env:            env,
-		Inputs:         na.inputList(na.vfsList(ragel6BinaryPath), closure),
+		Inputs:         na.inputList(head2, closure),
 		Outputs:        na.vfsList(outVFS),
 		KV:             &r6KV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:        producerRefs,
 		ForeignDepRefs: []NodeRef{ragel6LD},
 	}
 
@@ -84,7 +89,17 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) {
 	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
 	rl6SourceVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	r6Out := ragel6OutVFS(instance, srcRel)
-	r6Parsed := e.scanner.parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
+
+	var r6Parsed []IncludeDirective
+
+	if rl6SourceVFS.isBuild() {
+		if info := e.codegen.lookup(rl6SourceVFS); info != nil {
+			r6Parsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
+		}
+	} else {
+		r6Parsed = e.scanner.parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
+	}
+
 	r6Ref := ctx.emit.reserve()
 
 	var psc []ARG
@@ -117,6 +132,12 @@ func (e *EmitContext) emitLibraryRagel6Source(src STR) {
 			return v.isSource() && !extIsEnumSerialized(v.rel())
 		})
 
-		emitR6(instance, srcRel, ragelLDRef, ragelBinaryVFS, d.cc.Ragel6Flags, rl6Closure, r6Ref, ctx.emit)
+		var producerRefs []NodeRef
+
+		if rl6SourceVFS.isBuild() {
+			producerRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{rl6SourceVFS})
+		}
+
+		emitR6(instance, srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, d.cc.Ragel6Flags, rl6Closure, producerRefs, r6Ref, ctx.emit)
 	})
 }

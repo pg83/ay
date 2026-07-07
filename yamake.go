@@ -116,9 +116,10 @@ type Stmt interface {
 }
 
 type ModuleStmt struct {
-	Name TOK
-	Args []STR
-	Line int
+	Name   TOK
+	Schema bool
+	Args   []STR
+	Line   int
 }
 
 type PeerdirStmt struct {
@@ -987,7 +988,7 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 		return &ModuleStmt{Name: internTok(name), Args: args, Line: line}
 	case "PROTO_SCHEMA":
 
-		return &ModuleStmt{Name: tokProtoLibrary, Args: args, Line: line}
+		return &ModuleStmt{Name: tokProtoLibrary, Schema: true, Args: args, Line: line}
 	case "DECLARE_EXTERNAL_RESOURCE",
 		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE",
 		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON":
