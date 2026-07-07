@@ -25,7 +25,6 @@ type CompileSpec struct {
 }
 
 type CodegenRegistry struct {
-	byVFS           DenseMap[VFS, *GeneratedFileInfo]
 	byRel           DenseMap[STR, *GeneratedFileInfo]
 	splitPrefixSeen BitSet
 	leafEver        BitSet
@@ -41,14 +40,17 @@ func newCodegenRegistry() *CodegenRegistry {
 }
 
 func (r *CodegenRegistry) register(info *GeneratedFileInfo) {
-	if existing, ok := r.byVFS.get(info.OutputPath); ok {
+	if !info.OutputPath.isBuild() {
+		throwFmt("CodegenRegistry: register of a source path %q", info.OutputPath.string())
+	}
+
+	if existing, ok := r.byRel.get(info.OutputPath.rel()); ok {
 		throwFmt("CodegenRegistry: duplicate producer for %q (existing ref=%d, new ref=%d)",
 			info.OutputPath.string(), existing.ProducerRef, info.ProducerRef)
 	}
 
 	rel := info.OutputPath.relString()
 
-	r.byVFS.put(info.OutputPath, info)
 	r.byRel.put(info.OutputPath.rel(), info)
 
 	for _, leaf := range info.ClosureLeaves {
@@ -68,7 +70,11 @@ func (r *CodegenRegistry) putSplit(prefix VFS, suffix STR, info *GeneratedFileIn
 }
 
 func (r *CodegenRegistry) lookup(path VFS) *GeneratedFileInfo {
-	info, _ := r.byVFS.get(path)
+	if !path.isBuild() {
+		return nil
+	}
+
+	info, _ := r.byRel.get(path.rel())
 
 	return info
 }
@@ -92,7 +98,7 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix STR) *GeneratedFileInfo
 }
 
 func (r *CodegenRegistry) mustInfo(path VFS, op string) *GeneratedFileInfo {
-	if info, ok := r.byVFS.get(path); ok {
+	if info := r.lookup(path); info != nil {
 		return info
 	}
 
