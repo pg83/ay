@@ -7,14 +7,17 @@ import (
 	"testing"
 )
 
-func uidAccumScalar(es []uint64) (sum, xor, sq uint64) {
+func uidAccumScalar(es []uint64) (sum, xor, sq, cb uint64) {
 	for _, e := range es {
+		t := e * e
+
 		sum += e
 		xor ^= e
-		sq += e * e
+		sq += t
+		cb += t * e
 	}
 
-	return sum, xor, sq
+	return sum, xor, sq, cb
 }
 
 func TestUidAccumAVX2_MatchesScalar(t *testing.T) {
@@ -31,11 +34,11 @@ func TestUidAccumAVX2_MatchesScalar(t *testing.T) {
 			es[i] = rng.Uint64()
 		}
 
-		s0, x0, q0 := uidAccumScalar(es)
-		s1, x1, q1 := uidAccumAVX2(&es[0], n)
+		s0, x0, q0, c0 := uidAccumScalar(es)
+		s1, x1, q1, c1 := uidAccumAVX2(&es[0], n)
 
-		if s0 != s1 || x0 != x1 || q0 != q1 {
-			t.Fatalf("n=%d: scalar (%x,%x,%x) != avx2 (%x,%x,%x)", n, s0, x0, q0, s1, x1, q1)
+		if s0 != s1 || x0 != x1 || q0 != q1 || c0 != c1 {
+			t.Fatalf("n=%d: scalar (%x,%x,%x,%x) != avx2 (%x,%x,%x,%x)", n, s0, x0, q0, c0, s1, x1, q1, c1)
 		}
 	}
 }
@@ -50,11 +53,11 @@ func TestUidAccum_MatchesScalar(t *testing.T) {
 			es[i] = rng.Uint64()
 		}
 
-		s0, x0, q0 := uidAccumScalar(es)
-		s1, x1, q1 := uidAccum(es)
+		s0, x0, q0, c0 := uidAccumScalar(es)
+		s1, x1, q1, c1 := uidAccum(es)
 
-		if s0 != s1 || x0 != x1 || q0 != q1 {
-			t.Fatalf("n=%d: scalar (%x,%x,%x) != uidAccum (%x,%x,%x)", n, s0, x0, q0, s1, x1, q1)
+		if s0 != s1 || x0 != x1 || q0 != q1 || c0 != c1 {
+			t.Fatalf("n=%d: scalar (%x,%x,%x,%x) != uidAccum (%x,%x,%x,%x)", n, s0, x0, q0, c0, s1, x1, q1, c1)
 		}
 	}
 }

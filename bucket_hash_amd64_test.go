@@ -8,16 +8,17 @@ import (
 	"testing"
 )
 
-func bucketAccumScalar(elems []VFS) (sum, xr, sq uint32) {
+func bucketAccumScalar(elems []VFS) (sum, xr, sq, cb uint32) {
 	for _, v := range elems {
 		x := uint32(v)
 
 		sum += x
 		xr ^= x
 		sq += x * x
+		cb += x * x * x
 	}
 
-	return sum, xr, sq
+	return sum, xr, sq, cb
 }
 
 func TestBucketAccumAVX2_MatchesScalar(t *testing.T) {
@@ -34,11 +35,11 @@ func TestBucketAccumAVX2_MatchesScalar(t *testing.T) {
 			elems[i] = VFS(rng.Uint32())
 		}
 
-		s0, x0, q0 := bucketAccumScalar(elems)
-		s1, x1, q1 := bucketAccumAVX2(&elems[0], n)
+		s0, x0, q0, c0 := bucketAccumScalar(elems)
+		s1, x1, q1, c1 := bucketAccumAVX2(&elems[0], n)
 
-		if s0 != s1 || x0 != x1 || q0 != q1 {
-			t.Fatalf("n=%d: scalar (%d,%d,%d) != avx2 (%d,%d,%d)", n, s0, x0, q0, s1, x1, q1)
+		if s0 != s1 || x0 != x1 || q0 != q1 || c0 != c1 {
+			t.Fatalf("n=%d: scalar (%d,%d,%d,%d) != avx2 (%d,%d,%d,%d)", n, s0, x0, q0, c0, s1, x1, q1, c1)
 		}
 	}
 }
@@ -55,9 +56,9 @@ func BenchmarkBucketAccum(b *testing.B) {
 			var s uint32
 
 			for b.Loop() {
-				a, x, q := bucketAccumScalar(elems)
+				a, x, q, c := bucketAccumScalar(elems)
 
-				s += a + x + q
+				s += a + x + q + c
 			}
 
 			_ = s
@@ -68,9 +69,9 @@ func BenchmarkBucketAccum(b *testing.B) {
 				var s uint32
 
 				for b.Loop() {
-					a, x, q := bucketAccumAVX2(&elems[0], n&^7)
+					a, x, q, c := bucketAccumAVX2(&elems[0], n&^7)
 
-					s += a + x + q
+					s += a + x + q + c
 				}
 
 				_ = s

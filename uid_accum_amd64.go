@@ -4,24 +4,27 @@ package main
 
 const uidAccumSIMDMin = 8
 
-func uidAccum(es []uint64) (sum, xor, sq uint64) {
+func uidAccum(es []uint64) (sum, xor, sq, cb uint64) {
 	tail := es
 
 	if useBucketHashAVX2 && len(es) >= uidAccumSIMDMin {
 		k := len(es) &^ 3
 
-		sum, xor, sq = uidAccumAVX2(&es[0], k)
+		sum, xor, sq, cb = uidAccumAVX2(&es[0], k)
 		tail = es[k:]
 	}
 
 	for _, e := range tail {
+		t := e * e
+
 		sum += e
 		xor ^= e
-		sq += e * e
+		sq += t
+		cb += t * e
 	}
 
-	return sum, xor, sq
+	return sum, xor, sq, cb
 }
 
 //go:noescape
-func uidAccumAVX2(p *uint64, n int) (sum, xr, sq uint64)
+func uidAccumAVX2(p *uint64, n int) (sum, xr, sq, cb uint64)
