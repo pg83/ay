@@ -27,27 +27,29 @@ type CmdPrefix struct {
 }
 
 type Executor struct {
-	srcRoot     string
-	bldRoot     string
-	fs          FS
-	sema        chan struct{}
-	keepGoing   bool
-	cmdPrefixes []CmdPrefix
-	ninja       bool
-	sandboxing  bool
-	grbDir      string
-	futs        *PageVec[*NodeFuture]
-	fetchRefs   *DenseMap[STR, NodeRef]
-	uidSet      map[string]struct{}
-	uidSetReady chan struct{}
-	events      *EventQueue
-	stats       map[string][]time.Duration
-	canon       CanonBuf
-	localHash   map[STR]uint64
-	pending     atomic.Uint64
-	done        atomic.Uint64
-	tokenOnce   sync.Once
-	token       string
+	srcRoot      string
+	bldRoot      string
+	fs           FS
+	sema         chan struct{}
+	keepGoing    bool
+	cmdPrefixes  []CmdPrefix
+	ninja        bool
+	sandboxing   bool
+	grbDir       string
+	futs         *PageVec[*NodeFuture]
+	fetchRefs    *DenseMap[STR, NodeRef]
+	uidSet       map[string]struct{}
+	uidSetReady  chan struct{}
+	events       *EventQueue
+	stats        map[string][]time.Duration
+	canon        CanonBuf
+	srcHashes    map[string]srcHashEntry
+	srcHashDirty bool
+	prepBatch    []*NodeFuture
+	pending      atomic.Uint64
+	done         atomic.Uint64
+	tokenOnce    sync.Once
+	token        string
 }
 
 func (ex *Executor) sandboxToken() string {
@@ -84,7 +86,6 @@ func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ni
 		futs:        &PageVec[*NodeFuture]{},
 		events:      events,
 		stats:       map[string][]time.Duration{},
-		localHash:   map[STR]uint64{},
 	}
 
 	ex.canon = CanonBuf{hash: ex.contentHash, futs: ex.futs, chunkMemo: map[chunkKey]chunkAccum{}}
@@ -119,6 +120,11 @@ func (ex *Executor) loadUidSet() {
 	}
 
 	ex.uidSet = set
+	ex.srcHashes = map[string]srcHashEntry{}
+
+	if data, err := os.ReadFile(ex.srcHashPath()); err == nil {
+		_ = json.Unmarshal(data, &ex.srcHashes)
+	}
 
 	close(ex.uidSetReady)
 }
@@ -135,22 +141,52 @@ func (ex *Executor) uidCached(uid UID) bool {
 	return err == nil
 }
 
+type srcHashEntry struct {
+	Size  int64  `json:"s"`
+	Mtime int64  `json:"m"`
+	Hash  uint64 `json:"h"`
+}
+
+func (ex *Executor) srcHashPath() string {
+	return filepath.Join(ex.bldRoot, "srchash.json")
+}
+
 func (ex *Executor) contentHash(v VFS) uint64 {
 	if h := ex.fs.contentHash(v); h != 0 {
 		return h
 	}
 
-	s := v.str()
+	<-ex.uidSetReady
 
-	if h, ok := ex.localHash[s]; ok {
-		return h
+	rel := v.sharedRel()
+	info, err := os.Stat(filepath.Join(ex.srcRoot, cleanRel(rel)))
+
+	if err != nil {
+		return 0
 	}
 
-	h := hashSourceFile(ex.srcRoot, v.sharedRel())
+	if e, ok := ex.srcHashes[rel]; ok && e.Size == info.Size() && e.Mtime == info.ModTime().UnixNano() {
+		return e.Hash
+	}
 
-	ex.localHash[s] = h
+	h := hashSourceFile(ex.srcRoot, rel)
+
+	ex.srcHashes[rel] = srcHashEntry{Size: info.Size(), Mtime: info.ModTime().UnixNano(), Hash: h}
+	ex.srcHashDirty = true
 
 	return h
+}
+
+func (ex *Executor) saveSrcHashes() {
+	if !ex.srcHashDirty {
+		return
+	}
+
+	data := throw2(json.Marshal(ex.srcHashes))
+	tmp := ex.srcHashPath() + ".tmp"
+
+	throw(os.WriteFile(tmp, data, 0o644))
+	throw(os.Rename(tmp, ex.srcHashPath()))
 }
 
 func (ex *Executor) onNode(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
@@ -163,7 +199,28 @@ func (ex *Executor) onNode(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
 	f := &NodeFuture{node: n, ref: n.Ref}
 
 	ex.futs.set(uint32(n.Ref), f)
-	ex.events.post(func() { ex.prepare(f) })
+	ex.prepBatch = append(ex.prepBatch, f)
+
+	if len(ex.prepBatch) >= prepBatchSize {
+		ex.flushPrepBatch()
+	}
+}
+
+const prepBatchSize = 64
+
+func (ex *Executor) flushPrepBatch() {
+	if len(ex.prepBatch) == 0 {
+		return
+	}
+
+	batch := ex.prepBatch
+
+	ex.prepBatch = nil
+	ex.events.post(func() {
+		for _, f := range batch {
+			ex.prepare(f)
+		}
+	})
 }
 
 func (ex *Executor) prepare(f *NodeFuture) {
@@ -224,11 +281,15 @@ func fatalException(e *Exception) {
 }
 
 func (ex *Executor) run(roots []NodeRef) {
+	ex.flushPrepBatch()
 	ex.events.sync()
 
 	for _, r := range roots {
 		ex.visit(r)
 	}
+
+	ex.events.post(func() { ex.saveSrcHashes() })
+	ex.events.sync()
 }
 
 func (ex *Executor) visit(ref NodeRef) {
