@@ -35,7 +35,7 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 
 	node := Node{
 		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env, Stdout: (genVFS).fullSTR()}),
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkListSTR(head), Env: env, Stdout: genVFS.fullSTR()}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(gperfBin), srcInputs),
 		Outputs:        na.vfsList(genVFS),

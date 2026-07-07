@@ -191,7 +191,12 @@ func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 			}
 
 			first = false
-			buf = appendString(buf, a.string())
+
+			if v := a.vfs(); v != 0 {
+				buf = appendVFS(buf, v)
+			} else {
+				buf = appendString(buf, a.str().string())
+			}
 		}
 	}
 

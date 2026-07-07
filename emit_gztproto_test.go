@@ -268,7 +268,7 @@ END()
 		t.Fatalf("GZ producer KV = {%v,%v}, want {GZ,yellow}", gz.KV.P, gz.KV.PC)
 	}
 
-	gzArgs := strStrs(gz.Cmds[0].CmdArgs.flat())
+	gzArgs := anyStrs(gz.Cmds[0].CmdArgs.flat())
 
 	for _, want := range []string{
 		"$(B)/dict/gazetteer/converter/gztconverter",

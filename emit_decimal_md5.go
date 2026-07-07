@@ -51,7 +51,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 
 	svRef := ctx.emit.emitNode(Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env, Stdout: outVFS.fullSTR()}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs), Env: env, Stdout: outVFS.fullSTR()}),
 		Env:          env,
 		Inputs:       na.inputList(na.vfsList(optVFSs...), na.vfsList(decimalMD5PyVFS)),
 		KV:           &decimalMd5KV,

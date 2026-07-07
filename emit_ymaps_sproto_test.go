@@ -79,7 +79,7 @@ END()
 		t.Fatalf("attribution.sproto.h kv = {P:%q PC:%q}, want {PB yellow}", sproto.KV.P.string(), sproto.KV.PC.string())
 	}
 
-	cmd := strStrs(sproto.Cmds[0].CmdArgs.flat())
+	cmd := anyStrs(sproto.Cmds[0].CmdArgs.flat())
 
 	for _, want := range []string{
 		"$(B)/maps/libs/sproto/sprotoc/sprotoc",
@@ -91,7 +91,7 @@ END()
 		}
 	}
 
-	if sproto.Cmds[0].Cwd != strS {
+	if sproto.Cmds[0].Cwd != srcRootDirVFS {
 		t.Fatalf("attribution.sproto.h cwd = %q, want $(S)", sproto.Cmds[0].Cwd.string())
 	}
 

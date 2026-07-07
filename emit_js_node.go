@@ -38,7 +38,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	node := Node{
 		Platform: statsPlatform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
 			Env: env}),
 		Env:          env,
 		Inputs:       inputs,

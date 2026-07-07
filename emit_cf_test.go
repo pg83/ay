@@ -69,7 +69,7 @@ func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 		t.Fatal("no CF node emitted for thelib/x.cpp")
 	}
 
-	args := strings.Join(strStrs(cf.Cmds[0].CmdArgs.flat()), " ")
+	args := strings.Join(anyStrs(cf.Cmds[0].CmdArgs.flat()), " ")
 
 	if !strings.Contains(args, "MYVAR=hello") {
 		t.Errorf("CF cmd_args missing SET var MYVAR=hello; got: %s", args)

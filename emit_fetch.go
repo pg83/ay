@@ -13,7 +13,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 
 	node := Node{
 		Platform: ctx.host,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(currentYatoolPath()),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(internStr(currentYatoolPath()),
 			argFetch.str(),
 			argB.str(),
 			argS.str(),

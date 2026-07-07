@@ -290,7 +290,7 @@ func assertOutputOrder(t *testing.T, label string, n *Node, want []string) {
 		t.Fatalf("%s: PB outputs order =\n  %v\nwant\n  %v", label, got, want)
 	}
 
-	args := strStrs(n.Cmds[0].CmdArgs.flat())
+	args := anyStrs(n.Cmds[0].CmdArgs.flat())
 	start := -1
 
 	for i, a := range args {
@@ -1229,11 +1229,11 @@ END()
 	}
 
 	if ytCount == 0 {
-		t.Fatalf("py PB cmd missing transitive PROTO_NAMESPACE token -I=$(S)/yt: %v", strStrs(args))
+		t.Fatalf("py PB cmd missing transitive PROTO_NAMESPACE token -I=$(S)/yt: %v", anyStrs(args))
 	}
 
 	if ytCount > 1 {
-		t.Fatalf("py PB cmd duplicates -I=$(S)/yt (%d times): %v", ytCount, strStrs(args))
+		t.Fatalf("py PB cmd duplicates -I=$(S)/yt (%d times): %v", ytCount, anyStrs(args))
 	}
 
 	protobufSrcIdx := indexOfArg(args, "-I=$(S)/contrib/libs/protobuf/src")
@@ -1242,20 +1242,20 @@ END()
 	pyOutIdx := indexOfArg(args, "--python_out=$(B)/")
 
 	if protobufSrcIdx < 0 || pyOutIdx < 0 {
-		t.Fatalf("py PB cmd missing protobuf-src / python_out anchors: %v", strStrs(args))
+		t.Fatalf("py PB cmd missing protobuf-src / python_out anchors: %v", anyStrs(args))
 	}
 
 	if !(ytIdx < protobufSrcIdx && protobufSrcIdx < pyOutIdx) {
 		t.Fatalf("expected yt < protobuf-src < python_out: yt=%d protobuf-src=%d python_out=%d args=%v",
-			ytIdx, protobufSrcIdx, pyOutIdx, strStrs(args))
+			ytIdx, protobufSrcIdx, pyOutIdx, anyStrs(args))
 	}
 
 	if protocSrcIdx >= 0 && !(protobufSrcIdx < protocSrcIdx) {
-		t.Fatalf("expected protobuf-src before protoc-src: protobuf-src=%d protoc-src=%d args=%v", protobufSrcIdx, protocSrcIdx, strStrs(args))
+		t.Fatalf("expected protobuf-src before protoc-src: protobuf-src=%d protoc-src=%d args=%v", protobufSrcIdx, protocSrcIdx, anyStrs(args))
 	}
 
 	if pyOutIdx < 2 || args[pyOutIdx-1].string() != "-I=$(S)/contrib/libs/protobuf/src" || args[pyOutIdx-2].string() != "-I=$(B)" {
-		t.Fatalf("expected trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src before --python_out: %v", strStrs(args))
+		t.Fatalf("expected trailing -I=$(B) -I=$(S)/contrib/libs/protobuf/src before --python_out: %v", anyStrs(args))
 	}
 }
 
@@ -1302,14 +1302,14 @@ END()
 	pyOutIdx := indexOfArg(args, "--python_out=$(B)/contrib/libs/protobuf/src")
 
 	if pyOutIdx < 2 || args[pyOutIdx-1].string() != protobufSrc || args[pyOutIdx-2].string() != "-I=$(B)" {
-		t.Fatalf("expected trailing -I=$(B) %s before --python_out: %v", protobufSrc, strStrs(args))
+		t.Fatalf("expected trailing -I=$(B) %s before --python_out: %v", protobufSrc, anyStrs(args))
 	}
 
 	bareIdx := indexOfArg(args, "-I=$(S)")
 	trailingBIdx := pyOutIdx - 2
 
 	if bareIdx < 0 {
-		t.Fatalf("missing structural bare -I=$(S): %v", strStrs(args))
+		t.Fatalf("missing structural bare -I=$(S): %v", anyStrs(args))
 	}
 
 	bandCopy := false
@@ -1323,11 +1323,11 @@ END()
 	}
 
 	if !bandCopy {
-		t.Fatalf("band protobuf-src include collapsed for the protobuf builtin (only prefix+trailing remain): %v", strStrs(args))
+		t.Fatalf("band protobuf-src include collapsed for the protobuf builtin (only prefix+trailing remain): %v", anyStrs(args))
 	}
 
 	if protocSrcIdx := indexOfArg(args, "-I=$(S)/contrib/libs/protoc/src"); protocSrcIdx >= 0 {
-		t.Fatalf("protobuf builtin must not carry protoc-src include: %v", strStrs(args))
+		t.Fatalf("protobuf builtin must not carry protoc-src include: %v", anyStrs(args))
 	}
 }
 
@@ -1382,7 +1382,7 @@ END()
 	const ytTok = "-I=$(S)/yt"
 	const gapisTok = "-I=$(S)/lib/gapis"
 
-	assertInterleavedBand := func(label string, args []STR) {
+	assertInterleavedBand := func(label string, args []ANY) {
 		t.Helper()
 		ytIdx := indexOfArg(args, ytTok)
 		gapisIdx := indexOfArg(args, gapisTok)
@@ -1395,23 +1395,23 @@ END()
 		}
 
 		if ytIdx < 0 {
-			t.Fatalf("%s: missing bare namespace %s: %v", label, ytTok, strStrs(args))
+			t.Fatalf("%s: missing bare namespace %s: %v", label, ytTok, anyStrs(args))
 		}
 
 		if gapisCount == 0 {
-			t.Fatalf("%s: missing transitive GLOBAL namespace %s: %v", label, gapisTok, strStrs(args))
+			t.Fatalf("%s: missing transitive GLOBAL namespace %s: %v", label, gapisTok, anyStrs(args))
 		}
 
 		if gapisCount > 1 {
-			t.Fatalf("%s: GLOBAL namespace %s duplicated (%d): %v", label, gapisTok, gapisCount, strStrs(args))
+			t.Fatalf("%s: GLOBAL namespace %s duplicated (%d): %v", label, gapisTok, gapisCount, anyStrs(args))
 		}
 
 		if !(ytIdx < gapisIdx) {
-			t.Fatalf("%s: expected bare yt (%d) before GLOBAL gapis (%d): %v", label, ytIdx, gapisIdx, strStrs(args))
+			t.Fatalf("%s: expected bare yt (%d) before GLOBAL gapis (%d): %v", label, ytIdx, gapisIdx, anyStrs(args))
 		}
 	}
 
-	var cppArgs []STR
+	var cppArgs []ANY
 
 	for _, n := range g.Graph {
 		if n.KV.P == pkPB &&
@@ -1456,7 +1456,7 @@ func TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir(t *testing.T) {
 	}
 }
 
-func pyProtoCmdArgsForOutput(t *testing.T, g *Graph, wantSuffix string) []STR {
+func pyProtoCmdArgsForOutput(t *testing.T, g *Graph, wantSuffix string) []ANY {
 	t.Helper()
 
 	for _, n := range g.Graph {
@@ -1471,7 +1471,10 @@ func pyProtoCmdArgsForOutput(t *testing.T, g *Graph, wantSuffix string) []STR {
 	return nil
 }
 
-func assertYtNamespaceDuplicated(t *testing.T, args []STR) {
+func assertYtNamespaceDuplicated[T interface {
+	~uint32
+	string() string
+}](t *testing.T, args []T) {
 	t.Helper()
 	ytCount := 0
 
@@ -1482,21 +1485,21 @@ func assertYtNamespaceDuplicated(t *testing.T, args []STR) {
 	}
 
 	if ytCount != 3 {
-		t.Fatalf("expected 3 -I=$(S)/yt (output-root + duplicated _PROTO__INCLUDE), got %d: %v", ytCount, strStrs(args))
+		t.Fatalf("expected 3 -I=$(S)/yt (output-root + duplicated _PROTO__INCLUDE), got %d: %v", ytCount, genericStrs(args))
 	}
 
 	bare := indexOfArg(args, "-I=$(S)")
 
 	if bare < 0 || bare+3 >= len(args) {
-		t.Fatalf("missing bare -I=$(S) anchor: %v", strStrs(args))
+		t.Fatalf("missing bare -I=$(S) anchor: %v", genericStrs(args))
 	}
 
 	if args[bare+1].string() != "-I=$(S)/yt" || args[bare+2].string() != "-I=$(S)/yt" {
-		t.Fatalf("expected two consecutive -I=$(S)/yt after -I=$(S): %v", strStrs(args))
+		t.Fatalf("expected two consecutive -I=$(S)/yt after -I=$(S): %v", genericStrs(args))
 	}
 
 	if args[bare+3].string() != "-I=$(S)/contrib/libs/protobuf/src" {
-		t.Fatalf("expected protobuf-src after the duplicated namespace: %v", strStrs(args))
+		t.Fatalf("expected protobuf-src after the duplicated namespace: %v", genericStrs(args))
 	}
 }
 
@@ -1661,7 +1664,7 @@ func TestEmitProtoSrcs_CppEvlogCarriesEvent2cppInducedDeps(t *testing.T) {
 
 	pb := mustNodeByOutput(t, gEv, "$(B)/evlog/foo.pb.h")
 	const event2cppBinary = "$(B)/tools/event2cpp/event2cpp"
-	pbArgs := strStrs(pb.Cmds[0].CmdArgs.flat())
+	pbArgs := anyStrs(pb.Cmds[0].CmdArgs.flat())
 	const wantPlugin = "--plugin=protoc-gen-event2cpp=" + event2cppBinary
 	const wantOut = "--event2cpp_out=$(B)/"
 
@@ -1870,16 +1873,16 @@ func TestGen_BareProtoNamespace_BuildRootIncludeIsGlobalAndOrderedFirst(t *testi
 	iSub := indexOfArg(args, "-I$(B)/mid/sub")
 
 	if iNs < 0 {
-		t.Fatalf("consumer compile missing -I$(B)/mid\nargs=%v", strStrs(args))
+		t.Fatalf("consumer compile missing -I$(B)/mid\nargs=%v", genericStrs(args))
 	}
 
 	if iSub < 0 {
-		t.Fatalf("consumer compile missing -I$(B)/mid/sub\nargs=%v", strStrs(args))
+		t.Fatalf("consumer compile missing -I$(B)/mid/sub\nargs=%v", genericStrs(args))
 	}
 
 	if iNs > iSub {
 		t.Fatalf("-I$(B)/mid (idx %d) must precede -I$(B)/mid/sub (idx %d)\nargs=%v",
-			iNs, iSub, strStrs(args))
+			iNs, iSub, genericStrs(args))
 	}
 }
 
@@ -1934,7 +1937,7 @@ func TestGen_InlineProtoLibrary_ProtobufGlobalAddInclReachesOrdinaryAndConsumer(
 	assertBand := func(label, output string, want bool) {
 		t.Helper()
 		n := mustNodeByOutput(t, g, output)
-		args := strStrs(n.Cmds[0].CmdArgs.flat())
+		args := anyStrs(n.Cmds[0].CmdArgs.flat())
 
 		for _, inc := range band {
 			has := flagsContain(args, inc)
@@ -2261,7 +2264,7 @@ END()
 		"$(B)/yt/yt/library/query/proto/query.pb.h",
 		"$(B)/yt/yt/library/query/proto/query.pb.cc",
 	)
-	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	args := anyStrs(pb.Cmds[0].CmdArgs.flat())
 	count := func(want string) int {
 		n := 0
 
@@ -2316,7 +2319,7 @@ END()
 		"$(B)/top/proto/top.pb.h",
 		"$(B)/top/proto/top.pb.cc",
 	)
-	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	args := anyStrs(pb.Cmds[0].CmdArgs.flat())
 
 	for _, tok := range []string{"-I=./", "--cpp_out=:$(B)/", "--cpp_styleguide_out=:$(B)/"} {
 		if !slices.Contains(args, tok) {
@@ -2574,7 +2577,7 @@ END()
 
 	ldNode := resultRootNode(g)
 
-	var linkArgs []STR
+	var linkArgs []ANY
 
 	for _, c := range ldNode.Cmds {
 		flat := c.CmdArgs.flat()
@@ -2648,7 +2651,7 @@ END()
 
 	ldNode := resultRootNode(g)
 
-	var linkArgs []STR
+	var linkArgs []ANY
 
 	for _, c := range ldNode.Cmds {
 		flat := c.CmdArgs.flat()
@@ -2754,11 +2757,11 @@ END()
 	pluginRuntime := mustNodeByOutput(t, g, "$(B)/deps/plugin_runtime/libdeps-plugin_runtime.a")
 	_ = mustNodeByOutput(t, g, "$(B)/deps/generated_runtime/libdeps-generated_runtime.a")
 
-	if !containsString(strStrs(pb.Cmds[0].CmdArgs.flat()), "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin") {
+	if !containsString(anyStrs(pb.Cmds[0].CmdArgs.flat()), "--plugin=protoc-gen-config_proto_plugin=$(B)/tools/config_plugin/config_proto_plugin") {
 		t.Fatalf("pb cmd args missing config proto plugin: %v", pb.Cmds[0].CmdArgs.flat())
 	}
 
-	if !containsString(strStrs(pb.Cmds[0].CmdArgs.flat()), "--config_proto_plugin_out=$(B)/") {
+	if !containsString(anyStrs(pb.Cmds[0].CmdArgs.flat()), "--config_proto_plugin_out=$(B)/") {
 		t.Fatalf("pb cmd args missing config proto plugin out flag: %v", pb.Cmds[0].CmdArgs.flat())
 	}
 
@@ -2869,7 +2872,7 @@ END()
 	}
 	gotWrapperOutputs := pb.Cmds[0].CmdArgs.flat()[outputsIdx+1 : separatorIdx]
 
-	if !equalStrings(strStrs(gotWrapperOutputs), wantWrapperOutputs) {
+	if !equalStrings(genericStrs(gotWrapperOutputs), wantWrapperOutputs) {
 		t.Fatalf("pb wrapper outputs = %v, want %v", gotWrapperOutputs, wantWrapperOutputs)
 	}
 }
@@ -2907,7 +2910,7 @@ END()
 		"$(B)/protos/a.yaff.cpp",
 	)
 
-	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	args := anyStrs(pb.Cmds[0].CmdArgs.flat())
 	wantArgs := []string{
 		"--plugin=protoc-gen-yaff=$(B)/library/cpp/yaff/tools/protoc_plugin/protoc_plugin",
 		"--yaff_out=$(B)/",
@@ -2963,7 +2966,7 @@ END()
 		"$(B)/protos/a_tsar_vectors.yaff.cpp",
 	)
 
-	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	args := anyStrs(pb.Cmds[0].CmdArgs.flat())
 	wantArgs := []string{
 		"--plugin=protoc-gen-yaff_tsar_vectors=$(B)/library/cpp/yaff/tools/protoc_plugin/protoc_plugin",
 		"--yaff_tsar_vectors_out=$(B)/",
@@ -3070,7 +3073,7 @@ END()
 		"$(B)/consumer/brand.pb.cc",
 	)
 
-	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	args := anyStrs(pb.Cmds[0].CmdArgs.flat())
 
 	ytCount := 0
 
@@ -3131,7 +3134,7 @@ END()
 		"$(B)/consumer/brand.pb.cc",
 	)
 
-	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	args := anyStrs(pb.Cmds[0].CmdArgs.flat())
 
 	const wantTok = "-I=$(S)/maps/doc/proto"
 	mapsCount := 0
@@ -3161,7 +3164,7 @@ END()
 
 	for _, n := range g.Graph {
 		for _, cmd := range n.Cmds {
-			for _, a := range strStrs(cmd.CmdArgs.flat()) {
+			for _, a := range anyStrs(cmd.CmdArgs.flat()) {
 				if a == cppSourceLeak {
 					t.Fatalf("source-root C++ include leakage of maps/doc/proto: token %q on outputs %v", a, vfsStrings(n.Outputs))
 				}
@@ -3197,7 +3200,7 @@ END()
 
 	ccObj := findGraphNodeByOutputs(t, g, "$(B)/consumer/brand.pb.cc.o")
 
-	args := strStrs(ccObj.Cmds[0].CmdArgs.flat())
+	args := anyStrs(ccObj.Cmds[0].CmdArgs.flat())
 
 	const wantBuildTok = "-I$(B)/maps/doc/proto"
 	const sourceTok = "-I$(S)/maps/doc/proto"
@@ -3260,7 +3263,7 @@ message Attribution {}
 		"$(B)/"+moduleDir+"/response.pb.cc",
 	)
 
-	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	args := anyStrs(pb.Cmds[0].CmdArgs.flat())
 	count := func(want string) int {
 		n := 0
 
@@ -3306,7 +3309,7 @@ message Attribution {}
 	}
 
 	ccObj := findGraphNodeByOutputs(t, g, "$(B)/"+moduleDir+"/response.pb.cc.o")
-	ccArgs := strStrs(ccObj.Cmds[0].CmdArgs.flat())
+	ccArgs := anyStrs(ccObj.Cmds[0].CmdArgs.flat())
 	buildCount, sourceCount := 0, 0
 
 	for _, a := range ccArgs {

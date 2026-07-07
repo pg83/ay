@@ -1043,13 +1043,13 @@ END()
 	producer := mustNodeByAnyOutput(t, g, genHeader)
 
 	if !contains(producer.Cmds[0].CmdArgs.flat(), "--plugin=protoc-gen-custom=$(B)/tools/gen/gen") {
-		t.Fatalf("producer plugin arg corrupted: %v", strStrs(producer.Cmds[0].CmdArgs.flat()))
+		t.Fatalf("producer plugin arg corrupted: %v", anyStrs(producer.Cmds[0].CmdArgs.flat()))
 	}
 
 	use := mustNodeByOutput(t, g, "$(B)/cons/use.cpp.o")
 
 	if !contains(use.Cmds[0].CmdArgs.flat(), "-I$(B)/gen/wk") {
-		t.Fatalf("use.cpp.o missing -I$(B)/gen/wk: %v", strStrs(use.Cmds[0].CmdArgs.flat()))
+		t.Fatalf("use.cpp.o missing -I$(B)/gen/wk: %v", anyStrs(use.Cmds[0].CmdArgs.flat()))
 	}
 
 	if !nodeHasInput(use, genHeader) {
@@ -1775,7 +1775,7 @@ END()
 		t.Fatalf("expected PR producer, got %v", pr.KV.P)
 	}
 
-	gotArgs := strStrings(pr.Cmds[0].CmdArgs.flat())
+	gotArgs := anyStrs(pr.Cmds[0].CmdArgs.flat())
 	wantIn := "--in_file=$(S)/contrib/libs/libmysql_r/strings/lang_data/ja_hans.txt"
 	wantOut := "--out_file=$(B)/contrib/libs/libmysql_r/strings/uca900_ja_tbls.cc"
 

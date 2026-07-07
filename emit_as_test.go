@@ -96,7 +96,7 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 
 func testYasmLDRef(e *StreamingEmitter) NodeRef {
 	return e.emitNode(Node{
-		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"yasm"})}, Env: nil}},
+		Cmds:         []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"yasm"}))}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{})},
 		Outputs:      ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),

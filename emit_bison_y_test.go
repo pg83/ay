@@ -72,7 +72,7 @@ END()
 		"$(B)/genlib/pire/re_parser.h",
 	}
 
-	if got := strStrs(yc.Cmds[1].CmdArgs.flat()[1:]); !reflect.DeepEqual(got, wantPreprocess) {
+	if got := anyStrs(yc.Cmds[1].CmdArgs.flat()[1:]); !reflect.DeepEqual(got, wantPreprocess) {
 		t.Fatalf("bison preprocess cmd_args mismatch:\n  got:  %#v\n  want: %#v", got, wantPreprocess)
 	}
 
@@ -223,7 +223,7 @@ END()
 	g := testGen(newMemFS(files), "qbase")
 
 	yc := mustNodeByOutput(t, g, "$(B)/qbase/parser.h")
-	args := strStrs(yc.Cmds[0].CmdArgs.flat())
+	args := anyStrs(yc.Cmds[0].CmdArgs.flat())
 
 	flagIdx := -1
 

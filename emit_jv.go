@@ -80,9 +80,9 @@ func emitJVNode(instance ModuleInstance, cmdArgs []STR, inputs InputChunks, outp
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
 			Env: env,
-			Cwd: internStr(cwd)}),
+			Cwd: cwdVFS(cwd)}),
 		Env:          env,
 		Inputs:       inputs,
 		KV:           &jvKV,

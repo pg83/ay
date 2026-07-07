@@ -68,7 +68,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 	e := newStreamingEmitter(nil)
 
 	objRefs := []NodeRef{e.emitNode(Node{
-		Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+		Cmds:         []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"cc"}))}, Env: nil}},
 		Env:          nil,
 		Inputs:       InputChunks{ToVFSSlice([]string{})},
 		KV:           &arTestKV,
@@ -96,7 +96,7 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emitNode(Node{
-			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+			Cmds:         []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"cc"}))}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},
 			KV:           &arTestKV,
@@ -144,7 +144,7 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emitNode(Node{
-			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+			Cmds:         []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"cc"}))}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},
 			KV:           &arTestKV,
@@ -179,7 +179,7 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emitNode(Node{
-			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+			Cmds:         []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"cc"}))}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},
 			KV:           &arTestKV,
@@ -229,7 +229,7 @@ END()
 				continue
 			}
 
-			for _, a := range strStrs(n.Cmds[0].CmdArgs.flat()) {
+			for _, a := range anyStrs(n.Cmds[0].CmdArgs.flat()) {
 				if strings.HasSuffix(a, ".o") {
 					members = append(members, a)
 				}
@@ -283,7 +283,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 
 	makeLeaf := func(out VFS) NodeRef {
 		return e.emitNode(Node{
-			Cmds:         []Cmd{{CmdArgs: ArgChunks{appendInternStrs(nil, []string{"cc"})}, Env: nil}},
+			Cmds:         []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"cc"}))}, Env: nil}},
 			Env:          nil,
 			Inputs:       InputChunks{ToVFSSlice([]string{})},
 			KV:           &arTestKV,
@@ -308,7 +308,7 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 		t.Fatalf("cmd_args len = %d, want 13", len(cmdArgs))
 	}
 
-	trailing := strStrs(cmdArgs[10:])
+	trailing := anyStrs(cmdArgs[10:])
 	wantTrailing := []string{z.string(), m.string(), a.string()}
 
 	if !reflect.DeepEqual(trailing, wantTrailing) {
@@ -737,7 +737,7 @@ END()
 	const wantMember = "$(S)/data/member.txt"
 	const phantomMember = "$(S)/mod/member.txt"
 
-	args := strStrs(ar.Cmds[0].CmdArgs.flat())
+	args := anyStrs(ar.Cmds[0].CmdArgs.flat())
 
 	if !containsString(args, wantMember+":") {
 		t.Errorf("ARCHIVE cmd_args missing SRCDIR-resolved member %q: %v", wantMember+":", args)
@@ -859,7 +859,7 @@ END()
 	pbPos := -1
 	hSerPos := -1
 
-	for i, arg := range strStrs(ar.Cmds[0].CmdArgs.flat()) {
+	for i, arg := range anyStrs(ar.Cmds[0].CmdArgs.flat()) {
 		if strings.HasSuffix(arg, ".pb.cc.o") {
 			pbPos = i
 		}
@@ -915,7 +915,7 @@ message Cfg {}
 
 	cppPos, cfgPos := -1, -1
 
-	for i, arg := range strStrs(ar.Cmds[0].CmdArgs.flat()) {
+	for i, arg := range anyStrs(ar.Cmds[0].CmdArgs.flat()) {
 		if strings.HasSuffix(arg, "/status_codes.cpp.o") {
 			cppPos = i
 		}
@@ -977,7 +977,7 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 
 	objcopyIdx, globalCppIdx := -1, -1
 
-	for i, m := range strStrs(members) {
+	for i, m := range anyStrs(members) {
 		if strings.Contains(m, "/objcopy_") && strings.HasSuffix(m, ".o") {
 			objcopyIdx = i
 		}
@@ -1031,7 +1031,7 @@ END()
 	mustNodeByOutput(t, g, "$(B)/peer/data.inc")
 
 	cc := mustNodeByOutput(t, g, "$(B)/consumer/use.cpp.o")
-	args := strStrs(cc.Cmds[0].CmdArgs.flat())
+	args := anyStrs(cc.Cmds[0].CmdArgs.flat())
 
 	if !flagsContain(args, "-I$(B)/peer") {
 		t.Errorf("consumer use.cpp.o missing ARCHIVE-generated build include -I$(B)/peer: %v", args)
@@ -1055,7 +1055,7 @@ func globalARMembers(t *testing.T, g *Graph) []string {
 		t.Fatal("no global AR node in graph")
 	}
 
-	args := strStrs(globalAR.Cmds[0].CmdArgs.flat())
+	args := anyStrs(globalAR.Cmds[0].CmdArgs.flat())
 
 	if len(args) < 11 {
 		t.Fatalf("global AR cmd_args too short (%d): %v", len(args), args)

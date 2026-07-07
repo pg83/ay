@@ -615,7 +615,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	toolRefs = append(toolRefs, depRefs(spec.toolLDRef)...)
 
 	cmd := Cmd{
-		CmdArgs: na.chunkList(cmdArgs),
+		CmdArgs: na.chunkListSTR(cmdArgs),
 		Env:     env,
 	}
 
@@ -624,7 +624,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = *stmt.CWD
+		cmd.Cwd = cwdVFS((*stmt.CWD).string())
 	}
 
 	node := Node{

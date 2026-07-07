@@ -131,22 +131,22 @@ func emitLD(
 	envFull := hostP.toolEnv()
 	sbomEmbed := len(sbomPaths) > 0
 	sbomJSON := build(binPrefix, "__sbomdata.json").string()
-	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
+	cmds := na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkListSTR(cmd1), Env: envFull})
 
 	if sbomEmbed {
 		linkSbom := composeLDCmdLinkSbom(tc, sbomLang, binaryDir, sbomJSON, sbomPaths)
 
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(linkSbom), Cwd: strB, Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkListSTR(linkSbom), Cwd: bldRootDirVFS, Env: envVcsOnly})
 	}
 
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: strB, Env: envFull})
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkListSTR(cmd2), Cwd: bldRootDirVFS, Env: envFull})
 
 	emitCopy := instance.Platform.Flags[envOPENSOURCE] == strYes || len(dynamicPaths) > 0
 
 	if emitCopy {
 		cmd3 := composeLDCmdLinkOrCopy(tc, binaryDir, dynamicPaths...)
 
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkListSTR(cmd3), Env: envVcsOnly})
 	}
 
 	for i := range splitDwarfCmds {
@@ -158,7 +158,7 @@ func emitLD(
 	if sbomEmbed {
 		objcopy := composeLDCmdSbomObjcopy(tc, sbomJSON, outputPath)
 
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(objcopy), Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkListSTR(objcopy), Env: envVcsOnly})
 	}
 
 	inputs := composeLDInputs(na, instance.Path.relString(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles)
@@ -223,7 +223,7 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 
 	node := Node{
 		Platform: host,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(internStr(currentYatoolPath()),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(internStr(currentYatoolPath()),
 			argFetch.str(),
 			strBase64,
 			internStr(vcsJSONBase64),
@@ -466,7 +466,7 @@ func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, outputPath stri
 
 	debugPath := outputPath + ".debug"
 
-	return na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)))}, Cmd{CmdArgs: na.chunkList(na.strList(tc.Strip, argStripDebug.str(), internStr(outputPath)))}, Cmd{CmdArgs: na.chunkList(na.strList(tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)))})
+	return na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(tc.Objcopy, argOnlyKeepDebug.str(), internStr(outputPath), internStr(debugPath)))}, Cmd{CmdArgs: na.chunkListSTR(na.strList(tc.Strip, argStripDebug.str(), internStr(outputPath)))}, Cmd{CmdArgs: na.chunkListSTR(na.strList(tc.Objcopy, argRemoveSectionGnuDebuglink.str(), argAddGnuDebuglink.str(), internStr(debugPath), internStr(outputPath)))})
 }
 
 func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool) InputChunks {

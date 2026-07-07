@@ -382,7 +382,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR([]STR{
 			wrapccPython3STR,
 			copyFsToolsVFS.fullSTR(),
 			argCopy.str(),

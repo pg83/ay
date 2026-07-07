@@ -56,7 +56,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 		node := Node{
 			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(bcArgs), Env: env}),
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(bcArgs), Env: env}),
 			Env:          env,
 			Inputs:       allInputs,
 			Outputs:      na.vfsList(bcOut),
@@ -89,7 +89,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	ldNode := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(ldArgs), Env: env}),
 		Env:          env,
 		Inputs:       mergeInputs,
 		Outputs:      na.vfsList(mergedOut),
@@ -121,7 +121,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	optNode := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(optArgs), Env: env}),
 		Env:          env,
 		Inputs:       optChunks,
 		Outputs:      na.vfsList(optOut),

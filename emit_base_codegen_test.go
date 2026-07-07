@@ -134,7 +134,7 @@ END()
 		"$(B)/consumer/fill_factors.h",
 	}
 
-	if got := strStrings(bc.Cmds[0].CmdArgs.flat()); !slices.Equal(got, wantCmd) {
+	if got := anyStrs(bc.Cmds[0].CmdArgs.flat()); !slices.Equal(got, wantCmd) {
 		t.Fatalf("BC cmd = %v, want %v", got, wantCmd)
 	}
 
@@ -239,7 +239,7 @@ END()
 		"$(B)/lib/gen.h",
 	}
 
-	if got := strStrings(bc.Cmds[0].CmdArgs.flat()); !slices.Equal(got, wantCmd) {
+	if got := anyStrs(bc.Cmds[0].CmdArgs.flat()); !slices.Equal(got, wantCmd) {
 		t.Fatalf("BC cmd = %v, want %v", got, wantCmd)
 	}
 

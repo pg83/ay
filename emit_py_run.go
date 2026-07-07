@@ -413,14 +413,14 @@ func emitPYRun(
 		outputs = append(outputs, outVFSByToken[f.string()])
 	}
 
-	cmd := Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}
+	cmd := Cmd{CmdArgs: na.chunkListSTR(cmdArgs), Env: env}
 
 	if stdoutPath != 0 {
 		cmd.Stdout = stdoutPath
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = *stmt.CWD
+		cmd.Cwd = cwdVFS((*stmt.CWD).string())
 	}
 
 	node := Node{

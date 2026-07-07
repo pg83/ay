@@ -59,7 +59,7 @@ func TestArchiveByKeys_TopLevel(t *testing.T) {
 		t.Errorf("archive kv = {p:%q pc:%q}, want {AR light-red}", ar.KV.P.string(), ar.KV.PC.string())
 	}
 
-	arCmd := strings.Join(strStrs(ar.Cmds[0].CmdArgs.flat()), " ")
+	arCmd := strings.Join(anyStrs(ar.Cmds[0].CmdArgs.flat()), " ")
 
 	for _, want := range []string{
 		"$(S)/mod/a.txt $(S)/mod/sub/b.txt",
@@ -96,7 +96,7 @@ func TestArchiveByKeys_TopLevel(t *testing.T) {
 	}
 
 	if !contains(use.Cmds[0].CmdArgs.flat(), "-I$(B)/mod") {
-		t.Errorf("use.cpp.o cmd missing -I$(B)/mod; got %v", strStrs(use.Cmds[0].CmdArgs.flat()))
+		t.Errorf("use.cpp.o cmd missing -I$(B)/mod; got %v", anyStrs(use.Cmds[0].CmdArgs.flat()))
 	}
 
 	for _, leaf := range []string{"$(S)/mod/a.txt", "$(S)/mod/sub/b.txt"} {

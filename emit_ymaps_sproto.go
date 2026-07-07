@@ -54,7 +54,7 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 	ctx, instance := e.ctx, e.instance
 	na := ctx.emit.nodeArenas()
 
-	cmdArgs := na.chunkList(na.strList(
+	cmdArgs := na.chunkListSTR(na.strList(
 		sprotocBinary.fullSTR(),
 		internV("-I=./", outRoot),
 		internV("-I=$(S)/", outRoot),
@@ -74,7 +74,7 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Cwd: strS,
+			Cwd: srcRootDirVFS,
 			Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(sprotocBinary), closure),

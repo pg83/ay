@@ -71,7 +71,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
 			Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(na.vfsList(yasmBinaryVFS, in.IncludeView.self), in.IncludeView.buckets...),

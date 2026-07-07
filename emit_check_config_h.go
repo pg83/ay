@@ -23,7 +23,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 
 	chRef := ctx.emit.emitNode(Node{
 		Platform: ctx.target,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(d.tc.Python3,
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(d.tc.Python3,
 			argSBuildScriptsCheckConfigHPy.str(),
 			internV(instance.Path.relString(), "/", conf.string()),
 			(generatedVFS).fullSTR())),

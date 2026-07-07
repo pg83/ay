@@ -87,7 +87,7 @@ END()
 	}
 
 	cf := mustNodeByOutput(t, g, "$(B)/toollib/cfg.cpp")
-	cfArgs := strings.Join(strStrs(cf.Cmds[0].CmdArgs.flat()), " ")
+	cfArgs := strings.Join(anyStrs(cf.Cmds[0].CmdArgs.flat()), " ")
 
 	if !strings.Contains(cfArgs, "BUILD_TYPE=RELEASE") {
 		t.Errorf("tool-subtree configure_file vars = %q, want BUILD_TYPE=RELEASE", cfArgs)
@@ -98,7 +98,7 @@ END()
 	}
 
 	r6 := mustNodeByOutput(t, g, "$(B)/toollib/lex.rl6.cpp")
-	r6Args := strStrs(r6.Cmds[0].CmdArgs.flat())
+	r6Args := anyStrs(r6.Cmds[0].CmdArgs.flat())
 
 	if indexOfArg(r6.Cmds[0].CmdArgs.flat(), "-L") < 0 || indexOfArg(r6.Cmds[0].CmdArgs.flat(), "-G2") < 0 {
 		t.Errorf("R6 cmd %v missing split -L / -G2 tokens", r6Args)
@@ -255,7 +255,7 @@ END()
 	memberArg := "$(B)/m/out.dict.bin:"
 
 	if indexOfArg(ar.Cmds[0].CmdArgs.flat(), memberArg) < 0 {
-		t.Errorf("AR .rodata cmd missing `:`-suffixed member %q: %v", memberArg, strStrs(ar.Cmds[0].CmdArgs.flat()))
+		t.Errorf("AR .rodata cmd missing `:`-suffixed member %q: %v", memberArg, anyStrs(ar.Cmds[0].CmdArgs.flat()))
 	}
 
 	rd := mustNodeByAnyOutput(t, g, "$(B)/m/Dict.rodata.o")

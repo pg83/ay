@@ -235,7 +235,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 	}
 	gotArgs := tail.Cmds[0].CmdArgs.flat()
 
-	if !reflect.DeepEqual(strStrs(gotArgs), wantArgs) {
+	if !reflect.DeepEqual(genericStrs(gotArgs), wantArgs) {
 		t.Fatalf("tail cmd args mismatch:\n got: %v\nwant: %v", gotArgs, wantArgs)
 	}
 
@@ -913,11 +913,11 @@ END()
 	args := bc.Cmds[0].CmdArgs.flat()
 
 	if indexOfArg(args, "__init__.py-") < 0 {
-		t.Fatalf("py3cc cmd missing generated source-name arg %q: %v", "__init__.py-", strStrs(args))
+		t.Fatalf("py3cc cmd missing generated source-name arg %q: %v", "__init__.py-", genericStrs(args))
 	}
 
 	if indexOfArg(args, "mod/__init__.py-") >= 0 {
-		t.Fatalf("py3cc cmd uses module-rooted source name, want raw token: %v", strStrs(args))
+		t.Fatalf("py3cc cmd uses module-rooted source name, want raw token: %v", genericStrs(args))
 	}
 
 	producer := mustNodeByOutput(t, g, "$(B)/mod/__init__.py")

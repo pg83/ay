@@ -63,7 +63,7 @@ END()
 		t.Fatal("OP node has no cmds")
 	}
 
-	args := strStrs(opNode.Cmds[0].CmdArgs.flat())
+	args := anyStrs(opNode.Cmds[0].CmdArgs.flat())
 	var passesArg string
 
 	for _, a := range args {
@@ -147,7 +147,7 @@ END()
 		t.Fatal("BC node has no cmds")
 	}
 
-	args := strStrs(bcNode.Cmds[0].CmdArgs.flat())
+	args := anyStrs(bcNode.Cmds[0].CmdArgs.flat())
 
 	hasIB := false
 	hasIS := false
@@ -360,7 +360,7 @@ END()
 		t.Fatal("BC node has no cmds")
 	}
 
-	args := strStrs(bcNode.Cmds[0].CmdArgs.flat())
+	args := anyStrs(bcNode.Cmds[0].CmdArgs.flat())
 
 	hasMarch := false
 

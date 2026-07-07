@@ -31,7 +31,7 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 		t.Fatalf("LJ node has %d cmds, want 1", len(lj.Cmds))
 	}
 
-	gotCmd := strStrs(lj.Cmds[0].CmdArgs.flat())
+	gotCmd := anyStrs(lj.Cmds[0].CmdArgs.flat())
 	wantCmd := []string{compilerBin, "-b", "-g", "$(S)/mod/a.lua", "$(B)/mod/a.raw"}
 
 	if strings.Join(gotCmd, " ") != strings.Join(wantCmd, " ") {
@@ -58,7 +58,7 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 		t.Errorf("archive node kv.p = %q, want AR", ar.KV.P.string())
 	}
 
-	arCmd := strings.Join(strStrs(ar.Cmds[0].CmdArgs.flat()), " ")
+	arCmd := strings.Join(anyStrs(ar.Cmds[0].CmdArgs.flat()), " ")
 
 	for _, want := range []string{
 		"$(B)/mod/a.raw $(B)/mod/sub/b.raw",
@@ -89,7 +89,7 @@ func TestEmitLj21Archive_RawCompilationAndArchive(t *testing.T) {
 	}
 
 	src := mustNodeByOutput(t, g, "$(B)/mod/LuaSources.inc")
-	srcCmd := strings.Join(strStrs(src.Cmds[0].CmdArgs.flat()), " ")
+	srcCmd := strings.Join(anyStrs(src.Cmds[0].CmdArgs.flat()), " ")
 
 	if !strings.Contains(srcCmd, "$(S)/mod/a.lua $(S)/mod/sub/b.lua") || !strings.Contains(srcCmd, "-k a.lua:sub/b.lua") {
 		t.Errorf("LuaSources.inc cmd %q missing the lua sources / keys", srcCmd)
@@ -132,13 +132,13 @@ func TestEmitLj21Archive_ArchiveOutputAddInclAndClosure(t *testing.T) {
 	scripts := ccBySuffix("/templates.cpp.o")
 
 	if !contains(scripts.Cmds[0].CmdArgs.flat(), buildInc) {
-		t.Errorf("templates.cpp.o cmd missing %q; got %v", buildInc, strStrs(scripts.Cmds[0].CmdArgs.flat()))
+		t.Errorf("templates.cpp.o cmd missing %q; got %v", buildInc, anyStrs(scripts.Cmds[0].CmdArgs.flat()))
 	}
 
 	sources := ccBySuffix("/templates_sources.cpp.o")
 
 	if !contains(sources.Cmds[0].CmdArgs.flat(), buildInc) {
-		t.Errorf("templates_sources.cpp.o cmd missing %q; got %v", buildInc, strStrs(sources.Cmds[0].CmdArgs.flat()))
+		t.Errorf("templates_sources.cpp.o cmd missing %q; got %v", buildInc, anyStrs(sources.Cmds[0].CmdArgs.flat()))
 	}
 
 	for _, lua := range []string{"$(S)/mod/a.lua", "$(S)/mod/sub/b.lua"} {

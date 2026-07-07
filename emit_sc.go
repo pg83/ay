@@ -9,7 +9,7 @@ func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, ru
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{
-			CmdArgs: na.chunkList(na.strList(domschemecBinary.fullSTR(), argDashIn.str(), srcVFS.fullSTR(), argDashOut.str(), headerVFS.fullSTR())),
+			CmdArgs: na.chunkListSTR(na.strList(domschemecBinary.fullSTR(), argDashIn.str(), srcVFS.fullSTR(), argDashOut.str(), headerVFS.fullSTR())),
 			Env:     env,
 		}),
 		Env:            env,

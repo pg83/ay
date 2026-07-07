@@ -178,10 +178,10 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR, srcGroup int) {
 	}
 
 	relChunk := []STR{internStr(protoRelPath)}
-	cmdArgs := na.chunkList(pe.head, relChunk, pe.mid, relChunk)
+	cmdArgs := na.chunkListSTR(pe.head, relChunk, pe.mid, relChunk)
 
 	if len(pe.tail) > 0 {
-		cmdArgs = append(cmdArgs, pe.tail)
+		cmdArgs = append(cmdArgs, na.anyChunk(pe.tail))
 	}
 
 	toolRefs := depRefs(protocLDRef, pe.grpcPyRef)
@@ -191,7 +191,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR, srcGroup int) {
 	}
 
 	protoSrcVFS := source(protoRelPath)
-	protoCwd := strS
+	protoCwd := srcRootDirVFS
 	generatedProto := false
 
 	var producerDeps []NodeRef
@@ -199,7 +199,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR, srcGroup int) {
 
 	if info := e.codegen.lookup(build(protoRelPath)); info != nil {
 		protoSrcVFS = build(protoRelPath)
-		protoCwd = strB
+		protoCwd = bldRootDirVFS
 		producerDeps = []NodeRef{info.ProducerRef}
 		producerSourceInputs = info.SourceInputs
 		generatedProto = true
@@ -363,7 +363,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 
 	yapycNode := Node{
 		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(yapycCmd), Env: yapycEnv}),
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkListSTR(yapycCmd), Env: yapycEnv}),
 		Env:            yapycEnv,
 		Inputs:         nodeInputs,
 		Outputs:        na.vfsList(yapycOut),

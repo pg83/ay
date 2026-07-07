@@ -77,7 +77,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 
 	n := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
 			Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(inputs, na.srcChunk(toolBinPath)),

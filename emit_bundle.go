@@ -85,7 +85,7 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst 
 
 	node := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(inputHead, ctx.scripts[fsTools]),
 		KV:           &bundleKV,

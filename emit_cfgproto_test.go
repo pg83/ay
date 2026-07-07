@@ -48,7 +48,7 @@ message Cfg {}
 		t.Fatalf("cfgproto producer KV = {%v,%v}, want {PB,yellow}", pb.KV.P, pb.KV.PC)
 	}
 
-	args := strStrs(pb.Cmds[0].CmdArgs.flat())
+	args := anyStrs(pb.Cmds[0].CmdArgs.flat())
 	wantArgs := []string{
 		"--config_out=$(B)/",
 		"--cpp_out=:$(B)/",
@@ -220,7 +220,7 @@ END()
 		t.Fatal("no PB producer for data.proto found")
 	}
 
-	for _, a := range strStrs(pb.Cmds[0].CmdArgs.flat()) {
+	for _, a := range anyStrs(pb.Cmds[0].CmdArgs.flat()) {
 		if a == "--config_out=$(B)/" ||
 			a == "--plugin=protoc-gen-config=$(B)/library/cpp/proto_config/plugin/plugin" {
 			t.Fatalf("ordinary .proto must not carry the proto_config plugin: %q", a)

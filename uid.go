@@ -56,7 +56,7 @@ func (c *CanonBuf) inputVal(v VFS) uint64 {
 	}
 
 	if !c.eSeen[id] {
-		e := internTable.cells.get(id >> 1).lo ^ uint64(id&1)
+		e := internTable.cells.get(id>>1).lo ^ uint64(id&1)
 
 		if v.isSource() {
 			e ^= c.sourceHash(v)
@@ -232,7 +232,24 @@ func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 	}
 }
 
-func (c *CanonBuf) writeStrChunks(chunks ArgChunks) {
+func (c *CanonBuf) writeVFS(v VFS) {
+	c.writeByte(byte(uint32(v) & 1))
+	c.writeUint64(internTable.cells.get(uint32(v) >> 1).lo)
+}
+
+func (c *CanonBuf) writeANY(a ANY) {
+	if v := a.vfs(); v != 0 {
+		c.writeByte(1 | byte(uint32(v)&1)<<1)
+		c.writeUint64(internTable.cells.get(uint32(v) >> 1).lo)
+
+		return
+	}
+
+	c.writeByte(0)
+	c.writeUint64(internTable.cells.get(uint32(a.str())).lo)
+}
+
+func (c *CanonBuf) writeAnyChunks(chunks ArgChunks) {
 	total := 0
 
 	for _, ch := range chunks {
@@ -243,7 +260,7 @@ func (c *CanonBuf) writeStrChunks(chunks ArgChunks) {
 
 	for _, ch := range chunks {
 		for _, a := range ch {
-			c.writeSTR(a)
+			c.writeANY(a)
 		}
 	}
 }
@@ -252,8 +269,8 @@ func (c *CanonBuf) writeCmdSlice(cmds []Cmd) {
 	c.writeUint32(uint32(len(cmds)))
 
 	for _, cm := range cmds {
-		c.writeStrChunks(cm.CmdArgs)
-		c.writeSTR(cm.Cwd)
+		c.writeAnyChunks(cm.CmdArgs)
+		c.writeVFS(cm.Cwd)
 		c.writeEnv(cm.Env)
 		c.writeSTR(cm.Stdout)
 	}

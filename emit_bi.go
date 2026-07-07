@@ -58,7 +58,7 @@ func emitBI(
 
 	node := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkListSTR(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkListSTR(cmd2Args), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(inputs),
 		KV:           &biKV,

@@ -39,7 +39,7 @@ func emitJVCPG4(
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
 			Env: env}),
 		Env:          env,
 		Inputs:       inputs,
@@ -90,7 +90,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
 			Env: env}),
 		Env:          env,
 		Inputs:       inputs,

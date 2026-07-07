@@ -2,7 +2,7 @@ package main
 
 import "encoding/json"
 
-type ArgChunks [][]STR
+type ArgChunks [][]ANY
 
 func (c ArgChunks) marshalJSON() ([]byte, error) {
 	return json.Marshal(c.flat())
@@ -12,14 +12,14 @@ func (c ArgChunks) MarshalJSON() ([]byte, error) {
 	return c.marshalJSON()
 }
 
-func (c ArgChunks) flat() []STR {
+func (c ArgChunks) flat() []ANY {
 	total := 0
 
 	for _, ch := range c {
 		total += len(ch)
 	}
 
-	out := make([]STR, 0, total)
+	out := make([]ANY, 0, total)
 
 	for _, ch := range c {
 		out = append(out, ch...)
@@ -30,7 +30,7 @@ func (c ArgChunks) flat() []STR {
 
 type Cmd struct {
 	CmdArgs ArgChunks `json:"cmd_args"`
-	Cwd     STR       `json:"cwd,omitempty"`
+	Cwd     VFS       `json:"cwd,omitempty"`
 	Env     EnvVars   `json:"env,omitempty"`
 	Stdout  STR       `json:"stdout,omitempty"`
 }

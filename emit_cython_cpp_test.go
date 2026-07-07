@@ -592,7 +592,7 @@ func TestGen_ManualCompanionSourceUsesCythonCompanionCCInputs(t *testing.T) {
 		}
 	}
 
-	for _, arg := range strStrs(args) {
+	for _, arg := range anyStrs(args) {
 		if strings.HasPrefix(arg, "-DPyInit_") || strings.HasPrefix(arg, "-Dinit_module_") {
 			t.Fatalf("helper.cpp.o cmd_args still carry PY_REGISTER define %q: %#v", arg, args)
 		}

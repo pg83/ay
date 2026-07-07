@@ -47,7 +47,7 @@ func (e *EmitContext) emitSwigC() {
 		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), cv.buckets...)
 		swigClosure := collectBucketVFS(cv.buckets, func(VFS) bool { return true })
 
-		cmdArgs := na.chunkList(na.strList(swigBin.fullSTR()), swigConstArgs, na.strList(internStr(swigModuleName(stmt.Module)),
+		cmdArgs := na.chunkListSTR(na.strList(swigBin.fullSTR()), swigConstArgs, na.strList(internStr(swigModuleName(stmt.Module)),
 			argInterface.str(),
 			internV(swigModuleName(stmt.Module), "_swg"),
 			argDashO.str(),

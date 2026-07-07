@@ -288,7 +288,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		ctx.emit.emitReservedNode(Node{
 			Platform: instance.Platform,
-			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
 				Env: env}),
 			Env:          env,
 			Inputs:       na.inputList(toolInputs),

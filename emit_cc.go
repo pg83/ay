@@ -238,39 +238,39 @@ func composeCCNode(instance ModuleInstance, src STR, srcVFS VFS, in ModuleCCInpu
 	k := 0
 
 	if wrapcc {
-		chunks[k] = instance.Platform.WrapccHead
-		chunks[k+1] = inChunk
-		chunks[k+2] = instance.Platform.WrapccTail
+		chunks[k] = na.anyChunk(instance.Platform.WrapccHead)
+		chunks[k+1] = na.anyChunk(inChunk)
+		chunks[k+2] = na.anyChunk(instance.Platform.WrapccTail)
 		k += 3
 	}
 
-	chunks[k] = compiler
-	chunks[k+1] = instance.Platform.CCHead
-	chunks[k+2] = tok[1:4]
-	chunks[k+3] = blocks.includes
-	chunks[k+4] = blocks.flags
+	chunks[k] = na.anyChunk(compiler)
+	chunks[k+1] = na.anyChunk(instance.Platform.CCHead)
+	chunks[k+2] = na.anyChunk(tok[1:4])
+	chunks[k+3] = na.anyChunk(blocks.includes)
+	chunks[k+4] = na.anyChunk(blocks.flags)
 	k += 5
 
 	if len(tail) > 0 {
-		chunks[k] = tail
+		chunks[k] = na.anyChunk(tail)
 		k++
 	}
 
-	chunks[k] = builtinMacroDateTimeStr
-	chunks[k+1] = macroPrefixMapFlagsStr
+	chunks[k] = na.anyChunk(builtinMacroDateTimeStr)
+	chunks[k+1] = na.anyChunk(macroPrefixMapFlagsStr)
 	k += 2
 
 	if len(in.PerSourceCFlags) > 0 {
-		chunks[k] = na.argStrList(in.PerSourceCFlags)
+		chunks[k] = na.anyChunk(na.argStrList(in.PerSourceCFlags))
 		k++
 	}
 
 	if !isCxx && len(blocks.cPost) > 0 {
-		chunks[k] = blocks.cPost
+		chunks[k] = na.anyChunk(blocks.cPost)
 		k++
 	}
 
-	chunks[k] = inChunk
+	chunks[k] = na.anyChunk(inChunk)
 	k++
 	na.chunks.commit(k)
 

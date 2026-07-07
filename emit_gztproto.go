@@ -28,7 +28,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{
-			CmdArgs: na.chunkList(gztCmdArgs(converterBin, protoInclude, gztSource, genProto)),
+			CmdArgs: na.chunkListSTR(gztCmdArgs(converterBin, protoInclude, gztSource, genProto)),
 			Env:     env,
 		}),
 		Env:            env,

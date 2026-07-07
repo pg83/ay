@@ -68,7 +68,7 @@ func expectedTestEnv(testName string) EnvVars {
 func expectedTestCtxNode() *Node {
 	return &Node{
 		Cmds: []Cmd{{
-			CmdArgs: ArgChunks{appendInternStrs(nil, []string{
+			CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{
 				"$(YMAKE_PYTHON3)/bin/python3",
 				"$(S)/build/scripts/append_file.py",
 				"$(B)/common_test.context",
@@ -78,7 +78,7 @@ func expectedTestCtxNode() *Node {
 				`    "TESTS_REQUESTED": "yes"`,
 				"  }",
 				"}",
-			})},
+			}))},
 		}},
 		Env:          nil,
 		Inputs:       InputChunks{{intern("$(S)/build/scripts/append_file.py")}},
@@ -92,8 +92,8 @@ func expectedTestCtxNode() *Node {
 func expectedUnittestNode(info TestSuiteInfo) *Node {
 	return &Node{
 		Cmds: []Cmd{{
-			Cwd: internStr("$(B)"),
-			CmdArgs: ArgChunks{appendInternStrs(nil, []string{
+			Cwd: bldRootDirVFS,
+			CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{
 				"$(TEST_TOOL_HOST)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
@@ -144,7 +144,7 @@ func expectedUnittestNode(info TestSuiteInfo) *Node {
 				"--verbose",
 				"--gdb-path", "$(GDB)/gdb/bin/gdb",
 				"--ya-end-command-file",
-			})},
+			}))},
 		}},
 		Env:    expectedTestEnv("unittest"),
 		Inputs: InputChunks{{intern("$(S)/util/ut")}},
@@ -163,8 +163,8 @@ func expectedUnittestNode(info TestSuiteInfo) *Node {
 func expectedClangFormatNode() *Node {
 	return &Node{
 		Cmds: []Cmd{{
-			Cwd: internStr("$(B)"),
-			CmdArgs: ArgChunks{appendInternStrs(nil, []string{
+			Cwd: bldRootDirVFS,
+			CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{
 				"$(TEST_TOOL_HOST)/test_tool",
 				"run_test",
 				"--ya-start-command-file",
@@ -215,7 +215,7 @@ func expectedClangFormatNode() *Node {
 				"$(S)/util/ysafeptr_ut.cpp",
 				"$(S)/util/ysaveload_ut.cpp",
 				"--ya-end-command-file",
-			})},
+			}))},
 		}},
 		Env: expectedTestEnv("clang_format"),
 		Inputs: InputChunks{{
@@ -244,7 +244,7 @@ func cmdsEqual(got, want []Cmd) bool {
 	}
 
 	for i := range got {
-		if !reflect.DeepEqual(strStrs(got[i].CmdArgs.flat()), strStrs(want[i].CmdArgs.flat())) {
+		if !reflect.DeepEqual(anyStrs(got[i].CmdArgs.flat()), genericStrs(want[i].CmdArgs.flat())) {
 			return false
 		}
 
@@ -420,7 +420,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		t.Fatalf("clang deps = %v, want [%d]", graphDeps(g, clangNode), ctxNode.Ref)
 	}
 
-	unittestArgs := strStrs(unittestNode.Cmds[0].CmdArgs.flat())
+	unittestArgs := anyStrs(unittestNode.Cmds[0].CmdArgs.flat())
 	binaryValue := ""
 
 	for i := 0; i+1 < len(unittestArgs); i++ {
@@ -453,7 +453,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		}
 	}
 
-	clangArgs := strStrs(clangNode.Cmds[0].CmdArgs.flat())
+	clangArgs := anyStrs(clangNode.Cmds[0].CmdArgs.flat())
 	var relatedPaths []string
 
 	for i := 0; i+1 < len(clangArgs); i++ {
@@ -528,7 +528,7 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 			t.Fatalf("cc inputs for %q unexpectedly include %q in %v", spec.output, spec.bad, ccInputs)
 		}
 
-		if !containsString(strStrs(ccNode.Cmds[0].CmdArgs.flat()), "-gz=zstd") {
+		if !containsString(anyStrs(ccNode.Cmds[0].CmdArgs.flat()), "-gz=zstd") {
 			t.Fatalf("cc cmd for %q missing -gz=zstd: %v", spec.output, ccNode.Cmds[0].CmdArgs.flat())
 		}
 	}
@@ -539,11 +539,11 @@ func TestEmitTestRunNodes_WiringAndGenHook(t *testing.T) {
 		}
 	}
 
-	if !containsString(strStrs(ldNode.Cmds[1].CmdArgs.flat()), "-gz=zstd") {
+	if !containsString(anyStrs(ldNode.Cmds[1].CmdArgs.flat()), "-gz=zstd") {
 		t.Fatalf("ld vcs compile cmd missing -gz=zstd: %v", ldNode.Cmds[1].CmdArgs.flat())
 	}
 
-	linkArgs := strStrs(ldNode.Cmds[2].CmdArgs.flat())
+	linkArgs := anyStrs(ldNode.Cmds[2].CmdArgs.flat())
 	wantLinkPrefix := []string{
 		"$(S)/build/scripts/link_exe.py",
 		"--start-plugins",

@@ -23,7 +23,7 @@ func emitR5(
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	cmd0 := Cmd{
-		CmdArgs: na.chunkList(na.strList((ragel5BinPath).fullSTR(),
+		CmdArgs: na.chunkListSTR(na.strList((ragel5BinPath).fullSTR(),
 			argDashO.str(),
 			(tmpVFS).fullSTR(),
 			(srcVFS).fullSTR())),
@@ -37,7 +37,7 @@ func emitR5(
 	}
 
 	cmd1 := Cmd{
-		CmdArgs: na.chunkList(na.strList((rlgenCdBinPath).fullSTR(),
+		CmdArgs: na.chunkListSTR(na.strList((rlgenCdBinPath).fullSTR(),
 			rlgenMode.str(),
 			argDashO.str(),
 			(cppVFS).fullSTR(),

@@ -235,7 +235,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 		protocBinary.fullSTR(),
 	)
 
-	cmdArgs := na.chunkList(head, mid)
+	cmdArgs := na.chunkListSTR(head, mid)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	inputs := []VFS{
@@ -247,7 +247,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Cwd: strS,
+			Cwd: srcRootDirVFS,
 			Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(inputs, imports.buckets...),
@@ -286,8 +286,8 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(
-			Cmd{CmdArgs: na.chunkList(merge), Env: env},
-			Cmd{CmdArgs: na.chunkList(collect), Cwd: strB, Env: env},
+			Cmd{CmdArgs: na.chunkListSTR(merge), Env: env},
+			Cmd{CmdArgs: na.chunkListSTR(collect), Cwd: bldRootDirVFS, Env: env},
 		),
 		Env:          env,
 		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS], ctx.scripts[collectRawprotoVFS]),
@@ -337,8 +337,8 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(
-			Cmd{CmdArgs: na.chunkList(merge), Env: env},
-			Cmd{CmdArgs: na.chunkList(collect), Cwd: strB, Env: env},
+			Cmd{CmdArgs: na.chunkListSTR(merge), Env: env},
+			Cmd{CmdArgs: na.chunkListSTR(collect), Cwd: bldRootDirVFS, Env: env},
 		),
 		Env:          env,
 		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS], ctx.scripts[mergeProtosrcVFS]),

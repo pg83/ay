@@ -166,7 +166,7 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	}
 
 	for _, c := range cc.Cmds {
-		for _, a := range strStrs(c.CmdArgs.flat()) {
+		for _, a := range anyStrs(c.CmdArgs.flat()) {
 			if a == "-I$(S)/thelib" {
 				t.Fatalf("own CC unexpectedly carries direct -I$(S)/thelib: cmds=%+v", cc.Cmds)
 			}
@@ -1106,7 +1106,7 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	var iFlags []string
 
 	if len(consumerCC.Cmds) > 0 {
-		for _, arg := range strStrs(consumerCC.Cmds[0].CmdArgs.flat()) {
+		for _, arg := range anyStrs(consumerCC.Cmds[0].CmdArgs.flat()) {
 			if strings.HasPrefix(arg, "-I") {
 				iFlags = append(iFlags, arg)
 			}
@@ -1515,7 +1515,7 @@ END()
 
 	wantPluginArg := "--plugin=protoc-gen-cpp_styleguide=$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"
 
-	if !containsString(strStrs(protoc.Cmds[0].CmdArgs.flat()), wantPluginArg) {
+	if !containsString(anyStrs(protoc.Cmds[0].CmdArgs.flat()), wantPluginArg) {
 		t.Fatalf("protoc cmd args missing %q: %v", wantPluginArg, protoc.Cmds[0].CmdArgs.flat())
 	}
 
@@ -1547,11 +1547,11 @@ END()
 		t.Fatalf("python cwd = %q, want $(B)/proto", got)
 	}
 
-	if !containsString(strStrs(cc.Cmds[0].CmdArgs.flat()), "$(B)/proto/Generated.code0.cc") {
+	if !containsString(anyStrs(cc.Cmds[0].CmdArgs.flat()), "$(B)/proto/Generated.code0.cc") {
 		t.Fatalf("cc cmd args missing built generated source: %v", cc.Cmds[0].CmdArgs.flat())
 	}
 
-	if containsString(strStrs(cc.Cmds[0].CmdArgs.flat()), "$(S)/proto/Generated.code0.cc") {
+	if containsString(anyStrs(cc.Cmds[0].CmdArgs.flat()), "$(S)/proto/Generated.code0.cc") {
 		t.Fatalf("cc cmd args still contain source-root generated source: %v", cc.Cmds[0].CmdArgs.flat())
 	}
 
@@ -1605,7 +1605,7 @@ END()
 		}
 
 		for _, cmd := range node.Cmds {
-			values = append(values, strStrs(cmd.CmdArgs.flat())...)
+			values = append(values, anyStrs(cmd.CmdArgs.flat())...)
 
 			if cmd.Cwd != 0 {
 				values = append(values, cmd.Cwd.string())
@@ -1702,7 +1702,7 @@ int use() { return 0; }
 		"$(B)/protos/main.grpc.pb.h",
 	)
 
-	if !containsString(strStrs(pb.Cmds[0].CmdArgs.flat()), "--cpp_out=proto_h=true:$(B)/") {
+	if !containsString(anyStrs(pb.Cmds[0].CmdArgs.flat()), "--cpp_out=proto_h=true:$(B)/") {
 		t.Fatalf("pb cmd args missing lite-header cpp_out flag: %v", pb.Cmds[0].CmdArgs.flat())
 	}
 
@@ -2367,7 +2367,10 @@ func nodeHasInput(n *Node, input string) bool {
 	return false
 }
 
-func indexOfArg(args []STR, want string) int {
+func indexOfArg[T interface {
+	~uint32
+	string() string
+}](args []T, want string) int {
 	for i, arg := range args {
 		if arg.string() == want {
 			return i
@@ -2458,7 +2461,7 @@ func TestGen_CppEvlog_PropagatesEventlogGlobalAddIncl(t *testing.T) {
 	if indexOfArg(args, want) == -1 {
 		var iFlags []string
 
-		for _, a := range strStrs(args) {
+		for _, a := range genericStrs(args) {
 			if strings.HasPrefix(a, "-I") {
 				iFlags = append(iFlags, a)
 			}
@@ -2508,7 +2511,7 @@ END()
 	var args []string
 
 	for _, c := range cc.Cmds {
-		args = append(args, strStrs(c.CmdArgs.flat())...)
+		args = append(args, anyStrs(c.CmdArgs.flat())...)
 	}
 
 	fallthroughCount := 0
@@ -2584,7 +2587,7 @@ END()
 	var args []string
 
 	for _, c := range cc.Cmds {
-		args = append(args, strStrs(c.CmdArgs.flat())...)
+		args = append(args, anyStrs(c.CmdArgs.flat())...)
 	}
 
 	contains := func(flag string) bool {

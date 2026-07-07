@@ -125,7 +125,7 @@ func emitARNode(
 		tail = append(tail, (p).fullSTR())
 	}
 
-	cmdArgs := na.chunkList(tc.ARCmdHead, tail)
+	cmdArgs := na.chunkListSTR(tc.ARCmdHead, tail)
 	inputTail := make([]VFS, 0, 2)
 
 	inputTail = append(inputTail, buildScriptsLinkLibPy)

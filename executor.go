@@ -485,7 +485,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		args := make([]string, len(flatArgs))
 
 		for i, a := range flatArgs {
-			args[i] = mountString(a.sharedString(), srcMount, bldMount)
+			args[i] = mountANY(a, srcMount, bldMount)
 		}
 
 		if n.KV.P == pkSB {
@@ -498,7 +498,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		dir := bldMount
 
 		if c.Cwd != 0 {
-			dir = mountString(c.Cwd.sharedString(), srcMount, bldMount)
+			dir = mountANY(c.Cwd.any(), srcMount, bldMount)
 		}
 
 		env := os.Environ()
@@ -748,6 +748,26 @@ func removeAllForce(dir string) {
 	})
 
 	_ = os.RemoveAll(dir)
+}
+
+func mountANY(a ANY, srcRoot, bldRoot string) string {
+	if v := a.vfs(); v != 0 {
+		root := srcRoot
+
+		if v.isBuild() {
+			root = bldRoot
+		}
+
+		rel := v.sharedRel()
+
+		if rel == "" {
+			return root
+		}
+
+		return root + "/" + rel
+	}
+
+	return mountString(a.str().sharedString(), srcRoot, bldRoot)
 }
 
 func mountString(s, srcRoot, bldRoot string) string {
