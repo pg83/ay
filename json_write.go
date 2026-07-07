@@ -146,7 +146,7 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 
 		if c.Cwd != 0 {
 			buf = append(buf, `,"cwd":`...)
-			buf = appendString(buf, c.Cwd.string())
+			buf = appendVFS(buf, c.Cwd)
 		}
 
 		if len(c.Env) > 0 {
@@ -312,8 +312,14 @@ func appendVFS(buf []byte, v VFS) []byte {
 	out := make([]byte, 0, len(s)+7)
 
 	out = append(out, '"')
-	out = append(out, v.prefix()...)
-	out = appendStringEscapedBody(out, s)
+
+	if s == "" {
+		out = append(out, v.prefix()[:vfsPrefixLen-1]...)
+	} else {
+		out = append(out, v.prefix()...)
+		out = appendStringEscapedBody(out, s)
+	}
+
 	out = append(out, '"')
 
 	vfsEscapedJSON[id] = out

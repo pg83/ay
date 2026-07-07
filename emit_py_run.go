@@ -367,20 +367,28 @@ func emitPYRun(
 		a := aTok.string()
 
 		if a == "${ARCADIA_ROOT}" {
-			a = "$(S)"
+			cmdArgs = append(cmdArgs, argS.any())
+
+			continue
 		}
 
 		if vfs, ok := inVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = vfs.string()
+			cmdArgs = append(cmdArgs, vfs.any())
+
+			continue
 		} else if vfs, ok := outVFSByToken[a]; ok && !strings.HasPrefix(a, "-") && !strings.Contains(a, "=") {
-			a = vfs.string()
+			cmdArgs = append(cmdArgs, vfs.any())
+
+			continue
 		} else if k, val, ok := strings.Cut(a, "="); ok && !strings.HasPrefix(a, "-") {
 			if vfs, ok := inVFSByToken[val]; ok {
-				a = k + "=" + vfs.string()
+				cmdArgs = append(cmdArgs, internV(k, "=", vfs.prefix(), vfs.relString()).any())
+
+				continue
 			}
 		}
 
-		cmdArgs = append(cmdArgs, internStr(a).any())
+		cmdArgs = append(cmdArgs, aTok.any())
 	}
 
 	head := make([]VFS, 0, 2+len(stmt.INFiles))
