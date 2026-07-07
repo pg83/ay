@@ -29,12 +29,12 @@ func (e *EmitContext) emitArchiveAsmNode(
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	rodataVFS := build(instance.Path.relString(), "/", a.Name, ".rodata")
-	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
+	cmdArgs := make([]ANY, 0, 4+len(a.Files)+2)
 
-	cmdArgs = append(cmdArgs, (toolBinPath).fullSTR(), argQ.str())
+	cmdArgs = append(cmdArgs, (toolBinPath).fullSTR().any(), argQ.any())
 
 	if a.DontCompress {
-		cmdArgs = append(cmdArgs, argP.str())
+		cmdArgs = append(cmdArgs, argP.any())
 	}
 
 	producerRefs := []NodeRef{}
@@ -57,10 +57,10 @@ func (e *EmitContext) emitArchiveAsmNode(
 		}
 
 		pathPerFile = append(pathPerFile, memberVFS)
-		cmdArgs = append(cmdArgs, internV(memberVFS.string(), ":"))
+		cmdArgs = append(cmdArgs, internV(memberVFS.string(), ":").any())
 	}
 
-	cmdArgs = append(cmdArgs, argDashO.str(), (rodataVFS).fullSTR())
+	cmdArgs = append(cmdArgs, argDashO.any(), (rodataVFS).fullSTR().any())
 
 	inputs := make([]VFS, 0, len(pathPerFile))
 
@@ -77,7 +77,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 
 	n := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(inputs, na.srcChunk(toolBinPath)),

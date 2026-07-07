@@ -181,19 +181,19 @@ func emitEN(
 ) {
 	na := emit.nodeArenas()
 
-	cmdArgs := []STR{
-		(enumParserBin).fullSTR(),
-		(headerInput).fullSTR(),
-		argIncludePath.str(),
-		internStr(headerInput.relString()),
-		argOutput.str(),
-		(serializedCPPVFS).fullSTR(),
+	cmdArgs := []ANY{
+		(enumParserBin).fullSTR().any(),
+		(headerInput).fullSTR().any(),
+		argIncludePath.any(),
+		internStr(headerInput.relString()).any(),
+		argOutput.any(),
+		(serializedCPPVFS).fullSTR().any(),
 	}
 
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
-		cmdArgs = append(cmdArgs, argHeader.str(), (serializedHVFS).fullSTR())
+		cmdArgs = append(cmdArgs, argHeader.any(), (serializedHVFS).fullSTR().any())
 		outputs = append(outputs, serializedHVFS)
 	}
 
@@ -203,7 +203,7 @@ func emitEN(
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(enumParserBin), headerIncludeClosure),

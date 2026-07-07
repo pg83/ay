@@ -46,15 +46,15 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	cmdArgs := []STR{d.cc.TC.Python3, configureFilePyVFS.fullSTR(), srcVFS.fullSTR(), outVFS.fullSTR()}
+	cmdArgs := []ANY{d.cc.TC.Python3.any(), configureFilePyVFS.fullSTR().any(), srcVFS.fullSTR().any(), outVFS.fullSTR().any()}
 
-	cmdArgs = appendInternStrs(cmdArgs, buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
+	cmdArgs = appendInternAnys(cmdArgs, buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
 
 	cv := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
 
 	cfRef := ctx.emit.emitNode(Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(na.vfsList(configureFilePyVFS, cv.self), cv.buckets...),
 		KV:           &cfKV,

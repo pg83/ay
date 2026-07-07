@@ -41,3 +41,7 @@ func (a ANY) sharedString() string {
 
 	return a.str().sharedString()
 }
+
+func (a ARG) any() ANY {
+	return a.str().any()
+}

@@ -9,16 +9,16 @@ var (
 	flatcKVFL64 = KV{P: pkFL64, PC: pcLightGreen}
 )
 
-var flatcConstFlags = []STR{
-	argNoWarnings.str(),
-	argCpp.str(),
-	argKeepPrefix.str(),
-	argGenMutable.str(),
-	argSchema.str(),
-	argB2.str(),
-	argGenObjectApi.str(),
-	argFilenameSuffix.str(),
-	argFbs.str(),
+var flatcConstFlags = []ANY{
+	argNoWarnings.any(),
+	argCpp.any(),
+	argKeepPrefix.any(),
+	argGenMutable.any(),
+	argSchema.any(),
+	argB2.any(),
+	argGenObjectApi.any(),
+	argFilenameSuffix.any(),
+	argFbs.any(),
 }
 
 var flatcIOLeadArgs = []STR{
@@ -27,15 +27,15 @@ var flatcIOLeadArgs = []STR{
 	argDashO.str(),
 }
 
-var flatc64ConstFlags = []STR{
-	argNoWarnings.str(),
-	argCpp.str(),
-	argKeepPrefix.str(),
-	argGenMutable.str(),
-	argSchema.str(),
-	argB2.str(),
-	argFilenameSuffix.str(),
-	argFbs64.str(),
+var flatc64ConstFlags = []ANY{
+	argNoWarnings.any(),
+	argCpp.any(),
+	argKeepPrefix.any(),
+	argGenMutable.any(),
+	argSchema.any(),
+	argB2.any(),
+	argFilenameSuffix.any(),
+	argFbs64.any(),
 }
 
 var flatc64IOLeadArgs = []STR{
@@ -66,7 +66,7 @@ var flatcVariantFL64 = FlatcVariant{
 
 type FlatcVariant struct {
 	toolArg    ARG
-	constFlags []STR
+	constFlags []ANY
 	ioLeadArgs []STR
 	kv         *KV
 	srcExt     string
@@ -114,10 +114,10 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	headerVFS := build(srcRel, ".h")
 	cppVFS := build(srcRel, ".cpp")
 	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt), v.bfbsExt)
-	cmdArgs := na.chunkListSTR(na.strList(tc.Python3, (flatcWrapperVFS).fullSTR(), (flatcBinary).fullSTR()), v.constFlags)
+	cmdArgs := na.chunkList(na.anyList(tc.Python3.any(), (flatcWrapperVFS).any(), (flatcBinary).any()), v.constFlags)
 
 	if len(flatcFlags) > 0 {
-		cmdArgs = append(cmdArgs, na.anyChunk(appendArgStr(nil, flatcFlags)))
+		cmdArgs = append(cmdArgs, na.argAnyList(flatcFlags))
 	}
 
 	cmdArgs = append(cmdArgs, na.anyChunk(v.ioLeadArgs), []ANY{headerVFS.any(), srcVFS.any()})

@@ -22,12 +22,12 @@ func (e *EmitContext) emitArchive(
 	na := emit.nodeArenas()
 	archiveVFS := build(instance.Path.relString(), "/", a.Name)
 	archivePath := archiveVFS.string()
-	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
+	cmdArgs := make([]ANY, 0, 4+len(a.Files)+2)
 
-	cmdArgs = append(cmdArgs, (toolBinPath).fullSTR(), argQ.str(), argX.str())
+	cmdArgs = append(cmdArgs, (toolBinPath).fullSTR().any(), argQ.any(), argX.any())
 
 	if a.DontCompress {
-		cmdArgs = append(cmdArgs, argP.str())
+		cmdArgs = append(cmdArgs, argP.any())
 	}
 
 	producerRefs := []NodeRef{}
@@ -60,17 +60,17 @@ func (e *EmitContext) emitArchive(
 		pathPerFile = append(pathPerFile, absVFS)
 
 		if a.Keys != nil {
-			cmdArgs = append(cmdArgs, internStr(absStr))
+			cmdArgs = append(cmdArgs, internStr(absStr).any())
 		} else {
-			cmdArgs = append(cmdArgs, internV(absStr, ":"))
+			cmdArgs = append(cmdArgs, internV(absStr, ":").any())
 		}
 	}
 
 	if a.Keys != nil {
-		cmdArgs = append(cmdArgs, argDashK.str(), internStr(strings.Join(a.Keys, ":")))
+		cmdArgs = append(cmdArgs, argDashK.any(), internStr(strings.Join(a.Keys, ":")).any())
 	}
 
-	cmdArgs = append(cmdArgs, argDashO.str(), internStr(archivePath))
+	cmdArgs = append(cmdArgs, argDashO.any(), internStr(archivePath).any())
 
 	inputs := make([]VFS, 0, len(pathPerFile))
 
@@ -89,7 +89,7 @@ func (e *EmitContext) emitArchive(
 
 	n := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(inputs, na.srcChunk(toolBinPath)),

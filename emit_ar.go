@@ -113,19 +113,19 @@ func emitARNode(
 ) NodeRef {
 	na := emit.nodeArenas()
 	cmdEnv := hostP.toolEnv()
-	tail := make([]STR, 0, 4+len(objPaths))
+	tail := make([]ANY, 0, 4+len(objPaths))
 
 	if arPluginPath != nil {
-		tail = append(tail, argPlugin.str(), (*arPluginPath).fullSTR())
+		tail = append(tail, argPlugin.any(), (*arPluginPath).fullSTR().any())
 	}
 
-	tail = append(tail, arg2.str(), (archivePath).fullSTR())
+	tail = append(tail, arg2.any(), (archivePath).fullSTR().any())
 
 	for _, p := range objPaths {
-		tail = append(tail, (p).fullSTR())
+		tail = append(tail, (p).fullSTR().any())
 	}
 
-	cmdArgs := na.chunkListSTR(tc.ARCmdHead, tail)
+	cmdArgs := na.chunkList(tc.ARCmdHead, tail)
 	inputTail := make([]VFS, 0, 2)
 
 	inputTail = append(inputTail, buildScriptsLinkLibPy)

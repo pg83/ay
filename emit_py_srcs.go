@@ -237,8 +237,8 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 
 	outputPath := e.pyYapycOutFor(ps)
 
-	cmdArgs := na.chunkListSTR([]STR{(py3ccBinary).fullSTR(), argSlowPy3cc.str(), (py3ccSlowBin).fullSTR()},
-		na.strList(internStr(moduleName), (srcAbs).fullSTR(), (outputPath).fullSTR()))
+	cmdArgs := na.chunkList([]ANY{(py3ccBinary).any(), argSlowPy3cc.any(), (py3ccSlowBin).any()},
+		na.anyList(internStr(moduleName).any(), (srcAbs).any(), (outputPath).any()))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
 	nodeInputs := na.inputList([]VFS{py3ccBinary, py3ccSlowBin}, na.srcChunk(srcAbs))
@@ -596,16 +596,16 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 		regCppAbs := regCppVFS.string()
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-		pyCmdArgs := []STR{
-			d.tc.Python3,
-			(genPy3RegScriptVFS).fullSTR(),
-			internStr(arg.string()),
-			internStr(regCppAbs),
+		pyCmdArgs := []ANY{
+			d.tc.Python3.any(),
+			(genPy3RegScriptVFS).any(),
+			internStr(arg.string()).any(),
+			internStr(regCppAbs).any(),
 		}
 
 		pyNode := Node{
 			Platform:     ctx.target,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(pyCmdArgs), Env: env}),
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
 			Env:          env,
 			Inputs:       na.inputList(genPy3RegScriptChunk),
 			Outputs:      na.vfsList(regCppVFS),

@@ -10,13 +10,13 @@ var (
 	swigCKV      = KV{P: pkSW, PC: pcYellow}
 )
 
-var swigConstArgs = []STR{
-	argIB.str(),
-	argIS.str(),
-	argISContribToolsSwigLibPython.str(),
-	argISContribToolsSwigLib.str(),
-	argPython.str(),
-	argModule.str(),
+var swigConstArgs = []ANY{
+	argIB.any(),
+	argIS.any(),
+	argISContribToolsSwigLibPython.any(),
+	argISContribToolsSwigLib.any(),
+	argPython.any(),
+	argModule.any(),
 }
 
 const swigLibRoot = "contrib/tools/swig/Lib"
@@ -47,12 +47,12 @@ func (e *EmitContext) emitSwigC() {
 		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), cv.buckets...)
 		swigClosure := collectBucketVFS(cv.buckets, func(VFS) bool { return true })
 
-		cmdArgs := na.chunkListSTR(na.strList(swigBin.fullSTR()), swigConstArgs, na.strList(internStr(swigModuleName(stmt.Module)),
-			argInterface.str(),
-			internV(swigModuleName(stmt.Module), "_swg"),
-			argDashO.str(),
-			(cOutVFS).fullSTR(),
-			(srcVFS).fullSTR()))
+		cmdArgs := na.chunkList(na.anyList(swigBin.any()), swigConstArgs, na.anyList(internStr(swigModuleName(stmt.Module)).any(),
+			argInterface.any(),
+			internV(swigModuleName(stmt.Module), "_swg").any(),
+			argDashO.any(),
+			(cOutVFS).any(),
+			(srcVFS).any()))
 
 		swRef := ctx.emit.emitNode(Node{
 			Platform: instance.Platform,

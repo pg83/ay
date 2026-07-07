@@ -10,7 +10,7 @@ var (
 	cxxStandardWarningsStr       = argSTRs(cxxStandardWarnings)
 	warningFlagsStr              = argSTRs(warningFlags)
 	catboostOpenSourceDefineStr  = argSTRs(catboostOpenSourceDefine)
-	cxxStandardFlagStr           = []STR{cxxStandardFlag.str()}
+	cxxStandardFlagStr           = []ANY{cxxStandardFlag.any()}
 )
 
 var ccIncludesPrefix = []ARG{

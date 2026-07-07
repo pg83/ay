@@ -22,8 +22,8 @@ type EmitContext struct {
 	objcopyRes   *ObjcopyEmitResult
 	protoRes     *ProtoSrcsResult
 	goRes        *GoSrcsResult
-	goInclJoined []STR
-	goInclSplit  []STR
+	goInclJoined []ANY
+	goInclSplit  []ANY
 	pySrcsReg    []PySrc
 	resources    []ResourceEntry
 }

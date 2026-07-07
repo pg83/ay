@@ -10,7 +10,7 @@ var (
 func emitBI(
 	instance ModuleInstance,
 	outputHeader string,
-	cxxFlags []STR,
+	cxxFlags []ANY,
 	tc ModuleToolchain,
 	emit *StreamingEmitter,
 ) NodeRef {
@@ -21,33 +21,33 @@ func emitBI(
 	argsFile := argsFileVFS.string()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
-	cmd0Args := []STR{
-		tc.Python3,
-		(yieldLinePyVFS).fullSTR(),
-		arg2.str(),
-		internStr(argsFile),
-		tc.CXX,
+	cmd0Args := []ANY{
+		tc.Python3.any(),
+		(yieldLinePyVFS).fullSTR().any(),
+		arg2.any(),
+		internStr(argsFile).any(),
+		tc.CXX.any(),
 	}
 
-	cmd1Args := make([]STR, 0, 4+len(cxxFlags))
+	cmd1Args := make([]ANY, 0, 4+len(cxxFlags))
 
 	cmd1Args = append(cmd1Args,
-		tc.Python3,
-		(yieldLinePyVFS).fullSTR(),
-		arg2.str(),
-		internStr(argsFile),
+		tc.Python3.any(),
+		(yieldLinePyVFS).fullSTR().any(),
+		arg2.any(),
+		internStr(argsFile).any(),
 	)
 
 	cmd1Args = append(cmd1Args, cxxFlags...)
 
-	cmd2Args := []STR{
-		tc.Python3,
-		(xargsPyVFS).fullSTR(),
-		arg2.str(),
-		internStr(argsFile),
-		tc.Python3,
-		(buildInfoGenPyVFS).fullSTR(),
-		(outVFS).fullSTR(),
+	cmd2Args := []ANY{
+		tc.Python3.any(),
+		(xargsPyVFS).fullSTR().any(),
+		arg2.any(),
+		internStr(argsFile).any(),
+		tc.Python3.any(),
+		(buildInfoGenPyVFS).fullSTR().any(),
+		(outVFS).fullSTR().any(),
 	}
 
 	inputs := []VFS{
@@ -58,7 +58,7 @@ func emitBI(
 
 	node := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkListSTR(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkListSTR(cmd2Args), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(inputs),
 		KV:           &biKV,
@@ -71,17 +71,17 @@ func emitBI(
 	return emit.emitNode(node)
 }
 
-func biFlagsForInstance(targetP *Platform) []STR {
+func biFlagsForInstance(targetP *Platform) []ANY {
 	bundle := compileFlagBundleFor(targetP)
-	flags := make([]STR, 0, 100)
+	flags := make([]ANY, 0, 100)
 	cflagPrefix := append(muslCFlags(targetP.Flags[envMUSL] == strYes), sseBaseCFlags(targetP.ISA == ISAX8664)...)
 
 	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, targetP.CFlags, cflagPrefix, catboostOpenSourceDefineFor(targetP))
-	flags = append(flags, (cxxStandardFlag).str())
-	flags = appendArgStr(flags, cxxStandardWarnings)
-	flags = append(flags, (baseUnitCxxNostdinc).str())
-	flags = appendArgStr(flags, catboostOpenSourceDefineFor(targetP))
-	flags = append(flags, (baseUnitCxxNostdinc).str())
+	flags = append(flags, (cxxStandardFlag).any())
+	flags = appendArgAny(flags, cxxStandardWarnings)
+	flags = append(flags, (baseUnitCxxNostdinc).any())
+	flags = appendArgAny(flags, catboostOpenSourceDefineFor(targetP))
+	flags = append(flags, (baseUnitCxxNostdinc).any())
 
 	return flags
 }

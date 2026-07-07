@@ -31,27 +31,27 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 		optVFSs = append(optVFSs, e.requireProducedInput("DECIMAL_MD5 input", opt.string(), copyFileInputVFS(ctx.fs, instance.Path, opt.string())))
 	}
 
-	cmdArgs := make([]STR, 0, 7+len(optVFSs))
+	cmdArgs := make([]ANY, 0, 7+len(optVFSs))
 
 	cmdArgs = append(cmdArgs,
-		d.tc.Python3,
-		decimalMD5PyVFS.fullSTR(),
-		strFixedOutput,
-		internV("--func-name=", stmt.FuncName),
-		strLowerBits,
-		str32,
-		internV("--source-root=", strS.string()),
+		d.tc.Python3.any(),
+		decimalMD5PyVFS.fullSTR().any(),
+		strFixedOutput.any(),
+		internV("--func-name=", stmt.FuncName).any(),
+		strLowerBits.any(),
+		str32.any(),
+		internV("--source-root=", strS.string()).any(),
 	)
 
 	for _, v := range optVFSs {
-		cmdArgs = append(cmdArgs, v.fullSTR())
+		cmdArgs = append(cmdArgs, v.fullSTR().any())
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	svRef := ctx.emit.emitNode(Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs), Env: env, Stdout: outVFS.fullSTR()}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env, Stdout: outVFS.fullSTR()}),
 		Env:          env,
 		Inputs:       na.inputList(na.vfsList(optVFSs...), na.vfsList(decimalMD5PyVFS)),
 		KV:           &decimalMd5KV,

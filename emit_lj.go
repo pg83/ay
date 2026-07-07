@@ -13,7 +13,7 @@ func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLD
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{
-			CmdArgs: na.chunkListSTR(na.strList(compilerBin.fullSTR(), argB2.str(), argDashG.str(), luaSrc.fullSTR(), rawOut.fullSTR())),
+			CmdArgs: na.chunkList(na.anyList(compilerBin.any(), argB2.any(), argDashG.any(), luaSrc.any(), rawOut.any())),
 			Cwd:     cwd,
 			Env:     env,
 		}),

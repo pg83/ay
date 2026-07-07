@@ -35,47 +35,47 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 		mode = "--copy-to-dir"
 	}
 
-	args := []STR{
-		d.tc.Python3,
-		buildScriptsFetchFromSandboxPy.fullSTR(),
-		argYaStartCommandFile.str(),
-		strResourceFile,
-		internV("$(RESOURCE_ROOT)/sbr/", id, "/resource"),
-		strResourceId,
-		stmt.ResourceId,
-		internStr(mode),
-		internStr(stmt.Prefix),
+	args := []ANY{
+		d.tc.Python3.any(),
+		buildScriptsFetchFromSandboxPy.fullSTR().any(),
+		argYaStartCommandFile.any(),
+		strResourceFile.any(),
+		internV("$(RESOURCE_ROOT)/sbr/", id, "/resource").any(),
+		strResourceId.any(),
+		stmt.ResourceId.any(),
+		internStr(mode).any(),
+		internStr(stmt.Prefix).any(),
 	}
 
 	for _, r := range stmt.Renames {
-		args = append(args, strRename, r)
+		args = append(args, strRename.any(), r.any())
 	}
 
 	if stmt.Executable {
-		args = append(args, strExecutable)
+		args = append(args, strExecutable.any())
 	}
 
-	args = append(args, arg2.str())
+	args = append(args, arg2.any())
 
 	outVFSs := make([]VFS, 0, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
 
 	for _, f := range stmt.OUTFiles {
-		args = append(args, f)
+		args = append(args, f.any())
 		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.relString(), f.string()))
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		args = append(args, f)
+		args = append(args, f.any())
 		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.relString(), f.string()))
 	}
 
-	args = append(args, argYaEndCommandFile.str())
+	args = append(args, argYaEndCommandFile.any())
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkListSTR(args), Cwd: build(instance.Path.relString()), Env: env}),
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: build(instance.Path.relString()), Env: env}),
 		Env:          env,
 		Inputs:       na.inputList(fromSandboxScriptInputs),
 		KV:           &fromSandboxKV,

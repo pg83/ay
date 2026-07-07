@@ -191,51 +191,51 @@ func protoNamespaceContribs(d *ModuleData) []VFS {
 	return append(own, d.protoAddInclGlobal...)
 }
 
-func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []STR {
-	out := make([]STR, 0, 8+len(peerProtoAddIncl))
+func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []ANY {
+	out := make([]ANY, 0, 8+len(peerProtoAddIncl))
 
 	out = append(out,
-		internV("-I=./", cppOutRoot),
-		internV("-I=$(S)/", cppOutRoot),
-		argIB2.str(),
-		argIS3.str(),
+		internV("-I=./", cppOutRoot).any(),
+		internV("-I=$(S)/", cppOutRoot).any(),
+		argIB2.any(),
+		argIS3.any(),
 	)
 
 	if cppOutRoot != "" {
-		out = append(out, internV("-I=$(S)/", cppOutRoot))
+		out = append(out, internV("-I=$(S)/", cppOutRoot).any())
 	}
 
 	for _, p := range peerProtoAddIncl {
-		out = append(out, internV("-I=", p.string()))
+		out = append(out, internV("-I=", p.string()).any())
 	}
 
 	out = append(out,
-		argIB2.str(),
-		argISContribLibsProtobufSrc.str(),
-		strIncludeSourceInfo,
+		argIB2.any(),
+		argISContribLibsProtobufSrc.any(),
+		strIncludeSourceInfo.any(),
 	)
 
 	return out
 }
 
 func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath string,
-	descOut, rawprotoOut VFS, protocLDRef NodeRef, protocBinary VFS, mid []STR, imports Closure) NodeRef {
+	descOut, rawprotoOut VFS, protocLDRef NodeRef, protocBinary VFS, mid []ANY, imports Closure) NodeRef {
 	na := ctx.emit.nodeArenas()
 
-	head := na.strList(
-		wrapccPython3STR,
-		descRawprotoWrapperVFS.fullSTR(),
-		strDescOutput,
-		descOut.fullSTR(),
-		strRawprotoOutput,
-		rawprotoOut.fullSTR(),
-		strProtoFile,
-		internStr(protoRelPath),
-		arg2.str(),
-		protocBinary.fullSTR(),
+	head := na.anyList(
+		wrapccPython3STR.any(),
+		descRawprotoWrapperVFS.any(),
+		strDescOutput.any(),
+		descOut.any(),
+		strRawprotoOutput.any(),
+		rawprotoOut.any(),
+		strProtoFile.any(),
+		internStr(protoRelPath).any(),
+		arg2.any(),
+		protocBinary.any(),
 	)
 
-	cmdArgs := na.chunkListSTR(head, mid)
+	cmdArgs := na.chunkList(head, mid)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	inputs := []VFS{
@@ -265,20 +265,20 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	descOutputs, rawprotoOutputs, producerSourceInputs []VFS, producerRefs []NodeRef) NodeRef {
 	na := ctx.emit.nodeArenas()
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	merge := make([]STR, 0, 3+len(descOutputs))
+	merge := make([]ANY, 0, 3+len(descOutputs))
 
-	merge = append(merge, wrapccPython3STR, mergeFilesVFS.fullSTR(), selfProtodesc.fullSTR())
+	merge = append(merge, wrapccPython3STR.any(), mergeFilesVFS.any(), selfProtodesc.any())
 
 	for _, d := range descOutputs {
-		merge = append(merge, d.fullSTR())
+		merge = append(merge, d.any())
 	}
 
-	collect := make([]STR, 0, 4+len(rawprotoOutputs))
+	collect := make([]ANY, 0, 4+len(rawprotoOutputs))
 
-	collect = append(collect, wrapccPython3STR, collectRawprotoVFS.fullSTR(), strOutput, protosrc.fullSTR())
+	collect = append(collect, wrapccPython3STR.any(), collectRawprotoVFS.any(), strOutput.any(), protosrc.any())
 
 	for _, r := range rawprotoOutputs {
-		collect = append(collect, internStr(r.relString()))
+		collect = append(collect, internStr(r.relString()).any())
 	}
 
 	inputs := concat(descOutputs, rawprotoOutputs, producerSourceInputs)
@@ -286,8 +286,8 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(
-			Cmd{CmdArgs: na.chunkListSTR(merge), Env: env},
-			Cmd{CmdArgs: na.chunkListSTR(collect), Cwd: bldRootDirVFS, Env: env},
+			Cmd{CmdArgs: na.chunkList(merge), Env: env},
+			Cmd{CmdArgs: na.chunkList(collect), Cwd: bldRootDirVFS, Env: env},
 		),
 		Env:          env,
 		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS], ctx.scripts[collectRawprotoVFS]),
@@ -309,20 +309,20 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	prj := realPrjName(instance.Path.relString())
 	protodesc := build(instance.Path.relString(), "/", prj, ".protodesc")
 	tar := build(instance.Path.relString(), "/", prj, ".tar")
-	merge := make([]STR, 0, 3+len(closure))
+	merge := make([]ANY, 0, 3+len(closure))
 
-	merge = append(merge, wrapccPython3STR, mergeFilesVFS.fullSTR(), protodesc.fullSTR())
+	merge = append(merge, wrapccPython3STR.any(), mergeFilesVFS.any(), protodesc.any())
 
-	collect := make([]STR, 0, 4+len(closure))
+	collect := make([]ANY, 0, 4+len(closure))
 
-	collect = append(collect, wrapccPython3STR, mergeProtosrcVFS.fullSTR(), strOutput, tar.fullSTR())
+	collect = append(collect, wrapccPython3STR.any(), mergeProtosrcVFS.any(), strOutput.any(), tar.any())
 
 	inputs := make([]VFS, 0, len(closure))
 	deps := make([]NodeRef, 0, len(closure))
 
 	for _, p := range closure {
-		merge = append(merge, p.SelfProtodesc.fullSTR())
-		collect = append(collect, internStr(p.SelfProtodesc.relString()))
+		merge = append(merge, p.SelfProtodesc.any())
+		collect = append(collect, internStr(p.SelfProtodesc.relString()).any())
 		inputs = append(inputs, p.SelfProtodesc)
 		deps = append(deps, p.MergeRef)
 	}
@@ -337,8 +337,8 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(
-			Cmd{CmdArgs: na.chunkListSTR(merge), Env: env},
-			Cmd{CmdArgs: na.chunkListSTR(collect), Cwd: bldRootDirVFS, Env: env},
+			Cmd{CmdArgs: na.chunkList(merge), Env: env},
+			Cmd{CmdArgs: na.chunkList(collect), Cwd: bldRootDirVFS, Env: env},
 		),
 		Env:          env,
 		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS], ctx.scripts[mergeProtosrcVFS]),

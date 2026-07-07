@@ -60,12 +60,12 @@ var py3CythonEmbeddedFiles = []string{
 	"contrib/tools/cython/Cython/Utility/arrayarray.h",
 }
 
-var cythonConstHead = []STR{
-	argSContribToolsCythonCythonPy.str(),
-	argX2.str(),
-	argLegacyImplicitNoexceptTrue.str(),
-	argE.str(),
-	argUnameSysnameLinux.str(),
+var cythonConstHead = []ANY{
+	argSContribToolsCythonCythonPy.any(),
+	argX2.any(),
+	argLegacyImplicitNoexceptTrue.any(),
+	argE.any(),
+	argUnameSysnameLinux.any(),
 }
 
 var cythonCppKV = KV{P: pkCY, PC: pcYellow}
@@ -262,33 +262,33 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		})
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-		cmdArgs := make([]STR, 0, 8+len(cythonConstHead)+len(stmt.Options))
+		cmdArgs := make([]ANY, 0, 8+len(cythonConstHead)+len(stmt.Options))
 
-		cmdArgs = append(cmdArgs, d.tc.Python3)
+		cmdArgs = append(cmdArgs, d.tc.Python3.any())
 		cmdArgs = append(cmdArgs, cythonConstHead...)
-		cmdArgs = appendInternStrs(cmdArgs, stmt.Options)
+		cmdArgs = appendInternAnys(cmdArgs, stmt.Options)
 
 		if !stmt.CMode {
-			cmdArgs = append(cmdArgs, argCplus.str())
+			cmdArgs = append(cmdArgs, argCplus.any())
 		}
 
 		cmdArgs = append(cmdArgs,
-			argIB.str(),
-			argIS.str(),
+			argIB.any(),
+			argIS.any(),
 		)
 
 		cmdArgs = appendCythonAddIncl(cmdArgs, d.cythonAddIncl, ctx.inclArgs)
 
 		cmdArgs = append(cmdArgs,
-			argISContribToolsCythonCythonIncludes.str(),
-			(srcVFS).fullSTR(),
-			argDashO.str(),
-			(generatedVFS).fullSTR(),
+			argISContribToolsCythonCythonIncludes.any(),
+			(srcVFS).fullSTR().any(),
+			argDashO.any(),
+			(generatedVFS).fullSTR().any(),
 		)
 
 		ctx.emit.emitReservedNode(Node{
 			Platform: instance.Platform,
-			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 				Env: env}),
 			Env:          env,
 			Inputs:       na.inputList(toolInputs),
@@ -432,9 +432,9 @@ func cythonImplicitFallthrough(stmt *CythonStmt, py23Variant bool) bool {
 	return !stmt.CMode && (hasSuffix(stmt.Src, ".pyx") || py23Variant)
 }
 
-func appendCythonAddIncl(cmdArgs []STR, addIncl []VFS, memo InclArgMemo) []STR {
+func appendCythonAddIncl(cmdArgs []ANY, addIncl []VFS, memo InclArgMemo) []ANY {
 	for _, path := range addIncl {
-		cmdArgs = append(cmdArgs, memo.arg(path))
+		cmdArgs = append(cmdArgs, memo.arg(path).any())
 	}
 
 	return cmdArgs

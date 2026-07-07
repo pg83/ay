@@ -6,16 +6,16 @@ import (
 )
 
 var (
-	rodataConstArgs = []STR{(rodataScriptVFS).fullSTR(), argElf.str()}
+	rodataConstArgs = []ANY{(rodataScriptVFS).any(), argElf.any()}
 	rodataKV        = KV{P: pkRD, PC: pcLightGreen}
 )
 
-var rodataYasmConstArgs = []STR{
-	argDYasm.str(),
-	argDashG.str(), argDwarf2.str(),
-	argI.str(), argB.str(),
-	argI.str(), argS.str(),
-	argDashO.str(),
+var rodataYasmConstArgs = []ANY{
+	argDYasm.any(),
+	argDashG.any(), argDwarf2.any(),
+	argI.any(), argB.any(),
+	argI.any(), argS.any(),
+	argDashO.any(),
 }
 
 func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
@@ -37,8 +37,8 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(na.strList(tc.Python3), rodataConstArgs, na.strList(internStr(toolName), (srcVFS).fullSTR(), (asmVFS).fullSTR())),
-			Env: pythonEnv}, Cmd{CmdArgs: na.chunkListSTR(yasmConstHead, na.strList(argD.str(), internV("_", string(instance.Platform.ISA), "_")), rodataYasmConstArgs, na.strList((outVFS).fullSTR(), (asmVFS).fullSTR())),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Python3.any()), rodataConstArgs, na.anyList(internStr(toolName).any(), (srcVFS).any(), (asmVFS).any())),
+			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.anyList(argD.any(), internV("_", string(instance.Platform.ISA), "_").any()), rodataYasmConstArgs, na.anyList((outVFS).any(), (asmVFS).any())),
 			Env: yasmEnv}),
 		Env: yasmEnv,
 		Inputs: na.inputList(na.vfsList(yasmBinaryVFS,

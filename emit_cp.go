@@ -18,12 +18,12 @@ func emitJVCPG4(
 	na := emit.nodeArenas()
 	fsTools := copyFsToolsVFS
 
-	cmdArgs := []STR{
-		tc.Python3,
-		(fsTools).fullSTR(),
-		argCopy.str(),
-		(src).fullSTR(),
-		(dst).fullSTR(),
+	cmdArgs := []ANY{
+		tc.Python3.any(),
+		(fsTools).fullSTR().any(),
+		argCopy.any(),
+		(src).fullSTR().any(),
+		(dst).fullSTR().any(),
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -39,7 +39,7 @@ func emitJVCPG4(
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:          env,
 		Inputs:       inputs,
@@ -65,12 +65,12 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 	na := emit.nodeArenas()
 	fsTools := copyFsToolsVFS
 
-	cmdArgs := []STR{
-		tc.Python3,
-		(fsTools).fullSTR(),
-		argCopy.str(),
-		(src).fullSTR(),
-		(dst).fullSTR(),
+	cmdArgs := []ANY{
+		tc.Python3.any(),
+		(fsTools).fullSTR().any(),
+		argCopy.any(),
+		(src).fullSTR().any(),
+		(dst).fullSTR().any(),
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -90,7 +90,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkListSTR(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:          env,
 		Inputs:       inputs,

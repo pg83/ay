@@ -5,7 +5,7 @@ import "strings"
 var (
 	ragel6ArgOptimized = internArg(ragel6DefaultFlagOptimized)
 	ragel6ArgDebug     = internArg(ragel6DefaultFlagDebug)
-	ragel6ConstArgs    = []STR{argL.str(), argIS.str(), argDashO.str()}
+	ragel6ConstArgs    = []ANY{argL.any(), argIS.any(), argDashO.any()}
 	r6KV               = KV{P: pkR6, PC: pcYellow}
 )
 
@@ -54,12 +54,12 @@ func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef,
 		}
 	}
 
-	head := make([]STR, 0, 1+len(effectiveFlags))
+	head := make([]ANY, 0, 1+len(effectiveFlags))
 
-	head = append(head, (ragel6BinaryPath).fullSTR())
-	head = appendArgStr(head, effectiveFlags)
+	head = append(head, (ragel6BinaryPath).any())
+	head = appendArgAny(head, effectiveFlags)
 
-	cmdArgs := na.chunkListSTR(head, ragel6ConstArgs, na.strList((outVFS).fullSTR(), (inVFS).fullSTR()))
+	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.anyList((outVFS).any(), (inVFS).any()))
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	head2 := na.vfsList(ragel6BinaryPath)
 

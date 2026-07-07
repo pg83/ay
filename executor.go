@@ -141,15 +141,15 @@ func (ex *Executor) contentHash(v VFS) uint64 {
 		return h
 	}
 
-	s := v.fullSTR()
+	s := v.any()
 
-	if h, ok := ex.localHash[s]; ok {
+	if h, ok := ex.localHash[s.str()]; ok {
 		return h
 	}
 
 	h := hashSourceFile(ex.srcRoot, v.sharedRel())
 
-	ex.localHash[s] = h
+	ex.localHash[s.str()] = h
 
 	return h
 }

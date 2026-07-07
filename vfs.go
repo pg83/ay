@@ -197,7 +197,13 @@ func (v VFS) fullSTR() STR {
 }
 
 func (v VFS) string() string {
-	return v.fullSTR().string()
+	rel := v.relString()
+
+	if rel == "" {
+		return v.prefix()[:vfsPrefixLen-1]
+	}
+
+	return v.prefix() + rel
 }
 
 func (v VFS) sharedString() string {
