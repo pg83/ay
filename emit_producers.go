@@ -400,12 +400,12 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 			continue
 		}
 
-		srcs = append(srcs, d.srcMetaOf(src))
+		srcs = append(srcs, d.srcMetaOf(pathAny(src)))
 
 		if srcExtClassOf(src) == srcExtGztProto && d.unit.Tag != unitTagPy3Proto {
-			childMeta := d.srcMetaOf(src)
+			childMeta := d.srcMetaOf(pathAny(src))
 
-			childMeta.Source = internStr(e.gztGenProtoName(src.string()))
+			childMeta.Source = internStr(e.gztGenProtoName(src.string())).any()
 			gztChildren = append(gztChildren, childMeta)
 		}
 	}
@@ -416,8 +416,8 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		positions = append(positions, ProducerPos{
 			kind:  prodSrc,
 			index: i,
-			outs:  e.srcPositionOuts(m.Source),
-			ins:   e.srcPositionIns(m.Source),
+			outs:  e.srcPositionOuts(m.Source.str()),
+			ins:   e.srcPositionIns(m.Source.str()),
 		})
 	}
 

@@ -37,7 +37,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	args := []ANY{
 		d.tc.Python3.any(),
-		buildScriptsFetchFromSandboxPy.fullSTR().any(),
+		buildScriptsFetchFromSandboxPy.any(),
 		argYaStartCommandFile.any(),
 		strResourceFile.any(),
 		internV("$(RESOURCE_ROOT)/sbr/", id, "/resource").any(),
@@ -120,7 +120,7 @@ func fromSandboxOutputIncludes(stmt *FromSandboxStmt) []IncludeDirective {
 			f = internStr(v.relString())
 		}
 
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: f})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
 	}
 
 	return includes

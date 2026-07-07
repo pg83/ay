@@ -24,7 +24,7 @@ func (e *EmitContext) emitArchive(
 	archivePath := archiveVFS.string()
 	cmdArgs := make([]ANY, 0, 4+len(a.Files)+2)
 
-	cmdArgs = append(cmdArgs, (toolBinPath).fullSTR().any(), argQ.any(), argX.any())
+	cmdArgs = append(cmdArgs, (toolBinPath).any(), argQ.any(), argX.any())
 
 	if a.DontCompress {
 		cmdArgs = append(cmdArgs, argP.any())

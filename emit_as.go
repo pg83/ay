@@ -83,7 +83,7 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(instance.Platform))
 	cmdArgs = appendArgAny(cmdArgs, in.SFlags)
 	cmdArgs = appendArgAny(cmdArgs, in.PerSourceCFlags)
-	cmdArgs = append(cmdArgs, argDashC.any(), argDashO.any(), (outVFS).fullSTR().any(), (inVFS).fullSTR().any())
+	cmdArgs = append(cmdArgs, argDashC.any(), argDashO.any(), (outVFS).any(), (inVFS).any())
 	cmdArgs = append(cmdArgs, includes...)
 
 	return cmdArgs

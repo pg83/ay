@@ -7,7 +7,7 @@ import (
 var (
 	goCgoBaseCFlags    = []ARG{internArg("-w"), internArg("-pthread"), internArg("-fpic")}
 	goCgoBaseCFlagsStr = []ANY{internStr("-w").any(), internStr("-pthread").any(), internStr("-fpic").any()}
-	goCgoCopyCmdHead   = []ANY{wrapccPython3STR.any(), copyFsToolsVFS.fullSTR().any(), internStr("copy").any()}
+	goCgoCopyCmdHead   = []ANY{wrapccPython3STR.any(), copyFsToolsVFS.any(), internStr("copy").any()}
 	goCgo1ToolChunk    = []ANY{str3.any(), strGoCgoTool.any(), internStr("-objdir").any()}
 	goCgoImportStd     = []ANY{internStr("-import_runtime_cgo=false").any(), internStr("-import_syscall=false").any()}
 	goCgoImportDefault = []ANY{internStr("-import_runtime_cgo=true").any(), internStr("-import_syscall=true").any()}
@@ -399,8 +399,8 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	for _, f := range files {
 		e.codegen.register(&GeneratedFileInfo{OutputPath: f.cgo1, ProducerRef: ref})
 		e.codegen.register(&GeneratedFileInfo{OutputPath: f.cgo2C, ProducerRef: ref, Compile: cgo2Spec, ClosureLeaves: leaves})
-		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo1.relString(), dir+"/")), Prio: stmtPrioDefault, Generated: true})
-		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo2C.relString(), dir+"/")), Prio: stmtPrioDefault, Generated: true})
+		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo1.relString(), dir+"/")).any(), Prio: stmtPrioDefault, Generated: true})
+		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo2C.relString(), dir+"/")).any(), Prio: stmtPrioDefault, Generated: true})
 	}
 
 	e.codegen.register(&GeneratedFileInfo{OutputPath: exportH, ProducerRef: ref})
@@ -408,8 +408,8 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	e.codegen.register(&GeneratedFileInfo{OutputPath: gotypes, ProducerRef: ref})
 	e.codegen.register(&GeneratedFileInfo{OutputPath: mainC, ProducerRef: ref})
 
-	e.enqueueSrc(SrcMeta{Source: strCgoExportC, Prio: stmtPrioDefault, Generated: true})
-	e.enqueueSrc(SrcMeta{Source: strCgoGotypesGo, Prio: stmtPrioDefault, Generated: true})
+	e.enqueueSrc(SrcMeta{Source: strCgoExportC.any(), Prio: stmtPrioDefault, Generated: true})
+	e.enqueueSrc(SrcMeta{Source: strCgoGotypesGo.any(), Prio: stmtPrioDefault, Generated: true})
 }
 
 func (e *EmitContext) goCgoLinkOFlags() []ANY {

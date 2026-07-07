@@ -31,7 +31,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 	rodataVFS := build(instance.Path.relString(), "/", a.Name, ".rodata")
 	cmdArgs := make([]ANY, 0, 4+len(a.Files)+2)
 
-	cmdArgs = append(cmdArgs, (toolBinPath).fullSTR().any(), argQ.any())
+	cmdArgs = append(cmdArgs, (toolBinPath).any(), argQ.any())
 
 	if a.DontCompress {
 		cmdArgs = append(cmdArgs, argP.any())
@@ -60,7 +60,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 		cmdArgs = append(cmdArgs, internV(memberVFS.string(), ":").any())
 	}
 
-	cmdArgs = append(cmdArgs, argDashO.any(), (rodataVFS).fullSTR().any())
+	cmdArgs = append(cmdArgs, argDashO.any(), (rodataVFS).any())
 
 	inputs := make([]VFS, 0, len(pathPerFile))
 

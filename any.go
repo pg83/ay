@@ -45,3 +45,19 @@ func (a ANY) sharedString() string {
 func (a ARG) any() ANY {
 	return a.str().any()
 }
+
+func (a ANY) relOrSelf() STR {
+	if v := a.vfs(); v != 0 {
+		return v.rel()
+	}
+
+	return a.str()
+}
+
+func pathAny(s STR) ANY {
+	if v := s.vfs(); v != 0 {
+		return v.any()
+	}
+
+	return s.any()
+}

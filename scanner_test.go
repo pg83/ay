@@ -195,7 +195,7 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 
 	scanner := newTestScanner(fs, nil)
 	sc := scanner.getScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
-	d := IncludeDirective{kind: includeSystem, target: internStr("foo.h")}
+	d := IncludeDirective{kind: includeSystem, target: includeTarget(internStr("foo.h"))}
 
 	got1 := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
 	got2 := sc.resolveSearchPath(intern("$(S)/pkg/b.cpp"), dirKey("pkg"), d)
@@ -217,7 +217,7 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 	scanner := newTestScanner(newMemFS(nil), nil)
 	sc := scanner.getScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
-	d := IncludeDirective{kind: includeSystem, target: internStr("missing.h")}
+	d := IncludeDirective{kind: includeSystem, target: includeTarget(internStr("missing.h"))}
 
 	got1 := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
 	got2 := sc.resolveSearchPath(intern("$(S)/pkg/b.cpp"), dirKey("pkg"), d)
@@ -243,7 +243,7 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 
 	scanner := newTestScanner(fs, nil)
 	sc := scanner.getScanCtx(newScanContext(scanner.parsers, VFSesFromStrings([]string{"include"}), nil, nil, ""), nil)
-	got := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), IncludeDirective{kind: includeQuoted, target: internStr("foo.h")})
+	got := sc.resolveSearchPath(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("foo.h"))})
 	want := []VFS{intern("$(S)/pkg/foo.h")}
 
 	if len(got) != len(want) || got[0] != want[0] {
@@ -1016,7 +1016,7 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 		source("contrib/libs/llvm16/include"),
 	}, nil, ""), nil)
 
-	d := IncludeDirective{kind: includeQuoted, target: internStr("llvm/Frontend/OpenMP/OMP.inc")}
+	d := IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("llvm/Frontend/OpenMP/OMP.inc"))}
 	got := sc.resolveSearchPath(intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
 	want := []VFS{build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
 
@@ -1041,7 +1041,7 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 		build("contrib/libs/llvm16/include"),
 	}, nil, ""), nil)
 
-	d := IncludeDirective{kind: includeQuoted, target: internStr("llvm/Frontend/OpenMP/OMP.inc")}
+	d := IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("llvm/Frontend/OpenMP/OMP.inc"))}
 	got := sc.resolveSearchPath(intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
 	want := []VFS{source("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
 
@@ -1063,7 +1063,7 @@ func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 		source("contrib/libs/llvm16/include"),
 	}, nil, ""), nil)
 
-	d := IncludeDirective{kind: includeQuoted, target: internStr("llvm/Frontend/OpenMP/OMP.h.inc")}
+	d := IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("llvm/Frontend/OpenMP/OMP.h.inc"))}
 	got := sc.resolveSearchPath(intern("$(S)/contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP"), d)
 	want := []VFS{build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc")}
 
@@ -1077,7 +1077,7 @@ func TestScanCtx_Resolve_RootedTargetBindsDirectly(t *testing.T) {
 	sc := scanner.getScanCtx(newScanContext(scanner.parsers, nil, nil, nil, ""), nil)
 
 	for _, target := range []string{"$(S)/util/generic/typetraits.h", "$(B)/pkg/gen.h"} {
-		d := IncludeDirective{kind: includeQuoted, target: internStr(target)}
+		d := IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(target))}
 		got := sc.resolve(intern("$(S)/pkg/a.cpp"), dirKey("pkg"), d)
 
 		if len(got) != 1 || got[0] != intern(target) {

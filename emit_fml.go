@@ -2,7 +2,7 @@ package main
 
 var fmKV = KV{P: pkFM, PC: pcYellow}
 
-func (e *EmitContext) emitLibraryFmlSource(src STR) {
+func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	srcRel := src.string()

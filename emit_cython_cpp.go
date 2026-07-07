@@ -164,7 +164,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			headerParsed := make([]IncludeDirective, 0, len(headerInduced))
 
 			for _, v := range headerInduced {
-				headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: internStr(v.relString())})
+				headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(v.relString()))})
 			}
 
 			reg := e.codegen
@@ -235,7 +235,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
 
 		for _, include := range emitsIncludes {
-			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.relString())})
+			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(include.relString()))})
 		}
 
 		py3Suffix := !stmt.CMode && !generatedExplicit && py23Variant
@@ -243,7 +243,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		var psc []ARG
 
-		if pcf := d.perSrcCFlagsFor(genSrcID); pcf != nil {
+		if pcf := d.perSrcCFlagsFor(genSrcID.any()); pcf != nil {
 			psc = *pcf
 		}
 
@@ -258,7 +258,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			Compile:        &CompileSpec{FlatOutput: d.flatSrc(genSrcID), Py3Suffix: py3Suffix, CFlags: ccCFlags},
+			Compile:        &CompileSpec{FlatOutput: d.flatSrc(genSrcID.any()), Py3Suffix: py3Suffix, CFlags: ccCFlags},
 		})
 
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -281,9 +281,9 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		cmdArgs = append(cmdArgs,
 			argISContribToolsCythonCythonIncludes.any(),
-			(srcVFS).fullSTR().any(),
+			(srcVFS).any(),
 			argDashO.any(),
-			(generatedVFS).fullSTR().any(),
+			(generatedVFS).any(),
 		)
 
 		ctx.emit.emitReservedNode(Node{
@@ -298,7 +298,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			Resources:    usesPython3,
 		}, cyRef)
 
-		e.enqueueSrc(SrcMeta{Source: generatedVFS.fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCython})
+		e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCython})
 	}
 }
 

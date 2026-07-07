@@ -23,7 +23,7 @@ func emitBI(
 
 	cmd0Args := []ANY{
 		tc.Python3.any(),
-		(yieldLinePyVFS).fullSTR().any(),
+		(yieldLinePyVFS).any(),
 		arg2.any(),
 		internStr(argsFile).any(),
 		tc.CXX.any(),
@@ -33,7 +33,7 @@ func emitBI(
 
 	cmd1Args = append(cmd1Args,
 		tc.Python3.any(),
-		(yieldLinePyVFS).fullSTR().any(),
+		(yieldLinePyVFS).any(),
 		arg2.any(),
 		internStr(argsFile).any(),
 	)
@@ -42,12 +42,12 @@ func emitBI(
 
 	cmd2Args := []ANY{
 		tc.Python3.any(),
-		(xargsPyVFS).fullSTR().any(),
+		(xargsPyVFS).any(),
 		arg2.any(),
 		internStr(argsFile).any(),
 		tc.Python3.any(),
-		(buildInfoGenPyVFS).fullSTR().any(),
-		(outVFS).fullSTR().any(),
+		(buildInfoGenPyVFS).any(),
+		(outVFS).any(),
 	}
 
 	inputs := []VFS{
@@ -96,9 +96,9 @@ func (e *EmitContext) emitBuildInfoStmt() {
 		ProducerRef:   biRef,
 		GeneratorRefs: nil,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{
-			{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.relString())},
-			{kind: includeQuoted, target: internStr(xargsPyVFS.relString())},
-			{kind: includeQuoted, target: internStr(yieldLinePyVFS.relString())},
+			{kind: includeQuoted, target: includeTarget(internStr(buildInfoGenPyVFS.relString()))},
+			{kind: includeQuoted, target: includeTarget(internStr(xargsPyVFS.relString()))},
+			{kind: includeQuoted, target: includeTarget(internStr(yieldLinePyVFS.relString()))},
 		}},
 	})
 }

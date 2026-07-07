@@ -92,8 +92,8 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	enRef := ctx.emit.reserve()
 
 	cppParsed := []IncludeDirective{
-		{kind: includeQuoted, target: internStr(headerInput.relString())},
-		{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
+		{kind: includeQuoted, target: includeTarget(internStr(headerInput.relString()))},
+		{kind: includeQuoted, target: includeTarget(strUtilGenericSerializedEnumH)},
 	}
 
 	sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
@@ -109,8 +109,8 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	if withHeader {
 		hParsed := []IncludeDirective{
-			{kind: includeQuoted, target: internStr(headerInput.relString())},
-			{kind: includeQuoted, target: internStr(serializedCPPPath.relString())},
+			{kind: includeQuoted, target: includeTarget(internStr(headerInput.relString()))},
+			{kind: includeQuoted, target: includeTarget(internStr(serializedCPPPath.relString()))},
 		}
 
 		sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
@@ -161,7 +161,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			ctx.emit,
 		)
 
-		e.enqueueSrc(SrcMeta{Source: serializedCPPPath.fullSTR(), Prio: stmtPrioDefault, Seq: declSeq, Generated: true, SecondLevel: secondLevel})
+		e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: declSeq, Generated: true, SecondLevel: secondLevel})
 	})
 }
 
@@ -182,18 +182,18 @@ func emitEN(
 	na := emit.nodeArenas()
 
 	cmdArgs := []ANY{
-		(enumParserBin).fullSTR().any(),
-		(headerInput).fullSTR().any(),
+		(enumParserBin).any(),
+		(headerInput).any(),
 		argIncludePath.any(),
 		internStr(headerInput.relString()).any(),
 		argOutput.any(),
-		(serializedCPPVFS).fullSTR().any(),
+		(serializedCPPVFS).any(),
 	}
 
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
-		cmdArgs = append(cmdArgs, argHeader.any(), (serializedHVFS).fullSTR().any())
+		cmdArgs = append(cmdArgs, argHeader.any(), (serializedHVFS).any())
 		outputs = append(outputs, serializedHVFS)
 	}
 

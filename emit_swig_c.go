@@ -70,7 +70,7 @@ func (e *EmitContext) emitSwigC() {
 
 		var psc []ARG
 
-		if p := d.perSrcCFlagsFor(cOutVFS.fullSTR()); p != nil {
+		if p := d.perSrcCFlagsFor(cOutVFS.any()); p != nil {
 			psc = *p
 		}
 
@@ -80,7 +80,7 @@ func (e *EmitContext) emitSwigC() {
 			GeneratorRefs:  []NodeRef{swigRef},
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(ctx, srcVFS, swigClosure)},
 			ClosureLeaves:  append(append([]VFS{}, swigClosure...), srcVFS),
-			Compile:        &CompileSpec{FlatOutput: d.flatSrc(cOutVFS.fullSTR()), CFlags: psc},
+			Compile:        &CompileSpec{FlatOutput: d.flatSrc(cOutVFS.any()), CFlags: psc},
 		})
 
 		reg.register(&GeneratedFileInfo{
@@ -97,7 +97,7 @@ func (e *EmitContext) emitSwigC() {
 			Group:  pyGroupGenAux,
 		})
 
-		e.enqueueSrc(SrcMeta{Source: cOutVFS.fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkSwig})
+		e.enqueueSrc(SrcMeta{Source: cOutVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkSwig})
 	}
 }
 

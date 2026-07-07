@@ -17,7 +17,7 @@ func (e *EmitContext) emitDecimalMD5Stmt(stmt *DecimalMD5Lower32BitsStmt) {
 		return
 	}
 
-	e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), stmt.File).fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkDecimalMD5})
+	e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), stmt.File).any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkDecimalMD5})
 }
 
 func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
@@ -35,7 +35,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 
 	cmdArgs = append(cmdArgs,
 		d.tc.Python3.any(),
-		decimalMD5PyVFS.fullSTR().any(),
+		decimalMD5PyVFS.any(),
 		strFixedOutput.any(),
 		internV("--func-name=", stmt.FuncName).any(),
 		strLowerBits.any(),
@@ -44,7 +44,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 	)
 
 	for _, v := range optVFSs {
-		cmdArgs = append(cmdArgs, v.fullSTR().any())
+		cmdArgs = append(cmdArgs, v.any())
 	}
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}

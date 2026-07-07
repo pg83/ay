@@ -12,7 +12,7 @@ func (e *EmitContext) emitSplitCodegenStmt(sc *SplitCodegenStmt) {
 	_, parts := e.emitSplitCodegen(sc)
 
 	for _, partRel := range parts {
-		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), partRel).fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkSplitCodegen})
+		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), partRel).any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkSplitCodegen})
 	}
 }
 
@@ -56,11 +56,11 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	scRef := ctx.emit.reserve()
 	part0 := build(moduleDir, "/", partRels[0])
-	part0Inc := IncludeDirective{kind: includeQuoted, target: internStr(part0.relString())}
+	part0Inc := IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(part0.relString()))}
 	headerParsed := make([]IncludeDirective, 0, len(sc.OutputIncludes))
 
 	for _, oi := range sc.OutputIncludes {
-		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: oi})
+		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(oi)})
 	}
 
 	cppParsed := []IncludeDirective{part0Inc}

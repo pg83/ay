@@ -96,7 +96,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		outVFS := outVFSByToken[outTok.string()]
 		cppRel := antlrOutputModuleRel(instance.Path.relString(), outVFS)
 
-		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), cppRel).fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkAntlr})
+		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), cppRel).any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkAntlr})
 	}
 }
 
@@ -133,7 +133,7 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 		}
 
 		seen[target] = struct{}{}
-		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(target)})
+		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(target))})
 	}
 
 	if isCCSourceExt(outTok) {

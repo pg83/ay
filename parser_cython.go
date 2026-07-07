@@ -21,7 +21,7 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 	}
 
 	if extIsPyx(rel) {
-		add(IncludeDirective{kind: includeCythonSibling, target: internV(path.Base(rel[:len(rel)-len(".pyx")]), ".pxd")})
+		add(IncludeDirective{kind: includeCythonSibling, target: includeTarget(internV(path.Base(rel[:len(rel)-len(".pyx")]), ".pxd"))})
 	}
 
 	eachLine(data, func(line []byte) {
@@ -32,7 +32,7 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 		}
 
 		if m := cythonIncludeRe.FindSubmatch(t); len(m) == 2 {
-			add(IncludeDirective{kind: includeQuoted, target: internBytes(m[1])})
+			add(IncludeDirective{kind: includeQuoted, target: includeTarget(internBytes(m[1]))})
 
 			return
 		}
@@ -41,7 +41,7 @@ func (CythonIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAlloca
 			target, kind, ok := parseDelimitedIncludeTarget(string(m[1]))
 
 			if ok {
-				add(IncludeDirective{kind: kind, target: internStr(target)})
+				add(IncludeDirective{kind: kind, target: includeTarget(internStr(target))})
 			}
 
 			return
@@ -88,8 +88,8 @@ func addCythonPxdCandidates(add func(IncludeDirective), path string) {
 		return
 	}
 
-	add(IncludeDirective{kind: includeCythonOptional, target: internV(path, ".pxd")})
-	add(IncludeDirective{kind: includeCythonFallback, target: internV(path, "/__init__.pxd")})
+	add(IncludeDirective{kind: includeCythonOptional, target: includeTarget(internV(path, ".pxd"))})
+	add(IncludeDirective{kind: includeCythonFallback, target: includeTarget(internV(path, "/__init__.pxd"))})
 }
 
 func addCythonCimportFrom(add func(IncludeDirective), module, names string) {
@@ -104,7 +104,7 @@ func addCythonCimportFrom(add func(IncludeDirective), module, names string) {
 	}
 
 	emit := func(kind IncludeKind, rel string) {
-		add(IncludeDirective{kind: kind, target: internStr(rel)})
+		add(IncludeDirective{kind: kind, target: includeTarget(internStr(rel))})
 	}
 
 	if searchPath == "" {

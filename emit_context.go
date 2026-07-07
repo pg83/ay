@@ -99,7 +99,7 @@ func (e *EmitContext) emit() {
 	e.emitDeclaredProducers(cythonPlans)
 
 	for _, fe := range d.srcExtraFlat {
-		srcVFS := e.moduleSourceVFS(fe.Src)
+		srcVFS := e.moduleSourceVFS(fe.Src.any())
 		ref, out := e.emitCCFlat(srcVFS, nil, fe.Flags)
 
 		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq})
@@ -107,17 +107,17 @@ func (e *EmitContext) emit() {
 
 	for _, src := range d.srcs {
 		if !isCodegenProducingSrcID(src) {
-			e.emitOneSource(d.srcMetaOf(src))
+			e.emitOneSource(d.srcMetaOf(pathAny(src)))
 		}
 	}
 
 	e.drainSrcs()
 
 	for _, simd := range d.simdSrcs {
-		srcVFS := e.moduleSourceVFS(simd.Src)
+		srcVFS := e.moduleSourceVFS(pathAny(simd.Src))
 		flags := internArgs(simd.CFlags)
 
-		if extras := d.perSrcCFlagsFor(simd.Src); extras != nil {
+		if extras := d.perSrcCFlagsFor(pathAny(simd.Src)); extras != nil {
 			flags = append(flags, *extras...)
 		}
 
@@ -128,7 +128,7 @@ func (e *EmitContext) emit() {
 	}
 
 	for _, src := range d.globalSrcs {
-		m := d.srcMetaOf(src)
+		m := d.srcMetaOf(pathAny(src))
 
 		m.Global = true
 

@@ -65,13 +65,13 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst 
 	fsTools := copyFsToolsVFS
 	cmdArgs := make([]ANY, 0, 5)
 
-	cmdArgs = append(cmdArgs, python3.any(), fsTools.fullSTR().any(), argRename.any())
+	cmdArgs = append(cmdArgs, python3.any(), fsTools.any(), argRename.any())
 
 	if resolved {
-		cmdArgs = append(cmdArgs, src.fullSTR().any())
+		cmdArgs = append(cmdArgs, src.any())
 	}
 
-	cmdArgs = append(cmdArgs, dst.fullSTR().any())
+	cmdArgs = append(cmdArgs, dst.any())
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 

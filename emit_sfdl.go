@@ -7,7 +7,7 @@ import (
 
 var sfKV = KV{P: pkSF, PC: pcYellow}
 
-func (e *EmitContext) emitLibrarySfdlSource(src STR) {
+func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	srcRel := src.string()

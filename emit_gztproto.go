@@ -9,7 +9,7 @@ var gztprotoKV = KV{P: pkGZ, PC: pcYellow}
 
 func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VFS) (NodeRef, string) {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	gztSource := e.resolveModuleSourceVFS(internStr(srcRel), d.srcDirs)
+	gztSource := e.resolveModuleSourceVFS(internStr(srcRel).any(), d.srcDirs)
 	moddir := instance.Path.relString()
 	base := strings.TrimSuffix(filepath.Base(gztSource.relString()), filepath.Ext(gztSource.relString()))
 	genProtoName := base + ".proto"
@@ -62,12 +62,12 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 }
 
 func (e *EmitContext) gztGenProtoName(srcRel string) string {
-	gztSource := e.resolveModuleSourceVFS(internStr(srcRel), e.d.srcDirs)
+	gztSource := e.resolveModuleSourceVFS(internStr(srcRel).any(), e.d.srcDirs)
 
 	return strings.TrimSuffix(filepath.Base(gztSource.relString()), filepath.Ext(gztSource.relString())) + ".proto"
 }
 
-func (e *EmitContext) emitLibraryGztProtoCompile(src STR) {
+func (e *EmitContext) emitLibraryGztProtoCompile(src ANY) {
 	_, _, d := e.ctx, e.instance, e.d
 
 	if d.unit.Tag == unitTagPy3Proto {
@@ -140,7 +140,7 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) []I
 	local := make([]IncludeDirective, 0, len(inducedProtos)+len(gztLocal))
 
 	for _, v := range inducedProtos {
-		local = append(local, IncludeDirective{kind: includeQuoted, target: internStr(v.relString())})
+		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(v.relString()))})
 	}
 
 	for _, dir := range gztLocal {
@@ -150,7 +150,7 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) []I
 			t = strings.TrimSuffix(t, ".gztproto") + ".proto"
 		}
 
-		local = append(local, IncludeDirective{kind: dir.kind, target: internStr(t)})
+		local = append(local, IncludeDirective{kind: dir.kind, target: includeTarget(internStr(t))})
 	}
 
 	return local

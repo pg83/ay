@@ -3,7 +3,7 @@ package main
 import "strings"
 
 var (
-	flexOutputInclude = IncludeDirective{kind: includeQuoted, target: internStr("util/system/compiler.h")}
+	flexOutputInclude = IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("util/system/compiler.h"))}
 	flexKV            = KV{P: pkLX, PC: pcYellow}
 )
 
@@ -17,7 +17,7 @@ func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	return build(instance.Path.relString(), "/", srcRel, flexDefaultGenExt)
 }
 
-func (e *EmitContext) emitLibraryFlexSource(src STR) {
+func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
@@ -37,7 +37,7 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) {
 	cflags := psc
 
 	if extIsFlexL(srcRel) {
-		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(srcVFS.relString())})
+		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(srcVFS.relString()))})
 		cflags = concat(psc, []ARG{argWnoUnusedVariable})
 	}
 
@@ -54,7 +54,7 @@ func (e *EmitContext) emitLibraryFlexSource(src STR) {
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	meta.Source = outVFS.fullSTR()
+	meta.Source = outVFS.any()
 	e.enqueueSrc(meta)
 
 	e.deferPass2(func() {

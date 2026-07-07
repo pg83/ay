@@ -139,7 +139,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 	return pe
 }
 
-func (e *EmitContext) emitPyProtoSource(srcTok STR, srcGroup int) {
+func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	src := srcTok.string()
@@ -491,7 +491,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 
 	for _, in := range seed {
 		if in.isSource() {
-			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(in.relString())})
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(in.relString()))})
 		}
 	}
 

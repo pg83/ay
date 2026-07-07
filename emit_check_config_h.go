@@ -38,7 +38,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 
 	var psc []ARG
 
-	if p := d.perSrcCFlagsFor(generatedVFS.fullSTR()); p != nil {
+	if p := d.perSrcCFlagsFor(generatedVFS.any()); p != nil {
 		psc = *p
 	}
 
@@ -46,11 +46,11 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 		OutputPath:  generatedVFS,
 		ProducerRef: chRef,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{
-			{kind: includeQuoted, target: internStr(confVFS.relString())},
+			{kind: includeQuoted, target: includeTarget(internStr(confVFS.relString()))},
 		}},
 		ClosureLeaves: []VFS{buildScriptsCheckConfigHPy},
-		Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.fullSTR()), CFlags: psc},
+		Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.any()), CFlags: psc},
 	})
 
-	e.enqueueSrc(SrcMeta{Source: generatedVFS.fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCheckConfig})
+	e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCheckConfig})
 }

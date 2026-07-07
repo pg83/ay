@@ -27,10 +27,10 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	cmdArgs := make([]ANY, 0, 4+len(bc.Opts))
 
 	cmdArgs = append(cmdArgs,
-		toolBin.fullSTR().any(),
-		inputIn.fullSTR().any(),
-		prefixCpp.fullSTR().any(),
-		prefixH.fullSTR().any(),
+		toolBin.any(),
+		inputIn.any(),
+		prefixCpp.any(),
+		prefixH.any(),
 	)
 
 	cmdArgs = appendAnys(cmdArgs, bc.Opts)
@@ -40,7 +40,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	var headerParsed []IncludeDirective
 
 	for _, oi := range bc.OutputIncludes {
-		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: oi})
+		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(oi)})
 	}
 
 	reg := e.codegen

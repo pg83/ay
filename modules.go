@@ -197,7 +197,7 @@ type ModuleData struct {
 	exportsScript            *STR
 	ldPlugins                []STR
 	arPlugin                 *STR
-	perSrcCFlags             map[STR][]ARG
+	perSrcCFlags             map[ANY][]ARG
 	hasFbs                   bool
 	hasFbs64                 bool
 	defaultVars              map[STR]STR
@@ -226,8 +226,8 @@ type ModuleData struct {
 	lj21                     *Lj21Archive
 	copyFiles                []CopyFileEntry
 	copyFileAutoOutputs      map[STR]CopyFileEntry
-	flatSrcs                 map[STR]struct{}
-	srcMeta                  map[STR]SrcMeta
+	flatSrcs                 map[ANY]struct{}
+	srcMeta                  map[ANY]SrcMeta
 	declSeq                  int
 	resources                []ResourceEntry
 	bundles                  []BundleEntry
@@ -250,7 +250,7 @@ type ModuleData struct {
 	cc                       ModuleCompileEnv
 }
 
-func (d *ModuleData) perSrcCFlagsFor(src STR) *[]ARG {
+func (d *ModuleData) perSrcCFlagsFor(src ANY) *[]ARG {
 	if len(d.perSrcCFlags) == 0 {
 		return nil
 	}
@@ -262,7 +262,7 @@ func (d *ModuleData) perSrcCFlagsFor(src STR) *[]ARG {
 	return nil
 }
 
-func (d *ModuleData) flatSrc(src STR) bool {
+func (d *ModuleData) flatSrc(src ANY) bool {
 	if len(d.flatSrcs) == 0 {
 		return false
 	}
@@ -273,7 +273,7 @@ func (d *ModuleData) flatSrc(src STR) bool {
 }
 
 type SrcMeta struct {
-	Source      STR
+	Source      ANY
 	Prio        int
 	Seq         int
 	Generated   bool
@@ -302,15 +302,15 @@ func (d *ModuleData) nextDeclSeq() int {
 	return d.declSeq
 }
 
-func (d *ModuleData) setSrcMeta(src STR, prio, seq int) {
+func (d *ModuleData) setSrcMeta(src ANY, prio, seq int) {
 	if d.srcMeta == nil {
-		d.srcMeta = map[STR]SrcMeta{}
+		d.srcMeta = map[ANY]SrcMeta{}
 	}
 
 	d.srcMeta[src] = SrcMeta{Prio: prio, Seq: seq}
 }
 
-func (d *ModuleData) srcMetaOf(src STR) SrcMeta {
+func (d *ModuleData) srcMetaOf(src ANY) SrcMeta {
 	m, ok := d.srcMeta[src]
 
 	if !ok {
@@ -1039,7 +1039,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 					globalNext = false
 				} else {
 					d.srcs = append(d.srcs, srcTok)
-					d.setSrcMeta(srcTok, stmtPrioSrcs, d.nextDeclSeq())
+					d.setSrcMeta(pathAny(srcTok), stmtPrioSrcs, d.nextDeclSeq())
 				}
 
 				switch srcExtClassOf(srcTok) {
@@ -1947,18 +1947,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.srcs = append(d.srcs, filename)
 
 		if d.flatSrcs == nil {
-			d.flatSrcs = map[STR]struct{}{}
+			d.flatSrcs = map[ANY]struct{}{}
 		}
 
-		d.flatSrcs[filename] = struct{}{}
-		d.setSrcMeta(filename, stmtPrioDefault, d.nextDeclSeq())
+		d.flatSrcs[pathAny(filename)] = struct{}{}
+		d.setSrcMeta(pathAny(filename), stmtPrioDefault, d.nextDeclSeq())
 
 		if extras != nil {
 			if d.perSrcCFlags == nil {
-				d.perSrcCFlags = map[STR][]ARG{}
+				d.perSrcCFlags = map[ANY][]ARG{}
 			}
 
-			d.perSrcCFlags[filename] = append(d.perSrcCFlags[filename], extras...)
+			d.perSrcCFlags[pathAny(filename)] = append(d.perSrcCFlags[pathAny(filename)], extras...)
 		}
 	case tokSrcCNoLto:
 
@@ -1971,11 +1971,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.srcs = append(d.srcs, filename)
 
 		if d.flatSrcs == nil {
-			d.flatSrcs = map[STR]struct{}{}
+			d.flatSrcs = map[ANY]struct{}{}
 		}
 
-		d.flatSrcs[filename] = struct{}{}
-		d.setSrcMeta(filename, stmtPrioDefault, d.nextDeclSeq())
+		d.flatSrcs[pathAny(filename)] = struct{}{}
+		d.setSrcMeta(pathAny(filename), stmtPrioDefault, d.nextDeclSeq())
 	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
 		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 
@@ -2463,7 +2463,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			for _, pTok := range v.Args[1:] {
 				p := pTok.string()
-				dir := IncludeDirective{kind: includeQuoted, target: internStr(p)}
+				dir := IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(p))}
 
 				if toHeader {
 					d.inducedDeps = appendParsedDirectives(d.inducedDeps, parsedIncludesHeader, dir)

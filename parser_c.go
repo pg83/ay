@@ -109,10 +109,10 @@ func parseDirectiveInline(data []byte, hashPos int) (IncludeDirective, bool, int
 			}
 
 			if data[start] == 'O' && bytes.Equal(data[start:q], opensslUnistdInclude) {
-				return IncludeDirective{kind: includeSystem, target: opensslUnistdTarget}, true, nextLineStart(data, q)
+				return IncludeDirective{kind: includeSystem, target: includeTarget(opensslUnistdTarget)}, true, nextLineStart(data, q)
 			}
 
-			return IncludeDirective{kind: includeQuoted, target: internBytes(data[start:q])}, true, nextLineStart(data, q)
+			return IncludeDirective{kind: includeQuoted, target: includeTarget(internBytes(data[start:q]))}, true, nextLineStart(data, q)
 		}
 
 		return IncludeDirective{}, false, nextLineStart(data, q)
@@ -141,7 +141,7 @@ func parseDirectiveInline(data []byte, hashPos int) (IncludeDirective, bool, int
 	}
 
 	if !hasYIgnoreComment(data, q) && !bytes.ContainsAny(targetBytes, "[]") {
-		return IncludeDirective{kind: kind, target: internBytes(targetBytes)}, true, nextLineStart(data, q)
+		return IncludeDirective{kind: kind, target: includeTarget(internBytes(targetBytes))}, true, nextLineStart(data, q)
 	}
 
 	return IncludeDirective{}, false, nextLineStart(data, q)

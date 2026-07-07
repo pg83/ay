@@ -116,13 +116,13 @@ func emitARNode(
 	tail := make([]ANY, 0, 4+len(objPaths))
 
 	if arPluginPath != nil {
-		tail = append(tail, argPlugin.any(), (*arPluginPath).fullSTR().any())
+		tail = append(tail, argPlugin.any(), (*arPluginPath).any())
 	}
 
-	tail = append(tail, arg2.any(), (archivePath).fullSTR().any())
+	tail = append(tail, arg2.any(), (archivePath).any())
 
 	for _, p := range objPaths {
-		tail = append(tail, (p).fullSTR().any())
+		tail = append(tail, (p).any())
 	}
 
 	cmdArgs := na.chunkList(tc.ARCmdHead, tail)
