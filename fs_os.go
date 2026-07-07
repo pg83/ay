@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/zeebo/xxh3"
 )
@@ -48,22 +47,6 @@ func newFS(srcRoot string) FS {
 	fs.platformInit()
 
 	return fs
-}
-
-func (fs *OsFS) readSourceRels() []string {
-	var out []string
-
-	for s := uint32(1); s < internTable.count; s++ {
-		if fs.contentHashes.getSafe(s) == 0 {
-			continue
-		}
-
-		if rel, ok := strings.CutPrefix(STR(s).String(), "$(S)/"); ok && rel != "" {
-			out = append(out, rel)
-		}
-	}
-
-	return out
 }
 
 func (fs *OsFS) recordContentHash(rel string, data []byte) {

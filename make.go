@@ -29,7 +29,6 @@ type MakeFlags struct {
 	threads           int
 	keepGoing         bool
 	dumpGraph         bool
-	copySources       string
 	stats             bool
 	ninja             bool
 	buildType         string
@@ -228,22 +227,6 @@ func cmdMake(g GlobalFlags, args []string) int {
 		})
 	})
 
-	if mf.copySources != "" {
-		for _, target := range mf.targets {
-			genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0)
-		}
-
-		osfs, ok := fs.(*OsFS)
-
-		if !ok {
-			throwFmt("--copy-sources requires the on-disk source FS")
-		}
-
-		throw(copySourceSlice(osfs, mf.srcRoot, mf.copySources, onWarn))
-
-		return 0
-	}
-
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
@@ -308,7 +291,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
-		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,copy-sources:,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:"),
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:"),
 		Mode:     getopt.ModeInOrder,
 		Func:     getopt.FuncGetOptLong,
 	}
@@ -337,8 +320,6 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.clear = true
 		case opt.Char == 'G' || opt.Name == "dump-graph":
 			mf.dumpGraph = true
-		case opt.Name == "copy-sources":
-			mf.copySources = opt.OptArg
 		case opt.Name == "stats":
 			mf.stats = true
 		case opt.Name == "musl":
@@ -461,7 +442,6 @@ execution flags:
   -j, --jobs <N>                Parallel exec slots (default: NumCPU); 0 = build-only.
   -k, --keep-going              Continue past per-node failures.
   --clear                       Move cas/tmp/uid into grb at start (fresh build cache).
-  --copy-sources <dir>          Build the graph, copy the source slice it read into <dir>; no build.
   --cmd-prefix <suffix>=<pfx>   Prepend <pfx> tokens before any command arg whose path
                                 ends with <suffix> (repeatable). E.g. run fetched glibc
                                 binaries through a loader: bin/java=/bin/ld.linux-so.2
