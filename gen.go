@@ -15,6 +15,10 @@ var asmlibYasmModules = map[string]bool{
 }
 
 var acknowledgedMacros = map[string]struct{}{
+	"ALICE_TYPED_CALLBACK":            {},
+	"SOURCE_GROUP":                    {},
+	"TS_PROTO_OPT":                    {},
+	"GO_PACKAGE_NAME":                 {},
 	"CUDA_NVCC_FLAGS":                 {},
 	"SET_APPEND_WITH_GLOBAL":          {},
 	"RECURSE":                         {},
@@ -597,6 +601,14 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 }
 
 func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
+	for _, src := range d.srcs {
+		if extIsGztproto(src.string()) {
+			d.peerdirs = append(d.peerdirs, internStr("kernel/gazetteer/proto"))
+
+			break
+		}
+	}
+
 	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary {
 		hasProtoSrc := false
 
