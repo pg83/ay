@@ -2,10 +2,16 @@
 
 package main
 
-const bucketHashSIMDMin = 1 << 30
+func bucketHashPlatform(elems []VFS) (sum, xr, sq uint32) {
+	sum = uint32(len(elems))
 
-const useBucketHashAVX2 = false
+	for _, v := range elems {
+		x := uint32(v)
 
-func bucketAccumAVX2(p *VFS, n int) (sum, xr, sq uint32) {
-	panic("bucketAccumAVX2 without amd64")
+		sum += x
+		xr ^= x
+		sq += x * x
+	}
+
+	return sum, xr, sq
 }

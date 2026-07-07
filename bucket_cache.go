@@ -27,29 +27,7 @@ func newBucketCache() *BucketCache {
 }
 
 func bucketHash(elems []VFS) (uint64, uint64) {
-	sum := uint32(len(elems))
-
-	var xr, sq uint32
-
-	tail := elems
-
-	if useBucketHashAVX2 && len(elems) >= bucketHashSIMDMin {
-		k := len(elems) &^ 7
-		s, x, q := bucketAccumAVX2(&elems[0], k)
-
-		sum += s
-		xr ^= x
-		sq += q
-		tail = elems[k:]
-	}
-
-	for _, v := range tail {
-		x := uint32(v)
-
-		sum += x
-		xr ^= x
-		sq += x * x
-	}
+	sum, xr, sq := bucketHashPlatform(elems)
 
 	h1 := mix64(uint64(sq)<<32 | uint64(sum^xr))
 	h2 := mix64(uint64(sum)<<32 | uint64(xr^sq))
