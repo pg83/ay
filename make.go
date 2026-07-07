@@ -273,6 +273,10 @@ func cmdMake(g GlobalFlags, args []string) int {
 		ex.installRoot(r, mf.installRoot)
 	}
 
+	if ex.discarded.Load() {
+		ex.startGarbageCollector()
+	}
+
 	return 0
 }
 
