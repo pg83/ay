@@ -185,7 +185,7 @@ func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
 	}
 }
 
-func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
+func (fs *OsFS) readDirViewRel(dir VFS, rel string) DirView {
 	n, ok := fs.readDirAll(rel, &fs.direntBuf)
 
 	if !ok {

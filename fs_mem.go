@@ -75,7 +75,7 @@ func (fs *MemFS) listdir(dir VFS) DirView {
 		return DirView{}
 	}
 
-	key := STR(dir.strID())
+	key := dir
 	packed := make([]uint32, 0, len(entries))
 
 	for name, isDir := range entries {
