@@ -26,6 +26,9 @@ var commands = []Command{
 			"unauthenticated fetch_from_sandbox.py; untar/copy outputs into the build dir.",
 	},
 	{
+		path: []string{"gc"}, run: cmdGC, hide: true,
+	},
+	{
 		path: []string{"make"}, run: cmdMake,
 		help: "🔨 Generate the build graph for the given targets and write it as JSON.\n" +
 			"Mirrors ymake: --source-root, --sandboxing, -G, -j.",

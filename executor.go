@@ -45,6 +45,7 @@ type Executor struct {
 	canon       CanonBuf
 	localHash   map[STR]uint64
 	prepBatch   []*NodeFuture
+	discarded   atomic.Bool
 	pending     atomic.Uint64
 	done        atomic.Uint64
 	tokenOnce   sync.Once
@@ -707,6 +708,8 @@ func (ex *Executor) clearCache() {
 }
 
 func (ex *Executor) discard(path string) {
+	ex.discarded.Store(true)
+
 	for {
 		_ = os.MkdirAll(ex.grbDir, 0o755)
 
@@ -719,12 +722,73 @@ func (ex *Executor) discard(path string) {
 }
 
 func (ex *Executor) startGarbageCollector() {
+	exe, err := os.Executable()
+
+	if err == nil && spawnDetachedGC(exe, ex.grbDir) == nil {
+		return
+	}
+
 	go func() {
 		for {
 			removeAllForce(ex.grbDir)
 			time.Sleep(time.Second)
 		}
 	}()
+}
+
+func spawnDetachedGC(exe, grbDir string) error {
+	cmd := exec.Command(exe, "gc", grbDir)
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
+	env := os.Environ()
+	kept := env[:0]
+
+	for _, e := range env {
+		if !strings.HasPrefix(e, "YATOOL_") {
+			kept = append(kept, e)
+		}
+	}
+
+	cmd.Env = kept
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	return cmd.Process.Release()
+}
+
+func cmdGC(_ GlobalFlags, args []string) int {
+	if len(args) != 1 {
+		throwFmt("gc: expected one directory argument")
+	}
+
+	grbDir := args[0]
+	lockPath := grbDir + ".lock"
+	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+
+	if err != nil {
+		return 0
+	}
+
+	defer lock.Close()
+
+	if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+		return 0
+	}
+
+	for {
+		removeAllForce(grbDir)
+
+		entries, err := os.ReadDir(grbDir)
+
+		if err != nil || len(entries) == 0 {
+			return 0
+		}
+
+		time.Sleep(time.Second)
+	}
 }
 
 func removeAllForce(dir string) {
