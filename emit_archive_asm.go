@@ -28,10 +28,10 @@ func (e *EmitContext) emitArchiveAsmNode(
 ) NodeRef {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
-	rodataVFS := build(instance.Path.rel(), "/", a.Name, ".rodata")
+	rodataVFS := build(instance.Path.relString(), "/", a.Name, ".rodata")
 	cmdArgs := make([]STR, 0, 4+len(a.Files)+2)
 
-	cmdArgs = append(cmdArgs, (toolBinPath).str(), argQ.str())
+	cmdArgs = append(cmdArgs, (toolBinPath).fullSTR(), argQ.str())
 
 	if a.DontCompress {
 		cmdArgs = append(cmdArgs, argP.str())
@@ -46,8 +46,8 @@ func (e *EmitContext) emitArchiveAsmNode(
 	for _, f := range a.Files {
 		var memberVFS VFS
 
-		if info := reg.lookup(copyFileOutputVFS(instance.Path.rel(), f)); info != nil {
-			memberVFS = copyFileOutputVFS(instance.Path.rel(), f)
+		if info := reg.lookup(copyFileOutputVFS(instance.Path.relString(), f)); info != nil {
+			memberVFS = copyFileOutputVFS(instance.Path.relString(), f)
 
 			if deduper.add(info.ProducerRef.strID()) {
 				producerRefs = append(producerRefs, info.ProducerRef)
@@ -60,7 +60,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 		cmdArgs = append(cmdArgs, internV(memberVFS.string(), ":"))
 	}
 
-	cmdArgs = append(cmdArgs, argDashO.str(), (rodataVFS).str())
+	cmdArgs = append(cmdArgs, argDashO.str(), (rodataVFS).fullSTR())
 
 	inputs := make([]VFS, 0, len(pathPerFile))
 
@@ -116,7 +116,7 @@ func (e *EmitContext) emitArchiveAsmRodata(rodataRel string, producerRef NodeRef
 		throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", instance.Platform.ISA, rodataRel)
 	}
 
-	rodataPath := build(instance.Path.rel(), "/", rodataRel)
+	rodataPath := build(instance.Path.relString(), "/", rodataRel)
 	leaves := walkClosure(e.scanner, rodataPath, d.cc.ScanCfg)
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 	ref, _, outPath := emitRD(instance, rodataRel, rodataPath, yasmLDRef, leaves, []NodeRef{producerRef}, d.cc.TC, ctx.emit)

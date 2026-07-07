@@ -10,7 +10,7 @@ var baseCodegenKV = KV{P: pkBC, PC: pcYellow}
 func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.emit.nodeArenas()
-	moduleDir := instance.Path.rel()
+	moduleDir := instance.Path.relString()
 	prefix := bc.Prefix.string()
 	toolRes := ctx.toolResult(internArg(filepath.Clean(bc.ToolPath.string())))
 	toolLDRef := toolRes.LDRef
@@ -27,10 +27,10 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	cmdArgs := make([]STR, 0, 4+len(bc.Opts))
 
 	cmdArgs = append(cmdArgs,
-		toolBin.str(),
-		inputIn.str(),
-		prefixCpp.str(),
-		prefixH.str(),
+		toolBin.fullSTR(),
+		inputIn.fullSTR(),
+		prefixCpp.fullSTR(),
+		prefixH.fullSTR(),
 	)
 
 	cmdArgs = append(cmdArgs, bc.Opts...)

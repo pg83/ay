@@ -13,7 +13,7 @@ func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLD
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{
-			CmdArgs: na.chunkList(na.strList(compilerBin.str(), argB2.str(), argDashG.str(), luaSrc.str(), rawOut.str())),
+			CmdArgs: na.chunkList(na.strList(compilerBin.fullSTR(), argB2.str(), argDashG.str(), luaSrc.fullSTR(), rawOut.fullSTR())),
 			Cwd:     cwd,
 			Env:     env,
 		}),
@@ -37,11 +37,11 @@ func (e *EmitContext) emitLuaJit21() {
 
 	compilerLDRef, compilerBin := ctx.tool(argLuajit21Compiler)
 	reg := e.codegen
-	cwd := source(luajit21CwdRel).str()
+	cwd := source(luajit21CwdRel).fullSTR()
 
 	for _, lua := range d.lj21.Luas {
 		luaSrc := resolveSourceVFS(ctx, instance, lua, d.srcDirs)
-		rawOut := build(instance.Path.rel(), "/", strings.TrimSuffix(lua, ".lua"), ".raw")
+		rawOut := build(instance.Path.relString(), "/", strings.TrimSuffix(lua, ".lua"), ".raw")
 		ref := emitLJ(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ctx.emit)
 
 		reg.register(&GeneratedFileInfo{

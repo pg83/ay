@@ -38,12 +38,12 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 	cuCxxTail := blocks.cxxTail
 
 	head := []([]STR){
-		na.strList(wrapccPython3STR, cudaCompileScriptVFS.str(), cudaMtimeFlagStr, mtimeVFS.str(), cudaCustomPidFlagStr, pidVFS.str(), cudaNvccBinStr, cudaNvccStdStr),
+		na.strList(wrapccPython3STR, cudaCompileScriptVFS.fullSTR(), cudaMtimeFlagStr, mtimeVFS.fullSTR(), cudaCustomPidFlagStr, pidVFS.fullSTR(), cudaNvccBinStr, cudaNvccStdStr),
 		nvccFlagsHead,
-		na.strList(internV("--keep-dir=$(B)/", instance.Path.rel())),
+		na.strList(internV("--keep-dir=$(B)/", instance.Path.relString())),
 		nvccFlagsTail,
 		in.CudaNvccFlags,
-		na.strList(argDashC.str(), (inVFS).str(), argDashO.str(), (outVFS).str()),
+		na.strList(argDashC.str(), (inVFS).fullSTR(), argDashO.str(), (outVFS).fullSTR()),
 	}
 
 	total := len(head) + 6

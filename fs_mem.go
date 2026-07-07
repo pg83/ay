@@ -61,7 +61,7 @@ func newMemFS(files map[string]string) *MemFS {
 }
 
 func (fs *MemFS) listdir(dir VFS) DirView {
-	rel := dir.rel()
+	rel := dir.relString()
 
 	if v, ok := fs.views[rel]; ok {
 		return v
@@ -133,7 +133,7 @@ func (fs *MemFS) existsRel(rel string) (present bool, isDir bool) {
 }
 
 func (fs *MemFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
-	return fs.existsRel(joinRel(prefix.rel(), suffix))
+	return fs.existsRel(joinRel(prefix.relString(), suffix))
 }
 
 func (fs *MemFS) isFile(prefix VFS, suffix string) bool {
@@ -159,7 +159,7 @@ func (fs *MemFS) read(rel string) []byte {
 }
 
 func (fs *MemFS) contentHash(v VFS) uint64 {
-	data, ok := fs.files[cleanRel(v.rel())]
+	data, ok := fs.files[cleanRel(v.relString())]
 
 	if !ok {
 		return 0

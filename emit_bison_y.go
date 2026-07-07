@@ -31,7 +31,7 @@ func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {
 	parsed := make([]IncludeDirective, 0, 1+len(bisonCppSkeletonDirectives))
 
 	parsed = append(parsed,
-		IncludeDirective{kind: includeQuoted, target: internStr(bisonPreprocessPyVFS.rel())},
+		IncludeDirective{kind: includeQuoted, target: internStr(bisonPreprocessPyVFS.relString())},
 	)
 
 	parsed = append(parsed, bisonCppSkeletonDirectives...)
@@ -41,8 +41,8 @@ func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {
 
 func (e *EmitContext) bisonGeneratedCPPParsed(srcVFS, headerVFS VFS) []IncludeDirective {
 	parsed := []IncludeDirective{
-		{kind: includeQuoted, target: internStr(headerVFS.rel())},
-		{kind: includeQuoted, target: internStr(srcVFS.rel())},
+		{kind: includeQuoted, target: internStr(headerVFS.relString())},
+		{kind: includeQuoted, target: internStr(srcVFS.relString())},
 	}
 
 	parsed = append(parsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
@@ -69,13 +69,13 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	baseNoExt := strings.TrimSuffix(srcRel, filepath.Ext(srcRel))
 	headerRel := baseNoExt + ".h"
 	generatedRel := bisonGeneratedRel(srcRel, genExt)
-	headerVFS := build(instance.Path.rel(), "/", headerRel)
-	generatedVFS := build(instance.Path.rel(), "/", generatedRel)
-	srcVFS := source(instance.Path.rel(), "/", srcRel)
-	headerParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.rel())}}
+	headerVFS := build(instance.Path.relString(), "/", headerRel)
+	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
+	srcVFS := source(instance.Path.relString(), "/", srcRel)
+	headerParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.relString())}}
 
 	if preprocessHeader {
-		headerParsed = append([]IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.rel())}}, bisonCppHeaderParsed(srcVFS)...)
+		headerParsed = append([]IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.relString())}}, bisonCppHeaderParsed(srcVFS)...)
 	} else {
 		headerParsed = append(headerParsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 	}
@@ -94,7 +94,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 	reg.register(headerInfo)
 
-	generatedParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}
+	generatedParsed := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.relString())}}
 
 	if preprocessHeader {
 		generatedParsed = e.bisonGeneratedCPPParsed(srcVFS, headerVFS)
@@ -128,8 +128,8 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	head = append(head,
 		internV("--defines=", headerVFS.string()),
 		argDashO.str(),
-		(generatedVFS).str(),
-		(srcVFS).str())
+		(generatedVFS).fullSTR(),
+		(srcVFS).fullSTR())
 
 	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env})
 	inputs := []VFS{bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS}
@@ -137,8 +137,8 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
 			CmdArgs: na.chunkList(na.strList(d.cc.TC.Python3,
-				(bisonPreprocessPyVFS).str(),
-				(headerVFS).str())),
+				(bisonPreprocessPyVFS).fullSTR(),
+				(headerVFS).fullSTR())),
 			Env: preprocessEnv,
 		})
 
@@ -171,11 +171,11 @@ func (e *EmitContext) emitBisonY(src STR) {
 	e.emitBisonProducer(src)
 
 	generatedRel := bisonGeneratedRel(src.string(), d.cc.BisonGenExt)
-	generatedVFS := build(instance.Path.rel(), "/", generatedRel)
+	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	meta.Source = generatedVFS.str()
+	meta.Source = generatedVFS.fullSTR()
 	e.enqueueSrc(meta)
 }
 
@@ -188,5 +188,5 @@ func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {
 func m4Tool(ctx *GenCtx, instance ModuleInstance) (NodeRef, STR) {
 	ref, bin := ctx.tool(argContribToolsM4)
 
-	return ref, bin.str()
+	return ref, bin.fullSTR()
 }

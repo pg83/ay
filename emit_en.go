@@ -40,7 +40,7 @@ func (e *EmitContext) enumHeaderSourceInput(headerRel string, srcDirs []VFS) VFS
 	ctx, instance := e.ctx, e.instance
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDirs)
 
-	if !ctx.fs.isFile(srcRootVFS, headerInput.rel()) {
+	if !ctx.fs.isFile(srcRootVFS, headerInput.relString()) {
 		if vfs := sourceInputVFS(ctx.fs, instance.Path, headerRel); vfs != nil && vfs.isSource() {
 			headerInput = *vfs
 		}
@@ -51,7 +51,7 @@ func (e *EmitContext) enumHeaderSourceInput(headerRel string, srcDirs []VFS) VFS
 
 func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VFS {
 	headerInput := e.enumHeaderSourceInput(headerRel, srcDirs)
-	buildHeader := build(headerInput.rel())
+	buildHeader := build(headerInput.relString())
 
 	if e.codegen.lookup(buildHeader) != nil {
 		return buildHeader
@@ -61,11 +61,11 @@ func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VF
 }
 
 func (e *EmitContext) enumSerializedBase(stmt *GenerateEnumSerializationStmt) string {
-	if moduleRootedVFS(e.instance.Path.rel(), stmt.Header) != nil {
-		return e.enumHeaderSourceInput(stmt.Header, e.d.srcDirs).rel()
+	if moduleRootedVFS(e.instance.Path.relString(), stmt.Header) != nil {
+		return e.enumHeaderSourceInput(stmt.Header, e.d.srcDirs).relString()
 	}
 
-	return e.instance.Path.rel() + "/" + stmt.Header
+	return e.instance.Path.relString() + "/" + stmt.Header
 }
 
 func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
@@ -75,12 +75,12 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	ctx, instance, d := e.ctx, e.instance, e.d
 	enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
-	scanCfg := newScanContext(ctx.parsers, d.addIncl, e.peers.SelfAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	scanCfg := newScanContext(ctx.parsers, d.addIncl, e.peers.SelfAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
 	protoGenHeaders := e.moduleProtoGenHeaders()
 	withHeader := stmt.Variant == "with_header"
 	headerInput := e.resolveEnumHeaderInput(stmt.Header, d.srcDirs)
 	serializedBase := e.enumSerializedBase(stmt)
-	_, secondLevel := protoGenHeaders[headerInput.rel()]
+	_, secondLevel := protoGenHeaders[headerInput.relString()]
 	serializedCPPPath := build(serializedBase, "_serialized.cpp")
 
 	var serializedHPath VFS
@@ -92,7 +92,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	enRef := ctx.emit.reserve()
 
 	cppParsed := []IncludeDirective{
-		{kind: includeQuoted, target: internStr(headerInput.rel())},
+		{kind: includeQuoted, target: internStr(headerInput.relString())},
 		{kind: includeQuoted, target: strUtilGenericSerializedEnumH},
 	}
 
@@ -109,8 +109,8 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	if withHeader {
 		hParsed := []IncludeDirective{
-			{kind: includeQuoted, target: internStr(headerInput.rel())},
-			{kind: includeQuoted, target: internStr(serializedCPPPath.rel())},
+			{kind: includeQuoted, target: internStr(headerInput.relString())},
+			{kind: includeQuoted, target: internStr(serializedCPPPath.relString())},
 		}
 
 		sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
@@ -161,7 +161,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			ctx.emit,
 		)
 
-		e.enqueueSrc(SrcMeta{Source: serializedCPPPath.str(), Prio: stmtPrioDefault, Seq: declSeq, Generated: true, SecondLevel: secondLevel})
+		e.enqueueSrc(SrcMeta{Source: serializedCPPPath.fullSTR(), Prio: stmtPrioDefault, Seq: declSeq, Generated: true, SecondLevel: secondLevel})
 	})
 }
 
@@ -182,18 +182,18 @@ func emitEN(
 	na := emit.nodeArenas()
 
 	cmdArgs := []STR{
-		(enumParserBin).str(),
-		(headerInput).str(),
+		(enumParserBin).fullSTR(),
+		(headerInput).fullSTR(),
 		argIncludePath.str(),
-		internStr(headerInput.rel()),
+		internStr(headerInput.relString()),
 		argOutput.str(),
-		(serializedCPPVFS).str(),
+		(serializedCPPVFS).fullSTR(),
 	}
 
 	outputs := []VFS{serializedCPPVFS}
 
 	if withHeader {
-		cmdArgs = append(cmdArgs, argHeader.str(), (serializedHVFS).str())
+		cmdArgs = append(cmdArgs, argHeader.str(), (serializedHVFS).fullSTR())
 		outputs = append(outputs, serializedHVFS)
 	}
 

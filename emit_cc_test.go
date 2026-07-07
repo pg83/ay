@@ -499,7 +499,7 @@ func TestComposeCCPaths_DotDotSrc(t *testing.T) {
 
 	instance := targetInstance("ydb/public/lib/ydb_cli/commands/command_base")
 	srcRel := "../ydb_command.cpp"
-	srcVFS := source(instance.Path.rel() + "/" + srcRel)
+	srcVFS := source(instance.Path.relString() + "/" + srcRel)
 
 	_ = e
 	_ = srcVFS

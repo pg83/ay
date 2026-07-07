@@ -399,7 +399,7 @@ func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 	var sawMimDir bool
 
 	for _, n := range g.Graph {
-		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].rel(), "library/cpp/malloc/mimalloc/") {
+		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].relString(), "library/cpp/malloc/mimalloc/") {
 			sawMimDir = true
 
 			break
@@ -465,7 +465,7 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 			continue
 		}
 
-		rel := n.Outputs[0].rel()
+		rel := n.Outputs[0].relString()
 
 		if i := strings.LastIndex(rel, "/"); i >= 0 {
 			emittedDirs[rel[:i]] = true
@@ -712,7 +712,7 @@ END()
 	var lib1AR *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].rel(), "lib1/") {
+		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].relString(), "lib1/") {
 			lib1AR = n
 
 			break
@@ -793,7 +793,7 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		if len(ccNode.Outputs) == 0 || !strings.HasPrefix(ccNode.Outputs[0].rel(), "basemod/") {
+		if len(ccNode.Outputs) == 0 || !strings.HasPrefix(ccNode.Outputs[0].relString(), "basemod/") {
 			t.Errorf("CC outputs = %v, want under basemod/", ccNode.Outputs)
 		}
 
@@ -834,11 +834,11 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 			t.Fatal("no CC node emitted")
 		}
 
-		if len(jsNode.Outputs) == 0 || !strings.HasPrefix(jsNode.Outputs[0].rel(), "jsmod/") {
+		if len(jsNode.Outputs) == 0 || !strings.HasPrefix(jsNode.Outputs[0].relString(), "jsmod/") {
 			t.Errorf("JS outputs = %v, want under jsmod/", jsNode.Outputs)
 		}
 
-		if len(ccNode.Outputs) == 0 || !strings.HasPrefix(ccNode.Outputs[0].rel(), "jsmod/") {
+		if len(ccNode.Outputs) == 0 || !strings.HasPrefix(ccNode.Outputs[0].relString(), "jsmod/") {
 			t.Errorf("CC outputs = %v, want under jsmod/", ccNode.Outputs)
 		}
 	})
@@ -946,7 +946,7 @@ END()
 			continue
 		}
 
-		rel := n.Outputs[0].rel()
+		rel := n.Outputs[0].relString()
 
 		switch {
 		case strings.HasPrefix(rel, "library/cpp/malloc/tcmalloc/"):
@@ -984,7 +984,7 @@ END()
 			continue
 		}
 
-		rel := n.Outputs[0].rel()
+		rel := n.Outputs[0].relString()
 
 		if strings.HasPrefix(rel, "library/cpp/malloc/tcmalloc/") || strings.HasPrefix(rel, "contrib/libs/tcmalloc/no_percpu_cache/") {
 			t.Errorf("PROGRAM with ALLOCATOR(FAKE) emitted unexpected node output=%q (TCMALLOC_TC default must be suppressed)", rel)
@@ -2264,16 +2264,16 @@ func writeBisonProducer(files map[string]string) {
 	addToolchainPeers(files)
 	writeBisonTool(files)
 	writeToolProgram(files, "contrib/tools/m4", "m4")
-	writeTestModuleFile(files, bisonPreprocessPyVFS.rel(), "print('stub')\n")
+	writeTestModuleFile(files, bisonPreprocessPyVFS.relString(), "print('stub')\n")
 
 	for _, input := range bisonCppSkeletonInputs {
 		body := ""
 
-		if strings.HasSuffix(input.rel(), "/stack.hh") {
+		if strings.HasSuffix(input.relString(), "/stack.hh") {
 			body = `#include "skeleton-helper.h"` + "\n"
 		}
 
-		writeTestModuleFile(files, input.rel(), body)
+		writeTestModuleFile(files, input.relString(), body)
 	}
 
 	writeTestModuleFile(files, "contrib/tools/bison/data/skeletons/skeleton-helper.h", "")

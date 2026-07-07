@@ -26,7 +26,7 @@ func emitARNamed(
 		throwFmt("EmitARNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := buildJoined(instance.Path.rel(), archiveBaseName)
+	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 
 	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
 }
@@ -47,7 +47,7 @@ func emitARNamedTagged(
 		throwFmt("EmitARNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := buildJoined(instance.Path.rel(), archiveBaseName)
+	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 
 	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
 }
@@ -66,7 +66,7 @@ func emitARGlobalNamedTagged(
 		throwFmt("EmitARGlobalNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
 	}
 
-	archivePath := buildJoined(instance.Path.rel(), archiveBaseName)
+	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 
 	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, nil, tc, hostP, emit)
 }
@@ -116,13 +116,13 @@ func emitARNode(
 	tail := make([]STR, 0, 4+len(objPaths))
 
 	if arPluginPath != nil {
-		tail = append(tail, argPlugin.str(), (*arPluginPath).str())
+		tail = append(tail, argPlugin.str(), (*arPluginPath).fullSTR())
 	}
 
-	tail = append(tail, arg2.str(), (archivePath).str())
+	tail = append(tail, arg2.str(), (archivePath).fullSTR())
 
 	for _, p := range objPaths {
-		tail = append(tail, (p).str())
+		tail = append(tail, (p).fullSTR())
 	}
 
 	cmdArgs := na.chunkList(tc.ARCmdHead, tail)

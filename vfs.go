@@ -15,6 +15,8 @@ type VFSRoot uint8
 
 type VFS uint32
 
+var vfsFull DenseMap[VFS, STR]
+
 func vfsBound() uint32 {
 	return internTable.count << 1
 }
@@ -26,15 +28,39 @@ func intern(full string) VFS {
 		root = VFSRootBuild
 	}
 
-	return VFS(uint32(internStr(full))<<1 | uint32(root))
+	return VFS(uint32(internStr(full[vfsPrefixLen:]))<<1 | uint32(root))
 }
 
 func (v VFS) strID() uint32 {
-	return uint32(v) >> 1
+	return uint32(v)
 }
 
-func (v VFS) str() STR {
-	return STR(v.strID())
+func (v VFS) rel() STR {
+	return STR(uint32(v) >> 1)
+}
+
+func (v VFS) relString() string {
+	return internTable.flat[uint32(v)>>1].str
+}
+
+func (v VFS) sharedRel() string {
+	return internTable.cells.get(uint32(v) >> 1).str
+}
+
+func (id STR) source() VFS {
+	return VFS(uint32(id)<<1 | uint32(VFSRootSource))
+}
+
+func (id STR) build() VFS {
+	return VFS(uint32(id)<<1 | uint32(VFSRootBuild))
+}
+
+func (v VFS) prefix() string {
+	if v.isBuild() {
+		return "$(B)/"
+	}
+
+	return "$(S)/"
 }
 
 func internVInto(prefix string, parts []string) STR {
@@ -77,24 +103,32 @@ func internedPrefixedJoined(prefix, dir, rel string) STR {
 	return internedVInto(prefix, []string{dir, "/", rel})
 }
 
+func internJoined(dir, rel string) STR {
+	if dir == "" {
+		return internStr(rel)
+	}
+
+	return internV(dir, "/", rel)
+}
+
 func sourceJoined(dir, rel string) VFS {
-	return VFS(uint32(internPrefixedJoined("$(S)/", dir, rel))<<1 | uint32(VFSRootSource))
+	return internJoined(dir, rel).source()
 }
 
 func buildJoined(dir, rel string) VFS {
-	return VFS(uint32(internPrefixedJoined("$(B)/", dir, rel))<<1 | uint32(VFSRootBuild))
+	return internJoined(dir, rel).build()
 }
 
 func sourceBytes(rel []byte) VFS {
-	return VFS(uint32(internBuildBytes("$(S)/", rel))<<1 | uint32(VFSRootSource))
+	return internBytes(rel).source()
 }
 
 func source(parts ...string) VFS {
-	return VFS(uint32(internVInto("$(S)/", parts))<<1 | uint32(VFSRootSource))
+	return internV(parts...).source()
 }
 
 func build(parts ...string) VFS {
-	return VFS(uint32(internVInto("$(B)/", parts))<<1 | uint32(VFSRootBuild))
+	return internV(parts...).build()
 }
 
 func (id STR) vfs() VFS {
@@ -110,15 +144,7 @@ func (id STR) vfs() VFS {
 		root = VFSRootBuild
 	}
 
-	return VFS(uint32(id)<<1 | uint32(root))
-}
-
-func (v VFS) rel() string {
-	return internTable.flat[v.strID()].str[vfsPrefixLen:]
-}
-
-func (v VFS) sharedRel() string {
-	return internTable.cells.get(v.strID()).str[vfsPrefixLen:]
+	return VFS(uint32(internStr(s[vfsPrefixLen:]))<<1 | uint32(root))
 }
 
 func (v VFS) isSource() bool {
@@ -129,12 +155,24 @@ func (v VFS) isBuild() bool {
 	return uint32(v)&1 != 0
 }
 
+func (v VFS) fullSTR() STR {
+	if s, ok := vfsFull.get(v); ok {
+		return s
+	}
+
+	s := internPrefixed(v.prefix(), v.relString())
+
+	vfsFull.put(v, s)
+
+	return s
+}
+
 func (v VFS) string() string {
-	return internTable.flat[v.strID()].str
+	return v.fullSTR().string()
 }
 
 func (v VFS) sharedString() string {
-	return internTable.cells.get(v.strID()).str
+	return v.prefix() + v.sharedRel()
 }
 
 func (v VFS) String() string {
@@ -143,10 +181,10 @@ func (v VFS) String() string {
 
 func (v VFS) longString() string {
 	if v.isBuild() {
-		return "$(BUILD_ROOT)/" + v.rel()
+		return "$(BUILD_ROOT)/" + v.relString()
 	}
 
-	return "$(SOURCE_ROOT)/" + v.rel()
+	return "$(SOURCE_ROOT)/" + v.relString()
 }
 
 func vfsHasPrefix(s string) bool {

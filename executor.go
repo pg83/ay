@@ -141,7 +141,7 @@ func (ex *Executor) contentHash(v VFS) uint64 {
 		return h
 	}
 
-	s := v.str()
+	s := v.fullSTR()
 
 	if h, ok := ex.localHash[s]; ok {
 		return h

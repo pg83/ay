@@ -297,16 +297,17 @@ func appendVFS(buf []byte, v VFS) []byte {
 			return append(buf, cached...)
 		}
 	} else {
-		nc := make([][]byte, internBound())
+		nc := make([][]byte, vfsBound())
 
 		copy(nc, vfsEscapedJSON)
 		vfsEscapedJSON = nc
 	}
 
-	s := STR(id).string()
-	out := make([]byte, 0, len(s)+2)
+	s := v.relString()
+	out := make([]byte, 0, len(s)+7)
 
 	out = append(out, '"')
+	out = append(out, v.prefix()...)
 	out = appendStringEscapedBody(out, s)
 	out = append(out, '"')
 

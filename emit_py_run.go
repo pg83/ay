@@ -26,7 +26,7 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 	for _, out := range outs {
 		switch {
 		case isCCSourceExt(out) || isAsmSourceExt(out):
-			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.rel(), out).str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
+			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
 		case isCodegenProducingSrc(out):
 			e.enqueueSrc(SrcMeta{Source: internStr(out), Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
 		}
@@ -49,17 +49,17 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {
-		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.rel(), f.string())
+		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.relString(), f.string())
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.rel(), f.string())
+		outVFSByToken[f.string()] = copyFileOutputVFS(instance.Path.relString(), f.string())
 	}
 
 	var stdoutVFS *VFS
 
 	if stmt.StdoutFile != nil {
-		vfs := copyFileOutputVFS(instance.Path.rel(), stmt.StdoutFile.string())
+		vfs := copyFileOutputVFS(instance.Path.relString(), stmt.StdoutFile.string())
 
 		stdoutVFS = &vfs
 		outVFSByToken[stmt.StdoutFile.string()] = vfs
@@ -133,7 +133,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	if stmt.Lua {
 		luaLDRef, luaBinVFS := ctx.tool(argToolsLua)
 
-		interp = luaBinVFS.str()
+		interp = luaBinVFS.fullSTR()
 		interpInput = &luaBinVFS
 		toolRefs = depRefs(luaLDRef)
 		kv = &luaRunKV
@@ -145,13 +145,13 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 
 func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
 
 	var groups [][][]VFS
 	var selves []VFS
 
 	walkOne := func(rel string) {
-		buildRootPath := copyFileOutputVFS(instance.Path.rel(), rel)
+		buildRootPath := copyFileOutputVFS(instance.Path.relString(), rel)
 		cv := walkClosure(e.scanner, buildRootPath, scanCfg)
 
 		groups = append(groups, cv.buckets)
@@ -228,7 +228,7 @@ func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS
 	addInducedSources := func(deps []IncludeDirective) {
 		for _, d := range deps {
 			if v := d.target.vfs(); v != 0 {
-				if v.isSource() && ctx.fs.isFile(srcRootVFS, v.rel()) {
+				if v.isSource() && ctx.fs.isFile(srcRootVFS, v.relString()) {
 					addSource(v)
 				}
 
@@ -272,7 +272,7 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 		for _, f := range stmt.OUTNoAutoFiles {
 			if isCCSourceExt(f.string()) {
 				firstShardFile = f.string()
-				firstShardVFS = copyFileOutputVFS(instance.Path.rel(), f.string())
+				firstShardVFS = copyFileOutputVFS(instance.Path.relString(), f.string())
 
 				break
 			}
@@ -289,11 +289,11 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 			includes := make([]IncludeDirective, 0, capacity)
 
 			if isNonFirst && firstShardVFS != 0 {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(firstShardVFS.rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(firstShardVFS.relString())})
 			}
 
 			for _, src := range splitSrcs {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(src.rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(src.relString())})
 			}
 
 			return includes
@@ -303,26 +303,26 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 			includes := make([]IncludeDirective, 0, 1+len(splitSrcs))
 
 			if firstShardVFS != 0 {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(firstShardVFS.rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(firstShardVFS.relString())})
 			}
 
 			for _, src := range splitSrcs {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(src.rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(src.relString())})
 			}
 
 			return includes
 		}
 	}
 
-	includes := []IncludeDirective{{kind: includeQuoted, target: internStr(scriptVFS.rel())}}
+	includes := []IncludeDirective{{kind: includeQuoted, target: internStr(scriptVFS.relString())}}
 
 	for _, f := range stmt.INFiles {
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(e.runProgramInputVFS(f.string()).rel())})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(e.runProgramInputVFS(f.string()).relString())})
 	}
 
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f.string()) {
-			f = internStr(intern(f.string()).rel())
+			f = internStr(intern(f.string()).relString())
 		}
 
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: internStr(f.string())})
@@ -361,7 +361,7 @@ func emitPYRun(
 		}
 	}
 
-	cmdArgs := []STR{interp, (scriptVFS).str()}
+	cmdArgs := []STR{interp, (scriptVFS).fullSTR()}
 
 	for _, aTok := range stmt.Args {
 		a := aTok.string()
@@ -401,7 +401,7 @@ func emitPYRun(
 	var stdoutPath STR
 
 	if stdoutVFS != nil {
-		stdoutPath = stdoutVFS.str()
+		stdoutPath = stdoutVFS.fullSTR()
 		outputs = append(outputs, *stdoutVFS)
 	}
 

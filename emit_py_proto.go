@@ -12,7 +12,7 @@ func protoPythonResourceKeyBase(instance ModuleInstance, d *ModuleData, src stri
 	base := strings.TrimSuffix(src, ".proto")
 
 	if d.pyNamespace == nil {
-		return instance.Path.rel() + "/" + base
+		return instance.Path.relString() + "/" + base
 	}
 
 	if d.pyNamespace.string() == "." {
@@ -81,7 +81,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 	mid = append(mid,
 		argNs.str(), internStr(protoPythonNamespaceArg(d)),
 		arg2.str(),
-		(protocBinary).str(),
+		(protocBinary).fullSTR(),
 		internV("-I=./", protoRoot),
 		internV("-I=$(S)/", protoRoot),
 		argIB2.str(),
@@ -206,7 +206,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR, srcGroup int) {
 	}
 
 	inputs := []VFS{protocBinary, pbPyWrapperVFS, protoSrcVFS}
-	transitive := walkClosure(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
+	transitive := walkClosure(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.relString()))
 
 	inputs = append(inputs, producerSourceInputs...)
 
@@ -223,7 +223,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR, srcGroup int) {
 
 	for i, out := range outputs {
 		pbNodeKV.ExtOut = append(pbNodeKV.ExtOut, KVExt{
-			Key: "ext_out_name_for_" + filepath.Base(out.rel()),
+			Key: "ext_out_name_for_" + filepath.Base(out.relString()),
 			Val: protoBaseName + suffixes[i],
 		})
 	}
@@ -250,10 +250,10 @@ func (e *EmitContext) emitPyProtoSource(srcTok STR, srcGroup int) {
 
 	tokenFor := func(out VFS) STR {
 		if generatedProto {
-			return internStr(trimModulePrefix(out.rel(), instance.Path.rel()))
+			return internStr(trimModulePrefix(out.relString(), instance.Path.relString()))
 		}
 
-		return internV("${ARCADIA_BUILD_ROOT}/", out.rel())
+		return internV("${ARCADIA_BUILD_ROOT}/", out.relString())
 	}
 
 	e.codegen.register(&GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
@@ -276,11 +276,11 @@ func (e *EmitContext) hasProtoPySrcs() bool {
 }
 
 func (e *EmitContext) pyProtoYapycOut(ps PySrc) VFS {
-	rel := ps.Path.rel()
+	rel := ps.Path.relString()
 	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
 
 	if strings.Contains(token, "/") {
-		return build(rel, ".", pySrcYapycSuffix(e.instance.Path.rel()), ".yapyc3")
+		return build(rel, ".", pySrcYapycSuffix(e.instance.Path.relString()), ".yapyc3")
 	}
 
 	return build(rel, ".yapyc3")
@@ -288,7 +288,7 @@ func (e *EmitContext) pyProtoYapycOut(ps PySrc) VFS {
 
 func (e *EmitContext) pyProtoResEntries(ps PySrc) []PyGenResEntry {
 	key := ps.Module.string()
-	rel := ps.Path.rel()
+	rel := ps.Path.relString()
 	grpc := strings.HasSuffix(rel, "__intpy3___pb2_grpc.py")
 	info := e.codegen.mustInfo(ps.Path, "pyProtoResEntries")
 	token := ps.Token.string()
@@ -297,7 +297,7 @@ func (e *EmitContext) pyProtoResEntries(ps PySrc) []PyGenResEntry {
 	if !strings.HasPrefix(token, "${ARCADIA_BUILD_ROOT}/") {
 		return []PyGenResEntry{
 			{token: token, key: key, path: ps.Path},
-			{token: token + strings.TrimPrefix(yapycOut.rel(), rel), key: key + ".yapyc3", path: yapycOut},
+			{token: token + strings.TrimPrefix(yapycOut.relString(), rel), key: key + ".yapyc3", path: yapycOut},
 		}
 	}
 
@@ -311,7 +311,7 @@ func (e *EmitContext) pyProtoResEntries(ps PySrc) []PyGenResEntry {
 
 	return []PyGenResEntry{
 		{token: token, key: key, path: ps.Path, inputs: entryInputs},
-		{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.rel(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs},
+		{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.relString(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs},
 	}
 }
 
@@ -337,18 +337,18 @@ func (e *EmitContext) emitPyProtoBytecode() {
 func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef, py3ccBinary, py3ccSlowBin VFS) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
-	rel := ps.Path.rel()
+	rel := ps.Path.relString()
 	info := e.codegen.mustInfo(ps.Path, "emitPyProtoYapyc")
 	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
 	yapycOut := e.pyProtoYapycOut(ps)
 
 	yapycCmd := []STR{
-		(py3ccBinary).str(),
+		(py3ccBinary).fullSTR(),
 		argSlowPy3cc.str(),
-		(py3ccSlowBin).str(),
+		(py3ccSlowBin).fullSTR(),
 		internV(token, "-"),
-		(ps.Path).str(),
-		(yapycOut).str(),
+		(ps.Path).fullSTR(),
+		(yapycOut).fullSTR(),
 	}
 
 	nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path), info.SourceInputs)
@@ -449,9 +449,9 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		protoLibName = d.moduleStmt.Args[0].string()
 	}
 
-	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.rel(), d.unit.ARPrefix, protoLibName)
+	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.relString(), d.unit.ARPrefix, protoLibName)
 	gRef := emitARGlobalNamedTagged(instance, globalBaseName, d.unit.GlobalARTag, genRefs, genOuts, d.tc, ctx.host, ctx.emit)
-	globalPath := build(instance.Path.rel(), "/", globalBaseName)
+	globalPath := build(instance.Path.relString(), "/", globalBaseName)
 
 	result := &ProtoSrcsResult{
 		GlobalRef:  &gRef,
@@ -462,7 +462,7 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
 		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
 	} else if moduleExcludesTag(d, "CPP_PROTO") {
-		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, build(instance.Path.rel(), "/", archiveNameWithPrefixOrName(instance.Path.rel(), "lib", "")))
+		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, build(instance.Path.relString(), "/", archiveNameWithPrefixOrName(instance.Path.relString(), "lib", "")))
 	}
 
 	return result
@@ -491,7 +491,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 
 	for _, in := range seed {
 		if in.isSource() {
-			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(in.rel())})
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(in.relString())})
 		}
 	}
 
@@ -503,7 +503,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 		Compile:        &CompileSpec{ForceCxx: true, Py3Suffix: pyProtoAuxPy3Suffix(d), CFlags: []ARG{argX, argC}},
 	})
 
-	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.rel())
+	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.relString())
 
 	return walkClosure(e.scanner, aux, scanCfg)
 }

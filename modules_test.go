@@ -270,7 +270,7 @@ func TestPrEmitsIncludes_OutputIncludesVFSPrefixStripped(t *testing.T) {
 		got := c.input
 
 		if vfsHasPrefix(c.input) {
-			got = intern(c.input).rel()
+			got = intern(c.input).relString()
 		}
 
 		if got != c.want {
@@ -414,7 +414,7 @@ func TestCollectModule_OwnAddInclToMissingDir_WarnsAndDrops(t *testing.T) {
 	var rels []string
 
 	for _, v := range d.addIncl {
-		rels = append(rels, v.rel())
+		rels = append(rels, v.relString())
 	}
 
 	hasRel := func(rel string) bool { return slicesContains(rels, rel) }

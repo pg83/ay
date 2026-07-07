@@ -49,7 +49,7 @@ type PySrc struct {
 func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
 	for i := len(srcDirs) - 1; i >= 1; i-- {
 		if fs.isFile(srcDirs[i], srcRel) {
-			return internV(srcDirs[i].rel(), "/", srcRel)
+			return internV(srcDirs[i].relString(), "/", srcRel)
 		}
 	}
 
@@ -58,7 +58,7 @@ func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
 		return internStr(srcRel)
 	}
 
-	return internV(moduleVFS.rel(), "/", srcRel)
+	return internV(moduleVFS.relString(), "/", srcRel)
 }
 
 func pySrcYapycSuffix(modulePath string) string {
@@ -78,7 +78,7 @@ func (e *EmitContext) collectPyGroups() []PySrcGroup {
 
 func (e *EmitContext) registerCollectPySrcs() {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	module := instance.Path.rel()
+	module := instance.Path.relString()
 
 	for gi, group := range e.collectPyGroups() {
 		keyPrefix := pyResourceKeyPrefix(group.TopLevel, group.Namespace, module)
@@ -107,11 +107,11 @@ func (e *EmitContext) registerCollectPySrcs() {
 }
 
 func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
-	module := e.instance.Path.rel()
+	module := e.instance.Path.relString()
 	srcRel := ps.Token.string()
 
 	if ps.Group == pyGroupGenAux {
-		srcRel = strings.TrimPrefix(ps.Path.rel(), module+"/")
+		srcRel = strings.TrimPrefix(ps.Path.relString(), module+"/")
 	}
 
 	if strings.Contains(srcRel, "/") {
@@ -123,7 +123,7 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 
 func (e *EmitContext) pyResEntriesFor(ps PySrc) []PyGenResEntry {
 	d := e.d
-	module := e.instance.Path.rel()
+	module := e.instance.Path.relString()
 	key := ps.Module.string()
 
 	switch ps.Group {
@@ -134,7 +134,7 @@ func (e *EmitContext) pyResEntriesFor(ps PySrc) []PyGenResEntry {
 		if !d.pyBuildNoPYC {
 			yapycOut := e.pyYapycOutFor(ps)
 
-			out = append(out, PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.rel(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs})
+			out = append(out, PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.relString(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs})
 		}
 
 		return out
@@ -224,21 +224,21 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 
 	if ps.Group == pyGroupGenAux {
 		genInfo = e.codegen.mustInfo(ps.Path, "emitEnginePyYapyc")
-		moduleName = srcAbs.rel() + "-"
+		moduleName = srcAbs.relString() + "-"
 	} else {
 		genInfo = e.codegen.lookupSplit(instance.Path, ps.Token)
 
 		if genInfo != nil {
 			moduleName = ps.Token.string() + "-"
 		} else {
-			moduleName = srcAbs.rel() + "-"
+			moduleName = srcAbs.relString() + "-"
 		}
 	}
 
 	outputPath := e.pyYapycOutFor(ps)
 
-	cmdArgs := na.chunkList([]STR{(py3ccBinary).str(), argSlowPy3cc.str(), (py3ccSlowBin).str()},
-		na.strList(internStr(moduleName), (srcAbs).str(), (outputPath).str()))
+	cmdArgs := na.chunkList([]STR{(py3ccBinary).fullSTR(), argSlowPy3cc.str(), (py3ccSlowBin).fullSTR()},
+		na.strList(internStr(moduleName), (srcAbs).fullSTR(), (outputPath).fullSTR()))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
 	nodeInputs := na.inputList([]VFS{py3ccBinary, py3ccSlowBin}, na.srcChunk(srcAbs))
@@ -300,8 +300,8 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 	}
 
 	namespaceEnabled := !d.noExtendedPySearch &&
-		!strings.HasPrefix(instance.Path.rel(), "contrib/python") &&
-		!strings.HasPrefix(instance.Path.rel(), "contrib/tools/python3") &&
+		!strings.HasPrefix(instance.Path.relString(), "contrib/python") &&
+		!strings.HasPrefix(instance.Path.relString(), "contrib/tools/python3") &&
 		pyNamespaceUnitType(d.unit.Type)
 
 	res := &ObjcopyEmitResult{}
@@ -368,7 +368,7 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VF
 		return nil, nil
 	}
 
-	nsPrefix := strings.ReplaceAll(instance.Path.rel(), "/", ".") + "."
+	nsPrefix := strings.ReplaceAll(instance.Path.relString(), "/", ".") + "."
 
 	if group.Namespace != nil {
 		nsPrefix = strings.TrimSuffix(group.Namespace.string(), ".") + "."
@@ -542,12 +542,12 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 	emits := make([]IncludeDirective, 0, len(seed))
 
 	for _, v := range seed {
-		emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
+		emits = append(emits, IncludeDirective{kind: includeQuoted, target: internStr(v.relString())})
 	}
 
 	var psc []ARG
 
-	if p := d.perSrcCFlagsFor(aux.str()); p != nil {
+	if p := d.perSrcCFlagsFor(aux.fullSTR()); p != nil {
 		psc = *p
 	}
 
@@ -556,7 +556,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-		Compile:        &CompileSpec{FlatOutput: d.flatSrc(aux.str()), ForceCxx: true, CFlags: concat(psc, []ARG{argX, argC})},
+		Compile:        &CompileSpec{FlatOutput: d.flatSrc(aux.fullSTR()), ForceCxx: true, CFlags: concat(psc, []ARG{argX, argC})},
 	})
 
 	return walkClosure(e.scanner, aux, d.cc.ScanCfg)
@@ -592,13 +592,13 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 		}
 
 		regCpp := arg.string() + ".reg3.cpp"
-		regCppVFS := build(instance.Path.rel(), "/", regCpp)
+		regCppVFS := build(instance.Path.relString(), "/", regCpp)
 		regCppAbs := regCppVFS.string()
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 		pyCmdArgs := []STR{
 			d.tc.Python3,
-			(genPy3RegScriptVFS).str(),
+			(genPy3RegScriptVFS).fullSTR(),
 			internStr(arg.string()),
 			internStr(regCppAbs),
 		}
@@ -678,7 +678,7 @@ func pyGenResourceItems(entries []PyGenResEntry) []ResourceItem {
 	for _, en := range entries {
 		key := "resfs/file/py/" + en.key
 		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + en.token + "\"}"
-		kvCmd := internV("resfs/src/", key, "=", en.path.rel()).string()
+		kvCmd := internV("resfs/src/", key, "=", en.path.relString()).string()
 
 		items = append(items,
 			ResourceItem{Path: "-", Key: kvHash, Cmd: kvCmd, Input: en.path, Extra: en.inputs},

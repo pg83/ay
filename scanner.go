@@ -97,7 +97,7 @@ func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 		return false
 	}
 
-	v := s.parsers.fs.isFile(srcRootVFS, abs.rel())
+	v := s.parsers.fs.isFile(srcRootVFS, abs.relString())
 
 	if v {
 		s.parsers.sourceExists.set(id, sourceExistsYes)
@@ -180,7 +180,7 @@ func hashScanContext(ctx *ScanContext) uint64 {
 		h = mix64(h ^ uint64(len(ss)))
 
 		for _, v := range ss {
-			h = mix64(h ^ internTable.flat[v.strID()].lo)
+			h = mix64(h ^ internTable.flat[uint32(v.rel())].lo ^ uint64(uint32(v)&1))
 		}
 	}
 
@@ -198,12 +198,12 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 		return set.bucket(parsedIncludesLocal), set.bucket(parsedIncludesCpp)
 	}
 
-	return s.parsers.sourceParsedBuckets(vfsPath, ctxParser).bucket(s.parsers.registry.walkableBucketFor(vfsPath.rel())), nil
+	return s.parsers.sourceParsedBuckets(vfsPath, ctxParser).bucket(s.parsers.registry.walkableBucketFor(vfsPath.relString())), nil
 }
 
 func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
-	incDir := dirKey(pathDir(vfsPath.rel()))
+	incDir := dirKey(pathDir(vfsPath.relString()))
 	suppressCimportNames := false
 	prevProbeMissed := false
 
@@ -270,7 +270,7 @@ func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 
 	bucket := parsedIncludesCpp
 
-	if isHeaderSource(vfsPath.rel()) {
+	if isHeaderSource(vfsPath.relString()) {
 		bucket = parsedIncludesHeader
 	}
 
@@ -342,7 +342,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		sc.ensureClosure(ch)
 	})
 
-	s.tjc.closure.reset(strBound())
+	s.tjc.closure.reset(vfsBound())
 
 	block := s.closureArena.alloc(closureAllocHint)
 	k := 0
@@ -476,7 +476,7 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 	}()
 
 	searchOut := sc.resolveSearchPath(includerAbs, incDir, d)
-	includerRel := includerAbs.rel()
+	includerRel := includerAbs.relString()
 
 	var mappings []VFS
 	var hasMultiTarget bool
@@ -496,7 +496,7 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 				sameDirRel = d.target.string()
 			}
 
-			bypass = searchOut[0].rel() == sameDirRel
+			bypass = searchOut[0].relString() == sameDirRel
 		}
 
 		if bypass {
@@ -593,13 +593,13 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	idx := &CfgResolveIndex{}
 
 	for _, p := range cfg.OwnAddIncl {
-		if p.isSource() && p.rel() == "" {
+		if p.isSource() && p.relString() == "" {
 			return idx
 		}
 	}
 
 	for _, p := range cfg.PeerAddInclSet {
-		if p.isSource() && p.rel() == "" {
+		if p.isSource() && p.relString() == "" {
 			return idx
 		}
 	}
@@ -621,7 +621,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 		if p.isBuild() {
 			idx.buildEntries = append(idx.buildEntries, CfgBuildAddincl{
 				prefix:    p,
-				prefixSrc: source(p.rel()),
+				prefixSrc: source(p.relString()),
 				rank:      int(r),
 			})
 		}
@@ -687,8 +687,8 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 		if prefixRel == "" {
 			info = s.codegen.lookupSTR(buildSuffix)
-		} else if pid := internedPrefixed("$(S)/", prefixRel); pid != 0 {
-			info = s.codegen.lookupSplit(pid.vfs(), buildSuffix)
+		} else if pid := interned(prefixRel); pid != 0 {
+			info = s.codegen.lookupSplit(pid.source(), buildSuffix)
 		}
 
 		if info == nil {
@@ -702,7 +702,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 	addInclPath := func(prefix VFS) bool {
 		if prefix.isBuild() {
-			return addBuild(prefix.rel())
+			return addBuild(prefix.relString())
 		}
 
 		return addSource(prefix)
@@ -757,7 +757,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 			if bestRank != resolveNoRank {
 				if bestIsSource {
-					out = sourceJoined(bestAddincl.rel(), target)
+					out = sourceJoined(bestAddincl.relString(), target)
 				} else {
 					out = bestBuild.OutputPath
 				}
@@ -882,7 +882,7 @@ func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool
 		return "", false
 	}
 
-	if hasPrefix(includerAbs.rel(), "contrib/tools/cython_py2/Cython/Includes/") {
+	if hasPrefix(includerAbs.relString(), "contrib/tools/cython_py2/Cython/Includes/") {
 		if hasPrefix(d.target.string(), "libc/") || hasPrefix(d.target.string(), "libcpp/") {
 			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.string(), true
 		}
@@ -890,7 +890,7 @@ func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool
 		return "", false
 	}
 
-	switch includerAbs.rel() {
+	switch includerAbs.relString() {
 	case "util/generic/string.pxd":
 		if d.target.string() == "libcpp/string.pxd" {
 			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.string(), true
@@ -921,9 +921,9 @@ func (s *IncludeScanner) resolveSourceUnder(prefix VFS, targetSTR STR) VFS {
 
 	if s.parsers.fs.isFile(prefix, target) {
 		if target != "" && pathIsClean(target) {
-			v = sourceJoined(prefix.rel(), target)
+			v = sourceJoined(prefix.relString(), target)
 		} else {
-			v = source(normalisePath(joinRel(prefix.rel(), target)))
+			v = source(normalisePath(joinRel(prefix.relString(), target)))
 		}
 	}
 
@@ -940,7 +940,7 @@ func quotedDirectives(headers []VFS) []IncludeDirective {
 	out := make([]IncludeDirective, len(headers))
 
 	for i, h := range headers {
-		out[i] = IncludeDirective{kind: includeQuoted, target: internStr(h.rel())}
+		out[i] = IncludeDirective{kind: includeQuoted, target: internStr(h.relString())}
 	}
 
 	return out

@@ -15,7 +15,7 @@ func emitBI(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
-	outPrefix := instance.Path.rel() + "/"
+	outPrefix := instance.Path.relString() + "/"
 	argsFileVFS := build(outPrefix, "__args")
 	outVFS := build(outPrefix, outputHeader)
 	argsFile := argsFileVFS.string()
@@ -23,7 +23,7 @@ func emitBI(
 
 	cmd0Args := []STR{
 		tc.Python3,
-		(yieldLinePyVFS).str(),
+		(yieldLinePyVFS).fullSTR(),
 		arg2.str(),
 		internStr(argsFile),
 		tc.CXX,
@@ -33,7 +33,7 @@ func emitBI(
 
 	cmd1Args = append(cmd1Args,
 		tc.Python3,
-		(yieldLinePyVFS).str(),
+		(yieldLinePyVFS).fullSTR(),
 		arg2.str(),
 		internStr(argsFile),
 	)
@@ -42,12 +42,12 @@ func emitBI(
 
 	cmd2Args := []STR{
 		tc.Python3,
-		(xargsPyVFS).str(),
+		(xargsPyVFS).fullSTR(),
 		arg2.str(),
 		internStr(argsFile),
 		tc.Python3,
-		(buildInfoGenPyVFS).str(),
-		(outVFS).str(),
+		(buildInfoGenPyVFS).fullSTR(),
+		(outVFS).fullSTR(),
 	}
 
 	inputs := []VFS{
@@ -88,7 +88,7 @@ func biFlagsForInstance(targetP *Platform) []STR {
 
 func (e *EmitContext) emitBuildInfoStmt() {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	outPrefix := instance.Path.rel() + "/"
+	outPrefix := instance.Path.relString() + "/"
 	biRef := emitBI(instance, d.createBuildInfoFor.string(), biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
 
 	e.codegen.register(&GeneratedFileInfo{
@@ -96,9 +96,9 @@ func (e *EmitContext) emitBuildInfoStmt() {
 		ProducerRef:   biRef,
 		GeneratorRefs: nil,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{
-			{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.rel())},
-			{kind: includeQuoted, target: internStr(xargsPyVFS.rel())},
-			{kind: includeQuoted, target: internStr(yieldLinePyVFS.rel())},
+			{kind: includeQuoted, target: internStr(buildInfoGenPyVFS.relString())},
+			{kind: includeQuoted, target: internStr(xargsPyVFS.relString())},
+			{kind: includeQuoted, target: internStr(yieldLinePyVFS.relString())},
 		}},
 	})
 }

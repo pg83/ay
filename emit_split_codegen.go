@@ -12,14 +12,14 @@ func (e *EmitContext) emitSplitCodegenStmt(sc *SplitCodegenStmt) {
 	_, parts := e.emitSplitCodegen(sc)
 
 	for _, partRel := range parts {
-		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.rel(), partRel).str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkSplitCodegen})
+		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), partRel).fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkSplitCodegen})
 	}
 }
 
 func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.emit.nodeArenas()
-	moduleDir := instance.Path.rel()
+	moduleDir := instance.Path.relString()
 	prefix := sc.Prefix.string()
 	toolRes := ctx.toolResult(internArg(filepath.Clean(sc.ToolPath.string())))
 	toolLDRef := toolRes.LDRef
@@ -43,10 +43,10 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	cmdArgs := make([]STR, 0, 6+len(sc.Opts))
 
 	cmdArgs = append(cmdArgs,
-		toolBin.str(),
-		inputIn.str(),
-		prefixCpp.str(),
-		prefixH.str(),
+		toolBin.fullSTR(),
+		inputIn.fullSTR(),
+		prefixCpp.fullSTR(),
+		prefixH.fullSTR(),
 		strCppParts,
 		internStr(strconv.Itoa(cppParts)),
 	)
@@ -56,7 +56,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	scRef := ctx.emit.reserve()
 	part0 := build(moduleDir, "/", partRels[0])
-	part0Inc := IncludeDirective{kind: includeQuoted, target: internStr(part0.rel())}
+	part0Inc := IncludeDirective{kind: includeQuoted, target: internStr(part0.relString())}
 	headerParsed := make([]IncludeDirective, 0, len(sc.OutputIncludes))
 
 	for _, oi := range sc.OutputIncludes {

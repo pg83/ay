@@ -36,8 +36,8 @@ func perfDarts() int {
 
 	oldLookup := func(dir string) (int, bool) {
 		for d := dir; ; {
-			if st := internedPrefixed("$(S)/", d); st != 0 {
-				if v := old.get(uint64(st.vfs())); v != nil {
+			if st := interned(d); st != 0 {
+				if v := old.get(uint64(st.source())); v != nil {
 					return int(*v), true
 				}
 			}

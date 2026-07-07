@@ -74,7 +74,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 
 		e.ctx.onWarn(Warn{
 			Kind:    WarnUnsupportedSource,
-			Message: fmt.Sprintf("%s: unsupported source extension in %q", e.instance.Path.rel(), src.string()),
+			Message: fmt.Sprintf("%s: unsupported source extension in %q", e.instance.Path.relString(), src.string()),
 		})
 	}
 }

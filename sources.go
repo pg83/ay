@@ -12,17 +12,17 @@ var includeScannerBasePathsSlice = []VFS{
 }
 
 func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, srcDirs []VFS) VFS {
-	if vfs := moduleRootedVFS(srcInstance.Path.rel(), srcRel); vfs != nil {
+	if vfs := moduleRootedVFS(srcInstance.Path.relString(), srcRel); vfs != nil {
 		return *vfs
 	}
 
 	for i := len(srcDirs) - 1; i >= 1; i-- {
 		if ctx.fs.isFile(srcDirs[i], srcRel) {
 			if srcRel != "" && pathIsClean(srcRel) {
-				return sourceJoined(srcDirs[i].rel(), srcRel)
+				return sourceJoined(srcDirs[i].relString(), srcRel)
 			}
 
-			return source(filepath.ToSlash(filepath.Clean(srcDirs[i].rel() + "/" + srcRel)))
+			return source(filepath.ToSlash(filepath.Clean(srcDirs[i].relString() + "/" + srcRel)))
 		}
 	}
 
@@ -33,16 +33,16 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	}
 
 	if srcRel != "" && pathIsClean(srcRel) {
-		return sourceJoined(srcInstance.Path.rel(), srcRel)
+		return sourceJoined(srcInstance.Path.relString(), srcRel)
 	}
 
-	srcRelOnDisk := filepath.ToSlash(filepath.Clean(srcInstance.Path.rel() + "/" + srcRel))
+	srcRelOnDisk := filepath.ToSlash(filepath.Clean(srcInstance.Path.relString() + "/" + srcRel))
 
 	return source(srcRelOnDisk)
 }
 
 func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) Closure {
-	sc := scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(vfsPath.rel()))
+	sc := scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(vfsPath.relString()))
 
 	defer scanner.putScanCtx(sc)
 
@@ -76,16 +76,16 @@ func (e *EmitContext) generatedModuleSourceVFS(srcRel string) *VFS {
 	var id STR
 
 	if srcRel != "" && pathIsClean(srcRel) {
-		id = internedPrefixedJoined("$(B)/", instance.Path.rel(), srcRel)
+		id = internedPrefixedJoined("", instance.Path.relString(), srcRel)
 	} else {
-		id = internedPrefixed("$(B)/", filepath.ToSlash(filepath.Clean(instance.Path.rel()+"/"+srcRel)))
+		id = internedPrefixed("", filepath.ToSlash(filepath.Clean(instance.Path.relString()+"/"+srcRel)))
 	}
 
 	if id == 0 {
 		return nil
 	}
 
-	buildVFS := id.vfs()
+	buildVFS := id.build()
 
 	if reg.lookup(buildVFS) != nil {
 		return vfsPtr(buildVFS)
@@ -97,7 +97,7 @@ func (e *EmitContext) generatedModuleSourceVFS(srcRel string) *VFS {
 func (e *EmitContext) resolveModuleSourceVFS(src STR, srcDirs []VFS) VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
-	if buildVFS := copyFileAutoSourceVFS(instance.Path.rel(), d, src); buildVFS != nil {
+	if buildVFS := copyFileAutoSourceVFS(instance.Path.relString(), d, src); buildVFS != nil {
 		return *buildVFS
 	}
 

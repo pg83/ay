@@ -134,12 +134,12 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			generated = *stmt.Generated
 		}
 
-		generatedVFS := build(instance.Path.rel(), "/", generated)
+		generatedVFS := build(instance.Path.relString(), "/", generated)
 
 		var headerVFS []VFS
 
 		if stmt.Header {
-			base := instance.Path.rel() + "/" + relStem(stmt.Src)
+			base := instance.Path.relString() + "/" + relStem(stmt.Src)
 
 			headerVFS = append(headerVFS, build(base, ".h"))
 
@@ -148,9 +148,9 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			}
 		}
 
-		srcVFS := source(instance.Path.rel(), "/", stmt.Src)
+		srcVFS := source(instance.Path.relString(), "/", stmt.Src)
 		scanAddIncl := appendCythonScanAddIncl(d.cc.AddIncl, d.cythonAddIncl, py23Variant)
-		srcScanIn := newScanContext(ctx.parsers, scanAddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+		srcScanIn := newScanContext(ctx.parsers, scanAddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
 		ind := e.cythonCppInducedSets(srcVFS, stmt.CMode, srcScanIn)
 		cyRef := ctx.emit.reserve()
 
@@ -164,7 +164,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			headerParsed := make([]IncludeDirective, 0, len(headerInduced))
 
 			for _, v := range headerInduced {
-				headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: internStr(v.rel())})
+				headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: internStr(v.relString())})
 			}
 
 			reg := e.codegen
@@ -235,7 +235,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
 
 		for _, include := range emitsIncludes {
-			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.rel())})
+			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: internStr(include.relString())})
 		}
 
 		py3Suffix := !stmt.CMode && !generatedExplicit && py23Variant
@@ -281,9 +281,9 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		cmdArgs = append(cmdArgs,
 			argISContribToolsCythonCythonIncludes.str(),
-			(srcVFS).str(),
+			(srcVFS).fullSTR(),
 			argDashO.str(),
-			(generatedVFS).str(),
+			(generatedVFS).fullSTR(),
 		)
 
 		ctx.emit.emitReservedNode(Node{
@@ -298,7 +298,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			Resources:    usesPython3,
 		}, cyRef)
 
-		e.enqueueSrc(SrcMeta{Source: generatedVFS.str(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCython})
+		e.enqueueSrc(SrcMeta{Source: generatedVFS.fullSTR(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCython})
 	}
 }
 
@@ -315,7 +315,7 @@ func cythonHeaderToolInputs(src VFS, pyxClosure []VFS) []VFS {
 }
 
 func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []VFS {
-	sc := scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(src.rel()))
+	sc := scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(src.relString()))
 
 	defer scanner.putScanCtx(sc)
 
@@ -334,7 +334,7 @@ func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []V
 		out = append(out, v)
 
 		sc.forEachResolvedChildID(v, func(ch VFS) {
-			if isCythonLangFile(ch.rel()) {
+			if isCythonLangFile(ch.relString()) {
 				visit(ch)
 			}
 		})
@@ -364,7 +364,7 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanConte
 	var toolCl, emitsCl [][]VFS
 
 	for _, v := range py3CythonOutputIncludes {
-		if v.rel() == "contrib/tools/cython/generated_cpp_headers.h" && cMode {
+		if v.relString() == "contrib/tools/cython/generated_cpp_headers.h" && cMode {
 			continue
 		}
 
@@ -413,7 +413,7 @@ func resolveCythonPxd(ctx *GenCtx, instance ModuleInstance, pxdRel string) (VFS,
 	}
 
 	if ctx.fs.isFile(instance.Path, pxdRel) {
-		return sourceJoined(instance.Path.rel(), pxdRel), true
+		return sourceJoined(instance.Path.relString(), pxdRel), true
 	}
 
 	return 0, false

@@ -7,19 +7,19 @@ func (e *EmitContext) emitLibraryFmlSource(src STR) {
 	na := ctx.na
 	srcRel := src.string()
 	toolRef, toolBin := ctx.tool(argToolsRelevFmlCodegen)
-	srcVFS := source(instance.Path.rel(), "/", srcRel)
-	outVFS := build(instance.Path.rel(), "/", srcRel, ".inc")
+	srcVFS := source(instance.Path.relString(), "/", srcRel)
+	outVFS := build(instance.Path.relString(), "/", srcRel, ".inc")
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.strList(
-			toolBin.str(),
+			toolBin.fullSTR(),
 			strB2,
 			argDashO.str(),
-			outVFS.str(),
+			outVFS.fullSTR(),
 			strT,
-			srcVFS.str(),
+			srcVFS.fullSTR(),
 		)), Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(toolBin, srcVFS)),

@@ -17,7 +17,7 @@ var (
 	strGoYolintTool      = internV("$(B)/resources/", "YOLINT", "/yolint")
 	strGoToolScript      = internV("$(S)/", "build/scripts/go_tool.py")
 	strGoVcsInfoScript   = internV("$(S)/", "build/scripts/vcs_info.py")
-	strGoVcsJson         = bldVcsJson.str()
+	strGoVcsJson         = bldVcsJson.fullSTR()
 	strGoMigrationsCfg   = internV("-migration.config=", "$(S)/", "build/rules/go/migrations.yaml")
 	strGoScopelintCfg    = internV("-scopelint.config=", "$(S)/", "build/rules/go/extended_lint.yaml")
 	strGoRiskyCfg        = internV("-riskyimports.config=", "$(S)/", "build/rules/go/risky_imports.yaml")
@@ -183,7 +183,7 @@ func goImportDir(ctx *GenCtx, importerDir, imp string) string {
 }
 
 func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
-	dir := instance.Path.rel()
+	dir := instance.Path.relString()
 
 	addPeer := func(p string) {
 		if p == "" || p == dir {
@@ -321,7 +321,7 @@ func (e *EmitContext) flushGoSrcs() {
 
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
-	dir := instance.Path.rel()
+	dir := instance.Path.relString()
 	out := build(dir, "/gen.symabis")
 	tail := na.strs.alloc(5 + len(e.goRes.AsmFiles))
 	nt := 0
@@ -335,10 +335,10 @@ func (e *EmitContext) flushGoSrcs() {
 
 	push(strGensymabis)
 	push(argDashO.str())
-	push(out.str())
+	push(out.fullSTR())
 
 	for _, src := range e.goRes.AsmFiles {
-		push(src.str())
+		push(src.fullSTR())
 	}
 
 	na.strs.commit(nt)
@@ -363,7 +363,7 @@ func (e *EmitContext) flushGoSrcs() {
 func (e *EmitContext) goAsmIncludeSrcs() []VFS {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
-	cfg := newScanContext(ctx.parsers, goAsmIncludeDirs, nil, includeScannerBasePaths(), instance.Path.rel())
+	cfg := newScanContext(ctx.parsers, goAsmIncludeDirs, nil, includeScannerBasePaths(), instance.Path.relString())
 
 	deduper.reset()
 
@@ -454,7 +454,7 @@ func goClassifyClosure(na *NodeArenas, resolved []resolvedPeer, closurePaths []V
 		switch {
 		case deduper.has(p.strID()):
 			return 0
-		case isGoArchivePath(p.rel()):
+		case isGoArchivePath(p.relString()):
 			return 1
 		default:
 			return 2
@@ -617,7 +617,7 @@ func (e *EmitContext) goToolCmdFlagsFor() []STR {
 func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, ownSbomRef *NodeRef, ownSbomPath *VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS, []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	dir := instance.Path.rel()
+	dir := instance.Path.relString()
 	outName := dir[strings.LastIndexByte(dir, '/')+1:]
 	outPath := build(dir, "/", outName, ".a")
 	goRes := e.goRes
@@ -632,7 +632,7 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 	nsrc := 0
 
 	addSrc := func(p VFS) {
-		srcArgs[nsrc] = p.str()
+		srcArgs[nsrc] = p.fullSTR()
 		srcInputs[nsrc] = p
 		nsrc++
 	}
@@ -645,13 +645,13 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 		objSuf := instance.Platform.objectSuffix()
 
 		isCgoObj := func(p VFS) bool {
-			rel := p.rel()
+			rel := p.relString()
 
 			return strings.HasSuffix(rel, ".cgo2.c"+objSuf) || strings.HasSuffix(rel, "/_cgo_export.c"+objSuf)
 		}
 
 		isDotSObj := func(p VFS) bool {
-			return strings.HasSuffix(p.rel(), ".S.o")
+			return strings.HasSuffix(p.relString(), ".S.o")
 		}
 
 		for _, o := range objOuts {
@@ -669,7 +669,7 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 		importGoRel := dir + "/_cgo_import.go"
 
 		for _, src := range goRes.GoFiles {
-			if src.isBuild() && src.rel() != importGoRel {
+			if src.isBuild() && src.relString() != importGoRel {
 				addSrc(src)
 			}
 		}
@@ -681,7 +681,7 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 		}
 
 		for _, src := range goRes.GoFiles {
-			if src.isBuild() && src.rel() == importGoRel {
+			if src.isBuild() && src.relString() == importGoRel {
 				addSrc(src)
 			}
 		}
@@ -708,7 +708,7 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 	for _, f := range d.cgoSrcs {
 		cgoSrc := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
 
-		srcArgs[nsrc] = cgoSrc.str()
+		srcArgs[nsrc] = cgoSrc.fullSTR()
 		srcInputs[nsrc] = cgoSrc
 		nsrc++
 	}
@@ -738,7 +738,7 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 	pushTail(goToolCmdPeers[0])
 
 	for _, p := range localARs {
-		pushTail(internStr(p.rel()))
+		pushTail(internStr(p.relString()))
 	}
 
 	na.strs.commit(nt)
@@ -828,7 +828,7 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 	hasGoSbom := ownSbomPath != nil
 
 	for _, p := range mergedSbomPaths[:merged] {
-		if strings.HasSuffix(p.rel(), ".GO.component.sbom") {
+		if strings.HasSuffix(p.relString(), ".GO.component.sbom") {
 			hasGoSbom = true
 
 			break
@@ -899,9 +899,9 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(
 			goToolCmdHeadLib,
-			na.strList(build(dir).str()),
+			na.strList(build(dir).fullSTR()),
 			goToolCmdMid,
-			na.strList(outPath.str()),
+			na.strList(outPath.fullSTR()),
 			goToolCmdVet,
 			srcArgs,
 			e.goToolCmdFlagsFor(),
@@ -923,7 +923,7 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	dir := instance.Path.rel()
+	dir := instance.Path.relString()
 	outName := programBinaryName(instance, d.moduleStmt)
 	outPath := build(dir, "/", outName)
 	goRes := e.goRes
@@ -943,14 +943,14 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 		strGoVcsInfoScript,
 		strOutputGo,
 		strGoVcsJson,
-		vcsGoPath.str(),
+		vcsGoPath.fullSTR(),
 		internStr(goArcPrefix),
 	)), Env: goVcsEnv}
 
 	srcArgs := na.strs.alloc(len(goRes.GoFiles))
 
 	for i, src := range goRes.GoFiles {
-		srcArgs[i] = src.str()
+		srcArgs[i] = src.fullSTR()
 	}
 
 	na.strs.commit(len(goRes.GoFiles))
@@ -965,20 +965,20 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	pushTail(goToolCmdPeers[0])
 
 	for _, p := range localARs {
-		pushTail(internStr(p.rel()))
+		pushTail(internStr(p.relString()))
 	}
 
 	pushTail(strNonLocalPeers)
 
 	for _, p := range nonLocalARs {
-		pushTail(internStr(p.rel()))
+		pushTail(internStr(p.relString()))
 	}
 
 	pushTail(strCgoPeers)
-	pushTail(internStr(vcsOPath.rel()))
+	pushTail(internStr(vcsOPath.relString()))
 
 	for _, p := range cgoARs {
-		pushTail(internStr(p.rel()))
+		pushTail(internStr(p.relString()))
 	}
 
 	na.strs.commit(nt)
@@ -1032,14 +1032,14 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 
 	goCmd := Cmd{CmdArgs: na.chunkList(
 		goToolCmdHeadExe,
-		na.strList(build(dir).str()),
+		na.strList(build(dir).fullSTR()),
 		goToolCmdMid,
-		na.strList(outPath.str()),
+		na.strList(outPath.fullSTR()),
 		goToolCmdVet,
 		srcArgs,
 		e.goToolCmdFlagsFor(),
 		goExeCmdLinkFlags,
-		na.strList(vcsGoPath.str()),
+		na.strList(vcsGoPath.fullSTR()),
 		goExeCmdExtld,
 		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm),
 		tail[:nt:nt],

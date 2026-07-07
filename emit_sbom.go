@@ -65,7 +65,7 @@ func sbomComponentLang(moduleName TOK) string {
 func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	moddir := instance.Path.rel()
+	moddir := instance.Path.relString()
 	lang := sbomComponentLang(d.moduleStmt.Name)
 	modver := d.modver
 
@@ -81,8 +81,8 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
 			wrapccPython3STR,
-			scriptVFS.str(),
-			strOutput, out.str(),
+			scriptVFS.fullSTR(),
+			strOutput, out.fullSTR(),
 			strType, strLibrary,
 			strPath, internStr(moddir),
 			strVer, internStr(modver),
@@ -103,7 +103,7 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 
 func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainName, ver string) (*NodeRef, *VFS) {
 	na := ctx.na
-	moddir := instance.Path.rel()
+	moddir := instance.Path.relString()
 
 	if ver == "" {
 		ver = "unknown"
@@ -117,8 +117,8 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
 			wrapccPython3STR,
-			scriptVFS.str(),
-			strOutput, out.str(),
+			scriptVFS.fullSTR(),
+			strOutput, out.fullSTR(),
 			strType, strToolchain,
 			strToolchainName, internStr(toolchainName),
 			strVer, internStr(ver),

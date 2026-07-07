@@ -50,9 +50,7 @@ func newFS(srcRoot string) FS {
 }
 
 func (fs *OsFS) recordContentHash(rel string, data []byte) {
-	s := internPrefixed("$(S)/", cleanRel(rel))
-
-	fs.contentHashes.set(uint32(s), xxh3.Hash(data))
+	fs.contentHashes.set(uint32(source(cleanRel(rel))), xxh3.Hash(data))
 }
 
 func (fs *OsFS) contentHash(v VFS) uint64 {
@@ -66,7 +64,7 @@ func (fs *OsFS) listdir(dir VFS) DirView {
 		return cached
 	}
 
-	v := fs.readDirViewRel(key, dir.rel())
+	v := fs.readDirViewRel(key, dir.relString())
 
 	fs.dirs.put(key, v)
 
@@ -94,7 +92,7 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 		return fs.listdir(prefix).listable(), true
 	}
 
-	prefixRel := prefix.rel()
+	prefixRel := prefix.relString()
 
 	if !pathIsClean(suffix) {
 		rel := normalisePath(joinRel(prefixRel, suffix))

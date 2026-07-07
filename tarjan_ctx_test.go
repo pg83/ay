@@ -104,7 +104,7 @@ func TestTarjan_TwoNodeCycle(t *testing.T) {
 
 	for _, n := range []VFS{a, b} {
 		if got := m.cache[n]; !reflect.DeepEqual(got, want) {
-			t.Errorf("closure(%s) = %v, want %v", n.rel(), relsOf(got), relsOf(want))
+			t.Errorf("closure(%s) = %v, want %v", n.relString(), relsOf(got), relsOf(want))
 		}
 	}
 
@@ -211,7 +211,7 @@ func relsOf(vs []VFS) []string {
 	out := make([]string, len(vs))
 
 	for i, v := range vs {
-		out[i] = v.rel()
+		out[i] = v.relString()
 	}
 
 	return out

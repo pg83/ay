@@ -27,9 +27,9 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	var outVFS VFS
 
 	if strings.Contains(srcRel, "/") {
-		outVFS = build(instance.Path.rel(), "/_/", stem, suffix)
+		outVFS = build(instance.Path.relString(), "/_/", stem, suffix)
 	} else {
-		outVFS = build(instance.Path.rel(), "/", stem, suffix)
+		outVFS = build(instance.Path.relString(), "/", stem, suffix)
 	}
 
 	inVFS := srcVFS
@@ -38,7 +38,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 
 	var predefinedFlags []string
 
-	if !asmlibYasmModules[instance.Path.rel()] {
+	if !asmlibYasmModules[instance.Path.relString()] {
 		predefinedFlags = []string{"-g", "dwarf2"}
 	}
 
@@ -59,7 +59,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	)
 
 	for _, p := range in.AddIncl {
-		cmdArgs = append(cmdArgs, argI.str(), (p).str())
+		cmdArgs = append(cmdArgs, argI.str(), (p).fullSTR())
 	}
 
 	cmdArgs = append(cmdArgs,
@@ -98,7 +98,7 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta) {
 	if srcVFS == 0 {
 		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	} else {
-		srcRel = trimModulePrefix(srcVFS.rel(), instance.Path.rel())
+		srcRel = trimModulePrefix(srcVFS.relString(), instance.Path.relString())
 	}
 
 	in := e.ccInputsFor(srcVFS)
@@ -107,7 +107,7 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta) {
 
 	if len(d.asmAddIncl) > 0 {
 		scanIn.AddIncl = dedup(in.AddIncl, d.asmAddIncl)
-		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
 
 		asIn.AddIncl = scanIn.AddIncl
 	}

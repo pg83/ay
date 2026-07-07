@@ -114,13 +114,13 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	headerVFS := build(srcRel, ".h")
 	cppVFS := build(srcRel, ".cpp")
 	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt), v.bfbsExt)
-	cmdArgs := na.chunkList(na.strList(tc.Python3, (flatcWrapperVFS).str(), (flatcBinary).str()), v.constFlags)
+	cmdArgs := na.chunkList(na.strList(tc.Python3, (flatcWrapperVFS).fullSTR(), (flatcBinary).fullSTR()), v.constFlags)
 
 	if len(flatcFlags) > 0 {
 		cmdArgs = append(cmdArgs, appendArgStr(nil, flatcFlags))
 	}
 
-	cmdArgs = append(cmdArgs, v.ioLeadArgs, []STR{(headerVFS).str(), (srcVFS).str()})
+	cmdArgs = append(cmdArgs, v.ioLeadArgs, []STR{(headerVFS).fullSTR(), (srcVFS).fullSTR()})
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -146,9 +146,9 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	ctx, instance, d := e.ctx, e.instance, e.d
 	flatcRes := ctx.toolResult(v.toolArg)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
-	transitiveImports := walkClosure(e.scanner, srcVFS, newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.rel()))
-	flRef, headerVFS, cppVFS, bfbsVFS := emitFL(instance, srcVFS.rel(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.unit.CCTag, d.tc, ctx.emit, v, genDeps)
-	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, srcVFS.rel())
+	transitiveImports := walkClosure(e.scanner, srcVFS, newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.relString()))
+	flRef, headerVFS, cppVFS, bfbsVFS := emitFL(instance, srcVFS.relString(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.unit.CCTag, d.tc, ctx.emit, v, genDeps)
+	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, srcVFS.relString())
 	headerLeaves := []VFS{flatcWrapperVFS}
 
 	if srcVFS.isSource() {
@@ -168,7 +168,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 		ClosureLeaves:  headerLeaves,
 	})
 
-	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.rel())}}
+	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: internStr(headerVFS.relString())}}
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     cppVFS,
@@ -203,6 +203,6 @@ func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant
 
 	cpp.SecondLevel = meta.SecondLevel || meta.Generated
 	cpp.Generated = true
-	cpp.Source = build(srcVFS.rel(), ".cpp").str()
+	cpp.Source = build(srcVFS.relString(), ".cpp").fullSTR()
 	e.enqueueSrc(cpp)
 }

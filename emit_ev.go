@@ -24,8 +24,8 @@ func evWitnessExtras(evRelPath string) []IncludeDirective {
 	out := make([]IncludeDirective, 0,
 		3+len(pbDescriptorImporterDirectives)+len(evExtraProtobufDirectives)+len(evAbseilCleanupDirectives))
 
-	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())})
-	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.rel())})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbWrapperVFS.relString())})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(pbDescriptorVFS.relString())})
 	out = append(out, IncludeDirective{kind: includeQuoted, target: internStr(evRelPath)})
 	out = append(out, pbDescriptorImporterDirectives...)
 	out = append(out, evExtraProtobufDirectives...)
@@ -39,7 +39,7 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
 	if d.unit.Tag == unitTagPy3Proto {
-		throwFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path.rel())
+		throwFmt("gen: py-addressed PROTO_LIBRARY %s with .ev sources is not modelled", instance.Path.relString())
 	}
 
 	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
@@ -61,7 +61,7 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 		genRefs:    []NodeRef{event2cppLDRef},
 		genHParsed: evHParsed,
 		genCCExtras: []IncludeDirective{
-			{kind: includeQuoted, target: internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").rel())},
+			{kind: includeQuoted, target: internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").relString())},
 		},
 		hLeaves: []VFS{build(evRelPath, ".pb.cc")},
 	})

@@ -115,7 +115,7 @@ func emitLD(
 		throwFmt("EmitLD: dynamicRefs/dynamicPaths length mismatch (%d vs %d)", len(dynamicRefs), len(dynamicPaths))
 	}
 
-	binaryDir := instance.Path.rel()
+	binaryDir := instance.Path.relString()
 	binPrefix := binaryDir + "/"
 	outputVFS := build(binPrefix, binaryName)
 	vcsCVFS := build(binPrefix, "__vcs_version__.c")
@@ -161,7 +161,7 @@ func emitLD(
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(objcopy), Env: envVcsOnly})
 	}
 
-	inputs := composeLDInputs(na, instance.Path.rel(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles)
+	inputs := composeLDInputs(na, instance.Path.relString(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles)
 	inputTail := make([]VFS, 0, 2)
 
 	inputTail = append(inputTail, ldSvnversionHVFS)
@@ -191,7 +191,7 @@ func emitLD(
 	outputs := []VFS{outputVFS}
 
 	for _, p := range dynamicPaths {
-		outputs = append(outputs, build(binaryDir, "/", baseName(p.rel())))
+		outputs = append(outputs, build(binaryDir, "/", baseName(p.relString())))
 	}
 
 	if wantsSplitDwarf {
@@ -214,7 +214,7 @@ func emitLD(
 }
 
 func lDOutputPath(instance ModuleInstance, binaryName string) VFS {
-	return build(instance.Path.rel(), "/", binaryName)
+	return build(instance.Path.relString(), "/", binaryName)
 }
 
 func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
@@ -227,7 +227,7 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 			argFetch.str(),
 			strBase64,
 			internStr(vcsJSONBase64),
-			output.str()))}),
+			output.fullSTR()))}),
 		KV:           &ldKV2,
 		Outputs:      na.vfsList(output),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(16)},
@@ -241,10 +241,10 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 func composeLDCmdVcsInfo(tc ModuleToolchain, vcsCPath string) []STR {
 	return []STR{
 		tc.Python3,
-		(ldVcsInfoVFS).str(),
+		(ldVcsInfoVFS).fullSTR(),
 		argVcsVcsJson.str(),
 		internStr(vcsCPath),
-		(ldSvnInterfaceVFS).str(),
+		(ldSvnInterfaceVFS).fullSTR(),
 	}
 }
 
@@ -294,13 +294,13 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 
 	cmdArgs = append(cmdArgs,
 		tc.Python3,
-		(ldLinkExeVFS).str(),
+		(ldLinkExeVFS).fullSTR(),
 	)
 
 	cmdArgs = append(cmdArgs, argStartPlugins.str())
 
 	for _, p := range pluginPaths {
-		cmdArgs = append(cmdArgs, (p).str())
+		cmdArgs = append(cmdArgs, (p).fullSTR())
 	}
 
 	cmdArgs = append(cmdArgs, argEndPlugins.str())
@@ -312,11 +312,11 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 	)
 
 	for _, p := range wholeArchiveCmdPaths {
-		cmdArgs = append(cmdArgs, argWholeArchiveLibs.str(), internStr(p.rel()))
+		cmdArgs = append(cmdArgs, argWholeArchiveLibs.str(), internStr(p.relString()))
 	}
 
 	for _, p := range wholeArchivePaths {
-		cmdArgs = append(cmdArgs, argWholeArchiveLibs.str(), internStr(p.rel()))
+		cmdArgs = append(cmdArgs, argWholeArchiveLibs.str(), internStr(p.relString()))
 	}
 
 	cmdArgs = append(cmdArgs,
@@ -328,7 +328,7 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 	)
 
 	for _, p := range globalPaths {
-		cmdArgs = append(cmdArgs, internStr(p.rel()))
+		cmdArgs = append(cmdArgs, internStr(p.relString()))
 	}
 
 	cmdArgs = append(cmdArgs,
@@ -337,13 +337,13 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 	)
 
 	for _, op := range objcopyPaths {
-		cmdArgs = append(cmdArgs, internStr(op.rel()))
+		cmdArgs = append(cmdArgs, internStr(op.relString()))
 	}
 
 	cmdArgs = append(cmdArgs, internStr(vcsOPath))
 
 	for _, cp := range ccPaths {
-		cmdArgs = append(cmdArgs, (cp).str())
+		cmdArgs = append(cmdArgs, (cp).fullSTR())
 	}
 
 	cmdArgs = append(cmdArgs, argDashO.str(), internStr(outputPath))
@@ -356,7 +356,7 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 	cmdArgs = append(cmdArgs, argWlStartGroup.str())
 
 	for _, p := range peerLinkCmdPaths {
-		cmdArgs = append(cmdArgs, internStr(p.rel()))
+		cmdArgs = append(cmdArgs, internStr(p.relString()))
 	}
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.str())
@@ -419,7 +419,7 @@ func composeLDCmdLinkSbom(tc ModuleToolchain, lang STR, moddir, sbomJSON string,
 
 	cmd = append(cmd,
 		tc.Python3,
-		linkSbomScriptVFS.str(),
+		linkSbomScriptVFS.fullSTR(),
 		strLang, lang,
 		strModPath, internStr(moddir),
 		strOutput, internStr(sbomJSON),
@@ -427,7 +427,7 @@ func composeLDCmdLinkSbom(tc ModuleToolchain, lang STR, moddir, sbomJSON string,
 	)
 
 	for _, p := range sbomPaths {
-		cmd = append(cmd, p.str())
+		cmd = append(cmd, p.fullSTR())
 	}
 
 	return cmd
@@ -445,16 +445,16 @@ func composeLDCmdSbomObjcopy(tc ModuleToolchain, sbomJSON, targetPath string) []
 func composeLDCmdLinkOrCopy(tc ModuleToolchain, modulePath string, dynamicPaths ...VFS) []STR {
 	cmd := []STR{
 		tc.Python3,
-		(ldFsToolsVFS).str(),
+		(ldFsToolsVFS).fullSTR(),
 		argLinkOrCopyToDir.str(),
 		argNoCheck.str(),
 	}
 
 	for _, p := range dynamicPaths {
-		cmd = append(cmd, (p).str())
+		cmd = append(cmd, (p).fullSTR())
 	}
 
-	cmd = append(cmd, (build(modulePath)).str())
+	cmd = append(cmd, (build(modulePath)).fullSTR())
 
 	return cmd
 }
@@ -476,7 +476,7 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 
 	for _, p := range peerLibPaths {
 		if !deduper.add(p.strID()) {
-			throwFmt("composeLDInputs: %s: duplicate peer lib path %s", modulePath, p.rel())
+			throwFmt("composeLDInputs: %s: duplicate peer lib path %s", modulePath, p.relString())
 		}
 	}
 
@@ -539,8 +539,8 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc Mo
 	cpInstance.Platform = ctx.target
 
 	for _, name := range plugins {
-		src := source(instance.Path.rel(), "/", name.string())
-		dst := build(instance.Path.rel(), "/", name.string(), ".pyplugin")
+		src := source(instance.Path.relString(), "/", name.string())
+		dst := build(instance.Path.relString(), "/", name.string(), ".pyplugin")
 		ref := emitCP(cpInstance, src, dst, tc, ctx.scripts, ctx.emit)
 
 		res.Refs = append(res.Refs, ref)

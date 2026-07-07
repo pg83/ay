@@ -29,13 +29,13 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	head := make([]STR, 0, 3+len(gperfFlags))
 
-	head = append(head, (gperfBin).str())
+	head = append(head, (gperfBin).fullSTR())
 	head = append(head, gperfFlags...)
-	head = append(head, internStr(gperfSymbolName(srcRel)), (srcVFS).str())
+	head = append(head, internStr(gperfSymbolName(srcRel)), (srcVFS).fullSTR())
 
 	node := Node{
 		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env, Stdout: (genVFS).str()}),
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env, Stdout: (genVFS).fullSTR()}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(gperfBin), srcInputs),
 		Outputs:        na.vfsList(genVFS),
@@ -52,7 +52,7 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) {
 	srcRel := src.string()
 	gperfLDRef, gperfBinVFS := ctx.tool(argContribToolsGperf)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
-	genVFS := build(instance.Path.rel(), "/", gperfGeneratedRel(srcRel))
+	genVFS := build(instance.Path.relString(), "/", gperfGeneratedRel(srcRel))
 	gpRef := ctx.emit.reserve()
 
 	var psc []ARG
@@ -65,14 +65,14 @@ func (e *EmitContext) emitLibraryGperfSource(src STR) {
 		OutputPath:     genVFS,
 		ProducerRef:    gpRef,
 		GeneratorRefs:  []NodeRef{gperfLDRef},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.rel())}}},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: internStr(srcVFS.relString())}}},
 		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc},
 	})
 
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
-	meta.Source = genVFS.str()
+	meta.Source = genVFS.fullSTR()
 	e.enqueueSrc(meta)
 
 	e.deferPass2(func() {

@@ -10,7 +10,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
 	cfgRelPath := protoSourceRelPath(ctx.fs, instance, d, src.string())
 	cfgSource := source(cfgRelPath)
-	cfgImports := walkClosure(e.scanner, cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.rel()))
+	cfgImports := walkClosure(e.scanner, cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.relString()))
 	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, protoCPPOutRoot(d))
 	configIncludes := ctx.parsers.sourceParsedBuckets(cfgSource, nil).bucket(parsedIncludesProtoConfig)
 	extras := pbHEmitsIncludesExtras()
@@ -21,7 +21,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	cfgHParsed = append(cfgHParsed, extras...)
 
 	eachBucketVFS(cfgImports.buckets, func(ti VFS) {
-		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.rel())})
+		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: internStr(ti.relString())})
 	})
 
 	e.emitCppProtoFamilySource(meta, &ProtoSpec{
@@ -36,7 +36,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 		genRefs:    []NodeRef{protocLDRef, cppStyleguideLDRef, configPluginLDRef},
 		genHParsed: cfgHParsed,
 		genCCExtras: []IncludeDirective{
-			{kind: includeQuoted, target: internStr(pbWrapperVFS.rel())},
+			{kind: includeQuoted, target: internStr(pbWrapperVFS.relString())},
 		},
 		hLeaves:  []VFS{cfgSource, build(cfgRelPath, ".pb.cc")},
 		ccLeaves: []VFS{cfgSource},

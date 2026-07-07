@@ -200,7 +200,7 @@ func (e *EmitContext) bindResourceGlobalVars(env Environment) bool {
 	bound := false
 
 	for _, stmt := range d.resourceDeclStmts {
-		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.rel(), stmt) {
+		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt) {
 			env.setStringID(internEnvSTR(decl.GlobalVar), decl.Value)
 			bound = true
 		}
@@ -253,7 +253,7 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 
 	tc.ARCmdHead = []STR{
 		tc.Python3,
-		(buildScriptsLinkLibPy).str(),
+		(buildScriptsLinkLibPy).fullSTR(),
 		tc.AR,
 		internStr(arTypeLLVM),
 		internStr(arFormatGNU),
@@ -272,7 +272,7 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 	var decls []ResourceDecl
 
 	for _, stmt := range d.resourceDeclStmts {
-		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.rel(), stmt)...)
+		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt)...)
 	}
 
 	deduper.reset()
@@ -288,7 +288,7 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 	var sbomPath *VFS
 
 	if sbomActive(ctx, instance) && d.toolchainName != "" {
-		if instance.Path.rel() != pythonToolchainInfoRel {
+		if instance.Path.relString() != pythonToolchainInfoRel {
 			pythonToolchainSbomComponent(ctx, instance.Platform)
 		}
 
@@ -334,7 +334,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 	var decls []ResourceDecl
 
 	for _, stmt := range d.resourceDeclStmts {
-		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.rel(), stmt)...)
+		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt)...)
 	}
 
 	deduper.reset()
@@ -347,11 +347,11 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 	}
 
 	if d.primaryOutput == "" || len(globals) == 0 {
-		throwFmt("gen: %s: PREBUILT_PROGRAM has no PRIMARY_OUTPUT/resource", instance.Path.rel())
+		throwFmt("gen: %s: PREBUILT_PROGRAM has no PRIMARY_OUTPUT/resource", instance.Path.relString())
 	}
 
 	if strings.Contains(d.primaryOutput, "${") {
-		throwFmt("gen: %s: PREBUILT_PROGRAM PRIMARY_OUTPUT %q has an unresolved reference", instance.Path.rel(), d.primaryOutput)
+		throwFmt("gen: %s: PREBUILT_PROGRAM PRIMARY_OUTPUT %q has an unresolved reference", instance.Path.relString(), d.primaryOutput)
 	}
 
 	srcVFS := build(strings.TrimPrefix(d.primaryOutput, "$(B)/"))
@@ -384,10 +384,10 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]STR{
 			wrapccPython3STR,
-			copyFsToolsVFS.str(),
+			copyFsToolsVFS.fullSTR(),
 			argCopy.str(),
-			srcVFS.str(),
-			dst.str(),
+			srcVFS.fullSTR(),
+			dst.fullSTR(),
 		}), Env: env}),
 		Env:          env,
 		Inputs:       inputs,

@@ -25,7 +25,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok STR) {
 	outRoot := protoCPPOutRoot(d)
 	sprotocRes := ctx.toolResult(argMapsLibsSprotoSprotoc)
 	sprotocLDRef, sprotocBinary := sprotocRes.LDRef, *sprotocRes.LDPath
-	scanCfg := newScanContext(ctx.parsers, d.addIncl, e.peers.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.rel())
+	scanCfg := newScanContext(ctx.parsers, d.addIncl, e.peers.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
 	sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")
 	sprotoRef := ctx.emit.reserve()
@@ -55,7 +55,7 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 	na := ctx.emit.nodeArenas()
 
 	cmdArgs := na.chunkList(na.strList(
-		sprotocBinary.str(),
+		sprotocBinary.fullSTR(),
 		internV("-I=./", outRoot),
 		internV("-I=$(S)/", outRoot),
 		argIB2.str(),
@@ -68,7 +68,7 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 	sprotoCV := walkClosure(e.scanner, p.sprotoH, scanCfg)
 
 	closure := collectBucketVFS(sprotoCV.buckets, func(v VFS) bool {
-		return v.isSource() || !extIsProtoGeneratedHeader(v.rel())
+		return v.isSource() || !extIsProtoGeneratedHeader(v.relString())
 	})
 
 	node := Node{
