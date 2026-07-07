@@ -27,11 +27,11 @@ func newBucketCache() *BucketCache {
 }
 
 func bucketHash(elems []VFS) (uint64, uint64) {
-	sum, xr, sq := bucketHashPlatform(elems)
+	sm, xr, sq := bucketHashPlatform(elems)
 
 	nm := mix64(uint64(len(elems)) + 1)
-	h1 := mix64(nm ^ (uint64(sq)<<32 | uint64(sum^xr)))
-	h2 := mix64(nm ^ (uint64(sum)<<32 | uint64(xr^sq)))
+	h1 := mix64(nm ^ (uint64(sq)<<32 | uint64(xr^sm)))
+	h2 := mix64(nm ^ (uint64(sm)<<32 | uint64(xr^sq)))
 
 	if h1 == 0 {
 		h1 = 1
