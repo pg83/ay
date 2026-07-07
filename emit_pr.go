@@ -116,7 +116,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			return IncludeDirective{}, false
 		}
 
-		return IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(mainOutputVFS.relString()))}, true
+		return IncludeDirective{kind: includeQuoted, target: includeTarget(mainOutputVFS.rel())}, true
 	}
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet, ridesHeaderViaParsed bool) {
@@ -417,7 +417,7 @@ func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, pro
 
 	for _, f := range stmt.OutputIncludes {
 		if v := f.vfs(); v != 0 {
-			f = internStr(v.relString())
+			f = v.rel()
 		}
 
 		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
@@ -442,7 +442,7 @@ func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, pro
 				continue
 			}
 
-			compile = append(compile, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(v.relString()))})
+			compile = append(compile, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel())})
 		}
 	}
 

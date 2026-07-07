@@ -224,7 +224,7 @@ func (c *CanonBuf) writeVFSSlice(vs []VFS) {
 
 func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 	for _, v := range vs {
-		c.writeSTR(v.fullSTR())
+		c.writeVFS(v)
 
 		if v.isSource() {
 			c.writeUint64(c.hash(v))

@@ -65,7 +65,7 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 		OutputPath:     genVFS,
 		ProducerRef:    gpRef,
 		GeneratorRefs:  []NodeRef{gperfLDRef},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: includeTarget(internStr(srcVFS.relString()))}}},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: includeTarget(srcVFS.rel())}}},
 		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc},
 	})
 

@@ -21,10 +21,10 @@ var flatcConstFlags = []ANY{
 	argFbs.any(),
 }
 
-var flatcIOLeadArgs = []STR{
-	argI.str(), argB.str(),
-	argI.str(), argS.str(),
-	argDashO.str(),
+var flatcIOLeadArgs = []ANY{
+	argI.any(), argB.any(),
+	argI.any(), argS.any(),
+	argDashO.any(),
 }
 
 var flatc64ConstFlags = []ANY{
@@ -38,10 +38,10 @@ var flatc64ConstFlags = []ANY{
 	argFbs64.any(),
 }
 
-var flatc64IOLeadArgs = []STR{
-	argI.str(), argS.str(),
-	argI.str(), argB.str(),
-	argDashO.str(),
+var flatc64IOLeadArgs = []ANY{
+	argI.any(), argS.any(),
+	argI.any(), argB.any(),
+	argDashO.any(),
 }
 
 var flatcVariantFL = FlatcVariant{
@@ -67,7 +67,7 @@ var flatcVariantFL64 = FlatcVariant{
 type FlatcVariant struct {
 	toolArg    ARG
 	constFlags []ANY
-	ioLeadArgs []STR
+	ioLeadArgs []ANY
 	kv         *KV
 	srcExt     string
 	bfbsExt    string
@@ -120,7 +120,7 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		cmdArgs = append(cmdArgs, na.argAnyList(flatcFlags))
 	}
 
-	cmdArgs = append(cmdArgs, na.anyChunk(v.ioLeadArgs), []ANY{headerVFS.any(), srcVFS.any()})
+	cmdArgs = append(cmdArgs, v.ioLeadArgs, []ANY{headerVFS.any(), srcVFS.any()})
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
@@ -168,7 +168,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 		ClosureLeaves:  headerLeaves,
 	})
 
-	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: includeTarget(internStr(headerVFS.relString()))}}
+	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: includeTarget(headerVFS.rel())}}
 
 	reg.register(&GeneratedFileInfo{
 		OutputPath:     cppVFS,

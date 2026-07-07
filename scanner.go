@@ -944,7 +944,7 @@ func quotedDirectives(headers []VFS) []IncludeDirective {
 	out := make([]IncludeDirective, len(headers))
 
 	for i, h := range headers {
-		out[i] = IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(h.relString()))}
+		out[i] = IncludeDirective{kind: includeQuoted, target: includeTarget(h.rel())}
 	}
 
 	return out

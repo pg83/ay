@@ -140,7 +140,7 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) []I
 	local := make([]IncludeDirective, 0, len(inducedProtos)+len(gztLocal))
 
 	for _, v := range inducedProtos {
-		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(v.relString()))})
+		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel())})
 	}
 
 	for _, dir := range gztLocal {

@@ -21,22 +21,22 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	cfgHParsed = append(cfgHParsed, extras...)
 
 	eachBucketVFS(cfgImports.buckets, func(ti VFS) {
-		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(ti.relString()))})
+		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(ti.rel())})
 	})
 
 	e.emitCppProtoFamilySource(meta, &ProtoSpec{
 		kv:          &cfgprotoKV,
 		ccFirstOuts: true,
-		optsTail: []STR{
-			internV("--plugin=protoc-gen-config=", configPluginBinary.string()),
-			argConfigOutB.str(),
+		optsTail: []ANY{
+			internV("--plugin=protoc-gen-config=", configPluginBinary.string()).any(),
+			argConfigOutB.any(),
 		},
 		toolLDRef:  configPluginLDRef,
 		toolBinary: configPluginBinary,
 		genRefs:    []NodeRef{protocLDRef, cppStyleguideLDRef, configPluginLDRef},
 		genHParsed: cfgHParsed,
 		genCCExtras: []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(internStr(pbWrapperVFS.relString()))},
+			{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel())},
 		},
 		hLeaves:  []VFS{cfgSource, build(cfgRelPath, ".pb.cc")},
 		ccLeaves: []VFS{cfgSource},

@@ -335,10 +335,13 @@ func (e *EmitContext) flushGoSrcs() {
 
 	push(strGensymabis)
 	push(argDashO.str())
-	push(out.fullSTR())
+
+	tail[nt] = out.any()
+	nt++
 
 	for _, src := range e.goRes.AsmFiles {
-		push(src.fullSTR())
+		tail[nt] = src.any()
+		nt++
 	}
 
 	na.anys.commit(nt)
@@ -739,7 +742,7 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 	pushTail(goToolCmdPeers[0])
 
 	for _, p := range localARs {
-		pushTail(internStr(p.relString()))
+		pushTail(p.rel())
 	}
 
 	na.anys.commit(nt)
@@ -966,20 +969,20 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	pushTail(goToolCmdPeers[0])
 
 	for _, p := range localARs {
-		pushTail(internStr(p.relString()))
+		pushTail(p.rel())
 	}
 
 	pushTail(strNonLocalPeers)
 
 	for _, p := range nonLocalARs {
-		pushTail(internStr(p.relString()))
+		pushTail(p.rel())
 	}
 
 	pushTail(strCgoPeers)
-	pushTail(internStr(vcsOPath.relString()))
+	pushTail(vcsOPath.rel())
 
 	for _, p := range cgoARs {
-		pushTail(internStr(p.relString()))
+		pushTail(p.rel())
 	}
 
 	na.anys.commit(nt)

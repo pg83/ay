@@ -542,7 +542,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 	emits := make([]IncludeDirective, 0, len(seed))
 
 	for _, v := range seed {
-		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(v.relString()))})
+		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel())})
 	}
 
 	var psc []ARG

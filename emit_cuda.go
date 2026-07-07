@@ -1,18 +1,18 @@
 package main
 
-var nvccFlagsHead = []STR{
-	internStr("-Xfatbin=-compress-all"),
-	internStr("--expt-extended-lambda"),
-	internStr("--expt-relaxed-constexpr"),
-	internStr("--allow-unsupported-compiler"),
-	internStr("--dont-use-profile"),
-	internStr("--libdevice-directory=$(B)/resources/CUDA/nvvm/libdevice"),
-	internStr("--keep"),
+var nvccFlagsHead = []ANY{
+	internStr("-Xfatbin=-compress-all").any(),
+	internStr("--expt-extended-lambda").any(),
+	internStr("--expt-relaxed-constexpr").any(),
+	internStr("--allow-unsupported-compiler").any(),
+	internStr("--dont-use-profile").any(),
+	internStr("--libdevice-directory=$(B)/resources/CUDA/nvvm/libdevice").any(),
+	internStr("--keep").any(),
 }
 
-var nvccFlagsTail = []STR{
-	internStr("--compiler-bindir=$(B)/resources/CUDA_HOST_TOOLCHAIN/bin/clang"),
-	internStr("-I$(B)/resources/OS_SDK_ROOT/usr/include/x86_64-linux-gnu"),
+var nvccFlagsTail = []ANY{
+	internStr("--compiler-bindir=$(B)/resources/CUDA_HOST_TOOLCHAIN/bin/clang").any(),
+	internStr("-I$(B)/resources/OS_SDK_ROOT/usr/include/x86_64-linux-gnu").any(),
 }
 
 var cudaKV = KV{P: pkCU, PC: pcLightGreen}
@@ -37,13 +37,13 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)
 	cuCxxTail := blocks.cxxTail
 
-	head := []([]STR){
-		na.strList(wrapccPython3STR, cudaCompileScriptVFS.fullSTR(), cudaMtimeFlagStr, mtimeVFS.fullSTR(), cudaCustomPidFlagStr, pidVFS.fullSTR(), cudaNvccBinStr, cudaNvccStdStr),
+	head := []([]ANY){
+		na.anyList(wrapccPython3STR.any(), cudaCompileScriptVFS.any(), cudaMtimeFlagStr.any(), mtimeVFS.any(), cudaCustomPidFlagStr.any(), pidVFS.any(), cudaNvccBinStr.any(), cudaNvccStdStr.any()),
 		nvccFlagsHead,
-		na.strList(internV("--keep-dir=$(B)/", instance.Path.relString())),
+		na.anyList(internV("--keep-dir=$(B)/", instance.Path.relString()).any()),
 		nvccFlagsTail,
 		in.CudaNvccFlags,
-		na.strList(argDashC.str(), (inVFS).fullSTR(), argDashO.str(), (outVFS).fullSTR()),
+		na.anyList(argDashC.any(), inVFS.any(), argDashO.any(), outVFS.any()),
 	}
 
 	total := len(head) + 6
@@ -51,16 +51,16 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 	k := 0
 
 	for _, h := range head {
-		chunks[k] = na.anyChunk(h)
+		chunks[k] = h
 		k++
 	}
 
-	chunks[k] = na.anyChunkAny(blocks.includes)
-	chunks[k+1] = na.anyChunk(na.strList(cudaCflagsStr))
-	chunks[k+2] = na.anyChunkAny(p.CCHead)
-	chunks[k+3] = na.anyChunkAny(blocks.flags)
-	chunks[k+4] = na.anyChunkAny(cuCxxTail)
-	chunks[k+5] = na.anyChunk(na.strList(cudaNvccStdStr))
+	chunks[k] = blocks.includes
+	chunks[k+1] = na.anyList(cudaCflagsStr.any())
+	chunks[k+2] = p.CCHead
+	chunks[k+3] = blocks.flags
+	chunks[k+4] = cuCxxTail
+	chunks[k+5] = na.anyList(cudaNvccStdStr.any())
 	k += 6
 	na.chunks.commit(k)
 

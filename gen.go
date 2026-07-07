@@ -876,7 +876,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	const googleapisPeer = "contrib/libs/googleapis-common-protos"
 
-	internStr(instance.Path.relString())
+	instance.Path.rel()
 	internStr(googleapisPeer)
 
 	if unitTestPeer != "" {
@@ -1524,7 +1524,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.cc = ModuleCompileEnv{
 		InclArgs:             ctx.inclArgs,
 		Flags:                d.flags,
-		CudaNvccFlags:        d.cudaNvccFlags,
+		CudaNvccFlags:        strsAny(d.cudaNvccFlags),
 		AddIncl:              dedupedAddIncl,
 		PeerAddInclGlobal:    selfPeerAddInclGlobal,
 		ProtoInclude:         effectiveProtoInclude,

@@ -312,11 +312,11 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 	)
 
 	for _, p := range wholeArchiveCmdPaths {
-		cmdArgs = append(cmdArgs, argWholeArchiveLibs.any(), internStr(p.relString()).any())
+		cmdArgs = append(cmdArgs, argWholeArchiveLibs.any(), p.rel().any())
 	}
 
 	for _, p := range wholeArchivePaths {
-		cmdArgs = append(cmdArgs, argWholeArchiveLibs.any(), internStr(p.relString()).any())
+		cmdArgs = append(cmdArgs, argWholeArchiveLibs.any(), p.rel().any())
 	}
 
 	cmdArgs = append(cmdArgs,
@@ -328,7 +328,7 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 	)
 
 	for _, p := range globalPaths {
-		cmdArgs = append(cmdArgs, internStr(p.relString()).any())
+		cmdArgs = append(cmdArgs, p.rel().any())
 	}
 
 	cmdArgs = append(cmdArgs,
@@ -337,7 +337,7 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 	)
 
 	for _, op := range objcopyPaths {
-		cmdArgs = append(cmdArgs, internStr(op.relString()).any())
+		cmdArgs = append(cmdArgs, op.rel().any())
 	}
 
 	cmdArgs = append(cmdArgs, internStr(vcsOPath).any())
@@ -356,7 +356,7 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, outputPath, vcsOPath s
 	cmdArgs = append(cmdArgs, argWlStartGroup.any())
 
 	for _, p := range peerLinkCmdPaths {
-		cmdArgs = append(cmdArgs, internStr(p.relString()).any())
+		cmdArgs = append(cmdArgs, p.rel().any())
 	}
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.any())

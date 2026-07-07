@@ -46,7 +46,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 		OutputPath:  generatedVFS,
 		ProducerRef: chRef,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(internStr(confVFS.relString()))},
+			{kind: includeQuoted, target: includeTarget(confVFS.rel())},
 		}},
 		ClosureLeaves: []VFS{buildScriptsCheckConfigHPy},
 		Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.any()), CFlags: psc},

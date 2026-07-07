@@ -24,8 +24,8 @@ func evWitnessExtras(evRelPath string) []IncludeDirective {
 	out := make([]IncludeDirective, 0,
 		3+len(pbDescriptorImporterDirectives)+len(evExtraProtobufDirectives)+len(evAbseilCleanupDirectives))
 
-	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(pbWrapperVFS.relString()))})
-	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(pbDescriptorVFS.relString()))})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel())})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(pbDescriptorVFS.rel())})
 	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(evRelPath))})
 	out = append(out, pbDescriptorImporterDirectives...)
 	out = append(out, evExtraProtobufDirectives...)
@@ -51,10 +51,10 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 	e.emitCppProtoFamilySource(meta, &ProtoSpec{
 		kv:          &evKV,
 		ccFirstOuts: true,
-		optsTail: []STR{
-			internV("--plugin=protoc-gen-event2cpp=", event2cppBinary.string()),
-			argEvent2cppOutB.str(),
-			internV("-I=", evEventlogIncludePath),
+		optsTail: []ANY{
+			internV("--plugin=protoc-gen-event2cpp=", event2cppBinary.string()).any(),
+			argEvent2cppOutB.any(),
+			internV("-I=", evEventlogIncludePath).any(),
 		},
 		toolLDRef:  event2cppLDRef,
 		toolBinary: event2cppBinary,

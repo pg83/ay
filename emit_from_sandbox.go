@@ -117,7 +117,7 @@ func fromSandboxOutputIncludes(stmt *FromSandboxStmt) []IncludeDirective {
 
 	for _, f := range stmt.OutputIncludes {
 		if v := f.vfs(); v != 0 {
-			f = internStr(v.relString())
+			f = v.rel()
 		}
 
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
