@@ -396,11 +396,13 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	leaves := cgoLeaves[:nl:nl]
 	cgo2Spec := &CompileSpec{CFlags: append(goCgoCFlags(d), argWnoUnusedVariable)}
 
+	dirPrefix := dir + "/"
+
 	for _, f := range files {
 		e.codegen.register(&GeneratedFileInfo{OutputPath: f.cgo1, ProducerRef: ref})
 		e.codegen.register(&GeneratedFileInfo{OutputPath: f.cgo2C, ProducerRef: ref, Compile: cgo2Spec, ClosureLeaves: leaves})
-		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo1.relString(), dir+"/")).any(), Prio: stmtPrioDefault, Generated: true})
-		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo2C.relString(), dir+"/")).any(), Prio: stmtPrioDefault, Generated: true})
+		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo1.relString(), dirPrefix)).any(), Prio: stmtPrioDefault, Generated: true})
+		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo2C.relString(), dirPrefix)).any(), Prio: stmtPrioDefault, Generated: true})
 	}
 
 	e.codegen.register(&GeneratedFileInfo{OutputPath: exportH, ProducerRef: ref})

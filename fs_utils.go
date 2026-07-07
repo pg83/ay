@@ -114,6 +114,22 @@ func sourceClean(rel string) VFS {
 	return source(filepath.ToSlash(filepath.Clean(rel)))
 }
 
+func buildClean(rel string) VFS {
+	if rel != "" && pathIsClean(rel) {
+		return build(rel)
+	}
+
+	return build(filepath.ToSlash(filepath.Clean(rel)))
+}
+
+func sourceJoinClean(dir, rel string) VFS {
+	if dir != "" && rel != "" && pathIsClean(dir) && pathIsClean(rel) {
+		return source(dir, "/", rel)
+	}
+
+	return source(filepath.ToSlash(filepath.Clean(dir + "/" + rel)))
+}
+
 func baseName(s string) string {
 	if i := strings.LastIndexByte(s, '/'); i >= 0 {
 		return s[i+1:]

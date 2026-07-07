@@ -57,7 +57,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 		}
 
 		pathPerFile = append(pathPerFile, memberVFS)
-		cmdArgs = append(cmdArgs, internV(memberVFS.string(), ":").any())
+		cmdArgs = append(cmdArgs, internV(memberVFS.prefix(), memberVFS.relString(), ":").any())
 	}
 
 	cmdArgs = append(cmdArgs, argDashO.any(), (rodataVFS).any())

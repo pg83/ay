@@ -491,16 +491,15 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 
 		if !bypass && searchOut[0].isSource() {
 			incDir := pathDir(includerRel)
-
-			var sameDirRel string
+			rel := searchOut[0].relString()
+			t := d.target.string()
 
 			if incDir != "" {
-				sameDirRel = incDir + "/" + d.target.string()
+				bypass = len(rel) == len(incDir)+1+len(t) &&
+					rel[:len(incDir)] == incDir && rel[len(incDir)] == '/' && rel[len(incDir)+1:] == t
 			} else {
-				sameDirRel = d.target.string()
+				bypass = rel == t
 			}
-
-			bypass = searchOut[0].relString() == sameDirRel
 		}
 
 		if bypass {
@@ -625,7 +624,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 		if p.isBuild() {
 			idx.buildEntries = append(idx.buildEntries, CfgBuildAddincl{
 				prefix:    p,
-				prefixSrc: source(p.relString()),
+				prefixSrc: p.rel().source(),
 				rank:      int(r),
 			})
 		}

@@ -69,7 +69,7 @@ func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, o
 
 	cmdArgs := na.chunkList(na.anyList(
 		flexBin.any(),
-		internV(argDashO.string(), outVFS.string()).any(),
+		internV(argDashO.string(), outVFS.prefix(), outVFS.relString()).any(),
 		srcVFS.any(),
 	))
 

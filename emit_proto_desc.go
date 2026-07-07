@@ -206,7 +206,7 @@ func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []ANY {
 	}
 
 	for _, p := range peerProtoAddIncl {
-		out = append(out, internV("-I=", p.string()).any())
+		out = append(out, internV("-I=", p.prefix(), p.relString()).any())
 	}
 
 	out = append(out,

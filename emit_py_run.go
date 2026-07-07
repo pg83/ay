@@ -123,7 +123,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	inputClosure := e.pyInputClosure(stmt)
 	extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputClosure)
 
-	interp := d.cc.TC.Python3
+	interp := d.cc.TC.Python3.any()
 	kv := &pyRunKV
 	resources := usesPython3
 
@@ -133,7 +133,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	if stmt.Lua {
 		luaLDRef, luaBinVFS := ctx.tool(argToolsLua)
 
-		interp = luaBinVFS.fullSTR()
+		interp = luaBinVFS.any()
 		interpInput = &luaBinVFS
 		toolRefs = depRefs(luaLDRef)
 		kv = &luaRunKV
@@ -317,15 +317,15 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 	includes := []IncludeDirective{{kind: includeQuoted, target: includeTarget(scriptVFS.rel())}}
 
 	for _, f := range stmt.INFiles {
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(e.runProgramInputVFS(f.string()).relString()))})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(e.runProgramInputVFS(f.string()).rel())})
 	}
 
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f.string()) {
-			f = internStr(intern(f.string()).relString())
+			f = f.vfs().rel()
 		}
 
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(f.string()))})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
 	}
 
 	return includes
@@ -341,7 +341,7 @@ func emitPYRun(
 	inputClosure []VFS,
 	extraDepRefs []NodeRef,
 	id NodeRef,
-	interp STR,
+	interp ANY,
 	interpInput *VFS,
 	toolRefs []NodeRef,
 	kv *KV,
@@ -361,7 +361,7 @@ func emitPYRun(
 		}
 	}
 
-	cmdArgs := []ANY{interp.any(), (scriptVFS).any()}
+	cmdArgs := []ANY{interp, (scriptVFS).any()}
 
 	for _, aTok := range stmt.Args {
 		a := aTok.string()

@@ -116,15 +116,15 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		Compile:        spec,
 	})
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin.fullSTR()}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	head := make([]ANY, 0, 6+len(d.cc.BisonFlags))
 
-	head = append(head, internStr(bisonBin).any(), argV.any())
+	head = append(head, bisonBin.any(), argV.any())
 	head = appendArgAny(head, d.cc.BisonFlags)
 
 	head = append(head,
-		internV("--defines=", headerVFS.string()).any(),
+		internV("--defines=", headerVFS.prefix(), headerVFS.relString()).any(),
 		argDashO.any(),
 		(generatedVFS).any(),
 		(srcVFS).any())
@@ -177,14 +177,10 @@ func (e *EmitContext) emitBisonY(src ANY) {
 	e.enqueueSrc(meta)
 }
 
-func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, string) {
-	ref, bin := ctx.tool(argContribToolsBison)
-
-	return ref, bin.string()
+func bisonTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, VFS) {
+	return ctx.tool(argContribToolsBison)
 }
 
-func m4Tool(ctx *GenCtx, instance ModuleInstance) (NodeRef, STR) {
-	ref, bin := ctx.tool(argContribToolsM4)
-
-	return ref, bin.fullSTR()
+func m4Tool(ctx *GenCtx, instance ModuleInstance) (NodeRef, VFS) {
+	return ctx.tool(argContribToolsM4)
 }

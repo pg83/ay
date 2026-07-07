@@ -347,18 +347,18 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		target := oi
 
 		if vfsHasPrefix(target.string()) {
-			target = internStr(intern(target.string()).relString())
+			target = target.vfs().rel()
 		}
 
 		var sub Closure
 
 		selfIsInput := false
 
-		switch info := e.codegen.lookup(build(target.string())); {
+		switch info := e.codegen.lookup(target.build()); {
 		case info != nil:
 			sub = walkClosure(e.scanner, info.OutputPath, scanCfg)
 		case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
-			sub = walkClosure(e.scanner, source(target.string()), scanCfg)
+			sub = walkClosure(e.scanner, target.source(), scanCfg)
 			selfIsInput = true
 		default:
 			continue
@@ -495,7 +495,7 @@ func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 		return e.requireProducedInput("IN", rel, copyFileInputVFS(ctx.fs, instance.Path, rel))
 	}
 
-	buildVFS := build(filepath.ToSlash(filepath.Clean(instance.Path.relString() + "/" + rel)))
+	buildVFS := buildJoinClean(instance.Path.relString(), rel)
 
 	if e.codegen.lookup(buildVFS) != nil {
 		return buildVFS

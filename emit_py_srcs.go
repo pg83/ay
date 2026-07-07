@@ -149,7 +149,7 @@ func (e *EmitContext) pyResEntriesFor(ps PySrc) []PyGenResEntry {
 
 	resolvedRel := resolvePySrcRel(e.ctx.fs, d.srcDirs, e.instance.Path, srcRel)
 	genInfo := e.codegen.lookupSplit(e.instance.Path, ps.Token)
-	pySource := source(resolvedRel.string())
+	pySource := resolvedRel.source()
 
 	if genInfo != nil {
 		pySource = build(module, "/", srcRel)
@@ -593,14 +593,13 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 
 		regCpp := arg.string() + ".reg3.cpp"
 		regCppVFS := build(instance.Path.relString(), "/", regCpp)
-		regCppAbs := regCppVFS.string()
 		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 
 		pyCmdArgs := []ANY{
 			d.tc.Python3.any(),
 			(genPy3RegScriptVFS).any(),
-			internStr(arg.string()).any(),
-			internStr(regCppAbs).any(),
+			arg.any(),
+			regCppVFS.any(),
 		}
 
 		pyNode := Node{

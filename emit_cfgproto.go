@@ -28,7 +28,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 		kv:          &cfgprotoKV,
 		ccFirstOuts: true,
 		optsTail: []ANY{
-			internV("--plugin=protoc-gen-config=", configPluginBinary.string()).any(),
+			internV("--plugin=protoc-gen-config=", configPluginBinary.prefix(), configPluginBinary.relString()).any(),
 			argConfigOutB.any(),
 		},
 		toolLDRef:  configPluginLDRef,
