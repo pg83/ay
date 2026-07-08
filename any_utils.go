@@ -1,13 +1,6 @@
 package main
 
-import (
-	"strings"
-	"unsafe"
-)
-
-func strBytes(s string) []byte {
-	return unsafe.Slice(unsafe.StringData(s), len(s))
-}
+import "strings"
 
 func appendArgGroupStr(dst []ANY, srcs ...[]ANY) []ANY {
 	for _, s := range srcs {
@@ -16,22 +9,6 @@ func appendArgGroupStr(dst []ANY, srcs ...[]ANY) []ANY {
 				dst = append(dst, internStr(tok).any())
 			}
 		}
-	}
-
-	return dst
-}
-
-func appendInternStrs(dst []STR, ss []string) []STR {
-	for _, s := range ss {
-		dst = append(dst, internStr(s))
-	}
-
-	return dst
-}
-
-func appendStrStrs(dst []string, as []STR) []string {
-	for _, a := range as {
-		dst = append(dst, a.string())
 	}
 
 	return dst
@@ -47,25 +24,11 @@ func anyStrs(as []ANY) []string {
 	return out
 }
 
-func strStrs(as []STR) []string {
-	return appendStrStrs(make([]string, 0, len(as)), as)
-}
-
 func strStrings(items []ANY) []string {
 	out := make([]string, 0, len(items))
 
 	for _, s := range items {
 		out = append(out, s.string())
-	}
-
-	return out
-}
-
-func sTRS(items ...string) []STR {
-	out := make([]STR, 0, len(items))
-
-	for _, s := range items {
-		out = append(out, internStr(s))
 	}
 
 	return out
@@ -131,4 +94,18 @@ func strsAny(ss []STR) []ANY {
 
 func anysOf(items ...string) []ANY {
 	return internAnys(items)
+}
+
+func internAnys(ss []string) []ANY {
+	if len(ss) == 0 {
+		return nil
+	}
+
+	out := make([]ANY, len(ss))
+
+	for i, s := range ss {
+		out[i] = internAny(s)
+	}
+
+	return out
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"unsafe"
 )
 
 func hasPrefix(s, prefix string) bool {
@@ -196,4 +197,12 @@ func humanBytes(n int64) string {
 	}
 
 	return fmt.Sprintf("%.2f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+func strBytes(s string) []byte {
+	return unsafe.Slice(unsafe.StringData(s), len(s))
+}
+
+func stringPtr(s string) *string {
+	return &s
 }
