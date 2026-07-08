@@ -75,8 +75,19 @@ func (e *EmitContext) requireProducedInput(kind, token string, vfs VFS) VFS {
 	return vfs
 }
 
+func (e *EmitContext) prodVFSTake(mark int) []VFS {
+	n := len(e.prodVFS)
+
+	if n == mark {
+		return nil
+	}
+
+	return e.prodVFS[mark:n:n]
+}
+
 func (e *EmitContext) srcPositionOuts(tok STR) []VFS {
 	d := e.d
+	mark := len(e.prodVFS)
 
 	switch srcExtClassOf(tok.any()) {
 	case srcExtProto:
@@ -84,50 +95,58 @@ func (e *EmitContext) srcPositionOuts(tok STR) []VFS {
 		base := strings.TrimSuffix(rel, ".proto")
 
 		if d.unit.Tag == unitTagPy3Proto {
-			outs := []VFS{build(base, "__intpy3___pb2.py")}
+			e.prodVFS = append(e.prodVFS, build(base, "__intpy3___pb2.py"))
 
 			if d.grpc {
-				outs = append(outs, build(base, "__intpy3___pb2_grpc.py"))
+				e.prodVFS = append(e.prodVFS, build(base, "__intpy3___pb2_grpc.py"))
 			}
 
-			return outs
+			return e.prodVFSTake(mark)
 		}
 
-		outs := []VFS{build(base, ".pb.h"), build(base, ".pb.cc")}
+		e.prodVFS = append(e.prodVFS, build(base, ".pb.h"), build(base, ".pb.cc"))
 
 		if !protoTransitiveHeadersEnabled(d) {
-			outs = append(outs, build(base, ".deps.pb.h"))
+			e.prodVFS = append(e.prodVFS, build(base, ".deps.pb.h"))
 		}
 
 		if d.grpc {
-			outs = append(outs, build(base, ".grpc.pb.cc"), build(base, ".grpc.pb.h"))
+			e.prodVFS = append(e.prodVFS, build(base, ".grpc.pb.cc"), build(base, ".grpc.pb.h"))
 		}
 
 		for _, plugin := range d.cppProtoPlugins {
 			for _, suffix := range plugin.OutputSuffixes {
-				outs = append(outs, build(base, suffix))
+				e.prodVFS = append(e.prodVFS, build(base, suffix))
 			}
 		}
 
-		return outs
+		return e.prodVFSTake(mark)
 	case srcExtEv, srcExtCfgProto:
 		rel := protoSourceRelPath(e.ctx.fs, e.instance, d, tok.string())
 
-		return []VFS{build(rel, ".pb.h"), build(rel, ".pb.cc")}
+		e.prodVFS = append(e.prodVFS, build(rel, ".pb.h"), build(rel, ".pb.cc"))
+
+		return e.prodVFSTake(mark)
 	case srcExtGztProto:
 		if d.unit.Tag == unitTagPy3Proto {
 			return nil
 		}
 
-		return []VFS{build(e.instance.Path.relString(), "/", e.gztGenProtoName(tok.string()))}
+		e.prodVFS = append(e.prodVFS, build(e.instance.Path.relString(), "/", e.gztGenProtoName(tok.string())))
+
+		return e.prodVFSTake(mark)
 	}
 
 	return nil
 }
 
-func srcInsCandidate(module string, tok ANY) []VFS {
-	if v := runInputBuildCandidate(module, tok.string()); v != 0 {
-		return []VFS{v}
+func (e *EmitContext) srcInsCandidate(tok ANY) []VFS {
+	if v := runInputBuildCandidate(e.instance.Path.relString(), tok.string()); v != 0 {
+		e.prodVFS = append(e.prodVFS, v)
+
+		n := len(e.prodVFS)
+
+		return e.prodVFS[n-1 : n : n]
 	}
 
 	return nil
@@ -135,14 +154,18 @@ func srcInsCandidate(module string, tok ANY) []VFS {
 
 func (e *EmitContext) srcPositionIns(tok STR) []VFS {
 	module := e.instance.Path.relString()
-	ins := srcInsCandidate(module, tok.any())
+	mark := len(e.prodVFS)
+
+	if v := runInputBuildCandidate(module, tok.string()); v != 0 {
+		e.prodVFS = append(e.prodVFS, v)
+	}
 
 	switch srcExtClassOf(tok.any()) {
 	case srcExtProto, srcExtEv:
 		rel := protoSourceRelPath(e.ctx.fs, e.instance, e.d, tok.string())
 
 		if !e.ctx.fs.isFile(srcRootRel, rel) {
-			return ins
+			return e.prodVFSTake(mark)
 		}
 
 		outputRoot := protoCPPOutRoot(e.d)
@@ -154,15 +177,15 @@ func (e *EmitContext) srcPositionIns(tok STR) []VFS {
 				clean = filepath.ToSlash(filepath.Clean(name))
 			}
 
-			ins = append(ins, build(clean))
+			e.prodVFS = append(e.prodVFS, build(clean))
 
 			if outputRoot != "" {
-				ins = append(ins, build(protoOutputRel(outputRoot, clean)))
+				e.prodVFS = append(e.prodVFS, build(protoOutputRel(outputRoot, clean)))
 			}
 		})
 	}
 
-	return ins
+	return e.prodVFSTake(mark)
 }
 
 func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMeta) {
@@ -431,43 +454,55 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 	if goModule {
 		for i, srcTok := range goModuleCgoCFiles(d) {
+			outsMark := len(e.prodVFS)
+
+			e.prodVFS = append(e.prodVFS, build(module, "/", srcTok.string()))
+
 			positions = append(positions, ProducerPos{
 				kind:  prodGoCgoCopy,
 				index: i,
-				outs:  []VFS{build(module, "/", srcTok.string())},
-				ins:   srcInsCandidate(module, srcTok),
+				outs:  e.prodVFSTake(outsMark),
+				ins:   e.srcInsCandidate(srcTok),
 			})
 		}
 
 		if len(d.cgoSrcs) > 0 {
-			outs := make([]VFS, 0, 2*len(d.cgoSrcs)+4)
-			ins := make([]VFS, 0, len(d.cgoSrcs))
+			outsMark := len(e.prodVFS)
 
 			for _, f := range d.cgoSrcs {
 				base := strings.TrimSuffix(f.string(), ".go")
 
-				outs = append(outs, build(module, "/", base, ".cgo1.go"), build(module, "/", base, ".cgo2.c"))
-				ins = append(ins, source(module, "/", f.string()))
+				e.prodVFS = append(e.prodVFS, build(module, "/", base, ".cgo1.go"), build(module, "/", base, ".cgo2.c"))
 			}
 
-			outs = append(outs,
+			e.prodVFS = append(e.prodVFS,
 				build(module, "/_cgo_export.h"),
 				build(module, "/_cgo_export.c"),
 				build(module, "/_cgo_gotypes.go"),
 				build(module, "/_cgo_main.c"))
 
-			positions = append(positions, ProducerPos{kind: prodGoCgo1, index: 0, outs: outs, ins: ins})
+			outs := e.prodVFSTake(outsMark)
+			insMark := len(e.prodVFS)
+
+			for _, f := range d.cgoSrcs {
+				e.prodVFS = append(e.prodVFS, source(module, "/", f.string()))
+			}
+
+			positions = append(positions, ProducerPos{kind: prodGoCgo1, index: 0, outs: outs, ins: e.prodVFSTake(insMark)})
 		}
 	}
 
 	for i, srcTok := range d.ymapsSprotoSrcs {
 		protoRelPath := protoSourceRelPath(e.ctx.fs, e.instance, d, srcTok.string())
+		sprotoMark := len(e.prodVFS)
+
+		e.prodVFS = append(e.prodVFS, build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h"))
 
 		positions = append(positions, ProducerPos{
 			kind:  prodSproto,
 			index: i,
-			outs:  []VFS{build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")},
-			ins:   srcInsCandidate(module, srcTok),
+			outs:  e.prodVFSTake(sprotoMark),
+			ins:   e.srcInsCandidate(srcTok),
 		})
 	}
 

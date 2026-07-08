@@ -216,7 +216,7 @@ type PbModuleEmission struct {
 	pbGenRefs           []NodeRef
 	grpcCCRefs          []NodeRef
 	grpcHRefs           []NodeRef
-	blocks              *PbArgBlocks
+	blocks              PbArgBlocks
 	searchPaths         []VFS
 	scanCfg             ScanContext
 }
@@ -333,7 +333,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		transitiveImports,
 		extraProtoDeps,
 		protoProducerSourceInputs,
-		pe.blocks,
+		&pe.blocks,
 		spec,
 		ctx.emit,
 	)
@@ -877,7 +877,7 @@ type PbArgBlocks struct {
 func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
 	grpc bool, cppOutRoot string, liteHeaders bool,
 	extraProtocFlags []ANY, extraPlugins []ResolvedCPPProtoPlugin,
-	protoInclude []VFS) *PbArgBlocks {
+	protoInclude []VFS) PbArgBlocks {
 	head := na.anyList(
 		tc.Python3.any(),
 		pbWrapperVFS.any(),
@@ -966,5 +966,5 @@ func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppSty
 
 	na.anys.commit(len(tail))
 
-	return &PbArgBlocks{head: head, mid: mid, tail: tail[:len(tail):len(tail)]}
+	return PbArgBlocks{head: head, mid: mid, tail: tail[:len(tail):len(tail)]}
 }
