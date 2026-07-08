@@ -2,7 +2,7 @@ package main
 
 var deduper DeDuper
 
-type idKey interface {
+type IdKey interface {
 	~uint32
 	strID() uint32
 }
@@ -106,7 +106,7 @@ func dedupClosure(na *NodeArenas, extra []VFS, groups ...[][]VFS) []VFS {
 	return out[:len(out):len(out)]
 }
 
-func dedup[T idKey](lists ...[]T) []T {
+func dedup[T IdKey](lists ...[]T) []T {
 	total := 0
 
 	for _, l := range lists {

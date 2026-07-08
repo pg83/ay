@@ -1,12 +1,12 @@
 package main
 
-type denseRow3 struct {
+type DenseRow3 struct {
 	i1, i2, i3 uint32
 }
 
 type DenseMap3[K ~uint32, V1, V2, V3 any] struct {
 	idx   Vec[uint32]
-	rows  Vec[denseRow3]
+	rows  Vec[DenseRow3]
 	vals1 Vec[V1]
 	vals2 Vec[V2]
 	vals3 Vec[V3]
@@ -28,11 +28,11 @@ func (m *DenseMap3[K, V1, V2, V3]) ensureRow(k K) uint32 {
 	}
 
 	if m.rows.len() == 0 {
-		m.rows.pushBack(denseRow3{})
+		m.rows.pushBack(DenseRow3{})
 	}
 
 	m.idx.ensureLen(int(k) + 1)
-	m.rows.pushBack(denseRow3{})
+	m.rows.pushBack(DenseRow3{})
 
 	slot := uint32(m.rows.len() - 1)
 

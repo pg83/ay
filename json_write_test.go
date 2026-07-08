@@ -66,26 +66,26 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 			Cmds []struct {
 				CmdArgs []string `json:"cmd_args"`
 			} `json:"cmds"`
-			Deps        []nodeID            `json:"deps"`
-			ForeignDeps map[string][]nodeID `json:"foreign_deps"`
+			Deps        []NodeID            `json:"deps"`
+			ForeignDeps map[string][]NodeID `json:"foreign_deps"`
 			KV          map[string]any      `json:"kv"`
 		} `json:"graph"`
-		Result []nodeID `json:"result"`
+		Result []NodeID `json:"result"`
 	}
 
 	if err := json.Unmarshal(out, &parsed); err != nil {
 		t.Fatalf("compact output does not parse: %v\n%s", err, out)
 	}
 
-	leafUID := nodeID(strconv.FormatUint(uint64(leaf), 10))
-	mainUID := nodeID(strconv.FormatUint(uint64(main), 10))
+	leafUID := NodeID(strconv.FormatUint(uint64(leaf), 10))
+	mainUID := NodeID(strconv.FormatUint(uint64(main), 10))
 
 	var mainNode *struct {
 		Cmds []struct {
 			CmdArgs []string `json:"cmd_args"`
 		} `json:"cmds"`
-		Deps        []nodeID            `json:"deps"`
-		ForeignDeps map[string][]nodeID `json:"foreign_deps"`
+		Deps        []NodeID            `json:"deps"`
+		ForeignDeps map[string][]NodeID `json:"foreign_deps"`
 		KV          map[string]any      `json:"kv"`
 	}
 

@@ -28,13 +28,13 @@ type EmitContext struct {
 	resources    []ResourceEntry
 }
 
-type collectedObjs struct {
+type CollectedObjs struct {
 	refs  []NodeRef
 	outs  []VFS
 	metas []SrcMeta
 }
 
-func (e *EmitContext) partitionCollected() (local, global collectedObjs) {
+func (e *EmitContext) partitionCollected() (local, global CollectedObjs) {
 	n := len(e.metas)
 
 	local.refs = make([]NodeRef, 0, n)

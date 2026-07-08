@@ -1,12 +1,12 @@
 package main
 
-type denseRow2 struct {
+type DenseRow2 struct {
 	i1, i2 uint32
 }
 
 type DenseMap2[K ~uint32, V1, V2 any] struct {
 	idx   Vec[uint32]
-	rows  Vec[denseRow2]
+	rows  Vec[DenseRow2]
 	vals1 Vec[V1]
 	vals2 Vec[V2]
 }
@@ -27,11 +27,11 @@ func (m *DenseMap2[K, V1, V2]) ensureRow(k K) uint32 {
 	}
 
 	if m.rows.len() == 0 {
-		m.rows.pushBack(denseRow2{})
+		m.rows.pushBack(DenseRow2{})
 	}
 
 	m.idx.ensureLen(int(k) + 1)
-	m.rows.pushBack(denseRow2{})
+	m.rows.pushBack(DenseRow2{})
 
 	slot := uint32(m.rows.len() - 1)
 

@@ -9,25 +9,25 @@ import (
 var internTable = struct {
 	ids      *IntMap[STR]
 	overflow map[string]STR
-	flat     []internCell
-	cells    PageVec[internCell]
+	flat     []InternCell
+	cells    PageVec[InternCell]
 	count    uint32
 	bytes    *BumpAllocator[byte]
 }{
 	ids:      newIntMap[STR](1 << 16),
 	overflow: make(map[string]STR),
-	flat:     make([]internCell, 1, 1<<20),
+	flat:     make([]InternCell, 1, 1<<20),
 	count:    1,
 	bytes:    newBumpAllocator[byte](1 << 20),
 }
 
-type internCell struct {
+type InternCell struct {
 	str string
 	lo  uint64
 }
 
 func init() {
-	internTable.cells.set(0, internCell{})
+	internTable.cells.set(0, InternCell{})
 }
 
 func internOwnedCopy(b []byte) string {
@@ -57,7 +57,7 @@ func strBound() uint32 {
 
 func internAppend(s string, lo uint64) STR {
 	id := STR(internTable.count)
-	cell := internCell{str: s, lo: lo}
+	cell := InternCell{str: s, lo: lo}
 
 	internTable.flat = append(internTable.flat, cell)
 	internTable.cells.set(internTable.count, cell)

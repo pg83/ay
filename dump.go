@@ -336,19 +336,23 @@ func marshalCompact(v any) []byte {
 	return b
 }
 
-type nodeID string
+type NodeID string
 
-func (k *nodeID) UnmarshalJSON(b []byte) error {
+func (k *NodeID) UnmarshalJSON(b []byte) error {
+	return k.unmarshalJSON(b)
+}
+
+func (k *NodeID) unmarshalJSON(b []byte) error {
 	if len(b) >= 2 && b[0] == '"' {
-		*k = nodeID(b[1 : len(b)-1])
+		*k = NodeID(b[1 : len(b)-1])
 	} else {
-		*k = nodeID(b)
+		*k = NodeID(b)
 	}
 
 	return nil
 }
 
-func idStrs(ids []nodeID) []string {
+func idStrs(ids []NodeID) []string {
 	out := make([]string, len(ids))
 
 	for i, id := range ids {
@@ -359,8 +363,8 @@ func idStrs(ids []nodeID) []string {
 }
 
 type RawNode struct {
-	UID          nodeID   `json:"uid"`
-	Deps         []nodeID `json:"deps"`
+	UID          NodeID   `json:"uid"`
+	Deps         []NodeID `json:"deps"`
 	Inputs       []string `json:"inputs"`
 	Outputs      []string `json:"outputs"`
 	Platform     string   `json:"platform"`
