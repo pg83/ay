@@ -6,20 +6,20 @@ import (
 	"strings"
 )
 
-func protoPythonResourceKeyBase(instance ModuleInstance, d *ModuleData, src string) string {
-	base := strings.TrimSuffix(src, ".proto")
+func protoPythonResourceKeyParts(instance ModuleInstance, d *ModuleData, src string) (dir, sep, base string) {
+	base = strings.TrimSuffix(src, ".proto")
 
 	if d.pyNamespace == nil {
-		return instance.Path.relString() + "/" + base
+		return instance.Path.relString(), "/", base
 	}
 
 	if d.pyNamespace.string() == "." {
-		return base
+		return "", "", base
 	}
 
 	nsPath := strings.ReplaceAll(d.pyNamespace.string(), ".", "/")
 
-	return filepath.ToSlash(filepath.Clean(nsPath + "/" + base))
+	return "", "", filepath.ToSlash(filepath.Clean(nsPath + "/" + base))
 }
 
 func protoPythonNamespaceArg(d *ModuleData) string {
@@ -282,7 +282,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	pyPBRef := ctx.emit.emitNode(pyPBNode)
 	sourceInputs := dedupSourceVFS(na, inputs, transitive.buckets)
-	keyBase := protoPythonResourceKeyBase(instance, d, src)
+	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
 
 	tokenFor := func(out VFS) STR {
 		if generatedProto {
@@ -293,11 +293,11 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	}
 
 	e.codegen.register(&GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
-	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyBase, "_pb2.py"), Token: tokenFor(pyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
+	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyDir, keySep, keyBase, "_pb2.py"), Token: tokenFor(pyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 
 	if d.grpc {
 		e.codegen.register(&GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
-		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
+		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyDir, keySep, keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 	}
 }
 

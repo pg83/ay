@@ -165,6 +165,50 @@ func normalisePath(p string) string {
 		return p
 	}
 
+	var buf [256]byte
+	var starts [64]int
+
+	out := buf[:0]
+	depth := 0
+
+	for i := 0; i <= len(p); {
+		j := i
+
+		for j < len(p) && p[j] != '/' {
+			j++
+		}
+
+		seg := p[i:j]
+
+		i = j + 1
+
+		switch seg {
+		case "", ".":
+		case "..":
+			if depth > 0 {
+				depth--
+				out = out[:starts[depth]]
+			}
+		default:
+			if len(seg) > len(buf)-len(out)-1 || depth == len(starts) {
+				return normalisePathSlow(p)
+			}
+
+			starts[depth] = len(out)
+			depth++
+
+			if len(out) > 0 {
+				out = append(out, '/')
+			}
+
+			out = append(out, seg...)
+		}
+	}
+
+	return string(out)
+}
+
+func normalisePathSlow(p string) string {
 	parts := strings.Split(p, "/")
 	out := make([]string, 0, len(parts))
 

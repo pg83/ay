@@ -7,14 +7,14 @@ import (
 
 var enKV = KV{P: pkEN, PC: pcYellow}
 
-func (e *EmitContext) moduleProtoGenHeaders() map[string]struct{} {
+func (e *EmitContext) moduleProtoGenHeaders() map[STR]struct{} {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
-	var set map[string]struct{}
+	var set map[STR]struct{}
 
-	add := func(h string) {
+	add := func(h STR) {
 		if set == nil {
-			set = map[string]struct{}{}
+			set = map[STR]struct{}{}
 		}
 
 		set[h] = struct{}{}
@@ -27,9 +27,9 @@ func (e *EmitContext) moduleProtoGenHeaders() map[string]struct{} {
 		case extIsProto(s):
 			base := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, s), ".proto")
 
-			add(base + ".pb.h")
+			add(internV(base, ".pb.h"))
 		case extIsEv(s):
-			add(protoSourceRelPath(ctx.fs, instance, d, s) + ".pb.h")
+			add(internV(protoSourceRelPath(ctx.fs, instance, d, s), ".pb.h"))
 		}
 	}
 
@@ -60,12 +60,12 @@ func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VF
 	return headerInput
 }
 
-func (e *EmitContext) enumSerializedBase(stmt *GenerateEnumSerializationStmt) string {
+func (e *EmitContext) enumSerializedBaseParts(stmt *GenerateEnumSerializationStmt) (dir, sep, base string) {
 	if _, ok := moduleRootedVFS(e.instance.Path.relString(), stmt.Header); ok {
-		return e.enumHeaderSourceInput(stmt.Header, e.d.srcDirs).relString()
+		return e.enumHeaderSourceInput(stmt.Header, e.d.srcDirs).relString(), "", ""
 	}
 
-	return e.instance.Path.relString() + "/" + stmt.Header
+	return e.instance.Path.relString(), "/", stmt.Header
 }
 
 func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
@@ -79,14 +79,14 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	protoGenHeaders := e.moduleProtoGenHeaders()
 	withHeader := stmt.Variant == "with_header"
 	headerInput := e.resolveEnumHeaderInput(stmt.Header, d.srcDirs)
-	serializedBase := e.enumSerializedBase(stmt)
-	_, secondLevel := protoGenHeaders[headerInput.relString()]
-	serializedCPPPath := build(serializedBase, "_serialized.cpp")
+	baseDir, baseSep, baseName := e.enumSerializedBaseParts(stmt)
+	_, secondLevel := protoGenHeaders[headerInput.rel()]
+	serializedCPPPath := build(baseDir, baseSep, baseName, "_serialized.cpp")
 
 	var serializedHPath VFS
 
 	if withHeader {
-		serializedHPath = build(serializedBase, "_serialized.h")
+		serializedHPath = build(baseDir, baseSep, baseName, "_serialized.h")
 	}
 
 	enRef := ctx.emit.reserve()
