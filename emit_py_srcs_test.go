@@ -303,7 +303,7 @@ func buildPySrcEntries(d *ModuleData, modulePath string) []PyGenResEntry {
 	var entries []PyGenResEntry
 
 	for _, ps := range e.pySrcsReg {
-		entries = append(entries, e.pyResEntriesFor(ps)...)
+		entries = append(entries, e.appendPyResEntries(nil, ps)...)
 	}
 
 	return entries
@@ -320,7 +320,7 @@ func runPySrcBatcher(t *testing.T, d *ModuleData, modulePath string) []*Node {
 	var entries []PyGenResEntry
 
 	for _, ps := range e.pySrcsReg {
-		entries = append(entries, e.pyResEntriesFor(ps)...)
+		entries = append(entries, e.appendPyResEntries(nil, ps)...)
 	}
 
 	e.packResources(ResourcePack{Tag: unitTagPy3, Items: pyGenResourceItems(entries)})

@@ -720,8 +720,8 @@ func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleIns
 		d.moduleScopeCFlags = grown
 	}
 
-	d.addIncl = dedup(d.addIncl, nil)
-	d.addInclGlobal = dedup(d.addInclGlobal, nil)
+	d.addIncl = dedupInPlace(d.addIncl)
+	d.addInclGlobal = dedupInPlace(d.addInclGlobal)
 
 	for _, a := range d.addIncl {
 		pm.indexAddincl(a)

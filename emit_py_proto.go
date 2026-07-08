@@ -332,19 +332,18 @@ func (e *EmitContext) pyProtoYapycOut(ps PySrc) VFS {
 	return build(rel, ".yapyc3")
 }
 
-func (e *EmitContext) pyProtoResEntries(ps PySrc) []PyGenResEntry {
+func (e *EmitContext) appendPyProtoResEntries(out []PyGenResEntry, ps PySrc) []PyGenResEntry {
 	key := ps.Module.string()
 	rel := ps.Path.relString()
 	grpc := strings.HasSuffix(rel, "__intpy3___pb2_grpc.py")
-	info := e.codegen.mustInfo(ps.Path, "pyProtoResEntries")
+	info := e.codegen.mustInfo(ps.Path, "appendPyProtoResEntries")
 	token := ps.Token.string()
 	yapycOut := e.pyProtoYapycOut(ps)
 
 	if !strings.HasPrefix(token, "${ARCADIA_BUILD_ROOT}/") {
-		return []PyGenResEntry{
-			{token: token, key: key, path: ps.Path},
-			{token: token + strings.TrimPrefix(yapycOut.relString(), rel), key: key + ".yapyc3", path: yapycOut},
-		}
+		return append(out,
+			PyGenResEntry{token: token, key: key, path: ps.Path},
+			PyGenResEntry{token: token + strings.TrimPrefix(yapycOut.relString(), rel), key: key + ".yapyc3", path: yapycOut})
 	}
 
 	entryInputs := info.SourceInputs
@@ -355,10 +354,9 @@ func (e *EmitContext) pyProtoResEntries(ps PySrc) []PyGenResEntry {
 		entryInputs = concat(info.SourceInputs, []VFS{siblingPy})
 	}
 
-	return []PyGenResEntry{
-		{token: token, key: key, path: ps.Path, inputs: entryInputs},
-		{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.relString(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs},
-	}
+	return append(out,
+		PyGenResEntry{token: token, key: key, path: ps.Path, inputs: entryInputs},
+		PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.relString(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs})
 }
 
 func (e *EmitContext) emitPyProtoBytecode() {
@@ -430,7 +428,7 @@ func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
 			continue
 		}
 
-		entries = append(entries, e.pyProtoResEntries(ps)...)
+		entries = e.appendPyProtoResEntries(entries, ps)
 	}
 
 	if len(entries) == 0 {
@@ -454,7 +452,7 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 			continue
 		}
 
-		entries = append(entries, e.pyProtoResEntries(ps)...)
+		entries = e.appendPyProtoResEntries(entries, ps)
 	}
 
 	if len(entries) == 0 {

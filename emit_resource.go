@@ -124,7 +124,6 @@ func (e *EmitContext) objcopyEmitCtx() *ObjcopyEmitCtx {
 	oc := &e.objcopyCtx
 
 	*oc = ObjcopyEmitCtx{na: ctx.na}
-
 	oc.rescompilerLDRef, _ = ctx.tool(argToolsRescompiler)
 	oc.rescompressorLDRef, _ = ctx.tool(argToolsRescompressor)
 	oc.blocks = composeObjcopyArgBlocks(ctx.na, d.tc, instancePlatform(e))
