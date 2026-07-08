@@ -192,6 +192,7 @@ type GenCtx struct {
 	parsers          *IncludeParserManager
 	emit             *StreamingEmitter
 	onWarn           func(Warn)
+	keepGoing        bool
 	na               *NodeArenas
 	inclArgValues    DenseMap[VFS, STR]
 	prClosureScratch []VFS
@@ -370,7 +371,7 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 	return out[:k]
 }
 
-func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool) NodeRef {
+func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool) NodeRef {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
 
@@ -386,12 +387,13 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	hostReg := newCodegenRegistry()
 
 	ctx := &GenCtx{
-		fs:      fs,
-		parsers: parsers,
-		emit:    plainEmit,
-		onWarn:  onWarn,
-		na:      plainEmit.nodeArenas(),
-		memo:    newIntValueMap[*ModuleEmitResult](4096),
+		fs:        fs,
+		parsers:   parsers,
+		emit:      plainEmit,
+		onWarn:    onWarn,
+		keepGoing: keepGoing,
+		na:        plainEmit.nodeArenas(),
+		memo:      newIntValueMap[*ModuleEmitResult](4096),
 
 		refSlices:   newSliceCache[NodeRef](1 << 12),
 		vfsSlices:   newSliceCache[VFS](1 << 12),
@@ -548,16 +550,16 @@ func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
 	return finals
 }
 
-func genDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool) *Graph {
+func genDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool, keepGoing bool) *Graph {
 	emitter := newStreamingEmitter(nil)
 
-	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, testMode)
+	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, testMode, keepGoing)
 
 	return finalize(emitter)
 }
 
 func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool) *Graph {
-	return genDumpGraphWithResources(fs, targetDir, hostP, targetP, onWarn, testMode)
+	return genDumpGraphWithResources(fs, targetDir, hostP, targetP, onWarn, testMode, false)
 }
 
 func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
@@ -753,9 +755,37 @@ type ResolvedPeer struct {
 }
 
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
-	r := genModuleImpl(ctx, instance)
+	if !ctx.keepGoing {
+		r := genModuleImpl(ctx, instance)
 
-	persistResult(ctx, r)
+		persistResult(ctx, r)
+
+		return r
+	}
+
+	var r *ModuleEmitResult
+
+	depth := ctx.frameDepth
+
+	exc := try(func() {
+		r = genModuleImpl(ctx, instance)
+
+		persistResult(ctx, r)
+	})
+
+	if exc != nil {
+		ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: %s", instance.Path.relString(), exc.Error())})
+
+		for ctx.frameDepth > depth {
+			ctx.popFrame()
+		}
+
+		delete(ctx.walking, instance)
+
+		r = &ModuleEmitResult{}
+
+		ctx.memo.put(ctx.instanceKey(instance), r)
+	}
 
 	return r
 }
@@ -846,7 +876,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt.Name != tokLibrary && d.moduleStmt.Name != tokFbsLibrary && d.moduleStmt.Name != tokDllTool && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) && d.moduleStmt.Name != tokGoLibrary && d.moduleStmt.Name != tokGoProgram {
-		throwFmt("gen: %s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only)", instance.Path.relString(), d.moduleStmt.Name)
+		ctx.onWarn(Warn{Kind: WarnUnsupportedSource, Message: fmt.Sprintf("%s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only); module skipped", instance.Path.relString(), d.moduleStmt.Name)})
+
+		return &ModuleEmitResult{}
 	}
 
 	applyImplicitPeerdirs(ctx, instance, d)

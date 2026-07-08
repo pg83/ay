@@ -669,7 +669,7 @@ func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleIns
 	d.bisonGenExt = strCpp
 	d.needGoogleProtoPeerdirs = true
 
-	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d)
+	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d, onWarn)
 
 	if len(d.pySrcs) > 0 {
 		d.pyYapycSuffix = pySrcYapycSuffix(modulePath)
@@ -975,7 +975,7 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 	return false
 }
 
-func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData) {
+func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn)) {
 	for _, s := range stmts {
 		switch v := s.(type) {
 		case *ModuleStmt:
@@ -1357,13 +1357,13 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				taken = v.Else
 			}
 
-			collectStmts(fs, modulePath, kind, language, taken, env, d)
+			collectStmts(fs, modulePath, kind, language, taken, env, d, onWarn)
 		case *UnknownStmt:
 
 			expanded := *v
 
 			expanded.Args = expandStmtTokens(v.Args, env)
-			applyUnknownStmt(fs, modulePath, expanded, d, env)
+			applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
 		default:
 			throwFmt("gen: %s: unhandled Stmt type %T (parser added a new Stmt subclass without updating gen.go)", modulePath, s)
 		}
@@ -1473,7 +1473,13 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 	addGeneratedHeaderInclude(modulePath, dst, d)
 }
 
-func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment) {
+func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
+	if v.Name == tokInvalid {
+		onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q is not in the modelled set (line %d); skipped", modulePath, v.Raw.string(), v.Line)})
+
+		return
+	}
+
 	handled := true
 
 	defer func() {
@@ -2009,7 +2015,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokBuildMn:
 
 		if len(v.Args) != 2 {
-			throwFmt("gen: %s: BUILD_MN with options is not modelled, expected (MnInfo MnName), got %d args", modulePath, len(v.Args))
+			handled = false
+
+			onWarn(Warn{Kind: WarnBadMacroArgs, Message: fmt.Sprintf("%s: BUILD_MN with options is not modelled, expected (MnInfo MnName), got %d args; skipped", modulePath, len(v.Args))})
+
+			return
 		}
 
 		d.buildMns = append(d.buildMns, &BuildMnStmt{Info: v.Args[0], Name: v.Args[1].string(), Seq: d.nextDeclSeq()})
@@ -2488,7 +2498,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		handled = false
 
 		if !acknowledgedTokSet.has(uint32(v.Name)) {
-			throwFmt("gen: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf)", v.Name.string())
+			onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf); skipped", modulePath, v.Name.string())})
+
+			return
 		}
 
 		recordIgnoredMacro(v.Name)

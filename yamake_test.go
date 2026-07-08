@@ -160,8 +160,41 @@ func TestUnknownMacro(t *testing.T) {
 }
 
 func TestUnknownMacroNameFailsFast(t *testing.T) {
-	if _, err := parse(testParserFS, "test.input", []byte("FROBNICATE(foo bar)\n")); err == nil {
-		t.Fatal("Parse accepted an unknown macro name; want fail-fast error")
+	mf, err := parse(testParserFS, "test.input", []byte("FROBNICATE(foo bar)\n"))
+
+	if err != nil {
+		t.Fatalf("Parse rejected an unknown macro name: %v (want UnknownStmt sentinel)", err)
+	}
+
+	u, ok := mf.Stmts[0].(*UnknownStmt)
+
+	if !ok || u.Name != tokInvalid || u.Raw.string() != "FROBNICATE" {
+		t.Fatalf("Stmts[0] = %#v, want UnknownStmt{Name: tokInvalid, Raw: FROBNICATE}", mf.Stmts[0])
+	}
+
+	fatalWarn := warnHandler(false, false, func(string) {})
+
+	exc := try(func() {
+		applyUnknownStmt(nil, "mod", *u, &ModuleData{}, newEnvironment(), fatalWarn)
+	})
+
+	if exc == nil || !strings.Contains(exc.Error(), "unknown-macro") {
+		t.Fatalf("collect exception = %v, want unknown-macro failure without -k", exc)
+	}
+
+	warned := ""
+	keepGoingWarn := warnHandler(true, false, func(line string) { warned = line })
+
+	exc = try(func() {
+		applyUnknownStmt(nil, "mod", *u, &ModuleData{}, newEnvironment(), keepGoingWarn)
+	})
+
+	if exc != nil {
+		t.Fatalf("collect with -k threw %v, want warning-only skip", exc)
+	}
+
+	if !strings.Contains(warned, "FROBNICATE") {
+		t.Fatalf("warning %q does not mention the skipped macro", warned)
 	}
 }
 
@@ -413,13 +446,25 @@ func TestStringRejectsNewline(t *testing.T) {
 
 func TestLowercaseAndMixedCaseMacro(t *testing.T) {
 	t.Run("lowercase", func(t *testing.T) {
-		if _, err := parse(testParserFS, "test.input", []byte("lowercase_macro()\n")); err == nil {
-			t.Fatal("Parse accepted lowercase non-TOK macro; want fail-fast error")
+		mf, err := parse(testParserFS, "test.input", []byte("lowercase_macro()\n"))
+
+		if err != nil {
+			t.Fatalf("Parse rejected lowercase non-TOK macro: %v (want UnknownStmt sentinel)", err)
+		}
+
+		if u, ok := mf.Stmts[0].(*UnknownStmt); !ok || u.Name != tokInvalid {
+			t.Fatalf("Stmts[0] = %#v, want UnknownStmt sentinel", mf.Stmts[0])
 		}
 	})
 	t.Run("mixed_case_with_args", func(t *testing.T) {
-		if _, err := parse(testParserFS, "test.input", []byte(`Mixed_Case(arg1 "arg2")`)); err == nil {
-			t.Fatal("Parse accepted mixed-case non-TOK macro; want fail-fast error")
+		mf, err := parse(testParserFS, "test.input", []byte(`Mixed_Case(arg1 "arg2")`))
+
+		if err != nil {
+			t.Fatalf("Parse rejected mixed-case non-TOK macro: %v (want UnknownStmt sentinel)", err)
+		}
+
+		if u, ok := mf.Stmts[0].(*UnknownStmt); !ok || u.Name != tokInvalid {
+			t.Fatalf("Stmts[0] = %#v, want UnknownStmt sentinel", mf.Stmts[0])
 		}
 	})
 	t.Run("garbage_still_errors", func(t *testing.T) {

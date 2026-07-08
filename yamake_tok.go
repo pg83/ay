@@ -484,6 +484,10 @@ func internTok(s string) TOK {
 	return tokInvalid
 }
 
+func internTokMaybe(s string) TOK {
+	return tokByName[s]
+}
+
 func (t TOK) str() STR {
 	return tokName[t]
 }

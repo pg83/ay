@@ -10,6 +10,14 @@ const (
 	WarnMissingAddincl
 
 	WarnBucketHash
+
+	WarnUnknownMacro
+
+	WarnBadMacroArgs
+
+	WarnMissingProducer
+
+	WarnModuleFailed
 )
 
 type Warn struct {
@@ -31,6 +39,14 @@ func (k WarnKind) string() string {
 		return "missing-addincl"
 	case WarnBucketHash:
 		return "bucket-hash"
+	case WarnUnknownMacro:
+		return "unknown-macro"
+	case WarnBadMacroArgs:
+		return "bad-macro-args"
+	case WarnMissingProducer:
+		return "missing-producer"
+	case WarnModuleFailed:
+		return "module-failed"
 	}
 
 	return "warn"

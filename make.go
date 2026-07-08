@@ -83,7 +83,9 @@ func warnHandler(keepGoing, verbose bool, emit func(line string)) func(Warn) {
 	seen := map[string]bool{}
 
 	return func(w Warn) {
-		fatalable := w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource
+		fatalable := w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource ||
+			w.Kind == WarnUnknownMacro || w.Kind == WarnBadMacroArgs ||
+			w.Kind == WarnMissingProducer || w.Kind == WarnModuleFailed
 
 		if fatalable && !keepGoing {
 			throwFmt("%s: %s", w.Kind, w.Message)
@@ -228,12 +230,12 @@ func cmdMake(g GlobalFlags, args []string) int {
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
-				g := genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0)
+				g := genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing)
 
 				writeGraph("-", g, !mf.sandboxing)
 			}
 		} else {
-			genStream(fs, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, mf.testLevel > 0)
+			genStream(fs, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, mf.testLevel > 0, mf.keepGoing)
 		}
 
 		if mf.dumpIgnoredMacros {
@@ -251,7 +253,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		ex.clearCache()
 	}
 
-	results := genStream(fs, mf.targets, hostP, targetP, ex.onNode, onWarn, mf.testLevel > 0)
+	results := genStream(fs, mf.targets, hostP, targetP, ex.onNode, onWarn, mf.testLevel > 0, mf.keepGoing)
 
 	ex.run(results)
 
@@ -274,11 +276,11 @@ func cmdMake(g GlobalFlags, args []string) int {
 	return 0
 }
 
-func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool) []NodeRef {
+func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool, keepGoing bool) []NodeRef {
 	emitter := newStreamingEmitter(onNode)
 
 	for _, t := range targets {
-		runGenIntoWithResources(fs, t, hostP, targetP, emitter, onWarn, testMode)
+		runGenIntoWithResources(fs, t, hostP, targetP, emitter, onWarn, testMode, keepGoing)
 	}
 
 	return emitter.finish()
