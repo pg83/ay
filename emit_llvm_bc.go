@@ -222,7 +222,7 @@ func (e *EmitContext) llvmBcRootRelArcSrc(src string) string {
 		return src
 	}
 
-	if sourceInputVFS(ctx.fs, instance.Path, src) != nil {
+	if _, ok := sourceInputVFS(ctx.fs, instance.Path, src); ok {
 		return instance.Path.relString() + "/" + src
 	}
 

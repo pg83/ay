@@ -1,6 +1,6 @@
 package main
 
-import "sort"
+import "slices"
 
 type Darts struct {
 	base  []int32
@@ -67,7 +67,7 @@ func newDarts(keys []string) *Darts {
 			codes = append(codes, int32(b)+1)
 		}
 
-		sort.Slice(codes, func(i, j int) bool { return codes[i] < codes[j] })
+		slices.Sort(codes)
 
 		base := d.findBase(codes)
 

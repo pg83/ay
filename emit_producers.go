@@ -41,9 +41,9 @@ type ProducerPos struct {
 }
 
 func runInputBuildCandidate(modulePath, rel string) VFS {
-	if v := moduleRootedVFS(modulePath, rel); v != nil {
+	if v, ok := moduleRootedVFS(modulePath, rel); ok {
 		if v.isBuild() {
-			return *v
+			return v
 		}
 
 		return 0
@@ -53,8 +53,8 @@ func runInputBuildCandidate(modulePath, rel string) VFS {
 }
 
 func rootedBuildCandidate(modulePath, rel string) VFS {
-	if v := moduleRootedVFS(modulePath, rel); v != nil && v.isBuild() {
-		return *v
+	if v, ok := moduleRootedVFS(modulePath, rel); ok && v.isBuild() {
+		return v
 	}
 
 	return 0

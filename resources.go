@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -168,8 +169,8 @@ func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
 	out := append([]ResourceDecl(nil), in...)
 
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].GlobalVar.string() < out[j].GlobalVar.string()
+	slices.SortFunc(out, func(a, b ResourceDecl) int {
+		return strings.Compare(a.GlobalVar.string(), b.GlobalVar.string())
 	})
 
 	return out
@@ -223,19 +224,24 @@ type ModuleToolchain struct {
 	Python3       VFS
 }
 
+type ToolchainKey struct {
+	clangVer string
+	bits     uint8
+}
+
 func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, clangVer string) ModuleToolchain {
 	clangRes := resourcePatternClangTool + clangVer
 	clangResID := internStr(clangRes)
-	key := clangVer
+	key := ToolchainKey{clangVer: clangVer}
 
 	for _, decl := range globals {
 		switch decl.Name {
 		case clangResID:
-			key += "+clang"
+			key.bits |= 1
 		case strLLDRootName:
-			key += "+lld"
+			key.bits |= 2
 		case strYMakePython3Name:
-			key += "+py3"
+			key.bits |= 4
 		}
 	}
 

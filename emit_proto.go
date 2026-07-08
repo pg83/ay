@@ -2,7 +2,7 @@ package main
 
 import (
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -12,6 +12,7 @@ var (
 	pbRuntimeBaseVFS               = source(strings.TrimSuffix(pbRuntimeBase, "/"))
 	pbKV                           = KV{P: pkPB, PC: pcYellow}
 	cppProtoSpec                   = &ProtoSpec{kv: &pbKV, modulePlugins: true}
+	pbHEmitsIncludesExtrasChunk    = concat([]IncludeDirective{{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())}}, pbDescriptorImporterDirectives)
 )
 
 var yaffBaseRuntimeHeaders = []string{
@@ -102,7 +103,7 @@ func protoPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string, bucke
 		out = append(out, IncludeDirective{kind: d.kind, target: includeTarget(internStr(target).any())})
 	}
 
-	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
+	slices.SortFunc(out, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
 	return out
 }
@@ -129,18 +130,13 @@ func protoInducedPbH(pm *IncludeParserManager, local []IncludeDirective) []Inclu
 		out = append(out, IncludeDirective{kind: d.kind, target: includeTarget(pbH.any())})
 	}
 
-	sort.Slice(out, func(i, j int) bool { return out[i].target.string() < out[j].target.string() })
+	slices.SortFunc(out, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
 	return out
 }
 
 func pbHEmitsIncludesExtras() []IncludeDirective {
-	out := make([]IncludeDirective, 0, len(pbDescriptorImporterDirectives)+1)
-
-	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())})
-	out = append(out, pbDescriptorImporterDirectives...)
-
-	return out
+	return pbHEmitsIncludesExtrasChunk
 }
 
 func protoWalkInputs(pm *IncludeParserManager, peerProtoAddIncl []VFS, ownerModuleDir string) ScanContext {

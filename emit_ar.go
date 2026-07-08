@@ -1,9 +1,5 @@
 package main
 
-import (
-	"strings"
-)
-
 var arKV = KV{P: pkAR, PC: pcLightRed, ShowOut: true}
 
 const (
@@ -72,13 +68,37 @@ func emitARGlobalNamedTagged(
 }
 
 func archiveNameWithPrefix(moduleDir, prefix string) string {
-	parts := strings.Split(moduleDir, "/")
+	tail := moduleDir
 
-	if len(parts) > 3 {
-		parts = parts[len(parts)-3:]
+	for i, slashes := len(moduleDir)-1, 0; i >= 0; i-- {
+		if moduleDir[i] == '/' {
+			slashes++
+
+			if slashes == 3 {
+				tail = moduleDir[i+1:]
+
+				break
+			}
+		}
 	}
 
-	return prefix + strings.Join(parts, "-") + ".a"
+	b := make([]byte, 0, len(prefix)+len(tail)+2)
+
+	b = append(b, prefix...)
+
+	for i := 0; i < len(tail); i++ {
+		c := tail[i]
+
+		if c == '/' {
+			c = '-'
+		}
+
+		b = append(b, c)
+	}
+
+	b = append(b, ".a"...)
+
+	return string(b)
 }
 
 func archiveNameWithPrefixOrName(moduleDir, prefix, name string) string {

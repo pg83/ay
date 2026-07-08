@@ -2,7 +2,7 @@ package main
 
 import (
 	"path"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -189,8 +189,8 @@ func globMatch(fs FS, pattern string) []string {
 			view := fs.listdir(internStr(d))
 			entries := append([]uint32(nil), view.names...)
 
-			sort.Slice(entries, func(a, b int) bool {
-				return STR(entries[a]>>1).string() < STR(entries[b]>>1).string()
+			slices.SortFunc(entries, func(a, b uint32) int {
+				return strings.Compare(STR(a>>1).string(), STR(b>>1).string())
 			})
 
 			for _, packed := range entries {

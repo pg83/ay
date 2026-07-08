@@ -12,8 +12,8 @@ var includeScannerBasePathsSlice = []VFS{
 }
 
 func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, srcDirs []VFS) VFS {
-	if vfs := moduleRootedVFS(srcInstance.Path.relString(), srcRel); vfs != nil {
-		return *vfs
+	if vfs, ok := moduleRootedVFS(srcInstance.Path.relString(), srcRel); ok {
+		return vfs
 	}
 
 	for i := len(srcDirs) - 1; i >= 1; i-- {

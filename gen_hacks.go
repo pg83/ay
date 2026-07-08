@@ -1,5 +1,7 @@
 package main
 
+import "slices"
+
 import "path/filepath"
 
 func applySbomComponentOrder(name TOK, linkTarget bool, resolved []ResolvedPeer, allocatorExplicitPeers []string) []ResolvedPeer {
@@ -16,22 +18,12 @@ func applySbomComponentOrder(name TOK, linkTarget bool, resolved []ResolvedPeer,
 	}
 
 	if !isSpecializedLibraryType(name) && cxxIdx > libcxxIdx && libcxxIdx >= 0 {
-		reordered := make([]ResolvedPeer, 0, len(resolved))
-		cxx := resolved[cxxIdx]
+		sbomOrder = slices.Clone(resolved)
 
-		for i, rp := range resolved {
-			if i == cxxIdx {
-				continue
-			}
+		cxx := sbomOrder[cxxIdx]
 
-			reordered = append(reordered, rp)
-
-			if i == libcxxIdx {
-				reordered = append(reordered, cxx)
-			}
-		}
-
-		sbomOrder = reordered
+		copy(sbomOrder[libcxxIdx+2:cxxIdx+1], sbomOrder[libcxxIdx+1:cxxIdx])
+		sbomOrder[libcxxIdx+1] = cxx
 	}
 
 	if linkTarget && len(allocatorExplicitPeers) > 0 {
@@ -54,22 +46,14 @@ func applySbomComponentOrder(name TOK, linkTarget bool, resolved []ResolvedPeer,
 		}
 
 		if lldIdx >= 0 && allocIdx >= 0 && lldIdx < allocIdx {
-			relocated := make([]ResolvedPeer, 0, len(sbomOrder))
-			lld := sbomOrder[lldIdx]
-
-			for i, rp := range sbomOrder {
-				if i == lldIdx {
-					continue
-				}
-
-				if i == allocIdx {
-					relocated = append(relocated, lld)
-				}
-
-				relocated = append(relocated, rp)
+			if len(sbomOrder) == len(resolved) && &sbomOrder[0] == &resolved[0] {
+				sbomOrder = slices.Clone(resolved)
 			}
 
-			sbomOrder = relocated
+			lld := sbomOrder[lldIdx]
+
+			copy(sbomOrder[lldIdx:allocIdx-1], sbomOrder[lldIdx+1:allocIdx])
+			sbomOrder[allocIdx-1] = lld
 		}
 	}
 
