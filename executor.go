@@ -21,7 +21,7 @@ import (
 
 const (
 	executorGCPercent = 400
-	prepBatchSize     = 64
+	prepBatchMax      = 128
 )
 
 type CmdPrefix struct {
@@ -30,28 +30,29 @@ type CmdPrefix struct {
 }
 
 type Executor struct {
-	srcRoot     string
-	bldRoot     string
-	fs          FS
-	sema        chan struct{}
-	keepGoing   bool
-	cmdPrefixes []CmdPrefix
-	ninja       bool
-	sandboxing  bool
-	grbDir      string
-	futs        *PageVec[*NodeFuture]
-	fetchRefs   *DenseMap[STR, NodeRef]
-	uidSet      map[string]struct{}
-	uidSetReady chan struct{}
-	events      *EventQueue
-	stats       map[string][]time.Duration
-	canon       CanonBuf
-	localHash   map[STR]uint64
-	prepBatch   []*NodeFuture
-	pending     atomic.Uint64
-	done        atomic.Uint64
-	tokenOnce   sync.Once
-	token       string
+	srcRoot      string
+	bldRoot      string
+	fs           FS
+	sema         chan struct{}
+	keepGoing    bool
+	cmdPrefixes  []CmdPrefix
+	ninja        bool
+	sandboxing   bool
+	grbDir       string
+	futs         *PageVec[*NodeFuture]
+	fetchRefs    *DenseMap[STR, NodeRef]
+	uidSet       map[string]struct{}
+	uidSetReady  chan struct{}
+	events       *EventQueue
+	stats        map[string][]time.Duration
+	canon        CanonBuf
+	localHash    map[STR]uint64
+	prepBatch    []*NodeFuture
+	prepBatchCap int
+	pending      atomic.Uint64
+	done         atomic.Uint64
+	tokenOnce    sync.Once
+	token        string
 }
 
 func (ex *Executor) sandboxToken() string {
@@ -89,6 +90,8 @@ func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ni
 		events:      events,
 		stats:       map[string][]time.Duration{},
 		localHash:   map[STR]uint64{},
+
+		prepBatchCap: 1,
 	}
 
 	ex.canon = CanonBuf{hash: ex.contentHash, futs: ex.futs, chunkMemo: map[ChunkKey]ChunkAccum{}}
@@ -169,7 +172,7 @@ func (ex *Executor) onNode(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
 	ex.futs.set(uint32(n.Ref), f)
 	ex.prepBatch = append(ex.prepBatch, f)
 
-	if len(ex.prepBatch) >= prepBatchSize {
+	if len(ex.prepBatch) >= ex.prepBatchCap {
 		ex.flushPrepBatch()
 	}
 }
@@ -182,6 +185,10 @@ func (ex *Executor) flushPrepBatch() {
 	batch := ex.prepBatch
 
 	ex.prepBatch = nil
+
+	if ex.prepBatchCap < prepBatchMax {
+		ex.prepBatchCap <<= 1
+	}
 
 	ex.events.post(func() {
 		for _, f := range batch {
