@@ -137,6 +137,7 @@ type ModuleData struct {
 	pySrcs                   []ANY
 	pySrcGroups              []PySrcGroup
 	pyPyiResources           []ResourceEntry
+	resKeyBuf                []byte
 	pyBuildNoPYC             bool
 	pyBuildNoPY              bool
 	pyTopLevel               bool
@@ -342,7 +343,28 @@ type BundleEntry struct {
 type ResourceEntry struct {
 	Path      string
 	Key       string
+	SrcPath   string
 	EndsBatch bool
+}
+
+func (d *ModuleData) resStr2(a, b string) string {
+	start := len(d.resKeyBuf)
+
+	d.resKeyBuf = append(d.resKeyBuf, a...)
+	d.resKeyBuf = append(d.resKeyBuf, b...)
+
+	return bytesString(d.resKeyBuf[start:])
+}
+
+func (d *ModuleData) resStr4(a, b, c, e string) string {
+	start := len(d.resKeyBuf)
+
+	d.resKeyBuf = append(d.resKeyBuf, a...)
+	d.resKeyBuf = append(d.resKeyBuf, b...)
+	d.resKeyBuf = append(d.resKeyBuf, c...)
+	d.resKeyBuf = append(d.resKeyBuf, e...)
+
+	return bytesString(d.resKeyBuf[start:])
 }
 
 type PySrcGroup struct {
@@ -1335,7 +1357,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			before := len(d.resources)
 
-			d.resources = expandResourceFiles(d.resources, anyStrs(expandStmtTokens(v.Args, env)))
+			d.resources = expandResourceFiles(d, d.resources, anyStrs(expandStmtTokens(v.Args, env)))
 
 			if len(d.resources) > before {
 				d.resources[len(d.resources)-1].EndsBatch = true
@@ -1345,7 +1367,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			before := len(d.resources)
 
-			d.resources = expandAllResourceFiles(d.resources, fs, modulePath, env, v)
+			d.resources = expandAllResourceFiles(d, d.resources, fs, modulePath, env, v)
 
 			if len(d.resources) > before {
 				d.resources[len(d.resources)-1].EndsBatch = true
@@ -2285,7 +2307,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 				dest := "py/" + strings.ReplaceAll(modName, ".", "/") + ".pyi"
 
-				d.pyPyiResources = expandResourceFiles(d.pyPyiResources, []string{"DEST", dest, src})
+				d.pyPyiResources = expandResourceFiles(d, d.pyPyiResources, []string{"DEST", dest, src})
 				mainNext = false
 
 				continue

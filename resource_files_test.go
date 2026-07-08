@@ -16,16 +16,16 @@ func TestExpandResourceFilesRapidjson(t *testing.T) {
 		"rapidjson/readme.md",
 	}
 
-	got := expandResourceFiles(nil, args)
+	got := expandResourceFiles(&ModuleData{}, nil, args)
 
 	want := []ResourceEntry{
-		{Path: "-", Key: "resfs/src/resfs/file/devtools/ymake/contrib/python-rapidjson/.dist-info/METADATA=${rootrel;context=TEXT;input=TEXT:\".dist-info/METADATA\"}"},
+		{Path: "-", Key: "resfs/file/devtools/ymake/contrib/python-rapidjson/.dist-info/METADATA", SrcPath: ".dist-info/METADATA"},
 		{Path: ".dist-info/METADATA", Key: "resfs/file/devtools/ymake/contrib/python-rapidjson/.dist-info/METADATA"},
-		{Path: "-", Key: "resfs/src/resfs/file/devtools/ymake/contrib/python-rapidjson/.dist-info/top_level.txt=${rootrel;context=TEXT;input=TEXT:\".dist-info/top_level.txt\"}"},
+		{Path: "-", Key: "resfs/file/devtools/ymake/contrib/python-rapidjson/.dist-info/top_level.txt", SrcPath: ".dist-info/top_level.txt"},
 		{Path: ".dist-info/top_level.txt", Key: "resfs/file/devtools/ymake/contrib/python-rapidjson/.dist-info/top_level.txt"},
-		{Path: "-", Key: "resfs/src/resfs/file/devtools/ymake/contrib/python-rapidjson/rapidjson/license.txt=${rootrel;context=TEXT;input=TEXT:\"rapidjson/license.txt\"}"},
+		{Path: "-", Key: "resfs/file/devtools/ymake/contrib/python-rapidjson/rapidjson/license.txt", SrcPath: "rapidjson/license.txt"},
 		{Path: "rapidjson/license.txt", Key: "resfs/file/devtools/ymake/contrib/python-rapidjson/rapidjson/license.txt"},
-		{Path: "-", Key: "resfs/src/resfs/file/devtools/ymake/contrib/python-rapidjson/rapidjson/readme.md=${rootrel;context=TEXT;input=TEXT:\"rapidjson/readme.md\"}"},
+		{Path: "-", Key: "resfs/file/devtools/ymake/contrib/python-rapidjson/rapidjson/readme.md", SrcPath: "rapidjson/readme.md"},
 		{Path: "rapidjson/readme.md", Key: "resfs/file/devtools/ymake/contrib/python-rapidjson/rapidjson/readme.md"},
 	}
 
