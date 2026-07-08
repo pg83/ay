@@ -586,7 +586,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	inputs := na.inputList(head, deduper.filterSeen(spec.inputClosure))
 
 	var outputs []VFS
-	var stdoutPath STR
+	var stdoutPath VFS
 
 	emittedOut := map[VFS]bool{}
 
@@ -600,7 +600,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	}
 
 	if spec.stdoutVFS != nil {
-		stdoutPath = spec.stdoutVFS.fullSTR()
+		stdoutPath = *spec.stdoutVFS
 		appendOutput(*spec.stdoutVFS)
 	}
 

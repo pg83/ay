@@ -272,7 +272,7 @@ func (c *CanonBuf) writeCmdSlice(cmds []Cmd) {
 		c.writeAnyChunks(cm.CmdArgs)
 		c.writeVFS(cm.Cwd)
 		c.writeEnv(cm.Env)
-		c.writeSTR(cm.Stdout)
+		c.writeVFS(cm.Stdout)
 	}
 }
 

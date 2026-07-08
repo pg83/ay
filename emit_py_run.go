@@ -406,10 +406,10 @@ func emitPYRun(
 	inputs := na.inputList(head, inputClosure)
 
 	var outputs []VFS
-	var stdoutPath STR
+	var stdoutPath VFS
 
 	if stdoutVFS != nil {
-		stdoutPath = stdoutVFS.fullSTR()
+		stdoutPath = *stdoutVFS
 		outputs = append(outputs, *stdoutVFS)
 	}
 

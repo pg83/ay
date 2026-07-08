@@ -116,7 +116,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		Compile:        spec,
 	})
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: m4Bin.fullSTR()}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData}, {Name: envM4, Value: internV(m4Bin.prefix(), m4Bin.relString())}}
 	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
 	head := make([]ANY, 0, 6+len(d.cc.BisonFlags))
 
