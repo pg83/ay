@@ -47,9 +47,9 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	outputVFS := build(instance.Path.relString(), "/", outputName)
 	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")
 	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c", instance.Platform.objectSuffix())
-	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCVFS)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
-	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, ccOutputs, peerArchivePaths, nil, nil, d.exportsScript.string(), fixElfPath)
+	cmd0 := composeLDCmdVcsInfo(na, d.tc, vcsCVFS)
+	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
+	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, ccOutputs, peerArchivePaths, nil, nil, d.exportsScript.string(), fixElfPath)
 	envVcsOnly := envVarsVCS
 	envFull := ctx.host.toolEnv()
 	ldSbomRefs := peerSbomRefs
@@ -73,31 +73,39 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 		sbomEmbed = len(ldSbomPaths) > 0
 	}
 
-	cmds := make([]Cmd, 0, 5)
+	cmds := na.cmds.alloc(5)[:0]
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
 	if sbomEmbed {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, d.unit.SbomLang, instance.Path.rel(), sbomJSON, ldSbomPaths)), Cwd: bldRootDirVFS, Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(na, d.tc, d.unit.SbomLang, instance.Path.rel(), sbomJSON, ldSbomPaths)), Cwd: bldRootDirVFS, Env: envVcsOnly})
 	}
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
 
 	if sbomEmbed {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outputVFS)), Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(na, d.tc, sbomJSON, outputVFS)), Env: envVcsOnly})
 	}
 
-	inputs := InputChunks{peerArchivePaths, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS.rel()], ctx.scripts[ldLinkDynLibVFS.rel()]}
+	na.cmds.commit(len(cmds))
 
-	inputs = append(inputs, []VFS{ldSvnInterfaceVFS, ldSvnversionHVFS, source(instance.Path.relString(), "/", d.exportsScript.string())})
-	inputs = append(inputs, ccOutputs)
+	cmds = cmds[:len(cmds):len(cmds)]
+	peerChunk := na.vfsList(peerArchivePaths...)
+	svnChunk := na.vfsList(ldSvnInterfaceVFS, ldSvnversionHVFS, source(instance.Path.relString(), "/", d.exportsScript.string()))
+	ccChunk := na.vfsList(ccOutputs...)
+	inputs := na.inputs.alloc(8)[:0]
+	inputs = append(inputs, peerChunk, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS.rel()], ctx.scripts[ldLinkDynLibVFS.rel()])
+	inputs = append(inputs, svnChunk, ccChunk)
 
 	if sbomEmbed {
-		inputs = append(inputs, ldSbomPaths)
-		inputs = append(inputs, []VFS{linkSbomScriptVFS})
+		inputs = append(inputs, na.vfsList(ldSbomPaths...))
+		inputs = append(inputs, na.srcChunk(linkSbomScriptVFS))
 	}
 
-	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(ccRefs)+len(ldSbomRefs)+1)
+	na.inputs.commit(len(inputs))
+
+	inputsChunks := InputChunks(inputs[:len(inputs):len(inputs)])
+	deps := na.noderefs.alloc(len(peerArchiveRefs) + len(ccRefs) + len(ldSbomRefs) + 1)[:0]
 
 	deps = append(deps, peerArchiveRefs...)
 	deps = append(deps, ccRefs...)
@@ -107,12 +115,15 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	}
 
 	deps = append(deps, ctx.vcsRef)
+	na.noderefs.commit(len(deps))
+
+	deps = deps[:len(deps):len(deps)]
 
 	n := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(cmds...),
+		Cmds:         cmds,
 		Env:          envFull,
-		Inputs:       inputs,
+		Inputs:       inputsChunks,
 		Outputs:      na.vfsList(build(instance.Path.relString(), "/", outputName)),
 		KV:           &dynamicLibraryKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -120,7 +131,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 		Resources:    instance.Platform.UsesLinkResources,
 	}
 
-	n.ForeignDepRefs = depRefs(fixElfRef)
+	n.ForeignDepRefs = na.refList(fixElfRef)
 
 	ref := ctx.emit.emitNode(n)
 
@@ -304,18 +315,21 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	outputVFS := build(instance.Path.relString(), "/", outputName)
 	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")
 	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c.pic.o")
-	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCVFS)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
-	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, nil, peerArchivePaths, pluginPaths, strStrings(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath)
-	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.relString())
+	cmd0 := composeLDCmdVcsInfo(na, d.tc, vcsCVFS)
+	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
+	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, nil, peerArchivePaths, pluginPaths, strStrings(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath)
+	cmd3 := composeLDCmdLinkOrCopy(na, d.tc, instance.Path.relString())
 	envVcsOnly := envVarsVCS
 	envFull := ctx.host.toolEnv()
 	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.relString(), d.exportsScript.string(), ctx.scripts)
-	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)
+	deps := na.noderefs.alloc(len(peerArchiveRefs) + len(pluginRefs) + 1)[:0]
 
 	deps = append(deps, peerArchiveRefs...)
 	deps = append(deps, pluginRefs...)
 	deps = append(deps, ctx.vcsRef)
+	na.noderefs.commit(len(deps))
+
+	deps = deps[:len(deps):len(deps)]
 
 	n := Node{
 		Platform:     instance.Platform,
@@ -329,7 +343,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		Resources:    instance.Platform.UsesLinkResources,
 	}
 
-	n.ForeignDepRefs = depRefs(fixElfRef)
+	n.ForeignDepRefs = na.refList(fixElfRef)
 
 	ref := ctx.emit.emitNode(n)
 	addInclGlobal := concat(d.addInclGlobal, peerAddInclGlobal)
@@ -362,12 +376,15 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	}
 }
 
-func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath string, output VFS, outputName string, vcsO VFS, ownObjects, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript string, fixElf VFS) []ANY {
-	cmdArgs := []ANY{
+func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePath string, output VFS, outputName string, vcsO VFS, ownObjects, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript string, fixElf VFS) []ANY {
+	bound := 60 + len(pluginPaths) + 2*len(wholeArchivePeers) + len(ownObjects) +
+		len(p.SysrootArgs) + len(peerLibPaths) + len(p.LinkPreludeExtra) + len(p.SystemLibs)
+	cmdArgs := na.anys.alloc(bound)[:0]
+	cmdArgs = append(cmdArgs,
 		tc.Python3.any(),
 		ldLinkDynLibVFS.any(),
 		argTarget.any(), output.any(),
-	}
+	)
 
 	cmdArgs = append(cmdArgs, argStartPlugins.any())
 
@@ -450,24 +467,29 @@ func composeDynLibCmd(p *Platform, tc ModuleToolchain, modulePath string, output
 	cmdArgs = append(cmdArgs, p.SystemLibs...)
 	cmdArgs = append(cmdArgs, argLm.any(), argWlGcSections.any())
 	cmdArgs = appendInternAnys(cmdArgs, p.linkerSelectionNoPieFlags())
+	na.anys.commit(len(cmdArgs))
 
-	return cmdArgs
+	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
 func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts ScriptDeps) InputChunks {
-	chunks := make(InputChunks, 0, 7)
-
-	chunks = append(chunks, peerLibPaths, pluginPaths, na.srcChunk(fixElfPath))
-
-	for _, w := range []VFS{ldVcsInfoVFS, ldLinkDynLibVFS, ldFsToolsVFS} {
-		chunks = append(chunks, scripts[w.rel()])
-	}
-
-	chunks = append(chunks, []VFS{
+	peerChunk := na.vfsList(peerLibPaths...)
+	pluginChunk := na.vfsList(pluginPaths...)
+	tailChunk := na.vfsList(
 		ldSvnInterfaceVFS,
 		ldSvnversionHVFS,
 		source(modulePath, "/", exportsScript),
-	})
+	)
+	chunks := na.inputs.alloc(7)[:0]
 
-	return chunks
+	chunks = append(chunks, peerChunk, pluginChunk, na.srcChunk(fixElfPath))
+
+	for _, w := range [3]VFS{ldVcsInfoVFS, ldLinkDynLibVFS, ldFsToolsVFS} {
+		chunks = append(chunks, scripts[w.rel()])
+	}
+
+	chunks = append(chunks, tailChunk)
+	na.inputs.commit(len(chunks))
+
+	return InputChunks(chunks[:len(chunks):len(chunks)])
 }

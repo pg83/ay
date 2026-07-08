@@ -45,7 +45,7 @@ func (e *EmitContext) emitSwigC() {
 		pyOutVFS := build(instance.Path.relString(), "/", pyOutRel)
 		cv := walkClosure(e.scanner, srcVFS, newScanContext(ctx.parsers, swigAddIncls, nil, includeScannerBasePaths(), instance.Path.relString()))
 		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), cv.buckets...)
-		swigClosure := collectBucketVFS(cv.buckets, func(VFS) bool { return true })
+		swigClosure := collectBucketVFS(ctx.na, cv.buckets, func(VFS) bool { return true })
 
 		cmdArgs := na.chunkList(na.anyList(swigBin.any()), swigConstArgs, na.anyList(internStr(swigModuleName(stmt.Module)).any(),
 			argInterface.any(),
@@ -58,7 +58,7 @@ func (e *EmitContext) emitSwigC() {
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 				Env: envVarsVCS}),
-			DepRefs:      []NodeRef{swigRef},
+			DepRefs:      na.refList(swigRef),
 			Env:          envVarsVCS,
 			Inputs:       inputs,
 			Outputs:      na.vfsList(cOutVFS, pyOutVFS),
@@ -83,11 +83,19 @@ func (e *EmitContext) emitSwigC() {
 			Compile:        &CompileSpec{FlatOutput: d.flatSrc(cOutVFS.any()), CFlags: psc},
 		})
 
+		swigSourceInputs := na.vfs.alloc(2 + len(swigClosure))
+		swigSourceInputs[0] = cOutVFS
+		swigSourceInputs[1] = srcVFS
+		swigN := 2 + copy(swigSourceInputs[2:], swigClosure)
+		na.vfs.commit(swigN)
+
+		swigSourceInputs = swigSourceInputs[:swigN:swigN]
+
 		reg.register(&GeneratedFileInfo{
 			OutputPath:    pyOutVFS,
 			ProducerRef:   swRef,
 			GeneratorRefs: []NodeRef{swigRef},
-			SourceInputs:  append([]VFS{cOutVFS, srcVFS}, swigClosure...),
+			SourceInputs:  swigSourceInputs,
 		})
 
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{

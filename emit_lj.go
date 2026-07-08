@@ -22,7 +22,7 @@ func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLD
 		KV:             &ljKV,
 		Outputs:        na.vfsList(rawOut),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: depRefs(compilerLDRef),
+		ForeignDepRefs: na.refList(compilerLDRef),
 	}
 
 	return emit.emitNode(node)
@@ -47,7 +47,7 @@ func (e *EmitContext) emitLuaJit21() {
 		reg.register(&GeneratedFileInfo{
 			OutputPath:   rawOut,
 			ProducerRef:  ref,
-			SourceInputs: []VFS{luaSrc},
+			SourceInputs: ctx.na.vfsList(luaSrc),
 		})
 	}
 }

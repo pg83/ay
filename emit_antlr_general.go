@@ -69,7 +69,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	}
 
 	jvRef := emitJVGeneral(instance, jarVFS, args, inputs, outputs, cwd, deps, d.unit.CCTag, d.tc, ctx.emit)
-	jvSourceInputs := make([]VFS, 0, len(inputs)+2)
+	jvSourceInputs := ctx.na.vfs.alloc(len(inputs) + 2)[:0]
 
 	for _, v := range inputs {
 		if v.isSource() {
@@ -78,6 +78,9 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	}
 
 	jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
+	ctx.na.vfs.commit(len(jvSourceInputs))
+
+	jvSourceInputs = jvSourceInputs[:len(jvSourceInputs):len(jvSourceInputs)]
 
 	for outTok, outVFS := range outVFSByToken {
 		reg.register(&GeneratedFileInfo{

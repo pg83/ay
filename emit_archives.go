@@ -22,7 +22,7 @@ func (e *EmitContext) emitArchive(
 	na := emit.nodeArenas()
 	archiveVFS := build(instance.Path.relString(), "/", a.Name)
 	archivePath := archiveVFS.string()
-	cmdArgs := make([]ANY, 0, 4+len(a.Files)+2)
+	cmdArgs := na.anys.alloc(8 + len(a.Files))[:0]
 
 	cmdArgs = append(cmdArgs, (toolBinPath).any(), argQ.any(), argX.any())
 
@@ -71,8 +71,10 @@ func (e *EmitContext) emitArchive(
 	}
 
 	cmdArgs = append(cmdArgs, argDashO.any(), internStr(archivePath).any())
+	na.anys.commit(len(cmdArgs))
 
-	inputs := make([]VFS, 0, len(pathPerFile))
+	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+	inputs := na.vfs.alloc(len(pathPerFile))[:0]
 
 	deduper.reset()
 
@@ -84,7 +86,19 @@ func (e *EmitContext) emitArchive(
 		inputs = append(inputs, p)
 	}
 
-	deps := concat(producerRefs, depRefs(toolLDRef))
+	na.vfs.commit(len(inputs))
+
+	inputs = inputs[:len(inputs):len(inputs)]
+	deps := na.noderefs.alloc(len(producerRefs) + 1)[:0]
+	deps = append(deps, producerRefs...)
+
+	if toolLDRef != 0 {
+		deps = append(deps, toolLDRef)
+	}
+
+	na.noderefs.commit(len(deps))
+
+	deps = deps[:len(deps):len(deps)]
 	env := envVarsVCS
 
 	n := Node{

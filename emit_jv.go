@@ -64,7 +64,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			leafSet[l] = true
 		}
 
-		cpClosure := walkClosure(e.scanner, g4CppPath, d.cc.ScanCfg).collect(func(v VFS) bool {
+		cpClosure := walkClosure(e.scanner, g4CppPath, d.cc.ScanCfg).collect(ctx.na, func(v VFS) bool {
 			return v != g4CppPath && !leafSet[v]
 		})
 
@@ -80,15 +80,15 @@ func emitJVNode(instance ModuleInstance, cmdArgs []ANY, inputs InputChunks, outp
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyChunkAny(cmdArgs)),
 			Env: env,
 			Cwd: cwdVFS(cwd)}),
 		Env:          env,
 		Inputs:       inputs,
 		KV:           &jvKV,
-		Outputs:      outputs,
+		Outputs:      na.vfsList(outputs...),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:      depRefs,
+		DepRefs:      na.noderefs.list(depRefs...),
 		Resources:    usesPython3JDK17,
 	}
 
@@ -238,7 +238,7 @@ func emitJVGeneral(
 
 	cmdArgs = appendInternAnys(cmdArgs, args)
 
-	jvInputs := na.inputList(inputs, na.vfsList(stdout2stderrVFS, jarVFS))
+	jvInputs := na.inputList(na.vfsList(inputs...), na.vfsList(stdout2stderrVFS, jarVFS))
 
 	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit)
 }

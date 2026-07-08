@@ -27,10 +27,10 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	e.emitCppProtoFamilySource(meta, &ProtoSpec{
 		kv:          &cfgprotoKV,
 		ccFirstOuts: true,
-		optsTail: []ANY{
+		optsTail: ctx.na.anyList(
 			internV("--plugin=protoc-gen-config=", configPluginBinary.prefix(), configPluginBinary.relString()).any(),
 			argConfigOutB.any(),
-		},
+		),
 		toolLDRef:  configPluginLDRef,
 		toolBinary: configPluginBinary,
 		genRefs:    []NodeRef{protocLDRef, cppStyleguideLDRef, configPluginLDRef},

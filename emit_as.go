@@ -9,7 +9,7 @@ var asKV = KV{P: pkAS, PC: pcLightGreen}
 func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS) {
 	na := emit.nodeArenas()
 	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
-	cmdArgs := composeASCmdArgs(instance, outVFS, inVFS, in)
+	cmdArgs := composeASCmdArgs(na, instance, outVFS, inVFS, in)
 	env := hostP.toolEnv()
 
 	node := Node{
@@ -56,7 +56,7 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	return build(outRel), srcVFS
 }
 
-func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []ANY {
+func composeASCmdArgs(na *NodeArenas, instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []ANY {
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 2 + len(bundle.ArchArgs) + len(instance.Platform.SysrootArgs)
 	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
@@ -70,7 +70,7 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(ownCFlags) +
 		len(bundle.NoLibcBlock) + betweenBlocks + len(bundle.NoLibcBlock) + len(in.SFlags) + len(in.PerSourceCFlags) + 4
 
-	cmdArgs := make([]ANY, 0, fixed+len(includes))
+	cmdArgs := na.anys.alloc(fixed + len(includes))[:0]
 
 	cmdArgs = append(cmdArgs, in.TC.CC.any(), instance.Platform.TargetArg.any())
 	cmdArgs = appendAnyLists(cmdArgs, bundle.ArchArgs)
@@ -85,8 +85,9 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 	cmdArgs = appendAnyLists(cmdArgs, in.PerSourceCFlags)
 	cmdArgs = append(cmdArgs, argDashC.any(), argDashO.any(), (outVFS).any(), (inVFS).any())
 	cmdArgs = append(cmdArgs, includes...)
+	na.anys.commit(len(cmdArgs))
 
-	return cmdArgs
+	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
 func composeASIncludes(in ModuleCCInputs) []ANY {

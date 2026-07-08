@@ -66,10 +66,15 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 
 	cmdArgs := ArgChunks(chunks[:k])
 
-	env := EnvVars{
-		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()},
-		{Name: cudaPathEnv, Value: cudaPathValueStr.any()},
-	}
+	env := envVarsVCSCuda
+
+	cudaDeps := na.noderefs.alloc(2 + len(in.ExtraDepRefs))
+	cudaDeps[0] = mtimeRef
+	cudaDeps[1] = pidRef
+	cdn := 2 + copy(cudaDeps[2:], in.ExtraDepRefs)
+	na.noderefs.commit(cdn)
+
+	cudaDeps = cudaDeps[:cdn:cdn]
 
 	node := Node{
 		Platform:     p,
@@ -80,7 +85,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 		KV:           &cudaKV,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    p.CCUsesResources,
-		DepRefs:      append([]NodeRef{mtimeRef, pidRef}, in.ExtraDepRefs...),
+		DepRefs:      cudaDeps,
 	}
 
 	e.collectObj(ctx.emit.emitNode(node), outVFS, meta)

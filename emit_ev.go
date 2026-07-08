@@ -51,11 +51,11 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 	e.emitCppProtoFamilySource(meta, &ProtoSpec{
 		kv:          &evKV,
 		ccFirstOuts: true,
-		optsTail: []ANY{
+		optsTail: ctx.na.anyList(
 			internV("--plugin=protoc-gen-event2cpp=", event2cppBinary.prefix(), event2cppBinary.relString()).any(),
 			argEvent2cppOutB.any(),
 			internV("-I=", evEventlogIncludePath).any(),
-		},
+		),
 		toolLDRef:  event2cppLDRef,
 		toolBinary: event2cppBinary,
 		genRefs:    []NodeRef{event2cppLDRef},

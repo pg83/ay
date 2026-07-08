@@ -19,7 +19,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 			argS.any(),
 			decl.URI.any(),
 			output.any()))}),
-		Inputs:       na.inputList(fetchScriptInputs(ctx.scripts)),
+		Inputs:       na.inputList(fetchScriptInputs(na, ctx.scripts)),
 		KV:           &fetchKV,
 		Outputs:      na.vfsList(output),
 		Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},

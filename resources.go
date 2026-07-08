@@ -386,32 +386,43 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		ownSbomRef, ownSbomPath = e.emitSbomComponent(programBinaryName(instance, d.moduleStmt))
 	}
 
-	inputs := InputChunks{ctx.scripts[copyFsToolsVFS.rel()]}
-	depRefs := []NodeRef{fetchRef}
+	pyRef, pyPath := (*NodeRef)(nil), (*VFS)(nil)
 
 	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
-		if pyRef, pyPath := pythonToolchainSbomComponent(ctx, instance.Platform); pyRef != nil {
-			inputs = append(inputs, []VFS{*pyPath})
-			depRefs = append(depRefs, *pyRef)
-		}
+		pyRef, pyPath = pythonToolchainSbomComponent(ctx, instance.Platform)
+	}
+
+	inputs := na.inputs.alloc(3)[:0]
+	depRefs := na.noderefs.alloc(3)[:0]
+	inputs = append(inputs, ctx.scripts[copyFsToolsVFS.rel()])
+	depRefs = append(depRefs, fetchRef)
+
+	if pyRef != nil {
+		inputs = append(inputs, na.vfsList(*pyPath))
+		depRefs = append(depRefs, *pyRef)
 	}
 
 	if ownSbomRef != nil && instance.Platform.BuildRelease {
-		inputs = append(inputs, []VFS{*ownSbomPath, source(sbomGenScriptRel)})
+		inputs = append(inputs, na.vfsList(*ownSbomPath, source(sbomGenScriptRel)))
 		depRefs = append(depRefs, *ownSbomRef)
 	}
 
+	na.inputs.commit(len(inputs))
+	na.noderefs.commit(len(depRefs))
+
+	inputsChunks := InputChunks(inputs[:len(inputs):len(inputs)])
+	depRefs = depRefs[:len(depRefs):len(depRefs)]
+
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList([]ANY{
+		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
 			wrapccPython3STR.any(),
 			copyFsToolsVFS.any(),
 			argCopy.any(),
 			srcVFS.any(),
-			dst.any(),
-		}), Env: env}),
+			dst.any())), Env: env}),
 		Env:          env,
-		Inputs:       inputs,
+		Inputs:       inputsChunks,
 		KV:           &resourcesKV,
 		Outputs:      na.vfsList(dst),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

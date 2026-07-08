@@ -18,7 +18,7 @@ func containsVFS(xs []VFS, want VFS) bool {
 	return false
 }
 
-func filterSourceVFS(vs []VFS) []VFS {
+func filterSourceVFS(na *NodeArenas, vs []VFS) []VFS {
 	n := 0
 
 	for _, v := range vs {
@@ -31,7 +31,7 @@ func filterSourceVFS(vs []VFS) []VFS {
 		return vs
 	}
 
-	out := make([]VFS, 0, n)
+	out := na.vfs.alloc(n)[:0]
 
 	for _, v := range vs {
 		if v.isSource() {
@@ -39,7 +39,9 @@ func filterSourceVFS(vs []VFS) []VFS {
 		}
 	}
 
-	return out
+	na.vfs.commit(len(out))
+
+	return out[:len(out):len(out)]
 }
 
 func eachBucketVFS(chunks [][]VFS, fn func(VFS)) {
@@ -50,8 +52,14 @@ func eachBucketVFS(chunks [][]VFS, fn func(VFS)) {
 	}
 }
 
-func collectBucketVFS(chunks [][]VFS, keep func(VFS) bool) []VFS {
-	var out []VFS
+func collectBucketVFS(na *NodeArenas, chunks [][]VFS, keep func(VFS) bool) []VFS {
+	total := 0
+
+	for _, b := range chunks {
+		total += len(b)
+	}
+
+	out := na.vfs.alloc(total)[:0]
 
 	eachBucketVFS(chunks, func(v VFS) {
 		if keep(v) {
@@ -59,5 +67,7 @@ func collectBucketVFS(chunks [][]VFS, keep func(VFS) bool) []VFS {
 		}
 	})
 
-	return out
+	na.vfs.commit(len(out))
+
+	return out[:len(out):len(out)]
 }

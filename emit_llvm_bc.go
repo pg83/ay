@@ -127,7 +127,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		Outputs:      na.vfsList(optOut),
 		KV:           &llvmBcKV3,
 		Requirements: reqs,
-		DepRefs:      []NodeRef{ldRef},
+		DepRefs:      na.refList(ldRef),
 		Resources:    usesPython3Clang16,
 	}
 

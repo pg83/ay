@@ -54,10 +54,13 @@ func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef,
 		}
 	}
 
-	head := make([]ANY, 0, 1+len(effectiveFlags))
+	head := na.anys.alloc(1 + len(effectiveFlags))[:0]
 
 	head = append(head, (ragel6BinaryPath).any())
 	head = appendAnyLists(head, effectiveFlags)
+	na.anys.commit(len(head))
+
+	head = head[:len(head):len(head)]
 
 	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.anyList((outVFS).any(), (inVFS).any()))
 	env := envVarsVCS
@@ -72,12 +75,12 @@ func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
 		Env:            env,
-		Inputs:         na.inputList(head2, closure),
+		Inputs:         na.inputList(head2, na.vfsList(closure...)),
 		Outputs:        na.vfsList(outVFS),
 		KV:             &r6KV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        producerRefs,
-		ForeignDepRefs: []NodeRef{ragel6LD},
+		DepRefs:        na.noderefs.list(producerRefs...),
+		ForeignDepRefs: na.refList(ragel6LD),
 	}
 
 	emit.emitReservedNode(node, id)
@@ -128,7 +131,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 	}
 
 	e.deferPass2(func() {
-		rl6Closure := walkClosure(e.scanner, r6Out, d.cc.ScanCfg).collect(func(v VFS) bool {
+		rl6Closure := walkClosure(e.scanner, r6Out, d.cc.ScanCfg).collect(ctx.na, func(v VFS) bool {
 			return v.isSource() && !extIsEnumSerialized(v.relString())
 		})
 

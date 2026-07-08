@@ -40,7 +40,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		predefinedFlags = []string{"-g", "dwarf2"}
 	}
 
-	cmdArgs := make([]ANY, 0, 20+len(predefinedFlags))
+	cmdArgs := na.anys.alloc(len(yasmConstHead) + 10 + len(predefinedFlags) + 2*len(in.AddIncl))[:0]
 
 	cmdArgs = append(cmdArgs, yasmConstHead...)
 
@@ -65,6 +65,9 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		inVFS.any(),
 	)
 
+	na.anys.commit(len(cmdArgs))
+
+	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 	env := envVarsVCSYasm
 
 	node := Node{
@@ -78,7 +81,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 	}
 
-	node.ForeignDepRefs = []NodeRef{yasmLD}
+	node.ForeignDepRefs = na.refList(yasmLD)
 
 	if len(in.ExtraDepRefs) > 0 {
 		node.DepRefs = in.ExtraDepRefs

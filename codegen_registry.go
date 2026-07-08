@@ -126,14 +126,14 @@ func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
 	return nil
 }
 
-func (r *CodegenRegistry) addSourceInputs(path VFS, extra []VFS) {
+func (r *CodegenRegistry) addSourceInputs(na *NodeArenas, path VFS, extra []VFS) {
 	if len(extra) == 0 {
 		return
 	}
 
 	info := r.mustInfo(path, "addSourceInputs")
 
-	info.SourceInputs = dedup(info.SourceInputs, extra)
+	info.SourceInputs = dedupClosure(na, info.SourceInputs, [][]VFS{extra})
 }
 
 func (r *CodegenRegistry) buildParsedFor(out VFS) ParsedIncludeSet {

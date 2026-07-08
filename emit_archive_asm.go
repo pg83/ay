@@ -29,7 +29,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	rodataVFS := build(instance.Path.relString(), "/", a.Name, ".rodata")
-	cmdArgs := make([]ANY, 0, 4+len(a.Files)+2)
+	cmdArgs := na.anys.alloc(5 + len(a.Files))[:0]
 
 	cmdArgs = append(cmdArgs, (toolBinPath).any(), argQ.any())
 
@@ -61,8 +61,10 @@ func (e *EmitContext) emitArchiveAsmNode(
 	}
 
 	cmdArgs = append(cmdArgs, argDashO.any(), (rodataVFS).any())
+	na.anys.commit(len(cmdArgs))
 
-	inputs := make([]VFS, 0, len(pathPerFile))
+	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+	inputs := na.vfs.alloc(len(pathPerFile))[:0]
 
 	deduper.reset()
 
@@ -72,7 +74,19 @@ func (e *EmitContext) emitArchiveAsmNode(
 		}
 	}
 
-	deps := concat(producerRefs, depRefs(toolLDRef))
+	na.vfs.commit(len(inputs))
+
+	inputs = inputs[:len(inputs):len(inputs)]
+	deps := na.noderefs.alloc(len(producerRefs) + 1)[:0]
+	deps = append(deps, producerRefs...)
+
+	if toolLDRef != 0 {
+		deps = append(deps, toolLDRef)
+	}
+
+	na.noderefs.commit(len(deps))
+
+	deps = deps[:len(deps):len(deps)]
 	env := envVarsVCS
 
 	n := Node{

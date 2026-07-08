@@ -29,13 +29,17 @@ func currentYatoolPath() string {
 	return path
 }
 
-func fetchScriptInputs(scripts ScriptDeps) []VFS {
-	out := []VFS{buildMappingConfJson}
+func fetchScriptInputs(na *NodeArenas, scripts ScriptDeps) []VFS {
+	sbr := scripts[buildScriptsFetchFromSandboxPy.rel()]
+	mds := scripts[buildScriptsFetchFromMdsPy.rel()]
+	out := na.vfs.alloc(1 + len(sbr) + len(mds))[:0]
 
-	out = append(out, scripts[buildScriptsFetchFromSandboxPy.rel()]...)
-	out = append(out, scripts[buildScriptsFetchFromMdsPy.rel()]...)
+	out = append(out, buildMappingConfJson)
+	out = append(out, sbr...)
+	out = append(out, mds...)
+	na.vfs.commit(len(out))
 
-	return out
+	return out[:len(out):len(out)]
 }
 
 func cmdFetchBase64(_ GlobalFlags, args []string) int {

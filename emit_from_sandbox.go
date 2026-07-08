@@ -35,7 +35,8 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 		mode = "--copy-to-dir"
 	}
 
-	args := []ANY{
+	args := na.anys.alloc(12 + 2*len(stmt.Renames) + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
+	args = append(args,
 		d.tc.Python3.any(),
 		buildScriptsFetchFromSandboxPy.any(),
 		argYaStartCommandFile.any(),
@@ -45,7 +46,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 		stmt.ResourceId,
 		internStr(mode).any(),
 		internStr(stmt.Prefix).any(),
-	}
+	)
 
 	for _, r := range stmt.Renames {
 		args = append(args, strRename.any(), r)
@@ -70,7 +71,9 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	}
 
 	args = append(args, argYaEndCommandFile.any())
+	na.anys.commit(len(args))
 
+	args = args[:len(args):len(args)]
 	env := envVarsVCS
 
 	node := Node{

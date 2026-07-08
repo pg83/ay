@@ -17,7 +17,7 @@ func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, ru
 		KV:             &scKV,
 		Outputs:        na.vfsList(headerVFS),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: []NodeRef{domschemecLDRef},
+		ForeignDepRefs: na.refList(domschemecLDRef),
 	}
 
 	return emit.emitNode(node)

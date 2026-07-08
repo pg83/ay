@@ -45,7 +45,7 @@ func emitR5(
 		Env: env,
 	}
 
-	inputs := []VFS{ragel5BinPath, rlgenCdBinPath, srcVFS}
+	inputs := na.vfsList(ragel5BinPath, rlgenCdBinPath, srcVFS)
 
 	node := Node{
 		Platform:       instance.Platform,
@@ -55,7 +55,7 @@ func emitR5(
 		Outputs:        na.vfsList(tmpVFS, cppVFS),
 		KV:             &r5KV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: depRefs(ragel5LD, rlgenCdLD),
+		ForeignDepRefs: na.refList(ragel5LD, rlgenCdLD),
 	}
 
 	return emit.emitNode(node), tmpVFS, cppVFS

@@ -7,6 +7,7 @@ import (
 
 func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 	e := newStreamingEmitter(nil)
+	_ = e.reserve()
 
 	ragel6LD := e.emitNode(Node{
 		Cmds:         []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"link"}))}, Env: nil}},
@@ -94,6 +95,7 @@ func TestCollectModule_Ragel6FlagsMultiTokenSplit(t *testing.T) {
 
 func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := newStreamingEmitter(nil)
+	_ = e.reserve()
 
 	ragel6LD := e.emitNode(Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"link"}))}, Env: nil}},
@@ -136,6 +138,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 
 func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	e := newStreamingEmitter(nil)
+	_ = e.reserve()
 
 	ragel6LD := e.emitNode(Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"link"}))}, Env: nil}},
@@ -183,6 +186,7 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 
 func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	e := newStreamingEmitter(nil)
+	_ = e.reserve()
 
 	ragel6LD := e.emitNode(Node{Platform: &Platform{},
 		Cmds:    []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"link"}))}, Env: nil}},

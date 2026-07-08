@@ -12,7 +12,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 		statsPlatform = p
 	}
 
-	cmdArgs := make([]ANY, 0, 4+len(sources))
+	cmdArgs := na.anys.alloc(5 + len(sources))[:0]
 
 	cmdArgs = append(cmdArgs,
 		tc.Python3.any(),
@@ -26,13 +26,19 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	}
 
 	cmdArgs = append(cmdArgs, argYaEndCommandFile.any())
+	na.anys.commit(len(cmdArgs))
 
+	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 	env := envVarsVCS
-	srcVFSs := make([]VFS, 0, len(sources))
+	srcVFSs := na.vfs.alloc(len(sources))
 
-	for _, s := range sources {
-		srcVFSs = append(srcVFSs, source(instance.Path.relString(), "/", s))
+	for i, s := range sources {
+		srcVFSs[i] = source(instance.Path.relString(), "/", s)
 	}
+
+	na.vfs.commit(len(sources))
+
+	srcVFSs = srcVFSs[:len(sources):len(sources)]
 
 	inputs := na.inputList(scripts[joinSrcs.rel()], srcVFSs, closure)
 
@@ -134,7 +140,7 @@ func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []s
 		return nil
 	}
 
-	return order
+	return ctx.na.vfsList(order...)
 }
 
 func jsCCIncludeInputs(srcInstance ModuleInstance, joinOut VFS, sources []string, closure []VFS, scripts ScriptDeps) []VFS {

@@ -375,6 +375,12 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool) NodeRef {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
+
+	if ownershipOn {
+		for _, deps := range scriptTbl {
+			registerOwnedSlice(deps)
+		}
+	}
 	fetchRefs := emitter.fetchRefs
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
 	targetReg := newCodegenRegistry()

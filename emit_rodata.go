@@ -47,12 +47,12 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		KV:             &rodataKV,
 		Outputs:        na.vfsList(asmVFS, outVFS),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: []NodeRef{yasmLD},
+		ForeignDepRefs: na.refList(yasmLD),
 		Resources:      usesPython3,
 	}
 
 	if len(extraDepRefs) > 0 {
-		node.DepRefs = extraDepRefs
+		node.DepRefs = na.noderefs.list(extraDepRefs...)
 	}
 
 	return emit.emitNode(node), asmVFS, outVFS

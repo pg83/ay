@@ -49,8 +49,8 @@ func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) Closure 
 	return sc.closureOf(vfsPath)
 }
 
-func rewriteClosureCPSource(scanner *IncludeScanner, cv Closure) []VFS {
-	out := cv.collect(func(VFS) bool { return true })
+func rewriteClosureCPSource(na *NodeArenas, scanner *IncludeScanner, cv Closure) []VFS {
+	out := cv.collect(na, func(VFS) bool { return true })
 
 	for i, v := range out {
 		info := scanner.codegen.lookup(v)

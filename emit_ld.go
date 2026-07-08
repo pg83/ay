@@ -120,29 +120,37 @@ func emitLD(
 	outputVFS := build(binPrefix, binaryName)
 	vcsCVFS := build(binPrefix, "__vcs_version__.c")
 	vcsOVFS := build(binPrefix, "__vcs_version__.c", instance.Platform.objectSuffix())
-	cmd0 := composeLDCmdVcsInfo(tc, vcsCVFS)
-	cmd1 := composeLDCmdVcsCompile(instance.Platform, tc, vcsCVFS, vcsOVFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
-	cmd2 := composeLDCmdLinkExe(instance.Platform, tc, outputVFS, vcsOVFS, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm)
+	cmd0 := composeLDCmdVcsInfo(na, tc, vcsCVFS)
+	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, tc, vcsCVFS, vcsOVFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
+	cmd2 := composeLDCmdLinkExe(na, instance.Platform, tc, outputVFS, vcsOVFS, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm)
 	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputVFS, wantsSplitDwarf)
 	envVcsOnly := envVarsVCS
 	envFull := hostP.toolEnv()
 	sbomEmbed := len(sbomPaths) > 0
 	sbomJSON := build(binPrefix, "__sbomdata.json")
-	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
+	emitCopy := instance.Platform.Flags[envOPENSOURCE] == strYes || len(dynamicPaths) > 0
+
+	var cmdLinkSbom, cmd3, cmdObjcopy []ANY
 
 	if sbomEmbed {
-		linkSbom := composeLDCmdLinkSbom(tc, sbomLang, instance.Path.rel(), sbomJSON, sbomPaths)
+		cmdLinkSbom = composeLDCmdLinkSbom(na, tc, sbomLang, instance.Path.rel(), sbomJSON, sbomPaths)
+		cmdObjcopy = composeLDCmdSbomObjcopy(na, tc, sbomJSON, outputVFS)
+	}
 
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(linkSbom), Cwd: bldRootDirVFS, Env: envVcsOnly})
+	if emitCopy {
+		cmd3 = composeLDCmdLinkOrCopy(na, tc, binaryDir, dynamicPaths...)
+	}
+
+	cmds := na.cmds.alloc(5 + len(splitDwarfCmds))[:0]
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
+
+	if sbomEmbed {
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmdLinkSbom), Cwd: bldRootDirVFS, Env: envVcsOnly})
 	}
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
 
-	emitCopy := instance.Platform.Flags[envOPENSOURCE] == strYes || len(dynamicPaths) > 0
-
 	if emitCopy {
-		cmd3 := composeLDCmdLinkOrCopy(tc, binaryDir, dynamicPaths...)
-
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly})
 	}
 
@@ -153,13 +161,13 @@ func emitLD(
 	cmds = append(cmds, splitDwarfCmds...)
 
 	if sbomEmbed {
-		objcopy := composeLDCmdSbomObjcopy(tc, sbomJSON, outputVFS)
-
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(objcopy), Env: envVcsOnly})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmdObjcopy), Env: envVcsOnly})
 	}
 
-	inputs := composeLDInputs(na, instance.Path.relString(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles)
-	inputTail := make([]VFS, 0, 2)
+	na.cmds.commit(len(cmds))
+
+	cmds = cmds[:len(cmds):len(cmds)]
+	inputTail := na.vfs.alloc(2)[:0]
 
 	inputTail = append(inputTail, ldSvnversionHVFS)
 
@@ -167,14 +175,21 @@ func emitLD(
 		inputTail = append(inputTail, exportsScript.str().source())
 	}
 
-	inputs = append(inputs, inputTail)
+	na.vfs.commit(len(inputTail))
+
+	inputTail = inputTail[:len(inputTail):len(inputTail)]
+
+	extraChunks := [3][]VFS{inputTail, nil, nil}
+	nExtra := 1
 
 	if len(sbomPaths) > 0 {
-		inputs = append(inputs, sbomPaths)
-		inputs = append(inputs, []VFS{linkSbomScriptVFS})
+		extraChunks[1] = na.vfsList(sbomPaths...)
+		extraChunks[2] = na.srcChunk(linkSbomScriptVFS)
+		nExtra = 3
 	}
 
-	deps := make([]NodeRef, 0, len(ccRefs)+len(pluginRefs)+len(globalRefs)+len(peerLDRefs)+len(dynamicRefs)+len(objcopyRefs))
+	inputs := composeLDInputs(na, instance.Path.relString(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles, extraChunks[:nExtra]...)
+	deps := na.noderefs.alloc(len(ccRefs) + len(pluginRefs) + len(globalRefs) + len(peerLDRefs) + len(dynamicRefs) + len(objcopyRefs) + len(sbomRefs) + 1)[:0]
 
 	deps = append(deps, ccRefs...)
 	deps = append(deps, pluginRefs...)
@@ -184,8 +199,11 @@ func emitLD(
 	deps = append(deps, objcopyRefs...)
 	deps = append(deps, sbomRefs...)
 	deps = append(deps, vcsRef)
+	na.noderefs.commit(len(deps))
 
-	outputs := []VFS{outputVFS}
+	deps = deps[:len(deps):len(deps)]
+	outputs := na.vfs.alloc(2 + len(dynamicPaths))[:0]
+	outputs = append(outputs, outputVFS)
 
 	for _, p := range dynamicPaths {
 		outputs = append(outputs, build(binaryDir, "/", baseName(p.relString())))
@@ -194,6 +212,10 @@ func emitLD(
 	if wantsSplitDwarf {
 		outputs = append(outputs, build(binPrefix, binaryName, ".debug"))
 	}
+
+	na.vfs.commit(len(outputs))
+
+	outputs = outputs[:len(outputs):len(outputs)]
 
 	n := Node{
 		Platform:     instance.Platform,
@@ -235,28 +257,33 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 	return emit.emitNode(node)
 }
 
-func composeLDCmdVcsInfo(tc ModuleToolchain, vcsC VFS) []ANY {
-	return []ANY{
+func composeLDCmdVcsInfo(na *NodeArenas, tc ModuleToolchain, vcsC VFS) []ANY {
+	return na.anyList(
 		tc.Python3.any(),
 		(ldVcsInfoVFS).any(),
 		argVcsVcsJson.any(),
 		vcsC.any(),
 		(ldSvnInterfaceVFS).any(),
-	}
+	)
 }
 
-func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ANY, noCompilerWarnings, noOptimize bool) []ANY {
-	return composeLDCmdVcsCompileForced(p, tc, vcsC, vcsO, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize, false)
+func composeLDCmdVcsCompile(na *NodeArenas, p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ANY, noCompilerWarnings, noOptimize bool) []ANY {
+	return composeLDCmdVcsCompileForced(na, p, tc, vcsC, vcsO, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize, false)
 }
 
-func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ANY, noCompilerWarnings, noOptimize, forceConsistentDebug bool) []ANY {
+func composeLDCmdVcsCompileForced(na *NodeArenas, p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ANY, noCompilerWarnings, noOptimize, forceConsistentDebug bool) []ANY {
 	bundle := compileFlagBundleFor(p)
 
 	if noOptimize {
 		bundle.CFlags = suppressOptimize(bundle.CFlags)
 	}
 
-	cmdArgs := make([]ANY, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal)+len(moduleScopeCFlags))
+	bound := 16 + 2*(len(debugPrefixMapFlags)+len(xclangDebugCompilationDir)) +
+		len(bundle.ArchArgs) + len(p.SysrootArgs) + len(bundle.CFlags) +
+		len(warningFlags) + 1 + len(bundle.Defines) +
+		len(p.CFlags) + len(moduleCFlags) + len(peerCFlagsGlobal) +
+		2*len(bundle.NoLibcBlock) + 1 + len(moduleScopeCFlags)
+	cmdArgs := na.anys.alloc(bound)[:0]
 
 	cmdArgs = append(cmdArgs, tc.CC.any(), p.TargetArg.any())
 	cmdArgs = appendAnyLists(cmdArgs, bundle.ArchArgs)
@@ -278,16 +305,17 @@ func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsC, vcsO VF
 	preNoLibcExtras := concat(p.CFlags, moduleCFlags, peerCFlagsGlobal)
 
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, pickWarningFlags(noCompilerWarnings, false), bundle.Defines, preNoLibcExtras, moduleScopeCFlags, catboostOpenSourceDefineFor(p))
+	na.anys.commit(len(cmdArgs))
 
-	return cmdArgs
+	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
-func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
+func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
 
-	cmdArgs := make([]ANY, 0, argCap)
+	cmdArgs := na.anys.alloc(argCap)[:0]
 
 	cmdArgs = append(cmdArgs,
 		tc.Python3.any(),
@@ -358,8 +386,9 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPa
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.any())
 	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm)...)
+	na.anys.commit(len(cmdArgs))
 
-	return cmdArgs
+	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
 func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
@@ -411,8 +440,8 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	return trailer
 }
 
-func composeLDCmdLinkSbom(tc ModuleToolchain, lang, moddir STR, sbomJSON VFS, sbomPaths []VFS) []ANY {
-	cmd := make([]ANY, 0, 10+len(sbomPaths))
+func composeLDCmdLinkSbom(na *NodeArenas, tc ModuleToolchain, lang, moddir STR, sbomJSON VFS, sbomPaths []VFS) []ANY {
+	cmd := na.anys.alloc(10 + len(sbomPaths))[:0]
 
 	cmd = append(cmd,
 		tc.Python3.any(),
@@ -427,33 +456,37 @@ func composeLDCmdLinkSbom(tc ModuleToolchain, lang, moddir STR, sbomJSON VFS, sb
 		cmd = append(cmd, p.any())
 	}
 
-	return cmd
+	na.anys.commit(len(cmd))
+
+	return cmd[:len(cmd):len(cmd)]
 }
 
-func composeLDCmdSbomObjcopy(tc ModuleToolchain, sbomJSON, target VFS) []ANY {
-	return []ANY{
+func composeLDCmdSbomObjcopy(na *NodeArenas, tc ModuleToolchain, sbomJSON, target VFS) []ANY {
+	return na.anyList(
 		tc.Objcopy.any(),
 		strAddSection.any(),
 		internV(".rosbomdata=", sbomJSON.prefix(), sbomJSON.relString()).any(),
 		target.any(),
-	}
+	)
 }
 
-func composeLDCmdLinkOrCopy(tc ModuleToolchain, modulePath string, dynamicPaths ...VFS) []ANY {
-	cmd := []ANY{
+func composeLDCmdLinkOrCopy(na *NodeArenas, tc ModuleToolchain, modulePath string, dynamicPaths ...VFS) []ANY {
+	cmd := na.anys.alloc(5 + len(dynamicPaths))[:0]
+	cmd = append(cmd,
 		tc.Python3.any(),
 		(ldFsToolsVFS).any(),
 		argLinkOrCopyToDir.any(),
 		argNoCheck.any(),
-	}
+	)
 
 	for _, p := range dynamicPaths {
 		cmd = append(cmd, (p).any())
 	}
 
 	cmd = append(cmd, (build(modulePath)).any())
+	na.anys.commit(len(cmd))
 
-	return cmd
+	return cmd[:len(cmd):len(cmd)]
 }
 
 func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, output VFS, enabled bool) []Cmd {
@@ -466,9 +499,7 @@ func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, output VFS, ena
 	return na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Objcopy.any(), argOnlyKeepDebug.any(), output.any(), debug.any()))}, Cmd{CmdArgs: na.chunkList(na.anyList(tc.Strip.any(), argStripDebug.any(), output.any()))}, Cmd{CmdArgs: na.chunkList(na.anyList(tc.Objcopy.any(), argRemoveSectionGnuDebuglink.any(), argAddGnuDebuglink.any(), debug.any(), output.any()))})
 }
 
-func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool) InputChunks {
-	chunks := make(InputChunks, 0, 3+len(ldScriptInputs))
-
+func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool, extra ...[]VFS) InputChunks {
 	deduper.reset()
 
 	for _, p := range peerLibPaths {
@@ -477,9 +508,8 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 		}
 	}
 
-	chunks = append(chunks, peerLibPaths)
-
-	buildRootBlock := make([]VFS, 0, len(pluginPaths)+len(globalPaths)+len(wholeArchivePaths)+len(dynamicPaths)+len(ccPaths)+len(objcopyPaths))
+	peerLibChunk := na.vfsList(peerLibPaths...)
+	buildRootBlock := na.vfs.alloc(len(pluginPaths) + len(globalPaths) + len(wholeArchivePaths) + len(dynamicPaths) + len(ccPaths) + len(objcopyPaths))[:0]
 
 	appendBuildRoot := func(paths []VFS) {
 		for _, p := range paths {
@@ -498,8 +528,12 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 	appendBuildRoot(ccPaths)
 
 	appendBuildRoot(objcopyPaths)
+	na.vfs.commit(len(buildRootBlock))
 
-	chunks = append(chunks, buildRootBlock)
+	buildRootBlock = buildRootBlock[:len(buildRootBlock):len(buildRootBlock)]
+
+	scriptChunks := [8][]VFS{}
+	nScripts := 0
 
 	for _, s := range ldScriptInputs {
 		if s == copyFsToolsVFS && !emitCopy && !hasBundles {
@@ -507,13 +541,21 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 		}
 
 		if cl := scripts[s.rel()]; cl != nil {
-			chunks = append(chunks, cl)
+			scriptChunks[nScripts] = cl
 		} else {
-			chunks = append(chunks, na.srcChunk(s))
+			scriptChunks[nScripts] = na.srcChunk(s)
 		}
+
+		nScripts++
 	}
 
-	return chunks
+	chunks := na.inputs.alloc(2 + nScripts + len(extra))[:0]
+	chunks = append(chunks, peerLibChunk, buildRootBlock)
+	chunks = append(chunks, scriptChunks[:nScripts]...)
+	chunks = append(chunks, extra...)
+	na.inputs.commit(len(chunks))
+
+	return InputChunks(chunks[:len(chunks):len(chunks)])
 }
 
 type LdPluginsResult struct {

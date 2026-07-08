@@ -18,16 +18,15 @@ func emitJVCPG4(
 	na := emit.nodeArenas()
 	fsTools := copyFsToolsVFS
 
-	cmdArgs := []ANY{
+	cmdArgs := na.anyList(
 		tc.Python3.any(),
 		(fsTools).any(),
 		argCopy.any(),
 		(src).any(),
 		(dst).any(),
-	}
-
+	)
 	env := envVarsVCS
-	head := make([]VFS, 0, 2)
+	head := na.vfs.alloc(2)[:0]
 
 	head = append(head, jvPrimary)
 
@@ -35,7 +34,10 @@ func emitJVCPG4(
 		head = append(head, src)
 	}
 
-	inputs := na.inputList(head, scripts[fsTools.rel()], jvInputs, closure)
+	na.vfs.commit(len(head))
+
+	head = head[:len(head):len(head)]
+	inputs := na.inputList(head, scripts[fsTools.rel()], na.vfsList(jvInputs...), closure)
 
 	node := Node{
 		Platform: instance.Platform,
@@ -46,7 +48,7 @@ func emitJVCPG4(
 		KV:           &cpKV,
 		Outputs:      na.vfsList(dst),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:      []NodeRef{jvRef},
+		DepRefs:      na.refList(jvRef),
 		Resources:    usesPython3,
 	}
 
@@ -65,16 +67,15 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 	na := emit.nodeArenas()
 	fsTools := copyFsToolsVFS
 
-	cmdArgs := []ANY{
+	cmdArgs := na.anyList(
 		tc.Python3.any(),
 		(fsTools).any(),
 		argCopy.any(),
 		(src).any(),
 		(dst).any(),
-	}
-
+	)
 	env := envVarsVCS
-	ownInputs := make([]VFS, 0, 1+len(extraInputs))
+	ownInputs := na.vfs.alloc(1 + len(extraInputs))[:0]
 
 	ownInputs = append(ownInputs, src)
 
@@ -86,6 +87,9 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		ownInputs = append(ownInputs, v)
 	}
 
+	na.vfs.commit(len(ownInputs))
+
+	ownInputs = ownInputs[:len(ownInputs):len(ownInputs)]
 	inputs := na.inputList(scripts[fsTools.rel()], ownInputs)
 
 	node := Node{
@@ -97,7 +101,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		KV:           &cpKV,
 		Outputs:      na.vfsList(dst),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:      depRefs,
+		DepRefs:      na.noderefs.list(depRefs...),
 		Resources:    usesPython3,
 	}
 

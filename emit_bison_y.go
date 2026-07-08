@@ -116,9 +116,9 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		Compile:        spec,
 	})
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData.any()}, {Name: envM4, Value: m4Bin.any()}}
+	env := na.envList(EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, EnvVar{Name: envBISON_PKGDATADIR, Value: strBisonPkgData.any()}, EnvVar{Name: envM4, Value: m4Bin.any()})
 	preprocessEnv := envVarsVCS
-	head := make([]ANY, 0, 6+len(d.cc.BisonFlags))
+	head := na.anys.alloc(6 + len(d.cc.BisonFlags))[:0]
 
 	head = append(head, bisonBin.any(), argV.any())
 	head = appendAnyLists(head, d.cc.BisonFlags)
@@ -128,9 +128,13 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		argDashO.any(),
 		(generatedVFS).any(),
 		(srcVFS).any())
+	na.anys.commit(len(head))
 
-	cmds := na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env})
-	inputs := []VFS{bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS}
+	head = head[:len(head):len(head)]
+
+	cmds := na.cmds.alloc(2)[:0]
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(head), Env: env})
+	inputs := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS)
 
 	if preprocessHeader {
 		cmds = append(cmds, Cmd{
@@ -140,8 +144,13 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 			Env: preprocessEnv,
 		})
 
-		inputs = append(inputs, bisonPreprocessPyVFS)
-		inputs = append(inputs, bisonCppSkeletonInputs...)
+		ext := na.vfs.alloc(len(inputs) + 1 + len(bisonCppSkeletonInputs))[:0]
+		ext = append(ext, inputs...)
+		ext = append(ext, bisonPreprocessPyVFS)
+		ext = append(ext, bisonCppSkeletonInputs...)
+		na.vfs.commit(len(ext))
+
+		inputs = ext[:len(ext):len(ext)]
 
 		for _, sk := range bisonCppSkeletonInputs {
 			skCV := walkClosure(e.scanner, sk, d.cc.ScanCfg)
@@ -150,10 +159,14 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		}
 	}
 
+	na.cmds.commit(len(cmds))
+
+	cmds = cmds[:len(cmds):len(cmds)]
+
 	ctx.emit.emitReservedNode(Node{
 		Platform:     instance.Platform,
 		Cmds:         cmds,
-		DepRefs:      []NodeRef{bisonRef, m4Ref},
+		DepRefs:      na.refList(bisonRef, m4Ref),
 		Env:          env,
 		Inputs:       na.inputList(inputs),
 		Outputs:      na.vfsList(headerVFS, generatedVFS),

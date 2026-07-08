@@ -106,6 +106,7 @@ var (
 	envVarsVCS       = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 	envVarsVCSYasm   = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envYASM_TEST_SUITE, Value: strOne.any()}}
 	envVarsVCSPyHash = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envPYTHONHASHSEED, Value: strZero.any()}}
+	envVarsVCSCuda   = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: cudaPathEnv, Value: cudaPathValueStr.any()}}
 )
 
 func appendEnv(buf []byte, env EnvVars) []byte {

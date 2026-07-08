@@ -67,7 +67,7 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 	env := envVarsVCS
 	sprotoCV := walkClosure(e.scanner, p.sprotoH, scanCfg)
 
-	closure := collectBucketVFS(sprotoCV.buckets, func(v VFS) bool {
+	closure := collectBucketVFS(na, sprotoCV.buckets, func(v VFS) bool {
 		return v.isSource() || !extIsProtoGeneratedHeader(v.relString())
 	})
 
@@ -78,10 +78,10 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 			Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(sprotocBinary), closure),
-		Outputs:        []VFS{p.sprotoH},
+		Outputs:        na.vfsList(p.sprotoH),
 		KV:             &ymapsSprotoKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: depRefs(sprotocLDRef),
+		ForeignDepRefs: na.refList(sprotocLDRef),
 	}
 
 	ctx.emit.emitReservedNode(node, p.ref)

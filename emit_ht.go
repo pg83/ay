@@ -50,7 +50,7 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 			KV:             &htKV,
 			Outputs:        na.vfsList(outVFS),
 			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			ForeignDepRefs: depRefs(toolRef),
+			ForeignDepRefs: na.refList(toolRef),
 		}
 
 		ctx.emit.emitReservedNode(node, ref)

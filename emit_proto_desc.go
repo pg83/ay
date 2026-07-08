@@ -117,7 +117,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		protoSearchPaths = []VFS{source(cppOutRoot)}
 	}
 
-	mid := descProtocIncludes(span.includes, cppOutRoot)
+	mid := descProtocIncludes(ctx.na, span.includes, cppOutRoot)
 	scanCfg := protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.relString())
 	scanner := e.scanner
 	hash := moddirHash(instance.Path.relString())
@@ -191,8 +191,8 @@ func protoNamespaceContribs(d *ModuleData) []VFS {
 	return append(own, d.protoAddInclGlobal...)
 }
 
-func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []ANY {
-	out := make([]ANY, 0, 8+len(peerProtoAddIncl))
+func descProtocIncludes(na *NodeArenas, peerProtoAddIncl []VFS, cppOutRoot string) []ANY {
+	out := na.anys.alloc(8 + len(peerProtoAddIncl))[:0]
 
 	out = append(out,
 		internV("-I=./", cppOutRoot).any(),
@@ -215,7 +215,9 @@ func descProtocIncludes(peerProtoAddIncl []VFS, cppOutRoot string) []ANY {
 		strIncludeSourceInfo.any(),
 	)
 
-	return out
+	na.anys.commit(len(out))
+
+	return out[:len(out):len(out)]
 }
 
 func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath string,
@@ -237,12 +239,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 
 	cmdArgs := na.chunkList(head, mid)
 	env := envVarsVCS
-
-	inputs := []VFS{
-		protocBinary,
-		source(protoRelPath),
-		descRawprotoWrapperVFS,
-	}
+	inputs := na.vfsList(protocBinary, source(protoRelPath), descRawprotoWrapperVFS)
 
 	node := Node{
 		Platform: instance.Platform,
@@ -254,7 +251,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 		KV:             &protoDescKV,
 		Outputs:        na.vfsList(descOut, rawprotoOut),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: depRefs(protocLDRef),
+		ForeignDepRefs: na.refList(protocLDRef),
 		Resources:      usesPython3,
 	}
 
@@ -265,7 +262,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	descOutputs, rawprotoOutputs, producerSourceInputs []VFS, producerRefs []NodeRef) NodeRef {
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
-	merge := make([]ANY, 0, 3+len(descOutputs))
+	merge := na.anys.alloc(3 + len(descOutputs))[:0]
 
 	merge = append(merge, wrapccPython3STR.any(), mergeFilesVFS.any(), selfProtodesc.any())
 
@@ -273,7 +270,10 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 		merge = append(merge, d.any())
 	}
 
-	collect := make([]ANY, 0, 4+len(rawprotoOutputs))
+	na.anys.commit(len(merge))
+
+	merge = merge[:len(merge):len(merge)]
+	collect := na.anys.alloc(4 + len(rawprotoOutputs))[:0]
 
 	collect = append(collect, wrapccPython3STR.any(), collectRawprotoVFS.any(), strOutput.any(), protosrc.any())
 
@@ -281,7 +281,16 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 		collect = append(collect, r.rel().any())
 	}
 
-	inputs := concat(descOutputs, rawprotoOutputs, producerSourceInputs)
+	na.anys.commit(len(collect))
+
+	collect = collect[:len(collect):len(collect)]
+	inputs := na.vfs.alloc(len(descOutputs) + len(rawprotoOutputs) + len(producerSourceInputs))
+	ni := copy(inputs, descOutputs)
+	ni += copy(inputs[ni:], rawprotoOutputs)
+	ni += copy(inputs[ni:], producerSourceInputs)
+	na.vfs.commit(ni)
+
+	inputs = inputs[:ni:ni]
 
 	node := Node{
 		Platform: instance.Platform,
@@ -294,7 +303,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 		KV:           &protoDescKV,
 		Outputs:      na.vfsList(selfProtodesc, protosrc),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:      producerRefs,
+		DepRefs:      na.noderefs.list(producerRefs...),
 		Resources:    usesPython3,
 	}
 
@@ -309,30 +318,52 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	prj := realPrjName(instance.Path.relString())
 	protodesc := build(instance.Path.relString(), "/", prj, ".protodesc")
 	tar := build(instance.Path.relString(), "/", prj, ".tar")
-	merge := make([]ANY, 0, 3+len(closure))
+	merge := na.anys.alloc(3 + len(closure))[:0]
 
 	merge = append(merge, wrapccPython3STR.any(), mergeFilesVFS.any(), protodesc.any())
 
-	collect := make([]ANY, 0, 4+len(closure))
+	for _, p := range closure {
+		merge = append(merge, p.SelfProtodesc.any())
+	}
+
+	na.anys.commit(len(merge))
+
+	merge = merge[:len(merge):len(merge)]
+	collect := na.anys.alloc(4 + len(closure))[:0]
 
 	collect = append(collect, wrapccPython3STR.any(), mergeProtosrcVFS.any(), strOutput.any(), tar.any())
 
-	inputs := make([]VFS, 0, len(closure))
-	deps := make([]NodeRef, 0, len(closure))
+	for _, p := range closure {
+		collect = append(collect, p.SelfProtodesc.rel().any())
+	}
+
+	na.anys.commit(len(collect))
+
+	collect = collect[:len(collect):len(collect)]
+	sbomRef, sbomPath := (*NodeRef)(nil), (*VFS)(nil)
+
+	if sbomActive(ctx, instance) {
+		sbomRef, sbomPath = pythonToolchainSbomComponent(ctx, instance.Platform)
+	}
+
+	inputs := na.vfs.alloc(len(closure) + 1)[:0]
+	deps := na.noderefs.alloc(len(closure) + 1)[:0]
 
 	for _, p := range closure {
-		merge = append(merge, p.SelfProtodesc.any())
-		collect = append(collect, p.SelfProtodesc.rel().any())
 		inputs = append(inputs, p.SelfProtodesc)
 		deps = append(deps, p.MergeRef)
 	}
 
-	if sbomActive(ctx, instance) {
-		if pyRef, pyPath := pythonToolchainSbomComponent(ctx, instance.Platform); pyRef != nil {
-			inputs = append(inputs, *pyPath)
-			deps = append(deps, *pyRef)
-		}
+	if sbomRef != nil {
+		inputs = append(inputs, *sbomPath)
+		deps = append(deps, *sbomRef)
 	}
+
+	na.vfs.commit(len(inputs))
+	na.noderefs.commit(len(deps))
+
+	inputs = inputs[:len(inputs):len(inputs)]
+	deps = deps[:len(deps):len(deps)]
 
 	node := Node{
 		Platform: instance.Platform,

@@ -19,28 +19,31 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
-	inputs := make([]VFS, 0, 1+len(inducedProtos)+1)
+	inputs := na.vfs.alloc(2 + len(inducedProtos))[:0]
 
 	inputs = append(inputs, converterBin)
 	inputs = append(inputs, inducedProtos...)
 	inputs = append(inputs, gztSource)
+	na.vfs.commit(len(inputs))
+
+	inputs = inputs[:len(inputs):len(inputs)]
 
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{
-			CmdArgs: na.chunkList(gztCmdArgs(converterBin, protoInclude, gztSource, genProto)),
+			CmdArgs: na.chunkList(gztCmdArgs(na, converterBin, protoInclude, gztSource, genProto)),
 			Env:     env,
 		}),
 		Env:            env,
 		Inputs:         na.inputList(inputs, imports.buckets...),
-		Outputs:        []VFS{genProto},
+		Outputs:        na.vfsList(genProto),
 		KV:             &gztprotoKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: depRefs(converterRef),
+		ForeignDepRefs: na.refList(converterRef),
 	}
 
 	gzRef := ctx.emit.emitNode(node)
-	sourceInputs := make([]VFS, 0, 1+imports.len())
+	sourceInputs := na.vfs.alloc(1 + imports.len())[:0]
 
 	sourceInputs = append(sourceInputs, gztSource)
 
@@ -49,6 +52,10 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 			sourceInputs = append(sourceInputs, v)
 		}
 	})
+
+	na.vfs.commit(len(sourceInputs))
+
+	sourceInputs = sourceInputs[:len(sourceInputs):len(sourceInputs)]
 
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     genProto,
@@ -77,8 +84,8 @@ func (e *EmitContext) emitLibraryGztProtoCompile(src ANY) {
 	e.emitLibraryGztProtoSource(src.string(), d.cc.ProtoInclude)
 }
 
-func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []ANY {
-	args := make([]ANY, 0, 6+len(protoInclude))
+func gztCmdArgs(na *NodeArenas, converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) []ANY {
+	args := na.anys.alloc(8 + len(protoInclude))[:0]
 
 	args = append(args, converterBin.any())
 	args = append(args, internV("-I", pbRuntimeBaseVFS.prefix(), pbRuntimeBaseVFS.relString()).any())
@@ -103,8 +110,9 @@ func gztCmdArgs(converterBin VFS, protoInclude []VFS, gztSource, genProto VFS) [
 
 	args = append(args, internV("-I", strS.string()).any())
 	args = append(args, gztSource.any(), genProto.any())
+	na.anys.commit(len(args))
 
-	return args
+	return args[:len(args):len(args)]
 }
 
 func gztConverterInducedProtos(ctx *GenCtx) []VFS {

@@ -44,13 +44,14 @@ func (dd *DeDuper) has(id uint32) bool {
 	return dd.gen.s[id] == dd.epoch
 }
 
-func (dd *DeDuper) filterSeen(list []VFS) []VFS {
+func (dd *DeDuper) filterSeen(na *NodeArenas, list []VFS) []VFS {
 	for i, v := range list {
 		if dd.add(v.strID()) {
 			continue
 		}
 
-		out := append(make([]VFS, 0, len(list)-1), list[:i]...)
+		out := na.vfs.alloc(len(list) - 1)[:0]
+		out = append(out, list[:i]...)
 
 		for _, w := range list[i+1:] {
 			if dd.add(w.strID()) {
@@ -58,7 +59,9 @@ func (dd *DeDuper) filterSeen(list []VFS) []VFS {
 			}
 		}
 
-		return out
+		na.vfs.commit(len(out))
+
+		return out[:len(out):len(out)]
 	}
 
 	return list

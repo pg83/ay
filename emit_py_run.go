@@ -73,19 +73,12 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		splitSrcs = e.splitCodegenSrcs(stmt, scriptVFS)
 	}
 
-	var pySourceInputs []VFS
 	var pyGeneratedFromSources []VFS
-
-	if scriptVFS.isSource() {
-		pySourceInputs = append(pySourceInputs, scriptVFS)
-	}
 
 	reg := e.codegen
 
 	for _, v := range inVFSs {
 		if v.isSource() {
-			pySourceInputs = append(pySourceInputs, v)
-
 			continue
 		}
 
@@ -94,7 +87,22 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		}
 	}
 
+	pySourceInputs := ctx.na.vfs.alloc(1 + len(inVFSs) + len(pyGeneratedFromSources))[:0]
+
+	if scriptVFS.isSource() {
+		pySourceInputs = append(pySourceInputs, scriptVFS)
+	}
+
+	for _, v := range inVFSs {
+		if v.isSource() {
+			pySourceInputs = append(pySourceInputs, v)
+		}
+	}
+
 	pySourceInputs = append(pySourceInputs, pyGeneratedFromSources...)
+	ctx.na.vfs.commit(len(pySourceInputs))
+
+	pySourceInputs = pySourceInputs[:len(pySourceInputs):len(pySourceInputs)]
 
 	pyRef := ctx.emit.reserve()
 
@@ -352,17 +360,27 @@ func emitPYRun(
 	na := emit.nodeArenas()
 	env := envVarsVCS
 
-	for _, kv := range stmt.EnvPairs {
-		parts := strings.SplitN(kv.string(), "=", 2)
+	if len(stmt.EnvPairs) > 0 {
+		block := na.envs.alloc(1 + len(stmt.EnvPairs))[:0]
+		block = append(block, envVarsVCS...)
 
-		if len(parts) == 2 {
-			env = append(env, EnvVar{Name: internEnv(parts[0]), Value: internStr(parts[1]).any()})
-		} else {
-			env = append(env, EnvVar{Name: internEnv(kv.string()), Value: strEmpty.any()})
+		for _, kv := range stmt.EnvPairs {
+			parts := strings.SplitN(kv.string(), "=", 2)
+
+			if len(parts) == 2 {
+				block = append(block, EnvVar{Name: internEnv(parts[0]), Value: internStr(parts[1]).any()})
+			} else {
+				block = append(block, EnvVar{Name: internEnv(kv.string()), Value: strEmpty.any()})
+			}
 		}
+
+		na.envs.commit(len(block))
+
+		env = EnvVars(block[:len(block):len(block)])
 	}
 
-	cmdArgs := []ANY{interp, (scriptVFS).any()}
+	cmdArgs := na.anys.alloc(2 + len(stmt.Args))[:0]
+	cmdArgs = append(cmdArgs, interp, (scriptVFS).any())
 
 	for _, aTok := range stmt.Args {
 		a := aTok.string()
@@ -392,7 +410,10 @@ func emitPYRun(
 		cmdArgs = append(cmdArgs, aTok)
 	}
 
-	head := make([]VFS, 0, 2+len(stmt.INFiles))
+	na.anys.commit(len(cmdArgs))
+
+	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+	head := na.vfs.alloc(2 + len(stmt.INFiles))[:0]
 
 	if interpInput != nil {
 		head = append(head, *interpInput)
@@ -404,9 +425,12 @@ func emitPYRun(
 		head = append(head, inVFSByToken[f.string()])
 	}
 
-	inputs := na.inputList(head, inputClosure)
+	na.vfs.commit(len(head))
 
-	var outputs []VFS
+	head = head[:len(head):len(head)]
+	inputs := na.inputList(head, inputClosure)
+	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
+
 	var stdoutPath VFS
 
 	if stdoutVFS != nil {
@@ -421,6 +445,10 @@ func emitPYRun(
 	for _, f := range stmt.OUTNoAutoFiles {
 		outputs = append(outputs, outVFSByToken[f.string()])
 	}
+
+	na.vfs.commit(len(outputs))
+
+	outputs = outputs[:len(outputs):len(outputs)]
 
 	cmd := Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}
 
@@ -440,8 +468,8 @@ func emitPYRun(
 		KV:             kv,
 		Outputs:        outputs,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        extraDepRefs,
-		ForeignDepRefs: toolRefs,
+		DepRefs:        na.noderefs.list(extraDepRefs...),
+		ForeignDepRefs: na.noderefs.list(toolRefs...),
 		Resources:      resources,
 	}
 
