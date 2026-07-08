@@ -355,7 +355,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 		ccParsed := concat(spec.genHParsed, spec.genCCExtras)
 
-		var psc []ARG
+		var psc []ANY
 
 		if p := d.perSrcCFlagsFor(internStr(srcRel).any()); p != nil {
 			psc = *p
@@ -797,7 +797,7 @@ type PbArgBlocks struct {
 
 func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
 	grpc bool, cppOutRoot string, liteHeaders bool,
-	extraProtocFlags []ARG, extraPlugins []ResolvedCPPProtoPlugin,
+	extraProtocFlags []ANY, extraPlugins []ResolvedCPPProtoPlugin,
 	protoInclude []VFS) *PbArgBlocks {
 	head := []ANY{
 		tc.Python3.any(),
@@ -844,7 +844,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		)
 	}
 
-	mid = appendArgAny(mid, extraProtocFlags)
+	mid = appendAnyLists(mid, extraProtocFlags)
 
 	mid = append(mid,
 		internV("--cpp_styleguide_out=:$(B)/", cppOutRoot).any(),

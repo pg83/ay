@@ -5,8 +5,7 @@ import (
 )
 
 var (
-	goCgoBaseCFlags    = []ARG{internArg("-w"), internArg("-pthread"), internArg("-fpic")}
-	goCgoBaseCFlagsStr = []ANY{internStr("-w").any(), internStr("-pthread").any(), internStr("-fpic").any()}
+	goCgoBaseCFlags    = []ANY{internStr("-w").any(), internStr("-pthread").any(), internStr("-fpic").any()}
 	goCgoCopyCmdHead   = []ANY{wrapccPython3STR.any(), copyFsToolsVFS.any(), internStr("copy").any()}
 	goCgo1ToolChunk    = []ANY{str3.any(), strGoCgoTool.any(), internStr("-objdir").any()}
 	goCgoImportStd     = []ANY{internStr("-import_runtime_cgo=false").any(), internStr("-import_syscall=false").any()}
@@ -61,28 +60,20 @@ func goModuleUsesCgoC(d *ModuleData) bool {
 	return len(goModuleCgoCFiles(d))+len(goModuleCgoSFiles(d))+len(d.cgoSrcs) > 0
 }
 
-func goCgoCFlags(d *ModuleData) []ARG {
+func goCgoCFlags(d *ModuleData) []ANY {
 	if len(d.cgoCflags) == 0 {
 		return goCgoBaseCFlags
 	}
 
-	out := make([]ARG, 0, len(goCgoBaseCFlags)+len(d.cgoCflags))
+	out := make([]ANY, 0, len(goCgoBaseCFlags)+len(d.cgoCflags))
 
 	out = append(out, goCgoBaseCFlags...)
 
 	for _, f := range d.cgoCflags {
-		out = append(out, internArgSTR(f))
+		out = append(out, f.any())
 	}
 
 	return out
-}
-
-func (e *EmitContext) goCgoCFlagsStr() []ANY {
-	if len(e.d.cgoCflags) == 0 {
-		return goCgoBaseCFlagsStr
-	}
-
-	return e.ctx.na.anyConcat(goCgoBaseCFlagsStr, e.ctx.na.anyChunk(e.d.cgoCflags))
 }
 
 func (e *EmitContext) goCgoIncludeArgs() []ANY {
@@ -283,7 +274,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	na.anys.commit(len(files))
 
 	inclArgs := e.goCgoIncludeArgs()
-	cflagsStr := e.goCgoCFlagsStr()
+	cflagsStr := goCgoCFlags(e.d)
 	inputCap := 1 + len(files)
 
 	for _, f := range files {
@@ -394,7 +385,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	na.vfs.commit(nl)
 
 	leaves := cgoLeaves[:nl:nl]
-	cgo2Spec := &CompileSpec{CFlags: append(goCgoCFlags(d), argWnoUnusedVariable)}
+	cgo2Spec := &CompileSpec{CFlags: append(goCgoCFlags(d), argWnoUnusedVariable.any())}
 
 	dirPrefix := dir + "/"
 
@@ -491,7 +482,7 @@ func (e *EmitContext) flushGoCgo2() {
 	na.vfs.commit(ko)
 
 	inclArgs := e.goCgoIncludeArgs()
-	cflagsStr := e.goCgoCFlagsStr()
+	cflagsStr := goCgoCFlags(e.d)
 	linkOFlags := e.goCgoLinkOFlags()
 	linkOScripts := ctx.scripts[linkOScriptVFS]
 	copyFsScripts := ctx.scripts[copyFsToolsVFS]

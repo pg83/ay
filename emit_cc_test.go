@@ -233,7 +233,7 @@ func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 	emit := newStreamingEmitter(nil)
 	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{
 		Flags:    FlagSet{NoCompilerWarnings: true},
-		CXXFlags: internArgs([]string{"-D_LIBCPP_BUILDING_LIBRARY"}),
+		CXXFlags: internAnys([]string{"-D_LIBCPP_BUILDING_LIBRARY"}),
 	}}
 	inst := targetInstance("contrib/libs/cxxsupp/libcxx")
 	composeCCNode(inst, source("contrib/libs/cxxsupp/libcxx/src/algorithm.cpp"), withCCBlocks(inst.Platform, in), testHostP, emit)
@@ -271,7 +271,7 @@ func TestEmitCC_OwnCXXFlags_SlotsAfterSuppressionBlock(t *testing.T) {
 }
 
 func TestEmitCC_COnlyFlags_AppliesOnlyToCSources(t *testing.T) {
-	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{COnlyFlags: internArgs([]string{"-Wno-narrowing"})}}
+	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{COnlyFlags: internAnys([]string{"-Wno-narrowing"})}}
 
 	emitC := newStreamingEmitter(nil)
 	composeCCNode(targetInstance("build/cow/on"), source("build/cow/on/lib.c"), withCCBlocks(targetInstance("build/cow/on").Platform, in), testHostP, emitC)

@@ -262,7 +262,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	for _, src := range goModuleCgoSFiles(d) {
 		if d.perSrcCFlags == nil {
-			d.perSrcCFlags = map[ANY][]ARG{}
+			d.perSrcCFlags = map[ANY][]ANY{}
 		}
 
 		d.perSrcCFlags[src.any()] = goCgoCFlags(d)

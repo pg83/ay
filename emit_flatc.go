@@ -109,7 +109,7 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, srcRel string)
 	return out
 }
 
-func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ARG, transitiveImports Closure, moduleTag STR, tc ModuleToolchain, emit *StreamingEmitter, v *FlatcVariant, genDeps []NodeRef) (NodeRef, VFS, VFS, VFS) {
+func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ANY, transitiveImports Closure, moduleTag STR, tc ModuleToolchain, emit *StreamingEmitter, v *FlatcVariant, genDeps []NodeRef) (NodeRef, VFS, VFS, VFS) {
 	na := emit.nodeArenas()
 	headerVFS := build(srcRel, ".h")
 	cppVFS := build(srcRel, ".cpp")
@@ -117,7 +117,7 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	cmdArgs := na.chunkList(na.anyList(tc.Python3.any(), (flatcWrapperVFS).any(), (flatcBinary).any()), v.constFlags)
 
 	if len(flatcFlags) > 0 {
-		cmdArgs = append(cmdArgs, na.argAnyList(flatcFlags))
+		cmdArgs = append(cmdArgs, na.anyConcat(flatcFlags))
 	}
 
 	cmdArgs = append(cmdArgs, v.ioLeadArgs, []ANY{headerVFS.any(), srcVFS.any()})

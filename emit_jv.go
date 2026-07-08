@@ -55,7 +55,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 			ClosureLeaves:  leaves,
-			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.any()), CFlags: []ARG{argWnoUnusedVariable}},
+			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.any()), CFlags: []ANY{argWnoUnusedVariable.any()}},
 		})
 
 		leafSet := make(map[VFS]bool, len(leaves))

@@ -105,7 +105,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	}
 
 	if preprocessHeader {
-		spec.CFlags = append(spec.CFlags, argWnoUnusedButSetVariable, argWnoDeprecatedCopy)
+		spec.CFlags = append(spec.CFlags, argWnoUnusedButSetVariable.any(), argWnoDeprecatedCopy.any())
 	}
 
 	reg.register(&GeneratedFileInfo{
@@ -121,7 +121,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	head := make([]ANY, 0, 6+len(d.cc.BisonFlags))
 
 	head = append(head, bisonBin.any(), argV.any())
-	head = appendArgAny(head, d.cc.BisonFlags)
+	head = appendAnyLists(head, d.cc.BisonFlags)
 
 	head = append(head,
 		internV("--defines=", headerVFS.prefix(), headerVFS.relString()).any(),

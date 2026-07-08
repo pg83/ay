@@ -68,7 +68,7 @@ func (e *EmitContext) emitSwigC() {
 
 		reg := e.codegen
 
-		var psc []ARG
+		var psc []ANY
 
 		if p := d.perSrcCFlagsFor(cOutVFS.any()); p != nil {
 			psc = *p

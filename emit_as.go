@@ -73,16 +73,16 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 	cmdArgs := make([]ANY, 0, fixed+len(includes))
 
 	cmdArgs = append(cmdArgs, in.TC.CC.any(), instance.Platform.TargetArg.any())
-	cmdArgs = appendArgAny(cmdArgs, bundle.ArchArgs)
+	cmdArgs = appendAnyLists(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, instance.Platform.SysrootArgs...)
 
 	if in.ForceConsistentDebug {
-		cmdArgs = appendArgAny(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir)
+		cmdArgs = appendAnyLists(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir)
 	}
 
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(instance.Platform))
-	cmdArgs = appendArgAny(cmdArgs, in.SFlags)
-	cmdArgs = appendArgAny(cmdArgs, in.PerSourceCFlags)
+	cmdArgs = appendAnyLists(cmdArgs, in.SFlags)
+	cmdArgs = appendAnyLists(cmdArgs, in.PerSourceCFlags)
 	cmdArgs = append(cmdArgs, argDashC.any(), argDashO.any(), (outVFS).any(), (inVFS).any())
 	cmdArgs = append(cmdArgs, includes...)
 
@@ -92,7 +92,7 @@ func composeASCmdArgs(instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInp
 func composeASIncludes(in ModuleCCInputs) []ANY {
 	out := make([]ANY, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
 
-	out = appendArgAny(out, ccIncludesPrefix)
+	out = appendAnyLists(out, ccIncludesPrefix)
 	out = appendAddIncl(out, in.AddIncl, in.InclArgs)
 	out = appendAddIncl(out, in.PeerAddInclGlobal, in.InclArgs)
 

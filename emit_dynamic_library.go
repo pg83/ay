@@ -230,10 +230,10 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		}
 	}
 
-	var peerCFlagsGlobal []ARG
-	var peerCXXFlagsGlobal []ARG
-	var peerCOnlyFlagsGlobal []ARG
-	var peerRPathFlagsGlobal []ARG
+	var peerCFlagsGlobal []ANY
+	var peerCXXFlagsGlobal []ANY
+	var peerCOnlyFlagsGlobal []ANY
+	var peerRPathFlagsGlobal []ANY
 
 	deduper.reset()
 

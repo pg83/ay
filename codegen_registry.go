@@ -14,14 +14,14 @@ type GeneratedFileInfo struct {
 }
 
 type CompileSpec struct {
-	CFlags           []ARG
+	CFlags           []ANY
 	FlatOutput       bool
 	Variant          *string
 	ObjectSuffixStem *string
 	Py3Suffix        bool
 	ForceCxx         bool
 	EnvAddIncl       []VFS
-	EnvCFlags        []ARG
+	EnvCFlags        []ANY
 }
 
 type CodegenRegistry struct {

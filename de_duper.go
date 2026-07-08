@@ -29,6 +29,8 @@ func (dd *DeDuper) reset() {
 }
 
 func (dd *DeDuper) add(id uint32) bool {
+	dd.gen.ensureLen(int(id) + 1)
+
 	if dd.gen.s[id] == dd.epoch {
 		return false
 	}

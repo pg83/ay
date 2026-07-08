@@ -148,12 +148,12 @@ type ModuleEmitResult struct {
 	ProtoInclude                    []VFS
 	AddInclOneLevel                 []VFS
 	AddInclUserGlobal               []VFS
-	CFlagsGlobal                    []ARG
-	CXXFlagsGlobal                  []ARG
-	COnlyFlagsGlobal                []ARG
-	ObjAddLibsGlobal                []ARG
-	LDFlagsGlobal                   []ARG
-	RPathFlagsGlobal                []ARG
+	CFlagsGlobal                    []ANY
+	CXXFlagsGlobal                  []ANY
+	COnlyFlagsGlobal                []ANY
+	ObjAddLibsGlobal                []ANY
+	LDFlagsGlobal                   []ANY
+	RPathFlagsGlobal                []ANY
 	PeerArchiveClosureRefs          []NodeRef
 	PeerArchiveClosurePaths         []VFS
 	isPyLibrary                     bool
@@ -205,7 +205,7 @@ type GenCtx struct {
 	memo             *IntValueMap[*ModuleEmitResult]
 	refSlices        *SliceCache[NodeRef]
 	vfsSlices        *SliceCache[VFS]
-	argSlices        *SliceCache[ARG]
+	argSlices        *SliceCache[ANY]
 	declSlices       *SliceCache[ResourceDecl]
 	walking          map[ModuleInstance]bool
 	cyclesTolerated  int
@@ -383,7 +383,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 		refSlices:  newSliceCache[NodeRef](1 << 12),
 		vfsSlices:  newSliceCache[VFS](1 << 12),
-		argSlices:  newSliceCache[ARG](1 << 8),
+		argSlices:  newSliceCache[ANY](1 << 8),
 		declSlices: newSliceCache[ResourceDecl](1 << 3),
 
 		walking:   make(map[ModuleInstance]bool),
@@ -985,16 +985,16 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	var peerObjAddLibsGlobal []ARG
-	var peerLDFlagsGlobal []ARG
-	var peerRPathFlagsGlobal []ARG
+	var peerObjAddLibsGlobal []ANY
+	var peerLDFlagsGlobal []ANY
+	var peerRPathFlagsGlobal []ANY
 
 	peerAddInclGlobal := make([]VFS, 0, 16)
 
 	var oneLevelOnlyPaths map[VFS]struct{}
-	var peerCFlagsGlobal []ARG
-	var peerCXXFlagsGlobal []ARG
-	var peerCOnlyFlagsGlobal []ARG
+	var peerCFlagsGlobal []ANY
+	var peerCXXFlagsGlobal []ANY
+	var peerCOnlyFlagsGlobal []ANY
 
 	allPeers, peerKinds = applyDeferredPeerOrder(d.moduleStmt.Name, allPeers, peerKinds, allocatorExplicitPeers)
 
@@ -1474,7 +1474,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		hasNostdinc := false
 
 		for _, a := range peerCXXFlagsGlobal {
-			if a == baseUnitCxxNostdinc {
+			if a == baseUnitCxxNostdinc.any() {
 				hasNostdinc = true
 
 				break
@@ -1482,7 +1482,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		if !hasNostdinc {
-			peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, baseUnitCxxNostdinc)
+			peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, baseUnitCxxNostdinc.any())
 		}
 	}
 
@@ -1627,10 +1627,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ldObjcopyRefs = append(globalRefs, ldObjcopyRefs...)
 		ldObjcopyPaths = append(globalOutputs, ldObjcopyPaths...)
 
-		var ownRPathFlags []ARG
+		var ownRPathFlags []ANY
 
 		if len(peerDynamicPaths) > 0 {
-			ownRPathFlags = append([]ARG(nil), peerRPathFlagsGlobal...)
+			ownRPathFlags = append([]ANY(nil), peerRPathFlagsGlobal...)
 		}
 
 		wantsStrip := (d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Program) && !d.noStrip &&

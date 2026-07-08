@@ -41,23 +41,23 @@ func ragel6OutName(base string) string {
 	return stem + ragel6DefaultOutExt
 }
 
-func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ARG, closure []VFS, producerRefs []NodeRef, id NodeRef, emit *StreamingEmitter) {
+func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ANY, closure []VFS, producerRefs []NodeRef, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 	outVFS := ragel6OutVFS(instance, srcRel)
 	effectiveFlags := ragel6Flags
 
 	if len(effectiveFlags) == 0 {
 		if instance.Platform.RagelOptimized {
-			effectiveFlags = []ARG{ragel6ArgOptimized}
+			effectiveFlags = []ANY{ragel6ArgOptimized.any()}
 		} else {
-			effectiveFlags = []ARG{ragel6ArgDebug}
+			effectiveFlags = []ANY{ragel6ArgDebug.any()}
 		}
 	}
 
 	head := make([]ANY, 0, 1+len(effectiveFlags))
 
 	head = append(head, (ragel6BinaryPath).any())
-	head = appendArgAny(head, effectiveFlags)
+	head = appendAnyLists(head, effectiveFlags)
 
 	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.anyList((outVFS).any(), (inVFS).any()))
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
@@ -102,7 +102,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 
 	r6Ref := ctx.emit.reserve()
 
-	var psc []ARG
+	var psc []ANY
 
 	if p := d.perSrcCFlagsFor(src); p != nil {
 		psc = *p
@@ -115,7 +115,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r6Parsed},
 		Compile: &CompileSpec{
 			FlatOutput: d.flatSrc(src),
-			CFlags:     concat(psc, []ARG{argWnoImplicitFallthrough}),
+			CFlags:     concat(psc, []ANY{argWnoImplicitFallthrough.any()}),
 		},
 	})
 

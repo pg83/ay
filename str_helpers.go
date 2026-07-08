@@ -9,7 +9,7 @@ func strBytes(s string) []byte {
 	return unsafe.Slice(unsafe.StringData(s), len(s))
 }
 
-func appendArgGroupStr(dst []ANY, srcs ...[]ARG) []ANY {
+func appendArgGroupStr(dst []ANY, srcs ...[]ANY) []ANY {
 	for _, s := range srcs {
 		for _, a := range s {
 			for _, tok := range strings.Fields(a.string()) {
@@ -51,11 +51,11 @@ func strStrs(as []STR) []string {
 	return appendStrStrs(make([]string, 0, len(as)), as)
 }
 
-func internArgsFromSTR(items []STR) []ARG {
-	out := make([]ARG, 0, len(items))
+func internAnysFromSTR(items []STR) []ANY {
+	out := make([]ANY, 0, len(items))
 
 	for _, s := range items {
-		out = append(out, internArg(s.string()))
+		out = append(out, s.any())
 	}
 
 	return out
@@ -101,11 +101,9 @@ func strsContain(items []STR, s string) bool {
 	return false
 }
 
-func appendArgAny(dst []ANY, srcs ...[]ARG) []ANY {
-	for _, src := range srcs {
-		for _, a := range src {
-			dst = append(dst, a.any())
-		}
+func appendAnyLists(dst []ANY, srcs ...[]ANY) []ANY {
+	for _, s := range srcs {
+		dst = append(dst, s...)
 	}
 
 	return dst

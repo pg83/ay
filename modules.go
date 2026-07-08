@@ -154,19 +154,19 @@ type ModuleData struct {
 	asmAddIncl               []VFS
 	protoAddInclGlobal       []VFS
 	llvmBc                   []*LlvmBcStmt
-	cFlags                   []ARG
-	cFlagsGlobal             []ARG
-	cxxFlags                 []ARG
-	cxxFlagsGlobal           []ARG
-	cOnlyFlags               []ARG
-	cOnlyFlagsGlobal         []ARG
-	sFlags                   []ARG
-	protocFlags              []ARG
-	flatcFlags               []ARG
-	clangWarnings            []ARG
-	ldFlags                  []ARG
-	rpathFlagsGlobal         []ARG
-	objAddLibsGlobal         []ARG
+	cFlags                   []ANY
+	cFlagsGlobal             []ANY
+	cxxFlags                 []ANY
+	cxxFlagsGlobal           []ANY
+	cOnlyFlags               []ANY
+	cOnlyFlagsGlobal         []ANY
+	sFlags                   []ANY
+	protocFlags              []ANY
+	flatcFlags               []ANY
+	clangWarnings            []ANY
+	ldFlags                  []ANY
+	rpathFlagsGlobal         []ANY
+	objAddLibsGlobal         []ANY
 	srcDirs                  []VFS
 	flags                    FlagSet
 	hadAllocator             bool
@@ -181,7 +181,7 @@ type ModuleData struct {
 	noImportTracing          bool
 	usePython3               bool
 	useCommonGoogleAPIs      bool
-	moduleScopeCFlags        []ARG
+	moduleScopeCFlags        []ANY
 	pythonSQLite3            bool
 	pyNamespace              *STR
 	protoNamespace           *STR
@@ -197,7 +197,7 @@ type ModuleData struct {
 	exportsScript            *STR
 	ldPlugins                []STR
 	arPlugin                 *STR
-	perSrcCFlags             map[ANY][]ARG
+	perSrcCFlags             map[ANY][]ANY
 	hasFbs                   bool
 	hasFbs64                 bool
 	defaultVars              map[STR]STR
@@ -239,8 +239,8 @@ type ModuleData struct {
 	pyRegister               []STR
 	pyRegisterExplicit       []bool
 	simdSrcs                 []SimdSrc
-	ragel6Flags              []ARG
-	bisonFlags               []ARG
+	ragel6Flags              []ANY
+	bisonFlags               []ANY
 	conflictMod              *ModuleStmt
 	resourceDeclStmts        []*DeclareResourceStmt
 	primaryOutput            string
@@ -250,7 +250,7 @@ type ModuleData struct {
 	cc                       ModuleCompileEnv
 }
 
-func (d *ModuleData) perSrcCFlagsFor(src ANY) *[]ARG {
+func (d *ModuleData) perSrcCFlagsFor(src ANY) *[]ANY {
 	if len(d.perSrcCFlags) == 0 {
 		return nil
 	}
@@ -322,9 +322,9 @@ func (d *ModuleData) srcMetaOf(src ANY) SrcMeta {
 	return m
 }
 
-func muslCFlags(on bool) []ARG {
+func muslCFlags(on bool) []ANY {
 	if on {
-		return []ARG{argDMusl}
+		return []ANY{argDMusl.any()}
 	}
 
 	return nil
@@ -350,7 +350,7 @@ type PySrcGroup struct {
 
 type SrcFlatEntry struct {
 	Src   STR
-	Flags []ARG
+	Flags []ANY
 	Seq   int
 }
 
@@ -901,7 +901,7 @@ func applyPython3AddIncl(modulePath string, d *ModuleData) {
 	}
 
 	d.usePython3 = true
-	d.moduleScopeCFlags = append(d.moduleScopeCFlags, argDusePython3)
+	d.moduleScopeCFlags = append(d.moduleScopeCFlags, argDusePython3.any())
 	d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, pythonIncludeDir)
 	d.addIncl = append(d.addIncl, pythonIncludeDir)
@@ -1097,7 +1097,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			d.setVars[internStr(v.Name)] = internStr(value)
 
 			if v.Name == "RAGEL6_FLAGS" {
-				d.ragel6Flags = internArgs(strings.Fields(value))
+				d.ragel6Flags = internAnys(strings.Fields(value))
 			}
 		case *EndStmt:
 
@@ -1123,18 +1123,18 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
 		case *CFlagsStmt:
 
-			d.cFlagsGlobal = append(d.cFlagsGlobal, internArgsFromSTR(expandStmtTokensSTR(v.GlobalFlags, env))...)
-			d.cFlags = append(d.cFlags, internArgsFromSTR(expandStmtTokensSTR(v.OwnFlags, env))...)
+			d.cFlagsGlobal = append(d.cFlagsGlobal, internAnysFromSTR(expandStmtTokensSTR(v.GlobalFlags, env))...)
+			d.cFlags = append(d.cFlags, internAnysFromSTR(expandStmtTokensSTR(v.OwnFlags, env))...)
 		case *CXXFlagsStmt:
 
-			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, internArgsFromSTR(expandStmtTokensSTR(v.GlobalFlags, env))...)
-			d.cxxFlags = append(d.cxxFlags, internArgsFromSTR(expandStmtTokensSTR(v.OwnFlags, env))...)
+			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, internAnysFromSTR(expandStmtTokensSTR(v.GlobalFlags, env))...)
+			d.cxxFlags = append(d.cxxFlags, internAnysFromSTR(expandStmtTokensSTR(v.OwnFlags, env))...)
 		case *CONLYFlagsStmt:
 
-			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, internArgsFromSTR(expandStmtTokensSTR(v.GlobalFlags, env))...)
-			d.cOnlyFlags = append(d.cOnlyFlags, internArgsFromSTR(expandStmtTokensSTR(v.OwnFlags, env))...)
+			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, internAnysFromSTR(expandStmtTokensSTR(v.GlobalFlags, env))...)
+			d.cOnlyFlags = append(d.cOnlyFlags, internAnysFromSTR(expandStmtTokensSTR(v.OwnFlags, env))...)
 		case *LDFlagsStmt:
-			d.ldFlags = append(d.ldFlags, internArgsFromSTR(expandStmtTokensSTR(v.Flags, env))...)
+			d.ldFlags = append(d.ldFlags, internAnysFromSTR(expandStmtTokensSTR(v.Flags, env))...)
 		case *SrcDirStmt:
 
 			for _, dirTok := range expandStmtTokensSTR(v.Dirs, env) {
@@ -1658,7 +1658,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.cgoCflags = append(d.cgoCflags, expanded...)
 
 		for _, f := range expanded {
-			d.cFlags = append(d.cFlags, internArgSTR(f))
+			d.cFlags = append(d.cFlags, internArgSTR(f).any())
 		}
 	case tokMavenGroupId:
 
@@ -1729,7 +1729,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokBisonFlags:
 
 		for _, a := range v.Args {
-			d.bisonFlags = append(d.bisonFlags, internArg(a.string()))
+			d.bisonFlags = append(d.bisonFlags, internArg(a.string()).any())
 		}
 	case tokGrpc:
 		d.grpc = true
@@ -1745,32 +1745,32 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
 		}
 
-		d.cxxFlags = append(d.cxxFlags, argDuseCurrentUdfAbiVersion)
+		d.cxxFlags = append(d.cxxFlags, argDuseCurrentUdfAbiVersion.any())
 	case tokYqlAbiVersion:
 		if len(v.Args) != 3 {
 			throwFmt("YQL_ABI_VERSION expects exactly 3 arguments, got %d", len(v.Args))
 		}
 
 		d.cxxFlags = append(d.cxxFlags,
-			internArg("-DUDF_ABI_VERSION_MAJOR="+v.Args[0].string()),
-			internArg("-DUDF_ABI_VERSION_MINOR="+v.Args[1].string()),
-			internArg("-DUDF_ABI_VERSION_PATCH="+v.Args[2].string()),
+			internArg("-DUDF_ABI_VERSION_MAJOR="+v.Args[0].string()).any(),
+			internArg("-DUDF_ABI_VERSION_MINOR="+v.Args[1].string()).any(),
+			internArg("-DUDF_ABI_VERSION_PATCH="+v.Args[2].string()).any(),
 		)
 	case tokProtocFatalWarnings:
 		if len(v.Args) != 0 {
 			throwFmt("PROTOC_FATAL_WARNINGS expects exactly 0 arguments, got %d", len(v.Args))
 		}
 
-		d.protocFlags = append(d.protocFlags, argFatalWarnings)
+		d.protocFlags = append(d.protocFlags, argFatalWarnings.any())
 	case tokUseCommonGoogleApis:
 
 		d.useCommonGoogleAPIs = true
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]STR{internStr(googleapisPeer)}, d.peerdirs...)
 	case tokClangWarnings:
-		d.clangWarnings = append(d.clangWarnings, internArgsFromSTR(expandStmtTokensSTR(v.Args, env))...)
+		d.clangWarnings = append(d.clangWarnings, internAnysFromSTR(expandStmtTokensSTR(v.Args, env))...)
 	case tokFlatcFlags:
-		d.flatcFlags = append(d.flatcFlags, internArgsFromSTR(v.Args)...)
+		d.flatcFlags = append(d.flatcFlags, internAnysFromSTR(v.Args)...)
 	case tokCopyFile, tokCopyFileWithContext:
 		entry := parseCopyFileEntry(strStrings(v.Args), v.Name == tokCopyFileWithContext, v.Line)
 
@@ -1932,10 +1932,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		filename := v.Args[0]
 
-		var extras []ARG
+		var extras []ANY
 
 		if len(v.Args) > 1 {
-			extras = internArgsFromSTR(v.Args[1:])
+			extras = internAnysFromSTR(v.Args[1:])
 		}
 
 		if slices.Contains(d.srcs, filename) {
@@ -1955,7 +1955,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		if extras != nil {
 			if d.perSrcCFlags == nil {
-				d.perSrcCFlags = map[ANY][]ARG{}
+				d.perSrcCFlags = map[ANY][]ANY{}
 			}
 
 			d.perSrcCFlags[pathAny(filename)] = append(d.perSrcCFlags[pathAny(filename)], extras...)
@@ -2043,7 +2043,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		if len(libs) > 0 {
-			d.objAddLibsGlobal = append(d.objAddLibsGlobal, internArg(strings.Join(libs, " ")))
+			d.objAddLibsGlobal = append(d.objAddLibsGlobal, internArg(strings.Join(libs, " ")).any())
 		}
 	case tokUsePython3:
 
@@ -2428,15 +2428,15 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if len(v.Args) >= 1 {
 			switch v.Args[0].string() {
 			case "SFLAGS":
-				d.sFlags = append(d.sFlags, internArgsFromSTR(v.Args[1:])...)
+				d.sFlags = append(d.sFlags, internAnysFromSTR(v.Args[1:])...)
 			case "_PROTOC_FLAGS":
-				d.protocFlags = append(d.protocFlags, internArgsFromSTR(v.Args[1:])...)
+				d.protocFlags = append(d.protocFlags, internAnysFromSTR(v.Args[1:])...)
 			case "RPATH_GLOBAL":
 				for _, argTok := range v.Args[1:] {
 					arg := argTok.string()
 
 					arg = strings.ReplaceAll(arg, `${"$"}`, "$")
-					d.rpathFlagsGlobal = append(d.rpathFlagsGlobal, internArg(arg))
+					d.rpathFlagsGlobal = append(d.rpathFlagsGlobal, internArg(arg).any())
 				}
 			}
 
@@ -2593,8 +2593,8 @@ func appendPyRegister(d *ModuleData, name string, explicit bool) {
 	mangled := pythonInitSuffix(name)
 
 	d.cFlags = append(d.cFlags,
-		internArg("-DPyInit_"+shortname+"=PyInit_"+mangled),
-		internArg("-Dinit_module_"+shortname+"=init_module_"+mangled),
+		internArg("-DPyInit_"+shortname+"=PyInit_"+mangled).any(),
+		internArg("-Dinit_module_"+shortname+"=init_module_"+mangled).any(),
 	)
 }
 

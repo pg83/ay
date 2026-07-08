@@ -167,7 +167,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 		len(bundle.ArchArgs)+len(bundle.CFlags)+len(warningBundle))
 
 	args = append(args, internStr(python).any(), internStr(clangWrapper).any(), argNo.any(), internStr(clangBC).any())
-	args = appendArgAny(args, ccIncludesPrefix)
+	args = appendAnyLists(args, ccIncludesPrefix)
 	args = appendAddIncl(args, in.AddIncl, in.InclArgs)
 
 	peerAddIncl := in.PeerAddInclGlobal
@@ -180,9 +180,9 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	args = appendAddIncl(args, peerAddIncl, in.InclArgs)
 	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(platform))
 	args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
-	args = appendArgAny(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket))
+	args = appendAnyLists(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket))
 	args = append(args, platform.TargetArg.any())
-	args = appendArgAny(args, bundle.ArchArgs)
+	args = appendAnyLists(args, bundle.ArchArgs)
 	args = append(args, argDashBBin.any())
 	args = append(args, argWnoUnknownWarningOption.any(), argEmitLlvm.any(), argDashC.any(), (inVFS).any(), argDashO.any(), (outVFS).any())
 

@@ -77,12 +77,12 @@ func TestNewPlatform_ParsesCompilerFlags(t *testing.T) {
 
 	p := newPlatform(newMemFS(nil), OSLinux, ISAAArch64, flags, `-O2 -DNAME="hello world"`, `-stdlib=libc++ -DCPP=1`)
 
-	if !reflect.DeepEqual(argStrs(p.CFlags), []string{"-O2", "-DNAME=hello world"}) {
-		t.Fatalf("CFlags = %#v", argStrs(p.CFlags))
+	if !reflect.DeepEqual(anyStrs(p.CFlags), []string{"-O2", "-DNAME=hello world"}) {
+		t.Fatalf("CFlags = %#v", anyStrs(p.CFlags))
 	}
 
-	if !reflect.DeepEqual(argStrs(p.CXXFlags), []string{"-stdlib=libc++", "-DCPP=1"}) {
-		t.Fatalf("CXXFlags = %#v", argStrs(p.CXXFlags))
+	if !reflect.DeepEqual(anyStrs(p.CXXFlags), []string{"-stdlib=libc++", "-DCPP=1"}) {
+		t.Fatalf("CXXFlags = %#v", anyStrs(p.CXXFlags))
 	}
 }
 
