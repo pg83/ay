@@ -208,6 +208,7 @@ type GenCtx struct {
 	descSlices       *SliceCache[DescProtoPeer]
 	tcMemo           map[ToolchainKey]ModuleToolchain
 	moduleStmts      map[string][]Stmt
+	ifEnvScratch     EnvStore
 	walking          map[ModuleInstance]bool
 	cyclesTolerated  int
 	traceStack       []string
@@ -776,8 +777,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	defer delete(ctx.walking, instance)
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
-	env := buildIfEnv(instance)
 	frame := ctx.pushFrame()
+	env := buildIfEnvInto(&frame.ifEnv, instance)
 
 	defer ctx.popFrame()
 
@@ -2021,6 +2022,7 @@ type ModuleFrame struct {
 	d                    ModuleData
 	emitCtx              EmitContext
 	peerCtx              PeerContext
+	ifEnv                EnvStore
 	allPeers             []string
 	peerKinds            []int
 	resolved             []ResolvedPeer

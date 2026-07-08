@@ -297,7 +297,7 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 
 	flags := d.flags
 	allocatorName := d.allocatorName
-	env := buildIfEnv(instance)
+	env := buildIfEnvInto(&e.ctx.ifEnvScratch, instance)
 	muslLite := env.bool(envMUSL_LITE) || d.muslLite
 
 	rc := ImplicitPeerCtx{

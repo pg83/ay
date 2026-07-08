@@ -719,6 +719,7 @@ func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleIns
 
 		d.moduleScopeCFlags = grown
 	}
+
 	d.addIncl = dedup(d.addIncl, nil)
 	d.addInclGlobal = dedup(d.addInclGlobal, nil)
 
@@ -1326,6 +1327,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			ensureResourcePeer(modulePath, d)
 
 			before := len(d.resources)
+
 			d.resources = expandResourceFiles(d.resources, anyStrs(expandStmtTokens(v.Args, env)))
 
 			if len(d.resources) > before {
@@ -1335,6 +1337,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			ensureResourcePeer(modulePath, d)
 
 			before := len(d.resources)
+
 			d.resources = expandAllResourceFiles(d.resources, fs, modulePath, env, v)
 
 			if len(d.resources) > before {
@@ -3059,7 +3062,11 @@ func isResourceContainerType(name TOK) bool {
 }
 
 func buildIfEnv(instance ModuleInstance) Environment {
-	env := instance.Platform.ifEnv.clone()
+	return buildIfEnvInto(&EnvStore{}, instance)
+}
+
+func buildIfEnvInto(store *EnvStore, instance ModuleInstance) Environment {
+	env := instance.Platform.ifEnv.cloneInto(store)
 
 	if instance.Path != 0 {
 		env.setVFS(envCURDIR, instance.Path)

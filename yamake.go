@@ -6,6 +6,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+)
+
+var (
+	parseBufPool = sync.Pool{New: func() any { return new([]byte) }}
+	parserPool   = sync.Pool{New: func() any { return &Parser{lex: &Lexer{}} }}
 )
 
 var runAntlrKeywords = strKeySet(
@@ -54,6 +60,10 @@ var structCodegenPeerdirs = anysOf(
 	"kernel/struct_codegen/metadata",
 	"kernel/struct_codegen/reflection",
 )
+
+var includeStatePool = sync.Pool{New: func() any {
+	return &IncludeState{once: newIntSet(16), env: newEnvironment()}
+}}
 
 const (
 	splitCodegenDefaultOutNum = 25
@@ -386,7 +396,11 @@ func (e *ParseError) Error() string {
 
 func parseFile(fs FS, rel string) (mf *MakeFile, err error) {
 	exc := try(func() {
-		mf = throw2(parse(fs, cleanRel(rel), readOwnedForParse(fs, cleanRel(rel))))
+		bp := readForParse(fs, cleanRel(rel))
+
+		defer releaseParseBuf(bp)
+
+		mf = throw2(parse(fs, cleanRel(rel), *bp))
 	})
 
 	if exc != nil {
@@ -397,8 +411,16 @@ func parseFile(fs FS, rel string) (mf *MakeFile, err error) {
 	return mf, err
 }
 
-func readOwnedForParse(fs FS, rel string) []byte {
-	return append([]byte(nil), fs.read(rel)...)
+func readForParse(fs FS, rel string) *[]byte {
+	bp := parseBufPool.Get().(*[]byte)
+
+	*bp = append((*bp)[:0], fs.read(rel)...)
+
+	return bp
+}
+
+func releaseParseBuf(bp *[]byte) {
+	parseBufPool.Put(bp)
 }
 
 type TokKind int
@@ -418,17 +440,6 @@ type Lexer struct {
 	col      int
 	prevByte byte
 	tokBuf   []byte
-}
-
-func newLexer(name string, src []byte) *Lexer {
-	return &Lexer{
-		name:     name,
-		src:      src,
-		pos:      0,
-		line:     1,
-		col:      1,
-		prevByte: 0,
-	}
 }
 
 func (l *Lexer) throwParse(line, col int, format string, args ...any) {
@@ -785,7 +796,9 @@ func parseInternal(fs FS, name string, src []byte) *MakeFile {
 }
 
 func parseInternalWithStack(fs FS, name string, src []byte, stack []string) *MakeFile {
-	st := newIncludeState()
+	st := acquireIncludeState()
+
+	defer releaseIncludeState(st)
 
 	st.env.setString(envMODDIR, pathDir(name))
 
@@ -795,7 +808,17 @@ func parseInternalWithStack(fs FS, name string, src []byte, stack []string) *Mak
 func parseInternalWithState(fs FS, name string, src []byte, stack []string, includes *IncludeState) *MakeFile {
 	src = bytes.TrimPrefix(src, []byte{0xEF, 0xBB, 0xBF})
 
-	p := &Parser{lex: newLexer(name, src), name: name, includeStack: stack, includes: includes, fs: fs}
+	p := parserPool.Get().(*Parser)
+	lex := p.lex
+	tokBuf := lex.tokBuf
+	condScratch := p.condScratch
+	condTokBuf := p.condTokBuf
+
+	defer parserPool.Put(p)
+
+	*lex = Lexer{name: name, src: src, line: 1, col: 1, tokBuf: tokBuf[:0]}
+	*p = Parser{lex: lex, name: name, includeStack: stack, includes: includes, fs: fs, condScratch: condScratch[:0], condTokBuf: condTokBuf[:0]}
+
 	mf := &MakeFile{Path: name}
 
 	mf.Stmts, _ = p.parseStmts(termTopLevel)
@@ -804,12 +827,22 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 }
 
 type IncludeState struct {
-	once map[string]struct{}
+	once *IntSet
 	env  Environment
 }
 
-func newIncludeState() *IncludeState {
-	return &IncludeState{once: map[string]struct{}{}, env: newEnvironment()}
+func acquireIncludeState() *IncludeState {
+	st := includeStatePool.Get().(*IncludeState)
+
+	st.once.reset()
+	st.env.s.val = st.env.s.val[:0]
+	st.env.s.kind = st.env.s.kind[:0]
+
+	return st
+}
+
+func releaseIncludeState(st *IncludeState) {
+	includeStatePool.Put(st)
 }
 
 type StmtTerminator int
@@ -897,7 +930,7 @@ func (p *Parser) applyIncludeOnce(nameTok Token) {
 		return
 	}
 
-	p.includes.once[p.name] = struct{}{}
+	p.includes.once.put(uint64(internStr(p.name).strID()), true)
 }
 
 func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
@@ -2004,7 +2037,7 @@ func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt
 		target = cleanRel(joinRel(pathDir(p.name), rel))
 	}
 
-	if _, skip := p.includes.once[target]; skip {
+	if seen, _ := p.includes.once.get(uint64(internStr(target).strID())); seen {
 		return into
 	}
 
@@ -2031,8 +2064,11 @@ func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt
 		return into
 	}
 
-	data := readOwnedForParse(p.fs, target)
-	included := parseInternalWithState(p.fs, target, data, chain, p.includes)
+	bp := readForParse(p.fs, target)
+
+	defer releaseParseBuf(bp)
+
+	included := parseInternalWithState(p.fs, target, *bp, chain, p.includes)
 
 	return append(into, included.Stmts...)
 }

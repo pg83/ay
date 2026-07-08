@@ -65,7 +65,7 @@ func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data []byte, a *BumpAlloc
 			return
 		}
 
-		k = addDirective(block, k, IncludeDirective{kind: kind, target: includeTarget(internStr(target).any())})
+		k = addDirective(block, k, IncludeDirective{kind: kind, target: includeTarget(target.any())})
 	})
 
 	local := block[:k]
@@ -97,11 +97,11 @@ func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data []byte, a *BumpAlloc
 	return set
 }
 
-func parseProtoImportLine(line []byte) (string, IncludeKind, bool) {
+func parseProtoImportLine(line []byte) (STR, IncludeKind, bool) {
 	b := bytes.TrimSpace(line)
 
 	if len(b) == 0 {
-		return "", includeSystem, false
+		return 0, includeSystem, false
 	}
 
 	if idx := bytes.Index(b, protoLineComment); idx >= 0 {
@@ -109,13 +109,13 @@ func parseProtoImportLine(line []byte) (string, IncludeKind, bool) {
 	}
 
 	if !bytes.HasPrefix(b, protoImportKw) {
-		return "", includeSystem, false
+		return 0, includeSystem, false
 	}
 
-	trimmed := string(b)
+	trimmed := bytesString(b)
 
 	if isParserIdentContinuation(trimmed, len("import")) {
-		return "", includeSystem, false
+		return 0, includeSystem, false
 	}
 
 	rest := strings.TrimSpace(trimmed[len("import"):])
@@ -128,5 +128,9 @@ func parseProtoImportLine(line []byte) (string, IncludeKind, bool) {
 
 	target, kind, ok := parseDelimitedIncludeTarget(rest)
 
-	return target, kind, ok
+	if !ok {
+		return 0, kind, false
+	}
+
+	return internBytes(strBytes(target)), kind, true
 }

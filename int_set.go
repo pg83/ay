@@ -28,6 +28,13 @@ func newIntSet(hint int) *IntSet {
 	return s
 }
 
+func (s *IntSet) reset() {
+	clear(s.keys)
+	clear(s.bits)
+
+	s.count = 0
+}
+
 func (s *IntSet) alloc(capacity int) {
 	s.keys = make([]uint64, capacity)
 	s.bits = make([]uint64, (capacity+63)/64)

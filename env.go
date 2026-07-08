@@ -28,6 +28,18 @@ func (s *EnvStore) ensure(e ENV) {
 		n = int(e) + 1
 	}
 
+	if cap(s.kind) >= n && cap(s.val) >= n {
+		old := len(s.kind)
+
+		s.kind = s.kind[:n]
+		s.val = s.val[:n]
+
+		clear(s.kind[old:])
+		clear(s.val[old:])
+
+		return
+	}
+
 	nk := make([]EnvKind, n)
 
 	copy(nk, s.kind)
@@ -123,6 +135,13 @@ func (e Environment) clone() Environment {
 		val:  append([]STR(nil), e.s.val...),
 		kind: append([]EnvKind(nil), e.s.kind...),
 	}}
+}
+
+func (e Environment) cloneInto(dst *EnvStore) Environment {
+	dst.val = append(dst.val[:0], e.s.val...)
+	dst.kind = append(dst.kind[:0], e.s.kind...)
+
+	return Environment{s: dst}
 }
 
 func (e Environment) setVFS(id ENV, v VFS) {
