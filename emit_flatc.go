@@ -90,14 +90,14 @@ func flatcDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
 	return out
 }
 
-func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, srcRel string) []IncludeDirective {
+func flatcDirectGeneratedHeaderIncludes(na *NodeArenas, pm *IncludeParserManager, srcRel string) []IncludeDirective {
 	direct := flatcDirectImportNames(pm, srcRel)
 
 	if len(direct) == 0 {
 		return nil
 	}
 
-	out := make([]IncludeDirective, 0, len(direct))
+	out := na.dirs.alloc(len(direct))[:0]
 
 	for _, imp := range direct {
 		out = append(out, IncludeDirective{
@@ -106,7 +106,9 @@ func flatcDirectGeneratedHeaderIncludes(pm *IncludeParserManager, srcRel string)
 		})
 	}
 
-	return out
+	na.dirs.commit(len(out))
+
+	return out[:len(out):len(out)]
 }
 
 func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ANY, transitiveImports Closure, moduleTag STR, tc ModuleToolchain, emit *StreamingEmitter, v *FlatcVariant, genDeps []NodeRef) (NodeRef, VFS, VFS, VFS) {
@@ -160,8 +162,10 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := walkClosure(e.scanner, srcVFS, newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.relString()))
 	flRef, headerVFS, cppVFS, bfbsVFS := emitFL(instance, srcVFS.relString(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.unit.CCTag, d.tc, ctx.emit, v, genDeps)
-	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.parsers, srcVFS.relString())
-	headerLeaves := []VFS{flatcWrapperVFS}
+	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.na, ctx.parsers, srcVFS.relString())
+	headerLeaves := ctx.na.vfs.alloc(3 + transitiveImports.len())[:0]
+
+	headerLeaves = append(headerLeaves, flatcWrapperVFS)
 
 	if srcVFS.isSource() {
 		headerLeaves = append(headerLeaves, srcVFS)
@@ -169,30 +173,32 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 
 	headerLeaves = append(headerLeaves, v.runtimeVFS)
 	eachBucketVFS(transitiveImports.buckets, func(v VFS) { headerLeaves = append(headerLeaves, v) })
+	ctx.na.vfs.commit(len(headerLeaves))
+	headerLeaves = headerLeaves[:len(headerLeaves):len(headerLeaves)]
 
 	reg := e.codegen
 
-	reg.register(&GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    flRef,
-		GeneratorRefs:  []NodeRef{flatcLDRef},
+		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerIncludes},
 		ClosureLeaves:  headerLeaves,
 	})
 
-	cppIncludes := []IncludeDirective{{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())}}
+	cppIncludes := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
 
-	reg.register(&GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     cppVFS,
 		ProducerRef:    flRef,
-		GeneratorRefs:  []NodeRef{flatcLDRef},
+		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppIncludes},
 	})
 
-	reg.register(&GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:    bfbsVFS,
 		ProducerRef:   flRef,
-		GeneratorRefs: []NodeRef{flatcLDRef},
+		GeneratorRefs: e.ctx.na.refList(flatcLDRef),
 	})
 }
 

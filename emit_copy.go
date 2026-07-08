@@ -14,16 +14,25 @@ func copyFileAutoSourceVFS(modulePath string, d *ModuleData, src STR) *VFS {
 	return ptr(copyFileOutputVFS(modulePath, entry.Dst))
 }
 
-func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry CopyFileEntry) []IncludeDirective {
-	out := make([]IncludeDirective, 0, len(entry.OutputIncludes)+1)
+func copyFileParsedIncludes(na *NodeArenas, scanner *IncludeScanner, fs FS, moduleDir VFS, entry CopyFileEntry) []IncludeDirective {
+	var own, compileExtra []IncludeDirective
+
+	hasCtx := false
 
 	if entry.Text {
 		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
-		own, compileExtra := scanner.parsedIncludes(srcVFS, nil)
 
-		out = append(out, own...)
-		out = append(out, compileExtra...)
+		own, compileExtra = scanner.parsedIncludes(srcVFS, nil)
 	} else if entry.WithContext {
+		hasCtx = true
+	}
+
+	out := na.dirs.alloc(len(own) + len(compileExtra) + 1 + len(entry.OutputIncludes))[:0]
+
+	out = append(out, own...)
+	out = append(out, compileExtra...)
+
+	if hasCtx {
 		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
 
 		out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
@@ -36,7 +45,9 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry
 		})
 	}
 
-	return out
+	na.dirs.commit(len(out))
+
+	return out[:len(out):len(out)]
 }
 
 type CopyEmitState struct {
@@ -65,7 +76,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 		e.requireProducedInput("COPY_FILE src", entry.Src, srcVFS)
 	}
 
-	parsed := copyFileParsedIncludes(scanner, ctx.fs, instance.Path, entry)
+	parsed := copyFileParsedIncludes(ctx.na, scanner, ctx.fs, instance.Path, entry)
 	ref := ctx.emit.reserve()
 
 	var producerSource []VFS
@@ -77,7 +88,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 	if existing := reg.lookup(dstVFS); existing != nil {
 		existing.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: parsed}
 	} else {
-		info := &GeneratedFileInfo{
+		info := GeneratedFileInfo{
 			OutputPath:     dstVFS,
 			SourcePath:     srcVFS,
 			IsText:         entry.Text,
@@ -86,11 +97,17 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 		}
 
 		if srcVFS != dstVFS {
-			info.ClosureLeaves = append(info.ClosureLeaves, ctx.scripts[copyFsToolsVFS.rel()]...)
+			fsTools := ctx.scripts[copyFsToolsVFS.rel()]
+			leaves := ctx.na.vfs.alloc(len(fsTools) + 1)
+			ln := copy(leaves, fsTools)
 
 			if entry.Text || entry.Auto {
-				info.ClosureLeaves = append(info.ClosureLeaves, srcVFS)
+				leaves[ln] = srcVFS
+				ln++
 			}
+
+			ctx.na.vfs.commit(ln)
+			info.ClosureLeaves = leaves[:ln:ln]
 
 			if srcVFS.isSource() {
 				fsToolsDeps := ctx.scripts[copyFsToolsVFS.rel()]

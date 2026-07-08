@@ -170,13 +170,13 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 
 	na.vfs.commit(nl)
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     dstVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    ref,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[parsedIncludesLocal]},
 		ClosureLeaves:  leafBlock[:nl:nl],
-		Compile:        &CompileSpec{CFlags: goCgoCFlags(d)},
+		Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: goCgoCFlags(d)}),
 	})
 
 	e.deferPass2(func() {
@@ -385,20 +385,27 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	na.vfs.commit(nl)
 
 	leaves := cgoLeaves[:nl:nl]
-	cgo2Spec := &CompileSpec{CFlags: append(goCgoCFlags(d), argWnoUnusedVariable.any())}
+	cgoCF := goCgoCFlags(d)
+	cgo2CF := na.anys.alloc(len(cgoCF) + 1)
+	cgo2N := copy(cgo2CF, cgoCF)
+
+	cgo2CF[cgo2N] = argWnoUnusedVariable.any()
+	na.anys.commit(cgo2N + 1)
+
+	cgo2Spec := na.compileSpec(CompileSpec{CFlags: cgo2CF[: cgo2N+1 : cgo2N+1]})
 	dirPrefix := dir + "/"
 
 	for _, f := range files {
-		e.codegen.register(&GeneratedFileInfo{OutputPath: f.cgo1, ProducerRef: ref})
-		e.codegen.register(&GeneratedFileInfo{OutputPath: f.cgo2C, ProducerRef: ref, Compile: cgo2Spec, ClosureLeaves: leaves})
+		e.codegen.register(GeneratedFileInfo{OutputPath: f.cgo1, ProducerRef: ref})
+		e.codegen.register(GeneratedFileInfo{OutputPath: f.cgo2C, ProducerRef: ref, Compile: cgo2Spec, ClosureLeaves: leaves})
 		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo1.relString(), dirPrefix)).any(), Prio: stmtPrioDefault, Generated: true})
 		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo2C.relString(), dirPrefix)).any(), Prio: stmtPrioDefault, Generated: true})
 	}
 
-	e.codegen.register(&GeneratedFileInfo{OutputPath: exportH, ProducerRef: ref})
-	e.codegen.register(&GeneratedFileInfo{OutputPath: exportC, ProducerRef: ref, ClosureLeaves: leaves})
-	e.codegen.register(&GeneratedFileInfo{OutputPath: gotypes, ProducerRef: ref})
-	e.codegen.register(&GeneratedFileInfo{OutputPath: mainC, ProducerRef: ref})
+	e.codegen.register(GeneratedFileInfo{OutputPath: exportH, ProducerRef: ref})
+	e.codegen.register(GeneratedFileInfo{OutputPath: exportC, ProducerRef: ref, ClosureLeaves: leaves})
+	e.codegen.register(GeneratedFileInfo{OutputPath: gotypes, ProducerRef: ref})
+	e.codegen.register(GeneratedFileInfo{OutputPath: mainC, ProducerRef: ref})
 
 	e.enqueueSrc(SrcMeta{Source: strCgoExportC.any(), Prio: stmtPrioDefault, Generated: true})
 	e.enqueueSrc(SrcMeta{Source: strCgoGotypesGo.any(), Prio: stmtPrioDefault, Generated: true})
@@ -642,7 +649,7 @@ func (e *EmitContext) flushGoCgo2() {
 
 	ref := ctx.emit.emitNode(node)
 
-	e.codegen.register(&GeneratedFileInfo{OutputPath: importGo, ProducerRef: ref})
+	e.codegen.register(GeneratedFileInfo{OutputPath: importGo, ProducerRef: ref})
 
 	if e.goRes == nil {
 		e.goRes = &GoSrcsResult{}

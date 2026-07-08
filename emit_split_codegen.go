@@ -63,40 +63,44 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	scRef := ctx.emit.reserve()
 	part0 := build(moduleDir, "/", partRels[0])
 	part0Inc := IncludeDirective{kind: includeQuoted, target: includeTarget(part0.rel().any())}
-	headerParsed := make([]IncludeDirective, 0, len(sc.OutputIncludes))
+	headerParsed := ctx.na.dirs.alloc(len(sc.OutputIncludes))[:0]
 
 	for _, oi := range sc.OutputIncludes {
 		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(oi)})
 	}
 
-	cppParsed := []IncludeDirective{part0Inc}
+	ctx.na.dirs.commit(len(headerParsed))
+
+	headerParsed = headerParsed[:len(headerParsed):len(headerParsed)]
+
+	cppParsed := ctx.na.dirList(part0Inc)
 	reg := e.codegen
 
-	reg.register(&GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     prefixH,
 		ProducerRef:    scRef,
-		GeneratorRefs:  []NodeRef{toolLDRef},
+		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-		ClosureLeaves:  []VFS{part0, inputIn},
+		ClosureLeaves:  e.ctx.na.vfsList(part0, inputIn),
 	})
 
-	reg.register(&GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     prefixCpp,
 		ProducerRef:    scRef,
-		GeneratorRefs:  []NodeRef{toolLDRef},
+		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
 	})
 
 	for i, partRel := range partRels {
-		info := &GeneratedFileInfo{
+		info := GeneratedFileInfo{
 			OutputPath:     build(moduleDir, "/", partRel),
 			ProducerRef:    scRef,
-			GeneratorRefs:  []NodeRef{toolLDRef},
+			GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
 		}
 
 		if i == 0 {
-			info.ClosureLeaves = []VFS{inputIn}
+			info.ClosureLeaves = ctx.na.vfsList(inputIn)
 		}
 
 		reg.register(info)

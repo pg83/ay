@@ -34,6 +34,7 @@ type EmitContext struct {
 	objScratch   []ResourceItem
 	rawScratch   []ResourceItem
 	resItems     []ResourceItem
+	dirScratch   []IncludeDirective
 	resEntries   []PyGenResEntry
 	resStrBuf    []byte
 	resVFSBuf    []VFS
@@ -115,6 +116,7 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		objScratch:  scrub(prev.objScratch),
 		rawScratch:  scrub(prev.rawScratch),
 		resItems:    scrub(prev.resItems),
+		dirScratch:  prev.dirScratch[:0],
 		resEntries:  scrub(prev.resEntries),
 		resStrBuf:   prev.resStrBuf[:0],
 		resVFSBuf:   prev.resVFSBuf[:0],

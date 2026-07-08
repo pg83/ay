@@ -44,7 +44,7 @@ func (e *EmitContext) emitLuaJit21() {
 		rawOut := build(instance.Path.relString(), "/", strings.TrimSuffix(lua, ".lua"), ".raw")
 		ref := emitLJ(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ctx.emit)
 
-		reg.register(&GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:   rawOut,
 			ProducerRef:  ref,
 			SourceInputs: ctx.na.vfsList(luaSrc),

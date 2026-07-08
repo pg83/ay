@@ -57,7 +57,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 
 	sourceInputs = sourceInputs[:len(sourceInputs):len(sourceInputs)]
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     genProto,
 		ProducerRef:    gzRef,
 		SourceInputs:   sourceInputs,
@@ -154,7 +154,7 @@ func gztConverterInducedProtos(ctx *GenCtx) []VFS {
 
 func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) []IncludeDirective {
 	gztLocal := ctx.parsers.sourceParsedBuckets(gztSource, nil).bucket(parsedIncludesLocal)
-	local := make([]IncludeDirective, 0, len(inducedProtos)+len(gztLocal))
+	local := ctx.na.dirs.alloc(len(inducedProtos) + len(gztLocal))[:0]
 
 	for _, v := range inducedProtos {
 		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel().any())})
@@ -170,5 +170,7 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) []I
 		local = append(local, IncludeDirective{kind: dir.kind, target: includeTarget(internStr(t).any())})
 	}
 
-	return local
+	ctx.na.dirs.commit(len(local))
+
+	return local[:len(local):len(local)]
 }

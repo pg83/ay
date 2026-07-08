@@ -385,8 +385,8 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 	fetchRefs := emitter.fetchRefs
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
-	targetReg := newCodegenRegistry()
-	hostReg := newCodegenRegistry()
+	targetReg := newCodegenRegistry(plainEmit.nodeArenas())
+	hostReg := newCodegenRegistry(plainEmit.nodeArenas())
 
 	ctx := &GenCtx{
 		fs:        fs,

@@ -77,23 +77,23 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 	rlSourceVFS := source(instance.Path.relString(), "/", srcRel)
 	reg := e.codegen
 
-	reg.register(&GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:    r5TmpOut,
 		ProducerRef:   r5Ref,
-		GeneratorRefs: []NodeRef{ragel5LDRef, rlgenCdLDRef},
+		GeneratorRefs: e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
 	})
 
 	r5Parsed := e.scanner.parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
 
-	reg.register(&GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     r5CppOut,
 		ProducerRef:    r5Ref,
-		GeneratorRefs:  []NodeRef{ragel5LDRef, rlgenCdLDRef},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(r5TmpOut.rel().any())}}, r5Parsed...)},
-		Compile: &CompileSpec{
+		GeneratorRefs:  e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r5CppParsed(e.ctx.na, r5TmpOut, r5Parsed)},
+		Compile: e.ctx.na.compileSpec(CompileSpec{
 			FlatOutput: d.flatSrc(src),
-			CFlags:     concat(psc, []ANY{argWnoImplicitFallthrough.any()}),
-		},
+			CFlags:     cflagsWnoImplicitFallthrough(e.ctx.na, psc),
+		}),
 	})
 
 	meta := d.srcMetaOf(src)
@@ -101,4 +101,24 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 	meta.Generated = true
 	meta.Source = r5CppOut.any()
 	e.enqueueSrc(meta)
+}
+
+func r5CppParsed(na *NodeArenas, r5TmpOut VFS, r5Parsed []IncludeDirective) []IncludeDirective {
+	out := na.dirs.alloc(1 + len(r5Parsed))[:0]
+
+	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(r5TmpOut.rel().any())})
+	out = append(out, r5Parsed...)
+	na.dirs.commit(len(out))
+
+	return out[:len(out):len(out)]
+}
+
+func cflagsWnoImplicitFallthrough(na *NodeArenas, psc []ANY) []ANY {
+	out := na.anys.alloc(len(psc) + 1)
+	n := copy(out, psc)
+
+	out[n] = argWnoImplicitFallthrough.any()
+	na.anys.commit(n + 1)
+
+	return out[: n+1 : n+1]
 }

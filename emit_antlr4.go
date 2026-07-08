@@ -18,13 +18,13 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		lexerCpp := build(outPrefix, lexerBase, ".cpp")
 		parserCpp := build(outPrefix, parserBase, ".cpp")
 
-		e.codegen.register(&GeneratedFileInfo{
+		e.codegen.register(GeneratedFileInfo{
 			OutputPath:    lexerCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
 		})
 
-		e.codegen.register(&GeneratedFileInfo{
+		e.codegen.register(GeneratedFileInfo{
 			OutputPath:    parserCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
@@ -39,19 +39,15 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			parserG4,
 		}
 
+		parsed := antlrWitnessParsed(e.ctx.na, witnessIncludes)
+
 		for _, suffix := range []string{
 			lexerBase + ".h",
 			parserBase + ".h",
 			parserBase + "Visitor.h",
 			parserBase + "BaseVisitor.h",
 		} {
-			parsed := make([]IncludeDirective, 0, len(witnessIncludes))
-
-			for _, include := range witnessIncludes {
-				parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(include.rel().any())})
-			}
-
-			e.codegen.register(&GeneratedFileInfo{
+			e.codegen.register(GeneratedFileInfo{
 				OutputPath:     build(outPrefix, suffix),
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
@@ -81,13 +77,13 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		lexerCpp := build(outPrefix, base, "Lexer.cpp")
 		parserCpp := build(outPrefix, base, "Parser.cpp")
 
-		e.codegen.register(&GeneratedFileInfo{
+		e.codegen.register(GeneratedFileInfo{
 			OutputPath:    lexerCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
 		})
 
-		e.codegen.register(&GeneratedFileInfo{
+		e.codegen.register(GeneratedFileInfo{
 			OutputPath:    parserCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
@@ -101,19 +97,15 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			grammarG4,
 		}
 
+		parsed := antlrWitnessParsed(e.ctx.na, witnessIncludes)
+
 		for _, suffix := range []string{
 			base + "Lexer.h",
 			base + "Parser.h",
 			base + "Visitor.h",
 			base + "BaseVisitor.h",
 		} {
-			parsed := make([]IncludeDirective, 0, len(witnessIncludes))
-
-			for _, include := range witnessIncludes {
-				parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(include.rel().any())})
-			}
-
-			e.codegen.register(&GeneratedFileInfo{
+			e.codegen.register(GeneratedFileInfo{
 				OutputPath:     build(outPrefix, suffix),
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
@@ -136,4 +128,16 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 
 		e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
 	}
+}
+
+func antlrWitnessParsed(na *NodeArenas, witnessIncludes []VFS) []IncludeDirective {
+	parsed := na.dirs.alloc(len(witnessIncludes))[:0]
+
+	for _, include := range witnessIncludes {
+		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(include.rel().any())})
+	}
+
+	na.dirs.commit(len(parsed))
+
+	return parsed[:len(parsed):len(parsed)]
 }

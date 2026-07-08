@@ -98,10 +98,10 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 		}
 	}
 
-	parsed := fromSandboxOutputIncludes(stmt)
+	parsed := fromSandboxOutputIncludes(ctx.na, stmt)
 
 	for _, out := range outVFSs {
-		e.codegen.register(&GeneratedFileInfo{
+		e.codegen.register(GeneratedFileInfo{
 			OutputPath:      out,
 			ProducerRef:     ref,
 			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
@@ -113,12 +113,12 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	return memberRefs, memberPaths
 }
 
-func fromSandboxOutputIncludes(stmt *FromSandboxStmt) []IncludeDirective {
+func fromSandboxOutputIncludes(na *NodeArenas, stmt *FromSandboxStmt) []IncludeDirective {
 	if len(stmt.OutputIncludes) == 0 {
 		return nil
 	}
 
-	includes := make([]IncludeDirective, 0, len(stmt.OutputIncludes))
+	includes := na.dirs.alloc(len(stmt.OutputIncludes))[:0]
 
 	for _, f := range stmt.OutputIncludes {
 		if v := f.vfs(); v != 0 {
@@ -128,5 +128,7 @@ func fromSandboxOutputIncludes(stmt *FromSandboxStmt) []IncludeDirective {
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
 	}
 
-	return includes
+	na.dirs.commit(len(includes))
+
+	return includes[:len(includes):len(includes)]
 }

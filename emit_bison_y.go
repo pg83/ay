@@ -27,27 +27,27 @@ var bisonCppSkeletonInputs = []VFS{
 	source("contrib/tools/bison/data/skeletons/yacc.c"),
 }
 
-func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {
-	parsed := make([]IncludeDirective, 0, 1+len(bisonCppSkeletonDirectives))
-
-	parsed = append(parsed,
+func appendBisonCppHeaderParsed(dst []IncludeDirective) []IncludeDirective {
+	dst = append(dst,
 		IncludeDirective{kind: includeQuoted, target: includeTarget(bisonPreprocessPyVFS.rel().any())},
 	)
 
-	parsed = append(parsed, bisonCppSkeletonDirectives...)
-
-	return parsed
+	return append(dst, bisonCppSkeletonDirectives...)
 }
 
 func (e *EmitContext) bisonGeneratedCPPParsed(srcVFS, headerVFS VFS) []IncludeDirective {
-	parsed := []IncludeDirective{
-		{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())},
-		{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())},
-	}
+	na := e.ctx.na
+	localBucket := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)
+	parsed := na.dirs.alloc(2 + len(localBucket))[:0]
 
-	parsed = append(parsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
+	parsed = append(parsed,
+		IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())},
+		IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
 
-	return parsed
+	parsed = append(parsed, localBucket...)
+	na.dirs.commit(len(parsed))
+
+	return parsed[:len(parsed):len(parsed)]
 }
 
 func bisonGeneratedRel(srcRel, genExt string) string {
@@ -72,46 +72,69 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	headerVFS := build(instance.Path.relString(), "/", headerRel)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
 	srcVFS := source(instance.Path.relString(), "/", srcRel)
-	headerParsed := []IncludeDirective{{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())}}
+	localBucket := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)
+	headerParsed := na.dirs.alloc(2 + len(bisonCppSkeletonDirectives) + len(localBucket))[:0]
+
+	headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
 
 	if preprocessHeader {
-		headerParsed = append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())}}, bisonCppHeaderParsed(srcVFS)...)
+		headerParsed = appendBisonCppHeaderParsed(headerParsed)
 	} else {
-		headerParsed = append(headerParsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
+		headerParsed = append(headerParsed, localBucket...)
 	}
+
+	na.dirs.commit(len(headerParsed))
+	headerParsed = headerParsed[:len(headerParsed):len(headerParsed)]
 
 	ycRef := ctx.emit.reserve()
 	reg := e.codegen
 
-	headerInfo := &GeneratedFileInfo{
+	headerInfo := GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    ycRef,
-		GeneratorRefs:  []NodeRef{bisonRef, m4Ref},
+		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 	}
 
 	reg.register(headerInfo)
 
-	generatedParsed := []IncludeDirective{{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())}}
+	var generatedParsed []IncludeDirective
 
 	if preprocessHeader {
 		generatedParsed = e.bisonGeneratedCPPParsed(srcVFS, headerVFS)
+	} else {
+		generatedParsed = na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
 	}
 
-	spec := &CompileSpec{FlatOutput: d.flatSrc(src.any())}
+	extras := d.perSrcCFlagsFor(src.any())
+	cfBound := 2
 
-	if extras := d.perSrcCFlagsFor(src.any()); extras != nil {
-		spec.CFlags = append(spec.CFlags, *extras...)
+	if extras != nil {
+		cfBound += len(*extras)
+	}
+
+	cf := na.anys.alloc(cfBound)[:0]
+
+	if extras != nil {
+		cf = append(cf, *extras...)
 	}
 
 	if preprocessHeader {
-		spec.CFlags = append(spec.CFlags, argWnoUnusedButSetVariable.any(), argWnoDeprecatedCopy.any())
+		cf = append(cf, argWnoUnusedButSetVariable.any(), argWnoDeprecatedCopy.any())
 	}
 
-	reg.register(&GeneratedFileInfo{
+	na.anys.commit(len(cf))
+
+	spec := na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src.any())})
+
+	if len(cf) > 0 {
+		spec.CFlags = cf[:len(cf):len(cf)]
+	}
+
+	reg.register(GeneratedFileInfo{
 		OutputPath:     generatedVFS,
 		ProducerRef:    ycRef,
-		GeneratorRefs:  []NodeRef{bisonRef, m4Ref},
+		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: generatedParsed},
 		Compile:        spec,
 	})

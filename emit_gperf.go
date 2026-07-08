@@ -64,12 +64,12 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 		psc = *p
 	}
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     genVFS,
 		ProducerRef:    gpRef,
-		GeneratorRefs:  []NodeRef{gperfLDRef},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())}}},
-		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc},
+		GeneratorRefs:  e.ctx.na.refList(gperfLDRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})},
+		Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc}),
 	})
 
 	meta := d.srcMetaOf(src)

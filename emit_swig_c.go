@@ -74,13 +74,13 @@ func (e *EmitContext) emitSwigC() {
 			psc = *p
 		}
 
-		reg.register(&GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:     cOutVFS,
 			ProducerRef:    swRef,
-			GeneratorRefs:  []NodeRef{swigRef},
+			GeneratorRefs:  e.ctx.na.refList(swigRef),
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(ctx, srcVFS, swigClosure)},
 			ClosureLeaves:  append(append([]VFS{}, swigClosure...), srcVFS),
-			Compile:        &CompileSpec{FlatOutput: d.flatSrc(cOutVFS.any()), CFlags: psc},
+			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(cOutVFS.any()), CFlags: psc}),
 		})
 
 		swigSourceInputs := na.vfs.alloc(2 + len(swigClosure))
@@ -94,10 +94,10 @@ func (e *EmitContext) emitSwigC() {
 
 		swigSourceInputs = swigSourceInputs[:swigN:swigN]
 
-		reg.register(&GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:    pyOutVFS,
 			ProducerRef:   swRef,
-			GeneratorRefs: []NodeRef{swigRef},
+			GeneratorRefs: e.ctx.na.refList(swigRef),
 			SourceInputs:  swigSourceInputs,
 		})
 

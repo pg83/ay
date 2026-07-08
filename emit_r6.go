@@ -111,15 +111,15 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 		psc = *p
 	}
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     r6Out,
 		ProducerRef:    r6Ref,
-		GeneratorRefs:  []NodeRef{ragelLDRef},
+		GeneratorRefs:  e.ctx.na.refList(ragelLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r6Parsed},
-		Compile: &CompileSpec{
+		Compile: e.ctx.na.compileSpec(CompileSpec{
 			FlatOutput: d.flatSrc(src),
-			CFlags:     concat(psc, []ANY{argWnoImplicitFallthrough.any()}),
-		},
+			CFlags:     cflagsWnoImplicitFallthrough(e.ctx.na, psc),
+		}),
 	})
 
 	if isCxxSource(r6Out.relString()) {

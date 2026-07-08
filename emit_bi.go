@@ -93,14 +93,13 @@ func (e *EmitContext) emitBuildInfoStmt() {
 	outPrefix := instance.Path.relString() + "/"
 	biRef := emitBI(instance, d.createBuildInfoFor.string(), biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
 		ProducerRef:   biRef,
 		GeneratorRefs: nil,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(buildInfoGenPyVFS.rel().any())},
-			{kind: includeQuoted, target: includeTarget(xargsPyVFS.rel().any())},
-			{kind: includeQuoted, target: includeTarget(yieldLinePyVFS.rel().any())},
-		}},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(
+			IncludeDirective{kind: includeQuoted, target: includeTarget(buildInfoGenPyVFS.rel().any())},
+			IncludeDirective{kind: includeQuoted, target: includeTarget(xargsPyVFS.rel().any())},
+			IncludeDirective{kind: includeQuoted, target: includeTarget(yieldLinePyVFS.rel().any())})},
 	})
 }

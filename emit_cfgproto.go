@@ -2,6 +2,10 @@ package main
 
 var cfgprotoKV = KV{P: pkPB, PC: pcYellow}
 
+var cfgprotoGenCCExtras = []IncludeDirective{
+	{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())},
+}
+
 func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
@@ -11,10 +15,13 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	cfgRelPath := protoSourceRelPath(ctx.fs, instance, d, src.string())
 	cfgSource := source(cfgRelPath)
 	cfgImports := walkClosure(e.scanner, cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.relString()))
-	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, protoCPPOutRoot(d))
+	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, protoCPPOutRoot(d), e.dirScratch[:0])
+
+	e.dirScratch = directImports
+
 	configIncludes := ctx.parsers.sourceParsedBuckets(cfgSource, nil).bucket(parsedIncludesProtoConfig)
 	extras := pbHEmitsIncludesExtras()
-	cfgHParsed := make([]IncludeDirective, 0, len(directImports)+len(configIncludes)+len(extras)+cfgImports.len())
+	cfgHParsed := ctx.na.dirs.alloc(len(directImports) + len(configIncludes) + len(extras) + cfgImports.len())[:0]
 
 	cfgHParsed = append(cfgHParsed, directImports...)
 	cfgHParsed = append(cfgHParsed, configIncludes...)
@@ -24,6 +31,9 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(ti.rel().any())})
 	})
 
+	ctx.na.dirs.commit(len(cfgHParsed))
+	cfgHParsed = cfgHParsed[:len(cfgHParsed):len(cfgHParsed)]
+
 	e.emitCppProtoFamilySource(meta, &ProtoSpec{
 		kv:          &cfgprotoKV,
 		ccFirstOuts: true,
@@ -31,14 +41,12 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 			internV("--plugin=protoc-gen-config=", configPluginBinary.prefix(), configPluginBinary.relString()).any(),
 			argConfigOutB.any(),
 		),
-		toolLDRef:  configPluginLDRef,
-		toolBinary: configPluginBinary,
-		genRefs:    []NodeRef{protocLDRef, cppStyleguideLDRef, configPluginLDRef},
-		genHParsed: cfgHParsed,
-		genCCExtras: []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())},
-		},
-		hLeaves:  []VFS{cfgSource, build(cfgRelPath, ".pb.cc")},
-		ccLeaves: []VFS{cfgSource},
+		toolLDRef:   configPluginLDRef,
+		toolBinary:  configPluginBinary,
+		genRefs:     ctx.na.refList(protocLDRef, cppStyleguideLDRef, configPluginLDRef),
+		genHParsed:  cfgHParsed,
+		genCCExtras: cfgprotoGenCCExtras,
+		hLeaves:     ctx.na.vfsList(cfgSource, build(cfgRelPath, ".pb.cc")),
+		ccLeaves:    ctx.na.vfsList(cfgSource),
 	})
 }

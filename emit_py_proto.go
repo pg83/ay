@@ -309,11 +309,11 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		return internV("${ARCADIA_BUILD_ROOT}/", out.relString())
 	}
 
-	e.codegen.register(&GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
+	e.codegen.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
 	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyDir, keySep, keyBase, "_pb2.py"), Token: tokenFor(pyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 
 	if d.grpc {
-		e.codegen.register(&GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
+		e.codegen.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyDir, keySep, keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 	}
 }
@@ -421,7 +421,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 
 	yapycRef := ctx.emit.emitNode(yapycNode)
 
-	e.codegen.register(&GeneratedFileInfo{OutputPath: yapycOut, ProducerRef: yapycRef})
+	e.codegen.register(GeneratedFileInfo{OutputPath: yapycOut, ProducerRef: yapycRef})
 }
 
 func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
@@ -534,7 +534,8 @@ func pyProtoAuxPy3Suffix(d *ModuleData) bool {
 func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) Closure {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-	emits := make([]IncludeDirective, 0, len(seed))
+	na := ctx.na
+	emits := na.dirs.alloc(len(seed))[:0]
 
 	for _, in := range seed {
 		if in.isSource() {
@@ -542,12 +543,16 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 		}
 	}
 
-	e.codegen.register(&GeneratedFileInfo{
+	na.dirs.commit(len(emits))
+
+	emits = emits[:len(emits):len(emits)]
+
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     aux,
 		ProducerRef:    ref,
-		GeneratorRefs:  []NodeRef{rescompilerRef},
+		GeneratorRefs:  e.ctx.na.refList(rescompilerRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-		Compile:        &CompileSpec{ForceCxx: true, Py3Suffix: pyProtoAuxPy3Suffix(d), CFlags: []ANY{argX.any(), argC.any()}},
+		Compile:        e.ctx.na.compileSpec(CompileSpec{ForceCxx: true, Py3Suffix: pyProtoAuxPy3Suffix(d), CFlags: e.ctx.na.anyList(argX.any(), argC.any())}),
 	})
 
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.relString())

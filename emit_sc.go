@@ -31,13 +31,13 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 	headerVFS := build(srcVFS.relString(), ".h")
 	runtimeClosure := walkClosure(e.scanner, domschemeRuntimeVFS, d.cc.ScanCfg)
 	scRef := emitSC(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, ctx.emit)
-	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: includeTarget(domschemeRuntimeVFS.rel().any())}}
+	runtimeInclude := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(domschemeRuntimeVFS.rel().any())})
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    scRef,
-		GeneratorRefs:  []NodeRef{domLDRef},
+		GeneratorRefs:  e.ctx.na.refList(domLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: runtimeInclude},
-		ClosureLeaves:  []VFS{srcVFS, domschemeRuntimeVFS},
+		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, domschemeRuntimeVFS),
 	})
 }

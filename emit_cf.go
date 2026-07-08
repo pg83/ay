@@ -68,14 +68,14 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		Resources:    usesPython3,
 	})
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    cfRef,
 		GeneratorRefs:  nil,
 		SourceInputs:   na.vfsList(srcVFS, configureFilePyVFS),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cfTemplateParsedIncludes(ctx.parsers, srcVFS.relString())},
-		ClosureLeaves:  []VFS{srcVFS, configureFilePyVFS},
+		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, configureFilePyVFS),
 	})
 
 	return cfRef

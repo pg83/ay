@@ -49,20 +49,20 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 
 	reg := e.codegen
 
-	reg.register(&GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     prefixH,
 		ProducerRef:    bcRef,
-		GeneratorRefs:  []NodeRef{toolLDRef},
+		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-		ClosureLeaves:  []VFS{prefixCpp, inputIn},
+		ClosureLeaves:  e.ctx.na.vfsList(prefixCpp, inputIn),
 	})
 
-	reg.register(&GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     prefixCpp,
 		ProducerRef:    bcRef,
-		GeneratorRefs:  []NodeRef{toolLDRef},
+		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-		ClosureLeaves:  []VFS{inputIn},
+		ClosureLeaves:  e.ctx.na.vfsList(inputIn),
 	})
 
 	node := Node{

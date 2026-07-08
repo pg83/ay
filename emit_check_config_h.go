@@ -42,14 +42,13 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 		psc = *p
 	}
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:  generatedVFS,
 		ProducerRef: chRef,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(confVFS.rel().any())},
-		}},
-		ClosureLeaves: []VFS{buildScriptsCheckConfigHPy},
-		Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.any()), CFlags: psc},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(
+			IncludeDirective{kind: includeQuoted, target: includeTarget(confVFS.rel().any())})},
+		ClosureLeaves: e.ctx.na.vfsList(buildScriptsCheckConfigHPy),
+		Compile:       e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(generatedVFS.any()), CFlags: psc}),
 	})
 
 	e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCheckConfig})

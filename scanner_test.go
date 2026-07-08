@@ -1002,8 +1002,8 @@ func attachCodegen(scanner *IncludeScanner, reg *CodegenRegistry) {
 }
 
 func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
-	reg := newCodegenRegistry()
-	reg.register(&GeneratedFileInfo{
+	reg := newCodegenRegistry(newNodeArenas())
+	reg.register(GeneratedFileInfo{
 		OutputPath: build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
@@ -1027,8 +1027,8 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 }
 
 func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
-	reg := newCodegenRegistry()
-	reg.register(&GeneratedFileInfo{
+	reg := newCodegenRegistry(newNodeArenas())
+	reg.register(GeneratedFileInfo{
 		OutputPath: build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc"),
 	})
 
@@ -1052,8 +1052,8 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 }
 
 func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
-	reg := newCodegenRegistry()
-	reg.register(&GeneratedFileInfo{
+	reg := newCodegenRegistry(newNodeArenas())
+	reg.register(GeneratedFileInfo{
 		OutputPath: build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc"),
 	})
 
