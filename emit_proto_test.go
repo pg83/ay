@@ -2332,9 +2332,9 @@ func TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand(t *testing.T) {
 	const ns = "taxi/schemas/schemas/proto"
 
 	blocks := composePBArgBlocks(testToolchain(),
-		intern("$(B)/contrib/tools/protoc/protoc"),
-		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
-		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		build("contrib/tools/protoc/protoc"),
+		build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, ns, false, nil, nil,
 
 		[]VFS{
@@ -2379,9 +2379,9 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 	inst := targetInstance("pkg/proto")
 
 	blocks := composePBArgBlocks(testToolchain(),
-		intern("$(B)/contrib/tools/protoc/protoc"),
-		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
-		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		build("contrib/tools/protoc/protoc"),
+		build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, "", false,
 		internArgs([]string{"--fatal_warnings"}), nil, nil)
 	emitPB(
@@ -2391,9 +2391,9 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		NodeRef(1),
 		NodeRef(2),
 		NodeRef(0),
-		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
-		intern("$(B)/contrib/tools/protoc/protoc"),
-		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		build("contrib/tools/protoc/protoc"),
+		build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false,
 		0,
 		false,
@@ -2420,9 +2420,9 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 	inst := targetInstance("pkg/proto")
 
 	blocks := composePBArgBlocks(testToolchain(),
-		intern("$(B)/contrib/tools/protoc/protoc"),
-		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
-		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		build("contrib/tools/protoc/protoc"),
+		build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, "", true,
 		nil, nil, nil)
 	emitPB(
@@ -2432,9 +2432,9 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		NodeRef(1),
 		NodeRef(2),
 		NodeRef(0),
-		intern("$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
-		intern("$(B)/contrib/tools/protoc/protoc"),
-		intern("$(B)/contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
+		build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
+		build("contrib/tools/protoc/protoc"),
+		build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false,
 		0,
 		true,

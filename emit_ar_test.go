@@ -76,7 +76,7 @@ func TestEmitAR_LengthMismatchPanics(t *testing.T) {
 		Platform:     &Platform{Target: "default-linux-aarch64"},
 		Requirements: Requirements{},
 	})}
-	objPaths := []VFS{intern("$(B)/o1.o"), intern("$(B)/o2.o")}
+	objPaths := []VFS{build("o1.o"), build("o2.o")}
 
 	exc := try(func() {
 		EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, nil, testHostP, e)
@@ -106,13 +106,13 @@ func TestEmitAR_PeerArchives_NotInCmdArgs(t *testing.T) {
 		})
 	}
 
-	o1 := intern("$(B)/build/cow/on/a.c.o")
-	o2 := intern("$(B)/build/cow/on/b.c.o")
+	o1 := build("build/cow/on/a.c.o")
+	o2 := build("build/cow/on/b.c.o")
 	objRefs := []NodeRef{makeLeaf(o1), makeLeaf(o2)}
 	objPaths := []VFS{o1, o2}
 
-	peer1 := makeLeaf(intern("$(B)/some/peer/libsome-peer.a"))
-	peer2 := makeLeaf(intern("$(B)/other/peer/libother-peer.a"))
+	peer1 := makeLeaf(build("some/peer/libsome-peer.a"))
+	peer2 := makeLeaf(build("other/peer/libother-peer.a"))
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, testHostP, e)
@@ -154,13 +154,13 @@ func TestEmitAR_PeerArchives_InDepRefs(t *testing.T) {
 		})
 	}
 
-	o1 := intern("$(B)/build/cow/on/a.c.o")
-	o2 := intern("$(B)/build/cow/on/b.c.o")
+	o1 := build("build/cow/on/a.c.o")
+	o2 := build("build/cow/on/b.c.o")
 	objRefs := []NodeRef{makeLeaf(o1), makeLeaf(o2)}
 	objPaths := []VFS{o1, o2}
 
-	peer1 := makeLeaf(intern("$(B)/some/peer/libsome-peer.a"))
-	peer2 := makeLeaf(intern("$(B)/other/peer/libother-peer.a"))
+	peer1 := makeLeaf(build("some/peer/libsome-peer.a"))
+	peer2 := makeLeaf(build("other/peer/libother-peer.a"))
 	peerArchiveRefs := []NodeRef{peer1, peer2}
 
 	arRef := EmitAR(targetInstance("build/cow/on"), objRefs, objPaths, peerArchiveRefs, testHostP, e)
@@ -189,9 +189,9 @@ func TestEmitAR_InputsLeadWithObjPaths(t *testing.T) {
 		})
 	}
 
-	z := intern("$(B)/build/cow/on/z.c.o")
-	m := intern("$(B)/build/cow/on/m.c.o")
-	a := intern("$(B)/build/cow/on/a.c.o")
+	z := build("build/cow/on/z.c.o")
+	m := build("build/cow/on/m.c.o")
+	a := build("build/cow/on/a.c.o")
 	objPaths := []VFS{z, m, a}
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 
@@ -293,9 +293,9 @@ func TestEmitAR_CmdArgsPreservesDeclarationOrder(t *testing.T) {
 		})
 	}
 
-	z := intern("$(B)/build/cow/on/z.c.o")
-	m := intern("$(B)/build/cow/on/m.c.o")
-	a := intern("$(B)/build/cow/on/a.c.o")
+	z := build("build/cow/on/z.c.o")
+	m := build("build/cow/on/m.c.o")
+	a := build("build/cow/on/a.c.o")
 	objPaths := []VFS{z, m, a}
 	objRefs := []NodeRef{makeLeaf(z), makeLeaf(m), makeLeaf(a)}
 

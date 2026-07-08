@@ -11,20 +11,20 @@ var (
 )
 
 var bisonCppSkeletonInputs = []VFS{
-	intern("$(S)/contrib/tools/bison/data/m4sugar/foreach.m4"),
-	intern("$(S)/contrib/tools/bison/data/m4sugar/m4sugar.m4"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/bison.m4"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/c++-skel.m4"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/c++.m4"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/c-like.m4"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/c-skel.m4"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/c.m4"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/glr.cc"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/lalr1.cc"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/location.cc"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/stack.hh"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/variant.hh"),
-	intern("$(S)/contrib/tools/bison/data/skeletons/yacc.c"),
+	source("contrib/tools/bison/data/m4sugar/foreach.m4"),
+	source("contrib/tools/bison/data/m4sugar/m4sugar.m4"),
+	source("contrib/tools/bison/data/skeletons/bison.m4"),
+	source("contrib/tools/bison/data/skeletons/c++-skel.m4"),
+	source("contrib/tools/bison/data/skeletons/c++.m4"),
+	source("contrib/tools/bison/data/skeletons/c-like.m4"),
+	source("contrib/tools/bison/data/skeletons/c-skel.m4"),
+	source("contrib/tools/bison/data/skeletons/c.m4"),
+	source("contrib/tools/bison/data/skeletons/glr.cc"),
+	source("contrib/tools/bison/data/skeletons/lalr1.cc"),
+	source("contrib/tools/bison/data/skeletons/location.cc"),
+	source("contrib/tools/bison/data/skeletons/stack.hh"),
+	source("contrib/tools/bison/data/skeletons/variant.hh"),
+	source("contrib/tools/bison/data/skeletons/yacc.c"),
 }
 
 func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {

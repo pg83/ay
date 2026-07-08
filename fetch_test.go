@@ -25,9 +25,9 @@ func emitTestCompileGraph(t *testing.T, host, target *Platform) *Graph {
 			Env:     nil,
 		}},
 		Env:          nil,
-		Inputs:       InputChunks{{intern("$(S)/pkg/app/main.cpp")}},
+		Inputs:       InputChunks{{source("pkg/app/main.cpp")}},
 		KV:           &KV{P: pkCC},
-		Outputs:      []VFS{intern("$(B)/pkg/app/main.o")},
+		Outputs:      []VFS{build("pkg/app/main.o")},
 		Requirements: Requirements{},
 		Resources:    []STR{internStr(resourcePatternClangTool)},
 	})
