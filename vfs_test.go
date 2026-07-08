@@ -42,23 +42,6 @@ func BenchmarkMapAccess_StringKey(b *testing.B) {
 	}
 }
 
-func TestVFSLongString(t *testing.T) {
-	cases := []struct {
-		name string
-		vfs  VFS
-		want string
-	}{
-		{name: "source", vfs: source("a/b.txt"), want: "$(SOURCE_ROOT)/a/b.txt"},
-		{name: "build", vfs: build("x/y.o"), want: "$(BUILD_ROOT)/x/y.o"},
-	}
-
-	for _, tc := range cases {
-		if got := tc.vfs.longString(); got != tc.want {
-			t.Fatalf("%s LongString = %q, want %q", tc.name, got, tc.want)
-		}
-	}
-}
-
 func BenchmarkMapAccess_VFSStructKey(b *testing.B) {
 	keys := bvKeys()
 	m := make(map[VFS]struct{}, bvN)

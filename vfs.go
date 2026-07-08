@@ -148,14 +148,6 @@ func (v VFS) String() string {
 	return v.string()
 }
 
-func (v VFS) longString() string {
-	if v.isBuild() {
-		return "$(BUILD_ROOT)/" + v.relString()
-	}
-
-	return "$(SOURCE_ROOT)/" + v.relString()
-}
-
 func vfsHasPrefix(s string) bool {
 	return len(s) >= vfsPrefixLen && s[0] == '$' && s[1] == '('
 }
