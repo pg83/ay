@@ -765,8 +765,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	var r *ModuleEmitResult
 
-	depth := ctx.frameDepth
-
 	exc := try(func() {
 		r = genModuleImpl(ctx, instance)
 
@@ -775,12 +773,6 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if exc != nil {
 		ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: %s", instance.Path.relString(), exc.Error())})
-
-		for ctx.frameDepth > depth {
-			ctx.popFrame()
-		}
-
-		delete(ctx.walking, instance)
 
 		r = &ModuleEmitResult{}
 
