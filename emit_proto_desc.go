@@ -236,7 +236,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 	)
 
 	cmdArgs := na.chunkList(head, mid)
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	inputs := []VFS{
 		protocBinary,
@@ -264,7 +264,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, protosrc VFS,
 	descOutputs, rawprotoOutputs, producerSourceInputs []VFS, producerRefs []NodeRef) NodeRef {
 	na := ctx.emit.nodeArenas()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 	merge := make([]ANY, 0, 3+len(descOutputs))
 
 	merge = append(merge, wrapccPython3STR.any(), mergeFilesVFS.any(), selfProtodesc.any())
@@ -305,7 +305,7 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	closure := descPeerClosure(ctx, instance, d.peerdirs, false).peers
 	na := ctx.emit.nodeArenas()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 	prj := realPrjName(instance.Path.relString())
 	protodesc := build(instance.Path.relString(), "/", prj, ".protodesc")
 	tar := build(instance.Path.relString(), "/", prj, ".tar")

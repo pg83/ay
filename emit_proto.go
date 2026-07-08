@@ -259,7 +259,7 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInc
 		}
 	}
 
-	pe.blocks = composePBArgBlocks(d.tc, pe.protocBinary, pe.cppStyleguideBinary, pe.grpcCppBinary,
+	pe.blocks = composePBArgBlocks(ctx.emit.nodeArenas(), d.tc, pe.protocBinary, pe.cppStyleguideBinary, pe.grpcCppBinary,
 		cfg.grpc, cfg.cppOutRoot, pe.liteHeaders,
 		d.protocFlags, pe.extraPlugins, protoInclude)
 
@@ -519,7 +519,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	orderedCC := make([]VFS, 0, 2+len(extraOutputPaths))
 
-	for _, out := range assembleProtoCmdOutputs(protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, pe.extraPlugins, pe.liteHeaders, cfg.grpc) {
+	for _, out := range assembleProtoCmdOutputs(ctx.emit.nodeArenas(), protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, pe.extraPlugins, pe.liteHeaders, cfg.grpc) {
 		if isCCSourceExt(out.relString()) {
 			orderedCC = append(orderedCC, out)
 		}
@@ -636,33 +636,35 @@ func emitPB(
 		srcVFS = protoSrcOverride
 	}
 
-	outputs := assembleProtoCmdOutputs(protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, extraPlugins, liteHeaders, grpc)
+	var outputs []VFS
 
 	if spec.ccFirstOuts {
-		outputs = []VFS{pbCC, pbH}
+		outputs = na.vfsList(pbCC, pbH)
+	} else {
+		outputs = assembleProtoCmdOutputs(na, protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, extraPlugins, liteHeaders, grpc)
 	}
 
-	outsChunk := make([]ANY, 0, len(outputs))
-
-	for _, output := range outputs {
-		outsChunk = append(outsChunk, (output).any())
-	}
-
-	cmdArgs := na.chunkList(blocks.head, outsChunk, blocks.mid, na.anyList(internStr(protoRelPath).any()))
+	outsChunk := na.anyChunkVFS(outputs)
+	relChunk := na.anyList(internStr(protoRelPath).any())
+	chunks := na.chunks.alloc(6)[:0]
+	chunks = append(chunks, blocks.head, outsChunk, blocks.mid, relChunk)
 
 	if len(blocks.tail) > 0 {
-		cmdArgs = append(cmdArgs, blocks.tail)
+		chunks = append(chunks, blocks.tail)
 	}
 
 	if len(spec.optsTail) > 0 {
-		cmdArgs = append(cmdArgs, spec.optsTail)
+		chunks = append(chunks, spec.optsTail)
 	}
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	na.chunks.commit(len(chunks))
 
-	inputs := []VFS{
-		cppStyleguideBinary,
-	}
+	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])
+
+	env := envVarsVCS
+
+	inputs := na.vfs.alloc(5 + len(extraPlugins))[:0]
+	inputs = append(inputs, cppStyleguideBinary)
 
 	if grpc {
 		inputs = append(inputs, grpcCppBinary)
@@ -680,17 +682,33 @@ func emitPB(
 
 	inputs = append(inputs, pbWrapperVFS)
 	inputs = append(inputs, srcVFS)
+	na.vfs.commit(len(inputs))
 
-	foreignDepRefs := depRefs(cppStyleguideLDRef, grpcCppLDRef, protocLDRef)
+	inputs = inputs[:len(inputs):len(inputs)]
 
-	for _, plugin := range extraPlugins {
-		foreignDepRefs = append(foreignDepRefs, depRefs(plugin.LDRef)...)
+	foreignDepRefs := na.noderefs.alloc(4 + len(extraPlugins))[:0]
+
+	for _, r := range [3]NodeRef{cppStyleguideLDRef, grpcCppLDRef, protocLDRef} {
+		if r != 0 {
+			foreignDepRefs = append(foreignDepRefs, r)
+		}
 	}
 
-	foreignDepRefs = append(foreignDepRefs, depRefs(spec.toolLDRef)...)
-	foreignDepRefs = dedupRefs(foreignDepRefs)
+	for _, plugin := range extraPlugins {
+		if plugin.LDRef != 0 {
+			foreignDepRefs = append(foreignDepRefs, plugin.LDRef)
+		}
+	}
 
-	deps := append([]NodeRef(nil), extraDepRefs...)
+	if spec.toolLDRef != 0 {
+		foreignDepRefs = append(foreignDepRefs, spec.toolLDRef)
+	}
+
+	foreignDepRefs = dedupRefs(foreignDepRefs)
+	na.noderefs.commit(len(foreignDepRefs))
+
+	foreignDepRefs = foreignDepRefs[:len(foreignDepRefs):len(foreignDepRefs)]
+	deps := na.noderefs.list(extraDepRefs...)
 	protocCwd := "$(S)"
 
 	if protoSrcOverride != 0 {
@@ -716,8 +734,14 @@ func emitPB(
 	return emit.emitNode(node)
 }
 
-func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, extraPlugins []ResolvedCPPProtoPlugin, liteHeaders, grpc bool) []VFS {
-	outputs := make([]VFS, 0, 4+2*len(extraPlugins))
+func assembleProtoCmdOutputs(na *NodeArenas, protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, extraPlugins []ResolvedCPPProtoPlugin, liteHeaders, grpc bool) []VFS {
+	bound := 4
+
+	for _, plugin := range extraPlugins {
+		bound += len(plugin.Spec.OutputSuffixes)
+	}
+
+	outputs := na.vfs.alloc(bound)[:0]
 
 	outputs = append(outputs, pbH)
 
@@ -751,7 +775,9 @@ func assembleProtoCmdOutputs(protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grp
 		}
 	}
 
-	return outputs
+	na.vfs.commit(len(outputs))
+
+	return outputs[:len(outputs):len(outputs)]
 }
 
 func pluginOutputsPrecedeCppGroup(plugin ResolvedCPPProtoPlugin, liteHeaders bool) bool {
@@ -794,15 +820,15 @@ type PbArgBlocks struct {
 	tail []ANY
 }
 
-func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
+func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
 	grpc bool, cppOutRoot string, liteHeaders bool,
 	extraProtocFlags []ANY, extraPlugins []ResolvedCPPProtoPlugin,
 	protoInclude []VFS) *PbArgBlocks {
-	head := []ANY{
+	head := na.anyList(
 		tc.Python3.any(),
 		pbWrapperVFS.any(),
 		argOutputs.any(),
-	}
+	)
 
 	includeRoot := ""
 
@@ -810,7 +836,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		includeRoot = cppOutRoot
 	}
 
-	mid := make([]ANY, 0, 12+len(protoInclude)+len(extraProtocFlags))
+	mid := na.anys.alloc(12 + len(protoInclude) + len(extraProtocFlags))[:0]
 
 	mid = append(mid,
 		arg2.any(),
@@ -850,7 +876,16 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		internV("--plugin=protoc-gen-cpp_styleguide=", cppStyleguideBinary.prefix(), cppStyleguideBinary.relString()).any(),
 	)
 
-	var tail []ANY
+	na.anys.commit(len(mid))
+
+	mid = mid[:len(mid):len(mid)]
+	tailBound := 2
+
+	for _, plugin := range extraPlugins {
+		tailBound += 2 + strings.Count(plugin.Spec.ExtraOutFlag, ",") + 1
+	}
+
+	tail := na.anys.alloc(tailBound)[:0]
 
 	if grpc {
 		tail = append(tail,
@@ -874,5 +909,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 		}
 	}
 
-	return &PbArgBlocks{head: head, mid: mid, tail: tail}
+	na.anys.commit(len(tail))
+
+	return &PbArgBlocks{head: head, mid: mid, tail: tail[:len(tail):len(tail)]}
 }

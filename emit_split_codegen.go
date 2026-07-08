@@ -53,7 +53,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 
 	cmdArgs = appendAnys(cmdArgs, sc.Opts)
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 	scRef := ctx.emit.reserve()
 	part0 := build(moduleDir, "/", partRels[0])
 	part0Inc := IncludeDirective{kind: includeQuoted, target: includeTarget(part0.rel().any())}

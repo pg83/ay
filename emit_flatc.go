@@ -122,7 +122,7 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 
 	cmdArgs = append(cmdArgs, v.ioLeadArgs, []ANY{headerVFS.any(), srcVFS.any()})
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	node := Node{
 		Platform: instance.Platform,

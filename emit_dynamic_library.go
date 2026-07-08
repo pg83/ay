@@ -50,7 +50,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	cmd0 := composeLDCmdVcsInfo(d.tc, vcsCVFS)
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
 	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, ccOutputs, peerArchivePaths, nil, nil, d.exportsScript.string(), fixElfPath)
-	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	envVcsOnly := envVarsVCS
 	envFull := ctx.host.toolEnv()
 	ldSbomRefs := peerSbomRefs
 	ldSbomPaths := peerSbomPaths
@@ -297,7 +297,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		}
 	}
 
-	d.tc = resolveModuleToolchain(resourceGlobals, instance.Platform.ClangVer)
+	d.tc = resolveModuleToolchain(ctx, resourceGlobals, instance.Platform.ClangVer)
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 	outputName := "lib" + d.moduleStmt.Args[0].string() + ".so"
@@ -308,7 +308,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	cmd1 := composeLDCmdVcsCompile(instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
 	cmd2 := composeDynLibCmd(instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, nil, peerArchivePaths, pluginPaths, strStrings(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath)
 	cmd3 := composeLDCmdLinkOrCopy(d.tc, instance.Path.relString())
-	envVcsOnly := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	envVcsOnly := envVarsVCS
 	envFull := ctx.host.toolEnv()
 	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.relString(), d.exportsScript.string(), ctx.scripts)
 	deps := make([]NodeRef, 0, len(peerArchiveRefs)+len(pluginRefs)+1)

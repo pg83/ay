@@ -192,6 +192,10 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	p.Defines = bundle.Defines
 	p.NoLibcBlock = bundle.NoLibcBlock
 
+	if ownershipOn {
+		registerPlatformOwned(p)
+	}
+
 	return p
 }
 

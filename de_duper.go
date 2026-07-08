@@ -64,7 +64,7 @@ func (dd *DeDuper) filterSeen(list []VFS) []VFS {
 	return list
 }
 
-func dedupClosure(extra []VFS, groups ...[][]VFS) []VFS {
+func dedupClosure(na *NodeArenas, extra []VFS, groups ...[][]VFS) []VFS {
 	total := len(extra)
 
 	for _, g := range groups {
@@ -79,7 +79,7 @@ func dedupClosure(extra []VFS, groups ...[][]VFS) []VFS {
 
 	deduper.reset()
 
-	out := make([]VFS, 0, total)
+	out := na.vfs.alloc(total)[:0]
 
 	for _, v := range extra {
 		if deduper.add(v.strID()) {
@@ -97,7 +97,9 @@ func dedupClosure(extra []VFS, groups ...[][]VFS) []VFS {
 		}
 	}
 
-	return out
+	na.vfs.commit(len(out))
+
+	return out[:len(out):len(out)]
 }
 
 func dedup[T idKey](lists ...[]T) []T {
@@ -126,8 +128,14 @@ func dedup[T idKey](lists ...[]T) []T {
 	return out
 }
 
-func dedupSourceVFS(inputs []VFS, extra [][]VFS) []VFS {
-	out := make([]VFS, 0, len(inputs))
+func dedupSourceVFS(na *NodeArenas, inputs []VFS, extra [][]VFS) []VFS {
+	bound := len(inputs)
+
+	for _, b := range extra {
+		bound += len(b)
+	}
+
+	out := na.vfs.alloc(bound)[:0]
 
 	deduper.reset()
 
@@ -148,8 +156,9 @@ func dedupSourceVFS(inputs []VFS, extra [][]VFS) []VFS {
 	}
 
 	eachBucketVFS(extra, keep)
+	na.vfs.commit(len(out))
 
-	return out
+	return out[:len(out):len(out)]
 }
 
 func concat[T any](lists ...[]T) []T {

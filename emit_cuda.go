@@ -32,7 +32,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 	scanner := e.scanner
 	srcCV := walkClosure(scanner, srcVFS, in.ScanCfg)
 	runtimeCV := walkClosure(scanner, cudaRuntimeIncludeVFS, in.ScanCfg)
-	closure := dedupClosure([]VFS{srcCV.self, runtimeCV.self}, srcCV.buckets, runtimeCV.buckets)
+	closure := dedupClosure(na, []VFS{srcCV.self, runtimeCV.self}, srcCV.buckets, runtimeCV.buckets)
 	mtimeRef, mtimeVFS := ctx.tool(cudaMtimeArg)
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)
 	cuCxxTail := blocks.cxxTail

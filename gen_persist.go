@@ -1,76 +1,50 @@
 package main
 
-func cloneRefs(in []NodeRef) []NodeRef {
-	if len(in) == 0 {
-		return in
-	}
-
-	return append([]NodeRef(nil), in...)
-}
-
-func cloneAnys(in []ANY) []ANY {
-	if len(in) == 0 {
-		return in
-	}
-
-	return append([]ANY(nil), in...)
-}
-
-func cloneParsedIncludeSet(set ParsedIncludeSet) ParsedIncludeSet {
+func persistParsedIncludeSet(ctx *GenCtx, set ParsedIncludeSet) ParsedIncludeSet {
 	out := set
 
 	for i, bucket := range set {
-		if len(bucket) > 0 {
-			out[i] = append([]IncludeDirective(nil), bucket...)
-		}
+		out[i] = ctx.dirSlices.internCopy(bucket)
 	}
 
 	return out
 }
 
-func persistVFSs(in []VFS) []VFS {
-	if len(in) == 0 {
-		return in
-	}
-
-	return cloneVFSs(in)
-}
-
-func persistResult(r *ModuleEmitResult) {
+func persistResult(ctx *GenCtx, r *ModuleEmitResult) {
 	if r.persisted {
 		return
 	}
 
 	r.persisted = true
-	r.WholeArchiveRefs = cloneRefs(r.WholeArchiveRefs)
-	r.WholeArchivePaths = persistVFSs(r.WholeArchivePaths)
-	r.WholeArchiveCmdPaths = persistVFSs(r.WholeArchiveCmdPaths)
-	r.AddInclGlobal = persistVFSs(r.AddInclGlobal)
-	r.OwnAddInclGlobal = persistVFSs(r.OwnAddInclGlobal)
-	r.ProtoInclude = persistVFSs(r.ProtoInclude)
-	r.AddInclOneLevel = persistVFSs(r.AddInclOneLevel)
-	r.AddInclUserGlobal = persistVFSs(r.AddInclUserGlobal)
-	r.CFlagsGlobal = cloneAnys(r.CFlagsGlobal)
-	r.CXXFlagsGlobal = cloneAnys(r.CXXFlagsGlobal)
-	r.COnlyFlagsGlobal = cloneAnys(r.COnlyFlagsGlobal)
-	r.ObjAddLibsGlobal = cloneAnys(r.ObjAddLibsGlobal)
-	r.LDFlagsGlobal = cloneAnys(r.LDFlagsGlobal)
-	r.RPathFlagsGlobal = cloneAnys(r.RPathFlagsGlobal)
-	r.PeerArchiveClosureRefs = cloneRefs(r.PeerArchiveClosureRefs)
-	r.PeerArchiveClosurePaths = persistVFSs(r.PeerArchiveClosurePaths)
-	r.PeerGlobalClosureRefs = cloneRefs(r.PeerGlobalClosureRefs)
-	r.PeerGlobalClosurePaths = persistVFSs(r.PeerGlobalClosurePaths)
-	r.PeerWholeArchiveClosureRefs = cloneRefs(r.PeerWholeArchiveClosureRefs)
-	r.PeerWholeArchiveClosurePaths = persistVFSs(r.PeerWholeArchiveClosurePaths)
-	r.PeerWholeArchiveCmdClosurePaths = persistVFSs(r.PeerWholeArchiveCmdClosurePaths)
-	r.LDPluginRefs = cloneRefs(r.LDPluginRefs)
-	r.LDPluginPaths = persistVFSs(r.LDPluginPaths)
-	r.PeerDynamicClosureRefs = cloneRefs(r.PeerDynamicClosureRefs)
-	r.PeerDynamicClosurePaths = persistVFSs(r.PeerDynamicClosurePaths)
-	r.PeerSbomClosureRefs = cloneRefs(r.PeerSbomClosureRefs)
-	r.PeerSbomClosurePaths = persistVFSs(r.PeerSbomClosurePaths)
-	r.InducedDeps = cloneParsedIncludeSet(r.InducedDeps)
-	r.DescClosure = append([]DescProtoPeer(nil), r.DescClosure...)
-	r.ResourceGlobalClosure = append([]ResourceDecl(nil), r.ResourceGlobalClosure...)
-	r.GoSrcClosure = persistVFSs(r.GoSrcClosure)
+	r.WholeArchiveRefs = ctx.refSlices.internCopy(r.WholeArchiveRefs)
+	r.WholeArchivePaths = ctx.vfsSlices.internCopy(r.WholeArchivePaths)
+	r.WholeArchiveCmdPaths = ctx.vfsSlices.internCopy(r.WholeArchiveCmdPaths)
+	r.AddInclGlobal = ctx.vfsSlices.internCopy(r.AddInclGlobal)
+	r.OwnAddInclGlobal = ctx.vfsSlices.internCopy(r.OwnAddInclGlobal)
+	r.ProtoInclude = ctx.vfsSlices.internCopy(r.ProtoInclude)
+	r.AddInclOneLevel = ctx.vfsSlices.internCopy(r.AddInclOneLevel)
+	r.AddInclUserGlobal = ctx.vfsSlices.internCopy(r.AddInclUserGlobal)
+	r.CFlagsGlobal = ctx.argSlices.internCopy(r.CFlagsGlobal)
+	r.CXXFlagsGlobal = ctx.argSlices.internCopy(r.CXXFlagsGlobal)
+	r.COnlyFlagsGlobal = ctx.argSlices.internCopy(r.COnlyFlagsGlobal)
+	r.ObjAddLibsGlobal = ctx.argSlices.internCopy(r.ObjAddLibsGlobal)
+	r.LDFlagsGlobal = ctx.argSlices.internCopy(r.LDFlagsGlobal)
+	r.RPathFlagsGlobal = ctx.argSlices.internCopy(r.RPathFlagsGlobal)
+	r.PeerArchiveClosureRefs = ctx.refSlices.internCopy(r.PeerArchiveClosureRefs)
+	r.PeerArchiveClosurePaths = ctx.vfsSlices.internCopy(r.PeerArchiveClosurePaths)
+	r.PeerGlobalClosureRefs = ctx.refSlices.internCopy(r.PeerGlobalClosureRefs)
+	r.PeerGlobalClosurePaths = ctx.vfsSlices.internCopy(r.PeerGlobalClosurePaths)
+	r.PeerWholeArchiveClosureRefs = ctx.refSlices.internCopy(r.PeerWholeArchiveClosureRefs)
+	r.PeerWholeArchiveClosurePaths = ctx.vfsSlices.internCopy(r.PeerWholeArchiveClosurePaths)
+	r.PeerWholeArchiveCmdClosurePaths = ctx.vfsSlices.internCopy(r.PeerWholeArchiveCmdClosurePaths)
+	r.LDPluginRefs = ctx.refSlices.internCopy(r.LDPluginRefs)
+	r.LDPluginPaths = ctx.vfsSlices.internCopy(r.LDPluginPaths)
+	r.PeerDynamicClosureRefs = ctx.refSlices.internCopy(r.PeerDynamicClosureRefs)
+	r.PeerDynamicClosurePaths = ctx.vfsSlices.internCopy(r.PeerDynamicClosurePaths)
+	r.PeerSbomClosureRefs = ctx.refSlices.internCopy(r.PeerSbomClosureRefs)
+	r.PeerSbomClosurePaths = ctx.vfsSlices.internCopy(r.PeerSbomClosurePaths)
+	r.InducedDeps = persistParsedIncludeSet(ctx, r.InducedDeps)
+	r.DescClosure = ctx.descSlices.internCopy(r.DescClosure)
+	r.ResourceGlobalClosure = ctx.declSlices.internCopy(r.ResourceGlobalClosure)
+	r.GoSrcClosure = ctx.vfsSlices.internCopy(r.GoSrcClosure)
 }

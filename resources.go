@@ -223,11 +223,27 @@ type ModuleToolchain struct {
 	Python3       VFS
 }
 
-func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolchain {
-	var tc ModuleToolchain
-
+func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, clangVer string) ModuleToolchain {
 	clangRes := resourcePatternClangTool + clangVer
 	clangResID := internStr(clangRes)
+	key := clangVer
+
+	for _, decl := range globals {
+		switch decl.Name {
+		case clangResID:
+			key += "+clang"
+		case strLLDRootName:
+			key += "+lld"
+		case strYMakePython3Name:
+			key += "+py3"
+		}
+	}
+
+	if tc, ok := ctx.tcMemo[key]; ok {
+		return tc
+	}
+
+	var tc ModuleToolchain
 
 	for _, decl := range globals {
 		switch decl.Name {
@@ -262,6 +278,11 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 		arg2.any(),
 	}
 
+	ctx.tcMemo[key] = tc
+
+	if ownershipOn {
+		registerOwnedSlice(tc.ARCmdHead)
+	}
 	return tc
 }
 
@@ -356,7 +377,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 
 	srcVFS := build(strings.TrimPrefix(d.primaryOutput, "$(B)/"))
 	dst := lDOutputPath(instance, programBinaryName(instance, d.moduleStmt))
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	var ownSbomRef *NodeRef
 	var ownSbomPath *VFS

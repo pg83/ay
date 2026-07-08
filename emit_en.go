@@ -137,11 +137,11 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		var enClosure []VFS
 
 		if withHeader {
-			enClosure = dedupClosure([]VFS{headerClosure.self}, headerClosure.buckets)
+			enClosure = dedupClosure(ctx.na, []VFS{headerClosure.self}, headerClosure.buckets)
 		} else {
 			ownCV := walkClosure(e.scanner, serializedCPPPath, scanCfg)
 
-			enClosure = dedupClosure([]VFS{headerClosure.self}, headerClosure.buckets, ownCV.buckets)
+			enClosure = dedupClosure(ctx.na, []VFS{headerClosure.self}, headerClosure.buckets, ownCV.buckets)
 		}
 
 		augmentedDepENRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, enClosure)
@@ -181,25 +181,35 @@ func emitEN(
 ) {
 	na := emit.nodeArenas()
 
-	cmdArgs := []ANY{
+	cmdArgs := na.anys.alloc(8)[:0]
+	cmdArgs = append(cmdArgs,
 		(enumParserBin).any(),
 		(headerInput).any(),
 		argIncludePath.any(),
 		headerInput.rel().any(),
 		argOutput.any(),
 		(serializedCPPVFS).any(),
-	}
-
-	outputs := []VFS{serializedCPPVFS}
+	)
 
 	if withHeader {
 		cmdArgs = append(cmdArgs, argHeader.any(), (serializedHVFS).any())
-		outputs = append(outputs, serializedHVFS)
 	}
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
-	deps := append([]NodeRef(nil), depENRefs...)
-	foreignDepRefs := depRefs(enumParserLD)
+	na.anys.commit(len(cmdArgs))
+
+	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+
+	var outputs []VFS
+
+	if withHeader {
+		outputs = na.vfsList(serializedCPPVFS, serializedHVFS)
+	} else {
+		outputs = na.vfsList(serializedCPPVFS)
+	}
+
+	env := envVarsVCS
+	deps := na.noderefs.list(depENRefs...)
+	foreignDepRefs := na.refList(enumParserLD)
 
 	node := Node{
 		Platform: instance.Platform,

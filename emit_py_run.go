@@ -145,6 +145,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 
 func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	na := ctx.na
 	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
 
 	var groups [][][]VFS
@@ -192,7 +193,7 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 		}
 	}
 
-	return dedupClosure(selves, groups...)
+	return dedupClosure(na, selves, groups...)
 }
 
 func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
@@ -349,7 +350,7 @@ func emitPYRun(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	for _, kv := range stmt.EnvPairs {
 		parts := strings.SplitN(kv.string(), "=", 2)

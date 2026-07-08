@@ -71,7 +71,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	args = append(args, argYaEndCommandFile.any())
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	node := Node{
 		Platform:     instance.Platform,

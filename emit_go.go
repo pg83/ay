@@ -8,7 +8,7 @@ var (
 	goKV                 = KV{P: pkGO, PC: pcLightRed, ShowOut: true}
 	goToolKV             = KV{P: pkGoTool, PC: pcLightBlue, ShowOut: true}
 	goLdKV               = KV{P: pkLD, PC: pcLightRed, ShowOut: true}
-	goVcsEnv             = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	goVcsEnv             = envVarsVCS
 	goStdRuntimeVFS      = source(goStdPrefix + "/runtime")
 	strGoToolsRoot       = internV("$(B)/resources/", "GO_TOOLS")
 	strGoAsmTool         = internV("$(B)/resources/", "GO_TOOLS", "/pkg/tool/linux_amd64/asm")

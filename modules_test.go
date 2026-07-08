@@ -517,7 +517,7 @@ func TestCatboostOpenSourceDefineGating(t *testing.T) {
 }
 
 func testToolchain() ModuleToolchain {
-	return resolveModuleToolchain([]ResourceDecl{
+	return resolveModuleToolchain(&GenCtx{tcMemo: map[string]ModuleToolchain{}}, []ResourceDecl{
 		makeResourceDecl(resourcePatternClang20, "sbr:test-clang"),
 		makeResourceDecl(resourcePatternLLDRoot, "sbr:test-lld"),
 		makeResourceDecl(resourcePatternYMakePython3, "sbr:test-python"),

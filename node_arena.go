@@ -2,6 +2,7 @@ package main
 
 type NodeArenas struct {
 	cmds     *BumpAllocator[Cmd]
+	envs     *BumpAllocator[EnvVar]
 	vfs      *BumpAllocator[VFS]
 	strs     *BumpAllocator[STR]
 	chunks   *BumpAllocator[[]ANY]
@@ -14,6 +15,7 @@ type NodeArenas struct {
 func newNodeArenas() *NodeArenas {
 	return &NodeArenas{
 		cmds:     newBumpAllocator[Cmd](1 << 8),
+		envs:     newBumpAllocator[EnvVar](1 << 8),
 		vfs:      newBumpAllocator[VFS](1 << 12),
 		strs:     newBumpAllocator[STR](1 << 12),
 		chunks:   newBumpAllocator[[]ANY](1 << 10),
@@ -26,6 +28,38 @@ func newNodeArenas() *NodeArenas {
 
 func (na *NodeArenas) cmdList(cs ...Cmd) []Cmd {
 	return na.cmds.list(cs...)
+}
+
+func (na *NodeArenas) envList(vs ...EnvVar) EnvVars {
+	return EnvVars(na.envs.list(vs...))
+}
+
+func (na *NodeArenas) refList(refs ...NodeRef) []NodeRef {
+	n := 0
+
+	for _, r := range refs {
+		if r != 0 {
+			n++
+		}
+	}
+
+	if n == 0 {
+		return nil
+	}
+
+	block := na.noderefs.alloc(n)
+	k := 0
+
+	for _, r := range refs {
+		if r != 0 {
+			block[k] = r
+			k++
+		}
+	}
+
+	na.noderefs.commit(k)
+
+	return block[:k:k]
 }
 
 func (na *NodeArenas) vfsList(vs ...VFS) []VFS {
@@ -81,6 +115,18 @@ func (na *NodeArenas) anyChunk(ss []STR) []ANY {
 	na.anys.commit(len(ss))
 
 	return block[:len(ss):len(ss)]
+}
+
+func (na *NodeArenas) anyChunkVFS(vs []VFS) []ANY {
+	block := na.anys.alloc(len(vs))
+
+	for i, v := range vs {
+		block[i] = v.any()
+	}
+
+	na.anys.commit(len(vs))
+
+	return block[:len(vs):len(vs)]
 }
 
 func (na *NodeArenas) anyChunkAny(as []ANY) []ANY {

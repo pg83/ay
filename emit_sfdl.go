@@ -15,7 +15,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 	srcVFS := source(instance.Path.relString(), "/", srcRel)
 	tmpVFS := build(instance.Path.relString(), "/", srcRel, ".tmp")
 	incVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)))
-	plainEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	plainEnv := envVarsVCS
 	toolEnv := instance.Platform.ToolEnvVars
 	blocks := d.cc.CCBlocks
 

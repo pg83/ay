@@ -45,7 +45,7 @@ func (e *EmitContext) emitLibraryCInSource(meta SrcMeta) {
 func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 	cmdArgs := []ANY{d.cc.TC.Python3.any(), configureFilePyVFS.any(), srcVFS.any(), outVFS.any()}
 
 	cmdArgs = appendInternAnys(cmdArgs, buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))

@@ -85,7 +85,7 @@ func (e *EmitContext) emitArchive(
 	}
 
 	deps := concat(producerRefs, depRefs(toolLDRef))
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	n := Node{
 		Platform: instance.Platform,

@@ -2331,7 +2331,7 @@ END()
 func TestEmitPB_PeerRedeclaredOwnNamespaceRidesProtoIncludeBand(t *testing.T) {
 	const ns = "taxi/schemas/schemas/proto"
 
-	blocks := composePBArgBlocks(testToolchain(),
+	blocks := composePBArgBlocks(newNodeArenas(), testToolchain(),
 		build("contrib/tools/protoc/protoc"),
 		build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
@@ -2378,7 +2378,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 	e := newStreamingEmitter(nil)
 	inst := targetInstance("pkg/proto")
 
-	blocks := composePBArgBlocks(testToolchain(),
+	blocks := composePBArgBlocks(newNodeArenas(), testToolchain(),
 		build("contrib/tools/protoc/protoc"),
 		build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
@@ -2419,7 +2419,7 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 	e := newStreamingEmitter(nil)
 	inst := targetInstance("pkg/proto")
 
-	blocks := composePBArgBlocks(testToolchain(),
+	blocks := composePBArgBlocks(newNodeArenas(), testToolchain(),
 		build("contrib/tools/protoc/protoc"),
 		build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
