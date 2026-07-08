@@ -10,6 +10,7 @@ type NodeArenas struct {
 	inputs   *BumpAllocator[[]VFS]
 	noderefs *BumpAllocator[NodeRef]
 	nodes    *BumpAllocator[Node]
+	exts     *BumpAllocator[KVExt]
 }
 
 func newNodeArenas() *NodeArenas {
@@ -21,6 +22,7 @@ func newNodeArenas() *NodeArenas {
 		chunks:   newBumpAllocator[[]ANY](1 << 10),
 		anys:     newBumpAllocator[ANY](1 << 12),
 		inputs:   newBumpAllocator[[]VFS](1 << 10),
+		exts:     newBumpAllocator[KVExt](1 << 8),
 		noderefs: newBumpAllocator[NodeRef](1 << 12),
 		nodes:    newBumpAllocator[Node](1 << 10),
 	}

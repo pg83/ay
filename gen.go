@@ -618,7 +618,7 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootRel, inc.relString()) {
 		incStmts := ctx.parseFileCached(inc.relString())
 
-		stmts = concat(stmts, incStmts)
+		stmts = astStmts.list(concat(stmts, incStmts)...)
 	}
 
 	ctx.moduleStmts[dir] = stmts
@@ -1878,7 +1878,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			arRef = emitARNamed(arInstance, arBaseName, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		}
 
-		arPath = ptr(build(instance.Path.relString(), "/", arBaseName))
+		p := ctx.emit.nodeArenas().vfs.one()
+
+		*p = build(instance.Path.relString(), "/", arBaseName)
+		arPath = p
 	}
 
 	if sbomActive(ctx, instance) && sbomQualifies(d) && d.unit.Tag != unitTagPy3BinLib && !isGoModuleType(d.moduleStmt.Name) {
