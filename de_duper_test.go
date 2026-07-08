@@ -37,7 +37,7 @@ func TestDeDuper_FilterSeenNoCollisionReturnsInput(t *testing.T) {
 	dd.add(a.strID())
 
 	list := []VFS{b, c}
-	got := dd.filterSeen(list)
+	got := dd.filterSeen(newNodeArenas(), list)
 
 	if &got[0] != &list[0] {
 		t.Fatal("collision-free filterSeen did not return the input slice")
@@ -59,7 +59,7 @@ func TestDeDuper_FilterSeenDropsDuplicates(t *testing.T) {
 	dd.add(b.strID())
 
 	list := []VFS{a, b, c, c, d}
-	got := dd.filterSeen(list)
+	got := dd.filterSeen(newNodeArenas(), list)
 
 	want := []VFS{a, c, d}
 

@@ -46,9 +46,13 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
-	cmdArgs := []ANY{d.cc.TC.Python3.any(), configureFilePyVFS.any(), srcVFS.any(), outVFS.any()}
+	cfgVars := buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string())
+	cmdArgs := na.anys.alloc(4 + len(cfgVars))[:0]
+	cmdArgs = append(cmdArgs, d.cc.TC.Python3.any(), configureFilePyVFS.any(), srcVFS.any(), outVFS.any())
+	cmdArgs = appendInternAnys(cmdArgs, cfgVars)
+	na.anys.commit(len(cmdArgs))
 
-	cmdArgs = appendInternAnys(cmdArgs, buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string()))
+	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
 	cv := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
 
@@ -68,7 +72,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		SourcePath:     srcVFS,
 		ProducerRef:    cfRef,
 		GeneratorRefs:  nil,
-		SourceInputs:   []VFS{srcVFS, configureFilePyVFS},
+		SourceInputs:   na.vfsList(srcVFS, configureFilePyVFS),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cfTemplateParsedIncludes(ctx.parsers, srcVFS.relString())},
 		ClosureLeaves:  []VFS{srcVFS, configureFilePyVFS},
 	})

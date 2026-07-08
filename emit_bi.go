@@ -20,15 +20,15 @@ func emitBI(
 	outVFS := build(outPrefix, outputHeader)
 	env := envVarsVCS
 
-	cmd0Args := []ANY{
+	cmd0Args := na.anyList(
 		tc.Python3.any(),
 		(yieldLinePyVFS).any(),
 		arg2.any(),
 		argsFileVFS.any(),
 		tc.CXX.any(),
-	}
+	)
 
-	cmd1Args := make([]ANY, 0, 4+len(cxxFlags))
+	cmd1Args := na.anys.alloc(4 + len(cxxFlags))[:0]
 
 	cmd1Args = append(cmd1Args,
 		tc.Python3.any(),
@@ -38,8 +38,10 @@ func emitBI(
 	)
 
 	cmd1Args = append(cmd1Args, cxxFlags...)
+	na.anys.commit(len(cmd1Args))
 
-	cmd2Args := []ANY{
+	cmd1Args = cmd1Args[:len(cmd1Args):len(cmd1Args)]
+	cmd2Args := na.anyList(
 		tc.Python3.any(),
 		(xargsPyVFS).any(),
 		arg2.any(),
@@ -47,13 +49,12 @@ func emitBI(
 		tc.Python3.any(),
 		(buildInfoGenPyVFS).any(),
 		(outVFS).any(),
-	}
-
-	inputs := []VFS{
+	)
+	inputs := na.vfsList(
 		yieldLinePyVFS,
 		xargsPyVFS,
 		buildInfoGenPyVFS,
-	}
+	)
 
 	node := Node{
 		Platform:     instance.Platform,
@@ -63,7 +64,7 @@ func emitBI(
 		KV:           &biKV,
 		Outputs:      na.vfsList(outVFS),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:      []NodeRef{},
+		DepRefs:      na.refList(),
 		Resources:    instance.Platform.UsesPython3Clang,
 	}
 

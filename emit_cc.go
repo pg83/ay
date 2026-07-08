@@ -140,7 +140,7 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 	in.ExtraDepRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, in.IncludeView)
 
 	if in.MainOutInducedInputs {
-		in.IncludeInputs = e.mainOutInducedInputs(in.IncludeView)
+		in.IncludeInputs = e.mainOutInducedInputs(ctx.na, in.IncludeView)
 		in.IncludeView = Closure{}
 	}
 
@@ -149,10 +149,11 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 	return ref, outPath
 }
 
-func (e *EmitContext) mainOutInducedInputs(includeView Closure) []VFS {
+func (e *EmitContext) mainOutInducedInputs(na *NodeArenas, includeView Closure) []VFS {
 	reg := e.codegen
+	out := na.vfs.alloc(2 * includeView.len())[:0]
 
-	var out, extra []VFS
+	var extra []VFS
 
 	includeView.each(func(v VFS) {
 		out = append(out, v)
@@ -166,7 +167,10 @@ func (e *EmitContext) mainOutInducedInputs(includeView Closure) []VFS {
 		}
 	})
 
-	return append(out, extra...)
+	out = append(out, extra...)
+	na.vfs.commit(len(out))
+
+	return out[:len(out):len(out)]
 }
 
 func composeCCNode(instance ModuleInstance, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {

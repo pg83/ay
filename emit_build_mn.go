@@ -36,7 +36,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		KV:             &mnKV,
 		Outputs:        na.vfsList(cppVFS, rodataVFS),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: depRefs(archiverRef),
+		ForeignDepRefs: na.refList(archiverRef),
 		Resources:      usesPython3,
 	}
 

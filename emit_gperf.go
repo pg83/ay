@@ -27,11 +27,14 @@ func gperfSymbolName(srcRel string) string {
 func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, ref NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 	env := envVarsVCS
-	head := make([]ANY, 0, 3+len(gperfFlags))
+	head := na.anys.alloc(3 + len(gperfFlags))[:0]
 
 	head = append(head, (gperfBin).any())
 	head = append(head, gperfFlags...)
 	head = append(head, internStr(gperfSymbolName(srcRel)).any(), (srcVFS).any())
+	na.anys.commit(len(head))
+
+	head = head[:len(head):len(head)]
 
 	node := Node{
 		Platform:       instance.Platform,
@@ -41,7 +44,7 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 		Outputs:        na.vfsList(genVFS),
 		KV:             &gperfKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: depRefs(gperfLD),
+		ForeignDepRefs: na.refList(gperfLD),
 	}
 
 	emit.emitReservedNode(node, ref)
@@ -76,7 +79,7 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 	e.enqueueSrc(meta)
 
 	e.deferPass2(func() {
-		srcInputs := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg).collect(func(v VFS) bool { return v.isSource() })
+		srcInputs := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg).collect(ctx.na, func(v VFS) bool { return v.isSource() })
 
 		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef, ctx.emit)
 	})

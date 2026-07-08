@@ -58,7 +58,7 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 	e.enqueueSrc(meta)
 
 	e.deferPass2(func() {
-		lxClosure := walkClosure(e.scanner, outVFS, d.cc.ScanCfg).collect(func(v VFS) bool { return v.isSource() })
+		lxClosure := walkClosure(e.scanner, outVFS, d.cc.ScanCfg).collect(ctx.na, func(v VFS) bool { return v.isSource() })
 
 		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 	})
@@ -83,6 +83,6 @@ func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, o
 		Outputs:        na.vfsList(outVFS),
 		KV:             &flexKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: []NodeRef{flexRef},
+		ForeignDepRefs: na.refList(flexRef),
 	}, id)
 }

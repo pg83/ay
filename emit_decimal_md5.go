@@ -31,7 +31,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 		optVFSs = append(optVFSs, e.requireProducedInput("DECIMAL_MD5 input", opt.string(), copyFileInputVFS(ctx.fs, instance.Path, opt.string())))
 	}
 
-	cmdArgs := make([]ANY, 0, 7+len(optVFSs))
+	cmdArgs := na.anys.alloc(7 + len(optVFSs))[:0]
 
 	cmdArgs = append(cmdArgs,
 		d.tc.Python3.any(),
@@ -47,6 +47,9 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 		cmdArgs = append(cmdArgs, v.any())
 	}
 
+	na.anys.commit(len(cmdArgs))
+
+	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 	env := envVarsVCS
 
 	svRef := ctx.emit.emitNode(Node{
@@ -60,10 +63,13 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 		Resources:    usesPython3,
 	})
 
-	sourceInputs := make([]VFS, 0, len(optVFSs)+1)
+	sourceInputs := na.vfs.alloc(len(optVFSs) + 1)
+	sn := copy(sourceInputs, optVFSs)
+	sourceInputs[sn] = decimalMD5PyVFS
+	sn++
+	na.vfs.commit(sn)
 
-	sourceInputs = append(sourceInputs, optVFSs...)
-	sourceInputs = append(sourceInputs, decimalMD5PyVFS)
+	sourceInputs = sourceInputs[:sn:sn]
 
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:    outVFS,

@@ -352,7 +352,7 @@ func (e *EmitContext) flushGoSrcs() {
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(goSymabisHead, e.goInclSplitArgs(), goSymabisDefs, tail[:nt:nt]), Env: goVcsEnv}),
 		Env:          goVcsEnv,
-		Inputs:       na.inputList(e.goRes.AsmFiles, e.goRes.AsmInclSrcs),
+		Inputs:       na.inputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs),
 		KV:           &goToolKV,
 		Outputs:      na.vfsList(out),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -440,6 +440,10 @@ func goCmdEnv(ctx *GenCtx, p *Platform, tc ModuleToolchain) EnvVars {
 	}
 
 	ctx.goEnvMemo[key] = env
+
+	if ownershipOn {
+		registerOwnedSlice(env)
+	}
 
 	return env
 }
@@ -939,8 +943,8 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	vcsCPath := build(dir, "/__vcs_version__.c")
 	vcsOPath := build(dir, "/__vcs_version__.c", instance.Platform.objectSuffix())
 	vcsGoPath := build(dir, "/__vcs_version__.go")
-	cmd0 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsInfo(d.tc, vcsCPath)), Env: goVcsEnv}
-	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars}
+	cmd0 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsInfo(na, d.tc, vcsCPath)), Env: goVcsEnv}
+	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(na, instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars}
 
 	cmd2 := Cmd{CmdArgs: na.chunkList(na.anyList(
 		wrapccPython3STR.any(),
@@ -1012,7 +1016,7 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	extraInputs := extraBlock[:nx:nx]
 
 	inputs := na.inputList(
-		goRes.GoFiles,
+		na.vfsList(goRes.GoFiles...),
 		goToolScriptInputsChunk,
 		ctx.scripts[ldVcsInfoVFS.rel()],
 		ctx.scripts[ldFsToolsVFS.rel()],
@@ -1055,8 +1059,8 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	var linkSbomCmd, sbomObjcopyCmd Cmd
 
 	if sbomEmbed {
-		linkSbomCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(d.tc, strGo, instance.Path.rel(), sbomJSON, peerSbomPaths)), Cwd: bldRootDirVFS, Env: goVcsEnv}
-		sbomObjcopyCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outPath)), Env: goVcsEnv}
+		linkSbomCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(na, d.tc, strGo, instance.Path.rel(), sbomJSON, peerSbomPaths)), Cwd: bldRootDirVFS, Env: goVcsEnv}
+		sbomObjcopyCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(na, d.tc, sbomJSON, outPath)), Env: goVcsEnv}
 	}
 
 	cmds := na.cmds.alloc(6)

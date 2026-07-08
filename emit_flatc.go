@@ -114,13 +114,25 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	headerVFS := build(srcRel, ".h")
 	cppVFS := build(srcRel, ".cpp")
 	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt), v.bfbsExt)
-	cmdArgs := na.chunkList(na.anyList(tc.Python3.any(), (flatcWrapperVFS).any(), (flatcBinary).any()), v.constFlags)
+	flatcFlagsChunk := []ANY(nil)
 
 	if len(flatcFlags) > 0 {
-		cmdArgs = append(cmdArgs, na.anyConcat(flatcFlags))
+		flatcFlagsChunk = na.anyConcat(flatcFlags)
 	}
 
-	cmdArgs = append(cmdArgs, v.ioLeadArgs, []ANY{headerVFS.any(), srcVFS.any()})
+	headChunk := na.anyList(tc.Python3.any(), (flatcWrapperVFS).any(), (flatcBinary).any())
+	tailChunk := na.anyList(headerVFS.any(), srcVFS.any())
+	chunks := na.chunks.alloc(5)[:0]
+	chunks = append(chunks, headChunk, v.constFlags)
+
+	if flatcFlagsChunk != nil {
+		chunks = append(chunks, flatcFlagsChunk)
+	}
+
+	chunks = append(chunks, v.ioLeadArgs, tailChunk)
+	na.chunks.commit(len(chunks))
+
+	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])
 
 	env := envVarsVCS
 
@@ -130,8 +142,8 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 			Cwd: bldRootDirVFS,
 			Env: env}),
 		Env:            env,
-		DepRefs:        genDeps,
-		ForeignDepRefs: depRefs(flatcLDRef),
+		DepRefs:        na.noderefs.list(genDeps...),
+		ForeignDepRefs: na.refList(flatcLDRef),
 		Inputs:         na.inputList(na.vfsList(flatcBinary, flatcWrapperVFS, srcVFS), transitiveImports.buckets...),
 		KV:             v.kv,
 		Outputs:        na.vfsList(headerVFS, cppVFS, bfbsVFS),

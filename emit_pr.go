@@ -105,7 +105,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		mainOutputVFS = *stdoutVFS
 	}
 
-	prSourceInputs := prCollectSourceInputs(e.codegen, inVFSs)
+	prSourceInputs := prCollectSourceInputs(ctx.na, e.codegen, inVFSs)
 	protoImportPbH := prProtoImportPbH(ctx.parsers, inVFSs)
 	prRef := ctx.emit.reserve()
 	registeredPROut := map[VFS]bool{}
@@ -177,9 +177,9 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	e.deferPass2(func() {
 		inputClosure := e.prInputClosure(stmt)
 
-		if prSourceClosure := filterSourceVFS(inputClosure); len(prSourceClosure) > 0 {
+		if prSourceClosure := filterSourceVFS(ctx.na, inputClosure); len(prSourceClosure) > 0 {
 			for out := range registeredPROut {
-				e.codegen.addSourceInputs(out, prSourceClosure)
+				e.codegen.addSourceInputs(ctx.na, out, prSourceClosure)
 			}
 		}
 
@@ -208,7 +208,7 @@ type prSourceInputSet struct {
 	generated []VFS
 }
 
-func prCollectSourceInputs(reg *CodegenRegistry, inVFSs []VFS) prSourceInputSet {
+func prCollectSourceInputs(na *NodeArenas, reg *CodegenRegistry, inVFSs []VFS) prSourceInputSet {
 	var direct []VFS
 	var generated []VFS
 
@@ -224,7 +224,12 @@ func prCollectSourceInputs(reg *CodegenRegistry, inVFSs []VFS) prSourceInputSet 
 		}
 	}
 
-	return prSourceInputSet{all: append(direct, generated...), generated: generated}
+	all := na.vfs.alloc(len(direct) + len(generated))
+	an := copy(all, direct)
+	an += copy(all[an:], generated)
+	na.vfs.commit(an)
+
+	return prSourceInputSet{all: all[:an:an], generated: generated}
 }
 
 func prProtoImportPbH(pm *IncludeParserManager, inVFSs []VFS) []IncludeDirective {
@@ -395,7 +400,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		return nil
 	}
 
-	res := dedup(out, nil)
+	res := dedupClosure(ctx.na, out)
 
 	ctx.prClosureScratch = out
 
@@ -509,17 +514,26 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	na := emit.nodeArenas()
 	env := envVarsVCS
 
-	for _, kv := range stmt.EnvPairs {
-		parts := strings.SplitN(kv.string(), "=", 2)
+	if len(stmt.EnvPairs) > 0 {
+		block := na.envs.alloc(1 + len(stmt.EnvPairs))[:0]
+		block = append(block, envVarsVCS...)
 
-		if len(parts) == 2 {
-			env = append(env, EnvVar{Name: internEnv(parts[0]), Value: internStr(parts[1]).any()})
-		} else {
-			env = append(env, EnvVar{Name: internEnv(kv.string()), Value: strEmpty.any()})
+		for _, kv := range stmt.EnvPairs {
+			parts := strings.SplitN(kv.string(), "=", 2)
+
+			if len(parts) == 2 {
+				block = append(block, EnvVar{Name: internEnv(parts[0]), Value: internStr(parts[1]).any()})
+			} else {
+				block = append(block, EnvVar{Name: internEnv(kv.string()), Value: strEmpty.any()})
+			}
 		}
+
+		na.envs.commit(len(block))
+
+		env = EnvVars(block[:len(block):len(block)])
 	}
 
-	cmdArgs := make([]ANY, 0, 1+len(stmt.Args))
+	cmdArgs := na.anys.alloc(1 + len(stmt.Args))[:0]
 
 	cmdArgs = append(cmdArgs, spec.toolBinPath.any())
 
@@ -557,7 +571,10 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 		cmdArgs = append(cmdArgs, key)
 	}
 
-	head := make([]VFS, 0, 1+len(spec.auxTools)+len(stmt.INFiles))
+	na.anys.commit(len(cmdArgs))
+
+	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+	head := na.vfs.alloc(1 + len(spec.auxTools) + len(spec.inVFSs))[:0]
 
 	deduper.reset()
 
@@ -579,9 +596,12 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 		appendUnique(v)
 	}
 
-	inputs := na.inputList(head, deduper.filterSeen(spec.inputClosure))
+	na.vfs.commit(len(head))
 
-	var outputs []VFS
+	head = head[:len(head):len(head)]
+	inputs := na.inputList(head, deduper.filterSeen(na, spec.inputClosure))
+	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
+
 	var stdoutPath VFS
 
 	emittedOut := map[VFS]bool{}
@@ -608,13 +628,24 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 		appendOutput(spec.outVFSByToken[f])
 	}
 
-	var toolRefs []NodeRef
+	na.vfs.commit(len(outputs))
+
+	outputs = outputs[:len(outputs):len(outputs)]
+	toolRefs := na.noderefs.alloc(len(spec.auxTools) + 1)[:0]
 
 	for _, tool := range spec.auxTools {
-		toolRefs = append(toolRefs, depRefs(tool.ref)...)
+		if tool.ref != 0 {
+			toolRefs = append(toolRefs, tool.ref)
+		}
 	}
 
-	toolRefs = append(toolRefs, depRefs(spec.toolLDRef)...)
+	if spec.toolLDRef != 0 {
+		toolRefs = append(toolRefs, spec.toolLDRef)
+	}
+
+	na.noderefs.commit(len(toolRefs))
+
+	toolRefs = toolRefs[:len(toolRefs):len(toolRefs)]
 
 	cmd := Cmd{
 		CmdArgs: na.chunkList(cmdArgs),
@@ -637,7 +668,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 		Outputs:        outputs,
 		KV:             &prKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        append([]NodeRef(nil), spec.extraDepRefs...),
+		DepRefs:        na.noderefs.list(spec.extraDepRefs...),
 		ForeignDepRefs: toolRefs,
 	}
 

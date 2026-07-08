@@ -28,7 +28,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	prefixCpp := build(moduleDir, "/", prefix, ".cpp")
 	prefixH := build(moduleDir, "/", prefix, ".h")
 	partRels := make([]string, 0, sc.OutNum)
-	outputs := make([]VFS, 0, sc.OutNum+2)
+	outputs := na.vfs.alloc(sc.OutNum + 2)[:0]
 
 	for i := 0; i < sc.OutNum; i++ {
 		partRel := prefix + "." + strconv.Itoa(i) + ".cpp"
@@ -38,9 +38,12 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	}
 
 	outputs = append(outputs, prefixCpp, prefixH)
+	na.vfs.commit(len(outputs))
+
+	outputs = outputs[:len(outputs):len(outputs)]
 
 	cppParts := sc.OutNum - splitCodegenStreamCount
-	cmdArgs := make([]ANY, 0, 6+len(sc.Opts))
+	cmdArgs := na.anys.alloc(6 + len(sc.Opts))[:0]
 
 	cmdArgs = append(cmdArgs,
 		toolBin.any(),
@@ -52,6 +55,9 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	)
 
 	cmdArgs = appendAnys(cmdArgs, sc.Opts)
+	na.anys.commit(len(cmdArgs))
+
+	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
 	env := envVarsVCS
 	scRef := ctx.emit.reserve()
@@ -104,7 +110,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		Outputs:        outputs,
 		KV:             &splitCodegenKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: depRefs(toolLDRef),
+		ForeignDepRefs: na.refList(toolLDRef),
 	}
 
 	ctx.emit.emitReservedNode(node, scRef)

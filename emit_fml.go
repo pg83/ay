@@ -26,7 +26,7 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 		KV:             &fmKV,
 		Outputs:        na.vfsList(outVFS),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: depRefs(toolRef),
+		ForeignDepRefs: na.refList(toolRef),
 	}
 
 	ref := ctx.emit.emitNode(node)

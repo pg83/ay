@@ -93,12 +93,23 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 			}
 
 			if srcVFS.isSource() {
-				info.SourceInputs = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS.rel()]...)
+				fsToolsDeps := ctx.scripts[copyFsToolsVFS.rel()]
+				block := ctx.na.vfs.alloc(1 + len(fsToolsDeps))
+				block[0] = srcVFS
+				bn := 1 + copy(block[1:], fsToolsDeps)
+				ctx.na.vfs.commit(bn)
+				info.SourceInputs = block[:bn:bn]
 			}
 		}
 
 		if len(producerSource) > 0 {
-			info.SourceInputs = concat(producerSource, ctx.scripts[copyFsToolsVFS.rel()])
+			fsToolsDeps := ctx.scripts[copyFsToolsVFS.rel()]
+			merged := ctx.na.vfs.alloc(len(producerSource) + len(fsToolsDeps))
+			mn := copy(merged, producerSource)
+			mn += copy(merged[mn:], fsToolsDeps)
+			ctx.na.vfs.commit(mn)
+
+			info.SourceInputs = merged[:mn:mn]
 		}
 
 		reg.register(info)
@@ -115,13 +126,24 @@ func (e *EmitContext) emitCopyFileNode(entry CopyFileEntry, st CopyEmitState) {
 	var closure []VFS
 
 	if entry.WithContext || len(entry.OutputIncludes) > 0 {
-		closure = rewriteClosureCPSource(scanner, walkClosure(e.scanner, st.dstVFS, d.cc.ScanCfg))
-		closure = filterSourceVFS(closure)
-		closure = dedup(closure)
-	}
+		raw := rewriteClosureCPSource(ctx.na, scanner, walkClosure(e.scanner, st.dstVFS, d.cc.ScanCfg))
+		raw = filterSourceVFS(ctx.na, raw)
+		block := ctx.na.vfs.alloc(len(raw) + len(st.producerSource))[:0]
 
-	if len(st.producerSource) > 0 {
-		closure = append(closure, st.producerSource...)
+		deduper.reset()
+
+		for _, v := range raw {
+			if deduper.add(v.strID()) {
+				block = append(block, v)
+			}
+		}
+
+		block = append(block, st.producerSource...)
+		ctx.na.vfs.commit(len(block))
+
+		closure = block[:len(block):len(block)]
+	} else if len(st.producerSource) > 0 {
+		closure = ctx.na.vfsList(st.producerSource...)
 	}
 
 	emitCPWithDeps(instance, st.srcVFS, st.dstVFS, deps, closure, st.ref, d.cc.ModuleTag, d.tc, ctx.scripts, ctx.emit)

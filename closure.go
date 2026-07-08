@@ -27,8 +27,8 @@ func (cl Closure) each(fn func(VFS)) {
 	eachBucketVFS(cl.buckets, fn)
 }
 
-func (cl Closure) collect(keep func(VFS) bool) []VFS {
-	var out []VFS
+func (cl Closure) collect(na *NodeArenas, keep func(VFS) bool) []VFS {
+	out := na.vfs.alloc(cl.len())[:0]
 
 	cl.each(func(v VFS) {
 		if keep(v) {
@@ -36,7 +36,9 @@ func (cl Closure) collect(keep func(VFS) bool) []VFS {
 		}
 	})
 
-	return out
+	na.vfs.commit(len(out))
+
+	return out[:len(out):len(out)]
 }
 
 func (cl Closure) spliceInto(cs *IdSet, block []VFS, k int) int {

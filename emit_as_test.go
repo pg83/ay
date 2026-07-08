@@ -108,17 +108,18 @@ func testYasmLDRef(e *StreamingEmitter) NodeRef {
 
 func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 	e := newStreamingEmitter(nil)
+	_ = e.reserve()
 	yasmLDRef := testYasmLDRef(e)
 
 	yasmTestIn := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{InclArgs: newInclArgMemo(), AddIncl: builtinsASOwnAddIncl}}
 	ref, _ := emitASYasm(hostInstance("contrib/libs/asmlib"), "memset64.asm", source("contrib/libs/asmlib/memset64.asm"), yasmTestIn, yasmLDRef, e)
 
-	if e.nodes.len() != 2 {
-		t.Fatalf("emitter buffered %d nodes, want 2", e.nodes.len())
+	if e.nodes.len() != 3 {
+		t.Fatalf("emitter buffered %d nodes, want 3", e.nodes.len())
 	}
 
 	_ = ref
-	got := e.nodes.s[1]
+	got := e.nodes.s[2]
 
 	if len(got.ForeignDepRefs) != 1 || got.ForeignDepRefs[0] != yasmLDRef {
 		t.Errorf("ForeignDepRefs = %v, want [%v]", got.ForeignDepRefs, yasmLDRef)
