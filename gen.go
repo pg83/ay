@@ -765,7 +765,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	defer ctx.popFrame()
 
 	d := collectModuleInto(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn, &frame.d)
-	e := newEmitContext(ctx, instance, d, nil)
+	e := newEmitContextIn(frame, ctx, instance, d, nil)
 
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary {
 		cpp := instance
@@ -810,7 +810,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if d.moduleStmt.Name == tokResourcesLibrary {
 		if e.bindResourceGlobalVars(env) {
 			d = collectModuleInto(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn, &frame.d)
-			e = newEmitContext(ctx, instance, d, nil)
+			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
 
 		return e.genResourcesLibrary()
@@ -821,7 +821,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if e.bindResourceGlobalVars(env) {
 			d = collectModuleInto(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn, &frame.d)
-			e = newEmitContext(ctx, instance, d, nil)
+			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
 
 		return e.genPrebuiltProgram()
@@ -1000,18 +1000,30 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	var peerObjAddLibsGlobal []ANY
-	var peerLDFlagsGlobal []ANY
-	var peerRPathFlagsGlobal []ANY
+	peerObjAddLibsGlobal := frame.peerObjAddLibsGlobal[:0]
+	peerLDFlagsGlobal := frame.peerLDFlagsGlobal[:0]
+	peerRPathFlagsGlobal := frame.peerRPathFlagsGlobal[:0]
+
+	defer func() {
+		frame.peerObjAddLibsGlobal = peerObjAddLibsGlobal[:0]
+		frame.peerLDFlagsGlobal = peerLDFlagsGlobal[:0]
+		frame.peerRPathFlagsGlobal = peerRPathFlagsGlobal[:0]
+	}()
 
 	peerAddInclGlobal := frame.peerAddInclGlobal[:0]
 
 	defer func() { frame.peerAddInclGlobal = peerAddInclGlobal[:0] }()
 
 	var oneLevelOnlyPaths map[VFS]struct{}
-	var peerCFlagsGlobal []ANY
-	var peerCXXFlagsGlobal []ANY
-	var peerCOnlyFlagsGlobal []ANY
+	peerCFlagsGlobal := frame.peerCFlagsGlobal[:0]
+	peerCXXFlagsGlobal := frame.peerCXXFlagsGlobal[:0]
+	peerCOnlyFlagsGlobal := frame.peerCOnlyFlagsGlobal[:0]
+
+	defer func() {
+		frame.peerCFlagsGlobal = peerCFlagsGlobal[:0]
+		frame.peerCXXFlagsGlobal = peerCXXFlagsGlobal[:0]
+		frame.peerCOnlyFlagsGlobal = peerCOnlyFlagsGlobal[:0]
+	}()
 
 	allPeers, peerKinds = applyDeferredPeerOrder(d.moduleStmt.Name, allPeers, peerKinds, allocatorExplicitPeers)
 
@@ -1590,12 +1602,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.cc.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 
-	e = newEmitContext(ctx, instance, d, &PeerContext{
+	frame.peerCtx = PeerContext{
 		SelfAddInclGlobal: selfPeerAddInclGlobal,
 		PeerAddInclGlobal: peerAddInclGlobal,
 		ResourceGlobals:   resourceGlobalsClosure,
 		ProtoInclude:      peerProtoInclude,
-	})
+	}
+	e = newEmitContextIn(frame, ctx, instance, d, &frame.peerCtx)
 
 	e.cythonAdjustModuleCCBlocks()
 	e.sprotoAdjustProtoEnv()
@@ -1984,13 +1997,21 @@ func (ctx *GenCtx) py3ccHead(py3ccBinary, py3ccSlowBin VFS) []ANY {
 }
 
 type ModuleFrame struct {
-	d                 ModuleData
-	allPeers          []string
-	peerKinds         []int
-	resolved          []resolvedPeer
-	peerAddInclGlobal []VFS
-	ownProtoInclude   []VFS
-	peerProtoInclude  []VFS
+	d                    ModuleData
+	emitCtx              EmitContext
+	peerCtx              PeerContext
+	allPeers             []string
+	peerKinds            []int
+	resolved             []resolvedPeer
+	peerAddInclGlobal    []VFS
+	ownProtoInclude      []VFS
+	peerProtoInclude     []VFS
+	peerObjAddLibsGlobal []ANY
+	peerLDFlagsGlobal    []ANY
+	peerRPathFlagsGlobal []ANY
+	peerCFlagsGlobal     []ANY
+	peerCXXFlagsGlobal   []ANY
+	peerCOnlyFlagsGlobal []ANY
 }
 
 func (ctx *GenCtx) pushFrame() *ModuleFrame {
