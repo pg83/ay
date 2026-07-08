@@ -9,9 +9,6 @@ import (
 )
 
 var (
-	objcopyScriptPath           = objcopyScriptVFS.string()
-	rescompressorBinPath        = rescompressorBinVFS.string()
-	rescompilerBinPath          = rescompilerBinVFS.string()
 	rescompilersChunk           = []VFS{rescompilerBinVFS, rescompressorBinVFS}
 	rescompilersWithScriptChunk = []VFS{rescompilerBinVFS, rescompressorBinVFS, objcopyScriptVFS}
 	objcopyScriptChunk          = []VFS{objcopyScriptVFS}
@@ -126,11 +123,11 @@ func composeObjcopyArgBlocks(tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
 	return ObjcopyArgBlocks{
 		pre: []ANY{
 			tc.Python3.any(),
-			internStr(objcopyScriptPath).any(),
+			objcopyScriptVFS.any(),
 			argCompiler.any(), tc.CXX.any(),
 			argObjcopy.any(), tc.Objcopy.any(),
-			argCompressor.any(), internStr(rescompressorBinPath).any(),
-			argRescompiler.any(), internStr(rescompilerBinPath).any(),
+			argCompressor.any(), rescompressorBinVFS.any(),
+			argRescompiler.any(), rescompilerBinVFS.any(),
 			argOutputObj.any(),
 		},
 		post: []ANY{argTarget.any(), internStr(p.Triple).any()},
@@ -166,7 +163,7 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 
 func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs InputChunks, deps []NodeRef) NodeRef {
 	na := oc.na
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 
 	node := Node{
 		Platform:     instance.Platform,
@@ -468,7 +465,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		auxLen := auxClosure.len()
 		nodeCmd := make([]ANY, 0, 2+2*len(chunk))
 
-		nodeCmd = append(nodeCmd, internStr(rescompilerBinPath).any(), aux.any())
+		nodeCmd = append(nodeCmd, rescompilerBinVFS.any(), aux.any())
 
 		for _, it := range chunk {
 			if it.Path == "-" {
@@ -479,7 +476,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		}
 
 		deps := concat(resolveCodegenDepRefsIncl(ctx, instance, na, adjacent), depRefs(rescompilerRef))
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 
 		deduper.reset()
 

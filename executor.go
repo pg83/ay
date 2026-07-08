@@ -504,11 +504,11 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 		env := os.Environ()
 
 		for _, e := range n.Env {
-			env = append(env, e.Name.sharedString()+"="+mountString(e.Value.sharedString(), srcMount, bldMount))
+			env = append(env, e.Name.sharedString()+"="+mountANY(e.Value, srcMount, bldMount))
 		}
 
 		for _, e := range c.Env {
-			env = append(env, e.Name.sharedString()+"="+mountString(e.Value.sharedString(), srcMount, bldMount))
+			env = append(env, e.Name.sharedString()+"="+mountANY(e.Value, srcMount, bldMount))
 		}
 
 		if os.Getenv("YA_TOKEN") == "" && (n.KV.P == pkSB || (n.KV.P == pkFETCH && argsNeedSandboxToken(args))) {

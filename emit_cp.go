@@ -26,7 +26,7 @@ func emitJVCPG4(
 		(dst).any(),
 	}
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 	head := make([]VFS, 0, 2)
 
 	head = append(head, jvPrimary)
@@ -73,7 +73,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		(dst).any(),
 	}
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 	ownInputs := make([]VFS, 0, 1+len(extraInputs))
 
 	ownInputs = append(ownInputs, src)

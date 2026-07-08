@@ -8,7 +8,7 @@ var (
 	goKV                 = KV{P: pkGO, PC: pcLightRed, ShowOut: true}
 	goToolKV             = KV{P: pkGoTool, PC: pcLightBlue, ShowOut: true}
 	goLdKV               = KV{P: pkLD, PC: pcLightRed, ShowOut: true}
-	goVcsEnv             = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	goVcsEnv             = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 	goStdRuntimeVFS      = source(goStdPrefix + "/runtime")
 	strGoToolsRoot       = internV("$(B)/resources/", "GO_TOOLS")
 	strGoAsmTool         = internV("$(B)/resources/", "GO_TOOLS", "/pkg/tool/linux_amd64/asm")
@@ -424,15 +424,15 @@ func goCmdEnv(ctx *GenCtx, p *Platform, tc ModuleToolchain) EnvVars {
 	}
 
 	env := EnvVars{
-		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
-		{Name: envCC, Value: strClang},
-		{Name: envCPATH, Value: strEmpty},
-		{Name: envDYLD_LIBRARY_PATH, Value: p.MultiarchLibPathSTR},
-		{Name: envGOARCH, Value: strAmd64},
-		{Name: envGOOS, Value: strLinux},
-		{Name: envLIBRARY_PATH, Value: strEmpty},
-		{Name: cudaPathEnv, Value: path},
-		{Name: envSDKROOT, Value: strEmpty},
+		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()},
+		{Name: envCC, Value: strClang.any()},
+		{Name: envCPATH, Value: strEmpty.any()},
+		{Name: envDYLD_LIBRARY_PATH, Value: p.MultiarchLibPathSTR.any()},
+		{Name: envGOARCH, Value: strAmd64.any()},
+		{Name: envGOOS, Value: strLinux.any()},
+		{Name: envLIBRARY_PATH, Value: strEmpty.any()},
+		{Name: cudaPathEnv, Value: path.any()},
+		{Name: envSDKROOT, Value: strEmpty.any()},
 	}
 
 	if ctx.goEnvMemo == nil {
@@ -526,7 +526,7 @@ func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadi
 	}
 
 	push(argFuseLdLld.any())
-	push(internV("--ld-path=", tc.LLD.string()).any())
+	push(internV("--ld-path=", tc.LLD.prefix(), tc.LLD.relString()).any())
 
 	for _, x := range goExtldLinkerTail {
 		push(x)

@@ -20,7 +20,7 @@ func emitR5(
 	srcVFS := source(instance.Path.relString(), "/", srcRel)
 	tmpVFS := build(instance.Path.relString(), "/", srcRel, ".tmp")
 	cppVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".rl5.cpp")
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 
 	cmd0 := Cmd{
 		CmdArgs: na.chunkList(na.anyList((ragel5BinPath).any(),

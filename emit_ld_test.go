@@ -229,7 +229,7 @@ func TestEmitLD_SplitDwarfCommandsCarryDistbuildEnv(t *testing.T) {
 			t.Fatalf("cmd[%d].env len = %d, want 1 (env=%#v)", idx, len(got.Cmds[idx].Env), got.Cmds[idx].Env)
 		}
 
-		if got.Cmds[idx].Env[0] != (EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}) {
+		if got.Cmds[idx].Env[0] != (EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}) {
 			t.Fatalf("cmd[%d].env = %#v, want ARCADIA_ROOT_DISTBUILD=$(S)", idx, got.Cmds[idx].Env)
 		}
 

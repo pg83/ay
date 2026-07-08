@@ -18,14 +18,13 @@ func emitBI(
 	outPrefix := instance.Path.relString() + "/"
 	argsFileVFS := build(outPrefix, "__args")
 	outVFS := build(outPrefix, outputHeader)
-	argsFile := argsFileVFS.string()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 
 	cmd0Args := []ANY{
 		tc.Python3.any(),
 		(yieldLinePyVFS).any(),
 		arg2.any(),
-		internStr(argsFile).any(),
+		argsFileVFS.any(),
 		tc.CXX.any(),
 	}
 
@@ -35,7 +34,7 @@ func emitBI(
 		tc.Python3.any(),
 		(yieldLinePyVFS).any(),
 		arg2.any(),
-		internStr(argsFile).any(),
+		argsFileVFS.any(),
 	)
 
 	cmd1Args = append(cmd1Args, cxxFlags...)
@@ -44,7 +43,7 @@ func emitBI(
 		tc.Python3.any(),
 		(xargsPyVFS).any(),
 		arg2.any(),
-		internStr(argsFile).any(),
+		argsFileVFS.any(),
 		tc.Python3.any(),
 		(buildInfoGenPyVFS).any(),
 		(outVFS).any(),

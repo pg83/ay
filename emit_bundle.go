@@ -60,7 +60,7 @@ func hasModuleOpener(stmts []Stmt) bool {
 	return false
 }
 
-func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst VFS, srcRef NodeRef, resolved bool, id NodeRef) {
+func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 VFS, src, dst VFS, srcRef NodeRef, resolved bool, id NodeRef) {
 	na := ctx.emit.nodeArenas()
 	fsTools := copyFsToolsVFS
 	cmdArgs := make([]ANY, 0, 5)
@@ -73,7 +73,7 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 STR, src, dst 
 
 	cmdArgs = append(cmdArgs, dst.any())
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 
 	var inputHead []VFS
 	var depRefs []NodeRef

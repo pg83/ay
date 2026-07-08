@@ -173,11 +173,11 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	p.CCHead = append(appendAnyLists([]ANY{p.TargetArg.any()}, p.MarchArgs), p.SysrootArgs...)
 
 	p.ToolEnvVars = EnvVars{
-		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
-		{Name: envDYLD_LIBRARY_PATH, Value: p.MultiarchLibPathSTR},
-		{Name: envCPATH, Value: strEmpty},
-		{Name: envLIBRARY_PATH, Value: strEmpty},
-		{Name: envSDKROOT, Value: strEmpty},
+		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()},
+		{Name: envDYLD_LIBRARY_PATH, Value: p.MultiarchLibPathSTR.any()},
+		{Name: envCPATH, Value: strEmpty.any()},
+		{Name: envLIBRARY_PATH, Value: strEmpty.any()},
+		{Name: envSDKROOT, Value: strEmpty.any()},
 	}
 
 	compress := confCompressesDebug(fs)
@@ -255,7 +255,7 @@ func buildPlatformIfEnv(p *Platform) Environment {
 	}
 
 	if !env.hasBindingID(envCUDA_ROOT) {
-		env.setString(envCUDA_ROOT, "$(B)/resources/CUDA")
+		env.setVFS(envCUDA_ROOT, build("resources/CUDA"))
 	}
 
 	if !env.hasBindingID(envCUDA_ARCHITECTURES) {
@@ -263,7 +263,7 @@ func buildPlatformIfEnv(p *Platform) Environment {
 	}
 
 	if !env.hasBindingID(envOBJCOPY_TOOL) {
-		env.setString(envOBJCOPY_TOOL, "$(B)/resources/CLANG"+p.ClangVer+"/bin/llvm-objcopy")
+		env.setVFS(envOBJCOPY_TOOL, build("resources/CLANG", p.ClangVer, "/bin/llvm-objcopy"))
 	}
 
 	env.setString(envARCADIA_ROOT, "$(S)")

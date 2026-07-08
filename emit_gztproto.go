@@ -18,7 +18,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	imports := walkClosure(e.scanner, gztSource, protoWalkInputs(ctx.parsers, protoInclude, moddir))
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 	inputs := make([]VFS, 0, 1+len(inducedProtos)+1)
 
 	inputs = append(inputs, converterBin)

@@ -223,11 +223,11 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 
 	wantArgs := []string{
 		testToolchain().Python3.string(),
-		objcopyScriptPath,
+		objcopyScriptVFS.string(),
 		"--compiler", testToolchain().CXX.string(),
 		"--objcopy", testToolchain().Objcopy.string(),
-		"--compressor", rescompressorBinPath,
-		"--rescompiler", rescompilerBinPath,
+		"--compressor", rescompressorBinVFS.string(),
+		"--rescompiler", rescompilerBinVFS.string(),
 		"--output_obj", "$(B)/contrib/python/shellingham/objcopy_e79ae9e993a07f847435dcf3c2.o",
 		"--target", testTargetP.Triple,
 		"--inputs", "$(B)/contrib/python/shellingham/shellingham/posix/ps.py.yjsy.yapyc3",

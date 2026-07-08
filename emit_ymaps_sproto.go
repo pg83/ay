@@ -64,7 +64,7 @@ func (e *EmitContext) emitYmapsSprotoHeader(p YmapsSprotoPending, outRoot string
 		internStr(p.protoRelPath).any(),
 	))
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 	sprotoCV := walkClosure(e.scanner, p.sprotoH, scanCfg)
 
 	closure := collectBucketVFS(sprotoCV.buckets, func(v VFS) bool {

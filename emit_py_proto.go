@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-var pbPyWrapperPath = pbPyWrapperVFS.string()
-
 func protoPythonResourceKeyBase(instance ModuleInstance, d *ModuleData, src string) string {
 	base := strings.TrimSuffix(src, ".proto")
 
@@ -68,7 +66,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 
 	head := []ANY{
 		d.tc.Python3.any(),
-		internStr(pbPyWrapperPath).any(),
+		pbPyWrapperVFS.any(),
 		argPyVer.any(), argPy3.any(),
 		argSuffixes.any(),
 	}
@@ -230,8 +228,8 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	pyPBNode := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
-		Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
+		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}}),
+		Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}},
 		Inputs:       na.inputList(inputs, transitive.buckets...),
 		Outputs:      outputs,
 		KV:           &pbNodeKV,
@@ -352,7 +350,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 		nodeInputs = append(nodeInputs, []VFS{siblingPy})
 	}
 
-	yapycEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
+	yapycEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envPYTHONHASHSEED, Value: strZero.any()}}
 
 	yapycNode := Node{
 		Platform:       instance.Platform,

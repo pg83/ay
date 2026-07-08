@@ -25,7 +25,7 @@ type ResourceDecl struct {
 	Name      STR
 	URI       STR
 	GlobalVar STR
-	Value     STR
+	Value     VFS
 	Token     STR
 }
 
@@ -37,7 +37,7 @@ func makeResourceDecl(name, uri string) ResourceDecl {
 		Name:      internStr(name),
 		URI:       internStr(uri),
 		GlobalVar: internStr(globalVar),
-		Value:     internStr(value),
+		Value:     build("resources/", name),
 		Token:     internV(globalVar, "::", value),
 	}
 }
@@ -201,7 +201,7 @@ func (e *EmitContext) bindResourceGlobalVars(env Environment) bool {
 
 	for _, stmt := range d.resourceDeclStmts {
 		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt) {
-			env.setStringID(internEnvSTR(decl.GlobalVar), decl.Value)
+			env.setVFS(internEnvSTR(decl.GlobalVar), decl.Value)
 			bound = true
 		}
 	}
@@ -211,16 +211,16 @@ func (e *EmitContext) bindResourceGlobalVars(env Environment) bool {
 
 type ModuleToolchain struct {
 	ClangResource STR
-	ClangRoot     STR
-	CC            STR
-	CXX           STR
-	AR            STR
-	Objcopy       STR
-	Strip         STR
-	LLDRoot       STR
+	ClangRoot     VFS
+	CC            VFS
+	CXX           VFS
+	AR            VFS
+	Objcopy       VFS
+	Strip         VFS
+	LLDRoot       VFS
 	ARCmdHead     []ANY
-	LLD           STR
-	Python3       STR
+	LLD           VFS
+	Python3       VFS
 }
 
 func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolchain {
@@ -232,22 +232,22 @@ func resolveModuleToolchain(globals []ResourceDecl, clangVer string) ModuleToolc
 	for _, decl := range globals {
 		switch decl.Name {
 		case clangResID:
-			const pfx = "$(B)/resources/"
+			const pfx = "resources/"
 
 			tc.ClangResource = clangResID
-			tc.ClangRoot = internV(pfx, clangRes)
-			tc.CC = internV(pfx, clangRes, "/bin/clang")
-			tc.CXX = internV(pfx, clangRes, "/bin/clang++")
-			tc.AR = internV(pfx, clangRes, "/bin/llvm-ar")
-			tc.Objcopy = internV(pfx, clangRes, "/bin/llvm-objcopy")
-			tc.Strip = internV(pfx, clangRes, "/bin/llvm-strip")
+			tc.ClangRoot = build(pfx, clangRes)
+			tc.CC = build(pfx, clangRes, "/bin/clang")
+			tc.CXX = build(pfx, clangRes, "/bin/clang++")
+			tc.AR = build(pfx, clangRes, "/bin/llvm-ar")
+			tc.Objcopy = build(pfx, clangRes, "/bin/llvm-objcopy")
+			tc.Strip = build(pfx, clangRes, "/bin/llvm-strip")
 		case strLLDRootName:
-			const pfx = "$(B)/resources/"
+			const pfx = "resources/"
 
-			tc.LLDRoot = internV(pfx, resourcePatternLLDRoot)
-			tc.LLD = internV(pfx, resourcePatternLLDRoot, "/bin/ld.lld")
+			tc.LLDRoot = build(pfx, resourcePatternLLDRoot)
+			tc.LLD = build(pfx, resourcePatternLLDRoot, "/bin/ld.lld")
 		case strYMakePython3Name:
-			tc.Python3 = internV("$(B)/resources/", resourcePatternYMakePython3, "/bin/python3")
+			tc.Python3 = build("resources/", resourcePatternYMakePython3, "/bin/python3")
 		}
 	}
 
@@ -356,7 +356,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 
 	srcVFS := build(strings.TrimPrefix(d.primaryOutput, "$(B)/"))
 	dst := lDOutputPath(instance, programBinaryName(instance, d.moduleStmt))
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 
 	var ownSbomRef *NodeRef
 	var ownSbomPath *VFS

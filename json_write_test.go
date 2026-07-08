@@ -42,9 +42,9 @@ func TestWriteGraphCompact_RoundTrip(t *testing.T) {
 		Requirements: Requirements{},
 	})
 	main := e.emitNode(Node{Platform: &Platform{},
-		Cmds:           []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, trickyArgs))}, Cwd: bldRootDirVFS, Env: EnvVars{{Name: internEnv("FOO"), Value: internStr("bar")}}}},
+		Cmds:           []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, trickyArgs))}, Cwd: bldRootDirVFS, Env: EnvVars{{Name: internEnv("FOO"), Value: internStr("bar").any()}}}},
 		ForeignDepRefs: []NodeRef{leaf},
-		Env:            EnvVars{{Name: internEnv("PATH"), Value: internStr("/usr/bin")}},
+		Env:            EnvVars{{Name: internEnv("PATH"), Value: internStr("/usr/bin").any()}},
 		Inputs:         InputChunks{ToVFSSlice([]string{"in1"})},
 		KV:             &KV{Name: "main", P: pkCC},
 		Outputs:        ToVFSSlice([]string{"main.o"}),

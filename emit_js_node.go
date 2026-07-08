@@ -27,7 +27,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 	cmdArgs = append(cmdArgs, argYaEndCommandFile.any())
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 	srcVFSs := make([]VFS, 0, len(sources))
 
 	for _, s := range sources {

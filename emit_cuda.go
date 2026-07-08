@@ -67,8 +67,8 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 	cmdArgs := ArgChunks(chunks[:k])
 
 	env := EnvVars{
-		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
-		{Name: cudaPathEnv, Value: cudaPathValueStr},
+		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()},
+		{Name: cudaPathEnv, Value: cudaPathValueStr.any()},
 	}
 
 	node := Node{

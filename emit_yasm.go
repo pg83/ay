@@ -65,7 +65,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		inVFS.any(),
 	)
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envYASM_TEST_SUITE, Value: strOne}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envYASM_TEST_SUITE, Value: strOne.any()}}
 
 	node := Node{
 		Platform: instance.Platform,

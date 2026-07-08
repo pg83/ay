@@ -281,7 +281,7 @@ func (c *CanonBuf) writeEnv(env EnvVars) {
 
 	for _, e := range env {
 		c.writeSTR(e.Name.str())
-		c.writeSTR(e.Value)
+		c.writeANY(e.Value)
 	}
 }
 

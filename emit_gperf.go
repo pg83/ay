@@ -26,7 +26,7 @@ func gperfSymbolName(srcRel string) string {
 
 func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, ref NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 	head := make([]ANY, 0, 3+len(gperfFlags))
 
 	head = append(head, (gperfBin).any())

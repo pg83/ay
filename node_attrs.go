@@ -97,7 +97,7 @@ const (
 
 type EnvVar struct {
 	Name  ENV
-	Value STR
+	Value ANY
 }
 
 type EnvVars []EnvVar
@@ -112,7 +112,12 @@ func appendEnv(buf []byte, env EnvVars) []byte {
 
 		buf = appendString(buf, e.Name.string())
 		buf = append(buf, ':')
-		buf = appendString(buf, e.Value.string())
+
+		if v := e.Value.vfs(); v != 0 {
+			buf = appendVFS(buf, v)
+		} else {
+			buf = appendString(buf, e.Value.string())
+		}
 	}
 
 	return append(buf, '}')

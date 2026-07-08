@@ -261,7 +261,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			Compile:        &CompileSpec{FlatOutput: d.flatSrc(genSrcID.any()), Py3Suffix: py3Suffix, CFlags: ccCFlags},
 		})
 
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 		cmdArgs := make([]ANY, 0, 8+len(cythonConstHead)+len(stmt.Options))
 
 		cmdArgs = append(cmdArgs, d.tc.Python3.any())
