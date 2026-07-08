@@ -191,16 +191,19 @@ func TestGen_RejectsUnsupportedMacro(t *testing.T) {
 		"mod/ya.make": "LIBRARY()\nTOTALLY_UNKNOWN(foo bar)\nSRCS(main.cpp)\nEND()\n",
 	})
 
+	mf := throw2(parseFile(fs, "mod/ya.make"))
+	fatalWarn := warnHandler(false, false, func(string) {})
+
 	exc := try(func() {
-		testGen(fs, "mod")
+		collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("mod"), Kind: KindLib}, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), fatalWarn)
 	})
 
 	if exc == nil {
 		t.Fatal("expected exception for unsupported macro, got nil")
 	}
 
-	if !strings.Contains(exc.Error(), "unknown macro name") {
-		t.Errorf("error %q does not contain 'unknown macro name'", exc.Error())
+	if !strings.Contains(exc.Error(), "unknown-macro") {
+		t.Errorf("error %q does not contain 'unknown-macro'", exc.Error())
 	}
 }
 
@@ -1777,7 +1780,7 @@ func testGenDumpGraph(fs FS, targetDir string) *Graph {
 	targetFlags["PIC"] = "no"
 	target := newPlatform(fs, OSLinux, ISAAArch64, targetFlags, "", "")
 
-	return genDumpGraphWithResources(fs, targetDir, host, target, func(Warn) {}, false)
+	return genDumpGraphWithResources(fs, targetDir, host, target, func(Warn) {}, false, false)
 }
 
 func testGenInternal(fs FS, targetDir string) *Graph {

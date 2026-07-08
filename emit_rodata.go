@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"path"
 	"strings"
 )
@@ -64,7 +65,9 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta) {
 	srcRel := src.string()
 
 	if instance.Platform.ISA != ISAX8664 {
-		throwFmt("gen: unsupported .rodata platform %s for %q", instance.Platform.ISA, srcRel)
+		ctx.onWarn(Warn{Kind: WarnUnsupportedSource, Message: fmt.Sprintf("unsupported .rodata platform %s for %q; source skipped", instance.Platform.ISA, srcRel)})
+
+		return
 	}
 
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)

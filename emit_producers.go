@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -68,7 +69,7 @@ func (e *EmitContext) requireProducedInput(kind, token string, vfs VFS) VFS {
 	module := e.instance.Path.relString()
 
 	if vfs.isBuild() && e.codegen.lookup(vfs) == nil && relUnderDir(vfs.relString(), module) {
-		throwFmt("gen: %s: %s %q resolves to build file %s that no declared macro produces", module, kind, token, vfs.string())
+		e.ctx.onWarn(Warn{Kind: WarnMissingProducer, Message: fmt.Sprintf("%s: %s %q resolves to build file %s that no declared macro produces", module, kind, token, vfs.string())})
 	}
 
 	return vfs

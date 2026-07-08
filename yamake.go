@@ -161,6 +161,7 @@ type EndStmt struct {
 
 type UnknownStmt struct {
 	Name TOK
+	Raw  STR
 	Args []ANY
 	Line int
 }
@@ -1206,7 +1207,7 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 	case "ALL_RESOURCE_FILES_FROM_DIRS":
 		return &AllResourceFilesStmt{Args: append([]ANY(nil), args...), FromDirs: true, Line: line}
 	default:
-		return &UnknownStmt{Name: internTok(name), Args: args, Line: line}
+		return &UnknownStmt{Name: internTokMaybe(name), Raw: internStr(name), Args: args, Line: line}
 	}
 }
 
