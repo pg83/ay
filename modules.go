@@ -1123,18 +1123,18 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
 		case *CFlagsStmt:
 
-			d.cFlagsGlobal = append(d.cFlagsGlobal, internAnysFromSTR(expandStmtTokens(v.GlobalFlags, env))...)
-			d.cFlags = append(d.cFlags, internAnysFromSTR(expandStmtTokens(v.OwnFlags, env))...)
+			d.cFlagsGlobal = append(d.cFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
+			d.cFlags = append(d.cFlags, expandStmtTokens(v.OwnFlags, env)...)
 		case *CXXFlagsStmt:
 
-			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, internAnysFromSTR(expandStmtTokens(v.GlobalFlags, env))...)
-			d.cxxFlags = append(d.cxxFlags, internAnysFromSTR(expandStmtTokens(v.OwnFlags, env))...)
+			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
+			d.cxxFlags = append(d.cxxFlags, expandStmtTokens(v.OwnFlags, env)...)
 		case *CONLYFlagsStmt:
 
-			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, internAnysFromSTR(expandStmtTokens(v.GlobalFlags, env))...)
-			d.cOnlyFlags = append(d.cOnlyFlags, internAnysFromSTR(expandStmtTokens(v.OwnFlags, env))...)
+			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
+			d.cOnlyFlags = append(d.cOnlyFlags, expandStmtTokens(v.OwnFlags, env)...)
 		case *LDFlagsStmt:
-			d.ldFlags = append(d.ldFlags, internAnysFromSTR(expandStmtTokens(v.Flags, env))...)
+			d.ldFlags = append(d.ldFlags, expandStmtTokens(v.Flags, env)...)
 		case *SrcDirStmt:
 
 			for _, dirTok := range expandStmtTokens(v.Dirs, env) {
@@ -1766,9 +1766,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]ANY{internStr(googleapisPeer).any()}, d.peerdirs...)
 	case tokClangWarnings:
-		d.clangWarnings = append(d.clangWarnings, internAnysFromSTR(expandStmtTokens(v.Args, env))...)
+		d.clangWarnings = append(d.clangWarnings, expandStmtTokens(v.Args, env)...)
 	case tokFlatcFlags:
-		d.flatcFlags = append(d.flatcFlags, internAnysFromSTR(v.Args)...)
+		d.flatcFlags = append(d.flatcFlags, v.Args...)
 	case tokCopyFile, tokCopyFileWithContext:
 		entry := parseCopyFileEntry(strStrings(v.Args), v.Name == tokCopyFileWithContext, v.Line)
 
@@ -1933,7 +1933,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		var extras []ANY
 
 		if len(v.Args) > 1 {
-			extras = internAnysFromSTR(v.Args[1:])
+			extras = v.Args[1:]
 		}
 
 		if slices.Contains(d.srcs, filename) {
@@ -2426,9 +2426,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if len(v.Args) >= 1 {
 			switch v.Args[0].string() {
 			case "SFLAGS":
-				d.sFlags = append(d.sFlags, internAnysFromSTR(v.Args[1:])...)
+				d.sFlags = append(d.sFlags, v.Args[1:]...)
 			case "_PROTOC_FLAGS":
-				d.protocFlags = append(d.protocFlags, internAnysFromSTR(v.Args[1:])...)
+				d.protocFlags = append(d.protocFlags, v.Args[1:]...)
 			case "RPATH_GLOBAL":
 				for _, argTok := range v.Args[1:] {
 					arg := argTok.string()

@@ -253,7 +253,7 @@ func internAnys(ss []string) []ANY {
 	out := make([]ANY, len(ss))
 
 	for i, s := range ss {
-		out[i] = internStr(s).any()
+		out[i] = internAny(s)
 	}
 
 	return out
