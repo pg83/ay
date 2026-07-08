@@ -54,8 +54,8 @@ func TestCollectSwigInducedIncludes_UnionAcrossClosure(t *testing.T) {
 
 	ctx := &GenCtx{fs: fs, parsers: newIncludeParserManagerFS(fs, newSharedParseCache())}
 
-	closure := []VFS{intern("$(S)/mod/local.i"), intern("$(S)/mod/nested.i")}
-	got := collectSwigInducedIncludes(ctx, intern("$(S)/mod/src.swg"), closure)
+	closure := []VFS{source("mod/local.i"), source("mod/nested.i")}
+	got := collectSwigInducedIncludes(ctx, source("mod/src.swg"), closure)
 
 	want := []IncludeDirective{
 		{kind: includeSystem, target: includeTarget(internStr("Python.h"))},

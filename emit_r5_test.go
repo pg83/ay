@@ -25,8 +25,8 @@ func TestEmitR5_RlgenModeFollowsOptimized(t *testing.T) {
 		e := newStreamingEmitter(nil)
 		inst := ModuleInstance{Path: source("kernel/urlnorm"), Kind: KindLib, Language: LangCPP, Platform: p}
 		ref, tmpOut, cppOut := emitR5(inst, "urlhashval.rl",
-			0, 0, intern("$(B)/contrib/tools/ragel5/ragel/ragel5"),
-			intern("$(B)/contrib/tools/ragel5/rlgen-cd/rlgen-cd"), e)
+			0, 0, build("contrib/tools/ragel5/ragel/ragel5"),
+			build("contrib/tools/ragel5/rlgen-cd/rlgen-cd"), e)
 
 		if tmpOut.string() != "$(B)/kernel/urlnorm/urlhashval.rl.tmp" {
 			t.Errorf("tmpOut = %q, want $(B)/kernel/urlnorm/urlhashval.rl.tmp", tmpOut.string())

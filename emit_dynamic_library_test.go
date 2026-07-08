@@ -8,7 +8,7 @@ import (
 )
 
 func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
-	scr := func(rel string) VFS { return intern("$(S)/build/scripts/" + rel) }
+	scr := func(rel string) VFS { return source("build/scripts/", rel) }
 	scripts := ScriptDeps{
 		scr("vcs_info.py"): {scr("vcs_info.py")},
 		scr("link_dyn_lib.py"): {
@@ -21,13 +21,13 @@ func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 	got := composeDynLibInputs(
 		newNodeArenas(),
 		[]VFS{
-			intern("$(B)/contrib/libs/libiconv/static/liblibs-libiconv-static.a"),
-			intern("$(B)/build/cow/on/libbuild-cow-on.a"),
+			build("contrib/libs/libiconv/static/liblibs-libiconv-static.a"),
+			build("build/cow/on/libbuild-cow-on.a"),
 		},
 		[]VFS{
-			intern("$(B)/contrib/libs/foolib/include/foolib.py.pyplugin"),
+			build("contrib/libs/foolib/include/foolib.py.pyplugin"),
 		},
-		intern("$(B)/tools/fix_elf/fix_elf"),
+		build("tools/fix_elf/fix_elf"),
 		"contrib/libs/libiconv/dynamic",
 		"libiconv.exports",
 		scripts,

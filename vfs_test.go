@@ -48,8 +48,8 @@ func TestVFSLongString(t *testing.T) {
 		vfs  VFS
 		want string
 	}{
-		{name: "source", vfs: intern("$(S)/a/b.txt"), want: "$(SOURCE_ROOT)/a/b.txt"},
-		{name: "build", vfs: intern("$(B)/x/y.o"), want: "$(BUILD_ROOT)/x/y.o"},
+		{name: "source", vfs: source("a/b.txt"), want: "$(SOURCE_ROOT)/a/b.txt"},
+		{name: "build", vfs: build("x/y.o"), want: "$(BUILD_ROOT)/x/y.o"},
 	}
 
 	for _, tc := range cases {

@@ -1,25 +1,25 @@
 package main
 
 var cythonNumpyAddIncl = []VFS{
-	intern("$(S)/contrib/python/numpy/include/numpy/core/include"),
-	intern("$(S)/contrib/python/numpy/include/numpy/core/include/numpy"),
-	intern("$(S)/contrib/python/numpy/include/numpy/core/src/common"),
-	intern("$(S)/contrib/python/numpy/include/numpy/core/src/npymath"),
-	intern("$(S)/contrib/python/numpy/include/numpy/distutils/include"),
+	source("contrib/python/numpy/include/numpy/core/include"),
+	source("contrib/python/numpy/include/numpy/core/include/numpy"),
+	source("contrib/python/numpy/include/numpy/core/src/common"),
+	source("contrib/python/numpy/include/numpy/core/src/npymath"),
+	source("contrib/python/numpy/include/numpy/distutils/include"),
 }
 
 var py3CythonOutputIncludes = []VFS{
-	intern("$(S)/contrib/tools/cython/generated_c_headers.h"),
-	intern("$(S)/contrib/tools/cython/generated_cpp_headers.h"),
-	intern("$(S)/contrib/libs/python/Include/compile.h"),
-	intern("$(S)/contrib/libs/python/Include/frameobject.h"),
-	intern("$(S)/contrib/libs/python/Include/longintrepr.h"),
-	intern("$(S)/contrib/libs/python/Include/pyconfig.h"),
-	intern("$(S)/contrib/libs/python/Include/Python.h"),
-	intern("$(S)/contrib/libs/python/Include/pythread.h"),
-	intern("$(S)/contrib/libs/python/Include/structmember.h"),
-	intern("$(S)/contrib/libs/python/Include/traceback.h"),
-	intern("$(S)/contrib/libs/cxxsupp/openmp/omp.h"),
+	source("contrib/tools/cython/generated_c_headers.h"),
+	source("contrib/tools/cython/generated_cpp_headers.h"),
+	source("contrib/libs/python/Include/compile.h"),
+	source("contrib/libs/python/Include/frameobject.h"),
+	source("contrib/libs/python/Include/longintrepr.h"),
+	source("contrib/libs/python/Include/pyconfig.h"),
+	source("contrib/libs/python/Include/Python.h"),
+	source("contrib/libs/python/Include/pythread.h"),
+	source("contrib/libs/python/Include/structmember.h"),
+	source("contrib/libs/python/Include/traceback.h"),
+	source("contrib/libs/cxxsupp/openmp/omp.h"),
 }
 
 var py3CythonEmbeddedFiles = []string{
