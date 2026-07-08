@@ -52,7 +52,7 @@ func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]st
 	out := map[string]string{}
 
 	for _, rel := range rels {
-		if !fs.isFile(srcRootVFS, rel) {
+		if !fs.isFile(srcRootRel, rel) {
 			continue
 		}
 

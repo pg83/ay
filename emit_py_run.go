@@ -228,7 +228,7 @@ func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS
 	addInducedSources := func(deps []IncludeDirective) {
 		for _, d := range deps {
 			if v := d.target.vfs(); v != 0 {
-				if v.isSource() && ctx.fs.isFile(srcRootVFS, v.relString()) {
+				if v.isSource() && ctx.fs.isFile(srcRootRel, v.relString()) {
 					addSource(v)
 				}
 

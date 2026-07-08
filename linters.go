@@ -19,7 +19,7 @@ func loadAutoincludeIndex(fs FS) *AutoincludeIndex {
 	var linters []VFS
 
 	for _, f := range autoincludePathsFiles {
-		if !fs.isFile(srcRootVFS, f) {
+		if !fs.isFile(srcRootRel, f) {
 			continue
 		}
 

@@ -48,13 +48,13 @@ type PySrc struct {
 
 func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
 	for i := len(srcDirs) - 1; i >= 1; i-- {
-		if fs.isFile(srcDirs[i], srcRel) {
+		if fs.isFile(srcDirs[i].rel(), srcRel) {
 			return internV(srcDirs[i].relString(), "/", srcRel)
 		}
 	}
 
 	if srcRel != "" && pathIsClean(srcRel) &&
-		!fs.isFile(moduleVFS, srcRel) && fs.isFile(srcRootVFS, srcRel) {
+		!fs.isFile(moduleVFS.rel(), srcRel) && fs.isFile(srcRootRel, srcRel) {
 		return internStr(srcRel)
 	}
 
@@ -712,7 +712,7 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 			continue
 		}
 
-		if !fs.isFile(srcRootVFS, path) {
+		if !fs.isFile(srcRootRel, path) {
 			continue
 		}
 

@@ -64,7 +64,7 @@ func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
 	return readFileInto(fs.rootSlash+rel, buf)
 }
 
-func (fs *OsFS) readDirViewRel(dir VFS, rel string) DirView {
+func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	full := fs.rootSlash + rel
 
 	if rel == "" {

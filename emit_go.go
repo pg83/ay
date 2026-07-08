@@ -174,7 +174,7 @@ func goImportDir(ctx *GenCtx, importerDir, imp string) string {
 	}
 
 	for _, cand := range candidates {
-		if ctx.fs.isFile(source(cand), "ya.make") {
+		if ctx.fs.isFile(internStr(cand), "ya.make") {
 			return cand
 		}
 	}
@@ -751,8 +751,8 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 
 	if len(d.cgoSrcs) > 0 {
 		cgoAux := append(goModuleCgoCFiles(d), goModuleCgoSFiles(d)...)
-		copyScripts := ctx.scripts[copyFsToolsVFS]
-		linkOScripts := ctx.scripts[linkOScriptVFS]
+		copyScripts := ctx.scripts[copyFsToolsVFS.rel()]
+		linkOScripts := ctx.scripts[linkOScriptVFS.rel()]
 		extrasCap := len(srcClosureExtras) + 2 + len(copyScripts) + len(linkOScripts)
 		auxSrcs := make([]VFS, len(cgoAux))
 
@@ -1014,8 +1014,8 @@ func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeR
 	inputs := na.inputList(
 		goRes.GoFiles,
 		goToolScriptInputsChunk,
-		ctx.scripts[ldVcsInfoVFS],
-		ctx.scripts[ldFsToolsVFS],
+		ctx.scripts[ldVcsInfoVFS.rel()],
+		ctx.scripts[ldFsToolsVFS.rel()],
 		peerArchivePaths,
 		extraInputs,
 	)

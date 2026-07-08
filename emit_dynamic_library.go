@@ -87,7 +87,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(d.tc, sbomJSON, outputVFS)), Env: envVcsOnly})
 	}
 
-	inputs := InputChunks{peerArchivePaths, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS], ctx.scripts[ldLinkDynLibVFS]}
+	inputs := InputChunks{peerArchivePaths, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS.rel()], ctx.scripts[ldLinkDynLibVFS.rel()]}
 
 	inputs = append(inputs, []VFS{ldSvnInterfaceVFS, ldSvnversionHVFS, source(instance.Path.relString(), "/", d.exportsScript.string())})
 	inputs = append(inputs, ccOutputs)
@@ -460,7 +460,7 @@ func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElf
 	chunks = append(chunks, peerLibPaths, pluginPaths, na.srcChunk(fixElfPath))
 
 	for _, w := range []VFS{ldVcsInfoVFS, ldLinkDynLibVFS, ldFsToolsVFS} {
-		chunks = append(chunks, scripts[w])
+		chunks = append(chunks, scripts[w.rel()])
 	}
 
 	chunks = append(chunks, []VFS{

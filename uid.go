@@ -71,7 +71,7 @@ func (c *CanonBuf) inputVal(v VFS) uint64 {
 
 func (c *CanonBuf) sourceHash(v VFS) uint64 {
 	if c.fsHashes != nil {
-		if h := c.fsHashes.getSafe(v.strID()); h != 0 {
+		if h := c.fsHashes.getSafe(v.rel().strID()); h != 0 {
 			return h
 		}
 	}

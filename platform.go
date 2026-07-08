@@ -14,7 +14,7 @@ var (
 const gzZstdRule = "debug_info_flags.append('-gz=zstd')"
 
 func confCompressesDebug(fs FS) bool {
-	if !fs.isFile(srcRootVFS, "build/ymake_conf.py") {
+	if !fs.isFile(srcRootRel, "build/ymake_conf.py") {
 		return false
 	}
 

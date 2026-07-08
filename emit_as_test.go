@@ -78,7 +78,7 @@ func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 	e := newStreamingEmitter(nil)
 
-	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{SrcDirs: []VFS{dirKey("contrib/libs/tcmalloc")}, FS: newMemFS(nil)}}
+	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{SrcDirs: []VFS{dirKey("contrib/libs/tcmalloc").source()}, FS: newMemFS(nil)}}
 	_, outPath := emitAS(
 		targetInstance("contrib/libs/tcmalloc/no_percpu_cache"),
 		"tcmalloc/internal/percpu_rseq_asm.S",

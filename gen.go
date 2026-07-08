@@ -393,7 +393,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		scripts:   scriptTbl,
 		testMode:  testMode,
 
-		sbomEnabled: fs.isFile(srcRootVFS, sbomConfRel),
+		sbomEnabled: fs.isFile(srcRootRel, sbomConfRel),
 
 		autoincludeIdx: loadAutoincludeIndex(fs),
 		parsedFiles:    map[string]*MakeFile{},
@@ -468,7 +468,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 }
 
 func confPy3NoStripOnDebug(fs FS) bool {
-	if !fs.isFile(srcRootVFS, "build/conf/python.conf") {
+	if !fs.isFile(srcRootRel, "build/conf/python.conf") {
 		return false
 	}
 
@@ -494,7 +494,7 @@ func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
 
 			seen[dir] = true
 
-			if !ctx.fs.isFile(source(dir), "ya.make") {
+			if !ctx.fs.isFile(internStr(dir), "ya.make") {
 				return
 			}
 		}
@@ -591,7 +591,7 @@ func (ctx *GenCtx) parseFileCached(rel string) []Stmt {
 func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 	stmts := ctx.parseFileCached(joinRel(dir, "ya.make"))
 
-	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootVFS, inc.relString()) {
+	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootRel, inc.relString()) {
 		incStmts := ctx.parseFileCached(inc.relString())
 
 		return concat(stmts, incStmts)
@@ -1518,7 +1518,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	effectiveSrcDirs := d.srcDirs
 
 	if pd := programSourceDir(d.moduleStmt); pd != nil {
-		effectiveSrcDirs = concat(d.srcDirs, []VFS{dirKey(*pd)})
+		effectiveSrcDirs = concat(d.srcDirs, []VFS{dirKey(*pd).source()})
 	}
 
 	d.cc = ModuleCompileEnv{

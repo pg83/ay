@@ -40,7 +40,7 @@ func (e *EmitContext) enumHeaderSourceInput(headerRel string, srcDirs []VFS) VFS
 	ctx, instance := e.ctx, e.instance
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDirs)
 
-	if !ctx.fs.isFile(srcRootVFS, headerInput.relString()) {
+	if !ctx.fs.isFile(srcRootRel, headerInput.relString()) {
 		if vfs := sourceInputVFS(ctx.fs, instance.Path, headerRel); vfs != nil && vfs.isSource() {
 			headerInput = *vfs
 		}

@@ -140,7 +140,7 @@ func (e *EmitContext) srcPositionIns(tok STR) []VFS {
 	case srcExtProto, srcExtEv:
 		rel := protoSourceRelPath(e.ctx.fs, e.instance, e.d, tok.string())
 
-		if !e.ctx.fs.isFile(srcRootVFS, rel) {
+		if !e.ctx.fs.isFile(srcRootRel, rel) {
 			return ins
 		}
 

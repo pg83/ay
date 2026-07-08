@@ -34,7 +34,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 		srcVFSs = append(srcVFSs, source(instance.Path.relString(), "/", s))
 	}
 
-	inputs := na.inputList(scripts[joinSrcs], srcVFSs, closure)
+	inputs := na.inputList(scripts[joinSrcs.rel()], srcVFSs, closure)
 
 	node := Node{
 		Platform: statsPlatform,
@@ -92,7 +92,7 @@ func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []s
 
 	defer scanner.visitedIDPool.Put(visited)
 
-	modDirKey := srcInstance.Path
+	modDirKey := srcInstance.Path.rel()
 	srcRels := make([]string, len(sources))
 
 	for i, src := range sources {
@@ -100,7 +100,7 @@ func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []s
 
 		if !ctx.fs.isFile(modDirKey, src) {
 			for _, dir := range d.cc.SrcDirs {
-				if dir != modDirKey && ctx.fs.isFile(dir, src) {
+				if dir.rel() != modDirKey && ctx.fs.isFile(dir.rel(), src) {
 					srcRelOnDisk = dir.relString() + "/" + src
 
 					break
@@ -141,7 +141,7 @@ func jsCCIncludeInputs(srcInstance ModuleInstance, joinOut VFS, sources []string
 	out := make([]VFS, 0, 3+len(sources)+len(closure))
 
 	out = append(out, joinOut)
-	out = append(out, scripts[buildScriptsGenJoinSrcsPy]...)
+	out = append(out, scripts[buildScriptsGenJoinSrcsPy.rel()]...)
 
 	for _, s := range sources {
 		out = append(out, source(srcInstance.Path.relString(), "/", s))

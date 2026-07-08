@@ -250,7 +250,7 @@ func TestResolvePySrcRel_RootRelativeProto(t *testing.T) {
 		"market/idx/datacamp/proto/external/ExportCategory.proto": "",
 	})
 	moduleDir := "market/idx/datacamp/proto/external"
-	srcDirs := []VFS{dirKey(moduleDir)}
+	srcDirs := []VFS{dirKey(moduleDir).source()}
 
 	got := resolvePySrcRel(fs, srcDirs, source(moduleDir), "market/idx/datacamp/proto/api/ExportMessage.proto")
 
@@ -270,7 +270,7 @@ func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
 		"root.proto": "",
 	})
 	moduleDir := "pkg/sub"
-	srcDirs := []VFS{dirKey(moduleDir)}
+	srcDirs := []VFS{dirKey(moduleDir).source()}
 
 	got := resolvePySrcRel(fs, srcDirs, source(moduleDir), "../root.proto")
 

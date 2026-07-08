@@ -57,7 +57,7 @@ func TestBuildScriptTable_ImportsOnly_NoFalsePositives(t *testing.T) {
 	}
 
 	for script, want := range cases {
-		got := table[source(script)]
+		got := table[source(script).rel()]
 
 		if len(got) == 0 {
 			t.Errorf("table[%s] is empty (must contain at least self)", script)

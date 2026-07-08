@@ -68,6 +68,7 @@ var (
 	rescompressorBinVFS                 = build("tools/rescompressor/rescompressor")
 	rodataScriptVFS                     = source("build/scripts/rodata2asm.py")
 	srcRootVFS                          = source("")
+	srcRootRel                          = internStr("")
 	stdout2stderrVFS                    = source("build/scripts/stdout2stderr.py")
 	v                                   = source("")
 	wrapccPyVFS                         = source("build/scripts/wrapcc.py")

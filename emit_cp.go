@@ -35,7 +35,7 @@ func emitJVCPG4(
 		head = append(head, src)
 	}
 
-	inputs := na.inputList(head, scripts[fsTools], jvInputs, closure)
+	inputs := na.inputList(head, scripts[fsTools.rel()], jvInputs, closure)
 
 	node := Node{
 		Platform: instance.Platform,
@@ -86,7 +86,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		ownInputs = append(ownInputs, v)
 	}
 
-	inputs := na.inputList(scripts[fsTools], ownInputs)
+	inputs := na.inputList(scripts[fsTools.rel()], ownInputs)
 
 	node := Node{
 		Platform: instance.Platform,

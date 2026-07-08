@@ -113,7 +113,7 @@ func muslArchIs(want string) func(SysInclEnv) bool {
 }
 
 func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, os OS, onWarn func(Warn)) SysInclSet {
-	if !fs.isDir(srcRootVFS, baseSysInclDir) {
+	if !fs.isDir(srcRootRel, baseSysInclDir) {
 		return nil
 	}
 
@@ -167,11 +167,11 @@ func internalSysInclApplies(name string, env SysInclEnv) bool {
 }
 
 func loadSysInclDir(fs FS, dir string, env SysInclEnv, onWarn func(Warn)) SysInclSet {
-	if !fs.isDir(srcRootVFS, dir) {
+	if !fs.isDir(srcRootRel, dir) {
 		return nil
 	}
 
-	view := fs.listdir(source(dir))
+	view := fs.listdir(internStr(dir))
 	names := make([]string, 0, len(view.names))
 
 	for _, packed := range view.names {

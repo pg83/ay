@@ -137,7 +137,7 @@ func (ex *Executor) uidCached(uid UID) bool {
 }
 
 func (ex *Executor) contentHash(v VFS) uint64 {
-	if h := ex.fs.contentHash(v); h != 0 {
+	if h := ex.fs.contentHash(v.rel()); h != 0 {
 		return h
 	}
 

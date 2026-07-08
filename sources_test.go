@@ -12,7 +12,7 @@ func TestResolveSourceVFS_RootRelativeSrc(t *testing.T) {
 	ctx := &GenCtx{fs: fs}
 	moduleDir := "geobase/library/abi"
 	instance := ModuleInstance{Path: source(moduleDir)}
-	srcDirs := []VFS{dirKey(moduleDir)}
+	srcDirs := []VFS{dirKey(moduleDir).source()}
 
 	got := resolveSourceVFS(ctx, instance, "geobase/library/asset.cpp", srcDirs)
 

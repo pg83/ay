@@ -169,7 +169,7 @@ func globMatch(fs FS, pattern string) []string {
 		for _, d := range dirs {
 			if !wild {
 				child := path.Join(d, seg)
-				present, isDir := fs.exists(srcRootVFS, child)
+				present, isDir := fs.exists(srcRootRel, child)
 
 				if !present {
 					continue
@@ -186,7 +186,7 @@ func globMatch(fs FS, pattern string) []string {
 				continue
 			}
 
-			view := fs.listdir(source(d))
+			view := fs.listdir(internStr(d))
 			entries := append([]uint32(nil), view.names...)
 
 			sort.Slice(entries, func(a, b int) bool {
