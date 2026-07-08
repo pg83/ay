@@ -199,7 +199,7 @@ func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, 
 type ResourceItem struct {
 	Path  string
 	Key   string
-	Cmd   string
+	Cmd   STR
 	Input VFS
 	Extra []VFS
 	Aux   []VFS
@@ -359,7 +359,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 			for _, it := range chunk {
 				if it.Path == "-" {
-					payload = append(payload, internStr(it.Cmd).any())
+					payload = append(payload, it.Cmd.any())
 					hashScratch = append(hashScratch, it.Key)
 				}
 			}
@@ -457,10 +457,12 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 	hashScratch := ctx.resHashScratch[:0]
 	hashBuf := ctx.resHashBuf
+	dashBuf := ctx.resDashBuf[:0]
 
 	defer func() {
 		ctx.resHashScratch = hashScratch[:0]
 		ctx.resHashBuf = hashBuf
+		ctx.resDashBuf = dashBuf[:0]
 	}()
 
 	lo := 0
@@ -486,7 +488,12 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			if it.Path == "-" {
 				hashScratch = append(hashScratch, "-", it.Key)
 			} else {
-				hashScratch = append(hashScratch, it.Path, "-"+it.Key)
+				dashStart := len(dashBuf)
+
+				dashBuf = append(dashBuf, '-')
+				dashBuf = append(dashBuf, it.Key...)
+
+				hashScratch = append(hashScratch, it.Path, bytesString(dashBuf[dashStart:]))
 			}
 
 			if it.Input != 0 && deduper.add(it.Input.strID()) {
@@ -519,7 +526,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		for _, it := range chunk {
 			if it.Path == "-" {
-				nodeCmd = append(nodeCmd, dash.any(), internStr(it.Cmd).any())
+				nodeCmd = append(nodeCmd, dash.any(), it.Cmd.any())
 			} else {
 				nodeCmd = append(nodeCmd, it.Input.any(), internV("-", it.Key).any())
 			}
@@ -596,7 +603,7 @@ type ObjcopyEmitResult struct {
 	PySrcTrailCount int
 }
 
-func (e *EmitContext) emitKvOnlyResource(tag STR, kvsHash, kvsCmd []string) ([]NodeRef, []VFS) {
+func (e *EmitContext) emitKvOnlyResource(tag STR, kvsHash []string, kvsCmd []STR) ([]NodeRef, []VFS) {
 	items := make([]ResourceItem, len(kvsHash))
 
 	for i := range kvsHash {
@@ -629,10 +636,10 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			if inner, ok := rootrelInputPath(entry.Key); ok {
 				r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
 
-				it.Cmd = renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.relString()))
+				it.Cmd = internStr(renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.relString())))
 				it.Aux = []VFS{r.Input, r.ProducerMainOut}
 			} else {
-				it.Cmd = renderResourceKvCmd(entry.Key)
+				it.Cmd = internStr(renderResourceKvCmd(entry.Key))
 			}
 
 			batch = append(batch, it)

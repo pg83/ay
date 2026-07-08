@@ -349,7 +349,7 @@ func (e *EmitContext) appendPyProtoResEntries(out []PyGenResEntry, ps PySrc) []P
 	if !strings.HasPrefix(token, "${ARCADIA_BUILD_ROOT}/") {
 		return append(out,
 			PyGenResEntry{token: token, key: ps.Module, path: ps.Path},
-			PyGenResEntry{token: token + strings.TrimPrefix(yapycOut.relString(), rel), key: ps.Module, yapyc: true, path: yapycOut})
+			PyGenResEntry{token: e.resStr2(token, strings.TrimPrefix(yapycOut.relString(), rel)), key: ps.Module, yapyc: true, path: yapycOut})
 	}
 
 	entryInputs := info.SourceInputs
@@ -362,7 +362,7 @@ func (e *EmitContext) appendPyProtoResEntries(out []PyGenResEntry, ps PySrc) []P
 
 	return append(out,
 		PyGenResEntry{token: token, key: ps.Module, path: ps.Path, inputs: entryInputs},
-		PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.relString(), key: ps.Module, yapyc: true, path: yapycOut, inputs: info.SourceInputs})
+		PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut, inputs: info.SourceInputs})
 }
 
 func (e *EmitContext) emitPyProtoBytecode() {
@@ -426,8 +426,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 
 func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
 	d := e.d
-
-	var entries []PyGenResEntry
+	entries := e.resEntries[:0]
 
 	for _, ps := range e.pySrcsReg {
 		if ps.Group != pyGroupProto || ps.SrcGroup != srcGroup {
@@ -437,21 +436,22 @@ func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
 		entries = e.appendPyProtoResEntries(entries, ps)
 	}
 
+	e.resEntries = entries
+
 	if len(entries) == 0 {
 		return nil, nil
 	}
 
 	peerAddIncl := e.peers.PeerAddInclGlobal
 
-	return e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
+	return e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
 		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
 	}})
 }
 
 func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
-
-	var entries []PyGenResEntry
+	entries := e.resEntries[:0]
 
 	for _, ps := range e.pySrcsReg {
 		if ps.Group != pyGroupProto {
@@ -460,6 +460,8 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 
 		entries = e.appendPyProtoResEntries(entries, ps)
 	}
+
+	e.resEntries = entries
 
 	if len(entries) == 0 {
 		return nil
@@ -480,7 +482,7 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		peerAddIncl = dedup(cppSibling.AddInclGlobal, e.peers.PeerAddInclGlobal)
 	}
 
-	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
+	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
 		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
 	}})
 

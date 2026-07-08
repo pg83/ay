@@ -198,6 +198,7 @@ type GenCtx struct {
 	prClosureScratch []VFS
 	resHashScratch   []string
 	resHashBuf       []byte
+	resDashBuf       []byte
 	resB64Scratch    []byte
 	inclArgs         InclArgMemo
 	memo             *IntValueMap[*ModuleEmitResult]
