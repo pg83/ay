@@ -60,7 +60,7 @@ func (e *EmitContext) emitArchive(
 		pathPerFile = append(pathPerFile, absVFS)
 
 		if a.Keys != nil {
-			cmdArgs = append(cmdArgs, internStr(absStr).any())
+			cmdArgs = append(cmdArgs, absVFS.any())
 		} else {
 			cmdArgs = append(cmdArgs, internV(absStr, ":").any())
 		}

@@ -33,8 +33,6 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	}
 
 	inVFS := srcVFS
-	outputPath := outVFS.string()
-	inputPath := inVFS.string()
 
 	var predefinedFlags []string
 
@@ -63,8 +61,8 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	}
 
 	cmdArgs = append(cmdArgs,
-		argDashO.any(), internStr(outputPath).any(),
-		internStr(inputPath).any(),
+		argDashO.any(), outVFS.any(),
+		inVFS.any(),
 	)
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envYASM_TEST_SUITE, Value: strOne}}
