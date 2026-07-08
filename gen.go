@@ -1592,8 +1592,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		archiveName = d.moduleStmt.Args[0].string()
 	}
 
-	arNameFn = func(dir string) string { return archiveNameWithPrefixOrName(dir, d.unit.ARPrefix, archiveName) }
-	globalArNameFn = func(dir string) string { return globalArchiveNameWithPrefixOrName(dir, d.unit.ARPrefix, archiveName) }
+	arNameFn = func(dir string) string { return e.arName(dir, d.unit.ARPrefix, archiveName) }
+	globalArNameFn = func(dir string) string { return e.globalArName(dir, d.unit.ARPrefix, archiveName) }
 
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.relString(), peerAddInclGlobal, dedupedAddIncl)
 
@@ -1886,7 +1886,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if sbomActive(ctx, instance) && sbomQualifies(d) && d.unit.Tag != unitTagPy3BinLib && !isGoModuleType(d.moduleStmt.Name) {
-		realPrjName := strings.TrimSuffix(archiveNameWithPrefixOrName(instance.Path.relString(), "", archiveName), ".a")
+		realPrjName := strings.TrimSuffix(e.arName(instance.Path.relString(), "", archiveName), ".a")
 
 		ownSbomRef, ownSbomPath = e.emitSbomComponent(realPrjName)
 	}

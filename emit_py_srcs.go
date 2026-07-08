@@ -238,14 +238,14 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 
 	if ps.Group == pyGroupGenAux {
 		genInfo = e.codegen.mustInfo(ps.Path, "emitEnginePyYapyc")
-		moduleName = srcAbs.relString() + "-"
+		moduleName = e.resStr2(srcAbs.relString(), "-")
 	} else {
 		genInfo = e.codegen.lookupSplit(instance.Path, ps.Token)
 
 		if genInfo != nil {
-			moduleName = ps.Token.string() + "-"
+			moduleName = e.resStr2(ps.Token.string(), "-")
 		} else {
-			moduleName = srcAbs.relString() + "-"
+			moduleName = e.resStr2(srcAbs.relString(), "-")
 		}
 	}
 

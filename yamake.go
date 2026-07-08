@@ -834,8 +834,9 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 	*lex = Lexer{name: name, src: src, line: 1, col: 1, tokBuf: tokBuf[:0]}
 
 	argScratch := p.argScratch
+	stmtScratch := scrub(p.stmtScratch)
 
-	*p = Parser{lex: lex, name: name, includeStack: stack, includes: includes, fs: fs, condScratch: condScratch[:0], condTokBuf: condTokBuf[:0], argScratch: argScratch[:0]}
+	*p = Parser{lex: lex, name: name, includeStack: stack, includes: includes, fs: fs, condScratch: condScratch[:0], condTokBuf: condTokBuf[:0], argScratch: argScratch[:0], stmtScratch: stmtScratch}
 
 	mf := astOne(astFiles, MakeFile{Path: name})
 
@@ -865,8 +866,16 @@ func releaseIncludeState(st *IncludeState) {
 
 type StmtTerminator int
 
+func (p *Parser) takeStmts(mark int) []Stmt {
+	out := astStmts.list(p.stmtScratch[mark:]...)
+
+	p.stmtScratch = p.stmtScratch[:mark]
+
+	return out
+}
+
 func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
-	stmts = make([]Stmt, 0, 8)
+	mark := len(p.stmtScratch)
 
 	for {
 		tok := p.lex.next()
@@ -876,7 +885,7 @@ func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
 				p.lex.throwParse(tok.line, tok.col, "unexpected end of file inside IF block (missing ENDIF)")
 			}
 
-			return astStmts.list(stmts...), tok
+			return p.takeStmts(mark), tok
 		}
 
 		if tok.kind != tokIdent && !(tok.kind == tokWord && isIdentShapedName(tok.val)) {
@@ -884,23 +893,29 @@ func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
 		}
 
 		if term == termIfBody && (tok.val == "ELSE" || tok.val == "ELSEIF" || tok.val == "ENDIF") {
-			return astStmts.list(stmts...), tok
+			return p.takeStmts(mark), tok
 		}
 
-		stmts = p.parseMacroInto(stmts, tok)
+		p.parseMacroInto(tok)
 	}
 }
 
-func (p *Parser) parseMacroInto(into []Stmt, nameTok Token) []Stmt {
+func (p *Parser) parseMacroInto(nameTok Token) {
 	switch nameTok.val {
 	case "IF":
-		return append(into, p.parseIf(nameTok))
+		st := p.parseIf(nameTok)
+
+		p.stmtScratch = append(p.stmtScratch, st)
+
+		return
 	case "INCLUDE":
-		return p.expandInclude(into, nameTok)
+		p.expandInclude(nameTok)
+
+		return
 	case "INCLUDE_ONCE":
 		p.applyIncludeOnce(nameTok)
 
-		return into
+		return
 	}
 
 	args := p.parseMacroArgs(nameTok)
@@ -913,10 +928,10 @@ func (p *Parser) parseMacroInto(into []Stmt, nameTok Token) []Stmt {
 				continue
 			}
 
-			into = append(into, &GenerateEnumSerializationStmt{Header: args[i].string(), Variant: "with_header", Line: nameTok.line})
+			p.stmtScratch = append(p.stmtScratch, astOne(astEnumSers, GenerateEnumSerializationStmt{Header: args[i].string(), Variant: "with_header", Line: nameTok.line}))
 		}
 
-		return into
+		return
 	}
 
 	stmt := p.buildStmt(nameTok, args)
@@ -929,7 +944,7 @@ func (p *Parser) parseMacroInto(into []Stmt, nameTok Token) []Stmt {
 		p.includes.env.setFromString(def.NameEnv, expandScalarVarRef(def.Value, p.includes.env))
 	}
 
-	return append(into, stmt)
+	p.stmtScratch = append(p.stmtScratch, stmt)
 }
 
 func (p *Parser) applyIncludeOnce(nameTok Token) {
@@ -1020,6 +1035,7 @@ type Parser struct {
 	condScratch  []CondNode
 	condTokBuf   []Token
 	argScratch   []ANY
+	stmtScratch  []Stmt
 }
 
 func (p *Parser) buildStmt(nameTok Token, args []ANY) Stmt {
@@ -1601,19 +1617,47 @@ func unescapeFlag(s string) string {
 }
 
 func splitFlagsByGlobal(args []ANY) (globalFlags, ownFlags []ANY) {
+	ng, no := 0, 0
+
 	for i := 0; i < len(args); i++ {
 		if args[i] == kwGLOBAL.any() {
 			i++
 
 			if i < len(args) {
-				globalFlags = append(globalFlags, internStr(unescapeFlag(args[i].string())).any())
+				ng++
 			}
 		} else {
-			ownFlags = append(ownFlags, internStr(unescapeFlag(args[i].string())).any())
+			no++
 		}
 	}
 
-	return astArgs.list(globalFlags...), astArgs.list(ownFlags...)
+	gw := astArgs.alloc(ng)[:0]
+
+	for i := 0; i < len(args); i++ {
+		if args[i] == kwGLOBAL.any() {
+			i++
+
+			if i < len(args) {
+				gw = append(gw, internStr(unescapeFlag(args[i].string())).any())
+			}
+		}
+	}
+
+	astArgs.commit(ng)
+
+	ow := astArgs.alloc(no)[:0]
+
+	for i := 0; i < len(args); i++ {
+		if args[i] == kwGLOBAL.any() {
+			i++
+		} else {
+			ow = append(ow, internStr(unescapeFlag(args[i].string())).any())
+		}
+	}
+
+	astArgs.commit(no)
+
+	return gw[:ng:ng], ow[:no:no]
 }
 
 func splitAddInclPaths(args []ANY) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths []ANY) {
@@ -2040,17 +2084,17 @@ func (c *CondParser) parseAtom() int32 {
 	return -1
 }
 
-func (p *Parser) expandInclude(into []Stmt, nameTok Token) []Stmt {
+func (p *Parser) expandInclude(nameTok Token) {
 	args := p.parseMacroArgs(nameTok)
 
 	if len(args) == 0 {
 		p.lex.throwParse(nameTok.line, nameTok.col, "INCLUDE expects at least 1 argument (the path)")
 	}
 
-	return p.expandOneInclude(into, nameTok, args[0].string())
+	p.expandOneInclude(nameTok, args[0].string())
 }
 
-func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt {
+func (p *Parser) expandOneInclude(nameTok Token, rel string) {
 	rel = expandScalarVarRef(rel, p.includes.env)
 
 	var target string
@@ -2064,7 +2108,7 @@ func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt
 	}
 
 	if seen, _ := p.includes.once.get(uint64(internStr(target).strID())); seen {
-		return into
+		return
 	}
 
 	chain := append(p.includeStack, p.name)
@@ -2087,7 +2131,7 @@ func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt
 	}
 
 	if present, _ := p.fs.exists(srcRootRel, target); !present {
-		return into
+		return
 	}
 
 	bp := readForParse(p.fs, target)
@@ -2096,7 +2140,7 @@ func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt
 
 	included := parseInternalWithState(p.fs, target, *bp, chain, p.includes)
 
-	return append(into, included.Stmts...)
+	p.stmtScratch = append(p.stmtScratch, included.Stmts...)
 }
 
 func describeToken(t Token) string {

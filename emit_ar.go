@@ -67,7 +67,7 @@ func emitARGlobalNamedTagged(
 	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, nil, tc, hostP, emit)
 }
 
-func archiveNameWithPrefix(moduleDir, prefix string) string {
+func archiveTailFor(moduleDir string) string {
 	tail := moduleDir
 
 	for i, slashes := len(moduleDir)-1, 0; i >= 0; i-- {
@@ -82,6 +82,11 @@ func archiveNameWithPrefix(moduleDir, prefix string) string {
 		}
 	}
 
+	return tail
+}
+
+func archiveNameWithPrefix(moduleDir, prefix string) string {
+	tail := archiveTailFor(moduleDir)
 	b := make([]byte, 0, len(prefix)+len(tail)+2)
 
 	b = append(b, prefix...)
@@ -99,6 +104,46 @@ func archiveNameWithPrefix(moduleDir, prefix string) string {
 	b = append(b, ".a"...)
 
 	return string(b)
+}
+
+func (e *EmitContext) appendArchiveTail(moduleDir string) {
+	tail := archiveTailFor(moduleDir)
+
+	for i := 0; i < len(tail); i++ {
+		c := tail[i]
+
+		if c == '/' {
+			c = '-'
+		}
+
+		e.resStrBuf = append(e.resStrBuf, c)
+	}
+}
+
+func (e *EmitContext) arName(moduleDir, prefix, name string) string {
+	start := len(e.resStrBuf)
+
+	if name != "" {
+		e.resStrBuf = append(e.resStrBuf, prefix...)
+		e.resStrBuf = append(e.resStrBuf, name...)
+	} else {
+		e.resStrBuf = append(e.resStrBuf, prefix...)
+		e.appendArchiveTail(moduleDir)
+	}
+
+	e.resStrBuf = append(e.resStrBuf, ".a"...)
+
+	return bytesString(e.resStrBuf[start:])
+}
+
+func (e *EmitContext) globalArName(moduleDir, prefix, name string) string {
+	base := e.arName(moduleDir, prefix, name)
+	start := len(e.resStrBuf)
+
+	e.resStrBuf = append(e.resStrBuf, base[:len(base)-2]...)
+	e.resStrBuf = append(e.resStrBuf, ".global.a"...)
+
+	return bytesString(e.resStrBuf[start:])
 }
 
 func archiveNameWithPrefixOrName(moduleDir, prefix, name string) string {

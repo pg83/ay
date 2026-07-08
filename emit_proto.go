@@ -157,6 +157,10 @@ func protoOutputRel(outputRoot, rel string) string {
 		return rel
 	}
 
+	if pathIsClean(outputRoot) && pathIsClean(rel) {
+		return internV(outputRoot, "/", rel).string()
+	}
+
 	return filepath.ToSlash(filepath.Clean(outputRoot + "/" + rel))
 }
 

@@ -1039,7 +1039,8 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
 			globalNext := false
-			globalSrcs := make([]ANY, 0, len(v.Sources))
+
+			var globalSrcs []ANY
 
 			for _, srcTok := range expandStmtTokens(v.Sources, env) {
 				if srcTok == kwGLOBAL.any() {
@@ -1165,10 +1166,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 		case *GlobalSrcsStmt:
 			appendGlobalSrcGroup(d, expandStmtTokens(v.Sources, env))
 		case *GenerateEnumSerializationStmt:
-			expandedEN := *v
+			expandedEN := astOne(astEnumSers, *v)
 
 			expandedEN.DeclSeq = d.nextDeclSeq()
-			d.enumSrcs = append(d.enumSrcs, &expandedEN)
+			d.enumSrcs = append(d.enumSrcs, expandedEN)
 
 			const enumSerPeer = "tools/enum_parser/enum_serialization_runtime"
 
