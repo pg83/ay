@@ -4,6 +4,12 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
+func scrub[T any](s []T) []T {
+	clear(s[:cap(s)])
+
+	return s[:0]
+}
+
 func concat[T any](lists ...[]T) []T {
 	total := 0
 	nonEmpty := 0
