@@ -487,10 +487,11 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 	for i := range d.enumSrcs {
 		stmt := d.enumSrcs[i]
-		outs := []VFS{build(e.enumSerializedBase(stmt), "_serialized.cpp")}
+		enDir, enSep, enBase := e.enumSerializedBaseParts(stmt)
+		outs := []VFS{build(enDir, enSep, enBase, "_serialized.cpp")}
 
 		if stmt.Variant == "with_header" {
-			outs = append(outs, build(e.enumSerializedBase(stmt), "_serialized.h"))
+			outs = append(outs, build(enDir, enSep, enBase, "_serialized.h"))
 		}
 
 		positions = append(positions, ProducerPos{

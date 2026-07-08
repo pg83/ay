@@ -49,7 +49,11 @@ func resourceHashInto(buf []byte, list []string, moduleTag string) (string, []by
 
 	sum := md5.Sum(buf)
 
-	return enchex.EncodeToString(sum[:])[:hashLen], buf
+	var hexBuf [2 * md5.Size]byte
+
+	enchex.Encode(hexBuf[:], sum[:])
+
+	return string(hexBuf[:hashLen]), buf
 }
 
 func renderResourceKvCmd(kv string) string {

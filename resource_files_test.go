@@ -16,7 +16,7 @@ func TestExpandResourceFilesRapidjson(t *testing.T) {
 		"rapidjson/readme.md",
 	}
 
-	got := expandResourceFiles(args)
+	got := expandResourceFiles(nil, args)
 
 	want := []ResourceEntry{
 		{Path: "-", Key: "resfs/src/resfs/file/devtools/ymake/contrib/python-rapidjson/.dist-info/METADATA=${rootrel;context=TEXT;input=TEXT:\".dist-info/METADATA\"}"},

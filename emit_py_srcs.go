@@ -20,6 +20,7 @@ var (
 const (
 	pyGroupGenAux = -2
 	pyGroupProto  = -1
+	b32Lower      = "abcdefghijklmnopqrstuvwxyz234567"
 )
 
 func pyResourceKeyPrefix(topLevel bool, namespace *ANY, modulePath string) string {
@@ -62,7 +63,22 @@ func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
 }
 
 func pySrcYapycSuffix(modulePath string) string {
-	return pathIDBase32("$S/" + modulePath)[:4]
+	var pathBuf [192]byte
+
+	b := append(pathBuf[:0], "$S/"...)
+
+	b = append(b, modulePath...)
+
+	sum := md5.Sum(b)
+
+	var out [4]byte
+
+	out[0] = b32Lower[sum[0]>>3]
+	out[1] = b32Lower[(sum[0]<<2|sum[1]>>6)&31]
+	out[2] = b32Lower[(sum[1]>>1)&31]
+	out[3] = b32Lower[(sum[1]<<4|sum[2]>>4)&31]
+
+	return string(out[:])
 }
 
 func (e *EmitContext) collectPyGroups() []PySrcGroup {
@@ -727,15 +743,6 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 	}
 
 	return out
-}
-
-func pathIDBase32(path string) string {
-	sum := md5.Sum([]byte(path))
-	encoded := enc32.StdEncoding.EncodeToString(sum[:])
-
-	encoded = strings.ToLower(encoded)
-
-	return strings.TrimRight(encoded, "=")
 }
 
 func pyNamespaceUnitType(t TOK) bool {

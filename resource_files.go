@@ -6,11 +6,10 @@ import (
 	"strings"
 )
 
-func expandResourceFiles(args []string) []ResourceEntry {
+func expandResourceFiles(out []ResourceEntry, args []string) []ResourceEntry {
 	prefix := ""
 	prefixToStrip := ""
 	dest := ""
-	out := make([]ResourceEntry, 0, len(args))
 	i := 0
 
 	for i < len(args) {
@@ -72,7 +71,7 @@ func expandResourceFiles(args []string) []ResourceEntry {
 	return out
 }
 
-func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *AllResourceFilesStmt) []ResourceEntry {
+func expandAllResourceFiles(out []ResourceEntry, fs FS, modulePath string, env Environment, stmt *AllResourceFilesStmt) []ResourceEntry {
 	prefix := ""
 	strip := ""
 
@@ -136,7 +135,7 @@ func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *All
 		}
 	}
 
-	return expandResourceFiles(rfArgs)
+	return expandResourceFiles(out, rfArgs)
 }
 
 func allResourceDir(modulePath, dir string) (rel string, ok bool) {
@@ -168,7 +167,7 @@ func globMatch(fs FS, pattern string) []string {
 
 		for _, d := range dirs {
 			if !wild {
-				child := path.Join(d, seg)
+				child := joinRel(d, seg)
 				present, isDir := fs.exists(srcRootRel, child)
 
 				if !present {
@@ -201,7 +200,7 @@ func globMatch(fs FS, pattern string) []string {
 				}
 
 				isDir := packed&1 != 0
-				child := path.Join(d, name)
+				child := joinRel(d, name)
 
 				if last {
 					if !isDir {

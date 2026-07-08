@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -1324,27 +1325,22 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 		case *ResourceFilesStmt:
 			ensureResourcePeer(modulePath, d)
 
-			expanded := expandResourceFiles(anyStrs(expandStmtTokens(v.Args, env)))
+			before := len(d.resources)
+			d.resources = expandResourceFiles(d.resources, anyStrs(expandStmtTokens(v.Args, env)))
 
-			for i, e := range expanded {
-				if i == len(expanded)-1 {
-					e.EndsBatch = true
-				}
-
-				d.resources = append(d.resources, e)
+			if len(d.resources) > before {
+				d.resources[len(d.resources)-1].EndsBatch = true
 			}
 		case *AllResourceFilesStmt:
 			ensureResourcePeer(modulePath, d)
 
-			expanded := expandAllResourceFiles(fs, modulePath, env, v)
+			before := len(d.resources)
+			d.resources = expandAllResourceFiles(d.resources, fs, modulePath, env, v)
 
-			for i, e := range expanded {
-				if i == len(expanded)-1 {
-					e.EndsBatch = true
-				}
-
-				d.resources = append(d.resources, e)
+			if len(d.resources) > before {
+				d.resources[len(d.resources)-1].EndsBatch = true
 			}
+
 		case *DeclareResourceStmt:
 
 			expanded := *v
@@ -2269,7 +2265,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 				dest := "py/" + strings.ReplaceAll(modName, ".", "/") + ".pyi"
 
-				d.pyPyiResources = append(d.pyPyiResources, expandResourceFiles([]string{"DEST", dest, src})...)
+				d.pyPyiResources = expandResourceFiles(d.pyPyiResources, []string{"DEST", dest, src})
 				mainNext = false
 
 				continue
@@ -2796,13 +2792,16 @@ func pythonInitSuffix(name string) string {
 		return name
 	}
 
-	var mangled strings.Builder
+	var buf [128]byte
+
+	mangled := buf[:0]
 
 	for _, seg := range segs {
-		fmt.Fprintf(&mangled, "%d%s", len(seg), seg)
+		mangled = strconv.AppendInt(mangled, int64(len(seg)), 10)
+		mangled = append(mangled, seg...)
 	}
 
-	return mangled.String()
+	return string(mangled)
 }
 
 func applyProtoNamespace(d *ModuleData, namespace ANY) {
