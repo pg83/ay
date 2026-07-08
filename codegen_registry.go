@@ -34,6 +34,8 @@ type CodegenRegistry struct {
 	dirs            *BumpAllocator[IncludeDirective]
 	refs            *BumpAllocator[NodeRef]
 	leaves          *BumpAllocator[VFS]
+	compiles        *BumpAllocator[CompileSpec]
+	anys            *BumpAllocator[ANY]
 }
 
 func splitKey(prefix VFS, suffix ANY) uint64 {
@@ -42,11 +44,13 @@ func splitKey(prefix VFS, suffix ANY) uint64 {
 
 func newCodegenRegistry() *CodegenRegistry {
 	return &CodegenRegistry{
-		bySplit: newIntMap[*GeneratedFileInfo](1 << 14),
-		arena:   newBumpAllocator[GeneratedFileInfo](1 << 10),
-		dirs:    newBumpAllocator[IncludeDirective](1 << 10),
-		refs:    newBumpAllocator[NodeRef](1 << 10),
-		leaves:  newBumpAllocator[VFS](1 << 8),
+		bySplit:  newIntMap[*GeneratedFileInfo](1 << 14),
+		arena:    newBumpAllocator[GeneratedFileInfo](1 << 10),
+		dirs:     newBumpAllocator[IncludeDirective](1 << 10),
+		refs:     newBumpAllocator[NodeRef](1 << 10),
+		leaves:   newBumpAllocator[VFS](1 << 8),
+		compiles: newBumpAllocator[CompileSpec](1 << 8),
+		anys:     newBumpAllocator[ANY](1 << 8),
 	}
 }
 
@@ -72,6 +76,25 @@ func (r *CodegenRegistry) register(info *GeneratedFileInfo) {
 
 	if len(info.ClosureLeaves) > 0 {
 		info.ClosureLeaves = r.leaves.list(info.ClosureLeaves...)
+	}
+
+	if info.Compile != nil {
+		c := r.compiles.one()
+
+		*c = *info.Compile
+		info.Compile = c
+
+		if len(c.CFlags) > 0 {
+			c.CFlags = r.anys.list(c.CFlags...)
+		}
+
+		if len(c.EnvCFlags) > 0 {
+			c.EnvCFlags = r.anys.list(c.EnvCFlags...)
+		}
+
+		if len(c.EnvAddIncl) > 0 {
+			c.EnvAddIncl = r.leaves.list(c.EnvAddIncl...)
+		}
 	}
 
 	for b := range info.ParsedIncludes {
