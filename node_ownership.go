@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	ownershipOn         bool
+	ownershipOn         = os.Getenv("AY_DEBUG_OWNERSHIP") != ""
 	ownershipRanges     []ownedRange
 	ownershipSorted     bool
 	ownershipViolations = map[string]*ownershipViolation{}
@@ -48,9 +48,7 @@ func ownershipCallSite() string {
 	}
 }
 
-func ownershipInit() {
-	ownershipOn = os.Getenv("AY_DEBUG_OWNERSHIP") != ""
-
+func init() {
 	if ownershipOn {
 		registerKnownGlobalChunks()
 	}

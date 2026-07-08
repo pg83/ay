@@ -142,6 +142,7 @@ func emitLD(
 	}
 
 	cmds := na.cmds.alloc(5 + len(splitDwarfCmds))[:0]
+
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
 	if sbomEmbed {
@@ -167,6 +168,7 @@ func emitLD(
 	na.cmds.commit(len(cmds))
 
 	cmds = cmds[:len(cmds):len(cmds)]
+
 	inputTail := na.vfs.alloc(2)[:0]
 
 	inputTail = append(inputTail, ldSvnversionHVFS)
@@ -185,6 +187,7 @@ func emitLD(
 	if len(sbomPaths) > 0 {
 		extraChunks[1] = na.vfsList(sbomPaths...)
 		extraChunks[2] = na.srcChunk(linkSbomScriptVFS)
+
 		nExtra = 3
 	}
 
@@ -202,7 +205,9 @@ func emitLD(
 	na.noderefs.commit(len(deps))
 
 	deps = deps[:len(deps):len(deps)]
+
 	outputs := na.vfs.alloc(2 + len(dynamicPaths))[:0]
+
 	outputs = append(outputs, outputVFS)
 
 	for _, p := range dynamicPaths {
@@ -283,6 +288,7 @@ func composeLDCmdVcsCompileForced(na *NodeArenas, p *Platform, tc ModuleToolchai
 		len(warningFlags) + 1 + len(bundle.Defines) +
 		len(p.CFlags) + len(moduleCFlags) + len(peerCFlagsGlobal) +
 		2*len(bundle.NoLibcBlock) + 1 + len(moduleScopeCFlags)
+
 	cmdArgs := na.anys.alloc(bound)[:0]
 
 	cmdArgs = append(cmdArgs, tc.CC.any(), p.TargetArg.any())
@@ -472,6 +478,7 @@ func composeLDCmdSbomObjcopy(na *NodeArenas, tc ModuleToolchain, sbomJSON, targe
 
 func composeLDCmdLinkOrCopy(na *NodeArenas, tc ModuleToolchain, modulePath string, dynamicPaths ...VFS) []ANY {
 	cmd := na.anys.alloc(5 + len(dynamicPaths))[:0]
+
 	cmd = append(cmd,
 		tc.Python3.any(),
 		(ldFsToolsVFS).any(),
@@ -550,6 +557,7 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 	}
 
 	chunks := na.inputs.alloc(2 + nScripts + len(extra))[:0]
+
 	chunks = append(chunks, peerLibChunk, buildRootBlock)
 	chunks = append(chunks, scriptChunks[:nScripts]...)
 	chunks = append(chunks, extra...)

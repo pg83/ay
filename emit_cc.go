@@ -176,7 +176,6 @@ func (e *EmitContext) mainOutInducedInputs(na *NodeArenas, includeView Closure) 
 func composeCCNode(instance ModuleInstance, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
 	na := emit.nodeArenas()
 	srcRel := trimModulePrefix(srcVFS.relString(), instance.Path.relString())
-
 	suffix := ".o"
 
 	if instance.Platform.PIC {

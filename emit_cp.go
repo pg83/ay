@@ -25,6 +25,7 @@ func emitJVCPG4(
 		(src).any(),
 		(dst).any(),
 	)
+
 	env := envVarsVCS
 	head := na.vfs.alloc(2)[:0]
 
@@ -37,6 +38,7 @@ func emitJVCPG4(
 	na.vfs.commit(len(head))
 
 	head = head[:len(head):len(head)]
+
 	inputs := na.inputList(head, scripts[fsTools.rel()], na.vfsList(jvInputs...), closure)
 
 	node := Node{
@@ -74,6 +76,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		(src).any(),
 		(dst).any(),
 	)
+
 	env := envVarsVCS
 	ownInputs := na.vfs.alloc(1 + len(extraInputs))[:0]
 
@@ -90,6 +93,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 	na.vfs.commit(len(ownInputs))
 
 	ownInputs = ownInputs[:len(ownInputs):len(ownInputs)]
+
 	inputs := na.inputList(scripts[fsTools.rel()], ownInputs)
 
 	node := Node{

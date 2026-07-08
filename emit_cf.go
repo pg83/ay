@@ -48,6 +48,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	env := envVarsVCS
 	cfgVars := buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string())
 	cmdArgs := na.anys.alloc(4 + len(cfgVars))[:0]
+
 	cmdArgs = append(cmdArgs, d.cc.TC.Python3.any(), configureFilePyVFS.any(), srcVFS.any(), outVFS.any())
 	cmdArgs = appendInternAnys(cmdArgs, cfgVars)
 	na.anys.commit(len(cmdArgs))

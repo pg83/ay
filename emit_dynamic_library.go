@@ -90,10 +90,12 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	na.cmds.commit(len(cmds))
 
 	cmds = cmds[:len(cmds):len(cmds)]
+
 	peerChunk := na.vfsList(peerArchivePaths...)
 	svnChunk := na.vfsList(ldSvnInterfaceVFS, ldSvnversionHVFS, source(instance.Path.relString(), "/", d.exportsScript.string()))
 	ccChunk := na.vfsList(ccOutputs...)
 	inputs := na.inputs.alloc(8)[:0]
+
 	inputs = append(inputs, peerChunk, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS.rel()], ctx.scripts[ldLinkDynLibVFS.rel()])
 	inputs = append(inputs, svnChunk, ccChunk)
 
@@ -379,7 +381,9 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePath string, output VFS, outputName string, vcsO VFS, ownObjects, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript string, fixElf VFS) []ANY {
 	bound := 60 + len(pluginPaths) + 2*len(wholeArchivePeers) + len(ownObjects) +
 		len(p.SysrootArgs) + len(peerLibPaths) + len(p.LinkPreludeExtra) + len(p.SystemLibs)
+
 	cmdArgs := na.anys.alloc(bound)[:0]
+
 	cmdArgs = append(cmdArgs,
 		tc.Python3.any(),
 		ldLinkDynLibVFS.any(),
@@ -475,11 +479,13 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts ScriptDeps) InputChunks {
 	peerChunk := na.vfsList(peerLibPaths...)
 	pluginChunk := na.vfsList(pluginPaths...)
+
 	tailChunk := na.vfsList(
 		ldSvnInterfaceVFS,
 		ldSvnversionHVFS,
 		source(modulePath, "/", exportsScript),
 	)
+
 	chunks := na.inputs.alloc(7)[:0]
 
 	chunks = append(chunks, peerChunk, pluginChunk, na.srcChunk(fixElfPath))

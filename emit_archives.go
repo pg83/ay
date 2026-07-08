@@ -74,6 +74,7 @@ func (e *EmitContext) emitArchive(
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+
 	inputs := na.vfs.alloc(len(pathPerFile))[:0]
 
 	deduper.reset()
@@ -89,7 +90,9 @@ func (e *EmitContext) emitArchive(
 	na.vfs.commit(len(inputs))
 
 	inputs = inputs[:len(inputs):len(inputs)]
+
 	deps := na.noderefs.alloc(len(producerRefs) + 1)[:0]
+
 	deps = append(deps, producerRefs...)
 
 	if toolLDRef != 0 {
@@ -99,6 +102,7 @@ func (e *EmitContext) emitArchive(
 	na.noderefs.commit(len(deps))
 
 	deps = deps[:len(deps):len(deps)]
+
 	env := envVarsVCS
 
 	n := Node{

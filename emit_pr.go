@@ -226,6 +226,7 @@ func prCollectSourceInputs(na *NodeArenas, reg *CodegenRegistry, inVFSs []VFS) p
 
 	all := na.vfs.alloc(len(direct) + len(generated))
 	an := copy(all, direct)
+
 	an += copy(all[an:], generated)
 	na.vfs.commit(an)
 
@@ -516,6 +517,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 
 	if len(stmt.EnvPairs) > 0 {
 		block := na.envs.alloc(1 + len(stmt.EnvPairs))[:0]
+
 		block = append(block, envVarsVCS...)
 
 		for _, kv := range stmt.EnvPairs {
@@ -574,6 +576,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+
 	head := na.vfs.alloc(1 + len(spec.auxTools) + len(spec.inVFSs))[:0]
 
 	deduper.reset()
@@ -599,6 +602,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	na.vfs.commit(len(head))
 
 	head = head[:len(head):len(head)]
+
 	inputs := na.inputList(head, deduper.filterSeen(na, spec.inputClosure))
 	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
 
@@ -631,6 +635,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	na.vfs.commit(len(outputs))
 
 	outputs = outputs[:len(outputs):len(outputs)]
+
 	toolRefs := na.noderefs.alloc(len(spec.auxTools) + 1)[:0]
 
 	for _, tool := range spec.auxTools {

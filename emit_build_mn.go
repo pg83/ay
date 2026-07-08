@@ -1,12 +1,12 @@
 package main
 
+var mnKV = KV{P: pkMN, PC: pcYellow}
+
 type BuildMnStmt struct {
 	Info ANY
 	Name string
 	Seq  int
 }
-
-var mnKV = KV{P: pkMN, PC: pcYellow}
 
 func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
@@ -50,6 +50,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{mnSSEInclude}},
 		ClosureLeaves:  []VFS{infoVFS, buildMnScriptVFS},
 	})
+
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     rodataVFS,
 		ProducerRef:    ref,

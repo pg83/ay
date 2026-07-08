@@ -95,8 +95,11 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 			if srcVFS.isSource() {
 				fsToolsDeps := ctx.scripts[copyFsToolsVFS.rel()]
 				block := ctx.na.vfs.alloc(1 + len(fsToolsDeps))
+
 				block[0] = srcVFS
+
 				bn := 1 + copy(block[1:], fsToolsDeps)
+
 				ctx.na.vfs.commit(bn)
 				info.SourceInputs = block[:bn:bn]
 			}
@@ -106,6 +109,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 			fsToolsDeps := ctx.scripts[copyFsToolsVFS.rel()]
 			merged := ctx.na.vfs.alloc(len(producerSource) + len(fsToolsDeps))
 			mn := copy(merged, producerSource)
+
 			mn += copy(merged[mn:], fsToolsDeps)
 			ctx.na.vfs.commit(mn)
 
@@ -127,7 +131,9 @@ func (e *EmitContext) emitCopyFileNode(entry CopyFileEntry, st CopyEmitState) {
 
 	if entry.WithContext || len(entry.OutputIncludes) > 0 {
 		raw := rewriteClosureCPSource(ctx.na, scanner, walkClosure(e.scanner, st.dstVFS, d.cc.ScanCfg))
+
 		raw = filterSourceVFS(ctx.na, raw)
+
 		block := ctx.na.vfs.alloc(len(raw) + len(st.producerSource))[:0]
 
 		deduper.reset()

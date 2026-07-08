@@ -63,6 +63,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 		ProducerRef:   ref,
 		GeneratorRefs: []NodeRef{toolRef},
 	})
+
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:    incVFS,
 		ProducerRef:   ref,

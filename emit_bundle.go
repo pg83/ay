@@ -75,6 +75,7 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 VFS, src, dst 
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+
 	env := envVarsVCS
 
 	var inputHead []VFS

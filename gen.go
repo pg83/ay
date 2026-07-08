@@ -381,6 +381,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 			registerOwnedSlice(deps)
 		}
 	}
+
 	fetchRefs := emitter.fetchRefs
 	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
 	targetReg := newCodegenRegistry()
@@ -1027,6 +1028,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	defer func() { frame.peerAddInclGlobal = peerAddInclGlobal[:0] }()
 
 	var oneLevelOnlyPaths map[VFS]struct{}
+
 	peerCFlagsGlobal := frame.peerCFlagsGlobal[:0]
 	peerCXXFlagsGlobal := frame.peerCXXFlagsGlobal[:0]
 	peerCOnlyFlagsGlobal := frame.peerCOnlyFlagsGlobal[:0]
@@ -1422,7 +1424,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	effectiveAddInclGlobal := dedupShared(ctx.vfsSlices, d.addInclGlobal, peerAddInclForProp)
-
 	ownProtoInclude := frame.ownProtoInclude[:0]
 
 	defer func() { frame.ownProtoInclude = ownProtoInclude[:0] }()
@@ -2036,6 +2037,7 @@ func (ctx *GenCtx) pushFrame() *ModuleFrame {
 	}
 
 	f := ctx.frames[ctx.frameDepth]
+
 	ctx.frameDepth++
 
 	return f

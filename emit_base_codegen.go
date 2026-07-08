@@ -37,8 +37,10 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+
 	env := envVarsVCS
 	bcRef := ctx.emit.reserve()
+
 	var headerParsed []IncludeDirective
 
 	for _, oi := range bc.OutputIncludes {

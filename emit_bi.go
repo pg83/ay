@@ -41,6 +41,7 @@ func emitBI(
 	na.anys.commit(len(cmd1Args))
 
 	cmd1Args = cmd1Args[:len(cmd1Args):len(cmd1Args)]
+
 	cmd2Args := na.anyList(
 		tc.Python3.any(),
 		(xargsPyVFS).any(),
@@ -50,6 +51,7 @@ func emitBI(
 		(buildInfoGenPyVFS).any(),
 		(outVFS).any(),
 	)
+
 	inputs := na.vfsList(
 		yieldLinePyVFS,
 		xargsPyVFS,

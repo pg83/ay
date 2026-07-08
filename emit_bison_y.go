@@ -128,12 +128,15 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		argDashO.any(),
 		(generatedVFS).any(),
 		(srcVFS).any())
+
 	na.anys.commit(len(head))
 
 	head = head[:len(head):len(head)]
 
 	cmds := na.cmds.alloc(2)[:0]
+
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(head), Env: env})
+
 	inputs := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS)
 
 	if preprocessHeader {
@@ -145,6 +148,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		})
 
 		ext := na.vfs.alloc(len(inputs) + 1 + len(bisonCppSkeletonInputs))[:0]
+
 		ext = append(ext, inputs...)
 		ext = append(ext, bisonPreprocessPyVFS)
 		ext = append(ext, bisonCppSkeletonInputs...)

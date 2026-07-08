@@ -283,6 +283,7 @@ func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, clangVer string
 	if ownershipOn {
 		registerOwnedSlice(tc.ARCmdHead)
 	}
+
 	return tc
 }
 
@@ -394,6 +395,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 
 	inputs := na.inputs.alloc(3)[:0]
 	depRefs := na.noderefs.alloc(3)[:0]
+
 	inputs = append(inputs, ctx.scripts[copyFsToolsVFS.rel()])
 	depRefs = append(depRefs, fetchRef)
 
@@ -411,6 +413,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 	na.noderefs.commit(len(depRefs))
 
 	inputsChunks := InputChunks(inputs[:len(inputs):len(inputs)])
+
 	depRefs = depRefs[:len(depRefs):len(depRefs)]
 
 	node := Node{

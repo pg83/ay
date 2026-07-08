@@ -139,10 +139,12 @@ func emitARNode(
 	na.vfs.commit(len(inputTail))
 
 	inputTail = inputTail[:len(inputTail):len(inputTail)]
+
 	objInputs := na.vfsList(objPaths...)
 	topEnv := hostP.toolEnv()
 	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs))
 	nd := copy(deps, objRefs)
+
 	nd += copy(deps[nd:], peerArchiveRefs)
 	na.noderefs.commit(nd)
 

@@ -4,6 +4,11 @@ import (
 	"encoding/json"
 )
 
+var (
+	srcRootDirVFS = source("")
+	bldRootDirVFS = build("")
+)
+
 const vfsPrefixLen = len("$(S)/")
 
 const (
@@ -80,11 +85,6 @@ func (v VFS) isSource() bool {
 func (v VFS) isBuild() bool {
 	return uint32(v)&1 != 0
 }
-
-var (
-	srcRootDirVFS = source("")
-	bldRootDirVFS = build("")
-)
 
 func cwdVFS(s string) VFS {
 	switch {

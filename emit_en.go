@@ -180,8 +180,8 @@ func emitEN(
 	emit *StreamingEmitter,
 ) {
 	na := emit.nodeArenas()
-
 	cmdArgs := na.anys.alloc(8)[:0]
+
 	cmdArgs = append(cmdArgs,
 		(enumParserBin).any(),
 		(headerInput).any(),

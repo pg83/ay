@@ -29,6 +29,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+
 	env := envVarsVCS
 	srcVFSs := na.vfs.alloc(len(sources))
 

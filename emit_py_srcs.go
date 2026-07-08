@@ -247,6 +247,7 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 
 	if genInfo != nil {
 		block := na.vfs.alloc(3 + len(genInfo.SourceInputs))[:0]
+
 		block = append(block, srcAbs)
 		block = append(block, genInfo.SourceInputs...)
 		block = append(block, py3ccBinary, py3ccSlowBin)

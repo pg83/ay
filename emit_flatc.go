@@ -123,6 +123,7 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	headChunk := na.anyList(tc.Python3.any(), (flatcWrapperVFS).any(), (flatcBinary).any())
 	tailChunk := na.anyList(headerVFS.any(), srcVFS.any())
 	chunks := na.chunks.alloc(5)[:0]
+
 	chunks = append(chunks, headChunk, v.constFlags)
 
 	if flatcFlagsChunk != nil {
@@ -133,7 +134,6 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 	na.chunks.commit(len(chunks))
 
 	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])
-
 	env := envVarsVCS
 
 	node := Node{

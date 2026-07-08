@@ -482,7 +482,6 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		na.vfs.commit(len(adjacent))
 
 		adjacent = adjacent[:len(adjacent):len(adjacent)]
-
 		hashScratch = append(hashScratch, unitElem)
 
 		var hash string
@@ -508,6 +507,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		na.anys.commit(len(nodeCmd))
 
 		nodeCmd = nodeCmd[:len(nodeCmd):len(nodeCmd)]
+
 		codegenDeps := resolveCodegenDepRefsIncl(ctx, instance, na, adjacent)
 		deps := na.noderefs.alloc(len(codegenDeps) + 1)
 		nd := copy(deps, codegenDeps)
@@ -520,6 +520,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		na.noderefs.commit(nd)
 
 		deps = deps[:nd:nd]
+
 		env := envVarsVCS
 
 		deduper.reset()

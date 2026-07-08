@@ -647,6 +647,7 @@ func emitPB(
 	outsChunk := na.anyChunkVFS(outputs)
 	relChunk := na.anyList(internStr(protoRelPath).any())
 	chunks := na.chunks.alloc(6)[:0]
+
 	chunks = append(chunks, blocks.head, outsChunk, blocks.mid, relChunk)
 
 	if len(blocks.tail) > 0 {
@@ -660,10 +661,9 @@ func emitPB(
 	na.chunks.commit(len(chunks))
 
 	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])
-
 	env := envVarsVCS
-
 	inputs := na.vfs.alloc(5 + len(extraPlugins))[:0]
+
 	inputs = append(inputs, cppStyleguideBinary)
 
 	if grpc {
@@ -708,6 +708,7 @@ func emitPB(
 	na.noderefs.commit(len(foreignDepRefs))
 
 	foreignDepRefs = foreignDepRefs[:len(foreignDepRefs):len(foreignDepRefs)]
+
 	deps := na.noderefs.list(extraDepRefs...)
 	protocCwd := "$(S)"
 
@@ -879,6 +880,7 @@ func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppSty
 	na.anys.commit(len(mid))
 
 	mid = mid[:len(mid):len(mid)]
+
 	tailBound := 2
 
 	for _, plugin := range extraPlugins {

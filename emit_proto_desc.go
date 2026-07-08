@@ -273,6 +273,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	na.anys.commit(len(merge))
 
 	merge = merge[:len(merge):len(merge)]
+
 	collect := na.anys.alloc(4 + len(rawprotoOutputs))[:0]
 
 	collect = append(collect, wrapccPython3STR.any(), collectRawprotoVFS.any(), strOutput.any(), protosrc.any())
@@ -284,8 +285,10 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	na.anys.commit(len(collect))
 
 	collect = collect[:len(collect):len(collect)]
+
 	inputs := na.vfs.alloc(len(descOutputs) + len(rawprotoOutputs) + len(producerSourceInputs))
 	ni := copy(inputs, descOutputs)
+
 	ni += copy(inputs[ni:], rawprotoOutputs)
 	ni += copy(inputs[ni:], producerSourceInputs)
 	na.vfs.commit(ni)
@@ -329,6 +332,7 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	na.anys.commit(len(merge))
 
 	merge = merge[:len(merge):len(merge)]
+
 	collect := na.anys.alloc(4 + len(closure))[:0]
 
 	collect = append(collect, wrapccPython3STR.any(), mergeProtosrcVFS.any(), strOutput.any(), tar.any())
@@ -340,6 +344,7 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	na.anys.commit(len(collect))
 
 	collect = collect[:len(collect):len(collect)]
+
 	sbomRef, sbomPath := (*NodeRef)(nil), (*VFS)(nil)
 
 	if sbomActive(ctx, instance) {

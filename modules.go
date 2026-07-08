@@ -745,12 +745,12 @@ func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleIns
 		case srcExtEv:
 			if !evInduced {
 				evInduced = true
-
 				d.peerdirs = append(d.peerdirs, strLibraryCppEventlog.any(), strContribLibsProtobuf.any())
 			}
 		case srcExtProto:
 			if !protoInduced {
 				protoInduced = true
+
 				isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
 
 				if !isProtoLibrary || !env.bool(envPY3_PROTO) {
@@ -1656,7 +1656,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		expanded := expandStmtTokens(v.Args, env)
 
 		d.cgoCflags = append(d.cgoCflags, expanded...)
-
 		d.cFlags = append(d.cFlags, expanded...)
 	case tokMavenGroupId:
 
