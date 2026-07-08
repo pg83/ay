@@ -237,7 +237,7 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 
 	outputPath := e.pyYapycOutFor(ps)
 
-	cmdArgs := na.chunkList([]ANY{(py3ccBinary).any(), argSlowPy3cc.any(), (py3ccSlowBin).any()},
+	cmdArgs := na.chunkList(e.ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
 		na.anyList(internStr(moduleName).any(), (srcAbs).any(), (outputPath).any()))
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}

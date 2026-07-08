@@ -342,14 +342,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
 	yapycOut := e.pyProtoYapycOut(ps)
 
-	yapycCmd := []ANY{
-		(py3ccBinary).any(),
-		argSlowPy3cc.any(),
-		(py3ccSlowBin).any(),
-		internV(token, "-").any(),
-		(ps.Path).any(),
-		(yapycOut).any(),
-	}
+	yapycTail := na.anyList(internV(token, "-").any(), (ps.Path).any(), (yapycOut).any())
 
 	nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path), info.SourceInputs)
 
@@ -363,7 +356,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 
 	yapycNode := Node{
 		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(yapycCmd), Env: yapycEnv}),
+		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(e.ctx.py3ccHead(py3ccBinary, py3ccSlowBin), yapycTail), Env: yapycEnv}),
 		Env:            yapycEnv,
 		Inputs:         nodeInputs,
 		Outputs:        na.vfsList(yapycOut),
