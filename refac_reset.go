@@ -11,6 +11,14 @@ import (
 	"strings"
 )
 
+var resetScalarElems = map[string]bool{
+	"VFS": true, "STR": true, "ANY": true, "ARG": true, "ENV": true, "TOK": true,
+	"NodeRef": true, "SrcMeta": true, "bool": true, "byte": true, "rune": true,
+	"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+	"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
+	"float32": true, "float64": true,
+}
+
 func refacReset(_ GlobalFlags, args []string) int {
 	if len(args) == 0 {
 		throwFmt("refac reset: expected struct type names")
@@ -76,7 +84,11 @@ func refacReset(_ GlobalFlags, args []string) int {
 				switch field.Type.(type) {
 				case *ast.ArrayType:
 					if field.Type.(*ast.ArrayType).Len == nil {
-						fmt.Fprintf(&b, "\t\t%s: x.%s[:0],\n", id.Name, id.Name)
+						if elemIsScalarIdent(field.Type.(*ast.ArrayType).Elt) {
+							fmt.Fprintf(&b, "\t\t%s: x.%s[:0],\n", id.Name, id.Name)
+						} else {
+							fmt.Fprintf(&b, "\t\t%s: scrub(x.%s),\n", id.Name, id.Name)
+						}
 					}
 				case *ast.MapType:
 					fmt.Fprintf(&b, "\t\t%s: clearedMap(x.%s),\n", id.Name, id.Name)
@@ -96,6 +108,12 @@ func refacReset(_ GlobalFlags, args []string) int {
 	}
 
 	return 0
+}
+
+func elemIsScalarIdent(e ast.Expr) bool {
+	id, ok := e.(*ast.Ident)
+
+	return ok && resetScalarElems[id.Name]
 }
 
 func clearedMap[K comparable, V any](m map[K]V) map[K]V {
