@@ -51,6 +51,7 @@ func ownershipCallSite() string {
 func init() {
 	if ownershipOn {
 		registerKnownGlobalChunks()
+		atExit(ownershipDump)
 	}
 }
 
@@ -150,10 +151,6 @@ func ownershipCheckNode(n *Node) {
 }
 
 func ownershipDump() {
-	if !ownershipOn {
-		return
-	}
-
 	type row struct {
 		key string
 		v   *OwnershipViolation

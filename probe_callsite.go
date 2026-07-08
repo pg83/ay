@@ -113,14 +113,14 @@ func recordCall(site string) {
 	callSiteSeen.Store(site, struct{}{})
 }
 
-func dumpCalls() {
-	path := os.Getenv("CALLSITE_OUT")
-
-	if path == "" {
-		return
+func init() {
+	if os.Getenv("CALLSITE_OUT") != "" {
+		atExit(dumpCalls)
 	}
+}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+func dumpCalls() {
+	f, err := os.OpenFile(os.Getenv("CALLSITE_OUT"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 
 	if err != nil {
 		return

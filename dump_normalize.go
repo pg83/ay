@@ -14,8 +14,6 @@ import (
 const dumpUIDLen = 22
 
 func cmdDumpNormalize(_ GlobalFlags, args []string) int {
-	defer startProfilesFromEnv()()
-
 	var inPath, target, outPath string
 	var refGraph, streaming bool
 
