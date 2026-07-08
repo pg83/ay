@@ -78,14 +78,15 @@ func internStr(s string) STR {
 			return oid
 		}
 
-		id := internAppend(s, h.Lo)
+		owned := internOwnedCopy(unsafe.Slice(unsafe.StringData(s), len(s)))
+		id := internAppend(owned, h.Lo)
 
-		internTable.overflow[s] = id
+		internTable.overflow[owned] = id
 
 		return id
 	}
 
-	id := internAppend(s, h.Lo)
+	id := internAppend(internOwnedCopy(unsafe.Slice(unsafe.StringData(s), len(s))), h.Lo)
 
 	internTable.ids.put(h.Hi, id)
 

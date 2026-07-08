@@ -30,6 +30,10 @@ type CodegenRegistry struct {
 	splitPrefixSeen BitSet
 	leafEver        BitSet
 	bySplit         *IntMap[*GeneratedFileInfo]
+	arena           *BumpAllocator[GeneratedFileInfo]
+	dirs            *BumpAllocator[IncludeDirective]
+	refs            *BumpAllocator[NodeRef]
+	leaves          *BumpAllocator[VFS]
 }
 
 func splitKey(prefix VFS, suffix ANY) uint64 {
@@ -37,7 +41,13 @@ func splitKey(prefix VFS, suffix ANY) uint64 {
 }
 
 func newCodegenRegistry() *CodegenRegistry {
-	return &CodegenRegistry{bySplit: newIntMap[*GeneratedFileInfo](1 << 14)}
+	return &CodegenRegistry{
+		bySplit: newIntMap[*GeneratedFileInfo](1 << 14),
+		arena:   newBumpAllocator[GeneratedFileInfo](1 << 10),
+		dirs:    newBumpAllocator[IncludeDirective](1 << 10),
+		refs:    newBumpAllocator[NodeRef](1 << 10),
+		leaves:  newBumpAllocator[VFS](1 << 8),
+	}
 }
 
 func (r *CodegenRegistry) register(info *GeneratedFileInfo) {
@@ -51,6 +61,24 @@ func (r *CodegenRegistry) register(info *GeneratedFileInfo) {
 	}
 
 	rel := info.OutputPath.relString()
+	stored := r.arena.one()
+
+	*stored = *info
+	info = stored
+
+	if len(info.GeneratorRefs) > 0 {
+		info.GeneratorRefs = r.refs.list(info.GeneratorRefs...)
+	}
+
+	if len(info.ClosureLeaves) > 0 {
+		info.ClosureLeaves = r.leaves.list(info.ClosureLeaves...)
+	}
+
+	for b := range info.ParsedIncludes {
+		if len(info.ParsedIncludes[b]) > 0 {
+			info.ParsedIncludes[b] = r.dirs.list(info.ParsedIncludes[b]...)
+		}
+	}
 
 	r.byRel.put(info.OutputPath.rel(), info)
 

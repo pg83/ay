@@ -12,6 +12,14 @@ import (
 var (
 	parseBufPool = sync.Pool{New: func() any { return new([]byte) }}
 	parserPool   = sync.Pool{New: func() any { return &Parser{lex: &Lexer{}} }}
+	astArgs      = newBumpAllocator[ANY](1 << 12)
+	astStmts     = newBumpAllocator[Stmt](1 << 10)
+	astFiles     = newBumpAllocator[MakeFile](1 << 6)
+	astUnknowns  = newBumpAllocator[UnknownStmt](1 << 8)
+	astModules   = newBumpAllocator[ModuleStmt](1 << 6)
+	astSrcs      = newBumpAllocator[SrcsStmt](1 << 8)
+	astPeerdirs  = newBumpAllocator[PeerdirStmt](1 << 8)
+	astIfs       = newBumpAllocator[IfStmt](1 << 8)
 )
 
 var runAntlrKeywords = strKeySet(
@@ -823,7 +831,7 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 
 	*p = Parser{lex: lex, name: name, includeStack: stack, includes: includes, fs: fs, condScratch: condScratch[:0], condTokBuf: condTokBuf[:0], argScratch: argScratch[:0]}
 
-	mf := &MakeFile{Path: name}
+	mf := astOne(astFiles, MakeFile{Path: name})
 
 	mf.Stmts, _ = p.parseStmts(termTopLevel)
 
@@ -862,7 +870,7 @@ func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
 				p.lex.throwParse(tok.line, tok.col, "unexpected end of file inside IF block (missing ENDIF)")
 			}
 
-			return stmts, tok
+			return astStmts.list(stmts...), tok
 		}
 
 		if tok.kind != tokIdent && !(tok.kind == tokWord && isIdentShapedName(tok.val)) {
@@ -870,7 +878,7 @@ func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
 		}
 
 		if term == termIfBody && (tok.val == "ELSE" || tok.val == "ELSEIF" || tok.val == "ENDIF") {
-			return stmts, tok
+			return astStmts.list(stmts...), tok
 		}
 
 		stmts = p.parseMacroInto(stmts, tok)
@@ -957,7 +965,7 @@ func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
 				return nil
 			}
 
-			return append(make([]ANY, 0, len(scratch)), scratch...)
+			return astArgs.list(scratch...)
 		case tokEOF:
 			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.val)
 		case tokIdent, tokWord, tokString, tokInt:
@@ -1029,18 +1037,18 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 		"FBS_LIBRARY",
 		"GO_LIBRARY", "GO_PROGRAM",
 		"UNITTEST_FOR":
-		return &ModuleStmt{Name: internTok(name), Args: args, Line: line}
+		return astOne(astModules, ModuleStmt{Name: internTok(name), Args: args, Line: line})
 	case "PROTO_SCHEMA":
 
-		return &ModuleStmt{Name: tokProtoLibrary, Schema: true, Args: args, Line: line}
+		return astOne(astModules, ModuleStmt{Name: tokProtoLibrary, Schema: true, Args: args, Line: line})
 	case "DECLARE_EXTERNAL_RESOURCE",
 		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE",
 		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON":
 		return &DeclareResourceStmt{Macro: internTok(name), Args: args, Line: line}
 	case "PEERDIR":
-		return &PeerdirStmt{Paths: args, Line: line}
+		return astOne(astPeerdirs, PeerdirStmt{Paths: args, Line: line})
 	case "SRCS":
-		return &SrcsStmt{Sources: args, Line: line}
+		return astOne(astSrcs, SrcsStmt{Sources: args, Line: line})
 	case "SET":
 		if len(args) == 0 {
 			fail("SET expects at least 1 argument (name), got %d", len(args))
@@ -1060,7 +1068,7 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 			fail("JOIN_SRCS expects at least one argument (the output name)")
 		}
 
-		sources := append([]ANY(nil), args[1:]...)
+		sources := astArgs.list(args[1:]...)
 
 		return &JoinSrcsStmt{OutputName: args[0].string(), Sources: sources, Line: line}
 	case "ADDINCL":
@@ -1207,17 +1215,17 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 
 		return parseResource(args, Token{val: name, line: line})
 	case "RESOURCE_FILES":
-		return &ResourceFilesStmt{Args: append([]ANY(nil), args...), Line: line}
+		return &ResourceFilesStmt{Args: astArgs.list(args...), Line: line}
 	case "ALL_RESOURCE_FILES":
 		if len(args) == 0 {
 			fail("ALL_RESOURCE_FILES expects at least 1 argument (the extension)")
 		}
 
-		return &AllResourceFilesStmt{Args: append([]ANY(nil), args...), Line: line}
+		return &AllResourceFilesStmt{Args: astArgs.list(args...), Line: line}
 	case "ALL_RESOURCE_FILES_FROM_DIRS":
-		return &AllResourceFilesStmt{Args: append([]ANY(nil), args...), FromDirs: true, Line: line}
+		return &AllResourceFilesStmt{Args: astArgs.list(args...), FromDirs: true, Line: line}
 	default:
-		return &UnknownStmt{Name: internTokMaybe(name), Raw: internStr(name), Args: args, Line: line}
+		return astOne(astUnknowns, UnknownStmt{Name: internTokMaybe(name), Raw: internStr(name), Args: args, Line: line})
 	}
 }
 
@@ -1689,7 +1697,7 @@ func (p *Parser) parseIf(ifTok Token) *IfStmt {
 
 	cond := parseCondExpr(p, ifTok, condToks)
 	thenBody, endTok := p.parseStmts(termIfBody)
-	node := &IfStmt{Cond: cond, Then: thenBody, Line: ifTok.line}
+	node := astOne(astIfs, IfStmt{Cond: cond, Then: thenBody, Line: ifTok.line})
 
 	switch endTok.val {
 	case "ENDIF":
@@ -1713,7 +1721,7 @@ func (p *Parser) parseIf(ifTok Token) *IfStmt {
 
 		nested := p.parseIf(endTok)
 
-		node.Else = []Stmt{nested}
+		node.Else = astStmts.list(nested)
 
 		return node
 	}

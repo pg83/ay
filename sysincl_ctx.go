@@ -155,6 +155,7 @@ type SysinclIndex struct {
 
 func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 	m := &SysinclIndex{byLower: make(map[string]int32), byID: newIntValueMap[int32](4096)}
+	contribArena := newBumpAllocator[SysinclContribution](1 << 10)
 
 	bucketFor := func(lc string) int32 {
 		if i, ok := m.byLower[lc]; ok {
@@ -203,7 +204,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 			if p.key != 0 {
 				bi := bucketFor(strings.ToLower(p.key.string()))
 
-				m.buckets[bi] = append(m.buckets[bi], SysinclContribution{
+				m.buckets[bi] = arenaAppend(contribArena, m.buckets[bi], SysinclContribution{
 					paths:    p.paths,
 					filter:   rec.Filter,
 					rawKeyID: p.key,
@@ -219,7 +220,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 			ciID := internStr(p.keyCI)
 			bi := bucketFor(p.keyCI)
 
-			m.buckets[bi] = append(m.buckets[bi], SysinclContribution{
+			m.buckets[bi] = arenaAppend(contribArena, m.buckets[bi], SysinclContribution{
 				paths:    p.paths,
 				filter:   rec.Filter,
 				rawKeyID: ciID,

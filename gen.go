@@ -205,6 +205,7 @@ type GenCtx struct {
 	vfsSlices        *SliceCache[VFS]
 	argSlices        *SliceCache[ANY]
 	declSlices       *SliceCache[ResourceDecl]
+	results          *BumpAllocator[ModuleEmitResult]
 	dirSlices        *SliceCache[IncludeDirective]
 	descSlices       *SliceCache[DescProtoPeer]
 	tcMemo           map[ToolchainKey]ModuleToolchain
@@ -399,6 +400,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		vfsSlices:   newSliceCache[VFS](1 << 12),
 		argSlices:   newSliceCache[ANY](1 << 8),
 		declSlices:  newSliceCache[ResourceDecl](1 << 3),
+		results:     newBumpAllocator[ModuleEmitResult](1 << 8),
 		dirSlices:   newSliceCache[IncludeDirective](1 << 6),
 		descSlices:  newSliceCache[DescProtoPeer](1 << 3),
 		tcMemo:      map[ToolchainKey]ModuleToolchain{},
@@ -611,7 +613,7 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 		return cached
 	}
 
-	stmts := ctx.parseFileCached(joinRel(dir, "ya.make"))
+	stmts := ctx.parseFileCached(internJoined(dir, "ya.make").string())
 
 	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootRel, inc.relString()) {
 		incStmts := ctx.parseFileCached(inc.relString())
@@ -1518,7 +1520,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	newResult := func() *ModuleEmitResult {
-		return &ModuleEmitResult{
+		r := ctx.results.one()
+
+		*r = ModuleEmitResult{
 			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                d.addInclGlobal,
@@ -1547,6 +1551,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ModuleStmtName:                  d.moduleStmt.Name,
 			CFlagsGlobal:                    effectiveCFlagsGlobal,
 		}
+
+		return r
 	}
 
 	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.relString()] {

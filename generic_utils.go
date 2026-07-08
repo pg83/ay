@@ -39,3 +39,37 @@ func concat[T any](lists ...[]T) []T {
 
 	return out
 }
+
+func astOne[T any](a *BumpAllocator[T], v T) *T {
+	p := a.one()
+
+	*p = v
+
+	return p
+}
+
+func arenaAppend[T any](a *BumpAllocator[T], cur []T, v T) []T {
+	if len(cur) < cap(cur) {
+		cur = cur[:len(cur)+1]
+		cur[len(cur)-1] = v
+
+		return cur
+	}
+
+	n := 2 * cap(cur)
+
+	if n < 4 {
+		n = 4
+	}
+
+	block := a.alloc(n)
+
+	copy(block, cur)
+	a.commit(n)
+
+	out := block[: len(cur)+1 : n]
+
+	out[len(cur)] = v
+
+	return out
+}

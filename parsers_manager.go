@@ -52,14 +52,16 @@ type IncludeParserManager struct {
 	addinclIndex    DenseMap[STR, []VFS]
 	sourceExists    TwoBitSet
 	addinclIndexed  BitSet
+	addinclArena    *BumpAllocator[VFS]
 	registry        IncludeDirectiveParserRegistry
 }
 
 func newIncludeParserManagerFS(fs FS, cache *SharedParseCache) *IncludeParserManager {
 	return &IncludeParserManager{
-		fs:       fs,
-		cache:    cache,
-		registry: newIncludeDirectiveParserRegistry(),
+		fs:           fs,
+		cache:        cache,
+		addinclArena: newBumpAllocator[VFS](1 << 10),
+		registry:     newIncludeDirectiveParserRegistry(),
 	}
 }
 
@@ -136,7 +138,7 @@ func (pm *IncludeParserManager) indexAddincl(a VFS) {
 		t := internStr(rel[len(base)+1:])
 		cur, _ := pm.addinclIndex.get(t)
 
-		pm.addinclIndex.put(t, append(cur, a))
+		pm.addinclIndex.put(t, arenaAppend(pm.addinclArena, cur, a))
 
 		return false
 	})
