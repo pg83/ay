@@ -45,7 +45,9 @@ func (t *TarjanScratch) discover(v VFS, idx int32) {
 
 	if int(id) >= t.stamp.len() {
 		t.stamp.ensureLen(int(id) + 1)
+
 		grown := make([]int32, t.stamp.len())
+
 		copy(grown, t.index)
 		t.index = grown
 		grown = make([]int32, t.stamp.len())

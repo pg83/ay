@@ -5,6 +5,13 @@ import (
 	"strconv"
 )
 
+var (
+	envVarsVCS       = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	envVarsVCSYasm   = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envYASM_TEST_SUITE, Value: strOne.any()}}
+	envVarsVCSPyHash = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envPYTHONHASHSEED, Value: strZero.any()}}
+	envVarsVCSCuda   = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: cudaPathEnv, Value: cudaPathValueStr.any()}}
+)
+
 var procKindStr = [...]string{
 	pkNone: "", pkAS: "AS", pkAR: "AR", pkBI: "BI", pkBC: "BC", pkCC: "CC",
 	pkCF: "CF", pkCH: "CH", pkCP: "CP", pkCY: "CY", pkEN: "EN", pkEV: "EV",
@@ -101,13 +108,6 @@ type EnvVar struct {
 }
 
 type EnvVars []EnvVar
-
-var (
-	envVarsVCS       = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
-	envVarsVCSYasm   = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envYASM_TEST_SUITE, Value: strOne.any()}}
-	envVarsVCSPyHash = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envPYTHONHASHSEED, Value: strZero.any()}}
-	envVarsVCSCuda   = EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: cudaPathEnv, Value: cudaPathValueStr.any()}}
-)
 
 func appendEnv(buf []byte, env EnvVars) []byte {
 	buf = append(buf, '{')

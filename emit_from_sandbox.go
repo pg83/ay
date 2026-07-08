@@ -36,6 +36,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	}
 
 	args := na.anys.alloc(12 + 2*len(stmt.Renames) + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
+
 	args = append(args,
 		d.tc.Python3.any(),
 		buildScriptsFetchFromSandboxPy.any(),
@@ -74,6 +75,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	na.anys.commit(len(args))
 
 	args = args[:len(args):len(args)]
+
 	env := envVarsVCS
 
 	node := Node{

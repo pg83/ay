@@ -386,7 +386,6 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 
 	leaves := cgoLeaves[:nl:nl]
 	cgo2Spec := &CompileSpec{CFlags: append(goCgoCFlags(d), argWnoUnusedVariable.any())}
-
 	dirPrefix := dir + "/"
 
 	for _, f := range files {

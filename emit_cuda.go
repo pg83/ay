@@ -65,13 +65,14 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 	na.chunks.commit(k)
 
 	cmdArgs := ArgChunks(chunks[:k])
-
 	env := envVarsVCSCuda
-
 	cudaDeps := na.noderefs.alloc(2 + len(in.ExtraDepRefs))
+
 	cudaDeps[0] = mtimeRef
 	cudaDeps[1] = pidRef
+
 	cdn := 2 + copy(cudaDeps[2:], in.ExtraDepRefs)
+
 	na.noderefs.commit(cdn)
 
 	cudaDeps = cudaDeps[:cdn:cdn]

@@ -51,6 +51,7 @@ func (dd *DeDuper) filterSeen(na *NodeArenas, list []VFS) []VFS {
 		}
 
 		out := na.vfs.alloc(len(list) - 1)[:0]
+
 		out = append(out, list[:i]...)
 
 		for _, w := range list[i+1:] {

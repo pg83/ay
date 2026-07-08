@@ -91,6 +91,7 @@ func refacReset(_ GlobalFlags, args []string) int {
 		if err := os.WriteFile(out, formatted, 0o644); err != nil {
 			throwFmt("refac reset: %v", err)
 		}
+
 		fmt.Printf("refac reset: wrote %s\n", out)
 	}
 

@@ -4,6 +4,11 @@ import (
 	"bytes"
 )
 
+var (
+	lexLineComment   = []byte("//")
+	lexIncludePrefix = []byte("#include")
+)
+
 type LexIncludeDirectiveParser struct{}
 
 func (LexIncludeDirectiveParser) id() uint32 {
@@ -58,11 +63,6 @@ func (LexIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator
 
 	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
 }
-
-var (
-	lexLineComment   = []byte("//")
-	lexIncludePrefix = []byte("#include")
-)
 
 func lexValidInclude(cands [][]byte) []byte {
 	for i, s := range cands {

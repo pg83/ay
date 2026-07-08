@@ -45,7 +45,6 @@ func (c *CanonBuf) inputVal(v VFS) uint64 {
 
 	if int(id) >= len(c.eSeen) {
 		n := int(id) + 1 + len(c.eSeen)
-
 		eVals := make([]uint64, n)
 		eSeen := make([]bool, n)
 

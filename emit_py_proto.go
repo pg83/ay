@@ -63,15 +63,16 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 	}
 
 	protoRoot := protoPythonOutputRoot(d)
-
 	na := ctx.na
 	head := na.anys.alloc(6 + len(suffixes))[:0]
+
 	head = append(head,
 		d.tc.Python3.any(),
 		pbPyWrapperVFS.any(),
 		argPyVer.any(), argPy3.any(),
 		argSuffixes.any(),
 	)
+
 	head = appendInternAnys(head, suffixes)
 	head = append(head, argInput.any())
 	na.anys.commit(len(head))
@@ -172,7 +173,9 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	var grpcPyOut VFS
 
 	outputs := na.vfs.alloc(3)[:0]
+
 	outputs = append(outputs, pyOut)
+
 	suffixes := []string{"_pb2.py"}
 
 	if d.grpc {
@@ -189,8 +192,10 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	na.vfs.commit(len(outputs))
 
 	outputs = outputs[:len(outputs):len(outputs)]
+
 	relChunk := na.anyList(internStr(protoRelPath).any())
 	chunks := na.chunks.alloc(5)[:0]
+
 	chunks = append(chunks, pe.head, relChunk, pe.mid, relChunk)
 
 	if len(pe.tail) > 0 {
@@ -233,6 +238,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	transitive := walkClosure(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.relString()))
 	inputs := na.vfs.alloc(5 + len(producerSourceInputs))[:0]
+
 	inputs = append(inputs, protocBinary, pbPyWrapperVFS, protoSrcVFS)
 	inputs = append(inputs, producerSourceInputs...)
 
@@ -371,9 +377,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 	info := e.codegen.mustInfo(ps.Path, "emitPyProtoYapyc")
 	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
 	yapycOut := e.pyProtoYapycOut(ps)
-
 	yapycTail := na.anyList(internV(token, "-").any(), (ps.Path).any(), (yapycOut).any())
-
 	inputsHead := na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path)
 
 	var nodeInputs InputChunks

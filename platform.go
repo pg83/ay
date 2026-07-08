@@ -410,3 +410,24 @@ func platformsEquivalent(a, b *Platform) bool {
 
 	return slices.Equal(a.CFlags, b.CFlags) && slices.Equal(a.CXXFlags, b.CXXFlags)
 }
+
+func registerPlatformOwned(p *Platform) {
+	registerOwnedSlice(p.MarchArgs)
+	registerOwnedSlice(p.CFlags)
+	registerOwnedSlice(p.CXXFlags)
+	registerOwnedSlice(p.DebugInfoFlags)
+	registerOwnedSlice(p.CompileCFlags)
+	registerOwnedSlice(p.SystemLibs)
+	registerOwnedSlice(p.LinkPreludeExtra)
+	registerOwnedSlice(p.WrapccHead)
+	registerOwnedSlice(p.WrapccTail)
+	registerOwnedSlice(p.CCUsesResources)
+	registerOwnedSlice(p.UsesPython3Clang)
+	registerOwnedSlice(p.UsesLinkResources)
+	registerOwnedSlice(p.UsesClangOnly)
+	registerOwnedSlice(p.ToolEnvVars)
+	registerOwnedSlice(p.CCHead)
+	registerOwnedSlice(p.SysrootArgs)
+	registerOwnedSlice(p.Defines)
+	registerOwnedSlice(p.NoLibcBlock)
+}

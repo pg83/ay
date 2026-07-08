@@ -107,8 +107,6 @@ func warnHandler(keepGoing, verbose bool, emit func(line string)) func(Warn) {
 func cmdMake(g GlobalFlags, args []string) int {
 	defer startProfilesFromEnv()()
 
-	ownershipInit()
-
 	defer ownershipDump()
 
 	mf := parseMakeFlags(args)

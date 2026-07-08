@@ -84,9 +84,12 @@ func (e *EmitContext) emitSwigC() {
 		})
 
 		swigSourceInputs := na.vfs.alloc(2 + len(swigClosure))
+
 		swigSourceInputs[0] = cOutVFS
 		swigSourceInputs[1] = srcVFS
+
 		swigN := 2 + copy(swigSourceInputs[2:], swigClosure)
+
 		na.vfs.commit(swigN)
 
 		swigSourceInputs = swigSourceInputs[:swigN:swigN]

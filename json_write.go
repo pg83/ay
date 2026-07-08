@@ -321,7 +321,6 @@ func appendVFS(buf []byte, v VFS) []byte {
 	}
 
 	out = append(out, '"')
-
 	vfsEscapedJSON[id] = out
 
 	return append(buf, out...)

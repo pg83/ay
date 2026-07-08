@@ -4,11 +4,11 @@ import (
 	"strings"
 )
 
-var pyRunKV = KV{P: pkPY, PC: pcYellow, ShowOut: true}
-
-var luaRunKV = KV{P: pkLU, PC: pcYellow, ShowOut: true}
-
-var argToolsLua = internArg("tools/lua")
+var (
+	pyRunKV     = KV{P: pkPY, PC: pcYellow, ShowOut: true}
+	luaRunKV    = KV{P: pkLU, PC: pcYellow, ShowOut: true}
+	argToolsLua = internArg("tools/lua")
+)
 
 func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 	instance := e.instance
@@ -130,7 +130,6 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 
 	inputClosure := e.pyInputClosure(stmt)
 	extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputClosure)
-
 	interp := d.cc.TC.Python3.any()
 	kv := &pyRunKV
 	resources := usesPython3
@@ -362,6 +361,7 @@ func emitPYRun(
 
 	if len(stmt.EnvPairs) > 0 {
 		block := na.envs.alloc(1 + len(stmt.EnvPairs))[:0]
+
 		block = append(block, envVarsVCS...)
 
 		for _, kv := range stmt.EnvPairs {
@@ -380,6 +380,7 @@ func emitPYRun(
 	}
 
 	cmdArgs := na.anys.alloc(2 + len(stmt.Args))[:0]
+
 	cmdArgs = append(cmdArgs, interp, (scriptVFS).any())
 
 	for _, aTok := range stmt.Args {
@@ -413,6 +414,7 @@ func emitPYRun(
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+
 	head := na.vfs.alloc(2 + len(stmt.INFiles))[:0]
 
 	if interpInput != nil {
@@ -428,6 +430,7 @@ func emitPYRun(
 	na.vfs.commit(len(head))
 
 	head = head[:len(head):len(head)]
+
 	inputs := na.inputList(head, inputClosure)
 	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
 

@@ -2,9 +2,9 @@
 
 package main
 
-const bucketHashSIMDMin = 8
-
 var useBucketHashAVX2 = cpuHasAVX2()
+
+const bucketHashSIMDMin = 8
 
 func cpuHasAVX2() bool
 

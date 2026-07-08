@@ -50,6 +50,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+
 	env := envVarsVCS
 
 	svRef := ctx.emit.emitNode(Node{
@@ -65,6 +66,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 
 	sourceInputs := na.vfs.alloc(len(optVFSs) + 1)
 	sn := copy(sourceInputs, optVFSs)
+
 	sourceInputs[sn] = decimalMD5PyVFS
 	sn++
 	na.vfs.commit(sn)

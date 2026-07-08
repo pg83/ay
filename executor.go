@@ -19,7 +19,10 @@ import (
 	"time"
 )
 
-const executorGCPercent = 400
+const (
+	executorGCPercent = 400
+	prepBatchSize     = 64
+)
 
 type CmdPrefix struct {
 	suffix string
@@ -171,8 +174,6 @@ func (ex *Executor) onNode(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
 	}
 }
 
-const prepBatchSize = 64
-
 func (ex *Executor) flushPrepBatch() {
 	if len(ex.prepBatch) == 0 {
 		return
@@ -181,6 +182,7 @@ func (ex *Executor) flushPrepBatch() {
 	batch := ex.prepBatch
 
 	ex.prepBatch = nil
+
 	ex.events.post(func() {
 		for _, f := range batch {
 			ex.prepare(f)
@@ -252,7 +254,6 @@ func (ex *Executor) run(roots []NodeRef) {
 	for _, r := range roots {
 		ex.visit(r)
 	}
-
 }
 
 func (ex *Executor) visit(ref NodeRef) {
