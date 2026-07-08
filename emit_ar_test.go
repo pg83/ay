@@ -655,13 +655,14 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 				}
 			}
 
-			gotRefs, gotPaths := reorderARMembers(refs, paths, metas)
+			origRefs := append([]NodeRef(nil), refs...)
+			gotRefs, gotPaths := (&EmitContext{}).reorderARMembers(refs, paths, metas)
 
 			wantRefs := make([]NodeRef, len(tc.wantOrder))
 			wantPaths := make([]string, len(tc.wantOrder))
 
 			for i, idx := range tc.wantOrder {
-				wantRefs[i] = refs[idx]
+				wantRefs[i] = origRefs[idx]
 				wantPaths[i] = build(tc.paths[idx]).string()
 			}
 
@@ -817,7 +818,7 @@ func TestReorderARMembers_SecondLevelTrailsFirstLevelByRound(t *testing.T) {
 		{Prio: stmtPrioDefault, Seq: 2, Generated: true},
 	}
 
-	_, gotPaths := reorderARMembers(refs, paths, metas)
+	_, gotPaths := (&EmitContext{}).reorderARMembers(refs, paths, metas)
 
 	got := []string{gotPaths[0].string(), gotPaths[1].string()}
 	want := []string{cpp.string(), fbsCpp.string()}

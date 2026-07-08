@@ -1093,7 +1093,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		linkCmdCap += len(pr.PeerArchiveClosurePaths) + len(pr.PeerDynamicClosurePaths) + 2
 	}
 
-	peerLinkCmdPaths := make([]VFS, 0, linkCmdCap)
+	peerLinkCmdPaths := frame.peerLinkCmdPaths[:0]
+
+	defer func() { frame.peerLinkCmdPaths = peerLinkCmdPaths[:0] }()
 
 	deduper.reset()
 
@@ -1668,7 +1670,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ldCCRefs := local.refs
 		ldCCOutputs := local.outs
 
-		ldCCRefs, ldCCOutputs = reorderARMembers(ldCCRefs, ldCCOutputs, local.metas)
+		ldCCRefs, ldCCOutputs = e.reorderARMembers(ldCCRefs, ldCCOutputs, local.metas)
 
 		var ldObjcopyRefs []NodeRef
 		var ldObjcopyPaths []VFS
@@ -1778,7 +1780,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
-	local.refs, local.outs = reorderARMembers(local.refs, local.outs, local.metas)
+	local.refs, local.outs = e.reorderARMembers(local.refs, local.outs, local.metas)
 
 	var arRef NodeRef
 
@@ -1870,7 +1872,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		globalBaseName := globalArNameFn(instance.Path.relString())
 		globalTag := d.unit.GlobalARTag
 
-		globalRefs, globalOutputs = reorderARMembers(globalRefs, globalOutputs, globalMetas)
+		globalRefs, globalOutputs = e.reorderARMembers(globalRefs, globalOutputs, globalMetas)
 
 		globalRef := emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 
@@ -1929,36 +1931,35 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	return out
 }
 
-func reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcMeta) ([]NodeRef, []VFS) {
+type ARMember struct {
+	ref  NodeRef
+	path VFS
+	key  uint64
+}
+
+func (e *EmitContext) reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcMeta) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
 		return refs, paths
 	}
 
-	type member struct {
-		ref  NodeRef
-		path VFS
-		key  uint64
-	}
-
-	members := make([]member, len(paths))
+	members := e.arMembers[:0]
 
 	for i := range paths {
-		members[i] = member{refs[i], paths[i], metas[i].sortKey()}
+		members = append(members, ARMember{refs[i], paths[i], metas[i].sortKey()})
 	}
 
-	slices.SortStableFunc(members, func(a, b member) int {
+	e.arMembers = members[:0]
+
+	slices.SortStableFunc(members, func(a, b ARMember) int {
 		return cmp.Compare(a.key, b.key)
 	})
 
-	outRefs := make([]NodeRef, len(members))
-	outPaths := make([]VFS, len(members))
-
 	for i, m := range members {
-		outRefs[i] = m.ref
-		outPaths[i] = m.path
+		refs[i] = m.ref
+		paths[i] = m.path
 	}
 
-	return outRefs, outPaths
+	return refs, paths
 }
 
 func (ctx *GenCtx) tool(modulePath ARG) (NodeRef, VFS) {
@@ -2035,6 +2036,7 @@ type ModuleFrame struct {
 	peerCFlagsGlobal     []ANY
 	peerCXXFlagsGlobal   []ANY
 	peerCOnlyFlagsGlobal []ANY
+	peerLinkCmdPaths     []VFS
 }
 
 func (ctx *GenCtx) pushFrame() *ModuleFrame {

@@ -113,14 +113,27 @@ type ObjcopyEmitCtx struct {
 	na                 *NodeArenas
 }
 
-func newObjcopyEmitCtx(ctx *GenCtx, d *ModuleData, p *Platform) *ObjcopyEmitCtx {
-	oc := &ObjcopyEmitCtx{na: ctx.na}
+func (e *EmitContext) objcopyEmitCtx() *ObjcopyEmitCtx {
+	if e.objcopyOk {
+		return &e.objcopyCtx
+	}
+
+	e.objcopyOk = true
+
+	ctx, d := e.ctx, e.d
+	oc := &e.objcopyCtx
+
+	*oc = ObjcopyEmitCtx{na: ctx.na}
 
 	oc.rescompilerLDRef, _ = ctx.tool(argToolsRescompiler)
 	oc.rescompressorLDRef, _ = ctx.tool(argToolsRescompressor)
-	oc.blocks = composeObjcopyArgBlocks(ctx.na, d.tc, p)
+	oc.blocks = composeObjcopyArgBlocks(ctx.na, d.tc, instancePlatform(e))
 
 	return oc
+}
+
+func instancePlatform(e *EmitContext) *Platform {
+	return e.instance.Platform
 }
 
 func composeObjcopyArgBlocks(na *NodeArenas, tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
@@ -231,8 +244,13 @@ func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
 }
 
 func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS) {
-	objItems := make([]ResourceItem, 0, len(p.Items))
-	rawItems := make([]ResourceItem, 0, len(p.Items))
+	objItems := e.objScratch[:0]
+	rawItems := e.rawScratch[:0]
+
+	defer func() {
+		e.objScratch = objItems[:0]
+		e.rawScratch = rawItems[:0]
+	}()
 
 	for _, it := range p.Items {
 		if resourceCanObjcopy(it.Path, it.Key) {
@@ -260,9 +278,9 @@ func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS)
 }
 
 func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p ResourcePack) (refs []NodeRef, outs []VFS) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, instance := e.ctx, e.instance
 	na := ctx.na
-	oc := newObjcopyEmitCtx(ctx, d, instance.Platform)
+	oc := e.objcopyEmitCtx()
 	unitElem := "$S/" + instance.Path.relString()
 	tag := ""
 

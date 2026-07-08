@@ -565,19 +565,21 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 
 	includes := incl[:k:k]
 	warnC := cWarningChunk(na, in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	forceDebug := [][]ANY(nil)
+
+	var flagBuf [13][]ANY
+
+	nf := 0
+
+	flagBuf[nf] = na.anyConcat(in.ClangWarnings)
+	nf++
 
 	if in.ForceConsistentDebug {
-		forceDebug = [][]ANY{debugPrefixMapFlags, xclangDebugCompilationDir}
+		flagBuf[nf] = debugPrefixMapFlags
+		flagBuf[nf+1] = xclangDebugCompilationDir
+		nf += 2
 	}
 
-	flagParts := [][]ANY{
-		na.anyConcat(in.ClangWarnings),
-	}
-
-	flagParts = append(flagParts, forceDebug...)
-
-	flagParts = append(flagParts, [][]ANY{
+	for _, part := range [10][]ANY{
 		debugPrefixMapFlags,
 		xclangDebugCompilationDir,
 		cflagsStr,
@@ -588,8 +590,12 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 		catboostStr,
 		na.anyConcat(in.ModuleScopeCFlags),
 		noLibc,
-	}...)
+	} {
+		flagBuf[nf] = part
+		nf++
+	}
 
+	flagParts := flagBuf[:nf]
 	cxxOwnExtras := in.CXXFlags
 
 	if len(p.CXXFlags) > 0 {
@@ -598,7 +604,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 
 	cxxBucket := composeOwnAndPeerGlobalBucket(*in, true)
 
-	cxxTailParts := [][]ANY{
+	cxxTailParts := [6][]ANY{
 		cxxStandardFlagChunk,
 		cxxWarningChunk(in.Flags.NoCompilerWarnings),
 		na.anyConcat(cxxOwnExtras),
@@ -613,7 +619,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 		includes: includes,
 		flags:    na.anyConcat(flagParts...),
 		cTail:    na.anyConcat(in.PeerCOnlyFlagsGlobal),
-		cxxTail:  na.anyConcat(cxxTailParts...),
+		cxxTail:  na.anyConcat(cxxTailParts[:]...),
 		cPost:    na.anyConcat(in.COnlyFlags),
 	}
 }

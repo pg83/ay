@@ -233,8 +233,13 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		}
 	}
 
-	backing := make([]VFS, 0, total)
-	positions := make([]ProducerPos, 0, n)
+	backing := e.prodBacking[:0]
+	positions := e.prodPos[:0]
+
+	defer func() {
+		e.prodBacking = backing[:0]
+		e.prodPos = positions
+	}()
 
 	push := func(kind, index, outStart, outEnd int) {
 		positions = append(positions, ProducerPos{
@@ -391,7 +396,9 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		push(prodArchiveAsm, 0, len(backing), len(backing))
 	}
 
-	srcs := make([]SrcMeta, 0, len(d.srcs)+2)
+	srcs := e.prodSrcs[:0]
+
+	defer func() { e.prodSrcs = srcs }()
 
 	var gztChildren []SrcMeta
 

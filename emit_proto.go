@@ -226,10 +226,27 @@ type PbModuleEmission struct {
 	liteHeaders         bool
 	extraPlugins        []ResolvedCPPProtoPlugin
 	blocks              *PbArgBlocks
+	searchPaths         []VFS
+	scanCfg             ScanContext
 }
 
-func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInclude []VFS, spec *ProtoSpec) *PbModuleEmission {
-	pe := &PbModuleEmission{
+func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, spec *ProtoSpec) *PbModuleEmission {
+	idx := 0
+
+	if spec.modulePlugins {
+		idx = 1
+	}
+
+	if e.pbEmissionOk[idx] {
+		return &e.pbEmission[idx]
+	}
+
+	e.pbEmissionOk[idx] = true
+
+	pe := &e.pbEmission[idx]
+	ctx, d := e.ctx, e.d
+
+	*pe = PbModuleEmission{
 		liteHeaders:   !protoTransitiveHeadersEnabled(d),
 		grpcCppBinary: pbGrpcCppVFS,
 	}
@@ -259,18 +276,20 @@ func newPBModuleEmission(ctx *GenCtx, d *ModuleData, cfg ProtoPBConfig, protoInc
 		cfg.grpc, cfg.cppOutRoot, pe.liteHeaders,
 		d.protocFlags, pe.extraPlugins, protoInclude)
 
+	pe.searchPaths = d.cc.ProtoInclude
+
+	if cfg.cppOutRoot != "" {
+		pe.searchPaths = append([]VFS{source(cfg.cppOutRoot)}, d.cc.ProtoInclude...)
+	}
+
+	pe.scanCfg = protoWalkInputs(ctx.parsers, pe.searchPaths, e.instance.Path.relString())
+
 	return pe
 }
 
-func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, peerProtoAddIncl []VFS, spec *ProtoSpec) ProtoPBEmission {
+func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, spec *ProtoSpec) ProtoPBEmission {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
-	protoSearchPaths := peerProtoAddIncl
-
-	if cfg.cppOutRoot != "" {
-		protoSearchPaths = append([]VFS{source(cfg.cppOutRoot)}, peerProtoAddIncl...)
-	}
-
 	buildProto := build(protoRelPath)
 	protoVFS := source(protoRelPath)
 
@@ -287,7 +306,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
 	}
 
-	transitiveImports := walkClosure(e.scanner, protoVFS, protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.relString()))
+	transitiveImports := walkClosure(e.scanner, protoVFS, pe.scanCfg)
 
 	extraProtoDeps = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, transitiveImports, extraProtoDeps...)
 
@@ -531,7 +550,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 }
 
 func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) ProtoPBEmission {
-	ctx, d := e.ctx, e.d
+	d := e.d
 
 	cfg := ProtoPBConfig{
 		cppOutRoot: protoCPPOutRoot(d),
@@ -539,9 +558,9 @@ func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) ProtoPBEmission
 		moduleTag:  d.cc.ModuleTag,
 	}
 
-	pe := newPBModuleEmission(ctx, d, cfg, d.cc.ProtoIncludePeers, spec)
+	pe := e.pbModuleEmission(cfg, d.cc.ProtoIncludePeers, spec)
 
-	return e.emitProtoPB(srcRel, cfg, pe, d.cc.ProtoInclude, spec)
+	return e.emitProtoPB(srcRel, cfg, pe, spec)
 }
 
 func pbHCompanionDirectives(pbhImports []IncludeDirective, ext string) []IncludeDirective {
@@ -589,7 +608,8 @@ func (e *EmitContext) markProtoPendingAR() {
 		protoLibName = d.moduleStmt.Args[0].string()
 	}
 
-	e.protoRes = &ProtoSrcsResult{PendingAR: true, ProtoLibName: protoLibName}
+	e.protoResVal = ProtoSrcsResult{PendingAR: true, ProtoLibName: protoLibName}
+	e.protoRes = &e.protoResVal
 }
 
 type ResolvedCPPProtoPlugin struct {

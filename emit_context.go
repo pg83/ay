@@ -26,6 +26,21 @@ type EmitContext struct {
 	goInclSplit  []ANY
 	pySrcsReg    []PySrc
 	resources    []ResourceEntry
+	localObjs    CollectedObjs
+	globalObjs   CollectedObjs
+	prodPos      []ProducerPos
+	prodBacking  []VFS
+	prodSrcs     []SrcMeta
+	objScratch   []ResourceItem
+	rawScratch   []ResourceItem
+	arMembers    []ARMember
+	pbEmission   [2]PbModuleEmission
+	pbEmissionOk [2]bool
+	pyPBEmission PyPBModuleEmission
+	pyPBOk       bool
+	objcopyCtx   ObjcopyEmitCtx
+	objcopyOk    bool
+	protoResVal  ProtoSrcsResult
 }
 
 type CollectedObjs struct {
@@ -34,12 +49,13 @@ type CollectedObjs struct {
 	metas []SrcMeta
 }
 
-func (e *EmitContext) partitionCollected() (local, global CollectedObjs) {
-	n := len(e.metas)
+func (c CollectedObjs) reset() CollectedObjs {
+	return CollectedObjs{refs: c.refs[:0], outs: c.outs[:0], metas: c.metas[:0]}
+}
 
-	local.refs = make([]NodeRef, 0, n)
-	local.outs = make([]VFS, 0, n)
-	local.metas = make([]SrcMeta, 0, n)
+func (e *EmitContext) partitionCollected() (local, global CollectedObjs) {
+	local = e.localObjs
+	global = e.globalObjs
 
 	for i, m := range e.metas {
 		dst := &local
@@ -66,8 +82,32 @@ func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *
 func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *PeerContext) *EmitContext {
 	scanner := ctx.scannerFor(instance)
 	k := len(d.resources)
+	prev := &frame.emitCtx
 
-	frame.emitCtx = EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, resources: d.resources[:k:k]}
+	frame.emitCtx = EmitContext{
+		ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen,
+		resources: d.resources[:k:k],
+
+		srcs:        prev.srcs[:0],
+		pass2:       prev.pass2[:0],
+		refs:        prev.refs[:0],
+		outs:        prev.outs[:0],
+		metas:       prev.metas[:0],
+		pySrcsReg:   prev.pySrcsReg[:0],
+		localObjs:   prev.localObjs.reset(),
+		globalObjs:  prev.globalObjs.reset(),
+		prodPos:     prev.prodPos[:0],
+		prodBacking: prev.prodBacking[:0],
+		prodSrcs:    prev.prodSrcs[:0],
+		objScratch:  prev.objScratch[:0],
+		rawScratch:  prev.rawScratch[:0],
+		arMembers:   prev.arMembers[:0],
+	}
+
+	frame.emitCtx.pbEmissionOk = [2]bool{}
+	frame.emitCtx.pyPBOk = false
+	frame.emitCtx.objcopyOk = false
+	frame.emitCtx.protoResVal = ProtoSrcsResult{}
 
 	return &frame.emitCtx
 }
@@ -92,13 +132,6 @@ func (e *EmitContext) deferPass2(cb func()) {
 
 func (e *EmitContext) emit() {
 	d := e.d
-
-	if n := len(d.srcs) + len(d.simdSrcs) + len(d.srcExtraFlat); n > 0 {
-		e.refs = make([]NodeRef, 0, n)
-		e.outs = make([]VFS, 0, n)
-		e.metas = make([]SrcMeta, 0, n)
-	}
-
 	fsMemberRefs, fsMemberPaths := e.emitFromSandboxes()
 
 	e.emitBundles()
