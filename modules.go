@@ -656,8 +656,8 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 	kind := instance.Kind
 
 	env.setString(envMODDIR, modulePath)
-	env.setStringID(envCURDIR, internV("$(S)/", modulePath))
-	env.setStringID(envBINDIR, internV("$(B)/", modulePath))
+	env.setVFS(envCURDIR, source(modulePath))
+	env.setVFS(envBINDIR, build(modulePath))
 
 	d := &ModuleData{
 		pythonSQLite3:           true,
@@ -3055,8 +3055,8 @@ func buildIfEnv(instance ModuleInstance) Environment {
 	env := instance.Platform.ifEnv.clone()
 
 	if instance.Path != 0 {
-		env.setStringID(envCURDIR, internV(instance.Path.prefix(), instance.Path.relString()))
-		env.setStringID(envBINDIR, internV("$(B)/", instance.Path.relString()))
+		env.setVFS(envCURDIR, instance.Path)
+		env.setVFS(envBINDIR, instance.Path.rel().build())
 		env.setStringID(envMODDIR, instance.Path.rel())
 	}
 

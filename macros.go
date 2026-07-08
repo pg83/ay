@@ -22,6 +22,7 @@ const (
 	envAbsent EnvKind = iota
 	envStr
 	envInt
+	envVFS
 )
 
 func evalAtomString(nodes []CondNode, i int32, env Environment) string {
@@ -123,6 +124,8 @@ func evalAtomNode(nodes []CondNode, i int32, env Environment) AtomVal {
 		switch k, v := env.s.lookup(identEnvNode(n)); k {
 		case envStr:
 			return AtomVal{str: v.string()}
+		case envVFS:
+			return AtomVal{str: VFS(uint32(v)).string()}
 		case envInt:
 			x, _ := strconv.Atoi(v.string())
 

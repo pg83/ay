@@ -74,6 +74,8 @@ func (e Environment) boolID(id ENV, name string) bool {
 	switch k, v := e.s.lookup(id); k {
 	case envStr:
 		return strIsTruthy(v)
+	case envVFS:
+		return true
 	case envInt:
 		if name == "" {
 			name = id.string()
@@ -98,6 +100,10 @@ func strIsTruthy(v STR) bool {
 
 func (e Environment) string(id ENV) string {
 	if k, v := e.s.lookup(id); k != envAbsent {
+		if k == envVFS {
+			return VFS(uint32(v)).string()
+		}
+
 		return v.string()
 	}
 
@@ -117,6 +123,12 @@ func (e Environment) clone() Environment {
 		val:  append([]STR(nil), e.s.val...),
 		kind: append([]EnvKind(nil), e.s.kind...),
 	}}
+}
+
+func (e Environment) setVFS(id ENV, v VFS) {
+	e.s.ensure(id)
+	e.s.kind[id] = envVFS
+	e.s.val[id] = STR(uint32(v))
 }
 
 func (e Environment) setStrID(id ENV, v STR) {
@@ -192,6 +204,10 @@ func (e Environment) lookup(name string) (string, bool) {
 
 	if k == envAbsent {
 		return "", false
+	}
+
+	if k == envVFS {
+		return VFS(uint32(v)).string(), true
 	}
 
 	return v.string(), true
