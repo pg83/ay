@@ -448,7 +448,7 @@ func goCmdEnv(ctx *GenCtx, p *Platform, tc ModuleToolchain) EnvVars {
 	return env
 }
 
-func goClassifyClosure(na *NodeArenas, resolved []resolvedPeer, closurePaths []VFS) (localARs, nonLocalARs, cgoARs []VFS) {
+func goClassifyClosure(na *NodeArenas, resolved []ResolvedPeer, closurePaths []VFS) (localARs, nonLocalARs, cgoARs []VFS) {
 	deduper.reset()
 
 	for _, rp := range resolved {
@@ -575,7 +575,7 @@ func (e *EmitContext) goToolchainSboms(withLinker bool) ([]NodeRef, []VFS) {
 	return refs, paths
 }
 
-func goPeerSrcClosure(ctx *GenCtx, resolved []resolvedPeer, own []VFS, extra []VFS) []VFS {
+func goPeerSrcClosure(ctx *GenCtx, resolved []ResolvedPeer, own []VFS, extra []VFS) []VFS {
 	deduper.reset()
 
 	total := len(own) + len(extra) + 1
@@ -621,7 +621,7 @@ func (e *EmitContext) goToolCmdFlagsFor() []ANY {
 	return goToolCmdFlags
 }
 
-func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, ownSbomRef *NodeRef, ownSbomPath *VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS, []VFS) {
+func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, ownSbomRef *NodeRef, ownSbomPath *VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS, []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.relString()
@@ -928,7 +928,7 @@ func (e *EmitContext) emitGoPackage(resolved []resolvedPeer, objRefs []NodeRef, 
 	return ctx.emit.emitNode(node), outPath, srcClosure
 }
 
-func (e *EmitContext) emitGoExe(resolved []resolvedPeer, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
+func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.relString()

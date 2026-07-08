@@ -19,11 +19,11 @@ func resourceFetchUID(uri, output string) *UID {
 	return &UID{Hi: sum.Hi, Lo: sum.Lo}
 }
 
-type chunkAccum struct {
+type ChunkAccum struct {
 	sum, xor, sq, cb uint64
 }
 
-type chunkKey struct {
+type ChunkKey struct {
 	p *VFS
 	n int
 }
@@ -33,7 +33,7 @@ type CanonBuf struct {
 	scratch   []uint64
 	eVals     []uint64
 	eSeen     []bool
-	chunkMemo map[chunkKey]chunkAccum
+	chunkMemo map[ChunkKey]ChunkAccum
 	hash      func(VFS) uint64
 	fsHashes  *PageVec[uint64]
 	futs      *PageVec[*NodeFuture]
@@ -180,7 +180,7 @@ func (c *CanonBuf) writeVFSChunks(chunks InputChunks) {
 			continue
 		}
 
-		key := chunkKey{p: &ch[0], n: len(ch)}
+		key := ChunkKey{p: &ch[0], n: len(ch)}
 		a, ok := c.chunkMemo[key]
 
 		if !ok {
@@ -200,7 +200,7 @@ func (c *CanonBuf) writeVFSChunks(chunks InputChunks) {
 	c.writeUint64(cb)
 }
 
-func (c *CanonBuf) chunkAccumOf(ch []VFS) chunkAccum {
+func (c *CanonBuf) chunkAccumOf(ch []VFS) ChunkAccum {
 	if cap(c.scratch) < len(ch) {
 		c.scratch = make([]uint64, len(ch))
 	}
@@ -213,7 +213,7 @@ func (c *CanonBuf) chunkAccumOf(ch []VFS) chunkAccum {
 
 	sum, xor, sq, cb := uidAccum(es)
 
-	return chunkAccum{sum: sum, xor: xor, sq: sq, cb: cb}
+	return ChunkAccum{sum: sum, xor: xor, sq: sq, cb: cb}
 }
 
 func (c *CanonBuf) writeVFSSlice(vs []VFS) {

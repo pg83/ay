@@ -2,7 +2,7 @@ package main
 
 import "path/filepath"
 
-func applySbomComponentOrder(name TOK, linkTarget bool, resolved []resolvedPeer, allocatorExplicitPeers []string) []resolvedPeer {
+func applySbomComponentOrder(name TOK, linkTarget bool, resolved []ResolvedPeer, allocatorExplicitPeers []string) []ResolvedPeer {
 	sbomOrder := resolved
 	cxxIdx, libcxxIdx := -1, -1
 
@@ -16,7 +16,7 @@ func applySbomComponentOrder(name TOK, linkTarget bool, resolved []resolvedPeer,
 	}
 
 	if !isSpecializedLibraryType(name) && cxxIdx > libcxxIdx && libcxxIdx >= 0 {
-		reordered := make([]resolvedPeer, 0, len(resolved))
+		reordered := make([]ResolvedPeer, 0, len(resolved))
 		cxx := resolved[cxxIdx]
 
 		for i, rp := range resolved {
@@ -54,7 +54,7 @@ func applySbomComponentOrder(name TOK, linkTarget bool, resolved []resolvedPeer,
 		}
 
 		if lldIdx >= 0 && allocIdx >= 0 && lldIdx < allocIdx {
-			relocated := make([]resolvedPeer, 0, len(sbomOrder))
+			relocated := make([]ResolvedPeer, 0, len(sbomOrder))
 			lld := sbomOrder[lldIdx]
 
 			for i, rp := range sbomOrder {
@@ -76,7 +76,7 @@ func applySbomComponentOrder(name TOK, linkTarget bool, resolved []resolvedPeer,
 	return sbomOrder
 }
 
-func aggregateSbomComponents(name TOK, linkTarget bool, resolved []resolvedPeer, allocatorExplicitPeers []string, refs []NodeRef, paths []VFS) ([]NodeRef, []VFS, int) {
+func aggregateSbomComponents(name TOK, linkTarget bool, resolved []ResolvedPeer, allocatorExplicitPeers []string, refs []NodeRef, paths []VFS) ([]NodeRef, []VFS, int) {
 	sbomOrder := applySbomComponentOrder(name, linkTarget, resolved, allocatorExplicitPeers)
 	keepLld := linkTarget || isGoModuleType(name)
 

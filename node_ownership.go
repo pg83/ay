@@ -11,17 +11,17 @@ import (
 
 var (
 	ownershipOn         = os.Getenv("AY_DEBUG_OWNERSHIP") != ""
-	ownershipRanges     []ownedRange
+	ownershipRanges     []OwnedRange
 	ownershipSorted     bool
-	ownershipViolations = map[string]*ownershipViolation{}
+	ownershipViolations = map[string]*OwnershipViolation{}
 	ownershipSite       string
 )
 
-type ownedRange struct {
+type OwnedRange struct {
 	lo, hi uintptr
 }
 
-type ownershipViolation struct {
+type OwnershipViolation struct {
 	nodes    int
 	backings map[uintptr]struct{}
 	sample   string
@@ -61,7 +61,7 @@ func registerOwnedRange(p unsafe.Pointer, bytes int) {
 
 	lo := uintptr(p)
 
-	ownershipRanges = append(ownershipRanges, ownedRange{lo: lo, hi: lo + uintptr(bytes)})
+	ownershipRanges = append(ownershipRanges, OwnedRange{lo: lo, hi: lo + uintptr(bytes)})
 	ownershipSorted = false
 }
 
@@ -102,7 +102,7 @@ func ownershipCheckSlice[T any](field string, s []T, sample func() string) {
 	v := ownershipViolations[key]
 
 	if v == nil {
-		v = &ownershipViolation{sample: sample(), backings: map[uintptr]struct{}{}}
+		v = &OwnershipViolation{sample: sample(), backings: map[uintptr]struct{}{}}
 		ownershipViolations[key] = v
 	}
 
@@ -156,7 +156,7 @@ func ownershipDump() {
 
 	type row struct {
 		key string
-		v   *ownershipViolation
+		v   *OwnershipViolation
 	}
 
 	rows := make([]row, 0, len(ownershipViolations))

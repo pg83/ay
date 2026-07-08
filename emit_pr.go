@@ -203,12 +203,12 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	})
 }
 
-type prSourceInputSet struct {
+type PrSourceInputSet struct {
 	all       []VFS
 	generated []VFS
 }
 
-func prCollectSourceInputs(na *NodeArenas, reg *CodegenRegistry, inVFSs []VFS) prSourceInputSet {
+func prCollectSourceInputs(na *NodeArenas, reg *CodegenRegistry, inVFSs []VFS) PrSourceInputSet {
 	var direct []VFS
 	var generated []VFS
 
@@ -230,7 +230,7 @@ func prCollectSourceInputs(na *NodeArenas, reg *CodegenRegistry, inVFSs []VFS) p
 	an += copy(all[an:], generated)
 	na.vfs.commit(an)
 
-	return prSourceInputSet{all: all[:an:an], generated: generated}
+	return PrSourceInputSet{all: all[:an:an], generated: generated}
 }
 
 func prProtoImportPbH(pm *IncludeParserManager, inVFSs []VFS) []IncludeDirective {
@@ -680,14 +680,14 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	emit.emitReservedNode(node, id)
 }
 
-type prFileToken struct {
+type PrFileToken struct {
 	token  string
 	rooted string
 	vfs    VFS
 }
 
-func prBareFileTokens(stmt *RunProgramStmt, inVFSs []VFS, outVFSByToken map[ANY]VFS) []prFileToken {
-	toks := make([]prFileToken, 0, len(stmt.INFiles)+len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
+func prBareFileTokens(stmt *RunProgramStmt, inVFSs []VFS, outVFSByToken map[ANY]VFS) []PrFileToken {
+	toks := make([]PrFileToken, 0, len(stmt.INFiles)+len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
 
 	add := func(tok ANY, vfs VFS) {
 		if tok.vfs() != 0 {
@@ -696,7 +696,7 @@ func prBareFileTokens(stmt *RunProgramStmt, inVFSs []VFS, outVFSByToken map[ANY]
 
 		t := tok.string()
 
-		toks = append(toks, prFileToken{token: t, rooted: vfs.string(), vfs: vfs})
+		toks = append(toks, PrFileToken{token: t, rooted: vfs.string(), vfs: vfs})
 	}
 
 	for i, f := range stmt.INFiles {
@@ -718,7 +718,7 @@ func prBareFileTokens(stmt *RunProgramStmt, inVFSs []VFS, outVFSByToken map[ANY]
 	return toks
 }
 
-func rootBareFileArg(arg string, toks []prFileToken) (string, VFS, bool) {
+func rootBareFileArg(arg string, toks []PrFileToken) (string, VFS, bool) {
 	for _, c := range toks {
 		idx := strings.Index(arg, c.token)
 

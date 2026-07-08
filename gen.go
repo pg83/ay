@@ -741,7 +741,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	}
 }
 
-type resolvedPeer struct {
+type ResolvedPeer struct {
 	path   string
 	result *ModuleEmitResult
 	kind   int
@@ -918,7 +918,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return !deduper.add(internStr(p).strID())
 	}
 
-	preResolved := make([]resolvedPeer, 0, 2)
+	preResolved := make([]ResolvedPeer, 0, 2)
 
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
 		peerSeen(instance.Path.relString())
@@ -926,12 +926,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		cppSelf := instance
 
 		cppSelf.Language = LangCPP
-		preResolved = append(preResolved, resolvedPeer{path: instance.Path.relString(), result: genModule(ctx, cppSelf), kind: peerKindLangDefault})
+		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: genModule(ctx, cppSelf), kind: peerKindLangDefault})
 	}
 
 	if d.moduleStmt.Name == tokProtoLibrary && d.useCommonGoogleAPIs && instance.Language == LangCPP {
 		if !peerSeen(googleapisPeer) {
-			preResolved = append(preResolved, resolvedPeer{path: googleapisPeer, result: genModule(ctx, e.derivePeerInstance(googleapisPeer)), kind: peerKindLangDefault})
+			preResolved = append(preResolved, ResolvedPeer{path: googleapisPeer, result: genModule(ctx, e.derivePeerInstance(googleapisPeer)), kind: peerKindLangDefault})
 		}
 	}
 
@@ -1061,7 +1061,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			throwFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path.relString(), peerPath)
 		}
 
-		resolved = append(resolved, resolvedPeer{path: peerPath, result: peerResult, kind: kind})
+		resolved = append(resolved, ResolvedPeer{path: peerPath, result: peerResult, kind: kind})
 	}
 
 	resGlobalsSum := 0
@@ -2019,7 +2019,7 @@ type ModuleFrame struct {
 	peerCtx              PeerContext
 	allPeers             []string
 	peerKinds            []int
-	resolved             []resolvedPeer
+	resolved             []ResolvedPeer
 	peerAddInclGlobal    []VFS
 	ownProtoInclude      []VFS
 	peerProtoInclude     []VFS

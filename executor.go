@@ -91,7 +91,7 @@ func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ni
 		localHash:   map[STR]uint64{},
 	}
 
-	ex.canon = CanonBuf{hash: ex.contentHash, futs: ex.futs, chunkMemo: map[chunkKey]chunkAccum{}}
+	ex.canon = CanonBuf{hash: ex.contentHash, futs: ex.futs, chunkMemo: map[ChunkKey]ChunkAccum{}}
 
 	if osfs, ok := fs.(*OsFS); ok {
 		ex.canon.fsHashes = &osfs.contentHashes

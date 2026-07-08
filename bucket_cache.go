@@ -2,7 +2,7 @@ package main
 
 const closureBuckets = 16
 
-type bucketVal struct {
+type BucketVal struct {
 	verify uint64
 	slice  []VFS
 }
@@ -10,8 +10,8 @@ type bucketVal struct {
 type BucketCache struct {
 	chunks       *BumpAllocator[[]VFS]
 	pool         *BumpAllocator[VFS]
-	intern       *IntValueMap[bucketVal]
-	overflow     *IntValueMap[bucketVal]
+	intern       *IntValueMap[BucketVal]
+	overflow     *IntValueMap[BucketVal]
 	h1Mismatches int
 	overflowed   int
 	scratch      [closureBuckets][]VFS
@@ -21,8 +21,8 @@ func newBucketCache() *BucketCache {
 	return &BucketCache{
 		chunks:   newBumpAllocator[[]VFS](1 << 12),
 		pool:     newBumpAllocator[VFS](1 << 19),
-		intern:   newIntValueMap[bucketVal](1 << 18),
-		overflow: newIntValueMap[bucketVal](1 << 4),
+		intern:   newIntValueMap[BucketVal](1 << 18),
+		overflow: newIntValueMap[BucketVal](1 << 4),
 	}
 }
 
@@ -68,14 +68,14 @@ func (c *BucketCache) internBucket(elems []VFS) []VFS {
 
 		slice := c.pool.list(elems...)
 
-		*cell2 = bucketVal{verify: h1, slice: slice}
+		*cell2 = BucketVal{verify: h1, slice: slice}
 
 		return slice
 	}
 
 	slice := c.pool.list(elems...)
 
-	*cell = bucketVal{verify: h2, slice: slice}
+	*cell = BucketVal{verify: h2, slice: slice}
 
 	return slice
 }

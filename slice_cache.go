@@ -6,22 +6,22 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-type sliceVal[T any] struct {
+type SliceVal[T any] struct {
 	verify uint64
 	slice  []T
 }
 
 type SliceCache[T comparable] struct {
 	pool     *BumpAllocator[T]
-	table    *IntMap[sliceVal[T]]
-	overflow *IntMap[sliceVal[T]]
+	table    *IntMap[SliceVal[T]]
+	overflow *IntMap[SliceVal[T]]
 }
 
 func newSliceCache[T comparable](hint int) *SliceCache[T] {
 	return &SliceCache[T]{
 		pool:     newBumpAllocator[T](hint),
-		table:    newIntMap[sliceVal[T]](hint),
-		overflow: newIntMap[sliceVal[T]](1 << 4),
+		table:    newIntMap[SliceVal[T]](hint),
+		overflow: newIntMap[SliceVal[T]](1 << 4),
 	}
 }
 
@@ -70,14 +70,14 @@ func (c *SliceCache[T]) intern(block []T) []T {
 
 		slice := c.commit(block)
 
-		*cell2 = sliceVal[T]{verify: h1, slice: slice}
+		*cell2 = SliceVal[T]{verify: h1, slice: slice}
 
 		return slice
 	}
 
 	slice := c.commit(block)
 
-	*cell = sliceVal[T]{verify: h2, slice: slice}
+	*cell = SliceVal[T]{verify: h2, slice: slice}
 
 	return slice
 }
@@ -100,7 +100,7 @@ func (c *SliceCache[T]) commit(block []T) []T {
 	return block[:len(block):len(block)]
 }
 
-func dedupShared[T idKey](c *SliceCache[T], lists ...[]T) []T {
+func dedupShared[T IdKey](c *SliceCache[T], lists ...[]T) []T {
 	total := 0
 
 	for _, l := range lists {
