@@ -51,16 +51,6 @@ func strStrs(as []STR) []string {
 	return appendStrStrs(make([]string, 0, len(as)), as)
 }
 
-func internAnysFromSTR(items []ANY) []ANY {
-	out := make([]ANY, 0, len(items))
-
-	for _, s := range items {
-		out = append(out, s)
-	}
-
-	return out
-}
-
 func strStrings(items []ANY) []string {
 	out := make([]string, 0, len(items))
 
@@ -140,11 +130,5 @@ func strsAny(ss []STR) []ANY {
 }
 
 func anysOf(items ...string) []ANY {
-	out := make([]ANY, len(items))
-
-	for i, s := range items {
-		out[i] = internStr(s).any()
-	}
-
-	return out
+	return internAnys(items)
 }
