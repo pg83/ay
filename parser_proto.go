@@ -27,7 +27,7 @@ func (p ProtoIncludeDirectiveParser) inducedHeader(target STR) (STR, bool) {
 	var h STR
 
 	if pbH, ok := protoImportInducedHeader(target.string()); ok {
-		h = internStr(pbH)
+		h = pbH
 	}
 
 	if p.induced != nil {
@@ -37,21 +37,21 @@ func (p ProtoIncludeDirectiveParser) inducedHeader(target STR) (STR, bool) {
 	return h, h != 0
 }
 
-func protoImportInducedHeader(target string) (string, bool) {
+func protoImportInducedHeader(target string) (STR, bool) {
 	switch {
 	case extIsEv(target):
-		return strings.TrimSuffix(target, ".ev") + ".ev.pb.h", true
+		return internV(strings.TrimSuffix(target, ".ev"), ".ev.pb.h"), true
 	case extIsCfgproto(target):
 
-		return target + ".pb.h", true
+		return internV(target, ".pb.h"), true
 	case extIsGztproto(target):
 
-		return strings.TrimSuffix(target, ".gztproto") + ".pb.h", true
+		return internV(strings.TrimSuffix(target, ".gztproto"), ".pb.h"), true
 	case extIsProto(target):
-		return strings.TrimSuffix(target, ".proto") + ".pb.h", true
+		return internV(strings.TrimSuffix(target, ".proto"), ".pb.h"), true
 	}
 
-	return "", false
+	return 0, false
 }
 
 func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {

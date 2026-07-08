@@ -186,11 +186,11 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	p.DebugInfoFlags = buildDebugInfoFlags(os, buildRelease, compress)
 	p.CompileCFlags = composeCompileCFlags(isa, buildRelease, p.DebugInfoFlags)
 	p.ifEnv = buildPlatformIfEnv(p)
+	p.NoLibcBlock = noLibcBlock(p)
 
 	bundle := compileFlagBundleFor(p)
 
 	p.Defines = bundle.Defines
-	p.NoLibcBlock = bundle.NoLibcBlock
 
 	if ownershipOn {
 		registerPlatformOwned(p)

@@ -522,7 +522,9 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		})
 	}
 
-	orderedCC := make([]VFS, 0, 2+len(extraOutputPaths))
+	orderedCC := e.orderedCC[:0]
+
+	defer func() { e.orderedCC = orderedCC[:0] }()
 
 	for _, out := range assembleProtoCmdOutputs(ctx.emit.nodeArenas(), protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, pe.extraPlugins, pe.liteHeaders, cfg.grpc) {
 		if isCCSourceExt(out.relString()) {
@@ -722,6 +724,12 @@ func emitPB(
 		protocCwd = "$(B)"
 	}
 
+	pbInputChunks := na.inputs.alloc(2 + len(transitiveProtoImports.buckets))[:0]
+
+	pbInputChunks = append(pbInputChunks, inputs, producerSourceInputs)
+	pbInputChunks = append(pbInputChunks, transitiveProtoImports.buckets...)
+	na.inputs.commit(len(pbInputChunks))
+
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
@@ -729,7 +737,7 @@ func emitPB(
 			Env: env}),
 		Env: env,
 
-		Inputs:         na.inputList(inputs, append([][]VFS{producerSourceInputs}, transitiveProtoImports.buckets...)...),
+		Inputs:         pbInputChunks,
 		Outputs:        outputs,
 		KV:             spec.kv,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

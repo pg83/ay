@@ -224,23 +224,27 @@ type ModuleToolchain struct {
 	Python3       VFS
 }
 
+func isClangToolResourceName(name, clangVer string) bool {
+	return len(name) == len(resourcePatternClangTool)+len(clangVer) &&
+		strings.HasPrefix(name, resourcePatternClangTool) &&
+		name[len(resourcePatternClangTool):] == clangVer
+}
+
 type ToolchainKey struct {
 	clangVer string
 	bits     uint8
 }
 
 func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, clangVer string) ModuleToolchain {
-	clangRes := resourcePatternClangTool + clangVer
-	clangResID := internStr(clangRes)
 	key := ToolchainKey{clangVer: clangVer}
 
 	for _, decl := range globals {
-		switch decl.Name {
-		case clangResID:
+		switch {
+		case isClangToolResourceName(decl.Name.string(), clangVer):
 			key.bits |= 1
-		case strLLDRootName:
+		case decl.Name == strLLDRootName:
 			key.bits |= 2
-		case strYMakePython3Name:
+		case decl.Name == strYMakePython3Name:
 			key.bits |= 4
 		}
 	}
@@ -248,6 +252,9 @@ func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, clangVer string
 	if tc, ok := ctx.tcMemo[key]; ok {
 		return tc
 	}
+
+	clangRes := resourcePatternClangTool + clangVer
+	clangResID := internStr(clangRes)
 
 	var tc ModuleToolchain
 

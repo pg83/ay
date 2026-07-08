@@ -1217,7 +1217,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
 	sbomBlockR := ctx.refSlices.alloc(sbomCap)
 	sbomBlockP := ctx.vfsSlices.alloc(sbomCap)
-	peerSbomRefsRaw, peerSbomPathsRaw, ownSbomInsertIdx := aggregateSbomComponents(d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
+	peerSbomRefsRaw, peerSbomPathsRaw, ownSbomInsertIdx := aggregateSbomComponents(e, d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
 	peerSbomRefs := ctx.refSlices.intern(peerSbomRefsRaw)
 	peerSbomPaths := ctx.vfsSlices.intern(peerSbomPathsRaw)
 

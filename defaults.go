@@ -128,11 +128,11 @@ func (e *EmitContext) defaultPeerdirsForModule() []string {
 		inst.Language = LangCPP
 	}
 
-	return e.at(inst).defaultPeerdirsForWithState()
+	return e.defaultPeerdirsForWithState(inst)
 }
 
-func (e *EmitContext) defaultPeerdirsForWithState() []string {
-	ctx, instance, d := e.ctx, e.instance, e.d
+func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []string {
+	ctx, d := e.ctx, e.d
 	flags := d.flags
 	noPlatform := effectiveNoPlatform(flags)
 

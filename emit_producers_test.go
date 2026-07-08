@@ -15,7 +15,7 @@ func TestScheduleProducers_NoEdgesKeepsDeclarationOrder(t *testing.T) {
 
 	var m IdValueMap
 
-	order := scheduleProducers(&m, positions, "m")
+	order := scheduleProducers(nil, &m, positions, "m")
 
 	for i, pi := range order {
 		if pi != i {
@@ -33,7 +33,7 @@ func TestScheduleProducers_ReversedChainReordered(t *testing.T) {
 
 	var m IdValueMap
 
-	order := scheduleProducers(&m, positions, "m")
+	order := scheduleProducers(nil, &m, positions, "m")
 
 	if order[0] != 2 || order[1] != 1 || order[2] != 0 {
 		t.Fatalf("chain order = %v, want [2 1 0]", order)
@@ -49,7 +49,7 @@ func TestScheduleProducers_TieBreaksByDeclarationOrder(t *testing.T) {
 
 	var m IdValueMap
 
-	order := scheduleProducers(&m, positions, "m")
+	order := scheduleProducers(nil, &m, positions, "m")
 
 	if order[0] != 1 || order[1] != 2 || order[2] != 0 {
 		t.Fatalf("tie order = %v, want [1 2 0]", order)
@@ -65,7 +65,7 @@ func TestScheduleProducers_CycleThrows(t *testing.T) {
 	var m IdValueMap
 
 	exc := try(func() {
-		scheduleProducers(&m, positions, "m")
+		scheduleProducers(nil, &m, positions, "m")
 	})
 
 	if exc == nil {

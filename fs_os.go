@@ -206,14 +206,8 @@ func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 		return
 	}
 
-	prefix := rel
-
-	if prefix != "" {
-		prefix += "/"
-	}
-
 	for _, packed := range fs.listdirRel(rel).names {
-		child := prefix + STR(packed>>1).string()
+		child := internJoined(rel, STR(packed>>1).string()).string()
 
 		if packed&1 != 0 {
 			fs.walk(child, visit)

@@ -33,7 +33,29 @@ func (LexIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator
 			line = line[:c]
 		}
 
-		parts := bytes.FieldsFunc(line, func(r rune) bool { return r == ' ' || r == '\t' })
+		var lexFieldsScratch [8][]byte
+
+		fields := lexFieldsScratch[:0]
+
+		for i := 0; i < len(line) && len(fields) < len(lexFieldsScratch); {
+			for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
+				i++
+			}
+
+			j := i
+
+			for j < len(line) && line[j] != ' ' && line[j] != '\t' {
+				j++
+			}
+
+			if j > i {
+				fields = append(fields, line[i:j])
+			}
+
+			i = j
+		}
+
+		parts := fields
 
 		if len(parts) == 0 || !bytes.Equal(parts[0], lexIncludePrefix) {
 			continue
