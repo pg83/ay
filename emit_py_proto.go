@@ -38,11 +38,20 @@ type PyPBModuleEmission struct {
 	head         []ANY
 	mid          []ANY
 	tail         []ANY
+	scanCfg      ScanContext
 }
 
 func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS, duplicateOutputRootInclude bool) *PyPBModuleEmission {
+	if e.pyPBOk {
+		return &e.pyPBEmission
+	}
+
+	e.pyPBOk = true
+
 	ctx, _, d := e.ctx, e.instance, e.d
-	pe := &PyPBModuleEmission{}
+	pe := &e.pyPBEmission
+
+	*pe = PyPBModuleEmission{}
 
 	if d.grpc {
 		pe.grpcPyRef, pe.grpcPyBinary = ctx.tool(argContribToolsProtocPluginsGrpcPython)
@@ -144,6 +153,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 
 	na.anys.commit(len(tail))
 	pe.tail = tail[:len(tail):len(tail)]
+	pe.scanCfg = protoWalkInputs(ctx.parsers, nil, e.instance.Path.relString())
 
 	return pe
 }
@@ -236,7 +246,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		generatedProto = true
 	}
 
-	transitive := walkClosure(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.relString()))
+	transitive := walkClosure(e.scanner, source(protoRelPath), pe.scanCfg)
 	inputs := na.vfs.alloc(5 + len(producerSourceInputs))[:0]
 
 	inputs = append(inputs, protocBinary, pbPyWrapperVFS, protoSrcVFS)
