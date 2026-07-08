@@ -266,13 +266,17 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	pbNodeKV := KV{P: pkPB, PC: pcYellow}
 	protoBaseName := filepath.Base(protoBase)
+	extOut := na.exts.alloc(len(outputs))[:0]
 
 	for i, out := range outputs {
-		pbNodeKV.ExtOut = append(pbNodeKV.ExtOut, KVExt{
-			Key: "ext_out_name_for_" + filepath.Base(out.relString()),
-			Val: protoBaseName + suffixes[i],
+		extOut = append(extOut, KVExt{
+			Key: internStr("ext_out_name_for_" + filepath.Base(out.relString())).string(),
+			Val: internStr(protoBaseName + suffixes[i]).string(),
 		})
 	}
+
+	na.exts.commit(len(outputs))
+	pbNodeKV.ExtOut = extOut[:len(outputs):len(outputs)]
 
 	pyPBNode := Node{
 		Platform:     instance.Platform,

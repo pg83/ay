@@ -20,9 +20,11 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		lineNo int
 	)
 
+	pathArena := newBumpAllocator[VFS](1 << 8)
+
 	flushPending := func() {
 		if pendingActive {
-			rec.setMapping(pendingKey, pendingPaths)
+			rec.setMapping(pendingKey, pathArena.list(pendingPaths...))
 			pendingActive = false
 			pendingPaths = nil
 		}
@@ -91,7 +93,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		}
 
 		if v := unquoteYScalar(name, lineNo, val); len(v) != 0 {
-			rec.setMapping(key, []VFS{sourceBytes(v)})
+			rec.setMapping(key, pathArena.list(sourceBytes(v)))
 		} else {
 			rec.setMapping(key, nil)
 		}

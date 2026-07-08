@@ -55,22 +55,26 @@ func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
 	}
 }
 
-func TestBumpAllocatorFixedChunkSize(t *testing.T) {
+func TestBumpAllocatorChunkGrowth(t *testing.T) {
 	a := newBumpAllocator[byte](8)
+
+	want := 8
 
 	for i := 0; i < 4; i++ {
 		r := a.alloc(1)
 
-		if len(r) != bumpChunkBytes {
-			t.Fatalf("alloc %d: fresh chunk len = %d, want fixed %d", i, len(r), bumpChunkBytes)
+		if len(r) != want {
+			t.Fatalf("alloc %d: fresh chunk len = %d, want %d", i, len(r), want)
 		}
 
 		a.commit(len(r)) // exhaust the chunk so the next alloc opens a fresh one
+
+		want *= 2
 	}
 }
 
 func TestBumpAllocatorChunkByteBudget(t *testing.T) {
-	a := newBumpAllocator[uint64](8)
+	a := newBumpAllocator[uint64](1 << 20)
 
 	r := a.alloc(1)
 

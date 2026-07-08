@@ -20,6 +20,11 @@ var (
 	astSrcs      = newBumpAllocator[SrcsStmt](1 << 8)
 	astPeerdirs  = newBumpAllocator[PeerdirStmt](1 << 8)
 	astIfs       = newBumpAllocator[IfStmt](1 << 8)
+	astSets      = newBumpAllocator[SetStmt](1 << 8)
+	astCFlags    = newBumpAllocator[CFlagsStmt](1 << 8)
+	astCXXFlags  = newBumpAllocator[CXXFlagsStmt](1 << 8)
+	astEnumSers  = newBumpAllocator[GenerateEnumSerializationStmt](1 << 6)
+	astConds     = newBumpAllocator[CondNode](1 << 10)
 )
 
 var runAntlrKeywords = strKeySet(
@@ -1060,7 +1065,7 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 			value = strings.Join(anyStrs(args[1:]), " ")
 		}
 
-		return &SetStmt{Name: args[0].string(), NameEnv: internEnv(args[0].string()), Value: value, Line: line}
+		return astOne(astSets, SetStmt{Name: args[0].string(), NameEnv: internEnv(args[0].string()), Value: internStr(value).string(), Line: line})
 	case "END":
 		return &EndStmt{Line: line}
 	case "JOIN_SRCS":
@@ -1078,11 +1083,11 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 	case "CFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
-		return &CFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: line}
+		return astOne(astCFlags, CFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: line})
 	case "CXXFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
-		return &CXXFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: line}
+		return astOne(astCXXFlags, CXXFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: line})
 	case "CONLYFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
@@ -1102,7 +1107,7 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 			fail("GENERATE_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
 		}
 
-		return &GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "plain", Line: line}
+		return astOne(astEnumSers, GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "plain", Line: line})
 	case "GENERATE_ENUM_SERIALIZATION_WITH_HEADER":
 		if len(args) != 1 {
 			fail("GENERATE_ENUM_SERIALIZATION_WITH_HEADER expects exactly 1 argument (header path), got %d", len(args))
@@ -1607,7 +1612,7 @@ func splitFlagsByGlobal(args []ANY) (globalFlags, ownFlags []ANY) {
 		}
 	}
 
-	return globalFlags, ownFlags
+	return astArgs.list(globalFlags...), astArgs.list(ownFlags...)
 }
 
 func splitAddInclPaths(args []ANY) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths []ANY) {
@@ -1685,7 +1690,8 @@ func splitAddInclPaths(args []ANY) (globalPaths, oneLevelPaths, ownPaths, cython
 		}
 	}
 
-	return globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths
+	return astArgs.list(globalPaths...), astArgs.list(oneLevelPaths...), astArgs.list(ownPaths...), astArgs.list(cythonPaths...),
+		astArgs.list(asmPaths...), astArgs.list(protoGlobalPaths...), astArgs.list(userGlobalPaths...), astArgs.list(allPaths...)
 }
 
 func (p *Parser) parseIf(ifTok Token) *IfStmt {
@@ -1790,7 +1796,7 @@ func parseCondExpr(parent *Parser, ifTok Token, toks []Token) []CondNode {
 		parent.lex.throwParse(t.line, t.col, "unexpected %s in IF condition", describeToken(t))
 	}
 
-	return append([]CondNode(nil), parent.condScratch...)
+	return astConds.list(parent.condScratch...)
 }
 
 func (c *CondParser) emit(n CondNode) int32 {
