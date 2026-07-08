@@ -142,6 +142,12 @@ func (e Environment) setStringID(id ENV, v STR) {
 }
 
 func (e Environment) setString(id ENV, v string) {
+	if vfsHasPrefix(v) {
+		e.setVFS(id, intern(v))
+
+		return
+	}
+
 	e.setStrID(id, internStr(v))
 }
 

@@ -22,7 +22,7 @@ const (
 	pyGroupProto  = -1
 )
 
-func pyResourceKeyPrefix(topLevel bool, namespace *STR, modulePath string) string {
+func pyResourceKeyPrefix(topLevel bool, namespace *ANY, modulePath string) string {
 	if topLevel {
 		return ""
 	}
@@ -41,7 +41,7 @@ func generatedPyResourceKey(modulePath string, d *ModuleData, srcRel string) str
 type PySrc struct {
 	Path     VFS
 	Module   STR
-	Token    STR
+	Token    ANY
 	Group    int
 	SrcGroup int
 }
@@ -85,7 +85,7 @@ func (e *EmitContext) registerCollectPySrcs() {
 
 		for _, srcRel := range group.Srcs {
 			if extIsProto(srcRel.string()) {
-				e.emitPyProtoSource(srcRel.any(), gi)
+				e.emitPyProtoSource(srcRel, gi)
 
 				continue
 			}
@@ -542,7 +542,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 	emits := make([]IncludeDirective, 0, len(seed))
 
 	for _, v := range seed {
-		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel())})
+		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel().any())})
 	}
 
 	var psc []ANY

@@ -89,7 +89,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 		OutputPath:     r5CppOut,
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  []NodeRef{ragel5LDRef, rlgenCdLDRef},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(r5TmpOut.rel())}}, r5Parsed...)},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(r5TmpOut.rel().any())}}, r5Parsed...)},
 		Compile: &CompileSpec{
 			FlatOutput: d.flatSrc(src),
 			CFlags:     concat(psc, []ANY{argWnoImplicitFallthrough.any()}),

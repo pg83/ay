@@ -51,17 +51,17 @@ func strStrs(as []STR) []string {
 	return appendStrStrs(make([]string, 0, len(as)), as)
 }
 
-func internAnysFromSTR(items []STR) []ANY {
+func internAnysFromSTR(items []ANY) []ANY {
 	out := make([]ANY, 0, len(items))
 
 	for _, s := range items {
-		out = append(out, s.any())
+		out = append(out, s)
 	}
 
 	return out
 }
 
-func strStrings(items []STR) []string {
+func strStrings(items []ANY) []string {
 	out := make([]string, 0, len(items))
 
 	for _, s := range items {
@@ -81,11 +81,11 @@ func sTRS(items ...string) []STR {
 	return out
 }
 
-func strPtr(s STR) *STR {
+func anyPtr(s ANY) *ANY {
 	return &s
 }
 
-func strsContain(items []STR, s string) bool {
+func strsContain(items []ANY, s string) bool {
 	id := interned(s)
 
 	if id == 0 {
@@ -93,7 +93,7 @@ func strsContain(items []STR, s string) bool {
 	}
 
 	for _, it := range items {
-		if it == id {
+		if it == id.any() {
 			return true
 		}
 	}
@@ -109,9 +109,9 @@ func appendAnyLists(dst []ANY, srcs ...[]ANY) []ANY {
 	return dst
 }
 
-func appendAnys(dst []ANY, ss []STR) []ANY {
+func appendAnys(dst []ANY, ss []ANY) []ANY {
 	for _, s := range ss {
-		dst = append(dst, s.any())
+		dst = append(dst, s)
 	}
 
 	return dst
@@ -134,6 +134,16 @@ func strsAny(ss []STR) []ANY {
 
 	for i, s := range ss {
 		out[i] = s.any()
+	}
+
+	return out
+}
+
+func anysOf(items ...string) []ANY {
+	out := make([]ANY, len(items))
+
+	for i, s := range items {
+		out[i] = internStr(s).any()
 	}
 
 	return out

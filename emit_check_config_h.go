@@ -7,13 +7,13 @@ import (
 
 var checkConfigHKV = KV{P: pkCH, PC: pcYellow}
 
-func checkConfigHGeneratedVFS(modulePath string, conf STR) VFS {
+func checkConfigHGeneratedVFS(modulePath string, conf ANY) VFS {
 	confBase := strings.TrimSuffix(path.Base(conf.string()), path.Ext(conf.string()))
 
 	return build(modulePath, "/", confBase, ".config.cpp")
 }
 
-func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
+func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	generatedVFS := checkConfigHGeneratedVFS(instance.Path.relString(), conf)
@@ -46,7 +46,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 		OutputPath:  generatedVFS,
 		ProducerRef: chRef,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(confVFS.rel())},
+			{kind: includeQuoted, target: includeTarget(confVFS.rel().any())},
 		}},
 		ClosureLeaves: []VFS{buildScriptsCheckConfigHPy},
 		Compile:       &CompileSpec{FlatOutput: d.flatSrc(generatedVFS.any()), CFlags: psc},

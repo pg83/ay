@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseSplitCodegen_KeywordsAnywhere(t *testing.T) {
-	args := sTRS("OUT_NUM", "30", "tools/codegen", "factors_gen", "NTop", "OUTPUT_INCLUDES", "a.h", "b.h")
+	args := anysOf("OUT_NUM", "30", "tools/codegen", "factors_gen", "NTop", "OUTPUT_INCLUDES", "a.h", "b.h")
 	stmt := parseSplitCodegen(args, 1)
 
 	if stmt.ToolPath.string() != "tools/codegen" {
@@ -31,7 +31,7 @@ func TestParseSplitCodegen_KeywordsAnywhere(t *testing.T) {
 }
 
 func TestParseSplitCodegen_DefaultOutNum(t *testing.T) {
-	stmt := parseSplitCodegen(sTRS("tools/codegen", "factors_gen", "NTop"), 1)
+	stmt := parseSplitCodegen(anysOf("tools/codegen", "factors_gen", "NTop"), 1)
 
 	if stmt.OutNum != splitCodegenDefaultOutNum {
 		t.Fatalf("OutNum = %d, want %d", stmt.OutNum, splitCodegenDefaultOutNum)

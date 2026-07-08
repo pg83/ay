@@ -26,13 +26,13 @@ func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry
 	} else if entry.WithContext {
 		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
 
-		out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel())})
+		out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
 	}
 
 	for _, include := range entry.OutputIncludes {
 		out = append(out, IncludeDirective{
 			kind:   includeQuoted,
-			target: includeTarget(internStr(copyFileIncludeTarget(moduleDir.relString(), include))),
+			target: includeTarget(internStr(copyFileIncludeTarget(moduleDir.relString(), include)).any()),
 		})
 	}
 

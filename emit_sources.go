@@ -8,7 +8,7 @@ import (
 func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	src := meta.Source
 
-	switch srcExtClassOf(src.relOrSelf()) {
+	switch srcExtClassOf(src.relOrSelf().any()) {
 	case srcExtHeader:
 		return
 	case srcExtGztProto:

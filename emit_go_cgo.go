@@ -30,8 +30,8 @@ var goCgoLinkOPostLd = []ANY{
 	internStr("-lc").any(),
 }
 
-func goModuleCgoCFiles(d *ModuleData) []STR {
-	var out []STR
+func goModuleCgoCFiles(d *ModuleData) []ANY {
+	var out []ANY
 
 	for _, src := range d.srcs {
 		rel := src.string()
@@ -44,8 +44,8 @@ func goModuleCgoCFiles(d *ModuleData) []STR {
 	return out
 }
 
-func goModuleCgoSFiles(d *ModuleData) []STR {
-	var out []STR
+func goModuleCgoSFiles(d *ModuleData) []ANY {
+	var out []ANY
 
 	for _, src := range d.srcs {
 		if strings.HasSuffix(src.string(), ".S") {
@@ -70,7 +70,7 @@ func goCgoCFlags(d *ModuleData) []ANY {
 	out = append(out, goCgoBaseCFlags...)
 
 	for _, f := range d.cgoCflags {
-		out = append(out, f.any())
+		out = append(out, f)
 	}
 
 	return out
@@ -119,7 +119,7 @@ func goCgoImportPathFlags(dir string) []ANY {
 	return goCgoImportDefault
 }
 
-func (e *EmitContext) emitGoCgoCopyStmt(srcRel STR) {
+func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	module := instance.Path.relString()
@@ -594,7 +594,7 @@ func (e *EmitContext) flushGoCgo2() {
 	}
 
 	for _, f := range d.cgoLdflags {
-		objArgs[kd] = f.any()
+		objArgs[kd] = f
 		kd++
 	}
 

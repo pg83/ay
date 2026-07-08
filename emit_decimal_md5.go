@@ -5,7 +5,7 @@ var decimalMd5KV = KV{P: pkSV, PC: pcYellow, ShowOut: true}
 type DecimalMD5Lower32BitsStmt struct {
 	File     string
 	FuncName string
-	Opts     []STR
+	Opts     []ANY
 }
 
 func (e *EmitContext) emitDecimalMD5Stmt(stmt *DecimalMD5Lower32BitsStmt) {

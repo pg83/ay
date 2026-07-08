@@ -3,7 +3,7 @@ package main
 import "strings"
 
 var (
-	flexOutputInclude = IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("util/system/compiler.h"))}
+	flexOutputInclude = IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("util/system/compiler.h").any())}
 	flexKV            = KV{P: pkLX, PC: pcYellow}
 )
 
@@ -37,7 +37,7 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 	cflags := psc
 
 	if extIsFlexL(srcRel) {
-		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel())})
+		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
 		cflags = concat(psc, []ANY{argWnoUnusedVariable.any()})
 	}
 

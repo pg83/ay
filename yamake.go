@@ -40,7 +40,7 @@ var runProgramKeywords = strKeySet(
 	"TOOL",
 )
 
-var structCodegenOutputIncludes = sTRS(
+var structCodegenOutputIncludes = anysOf(
 	"util/generic/singleton.h",
 	"util/generic/strbuf.h",
 	"util/generic/vector.h",
@@ -50,7 +50,7 @@ var structCodegenOutputIncludes = sTRS(
 	"kernel/struct_codegen/reflection/floats.h",
 )
 
-var structCodegenPeerdirs = sTRS(
+var structCodegenPeerdirs = anysOf(
 	"kernel/struct_codegen/metadata",
 	"kernel/struct_codegen/reflection",
 )
@@ -118,23 +118,23 @@ type Stmt interface {
 type ModuleStmt struct {
 	Name   TOK
 	Schema bool
-	Args   []STR
+	Args   []ANY
 	Line   int
 }
 
 type PeerdirStmt struct {
-	Paths []STR
+	Paths []ANY
 	Line  int
 }
 
 type DeclareResourceStmt struct {
 	Macro TOK
-	Args  []STR
+	Args  []ANY
 	Line  int
 }
 
 type SrcsStmt struct {
-	Sources []STR
+	Sources []ANY
 	Line    int
 }
 
@@ -151,7 +151,7 @@ type EndStmt struct {
 
 type UnknownStmt struct {
 	Name TOK
-	Args []STR
+	Args []ANY
 	Line int
 }
 
@@ -169,53 +169,53 @@ type IncludeStmt struct {
 
 type JoinSrcsStmt struct {
 	OutputName string
-	Sources    []STR
+	Sources    []ANY
 	Line       int
 	Seq        int
 }
 
 type AddInclStmt struct {
-	GlobalPaths      []STR
-	OneLevelPaths    []STR
-	OwnPaths         []STR
-	CythonPaths      []STR
-	AsmPaths         []STR
-	ProtoGlobalPaths []STR
-	UserGlobalPaths  []STR
-	AllPaths         []STR
+	GlobalPaths      []ANY
+	OneLevelPaths    []ANY
+	OwnPaths         []ANY
+	CythonPaths      []ANY
+	AsmPaths         []ANY
+	ProtoGlobalPaths []ANY
+	UserGlobalPaths  []ANY
+	AllPaths         []ANY
 	Line             int
 }
 
 type CFlagsStmt struct {
-	GlobalFlags []STR
-	OwnFlags    []STR
+	GlobalFlags []ANY
+	OwnFlags    []ANY
 	Line        int
 }
 
 type CXXFlagsStmt struct {
-	GlobalFlags []STR
-	OwnFlags    []STR
+	GlobalFlags []ANY
+	OwnFlags    []ANY
 	Line        int
 }
 
 type CONLYFlagsStmt struct {
-	GlobalFlags []STR
-	OwnFlags    []STR
+	GlobalFlags []ANY
+	OwnFlags    []ANY
 	Line        int
 }
 
 type LDFlagsStmt struct {
-	Flags []STR
+	Flags []ANY
 	Line  int
 }
 
 type SrcDirStmt struct {
-	Dirs []STR
+	Dirs []ANY
 	Line int
 }
 
 type GlobalSrcsStmt struct {
-	Sources []STR
+	Sources []ANY
 	Line    int
 }
 
@@ -234,45 +234,45 @@ type DefaultVarStmt struct {
 }
 
 type RunProgramStmt struct {
-	ToolPath       STR
-	Args           []STR
-	INFiles        []STR
-	OUTFiles       []STR
-	OUTNoAutoFiles []STR
-	StdoutFile     *STR
+	ToolPath       ANY
+	Args           []ANY
+	INFiles        []ANY
+	OUTFiles       []ANY
+	OUTNoAutoFiles []ANY
+	StdoutFile     *ANY
 	StdoutNoAuto   bool
-	EnvPairs       []STR
-	CWD            *STR
-	OutputIncludes []STR
-	ToolPaths      []STR
+	EnvPairs       []ANY
+	CWD            *ANY
+	OutputIncludes []ANY
+	ToolPaths      []ANY
 	Line           int
 	DeclSeq        int
 }
 
 type SplitCodegenStmt struct {
-	ToolPath       STR
-	Prefix         STR
-	Opts           []STR
+	ToolPath       ANY
+	Prefix         ANY
+	Opts           []ANY
 	OutNum         int
-	OutputIncludes []STR
+	OutputIncludes []ANY
 	Line           int
 }
 
 type BaseCodegenStmt struct {
-	ToolPath       STR
-	Prefix         STR
-	Opts           []STR
-	OutputIncludes []STR
-	Peerdirs       []STR
+	ToolPath       ANY
+	Prefix         ANY
+	Opts           []ANY
+	OutputIncludes []ANY
+	Peerdirs       []ANY
 	Line           int
 }
 
 type FromSandboxStmt struct {
-	ResourceId     STR
-	OUTFiles       []STR
-	OUTNoAutoFiles []STR
-	OutputIncludes []STR
-	Renames        []STR
+	ResourceId     ANY
+	OUTFiles       []ANY
+	OUTNoAutoFiles []ANY
+	OutputIncludes []ANY
+	Renames        []ANY
 	File           bool
 	Executable     bool
 	Prefix         string
@@ -281,16 +281,16 @@ type FromSandboxStmt struct {
 
 type RunPythonStmt struct {
 	Lua            bool
-	ScriptPath     STR
-	Args           []STR
-	INFiles        []STR
-	OUTFiles       []STR
-	OUTNoAutoFiles []STR
-	StdoutFile     *STR
+	ScriptPath     ANY
+	Args           []ANY
+	INFiles        []ANY
+	OUTFiles       []ANY
+	OUTNoAutoFiles []ANY
+	StdoutFile     *ANY
 	StdoutNoAuto   bool
-	EnvPairs       []STR
-	CWD            *STR
-	OutputIncludes []STR
+	EnvPairs       []ANY
+	CWD            *ANY
+	OutputIncludes []ANY
 	Line           int
 }
 
@@ -306,31 +306,31 @@ type CreateBuildInfoStmt struct {
 }
 
 type RunAntlr4CppStmt struct {
-	Grammar        STR
-	Options        []STR
+	Grammar        ANY
+	Options        []ANY
 	Visitor        bool
 	Listener       bool
-	OutputIncludes []STR
+	OutputIncludes []ANY
 	Line           int
 }
 
 type RunAntlr4CppSplitStmt struct {
-	Lexer          STR
-	Parser         STR
+	Lexer          ANY
+	Parser         ANY
 	Visitor        bool
 	Listener       bool
-	OutputIncludes []STR
+	OutputIncludes []ANY
 	Line           int
 }
 
 type RunAntlrStmt struct {
 	Macro          string
-	Args           []STR
-	INFiles        []STR
-	OUTFiles       []STR
-	OUTNoAutoFiles []STR
-	CWD            *STR
-	OutputIncludes []STR
+	Args           []ANY
+	INFiles        []ANY
+	OUTFiles       []ANY
+	OUTNoAutoFiles []ANY
+	CWD            *ANY
+	OutputIncludes []ANY
 	Line           int
 }
 
@@ -345,12 +345,12 @@ type ResourceStmt struct {
 }
 
 type ResourceFilesStmt struct {
-	Args []STR
+	Args []ANY
 	Line int
 }
 
 type AllResourceFilesStmt struct {
-	Args     []STR
+	Args     []ANY
 	FromDirs bool
 	Line     int
 }
@@ -900,14 +900,14 @@ func (p *Parser) applyIncludeOnce(nameTok Token) {
 	p.includes.once[p.name] = struct{}{}
 }
 
-func (p *Parser) parseMacroArgs(nameTok Token) []STR {
+func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
 	lp := p.lex.next()
 
 	if lp.kind != tokLParen {
 		p.lex.throwParse(lp.line, lp.col, "expected '(' after macro name %q, got %s", nameTok.val, describeToken(lp))
 	}
 
-	var args []STR
+	var args []ANY
 
 	for {
 		tok := p.lex.next()
@@ -919,7 +919,7 @@ func (p *Parser) parseMacroArgs(nameTok Token) []STR {
 			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.val)
 		case tokIdent, tokWord, tokString, tokInt:
 
-			args = append(args, internStr(tok.val))
+			args = append(args, internStr(tok.val).any())
 		case tokLParen:
 			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.val)
 		default:
@@ -964,13 +964,13 @@ type Parser struct {
 	condTokBuf   []Token
 }
 
-func (p *Parser) buildStmt(nameTok Token, args []STR) Stmt {
+func (p *Parser) buildStmt(nameTok Token, args []ANY) Stmt {
 	return buildStmtFor(nameTok.val, args, nameTok.line, func(format string, a ...any) {
 		p.lex.throwParse(nameTok.line, nameTok.col, format, a...)
 	})
 }
 
-func buildStmtFor(name string, args []STR, line int, fail func(format string, a ...any)) Stmt {
+func buildStmtFor(name string, args []ANY, line int, fail func(format string, a ...any)) Stmt {
 	switch name {
 	case "PROGRAM", "LIBRARY",
 
@@ -1016,7 +1016,7 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 			fail("JOIN_SRCS expects at least one argument (the output name)")
 		}
 
-		sources := append([]STR(nil), args[1:]...)
+		sources := append([]ANY(nil), args[1:]...)
 
 		return &JoinSrcsStmt{OutputName: args[0].string(), Sources: sources, Line: line}
 	case "ADDINCL":
@@ -1036,15 +1036,15 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 
 		return &CONLYFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: line}
 	case "LDFLAGS":
-		return &LDFlagsStmt{Flags: append([]STR(nil), args...), Line: line}
+		return &LDFlagsStmt{Flags: append([]ANY(nil), args...), Line: line}
 	case "SRCDIR":
 		if len(args) == 0 {
 			fail("SRCDIR expects at least 1 argument, got %d", len(args))
 		}
 
-		return &SrcDirStmt{Dirs: append([]STR(nil), args...), Line: line}
+		return &SrcDirStmt{Dirs: append([]ANY(nil), args...), Line: line}
 	case "GLOBAL_SRCS":
-		return &GlobalSrcsStmt{Sources: append([]STR(nil), args...), Line: line}
+		return &GlobalSrcsStmt{Sources: append([]ANY(nil), args...), Line: line}
 	case "GENERATE_ENUM_SERIALIZATION":
 		if len(args) != 1 {
 			fail("GENERATE_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
@@ -1163,39 +1163,39 @@ func buildStmtFor(name string, args []STR, line int, fail func(format string, a 
 
 		return parseResource(args, Token{val: name, line: line})
 	case "RESOURCE_FILES":
-		return &ResourceFilesStmt{Args: append([]STR(nil), args...), Line: line}
+		return &ResourceFilesStmt{Args: append([]ANY(nil), args...), Line: line}
 	case "ALL_RESOURCE_FILES":
 		if len(args) == 0 {
 			fail("ALL_RESOURCE_FILES expects at least 1 argument (the extension)")
 		}
 
-		return &AllResourceFilesStmt{Args: append([]STR(nil), args...), Line: line}
+		return &AllResourceFilesStmt{Args: append([]ANY(nil), args...), Line: line}
 	case "ALL_RESOURCE_FILES_FROM_DIRS":
-		return &AllResourceFilesStmt{Args: append([]STR(nil), args...), FromDirs: true, Line: line}
+		return &AllResourceFilesStmt{Args: append([]ANY(nil), args...), FromDirs: true, Line: line}
 	default:
 		return &UnknownStmt{Name: internTok(name), Args: args, Line: line}
 	}
 }
 
-func parseRunAntlr4Cpp(args []STR, line int) *RunAntlr4CppStmt {
+func parseRunAntlr4Cpp(args []ANY, line int) *RunAntlr4CppStmt {
 	stmt := &RunAntlr4CppStmt{Grammar: args[0], Line: line}
 	i := 1
 
 	for i < len(args) {
 		switch args[i] {
-		case kwVISITOR:
+		case kwVISITOR.any():
 			stmt.Visitor = true
 			i++
-		case kwNO_LISTENER, kwLISTENER:
+		case kwNO_LISTENER.any(), kwLISTENER.any():
 
-			if args[i] == kwNO_LISTENER {
+			if args[i] == kwNO_LISTENER.any() {
 				stmt.Listener = false
 			} else {
 				stmt.Listener = true
 			}
 
 			i++
-		case kwOUTPUT_INCLUDES:
+		case kwOUTPUT_INCLUDES.any():
 
 			i++
 
@@ -1203,7 +1203,7 @@ func parseRunAntlr4Cpp(args []STR, line int) *RunAntlr4CppStmt {
 				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
 				i++
 			}
-		case kwIN, kwOUT, kwOUT_NOAUTO, kwINDUCED_DEPS, kwTOOL:
+		case kwIN.any(), kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
 
 			i++
 
@@ -1219,18 +1219,18 @@ func parseRunAntlr4Cpp(args []STR, line int) *RunAntlr4CppStmt {
 	return stmt
 }
 
-func parseRunAntlr4CppSplit(args []STR, line int) *RunAntlr4CppSplitStmt {
+func parseRunAntlr4CppSplit(args []ANY, line int) *RunAntlr4CppSplitStmt {
 	stmt := &RunAntlr4CppSplitStmt{Lexer: args[0], Parser: args[1], Line: line}
 
 	for i := 2; i < len(args); i++ {
 		switch args[i] {
-		case kwVISITOR:
+		case kwVISITOR.any():
 			stmt.Visitor = true
-		case kwLISTENER:
+		case kwLISTENER.any():
 			stmt.Listener = true
-		case kwNO_LISTENER:
+		case kwNO_LISTENER.any():
 
-		case kwOUTPUT_INCLUDES:
+		case kwOUTPUT_INCLUDES.any():
 
 			i++
 
@@ -1240,7 +1240,7 @@ func parseRunAntlr4CppSplit(args []STR, line int) *RunAntlr4CppSplitStmt {
 			}
 
 			i--
-		case kwIN, kwOUT, kwOUT_NOAUTO, kwINDUCED_DEPS, kwTOOL:
+		case kwIN.any(), kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
 
 			i++
 
@@ -1255,33 +1255,33 @@ func parseRunAntlr4CppSplit(args []STR, line int) *RunAntlr4CppSplitStmt {
 	return stmt
 }
 
-func parseRunAntlr(args []STR, nameTok Token) *RunAntlrStmt {
+func parseRunAntlr(args []ANY, nameTok Token) *RunAntlrStmt {
 	stmt := &RunAntlrStmt{Macro: nameTok.val, Line: nameTok.line}
-	currentSection := kwARGS
+	currentSection := kwARGS.any()
 
 	for i := 0; i < len(args); i++ {
 		tok := args[i]
 
-		if runAntlrKeywords.has(uint32(tok)) {
+		if runAntlrKeywords.has(uint32(tok.str())) {
 			currentSection = tok
 
 			continue
 		}
 
 		switch currentSection {
-		case kwARGS:
+		case kwARGS.any():
 			stmt.Args = append(stmt.Args, tok)
-		case kwIN, kwIN_NOPARSE, kwIN_DEPS:
+		case kwIN.any(), kwIN_NOPARSE.any(), kwIN_DEPS.any():
 			stmt.INFiles = append(stmt.INFiles, tok)
-		case kwOUT:
+		case kwOUT.any():
 			stmt.OUTFiles = append(stmt.OUTFiles, tok)
-		case kwOUT_NOAUTO:
+		case kwOUT_NOAUTO.any():
 			stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, tok)
-		case kwCWD:
+		case kwCWD.any():
 			if stmt.CWD == nil {
 				stmt.CWD = &tok
 			}
-		case kwOUTPUT_INCLUDES, kwINDUCED_DEPS, kwTOOL, kwENV, kwGRAMMAR_FILES, kwGRAMMAR_CWD:
+		case kwOUTPUT_INCLUDES.any(), kwINDUCED_DEPS.any(), kwTOOL.any(), kwENV.any(), kwGRAMMAR_FILES.any(), kwGRAMMAR_CWD.any():
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
 		}
 	}
@@ -1289,19 +1289,19 @@ func parseRunAntlr(args []STR, nameTok Token) *RunAntlrStmt {
 	return stmt
 }
 
-func isRunAntlrKeyword(s STR) bool {
+func isRunAntlrKeyword(s ANY) bool {
 	switch s {
-	case kwVISITOR, kwLISTENER, kwNO_LISTENER, kwOUTPUT_INCLUDES,
-		kwIN, kwIN_NOPARSE, kwIN_DEPS, kwOUT, kwOUT_NOAUTO,
-		kwINDUCED_DEPS, kwTOOL, kwCWD, kwENV, kwSTDOUT,
-		kwSTDOUT_NOAUTO, kwGRAMMAR_FILES, kwGRAMMAR_CWD:
+	case kwVISITOR.any(), kwLISTENER.any(), kwNO_LISTENER.any(), kwOUTPUT_INCLUDES.any(),
+		kwIN.any(), kwIN_NOPARSE.any(), kwIN_DEPS.any(), kwOUT.any(), kwOUT_NOAUTO.any(),
+		kwINDUCED_DEPS.any(), kwTOOL.any(), kwCWD.any(), kwENV.any(), kwSTDOUT.any(),
+		kwSTDOUT_NOAUTO.any(), kwGRAMMAR_FILES.any(), kwGRAMMAR_CWD.any():
 		return true
 	}
 
 	return false
 }
 
-func parseFromSandbox(args []STR, line int) *FromSandboxStmt {
+func parseFromSandbox(args []ANY, line int) *FromSandboxStmt {
 	stmt := &FromSandboxStmt{Line: line, Prefix: "."}
 	section := ""
 
@@ -1352,15 +1352,15 @@ func parseFromSandbox(args []STR, line int) *FromSandboxStmt {
 	return stmt
 }
 
-func parseRunProgram(args []STR, line int) *RunProgramStmt {
+func parseRunProgram(args []ANY, line int) *RunProgramStmt {
 	stmt := &RunProgramStmt{ToolPath: args[0], Line: line}
 	i := 1
-	currentSection := kwARGS
+	currentSection := kwARGS.any()
 
 	for i < len(args) {
 		tok := args[i]
 
-		if runProgramKeywords.has(uint32(tok)) {
+		if runProgramKeywords.has(uint32(tok.str())) {
 			currentSection = tok
 			i++
 
@@ -1368,28 +1368,28 @@ func parseRunProgram(args []STR, line int) *RunProgramStmt {
 		}
 
 		switch currentSection {
-		case kwARGS:
+		case kwARGS.any():
 			stmt.Args = append(stmt.Args, tok)
-		case kwIN, kwIN_NOPARSE, kwIN_DEPS:
+		case kwIN.any(), kwIN_NOPARSE.any(), kwIN_DEPS.any():
 			stmt.INFiles = append(stmt.INFiles, tok)
-		case kwOUT:
+		case kwOUT.any():
 			stmt.OUTFiles = append(stmt.OUTFiles, tok)
-		case kwOUT_NOAUTO:
+		case kwOUT_NOAUTO.any():
 			stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, tok)
-		case kwSTDOUT, kwSTDOUT_NOAUTO:
+		case kwSTDOUT.any(), kwSTDOUT_NOAUTO.any():
 			if stmt.StdoutFile == nil {
 				stmt.StdoutFile = &tok
-				stmt.StdoutNoAuto = currentSection == kwSTDOUT_NOAUTO
+				stmt.StdoutNoAuto = currentSection == kwSTDOUT_NOAUTO.any()
 			}
-		case kwENV:
+		case kwENV.any():
 			stmt.EnvPairs = append(stmt.EnvPairs, tok)
-		case kwCWD:
+		case kwCWD.any():
 			if stmt.CWD == nil {
 				stmt.CWD = &tok
 			}
-		case kwOUTPUT_INCLUDES, kwINDUCED_DEPS:
+		case kwOUTPUT_INCLUDES.any(), kwINDUCED_DEPS.any():
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
-		case kwTOOL:
+		case kwTOOL.any():
 			stmt.ToolPaths = append(stmt.ToolPaths, tok)
 		}
 
@@ -1399,15 +1399,15 @@ func parseRunProgram(args []STR, line int) *RunProgramStmt {
 	return stmt
 }
 
-func parseRunPython(args []STR, line int) *RunPythonStmt {
+func parseRunPython(args []ANY, line int) *RunPythonStmt {
 	stmt := &RunPythonStmt{ScriptPath: args[0], Line: line}
 	i := 1
-	currentSection := kwARGS
+	currentSection := kwARGS.any()
 
 	for i < len(args) {
 		tok := args[i]
 
-		if runProgramKeywords.has(uint32(tok)) {
+		if runProgramKeywords.has(uint32(tok.str())) {
 			currentSection = tok
 			i++
 
@@ -1415,26 +1415,26 @@ func parseRunPython(args []STR, line int) *RunPythonStmt {
 		}
 
 		switch currentSection {
-		case kwARGS:
+		case kwARGS.any():
 			stmt.Args = append(stmt.Args, tok)
-		case kwIN, kwIN_NOPARSE, kwIN_DEPS:
+		case kwIN.any(), kwIN_NOPARSE.any(), kwIN_DEPS.any():
 			stmt.INFiles = append(stmt.INFiles, tok)
-		case kwOUT:
+		case kwOUT.any():
 			stmt.OUTFiles = append(stmt.OUTFiles, tok)
-		case kwOUT_NOAUTO:
+		case kwOUT_NOAUTO.any():
 			stmt.OUTNoAutoFiles = append(stmt.OUTNoAutoFiles, tok)
-		case kwSTDOUT, kwSTDOUT_NOAUTO:
+		case kwSTDOUT.any(), kwSTDOUT_NOAUTO.any():
 			if stmt.StdoutFile == nil {
 				stmt.StdoutFile = &tok
-				stmt.StdoutNoAuto = currentSection == kwSTDOUT_NOAUTO
+				stmt.StdoutNoAuto = currentSection == kwSTDOUT_NOAUTO.any()
 			}
-		case kwENV:
+		case kwENV.any():
 			stmt.EnvPairs = append(stmt.EnvPairs, tok)
-		case kwCWD:
+		case kwCWD.any():
 			if stmt.CWD == nil {
 				stmt.CWD = &tok
 			}
-		case kwOUTPUT_INCLUDES, kwINDUCED_DEPS, kwTOOL:
+		case kwOUTPUT_INCLUDES.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
 		}
 
@@ -1444,20 +1444,20 @@ func parseRunPython(args []STR, line int) *RunPythonStmt {
 	return stmt
 }
 
-func parseSplitCodegen(args []STR, line int) *SplitCodegenStmt {
+func parseSplitCodegen(args []ANY, line int) *SplitCodegenStmt {
 	stmt := &SplitCodegenStmt{OutNum: splitCodegenDefaultOutNum, Line: line}
 
-	var positional []STR
+	var positional []ANY
 
 	section := STR(0)
 
 	for _, tok := range args {
 		switch tok {
-		case kwSplitOutNum:
+		case kwSplitOutNum.any():
 			section = kwSplitOutNum
 
 			continue
-		case kwSplitOutputIncludes:
+		case kwSplitOutputIncludes.any():
 			section = kwSplitOutputIncludes
 
 			continue
@@ -1492,7 +1492,7 @@ func parseSplitCodegen(args []STR, line int) *SplitCodegenStmt {
 	return stmt
 }
 
-func parseBaseCodegen(args []STR, line int) *BaseCodegenStmt {
+func parseBaseCodegen(args []ANY, line int) *BaseCodegenStmt {
 	stmt := &BaseCodegenStmt{ToolPath: args[0], Prefix: args[1], Line: line}
 
 	if len(args) > 2 {
@@ -1502,9 +1502,9 @@ func parseBaseCodegen(args []STR, line int) *BaseCodegenStmt {
 	return stmt
 }
 
-func parseStructCodegen(prefix STR, line int) *BaseCodegenStmt {
+func parseStructCodegen(prefix ANY, line int) *BaseCodegenStmt {
 	return &BaseCodegenStmt{
-		ToolPath:       internStr(structCodegenTool),
+		ToolPath:       internStr(structCodegenTool).any(),
 		Prefix:         prefix,
 		OutputIncludes: structCodegenOutputIncludes,
 		Peerdirs:       structCodegenPeerdirs,
@@ -1512,11 +1512,11 @@ func parseStructCodegen(prefix STR, line int) *BaseCodegenStmt {
 	}
 }
 
-func parseResource(args []STR, nameTok Token) *ResourceStmt {
+func parseResource(args []ANY, nameTok Token) *ResourceStmt {
 	rest := args
 
 	for i := 0; i < 2 && len(rest) > 0; i++ {
-		if rest[0] == kwDONT_PARSE || rest[0] == kwDONT_COMPRESS {
+		if rest[0] == kwDONT_PARSE.any() || rest[0] == kwDONT_COMPRESS.any() {
 			rest = rest[1:]
 
 			continue
@@ -1542,25 +1542,25 @@ func unescapeFlag(s string) string {
 	return strings.ReplaceAll(s, `\"`, `"`)
 }
 
-func splitFlagsByGlobal(args []STR) (globalFlags, ownFlags []STR) {
+func splitFlagsByGlobal(args []ANY) (globalFlags, ownFlags []ANY) {
 	for i := 0; i < len(args); i++ {
-		if args[i] == kwGLOBAL {
+		if args[i] == kwGLOBAL.any() {
 			i++
 
 			if i < len(args) {
-				globalFlags = append(globalFlags, internStr(unescapeFlag(args[i].string())))
+				globalFlags = append(globalFlags, internStr(unescapeFlag(args[i].string())).any())
 			}
 		} else {
-			ownFlags = append(ownFlags, internStr(unescapeFlag(args[i].string())))
+			ownFlags = append(ownFlags, internStr(unescapeFlag(args[i].string())).any())
 		}
 	}
 
 	return globalFlags, ownFlags
 }
 
-func splitAddInclPaths(args []STR) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths []STR) {
+func splitAddInclPaths(args []ANY) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths []ANY) {
 	for i := 0; i < len(args); i++ {
-		if args[i] == kwONE_LEVEL {
+		if args[i] == kwONE_LEVEL.any() {
 			i++
 
 			if i < len(args) {
@@ -1573,7 +1573,7 @@ func splitAddInclPaths(args []STR) (globalPaths, oneLevelPaths, ownPaths, cython
 			continue
 		}
 
-		if args[i] == kwFOR {
+		if args[i] == kwFOR.any() {
 			if i+2 < len(args) && args[i+1].string() == "cython" {
 				cythonPaths = append(cythonPaths, args[i+2])
 				i += 2
@@ -1593,10 +1593,10 @@ func splitAddInclPaths(args []STR) (globalPaths, oneLevelPaths, ownPaths, cython
 			continue
 		}
 
-		if args[i] == kwGLOBAL {
+		if args[i] == kwGLOBAL.any() {
 			i++
 
-			if i < len(args) && args[i] == kwFOR {
+			if i < len(args) && args[i] == kwFOR.any() {
 				if i+2 < len(args) && args[i+1].string() == "cython" {
 					cythonPaths = append(cythonPaths, args[i+2])
 					i += 2

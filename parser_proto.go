@@ -65,7 +65,7 @@ func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data []byte, a *BumpAlloc
 			return
 		}
 
-		k = addDirective(block, k, IncludeDirective{kind: kind, target: includeTarget(internStr(target))})
+		k = addDirective(block, k, IncludeDirective{kind: kind, target: includeTarget(internStr(target).any())})
 	})
 
 	local := block[:k]
@@ -77,7 +77,7 @@ func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data []byte, a *BumpAlloc
 
 	for _, d := range local {
 		if pbH, ok := p.inducedHeader(d.target.str()); ok {
-			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: includeTarget(pbH)})
+			j = addDirective(hblock, j, IncludeDirective{kind: d.kind, target: includeTarget(pbH.any())})
 		}
 	}
 

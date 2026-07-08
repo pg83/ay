@@ -288,7 +288,7 @@ func extIsProtoGeneratedHeader(p string) bool {
 
 type SrcExtClass uint8
 
-func srcExtClassOf(id STR) SrcExtClass {
+func srcExtClassOf(id ANY) SrcExtClass {
 	if int(id) < len(srcExtClasses) {
 		if c := SrcExtClass(srcExtClasses[id]); c != srcExtUnseen {
 			return c
@@ -315,7 +315,7 @@ func srcExtClassOf(id STR) SrcExtClass {
 	return c
 }
 
-func isCodegenProducingSrcID(id STR) bool {
+func isCodegenProducingSrcID(id ANY) bool {
 	switch srcExtClassOf(id) {
 	case srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex, srcExtFml, srcExtSfdl, srcExtAsp:
 		return true

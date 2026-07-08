@@ -45,7 +45,7 @@ func isProtoLibraryPeer(ctx *GenCtx, peerPath string) bool {
 	return false
 }
 
-func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []STR, injectBuiltins bool) DescPeerSpan {
+func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []ANY, injectBuiltins bool) DescPeerSpan {
 	var span DescPeerSpan
 
 	seen := make(map[VFS]struct{})

@@ -32,7 +32,7 @@ type CodegenRegistry struct {
 	bySplit         *IntMap[*GeneratedFileInfo]
 }
 
-func splitKey(prefix VFS, suffix STR) uint64 {
+func splitKey(prefix VFS, suffix ANY) uint64 {
 	return splitMix64(uint32(prefix), uint32(suffix))
 }
 
@@ -66,7 +66,7 @@ func (r *CodegenRegistry) register(info *GeneratedFileInfo) {
 }
 
 func (r *CodegenRegistry) putSplit(prefix VFS, suffix STR, info *GeneratedFileInfo) {
-	r.bySplit.put(splitKey(prefix, suffix), info)
+	r.bySplit.put(splitKey(prefix, suffix.any()), info)
 	r.splitPrefixSeen.add(uint32(prefix))
 }
 
@@ -86,7 +86,7 @@ func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
 	return info
 }
 
-func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix STR) *GeneratedFileInfo {
+func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix ANY) *GeneratedFileInfo {
 	if !r.splitPrefixSeen.has(uint32(prefix)) {
 		return nil
 	}

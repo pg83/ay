@@ -21,7 +21,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	cfgHParsed = append(cfgHParsed, extras...)
 
 	eachBucketVFS(cfgImports.buckets, func(ti VFS) {
-		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(ti.rel())})
+		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(ti.rel().any())})
 	})
 
 	e.emitCppProtoFamilySource(meta, &ProtoSpec{
@@ -36,7 +36,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 		genRefs:    []NodeRef{protocLDRef, cppStyleguideLDRef, configPluginLDRef},
 		genHParsed: cfgHParsed,
 		genCCExtras: []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel())},
+			{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())},
 		},
 		hLeaves:  []VFS{cfgSource, build(cfgRelPath, ".pb.cc")},
 		ccLeaves: []VFS{cfgSource},

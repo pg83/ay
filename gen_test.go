@@ -2399,7 +2399,7 @@ func TestIsHeaderSource_ExtendedHeaderExtensions(t *testing.T) {
 func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 	inst := ModuleInstance{Path: source("tools/py3cc/slow"), Kind: KindBin, Platform: testTargetP}
 
-	got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin, Args: sTRS("py3cc")})
+	got := programBinaryName(inst, &ModuleStmt{Name: tokPy3ProgramBin, Args: anysOf("py3cc")})
 
 	if got != "py3cc" {
 		t.Fatalf("PY3_PROGRAM_BIN binary name = %q, want py3cc", got)
@@ -2409,7 +2409,7 @@ func TestProgramBinaryName_Py3ProgramBinArgWins(t *testing.T) {
 		t.Fatalf("PY3_PROGRAM_BIN no-arg binary name = %q, want slow (dir-basename fallback)", got)
 	}
 
-	if got := programBinaryName(inst, &ModuleStmt{Name: tokProgram, Args: sTRS("foo")}); got != "foo" {
+	if got := programBinaryName(inst, &ModuleStmt{Name: tokProgram, Args: anysOf("foo")}); got != "foo" {
 		t.Fatalf("PROGRAM(foo) binary name = %q, want foo", got)
 	}
 }

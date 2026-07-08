@@ -92,8 +92,8 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	enRef := ctx.emit.reserve()
 
 	cppParsed := []IncludeDirective{
-		{kind: includeQuoted, target: includeTarget(headerInput.rel())},
-		{kind: includeQuoted, target: includeTarget(strUtilGenericSerializedEnumH)},
+		{kind: includeQuoted, target: includeTarget(headerInput.rel().any())},
+		{kind: includeQuoted, target: includeTarget(strUtilGenericSerializedEnumH.any())},
 	}
 
 	sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
@@ -109,8 +109,8 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	if withHeader {
 		hParsed := []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(headerInput.rel())},
-			{kind: includeQuoted, target: includeTarget(serializedCPPPath.rel())},
+			{kind: includeQuoted, target: includeTarget(headerInput.rel().any())},
+			{kind: includeQuoted, target: includeTarget(serializedCPPPath.rel().any())},
 		}
 
 		sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })

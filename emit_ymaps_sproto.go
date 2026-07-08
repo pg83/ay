@@ -20,7 +20,7 @@ type YmapsSprotoPending struct {
 	protoRelPath string
 }
 
-func (e *EmitContext) emitYmapsSprotoStmt(srcTok STR) {
+func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	outRoot := protoCPPOutRoot(d)
 	sprotocRes := ctx.toolResult(argMapsLibsSprotoSprotoc)

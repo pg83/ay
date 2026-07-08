@@ -13,7 +13,7 @@ func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 	tag := "PY" + "_" + "PROTO"
 
 	err := try(func() {
-		applyUnknownStmt(nil, "mod", UnknownStmt{Name: tokExcludeTags, Args: sTRS(tag)}, d, env)
+		applyUnknownStmt(nil, "mod", UnknownStmt{Name: tokExcludeTags, Args: anysOf(tag)}, d, env)
 	})
 
 	if err != nil {
@@ -46,7 +46,7 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	}
 
 	dc := &ModuleData{}
-	applyUnknownStmt(nil, "contrib/libs/bar", UnknownStmt{Name: internTok("ADDINCLSELF"), Args: sTRS("FOR", "cython")}, dc, env)
+	applyUnknownStmt(nil, "contrib/libs/bar", UnknownStmt{Name: internTok("ADDINCLSELF"), Args: anysOf("FOR", "cython")}, dc, env)
 
 	if len(dc.cythonAddIncl) != 1 || dc.cythonAddIncl[0] != source("contrib/libs/bar") {
 		t.Fatalf("ADDINCLSELF(FOR cython): cythonAddIncl = %v, want [%v]", dc.cythonAddIncl, source("contrib/libs/bar"))
@@ -145,7 +145,7 @@ func TestApplyUnknownStmt_LLVMBCRequiresConfiguredVersion(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 
 	err := try(func() {
-		applyUnknownStmt(nil, "mod", UnknownStmt{Name: tokLlvmBc, Args: sTRS("src.cpp", "generated.cpp")}, &ModuleData{}, env)
+		applyUnknownStmt(nil, "mod", UnknownStmt{Name: tokLlvmBc, Args: anysOf("src.cpp", "generated.cpp")}, &ModuleData{}, env)
 	})
 
 	if err == nil {
@@ -214,7 +214,7 @@ func TestApplyUnknownStmt_LLVMBCAcceptsConfiguredVersion(t *testing.T) {
 			}
 
 			if err := try(func() {
-				applyUnknownStmt(nil, "mod", UnknownStmt{Name: tokLlvmBc, Args: sTRS("src.cpp", "generated.cpp", "NAME", "Bytecode")}, data, env)
+				applyUnknownStmt(nil, "mod", UnknownStmt{Name: tokLlvmBc, Args: anysOf("src.cpp", "generated.cpp", "NAME", "Bytecode")}, data, env)
 			}); err != nil {
 				t.Fatalf("applyUnknownStmt rejected configured LLVM_BC: %v", err)
 			}
@@ -312,7 +312,7 @@ func expandTestEnv(bindings map[string]string) Environment {
 func TestExpandStmtTokens_GateExample(t *testing.T) {
 	env := expandTestEnv(map[string]string{"C": "C", "D": "D"})
 
-	got := expandStmtTokens([]string{"B", "${C}/${D}", "E"}, env)
+	got := expandStmtTokensStrings([]string{"B", "${C}/${D}", "E"}, env)
 	want := []string{"B", "C/D", "E"}
 
 	if !reflect.DeepEqual(got, want) {
@@ -323,7 +323,7 @@ func TestExpandStmtTokens_GateExample(t *testing.T) {
 func TestExpandStmtTokens_MultiWordValueResplits(t *testing.T) {
 	env := expandTestEnv(map[string]string{"C": "x y", "D": "D"})
 
-	got := expandStmtTokens([]string{"B", "${C}/${D}", "E"}, env)
+	got := expandStmtTokensStrings([]string{"B", "${C}/${D}", "E"}, env)
 	want := []string{"B", "x", "y/D", "E"}
 
 	if !reflect.DeepEqual(got, want) {
@@ -334,7 +334,7 @@ func TestExpandStmtTokens_MultiWordValueResplits(t *testing.T) {
 func TestExpandStmtTokens_QuotedLiteralWithoutDollarKeptWhole(t *testing.T) {
 	env := expandTestEnv(nil)
 
-	got := expandStmtTokens([]string{"a b", "c"}, env)
+	got := expandStmtTokensStrings([]string{"a b", "c"}, env)
 	want := []string{"a b", "c"}
 
 	if !reflect.DeepEqual(got, want) {
@@ -345,7 +345,7 @@ func TestExpandStmtTokens_QuotedLiteralWithoutDollarKeptWhole(t *testing.T) {
 func TestExpandStmtTokens_QuotedArgWithDollarResplits(t *testing.T) {
 	env := expandTestEnv(map[string]string{"V": "p q"})
 
-	got := expandStmtTokens([]string{"x ${V} y"}, env)
+	got := expandStmtTokensStrings([]string{"x ${V} y"}, env)
 	want := []string{"x", "p", "q", "y"}
 
 	if !reflect.DeepEqual(got, want) {
@@ -356,7 +356,7 @@ func TestExpandStmtTokens_QuotedArgWithDollarResplits(t *testing.T) {
 func TestExpandStmtTokens_UnresolvedRefStaysLiteral(t *testing.T) {
 	env := expandTestEnv(map[string]string{"C": "C"})
 
-	got := expandStmtTokens([]string{"${UNDEFINED_VAR_42}", "${UNDEFINED_VAR_42}/${C}"}, env)
+	got := expandStmtTokensStrings([]string{"${UNDEFINED_VAR_42}", "${UNDEFINED_VAR_42}/${C}"}, env)
 	want := []string{"${UNDEFINED_VAR_42}", "${UNDEFINED_VAR_42}/C"}
 
 	if !reflect.DeepEqual(got, want) {
@@ -367,7 +367,7 @@ func TestExpandStmtTokens_UnresolvedRefStaysLiteral(t *testing.T) {
 func TestExpandStmtTokens_EmptyResultDropped(t *testing.T) {
 	env := expandTestEnv(map[string]string{"EMPTY": ""})
 
-	got := expandStmtTokens([]string{"a", "${EMPTY}", "b", "x${EMPTY}y"}, env)
+	got := expandStmtTokensStrings([]string{"a", "${EMPTY}", "b", "x${EMPTY}y"}, env)
 	want := []string{"a", "b", "xy"}
 
 	if !reflect.DeepEqual(got, want) {
@@ -494,7 +494,7 @@ func TestExpandConfigVFSPaths_SplitsSetList(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})
 	env.setFromString(internEnv("DIRS"), "contrib/deprecated/bdb/src contrib/deprecated/bdb/src/dbinc")
 
-	got := expandConfigVFSPaths(sTRS("${DIRS}"), env)
+	got := expandConfigVFSPaths(anysOf("${DIRS}"), env)
 	want := []VFS{source("contrib/deprecated/bdb/src"), source("contrib/deprecated/bdb/src/dbinc")}
 
 	if !reflect.DeepEqual(got, want) {

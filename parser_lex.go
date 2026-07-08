@@ -46,7 +46,7 @@ func (LexIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator
 			kind = includeSystem
 		}
 
-		block[k] = IncludeDirective{kind: kind, target: includeTarget(internBytes(inc[1 : len(inc)-1]))}
+		block[k] = IncludeDirective{kind: kind, target: includeTarget(internBytes(inc[1 : len(inc)-1]).any())}
 		k++
 	}
 

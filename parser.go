@@ -29,7 +29,7 @@ var swigImplicitDirectives = func() []IncludeDirective {
 	out := make([]IncludeDirective, 0, len(names))
 
 	for _, n := range names {
-		out = append(out, IncludeDirective{kind: includeSystem, target: includeTarget(internStr(n))})
+		out = append(out, IncludeDirective{kind: includeSystem, target: includeTarget(internStr(n).any())})
 	}
 
 	return out

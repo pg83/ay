@@ -77,7 +77,7 @@ func (e *EmitContext) requireProducedInput(kind, token string, vfs VFS) VFS {
 func (e *EmitContext) srcPositionOuts(tok STR) []VFS {
 	d := e.d
 
-	switch srcExtClassOf(tok) {
+	switch srcExtClassOf(tok.any()) {
 	case srcExtProto:
 		rel := protoSourceRelPath(e.ctx.fs, e.instance, d, tok.string())
 		base := strings.TrimSuffix(rel, ".proto")
@@ -124,7 +124,7 @@ func (e *EmitContext) srcPositionOuts(tok STR) []VFS {
 	return nil
 }
 
-func srcInsCandidate(module string, tok STR) []VFS {
+func srcInsCandidate(module string, tok ANY) []VFS {
 	if v := runInputBuildCandidate(module, tok.string()); v != 0 {
 		return []VFS{v}
 	}
@@ -134,9 +134,9 @@ func srcInsCandidate(module string, tok STR) []VFS {
 
 func (e *EmitContext) srcPositionIns(tok STR) []VFS {
 	module := e.instance.Path.relString()
-	ins := srcInsCandidate(module, tok)
+	ins := srcInsCandidate(module, tok.any())
 
-	switch srcExtClassOf(tok) {
+	switch srcExtClassOf(tok.any()) {
 	case srcExtProto, srcExtEv:
 		rel := protoSourceRelPath(e.ctx.fs, e.instance, e.d, tok.string())
 
@@ -245,7 +245,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		})
 	}
 
-	runOuts := func(outFiles, outNoAuto []STR, stdout *STR) {
+	runOuts := func(outFiles, outNoAuto []ANY, stdout *ANY) {
 		for _, f := range outFiles {
 			backing = append(backing, copyFileOutputVFS(module, f.string()))
 		}
@@ -357,7 +357,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		push(prodBaseCodegen, i, start, len(backing))
 	}
 
-	runIns := func(inFiles []STR) {
+	runIns := func(inFiles []ANY) {
 		for _, f := range inFiles {
 			if v := runInputBuildCandidate(module, f.string()); v != 0 {
 				backing = append(backing, v)
@@ -400,10 +400,10 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 			continue
 		}
 
-		srcs = append(srcs, d.srcMetaOf(pathAny(src)))
+		srcs = append(srcs, d.srcMetaOf(src))
 
 		if srcExtClassOf(src) == srcExtGztProto && d.unit.Tag != unitTagPy3Proto {
-			childMeta := d.srcMetaOf(pathAny(src))
+			childMeta := d.srcMetaOf(src)
 
 			childMeta.Source = internStr(e.gztGenProtoName(src.string())).any()
 			gztChildren = append(gztChildren, childMeta)

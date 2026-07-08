@@ -12,7 +12,7 @@ const (
 
 type DollarMemoState uint8
 
-func strHasDollar(id STR) bool {
+func strHasDollar(id ANY) bool {
 	if cell := DollarMemoState(strDollar.get(uint32(id))); cell != dollarUnseen {
 		return cell == dollarPresent
 	}
