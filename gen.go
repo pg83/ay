@@ -884,12 +884,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		allocatorExplicitPeers = allocatorPeers[d.allocatorName.string()]
 	}
 
-	unitTestPeerCount := 0
-
-	if unitTestPeer != "" {
-		unitTestPeerCount = 1
-	}
-
 	const googleapisPeer = "contrib/libs/googleapis-common-protos"
 
 	instance.Path.rel()
@@ -928,8 +922,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	allPeers := make([]string, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
-	peerKinds := make([]int, 0, len(languageDefaults)+unitTestPeerCount+len(preUserProgDefaults)+len(allocatorExplicitPeers)+len(d.peerdirs)+len(postUserProgDefaults))
+	allPeers := frame.allPeers[:0]
+	peerKinds := frame.peerKinds[:0]
+
+	defer func() {
+		frame.allPeers = allPeers[:0]
+		frame.peerKinds = peerKinds[:0]
+	}()
 
 	for _, p := range languageDefaults {
 		if peerSeen(p) {
@@ -1005,7 +1004,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var peerLDFlagsGlobal []ANY
 	var peerRPathFlagsGlobal []ANY
 
-	peerAddInclGlobal := make([]VFS, 0, 16)
+	peerAddInclGlobal := frame.peerAddInclGlobal[:0]
+
+	defer func() { frame.peerAddInclGlobal = peerAddInclGlobal[:0] }()
 
 	var oneLevelOnlyPaths map[VFS]struct{}
 	var peerCFlagsGlobal []ANY
@@ -1014,7 +1015,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	allPeers, peerKinds = applyDeferredPeerOrder(d.moduleStmt.Name, allPeers, peerKinds, allocatorExplicitPeers)
 
-	resolved := append(make([]resolvedPeer, 0, len(preResolved)+len(allPeers)), preResolved...)
+	resolved := append(frame.resolved[:0], preResolved...)
+
+	defer func() { frame.resolved = resolved[:0] }()
 
 	for i, p := range allPeers {
 		peerPath := filepath.Clean(p)
@@ -1396,15 +1399,19 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	effectiveAddInclGlobal := dedupShared(ctx.vfsSlices, d.addInclGlobal, peerAddInclForProp)
 
-	var ownProtoInclude []VFS
+	ownProtoInclude := frame.ownProtoInclude[:0]
+
+	defer func() { frame.ownProtoInclude = ownProtoInclude[:0] }()
 
 	if d.protoNamespace != nil {
-		ownProtoInclude = []VFS{sourceClean(d.protoNamespace.string())}
+		ownProtoInclude = append(ownProtoInclude, sourceClean(d.protoNamespace.string()))
 	}
 
 	ownProtoInclude = append(ownProtoInclude, d.protoAddInclGlobal...)
 
-	peerProtoInclude := make([]VFS, 0, 4)
+	peerProtoInclude := frame.peerProtoInclude[:0]
+
+	defer func() { frame.peerProtoInclude = peerProtoInclude[:0] }()
 
 	deduper.reset()
 
@@ -1977,7 +1984,13 @@ func (ctx *GenCtx) py3ccHead(py3ccBinary, py3ccSlowBin VFS) []ANY {
 }
 
 type ModuleFrame struct {
-	d ModuleData
+	d                 ModuleData
+	allPeers          []string
+	peerKinds         []int
+	resolved          []resolvedPeer
+	peerAddInclGlobal []VFS
+	ownProtoInclude   []VFS
+	peerProtoInclude  []VFS
 }
 
 func (ctx *GenCtx) pushFrame() *ModuleFrame {
