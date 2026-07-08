@@ -82,6 +82,11 @@ var commands = []Command{
 			".go here). Mutates source in place.",
 	},
 	{
+		path: []string{"dev", "refac", "reset"}, run: refacReset,
+		help: "\u267b\ufe0f Generate a capacity-preserving reset() for the named structs into\n" +
+			"<file>_reset_gen.go (slices [:0], maps cleared, everything else zeroed).",
+	},
+	{
 		path: []string{"dev", "refac", "case"}, run: refacCase,
 		help: "🔠 Flip identifier case via the compiler's error positions to a fixpoint.\n" +
 			"Mutates source in place; run in a worktree.",

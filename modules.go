@@ -650,7 +650,7 @@ func (d *ModuleData) materializeAddIncl() {
 	d.addInclP = nil
 }
 
-func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn)) *ModuleData {
+func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn), d *ModuleData) *ModuleData {
 	fs := pm.fs
 	modulePath := instance.Path.relString()
 	kind := instance.Kind
@@ -659,12 +659,12 @@ func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstanc
 	env.setVFS(envCURDIR, source(modulePath))
 	env.setVFS(envBINDIR, build(modulePath))
 
-	d := &ModuleData{
-		pythonSQLite3:           true,
-		useAsmlib:               true,
-		bisonGenExt:             strCpp,
-		needGoogleProtoPeerdirs: true,
-	}
+	d.reset()
+
+	d.pythonSQLite3 = true
+	d.useAsmlib = true
+	d.bisonGenExt = strCpp
+	d.needGoogleProtoPeerdirs = true
 
 	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d)
 
