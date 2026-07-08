@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func expandResourceFiles(out []ResourceEntry, args []string) []ResourceEntry {
+func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string) []ResourceEntry {
 	prefix := ""
 	prefixToStrip := ""
 	dest := ""
@@ -52,18 +52,15 @@ func expandResourceFiles(out []ResourceEntry, args []string) []ResourceEntry {
 				keyTail = keyTail[len(prefixToStrip):]
 			}
 
-			var computedKey string
+			var fileKey string
 
 			if dest != "" {
-				computedKey = dest
+				fileKey = d.resStr2("resfs/file/", dest)
 			} else {
-				computedKey = prefix + keyTail
+				fileKey = d.resStr4("resfs/file/", prefix, keyTail, "")
 			}
 
-			fileKey := "resfs/file/" + computedKey
-			srcKv := "resfs/src/" + fileKey + "=${rootrel;context=TEXT;input=TEXT:\"" + path + "\"}"
-
-			out = append(out, ResourceEntry{Path: "-", Key: srcKv})
+			out = append(out, ResourceEntry{Path: "-", Key: fileKey, SrcPath: path})
 			out = append(out, ResourceEntry{Path: path, Key: fileKey})
 		}
 	}
@@ -71,7 +68,7 @@ func expandResourceFiles(out []ResourceEntry, args []string) []ResourceEntry {
 	return out
 }
 
-func expandAllResourceFiles(out []ResourceEntry, fs FS, modulePath string, env Environment, stmt *AllResourceFilesStmt) []ResourceEntry {
+func expandAllResourceFiles(d *ModuleData, out []ResourceEntry, fs FS, modulePath string, env Environment, stmt *AllResourceFilesStmt) []ResourceEntry {
 	prefix := ""
 	strip := ""
 
@@ -117,7 +114,7 @@ func expandAllResourceFiles(out []ResourceEntry, fs FS, modulePath string, env E
 		rfArgs = append(rfArgs, "PREFIX", prefix)
 	}
 
-	rfArgs = append(rfArgs, "STRIP", "${ARCADIA_ROOT}/"+modulePath+"/"+strip)
+	rfArgs = append(rfArgs, "STRIP", d.resStr4("${ARCADIA_ROOT}/", modulePath, "/", strip))
 
 	deduper.reset()
 
@@ -130,12 +127,12 @@ func expandAllResourceFiles(out []ResourceEntry, fs FS, modulePath string, env E
 
 		for _, match := range globMatch(fs, rel+"/*"+suffix) {
 			if deduper.add(internStr(match).strID()) {
-				rfArgs = append(rfArgs, "${ARCADIA_ROOT}/"+match)
+				rfArgs = append(rfArgs, d.resStr2("${ARCADIA_ROOT}/", match))
 			}
 		}
 	}
 
-	return expandResourceFiles(out, rfArgs)
+	return expandResourceFiles(d, out, rfArgs)
 }
 
 func allResourceDir(modulePath, dir string) (rel string, ok bool) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/md5"
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
@@ -14,6 +15,7 @@ var (
 	objcopyScriptChunk          = []VFS{objcopyScriptVFS}
 	rawAuxKV                    = KV{P: pkPR, PC: pcYellow, ShowOut: true}
 	pyObjcopyKV                 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
+	resKvMacroPrefix            = []byte("${ARCADIA")
 )
 
 const (
@@ -615,7 +617,10 @@ func (e *EmitContext) emitKvOnlyResource(tag STR, kvsHash []string, kvsCmd []STR
 
 func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (refs []NodeRef, outs []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	batch := make([]ResourceItem, 0, len(entries))
+	na := ctx.na
+	batch := e.resItems[:0]
+
+	defer func() { e.resItems = batch[:0] }()
 
 	flushBatch := func() {
 		if len(batch) == 0 {
@@ -631,15 +636,48 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 	for _, entry := range entries {
 		if entry.Path == "-" {
-			it := ResourceItem{Path: "-", Key: entry.Key}
+			it := ResourceItem{Path: "-"}
 
-			if inner, ok := rootrelInputPath(entry.Key); ok {
-				r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
+			if entry.SrcPath != "" {
+				hashStart := len(e.resStrBuf)
 
-				it.Cmd = internStr(renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.relString())))
-				it.Aux = []VFS{r.Input, r.ProducerMainOut}
+				e.resStrBuf = append(e.resStrBuf, "resfs/src/"...)
+				e.resStrBuf = append(e.resStrBuf, entry.Key...)
+				e.resStrBuf = append(e.resStrBuf, "=${rootrel;context=TEXT;input=TEXT:\""...)
+				e.resStrBuf = append(e.resStrBuf, entry.SrcPath...)
+				e.resStrBuf = append(e.resStrBuf, "\"}"...)
+
+				it.Key = bytesString(e.resStrBuf[hashStart:])
+
+				r := e.resolveResourceInput(entry.SrcPath, copyFileInputVFS(ctx.fs, instance.Path, entry.SrcPath))
+				cmdStart := len(e.resStrBuf)
+
+				e.resStrBuf = append(e.resStrBuf, "resfs/src/"...)
+				e.resStrBuf = append(e.resStrBuf, entry.Key...)
+				e.resStrBuf = append(e.resStrBuf, '=')
+				e.resStrBuf = append(e.resStrBuf, r.Input.relString()...)
+
+				cmdView := e.resStrBuf[cmdStart:]
+
+				if bytes.Contains(cmdView, resKvMacroPrefix) {
+					it.Cmd = internStr(renderResourceKvCmd(string(cmdView)))
+				} else {
+					it.Cmd = internBytes(cmdView)
+				}
+
+				e.resStrBuf = e.resStrBuf[:cmdStart]
+				it.Aux = na.vfsList(r.Input, r.ProducerMainOut)
 			} else {
-				it.Cmd = internStr(renderResourceKvCmd(entry.Key))
+				it.Key = entry.Key
+
+				if inner, ok := rootrelInputPath(entry.Key); ok {
+					r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
+
+					it.Cmd = internStr(renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.relString())))
+					it.Aux = na.vfsList(r.Input, r.ProducerMainOut)
+				} else {
+					it.Cmd = internStr(renderResourceKvCmd(entry.Key))
+				}
 			}
 
 			batch = append(batch, it)
@@ -649,21 +687,27 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 			if r.ProducerRef != 0 {
 				cv := walkClosure(e.scanner, r.Input, d.cc.ScanCfg)
+				aux := na.vfs.alloc(cv.len() + len(r.SourceInputs) + 1)[:0]
 
 				eachBucketVFS(cv.buckets, func(v VFS) {
 					if v.isBuild() {
-						it.Aux = append(it.Aux, v)
+						aux = append(aux, v)
 					}
 				})
 
 				for _, v := range r.SourceInputs {
 					if v.isSource() && objcopySourceLeafKept(v.relString()) {
-						it.Aux = append(it.Aux, v)
+						aux = append(aux, v)
 					}
 				}
+
+				aux = append(aux, r.ProducerMainOut)
+				na.vfs.commit(len(aux))
+				it.Aux = aux[:len(aux):len(aux)]
+			} else {
+				it.Aux = na.vfsList(r.ProducerMainOut)
 			}
 
-			it.Aux = append(it.Aux, r.ProducerMainOut)
 			batch = append(batch, it)
 		}
 
