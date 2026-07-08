@@ -1,7 +1,5 @@
 package main
 
-import "slices"
-
 type Darts struct {
 	base  []int32
 	check []int32
@@ -9,65 +7,62 @@ type Darts struct {
 }
 
 type DartsNode struct {
-	children map[byte]*DartsNode
+	children [256]int32
+	nChild   int
 	key      int32
 }
 
 func newDarts(keys []string) *Darts {
-	root := &DartsNode{}
+	nodes := make([]DartsNode, 1, 64)
 
 	for i, k := range keys {
-		n := root
+		n := int32(0)
 
 		for j := 0; j < len(k); j++ {
 			b := k[j]
+			c := nodes[n].children[b]
 
-			if n.children == nil {
-				n.children = make(map[byte]*DartsNode)
-			}
-
-			c := n.children[b]
-
-			if c == nil {
-				c = &DartsNode{}
-				n.children[b] = c
+			if c == 0 {
+				nodes = append(nodes, DartsNode{})
+				c = int32(len(nodes) - 1)
+				nodes[n].children[b] = c
+				nodes[n].nChild++
 			}
 
 			n = c
 		}
 
-		n.key = int32(i) + 1
+		nodes[n].key = int32(i) + 1
 	}
 
 	d := &Darts{base: []int32{0}, check: []int32{0}, value: []int32{0}}
 
-	d.value[0] = root.key
+	d.value[0] = nodes[0].key
 
 	type item struct {
-		node  *DartsNode
+		node  int32
 		state int32
 	}
 
-	queue := []item{{root, 0}}
+	queue := []item{{0, 0}}
 
-	for len(queue) > 0 {
-		it := queue[0]
+	var codesBuf [256]int32
 
-		queue = queue[1:]
+	for qi := 0; qi < len(queue); qi++ {
+		it := queue[qi]
+		n := &nodes[it.node]
 
-		n := it.node
-
-		if len(n.children) == 0 {
+		if n.nChild == 0 {
 			continue
 		}
 
-		codes := make([]int32, 0, len(n.children))
+		codes := codesBuf[:0]
 
-		for b := range n.children {
-			codes = append(codes, int32(b)+1)
+		for b := 0; b < 256; b++ {
+			if n.children[b] != 0 {
+				codes = append(codes, int32(b)+1)
+			}
 		}
-
-		slices.Sort(codes)
 
 		base := d.findBase(codes)
 
@@ -80,7 +75,7 @@ func newDarts(keys []string) *Darts {
 
 			child := n.children[byte(c-1)]
 
-			d.value[t] = child.key
+			d.value[t] = nodes[child].key
 			queue = append(queue, item{child, t})
 		}
 	}

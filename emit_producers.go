@@ -146,7 +146,7 @@ func (e *EmitContext) srcPositionIns(tok STR) []VFS {
 
 		outputRoot := protoCPPOutRoot(e.d)
 
-		for _, name := range protoDirectImportNames(e.ctx.parsers, rel) {
+		protoEachDirectImportName(e.ctx.parsers, rel, func(name string) {
 			clean := name
 
 			if name == "" || !pathIsClean(name) {
@@ -158,7 +158,7 @@ func (e *EmitContext) srcPositionIns(tok STR) []VFS {
 			if outputRoot != "" {
 				ins = append(ins, build(protoOutputRel(outputRoot, clean)))
 			}
-		}
+		})
 	}
 
 	return ins

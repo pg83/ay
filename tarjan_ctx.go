@@ -9,10 +9,18 @@ type TarjanScratch struct {
 }
 
 type TarjanCtx struct {
-	scratch TarjanScratch
-	stack   []VFS
-	next    int32
-	closure IdSet
+	scratch  TarjanScratch
+	stack    []VFS
+	next     int32
+	closure  IdSet
+	g        ClosureSink
+	hits     uint64
+	visitV   VFS
+	emitK    int
+	emitBuf  []VFS
+	childFn  func(VFS)
+	spliceFn func(VFS)
+	emitFn   func([]VFS) int
 }
 
 func (t *TarjanScratch) reset(size uint32) {
@@ -99,84 +107,119 @@ func (tc *TarjanCtx) runSCC(g ClosureSink, root VFS) uint64 {
 	tc.scratch.reset(vfsBound())
 	tc.stack = tc.stack[:0]
 	tc.next = 0
+	tc.g = g
+	tc.hits = 0
 
-	return tc.strongconnect(g, root)
-}
-
-func (tc *TarjanCtx) strongconnect(g ClosureSink, v VFS) (hits uint64) {
-	tc.next++
-	tc.scratch.discover(v, tc.next)
-	tc.stack = append(tc.stack, v)
-
-	g.forEachChild(v, func(w VFS) {
-		if _, cached := g.cachedWindow(w); cached {
-			hits++
-
-			return
-		}
-
-		if !tc.scratch.visited(w) {
-			hits += tc.strongconnect(g, w)
-
-			if tc.scratch.lowOf(w) < tc.scratch.lowOf(v) {
-				tc.scratch.setLow(v, tc.scratch.lowOf(w))
-			}
-		} else if tc.scratch.onStackOf(w) {
-			if tc.scratch.indexOf(w) < tc.scratch.lowOf(v) {
-				tc.scratch.setLow(v, tc.scratch.indexOf(w))
-			}
-		}
-	})
-
-	if tc.scratch.lowOf(v) != tc.scratch.indexOf(v) {
-		return hits
+	if tc.childFn == nil {
+		tc.childFn = tc.visitChild
+		tc.spliceFn = tc.spliceChild
+		tc.emitFn = tc.emitMembers
 	}
 
+	tc.strongconnect(root)
+	tc.g = nil
+
+	return tc.hits
+}
+
+func (tc *TarjanCtx) visitChild(w VFS) {
+	if _, cached := tc.g.cachedWindow(w); cached {
+		tc.hits++
+
+		return
+	}
+
+	v := tc.visitV
+
+	if !tc.scratch.visited(w) {
+		tc.strongconnect(w)
+
+		tc.visitV = v
+
+		if tc.scratch.lowOf(w) < tc.scratch.lowOf(v) {
+			tc.scratch.setLow(v, tc.scratch.lowOf(w))
+		}
+	} else if tc.scratch.onStackOf(w) {
+		if tc.scratch.indexOf(w) < tc.scratch.lowOf(v) {
+			tc.scratch.setLow(v, tc.scratch.indexOf(w))
+		}
+	}
+}
+
+func (tc *TarjanCtx) spliceChild(ch VFS) {
+	if tc.scratch.onStackHas(ch) {
+		return
+	}
+
+	if tc.g.windowSubsumed(ch) {
+		return
+	}
+
+	cl, _ := tc.g.cachedWindow(ch)
+
+	tc.emitK = cl.spliceInto(&tc.closure, tc.emitBuf, tc.emitK)
+}
+
+func (tc *TarjanCtx) emitMembers(block []VFS) int {
+	members := tc.emitMembersSlice()
+	k := 0
+
+	for _, u := range members {
+		if !tc.closure.has(u) {
+			tc.closure.add(u)
+			block[k] = u
+			k++
+		}
+	}
+
+	tc.emitBuf = block
+	tc.emitK = k
+
+	for _, u := range members {
+		tc.g.forEachChild(u, tc.spliceFn)
+	}
+
+	tc.emitBuf = nil
+
+	return tc.emitK
+}
+
+func (tc *TarjanCtx) emitMembersSlice() []VFS {
+	return tc.stack[tc.sccStart():]
+}
+
+func (tc *TarjanCtx) sccStart() int {
+	v := tc.visitV
 	sccStart := len(tc.stack) - 1
 
 	for tc.stack[sccStart] != v {
 		sccStart--
 	}
 
+	return sccStart
+}
+
+func (tc *TarjanCtx) strongconnect(v VFS) {
+	tc.next++
+	tc.scratch.discover(v, tc.next)
+	tc.stack = append(tc.stack, v)
+	tc.visitV = v
+
+	tc.g.forEachChild(v, tc.childFn)
+
+	if tc.scratch.lowOf(v) != tc.scratch.indexOf(v) {
+		return
+	}
+
+	sccStart := tc.sccStart()
 	members := tc.stack[sccStart:]
 
 	tc.closure.reset(vfsBound())
-
-	g.emitClosure(members, func(block []VFS) int {
-		k := 0
-
-		for _, u := range members {
-			if !tc.closure.has(u) {
-				tc.closure.add(u)
-				block[k] = u
-				k++
-			}
-		}
-
-		for _, u := range members {
-			g.forEachChild(u, func(ch VFS) {
-				if tc.scratch.onStackHas(ch) {
-					return
-				}
-
-				if g.windowSubsumed(ch) {
-					return
-				}
-
-				cl, _ := g.cachedWindow(ch)
-
-				k = cl.spliceInto(&tc.closure, block, k)
-			})
-		}
-
-		return k
-	})
+	tc.g.emitClosure(members, tc.emitFn)
 
 	for _, u := range members {
 		tc.scratch.setOnStack(u, false)
 	}
 
 	tc.stack = tc.stack[:sccStart]
-
-	return hits
 }

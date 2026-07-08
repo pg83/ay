@@ -106,6 +106,20 @@ func dedupClosure(na *NodeArenas, extra []VFS, groups ...[][]VFS) []VFS {
 	return out[:len(out):len(out)]
 }
 
+func dedupInPlace[T IdKey](xs []T) []T {
+	deduper.reset()
+
+	out := xs[:0]
+
+	for _, x := range xs {
+		if deduper.add(x.strID()) {
+			out = append(out, x)
+		}
+	}
+
+	return out
+}
+
 func dedup[T IdKey](lists ...[]T) []T {
 	total := 0
 

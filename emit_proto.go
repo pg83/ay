@@ -148,20 +148,10 @@ func protoWalkInputs(pm *IncludeParserManager, peerProtoAddIncl []VFS, ownerModu
 	return newScanContext(pm, own, nil, includeScannerBasePaths(), ownerModuleDir)
 }
 
-func protoDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
-	direct := pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal)
-
-	if len(direct) == 0 {
-		return nil
+func protoEachDirectImportName(pm *IncludeParserManager, srcRel string, fn func(string)) {
+	for _, d := range pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal) {
+		fn(d.target.string())
 	}
-
-	out := make([]string, 0, len(direct))
-
-	for _, d := range direct {
-		out = append(out, d.target.string())
-	}
-
-	return out
 }
 
 func protoOutputRel(outputRoot, rel string) string {

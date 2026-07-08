@@ -137,15 +137,16 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 	return build(module, "/", srcRel, ".yapyc3")
 }
 
-func (e *EmitContext) pyResEntriesFor(ps PySrc) []PyGenResEntry {
+func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenResEntry {
 	d := e.d
 	module := e.instance.Path.relString()
 	key := ps.Module.string()
 
 	switch ps.Group {
 	case pyGroupGenAux:
-		info := e.codegen.mustInfo(ps.Path, "pyResEntriesFor")
-		out := []PyGenResEntry{{token: ps.Token.string(), key: key, path: ps.Path, inputs: info.SourceInputs}}
+		info := e.codegen.mustInfo(ps.Path, "appendPyResEntries")
+
+		out = append(out, PyGenResEntry{token: ps.Token.string(), key: key, path: ps.Path, inputs: info.SourceInputs})
 
 		if !d.pyBuildNoPYC {
 			yapycOut := e.pyYapycOutFor(ps)
@@ -177,8 +178,6 @@ func (e *EmitContext) pyResEntriesFor(ps PySrc) []PyGenResEntry {
 	if copyStaged {
 		srcEdge = genInfo.SourcePath
 	}
-
-	out := make([]PyGenResEntry, 0, 2)
 
 	if !d.pyBuildNoPY {
 		var pyExtra []VFS
@@ -343,7 +342,7 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 				continue
 			}
 
-			entries = append(entries, e.pyResEntriesFor(ps)...)
+			entries = e.appendPyResEntries(entries, ps)
 		}
 
 		if len(entries) > 0 {
@@ -547,7 +546,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 			continue
 		}
 
-		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: pyGenResourceItems(e.pyResEntriesFor(ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
+		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: pyGenResourceItems(e.appendPyResEntries(nil, ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
 			return e.rawAuxInputClosure(aux, dedupSourceVFS(e.ctx.na, inputs, nil), ref)
 		}})
 
