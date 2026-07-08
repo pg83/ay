@@ -42,7 +42,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta) {
 		nvccFlagsHead,
 		na.anyList(internV("--keep-dir=$(B)/", instance.Path.relString()).any()),
 		nvccFlagsTail,
-		in.CudaNvccFlags,
+		na.anyChunkAny(in.CudaNvccFlags),
 		na.anyList(argDashC.any(), inVFS.any(), argDashO.any(), outVFS.any()),
 	}
 
