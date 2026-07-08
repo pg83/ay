@@ -173,6 +173,7 @@ type ModuleEmitResult struct {
 	InducedDeps                     ParsedIncludeSet
 	ModuleStmtName                  TOK
 	testSuiteInfo                   *TestSuiteInfo
+	persisted                       bool
 	DescClosure                     []DescProtoPeer
 	ResourceGlobalClosure           []ResourceDecl
 	GoSrcClosure                    []VFS
@@ -732,6 +733,14 @@ type resolvedPeer struct {
 }
 
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
+	r := genModuleImpl(ctx, instance)
+
+	persistResult(r)
+
+	return r
+}
+
+func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if existing := ctx.memo.get(ctx.instanceKey(instance)); existing != nil {
 		return *existing
 	}
