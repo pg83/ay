@@ -156,7 +156,7 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 
 		if c.Stdout != 0 {
 			buf = append(buf, `,"stdout":`...)
-			buf = appendString(buf, c.Stdout.string())
+			buf = appendVFS(buf, c.Stdout)
 		}
 
 		buf = append(buf, '}')

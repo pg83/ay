@@ -42,7 +42,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 		tmpVFS.any(),
 		strA.any(),
 		strS.any(),
-	)), Env: toolEnv, Stdout: incVFS.fullSTR()}
+	)), Env: toolEnv, Stdout: incVFS}
 
 	node := Node{
 		Platform:       instance.Platform,

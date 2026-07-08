@@ -15,8 +15,6 @@ type VFSRoot uint8
 
 type VFS uint32
 
-var vfsFull DenseMap[VFS, STR]
-
 func vfsBound() uint32 {
 	return internTable.count << 1
 }
@@ -101,27 +99,6 @@ func cwdVFS(s string) VFS {
 	throwFmt("cwdVFS: unexpected cwd %q", s)
 
 	return 0
-}
-
-func (v VFS) fullSTR() STR {
-	if s, ok := vfsFull.get(v); ok {
-		return s
-	}
-
-	rel := v.relString()
-	s := internPrefixed(v.prefix(), rel)
-
-	if rel == "" {
-		if v.isBuild() {
-			s = strB
-		} else {
-			s = strS
-		}
-	}
-
-	vfsFull.put(v, s)
-
-	return s
 }
 
 func (v VFS) string() string {

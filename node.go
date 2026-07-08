@@ -32,7 +32,7 @@ type Cmd struct {
 	CmdArgs ArgChunks `json:"cmd_args"`
 	Cwd     VFS       `json:"cwd,omitempty"`
 	Env     EnvVars   `json:"env,omitempty"`
-	Stdout  STR       `json:"stdout,omitempty"`
+	Stdout  VFS       `json:"stdout,omitempty"`
 }
 
 type Node struct {

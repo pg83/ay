@@ -3055,8 +3055,8 @@ func buildIfEnv(instance ModuleInstance) Environment {
 	env := instance.Platform.ifEnv.clone()
 
 	if instance.Path != 0 {
-		env.setStringID(envCURDIR, instance.Path.fullSTR())
-		env.setStringID(envBINDIR, instance.Path.rel().build().fullSTR())
+		env.setStringID(envCURDIR, internV(instance.Path.prefix(), instance.Path.relString()))
+		env.setStringID(envBINDIR, internV("$(B)/", instance.Path.relString()))
 		env.setStringID(envMODDIR, instance.Path.rel())
 	}
 
