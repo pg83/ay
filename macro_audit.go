@@ -87,7 +87,7 @@ func recordHandledMacro(name TOK, args []ANY) {
 
 	defer macroAudit.mu.Unlock()
 
-	recordServiceArgsLocked(name.string(), strStrings(args))
+	recordServiceArgsLocked(name.string(), anyStrs(args))
 }
 
 func recordServiceArgsLocked(macroName string, args []string) {

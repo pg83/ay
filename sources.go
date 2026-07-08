@@ -88,7 +88,7 @@ func (e *EmitContext) generatedModuleSourceVFS(srcRel string) *VFS {
 	buildVFS := id.build()
 
 	if reg.lookup(buildVFS) != nil {
-		return vfsPtr(buildVFS)
+		return ptr(buildVFS)
 	}
 
 	return nil

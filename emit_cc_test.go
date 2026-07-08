@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -435,7 +436,7 @@ func TestEmitCC_OutputPath_ExplicitDotSrc(t *testing.T) {
 
 func TestEmitCC_OutputPath_YqlUdfSuffix(t *testing.T) {
 	e := newStreamingEmitter(nil)
-	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{ObjectSuffixStem: stringPtr("udfs")}}
+	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{ObjectSuffixStem: ptr("udfs")}}
 
 	_, outPath, _ := composeCCNode(targetInstance("udfmod"), source("udfmod/lib.cpp"), withCCBlocks(targetInstance("udfmod").Platform, in), testHostP, e)
 
@@ -448,7 +449,7 @@ func TestEmitCC_OutputPath_YqlUdfSuffix(t *testing.T) {
 
 func TestEmitCC_OutputPath_YqlUdfSuffixPIC(t *testing.T) {
 	e := newStreamingEmitter(nil)
-	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{ObjectSuffixStem: stringPtr("udfs")}}
+	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{ObjectSuffixStem: ptr("udfs")}}
 	instance := ModuleInstance{
 		Path:     source("udfmod"),
 		Kind:     KindLib,
@@ -576,7 +577,7 @@ END()
 		t.Fatalf("bridge CC node not found")
 	}
 
-	if !flagsContain(args, "-D_foolib_=1") {
+	if !slices.Contains(args, "-D_foolib_=1") {
 		t.Fatalf("bridge CC args missing GLOBAL CFLAG from explicit peer: %v", args)
 	}
 }

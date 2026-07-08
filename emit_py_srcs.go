@@ -453,7 +453,7 @@ func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 		return nil, nil
 	}
 
-	value := strings.Join(strStrings(d.noCheckImports), " ")
+	value := strings.Join(anyStrs(d.noCheckImports), " ")
 	sum := md5.Sum([]byte(value))
 	b32 := strings.ToLower(enc32.StdEncoding.EncodeToString(sum[:]))
 

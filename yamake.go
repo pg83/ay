@@ -1005,7 +1005,7 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 		value := ""
 
 		if len(args) > 1 {
-			value = strings.Join(strStrings(args[1:]), " ")
+			value = strings.Join(anyStrs(args[1:]), " ")
 		}
 
 		return &SetStmt{Name: args[0].string(), NameEnv: internEnv(args[0].string()), Value: value, Line: line}

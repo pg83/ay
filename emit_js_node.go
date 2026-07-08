@@ -60,7 +60,7 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 
 func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	jsSources := strStrings(js.Sources)
+	jsSources := anyStrs(js.Sources)
 	joinClosure := e.joinSrcsIncludeClosure(instance.Platform, jsSources, d.cc.ScanCfg)
 	ccClosure := joinClosure
 

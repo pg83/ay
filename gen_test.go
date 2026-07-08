@@ -1841,7 +1841,7 @@ END()
 		t.Fatalf("moduleStmt = %#v, want YQL_UDF_CONTRIB", d.moduleStmt)
 	}
 
-	if !equalStrings(strStrings(d.moduleStmt.Args), []string{"my_udf"}) {
+	if !equalStrings(anyStrs(d.moduleStmt.Args), []string{"my_udf"}) {
 		t.Fatalf("module args = %v, want [my_udf]", d.moduleStmt.Args)
 	}
 
@@ -1849,11 +1849,11 @@ END()
 		t.Fatalf("srcs = %v, want empty (SRCS must alias to GLOBAL_SRCS)", d.srcs)
 	}
 
-	if !equalStrings(strStrings(d.globalSrcs), []string{"lib.cpp", "nested/extra.cpp"}) {
+	if !equalStrings(anyStrs(d.globalSrcs), []string{"lib.cpp", "nested/extra.cpp"}) {
 		t.Fatalf("globalSrcs = %v, want [lib.cpp nested/extra.cpp]", d.globalSrcs)
 	}
 
-	if !equalStrings(strStrings(d.peerdirs), []string{
+	if !equalStrings(anyStrs(d.peerdirs), []string{
 		"yql/essentials/public/udf",
 		"yql/essentials/public/udf/support",
 		"custom/peer",
@@ -1915,7 +1915,7 @@ END()
 		t.Fatalf("plugin.ExtraOutFlag = %q, want lite=true", plugin.ExtraOutFlag)
 	}
 
-	if !containsString(strStrings(d.peerdirs), "ydb/public/api/protos/annotations") {
+	if !containsString(anyStrs(d.peerdirs), "ydb/public/api/protos/annotations") {
 		t.Fatalf("peerdirs = %v, want ydb/public/api/protos/annotations", d.peerdirs)
 	}
 }
@@ -1932,12 +1932,12 @@ END()
 	mf := throw2(parseFile(fs, "proto/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("proto"), Kind: KindLib}, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
-	if !equalStrings(strStrings(d.protoCmdPeers), []string{"library/cpp/eventlog"}) {
-		t.Fatalf("protoCmdPeers = %v, want [library/cpp/eventlog]", strStrings(d.protoCmdPeers))
+	if !equalStrings(anyStrs(d.protoCmdPeers), []string{"library/cpp/eventlog"}) {
+		t.Fatalf("protoCmdPeers = %v, want [library/cpp/eventlog]", anyStrs(d.protoCmdPeers))
 	}
 
 	if len(d.peerdirs) == 0 || d.peerdirs[0].string() != "some/declared/peer" {
-		t.Fatalf("d.peerdirs[0] = %v, want some/declared/peer first (link order intact): %v", d.peerdirs, strStrings(d.peerdirs))
+		t.Fatalf("d.peerdirs[0] = %v, want some/declared/peer first (link order intact): %v", d.peerdirs, anyStrs(d.peerdirs))
 	}
 }
 
@@ -1968,7 +1968,7 @@ END()
 	mf := throw2(parseFile(fs, "proto/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("proto"), Kind: KindLib}, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("proto"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
-	if !containsString(strStrings(d.peerdirs), "contrib/libs/googleapis-common-protos") {
+	if !containsString(anyStrs(d.peerdirs), "contrib/libs/googleapis-common-protos") {
 		t.Fatalf("peerdirs = %v, want contrib/libs/googleapis-common-protos", d.peerdirs)
 	}
 }
@@ -1991,7 +1991,7 @@ END()
 		t.Fatalf("bin pyMain = %#v, want pytool.__main__:main", got)
 	}
 
-	if !equalStrings(strStrings(bin.pySrcs), []string{"__main__.py"}) {
+	if !equalStrings(anyStrs(bin.pySrcs), []string{"__main__.py"}) {
 		t.Fatalf("bin pySrcs = %v, want [__main__.py]", bin.pySrcs)
 	}
 
@@ -2001,7 +2001,7 @@ END()
 		t.Fatalf("lib pyMain = %#v, want nil", lib.pyMain)
 	}
 
-	if !equalStrings(strStrings(lib.pySrcs), []string{"__main__.py"}) {
+	if !equalStrings(anyStrs(lib.pySrcs), []string{"__main__.py"}) {
 		t.Fatalf("lib pySrcs = %v, want [__main__.py]", lib.pySrcs)
 	}
 }
@@ -2024,7 +2024,7 @@ END()
 	mf := throw2(parseFile(fs, "copymod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("copymod"), Kind: KindLib}, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("copymod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
-	if !equalStrings(strStrings(d.srcs), []string{"a.cpp", "b.h"}) {
+	if !equalStrings(anyStrs(d.srcs), []string{"a.cpp", "b.h"}) {
 		t.Fatalf("srcs = %v, want [a.cpp b.h]", d.srcs)
 	}
 

@@ -67,7 +67,7 @@ END()
 	d := collectTestModule(newMemFS(files), "mod")
 
 	if !peerdirsContain(d, "library/cpp/domscheme") {
-		t.Fatalf("module peerdirs = %v, want library/cpp/domscheme", strStrings(d.peerdirs))
+		t.Fatalf("module peerdirs = %v, want library/cpp/domscheme", anyStrs(d.peerdirs))
 	}
 }
 

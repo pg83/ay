@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -919,7 +920,7 @@ func (s *IncludeScanner) sourceParsedBuckets(vfsPath VFS) ParsedIncludeSet {
 func assertHasVFS(t *testing.T, closure []VFS, want VFS) {
 	t.Helper()
 
-	if !containsVFS(closure, want) {
+	if !slices.Contains(closure, want) {
 		t.Fatalf("closure missing %v: %v", want, closure)
 	}
 }
@@ -927,7 +928,7 @@ func assertHasVFS(t *testing.T, closure []VFS, want VFS) {
 func assertLacksVFS(t *testing.T, closure []VFS, want VFS) {
 	t.Helper()
 
-	if containsVFS(closure, want) {
+	if slices.Contains(closure, want) {
 		t.Fatalf("closure unexpectedly contains %v: %v", want, closure)
 	}
 }

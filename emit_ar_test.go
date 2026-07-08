@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -1033,7 +1034,7 @@ END()
 	cc := mustNodeByOutput(t, g, "$(B)/consumer/use.cpp.o")
 	args := anyStrs(cc.Cmds[0].CmdArgs.flat())
 
-	if !flagsContain(args, "-I$(B)/peer") {
+	if !slices.Contains(args, "-I$(B)/peer") {
 		t.Errorf("consumer use.cpp.o missing ARCHIVE-generated build include -I$(B)/peer: %v", args)
 	}
 }

@@ -32,7 +32,7 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 
 	outs := make([]string, 0, len(rp.OUTFiles)+1)
 
-	outs = append(outs, strStrings(rp.OUTFiles)...)
+	outs = append(outs, anyStrs(rp.OUTFiles)...)
 
 	if rp.StdoutFile != nil && !rp.StdoutNoAuto {
 		outs = append(outs, rp.StdoutFile.string())
@@ -68,7 +68,7 @@ func prMainOutputRel(stmt *RunProgramStmt) string {
 func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	ctx, instance := e.ctx, e.instance
 	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
-	auxTools := resolveRunProgramAuxTools(ctx, strStrings(stmt.ToolPaths))
+	auxTools := resolveRunProgramAuxTools(ctx, anyStrs(stmt.ToolPaths))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 
 	for _, f := range stmt.INFiles {

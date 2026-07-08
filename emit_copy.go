@@ -11,7 +11,7 @@ func copyFileAutoSourceVFS(modulePath string, d *ModuleData, src STR) *VFS {
 		return nil
 	}
 
-	return vfsPtr(copyFileOutputVFS(modulePath, entry.Dst))
+	return ptr(copyFileOutputVFS(modulePath, entry.Dst))
 }
 
 func copyFileParsedIncludes(scanner *IncludeScanner, fs FS, moduleDir VFS, entry CopyFileEntry) []IncludeDirective {
