@@ -89,3 +89,7 @@ func argSTRs(as []ARG) []ANY {
 
 	return out
 }
+
+func (a ARG) any() ANY {
+	return a.str().any()
+}

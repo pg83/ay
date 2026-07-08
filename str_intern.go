@@ -278,3 +278,79 @@ func interned(s string) STR {
 func internBound() uint32 {
 	return internTable.count
 }
+
+func (id STR) source() VFS {
+	return VFS(uint32(id)<<1 | uint32(VFSRootSource))
+}
+
+func (id STR) build() VFS {
+	return VFS(uint32(id)<<1 | uint32(VFSRootBuild))
+}
+
+func (id STR) vfs() VFS {
+	s := internTable.flat[uint32(id)].str
+
+	if !vfsHasPrefix(s) {
+		return 0
+	}
+
+	root := VFSRootSource
+
+	if s[2] == 'B' {
+		root = VFSRootBuild
+	}
+
+	return VFS(uint32(internStr(s[vfsPrefixLen:]))<<1 | uint32(root))
+}
+
+func internVInto(prefix string, parts []string) STR {
+	return internBuild(prefix, parts)
+}
+
+func internedVInto(prefix string, parts []string) STR {
+	return internedBuild(prefix, parts)
+}
+
+func internV(parts ...string) STR {
+	return internVInto("", parts)
+}
+
+func internedV(parts ...string) STR {
+	return internedVInto("", parts)
+}
+
+func internPrefixed(prefix, rel string) STR {
+	return internVInto(prefix, []string{rel})
+}
+
+func internedPrefixed(prefix, rel string) STR {
+	return internedVInto(prefix, []string{rel})
+}
+
+func internPrefixedJoined(prefix, dir, rel string) STR {
+	if dir == "" {
+		return internVInto(prefix, []string{rel})
+	}
+
+	return internVInto(prefix, []string{dir, "/", rel})
+}
+
+func internedPrefixedJoined(prefix, dir, rel string) STR {
+	if dir == "" {
+		return internedVInto(prefix, []string{rel})
+	}
+
+	return internedVInto(prefix, []string{dir, "/", rel})
+}
+
+func internJoined(dir, rel string) STR {
+	if dir == "" {
+		return internStr(rel)
+	}
+
+	return internV(dir, "/", rel)
+}
+
+func (s STR) any() ANY {
+	return ANY(uint32(s) << 1)
+}
