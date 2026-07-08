@@ -553,3 +553,7 @@ func TestGen_PeerGlobalAddInclToMissingDir_DroppedFromConsumer(t *testing.T) {
 		t.Fatalf("consumer kept a peer GLOBAL ADDINCL to a missing dir; upstream prunes it before propagation:\n%v", args)
 	}
 }
+
+func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn)) *ModuleData {
+	return collectModuleInto(pm, dd, instance, stmts, env, onWarn, &ModuleData{})
+}

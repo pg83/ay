@@ -216,6 +216,8 @@ type GenCtx struct {
 	buckets          *BucketCache
 	moduleByRef      DenseMap[NodeRef, *ModuleEmitResult]
 	tools            DenseMap[ARG, *ModuleEmitResult]
+	frames           []*ModuleFrame
+	frameDepth       int
 	py3ccHeadChunk   []ANY
 	scripts          ScriptDeps
 	fetchRefs        *DenseMap[STR, NodeRef]
@@ -758,7 +760,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
 	env := buildIfEnv(instance)
-	d := collectModule(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn)
+	frame := ctx.pushFrame()
+
+	defer ctx.popFrame()
+
+	d := collectModuleInto(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn, &frame.d)
 	e := newEmitContext(ctx, instance, d, nil)
 
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary {
@@ -803,7 +809,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if d.moduleStmt.Name == tokResourcesLibrary {
 		if e.bindResourceGlobalVars(env) {
-			d = collectModule(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn)
+			d = collectModuleInto(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn, &frame.d)
 			e = newEmitContext(ctx, instance, d, nil)
 		}
 
@@ -814,7 +820,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		env.setString(envMODULE_SUFFIX, prebuiltModuleSuffix(instance.Platform))
 
 		if e.bindResourceGlobalVars(env) {
-			d = collectModule(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn)
+			d = collectModuleInto(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn, &frame.d)
 			e = newEmitContext(ctx, instance, d, nil)
 		}
 
@@ -1968,4 +1974,23 @@ func (ctx *GenCtx) py3ccHead(py3ccBinary, py3ccSlowBin VFS) []ANY {
 	}
 
 	return ctx.py3ccHeadChunk
+}
+
+type ModuleFrame struct {
+	d ModuleData
+}
+
+func (ctx *GenCtx) pushFrame() *ModuleFrame {
+	if ctx.frameDepth == len(ctx.frames) {
+		ctx.frames = append(ctx.frames, &ModuleFrame{})
+	}
+
+	f := ctx.frames[ctx.frameDepth]
+	ctx.frameDepth++
+
+	return f
+}
+
+func (ctx *GenCtx) popFrame() {
+	ctx.frameDepth--
 }
