@@ -179,10 +179,6 @@ type ModuleEmitResult struct {
 	GoSrcClosure                    []VFS
 }
 
-func stringPtr(s string) *string {
-	return &s
-}
-
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 	if res == nil {
 		return nil
