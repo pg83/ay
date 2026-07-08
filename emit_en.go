@@ -197,7 +197,7 @@ func emitEN(
 		outputs = append(outputs, serializedHVFS)
 	}
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 	deps := append([]NodeRef(nil), depENRefs...)
 	foreignDepRefs := depRefs(enumParserLD)
 

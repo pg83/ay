@@ -57,9 +57,9 @@ func (e *EmitContext) emitSwigC() {
 		swRef := ctx.emit.emitNode(Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-				Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}}),
+				Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}}),
 			DepRefs:      []NodeRef{swigRef},
-			Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}},
+			Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}},
 			Inputs:       inputs,
 			Outputs:      na.vfsList(cOutVFS, pyOutVFS),
 			KV:           &swigCKV,

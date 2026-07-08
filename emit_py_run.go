@@ -349,15 +349,15 @@ func emitPYRun(
 	emit *StreamingEmitter,
 ) NodeRef {
 	na := emit.nodeArenas()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 
 	for _, kv := range stmt.EnvPairs {
 		parts := strings.SplitN(kv.string(), "=", 2)
 
 		if len(parts) == 2 {
-			env = append(env, EnvVar{Name: internEnv(parts[0]), Value: internStr(parts[1])})
+			env = append(env, EnvVar{Name: internEnv(parts[0]), Value: internStr(parts[1]).any()})
 		} else {
-			env = append(env, EnvVar{Name: internEnv(kv.string()), Value: strEmpty})
+			env = append(env, EnvVar{Name: internEnv(kv.string()), Value: strEmpty.any()})
 		}
 	}
 

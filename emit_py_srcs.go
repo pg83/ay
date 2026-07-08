@@ -240,7 +240,7 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 	cmdArgs := na.chunkList(e.ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
 		na.anyList(internStr(moduleName).any(), (srcAbs).any(), (outputPath).any()))
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envPYTHONHASHSEED, Value: strZero}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envPYTHONHASHSEED, Value: strZero.any()}}
 	nodeInputs := na.inputList([]VFS{py3ccBinary, py3ccSlowBin}, na.srcChunk(srcAbs))
 
 	var inputs []VFS
@@ -593,7 +593,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 
 		regCpp := arg.string() + ".reg3.cpp"
 		regCppVFS := build(instance.Path.relString(), "/", regCpp)
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 
 		pyCmdArgs := []ANY{
 			d.tc.Python3.any(),

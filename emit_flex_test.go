@@ -49,7 +49,7 @@ END()
 		}
 	}
 
-	if len(lx.Env) != 1 || lx.Env[0].Name != envARCADIA_ROOT_DISTBUILD || lx.Env[0].Value != strS {
+	if len(lx.Env) != 1 || lx.Env[0].Name != envARCADIA_ROOT_DISTBUILD || lx.Env[0].Value != strS.any() {
 		t.Errorf("LX env = %#v, want [ARCADIA_ROOT_DISTBUILD=$(S)]", lx.Env)
 	}
 

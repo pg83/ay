@@ -41,7 +41,7 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 
 		na.vfs.commit(k)
 
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 		node := Node{
 			Platform:       instance.Platform,
 			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolBin.any(), srcVFS.any(), outVFS.any())), Env: env}),

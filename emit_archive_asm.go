@@ -73,7 +73,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 	}
 
 	deps := concat(producerRefs, depRefs(toolLDRef))
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 
 	n := Node{
 		Platform: instance.Platform,

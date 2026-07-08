@@ -429,7 +429,7 @@ func (e *EmitContext) goCgoLinkOFlags() []ANY {
 	}
 
 	push(argFuseLdLld.any())
-	push(internV("--ld-path=", tc.LLD.string()).any())
+	push(internV("--ld-path=", tc.LLD.prefix(), tc.LLD.relString()).any())
 
 	na.anys.commit(k)
 

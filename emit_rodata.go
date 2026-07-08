@@ -32,8 +32,8 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 	na := emit.nodeArenas()
 	asmVFS, outVFS := composeRodataOutputs(instance, srcRel)
 	toolName := path.Base(strings.TrimSuffix(srcRel, ".rodata"))
-	pythonEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
-	yasmEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}, {Name: envYASM_TEST_SUITE, Value: strOne}}
+	pythonEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	yasmEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envYASM_TEST_SUITE, Value: strOne.any()}}
 
 	node := Node{
 		Platform: instance.Platform,

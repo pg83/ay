@@ -10,7 +10,6 @@ var (
 	protobufRuntimeDirectives      = quotedDirectives(protobufRuntimeHeaders)
 	pbDescriptorImporterDirectives = quotedDirectives(pbDescriptorImporterHeaders)
 	pbRuntimeBaseVFS               = source(strings.TrimSuffix(pbRuntimeBase, "/"))
-	pbWrapperPath                  = pbWrapperVFS.string()
 	pbKV                           = KV{P: pkPB, PC: pcYellow}
 	cppProtoSpec                   = &ProtoSpec{kv: &pbKV, modulePlugins: true}
 )
@@ -659,7 +658,7 @@ func emitPB(
 		cmdArgs = append(cmdArgs, spec.optsTail)
 	}
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS}}
+	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
 
 	inputs := []VFS{
 		cppStyleguideBinary,
@@ -801,7 +800,7 @@ func composePBArgBlocks(tc ModuleToolchain, protocBinary, cppStyleguideBinary, g
 	protoInclude []VFS) *PbArgBlocks {
 	head := []ANY{
 		tc.Python3.any(),
-		internStr(pbWrapperPath).any(),
+		pbWrapperVFS.any(),
 		argOutputs.any(),
 	}
 
