@@ -571,7 +571,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	return positions, srcs
 }
 
-func scheduleProducers(m *IdValueMap, positions []ProducerPos, modulePath string) []int {
+func scheduleProducers(dst []int, m *IdValueMap, positions []ProducerPos, modulePath string) []int {
 	m.reset(vfsBound())
 
 	for i, p := range positions {
@@ -602,7 +602,7 @@ func scheduleProducers(m *IdValueMap, positions []ProducerPos, modulePath string
 		}
 	}
 
-	order := make([]int, 0, len(positions))
+	order := dst[:0]
 
 	if len(edges) == 0 {
 		for i := range positions {
@@ -649,7 +649,11 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		return
 	}
 
-	for _, pi := range scheduleProducers(&e.ctx.prodOuts, positions, e.instance.Path.relString()) {
+	order := scheduleProducers(e.prodOrder[:0], &e.ctx.prodOuts, positions, e.instance.Path.relString())
+
+	e.prodOrder = order[:0]
+
+	for _, pi := range order {
 		pos := positions[pi]
 
 		switch pos.kind {

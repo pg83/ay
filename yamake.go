@@ -818,7 +818,9 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 	defer parserPool.Put(p)
 
 	*lex = Lexer{name: name, src: src, line: 1, col: 1, tokBuf: tokBuf[:0]}
-	*p = Parser{lex: lex, name: name, includeStack: stack, includes: includes, fs: fs, condScratch: condScratch[:0], condTokBuf: condTokBuf[:0]}
+	argScratch := p.argScratch
+
+	*p = Parser{lex: lex, name: name, includeStack: stack, includes: includes, fs: fs, condScratch: condScratch[:0], condTokBuf: condTokBuf[:0], argScratch: argScratch[:0]}
 
 	mf := &MakeFile{Path: name}
 
@@ -935,25 +937,31 @@ func (p *Parser) applyIncludeOnce(nameTok Token) {
 }
 
 func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
+	scratch := p.argScratch[:0]
+
+	defer func() { p.argScratch = scratch[:0] }()
+
 	lp := p.lex.next()
 
 	if lp.kind != tokLParen {
 		p.lex.throwParse(lp.line, lp.col, "expected '(' after macro name %q, got %s", nameTok.val, describeToken(lp))
 	}
 
-	var args []ANY
-
 	for {
 		tok := p.lex.next()
 
 		switch tok.kind {
 		case tokRParen:
-			return args
+			if len(scratch) == 0 {
+				return nil
+			}
+
+			return append(make([]ANY, 0, len(scratch)), scratch...)
 		case tokEOF:
 			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.val)
 		case tokIdent, tokWord, tokString, tokInt:
 
-			args = append(args, internStr(tok.val).any())
+			scratch = append(scratch, internStr(tok.val).any())
 		case tokLParen:
 			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.val)
 		default:
@@ -996,6 +1004,7 @@ type Parser struct {
 	fs           FS
 	condScratch  []CondNode
 	condTokBuf   []Token
+	argScratch   []ANY
 }
 
 func (p *Parser) buildStmt(nameTok Token, args []ANY) Stmt {

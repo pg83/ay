@@ -361,31 +361,67 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 }
 
 func composeSrcDirOutputRel(instancePath, target string) string {
-	rel, err := filepath.Rel(instancePath, target)
+	a, b := instancePath, target
 
-	if err != nil {
-		return "_/" + filepath.Base(target)
-	}
+	for a != "" && b != "" {
+		ia := strings.IndexByte(a, '/')
+		ib := strings.IndexByte(b, '/')
+		ca, cb := a, b
 
-	if !strings.Contains(rel, "..") {
-		joined := filepath.ToSlash(rel)
-
-		if strings.Contains(joined, "/") {
-			return "_/" + joined
+		if ia >= 0 {
+			ca = a[:ia]
 		}
 
-		return joined
-	}
+		if ib >= 0 {
+			cb = b[:ib]
+		}
 
-	parts := strings.Split(rel, string(filepath.Separator))
+		if ca != cb {
+			break
+		}
 
-	for i, p := range parts {
-		if p == ".." {
-			parts[i] = "__"
+		if ia < 0 {
+			a = ""
+		} else {
+			a = a[ia+1:]
+		}
+
+		if ib < 0 {
+			b = ""
+		} else {
+			b = b[ib+1:]
 		}
 	}
 
-	return strings.Join(parts, "/")
+	if a == "" {
+		if b == "" {
+			return "."
+		}
+
+		if strings.Contains(b, "/") {
+			return "_/" + b
+		}
+
+		return b
+	}
+
+	ups := strings.Count(a, "/") + 1
+	buf := make([]byte, 0, 3*ups+len(b))
+
+	for i := 0; i < ups; i++ {
+		if i > 0 {
+			buf = append(buf, '/')
+		}
+
+		buf = append(buf, "__"...)
+	}
+
+	if b != "" {
+		buf = append(buf, '/')
+		buf = append(buf, b...)
+	}
+
+	return string(buf)
 }
 
 func normalizeDotDotSegments(rel string) (body string, underscore bool) {

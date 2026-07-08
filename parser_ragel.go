@@ -20,7 +20,6 @@ func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocat
 
 	nblock := a.alloc(directiveBlockHint)
 	nk := 0
-	seenNative := make(map[string]struct{}, 4)
 	inSpecification := false
 
 	eachLine(data, func(line []byte) {
@@ -51,12 +50,15 @@ func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocat
 			return
 		}
 
-		if _, dup := seenNative[target]; dup {
-			return
+		wrapped := includeTarget(internStr(target).any())
+
+		for _, d := range nblock[:nk] {
+			if d.target == wrapped {
+				return
+			}
 		}
 
-		seenNative[target] = struct{}{}
-		nk = addDirective(nblock, nk, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(target).any())})
+		nk = addDirective(nblock, nk, IncludeDirective{kind: includeQuoted, target: wrapped})
 	})
 
 	native := nblock[:nk]

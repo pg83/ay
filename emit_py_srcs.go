@@ -78,7 +78,7 @@ func pySrcYapycSuffix(modulePath string) string {
 	out[2] = b32Lower[(sum[1]>>1)&31]
 	out[3] = b32Lower[(sum[1]<<4|sum[2]>>4)&31]
 
-	return string(out[:])
+	return internBytes(out[:]).string()
 }
 
 func (e *EmitContext) collectPyGroups() []PySrcGroup {
@@ -140,18 +140,17 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenResEntry {
 	d := e.d
 	module := e.instance.Path.relString()
-	key := ps.Module.string()
 
 	switch ps.Group {
 	case pyGroupGenAux:
 		info := e.codegen.mustInfo(ps.Path, "appendPyResEntries")
 
-		out = append(out, PyGenResEntry{token: ps.Token.string(), key: key, path: ps.Path, inputs: info.SourceInputs})
+		out = append(out, PyGenResEntry{token: ps.Token.string(), key: ps.Module, path: ps.Path, inputs: info.SourceInputs})
 
 		if !d.pyBuildNoPYC {
 			yapycOut := e.pyYapycOutFor(ps)
 
-			out = append(out, PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.relString(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs})
+			out = append(out, PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.relString(), key: ps.Module, yapyc: true, path: yapycOut, inputs: info.SourceInputs})
 		}
 
 		return out
@@ -186,11 +185,11 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 			pyExtra = []VFS{srcEdge}
 		}
 
-		out = append(out, PyGenResEntry{token: srcRel, key: key, path: pySource, inputs: pyExtra})
+		out = append(out, PyGenResEntry{token: srcRel, key: ps.Module, path: pySource, inputs: pyExtra})
 	}
 
 	if !d.pyBuildNoPYC {
-		out = append(out, PyGenResEntry{token: srcRel + suffix, key: key + ".yapyc3", path: build(module, "/", srcRel, suffix), inputs: []VFS{srcEdge}})
+		out = append(out, PyGenResEntry{token: srcRel + suffix, key: ps.Module, yapyc: true, path: build(module, "/", srcRel, suffix), inputs: []VFS{srcEdge}})
 	}
 
 	return out
@@ -687,16 +686,25 @@ func pyInitDefineShortname(flag string) (string, bool) {
 
 type PyGenResEntry struct {
 	token  string
-	key    string
+	key    STR
+	yapyc  bool
 	path   VFS
 	inputs []VFS
 }
 
 func pyGenResourceItems(entries []PyGenResEntry) []ResourceItem {
 	items := make([]ResourceItem, 0, 2*len(entries))
+	keyBuf := make([]byte, 0, 128)
 
 	for _, en := range entries {
-		key := "resfs/file/py/" + en.key
+		keyBuf = append(keyBuf[:0], "resfs/file/py/"...)
+		keyBuf = append(keyBuf, en.key.sharedString()...)
+
+		if en.yapyc {
+			keyBuf = append(keyBuf, ".yapyc3"...)
+		}
+
+		key := string(keyBuf)
 		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + en.token + "\"}"
 		kvCmd := internV("resfs/src/", key, "=", en.path.relString()).string()
 

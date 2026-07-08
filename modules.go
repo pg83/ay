@@ -677,7 +677,13 @@ func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleIns
 
 	d.materializeAddIncl()
 
-	d.srcDirs = append([]VFS{instance.Path}, d.srcDirs...)
+	srcDirs := append(d.srcDirs, 0)
+
+	copy(srcDirs[1:], srcDirs[:len(srcDirs)-1])
+
+	srcDirs[0] = instance.Path
+
+	d.srcDirs = srcDirs
 	d.addIncl = append(d.addIncl, d.cfAddIncl...)
 	d.addInclGlobal = append(d.addInclGlobal, d.cfAddInclGlobal...)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
@@ -2801,9 +2807,7 @@ func pythonModuleName(modulePath, src string, topLevel bool, namespace *ANY) str
 }
 
 func pythonInitSuffix(name string) string {
-	segs := strings.Split(name, ".")
-
-	if len(segs) == 1 {
+	if !strings.Contains(name, ".") {
 		return name
 	}
 
@@ -2811,9 +2815,18 @@ func pythonInitSuffix(name string) string {
 
 	mangled := buf[:0]
 
-	for _, seg := range segs {
+	for rest := name; ; {
+		var seg string
+		var more bool
+
+		seg, rest, more = strings.Cut(rest, ".")
+
 		mangled = strconv.AppendInt(mangled, int64(len(seg)), 10)
 		mangled = append(mangled, seg...)
+
+		if !more {
+			break
+		}
 	}
 
 	return string(mangled)
@@ -3190,14 +3203,14 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 		return s
 	}
 
-	var b strings.Builder
-	b.Grow(len(s))
+	var buf [192]byte
 
+	b := buf[:0]
 	changed := false
 
 	for i := 0; i < len(s); {
 		if s[i] != '$' || i+1 >= len(s) || s[i+1] == '{' || s[i+1] == '(' {
-			b.WriteByte(s[i])
+			b = append(b, s[i])
 			i++
 
 			continue
@@ -3218,7 +3231,7 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 		}
 
 		if j == i+1 {
-			b.WriteByte(s[i])
+			b = append(b, s[i])
 			i++
 
 			continue
@@ -3228,13 +3241,13 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 		val, ok := env.lookup(name)
 
 		if !ok {
-			b.WriteString(s[i:j])
+			b = append(b, s[i:j]...)
 			i = j
 
 			continue
 		}
 
-		b.WriteString(val)
+		b = append(b, val...)
 		i = j
 		changed = true
 	}
@@ -3243,7 +3256,7 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 		return s
 	}
 
-	return b.String()
+	return string(b)
 }
 
 func expandStmtTokens(items []ANY, env Environment) []ANY {

@@ -1,11 +1,17 @@
 package main
 
-import "slices"
-
 import "path/filepath"
 
-func applySbomComponentOrder(name TOK, linkTarget bool, resolved []ResolvedPeer, allocatorExplicitPeers []string) []ResolvedPeer {
+func applySbomComponentOrder(e *EmitContext, name TOK, linkTarget bool, resolved []ResolvedPeer, allocatorExplicitPeers []string) []ResolvedPeer {
 	sbomOrder := resolved
+
+	cloneOrder := func() {
+		if len(resolved) > 0 && len(sbomOrder) == len(resolved) && &sbomOrder[0] == &resolved[0] {
+			sbomOrder = append(e.sbomOrder[:0], resolved...)
+			e.sbomOrder = sbomOrder[:0]
+		}
+	}
+
 	cxxIdx, libcxxIdx := -1, -1
 
 	for i, rp := range resolved {
@@ -18,7 +24,7 @@ func applySbomComponentOrder(name TOK, linkTarget bool, resolved []ResolvedPeer,
 	}
 
 	if !isSpecializedLibraryType(name) && cxxIdx > libcxxIdx && libcxxIdx >= 0 {
-		sbomOrder = slices.Clone(resolved)
+		cloneOrder()
 
 		cxx := sbomOrder[cxxIdx]
 
@@ -46,9 +52,7 @@ func applySbomComponentOrder(name TOK, linkTarget bool, resolved []ResolvedPeer,
 		}
 
 		if lldIdx >= 0 && allocIdx >= 0 && lldIdx < allocIdx {
-			if len(sbomOrder) == len(resolved) && &sbomOrder[0] == &resolved[0] {
-				sbomOrder = slices.Clone(resolved)
-			}
+			cloneOrder()
 
 			lld := sbomOrder[lldIdx]
 
@@ -60,8 +64,8 @@ func applySbomComponentOrder(name TOK, linkTarget bool, resolved []ResolvedPeer,
 	return sbomOrder
 }
 
-func aggregateSbomComponents(name TOK, linkTarget bool, resolved []ResolvedPeer, allocatorExplicitPeers []string, refs []NodeRef, paths []VFS) ([]NodeRef, []VFS, int) {
-	sbomOrder := applySbomComponentOrder(name, linkTarget, resolved, allocatorExplicitPeers)
+func aggregateSbomComponents(e *EmitContext, name TOK, linkTarget bool, resolved []ResolvedPeer, allocatorExplicitPeers []string, refs []NodeRef, paths []VFS) ([]NodeRef, []VFS, int) {
+	sbomOrder := applySbomComponentOrder(e, name, linkTarget, resolved, allocatorExplicitPeers)
 	keepLld := linkTarget || isGoModuleType(name)
 
 	deduper.reset()

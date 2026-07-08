@@ -333,7 +333,6 @@ func (e *EmitContext) pyProtoYapycOut(ps PySrc) VFS {
 }
 
 func (e *EmitContext) appendPyProtoResEntries(out []PyGenResEntry, ps PySrc) []PyGenResEntry {
-	key := ps.Module.string()
 	rel := ps.Path.relString()
 	grpc := strings.HasSuffix(rel, "__intpy3___pb2_grpc.py")
 	info := e.codegen.mustInfo(ps.Path, "appendPyProtoResEntries")
@@ -342,8 +341,8 @@ func (e *EmitContext) appendPyProtoResEntries(out []PyGenResEntry, ps PySrc) []P
 
 	if !strings.HasPrefix(token, "${ARCADIA_BUILD_ROOT}/") {
 		return append(out,
-			PyGenResEntry{token: token, key: key, path: ps.Path},
-			PyGenResEntry{token: token + strings.TrimPrefix(yapycOut.relString(), rel), key: key + ".yapyc3", path: yapycOut})
+			PyGenResEntry{token: token, key: ps.Module, path: ps.Path},
+			PyGenResEntry{token: token + strings.TrimPrefix(yapycOut.relString(), rel), key: ps.Module, yapyc: true, path: yapycOut})
 	}
 
 	entryInputs := info.SourceInputs
@@ -355,8 +354,8 @@ func (e *EmitContext) appendPyProtoResEntries(out []PyGenResEntry, ps PySrc) []P
 	}
 
 	return append(out,
-		PyGenResEntry{token: token, key: key, path: ps.Path, inputs: entryInputs},
-		PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.relString(), key: key + ".yapyc3", path: yapycOut, inputs: info.SourceInputs})
+		PyGenResEntry{token: token, key: ps.Module, path: ps.Path, inputs: entryInputs},
+		PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.relString(), key: ps.Module, yapyc: true, path: yapycOut, inputs: info.SourceInputs})
 }
 
 func (e *EmitContext) emitPyProtoBytecode() {

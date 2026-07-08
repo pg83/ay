@@ -258,13 +258,13 @@ func compileFlagBundleFor(p *Platform) CompileFlagBundle {
 		return CompileFlagBundle{
 			CFlags:      p.CompileCFlags,
 			Defines:     hostDefines,
-			NoLibcBlock: noLibcBlock(p),
+			NoLibcBlock: p.NoLibcBlock,
 		}
 	case ISAAArch64:
 		bundle := CompileFlagBundle{
 			CFlags:      p.CompileCFlags,
 			Defines:     commonDefines,
-			NoLibcBlock: noLibcBlock(p),
+			NoLibcBlock: p.NoLibcBlock,
 		}
 
 		bundle.ArchArgs = p.MarchArgs

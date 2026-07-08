@@ -91,8 +91,8 @@ func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 
 	expectedKey := "library/python/runtime_py3/entry_points.py"
 
-	if entries[0].key != expectedKey {
-		t.Errorf("key: got %q, want %q", entries[0].key, expectedKey)
+	if entries[0].key.string() != expectedKey {
+		t.Errorf("key: got %q, want %q", entries[0].key.string(), expectedKey)
 	}
 
 	items := pyGenResourceItems(entries)

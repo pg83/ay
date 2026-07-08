@@ -34,6 +34,9 @@ type EmitContext struct {
 	objScratch   []ResourceItem
 	rawScratch   []ResourceItem
 	arMembers    []ARMember
+	sbomOrder    []ResolvedPeer
+	orderedCC    []VFS
+	prodOrder    []int
 	pbEmission   [2]PbModuleEmission
 	pbEmissionOk [2]bool
 	pyPBEmission PyPBModuleEmission
@@ -56,6 +59,12 @@ func (c CollectedObjs) reset() CollectedObjs {
 func (e *EmitContext) partitionCollected() (local, global CollectedObjs) {
 	local = e.localObjs
 	global = e.globalObjs
+
+	if n := len(e.metas); cap(local.refs) < n {
+		local.refs = make([]NodeRef, 0, n)
+		local.outs = make([]VFS, 0, n)
+		local.metas = make([]SrcMeta, 0, n)
+	}
 
 	for i, m := range e.metas {
 		dst := &local
@@ -102,6 +111,9 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		objScratch:  prev.objScratch[:0],
 		rawScratch:  prev.rawScratch[:0],
 		arMembers:   prev.arMembers[:0],
+		sbomOrder:   prev.sbomOrder[:0],
+		orderedCC:   prev.orderedCC[:0],
+		prodOrder:   prev.prodOrder[:0],
 	}
 
 	frame.emitCtx.pbEmissionOk = [2]bool{}
@@ -123,6 +135,10 @@ func (e *EmitContext) at(instance ModuleInstance) *EmitContext {
 }
 
 func (e *EmitContext) enqueueSrc(meta SrcMeta) {
+	if cap(e.srcs) == 0 {
+		e.srcs = make([]SrcMeta, 0, len(e.d.srcs)+8)
+	}
+
 	e.srcs = append(e.srcs, meta)
 }
 

@@ -21,7 +21,6 @@ func (e *EmitContext) emitArchive(
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := emit.nodeArenas()
 	archiveVFS := build(instance.Path.relString(), "/", a.Name)
-	archivePath := archiveVFS.string()
 	cmdArgs := na.anys.alloc(8 + len(a.Files))[:0]
 
 	cmdArgs = append(cmdArgs, (toolBinPath).any(), argQ.any(), argX.any())
@@ -55,14 +54,12 @@ func (e *EmitContext) emitArchive(
 			absVFS = e.requireProducedInput("ARCHIVE member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))
 		}
 
-		absStr := absVFS.string()
-
 		pathPerFile = append(pathPerFile, absVFS)
 
 		if a.Keys != nil {
 			cmdArgs = append(cmdArgs, absVFS.any())
 		} else {
-			cmdArgs = append(cmdArgs, internV(absStr, ":").any())
+			cmdArgs = append(cmdArgs, internV(absVFS.prefix(), absVFS.relString(), ":").any())
 		}
 	}
 
@@ -70,7 +67,7 @@ func (e *EmitContext) emitArchive(
 		cmdArgs = append(cmdArgs, argDashK.any(), internStr(strings.Join(a.Keys, ":")).any())
 	}
 
-	cmdArgs = append(cmdArgs, argDashO.any(), internStr(archivePath).any())
+	cmdArgs = append(cmdArgs, argDashO.any(), internV(archiveVFS.prefix(), archiveVFS.relString()).any())
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
