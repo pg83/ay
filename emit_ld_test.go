@@ -945,7 +945,7 @@ func TestGen_UseArcadiaLibm_NoSelfPeer(t *testing.T) {
 		Platform: testTargetP,
 	}
 
-	got := (&EmitContext{instance: mi, d: &ModuleData{useArcadiaLibm: true}}).defaultProgramPeerdirsForWithState(false)
+	got := (&EmitContext{ctx: &GenCtx{}, instance: mi, d: &ModuleData{useArcadiaLibm: true}}).defaultProgramPeerdirsForWithState(false)
 
 	for _, p := range got {
 		if p == "contrib/libs/libm" {

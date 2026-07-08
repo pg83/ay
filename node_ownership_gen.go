@@ -56,6 +56,7 @@ func registerKnownGlobalChunks() {
 	registerOwnedSlice(includeScannerBasePathsSlice)
 	registerOwnedSlice(ldScriptInputs)
 	registerOwnedSlice(macroPrefixMapFlags)
+	registerOwnedSlice(muslCFlagsChunk)
 	registerOwnedSlice(noLibcWarningSuppressions)
 	registerOwnedSlice(noWarningsBundle)
 	registerOwnedSlice(nvccFlagsHead)
