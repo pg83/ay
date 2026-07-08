@@ -206,7 +206,8 @@ type GenCtx struct {
 	declSlices       *SliceCache[ResourceDecl]
 	dirSlices        *SliceCache[IncludeDirective]
 	descSlices       *SliceCache[DescProtoPeer]
-	tcMemo           map[string]ModuleToolchain
+	tcMemo           map[ToolchainKey]ModuleToolchain
+	moduleStmts      map[string][]Stmt
 	walking          map[ModuleInstance]bool
 	cyclesTolerated  int
 	traceStack       []string
@@ -391,13 +392,14 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		na:      plainEmit.nodeArenas(),
 		memo:    newIntValueMap[*ModuleEmitResult](4096),
 
-		refSlices:  newSliceCache[NodeRef](1 << 12),
-		vfsSlices:  newSliceCache[VFS](1 << 12),
-		argSlices:  newSliceCache[ANY](1 << 8),
-		declSlices: newSliceCache[ResourceDecl](1 << 3),
-		dirSlices:  newSliceCache[IncludeDirective](1 << 6),
-		descSlices: newSliceCache[DescProtoPeer](1 << 3),
-		tcMemo:     map[string]ModuleToolchain{},
+		refSlices:   newSliceCache[NodeRef](1 << 12),
+		vfsSlices:   newSliceCache[VFS](1 << 12),
+		argSlices:   newSliceCache[ANY](1 << 8),
+		declSlices:  newSliceCache[ResourceDecl](1 << 3),
+		dirSlices:   newSliceCache[IncludeDirective](1 << 6),
+		descSlices:  newSliceCache[DescProtoPeer](1 << 3),
+		tcMemo:      map[ToolchainKey]ModuleToolchain{},
+		moduleStmts: map[string][]Stmt{},
 
 		walking:   make(map[ModuleInstance]bool),
 		host:      hostP,
@@ -602,13 +604,19 @@ func (ctx *GenCtx) parseFileCached(rel string) []Stmt {
 }
 
 func moduleStmts(ctx *GenCtx, dir string) []Stmt {
+	if cached, ok := ctx.moduleStmts[dir]; ok {
+		return cached
+	}
+
 	stmts := ctx.parseFileCached(joinRel(dir, "ya.make"))
 
 	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootRel, inc.relString()) {
 		incStmts := ctx.parseFileCached(inc.relString())
 
-		return concat(stmts, incStmts)
+		stmts = concat(stmts, incStmts)
 	}
+
+	ctx.moduleStmts[dir] = stmts
 
 	return stmts
 }

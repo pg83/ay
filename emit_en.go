@@ -1,7 +1,7 @@
 package main
 
 import (
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -41,8 +41,8 @@ func (e *EmitContext) enumHeaderSourceInput(headerRel string, srcDirs []VFS) VFS
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDirs)
 
 	if !ctx.fs.isFile(srcRootRel, headerInput.relString()) {
-		if vfs := sourceInputVFS(ctx.fs, instance.Path, headerRel); vfs != nil && vfs.isSource() {
-			headerInput = *vfs
+		if vfs, ok := sourceInputVFS(ctx.fs, instance.Path, headerRel); ok && vfs.isSource() {
+			headerInput = vfs
 		}
 	}
 
@@ -61,7 +61,7 @@ func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VF
 }
 
 func (e *EmitContext) enumSerializedBase(stmt *GenerateEnumSerializationStmt) string {
-	if moduleRootedVFS(e.instance.Path.relString(), stmt.Header) != nil {
+	if _, ok := moduleRootedVFS(e.instance.Path.relString(), stmt.Header); ok {
 		return e.enumHeaderSourceInput(stmt.Header, e.d.srcDirs).relString()
 	}
 
@@ -96,7 +96,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		{kind: includeQuoted, target: includeTarget(strUtilGenericSerializedEnumH.any())},
 	}
 
-	sort.Slice(cppParsed, func(i, j int) bool { return cppParsed[i].target.string() < cppParsed[j].target.string() })
+	slices.SortFunc(cppParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
 	reg := e.codegen
 
@@ -113,7 +113,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			{kind: includeQuoted, target: includeTarget(serializedCPPPath.rel().any())},
 		}
 
-		sort.Slice(hParsed, func(i, j int) bool { return hParsed[i].target.string() < hParsed[j].target.string() })
+		slices.SortFunc(hParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
 		reg.register(&GeneratedFileInfo{
 			OutputPath:     serializedHPath,

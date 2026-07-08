@@ -36,6 +36,8 @@ var allocatorPeers = map[string][]string{
 	"DEFAULT":                   nil,
 }
 
+var muslCFlagsChunk = []ANY{argDMusl.any()}
+
 const (
 	event2cppPluginName = "event2cpp"
 	event2cppToolPath   = "tools/event2cpp"
@@ -324,7 +326,7 @@ func (d *ModuleData) srcMetaOf(src ANY) SrcMeta {
 
 func muslCFlags(on bool) []ANY {
 	if on {
-		return []ANY{argDMusl.any()}
+		return muslCFlagsChunk
 	}
 
 	return nil
@@ -528,79 +530,79 @@ parsedFlags:
 	return out
 }
 
-func sourceInputVFS(fs FS, moduleDir VFS, path string) *VFS {
+func sourceInputVFS(fs FS, moduleDir VFS, path string) (VFS, bool) {
 	modulePath := moduleDir.relString()
 
-	if vfs := moduleRootedVFS(modulePath, path); vfs != nil {
-		return vfs
+	if vfs, ok := moduleRootedVFS(modulePath, path); ok {
+		return vfs, true
 	}
 
 	clean := filepath.ToSlash(filepath.Clean(path))
 
 	if clean == "." || clean == "" {
-		return ptr(moduleDir)
+		return moduleDir, true
 	}
 
 	if clean == modulePath ||
 		(len(clean) > len(modulePath) && clean[len(modulePath)] == '/' && clean[:len(modulePath)] == modulePath) {
-		return ptr(source(clean))
+		return source(clean), true
 	}
 
 	if fs != nil {
 		if fs.isFile(moduleDir.rel(), clean) {
 			if strings.Contains(clean, "..") {
-				return ptr(source(filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))))
+				return source(filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))), true
 			}
 
-			return ptr(source(modulePath, "/", clean))
+			return source(modulePath, "/", clean), true
 		}
 
 		if fs.isFile(srcRootRel, clean) {
-			return ptr(source(clean))
+			return source(clean), true
 		}
 	}
 
-	return nil
+	return 0, false
 }
 
 func copyFileInputVFS(fs FS, moduleDir VFS, src string) VFS {
-	if vfs := sourceInputVFS(fs, moduleDir, src); vfs != nil {
-		return *vfs
+	if vfs, ok := sourceInputVFS(fs, moduleDir, src); ok {
+		return vfs
 	}
 
 	return sourceJoinClean(moduleDir.relString(), src)
 }
 
-func moduleRootedVFS(modulePath string, path string) *VFS {
+func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 	if vfsHasPrefix(path) {
-		return ptr(intern(path))
+		return intern(path), true
 	}
 
 	switch {
 	case strings.HasPrefix(path, "${ARCADIA_ROOT}/"):
-		return ptr(sourceClean(strings.TrimPrefix(path, "${ARCADIA_ROOT}/")))
+		return sourceClean(strings.TrimPrefix(path, "${ARCADIA_ROOT}/")), true
 	case strings.HasPrefix(path, "${CURDIR}/"):
-		return ptr(sourceJoinClean(modulePath, strings.TrimPrefix(path, "${CURDIR}/")))
+		return sourceJoinClean(modulePath, strings.TrimPrefix(path, "${CURDIR}/")), true
 	case strings.HasPrefix(path, "${ARCADIA_BUILD_ROOT}/"):
-		return ptr(buildClean(strings.TrimPrefix(path, "${ARCADIA_BUILD_ROOT}/")))
+		return buildClean(strings.TrimPrefix(path, "${ARCADIA_BUILD_ROOT}/")), true
 	case strings.HasPrefix(path, "${BINDIR}/"):
-		return ptr(buildJoinClean(modulePath, strings.TrimPrefix(path, "${BINDIR}/")))
+		return buildJoinClean(modulePath, strings.TrimPrefix(path, "${BINDIR}/")), true
 	default:
-		return nil
+		return 0, false
 	}
 }
 
 func copyFileOutputVFS(modulePath string, dst string) VFS {
-	if vfs := moduleRootedVFS(modulePath, dst); vfs != nil {
-		return *vfs
+	if vfs, ok := moduleRootedVFS(modulePath, dst); ok {
+		return vfs
 	}
 
 	return buildJoinClean(modulePath, dst)
 }
 
 func resourceOutputVFS(modulePath string, path string) VFS {
-	if vfs := moduleRootedVFS(modulePath, path); vfs != nil {
-		return *vfs
+	if vfs, ok := moduleRootedVFS(modulePath, path); ok {
+		return vfs
 	}
 
 	clean := filepath.ToSlash(filepath.Clean(path))
@@ -703,9 +705,19 @@ func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleIns
 	applyArchiveAddIncl(modulePath, d)
 	applyCythonHeaderAddIncl(modulePath, d)
 
-	cflagPrefix := append(muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags)), sseBaseCFlags(env.bool(envARCH_X86_64))...)
+	musl := muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags))
+	sse := sseBaseCFlags(env.bool(envARCH_X86_64))
 
-	d.moduleScopeCFlags = append(cflagPrefix, d.moduleScopeCFlags...)
+	if n := len(musl) + len(sse); n > 0 {
+		scope := d.moduleScopeCFlags
+		grown := append(scope, make([]ANY, n)...)
+
+		copy(grown[n:], grown[:len(scope)])
+		copy(grown, musl)
+		copy(grown[len(musl):], sse)
+
+		d.moduleScopeCFlags = grown
+	}
 	d.addIncl = dedup(d.addIncl, nil)
 	d.addInclGlobal = dedup(d.addInclGlobal, nil)
 
