@@ -22,6 +22,7 @@ type CompileSpec struct {
 	ForceCxx         bool
 	EnvAddIncl       []VFS
 	EnvCFlags        []ANY
+	blocksMemo       *CcModuleArgBlocks
 }
 
 type CodegenRegistry struct {

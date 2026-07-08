@@ -215,6 +215,7 @@ type GenCtx struct {
 	buckets          *BucketCache
 	moduleByRef      DenseMap[NodeRef, *ModuleEmitResult]
 	tools            DenseMap[ARG, *ModuleEmitResult]
+	py3ccHeadChunk   []ANY
 	scripts          ScriptDeps
 	fetchRefs        *DenseMap[STR, NodeRef]
 	host             *Platform
@@ -1950,4 +1951,12 @@ func (ctx *GenCtx) scannerForPlatform(p *Platform) *IncludeScanner {
 	}
 
 	return ctx.scannerTarget
+}
+
+func (ctx *GenCtx) py3ccHead(py3ccBinary, py3ccSlowBin VFS) []ANY {
+	if ctx.py3ccHeadChunk == nil {
+		ctx.py3ccHeadChunk = []ANY{py3ccBinary.any(), argSlowPy3cc.any(), py3ccSlowBin.any()}
+	}
+
+	return ctx.py3ccHeadChunk
 }

@@ -90,7 +90,11 @@ func (e *EmitContext) ccInputsFor(srcVFS VFS) ModuleCCInputs {
 		}
 
 		if envDelta {
-			in.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
+			if sp.blocksMemo == nil {
+				sp.blocksMemo = composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
+			}
+
+			in.CCBlocks = sp.blocksMemo
 		}
 
 		return in
