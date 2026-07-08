@@ -24,7 +24,7 @@ func (p CfgProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllo
 			return
 		}
 
-		k = addDirective(block, k, IncludeDirective{kind: includeSystem, target: includeTarget(internStr(target))})
+		k = addDirective(block, k, IncludeDirective{kind: includeSystem, target: includeTarget(internStr(target).any())})
 	})
 
 	if k > 0 {

@@ -95,9 +95,9 @@ func (e *EmitContext) emitBuildInfoStmt() {
 		ProducerRef:   biRef,
 		GeneratorRefs: nil,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(buildInfoGenPyVFS.rel())},
-			{kind: includeQuoted, target: includeTarget(xargsPyVFS.rel())},
-			{kind: includeQuoted, target: includeTarget(yieldLinePyVFS.rel())},
+			{kind: includeQuoted, target: includeTarget(buildInfoGenPyVFS.rel().any())},
+			{kind: includeQuoted, target: includeTarget(xargsPyVFS.rel().any())},
+			{kind: includeQuoted, target: includeTarget(yieldLinePyVFS.rel().any())},
 		}},
 	})
 }

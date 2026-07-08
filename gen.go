@@ -604,7 +604,7 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	for _, src := range d.srcs {
 		if extIsGztproto(src.string()) {
-			d.peerdirs = append(d.peerdirs, internStr("kernel/gazetteer/proto"))
+			d.peerdirs = append(d.peerdirs, internStr("kernel/gazetteer/proto").any())
 
 			break
 		}
@@ -623,28 +623,28 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 
 		if hasProtoSrc && !strings.HasPrefix(instance.Path.relString(), "contrib/libs/protobuf/builtin_proto") &&
 			!strings.HasPrefix(instance.Path.relString(), "contrib/python/protobuf") {
-			d.peerdirs = append(d.peerdirs, strContribPythonProtobuf)
+			d.peerdirs = append(d.peerdirs, strContribPythonProtobuf.any())
 		}
 
 		if hasProtoSrc && d.grpc {
-			d.peerdirs = append(d.peerdirs, strContribPythonGrpcio)
+			d.peerdirs = append(d.peerdirs, strContribPythonGrpcio.any())
 		}
 	}
 
 	if !d.hadAllocator && (d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) {
 		d.hadAllocator = true
-		d.allocatorName = strJ
+		d.allocatorName = strJ.any()
 	}
 
 	py3ProtoVariant := d.moduleStmt.Name == tokProtoLibrary && d.usePython3
 
 	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
-		d.peerdirs = append([]STR{strContribLibsPython}, d.peerdirs...)
+		d.peerdirs = append([]ANY{strContribLibsPython.any()}, d.peerdirs...)
 	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
 		if moduleExcludesTag(d, "CPP_PROTO") {
-			d.peerdirs = append([]STR{strContribLibsPython}, d.peerdirs...)
+			d.peerdirs = append([]ANY{strContribLibsPython.any()}, d.peerdirs...)
 		} else {
-			d.peerdirs = append(d.peerdirs, strContribLibsPython)
+			d.peerdirs = append(d.peerdirs, strContribLibsPython.any())
 		}
 	}
 
@@ -682,46 +682,46 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 				}
 			}
 
-			spliced := make([]STR, 0, len(d.peerdirs)+len(filteredEarly))
+			spliced := make([]ANY, 0, len(d.peerdirs)+len(filteredEarly))
 
 			spliced = append(spliced, d.peerdirs[:insertAt]...)
-			spliced = append(spliced, sTRS(filteredEarly...)...)
+			spliced = append(spliced, internAnys(filteredEarly)...)
 			spliced = append(spliced, d.peerdirs[insertAt:]...)
 
 			d.peerdirs = spliced
 		} else {
 			for _, peer := range earlyPeers {
 				if instance.Path.relString() != peer {
-					d.peerdirs = append(d.peerdirs, internStr(peer))
+					d.peerdirs = append(d.peerdirs, internStr(peer).any())
 				}
 			}
 		}
 
 		for _, peer := range latePeers {
 			if instance.Path.relString() != peer {
-				d.peerdirs = append(d.peerdirs, internStr(peer))
+				d.peerdirs = append(d.peerdirs, internStr(peer).any())
 			}
 		}
 	}
 
 	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path.relString() != "library/python/import_tracing/constructor" {
-		d.peerdirs = append(d.peerdirs, strLibraryPythonImportTracingConstructor)
+		d.peerdirs = append(d.peerdirs, strLibraryPythonImportTracingConstructor.any())
 	}
 
 	if d.hasFbs && instance.Path.relString() != "contrib/libs/flatbuffers" {
-		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers)
+		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers.any())
 	}
 
 	if d.hasFbs64 && instance.Path.relString() != "contrib/libs/flatbuffers64" {
-		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers64)
+		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers64.any())
 	}
 
 	if d.hasBisonY && instance.Path.relString() != strBuildInducedByBison.string() {
-		d.peerdirs = append(d.peerdirs, strBuildInducedByBison)
+		d.peerdirs = append(d.peerdirs, strBuildInducedByBison.any())
 	}
 
 	if ctx.sbomEnabled && !d.flags.NoRuntime && !effectiveNoPlatform(d.flags) && !isGoModuleType(d.moduleStmt.Name) && !strings.HasPrefix(instance.Path.relString(), "contrib/libs/cxxsupp") {
-		d.peerdirs = append(d.peerdirs, strContribLibsCxxsupp)
+		d.peerdirs = append(d.peerdirs, strContribLibsCxxsupp.any())
 	}
 }
 
@@ -836,7 +836,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		if hasPyProto {
-			d.peerdirs = append(d.peerdirs, strContribPythonProtobuf)
+			d.peerdirs = append(d.peerdirs, strContribPythonProtobuf.any())
 		}
 	}
 
@@ -959,13 +959,13 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		peerKinds = append(peerKinds, peerKindProgramDefault)
 	}
 
-	frontSet := make(map[STR]struct{}, len(d.protoCmdPeers))
+	frontSet := make(map[ANY]struct{}, len(d.protoCmdPeers))
 
 	for _, p := range d.protoCmdPeers {
 		frontSet[p] = struct{}{}
 	}
 
-	appendUserPeer := func(p STR) {
+	appendUserPeer := func(p ANY) {
 		if !deduper.add(p.strID()) {
 			return
 		}
@@ -1525,7 +1525,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.cc = ModuleCompileEnv{
 		InclArgs:             ctx.inclArgs,
 		Flags:                d.flags,
-		CudaNvccFlags:        strsAny(d.cudaNvccFlags),
+		CudaNvccFlags:        d.cudaNvccFlags,
 		AddIncl:              dedupedAddIncl,
 		PeerAddInclGlobal:    selfPeerAddInclGlobal,
 		ProtoInclude:         effectiveProtoInclude,

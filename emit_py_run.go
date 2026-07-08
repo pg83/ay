@@ -289,11 +289,11 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 			includes := make([]IncludeDirective, 0, capacity)
 
 			if isNonFirst && firstShardVFS != 0 {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel().any())})
 			}
 
 			for _, src := range splitSrcs {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel().any())})
 			}
 
 			return includes
@@ -303,26 +303,26 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 			includes := make([]IncludeDirective, 0, 1+len(splitSrcs))
 
 			if firstShardVFS != 0 {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel().any())})
 			}
 
 			for _, src := range splitSrcs {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel())})
+				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel().any())})
 			}
 
 			return includes
 		}
 	}
 
-	includes := []IncludeDirective{{kind: includeQuoted, target: includeTarget(scriptVFS.rel())}}
+	includes := []IncludeDirective{{kind: includeQuoted, target: includeTarget(scriptVFS.rel().any())}}
 
 	for _, f := range stmt.INFiles {
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(e.runProgramInputVFS(f.string()).rel())})
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(e.runProgramInputVFS(f.string()).rel().any())})
 	}
 
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f.string()) {
-			f = f.vfs().rel()
+			f = f.vfs().rel().any()
 		}
 
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
@@ -388,7 +388,7 @@ func emitPYRun(
 			}
 		}
 
-		cmdArgs = append(cmdArgs, aTok.any())
+		cmdArgs = append(cmdArgs, aTok)
 	}
 
 	head := make([]VFS, 0, 2+len(stmt.INFiles))

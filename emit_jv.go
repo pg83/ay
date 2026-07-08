@@ -39,10 +39,10 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		cpRef := ctx.emit.reserve()
 		emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
 
-		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(antlr4RuntimeHeaderVFS.rel())})
+		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(antlr4RuntimeHeaderVFS.rel().any())})
 
 		for _, h := range outputIncludes {
-			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(h))})
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(h).any())})
 		}
 
 		leaves := append([]VFS{jvPrimary, srcH}, ctx.scripts[antlr4FsToolsVFS.rel()]...)

@@ -1433,7 +1433,7 @@ END()
 
 func TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir(t *testing.T) {
 	instance := ModuleInstance{Path: source("yt/yt_proto/yt/client")}
-	d := &ModuleData{pyNamespace: strPtr(internStr("yt_proto.yt.client"))}
+	d := &ModuleData{pyNamespace: anyPtr(internStr("yt_proto.yt.client").any())}
 
 	got := protoPythonResourceKeyBase(instance, d, "chunk_client/proto/data_statistics.proto") + "_pb2.py"
 	const want = "yt_proto/yt/client/chunk_client/proto/data_statistics_pb2.py"

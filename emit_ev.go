@@ -24,9 +24,9 @@ func evWitnessExtras(evRelPath string) []IncludeDirective {
 	out := make([]IncludeDirective, 0,
 		3+len(pbDescriptorImporterDirectives)+len(evExtraProtobufDirectives)+len(evAbseilCleanupDirectives))
 
-	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel())})
-	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(pbDescriptorVFS.rel())})
-	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(evRelPath))})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(pbDescriptorVFS.rel().any())})
+	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(evRelPath).any())})
 	out = append(out, pbDescriptorImporterDirectives...)
 	out = append(out, evExtraProtobufDirectives...)
 	out = append(out, evAbseilCleanupDirectives...)
@@ -61,7 +61,7 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 		genRefs:    []NodeRef{event2cppLDRef},
 		genHParsed: evHParsed,
 		genCCExtras: []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").relString()))},
+			{kind: includeQuoted, target: includeTarget(internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").relString()).any())},
 		},
 		hLeaves: []VFS{build(evRelPath, ".pb.cc")},
 	})

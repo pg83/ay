@@ -42,13 +42,13 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 		strResourceFile.any(),
 		internV("$(RESOURCE_ROOT)/sbr/", id, "/resource").any(),
 		strResourceId.any(),
-		stmt.ResourceId.any(),
+		stmt.ResourceId,
 		internStr(mode).any(),
 		internStr(stmt.Prefix).any(),
 	}
 
 	for _, r := range stmt.Renames {
-		args = append(args, strRename.any(), r.any())
+		args = append(args, strRename.any(), r)
 	}
 
 	if stmt.Executable {
@@ -60,12 +60,12 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	outVFSs := make([]VFS, 0, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
 
 	for _, f := range stmt.OUTFiles {
-		args = append(args, f.any())
+		args = append(args, f)
 		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.relString(), f.string()))
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		args = append(args, f.any())
+		args = append(args, f)
 		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.relString(), f.string()))
 	}
 
@@ -117,7 +117,7 @@ func fromSandboxOutputIncludes(stmt *FromSandboxStmt) []IncludeDirective {
 
 	for _, f := range stmt.OutputIncludes {
 		if v := f.vfs(); v != 0 {
-			f = v.rel()
+			f = v.rel().any()
 		}
 
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})

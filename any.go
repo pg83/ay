@@ -53,3 +53,11 @@ func pathAny(s STR) ANY {
 func (a ANY) strID() uint32 {
 	return uint32(a)
 }
+
+func internAny(s string) ANY {
+	if vfsHasPrefix(s) {
+		return intern(s).any()
+	}
+
+	return internStr(s).any()
+}

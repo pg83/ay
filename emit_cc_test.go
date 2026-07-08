@@ -384,7 +384,7 @@ func TestEmitCC_WrapccPrefix_NonOpensource(t *testing.T) {
 		t.Errorf("inputs[0] = %q, want the source $(S)/mod/lib.cpp", node.flatInputs()[0].string())
 	}
 
-	if !strsContain(node.Resources, resourcePatternYMakePython3) {
+	if !strsContain(strsAny(node.Resources), resourcePatternYMakePython3) {
 		t.Errorf("wrapped CC Resources missing YMAKE_PYTHON3: %v", node.Resources)
 	}
 }
@@ -405,7 +405,7 @@ func TestEmitCC_NoWrapcc_Opensource(t *testing.T) {
 		t.Errorf("opensource CC node must not list wrapcc.py as input: %v", vfsStrings(node.flatInputs()))
 	}
 
-	if strsContain(node.Resources, resourcePatternYMakePython3) {
+	if strsContain(strsAny(node.Resources), resourcePatternYMakePython3) {
 		t.Errorf("opensource CC node must not depend on YMAKE_PYTHON3: %v", node.Resources)
 	}
 }

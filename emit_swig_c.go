@@ -93,7 +93,7 @@ func (e *EmitContext) emitSwigC() {
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{
 			Path:   pyOutVFS,
 			Module: internStr(generatedPyResourceKey(instance.Path.relString(), d, pyOutRel)),
-			Token:  internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.relString()),
+			Token:  internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.relString()).any(),
 			Group:  pyGroupGenAux,
 		})
 

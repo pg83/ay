@@ -31,7 +31,7 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 	headerVFS := build(srcVFS.relString(), ".h")
 	runtimeClosure := walkClosure(e.scanner, domschemeRuntimeVFS, d.cc.ScanCfg)
 	scRef := emitSC(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, ctx.emit)
-	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: includeTarget(domschemeRuntimeVFS.rel())}}
+	runtimeInclude := []IncludeDirective{{kind: includeQuoted, target: includeTarget(domschemeRuntimeVFS.rel().any())}}
 
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     headerVFS,

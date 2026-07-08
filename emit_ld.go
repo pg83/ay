@@ -69,7 +69,7 @@ func emitLD(
 	ownRPathFlags []ANY,
 	peerRPathFlagsGlobal []ANY,
 	objAddLibsGlobal []ANY,
-	exportsScript *STR,
+	exportsScript *ANY,
 	noExportDynSymbols bool,
 	noCompilerWarnings bool,
 	noOptimize bool,
@@ -164,7 +164,7 @@ func emitLD(
 	inputTail = append(inputTail, ldSvnversionHVFS)
 
 	if exportsScript != nil {
-		inputTail = append(inputTail, exportsScript.source())
+		inputTail = append(inputTail, exportsScript.str().source())
 	}
 
 	inputs = append(inputs, inputTail)
@@ -282,7 +282,7 @@ func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsC, vcsO VF
 	return cmdArgs
 }
 
-func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *STR, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
+func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
@@ -362,7 +362,7 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPa
 	return cmdArgs
 }
 
-func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *STR, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
+func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
 	var trailer []ANY
 
 	if !noExportDynSymbols {
@@ -521,7 +521,7 @@ type LdPluginsResult struct {
 	Paths []VFS
 }
 
-func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []STR, tc ModuleToolchain) *LdPluginsResult {
+func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []ANY, tc ModuleToolchain) *LdPluginsResult {
 	if len(plugins) == 0 {
 		return nil
 	}

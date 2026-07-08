@@ -1,7 +1,7 @@
 package main
 
 type BuildMnStmt struct {
-	Info STR
+	Info ANY
 	Name string
 	Seq  int
 }
@@ -41,7 +41,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	}
 
 	ref := ctx.emit.emitNode(node)
-	mnSSEInclude := IncludeDirective{kind: includeQuoted, target: includeTarget(strKernelMatrixnetMnSseH)}
+	mnSSEInclude := IncludeDirective{kind: includeQuoted, target: includeTarget(strKernelMatrixnetMnSseH.any())}
 
 	e.codegen.register(&GeneratedFileInfo{
 		OutputPath:     cppVFS,
@@ -54,7 +54,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		OutputPath:     rodataVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{archiverRef},
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: includeTarget(cppVFS.rel())}}},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: []IncludeDirective{{kind: includeQuoted, target: includeTarget(cppVFS.rel().any())}}},
 	})
 
 	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})

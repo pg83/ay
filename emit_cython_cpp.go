@@ -164,7 +164,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			headerParsed := make([]IncludeDirective, 0, len(headerInduced))
 
 			for _, v := range headerInduced {
-				headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel())})
+				headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel().any())})
 			}
 
 			reg := e.codegen
@@ -235,7 +235,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
 
 		for _, include := range emitsIncludes {
-			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(include.rel())})
+			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(include.rel().any())})
 		}
 
 		py3Suffix := !stmt.CMode && !generatedExplicit && py23Variant

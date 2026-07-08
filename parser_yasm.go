@@ -42,7 +42,7 @@ func parseYasmIncludes(data []byte, block []IncludeDirective, k int) int {
 			kind = includeQuoted
 		}
 
-		k = addDirective(block, k, IncludeDirective{kind: kind, target: includeTarget(internStr(string(line[m[2]:m[3]])))})
+		k = addDirective(block, k, IncludeDirective{kind: kind, target: includeTarget(internStr(string(line[m[2]:m[3]])).any())})
 	})
 
 	return k

@@ -21,7 +21,7 @@ type RunProgramNodeSpec struct {
 	toolLDRef     NodeRef
 	auxTools      []RunProgramAuxTool
 	inVFSs        []VFS
-	outVFSByToken map[STR]VFS
+	outVFSByToken map[ANY]VFS
 	stdoutVFS     *VFS
 	inputClosure  []VFS
 	extraDepRefs  []NodeRef
@@ -75,7 +75,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		inVFSs = append(inVFSs, e.runProgramInputVFS(f.string()))
 	}
 
-	outVFSByToken := make(map[STR]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
+	outVFSByToken := make(map[ANY]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {
 		outVFSByToken[f] = copyFileOutputVFS(instance.Path.relString(), f.string())
@@ -116,7 +116,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			return IncludeDirective{}, false
 		}
 
-		return IncludeDirective{kind: includeQuoted, target: includeTarget(mainOutputVFS.rel())}, true
+		return IncludeDirective{kind: includeQuoted, target: includeTarget(mainOutputVFS.rel().any())}, true
 	}
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet, ridesHeaderViaParsed bool) {
@@ -142,7 +142,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		})
 	}
 
-	parsedFor := func(f STR, out VFS, auto bool) (ParsedIncludeSet, bool) {
+	parsedFor := func(f ANY, out VFS, auto bool) (ParsedIncludeSet, bool) {
 		parsed := prOutputParsedIncludes(f, stmt, inVFSs, protoImportPbH)
 
 		if auto && isCCSourceExt(f.string()) {
@@ -344,11 +344,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 	pbhSeen := pbhBasenameSet(out)
 
 	for _, oi := range stmt.OutputIncludes {
-		target := oi
-
-		if vfsHasPrefix(target.string()) {
-			target = target.vfs().rel()
-		}
+		target := oi.relOrSelf()
 
 		var sub Closure
 
@@ -406,7 +402,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 	return res
 }
 
-func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) ParsedIncludeSet {
+func prOutputParsedIncludes(outFile ANY, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) ParsedIncludeSet {
 	carries := generatedOutputCarriesIncludes(outFile.string())
 
 	if !carries && len(stmt.OutputIncludes) == 0 {
@@ -417,7 +413,7 @@ func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, pro
 
 	for _, f := range stmt.OutputIncludes {
 		if v := f.vfs(); v != 0 {
-			f = v.rel()
+			f = v.rel().any()
 		}
 
 		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
@@ -442,7 +438,7 @@ func prOutputParsedIncludes(outFile STR, stmt *RunProgramStmt, inVFSs []VFS, pro
 				continue
 			}
 
-			compile = append(compile, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel())})
+			compile = append(compile, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel().any())})
 		}
 	}
 
@@ -541,7 +537,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 
 			if strings.Contains(a, tool.token) {
 				a = strings.ReplaceAll(a, tool.token, tool.bin.string())
-				key = internStr(a)
+				key = internStr(a).any()
 				toolReplaced = true
 			}
 		}
@@ -554,11 +550,11 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 					continue
 				}
 
-				key = internStr(rooted)
+				key = internStr(rooted).any()
 			}
 		}
 
-		cmdArgs = append(cmdArgs, key.any())
+		cmdArgs = append(cmdArgs, key)
 	}
 
 	head := make([]VFS, 0, 1+len(spec.auxTools)+len(stmt.INFiles))
@@ -654,15 +650,15 @@ type prFileToken struct {
 	vfs    VFS
 }
 
-func prBareFileTokens(stmt *RunProgramStmt, inVFSs []VFS, outVFSByToken map[STR]VFS) []prFileToken {
+func prBareFileTokens(stmt *RunProgramStmt, inVFSs []VFS, outVFSByToken map[ANY]VFS) []prFileToken {
 	toks := make([]prFileToken, 0, len(stmt.INFiles)+len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))
 
-	add := func(tok STR, vfs VFS) {
-		t := tok.string()
-
-		if vfsHasPrefix(t) {
+	add := func(tok ANY, vfs VFS) {
+		if tok.vfs() != 0 {
 			return
 		}
+
+		t := tok.string()
 
 		toks = append(toks, prFileToken{token: t, rooted: vfs.string(), vfs: vfs})
 	}

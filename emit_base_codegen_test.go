@@ -6,7 +6,7 @@ import (
 )
 
 func TestParseBaseCodegen(t *testing.T) {
-	stmt := parseBaseCodegen(sTRS("kernel/fill_factors_codegen", "fill_factors", "NTop"), 1)
+	stmt := parseBaseCodegen(anysOf("kernel/fill_factors_codegen", "fill_factors", "NTop"), 1)
 
 	if stmt.ToolPath.string() != "kernel/fill_factors_codegen" {
 		t.Fatalf("ToolPath = %q", stmt.ToolPath.string())

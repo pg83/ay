@@ -77,26 +77,26 @@ func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *All
 	strip := ""
 
 	var ext string
-	var dirs []STR
+	var dirs []ANY
 
 	i := 0
 
 	if !stmt.FromDirs {
-		ext = expandStmtTokenSTR(stmt.Args[0], env).string()
+		ext = expandStmtTokenAny(stmt.Args[0], env).string()
 		i = 1
 	}
 
 	for i < len(stmt.Args) {
 		switch stmt.Args[i] {
-		case kwPREFIX:
+		case kwPREFIX.any():
 			if i+1 < len(stmt.Args) {
-				prefix = expandStmtTokenSTR(stmt.Args[i+1], env).string()
+				prefix = expandStmtTokenAny(stmt.Args[i+1], env).string()
 			}
 
 			i += 2
-		case kwSTRIP:
+		case kwSTRIP.any():
 			if i+1 < len(stmt.Args) {
-				strip = expandStmtTokenSTR(stmt.Args[i+1], env).string()
+				strip = expandStmtTokenAny(stmt.Args[i+1], env).string()
 			}
 
 			i += 2
@@ -123,7 +123,7 @@ func expandAllResourceFiles(fs FS, modulePath string, env Environment, stmt *All
 	deduper.reset()
 
 	for _, dir := range dirs {
-		rel, ok := allResourceDir(modulePath, expandStmtTokenSTR(dir, env).string())
+		rel, ok := allResourceDir(modulePath, expandStmtTokenAny(dir, env).string())
 
 		if !ok {
 			continue

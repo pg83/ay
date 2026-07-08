@@ -36,8 +36,12 @@ type IncludeDirective struct {
 	target ANY
 }
 
-func includeTarget(s STR) ANY {
-	return pathAny(s)
+func includeTarget(s ANY) ANY {
+	if s.vfs() != 0 {
+		return s
+	}
+
+	return pathAny(s.str())
 }
 
 func (d IncludeDirective) quotedLike() bool {
@@ -691,7 +695,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 		if prefixRel == "" {
 			info = s.codegen.lookupSTR(buildSuffix)
 		} else if pid := interned(prefixRel); pid != 0 {
-			info = s.codegen.lookupSplit(pid.source(), buildSuffix)
+			info = s.codegen.lookupSplit(pid.source(), buildSuffix.any())
 		}
 
 		if info == nil {
@@ -746,7 +750,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 						continue
 					}
 
-					info := s.codegen.lookupSplit(b.prefixSrc, buildSuffix)
+					info := s.codegen.lookupSplit(b.prefixSrc, buildSuffix.any())
 
 					if info == nil {
 						continue
@@ -859,7 +863,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		}
 
 		if !matched {
-			if info := s.codegen.lookupSplit(incDir, d.target.str()); info != nil {
+			if info := s.codegen.lookupSplit(incDir, d.target.str().any()); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true
@@ -943,7 +947,7 @@ func quotedDirectives(headers []VFS) []IncludeDirective {
 	out := make([]IncludeDirective, len(headers))
 
 	for i, h := range headers {
-		out[i] = IncludeDirective{kind: includeQuoted, target: includeTarget(h.rel())}
+		out[i] = IncludeDirective{kind: includeQuoted, target: includeTarget(h.rel().any())}
 	}
 
 	return out

@@ -255,11 +255,11 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	}
 
 	e.codegen.register(&GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
-	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyBase, "_pb2.py"), Token: tokenFor(pyOut), Group: pyGroupProto, SrcGroup: srcGroup})
+	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyBase, "_pb2.py"), Token: tokenFor(pyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 
 	if d.grpc {
 		e.codegen.register(&GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
-		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut), Group: pyGroupProto, SrcGroup: srcGroup})
+		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 	}
 }
 
@@ -482,7 +482,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 
 	for _, in := range seed {
 		if in.isSource() {
-			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(in.rel())})
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(in.rel().any())})
 		}
 	}
 

@@ -37,7 +37,7 @@ func (SwigIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocato
 			target, kind, ok := parseSwigIncludeLine(string(trimmed))
 
 			if ok {
-				k = addDirective(block, k, IncludeDirective{kind: kind, target: includeTarget(internStr(target))})
+				k = addDirective(block, k, IncludeDirective{kind: kind, target: includeTarget(internStr(target).any())})
 			}
 		}
 

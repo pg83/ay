@@ -149,7 +149,7 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) []I
 	local := make([]IncludeDirective, 0, len(inducedProtos)+len(gztLocal))
 
 	for _, v := range inducedProtos {
-		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel())})
+		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel().any())})
 	}
 
 	for _, dir := range gztLocal {
@@ -159,7 +159,7 @@ func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) []I
 			t = strings.TrimSuffix(t, ".gztproto") + ".proto"
 		}
 
-		local = append(local, IncludeDirective{kind: dir.kind, target: includeTarget(internStr(t))})
+		local = append(local, IncludeDirective{kind: dir.kind, target: includeTarget(internStr(t).any())})
 	}
 
 	return local

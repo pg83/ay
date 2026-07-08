@@ -31,7 +31,7 @@ func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {
 	parsed := make([]IncludeDirective, 0, 1+len(bisonCppSkeletonDirectives))
 
 	parsed = append(parsed,
-		IncludeDirective{kind: includeQuoted, target: includeTarget(bisonPreprocessPyVFS.rel())},
+		IncludeDirective{kind: includeQuoted, target: includeTarget(bisonPreprocessPyVFS.rel().any())},
 	)
 
 	parsed = append(parsed, bisonCppSkeletonDirectives...)
@@ -41,8 +41,8 @@ func bisonCppHeaderParsed(srcVFS VFS) []IncludeDirective {
 
 func (e *EmitContext) bisonGeneratedCPPParsed(srcVFS, headerVFS VFS) []IncludeDirective {
 	parsed := []IncludeDirective{
-		{kind: includeQuoted, target: includeTarget(headerVFS.rel())},
-		{kind: includeQuoted, target: includeTarget(srcVFS.rel())},
+		{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())},
+		{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())},
 	}
 
 	parsed = append(parsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
@@ -72,10 +72,10 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	headerVFS := build(instance.Path.relString(), "/", headerRel)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
 	srcVFS := source(instance.Path.relString(), "/", srcRel)
-	headerParsed := []IncludeDirective{{kind: includeQuoted, target: includeTarget(srcVFS.rel())}}
+	headerParsed := []IncludeDirective{{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())}}
 
 	if preprocessHeader {
-		headerParsed = append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(srcVFS.rel())}}, bisonCppHeaderParsed(srcVFS)...)
+		headerParsed = append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())}}, bisonCppHeaderParsed(srcVFS)...)
 	} else {
 		headerParsed = append(headerParsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 	}
@@ -92,7 +92,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 	reg.register(headerInfo)
 
-	generatedParsed := []IncludeDirective{{kind: includeQuoted, target: includeTarget(headerVFS.rel())}}
+	generatedParsed := []IncludeDirective{{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())}}
 
 	if preprocessHeader {
 		generatedParsed = e.bisonGeneratedCPPParsed(srcVFS, headerVFS)

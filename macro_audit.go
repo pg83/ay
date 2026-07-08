@@ -60,7 +60,7 @@ func recordIgnoredMacro(name TOK) {
 	macroAudit.ignored[name.string()]++
 }
 
-func recordHandledMacro(name TOK, args []STR) {
+func recordHandledMacro(name TOK, args []ANY) {
 	if _, free := macrosAcceptingUserFlags[name]; !free {
 		for _, aTok := range args {
 			if serviceArgOK.has(uint32(aTok)) {

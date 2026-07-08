@@ -196,7 +196,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			}
 		}
 
-		d.peerdirs = append(d.peerdirs, internStr(p))
+		d.peerdirs = append(d.peerdirs, internStr(p).any())
 	}
 
 	if d.moduleStmt.Name == tokGoProgram {
@@ -265,7 +265,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			d.perSrcCFlags = map[ANY][]ANY{}
 		}
 
-		d.perSrcCFlags[src.any()] = goCgoCFlags(d)
+		d.perSrcCFlags[src] = goCgoCFlags(d)
 	}
 }
 
