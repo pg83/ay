@@ -4,7 +4,7 @@ var scKV = KV{P: pkSC, PC: pcYellow}
 
 func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure Closure, domschemecLDRef NodeRef, emit *StreamingEmitter) NodeRef {
 	na := emit.nodeArenas()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	node := Node{
 		Platform: instance.Platform,

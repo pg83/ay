@@ -208,6 +208,9 @@ type GenCtx struct {
 	vfsSlices        *SliceCache[VFS]
 	argSlices        *SliceCache[ANY]
 	declSlices       *SliceCache[ResourceDecl]
+	dirSlices        *SliceCache[IncludeDirective]
+	descSlices       *SliceCache[DescProtoPeer]
+	tcMemo           map[string]ModuleToolchain
 	walking          map[ModuleInstance]bool
 	cyclesTolerated  int
 	traceStack       []string
@@ -389,6 +392,9 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		vfsSlices:  newSliceCache[VFS](1 << 12),
 		argSlices:  newSliceCache[ANY](1 << 8),
 		declSlices: newSliceCache[ResourceDecl](1 << 3),
+		dirSlices:  newSliceCache[IncludeDirective](1 << 6),
+		descSlices: newSliceCache[DescProtoPeer](1 << 3),
+		tcMemo:     map[string]ModuleToolchain{},
 
 		walking:   make(map[ModuleInstance]bool),
 		host:      hostP,
@@ -737,7 +743,7 @@ type resolvedPeer struct {
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	r := genModuleImpl(ctx, instance)
 
-	persistResult(r)
+	persistResult(ctx, r)
 
 	return r
 }
@@ -1092,7 +1098,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	resourceGlobalsClosure := ctx.declSlices.intern(declBlock[:k])
 
-	d.tc = resolveModuleToolchain(resourceGlobalsClosure, instance.Platform.ClangVer)
+	d.tc = resolveModuleToolchain(ctx, resourceGlobalsClosure, instance.Platform.ClangVer)
 
 	deduper.reset()
 
@@ -1991,6 +1997,10 @@ func (ctx *GenCtx) scannerForPlatform(p *Platform) *IncludeScanner {
 func (ctx *GenCtx) py3ccHead(py3ccBinary, py3ccSlowBin VFS) []ANY {
 	if ctx.py3ccHeadChunk == nil {
 		ctx.py3ccHeadChunk = []ANY{py3ccBinary.any(), argSlowPy3cc.any(), py3ccSlowBin.any()}
+
+		if ownershipOn {
+			registerOwnedSlice(ctx.py3ccHeadChunk)
+		}
 	}
 
 	return ctx.py3ccHeadChunk

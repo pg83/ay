@@ -507,7 +507,7 @@ func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *StreamingEmitter) {
 	stmt := spec.stmt
 	na := emit.nodeArenas()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	for _, kv := range stmt.EnvPairs {
 		parts := strings.SplitN(kv.string(), "=", 2)

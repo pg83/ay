@@ -113,7 +113,7 @@ func emitARNode(
 ) NodeRef {
 	na := emit.nodeArenas()
 	cmdEnv := hostP.toolEnv()
-	tail := make([]ANY, 0, 4+len(objPaths))
+	tail := na.anys.alloc(4 + len(objPaths))[:0]
 
 	if arPluginPath != nil {
 		tail = append(tail, argPlugin.any(), (*arPluginPath).any())
@@ -125,8 +125,10 @@ func emitARNode(
 		tail = append(tail, (p).any())
 	}
 
-	cmdArgs := na.chunkList(tc.ARCmdHead, tail)
-	inputTail := make([]VFS, 0, 2)
+	na.anys.commit(len(tail))
+
+	cmdArgs := na.chunkList(tc.ARCmdHead, tail[:len(tail):len(tail)])
+	inputTail := na.vfs.alloc(2)[:0]
 
 	inputTail = append(inputTail, buildScriptsLinkLibPy)
 
@@ -134,15 +136,24 @@ func emitARNode(
 		inputTail = append(inputTail, *arPluginPath)
 	}
 
+	na.vfs.commit(len(inputTail))
+
+	inputTail = inputTail[:len(inputTail):len(inputTail)]
+	objInputs := na.vfsList(objPaths...)
 	topEnv := hostP.toolEnv()
-	deps := concat(objRefs, peerArchiveRefs)
+	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs))
+	nd := copy(deps, objRefs)
+	nd += copy(deps[nd:], peerArchiveRefs)
+	na.noderefs.commit(nd)
+
+	deps = deps[:nd:nd]
 
 	n := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: cmdEnv}),
 		Env:          topEnv,
-		Inputs:       na.inputList(objPaths, inputTail),
+		Inputs:       na.inputList(objInputs, inputTail),
 		KV:           &arKV,
 		Outputs:      na.vfsList(archivePath),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

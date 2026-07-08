@@ -18,7 +18,7 @@ func emitBI(
 	outPrefix := instance.Path.relString() + "/"
 	argsFileVFS := build(outPrefix, "__args")
 	outVFS := build(outPrefix, outputHeader)
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	cmd0Args := []ANY{
 		tc.Python3.any(),

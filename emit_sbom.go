@@ -75,7 +75,7 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 
 	out := build(moddir, "/", realPrjName, ".", lang, ".component.sbom")
 	scriptVFS := source(sbomGenScriptRel)
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	node := Node{
 		Platform: instance.Platform,
@@ -111,7 +111,7 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 
 	out := build(moddir, "/toolchain.component.sbom")
 	scriptVFS := source(sbomGenScriptRel)
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	node := Node{
 		Platform: instance.Platform,

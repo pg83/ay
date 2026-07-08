@@ -82,6 +82,18 @@ func (c *SliceCache[T]) intern(block []T) []T {
 	return slice
 }
 
+func (c *SliceCache[T]) internCopy(xs []T) []T {
+	if len(xs) == 0 {
+		return nil
+	}
+
+	block := c.alloc(len(xs))
+
+	copy(block, xs)
+
+	return c.intern(block[:len(xs)])
+}
+
 func (c *SliceCache[T]) commit(block []T) []T {
 	c.pool.commit(len(block))
 

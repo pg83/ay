@@ -76,7 +76,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 
 func emitJVNode(instance ModuleInstance, cmdArgs []ANY, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit *StreamingEmitter) NodeRef {
 	na := emit.nodeArenas()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	node := Node{
 		Platform: instance.Platform,

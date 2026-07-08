@@ -228,8 +228,8 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		if pxdVFS, ok := resolveCythonPxd(ctx, instance, stmt.Pxd); ok {
 			pxdCV := walkClosure(e.scanner, pxdVFS, srcScanIn)
 
-			toolInputs = filterSourceVFS(dedupClosure(append(toolInputs, pxdCV.self), pxdCV.buckets))
-			emitsIncludes = dedupClosure(append(emitsIncludes, pxdCV.self), pxdCV.buckets)
+			toolInputs = filterSourceVFS(dedupClosure(na, append(toolInputs, pxdCV.self), pxdCV.buckets))
+			emitsIncludes = dedupClosure(na, append(emitsIncludes, pxdCV.self), pxdCV.buckets)
 		}
 
 		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
@@ -261,7 +261,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			Compile:        &CompileSpec{FlatOutput: d.flatSrc(genSrcID.any()), Py3Suffix: py3Suffix, CFlags: ccCFlags},
 		})
 
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+		env := envVarsVCS
 		cmdArgs := make([]ANY, 0, 8+len(cythonConstHead)+len(stmt.Options))
 
 		cmdArgs = append(cmdArgs, d.tc.Python3.any())

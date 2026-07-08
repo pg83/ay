@@ -16,7 +16,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	infoVFS := resolveSourceVFS(ctx, instance, stmt.Info.string(), d.srcDirs)
 	cppVFS := build(module, "/mn.", stmt.Name, ".cpp")
 	rodataVFS := build(module, "/MN_External_", stmt.Name, ".rodata")
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	node := Node{
 		Platform: instance.Platform,

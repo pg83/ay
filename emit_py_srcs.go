@@ -240,17 +240,22 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 	cmdArgs := na.chunkList(e.ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
 		na.anyList(internStr(moduleName).any(), (srcAbs).any(), (outputPath).any()))
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envPYTHONHASHSEED, Value: strZero.any()}}
-	nodeInputs := na.inputList([]VFS{py3ccBinary, py3ccSlowBin}, na.srcChunk(srcAbs))
+	env := envVarsVCSPyHash
 
+	var nodeInputs InputChunks
 	var inputs []VFS
 
 	if genInfo != nil {
-		inputs = []VFS{srcAbs}
-		inputs = append(inputs, genInfo.SourceInputs...)
-		inputs = append(inputs, py3ccBinary, py3ccSlowBin)
+		block := na.vfs.alloc(3 + len(genInfo.SourceInputs))[:0]
+		block = append(block, srcAbs)
+		block = append(block, genInfo.SourceInputs...)
+		block = append(block, py3ccBinary, py3ccSlowBin)
+		na.vfs.commit(len(block))
 
+		inputs = block[:len(block):len(block)]
 		nodeInputs = na.inputList(inputs)
+	} else {
+		nodeInputs = na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin), na.srcChunk(srcAbs))
 	}
 
 	node := Node{
@@ -265,11 +270,11 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 		Resources:    usesPython3,
 	}
 
-	toolRefs := depRefs(py3ccLDRef, py3ccSlowLDRef)
+	toolRefs := na.refList(py3ccLDRef, py3ccSlowLDRef)
 
 	if genInfo != nil {
 		if extras := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputs); len(extras) > 0 {
-			node.DepRefs = append(node.DepRefs, extras...)
+			node.DepRefs = extras
 		}
 	}
 
@@ -526,7 +531,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 		}
 
 		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: pyGenResourceItems(e.pyResEntriesFor(ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
-			return e.rawAuxInputClosure(aux, dedupSourceVFS(inputs, nil), ref)
+			return e.rawAuxInputClosure(aux, dedupSourceVFS(e.ctx.na, inputs, nil), ref)
 		}})
 
 		refs = append(refs, r...)
@@ -593,14 +598,14 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 
 		regCpp := arg.string() + ".reg3.cpp"
 		regCppVFS := build(instance.Path.relString(), "/", regCpp)
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+		env := envVarsVCS
 
-		pyCmdArgs := []ANY{
+		pyCmdArgs := na.anyList(
 			d.tc.Python3.any(),
 			(genPy3RegScriptVFS).any(),
 			arg.any(),
 			regCppVFS.any(),
-		}
+		)
 
 		pyNode := Node{
 			Platform:     ctx.target,

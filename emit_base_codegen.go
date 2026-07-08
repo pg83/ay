@@ -35,7 +35,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 
 	cmdArgs = appendAnys(cmdArgs, bc.Opts)
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 	bcRef := ctx.emit.reserve()
 	var headerParsed []IncludeDirective
 

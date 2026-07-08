@@ -117,7 +117,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	})
 
 	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envBISON_PKGDATADIR, Value: strBisonPkgData.any()}, {Name: envM4, Value: m4Bin.any()}}
-	preprocessEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	preprocessEnv := envVarsVCS
 	head := make([]ANY, 0, 6+len(d.cc.BisonFlags))
 
 	head = append(head, bisonBin.any(), argV.any())
@@ -146,7 +146,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		for _, sk := range bisonCppSkeletonInputs {
 			skCV := walkClosure(e.scanner, sk, d.cc.ScanCfg)
 
-			inputs = dedupClosure(inputs, skCV.buckets)
+			inputs = dedupClosure(na, inputs, skCV.buckets)
 		}
 	}
 

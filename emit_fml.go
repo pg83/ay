@@ -9,7 +9,7 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 	toolRef, toolBin := ctx.tool(argToolsRelevFmlCodegen)
 	srcVFS := source(instance.Path.relString(), "/", srcRel)
 	outVFS := build(instance.Path.relString(), "/", srcRel, ".inc")
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	node := Node{
 		Platform: instance.Platform,

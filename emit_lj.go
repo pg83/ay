@@ -8,7 +8,7 @@ const luajit21CwdRel = "contrib/libs/luajit_21"
 
 func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLDRef NodeRef, cwd VFS, emit *StreamingEmitter) NodeRef {
 	na := emit.nodeArenas()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	node := Node{
 		Platform: instance.Platform,

@@ -114,14 +114,14 @@ func newObjcopyEmitCtx(ctx *GenCtx, d *ModuleData, p *Platform) *ObjcopyEmitCtx 
 
 	oc.rescompilerLDRef, _ = ctx.tool(argToolsRescompiler)
 	oc.rescompressorLDRef, _ = ctx.tool(argToolsRescompressor)
-	oc.blocks = composeObjcopyArgBlocks(d.tc, p)
+	oc.blocks = composeObjcopyArgBlocks(ctx.na, d.tc, p)
 
 	return oc
 }
 
-func composeObjcopyArgBlocks(tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
+func composeObjcopyArgBlocks(na *NodeArenas, tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
 	return ObjcopyArgBlocks{
-		pre: []ANY{
+		pre: na.anyList(
 			tc.Python3.any(),
 			objcopyScriptVFS.any(),
 			argCompiler.any(), tc.CXX.any(),
@@ -129,8 +129,8 @@ func composeObjcopyArgBlocks(tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
 			argCompressor.any(), rescompressorBinVFS.any(),
 			argRescompiler.any(), rescompilerBinVFS.any(),
 			argOutputObj.any(),
-		},
-		post: []ANY{argTarget.any(), internStr(p.Triple).any()},
+		),
+		post: na.anyList(argTarget.any(), internStr(p.Triple).any()),
 	}
 }
 
@@ -163,7 +163,7 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 
 func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs InputChunks, deps []NodeRef) NodeRef {
 	na := oc.na
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	node := Node{
 		Platform:     instance.Platform,
@@ -305,7 +305,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 			payloadCap += 1 + nKvs
 		}
 
-		payload := make([]ANY, 0, payloadCap)
+		payload := na.anys.alloc(payloadCap)[:0]
 
 		hashScratch = hashScratch[:0]
 
@@ -344,9 +344,13 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 			}
 		}
 
+		na.anys.commit(len(payload))
+
+		payload = payload[:len(payload):len(payload)]
+
 		deduper.reset()
 
-		adjacent := make([]VFS, 0, cand)
+		adjacent := na.vfs.alloc(cand)[:0]
 
 		for _, it := range chunk {
 			if it.Input != 0 && deduper.add(it.Input.strID()) {
@@ -360,11 +364,21 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 			}
 		}
 
+		na.vfs.commit(len(adjacent))
+
+		adjacent = adjacent[:len(adjacent):len(adjacent)]
+
 		for _, v := range rescompilersWithScriptChunk {
 			deduper.add(v.strID())
 		}
 
-		var tail []VFS
+		auxBound := 0
+
+		for _, it := range chunk {
+			auxBound += len(it.Aux)
+		}
+
+		tail := na.vfs.alloc(auxBound)[:0]
 
 		for _, it := range chunk {
 			for _, v := range it.Aux {
@@ -374,10 +388,16 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 			}
 		}
 
-		inputs := na.inputList(rescompilersChunk, adjacent, objcopyScriptChunk)
+		na.vfs.commit(len(tail))
+
+		tail = tail[:len(tail):len(tail)]
+
+		var inputs InputChunks
 
 		if len(tail) > 0 {
-			inputs = append(inputs, tail)
+			inputs = na.inputList(rescompilersChunk, adjacent, objcopyScriptChunk, tail)
+		} else {
+			inputs = na.inputList(rescompilersChunk, adjacent, objcopyScriptChunk)
 		}
 
 		hashScratch = append(hashScratch, unitElem)
@@ -431,7 +451,13 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		deduper.reset()
 
-		var adjacent []VFS
+		adjBound := 0
+
+		for _, it := range chunk {
+			adjBound += 1 + len(it.Extra)
+		}
+
+		adjacent := na.vfs.alloc(adjBound)[:0]
 
 		hashScratch = hashScratch[:0]
 
@@ -453,6 +479,10 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			}
 		}
 
+		na.vfs.commit(len(adjacent))
+
+		adjacent = adjacent[:len(adjacent):len(adjacent)]
+
 		hashScratch = append(hashScratch, unitElem)
 
 		var hash string
@@ -463,7 +493,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		auxRef := ctx.emit.reserve()
 		auxClosure := p.RawClosure(aux, adjacent, auxRef)
 		auxLen := auxClosure.len()
-		nodeCmd := make([]ANY, 0, 2+2*len(chunk))
+		nodeCmd := na.anys.alloc(2 + 2*len(chunk))[:0]
 
 		nodeCmd = append(nodeCmd, rescompilerBinVFS.any(), aux.any())
 
@@ -475,8 +505,22 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			}
 		}
 
-		deps := concat(resolveCodegenDepRefsIncl(ctx, instance, na, adjacent), depRefs(rescompilerRef))
-		env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+		na.anys.commit(len(nodeCmd))
+
+		nodeCmd = nodeCmd[:len(nodeCmd):len(nodeCmd)]
+		codegenDeps := resolveCodegenDepRefsIncl(ctx, instance, na, adjacent)
+		deps := na.noderefs.alloc(len(codegenDeps) + 1)
+		nd := copy(deps, codegenDeps)
+
+		if rescompilerRef != 0 {
+			deps[nd] = rescompilerRef
+			nd++
+		}
+
+		na.noderefs.commit(nd)
+
+		deps = deps[:nd:nd]
+		env := envVarsVCS
 
 		deduper.reset()
 
@@ -484,7 +528,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			deduper.add(v.strID())
 		}
 
-		tail := make([]VFS, 0, 1+auxLen)
+		tail := na.vfs.alloc(1 + auxLen)[:0]
 
 		if deduper.add(rescompilerBinVFS.strID()) {
 			tail = append(tail, rescompilerBinVFS)
@@ -499,6 +543,10 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 				tail = append(tail, v)
 			}
 		})
+
+		na.vfs.commit(len(tail))
+
+		tail = tail[:len(tail):len(tail)]
 
 		ctx.emit.emitReservedNode(Node{
 			Platform:     instance.Platform,

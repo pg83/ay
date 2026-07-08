@@ -60,7 +60,7 @@ func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef,
 	head = appendAnyLists(head, effectiveFlags)
 
 	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.anyList((outVFS).any(), (inVFS).any()))
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 	head2 := na.vfsList(ragel6BinaryPath)
 
 	if inVFS.isBuild() {

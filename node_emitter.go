@@ -72,6 +72,8 @@ func (e *StreamingEmitter) newNode() *Node {
 }
 
 func (e *StreamingEmitter) emitNode(n Node) NodeRef {
+	ownershipCheckNode(&n)
+
 	p := e.na.nodes.one()
 
 	*p = n
@@ -80,6 +82,8 @@ func (e *StreamingEmitter) emitNode(n Node) NodeRef {
 }
 
 func (e *StreamingEmitter) emitReservedNode(n Node, id NodeRef) {
+	ownershipCheckNode(&n)
+
 	p := e.na.nodes.one()
 
 	*p = n

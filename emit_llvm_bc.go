@@ -18,7 +18,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	)
 
 	python := d.tc.Python3.string()
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 	reqs := Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)}
 	clangRoot := resolveResourceGlobalRef(stmt.ClangBCRoot, e.peers.ResourceGlobals)
 	clangxx := clangRoot + "/bin/clang++"

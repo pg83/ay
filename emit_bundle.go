@@ -73,7 +73,7 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 VFS, src, dst 
 
 	cmdArgs = append(cmdArgs, dst.any())
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	var inputHead []VFS
 	var depRefs []NodeRef

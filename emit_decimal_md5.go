@@ -47,7 +47,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 		cmdArgs = append(cmdArgs, v.any())
 	}
 
-	env := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}
+	env := envVarsVCS
 
 	svRef := ctx.emit.emitNode(Node{
 		Platform:     instance.Platform,

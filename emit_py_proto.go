@@ -64,17 +64,20 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 
 	protoRoot := protoPythonOutputRoot(d)
 
-	head := []ANY{
+	na := ctx.na
+	head := na.anys.alloc(6 + len(suffixes))[:0]
+	head = append(head,
 		d.tc.Python3.any(),
 		pbPyWrapperVFS.any(),
 		argPyVer.any(), argPy3.any(),
 		argSuffixes.any(),
-	}
-
+	)
 	head = appendInternAnys(head, suffixes)
-	pe.head = append(head, argInput.any())
+	head = append(head, argInput.any())
+	na.anys.commit(len(head))
+	pe.head = head[:len(head):len(head)]
 
-	mid := make([]ANY, 0, 16)
+	mid := na.anys.alloc(15 + len(protoInclude) + len(d.protocFlags))[:0]
 
 	mid = append(mid,
 		argNs.any(), internStr(protoPythonNamespaceArg(d)).any(),
@@ -112,27 +115,34 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 		mid = append(mid, argISContribLibsProtocSrc.any())
 	}
 
-	pe.mid = append(mid,
+	mid = append(mid,
 		argIB2.any(),
 		argISContribLibsProtobufSrc.any(),
 		internV("--python_out=$(B)/", protoRoot).any(),
 	)
 
-	pe.mid = appendAnyLists(pe.mid, d.protocFlags)
+	mid = appendAnyLists(mid, d.protocFlags)
+	na.anys.commit(len(mid))
+	pe.mid = mid[:len(mid):len(mid)]
+
+	tail := na.anys.alloc(4)[:0]
 
 	if d.grpc {
-		pe.tail = append(pe.tail,
+		tail = append(tail,
 			internV("--plugin=protoc-gen-grpc_py=", pe.grpcPyBinary.prefix(), pe.grpcPyBinary.relString()).any(),
 			internV("--grpc_py_out=$(B)/", protoRoot).any(),
 		)
 	}
 
 	if !d.noMypy {
-		pe.tail = append(pe.tail,
+		tail = append(tail,
 			internV("--plugin=protoc-gen-mypy=", pe.mypyBinary.prefix(), pe.mypyBinary.relString()).any(),
 			internV("--mypy_out=$(B)/", protoRoot).any(),
 		)
 	}
+
+	na.anys.commit(len(tail))
+	pe.tail = tail[:len(tail):len(tail)]
 
 	return pe
 }
@@ -161,7 +171,8 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	var grpcPyOut VFS
 
-	outputs := []VFS{pyOut}
+	outputs := na.vfs.alloc(3)[:0]
+	outputs = append(outputs, pyOut)
 	suffixes := []string{"_pb2.py"}
 
 	if d.grpc {
@@ -175,18 +186,35 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		suffixes = append(suffixes, "_pb2.pyi")
 	}
 
-	relChunk := []ANY{internStr(protoRelPath).any()}
-	cmdArgs := na.chunkList(pe.head, relChunk, pe.mid, relChunk)
+	na.vfs.commit(len(outputs))
+
+	outputs = outputs[:len(outputs):len(outputs)]
+	relChunk := na.anyList(internStr(protoRelPath).any())
+	chunks := na.chunks.alloc(5)[:0]
+	chunks = append(chunks, pe.head, relChunk, pe.mid, relChunk)
 
 	if len(pe.tail) > 0 {
-		cmdArgs = append(cmdArgs, pe.tail)
+		chunks = append(chunks, pe.tail)
 	}
 
-	toolRefs := depRefs(protocLDRef, pe.grpcPyRef)
+	na.chunks.commit(len(chunks))
 
-	if !d.noMypy {
-		toolRefs = append(toolRefs, depRefs(pe.mypyRef)...)
+	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])
+	toolRefs := na.noderefs.alloc(3)[:0]
+
+	for _, r := range [2]NodeRef{protocLDRef, pe.grpcPyRef} {
+		if r != 0 {
+			toolRefs = append(toolRefs, r)
+		}
 	}
+
+	if !d.noMypy && pe.mypyRef != 0 {
+		toolRefs = append(toolRefs, pe.mypyRef)
+	}
+
+	na.noderefs.commit(len(toolRefs))
+
+	toolRefs = toolRefs[:len(toolRefs):len(toolRefs)]
 
 	protoSrcVFS := source(protoRelPath)
 	protoCwd := srcRootDirVFS
@@ -198,14 +226,14 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	if info := e.codegen.lookup(build(protoRelPath)); info != nil {
 		protoSrcVFS = build(protoRelPath)
 		protoCwd = bldRootDirVFS
-		producerDeps = []NodeRef{info.ProducerRef}
+		producerDeps = na.refList(info.ProducerRef)
 		producerSourceInputs = info.SourceInputs
 		generatedProto = true
 	}
 
-	inputs := []VFS{protocBinary, pbPyWrapperVFS, protoSrcVFS}
 	transitive := walkClosure(e.scanner, source(protoRelPath), protoWalkInputs(ctx.parsers, nil, instance.Path.relString()))
-
+	inputs := na.vfs.alloc(5 + len(producerSourceInputs))[:0]
+	inputs = append(inputs, protocBinary, pbPyWrapperVFS, protoSrcVFS)
 	inputs = append(inputs, producerSourceInputs...)
 
 	if d.grpc {
@@ -215,6 +243,10 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	if !d.noMypy {
 		inputs = append(inputs, pe.mypyBinary)
 	}
+
+	na.vfs.commit(len(inputs))
+
+	inputs = inputs[:len(inputs):len(inputs)]
 
 	pbNodeKV := KV{P: pkPB, PC: pcYellow}
 	protoBaseName := filepath.Base(protoBase)
@@ -228,8 +260,8 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	pyPBNode := Node{
 		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}}}),
-		Env:          EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}},
+		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: envVarsVCS}),
+		Env:          envVarsVCS,
 		Inputs:       na.inputList(inputs, transitive.buckets...),
 		Outputs:      outputs,
 		KV:           &pbNodeKV,
@@ -243,7 +275,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	}
 
 	pyPBRef := ctx.emit.emitNode(pyPBNode)
-	sourceInputs := dedupSourceVFS(inputs, transitive.buckets)
+	sourceInputs := dedupSourceVFS(na, inputs, transitive.buckets)
 	keyBase := protoPythonResourceKeyBase(instance, d, src)
 
 	tokenFor := func(out VFS) STR {
@@ -342,15 +374,19 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 
 	yapycTail := na.anyList(internV(token, "-").any(), (ps.Path).any(), (yapycOut).any())
 
-	nodeInputs := na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path), info.SourceInputs)
+	inputsHead := na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path)
+
+	var nodeInputs InputChunks
 
 	if strings.HasSuffix(rel, "__intpy3___pb2_grpc.py") {
 		siblingPy := build(strings.TrimSuffix(rel, "__intpy3___pb2_grpc.py"), "__intpy3___pb2.py")
 
-		nodeInputs = append(nodeInputs, []VFS{siblingPy})
+		nodeInputs = na.inputList(inputsHead, info.SourceInputs, na.srcChunk(siblingPy))
+	} else {
+		nodeInputs = na.inputList(inputsHead, info.SourceInputs)
 	}
 
-	yapycEnv := EnvVars{{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, {Name: envPYTHONHASHSEED, Value: strZero.any()}}
+	yapycEnv := envVarsVCSPyHash
 
 	yapycNode := Node{
 		Platform:       instance.Platform,
@@ -360,8 +396,8 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 		Outputs:        na.vfsList(yapycOut),
 		KV:             &pyCodegenKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        []NodeRef{info.ProducerRef},
-		ForeignDepRefs: depRefs(py3ccRef, py3ccSlowRef),
+		DepRefs:        na.refList(info.ProducerRef),
+		ForeignDepRefs: na.refList(py3ccRef, py3ccSlowRef),
 		Resources:      usesPython3,
 	}
 

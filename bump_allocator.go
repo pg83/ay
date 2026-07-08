@@ -23,6 +23,10 @@ func (a *BumpAllocator[T]) alloc(n int) []T {
 		}
 
 		a.chunk = make([]T, size)
+
+		if ownershipOn {
+			registerOwnedSlice(a.chunk)
+		}
 	}
 
 	return a.chunk
