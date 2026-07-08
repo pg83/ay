@@ -25,6 +25,7 @@ var (
 	astCXXFlags  = newBumpAllocator[CXXFlagsStmt](1 << 8)
 	astEnumSers  = newBumpAllocator[GenerateEnumSerializationStmt](1 << 6)
 	astConds     = newBumpAllocator[CondNode](1 << 10)
+	astEnds      = newBumpAllocator[EndStmt](1 << 8)
 )
 
 var runAntlrKeywords = strKeySet(
@@ -1067,7 +1068,7 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 
 		return astOne(astSets, SetStmt{Name: args[0].string(), NameEnv: internEnv(args[0].string()), Value: internStr(value).string(), Line: line})
 	case "END":
-		return &EndStmt{Line: line}
+		return astOne(astEnds, EndStmt{Line: line})
 	case "JOIN_SRCS":
 		if len(args) == 0 {
 			fail("JOIN_SRCS expects at least one argument (the output name)")
