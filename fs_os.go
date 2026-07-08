@@ -93,7 +93,15 @@ func (fs *OsFS) exists(prefix STR, suffix string) (present bool, isDir bool) {
 	prefixRel := prefix.string()
 
 	if !pathIsClean(suffix) {
-		rel := normalisePath(joinRel(prefixRel, suffix))
+		var jb, nb [256]byte
+
+		joined := joinRelInto(jb[:0], prefixRel, suffix)
+		normB, ok := normaliseAppend(nb[:0], bytesString(joined))
+		rel := bytesString(normB)
+
+		if !ok {
+			rel = normalisePathSlow(string(joined))
+		}
 
 		if rel == "" {
 			return true, true

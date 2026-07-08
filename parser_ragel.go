@@ -44,7 +44,7 @@ func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocat
 			return
 		}
 
-		target, ok := parseRagelNativeIncludeLine(string(trimmed))
+		target, ok := parseRagelNativeIncludeLine(bytesString(trimmed))
 
 		if !ok {
 			return

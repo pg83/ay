@@ -160,15 +160,27 @@ func relStem(rel string) string {
 	return strings.TrimSuffix(rel, filepath.Ext(rel))
 }
 
-func normalisePath(p string) string {
-	if !strings.Contains(p, "..") && !strings.Contains(p, "./") && !strings.Contains(p, "//") {
-		return p
+func joinRelInto(dst []byte, a, b string) []byte {
+	if a != "" {
+		dst = append(dst, a...)
 	}
 
-	var buf [256]byte
+	if a != "" && b != "" {
+		dst = append(dst, '/')
+	}
+
+	if b != "" {
+		dst = append(dst, b...)
+	}
+
+	return dst
+}
+
+func normaliseAppend(out []byte, p string) ([]byte, bool) {
 	var starts [64]int
 
-	out := buf[:0]
+	base := len(out)
+	room := cap(out) - base
 	depth := 0
 
 	for i := 0; i <= len(p); {
@@ -190,19 +202,35 @@ func normalisePath(p string) string {
 				out = out[:starts[depth]]
 			}
 		default:
-			if len(seg) > len(buf)-len(out)-1 || depth == len(starts) {
-				return normalisePathSlow(p)
+			if len(seg) > room-(len(out)-base)-1 || depth == len(starts) {
+				return out[:base], false
 			}
 
 			starts[depth] = len(out)
 			depth++
 
-			if len(out) > 0 {
+			if len(out) > base {
 				out = append(out, '/')
 			}
 
 			out = append(out, seg...)
 		}
+	}
+
+	return out, true
+}
+
+func normalisePath(p string) string {
+	if !strings.Contains(p, "..") && !strings.Contains(p, "./") && !strings.Contains(p, "//") {
+		return p
+	}
+
+	var buf [256]byte
+
+	out, ok := normaliseAppend(buf[:0], p)
+
+	if !ok {
+		return normalisePathSlow(p)
 	}
 
 	return string(out)

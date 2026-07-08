@@ -42,10 +42,8 @@ func mineServiceTokensFromSources() map[string]struct{} {
 		}
 
 		for _, match := range stringLiteralRE.FindAllSubmatch(data, -1) {
-			tok := string(match[1])
-
-			if looksLikeServiceWord(tok) {
-				tokens[tok] = struct{}{}
+			if looksLikeServiceWord(bytesString(match[1])) {
+				tokens[internBytes(match[1]).string()] = struct{}{}
 			}
 		}
 	}

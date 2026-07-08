@@ -930,7 +930,16 @@ func (s *IncludeScanner) resolveSourceUnder(prefix VFS, targetSTR STR) VFS {
 		if target != "" && pathIsClean(target) {
 			v = sourceJoined(prefix.relString(), target)
 		} else {
-			v = source(normalisePath(joinRel(prefix.relString(), target)))
+			var jb, nb [256]byte
+
+			joined := joinRelInto(jb[:0], prefix.relString(), target)
+			normB, ok := normaliseAppend(nb[:0], bytesString(joined))
+
+			if ok {
+				v = sourceBytes(normB)
+			} else {
+				v = source(normalisePathSlow(string(joined)))
+			}
 		}
 	}
 
