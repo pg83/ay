@@ -10,12 +10,12 @@ import (
 func TestComposeDynLibInputs_IncludesVcsAndHelperScripts(t *testing.T) {
 	scr := func(rel string) VFS { return source("build/scripts/", rel) }
 	scripts := ScriptDeps{
-		scr("vcs_info.py"): {scr("vcs_info.py")},
-		scr("link_dyn_lib.py"): {
+		scr("vcs_info.py").rel(): {scr("vcs_info.py")},
+		scr("link_dyn_lib.py").rel(): {
 			scr("link_dyn_lib.py"), scr("link_exe.py"), scr("process_command_files.py"),
 			scr("process_whole_archive_option.py"), scr("thinlto_cache.py"),
 		},
-		scr("fs_tools.py"): {scr("fs_tools.py"), scr("process_command_files.py")},
+		scr("fs_tools.py").rel(): {scr("fs_tools.py"), scr("process_command_files.py")},
 	}
 
 	got := composeDynLibInputs(

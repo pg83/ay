@@ -357,7 +357,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		switch info := e.codegen.lookup(target.build()); {
 		case info != nil:
 			sub = walkClosure(e.scanner, info.OutputPath, scanCfg)
-		case fullSourceClosure && ctx.fs.isFile(srcRootVFS, target.string()):
+		case fullSourceClosure && ctx.fs.isFile(srcRootRel, target.string()):
 			sub = walkClosure(e.scanner, target.source(), scanCfg)
 			selfIsInput = true
 		default:
@@ -501,7 +501,7 @@ func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 		return buildVFS
 	}
 
-	if ctx.fs.isFile(srcRootVFS, rel) {
+	if ctx.fs.isFile(srcRootRel, rel) {
 		return source(rel)
 	}
 

@@ -412,7 +412,7 @@ func resolveCythonPxd(ctx *GenCtx, instance ModuleInstance, pxdRel string) (VFS,
 		return 0, false
 	}
 
-	if ctx.fs.isFile(instance.Path, pxdRel) {
+	if ctx.fs.isFile(instance.Path.rel(), pxdRel) {
 		return sourceJoined(instance.Path.relString(), pxdRel), true
 	}
 

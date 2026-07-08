@@ -506,7 +506,7 @@ func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPa
 			continue
 		}
 
-		if cl := scripts[s]; cl != nil {
+		if cl := scripts[s.rel()]; cl != nil {
 			chunks = append(chunks, cl)
 		} else {
 			chunks = append(chunks, na.srcChunk(s))

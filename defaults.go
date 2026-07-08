@@ -345,5 +345,5 @@ func effectiveNoPlatform(f FlagSet) bool {
 }
 
 func peerYaMakeExists(fs FS, peerDir VFS) bool {
-	return fs.isFile(peerDir, "ya.make")
+	return fs.isFile(peerDir.rel(), "ya.make")
 }

@@ -86,19 +86,19 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 		}
 
 		if srcVFS != dstVFS {
-			info.ClosureLeaves = append(info.ClosureLeaves, ctx.scripts[copyFsToolsVFS]...)
+			info.ClosureLeaves = append(info.ClosureLeaves, ctx.scripts[copyFsToolsVFS.rel()]...)
 
 			if entry.Text || entry.Auto {
 				info.ClosureLeaves = append(info.ClosureLeaves, srcVFS)
 			}
 
 			if srcVFS.isSource() {
-				info.SourceInputs = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS]...)
+				info.SourceInputs = append([]VFS{srcVFS}, ctx.scripts[copyFsToolsVFS.rel()]...)
 			}
 		}
 
 		if len(producerSource) > 0 {
-			info.SourceInputs = concat(producerSource, ctx.scripts[copyFsToolsVFS])
+			info.SourceInputs = concat(producerSource, ctx.scripts[copyFsToolsVFS.rel()])
 		}
 
 		reg.register(info)

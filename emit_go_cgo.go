@@ -144,7 +144,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel STR) {
 		cgoContext = block[: 1+len(d.cgoSrcs) : 1+len(d.cgoSrcs)]
 	}
 
-	scripts := ctx.scripts[copyFsToolsVFS]
+	scripts := ctx.scripts[copyFsToolsVFS.rel()]
 	leafCap := 1 + len(scripts) + len(cgoContext) + 1 + len(d.cgoSrcs)
 	leafBlock := na.vfs.alloc(leafCap)
 	nl := 0
@@ -484,8 +484,8 @@ func (e *EmitContext) flushGoCgo2() {
 	inclArgs := e.goCgoIncludeArgs()
 	cflagsStr := goCgoCFlags(e.d)
 	linkOFlags := e.goCgoLinkOFlags()
-	linkOScripts := ctx.scripts[linkOScriptVFS]
-	copyFsScripts := ctx.scripts[copyFsToolsVFS]
+	linkOScripts := ctx.scripts[linkOScriptVFS.rel()]
+	copyFsScripts := ctx.scripts[copyFsToolsVFS.rel()]
 
 	if len(cFiles) == 0 {
 		copyFsScripts = nil

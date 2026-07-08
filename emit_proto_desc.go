@@ -32,7 +32,7 @@ func moddirHash(moduleDir string) string {
 }
 
 func isProtoLibraryPeer(ctx *GenCtx, peerPath string) bool {
-	if !peerYaMakeExists(ctx.fs, dirKey(peerPath)) {
+	if !peerYaMakeExists(ctx.fs, dirKey(peerPath).source()) {
 		return false
 	}
 
@@ -290,7 +290,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 			Cmd{CmdArgs: na.chunkList(collect), Cwd: bldRootDirVFS, Env: env},
 		),
 		Env:          env,
-		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS], ctx.scripts[collectRawprotoVFS]),
+		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[collectRawprotoVFS.rel()]),
 		KV:           &protoDescKV,
 		Outputs:      na.vfsList(selfProtodesc, protosrc),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
@@ -341,7 +341,7 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 			Cmd{CmdArgs: na.chunkList(collect), Cwd: bldRootDirVFS, Env: env},
 		),
 		Env:          env,
-		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS], ctx.scripts[mergeProtosrcVFS]),
+		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[mergeProtosrcVFS.rel()]),
 		KV:           &protoDescKV,
 		Outputs:      na.vfsList(protodesc, tar),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},

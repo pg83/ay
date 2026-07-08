@@ -24,7 +24,7 @@ func hashSourceFile(srcRoot, rel string) uint64 {
 type OsFS struct {
 	srcRoot       string
 	rootSlash     string
-	dirs          DenseMap[VFS, DirView]
+	dirs          DenseMap[STR, DirView]
 	dirNames      *BumpAllocator[uint32]
 	dirEntries    *IntSet
 	contentHashes PageVec[uint64]
@@ -50,19 +50,19 @@ func newFS(srcRoot string) FS {
 }
 
 func (fs *OsFS) recordContentHash(rel string, data []byte) {
-	fs.contentHashes.set(uint32(source(cleanRel(rel))), xxh3.Hash(data))
+	fs.contentHashes.set(uint32(internStr(cleanRel(rel))), xxh3.Hash(data))
 }
 
-func (fs *OsFS) contentHash(v VFS) uint64 {
-	return fs.contentHashes.getSafe(v.strID())
+func (fs *OsFS) contentHash(rel STR) uint64 {
+	return fs.contentHashes.getSafe(rel.strID())
 }
 
-func (fs *OsFS) listdir(dir VFS) DirView {
+func (fs *OsFS) listdir(dir STR) DirView {
 	if cached, ok := fs.dirs.get(dir); ok {
 		return cached
 	}
 
-	v := fs.readDirViewRel(dir, dir.relString())
+	v := fs.readDirViewRel(dir, dir.string())
 
 	fs.dirs.put(dir, v)
 
@@ -85,12 +85,12 @@ func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 	return true, isDir
 }
 
-func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
+func (fs *OsFS) exists(prefix STR, suffix string) (present bool, isDir bool) {
 	if suffix == "" {
 		return fs.listdir(prefix).listable(), true
 	}
 
-	prefixRel := prefix.relString()
+	prefixRel := prefix.string()
 
 	if !pathIsClean(suffix) {
 		rel := normalisePath(joinRel(prefixRel, suffix))
@@ -131,7 +131,7 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 
 	dname, base := splitDirName(suffix)
 
-	v = fs.listdir(sourceJoined(prefixRel, dname))
+	v = fs.listdir(internJoined(prefixRel, dname))
 
 	if !v.listable() {
 		return false, false
@@ -142,13 +142,13 @@ func (fs *OsFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
 	return ok, d
 }
 
-func (fs *OsFS) isFile(prefix VFS, suffix string) bool {
+func (fs *OsFS) isFile(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
 
 	return p && !d
 }
 
-func (fs *OsFS) isDir(prefix VFS, suffix string) bool {
+func (fs *OsFS) isDir(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
 
 	return p && d

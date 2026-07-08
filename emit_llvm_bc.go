@@ -84,7 +84,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	mergeInputs := na.inputList(bcPaths)
 
 	if linksCopy {
-		mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS])
+		mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS.rel()])
 	}
 
 	ldNode := Node{

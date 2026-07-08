@@ -7,7 +7,7 @@ import (
 
 const buildScriptsRoot = "build/scripts"
 
-type ScriptDeps map[VFS][]VFS
+type ScriptDeps map[STR][]VFS
 
 func buildScriptTable(fs FS) ScriptDeps {
 	texts := map[string]string{}
@@ -90,7 +90,7 @@ func buildScriptTable(fs FS) ScriptDeps {
 			out = append(out, source(d))
 		}
 
-		table[source(rel)] = out
+		table[source(rel).rel()] = out
 	}
 
 	return table

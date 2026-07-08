@@ -60,8 +60,8 @@ func newMemFS(files map[string]string) *MemFS {
 	return fs
 }
 
-func (fs *MemFS) listdir(dir VFS) DirView {
-	rel := dir.relString()
+func (fs *MemFS) listdir(dir STR) DirView {
+	rel := dir.string()
 
 	if v, ok := fs.views[rel]; ok {
 		return v
@@ -132,17 +132,17 @@ func (fs *MemFS) existsRel(rel string) (present bool, isDir bool) {
 	return ok, isDir
 }
 
-func (fs *MemFS) exists(prefix VFS, suffix string) (present bool, isDir bool) {
-	return fs.existsRel(joinRel(prefix.relString(), suffix))
+func (fs *MemFS) exists(prefix STR, suffix string) (present bool, isDir bool) {
+	return fs.existsRel(joinRel(prefix.string(), suffix))
 }
 
-func (fs *MemFS) isFile(prefix VFS, suffix string) bool {
+func (fs *MemFS) isFile(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
 
 	return p && !d
 }
 
-func (fs *MemFS) isDir(prefix VFS, suffix string) bool {
+func (fs *MemFS) isDir(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
 
 	return p && d
@@ -158,8 +158,8 @@ func (fs *MemFS) read(rel string) []byte {
 	return append([]byte(nil), data...)
 }
 
-func (fs *MemFS) contentHash(v VFS) uint64 {
-	data, ok := fs.files[cleanRel(v.relString())]
+func (fs *MemFS) contentHash(rel STR) uint64 {
+	data, ok := fs.files[cleanRel(rel.string())]
 
 	if !ok {
 		return 0

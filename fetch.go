@@ -32,8 +32,8 @@ func currentYatoolPath() string {
 func fetchScriptInputs(scripts ScriptDeps) []VFS {
 	out := []VFS{buildMappingConfJson}
 
-	out = append(out, scripts[buildScriptsFetchFromSandboxPy]...)
-	out = append(out, scripts[buildScriptsFetchFromMdsPy]...)
+	out = append(out, scripts[buildScriptsFetchFromSandboxPy.rel()]...)
+	out = append(out, scripts[buildScriptsFetchFromMdsPy.rel()]...)
 
 	return out
 }

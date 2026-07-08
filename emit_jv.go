@@ -45,7 +45,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(h))})
 		}
 
-		leaves := append([]VFS{jvPrimary, srcH}, ctx.scripts[antlr4FsToolsVFS]...)
+		leaves := append([]VFS{jvPrimary, srcH}, ctx.scripts[antlr4FsToolsVFS.rel()]...)
 
 		leaves = append(leaves, jvInputs...)
 

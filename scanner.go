@@ -101,7 +101,7 @@ func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 		return false
 	}
 
-	v := s.parsers.fs.isFile(srcRootVFS, abs.relString())
+	v := s.parsers.fs.isFile(srcRootRel, abs.relString())
 
 	if v {
 		s.parsers.sourceExists.set(id, sourceExistsYes)
@@ -213,7 +213,7 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 
 	process := func(entry IncludeDirective) {
 		if entry.kind == includeCythonSibling {
-			for _, rabs := range sc.resolve(vfsPath, incDir, entry) {
+			for _, rabs := range sc.resolve(vfsPath, incDir.source(), entry) {
 				fn(rabs)
 			}
 
@@ -233,7 +233,7 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 			return
 		}
 
-		resolved := sc.resolve(vfsPath, incDir, entry)
+		resolved := sc.resolve(vfsPath, incDir.source(), entry)
 
 		for _, rabs := range resolved {
 			fn(rabs)
@@ -256,7 +256,7 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 		process(entry)
 	}
 
-	sc.resolveInducedDeps(vfsPath, incDir, fn)
+	sc.resolveInducedDeps(vfsPath, incDir.source(), fn)
 }
 
 func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)) {
@@ -820,7 +820,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	addPath := func(rel string) bool {
 		rel = normalisePath(rel)
 
-		if !s.parsers.fs.isFile(srcRootVFS, rel) {
+		if !s.parsers.fs.isFile(srcRootRel, rel) {
 			return false
 		}
 
@@ -912,7 +912,7 @@ func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool
 }
 
 func (s *IncludeScanner) resolveSourceUnder(prefix VFS, targetSTR STR) VFS {
-	key := splitMix64(uint32(prefix), uint32(targetSTR))
+	key := splitMix64(uint32(prefix.rel()), uint32(targetSTR))
 
 	if p := s.sourceUnderCache.get(key); p != nil {
 		return *p
@@ -922,7 +922,7 @@ func (s *IncludeScanner) resolveSourceUnder(prefix VFS, targetSTR STR) VFS {
 
 	var v VFS
 
-	if s.parsers.fs.isFile(prefix, target) {
+	if s.parsers.fs.isFile(prefix.rel(), target) {
 		if target != "" && pathIsClean(target) {
 			v = sourceJoined(prefix.relString(), target)
 		} else {

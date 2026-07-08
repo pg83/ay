@@ -365,7 +365,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		ownSbomRef, ownSbomPath = e.emitSbomComponent(programBinaryName(instance, d.moduleStmt))
 	}
 
-	inputs := InputChunks{ctx.scripts[copyFsToolsVFS]}
+	inputs := InputChunks{ctx.scripts[copyFsToolsVFS.rel()]}
 	depRefs := []NodeRef{fetchRef}
 
 	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {

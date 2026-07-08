@@ -17,7 +17,7 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	}
 
 	for i := len(srcDirs) - 1; i >= 1; i-- {
-		if ctx.fs.isFile(srcDirs[i], srcRel) {
+		if ctx.fs.isFile(srcDirs[i].rel(), srcRel) {
 			if srcRel != "" && pathIsClean(srcRel) {
 				return sourceJoined(srcDirs[i].relString(), srcRel)
 			}
@@ -27,8 +27,8 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	}
 
 	if srcRel != "" && pathIsClean(srcRel) &&
-		!ctx.fs.isFile(srcInstance.Path, srcRel) &&
-		ctx.fs.isFile(srcRootVFS, srcRel) {
+		!ctx.fs.isFile(srcInstance.Path.rel(), srcRel) &&
+		ctx.fs.isFile(srcRootRel, srcRel) {
 		return source(srcRel)
 	}
 

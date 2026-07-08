@@ -547,7 +547,7 @@ func sourceInputVFS(fs FS, moduleDir VFS, path string) *VFS {
 	}
 
 	if fs != nil {
-		if fs.isFile(moduleDir, clean) {
+		if fs.isFile(moduleDir.rel(), clean) {
 			if strings.Contains(clean, "..") {
 				return vfsPtr(source(filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))))
 			}
@@ -555,7 +555,7 @@ func sourceInputVFS(fs FS, moduleDir VFS, path string) *VFS {
 			return vfsPtr(source(modulePath, "/", clean))
 		}
 
-		if fs.isFile(srcRootVFS, clean) {
+		if fs.isFile(srcRootRel, clean) {
 			return vfsPtr(source(clean))
 		}
 	}
@@ -849,7 +849,7 @@ func filterOwnAddIncl(fs FS, paths []VFS, modulePath string, onWarn func(Warn)) 
 	copied := false
 
 	for i, path := range paths {
-		if shouldCheckSourceDir(path) && !fs.isDir(path, "") {
+		if shouldCheckSourceDir(path) && !fs.isDir(path.rel(), "") {
 			onWarn(Warn{
 				Kind:    WarnMissingAddincl,
 				Message: fmt.Sprintf("%s: ADDINCL to non existent source directory %s", modulePath, path.relString()),
@@ -1140,7 +1140,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			for _, dirTok := range expandStmtTokensSTR(v.Dirs, env) {
 				dir := dirTok.string()
 
-				d.srcDirs = append(d.srcDirs, dirKey(dir))
+				d.srcDirs = append(d.srcDirs, dirKey(dir).source())
 			}
 		case *GlobalSrcsStmt:
 			appendGlobalSrcGroup(d, expandStmtTokensSTR(v.Sources, env))

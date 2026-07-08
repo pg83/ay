@@ -2027,7 +2027,7 @@ func (p *Parser) expandOneInclude(into []Stmt, nameTok Token, rel string) []Stmt
 		}
 	}
 
-	if present, _ := p.fs.exists(srcRootVFS, target); !present {
+	if present, _ := p.fs.exists(srcRootRel, target); !present {
 		return into
 	}
 

@@ -52,7 +52,7 @@ func copyStatsFlags(dst, src map[string]string) {
 }
 
 func readOptionalYaConfSection(fs FS, rel, wantSection string) map[string]string {
-	if fs == nil || !fs.isFile(srcRootVFS, rel) {
+	if fs == nil || !fs.isFile(srcRootRel, rel) {
 		return nil
 	}
 
