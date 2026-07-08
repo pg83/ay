@@ -47,68 +47,12 @@ func (v VFS) sharedRel() string {
 	return internTable.cells.get(uint32(v) >> 1).str
 }
 
-func (id STR) source() VFS {
-	return VFS(uint32(id)<<1 | uint32(VFSRootSource))
-}
-
-func (id STR) build() VFS {
-	return VFS(uint32(id)<<1 | uint32(VFSRootBuild))
-}
-
 func (v VFS) prefix() string {
 	if v.isBuild() {
 		return "$(B)/"
 	}
 
 	return "$(S)/"
-}
-
-func internVInto(prefix string, parts []string) STR {
-	return internBuild(prefix, parts)
-}
-
-func internedVInto(prefix string, parts []string) STR {
-	return internedBuild(prefix, parts)
-}
-
-func internV(parts ...string) STR {
-	return internVInto("", parts)
-}
-
-func internedV(parts ...string) STR {
-	return internedVInto("", parts)
-}
-
-func internPrefixed(prefix, rel string) STR {
-	return internVInto(prefix, []string{rel})
-}
-
-func internedPrefixed(prefix, rel string) STR {
-	return internedVInto(prefix, []string{rel})
-}
-
-func internPrefixedJoined(prefix, dir, rel string) STR {
-	if dir == "" {
-		return internVInto(prefix, []string{rel})
-	}
-
-	return internVInto(prefix, []string{dir, "/", rel})
-}
-
-func internedPrefixedJoined(prefix, dir, rel string) STR {
-	if dir == "" {
-		return internedVInto(prefix, []string{rel})
-	}
-
-	return internedVInto(prefix, []string{dir, "/", rel})
-}
-
-func internJoined(dir, rel string) STR {
-	if dir == "" {
-		return internStr(rel)
-	}
-
-	return internV(dir, "/", rel)
 }
 
 func sourceJoined(dir, rel string) VFS {
@@ -129,22 +73,6 @@ func source(parts ...string) VFS {
 
 func build(parts ...string) VFS {
 	return internV(parts...).build()
-}
-
-func (id STR) vfs() VFS {
-	s := internTable.flat[uint32(id)].str
-
-	if !vfsHasPrefix(s) {
-		return 0
-	}
-
-	root := VFSRootSource
-
-	if s[2] == 'B' {
-		root = VFSRootBuild
-	}
-
-	return VFS(uint32(internStr(s[vfsPrefixLen:]))<<1 | uint32(root))
 }
 
 func (v VFS) isSource() bool {
@@ -238,4 +166,8 @@ func (v VFS) marshalJSON() ([]byte, error) {
 
 func (v VFS) MarshalJSON() ([]byte, error) {
 	return v.marshalJSON()
+}
+
+func (v VFS) any() ANY {
+	return ANY(uint32(v)<<1 | 1)
 }
