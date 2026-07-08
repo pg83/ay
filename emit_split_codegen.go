@@ -54,7 +54,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		internStr(strconv.Itoa(cppParts)).any(),
 	)
 
-	cmdArgs = appendAnys(cmdArgs, sc.Opts)
+	cmdArgs = append(cmdArgs, sc.Opts...)
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]

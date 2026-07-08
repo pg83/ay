@@ -156,7 +156,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	duplicateOutputRootInclude := false
 
 	if protoRoot := protoPythonOutputRoot(d); protoRoot != "" {
-		duplicateOutputRootInclude = containsVFS(e.peers.PeerAddInclGlobal, build(protoRoot))
+		duplicateOutputRootInclude = slices.Contains(e.peers.PeerAddInclGlobal, build(protoRoot))
 	}
 
 	pe := e.newPyPBModuleEmission(protocBinary, e.peers.ProtoInclude, duplicateOutputRootInclude)

@@ -448,7 +448,7 @@ func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("mod"), Kind: KindLib},
 		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
-	if !equalStrings(strStrings(d.pySrcs), []string{"a.py", "b.py"}) {
+	if !equalStrings(anyStrs(d.pySrcs), []string{"a.py", "b.py"}) {
 		t.Fatalf("pySrcs = %v, want [a.py b.py]", d.pySrcs)
 	}
 }
@@ -473,7 +473,7 @@ func TestCollectModule_SetAppendExpandsResourceAndSandboxInputs(t *testing.T) {
 		t.Fatalf("fromSandboxes = %d, want 1", len(d.fromSandboxes))
 	}
 
-	if !equalStrings(strStrings(d.fromSandboxes[0].OUTNoAutoFiles), []string{"d/2.dict", "d/3.dict"}) {
+	if !equalStrings(anyStrs(d.fromSandboxes[0].OUTNoAutoFiles), []string{"d/2.dict", "d/3.dict"}) {
 		t.Fatalf("OUT_NOAUTO = %v, want [d/2.dict d/3.dict]", d.fromSandboxes[0].OUTNoAutoFiles)
 	}
 

@@ -24,20 +24,6 @@ func anyStrs(as []ANY) []string {
 	return out
 }
 
-func strStrings(items []ANY) []string {
-	out := make([]string, 0, len(items))
-
-	for _, s := range items {
-		out = append(out, s.string())
-	}
-
-	return out
-}
-
-func anyPtr(s ANY) *ANY {
-	return &s
-}
-
 func strsContain(items []ANY, s string) bool {
 	id := interned(s)
 
@@ -57,14 +43,6 @@ func strsContain(items []ANY, s string) bool {
 func appendAnyLists(dst []ANY, srcs ...[]ANY) []ANY {
 	for _, s := range srcs {
 		dst = append(dst, s...)
-	}
-
-	return dst
-}
-
-func appendAnys(dst []ANY, ss []ANY) []ANY {
-	for _, s := range ss {
-		dst = append(dst, s)
 	}
 
 	return dst

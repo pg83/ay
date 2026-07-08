@@ -21,11 +21,5 @@ func strStrs(as []STR) []string {
 }
 
 func sTRS(items ...string) []STR {
-	out := make([]STR, 0, len(items))
-
-	for _, s := range items {
-		out = append(out, internStr(s))
-	}
-
-	return out
+	return appendInternStrs(make([]STR, 0, len(items)), items)
 }

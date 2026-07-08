@@ -889,8 +889,8 @@ func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool
 		return "", false
 	}
 
-	if hasPrefix(includerAbs.relString(), "contrib/tools/cython_py2/Cython/Includes/") {
-		if hasPrefix(d.target.string(), "libc/") || hasPrefix(d.target.string(), "libcpp/") {
+	if strings.HasPrefix(includerAbs.relString(), "contrib/tools/cython_py2/Cython/Includes/") {
+		if strings.HasPrefix(d.target.string(), "libc/") || strings.HasPrefix(d.target.string(), "libcpp/") {
 			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.string(), true
 		}
 

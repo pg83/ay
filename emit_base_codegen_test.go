@@ -16,7 +16,7 @@ func TestParseBaseCodegen(t *testing.T) {
 		t.Fatalf("Prefix = %q", stmt.Prefix.string())
 	}
 
-	if got := strStrings(stmt.Opts); !slices.Equal(got, []string{"NTop"}) {
+	if got := anyStrs(stmt.Opts); !slices.Equal(got, []string{"NTop"}) {
 		t.Fatalf("Opts = %v, want [NTop]", got)
 	}
 }

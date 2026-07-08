@@ -1433,7 +1433,7 @@ END()
 
 func TestProtoPythonResourceKey_PYNamespacePreservesNestedSubdir(t *testing.T) {
 	instance := ModuleInstance{Path: source("yt/yt_proto/yt/client")}
-	d := &ModuleData{pyNamespace: anyPtr(internStr("yt_proto.yt.client").any())}
+	d := &ModuleData{pyNamespace: ptr(internStr("yt_proto.yt.client").any())}
 
 	got := protoPythonResourceKeyBase(instance, d, "chunk_client/proto/data_statistics.proto") + "_pb2.py"
 	const want = "yt_proto/yt/client/chunk_client/proto/data_statistics_pb2.py"
@@ -1940,7 +1940,7 @@ func TestGen_InlineProtoLibrary_ProtobufGlobalAddInclReachesOrdinaryAndConsumer(
 		args := anyStrs(n.Cmds[0].CmdArgs.flat())
 
 		for _, inc := range band {
-			has := flagsContain(args, inc)
+			has := slices.Contains(args, inc)
 
 			if has != want {
 				t.Fatalf("%s (%s): include %q present=%v, want %v\nargs=%v", label, output, inc, has, want, args)

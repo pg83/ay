@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 var (
 	ldLinkDynLibPath = ldLinkDynLibVFS.string()
@@ -58,7 +61,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	sbomEmbed := false
 
 	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
-		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !containsVFS(ldSbomPaths, *p) {
+		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !slices.Contains(ldSbomPaths, *p) {
 			ldSbomRefs = append(ldSbomRefs, *r)
 			ldSbomPaths = append(ldSbomPaths, *p)
 		}
@@ -139,7 +142,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 
 	return &ModuleEmitResult{
 		LDRef:          ref,
-		LDPath:         vfsPtr(build(instance.Path.relString(), "/", outputName)),
+		LDPath:         ptr(build(instance.Path.relString(), "/", outputName)),
 		ModuleStmtName: d.moduleStmt.Name,
 		InducedDeps:    d.inducedDeps,
 	}
@@ -319,7 +322,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c.pic.o")
 	cmd0 := composeLDCmdVcsInfo(na, d.tc, vcsCVFS)
 	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
-	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, nil, peerArchivePaths, pluginPaths, strStrings(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath)
+	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, nil, peerArchivePaths, pluginPaths, anyStrs(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath)
 	cmd3 := composeLDCmdLinkOrCopy(na, d.tc, instance.Path.relString())
 	envVcsOnly := envVarsVCS
 	envFull := ctx.host.toolEnv()
@@ -357,9 +360,9 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		ARPath:                       nil,
 		isPROGRAM:                    false,
 		LDRef:                        ref,
-		LDPath:                       vfsPtr(build(instance.Path.relString(), "/", outputName)),
+		LDPath:                       ptr(build(instance.Path.relString(), "/", outputName)),
 		AddInclGlobal:                addInclGlobal,
-		OwnAddInclGlobal:             cloneVFSs(d.addInclGlobal),
+		OwnAddInclGlobal:             slices.Clone(d.addInclGlobal),
 		CFlagsGlobal:                 cFlagsGlobal,
 		CXXFlagsGlobal:               cxxFlagsGlobal,
 		COnlyFlagsGlobal:             cOnlyFlagsGlobal,

@@ -21,11 +21,11 @@ func TestParseSplitCodegen_KeywordsAnywhere(t *testing.T) {
 		t.Fatalf("OutNum = %d, want 30", stmt.OutNum)
 	}
 
-	if got := strStrings(stmt.Opts); !slices.Equal(got, []string{"NTop"}) {
+	if got := anyStrs(stmt.Opts); !slices.Equal(got, []string{"NTop"}) {
 		t.Fatalf("Opts = %v, want [NTop]", got)
 	}
 
-	if got := strStrings(stmt.OutputIncludes); !slices.Equal(got, []string{"a.h", "b.h"}) {
+	if got := anyStrs(stmt.OutputIncludes); !slices.Equal(got, []string{"a.h", "b.h"}) {
 		t.Fatalf("OutputIncludes = %v, want [a.h b.h]", got)
 	}
 }

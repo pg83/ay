@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 var cythonNumpyAddIncl = []VFS{
 	source("contrib/python/numpy/include/numpy/core/include"),
 	source("contrib/python/numpy/include/numpy/core/include/numpy"),
@@ -350,7 +352,7 @@ func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []V
 }
 
 func isCythonLangFile(rel string) bool {
-	return hasSuffix(rel, ".pyx") || hasSuffix(rel, ".pxd") || hasSuffix(rel, ".pxi") || hasSuffix(rel, ".py")
+	return strings.HasSuffix(rel, ".pyx") || strings.HasSuffix(rel, ".pxd") || strings.HasSuffix(rel, ".pxi") || strings.HasSuffix(rel, ".py")
 }
 
 type CythonCppInduced struct {
@@ -433,7 +435,7 @@ func cythonUsesPy23Variant(modName TOK) bool {
 }
 
 func cythonImplicitFallthrough(stmt *CythonStmt, py23Variant bool) bool {
-	return !stmt.CMode && (hasSuffix(stmt.Src, ".pyx") || py23Variant)
+	return !stmt.CMode && (strings.HasSuffix(stmt.Src, ".pyx") || py23Variant)
 }
 
 func appendCythonAddIncl(cmdArgs []ANY, addIncl []VFS, memo InclArgMemo) []ANY {
@@ -508,7 +510,7 @@ func filterPyRegisterCFlags(cflags []ANY) []ANY {
 	for _, flag := range cflags {
 		s := flag.string()
 
-		if hasPrefix(s, "-DPyInit_") || hasPrefix(s, "-Dinit_module_") {
+		if strings.HasPrefix(s, "-DPyInit_") || strings.HasPrefix(s, "-Dinit_module_") {
 			continue
 		}
 

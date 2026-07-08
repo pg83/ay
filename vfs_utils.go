@@ -1,23 +1,5 @@
 package main
 
-func vfsPtr(v VFS) *VFS {
-	return &v
-}
-
-func cloneVFSs(in []VFS) []VFS {
-	return append([]VFS(nil), in...)
-}
-
-func containsVFS(xs []VFS, want VFS) bool {
-	for _, x := range xs {
-		if x == want {
-			return true
-		}
-	}
-
-	return false
-}
-
 func filterSourceVFS(na *NodeArenas, vs []VFS) []VFS {
 	n := 0
 

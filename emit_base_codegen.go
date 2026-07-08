@@ -33,7 +33,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		prefixH.any(),
 	)
 
-	cmdArgs = appendAnys(cmdArgs, bc.Opts)
+	cmdArgs = append(cmdArgs, bc.Opts...)
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]

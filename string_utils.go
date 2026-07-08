@@ -6,14 +6,6 @@ import (
 	"unsafe"
 )
 
-func hasPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
-}
-
-func hasSuffix(s, suffix string) bool {
-	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
-}
-
 func reverseStr(s string) string {
 	b := []byte(s)
 
@@ -52,16 +44,6 @@ func prefixEach(prefix string, items []string) []string {
 	}
 
 	return out
-}
-
-func flagsContain(flags []string, want string) bool {
-	for _, flag := range flags {
-		if flag == want {
-			return true
-		}
-	}
-
-	return false
 }
 
 func isTokenPrefix(p, of []string) bool {
@@ -201,8 +183,4 @@ func humanBytes(n int64) string {
 
 func strBytes(s string) []byte {
 	return unsafe.Slice(unsafe.StringData(s), len(s))
-}
-
-func stringPtr(s string) *string {
-	return &s
 }

@@ -184,7 +184,7 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 		return nil
 	}
 
-	return cloneVFSs(res.WholeArchiveCmdPaths)
+	return slices.Clone(res.WholeArchiveCmdPaths)
 }
 
 type GenCtx struct {
@@ -1593,7 +1593,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		Py3Suffix:            isPy3NativeLib,
 		ObjectSuffixStem: func() *string {
 			if isYqlUdfStaticModule(d.moduleStmt.Name) {
-				return stringPtr("udfs")
+				return ptr("udfs")
 			}
 
 			return nil
@@ -1629,7 +1629,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	globalMetas := global.metas
 
 	if ctx.sbomEnabled && env.bool(envCLANG) && len(local.refs) > 0 {
-		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !containsVFS(peerSbomPaths, *p) {
+		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !slices.Contains(peerSbomPaths, *p) {
 			peerSbomRefs = append(peerSbomRefs, *r)
 			peerSbomPaths = append(peerSbomPaths, *p)
 		}
@@ -1641,9 +1641,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		result.isPROGRAM = true
 		result.LDRef = goRef
-		result.LDPath = vfsPtr(goPath)
+		result.LDPath = ptr(goPath)
 		result.ARRef = goRef
-		result.ARPath = vfsPtr(goPath)
+		result.ARPath = ptr(goPath)
 
 		ctx.memo.put(ctx.instanceKey(instance), result)
 
@@ -1828,7 +1828,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		goRef, goPath, srcClosure := e.emitGoPackage(resolved, local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths, ownSbomRef, ownSbomPath, resourceGlobalsClosure)
 
 		arRef = goRef
-		arPath = vfsPtr(goPath)
+		arPath = ptr(goPath)
 		goSrcClosure = srcClosure
 	} else if len(local.refs) > 0 {
 		if perModuleCCTag != 0 {
@@ -1837,7 +1837,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			arRef = emitARNamed(arInstance, arBaseName, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		}
 
-		arPath = vfsPtr(build(instance.Path.relString(), "/", arBaseName))
+		arPath = ptr(build(instance.Path.relString(), "/", arBaseName))
 	}
 
 	if sbomActive(ctx, instance) && sbomQualifies(d) && d.unit.Tag != unitTagPy3BinLib && !isGoModuleType(d.moduleStmt.Name) {
@@ -1866,7 +1866,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		globalRef := emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 
 		result.GlobalRef = &globalRef
-		result.GlobalPath = vfsPtr(build(instance.Path.relString(), "/", globalBaseName))
+		result.GlobalPath = ptr(build(instance.Path.relString(), "/", globalBaseName))
 	}
 
 	if protoResult := e.protoRes; protoResult != nil {

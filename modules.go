@@ -538,25 +538,25 @@ func sourceInputVFS(fs FS, moduleDir VFS, path string) *VFS {
 	clean := filepath.ToSlash(filepath.Clean(path))
 
 	if clean == "." || clean == "" {
-		return vfsPtr(moduleDir)
+		return ptr(moduleDir)
 	}
 
 	if clean == modulePath ||
 		(len(clean) > len(modulePath) && clean[len(modulePath)] == '/' && clean[:len(modulePath)] == modulePath) {
-		return vfsPtr(source(clean))
+		return ptr(source(clean))
 	}
 
 	if fs != nil {
 		if fs.isFile(moduleDir.rel(), clean) {
 			if strings.Contains(clean, "..") {
-				return vfsPtr(source(filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))))
+				return ptr(source(filepath.ToSlash(filepath.Clean(modulePath + "/" + clean))))
 			}
 
-			return vfsPtr(source(modulePath, "/", clean))
+			return ptr(source(modulePath, "/", clean))
 		}
 
 		if fs.isFile(srcRootRel, clean) {
-			return vfsPtr(source(clean))
+			return ptr(source(clean))
 		}
 	}
 
@@ -573,18 +573,18 @@ func copyFileInputVFS(fs FS, moduleDir VFS, src string) VFS {
 
 func moduleRootedVFS(modulePath string, path string) *VFS {
 	if vfsHasPrefix(path) {
-		return vfsPtr(intern(path))
+		return ptr(intern(path))
 	}
 
 	switch {
 	case strings.HasPrefix(path, "${ARCADIA_ROOT}/"):
-		return vfsPtr(sourceClean(strings.TrimPrefix(path, "${ARCADIA_ROOT}/")))
+		return ptr(sourceClean(strings.TrimPrefix(path, "${ARCADIA_ROOT}/")))
 	case strings.HasPrefix(path, "${CURDIR}/"):
-		return vfsPtr(sourceJoinClean(modulePath, strings.TrimPrefix(path, "${CURDIR}/")))
+		return ptr(sourceJoinClean(modulePath, strings.TrimPrefix(path, "${CURDIR}/")))
 	case strings.HasPrefix(path, "${ARCADIA_BUILD_ROOT}/"):
-		return vfsPtr(buildClean(strings.TrimPrefix(path, "${ARCADIA_BUILD_ROOT}/")))
+		return ptr(buildClean(strings.TrimPrefix(path, "${ARCADIA_BUILD_ROOT}/")))
 	case strings.HasPrefix(path, "${BINDIR}/"):
-		return vfsPtr(buildJoinClean(modulePath, strings.TrimPrefix(path, "${BINDIR}/")))
+		return ptr(buildJoinClean(modulePath, strings.TrimPrefix(path, "${BINDIR}/")))
 	default:
 		return nil
 	}
@@ -1181,15 +1181,15 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				addGeneratedHeaderIncludeCF(modulePath, expanded.Dst, d)
 			}
 		case *CreateBuildInfoStmt:
-			d.createBuildInfoFor = anyPtr(internStr(v.OutputHeader).any())
+			d.createBuildInfoFor = ptr(internStr(v.OutputHeader).any())
 		case *RunAntlr4CppStmt:
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        false,
 				Grammar:        expandStmtToken(v.Grammar.string(), env),
-				Options:        strStrings(expandStmtTokens(v.Options, env)),
+				Options:        anyStrs(expandStmtTokens(v.Options, env)),
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
-				OutputIncludes: strStrings(expandStmtTokens(v.OutputIncludes, env)),
+				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
 			})
 		case *RunAntlr4CppSplitStmt:
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
@@ -1198,7 +1198,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				Parser:         expandStmtToken(v.Parser.string(), env),
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
-				OutputIncludes: strStrings(expandStmtTokens(v.OutputIncludes, env)),
+				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
 			})
 		case *RunAntlrStmt:
 			expanded := AntlrRunInfo{
@@ -1312,7 +1312,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 		case *ResourceFilesStmt:
 			ensureResourcePeer(modulePath, d)
 
-			expanded := expandResourceFiles(strStrings(expandStmtTokens(v.Args, env)))
+			expanded := expandResourceFiles(anyStrs(expandStmtTokens(v.Args, env)))
 
 			for i, e := range expanded {
 				if i == len(expanded)-1 {
@@ -1664,7 +1664,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.hasLicense = true
 	case tokVersion:
 
-		d.modver = strings.Join(strStrings(expandStmtTokens(v.Args, env)), ".")
+		d.modver = strings.Join(anyStrs(expandStmtTokens(v.Args, env)), ".")
 	case tokToolchain:
 
 		if len(v.Args) == 1 {
@@ -1703,7 +1703,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{
 			Src:     v.Args[0].string(),
-			Options: strStrings(v.Args[1:]),
+			Options: anyStrs(v.Args[1:]),
 		})
 
 		d.cythonNumpyBeforeInclude = true
@@ -1714,7 +1714,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{
 			Src:     v.Args[0].string(),
-			Options: strStrings(v.Args[1:]),
+			Options: anyStrs(v.Args[1:]),
 			CMode:   true,
 		})
 
@@ -1736,7 +1736,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("gen: PY_NAMESPACE expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.pyNamespace = anyPtr(v.Args[0])
+		d.pyNamespace = ptr(v.Args[0])
 	case tokYqlLastAbiVersion:
 		if len(v.Args) != 0 {
 			throwFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
@@ -1769,7 +1769,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokFlatcFlags:
 		d.flatcFlags = append(d.flatcFlags, v.Args...)
 	case tokCopyFile, tokCopyFileWithContext:
-		entry := parseCopyFileEntry(strStrings(v.Args), v.Name == tokCopyFileWithContext, v.Line)
+		entry := parseCopyFileEntry(anyStrs(v.Args), v.Name == tokCopyFileWithContext, v.Line)
 
 		d.copyFiles = append(d.copyFiles, entry)
 
@@ -1792,7 +1792,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 		}
 	case tokCopy:
-		for _, entry := range parseCopyEntries(strStrings(v.Args), v.Line) {
+		for _, entry := range parseCopyEntries(anyStrs(v.Args), v.Line) {
 			d.copyFiles = append(d.copyFiles, entry)
 
 			if entry.Auto {
@@ -1987,7 +1987,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		filename := v.Args[0]
-		flags := concat(variant.CFlags, strStrings(v.Args[1:]))
+		flags := concat(variant.CFlags, anyStrs(v.Args[1:]))
 
 		d.simdSrcs = append(d.simdSrcs, SimdSrc{
 			Src:     filename,
@@ -2011,7 +2011,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("gen: AR_PLUGIN expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.arPlugin = anyPtr(internV(v.Args[0].string(), ".pyplugin").any())
+		d.arPlugin = ptr(internV(v.Args[0].string(), ".pyplugin").any())
 	case tokDynamicLibraryFrom:
 		if len(v.Args) == 0 {
 			throwFmt("gen: DYNAMIC_LIBRARY_FROM expects at least 1 argument")
@@ -2024,7 +2024,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("gen: EXPORTS_SCRIPT expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.exportsScript = anyPtr(v.Args[0])
+		d.exportsScript = ptr(v.Args[0])
 	case tokExtralibs:
 
 		libs := make([]string, 0, len(v.Args))
@@ -2086,7 +2086,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 					throwFmt("PY_SRCS NAMESPACE expects a value")
 				}
 
-				namespace = anyPtr(v.Args[i])
+				namespace = ptr(v.Args[i])
 				d.pyNamespace = namespace
 
 				continue
@@ -2185,7 +2185,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				}
 
 				if cythonPlainCpp {
-					stmt.Generated = stringPtr(src + ".cpp")
+					stmt.Generated = ptr(src + ".cpp")
 				}
 
 				d.cythonCpp = append(d.cythonCpp, stmt)
@@ -2285,7 +2285,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 					modName = ns + modName
 				}
 
-				d.pyMain = anyPtr(internV(modName, ":main").any())
+				d.pyMain = ptr(internV(modName, ":main").any())
 				mainNext = false
 			} else if d.pyMain == nil && d.moduleStmt != nil &&
 				(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) &&
@@ -2299,7 +2299,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				modName := strings.TrimSuffix(src, ".py")
 
 				modName = strings.ReplaceAll(modName, "/", ".")
-				d.pyMain = anyPtr(internV(ns, modName).any())
+				d.pyMain = ptr(internV(ns, modName).any())
 			}
 		}
 
@@ -2332,7 +2332,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			arg += ":main"
 		}
 
-		d.pyMain = anyPtr(internStr(arg).any())
+		d.pyMain = ptr(internStr(arg).any())
 	case tokPyConstructor:
 
 		ensureResourcePeer(modulePath, d)
@@ -2438,7 +2438,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			name := v.Args[0].string()
-			value := strings.Join(strStrings(v.Args[1:]), " ")
+			value := strings.Join(anyStrs(v.Args[1:]), " ")
 
 			if prev, ok := env.lookup(name); ok && prev != "" {
 				value = prev + " " + value
@@ -2623,7 +2623,7 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 	tail := 2
 
 	if outputSuffixes > 0 {
-		plugin.OutputSuffixes = append(plugin.OutputSuffixes, strStrings(v.Args[tail:tail+outputSuffixes])...)
+		plugin.OutputSuffixes = append(plugin.OutputSuffixes, anyStrs(v.Args[tail:tail+outputSuffixes])...)
 		tail += outputSuffixes
 	}
 
@@ -2794,7 +2794,7 @@ func pythonInitSuffix(name string) string {
 }
 
 func applyProtoNamespace(d *ModuleData, namespace ANY) {
-	d.protoNamespace = anyPtr(namespace)
+	d.protoNamespace = ptr(namespace)
 
 	protoBuildRoot := build(filepath.ToSlash(filepath.Clean(namespace.string())))
 
@@ -3445,7 +3445,7 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 				throwFmt("ALL_PY_SRCS NAMESPACE expects a value")
 			}
 
-			d.pyNamespace = anyPtr(v.Args[i])
+			d.pyNamespace = ptr(v.Args[i])
 		case "RECURSIVE":
 			recursive = true
 		case "NO_TEST_FILES":

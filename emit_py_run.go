@@ -17,7 +17,7 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 
 	outs := make([]string, 0, len(rp.OUTFiles)+1)
 
-	outs = append(outs, strStrings(rp.OUTFiles)...)
+	outs = append(outs, anyStrs(rp.OUTFiles)...)
 
 	if rp.StdoutFile != nil && !rp.StdoutNoAuto {
 		outs = append(outs, rp.StdoutFile.string())
