@@ -13,13 +13,13 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 	ref := ctx.emit.reserve()
 	parsed := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil)
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    ref,
-		GeneratorRefs:  []NodeRef{toolRef},
+		GeneratorRefs:  e.ctx.na.refList(toolRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[parsedIncludesLocal]},
-		ClosureLeaves:  []VFS{srcVFS},
+		ClosureLeaves:  e.ctx.na.vfsList(srcVFS),
 	})
 
 	e.deferPass2(func() {

@@ -31,10 +31,10 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 
 	ref := ctx.emit.emitNode(node)
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:    outVFS,
 		ProducerRef:   ref,
-		GeneratorRefs: []NodeRef{toolRef},
-		ClosureLeaves: []VFS{srcVFS},
+		GeneratorRefs: e.ctx.na.refList(toolRef),
+		ClosureLeaves: e.ctx.na.vfsList(srcVFS),
 	})
 }

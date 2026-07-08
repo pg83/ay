@@ -23,10 +23,12 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	outVFS := flexGeneratedVFS(instance, srcRel)
-	parsed := make([]IncludeDirective, 0, 2)
+	na := ctx.na
+	localBucket := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)
+	parsed := na.dirs.alloc(2 + len(localBucket))[:0]
 
 	parsed = append(parsed, flexOutputInclude)
-	parsed = append(parsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
+	parsed = append(parsed, localBucket...)
 
 	var psc []ANY
 
@@ -38,17 +40,26 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 
 	if extIsFlexL(srcRel) {
 		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
-		cflags = concat(psc, []ANY{argWnoUnusedVariable.any()})
+
+		cf := na.anys.alloc(len(psc) + 1)
+		cn := copy(cf, psc)
+
+		cf[cn] = argWnoUnusedVariable.any()
+		na.anys.commit(cn + 1)
+		cflags = cf[: cn+1 : cn+1]
 	}
+
+	na.dirs.commit(len(parsed))
+	parsed = parsed[:len(parsed):len(parsed)]
 
 	lxRef := ctx.emit.reserve()
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
 		ProducerRef:    lxRef,
-		GeneratorRefs:  []NodeRef{flexRef},
+		GeneratorRefs:  e.ctx.na.refList(flexRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-		Compile:        &CompileSpec{FlatOutput: d.flatSrc(src), CFlags: cflags},
+		Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src), CFlags: cflags}),
 	})
 
 	meta := d.srcMetaOf(src)

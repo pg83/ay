@@ -37,7 +37,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		base := strings.TrimSuffix(filepath.Base(srcCpp.relString()), ".cpp")
 		g4CppPath := build(instance.Path.relString(), "/", base, ".g4.cpp")
 		cpRef := ctx.emit.reserve()
-		emits := make([]IncludeDirective, 0, 1+len(outputIncludes))
+		emits := ctx.na.dirs.alloc(1 + len(outputIncludes))[:0]
 
 		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(antlr4RuntimeHeaderVFS.rel().any())})
 
@@ -45,17 +45,26 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(h).any())})
 		}
 
-		leaves := append([]VFS{jvPrimary, srcH}, ctx.scripts[antlr4FsToolsVFS.rel()]...)
+		ctx.na.dirs.commit(len(emits))
 
+		emits = emits[:len(emits):len(emits)]
+
+		fsTools := ctx.scripts[antlr4FsToolsVFS.rel()]
+		leaves := ctx.na.vfs.alloc(2 + len(fsTools) + len(jvInputs))[:0]
+
+		leaves = append(leaves, jvPrimary, srcH)
+		leaves = append(leaves, fsTools...)
 		leaves = append(leaves, jvInputs...)
+		ctx.na.vfs.commit(len(leaves))
+		leaves = leaves[:len(leaves):len(leaves)]
 
-		e.codegen.register(&GeneratedFileInfo{
+		e.codegen.register(GeneratedFileInfo{
 			OutputPath:     g4CppPath,
 			ProducerRef:    cpRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 			ClosureLeaves:  leaves,
-			Compile:        &CompileSpec{FlatOutput: d.flatSrc(g4CppPath.any()), CFlags: []ANY{argWnoUnusedVariable.any()}},
+			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(g4CppPath.any()), CFlags: e.ctx.na.anyList(argWnoUnusedVariable.any())}),
 		})
 
 		leafSet := make(map[VFS]bool, len(leaves))

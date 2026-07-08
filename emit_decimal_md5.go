@@ -73,7 +73,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 
 	sourceInputs = sourceInputs[:sn:sn]
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:    outVFS,
 		ProducerRef:   svRef,
 		SourceInputs:  sourceInputs,

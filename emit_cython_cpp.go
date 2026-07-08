@@ -163,16 +163,19 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 
 			pyxInduced := filterSourceVFS(ctx.na, headerPyxClosure)
 			headerInduced := cythonHeaderInducedClosure(ind)
-			headerParsed := make([]IncludeDirective, 0, len(headerInduced))
+			headerParsed := ctx.na.dirs.alloc(len(headerInduced))[:0]
 
 			for _, v := range headerInduced {
 				headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel().any())})
 			}
 
+			ctx.na.dirs.commit(len(headerParsed))
+			headerParsed = headerParsed[:len(headerParsed):len(headerParsed)]
+
 			reg := e.codegen
 
 			for _, h := range headerVFS {
-				reg.register(&GeneratedFileInfo{
+				reg.register(GeneratedFileInfo{
 					OutputPath:      h,
 					ProducerRef:     cyRef,
 					ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: headerParsed},
@@ -234,11 +237,14 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			emitsIncludes = dedupClosure(na, append(emitsIncludes, pxdCV.self), pxdCV.buckets)
 		}
 
-		parsed := make([]IncludeDirective, 0, len(emitsIncludes))
+		parsed := na.dirs.alloc(len(emitsIncludes))[:0]
 
 		for _, include := range emitsIncludes {
 			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(include.rel().any())})
 		}
+
+		na.dirs.commit(len(parsed))
+		parsed = parsed[:len(parsed):len(parsed)]
 
 		py3Suffix := !stmt.CMode && !generatedExplicit && py23Variant
 		genSrcID := internStr(p.generated)
@@ -249,18 +255,23 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			psc = *pcf
 		}
 
-		ccCFlags := append([]ANY(nil), psc...)
+		ccCFlags := na.anys.alloc(len(psc) + 1)[:0]
+
+		ccCFlags = append(ccCFlags, psc...)
 
 		if cythonImplicitFallthrough(stmt, py23Variant) {
 			ccCFlags = append(ccCFlags, argWnoImplicitFallthrough.any())
 		}
 
-		e.codegen.register(&GeneratedFileInfo{
+		na.anys.commit(len(ccCFlags))
+		ccCFlags = ccCFlags[:len(ccCFlags):len(ccCFlags)]
+
+		e.codegen.register(GeneratedFileInfo{
 			OutputPath:     generatedVFS,
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			Compile:        &CompileSpec{FlatOutput: d.flatSrc(genSrcID.any()), Py3Suffix: py3Suffix, CFlags: ccCFlags},
+			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(genSrcID.any()), Py3Suffix: py3Suffix, CFlags: ccCFlags}),
 		})
 
 		env := envVarsVCS
@@ -455,15 +466,19 @@ func (e *EmitContext) cythonAdjustModuleCCBlocks() {
 
 	cy := d.cc
 
-	cy.AddIncl = appendCythonCCAddIncl(d.cc.AddIncl, d.cythonNumpyBeforeInclude)
+	cy.AddIncl = appendCythonCCAddIncl(ctx.na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
 	cy.CFlags = filterPyRegisterCFlags(d.cc.CFlags)
 
 	d.cc.MainOutInducedInputs = true
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &cy)
 }
 
-func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
-	out := make([]VFS, 0, len(addIncl)+len(cythonNumpyAddIncl))
+func appendCythonCCAddIncl(na *NodeArenas, addIncl []VFS, numpyBeforeInclude bool) []VFS {
+	out := na.vfs.alloc(len(addIncl) + len(cythonNumpyAddIncl))[:0]
+
+	defer func() {
+		na.vfs.commit(len(out))
+	}()
 
 	if numpyBeforeInclude {
 		for i, path := range addIncl {
@@ -472,7 +487,7 @@ func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 				out = append(out, cythonNumpyAddIncl...)
 				out = append(out, addIncl[i:]...)
 
-				return out
+				return out[:len(out):len(out)]
 			}
 		}
 	}
@@ -480,7 +495,7 @@ func appendCythonCCAddIncl(addIncl []VFS, numpyBeforeInclude bool) []VFS {
 	out = append(out, addIncl...)
 	out = append(out, cythonNumpyAddIncl...)
 
-	return out
+	return out[:len(out):len(out)]
 }
 
 func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VFS {

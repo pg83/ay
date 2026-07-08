@@ -29,18 +29,23 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
 	sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")
 	sprotoRef := ctx.emit.reserve()
-	pbhImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, outRoot)
-	parsed := make([]IncludeDirective, 0, 2*len(pbhImports))
+	pbhImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, outRoot, e.dirScratch[:0])
+
+	e.dirScratch = pbhImports
+
+	parsed := ctx.na.dirs.alloc(2 * len(pbhImports))[:0]
 
 	parsed = append(parsed, pbhImports...)
-	parsed = append(parsed, pbHCompanionDirectives(pbhImports, sprotoPbHCompanionExt)...)
+	parsed = appendPbHCompanions(parsed, pbhImports, sprotoPbHCompanionExt)
+	ctx.na.dirs.commit(len(parsed))
+	parsed = parsed[:len(parsed):len(parsed)]
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     sprotoH,
 		ProducerRef:    sprotoRef,
-		GeneratorRefs:  []NodeRef{sprotocLDRef},
+		GeneratorRefs:  e.ctx.na.refList(sprotocLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-		ClosureLeaves:  []VFS{source(protoRelPath)},
+		ClosureLeaves:  e.ctx.na.vfsList(source(protoRelPath)),
 	})
 
 	pending := YmapsSprotoPending{ref: sprotoRef, sprotoH: sprotoH, protoRelPath: protoRelPath}

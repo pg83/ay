@@ -137,7 +137,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		return
 	}
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:    optOut,
 		ProducerRef:   opRef,
 		GeneratorRefs: nil,

@@ -107,7 +107,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	pyRef := ctx.emit.reserve()
 
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
-		reg.register(&GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:     out,
 			ProducerRef:    pyRef,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
@@ -294,7 +294,7 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 				capacity++
 			}
 
-			includes := make([]IncludeDirective, 0, capacity)
+			includes := e.ctx.na.dirs.alloc(capacity)[:0]
 
 			if isNonFirst && firstShardVFS != 0 {
 				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel().any())})
@@ -304,11 +304,13 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel().any())})
 			}
 
-			return includes
+			e.ctx.na.dirs.commit(len(includes))
+
+			return includes[:len(includes):len(includes)]
 		}
 
 		if isHeaderSource(outFile) {
-			includes := make([]IncludeDirective, 0, 1+len(splitSrcs))
+			includes := e.ctx.na.dirs.alloc(1 + len(splitSrcs))[:0]
 
 			if firstShardVFS != 0 {
 				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel().any())})
@@ -318,11 +320,15 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel().any())})
 			}
 
-			return includes
+			e.ctx.na.dirs.commit(len(includes))
+
+			return includes[:len(includes):len(includes)]
 		}
 	}
 
-	includes := []IncludeDirective{{kind: includeQuoted, target: includeTarget(scriptVFS.rel().any())}}
+	includes := e.ctx.na.dirs.alloc(1 + len(stmt.INFiles) + len(stmt.OutputIncludes))[:0]
+
+	includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(scriptVFS.rel().any())})
 
 	for _, f := range stmt.INFiles {
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(e.runProgramInputVFS(f.string()).rel().any())})
@@ -336,7 +342,9 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
 	}
 
-	return includes
+	e.ctx.na.dirs.commit(len(includes))
+
+	return includes[:len(includes):len(includes)]
 }
 
 func emitPYRun(

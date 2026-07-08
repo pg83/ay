@@ -193,7 +193,7 @@ func newTestScanner(fs FS, sysincl SysInclSet) *IncludeScanner {
 		newBucketCache(),
 	)
 
-	s.codegen = newCodegenRegistry()
+	s.codegen = newCodegenRegistry(newNodeArenas())
 	s.moduleByRef = &DenseMap[NodeRef, *ModuleEmitResult]{}
 
 	return s

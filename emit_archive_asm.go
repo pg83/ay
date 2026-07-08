@@ -118,7 +118,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 		}
 	}
 
-	reg.register(&GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:    rodataVFS,
 		ProducerRef:   rodataRef,
 		ClosureLeaves: leaves,

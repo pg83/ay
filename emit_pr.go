@@ -106,7 +106,10 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	prSourceInputs := prCollectSourceInputs(ctx.na, e.codegen, inVFSs)
-	protoImportPbH := prProtoImportPbH(ctx.parsers, inVFSs)
+	protoImportPbH := prProtoImportPbH(ctx.parsers, inVFSs, e.dirScratch[:0])
+
+	e.dirScratch = protoImportPbH
+
 	prRef := ctx.emit.reserve()
 	registeredPROut := map[VFS]bool{}
 	mainIsHeader := mainOutputVFS != 0 && isHeaderSource(mainOutputVFS.relString())
@@ -129,13 +132,20 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		leaves := prSourceInputs.generated
 
 		if out != mainOutputVFS && !ridesHeaderViaParsed {
-			leaves = append([]VFS{mainOutputVFS}, prSourceInputs.generated...)
+			lv := ctx.na.vfs.alloc(1 + len(prSourceInputs.generated))
+
+			lv[0] = mainOutputVFS
+
+			ln := 1 + copy(lv[1:], prSourceInputs.generated)
+
+			ctx.na.vfs.commit(ln)
+			leaves = lv[:ln:ln]
 		}
 
-		e.codegen.register(&GeneratedFileInfo{
+		e.codegen.register(GeneratedFileInfo{
 			OutputPath:     out,
 			ProducerRef:    prRef,
-			GeneratorRefs:  []NodeRef{res.LDRef},
+			GeneratorRefs:  e.ctx.na.refList(res.LDRef),
 			ParsedIncludes: parsed,
 			SourceInputs:   prSourceInputs.all,
 			ClosureLeaves:  leaves,
@@ -143,7 +153,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	parsedFor := func(f ANY, out VFS, auto bool) (ParsedIncludeSet, bool) {
-		parsed := prOutputParsedIncludes(f, stmt, inVFSs, protoImportPbH)
+		parsed := prOutputParsedIncludes(ctx.na, f, stmt, inVFSs, protoImportPbH)
 
 		if auto && isCCSourceExt(f.string()) {
 			if inc, ok := mainHeaderInclude(out.relString()); ok {
@@ -233,16 +243,14 @@ func prCollectSourceInputs(na *NodeArenas, reg *CodegenRegistry, inVFSs []VFS) P
 	return PrSourceInputSet{all: all[:an:an], generated: generated}
 }
 
-func prProtoImportPbH(pm *IncludeParserManager, inVFSs []VFS) []IncludeDirective {
-	var out []IncludeDirective
-
+func prProtoImportPbH(pm *IncludeParserManager, inVFSs []VFS, dst []IncludeDirective) []IncludeDirective {
 	for _, v := range inVFSs {
 		if v.isSource() && extIsProto(v.relString()) {
-			out = append(out, protoDirectPbHIncludes(pm, v.relString(), "")...)
+			dst = protoDirectPbHIncludes(pm, v.relString(), "", dst)
 		}
 	}
 
-	return out
+	return dst
 }
 
 func pbhBasenameSet(vs []VFS) map[string]bool {
@@ -408,14 +416,14 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 	return res
 }
 
-func prOutputParsedIncludes(outFile ANY, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) ParsedIncludeSet {
+func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) ParsedIncludeSet {
 	carries := generatedOutputCarriesIncludes(outFile.string())
 
 	if !carries && len(stmt.OutputIncludes) == 0 {
 		return ParsedIncludeSet{}
 	}
 
-	local := make([]IncludeDirective, 0, len(stmt.OutputIncludes))
+	local := na.dirs.alloc(len(stmt.OutputIncludes))[:0]
 
 	for _, f := range stmt.OutputIncludes {
 		if v := f.vfs(); v != 0 {
@@ -424,6 +432,9 @@ func prOutputParsedIncludes(outFile ANY, stmt *RunProgramStmt, inVFSs []VFS, pro
 
 		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
 	}
+
+	na.dirs.commit(len(local))
+	local = local[:len(local):len(local)]
 
 	carryProtoImportPbH := isHeaderSource(outFile.string()) && !extIsPbH(outFile.string())
 	n := 0
@@ -436,7 +447,7 @@ func prOutputParsedIncludes(outFile ANY, stmt *RunProgramStmt, inVFSs []VFS, pro
 		n += len(protoImportPbH)
 	}
 
-	compile := make([]IncludeDirective, 0, n)
+	compile := na.dirs.alloc(n)[:0]
 
 	if carries {
 		for _, v := range inVFSs {
@@ -452,7 +463,9 @@ func prOutputParsedIncludes(outFile ANY, stmt *RunProgramStmt, inVFSs []VFS, pro
 		compile = append(compile, protoImportPbH...)
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: local, parsedIncludesCpp: compile}
+	na.dirs.commit(len(compile))
+
+	return ParsedIncludeSet{parsedIncludesLocal: local, parsedIncludesCpp: compile[:len(compile):len(compile)]}
 }
 
 func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxTool {

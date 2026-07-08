@@ -22,18 +22,23 @@ var evAbseilCleanupHeaders = []VFS{
 	source("contrib/restricted/abseil-cpp-tstring/y_absl/cleanup/internal/cleanup.h"),
 }
 
-func evWitnessExtras(evRelPath string) []IncludeDirective {
-	out := make([]IncludeDirective, 0,
-		3+len(pbDescriptorImporterDirectives)+len(evExtraProtobufDirectives)+len(evAbseilCleanupDirectives))
+var evGenCCExtras = []IncludeDirective{
+	{kind: includeQuoted, target: includeTarget(internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").relString()).any())},
+}
 
-	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())})
-	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(pbDescriptorVFS.rel().any())})
-	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(evRelPath).any())})
-	out = append(out, pbDescriptorImporterDirectives...)
-	out = append(out, evExtraProtobufDirectives...)
-	out = append(out, evAbseilCleanupDirectives...)
+func evWitnessExtrasBound() int {
+	return 3 + len(pbDescriptorImporterDirectives) + len(evExtraProtobufDirectives) + len(evAbseilCleanupDirectives)
+}
 
-	return out
+func appendEvWitnessExtras(dst []IncludeDirective, evRelPath string) []IncludeDirective {
+	dst = append(dst, IncludeDirective{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())})
+	dst = append(dst, IncludeDirective{kind: includeQuoted, target: includeTarget(pbDescriptorVFS.rel().any())})
+	dst = append(dst, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(evRelPath).any())})
+	dst = append(dst, pbDescriptorImporterDirectives...)
+	dst = append(dst, evExtraProtobufDirectives...)
+	dst = append(dst, evAbseilCleanupDirectives...)
+
+	return dst
 }
 
 func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
@@ -48,9 +53,17 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 
 	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
 	evRelPath := protoSourceRelPath(ctx.fs, instance, d, src.string())
-	directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d))
-	evExtras := evWitnessExtras(evRelPath)
-	evHParsed := concat(directImports, protobufRuntimeDirectives, evExtras)
+	directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d), e.dirScratch[:0])
+
+	e.dirScratch = directImports
+
+	evHParsed := ctx.na.dirs.alloc(len(directImports) + len(protobufRuntimeDirectives) + evWitnessExtrasBound())[:0]
+
+	evHParsed = append(evHParsed, directImports...)
+	evHParsed = append(evHParsed, protobufRuntimeDirectives...)
+	evHParsed = appendEvWitnessExtras(evHParsed, evRelPath)
+	ctx.na.dirs.commit(len(evHParsed))
+	evHParsed = evHParsed[:len(evHParsed):len(evHParsed)]
 
 	e.emitCppProtoFamilySource(meta, &ProtoSpec{
 		kv:          &evKV,
@@ -60,13 +73,11 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 			argEvent2cppOutB.any(),
 			internV("-I=", evEventlogIncludePath).any(),
 		),
-		toolLDRef:  event2cppLDRef,
-		toolBinary: event2cppBinary,
-		genRefs:    []NodeRef{event2cppLDRef},
-		genHParsed: evHParsed,
-		genCCExtras: []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(internStr(source(pbRuntimeBase, "google/protobuf/wire_format.h").relString()).any())},
-		},
-		hLeaves: []VFS{build(evRelPath, ".pb.cc")},
+		toolLDRef:   event2cppLDRef,
+		toolBinary:  event2cppBinary,
+		genRefs:     ctx.na.refList(event2cppLDRef),
+		genHParsed:  evHParsed,
+		genCCExtras: evGenCCExtras,
+		hLeaves:     ctx.na.vfsList(build(evRelPath, ".pb.cc")),
 	})
 }

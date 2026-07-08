@@ -91,34 +91,32 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	enRef := ctx.emit.reserve()
 
-	cppParsed := []IncludeDirective{
-		{kind: includeQuoted, target: includeTarget(headerInput.rel().any())},
-		{kind: includeQuoted, target: includeTarget(strUtilGenericSerializedEnumH.any())},
-	}
+	cppParsed := e.ctx.na.dirList(
+		IncludeDirective{kind: includeQuoted, target: includeTarget(headerInput.rel().any())},
+		IncludeDirective{kind: includeQuoted, target: includeTarget(strUtilGenericSerializedEnumH.any())})
 
 	slices.SortFunc(cppParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
 	reg := e.codegen
 
-	reg.register(&GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     serializedCPPPath,
 		ProducerRef:    enRef,
-		GeneratorRefs:  []NodeRef{enumParserLD},
+		GeneratorRefs:  e.ctx.na.refList(enumParserLD),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
 	})
 
 	if withHeader {
-		hParsed := []IncludeDirective{
-			{kind: includeQuoted, target: includeTarget(headerInput.rel().any())},
-			{kind: includeQuoted, target: includeTarget(serializedCPPPath.rel().any())},
-		}
+		hParsed := e.ctx.na.dirList(
+			IncludeDirective{kind: includeQuoted, target: includeTarget(headerInput.rel().any())},
+			IncludeDirective{kind: includeQuoted, target: includeTarget(serializedCPPPath.rel().any())})
 
 		slices.SortFunc(hParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
-		reg.register(&GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:     serializedHPath,
 			ProducerRef:    enRef,
-			GeneratorRefs:  []NodeRef{enumParserLD},
+			GeneratorRefs:  e.ctx.na.refList(enumParserLD),
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: hParsed},
 		})
 	}

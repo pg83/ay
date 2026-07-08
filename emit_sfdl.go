@@ -58,16 +58,16 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 
 	ref := ctx.emit.emitNode(node)
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:    tmpVFS,
 		ProducerRef:   ref,
-		GeneratorRefs: []NodeRef{toolRef},
+		GeneratorRefs: e.ctx.na.refList(toolRef),
 	})
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:    incVFS,
 		ProducerRef:   ref,
-		GeneratorRefs: []NodeRef{toolRef},
-		ClosureLeaves: []VFS{tmpVFS, srcVFS},
+		GeneratorRefs: e.ctx.na.refList(toolRef),
+		ClosureLeaves: e.ctx.na.vfsList(tmpVFS, srcVFS),
 	})
 }

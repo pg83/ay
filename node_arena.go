@@ -12,6 +12,9 @@ type NodeArenas struct {
 	nodes    *BumpAllocator[Node]
 	exts     *BumpAllocator[KVExt]
 	kvs      *BumpAllocator[KV]
+	geninfos *BumpAllocator[GeneratedFileInfo]
+	dirs     *BumpAllocator[IncludeDirective]
+	compiles *BumpAllocator[CompileSpec]
 }
 
 func newNodeArenas() *NodeArenas {
@@ -25,6 +28,9 @@ func newNodeArenas() *NodeArenas {
 		inputs:   newBumpAllocator[[]VFS](1 << 10),
 		exts:     newBumpAllocator[KVExt](1 << 8),
 		kvs:      newBumpAllocator[KV](1 << 8),
+		geninfos: newBumpAllocator[GeneratedFileInfo](1 << 10),
+		dirs:     newBumpAllocator[IncludeDirective](1 << 10),
+		compiles: newBumpAllocator[CompileSpec](1 << 8),
 		noderefs: newBumpAllocator[NodeRef](1 << 12),
 		nodes:    newBumpAllocator[Node](1 << 10),
 	}
@@ -150,4 +156,16 @@ func (na *NodeArenas) inputList(first []VFS, rest ...[]VFS) InputChunks {
 
 func (na *NodeArenas) srcChunk(v VFS) []VFS {
 	return na.vfsList(v)
+}
+
+func (na *NodeArenas) dirList(vs ...IncludeDirective) []IncludeDirective {
+	return na.dirs.list(vs...)
+}
+
+func (na *NodeArenas) compileSpec(c CompileSpec) *CompileSpec {
+	p := na.compiles.one()
+
+	*p = c
+
+	return p
 }

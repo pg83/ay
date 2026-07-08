@@ -297,7 +297,7 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 
 	pyRef := ctx.emit.emitNode(node)
 
-	e.codegen.register(&GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:    outputPath,
 		ProducerRef:   pyRef,
 		GeneratorRefs: toolRefs,
@@ -561,11 +561,16 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closure {
 	ctx, _, d := e.ctx, e.instance, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-	emits := make([]IncludeDirective, 0, len(seed))
+	na := ctx.na
+	emits := na.dirs.alloc(len(seed))[:0]
 
 	for _, v := range seed {
 		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel().any())})
 	}
+
+	na.dirs.commit(len(emits))
+
+	emits = emits[:len(emits):len(emits)]
 
 	var psc []ANY
 
@@ -573,12 +578,19 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 		psc = *p
 	}
 
-	e.codegen.register(&GeneratedFileInfo{
+	cflags := na.anys.alloc(len(psc) + 2)
+	cn := copy(cflags, psc)
+
+	cflags[cn] = argX.any()
+	cflags[cn+1] = argC.any()
+	na.anys.commit(cn + 2)
+
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     aux,
 		ProducerRef:    ref,
-		GeneratorRefs:  []NodeRef{rescompilerRef},
+		GeneratorRefs:  na.refList(rescompilerRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-		Compile:        &CompileSpec{FlatOutput: d.flatSrc(aux.any()), ForceCxx: true, CFlags: concat(psc, []ANY{argX.any(), argC.any()})},
+		Compile:        na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(aux.any()), ForceCxx: true, CFlags: cflags[: cn+2 : cn+2]}),
 	})
 
 	return walkClosure(e.scanner, aux, d.cc.ScanCfg)
@@ -636,7 +648,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 		}
 
 		pyRef := ctx.emit.emitNode(pyNode)
-		envCFlags := make([]ANY, 0, len(d.cc.CFlags))
+		envCFlags := na.anys.alloc(len(d.cc.CFlags))[:0]
 
 		for _, f := range d.cc.CFlags {
 			if short, ok := pyInitDefineShortname(f.string()); ok {
@@ -648,16 +660,18 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 			envCFlags = append(envCFlags, f)
 		}
 
-		spec := &CompileSpec{Py3Suffix: py3Suffix, EnvCFlags: envCFlags}
+		na.anys.commit(len(envCFlags))
+
+		spec := na.compileSpec(CompileSpec{Py3Suffix: py3Suffix, EnvCFlags: envCFlags[:len(envCFlags):len(envCFlags)]})
 
 		if len(d.cythonCpp) > 0 {
-			spec.EnvAddIncl = appendCythonCCAddIncl(d.cc.AddIncl, d.cythonNumpyBeforeInclude)
+			spec.EnvAddIncl = appendCythonCCAddIncl(na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
 		}
 
-		e.codegen.register(&GeneratedFileInfo{
+		e.codegen.register(GeneratedFileInfo{
 			OutputPath:    regCppVFS,
 			ProducerRef:   pyRef,
-			ClosureLeaves: []VFS{genPy3RegScriptVFS},
+			ClosureLeaves: e.ctx.na.vfsList(genPy3RegScriptVFS),
 			Compile:       spec,
 		})
 
