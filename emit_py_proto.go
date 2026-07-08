@@ -120,7 +120,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 		internV("--python_out=$(B)/", protoRoot).any(),
 	)
 
-	pe.mid = appendArgAny(pe.mid, d.protocFlags)
+	pe.mid = appendAnyLists(pe.mid, d.protocFlags)
 
 	if d.grpc {
 		pe.tail = append(pe.tail,
@@ -500,7 +500,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-		Compile:        &CompileSpec{ForceCxx: true, Py3Suffix: pyProtoAuxPy3Suffix(d), CFlags: []ARG{argX, argC}},
+		Compile:        &CompileSpec{ForceCxx: true, Py3Suffix: pyProtoAuxPy3Suffix(d), CFlags: []ANY{argX.any(), argC.any()}},
 	})
 
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.relString())

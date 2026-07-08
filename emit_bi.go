@@ -78,9 +78,9 @@ func biFlagsForInstance(targetP *Platform) []ANY {
 
 	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, targetP.CFlags, cflagPrefix, catboostOpenSourceDefineFor(targetP))
 	flags = append(flags, (cxxStandardFlag).any())
-	flags = appendArgAny(flags, cxxStandardWarnings)
+	flags = appendAnyLists(flags, cxxStandardWarnings)
 	flags = append(flags, (baseUnitCxxNostdinc).any())
-	flags = appendArgAny(flags, catboostOpenSourceDefineFor(targetP))
+	flags = appendAnyLists(flags, catboostOpenSourceDefineFor(targetP))
 	flags = append(flags, (baseUnitCxxNostdinc).any())
 
 	return flags

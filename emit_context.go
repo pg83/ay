@@ -115,7 +115,7 @@ func (e *EmitContext) emit() {
 
 	for _, simd := range d.simdSrcs {
 		srcVFS := e.moduleSourceVFS(pathAny(simd.Src))
-		flags := internArgs(simd.CFlags)
+		flags := internAnys(simd.CFlags)
 
 		if extras := d.perSrcCFlagsFor(pathAny(simd.Src)); extras != nil {
 			flags = append(flags, *extras...)

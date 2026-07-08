@@ -28,7 +28,7 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 	parsed = append(parsed, flexOutputInclude)
 	parsed = append(parsed, e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)...)
 
-	var psc []ARG
+	var psc []ANY
 
 	if p := d.perSrcCFlagsFor(src); p != nil {
 		psc = *p
@@ -38,7 +38,7 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 
 	if extIsFlexL(srcRel) {
 		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel())})
-		cflags = concat(psc, []ARG{argWnoUnusedVariable})
+		cflags = concat(psc, []ANY{argWnoUnusedVariable.any()})
 	}
 
 	lxRef := ctx.emit.reserve()

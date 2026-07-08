@@ -65,7 +65,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
 
-	var psc []ARG
+	var psc []ANY
 
 	if p := d.perSrcCFlagsFor(src); p != nil {
 		psc = *p
@@ -92,7 +92,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(r5TmpOut.rel())}}, r5Parsed...)},
 		Compile: &CompileSpec{
 			FlatOutput: d.flatSrc(src),
-			CFlags:     concat(psc, []ARG{argWnoImplicitFallthrough}),
+			CFlags:     concat(psc, []ANY{argWnoImplicitFallthrough.any()}),
 		},
 	})
 

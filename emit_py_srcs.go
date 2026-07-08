@@ -545,7 +545,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel())})
 	}
 
-	var psc []ARG
+	var psc []ANY
 
 	if p := d.perSrcCFlagsFor(aux.any()); p != nil {
 		psc = *p
@@ -556,7 +556,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 		ProducerRef:    ref,
 		GeneratorRefs:  []NodeRef{rescompilerRef},
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-		Compile:        &CompileSpec{FlatOutput: d.flatSrc(aux.any()), ForceCxx: true, CFlags: concat(psc, []ARG{argX, argC})},
+		Compile:        &CompileSpec{FlatOutput: d.flatSrc(aux.any()), ForceCxx: true, CFlags: concat(psc, []ANY{argX.any(), argC.any()})},
 	})
 
 	return walkClosure(e.scanner, aux, d.cc.ScanCfg)
@@ -614,7 +614,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 		}
 
 		pyRef := ctx.emit.emitNode(pyNode)
-		envCFlags := make([]ARG, 0, len(d.cc.CFlags))
+		envCFlags := make([]ANY, 0, len(d.cc.CFlags))
 
 		for _, f := range d.cc.CFlags {
 			if short, ok := pyInitDefineShortname(f.string()); ok {

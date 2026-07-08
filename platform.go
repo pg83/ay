@@ -35,11 +35,11 @@ type Platform struct {
 	March                 string
 	MultiarchLibPathSTR   STR
 	TargetArg             STR
-	MarchArgs             []ARG
-	CFlags                []ARG
-	CXXFlags              []ARG
-	DebugInfoFlags        []ARG
-	CompileCFlags         []ARG
+	MarchArgs             []ANY
+	CFlags                []ANY
+	CXXFlags              []ANY
+	DebugInfoFlags        []ANY
+	CompileCFlags         []ANY
 	CompressDebugSections bool
 	SystemLibs            []ANY
 	LinkPreludeExtra      []ANY
@@ -57,9 +57,8 @@ type Platform struct {
 	SysrootArgs           []ANY
 	UsesSDKRoot           bool
 	ifEnv                 Environment
-	CompileCFlagsStr      []ANY
-	DefinesStr            []ANY
-	NoLibcBlockStr        []ANY
+	Defines               []ANY
+	NoLibcBlock           []ANY
 }
 
 func platformUsesSDKRoot(os OS, flags map[string]string) bool {
@@ -132,8 +131,8 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 		RagelOptimized:    buildRelease && !buildSanitized,
 		Triple:            string(isa) + "-" + string(os) + "-gnu",
 		March:             marchFor(isa),
-		CFlags:            internArgs(splitShellWords(cflagsEnv)),
-		CXXFlags:          internArgs(splitShellWords(cxxflagsEnv)),
+		CFlags:            internAnys(splitShellWords(cflagsEnv)),
+		CXXFlags:          internAnys(splitShellWords(cxxflagsEnv)),
 		SystemLibs:        internAnys(systemLibs),
 		LinkPreludeExtra:  internAnys(linkPreludeExtra),
 		ClangVer:          platformClangVersion(flags),
@@ -168,10 +167,10 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	}
 
 	if p.March != "" {
-		p.MarchArgs = []ARG{internArg("-march=" + p.March)}
+		p.MarchArgs = []ANY{internArg("-march=" + p.March).any()}
 	}
 
-	p.CCHead = append(appendArgAny([]ANY{p.TargetArg.any()}, p.MarchArgs), p.SysrootArgs...)
+	p.CCHead = append(appendAnyLists([]ANY{p.TargetArg.any()}, p.MarchArgs), p.SysrootArgs...)
 
 	p.ToolEnvVars = EnvVars{
 		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS},
@@ -190,9 +189,8 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 
 	bundle := compileFlagBundleFor(p)
 
-	p.CompileCFlagsStr = argSTRs(bundle.CFlags)
-	p.DefinesStr = argSTRs(bundle.Defines)
-	p.NoLibcBlockStr = argSTRs(bundle.NoLibcBlock)
+	p.Defines = bundle.Defines
+	p.NoLibcBlock = bundle.NoLibcBlock
 
 	return p
 }

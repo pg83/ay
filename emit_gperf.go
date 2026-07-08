@@ -55,7 +55,7 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 	genVFS := build(instance.Path.relString(), "/", gperfGeneratedRel(srcRel))
 	gpRef := ctx.emit.reserve()
 
-	var psc []ARG
+	var psc []ANY
 
 	if p := d.perSrcCFlagsFor(src); p != nil {
 		psc = *p

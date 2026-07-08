@@ -52,44 +52,6 @@ func (a ARG) String() string {
 	return a.string()
 }
 
-func internArgs(ss []string) []ARG {
-	if len(ss) == 0 {
-		return nil
-	}
-
-	out := make([]ARG, len(ss))
-
-	for i, s := range ss {
-		out[i] = internArg(s)
-	}
-
-	return out
-}
-
-func argStrs(as []ARG) []string {
-	if len(as) == 0 {
-		return nil
-	}
-
-	out := make([]string, len(as))
-
-	for i, a := range as {
-		out[i] = a.string()
-	}
-
-	return out
-}
-
-func argSTRs(as []ARG) []ANY {
-	out := make([]ANY, len(as))
-
-	for i, a := range as {
-		out[i] = a.any()
-	}
-
-	return out
-}
-
 func (a ARG) any() ANY {
 	return a.str().any()
 }

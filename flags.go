@@ -1,191 +1,180 @@
 package main
 
-var (
-	ccIncludesPrefixStr          = argSTRs(ccIncludesPrefix)
-	debugPrefixMapFlagsStr       = argSTRs(debugPrefixMapFlags)
-	xclangDebugCompilationDirStr = argSTRs(xclangDebugCompilationDir)
-	builtinMacroDateTimeStr      = argSTRs(builtinMacroDateTime)
-	macroPrefixMapFlagsStr       = argSTRs(macroPrefixMapFlags)
-	noWarningsBundleStr          = argSTRs(noWarningsBundle)
-	cxxStandardWarningsStr       = argSTRs(cxxStandardWarnings)
-	warningFlagsStr              = argSTRs(warningFlags)
-	catboostOpenSourceDefineStr  = argSTRs(catboostOpenSourceDefine)
-	cxxStandardFlagStr           = []ANY{cxxStandardFlag.any()}
-)
+var cxxStandardFlagChunk = []ANY{cxxStandardFlag.any()}
 
-var ccIncludesPrefix = []ARG{
-	argIB,
-	argIS,
+var ccIncludesPrefix = []ANY{
+	argIB.any(),
+	argIS.any(),
 }
 
-var debugPrefixMapFlags = []ARG{
-	argFdebugPrefixMapBB,
-	argFdebugPrefixMapSS,
-	argFdebugPrefixMapToolRootT,
+var debugPrefixMapFlags = []ANY{
+	argFdebugPrefixMapBB.any(),
+	argFdebugPrefixMapSS.any(),
+	argFdebugPrefixMapToolRootT.any(),
 }
 
-var xclangDebugCompilationDir = []ARG{
-	argXclang,
-	argFdebugCompilationDir,
-	argXclang,
-	argTmp,
+var xclangDebugCompilationDir = []ANY{
+	argXclang.any(),
+	argFdebugCompilationDir.any(),
+	argXclang.any(),
+	argTmp.any(),
 }
 
-var commonCFlagsPre = []ARG{
-	argPipe,
+var commonCFlagsPre = []ANY{
+	argPipe.any(),
 }
 
-var commonCFlagsPost = []ARG{
-	argFnoCommon,
-	argFfunctionSections,
-	argFdataSections,
-	argFsignedChar,
-	argFsizedDeallocation,
-	argFexceptions,
-	argFuseInitArray,
-	argFcolorDiagnostics,
-	argFalignedAllocation,
-	argFstackProtector,
+var commonCFlagsPost = []ANY{
+	argFnoCommon.any(),
+	argFfunctionSections.any(),
+	argFdataSections.any(),
+	argFsignedChar.any(),
+	argFsizedDeallocation.any(),
+	argFexceptions.any(),
+	argFuseInitArray.any(),
+	argFcolorDiagnostics.any(),
+	argFalignedAllocation.any(),
+	argFstackProtector.any(),
 }
 
-var x86TargetCFlagsPre = []ARG{
-	argPipe,
-	argM64,
+var x86TargetCFlagsPre = []ANY{
+	argPipe.any(),
+	argM64.any(),
 }
 
-var x86TargetCFlagsPost = []ARG{
-	argFnoCommon,
-	argFfunctionSections,
-	argFdataSections,
-	argFsizedDeallocation,
-	argFexceptions,
-	argFuseInitArray,
-	argFcolorDiagnostics,
-	argFalignedAllocation,
-	argFstackProtector,
+var x86TargetCFlagsPost = []ANY{
+	argFnoCommon.any(),
+	argFfunctionSections.any(),
+	argFdataSections.any(),
+	argFsizedDeallocation.any(),
+	argFexceptions.any(),
+	argFuseInitArray.any(),
+	argFcolorDiagnostics.any(),
+	argFalignedAllocation.any(),
+	argFstackProtector.any(),
 }
 
-var hostCFlags = []ARG{
-	argPipe,
-	argM64,
-	argO3,
-	argFnoCommon,
-	argFfunctionSections,
-	argFdataSections,
-	argFsizedDeallocation,
-	argFexceptions,
-	argFuseInitArray,
-	argFcolorDiagnostics,
-	argFalignedAllocation,
+var hostCFlags = []ANY{
+	argPipe.any(),
+	argM64.any(),
+	argO3.any(),
+	argFnoCommon.any(),
+	argFfunctionSections.any(),
+	argFdataSections.any(),
+	argFsizedDeallocation.any(),
+	argFexceptions.any(),
+	argFuseInitArray.any(),
+	argFcolorDiagnostics.any(),
+	argFalignedAllocation.any(),
 }
 
-var warningFlags = []ARG{
-	argWerror,
-	argWall,
-	argWextra,
-	argWnoParentheses,
-	argWnoImplicitConstIntFloatConversion,
-	argWnoUnknownWarningOption,
+var warningFlags = []ANY{
+	argWerror.any(),
+	argWall.any(),
+	argWextra.any(),
+	argWnoParentheses.any(),
+	argWnoImplicitConstIntFloatConversion.any(),
+	argWnoUnknownWarningOption.any(),
 }
 
-var commonDefines = []ARG{
-	argDarcadiaRootS,
-	argDarcadiaBuildRootB,
-	argDThreadSafe,
-	argDPthreads,
-	argDReentrant,
-	argDLargefileSource,
-	argDStdcConstantMacros,
-	argDStdcFormatMacros,
-	argDFileOffsetBits64,
-	argDGnuSource,
-	argDLongLongSupported,
+var commonDefines = []ANY{
+	argDarcadiaRootS.any(),
+	argDarcadiaBuildRootB.any(),
+	argDThreadSafe.any(),
+	argDPthreads.any(),
+	argDReentrant.any(),
+	argDLargefileSource.any(),
+	argDStdcConstantMacros.any(),
+	argDStdcFormatMacros.any(),
+	argDFileOffsetBits64.any(),
+	argDGnuSource.any(),
+	argDLongLongSupported.any(),
 }
 
-var hostDefines = []ARG{
-	argDarcadiaRootS,
-	argDarcadiaBuildRootB,
-	argDThreadSafe,
-	argDPthreads,
-	argDReentrant,
-	argDLargefileSource,
-	argDStdcConstantMacros,
-	argDStdcFormatMacros,
-	argDFileOffsetBits64,
-	argDGnuSource,
-	argDYndxLibunwindEnableExceptionBacktrace,
-	argDLongLongSupported,
+var hostDefines = []ANY{
+	argDarcadiaRootS.any(),
+	argDarcadiaBuildRootB.any(),
+	argDThreadSafe.any(),
+	argDPthreads.any(),
+	argDReentrant.any(),
+	argDLargefileSource.any(),
+	argDStdcConstantMacros.any(),
+	argDStdcFormatMacros.any(),
+	argDFileOffsetBits64.any(),
+	argDGnuSource.any(),
+	argDYndxLibunwindEnableExceptionBacktrace.any(),
+	argDLongLongSupported.any(),
 }
 
-var hostSseFeatures = []ARG{
-	argMsse2,
-	argMsse3,
-	argMssse3,
-	argMsse41,
-	argMsse42,
-	argMpopcnt,
-	argMcx16,
+var hostSseFeatures = []ANY{
+	argMsse2.any(),
+	argMsse3.any(),
+	argMssse3.any(),
+	argMsse41.any(),
+	argMsse42.any(),
+	argMpopcnt.any(),
+	argMcx16.any(),
 }
 
-var noLibcWarningSuppressions = []ARG{
-	argWnoArrayParameter,
-	argWnoDeprecateLaxVecConvAll,
-	argWnoUnqualifiedStdCastCall,
-	argWnoUnusedButSetParameter,
-	argWnoImplicitFunctionDeclaration,
-	argWnoIntConversion,
-	argWnoIncompatibleFunctionPointerTypes,
-	argWnoAddressOfPackedMember,
-	argWnoDeprecatedThisCapture,
-	argWnoMissingDesignatedFieldInitializers,
-	argWnoFormat,
-	argWnoVlaCxxExtension,
-	argWnoInvalidOffsetof,
-	argWnoAliasTemplateInDeclarationName,
-	argWnoCastFunctionTypeMismatch,
-	argWnoExplicitSpecializationStorageClass,
-	argWnoExtraneousTemplateHead,
-	argWnoMissingTemplateArgListAfterTemplateKw,
-	argWnoNontrivialMemcall,
-	argWnoStrictPrimaryTemplateShadow,
+var noLibcWarningSuppressions = []ANY{
+	argWnoArrayParameter.any(),
+	argWnoDeprecateLaxVecConvAll.any(),
+	argWnoUnqualifiedStdCastCall.any(),
+	argWnoUnusedButSetParameter.any(),
+	argWnoImplicitFunctionDeclaration.any(),
+	argWnoIntConversion.any(),
+	argWnoIncompatibleFunctionPointerTypes.any(),
+	argWnoAddressOfPackedMember.any(),
+	argWnoDeprecatedThisCapture.any(),
+	argWnoMissingDesignatedFieldInitializers.any(),
+	argWnoFormat.any(),
+	argWnoVlaCxxExtension.any(),
+	argWnoInvalidOffsetof.any(),
+	argWnoAliasTemplateInDeclarationName.any(),
+	argWnoCastFunctionTypeMismatch.any(),
+	argWnoExplicitSpecializationStorageClass.any(),
+	argWnoExtraneousTemplateHead.any(),
+	argWnoMissingTemplateArgListAfterTemplateKw.any(),
+	argWnoNontrivialMemcall.any(),
+	argWnoStrictPrimaryTemplateShadow.any(),
 }
 
-var catboostOpenSourceDefine = []ARG{
-	argDcatboostOpensourceYes,
+var catboostOpenSourceDefine = []ANY{
+	argDcatboostOpensourceYes.any(),
 }
 
-var builtinMacroDateTime = []ARG{
-	argWnoBuiltinMacroRedefined,
-	argDDateJan102019,
-	argDTime000000,
+var builtinMacroDateTime = []ANY{
+	argWnoBuiltinMacroRedefined.any(),
+	argDDateJan102019.any(),
+	argDTime000000.any(),
 }
 
-var macroPrefixMapFlags = []ARG{
-	argFmacroPrefixMapB,
-	argFmacroPrefixMapS,
-	argFmacroPrefixMapToolRoot,
+var macroPrefixMapFlags = []ANY{
+	argFmacroPrefixMapB.any(),
+	argFmacroPrefixMapS.any(),
+	argFmacroPrefixMapToolRoot.any(),
 }
 
-var noWarningsBundle = []ARG{
-	argWnoEverything,
+var noWarningsBundle = []ANY{
+	argWnoEverything.any(),
 }
 
-var cxxStandardWarnings = []ARG{
-	argWimportPreprocessorDirectivePedantic,
-	argWoverloadedVirtual,
-	argWnoAmbiguousReversedOperator,
-	argWnoDefaultedFunctionDeleted,
-	argWnoDeprecatedAnonEnumEnumConversion,
-	argWnoDeprecatedEnumEnumConversion,
-	argWnoDeprecatedEnumFloatConversion,
-	argWnoDeprecatedVolatile,
-	argWnoPessimizingMove,
-	argWnoUndefinedVarTemplate,
+var cxxStandardWarnings = []ANY{
+	argWimportPreprocessorDirectivePedantic.any(),
+	argWoverloadedVirtual.any(),
+	argWnoAmbiguousReversedOperator.any(),
+	argWnoDefaultedFunctionDeleted.any(),
+	argWnoDeprecatedAnonEnumEnumConversion.any(),
+	argWnoDeprecatedEnumEnumConversion.any(),
+	argWnoDeprecatedEnumFloatConversion.any(),
+	argWnoDeprecatedVolatile.any(),
+	argWnoPessimizingMove.any(),
+	argWnoUndefinedVarTemplate.any(),
 }
 
 const binPath = "/usr/bin"
 
-func catboostOpenSourceDefineFor(p *Platform) []ARG {
+func catboostOpenSourceDefineFor(p *Platform) []ANY {
 	if p.Flags[envOPENSOURCE] == strYes {
 		return catboostOpenSourceDefine
 	}
@@ -193,7 +182,7 @@ func catboostOpenSourceDefineFor(p *Platform) []ARG {
 	return nil
 }
 
-func sseBaseCFlags(x8664 bool) []ARG {
+func sseBaseCFlags(x8664 bool) []ANY {
 	if x8664 {
 		return hostSseFeatures
 	}
@@ -201,21 +190,21 @@ func sseBaseCFlags(x8664 bool) []ARG {
 	return nil
 }
 
-func noLibcBlock(p *Platform) []ARG {
-	out := make([]ARG, 0, 3+len(noLibcWarningSuppressions))
+func noLibcBlock(p *Platform) []ANY {
+	out := make([]ANY, 0, 3+len(noLibcWarningSuppressions))
 
 	if p.BuildRelease {
-		out = append(out, argNDEBUG)
+		out = append(out, argNDEBUG.any())
 	} else {
-		out = append(out, argUNDEBUG)
+		out = append(out, argUNDEBUG.any())
 	}
 
 	if p.ISA == ISAAArch64 {
-		out = append(out, argNoOutlineAtomics)
+		out = append(out, argNoOutlineAtomics.any())
 	}
 
 	if p.PIC {
-		out = append(out, argFPIC)
+		out = append(out, argFPIC.any())
 	}
 
 	out = append(out, noLibcWarningSuppressions...)
@@ -224,31 +213,31 @@ func noLibcBlock(p *Platform) []ARG {
 }
 
 type CompileFlagBundle struct {
-	ArchArgs    []ARG
-	CFlags      []ARG
-	Defines     []ARG
-	NoLibcBlock []ARG
+	ArchArgs    []ANY
+	CFlags      []ANY
+	Defines     []ANY
+	NoLibcBlock []ANY
 }
 
-func buildDebugInfoFlags(os OS, release, compress bool) []ARG {
-	out := make([]ARG, 0, 4)
+func buildDebugInfoFlags(os OS, release, compress bool) []ANY {
+	out := make([]ANY, 0, 4)
 
-	out = append(out, argDashG)
+	out = append(out, argDashG.any())
 
 	if compress && !release && os == OSLinux {
-		out = append(out, argGzZstd)
+		out = append(out, argGzZstd.any())
 	}
 
-	out = append(out, argFdebugDefaultVersion4)
+	out = append(out, argFdebugDefaultVersion4.any())
 
 	if os == OSLinux {
-		out = append(out, argGgnuPubnames)
+		out = append(out, argGgnuPubnames.any())
 	}
 
 	return out
 }
 
-func composeCompileCFlags(isa ISA, release bool, debugInfo []ARG) []ARG {
+func composeCompileCFlags(isa ISA, release bool, debugInfo []ANY) []ANY {
 	switch isa {
 	case ISAX8664:
 		if release {

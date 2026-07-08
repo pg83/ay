@@ -61,14 +61,14 @@ func emitLD(
 	objcopyPaths []VFS,
 	sbomRefs []NodeRef,
 	sbomPaths []VFS,
-	moduleCFlags []ARG,
-	peerCFlagsGlobal []ARG,
-	moduleScopeCFlags []ARG,
-	peerLDFlagsGlobal []ARG,
-	ownLDFlags []ARG,
-	ownRPathFlags []ARG,
-	peerRPathFlagsGlobal []ARG,
-	objAddLibsGlobal []ARG,
+	moduleCFlags []ANY,
+	peerCFlagsGlobal []ANY,
+	moduleScopeCFlags []ANY,
+	peerLDFlagsGlobal []ANY,
+	ownLDFlags []ANY,
+	ownRPathFlags []ANY,
+	peerRPathFlagsGlobal []ANY,
+	objAddLibsGlobal []ANY,
 	exportsScript *STR,
 	noExportDynSymbols bool,
 	noCompilerWarnings bool,
@@ -245,11 +245,11 @@ func composeLDCmdVcsInfo(tc ModuleToolchain, vcsC VFS) []ANY {
 	}
 }
 
-func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings, noOptimize bool) []ANY {
+func composeLDCmdVcsCompile(p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ANY, noCompilerWarnings, noOptimize bool) []ANY {
 	return composeLDCmdVcsCompileForced(p, tc, vcsC, vcsO, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize, false)
 }
 
-func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ARG, noCompilerWarnings, noOptimize, forceConsistentDebug bool) []ANY {
+func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ANY, noCompilerWarnings, noOptimize, forceConsistentDebug bool) []ANY {
 	bundle := compileFlagBundleFor(p)
 
 	if noOptimize {
@@ -259,7 +259,7 @@ func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsC, vcsO VF
 	cmdArgs := make([]ANY, 0, 94+len(moduleCFlags)+len(peerCFlagsGlobal)+len(moduleScopeCFlags))
 
 	cmdArgs = append(cmdArgs, tc.CC.any(), p.TargetArg.any())
-	cmdArgs = appendArgAny(cmdArgs, bundle.ArchArgs)
+	cmdArgs = appendAnyLists(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
 
 	cmdArgs = append(cmdArgs,
@@ -272,7 +272,7 @@ func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsC, vcsO VF
 	cmdArgs = append(cmdArgs, argIS.any())
 
 	if forceConsistentDebug {
-		cmdArgs = appendArgAny(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir)
+		cmdArgs = appendAnyLists(cmdArgs, debugPrefixMapFlags, xclangDebugCompilationDir)
 	}
 
 	preNoLibcExtras := concat(p.CFlags, moduleCFlags, peerCFlagsGlobal)
@@ -282,7 +282,7 @@ func composeLDCmdVcsCompileForced(p *Platform, tc ModuleToolchain, vcsC, vcsO VF
 	return cmdArgs
 }
 
-func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
+func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *STR, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths)
@@ -348,7 +348,7 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPa
 	bundle := compileFlagBundleFor(p)
 
 	cmdArgs = append(cmdArgs, p.TargetArg.any())
-	cmdArgs = appendArgAny(cmdArgs, bundle.ArchArgs)
+	cmdArgs = appendAnyLists(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
 	cmdArgs = append(cmdArgs, argWlStartGroup.any())
 
@@ -362,7 +362,7 @@ func composeLDCmdLinkExe(p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPa
 	return cmdArgs
 }
 
-func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ARG, exportsScript *STR, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
+func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *STR, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
 	var trailer []ANY
 
 	if !noExportDynSymbols {
@@ -379,21 +379,21 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 
 	trailer = append(trailer, p.LinkPreludeExtra...)
 	trailer = append(trailer, argWlNoAsNeeded.any())
-	trailer = appendArgAny(trailer, ownRPathFlags)
+	trailer = appendAnyLists(trailer, ownRPathFlags)
 
 	if p.PIC {
 		trailer = append(trailer, (argFPIC).any())
 	}
 
 	trailer = appendInternAnys(trailer, p.linkerSelectionGDBIndexFlags())
-	trailer = appendArgAny(trailer, peerRPathFlagsGlobal)
+	trailer = appendAnyLists(trailer, peerRPathFlagsGlobal)
 
 	if p.PIC {
 		trailer = append(trailer, (argFPIC).any())
 	}
 
 	trailer = appendInternAnys(trailer, p.linkerSelectionTailFlags())
-	trailer = appendArgAny(trailer, peerLDFlagsGlobal, ownLDFlags)
+	trailer = appendAnyLists(trailer, peerLDFlagsGlobal, ownLDFlags)
 	trailer = appendArgGroupStr(trailer, objAddLibsGlobal)
 	trailer = append(trailer, p.SystemLibs...)
 

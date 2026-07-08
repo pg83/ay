@@ -67,7 +67,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	jsRef, joinOutVFS := emitJS(instance, js.OutputName, jsSources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
 	ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
 
-	var psc []ARG
+	var psc []ANY
 
 	if p := d.perSrcCFlagsFor(joinOutVFS.any()); p != nil {
 		psc = *p

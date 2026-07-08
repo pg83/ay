@@ -36,7 +36,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf STR) {
 		Resources:    usesPython3,
 	})
 
-	var psc []ARG
+	var psc []ANY
 
 	if p := d.perSrcCFlagsFor(generatedVFS.any()); p != nil {
 		psc = *p

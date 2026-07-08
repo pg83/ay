@@ -49,3 +49,7 @@ func pathAny(s STR) ANY {
 
 	return s.any()
 }
+
+func (a ANY) strID() uint32 {
+	return uint32(a)
+}

@@ -55,28 +55,6 @@ func (na *NodeArenas) anyConcat(parts ...[]ANY) []ANY {
 	return block[:n:n]
 }
 
-func (na *NodeArenas) argAnyList(groups ...[]ARG) []ANY {
-	n := 0
-
-	for _, g := range groups {
-		n += len(g)
-	}
-
-	block := na.anys.alloc(n)
-	k := 0
-
-	for _, g := range groups {
-		for _, a := range g {
-			block[k] = a.any()
-			k++
-		}
-	}
-
-	na.anys.commit(n)
-
-	return block[:n:n]
-}
-
 func (na *NodeArenas) inclAnyList(addIncl []VFS, memo InclArgMemo) []ANY {
 	block := na.anys.alloc(len(addIncl))
 

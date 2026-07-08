@@ -241,16 +241,16 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		py3Suffix := !stmt.CMode && !generatedExplicit && py23Variant
 		genSrcID := internStr(p.generated)
 
-		var psc []ARG
+		var psc []ANY
 
 		if pcf := d.perSrcCFlagsFor(genSrcID.any()); pcf != nil {
 			psc = *pcf
 		}
 
-		ccCFlags := append([]ARG(nil), psc...)
+		ccCFlags := append([]ANY(nil), psc...)
 
 		if cythonImplicitFallthrough(stmt, py23Variant) {
-			ccCFlags = append(ccCFlags, argWnoImplicitFallthrough)
+			ccCFlags = append(ccCFlags, argWnoImplicitFallthrough.any())
 		}
 
 		e.codegen.register(&GeneratedFileInfo{
@@ -494,12 +494,12 @@ func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VF
 	return dedup(out)
 }
 
-func filterPyRegisterCFlags(cflags []ARG) []ARG {
+func filterPyRegisterCFlags(cflags []ANY) []ANY {
 	if len(cflags) == 0 {
 		return cflags
 	}
 
-	out := make([]ARG, 0, len(cflags))
+	out := make([]ANY, 0, len(cflags))
 
 	for _, flag := range cflags {
 		s := flag.string()

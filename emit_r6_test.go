@@ -84,7 +84,7 @@ func TestCollectModule_Ragel6FlagsMultiTokenSplit(t *testing.T) {
 		"mod/x.rl6":   "%%{ machine x; }%%\n",
 	})
 	d := collectTestModule(fs, "mod")
-	got := argStrs(d.ragel6Flags)
+	got := anyStrs(d.ragel6Flags)
 	want := []string{"-L", "-G2"}
 
 	if !equalStrings(got, want) {
@@ -110,7 +110,7 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 		source("devtools/ymake/lang/makelists/makefile_lang.rl6"),
 		ragel6LD,
 		build("contrib/tools/ragel6/ragel6"),
-		internArgs([]string{"-lF1"}),
+		internAnys([]string{"-lF1"}),
 		nil,
 		nil,
 		r6Ref,

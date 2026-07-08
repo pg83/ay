@@ -2383,7 +2383,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		build("contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"),
 		build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, "", false,
-		internArgs([]string{"--fatal_warnings"}), nil, nil)
+		internAnys([]string{"--fatal_warnings"}), nil, nil)
 	emitPB(
 		inst,
 		"pkg/proto/test.proto",
