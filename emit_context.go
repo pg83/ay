@@ -33,6 +33,10 @@ type EmitContext struct {
 	prodSrcs     []SrcMeta
 	objScratch   []ResourceItem
 	rawScratch   []ResourceItem
+	resItems     []ResourceItem
+	resEntries   []PyGenResEntry
+	resStrBuf    []byte
+	resVFSBuf    []VFS
 	arMembers    []ARMember
 	sbomOrder    []ResolvedPeer
 	orderedCC    []VFS
@@ -110,6 +114,10 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		prodSrcs:    prev.prodSrcs[:0],
 		objScratch:  scrub(prev.objScratch),
 		rawScratch:  scrub(prev.rawScratch),
+		resItems:    scrub(prev.resItems),
+		resEntries:  scrub(prev.resEntries),
+		resStrBuf:   prev.resStrBuf[:0],
+		resVFSBuf:   prev.resVFSBuf[:0],
 		arMembers:   prev.arMembers[:0],
 		sbomOrder:   scrub(prev.sbomOrder),
 		orderedCC:   prev.orderedCC[:0],
@@ -122,6 +130,23 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 	frame.emitCtx.protoResVal = ProtoSrcsResult{}
 
 	return &frame.emitCtx
+}
+
+func (e *EmitContext) resStr2(a, b string) string {
+	start := len(e.resStrBuf)
+
+	e.resStrBuf = append(e.resStrBuf, a...)
+	e.resStrBuf = append(e.resStrBuf, b...)
+
+	return bytesString(e.resStrBuf[start:])
+}
+
+func (e *EmitContext) resVFS1(v VFS) []VFS {
+	e.resVFSBuf = append(e.resVFSBuf, v)
+
+	n := len(e.resVFSBuf)
+
+	return e.resVFSBuf[n-1 : n : n]
 }
 
 func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {

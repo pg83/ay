@@ -95,7 +95,7 @@ func TestPySrcObjcopyHashRuntimePy3RawEntryPoints(t *testing.T) {
 		t.Errorf("key: got %q, want %q", entries[0].key.string(), expectedKey)
 	}
 
-	items := pyGenResourceItems(entries)
+	items := (&EmitContext{}).pyGenResourceItems(entries)
 	expectedKv := "resfs/src/resfs/file/py/" + expectedKey + "=${rootrel;context=TEXT;input=TEXT:\"entry_points.py\"}"
 
 	if items[0].Key != expectedKv {
@@ -323,7 +323,7 @@ func runPySrcBatcher(t *testing.T, d *ModuleData, modulePath string) []*Node {
 		entries = append(entries, e.appendPyResEntries(nil, ps)...)
 	}
 
-	e.packResources(ResourcePack{Tag: unitTagPy3, Items: pyGenResourceItems(entries)})
+	e.packResources(ResourcePack{Tag: unitTagPy3, Items: e.pyGenResourceItems(entries)})
 
 	return ctx.emit.nodes.s
 }

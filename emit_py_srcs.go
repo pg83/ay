@@ -150,7 +150,7 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 		if !d.pyBuildNoPYC {
 			yapycOut := e.pyYapycOutFor(ps)
 
-			out = append(out, PyGenResEntry{token: "${ARCADIA_BUILD_ROOT}/" + yapycOut.relString(), key: ps.Module, yapyc: true, path: yapycOut, inputs: info.SourceInputs})
+			out = append(out, PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut, inputs: info.SourceInputs})
 		}
 
 		return out
@@ -182,14 +182,14 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 		var pyExtra []VFS
 
 		if copyStaged {
-			pyExtra = []VFS{srcEdge}
+			pyExtra = e.resVFS1(srcEdge)
 		}
 
 		out = append(out, PyGenResEntry{token: srcRel, key: ps.Module, path: pySource, inputs: pyExtra})
 	}
 
 	if !d.pyBuildNoPYC {
-		out = append(out, PyGenResEntry{token: srcRel + suffix, key: ps.Module, yapyc: true, path: build(module, "/", srcRel, suffix), inputs: []VFS{srcEdge}})
+		out = append(out, PyGenResEntry{token: e.resStr2(srcRel, suffix), key: ps.Module, yapyc: true, path: build(module, "/", srcRel, suffix), inputs: e.resVFS1(srcEdge)})
 	}
 
 	return out
@@ -334,7 +334,7 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 			res.Outputs = append(res.Outputs, nsOuts...)
 		}
 
-		var entries []PyGenResEntry
+		entries := e.resEntries[:0]
 
 		for _, ps := range e.pySrcsReg {
 			if ps.Group != gi {
@@ -344,8 +344,10 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 			entries = e.appendPyResEntries(entries, ps)
 		}
 
+		e.resEntries = entries
+
 		if len(entries) > 0 {
-			groupRefs, groupOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: pyGenResourceItems(entries)})
+			groupRefs, groupOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries)})
 
 			res.Refs = append(res.Refs, groupRefs...)
 			res.Outputs = append(res.Outputs, groupOuts...)
@@ -436,13 +438,13 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VF
 	sort.Strings(keyPaths)
 
 	kvsHash := make([]string, 0, len(keyPaths))
-	kvsCmd := make([]string, 0, len(keyPaths))
+	kvsCmd := make([]STR, 0, len(keyPaths))
 
 	for _, keyPath := range keyPaths {
 		key := "py/namespace/" + modListMD5 + "/" + keyPath
 
 		kvsHash = append(kvsHash, key+"=\""+nsValue+"\"")
-		kvsCmd = append(kvsCmd, key+"="+nsValue)
+		kvsCmd = append(kvsCmd, internStr(key+"="+nsValue))
 	}
 
 	return e.emitKvOnlyResource(d.unit.Tag, kvsHash, kvsCmd)
@@ -457,7 +459,7 @@ func (e *EmitContext) emitPyMainObjcopy() ([]NodeRef, []VFS) {
 
 	kv := "PY_MAIN=" + d.pyMain.string()
 
-	return e.emitKvOnlyResource(d.unit.Tag, []string{kv}, []string{kv})
+	return e.emitKvOnlyResource(d.unit.Tag, []string{kv}, []STR{internStr(kv)})
 }
 
 func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
@@ -477,7 +479,7 @@ func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
 
-	return e.emitKvOnlyResource(d.unit.Tag, []string{kvHash}, []string{kvCmd})
+	return e.emitKvOnlyResource(d.unit.Tag, []string{kvHash}, []STR{internStr(kvCmd)})
 }
 
 func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
@@ -522,7 +524,7 @@ func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
 	for _, res := range resources {
 		key := "resfs/file/" + res.keyPath
 		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + res.hashPath + "\"}"
-		kvCmd := internV("resfs/src/", key, "=", res.sourcePath).string()
+		kvCmd := internStr("resfs/src/" + key + "=" + res.sourcePath)
 		input := source(res.sourcePath)
 
 		refs, outs := e.packResources(ResourcePack{Tag: moduleTag, Items: []ResourceItem{
@@ -545,7 +547,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 			continue
 		}
 
-		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: pyGenResourceItems(e.appendPyResEntries(nil, ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
+		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
 			return e.rawAuxInputClosure(aux, dedupSourceVFS(e.ctx.na, inputs, nil), ref)
 		}})
 
@@ -692,26 +694,48 @@ type PyGenResEntry struct {
 	inputs []VFS
 }
 
-func pyGenResourceItems(entries []PyGenResEntry) []ResourceItem {
-	items := make([]ResourceItem, 0, 2*len(entries))
-	keyBuf := make([]byte, 0, 128)
+func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem {
+	items := e.resItems[:0]
+	buf := e.resStrBuf
 
 	for _, en := range entries {
-		keyBuf = append(keyBuf[:0], "resfs/file/py/"...)
-		keyBuf = append(keyBuf, en.key.sharedString()...)
+		keyStart := len(buf)
+
+		buf = append(buf, "resfs/file/py/"...)
+		buf = append(buf, en.key.sharedString()...)
 
 		if en.yapyc {
-			keyBuf = append(keyBuf, ".yapyc3"...)
+			buf = append(buf, ".yapyc3"...)
 		}
 
-		key := string(keyBuf)
-		kvHash := "resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + en.token + "\"}"
-		kvCmd := internV("resfs/src/", key, "=", en.path.relString()).string()
+		key := bytesString(buf[keyStart:])
+		hashStart := len(buf)
+
+		buf = append(buf, "resfs/src/"...)
+		buf = append(buf, key...)
+		buf = append(buf, "=${rootrel;context=TEXT;input=TEXT:\""...)
+		buf = append(buf, en.token...)
+		buf = append(buf, "\"}"...)
+
+		kvHash := bytesString(buf[hashStart:])
+		cmdStart := len(buf)
+
+		buf = append(buf, "resfs/src/"...)
+		buf = append(buf, key...)
+		buf = append(buf, '=')
+		buf = append(buf, en.path.relString()...)
+
+		cmd := internBytes(buf[cmdStart:])
+
+		buf = buf[:cmdStart]
 
 		items = append(items,
-			ResourceItem{Path: "-", Key: kvHash, Cmd: kvCmd, Input: en.path, Extra: en.inputs},
+			ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, Input: en.path, Extra: en.inputs},
 			ResourceItem{Path: en.token, Key: key, Input: en.path, Extra: en.inputs})
 	}
+
+	e.resStrBuf = buf
+	e.resItems = items
 
 	return items
 }
