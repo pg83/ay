@@ -63,6 +63,15 @@ func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *
 	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, resources: d.resources[:k:k]}
 }
 
+func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *PeerContext) *EmitContext {
+	scanner := ctx.scannerFor(instance)
+	k := len(d.resources)
+
+	frame.emitCtx = EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, resources: d.resources[:k:k]}
+
+	return &frame.emitCtx
+}
+
 func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
 	e.refs = append(e.refs, ref)
 	e.outs = append(e.outs, out)
