@@ -10,8 +10,6 @@ import (
 )
 
 func cmdPerfParser(_ GlobalFlags, args []string) int {
-	defer startProfilesFromEnv()()
-
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: ay perf parser <dir>")
 
@@ -22,14 +20,10 @@ func cmdPerfParser(_ GlobalFlags, args []string) int {
 }
 
 func cmdPerfDarts(_ GlobalFlags, args []string) int {
-	defer startProfilesFromEnv()()
-
 	return perfDarts()
 }
 
 func cmdPerfLink(_ GlobalFlags, args []string) int {
-	defer startProfilesFromEnv()()
-
 	count, size := 5000, 8192
 
 	if len(args) >= 1 {

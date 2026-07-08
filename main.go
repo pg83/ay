@@ -114,11 +114,10 @@ func main() {
 }
 
 func dispatch(argv []string) {
-	probes, g, rest := parseGlobalFlags(argv[1:])
+	g, rest := parseGlobalFlags(argv[1:])
 	code := runCommand(rest, g)
 
-	dumpProbes(probes)
-	dumpCalls()
+	runAtExitHooks()
 	os.Exit(code)
 }
 
@@ -126,7 +125,7 @@ type GlobalFlags struct {
 	Verbose bool
 }
 
-func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []string) {
+func parseGlobalFlags(argv []string) (g GlobalFlags, rest []string) {
 	i := 0
 
 	for ; i < len(argv); i++ {
@@ -139,8 +138,9 @@ func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []str
 		k, v, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
 
 		switch {
-		case k == "probe" && (v == "map" || v == "callsite"):
-			probes = append(probes, v)
+		case k == "probe" && v == "map":
+			atExit(reportMapProbe)
+		case k == "probe" && v == "callsite":
 		case k == "probe":
 			throwFmt("unknown --probe=%q (want map|callsite)", v)
 		case k == "verbose" || k == "v":
@@ -150,7 +150,7 @@ func parseGlobalFlags(argv []string) (probes []string, g GlobalFlags, rest []str
 		}
 	}
 
-	return probes, g, argv[i:]
+	return g, argv[i:]
 }
 
 type Command struct {
@@ -257,36 +257,34 @@ func runCommand(argv []string, g GlobalFlags) int {
 	return 2
 }
 
-func startProfilesFromEnv() func() {
-	var cpuFile *os.File
-
+func init() {
 	if r := os.Getenv("YATOOL_MEMPROFRATE"); r != "" {
 		runtime.MemProfileRate = throw2(strconv.Atoi(r))
 	}
 
 	if path := os.Getenv("YATOOL_CPUPROFILE"); path != "" {
-		cpuFile = throw2(os.Create(path))
+		cpuFile := throw2(os.Create(path))
 
 		if hz := os.Getenv("YATOOL_CPUHZ"); hz != "" {
 			runtime.SetCPUProfileRate(throw2(strconv.Atoi(hz)))
 		}
 
 		throw(pprof.StartCPUProfile(cpuFile))
-	}
 
-	return func() {
-		if cpuFile != nil {
+		atExit(func() {
 			pprof.StopCPUProfile()
 			throw(cpuFile.Close())
-		}
+		})
+	}
 
-		if path := os.Getenv("YATOOL_MEMPROFILE"); path != "" {
+	if path := os.Getenv("YATOOL_MEMPROFILE"); path != "" {
+		atExit(func() {
 			f := throw2(os.Create(path))
 
 			runtime.GC()
 			throw(pprof.WriteHeapProfile(f))
 			throw(f.Close())
-		}
+		})
 	}
 }
 
