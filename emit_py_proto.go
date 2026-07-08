@@ -6,6 +6,26 @@ import (
 	"strings"
 )
 
+var (
+	pyPBSuffixesBase     = []string{"_pb2.py"}
+	pyPBSuffixesGrpc     = []string{"_pb2.py", "_pb2_grpc.py"}
+	pyPBSuffixesMypy     = []string{"_pb2.py", "_pb2.pyi"}
+	pyPBSuffixesGrpcMypy = []string{"_pb2.py", "_pb2_grpc.py", "_pb2.pyi"}
+)
+
+func pyPBSuffixesFor(grpc, mypy bool) []string {
+	switch {
+	case grpc && mypy:
+		return pyPBSuffixesGrpcMypy
+	case grpc:
+		return pyPBSuffixesGrpc
+	case mypy:
+		return pyPBSuffixesMypy
+	default:
+		return pyPBSuffixesBase
+	}
+}
+
 func protoPythonResourceKeyParts(instance ModuleInstance, d *ModuleData, src string) (dir, sep, base string) {
 	base = strings.TrimSuffix(src, ".proto")
 
@@ -186,18 +206,16 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	outputs = append(outputs, pyOut)
 
-	suffixes := []string{"_pb2.py"}
-
 	if d.grpc {
 		grpcPyOut = build(protoBase, "__intpy3___pb2_grpc.py")
 		outputs = append(outputs, grpcPyOut)
-		suffixes = append(suffixes, "_pb2_grpc.py")
 	}
 
 	if !d.noMypy {
 		outputs = append(outputs, pyiOut)
-		suffixes = append(suffixes, "_pb2.pyi")
 	}
+
+	suffixes := pyPBSuffixesFor(d.grpc, !d.noMypy)
 
 	na.vfs.commit(len(outputs))
 
@@ -272,10 +290,21 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	extOut := na.exts.alloc(len(outputs))[:0]
 
 	for i, out := range outputs {
-		extOut = append(extOut, KVExt{
-			Key: internStr("ext_out_name_for_" + filepath.Base(out.relString())).string(),
-			Val: internStr(protoBaseName + suffixes[i]).string(),
-		})
+		keyStart := len(e.resStrBuf)
+
+		e.resStrBuf = append(e.resStrBuf, "ext_out_name_for_"...)
+		e.resStrBuf = append(e.resStrBuf, filepath.Base(out.relString())...)
+
+		key := internBytes(e.resStrBuf[keyStart:])
+		valStart := len(e.resStrBuf)
+
+		e.resStrBuf = append(e.resStrBuf, protoBaseName...)
+		e.resStrBuf = append(e.resStrBuf, suffixes[i]...)
+
+		val := internBytes(e.resStrBuf[valStart:])
+
+		e.resStrBuf = e.resStrBuf[:keyStart]
+		extOut = append(extOut, KVExt{Key: key.string(), Val: val.string()})
 	}
 
 	na.exts.commit(len(outputs))
@@ -509,7 +538,7 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
 		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
 	} else if moduleExcludesTag(d, "CPP_PROTO") {
-		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, build(instance.Path.relString(), "/", archiveNameWithPrefixOrName(instance.Path.relString(), "lib", "")))
+		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, build(instance.Path.relString(), "/", e.arName(instance.Path.relString(), "lib", "")))
 	}
 
 	return result
