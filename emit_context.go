@@ -38,6 +38,8 @@ type EmitContext struct {
 	resEntries   []PyGenResEntry
 	resStrBuf    []byte
 	resVFSBuf    []VFS
+	prodVFS      []VFS
+	peerScratch  []string
 	arMembers    []ARMember
 	sbomOrder    []ResolvedPeer
 	orderedCC    []VFS
@@ -83,6 +85,9 @@ func (e *EmitContext) partitionCollected() (local, global CollectedObjs) {
 		dst.metas = append(dst.metas, m)
 	}
 
+	e.localObjs = local.reset()
+	e.globalObjs = global.reset()
+
 	return local, global
 }
 
@@ -120,6 +125,8 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		resEntries:  scrub(prev.resEntries),
 		resStrBuf:   prev.resStrBuf[:0],
 		resVFSBuf:   prev.resVFSBuf[:0],
+		prodVFS:     prev.prodVFS[:0],
+		peerScratch: scrub(prev.peerScratch),
 		arMembers:   prev.arMembers[:0],
 		sbomOrder:   scrub(prev.sbomOrder),
 		orderedCC:   prev.orderedCC[:0],

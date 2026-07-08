@@ -15,7 +15,7 @@ type ModuleCompileEnv struct {
 	CudaNvccFlags        []ANY
 	AddIncl              []VFS
 	InclArgs             InclArgMemo
-	CCBlocks             *CcModuleArgBlocks
+	CCBlocks             CcModuleArgBlocks
 	PeerAddInclGlobal    []VFS
 	ProtoInclude         []VFS
 	ProtoIncludePeers    []VFS
@@ -91,10 +91,12 @@ func (e *EmitContext) ccInputsFor(srcVFS VFS) ModuleCCInputs {
 
 		if envDelta {
 			if sp.blocksMemo == nil {
-				sp.blocksMemo = composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
+				mb := composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
+
+				sp.blocksMemo = &mb
 			}
 
-			in.CCBlocks = sp.blocksMemo
+			in.CCBlocks = *sp.blocksMemo
 		}
 
 		return in
@@ -575,7 +577,7 @@ func suppressOptimize(cf []ANY) []ANY {
 	return cf
 }
 
-func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv) *CcModuleArgBlocks {
+func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv) CcModuleArgBlocks {
 	cflagsStr := p.CompileCFlags
 
 	if in.NoOptimize {
@@ -649,7 +651,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 		composePostCatboostBucket(cxxBucket),
 	}
 
-	return &CcModuleArgBlocks{
+	return CcModuleArgBlocks{
 		cHead:    na.anyList(in.TC.CC.any()),
 		cxxHead:  na.anyList(in.TC.CXX.any()),
 		includes: includes,

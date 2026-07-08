@@ -161,7 +161,9 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 		muslOn:     d.muslEnabled && !noPlatform,
 	}
 
-	peers := make([]string, 0, 16)
+	peers := e.peerScratch[:0]
+
+	defer func() { e.peerScratch = peers[:0] }()
 
 	if addLinuxHeaders {
 		peers = append(peers, "contrib/libs/linux-headers")
