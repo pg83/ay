@@ -762,6 +762,10 @@ func (ex *Executor) discard(path string) {
 		if os.Rename(path, dst) == nil {
 			return
 		}
+
+		if _, err := os.Lstat(path); err != nil {
+			return
+		}
 	}
 }
 

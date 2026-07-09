@@ -1,9 +1,29 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestExecutorDiscardMissingPathReturns(t *testing.T) {
+	dir := t.TempDir()
+	ex := &Executor{grbDir: filepath.Join(dir, "grb")}
+
+	done := make(chan struct{})
+
+	go func() {
+		ex.discard(filepath.Join(dir, "does-not-exist"))
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("discard on a non-existent path did not return (infinite loop)")
+	}
+}
 
 func TestExecutorKeepGoingSyntheticDepFailure(t *testing.T) {
 	events := newEventQueue()
