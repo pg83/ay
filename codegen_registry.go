@@ -6,6 +6,26 @@ type PendingEmit struct {
 	fn    func()
 }
 
+func (p *PendingEmit) run() {
+	if p == nil || p.fn == nil {
+		return
+	}
+
+	fn := p.fn
+
+	p.fn = nil
+
+	if p.prep != nil {
+		prep := p.prep
+
+		p.prep = nil
+
+		prep()
+	}
+
+	fn()
+}
+
 func runPendingPrep(info *GeneratedFileInfo) {
 	p := info.pending
 

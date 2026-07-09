@@ -58,14 +58,29 @@ type CopyEmitState struct {
 }
 
 func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
-	st := e.registerCopyFile(entry)
+	st, info := e.registerCopyFile(entry)
+	ctx, instance, scanner := e.ctx, e.instance, e.scanner
+	scanCfg := snapshotScanCfg(ctx.na, e.d.cc.ScanCfg)
+	moduleTag := e.d.cc.ModuleTag
+	tc := e.d.tc
+	demanded := instance.Demand != demandNone
 
-	e.deferPass2(func() {
-		e.emitCopyFileNode(entry, st)
-	})
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		emitCopyFileNodeSnap(ctx, instance, scanner, scanCfg, moduleTag, tc, entry, st)
+
+		if demanded && extIsArchiveMember(entry.Dst) {
+			e.collectObj(st.ref, st.dstVFS, SrcMeta{Prio: stmtPrioDefault})
+		}
+	}}
+
+	if info != nil {
+		info.pending = pe
+	}
+
+	e.noteOwn(pe)
 }
 
-func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
+func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *GeneratedFileInfo) {
 	ctx, instance := e.ctx, e.instance
 	scanner := e.scanner
 	reg := e.codegen
@@ -133,21 +148,19 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) CopyEmitState {
 			info.SourceInputs = merged[:mn:mn]
 		}
 
-		reg.register(info)
+		return CopyEmitState{srcVFS: srcVFS, dstVFS: dstVFS, ref: ref, producerSource: producerSource}, reg.register(info)
 	}
 
-	return CopyEmitState{srcVFS: srcVFS, dstVFS: dstVFS, ref: ref, producerSource: producerSource}
+	return CopyEmitState{srcVFS: srcVFS, dstVFS: dstVFS, ref: ref, producerSource: producerSource}, nil
 }
 
-func (e *EmitContext) emitCopyFileNode(entry CopyFileEntry, st CopyEmitState) {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	scanner := e.scanner
+func emitCopyFileNodeSnap(ctx *GenCtx, instance ModuleInstance, scanner *IncludeScanner, scanCfg ScanContext, moduleTag STR, tc ModuleToolchain, entry CopyFileEntry, st CopyEmitState) {
 	deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{st.srcVFS})
 
 	var closure []VFS
 
 	if entry.WithContext || len(entry.OutputIncludes) > 0 {
-		raw := rewriteClosureCPSource(ctx.na, scanner, walkClosure(e.scanner, st.dstVFS, d.cc.ScanCfg))
+		raw := rewriteClosureCPSource(ctx.na, scanner, walkClosure(scanner, st.dstVFS, scanCfg))
 
 		raw = filterSourceVFS(ctx.na, raw)
 
@@ -170,9 +183,5 @@ func (e *EmitContext) emitCopyFileNode(entry CopyFileEntry, st CopyEmitState) {
 		closure = ctx.na.vfsList(st.producerSource...)
 	}
 
-	emitCPWithDeps(instance, st.srcVFS, st.dstVFS, deps, closure, st.ref, d.cc.ModuleTag, d.tc, ctx.scripts, ctx.emit)
-
-	if extIsArchiveMember(entry.Dst) {
-		e.collectObj(st.ref, st.dstVFS, SrcMeta{Prio: stmtPrioDefault})
-	}
+	emitCPWithDeps(instance, st.srcVFS, st.dstVFS, deps, closure, st.ref, moduleTag, tc, ctx.scripts, ctx.emit)
 }

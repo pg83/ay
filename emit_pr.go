@@ -184,19 +184,28 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		registerOutput(*stdoutVFS, parsed, rides)
 	}
 
-	e.deferPass2(func() {
-		inputClosure := e.prInputClosure(stmt)
+	snap := &prSnap{
+		ctx:      ctx,
+		instance: instance,
+		scanner:  e.scanner,
+		codegen:  e.codegen,
+		scanCfg:  snapshotScanCfg(ctx.na, e.d.cc.ScanCfg),
+		inVFSs:   ctx.na.vfsList(inVFSs...),
+	}
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		inputClosure := prInputClosure(snap, stmt)
 
 		if prSourceClosure := filterSourceVFS(ctx.na, inputClosure); len(prSourceClosure) > 0 {
 			for out := range registeredPROut {
-				e.codegen.addSourceInputs(ctx.na, out, prSourceClosure)
+				snap.codegen.addSourceInputs(ctx.na, out, prSourceClosure)
 			}
 		}
 
 		depInputs := inputClosure
 
-		if len(inVFSs) > 0 {
-			depInputs = concat(inVFSs, inputClosure)
+		if len(snap.inVFSs) > 0 {
+			depInputs = concat(snap.inVFSs, inputClosure)
 		}
 
 		emitPR(instance, RunProgramNodeSpec{
@@ -204,13 +213,21 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			toolBinPath:   *res.LDPath,
 			toolLDRef:     res.LDRef,
 			auxTools:      auxTools,
-			inVFSs:        inVFSs,
+			inVFSs:        snap.inVFSs,
 			outVFSByToken: outVFSByToken,
 			stdoutVFS:     stdoutVFS,
 			inputClosure:  inputClosure,
 			extraDepRefs:  resolveCodegenDepRefsIncl(ctx, instance, ctx.na, depInputs),
 		}, prRef, ctx.emit)
-	})
+	}}
+
+	for out := range registeredPROut {
+		if info := e.codegen.lookup(out); info != nil {
+			info.pending = pe
+		}
+	}
+
+	e.noteOwn(pe)
 }
 
 type PrSourceInputSet struct {
@@ -265,8 +282,17 @@ func pbhBasenameSet(vs []VFS) map[string]bool {
 	return m
 }
 
-func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
-	ctx, instance, d := e.ctx, e.instance, e.d
+type prSnap struct {
+	ctx      *GenCtx
+	instance ModuleInstance
+	scanner  *IncludeScanner
+	codegen  *CodegenRegistry
+	scanCfg  ScanContext
+	inVFSs   []VFS
+}
+
+func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
+	ctx, instance := s.ctx, s.instance
 	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
 	generatesHeader := stmt.StdoutFile != nil && isHeaderSource(stmt.StdoutFile.string())
 
@@ -290,8 +316,12 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		hasParsedIN = hasParsedIN || ctx.parsers.registry.hasRegisteredParser(f.string())
 	}
 
-	scanCfg := d.cc.ScanCfg
-	out := ctx.prClosureScratch[:0]
+	scanCfg := s.scanCfg
+	scratch := vfsScratches.get()
+
+	defer func() { vfsScratches.put(scratch) }()
+
+	out := scratch
 
 	ridesMainHeader := func(ccRel string) bool {
 		return isHeaderSource(mainRel) && relStem(ccRel) == relStem(mainRel)
@@ -303,7 +333,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 				return
 			}
 
-			cv := walkClosure(e.scanner, copyFileOutputVFS(instance.Path.relString(), rel), scanCfg)
+			cv := walkClosure(s.scanner, copyFileOutputVFS(instance.Path.relString(), rel), scanCfg)
 
 			eachBucketVFS(cv.buckets, func(v VFS) { out = append(out, v) })
 		}
@@ -317,16 +347,16 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		}
 	}
 
-	for _, f := range stmt.INFiles {
+	for i, f := range stmt.INFiles {
 		rel := f.string()
 
 		if ctx.parsers.registry.hasRegisteredParser(rel) {
-			walkClosure(e.scanner, e.runProgramInputVFS(rel), scanCfg).each(func(v VFS) { out = append(out, v) })
+			walkClosure(s.scanner, s.inVFSs[i], scanCfg).each(func(v VFS) { out = append(out, v) })
 
 			continue
 		}
 
-		if info := e.codegen.lookup(e.runProgramInputVFS(rel)); info != nil {
+		if info := s.codegen.lookup(s.inVFSs[i]); info != nil {
 			out = append(out, info.SourceInputs...)
 		}
 	}
@@ -337,7 +367,7 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 				continue
 			}
 
-			cv := walkClosure(e.scanner, copyFileOutputVFS(instance.Path.relString(), f.string()), scanCfg)
+			cv := walkClosure(s.scanner, copyFileOutputVFS(instance.Path.relString(), f.string()), scanCfg)
 
 			eachBucketVFS(cv.buckets, func(v VFS) {
 				if v.isSource() {
@@ -364,11 +394,11 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 
 		selfIsInput := false
 
-		switch info := e.codegen.lookup(target.build()); {
+		switch info := s.codegen.lookup(target.build()); {
 		case info != nil:
-			sub = walkClosure(e.scanner, info.OutputPath, scanCfg)
+			sub = walkClosure(s.scanner, info.OutputPath, scanCfg)
 		case fullSourceClosure && ctx.fs.isFile(srcRootRel, target.string()):
-			sub = walkClosure(e.scanner, target.source(), scanCfg)
+			sub = walkClosure(s.scanner, target.source(), scanCfg)
 			selfIsInput = true
 		default:
 			continue
@@ -403,17 +433,13 @@ func (e *EmitContext) prInputClosure(stmt *RunProgramStmt) []VFS {
 		eachBucketVFS(sub.buckets, process)
 	}
 
-	if len(out) == 0 {
-		ctx.prClosureScratch = out
+	scratch = out
 
+	if len(out) == 0 {
 		return nil
 	}
 
-	res := dedupClosure(ctx.na, out)
-
-	ctx.prClosureScratch = out
-
-	return res
+	return dedupClosure(ctx.na, out)
 }
 
 func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) ParsedIncludeSet {

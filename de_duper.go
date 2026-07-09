@@ -1,6 +1,9 @@
 package main
 
-var dedupers DeDuperPool
+var (
+	dedupers     DeDuperPool
+	vfsScratches VFSScratchPool
+)
 
 type DeDuperPool struct {
 	free []*DeDuper
@@ -210,4 +213,24 @@ func dedupSourceVFS(na *NodeArenas, inputs []VFS, extra [][]VFS) []VFS {
 	na.vfs.commit(len(out))
 
 	return out[:len(out):len(out)]
+}
+
+type VFSScratchPool struct {
+	free [][]VFS
+}
+
+func (p *VFSScratchPool) get() []VFS {
+	if n := len(p.free); n > 0 {
+		s := p.free[n-1]
+
+		p.free = p.free[:n-1]
+
+		return s[:0]
+	}
+
+	return make([]VFS, 0, 1<<10)
+}
+
+func (p *VFSScratchPool) put(s []VFS) {
+	p.free = append(p.free, s)
 }

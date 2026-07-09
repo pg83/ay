@@ -74,7 +74,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	}
 
 	ctx, instance, d := e.ctx, e.instance, e.d
-	scanCfg := newScanContext(ctx.parsers, d.addIncl, e.peers.SelfAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
+	scanCfg := newScanContext(ctx.parsers, ctx.na.vfsList(d.addIncl...), ctx.na.vfsList(e.peers.SelfAddInclGlobal...), includeScannerBasePaths(), instance.Path.relString())
 	protoGenHeaders := e.moduleProtoGenHeaders()
 	withHeader := stmt.Variant == "with_header"
 	headerInput := e.resolveEnumHeaderInput(stmt.Header, d.srcDirs)
@@ -188,7 +188,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		hInfo.pending = pe
 	}
 
-	e.notePending(cppInfo)
+	e.noteOwn(pe)
 }
 
 func emitEN(

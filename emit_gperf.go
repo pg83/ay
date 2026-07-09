@@ -64,7 +64,7 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 		psc = *p
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:     genVFS,
 		ProducerRef:    gpRef,
 		GeneratorRefs:  e.ctx.na.refList(gperfLDRef),
@@ -78,9 +78,16 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 	meta.Source = genVFS.any()
 	e.enqueueSrc(meta)
 
-	e.deferPass2(func() {
-		srcInputs := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg).collect(ctx.na, func(v VFS) bool { return v.isSource() })
+	scanner := e.scanner
+	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		srcInputs := walkClosure(scanner, srcVFS, scanCfg).collect(ctx.na, func(v VFS) bool { return v.isSource() })
 
 		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef, ctx.emit)
-	})
+	}}
+
+	info.pending = pe
+
+	e.noteOwn(pe)
 }
