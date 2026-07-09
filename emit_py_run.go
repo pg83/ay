@@ -106,30 +106,6 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 
 	pyRef := ctx.emit.reserve()
 
-	var pyInfos []*GeneratedFileInfo
-
-	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
-		pyInfos = append(pyInfos, reg.register(GeneratedFileInfo{
-			OutputPath:     out,
-			ProducerRef:    pyRef,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			SourceInputs:   pySourceInputs,
-			ClosureLeaves:  pyGeneratedFromSources,
-		}))
-	}
-
-	for _, f := range stmt.OUTFiles {
-		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
-	}
-
-	for _, f := range stmt.OUTNoAutoFiles {
-		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
-	}
-
-	if stmt.StdoutFile != nil {
-		registerPYOutput(*stdoutVFS, e.pyEmitsIncludes(stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard))
-	}
-
 	interp := d.cc.TC.Python3.any()
 	kv := &pyRunKV
 	resources := usesPython3
@@ -175,8 +151,27 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, interp, interpInput, toolRefs, kv, resources, ctx.emit)
 	}
 
-	for _, info := range pyInfos {
-		info.OnUse = &pe
+	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
+		reg.register(GeneratedFileInfo{
+			OutputPath:     out,
+			ProducerRef:    pyRef,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+			SourceInputs:   pySourceInputs,
+			ClosureLeaves:  pyGeneratedFromSources,
+			OnUse:          &pe,
+		})
+	}
+
+	for _, f := range stmt.OUTFiles {
+		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
+	}
+
+	for _, f := range stmt.OUTNoAutoFiles {
+		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
+	}
+
+	if stmt.StdoutFile != nil {
+		registerPYOutput(*stdoutVFS, e.pyEmitsIncludes(stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard))
 	}
 
 	return pyRef

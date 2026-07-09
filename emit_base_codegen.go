@@ -49,22 +49,6 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 
 	reg := e.codegen
 
-	hInfo := reg.register(GeneratedFileInfo{
-		OutputPath:     prefixH,
-		ProducerRef:    bcRef,
-		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-		ClosureLeaves:  e.ctx.na.vfsList(prefixCpp, inputIn),
-	})
-
-	cppInfo := reg.register(GeneratedFileInfo{
-		OutputPath:     prefixCpp,
-		ProducerRef:    bcRef,
-		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-		ClosureLeaves:  e.ctx.na.vfsList(inputIn),
-	})
-
 	pe := func() {
 		node := Node{
 			Platform:       instance.Platform,
@@ -80,7 +64,21 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		ctx.emit.emitReservedNode(node, bcRef)
 	}
 
-	hInfo.OnUse = &pe
-	cppInfo.OnUse = &pe
+	reg.register(GeneratedFileInfo{
+		OutputPath:     prefixH,
+		ProducerRef:    bcRef,
+		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
+		ClosureLeaves:  e.ctx.na.vfsList(prefixCpp, inputIn),
+		OnUse:          &pe,
+	})
 
+	reg.register(GeneratedFileInfo{
+		OutputPath:     prefixCpp,
+		ProducerRef:    bcRef,
+		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
+		ClosureLeaves:  e.ctx.na.vfsList(inputIn),
+		OnUse:          &pe,
+	})
 }

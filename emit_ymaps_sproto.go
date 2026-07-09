@@ -40,14 +40,6 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	ctx.na.dirs.commit(len(parsed))
 	parsed = parsed[:len(parsed):len(parsed)]
 
-	info := e.codegen.register(GeneratedFileInfo{
-		OutputPath:     sprotoH,
-		ProducerRef:    sprotoRef,
-		GeneratorRefs:  e.ctx.na.refList(sprotocLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-		ClosureLeaves:  e.ctx.na.vfsList(source(protoRelPath)),
-	})
-
 	pending := YmapsSprotoPending{ref: sprotoRef, sprotoH: sprotoH, protoRelPath: protoRelPath}
 	scanner := e.scanner
 
@@ -55,8 +47,14 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 		emitYmapsSprotoHeaderSnap(ctx, instance, scanner, pending, outRoot, sprotocLDRef, sprotocBinary, scanCfg)
 	}
 
-	info.OnUse = &pe
-
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:     sprotoH,
+		ProducerRef:    sprotoRef,
+		GeneratorRefs:  e.ctx.na.refList(sprotocLDRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+		ClosureLeaves:  e.ctx.na.vfsList(source(protoRelPath)),
+		OnUse:          &pe,
+	})
 }
 
 func emitYmapsSprotoHeaderSnap(ctx *GenCtx, instance ModuleInstance, scanner *IncludeScanner, p YmapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCfg ScanContext) {

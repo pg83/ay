@@ -63,15 +63,14 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 
 	sourceInputs = sourceInputs[:len(sourceInputs):len(sourceInputs)]
 
-	info := e.codegen.register(GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:     genProto,
 		ProducerRef:    gzRef,
 		SourceInputs:   sourceInputs,
 		ClosureLeaves:  sourceInputs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: gztGeneratedProtoParse(ctx, gztSource, inducedProtos)},
+		OnUse:          &pe,
 	})
-
-	info.OnUse = &pe
 
 	return gzRef, genProtoName
 }

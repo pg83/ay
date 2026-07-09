@@ -100,7 +100,8 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 			ProducerRef:    jvRef,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: antlrParsedIncludes(instance.Path.relString(), run, outTok, outVFSByToken, inputs, jarVFS)},
 			SourceInputs:   jvSourceInputs,
-		}).OnUse = &pe
+			OnUse:          &pe,
+		})
 	}
 
 	for _, outTok := range run.OUTFiles {

@@ -172,15 +172,6 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 
 	na.vfs.commit(nl)
 
-	info := e.codegen.register(GeneratedFileInfo{
-		OutputPath:     dstVFS,
-		SourcePath:     srcVFS,
-		ProducerRef:    ref,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[parsedIncludesLocal]},
-		ClosureLeaves:  leafBlock[:nl:nl],
-		Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: goCgoCFlags(d)}),
-	})
-
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
@@ -224,8 +215,15 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
-	info.OnUse = &pe
-
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:     dstVFS,
+		SourcePath:     srcVFS,
+		ProducerRef:    ref,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[parsedIncludesLocal]},
+		ClosureLeaves:  leafBlock[:nl:nl],
+		Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: goCgoCFlags(d)}),
+		OnUse:          &pe,
+	})
 }
 
 func (e *EmitContext) emitGoCgo1Stmt() {

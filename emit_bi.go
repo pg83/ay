@@ -100,7 +100,7 @@ func (e *EmitContext) emitBuildInfoStmt() {
 		emitBIReserved(instance, createFor, biFlagsForInstance(instance.Platform), tc, ctx.emit, biRef)
 	}
 
-	info := e.codegen.register(GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
 		ProducerRef:   biRef,
 		GeneratorRefs: nil,
@@ -108,8 +108,6 @@ func (e *EmitContext) emitBuildInfoStmt() {
 			IncludeDirective{kind: includeQuoted, target: includeTarget(buildInfoGenPyVFS.rel().any())},
 			IncludeDirective{kind: includeQuoted, target: includeTarget(xargsPyVFS.rel().any())},
 			IncludeDirective{kind: includeQuoted, target: includeTarget(yieldLinePyVFS.rel().any())})},
+		OnUse: &pe,
 	})
-
-	info.OnUse = &pe
-
 }
