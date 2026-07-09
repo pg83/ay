@@ -103,7 +103,33 @@ type ClosureSink interface {
 	windowSubsumed(v VFS) bool
 }
 
+type TarjanPool struct {
+	free []*TarjanCtx
+}
+
+func (p *TarjanPool) get() *TarjanCtx {
+	if n := len(p.free); n > 0 {
+		tc := p.free[n-1]
+
+		p.free = p.free[:n-1]
+
+		return tc
+	}
+
+	return &TarjanCtx{}
+}
+
+func (p *TarjanPool) put(tc *TarjanCtx) {
+	p.free = append(p.free, tc)
+}
+
+var tarjans TarjanPool
+
 func (tc *TarjanCtx) runSCC(g ClosureSink, root VFS) uint64 {
+	if tc.g != nil {
+		throwFmt("tarjan: nested runSCC (pending fire inside SCC walk)")
+	}
+
 	tc.scratch.reset(vfsBound())
 	tc.stack = tc.stack[:0]
 	tc.next = 0

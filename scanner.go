@@ -65,7 +65,6 @@ type IncludeScanner struct {
 	childArena       *BumpAllocator[VFS]
 	spOut            []VFS
 	resolveOut       []VFS
-	tjc              *TarjanCtx
 	dfsActive        BitSet
 	visitedIDPool    sync.Pool
 	scanCtxPool      sync.Pool
@@ -78,6 +77,7 @@ type ScanCtx struct {
 	scanner *IncludeScanner
 	cfg     ScanContext
 	parser  IncludeDirectiveParser
+	tjc     *TarjanCtx
 }
 
 func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
@@ -117,7 +117,7 @@ func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
 	return v
 }
 
-func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), tjc *TarjanCtx, buckets *BucketCache) *IncludeScanner {
+func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), buckets *BucketCache) *IncludeScanner {
 	s := &IncludeScanner{
 		sysincl: newSysinclCtx(sysincl),
 		parsers: parsers,
@@ -128,7 +128,6 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		childArena:       newBumpAllocator[VFS](1 << 12),
 		searchTierFlat:   newIntMap[VFS](4096),
 		sourceUnderCache: newIntMap[VFS](1 << 16),
-		tjc:              tjc,
 	}
 
 	s.visitedIDPool.New = func() any {
@@ -182,11 +181,14 @@ func (s *IncludeScanner) getScanCtx(cfg ScanContext, parser IncludeDirectivePars
 	sc.scanner = s
 	sc.cfg = cfg
 	sc.parser = parser
+	sc.tjc = tarjans.get()
 
 	return sc
 }
 
 func (s *IncludeScanner) putScanCtx(sc *ScanCtx) {
+	tarjans.put(sc.tjc)
+	sc.tjc = nil
 	s.scanCtxPool.Put(sc)
 }
 
@@ -285,7 +287,7 @@ func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 		return
 	}
 
-	runPendingPrep(info)
+	runPending(info)
 
 	bucket := parsedIncludesCpp
 
@@ -319,15 +321,18 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 		return
 	}
 
-	block := s.childArena.alloc(closureAllocHint)
-	k := 0
+	scratch := vfsScratches.get()
 
 	sc.forEachResolvedChild(abs, func(rabs VFS) {
-		block[k] = rabs
-		k++
+		scratch = append(scratch, rabs)
 	})
 
+	k := len(scratch)
+	block := s.childArena.alloc(k)
+
+	copy(block, scratch)
 	s.childArena.commit(k)
+	vfsScratches.put(scratch)
 
 	var children []VFS
 
@@ -346,7 +351,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	s := sc.scanner
 
 	if s.dfsActive.has(uint32(abs)) {
-		s.tjc.runSCC(sc, abs)
+		sc.tjc.runSCC(sc, abs)
 
 		return
 	}
@@ -369,12 +374,12 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		s.inDfsFrame = true
 	}
 
-	s.tjc.closure.reset(vfsBound())
+	sc.tjc.closure.reset(vfsBound())
 
 	block := s.closureArena.alloc(closureAllocHint)
 	k := 0
 
-	s.tjc.closure.add(abs)
+	sc.tjc.closure.add(abs)
 	block[k] = abs
 	k++
 
@@ -389,18 +394,18 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 		cl, _ := s.closure(ch)
 
-		k = cl.spliceInto(&s.tjc.closure, block, k)
+		k = cl.spliceInto(&sc.tjc.closure, block, k)
 	})
 
 	leafStart := k
 
 	if abs.isBuild() {
-		k = s.tjc.closure.spliceNew(s.codegen.closureLeaves(abs), block, k)
+		k = sc.tjc.closure.spliceNew(s.codegen.closureLeaves(abs), block, k)
 	}
 
 	for i := leafStart; i < k; i++ {
 		if block[i].isBuild() {
-			k = s.tjc.closure.spliceNew(s.codegen.closureLeaves(block[i]), block, k)
+			k = sc.tjc.closure.spliceNew(s.codegen.closureLeaves(block[i]), block, k)
 		}
 	}
 
@@ -435,7 +440,7 @@ func (sc *ScanCtx) closureOf(abs VFS) Closure {
 func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
 	s := sc.scanner
 
-	if !s.tjc.closure.has(ch) {
+	if !sc.tjc.closure.has(ch) {
 		return false
 	}
 
@@ -461,7 +466,7 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 
 	for i := 0; i < k; i++ {
 		if block[i].isBuild() {
-			k = s.tjc.closure.spliceNew(s.codegen.closureLeaves(block[i]), block, k)
+			k = sc.tjc.closure.spliceNew(s.codegen.closureLeaves(block[i]), block, k)
 		}
 	}
 

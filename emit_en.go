@@ -130,14 +130,10 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	scanner := e.scanner
 	demanded := instance.Demand != demandNone
 
-	var enumParserLD NodeRef
-	var enumParserBin VFS
-
 	pe := &PendingEmit{owner: ctx.instanceKey(instance)}
 
-	pe.prep = func() {
-		enumParserLD, enumParserBin = ctx.tool(argToolsEnumParserEnumParser)
-
+	pe.fn = func() {
+		enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
 		generatorRefs := ctx.na.refList(enumParserLD)
 
 		cppInfo.GeneratorRefs = generatorRefs
@@ -145,9 +141,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		if hInfo != nil {
 			hInfo.GeneratorRefs = generatorRefs
 		}
-	}
 
-	pe.fn = func() {
 		headerClosure := walkClosure(scanner, headerInput, scanCfg)
 
 		var enClosure []VFS
