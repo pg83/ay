@@ -6,7 +6,7 @@ var ljKV = KV{P: pkLJ, PC: pcLightCyan}
 
 const luajit21CwdRel = "contrib/libs/luajit_21"
 
-func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLDRef NodeRef, cwd VFS, emit *StreamingEmitter) NodeRef {
+func emitLJReserved(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLDRef NodeRef, cwd VFS, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 	env := envVarsVCS
 
@@ -25,7 +25,7 @@ func emitLJ(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLD
 		ForeignDepRefs: na.refList(compilerLDRef),
 	}
 
-	return emit.emitNode(node)
+	emit.emitReservedNode(node, id)
 }
 
 func (e *EmitContext) emitLuaJit21() {
@@ -42,12 +42,20 @@ func (e *EmitContext) emitLuaJit21() {
 	for _, lua := range d.lj21.Luas {
 		luaSrc := resolveSourceVFS(ctx, instance, lua, d.srcDirs)
 		rawOut := build(instance.Path.relString(), "/", strings.TrimSuffix(lua, ".lua"), ".raw")
-		ref := emitLJ(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ctx.emit)
+		ref := ctx.emit.reserve()
 
-		reg.register(GeneratedFileInfo{
+		info := reg.register(GeneratedFileInfo{
 			OutputPath:   rawOut,
 			ProducerRef:  ref,
 			SourceInputs: ctx.na.vfsList(luaSrc),
 		})
+
+		pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+			emitLJReserved(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ref, ctx.emit)
+		}}
+
+		info.pending = pe
+
+		e.noteOwn(pe)
 	}
 }

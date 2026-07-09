@@ -29,6 +29,8 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	var bcSourceInputs []VFS
 
+	pendNodes := make([]Node, 0, len(stmt.Sources)+2)
+	pendRefs := make([]NodeRef, 0, len(stmt.Sources)+2)
 	bcRefs := make([]NodeRef, 0, len(stmt.Sources))
 	bcPaths := make([]VFS, 0, len(stmt.Sources))
 	linksCopy := false
@@ -66,8 +68,10 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			Resources:    usesPython3Clang16,
 		}
 
-		ref := ctx.emit.emitNode(node)
+		ref := ctx.emit.reserve()
 
+		pendNodes = append(pendNodes, node)
+		pendRefs = append(pendRefs, ref)
 		bcRefs = append(bcRefs, ref)
 		bcPaths = append(bcPaths, bcOut)
 	}
@@ -99,7 +103,10 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		Resources:    usesPython3Clang16,
 	}
 
-	ldRef := ctx.emit.emitNode(ldNode)
+	ldRef := ctx.emit.reserve()
+
+	pendNodes = append(pendNodes, ldNode)
+	pendRefs = append(pendRefs, ldRef)
 	optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 	optOut := build(instance.Path.relString(), "/", optOutName)
 	optArgs := []ANY{internStr(python).any(), internStr(optWrapper).any(), internStr(opt).any(), (mergedOut).any(), argDashO.any(), (optOut).any()}
@@ -131,17 +138,30 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		Resources:    usesPython3Clang16,
 	}
 
-	opRef := ctx.emit.emitNode(optNode)
+	opRef := ctx.emit.reserve()
+
+	pendNodes = append(pendNodes, optNode)
+	pendRefs = append(pendRefs, opRef)
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		for i := range pendNodes {
+			ctx.emit.emitReservedNode(pendNodes[i], pendRefs[i])
+		}
+	}}
+
+	e.noteOwn(pe)
 
 	if stmt.GenerateMachineCode {
 		return
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:    optOut,
 		ProducerRef:   opRef,
 		GeneratorRefs: nil,
 	})
+
+	info.pending = pe
 
 	e.resources = append(e.resources, ResourceEntry{
 		Path:      optOutName,
