@@ -35,7 +35,7 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:    outVFS,
 		ProducerRef:   ref,
 		GeneratorRefs: e.ctx.na.refList(toolRef),

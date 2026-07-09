@@ -177,7 +177,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			reg := e.codegen
 
 			for _, h := range headerVFS {
-				infos = append(infos, reg.register(GeneratedFileInfo{
+				infos = append(infos, e.register(GeneratedFileInfo{
 					OutputPath:      h,
 					ProducerRef:     cyRef,
 					ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: headerParsed},
@@ -328,7 +328,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			}, cyRef)
 		}
 
-		e.codegen.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     generatedVFS,
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,

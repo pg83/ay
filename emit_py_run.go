@@ -152,7 +152,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	}
 
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     out,
 			ProducerRef:    pyRef,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},

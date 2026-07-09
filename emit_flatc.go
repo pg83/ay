@@ -189,9 +189,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	ctx.na.vfs.commit(len(headerLeaves))
 	headerLeaves = headerLeaves[:len(headerLeaves):len(headerLeaves)]
 
-	reg := e.codegen
-
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
@@ -202,15 +200,16 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 
 	cppIncludes := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     cppVFS,
+		SourcePath:     srcVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppIncludes},
 		OnUse:          &pe,
 	})
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:    bfbsVFS,
 		ProducerRef:   flRef,
 		GeneratorRefs: e.ctx.na.refList(flatcLDRef),
@@ -241,7 +240,6 @@ func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant
 
 	cpp := meta
 
-	cpp.SecondLevel = meta.SecondLevel || meta.Generated
 	cpp.Generated = true
 	cpp.Source = build(srcVFS.relString(), ".cpp").any()
 	e.enqueueSrc(cpp)

@@ -49,7 +49,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 		psc = *p
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:  generatedVFS,
 		ProducerRef: chRef,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(

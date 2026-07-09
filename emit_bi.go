@@ -100,7 +100,7 @@ func (e *EmitContext) emitBuildInfoStmt() {
 		emitBIReserved(instance, createFor, biFlagsForInstance(instance.Platform), tc, ctx.emit, biRef)
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
 		ProducerRef:   biRef,
 		GeneratorRefs: nil,

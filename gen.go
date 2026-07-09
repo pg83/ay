@@ -2056,6 +2056,37 @@ type ARMember struct {
 	key  uint64
 }
 
+// srcRound classifies a source for archive-member ordering: the length of
+// its producer chain. 0 for a hand-written source; 1 for Generated (trusted
+// as reported, no lookup needed); each further hop through a registered
+// producer's own SourcePath adds 1, provided that next producer was
+// registered by this same module (a peer's generated header feeding a
+// local producer doesn't count — only within-module codegen chains do).
+func (e *EmitContext) srcRound(m SrcMeta) uint64 {
+	if !m.Generated {
+		return 0
+	}
+
+	round := uint64(1)
+
+	for cur := m.Source.vfs(); ; {
+		info := e.codegen.lookup(cur)
+
+		if info == nil || info.SourcePath == 0 {
+			return round
+		}
+
+		next := e.codegen.lookup(info.SourcePath)
+
+		if next == nil || next.OwnerModule != e.instance.Path {
+			return round
+		}
+
+		round++
+		cur = info.SourcePath
+	}
+}
+
 func (e *EmitContext) reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcMeta) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
 		return refs, paths
@@ -2064,7 +2095,7 @@ func (e *EmitContext) reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcM
 	members := e.arMembers[:0]
 
 	for i := range paths {
-		members = append(members, ARMember{refs[i], paths[i], metas[i].sortKey()})
+		members = append(members, ARMember{refs[i], paths[i], metas[i].sortKey(e.srcRound(metas[i]))})
 	}
 
 	e.arMembers = members[:0]

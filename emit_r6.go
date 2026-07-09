@@ -137,7 +137,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 		emitR6(instance, srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, producerRefs, r6Ref, ctx.emit)
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     r6Out,
 		ProducerRef:    r6Ref,
 		GeneratorRefs:  e.ctx.na.refList(ragelLDRef),

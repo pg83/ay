@@ -87,7 +87,6 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	headerParsed = headerParsed[:len(headerParsed):len(headerParsed)]
 
 	ycRef := ctx.emit.reserve()
-	reg := e.codegen
 
 	env := na.envList(EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, EnvVar{Name: envBISON_PKGDATADIR, Value: strBisonPkgData.any()}, EnvVar{Name: envM4, Value: m4Bin.any()})
 	preprocessEnv := envVarsVCS
@@ -159,7 +158,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		}, ycRef)
 	}
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
@@ -200,7 +199,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		spec.CFlags = cf[:len(cf):len(cf)]
 	}
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     generatedVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),

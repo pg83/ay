@@ -71,15 +71,13 @@ func (e *EmitContext) emitSwigC() {
 			}, swRef)
 		}
 
-		reg := e.codegen
-
 		var psc []ANY
 
 		if p := d.perSrcCFlagsFor(cOutVFS.any()); p != nil {
 			psc = *p
 		}
 
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     cOutVFS,
 			ProducerRef:    swRef,
 			GeneratorRefs:  e.ctx.na.refList(swigRef),
@@ -100,7 +98,7 @@ func (e *EmitContext) emitSwigC() {
 
 		swigSourceInputs = swigSourceInputs[:swigN:swigN]
 
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:    pyOutVFS,
 			ProducerRef:   swRef,
 			GeneratorRefs: e.ctx.na.refList(swigRef),

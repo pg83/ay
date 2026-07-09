@@ -215,7 +215,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     dstVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    ref,
@@ -408,16 +408,16 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	dirPrefix := dir + "/"
 
 	for _, f := range files {
-		e.codegen.register(GeneratedFileInfo{OutputPath: f.cgo1, ProducerRef: ref})
-		e.codegen.register(GeneratedFileInfo{OutputPath: f.cgo2C, ProducerRef: ref, Compile: cgo2Spec, ClosureLeaves: leaves})
+		e.register(GeneratedFileInfo{OutputPath: f.cgo1, ProducerRef: ref})
+		e.register(GeneratedFileInfo{OutputPath: f.cgo2C, ProducerRef: ref, Compile: cgo2Spec, ClosureLeaves: leaves})
 		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo1.relString(), dirPrefix)).any(), Prio: stmtPrioDefault, Generated: true})
 		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo2C.relString(), dirPrefix)).any(), Prio: stmtPrioDefault, Generated: true})
 	}
 
-	e.codegen.register(GeneratedFileInfo{OutputPath: exportH, ProducerRef: ref})
-	e.codegen.register(GeneratedFileInfo{OutputPath: exportC, ProducerRef: ref, ClosureLeaves: leaves})
-	e.codegen.register(GeneratedFileInfo{OutputPath: gotypes, ProducerRef: ref})
-	e.codegen.register(GeneratedFileInfo{OutputPath: mainC, ProducerRef: ref})
+	e.register(GeneratedFileInfo{OutputPath: exportH, ProducerRef: ref})
+	e.register(GeneratedFileInfo{OutputPath: exportC, ProducerRef: ref, ClosureLeaves: leaves})
+	e.register(GeneratedFileInfo{OutputPath: gotypes, ProducerRef: ref})
+	e.register(GeneratedFileInfo{OutputPath: mainC, ProducerRef: ref})
 
 	e.enqueueSrc(SrcMeta{Source: strCgoExportC.any(), Prio: stmtPrioDefault, Generated: true})
 	e.enqueueSrc(SrcMeta{Source: strCgoGotypesGo.any(), Prio: stmtPrioDefault, Generated: true})
@@ -671,7 +671,7 @@ func (e *EmitContext) flushGoCgo2() {
 
 	ref := ctx.emit.emitNode(node)
 
-	e.codegen.register(GeneratedFileInfo{OutputPath: importGo, ProducerRef: ref})
+	e.register(GeneratedFileInfo{OutputPath: importGo, ProducerRef: ref})
 
 	if e.goRes == nil {
 		e.goRes = &GoSrcsResult{}

@@ -7,35 +7,6 @@ import (
 
 var enKV = KV{P: pkEN, PC: pcYellow}
 
-func (e *EmitContext) moduleProtoGenHeaders() map[STR]struct{} {
-	ctx, instance, d := e.ctx, e.instance, e.d
-
-	var set map[STR]struct{}
-
-	add := func(h STR) {
-		if set == nil {
-			set = map[STR]struct{}{}
-		}
-
-		set[h] = struct{}{}
-	}
-
-	for _, src := range d.srcs {
-		s := src.string()
-
-		switch {
-		case extIsProto(s):
-			base := strings.TrimSuffix(protoSourceRelPath(ctx.fs, instance, d, s), ".proto")
-
-			add(internV(base, ".pb.h"))
-		case extIsEv(s):
-			add(internV(protoSourceRelPath(ctx.fs, instance, d, s), ".pb.h"))
-		}
-	}
-
-	return set
-}
-
 func (e *EmitContext) enumHeaderSourceInput(headerRel string, srcDirs []VFS) VFS {
 	ctx, instance := e.ctx, e.instance
 	headerInput := resolveSourceVFS(ctx, instance, headerRel, srcDirs)
@@ -75,11 +46,9 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	ctx, instance, d := e.ctx, e.instance, e.d
 	scanCfg := newScanContext(ctx.parsers, ctx.na.vfsList(d.addIncl...), ctx.na.vfsList(e.peers.SelfAddInclGlobal...), includeScannerBasePaths(), instance.Path.relString())
-	protoGenHeaders := e.moduleProtoGenHeaders()
 	withHeader := stmt.Variant == "with_header"
 	headerInput := e.resolveEnumHeaderInput(stmt.Header, d.srcDirs)
 	baseDir, baseSep, baseName := e.enumSerializedBaseParts(stmt)
-	_, secondLevel := protoGenHeaders[headerInput.rel()]
 	serializedCPPPath := build(baseDir, baseSep, baseName, "_serialized.cpp")
 
 	var serializedHPath VFS
@@ -96,8 +65,6 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	slices.SortFunc(cppParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
-	reg := e.codegen
-
 	var cppInfo, hInfo *GeneratedFileInfo
 
 	var moduleTag STR
@@ -108,7 +75,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	scanner := e.scanner
 
-	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq, Generated: true, SecondLevel: secondLevel})
+	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq, Generated: true})
 
 	pe := func() {
 		enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
@@ -150,8 +117,9 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		)
 	}
 
-	cppInfo = reg.register(GeneratedFileInfo{
+	cppInfo = e.register(GeneratedFileInfo{
 		OutputPath:     serializedCPPPath,
+		SourcePath:     headerInput,
 		ProducerRef:    enRef,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
 		OnUse:          &pe,
@@ -164,8 +132,9 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 		slices.SortFunc(hParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
-		hInfo = reg.register(GeneratedFileInfo{
+		hInfo = e.register(GeneratedFileInfo{
 			OutputPath:     serializedHPath,
+			SourcePath:     headerInput,
 			ProducerRef:    enRef,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: hParsed},
 			OnUse:          &pe,

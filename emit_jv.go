@@ -76,7 +76,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, tc, ctx.scripts, ctx.emit)
 		}
 
-		e.codegen.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     g4CppPath,
 			ProducerRef:    cpRef,
 			GeneratorRefs:  nil,

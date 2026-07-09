@@ -51,7 +51,7 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    ref,

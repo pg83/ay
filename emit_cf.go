@@ -76,7 +76,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		}, cfRef)
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    cfRef,

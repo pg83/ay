@@ -131,7 +131,7 @@ func (e *EmitContext) emitArchive(
 		}
 	}
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:    archiveVFS,
 		ProducerRef:   arRef,
 		ClosureLeaves: leaves,

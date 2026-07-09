@@ -179,7 +179,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			leaves = lv[:ln:ln]
 		}
 
-		e.codegen.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     out,
 			ProducerRef:    prRef,
 			GeneratorRefs:  e.ctx.na.refList(res.LDRef),
