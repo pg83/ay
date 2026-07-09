@@ -394,7 +394,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 	}
 
 	for r := range n.buildDeps(ex.fetchRefs) {
-		ex.restoreInto(ex.futs.get(uint32(r)).uid, bldMount)
+		ex.restoreInto(ex.futs.get(uint32(r)).uid, bldMount, false)
 	}
 
 	start := time.Now()
@@ -688,14 +688,14 @@ func (ex *Executor) storeFileToCAS(src string) string {
 	return hash
 }
 
-func (ex *Executor) restoreInto(uid UID, where string) {
-	if exc := try(func() { ex.restoreManifest(uid, where) }); exc != nil {
+func (ex *Executor) restoreInto(uid UID, where string, symlink bool) {
+	if exc := try(func() { ex.restoreManifest(uid, where, symlink) }); exc != nil {
 		_ = os.Remove(ex.uidPath(uid))
 		exc.throw()
 	}
 }
 
-func (ex *Executor) restoreManifest(uid UID, where string) {
+func (ex *Executor) restoreManifest(uid UID, where string, symlink bool) {
 	metaPath := ex.uidPath(uid)
 	data := throw2(os.ReadFile(metaPath))
 
@@ -717,6 +717,9 @@ func (ex *Executor) restoreManifest(uid UID, where string) {
 		case e.Link != "":
 			throw(os.Symlink(e.Link, target))
 
+		case symlink:
+			throw(os.Symlink(throw2(filepath.Abs(ex.casPathForHash(e.Cas))), target))
+
 		default:
 			src := ex.casPathForHash(e.Cas)
 
@@ -732,7 +735,7 @@ func (ex *Executor) installRoot(ref NodeRef, where string) {
 		return
 	}
 
-	ex.restoreInto(ex.futs.get(uint32(ref)).uid, where)
+	ex.restoreInto(ex.futs.get(uint32(ref)).uid, where, true)
 }
 
 func (ex *Executor) removeContents(dir string) {
