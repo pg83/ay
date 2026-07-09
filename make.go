@@ -257,6 +257,10 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	ex.run(results)
 
+	if mf.stats {
+		ex.printStats()
+	}
+
 	failedRoots := ex.failedRoots(results)
 
 	if len(failedRoots) > 0 {
@@ -295,7 +299,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 
 	config := getopt.Config{
 		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
-		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stats,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:,jobs:,ninja,define:"),
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stat,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:,jobs:,ninja,define:"),
 		Mode:     getopt.ModeInOrder,
 		Func:     getopt.FuncGetOptLong,
 	}
@@ -324,7 +328,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.clear = true
 		case opt.Char == 'G' || opt.Name == "dump-graph":
 			mf.dumpGraph = true
-		case opt.Name == "stats":
+		case opt.Name == "stat":
 			mf.stats = true
 		case opt.Name == "musl":
 			parseKV(mf.tflags, "MUSL=yes")
@@ -452,7 +456,7 @@ execution flags:
                                 binaries through a loader: bin/java=/bin/ld.linux-so.2
   -T, --ninja                   Ninja-style per-line output (default: in-place repaint).
   -t, -tt, -ttt                 Generate test nodes (small / +medium / +large).
-  --stats                       Print per-kind execution stats after the build.
+  --stat                        Print the 10 longest tasks and per-kind totals after the build.
   -G, --dump-graph              With -j 0, write the generated graph as JSON to stdout.
   --dump-ignored-macros         With -j 0, print service-keyword macro args no handler models.
   --verbose                     Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
