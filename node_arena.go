@@ -17,6 +17,40 @@ type NodeArenas struct {
 	compiles *BumpAllocator[CompileSpec]
 }
 
+func (na *NodeArenas) resetWindows() {
+	na.cmds.open = false
+	na.envs.open = false
+	na.vfs.open = false
+	na.strs.open = false
+	na.chunks.open = false
+	na.anys.open = false
+	na.inputs.open = false
+	na.noderefs.open = false
+	na.nodes.open = false
+	na.exts.open = false
+	na.kvs.open = false
+	na.geninfos.open = false
+	na.dirs.open = false
+	na.compiles.open = false
+}
+
+func (na *NodeArenas) markStrict() {
+	na.cmds.markStrict()
+	na.envs.markStrict()
+	na.vfs.markStrict()
+	na.strs.markStrict()
+	na.chunks.markStrict()
+	na.anys.markStrict()
+	na.inputs.markStrict()
+	na.noderefs.markStrict()
+	na.nodes.markStrict()
+	na.exts.markStrict()
+	na.kvs.markStrict()
+	na.geninfos.markStrict()
+	na.dirs.markStrict()
+	na.compiles.markStrict()
+}
+
 func newNodeArenas() *NodeArenas {
 	return &NodeArenas{
 		cmds:     newBumpAllocator[Cmd](1 << 8),
@@ -34,6 +68,16 @@ func newNodeArenas() *NodeArenas {
 		noderefs: newBumpAllocator[NodeRef](1 << 12),
 		nodes:    newBumpAllocator[Node](1 << 10),
 	}
+}
+
+func newStrictNodeArenas() *NodeArenas {
+	na := newNodeArenas()
+
+	if ownershipOn {
+		na.markStrict()
+	}
+
+	return na
 }
 
 func (na *NodeArenas) cmdList(cs ...Cmd) []Cmd {

@@ -283,6 +283,14 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 		inputCap += walkClosure(e.scanner, f.src, d.cc.ScanCfg).len()
 	}
 
+	cvs := e.cvScratch[:0]
+
+	for _, f := range files {
+		cvs = append(cvs, walkClosure(e.scanner, f.src, d.cc.ScanCfg))
+	}
+
+	e.cvScratch = cvs
+
 	inputs := na.vfs.alloc(inputCap)
 	ni := 0
 
@@ -300,9 +308,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 		}
 	}
 
-	for _, f := range files {
-		cv := walkClosure(e.scanner, f.src, d.cc.ScanCfg)
-
+	for _, cv := range cvs {
 		cv.each(func(p VFS) {
 			if p.isSource() && deduper.add(p.strID()) {
 				inputs[ni] = p
@@ -367,15 +373,13 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 
 	deduper.reset()
 
-	for _, f := range files {
+	for i, f := range files {
 		if deduper.add(f.src.strID()) {
 			cgoLeaves[nl] = f.src
 			nl++
 		}
 
-		cv := walkClosure(e.scanner, f.src, d.cc.ScanCfg)
-
-		cv.each(func(p VFS) {
+		cvs[i].each(func(p VFS) {
 			if p.isSource() && deduper.add(p.strID()) {
 				cgoLeaves[nl] = p
 				nl++
@@ -502,19 +506,30 @@ func (e *EmitContext) flushGoCgo2() {
 	}
 
 	inputCap := len(linkOScripts) + len(copyFsScripts) + 4 + 1 + nObjs
+	srcMark := len(e.prodVFS)
+	cvs := e.cvScratch[:0]
 
 	for _, f := range d.cgoSrcs {
 		src := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
+		cv := walkClosure(e.scanner, src, d.cc.ScanCfg)
 
-		inputCap += 1 + walkClosure(e.scanner, src, d.cc.ScanCfg).len()
+		e.prodVFS = append(e.prodVFS, src)
+		cvs = append(cvs, cv)
+		inputCap += 1 + cv.len()
 	}
 
 	for _, f := range append(cFiles, sFiles...) {
 		src := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
+		cv := walkClosure(e.scanner, src, d.cc.ScanCfg)
 
-		inputCap += 1 + walkClosure(e.scanner, src, d.cc.ScanCfg).len()
+		e.prodVFS = append(e.prodVFS, src)
+		cvs = append(cvs, cv)
+		inputCap += 1 + cv.len()
 	}
 
+	e.cvScratch = cvs
+
+	resolvedSrcs := e.prodVFSTake(srcMark)
 	inputs := na.vfs.alloc(inputCap)
 	ni := 0
 	pushIn := func(v VFS) { inputs[ni] = v; ni++ }
@@ -543,16 +558,14 @@ func (e *EmitContext) flushGoCgo2() {
 
 	var cgoClosureExtras []VFS
 
-	for _, f := range d.cgoSrcs {
-		src := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
+	for i := range d.cgoSrcs {
+		src := resolvedSrcs[i]
 
 		if deduper.add(src.strID()) {
 			pushIn(src)
 		}
 
-		cv := walkClosure(e.scanner, src, d.cc.ScanCfg)
-
-		cv.each(func(p VFS) {
+		cvs[i].each(func(p VFS) {
 			if p.isSource() && deduper.add(p.strID()) {
 				cgoClosureExtras = append(cgoClosureExtras, p)
 			}
@@ -565,15 +578,14 @@ func (e *EmitContext) flushGoCgo2() {
 
 	pushIn(build(dir, "/", strings.TrimSuffix(d.cgoSrcs[0].string(), ".go"), ".cgo1.go"))
 
-	for _, f := range append(cFiles, sFiles...) {
-		src := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
-		cv := walkClosure(e.scanner, src, d.cc.ScanCfg)
+	for i := len(d.cgoSrcs); i < len(resolvedSrcs); i++ {
+		src := resolvedSrcs[i]
 
 		if deduper.add(src.strID()) {
 			pushIn(src)
 		}
 
-		cv.each(func(p VFS) {
+		cvs[i].each(func(p VFS) {
 			if p.isSource() && deduper.add(p.strID()) {
 				pushIn(p)
 			}

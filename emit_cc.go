@@ -153,20 +153,23 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 
 func (e *EmitContext) mainOutInducedInputs(na *NodeArenas, includeView Closure) []VFS {
 	reg := e.codegen
-	out := na.vfs.alloc(2 * includeView.len())[:0]
-
-	var extra []VFS
+	extraMark := len(e.prodVFS)
 
 	includeView.each(func(v VFS) {
-		out = append(out, v)
-
 		if !v.isBuild() {
 			return
 		}
 
 		if info := reg.lookup(v); info != nil && info.ProducerMainOut != 0 {
-			extra = append(extra, info.ProducerMainOut)
+			e.prodVFS = append(e.prodVFS, info.ProducerMainOut)
 		}
+	})
+
+	extra := e.prodVFSTake(extraMark)
+	out := na.vfs.alloc(2 * includeView.len())[:0]
+
+	includeView.each(func(v VFS) {
+		out = append(out, v)
 	})
 
 	out = append(out, extra...)

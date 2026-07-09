@@ -833,6 +833,10 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if exc != nil {
 		ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: %s", instance.Path.relString(), exc.Error())})
 
+		if ownershipOn {
+			ctx.na.resetWindows()
+		}
+
 		r = &ModuleEmitResult{}
 
 		ctx.memo.put(ctx.instanceKey(instance), r)

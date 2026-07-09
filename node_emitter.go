@@ -30,7 +30,7 @@ func newStreamingEmitter(onNode func(*Node, *DenseMap[STR, NodeRef])) *Streaming
 	return &StreamingEmitter{
 		pendingSet: map[NodeRef]bool{},
 		onNode:     onNode,
-		na:         newNodeArenas(),
+		na:         newStrictNodeArenas(),
 		fetchRefs:  &DenseMap[STR, NodeRef]{},
 	}
 }

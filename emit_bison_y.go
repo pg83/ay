@@ -156,20 +156,9 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 	head = head[:len(head):len(head)]
 
-	cmds := na.cmds.alloc(2)[:0]
-
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(head), Env: env})
-
 	inputs := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS)
 
 	if preprocessHeader {
-		cmds = append(cmds, Cmd{
-			CmdArgs: na.chunkList(na.anyList(d.cc.TC.Python3.any(),
-				(bisonPreprocessPyVFS).any(),
-				(headerVFS).any())),
-			Env: preprocessEnv,
-		})
-
 		ext := na.vfs.alloc(len(inputs) + 1 + len(bisonCppSkeletonInputs))[:0]
 
 		ext = append(ext, inputs...)
@@ -184,6 +173,19 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 			inputs = dedupClosure(na, inputs, skCV.buckets)
 		}
+	}
+
+	cmds := na.cmds.alloc(2)[:0]
+
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(head), Env: env})
+
+	if preprocessHeader {
+		cmds = append(cmds, Cmd{
+			CmdArgs: na.chunkList(na.anyList(d.cc.TC.Python3.any(),
+				(bisonPreprocessPyVFS).any(),
+				(headerVFS).any())),
+			Env: preprocessEnv,
+		})
 	}
 
 	na.cmds.commit(len(cmds))
