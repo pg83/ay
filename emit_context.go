@@ -180,6 +180,10 @@ func (e *EmitContext) deferPass2(cb func()) {
 	e.pass2 = append(e.pass2, cb)
 }
 
+func (e *EmitContext) producersOnly() bool {
+	return e.instance.Demand == demandNone
+}
+
 func (e *EmitContext) emit() {
 	d := e.d
 	fsMemberRefs, fsMemberPaths := e.emitFromSandboxes()
@@ -189,6 +193,18 @@ func (e *EmitContext) emit() {
 	cythonPlans := e.planCythonCpp()
 
 	e.emitDeclaredProducers(cythonPlans)
+
+	if e.producersOnly() {
+		for _, src := range d.srcs {
+			if !isCodegenProducingSrcID(src) {
+				e.emitOneSource(d.srcMetaOf(src))
+			}
+		}
+
+		e.drainSrcs()
+
+		return
+	}
 
 	for _, fe := range d.srcExtraFlat {
 		srcVFS := e.moduleSourceVFS(fe.Src)

@@ -3642,6 +3642,7 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		Kind:     KindLib,
 		Language: peerEntryLanguage(parent, d.moduleStmt.Name),
 		Platform: parent.Platform,
+		Demand:   e.peerDemand(),
 	}
 }
 

@@ -1780,7 +1780,7 @@ func testGenDumpGraph(fs FS, targetDir string) *Graph {
 	targetFlags["PIC"] = "no"
 	target := newPlatform(fs, OSLinux, ISAAArch64, targetFlags, "", "")
 
-	return genDumpGraphWithResources(fs, targetDir, host, target, func(Warn) {}, false, false)
+	return genDumpGraphWithResources(fs, targetDir, host, target, func(Warn) {}, false, false, demandLinked)
 }
 
 func testGenInternal(fs FS, targetDir string) *Graph {
@@ -2635,4 +2635,92 @@ func Gen(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *
 }
 
 func noWarn(Warn) {
+}
+
+func testGenSelfTarget(fs FS, targetDir string) *Graph {
+	host := newTestPlatform(OSLinux, ISAX8664, "yes")
+	targetFlags := make(map[string]string, len(testToolchainFlags))
+
+	for k, v := range testToolchainFlags {
+		targetFlags[k] = v
+	}
+
+	target := newPlatform(fs, OSLinux, ISAX8664, targetFlags, "", "")
+
+	return genDumpGraphWithResources(fs, targetDir, host, target, func(Warn) {}, false, false, demandSelf)
+}
+
+func graphHasOutput(g *Graph, output string) bool {
+	for _, n := range g.Graph {
+		for _, out := range n.Outputs {
+			if out.string() == output {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func TestGen_LibraryTargetEmitsProducerSliceForPeers(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "lib/ya.make", `LIBRARY()
+SRCS(
+    data.proto
+    impl.cpp
+)
+END()
+`)
+	writeTestModuleFile(files, "lib/data.proto", "syntax = \"proto3\";\npackage lib;\nmessage Data {}\n")
+	writeTestModuleFile(files, "lib/impl.cpp", "int impl(){return 0;}\n")
+
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	writeTestModuleFile(files, "app/ya.make", "LIBRARY()\nPEERDIR(lib)\nSRCS(use.cpp)\nEND()\n")
+	writeTestModuleFile(files, "app/use.cpp", "#include <lib/data.pb.h>\nint use(){return 0;}\n")
+
+	g := testGenSelfTarget(newMemFS(files), "app")
+
+	mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
+	mustNodeByOutput(t, g, "$(B)/app/libapp.a")
+
+	pb := mustNodeByOutput(t, g, "$(B)/lib/data.pb.h")
+
+	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
+
+	if !slices.Contains(graphDeps(g, useCC), pb.Ref) {
+		t.Errorf("use.cpp.o deps missing peer pb producer ref %d: %v", pb.Ref, graphDeps(g, useCC))
+	}
+
+	for _, absent := range []string{
+		"$(B)/lib/data.pb.cc.o",
+		"$(B)/lib/impl.cpp.o",
+		"$(B)/lib/liblib.a",
+		"$(B)/contrib/libs/protobuf/protobuf.cpp.o",
+		"$(B)/contrib/libs/protobuf/libcontrib-libs-protobuf.a",
+	} {
+		if graphHasOutput(g, absent) {
+			t.Errorf("library-target graph must not contain peer object %q", absent)
+		}
+	}
+}
+
+func TestGen_ProgramTargetKeepsFullPeerUniverse(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "lib/ya.make", "LIBRARY()\nSRCS(impl.cpp)\nEND()\n")
+	writeTestModuleFile(files, "lib/impl.cpp", "int impl(){return 0;}\n")
+	writeTestModuleFile(files, "app/ya.make", "PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(lib)\nSRCS(main.cpp)\nEND()\n")
+	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+
+	g := testGenSelfTarget(newMemFS(files), "app")
+
+	mustNodeByOutput(t, g, "$(B)/lib/impl.cpp.o")
+	mustNodeByOutput(t, g, "$(B)/lib/liblib.a")
+	mustNodeByOutput(t, g, "$(B)/app/app")
 }

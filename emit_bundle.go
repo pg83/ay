@@ -37,7 +37,13 @@ func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
 		return 0, 0, false
 	}
 
-	res := genModule(ctx, e.derivePeerInstance(target))
+	bundleInstance := e.derivePeerInstance(target)
+
+	if e.instance.Demand != demandNone {
+		bundleInstance.Demand = demandLinked
+	}
+
+	res := genModule(ctx, bundleInstance)
 
 	if res.isPROGRAM && res.LDPath != nil {
 		return *res.LDPath, res.LDRef, true

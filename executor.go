@@ -52,6 +52,7 @@ type Executor struct {
 	pending      atomic.Uint64
 	done         atomic.Uint64
 	failed       atomic.Uint64
+	inFlight     sync.WaitGroup
 	tokenOnce    sync.Once
 	token        string
 }
@@ -222,11 +223,14 @@ func (ex *Executor) prepare(f *NodeFuture) {
 	}
 
 	ex.pending.Add(1)
+	ex.inFlight.Add(1)
 
 	go ex.fire(f)
 }
 
 func (ex *Executor) fire(f *NodeFuture) {
+	defer ex.inFlight.Done()
+
 	try(func() {
 		ex.visit(f.ref)
 	}).catch(func(e *Exception) {
@@ -268,6 +272,8 @@ func (ex *Executor) run(roots []NodeRef) {
 
 		ex.visit(r)
 	}
+
+	ex.inFlight.Wait()
 }
 
 func (ex *Executor) visit(ref NodeRef) {

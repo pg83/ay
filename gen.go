@@ -373,7 +373,7 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 	return out[:k]
 }
 
-func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool) NodeRef {
+func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) NodeRef {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
 
@@ -444,6 +444,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		Kind:     KindBin,
 		Language: LangCPP,
 		Platform: targetP,
+		Demand:   rootDemand,
 	}
 
 	root := genModule(ctx, seed)
@@ -468,6 +469,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 			Kind:     KindBin,
 			Language: LangCPP,
 			Platform: targetP,
+			Demand:   rootDemand,
 		})
 
 		if sub.LDRef != 0 {
@@ -498,6 +500,23 @@ func confPy3NoStripOnDebug(fs FS) bool {
 
 func isFinalTargetModuleType(name TOK) bool {
 	return isProgramModuleType(name) || name == tokDllTool
+}
+
+func isLinkingModuleType(name TOK) bool {
+	switch name {
+	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary:
+		return true
+	}
+
+	return isProgramModuleType(name)
+}
+
+func (e *EmitContext) peerDemand() ModuleDemand {
+	if e.instance.Demand == demandLinked || (e.instance.Demand == demandSelf && isLinkingModuleType(e.d.moduleStmt.Name)) {
+		return demandLinked
+	}
+
+	return demandNone
 }
 
 func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
@@ -553,16 +572,16 @@ func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
 	return finals
 }
 
-func genDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool, keepGoing bool) *Graph {
+func genDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) *Graph {
 	emitter := newStreamingEmitter(nil)
 
-	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, testMode, keepGoing)
+	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, testMode, keepGoing, rootDemand)
 
 	return finalize(emitter)
 }
 
 func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool) *Graph {
-	return genDumpGraphWithResources(fs, targetDir, hostP, targetP, onWarn, testMode, false)
+	return genDumpGraphWithResources(fs, targetDir, hostP, targetP, onWarn, testMode, false, demandLinked)
 }
 
 func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
@@ -1665,6 +1684,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	e.sprotoAdjustProtoEnv()
 	e.emit()
 
+	if instance.Demand == demandNone {
+		result := newResult()
+
+		ctx.memo.put(ctx.instanceKey(instance), result)
+
+		return result
+	}
+
 	local, global := e.partitionCollected()
 	globalRefs := global.refs
 	globalOutputs := global.outs
@@ -2030,7 +2057,7 @@ func (ctx *GenCtx) instanceKey(in ModuleInstance) uint64 {
 		throwFmt("instanceKey: unknown platform for %s", in.Path.string())
 	}
 
-	return uint64(in.Path)<<16 | uint64(in.Kind)<<8 | uint64(in.Language)<<1 | pbit
+	return uint64(in.Path)<<16 | uint64(in.Kind)<<8 | uint64(in.Demand)<<4 | uint64(in.Language)<<1 | pbit
 }
 
 func (ctx *GenCtx) scannerForPlatform(p *Platform) *IncludeScanner {

@@ -8,6 +8,17 @@ import (
 func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	src := meta.Source
 
+	if e.producersOnly() {
+		switch srcExtClassOf(src.relOrSelf().any()) {
+		case srcExtCSource, srcExtRodata, srcExtCuda, srcExtYasm, srcExtAsm, srcExtGo:
+			return
+		case srcExtProto:
+			if e.d.unit.Tag == unitTagPy3Proto {
+				return
+			}
+		}
+	}
+
 	switch srcExtClassOf(src.relOrSelf().any()) {
 	case srcExtHeader:
 		return
