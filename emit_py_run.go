@@ -106,14 +106,16 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 
 	pyRef := ctx.emit.reserve()
 
+	var pyInfos []*GeneratedFileInfo
+
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
-		reg.register(GeneratedFileInfo{
+		pyInfos = append(pyInfos, reg.register(GeneratedFileInfo{
 			OutputPath:     out,
 			ProducerRef:    pyRef,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 			SourceInputs:   pySourceInputs,
 			ClosureLeaves:  pyGeneratedFromSources,
-		})
+		}))
 	}
 
 	for _, f := range stmt.OUTFiles {
@@ -128,8 +130,6 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		registerPYOutput(*stdoutVFS, e.pyEmitsIncludes(stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard))
 	}
 
-	inputClosure := e.pyInputClosure(stmt)
-	extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputClosure)
 	interp := d.cc.TC.Python3.any()
 	kv := &pyRunKV
 	resources := usesPython3
@@ -147,20 +147,63 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		resources = nil
 	}
 
-	return emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, interp, interpInput, toolRefs, kv, resources, ctx.emit)
+	outIncludeVFSs := make([]VFS, 0, len(stmt.OutputIncludes))
+
+	for _, f := range stmt.OutputIncludes {
+		outIncludeVFSs = append(outIncludeVFSs, e.runProgramInputVFS(f.string()))
+	}
+
+	inSnapVFSs := make([]VFS, 0, len(stmt.INFiles))
+
+	for _, f := range stmt.INFiles {
+		inSnapVFSs = append(inSnapVFSs, inVFSByToken[f.string()])
+	}
+
+	snap := &pyRunSnap{
+		ctx:            ctx,
+		instance:       instance,
+		scanner:        e.scanner,
+		scanCfg:        newScanContext(ctx.parsers, ctx.na.vfsList(d.cc.AddIncl...), ctx.na.vfsList(d.cc.PeerAddInclGlobal...), includeScannerBasePaths(), instance.Path.relString()),
+		inVFSs:         ctx.na.vfsList(inSnapVFSs...),
+		outIncludeVFSs: ctx.na.vfsList(outIncludeVFSs...),
+	}
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		inputClosure := pyInputClosure(snap, stmt)
+		extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputClosure)
+
+		emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, interp, interpInput, toolRefs, kv, resources, ctx.emit)
+	}}
+
+	for _, info := range pyInfos {
+		info.pending = pe
+	}
+
+	e.noteOwn(pe)
+
+	return pyRef
 }
 
-func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
-	ctx, instance, d := e.ctx, e.instance, e.d
+type pyRunSnap struct {
+	ctx            *GenCtx
+	instance       ModuleInstance
+	scanner        *IncludeScanner
+	scanCfg        ScanContext
+	inVFSs         []VFS
+	outIncludeVFSs []VFS
+}
+
+func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) []VFS {
+	ctx, instance := s.ctx, s.instance
 	na := ctx.na
-	scanCfg := newScanContext(ctx.parsers, d.cc.AddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
+	scanCfg := s.scanCfg
 
 	var groups [][][]VFS
 	var selves []VFS
 
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.relString(), rel)
-		cv := walkClosure(e.scanner, buildRootPath, scanCfg)
+		cv := walkClosure(s.scanner, buildRootPath, scanCfg)
 
 		groups = append(groups, cv.buckets)
 	}
@@ -168,9 +211,8 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 	hasCCShard, _ := splitCodegenDetect(stmt)
 
 	if hasCCShard {
-		for _, f := range stmt.INFiles {
-			vfs := e.runProgramInputVFS(f.string())
-			cv := walkClosure(e.scanner, vfs, scanCfg)
+		for i := range stmt.INFiles {
+			cv := walkClosure(s.scanner, s.inVFSs[i], scanCfg)
 
 			selves = append(selves, cv.self)
 			groups = append(groups, cv.buckets)
@@ -192,8 +234,8 @@ func (e *EmitContext) pyInputClosure(stmt *RunPythonStmt) []VFS {
 			walkOne(stmt.StdoutFile.string())
 		}
 
-		for _, f := range stmt.OutputIncludes {
-			cv := walkClosure(e.scanner, e.runProgramInputVFS(f.string()), scanCfg)
+		for i := range stmt.OutputIncludes {
+			cv := walkClosure(s.scanner, s.outIncludeVFSs[i], scanCfg)
 
 			selves = append(selves, cv.self)
 			groups = append(groups, cv.buckets)
