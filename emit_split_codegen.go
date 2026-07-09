@@ -76,38 +76,6 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	cppParsed := ctx.na.dirList(part0Inc)
 	reg := e.codegen
 
-	hInfo := reg.register(GeneratedFileInfo{
-		OutputPath:     prefixH,
-		ProducerRef:    scRef,
-		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-		ClosureLeaves:  e.ctx.na.vfsList(part0, inputIn),
-	})
-
-	cInfo := reg.register(GeneratedFileInfo{
-		OutputPath:     prefixCpp,
-		ProducerRef:    scRef,
-		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
-	})
-
-	partInfos := make([]*GeneratedFileInfo, 0, len(partRels))
-
-	for i, partRel := range partRels {
-		info := GeneratedFileInfo{
-			OutputPath:     build(moduleDir, "/", partRel),
-			ProducerRef:    scRef,
-			GeneratorRefs:  e.ctx.na.refList(toolLDRef),
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
-		}
-
-		if i == 0 {
-			info.ClosureLeaves = ctx.na.vfsList(inputIn)
-		}
-
-		partInfos = append(partInfos, reg.register(info))
-	}
-
 	pe := func() {
 		node := Node{
 			Platform:       instance.Platform,
@@ -123,11 +91,37 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		ctx.emit.emitReservedNode(node, scRef)
 	}
 
-	hInfo.OnUse = &pe
-	cInfo.OnUse = &pe
+	reg.register(GeneratedFileInfo{
+		OutputPath:     prefixH,
+		ProducerRef:    scRef,
+		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
+		ClosureLeaves:  e.ctx.na.vfsList(part0, inputIn),
+		OnUse:          &pe,
+	})
 
-	for _, pi := range partInfos {
-		pi.OnUse = &pe
+	reg.register(GeneratedFileInfo{
+		OutputPath:     prefixCpp,
+		ProducerRef:    scRef,
+		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
+		OnUse:          &pe,
+	})
+
+	for i, partRel := range partRels {
+		info := GeneratedFileInfo{
+			OutputPath:     build(moduleDir, "/", partRel),
+			ProducerRef:    scRef,
+			GeneratorRefs:  e.ctx.na.refList(toolLDRef),
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
+			OnUse:          &pe,
+		}
+
+		if i == 0 {
+			info.ClosureLeaves = ctx.na.vfsList(inputIn)
+		}
+
+		reg.register(info)
 	}
 
 	return scRef, partRels

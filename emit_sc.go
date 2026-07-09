@@ -32,14 +32,6 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 	scRef := ctx.emit.reserve()
 	runtimeInclude := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(domschemeRuntimeVFS.rel().any())})
 
-	info := e.codegen.register(GeneratedFileInfo{
-		OutputPath:     headerVFS,
-		ProducerRef:    scRef,
-		GeneratorRefs:  e.ctx.na.refList(domLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: runtimeInclude},
-		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, domschemeRuntimeVFS),
-	})
-
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
@@ -49,6 +41,12 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 		emitSCReserved(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, scRef, ctx.emit)
 	}
 
-	info.OnUse = &pe
-
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:     headerVFS,
+		ProducerRef:    scRef,
+		GeneratorRefs:  e.ctx.na.refList(domLDRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: runtimeInclude},
+		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, domschemeRuntimeVFS),
+		OnUse:          &pe,
+	})
 }

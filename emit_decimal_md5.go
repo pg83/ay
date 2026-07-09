@@ -41,13 +41,6 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 
 	sourceInputs = sourceInputs[:sn:sn]
 
-	info := e.codegen.register(GeneratedFileInfo{
-		OutputPath:    outVFS,
-		ProducerRef:   svRef,
-		SourceInputs:  sourceInputs,
-		ClosureLeaves: sourceInputs,
-	})
-
 	optArena := na.vfsList(optVFSs...)
 	python3 := d.tc.Python3
 
@@ -86,7 +79,13 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 		}, svRef)
 	}
 
-	info.OnUse = &pe
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:    outVFS,
+		ProducerRef:   svRef,
+		SourceInputs:  sourceInputs,
+		ClosureLeaves: sourceInputs,
+		OnUse:         &pe,
+	})
 
 	return svRef
 }

@@ -111,17 +111,6 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 		psc = *p
 	}
 
-	info := e.codegen.register(GeneratedFileInfo{
-		OutputPath:     r6Out,
-		ProducerRef:    r6Ref,
-		GeneratorRefs:  e.ctx.na.refList(ragelLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r6Parsed},
-		Compile: e.ctx.na.compileSpec(CompileSpec{
-			FlatOutput: d.flatSrc(src),
-			CFlags:     cflagsWnoImplicitFallthrough(e.ctx.na, psc),
-		}),
-	})
-
 	if isCxxSource(r6Out.relString()) {
 		meta := d.srcMetaOf(src)
 
@@ -148,6 +137,15 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 		emitR6(instance, srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, producerRefs, r6Ref, ctx.emit)
 	}
 
-	info.OnUse = &pe
-
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:     r6Out,
+		ProducerRef:    r6Ref,
+		GeneratorRefs:  e.ctx.na.refList(ragelLDRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r6Parsed},
+		Compile: e.ctx.na.compileSpec(CompileSpec{
+			FlatOutput: d.flatSrc(src),
+			CFlags:     cflagsWnoImplicitFallthrough(e.ctx.na, psc),
+		}),
+		OnUse: &pe,
+	})
 }

@@ -58,15 +58,6 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		ctx.na.vfs.commit(len(leaves))
 		leaves = leaves[:len(leaves):len(leaves)]
 
-		info := e.codegen.register(GeneratedFileInfo{
-			OutputPath:     g4CppPath,
-			ProducerRef:    cpRef,
-			GeneratorRefs:  nil,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-			ClosureLeaves:  leaves,
-			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(g4CppPath.any()), CFlags: e.ctx.na.anyList(argWnoUnusedVariable.any())}),
-		})
-
 		scanner := e.scanner
 		scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 		tc := d.cc.TC
@@ -85,7 +76,15 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, tc, ctx.scripts, ctx.emit)
 		}
 
-		info.OnUse = &pe
+		e.codegen.register(GeneratedFileInfo{
+			OutputPath:     g4CppPath,
+			ProducerRef:    cpRef,
+			GeneratorRefs:  nil,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
+			ClosureLeaves:  leaves,
+			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(g4CppPath.any()), CFlags: e.ctx.na.anyList(argWnoUnusedVariable.any())}),
+			OnUse:          &pe,
+		})
 
 		e.enqueueSrc(SrcMeta{Source: g4CppPath.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
 	}
