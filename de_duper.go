@@ -1,12 +1,28 @@
 package main
 
+import (
+	"fmt"
+	"os"
+	"runtime"
+	"strings"
+)
+
 var dedupers DeDuperPool
 
+var dedupDebug = os.Getenv("AY_DEBUG_DEDUP") != ""
+
 type DeDuperPool struct {
-	free []*DeDuper
+	free  []*DeDuper
+	depth int
 }
 
 func (p *DeDuperPool) get() *DeDuper {
+	p.depth++
+
+	if dedupDebug && p.depth >= 2 {
+		dedupReport(p.depth)
+	}
+
 	if n := len(p.free); n > 0 {
 		d := p.free[n-1]
 
@@ -25,7 +41,40 @@ func (p *DeDuperPool) get() *DeDuper {
 }
 
 func (p *DeDuperPool) put(d *DeDuper) {
+	p.depth--
 	p.free = append(p.free, d)
+}
+
+var dedupStacks = map[string]bool{}
+
+func dedupReport(depth int) {
+	pc := make([]uintptr, 64)
+	n := runtime.Callers(3, pc)
+	frames := runtime.CallersFrames(pc[:n])
+
+	var sb strings.Builder
+
+	for {
+		f, more := frames.Next()
+
+		if strings.HasPrefix(f.Function, "main.") {
+			fmt.Fprintf(&sb, "  %s\n", strings.TrimPrefix(f.Function, "main."))
+		}
+
+		if !more {
+			break
+		}
+	}
+
+	sig := sb.String()
+
+	if dedupStacks[sig] {
+		return
+	}
+
+	dedupStacks[sig] = true
+
+	fmt.Fprintf(os.Stderr, "=== deduper depth %d ===\n%s", depth, sig)
 }
 
 type IdKey interface {
