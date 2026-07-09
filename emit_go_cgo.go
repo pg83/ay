@@ -172,7 +172,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 
 	na.vfs.commit(nl)
 
-	e.codegen.register(GeneratedFileInfo{
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:     dstVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    ref,
@@ -181,8 +181,11 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 		Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: goCgoCFlags(d)}),
 	})
 
-	e.deferPass2(func() {
-		cv := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
+	scanner := e.scanner
+	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		cv := walkClosure(scanner, srcVFS, scanCfg)
 		block := na.vfs.alloc(len(scripts) + cv.len() + len(cgoContext))
 		k := 0
 
@@ -219,7 +222,11 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 		}
 
 		ctx.emit.emitReservedNode(node, ref)
-	})
+	}}
+
+	info.pending = pe
+
+	e.noteOwn(pe)
 }
 
 func (e *EmitContext) emitGoCgo1Stmt() {

@@ -54,7 +54,7 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 
 	lxRef := ctx.emit.reserve()
 
-	e.codegen.register(GeneratedFileInfo{
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
 		ProducerRef:    lxRef,
 		GeneratorRefs:  e.ctx.na.refList(flexRef),
@@ -68,11 +68,18 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 	meta.Source = outVFS.any()
 	e.enqueueSrc(meta)
 
-	e.deferPass2(func() {
-		lxClosure := walkClosure(e.scanner, outVFS, d.cc.ScanCfg).collect(ctx.na, func(v VFS) bool { return v.isSource() })
+	scanner := e.scanner
+	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		lxClosure := walkClosure(scanner, outVFS, scanCfg).collect(ctx.na, func(v VFS) bool { return v.isSource() })
 
 		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
-	})
+	}}
+
+	info.pending = pe
+
+	e.noteOwn(pe)
 }
 
 func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {

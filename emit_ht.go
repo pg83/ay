@@ -13,7 +13,7 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 	ref := ctx.emit.reserve()
 	parsed := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil)
 
-	e.codegen.register(GeneratedFileInfo{
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    ref,
@@ -22,8 +22,11 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 		ClosureLeaves:  e.ctx.na.vfsList(srcVFS),
 	})
 
-	e.deferPass2(func() {
-		cv := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
+	scanner := e.scanner
+	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		cv := walkClosure(scanner, srcVFS, scanCfg)
 		block := na.vfs.alloc(2 + cv.len())
 		k := 0
 
@@ -55,7 +58,11 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 		}
 
 		ctx.emit.emitReservedNode(node, ref)
-	})
+	}}
+
+	info.pending = pe
+
+	e.noteOwn(pe)
 
 	meta := d.srcMetaOf(src)
 

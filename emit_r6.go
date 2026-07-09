@@ -111,7 +111,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 		psc = *p
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:     r6Out,
 		ProducerRef:    r6Ref,
 		GeneratorRefs:  e.ctx.na.refList(ragelLDRef),
@@ -130,8 +130,12 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 		e.enqueueSrc(meta)
 	}
 
-	e.deferPass2(func() {
-		rl6Closure := walkClosure(e.scanner, r6Out, d.cc.ScanCfg).collect(ctx.na, func(v VFS) bool {
+	scanner := e.scanner
+	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+	ragel6Flags := ctx.na.anyList(d.cc.Ragel6Flags...)
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		rl6Closure := walkClosure(scanner, r6Out, scanCfg).collect(ctx.na, func(v VFS) bool {
 			return v.isSource() && !extIsEnumSerialized(v.relString())
 		})
 
@@ -141,6 +145,10 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 			producerRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{rl6SourceVFS})
 		}
 
-		emitR6(instance, srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, d.cc.Ragel6Flags, rl6Closure, producerRefs, r6Ref, ctx.emit)
-	})
+		emitR6(instance, srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, producerRefs, r6Ref, ctx.emit)
+	}}
+
+	info.pending = pe
+
+	e.noteOwn(pe)
 }
