@@ -77,7 +77,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	inputsSnap := ctx.na.vfsList(inputs...)
 	outputsSnap := ctx.na.vfsList(outputs...)
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		emitJVGeneralReserved(instance, jarVFS, args, inputsSnap, outputsSnap, cwd, deps, ccTag, tc, ctx.emit, jvRef)
 	}}
 

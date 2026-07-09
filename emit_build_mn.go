@@ -38,7 +38,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 
 	python3 := d.tc.Python3
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		node := Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(

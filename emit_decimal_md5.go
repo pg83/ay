@@ -51,7 +51,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 	optArena := na.vfsList(optVFSs...)
 	python3 := d.tc.Python3
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		cmdArgs := na.anys.alloc(7 + len(optArena))[:0]
 
 		cmdArgs = append(cmdArgs,

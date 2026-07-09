@@ -80,7 +80,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	ref := ctx.emit.reserve()
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		node := Node{
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: instance.Path.rel().build(), Env: env}),

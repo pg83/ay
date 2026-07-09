@@ -171,7 +171,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	tc := d.tc
 	genDepsSnap := ctx.na.refList(genDeps...)
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		emitFLReserved(instance, srcRel, srcVFS, flatcLDRef, flatcBinary, flatcFlags, transitiveImports, ccTag, tc, ctx.emit, v, genDepsSnap, flRef)
 	}}
 

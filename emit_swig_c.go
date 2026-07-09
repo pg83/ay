@@ -50,7 +50,7 @@ func (e *EmitContext) emitSwigC() {
 		swRef := ctx.emit.reserve()
 		moduleName := swigModuleName(stmt.Module)
 
-		pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		pe := &PendingEmit{fn: func() {
 			cmdArgs := na.chunkList(na.anyList(swigBin.any()), swigConstArgs, na.anyList(internStr(moduleName).any(),
 				argInterface.any(),
 				internV(moduleName, "_swg").any(),

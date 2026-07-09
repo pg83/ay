@@ -1,8 +1,7 @@
 package main
 
 type PendingEmit struct {
-	owner uint64
-	fn    func()
+	fn func()
 }
 
 func (p *PendingEmit) run() {
@@ -19,16 +18,6 @@ func (p *PendingEmit) run() {
 
 func runPending(info *GeneratedFileInfo) {
 	info.pending.run()
-}
-
-func runPendingFor(info *GeneratedFileInfo, consumerKey uint64) {
-	p := info.pending
-
-	if p == nil || p.owner == consumerKey {
-		return
-	}
-
-	runPending(info)
 }
 
 type GeneratedFileInfo struct {

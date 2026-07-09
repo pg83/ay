@@ -96,7 +96,7 @@ func (e *EmitContext) emitBuildInfoStmt() {
 	createFor := d.createBuildInfoFor.string()
 	tc := d.tc
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		emitBIReserved(instance, createFor, biFlagsForInstance(instance.Platform), tc, ctx.emit, biRef)
 	}}
 

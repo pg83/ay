@@ -65,7 +65,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		ClosureLeaves:  e.ctx.na.vfsList(inputIn),
 	})
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		node := Node{
 			Platform:       instance.Platform,
 			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),

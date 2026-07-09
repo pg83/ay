@@ -159,7 +159,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 	head = head[:len(head):len(head)]
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance)}
+	pe := &PendingEmit{}
 
 	pe.fn = func() {
 		inputs := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS)

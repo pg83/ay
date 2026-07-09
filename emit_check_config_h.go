@@ -24,7 +24,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 	python3 := d.tc.Python3
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		cv := walkClosure(scanner, confVFS, scanCfg)
 
 		ctx.emit.emitReservedNode(Node{

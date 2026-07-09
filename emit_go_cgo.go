@@ -184,7 +184,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		cv := walkClosure(scanner, srcVFS, scanCfg)
 		block := na.vfs.alloc(len(scripts) + cv.len() + len(cgoContext))
 		k := 0

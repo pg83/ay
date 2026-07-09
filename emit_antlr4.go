@@ -14,7 +14,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		ccTag := d.unit.CCTag
 		tc := d.tc
 
-		jvPE := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		jvPE := &PendingEmit{fn: func() {
 			emitJVSplitReserved(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ccTag, tc, ctx.emit, jvRef)
 		}}
 
@@ -83,7 +83,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		ccTag := d.unit.CCTag
 		tc := d.tc
 
-		jvPE := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		jvPE := &PendingEmit{fn: func() {
 			emitJVReserved(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ccTag, tc, ctx.emit, jvRef)
 		}}
 

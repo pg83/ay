@@ -99,7 +99,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 		}),
 	})
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		emitR5Reserved(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, r5Ref, ctx.emit)
 	}}
 

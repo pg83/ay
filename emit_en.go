@@ -130,7 +130,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	scanner := e.scanner
 	demanded := instance.Demand != demandNone
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance)}
+	pe := &PendingEmit{}
 
 	pe.fn = func() {
 		enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)

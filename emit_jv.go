@@ -71,7 +71,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 		tc := d.cc.TC
 
-		pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		pe := &PendingEmit{fn: func() {
 			leafSet := make(map[VFS]bool, len(leaves))
 
 			for _, l := range leaves {
