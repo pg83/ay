@@ -38,6 +38,10 @@ END()
 	var opNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if p := n.KV.P.string(); p != "OP" {
 			continue
 		}
@@ -122,6 +126,10 @@ END()
 	var bcNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if p := n.KV.P.string(); p != "BC" {
 			continue
 		}
@@ -221,6 +229,10 @@ END()
 	byOut := make(map[string]*Node, len(g.Graph))
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			byOut[o.string()] = n
 		}
@@ -249,6 +261,10 @@ END()
 	var pyNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if got := n.KV.P.string(); got != "PY" {
 			continue
 		}
@@ -288,6 +304,10 @@ END()
 	var arNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if got := n.KV.P.string(); got != "AR" {
 			continue
 		}
@@ -335,6 +355,10 @@ END()
 	var bcNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if p := n.KV.P.string(); p != "BC" {
 			continue
 		}
@@ -424,6 +448,10 @@ END()
 	var bcNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if p := n.KV.P.string(); p != "BC" {
 			continue
 		}
@@ -483,6 +511,10 @@ END()
 	var pyNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if p := n.KV.P.string(); p != "PY" {
 			continue
 		}
@@ -543,6 +575,10 @@ END()
 	var bcNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if p := n.KV.P.string(); p != "BC" {
 			continue
 		}
@@ -595,6 +631,7 @@ func TestGen_RunProgramConsumesLLVMBCOutput(t *testing.T) {
 	writeToolProgram(files, "tools/rescompiler", "rescompiler")
 	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeToolProgram(files, "tools/gp", "gp")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
 	files[modPath+"/ya.make"] = `LIBRARY()
 USE_LLVM_BC16()
 LLVM_BC(
@@ -608,6 +645,9 @@ RUN_PROGRAM(
     tools/gp ${BINDIR}/Bar_optimized.16.bc out.txt
     IN ${BINDIR}/Bar_optimized.16.bc
     OUT_NOAUTO out.txt
+)
+RESOURCE(
+    out.txt /out.txt
 )
 END()
 `

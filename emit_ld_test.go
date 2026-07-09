@@ -556,6 +556,10 @@ func TestGen_SyntheticPROGRAM_EmitsLD(t *testing.T) {
 	var ld, cc *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		switch n.KV.P.string() {
 		case "LD":
 			ld = n
@@ -598,6 +602,10 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	var ldNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkLD {
 			ldNode = n
 		}
@@ -610,6 +618,10 @@ func TestGen_PeerGlobalArchive_ThreadsToLD(t *testing.T) {
 	arCount := 0
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkAR {
 			arCount++
 		}
@@ -891,6 +903,10 @@ func linkArgsOf(t *testing.T, g *Graph) []ANY {
 	t.Helper()
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkLD {
 			continue
 		}

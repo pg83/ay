@@ -359,6 +359,10 @@ END()
 	byOut := make(map[string]*Node, len(g.Graph))
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 {
 			byOut[n.Outputs[0].string()] = n
 		}
@@ -376,6 +380,10 @@ END()
 	var pb *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkPB && strings.HasSuffix(n.Outputs[0].string(), "JsonPathParser.pb.h") {
 			pb = n
 
@@ -473,6 +481,10 @@ END()
 	var pb *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkPB && strings.HasSuffix(n.Outputs[0].string(), "JsonPathParser.pb.h") {
 			pb = n
 
@@ -675,6 +687,10 @@ END()
 	byOut := make(map[string]*Node, len(g.Graph))
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 {
 			byOut[n.Outputs[0].string()] = n
 		}
@@ -961,6 +977,10 @@ END()
 	var pyPB *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkPB &&
 			strings.HasSuffix(n.Outputs[0].string(), "JsonPathParser__intpy3___pb2.py") {
 			pyPB = n
@@ -976,6 +996,10 @@ END()
 	byOut := make(map[string]*Node, len(g.Graph))
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 {
 			byOut[n.Outputs[0].string()] = n
 		}
@@ -1073,6 +1097,10 @@ END()
 	var pbH, pbCC int
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkPB {
 			continue
 		}
@@ -1128,6 +1156,10 @@ END()
 	var gotObj bool
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkCC {
 			continue
 		}
@@ -1147,6 +1179,10 @@ END()
 		var ccOuts []string
 
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.KV.P == pkCC {
 				ccOuts = append(ccOuts, n.Outputs[0].string())
 			}
@@ -1206,6 +1242,10 @@ END()
 	var pyPB *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkPB &&
 			strings.HasSuffix(n.Outputs[0].string(), "brand__intpy3___pb2.py") {
 			pyPB = n
@@ -1414,6 +1454,10 @@ END()
 	var cppArgs []ANY
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkPB &&
 			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "app/proto/c.pb.h") {
 			cppArgs = n.Cmds[0].CmdArgs.flat()
@@ -1462,6 +1506,10 @@ func pyProtoCmdArgsForOutput(t *testing.T, g *Graph, wantSuffix string) []ANY {
 	t.Helper()
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkPB &&
 			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), wantSuffix) {
 			return n.Cmds[0].CmdArgs.flat()
@@ -1549,6 +1597,10 @@ END()
 	foundKey, foundCollapsed := false, false
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkPR {
 			continue
 		}
@@ -1620,6 +1672,10 @@ END()
 	hasGrpcOut := false
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			if strings.HasSuffix(o.string(), "access_control_service__intpy3___pb2_grpc.py") {
 				hasGrpcOut = true
@@ -1762,6 +1818,10 @@ END()
 	var pyPB *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkPB &&
 			len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "enum_options__intpy3___pb2.py") {
 			pyPB = n
@@ -1817,6 +1877,10 @@ END()
 	globals := map[string]bool{}
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkAR && len(n.Outputs) > 0 &&
 			strings.HasSuffix(n.Outputs[0].string(), ".global.a") &&
 			strings.Contains(n.Outputs[0].string(), "libpy3") {
@@ -2139,6 +2203,10 @@ func TestEmitLibraryProtoSource_NonGrpcKeepsDeclaredAddInclOrder(t *testing.T) {
 
 func graphHasOutputSuffix(g *Graph, suffix string) bool {
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			if strings.HasSuffix(o.string(), suffix) {
 				return true
@@ -3167,6 +3235,10 @@ END()
 	const cppSourceLeak = "-I$(S)/maps/doc/proto"
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, cmd := range n.Cmds {
 			for _, a := range anyStrs(cmd.CmdArgs.flat()) {
 				if a == cppSourceLeak {

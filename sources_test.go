@@ -54,6 +54,10 @@ func TestGen_RootRelativeSrc_CCInputsNotDoubled(t *testing.T) {
 	var sawLocal, sawRoot bool
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkCC {
 			continue
 		}

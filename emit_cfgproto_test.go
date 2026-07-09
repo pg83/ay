@@ -205,6 +205,10 @@ END()
 	var pb *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkPB {
 			continue
 		}

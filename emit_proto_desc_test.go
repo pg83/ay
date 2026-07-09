@@ -58,6 +58,10 @@ func TestEmitDescProto_SRCDIRBuiltinDescRoot(t *testing.T) {
 	outputs := make(map[string]*Node, len(g.Graph))
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			outputs[o.string()] = n
 		}
@@ -121,6 +125,10 @@ func TestEmitProtoDescriptions_PDProducerShape(t *testing.T) {
 	outputs := make(map[string]*Node, len(g.Graph))
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			outputs[o.string()] = n
 		}
@@ -309,6 +317,10 @@ func TestEmitDescProto_ProtoNamespaceNestedSourceDescOutputAndIncludes(t *testin
 	}
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			if o.string() == "$(B)/"+clientMod+"/hive/proto/cluster.proto.desc" {
 				t.Errorf("found non-rebased desc output %q (should be under _/)", o.string())
@@ -430,6 +442,10 @@ func TestEmitDescProto_ProtoNamespaceRootLevelSourceNoUnderscore(t *testing.T) {
 	mustNodeByAnyOutput(t, g, descOut)
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			if strings.Contains(o.string(), ormMod+"/_/") {
 				t.Errorf("root-level source gained an `_/` segment: %q", o.string())

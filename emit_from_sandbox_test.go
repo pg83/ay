@@ -9,6 +9,9 @@ func TestGen_FromSandboxOutputConsumedAsRunProgramInput(t *testing.T) {
 	files := map[string]string{}
 
 	writeToolProgram(files, "tools/morph2blob", "morph2blob")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 
 	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
 NO_LIBC()
@@ -19,6 +22,9 @@ RUN_PROGRAM(
     tools/morph2blob trie
     IN trie
     STDOUT ${BINDIR}/pack.bin
+)
+RESOURCE(
+    pack.bin /pack.bin
 )
 SRCS(reg.cpp)
 END()
@@ -119,7 +125,11 @@ END()
 	var ld *Node
 
 	for _, n := range g.Graph {
-		if n.KV.P == pkLD {
+		if n == nil {
+			continue
+		}
+
+		if n != nil && n.KV.P == pkLD {
 			ld = n
 		}
 	}
@@ -156,11 +166,18 @@ func TestGen_FromSandboxScriptInputsExplicitThree(t *testing.T) {
 	files["build/scripts/retry.py"] = "\n"
 	files["build/scripts/error.py"] = "\n"
 
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
 	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 FROM_SANDBOX(1038029059 OUT_NOAUTO trie)
+RESOURCE(
+    trie /trie
+)
 END()
 `)
 
@@ -313,11 +330,18 @@ func TestGen_FromSandboxRenameResourceCommand(t *testing.T) {
 			files["build/scripts/fetch_from.py"] = "\n"
 			files["build/scripts/process_command_files.py"] = "\n"
 
+			writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+			writeToolProgram(files, "tools/rescompiler", "rescompiler")
+			writeToolProgram(files, "tools/rescompressor", "rescompressor")
+
 			writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 `+tc.decl+`
+RESOURCE(
+    `+tc.outArg+` /`+tc.outArg+`
+)
 END()
 `)
 

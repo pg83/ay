@@ -514,6 +514,10 @@ END()
 	}
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) == 0 {
 			continue
 		}
@@ -526,6 +530,10 @@ END()
 	}
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, a := range prCmdArgStrings(n) {
 			if strings.Contains(a, "py/namespace") && strings.Contains(a, "/mod=") {
 				t.Fatalf("generated-only PY_SRCS emitted a namespace resource: %q", a)
@@ -590,6 +598,10 @@ END()
 	sawNamespace := false
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, a := range prCmdArgStrings(n) {
 			if strings.Contains(a, "py/namespace") && strings.Contains(a, "/modc=") {
 				sawNamespace = true
@@ -638,6 +650,10 @@ END()
 	sawRoot := false
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, a := range prCmdArgStrings(n) {
 			if a == kvCmd {
 				sawRoot = true
@@ -702,6 +718,10 @@ END()
 	var resObjcopy, mainObjcopy *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) == 0 || !strings.Contains(n.Outputs[0].string(), "/objcopy_") {
 			continue
 		}
@@ -761,6 +781,10 @@ END()
 	var resObjcopy, mainObjcopy *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) == 0 || !strings.Contains(n.Outputs[0].string(), "/objcopy_") {
 			continue
 		}
@@ -812,6 +836,10 @@ END()
 	var global *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) == 0 {
 			continue
 		}

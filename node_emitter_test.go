@@ -146,6 +146,10 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	var aNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.Name == "A" {
 			aNode = n
 
@@ -160,6 +164,10 @@ func TestFinalize_DepsPreserveInsertionOrder(t *testing.T) {
 	byName := map[string]NodeRef{}
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if nm := n.KV.Name; nm != "" {
 			byName[nm] = n.Ref
 		}
@@ -193,6 +201,10 @@ func TestFinalize_KeepsDuplicateDeps(t *testing.T) {
 	var aNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.Name == "A" {
 			aNode = n
 		}
@@ -278,6 +290,10 @@ func TestFinalize_DropsEmptyForeignDepsKey(t *testing.T) {
 	var aNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.Name == "A" {
 			aNode = n
 		}

@@ -14,7 +14,6 @@ type EmitContext struct {
 	peers        *PeerContext
 	scanner      *IncludeScanner
 	codegen      *CodegenRegistry
-	regStart     int
 	srcs         []SrcMeta
 	refs         []NodeRef
 	outs         []VFS
@@ -96,7 +95,7 @@ func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *
 	scanner := ctx.scannerFor(instance)
 	k := len(d.resources)
 
-	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, regStart: len(scanner.codegen.order), resources: d.resources[:k:k]}
+	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, resources: d.resources[:k:k]}
 }
 
 func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *PeerContext) *EmitContext {
@@ -106,7 +105,6 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 
 	frame.emitCtx = EmitContext{
 		ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen,
-		regStart:  len(scanner.codegen.order),
 		resources: d.resources[:k:k],
 
 		srcs:        prev.srcs[:0],
@@ -280,10 +278,6 @@ func (e *EmitContext) emit() {
 
 	e.flushGoCgo2()
 	e.flushGoSrcs()
-
-	for i := e.regStart; i < len(e.codegen.order); i++ {
-		runPending(e.codegen.order[i])
-	}
 }
 
 func (e *EmitContext) drainSrcs() {

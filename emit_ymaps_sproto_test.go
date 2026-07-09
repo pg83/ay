@@ -138,6 +138,10 @@ func TestGen_YmapsSproto_InducesTargetSprotoPeerArchive(t *testing.T) {
 	var hasNonPIC, hasPIC bool
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) == 0 || n.Outputs[0].string() != archive {
 			continue
 		}
