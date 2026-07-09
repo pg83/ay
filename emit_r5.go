@@ -80,15 +80,20 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 	rlSourceVFS := source(instance.Path.relString(), "/", srcRel)
 	reg := e.codegen
 
-	tmpInfo := reg.register(GeneratedFileInfo{
+	pe := func() {
+		emitR5Reserved(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, r5Ref, ctx.emit)
+	}
+
+	reg.register(GeneratedFileInfo{
 		OutputPath:    r5TmpOut,
 		ProducerRef:   r5Ref,
 		GeneratorRefs: e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
+		OnUse:         &pe,
 	})
 
 	r5Parsed := e.scanner.parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
 
-	cppInfo := reg.register(GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     r5CppOut,
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
@@ -97,14 +102,8 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 			FlatOutput: d.flatSrc(src),
 			CFlags:     cflagsWnoImplicitFallthrough(e.ctx.na, psc),
 		}),
+		OnUse: &pe,
 	})
-
-	pe := func() {
-		emitR5Reserved(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, r5Ref, ctx.emit)
-	}
-
-	tmpInfo.OnUse = &pe
-	cppInfo.OnUse = &pe
 
 	meta := d.srcMetaOf(src)
 

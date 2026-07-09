@@ -54,14 +54,6 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 
 	lxRef := ctx.emit.reserve()
 
-	info := e.codegen.register(GeneratedFileInfo{
-		OutputPath:     outVFS,
-		ProducerRef:    lxRef,
-		GeneratorRefs:  e.ctx.na.refList(flexRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-		Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src), CFlags: cflags}),
-	})
-
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
@@ -77,8 +69,14 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 	}
 
-	info.OnUse = &pe
-
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:     outVFS,
+		ProducerRef:    lxRef,
+		GeneratorRefs:  e.ctx.na.refList(flexRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+		Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src), CFlags: cflags}),
+		OnUse:          &pe,
+	})
 }
 
 func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {

@@ -20,22 +20,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 	blocks := d.cc.CCBlocks
 	ref := ctx.emit.reserve()
 
-	tmpInfo := e.codegen.register(GeneratedFileInfo{
-		OutputPath:    tmpVFS,
-		ProducerRef:   ref,
-		GeneratorRefs: e.ctx.na.refList(toolRef),
-	})
-
-	incInfo := e.codegen.register(GeneratedFileInfo{
-		OutputPath:    incVFS,
-		ProducerRef:   ref,
-		GeneratorRefs: e.ctx.na.refList(toolRef),
-		ClosureLeaves: e.ctx.na.vfsList(tmpVFS, srcVFS),
-	})
-
-	var pe func()
-
-	pe = func() {
+	pe := func() {
 		cmd0 := Cmd{CmdArgs: na.chunkList(
 			blocks.cxxHead,
 			instance.Platform.CCHead,
@@ -76,7 +61,18 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
-	tmpInfo.OnUse = &pe
-	incInfo.OnUse = &pe
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:    tmpVFS,
+		ProducerRef:   ref,
+		GeneratorRefs: e.ctx.na.refList(toolRef),
+		OnUse:         &pe,
+	})
 
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:    incVFS,
+		ProducerRef:   ref,
+		GeneratorRefs: e.ctx.na.refList(toolRef),
+		ClosureLeaves: e.ctx.na.vfsList(tmpVFS, srcVFS),
+		OnUse:         &pe,
+	})
 }

@@ -13,13 +13,6 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 
 	ref := ctx.emit.reserve()
 
-	info := e.codegen.register(GeneratedFileInfo{
-		OutputPath:    outVFS,
-		ProducerRef:   ref,
-		GeneratorRefs: e.ctx.na.refList(toolRef),
-		ClosureLeaves: e.ctx.na.vfsList(srcVFS),
-	})
-
 	pe := func() {
 		node := Node{
 			Platform: instance.Platform,
@@ -42,6 +35,11 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
-	info.OnUse = &pe
-
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:    outVFS,
+		ProducerRef:   ref,
+		GeneratorRefs: e.ctx.na.refList(toolRef),
+		ClosureLeaves: e.ctx.na.vfsList(srcVFS),
+		OnUse:         &pe,
+	})
 }

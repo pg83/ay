@@ -90,14 +90,13 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 		psc = *p
 	}
 
-	info := e.codegen.register(GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:    joinOutVFS,
 		ProducerRef:   jsRef,
 		ClosureLeaves: ccIncl[1:],
 		Compile:       e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.any()), CFlags: psc}),
+		OnUse:         &pe,
 	})
-
-	info.OnUse = &pe
 
 	e.enqueueSrc(SrcMeta{Source: joinOutVFS.any(), Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
 }

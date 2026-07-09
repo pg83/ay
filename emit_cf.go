@@ -50,16 +50,6 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	python3 := d.cc.TC.Python3
 	cfRef := ctx.emit.reserve()
 
-	info := e.codegen.register(GeneratedFileInfo{
-		OutputPath:     outVFS,
-		SourcePath:     srcVFS,
-		ProducerRef:    cfRef,
-		GeneratorRefs:  nil,
-		SourceInputs:   na.vfsList(srcVFS, configureFilePyVFS),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cfTemplateParsedIncludes(ctx.parsers, srcVFS.relString())},
-		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, configureFilePyVFS),
-	})
-
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
@@ -86,7 +76,16 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		}, cfRef)
 	}
 
-	info.OnUse = &pe
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:     outVFS,
+		SourcePath:     srcVFS,
+		ProducerRef:    cfRef,
+		GeneratorRefs:  nil,
+		SourceInputs:   na.vfsList(srcVFS, configureFilePyVFS),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cfTemplateParsedIncludes(ctx.parsers, srcVFS.relString())},
+		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, configureFilePyVFS),
+		OnUse:          &pe,
+	})
 
 	return cfRef
 }

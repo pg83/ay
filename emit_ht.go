@@ -13,15 +13,6 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 	ref := ctx.emit.reserve()
 	parsed := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil)
 
-	info := e.codegen.register(GeneratedFileInfo{
-		OutputPath:     outVFS,
-		SourcePath:     srcVFS,
-		ProducerRef:    ref,
-		GeneratorRefs:  e.ctx.na.refList(toolRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[parsedIncludesLocal]},
-		ClosureLeaves:  e.ctx.na.vfsList(srcVFS),
-	})
-
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
@@ -60,7 +51,15 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
-	info.OnUse = &pe
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:     outVFS,
+		SourcePath:     srcVFS,
+		ProducerRef:    ref,
+		GeneratorRefs:  e.ctx.na.refList(toolRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[parsedIncludesLocal]},
+		ClosureLeaves:  e.ctx.na.vfsList(srcVFS),
+		OnUse:          &pe,
+	})
 
 	meta := d.srcMetaOf(src)
 
