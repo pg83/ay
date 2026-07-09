@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -13,14 +14,16 @@ var dedupDebug = os.Getenv("AY_DEBUG_DEDUP") != ""
 
 type DeDuperPool struct {
 	free  []*DeDuper
-	depth int
+	sites []string
 }
 
 func (p *DeDuperPool) get() *DeDuper {
-	p.depth++
+	if dedupDebug {
+		p.sites = append(p.sites, dedupSite())
 
-	if dedupDebug && p.depth >= 2 {
-		dedupReport(p.depth)
+		if len(p.sites) >= 2 {
+			dedupReport(p.sites)
+		}
 	}
 
 	if n := len(p.free); n > 0 {
@@ -41,32 +44,37 @@ func (p *DeDuperPool) get() *DeDuper {
 }
 
 func (p *DeDuperPool) put(d *DeDuper) {
-	p.depth--
+	if dedupDebug && len(p.sites) > 0 {
+		p.sites = p.sites[:len(p.sites)-1]
+	}
+
 	p.free = append(p.free, d)
 }
 
-var dedupStacks = map[string]bool{}
-
-func dedupReport(depth int) {
-	pc := make([]uintptr, 64)
+func dedupSite() string {
+	pc := make([]uintptr, 4)
 	n := runtime.Callers(3, pc)
 	frames := runtime.CallersFrames(pc[:n])
 
-	var sb strings.Builder
+	var parts []string
 
-	for {
+	for i := 0; i < 3; i++ {
 		f, more := frames.Next()
 
-		if strings.HasPrefix(f.Function, "main.") {
-			fmt.Fprintf(&sb, "  %s\n", strings.TrimPrefix(f.Function, "main."))
-		}
+		parts = append(parts, fmt.Sprintf("%s@%s:%d", strings.TrimPrefix(f.Function, "main."), filepath.Base(f.File), f.Line))
 
 		if !more {
 			break
 		}
 	}
 
-	sig := sb.String()
+	return strings.Join(parts, " <- ")
+}
+
+var dedupStacks = map[string]bool{}
+
+func dedupReport(sites []string) {
+	sig := strings.Join(sites, " || ")
 
 	if dedupStacks[sig] {
 		return
@@ -74,7 +82,11 @@ func dedupReport(depth int) {
 
 	dedupStacks[sig] = true
 
-	fmt.Fprintf(os.Stderr, "=== deduper depth %d ===\n%s", depth, sig)
+	fmt.Fprintf(os.Stderr, "=== %d live dedupers ===\n", len(sites))
+
+	for i, s := range sites {
+		fmt.Fprintf(os.Stderr, "  #%d  %s\n", i+1, s)
+	}
 }
 
 type IdKey interface {
