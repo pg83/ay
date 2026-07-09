@@ -80,7 +80,7 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta) {
 	if srcVFS.isBuild() {
 		cv = walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
 
-		if info := e.codegen.lookup(srcVFS); info != nil {
+		if info := e.codegen.use(srcVFS); info != nil {
 			deps = depRefs(info.ProducerRef)
 		}
 

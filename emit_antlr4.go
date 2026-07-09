@@ -18,7 +18,6 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			emitJVSplitReserved(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ccTag, tc, ctx.emit, jvRef)
 		}}
 
-		e.noteOwn(jvPE)
 		lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 		parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 		lexerG4 := source(instance.Path.relString(), "/", g.Lexer)
@@ -87,7 +86,6 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			emitJVReserved(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ccTag, tc, ctx.emit, jvRef)
 		}}
 
-		e.noteOwn(jvPE)
 		base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 		grammarG4 := source(instance.Path.relString(), "/", g.Grammar)
 		lexerCpp := build(outPrefix, base, "Lexer.cpp")

@@ -226,7 +226,6 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 }
 
 func (e *EmitContext) emitGoCgo1Stmt() {

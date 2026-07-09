@@ -89,5 +89,4 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 }

@@ -67,7 +67,6 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	cppInfo.pending = pe
 	rodataInfo.pending = pe
 
-	e.noteOwn(pe)
 
 	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
 	e.enqueueSrc(SrcMeta{Source: internV("MN_External_", stmt.Name, ".rodata").any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})

@@ -88,7 +88,6 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 
 	return svRef
 }

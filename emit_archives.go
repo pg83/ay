@@ -31,7 +31,7 @@ func (e *EmitContext) emitArchive(
 	for _, f := range a.Files {
 		isPRProduced := false
 
-		if info := reg.lookup(copyFileOutputVFS(instance.Path.relString(), f)); info != nil {
+		if info := reg.use(copyFileOutputVFS(instance.Path.relString(), f)); info != nil {
 			isPRProduced = true
 
 			if deduper.add(info.ProducerRef.strID()) {
@@ -124,7 +124,7 @@ func (e *EmitContext) emitArchive(
 	var leaves []VFS
 
 	for _, p := range pathPerFile {
-		if info := reg.lookup(p); info != nil && len(info.SourceInputs) > 0 {
+		if info := reg.use(p); info != nil && len(info.SourceInputs) > 0 {
 			leaves = append(leaves, info.SourceInputs...)
 		} else if a.PropagateSourceMembers && info == nil {
 			leaves = append(leaves, p)

@@ -109,7 +109,6 @@ func (e *EmitContext) emitSwigC() {
 		cInfo.pending = pe
 		pyInfo.pending = pe
 
-		e.noteOwn(pe)
 
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{
 			Path:   pyOutVFS,

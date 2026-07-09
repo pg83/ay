@@ -62,7 +62,6 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 
 	meta := d.srcMetaOf(src)
 

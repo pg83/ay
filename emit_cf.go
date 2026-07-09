@@ -88,7 +88,6 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 
 	return cfRef
 }

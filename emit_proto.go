@@ -316,7 +316,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	var protoProducerSourceInputs []VFS
 	var genProtoParsed []IncludeDirective
 
-	if info := e.codegen.lookup(buildProto); info != nil {
+	if info := e.codegen.use(buildProto); info != nil {
 		protoSrcOverride = buildProto
 		protoVFS = buildProto
 		extraProtoDeps = []NodeRef{info.ProducerRef}
@@ -418,8 +418,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 		hInfo.pending = pbPE
 		ccInfo.pending = pbPE
-
-		e.noteOwn(pbPE)
 
 		return ProtoPBEmission{
 			pbRef:     pbRef,
@@ -584,7 +582,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		info.pending = pbPE
 	}
 
-	e.noteOwn(pbPE)
 
 	orderedCC := e.orderedCC[:0]
 

@@ -149,7 +149,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		}
 	}}
 
-	e.noteOwn(pe)
 
 	if stmt.GenerateMachineCode {
 		return
@@ -214,14 +213,14 @@ func (e *EmitContext) llvmBcSourceInfo(src string) (inputVFS VFS, producer NodeR
 	reg := e.codegen
 	outVFS := copyFileOutputVFS(instance.Path.relString(), src)
 
-	if info := reg.lookup(outVFS); info != nil {
+	if info := reg.use(outVFS); info != nil {
 		return outVFS, info.ProducerRef
 	}
 
 	if buildVFS := e.generatedModuleSourceVFS(src); buildVFS != nil {
 		ref := NodeRef(0)
 
-		if info := reg.lookup(*buildVFS); info != nil {
+		if info := reg.use(*buildVFS); info != nil {
 			ref = info.ProducerRef
 		}
 

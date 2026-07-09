@@ -130,7 +130,6 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		pi.pending = pe
 	}
 
-	e.noteOwn(pe)
 
 	return scRef, partRels
 }

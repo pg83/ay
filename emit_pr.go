@@ -227,7 +227,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		}
 	}
 
-	e.noteOwn(pe)
 }
 
 type PrSourceInputSet struct {
@@ -246,7 +245,7 @@ func prCollectSourceInputs(na *NodeArenas, reg *CodegenRegistry, inVFSs []VFS) P
 			continue
 		}
 
-		if info := reg.lookup(v); info != nil {
+		if info := reg.use(v); info != nil {
 			generated = append(generated, info.SourceInputs...)
 		}
 	}
@@ -356,7 +355,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 			continue
 		}
 
-		if info := s.codegen.lookup(s.inVFSs[i]); info != nil {
+		if info := s.codegen.use(s.inVFSs[i]); info != nil {
 			out = append(out, info.SourceInputs...)
 		}
 	}

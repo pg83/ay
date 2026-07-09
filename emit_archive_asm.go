@@ -39,7 +39,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 	for _, f := range a.Files {
 		var memberVFS VFS
 
-		if info := reg.lookup(copyFileOutputVFS(instance.Path.relString(), f)); info != nil {
+		if info := reg.use(copyFileOutputVFS(instance.Path.relString(), f)); info != nil {
 			memberVFS = copyFileOutputVFS(instance.Path.relString(), f)
 
 			if deduper.add(info.ProducerRef.strID()) {
@@ -116,7 +116,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 	var leaves []VFS
 
 	for _, p := range pathPerFile {
-		if info := reg.lookup(p); info != nil && len(info.SourceInputs) > 0 {
+		if info := reg.use(p); info != nil && len(info.SourceInputs) > 0 {
 			leaves = dedup(leaves, info.SourceInputs)
 		} else if info == nil {
 			leaves = dedup(leaves, []VFS{p})

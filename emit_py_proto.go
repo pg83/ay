@@ -256,7 +256,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	var producerDeps []NodeRef
 	var producerSourceInputs []VFS
 
-	if info := e.codegen.lookup(build(protoRelPath)); info != nil {
+	if info := e.codegen.use(build(protoRelPath)); info != nil {
 		protoSrcVFS = build(protoRelPath)
 		protoCwd = bldRootDirVFS
 		producerDeps = na.refList(info.ProducerRef)
@@ -361,9 +361,6 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyDir, keySep, keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 	}
 
-	if !e.producersOnly() {
-		pyPBPE.run()
-	}
 }
 
 func (e *EmitContext) hasProtoPySrcs() bool {
@@ -391,6 +388,8 @@ func (e *EmitContext) appendPyProtoResEntries(out []PyGenResEntry, ps PySrc) []P
 	rel := ps.Path.relString()
 	grpc := strings.HasSuffix(rel, "__intpy3___pb2_grpc.py")
 	info := e.codegen.mustInfo(ps.Path, "appendPyProtoResEntries")
+
+	runPending(info)
 	token := ps.Token.string()
 	yapycOut := e.pyProtoYapycOut(ps)
 
@@ -437,6 +436,8 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 	na := ctx.na
 	rel := ps.Path.relString()
 	info := e.codegen.mustInfo(ps.Path, "emitPyProtoYapyc")
+
+	runPending(info)
 	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
 	yapycOut := e.pyProtoYapycOut(ps)
 	yapycTail := na.anyList(internV(token, "-").any(), (ps.Path).any(), (yapycOut).any())

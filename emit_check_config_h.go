@@ -60,7 +60,6 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 
 	e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCheckConfig})
 }

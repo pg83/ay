@@ -73,7 +73,6 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 
 	return gzRef, genProtoName
 }

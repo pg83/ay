@@ -126,9 +126,9 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		moduleTag = tagCppProto
 	}
 
-	declSeq := stmt.DeclSeq
 	scanner := e.scanner
-	demanded := instance.Demand != demandNone
+
+	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq, Generated: true, SecondLevel: secondLevel})
 
 	pe := &PendingEmit{}
 
@@ -170,10 +170,6 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			enRef,
 			ctx.emit,
 		)
-
-		if demanded {
-			e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: declSeq, Generated: true, SecondLevel: secondLevel})
-		}
 	}
 
 	cppInfo.pending = pe
@@ -182,7 +178,6 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		hInfo.pending = pe
 	}
 
-	e.noteOwn(pe)
 }
 
 func emitEN(

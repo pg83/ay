@@ -51,6 +51,7 @@ type CodegenRegistry struct {
 	splitPrefixSeen BitSet
 	leafEver        BitSet
 	bySplit         *IntMap[*GeneratedFileInfo]
+	order           []*GeneratedFileInfo
 	na              *NodeArenas
 }
 
@@ -88,6 +89,7 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	*stored = info
 
 	r.byRel.put(stored.OutputPath.rel(), stored)
+	r.order = append(r.order, stored)
 
 	for _, leaf := range stored.ClosureLeaves {
 		r.leafEver.add(uint32(leaf))

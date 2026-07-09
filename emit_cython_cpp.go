@@ -342,7 +342,6 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			info.pending = pe
 		}
 
-		e.noteOwn(pe)
 		e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCython})
 	}
 }
