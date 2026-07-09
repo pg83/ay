@@ -2,7 +2,7 @@ package main
 
 var jsNodeKV = KV{P: pkJS, PC: pcMagenta}
 
-func emitJS(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) (NodeRef, VFS) {
+func emitJSReserved(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter, id NodeRef) VFS {
 	na := emit.nodeArenas()
 	joinSrcs := buildScriptsGenJoinSrcsPy
 	outVFS := build(instance.Path.relString(), "/", allName)
@@ -55,7 +55,9 @@ func emitJS(instance ModuleInstance, allName string, sources []string, closure [
 		Resources:    usesPython3,
 	}
 
-	return emit.emitNode(node), outVFS
+	emit.emitReservedNode(node, id)
+
+	return outVFS
 }
 
 func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
@@ -71,7 +73,15 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 		joinClosure = e.joinSrcsIncludeClosure(ctx.target, jsSources, jsScanCfg)
 	}
 
-	jsRef, joinOutVFS := emitJS(instance, js.OutputName, jsSources, joinClosure, ctx.target, d.tc, ctx.scripts, ctx.emit)
+	jsRef := ctx.emit.reserve()
+	tc := d.tc
+	outputName := js.OutputName
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		emitJSReserved(instance, outputName, jsSources, joinClosure, ctx.target, tc, ctx.scripts, ctx.emit, jsRef)
+	}}
+
+	joinOutVFS := build(instance.Path.relString(), "/", js.OutputName)
 	ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
 
 	var psc []ANY
@@ -80,12 +90,16 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 		psc = *p
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:    joinOutVFS,
 		ProducerRef:   jsRef,
 		ClosureLeaves: ccIncl[1:],
 		Compile:       e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.any()), CFlags: psc}),
 	})
+
+	info.pending = pe
+
+	e.noteOwn(pe)
 
 	e.enqueueSrc(SrcMeta{Source: joinOutVFS.any(), Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
 }
