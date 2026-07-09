@@ -8,6 +8,8 @@ type FS interface {
 	isFile(prefix STR, suffix string) bool
 	isDir(prefix STR, suffix string) bool
 
+	resolveSourceUnder(prefix, target STR) STR
+
 	read(rel string) []byte
 
 	walk(rel string, visit func(rel string, isDir bool) bool)

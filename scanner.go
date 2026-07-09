@@ -51,24 +51,23 @@ func (d IncludeDirective) cythonProbe() bool {
 }
 
 type IncludeScanner struct {
-	sysincl          *SysinclCtx
-	parsers          *IncludeParserManager
-	buckets          *BucketCache
-	closureArena     *BumpAllocator[VFS]
-	inDfsFrame       bool
-	scanCache        DenseMap2[VFS, []VFS, Closure]
-	searchTierFlat   *IntMap[VFS]
-	searchTierSeen   BitSet
-	sourceUnderCache *IntMap[STR]
-	childArena       *BumpAllocator[VFS]
-	spOut            []VFS
-	resolveOut       []VFS
-	dfsActive        BitSet
-	visitedIDPool    sync.Pool
-	scanCtxPool      sync.Pool
-	onWarn           func(Warn)
-	codegen          *CodegenRegistry
-	moduleByRef      *DenseMap[NodeRef, *ModuleEmitResult]
+	sysincl        *SysinclCtx
+	parsers        *IncludeParserManager
+	buckets        *BucketCache
+	closureArena   *BumpAllocator[VFS]
+	inDfsFrame     bool
+	scanCache      DenseMap2[VFS, []VFS, Closure]
+	searchTierFlat *IntMap[VFS]
+	searchTierSeen BitSet
+	childArena     *BumpAllocator[VFS]
+	spOut          []VFS
+	resolveOut     []VFS
+	dfsActive      BitSet
+	visitedIDPool  sync.Pool
+	scanCtxPool    sync.Pool
+	onWarn         func(Warn)
+	codegen        *CodegenRegistry
+	moduleByRef    *DenseMap[NodeRef, *ModuleEmitResult]
 }
 
 type ScanCtx struct {
@@ -100,11 +99,10 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		parsers: parsers,
 		onWarn:  onWarn,
 
-		buckets:          buckets,
-		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
-		childArena:       newBumpAllocator[VFS](1 << 12),
-		searchTierFlat:   newIntMap[VFS](4096),
-		sourceUnderCache: newIntMap[STR](1 << 16),
+		buckets:        buckets,
+		closureArena:   newBumpAllocator[VFS](closureArenaInitial),
+		childArena:     newBumpAllocator[VFS](1 << 12),
+		searchTierFlat: newIntMap[VFS](4096),
 	}
 
 	s.visitedIDPool.New = func() any {
@@ -529,7 +527,7 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 				}
 			}
 
-			if s.resolveSourceUnder(srcRootRel, abs.rel()) == 0 {
+			if s.parsers.fs.resolveSourceUnder(srcRootRel, abs.rel()) == 0 {
 				continue
 			}
 
@@ -564,7 +562,7 @@ mapLoop:
 			}
 		}
 
-		if s.resolveSourceUnder(srcRootRel, abs.rel()) == 0 {
+		if s.parsers.fs.resolveSourceUnder(srcRootRel, abs.rel()) == 0 {
 			continue
 		}
 
@@ -677,7 +675,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	normTarget := normalisePath(target)
 
 	addSource := func(prefix VFS) bool {
-		rel := s.resolveSourceUnder(prefix.rel(), targetID)
+		rel := s.parsers.fs.resolveSourceUnder(prefix.rel(), targetID)
 
 		if rel == 0 {
 			return false
@@ -859,7 +857,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 	if d.quotedLike() {
 		matched := false
-		sv := s.resolveSourceUnder(incDir.rel(), d.target.str())
+		sv := s.parsers.fs.resolveSourceUnder(incDir.rel(), d.target.str())
 
 		if sv != 0 {
 			out = append(out, sv.source())
@@ -918,44 +916,6 @@ func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool
 	}
 
 	return "", false
-}
-
-func (s *IncludeScanner) resolveSourceUnder(prefix, targetSTR STR) STR {
-	key := splitMix64(uint32(prefix), uint32(targetSTR))
-
-	if p := s.sourceUnderCache.get(key); p != nil {
-		return *p
-	}
-
-	target := targetSTR.string()
-
-	var v STR
-
-	if s.parsers.fs.isFile(prefix, target) {
-		switch {
-		case target != "" && pathIsClean(target):
-			if prefix == srcRootRel {
-				v = targetSTR
-			} else {
-				v = internJoined(prefix.string(), target)
-			}
-		default:
-			var jb, nb [256]byte
-
-			joined := joinRelInto(jb[:0], prefix.string(), target)
-			normB, ok := normaliseAppend(nb[:0], bytesString(joined))
-
-			if ok {
-				v = internBytes(normB)
-			} else {
-				v = internStr(normalisePathSlow(string(joined)))
-			}
-		}
-	}
-
-	s.sourceUnderCache.put(key, v)
-
-	return v
 }
 
 func canRelFilter(first, target string) bool {
