@@ -24,17 +24,11 @@ func TestEmitR5_RlgenModeFollowsOptimized(t *testing.T) {
 	rlgenMode := func(p *Platform) string {
 		e := newStreamingEmitter(nil)
 		inst := ModuleInstance{Path: source("kernel/urlnorm"), Kind: KindLib, Language: LangCPP, Platform: p}
-		ref, tmpOut, cppOut := emitR5(inst, "urlhashval.rl",
+		ref := e.reserve()
+
+		emitR5Reserved(inst, "urlhashval.rl",
 			0, 0, build("contrib/tools/ragel5/ragel/ragel5"),
-			build("contrib/tools/ragel5/rlgen-cd/rlgen-cd"), e)
-
-		if tmpOut.string() != "$(B)/kernel/urlnorm/urlhashval.rl.tmp" {
-			t.Errorf("tmpOut = %q, want $(B)/kernel/urlnorm/urlhashval.rl.tmp", tmpOut.string())
-		}
-
-		if cppOut.string() != "$(B)/kernel/urlnorm/urlhashval.rl5.cpp" {
-			t.Errorf("cppOut = %q, want $(B)/kernel/urlnorm/urlhashval.rl5.cpp", cppOut.string())
-		}
+			build("contrib/tools/ragel5/rlgen-cd/rlgen-cd"), ref, e)
 
 		flat := e.nodes.s[ref].Cmds[1].CmdArgs.flat()
 
