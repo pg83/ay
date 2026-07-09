@@ -51,6 +51,7 @@ type Executor struct {
 	prepBatchCap int
 	pending      atomic.Uint64
 	done         atomic.Uint64
+	failed       atomic.Uint64
 	tokenOnce    sync.Once
 	token        string
 }
@@ -259,6 +260,12 @@ func (ex *Executor) run(roots []NodeRef) {
 	ex.events.sync()
 
 	for _, r := range roots {
+		if ex.keepGoing {
+			_ = try(func() { ex.visit(r) })
+
+			continue
+		}
+
 		ex.visit(r)
 	}
 }
@@ -274,6 +281,10 @@ func (ex *Executor) visit(ref NodeRef) {
 		f.err = try(func() {
 			ex.execute(f)
 		})
+
+		if f.err != nil && ex.keepGoing {
+			ex.reportFailure(f.err)
+		}
 	})
 
 	if f.err != nil {
@@ -297,8 +308,32 @@ func (ex *Executor) failedRoots(roots []NodeRef) []NodeRef {
 	return failed
 }
 
+func nodeOutName(n *Node) string {
+	if len(n.Outputs) > 0 {
+		return n.Outputs[0].sharedString()
+	}
+
+	return fmt.Sprintf("ref=%d", n.Ref)
+}
+
+func (ex *Executor) reportFailure(err *Exception) {
+	ex.failed.Add(1)
+
+	msg := err.Error()
+
+	ex.events.post(func() {
+		if !ex.ninja {
+			fmt.Fprint(os.Stderr, ansiESC+"[2K\r")
+		}
+
+		fmt.Fprintln(os.Stderr, color("red", msg))
+	})
+}
+
 func (ex *Executor) execute(f *NodeFuture) {
 	n := f.node
+
+	defer ex.done.Add(1)
 
 	if ex.keepGoing {
 		for r := range n.buildDeps(ex.fetchRefs) {
@@ -310,7 +345,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 				continue
 			}
 
-			throwFmt("deps failed: %d", r)
+			throwFmt("%s broken by dep %s", nodeOutName(n), nodeOutName(ex.futs.get(uint32(r)).node))
 		}
 	} else {
 		for r := range n.buildDeps(ex.fetchRefs) {
@@ -319,8 +354,6 @@ func (ex *Executor) execute(f *NodeFuture) {
 	}
 
 	cachePath := ex.uidPath(f.uid)
-
-	defer ex.done.Add(1)
 
 	ex.sema <- struct{}{}
 

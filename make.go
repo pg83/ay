@@ -269,6 +269,10 @@ func cmdMake(g GlobalFlags, args []string) int {
 		throwFmt("build failed: %s", strings.Join(failedStrs, ", "))
 	}
 
+	if failed := ex.failed.Load(); failed > 0 {
+		throwFmt("build failed: %d nodes failed", failed)
+	}
+
 	for _, r := range results {
 		ex.installRoot(r, mf.installRoot)
 	}
