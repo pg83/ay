@@ -276,6 +276,8 @@ func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 		return
 	}
 
+	runPendingPrep(info)
+
 	bucket := parsedIncludesCpp
 
 	if isHeaderSource(vfsPath.relString()) {

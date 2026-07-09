@@ -238,7 +238,22 @@ type GenCtx struct {
 	goEnvMemo        map[[2]STR]EnvVars
 }
 
+func runPendingProducers(ctx *GenCtx, reg *CodegenRegistry, consumer ModuleInstance, paths []VFS) {
+	consumerKey := ctx.instanceKey(consumer)
+
+	for _, p := range paths {
+		if !p.isBuild() {
+			continue
+		}
+
+		if info := reg.lookup(p); info != nil {
+			runPendingFor(info, consumerKey)
+		}
+	}
+}
+
 func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, includeInputs []VFS, incl ...NodeRef) []NodeRef {
+	runPendingProducers(ctx, ctx.codegenFor(consumer), consumer, includeInputs)
 	deduper.reset()
 
 	out := na.noderefs.alloc(len(incl) + len(includeInputs))
@@ -281,6 +296,10 @@ func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeAre
 }
 
 func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []NodeRef) []NodeRef {
+	for _, ch := range chunks {
+		runPendingProducers(e.ctx, e.codegen, e.instance, ch)
+	}
+
 	deduper.reset()
 
 	na := e.ctx.na
@@ -332,6 +351,19 @@ func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []Nod
 }
 
 func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, cv Closure, incl ...NodeRef) []NodeRef {
+	reg := ctx.codegenFor(consumer)
+	consumerKey := ctx.instanceKey(consumer)
+
+	cv.each(func(p VFS) {
+		if !p.isBuild() {
+			return
+		}
+
+		if info := reg.lookup(p); info != nil {
+			runPendingFor(info, consumerKey)
+		}
+	})
+
 	deduper.reset()
 
 	out := na.noderefs.alloc(len(incl) + cv.len())
@@ -342,8 +374,6 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 		out[k] = r
 		k++
 	}
-
-	reg := ctx.codegenFor(consumer)
 
 	cv.each(func(p VFS) {
 		if !p.isBuild() {

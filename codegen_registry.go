@@ -1,5 +1,55 @@
 package main
 
+type PendingEmit struct {
+	owner uint64
+	prep  func()
+	fn    func()
+}
+
+func runPendingPrep(info *GeneratedFileInfo) {
+	p := info.pending
+
+	if p == nil || p.prep == nil {
+		return
+	}
+
+	prep := p.prep
+
+	p.prep = nil
+
+	prep()
+}
+
+func runPending(info *GeneratedFileInfo) {
+	p := info.pending
+
+	if p == nil {
+		return
+	}
+
+	runPendingPrep(info)
+
+	if p.fn == nil {
+		return
+	}
+
+	fn := p.fn
+
+	p.fn = nil
+
+	fn()
+}
+
+func runPendingFor(info *GeneratedFileInfo, consumerKey uint64) {
+	p := info.pending
+
+	if p == nil || p.owner == consumerKey {
+		return
+	}
+
+	runPending(info)
+}
+
 type GeneratedFileInfo struct {
 	OutputPath      VFS
 	SourcePath      VFS
@@ -11,6 +61,7 @@ type GeneratedFileInfo struct {
 	ClosureLeaves   []VFS
 	ParsedIncludes  ParsedIncludeSet
 	Compile         *CompileSpec
+	pending         *PendingEmit
 }
 
 type CompileSpec struct {
@@ -41,7 +92,17 @@ func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
 	return &CodegenRegistry{bySplit: newIntMap[*GeneratedFileInfo](1 << 14), na: na}
 }
 
-func (r *CodegenRegistry) register(info GeneratedFileInfo) {
+func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
+	info := r.lookup(path)
+
+	if info != nil {
+		runPending(info)
+	}
+
+	return info
+}
+
+func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	if !info.OutputPath.isBuild() {
 		throwFmt("CodegenRegistry: register of a source path %q", info.OutputPath.string())
 	}
@@ -67,6 +128,8 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) {
 			r.putSplit(source(rel[:i]), internStr(rel[i+1:]), stored)
 		}
 	}
+
+	return stored
 }
 
 func (r *CodegenRegistry) putSplit(prefix VFS, suffix STR, info *GeneratedFileInfo) {
