@@ -7,15 +7,16 @@ import (
 
 var r5KV = KV{P: pkR5, PC: pcYellow}
 
-func emitR5(
+func emitR5Reserved(
 	instance ModuleInstance,
 	srcRel string,
 	ragel5LD NodeRef,
 	rlgenCdLD NodeRef,
 	ragel5BinPath VFS,
 	rlgenCdBinPath VFS,
+	id NodeRef,
 	emit *StreamingEmitter,
-) (NodeRef, VFS, VFS) {
+) {
 	na := emit.nodeArenas()
 	srcVFS := source(instance.Path.relString(), "/", srcRel)
 	tmpVFS := build(instance.Path.relString(), "/", srcRel, ".tmp")
@@ -58,7 +59,7 @@ func emitR5(
 		ForeignDepRefs: na.refList(ragel5LD, rlgenCdLD),
 	}
 
-	return emit.emitNode(node), tmpVFS, cppVFS
+	emit.emitReservedNode(node, id)
 }
 
 func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
@@ -73,11 +74,13 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 
 	ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
 	rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
-	r5Ref, r5TmpOut, r5CppOut := emitR5(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, ctx.emit)
+	r5Ref := ctx.emit.reserve()
+	r5TmpOut := build(instance.Path.relString(), "/", srcRel, ".tmp")
+	r5CppOut := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".rl5.cpp")
 	rlSourceVFS := source(instance.Path.relString(), "/", srcRel)
 	reg := e.codegen
 
-	reg.register(GeneratedFileInfo{
+	tmpInfo := reg.register(GeneratedFileInfo{
 		OutputPath:    r5TmpOut,
 		ProducerRef:   r5Ref,
 		GeneratorRefs: e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
@@ -85,7 +88,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 
 	r5Parsed := e.scanner.parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
 
-	reg.register(GeneratedFileInfo{
+	cppInfo := reg.register(GeneratedFileInfo{
 		OutputPath:     r5CppOut,
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
@@ -95,6 +98,15 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 			CFlags:     cflagsWnoImplicitFallthrough(e.ctx.na, psc),
 		}),
 	})
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		emitR5Reserved(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, r5Ref, ctx.emit)
+	}}
+
+	tmpInfo.pending = pe
+	cppInfo.pending = pe
+
+	e.noteOwn(pe)
 
 	meta := d.srcMetaOf(src)
 

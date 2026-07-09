@@ -7,13 +7,14 @@ var (
 	biKV               = KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: true}
 )
 
-func emitBI(
+func emitBIReserved(
 	instance ModuleInstance,
 	outputHeader string,
 	cxxFlags []ANY,
 	tc ModuleToolchain,
 	emit *StreamingEmitter,
-) NodeRef {
+	id NodeRef,
+) {
 	na := emit.nodeArenas()
 	outPrefix := instance.Path.relString() + "/"
 	argsFileVFS := build(outPrefix, "__args")
@@ -70,7 +71,7 @@ func emitBI(
 		Resources:    instance.Platform.UsesPython3Clang,
 	}
 
-	return emit.emitNode(node)
+	emit.emitReservedNode(node, id)
 }
 
 func biFlagsForInstance(targetP *Platform) []ANY {
@@ -91,9 +92,15 @@ func biFlagsForInstance(targetP *Platform) []ANY {
 func (e *EmitContext) emitBuildInfoStmt() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	outPrefix := instance.Path.relString() + "/"
-	biRef := emitBI(instance, d.createBuildInfoFor.string(), biFlagsForInstance(instance.Platform), d.tc, ctx.emit)
+	biRef := ctx.emit.reserve()
+	createFor := d.createBuildInfoFor.string()
+	tc := d.tc
 
-	e.codegen.register(GeneratedFileInfo{
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		emitBIReserved(instance, createFor, biFlagsForInstance(instance.Platform), tc, ctx.emit, biRef)
+	}}
+
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
 		ProducerRef:   biRef,
 		GeneratorRefs: nil,
@@ -102,4 +109,8 @@ func (e *EmitContext) emitBuildInfoStmt() {
 			IncludeDirective{kind: includeQuoted, target: includeTarget(xargsPyVFS.rel().any())},
 			IncludeDirective{kind: includeQuoted, target: includeTarget(yieldLinePyVFS.rel().any())})},
 	})
+
+	info.pending = pe
+
+	e.noteOwn(pe)
 }
