@@ -2405,6 +2405,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		nil,
 		&blocks,
 		cppProtoSpec,
+		e.reserve(),
 		e,
 	)
 
@@ -2446,6 +2447,7 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		nil,
 		&blocks,
 		cppProtoSpec,
+		e.reserve(),
 		e,
 	)
 

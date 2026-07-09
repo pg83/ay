@@ -325,22 +325,29 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	transitiveImports := walkClosure(e.scanner, protoVFS, pe.scanCfg)
+	pbRef := ctx.emit.reserve()
+	pbm := *pe
+	scanner := e.scanner
 
-	extraProtoDeps = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, transitiveImports, extraProtoDeps...)
+	pbPE := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		imports := walkClosure(scanner, protoVFS, pbm.scanCfg)
+		depRefs := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, imports, extraProtoDeps...)
 
-	pbRef := emitPB(
-		instance, protoRelPath, protoSrcOverride, pe.cppStyleguideLDRef, pe.protocLDRef,
-		pe.grpcCppLDRef, pe.cppStyleguideBinary, pe.protocBinary, pe.grpcCppBinary,
-		cfg.grpc, cfg.moduleTag,
-		pe.liteHeaders,
-		pe.extraPlugins,
-		transitiveImports,
-		extraProtoDeps,
-		protoProducerSourceInputs,
-		&pe.blocks,
-		spec,
-		ctx.emit,
-	)
+		emitPB(
+			instance, protoRelPath, protoSrcOverride, pbm.cppStyleguideLDRef, pbm.protocLDRef,
+			pbm.grpcCppLDRef, pbm.cppStyleguideBinary, pbm.protocBinary, pbm.grpcCppBinary,
+			cfg.grpc, cfg.moduleTag,
+			pbm.liteHeaders,
+			pbm.extraPlugins,
+			imports,
+			depRefs,
+			protoProducerSourceInputs,
+			&pbm.blocks,
+			spec,
+			pbRef,
+			ctx.emit,
+		)
+	}}
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := build(protoBase, ".pb.h")
@@ -379,7 +386,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	if spec.genHParsed != nil {
 		reg := e.codegen
 
-		reg.register(GeneratedFileInfo{
+		hInfo := reg.register(GeneratedFileInfo{
 			OutputPath:     pbH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  spec.genRefs,
@@ -400,7 +407,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			psc = *p
 		}
 
-		reg.register(GeneratedFileInfo{
+		ccInfo := reg.register(GeneratedFileInfo{
 			OutputPath:     pbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  spec.genRefs,
@@ -408,6 +415,11 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			ClosureLeaves:  spec.ccLeaves,
 			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(internStr(srcRel).any()), CFlags: psc}),
 		})
+
+		hInfo.pending = pbPE
+		ccInfo.pending = pbPE
+
+		e.noteOwn(pbPE)
 
 		return ProtoPBEmission{
 			pbRef:     pbRef,
@@ -454,14 +466,15 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	reg := e.codegen
+	pbInfos := make([]*GeneratedFileInfo, 0, 6)
 
-	reg.register(GeneratedFileInfo{
+	pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
 		OutputPath:     pbH,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesCpp: pbHCompile},
 		ClosureLeaves:  pbHLeaves,
-	})
+	}))
 
 	protoBaseName := filepath.Base(protoRelPath)
 
@@ -479,12 +492,12 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			yaffHParsed = yaffGeneratedHeaderIncludes(na, plugin.isExperimental(protoBaseName), pbH.relString())
 		}
 
-		reg.register(GeneratedFileInfo{
+		pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
 			OutputPath:     yaffH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffHParsed},
-		})
+		}))
 
 		yaffCCParsed := na.dirs.alloc(len(yaffHParsed) + 1)
 		yn := copy(yaffCCParsed, yaffHParsed)
@@ -493,12 +506,12 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		na.dirs.commit(yn + 1)
 		yaffCCParsed = yaffCCParsed[: yn+1 : yn+1]
 
-		reg.register(GeneratedFileInfo{
+		pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
 			OutputPath:     yaffCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffCCParsed},
-		})
+		}))
 	}
 
 	if pe.liteHeaders {
@@ -509,12 +522,12 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		na.dirs.commit(len(depsParsed))
 		depsParsed = depsParsed[:len(depsParsed):len(depsParsed)]
 
-		reg.register(GeneratedFileInfo{
+		pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
 			OutputPath:     pbDepsH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: depsParsed},
-		})
+		}))
 	}
 
 	pbCCParsed := na.dirs.alloc(3 + len(directImports))[:0]
@@ -529,12 +542,12 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	na.dirs.commit(len(pbCCParsed))
 	pbCCParsed = pbCCParsed[:len(pbCCParsed):len(pbCCParsed)]
 
-	reg.register(GeneratedFileInfo{
+	pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
 		OutputPath:     pbCC,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbCCParsed},
-	})
+	}))
 
 	var grpcCCParsed, grpcHParsed []IncludeDirective
 
@@ -552,20 +565,26 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	if cfg.grpc {
-		reg.register(GeneratedFileInfo{
+		pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
 			OutputPath:     grpcPbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pe.grpcCCRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: grpcCCParsed},
-		})
+		}))
 
-		reg.register(GeneratedFileInfo{
+		pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
 			OutputPath:     grpcPbH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pe.grpcHRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: grpcHParsed},
-		})
+		}))
 	}
+
+	for _, info := range pbInfos {
+		info.pending = pbPE
+	}
+
+	e.noteOwn(pbPE)
 
 	orderedCC := e.orderedCC[:0]
 
@@ -672,8 +691,9 @@ func emitPB(
 	producerSourceInputs []VFS,
 	blocks *PbArgBlocks,
 	spec *ProtoSpec,
+	id NodeRef,
 	emit *StreamingEmitter,
-) NodeRef {
+) {
 	na := emit.nodeArenas()
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := build(protoBase, ".pb.h")
@@ -789,7 +809,7 @@ func emitPB(
 		Resources:      usesPython3,
 	}
 
-	return emit.emitNode(node)
+	emit.emitReservedNode(node, id)
 }
 
 func assembleProtoCmdOutputs(na *NodeArenas, protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, extraPlugins []ResolvedCPPProtoPlugin, liteHeaders, grpc bool) []VFS {
