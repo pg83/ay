@@ -235,7 +235,7 @@ func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) []VFS {
 		}
 	}
 
-	return dedupClosure(na, selves, groups...)
+	return na.dedupClosure(selves, groups...)
 }
 
 func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {

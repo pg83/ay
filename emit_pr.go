@@ -432,7 +432,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 		return nil
 	}
 
-	return dedupClosure(ctx.na, out)
+	return ctx.na.dedupClosure(out)
 }
 
 func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) ParsedIncludeSet {
@@ -636,7 +636,7 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 
 	head = head[:len(head):len(head)]
 
-	inputs := na.inputList(head, deduper.filterSeen(na, spec.inputClosure))
+	inputs := na.inputList(head, na.filterSeen(deduper, spec.inputClosure))
 	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
 
 	var stdoutPath VFS

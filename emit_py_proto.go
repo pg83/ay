@@ -336,7 +336,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		ctx.emit.emitReservedNode(pyPBNode, pyPBRef)
 	}
 
-	sourceInputs := dedupSourceVFS(na, inputs, transitive.buckets)
+	sourceInputs := na.dedupSourceVFS(inputs, transitive.buckets)
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
 
 	tokenFor := func(out VFS) STR {
