@@ -744,6 +744,15 @@ type TaskStat struct {
 	dur time.Duration
 }
 
+type kindKey struct {
+	p  ProcKind
+	pc PColor
+}
+
+func coloredKind(pc PColor, k ProcKind) string {
+	return color(pc.string(), fmt.Sprintf("%-4s", k.string()))
+}
+
 func (ex *Executor) printStats() {
 	ex.events.sync()
 
@@ -770,29 +779,29 @@ func (ex *Executor) printStats() {
 			break
 		}
 
-		fmt.Fprintf(os.Stderr, "  %10s  %-4s %s\n", s.dur.Round(time.Millisecond), s.f.node.KV.P.string(), nodeOutName(s.f.node))
+		fmt.Fprintf(os.Stderr, "  %10s  %s %s\n", s.dur.Round(time.Millisecond), coloredKind(s.f.node.KV.PC, s.f.node.KV.P), nodeOutName(s.f.node))
 	}
 
-	sums := map[ProcKind]time.Duration{}
+	sums := map[kindKey]time.Duration{}
 
 	for _, s := range ex.taskStats {
-		sums[s.f.node.KV.P] += s.dur
+		sums[kindKey{s.f.node.KV.P, s.f.node.KV.PC}] += s.dur
 	}
 
-	kinds := make([]ProcKind, 0, len(sums))
+	kinds := make([]kindKey, 0, len(sums))
 
 	for k := range sums {
 		kinds = append(kinds, k)
 	}
 
-	slices.SortFunc(kinds, func(a, b ProcKind) int {
+	slices.SortFunc(kinds, func(a, b kindKey) int {
 		return cmp.Compare(sums[b], sums[a])
 	})
 
 	fmt.Fprintln(os.Stderr, "\nper-kind total:")
 
 	for _, k := range kinds {
-		fmt.Fprintf(os.Stderr, "  %10s  %s\n", sums[k].Round(time.Millisecond), k.string())
+		fmt.Fprintf(os.Stderr, "  %10s  %s\n", sums[k].Round(time.Millisecond), coloredKind(k.pc, k.p))
 	}
 
 	ex.printCriticalPath(durOf)
@@ -852,7 +861,7 @@ func (ex *Executor) printCriticalPath(durOf map[NodeRef]time.Duration) {
 			break
 		}
 
-		fmt.Fprintf(os.Stderr, "  %10s  %-4s %s\n", durOf[ref].Round(time.Millisecond), f.node.KV.P.string(), nodeOutName(f.node))
+		fmt.Fprintf(os.Stderr, "  %10s  %s %s\n", durOf[ref].Round(time.Millisecond), coloredKind(f.node.KV.PC, f.node.KV.P), nodeOutName(f.node))
 
 		nx, ok := crit[ref]
 
