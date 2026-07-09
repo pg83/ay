@@ -10,7 +10,15 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 	outPrefix := instance.Path.relString() + "/"
 
 	if g.IsSplit {
-		jvRef := emitJVSplit(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, d.unit.CCTag, d.tc, ctx.emit)
+		jvRef := ctx.emit.reserve()
+		ccTag := d.unit.CCTag
+		tc := d.tc
+
+		jvPE := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+			emitJVSplitReserved(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ccTag, tc, ctx.emit, jvRef)
+		}}
+
+		e.noteOwn(jvPE)
 		lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 		parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
 		lexerG4 := source(instance.Path.relString(), "/", g.Lexer)
@@ -22,13 +30,13 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			OutputPath:    lexerCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-		})
+		}).pending = jvPE
 
 		e.codegen.register(GeneratedFileInfo{
 			OutputPath:    parserCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-		})
+		}).pending = jvPE
 
 		witnessIncludes := []VFS{
 			antlr4RuntimeHeaderVFS,
@@ -52,7 +60,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
 				ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			})
+			}).pending = jvPE
 		}
 
 		jvInputs := []VFS{
@@ -71,7 +79,15 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 
 		e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
 	} else {
-		jvRef := emitJV(instance, g.Grammar, g.Options, g.Visitor, g.Listener, d.unit.CCTag, d.tc, ctx.emit)
+		jvRef := ctx.emit.reserve()
+		ccTag := d.unit.CCTag
+		tc := d.tc
+
+		jvPE := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+			emitJVReserved(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ccTag, tc, ctx.emit, jvRef)
+		}}
+
+		e.noteOwn(jvPE)
 		base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 		grammarG4 := source(instance.Path.relString(), "/", g.Grammar)
 		lexerCpp := build(outPrefix, base, "Lexer.cpp")
@@ -81,13 +97,13 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			OutputPath:    lexerCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-		})
+		}).pending = jvPE
 
 		e.codegen.register(GeneratedFileInfo{
 			OutputPath:    parserCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-		})
+		}).pending = jvPE
 
 		witnessIncludes := []VFS{
 			antlr4RuntimeHeaderVFS,
@@ -110,7 +126,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
 				ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			})
+			}).pending = jvPE
 		}
 
 		jvInputs := []VFS{

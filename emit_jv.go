@@ -58,7 +58,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		ctx.na.vfs.commit(len(leaves))
 		leaves = leaves[:len(leaves):len(leaves)]
 
-		e.codegen.register(GeneratedFileInfo{
+		info := e.codegen.register(GeneratedFileInfo{
 			OutputPath:     g4CppPath,
 			ProducerRef:    cpRef,
 			GeneratorRefs:  nil,
@@ -67,23 +67,33 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(g4CppPath.any()), CFlags: e.ctx.na.anyList(argWnoUnusedVariable.any())}),
 		})
 
-		leafSet := make(map[VFS]bool, len(leaves))
+		scanner := e.scanner
+		scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+		tc := d.cc.TC
 
-		for _, l := range leaves {
-			leafSet[l] = true
-		}
+		pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+			leafSet := make(map[VFS]bool, len(leaves))
 
-		cpClosure := walkClosure(e.scanner, g4CppPath, d.cc.ScanCfg).collect(ctx.na, func(v VFS) bool {
-			return v != g4CppPath && !leafSet[v]
-		})
+			for _, l := range leaves {
+				leafSet[l] = true
+			}
 
-		emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, d.cc.TC, ctx.scripts, ctx.emit)
+			cpClosure := walkClosure(scanner, g4CppPath, scanCfg).collect(ctx.na, func(v VFS) bool {
+				return v != g4CppPath && !leafSet[v]
+			})
+
+			emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, tc, ctx.scripts, ctx.emit)
+		}}
+
+		info.pending = pe
+
+		e.noteOwn(pe)
 
 		e.enqueueSrc(SrcMeta{Source: g4CppPath.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
 	}
 }
 
-func emitJVNode(instance ModuleInstance, cmdArgs []ANY, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit *StreamingEmitter) NodeRef {
+func emitJVNodeReserved(instance ModuleInstance, cmdArgs []ANY, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit *StreamingEmitter, id NodeRef) {
 	na := emit.nodeArenas()
 	env := envVarsVCS
 
@@ -101,10 +111,10 @@ func emitJVNode(instance ModuleInstance, cmdArgs []ANY, inputs InputChunks, outp
 		Resources:    usesPython3JDK17,
 	}
 
-	return emit.emitNode(node)
+	emit.emitReservedNode(node, id)
 }
 
-func emitJV(
+func emitJVReserved(
 	instance ModuleInstance,
 	grammar string,
 	options []string,
@@ -113,7 +123,8 @@ func emitJV(
 	moduleTag STR,
 	tc ModuleToolchain,
 	emit *StreamingEmitter,
-) NodeRef {
+	id NodeRef,
+) {
 	na := emit.nodeArenas()
 	grammarVFS := source(instance.Path.relString(), "/", grammar)
 	outDirVFS := instance.Path.rel().build()
@@ -158,10 +169,10 @@ func emitJV(
 		build(outPrefix, "BaseVisitor.h"),
 	}
 
-	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit)
+	emitJVNodeReserved(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit, id)
 }
 
-func emitJVSplit(
+func emitJVSplitReserved(
 	instance ModuleInstance,
 	lexer string,
 	parser string,
@@ -170,7 +181,8 @@ func emitJVSplit(
 	moduleTag STR,
 	tc ModuleToolchain,
 	emit *StreamingEmitter,
-) NodeRef {
+	id NodeRef,
+) {
 	na := emit.nodeArenas()
 	lexerVFS := source(instance.Path.relString(), "/", lexer)
 	parserVFS := source(instance.Path.relString(), "/", parser)
@@ -219,10 +231,10 @@ func emitJVSplit(
 		build(outPrefix, visitorBase, "BaseVisitor.h"),
 	}
 
-	return emitJVNode(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit)
+	emitJVNodeReserved(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit, id)
 }
 
-func emitJVGeneral(
+func emitJVGeneralReserved(
 	instance ModuleInstance,
 	jarVFS VFS,
 	args []string,
@@ -233,7 +245,8 @@ func emitJVGeneral(
 	moduleTag STR,
 	tc ModuleToolchain,
 	emit *StreamingEmitter,
-) NodeRef {
+	id NodeRef,
+) {
 	na := emit.nodeArenas()
 	cmdArgs := make([]ANY, 0, 5+len(args))
 
@@ -249,5 +262,5 @@ func emitJVGeneral(
 
 	jvInputs := na.inputList(na.vfsList(inputs...), na.vfsList(stdout2stderrVFS, jarVFS))
 
-	return emitJVNode(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit)
+	emitJVNodeReserved(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit, id)
 }
