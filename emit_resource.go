@@ -301,6 +301,10 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 	lo := 0
 
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
+
 	for _, hi := range resourceChunkEnds(items, true) {
 		chunk := items[lo:hi]
 
@@ -371,9 +375,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		payload = payload[:len(payload):len(payload)]
 
-		deduper := dedupers.get()
-
-		defer dedupers.put(deduper)
+		deduper.reset()
 
 		adjacent := na.vfs.alloc(cand)[:0]
 
@@ -471,14 +473,16 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 	lo := 0
 
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
+
 	for _, hi := range resourceChunkEnds(items, false) {
 		chunk := items[lo:hi]
 
 		lo = hi
 
-		deduper := dedupers.get()
-
-		defer dedupers.put(deduper)
+		deduper.reset()
 
 		adjBound := 0
 
