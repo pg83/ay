@@ -1009,31 +1009,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
-	peerSeen := func(p string) bool {
-		return !deduper.add(internStr(p).strID())
-	}
-
-	preResolved := make([]ResolvedPeer, 0, 2)
-
-	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
-		peerSeen(instance.Path.relString())
-
-		cppSelf := instance
-
-		cppSelf.Language = LangCPP
-		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: genModule(ctx, cppSelf), kind: peerKindLangDefault})
-	}
-
-	if d.moduleStmt.Name == tokProtoLibrary && d.useCommonGoogleAPIs && instance.Language == LangCPP {
-		if !peerSeen(googleapisPeer) {
-			preResolved = append(preResolved, ResolvedPeer{path: googleapisPeer, result: genModule(ctx, e.derivePeerInstance(googleapisPeer)), kind: peerKindLangDefault})
-		}
-	}
-
 	allPeers := frame.allPeers[:0]
 	peerKinds := frame.peerKinds[:0]
 
@@ -1042,48 +1017,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		frame.peerKinds = peerKinds[:0]
 	}()
 
-	for _, p := range languageDefaults {
-		if peerSeen(p) {
-			continue
-		}
-
-		allPeers = append(allPeers, p)
-		peerKinds = append(peerKinds, peerKindLangDefault)
-	}
-
-	if unitTestPeer != "" {
-		if !peerSeen(unitTestPeer) {
-			allPeers = append(allPeers, unitTestPeer)
-			peerKinds = append(peerKinds, peerKindUnitTestPeer)
-		}
-	}
-
-	for _, p := range preUserProgDefaults {
-		if peerSeen(p) {
-			continue
-		}
-
-		allPeers = append(allPeers, p)
-		peerKinds = append(peerKinds, peerKindProgramDefault)
-	}
-
-	for _, p := range allocatorExplicitPeers {
-		if peerSeen(p) {
-			continue
-		}
-
-		allPeers = append(allPeers, p)
-		peerKinds = append(peerKinds, peerKindUserPeer)
-	}
-
-	for _, p := range postUserProgDefaults {
-		if peerSeen(p) {
-			continue
-		}
-
-		allPeers = append(allPeers, p)
-		peerKinds = append(peerKinds, peerKindProgramDefault)
-	}
+	var preResolved []ResolvedPeer
 
 	frontSet := make(map[ANY]struct{}, len(d.protoCmdPeers))
 
@@ -1091,26 +1025,96 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		frontSet[p] = struct{}{}
 	}
 
-	appendUserPeer := func(p ANY) {
-		if !deduper.add(p.strID()) {
-			return
+	func() {
+		deduper := dedupers.get()
+
+		defer dedupers.put(deduper)
+
+		peerSeen := func(p string) bool {
+			return !deduper.add(internStr(p).strID())
 		}
 
-		allPeers = append(allPeers, p.string())
-		peerKinds = append(peerKinds, peerKindUserPeer)
-	}
+		preResolved = make([]ResolvedPeer, 0, 2)
 
-	for _, p := range d.peerdirs {
-		if _, isFront := frontSet[p]; isFront {
-			appendUserPeer(p)
-		}
-	}
+		if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
+			peerSeen(instance.Path.relString())
 
-	for _, p := range d.peerdirs {
-		if _, isFront := frontSet[p]; !isFront {
-			appendUserPeer(p)
+			cppSelf := instance
+
+			cppSelf.Language = LangCPP
+			preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: genModule(ctx, cppSelf), kind: peerKindLangDefault})
 		}
-	}
+
+		if d.moduleStmt.Name == tokProtoLibrary && d.useCommonGoogleAPIs && instance.Language == LangCPP {
+			if !peerSeen(googleapisPeer) {
+				preResolved = append(preResolved, ResolvedPeer{path: googleapisPeer, result: genModule(ctx, e.derivePeerInstance(googleapisPeer)), kind: peerKindLangDefault})
+			}
+		}
+
+		for _, p := range languageDefaults {
+			if peerSeen(p) {
+				continue
+			}
+
+			allPeers = append(allPeers, p)
+			peerKinds = append(peerKinds, peerKindLangDefault)
+		}
+
+		if unitTestPeer != "" {
+			if !peerSeen(unitTestPeer) {
+				allPeers = append(allPeers, unitTestPeer)
+				peerKinds = append(peerKinds, peerKindUnitTestPeer)
+			}
+		}
+
+		for _, p := range preUserProgDefaults {
+			if peerSeen(p) {
+				continue
+			}
+
+			allPeers = append(allPeers, p)
+			peerKinds = append(peerKinds, peerKindProgramDefault)
+		}
+
+		for _, p := range allocatorExplicitPeers {
+			if peerSeen(p) {
+				continue
+			}
+
+			allPeers = append(allPeers, p)
+			peerKinds = append(peerKinds, peerKindUserPeer)
+		}
+
+		for _, p := range postUserProgDefaults {
+			if peerSeen(p) {
+				continue
+			}
+
+			allPeers = append(allPeers, p)
+			peerKinds = append(peerKinds, peerKindProgramDefault)
+		}
+
+		appendUserPeer := func(p ANY) {
+			if !deduper.add(p.strID()) {
+				return
+			}
+
+			allPeers = append(allPeers, p.string())
+			peerKinds = append(peerKinds, peerKindUserPeer)
+		}
+
+		for _, p := range d.peerdirs {
+			if _, isFront := frontSet[p]; isFront {
+				appendUserPeer(p)
+			}
+		}
+
+		for _, p := range d.peerdirs {
+			if _, isFront := frontSet[p]; !isFront {
+				appendUserPeer(p)
+			}
+		}
+	}()
 
 	peerObjAddLibsGlobal := frame.peerObjAddLibsGlobal[:0]
 	peerLDFlagsGlobal := frame.peerLDFlagsGlobal[:0]
@@ -1191,401 +1195,420 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	defer func() { frame.peerLinkCmdPaths = peerLinkCmdPaths[:0] }()
 
-	deduper.reset()
+	var (
+		resourceGlobalsClosure []ResourceDecl
 
-	declBlock := ctx.declSlices.alloc(resGlobalsSum)
-	k := 0
+		peerArchiveRefs, peerGlobalRefs, peerWholeArchiveRefs, peerDynamicRefs, peerSbomRefs, mergedLDPluginRefs []NodeRef
 
-	for _, rp := range resolved {
-		for _, decl := range rp.result.ResourceGlobalClosure {
-			if deduper.add(decl.GlobalVar.strID()) {
-				declBlock[k] = decl
-				k++
-			}
-		}
-	}
+		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, mergedLDPluginPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude []VFS
 
-	resourceGlobalsClosure := ctx.declSlices.intern(declBlock[:k])
+		effectiveCFlagsGlobal, effectiveCXXFlagsGlobal, effectiveCOnlyFlagsGlobal, effectiveRPathFlagsGlobal []ANY
 
-	d.tc = resolveModuleToolchain(ctx, resourceGlobalsClosure, instance.Platform.ClangVer)
+		ownSbomInsertIdx int
+	)
 
-	deduper.reset()
+	func() {
+		deduper := dedupers.get()
 
-	ldplugBlockR := ctx.refSlices.alloc(ldplugCap)
-	ldplugBlockP := ctx.vfsSlices.alloc(ldplugCap)
-
-	k = 0
-
-	for _, rp := range resolved {
-		for i, p := range rp.result.LDPluginPaths {
-			if deduper.add(p.strID()) {
-				ldplugBlockR[k] = rp.result.LDPluginRefs[i]
-				ldplugBlockP[k] = p
-				k++
-			}
-		}
-	}
-
-	peerLDPluginRefs := ctx.refSlices.intern(ldplugBlockR[:k])
-	peerLDPluginPaths := ctx.vfsSlices.intern(ldplugBlockP[:k])
-
-	deduper.reset()
-
-	archiveBlockR := ctx.refSlices.alloc(archiveCap)
-	archiveBlockP := ctx.vfsSlices.alloc(archiveCap)
-
-	k = 0
-
-	for _, rp := range resolved {
-		pr := rp.result
-
-		for i, p := range pr.PeerArchiveClosurePaths {
-			if deduper.add(p.strID()) {
-				archiveBlockR[k] = pr.PeerArchiveClosureRefs[i]
-				archiveBlockP[k] = p
-				k++
-			}
-		}
-
-		if pr.ARPath != nil && deduper.add(pr.ARPath.strID()) {
-			archiveBlockR[k] = pr.ARRef
-			archiveBlockP[k] = *pr.ARPath
-			k++
-		}
-	}
-
-	peerArchiveRefs := ctx.refSlices.intern(archiveBlockR[:k])
-	peerArchivePaths := ctx.vfsSlices.intern(archiveBlockP[:k])
-
-	deduper.reset()
-
-	globalBlockR := ctx.refSlices.alloc(globalCap)
-	globalBlockP := ctx.vfsSlices.alloc(globalCap)
-
-	k = 0
-
-	for _, rp := range resolved {
-		pr := rp.result
-
-		for i, p := range pr.PeerGlobalClosurePaths {
-			if deduper.add(p.strID()) {
-				globalBlockR[k] = pr.PeerGlobalClosureRefs[i]
-				globalBlockP[k] = p
-				k++
-			}
-		}
-
-		if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.add(pr.GlobalPath.strID()) {
-			globalBlockR[k] = *pr.GlobalRef
-			globalBlockP[k] = *pr.GlobalPath
-			k++
-		}
-	}
-
-	peerGlobalRefs := ctx.refSlices.intern(globalBlockR[:k])
-	peerGlobalPaths := ctx.vfsSlices.intern(globalBlockP[:k])
-	linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
-	sbomBlockR := ctx.refSlices.alloc(sbomCap)
-	sbomBlockP := ctx.vfsSlices.alloc(sbomCap)
-	peerSbomRefsRaw, peerSbomPathsRaw, ownSbomInsertIdx := aggregateSbomComponents(e, d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
-	peerSbomRefs := ctx.refSlices.intern(peerSbomRefsRaw)
-	peerSbomPaths := ctx.vfsSlices.intern(peerSbomPathsRaw)
-
-	deduper.reset()
-
-	waBlockR := ctx.refSlices.alloc(waCap)
-	waBlockP := ctx.vfsSlices.alloc(waCap)
-
-	k = 0
-
-	for _, rp := range resolved {
-		pr := rp.result
-
-		for i, p := range pr.PeerWholeArchiveClosurePaths {
-			if deduper.add(p.strID()) {
-				waBlockR[k] = pr.PeerWholeArchiveClosureRefs[i]
-				waBlockP[k] = p
-				k++
-			}
-		}
-
-		for i, p := range pr.WholeArchivePaths {
-			if deduper.add(p.strID()) {
-				waBlockR[k] = pr.WholeArchiveRefs[i]
-				waBlockP[k] = p
-				k++
-			}
-		}
-	}
-
-	peerWholeArchiveRefs := ctx.refSlices.intern(waBlockR[:k])
-	peerWholeArchivePaths := ctx.vfsSlices.intern(waBlockP[:k])
-
-	deduper.reset()
-
-	waCmdBlock := ctx.vfsSlices.alloc(waCmdCap)
-
-	k = 0
-
-	for _, rp := range resolved {
-		pr := rp.result
-
-		for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
-			if deduper.add(p.strID()) {
-				waCmdBlock[k] = p
-				k++
-			}
-		}
-
-		for _, p := range pr.WholeArchiveCmdPaths {
-			if deduper.add(p.strID()) {
-				waCmdBlock[k] = p
-				k++
-			}
-		}
-	}
-
-	peerWholeArchiveCmdPaths := ctx.vfsSlices.intern(waCmdBlock[:k])
-
-	deduper.reset()
-
-	dynBlockR := ctx.refSlices.alloc(dynCap)
-	dynBlockP := ctx.vfsSlices.alloc(dynCap)
-
-	k = 0
-
-	for _, rp := range resolved {
-		pr := rp.result
-
-		for i, p := range pr.PeerDynamicClosurePaths {
-			if deduper.add(p.strID()) {
-				dynBlockR[k] = pr.PeerDynamicClosureRefs[i]
-				dynBlockP[k] = p
-				k++
-			}
-		}
-
-		if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(pr.LDPath.strID()) {
-			dynBlockR[k] = pr.LDRef
-			dynBlockP[k] = *pr.LDPath
-			k++
-		}
-	}
-
-	peerDynamicRefs := ctx.refSlices.intern(dynBlockR[:k])
-	peerDynamicPaths := ctx.vfsSlices.intern(dynBlockP[:k])
-
-	deduper.reset()
-
-	for _, rp := range resolved {
-		pr := rp.result
-
-		for _, p := range pr.PeerArchiveClosurePaths {
-			if deduper.add(p.strID()) {
-				peerLinkCmdPaths = append(peerLinkCmdPaths, p)
-			}
-		}
-
-		for _, p := range pr.PeerDynamicClosurePaths {
-			if deduper.add(p.strID()) {
-				peerLinkCmdPaths = append(peerLinkCmdPaths, p)
-			}
-		}
-
-		if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(pr.LDPath.strID()) {
-			peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.LDPath)
-		}
-
-		if pr.ARPath != nil && deduper.add(pr.ARPath.strID()) {
-			peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.ARPath)
-		}
-	}
-
-	deduper.reset()
-
-	for _, rp := range resolved {
-		switch rp.kind {
-		case peerKindLangDefault:
-			for _, p := range rp.result.OwnAddInclGlobal {
-				if deduper.add(p.strID()) {
-					peerAddInclGlobal = append(peerAddInclGlobal, p)
-				}
-			}
-
-			for _, p := range rp.result.AddInclGlobal {
-				if deduper.add(p.strID()) {
-					peerAddInclGlobal = append(peerAddInclGlobal, p)
-				}
-			}
-		case peerKindUnitTestPeer, peerKindProgramDefault:
-			for _, p := range rp.result.AddInclGlobal {
-				if deduper.add(p.strID()) {
-					peerAddInclGlobal = append(peerAddInclGlobal, p)
-				}
-			}
-		case peerKindUserPeer:
-			for _, p := range rp.result.AddInclUserGlobal {
-				if deduper.add(p.strID()) {
-					peerAddInclGlobal = append(peerAddInclGlobal, p)
-				}
-			}
-
-			for _, p := range rp.result.AddInclOneLevel {
-				if oneLevelOnlyPaths == nil {
-					oneLevelOnlyPaths = map[VFS]struct{}{}
-				}
-
-				oneLevelOnlyPaths[p] = struct{}{}
-			}
-
-			for _, p := range rp.result.AddInclGlobal {
-				if deduper.add(p.strID()) {
-					peerAddInclGlobal = append(peerAddInclGlobal, p)
-				}
-
-				if oneLevelOnlyPaths != nil {
-					delete(oneLevelOnlyPaths, p)
-				}
-			}
-		}
-	}
-
-	cflagsAggOrder := resolved
-
-	deduper.reset()
-
-	for _, rp := range cflagsAggOrder {
-		for _, a := range rp.result.CFlagsGlobal {
-			if deduper.add(a.strID()) {
-				peerCFlagsGlobal = append(peerCFlagsGlobal, a)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, rp := range cflagsAggOrder {
-		for _, a := range rp.result.CXXFlagsGlobal {
-			if deduper.add(a.strID()) {
-				peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, rp := range cflagsAggOrder {
-		for _, a := range rp.result.COnlyFlagsGlobal {
-			if deduper.add(a.strID()) {
-				peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, rp := range cflagsAggOrder {
-		for _, a := range rp.result.ObjAddLibsGlobal {
-			if deduper.add(a.strID()) {
-				peerObjAddLibsGlobal = append(peerObjAddLibsGlobal, a)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, rp := range cflagsAggOrder {
-		for _, a := range rp.result.LDFlagsGlobal {
-			if deduper.add(a.strID()) {
-				peerLDFlagsGlobal = append(peerLDFlagsGlobal, a)
-			}
-		}
-	}
-
-	deduper.reset()
-
-	for _, rp := range cflagsAggOrder {
-		for _, a := range rp.result.RPathFlagsGlobal {
-			if deduper.add(a.strID()) {
-				peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
-			}
-		}
-	}
-
-	peerAddInclForProp := peerAddInclGlobal
-
-	if len(oneLevelOnlyPaths) > 0 {
-		peerAddInclForProp = make([]VFS, 0, len(peerAddInclGlobal))
-
-		for _, p := range peerAddInclGlobal {
-			if _, isOneLevel := oneLevelOnlyPaths[p]; !isOneLevel {
-				peerAddInclForProp = append(peerAddInclForProp, p)
-			}
-		}
-	}
-
-	effectiveAddInclGlobal := dedupShared(ctx.vfsSlices, d.addInclGlobal, peerAddInclForProp)
-	ownProtoInclude := frame.ownProtoInclude[:0]
-
-	defer func() { frame.ownProtoInclude = ownProtoInclude[:0] }()
-
-	if d.protoNamespace != nil {
-		ownProtoInclude = append(ownProtoInclude, sourceClean(d.protoNamespace.string()))
-	}
-
-	ownProtoInclude = append(ownProtoInclude, d.protoAddInclGlobal...)
-
-	peerProtoInclude := frame.peerProtoInclude[:0]
-
-	defer func() { frame.peerProtoInclude = peerProtoInclude[:0] }()
-
-	deduper.reset()
-
-	for _, rp := range resolved {
-		for _, p := range rp.result.ProtoInclude {
-			if deduper.add(p.strID()) {
-				peerProtoInclude = append(peerProtoInclude, p)
-			}
-		}
-	}
-
-	effectiveProtoInclude := dedupShared(ctx.vfsSlices, ownProtoInclude, peerProtoInclude)
-	effectiveCFlagsGlobal := dedupShared(ctx.argSlices, peerCFlagsGlobal, d.cFlagsGlobal)
-	effectiveCXXFlagsGlobal := concatShared(ctx.argSlices, peerCXXFlagsGlobal, d.cxxFlagsGlobal)
-	effectiveCOnlyFlagsGlobal := concatShared(ctx.argSlices, peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
-	effectiveRPathFlagsGlobal := concatShared(ctx.argSlices, peerRPathFlagsGlobal, d.rpathFlagsGlobal)
-	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
-	mergedLDPluginRefs := peerLDPluginRefs
-	mergedLDPluginPaths := peerLDPluginPaths
-
-	if ownLDPlugins != nil && len(ownLDPlugins.Paths) > 0 {
-		total := len(ownLDPlugins.Paths) + len(peerLDPluginPaths)
-		mergeBlockR := ctx.refSlices.alloc(total)
-		mergeBlockP := ctx.vfsSlices.alloc(total)
+		defer dedupers.put(deduper)
 
 		deduper.reset()
 
+		declBlock := ctx.declSlices.alloc(resGlobalsSum)
+		k := 0
+
+		for _, rp := range resolved {
+			for _, decl := range rp.result.ResourceGlobalClosure {
+				if deduper.add(decl.GlobalVar.strID()) {
+					declBlock[k] = decl
+					k++
+				}
+			}
+		}
+
+		resourceGlobalsClosure = ctx.declSlices.intern(declBlock[:k])
+
+		d.tc = resolveModuleToolchain(ctx, resourceGlobalsClosure, instance.Platform.ClangVer)
+
+		deduper.reset()
+
+		ldplugBlockR := ctx.refSlices.alloc(ldplugCap)
+		ldplugBlockP := ctx.vfsSlices.alloc(ldplugCap)
+
 		k = 0
 
-		for i, p := range ownLDPlugins.Paths {
-			if deduper.add(p.strID()) {
-				mergeBlockR[k] = ownLDPlugins.Refs[i]
-				mergeBlockP[k] = p
+		for _, rp := range resolved {
+			for i, p := range rp.result.LDPluginPaths {
+				if deduper.add(p.strID()) {
+					ldplugBlockR[k] = rp.result.LDPluginRefs[i]
+					ldplugBlockP[k] = p
+					k++
+				}
+			}
+		}
+
+		peerLDPluginRefs := ctx.refSlices.intern(ldplugBlockR[:k])
+		peerLDPluginPaths := ctx.vfsSlices.intern(ldplugBlockP[:k])
+
+		deduper.reset()
+
+		archiveBlockR := ctx.refSlices.alloc(archiveCap)
+		archiveBlockP := ctx.vfsSlices.alloc(archiveCap)
+
+		k = 0
+
+		for _, rp := range resolved {
+			pr := rp.result
+
+			for i, p := range pr.PeerArchiveClosurePaths {
+				if deduper.add(p.strID()) {
+					archiveBlockR[k] = pr.PeerArchiveClosureRefs[i]
+					archiveBlockP[k] = p
+					k++
+				}
+			}
+
+			if pr.ARPath != nil && deduper.add(pr.ARPath.strID()) {
+				archiveBlockR[k] = pr.ARRef
+				archiveBlockP[k] = *pr.ARPath
 				k++
 			}
 		}
 
-		for i, p := range peerLDPluginPaths {
-			if deduper.add(p.strID()) {
-				mergeBlockR[k] = peerLDPluginRefs[i]
-				mergeBlockP[k] = p
+		peerArchiveRefs = ctx.refSlices.intern(archiveBlockR[:k])
+		peerArchivePaths = ctx.vfsSlices.intern(archiveBlockP[:k])
+
+		deduper.reset()
+
+		globalBlockR := ctx.refSlices.alloc(globalCap)
+		globalBlockP := ctx.vfsSlices.alloc(globalCap)
+
+		k = 0
+
+		for _, rp := range resolved {
+			pr := rp.result
+
+			for i, p := range pr.PeerGlobalClosurePaths {
+				if deduper.add(p.strID()) {
+					globalBlockR[k] = pr.PeerGlobalClosureRefs[i]
+					globalBlockP[k] = p
+					k++
+				}
+			}
+
+			if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.add(pr.GlobalPath.strID()) {
+				globalBlockR[k] = *pr.GlobalRef
+				globalBlockP[k] = *pr.GlobalPath
 				k++
 			}
 		}
 
-		mergedLDPluginRefs = ctx.refSlices.intern(mergeBlockR[:k])
-		mergedLDPluginPaths = ctx.vfsSlices.intern(mergeBlockP[:k])
-	}
+		peerGlobalRefs = ctx.refSlices.intern(globalBlockR[:k])
+		peerGlobalPaths = ctx.vfsSlices.intern(globalBlockP[:k])
+		linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
+		sbomBlockR := ctx.refSlices.alloc(sbomCap)
+		sbomBlockP := ctx.vfsSlices.alloc(sbomCap)
+		peerSbomRefsRaw, peerSbomPathsRaw, sbomInsertIdx := aggregateSbomComponents(e, d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
+		ownSbomInsertIdx = sbomInsertIdx
+		peerSbomRefs = ctx.refSlices.intern(peerSbomRefsRaw)
+		peerSbomPaths = ctx.vfsSlices.intern(peerSbomPathsRaw)
+
+		deduper.reset()
+
+		waBlockR := ctx.refSlices.alloc(waCap)
+		waBlockP := ctx.vfsSlices.alloc(waCap)
+
+		k = 0
+
+		for _, rp := range resolved {
+			pr := rp.result
+
+			for i, p := range pr.PeerWholeArchiveClosurePaths {
+				if deduper.add(p.strID()) {
+					waBlockR[k] = pr.PeerWholeArchiveClosureRefs[i]
+					waBlockP[k] = p
+					k++
+				}
+			}
+
+			for i, p := range pr.WholeArchivePaths {
+				if deduper.add(p.strID()) {
+					waBlockR[k] = pr.WholeArchiveRefs[i]
+					waBlockP[k] = p
+					k++
+				}
+			}
+		}
+
+		peerWholeArchiveRefs = ctx.refSlices.intern(waBlockR[:k])
+		peerWholeArchivePaths = ctx.vfsSlices.intern(waBlockP[:k])
+
+		deduper.reset()
+
+		waCmdBlock := ctx.vfsSlices.alloc(waCmdCap)
+
+		k = 0
+
+		for _, rp := range resolved {
+			pr := rp.result
+
+			for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
+				if deduper.add(p.strID()) {
+					waCmdBlock[k] = p
+					k++
+				}
+			}
+
+			for _, p := range pr.WholeArchiveCmdPaths {
+				if deduper.add(p.strID()) {
+					waCmdBlock[k] = p
+					k++
+				}
+			}
+		}
+
+		peerWholeArchiveCmdPaths = ctx.vfsSlices.intern(waCmdBlock[:k])
+
+		deduper.reset()
+
+		dynBlockR := ctx.refSlices.alloc(dynCap)
+		dynBlockP := ctx.vfsSlices.alloc(dynCap)
+
+		k = 0
+
+		for _, rp := range resolved {
+			pr := rp.result
+
+			for i, p := range pr.PeerDynamicClosurePaths {
+				if deduper.add(p.strID()) {
+					dynBlockR[k] = pr.PeerDynamicClosureRefs[i]
+					dynBlockP[k] = p
+					k++
+				}
+			}
+
+			if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(pr.LDPath.strID()) {
+				dynBlockR[k] = pr.LDRef
+				dynBlockP[k] = *pr.LDPath
+				k++
+			}
+		}
+
+		peerDynamicRefs = ctx.refSlices.intern(dynBlockR[:k])
+		peerDynamicPaths = ctx.vfsSlices.intern(dynBlockP[:k])
+
+		deduper.reset()
+
+		for _, rp := range resolved {
+			pr := rp.result
+
+			for _, p := range pr.PeerArchiveClosurePaths {
+				if deduper.add(p.strID()) {
+					peerLinkCmdPaths = append(peerLinkCmdPaths, p)
+				}
+			}
+
+			for _, p := range pr.PeerDynamicClosurePaths {
+				if deduper.add(p.strID()) {
+					peerLinkCmdPaths = append(peerLinkCmdPaths, p)
+				}
+			}
+
+			if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(pr.LDPath.strID()) {
+				peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.LDPath)
+			}
+
+			if pr.ARPath != nil && deduper.add(pr.ARPath.strID()) {
+				peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.ARPath)
+			}
+		}
+
+		deduper.reset()
+
+		for _, rp := range resolved {
+			switch rp.kind {
+			case peerKindLangDefault:
+				for _, p := range rp.result.OwnAddInclGlobal {
+					if deduper.add(p.strID()) {
+						peerAddInclGlobal = append(peerAddInclGlobal, p)
+					}
+				}
+
+				for _, p := range rp.result.AddInclGlobal {
+					if deduper.add(p.strID()) {
+						peerAddInclGlobal = append(peerAddInclGlobal, p)
+					}
+				}
+			case peerKindUnitTestPeer, peerKindProgramDefault:
+				for _, p := range rp.result.AddInclGlobal {
+					if deduper.add(p.strID()) {
+						peerAddInclGlobal = append(peerAddInclGlobal, p)
+					}
+				}
+			case peerKindUserPeer:
+				for _, p := range rp.result.AddInclUserGlobal {
+					if deduper.add(p.strID()) {
+						peerAddInclGlobal = append(peerAddInclGlobal, p)
+					}
+				}
+
+				for _, p := range rp.result.AddInclOneLevel {
+					if oneLevelOnlyPaths == nil {
+						oneLevelOnlyPaths = map[VFS]struct{}{}
+					}
+
+					oneLevelOnlyPaths[p] = struct{}{}
+				}
+
+				for _, p := range rp.result.AddInclGlobal {
+					if deduper.add(p.strID()) {
+						peerAddInclGlobal = append(peerAddInclGlobal, p)
+					}
+
+					if oneLevelOnlyPaths != nil {
+						delete(oneLevelOnlyPaths, p)
+					}
+				}
+			}
+		}
+
+		cflagsAggOrder := resolved
+
+		deduper.reset()
+
+		for _, rp := range cflagsAggOrder {
+			for _, a := range rp.result.CFlagsGlobal {
+				if deduper.add(a.strID()) {
+					peerCFlagsGlobal = append(peerCFlagsGlobal, a)
+				}
+			}
+		}
+
+		deduper.reset()
+
+		for _, rp := range cflagsAggOrder {
+			for _, a := range rp.result.CXXFlagsGlobal {
+				if deduper.add(a.strID()) {
+					peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
+				}
+			}
+		}
+
+		deduper.reset()
+
+		for _, rp := range cflagsAggOrder {
+			for _, a := range rp.result.COnlyFlagsGlobal {
+				if deduper.add(a.strID()) {
+					peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
+				}
+			}
+		}
+
+		deduper.reset()
+
+		for _, rp := range cflagsAggOrder {
+			for _, a := range rp.result.ObjAddLibsGlobal {
+				if deduper.add(a.strID()) {
+					peerObjAddLibsGlobal = append(peerObjAddLibsGlobal, a)
+				}
+			}
+		}
+
+		deduper.reset()
+
+		for _, rp := range cflagsAggOrder {
+			for _, a := range rp.result.LDFlagsGlobal {
+				if deduper.add(a.strID()) {
+					peerLDFlagsGlobal = append(peerLDFlagsGlobal, a)
+				}
+			}
+		}
+
+		deduper.reset()
+
+		for _, rp := range cflagsAggOrder {
+			for _, a := range rp.result.RPathFlagsGlobal {
+				if deduper.add(a.strID()) {
+					peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
+				}
+			}
+		}
+
+		peerAddInclForProp := peerAddInclGlobal
+
+		if len(oneLevelOnlyPaths) > 0 {
+			peerAddInclForProp = make([]VFS, 0, len(peerAddInclGlobal))
+
+			for _, p := range peerAddInclGlobal {
+				if _, isOneLevel := oneLevelOnlyPaths[p]; !isOneLevel {
+					peerAddInclForProp = append(peerAddInclForProp, p)
+				}
+			}
+		}
+
+		effectiveAddInclGlobal = dedupShared(ctx.vfsSlices, d.addInclGlobal, peerAddInclForProp)
+		ownProtoInclude := frame.ownProtoInclude[:0]
+
+		defer func() { frame.ownProtoInclude = ownProtoInclude[:0] }()
+
+		if d.protoNamespace != nil {
+			ownProtoInclude = append(ownProtoInclude, sourceClean(d.protoNamespace.string()))
+		}
+
+		ownProtoInclude = append(ownProtoInclude, d.protoAddInclGlobal...)
+
+		peerProtoInclude = frame.peerProtoInclude[:0]
+
+		defer func() { frame.peerProtoInclude = peerProtoInclude[:0] }()
+
+		deduper.reset()
+
+		for _, rp := range resolved {
+			for _, p := range rp.result.ProtoInclude {
+				if deduper.add(p.strID()) {
+					peerProtoInclude = append(peerProtoInclude, p)
+				}
+			}
+		}
+
+		effectiveProtoInclude = dedupShared(ctx.vfsSlices, ownProtoInclude, peerProtoInclude)
+		effectiveCFlagsGlobal = dedupShared(ctx.argSlices, peerCFlagsGlobal, d.cFlagsGlobal)
+		effectiveCXXFlagsGlobal = concatShared(ctx.argSlices, peerCXXFlagsGlobal, d.cxxFlagsGlobal)
+		effectiveCOnlyFlagsGlobal = concatShared(ctx.argSlices, peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
+		effectiveRPathFlagsGlobal = concatShared(ctx.argSlices, peerRPathFlagsGlobal, d.rpathFlagsGlobal)
+		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
+		mergedLDPluginRefs = peerLDPluginRefs
+		mergedLDPluginPaths = peerLDPluginPaths
+
+		if ownLDPlugins != nil && len(ownLDPlugins.Paths) > 0 {
+			total := len(ownLDPlugins.Paths) + len(peerLDPluginPaths)
+			mergeBlockR := ctx.refSlices.alloc(total)
+			mergeBlockP := ctx.vfsSlices.alloc(total)
+
+			deduper.reset()
+
+			k = 0
+
+			for i, p := range ownLDPlugins.Paths {
+				if deduper.add(p.strID()) {
+					mergeBlockR[k] = ownLDPlugins.Refs[i]
+					mergeBlockP[k] = p
+					k++
+				}
+			}
+
+			for i, p := range peerLDPluginPaths {
+				if deduper.add(p.strID()) {
+					mergeBlockR[k] = peerLDPluginRefs[i]
+					mergeBlockP[k] = p
+					k++
+				}
+			}
+
+			mergedLDPluginRefs = ctx.refSlices.intern(mergeBlockR[:k])
+			mergedLDPluginPaths = ctx.vfsSlices.intern(mergeBlockP[:k])
+		}
+	}()
 
 	newResult := func() *ModuleEmitResult {
 		r := ctx.results.one()
