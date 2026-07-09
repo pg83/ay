@@ -280,7 +280,17 @@ def load_config():
     if not os.path.exists(CONFIG_PATH):
         return []
     with open(CONFIG_PATH) as f:
-        return json.load(f)
+        cases = json.load(f)
+    for c in cases:
+        cmd = c.get("command", [])
+        for flag in ("--target-platform", "--host-platform"):
+            if not any(t == flag or t.startswith(flag + "=") for t in cmd):
+                sys.exit(
+                    "config.json: case %r is missing %s — both --target-platform "
+                    "and --host-platform must be pinned so the gate is reproducible "
+                    "on any host" % (c.get("id"), flag)
+                )
+    return cases
 
 
 def resource_id(url):
