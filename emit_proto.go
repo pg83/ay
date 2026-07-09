@@ -386,12 +386,13 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	if spec.genHParsed != nil {
 		reg := e.codegen
 
-		hInfo := reg.register(GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:     pbH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  spec.genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: spec.genHParsed},
 			ClosureLeaves:  spec.hLeaves,
+			OnUse:          &pbPE,
 		})
 
 		ccParsed := e.ctx.na.dirs.alloc(len(spec.genHParsed) + len(spec.genCCExtras))
@@ -407,17 +408,15 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			psc = *p
 		}
 
-		ccInfo := reg.register(GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:     pbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  spec.genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: ccParsed},
 			ClosureLeaves:  spec.ccLeaves,
 			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(internStr(srcRel).any()), CFlags: psc}),
+			OnUse:          &pbPE,
 		})
-
-		hInfo.OnUse = &pbPE
-		ccInfo.OnUse = &pbPE
 
 		return ProtoPBEmission{
 			pbRef:     pbRef,
@@ -464,15 +463,15 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	reg := e.codegen
-	pbInfos := make([]*GeneratedFileInfo, 0, 6)
 
-	pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     pbH,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesCpp: pbHCompile},
 		ClosureLeaves:  pbHLeaves,
-	}))
+		OnUse:          &pbPE,
+	})
 
 	protoBaseName := filepath.Base(protoRelPath)
 
@@ -490,12 +489,13 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			yaffHParsed = yaffGeneratedHeaderIncludes(na, plugin.isExperimental(protoBaseName), pbH.relString())
 		}
 
-		pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:     yaffH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffHParsed},
-		}))
+			OnUse:          &pbPE,
+		})
 
 		yaffCCParsed := na.dirs.alloc(len(yaffHParsed) + 1)
 		yn := copy(yaffCCParsed, yaffHParsed)
@@ -504,12 +504,13 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		na.dirs.commit(yn + 1)
 		yaffCCParsed = yaffCCParsed[: yn+1 : yn+1]
 
-		pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:     yaffCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffCCParsed},
-		}))
+			OnUse:          &pbPE,
+		})
 	}
 
 	if pe.liteHeaders {
@@ -520,12 +521,13 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		na.dirs.commit(len(depsParsed))
 		depsParsed = depsParsed[:len(depsParsed):len(depsParsed)]
 
-		pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:     pbDepsH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: depsParsed},
-		}))
+			OnUse:          &pbPE,
+		})
 	}
 
 	pbCCParsed := na.dirs.alloc(3 + len(directImports))[:0]
@@ -540,12 +542,13 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	na.dirs.commit(len(pbCCParsed))
 	pbCCParsed = pbCCParsed[:len(pbCCParsed):len(pbCCParsed)]
 
-	pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     pbCC,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbCCParsed},
-	}))
+		OnUse:          &pbPE,
+	})
 
 	var grpcCCParsed, grpcHParsed []IncludeDirective
 
@@ -563,23 +566,21 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	if cfg.grpc {
-		pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:     grpcPbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pe.grpcCCRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: grpcCCParsed},
-		}))
+			OnUse:          &pbPE,
+		})
 
-		pbInfos = append(pbInfos, reg.register(GeneratedFileInfo{
+		reg.register(GeneratedFileInfo{
 			OutputPath:     grpcPbH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pe.grpcHRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: grpcHParsed},
-		}))
-	}
-
-	for _, info := range pbInfos {
-		info.OnUse = &pbPE
+			OnUse:          &pbPE,
+		})
 	}
 
 	orderedCC := e.orderedCC[:0]

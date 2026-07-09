@@ -64,14 +64,6 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 		psc = *p
 	}
 
-	info := e.codegen.register(GeneratedFileInfo{
-		OutputPath:     genVFS,
-		ProducerRef:    gpRef,
-		GeneratorRefs:  e.ctx.na.refList(gperfLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})},
-		Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc}),
-	})
-
 	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
@@ -87,6 +79,12 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef, ctx.emit)
 	}
 
-	info.OnUse = &pe
-
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:     genVFS,
+		ProducerRef:    gpRef,
+		GeneratorRefs:  e.ctx.na.refList(gperfLDRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})},
+		Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc}),
+		OnUse:          &pe,
+	})
 }

@@ -105,15 +105,14 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	parsed := fromSandboxOutputIncludes(ctx.na, stmt)
 
 	for _, out := range outVFSs {
-		info := e.codegen.register(GeneratedFileInfo{
+		e.codegen.register(GeneratedFileInfo{
 			OutputPath:      out,
 			ProducerRef:     ref,
 			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
 			SourceInputs:    fromSandboxScriptInputs,
 			ProducerMainOut: outVFSs[0],
+			OnUse:           &pe,
 		})
-
-		info.OnUse = &pe
 	}
 
 	return memberRefs, memberPaths

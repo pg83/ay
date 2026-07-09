@@ -21,21 +21,6 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	ref := ctx.emit.reserve()
 	mnSSEInclude := IncludeDirective{kind: includeQuoted, target: includeTarget(strKernelMatrixnetMnSseH.any())}
 
-	cppInfo := e.codegen.register(GeneratedFileInfo{
-		OutputPath:     cppVFS,
-		ProducerRef:    ref,
-		GeneratorRefs:  e.ctx.na.refList(archiverRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(mnSSEInclude)},
-		ClosureLeaves:  e.ctx.na.vfsList(infoVFS, buildMnScriptVFS),
-	})
-
-	rodataInfo := e.codegen.register(GeneratedFileInfo{
-		OutputPath:     rodataVFS,
-		ProducerRef:    ref,
-		GeneratorRefs:  e.ctx.na.refList(archiverRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(cppVFS.rel().any())})},
-	})
-
 	python3 := d.tc.Python3
 
 	pe := func() {
@@ -64,8 +49,22 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
-	cppInfo.OnUse = &pe
-	rodataInfo.OnUse = &pe
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:     cppVFS,
+		ProducerRef:    ref,
+		GeneratorRefs:  e.ctx.na.refList(archiverRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(mnSSEInclude)},
+		ClosureLeaves:  e.ctx.na.vfsList(infoVFS, buildMnScriptVFS),
+		OnUse:          &pe,
+	})
+
+	e.codegen.register(GeneratedFileInfo{
+		OutputPath:     rodataVFS,
+		ProducerRef:    ref,
+		GeneratorRefs:  e.ctx.na.refList(archiverRef),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(cppVFS.rel().any())})},
+		OnUse:          &pe,
+	})
 
 	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
 	e.enqueueSrc(SrcMeta{Source: internV("MN_External_", stmt.Name, ".rodata").any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})

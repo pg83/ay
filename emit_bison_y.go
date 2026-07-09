@@ -89,56 +89,6 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	ycRef := ctx.emit.reserve()
 	reg := e.codegen
 
-	headerInfo := GeneratedFileInfo{
-		OutputPath:     headerVFS,
-		ProducerRef:    ycRef,
-		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-	}
-
-	headerInfoStored := reg.register(headerInfo)
-
-	var generatedParsed []IncludeDirective
-
-	if preprocessHeader {
-		generatedParsed = e.bisonGeneratedCPPParsed(srcVFS, headerVFS)
-	} else {
-		generatedParsed = na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
-	}
-
-	extras := d.perSrcCFlagsFor(src.any())
-	cfBound := 2
-
-	if extras != nil {
-		cfBound += len(*extras)
-	}
-
-	cf := na.anys.alloc(cfBound)[:0]
-
-	if extras != nil {
-		cf = append(cf, *extras...)
-	}
-
-	if preprocessHeader {
-		cf = append(cf, argWnoUnusedButSetVariable.any(), argWnoDeprecatedCopy.any())
-	}
-
-	na.anys.commit(len(cf))
-
-	spec := na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src.any())})
-
-	if len(cf) > 0 {
-		spec.CFlags = cf[:len(cf):len(cf)]
-	}
-
-	generatedInfoStored := reg.register(GeneratedFileInfo{
-		OutputPath:     generatedVFS,
-		ProducerRef:    ycRef,
-		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: generatedParsed},
-		Compile:        spec,
-	})
-
 	env := na.envList(EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, EnvVar{Name: envBISON_PKGDATADIR, Value: strBisonPkgData.any()}, EnvVar{Name: envM4, Value: m4Bin.any()})
 	preprocessEnv := envVarsVCS
 	python3 := d.cc.TC.Python3
@@ -159,9 +109,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 	head = head[:len(head):len(head)]
 
-	var pe func()
-
-	pe = func() {
+	pe := func() {
 		inputs := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS)
 
 		if preprocessHeader {
@@ -211,9 +159,55 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		}, ycRef)
 	}
 
-	headerInfoStored.OnUse = &pe
-	generatedInfoStored.OnUse = &pe
+	reg.register(GeneratedFileInfo{
+		OutputPath:     headerVFS,
+		ProducerRef:    ycRef,
+		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
+		OnUse:          &pe,
+	})
 
+	var generatedParsed []IncludeDirective
+
+	if preprocessHeader {
+		generatedParsed = e.bisonGeneratedCPPParsed(srcVFS, headerVFS)
+	} else {
+		generatedParsed = na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
+	}
+
+	extras := d.perSrcCFlagsFor(src.any())
+	cfBound := 2
+
+	if extras != nil {
+		cfBound += len(*extras)
+	}
+
+	cf := na.anys.alloc(cfBound)[:0]
+
+	if extras != nil {
+		cf = append(cf, *extras...)
+	}
+
+	if preprocessHeader {
+		cf = append(cf, argWnoUnusedButSetVariable.any(), argWnoDeprecatedCopy.any())
+	}
+
+	na.anys.commit(len(cf))
+
+	spec := na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src.any())})
+
+	if len(cf) > 0 {
+		spec.CFlags = cf[:len(cf):len(cf)]
+	}
+
+	reg.register(GeneratedFileInfo{
+		OutputPath:     generatedVFS,
+		ProducerRef:    ycRef,
+		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: generatedParsed},
+		Compile:        spec,
+		OnUse:          &pe,
+	})
 }
 
 func (e *EmitContext) emitBisonY(src ANY) {

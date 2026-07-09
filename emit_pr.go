@@ -122,68 +122,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		return IncludeDirective{kind: includeQuoted, target: includeTarget(mainOutputVFS.rel().any())}, true
 	}
 
-	registerOutput := func(out VFS, parsed ParsedIncludeSet, ridesHeaderViaParsed bool) {
-		if registeredPROut[out] {
-			return
-		}
-
-		registeredPROut[out] = true
-
-		leaves := prSourceInputs.generated
-
-		if out != mainOutputVFS && !ridesHeaderViaParsed {
-			lv := ctx.na.vfs.alloc(1 + len(prSourceInputs.generated))
-
-			lv[0] = mainOutputVFS
-
-			ln := 1 + copy(lv[1:], prSourceInputs.generated)
-
-			ctx.na.vfs.commit(ln)
-			leaves = lv[:ln:ln]
-		}
-
-		e.codegen.register(GeneratedFileInfo{
-			OutputPath:     out,
-			ProducerRef:    prRef,
-			GeneratorRefs:  e.ctx.na.refList(res.LDRef),
-			ParsedIncludes: parsed,
-			SourceInputs:   prSourceInputs.all,
-			ClosureLeaves:  leaves,
-		})
-	}
-
-	parsedFor := func(f ANY, out VFS, auto bool) (ParsedIncludeSet, bool) {
-		parsed := prOutputParsedIncludes(ctx.na, f, stmt, inVFSs, protoImportPbH)
-
-		if auto && isCCSourceExt(f.string()) {
-			if inc, ok := mainHeaderInclude(out.relString()); ok {
-				return appendParsedDirectives(parsed, parsedIncludesCpp, inc), true
-			}
-		}
-
-		return parsed, false
-	}
-
-	for _, f := range stmt.OUTFiles {
-		out := outVFSByToken[f]
-		parsed, rides := parsedFor(f, out, true)
-
-		registerOutput(out, parsed, rides)
-	}
-
-	for _, f := range stmt.OUTNoAutoFiles {
-		out := outVFSByToken[f]
-		parsed, rides := parsedFor(f, out, false)
-
-		registerOutput(out, parsed, rides)
-	}
-
-	if stmt.StdoutFile != nil {
-		parsed, rides := parsedFor(*stmt.StdoutFile, *stdoutVFS, !stmt.StdoutNoAuto)
-
-		registerOutput(*stdoutVFS, parsed, rides)
-	}
-
 	snap := &prSnap{
 		ctx:      ctx,
 		instance: instance,
@@ -221,12 +159,68 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		}, prRef, ctx.emit)
 	}
 
-	for out := range registeredPROut {
-		if info := e.codegen.lookup(out); info != nil {
-			info.OnUse = &pe
+	registerOutput := func(out VFS, parsed ParsedIncludeSet, ridesHeaderViaParsed bool) {
+		if registeredPROut[out] {
+			return
 		}
+
+		registeredPROut[out] = true
+
+		leaves := prSourceInputs.generated
+
+		if out != mainOutputVFS && !ridesHeaderViaParsed {
+			lv := ctx.na.vfs.alloc(1 + len(prSourceInputs.generated))
+
+			lv[0] = mainOutputVFS
+
+			ln := 1 + copy(lv[1:], prSourceInputs.generated)
+
+			ctx.na.vfs.commit(ln)
+			leaves = lv[:ln:ln]
+		}
+
+		e.codegen.register(GeneratedFileInfo{
+			OutputPath:     out,
+			ProducerRef:    prRef,
+			GeneratorRefs:  e.ctx.na.refList(res.LDRef),
+			ParsedIncludes: parsed,
+			SourceInputs:   prSourceInputs.all,
+			ClosureLeaves:  leaves,
+			OnUse:          &pe,
+		})
 	}
 
+	parsedFor := func(f ANY, out VFS, auto bool) (ParsedIncludeSet, bool) {
+		parsed := prOutputParsedIncludes(ctx.na, f, stmt, inVFSs, protoImportPbH)
+
+		if auto && isCCSourceExt(f.string()) {
+			if inc, ok := mainHeaderInclude(out.relString()); ok {
+				return appendParsedDirectives(parsed, parsedIncludesCpp, inc), true
+			}
+		}
+
+		return parsed, false
+	}
+
+	for _, f := range stmt.OUTFiles {
+		out := outVFSByToken[f]
+		parsed, rides := parsedFor(f, out, true)
+
+		registerOutput(out, parsed, rides)
+	}
+
+	for _, f := range stmt.OUTNoAutoFiles {
+		out := outVFSByToken[f]
+		parsed, rides := parsedFor(f, out, false)
+
+		registerOutput(out, parsed, rides)
+	}
+
+	if stmt.StdoutFile != nil {
+		parsed, rides := parsedFor(*stmt.StdoutFile, *stdoutVFS, !stmt.StdoutNoAuto)
+
+		registerOutput(*stdoutVFS, parsed, rides)
+	}
 }
 
 type PrSourceInputSet struct {

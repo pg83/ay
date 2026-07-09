@@ -265,14 +265,6 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		na.anys.commit(len(ccCFlags))
 		ccCFlags = ccCFlags[:len(ccCFlags):len(ccCFlags)]
 
-		cppInfo := e.codegen.register(GeneratedFileInfo{
-			OutputPath:     generatedVFS,
-			ProducerRef:    cyRef,
-			GeneratorRefs:  nil,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(genSrcID.any()), Py3Suffix: py3Suffix, CFlags: ccCFlags}),
-		})
-
 		env := envVarsVCS
 		cmdArgs := na.anys.alloc(8 + len(cythonConstHead) + len(stmt.Options) + len(d.cythonAddIncl))[:0]
 
@@ -336,8 +328,17 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			}, cyRef)
 		}
 
-		cppInfo.OnUse = &pe
+		e.codegen.register(GeneratedFileInfo{
+			OutputPath:     generatedVFS,
+			ProducerRef:    cyRef,
+			GeneratorRefs:  nil,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(genSrcID.any()), Py3Suffix: py3Suffix, CFlags: ccCFlags}),
+			OnUse:          &pe,
+		})
 
+		// p.infos were registered earlier in planCythonCpp (pass1 header
+		// registration), before pe existed; attach post hoc.
 		for _, info := range p.infos {
 			info.OnUse = &pe
 		}

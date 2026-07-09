@@ -191,33 +191,31 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 
 	reg := e.codegen
 
-	hInfo := reg.register(GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerIncludes},
 		ClosureLeaves:  headerLeaves,
+		OnUse:          &pe,
 	})
 
 	cppIncludes := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
 
-	cInfo := reg.register(GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:     cppVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppIncludes},
+		OnUse:          &pe,
 	})
 
-	bInfo := reg.register(GeneratedFileInfo{
+	reg.register(GeneratedFileInfo{
 		OutputPath:    bfbsVFS,
 		ProducerRef:   flRef,
 		GeneratorRefs: e.ctx.na.refList(flatcLDRef),
+		OnUse:         &pe,
 	})
-
-	hInfo.OnUse = &pe
-	cInfo.OnUse = &pe
-	bInfo.OnUse = &pe
-
 }
 
 func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant) {

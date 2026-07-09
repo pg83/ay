@@ -347,20 +347,15 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		return internV("${ARCADIA_BUILD_ROOT}/", out.relString())
 	}
 
-	pyInfo := e.codegen.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
-
-	pyInfo.OnUse = &pyPBPE
+	e.codegen.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: &pyPBPE})
 
 	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyDir, keySep, keyBase, "_pb2.py"), Token: tokenFor(pyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 
 	if d.grpc {
-		grpcInfo := e.codegen.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
-
-		grpcInfo.OnUse = &pyPBPE
+		e.codegen.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: &pyPBPE})
 
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyDir, keySep, keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 	}
-
 }
 
 func (e *EmitContext) hasProtoPySrcs() bool {

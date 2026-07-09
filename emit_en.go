@@ -98,27 +98,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	reg := e.codegen
 
-	cppInfo := reg.register(GeneratedFileInfo{
-		OutputPath:     serializedCPPPath,
-		ProducerRef:    enRef,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
-	})
-
-	var hInfo *GeneratedFileInfo
-
-	if withHeader {
-		hParsed := e.ctx.na.dirList(
-			IncludeDirective{kind: includeQuoted, target: includeTarget(headerInput.rel().any())},
-			IncludeDirective{kind: includeQuoted, target: includeTarget(serializedCPPPath.rel().any())})
-
-		slices.SortFunc(hParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
-
-		hInfo = reg.register(GeneratedFileInfo{
-			OutputPath:     serializedHPath,
-			ProducerRef:    enRef,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: hParsed},
-		})
-	}
+	var cppInfo, hInfo *GeneratedFileInfo
 
 	var moduleTag STR
 
@@ -130,9 +110,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq, Generated: true, SecondLevel: secondLevel})
 
-	var pe func()
-
-	pe = func() {
+	pe := func() {
 		enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
 		generatorRefs := ctx.na.refList(enumParserLD)
 
@@ -172,12 +150,27 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		)
 	}
 
-	cppInfo.OnUse = &pe
+	cppInfo = reg.register(GeneratedFileInfo{
+		OutputPath:     serializedCPPPath,
+		ProducerRef:    enRef,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
+		OnUse:          &pe,
+	})
 
-	if hInfo != nil {
-		hInfo.OnUse = &pe
+	if withHeader {
+		hParsed := e.ctx.na.dirList(
+			IncludeDirective{kind: includeQuoted, target: includeTarget(headerInput.rel().any())},
+			IncludeDirective{kind: includeQuoted, target: includeTarget(serializedCPPPath.rel().any())})
+
+		slices.SortFunc(hParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
+
+		hInfo = reg.register(GeneratedFileInfo{
+			OutputPath:     serializedHPath,
+			ProducerRef:    enRef,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: hParsed},
+			OnUse:          &pe,
+		})
 	}
-
 }
 
 func emitEN(

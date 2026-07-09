@@ -153,13 +153,12 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		return
 	}
 
-	info := e.codegen.register(GeneratedFileInfo{
+	e.codegen.register(GeneratedFileInfo{
 		OutputPath:    optOut,
 		ProducerRef:   opRef,
 		GeneratorRefs: nil,
+		OnUse:         &pe,
 	})
-
-	info.OnUse = &pe
 
 	e.resources = append(e.resources, ResourceEntry{
 		Path:      optOutName,

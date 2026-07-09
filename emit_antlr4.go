@@ -29,13 +29,15 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			OutputPath:    lexerCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-		}).OnUse = &jvPE
+			OnUse:         &jvPE,
+		})
 
 		e.codegen.register(GeneratedFileInfo{
 			OutputPath:    parserCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-		}).OnUse = &jvPE
+			OnUse:         &jvPE,
+		})
 
 		witnessIncludes := []VFS{
 			antlr4RuntimeHeaderVFS,
@@ -59,7 +61,8 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
 				ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			}).OnUse = &jvPE
+				OnUse:          &jvPE,
+			})
 		}
 
 		jvInputs := []VFS{
@@ -95,13 +98,15 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			OutputPath:    lexerCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-		}).OnUse = &jvPE
+			OnUse:         &jvPE,
+		})
 
 		e.codegen.register(GeneratedFileInfo{
 			OutputPath:    parserCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-		}).OnUse = &jvPE
+			OnUse:         &jvPE,
+		})
 
 		witnessIncludes := []VFS{
 			antlr4RuntimeHeaderVFS,
@@ -124,7 +129,8 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
 				ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			}).OnUse = &jvPE
+				OnUse:          &jvPE,
+			})
 		}
 
 		jvInputs := []VFS{
