@@ -557,7 +557,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 		}
 
 		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
-			return e.rawAuxInputClosure(aux, dedupSourceVFS(e.ctx.na, inputs, nil), ref)
+			return e.rawAuxInputClosure(aux, e.ctx.na.dedupSourceVFS(inputs, nil), ref)
 		}})
 
 		refs = append(refs, r...)

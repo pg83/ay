@@ -169,7 +169,7 @@ func (r *CodegenRegistry) addSourceInputs(na *NodeArenas, path VFS, extra []VFS)
 
 	info := r.mustInfo(path, "addSourceInputs")
 
-	info.SourceInputs = dedupClosure(na, info.SourceInputs, [][]VFS{extra})
+	info.SourceInputs = na.dedupClosure(info.SourceInputs, [][]VFS{extra})
 }
 
 func (r *CodegenRegistry) buildParsedFor(out VFS) ParsedIncludeSet {

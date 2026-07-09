@@ -70,70 +70,6 @@ func (dd *DeDuper) has(id uint32) bool {
 	return dd.gen.s[id] == dd.epoch
 }
 
-func (dd *DeDuper) filterSeen(na *NodeArenas, list []VFS) []VFS {
-	for i, v := range list {
-		if dd.add(v.strID()) {
-			continue
-		}
-
-		out := na.vfs.alloc(len(list) - 1)[:0]
-
-		out = append(out, list[:i]...)
-
-		for _, w := range list[i+1:] {
-			if dd.add(w.strID()) {
-				out = append(out, w)
-			}
-		}
-
-		na.vfs.commit(len(out))
-
-		return out[:len(out):len(out)]
-	}
-
-	return list
-}
-
-func dedupClosure(na *NodeArenas, extra []VFS, groups ...[][]VFS) []VFS {
-	total := len(extra)
-
-	for _, g := range groups {
-		for _, b := range g {
-			total += len(b)
-		}
-	}
-
-	if total == 0 {
-		return nil
-	}
-
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
-	out := na.vfs.alloc(total)[:0]
-
-	for _, v := range extra {
-		if deduper.add(v.strID()) {
-			out = append(out, v)
-		}
-	}
-
-	for _, g := range groups {
-		for _, b := range g {
-			for _, v := range b {
-				if deduper.add(v.strID()) {
-					out = append(out, v)
-				}
-			}
-		}
-	}
-
-	na.vfs.commit(len(out))
-
-	return out[:len(out):len(out)]
-}
-
 func dedupInPlace[T IdKey](xs []T) []T {
 	deduper := dedupers.get()
 
@@ -176,38 +112,4 @@ func dedup[T IdKey](lists ...[]T) []T {
 	}
 
 	return out
-}
-
-func dedupSourceVFS(na *NodeArenas, inputs []VFS, extra [][]VFS) []VFS {
-	bound := len(inputs)
-
-	for _, b := range extra {
-		bound += len(b)
-	}
-
-	out := na.vfs.alloc(bound)[:0]
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
-	keep := func(input VFS) {
-		if !input.isSource() {
-			return
-		}
-
-		if !deduper.add(input.strID()) {
-			return
-		}
-
-		out = append(out, input)
-	}
-
-	for _, input := range inputs {
-		keep(input)
-	}
-
-	eachBucketVFS(extra, keep)
-	na.vfs.commit(len(out))
-
-	return out[:len(out):len(out)]
 }

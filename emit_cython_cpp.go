@@ -233,7 +233,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		if pxdOK {
 			pxdCV := walkClosure(e.scanner, pxdVFS, srcScanIn)
 
-			emitsIncludes = dedupClosure(na, append(emitsIncludes, pxdCV.self), pxdCV.buckets)
+			emitsIncludes = na.dedupClosure(append(emitsIncludes, pxdCV.self), pxdCV.buckets)
 		}
 
 		parsed := na.dirs.alloc(len(emitsIncludes))[:0]
@@ -312,7 +312,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			if pxdOK {
 				pxdCV := walkClosure(scanner, pxdVFS, srcScanIn)
 
-				toolInputs = filterSourceVFS(na, dedupClosure(na, append(toolInputs, pxdCV.self), pxdCV.buckets))
+				toolInputs = filterSourceVFS(na, na.dedupClosure(append(toolInputs, pxdCV.self), pxdCV.buckets))
 			}
 
 			ctx.emit.emitReservedNode(Node{
@@ -356,7 +356,7 @@ func cythonHeaderToolInputs(na *NodeArenas, src VFS, pyxClosure []VFS) []VFS {
 		singles = append(singles, source(rel))
 	}
 
-	return filterSourceVFS(na, dedupClosure(na, singles, [][]VFS{pyxClosure}))
+	return filterSourceVFS(na, na.dedupClosure(singles, [][]VFS{pyxClosure}))
 }
 
 func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg ScanContext) []VFS {
@@ -442,7 +442,7 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanConte
 func cythonToolInputs(na *NodeArenas, ind CythonCppInduced, sourceCV Closure) []VFS {
 	toolLists := append(append([][]VFS{ind.toolSingles}, ind.toolCl...), sourceCV.buckets...)
 
-	return filterSourceVFS(na, dedupClosure(na, nil, toolLists))
+	return filterSourceVFS(na, na.dedupClosure(nil, toolLists))
 }
 
 func cythonEmitsIncludes(ind CythonCppInduced, sourceCV Closure) []VFS {
