@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"slices"
 	"testing"
 )
@@ -15,7 +16,12 @@ func TestEmitFL_NodeShape(t *testing.T) {
 	}
 
 	e := newStreamingEmitter(nil)
-	_, header, cpp, bfbs := emitFL(
+	ref := e.reserve()
+	header := build("mod/File.fbs", ".h")
+	cpp := build("mod/File.fbs", ".cpp")
+	bfbs := build("mod/" + strings.TrimSuffix("File.fbs", ".fbs"), ".bfbs")
+
+	emitFLReserved(
 		instance,
 		"mod/File.fbs",
 		source("mod/File.fbs"),
@@ -28,6 +34,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 		e,
 		&flatcVariantFL,
 		nil,
+		ref,
 	)
 
 	if header.string() != "$(B)/mod/File.fbs.h" {
@@ -221,7 +228,12 @@ func TestEmitFL64_NodeShape(t *testing.T) {
 	}
 
 	e := newStreamingEmitter(nil)
-	_, header, cpp, bfbs := emitFL(
+	ref := e.reserve()
+	header := build("mod/File.fbs64", ".h")
+	cpp := build("mod/File.fbs64", ".cpp")
+	bfbs := build("mod/" + strings.TrimSuffix("File.fbs64", ".fbs64"), ".bfbs64")
+
+	emitFLReserved(
 		instance,
 		"mod/File.fbs64",
 		source("mod/File.fbs64"),
@@ -234,6 +246,7 @@ func TestEmitFL64_NodeShape(t *testing.T) {
 		e,
 		&flatcVariantFL64,
 		nil,
+		ref,
 	)
 
 	if header.string() != "$(B)/mod/File.fbs64.h" {

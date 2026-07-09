@@ -111,7 +111,7 @@ func flatcDirectGeneratedHeaderIncludes(na *NodeArenas, pm *IncludeParserManager
 	return out[:len(out):len(out)]
 }
 
-func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ANY, transitiveImports Closure, moduleTag STR, tc ModuleToolchain, emit *StreamingEmitter, v *FlatcVariant, genDeps []NodeRef) (NodeRef, VFS, VFS, VFS) {
+func emitFLReserved(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ANY, transitiveImports Closure, moduleTag STR, tc ModuleToolchain, emit *StreamingEmitter, v *FlatcVariant, genDeps []NodeRef, id NodeRef) {
 	na := emit.nodeArenas()
 	headerVFS := build(srcRel, ".h")
 	cppVFS := build(srcRel, ".cpp")
@@ -153,7 +153,7 @@ func emitFL(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeR
 		Resources:      usesPython3,
 	}
 
-	return emit.emitNode(node), headerVFS, cppVFS, bfbsVFS
+	emit.emitReservedNode(node, id)
 }
 
 func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []NodeRef) {
@@ -161,7 +161,20 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	flatcRes := ctx.toolResult(v.toolArg)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := walkClosure(e.scanner, srcVFS, newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.relString()))
-	flRef, headerVFS, cppVFS, bfbsVFS := emitFL(instance, srcVFS.relString(), srcVFS, flatcLDRef, flatcBinary, d.flatcFlags, transitiveImports, d.unit.CCTag, d.tc, ctx.emit, v, genDeps)
+	flRef := ctx.emit.reserve()
+	srcRel := srcVFS.relString()
+	headerVFS := build(srcRel, ".h")
+	cppVFS := build(srcRel, ".cpp")
+	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt), v.bfbsExt)
+	flatcFlags := ctx.na.anyList(d.flatcFlags...)
+	ccTag := d.unit.CCTag
+	tc := d.tc
+	genDepsSnap := ctx.na.refList(genDeps...)
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		emitFLReserved(instance, srcRel, srcVFS, flatcLDRef, flatcBinary, flatcFlags, transitiveImports, ccTag, tc, ctx.emit, v, genDepsSnap, flRef)
+	}}
+
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.na, ctx.parsers, srcVFS.relString())
 	headerLeaves := ctx.na.vfs.alloc(3 + transitiveImports.len())[:0]
 
@@ -178,7 +191,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 
 	reg := e.codegen
 
-	reg.register(GeneratedFileInfo{
+	hInfo := reg.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
@@ -188,18 +201,24 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 
 	cppIncludes := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
 
-	reg.register(GeneratedFileInfo{
+	cInfo := reg.register(GeneratedFileInfo{
 		OutputPath:     cppVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppIncludes},
 	})
 
-	reg.register(GeneratedFileInfo{
+	bInfo := reg.register(GeneratedFileInfo{
 		OutputPath:    bfbsVFS,
 		ProducerRef:   flRef,
 		GeneratorRefs: e.ctx.na.refList(flatcLDRef),
 	})
+
+	hInfo.pending = pe
+	cInfo.pending = pe
+	bInfo.pending = pe
+
+	e.noteOwn(pe)
 }
 
 func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant) {
