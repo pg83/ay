@@ -171,9 +171,9 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	tc := d.tc
 	genDepsSnap := ctx.na.refList(genDeps...)
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		emitFLReserved(instance, srcRel, srcVFS, flatcLDRef, flatcBinary, flatcFlags, transitiveImports, ccTag, tc, ctx.emit, v, genDepsSnap, flRef)
-	}}
+	}
 
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.na, ctx.parsers, srcVFS.relString())
 	headerLeaves := ctx.na.vfs.alloc(3 + transitiveImports.len())[:0]
@@ -214,9 +214,9 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 		GeneratorRefs: e.ctx.na.refList(flatcLDRef),
 	})
 
-	hInfo.pending = pe
-	cInfo.pending = pe
-	bInfo.pending = pe
+	hInfo.OnUse = &pe
+	cInfo.OnUse = &pe
+	bInfo.OnUse = &pe
 
 }
 
@@ -228,9 +228,11 @@ func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant
 
 	if meta.Generated {
 		srcVFS = meta.Source.vfs()
-		genInfo := e.codegen.mustInfo(srcVFS, "flatc generated source")
+		genInfo := e.codegen.use(srcVFS)
 
-		runPending(genInfo)
+		if genInfo == nil {
+			throwFmt("flatc generated source: unregistered producer for %q", srcVFS.string())
+		}
 
 		genDeps = []NodeRef{genInfo.ProducerRef}
 	} else {

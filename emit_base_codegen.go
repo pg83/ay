@@ -65,7 +65,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		ClosureLeaves:  e.ctx.na.vfsList(inputIn),
 	})
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		node := Node{
 			Platform:       instance.Platform,
 			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
@@ -78,9 +78,9 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		}
 
 		ctx.emit.emitReservedNode(node, bcRef)
-	}}
+	}
 
-	hInfo.pending = pe
-	cppInfo.pending = pe
+	hInfo.OnUse = &pe
+	cppInfo.OnUse = &pe
 
 }

@@ -69,12 +69,12 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 		e.collectObj(st.ref, st.dstVFS, SrcMeta{Prio: stmtPrioDefault})
 	}
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		emitCopyFileNodeSnap(ctx, instance, scanner, scanCfg, moduleTag, tc, entry, st)
-	}}
+	}
 
 	if info != nil {
-		info.pending = pe
+		info.OnUse = &pe
 	}
 
 }

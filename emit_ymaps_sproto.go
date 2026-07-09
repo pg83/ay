@@ -51,11 +51,11 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	pending := YmapsSprotoPending{ref: sprotoRef, sprotoH: sprotoH, protoRelPath: protoRelPath}
 	scanner := e.scanner
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		emitYmapsSprotoHeaderSnap(ctx, instance, scanner, pending, outRoot, sprotocLDRef, sprotocBinary, scanCfg)
-	}}
+	}
 
-	info.pending = pe
+	info.OnUse = &pe
 
 }
 

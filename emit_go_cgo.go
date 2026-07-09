@@ -184,7 +184,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		cv := walkClosure(scanner, srcVFS, scanCfg)
 		block := na.vfs.alloc(len(scripts) + cv.len() + len(cgoContext))
 		k := 0
@@ -222,9 +222,9 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 		}
 
 		ctx.emit.emitReservedNode(node, ref)
-	}}
+	}
 
-	info.pending = pe
+	info.OnUse = &pe
 
 }
 

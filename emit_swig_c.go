@@ -50,7 +50,7 @@ func (e *EmitContext) emitSwigC() {
 		swRef := ctx.emit.reserve()
 		moduleName := swigModuleName(stmt.Module)
 
-		pe := &PendingEmit{fn: func() {
+		pe := func() {
 			cmdArgs := na.chunkList(na.anyList(swigBin.any()), swigConstArgs, na.anyList(internStr(moduleName).any(),
 				argInterface.any(),
 				internV(moduleName, "_swg").any(),
@@ -69,7 +69,7 @@ func (e *EmitContext) emitSwigC() {
 				KV:           &swigCKV,
 				Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			}, swRef)
-		}}
+		}
 
 		reg := e.codegen
 
@@ -106,9 +106,8 @@ func (e *EmitContext) emitSwigC() {
 			SourceInputs:  swigSourceInputs,
 		})
 
-		cInfo.pending = pe
-		pyInfo.pending = pe
-
+		cInfo.OnUse = &pe
+		pyInfo.OnUse = &pe
 
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{
 			Path:   pyOutVFS,

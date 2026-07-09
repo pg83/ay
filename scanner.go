@@ -281,13 +281,11 @@ func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 		return
 	}
 
-	info := s.codegen.lookup(vfsPath)
+	info := s.codegen.use(vfsPath)
 
 	if info == nil {
 		return
 	}
-
-	runPending(info)
 
 	bucket := parsedIncludesCpp
 

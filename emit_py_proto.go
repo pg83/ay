@@ -314,7 +314,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	scanner := e.scanner
 	scanCfg := pe.scanCfg
 
-	pyPBPE := &PendingEmit{fn: func() {
+	pyPBPE := func() {
 		buckets := walkClosure(scanner, source(protoRelPath), scanCfg).buckets
 
 		pyPBNode := Node{
@@ -334,7 +334,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		}
 
 		ctx.emit.emitReservedNode(pyPBNode, pyPBRef)
-	}}
+	}
 
 	sourceInputs := dedupSourceVFS(na, inputs, transitive.buckets)
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
@@ -349,14 +349,14 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	pyInfo := e.codegen.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
 
-	pyInfo.pending = pyPBPE
+	pyInfo.OnUse = &pyPBPE
 
 	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyDir, keySep, keyBase, "_pb2.py"), Token: tokenFor(pyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 
 	if d.grpc {
 		grpcInfo := e.codegen.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
 
-		grpcInfo.pending = pyPBPE
+		grpcInfo.OnUse = &pyPBPE
 
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyDir, keySep, keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 	}
@@ -387,9 +387,12 @@ func (e *EmitContext) pyProtoYapycOut(ps PySrc) VFS {
 func (e *EmitContext) appendPyProtoResEntries(out []PyGenResEntry, ps PySrc) []PyGenResEntry {
 	rel := ps.Path.relString()
 	grpc := strings.HasSuffix(rel, "__intpy3___pb2_grpc.py")
-	info := e.codegen.mustInfo(ps.Path, "appendPyProtoResEntries")
+	info := e.codegen.use(ps.Path)
 
-	runPending(info)
+	if info == nil {
+		throwFmt("appendPyProtoResEntries: unregistered producer for %q", ps.Path.string())
+	}
+
 	token := ps.Token.string()
 	yapycOut := e.pyProtoYapycOut(ps)
 
@@ -435,9 +438,11 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	rel := ps.Path.relString()
-	info := e.codegen.mustInfo(ps.Path, "emitPyProtoYapyc")
+	info := e.codegen.use(ps.Path)
 
-	runPending(info)
+	if info == nil {
+		throwFmt("emitPyProtoYapyc: unregistered producer for %q", ps.Path.string())
+	}
 	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
 	yapycOut := e.pyProtoYapycOut(ps)
 	yapycTail := na.anyList(internV(token, "-").any(), (ps.Path).any(), (yapycOut).any())

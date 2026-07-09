@@ -143,12 +143,11 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	pendNodes = append(pendNodes, optNode)
 	pendRefs = append(pendRefs, opRef)
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		for i := range pendNodes {
 			ctx.emit.emitReservedNode(pendNodes[i], pendRefs[i])
 		}
-	}}
-
+	}
 
 	if stmt.GenerateMachineCode {
 		return
@@ -160,7 +159,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		GeneratorRefs: nil,
 	})
 
-	info.pending = pe
+	info.OnUse = &pe
 
 	e.resources = append(e.resources, ResourceEntry{
 		Path:      optOutName,

@@ -33,9 +33,9 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 		ClosureLeaves: e.ctx.na.vfsList(tmpVFS, srcVFS),
 	})
 
-	pe := &PendingEmit{}
+	var pe func()
 
-	pe.fn = func() {
+	pe = func() {
 		cmd0 := Cmd{CmdArgs: na.chunkList(
 			blocks.cxxHead,
 			instance.Platform.CCHead,
@@ -76,7 +76,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
-	tmpInfo.pending = pe
-	incInfo.pending = pe
+	tmpInfo.OnUse = &pe
+	incInfo.OnUse = &pe
 
 }

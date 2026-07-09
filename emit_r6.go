@@ -134,7 +134,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 	ragel6Flags := ctx.na.anyList(d.cc.Ragel6Flags...)
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		rl6Closure := walkClosure(scanner, r6Out, scanCfg).collect(ctx.na, func(v VFS) bool {
 			return v.isSource() && !extIsEnumSerialized(v.relString())
 		})
@@ -146,8 +146,8 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 		}
 
 		emitR6(instance, srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, producerRefs, r6Ref, ctx.emit)
-	}}
+	}
 
-	info.pending = pe
+	info.OnUse = &pe
 
 }

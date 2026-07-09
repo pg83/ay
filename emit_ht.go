@@ -25,7 +25,7 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		cv := walkClosure(scanner, srcVFS, scanCfg)
 		block := na.vfs.alloc(2 + cv.len())
 		k := 0
@@ -58,10 +58,9 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 		}
 
 		ctx.emit.emitReservedNode(node, ref)
-	}}
+	}
 
-	info.pending = pe
-
+	info.OnUse = &pe
 
 	meta := d.srcMetaOf(src)
 

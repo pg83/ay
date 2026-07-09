@@ -99,13 +99,12 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 		}),
 	})
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		emitR5Reserved(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, r5Ref, ctx.emit)
-	}}
+	}
 
-	tmpInfo.pending = pe
-	cppInfo.pending = pe
-
+	tmpInfo.OnUse = &pe
+	cppInfo.OnUse = &pe
 
 	meta := d.srcMetaOf(src)
 

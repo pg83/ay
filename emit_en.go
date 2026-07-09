@@ -130,9 +130,9 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq, Generated: true, SecondLevel: secondLevel})
 
-	pe := &PendingEmit{}
+	var pe func()
 
-	pe.fn = func() {
+	pe = func() {
 		enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
 		generatorRefs := ctx.na.refList(enumParserLD)
 
@@ -172,10 +172,10 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		)
 	}
 
-	cppInfo.pending = pe
+	cppInfo.OnUse = &pe
 
 	if hInfo != nil {
-		hInfo.pending = pe
+		hInfo.OnUse = &pe
 	}
 
 }
