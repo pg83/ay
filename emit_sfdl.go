@@ -18,56 +18,66 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 	plainEnv := envVarsVCS
 	toolEnv := instance.Platform.ToolEnvVars
 	blocks := d.cc.CCBlocks
+	ref := ctx.emit.reserve()
 
-	cmd0 := Cmd{CmdArgs: na.chunkList(
-		blocks.cxxHead,
-		instance.Platform.CCHead,
-		blocks.flags,
-		blocks.cxxTail,
-		na.anyList(
-			strE.any(),
-			strC3.any(),
-			strX.any(),
-			strC4.any(),
-			strQunusedArguments.any(),
-			argDashO.any(),
-			tmpVFS.any(),
-			srcVFS.any(),
-		),
-	), Env: plainEnv}
-
-	cmd1 := Cmd{CmdArgs: na.chunkList(na.anyList(
-		toolBin.any(),
-		strI2.any(),
-		tmpVFS.any(),
-		strA.any(),
-		strS.any(),
-	)), Env: toolEnv, Stdout: incVFS}
-
-	node := Node{
-		Platform:       instance.Platform,
-		Cmds:           na.cmdList(cmd0, cmd1),
-		Env:            toolEnv,
-		Inputs:         na.inputList(na.vfsList(toolBin, srcVFS)),
-		KV:             &sfKV,
-		Outputs:        na.vfsList(tmpVFS, incVFS),
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: na.refList(toolRef),
-		Resources:      instance.Platform.CCUsesResources,
-	}
-
-	ref := ctx.emit.emitNode(node)
-
-	e.codegen.register(GeneratedFileInfo{
+	tmpInfo := e.codegen.register(GeneratedFileInfo{
 		OutputPath:    tmpVFS,
 		ProducerRef:   ref,
 		GeneratorRefs: e.ctx.na.refList(toolRef),
 	})
 
-	e.codegen.register(GeneratedFileInfo{
+	incInfo := e.codegen.register(GeneratedFileInfo{
 		OutputPath:    incVFS,
 		ProducerRef:   ref,
 		GeneratorRefs: e.ctx.na.refList(toolRef),
 		ClosureLeaves: e.ctx.na.vfsList(tmpVFS, srcVFS),
 	})
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance)}
+
+	pe.fn = func() {
+		cmd0 := Cmd{CmdArgs: na.chunkList(
+			blocks.cxxHead,
+			instance.Platform.CCHead,
+			blocks.flags,
+			blocks.cxxTail,
+			na.anyList(
+				strE.any(),
+				strC3.any(),
+				strX.any(),
+				strC4.any(),
+				strQunusedArguments.any(),
+				argDashO.any(),
+				tmpVFS.any(),
+				srcVFS.any(),
+			),
+		), Env: plainEnv}
+
+		cmd1 := Cmd{CmdArgs: na.chunkList(na.anyList(
+			toolBin.any(),
+			strI2.any(),
+			tmpVFS.any(),
+			strA.any(),
+			strS.any(),
+		)), Env: toolEnv, Stdout: incVFS}
+
+		node := Node{
+			Platform:       instance.Platform,
+			Cmds:           na.cmdList(cmd0, cmd1),
+			Env:            toolEnv,
+			Inputs:         na.inputList(na.vfsList(toolBin, srcVFS)),
+			KV:             &sfKV,
+			Outputs:        na.vfsList(tmpVFS, incVFS),
+			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			ForeignDepRefs: na.refList(toolRef),
+			Resources:      instance.Platform.CCUsesResources,
+		}
+
+		ctx.emit.emitReservedNode(node, ref)
+	}
+
+	tmpInfo.pending = pe
+	incInfo.pending = pe
+
+	e.noteOwn(pe)
 }

@@ -2,7 +2,7 @@ package main
 
 var scKV = KV{P: pkSC, PC: pcYellow}
 
-func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure Closure, domschemecLDRef NodeRef, emit *StreamingEmitter) NodeRef {
+func emitSCReserved(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure Closure, domschemecLDRef NodeRef, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 	env := envVarsVCS
 
@@ -20,7 +20,7 @@ func emitSC(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, ru
 		ForeignDepRefs: na.refList(domschemecLDRef),
 	}
 
-	return emit.emitNode(node)
+	emit.emitReservedNode(node, id)
 }
 
 func (e *EmitContext) emitLibrarySCSource(src ANY) {
@@ -29,15 +29,27 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 	domLDRef, domBinary := domRes.LDRef, *domRes.LDPath
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	headerVFS := build(srcVFS.relString(), ".h")
-	runtimeClosure := walkClosure(e.scanner, domschemeRuntimeVFS, d.cc.ScanCfg)
-	scRef := emitSC(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, ctx.emit)
+	scRef := ctx.emit.reserve()
 	runtimeInclude := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(domschemeRuntimeVFS.rel().any())})
 
-	e.codegen.register(GeneratedFileInfo{
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    scRef,
 		GeneratorRefs:  e.ctx.na.refList(domLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: runtimeInclude},
 		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, domschemeRuntimeVFS),
 	})
+
+	scanner := e.scanner
+	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		runtimeClosure := walkClosure(scanner, domschemeRuntimeVFS, scanCfg)
+
+		emitSCReserved(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, scRef, ctx.emit)
+	}}
+
+	info.pending = pe
+
+	e.noteOwn(pe)
 }
