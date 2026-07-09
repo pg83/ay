@@ -31,39 +31,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 		optVFSs = append(optVFSs, e.requireProducedInput("DECIMAL_MD5 input", opt.string(), copyFileInputVFS(ctx.fs, instance.Path, opt.string())))
 	}
 
-	cmdArgs := na.anys.alloc(7 + len(optVFSs))[:0]
-
-	cmdArgs = append(cmdArgs,
-		d.tc.Python3.any(),
-		decimalMD5PyVFS.any(),
-		strFixedOutput.any(),
-		internV("--func-name=", stmt.FuncName).any(),
-		strLowerBits.any(),
-		str32.any(),
-		internV("--source-root=", strS.string()).any(),
-	)
-
-	for _, v := range optVFSs {
-		cmdArgs = append(cmdArgs, v.any())
-	}
-
-	na.anys.commit(len(cmdArgs))
-
-	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
-
-	env := envVarsVCS
-
-	svRef := ctx.emit.emitNode(Node{
-		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env, Stdout: outVFS}),
-		Env:          env,
-		Inputs:       na.inputList(na.vfsList(optVFSs...), na.vfsList(decimalMD5PyVFS)),
-		KV:           &decimalMd5KV,
-		Outputs:      na.vfsList(outVFS),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Resources:    usesPython3,
-	})
-
+	svRef := ctx.emit.reserve()
 	sourceInputs := na.vfs.alloc(len(optVFSs) + 1)
 	sn := copy(sourceInputs, optVFSs)
 
@@ -73,12 +41,54 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 
 	sourceInputs = sourceInputs[:sn:sn]
 
-	e.codegen.register(GeneratedFileInfo{
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:    outVFS,
 		ProducerRef:   svRef,
 		SourceInputs:  sourceInputs,
 		ClosureLeaves: sourceInputs,
 	})
+
+	optArena := na.vfsList(optVFSs...)
+	python3 := d.tc.Python3
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		cmdArgs := na.anys.alloc(7 + len(optArena))[:0]
+
+		cmdArgs = append(cmdArgs,
+			python3.any(),
+			decimalMD5PyVFS.any(),
+			strFixedOutput.any(),
+			internV("--func-name=", stmt.FuncName).any(),
+			strLowerBits.any(),
+			str32.any(),
+			internV("--source-root=", strS.string()).any(),
+		)
+
+		for _, v := range optArena {
+			cmdArgs = append(cmdArgs, v.any())
+		}
+
+		na.anys.commit(len(cmdArgs))
+
+		cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+
+		env := envVarsVCS
+
+		ctx.emit.emitReservedNode(Node{
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env, Stdout: outVFS}),
+			Env:          env,
+			Inputs:       na.inputList(optArena, na.vfsList(decimalMD5PyVFS)),
+			KV:           &decimalMd5KV,
+			Outputs:      na.vfsList(outVFS),
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:    usesPython3,
+		}, svRef)
+	}}
+
+	info.pending = pe
+
+	e.noteOwn(pe)
 
 	return svRef
 }

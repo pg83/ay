@@ -18,32 +18,10 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	rodataVFS := build(module, "/MN_External_", stmt.Name, ".rodata")
 	env := envVarsVCS
 
-	node := Node{
-		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
-			d.tc.Python3.any(),
-			buildMnScriptVFS.any(),
-			strBuildmnf.any(),
-			strS.any(),
-			archiverBin.any(),
-			infoVFS.any(),
-			internStr(stmt.Name).any(),
-			strRankingSuffix.any(),
-			cppVFS.any(),
-		)), Env: env}),
-		Env:            env,
-		Inputs:         na.inputList(na.vfsList(archiverBin, buildMnScriptVFS, infoVFS)),
-		KV:             &mnKV,
-		Outputs:        na.vfsList(cppVFS, rodataVFS),
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: na.refList(archiverRef),
-		Resources:      usesPython3,
-	}
-
-	ref := ctx.emit.emitNode(node)
+	ref := ctx.emit.reserve()
 	mnSSEInclude := IncludeDirective{kind: includeQuoted, target: includeTarget(strKernelMatrixnetMnSseH.any())}
 
-	e.codegen.register(GeneratedFileInfo{
+	cppInfo := e.codegen.register(GeneratedFileInfo{
 		OutputPath:     cppVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(archiverRef),
@@ -51,12 +29,45 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		ClosureLeaves:  e.ctx.na.vfsList(infoVFS, buildMnScriptVFS),
 	})
 
-	e.codegen.register(GeneratedFileInfo{
+	rodataInfo := e.codegen.register(GeneratedFileInfo{
 		OutputPath:     rodataVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(archiverRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(cppVFS.rel().any())})},
 	})
+
+	python3 := d.tc.Python3
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		node := Node{
+			Platform: instance.Platform,
+			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
+				python3.any(),
+				buildMnScriptVFS.any(),
+				strBuildmnf.any(),
+				strS.any(),
+				archiverBin.any(),
+				infoVFS.any(),
+				internStr(stmt.Name).any(),
+				strRankingSuffix.any(),
+				cppVFS.any(),
+			)), Env: env}),
+			Env:            env,
+			Inputs:         na.inputList(na.vfsList(archiverBin, buildMnScriptVFS, infoVFS)),
+			KV:             &mnKV,
+			Outputs:        na.vfsList(cppVFS, rodataVFS),
+			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			ForeignDepRefs: na.refList(archiverRef),
+			Resources:      usesPython3,
+		}
+
+		ctx.emit.emitReservedNode(node, ref)
+	}}
+
+	cppInfo.pending = pe
+	rodataInfo.pending = pe
+
+	e.noteOwn(pe)
 
 	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
 	e.enqueueSrc(SrcMeta{Source: internV("MN_External_", stmt.Name, ".rodata").any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
