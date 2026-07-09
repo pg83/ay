@@ -215,7 +215,10 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	}
 
 	var resourceGlobals []ResourceDecl
-	deduper.reset()
+
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	for _, pr := range resolved {
 		for _, decl := range pr.ResourceGlobalClosure {

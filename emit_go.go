@@ -367,8 +367,9 @@ func (e *EmitContext) goAsmIncludeSrcs() []VFS {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	cfg := newScanContext(ctx.parsers, goAsmIncludeDirs, nil, includeScannerBasePaths(), instance.Path.relString())
+	deduper := dedupers.get()
 
-	deduper.reset()
+	defer dedupers.put(deduper)
 
 	bound := 0
 
@@ -449,7 +450,9 @@ func goCmdEnv(ctx *GenCtx, p *Platform, tc ModuleToolchain) EnvVars {
 }
 
 func goClassifyClosure(na *NodeArenas, resolved []ResolvedPeer, closurePaths []VFS) (localARs, nonLocalARs, cgoARs []VFS) {
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	for _, rp := range resolved {
 		if rp.result.ARPath != nil && isGoModuleType(rp.result.ModuleStmtName) {
@@ -576,7 +579,9 @@ func (e *EmitContext) goToolchainSboms(withLinker bool) ([]NodeRef, []VFS) {
 }
 
 func goPeerSrcClosure(ctx *GenCtx, resolved []ResolvedPeer, own []VFS, extra []VFS) []VFS {
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	total := len(own) + len(extra) + 1
 
@@ -803,8 +808,9 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 	srcClosure := goPeerSrcClosure(ctx, resolved, ownInputs, srcClosureExtras)
 	sbomRefs, sbomPaths := e.goToolchainSboms(false)
+	deduper := dedupers.get()
 
-	deduper.reset()
+	defer dedupers.put(deduper)
 
 	mergedSbomRefs := na.noderefs.alloc(len(peerSbomRefs) + len(sbomRefs) + 1)
 	mergedSbomPaths := na.vfs.alloc(len(peerSbomPaths) + len(sbomPaths) + 1)

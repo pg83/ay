@@ -616,7 +616,9 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	idx.indexable = true
 	idx.rank = newIntValueMap[int32](2 * (len(cfg.OwnAddIncl) + len(cfg.PeerAddInclSet)))
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	r := int32(0)
 

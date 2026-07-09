@@ -18,7 +18,10 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	inputs := make([]VFS, 0, len(run.INFiles))
 
 	var cfExtraInputs []VFS
-	deduper.reset()
+
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	appendCFExtra := func(v VFS) {
 		if !deduper.add(v.strID()) {

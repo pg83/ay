@@ -90,7 +90,9 @@ func (e *EmitContext) goCgoIncludeArgs() []ANY {
 	push(strIB)
 	push(strIS)
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	for _, p := range d.cc.AddIncl {
 		if deduper.add(p.strID()) {
@@ -287,7 +289,9 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	inputs[ni] = cgo1WrapperVFS
 	ni++
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	for _, f := range files {
 		if deduper.add(f.src.strID()) {
@@ -529,7 +533,9 @@ func (e *EmitContext) flushGoCgo2() {
 	pushIn(exportH)
 	pushIn(mainC)
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	for _, v := range inputs[:ni] {
 		deduper.add(v.strID())

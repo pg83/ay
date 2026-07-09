@@ -152,8 +152,9 @@ func (e *EmitContext) emitCopyFileNode(entry CopyFileEntry, st CopyEmitState) {
 		raw = filterSourceVFS(ctx.na, raw)
 
 		block := ctx.na.vfs.alloc(len(raw) + len(st.producerSource))[:0]
+		deduper := dedupers.get()
 
-		deduper.reset()
+		defer dedupers.put(deduper)
 
 		for _, v := range raw {
 			if deduper.add(v.strID()) {

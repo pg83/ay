@@ -310,7 +310,9 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt)...)
 	}
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	for _, decl := range decls {
 		if deduper.add(decl.GlobalVar.strID()) {
@@ -372,7 +374,9 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt)...)
 	}
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	for _, decl := range decls {
 		if deduper.add(decl.Name.strID()) {

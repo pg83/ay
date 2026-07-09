@@ -111,7 +111,9 @@ func dedupShared[T IdKey](c *SliceCache[T], lists ...[]T) []T {
 		return nil
 	}
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	block := c.alloc(total)
 	k := 0

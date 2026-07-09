@@ -1,6 +1,32 @@
 package main
 
-var deduper DeDuper
+var dedupers DeDuperPool
+
+type DeDuperPool struct {
+	free []*DeDuper
+}
+
+func (p *DeDuperPool) get() *DeDuper {
+	if n := len(p.free); n > 0 {
+		d := p.free[n-1]
+
+		p.free = p.free[:n-1]
+
+		d.reset()
+
+		return d
+	}
+
+	d := &DeDuper{}
+
+	d.reset()
+
+	return d
+}
+
+func (p *DeDuperPool) put(d *DeDuper) {
+	p.free = append(p.free, d)
+}
 
 type IdKey interface {
 	~uint32
@@ -81,7 +107,9 @@ func dedupClosure(na *NodeArenas, extra []VFS, groups ...[][]VFS) []VFS {
 		return nil
 	}
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	out := na.vfs.alloc(total)[:0]
 
@@ -107,7 +135,9 @@ func dedupClosure(na *NodeArenas, extra []VFS, groups ...[][]VFS) []VFS {
 }
 
 func dedupInPlace[T IdKey](xs []T) []T {
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	out := xs[:0]
 
@@ -131,7 +161,9 @@ func dedup[T IdKey](lists ...[]T) []T {
 		return nil
 	}
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	out := make([]T, 0, total)
 
@@ -154,8 +186,9 @@ func dedupSourceVFS(na *NodeArenas, inputs []VFS, extra [][]VFS) []VFS {
 	}
 
 	out := na.vfs.alloc(bound)[:0]
+	deduper := dedupers.get()
 
-	deduper.reset()
+	defer dedupers.put(deduper)
 
 	keep := func(input VFS) {
 		if !input.isSource() {
