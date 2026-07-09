@@ -347,12 +347,12 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		return internV("${ARCADIA_BUILD_ROOT}/", out.relString())
 	}
 
-	e.codegen.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: &pyPBPE})
+	e.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: &pyPBPE})
 
 	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyDir, keySep, keyBase, "_pb2.py"), Token: tokenFor(pyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 
 	if d.grpc {
-		e.codegen.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: &pyPBPE})
+		e.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: &pyPBPE})
 
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyDir, keySep, keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 	}
@@ -470,7 +470,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 
 	yapycRef := ctx.emit.emitNode(yapycNode)
 
-	e.codegen.register(GeneratedFileInfo{OutputPath: yapycOut, ProducerRef: yapycRef})
+	e.register(GeneratedFileInfo{OutputPath: yapycOut, ProducerRef: yapycRef})
 }
 
 func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
@@ -601,7 +601,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 
 	emits = emits[:len(emits):len(emits)]
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     aux,
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(rescompilerRef),

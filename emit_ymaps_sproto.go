@@ -47,7 +47,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 		emitYmapsSprotoHeaderSnap(ctx, instance, scanner, pending, outRoot, sprotocLDRef, sprotocBinary, scanCfg)
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     sprotoH,
 		ProducerRef:    sprotoRef,
 		GeneratorRefs:  e.ctx.na.refList(sprotocLDRef),

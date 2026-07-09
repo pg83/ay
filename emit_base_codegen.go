@@ -47,8 +47,6 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(oi)})
 	}
 
-	reg := e.codegen
-
 	pe := func() {
 		node := Node{
 			Platform:       instance.Platform,
@@ -64,7 +62,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		ctx.emit.emitReservedNode(node, bcRef)
 	}
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     prefixH,
 		ProducerRef:    bcRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
@@ -73,7 +71,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		OnUse:          &pe,
 	})
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     prefixCpp,
 		ProducerRef:    bcRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),

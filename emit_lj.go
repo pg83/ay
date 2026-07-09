@@ -36,7 +36,6 @@ func (e *EmitContext) emitLuaJit21() {
 	}
 
 	compilerLDRef, compilerBin := ctx.tool(argLuajit21Compiler)
-	reg := e.codegen
 	cwd := source(luajit21CwdRel)
 
 	for _, lua := range d.lj21.Luas {
@@ -48,7 +47,7 @@ func (e *EmitContext) emitLuaJit21() {
 			emitLJReserved(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ref, ctx.emit)
 		}
 
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:   rawOut,
 			ProducerRef:  ref,
 			SourceInputs: ctx.na.vfsList(luaSrc),

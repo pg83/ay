@@ -849,16 +849,33 @@ message Ydb {}
 }
 
 func TestReorderARMembers_SecondLevelTrailsFirstLevelByRound(t *testing.T) {
+	reg := newCodegenRegistry(newNodeArenas())
+
+	owner := source("mod")
+	fbs := build("mod/formula.fbs")
+	fbsCppSrc := build("mod/formula.fbs.cpp")
 	fbsCpp := build("mod/formula.fbs.cpp.o")
+	cppSrc := build("mod/formula.cpp")
 	cpp := build("mod/formula.cpp.o")
+
+	// fbs is registered (by the same module) with no further chain;
+	// fbsCppSrc's own SourcePath points to fbs — a two-hop producer chain
+	// within one module, round 2.
+	reg.register(GeneratedFileInfo{OutputPath: fbs, OwnerModule: owner, ProducerRef: NodeRef(10)})
+	reg.register(GeneratedFileInfo{OutputPath: fbsCppSrc, SourcePath: fbs, OwnerModule: owner, ProducerRef: NodeRef(11)})
+
+	// cppSrc is generated but its own chain stops after one hop (no
+	// SourcePath), round 1.
+	reg.register(GeneratedFileInfo{OutputPath: cppSrc, OwnerModule: owner, ProducerRef: NodeRef(20)})
+
 	refs := []NodeRef{NodeRef(1), NodeRef(2)}
 	paths := []VFS{fbsCpp, cpp}
 	metas := []SrcMeta{
-		{Prio: stmtPrioDefault, Seq: 1, Generated: true, SecondLevel: true},
-		{Prio: stmtPrioDefault, Seq: 2, Generated: true},
+		{Source: fbsCppSrc.any(), Prio: stmtPrioDefault, Seq: 1, Generated: true},
+		{Source: cppSrc.any(), Prio: stmtPrioDefault, Seq: 2, Generated: true},
 	}
 
-	_, gotPaths := (&EmitContext{}).reorderARMembers(refs, paths, metas)
+	_, gotPaths := (&EmitContext{codegen: reg, instance: ModuleInstance{Path: source("mod")}}).reorderARMembers(refs, paths, metas)
 
 	got := []string{gotPaths[0].string(), gotPaths[1].string()}
 	want := []string{cpp.string(), fbsCpp.string()}

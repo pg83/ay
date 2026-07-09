@@ -180,6 +180,12 @@ func (e *EmitContext) producersOnly() bool {
 	return e.instance.Demand == demandNone
 }
 
+func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
+	info.OwnerModule = e.instance.Path
+
+	return e.codegen.register(info)
+}
+
 func (e *EmitContext) emit() {
 	d := e.d
 	fsMemberRefs, fsMemberPaths := e.emitFromSandboxes()

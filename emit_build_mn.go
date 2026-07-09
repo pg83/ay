@@ -49,7 +49,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     cppVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(archiverRef),
@@ -58,7 +58,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		OnUse:          &pe,
 	})
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     rodataVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(archiverRef),

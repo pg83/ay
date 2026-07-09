@@ -78,13 +78,12 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 	r5TmpOut := build(instance.Path.relString(), "/", srcRel, ".tmp")
 	r5CppOut := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".rl5.cpp")
 	rlSourceVFS := source(instance.Path.relString(), "/", srcRel)
-	reg := e.codegen
 
 	pe := func() {
 		emitR5Reserved(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, r5Ref, ctx.emit)
 	}
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:    r5TmpOut,
 		ProducerRef:   r5Ref,
 		GeneratorRefs: e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
@@ -93,7 +92,7 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 
 	r5Parsed := e.scanner.parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     r5CppOut,
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),

@@ -74,7 +74,6 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	headerParsed = headerParsed[:len(headerParsed):len(headerParsed)]
 
 	cppParsed := ctx.na.dirList(part0Inc)
-	reg := e.codegen
 
 	pe := func() {
 		node := Node{
@@ -91,7 +90,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		ctx.emit.emitReservedNode(node, scRef)
 	}
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     prefixH,
 		ProducerRef:    scRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
@@ -100,7 +99,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		OnUse:          &pe,
 	})
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     prefixCpp,
 		ProducerRef:    scRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
@@ -121,7 +120,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 			info.ClosureLeaves = ctx.na.vfsList(inputIn)
 		}
 
-		reg.register(info)
+		e.register(info)
 	}
 
 	return scRef, partRels

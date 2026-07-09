@@ -25,14 +25,14 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		lexerCpp := build(outPrefix, lexerBase, ".cpp")
 		parserCpp := build(outPrefix, parserBase, ".cpp")
 
-		e.codegen.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:    lexerCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
 			OnUse:         &jvPE,
 		})
 
-		e.codegen.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:    parserCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
@@ -56,7 +56,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			parserBase + "Visitor.h",
 			parserBase + "BaseVisitor.h",
 		} {
-			e.codegen.register(GeneratedFileInfo{
+			e.register(GeneratedFileInfo{
 				OutputPath:     build(outPrefix, suffix),
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
@@ -94,14 +94,14 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		lexerCpp := build(outPrefix, base, "Lexer.cpp")
 		parserCpp := build(outPrefix, base, "Parser.cpp")
 
-		e.codegen.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:    lexerCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
 			OnUse:         &jvPE,
 		})
 
-		e.codegen.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:    parserCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
@@ -124,7 +124,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			base + "Visitor.h",
 			base + "BaseVisitor.h",
 		} {
-			e.codegen.register(GeneratedFileInfo{
+			e.register(GeneratedFileInfo{
 				OutputPath:     build(outPrefix, suffix),
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,

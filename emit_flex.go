@@ -69,7 +69,7 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
 		ProducerRef:    lxRef,
 		GeneratorRefs:  e.ctx.na.refList(flexRef),

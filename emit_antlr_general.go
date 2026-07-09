@@ -95,7 +95,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	jvSourceInputs = jvSourceInputs[:len(jvSourceInputs):len(jvSourceInputs)]
 
 	for outTok, outVFS := range outVFSByToken {
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     outVFS,
 			ProducerRef:    jvRef,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: antlrParsedIncludes(instance.Path.relString(), run, outTok, outVFSByToken, inputs, jarVFS)},

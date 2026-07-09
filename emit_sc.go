@@ -41,7 +41,7 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 		emitSCReserved(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, scRef, ctx.emit)
 	}
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    scRef,
 		GeneratorRefs:  e.ctx.na.refList(domLDRef),

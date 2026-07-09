@@ -306,7 +306,7 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 
 	pyRef := ctx.emit.emitNode(node)
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:    outputPath,
 		ProducerRef:   pyRef,
 		GeneratorRefs: toolRefs,
@@ -594,7 +594,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 	cflags[cn+1] = argC.any()
 	na.anys.commit(cn + 2)
 
-	e.codegen.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     aux,
 		ProducerRef:    ref,
 		GeneratorRefs:  na.refList(rescompilerRef),
@@ -677,7 +677,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 			spec.EnvAddIncl = appendCythonCCAddIncl(na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
 		}
 
-		e.codegen.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:    regCppVFS,
 			ProducerRef:   pyRef,
 			ClosureLeaves: e.ctx.na.vfsList(genPy3RegScriptVFS),

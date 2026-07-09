@@ -277,26 +277,15 @@ func (d *ModuleData) flatSrc(src ANY) bool {
 }
 
 type SrcMeta struct {
-	Source      ANY
-	Prio        int
-	Seq         int
-	Generated   bool
-	SecondLevel bool
-	Global      bool
-	Bucket      int
+	Source    ANY
+	Prio      int
+	Seq       int
+	Generated bool
+	Global    bool
+	Bucket    int
 }
 
-func (m SrcMeta) sortKey() uint64 {
-	var round uint64
-
-	if m.Generated {
-		round = 1
-	}
-
-	if m.SecondLevel {
-		round = 2
-	}
-
+func (m SrcMeta) sortKey(round uint64) uint64 {
 	return round<<48 | uint64(m.Prio)<<40 | uint64(uint32(m.Seq))<<8 | uint64(uint8(m.Bucket))
 }
 

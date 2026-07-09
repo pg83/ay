@@ -384,9 +384,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	e.dirScratch = directImports
 
 	if spec.genHParsed != nil {
-		reg := e.codegen
-
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     pbH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  spec.genRefs,
@@ -408,7 +406,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			psc = *p
 		}
 
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     pbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  spec.genRefs,
@@ -462,9 +460,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		pbHLeaves = protoProducerSourceInputs
 	}
 
-	reg := e.codegen
-
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     pbH,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
@@ -489,7 +485,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			yaffHParsed = yaffGeneratedHeaderIncludes(na, plugin.isExperimental(protoBaseName), pbH.relString())
 		}
 
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     yaffH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  nil,
@@ -504,7 +500,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		na.dirs.commit(yn + 1)
 		yaffCCParsed = yaffCCParsed[: yn+1 : yn+1]
 
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     yaffCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
@@ -521,7 +517,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		na.dirs.commit(len(depsParsed))
 		depsParsed = depsParsed[:len(depsParsed):len(depsParsed)]
 
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     pbDepsH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
@@ -542,7 +538,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	na.dirs.commit(len(pbCCParsed))
 	pbCCParsed = pbCCParsed[:len(pbCCParsed):len(pbCCParsed)]
 
-	reg.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     pbCC,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
@@ -566,7 +562,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	if cfg.grpc {
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     grpcPbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pe.grpcCCRefs,
@@ -574,7 +570,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			OnUse:          &pbPE,
 		})
 
-		reg.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     grpcPbH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pe.grpcHRefs,
