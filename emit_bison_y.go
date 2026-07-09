@@ -96,7 +96,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 	}
 
-	reg.register(headerInfo)
+	headerInfoStored := reg.register(headerInfo)
 
 	var generatedParsed []IncludeDirective
 
@@ -131,7 +131,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		spec.CFlags = cf[:len(cf):len(cf)]
 	}
 
-	reg.register(GeneratedFileInfo{
+	generatedInfoStored := reg.register(GeneratedFileInfo{
 		OutputPath:     generatedVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
@@ -141,6 +141,9 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 	env := na.envList(EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, EnvVar{Name: envBISON_PKGDATADIR, Value: strBisonPkgData.any()}, EnvVar{Name: envM4, Value: m4Bin.any()})
 	preprocessEnv := envVarsVCS
+	python3 := d.cc.TC.Python3
+	scanner := e.scanner
+	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 	head := na.anys.alloc(6 + len(d.cc.BisonFlags))[:0]
 
 	head = append(head, bisonBin.any(), argV.any())
@@ -156,9 +159,12 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 	head = head[:len(head):len(head)]
 
-	inputs := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS)
+	pe := &PendingEmit{owner: ctx.instanceKey(instance)}
 
-	if preprocessHeader {
+	pe.fn = func() {
+		inputs := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS)
+
+		if preprocessHeader {
 		ext := na.vfs.alloc(len(inputs) + 1 + len(bisonCppSkeletonInputs))[:0]
 
 		ext = append(ext, inputs...)
@@ -168,41 +174,47 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 		inputs = ext[:len(ext):len(ext)]
 
-		for _, sk := range bisonCppSkeletonInputs {
-			skCV := walkClosure(e.scanner, sk, d.cc.ScanCfg)
+			for _, sk := range bisonCppSkeletonInputs {
+				skCV := walkClosure(scanner, sk, scanCfg)
 
-			inputs = dedupClosure(na, inputs, skCV.buckets)
+				inputs = dedupClosure(na, inputs, skCV.buckets)
+			}
 		}
+
+		cmds := na.cmds.alloc(2)[:0]
+
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(head), Env: env})
+
+		if preprocessHeader {
+			cmds = append(cmds, Cmd{
+				CmdArgs: na.chunkList(na.anyList(python3.any(),
+					(bisonPreprocessPyVFS).any(),
+					(headerVFS).any())),
+				Env: preprocessEnv,
+			})
+		}
+
+		na.cmds.commit(len(cmds))
+
+		cmds = cmds[:len(cmds):len(cmds)]
+
+		ctx.emit.emitReservedNode(Node{
+			Platform:     instance.Platform,
+			Cmds:         cmds,
+			DepRefs:      na.refList(bisonRef, m4Ref),
+			Env:          env,
+			Inputs:       na.inputList(inputs),
+			Outputs:      na.vfsList(headerVFS, generatedVFS),
+			KV:           &bisonYKV,
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:    usesPython3,
+		}, ycRef)
 	}
 
-	cmds := na.cmds.alloc(2)[:0]
+	headerInfoStored.pending = pe
+	generatedInfoStored.pending = pe
 
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(head), Env: env})
-
-	if preprocessHeader {
-		cmds = append(cmds, Cmd{
-			CmdArgs: na.chunkList(na.anyList(d.cc.TC.Python3.any(),
-				(bisonPreprocessPyVFS).any(),
-				(headerVFS).any())),
-			Env: preprocessEnv,
-		})
-	}
-
-	na.cmds.commit(len(cmds))
-
-	cmds = cmds[:len(cmds):len(cmds)]
-
-	ctx.emit.emitReservedNode(Node{
-		Platform:     instance.Platform,
-		Cmds:         cmds,
-		DepRefs:      na.refList(bisonRef, m4Ref),
-		Env:          env,
-		Inputs:       na.inputList(inputs),
-		Outputs:      na.vfsList(headerVFS, generatedVFS),
-		KV:           &bisonYKV,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Resources:    usesPython3,
-	}, ycRef)
+	e.noteOwn(pe)
 }
 
 func (e *EmitContext) emitBisonY(src ANY) {
