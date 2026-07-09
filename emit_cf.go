@@ -47,28 +47,10 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
 	cfgVars := buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string())
-	cmdArgs := na.anys.alloc(4 + len(cfgVars))[:0]
+	python3 := d.cc.TC.Python3
+	cfRef := ctx.emit.reserve()
 
-	cmdArgs = append(cmdArgs, d.cc.TC.Python3.any(), configureFilePyVFS.any(), srcVFS.any(), outVFS.any())
-	cmdArgs = appendInternAnys(cmdArgs, cfgVars)
-	na.anys.commit(len(cmdArgs))
-
-	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
-
-	cv := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
-
-	cfRef := ctx.emit.emitNode(Node{
-		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-		Env:          env,
-		Inputs:       na.inputList(na.vfsList(configureFilePyVFS, cv.self), cv.buckets...),
-		KV:           &cfKV,
-		Outputs:      na.vfsList(outVFS),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Resources:    usesPython3,
-	})
-
-	e.codegen.register(GeneratedFileInfo{
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    cfRef,
@@ -77,6 +59,36 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cfTemplateParsedIncludes(ctx.parsers, srcVFS.relString())},
 		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, configureFilePyVFS),
 	})
+
+	scanner := e.scanner
+	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		cmdArgs := na.anys.alloc(4 + len(cfgVars))[:0]
+
+		cmdArgs = append(cmdArgs, python3.any(), configureFilePyVFS.any(), srcVFS.any(), outVFS.any())
+		cmdArgs = appendInternAnys(cmdArgs, cfgVars)
+		na.anys.commit(len(cmdArgs))
+
+		cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
+
+		cv := walkClosure(scanner, srcVFS, scanCfg)
+
+		ctx.emit.emitReservedNode(Node{
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+			Env:          env,
+			Inputs:       na.inputList(na.vfsList(configureFilePyVFS, cv.self), cv.buckets...),
+			KV:           &cfKV,
+			Outputs:      na.vfsList(outVFS),
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			Resources:    usesPython3,
+		}, cfRef)
+	}}
+
+	info.pending = pe
+
+	e.noteOwn(pe)
 
 	return cfRef
 }
