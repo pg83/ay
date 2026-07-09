@@ -195,7 +195,6 @@ type GenCtx struct {
 	keepGoing        bool
 	na               *NodeArenas
 	inclArgValues    DenseMap[VFS, STR]
-	prClosureScratch []VFS
 	resHashScratch   []string
 	resHashBuf       []byte
 	resDashBuf       []byte

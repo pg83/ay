@@ -28,7 +28,6 @@ type StreamingEmitter struct {
 	finalized  bool
 	na         *NodeArenas
 	fetchRefs  *DenseMap[STR, NodeRef]
-	reserved   int
 }
 
 func newStreamingEmitter(onNode func(*Node, *DenseMap[STR, NodeRef])) *StreamingEmitter {
@@ -52,7 +51,6 @@ func (e *StreamingEmitter) reserve() NodeRef {
 	id := NodeRef(e.nodes.len())
 
 	e.nodes.pushBack(nil)
-	e.reserved++
 
 	return id
 }
@@ -68,7 +66,6 @@ func (e *StreamingEmitter) emitReserved(n *Node, id NodeRef) {
 
 	n.Ref = id
 	e.nodes.s[id] = n
-	e.reserved--
 	e.resolveOrPend(n, id)
 }
 

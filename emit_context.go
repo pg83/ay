@@ -15,7 +15,7 @@ type EmitContext struct {
 	scanner      *IncludeScanner
 	codegen      *CodegenRegistry
 	srcs         []SrcMeta
-	pass2        []func()
+	ownPending   []*PendingEmit
 	refs         []NodeRef
 	outs         []VFS
 	metas        []SrcMeta
@@ -109,7 +109,7 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		resources: d.resources[:k:k],
 
 		srcs:        prev.srcs[:0],
-		pass2:       scrub(prev.pass2),
+		ownPending:  scrub(prev.ownPending),
 		refs:        prev.refs[:0],
 		outs:        prev.outs[:0],
 		metas:       prev.metas[:0],
@@ -178,8 +178,8 @@ func (e *EmitContext) enqueueSrc(meta SrcMeta) {
 	e.srcs = append(e.srcs, meta)
 }
 
-func (e *EmitContext) deferPass2(cb func()) {
-	e.pass2 = append(e.pass2, cb)
+func (e *EmitContext) deferOwn(pe *PendingEmit) {
+	e.ownPending = append(e.ownPending, pe)
 }
 
 func (e *EmitContext) producersOnly() bool {
@@ -291,7 +291,7 @@ func (e *EmitContext) noteOwn(pe *PendingEmit) {
 		return
 	}
 
-	e.deferPass2(pe.run)
+	e.deferOwn(pe)
 }
 
 func (e *EmitContext) drainSrcs() {
@@ -304,16 +304,16 @@ func (e *EmitContext) drainSrcs() {
 			e.emitOneSource(meta)
 		}
 
-		if len(e.pass2) == 0 {
+		if len(e.ownPending) == 0 {
 			return
 		}
 
-		cbs := e.pass2
+		pes := e.ownPending
 
-		e.pass2 = nil
+		e.ownPending = nil
 
-		for _, cb := range cbs {
-			cb()
+		for _, pe := range pes {
+			pe.run()
 		}
 	}
 }
