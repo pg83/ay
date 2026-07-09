@@ -12,21 +12,50 @@ import (
 )
 
 func cmdMaxRSS(g GlobalFlags, args []string) int {
+	hz := 1.0
 	sub := args
+	var own []string
 
 	for i, a := range args {
 		if a == "--" {
-			sub = args[i+1:]
+			own, sub = args[:i], args[i+1:]
 
 			break
 		}
 	}
 
+	for i := 0; i < len(own); i++ {
+		a := own[i]
+
+		switch {
+		case a == "--hz":
+			i++
+
+			if i >= len(own) {
+				throwFmt("maxrss: --hz needs a value")
+			}
+
+			hz = throw2(strconv.ParseFloat(own[i], 64))
+
+		case strings.HasPrefix(a, "--hz="):
+			hz = throw2(strconv.ParseFloat(a[len("--hz="):], 64))
+
+		default:
+			throwFmt("maxrss: unknown flag %q", a)
+		}
+	}
+
+	if hz <= 0 {
+		throwFmt("maxrss: --hz must be > 0, got %g", hz)
+	}
+
 	if len(sub) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ay dev maxrss -- <command> [args...]")
+		fmt.Fprintln(os.Stderr, "usage: ay dev maxrss [--hz N] -- <command> [args...]")
 
 		return 2
 	}
+
+	interval := time.Duration(float64(time.Second) / hz)
 
 	cmd := exec.Command(sub[0], sub[1:]...)
 	cmd.Stdin = os.Stdin
@@ -57,7 +86,7 @@ func cmdMaxRSS(g GlobalFlags, args []string) int {
 
 		sample()
 
-		ticker := time.NewTicker(time.Second)
+		ticker := time.NewTicker(interval)
 
 		defer ticker.Stop()
 

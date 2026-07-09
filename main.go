@@ -38,7 +38,7 @@ var commands = []Command{
 	{
 		path: []string{"dev", "maxrss"}, run: cmdMaxRSS,
 		help: "📈 Run <command> after -- and report the peak summed RSS of its whole\n" +
-			"process subtree, sampled once a second.",
+			"process subtree. --hz N sets samples per second (default 1).",
 	},
 	{
 		path: []string{"dev", "dump", "normalize"}, run: cmdDumpNormalize,
