@@ -371,7 +371,9 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		payload = payload[:len(payload):len(payload)]
 
-		deduper.reset()
+		deduper := dedupers.get()
+
+		defer dedupers.put(deduper)
 
 		adjacent := na.vfs.alloc(cand)[:0]
 
@@ -474,7 +476,9 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		lo = hi
 
-		deduper.reset()
+		deduper := dedupers.get()
+
+		defer dedupers.put(deduper)
 
 		adjBound := 0
 

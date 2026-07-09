@@ -254,7 +254,10 @@ func runPendingProducers(ctx *GenCtx, reg *CodegenRegistry, consumer ModuleInsta
 
 func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, includeInputs []VFS, incl ...NodeRef) []NodeRef {
 	runPendingProducers(ctx, ctx.codegenFor(consumer), consumer, includeInputs)
-	deduper.reset()
+
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	out := na.noderefs.alloc(len(incl) + len(includeInputs))
 	k := 0
@@ -300,7 +303,9 @@ func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []Nod
 		runPendingProducers(e.ctx, e.codegen, e.instance, ch)
 	}
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	na := e.ctx.na
 	total := len(incl)
@@ -364,7 +369,9 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 		}
 	})
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	out := na.noderefs.alloc(len(incl) + cv.len())
 	k := 0
@@ -856,7 +863,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	defer ctx.popFrame()
 
-	d := collectModuleInto(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn, &frame.d)
+	collectDD := dedupers.get()
+	d := collectModuleInto(ctx.parsers, collectDD, instance, stmts, env, ctx.onWarn, &frame.d)
+
+	dedupers.put(collectDD)
+
 	e := newEmitContextIn(frame, ctx, instance, d, nil)
 
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary {
@@ -901,7 +912,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if d.moduleStmt.Name == tokResourcesLibrary {
 		if e.bindResourceGlobalVars(env) {
-			d = collectModuleInto(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn, &frame.d)
+			redoDD := dedupers.get()
+
+			d = collectModuleInto(ctx.parsers, redoDD, instance, stmts, env, ctx.onWarn, &frame.d)
+
+			dedupers.put(redoDD)
+
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
 
@@ -912,7 +928,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		env.setString(envMODULE_SUFFIX, prebuiltModuleSuffix(instance.Platform))
 
 		if e.bindResourceGlobalVars(env) {
-			d = collectModuleInto(ctx.parsers, &deduper, instance, stmts, env, ctx.onWarn, &frame.d)
+			redoDD := dedupers.get()
+
+			d = collectModuleInto(ctx.parsers, redoDD, instance, stmts, env, ctx.onWarn, &frame.d)
+
+			dedupers.put(redoDD)
+
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
 
@@ -993,7 +1014,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	peerSeen := func(p string) bool {
 		return !deduper.add(internStr(p).strID())
@@ -1993,8 +2016,9 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	}
 
 	ownPrefix := build(instancePath)
+	deduper := dedupers.get()
 
-	deduper.reset()
+	defer dedupers.put(deduper)
 
 	matched := false
 

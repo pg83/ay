@@ -179,7 +179,9 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 			}
 		}
 
-		deduper.reset()
+		deduper := dedupers.get()
+
+		defer dedupers.put(deduper)
 
 		for i := len(rec.pairs) - 1; i >= 0; i-- {
 			p := &rec.pairs[i]

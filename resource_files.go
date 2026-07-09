@@ -116,7 +116,9 @@ func expandAllResourceFiles(d *ModuleData, out []ResourceEntry, fs FS, modulePat
 
 	rfArgs = append(rfArgs, "STRIP", d.resStr4("${ARCADIA_ROOT}/", modulePath, "/", strip))
 
-	deduper.reset()
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
 
 	for _, dir := range dirs {
 		rel, ok := allResourceDir(modulePath, expandStmtTokenAny(dir, env).string())

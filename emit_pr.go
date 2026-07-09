@@ -591,8 +591,9 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
 	head := na.vfs.alloc(1 + len(spec.auxTools) + len(spec.inVFSs))[:0]
+	deduper := dedupers.get()
 
-	deduper.reset()
+	defer dedupers.put(deduper)
 
 	appendUnique := func(p VFS) {
 		if !deduper.add(p.strID()) {

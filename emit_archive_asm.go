@@ -38,8 +38,9 @@ func (e *EmitContext) emitArchiveAsmNode(
 	}
 
 	producerRefs := []NodeRef{}
+	deduper := dedupers.get()
 
-	deduper.reset()
+	defer dedupers.put(deduper)
 
 	pathPerFile := make([]VFS, 0, len(a.Files))
 
