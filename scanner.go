@@ -57,6 +57,7 @@ type IncludeScanner struct {
 	parsers          *IncludeParserManager
 	buckets          *BucketCache
 	closureArena     *BumpAllocator[VFS]
+	inDfsFrame       bool
 	scanCache        DenseMap2[VFS, []VFS, Closure]
 	searchTierFlat   *IntMap[VFS]
 	searchTierSeen   BitSet
@@ -352,6 +353,14 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		sc.ensureClosure(ch)
 	})
 
+	if ownershipOn {
+		if s.inDfsFrame {
+			throwFmt("scanner: nested dfs frame (closure assembly reentered)")
+		}
+
+		s.inDfsFrame = true
+	}
+
 	s.tjc.closure.reset(vfsBound())
 
 	block := s.closureArena.alloc(closureAllocHint)
@@ -388,6 +397,10 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	}
 
 	s.putClosure(abs, s.buckets.storeBuckets(block[0], block[1:k]))
+
+	if ownershipOn {
+		s.inDfsFrame = false
+	}
 }
 
 func (sc *ScanCtx) ensureClosure(abs VFS) {

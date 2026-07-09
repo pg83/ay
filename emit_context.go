@@ -39,6 +39,7 @@ type EmitContext struct {
 	resStrBuf    []byte
 	resVFSBuf    []VFS
 	prodVFS      []VFS
+	cvScratch    []Closure
 	peerScratch  []string
 	arMembers    []ARMember
 	sbomOrder    []ResolvedPeer
@@ -126,6 +127,7 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		resStrBuf:   prev.resStrBuf[:0],
 		resVFSBuf:   prev.resVFSBuf[:0],
 		prodVFS:     prev.prodVFS[:0],
+		cvScratch:   scrub(prev.cvScratch),
 		peerScratch: scrub(prev.peerScratch),
 		arMembers:   prev.arMembers[:0],
 		sbomOrder:   scrub(prev.sbomOrder),

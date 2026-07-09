@@ -21,20 +21,12 @@ func (e *EmitContext) emitArchive(
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := emit.nodeArenas()
 	archiveVFS := build(instance.Path.relString(), "/", a.Name)
-	cmdArgs := na.anys.alloc(8 + len(a.Files))[:0]
-
-	cmdArgs = append(cmdArgs, (toolBinPath).any(), argQ.any(), argX.any())
-
-	if a.DontCompress {
-		cmdArgs = append(cmdArgs, argP.any())
-	}
-
 	producerRefs := []NodeRef{}
 	deduper := dedupers.get()
 
 	defer dedupers.put(deduper)
 
-	pathPerFile := make([]VFS, 0, len(a.Files))
+	pathMark := len(e.prodVFS)
 
 	for _, f := range a.Files {
 		isPRProduced := false
@@ -55,8 +47,19 @@ func (e *EmitContext) emitArchive(
 			absVFS = e.requireProducedInput("ARCHIVE member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))
 		}
 
-		pathPerFile = append(pathPerFile, absVFS)
+		e.prodVFS = append(e.prodVFS, absVFS)
+	}
 
+	pathPerFile := e.prodVFSTake(pathMark)
+	cmdArgs := na.anys.alloc(8 + len(a.Files))[:0]
+
+	cmdArgs = append(cmdArgs, (toolBinPath).any(), argQ.any(), argX.any())
+
+	if a.DontCompress {
+		cmdArgs = append(cmdArgs, argP.any())
+	}
+
+	for _, absVFS := range pathPerFile {
 		if a.Keys != nil {
 			cmdArgs = append(cmdArgs, absVFS.any())
 		} else {

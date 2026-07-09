@@ -29,20 +29,12 @@ func (e *EmitContext) emitArchiveAsmNode(
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	rodataVFS := build(instance.Path.relString(), "/", a.Name, ".rodata")
-	cmdArgs := na.anys.alloc(5 + len(a.Files))[:0]
-
-	cmdArgs = append(cmdArgs, (toolBinPath).any(), argQ.any())
-
-	if a.DontCompress {
-		cmdArgs = append(cmdArgs, argP.any())
-	}
-
 	producerRefs := []NodeRef{}
 	deduper := dedupers.get()
 
 	defer dedupers.put(deduper)
 
-	pathPerFile := make([]VFS, 0, len(a.Files))
+	pathMark := len(e.prodVFS)
 
 	for _, f := range a.Files {
 		var memberVFS VFS
@@ -57,7 +49,19 @@ func (e *EmitContext) emitArchiveAsmNode(
 			memberVFS = e.requireProducedInput("ARCHIVE_ASM member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))
 		}
 
-		pathPerFile = append(pathPerFile, memberVFS)
+		e.prodVFS = append(e.prodVFS, memberVFS)
+	}
+
+	pathPerFile := e.prodVFSTake(pathMark)
+	cmdArgs := na.anys.alloc(5 + len(a.Files))[:0]
+
+	cmdArgs = append(cmdArgs, (toolBinPath).any(), argQ.any())
+
+	if a.DontCompress {
+		cmdArgs = append(cmdArgs, argP.any())
+	}
+
+	for _, memberVFS := range pathPerFile {
 		cmdArgs = append(cmdArgs, internV(memberVFS.prefix(), memberVFS.relString(), ":").any())
 	}
 

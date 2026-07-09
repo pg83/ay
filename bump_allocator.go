@@ -5,8 +5,14 @@ import "unsafe"
 const bumpChunkBytes = 1 << 21
 
 type BumpAllocator[T any] struct {
-	chunk []T
-	next  int
+	chunk  []T
+	next   int
+	strict bool
+	open   bool
+}
+
+func (a *BumpAllocator[T]) markStrict() {
+	a.strict = true
 }
 
 func newBumpAllocator[T any](hint int) *BumpAllocator[T] {
@@ -14,6 +20,14 @@ func newBumpAllocator[T any](hint int) *BumpAllocator[T] {
 }
 
 func (a *BumpAllocator[T]) alloc(n int) []T {
+	if ownershipOn && a.strict {
+		if a.open {
+			throwFmt("bump: nested alloc on strict arena (open window)")
+		}
+
+		a.open = true
+	}
+
 	if len(a.chunk) < n {
 		var zero T
 
@@ -40,6 +54,7 @@ func (a *BumpAllocator[T]) alloc(n int) []T {
 }
 
 func (a *BumpAllocator[T]) commit(k int) {
+	a.open = false
 	a.chunk = a.chunk[k:]
 }
 

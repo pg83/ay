@@ -379,12 +379,18 @@ func (e *EmitContext) goAsmIncludeSrcs() []VFS {
 		bound += walkClosure(e.scanner, src, cfg).len()
 	}
 
+	cvs := e.cvScratch[:0]
+
+	for _, src := range e.goRes.AsmFiles {
+		cvs = append(cvs, walkClosure(e.scanner, src, cfg))
+	}
+
+	e.cvScratch = cvs
+
 	block := na.vfs.alloc(bound)
 	k := 0
 
-	for _, src := range e.goRes.AsmFiles {
-		cv := walkClosure(e.scanner, src, cfg)
-
+	for _, cv := range cvs {
 		cv.each(func(p VFS) {
 			if p.isSource() && deduper.add(p.strID()) {
 				block[k] = p
@@ -770,6 +776,14 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			extrasCap += 1 + walkClosure(e.scanner, auxSrcs[i], d.cc.ScanCfg).len()
 		}
 
+		cvs := e.cvScratch[:0]
+
+		for _, src := range auxSrcs {
+			cvs = append(cvs, walkClosure(e.scanner, src, d.cc.ScanCfg))
+		}
+
+		e.cvScratch = cvs
+
 		block := na.vfs.alloc(extrasCap)
 		k := 0
 		push := func(p VFS) { block[k] = p; k++ }
@@ -789,12 +803,10 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			push(p)
 		}
 
-		for _, src := range auxSrcs {
+		for i, src := range auxSrcs {
 			push(src)
 
-			cv := walkClosure(e.scanner, src, d.cc.ScanCfg)
-
-			cv.each(func(p VFS) {
+			cvs[i].each(func(p VFS) {
 				if p.isSource() {
 					push(p)
 				}
