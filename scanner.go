@@ -10,8 +10,6 @@ const (
 	closureAllocHint    = 1 << 13
 	closureArenaInitial = closureAllocHint
 	resolveNoRank       = int(^uint(0) >> 1)
-	sourceExistsNo      = 1
-	sourceExistsYes     = 2
 )
 
 const (
@@ -61,7 +59,7 @@ type IncludeScanner struct {
 	scanCache        DenseMap2[VFS, []VFS, Closure]
 	searchTierFlat   *IntMap[VFS]
 	searchTierSeen   BitSet
-	sourceUnderCache *IntMap[VFS]
+	sourceUnderCache *IntMap[STR]
 	childArena       *BumpAllocator[VFS]
 	spOut            []VFS
 	resolveOut       []VFS
@@ -96,27 +94,6 @@ func (s *IncludeScanner) putChildren(v VFS, children []VFS) {
 	s.scanCache.put1(v, children)
 }
 
-func (s *IncludeScanner) sourceFileExists(abs VFS) bool {
-	id := abs.strID()
-
-	switch s.parsers.sourceExists.get(id) {
-	case sourceExistsYes:
-		return true
-	case sourceExistsNo:
-		return false
-	}
-
-	v := s.parsers.fs.isFile(srcRootRel, abs.relString())
-
-	if v {
-		s.parsers.sourceExists.set(id, sourceExistsYes)
-	} else {
-		s.parsers.sourceExists.set(id, sourceExistsNo)
-	}
-
-	return v
-}
-
 func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), buckets *BucketCache) *IncludeScanner {
 	s := &IncludeScanner{
 		sysincl: newSysinclCtx(sysincl),
@@ -127,7 +104,7 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		closureArena:     newBumpAllocator[VFS](closureArenaInitial),
 		childArena:       newBumpAllocator[VFS](1 << 12),
 		searchTierFlat:   newIntMap[VFS](4096),
-		sourceUnderCache: newIntMap[VFS](1 << 16),
+		sourceUnderCache: newIntMap[STR](1 << 16),
 	}
 
 	s.visitedIDPool.New = func() any {
@@ -552,7 +529,7 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 				}
 			}
 
-			if !s.sourceFileExists(abs) {
+			if s.resolveSourceUnder(srcRootRel, abs.rel()) == 0 {
 				continue
 			}
 
@@ -587,7 +564,7 @@ mapLoop:
 			}
 		}
 
-		if !s.sourceFileExists(abs) {
+		if s.resolveSourceUnder(srcRootRel, abs.rel()) == 0 {
 			continue
 		}
 
@@ -700,13 +677,13 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	normTarget := normalisePath(target)
 
 	addSource := func(prefix VFS) bool {
-		v := s.resolveSourceUnder(prefix, targetID)
+		rel := s.resolveSourceUnder(prefix.rel(), targetID)
 
-		if v == 0 {
+		if rel == 0 {
 			return false
 		}
 
-		out = v
+		out = rel.source()
 
 		return true
 	}
@@ -882,10 +859,10 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 	if d.quotedLike() {
 		matched := false
-		sv := s.resolveSourceUnder(incDir, d.target.str())
+		sv := s.resolveSourceUnder(incDir.rel(), d.target.str())
 
 		if sv != 0 {
-			out = append(out, sv)
+			out = append(out, sv.source())
 			searchPathFound = true
 			matched = true
 		}
@@ -943,8 +920,8 @@ func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool
 	return "", false
 }
 
-func (s *IncludeScanner) resolveSourceUnder(prefix VFS, targetSTR STR) VFS {
-	key := splitMix64(uint32(prefix.rel()), uint32(targetSTR))
+func (s *IncludeScanner) resolveSourceUnder(prefix, targetSTR STR) STR {
+	key := splitMix64(uint32(prefix), uint32(targetSTR))
 
 	if p := s.sourceUnderCache.get(key); p != nil {
 		return *p
@@ -952,21 +929,26 @@ func (s *IncludeScanner) resolveSourceUnder(prefix VFS, targetSTR STR) VFS {
 
 	target := targetSTR.string()
 
-	var v VFS
+	var v STR
 
-	if s.parsers.fs.isFile(prefix.rel(), target) {
-		if target != "" && pathIsClean(target) {
-			v = sourceJoined(prefix.relString(), target)
-		} else {
+	if s.parsers.fs.isFile(prefix, target) {
+		switch {
+		case target != "" && pathIsClean(target):
+			if prefix == srcRootRel {
+				v = targetSTR
+			} else {
+				v = internJoined(prefix.string(), target)
+			}
+		default:
 			var jb, nb [256]byte
 
-			joined := joinRelInto(jb[:0], prefix.relString(), target)
+			joined := joinRelInto(jb[:0], prefix.string(), target)
 			normB, ok := normaliseAppend(nb[:0], bytesString(joined))
 
 			if ok {
-				v = sourceBytes(normB)
+				v = internBytes(normB)
 			} else {
-				v = source(normalisePathSlow(string(joined)))
+				v = internStr(normalisePathSlow(string(joined)))
 			}
 		}
 	}
