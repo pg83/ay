@@ -188,68 +188,66 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 }
 
 type GenCtx struct {
-	fs               FS
-	parsers          *IncludeParserManager
-	emit             *StreamingEmitter
-	onWarn           func(Warn)
-	keepGoing        bool
-	na               *NodeArenas
-	inclArgValues    DenseMap[VFS, STR]
-	resHashScratch   []string
-	resHashBuf       []byte
-	resDashBuf       []byte
-	resB64Scratch    []byte
-	inclArgs         InclArgMemo
-	memo             *IntValueMap[*ModuleEmitResult]
-	refSlices        *SliceCache[NodeRef]
-	vfsSlices        *SliceCache[VFS]
-	argSlices        *SliceCache[ANY]
-	declSlices       *SliceCache[ResourceDecl]
-	results          *BumpAllocator[ModuleEmitResult]
-	dirSlices        *SliceCache[IncludeDirective]
-	descSlices       *SliceCache[DescProtoPeer]
-	tcMemo           map[ToolchainKey]ModuleToolchain
-	moduleStmts      map[string][]Stmt
-	ifEnvScratch     EnvStore
-	walking          map[ModuleInstance]bool
-	cyclesTolerated  int
-	traceStack       []string
-	scannerTarget    *IncludeScanner
-	scannerHost      *IncludeScanner
-	buckets          *BucketCache
-	moduleByRef      DenseMap[NodeRef, *ModuleEmitResult]
-	tools            DenseMap[ARG, *ModuleEmitResult]
-	frames           []*ModuleFrame
-	frameDepth       int
-	py3ccHeadChunk   []ANY
-	scripts          ScriptDeps
-	fetchRefs        *DenseMap[STR, NodeRef]
-	host             *Platform
-	target           *Platform
-	vcsRef           NodeRef
-	testMode         bool
-	sbomEnabled      bool
-	autoincludeIdx   *AutoincludeIndex
-	parsedFiles      map[string]*MakeFile
-	prodOuts         IdValueMap
-	py3NoStripDebug  bool
-	goEnvMemo        map[[2]STR]EnvVars
+	fs              FS
+	parsers         *IncludeParserManager
+	emit            *StreamingEmitter
+	onWarn          func(Warn)
+	keepGoing       bool
+	na              *NodeArenas
+	inclArgValues   DenseMap[VFS, STR]
+	resHashScratch  []string
+	resHashBuf      []byte
+	resDashBuf      []byte
+	resB64Scratch   []byte
+	inclArgs        InclArgMemo
+	memo            *IntValueMap[*ModuleEmitResult]
+	refSlices       *SliceCache[NodeRef]
+	vfsSlices       *SliceCache[VFS]
+	argSlices       *SliceCache[ANY]
+	declSlices      *SliceCache[ResourceDecl]
+	results         *BumpAllocator[ModuleEmitResult]
+	dirSlices       *SliceCache[IncludeDirective]
+	descSlices      *SliceCache[DescProtoPeer]
+	tcMemo          map[ToolchainKey]ModuleToolchain
+	moduleStmts     map[string][]Stmt
+	ifEnvScratch    EnvStore
+	walking         map[ModuleInstance]bool
+	cyclesTolerated int
+	traceStack      []string
+	scannerTarget   *IncludeScanner
+	scannerHost     *IncludeScanner
+	buckets         *BucketCache
+	moduleByRef     DenseMap[NodeRef, *ModuleEmitResult]
+	tools           DenseMap[ARG, *ModuleEmitResult]
+	frames          []*ModuleFrame
+	frameDepth      int
+	py3ccHeadChunk  []ANY
+	scripts         ScriptDeps
+	fetchRefs       *DenseMap[STR, NodeRef]
+	host            *Platform
+	target          *Platform
+	vcsRef          NodeRef
+	testMode        bool
+	sbomEnabled     bool
+	autoincludeIdx  *AutoincludeIndex
+	parsedFiles     map[string]*MakeFile
+	prodOuts        IdValueMap
+	py3NoStripDebug bool
+	goEnvMemo       map[[2]STR]EnvVars
 }
 
-func runPendingProducers(ctx *GenCtx, reg *CodegenRegistry, consumer ModuleInstance, paths []VFS) {
+func useProducers(reg *CodegenRegistry, paths []VFS) {
 	for _, p := range paths {
 		if !p.isBuild() {
 			continue
 		}
 
-		if info := reg.lookup(p); info != nil {
-			runPending(info)
-		}
+		reg.use(p)
 	}
 }
 
 func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, includeInputs []VFS, incl ...NodeRef) []NodeRef {
-	runPendingProducers(ctx, ctx.codegenFor(consumer), consumer, includeInputs)
+	useProducers(ctx.codegenFor(consumer), includeInputs)
 
 	deduper := dedupers.get()
 
@@ -296,7 +294,7 @@ func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeAre
 
 func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []NodeRef) []NodeRef {
 	for _, ch := range chunks {
-		runPendingProducers(e.ctx, e.codegen, e.instance, ch)
+		useProducers(e.codegen, ch)
 	}
 
 	deduper := dedupers.get()
@@ -359,9 +357,7 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 			return
 		}
 
-		if info := reg.lookup(p); info != nil {
-			runPending(info)
-		}
+		reg.use(p)
 	})
 
 	deduper := dedupers.get()

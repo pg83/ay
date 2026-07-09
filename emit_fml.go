@@ -20,7 +20,7 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 		ClosureLeaves: e.ctx.na.vfsList(srcVFS),
 	})
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		node := Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
@@ -40,8 +40,8 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 		}
 
 		ctx.emit.emitReservedNode(node, ref)
-	}}
+	}
 
-	info.pending = pe
+	info.OnUse = &pe
 
 }

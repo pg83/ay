@@ -1,25 +1,5 @@
 package main
 
-type PendingEmit struct {
-	fn func()
-}
-
-func (p *PendingEmit) run() {
-	if p == nil || p.fn == nil {
-		return
-	}
-
-	fn := p.fn
-
-	p.fn = nil
-
-	fn()
-}
-
-func runPending(info *GeneratedFileInfo) {
-	info.pending.run()
-}
-
 type GeneratedFileInfo struct {
 	OutputPath      VFS
 	SourcePath      VFS
@@ -31,7 +11,19 @@ type GeneratedFileInfo struct {
 	ClosureLeaves   []VFS
 	ParsedIncludes  ParsedIncludeSet
 	Compile         *CompileSpec
-	pending         *PendingEmit
+	OnUse           *func()
+}
+
+func fireOnUse(info *GeneratedFileInfo) {
+	if info == nil || info.OnUse == nil || *info.OnUse == nil {
+		return
+	}
+
+	fn := *info.OnUse
+
+	*info.OnUse = nil
+
+	fn()
 }
 
 type CompileSpec struct {
@@ -65,9 +57,15 @@ func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
 func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
 	info := r.lookup(path)
 
-	if info != nil {
-		runPending(info)
-	}
+	fireOnUse(info)
+
+	return info
+}
+
+func (r *CodegenRegistry) useSplit(prefix VFS, suffix ANY) *GeneratedFileInfo {
+	info := r.lookupSplit(prefix, suffix)
+
+	fireOnUse(info)
 
 	return info
 }

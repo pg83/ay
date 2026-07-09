@@ -308,7 +308,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		headerPyxClosure := p.headerPyxClosure
 		header := stmt.Header
 
-		pe := &PendingEmit{fn: func() {
+		pe := func() {
 			var toolInputs []VFS
 
 			if header {
@@ -334,12 +334,12 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 				Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 				Resources:    usesPython3,
 			}, cyRef)
-		}}
+		}
 
-		cppInfo.pending = pe
+		cppInfo.OnUse = &pe
 
 		for _, info := range p.infos {
-			info.pending = pe
+			info.OnUse = &pe
 		}
 
 		e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCython})

@@ -77,9 +77,9 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	tc := d.tc
 	outputName := js.OutputName
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		emitJSReserved(instance, outputName, jsSources, joinClosure, ctx.target, tc, ctx.scripts, ctx.emit, jsRef)
-	}}
+	}
 
 	joinOutVFS := build(instance.Path.relString(), "/", js.OutputName)
 	ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
@@ -97,8 +97,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 		Compile:       e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.any()), CFlags: psc}),
 	})
 
-	info.pending = pe
-
+	info.OnUse = &pe
 
 	e.enqueueSrc(SrcMeta{Source: joinOutVFS.any(), Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
 }

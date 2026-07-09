@@ -168,17 +168,16 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		outIncludeVFSs: ctx.na.vfsList(outIncludeVFSs...),
 	}
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		inputClosure := pyInputClosure(snap, stmt)
 		extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputClosure)
 
 		emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, interp, interpInput, toolRefs, kv, resources, ctx.emit)
-	}}
-
-	for _, info := range pyInfos {
-		info.pending = pe
 	}
 
+	for _, info := range pyInfos {
+		info.OnUse = &pe
+	}
 
 	return pyRef
 }
@@ -291,9 +290,7 @@ func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS
 	for _, f := range stmt.INFiles {
 		vfs := e.runProgramInputVFS(f.string())
 
-		if info := reg.lookup(vfs); info != nil {
-			runPending(info)
-
+		if info := reg.use(vfs); info != nil {
 			for _, si := range info.SourceInputs {
 				addSource(si)
 			}

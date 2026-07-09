@@ -50,11 +50,11 @@ func (e *EmitContext) emitLuaJit21() {
 			SourceInputs: ctx.na.vfsList(luaSrc),
 		})
 
-		pe := &PendingEmit{fn: func() {
+		pe := func() {
 			emitLJReserved(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ref, ctx.emit)
-		}}
+		}
 
-		info.pending = pe
+		info.OnUse = &pe
 
 	}
 }

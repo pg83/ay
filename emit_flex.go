@@ -71,13 +71,13 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		lxClosure := walkClosure(scanner, outVFS, scanCfg).collect(ctx.na, func(v VFS) bool { return v.isSource() })
 
 		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
-	}}
+	}
 
-	info.pending = pe
+	info.OnUse = &pe
 
 }
 

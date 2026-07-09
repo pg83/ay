@@ -63,7 +63,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		cmdArgs := na.anys.alloc(4 + len(cfgVars))[:0]
 
 		cmdArgs = append(cmdArgs, python3.any(), configureFilePyVFS.any(), srcVFS.any(), outVFS.any())
@@ -84,10 +84,9 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}, cfRef)
-	}}
+	}
 
-	info.pending = pe
-
+	info.OnUse = &pe
 
 	return cfRef
 }

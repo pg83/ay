@@ -193,7 +193,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		inVFSs:   ctx.na.vfsList(inVFSs...),
 	}
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		inputClosure := prInputClosure(snap, stmt)
 
 		if prSourceClosure := filterSourceVFS(ctx.na, inputClosure); len(prSourceClosure) > 0 {
@@ -219,11 +219,11 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			inputClosure:  inputClosure,
 			extraDepRefs:  resolveCodegenDepRefsIncl(ctx, instance, ctx.na, depInputs),
 		}, prRef, ctx.emit)
-	}}
+	}
 
 	for out := range registeredPROut {
 		if info := e.codegen.lookup(out); info != nil {
-			info.pending = pe
+			info.OnUse = &pe
 		}
 	}
 

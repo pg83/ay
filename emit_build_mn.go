@@ -38,7 +38,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 
 	python3 := d.tc.Python3
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		node := Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
@@ -62,11 +62,10 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		}
 
 		ctx.emit.emitReservedNode(node, ref)
-	}}
+	}
 
-	cppInfo.pending = pe
-	rodataInfo.pending = pe
-
+	cppInfo.OnUse = &pe
+	rodataInfo.OnUse = &pe
 
 	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
 	e.enqueueSrc(SrcMeta{Source: internV("MN_External_", stmt.Name, ".rodata").any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})

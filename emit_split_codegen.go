@@ -108,7 +108,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		partInfos = append(partInfos, reg.register(info))
 	}
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		node := Node{
 			Platform:       instance.Platform,
 			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
@@ -121,15 +121,14 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		}
 
 		ctx.emit.emitReservedNode(node, scRef)
-	}}
-
-	hInfo.pending = pe
-	cInfo.pending = pe
-
-	for _, pi := range partInfos {
-		pi.pending = pe
 	}
 
+	hInfo.OnUse = &pe
+	cInfo.OnUse = &pe
+
+	for _, pi := range partInfos {
+		pi.OnUse = &pe
+	}
 
 	return scRef, partRels
 }

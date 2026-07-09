@@ -143,9 +143,11 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 
 	switch ps.Group {
 	case pyGroupGenAux:
-		info := e.codegen.mustInfo(ps.Path, "appendPyResEntries")
+		info := e.codegen.use(ps.Path)
 
-		runPending(info)
+		if info == nil {
+			throwFmt("appendPyResEntries: unregistered producer for %q", ps.Path.string())
+		}
 
 		out = append(out, PyGenResEntry{token: ps.Token.string(), key: ps.Module, path: ps.Path, inputs: info.SourceInputs})
 
@@ -166,11 +168,7 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 	}
 
 	resolvedRel := resolvePySrcRel(e.ctx.fs, d.srcDirs, e.instance.Path, srcRel)
-	genInfo := e.codegen.lookupSplit(e.instance.Path, ps.Token)
-
-	if genInfo != nil {
-		runPending(genInfo)
-	}
+	genInfo := e.codegen.useSplit(e.instance.Path, ps.Token)
 	pySource := resolvedRel.source()
 
 	if genInfo != nil {
@@ -243,16 +241,15 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 	var moduleName string
 
 	if ps.Group == pyGroupGenAux {
-		genInfo = e.codegen.mustInfo(ps.Path, "emitEnginePyYapyc")
+		genInfo = e.codegen.use(ps.Path)
 
-		runPending(genInfo)
+		if genInfo == nil {
+			throwFmt("emitEnginePyYapyc: unregistered producer for %q", ps.Path.string())
+		}
+
 		moduleName = e.resStr2(srcAbs.relString(), "-")
 	} else {
-		genInfo = e.codegen.lookupSplit(instance.Path, ps.Token)
-
-		if genInfo != nil {
-			runPending(genInfo)
-		}
+		genInfo = e.codegen.useSplit(instance.Path, ps.Token)
 
 		if genInfo != nil {
 			moduleName = e.resStr2(ps.Token.string(), "-")

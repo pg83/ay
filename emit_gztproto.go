@@ -31,7 +31,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	gzRef := ctx.emit.reserve()
 	protoIncludeSnap := na.vfsList(protoInclude...)
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		node := Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{
@@ -47,7 +47,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 		}
 
 		ctx.emit.emitReservedNode(node, gzRef)
-	}}
+	}
 
 	sourceInputs := na.vfs.alloc(1 + imports.len())[:0]
 
@@ -71,8 +71,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: gztGeneratedProtoParse(ctx, gztSource, inducedProtos)},
 	})
 
-	info.pending = pe
-
+	info.OnUse = &pe
 
 	return gzRef, genProtoName
 }

@@ -51,7 +51,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 	optArena := na.vfsList(optVFSs...)
 	python3 := d.tc.Python3
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		cmdArgs := na.anys.alloc(7 + len(optArena))[:0]
 
 		cmdArgs = append(cmdArgs,
@@ -84,10 +84,9 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}, svRef)
-	}}
+	}
 
-	info.pending = pe
-
+	info.OnUse = &pe
 
 	return svRef
 }

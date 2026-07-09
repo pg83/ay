@@ -159,20 +159,20 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 	head = head[:len(head):len(head)]
 
-	pe := &PendingEmit{}
+	var pe func()
 
-	pe.fn = func() {
+	pe = func() {
 		inputs := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS)
 
 		if preprocessHeader {
-		ext := na.vfs.alloc(len(inputs) + 1 + len(bisonCppSkeletonInputs))[:0]
+			ext := na.vfs.alloc(len(inputs) + 1 + len(bisonCppSkeletonInputs))[:0]
 
-		ext = append(ext, inputs...)
-		ext = append(ext, bisonPreprocessPyVFS)
-		ext = append(ext, bisonCppSkeletonInputs...)
-		na.vfs.commit(len(ext))
+			ext = append(ext, inputs...)
+			ext = append(ext, bisonPreprocessPyVFS)
+			ext = append(ext, bisonCppSkeletonInputs...)
+			na.vfs.commit(len(ext))
 
-		inputs = ext[:len(ext):len(ext)]
+			inputs = ext[:len(ext):len(ext)]
 
 			for _, sk := range bisonCppSkeletonInputs {
 				skCV := walkClosure(scanner, sk, scanCfg)
@@ -211,8 +211,8 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		}, ycRef)
 	}
 
-	headerInfoStored.pending = pe
-	generatedInfoStored.pending = pe
+	headerInfoStored.OnUse = &pe
+	generatedInfoStored.OnUse = &pe
 
 }
 

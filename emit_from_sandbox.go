@@ -80,7 +80,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	ref := ctx.emit.reserve()
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		node := Node{
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: instance.Path.rel().build(), Env: env}),
@@ -93,8 +93,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 		}
 
 		ctx.emit.emitReservedNode(node, ref)
-	}}
-
+	}
 
 	for i, f := range stmt.OUTFiles {
 		if fromSandboxAutoLinkMember(f.string()) {
@@ -114,7 +113,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 			ProducerMainOut: outVFSs[0],
 		})
 
-		info.pending = pe
+		info.OnUse = &pe
 	}
 
 	return memberRefs, memberPaths

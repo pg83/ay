@@ -24,7 +24,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 	python3 := d.tc.Python3
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		cv := walkClosure(scanner, confVFS, scanCfg)
 
 		ctx.emit.emitReservedNode(Node{
@@ -41,7 +41,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}, chRef)
-	}}
+	}
 
 	var psc []ANY
 
@@ -58,8 +58,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 		Compile:       e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(generatedVFS.any()), CFlags: psc}),
 	})
 
-	info.pending = pe
-
+	info.OnUse = &pe
 
 	e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCheckConfig})
 }

@@ -71,7 +71,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 		tc := d.cc.TC
 
-		pe := &PendingEmit{fn: func() {
+		pe := func() {
 			leafSet := make(map[VFS]bool, len(leaves))
 
 			for _, l := range leaves {
@@ -83,10 +83,9 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			})
 
 			emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, tc, ctx.scripts, ctx.emit)
-		}}
+		}
 
-		info.pending = pe
-
+		info.OnUse = &pe
 
 		e.enqueueSrc(SrcMeta{Source: g4CppPath.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
 	}

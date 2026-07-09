@@ -329,7 +329,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbm := *pe
 	scanner := e.scanner
 
-	pbPE := &PendingEmit{fn: func() {
+	pbPE := func() {
 		imports := walkClosure(scanner, protoVFS, pbm.scanCfg)
 		depRefs := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, imports, extraProtoDeps...)
 
@@ -347,7 +347,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			pbRef,
 			ctx.emit,
 		)
-	}}
+	}
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := build(protoBase, ".pb.h")
@@ -416,8 +416,8 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(internStr(srcRel).any()), CFlags: psc}),
 		})
 
-		hInfo.pending = pbPE
-		ccInfo.pending = pbPE
+		hInfo.OnUse = &pbPE
+		ccInfo.OnUse = &pbPE
 
 		return ProtoPBEmission{
 			pbRef:     pbRef,
@@ -579,9 +579,8 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	for _, info := range pbInfos {
-		info.pending = pbPE
+		info.OnUse = &pbPE
 	}
-
 
 	orderedCC := e.orderedCC[:0]
 

@@ -81,12 +81,12 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
-	pe := &PendingEmit{fn: func() {
+	pe := func() {
 		srcInputs := walkClosure(scanner, srcVFS, scanCfg).collect(ctx.na, func(v VFS) bool { return v.isSource() })
 
 		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef, ctx.emit)
-	}}
+	}
 
-	info.pending = pe
+	info.OnUse = &pe
 
 }
