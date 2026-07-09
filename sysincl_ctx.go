@@ -170,6 +170,10 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 		return i
 	}
 
+	deduper := dedupers.get()
+
+	defer dedupers.put(deduper)
+
 	for order := range set {
 		rec := &set[order]
 
@@ -179,9 +183,7 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 			}
 		}
 
-		deduper := dedupers.get()
-
-		defer dedupers.put(deduper)
+		deduper.reset()
 
 		for i := len(rec.pairs) - 1; i >= 0; i-- {
 			p := &rec.pairs[i]
