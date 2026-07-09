@@ -76,7 +76,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	cppParsed := ctx.na.dirList(part0Inc)
 	reg := e.codegen
 
-	reg.register(GeneratedFileInfo{
+	hInfo := reg.register(GeneratedFileInfo{
 		OutputPath:     prefixH,
 		ProducerRef:    scRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
@@ -84,12 +84,14 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		ClosureLeaves:  e.ctx.na.vfsList(part0, inputIn),
 	})
 
-	reg.register(GeneratedFileInfo{
+	cInfo := reg.register(GeneratedFileInfo{
 		OutputPath:     prefixCpp,
 		ProducerRef:    scRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
 	})
+
+	partInfos := make([]*GeneratedFileInfo, 0, len(partRels))
 
 	for i, partRel := range partRels {
 		info := GeneratedFileInfo{
@@ -103,21 +105,32 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 			info.ClosureLeaves = ctx.na.vfsList(inputIn)
 		}
 
-		reg.register(info)
+		partInfos = append(partInfos, reg.register(info))
 	}
 
-	node := Node{
-		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-		Env:            env,
-		Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
-		Outputs:        outputs,
-		KV:             &splitCodegenKV,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: na.refList(toolLDRef),
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		node := Node{
+			Platform:       instance.Platform,
+			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+			Env:            env,
+			Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
+			Outputs:        outputs,
+			KV:             &splitCodegenKV,
+			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			ForeignDepRefs: na.refList(toolLDRef),
+		}
+
+		ctx.emit.emitReservedNode(node, scRef)
+	}}
+
+	hInfo.pending = pe
+	cInfo.pending = pe
+
+	for _, pi := range partInfos {
+		pi.pending = pe
 	}
 
-	ctx.emit.emitReservedNode(node, scRef)
+	e.noteOwn(pe)
 
 	return scRef, partRels
 }

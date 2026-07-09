@@ -49,7 +49,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 
 	reg := e.codegen
 
-	reg.register(GeneratedFileInfo{
+	hInfo := reg.register(GeneratedFileInfo{
 		OutputPath:     prefixH,
 		ProducerRef:    bcRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
@@ -57,7 +57,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		ClosureLeaves:  e.ctx.na.vfsList(prefixCpp, inputIn),
 	})
 
-	reg.register(GeneratedFileInfo{
+	cppInfo := reg.register(GeneratedFileInfo{
 		OutputPath:     prefixCpp,
 		ProducerRef:    bcRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
@@ -65,16 +65,23 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		ClosureLeaves:  e.ctx.na.vfsList(inputIn),
 	})
 
-	node := Node{
-		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-		Env:            env,
-		Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
-		Outputs:        na.vfsList(prefixCpp, prefixH),
-		KV:             &baseCodegenKV,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: na.refList(toolLDRef),
-	}
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		node := Node{
+			Platform:       instance.Platform,
+			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+			Env:            env,
+			Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
+			Outputs:        na.vfsList(prefixCpp, prefixH),
+			KV:             &baseCodegenKV,
+			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			ForeignDepRefs: na.refList(toolLDRef),
+		}
 
-	ctx.emit.emitReservedNode(node, bcRef)
+		ctx.emit.emitReservedNode(node, bcRef)
+	}}
+
+	hInfo.pending = pe
+	cppInfo.pending = pe
+
+	e.noteOwn(pe)
 }

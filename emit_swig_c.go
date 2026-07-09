@@ -47,24 +47,29 @@ func (e *EmitContext) emitSwigC() {
 		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), cv.buckets...)
 		swigClosure := collectBucketVFS(ctx.na, cv.buckets, func(VFS) bool { return true })
 
-		cmdArgs := na.chunkList(na.anyList(swigBin.any()), swigConstArgs, na.anyList(internStr(swigModuleName(stmt.Module)).any(),
-			argInterface.any(),
-			internV(swigModuleName(stmt.Module), "_swg").any(),
-			argDashO.any(),
-			(cOutVFS).any(),
-			(srcVFS).any()))
+		swRef := ctx.emit.reserve()
+		moduleName := swigModuleName(stmt.Module)
 
-		swRef := ctx.emit.emitNode(Node{
-			Platform: instance.Platform,
-			Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-				Env: envVarsVCS}),
-			DepRefs:      na.refList(swigRef),
-			Env:          envVarsVCS,
-			Inputs:       inputs,
-			Outputs:      na.vfsList(cOutVFS, pyOutVFS),
-			KV:           &swigCKV,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		})
+		pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+			cmdArgs := na.chunkList(na.anyList(swigBin.any()), swigConstArgs, na.anyList(internStr(moduleName).any(),
+				argInterface.any(),
+				internV(moduleName, "_swg").any(),
+				argDashO.any(),
+				(cOutVFS).any(),
+				(srcVFS).any()))
+
+			ctx.emit.emitReservedNode(Node{
+				Platform: instance.Platform,
+				Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
+					Env: envVarsVCS}),
+				DepRefs:      na.refList(swigRef),
+				Env:          envVarsVCS,
+				Inputs:       inputs,
+				Outputs:      na.vfsList(cOutVFS, pyOutVFS),
+				KV:           &swigCKV,
+				Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			}, swRef)
+		}}
 
 		reg := e.codegen
 
@@ -74,7 +79,7 @@ func (e *EmitContext) emitSwigC() {
 			psc = *p
 		}
 
-		reg.register(GeneratedFileInfo{
+		cInfo := reg.register(GeneratedFileInfo{
 			OutputPath:     cOutVFS,
 			ProducerRef:    swRef,
 			GeneratorRefs:  e.ctx.na.refList(swigRef),
@@ -94,12 +99,17 @@ func (e *EmitContext) emitSwigC() {
 
 		swigSourceInputs = swigSourceInputs[:swigN:swigN]
 
-		reg.register(GeneratedFileInfo{
+		pyInfo := reg.register(GeneratedFileInfo{
 			OutputPath:    pyOutVFS,
 			ProducerRef:   swRef,
 			GeneratorRefs: e.ctx.na.refList(swigRef),
 			SourceInputs:  swigSourceInputs,
 		})
+
+		cInfo.pending = pe
+		pyInfo.pending = pe
+
+		e.noteOwn(pe)
 
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{
 			Path:   pyOutVFS,
