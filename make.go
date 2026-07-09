@@ -230,7 +230,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 	if mf.threads == 0 {
 		if mf.dumpGraph {
 			for _, target := range mf.targets {
-				g := genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing)
+				g := genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing, demandSelf)
 
 				writeGraph("-", g, !mf.sandboxing)
 			}
@@ -284,7 +284,7 @@ func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*N
 	emitter := newStreamingEmitter(onNode)
 
 	for _, t := range targets {
-		runGenIntoWithResources(fs, t, hostP, targetP, emitter, onWarn, testMode, keepGoing)
+		runGenIntoWithResources(fs, t, hostP, targetP, emitter, onWarn, testMode, keepGoing, demandSelf)
 	}
 
 	return emitter.finish()

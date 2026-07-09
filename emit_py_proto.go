@@ -502,6 +502,11 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		cppInstance := instance
 
 		cppInstance.Language = LangCPP
+
+		if cppInstance.Demand != demandNone {
+			cppInstance.Demand = demandLinked
+		}
+
 		cppSibling = genModule(ctx, cppInstance)
 	}
 

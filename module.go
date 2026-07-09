@@ -34,6 +34,12 @@ const (
 	KindLib
 )
 
+const (
+	demandNone ModuleDemand = iota
+	demandSelf
+	demandLinked
+)
+
 type Language int
 
 func (l Language) string() string {
@@ -97,17 +103,21 @@ type FlagSet struct {
 	IsCpp              bool
 }
 
+type ModuleDemand uint8
+
 type ModuleInstance struct {
 	Path     VFS
 	Kind     ModuleKind
 	Language Language
 	Platform *Platform
+	Demand   ModuleDemand
 }
 
 func newToolInstance(host *Platform, path string) ModuleInstance {
 	return ModuleInstance{
 		Path:     source(path),
 		Kind:     KindBin,
+		Demand:   demandLinked,
 		Language: LangCPP,
 		Platform: host,
 	}
