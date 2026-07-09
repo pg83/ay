@@ -2652,6 +2652,10 @@ func testGenSelfTarget(fs FS, targetDir string) *Graph {
 
 func graphHasOutput(g *Graph, output string) bool {
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, out := range n.Outputs {
 			if out.string() == output {
 				return true

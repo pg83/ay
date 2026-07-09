@@ -143,10 +143,6 @@ func (e *StreamingEmitter) finish() []NodeRef {
 		panic("StreamingEmitter.Finish called twice")
 	}
 
-	if e.reserved != 0 {
-		throwFmt("finish: %d reserved node slot(s) left unfilled", e.reserved)
-	}
-
 	pending := e.pendingIdx
 
 	for len(pending) > 0 {

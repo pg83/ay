@@ -284,6 +284,14 @@ func (e *EmitContext) emit() {
 	e.flushGoSrcs()
 }
 
+func (e *EmitContext) notePending(info *GeneratedFileInfo) {
+	if e.producersOnly() {
+		return
+	}
+
+	e.deferPass2(func() { runPending(info) })
+}
+
 func (e *EmitContext) drainSrcs() {
 	for {
 		for len(e.srcs) > 0 {

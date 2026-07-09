@@ -74,7 +74,6 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	}
 
 	ctx, instance, d := e.ctx, e.instance, e.d
-	enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, e.peers.SelfAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
 	protoGenHeaders := e.moduleProtoGenHeaders()
 	withHeader := stmt.Variant == "with_header"
@@ -99,12 +98,13 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	reg := e.codegen
 
-	reg.register(GeneratedFileInfo{
+	cppInfo := reg.register(GeneratedFileInfo{
 		OutputPath:     serializedCPPPath,
 		ProducerRef:    enRef,
-		GeneratorRefs:  e.ctx.na.refList(enumParserLD),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
 	})
+
+	var hInfo *GeneratedFileInfo
 
 	if withHeader {
 		hParsed := e.ctx.na.dirList(
@@ -113,10 +113,9 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 		slices.SortFunc(hParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
-		reg.register(GeneratedFileInfo{
+		hInfo = reg.register(GeneratedFileInfo{
 			OutputPath:     serializedHPath,
 			ProducerRef:    enRef,
-			GeneratorRefs:  e.ctx.na.refList(enumParserLD),
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: hParsed},
 		})
 	}
@@ -128,16 +127,35 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	}
 
 	declSeq := stmt.DeclSeq
+	scanner := e.scanner
+	demanded := instance.Demand != demandNone
 
-	e.deferPass2(func() {
-		headerClosure := walkClosure(e.scanner, headerInput, scanCfg)
+	var enumParserLD NodeRef
+	var enumParserBin VFS
+
+	pe := &PendingEmit{owner: ctx.instanceKey(instance)}
+
+	pe.prep = func() {
+		enumParserLD, enumParserBin = ctx.tool(argToolsEnumParserEnumParser)
+
+		generatorRefs := ctx.na.refList(enumParserLD)
+
+		cppInfo.GeneratorRefs = generatorRefs
+
+		if hInfo != nil {
+			hInfo.GeneratorRefs = generatorRefs
+		}
+	}
+
+	pe.fn = func() {
+		headerClosure := walkClosure(scanner, headerInput, scanCfg)
 
 		var enClosure []VFS
 
 		if withHeader {
 			enClosure = dedupClosure(ctx.na, []VFS{headerClosure.self}, headerClosure.buckets)
 		} else {
-			ownCV := walkClosure(e.scanner, serializedCPPPath, scanCfg)
+			ownCV := walkClosure(scanner, serializedCPPPath, scanCfg)
 
 			enClosure = dedupClosure(ctx.na, []VFS{headerClosure.self}, headerClosure.buckets, ownCV.buckets)
 		}
@@ -159,8 +177,18 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			ctx.emit,
 		)
 
-		e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: declSeq, Generated: true, SecondLevel: secondLevel})
-	})
+		if demanded {
+			e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: declSeq, Generated: true, SecondLevel: secondLevel})
+		}
+	}
+
+	cppInfo.pending = pe
+
+	if hInfo != nil {
+		hInfo.pending = pe
+	}
+
+	e.notePending(cppInfo)
 }
 
 func emitEN(

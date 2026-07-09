@@ -69,11 +69,18 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 
 	buf = append(buf, `{"graph":[`...)
 
-	for i, node := range g.Graph {
-		if i > 0 {
+	first := true
+
+	for _, node := range g.Graph {
+		if node == nil {
+			continue
+		}
+
+		if !first {
 			buf = append(buf, ',')
 		}
 
+		first = false
 		buf = appendNode(buf, node, g.fetchRefs, dropSrcInputs)
 
 		if len(buf) >= 256<<10 {

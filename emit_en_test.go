@@ -427,3 +427,62 @@ END()
 		t.Fatalf("enum --include-path mismatch: %#v", en.Cmds[0].CmdArgs.flat())
 	}
 }
+
+func TestGen_EnumSerializationPendingEmitFollowsDemand(t *testing.T) {
+	base := func(consUse string) map[string]string {
+		files := map[string]string{}
+
+		writeTestModuleFile(files, "own/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(mode.h)
+SRCS(stub.cpp)
+END()
+`)
+		writeTestModuleFile(files, "own/mode.h", "enum class Mode { A = 0, B = 1 };\n")
+		writeTestModuleFile(files, "own/stub.cpp", "int stub(){return 0;}\n")
+
+		writeTestModuleFile(files, "app/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+PEERDIR(own)
+SRCS(use.cpp)
+END()
+`)
+		writeTestModuleFile(files, "app/use.cpp", consUse)
+		writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+		writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+		writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+		return files
+	}
+
+	unused := testGenSelfTarget(newMemFS(base("int use(){return 0;}\n")), "app")
+
+	for _, absent := range []string{
+		"$(B)/own/mode.h_serialized.cpp",
+		"$(B)/tools/enum_parser/enum_parser/enum_parser",
+	} {
+		if graphHasOutput(unused, absent) {
+			t.Errorf("unconsumed EN producer leaked %q into library-target graph", absent)
+		}
+	}
+
+	used := testGenSelfTarget(newMemFS(base("#include <own/mode.h_serialized.h>\nint use(){return 0;}\n")), "app")
+
+	en := mustNodeByOutput(t, used, "$(B)/own/mode.h_serialized.cpp")
+
+	useCC := mustNodeByOutput(t, used, "$(B)/app/use.cpp.o")
+
+	if !slices.Contains(graphDeps(used, useCC), en.Ref) {
+		t.Errorf("use.cpp.o deps missing demanded EN producer ref %d: %v", en.Ref, graphDeps(used, useCC))
+	}
+
+	mustNodeByOutput(t, used, "$(B)/tools/enum_parser/enum_parser/enum_parser")
+
+	if graphHasOutput(used, "$(B)/own/mode.h_serialized.cpp.o") {
+		t.Error("undemanded peer must not compile mode.h_serialized.cpp.o")
+	}
+}

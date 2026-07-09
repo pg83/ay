@@ -251,6 +251,8 @@ func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS
 		vfs := e.runProgramInputVFS(f.string())
 
 		if info := reg.lookup(vfs); info != nil {
+			runPendingPrep(info)
+
 			for _, si := range info.SourceInputs {
 				addSource(si)
 			}
