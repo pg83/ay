@@ -1745,6 +1745,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	local, global := e.partitionCollected()
+
+	for _, out := range local.outs {
+		e.codegen.use(out)
+	}
+
+	for _, out := range global.outs {
+		e.codegen.use(out)
+	}
+
 	globalRefs := global.refs
 	globalOutputs := global.outs
 	globalMetas := global.metas

@@ -204,6 +204,10 @@ END()
 	var asNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkAS {
 			asNode = n
 

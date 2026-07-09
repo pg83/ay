@@ -34,6 +34,10 @@ END()
 	counts := make(map[string]int)
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		p := n.KV.P.string()
 		counts[p]++
 	}
@@ -60,6 +64,10 @@ END()
 	)
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkCC {
 			continue
 		}
@@ -87,6 +95,10 @@ END()
 	var jsOut string
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkJS && len(n.Outputs) > 0 {
 			jsOut = n.Outputs[0].string()
 		}
@@ -109,6 +121,10 @@ func TestGen_GeneratorWiredIntoDepRefs_JS(t *testing.T) {
 	var jsNode, ccNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		switch n.KV.P.string() {
 		case "JS":
 			jsNode = n

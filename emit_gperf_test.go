@@ -104,6 +104,10 @@ END()
 	g := testGen(newMemFS(files), "plain")
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkGP {
 			t.Fatalf("ordinary .cpp module unexpectedly emitted a GP node: %#v", n.Outputs)
 		}

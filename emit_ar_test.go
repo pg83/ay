@@ -226,6 +226,10 @@ END()
 		var members []string
 
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.KV.P != pkAR {
 				continue
 			}
@@ -331,6 +335,10 @@ END()
 	counts := make(map[string]int)
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		p := n.KV.P.string()
 		counts[p]++
 	}
@@ -346,6 +354,10 @@ END()
 	var globalARs, regularARs int
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkAR {
 			continue
 		}
@@ -394,6 +406,10 @@ END()
 	var consumerAR *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].relString(), "lib_consumer/") {
 			consumerAR = n
 
@@ -407,6 +423,10 @@ END()
 
 	for _, dep := range graphDeps(g, consumerAR) {
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.Ref == dep && n.KV.P == pkAR {
 				t.Errorf("lib_consumer AR has AR-typed dep (peer outputs=%v); reference invariant: zero AR-on-AR deps", n.Outputs)
 			}
@@ -427,6 +447,10 @@ END()
 	var arNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkAR {
 			arNode = n
 
@@ -466,6 +490,10 @@ func TestGen_PR35y_R7_RagelRl6_OriginalSourcePair(t *testing.T) {
 	var arNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].relString(), "consumer/") {
 			arNode = n
 
@@ -509,6 +537,10 @@ END()
 	)
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkAR || len(n.Outputs) == 0 {
 			continue
 		}
@@ -601,6 +633,10 @@ END()
 	findGraphNodeByOutputs(t, g, "$(B)/udfmod/libmy_udf.global.a")
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, out := range n.Outputs {
 			if out.string() == "$(B)/udfmod/libmy_udf.a" {
 				t.Fatalf("unexpected regular archive output %q present in graph", out)
@@ -779,6 +815,10 @@ message Ydb {}
 	mustNodeByOutput(t, g, "$(B)/ydb/public/api/protos/libapi-protos.a")
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			if o.string() == "$(B)/ydb/public/api/protos/libprotos.a" {
 				t.Fatalf("path-derived archive libprotos.a should not exist; got it with named arg")
@@ -958,6 +998,10 @@ func TestGen_GlobalAR_ObjcopyBeforeGlobalSrcs(t *testing.T) {
 	var globalAR *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), ".global.a") {
 			globalAR = n
 
@@ -1046,6 +1090,10 @@ func globalARMembers(t *testing.T, g *Graph) []string {
 	var globalAR *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), ".global.a") {
 			globalAR = n
 

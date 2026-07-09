@@ -99,6 +99,10 @@ END()
 	var bc *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkBC {
 			if bc != nil {
 				t.Fatalf("expected exactly one BC node, found a second producing %v", n.Outputs)
@@ -208,6 +212,10 @@ END()
 	var bc *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkBC {
 			if bc != nil {
 				t.Fatalf("expected exactly one BC node, found a second producing %v", n.Outputs)

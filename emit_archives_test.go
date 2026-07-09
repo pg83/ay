@@ -22,6 +22,10 @@ func TestArchive_PlainPropagatesSourceMembers(t *testing.T) {
 	var use *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "/use.cpp.o") {
 			use = n
 
@@ -84,6 +88,10 @@ func TestArchiveByKeys_TopLevel(t *testing.T) {
 	var use *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), "/use.cpp.o") {
 			use = n
 

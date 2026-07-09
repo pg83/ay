@@ -124,6 +124,10 @@ END()
 	var sc *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkSC {
 			if sc != nil {
 				t.Fatalf("expected exactly one SC node, found a second producing %v", n.Outputs)

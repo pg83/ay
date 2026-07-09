@@ -576,6 +576,10 @@ END()
 	var chunks []*Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].string(), "$(B)/dictmod/objcopy_") {
 			chunks = append(chunks, n)
 		}
@@ -816,6 +820,10 @@ func objcopyOutputs(g *Graph) []string {
 	var out []string
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 && strings.Contains(n.Outputs[0].string(), "/objcopy_") {
 			out = append(out, n.Outputs[0].string())
 		}

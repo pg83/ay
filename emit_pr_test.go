@@ -35,8 +35,14 @@ RUN_PROGRAM(
         ${BINDIR}/second.bin
     OUT_NOAUTO third.bin
 )
+RESOURCE(
+    third.bin /third.bin
+)
 END()
 `)
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "gen/root.proto",
 		"syntax = \"proto3\";\npackage gen;\nimport \"gen/leaf.proto\";\nmessage R { gen.L l = 1; }\n")
 	writeTestModuleFile(files, "gen/leaf.proto",
@@ -202,6 +208,10 @@ END()
 	const bPbH = "$(B)/q/b.pb.h"
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			if strings.Contains(o.string(), "/gen/$(B)/") {
 				t.Fatalf("generated source re-rooted under module dir: %q", o.string())
@@ -212,6 +222,10 @@ END()
 	var cc *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkCC || len(n.Outputs) == 0 {
 			continue
 		}
@@ -512,7 +526,7 @@ PEERDIR(gen)
 SRCS(main.cpp)
 END()
 `)
-	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+	writeTestModuleFile(files, "app/main.cpp", "#include \"gen/out.h\"\nint main(){return 0;}\n")
 
 	g := testGen(newMemFS(files), "app")
 
@@ -764,6 +778,9 @@ func TestGen_RunProgramPlainStdoutProducerStaysToolOnly(t *testing.T) {
 	files := map[string]string{}
 
 	writeToolProgram(files, "mod/gen_tool", "gen_tool")
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 
 	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
 NO_LIBC()
@@ -778,6 +795,9 @@ RUN_PROGRAM(
     mod/gen_tool meta
     STDOUT_NOAUTO
         meta.txt
+)
+RESOURCE(
+    meta.txt /meta.txt
 )
 END()
 `)
@@ -868,7 +888,7 @@ PEERDIR(gen)
 SRCS(main.cpp)
 END()
 `)
-	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+	writeTestModuleFile(files, "app/main.cpp", "#include \"gen/gen.yaff.h\"\nint main(){return 0;}\n")
 
 	g := testGen(newMemFS(files), "app")
 
@@ -949,6 +969,10 @@ END()
 	var cc *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkCC || len(n.Outputs) == 0 {
 			continue
 		}
@@ -1148,9 +1172,15 @@ RUN_PROGRAM(
     tools/dumper archive_asm
     STDOUT_NOAUTO gen.asm
 )
+RESOURCE(
+    gen.asm /gen.asm
+)
 SRCS(builtin.cpp)
 END()
 `)
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "builtin/builtin.cpp", "int builtin(){return 0;}\n")
 
 	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
@@ -1189,9 +1219,15 @@ RUN_PYTHON3(
     gen.py archive_asm
     STDOUT_NOAUTO gen.asm
 )
+RESOURCE(
+    gen.asm /gen.asm
+)
 SRCS(builtin.cpp)
 END()
 `)
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "builtin/gen.py", "print('.text')\n")
 	writeTestModuleFile(files, "builtin/builtin.cpp", "int builtin(){return 0;}\n")
 
@@ -1522,7 +1558,7 @@ PEERDIR(prof ctl)
 SRCS(main.cpp)
 END()
 `)
-	writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+	writeTestModuleFile(files, "app/main.cpp", "#include \"prof/prof.yaff.h\"\n#include \"ctl/ctl.h\"\nint main(){return 0;}\n")
 
 	g := testGenDumpGraph(newMemFS(files), "app")
 
@@ -1831,7 +1867,7 @@ PEERDIR(gen)
 SRCS(main.cpp)
 END()
 `)
-		writeTestModuleFile(files, "app/main.cpp", "int main(){return 0;}\n")
+		writeTestModuleFile(files, "app/main.cpp", "#include \"gen/gen.h\"\nint main(){return 0;}\n")
 
 		return testGen(newMemFS(files), "app")
 	}
@@ -1891,8 +1927,14 @@ RUN_PROGRAM(
         root.dat
     OUT_NOAUTO first.bin
 )
+RESOURCE(
+    second.bin /second.bin
+)
 END()
 `)
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "gen/root.dat", "opaque\n")
 
 	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
@@ -1937,8 +1979,14 @@ RUN_PROGRAM(
         ${BINDIR}/first.txt
     OUT_NOAUTO second.bin
 )
+RESOURCE(
+    second.bin /second.bin
+)
 END()
 `)
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "gen/gen.py", "print('payload')\n")
 
 	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
@@ -1985,8 +2033,14 @@ RUN_PYTHON3(
     gen.py
     STDOUT first.txt
 )
+RESOURCE(
+    third.bin /third.bin
+)
 END()
 `)
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "gen/gen.py", "print('payload')\n")
 
 	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
@@ -2019,6 +2073,8 @@ func TestGen_RunProgramConsumesProtoGeneratedHeader(t *testing.T) {
 	writeToolProgram(files, "tools/gp", "gp")
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
@@ -2033,8 +2089,12 @@ RUN_PROGRAM(
     IN ${BINDIR}/msg.pb.h
     OUT_NOAUTO out.txt
 )
+RESOURCE(
+    out.txt /out.txt
+)
 END()
 `)
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
 	writeTestModuleFile(files, "mod/msg.proto", "syntax = \"proto3\";\npackage mod;\nmessage M {}\n")
 
 	writeTestModuleFile(files, "app/ya.make", `PROGRAM()
@@ -2075,8 +2135,14 @@ RUN_PROGRAM(
     IN ${BINDIR}/myenum.h_serialized.cpp
     OUT_NOAUTO out.txt
 )
+RESOURCE(
+    out.txt /out.txt
+)
 END()
 `)
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "mod/myenum.h", "enum class E { A = 0 };\n")
 	writeTestModuleFile(files, "mod/real.cpp", "int real(){return 0;}\n")
 
@@ -2119,8 +2185,14 @@ RUN_PROGRAM(
     IN ${BINDIR}/data.inc
     OUT_NOAUTO out.txt
 )
+RESOURCE(
+    out.txt /out.txt
+)
 END()
 `)
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
 	writeTestModuleFile(files, "mod/payload.lst", "payload\n")
 	writeTestModuleFile(files, "mod/real.cpp", "int real(){return 0;}\n")
 

@@ -10,8 +10,10 @@ NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 INCLUDE(${ARCADIA_ROOT}/shared/copy.ya.make.inc)
+SRCS(use.cpp)
 END()
 `)
+	writeTestModuleFile(files, "mod/use.cpp", "#include \"shared/generated.h\"\n")
 	writeTestModuleFile(files, "shared/copy.ya.make.inc", `COPY_FILE(
     TEXT
     shared/generated.txt

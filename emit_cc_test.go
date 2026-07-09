@@ -566,6 +566,10 @@ END()
 	var args []string
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) == 1 && n.Outputs[0].string() == "$(B)/bridge/x.cpp.o" {
 			args = anyStrs(n.Cmds[0].CmdArgs.flat())
 
@@ -593,6 +597,10 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.KV.P == pkCC {
 				ccNode = n
 
@@ -635,6 +643,10 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.KV.P == pkCC {
 				ccNode = n
 
@@ -667,6 +679,10 @@ func TestGen_CXXFLAGS_GLOBAL_LandsOnOwnCmdArgs(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.KV.P == pkCC {
 				ccNode = n
 
@@ -708,6 +724,10 @@ func TestGen_SRC_AppendsExtraCFlags_PerSource(t *testing.T) {
 	var cc *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC {
 			cc = n
 
@@ -748,6 +768,10 @@ func TestGen_UppercaseCSource_CompilesAsCxx(t *testing.T) {
 	var regularCC *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		switch n.KV.P {
 		case pkCC:
 			ccCount++
@@ -834,6 +858,10 @@ func TestGen_SRC_C_NO_LTO_RegistersSource(t *testing.T) {
 	var cc *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC {
 			cc = n
 
@@ -877,6 +905,10 @@ func TestGen_SRC_FlatOutputPath(t *testing.T) {
 	var cc *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC {
 			cc = n
 

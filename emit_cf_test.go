@@ -58,6 +58,10 @@ func TestGen_CF_SetVarsReachCfgVars(t *testing.T) {
 	var cf *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 && n.Outputs[0].string() == "$(B)/thelib/x.cpp" {
 			cf = n
 

@@ -237,6 +237,10 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	platforms := make(map[string]int)
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		p := n.KV.P.string()
 		counts[p]++
 		platforms[string(n.Platform.Target)]++
@@ -272,6 +276,10 @@ func TestGen_HostToolRecursion_R6(t *testing.T) {
 	)
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		switch n.KV.P.string() {
 		case "R6":
 			r6Node = n
@@ -340,7 +348,7 @@ func TestGen_Ragel6HeaderOutputNotCompiled(t *testing.T) {
 		"contrib/tools/ragel6/ya.make": "PROGRAM(ragel6)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nALLOCATOR(FAKE)\nSRCS(main.cpp)\nEND()\n",
 		"mod/ya.make":                  "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(markupfsm.h.rl6 parser.rl6)\nEND()\n",
 		"mod/markupfsm.h.rl6":          "%%{ machine m; }%%\n",
-		"mod/parser.rl6":               "%%{ machine p; }%%\n",
+		"mod/parser.rl6":               "#include \"markupfsm.h\"\n%%{ machine p; }%%\n",
 	})
 
 	g := testGen(fs, "mod")
@@ -352,6 +360,10 @@ func TestGen_Ragel6HeaderOutputNotCompiled(t *testing.T) {
 	)
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		switch n.KV.P.string() {
 		case "R6":
 			for _, o := range n.Outputs {
@@ -421,6 +433,10 @@ END()
 	var r6Node, ccNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		switch n.KV.P.string() {
 		case "R6":
 			r6Node = n

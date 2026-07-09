@@ -47,6 +47,10 @@ func TestGen_CppEnumsSerializationNamespaceControlToken(t *testing.T) {
 	mustNodeByOutput(t, g, "$(B)/pe/proto/package.pb.h_serialized.cpp")
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			s := o.string()
 
@@ -358,6 +362,10 @@ END()
 	mustNodeByOutput(t, g, "$(B)/m/Offer.pb.h_serialized.cpp")
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			s := o.string()
 

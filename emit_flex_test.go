@@ -132,6 +132,10 @@ func countKind(g *Graph, k ProcKind) int {
 	c := 0
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == k {
 			c++
 		}

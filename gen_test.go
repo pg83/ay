@@ -29,6 +29,10 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	nodesByOutput := make(map[string]*Node, len(g.Graph))
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) == 0 {
 			t.Fatalf("node ref=%d has no outputs", n.Ref)
 		}
@@ -108,6 +112,10 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	byOut := make(map[string]*Node, len(g.Graph))
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 {
 			byOut[n.Outputs[0].string()] = n
 		}
@@ -339,6 +347,10 @@ END()
 	var ccInputs []string
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC {
 			ccInputs = append(ccInputs, vfsStrings(n.flatInputs())...)
 		}
@@ -402,6 +414,10 @@ func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 	var sawMimDir bool
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].relString(), "library/cpp/malloc/mimalloc/") {
 			sawMimDir = true
 
@@ -464,6 +480,10 @@ func TestGen_DefaultPeerdirs_SimpleLibrary(t *testing.T) {
 	emittedDirs := make(map[string]bool)
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) == 0 {
 			continue
 		}
@@ -715,6 +735,10 @@ END()
 	var lib1AR *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkAR && len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].relString(), "lib1/") {
 			lib1AR = n
 
@@ -728,6 +752,10 @@ END()
 
 	for _, ref := range graphDeps(g, lib1AR) {
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.Ref == ref && n.KV.P == pkAR {
 				t.Errorf("lib1 AR has AR-typed dep %q (outputs=%v); reference invariant: zero AR-on-AR deps", ref, n.Outputs)
 			}
@@ -751,6 +779,10 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.KV.P == pkCC {
 				ccNode = n
 			}
@@ -787,6 +819,10 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.KV.P == pkCC {
 				ccNode = n
 			}
@@ -821,6 +857,10 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var jsNode, ccNode *Node
 
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			switch n.KV.P.string() {
 			case "JS":
 				jsNode = n
@@ -857,6 +897,10 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.KV.P == pkCC {
 				ccNode = n
 			}
@@ -890,6 +934,10 @@ func TestGen_SrcDirRebasesSourceResolution(t *testing.T) {
 		var ccNode *Node
 
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.KV.P == pkCC {
 				ccNode = n
 
@@ -945,6 +993,10 @@ END()
 	hasNoPercpu := false
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkAR || len(n.Outputs) == 0 {
 			continue
 		}
@@ -983,6 +1035,10 @@ END()
 	g := testGen(fs, "myprog")
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) == 0 {
 			continue
 		}
@@ -1013,6 +1069,10 @@ END()
 	var ccNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC {
 			ccNode = n
 
@@ -1055,6 +1115,10 @@ END()
 	var ccNode *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC {
 			ccNode = n
 
@@ -1091,6 +1155,10 @@ func TestGen_AddInclMixed_OwnPathStaysOwn(t *testing.T) {
 	var consumerCC *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.string(), "main.cpp.o") {
@@ -1156,6 +1224,10 @@ func TestGen_OneLevelAddIncl_DeclOrderPreserved(t *testing.T) {
 	var consumerCC *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.string(), "consumer.cpp.o") {
@@ -1206,6 +1278,10 @@ func TestGen_ImplicitOwnGlobal_BeforeOneLevelAddIncl(t *testing.T) {
 	var consumerCC *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.string(), "consumer.cpp.o") {
@@ -1257,6 +1333,10 @@ func TestGen_ConfigureFileOwnGlobal_AfterExplicitAddIncl(t *testing.T) {
 	var consumerCC *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.string(), "consumer.cpp.o") {
@@ -1307,6 +1387,10 @@ func TestGen_OneLevelAddIncl_AppearsInPeerIncludeSlot(t *testing.T) {
 	var consumerCC *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P == pkCC {
 			for _, out := range n.Outputs {
 				if strings.Contains(out.string(), "consumer.cpp.o") {
@@ -2300,6 +2384,14 @@ func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 	t.Helper()
 
 	for _, n := range g.Graph {
+	if n == nil {
+		continue
+	}
+
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 && n.Outputs[0].string() == output {
 			return n
 		}
@@ -2314,6 +2406,14 @@ func mustNodeByOutputSuffix(t *testing.T, g *Graph, suffix string) *Node {
 	t.Helper()
 
 	for _, n := range g.Graph {
+	if n == nil {
+		continue
+	}
+
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), suffix) {
 			return n
 		}
@@ -2326,6 +2426,10 @@ func mustNodeByOutputSuffix(t *testing.T, g *Graph, suffix string) *Node {
 
 func nodeByOutput(g *Graph, output string) *Node {
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 && n.Outputs[0].string() == output {
 			return n
 		}
@@ -2338,6 +2442,14 @@ func mustNodeByAnyOutput(t *testing.T, g *Graph, output string) *Node {
 	t.Helper()
 
 	for _, n := range g.Graph {
+	if n == nil {
+		continue
+	}
+
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			if o.string() == output {
 				return n
@@ -2352,6 +2464,10 @@ func mustNodeByAnyOutput(t *testing.T, g *Graph, output string) *Node {
 
 func findNodeByOutputPrefix(g *Graph, prefix string) *Node {
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].string(), prefix) {
 			return n
 		}
@@ -2496,6 +2612,10 @@ END()
 	var cc *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkCC {
 			continue
 		}
@@ -2572,6 +2692,10 @@ END()
 	var cc *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkCC {
 			continue
 		}
@@ -2652,6 +2776,10 @@ func testGenSelfTarget(fs FS, targetDir string) *Graph {
 
 func graphHasOutput(g *Graph, output string) bool {
 	for _, n := range g.Graph {
+	if n == nil {
+		continue
+	}
+
 		if n == nil {
 			continue
 		}

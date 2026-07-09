@@ -54,6 +54,10 @@ END()
 	kqhj := pyOut + ".kqhj.yapyc3"
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) == 0 {
 			continue
 		}
@@ -252,6 +256,10 @@ END()
 	sawAux := false
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if len(n.Outputs) == 0 {
 			continue
 		}
@@ -320,6 +328,10 @@ END()
 	var pbCC *Node
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		if n.KV.P != pkCC || len(n.Outputs) == 0 {
 			continue
 		}

@@ -117,6 +117,10 @@ func TestEmitLj21Archive_ArchiveOutputAddInclAndClosure(t *testing.T) {
 		t.Helper()
 
 		for _, n := range g.Graph {
+			if n == nil {
+				continue
+			}
+
 			if n.KV.P == pkCC && len(n.Outputs) > 0 && strings.HasSuffix(n.Outputs[0].string(), suffix) {
 				return n
 			}

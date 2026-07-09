@@ -9,6 +9,10 @@ func sbomComponentOutputs(g *Graph) []string {
 	var out []string
 
 	for _, n := range g.Graph {
+		if n == nil {
+			continue
+		}
+
 		for _, o := range n.Outputs {
 			if strings.HasSuffix(o.string(), ".component.sbom") {
 				out = append(out, o.string())

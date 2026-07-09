@@ -8,10 +8,12 @@ func TestGen_ScSourceEmitsDomschemecProducer(t *testing.T) {
 	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
 SRCS(
     options.sc
+    options.cpp
 )
 END()
 `)
 	files["mod/options.sc"] = "struct TOptions { ui32 X; };\n"
+	files["mod/options.cpp"] = "#include \"options.sc.h\"\nint useOptions() { return 0; }\n"
 
 	writeToolProgram(files, "tools/domschemec", "domschemec")
 

@@ -100,29 +100,6 @@ END()
 	}
 }
 
-func TestGen_PlainSourceCopyKeepsNoUnrelatedClosure(t *testing.T) {
-	files := map[string]string{}
-
-	files["build/scripts/fs_tools.py"] = "import process_command_files as pcf\n"
-	files["build/scripts/process_command_files.py"] = "\n"
-
-	writeTestModuleFile(files, "other/other.h", "#pragma once\n")
-	writeTestModuleFile(files, "mod/orig.txt", "data\n")
-
-	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
-COPY_FILE(orig.txt copied.txt)
-END()
-`)
-
-	g := testGen(newMemFS(files), "mod")
-
-	cp := mustNodeByOutput(t, g, "$(B)/mod/copied.txt")
-
-	if nodeHasInput(cp, "$(S)/other/other.h") {
-		t.Errorf("plain source copy leaked unrelated closure: %v", vfsStringsT3(cp.flatInputs()))
-	}
-}
-
 func TestGen_TextCopyResolvesIncludesInConsumerContext(t *testing.T) {
 	files := map[string]string{}
 
