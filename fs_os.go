@@ -28,6 +28,7 @@ type OsFS struct {
 	dirNames      *BumpAllocator[uint32]
 	dirEntries    *IntSet
 	contentHashes PageVec[uint64]
+	sourceUnder   *IntMap[STR]
 	readBuf       []byte
 	mmapCur       []byte
 	direntBuf     []byte
@@ -37,11 +38,12 @@ type OsFS struct {
 
 func newFS(srcRoot string) FS {
 	fs := &OsFS{
-		srcRoot:    srcRoot,
-		rootSlash:  srcRoot + "/",
-		readBuf:    make([]byte, 0, mmapReadThreshold),
-		dirNames:   newBumpAllocator[uint32](1 << 12),
-		dirEntries: newIntSet(1 << 12),
+		srcRoot:     srcRoot,
+		rootSlash:   srcRoot + "/",
+		readBuf:     make([]byte, 0, mmapReadThreshold),
+		dirNames:    newBumpAllocator[uint32](1 << 12),
+		dirEntries:  newIntSet(1 << 12),
+		sourceUnder: newIntMap[STR](1 << 16),
 	}
 
 	fs.platformInit()
@@ -154,6 +156,44 @@ func (fs *OsFS) isFile(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
 
 	return p && !d
+}
+
+func (fs *OsFS) resolveSourceUnder(prefix, target STR) STR {
+	key := splitMix64(uint32(prefix), uint32(target))
+
+	if p := fs.sourceUnder.get(key); p != nil {
+		return *p
+	}
+
+	suffix := target.string()
+
+	var v STR
+
+	if fs.isFile(prefix, suffix) {
+		switch {
+		case suffix != "" && pathIsClean(suffix):
+			if prefix == srcRootRel {
+				v = target
+			} else {
+				v = internJoined(prefix.string(), suffix)
+			}
+		default:
+			var jb, nb [256]byte
+
+			joined := joinRelInto(jb[:0], prefix.string(), suffix)
+			normB, ok := normaliseAppend(nb[:0], bytesString(joined))
+
+			if ok {
+				v = internBytes(normB)
+			} else {
+				v = internStr(normalisePathSlow(string(joined)))
+			}
+		}
+	}
+
+	fs.sourceUnder.put(key, v)
+
+	return v
 }
 
 func (fs *OsFS) isDir(prefix STR, suffix string) bool {

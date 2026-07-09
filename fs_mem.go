@@ -3,24 +3,26 @@ package main
 import "github.com/zeebo/xxh3"
 
 type MemFS struct {
-	srcRoot   string
-	rootSlash string
-	files     map[string][]byte
-	dirs      map[string]map[string]bool
-	views     map[string]DirView
-	entries   *IntSet
+	srcRoot     string
+	rootSlash   string
+	files       map[string][]byte
+	dirs        map[string]map[string]bool
+	views       map[string]DirView
+	entries     *IntSet
+	sourceUnder *IntMap[STR]
 }
 
 func newMemFS(files map[string]string) *MemFS {
 	const root = "/__fake_repo__"
 
 	fs := &MemFS{
-		srcRoot:   root,
-		rootSlash: root + "/",
-		files:     make(map[string][]byte, len(files)),
-		dirs:      map[string]map[string]bool{"": {}},
-		views:     map[string]DirView{},
-		entries:   newIntSet(64),
+		srcRoot:     root,
+		rootSlash:   root + "/",
+		files:       make(map[string][]byte, len(files)),
+		dirs:        map[string]map[string]bool{"": {}},
+		views:       map[string]DirView{},
+		entries:     newIntSet(64),
+		sourceUnder: newIntMap[STR](256),
 	}
 
 	addEntry := func(parent, name string, isDir bool) {
@@ -140,6 +142,26 @@ func (fs *MemFS) isFile(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
 
 	return p && !d
+}
+
+func (fs *MemFS) resolveSourceUnder(prefix, target STR) STR {
+	key := splitMix64(uint32(prefix), uint32(target))
+
+	if p := fs.sourceUnder.get(key); p != nil {
+		return *p
+	}
+
+	rel := joinRel(prefix.string(), target.string())
+
+	var v STR
+
+	if p, d := fs.existsRel(rel); p && !d {
+		v = internStr(normalisePath(cleanRel(rel)))
+	}
+
+	fs.sourceUnder.put(key, v)
+
+	return v
 }
 
 func (fs *MemFS) isDir(prefix STR, suffix string) bool {
