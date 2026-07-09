@@ -36,6 +36,11 @@ var commands = []Command{
 			"chunking (rolling-hash chunk dedup) on top of whole-file dedup.",
 	},
 	{
+		path: []string{"dev", "maxrss"}, run: cmdMaxRSS,
+		help: "📈 Run <command> after -- and report the peak summed RSS of its whole\n" +
+			"process subtree, sampled once a second.",
+	},
+	{
 		path: []string{"dev", "dump", "normalize"}, run: cmdDumpNormalize,
 		help: "🧼 Normalize a raw graph dump (fold producers, canonicalize paths, prune\n" +
 			"ref-only artifacts) to one JSON node per line for byte-exact comparison.",
