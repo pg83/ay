@@ -79,5 +79,4 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 	tmpInfo.pending = pe
 	incInfo.pending = pe
 
-	e.noteOwn(pe)
 }

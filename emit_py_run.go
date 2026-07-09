@@ -82,7 +82,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 			continue
 		}
 
-		if info := reg.lookup(v); info != nil {
+		if info := reg.use(v); info != nil {
 			pyGeneratedFromSources = append(pyGeneratedFromSources, info.SourceInputs...)
 		}
 	}
@@ -179,7 +179,6 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		info.pending = pe
 	}
 
-	e.noteOwn(pe)
 
 	return pyRef
 }

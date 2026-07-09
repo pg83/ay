@@ -95,7 +95,6 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 		ctx.emit.emitReservedNode(node, ref)
 	}}
 
-	e.noteOwn(pe)
 
 	for i, f := range stmt.OUTFiles {
 		if fromSandboxAutoLinkMember(f.string()) {

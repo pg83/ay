@@ -44,5 +44,4 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 }

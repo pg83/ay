@@ -56,6 +56,5 @@ func (e *EmitContext) emitLuaJit21() {
 
 		info.pending = pe
 
-		e.noteOwn(pe)
 	}
 }

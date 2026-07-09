@@ -214,7 +214,6 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	headerInfoStored.pending = pe
 	generatedInfoStored.pending = pe
 
-	e.noteOwn(pe)
 }
 
 func (e *EmitContext) emitBisonY(src ANY) {

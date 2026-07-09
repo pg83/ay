@@ -167,7 +167,7 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 	_, instance := e.ctx, e.instance
 	output := resourceOutputVFS(instance.Path.relString(), rawPath)
 
-	if info := e.codegen.lookup(output); info != nil {
+	if info := e.codegen.use(output); info != nil {
 		return ResolvedResource{
 			Input:           output,
 			ProducerRef:     info.ProducerRef,

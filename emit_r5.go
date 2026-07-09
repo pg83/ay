@@ -106,7 +106,6 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 	tmpInfo.pending = pe
 	cppInfo.pending = pe
 
-	e.noteOwn(pe)
 
 	meta := d.srcMetaOf(src)
 

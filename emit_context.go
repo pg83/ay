@@ -14,8 +14,8 @@ type EmitContext struct {
 	peers        *PeerContext
 	scanner      *IncludeScanner
 	codegen      *CodegenRegistry
+	regStart     int
 	srcs         []SrcMeta
-	ownPending   []*PendingEmit
 	refs         []NodeRef
 	outs         []VFS
 	metas        []SrcMeta
@@ -96,7 +96,7 @@ func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *
 	scanner := ctx.scannerFor(instance)
 	k := len(d.resources)
 
-	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, resources: d.resources[:k:k]}
+	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, regStart: len(scanner.codegen.order), resources: d.resources[:k:k]}
 }
 
 func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *PeerContext) *EmitContext {
@@ -106,10 +106,10 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 
 	frame.emitCtx = EmitContext{
 		ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen,
+		regStart:  len(scanner.codegen.order),
 		resources: d.resources[:k:k],
 
 		srcs:        prev.srcs[:0],
-		ownPending:  scrub(prev.ownPending),
 		refs:        prev.refs[:0],
 		outs:        prev.outs[:0],
 		metas:       prev.metas[:0],
@@ -176,10 +176,6 @@ func (e *EmitContext) enqueueSrc(meta SrcMeta) {
 	}
 
 	e.srcs = append(e.srcs, meta)
-}
-
-func (e *EmitContext) deferOwn(pe *PendingEmit) {
-	e.ownPending = append(e.ownPending, pe)
 }
 
 func (e *EmitContext) producersOnly() bool {
@@ -284,36 +280,18 @@ func (e *EmitContext) emit() {
 
 	e.flushGoCgo2()
 	e.flushGoSrcs()
-}
 
-func (e *EmitContext) noteOwn(pe *PendingEmit) {
-	if e.producersOnly() {
-		return
+	for i := e.regStart; i < len(e.codegen.order); i++ {
+		runPending(e.codegen.order[i])
 	}
-
-	e.deferOwn(pe)
 }
 
 func (e *EmitContext) drainSrcs() {
-	for {
-		for len(e.srcs) > 0 {
-			meta := e.srcs[0]
+	for len(e.srcs) > 0 {
+		meta := e.srcs[0]
 
-			e.srcs = e.srcs[1:]
+		e.srcs = e.srcs[1:]
 
-			e.emitOneSource(meta)
-		}
-
-		if len(e.ownPending) == 0 {
-			return
-		}
-
-		pes := e.ownPending
-
-		e.ownPending = nil
-
-		for _, pe := range pes {
-			pe.run()
-		}
+		e.emitOneSource(meta)
 	}
 }

@@ -37,7 +37,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		inVFSByToken[inTok.string()] = vfs
 		inputs = append(inputs, vfs)
 
-		if info := reg.lookup(vfs); info != nil {
+		if info := reg.use(vfs); info != nil {
 			for _, v := range info.SourceInputs {
 				appendCFExtra(v)
 			}
@@ -81,7 +81,6 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		emitJVGeneralReserved(instance, jarVFS, args, inputsSnap, outputsSnap, cwd, deps, ccTag, tc, ctx.emit, jvRef)
 	}}
 
-	e.noteOwn(pe)
 	jvSourceInputs := ctx.na.vfs.alloc(len(inputs) + 2)[:0]
 
 	for _, v := range inputs {

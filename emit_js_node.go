@@ -99,7 +99,6 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 
 	e.enqueueSrc(SrcMeta{Source: joinOutVFS.any(), Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
 }

@@ -218,7 +218,6 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	cInfo.pending = pe
 	bInfo.pending = pe
 
-	e.noteOwn(pe)
 }
 
 func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant) {
@@ -229,7 +228,11 @@ func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant
 
 	if meta.Generated {
 		srcVFS = meta.Source.vfs()
-		genDeps = []NodeRef{e.codegen.mustInfo(srcVFS, "flatc generated source").ProducerRef}
+		genInfo := e.codegen.mustInfo(srcVFS, "flatc generated source")
+
+		runPending(genInfo)
+
+		genDeps = []NodeRef{genInfo.ProducerRef}
 	} else {
 		srcVFS = resolveSourceVFS(ctx, instance, meta.Source.string(), d.srcDirs)
 	}

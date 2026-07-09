@@ -79,7 +79,6 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 }
 
 func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {

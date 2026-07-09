@@ -112,5 +112,4 @@ func (e *EmitContext) emitBuildInfoStmt() {
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 }

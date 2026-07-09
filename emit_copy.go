@@ -65,19 +65,18 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 	tc := e.d.tc
 	demanded := instance.Demand != demandNone
 
+	if demanded && extIsArchiveMember(entry.Dst) {
+		e.collectObj(st.ref, st.dstVFS, SrcMeta{Prio: stmtPrioDefault})
+	}
+
 	pe := &PendingEmit{fn: func() {
 		emitCopyFileNodeSnap(ctx, instance, scanner, scanCfg, moduleTag, tc, entry, st)
-
-		if demanded && extIsArchiveMember(entry.Dst) {
-			e.collectObj(st.ref, st.dstVFS, SrcMeta{Prio: stmtPrioDefault})
-		}
 	}}
 
 	if info != nil {
 		info.pending = pe
 	}
 
-	e.noteOwn(pe)
 }
 
 func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *GeneratedFileInfo) {
@@ -96,7 +95,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 
 	var producerSource []VFS
 
-	if srcInfo := reg.lookup(srcVFS); srcInfo != nil {
+	if srcInfo := reg.use(srcVFS); srcInfo != nil {
 		producerSource = srcInfo.SourceInputs
 	}
 

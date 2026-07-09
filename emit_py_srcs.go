@@ -145,6 +145,8 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 	case pyGroupGenAux:
 		info := e.codegen.mustInfo(ps.Path, "appendPyResEntries")
 
+		runPending(info)
+
 		out = append(out, PyGenResEntry{token: ps.Token.string(), key: ps.Module, path: ps.Path, inputs: info.SourceInputs})
 
 		if !d.pyBuildNoPYC {
@@ -165,6 +167,10 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 
 	resolvedRel := resolvePySrcRel(e.ctx.fs, d.srcDirs, e.instance.Path, srcRel)
 	genInfo := e.codegen.lookupSplit(e.instance.Path, ps.Token)
+
+	if genInfo != nil {
+		runPending(genInfo)
+	}
 	pySource := resolvedRel.source()
 
 	if genInfo != nil {
@@ -238,9 +244,15 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 
 	if ps.Group == pyGroupGenAux {
 		genInfo = e.codegen.mustInfo(ps.Path, "emitEnginePyYapyc")
+
+		runPending(genInfo)
 		moduleName = e.resStr2(srcAbs.relString(), "-")
 	} else {
 		genInfo = e.codegen.lookupSplit(instance.Path, ps.Token)
+
+		if genInfo != nil {
+			runPending(genInfo)
+		}
 
 		if genInfo != nil {
 			moduleName = e.resStr2(ps.Token.string(), "-")

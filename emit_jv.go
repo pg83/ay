@@ -87,7 +87,6 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 
 		info.pending = pe
 
-		e.noteOwn(pe)
 
 		e.enqueueSrc(SrcMeta{Source: g4CppPath.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
 	}

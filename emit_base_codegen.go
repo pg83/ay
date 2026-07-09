@@ -83,5 +83,4 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	hInfo.pending = pe
 	cppInfo.pending = pe
 
-	e.noteOwn(pe)
 }

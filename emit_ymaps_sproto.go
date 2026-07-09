@@ -57,7 +57,6 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 
 	info.pending = pe
 
-	e.noteOwn(pe)
 }
 
 func emitYmapsSprotoHeaderSnap(ctx *GenCtx, instance ModuleInstance, scanner *IncludeScanner, p YmapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCfg ScanContext) {
