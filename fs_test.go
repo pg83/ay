@@ -94,6 +94,60 @@ func TestFS_ExistsRoutesThroughListdir(t *testing.T) {
 
 }
 
+func TestFS_ResolveSourceUnder(t *testing.T) {
+	files := map[string]string{
+		"a/b/c.txt": "hi",
+		"top.txt":   "top",
+	}
+
+	root := t.TempDir()
+	writeTree(t, root, files)
+
+	for _, tc := range []struct {
+		name string
+		fs   FS
+	}{
+		{"os", newFS(root)},
+		{"mem", newMemFS(files)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := tc.fs
+
+			check := func(prefix, target, want string) {
+				t.Helper()
+
+				wantSTR := STR(0)
+
+				if want != "" {
+					wantSTR = internStr(want)
+				}
+
+				got := fs.resolveSourceUnder(dirKey(prefix), internStr(target))
+
+				if got != wantSTR {
+					t.Errorf("resolveSourceUnder(%q, %q) = %q, want %q", prefix, target, got.string(), want)
+				}
+
+				if again := fs.resolveSourceUnder(dirKey(prefix), internStr(target)); again != got {
+					t.Errorf("resolveSourceUnder(%q, %q) not idempotent: %q then %q", prefix, target, got.string(), again.string())
+				}
+			}
+
+			check("a/b", "c.txt", "a/b/c.txt")
+			check("a", "b/c.txt", "a/b/c.txt")
+			check("", "a/b/c.txt", "a/b/c.txt")
+			check("", "top.txt", "top.txt")
+
+			check("a/b", "missing.txt", "")
+			check("", "nope/x.txt", "")
+			check("a", "c.txt", "")
+
+			check("a", "b/../b/c.txt", "a/b/c.txt")
+			check("", "a/./b/c.txt", "a/b/c.txt")
+		})
+	}
+}
+
 func TestFS_ListdirCachesNegative(t *testing.T) {
 	root := t.TempDir()
 	fs := newFS(root)
