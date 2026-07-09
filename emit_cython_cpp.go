@@ -94,6 +94,7 @@ type CythonStmtPlan struct {
 	cyRef             NodeRef
 	headerPyxClosure  []VFS
 	ind               CythonCppInduced
+	infos             []*GeneratedFileInfo
 }
 
 func (e *EmitContext) emitCythonCpp() {
@@ -152,11 +153,12 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 
 		srcVFS := source(instance.Path.relString(), "/", stmt.Src)
 		scanAddIncl := appendCythonScanAddIncl(d.cc.AddIncl, d.cythonAddIncl, py23Variant)
-		srcScanIn := newScanContext(ctx.parsers, scanAddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
+		srcScanIn := snapshotScanCfg(ctx.na, newScanContext(ctx.parsers, scanAddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString()))
 		ind := e.cythonCppInducedSets(srcVFS, stmt.CMode, srcScanIn)
 		cyRef := ctx.emit.reserve()
 
 		var headerPyxClosure []VFS
+		var infos []*GeneratedFileInfo
 
 		if stmt.Header {
 			headerPyxClosure = cythonPyxLangClosure(e.scanner, srcVFS, srcScanIn)
@@ -175,12 +177,12 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			reg := e.codegen
 
 			for _, h := range headerVFS {
-				reg.register(GeneratedFileInfo{
+				infos = append(infos, reg.register(GeneratedFileInfo{
 					OutputPath:      h,
 					ProducerRef:     cyRef,
 					ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 					ProducerMainOut: generatedVFS,
-				})
+				}))
 
 				for _, p := range pyxInduced {
 					reg.addClosureLeafNoSubsume(h, p)
@@ -200,6 +202,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			cyRef:             cyRef,
 			headerPyxClosure:  headerPyxClosure,
 			ind:               ind,
+			infos:             infos,
 		})
 	}
 
@@ -224,16 +227,12 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		srcVFS := p.srcVFS
 		srcScanIn := p.srcScanIn
 		cyRef := p.cyRef
-		toolInputs, emitsIncludes := cythonGeneratedOutputInputs(na, p.ind, walkClosure(e.scanner, srcVFS, srcScanIn))
+		emitsIncludes := cythonEmitsIncludes(p.ind, walkClosure(e.scanner, srcVFS, srcScanIn))
+		pxdVFS, pxdOK := resolveCythonPxd(ctx, instance, stmt.Pxd)
 
-		if stmt.Header {
-			toolInputs = cythonHeaderToolInputs(na, srcVFS, p.headerPyxClosure)
-		}
-
-		if pxdVFS, ok := resolveCythonPxd(ctx, instance, stmt.Pxd); ok {
+		if pxdOK {
 			pxdCV := walkClosure(e.scanner, pxdVFS, srcScanIn)
 
-			toolInputs = filterSourceVFS(na, dedupClosure(na, append(toolInputs, pxdCV.self), pxdCV.buckets))
 			emitsIncludes = dedupClosure(na, append(emitsIncludes, pxdCV.self), pxdCV.buckets)
 		}
 
@@ -266,7 +265,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		na.anys.commit(len(ccCFlags))
 		ccCFlags = ccCFlags[:len(ccCFlags):len(ccCFlags)]
 
-		e.codegen.register(GeneratedFileInfo{
+		cppInfo := e.codegen.register(GeneratedFileInfo{
 			OutputPath:     generatedVFS,
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,
@@ -303,18 +302,47 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
-		ctx.emit.emitReservedNode(Node{
-			Platform: instance.Platform,
-			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
-				Env: env}),
-			Env:          env,
-			Inputs:       na.inputList(toolInputs),
-			Outputs:      na.vfsList(append([]VFS{generatedVFS}, headerVFS...)...),
-			KV:           &cythonCppKV,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			Resources:    usesPython3,
-		}, cyRef)
+		outputs := na.vfsList(append([]VFS{generatedVFS}, headerVFS...)...)
+		scanner := e.scanner
+		ind := p.ind
+		headerPyxClosure := p.headerPyxClosure
+		header := stmt.Header
 
+		pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+			var toolInputs []VFS
+
+			if header {
+				toolInputs = cythonHeaderToolInputs(na, srcVFS, headerPyxClosure)
+			} else {
+				toolInputs = cythonToolInputs(na, ind, walkClosure(scanner, srcVFS, srcScanIn))
+			}
+
+			if pxdOK {
+				pxdCV := walkClosure(scanner, pxdVFS, srcScanIn)
+
+				toolInputs = filterSourceVFS(na, dedupClosure(na, append(toolInputs, pxdCV.self), pxdCV.buckets))
+			}
+
+			ctx.emit.emitReservedNode(Node{
+				Platform: instance.Platform,
+				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
+					Env: env}),
+				Env:          env,
+				Inputs:       na.inputList(toolInputs),
+				Outputs:      outputs,
+				KV:           &cythonCppKV,
+				Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+				Resources:    usesPython3,
+			}, cyRef)
+		}}
+
+		cppInfo.pending = pe
+
+		for _, info := range p.infos {
+			info.pending = pe
+		}
+
+		e.noteOwn(pe)
 		e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCython})
 	}
 }
@@ -411,11 +439,16 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn ScanConte
 	return CythonCppInduced{toolSingles: toolSingles, emitsSingles: emitsSingles, toolCl: toolCl, emitsCl: emitsCl}
 }
 
-func cythonGeneratedOutputInputs(na *NodeArenas, ind CythonCppInduced, sourceCV Closure) ([]VFS, []VFS) {
+func cythonToolInputs(na *NodeArenas, ind CythonCppInduced, sourceCV Closure) []VFS {
 	toolLists := append(append([][]VFS{ind.toolSingles}, ind.toolCl...), sourceCV.buckets...)
+
+	return filterSourceVFS(na, dedupClosure(na, nil, toolLists))
+}
+
+func cythonEmitsIncludes(ind CythonCppInduced, sourceCV Closure) []VFS {
 	emitsLists := append(append([][]VFS{ind.emitsSingles}, ind.emitsCl...), sourceCV.buckets...)
 
-	return filterSourceVFS(na, dedupClosure(na, nil, toolLists)), dedup(emitsLists...)
+	return dedup(emitsLists...)
 }
 
 func cythonHeaderInducedClosure(ind CythonCppInduced) []VFS {
