@@ -78,18 +78,24 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	env := envVarsVCS
 
-	node := Node{
-		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: instance.Path.rel().build(), Env: env}),
-		Env:          env,
-		Inputs:       na.inputList(fromSandboxScriptInputs),
-		KV:           &fromSandboxKV,
-		Outputs:      na.vfsList(outVFSs...),
-		Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
-		Resources:    usesPython3,
-	}
+	ref := ctx.emit.reserve()
 
-	ref := ctx.emit.emitNode(node)
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		node := Node{
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: instance.Path.rel().build(), Env: env}),
+			Env:          env,
+			Inputs:       na.inputList(fromSandboxScriptInputs),
+			KV:           &fromSandboxKV,
+			Outputs:      na.vfsList(outVFSs...),
+			Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
+			Resources:    usesPython3,
+		}
+
+		ctx.emit.emitReservedNode(node, ref)
+	}}
+
+	e.noteOwn(pe)
 
 	for i, f := range stmt.OUTFiles {
 		if fromSandboxAutoLinkMember(f.string()) {
@@ -101,13 +107,15 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	parsed := fromSandboxOutputIncludes(ctx.na, stmt)
 
 	for _, out := range outVFSs {
-		e.codegen.register(GeneratedFileInfo{
+		info := e.codegen.register(GeneratedFileInfo{
 			OutputPath:      out,
 			ProducerRef:     ref,
 			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
 			SourceInputs:    fromSandboxScriptInputs,
 			ProducerMainOut: outVFSs[0],
 		})
+
+		info.pending = pe
 	}
 
 	return memberRefs, memberPaths

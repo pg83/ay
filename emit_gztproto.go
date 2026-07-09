@@ -28,21 +28,27 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 
 	inputs = inputs[:len(inputs):len(inputs)]
 
-	node := Node{
-		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{
-			CmdArgs: na.chunkList(gztCmdArgs(na, converterBin, protoInclude, gztSource, genProto)),
-			Env:     env,
-		}),
-		Env:            env,
-		Inputs:         na.inputList(inputs, imports.buckets...),
-		Outputs:        na.vfsList(genProto),
-		KV:             &gztprotoKV,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		ForeignDepRefs: na.refList(converterRef),
-	}
+	gzRef := ctx.emit.reserve()
+	protoIncludeSnap := na.vfsList(protoInclude...)
 
-	gzRef := ctx.emit.emitNode(node)
+	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		node := Node{
+			Platform: instance.Platform,
+			Cmds: na.cmdList(Cmd{
+				CmdArgs: na.chunkList(gztCmdArgs(na, converterBin, protoIncludeSnap, gztSource, genProto)),
+				Env:     env,
+			}),
+			Env:            env,
+			Inputs:         na.inputList(inputs, imports.buckets...),
+			Outputs:        na.vfsList(genProto),
+			KV:             &gztprotoKV,
+			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			ForeignDepRefs: na.refList(converterRef),
+		}
+
+		ctx.emit.emitReservedNode(node, gzRef)
+	}}
+
 	sourceInputs := na.vfs.alloc(1 + imports.len())[:0]
 
 	sourceInputs = append(sourceInputs, gztSource)
@@ -57,13 +63,17 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 
 	sourceInputs = sourceInputs[:len(sourceInputs):len(sourceInputs)]
 
-	e.codegen.register(GeneratedFileInfo{
+	info := e.codegen.register(GeneratedFileInfo{
 		OutputPath:     genProto,
 		ProducerRef:    gzRef,
 		SourceInputs:   sourceInputs,
 		ClosureLeaves:  sourceInputs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: gztGeneratedProtoParse(ctx, gztSource, inducedProtos)},
 	})
+
+	info.pending = pe
+
+	e.noteOwn(pe)
 
 	return gzRef, genProtoName
 }
