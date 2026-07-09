@@ -65,7 +65,7 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 	tc := e.d.tc
 	demanded := instance.Demand != demandNone
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		emitCopyFileNodeSnap(ctx, instance, scanner, scanCfg, moduleTag, tc, entry, st)
 
 		if demanded && extIsArchiveMember(entry.Dst) {

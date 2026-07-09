@@ -193,7 +193,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		inVFSs:   ctx.na.vfsList(inVFSs...),
 	}
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		inputClosure := prInputClosure(snap, stmt)
 
 		if prSourceClosure := filterSourceVFS(ctx.na, inputClosure); len(prSourceClosure) > 0 {

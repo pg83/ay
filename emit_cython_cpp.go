@@ -308,7 +308,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		headerPyxClosure := p.headerPyxClosure
 		header := stmt.Header
 
-		pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		pe := &PendingEmit{fn: func() {
 			var toolInputs []VFS
 
 			if header {

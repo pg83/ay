@@ -238,15 +238,13 @@ type GenCtx struct {
 }
 
 func runPendingProducers(ctx *GenCtx, reg *CodegenRegistry, consumer ModuleInstance, paths []VFS) {
-	consumerKey := ctx.instanceKey(consumer)
-
 	for _, p := range paths {
 		if !p.isBuild() {
 			continue
 		}
 
 		if info := reg.lookup(p); info != nil {
-			runPendingFor(info, consumerKey)
+			runPending(info)
 		}
 	}
 }
@@ -356,7 +354,6 @@ func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []Nod
 
 func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, cv Closure, incl ...NodeRef) []NodeRef {
 	reg := ctx.codegenFor(consumer)
-	consumerKey := ctx.instanceKey(consumer)
 
 	cv.each(func(p VFS) {
 		if !p.isBuild() {
@@ -364,7 +361,7 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 		}
 
 		if info := reg.lookup(p); info != nil {
-			runPendingFor(info, consumerKey)
+			runPending(info)
 		}
 	})
 

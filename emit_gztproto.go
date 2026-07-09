@@ -31,7 +31,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	gzRef := ctx.emit.reserve()
 	protoIncludeSnap := na.vfsList(protoInclude...)
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		node := Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{

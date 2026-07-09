@@ -33,7 +33,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 		ClosureLeaves: e.ctx.na.vfsList(tmpVFS, srcVFS),
 	})
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance)}
+	pe := &PendingEmit{}
 
 	pe.fn = func() {
 		cmd0 := Cmd{CmdArgs: na.chunkList(

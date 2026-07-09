@@ -77,7 +77,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	tc := d.tc
 	outputName := js.OutputName
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		emitJSReserved(instance, outputName, jsSources, joinClosure, ctx.target, tc, ctx.scripts, ctx.emit, jsRef)
 	}}
 

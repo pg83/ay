@@ -143,7 +143,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	pendNodes = append(pendNodes, optNode)
 	pendRefs = append(pendRefs, opRef)
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		for i := range pendNodes {
 			ctx.emit.emitReservedNode(pendNodes[i], pendRefs[i])
 		}

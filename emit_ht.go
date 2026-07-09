@@ -25,7 +25,7 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		cv := walkClosure(scanner, srcVFS, scanCfg)
 		block := na.vfs.alloc(2 + cv.len())
 		k := 0

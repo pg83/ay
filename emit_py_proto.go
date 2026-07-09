@@ -314,7 +314,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	scanner := e.scanner
 	scanCfg := pe.scanCfg
 
-	pyPBPE := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pyPBPE := &PendingEmit{fn: func() {
 		buckets := walkClosure(scanner, source(protoRelPath), scanCfg).buckets
 
 		pyPBNode := Node{

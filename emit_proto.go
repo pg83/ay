@@ -329,7 +329,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbm := *pe
 	scanner := e.scanner
 
-	pbPE := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pbPE := &PendingEmit{fn: func() {
 		imports := walkClosure(scanner, protoVFS, pbm.scanCfg)
 		depRefs := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, imports, extraProtoDeps...)
 

@@ -168,7 +168,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		outIncludeVFSs: ctx.na.vfsList(outIncludeVFSs...),
 	}
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		inputClosure := pyInputClosure(snap, stmt)
 		extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputClosure)
 

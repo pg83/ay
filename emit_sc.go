@@ -43,7 +43,7 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 	scanner := e.scanner
 	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
 
-	pe := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+	pe := &PendingEmit{fn: func() {
 		runtimeClosure := walkClosure(scanner, domschemeRuntimeVFS, scanCfg)
 
 		emitSCReserved(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, scRef, ctx.emit)
