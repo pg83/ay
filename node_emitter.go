@@ -1,5 +1,10 @@
 package main
 
+import (
+	"fmt"
+	"os"
+)
+
 type NodeRef uint32
 
 func (r NodeRef) strID() uint32 {
@@ -165,6 +170,32 @@ func (e *StreamingEmitter) finish() []NodeRef {
 		}
 
 		if len(next) == len(pending) {
+			if os.Getenv("AY_DEBUG_PENDING") != "" {
+				for _, id := range next {
+					n := e.nodes.s[id]
+
+					outs := ""
+
+					if len(n.Outputs) > 0 {
+						outs = n.Outputs[0].string()
+					}
+
+					unres := ""
+
+					for _, d := range n.DepRefs {
+						if !e.resolved.has(uint32(d)) {
+							unres += " " + fmt.Sprint(uint32(d))
+
+							if e.nodes.s[d] == nil {
+								unres += "(nil-slot)"
+							}
+						}
+					}
+
+					fmt.Fprintf(os.Stderr, "pending node %d out=%s unresolved deps:%s\n", uint32(id), outs, unres)
+				}
+			}
+
 			throwFmt("finish: %d pending node(s) form a dependency cycle", len(next))
 		}
 

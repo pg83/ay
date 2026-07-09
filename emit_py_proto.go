@@ -310,23 +310,32 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	na.exts.commit(len(outputs))
 	pbNodeKV.ExtOut = extOut[:len(outputs):len(outputs)]
 
-	pyPBNode := Node{
-		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: envVarsVCS}),
-		Env:          envVarsVCS,
-		Inputs:       na.inputList(inputs, transitive.buckets...),
-		Outputs:      outputs,
-		KV:           pbNodeKV,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:      producerDeps,
-		Resources:    usesPython3,
-	}
+	pyPBRef := ctx.emit.reserve()
+	scanner := e.scanner
+	scanCfg := pe.scanCfg
 
-	if len(toolRefs) > 0 {
-		pyPBNode.ForeignDepRefs = toolRefs
-	}
+	pyPBPE := &PendingEmit{owner: ctx.instanceKey(instance), fn: func() {
+		buckets := walkClosure(scanner, source(protoRelPath), scanCfg).buckets
 
-	pyPBRef := ctx.emit.emitNode(pyPBNode)
+		pyPBNode := Node{
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: envVarsVCS}),
+			Env:          envVarsVCS,
+			Inputs:       na.inputList(inputs, buckets...),
+			Outputs:      outputs,
+			KV:           pbNodeKV,
+			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+			DepRefs:      producerDeps,
+			Resources:    usesPython3,
+		}
+
+		if len(toolRefs) > 0 {
+			pyPBNode.ForeignDepRefs = toolRefs
+		}
+
+		ctx.emit.emitReservedNode(pyPBNode, pyPBRef)
+	}}
+
 	sourceInputs := dedupSourceVFS(na, inputs, transitive.buckets)
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
 
@@ -338,12 +347,22 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		return internV("${ARCADIA_BUILD_ROOT}/", out.relString())
 	}
 
-	e.codegen.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
+	pyInfo := e.codegen.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
+
+	pyInfo.pending = pyPBPE
+
 	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyDir, keySep, keyBase, "_pb2.py"), Token: tokenFor(pyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 
 	if d.grpc {
-		e.codegen.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
+		grpcInfo := e.codegen.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs})
+
+		grpcInfo.pending = pyPBPE
+
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyDir, keySep, keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
+	}
+
+	if !e.producersOnly() {
+		pyPBPE.run()
 	}
 }
 
