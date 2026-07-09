@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,7 +46,7 @@ type Executor struct {
 	uidSet       map[string]struct{}
 	uidSetReady  chan struct{}
 	events       *EventQueue
-	stats        map[string][]time.Duration
+	taskStats    []TaskStat
 	canon        CanonBuf
 	localHash    map[STR]uint64
 	prepBatch    []*NodeFuture
@@ -90,7 +92,6 @@ func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ni
 		cmdPrefixes: cmdPrefixes,
 		futs:        &PageVec[*NodeFuture]{},
 		events:      events,
-		stats:       map[string][]time.Duration{},
 		localHash:   map[STR]uint64{},
 
 		prepBatchCap: 1,
@@ -425,7 +426,7 @@ func (ex *Executor) execute(f *NodeFuture) {
 			fmt.Fprintln(os.Stderr, cmdResult.Stderr)
 		}
 
-		ex.stats[kind.string()] = append(ex.stats[kind.string()], dur)
+		ex.taskStats = append(ex.taskStats, TaskStat{f: f, dur: dur})
 
 		if ex.ninja {
 			fmt.Fprintln(os.Stderr, rec)
@@ -736,6 +737,131 @@ func (ex *Executor) installRoot(ref NodeRef, where string) {
 	}
 
 	ex.restoreInto(ex.futs.get(uint32(ref)).uid, where, true)
+}
+
+type TaskStat struct {
+	f   *NodeFuture
+	dur time.Duration
+}
+
+func (ex *Executor) printStats() {
+	ex.events.sync()
+
+	if len(ex.taskStats) == 0 {
+		return
+	}
+
+	durOf := make(map[NodeRef]time.Duration, len(ex.taskStats))
+
+	for _, s := range ex.taskStats {
+		durOf[s.f.ref] = s.dur
+	}
+
+	sorted := slices.Clone(ex.taskStats)
+
+	slices.SortFunc(sorted, func(a, b TaskStat) int {
+		return cmp.Compare(b.dur, a.dur)
+	})
+
+	fmt.Fprintln(os.Stderr, "\n10 longest tasks:")
+
+	for i, s := range sorted {
+		if i >= 10 {
+			break
+		}
+
+		fmt.Fprintf(os.Stderr, "  %10s  %-4s %s\n", s.dur.Round(time.Millisecond), s.f.node.KV.P.string(), nodeOutName(s.f.node))
+	}
+
+	sums := map[ProcKind]time.Duration{}
+
+	for _, s := range ex.taskStats {
+		sums[s.f.node.KV.P] += s.dur
+	}
+
+	kinds := make([]ProcKind, 0, len(sums))
+
+	for k := range sums {
+		kinds = append(kinds, k)
+	}
+
+	slices.SortFunc(kinds, func(a, b ProcKind) int {
+		return cmp.Compare(sums[b], sums[a])
+	})
+
+	fmt.Fprintln(os.Stderr, "\nper-kind total:")
+
+	for _, k := range kinds {
+		fmt.Fprintf(os.Stderr, "  %10s  %s\n", sums[k].Round(time.Millisecond), k.string())
+	}
+
+	ex.printCriticalPath(durOf)
+}
+
+func (ex *Executor) printCriticalPath(durOf map[NodeRef]time.Duration) {
+	finish := map[NodeRef]time.Duration{}
+	crit := map[NodeRef]NodeRef{}
+
+	var walk func(ref NodeRef) time.Duration
+
+	walk = func(ref NodeRef) time.Duration {
+		if v, ok := finish[ref]; ok {
+			return v
+		}
+
+		f := ex.futs.get(uint32(ref))
+
+		var best time.Duration
+		var bestDep NodeRef
+
+		if f != nil {
+			for dep := range f.node.buildDeps(ex.fetchRefs) {
+				if d := walk(dep); d > best {
+					best = d
+					bestDep = dep
+				}
+			}
+		}
+
+		total := durOf[ref] + best
+		finish[ref] = total
+
+		if best > 0 {
+			crit[ref] = bestDep
+		}
+
+		return total
+	}
+
+	var top NodeRef
+	var topFinish time.Duration
+
+	for _, s := range ex.taskStats {
+		if d := walk(s.f.ref); d > topFinish {
+			topFinish = d
+			top = s.f.ref
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "\ncritical path (%s):\n", topFinish.Round(time.Millisecond))
+
+	for ref := top; ; {
+		f := ex.futs.get(uint32(ref))
+
+		if f == nil {
+			break
+		}
+
+		fmt.Fprintf(os.Stderr, "  %10s  %-4s %s\n", durOf[ref].Round(time.Millisecond), f.node.KV.P.string(), nodeOutName(f.node))
+
+		nx, ok := crit[ref]
+
+		if !ok {
+			break
+		}
+
+		ref = nx
+	}
 }
 
 func (ex *Executor) removeContents(dir string) {
