@@ -91,7 +91,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 		OnUse:         &pe,
 	})
 
-	e.enqueueSrc(SrcMeta{Source: joinOutVFS.any(), Prio: stmtPrioDefault, Seq: js.Seq, Generated: true})
+	e.enqueueSrc(SrcMeta{Source: joinOutVFS.any(), Prio: stmtPrioDefault, Seq: js.Seq})
 }
 
 func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []string, scanCfg ScanContext) []VFS {

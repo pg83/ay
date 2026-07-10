@@ -262,7 +262,6 @@ type SrcMeta struct {
 	Source       ANY
 	Prio         int
 	Seq          int
-	Generated    bool
 	Global       bool
 	Bucket       int
 	Compile      CompileSpec

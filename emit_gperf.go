@@ -59,7 +59,6 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 	genVFS := build(instance.Path.relString(), "/", gperfGeneratedRel(srcRel))
 	gpRef := ctx.emit.reserve()
 
-	meta.Generated = true
 	meta.Source = genVFS.any()
 	e.enqueueSrc(meta)
 

@@ -600,7 +600,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		ccOut := e.ccOutputFor(aux, compile)
 
 		e.enqueueSrc(SrcMeta{
-			Source: aux.any(), Prio: stmtPrioDefault, Generated: true,
+			Source: aux.any(), Prio: stmtPrioDefault,
 			Compile: compile, CompileRef: ccRef,
 		})
 

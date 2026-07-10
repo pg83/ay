@@ -14,9 +14,10 @@ func (e *EmitContext) emitArchiveAsmForAR() {
 
 	for _, a := range d.archiveAsm {
 		rodataRef := e.emitArchiveAsmNode(a, toolBinPath, toolLDRef, reg)
-		rdRef, rdOut := e.emitArchiveAsmRodata(a.Name+".rodata", rodataRef)
+		rodataRel := a.Name + ".rodata"
+		rdRef, rdOut := e.emitArchiveAsmRodata(rodataRel, rodataRef)
 
-		e.collectObj(rdRef, rdOut, SrcMeta{Prio: stmtPrioDefault, Generated: true, Bucket: bkArchiveAsm})
+		e.collectObj(rdRef, rdOut, SrcMeta{Source: build(e.instance.Path.relString(), "/", rodataRel).any(), Prio: stmtPrioDefault, Bucket: bkArchiveAsm})
 	}
 }
 

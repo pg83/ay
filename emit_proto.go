@@ -622,8 +622,6 @@ func appendPbHCompanions(dst []IncludeDirective, pbhImports []IncludeDirective, 
 func (e *EmitContext) emitCppProtoFamilySource(meta SrcMeta, spec *ProtoSpec) {
 	pb := e.cppProtoPB(meta.Source.string(), spec)
 
-	meta.Generated = true
-
 	for _, cc := range pb.orderedCC {
 		child := meta
 

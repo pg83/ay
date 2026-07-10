@@ -333,7 +333,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		}
 
 		e.enqueueSrc(SrcMeta{
-			Source: generatedVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCython,
+			Source: generatedVFS.any(), Prio: stmtPrioDefault, Bucket: bkCython,
 			Compile: CompileSpec{Py3Suffix: py3Suffix, CFlags: ccCFlags},
 		})
 	}

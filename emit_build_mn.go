@@ -66,6 +66,6 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		OnUse:          &pe,
 	})
 
-	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
-	e.enqueueSrc(SrcMeta{Source: internV("MN_External_", stmt.Name, ".rodata").any(), Prio: stmtPrioDefault, Generated: true, Seq: stmt.Seq})
+	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault, Seq: stmt.Seq})
+	e.enqueueSrc(SrcMeta{Source: rodataVFS.any(), Prio: stmtPrioDefault, Seq: stmt.Seq})
 }

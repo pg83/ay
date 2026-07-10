@@ -2071,19 +2071,21 @@ type ARMember struct {
 }
 
 // srcRound classifies a source for archive-member ordering: the length of
-// its producer chain. 0 for a hand-written source; 1 for Generated (trusted
-// as reported, no lookup needed); each further hop through a registered
-// producer's own SourcePath adds 1, provided that next producer was
-// registered by this same module (a peer's generated header feeding a
+// its producer chain. Relative paths and $(S) paths are hand-written sources
+// in round 0. A $(B) path starts in round 1; each further hop through a
+// registered producer's own SourcePath adds 1, provided that next producer
+// was registered by this same module (a peer's generated header feeding a
 // local producer doesn't count — only within-module codegen chains do).
 func (e *EmitContext) srcRound(m SrcMeta) uint64 {
-	if !m.Generated {
+	cur := m.Source.vfs()
+
+	if !cur.isBuild() {
 		return 0
 	}
 
 	round := uint64(1)
 
-	for cur := m.Source.vfs(); ; {
+	for {
 		info := e.codegen.lookup(cur)
 
 		if info == nil || info.SourcePath == 0 {

@@ -75,7 +75,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	scanner := e.scanner
 
-	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq, Generated: true})
+	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq})
 
 	pe := func() {
 		enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)

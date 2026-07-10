@@ -17,7 +17,7 @@ func (e *EmitContext) emitDecimalMD5Stmt(stmt *DecimalMD5Lower32BitsStmt) {
 		return
 	}
 
-	e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), stmt.File).any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkDecimalMD5})
+	e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), stmt.File).any(), Prio: stmtPrioDefault, Bucket: bkDecimalMD5})
 }
 
 func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {

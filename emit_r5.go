@@ -95,7 +95,6 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 		OnUse:          &pe,
 	})
 
-	meta.Generated = true
 	meta.Source = r5CppOut.any()
 	meta.Compile.CFlags = cflagsWnoImplicitFallthrough(e.ctx.na, meta.Compile.CFlags)
 	e.enqueueSrc(meta)
