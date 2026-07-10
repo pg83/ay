@@ -122,7 +122,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 	ragel6Flags := ctx.na.anyList(d.cc.Ragel6Flags...)
 
 	pe := func() {
-		rl6Closure := walkClosure(scanner, r6Out, scanCfg).collect(ctx.na, func(v VFS) bool {
+		rl6Closure := walkClosure(scanner, r6Out, scanCfg, scanDomainCC).collect(ctx.na, func(v VFS) bool {
 			return v.isSource() && !extIsEnumSerialized(v.relString())
 		})
 

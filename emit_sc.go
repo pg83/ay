@@ -36,7 +36,7 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 	scanCfg := d.cc.ScanCfg
 
 	pe := func() {
-		runtimeClosure := walkClosure(scanner, domschemeRuntimeVFS, scanCfg)
+		runtimeClosure := walkClosure(scanner, domschemeRuntimeVFS, scanCfg, scanDomainCC)
 
 		emitSCReserved(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, scRef, ctx.emit)
 	}

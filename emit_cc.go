@@ -23,7 +23,7 @@ type ModuleCompileEnv struct {
 	CXXFlags             []ANY
 	COnlyFlags           []ANY
 	ClangWarnings        []ANY
-	ScanCfg              ScanContext
+	ScanCfg              *ScanContext
 	SrcDirs              []VFS
 	FS                   FS
 	PeerCFlagsGlobal     []ANY
@@ -109,7 +109,7 @@ func (e *EmitContext) moduleSourceVFS(src ANY) VFS {
 func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS) {
 	ctx, instance := e.ctx, e.instance
 
-	in.IncludeView = walkClosure(e.scanner, srcVFS, in.ScanCfg)
+	in.IncludeView = walkClosure(e.scanner, srcVFS, in.ScanCfg, scanDomainCC)
 	in.ExtraDepRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, in.IncludeView)
 
 	if in.MainOutInducedInputs {

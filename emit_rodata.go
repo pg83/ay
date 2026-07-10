@@ -85,7 +85,7 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta, in ModuleCCInputs) {
 	var deps []NodeRef
 
 	if srcVFS.isBuild() {
-		cv = walkClosure(e.scanner, srcVFS, d.cc.ScanCfg)
+		cv = walkClosure(e.scanner, srcVFS, d.cc.ScanCfg, scanDomainCC)
 
 		if info := e.codegen.use(srcVFS); info != nil {
 			deps = depRefs(info.ProducerRef)

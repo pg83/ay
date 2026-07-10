@@ -139,7 +139,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		ctx:            ctx,
 		instance:       instance,
 		scanner:        e.scanner,
-		scanCfg:        newScanContext(ctx.parsers, ctx.na.vfsList(d.cc.AddIncl...), ctx.na.vfsList(d.cc.PeerAddInclGlobal...), includeScannerBasePaths(), instance.Path.relString()),
+		scanCfg:        d.cc.ScanCfg,
 		inVFSs:         ctx.na.vfsList(inSnapVFSs...),
 		outIncludeVFSs: ctx.na.vfsList(outIncludeVFSs...),
 	}
@@ -181,7 +181,7 @@ type pyRunSnap struct {
 	ctx            *GenCtx
 	instance       ModuleInstance
 	scanner        *IncludeScanner
-	scanCfg        ScanContext
+	scanCfg        *ScanContext
 	inVFSs         []VFS
 	outIncludeVFSs []VFS
 }
@@ -196,7 +196,7 @@ func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) []VFS {
 
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.relString(), rel)
-		cv := walkClosure(s.scanner, buildRootPath, scanCfg)
+		cv := walkClosure(s.scanner, buildRootPath, scanCfg, scanDomainCC)
 
 		groups = append(groups, cv.buckets)
 	}
@@ -205,7 +205,7 @@ func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) []VFS {
 
 	if hasCCShard {
 		for i := range stmt.INFiles {
-			cv := walkClosure(s.scanner, s.inVFSs[i], scanCfg)
+			cv := walkClosure(s.scanner, s.inVFSs[i], scanCfg, scanDomainCC)
 
 			selves = append(selves, cv.self)
 			groups = append(groups, cv.buckets)
@@ -228,7 +228,7 @@ func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) []VFS {
 		}
 
 		for i := range stmt.OutputIncludes {
-			cv := walkClosure(s.scanner, s.outIncludeVFSs[i], scanCfg)
+			cv := walkClosure(s.scanner, s.outIncludeVFSs[i], scanCfg, scanDomainCC)
 
 			selves = append(selves, cv.self)
 			groups = append(groups, cv.buckets)

@@ -45,7 +45,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	}
 
 	ctx, instance, d := e.ctx, e.instance, e.d
-	scanCfg := newScanContext(ctx.parsers, ctx.na.vfsList(d.addIncl...), ctx.na.vfsList(e.peers.SelfAddInclGlobal...), includeScannerBasePaths(), instance.Path.relString())
+	scanCfg := d.cc.ScanCfg
 	withHeader := stmt.Variant == "with_header"
 	headerInput := e.resolveEnumHeaderInput(stmt.Header, d.srcDirs)
 	baseDir, baseSep, baseName := e.enumSerializedBaseParts(stmt)
@@ -87,14 +87,14 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			hInfo.GeneratorRefs = generatorRefs
 		}
 
-		headerClosure := walkClosure(scanner, headerInput, scanCfg)
+		headerClosure := walkClosure(scanner, headerInput, scanCfg, scanDomainAux)
 
 		var enClosure []VFS
 
 		if withHeader {
 			enClosure = ctx.na.dedupClosure([]VFS{headerClosure.self}, headerClosure.buckets)
 		} else {
-			ownCV := walkClosure(scanner, serializedCPPPath, scanCfg)
+			ownCV := walkClosure(scanner, serializedCPPPath, scanCfg, scanDomainAux)
 
 			enClosure = ctx.na.dedupClosure([]VFS{headerClosure.self}, headerClosure.buckets, ownCV.buckets)
 		}

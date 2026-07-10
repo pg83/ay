@@ -117,12 +117,10 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {
 
 	if len(d.asmAddIncl) > 0 {
 		scanIn.AddIncl = dedup(in.AddIncl, d.asmAddIncl)
-		scanIn.ScanCfg = newScanContext(ctx.parsers, scanIn.AddIncl, scanIn.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
-
 		asIn.AddIncl = scanIn.AddIncl
 	}
 
-	asIn.IncludeView = walkClosure(e.scanner, srcVFS, scanIn.ScanCfg)
+	asIn.IncludeView = walkClosure(e.scanner, srcVFS, scanIn.ScanCfg, scanDomainAsm)
 	asIn.ExtraDepRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, asIn.IncludeView)
 
 	ref, outPath := emitAS(instance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)

@@ -160,7 +160,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	ctx, instance, d := e.ctx, e.instance, e.d
 	flatcRes := ctx.toolResult(v.toolArg)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
-	transitiveImports := walkClosure(e.scanner, srcVFS, newScanContext(ctx.parsers, nil, nil, includeScannerBasePaths(), instance.Path.relString()))
+	transitiveImports := walkClosure(e.scanner, srcVFS, d.cc.ScanCfg, scanDomainFlatc)
 	flRef := ctx.emit.reserve()
 	srcRel := srcVFS.relString()
 	headerVFS := build(srcRel, ".h")

@@ -40,7 +40,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		in := ModuleCCInputs{ModuleCompileEnv: d.cc}
 		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
 		bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
-		cv := walkClosure(e.scanner, inputVFS, in.ScanCfg)
+		cv := walkClosure(e.scanner, inputVFS, in.ScanCfg, scanDomainCC)
 		deps := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, cv, depRefs(producer)...)
 		allInputs := na.inputList(na.vfsList(clangWrapperVFS, cv.self), cv.buckets...)
 

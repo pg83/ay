@@ -72,7 +72,7 @@ type IncludeScanner struct {
 
 type ScanCtx struct {
 	scanner *IncludeScanner
-	cfg     ScanContext
+	cfg     *ScanConfig
 	parser  IncludeDirectiveParser
 	tjc     *TarjanCtx
 }
@@ -116,37 +116,53 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 	return s
 }
 
-type ScanContext struct {
-	OwnAddIncl      []VFS
-	PeerAddInclSet  []VFS
-	BaseSearchPaths []VFS
-	OwnerModuleDir  string
-	cfg             *ScanConfig
-}
+type ScanDomain uint8
+
+const (
+	scanDomainCC ScanDomain = iota
+	scanDomainAsm
+	scanDomainCython
+	scanDomainProto
+	scanDomainAux
+	scanDomainFlatc
+	scanDomainGoAsm
+	scanDomainSwig
+	scanDomainJoinTarget
+	scanDomainCount
+)
+
+type ScanContext [scanDomainCount]*ScanConfig
 
 type ScanConfig struct {
-	num uint32
-	ri  *CfgResolveIndex
+	num             uint32
+	ownAddIncl      []VFS
+	peerAddInclSet  []VFS
+	baseSearchPaths []VFS
+	ri              *CfgResolveIndex
 }
 
-func newScanContext(pm *IncludeParserManager, ownAddIncl, peerAddIncl, base []VFS, ownerModuleDir string) ScanContext {
-	cfg := ScanContext{
-		OwnAddIncl:      ownAddIncl,
-		PeerAddInclSet:  peerAddIncl,
-		BaseSearchPaths: base,
-		OwnerModuleDir:  ownerModuleDir,
+type ScanDomainPaths struct {
+	OwnAddIncl     []VFS
+	PeerAddInclSet []VFS
+}
+
+func newScanContext(na *NodeArenas, pm *IncludeParserManager, domains [scanDomainCount]ScanDomainPaths, base []VFS) *ScanContext {
+	ctx := na.scanContext()
+
+	for domain := range domains {
+		paths := &domains[domain]
+
+		ctx[domain] = pm.resolveScanConfig(paths.OwnAddIncl, paths.PeerAddInclSet, base)
 	}
 
-	cfg.cfg = pm.resolveScanConfig(&cfg)
-
-	return cfg
+	return ctx
 }
 
-func (s *IncludeScanner) getScanCtx(cfg ScanContext, parser IncludeDirectiveParser) *ScanCtx {
+func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser IncludeDirectiveParser) *ScanCtx {
 	sc := s.scanCtxPool.Get().(*ScanCtx)
 
 	sc.scanner = s
-	sc.cfg = cfg
+	sc.cfg = ctx[domain]
 	sc.parser = parser
 	sc.tjc = tarjans.get()
 
@@ -159,7 +175,7 @@ func (s *IncludeScanner) putScanCtx(sc *ScanCtx) {
 	s.scanCtxPool.Put(sc)
 }
 
-func hashScanContext(ctx *ScanContext) uint64 {
+func hashScanConfig(ownAddIncl, peerAddIncl, baseSearchPaths []VFS) uint64 {
 	h := uint64(0x9e3779b97f4a7c15)
 
 	mixSlice := func(ss []VFS) {
@@ -170,9 +186,9 @@ func hashScanContext(ctx *ScanContext) uint64 {
 		}
 	}
 
-	mixSlice(ctx.OwnAddIncl)
-	mixSlice(ctx.PeerAddInclSet)
-	mixSlice(ctx.BaseSearchPaths)
+	mixSlice(ownAddIncl)
+	mixSlice(peerAddIncl)
+	mixSlice(baseSearchPaths)
 
 	return h
 }
@@ -589,23 +605,23 @@ type CfgBuildAddincl struct {
 	rank      int
 }
 
-func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
+func buildCfgResolveIndex(cfg *ScanConfig) *CfgResolveIndex {
 	idx := &CfgResolveIndex{}
 
-	for _, p := range cfg.OwnAddIncl {
+	for _, p := range cfg.ownAddIncl {
 		if p.isSource() && p.relString() == "" {
 			return idx
 		}
 	}
 
-	for _, p := range cfg.PeerAddInclSet {
+	for _, p := range cfg.peerAddInclSet {
 		if p.isSource() && p.relString() == "" {
 			return idx
 		}
 	}
 
 	idx.indexable = true
-	idx.rank = newIntValueMap[int32](2 * (len(cfg.OwnAddIncl) + len(cfg.PeerAddInclSet)))
+	idx.rank = newIntValueMap[int32](2 * (len(cfg.ownAddIncl) + len(cfg.peerAddInclSet)))
 
 	dedupers.with(func(deduper *DeDuper) {
 		r := int32(0)
@@ -628,11 +644,11 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 			r++
 		}
 
-		for _, p := range cfg.OwnAddIncl {
+		for _, p := range cfg.ownAddIncl {
 			add(p)
 		}
 
-		for _, p := range cfg.PeerAddInclSet {
+		for _, p := range cfg.peerAddInclSet {
 			add(p)
 		}
 	})
@@ -643,7 +659,7 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 func (sc *ScanCtx) cacheSearchTier(targetID STR, out VFS) VFS {
 	s := sc.scanner
 
-	s.searchTierFlat.put(splitMix64(sc.cfg.cfg.num, uint32(targetID)), out)
+	s.searchTierFlat.put(splitMix64(sc.cfg.num, uint32(targetID)), out)
 	s.searchTierSeen.add(uint32(targetID))
 
 	return out
@@ -653,7 +669,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	s := sc.scanner
 
 	if s.searchTierSeen.has(uint32(targetID)) {
-		if cached := s.searchTierFlat.get(splitMix64(sc.cfg.cfg.num, uint32(targetID))); cached != nil {
+		if cached := s.searchTierFlat.get(splitMix64(sc.cfg.num, uint32(targetID))); cached != nil {
 			return *cached
 		}
 	}
@@ -715,7 +731,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	first, _ := firstComponent(target)
 
 	if canRelFilter(first, target) && !strings.Contains(target, "/./") && !strings.Contains(target, "//") {
-		idx := sc.cfg.cfg.ri
+		idx := sc.cfg.ri
 
 		if idx.indexable {
 			bestRank := resolveNoRank
@@ -765,7 +781,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 				return sc.cacheSearchTier(targetID, out)
 			}
 
-			for _, p := range sc.cfg.BaseSearchPaths {
+			for _, p := range sc.cfg.baseSearchPaths {
 				if addInclPath(p) {
 					return sc.cacheSearchTier(targetID, out)
 				}
@@ -775,19 +791,19 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 		}
 	}
 
-	for _, p := range sc.cfg.OwnAddIncl {
+	for _, p := range sc.cfg.ownAddIncl {
 		if addInclPath(p) {
 			return sc.cacheSearchTier(targetID, out)
 		}
 	}
 
-	for _, p := range sc.cfg.PeerAddInclSet {
+	for _, p := range sc.cfg.peerAddInclSet {
 		if addInclPath(p) {
 			return sc.cacheSearchTier(targetID, out)
 		}
 	}
 
-	for _, p := range sc.cfg.BaseSearchPaths {
+	for _, p := range sc.cfg.baseSearchPaths {
 		if addInclPath(p) {
 			return sc.cacheSearchTier(targetID, out)
 		}

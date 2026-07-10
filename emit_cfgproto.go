@@ -14,7 +14,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
 	cfgRelPath := protoSourceRelPath(ctx.fs, instance, d, src.string())
 	cfgSource := source(cfgRelPath)
-	cfgImports := walkClosure(e.scanner, cfgSource, protoWalkInputs(ctx.parsers, nil, instance.Path.relString()))
+	cfgImports := walkClosure(e.scanner, cfgSource, d.cc.ScanCfg, scanDomainProto)
 	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, protoCPPOutRoot(d), e.dirScratch[:0])
 
 	e.dirScratch = directImports

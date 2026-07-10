@@ -56,7 +56,7 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	scanCfg := d.cc.ScanCfg
 
 	pe := func() {
-		lxClosure := walkClosure(scanner, outVFS, scanCfg).collect(ctx.na, func(v VFS) bool { return v.isSource() })
+		lxClosure := walkClosure(scanner, outVFS, scanCfg, scanDomainCC).collect(ctx.na, func(v VFS) bool { return v.isSource() })
 
 		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 	}

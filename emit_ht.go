@@ -18,7 +18,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 	scanCfg := d.cc.ScanCfg
 
 	pe := func() {
-		cv := walkClosure(scanner, srcVFS, scanCfg)
+		cv := walkClosure(scanner, srcVFS, scanCfg, scanDomainCC)
 		block := na.vfs.alloc(2 + cv.len())
 		k := 0
 

@@ -66,7 +66,7 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 	scanCfg := d.cc.ScanCfg
 
 	pe := func() {
-		srcInputs := walkClosure(scanner, srcVFS, scanCfg).collect(ctx.na, func(v VFS) bool { return v.isSource() })
+		srcInputs := walkClosure(scanner, srcVFS, scanCfg, scanDomainCC).collect(ctx.na, func(v VFS) bool { return v.isSource() })
 
 		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef, ctx.emit)
 	}

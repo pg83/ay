@@ -41,8 +41,8 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	return source(srcRelOnDisk)
 }
 
-func walkClosure(scanner *IncludeScanner, vfsPath VFS, cfg ScanContext) Closure {
-	sc := scanner.getScanCtx(cfg, scanner.parsers.registry.registeredParserFor(vfsPath.relString()))
+func walkClosure(scanner *IncludeScanner, vfsPath VFS, ctx *ScanContext, domain ScanDomain) Closure {
+	sc := scanner.getScanCtx(ctx, domain, scanner.parsers.registry.registeredParserFor(vfsPath.relString()))
 
 	defer scanner.putScanCtx(sc)
 
