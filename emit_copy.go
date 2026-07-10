@@ -106,7 +106,6 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 		info := GeneratedFileInfo{
 			OutputPath:     dstVFS,
 			SourcePath:     srcVFS,
-			IsText:         entry.Text,
 			ProducerRef:    ref,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 		}

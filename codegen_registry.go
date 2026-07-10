@@ -4,7 +4,6 @@ type GeneratedFileInfo struct {
 	OutputPath      VFS
 	SourcePath      VFS
 	OwnerModule     VFS
-	IsText          bool
 	ProducerRef     NodeRef
 	GeneratorRefs   []NodeRef
 	SourceInputs    []VFS
