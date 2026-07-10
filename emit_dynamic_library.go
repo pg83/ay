@@ -216,105 +216,107 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	var resourceGlobals []ResourceDecl
 
-	deduper := dedupers.get()
+	var (
+		peerArchiveRefs, pluginRefs                                                      []NodeRef
+		peerArchivePaths, peerAddInclGlobal, pluginPaths                                 []VFS
+		peerCFlagsGlobal, peerCXXFlagsGlobal, peerCOnlyFlagsGlobal, peerRPathFlagsGlobal []ANY
+	)
 
-	defer dedupers.put(deduper)
+	func() {
+		deduper := dedupers.get()
 
-	for _, pr := range resolved {
-		for _, decl := range pr.ResourceGlobalClosure {
-			if deduper.add(decl.GlobalVar.strID()) {
-				resourceGlobals = append(resourceGlobals, decl)
+		defer dedupers.put(deduper)
+
+		for _, pr := range resolved {
+			for _, decl := range pr.ResourceGlobalClosure {
+				if deduper.add(decl.GlobalVar.strID()) {
+					resourceGlobals = append(resourceGlobals, decl)
+				}
 			}
 		}
-	}
 
-	peerArchiveRefs := make([]NodeRef, 0, len(resolved))
-	peerArchivePaths := make([]VFS, 0, len(resolved))
+		peerArchiveRefs = make([]NodeRef, 0, len(resolved))
+		peerArchivePaths = make([]VFS, 0, len(resolved))
 
-	for _, pr := range resolved {
-		if pr.ARPath != nil {
-			peerArchiveRefs = append(peerArchiveRefs, pr.ARRef)
-			peerArchivePaths = append(peerArchivePaths, *pr.ARPath)
-		}
-	}
-
-	var peerAddInclGlobal []VFS
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for _, p := range pr.AddInclGlobal {
-			if deduper.add(p.strID()) {
-				peerAddInclGlobal = append(peerAddInclGlobal, p)
+		for _, pr := range resolved {
+			if pr.ARPath != nil {
+				peerArchiveRefs = append(peerArchiveRefs, pr.ARRef)
+				peerArchivePaths = append(peerArchivePaths, *pr.ARPath)
 			}
 		}
-	}
 
-	var peerCFlagsGlobal []ANY
-	var peerCXXFlagsGlobal []ANY
-	var peerCOnlyFlagsGlobal []ANY
-	var peerRPathFlagsGlobal []ANY
+		deduper.reset()
 
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for _, a := range pr.CFlagsGlobal {
-			if deduper.add(a.strID()) {
-				peerCFlagsGlobal = append(peerCFlagsGlobal, a)
+		for _, pr := range resolved {
+			for _, p := range pr.AddInclGlobal {
+				if deduper.add(p.strID()) {
+					peerAddInclGlobal = append(peerAddInclGlobal, p)
+				}
 			}
 		}
-	}
 
-	deduper.reset()
+		deduper.reset()
 
-	for _, pr := range resolved {
-		for _, a := range pr.CXXFlagsGlobal {
-			if deduper.add(a.strID()) {
-				peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
+		for _, pr := range resolved {
+			for _, a := range pr.CFlagsGlobal {
+				if deduper.add(a.strID()) {
+					peerCFlagsGlobal = append(peerCFlagsGlobal, a)
+				}
 			}
 		}
-	}
 
-	deduper.reset()
+		deduper.reset()
 
-	for _, pr := range resolved {
-		for _, a := range pr.COnlyFlagsGlobal {
-			if deduper.add(a.strID()) {
-				peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
+		for _, pr := range resolved {
+			for _, a := range pr.CXXFlagsGlobal {
+				if deduper.add(a.strID()) {
+					peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
+				}
 			}
 		}
-	}
 
-	deduper.reset()
+		deduper.reset()
 
-	for _, pr := range resolved {
-		for _, a := range pr.RPathFlagsGlobal {
-			if deduper.add(a.strID()) {
-				peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
+		for _, pr := range resolved {
+			for _, a := range pr.COnlyFlagsGlobal {
+				if deduper.add(a.strID()) {
+					peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
+				}
 			}
 		}
-	}
 
-	for _, pr := range rpathOnly {
-		for _, a := range pr.RPathFlagsGlobal {
-			if deduper.add(a.strID()) {
-				peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
+		deduper.reset()
+
+		for _, pr := range resolved {
+			for _, a := range pr.RPathFlagsGlobal {
+				if deduper.add(a.strID()) {
+					peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
+				}
 			}
 		}
-	}
 
-	pluginRefs := []NodeRef{}
-	pluginPaths := []VFS{}
-
-	deduper.reset()
-
-	for _, pr := range resolved {
-		for i, pp := range pr.LDPluginPaths {
-			if deduper.add(pp.strID()) {
-				pluginRefs = append(pluginRefs, pr.LDPluginRefs[i])
-				pluginPaths = append(pluginPaths, pp)
+		for _, pr := range rpathOnly {
+			for _, a := range pr.RPathFlagsGlobal {
+				if deduper.add(a.strID()) {
+					peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
+				}
 			}
 		}
-	}
+
+		pluginRefs = []NodeRef{}
+		pluginPaths = []VFS{}
+
+		deduper.reset()
+
+		for _, pr := range resolved {
+			for i, pp := range pr.LDPluginPaths {
+				if deduper.add(pp.strID()) {
+					pluginRefs = append(pluginRefs, pr.LDPluginRefs[i])
+					pluginPaths = append(pluginPaths, pp)
+				}
+			}
+		}
+	}()
 
 	d.tc = resolveModuleToolchain(ctx, resourceGlobals, instance.Platform.ClangVer)
 
