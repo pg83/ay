@@ -84,17 +84,10 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	joinOutVFS := build(instance.Path.relString(), "/", js.OutputName)
 	ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
 
-	var psc []ANY
-
-	if p := d.perSrcCFlagsFor(joinOutVFS.any()); p != nil {
-		psc = *p
-	}
-
 	e.register(GeneratedFileInfo{
 		OutputPath:    joinOutVFS,
 		ProducerRef:   jsRef,
 		ClosureLeaves: ccIncl[1:],
-		Compile:       e.ctx.na.compileSpec(CompileSpec{CFlags: psc}),
 		OnUse:         &pe,
 	})
 

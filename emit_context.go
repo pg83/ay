@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 type PeerContext struct {
 	SelfAddInclGlobal []VFS
 	PeerAddInclGlobal []VFS
@@ -207,82 +209,113 @@ func (e *EmitContext) emit() {
 		}
 	}
 
-	e.drainSrcs()
+	if !e.producersOnly() {
+		e.registerCollectPySrcs()
 
-	if e.producersOnly() {
-		return
+		regCCPy3Suffix := d.moduleStmt.Name == tokPy23NativeLibrary || d.moduleStmt.Name == tokPy23Library
+
+		e.emitPyRegister(regCCPy3Suffix)
 	}
 
-	e.registerCollectPySrcs()
-
-	regCCPy3Suffix := d.moduleStmt.Name == tokPy23NativeLibrary || d.moduleStmt.Name == tokPy23Library
-
-	if regRes := e.emitPyRegister(regCCPy3Suffix); regRes != nil {
-		for i, ref := range regRes.Refs {
-			e.collectObj(ref, regRes.Outputs[i], SrcMeta{Prio: stmtPrioDefault, Generated: true, Global: true})
-		}
-	}
-
-	if !isProgramModuleType(d.moduleStmt.Name) {
-		e.emitPyProtoBytecode()
-		e.emitPyBytecode()
-
-		genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()
-
-		for i, ref := range genPyAuxRefs {
-			e.collectObj(ref, genPyAuxOuts[i], SrcMeta{Prio: stmtPrioDefault, Global: true})
+	e.drainSrcs(func() {
+		if e.producersOnly() {
+			return
 		}
 
-		if d.moduleStmt.Name == tokProtoLibrary {
-			if pyRes := e.flushPyProtoSrcs(); pyRes != nil {
-				e.protoRes = pyRes
+		if !isProgramModuleType(d.moduleStmt.Name) {
+			e.emitPyProtoBytecode()
+			e.emitPyBytecode()
+
+			genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()
+
+			for i, ref := range genPyAuxRefs {
+				e.collectObj(ref, genPyAuxOuts[i], SrcMeta{Prio: stmtPrioDefault, Global: true})
 			}
+
+			if d.moduleStmt.Name == tokProtoLibrary {
+				if pyRes := e.flushPyProtoSrcs(); pyRes != nil {
+					e.protoRes = pyRes
+				}
+			}
+		} else if pyModuleTypeUsesPython3(d.moduleStmt.Name) {
+			e.emitPyProtoBytecode()
 		}
-	} else if pyModuleTypeUsesPython3(d.moduleStmt.Name) {
-		e.emitPyProtoBytecode()
-	}
 
-	if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 {
-		e.objcopyRes = e.emitResourceObjcopy()
-	}
+		if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 {
+			e.objcopyRes = e.emitResourceObjcopy()
+		}
 
-	for i, ref := range fsMemberRefs {
-		e.collectObj(ref, fsMemberPaths[i], SrcMeta{Prio: stmtPrioDefault})
-	}
+		for i, ref := range fsMemberRefs {
+			e.collectObj(ref, fsMemberPaths[i], SrcMeta{Prio: stmtPrioDefault})
+		}
 
-	e.flushGoCgo2()
-	e.flushGoSrcs()
+		e.flushGoCgo2()
+		e.flushGoSrcs()
+	})
 }
 
-func (e *EmitContext) drainSrcs() {
-	for len(e.srcs) > 0 {
-		meta := e.srcs[0]
+func (e *EmitContext) drainSrcs(finalize func()) {
+	for {
+		for len(e.srcs) > 0 {
+			meta := e.srcs[0]
 
-		e.srcs = e.srcs[1:]
+			e.srcs = e.srcs[1:]
+			class := srcExtClassOf(meta.Source.relOrSelf().any())
 
-		if meta.Compile != nil && !e.producersOnly() && srcExtClassOf(meta.Source.relOrSelf().any()) == srcExtCSource {
-			srcVFS := meta.Source.vfs()
+			if e.producersOnly() {
+				e.emitOneSource(meta)
 
-			if srcVFS == 0 {
-				srcVFS = e.moduleSourceVFS(meta.Source)
+				continue
 			}
 
-			var variant *string
+			switch class {
+			case srcExtCSource:
+				srcVFS := meta.Source.vfs()
 
-			if meta.Compile.Variant != 0 {
-				name := meta.Compile.Variant.string()
+				if srcVFS == 0 {
+					srcVFS = e.moduleSourceVFS(meta.Source)
+				}
 
-				variant = &name
+				ref, out := e.emitCCWith(srcVFS, e.ccInputsFor(meta.Compile), meta.CompileRef)
+
+				if meta.CompileRef == 0 {
+					e.collectObj(ref, out, meta)
+				}
+
+				continue
+			case srcExtRodata:
+				e.emitLibraryRodataSource(meta, e.ccInputsFor(meta.Compile))
+
+				continue
+			case srcExtAsm:
+				if isGoModuleType(e.d.unit.Type) && strings.HasSuffix(meta.Source.string(), ".s") {
+					e.collectGoSource(meta, true)
+				} else {
+					e.emitLibraryAsmSource(meta, e.ccInputsFor(meta.Compile))
+				}
+
+				continue
+			case srcExtYasm:
+				e.emitLibraryYasmSource(meta, e.ccInputsFor(meta.Compile))
+
+				continue
+			case srcExtCuda:
+				e.emitLibraryCudaSource(meta, e.ccInputsFor(meta.Compile))
+
+				continue
 			}
 
-			ref, out := e.emitCCFlat(srcVFS, variant, meta.Compile.CFlags)
-
-			e.collectObj(ref, out, meta)
-
-			continue
+			e.emitOneSource(meta)
 		}
 
-		e.emitOneSource(meta)
+		if finalize == nil {
+			break
+		}
+
+		f := finalize
+
+		finalize = nil
+		f()
 	}
 
 	e.srcsClosed = true

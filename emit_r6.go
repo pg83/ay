@@ -106,15 +106,10 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 
 	r6Ref := ctx.emit.reserve()
 
-	var psc []ANY
-
-	if p := d.perSrcCFlagsFor(src); p != nil {
-		psc = *p
-	}
-
 	if isCxxSource(r6Out.relString()) {
 		meta.Generated = true
 		meta.Source = r6Out.any()
+		meta.Compile.CFlags = cflagsWnoImplicitFallthrough(e.ctx.na, meta.Compile.CFlags)
 		e.enqueueSrc(meta)
 	}
 
@@ -141,9 +136,6 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 		ProducerRef:    r6Ref,
 		GeneratorRefs:  e.ctx.na.refList(ragelLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r6Parsed},
-		Compile: e.ctx.na.compileSpec(CompileSpec{
-			CFlags: cflagsWnoImplicitFallthrough(e.ctx.na, psc),
-		}),
-		OnUse: &pe,
+		OnUse:          &pe,
 	})
 }

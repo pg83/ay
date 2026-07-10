@@ -31,23 +31,16 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	parsed = append(parsed, flexOutputInclude)
 	parsed = append(parsed, localBucket...)
 
-	var psc []ANY
-
-	if p := d.perSrcCFlagsFor(src); p != nil {
-		psc = *p
-	}
-
-	cflags := psc
+	var cflags []ANY
 
 	if extIsFlexL(srcRel) {
 		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
 
-		cf := na.anys.alloc(len(psc) + 1)
-		cn := copy(cf, psc)
+		cf := na.anys.alloc(1)
 
-		cf[cn] = argWnoUnusedVariable.any()
-		na.anys.commit(cn + 1)
-		cflags = cf[: cn+1 : cn+1]
+		cf[0] = argWnoUnusedVariable.any()
+		na.anys.commit(1)
+		cflags = cf[:1:1]
 	}
 
 	na.dirs.commit(len(parsed))
@@ -57,6 +50,7 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 
 	meta.Generated = true
 	meta.Source = outVFS.any()
+	meta.Compile.CFlags = concat(meta.Compile.CFlags, cflags)
 	e.enqueueSrc(meta)
 
 	scanner := e.scanner
@@ -73,7 +67,6 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 		ProducerRef:    lxRef,
 		GeneratorRefs:  e.ctx.na.refList(flexRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-		Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: cflags}),
 		OnUse:          &pe,
 	})
 }

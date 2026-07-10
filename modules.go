@@ -199,7 +199,6 @@ type ModuleData struct {
 	exportsScript            *ANY
 	ldPlugins                []ANY
 	arPlugin                 *ANY
-	perSrcCFlags             map[ANY][]ANY
 	hasFbs                   bool
 	hasFbs64                 bool
 	defaultVars              map[STR]STR
@@ -249,31 +248,26 @@ type ModuleData struct {
 	cc                       ModuleCompileEnv
 }
 
-func (d *ModuleData) perSrcCFlagsFor(src ANY) *[]ANY {
-	if len(d.perSrcCFlags) == 0 {
-		return nil
-	}
-
-	if v, ok := d.perSrcCFlags[src]; ok {
-		return &v
-	}
-
-	return nil
-}
-
-type SourceCompile struct {
-	CFlags  []ANY
-	Variant STR
+type CompileSpec struct {
+	CFlags     []ANY
+	FlatOutput bool
+	Variant    STR
+	Py3Suffix  bool
+	ForceCxx   bool
+	EnvAddIncl []VFS
+	EnvCFlags  []ANY
 }
 
 type SrcMeta struct {
-	Source    ANY
-	Prio      int
-	Seq       int
-	Generated bool
-	Global    bool
-	Bucket    int
-	Compile   *SourceCompile
+	Source       ANY
+	Prio         int
+	Seq          int
+	Generated    bool
+	Global       bool
+	Bucket       int
+	Compile      CompileSpec
+	CompileRef   NodeRef
+	PyProtoGroup *int
 }
 
 func (m SrcMeta) sortKey(round uint64) uint64 {
@@ -1938,8 +1932,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			extras = v.Args[1:]
 		}
 
-		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: &SourceCompile{
-			CFlags: extras,
+		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{
+			CFlags:     extras,
+			FlatOutput: true,
 		}})
 	case tokSrcCNoLto:
 
@@ -1949,7 +1944,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		filename := v.Args[0]
 
-		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: &SourceCompile{}})
+		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{FlatOutput: true}})
 	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
 		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 
@@ -1966,9 +1961,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		filename := v.Args[0]
 		flags := concat(variant.CFlags, v.Args[1:])
 
-		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: &SourceCompile{
-			CFlags:  flags,
-			Variant: variant.Suffix,
+		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{
+			CFlags:     flags,
+			FlatOutput: true,
+			Variant:    variant.Suffix,
 		}})
 	case tokBuildMn:
 

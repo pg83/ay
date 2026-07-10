@@ -43,19 +43,12 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 		}, chRef)
 	}
 
-	var psc []ANY
-
-	if p := d.perSrcCFlagsFor(generatedVFS.any()); p != nil {
-		psc = *p
-	}
-
 	e.register(GeneratedFileInfo{
 		OutputPath:  generatedVFS,
 		ProducerRef: chRef,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(
 			IncludeDirective{kind: includeQuoted, target: includeTarget(confVFS.rel().any())})},
 		ClosureLeaves: e.ctx.na.vfsList(buildScriptsCheckConfigHPy),
-		Compile:       e.ctx.na.compileSpec(CompileSpec{CFlags: psc}),
 		OnUse:         &pe,
 	})
 

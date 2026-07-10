@@ -45,7 +45,6 @@ func (x *ModuleData) reset() {
 		excludeTags:         clearedMap(x.excludeTags),
 		dynamicLibraryFrom:  x.dynamicLibraryFrom[:0],
 		ldPlugins:           x.ldPlugins[:0],
-		perSrcCFlags:        clearedMap(x.perSrcCFlags),
 		defaultVars:         clearedMap(x.defaultVars),
 		defaultVarOrder:     x.defaultVarOrder[:0],
 		configureFiles:      scrub(x.configureFiles),

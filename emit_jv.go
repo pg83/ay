@@ -82,11 +82,13 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 			ClosureLeaves:  leaves,
-			Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: e.ctx.na.anyList(argWnoUnusedVariable.any())}),
 			OnUse:          &pe,
 		})
 
-		e.enqueueSrc(SrcMeta{Source: g4CppPath.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV})
+		e.enqueueSrc(SrcMeta{
+			Source: g4CppPath.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV,
+			Compile: CompileSpec{CFlags: e.ctx.na.anyList(argWnoUnusedVariable.any())},
+		})
 	}
 }
 

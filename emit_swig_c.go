@@ -71,19 +71,12 @@ func (e *EmitContext) emitSwigC() {
 			}, swRef)
 		}
 
-		var psc []ANY
-
-		if p := d.perSrcCFlagsFor(cOutVFS.any()); p != nil {
-			psc = *p
-		}
-
 		e.register(GeneratedFileInfo{
 			OutputPath:     cOutVFS,
 			ProducerRef:    swRef,
 			GeneratorRefs:  e.ctx.na.refList(swigRef),
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(ctx, srcVFS, swigClosure)},
 			ClosureLeaves:  append(append([]VFS{}, swigClosure...), srcVFS),
-			Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: psc}),
 			OnUse:          &pe,
 		})
 

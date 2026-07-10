@@ -63,15 +63,9 @@ func emitR5Reserved(
 }
 
 func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, instance := e.ctx, e.instance
 	src := meta.Source
 	srcRel := src.string()
-
-	var psc []ANY
-
-	if p := d.perSrcCFlagsFor(src); p != nil {
-		psc = *p
-	}
 
 	ragel5LDRef, ragel5BinVFS := ctx.tool(argContribToolsRagel5Ragel)
 	rlgenCdLDRef, rlgenCdBinVFS := ctx.tool(argContribToolsRagel5RlgenCd)
@@ -98,14 +92,12 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r5CppParsed(e.ctx.na, r5TmpOut, r5Parsed)},
-		Compile: e.ctx.na.compileSpec(CompileSpec{
-			CFlags: cflagsWnoImplicitFallthrough(e.ctx.na, psc),
-		}),
-		OnUse: &pe,
+		OnUse:          &pe,
 	})
 
 	meta.Generated = true
 	meta.Source = r5CppOut.any()
+	meta.Compile.CFlags = cflagsWnoImplicitFallthrough(e.ctx.na, meta.Compile.CFlags)
 	e.enqueueSrc(meta)
 }
 

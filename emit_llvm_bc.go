@@ -37,7 +37,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	for _, src := range stmt.Sources {
 		inputVFS, producer := e.llvmBcSourceInfo(src)
-		in := e.ccInputsFor(inputVFS)
+		in := ModuleCCInputs{ModuleCompileEnv: d.cc}
 		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
 		bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 		cv := walkClosure(e.scanner, inputVFS, in.ScanCfg)

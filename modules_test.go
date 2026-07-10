@@ -25,19 +25,19 @@ END()
 
 	plain, global, flat, simd := d.srcs[0], d.srcs[1], d.srcs[2], d.srcs[3]
 
-	if plain.Source.string() != "plain.cpp" || plain.Global || plain.Compile != nil || plain.Prio != stmtPrioSrcs {
+	if plain.Source.string() != "plain.cpp" || plain.Global || plain.Compile.CFlags != nil || plain.Compile.FlatOutput || plain.Prio != stmtPrioSrcs {
 		t.Fatalf("plain SRCS occurrence = %#v", plain)
 	}
 
-	if global.Source.string() != "global.cpp" || !global.Global || global.Compile != nil || global.Prio != stmtPrioDefault || global.Seq != 0 {
+	if global.Source.string() != "global.cpp" || !global.Global || global.Compile.CFlags != nil || global.Compile.FlatOutput || global.Prio != stmtPrioDefault || global.Seq != 0 {
 		t.Fatalf("GLOBAL occurrence = %#v", global)
 	}
 
-	if flat.Source.string() != "plain.cpp" || flat.Compile == nil || flat.Compile.Variant != 0 || !slices.Equal(anyStrs(flat.Compile.CFlags), []string{"-DFLAT_COPY"}) {
+	if flat.Source.string() != "plain.cpp" || !flat.Compile.FlatOutput || flat.Compile.Variant != 0 || !slices.Equal(anyStrs(flat.Compile.CFlags), []string{"-DFLAT_COPY"}) {
 		t.Fatalf("SRC flat occurrence = %#v", flat)
 	}
 
-	if simd.Source.string() != "vector.cpp" || simd.Compile == nil || simd.Compile.Variant.string() != "avx2" {
+	if simd.Source.string() != "vector.cpp" || !simd.Compile.FlatOutput || simd.Compile.Variant.string() != "avx2" {
 		t.Fatalf("SIMD occurrence = %#v", simd)
 	}
 
