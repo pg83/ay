@@ -2,8 +2,9 @@ package main
 
 var htKV = KV{P: pkHT, PC: pcYellow}
 
-func (e *EmitContext) emitLibraryAspSource(src ANY) {
+func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	src := meta.Source
 	na := ctx.na
 	module := instance.Path.relString()
 	srcRel := src.string()
@@ -60,8 +61,6 @@ func (e *EmitContext) emitLibraryAspSource(src ANY) {
 		ClosureLeaves:  e.ctx.na.vfsList(srcVFS),
 		OnUse:          &pe,
 	})
-
-	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
 	meta.Source = outVFS.any()

@@ -94,7 +94,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 		OutputPath:    joinOutVFS,
 		ProducerRef:   jsRef,
 		ClosureLeaves: ccIncl[1:],
-		Compile:       e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(joinOutVFS.any()), CFlags: psc}),
+		Compile:       e.ctx.na.compileSpec(CompileSpec{CFlags: psc}),
 		OnUse:         &pe,
 	})
 

@@ -412,7 +412,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			GeneratorRefs:  spec.genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: ccParsed},
 			ClosureLeaves:  spec.ccLeaves,
-			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(internStr(srcRel).any()), CFlags: psc}),
+			Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: psc}),
 			OnUse:          &pbPE,
 		})
 

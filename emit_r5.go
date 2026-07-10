@@ -62,8 +62,9 @@ func emitR5Reserved(
 	emit.emitReservedNode(node, id)
 }
 
-func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
+func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	src := meta.Source
 	srcRel := src.string()
 
 	var psc []ANY
@@ -98,13 +99,10 @@ func (e *EmitContext) emitLibraryRagel5Source(src ANY) {
 		GeneratorRefs:  e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r5CppParsed(e.ctx.na, r5TmpOut, r5Parsed)},
 		Compile: e.ctx.na.compileSpec(CompileSpec{
-			FlatOutput: d.flatSrc(src),
-			CFlags:     cflagsWnoImplicitFallthrough(e.ctx.na, psc),
+			CFlags: cflagsWnoImplicitFallthrough(e.ctx.na, psc),
 		}),
 		OnUse: &pe,
 	})
-
-	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
 	meta.Source = r5CppOut.any()

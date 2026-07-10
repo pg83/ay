@@ -139,7 +139,9 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		producerSourceInputs = append(producerSourceInputs, v)
 	}
 
-	for _, src := range d.srcs {
+	for _, meta := range d.srcs {
+		src := meta.Source
+
 		if !extIsProto(src.string()) {
 			continue
 		}

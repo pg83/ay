@@ -2,9 +2,51 @@ package main
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestCollectModule_SourceOccurrencesCarryCompileAndArchiveMetadata(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"mod/ya.make": `LIBRARY()
+SRCS(plain.cpp GLOBAL global.cpp)
+SRC(plain.cpp -DFLAT_COPY)
+SRC_C_AVX2(vector.cpp -DVECTOR_COPY)
+END()
+`,
+	})
+	mf := throw2(parseFile(fs, "mod/ya.make"))
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("mod"), Kind: KindLib}, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
+
+	if len(d.srcs) != 4 {
+		t.Fatalf("source occurrences = %d, want 4: %#v", len(d.srcs), d.srcs)
+	}
+
+	plain, global, flat, simd := d.srcs[0], d.srcs[1], d.srcs[2], d.srcs[3]
+
+	if plain.Source.string() != "plain.cpp" || plain.Global || plain.Compile != nil || plain.Prio != stmtPrioSrcs {
+		t.Fatalf("plain SRCS occurrence = %#v", plain)
+	}
+
+	if global.Source.string() != "global.cpp" || !global.Global || global.Compile != nil || global.Prio != stmtPrioDefault || global.Seq != 0 {
+		t.Fatalf("GLOBAL occurrence = %#v", global)
+	}
+
+	if flat.Source.string() != "plain.cpp" || flat.Compile == nil || flat.Compile.Variant != 0 || !slices.Equal(anyStrs(flat.Compile.CFlags), []string{"-DFLAT_COPY"}) {
+		t.Fatalf("SRC flat occurrence = %#v", flat)
+	}
+
+	if simd.Source.string() != "vector.cpp" || simd.Compile == nil || simd.Compile.Variant.string() != "avx2" {
+		t.Fatalf("SIMD occurrence = %#v", simd)
+	}
+
+	for _, flag := range []string{"-mavx2", "-mfma", "-mbmi", "-mbmi2", "-DVECTOR_COPY"} {
+		if !slices.Contains(anyStrs(simd.Compile.CFlags), flag) {
+			t.Fatalf("SIMD flags %v missing %q", anyStrs(simd.Compile.CFlags), flag)
+		}
+	}
+}
 
 func TestApplyUnknownStmt_ExcludeTagsAcceptsTagNames(t *testing.T) {
 	env := buildIfEnv(ModuleInstance{Platform: testTargetP})

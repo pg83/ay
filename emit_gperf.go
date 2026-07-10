@@ -50,8 +50,9 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 	emit.emitReservedNode(node, ref)
 }
 
-func (e *EmitContext) emitLibraryGperfSource(src ANY) {
+func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	src := meta.Source
 	srcRel := src.string()
 	gperfLDRef, gperfBinVFS := ctx.tool(argContribToolsGperf)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
@@ -63,8 +64,6 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 	if p := d.perSrcCFlagsFor(src); p != nil {
 		psc = *p
 	}
-
-	meta := d.srcMetaOf(src)
 
 	meta.Generated = true
 	meta.Source = genVFS.any()
@@ -84,7 +83,7 @@ func (e *EmitContext) emitLibraryGperfSource(src ANY) {
 		ProducerRef:    gpRef,
 		GeneratorRefs:  e.ctx.na.refList(gperfLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})},
-		Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src), CFlags: psc}),
+		Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: psc}),
 		OnUse:          &pe,
 	})
 }

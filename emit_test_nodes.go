@@ -299,7 +299,13 @@ func buildTestSuiteInfo(instance ModuleInstance, d *ModuleData, ldPath VFS) *Tes
 
 	cppSources := make([]string, 0, len(d.srcs))
 
-	for _, src := range d.srcs {
+	for _, meta := range d.srcs {
+		if meta.Global || meta.Compile != nil && meta.Compile.Variant != 0 {
+			continue
+		}
+
+		src := meta.Source
+
 		switch strings.ToLower(path.Ext(src.string())) {
 		case ".c", ".cc", ".cpp", ".cxx":
 			cppSources = append(cppSources, path.Clean(path.Join(srcBase, src.string())))

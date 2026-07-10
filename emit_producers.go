@@ -426,15 +426,17 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 	var gztChildren []SrcMeta
 
-	for _, src := range d.srcs {
+	for _, meta := range d.srcs {
+		src := meta.Source
+
 		if !isCodegenProducingSrcID(src) {
 			continue
 		}
 
-		srcs = append(srcs, d.srcMetaOf(src))
+		srcs = append(srcs, meta)
 
 		if srcExtClassOf(src) == srcExtGztProto && d.unit.Tag != unitTagPy3Proto {
-			childMeta := d.srcMetaOf(src)
+			childMeta := meta
 
 			childMeta.Source = internStr(e.gztGenProtoName(src.string())).any()
 			gztChildren = append(gztChildren, childMeta)

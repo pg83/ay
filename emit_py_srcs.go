@@ -599,7 +599,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 		ProducerRef:    ref,
 		GeneratorRefs:  na.refList(rescompilerRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-		Compile:        na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(aux.any()), ForceCxx: true, CFlags: cflags[: cn+2 : cn+2]}),
+		Compile:        na.compileSpec(CompileSpec{ForceCxx: true, CFlags: cflags[: cn+2 : cn+2]}),
 	})
 
 	return walkClosure(e.scanner, aux, d.cc.ScanCfg)

@@ -675,7 +675,9 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 }
 
 func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
-	for _, src := range d.srcs {
+	for _, meta := range d.srcs {
+		src := meta.Source
+
 		if extIsGztproto(src.string()) {
 			d.peerdirs = append(d.peerdirs, internStr("kernel/gazetteer/proto").any())
 
@@ -686,7 +688,9 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary {
 		hasProtoSrc := false
 
-		for _, src := range d.srcs {
+		for _, meta := range d.srcs {
+			src := meta.Source
+
 			if extIsProto(src.string()) {
 				hasProtoSrc = true
 

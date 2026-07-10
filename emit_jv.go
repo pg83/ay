@@ -82,7 +82,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 			ClosureLeaves:  leaves,
-			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(g4CppPath.any()), CFlags: e.ctx.na.anyList(argWnoUnusedVariable.any())}),
+			Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: e.ctx.na.anyList(argWnoUnusedVariable.any())}),
 			OnUse:          &pe,
 		})
 

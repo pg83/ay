@@ -55,7 +55,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(
 			IncludeDirective{kind: includeQuoted, target: includeTarget(confVFS.rel().any())})},
 		ClosureLeaves: e.ctx.na.vfsList(buildScriptsCheckConfigHPy),
-		Compile:       e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(generatedVFS.any()), CFlags: psc}),
+		Compile:       e.ctx.na.compileSpec(CompileSpec{CFlags: psc}),
 		OnUse:         &pe,
 	})
 

@@ -83,7 +83,7 @@ func (e *EmitContext) emitSwigC() {
 			GeneratorRefs:  e.ctx.na.refList(swigRef),
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(ctx, srcVFS, swigClosure)},
 			ClosureLeaves:  append(append([]VFS{}, swigClosure...), srcVFS),
-			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(cOutVFS.any()), CFlags: psc}),
+			Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: psc}),
 			OnUse:          &pe,
 		})
 

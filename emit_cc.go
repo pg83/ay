@@ -108,10 +108,6 @@ func (e *EmitContext) ccInputsFor(srcVFS VFS) ModuleCCInputs {
 		in.PerSourceCFlags = *extras
 	}
 
-	if d.flatSrc(srcID.any()) {
-		in.FlatOutput = true
-	}
-
 	return in
 }
 
@@ -130,7 +126,7 @@ func (e *EmitContext) emitCCFlat(srcVFS VFS, variant *string, cflags []ANY) (Nod
 
 	in.FlatOutput = true
 	in.Variant = variant
-	in.PerSourceCFlags = cflags
+	in.PerSourceCFlags = concat(cflags, in.PerSourceCFlags)
 
 	return e.emitCCWith(srcVFS, in)
 }

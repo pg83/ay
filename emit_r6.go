@@ -86,8 +86,9 @@ func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef,
 	emit.emitReservedNode(node, id)
 }
 
-func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
+func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	src := meta.Source
 	srcRel := src.string()
 	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
 	rl6SourceVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
@@ -112,8 +113,6 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 	}
 
 	if isCxxSource(r6Out.relString()) {
-		meta := d.srcMetaOf(src)
-
 		meta.Generated = true
 		meta.Source = r6Out.any()
 		e.enqueueSrc(meta)
@@ -143,8 +142,7 @@ func (e *EmitContext) emitLibraryRagel6Source(src ANY) {
 		GeneratorRefs:  e.ctx.na.refList(ragelLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r6Parsed},
 		Compile: e.ctx.na.compileSpec(CompileSpec{
-			FlatOutput: d.flatSrc(src),
-			CFlags:     cflagsWnoImplicitFallthrough(e.ctx.na, psc),
+			CFlags: cflagsWnoImplicitFallthrough(e.ctx.na, psc),
 		}),
 		OnUse: &pe,
 	})
