@@ -13,6 +13,7 @@ type NodeArenas struct {
 	exts     *BumpAllocator[KVExt]
 	geninfos *BumpAllocator[GeneratedFileInfo]
 	pending  *BumpAllocator[PendingEmit]
+	protoPBC *BumpAllocator[protoPBCommon]
 	protoPB  *BumpAllocator[protoPBPending]
 	pyPB     *BumpAllocator[pyPBPending]
 	dirs     *BumpAllocator[IncludeDirective]
@@ -32,6 +33,7 @@ func (na *NodeArenas) resetWindows() {
 	na.exts.open = false
 	na.geninfos.open = false
 	na.pending.open = false
+	na.protoPBC.open = false
 	na.protoPB.open = false
 	na.pyPB.open = false
 	na.dirs.open = false
@@ -51,6 +53,7 @@ func (na *NodeArenas) markStrict() {
 	na.exts.markStrict()
 	na.geninfos.markStrict()
 	na.pending.markStrict()
+	na.protoPBC.markStrict()
 	na.protoPB.markStrict()
 	na.pyPB.markStrict()
 	na.dirs.markStrict()
@@ -69,6 +72,7 @@ func newNodeArenas() *NodeArenas {
 		exts:     newBumpAllocator[KVExt](1 << 8),
 		geninfos: newBumpAllocator[GeneratedFileInfo](1 << 10),
 		pending:  newBumpAllocator[PendingEmit](1 << 10),
+		protoPBC: newBumpAllocator[protoPBCommon](1 << 8),
 		protoPB:  newBumpAllocator[protoPBPending](1 << 8),
 		pyPB:     newBumpAllocator[pyPBPending](1 << 8),
 		dirs:     newBumpAllocator[IncludeDirective](1 << 10),

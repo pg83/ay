@@ -132,11 +132,12 @@ const (
 )
 
 type ScanContext struct {
-	configs [scanDomainCount]*ScanConfig
-	domains [scanDomainCount]ScanDomainPaths
-	base    []VFS
-	parsers *IncludeParserManager
-	ready   uint16
+	configs  [scanDomainCount]*ScanConfig
+	base     []VFS
+	ccOwn    []VFS
+	ccPeer   []VFS
+	fullPeer []VFS
+	parsers  *IncludeParserManager
 
 	asmAddIncl    []VFS
 	cythonAddIncl []VFS
@@ -155,36 +156,28 @@ type ScanConfig struct {
 	ri              *CfgResolveIndex
 }
 
-type ScanDomainPaths struct {
-	OwnAddIncl     []VFS
-	PeerAddInclSet []VFS
-}
-
-func newScanContext(na *NodeArenas, pm *IncludeParserManager, domains [scanDomainCount]ScanDomainPaths, base []VFS) *ScanContext {
+func newScanContext(na *NodeArenas, pm *IncludeParserManager, ccOwn, ccPeer, fullPeer, base []VFS) *ScanContext {
 	ctx := na.scanContext()
 
-	*ctx = ScanContext{domains: domains, base: base, parsers: pm, ready: (1 << scanDomainCount) - 1}
+	*ctx = ScanContext{base: base, ccOwn: ccOwn, ccPeer: ccPeer, fullPeer: fullPeer, parsers: pm}
 
 	return ctx
 }
 
-func (ctx *ScanContext) modulePaths(domain ScanDomain) *ScanDomainPaths {
-	paths := &ctx.domains[domain]
-	bit := uint16(1) << domain
-
-	if ctx.ready&bit != 0 {
-		return paths
-	}
-
+func (ctx *ScanContext) modulePaths(domain ScanDomain) (own, peer []VFS) {
 	switch domain {
 	case scanDomainAsm:
-		if len(ctx.asmAddIncl) > 0 {
-			paths.OwnAddIncl = dedup(paths.OwnAddIncl, ctx.asmAddIncl)
+		own = ctx.ccOwn
+
+		if len(ctx.asmAddIncl) != 0 {
+			own = dedup(own, ctx.asmAddIncl)
 		}
+
+		return own, ctx.ccPeer
 	case scanDomainCython:
-		paths.OwnAddIncl = appendCythonScanAddIncl(paths.OwnAddIncl, ctx.cythonAddIncl, ctx.cythonPy23)
+		return appendCythonScanAddIncl(ctx.ccOwn, ctx.cythonAddIncl, ctx.cythonPy23), ctx.ccPeer
 	case scanDomainProto:
-		own := make([]VFS, 0, 2+len(ctx.protoInclude))
+		own = make([]VFS, 0, 2+len(ctx.protoInclude))
 
 		own = append(own, pbRuntimeBaseVFS)
 
@@ -192,25 +185,35 @@ func (ctx *ScanContext) modulePaths(domain ScanDomain) *ScanDomainPaths {
 			own = append(own, ctx.protoOutRoot)
 		}
 
-		paths.OwnAddIncl = append(own, ctx.protoInclude...)
+		return append(own, ctx.protoInclude...), nil
+	case scanDomainAux:
+		return ctx.ccOwn, ctx.fullPeer
+	case scanDomainFlatc:
+		return nil, nil
+	case scanDomainGoAsm:
+		return goAsmIncludeDirs, nil
+	case scanDomainSwig:
+		return swigAddIncls, nil
 	case scanDomainJoinTarget:
+		peer = ctx.ccPeer
+
 		if ctx.joinFrom == ISAX8664 {
-			paths.PeerAddInclSet = rebasePerArchPeerAddIncl(paths.PeerAddInclSet, ctx.joinFrom, ctx.joinTo)
+			peer = rebasePerArchPeerAddIncl(peer, ctx.joinFrom, ctx.joinTo)
 		}
+
+		return ctx.ccOwn, peer
+	default:
+		return ctx.ccOwn, ctx.ccPeer
 	}
-
-	ctx.ready |= bit
-
-	return paths
 }
 
 func (ctx *ScanContext) config(domain ScanDomain) *ScanConfig {
 	cfg := ctx.configs[domain]
 
 	if cfg == nil {
-		paths := ctx.modulePaths(domain)
+		own, peer := ctx.modulePaths(domain)
 
-		cfg = ctx.parsers.resolveScanConfig(paths.OwnAddIncl, paths.PeerAddInclSet, ctx.base)
+		cfg = ctx.parsers.resolveScanConfig(own, peer, ctx.base)
 		ctx.configs[domain] = cfg
 	}
 
