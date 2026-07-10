@@ -69,7 +69,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 				leafSet[l] = true
 			}
 
-			cpClosure := walkClosure(scanner, g4CppPath, scanCfg).collect(ctx.na, func(v VFS) bool {
+			cpClosure := walkClosure(scanner, g4CppPath, scanCfg, scanDomainCC).collect(ctx.na, func(v VFS) bool {
 				return v != g4CppPath && !leafSet[v]
 			})
 

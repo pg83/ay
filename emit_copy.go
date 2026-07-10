@@ -155,13 +155,13 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	return CopyEmitState{srcVFS: srcVFS, dstVFS: dstVFS, ref: ref, producerSource: producerSource}, nil
 }
 
-func emitCopyFileNodeSnap(ctx *GenCtx, instance ModuleInstance, scanner *IncludeScanner, scanCfg ScanContext, moduleTag STR, tc ModuleToolchain, entry CopyFileEntry, st CopyEmitState) {
+func emitCopyFileNodeSnap(ctx *GenCtx, instance ModuleInstance, scanner *IncludeScanner, scanCfg *ScanContext, moduleTag STR, tc ModuleToolchain, entry CopyFileEntry, st CopyEmitState) {
 	deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{st.srcVFS})
 
 	var closure []VFS
 
 	if entry.WithContext || len(entry.OutputIncludes) > 0 {
-		raw := rewriteClosureCPSource(ctx.na, scanner, walkClosure(scanner, st.dstVFS, scanCfg))
+		raw := rewriteClosureCPSource(ctx.na, scanner, walkClosure(scanner, st.dstVFS, scanCfg, scanDomainCC))
 
 		raw = filterSourceVFS(ctx.na, raw)
 

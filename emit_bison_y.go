@@ -122,7 +122,7 @@ func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 			inputs = ext[:len(ext):len(ext)]
 
 			for _, sk := range bisonCppSkeletonInputs {
-				skCV := walkClosure(scanner, sk, scanCfg)
+				skCV := walkClosure(scanner, sk, scanCfg, scanDomainCC)
 
 				inputs = na.dedupClosure(inputs, skCV.buckets)
 			}

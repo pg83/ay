@@ -807,6 +807,44 @@ type ResolvedPeer struct {
 	kind   int
 }
 
+func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccOwn, ccPeer, fullPeer, protoInclude []VFS) *ScanContext {
+	asmOwn := ccOwn
+
+	if len(d.asmAddIncl) > 0 {
+		asmOwn = dedup(ccOwn, d.asmAddIncl)
+	}
+
+	cythonOwn := appendCythonScanAddIncl(ccOwn, d.cythonAddIncl, cythonUsesPy23Variant(d.moduleStmt.Name))
+	protoOwn := make([]VFS, 0, 2+len(protoInclude))
+
+	protoOwn = append(protoOwn, pbRuntimeBaseVFS)
+
+	if root := protoCPPOutRoot(d); root != "" {
+		protoOwn = append(protoOwn, source(root))
+	}
+
+	protoOwn = append(protoOwn, protoInclude...)
+	joinPeer := ccPeer
+
+	if instance.Platform.ISA == ISAX8664 {
+		joinPeer = rebasePerArchPeerAddIncl(ccPeer, instance.Platform.ISA, ctx.target.ISA)
+	}
+
+	domains := [scanDomainCount]ScanDomainPaths{
+		scanDomainCC:         {OwnAddIncl: ccOwn, PeerAddInclSet: ccPeer},
+		scanDomainAsm:        {OwnAddIncl: asmOwn, PeerAddInclSet: ccPeer},
+		scanDomainCython:     {OwnAddIncl: cythonOwn, PeerAddInclSet: ccPeer},
+		scanDomainProto:      {OwnAddIncl: protoOwn},
+		scanDomainAux:        {OwnAddIncl: ccOwn, PeerAddInclSet: fullPeer},
+		scanDomainFlatc:      {},
+		scanDomainGoAsm:      {OwnAddIncl: goAsmIncludeDirs},
+		scanDomainSwig:       {OwnAddIncl: swigAddIncls},
+		scanDomainJoinTarget: {OwnAddIncl: ccOwn, PeerAddInclSet: joinPeer},
+	}
+
+	return newScanContext(ctx.na, ctx.parsers, domains, includeScannerBasePaths())
+}
+
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if !ctx.keepGoing {
 		r := genModuleImpl(ctx, instance)
@@ -1684,6 +1722,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	dedupedAddIncl = ctx.na.vfsList(dedupedAddIncl...)
 	selfPeerAddInclGlobal = ctx.na.vfsList(selfPeerAddInclGlobal...)
+	fullPeerAddInclGlobal := ctx.na.vfsList(peerAddInclGlobal...)
 
 	effectiveSrcDirs := d.srcDirs
 
@@ -1734,18 +1773,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ForceConsistentDebug: isGoModuleType(d.moduleStmt.Name),
 	}
 
-	d.cc.ScanCfg = newScanContext(
-		ctx.parsers,
-		d.cc.AddIncl,
-		d.cc.PeerAddInclGlobal,
-		includeScannerBasePaths(),
-		instance.Path.relString(),
-	)
+	d.cc.ScanCfg = newModuleScanContext(ctx, instance, d, d.cc.AddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 
 	frame.peerCtx = PeerContext{
 		SelfAddInclGlobal: selfPeerAddInclGlobal,
-		PeerAddInclGlobal: peerAddInclGlobal,
+		PeerAddInclGlobal: fullPeerAddInclGlobal,
 		ResourceGlobals:   resourceGlobalsClosure,
 		ProtoInclude:      peerProtoInclude,
 	}

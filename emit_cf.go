@@ -61,7 +61,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 
 		cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
-		cv := walkClosure(scanner, srcVFS, scanCfg)
+		cv := walkClosure(scanner, srcVFS, scanCfg, scanDomainCC)
 
 		ctx.emit.emitReservedNode(Node{
 			Platform:     instance.Platform,

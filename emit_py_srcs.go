@@ -592,7 +592,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) (Clos
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 	})
 
-	return walkClosure(e.scanner, aux, d.cc.ScanCfg), CompileSpec{ForceCxx: true, CFlags: cflags}
+	return walkClosure(e.scanner, aux, d.cc.ScanCfg, scanDomainCC), CompileSpec{ForceCxx: true, CFlags: cflags}
 }
 
 func (e *EmitContext) emitPyRegister(py3Suffix bool) {

@@ -14,6 +14,7 @@ type NodeArenas struct {
 	kvs      *BumpAllocator[KV]
 	geninfos *BumpAllocator[GeneratedFileInfo]
 	dirs     *BumpAllocator[IncludeDirective]
+	scanctxs *BumpAllocator[ScanContext]
 }
 
 func (na *NodeArenas) resetWindows() {
@@ -30,6 +31,7 @@ func (na *NodeArenas) resetWindows() {
 	na.kvs.open = false
 	na.geninfos.open = false
 	na.dirs.open = false
+	na.scanctxs.open = false
 }
 
 func (na *NodeArenas) markStrict() {
@@ -46,6 +48,7 @@ func (na *NodeArenas) markStrict() {
 	na.kvs.markStrict()
 	na.geninfos.markStrict()
 	na.dirs.markStrict()
+	na.scanctxs.markStrict()
 }
 
 func newNodeArenas() *NodeArenas {
@@ -61,6 +64,7 @@ func newNodeArenas() *NodeArenas {
 		kvs:      newBumpAllocator[KV](1 << 8),
 		geninfos: newBumpAllocator[GeneratedFileInfo](1 << 10),
 		dirs:     newBumpAllocator[IncludeDirective](1 << 10),
+		scanctxs: newBumpAllocator[ScanContext](1 << 8),
 		noderefs: newBumpAllocator[NodeRef](1 << 12),
 		nodes:    newBumpAllocator[Node](1 << 10),
 	}
@@ -114,6 +118,10 @@ func (na *NodeArenas) refList(refs ...NodeRef) []NodeRef {
 
 func (na *NodeArenas) vfsList(vs ...VFS) []VFS {
 	return na.vfs.list(vs...)
+}
+
+func (na *NodeArenas) scanContext() *ScanContext {
+	return na.scanctxs.one()
 }
 
 func (na *NodeArenas) anyList(as ...ANY) []ANY {

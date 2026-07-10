@@ -279,7 +279,7 @@ type prSnap struct {
 	instance ModuleInstance
 	scanner  *IncludeScanner
 	codegen  *CodegenRegistry
-	scanCfg  ScanContext
+	scanCfg  *ScanContext
 	inVFSs   []VFS
 }
 
@@ -325,7 +325,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 				return
 			}
 
-			cv := walkClosure(s.scanner, copyFileOutputVFS(instance.Path.relString(), rel), scanCfg)
+			cv := walkClosure(s.scanner, copyFileOutputVFS(instance.Path.relString(), rel), scanCfg, scanDomainCC)
 
 			eachBucketVFS(cv.buckets, func(v VFS) { out = append(out, v) })
 		}
@@ -343,7 +343,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 		rel := f.string()
 
 		if ctx.parsers.registry.hasRegisteredParser(rel) {
-			walkClosure(s.scanner, s.inVFSs[i], scanCfg).each(func(v VFS) { out = append(out, v) })
+			walkClosure(s.scanner, s.inVFSs[i], scanCfg, scanDomainCC).each(func(v VFS) { out = append(out, v) })
 
 			continue
 		}
@@ -359,7 +359,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 				continue
 			}
 
-			cv := walkClosure(s.scanner, copyFileOutputVFS(instance.Path.relString(), f.string()), scanCfg)
+			cv := walkClosure(s.scanner, copyFileOutputVFS(instance.Path.relString(), f.string()), scanCfg, scanDomainCC)
 
 			eachBucketVFS(cv.buckets, func(v VFS) {
 				if v.isSource() {
@@ -388,9 +388,9 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 
 		switch info := s.codegen.lookup(target.build()); {
 		case info != nil:
-			sub = walkClosure(s.scanner, info.OutputPath, scanCfg)
+			sub = walkClosure(s.scanner, info.OutputPath, scanCfg, scanDomainCC)
 		case fullSourceClosure && ctx.fs.isFile(srcRootRel, target.string()):
-			sub = walkClosure(s.scanner, target.source(), scanCfg)
+			sub = walkClosure(s.scanner, target.source(), scanCfg, scanDomainCC)
 			selfIsInput = true
 		default:
 			continue

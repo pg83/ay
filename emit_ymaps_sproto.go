@@ -25,7 +25,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	outRoot := protoCPPOutRoot(d)
 	sprotocRes := ctx.toolResult(argMapsLibsSprotoSprotoc)
 	sprotocLDRef, sprotocBinary := sprotocRes.LDRef, *sprotocRes.LDPath
-	scanCfg := newScanContext(ctx.parsers, ctx.na.vfsList(d.addIncl...), ctx.na.vfsList(e.peers.PeerAddInclGlobal...), includeScannerBasePaths(), instance.Path.relString())
+	scanCfg := d.cc.ScanCfg
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
 	sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")
 	sprotoRef := ctx.emit.reserve()
@@ -57,7 +57,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	})
 }
 
-func emitYmapsSprotoHeaderSnap(ctx *GenCtx, instance ModuleInstance, scanner *IncludeScanner, p YmapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCfg ScanContext) {
+func emitYmapsSprotoHeaderSnap(ctx *GenCtx, instance ModuleInstance, scanner *IncludeScanner, p YmapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCfg *ScanContext) {
 	na := ctx.emit.nodeArenas()
 
 	cmdArgs := na.chunkList(na.anyList(
@@ -71,7 +71,7 @@ func emitYmapsSprotoHeaderSnap(ctx *GenCtx, instance ModuleInstance, scanner *In
 	))
 
 	env := envVarsVCS
-	sprotoCV := walkClosure(scanner, p.sprotoH, scanCfg)
+	sprotoCV := walkClosure(scanner, p.sprotoH, scanCfg, scanDomainAux)
 
 	closure := collectBucketVFS(na, sprotoCV.buckets, func(v VFS) bool {
 		return v.isSource() || !extIsProtoGeneratedHeader(v.relString())

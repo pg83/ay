@@ -137,15 +137,6 @@ func pbHEmitsIncludesExtras() []IncludeDirective {
 	return pbHEmitsIncludesExtrasChunk
 }
 
-func protoWalkInputs(pm *IncludeParserManager, peerProtoAddIncl []VFS, ownerModuleDir string) ScanContext {
-	own := make([]VFS, 0, 1+len(peerProtoAddIncl))
-
-	own = append(own, pbRuntimeBaseVFS)
-	own = append(own, peerProtoAddIncl...)
-
-	return newScanContext(pm, own, nil, includeScannerBasePaths(), ownerModuleDir)
-}
-
 func protoEachDirectImportName(pm *IncludeParserManager, srcRel string, fn func(string)) {
 	for _, d := range pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal) {
 		fn(d.target.string())
@@ -222,7 +213,7 @@ type PbModuleEmission struct {
 	grpcHRefs           []NodeRef
 	blocks              PbArgBlocks
 	searchPaths         []VFS
-	scanCfg             ScanContext
+	scanCfg             *ScanContext
 }
 
 func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, spec *ProtoSpec) *PbModuleEmission {
@@ -300,7 +291,7 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 		pe.searchPaths = append([]VFS{source(cfg.cppOutRoot)}, d.cc.ProtoInclude...)
 	}
 
-	pe.scanCfg = protoWalkInputs(ctx.parsers, pe.searchPaths, e.instance.Path.relString())
+	pe.scanCfg = d.cc.ScanCfg
 
 	return pe
 }
@@ -324,13 +315,13 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
 	}
 
-	transitiveImports := walkClosure(e.scanner, protoVFS, pe.scanCfg)
+	transitiveImports := walkClosure(e.scanner, protoVFS, pe.scanCfg, scanDomainProto)
 	pbRef := ctx.emit.reserve()
 	pbm := *pe
 	scanner := e.scanner
 
 	pbPE := func() {
-		imports := walkClosure(scanner, protoVFS, pbm.scanCfg)
+		imports := walkClosure(scanner, protoVFS, pbm.scanCfg, scanDomainProto)
 		depRefs := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, imports, extraProtoDeps...)
 
 		emitPB(

@@ -143,8 +143,8 @@ func (pm *IncludeParserManager) indexAddincl(a VFS) {
 	})
 }
 
-func (pm *IncludeParserManager) resolveScanConfig(cfg *ScanContext) *ScanConfig {
-	h := hashScanContext(cfg)
+func (pm *IncludeParserManager) resolveScanConfig(ownAddIncl, peerAddIncl, baseSearchPaths []VFS) *ScanConfig {
+	h := hashScanConfig(ownAddIncl, peerAddIncl, baseSearchPaths)
 
 	if sc, ok := pm.scanConfigs[h]; ok {
 		return sc
@@ -154,17 +154,23 @@ func (pm *IncludeParserManager) resolveScanConfig(cfg *ScanContext) *ScanConfig 
 		pm.scanConfigs = make(map[uint64]*ScanConfig, 256)
 	}
 
-	sc := &ScanConfig{num: pm.scanConfigCount, ri: buildCfgResolveIndex(cfg)}
+	sc := &ScanConfig{
+		num:             pm.scanConfigCount,
+		ownAddIncl:      ownAddIncl,
+		peerAddInclSet:  peerAddIncl,
+		baseSearchPaths: baseSearchPaths,
+	}
+	sc.ri = buildCfgResolveIndex(sc)
 
 	pm.scanConfigCount++
 	pm.scanConfigs[h] = sc
 
 	if sc.ri.indexable {
-		for _, p := range cfg.OwnAddIncl {
+		for _, p := range sc.ownAddIncl {
 			pm.indexAddincl(p)
 		}
 
-		for _, p := range cfg.PeerAddInclSet {
+		for _, p := range sc.peerAddInclSet {
 			pm.indexAddincl(p)
 		}
 	}

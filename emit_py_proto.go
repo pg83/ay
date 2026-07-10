@@ -58,7 +58,7 @@ type PyPBModuleEmission struct {
 	head         []ANY
 	mid          []ANY
 	tail         []ANY
-	scanCfg      ScanContext
+	scanCfg      *ScanContext
 }
 
 func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS, duplicateOutputRootInclude bool) *PyPBModuleEmission {
@@ -173,7 +173,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 
 	na.anys.commit(len(tail))
 	pe.tail = tail[:len(tail):len(tail)]
-	pe.scanCfg = protoWalkInputs(ctx.parsers, nil, e.instance.Path.relString())
+	pe.scanCfg = d.cc.ScanCfg
 
 	return pe
 }
@@ -264,7 +264,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		generatedProto = true
 	}
 
-	transitive := walkClosure(e.scanner, source(protoRelPath), pe.scanCfg)
+	transitive := walkClosure(e.scanner, source(protoRelPath), pe.scanCfg, scanDomainProto)
 	inputs := na.vfs.alloc(5 + len(producerSourceInputs))[:0]
 
 	inputs = append(inputs, protocBinary, pbPyWrapperVFS, protoSrcVFS)
@@ -315,7 +315,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	scanCfg := pe.scanCfg
 
 	pyPBPE := func() {
-		buckets := walkClosure(scanner, source(protoRelPath), scanCfg).buckets
+		buckets := walkClosure(scanner, source(protoRelPath), scanCfg, scanDomainProto).buckets
 
 		pyPBNode := Node{
 			Platform:     instance.Platform,
@@ -491,10 +491,8 @@ func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
 		return nil, nil
 	}
 
-	peerAddIncl := e.peers.PeerAddInclGlobal
-
 	return e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) (Closure, CompileSpec) {
-		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
+		return e.pyProtoAuxInputClosure(aux, inputs, ref)
 	}})
 }
 
@@ -530,14 +528,8 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		cppSibling = genModule(ctx, cppInstance)
 	}
 
-	peerAddIncl := e.peers.PeerAddInclGlobal
-
-	if cppSibling != nil {
-		peerAddIncl = dedup(cppSibling.AddInclGlobal, e.peers.PeerAddInclGlobal)
-	}
-
 	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) (Closure, CompileSpec) {
-		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
+		return e.pyProtoAuxInputClosure(aux, inputs, ref)
 	}})
 
 	if len(genRefs) == 0 {
@@ -585,8 +577,8 @@ func pyProtoAuxPy3Suffix(d *ModuleData) bool {
 	return d.unit.Tag == unitTagPy3Proto || d.moduleStmt.Name == tokPy23Library || d.moduleStmt.Name == tokPy23NativeLibrary
 }
 
-func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) (Closure, CompileSpec) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) (Closure, CompileSpec) {
+	ctx, d := e.ctx, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	na := ctx.na
 	emits := na.dirs.alloc(len(seed))[:0]
@@ -608,9 +600,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 	})
 
-	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.relString())
-
-	return walkClosure(e.scanner, aux, scanCfg), CompileSpec{
+	return walkClosure(e.scanner, aux, d.cc.ScanCfg, scanDomainAux), CompileSpec{
 		ForceCxx:  true,
 		Py3Suffix: pyProtoAuxPy3Suffix(d),
 		CFlags:    e.ctx.na.anyList(argX.any(), argC.any()),

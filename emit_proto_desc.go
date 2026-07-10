@@ -108,17 +108,13 @@ func descProtoOutputRel(instancePath, srcRel, resolvedRel string) string {
 func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	span := descPeerClosure(ctx, instance, d.peerdirs, d.needGoogleProtoPeerdirs)
+	protoInclude := dedup(protoNamespaceContribs(d), span.includes)
+	d.cc.ScanCfg = newModuleScanContext(ctx, instance, d, dedup(d.addIncl, d.addInclGlobal), nil, nil, protoInclude)
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 	cppOutRoot := protoCPPOutRoot(d)
 
-	var protoSearchPaths []VFS
-
-	if cppOutRoot != "" {
-		protoSearchPaths = []VFS{source(cppOutRoot)}
-	}
-
 	mid := descProtocIncludes(ctx.na, span.includes, cppOutRoot)
-	scanCfg := protoWalkInputs(ctx.parsers, protoSearchPaths, instance.Path.relString())
+	scanCfg := d.cc.ScanCfg
 	scanner := e.scanner
 	hash := moddirHash(instance.Path.relString())
 
@@ -149,7 +145,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		srcRel := src.string()
 		protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 		protoVFS := source(protoRelPath)
-		imports := walkClosure(scanner, protoVFS, scanCfg)
+		imports := walkClosure(scanner, protoVFS, scanCfg, scanDomainProto)
 		descOut := build(descProtoOutputRel(instance.Path.relString(), srcRel, protoRelPath))
 		rawprotoOut := build(protoRelPath, ".", hash, ".rawproto")
 
@@ -179,7 +175,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		ARRef:        mergeRef,
 		ARPath:       &selfPath,
 		DescClosure:  closure,
-		ProtoInclude: dedup(protoNamespaceContribs(d), span.includes),
+		ProtoInclude: protoInclude,
 	}
 }
 
