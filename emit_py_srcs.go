@@ -263,7 +263,7 @@ func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef Nod
 	outputPath := e.pyYapycOutFor(ps)
 
 	cmdArgs := na.chunkList(e.ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
-		na.anyList(internStr(moduleName).any(), (srcAbs).any(), (outputPath).any()))
+		na.anyList(internStr(moduleName).any(), srcAbs.any(), outputPath.any()))
 
 	env := envVarsVCSPyHash
 
@@ -623,7 +623,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 
 		pyCmdArgs := na.anyList(
 			d.tc.Python3.any(),
-			(genPy3RegScriptVFS).any(),
+			genPy3RegScriptVFS.any(),
 			arg.any(),
 			regCppVFS.any(),
 		)

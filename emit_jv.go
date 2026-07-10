@@ -134,7 +134,7 @@ func emitJVReserved(
 	cmdArgs = append(cmdArgs, antlrJavaConstHead...)
 
 	cmdArgs = append(cmdArgs,
-		(grammarVFS).any(),
+		grammarVFS.any(),
 		argDlanguageCpp.any(),
 		argDashO.any(),
 		internStr(outDir).any(),
@@ -194,8 +194,8 @@ func emitJVSplitReserved(
 		internStr(jdkResourcePath).any(),
 		argJar.any(),
 		internStr(antlr4JarPath).any(),
-		(lexerVFS).any(),
-		(parserVFS).any(),
+		lexerVFS.any(),
+		parserVFS.any(),
 		argDlanguageCpp.any(),
 		argDashO.any(),
 		internStr(outDir).any(),
@@ -254,7 +254,7 @@ func emitJVGeneralReserved(
 		internStr(stdout2stderrPath).any(),
 		internStr(jdkResourcePath).any(),
 		argJar.any(),
-		(jarVFS).any(),
+		jarVFS.any(),
 	)
 
 	cmdArgs = appendInternAnys(cmdArgs, args)

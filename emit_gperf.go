@@ -29,9 +29,9 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 	env := envVarsVCS
 	head := na.anys.alloc(3 + len(gperfFlags))[:0]
 
-	head = append(head, (gperfBin).any())
+	head = append(head, gperfBin.any())
 	head = append(head, gperfFlags...)
-	head = append(head, internStr(gperfSymbolName(srcRel)).any(), (srcVFS).any())
+	head = append(head, internStr(gperfSymbolName(srcRel)).any(), srcVFS.any())
 	na.anys.commit(len(head))
 
 	head = head[:len(head):len(head)]

@@ -32,7 +32,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(python3.any(),
 				argSBuildScriptsCheckConfigHPy.any(),
 				internV(instance.Path.relString(), "/", conf.string()).any(),
-				(generatedVFS).any())),
+				generatedVFS.any())),
 				Env: env}),
 			Env:          env,
 			Inputs:       na.inputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.buckets...),

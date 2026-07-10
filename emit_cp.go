@@ -20,10 +20,10 @@ func emitJVCPG4(
 
 	cmdArgs := na.anyList(
 		tc.Python3.any(),
-		(fsTools).any(),
+		fsTools.any(),
 		argCopy.any(),
-		(src).any(),
-		(dst).any(),
+		src.any(),
+		dst.any(),
 	)
 
 	env := envVarsVCS
@@ -71,10 +71,10 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	cmdArgs := na.anyList(
 		tc.Python3.any(),
-		(fsTools).any(),
+		fsTools.any(),
 		argCopy.any(),
-		(src).any(),
-		(dst).any(),
+		src.any(),
+		dst.any(),
 	)
 
 	env := envVarsVCS

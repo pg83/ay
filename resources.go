@@ -282,7 +282,7 @@ func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, clangVer string
 
 	tc.ARCmdHead = []ANY{
 		tc.Python3.any(),
-		(buildScriptsLinkLibPy).any(),
+		buildScriptsLinkLibPy.any(),
 		tc.AR.any(),
 		internStr(arTypeLLVM).any(),
 		internStr(arFormatGNU).any(),

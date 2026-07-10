@@ -47,7 +47,7 @@ func (e *EmitContext) emitArchive(
 	pathPerFile := e.prodVFSTake(pathMark)
 	cmdArgs := na.anys.alloc(8 + len(a.Files))[:0]
 
-	cmdArgs = append(cmdArgs, (toolBinPath).any(), argQ.any(), argX.any())
+	cmdArgs = append(cmdArgs, toolBinPath.any(), argQ.any(), argX.any())
 
 	if a.DontCompress {
 		cmdArgs = append(cmdArgs, argP.any())

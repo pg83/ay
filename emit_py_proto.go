@@ -112,7 +112,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 	mid = append(mid,
 		argNs.any(), internStr(protoPythonNamespaceArg(d)).any(),
 		arg2.any(),
-		(protocBinary).any(),
+		protocBinary.any(),
 		internV("-I=./", protoRoot).any(),
 		internV("-I=$(S)/", protoRoot).any(),
 		argIB2.any(),
@@ -437,7 +437,7 @@ func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef,
 	}
 	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
 	yapycOut := e.pyProtoYapycOut(ps)
-	yapycTail := na.anyList(internV(token, "-").any(), (ps.Path).any(), (yapycOut).any())
+	yapycTail := na.anyList(internV(token, "-").any(), (ps.Path).any(), yapycOut.any())
 	inputsHead := na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path)
 
 	var nodeInputs InputChunks

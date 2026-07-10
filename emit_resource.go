@@ -153,7 +153,7 @@ func composeObjcopyArgBlocks(na *NodeArenas, tc ModuleToolchain, p *Platform) Ob
 }
 
 func objcopyCmdArgs(oc *ObjcopyEmitCtx, outputObj VFS, payload []ANY) ArgChunks {
-	return oc.na.chunkList(oc.blocks.pre, oc.na.anyList((outputObj).any()), oc.blocks.post, payload)
+	return oc.na.chunkList(oc.blocks.pre, oc.na.anyList(outputObj.any()), oc.blocks.post, payload)
 }
 
 type ResolvedResource struct {

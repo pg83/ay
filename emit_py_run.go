@@ -424,7 +424,7 @@ func emitPYRun(
 
 	cmdArgs := na.anys.alloc(2 + len(stmt.Args))[:0]
 
-	cmdArgs = append(cmdArgs, interp, (scriptVFS).any())
+	cmdArgs = append(cmdArgs, interp, scriptVFS.any())
 
 	for _, aTok := range stmt.Args {
 		a := aTok.string()

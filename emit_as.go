@@ -83,7 +83,7 @@ func composeASCmdArgs(na *NodeArenas, instance ModuleInstance, outVFS, inVFS VFS
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(instance.Platform))
 	cmdArgs = appendAnyLists(cmdArgs, in.SFlags)
 	cmdArgs = appendAnyLists(cmdArgs, in.PerSourceCFlags)
-	cmdArgs = append(cmdArgs, argDashC.any(), argDashO.any(), (outVFS).any(), (inVFS).any())
+	cmdArgs = append(cmdArgs, argDashC.any(), argDashO.any(), outVFS.any(), inVFS.any())
 	cmdArgs = append(cmdArgs, includes...)
 	na.anys.commit(len(cmdArgs))
 

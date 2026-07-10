@@ -55,8 +55,8 @@ func (e *EmitContext) emitSwigC() {
 				argInterface.any(),
 				internV(moduleName, "_swg").any(),
 				argDashO.any(),
-				(cOutVFS).any(),
-				(srcVFS).any()))
+				cOutVFS.any(),
+				srcVFS.any()))
 
 			ctx.emit.emitReservedNode(Node{
 				Platform: instance.Platform,

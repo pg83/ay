@@ -101,8 +101,8 @@ func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 	head = append(head,
 		internV("--defines=", headerVFS.prefix(), headerVFS.relString()).any(),
 		argDashO.any(),
-		(generatedVFS).any(),
-		(srcVFS).any())
+		generatedVFS.any(),
+		srcVFS.any())
 
 	na.anys.commit(len(head))
 
@@ -135,8 +135,8 @@ func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 		if preprocessHeader {
 			cmds = append(cmds, Cmd{
 				CmdArgs: na.chunkList(na.anyList(python3.any(),
-					(bisonPreprocessPyVFS).any(),
-					(headerVFS).any())),
+					bisonPreprocessPyVFS.any(),
+					headerVFS.any())),
 				Env: preprocessEnv,
 			})
 		}

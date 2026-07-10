@@ -184,10 +184,10 @@ func emitARNode(
 		tail = append(tail, argPlugin.any(), (*arPluginPath).any())
 	}
 
-	tail = append(tail, arg2.any(), (archivePath).any())
+	tail = append(tail, arg2.any(), archivePath.any())
 
 	for _, p := range objPaths {
-		tail = append(tail, (p).any())
+		tail = append(tail, p.any())
 	}
 
 	na.anys.commit(len(tail))
