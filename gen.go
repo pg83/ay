@@ -1018,6 +1018,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}()
 
 	var preResolved []ResolvedPeer
+	var resolveCppSelf, resolveGoogleapis bool
 
 	frontSet := make(map[ANY]struct{}, len(d.protoCmdPeers))
 
@@ -1034,21 +1035,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			return !deduper.add(internStr(p).strID())
 		}
 
-		preResolved = make([]ResolvedPeer, 0, 2)
-
 		if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
 			peerSeen(instance.Path.relString())
 
-			cppSelf := instance
-
-			cppSelf.Language = LangCPP
-			preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: genModule(ctx, cppSelf), kind: peerKindLangDefault})
+			resolveCppSelf = true
 		}
 
 		if d.moduleStmt.Name == tokProtoLibrary && d.useCommonGoogleAPIs && instance.Language == LangCPP {
-			if !peerSeen(googleapisPeer) {
-				preResolved = append(preResolved, ResolvedPeer{path: googleapisPeer, result: genModule(ctx, e.derivePeerInstance(googleapisPeer)), kind: peerKindLangDefault})
-			}
+			resolveGoogleapis = !peerSeen(googleapisPeer)
 		}
 
 		for _, p := range languageDefaults {
@@ -1115,6 +1109,19 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			}
 		}
 	}()
+
+	preResolved = make([]ResolvedPeer, 0, 2)
+
+	if resolveCppSelf {
+		cppSelf := instance
+
+		cppSelf.Language = LangCPP
+		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: genModule(ctx, cppSelf), kind: peerKindLangDefault})
+	}
+
+	if resolveGoogleapis {
+		preResolved = append(preResolved, ResolvedPeer{path: googleapisPeer, result: genModule(ctx, e.derivePeerInstance(googleapisPeer)), kind: peerKindLangDefault})
+	}
 
 	peerObjAddLibsGlobal := frame.peerObjAddLibsGlobal[:0]
 	peerLDFlagsGlobal := frame.peerLDFlagsGlobal[:0]
