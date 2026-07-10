@@ -13,8 +13,9 @@ var dedupers DeDuperPool
 var dedupDebug = os.Getenv("AY_DEBUG_DEDUP") != ""
 
 type DeDuperPool struct {
-	free  []*DeDuper
-	sites []string
+	deduper DeDuper
+	live    bool
+	sites   []string
 }
 
 func (p *DeDuperPool) get() *DeDuper {
@@ -26,38 +27,45 @@ func (p *DeDuperPool) get() *DeDuper {
 		}
 	}
 
-	if n := len(p.free); n > 0 {
-		d := p.free[n-1]
+	if p.live {
+		sites := strings.Join(p.sites, " || ")
 
-		p.free = p.free[:n-1]
+		if dedupDebug {
+			p.sites = p.sites[:len(p.sites)-1]
+		}
 
-		d.reset()
-
-		return d
+		panic("deduper already borrowed: " + sites)
 	}
 
-	d := &DeDuper{}
+	p.live = true
+	p.deduper.reset()
 
-	d.reset()
+	return &p.deduper
+}
 
-	return d
+func (p *DeDuperPool) with(f func(*DeDuper)) {
+	deduper := p.get()
+
+	defer p.put(deduper)
+
+	f(deduper)
 }
 
 func (p *DeDuperPool) put(d *DeDuper) {
+	if !p.live || d != &p.deduper {
+		panic("deduper pool: invalid return")
+	}
+
 	if dedupDebug && len(p.sites) > 0 {
 		p.sites = p.sites[:len(p.sites)-1]
 	}
 
-	p.free = append(p.free, d)
-
-	if len(p.free) > 2 {
-		panic("deduper pool: more than 2 concurrently live: " + strings.Join(p.sites, " || "))
-	}
+	p.live = false
 }
 
 func dedupSite() string {
 	pc := make([]uintptr, 4)
-	n := runtime.Callers(3, pc)
+	n := runtime.Callers(4, pc)
 	frames := runtime.CallersFrames(pc[:n])
 
 	var parts []string
@@ -136,9 +144,17 @@ func (dd *DeDuper) has(id uint32) bool {
 }
 
 func dedupInPlace[T IdKey](xs []T) []T {
-	deduper := dedupers.get()
+	var out []T
 
-	defer dedupers.put(deduper)
+	dedupers.with(func(deduper *DeDuper) {
+		out = dedupInPlaceWith(deduper, xs)
+	})
+
+	return out
+}
+
+func dedupInPlaceWith[T IdKey](deduper *DeDuper, xs []T) []T {
+	deduper.reset()
 
 	out := xs[:0]
 
@@ -162,19 +178,19 @@ func dedup[T IdKey](lists ...[]T) []T {
 		return nil
 	}
 
-	deduper := dedupers.get()
+	var out []T
 
-	defer dedupers.put(deduper)
+	dedupers.with(func(deduper *DeDuper) {
+		out = make([]T, 0, total)
 
-	out := make([]T, 0, total)
-
-	for _, l := range lists {
-		for _, x := range l {
-			if deduper.add(x.strID()) {
-				out = append(out, x)
+		for _, l := range lists {
+			for _, x := range l {
+				if deduper.add(x.strID()) {
+					out = append(out, x)
+				}
 			}
 		}
-	}
+	})
 
 	return out
 }

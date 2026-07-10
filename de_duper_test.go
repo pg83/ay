@@ -2,6 +2,48 @@ package main
 
 import "testing"
 
+func TestDeDuperPoolWithReturnsAfterPanic(t *testing.T) {
+	var pool DeDuperPool
+	var got any
+
+	func() {
+		defer func() { got = recover() }()
+
+		pool.with(func(*DeDuper) {
+			panic("stop")
+		})
+	}()
+
+	if got != "stop" {
+		t.Fatalf("recovered %v, want stop", got)
+	}
+
+	pool.with(func(deduper *DeDuper) {
+		if !deduper.add(1) {
+			t.Fatal("deduper was not reset after panic")
+		}
+	})
+}
+
+func TestDeDuperPoolRejectsNestedBorrow(t *testing.T) {
+	var pool DeDuperPool
+	var got any
+
+	func() {
+		defer func() { got = recover() }()
+
+		pool.with(func(*DeDuper) {
+			pool.with(func(*DeDuper) {})
+		})
+	}()
+
+	if got == nil {
+		t.Fatal("nested deduper borrow did not panic")
+	}
+
+	pool.with(func(*DeDuper) {})
+}
+
 func TestDeDuper_AddHas(t *testing.T) {
 	var dd DeDuper
 	dd.reset()

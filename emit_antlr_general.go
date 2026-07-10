@@ -19,18 +19,6 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 
 	var cfExtraInputs []VFS
 
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
-	appendCFExtra := func(v VFS) {
-		if !deduper.add(v.strID()) {
-			return
-		}
-
-		cfExtraInputs = append(cfExtraInputs, v)
-	}
-
 	for _, inTok := range run.INFiles {
 		vfs := e.requireProducedInput("IN", inTok.string(), copyFileInputVFS(ctx.fs, instance.Path, inTok.string()))
 
@@ -39,11 +27,12 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 
 		if info := reg.use(vfs); info != nil {
 			for _, v := range info.SourceInputs {
-				appendCFExtra(v)
+				cfExtraInputs = append(cfExtraInputs, v)
 			}
 		}
 	}
 
+	cfExtraInputs = dedupInPlace(cfExtraInputs)
 	inputs = append(inputs, cfExtraInputs...)
 
 	outVFSByToken := make(map[string]VFS, len(run.OUTFiles)+len(run.OUTNoAutoFiles))

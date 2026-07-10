@@ -30,9 +30,6 @@ func (e *EmitContext) emitArchiveAsmNode(
 	na := ctx.emit.nodeArenas()
 	rodataVFS := build(instance.Path.relString(), "/", a.Name, ".rodata")
 	producerRefs := []NodeRef{}
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
 
 	pathMark := len(e.prodVFS)
 
@@ -42,9 +39,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 		if info := reg.use(copyFileOutputVFS(instance.Path.relString(), f)); info != nil {
 			memberVFS = copyFileOutputVFS(instance.Path.relString(), f)
 
-			if deduper.add(info.ProducerRef.strID()) {
-				producerRefs = append(producerRefs, info.ProducerRef)
-			}
+			producerRefs = append(producerRefs, info.ProducerRef)
 		} else {
 			memberVFS = e.requireProducedInput("ARCHIVE_ASM member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))
 		}
@@ -70,17 +65,21 @@ func (e *EmitContext) emitArchiveAsmNode(
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
-	inputs := na.vfs.alloc(len(pathPerFile))[:0]
+	var inputs []VFS
 
-	deduper.reset()
+	dedupers.with(func(deduper *DeDuper) {
+		producerRefs = dedupInPlaceWith(deduper, producerRefs)
+		deduper.reset()
+		inputs = na.vfs.alloc(len(pathPerFile))[:0]
 
-	for _, p := range pathPerFile {
-		if deduper.add(p.strID()) {
-			inputs = append(inputs, p)
+		for _, p := range pathPerFile {
+			if deduper.add(p.strID()) {
+				inputs = append(inputs, p)
+			}
 		}
-	}
 
-	na.vfs.commit(len(inputs))
+		na.vfs.commit(len(inputs))
+	})
 
 	inputs = inputs[:len(inputs):len(inputs)]
 
@@ -117,11 +116,13 @@ func (e *EmitContext) emitArchiveAsmNode(
 
 	for _, p := range pathPerFile {
 		if info := reg.use(p); info != nil && len(info.SourceInputs) > 0 {
-			leaves = dedup(leaves, info.SourceInputs)
+			leaves = append(leaves, info.SourceInputs...)
 		} else if info == nil {
-			leaves = dedup(leaves, []VFS{p})
+			leaves = append(leaves, p)
 		}
 	}
+
+	leaves = dedupInPlace(leaves)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    rodataVFS,

@@ -22,9 +22,6 @@ func (e *EmitContext) emitArchive(
 	na := emit.nodeArenas()
 	archiveVFS := build(instance.Path.relString(), "/", a.Name)
 	producerRefs := []NodeRef{}
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
 
 	pathMark := len(e.prodVFS)
 
@@ -33,10 +30,7 @@ func (e *EmitContext) emitArchive(
 
 		if info := reg.use(copyFileOutputVFS(instance.Path.relString(), f)); info != nil {
 			isPRProduced = true
-
-			if deduper.add(info.ProducerRef.strID()) {
-				producerRefs = append(producerRefs, info.ProducerRef)
-			}
+			producerRefs = append(producerRefs, info.ProducerRef)
 		}
 
 		var absVFS VFS
@@ -76,19 +70,23 @@ func (e *EmitContext) emitArchive(
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
-	inputs := na.vfs.alloc(len(pathPerFile))[:0]
+	var inputs []VFS
 
-	deduper.reset()
+	dedupers.with(func(deduper *DeDuper) {
+		producerRefs = dedupInPlaceWith(deduper, producerRefs)
+		deduper.reset()
+		inputs = na.vfs.alloc(len(pathPerFile))[:0]
 
-	for _, p := range pathPerFile {
-		if !deduper.add(p.strID()) {
-			continue
+		for _, p := range pathPerFile {
+			if !deduper.add(p.strID()) {
+				continue
+			}
+
+			inputs = append(inputs, p)
 		}
 
-		inputs = append(inputs, p)
-	}
-
-	na.vfs.commit(len(inputs))
+		na.vfs.commit(len(inputs))
+	})
 
 	inputs = inputs[:len(inputs):len(inputs)]
 

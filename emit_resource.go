@@ -301,10 +301,6 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 	lo := 0
 
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
 	for _, hi := range resourceChunkEnds(items, true) {
 		chunk := items[lo:hi]
 
@@ -375,49 +371,51 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		payload = payload[:len(payload):len(payload)]
 
-		deduper.reset()
+		var adjacent, tail []VFS
 
-		adjacent := na.vfs.alloc(cand)[:0]
+		dedupers.with(func(deduper *DeDuper) {
+			adjacent = na.vfs.alloc(cand)[:0]
 
-		for _, it := range chunk {
-			if it.Input != 0 && deduper.add(it.Input.strID()) {
-				adjacent = append(adjacent, it.Input)
-			}
+			for _, it := range chunk {
+				if it.Input != 0 && deduper.add(it.Input.strID()) {
+					adjacent = append(adjacent, it.Input)
+				}
 
-			for _, v := range it.Extra {
-				if v != 0 && deduper.add(v.strID()) {
-					adjacent = append(adjacent, v)
+				for _, v := range it.Extra {
+					if v != 0 && deduper.add(v.strID()) {
+						adjacent = append(adjacent, v)
+					}
 				}
 			}
-		}
 
-		na.vfs.commit(len(adjacent))
+			na.vfs.commit(len(adjacent))
 
-		adjacent = adjacent[:len(adjacent):len(adjacent)]
+			adjacent = adjacent[:len(adjacent):len(adjacent)]
 
-		for _, v := range rescompilersWithScriptChunk {
-			deduper.add(v.strID())
-		}
+			for _, v := range rescompilersWithScriptChunk {
+				deduper.add(v.strID())
+			}
 
-		auxBound := 0
+			auxBound := 0
 
-		for _, it := range chunk {
-			auxBound += len(it.Aux)
-		}
+			for _, it := range chunk {
+				auxBound += len(it.Aux)
+			}
 
-		tail := na.vfs.alloc(auxBound)[:0]
+			tail = na.vfs.alloc(auxBound)[:0]
 
-		for _, it := range chunk {
-			for _, v := range it.Aux {
-				if v != 0 && deduper.add(v.strID()) {
-					tail = append(tail, v)
+			for _, it := range chunk {
+				for _, v := range it.Aux {
+					if v != 0 && deduper.add(v.strID()) {
+						tail = append(tail, v)
+					}
 				}
 			}
-		}
 
-		na.vfs.commit(len(tail))
+			na.vfs.commit(len(tail))
 
-		tail = tail[:len(tail):len(tail)]
+			tail = tail[:len(tail):len(tail)]
+		})
 
 		var inputs InputChunks
 
@@ -473,16 +471,10 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 	lo := 0
 
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
 	for _, hi := range resourceChunkEnds(items, false) {
 		chunk := items[lo:hi]
 
 		lo = hi
-
-		deduper.reset()
 
 		adjBound := 0
 
@@ -490,36 +482,40 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			adjBound += 1 + len(it.Extra)
 		}
 
-		adjacent := na.vfs.alloc(adjBound)[:0]
+		var adjacent []VFS
 
 		hashScratch = hashScratch[:0]
 
-		for _, it := range chunk {
-			if it.Path == "-" {
-				hashScratch = append(hashScratch, "-", it.Key)
-			} else {
-				dashStart := len(dashBuf)
+		dedupers.with(func(deduper *DeDuper) {
+			adjacent = na.vfs.alloc(adjBound)[:0]
 
-				dashBuf = append(dashBuf, '-')
-				dashBuf = append(dashBuf, it.Key...)
+			for _, it := range chunk {
+				if it.Path == "-" {
+					hashScratch = append(hashScratch, "-", it.Key)
+				} else {
+					dashStart := len(dashBuf)
 
-				hashScratch = append(hashScratch, it.Path, bytesString(dashBuf[dashStart:]))
-			}
+					dashBuf = append(dashBuf, '-')
+					dashBuf = append(dashBuf, it.Key...)
 
-			if it.Input != 0 && deduper.add(it.Input.strID()) {
-				adjacent = append(adjacent, it.Input)
-			}
+					hashScratch = append(hashScratch, it.Path, bytesString(dashBuf[dashStart:]))
+				}
 
-			for _, v := range it.Extra {
-				if v != 0 && deduper.add(v.strID()) {
-					adjacent = append(adjacent, v)
+				if it.Input != 0 && deduper.add(it.Input.strID()) {
+					adjacent = append(adjacent, it.Input)
+				}
+
+				for _, v := range it.Extra {
+					if v != 0 && deduper.add(v.strID()) {
+						adjacent = append(adjacent, v)
+					}
 				}
 			}
-		}
 
-		na.vfs.commit(len(adjacent))
+			na.vfs.commit(len(adjacent))
 
-		adjacent = adjacent[:len(adjacent):len(adjacent)]
+			adjacent = adjacent[:len(adjacent):len(adjacent)]
+		})
 		hashScratch = append(hashScratch, unitElem)
 
 		var hash string
@@ -561,29 +557,31 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		env := envVarsVCS
 
-		deduper.reset()
+		var tail []VFS
 
-		for _, v := range adjacent {
-			deduper.add(v.strID())
-		}
-
-		tail := na.vfs.alloc(1 + auxLen)[:0]
-
-		if deduper.add(rescompilerBinVFS.strID()) {
-			tail = append(tail, rescompilerBinVFS)
-		}
-
-		auxClosure.each(func(v VFS) {
-			if v == aux {
-				return
+		dedupers.with(func(deduper *DeDuper) {
+			for _, v := range adjacent {
+				deduper.add(v.strID())
 			}
 
-			if deduper.add(v.strID()) {
-				tail = append(tail, v)
+			tail = na.vfs.alloc(1 + auxLen)[:0]
+
+			if deduper.add(rescompilerBinVFS.strID()) {
+				tail = append(tail, rescompilerBinVFS)
 			}
+
+			auxClosure.each(func(v VFS) {
+				if v == aux {
+					return
+				}
+
+				if deduper.add(v.strID()) {
+					tail = append(tail, v)
+				}
+			})
+
+			na.vfs.commit(len(tail))
 		})
-
-		na.vfs.commit(len(tail))
 
 		tail = tail[:len(tail):len(tail)]
 

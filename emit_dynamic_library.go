@@ -222,11 +222,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		peerCFlagsGlobal, peerCXXFlagsGlobal, peerCOnlyFlagsGlobal, peerRPathFlagsGlobal []ANY
 	)
 
-	func() {
-		deduper := dedupers.get()
-
-		defer dedupers.put(deduper)
-
+	dedupers.with(func(deduper *DeDuper) {
 		for _, pr := range resolved {
 			for _, decl := range pr.ResourceGlobalClosure {
 				if deduper.add(decl.GlobalVar.strID()) {
@@ -316,7 +312,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 				}
 			}
 		}
-	}()
+	})
 
 	d.tc = resolveModuleToolchain(ctx, resourceGlobals, instance.Platform.ClangVer)
 

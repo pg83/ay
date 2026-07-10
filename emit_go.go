@@ -386,41 +386,42 @@ func (e *EmitContext) goAsmIncludeSrcs() []VFS {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	cfg := newScanContext(ctx.parsers, goAsmIncludeDirs, nil, includeScannerBasePaths(), instance.Path.relString())
-	deduper := dedupers.get()
+	var out []VFS
 
-	defer dedupers.put(deduper)
+	dedupers.with(func(deduper *DeDuper) {
+		bound := 0
 
-	bound := 0
+		for _, src := range e.goRes.AsmFiles {
+			deduper.add(src.strID())
 
-	for _, src := range e.goRes.AsmFiles {
-		deduper.add(src.strID())
+			bound += walkClosure(e.scanner, src, cfg).len()
+		}
 
-		bound += walkClosure(e.scanner, src, cfg).len()
-	}
+		cvs := e.cvScratch[:0]
 
-	cvs := e.cvScratch[:0]
+		for _, src := range e.goRes.AsmFiles {
+			cvs = append(cvs, walkClosure(e.scanner, src, cfg))
+		}
 
-	for _, src := range e.goRes.AsmFiles {
-		cvs = append(cvs, walkClosure(e.scanner, src, cfg))
-	}
+		e.cvScratch = cvs
 
-	e.cvScratch = cvs
+		block := na.vfs.alloc(bound)
+		k := 0
 
-	block := na.vfs.alloc(bound)
-	k := 0
+		for _, cv := range cvs {
+			cv.each(func(p VFS) {
+				if p.isSource() && deduper.add(p.strID()) {
+					block[k] = p
+					k++
+				}
+			})
+		}
 
-	for _, cv := range cvs {
-		cv.each(func(p VFS) {
-			if p.isSource() && deduper.add(p.strID()) {
-				block[k] = p
-				k++
-			}
-		})
-	}
+		na.vfs.commit(k)
+		out = block[:k:k]
+	})
 
-	na.vfs.commit(k)
-
-	return block[:k:k]
+	return out
 }
 
 func goToolResources(na *NodeArenas, decls []ResourceDecl) []STR {
@@ -475,47 +476,49 @@ func goCmdEnv(ctx *GenCtx, p *Platform, tc ModuleToolchain) EnvVars {
 }
 
 func goClassifyClosure(na *NodeArenas, resolved []ResolvedPeer, closurePaths []VFS) (localARs, nonLocalARs, cgoARs []VFS) {
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
-	for _, rp := range resolved {
-		if rp.result.ARPath != nil && isGoModuleType(rp.result.ModuleStmtName) {
-			deduper.add(rp.result.ARPath.strID())
+	dedupers.with(func(deduper *DeDuper) {
+		for _, rp := range resolved {
+			if rp.result.ARPath != nil && isGoModuleType(rp.result.ModuleStmtName) {
+				deduper.add(rp.result.ARPath.strID())
+			}
 		}
-	}
 
-	classify := func(p VFS) int {
-		switch {
-		case deduper.has(p.strID()):
-			return 0
-		case isGoArchivePath(p.relString()):
-			return 1
-		default:
-			return 2
+		classify := func(p VFS) int {
+			switch {
+			case deduper.has(p.strID()):
+				return 0
+			case isGoArchivePath(p.relString()):
+				return 1
+			default:
+				return 2
+			}
 		}
-	}
 
-	var counts [3]int
+		var counts [3]int
 
-	for _, p := range closurePaths {
-		counts[classify(p)]++
-	}
+		for _, p := range closurePaths {
+			counts[classify(p)]++
+		}
 
-	block := na.vfs.alloc(len(closurePaths))
-	starts := [3]int{0, counts[0], counts[0] + counts[1]}
-	fill := starts
+		block := na.vfs.alloc(len(closurePaths))
+		starts := [3]int{0, counts[0], counts[0] + counts[1]}
+		fill := starts
 
-	for _, p := range closurePaths {
-		c := classify(p)
+		for _, p := range closurePaths {
+			c := classify(p)
 
-		block[fill[c]] = p
-		fill[c]++
-	}
+			block[fill[c]] = p
+			fill[c]++
+		}
 
-	na.vfs.commit(len(closurePaths))
+		na.vfs.commit(len(closurePaths))
 
-	return block[:fill[0]:fill[0]], block[starts[1]:fill[1]:fill[1]], block[starts[2]:fill[2]:fill[2]]
+		localARs = block[:fill[0]:fill[0]]
+		nonLocalARs = block[starts[1]:fill[1]:fill[1]]
+		cgoARs = block[starts[2]:fill[2]:fill[2]]
+	})
+
+	return
 }
 
 func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadiaLibm bool) []ANY {
@@ -604,43 +607,45 @@ func (e *EmitContext) goToolchainSboms(withLinker bool) ([]NodeRef, []VFS) {
 }
 
 func goPeerSrcClosure(ctx *GenCtx, resolved []ResolvedPeer, own []VFS, extra []VFS) []VFS {
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
 	total := len(own) + len(extra) + 1
 
 	for _, rp := range resolved {
 		total += len(rp.result.GoSrcClosure)
 	}
 
-	block := ctx.vfsSlices.alloc(total)
-	k := 0
+	var out []VFS
 
-	add := func(p VFS) {
-		if deduper.add(p.strID()) {
-			block[k] = p
-			k++
+	dedupers.with(func(deduper *DeDuper) {
+		block := ctx.vfsSlices.alloc(total)
+		k := 0
+
+		add := func(p VFS) {
+			if deduper.add(p.strID()) {
+				block[k] = p
+				k++
+			}
 		}
-	}
 
-	for _, rp := range resolved {
-		for _, p := range rp.result.GoSrcClosure {
+		for _, rp := range resolved {
+			for _, p := range rp.result.GoSrcClosure {
+				add(p)
+			}
+		}
+
+		for _, p := range own {
+			if p.isSource() {
+				add(p)
+			}
+		}
+
+		for _, p := range extra {
 			add(p)
 		}
-	}
 
-	for _, p := range own {
-		if p.isSource() {
-			add(p)
-		}
-	}
+		out = ctx.vfsSlices.intern(block[:k])
+	})
 
-	for _, p := range extra {
-		add(p)
-	}
-
-	return ctx.vfsSlices.intern(block[:k])
+	return out
 }
 
 func (e *EmitContext) goToolCmdFlagsFor() []ANY {
@@ -839,89 +844,90 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 	srcClosure := goPeerSrcClosure(ctx, resolved, ownInputs, srcClosureExtras)
 	sbomRefs, sbomPaths := e.goToolchainSboms(false)
-	deduper := dedupers.get()
+	var mergedSbomRefs []NodeRef
+	var merged int
+	var extraInputs []VFS
 
-	defer dedupers.put(deduper)
+	dedupers.with(func(deduper *DeDuper) {
+		mergedSbomRefs = na.noderefs.alloc(len(peerSbomRefs) + len(sbomRefs) + 1)
+		mergedSbomPaths := na.vfs.alloc(len(peerSbomPaths) + len(sbomPaths) + 1)
 
-	mergedSbomRefs := na.noderefs.alloc(len(peerSbomRefs) + len(sbomRefs) + 1)
-	mergedSbomPaths := na.vfs.alloc(len(peerSbomPaths) + len(sbomPaths) + 1)
-	merged := 0
-
-	addSbom := func(ref NodeRef, p VFS) {
-		if deduper.add(p.strID()) {
-			mergedSbomRefs[merged] = ref
-			mergedSbomPaths[merged] = p
-			merged++
+		addSbom := func(ref NodeRef, p VFS) {
+			if deduper.add(p.strID()) {
+				mergedSbomRefs[merged] = ref
+				mergedSbomPaths[merged] = p
+				merged++
+			}
 		}
-	}
 
-	for i, p := range peerSbomPaths {
-		addSbom(peerSbomRefs[i], p)
-	}
-
-	for i, p := range sbomPaths {
-		addSbom(sbomRefs[i], p)
-	}
-
-	if ownSbomPath != nil && ownSbomRef != nil {
-		addSbom(*ownSbomRef, *ownSbomPath)
-	}
-
-	na.noderefs.commit(merged)
-	na.vfs.commit(merged)
-
-	hasGoSbom := ownSbomPath != nil
-
-	for _, p := range mergedSbomPaths[:merged] {
-		if strings.HasSuffix(p.relString(), ".GO.component.sbom") {
-			hasGoSbom = true
-
-			break
+		for i, p := range peerSbomPaths {
+			addSbom(peerSbomRefs[i], p)
 		}
-	}
 
-	deduper.reset()
+		for i, p := range sbomPaths {
+			addSbom(sbomRefs[i], p)
+		}
 
-	for _, p := range ownInputs {
-		deduper.add(p.strID())
-	}
+		if ownSbomPath != nil && ownSbomRef != nil {
+			addSbom(*ownSbomRef, *ownSbomPath)
+		}
 
-	for _, p := range goToolScriptInputsChunk {
-		deduper.add(p.strID())
-	}
+		na.noderefs.commit(merged)
+		na.vfs.commit(merged)
 
-	for _, p := range peerArchivePaths {
-		deduper.add(p.strID())
-	}
+		hasGoSbom := ownSbomPath != nil
 
-	extraBlock := na.vfs.alloc(len(srcClosure) + 1 + merged + 1)
-	nx := 0
+		for _, p := range mergedSbomPaths[:merged] {
+			if strings.HasSuffix(p.relString(), ".GO.component.sbom") {
+				hasGoSbom = true
 
-	for _, p := range srcClosure {
-		if deduper.add(p.strID()) {
+				break
+			}
+		}
+
+		deduper.reset()
+
+		for _, p := range ownInputs {
+			deduper.add(p.strID())
+		}
+
+		for _, p := range goToolScriptInputsChunk {
+			deduper.add(p.strID())
+		}
+
+		for _, p := range peerArchivePaths {
+			deduper.add(p.strID())
+		}
+
+		extraBlock := na.vfs.alloc(len(srcClosure) + 1 + merged + 1)
+		nx := 0
+
+		for _, p := range srcClosure {
+			if deduper.add(p.strID()) {
+				extraBlock[nx] = p
+				nx++
+			}
+		}
+
+		if len(d.cgoSrcs) > 0 {
+			extraBlock[nx] = build(dir, "/_cgo_main.c", instance.Platform.objectSuffix())
+			nx++
+		}
+
+		for _, p := range mergedSbomPaths[:merged] {
 			extraBlock[nx] = p
 			nx++
 		}
-	}
 
-	if len(d.cgoSrcs) > 0 {
-		extraBlock[nx] = build(dir, "/_cgo_main.c", instance.Platform.objectSuffix())
-		nx++
-	}
+		if hasGoSbom {
+			extraBlock[nx] = source(sbomGenScriptRel)
+			nx++
+		}
 
-	for _, p := range mergedSbomPaths[:merged] {
-		extraBlock[nx] = p
-		nx++
-	}
+		na.vfs.commit(nx)
 
-	if hasGoSbom {
-		extraBlock[nx] = source(sbomGenScriptRel)
-		nx++
-	}
-
-	na.vfs.commit(nx)
-
-	extraInputs := extraBlock[:nx:nx]
+		extraInputs = extraBlock[:nx:nx]
+	})
 	inputs := na.inputList(ownInputs, goToolScriptInputsChunk, peerArchivePaths, extraInputs)
 	depBlock := na.noderefs.alloc(1 + len(objRefs) + len(peerArchiveRefs) + merged)
 	ndep := 0

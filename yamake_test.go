@@ -1779,7 +1779,7 @@ func TestParseInclude_ModdirDefaultIncludeSetListFeedsRunProgram(t *testing.T) {
 		t.Fatalf("modules.lst was not included: no SET(MODULES_INCLUDED); got %#v", mf.Stmts)
 	}
 
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("pkg/cfg"), Kind: KindLib}, mf.Stmts,
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), ModuleInstance{Path: source("pkg/cfg"), Kind: KindLib}, mf.Stmts,
 		buildIfEnv(ModuleInstance{Path: source("pkg/cfg"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if len(d.runPrograms) != 1 {

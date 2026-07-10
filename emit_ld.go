@@ -507,39 +507,38 @@ func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, output VFS, ena
 }
 
 func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool, extra ...[]VFS) InputChunks {
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
-	for _, p := range peerLibPaths {
-		if !deduper.add(p.strID()) {
-			throwFmt("composeLDInputs: %s: duplicate peer lib path %s", modulePath, p.relString())
-		}
-	}
-
 	peerLibChunk := na.vfsList(peerLibPaths...)
-	buildRootBlock := na.vfs.alloc(len(pluginPaths) + len(globalPaths) + len(wholeArchivePaths) + len(dynamicPaths) + len(ccPaths) + len(objcopyPaths))[:0]
+	var buildRootBlock []VFS
 
-	appendBuildRoot := func(paths []VFS) {
-		for _, p := range paths {
+	dedupers.with(func(deduper *DeDuper) {
+		for _, p := range peerLibPaths {
 			if !deduper.add(p.strID()) {
-				continue
+				throwFmt("composeLDInputs: %s: duplicate peer lib path %s", modulePath, p.relString())
 			}
-
-			buildRootBlock = append(buildRootBlock, p)
 		}
-	}
 
-	appendBuildRoot(pluginPaths)
-	appendBuildRoot(globalPaths)
-	appendBuildRoot(wholeArchivePaths)
-	appendBuildRoot(dynamicPaths)
-	appendBuildRoot(ccPaths)
+		buildRootBlock = na.vfs.alloc(len(pluginPaths) + len(globalPaths) + len(wholeArchivePaths) + len(dynamicPaths) + len(ccPaths) + len(objcopyPaths))[:0]
 
-	appendBuildRoot(objcopyPaths)
-	na.vfs.commit(len(buildRootBlock))
+		appendBuildRoot := func(paths []VFS) {
+			for _, p := range paths {
+				if !deduper.add(p.strID()) {
+					continue
+				}
 
-	buildRootBlock = buildRootBlock[:len(buildRootBlock):len(buildRootBlock)]
+				buildRootBlock = append(buildRootBlock, p)
+			}
+		}
+
+		appendBuildRoot(pluginPaths)
+		appendBuildRoot(globalPaths)
+		appendBuildRoot(wholeArchivePaths)
+		appendBuildRoot(dynamicPaths)
+		appendBuildRoot(ccPaths)
+		appendBuildRoot(objcopyPaths)
+		na.vfs.commit(len(buildRootBlock))
+
+		buildRootBlock = buildRootBlock[:len(buildRootBlock):len(buildRootBlock)]
+	})
 
 	scriptChunks := [8][]VFS{}
 	nScripts := 0

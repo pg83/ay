@@ -248,79 +248,21 @@ func useProducers(reg *CodegenRegistry, paths []VFS) {
 
 func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, includeInputs []VFS, incl ...NodeRef) []NodeRef {
 	useProducers(ctx.codegenFor(consumer), includeInputs)
+	var result []NodeRef
 
-	deduper := dedupers.get()
+	dedupers.with(func(deduper *DeDuper) {
+		out := na.noderefs.alloc(len(incl) + len(includeInputs))
+		k := 0
 
-	defer dedupers.put(deduper)
-
-	out := na.noderefs.alloc(len(incl) + len(includeInputs))
-	k := 0
-
-	for _, r := range incl {
-		deduper.add(r.strID())
-		out[k] = r
-		k++
-	}
-
-	reg := ctx.codegenFor(consumer)
-
-	for _, p := range includeInputs {
-		if !p.isBuild() {
-			continue
+		for _, r := range incl {
+			deduper.add(r.strID())
+			out[k] = r
+			k++
 		}
 
-		info := reg.lookup(p)
+		reg := ctx.codegenFor(consumer)
 
-		if info == nil {
-			continue
-		}
-
-		if !deduper.add(info.ProducerRef.strID()) {
-			continue
-		}
-
-		out[k] = info.ProducerRef
-		k++
-	}
-
-	na.noderefs.commit(k)
-
-	if k == 0 {
-		return nil
-	}
-
-	return out[:k]
-}
-
-func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []NodeRef) []NodeRef {
-	for _, ch := range chunks {
-		useProducers(e.codegen, ch)
-	}
-
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
-	na := e.ctx.na
-	total := len(incl)
-
-	for _, ch := range chunks {
-		total += len(ch)
-	}
-
-	out := na.noderefs.alloc(total)
-	k := 0
-
-	for _, r := range incl {
-		deduper.add(r.strID())
-		out[k] = r
-		k++
-	}
-
-	reg := e.codegen
-
-	for _, ch := range chunks {
-		for _, p := range ch {
+		for _, p := range includeInputs {
 			if !p.isBuild() {
 				continue
 			}
@@ -338,15 +280,72 @@ func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []Nod
 			out[k] = info.ProducerRef
 			k++
 		}
+
+		na.noderefs.commit(k)
+
+		if k > 0 {
+			result = out[:k]
+		}
+	})
+
+	return result
+}
+
+func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []NodeRef) []NodeRef {
+	for _, ch := range chunks {
+		useProducers(e.codegen, ch)
 	}
 
-	na.noderefs.commit(k)
+	na := e.ctx.na
+	total := len(incl)
 
-	if k == 0 {
-		return nil
+	for _, ch := range chunks {
+		total += len(ch)
 	}
 
-	return out[:k]
+	var result []NodeRef
+
+	dedupers.with(func(deduper *DeDuper) {
+		out := na.noderefs.alloc(total)
+		k := 0
+
+		for _, r := range incl {
+			deduper.add(r.strID())
+			out[k] = r
+			k++
+		}
+
+		reg := e.codegen
+
+		for _, ch := range chunks {
+			for _, p := range ch {
+				if !p.isBuild() {
+					continue
+				}
+
+				info := reg.lookup(p)
+
+				if info == nil {
+					continue
+				}
+
+				if !deduper.add(info.ProducerRef.strID()) {
+					continue
+				}
+
+				out[k] = info.ProducerRef
+				k++
+			}
+		}
+
+		na.noderefs.commit(k)
+
+		if k > 0 {
+			result = out[:k]
+		}
+	})
+
+	return result
 }
 
 func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, cv Closure, incl ...NodeRef) []NodeRef {
@@ -360,45 +359,45 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 		reg.use(p)
 	})
 
-	deduper := dedupers.get()
+	var result []NodeRef
 
-	defer dedupers.put(deduper)
+	dedupers.with(func(deduper *DeDuper) {
+		out := na.noderefs.alloc(len(incl) + cv.len())
+		k := 0
 
-	out := na.noderefs.alloc(len(incl) + cv.len())
-	k := 0
-
-	for _, r := range incl {
-		deduper.add(r.strID())
-		out[k] = r
-		k++
-	}
-
-	cv.each(func(p VFS) {
-		if !p.isBuild() {
-			return
+		for _, r := range incl {
+			deduper.add(r.strID())
+			out[k] = r
+			k++
 		}
 
-		info := reg.lookup(p)
+		cv.each(func(p VFS) {
+			if !p.isBuild() {
+				return
+			}
 
-		if info == nil {
-			return
+			info := reg.lookup(p)
+
+			if info == nil {
+				return
+			}
+
+			if !deduper.add(info.ProducerRef.strID()) {
+				return
+			}
+
+			out[k] = info.ProducerRef
+			k++
+		})
+
+		na.noderefs.commit(k)
+
+		if k > 0 {
+			result = out[:k]
 		}
-
-		if !deduper.add(info.ProducerRef.strID()) {
-			return
-		}
-
-		out[k] = info.ProducerRef
-		k++
 	})
 
-	na.noderefs.commit(k)
-
-	if k == 0 {
-		return nil
-	}
-
-	return out[:k]
+	return result
 }
 
 func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) NodeRef {
@@ -862,10 +861,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	defer ctx.popFrame()
 
-	collectDD := dedupers.get()
-	d := collectModuleInto(ctx.parsers, collectDD, instance, stmts, env, ctx.onWarn, &frame.d)
-
-	dedupers.put(collectDD)
+	d := collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
 
 	e := newEmitContextIn(frame, ctx, instance, d, nil)
 
@@ -911,11 +907,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if d.moduleStmt.Name == tokResourcesLibrary {
 		if e.bindResourceGlobalVars(env) {
-			redoDD := dedupers.get()
-
-			d = collectModuleInto(ctx.parsers, redoDD, instance, stmts, env, ctx.onWarn, &frame.d)
-
-			dedupers.put(redoDD)
+			d = collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
 
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
@@ -927,11 +919,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		env.setString(envMODULE_SUFFIX, prebuiltModuleSuffix(instance.Platform))
 
 		if e.bindResourceGlobalVars(env) {
-			redoDD := dedupers.get()
-
-			d = collectModuleInto(ctx.parsers, redoDD, instance, stmts, env, ctx.onWarn, &frame.d)
-
-			dedupers.put(redoDD)
+			d = collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
 
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
@@ -1030,11 +1018,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		frontSet[p] = struct{}{}
 	}
 
-	func() {
-		deduper := dedupers.get()
-
-		defer dedupers.put(deduper)
-
+	dedupers.with(func(deduper *DeDuper) {
 		peerSeen := func(p string) bool {
 			return !deduper.add(internStr(p).strID())
 		}
@@ -1112,7 +1096,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				appendUserPeer(p)
 			}
 		}
-	}()
+	})
 
 	preResolved = make([]ResolvedPeer, 0, 2)
 
@@ -1209,20 +1193,16 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var (
 		resourceGlobalsClosure []ResourceDecl
 
-		peerArchiveRefs, peerGlobalRefs, peerWholeArchiveRefs, peerDynamicRefs, peerSbomRefs, mergedLDPluginRefs []NodeRef
+		peerArchiveRefs, peerGlobalRefs, peerWholeArchiveRefs, peerDynamicRefs, peerSbomRefs, peerLDPluginRefs, mergedLDPluginRefs []NodeRef
 
-		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, mergedLDPluginPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude []VFS
+		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, peerLDPluginPaths, mergedLDPluginPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude []VFS
 
 		effectiveCFlagsGlobal, effectiveCXXFlagsGlobal, effectiveCOnlyFlagsGlobal, effectiveRPathFlagsGlobal []ANY
 
 		ownSbomInsertIdx int
 	)
 
-	func() {
-		deduper := dedupers.get()
-
-		defer dedupers.put(deduper)
-
+	dedupers.with(func(deduper *DeDuper) {
 		deduper.reset()
 
 		declBlock := ctx.declSlices.alloc(resGlobalsSum)
@@ -1258,8 +1238,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			}
 		}
 
-		peerLDPluginRefs := ctx.refSlices.intern(ldplugBlockR[:k])
-		peerLDPluginPaths := ctx.vfsSlices.intern(ldplugBlockP[:k])
+		peerLDPluginRefs = ctx.refSlices.intern(ldplugBlockR[:k])
+		peerLDPluginPaths = ctx.vfsSlices.intern(ldplugBlockP[:k])
 
 		deduper.reset()
 
@@ -1319,7 +1299,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
 		sbomBlockR := ctx.refSlices.alloc(sbomCap)
 		sbomBlockP := ctx.vfsSlices.alloc(sbomCap)
-		peerSbomRefsRaw, peerSbomPathsRaw, sbomInsertIdx := aggregateSbomComponents(e, d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
+		peerSbomRefsRaw, peerSbomPathsRaw, sbomInsertIdx := aggregateSbomComponents(deduper, e, d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
 		ownSbomInsertIdx = sbomInsertIdx
 		peerSbomRefs = ctx.refSlices.intern(peerSbomRefsRaw)
 		peerSbomPaths = ctx.vfsSlices.intern(peerSbomPathsRaw)
@@ -1557,7 +1537,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			}
 		}
 
-		effectiveAddInclGlobal = dedupShared(ctx.vfsSlices, d.addInclGlobal, peerAddInclForProp)
+		effectiveAddInclGlobal = dedupSharedWith(deduper, ctx.vfsSlices, d.addInclGlobal, peerAddInclForProp)
 		ownProtoInclude := frame.ownProtoInclude[:0]
 
 		defer func() { frame.ownProtoInclude = ownProtoInclude[:0] }()
@@ -1582,23 +1562,23 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			}
 		}
 
-		effectiveProtoInclude = dedupShared(ctx.vfsSlices, ownProtoInclude, peerProtoInclude)
-		effectiveCFlagsGlobal = dedupShared(ctx.argSlices, peerCFlagsGlobal, d.cFlagsGlobal)
+		effectiveProtoInclude = dedupSharedWith(deduper, ctx.vfsSlices, ownProtoInclude, peerProtoInclude)
+		effectiveCFlagsGlobal = dedupSharedWith(deduper, ctx.argSlices, peerCFlagsGlobal, d.cFlagsGlobal)
 		effectiveCXXFlagsGlobal = concatShared(ctx.argSlices, peerCXXFlagsGlobal, d.cxxFlagsGlobal)
 		effectiveCOnlyFlagsGlobal = concatShared(ctx.argSlices, peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
 		effectiveRPathFlagsGlobal = concatShared(ctx.argSlices, peerRPathFlagsGlobal, d.rpathFlagsGlobal)
-		ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
-		mergedLDPluginRefs = peerLDPluginRefs
-		mergedLDPluginPaths = peerLDPluginPaths
+	})
 
-		if ownLDPlugins != nil && len(ownLDPlugins.Paths) > 0 {
+	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
+	mergedLDPluginRefs = peerLDPluginRefs
+	mergedLDPluginPaths = peerLDPluginPaths
+
+	if ownLDPlugins != nil && len(ownLDPlugins.Paths) > 0 {
+		dedupers.with(func(deduper *DeDuper) {
 			total := len(ownLDPlugins.Paths) + len(peerLDPluginPaths)
 			mergeBlockR := ctx.refSlices.alloc(total)
 			mergeBlockP := ctx.vfsSlices.alloc(total)
-
-			deduper.reset()
-
-			k = 0
+			k := 0
 
 			for i, p := range ownLDPlugins.Paths {
 				if deduper.add(p.strID()) {
@@ -1618,8 +1598,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 			mergedLDPluginRefs = ctx.refSlices.intern(mergeBlockR[:k])
 			mergedLDPluginPaths = ctx.vfsSlices.intern(mergeBlockP[:k])
-		}
-	}()
+		})
+	}
 
 	newResult := func() *ModuleEmitResult {
 		r := ctx.results.one()
@@ -2054,32 +2034,32 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	}
 
 	ownPrefix := build(instancePath)
-	deduper := dedupers.get()
+	out := peer
 
-	defer dedupers.put(deduper)
+	dedupers.with(func(deduper *DeDuper) {
+		matched := false
 
-	matched := false
-
-	for _, p := range own {
-		if p.isBuild() && (p == ownPrefix || strings.HasPrefix(p.relString(), ownPrefix.relString()+"/")) {
-			deduper.add(p.strID())
-			matched = true
-		}
-	}
-
-	if !matched {
-		return peer
-	}
-
-	out := make([]VFS, 0, len(peer))
-
-	for _, p := range peer {
-		if deduper.has(p.strID()) {
-			continue
+		for _, p := range own {
+			if p.isBuild() && (p == ownPrefix || strings.HasPrefix(p.relString(), ownPrefix.relString()+"/")) {
+				deduper.add(p.strID())
+				matched = true
+			}
 		}
 
-		out = append(out, p)
-	}
+		if !matched {
+			return
+		}
+
+		out = make([]VFS, 0, len(peer))
+
+		for _, p := range peer {
+			if deduper.has(p.strID()) {
+				continue
+			}
+
+			out = append(out, p)
+		}
+	})
 
 	return out
 }

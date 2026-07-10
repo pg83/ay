@@ -165,21 +165,20 @@ func emitCopyFileNodeSnap(ctx *GenCtx, instance ModuleInstance, scanner *Include
 
 		raw = filterSourceVFS(ctx.na, raw)
 
-		block := ctx.na.vfs.alloc(len(raw) + len(st.producerSource))[:0]
-		deduper := dedupers.get()
+		dedupers.with(func(deduper *DeDuper) {
+			block := ctx.na.vfs.alloc(len(raw) + len(st.producerSource))[:0]
 
-		defer dedupers.put(deduper)
-
-		for _, v := range raw {
-			if deduper.add(v.strID()) {
-				block = append(block, v)
+			for _, v := range raw {
+				if deduper.add(v.strID()) {
+					block = append(block, v)
+				}
 			}
-		}
 
-		block = append(block, st.producerSource...)
-		ctx.na.vfs.commit(len(block))
+			block = append(block, st.producerSource...)
+			ctx.na.vfs.commit(len(block))
 
-		closure = block[:len(block):len(block)]
+			closure = block[:len(block):len(block)]
+		})
 	} else if len(st.producerSource) > 0 {
 		closure = ctx.na.vfsList(st.producerSource...)
 	}

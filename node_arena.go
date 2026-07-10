@@ -215,29 +215,29 @@ func (na *NodeArenas) dedupClosure(extra []VFS, groups ...[][]VFS) []VFS {
 		return nil
 	}
 
-	deduper := dedupers.get()
+	var out []VFS
 
-	defer dedupers.put(deduper)
+	dedupers.with(func(deduper *DeDuper) {
+		out = na.vfs.alloc(total)[:0]
 
-	out := na.vfs.alloc(total)[:0]
-
-	for _, v := range extra {
-		if deduper.add(v.strID()) {
-			out = append(out, v)
+		for _, v := range extra {
+			if deduper.add(v.strID()) {
+				out = append(out, v)
+			}
 		}
-	}
 
-	for _, g := range groups {
-		for _, b := range g {
-			for _, v := range b {
-				if deduper.add(v.strID()) {
-					out = append(out, v)
+		for _, g := range groups {
+			for _, b := range g {
+				for _, v := range b {
+					if deduper.add(v.strID()) {
+						out = append(out, v)
+					}
 				}
 			}
 		}
-	}
 
-	na.vfs.commit(len(out))
+		na.vfs.commit(len(out))
+	})
 
 	return out[:len(out):len(out)]
 }
@@ -249,29 +249,30 @@ func (na *NodeArenas) dedupSourceVFS(inputs []VFS, extra [][]VFS) []VFS {
 		bound += len(b)
 	}
 
-	out := na.vfs.alloc(bound)[:0]
-	deduper := dedupers.get()
+	var out []VFS
 
-	defer dedupers.put(deduper)
+	dedupers.with(func(deduper *DeDuper) {
+		out = na.vfs.alloc(bound)[:0]
 
-	keep := func(input VFS) {
-		if !input.isSource() {
-			return
+		keep := func(input VFS) {
+			if !input.isSource() {
+				return
+			}
+
+			if !deduper.add(input.strID()) {
+				return
+			}
+
+			out = append(out, input)
 		}
 
-		if !deduper.add(input.strID()) {
-			return
+		for _, input := range inputs {
+			keep(input)
 		}
 
-		out = append(out, input)
-	}
-
-	for _, input := range inputs {
-		keep(input)
-	}
-
-	eachBucketVFS(extra, keep)
-	na.vfs.commit(len(out))
+		eachBucketVFS(extra, keep)
+		na.vfs.commit(len(out))
+	})
 
 	return out[:len(out):len(out)]
 }
