@@ -17,8 +17,9 @@ func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 	return build(instance.Path.relString(), "/", srcRel, flexDefaultGenExt)
 }
 
-func (e *EmitContext) emitLibraryFlexSource(src ANY) {
+func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	src := meta.Source
 	srcRel := src.string()
 	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
@@ -54,8 +55,6 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 
 	lxRef := ctx.emit.reserve()
 
-	meta := d.srcMetaOf(src)
-
 	meta.Generated = true
 	meta.Source = outVFS.any()
 	e.enqueueSrc(meta)
@@ -74,7 +73,7 @@ func (e *EmitContext) emitLibraryFlexSource(src ANY) {
 		ProducerRef:    lxRef,
 		GeneratorRefs:  e.ctx.na.refList(flexRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-		Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src), CFlags: cflags}),
+		Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: cflags}),
 		OnUse:          &pe,
 	})
 }

@@ -131,9 +131,7 @@ type ModuleData struct {
 	cgoCflags                []ANY
 	hasBisonY                bool
 	toolchainName            string
-	srcs                     []ANY
-	srcExtraFlat             []SrcFlatEntry
-	globalSrcs               []ANY
+	srcs                     []SrcMeta
 	pySrcs                   []ANY
 	pySrcGroups              []PySrcGroup
 	pyPyiResources           []ResourceEntry
@@ -230,8 +228,6 @@ type ModuleData struct {
 	lj21                     *Lj21Archive
 	copyFiles                []CopyFileEntry
 	copyFileAutoOutputs      map[STR]CopyFileEntry
-	flatSrcs                 map[ANY]struct{}
-	srcMeta                  map[ANY]SrcMeta
 	declSeq                  int
 	resources                []ResourceEntry
 	bundles                  []BundleEntry
@@ -242,7 +238,6 @@ type ModuleData struct {
 	noCheckImportsDisabled   bool
 	pyRegister               []STR
 	pyRegisterExplicit       []bool
-	simdSrcs                 []SimdSrc
 	ragel6Flags              []ANY
 	bisonFlags               []ANY
 	conflictMod              *ModuleStmt
@@ -266,14 +261,9 @@ func (d *ModuleData) perSrcCFlagsFor(src ANY) *[]ANY {
 	return nil
 }
 
-func (d *ModuleData) flatSrc(src ANY) bool {
-	if len(d.flatSrcs) == 0 {
-		return false
-	}
-
-	_, ok := d.flatSrcs[src]
-
-	return ok
+type SourceCompile struct {
+	CFlags  []ANY
+	Variant STR
 }
 
 type SrcMeta struct {
@@ -283,6 +273,7 @@ type SrcMeta struct {
 	Generated bool
 	Global    bool
 	Bucket    int
+	Compile   *SourceCompile
 }
 
 func (m SrcMeta) sortKey(round uint64) uint64 {
@@ -295,24 +286,14 @@ func (d *ModuleData) nextDeclSeq() int {
 	return d.declSeq
 }
 
-func (d *ModuleData) setSrcMeta(src ANY, prio, seq int) {
-	if d.srcMeta == nil {
-		d.srcMeta = map[ANY]SrcMeta{}
+func (d *ModuleData) hasSrc(src string) bool {
+	for _, meta := range d.srcs {
+		if meta.Source.string() == src {
+			return true
+		}
 	}
 
-	d.srcMeta[src] = SrcMeta{Prio: prio, Seq: seq}
-}
-
-func (d *ModuleData) srcMetaOf(src ANY) SrcMeta {
-	m, ok := d.srcMeta[src]
-
-	if !ok {
-		m = SrcMeta{Prio: stmtPrioDefault}
-	}
-
-	m.Source = src
-
-	return m
+	return false
 }
 
 func muslCFlags(on bool) []ANY {
@@ -360,12 +341,6 @@ type PySrcGroup struct {
 	Srcs      []ANY
 	TopLevel  bool
 	Namespace *ANY
-}
-
-type SrcFlatEntry struct {
-	Src   ANY
-	Flags []ANY
-	Seq   int
 }
 
 type ArchiveEntry struct {
@@ -752,7 +727,9 @@ func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleIns
 	hasSc := false
 	hasCfgProto := false
 
-	for _, src := range d.srcs {
+	for _, meta := range d.srcs {
+		src := meta.Source
+
 		switch srcExtClassOf(src) {
 		case srcExtProto:
 			hasProto = true
@@ -771,7 +748,9 @@ func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleIns
 
 	evInduced, protoInduced := false, false
 
-	for _, src := range d.srcs {
+	for _, meta := range d.srcs {
+		src := meta.Source
+
 		switch srcExtClassOf(src) {
 		case srcExtEv:
 			if !evInduced {
@@ -820,14 +799,6 @@ func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleIns
 	}
 
 	return d
-}
-
-func appendGlobalSrcEvent(d *ModuleData, src ANY) {
-	d.globalSrcs = append(d.globalSrcs, src)
-}
-
-func appendGlobalSrcGroup(d *ModuleData, srcs []ANY) {
-	d.globalSrcs = append(d.globalSrcs, srcs...)
 }
 
 func ensureResourcePeer(modulePath string, d *ModuleData) {
@@ -1051,8 +1022,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
 			globalNext := false
 
-			var globalSrcs []ANY
-
 			for _, srcTok := range expandStmtTokens(v.Sources, env) {
 				if srcTok == kwGLOBAL.any() {
 					globalNext = true
@@ -1064,15 +1033,15 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 					continue
 				}
 
-				if routeAllToGlobal {
-					globalSrcs = append(globalSrcs, srcTok)
-				} else if globalNext {
-					appendGlobalSrcEvent(d, srcTok)
-					globalNext = false
-				} else {
-					d.srcs = append(d.srcs, srcTok)
-					d.setSrcMeta(srcTok, stmtPrioSrcs, d.nextDeclSeq())
+				global := routeAllToGlobal || globalNext
+				prio, seq := stmtPrioDefault, 0
+
+				if !global {
+					prio, seq = stmtPrioSrcs, d.nextDeclSeq()
 				}
+
+				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Global: global})
+				globalNext = false
 
 				switch srcExtClassOf(srcTok) {
 				case srcExtHIn:
@@ -1087,9 +1056,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				}
 			}
 
-			if routeAllToGlobal {
-				appendGlobalSrcGroup(d, globalSrcs)
-			}
 		case *PeerdirStmt:
 
 			addInclNext := false
@@ -1175,7 +1141,9 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				d.srcDirs = append(d.srcDirs, dirKey(dir).source())
 			}
 		case *GlobalSrcsStmt:
-			appendGlobalSrcGroup(d, expandStmtTokens(v.Sources, env))
+			for _, src := range expandStmtTokens(v.Sources, env) {
+				d.srcs = append(d.srcs, SrcMeta{Source: src, Prio: stmtPrioDefault, Global: true})
+			}
 		case *GenerateEnumSerializationStmt:
 			expandedEN := astOne(astEnumSers, *v)
 
@@ -1815,8 +1783,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			if strings.HasPrefix(dstVFS.relString(), prefix) {
 				dstRel := strings.TrimPrefix(dstVFS.relString(), prefix)
 
-				if isSourceEligibleForCopyAuto(dstRel) && !strsContain(d.srcs, dstRel) {
-					d.srcs = append(d.srcs, internStr(dstRel).any())
+				if isSourceEligibleForCopyAuto(dstRel) && !d.hasSrc(dstRel) {
+					d.srcs = append(d.srcs, SrcMeta{Source: internStr(dstRel).any(), Prio: stmtPrioDefault})
 				}
 
 				if d.copyFileAutoOutputs == nil {
@@ -1837,8 +1805,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				if strings.HasPrefix(dstVFS.relString(), prefix) {
 					dstRel := strings.TrimPrefix(dstVFS.relString(), prefix)
 
-					if isSourceEligibleForCopyAuto(dstRel) && !strsContain(d.srcs, dstRel) {
-						d.srcs = append(d.srcs, internStr(dstRel).any())
+					if isSourceEligibleForCopyAuto(dstRel) && !d.hasSrc(dstRel) {
+						d.srcs = append(d.srcs, SrcMeta{Source: internStr(dstRel).any(), Prio: stmtPrioDefault})
 					}
 
 					if d.copyFileAutoOutputs == nil {
@@ -1970,28 +1938,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			extras = v.Args[1:]
 		}
 
-		if slices.Contains(d.srcs, filename) {
-			d.srcExtraFlat = append(d.srcExtraFlat, SrcFlatEntry{Src: filename, Flags: extras, Seq: d.nextDeclSeq()})
-
-			break
-		}
-
-		d.srcs = append(d.srcs, filename)
-
-		if d.flatSrcs == nil {
-			d.flatSrcs = map[ANY]struct{}{}
-		}
-
-		d.flatSrcs[filename] = struct{}{}
-		d.setSrcMeta(filename, stmtPrioDefault, d.nextDeclSeq())
-
-		if extras != nil {
-			if d.perSrcCFlags == nil {
-				d.perSrcCFlags = map[ANY][]ANY{}
-			}
-
-			d.perSrcCFlags[filename] = append(d.perSrcCFlags[filename], extras...)
-		}
+		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: &SourceCompile{
+			CFlags: extras,
+		}})
 	case tokSrcCNoLto:
 
 		if len(v.Args) != 1 {
@@ -2000,14 +1949,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		filename := v.Args[0]
 
-		d.srcs = append(d.srcs, filename)
-
-		if d.flatSrcs == nil {
-			d.flatSrcs = map[ANY]struct{}{}
-		}
-
-		d.flatSrcs[filename] = struct{}{}
-		d.setSrcMeta(filename, stmtPrioDefault, d.nextDeclSeq())
+		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: &SourceCompile{}})
 	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
 		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 
@@ -2022,14 +1964,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		filename := v.Args[0]
-		flags := concat(variant.CFlags, anyStrs(v.Args[1:]))
+		flags := concat(variant.CFlags, v.Args[1:])
 
-		d.simdSrcs = append(d.simdSrcs, SimdSrc{
-			Src:     filename,
-			Variant: variant.Suffix,
+		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: &SourceCompile{
 			CFlags:  flags,
-			Seq:     d.nextDeclSeq(),
-		})
+			Variant: variant.Suffix,
+		}})
 	case tokBuildMn:
 
 		if len(v.Args) != 2 {

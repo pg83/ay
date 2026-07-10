@@ -211,7 +211,12 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		addPeer(goStdPrefix + "/runtime/cgo")
 	}
 
-	for _, src := range d.srcs {
+	for _, meta := range d.srcs {
+		if meta.Global || meta.Compile != nil && meta.Compile.Variant != 0 {
+			continue
+		}
+
+		src := meta.Source
 		rel := src.string()
 
 		if !strings.HasSuffix(rel, ".go") {
@@ -242,7 +247,13 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	hasDotS := false
 
-	for _, src := range d.srcs {
+	for _, meta := range d.srcs {
+		if meta.Global || meta.Compile != nil && meta.Compile.Variant != 0 {
+			continue
+		}
+
+		src := meta.Source
+
 		if strings.HasSuffix(src.string(), ".s") {
 			hasDotS = true
 

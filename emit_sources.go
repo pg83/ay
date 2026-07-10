@@ -53,21 +53,21 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtCuda:
 		e.emitLibraryCudaSource(meta)
 	case srcExtRl6:
-		e.emitLibraryRagel6Source(src)
+		e.emitLibraryRagel6Source(meta)
 	case srcExtY:
-		e.emitBisonY(src)
+		e.emitBisonY(meta)
 	case srcExtEv:
 		e.emitLibraryEvSource(meta)
 	case srcExtRl:
-		e.emitLibraryRagel5Source(src)
+		e.emitLibraryRagel5Source(meta)
 	case srcExtFml:
 		e.emitLibraryFmlSource(src)
 	case srcExtSfdl:
 		e.emitLibrarySfdlSource(src)
 	case srcExtAsp:
-		e.emitLibraryAspSource(src)
+		e.emitLibraryAspSource(meta)
 	case srcExtFlex:
-		e.emitLibraryFlexSource(src)
+		e.emitLibraryFlexSource(meta)
 	case srcExtHIn:
 		e.emitLibraryHInSource(src)
 	case srcExtCppIn, srcExtCIn:
@@ -75,7 +75,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtSc:
 		e.emitLibrarySCSource(src)
 	case srcExtGperf:
-		e.emitLibraryGperfSource(src)
+		e.emitLibraryGperfSource(meta)
 	case srcExtCfgProto:
 		e.emitLibraryCfgProtoSource(meta)
 	default:

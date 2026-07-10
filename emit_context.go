@@ -15,6 +15,7 @@ type EmitContext struct {
 	scanner      *IncludeScanner
 	codegen      *CodegenRegistry
 	srcs         []SrcMeta
+	srcsClosed   bool
 	refs         []NodeRef
 	outs         []VFS
 	metas        []SrcMeta
@@ -169,6 +170,10 @@ func (e *EmitContext) at(instance ModuleInstance) *EmitContext {
 }
 
 func (e *EmitContext) enqueueSrc(meta SrcMeta) {
+	if e.srcsClosed {
+		throwFmt("enqueueSrc after drainSrcs for %q", meta.Source.string())
+	}
+
 	if cap(e.srcs) == 0 {
 		e.srcs = make([]SrcMeta, 0, len(e.d.srcs)+8)
 	}
@@ -196,53 +201,16 @@ func (e *EmitContext) emit() {
 
 	e.emitDeclaredProducers(cythonPlans)
 
-	if e.producersOnly() {
-		for _, src := range d.srcs {
-			if !isCodegenProducingSrcID(src) {
-				e.emitOneSource(d.srcMetaOf(src))
-			}
-		}
-
-		e.drainSrcs()
-
-		return
-	}
-
-	for _, fe := range d.srcExtraFlat {
-		srcVFS := e.moduleSourceVFS(fe.Src)
-		ref, out := e.emitCCFlat(srcVFS, nil, fe.Flags)
-
-		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Seq: fe.Seq})
-	}
-
-	for _, src := range d.srcs {
-		if !isCodegenProducingSrcID(src) {
-			e.emitOneSource(d.srcMetaOf(src))
+	for _, meta := range d.srcs {
+		if !isCodegenProducingSrcID(meta.Source) {
+			e.enqueueSrc(meta)
 		}
 	}
 
 	e.drainSrcs()
 
-	for _, simd := range d.simdSrcs {
-		srcVFS := e.moduleSourceVFS(simd.Src)
-		flags := internAnys(simd.CFlags)
-
-		if extras := d.perSrcCFlagsFor(simd.Src); extras != nil {
-			flags = append(flags, *extras...)
-		}
-
-		variant := simd.Variant
-		ref, out := e.emitCCFlat(srcVFS, &variant, flags)
-
-		e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault, Seq: simd.Seq})
-	}
-
-	for _, src := range d.globalSrcs {
-		m := d.srcMetaOf(src)
-
-		m.Global = true
-
-		e.emitOneSource(m)
+	if e.producersOnly() {
+		return
 	}
 
 	e.registerCollectPySrcs()
@@ -292,6 +260,30 @@ func (e *EmitContext) drainSrcs() {
 
 		e.srcs = e.srcs[1:]
 
+		if meta.Compile != nil && !e.producersOnly() && srcExtClassOf(meta.Source.relOrSelf().any()) == srcExtCSource {
+			srcVFS := meta.Source.vfs()
+
+			if srcVFS == 0 {
+				srcVFS = e.moduleSourceVFS(meta.Source)
+			}
+
+			var variant *string
+
+			if meta.Compile.Variant != 0 {
+				name := meta.Compile.Variant.string()
+
+				variant = &name
+			}
+
+			ref, out := e.emitCCFlat(srcVFS, variant, meta.Compile.CFlags)
+
+			e.collectObj(ref, out, meta)
+
+			continue
+		}
+
 		e.emitOneSource(meta)
 	}
+
+	e.srcsClosed = true
 }

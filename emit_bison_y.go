@@ -193,7 +193,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 	na.anys.commit(len(cf))
 
-	spec := na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(src.any())})
+	spec := na.compileSpec(CompileSpec{})
 
 	if len(cf) > 0 {
 		spec.CFlags = cf[:len(cf):len(cf)]
@@ -209,15 +209,14 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 	})
 }
 
-func (e *EmitContext) emitBisonY(src ANY) {
+func (e *EmitContext) emitBisonY(meta SrcMeta) {
 	_, instance, d := e.ctx, e.instance, e.d
+	src := meta.Source
 
 	e.emitBisonProducer(src.str())
 
 	generatedRel := bisonGeneratedRel(src.string(), d.cc.BisonGenExt)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
-	meta := d.srcMetaOf(src)
-
 	meta.Generated = true
 	meta.Source = generatedVFS.any()
 	e.enqueueSrc(meta)

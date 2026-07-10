@@ -33,7 +33,12 @@ var goCgoLinkOPostLd = []ANY{
 func goModuleCgoCFiles(d *ModuleData) []ANY {
 	var out []ANY
 
-	for _, src := range d.srcs {
+	for _, meta := range d.srcs {
+		if meta.Global || meta.Compile != nil && meta.Compile.Variant != 0 {
+			continue
+		}
+
+		src := meta.Source
 		rel := src.string()
 
 		if strings.HasSuffix(rel, ".c") || strings.HasSuffix(rel, ".cxx") {
@@ -47,7 +52,13 @@ func goModuleCgoCFiles(d *ModuleData) []ANY {
 func goModuleCgoSFiles(d *ModuleData) []ANY {
 	var out []ANY
 
-	for _, src := range d.srcs {
+	for _, meta := range d.srcs {
+		if meta.Global || meta.Compile != nil && meta.Compile.Variant != 0 {
+			continue
+		}
+
+		src := meta.Source
+
 		if strings.HasSuffix(src.string(), ".S") {
 			out = append(out, src)
 		}

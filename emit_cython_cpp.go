@@ -333,7 +333,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			Compile:        e.ctx.na.compileSpec(CompileSpec{FlatOutput: d.flatSrc(genSrcID.any()), Py3Suffix: py3Suffix, CFlags: ccCFlags}),
+			Compile:        e.ctx.na.compileSpec(CompileSpec{Py3Suffix: py3Suffix, CFlags: ccCFlags}),
 			OnUse:          &pe,
 		})
 

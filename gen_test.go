@@ -1932,12 +1932,18 @@ END()
 		t.Fatalf("module args = %v, want [my_udf]", d.moduleStmt.Args)
 	}
 
-	if len(d.srcs) != 0 {
-		t.Fatalf("srcs = %v, want empty (SRCS must alias to GLOBAL_SRCS)", d.srcs)
+	var globalSrcs []string
+
+	for _, meta := range d.srcs {
+		if !meta.Global {
+			t.Fatalf("src %q is local, want all YQL UDF SRCS routed global", meta.Source.string())
+		}
+
+		globalSrcs = append(globalSrcs, meta.Source.string())
 	}
 
-	if !equalStrings(anyStrs(d.globalSrcs), []string{"lib.cpp", "nested/extra.cpp"}) {
-		t.Fatalf("globalSrcs = %v, want [lib.cpp nested/extra.cpp]", d.globalSrcs)
+	if !equalStrings(globalSrcs, []string{"lib.cpp", "nested/extra.cpp"}) {
+		t.Fatalf("global srcs = %v, want [lib.cpp nested/extra.cpp]", globalSrcs)
 	}
 
 	if !equalStrings(anyStrs(d.peerdirs), []string{
@@ -2111,7 +2117,13 @@ END()
 	mf := throw2(parseFile(fs, "copymod/ya.make"))
 	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("copymod"), Kind: KindLib}, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("copymod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
-	if !equalStrings(anyStrs(d.srcs), []string{"a.cpp", "b.h"}) {
+	var srcs []string
+
+	for _, meta := range d.srcs {
+		srcs = append(srcs, meta.Source.string())
+	}
+
+	if !equalStrings(srcs, []string{"a.cpp", "b.h"}) {
 		t.Fatalf("srcs = %v, want [a.cpp b.h]", d.srcs)
 	}
 
