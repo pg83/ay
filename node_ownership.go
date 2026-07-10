@@ -129,6 +129,7 @@ func ownershipCheckNode(n *Node) {
 	ownershipCheckSlice("Cmds", n.Cmds, outSample)
 	ownershipCheckSlice("Env", n.Env, outSample)
 	ownershipCheckSlice("Outputs", n.Outputs, outSample)
+	ownershipCheckSlice("KVExts", n.KVExts, outSample)
 	ownershipCheckSlice("DepRefs", n.DepRefs, outSample)
 	ownershipCheckSlice("ForeignDepRefs", n.ForeignDepRefs, outSample)
 	ownershipCheckSlice("Resources", n.Resources, outSample)

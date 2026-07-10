@@ -282,10 +282,6 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	inputs = inputs[:len(inputs):len(inputs)]
 
-	pbNodeKV := na.kvs.one()
-
-	*pbNodeKV = KV{P: pkPB, PC: pcYellow}
-
 	protoBaseName := filepath.Base(protoBase)
 	extOut := na.exts.alloc(len(outputs))[:0]
 
@@ -308,7 +304,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	}
 
 	na.exts.commit(len(outputs))
-	pbNodeKV.ExtOut = extOut[:len(outputs):len(outputs)]
+	extOut = extOut[:len(outputs):len(outputs)]
 
 	pyPBRef := ctx.emit.reserve()
 	scanner := e.scanner
@@ -323,7 +319,8 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 			Env:          envVarsVCS,
 			Inputs:       na.inputList(inputs, buckets...),
 			Outputs:      outputs,
-			KV:           pbNodeKV,
+			KV:           &pbKV,
+			KVExts:       extOut,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:      producerDeps,
 			Resources:    usesPython3,
