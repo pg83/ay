@@ -212,7 +212,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	}
 
 	for _, meta := range d.srcs {
-		if meta.Global || meta.Compile != nil && meta.Compile.Variant != 0 {
+		if meta.Global || meta.Compile.Variant != 0 {
 			continue
 		}
 
@@ -248,7 +248,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	hasDotS := false
 
 	for _, meta := range d.srcs {
-		if meta.Global || meta.Compile != nil && meta.Compile.Variant != 0 {
+		if meta.Global || meta.Compile.Variant != 0 {
 			continue
 		}
 
@@ -271,12 +271,20 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	d.addIncl = append(goIncl, d.addIncl...)
 
-	for _, src := range goModuleCgoSFiles(d) {
-		if d.perSrcCFlags == nil {
-			d.perSrcCFlags = map[ANY][]ANY{}
+	cgoFlags := goCgoCFlags(d)
+
+	for i := range d.srcs {
+		meta := &d.srcs[i]
+
+		if meta.Global || meta.Compile.Variant != 0 {
+			continue
 		}
 
-		d.perSrcCFlags[src] = goCgoCFlags(d)
+		rel := meta.Source.string()
+
+		if strings.HasSuffix(rel, ".S") || strings.HasSuffix(rel, ".c") || strings.HasSuffix(rel, ".cxx") {
+			meta.Compile.CFlags = concat(meta.Compile.CFlags, cgoFlags)
+		}
 	}
 }
 

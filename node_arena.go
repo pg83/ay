@@ -14,7 +14,6 @@ type NodeArenas struct {
 	kvs      *BumpAllocator[KV]
 	geninfos *BumpAllocator[GeneratedFileInfo]
 	dirs     *BumpAllocator[IncludeDirective]
-	compiles *BumpAllocator[CompileSpec]
 }
 
 func (na *NodeArenas) resetWindows() {
@@ -31,7 +30,6 @@ func (na *NodeArenas) resetWindows() {
 	na.kvs.open = false
 	na.geninfos.open = false
 	na.dirs.open = false
-	na.compiles.open = false
 }
 
 func (na *NodeArenas) markStrict() {
@@ -48,7 +46,6 @@ func (na *NodeArenas) markStrict() {
 	na.kvs.markStrict()
 	na.geninfos.markStrict()
 	na.dirs.markStrict()
-	na.compiles.markStrict()
 }
 
 func newNodeArenas() *NodeArenas {
@@ -64,7 +61,6 @@ func newNodeArenas() *NodeArenas {
 		kvs:      newBumpAllocator[KV](1 << 8),
 		geninfos: newBumpAllocator[GeneratedFileInfo](1 << 10),
 		dirs:     newBumpAllocator[IncludeDirective](1 << 10),
-		compiles: newBumpAllocator[CompileSpec](1 << 8),
 		noderefs: newBumpAllocator[NodeRef](1 << 12),
 		nodes:    newBumpAllocator[Node](1 << 10),
 	}
@@ -204,14 +200,6 @@ func (na *NodeArenas) srcChunk(v VFS) []VFS {
 
 func (na *NodeArenas) dirList(vs ...IncludeDirective) []IncludeDirective {
 	return na.dirs.list(vs...)
-}
-
-func (na *NodeArenas) compileSpec(c CompileSpec) *CompileSpec {
-	p := na.compiles.one()
-
-	*p = c
-
-	return p
 }
 
 func (na *NodeArenas) dedupClosure(extra []VFS, groups ...[][]VFS) []VFS {

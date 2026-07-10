@@ -210,7 +210,7 @@ type ResourceItem struct {
 type ResourcePack struct {
 	Tag        STR
 	Items      []ResourceItem
-	RawClosure func(aux VFS, inputs []VFS, ref NodeRef) Closure
+	RawClosure func(aux VFS, inputs []VFS, ref NodeRef) (Closure, CompileSpec)
 }
 
 func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
@@ -528,7 +528,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		aux := build(instance.Path.relString(), "/", hash, "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
-		auxClosure := p.RawClosure(aux, adjacent, auxRef)
+		auxClosure, compile := p.RawClosure(aux, adjacent, auxRef)
 		auxLen := auxClosure.len()
 		nodeCmd := na.anys.alloc(2 + 2*len(chunk))[:0]
 
@@ -598,7 +598,13 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			DepRefs:      deps,
 		}, auxRef)
 
-		ccRef, ccOut := e.emitCC(aux)
+		ccRef := ctx.emit.reserve()
+		ccOut := e.ccOutputFor(aux, compile)
+
+		e.enqueueSrc(SrcMeta{
+			Source: aux.any(), Prio: stmtPrioDefault, Generated: true,
+			Compile: compile, CompileRef: ccRef,
+		})
 
 		refs = append(refs, ccRef)
 		outs = append(outs, ccOut)

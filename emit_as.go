@@ -100,7 +100,7 @@ func composeASIncludes(in ModuleCCInputs) []ANY {
 	return out
 }
 
-func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta) {
+func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {
 	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcVFS := src.vfs()
@@ -112,7 +112,6 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta) {
 		srcRel = trimModulePrefix(srcVFS.relString(), instance.Path.relString())
 	}
 
-	in := e.ccInputsFor(srcVFS)
 	asIn := in
 	scanIn := in
 

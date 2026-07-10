@@ -246,17 +246,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		parsed = parsed[:len(parsed):len(parsed)]
 
 		py3Suffix := !stmt.CMode && !generatedExplicit && py23Variant
-		genSrcID := internStr(p.generated)
-
-		var psc []ANY
-
-		if pcf := d.perSrcCFlagsFor(genSrcID.any()); pcf != nil {
-			psc = *pcf
-		}
-
-		ccCFlags := na.anys.alloc(len(psc) + 1)[:0]
-
-		ccCFlags = append(ccCFlags, psc...)
+		ccCFlags := na.anys.alloc(1)[:0]
 
 		if cythonImplicitFallthrough(stmt, py23Variant) {
 			ccCFlags = append(ccCFlags, argWnoImplicitFallthrough.any())
@@ -333,7 +323,6 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			Compile:        e.ctx.na.compileSpec(CompileSpec{Py3Suffix: py3Suffix, CFlags: ccCFlags}),
 			OnUse:          &pe,
 		})
 
@@ -343,7 +332,10 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			info.OnUse = &pe
 		}
 
-		e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCython})
+		e.enqueueSrc(SrcMeta{
+			Source: generatedVFS.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkCython,
+			Compile: CompileSpec{Py3Suffix: py3Suffix, CFlags: ccCFlags},
+		})
 	}
 }
 

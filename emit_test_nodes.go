@@ -300,7 +300,7 @@ func buildTestSuiteInfo(instance ModuleInstance, d *ModuleData, ldPath VFS) *Tes
 	cppSources := make([]string, 0, len(d.srcs))
 
 	for _, meta := range d.srcs {
-		if meta.Global || meta.Compile != nil && meta.Compile.Variant != 0 {
+		if meta.Global || meta.Compile.Variant != 0 {
 			continue
 		}
 

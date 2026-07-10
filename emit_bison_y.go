@@ -58,7 +58,7 @@ func bisonGeneratedRel(srcRel, genExt string) string {
 	return srcRel + genExt
 }
 
-func (e *EmitContext) emitBisonProducer(src STR) {
+func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	srcRel := src.string()
@@ -174,18 +174,7 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 		generatedParsed = na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
 	}
 
-	extras := d.perSrcCFlagsFor(src.any())
-	cfBound := 2
-
-	if extras != nil {
-		cfBound += len(*extras)
-	}
-
-	cf := na.anys.alloc(cfBound)[:0]
-
-	if extras != nil {
-		cf = append(cf, *extras...)
-	}
+	cf := na.anys.alloc(2)[:0]
 
 	if preprocessHeader {
 		cf = append(cf, argWnoUnusedButSetVariable.any(), argWnoDeprecatedCopy.any())
@@ -193,32 +182,28 @@ func (e *EmitContext) emitBisonProducer(src STR) {
 
 	na.anys.commit(len(cf))
 
-	spec := na.compileSpec(CompileSpec{})
-
-	if len(cf) > 0 {
-		spec.CFlags = cf[:len(cf):len(cf)]
-	}
-
 	e.register(GeneratedFileInfo{
 		OutputPath:     generatedVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: generatedParsed},
-		Compile:        spec,
 		OnUse:          &pe,
 	})
+
+	return cf[:len(cf):len(cf)]
 }
 
 func (e *EmitContext) emitBisonY(meta SrcMeta) {
 	_, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
 
-	e.emitBisonProducer(src.str())
+	cflags := e.emitBisonProducer(src.str())
 
 	generatedRel := bisonGeneratedRel(src.string(), d.cc.BisonGenExt)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
 	meta.Generated = true
 	meta.Source = generatedVFS.any()
+	meta.Compile.CFlags = concat(meta.Compile.CFlags, cflags)
 	e.enqueueSrc(meta)
 }
 

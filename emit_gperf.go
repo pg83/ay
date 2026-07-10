@@ -59,12 +59,6 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 	genVFS := build(instance.Path.relString(), "/", gperfGeneratedRel(srcRel))
 	gpRef := ctx.emit.reserve()
 
-	var psc []ANY
-
-	if p := d.perSrcCFlagsFor(src); p != nil {
-		psc = *p
-	}
-
 	meta.Generated = true
 	meta.Source = genVFS.any()
 	e.enqueueSrc(meta)
@@ -83,7 +77,6 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 		ProducerRef:    gpRef,
 		GeneratorRefs:  e.ctx.na.refList(gperfLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})},
-		Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: psc}),
 		OnUse:          &pe,
 	})
 }

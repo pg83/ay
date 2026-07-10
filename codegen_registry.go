@@ -11,7 +11,6 @@ type GeneratedFileInfo struct {
 	ProducerMainOut VFS
 	ClosureLeaves   []VFS
 	ParsedIncludes  ParsedIncludeSet
-	Compile         *CompileSpec
 	OnUse           *func()
 }
 
@@ -25,18 +24,6 @@ func fireOnUse(info *GeneratedFileInfo) {
 	*info.OnUse = nil
 
 	fn()
-}
-
-type CompileSpec struct {
-	CFlags           []ANY
-	FlatOutput       bool
-	Variant          *string
-	ObjectSuffixStem *string
-	Py3Suffix        bool
-	ForceCxx         bool
-	EnvAddIncl       []VFS
-	EnvCFlags        []ANY
-	blocksMemo       *CcModuleArgBlocks
 }
 
 type CodegenRegistry struct {

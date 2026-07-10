@@ -62,57 +62,42 @@ type ModuleCCInputs struct {
 	IncludeView     Closure
 }
 
-func (e *EmitContext) ccInputsFor(srcVFS VFS) ModuleCCInputs {
+func (e *EmitContext) ccInputsFor(compile CompileSpec) ModuleCCInputs {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	env := d.cc
 	in := ModuleCCInputs{ModuleCompileEnv: env}
 
-	if info := e.codegen.lookup(srcVFS); info != nil && info.Compile != nil {
-		sp := info.Compile
+	in.PerSourceCFlags = compile.CFlags
+	in.FlatOutput = compile.FlatOutput
+	in.ForceCxx = compile.ForceCxx
 
-		in.PerSourceCFlags = sp.CFlags
-		in.FlatOutput = sp.FlatOutput
-		in.Variant = sp.Variant
-		in.ObjectSuffixStem = sp.ObjectSuffixStem
-		in.Py3Suffix = sp.Py3Suffix
-		in.ForceCxx = sp.ForceCxx
-
-		envDelta := false
-
-		if sp.EnvAddIncl != nil {
-			in.AddIncl = sp.EnvAddIncl
-			envDelta = true
-		}
-
-		if sp.EnvCFlags != nil {
-			in.CFlags = sp.EnvCFlags
-			envDelta = true
-		}
-
-		if envDelta {
-			if sp.blocksMemo == nil {
-				mb := composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
-
-				sp.blocksMemo = &mb
-			}
-
-			in.CCBlocks = *sp.blocksMemo
-		}
-
-		return in
+	if compile.Py3Suffix {
+		in.Py3Suffix = true
 	}
 
-	srcID := internStr(trimModulePrefix(srcVFS.relString(), instance.Path.relString()))
+	if compile.Variant != 0 {
+		variant := compile.Variant.string()
 
-	if extras := d.perSrcCFlagsFor(srcID.any()); extras != nil {
-		in.PerSourceCFlags = *extras
+		in.Variant = &variant
+	}
+
+	envDelta := false
+
+	if compile.EnvAddIncl != nil {
+		in.AddIncl = compile.EnvAddIncl
+		envDelta = true
+	}
+
+	if compile.EnvCFlags != nil {
+		in.CFlags = compile.EnvCFlags
+		envDelta = true
+	}
+
+	if envDelta {
+		in.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
 	}
 
 	return in
-}
-
-func (e *EmitContext) emitCC(srcVFS VFS) (NodeRef, VFS) {
-	return e.emitCCWith(srcVFS, e.ccInputsFor(srcVFS))
 }
 
 func (e *EmitContext) moduleSourceVFS(src ANY) VFS {
@@ -121,17 +106,7 @@ func (e *EmitContext) moduleSourceVFS(src ANY) VFS {
 	return e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 }
 
-func (e *EmitContext) emitCCFlat(srcVFS VFS, variant *string, cflags []ANY) (NodeRef, VFS) {
-	in := e.ccInputsFor(srcVFS)
-
-	in.FlatOutput = true
-	in.Variant = variant
-	in.PerSourceCFlags = concat(cflags, in.PerSourceCFlags)
-
-	return e.emitCCWith(srcVFS, in)
-}
-
-func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
+func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS) {
 	ctx, instance := e.ctx, e.instance
 
 	in.IncludeView = walkClosure(e.scanner, srcVFS, in.ScanCfg)
@@ -142,7 +117,7 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs) (NodeRef, VFS) {
 		in.IncludeView = Closure{}
 	}
 
-	ref, outPath, _ := composeCCNode(instance, srcVFS, in, ctx.host, ctx.emit)
+	ref, outPath, _ := composeCCNodeAt(instance, srcVFS, in, ctx.host, ctx.emit, reserved)
 
 	return ref, outPath
 }
@@ -175,31 +150,13 @@ func (e *EmitContext) mainOutInducedInputs(na *NodeArenas, includeView Closure) 
 }
 
 func composeCCNode(instance ModuleInstance, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
+	return composeCCNodeAt(instance, srcVFS, in, hostP, emit, 0)
+}
+
+func composeCCNodeAt(instance ModuleInstance, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter, reserved NodeRef) (NodeRef, VFS, InputChunks) {
 	na := emit.nodeArenas()
 	srcRel := trimModulePrefix(srcVFS.relString(), instance.Path.relString())
-	suffix := ".o"
-
-	if instance.Platform.PIC {
-		suffix = ".pic.o"
-	}
-
-	if in.ObjectSuffixStem != nil {
-		if instance.Platform.PIC {
-			suffix = "." + *in.ObjectSuffixStem + ".pic.o"
-		} else {
-			suffix = "." + *in.ObjectSuffixStem + ".o"
-		}
-	} else if in.Py3Suffix {
-		if instance.Platform.PIC {
-			suffix = ".py3.pic.o"
-		} else {
-			suffix = ".py3.o"
-		}
-	}
-
-	if in.Variant != nil {
-		suffix = "." + *in.Variant + suffix
-	}
+	suffix := ccObjectSuffix(instance, in)
 
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, suffix)
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
@@ -308,7 +265,60 @@ func composeCCNode(instance ModuleInstance, srcVFS VFS, in ModuleCCInputs, hostP
 		node.DepRefs = in.ExtraDepRefs
 	}
 
+	if reserved != 0 {
+		emit.emitReservedNode(node, reserved)
+
+		return reserved, outVFS, allInputs
+	}
+
 	return emit.emitNode(node), outVFS, allInputs
+}
+
+func ccObjectSuffix(instance ModuleInstance, in ModuleCCInputs) string {
+	suffix := ".o"
+
+	if instance.Platform.PIC {
+		suffix = ".pic.o"
+	}
+
+	if in.ObjectSuffixStem != nil {
+		if instance.Platform.PIC {
+			suffix = "." + *in.ObjectSuffixStem + ".pic.o"
+		} else {
+			suffix = "." + *in.ObjectSuffixStem + ".o"
+		}
+	} else if in.Py3Suffix {
+		if instance.Platform.PIC {
+			suffix = ".py3.pic.o"
+		} else {
+			suffix = ".py3.o"
+		}
+	}
+
+	if in.Variant != nil {
+		suffix = "." + *in.Variant + suffix
+	}
+
+	return suffix
+}
+
+func (e *EmitContext) ccOutputFor(srcVFS VFS, compile CompileSpec) VFS {
+	in := ModuleCCInputs{ModuleCompileEnv: e.d.cc, FlatOutput: compile.FlatOutput}
+
+	if compile.Py3Suffix {
+		in.Py3Suffix = true
+	}
+
+	if compile.Variant != 0 {
+		variant := compile.Variant.string()
+
+		in.Variant = &variant
+	}
+
+	srcRel := trimModulePrefix(srcVFS.relString(), e.instance.Path.relString())
+	out, _ := composeCCPaths(e.instance, srcRel, srcVFS, in, ccObjectSuffix(e.instance, in))
+
+	return out
 }
 
 func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {
@@ -687,18 +697,4 @@ func (m InclArgMemo) arg(path VFS) STR {
 	m.m.put(path, a)
 
 	return a
-}
-
-func (e *EmitContext) emitLibraryCSource(meta SrcMeta) {
-	src := meta.Source
-	_, _, d := e.ctx, e.instance, e.d
-	srcVFS := src.vfs()
-
-	if srcVFS == 0 {
-		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
-	}
-
-	ref, outPath := e.emitCC(srcVFS)
-
-	e.collectObj(ref, outPath, meta)
 }

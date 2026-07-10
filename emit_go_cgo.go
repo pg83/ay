@@ -34,7 +34,7 @@ func goModuleCgoCFiles(d *ModuleData) []ANY {
 	var out []ANY
 
 	for _, meta := range d.srcs {
-		if meta.Global || meta.Compile != nil && meta.Compile.Variant != 0 {
+		if meta.Global || meta.Compile.Variant != 0 {
 			continue
 		}
 
@@ -53,7 +53,7 @@ func goModuleCgoSFiles(d *ModuleData) []ANY {
 	var out []ANY
 
 	for _, meta := range d.srcs {
-		if meta.Global || meta.Compile != nil && meta.Compile.Variant != 0 {
+		if meta.Global || meta.Compile.Variant != 0 {
 			continue
 		}
 
@@ -232,7 +232,6 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 		ProducerRef:    ref,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[parsedIncludesLocal]},
 		ClosureLeaves:  leafBlock[:nl:nl],
-		Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: goCgoCFlags(d)}),
 		OnUse:          &pe,
 	})
 }
@@ -415,14 +414,14 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	cgo2CF[cgo2N] = argWnoUnusedVariable.any()
 	na.anys.commit(cgo2N + 1)
 
-	cgo2Spec := na.compileSpec(CompileSpec{CFlags: cgo2CF[: cgo2N+1 : cgo2N+1]})
+	cgo2Spec := CompileSpec{CFlags: cgo2CF[: cgo2N+1 : cgo2N+1]}
 	dirPrefix := dir + "/"
 
 	for _, f := range files {
 		e.register(GeneratedFileInfo{OutputPath: f.cgo1, ProducerRef: ref})
-		e.register(GeneratedFileInfo{OutputPath: f.cgo2C, ProducerRef: ref, Compile: cgo2Spec, ClosureLeaves: leaves})
+		e.register(GeneratedFileInfo{OutputPath: f.cgo2C, ProducerRef: ref, ClosureLeaves: leaves})
 		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo1.relString(), dirPrefix)).any(), Prio: stmtPrioDefault, Generated: true})
-		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo2C.relString(), dirPrefix)).any(), Prio: stmtPrioDefault, Generated: true})
+		e.enqueueSrc(SrcMeta{Source: internStr(strings.TrimPrefix(f.cgo2C.relString(), dirPrefix)).any(), Prio: stmtPrioDefault, Generated: true, Compile: cgo2Spec})
 	}
 
 	e.register(GeneratedFileInfo{OutputPath: exportH, ProducerRef: ref})

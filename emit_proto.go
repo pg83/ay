@@ -400,19 +400,12 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		e.ctx.na.dirs.commit(cn)
 		ccParsed = ccParsed[:cn:cn]
 
-		var psc []ANY
-
-		if p := d.perSrcCFlagsFor(internStr(srcRel).any()); p != nil {
-			psc = *p
-		}
-
 		e.register(GeneratedFileInfo{
 			OutputPath:     pbCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  spec.genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: ccParsed},
 			ClosureLeaves:  spec.ccLeaves,
-			Compile:        e.ctx.na.compileSpec(CompileSpec{CFlags: psc}),
 			OnUse:          &pbPE,
 		})
 

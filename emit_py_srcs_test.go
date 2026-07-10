@@ -279,6 +279,30 @@ func TestResolvePySrcRel_DirtyPathNotRootBound(t *testing.T) {
 	}
 }
 
+func TestRegisterCollectPySrcs_EnqueuesProto(t *testing.T) {
+	d := &ModuleData{
+		pySrcs:     anysOf("schema.proto"),
+		moduleStmt: &ModuleStmt{Name: tokPy3Library},
+	}
+	e, _ := pySrcTestEmitContext(d, "mod")
+
+	e.registerCollectPySrcs()
+
+	if len(e.srcs) != 1 {
+		t.Fatalf("queued sources = %d, want 1", len(e.srcs))
+	}
+
+	meta := e.srcs[0]
+
+	if meta.Source.string() != "schema.proto" || meta.PyProtoGroup == nil || *meta.PyProtoGroup != 0 {
+		t.Fatalf("queued proto = %#v", meta)
+	}
+
+	if len(e.pySrcsReg) != 0 {
+		t.Fatalf("python sources registered before drain: %#v", e.pySrcsReg)
+	}
+}
+
 func pySrcTestEmitContext(d *ModuleData, modulePath string) (*EmitContext, *GenCtx) {
 	em := newStreamingEmitter(nil)
 	ctx := &GenCtx{emit: em, na: em.nodeArenas(), target: testTargetP, fs: newMemFS(nil)}

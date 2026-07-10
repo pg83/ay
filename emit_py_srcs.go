@@ -101,7 +101,9 @@ func (e *EmitContext) registerCollectPySrcs() {
 
 		for _, srcRel := range group.Srcs {
 			if extIsProto(srcRel.string()) {
-				e.emitPyProtoSource(srcRel, gi)
+				group := gi
+
+				e.enqueueSrc(SrcMeta{Source: srcRel, Prio: stmtPrioDefault, PyProtoGroup: &group})
 
 				continue
 			}
@@ -556,7 +558,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 			continue
 		}
 
-		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
+		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) (Closure, CompileSpec) {
 			return e.rawAuxInputClosure(aux, e.ctx.na.dedupSourceVFS(inputs, nil), ref)
 		}})
 
@@ -567,7 +569,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 	return refs, outs
 }
 
-func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closure {
+func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) (Closure, CompileSpec) {
 	ctx, _, d := e.ctx, e.instance, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	na := ctx.na
@@ -581,44 +583,25 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) Closu
 
 	emits = emits[:len(emits):len(emits)]
 
-	var psc []ANY
-
-	if p := d.perSrcCFlagsFor(aux.any()); p != nil {
-		psc = *p
-	}
-
-	cflags := na.anys.alloc(len(psc) + 2)
-	cn := copy(cflags, psc)
-
-	cflags[cn] = argX.any()
-	cflags[cn+1] = argC.any()
-	na.anys.commit(cn + 2)
+	cflags := na.anyList(argX.any(), argC.any())
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     aux,
 		ProducerRef:    ref,
 		GeneratorRefs:  na.refList(rescompilerRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-		Compile:        na.compileSpec(CompileSpec{ForceCxx: true, CFlags: cflags[: cn+2 : cn+2]}),
 	})
 
-	return walkClosure(e.scanner, aux, d.cc.ScanCfg)
+	return walkClosure(e.scanner, aux, d.cc.ScanCfg), CompileSpec{ForceCxx: true, CFlags: cflags}
 }
 
-type PyRegisterResult struct {
-	Refs    []NodeRef
-	Outputs []VFS
-}
-
-func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
+func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	if len(d.pyRegister) == 0 {
-		return nil
+		return
 	}
-
-	res := &PyRegisterResult{}
 
 	for i, arg := range d.pyRegister {
 		priorShort := make(map[string]struct{}, i)
@@ -671,7 +654,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 
 		na.anys.commit(len(envCFlags))
 
-		spec := na.compileSpec(CompileSpec{Py3Suffix: py3Suffix, EnvCFlags: envCFlags[:len(envCFlags):len(envCFlags)]})
+		spec := CompileSpec{Py3Suffix: py3Suffix, EnvCFlags: envCFlags[:len(envCFlags):len(envCFlags)]}
 
 		if len(d.cythonCpp) > 0 {
 			spec.EnvAddIncl = appendCythonCCAddIncl(na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
@@ -681,16 +664,13 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) *PyRegisterResult {
 			OutputPath:    regCppVFS,
 			ProducerRef:   pyRef,
 			ClosureLeaves: e.ctx.na.vfsList(genPy3RegScriptVFS),
-			Compile:       spec,
 		})
 
-		regRef, regOut := e.emitCC(regCppVFS)
-
-		res.Refs = append(res.Refs, regRef)
-		res.Outputs = append(res.Outputs, regOut)
+		e.enqueueSrc(SrcMeta{
+			Source: regCppVFS.any(), Prio: stmtPrioDefault, Generated: true, Global: true,
+			Compile: spec,
+		})
 	}
-
-	return res
 }
 
 func pyInitDefineShortname(flag string) (string, bool) {

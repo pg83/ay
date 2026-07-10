@@ -493,7 +493,7 @@ func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
 
 	peerAddIncl := e.peers.PeerAddInclGlobal
 
-	return e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
+	return e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) (Closure, CompileSpec) {
 		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
 	}})
 }
@@ -536,7 +536,7 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		peerAddIncl = dedup(cppSibling.AddInclGlobal, e.peers.PeerAddInclGlobal)
 	}
 
-	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) Closure {
+	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) (Closure, CompileSpec) {
 		return e.pyProtoAuxInputClosure(aux, inputs, ref, peerAddIncl)
 	}})
 
@@ -585,7 +585,7 @@ func pyProtoAuxPy3Suffix(d *ModuleData) bool {
 	return d.unit.Tag == unitTagPy3Proto || d.moduleStmt.Name == tokPy23Library || d.moduleStmt.Name == tokPy23NativeLibrary
 }
 
-func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) Closure {
+func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, peerAddIncl []VFS) (Closure, CompileSpec) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	na := ctx.na
@@ -606,10 +606,13 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef, p
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(rescompilerRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-		Compile:        e.ctx.na.compileSpec(CompileSpec{ForceCxx: true, Py3Suffix: pyProtoAuxPy3Suffix(d), CFlags: e.ctx.na.anyList(argX.any(), argC.any())}),
 	})
 
 	scanCfg := newScanContext(ctx.parsers, d.addIncl, peerAddIncl, includeScannerBasePaths(), instance.Path.relString())
 
-	return walkClosure(e.scanner, aux, scanCfg)
+	return walkClosure(e.scanner, aux, scanCfg), CompileSpec{
+		ForceCxx:  true,
+		Py3Suffix: pyProtoAuxPy3Suffix(d),
+		CFlags:    e.ctx.na.anyList(argX.any(), argC.any()),
+	}
 }
