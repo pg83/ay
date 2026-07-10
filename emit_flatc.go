@@ -219,12 +219,12 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 
 func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant) {
 	ctx, instance, d := e.ctx, e.instance, e.d
-
-	var srcVFS VFS
+	srcVFS := meta.Source.vfs()
 	var genDeps []NodeRef
 
-	if meta.Generated {
-		srcVFS = meta.Source.vfs()
+	if srcVFS == 0 {
+		srcVFS = resolveSourceVFS(ctx, instance, meta.Source.string(), d.srcDirs)
+	} else if srcVFS.isBuild() {
 		genInfo := e.codegen.use(srcVFS)
 
 		if genInfo == nil {
@@ -232,15 +232,12 @@ func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant
 		}
 
 		genDeps = []NodeRef{genInfo.ProducerRef}
-	} else {
-		srcVFS = resolveSourceVFS(ctx, instance, meta.Source.string(), d.srcDirs)
 	}
 
 	e.emitFlatcProducer(srcVFS, variant, genDeps)
 
 	cpp := meta
 
-	cpp.Generated = true
 	cpp.Source = build(srcVFS.relString(), ".cpp").any()
 	e.enqueueSrc(cpp)
 }

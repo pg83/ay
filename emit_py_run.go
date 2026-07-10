@@ -26,9 +26,9 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 	for _, out := range outs {
 		switch {
 		case isCCSourceExt(out) || isAsmSourceExt(out):
-			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
+			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).any(), Prio: stmtPrioDefault, Bucket: bkRunPython})
 		case isCodegenProducingSrc(out):
-			e.enqueueSrc(SrcMeta{Source: pathAny(internStr(out)), Prio: stmtPrioDefault, Generated: true, Bucket: bkRunPython})
+			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).any(), Prio: stmtPrioDefault, Bucket: bkRunPython})
 		}
 	}
 }

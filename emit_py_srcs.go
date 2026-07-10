@@ -667,7 +667,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 		})
 
 		e.enqueueSrc(SrcMeta{
-			Source: regCppVFS.any(), Prio: stmtPrioDefault, Generated: true, Global: true,
+			Source: regCppVFS.any(), Prio: stmtPrioDefault, Global: true,
 			Compile: spec,
 		})
 	}

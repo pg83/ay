@@ -44,10 +44,9 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 		}
 
 		e.enqueueSrc(SrcMeta{
-			Source:    copyFileOutputVFS(e.instance.Path.relString(), out).any(),
-			Prio:      stmtPrioDefault,
-			Seq:       rp.DeclSeq,
-			Generated: true,
+			Source: copyFileOutputVFS(e.instance.Path.relString(), out).any(),
+			Prio:   stmtPrioDefault,
+			Seq:    rp.DeclSeq,
 		})
 	}
 }

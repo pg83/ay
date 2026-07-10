@@ -48,7 +48,6 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 
 	lxRef := ctx.emit.reserve()
 
-	meta.Generated = true
 	meta.Source = outVFS.any()
 	meta.Compile.CFlags = concat(meta.Compile.CFlags, cflags)
 	e.enqueueSrc(meta)

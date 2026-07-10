@@ -90,6 +90,11 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
 	srcRel := src.string()
+
+	if srcVFS := src.vfs(); srcVFS != 0 {
+		srcRel = trimModulePrefix(srcVFS.relString(), instance.Path.relString())
+	}
+
 	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
 	rl6SourceVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	r6Out := ragel6OutVFS(instance, srcRel)
@@ -107,7 +112,6 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 	r6Ref := ctx.emit.reserve()
 
 	if isCxxSource(r6Out.relString()) {
-		meta.Generated = true
 		meta.Source = r6Out.any()
 		meta.Compile.CFlags = cflagsWnoImplicitFallthrough(e.ctx.na, meta.Compile.CFlags)
 		e.enqueueSrc(meta)

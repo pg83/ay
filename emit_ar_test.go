@@ -677,6 +677,7 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			reg := newCodegenRegistry(newNodeArenas())
 			refs := make([]NodeRef, len(tc.paths))
 			paths := make([]VFS, len(tc.paths))
 			metas := make([]SrcMeta, len(tc.paths))
@@ -684,15 +685,15 @@ func TestReorderARMembers_Reg3PICVariantsTrailObjcopy(t *testing.T) {
 			for i, rel := range tc.paths {
 				refs[i] = NodeRef(int64(i + 1))
 				paths[i] = build(rel)
-				metas[i] = SrcMeta{Prio: stmtPrioDefault}
+				metas[i] = SrcMeta{Source: internStr(strings.TrimSuffix(rel, ".o")).any(), Prio: stmtPrioDefault}
 
 				if strings.Contains(rel, ".reg3.cpp") {
-					metas[i] = SrcMeta{Prio: stmtPrioDefault, Generated: true}
+					metas[i] = SrcMeta{Source: build(strings.TrimSuffix(rel, ".o")).any(), Prio: stmtPrioDefault}
 				}
 			}
 
 			origRefs := append([]NodeRef(nil), refs...)
-			gotRefs, gotPaths := (&EmitContext{}).reorderARMembers(refs, paths, metas)
+			gotRefs, gotPaths := (&EmitContext{codegen: reg}).reorderARMembers(refs, paths, metas)
 
 			wantRefs := make([]NodeRef, len(tc.wantOrder))
 			wantPaths := make([]string, len(tc.wantOrder))
@@ -871,8 +872,8 @@ func TestReorderARMembers_SecondLevelTrailsFirstLevelByRound(t *testing.T) {
 	refs := []NodeRef{NodeRef(1), NodeRef(2)}
 	paths := []VFS{fbsCpp, cpp}
 	metas := []SrcMeta{
-		{Source: fbsCppSrc.any(), Prio: stmtPrioDefault, Seq: 1, Generated: true},
-		{Source: cppSrc.any(), Prio: stmtPrioDefault, Seq: 2, Generated: true},
+		{Source: fbsCppSrc.any(), Prio: stmtPrioDefault, Seq: 1},
+		{Source: cppSrc.any(), Prio: stmtPrioDefault, Seq: 2},
 	}
 
 	_, gotPaths := (&EmitContext{codegen: reg, instance: ModuleInstance{Path: source("mod")}}).reorderARMembers(refs, paths, metas)

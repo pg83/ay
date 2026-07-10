@@ -63,6 +63,11 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta, in ModuleCCInputs) {
 	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcRel := src.string()
+	srcVFS := src.vfs()
+
+	if srcVFS != 0 {
+		srcRel = trimModulePrefix(srcVFS.relString(), instance.Path.relString())
+	}
 
 	if instance.Platform.ISA != ISAX8664 {
 		ctx.onWarn(Warn{Kind: WarnUnsupportedSource, Message: fmt.Sprintf("unsupported .rodata platform %s for %q; source skipped", instance.Platform.ISA, srcRel)})
@@ -70,8 +75,11 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta, in ModuleCCInputs) {
 		return
 	}
 
+	if srcVFS == 0 {
+		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
+	}
+
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
-	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	cv := Closure{}
 
 	var deps []NodeRef

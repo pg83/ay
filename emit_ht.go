@@ -62,7 +62,6 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 		OnUse:          &pe,
 	})
 
-	meta.Generated = true
 	meta.Source = outVFS.any()
 	e.enqueueSrc(meta)
 }

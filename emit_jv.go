@@ -86,7 +86,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		})
 
 		e.enqueueSrc(SrcMeta{
-			Source: g4CppPath.any(), Prio: stmtPrioDefault, Generated: true, Bucket: bkJV,
+			Source: g4CppPath.any(), Prio: stmtPrioDefault, Bucket: bkJV,
 			Compile: CompileSpec{CFlags: e.ctx.na.anyList(argWnoUnusedVariable.any())},
 		})
 	}
