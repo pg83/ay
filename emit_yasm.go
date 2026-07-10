@@ -57,7 +57,7 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 	)
 
 	for _, p := range in.AddIncl {
-		cmdArgs = append(cmdArgs, argI.any(), (p).any())
+		cmdArgs = append(cmdArgs, argI.any(), p.any())
 	}
 
 	cmdArgs = append(cmdArgs,

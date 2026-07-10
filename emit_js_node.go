@@ -16,8 +16,8 @@ func emitJSReserved(instance ModuleInstance, allName string, sources []string, c
 
 	cmdArgs = append(cmdArgs,
 		tc.Python3.any(),
-		(joinSrcs).any(),
-		(outVFS).any(),
+		joinSrcs.any(),
+		outVFS.any(),
 		argYaStartCommandFile.any(),
 	)
 

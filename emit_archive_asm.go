@@ -51,7 +51,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 	pathPerFile := e.prodVFSTake(pathMark)
 	cmdArgs := na.anys.alloc(5 + len(a.Files))[:0]
 
-	cmdArgs = append(cmdArgs, (toolBinPath).any(), argQ.any())
+	cmdArgs = append(cmdArgs, toolBinPath.any(), argQ.any())
 
 	if a.DontCompress {
 		cmdArgs = append(cmdArgs, argP.any())
@@ -61,7 +61,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 		cmdArgs = append(cmdArgs, internV(memberVFS.prefix(), memberVFS.relString(), ":").any())
 	}
 
-	cmdArgs = append(cmdArgs, argDashO.any(), (rodataVFS).any())
+	cmdArgs = append(cmdArgs, argDashO.any(), rodataVFS.any())
 	na.anys.commit(len(cmdArgs))
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]

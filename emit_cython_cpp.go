@@ -274,9 +274,9 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		cmdArgs = append(cmdArgs,
 			argISContribToolsCythonCythonIncludes.any(),
-			(srcVFS).any(),
+			srcVFS.any(),
 			argDashO.any(),
-			(generatedVFS).any(),
+			generatedVFS.any(),
 		)
 
 		na.anys.commit(len(cmdArgs))

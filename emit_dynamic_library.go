@@ -397,7 +397,7 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 	cmdArgs = append(cmdArgs, argStartPlugins.any())
 
 	for _, p := range pluginPaths {
-		cmdArgs = append(cmdArgs, (p).any())
+		cmdArgs = append(cmdArgs, p.any())
 	}
 
 	cmdArgs = append(cmdArgs, argEndPlugins.any())
@@ -421,7 +421,7 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 	)
 
 	for _, o := range ownObjects {
-		cmdArgs = append(cmdArgs, (o).any())
+		cmdArgs = append(cmdArgs, o.any())
 	}
 
 	cmdArgs = append(cmdArgs,
@@ -453,7 +453,7 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 	cmdArgs = append(cmdArgs, argWlNoAsNeeded.any())
 
 	if p.PIC {
-		cmdArgs = append(cmdArgs, (argFPIC).any())
+		cmdArgs = append(cmdArgs, argFPIC.any())
 	}
 
 	cmdArgs = append(cmdArgs,
@@ -462,7 +462,7 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 	)
 
 	if p.PIC {
-		cmdArgs = append(cmdArgs, (argFPIC).any())
+		cmdArgs = append(cmdArgs, argFPIC.any())
 	}
 
 	cmdArgs = append(cmdArgs,

@@ -122,7 +122,7 @@ func emitFLReserved(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDR
 		flatcFlagsChunk = na.anyConcat(flatcFlags)
 	}
 
-	headChunk := na.anyList(tc.Python3.any(), (flatcWrapperVFS).any(), (flatcBinary).any())
+	headChunk := na.anyList(tc.Python3.any(), flatcWrapperVFS.any(), flatcBinary.any())
 	tailChunk := na.anyList(headerVFS.any(), srcVFS.any())
 	chunks := na.chunks.alloc(5)[:0]
 

@@ -24,10 +24,10 @@ func emitR5Reserved(
 	env := envVarsVCS
 
 	cmd0 := Cmd{
-		CmdArgs: na.chunkList(na.anyList((ragel5BinPath).any(),
+		CmdArgs: na.chunkList(na.anyList(ragel5BinPath.any(),
 			argDashO.any(),
-			(tmpVFS).any(),
-			(srcVFS).any())),
+			tmpVFS.any(),
+			srcVFS.any())),
 		Env: env,
 	}
 
@@ -38,11 +38,11 @@ func emitR5Reserved(
 	}
 
 	cmd1 := Cmd{
-		CmdArgs: na.chunkList(na.anyList((rlgenCdBinPath).any(),
+		CmdArgs: na.chunkList(na.anyList(rlgenCdBinPath.any(),
 			rlgenMode.any(),
 			argDashO.any(),
-			(cppVFS).any(),
-			(tmpVFS).any())),
+			cppVFS.any(),
+			tmpVFS.any())),
 		Env: env,
 	}
 

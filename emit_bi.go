@@ -23,7 +23,7 @@ func emitBIReserved(
 
 	cmd0Args := na.anyList(
 		tc.Python3.any(),
-		(yieldLinePyVFS).any(),
+		yieldLinePyVFS.any(),
 		arg2.any(),
 		argsFileVFS.any(),
 		tc.CXX.any(),
@@ -33,7 +33,7 @@ func emitBIReserved(
 
 	cmd1Args = append(cmd1Args,
 		tc.Python3.any(),
-		(yieldLinePyVFS).any(),
+		yieldLinePyVFS.any(),
 		arg2.any(),
 		argsFileVFS.any(),
 	)
@@ -45,12 +45,12 @@ func emitBIReserved(
 
 	cmd2Args := na.anyList(
 		tc.Python3.any(),
-		(xargsPyVFS).any(),
+		xargsPyVFS.any(),
 		arg2.any(),
 		argsFileVFS.any(),
 		tc.Python3.any(),
-		(buildInfoGenPyVFS).any(),
-		(outVFS).any(),
+		buildInfoGenPyVFS.any(),
+		outVFS.any(),
 	)
 
 	inputs := na.vfsList(
@@ -80,11 +80,11 @@ func biFlagsForInstance(targetP *Platform) []ANY {
 	cflagPrefix := append(muslCFlags(targetP.Flags[envMUSL] == strYes), sseBaseCFlags(targetP.ISA == ISAX8664)...)
 
 	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, targetP.CFlags, cflagPrefix, catboostOpenSourceDefineFor(targetP))
-	flags = append(flags, (cxxStandardFlag).any())
+	flags = append(flags, cxxStandardFlag.any())
 	flags = appendAnyLists(flags, cxxStandardWarnings)
-	flags = append(flags, (baseUnitCxxNostdinc).any())
+	flags = append(flags, baseUnitCxxNostdinc.any())
 	flags = appendAnyLists(flags, catboostOpenSourceDefineFor(targetP))
-	flags = append(flags, (baseUnitCxxNostdinc).any())
+	flags = append(flags, baseUnitCxxNostdinc.any())
 
 	return flags
 }

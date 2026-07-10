@@ -467,7 +467,7 @@ func pickWarningFlags(noCompilerWarnings bool, noWShadow bool) []ANY {
 
 func appendCxxStdAndOwn(cmdArgs []ANY, isCxx bool, noCompilerWarnings bool, injectCxxWarningBundle bool, ownExtras []ANY) []ANY {
 	if isCxx {
-		cmdArgs = append(cmdArgs, (cxxStandardFlag).any())
+		cmdArgs = append(cmdArgs, cxxStandardFlag.any())
 
 		if injectCxxWarningBundle {
 			if noCompilerWarnings {

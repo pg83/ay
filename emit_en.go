@@ -160,16 +160,16 @@ func emitEN(
 	cmdArgs := na.anys.alloc(8)[:0]
 
 	cmdArgs = append(cmdArgs,
-		(enumParserBin).any(),
-		(headerInput).any(),
+		enumParserBin.any(),
+		headerInput.any(),
 		argIncludePath.any(),
 		headerInput.rel().any(),
 		argOutput.any(),
-		(serializedCPPVFS).any(),
+		serializedCPPVFS.any(),
 	)
 
 	if withHeader {
-		cmdArgs = append(cmdArgs, argHeader.any(), (serializedHVFS).any())
+		cmdArgs = append(cmdArgs, argHeader.any(), serializedHVFS.any())
 	}
 
 	na.anys.commit(len(cmdArgs))

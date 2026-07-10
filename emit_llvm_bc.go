@@ -80,10 +80,10 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	ldArgs := []ANY{internStr(llvmLink).any()}
 
 	for _, p := range bcPaths {
-		ldArgs = append(ldArgs, (p).any())
+		ldArgs = append(ldArgs, p.any())
 	}
 
-	ldArgs = append(ldArgs, argDashO.any(), (mergedOut).any())
+	ldArgs = append(ldArgs, argDashO.any(), mergedOut.any())
 
 	mergeInputs := na.inputList(bcPaths)
 
@@ -109,7 +109,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	pendRefs = append(pendRefs, ldRef)
 	optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 	optOut := build(instance.Path.relString(), "/", optOutName)
-	optArgs := []ANY{internStr(python).any(), internStr(optWrapper).any(), internStr(opt).any(), (mergedOut).any(), argDashO.any(), (optOut).any()}
+	optArgs := []ANY{internStr(python).any(), internStr(optWrapper).any(), internStr(opt).any(), mergedOut.any(), argDashO.any(), optOut.any()}
 	passes := []string{"default<O2>", "globalopt", "globaldce"}
 
 	if len(stmt.Symbols) > 0 {
@@ -201,7 +201,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	args = append(args, platform.TargetArg.any())
 	args = appendAnyLists(args, bundle.ArchArgs)
 	args = append(args, argDashBBin.any())
-	args = append(args, argWnoUnknownWarningOption.any(), argEmitLlvm.any(), argDashC.any(), (inVFS).any(), argDashO.any(), (outVFS).any())
+	args = append(args, argWnoUnknownWarningOption.any(), argEmitLlvm.any(), argDashC.any(), inVFS.any(), argDashO.any(), outVFS.any())
 
 	return args
 }

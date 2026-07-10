@@ -265,10 +265,10 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 func composeLDCmdVcsInfo(na *NodeArenas, tc ModuleToolchain, vcsC VFS) []ANY {
 	return na.anyList(
 		tc.Python3.any(),
-		(ldVcsInfoVFS).any(),
+		ldVcsInfoVFS.any(),
 		argVcsVcsJson.any(),
 		vcsC.any(),
-		(ldSvnInterfaceVFS).any(),
+		ldSvnInterfaceVFS.any(),
 	)
 }
 
@@ -325,13 +325,13 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 
 	cmdArgs = append(cmdArgs,
 		tc.Python3.any(),
-		(ldLinkExeVFS).any(),
+		ldLinkExeVFS.any(),
 	)
 
 	cmdArgs = append(cmdArgs, argStartPlugins.any())
 
 	for _, p := range pluginPaths {
-		cmdArgs = append(cmdArgs, (p).any())
+		cmdArgs = append(cmdArgs, p.any())
 	}
 
 	cmdArgs = append(cmdArgs, argEndPlugins.any())
@@ -374,7 +374,7 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 	cmdArgs = append(cmdArgs, vcsO.any())
 
 	for _, cp := range ccPaths {
-		cmdArgs = append(cmdArgs, (cp).any())
+		cmdArgs = append(cmdArgs, cp.any())
 	}
 
 	cmdArgs = append(cmdArgs, argDashO.any(), output.any())
@@ -417,14 +417,14 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	trailer = appendAnyLists(trailer, ownRPathFlags)
 
 	if p.PIC {
-		trailer = append(trailer, (argFPIC).any())
+		trailer = append(trailer, argFPIC.any())
 	}
 
 	trailer = appendInternAnys(trailer, p.linkerSelectionGDBIndexFlags())
 	trailer = appendAnyLists(trailer, peerRPathFlagsGlobal)
 
 	if p.PIC {
-		trailer = append(trailer, (argFPIC).any())
+		trailer = append(trailer, argFPIC.any())
 	}
 
 	trailer = appendInternAnys(trailer, p.linkerSelectionTailFlags())
@@ -481,13 +481,13 @@ func composeLDCmdLinkOrCopy(na *NodeArenas, tc ModuleToolchain, modulePath strin
 
 	cmd = append(cmd,
 		tc.Python3.any(),
-		(ldFsToolsVFS).any(),
+		ldFsToolsVFS.any(),
 		argLinkOrCopyToDir.any(),
 		argNoCheck.any(),
 	)
 
 	for _, p := range dynamicPaths {
-		cmd = append(cmd, (p).any())
+		cmd = append(cmd, p.any())
 	}
 
 	cmd = append(cmd, (build(modulePath)).any())

@@ -56,13 +56,13 @@ func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef,
 
 	head := na.anys.alloc(1 + len(effectiveFlags))[:0]
 
-	head = append(head, (ragel6BinaryPath).any())
+	head = append(head, ragel6BinaryPath.any())
 	head = appendAnyLists(head, effectiveFlags)
 	na.anys.commit(len(head))
 
 	head = head[:len(head):len(head)]
 
-	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.anyList((outVFS).any(), (inVFS).any()))
+	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.anyList(outVFS.any(), inVFS.any()))
 	env := envVarsVCS
 	head2 := na.vfsList(ragel6BinaryPath)
 

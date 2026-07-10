@@ -893,7 +893,7 @@ func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppSty
 
 	mid = append(mid,
 		arg2.any(),
-		(protocBinary).any(),
+		protocBinary.any(),
 		internV("-I=./", includeRoot).any(),
 		internV("-I=$(S)/", includeRoot).any(),
 		argIB2.any(),
