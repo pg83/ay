@@ -49,6 +49,10 @@ func (p *DeDuperPool) put(d *DeDuper) {
 	}
 
 	p.free = append(p.free, d)
+
+	if len(p.free) > 2 {
+		panic("deduper pool: more than 2 concurrently live: " + strings.Join(p.sites, " || "))
+	}
 }
 
 func dedupSite() string {
