@@ -12,6 +12,7 @@ type NodeArenas struct {
 	nodes    *BumpAllocator[Node]
 	exts     *BumpAllocator[KVExt]
 	geninfos *BumpAllocator[GeneratedFileInfo]
+	pending  *BumpAllocator[func()]
 	dirs     *BumpAllocator[IncludeDirective]
 	scanctxs *BumpAllocator[ScanContext]
 }
@@ -28,6 +29,7 @@ func (na *NodeArenas) resetWindows() {
 	na.nodes.open = false
 	na.exts.open = false
 	na.geninfos.open = false
+	na.pending.open = false
 	na.dirs.open = false
 	na.scanctxs.open = false
 }
@@ -44,6 +46,7 @@ func (na *NodeArenas) markStrict() {
 	na.nodes.markStrict()
 	na.exts.markStrict()
 	na.geninfos.markStrict()
+	na.pending.markStrict()
 	na.dirs.markStrict()
 	na.scanctxs.markStrict()
 }
@@ -59,11 +62,20 @@ func newNodeArenas() *NodeArenas {
 		inputs:   newBumpAllocator[[]VFS](1 << 10),
 		exts:     newBumpAllocator[KVExt](1 << 8),
 		geninfos: newBumpAllocator[GeneratedFileInfo](1 << 10),
+		pending:  newBumpAllocator[func()](1 << 10),
 		dirs:     newBumpAllocator[IncludeDirective](1 << 10),
 		scanctxs: newBumpAllocator[ScanContext](1 << 8),
 		noderefs: newBumpAllocator[NodeRef](1 << 12),
 		nodes:    newBumpAllocator[Node](1 << 10),
 	}
+}
+
+func (na *NodeArenas) pendingEmit(fn func()) *func() {
+	p := na.pending.one()
+
+	*p = fn
+
+	return p
 }
 
 func newStrictNodeArenas() *NodeArenas {
