@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	src := meta.Source
@@ -19,6 +22,30 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	switch srcExtClassOf(src.relOrSelf().any()) {
 	case srcExtHeader:
 		return
+	case srcExtCSource:
+		srcVFS := src.vfs()
+
+		if srcVFS == 0 {
+			srcVFS = e.moduleSourceVFS(src)
+		}
+
+		ref, out := e.emitCCWith(srcVFS, e.ccInputsFor(meta.Compile), meta.CompileRef)
+
+		if meta.CompileRef == 0 {
+			e.collectObj(ref, out, meta)
+		}
+	case srcExtRodata:
+		e.emitLibraryRodataSource(meta, e.ccInputsFor(meta.Compile))
+	case srcExtAsm:
+		if isGoModuleType(e.d.unit.Type) && strings.HasSuffix(src.string(), ".s") {
+			e.collectGoSource(meta, true)
+		} else {
+			e.emitLibraryAsmSource(meta, e.ccInputsFor(meta.Compile))
+		}
+	case srcExtYasm:
+		e.emitLibraryYasmSource(meta, e.ccInputsFor(meta.Compile))
+	case srcExtCuda:
+		e.emitLibraryCudaSource(meta, e.ccInputsFor(meta.Compile))
 	case srcExtGztProto:
 		e.emitLibraryGztProtoCompile(src)
 	case srcExtProto:

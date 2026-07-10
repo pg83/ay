@@ -1,7 +1,5 @@
 package main
 
-import "strings"
-
 type PeerContext struct {
 	SelfAddInclGlobal []VFS
 	PeerAddInclGlobal []VFS
@@ -173,7 +171,7 @@ func (e *EmitContext) at(instance ModuleInstance) *EmitContext {
 
 func (e *EmitContext) enqueueSrc(meta SrcMeta) {
 	if e.srcsClosed {
-		throwFmt("enqueueSrc after drainSrcs for %q", meta.Source.string())
+		throwFmt("enqueueSrc after source queue closed for %q", meta.Source.string())
 	}
 
 	if cap(e.srcs) == 0 {
@@ -217,10 +215,21 @@ func (e *EmitContext) emit() {
 		e.emitPyRegister(regCCPy3Suffix)
 	}
 
-	e.drainSrcs(func() {
-		if e.producersOnly() {
-			return
+	finalized := e.producersOnly()
+
+	for {
+		for len(e.srcs) > 0 {
+			meta := e.srcs[0]
+
+			e.srcs = e.srcs[1:]
+			e.emitOneSource(meta)
 		}
+
+		if finalized {
+			break
+		}
+
+		finalized = true
 
 		if !isProgramModuleType(d.moduleStmt.Name) {
 			e.emitPyProtoBytecode()
@@ -251,71 +260,6 @@ func (e *EmitContext) emit() {
 
 		e.flushGoCgo2()
 		e.flushGoSrcs()
-	})
-}
-
-func (e *EmitContext) drainSrcs(finalize func()) {
-	for {
-		for len(e.srcs) > 0 {
-			meta := e.srcs[0]
-
-			e.srcs = e.srcs[1:]
-			class := srcExtClassOf(meta.Source.relOrSelf().any())
-
-			if e.producersOnly() {
-				e.emitOneSource(meta)
-
-				continue
-			}
-
-			switch class {
-			case srcExtCSource:
-				srcVFS := meta.Source.vfs()
-
-				if srcVFS == 0 {
-					srcVFS = e.moduleSourceVFS(meta.Source)
-				}
-
-				ref, out := e.emitCCWith(srcVFS, e.ccInputsFor(meta.Compile), meta.CompileRef)
-
-				if meta.CompileRef == 0 {
-					e.collectObj(ref, out, meta)
-				}
-
-				continue
-			case srcExtRodata:
-				e.emitLibraryRodataSource(meta, e.ccInputsFor(meta.Compile))
-
-				continue
-			case srcExtAsm:
-				if isGoModuleType(e.d.unit.Type) && strings.HasSuffix(meta.Source.string(), ".s") {
-					e.collectGoSource(meta, true)
-				} else {
-					e.emitLibraryAsmSource(meta, e.ccInputsFor(meta.Compile))
-				}
-
-				continue
-			case srcExtYasm:
-				e.emitLibraryYasmSource(meta, e.ccInputsFor(meta.Compile))
-
-				continue
-			case srcExtCuda:
-				e.emitLibraryCudaSource(meta, e.ccInputsFor(meta.Compile))
-
-				continue
-			}
-
-			e.emitOneSource(meta)
-		}
-
-		if finalize == nil {
-			break
-		}
-
-		f := finalize
-
-		finalize = nil
-		f()
 	}
 
 	e.srcsClosed = true
