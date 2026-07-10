@@ -8,14 +8,7 @@ import (
 )
 
 func testScanContext(scanner *IncludeScanner, ownAddIncl, peerAddIncl, base []VFS, _ string) *ScanContext {
-	paths := ScanDomainPaths{OwnAddIncl: ownAddIncl, PeerAddInclSet: peerAddIncl}
-	domains := [scanDomainCount]ScanDomainPaths{}
-
-	for domain := range domains {
-		domains[domain] = paths
-	}
-
-	return newScanContext(newNodeArenas(), scanner.parsers, domains, base)
+	return newScanContext(newNodeArenas(), scanner.parsers, ownAddIncl, peerAddIncl, peerAddIncl, base)
 }
 
 func scanClosure(scanner *IncludeScanner, srcRel string, cfg *ScanContext) []VFS {

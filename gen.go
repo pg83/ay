@@ -808,20 +808,7 @@ type ResolvedPeer struct {
 }
 
 func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccOwn, ccPeer, fullPeer, protoInclude []VFS) *ScanContext {
-	domains := [scanDomainCount]ScanDomainPaths{
-		scanDomainCC:         {OwnAddIncl: ccOwn, PeerAddInclSet: ccPeer},
-		scanDomainAsm:        {OwnAddIncl: ccOwn, PeerAddInclSet: ccPeer},
-		scanDomainCython:     {OwnAddIncl: ccOwn, PeerAddInclSet: ccPeer},
-		scanDomainProto:      {},
-		scanDomainAux:        {OwnAddIncl: ccOwn, PeerAddInclSet: fullPeer},
-		scanDomainFlatc:      {},
-		scanDomainGoAsm:      {OwnAddIncl: goAsmIncludeDirs},
-		scanDomainSwig:       {OwnAddIncl: swigAddIncls},
-		scanDomainJoinTarget: {OwnAddIncl: ccOwn, PeerAddInclSet: ccPeer},
-	}
-
-	scanCtx := newScanContext(ctx.na, ctx.parsers, domains, includeScannerBasePaths())
-	scanCtx.ready &^= 1<<scanDomainAsm | 1<<scanDomainCython | 1<<scanDomainProto | 1<<scanDomainJoinTarget
+	scanCtx := newScanContext(ctx.na, ctx.parsers, ccOwn, ccPeer, fullPeer, includeScannerBasePaths())
 	scanCtx.asmAddIncl = ctx.na.vfsList(d.asmAddIncl...)
 	scanCtx.cythonAddIncl = ctx.na.vfsList(d.cythonAddIncl...)
 	scanCtx.protoInclude = ctx.na.vfsList(protoInclude...)

@@ -213,29 +213,32 @@ type PbModuleEmission struct {
 	grpcHRefs           []NodeRef
 	blocks              PbArgBlocks
 	searchPaths         []VFS
+	pendingCommon       *protoPBCommon
+}
+
+type protoPBCommon struct {
+	ctx                 *GenCtx
+	instance            ModuleInstance
+	cppStyleguideLDRef  NodeRef
+	protocLDRef         NodeRef
+	grpcCppLDRef        NodeRef
+	cppStyleguideBinary VFS
+	protocBinary        VFS
+	grpcCppBinary       VFS
+	liteHeaders         bool
+	grpc                bool
+	moduleTag           STR
+	extraPlugins        []ResolvedCPPProtoPlugin
+	blocks              PbArgBlocks
 }
 
 type protoPBPending struct {
-	ctx                       *GenCtx
-	instance                  ModuleInstance
-	scanner                   *IncludeScanner
-	scanCtx                   *ScanContext
-	protoVFS                  VFS
+	common                    *protoPBCommon
+	imports                   Closure
 	protoRelPath              string
 	protoSrcOverride          VFS
-	extraProtoDeps            []NodeRef
+	extraProtoDep             NodeRef
 	protoProducerSourceInputs []VFS
-	cppStyleguideLDRef        NodeRef
-	protocLDRef               NodeRef
-	grpcCppLDRef              NodeRef
-	cppStyleguideBinary       VFS
-	protocBinary              VFS
-	grpcCppBinary             VFS
-	grpc                      bool
-	moduleTag                 STR
-	liteHeaders               bool
-	extraPlugins              []ResolvedCPPProtoPlugin
-	blocks                    PbArgBlocks
 	spec                      *ProtoSpec
 	pbRef                     NodeRef
 }
@@ -245,14 +248,20 @@ func (p *protoPBPending) emitPending() {
 
 	*p = protoPBPending{}
 
-	imports := s.scanner.walkClosure(s.protoVFS, s.scanCtx, scanDomainProto)
-	depRefs := resolveCodegenDepRefsInclView(s.ctx, s.instance, s.ctx.na, imports, s.extraProtoDeps...)
+	c := s.common
+	var depRefs []NodeRef
+
+	if s.extraProtoDep != 0 {
+		depRefs = resolveCodegenDepRefsInclView(c.ctx, c.instance, c.ctx.na, s.imports, s.extraProtoDep)
+	} else {
+		depRefs = resolveCodegenDepRefsInclView(c.ctx, c.instance, c.ctx.na, s.imports)
+	}
 
 	emitPB(
-		s.instance, s.protoRelPath, s.protoSrcOverride, s.cppStyleguideLDRef, s.protocLDRef,
-		s.grpcCppLDRef, s.cppStyleguideBinary, s.protocBinary, s.grpcCppBinary,
-		s.grpc, s.moduleTag, s.liteHeaders, s.extraPlugins, imports, depRefs,
-		s.protoProducerSourceInputs, s.blocks, s.spec, s.pbRef, s.ctx.emit,
+		c.instance, s.protoRelPath, s.protoSrcOverride, c.cppStyleguideLDRef, c.protocLDRef,
+		c.grpcCppLDRef, c.cppStyleguideBinary, c.protocBinary, c.grpcCppBinary,
+		c.grpc, c.moduleTag, c.liteHeaders, c.extraPlugins, s.imports, depRefs,
+		s.protoProducerSourceInputs, c.blocks, s.spec, s.pbRef, c.ctx.emit,
 	)
 }
 
@@ -324,6 +333,14 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 	pe.blocks = composePBArgBlocks(ctx.emit.nodeArenas(), d.tc, pe.protocBinary, pe.cppStyleguideBinary, pe.grpcCppBinary,
 		cfg.grpc, cfg.cppOutRoot, pe.liteHeaders,
 		d.protocFlags, pe.extraPlugins, protoInclude)
+	pe.pendingCommon = na.protoPBC.one()
+	*pe.pendingCommon = protoPBCommon{
+		ctx: ctx, instance: e.instance,
+		cppStyleguideLDRef: pe.cppStyleguideLDRef, protocLDRef: pe.protocLDRef, grpcCppLDRef: pe.grpcCppLDRef,
+		cppStyleguideBinary: pe.cppStyleguideBinary, protocBinary: pe.protocBinary, grpcCppBinary: pe.grpcCppBinary,
+		liteHeaders: pe.liteHeaders, grpc: cfg.grpc, moduleTag: cfg.moduleTag,
+		extraPlugins: pe.extraPlugins, blocks: pe.blocks,
+	}
 
 	pe.searchPaths = d.cc.ProtoInclude
 
@@ -342,14 +359,14 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	scanCtx := d.scanCtx
 
 	var protoSrcOverride VFS
-	var extraProtoDeps []NodeRef
+	var extraProtoDep NodeRef
 	var protoProducerSourceInputs []VFS
 	var genProtoParsed []IncludeDirective
 
 	if info := e.codegen.use(buildProto); info != nil {
 		protoSrcOverride = buildProto
 		protoVFS = buildProto
-		extraProtoDeps = []NodeRef{info.ProducerRef}
+		extraProtoDep = info.ProducerRef
 		protoProducerSourceInputs = info.SourceInputs
 		genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
 	}
@@ -359,13 +376,10 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pending := ctx.na.protoPB.one()
 
 	*pending = protoPBPending{
-		ctx: ctx, instance: instance, scanner: e.scanner, scanCtx: scanCtx,
-		protoVFS: protoVFS, protoRelPath: protoRelPath, protoSrcOverride: protoSrcOverride,
-		extraProtoDeps: extraProtoDeps, protoProducerSourceInputs: protoProducerSourceInputs,
-		cppStyleguideLDRef: pe.cppStyleguideLDRef, protocLDRef: pe.protocLDRef, grpcCppLDRef: pe.grpcCppLDRef,
-		cppStyleguideBinary: pe.cppStyleguideBinary, protocBinary: pe.protocBinary, grpcCppBinary: pe.grpcCppBinary,
-		grpc: cfg.grpc, moduleTag: cfg.moduleTag, liteHeaders: pe.liteHeaders,
-		extraPlugins: pe.extraPlugins, blocks: pe.blocks, spec: spec, pbRef: pbRef,
+		common: pe.pendingCommon, imports: transitiveImports,
+		protoRelPath: protoRelPath, protoSrcOverride: protoSrcOverride,
+		extraProtoDep: extraProtoDep, protoProducerSourceInputs: protoProducerSourceInputs,
+		spec: spec, pbRef: pbRef,
 	}
 	pbPE := ctx.na.pendingEmitter(pending)
 

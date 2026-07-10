@@ -15,6 +15,7 @@ type EmitContext struct {
 	scanner      *IncludeScanner
 	codegen      *CodegenRegistry
 	srcs         []SrcMeta
+	srcHead      int
 	srcsClosed   bool
 	refs         []NodeRef
 	outs         []VFS
@@ -218,10 +219,11 @@ func (e *EmitContext) emit() {
 	finalized := e.producersOnly()
 
 	for {
-		for len(e.srcs) > 0 {
-			meta := e.srcs[0]
+		for e.srcHead < len(e.srcs) {
+			meta := e.srcs[e.srcHead]
 
-			e.srcs = e.srcs[1:]
+			e.srcs[e.srcHead] = SrcMeta{}
+			e.srcHead++
 			e.emitOneSource(meta)
 		}
 
