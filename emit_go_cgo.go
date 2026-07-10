@@ -223,6 +223,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 
 		ctx.emit.emitReservedNode(node, ref)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     dstVFS,
@@ -230,7 +231,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 		ProducerRef:    ref,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[parsedIncludesLocal]},
 		ClosureLeaves:  leafBlock[:nl:nl],
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 }
 

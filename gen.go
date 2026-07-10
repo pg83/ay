@@ -808,41 +808,32 @@ type ResolvedPeer struct {
 }
 
 func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccOwn, ccPeer, fullPeer, protoInclude []VFS) *ScanContext {
-	asmOwn := ccOwn
-
-	if len(d.asmAddIncl) > 0 {
-		asmOwn = dedup(ccOwn, d.asmAddIncl)
-	}
-
-	cythonOwn := appendCythonScanAddIncl(ccOwn, d.cythonAddIncl, cythonUsesPy23Variant(d.moduleStmt.Name))
-	protoOwn := make([]VFS, 0, 2+len(protoInclude))
-
-	protoOwn = append(protoOwn, pbRuntimeBaseVFS)
-
-	if root := protoCPPOutRoot(d); root != "" {
-		protoOwn = append(protoOwn, source(root))
-	}
-
-	protoOwn = append(protoOwn, protoInclude...)
-	joinPeer := ccPeer
-
-	if instance.Platform.ISA == ISAX8664 {
-		joinPeer = rebasePerArchPeerAddIncl(ccPeer, instance.Platform.ISA, ctx.target.ISA)
-	}
-
 	domains := [scanDomainCount]ScanDomainPaths{
 		scanDomainCC:         {OwnAddIncl: ccOwn, PeerAddInclSet: ccPeer},
-		scanDomainAsm:        {OwnAddIncl: asmOwn, PeerAddInclSet: ccPeer},
-		scanDomainCython:     {OwnAddIncl: cythonOwn, PeerAddInclSet: ccPeer},
-		scanDomainProto:      {OwnAddIncl: protoOwn},
+		scanDomainAsm:        {OwnAddIncl: ccOwn, PeerAddInclSet: ccPeer},
+		scanDomainCython:     {OwnAddIncl: ccOwn, PeerAddInclSet: ccPeer},
+		scanDomainProto:      {},
 		scanDomainAux:        {OwnAddIncl: ccOwn, PeerAddInclSet: fullPeer},
 		scanDomainFlatc:      {},
 		scanDomainGoAsm:      {OwnAddIncl: goAsmIncludeDirs},
 		scanDomainSwig:       {OwnAddIncl: swigAddIncls},
-		scanDomainJoinTarget: {OwnAddIncl: ccOwn, PeerAddInclSet: joinPeer},
+		scanDomainJoinTarget: {OwnAddIncl: ccOwn, PeerAddInclSet: ccPeer},
 	}
 
-	return newScanContext(ctx.na, ctx.parsers, domains, includeScannerBasePaths())
+	scanCtx := newScanContext(ctx.na, ctx.parsers, domains, includeScannerBasePaths())
+	scanCtx.ready &^= 1<<scanDomainAsm | 1<<scanDomainCython | 1<<scanDomainProto | 1<<scanDomainJoinTarget
+	scanCtx.asmAddIncl = ctx.na.vfsList(d.asmAddIncl...)
+	scanCtx.cythonAddIncl = ctx.na.vfsList(d.cythonAddIncl...)
+	scanCtx.protoInclude = ctx.na.vfsList(protoInclude...)
+	scanCtx.cythonPy23 = cythonUsesPy23Variant(d.moduleStmt.Name)
+	scanCtx.joinFrom = instance.Platform.ISA
+	scanCtx.joinTo = ctx.target.ISA
+
+	if root := protoCPPOutRoot(d); root != "" {
+		scanCtx.protoOutRoot = source(root)
+	}
+
+	return scanCtx
 }
 
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {

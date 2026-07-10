@@ -78,13 +78,14 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 			Resources:    usesPython3,
 		}, svRef)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    outVFS,
 		ProducerRef:   svRef,
 		SourceInputs:  sourceInputs,
 		ClosureLeaves: sourceInputs,
-		OnUse:         &pe,
+		OnUse:         pending,
 	})
 
 	return svRef

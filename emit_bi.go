@@ -99,6 +99,7 @@ func (e *EmitContext) emitBuildInfoStmt() {
 	pe := func() {
 		emitBIReserved(instance, createFor, biFlagsForInstance(instance.Platform), tc, ctx.emit, biRef)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
@@ -108,6 +109,6 @@ func (e *EmitContext) emitBuildInfoStmt() {
 			IncludeDirective{kind: includeQuoted, target: includeTarget(buildInfoGenPyVFS.rel().any())},
 			IncludeDirective{kind: includeQuoted, target: includeTarget(xargsPyVFS.rel().any())},
 			IncludeDirective{kind: includeQuoted, target: includeTarget(yieldLinePyVFS.rel().any())})},
-		OnUse: &pe,
+		OnUse: pending,
 	})
 }

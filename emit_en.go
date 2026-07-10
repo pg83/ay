@@ -65,8 +65,6 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	slices.SortFunc(cppParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
-	var cppInfo, hInfo *GeneratedFileInfo
-
 	var moduleTag STR
 
 	if d.moduleStmt.Name == tokProtoLibrary {
@@ -74,17 +72,19 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	}
 
 	scanner := e.scanner
+	codegen := e.codegen
 
 	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq})
 
-	pe := func() {
+	pe := ctx.na.pendingEmit(func() {
 		enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
 		generatorRefs := ctx.na.refList(enumParserLD)
+		cppInfo := codegen.lookup(serializedCPPPath)
 
 		cppInfo.GeneratorRefs = generatorRefs
 
-		if hInfo != nil {
-			hInfo.GeneratorRefs = generatorRefs
+		if withHeader {
+			codegen.lookup(serializedHPath).GeneratorRefs = generatorRefs
 		}
 
 		headerClosure := scanner.walkClosure(headerInput, scanCtx, scanDomainAux)
@@ -115,14 +115,14 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			enRef,
 			ctx.emit,
 		)
-	}
+	})
 
-	cppInfo = e.register(GeneratedFileInfo{
+	e.register(GeneratedFileInfo{
 		OutputPath:     serializedCPPPath,
 		SourcePath:     headerInput,
 		ProducerRef:    enRef,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
-		OnUse:          &pe,
+		OnUse:          pe,
 	})
 
 	if withHeader {
@@ -132,12 +132,12 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 		slices.SortFunc(hParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
-		hInfo = e.register(GeneratedFileInfo{
+		e.register(GeneratedFileInfo{
 			OutputPath:     serializedHPath,
 			SourcePath:     headerInput,
 			ProducerRef:    enRef,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: hParsed},
-			OnUse:          &pe,
+			OnUse:          pe,
 		})
 	}
 }

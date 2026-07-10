@@ -189,13 +189,15 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	ctx.na.vfs.commit(len(headerLeaves))
 	headerLeaves = headerLeaves[:len(headerLeaves):len(headerLeaves)]
 
+	pending := e.ctx.na.pendingEmit(pe)
+
 	e.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    flRef,
 		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerIncludes},
 		ClosureLeaves:  headerLeaves,
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	cppIncludes := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
@@ -206,14 +208,14 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 		ProducerRef:    flRef,
 		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppIncludes},
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    bfbsVFS,
 		ProducerRef:   flRef,
 		GeneratorRefs: e.ctx.na.refList(flatcLDRef),
-		OnUse:         &pe,
+		OnUse:         pending,
 	})
 }
 

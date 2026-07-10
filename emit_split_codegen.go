@@ -90,13 +90,15 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		ctx.emit.emitReservedNode(node, scRef)
 	}
 
+	pending := e.ctx.na.pendingEmit(pe)
+
 	e.register(GeneratedFileInfo{
 		OutputPath:     prefixH,
 		ProducerRef:    scRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 		ClosureLeaves:  e.ctx.na.vfsList(part0, inputIn),
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	e.register(GeneratedFileInfo{
@@ -104,7 +106,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		ProducerRef:    scRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	for i, partRel := range partRels {
@@ -113,7 +115,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 			ProducerRef:    scRef,
 			GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
-			OnUse:          &pe,
+			OnUse:          pending,
 		}
 
 		if i == 0 {

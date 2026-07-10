@@ -70,6 +70,7 @@ func (e *EmitContext) emitSwigC() {
 				Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			}, swRef)
 		}
+		pending := e.ctx.na.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{
 			OutputPath:     cOutVFS,
@@ -77,7 +78,7 @@ func (e *EmitContext) emitSwigC() {
 			GeneratorRefs:  e.ctx.na.refList(swigRef),
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(ctx, srcVFS, swigClosure)},
 			ClosureLeaves:  append(append([]VFS{}, swigClosure...), srcVFS),
-			OnUse:          &pe,
+			OnUse:          pending,
 		})
 
 		swigSourceInputs := na.vfs.alloc(2 + len(swigClosure))
@@ -96,7 +97,7 @@ func (e *EmitContext) emitSwigC() {
 			ProducerRef:   swRef,
 			GeneratorRefs: e.ctx.na.refList(swigRef),
 			SourceInputs:  swigSourceInputs,
-			OnUse:         &pe,
+			OnUse:         pending,
 		})
 
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{

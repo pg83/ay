@@ -158,12 +158,14 @@ func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 		}, ycRef)
 	}
 
+	pending := e.ctx.na.pendingEmit(pe)
+
 	e.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	var generatedParsed []IncludeDirective
@@ -187,7 +189,7 @@ func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 		ProducerRef:    ycRef,
 		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: generatedParsed},
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	return cf[:len(cf):len(cf)]

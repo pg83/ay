@@ -70,12 +70,13 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 
 		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef, ctx.emit)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     genVFS,
 		ProducerRef:    gpRef,
 		GeneratorRefs:  e.ctx.na.refList(gperfLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})},
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 }

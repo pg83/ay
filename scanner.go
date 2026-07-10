@@ -131,7 +131,21 @@ const (
 	scanDomainCount
 )
 
-type ScanContext [scanDomainCount]*ScanConfig
+type ScanContext struct {
+	configs [scanDomainCount]*ScanConfig
+	domains [scanDomainCount]ScanDomainPaths
+	base    []VFS
+	parsers *IncludeParserManager
+	ready   uint16
+
+	asmAddIncl    []VFS
+	cythonAddIncl []VFS
+	protoInclude  []VFS
+	protoOutRoot  VFS
+	cythonPy23    bool
+	joinFrom      ISA
+	joinTo        ISA
+}
 
 type ScanConfig struct {
 	num             uint32
@@ -149,20 +163,65 @@ type ScanDomainPaths struct {
 func newScanContext(na *NodeArenas, pm *IncludeParserManager, domains [scanDomainCount]ScanDomainPaths, base []VFS) *ScanContext {
 	ctx := na.scanContext()
 
-	for domain := range domains {
-		paths := &domains[domain]
-
-		ctx[domain] = pm.resolveScanConfig(paths.OwnAddIncl, paths.PeerAddInclSet, base)
-	}
+	*ctx = ScanContext{domains: domains, base: base, parsers: pm, ready: (1 << scanDomainCount) - 1}
 
 	return ctx
+}
+
+func (ctx *ScanContext) modulePaths(domain ScanDomain) *ScanDomainPaths {
+	paths := &ctx.domains[domain]
+	bit := uint16(1) << domain
+
+	if ctx.ready&bit != 0 {
+		return paths
+	}
+
+	switch domain {
+	case scanDomainAsm:
+		if len(ctx.asmAddIncl) > 0 {
+			paths.OwnAddIncl = dedup(paths.OwnAddIncl, ctx.asmAddIncl)
+		}
+	case scanDomainCython:
+		paths.OwnAddIncl = appendCythonScanAddIncl(paths.OwnAddIncl, ctx.cythonAddIncl, ctx.cythonPy23)
+	case scanDomainProto:
+		own := make([]VFS, 0, 2+len(ctx.protoInclude))
+
+		own = append(own, pbRuntimeBaseVFS)
+
+		if ctx.protoOutRoot != 0 {
+			own = append(own, ctx.protoOutRoot)
+		}
+
+		paths.OwnAddIncl = append(own, ctx.protoInclude...)
+	case scanDomainJoinTarget:
+		if ctx.joinFrom == ISAX8664 {
+			paths.PeerAddInclSet = rebasePerArchPeerAddIncl(paths.PeerAddInclSet, ctx.joinFrom, ctx.joinTo)
+		}
+	}
+
+	ctx.ready |= bit
+
+	return paths
+}
+
+func (ctx *ScanContext) config(domain ScanDomain) *ScanConfig {
+	cfg := ctx.configs[domain]
+
+	if cfg == nil {
+		paths := ctx.modulePaths(domain)
+
+		cfg = ctx.parsers.resolveScanConfig(paths.OwnAddIncl, paths.PeerAddInclSet, ctx.base)
+		ctx.configs[domain] = cfg
+	}
+
+	return cfg
 }
 
 func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser IncludeDirectiveParser) *ScanCtx {
 	sc := s.scanCtxPool.Get().(*ScanCtx)
 
 	sc.scanner = s
-	sc.cfg = ctx[domain]
+	sc.cfg = ctx.config(domain)
 	sc.parser = parser
 	sc.tjc = tarjans.get()
 
@@ -622,36 +681,33 @@ func buildCfgResolveIndex(cfg *ScanConfig) *CfgResolveIndex {
 
 	idx.indexable = true
 	idx.rank = newIntValueMap[int32](2 * (len(cfg.ownAddIncl) + len(cfg.peerAddInclSet)))
+	r := int32(0)
 
-	dedupers.with(func(deduper *DeDuper) {
-		r := int32(0)
-
-		add := func(p VFS) {
-			if !deduper.add(p.strID()) {
-				return
-			}
-
-			idx.rank.put(uint64(p), r)
-
-			if p.isBuild() {
-				idx.buildEntries = append(idx.buildEntries, CfgBuildAddincl{
-					prefix:    p,
-					prefixSrc: p.rel().source(),
-					rank:      int(r),
-				})
-			}
-
-			r++
+	add := func(p VFS) {
+		if idx.rank.get(uint64(p)) != nil {
+			return
 		}
 
-		for _, p := range cfg.ownAddIncl {
-			add(p)
+		idx.rank.put(uint64(p), r)
+
+		if p.isBuild() {
+			idx.buildEntries = append(idx.buildEntries, CfgBuildAddincl{
+				prefix:    p,
+				prefixSrc: p.rel().source(),
+				rank:      int(r),
+			})
 		}
 
-		for _, p := range cfg.peerAddInclSet {
-			add(p)
-		}
-	})
+		r++
+	}
+
+	for _, p := range cfg.ownAddIncl {
+		add(p)
+	}
+
+	for _, p := range cfg.peerAddInclSet {
+		add(p)
+	}
 
 	return idx
 }

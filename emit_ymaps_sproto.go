@@ -46,6 +46,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	pe := func() {
 		emitYmapsSprotoHeaderSnap(ctx, instance, scanner, pending, outRoot, sprotocLDRef, sprotocBinary, scanCtx)
 	}
+	onUse := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     sprotoH,
@@ -53,7 +54,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 		GeneratorRefs:  e.ctx.na.refList(sprotocLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 		ClosureLeaves:  e.ctx.na.vfsList(source(protoRelPath)),
-		OnUse:          &pe,
+		OnUse:          onUse,
 	})
 }
 

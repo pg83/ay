@@ -10,19 +10,41 @@ type GeneratedFileInfo struct {
 	ProducerMainOut VFS
 	ClosureLeaves   []VFS
 	ParsedIncludes  ParsedIncludeSet
-	OnUse           *func()
+	OnUse           *PendingEmit
 }
 
-func fireOnUse(info *GeneratedFileInfo) {
-	if info == nil || info.OnUse == nil || *info.OnUse == nil {
+type pendingEmitter interface {
+	emitPending()
+}
+
+type PendingEmit struct {
+	fn      func()
+	emitter pendingEmitter
+}
+
+func (p *PendingEmit) fire() {
+	if p == nil || p.fn == nil && p.emitter == nil {
 		return
 	}
 
-	fn := *info.OnUse
+	fn, emitter := p.fn, p.emitter
 
-	*info.OnUse = nil
+	p.fn = nil
+	p.emitter = nil
 
-	fn()
+	if emitter != nil {
+		emitter.emitPending()
+	} else {
+		fn()
+	}
+}
+
+func fireOnUse(info *GeneratedFileInfo) {
+	if info == nil {
+		return
+	}
+
+	info.OnUse.fire()
 }
 
 type CodegenRegistry struct {

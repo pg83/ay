@@ -78,11 +78,13 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 		emitR5Reserved(instance, srcRel, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, r5Ref, ctx.emit)
 	}
 
+	pending := e.ctx.na.pendingEmit(pe)
+
 	e.register(GeneratedFileInfo{
 		OutputPath:    r5TmpOut,
 		ProducerRef:   r5Ref,
 		GeneratorRefs: e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
-		OnUse:         &pe,
+		OnUse:         pending,
 	})
 
 	r5Parsed := e.scanner.parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
@@ -92,7 +94,7 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 		ProducerRef:    r5Ref,
 		GeneratorRefs:  e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r5CppParsed(e.ctx.na, r5TmpOut, r5Parsed)},
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	meta.Source = r5CppOut.any()

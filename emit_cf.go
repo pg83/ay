@@ -74,6 +74,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 			Resources:    usesPython3,
 		}, cfRef)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
@@ -83,7 +84,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		SourceInputs:   na.vfsList(srcVFS, configureFilePyVFS),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cfTemplateParsedIncludes(ctx.parsers, srcVFS.relString())},
 		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, configureFilePyVFS),
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	return cfRef

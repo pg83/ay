@@ -60,13 +60,14 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 
 		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
 		ProducerRef:    lxRef,
 		GeneratorRefs:  e.ctx.na.refList(flexRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 }
 

@@ -75,9 +75,10 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 	pe := func() {
 		emitCopyFileNodeSnap(ctx, instance, scanner, scanCtx, moduleTag, tc, entry, st)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	if info != nil {
-		info.OnUse = &pe
+		info.OnUse = pending
 	}
 }
 

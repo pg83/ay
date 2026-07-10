@@ -1,11 +1,14 @@
 package main
 
 type TarjanScratch struct {
-	stamp   Vec[uint32]
-	index   []int32
-	low     []int32
-	onStack BitSet
-	epoch   uint32
+	slots map[VFS]int
+	nodes []tarjanNode
+}
+
+type tarjanNode struct {
+	index   int32
+	low     int32
+	onStack bool
 }
 
 type TarjanCtx struct {
@@ -23,74 +26,51 @@ type TarjanCtx struct {
 	emitFn   func([]VFS) int
 }
 
-func (t *TarjanScratch) reset(size uint32) {
-	if t.stamp.freshLen(int(size)) {
-		t.index = make([]int32, t.stamp.len())
-		t.low = make([]int32, t.stamp.len())
-		t.onStack = BitSet{}
-		t.epoch = 1
-
-		return
+func (t *TarjanScratch) reset(uint32) {
+	if t.slots == nil {
+		t.slots = make(map[VFS]int, 512)
+	} else {
+		clear(t.slots)
 	}
 
-	t.epoch++
-
-	if t.epoch == 0 {
-		clear(t.stamp.s)
-
-		t.epoch = 1
-	}
+	t.nodes = t.nodes[:0]
 }
 
 func (t *TarjanScratch) visited(v VFS) bool {
-	id := uint32(v)
+	_, ok := t.slots[v]
 
-	return id < uint32(t.stamp.len()) && t.stamp.s[id] == t.epoch
+	return ok
 }
 
 func (t *TarjanScratch) discover(v VFS, idx int32) {
-	id := uint32(v)
-
-	if int(id) >= t.stamp.len() {
-		t.stamp.ensureLen(int(id) + 1)
-
-		grown := make([]int32, t.stamp.len())
-
-		copy(grown, t.index)
-		t.index = grown
-		grown = make([]int32, t.stamp.len())
-		copy(grown, t.low)
-		t.low = grown
-	}
-
-	t.stamp.s[id] = t.epoch
-	t.index[id] = idx
-	t.low[id] = idx
-	t.onStack.add(id)
+	t.slots[v] = len(t.nodes)
+	t.nodes = append(t.nodes, tarjanNode{index: idx, low: idx, onStack: true})
 }
 
 func (t *TarjanScratch) onStackHas(v VFS) bool {
-	return t.visited(v) && t.onStack.has(uint32(v))
+	i, ok := t.slots[v]
+
+	return ok && t.nodes[i].onStack
 }
 
 func (t *TarjanScratch) lowOf(v VFS) int32 {
-	return t.low[uint32(v)]
+	return t.nodes[t.slots[v]].low
 }
 
 func (t *TarjanScratch) indexOf(v VFS) int32 {
-	return t.index[uint32(v)]
+	return t.nodes[t.slots[v]].index
 }
 
 func (t *TarjanScratch) setLow(v VFS, x int32) {
-	t.low[uint32(v)] = x
+	t.nodes[t.slots[v]].low = x
 }
 
 func (t *TarjanScratch) onStackOf(v VFS) bool {
-	return t.onStack.has(uint32(v))
+	return t.nodes[t.slots[v]].onStack
 }
 
 func (t *TarjanScratch) setOnStack(v VFS, b bool) {
-	t.onStack.set(uint32(v), b)
+	t.nodes[t.slots[v]].onStack = b
 }
 
 type ClosureSink interface {

@@ -148,6 +148,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			ctx.emit.emitReservedNode(pendNodes[i], pendRefs[i])
 		}
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	if stmt.GenerateMachineCode {
 		return
@@ -157,7 +158,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		OutputPath:    optOut,
 		ProducerRef:   opRef,
 		GeneratorRefs: nil,
-		OnUse:         &pe,
+		OnUse:         pending,
 	})
 
 	e.resources = append(e.resources, ResourceEntry{
