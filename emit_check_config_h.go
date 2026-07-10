@@ -21,7 +21,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 	env := envVarsVCS
 	chRef := ctx.emit.reserve()
 	scanner := e.scanner
-	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+	scanCfg := d.cc.ScanCfg
 	python3 := d.tc.Python3
 
 	pe := func() {

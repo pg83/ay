@@ -182,7 +182,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 	na.vfs.commit(nl)
 
 	scanner := e.scanner
-	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+	scanCfg := d.cc.ScanCfg
 
 	pe := func() {
 		cv := walkClosure(scanner, srcVFS, scanCfg)

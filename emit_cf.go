@@ -50,7 +50,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	cfRef := ctx.emit.reserve()
 
 	scanner := e.scanner
-	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+	scanCfg := d.cc.ScanCfg
 
 	pe := func() {
 		cmdArgs := na.anys.alloc(4 + len(cfgVars))[:0]

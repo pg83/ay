@@ -15,7 +15,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 	parsed := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil)
 
 	scanner := e.scanner
-	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+	scanCfg := d.cc.ScanCfg
 
 	pe := func() {
 		cv := walkClosure(scanner, srcVFS, scanCfg)

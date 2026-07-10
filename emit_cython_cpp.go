@@ -153,7 +153,13 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 
 		srcVFS := source(instance.Path.relString(), "/", stmt.Src)
 		scanAddIncl := appendCythonScanAddIncl(d.cc.AddIncl, d.cythonAddIncl, py23Variant)
-		srcScanIn := snapshotScanCfg(ctx.na, newScanContext(ctx.parsers, scanAddIncl, d.cc.PeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString()))
+		srcScanIn := newScanContext(
+			ctx.parsers,
+			ctx.na.vfsList(scanAddIncl...),
+			d.cc.PeerAddInclGlobal,
+			includeScannerBasePaths(),
+			instance.Path.relString(),
+		)
 		ind := e.cythonCppInducedSets(srcVFS, stmt.CMode, srcScanIn)
 		cyRef := ctx.emit.reserve()
 
