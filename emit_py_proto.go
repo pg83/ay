@@ -58,7 +58,6 @@ type PyPBModuleEmission struct {
 	head         []ANY
 	mid          []ANY
 	tail         []ANY
-	scanCfg      *ScanContext
 }
 
 func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS, duplicateOutputRootInclude bool) *PyPBModuleEmission {
@@ -173,8 +172,6 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 
 	na.anys.commit(len(tail))
 	pe.tail = tail[:len(tail):len(tail)]
-	pe.scanCfg = d.cc.ScanCfg
-
 	return pe
 }
 
@@ -190,6 +187,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	}
 
 	pe := e.newPyPBModuleEmission(protocBinary, e.peers.ProtoInclude, duplicateOutputRootInclude)
+	scanCtx := d.scanCtx
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pyOut := build(protoBase, "__intpy3___pb2.py")
@@ -264,7 +262,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		generatedProto = true
 	}
 
-	transitive := walkClosure(e.scanner, source(protoRelPath), pe.scanCfg, scanDomainProto)
+	transitive := e.scanner.walkClosure(source(protoRelPath), scanCtx, scanDomainProto)
 	inputs := na.vfs.alloc(5 + len(producerSourceInputs))[:0]
 
 	inputs = append(inputs, protocBinary, pbPyWrapperVFS, protoSrcVFS)
@@ -308,10 +306,9 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	pyPBRef := ctx.emit.reserve()
 	scanner := e.scanner
-	scanCfg := pe.scanCfg
 
 	pyPBPE := func() {
-		buckets := walkClosure(scanner, source(protoRelPath), scanCfg, scanDomainProto).buckets
+		buckets := scanner.walkClosure(source(protoRelPath), scanCtx, scanDomainProto).buckets
 
 		pyPBNode := Node{
 			Platform:     instance.Platform,
@@ -597,7 +594,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) (
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 	})
 
-	return walkClosure(e.scanner, aux, d.cc.ScanCfg, scanDomainAux), CompileSpec{
+	return e.scanner.walkClosure(aux, d.scanCtx, scanDomainAux), CompileSpec{
 		ForceCxx:  true,
 		Py3Suffix: pyProtoAuxPy3Suffix(d),
 		CFlags:    e.ctx.na.anyList(argX.any(), argC.any()),

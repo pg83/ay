@@ -698,7 +698,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			it := ResourceItem{Path: entry.Path, Key: entry.Key, Input: r.Input}
 
 			if r.ProducerRef != 0 {
-				cv := walkClosure(e.scanner, r.Input, d.cc.ScanCfg, scanDomainCC)
+				cv := e.scanner.walkClosure(r.Input, d.scanCtx, scanDomainCC)
 				aux := na.vfs.alloc(cv.len() + len(r.SourceInputs) + 1)[:0]
 
 				eachBucketVFS(cv.buckets, func(v VFS) {

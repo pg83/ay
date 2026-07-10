@@ -50,7 +50,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	cfRef := ctx.emit.reserve()
 
 	scanner := e.scanner
-	scanCfg := d.cc.ScanCfg
+	scanCtx := d.scanCtx
 
 	pe := func() {
 		cmdArgs := na.anys.alloc(4 + len(cfgVars))[:0]
@@ -61,7 +61,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 
 		cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
-		cv := walkClosure(scanner, srcVFS, scanCfg, scanDomainCC)
+		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
 
 		ctx.emit.emitReservedNode(Node{
 			Platform:     instance.Platform,

@@ -21,11 +21,11 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 	env := envVarsVCS
 	chRef := ctx.emit.reserve()
 	scanner := e.scanner
-	scanCfg := d.cc.ScanCfg
+	scanCtx := d.scanCtx
 	python3 := d.tc.Python3
 
 	pe := func() {
-		cv := walkClosure(scanner, confVFS, scanCfg, scanDomainCC)
+		cv := scanner.walkClosure(confVFS, scanCtx, scanDomainCC)
 
 		ctx.emit.emitReservedNode(Node{
 			Platform: ctx.target,

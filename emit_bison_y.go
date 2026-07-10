@@ -92,7 +92,7 @@ func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 	preprocessEnv := envVarsVCS
 	python3 := d.cc.TC.Python3
 	scanner := e.scanner
-	scanCfg := d.cc.ScanCfg
+	scanCtx := d.scanCtx
 	head := na.anys.alloc(6 + len(d.cc.BisonFlags))[:0]
 
 	head = append(head, bisonBin.any(), argV.any())
@@ -122,7 +122,7 @@ func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 			inputs = ext[:len(ext):len(ext)]
 
 			for _, sk := range bisonCppSkeletonInputs {
-				skCV := walkClosure(scanner, sk, scanCfg, scanDomainCC)
+				skCV := scanner.walkClosure(sk, scanCtx, scanDomainCC)
 
 				inputs = na.dedupClosure(inputs, skCV.buckets)
 			}

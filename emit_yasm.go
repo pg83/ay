@@ -111,7 +111,7 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta, in ModuleCCInputs) {
 		asIn.AddIncl = scanIn.AddIncl
 	}
 
-	asIn.IncludeView = walkClosure(e.scanner, srcVFS, scanIn.ScanCfg, scanDomainAsm)
+	asIn.IncludeView = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainAsm)
 	asIn.ExtraDepRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, asIn.IncludeView)
 
 	yasmLD, _ := ctx.tool(argContribToolsYasm)

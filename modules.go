@@ -245,6 +245,7 @@ type ModuleData struct {
 	inducedDeps              ParsedIncludeSet
 	setVars                  map[STR]STR
 	tc                       ModuleToolchain
+	scanCtx                  *ScanContext
 	cc                       ModuleCompileEnv
 }
 

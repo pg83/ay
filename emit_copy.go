@@ -60,7 +60,7 @@ type CopyEmitState struct {
 func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 	st, info := e.registerCopyFile(entry)
 	ctx, instance, scanner := e.ctx, e.instance, e.scanner
-	scanCfg := e.d.cc.ScanCfg
+	scanCtx := e.d.scanCtx
 	moduleTag := e.d.cc.ModuleTag
 	tc := e.d.tc
 	demanded := instance.Demand != demandNone
@@ -73,7 +73,7 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 	// as its return value — register() there happens before pe can exist,
 	// and is skipped entirely on the merge-existing-dst path (info == nil).
 	pe := func() {
-		emitCopyFileNodeSnap(ctx, instance, scanner, scanCfg, moduleTag, tc, entry, st)
+		emitCopyFileNodeSnap(ctx, instance, scanner, scanCtx, moduleTag, tc, entry, st)
 	}
 
 	if info != nil {
@@ -83,7 +83,6 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 
 func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *GeneratedFileInfo) {
 	ctx, instance := e.ctx, e.instance
-	scanner := e.scanner
 	reg := e.codegen
 	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
 	dstVFS := copyFileOutputVFS(instance.Path.relString(), entry.Dst)
@@ -92,7 +91,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 		e.requireProducedInput("COPY_FILE src", entry.Src, srcVFS)
 	}
 
-	parsed := copyFileParsedIncludes(ctx.na, scanner, ctx.fs, instance.Path, entry)
+	parsed := copyFileParsedIncludes(ctx.na, e.scanner, ctx.fs, instance.Path, entry)
 	ref := ctx.emit.reserve()
 
 	var producerSource []VFS
@@ -155,13 +154,13 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	return CopyEmitState{srcVFS: srcVFS, dstVFS: dstVFS, ref: ref, producerSource: producerSource}, nil
 }
 
-func emitCopyFileNodeSnap(ctx *GenCtx, instance ModuleInstance, scanner *IncludeScanner, scanCfg *ScanContext, moduleTag STR, tc ModuleToolchain, entry CopyFileEntry, st CopyEmitState) {
+func emitCopyFileNodeSnap(ctx *GenCtx, instance ModuleInstance, scanner *IncludeScanner, scanCtx *ScanContext, moduleTag STR, tc ModuleToolchain, entry CopyFileEntry, st CopyEmitState) {
 	deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{st.srcVFS})
 
 	var closure []VFS
 
 	if entry.WithContext || len(entry.OutputIncludes) > 0 {
-		raw := rewriteClosureCPSource(ctx.na, scanner, walkClosure(scanner, st.dstVFS, scanCfg, scanDomainCC))
+		raw := rewriteClosureCPSource(ctx.na, scanner, scanner.walkClosure(st.dstVFS, scanCtx, scanDomainCC))
 
 		raw = filterSourceVFS(ctx.na, raw)
 

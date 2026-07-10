@@ -63,10 +63,10 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 	e.enqueueSrc(meta)
 
 	scanner := e.scanner
-	scanCfg := d.cc.ScanCfg
+	scanCtx := d.scanCtx
 
 	pe := func() {
-		srcInputs := walkClosure(scanner, srcVFS, scanCfg, scanDomainCC).collect(ctx.na, func(v VFS) bool { return v.isSource() })
+		srcInputs := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC).collect(ctx.na, func(v VFS) bool { return v.isSource() })
 
 		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef, ctx.emit)
 	}

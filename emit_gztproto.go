@@ -15,7 +15,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	genProtoName := base + ".proto"
 	genProto := build(moddir, "/", genProtoName)
 	converterRef, converterBin := ctx.tool(argDictGazetteerConverter)
-	imports := walkClosure(e.scanner, gztSource, d.cc.ScanCfg, scanDomainProto)
+	imports := e.scanner.walkClosure(gztSource, d.scanCtx, scanDomainProto)
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS

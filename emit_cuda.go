@@ -28,9 +28,8 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, ".o")
 	blocks := in.CCBlocks
-	scanner := e.scanner
-	srcCV := walkClosure(scanner, srcVFS, in.ScanCfg, scanDomainCC)
-	runtimeCV := walkClosure(scanner, cudaRuntimeIncludeVFS, in.ScanCfg, scanDomainCC)
+	srcCV := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
+	runtimeCV := e.scanner.walkClosure(cudaRuntimeIncludeVFS, d.scanCtx, scanDomainCC)
 	closure := na.dedupClosure([]VFS{srcCV.self, runtimeCV.self}, srcCV.buckets, runtimeCV.buckets)
 	mtimeRef, mtimeVFS := ctx.tool(cudaMtimeArg)
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)

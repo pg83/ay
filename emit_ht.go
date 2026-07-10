@@ -15,10 +15,10 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 	parsed := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil)
 
 	scanner := e.scanner
-	scanCfg := d.cc.ScanCfg
+	scanCtx := d.scanCtx
 
 	pe := func() {
-		cv := walkClosure(scanner, srcVFS, scanCfg, scanDomainCC)
+		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
 		block := na.vfs.alloc(2 + cv.len())
 		k := 0
 
