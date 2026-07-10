@@ -633,7 +633,7 @@ func (d *ModuleData) materializeAddIncl() {
 	d.addInclP = nil
 }
 
-func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn), d *ModuleData) *ModuleData {
+func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn), d *ModuleData) *ModuleData {
 	fs := pm.fs
 	modulePath := instance.Path.relString()
 	kind := instance.Kind
@@ -669,7 +669,9 @@ func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleIns
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
 	d.cfAddIncl = nil
 	d.cfAddInclGlobal = nil
-	filterInvalidAddIncl(fs, dd, d, modulePath, onWarn)
+	dedupers.with(func(deduper *DeDuper) {
+		filterInvalidAddIncl(fs, deduper, d, modulePath, onWarn)
+	})
 
 	if d.unit.Tag == unitTagPy3BinLib {
 		d.pyMain = nil
@@ -706,8 +708,10 @@ func collectModuleInto(pm *IncludeParserManager, dd *DeDuper, instance ModuleIns
 		d.moduleScopeCFlags = grown
 	}
 
-	d.addIncl = dedupInPlace(d.addIncl)
-	d.addInclGlobal = dedupInPlace(d.addInclGlobal)
+	dedupers.with(func(deduper *DeDuper) {
+		d.addIncl = dedupInPlaceWith(deduper, d.addIncl)
+		d.addInclGlobal = dedupInPlaceWith(deduper, d.addInclGlobal)
+	})
 
 	for _, a := range d.addIncl {
 		pm.indexAddincl(a)

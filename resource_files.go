@@ -116,23 +116,21 @@ func expandAllResourceFiles(d *ModuleData, out []ResourceEntry, fs FS, modulePat
 
 	rfArgs = append(rfArgs, "STRIP", d.resStr4("${ARCADIA_ROOT}/", modulePath, "/", strip))
 
-	deduper := dedupers.get()
+	dedupers.with(func(deduper *DeDuper) {
+		for _, dir := range dirs {
+			rel, ok := allResourceDir(modulePath, expandStmtTokenAny(dir, env).string())
 
-	defer dedupers.put(deduper)
+			if !ok {
+				continue
+			}
 
-	for _, dir := range dirs {
-		rel, ok := allResourceDir(modulePath, expandStmtTokenAny(dir, env).string())
-
-		if !ok {
-			continue
-		}
-
-		for _, match := range globMatch(fs, rel+"/*"+suffix) {
-			if deduper.add(internStr(match).strID()) {
-				rfArgs = append(rfArgs, d.resStr2("${ARCADIA_ROOT}/", match))
+			for _, match := range globMatch(fs, rel+"/*"+suffix) {
+				if deduper.add(internStr(match).strID()) {
+					rfArgs = append(rfArgs, d.resStr2("${ARCADIA_ROOT}/", match))
+				}
 			}
 		}
-	}
+	})
 
 	return expandResourceFiles(d, out, rfArgs)
 }

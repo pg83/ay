@@ -170,71 +170,69 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 		return i
 	}
 
-	deduper := dedupers.get()
+	dedupers.with(func(deduper *DeDuper) {
+		for order := range set {
+			rec := &set[order]
 
-	defer dedupers.put(deduper)
-
-	for order := range set {
-		rec := &set[order]
-
-		for i := range rec.pairs {
-			if rec.pairs[i].key == 0 {
-				internStr(rec.pairs[i].keyCI)
-			}
-		}
-
-		deduper.reset()
-
-		for i := len(rec.pairs) - 1; i >= 0; i-- {
-			p := &rec.pairs[i]
-			id := p.key
-
-			if id == 0 {
-				id = internStr(p.keyCI)
+			for i := range rec.pairs {
+				if rec.pairs[i].key == 0 {
+					internStr(rec.pairs[i].keyCI)
+				}
 			}
 
-			if !deduper.add(id.strID()) {
-				p.paths = nil
-				p.key = 0
-				p.keyCI = ""
-			}
-		}
+			deduper.reset()
 
-		for _, p := range rec.pairs {
-			if p.key == 0 && p.keyCI == "" {
-				continue
+			for i := len(rec.pairs) - 1; i >= 0; i-- {
+				p := &rec.pairs[i]
+				id := p.key
+
+				if id == 0 {
+					id = internStr(p.keyCI)
+				}
+
+				if !deduper.add(id.strID()) {
+					p.paths = nil
+					p.key = 0
+					p.keyCI = ""
+				}
 			}
 
-			if p.key != 0 {
-				bi := bucketFor(strings.ToLower(p.key.string()))
+			for _, p := range rec.pairs {
+				if p.key == 0 && p.keyCI == "" {
+					continue
+				}
+
+				if p.key != 0 {
+					bi := bucketFor(strings.ToLower(p.key.string()))
+
+					m.buckets[bi] = arenaAppend(contribArena, m.buckets[bi], SysinclContribution{
+						paths:    p.paths,
+						filter:   rec.Filter,
+						rawKeyID: p.key,
+						ci:       false,
+						multi:    rec.HasMultiTarget,
+					})
+
+					m.byID.put(uint64(p.key), bi)
+
+					continue
+				}
+
+				ciID := internStr(p.keyCI)
+				bi := bucketFor(p.keyCI)
 
 				m.buckets[bi] = arenaAppend(contribArena, m.buckets[bi], SysinclContribution{
 					paths:    p.paths,
 					filter:   rec.Filter,
-					rawKeyID: p.key,
-					ci:       false,
+					rawKeyID: ciID,
+					ci:       true,
 					multi:    rec.HasMultiTarget,
 				})
 
-				m.byID.put(uint64(p.key), bi)
-
-				continue
+				m.byID.put(uint64(ciID), bi)
 			}
-
-			ciID := internStr(p.keyCI)
-			bi := bucketFor(p.keyCI)
-
-			m.buckets[bi] = arenaAppend(contribArena, m.buckets[bi], SysinclContribution{
-				paths:    p.paths,
-				filter:   rec.Filter,
-				rawKeyID: ciID,
-				ci:       true,
-				multi:    rec.HasMultiTarget,
-			})
-
-			m.byID.put(uint64(ciID), bi)
 		}
-	}
+	})
 
 	return m
 }

@@ -609,34 +609,34 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
-	head := na.vfs.alloc(1 + len(spec.auxTools) + len(spec.inVFSs))[:0]
-	deduper := dedupers.get()
+	var inputs InputChunks
 
-	defer dedupers.put(deduper)
+	dedupers.with(func(deduper *DeDuper) {
+		head := na.vfs.alloc(1 + len(spec.auxTools) + len(spec.inVFSs))[:0]
 
-	appendUnique := func(p VFS) {
-		if !deduper.add(p.strID()) {
-			return
+		appendUnique := func(p VFS) {
+			if !deduper.add(p.strID()) {
+				return
+			}
+
+			head = append(head, p)
 		}
 
-		head = append(head, p)
-	}
+		appendUnique(spec.toolBinPath)
 
-	appendUnique(spec.toolBinPath)
+		for _, tool := range spec.auxTools {
+			appendUnique(tool.bin)
+		}
 
-	for _, tool := range spec.auxTools {
-		appendUnique(tool.bin)
-	}
+		for _, v := range spec.inVFSs {
+			appendUnique(v)
+		}
 
-	for _, v := range spec.inVFSs {
-		appendUnique(v)
-	}
+		na.vfs.commit(len(head))
 
-	na.vfs.commit(len(head))
-
-	head = head[:len(head):len(head)]
-
-	inputs := na.inputList(head, na.filterSeen(deduper, spec.inputClosure))
+		head = head[:len(head):len(head)]
+		inputs = na.inputList(head, na.filterSeen(deduper, spec.inputClosure))
+	})
 	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
 
 	var stdoutPath VFS

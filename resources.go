@@ -310,18 +310,17 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt)...)
 	}
 
-	func() {
-		deduper := dedupers.get()
-
-		defer dedupers.put(deduper)
-
+	dedupers.with(func(deduper *DeDuper) {
 		for _, decl := range decls {
 			if deduper.add(decl.GlobalVar.strID()) {
 				globals = append(globals, decl)
-				emitResourceFetch(ctx, decl)
 			}
 		}
-	}()
+	})
+
+	for _, decl := range globals {
+		emitResourceFetch(ctx, decl)
+	}
 
 	var sbomRef *NodeRef
 	var sbomPath *VFS
@@ -376,18 +375,17 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt)...)
 	}
 
-	func() {
-		deduper := dedupers.get()
-
-		defer dedupers.put(deduper)
-
+	dedupers.with(func(deduper *DeDuper) {
 		for _, decl := range decls {
 			if deduper.add(decl.Name.strID()) {
 				globals = append(globals, decl)
-				fetchRef = emitResourceFetch(ctx, decl)
 			}
 		}
-	}()
+	})
+
+	for _, decl := range globals {
+		fetchRef = emitResourceFetch(ctx, decl)
+	}
 
 	if d.primaryOutput == "" || len(globals) == 0 {
 		throwFmt("gen: %s: PREBUILT_PROGRAM has no PRIMARY_OUTPUT/resource", instance.Path.relString())

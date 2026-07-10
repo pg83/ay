@@ -101,21 +101,19 @@ func (e *EmitContext) goCgoIncludeArgs() []ANY {
 	push(strIB)
 	push(strIS)
 
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
-	for _, p := range d.cc.AddIncl {
-		if deduper.add(p.strID()) {
-			push(d.cc.InclArgs.arg(p))
+	dedupers.with(func(deduper *DeDuper) {
+		for _, p := range d.cc.AddIncl {
+			if deduper.add(p.strID()) {
+				push(d.cc.InclArgs.arg(p))
+			}
 		}
-	}
 
-	for _, p := range d.cc.PeerAddInclGlobal {
-		if deduper.add(p.strID()) {
-			push(d.cc.InclArgs.arg(p))
+		for _, p := range d.cc.PeerAddInclGlobal {
+			if deduper.add(p.strID()) {
+				push(d.cc.InclArgs.arg(p))
+			}
 		}
-	}
+	})
 
 	na.anys.commit(k)
 
@@ -311,27 +309,25 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	inputs[ni] = cgo1WrapperVFS
 	ni++
 
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
-	for _, f := range files {
-		if deduper.add(f.src.strID()) {
-			inputs[ni] = f.src
-			ni++
-		}
-	}
-
-	for _, cv := range cvs {
-		cv.each(func(p VFS) {
-			if p.isSource() && deduper.add(p.strID()) {
-				inputs[ni] = p
+	dedupers.with(func(deduper *DeDuper) {
+		for _, f := range files {
+			if deduper.add(f.src.strID()) {
+				inputs[ni] = f.src
 				ni++
 			}
-		})
-	}
+		}
 
-	na.vfs.commit(ni)
+		for _, cv := range cvs {
+			cv.each(func(p VFS) {
+				if p.isSource() && deduper.add(p.strID()) {
+					inputs[ni] = p
+					ni++
+				}
+			})
+		}
+
+		na.vfs.commit(ni)
+	})
 
 	env := goCmdEnv(ctx, instance.Platform, d.tc)
 	outputs := na.vfs.alloc(2*len(files) + 4)
@@ -385,21 +381,21 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	cgoLeaves[nl] = cgo1WrapperVFS
 	nl++
 
-	deduper.reset()
-
-	for i, f := range files {
-		if deduper.add(f.src.strID()) {
-			cgoLeaves[nl] = f.src
-			nl++
-		}
-
-		cvs[i].each(func(p VFS) {
-			if p.isSource() && deduper.add(p.strID()) {
-				cgoLeaves[nl] = p
+	dedupers.with(func(deduper *DeDuper) {
+		for i, f := range files {
+			if deduper.add(f.src.strID()) {
+				cgoLeaves[nl] = f.src
 				nl++
 			}
-		})
-	}
+
+			cvs[i].each(func(p VFS) {
+				if p.isSource() && deduper.add(p.strID()) {
+					cgoLeaves[nl] = p
+					nl++
+				}
+			})
+		}
+	})
 
 	cgoLeaves[nl] = files[0].cgo1
 	nl++
@@ -562,55 +558,53 @@ func (e *EmitContext) flushGoCgo2() {
 	pushIn(exportH)
 	pushIn(mainC)
 
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
-
-	for _, v := range inputs[:ni] {
-		deduper.add(v.strID())
-	}
-
-	var cgoClosureExtras []VFS
-
-	for i := range d.cgoSrcs {
-		src := resolvedSrcs[i]
-
-		if deduper.add(src.strID()) {
-			pushIn(src)
+	dedupers.with(func(deduper *DeDuper) {
+		for _, v := range inputs[:ni] {
+			deduper.add(v.strID())
 		}
 
-		cvs[i].each(func(p VFS) {
-			if p.isSource() && deduper.add(p.strID()) {
-				cgoClosureExtras = append(cgoClosureExtras, p)
+		var cgoClosureExtras []VFS
+
+		for i := range d.cgoSrcs {
+			src := resolvedSrcs[i]
+
+			if deduper.add(src.strID()) {
+				pushIn(src)
 			}
-		})
-	}
 
-	for _, v := range cgoClosureExtras {
-		pushIn(v)
-	}
-
-	pushIn(build(dir, "/", strings.TrimSuffix(d.cgoSrcs[0].string(), ".go"), ".cgo1.go"))
-
-	for i := len(d.cgoSrcs); i < len(resolvedSrcs); i++ {
-		src := resolvedSrcs[i]
-
-		if deduper.add(src.strID()) {
-			pushIn(src)
+			cvs[i].each(func(p VFS) {
+				if p.isSource() && deduper.add(p.strID()) {
+					cgoClosureExtras = append(cgoClosureExtras, p)
+				}
+			})
 		}
 
-		cvs[i].each(func(p VFS) {
-			if p.isSource() && deduper.add(p.strID()) {
-				pushIn(p)
+		for _, v := range cgoClosureExtras {
+			pushIn(v)
+		}
+
+		pushIn(build(dir, "/", strings.TrimSuffix(d.cgoSrcs[0].string(), ".go"), ".cgo1.go"))
+
+		for i := len(d.cgoSrcs); i < len(resolvedSrcs); i++ {
+			src := resolvedSrcs[i]
+
+			if deduper.add(src.strID()) {
+				pushIn(src)
 			}
-		})
-	}
 
-	for _, o := range objOrder[:ko] {
-		pushIn(o)
-	}
+			cvs[i].each(func(p VFS) {
+				if p.isSource() && deduper.add(p.strID()) {
+					pushIn(p)
+				}
+			})
+		}
 
-	na.vfs.commit(ni)
+		for _, o := range objOrder[:ko] {
+			pushIn(o)
+		}
+
+		na.vfs.commit(ni)
+	})
 
 	objArgs := na.anys.alloc(1 + nObjs + len(d.cgoLdflags))
 	kd := 0

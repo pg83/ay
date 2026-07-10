@@ -17,7 +17,7 @@ END()
 `,
 	})
 	mf := throw2(parseFile(fs, "mod/ya.make"))
-	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("mod"), Kind: KindLib}, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
+	d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), ModuleInstance{Path: source("mod"), Kind: KindLib}, mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if len(d.srcs) != 4 {
 		t.Fatalf("source occurrences = %d, want 4: %#v", len(d.srcs), d.srcs)
@@ -162,7 +162,7 @@ END()
 
 			fs := newMemFS(map[string]string{"contrib/libs/cblas/ya.make": mklYaMake})
 			mf := throw2(parseFile(fs, "contrib/libs/cblas/ya.make"))
-			d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("contrib/libs/cblas"), Kind: KindLib}, mf.Stmts, env, noWarn)
+			d := collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), ModuleInstance{Path: source("contrib/libs/cblas"), Kind: KindLib}, mf.Stmts, env, noWarn)
 
 			hasMkl, hasFallback := false, false
 
@@ -449,7 +449,7 @@ func TestCollectModule_OwnAddInclToMissingDir_WarnsAndDrops(t *testing.T) {
 	files := map[string]string{"mod/present_inc/h.h": "#pragma once\n"}
 
 	var warns []Warn
-	d := collectModule(newIncludeParserManagerFS(newMemFS(files), newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("mod"), Kind: KindLib},
+	d := collectModule(newIncludeParserManagerFS(newMemFS(files), newSharedParseCache()), ModuleInstance{Path: source("mod"), Kind: KindLib},
 		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}),
 		func(w Warn) { warns = append(warns, w) })
 
@@ -487,7 +487,7 @@ func TestCollectModule_PySrcsExpandsSetList(t *testing.T) {
 		t.Fatalf("Parse: %v", err)
 	}
 
-	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("mod"), Kind: KindLib},
+	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), ModuleInstance{Path: source("mod"), Kind: KindLib},
 		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if !equalStrings(anyStrs(d.pySrcs), []string{"a.py", "b.py"}) {
@@ -508,7 +508,7 @@ func TestCollectModule_SetAppendExpandsResourceAndSandboxInputs(t *testing.T) {
 		t.Fatalf("Parse: %v", err)
 	}
 
-	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source("mod"), Kind: KindLib},
+	d := collectModule(newIncludeParserManagerFS(newMemFS(nil), newSharedParseCache()), ModuleInstance{Path: source("mod"), Kind: KindLib},
 		mf.Stmts, buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}), noWarn)
 
 	if len(d.fromSandboxes) != 1 {
@@ -596,6 +596,6 @@ func TestGen_PeerGlobalAddInclToMissingDir_DroppedFromConsumer(t *testing.T) {
 	}
 }
 
-func collectModule(pm *IncludeParserManager, dd *DeDuper, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn)) *ModuleData {
-	return collectModuleInto(pm, dd, instance, stmts, env, onWarn, &ModuleData{})
+func collectModule(pm *IncludeParserManager, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn)) *ModuleData {
+	return collectModuleInto(pm, instance, stmts, env, onWarn, &ModuleData{})
 }

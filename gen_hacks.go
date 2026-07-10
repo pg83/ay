@@ -64,12 +64,11 @@ func applySbomComponentOrder(e *EmitContext, name TOK, linkTarget bool, resolved
 	return sbomOrder
 }
 
-func aggregateSbomComponents(e *EmitContext, name TOK, linkTarget bool, resolved []ResolvedPeer, allocatorExplicitPeers []string, refs []NodeRef, paths []VFS) ([]NodeRef, []VFS, int) {
+func aggregateSbomComponents(deduper *DeDuper, e *EmitContext, name TOK, linkTarget bool, resolved []ResolvedPeer, allocatorExplicitPeers []string, refs []NodeRef, paths []VFS) ([]NodeRef, []VFS, int) {
 	sbomOrder := applySbomComponentOrder(e, name, linkTarget, resolved, allocatorExplicitPeers)
 	keepLld := linkTarget || isGoModuleType(name)
-	deduper := dedupers.get()
 
-	defer dedupers.put(deduper)
+	deduper.reset()
 
 	ownInsertIdx := -1
 

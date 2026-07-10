@@ -615,37 +615,35 @@ func buildCfgResolveIndex(cfg *ScanContext) *CfgResolveIndex {
 	idx.indexable = true
 	idx.rank = newIntValueMap[int32](2 * (len(cfg.OwnAddIncl) + len(cfg.PeerAddInclSet)))
 
-	deduper := dedupers.get()
+	dedupers.with(func(deduper *DeDuper) {
+		r := int32(0)
 
-	defer dedupers.put(deduper)
+		add := func(p VFS) {
+			if !deduper.add(p.strID()) {
+				return
+			}
 
-	r := int32(0)
+			idx.rank.put(uint64(p), r)
 
-	add := func(p VFS) {
-		if !deduper.add(p.strID()) {
-			return
+			if p.isBuild() {
+				idx.buildEntries = append(idx.buildEntries, CfgBuildAddincl{
+					prefix:    p,
+					prefixSrc: p.rel().source(),
+					rank:      int(r),
+				})
+			}
+
+			r++
 		}
 
-		idx.rank.put(uint64(p), r)
-
-		if p.isBuild() {
-			idx.buildEntries = append(idx.buildEntries, CfgBuildAddincl{
-				prefix:    p,
-				prefixSrc: p.rel().source(),
-				rank:      int(r),
-			})
+		for _, p := range cfg.OwnAddIncl {
+			add(p)
 		}
 
-		r++
-	}
-
-	for _, p := range cfg.OwnAddIncl {
-		add(p)
-	}
-
-	for _, p := range cfg.PeerAddInclSet {
-		add(p)
-	}
+		for _, p := range cfg.PeerAddInclSet {
+			add(p)
+		}
+	})
 
 	return idx
 }

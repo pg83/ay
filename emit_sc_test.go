@@ -108,7 +108,7 @@ func TestGen_ScSourceAddsNoAddIncl(t *testing.T) {
 func collectTestModule(fs FS, modulePath string) *ModuleData {
 	mf := throw2(parseFile(fs, modulePath+"/ya.make"))
 
-	return collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), &DeDuper{}, ModuleInstance{Path: source(modulePath), Kind: KindLib}, mf.Stmts, buildIfEnv(ModuleInstance{Path: source(modulePath), Kind: KindLib, Platform: testTargetP}), noWarn)
+	return collectModule(newIncludeParserManagerFS(fs, newSharedParseCache()), ModuleInstance{Path: source(modulePath), Kind: KindLib}, mf.Stmts, buildIfEnv(ModuleInstance{Path: source(modulePath), Kind: KindLib, Platform: testTargetP}), noWarn)
 }
 
 func peerdirsContain(d *ModuleData, want string) bool {

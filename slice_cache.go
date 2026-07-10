@@ -101,6 +101,18 @@ func (c *SliceCache[T]) commit(block []T) []T {
 }
 
 func dedupShared[T IdKey](c *SliceCache[T], lists ...[]T) []T {
+	var out []T
+
+	dedupers.with(func(deduper *DeDuper) {
+		out = dedupSharedWith(deduper, c, lists...)
+	})
+
+	return out
+}
+
+func dedupSharedWith[T IdKey](deduper *DeDuper, c *SliceCache[T], lists ...[]T) []T {
+	deduper.reset()
+
 	total := 0
 
 	for _, l := range lists {
@@ -110,10 +122,6 @@ func dedupShared[T IdKey](c *SliceCache[T], lists ...[]T) []T {
 	if total == 0 {
 		return nil
 	}
-
-	deduper := dedupers.get()
-
-	defer dedupers.put(deduper)
 
 	block := c.alloc(total)
 	k := 0
