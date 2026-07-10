@@ -385,7 +385,6 @@ func (e *EmitContext) flushGoSrcs() {
 func (e *EmitContext) goAsmIncludeSrcs() []VFS {
 	ctx := e.ctx
 	na := ctx.na
-	cfg := e.d.cc.ScanCfg
 	var out []VFS
 
 	dedupers.with(func(deduper *DeDuper) {
@@ -394,13 +393,13 @@ func (e *EmitContext) goAsmIncludeSrcs() []VFS {
 		for _, src := range e.goRes.AsmFiles {
 			deduper.add(src.strID())
 
-			bound += walkClosure(e.scanner, src, cfg, scanDomainGoAsm).len()
+			bound += e.scanner.walkClosure(src, e.d.scanCtx, scanDomainGoAsm).len()
 		}
 
 		cvs := e.cvScratch[:0]
 
 		for _, src := range e.goRes.AsmFiles {
-			cvs = append(cvs, walkClosure(e.scanner, src, cfg, scanDomainGoAsm))
+			cvs = append(cvs, e.scanner.walkClosure(src, e.d.scanCtx, scanDomainGoAsm))
 		}
 
 		e.cvScratch = cvs
@@ -797,13 +796,13 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 		for i, f := range cgoAux {
 			auxSrcs[i] = resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
-			extrasCap += 1 + walkClosure(e.scanner, auxSrcs[i], d.cc.ScanCfg, scanDomainCC).len()
+			extrasCap += 1 + e.scanner.walkClosure(auxSrcs[i], d.scanCtx, scanDomainCC).len()
 		}
 
 		cvs := e.cvScratch[:0]
 
 		for _, src := range auxSrcs {
-			cvs = append(cvs, walkClosure(e.scanner, src, d.cc.ScanCfg, scanDomainCC))
+			cvs = append(cvs, e.scanner.walkClosure(src, d.scanCtx, scanDomainCC))
 		}
 
 		e.cvScratch = cvs

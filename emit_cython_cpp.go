@@ -90,7 +90,6 @@ type CythonStmtPlan struct {
 	generatedVFS      VFS
 	headerVFS         []VFS
 	srcVFS            VFS
-	srcScanIn         *ScanContext
 	cyRef             NodeRef
 	headerPyxClosure  []VFS
 	ind               CythonCppInduced
@@ -152,15 +151,14 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		}
 
 		srcVFS := source(instance.Path.relString(), "/", stmt.Src)
-		srcScanIn := d.cc.ScanCfg
-		ind := e.cythonCppInducedSets(srcVFS, stmt.CMode, srcScanIn)
+		ind := e.cythonCppInducedSets(srcVFS, stmt.CMode, d.scanCtx)
 		cyRef := ctx.emit.reserve()
 
 		var headerPyxClosure []VFS
 		var infos []*GeneratedFileInfo
 
 		if stmt.Header {
-			headerPyxClosure = cythonPyxLangClosure(e.scanner, srcVFS, srcScanIn)
+			headerPyxClosure = e.scanner.cythonPyxLangClosure(srcVFS, d.scanCtx)
 
 			pyxInduced := filterSourceVFS(ctx.na, headerPyxClosure)
 			headerInduced := cythonHeaderInducedClosure(ind)
@@ -197,7 +195,6 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			generatedVFS:      generatedVFS,
 			headerVFS:         headerVFS,
 			srcVFS:            srcVFS,
-			srcScanIn:         srcScanIn,
 			cyRef:             cyRef,
 			headerPyxClosure:  headerPyxClosure,
 			ind:               ind,
@@ -216,6 +213,8 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		return
 	}
 
+	scanCtx := d.scanCtx
+
 	for i := range plans {
 		p := &plans[i]
 		stmt := p.stmt
@@ -224,13 +223,12 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		generatedVFS := p.generatedVFS
 		headerVFS := p.headerVFS
 		srcVFS := p.srcVFS
-		srcScanIn := p.srcScanIn
 		cyRef := p.cyRef
-		emitsIncludes := cythonEmitsIncludes(p.ind, walkClosure(e.scanner, srcVFS, srcScanIn, scanDomainCython))
+		emitsIncludes := cythonEmitsIncludes(p.ind, e.scanner.walkClosure(srcVFS, scanCtx, scanDomainCython))
 		pxdVFS, pxdOK := resolveCythonPxd(ctx, instance, stmt.Pxd)
 
 		if pxdOK {
-			pxdCV := walkClosure(e.scanner, pxdVFS, srcScanIn, scanDomainCython)
+			pxdCV := e.scanner.walkClosure(pxdVFS, scanCtx, scanDomainCython)
 
 			emitsIncludes = na.dedupClosure(append(emitsIncludes, pxdCV.self), pxdCV.buckets)
 		}
@@ -295,11 +293,11 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			if header {
 				toolInputs = cythonHeaderToolInputs(na, srcVFS, headerPyxClosure)
 			} else {
-				toolInputs = cythonToolInputs(na, ind, walkClosure(scanner, srcVFS, srcScanIn, scanDomainCython))
+				toolInputs = cythonToolInputs(na, ind, scanner.walkClosure(srcVFS, scanCtx, scanDomainCython))
 			}
 
 			if pxdOK {
-				pxdCV := walkClosure(scanner, pxdVFS, srcScanIn, scanDomainCython)
+				pxdCV := scanner.walkClosure(pxdVFS, scanCtx, scanDomainCython)
 
 				toolInputs = filterSourceVFS(na, na.dedupClosure(append(toolInputs, pxdCV.self), pxdCV.buckets))
 			}
@@ -350,7 +348,7 @@ func cythonHeaderToolInputs(na *NodeArenas, src VFS, pyxClosure []VFS) []VFS {
 	return filterSourceVFS(na, na.dedupClosure(singles, [][]VFS{pyxClosure}))
 }
 
-func cythonPyxLangClosure(scanner *IncludeScanner, src VFS, cfg *ScanContext) []VFS {
+func (scanner *IncludeScanner) cythonPyxLangClosure(src VFS, cfg *ScanContext) []VFS {
 	sc := scanner.getScanCtx(cfg, scanDomainCython, scanner.parsers.registry.registeredParserFor(src.relString()))
 
 	defer scanner.putScanCtx(sc)
@@ -393,7 +391,6 @@ type CythonCppInduced struct {
 }
 
 func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn *ScanContext) CythonCppInduced {
-	scanner := e.scanner
 	toolSingles := []VFS{contribToolsCythonCythonPy}
 	emitsSingles := []VFS{contribToolsCythonCythonPy, src}
 
@@ -407,7 +404,7 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn *ScanCont
 		toolSingles = append(toolSingles, v)
 		emitsSingles = append(emitsSingles, v)
 
-		cv := walkClosure(scanner, v, scanIn, scanDomainCython)
+		cv := e.scanner.walkClosure(v, scanIn, scanDomainCython)
 
 		toolCl = append(toolCl, cv.buckets...)
 		emitsCl = append(emitsCl, cv.buckets...)
@@ -419,7 +416,7 @@ func (e *EmitContext) cythonCppInducedSets(src VFS, cMode bool, scanIn *ScanCont
 		toolSingles = append(toolSingles, v)
 		emitsSingles = append(emitsSingles, v)
 
-		cv := walkClosure(scanner, v, scanIn, scanDomainCython)
+		cv := e.scanner.walkClosure(v, scanIn, scanDomainCython)
 
 		toolCl = append(toolCl, cv.buckets...)
 		emitsCl = append(emitsCl, cv.buckets...)

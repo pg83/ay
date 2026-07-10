@@ -182,10 +182,10 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 	na.vfs.commit(nl)
 
 	scanner := e.scanner
-	scanCfg := d.cc.ScanCfg
+	scanCtx := d.scanCtx
 
 	pe := func() {
-		cv := walkClosure(scanner, srcVFS, scanCfg, scanDomainCC)
+		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
 		block := na.vfs.alloc(len(scripts) + cv.len() + len(cgoContext))
 		k := 0
 
@@ -292,13 +292,13 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	inputCap := 1 + len(files)
 
 	for _, f := range files {
-		inputCap += walkClosure(e.scanner, f.src, d.cc.ScanCfg, scanDomainCC).len()
+		inputCap += e.scanner.walkClosure(f.src, d.scanCtx, scanDomainCC).len()
 	}
 
 	cvs := e.cvScratch[:0]
 
 	for _, f := range files {
-		cvs = append(cvs, walkClosure(e.scanner, f.src, d.cc.ScanCfg, scanDomainCC))
+		cvs = append(cvs, e.scanner.walkClosure(f.src, d.scanCtx, scanDomainCC))
 	}
 
 	e.cvScratch = cvs
@@ -520,7 +520,7 @@ func (e *EmitContext) flushGoCgo2() {
 
 	for _, f := range d.cgoSrcs {
 		src := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
-		cv := walkClosure(e.scanner, src, d.cc.ScanCfg, scanDomainCC)
+		cv := e.scanner.walkClosure(src, d.scanCtx, scanDomainCC)
 
 		e.prodVFS = append(e.prodVFS, src)
 		cvs = append(cvs, cv)
@@ -529,7 +529,7 @@ func (e *EmitContext) flushGoCgo2() {
 
 	for _, f := range append(cFiles, sFiles...) {
 		src := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
-		cv := walkClosure(e.scanner, src, d.cc.ScanCfg, scanDomainCC)
+		cv := e.scanner.walkClosure(src, d.scanCtx, scanDomainCC)
 
 		e.prodVFS = append(e.prodVFS, src)
 		cvs = append(cvs, cv)

@@ -63,11 +63,11 @@ func emitJSReserved(instance ModuleInstance, allName string, sources []string, c
 func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	jsSources := anyStrs(js.Sources)
-	joinClosure := e.joinSrcsIncludeClosure(instance.Platform, jsSources, d.cc.ScanCfg, scanDomainCC)
+	joinClosure := e.joinSrcsIncludeClosure(instance.Platform, jsSources, scanDomainCC)
 	ccClosure := joinClosure
 
 	if instance.Platform.ISA == ISAX8664 {
-		joinClosure = e.joinSrcsIncludeClosure(ctx.target, jsSources, d.cc.ScanCfg, scanDomainJoinTarget)
+		joinClosure = e.joinSrcsIncludeClosure(ctx.target, jsSources, scanDomainJoinTarget)
 	}
 
 	jsRef := ctx.emit.reserve()
@@ -91,7 +91,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	e.enqueueSrc(SrcMeta{Source: joinOutVFS.any(), Prio: stmtPrioDefault, Seq: js.Seq})
 }
 
-func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []string, scanCfg *ScanContext, domain ScanDomain) []VFS {
+func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []string, domain ScanDomain) []VFS {
 	ctx, srcInstance, d := e.ctx, e.instance, e.d
 	scanner := ctx.scannerForPlatform(scanPlatform)
 	visited := scanner.visitedIDPool.Get().(*IdSet)
@@ -122,7 +122,7 @@ func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []s
 
 	order := make([]VFS, 0, 1024)
 	for _, srcRelOnDisk := range srcRels {
-		sc := scanner.getScanCtx(scanCfg, domain, scanner.parsers.registry.registeredParserFor(srcRelOnDisk))
+		sc := scanner.getScanCtx(d.scanCtx, domain, scanner.parsers.registry.registeredParserFor(srcRelOnDisk))
 
 		sc.closureOf(source(srcRelOnDisk)).each(func(v VFS) {
 			if visited.has(v) {

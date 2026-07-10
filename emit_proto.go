@@ -213,7 +213,6 @@ type PbModuleEmission struct {
 	grpcHRefs           []NodeRef
 	blocks              PbArgBlocks
 	searchPaths         []VFS
-	scanCfg             *ScanContext
 }
 
 func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, spec *ProtoSpec) *PbModuleEmission {
@@ -291,8 +290,6 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 		pe.searchPaths = append([]VFS{source(cfg.cppOutRoot)}, d.cc.ProtoInclude...)
 	}
 
-	pe.scanCfg = d.cc.ScanCfg
-
 	return pe
 }
 
@@ -301,6 +298,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
 	buildProto := build(protoRelPath)
 	protoVFS := source(protoRelPath)
+	scanCtx := d.scanCtx
 
 	var protoSrcOverride VFS
 	var extraProtoDeps []NodeRef
@@ -315,13 +313,13 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
 	}
 
-	transitiveImports := walkClosure(e.scanner, protoVFS, pe.scanCfg, scanDomainProto)
+	transitiveImports := e.scanner.walkClosure(protoVFS, scanCtx, scanDomainProto)
 	pbRef := ctx.emit.reserve()
 	pbm := *pe
 	scanner := e.scanner
 
 	pbPE := func() {
-		imports := walkClosure(scanner, protoVFS, pbm.scanCfg, scanDomainProto)
+		imports := scanner.walkClosure(protoVFS, scanCtx, scanDomainProto)
 		depRefs := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, imports, extraProtoDeps...)
 
 		emitPB(

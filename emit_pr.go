@@ -126,7 +126,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		instance: instance,
 		scanner:  e.scanner,
 		codegen:  e.codegen,
-		scanCfg:  e.d.cc.ScanCfg,
+		scanCtx:  e.d.scanCtx,
 		inVFSs:   ctx.na.vfsList(inVFSs...),
 	}
 
@@ -279,7 +279,7 @@ type prSnap struct {
 	instance ModuleInstance
 	scanner  *IncludeScanner
 	codegen  *CodegenRegistry
-	scanCfg  *ScanContext
+	scanCtx  *ScanContext
 	inVFSs   []VFS
 }
 
@@ -308,7 +308,6 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 		hasParsedIN = hasParsedIN || ctx.parsers.registry.hasRegisteredParser(f.string())
 	}
 
-	scanCfg := s.scanCfg
 	scratch := vfsScratches.get()
 
 	defer func() { vfsScratches.put(scratch) }()
@@ -325,7 +324,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 				return
 			}
 
-			cv := walkClosure(s.scanner, copyFileOutputVFS(instance.Path.relString(), rel), scanCfg, scanDomainCC)
+			cv := s.scanner.walkClosure(copyFileOutputVFS(instance.Path.relString(), rel), s.scanCtx, scanDomainCC)
 
 			eachBucketVFS(cv.buckets, func(v VFS) { out = append(out, v) })
 		}
@@ -343,7 +342,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 		rel := f.string()
 
 		if ctx.parsers.registry.hasRegisteredParser(rel) {
-			walkClosure(s.scanner, s.inVFSs[i], scanCfg, scanDomainCC).each(func(v VFS) { out = append(out, v) })
+			s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC).each(func(v VFS) { out = append(out, v) })
 
 			continue
 		}
@@ -359,7 +358,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 				continue
 			}
 
-			cv := walkClosure(s.scanner, copyFileOutputVFS(instance.Path.relString(), f.string()), scanCfg, scanDomainCC)
+			cv := s.scanner.walkClosure(copyFileOutputVFS(instance.Path.relString(), f.string()), s.scanCtx, scanDomainCC)
 
 			eachBucketVFS(cv.buckets, func(v VFS) {
 				if v.isSource() {
@@ -388,9 +387,9 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 
 		switch info := s.codegen.lookup(target.build()); {
 		case info != nil:
-			sub = walkClosure(s.scanner, info.OutputPath, scanCfg, scanDomainCC)
+			sub = s.scanner.walkClosure(info.OutputPath, s.scanCtx, scanDomainCC)
 		case fullSourceClosure && ctx.fs.isFile(srcRootRel, target.string()):
-			sub = walkClosure(s.scanner, target.source(), scanCfg, scanDomainCC)
+			sub = s.scanner.walkClosure(target.source(), s.scanCtx, scanDomainCC)
 			selfIsInput = true
 		default:
 			continue

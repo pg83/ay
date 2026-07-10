@@ -1773,7 +1773,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ForceConsistentDebug: isGoModuleType(d.moduleStmt.Name),
 	}
 
-	d.cc.ScanCfg = newModuleScanContext(ctx, instance, d, d.cc.AddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
+	d.scanCtx = newModuleScanContext(ctx, instance, d, d.cc.AddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 
 	frame.peerCtx = PeerContext{

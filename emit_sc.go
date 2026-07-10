@@ -33,10 +33,10 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 	runtimeInclude := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(domschemeRuntimeVFS.rel().any())})
 
 	scanner := e.scanner
-	scanCfg := d.cc.ScanCfg
+	scanCtx := d.scanCtx
 
 	pe := func() {
-		runtimeClosure := walkClosure(scanner, domschemeRuntimeVFS, scanCfg, scanDomainCC)
+		runtimeClosure := scanner.walkClosure(domschemeRuntimeVFS, scanCtx, scanDomainCC)
 
 		emitSCReserved(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, scRef, ctx.emit)
 	}
