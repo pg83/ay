@@ -157,6 +157,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			extraDepRefs:  resolveCodegenDepRefsIncl(ctx, instance, ctx.na, depInputs),
 		}, prRef, ctx.emit)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet, ridesHeaderViaParsed bool) {
 		if registeredPROut[out] {
@@ -185,7 +186,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			ParsedIncludes: parsed,
 			SourceInputs:   prSourceInputs.all,
 			ClosureLeaves:  leaves,
-			OnUse:          &pe,
+			OnUse:          pending,
 		})
 	}
 

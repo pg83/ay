@@ -40,6 +40,7 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 
 		emitSCReserved(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, scRef, ctx.emit)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,
@@ -47,6 +48,6 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 		GeneratorRefs:  e.ctx.na.refList(domLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: runtimeInclude},
 		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, domschemeRuntimeVFS),
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 }

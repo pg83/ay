@@ -314,19 +314,20 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 				Resources:    usesPython3,
 			}, cyRef)
 		}
+		pending := e.ctx.na.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{
 			OutputPath:     generatedVFS,
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			OnUse:          &pe,
+			OnUse:          pending,
 		})
 
 		// p.infos were registered earlier in planCythonCpp (pass1 header
 		// registration), before pe existed; attach post hoc.
 		for _, info := range p.infos {
-			info.OnUse = &pe
+			info.OnUse = pending
 		}
 
 		e.enqueueSrc(SrcMeta{

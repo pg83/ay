@@ -48,6 +48,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 
 		ctx.emit.emitReservedNode(node, gzRef)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	sourceInputs := na.vfs.alloc(1 + imports.len())[:0]
 
@@ -69,7 +70,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 		SourceInputs:   sourceInputs,
 		ClosureLeaves:  sourceInputs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: gztGeneratedProtoParse(ctx, gztSource, inducedProtos)},
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	return gzRef, genProtoName

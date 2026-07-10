@@ -42,6 +42,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 			Resources:    usesPython3,
 		}, chRef)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:  generatedVFS,
@@ -49,7 +50,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(
 			IncludeDirective{kind: includeQuoted, target: includeTarget(confVFS.rel().any())})},
 		ClosureLeaves: e.ctx.na.vfsList(buildScriptsCheckConfigHPy),
-		OnUse:         &pe,
+		OnUse:         pending,
 	})
 
 	e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Bucket: bkCheckConfig})

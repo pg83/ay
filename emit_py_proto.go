@@ -13,6 +13,49 @@ var (
 	pyPBSuffixesGrpcMypy = []string{"_pb2.py", "_pb2_grpc.py", "_pb2.pyi"}
 )
 
+type pyPBPending struct {
+	ctx          *GenCtx
+	instance     ModuleInstance
+	scanner      *IncludeScanner
+	scanCtx      *ScanContext
+	protoRelPath string
+	cmdArgs      ArgChunks
+	protoCwd     VFS
+	inputs       []VFS
+	outputs      []VFS
+	extOut       []KVExt
+	producerDeps []NodeRef
+	toolRefs     []NodeRef
+	pyPBRef      NodeRef
+}
+
+func (p *pyPBPending) emitPending() {
+	s := *p
+
+	*p = pyPBPending{}
+
+	buckets := s.scanner.walkClosure(source(s.protoRelPath), s.scanCtx, scanDomainProto).buckets
+	na := s.ctx.na
+	node := Node{
+		Platform:     s.instance.Platform,
+		Cmds:         na.cmdList(Cmd{CmdArgs: s.cmdArgs, Cwd: s.protoCwd, Env: envVarsVCS}),
+		Env:          envVarsVCS,
+		Inputs:       na.inputList(s.inputs, buckets...),
+		Outputs:      s.outputs,
+		KV:           &pbKV,
+		KVExts:       s.extOut,
+		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:      s.producerDeps,
+		Resources:    usesPython3,
+	}
+
+	if len(s.toolRefs) > 0 {
+		node.ForeignDepRefs = s.toolRefs
+	}
+
+	s.ctx.emit.emitReservedNode(node, s.pyPBRef)
+}
+
 func pyPBSuffixesFor(grpc, mypy bool) []string {
 	switch {
 	case grpc && mypy:
@@ -305,30 +348,15 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	extOut = extOut[:len(outputs):len(outputs)]
 
 	pyPBRef := ctx.emit.reserve()
-	scanner := e.scanner
+	pending := na.pyPB.one()
 
-	pyPBPE := na.pendingEmit(func() {
-		buckets := scanner.walkClosure(source(protoRelPath), scanCtx, scanDomainProto).buckets
-
-		pyPBNode := Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Cwd: protoCwd, Env: envVarsVCS}),
-			Env:          envVarsVCS,
-			Inputs:       na.inputList(inputs, buckets...),
-			Outputs:      outputs,
-			KV:           &pbKV,
-			KVExts:       extOut,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-			DepRefs:      producerDeps,
-			Resources:    usesPython3,
-		}
-
-		if len(toolRefs) > 0 {
-			pyPBNode.ForeignDepRefs = toolRefs
-		}
-
-		ctx.emit.emitReservedNode(pyPBNode, pyPBRef)
-	})
+	*pending = pyPBPending{
+		ctx: ctx, instance: instance, scanner: e.scanner, scanCtx: scanCtx,
+		protoRelPath: protoRelPath, cmdArgs: cmdArgs, protoCwd: protoCwd,
+		inputs: inputs, outputs: outputs, extOut: extOut,
+		producerDeps: producerDeps, toolRefs: toolRefs, pyPBRef: pyPBRef,
+	}
+	pyPBPE := na.pendingEmitter(pending)
 
 	sourceInputs := na.dedupSourceVFS(inputs, transitive.buckets)
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)

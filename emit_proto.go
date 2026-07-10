@@ -215,6 +215,47 @@ type PbModuleEmission struct {
 	searchPaths         []VFS
 }
 
+type protoPBPending struct {
+	ctx                       *GenCtx
+	instance                  ModuleInstance
+	scanner                   *IncludeScanner
+	scanCtx                   *ScanContext
+	protoVFS                  VFS
+	protoRelPath              string
+	protoSrcOverride          VFS
+	extraProtoDeps            []NodeRef
+	protoProducerSourceInputs []VFS
+	cppStyleguideLDRef        NodeRef
+	protocLDRef               NodeRef
+	grpcCppLDRef              NodeRef
+	cppStyleguideBinary       VFS
+	protocBinary              VFS
+	grpcCppBinary             VFS
+	grpc                      bool
+	moduleTag                 STR
+	liteHeaders               bool
+	extraPlugins              []ResolvedCPPProtoPlugin
+	blocks                    PbArgBlocks
+	spec                      *ProtoSpec
+	pbRef                     NodeRef
+}
+
+func (p *protoPBPending) emitPending() {
+	s := *p
+
+	*p = protoPBPending{}
+
+	imports := s.scanner.walkClosure(s.protoVFS, s.scanCtx, scanDomainProto)
+	depRefs := resolveCodegenDepRefsInclView(s.ctx, s.instance, s.ctx.na, imports, s.extraProtoDeps...)
+
+	emitPB(
+		s.instance, s.protoRelPath, s.protoSrcOverride, s.cppStyleguideLDRef, s.protocLDRef,
+		s.grpcCppLDRef, s.cppStyleguideBinary, s.protocBinary, s.grpcCppBinary,
+		s.grpc, s.moduleTag, s.liteHeaders, s.extraPlugins, imports, depRefs,
+		s.protoProducerSourceInputs, s.blocks, s.spec, s.pbRef, s.ctx.emit,
+	)
+}
+
 func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, spec *ProtoSpec) *PbModuleEmission {
 	idx := 0
 
@@ -315,36 +356,18 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	transitiveImports := e.scanner.walkClosure(protoVFS, scanCtx, scanDomainProto)
 	pbRef := ctx.emit.reserve()
-	scanner := e.scanner
-	cppStyleguideLDRef := pe.cppStyleguideLDRef
-	protocLDRef := pe.protocLDRef
-	grpcCppLDRef := pe.grpcCppLDRef
-	cppStyleguideBinary := pe.cppStyleguideBinary
-	protocBinary := pe.protocBinary
-	grpcCppBinary := pe.grpcCppBinary
-	liteHeaders := pe.liteHeaders
-	extraPlugins := pe.extraPlugins
-	blocks := pe.blocks
+	pending := ctx.na.protoPB.one()
 
-	pbPE := ctx.na.pendingEmit(func() {
-		imports := scanner.walkClosure(protoVFS, scanCtx, scanDomainProto)
-		depRefs := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, imports, extraProtoDeps...)
-
-		emitPB(
-			instance, protoRelPath, protoSrcOverride, cppStyleguideLDRef, protocLDRef,
-			grpcCppLDRef, cppStyleguideBinary, protocBinary, grpcCppBinary,
-			cfg.grpc, cfg.moduleTag,
-			liteHeaders,
-			extraPlugins,
-			imports,
-			depRefs,
-			protoProducerSourceInputs,
-			blocks,
-			spec,
-			pbRef,
-			ctx.emit,
-		)
-	})
+	*pending = protoPBPending{
+		ctx: ctx, instance: instance, scanner: e.scanner, scanCtx: scanCtx,
+		protoVFS: protoVFS, protoRelPath: protoRelPath, protoSrcOverride: protoSrcOverride,
+		extraProtoDeps: extraProtoDeps, protoProducerSourceInputs: protoProducerSourceInputs,
+		cppStyleguideLDRef: pe.cppStyleguideLDRef, protocLDRef: pe.protocLDRef, grpcCppLDRef: pe.grpcCppLDRef,
+		cppStyleguideBinary: pe.cppStyleguideBinary, protocBinary: pe.protocBinary, grpcCppBinary: pe.grpcCppBinary,
+		grpc: cfg.grpc, moduleTag: cfg.moduleTag, liteHeaders: pe.liteHeaders,
+		extraPlugins: pe.extraPlugins, blocks: pe.blocks, spec: spec, pbRef: pbRef,
+	}
+	pbPE := ctx.na.pendingEmitter(pending)
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := build(protoBase, ".pb.h")

@@ -75,6 +75,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 
 			emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, tc, ctx.scripts, ctx.emit)
 		}
+		pending := e.ctx.na.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{
 			OutputPath:     g4CppPath,
@@ -82,7 +83,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 			ClosureLeaves:  leaves,
-			OnUse:          &pe,
+			OnUse:          pending,
 		})
 
 		e.enqueueSrc(SrcMeta{

@@ -17,6 +17,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		jvPE := func() {
 			emitJVSplitReserved(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ccTag, tc, ctx.emit, jvRef)
 		}
+		pending := e.ctx.na.pendingEmit(jvPE)
 
 		lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 		parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
@@ -29,14 +30,14 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			OutputPath:    lexerCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-			OnUse:         &jvPE,
+			OnUse:         pending,
 		})
 
 		e.register(GeneratedFileInfo{
 			OutputPath:    parserCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-			OnUse:         &jvPE,
+			OnUse:         pending,
 		})
 
 		witnessIncludes := []VFS{
@@ -61,7 +62,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
 				ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-				OnUse:          &jvPE,
+				OnUse:          pending,
 			})
 		}
 
@@ -88,6 +89,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		jvPE := func() {
 			emitJVReserved(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ccTag, tc, ctx.emit, jvRef)
 		}
+		pending := e.ctx.na.pendingEmit(jvPE)
 
 		base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
 		grammarG4 := source(instance.Path.relString(), "/", g.Grammar)
@@ -98,14 +100,14 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			OutputPath:    lexerCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-			OnUse:         &jvPE,
+			OnUse:         pending,
 		})
 
 		e.register(GeneratedFileInfo{
 			OutputPath:    parserCpp,
 			ProducerRef:   jvRef,
 			GeneratorRefs: nil,
-			OnUse:         &jvPE,
+			OnUse:         pending,
 		})
 
 		witnessIncludes := []VFS{
@@ -129,7 +131,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 				ProducerRef:    jvRef,
 				GeneratorRefs:  nil,
 				ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-				OnUse:          &jvPE,
+				OnUse:          pending,
 			})
 		}
 

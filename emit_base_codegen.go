@@ -62,13 +62,15 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		ctx.emit.emitReservedNode(node, bcRef)
 	}
 
+	pending := e.ctx.na.pendingEmit(pe)
+
 	e.register(GeneratedFileInfo{
 		OutputPath:     prefixH,
 		ProducerRef:    bcRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 		ClosureLeaves:  e.ctx.na.vfsList(prefixCpp, inputIn),
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	e.register(GeneratedFileInfo{
@@ -77,6 +79,6 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 		ClosureLeaves:  e.ctx.na.vfsList(inputIn),
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 }

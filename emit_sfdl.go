@@ -61,11 +61,13 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
+	pending := e.ctx.na.pendingEmit(pe)
+
 	e.register(GeneratedFileInfo{
 		OutputPath:    tmpVFS,
 		ProducerRef:   ref,
 		GeneratorRefs: e.ctx.na.refList(toolRef),
-		OnUse:         &pe,
+		OnUse:         pending,
 	})
 
 	e.register(GeneratedFileInfo{
@@ -73,6 +75,6 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 		ProducerRef:   ref,
 		GeneratorRefs: e.ctx.na.refList(toolRef),
 		ClosureLeaves: e.ctx.na.vfsList(tmpVFS, srcVFS),
-		OnUse:         &pe,
+		OnUse:         pending,
 	})
 }

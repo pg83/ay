@@ -49,13 +49,15 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		ctx.emit.emitReservedNode(node, ref)
 	}
 
+	pending := e.ctx.na.pendingEmit(pe)
+
 	e.register(GeneratedFileInfo{
 		OutputPath:     cppVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(archiverRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(mnSSEInclude)},
 		ClosureLeaves:  e.ctx.na.vfsList(infoVFS, buildMnScriptVFS),
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	e.register(GeneratedFileInfo{
@@ -63,7 +65,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(archiverRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(cppVFS.rel().any())})},
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	e.enqueueSrc(SrcMeta{Source: cppVFS.any(), Prio: stmtPrioDefault, Seq: stmt.Seq})

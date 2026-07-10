@@ -94,6 +94,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 		ctx.emit.emitReservedNode(node, ref)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	for i, f := range stmt.OUTFiles {
 		if fromSandboxAutoLinkMember(f.string()) {
@@ -111,7 +112,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
 			SourceInputs:    fromSandboxScriptInputs,
 			ProducerMainOut: outVFSs[0],
-			OnUse:           &pe,
+			OnUse:           pending,
 		})
 	}
 

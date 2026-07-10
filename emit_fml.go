@@ -34,12 +34,13 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 
 		ctx.emit.emitReservedNode(node, ref)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    outVFS,
 		ProducerRef:   ref,
 		GeneratorRefs: e.ctx.na.refList(toolRef),
 		ClosureLeaves: e.ctx.na.vfsList(srcVFS),
-		OnUse:         &pe,
+		OnUse:         pending,
 	})
 }

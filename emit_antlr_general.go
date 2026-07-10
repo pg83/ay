@@ -69,6 +69,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	pe := func() {
 		emitJVGeneralReserved(instance, jarVFS, args, inputsSnap, outputsSnap, cwd, deps, ccTag, tc, ctx.emit, jvRef)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	jvSourceInputs := ctx.na.vfs.alloc(len(inputs) + 2)[:0]
 
@@ -89,7 +90,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 			ProducerRef:    jvRef,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: antlrParsedIncludes(instance.Path.relString(), run, outTok, outVFSByToken, inputs, jarVFS)},
 			SourceInputs:   jvSourceInputs,
-			OnUse:          &pe,
+			OnUse:          pending,
 		})
 	}
 

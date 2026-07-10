@@ -46,12 +46,13 @@ func (e *EmitContext) emitLuaJit21() {
 		pe := func() {
 			emitLJReserved(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ref, ctx.emit)
 		}
+		pending := e.ctx.na.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{
 			OutputPath:   rawOut,
 			ProducerRef:  ref,
 			SourceInputs: ctx.na.vfsList(luaSrc),
-			OnUse:        &pe,
+			OnUse:        pending,
 		})
 	}
 }

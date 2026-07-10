@@ -150,6 +150,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 
 		emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, interp, interpInput, toolRefs, kv, resources, ctx.emit)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
 		e.register(GeneratedFileInfo{
@@ -158,7 +159,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 			SourceInputs:   pySourceInputs,
 			ClosureLeaves:  pyGeneratedFromSources,
-			OnUse:          &pe,
+			OnUse:          pending,
 		})
 	}
 

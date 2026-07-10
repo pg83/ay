@@ -51,6 +51,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 
 		ctx.emit.emitReservedNode(node, ref)
 	}
+	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
@@ -59,7 +60,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 		GeneratorRefs:  e.ctx.na.refList(toolRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[parsedIncludesLocal]},
 		ClosureLeaves:  e.ctx.na.vfsList(srcVFS),
-		OnUse:          &pe,
+		OnUse:          pending,
 	})
 
 	meta.Source = outVFS.any()

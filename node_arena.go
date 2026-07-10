@@ -12,7 +12,9 @@ type NodeArenas struct {
 	nodes    *BumpAllocator[Node]
 	exts     *BumpAllocator[KVExt]
 	geninfos *BumpAllocator[GeneratedFileInfo]
-	pending  *BumpAllocator[func()]
+	pending  *BumpAllocator[PendingEmit]
+	protoPB  *BumpAllocator[protoPBPending]
+	pyPB     *BumpAllocator[pyPBPending]
 	dirs     *BumpAllocator[IncludeDirective]
 	scanctxs *BumpAllocator[ScanContext]
 }
@@ -30,6 +32,8 @@ func (na *NodeArenas) resetWindows() {
 	na.exts.open = false
 	na.geninfos.open = false
 	na.pending.open = false
+	na.protoPB.open = false
+	na.pyPB.open = false
 	na.dirs.open = false
 	na.scanctxs.open = false
 }
@@ -47,6 +51,8 @@ func (na *NodeArenas) markStrict() {
 	na.exts.markStrict()
 	na.geninfos.markStrict()
 	na.pending.markStrict()
+	na.protoPB.markStrict()
+	na.pyPB.markStrict()
 	na.dirs.markStrict()
 	na.scanctxs.markStrict()
 }
@@ -62,7 +68,9 @@ func newNodeArenas() *NodeArenas {
 		inputs:   newBumpAllocator[[]VFS](1 << 10),
 		exts:     newBumpAllocator[KVExt](1 << 8),
 		geninfos: newBumpAllocator[GeneratedFileInfo](1 << 10),
-		pending:  newBumpAllocator[func()](1 << 10),
+		pending:  newBumpAllocator[PendingEmit](1 << 10),
+		protoPB:  newBumpAllocator[protoPBPending](1 << 8),
+		pyPB:     newBumpAllocator[pyPBPending](1 << 8),
 		dirs:     newBumpAllocator[IncludeDirective](1 << 10),
 		scanctxs: newBumpAllocator[ScanContext](1 << 8),
 		noderefs: newBumpAllocator[NodeRef](1 << 12),
@@ -70,10 +78,18 @@ func newNodeArenas() *NodeArenas {
 	}
 }
 
-func (na *NodeArenas) pendingEmit(fn func()) *func() {
+func (na *NodeArenas) pendingEmit(fn func()) *PendingEmit {
 	p := na.pending.one()
 
-	*p = fn
+	*p = PendingEmit{fn: fn}
+
+	return p
+}
+
+func (na *NodeArenas) pendingEmitter(emitter pendingEmitter) *PendingEmit {
+	p := na.pending.one()
+
+	*p = PendingEmit{emitter: emitter}
 
 	return p
 }
