@@ -129,14 +129,6 @@ type ScanConfig struct {
 	ri  *CfgResolveIndex
 }
 
-func snapshotScanCfg(na *NodeArenas, sc ScanContext) ScanContext {
-	sc.OwnAddIncl = na.vfsList(sc.OwnAddIncl...)
-	sc.PeerAddInclSet = na.vfsList(sc.PeerAddInclSet...)
-	sc.BaseSearchPaths = na.vfsList(sc.BaseSearchPaths...)
-
-	return sc
-}
-
 func newScanContext(pm *IncludeParserManager, ownAddIncl, peerAddIncl, base []VFS, ownerModuleDir string) ScanContext {
 	cfg := ScanContext{
 		OwnAddIncl:      ownAddIncl,

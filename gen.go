@@ -1682,6 +1682,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		selfPeerAddInclGlobal = peerAddInclGlobal
 	}
 
+	dedupedAddIncl = ctx.na.vfsList(dedupedAddIncl...)
+	selfPeerAddInclGlobal = ctx.na.vfsList(selfPeerAddInclGlobal...)
+
 	effectiveSrcDirs := d.srcDirs
 
 	if pd := programSourceDir(d.moduleStmt); pd != nil {
@@ -1731,7 +1734,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ForceConsistentDebug: isGoModuleType(d.moduleStmt.Name),
 	}
 
-	d.cc.ScanCfg = newScanContext(ctx.parsers, dedupedAddIncl, selfPeerAddInclGlobal, includeScannerBasePaths(), instance.Path.relString())
+	d.cc.ScanCfg = newScanContext(
+		ctx.parsers,
+		d.cc.AddIncl,
+		d.cc.PeerAddInclGlobal,
+		includeScannerBasePaths(),
+		instance.Path.relString(),
+	)
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 
 	frame.peerCtx = PeerContext{

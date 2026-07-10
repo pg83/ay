@@ -118,7 +118,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 	}
 
 	scanner := e.scanner
-	scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+	scanCfg := d.cc.ScanCfg
 	ragel6Flags := ctx.na.anyList(d.cc.Ragel6Flags...)
 
 	pe := func() {

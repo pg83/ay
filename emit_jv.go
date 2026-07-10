@@ -59,7 +59,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		leaves = leaves[:len(leaves):len(leaves)]
 
 		scanner := e.scanner
-		scanCfg := snapshotScanCfg(ctx.na, d.cc.ScanCfg)
+		scanCfg := d.cc.ScanCfg
 		tc := d.cc.TC
 
 		pe := func() {

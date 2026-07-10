@@ -60,7 +60,7 @@ type CopyEmitState struct {
 func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 	st, info := e.registerCopyFile(entry)
 	ctx, instance, scanner := e.ctx, e.instance, e.scanner
-	scanCfg := snapshotScanCfg(ctx.na, e.d.cc.ScanCfg)
+	scanCfg := e.d.cc.ScanCfg
 	moduleTag := e.d.cc.ModuleTag
 	tc := e.d.tc
 	demanded := instance.Demand != demandNone

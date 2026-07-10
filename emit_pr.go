@@ -126,7 +126,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		instance: instance,
 		scanner:  e.scanner,
 		codegen:  e.codegen,
-		scanCfg:  snapshotScanCfg(ctx.na, e.d.cc.ScanCfg),
+		scanCfg:  e.d.cc.ScanCfg,
 		inVFSs:   ctx.na.vfsList(inVFSs...),
 	}
 
