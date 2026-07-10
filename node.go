@@ -40,6 +40,7 @@ type Node struct {
 	Env            EnvVars      `json:"env"`
 	Inputs         InputChunks  `json:"inputs"`
 	KV             *KV          `json:"kv"`
+	KVExts         []KVExt      `json:"-"`
 	Outputs        []VFS        `json:"outputs"`
 	Platform       *Platform    `json:"platform"`
 	Requirements   Requirements `json:"requirements"`

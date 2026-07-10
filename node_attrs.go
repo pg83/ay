@@ -184,7 +184,6 @@ type KV struct {
 	SpecialRunner    string
 	HasSpecialRunner bool
 	RunTestNode      bool
-	ExtOut           []KVExt
 }
 
 type KVExt struct {
@@ -192,12 +191,12 @@ type KVExt struct {
 	Val string
 }
 
-func (kv KV) sortedExt() []KVExt {
-	if len(kv.ExtOut) < 2 {
-		return kv.ExtOut
+func sortedKVExts(exts []KVExt) []KVExt {
+	if len(exts) < 2 {
+		return exts
 	}
 
-	out := append([]KVExt(nil), kv.ExtOut...)
+	out := append([]KVExt(nil), exts...)
 
 	slices.SortFunc(out, func(a, b KVExt) int { return strings.Compare(a.Key, b.Key) })
 
@@ -273,14 +272,14 @@ func appendRequirements(buf []byte, r Requirements) []byte {
 	return append(o.buf, '}')
 }
 
-func appendKV(buf []byte, kv KV) []byte {
+func appendKV(buf []byte, kv KV, exts []KVExt) []byte {
 	o := JsonObj{buf: append(buf, '{')}
 
 	if kv.DisableCache {
 		o.forceStr("disable_cache", "yes")
 	}
 
-	for _, e := range kv.sortedExt() {
+	for _, e := range sortedKVExts(exts) {
 		o.forceStr(e.Key, e.Val)
 	}
 
@@ -312,7 +311,7 @@ func (e EnvVars) MarshalJSON() ([]byte, error) {
 }
 
 func (kv KV) marshalJSON() ([]byte, error) {
-	return appendKV(nil, kv), nil
+	return appendKV(nil, kv, nil), nil
 }
 
 func (kv KV) MarshalJSON() ([]byte, error) {
