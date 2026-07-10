@@ -315,28 +315,36 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	transitiveImports := e.scanner.walkClosure(protoVFS, scanCtx, scanDomainProto)
 	pbRef := ctx.emit.reserve()
-	pbm := *pe
 	scanner := e.scanner
+	cppStyleguideLDRef := pe.cppStyleguideLDRef
+	protocLDRef := pe.protocLDRef
+	grpcCppLDRef := pe.grpcCppLDRef
+	cppStyleguideBinary := pe.cppStyleguideBinary
+	protocBinary := pe.protocBinary
+	grpcCppBinary := pe.grpcCppBinary
+	liteHeaders := pe.liteHeaders
+	extraPlugins := pe.extraPlugins
+	blocks := pe.blocks
 
-	pbPE := func() {
+	pbPE := ctx.na.pendingEmit(func() {
 		imports := scanner.walkClosure(protoVFS, scanCtx, scanDomainProto)
 		depRefs := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, imports, extraProtoDeps...)
 
 		emitPB(
-			instance, protoRelPath, protoSrcOverride, pbm.cppStyleguideLDRef, pbm.protocLDRef,
-			pbm.grpcCppLDRef, pbm.cppStyleguideBinary, pbm.protocBinary, pbm.grpcCppBinary,
+			instance, protoRelPath, protoSrcOverride, cppStyleguideLDRef, protocLDRef,
+			grpcCppLDRef, cppStyleguideBinary, protocBinary, grpcCppBinary,
 			cfg.grpc, cfg.moduleTag,
-			pbm.liteHeaders,
-			pbm.extraPlugins,
+			liteHeaders,
+			extraPlugins,
 			imports,
 			depRefs,
 			protoProducerSourceInputs,
-			&pbm.blocks,
+			blocks,
 			spec,
 			pbRef,
 			ctx.emit,
 		)
-	}
+	})
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := build(protoBase, ".pb.h")
@@ -379,7 +387,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			GeneratorRefs:  spec.genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: spec.genHParsed},
 			ClosureLeaves:  spec.hLeaves,
-			OnUse:          &pbPE,
+			OnUse:          pbPE,
 		})
 
 		ccParsed := e.ctx.na.dirs.alloc(len(spec.genHParsed) + len(spec.genCCExtras))
@@ -395,7 +403,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			GeneratorRefs:  spec.genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: ccParsed},
 			ClosureLeaves:  spec.ccLeaves,
-			OnUse:          &pbPE,
+			OnUse:          pbPE,
 		})
 
 		return ProtoPBEmission{
@@ -448,7 +456,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		GeneratorRefs:  pbGenRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesCpp: pbHCompile},
 		ClosureLeaves:  pbHLeaves,
-		OnUse:          &pbPE,
+		OnUse:          pbPE,
 	})
 
 	protoBaseName := filepath.Base(protoRelPath)
@@ -472,7 +480,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			ProducerRef:    pbRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffHParsed},
-			OnUse:          &pbPE,
+			OnUse:          pbPE,
 		})
 
 		yaffCCParsed := na.dirs.alloc(len(yaffHParsed) + 1)
@@ -487,7 +495,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffCCParsed},
-			OnUse:          &pbPE,
+			OnUse:          pbPE,
 		})
 	}
 
@@ -504,7 +512,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: depsParsed},
-			OnUse:          &pbPE,
+			OnUse:          pbPE,
 		})
 	}
 
@@ -525,7 +533,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbCCParsed},
-		OnUse:          &pbPE,
+		OnUse:          pbPE,
 	})
 
 	var grpcCCParsed, grpcHParsed []IncludeDirective
@@ -549,7 +557,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pe.grpcCCRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: grpcCCParsed},
-			OnUse:          &pbPE,
+			OnUse:          pbPE,
 		})
 
 		e.register(GeneratedFileInfo{
@@ -557,7 +565,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pe.grpcHRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: grpcHParsed},
-			OnUse:          &pbPE,
+			OnUse:          pbPE,
 		})
 	}
 
@@ -662,7 +670,7 @@ func emitPB(
 	transitiveProtoImports Closure,
 	extraDepRefs []NodeRef,
 	producerSourceInputs []VFS,
-	blocks *PbArgBlocks,
+	blocks PbArgBlocks,
 	spec *ProtoSpec,
 	id NodeRef,
 	emit *StreamingEmitter,

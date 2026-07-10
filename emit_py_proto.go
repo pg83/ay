@@ -307,7 +307,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	pyPBRef := ctx.emit.reserve()
 	scanner := e.scanner
 
-	pyPBPE := func() {
+	pyPBPE := na.pendingEmit(func() {
 		buckets := scanner.walkClosure(source(protoRelPath), scanCtx, scanDomainProto).buckets
 
 		pyPBNode := Node{
@@ -328,7 +328,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		}
 
 		ctx.emit.emitReservedNode(pyPBNode, pyPBRef)
-	}
+	})
 
 	sourceInputs := na.dedupSourceVFS(inputs, transitive.buckets)
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
@@ -341,12 +341,12 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		return internV("${ARCADIA_BUILD_ROOT}/", out.relString())
 	}
 
-	e.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: &pyPBPE})
+	e.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})
 
 	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyDir, keySep, keyBase, "_pb2.py"), Token: tokenFor(pyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 
 	if d.grpc {
-		e.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: &pyPBPE})
+		e.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})
 
 		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyDir, keySep, keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
 	}
