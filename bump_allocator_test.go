@@ -11,7 +11,7 @@ func fill[T any](region []T, vals ...T) int {
 }
 
 func TestBumpAllocatorAllocAtLeastN(t *testing.T) {
-	a := newBumpAllocator[int](4)
+	a := newBumpAllocator[int]()
 
 	for _, n := range []int{1, 4, 7, 100} {
 		r := a.alloc(n)
@@ -25,7 +25,7 @@ func TestBumpAllocatorAllocAtLeastN(t *testing.T) {
 }
 
 func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
-	a := newBumpAllocator[int](16)
+	a := newBumpAllocator[int]()
 
 	var got [][]int
 	var want [][]int
@@ -56,9 +56,9 @@ func TestBumpAllocatorPacksCommittedRegions(t *testing.T) {
 }
 
 func TestBumpAllocatorChunkGrowth(t *testing.T) {
-	a := newBumpAllocator[byte](8)
+	a := newBumpAllocator[byte]()
 
-	want := 8
+	want := bumpChunkInitial
 
 	for i := 0; i < 4; i++ {
 		r := a.alloc(1)
@@ -74,17 +74,38 @@ func TestBumpAllocatorChunkGrowth(t *testing.T) {
 }
 
 func TestBumpAllocatorChunkByteBudget(t *testing.T) {
-	a := newBumpAllocator[uint64](1 << 20)
+	a := newBumpAllocator[uint64]()
+	limit := bumpChunkBytes / 8
+	want := bumpChunkInitial
+
+	for {
+		r := a.alloc(1)
+
+		if len(r) != want {
+			t.Fatalf("uint64 fresh chunk len = %d, want %d", len(r), want)
+		}
+
+		a.commit(len(r))
+
+		if want == limit {
+			break
+		}
+
+		want *= 2
+		if want > limit {
+			want = limit
+		}
+	}
 
 	r := a.alloc(1)
 
-	if len(r) != bumpChunkBytes/8 {
-		t.Fatalf("uint64 fresh chunk len = %d, want %d", len(r), bumpChunkBytes/8)
+	if len(r) != limit {
+		t.Fatalf("uint64 chunk after cap len = %d, want %d", len(r), limit)
 	}
 }
 
 func TestBumpAllocatorOversizedAllocFits(t *testing.T) {
-	a := newBumpAllocator[byte](8)
+	a := newBumpAllocator[byte]()
 
 	big := bumpChunkBytes * 3
 	r := a.alloc(big)
@@ -97,7 +118,7 @@ func TestBumpAllocatorOversizedAllocFits(t *testing.T) {
 }
 
 func TestBumpAllocatorChunkFitsLargeAlloc(t *testing.T) {
-	a := newBumpAllocator[int](4)
+	a := newBumpAllocator[int]()
 
 	r := a.alloc(100)
 
@@ -110,7 +131,7 @@ func TestBumpAllocatorChunkFitsLargeAlloc(t *testing.T) {
 }
 
 func TestBumpAllocatorCommitOutOfRangePanics(t *testing.T) {
-	a := newBumpAllocator[int](4)
+	a := newBumpAllocator[int]()
 	r := a.alloc(2)
 
 	defer func() {

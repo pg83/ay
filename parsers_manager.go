@@ -40,7 +40,7 @@ type SharedParseCache struct {
 func newSharedParseCache() *SharedParseCache {
 	return &SharedParseCache{
 		ambiguous:  make(map[uint64]ParsedIncludeSet, 16),
-		directives: newBumpAllocator[IncludeDirective](directiveBlockHint),
+		directives: newBumpAllocator[IncludeDirective](),
 	}
 }
 
@@ -59,7 +59,7 @@ func newIncludeParserManagerFS(fs FS, cache *SharedParseCache) *IncludeParserMan
 	return &IncludeParserManager{
 		fs:           fs,
 		cache:        cache,
-		addinclArena: newBumpAllocator[VFS](1 << 10),
+		addinclArena: newBumpAllocator[VFS](),
 		registry:     newIncludeDirectiveParserRegistry(),
 	}
 }

@@ -7,9 +7,8 @@ import (
 )
 
 const (
-	closureAllocHint    = 1 << 13
-	closureArenaInitial = closureAllocHint
-	resolveNoRank       = int(^uint(0) >> 1)
+	closureAllocHint = 1 << 13
+	resolveNoRank    = int(^uint(0) >> 1)
 )
 
 const (
@@ -100,8 +99,8 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		onWarn:  onWarn,
 
 		buckets:        buckets,
-		closureArena:   newBumpAllocator[VFS](closureArenaInitial),
-		childArena:     newBumpAllocator[VFS](1 << 12),
+		closureArena:   newBumpAllocator[VFS](),
+		childArena:     newBumpAllocator[VFS](),
 		searchTierFlat: newIntMap[VFS](4096),
 	}
 

@@ -19,8 +19,8 @@ type BucketCache struct {
 
 func newBucketCache() *BucketCache {
 	return &BucketCache{
-		chunks:   newBumpAllocator[[]VFS](1 << 12),
-		pool:     newBumpAllocator[VFS](1 << 19),
+		chunks:   newBumpAllocator[[]VFS](),
+		pool:     newBumpAllocator[VFS](),
 		intern:   newIntValueMap[BucketVal](1 << 18),
 		overflow: newIntValueMap[BucketVal](1 << 4),
 	}

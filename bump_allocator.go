@@ -2,7 +2,10 @@ package main
 
 import "unsafe"
 
-const bumpChunkBytes = 1 << 21
+const (
+	bumpChunkInitial = 128
+	bumpChunkBytes   = 1 << 21
+)
 
 type BumpAllocator[T any] struct {
 	chunk  []T
@@ -15,8 +18,8 @@ func (a *BumpAllocator[T]) markStrict() {
 	a.strict = true
 }
 
-func newBumpAllocator[T any](hint int) *BumpAllocator[T] {
-	return &BumpAllocator[T]{next: hint}
+func newBumpAllocator[T any]() *BumpAllocator[T] {
+	return &BumpAllocator[T]{next: bumpChunkInitial}
 }
 
 func (a *BumpAllocator[T]) alloc(n int) []T {
