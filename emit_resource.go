@@ -249,8 +249,8 @@ func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS)
 	rawItems := e.rawScratch[:0]
 
 	defer func() {
-		e.objScratch = objItems[:0]
-		e.rawScratch = rawItems[:0]
+		e.objScratch = retainMaxLen(e.objScratch, objItems)
+		e.rawScratch = retainMaxLen(e.rawScratch, rawItems)
 	}()
 
 	for _, it := range p.Items {
@@ -632,7 +632,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 	na := ctx.na
 	batch := e.resItems[:0]
 
-	defer func() { e.resItems = batch[:0] }()
+	defer func() { e.resItems = retainMaxLen(e.resItems, batch) }()
 
 	flushBatch := func() {
 		if len(batch) == 0 {
@@ -643,6 +643,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 		refs = append(refs, r...)
 		outs = append(outs, o...)
+		e.resItems = retainMaxLen(e.resItems, batch)
 		batch = batch[:0]
 	}
 

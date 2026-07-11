@@ -16,6 +16,14 @@ func scrubCap[T any](s []T) []T {
 	return s[:0]
 }
 
+func retainMaxLen[T any](scratch, used []T) []T {
+	if len(used) > len(scratch) {
+		return used
+	}
+
+	return scratch
+}
+
 func concat[T any](lists ...[]T) []T {
 	total := 0
 	nonEmpty := 0
