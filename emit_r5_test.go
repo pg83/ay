@@ -26,9 +26,9 @@ func TestEmitR5_RlgenModeFollowsOptimized(t *testing.T) {
 		inst := ModuleInstance{Path: source("kernel/urlnorm"), Kind: KindLib, Language: LangCPP, Platform: p}
 		ref := e.reserve()
 
-		emitR5Reserved(inst, "urlhashval.rl",
+		emitR5Reserved(inst, "urlhashval.rl", source("kernel/urlnorm/urlhashval.rl"),
 			0, 0, build("contrib/tools/ragel5/ragel/ragel5"),
-			build("contrib/tools/ragel5/rlgen-cd/rlgen-cd"), ref, e)
+			build("contrib/tools/ragel5/rlgen-cd/rlgen-cd"), nil, ref, e)
 
 		flat := e.nodes.s[ref].Cmds[1].CmdArgs.flat()
 

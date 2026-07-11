@@ -20,7 +20,7 @@ func flexGeneratedVFS(instance ModuleInstance, srcRel string) VFS {
 func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
-	srcRel := src.string()
+	srcRel := e.moduleSourceRel(src)
 	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	outVFS := flexGeneratedVFS(instance, srcRel)
@@ -57,8 +57,9 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 
 	pe := func() {
 		lxClosure := scanner.walkClosure(outVFS, scanCtx, scanDomainCC).collect(ctx.na, func(v VFS) bool { return v.isSource() })
+		depRefs := resolveCodegenDepRefsIncl(ctx, instance, na, []VFS{srcVFS})
 
-		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef, ctx.emit)
+		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, depRefs, lxRef, ctx.emit)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 
@@ -71,7 +72,7 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	})
 }
 
-func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef, emit *StreamingEmitter) {
+func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, depRefs []NodeRef, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 
 	cmdArgs := na.chunkList(na.anyList(
@@ -91,5 +92,6 @@ func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, o
 		KV:             &flexKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(flexRef),
+		DepRefs:        depRefs,
 	}, id)
 }

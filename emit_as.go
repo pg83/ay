@@ -104,12 +104,10 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {
 	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcVFS := src.vfs()
-	srcRel := src.string()
+	srcRel := e.moduleSourceRel(src)
 
 	if srcVFS == 0 {
 		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
-	} else {
-		srcRel = trimModulePrefix(srcVFS.relString(), instance.Path.relString())
 	}
 
 	asIn := in

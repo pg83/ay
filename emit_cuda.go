@@ -22,7 +22,7 @@ const cudaArchitectures129 = "sm_50:sm_52:sm_60:sm_61:sm_70:sm_75:sm_80:sm_86:sm
 func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
-	srcRel := src.string()
+	srcRel := e.moduleSourceRel(src)
 	na := ctx.emit.nodeArenas()
 	p := instance.Platform
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
@@ -31,6 +31,9 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	srcCV := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
 	runtimeCV := e.scanner.walkClosure(cudaRuntimeIncludeVFS, d.scanCtx, scanDomainCC)
 	closure := na.dedupClosure([]VFS{srcCV.self, runtimeCV.self}, srcCV.buckets, runtimeCV.buckets)
+	compileDepRefs := in.ExtraDepRefs
+	compileDepRefs = resolveCodegenDepRefsInclView(ctx, instance, na, srcCV, compileDepRefs...)
+	compileDepRefs = resolveCodegenDepRefsInclView(ctx, instance, na, runtimeCV, compileDepRefs...)
 	mtimeRef, mtimeVFS := ctx.tool(cudaMtimeArg)
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)
 	cuCxxTail := blocks.cxxTail
@@ -64,12 +67,12 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 
 	cmdArgs := ArgChunks(chunks[:k])
 	env := envVarsVCSCuda
-	cudaDeps := na.noderefs.alloc(2 + len(in.ExtraDepRefs))
+	cudaDeps := na.noderefs.alloc(2 + len(compileDepRefs))
 
 	cudaDeps[0] = mtimeRef
 	cudaDeps[1] = pidRef
 
-	cdn := 2 + copy(cudaDeps[2:], in.ExtraDepRefs)
+	cdn := 2 + copy(cudaDeps[2:], compileDepRefs)
 
 	na.noderefs.commit(cdn)
 

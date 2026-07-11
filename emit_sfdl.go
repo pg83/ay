@@ -10,11 +10,12 @@ var sfKV = KV{P: pkSF, PC: pcYellow}
 func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	srcRel := src.string()
+	srcRel := e.moduleSourceRel(src)
 	toolRef, toolBin := ctx.tool(argToolsCalcstaticopt)
-	srcVFS := source(instance.Path.relString(), "/", srcRel)
+	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	tmpVFS := build(instance.Path.relString(), "/", srcRel, ".tmp")
 	incVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)))
+	depRefs := resolveCodegenDepRefsIncl(ctx, instance, na, []VFS{srcVFS})
 	plainEnv := envVarsVCS
 	toolEnv := instance.Platform.ToolEnvVars
 	blocks := d.cc.CCBlocks
@@ -55,6 +56,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 			Outputs:        na.vfsList(tmpVFS, incVFS),
 			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(toolRef),
+			DepRefs:        depRefs,
 			Resources:      instance.Platform.CCUsesResources,
 		}
 

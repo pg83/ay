@@ -22,7 +22,7 @@ func (e *EmitContext) emitExplicitCF(cf *ConfigureFileStmt) {
 
 func (e *EmitContext) emitLibraryHInSource(src ANY) {
 	_, instance, d := e.ctx, e.instance, e.d
-	srcRel := src.string()
+	srcRel := e.moduleSourceRel(src)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	outVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, ".in"))
 
@@ -31,7 +31,7 @@ func (e *EmitContext) emitLibraryHInSource(src ANY) {
 
 func (e *EmitContext) emitLibraryCInSource(meta SrcMeta) {
 	_, instance, d := e.ctx, e.instance, e.d
-	srcRel := meta.Source.string()
+	srcRel := e.moduleSourceRel(meta.Source)
 	srcVFS := e.resolveModuleSourceVFS(meta.Source, d.cc.SrcDirs)
 	outVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, ".in"))
 
@@ -45,9 +45,15 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
-	cfgVars := buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string())
+	var cfgVars []string
+
+	if srcVFS.isSource() {
+		cfgVars = buildCFGVars(ctx.fs, srcVFS.relString(), d.cc.SetVars, d.cc.DefaultVars, instance.Platform.BuildTypeUpperSTR.string())
+	}
+
 	python3 := d.cc.TC.Python3
 	cfRef := ctx.emit.reserve()
+	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
 
 	scanner := e.scanner
 	scanCtx := d.scanCtx
@@ -62,6 +68,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
 		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
+		depRefs := resolveCodegenDepRefsInclView(ctx, instance, na, cv)
 
 		ctx.emit.emitReservedNode(Node{
 			Platform:     instance.Platform,
@@ -72,6 +79,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 			Outputs:      na.vfsList(outVFS),
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
+			DepRefs:      depRefs,
 		}, cfRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
@@ -82,7 +90,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		ProducerRef:    cfRef,
 		GeneratorRefs:  nil,
 		SourceInputs:   na.vfsList(srcVFS, configureFilePyVFS),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cfTemplateParsedIncludes(ctx.parsers, srcVFS.relString())},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, configureFilePyVFS),
 		OnUse:          pending,
 	})

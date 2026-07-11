@@ -5,10 +5,11 @@ var fmKV = KV{P: pkFM, PC: pcYellow}
 func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
-	srcRel := src.string()
+	srcRel := e.moduleSourceRel(src)
 	toolRef, toolBin := ctx.tool(argToolsRelevFmlCodegen)
-	srcVFS := source(instance.Path.relString(), "/", srcRel)
+	srcVFS := e.resolveModuleSourceVFS(src, e.d.cc.SrcDirs)
 	outVFS := build(instance.Path.relString(), "/", srcRel, ".inc")
+	depRefs := resolveCodegenDepRefsIncl(ctx, instance, na, []VFS{srcVFS})
 	env := envVarsVCS
 
 	ref := ctx.emit.reserve()
@@ -30,6 +31,7 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 			Outputs:        na.vfsList(outVFS),
 			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(toolRef),
+			DepRefs:        depRefs,
 		}
 
 		ctx.emit.emitReservedNode(node, ref)

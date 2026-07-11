@@ -52,7 +52,7 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 	}
 
 	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
-	evRelPath := protoSourceRelPath(ctx.fs, instance, d, src.string())
+	evRelPath := protoSourceRelPath(ctx.fs, instance, d, e.moduleSourceName(src))
 	directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d), e.dirScratch[:0])
 
 	e.dirScratch = directImports

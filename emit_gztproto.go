@@ -16,6 +16,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	genProto := build(moddir, "/", genProtoName)
 	converterRef, converterBin := ctx.tool(argDictGazetteerConverter)
 	imports := e.scanner.walkClosure(gztSource, d.scanCtx, scanDomainProto)
+	depRefs := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, imports)
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
@@ -44,6 +45,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 			KV:             &gztprotoKV,
 			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(converterRef),
+			DepRefs:        depRefs,
 		}
 
 		ctx.emit.emitReservedNode(node, gzRef)
@@ -69,7 +71,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 		ProducerRef:    gzRef,
 		SourceInputs:   sourceInputs,
 		ClosureLeaves:  sourceInputs,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: gztGeneratedProtoParse(ctx, gztSource, inducedProtos)},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: gztGeneratedProtoParse(ctx, e.scanner, gztSource, inducedProtos)},
 		OnUse:          pending,
 	})
 
@@ -160,8 +162,8 @@ func gztConverterInducedProtos(ctx *GenCtx) []VFS {
 	return out
 }
 
-func gztGeneratedProtoParse(ctx *GenCtx, gztSource VFS, inducedProtos []VFS) []IncludeDirective {
-	gztLocal := ctx.parsers.sourceParsedBuckets(gztSource, nil).bucket(parsedIncludesLocal)
+func gztGeneratedProtoParse(ctx *GenCtx, scanner *IncludeScanner, gztSource VFS, inducedProtos []VFS) []IncludeDirective {
+	gztLocal := scanner.parsedBucketForInput(gztSource, parsedIncludesLocal, nil)
 	local := ctx.na.dirs.alloc(len(inducedProtos) + len(gztLocal))[:0]
 
 	for _, v := range inducedProtos {

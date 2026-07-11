@@ -58,10 +58,10 @@ func bisonGeneratedRel(srcRel, genExt string) string {
 	return srcRel + genExt
 }
 
-func (e *EmitContext) emitBisonProducer(src STR) []ANY {
+func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	srcRel := src.string()
+	srcRel := e.moduleSourceRel(src)
 	genExt := d.cc.BisonGenExt
 	bisonRef, bisonBin := bisonTool(ctx, instance)
 	m4Ref, m4Bin := m4Tool(ctx, instance)
@@ -71,7 +71,7 @@ func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 	generatedRel := bisonGeneratedRel(srcRel, genExt)
 	headerVFS := build(instance.Path.relString(), "/", headerRel)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
-	srcVFS := source(instance.Path.relString(), "/", srcRel)
+	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
 	headerParsed := na.dirs.alloc(2 + len(bisonCppSkeletonDirectives) + len(localBucket))[:0]
 
@@ -110,6 +110,8 @@ func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 
 	pe := func() {
 		inputs := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS)
+		depRefs := na.refList(bisonRef, m4Ref)
+		depRefs = resolveCodegenDepRefsIncl(ctx, instance, na, []VFS{srcVFS}, depRefs...)
 
 		if preprocessHeader {
 			ext := na.vfs.alloc(len(inputs) + 1 + len(bisonCppSkeletonInputs))[:0]
@@ -148,7 +150,7 @@ func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 		ctx.emit.emitReservedNode(Node{
 			Platform:     instance.Platform,
 			Cmds:         cmds,
-			DepRefs:      na.refList(bisonRef, m4Ref),
+			DepRefs:      depRefs,
 			Env:          env,
 			Inputs:       na.inputList(inputs),
 			Outputs:      na.vfsList(headerVFS, generatedVFS),
@@ -199,9 +201,9 @@ func (e *EmitContext) emitBisonY(meta SrcMeta) {
 	_, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
 
-	cflags := e.emitBisonProducer(src.str())
+	cflags := e.emitBisonProducer(src)
 
-	generatedRel := bisonGeneratedRel(src.string(), d.cc.BisonGenExt)
+	generatedRel := bisonGeneratedRel(e.moduleSourceRel(src), d.cc.BisonGenExt)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
 	meta.Source = generatedVFS.any()
 	meta.Compile.CFlags = concat(meta.Compile.CFlags, cflags)

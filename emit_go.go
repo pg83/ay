@@ -217,13 +217,19 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		}
 
 		src := meta.Source
-		rel := src.string()
+		rel := src.relOrSelf().string()
 
 		if !strings.HasSuffix(rel, ".go") {
 			continue
 		}
 
-		data := ctx.fs.read(dir + "/" + rel)
+		path, ok := goReadableSourcePath(dir, src)
+
+		if !ok {
+			continue
+		}
+
+		data := ctx.fs.read(path)
 
 		for _, imp := range parseGoImports(data) {
 			addPeer(goImportDir(ctx, dir, imp.string()))
@@ -231,7 +237,13 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	}
 
 	for _, src := range d.cgoSrcs {
-		data := ctx.fs.read(dir + "/" + src.string())
+		path, ok := goReadableSourcePath(dir, src)
+
+		if !ok {
+			continue
+		}
+
+		data := ctx.fs.read(path)
 
 		for _, imp := range parseGoImports(data) {
 			addPeer(goImportDir(ctx, dir, imp.string()))
@@ -286,6 +298,18 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			meta.Compile.CFlags = concat(meta.Compile.CFlags, cgoFlags)
 		}
 	}
+}
+
+func goReadableSourcePath(module string, src ANY) (string, bool) {
+	if v := src.vfs(); v != 0 {
+		if v.isBuild() {
+			return "", false
+		}
+
+		return v.relString(), true
+	}
+
+	return module + "/" + src.string(), true
 }
 
 type GoSrcsResult struct {
@@ -366,6 +390,7 @@ func (e *EmitContext) flushGoSrcs() {
 	na.anys.commit(nt)
 
 	e.goRes.AsmInclSrcs = e.goAsmIncludeSrcs()
+	depRefs := resolveCodegenDepRefsIncl(ctx, instance, na, e.goRes.AsmFiles)
 
 	node := Node{
 		Platform:     instance.Platform,
@@ -376,6 +401,7 @@ func (e *EmitContext) flushGoSrcs() {
 		Outputs:      na.vfsList(out),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    goToolResources(na, e.peers.ResourceGlobals),
+		DepRefs:      depRefs,
 	}
 
 	e.goRes.SymabisRef = ctx.emit.emitNode(node)
@@ -386,23 +412,22 @@ func (e *EmitContext) goAsmIncludeSrcs() []VFS {
 	ctx := e.ctx
 	na := ctx.na
 	var out []VFS
+	bound := 0
+	cvs := e.cvScratch[:0]
+
+	for _, src := range e.goRes.AsmFiles {
+		cv := e.scanner.walkClosure(src, e.d.scanCtx, scanDomainGoAsm)
+
+		cvs = append(cvs, cv)
+		bound += cv.len()
+	}
+
+	e.cvScratch = retainMaxLen(e.cvScratch, cvs)
 
 	dedupers.with(func(deduper *DeDuper) {
-		bound := 0
-
 		for _, src := range e.goRes.AsmFiles {
 			deduper.add(src.strID())
-
-			bound += e.scanner.walkClosure(src, e.d.scanCtx, scanDomainGoAsm).len()
 		}
-
-		cvs := e.cvScratch[:0]
-
-		for _, src := range e.goRes.AsmFiles {
-			cvs = append(cvs, e.scanner.walkClosure(src, e.d.scanCtx, scanDomainGoAsm))
-		}
-
-		e.cvScratch = retainMaxLen(e.cvScratch, cvs)
 
 		block := na.vfs.alloc(bound)
 		k := 0
