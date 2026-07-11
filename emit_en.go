@@ -45,7 +45,6 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	}
 
 	ctx, instance, d := e.ctx, e.instance, e.d
-	scanCtx := d.scanCtx
 	withHeader := stmt.Variant == "with_header"
 	headerInput := e.resolveEnumHeaderInput(stmt.Header, d.srcDirs)
 	baseDir, baseSep, baseName := e.enumSerializedBaseParts(stmt)
@@ -71,7 +70,6 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		moduleTag = tagCppProto
 	}
 
-	scanner := e.scanner
 	codegen := e.codegen
 
 	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq})
@@ -87,19 +85,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			codegen.lookup(serializedHPath).GeneratorRefs = generatorRefs
 		}
 
-		headerClosure := scanner.walkClosure(headerInput, scanCtx, scanDomainAux)
-
-		var enClosure []VFS
-
-		if withHeader {
-			enClosure = ctx.na.dedupClosure([]VFS{headerClosure.self}, headerClosure.buckets)
-		} else {
-			ownCV := scanner.walkClosure(serializedCPPPath, scanCtx, scanDomainAux)
-
-			enClosure = ctx.na.dedupClosure([]VFS{headerClosure.self}, headerClosure.buckets, ownCV.buckets)
-		}
-
-		augmentedDepENRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, enClosure)
+		depENRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{headerInput})
 
 		emitEN(
 			instance,
@@ -110,8 +96,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			withHeader,
 			enumParserLD,
 			enumParserBin,
-			augmentedDepENRefs,
-			enClosure,
+			depENRefs,
 			enRef,
 			ctx.emit,
 		)
@@ -152,7 +137,6 @@ func emitEN(
 	enumParserLD NodeRef,
 	enumParserBin VFS,
 	depENRefs []NodeRef,
-	headerIncludeClosure []VFS,
 	id NodeRef,
 	emit *StreamingEmitter,
 ) {
@@ -193,7 +177,7 @@ func emitEN(
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:            env,
-		Inputs:         na.inputList(na.vfsList(enumParserBin), headerIncludeClosure),
+		Inputs:         na.inputList(na.vfsList(enumParserBin, headerInput)),
 		KV:             &enKV,
 		Outputs:        outputs,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
