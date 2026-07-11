@@ -51,9 +51,10 @@ Reference CY node `$(B)/library/python/codecs/__codecs.pyx.py3.cpp` —
 | …   | glibc compat, `library/cpp/blockcodecs`, `util/charset`, … |
 
 The genuine cython action inputs are the small non-header set: `cython.py`, the
-`Cython/Utility/*.c/.pyx/.pxd` templates, `__codecs.pyx`, the cimported `.pxd`
-(`util/generic/string.pxd`, `libcpp/string.pxd`, …), `pyconfig.h.in`. Everything
-else (the 837 libcxx + python + numpy headers) is the scanned include closure.
+`Cython/Utility/*.c/.pyx/.pxd` templates, `__codecs.pyx`, and the cimported
+`.pxd`/`.pxi` files (`util/generic/string.pxd`, `libcpp/string.pxd`, …).
+Everything else (the 837 libcxx + python + numpy headers, including
+`pyconfig.h.in`) is the scanned include closure.
 
 ### How the closure is assembled (two paths)
 
@@ -98,13 +99,20 @@ The full ref node is embedded verbatim below ("Узел целиком").
 
 ## Status
 
-Reproduced. `emit_cython_cpp.go` now walks each `OUTPUT_INCLUDES` header's
-closure (instead of adding the headers bare), so the shim's `#else` `#include`
-is followed and the `longintrepr.h` target rides on the CY node — the codecs CY
-node matches ref exactly (1263 inputs, identical `self_uid`), sg6 node parity
-8016 → 8140, sg2-5 byte-exact. This document records that the broad CY-node
-closure itself is an upstream over-declaration (cython reads none of those
-headers), not a property our model independently needs.
+Confirmed and normalized as of 2026-07-11. The earlier parity implementation
+walked every `OUTPUT_INCLUDES`/utility C file and reproduced all 1263 inputs on
+the CY node. `ay` now keeps Cython-language inputs and the utility template
+files on the CY action, while the generated C/C++ action alone owns their
+C/C++ include closure. `dev dump normalize --ref-graph` removes the upstream
+header over-declaration from `kv.p=CY` nodes before graph comparison.
+
+Cython 3.2.5's loader provides the mechanical proof. In
+`Cython/Compiler/Code.py`, `UtilityCodeBase.load_utilities_from_file()` reads
+the utility file as text and recognizes only `requires`, `substitute`, and
+`proto_block` special tags. A C `#include` is ordinary payload text. Only
+`//@requires` recursively calls `UtilityCode.load()` for another utility
+section/file; no C/C++ header is opened by the generator. The emitted
+`#include` lines are therefore inputs of the later compiler action only.
 
 ## Узел целиком (verbatim, из sg6 ref-графа)
 

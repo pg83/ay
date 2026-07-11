@@ -1729,7 +1729,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ForceConsistentDebug: isGoModuleType(d.moduleStmt.Name),
 	}
 
-	d.scanCtx = newModuleScanContext(ctx, instance, d, d.cc.AddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 
 	frame.peerCtx = PeerContext{
@@ -1740,8 +1739,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 	e = newEmitContextIn(frame, ctx, instance, d, &frame.peerCtx)
 
-	e.cythonAdjustModuleCCBlocks()
+	scanAddIncl := e.cythonAdjustModuleCCBlocks()
 	e.sprotoAdjustProtoEnv()
+	d.scanCtx = newModuleScanContext(ctx, instance, d, scanAddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
 	e.emit()
 
 	if instance.Demand == demandNone {
