@@ -13,7 +13,7 @@ var (
 	bucketHashBenchXor uint64
 )
 
-func TestBucketMix64MatchesScalar(t *testing.T) {
+func TestBucketHashPlatform(t *testing.T) {
 	rng := rand.New(rand.NewSource(2))
 
 	for n := 0; n <= 1024; n++ {
@@ -23,27 +23,11 @@ func TestBucketMix64MatchesScalar(t *testing.T) {
 			elems[i] = VFS(rng.Uint32())
 		}
 
-		sum, xr := bucketMix64Scalar(elems)
+		sum, xr := bucketMix64Reference(elems)
 		platformSum, platformXor := bucketHashPlatform(elems)
 
 		if sum != platformSum || xr != platformXor {
-			t.Fatalf("platform n=%d: scalar (%d,%d) != platform (%d,%d)", n, sum, xr, platformSum, platformXor)
-		}
-
-		if useBucketHashAVX2 && n >= bucketHashSIMDMin {
-			avxSum, avxXor := bucketMix64AVX2(elems)
-
-			if sum != avxSum || xr != avxXor {
-				t.Fatalf("avx2 n=%d: scalar (%d,%d) != vector (%d,%d)", n, sum, xr, avxSum, avxXor)
-			}
-		}
-
-		if useBucketHashAVX512 && n >= bucketHashSIMDMin {
-			avxSum, avxXor := bucketMix64AVX512(elems)
-
-			if sum != avxSum || xr != avxXor {
-				t.Fatalf("avx512 n=%d: scalar (%d,%d) != vector (%d,%d)", n, sum, xr, avxSum, avxXor)
-			}
+			t.Fatalf("n=%d: reference (%d,%d) != platform (%d,%d)", n, sum, xr, platformSum, platformXor)
 		}
 	}
 }
@@ -56,16 +40,19 @@ func BenchmarkBucketMix64(b *testing.B) {
 			elems[i] = VFS(i*2654435761 + 12345)
 		}
 
-		benchBucketMix64(b, "scalar/"+strconv.Itoa(n), elems, bucketMix64Scalar)
-
-		if useBucketHashAVX2 && n >= bucketHashSIMDMin {
-			benchBucketMix64(b, "avx2/"+strconv.Itoa(n), elems, bucketMix64AVX2)
-		}
-
-		if useBucketHashAVX512 && n >= bucketHashSIMDMin {
-			benchBucketMix64(b, "avx512/"+strconv.Itoa(n), elems, bucketMix64AVX512)
-		}
+		benchBucketMix64(b, strconv.Itoa(n), elems, bucketHashPlatform)
 	}
+}
+
+func bucketMix64Reference(elems []VFS) (sum, xr uint64) {
+	for _, v := range elems {
+		z := mix64(uint64(v))
+
+		sum += z
+		xr ^= z
+	}
+
+	return sum, xr
 }
 
 func bucketHashBenchSizes() []int {
