@@ -834,7 +834,7 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 	*lex = Lexer{name: name, src: src, line: 1, col: 1, tokBuf: tokBuf[:0]}
 
 	argScratch := p.argScratch
-	stmtScratch := scrub(p.stmtScratch)
+	stmtScratch := scrubCap(p.stmtScratch)
 
 	*p = Parser{lex: lex, name: name, includeStack: stack, includes: includes, fs: fs, condScratch: condScratch[:0], condTokBuf: condTokBuf[:0], argScratch: argScratch[:0], stmtScratch: stmtScratch}
 
