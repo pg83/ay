@@ -49,7 +49,7 @@ func newFS(srcRoot string) FS {
 		srcRoot:     srcRoot,
 		rootSlash:   srcRoot + "/",
 		readBuf:     make([]byte, 0, mmapReadThreshold),
-		dirNames:    newBumpAllocator[uint32](1 << 12),
+		dirNames:    newBumpAllocator[uint32](),
 		dirEntries:  newIntSet(1 << 12),
 		sourceUnder: newIntMap[STR](1 << 16),
 	}

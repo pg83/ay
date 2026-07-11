@@ -20,7 +20,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 		lineNo int
 	)
 
-	pathArena := newBumpAllocator[VFS](1 << 8)
+	pathArena := newBumpAllocator[VFS]()
 
 	flushPending := func() {
 		if pendingActive {

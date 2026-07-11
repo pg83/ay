@@ -19,7 +19,7 @@ type SliceCache[T comparable] struct {
 
 func newSliceCache[T comparable](hint int) *SliceCache[T] {
 	return &SliceCache[T]{
-		pool:     newBumpAllocator[T](hint),
+		pool:     newBumpAllocator[T](),
 		table:    newIntMap[SliceVal[T]](hint),
 		overflow: newIntMap[SliceVal[T]](1 << 4),
 	}
