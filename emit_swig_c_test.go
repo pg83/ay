@@ -52,10 +52,10 @@ func TestCollectSwigInducedIncludes_UnionAcrossClosure(t *testing.T) {
 		"contrib/tools/swig/Lib/python.swg": "%module python\n",
 	})
 
-	ctx := &GenCtx{fs: fs, parsers: newIncludeParserManagerFS(fs, newSharedParseCache())}
+	scanner := newTestScanner(fs, SysInclSet{})
 
 	closure := []VFS{source("mod/local.i"), source("mod/nested.i")}
-	got := collectSwigInducedIncludes(ctx, source("mod/src.swg"), closure)
+	got := collectSwigInducedIncludes(scanner, source("mod/src.swg"), closure)
 
 	want := []IncludeDirective{
 		{kind: includeSystem, target: includeTarget(internStr("Python.h").any())},

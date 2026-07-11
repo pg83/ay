@@ -12,7 +12,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 	srcVFS := resolveSourceVFS(ctx, instance, srcRel, d.srcDirs)
 	outVFS := build(module, "/", srcRel, ".cpp")
 	ref := ctx.emit.reserve()
-	parsed := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil)
+	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
 
 	scanner := e.scanner
 	scanCtx := d.scanCtx
@@ -58,7 +58,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 		SourcePath:     srcVFS,
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(toolRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[parsedIncludesLocal]},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 		ClosureLeaves:  e.ctx.na.vfsList(srcVFS),
 		OnUse:          pending,
 	})

@@ -87,7 +87,7 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 		OnUse:         pending,
 	})
 
-	r5Parsed := e.scanner.parsers.sourceParsedBuckets(rlSourceVFS, nil).bucket(parsedIncludesCpp)
+	r5Parsed := e.scanner.parsedBucketForInput(rlSourceVFS, parsedIncludesCpp, nil)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     r5CppOut,

@@ -264,6 +264,14 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 	return s.parsers.sourceParsedBuckets(vfsPath, ctxParser).bucket(s.parsers.registry.walkableBucketFor(vfsPath.relString())), nil
 }
 
+func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIncludeBucket, ctxParser IncludeDirectiveParser) []IncludeDirective {
+	if vfsPath.isBuild() {
+		return s.codegen.buildParsedFor(vfsPath).bucket(parsedIncludesLocal)
+	}
+
+	return s.parsers.sourceParsedBuckets(vfsPath, ctxParser).bucket(sourceBucket)
+}
+
 func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
 	incDir := dirKey(pathDir(vfsPath.relString()))

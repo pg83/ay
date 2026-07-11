@@ -99,15 +99,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 	rl6SourceVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	r6Out := ragel6OutVFS(instance, srcRel)
 
-	var r6Parsed []IncludeDirective
-
-	if rl6SourceVFS.isBuild() {
-		if info := e.codegen.lookup(rl6SourceVFS); info != nil {
-			r6Parsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
-		}
-	} else {
-		r6Parsed = e.scanner.parsers.sourceParsedBuckets(rl6SourceVFS, nil).bucket(parsedIncludesCpp)
-	}
+	r6Parsed := e.scanner.parsedBucketForInput(rl6SourceVFS, parsedIncludesCpp, nil)
 
 	r6Ref := ctx.emit.reserve()
 
