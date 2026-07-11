@@ -40,11 +40,14 @@ func (p *PendingEmit) fire() {
 }
 
 func fireOnUse(info *GeneratedFileInfo) {
-	if info == nil {
+	if info == nil || info.OnUse == nil {
 		return
 	}
 
-	info.OnUse.fire()
+	pending := info.OnUse
+
+	info.OnUse = nil
+	pending.fire()
 }
 
 type CodegenRegistry struct {
