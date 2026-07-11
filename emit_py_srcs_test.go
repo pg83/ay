@@ -202,6 +202,7 @@ func TestEmitPySrcObjcopyShellinghamTailOmitsBareKvs(t *testing.T) {
 	e := newEmitContext(ctx, instance, d, nil)
 
 	e.registerCollectPySrcs()
+	drainPySrcTestQueue(e)
 
 	res := e.emitPySrcObjcopy()
 
@@ -294,12 +295,42 @@ func TestRegisterCollectPySrcs_EnqueuesProto(t *testing.T) {
 
 	meta := e.srcs[0]
 
-	if meta.Source.string() != "schema.proto" || meta.PyProtoGroup == nil || *meta.PyProtoGroup != 0 {
+	if meta.Source.string() != "schema.proto" || meta.Py == nil || meta.Py.Kind != pySourceProtoInput || meta.Py.Group != 0 {
 		t.Fatalf("queued proto = %#v", meta)
 	}
 
 	if len(e.pySrcsReg) != 0 {
 		t.Fatalf("python sources registered before drain: %#v", e.pySrcsReg)
+	}
+}
+
+func TestRegisterCollectPySrcs_EnqueuesPython(t *testing.T) {
+	d := &ModuleData{
+		pySrcs:     anysOf("pkg/mod.py"),
+		moduleStmt: &ModuleStmt{Name: tokPy3Library},
+	}
+	e, _ := pySrcTestEmitContext(d, "mod")
+
+	e.registerCollectPySrcs()
+
+	if len(e.srcs) != 1 {
+		t.Fatalf("queued sources = %d, want 1", len(e.srcs))
+	}
+
+	meta := e.srcs[0]
+
+	if meta.Source.string() != "$(S)/mod/pkg/mod.py" || meta.Py == nil || meta.Py.Kind != pySourcePlain || meta.Py.Group != 0 {
+		t.Fatalf("queued Python source = %#v", meta)
+	}
+
+	if len(e.pySrcsReg) != 0 {
+		t.Fatalf("Python sources registered before drain: %#v", e.pySrcsReg)
+	}
+
+	drainPySrcTestQueue(e)
+
+	if len(e.pySrcsReg) != 1 || e.pySrcsReg[0].Path != meta.Source.vfs() {
+		t.Fatalf("Python sources after drain = %#v", e.pySrcsReg)
 	}
 }
 
@@ -319,10 +350,20 @@ func pySrcTestEmitContext(d *ModuleData, modulePath string) (*EmitContext, *GenC
 	return newEmitContext(ctx, instance, d, nil), ctx
 }
 
+func drainPySrcTestQueue(e *EmitContext) {
+	for e.srcHead < len(e.srcs) {
+		meta := e.srcs[e.srcHead]
+
+		e.srcHead++
+		e.emitOneSource(meta)
+	}
+}
+
 func buildPySrcEntries(d *ModuleData, modulePath string) []PyGenResEntry {
 	e, _ := pySrcTestEmitContext(d, modulePath)
 
 	e.registerCollectPySrcs()
+	drainPySrcTestQueue(e)
 
 	var entries []PyGenResEntry
 
@@ -340,6 +381,7 @@ func runPySrcBatcher(t *testing.T, d *ModuleData, modulePath string) []*Node {
 
 	seedResourceTools(ctx)
 	e.registerCollectPySrcs()
+	drainPySrcTestQueue(e)
 
 	var entries []PyGenResEntry
 

@@ -93,6 +93,44 @@ func protoPythonNamespaceArg(d *ModuleData) string {
 	return "/" + filepath.ToSlash(filepath.Clean(d.protoNamespace.string()))
 }
 
+func pyProtoOutputToken(instance ModuleInstance, out VFS, generatedProto bool) ANY {
+	if generatedProto {
+		return internStr(trimModulePrefix(out.relString(), instance.Path.relString())).any()
+	}
+
+	return internV("${ARCADIA_BUILD_ROOT}/", out.relString()).any()
+}
+
+func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, pyOut, grpcPyOut VFS, generatedProto bool) {
+	instance, d := e.instance, e.d
+	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
+
+	e.enqueueSrc(SrcMeta{
+		Source: pyOut.any(), Prio: stmtPrioDefault,
+		Py: &PySourceMeta{
+			Module: internV(keyDir, keySep, keyBase, "_pb2.py"),
+			Token:  pyProtoOutputToken(instance, pyOut, generatedProto),
+			Group:  srcGroup,
+			Kind:   pySourceProto,
+		},
+	})
+
+	if grpcPyOut == 0 {
+		return
+	}
+
+	e.enqueueSrc(SrcMeta{
+		Source: grpcPyOut.any(), Prio: stmtPrioDefault,
+		Py: &PySourceMeta{
+			Module:      internV(keyDir, keySep, keyBase, "_pb2_grpc.py"),
+			Token:       pyProtoOutputToken(instance, grpcPyOut, generatedProto),
+			ExtraInputs: e.ctx.na.vfsList(pyOut),
+			Group:       srcGroup,
+			Kind:        pySourceProto,
+		},
+	})
+}
+
 type PyPBModuleEmission struct {
 	grpcPyRef    NodeRef
 	mypyRef      NodeRef
@@ -236,6 +274,14 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	pyOut := build(protoBase, "__intpy3___pb2.py")
 
 	if e.codegen.lookup(pyOut) != nil {
+		var grpcPyOut VFS
+
+		if d.grpc {
+			grpcPyOut = build(protoBase, "__intpy3___pb2_grpc.py")
+		}
+
+		e.enqueuePyProtoOutputs(src, srcGroup, pyOut, grpcPyOut, e.codegen.lookup(build(protoRelPath)) != nil)
+
 		return
 	}
 
@@ -359,224 +405,18 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	pyPBPE := na.pendingEmitter(pending)
 
 	sourceInputs := na.dedupSourceVFS(inputs, transitive.buckets)
-	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
-
-	tokenFor := func(out VFS) STR {
-		if generatedProto {
-			return internStr(trimModulePrefix(out.relString(), instance.Path.relString()))
-		}
-
-		return internV("${ARCADIA_BUILD_ROOT}/", out.relString())
-	}
 
 	e.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})
 
-	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: pyOut, Module: internV(keyDir, keySep, keyBase, "_pb2.py"), Token: tokenFor(pyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
+	if !d.noMypy {
+		e.register(GeneratedFileInfo{OutputPath: pyiOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})
+	}
 
 	if d.grpc {
 		e.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})
-
-		e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: grpcPyOut, Module: internV(keyDir, keySep, keyBase, "_pb2_grpc.py"), Token: tokenFor(grpcPyOut).any(), Group: pyGroupProto, SrcGroup: srcGroup})
-	}
-}
-
-func (e *EmitContext) hasProtoPySrcs() bool {
-	for _, ps := range e.pySrcsReg {
-		if ps.Group == pyGroupProto {
-			return true
-		}
 	}
 
-	return false
-}
-
-func (e *EmitContext) pyProtoYapycOut(ps PySrc) VFS {
-	rel := ps.Path.relString()
-	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
-
-	if strings.Contains(token, "/") {
-		return build(rel, ".", pySrcYapycSuffix(e.instance.Path.relString()), ".yapyc3")
-	}
-
-	return build(rel, ".yapyc3")
-}
-
-func (e *EmitContext) appendPyProtoResEntries(out []PyGenResEntry, ps PySrc) []PyGenResEntry {
-	rel := ps.Path.relString()
-	grpc := strings.HasSuffix(rel, "__intpy3___pb2_grpc.py")
-	info := e.codegen.use(ps.Path)
-
-	if info == nil {
-		throwFmt("appendPyProtoResEntries: unregistered producer for %q", ps.Path.string())
-	}
-
-	token := ps.Token.string()
-	yapycOut := e.pyProtoYapycOut(ps)
-
-	if !strings.HasPrefix(token, "${ARCADIA_BUILD_ROOT}/") {
-		return append(out,
-			PyGenResEntry{token: token, key: ps.Module, path: ps.Path},
-			PyGenResEntry{token: e.resStr2(token, strings.TrimPrefix(yapycOut.relString(), rel)), key: ps.Module, yapyc: true, path: yapycOut})
-	}
-
-	entryInputs := info.SourceInputs
-
-	if grpc {
-		siblingPy := build(strings.TrimSuffix(rel, "__intpy3___pb2_grpc.py"), "__intpy3___pb2.py")
-
-		entryInputs = concat(info.SourceInputs, []VFS{siblingPy})
-	}
-
-	return append(out,
-		PyGenResEntry{token: token, key: ps.Module, path: ps.Path, inputs: entryInputs},
-		PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut, inputs: info.SourceInputs})
-}
-
-func (e *EmitContext) emitPyProtoBytecode() {
-	ctx := e.ctx
-
-	if !e.hasProtoPySrcs() {
-		return
-	}
-
-	py3ccLDRef, py3ccBinary := ctx.tool(argToolsPy3cc)
-	py3ccSlowLDRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
-
-	for _, ps := range e.pySrcsReg {
-		if ps.Group != pyGroupProto {
-			continue
-		}
-
-		e.emitPyProtoYapyc(ps, py3ccLDRef, py3ccSlowLDRef, py3ccBinary, py3ccSlowBin)
-	}
-}
-
-func (e *EmitContext) emitPyProtoYapyc(ps PySrc, py3ccRef, py3ccSlowRef NodeRef, py3ccBinary, py3ccSlowBin VFS) {
-	ctx, instance := e.ctx, e.instance
-	na := ctx.na
-	rel := ps.Path.relString()
-	info := e.codegen.use(ps.Path)
-
-	if info == nil {
-		throwFmt("emitPyProtoYapyc: unregistered producer for %q", ps.Path.string())
-	}
-	token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
-	yapycOut := e.pyProtoYapycOut(ps)
-	yapycTail := na.anyList(internV(token, "-").any(), (ps.Path).any(), yapycOut.any())
-	inputsHead := na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path)
-
-	var nodeInputs InputChunks
-
-	if strings.HasSuffix(rel, "__intpy3___pb2_grpc.py") {
-		siblingPy := build(strings.TrimSuffix(rel, "__intpy3___pb2_grpc.py"), "__intpy3___pb2.py")
-
-		nodeInputs = na.inputList(inputsHead, info.SourceInputs, na.srcChunk(siblingPy))
-	} else {
-		nodeInputs = na.inputList(inputsHead, info.SourceInputs)
-	}
-
-	yapycEnv := envVarsVCSPyHash
-
-	yapycNode := Node{
-		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(e.ctx.py3ccHead(py3ccBinary, py3ccSlowBin), yapycTail), Env: yapycEnv}),
-		Env:            yapycEnv,
-		Inputs:         nodeInputs,
-		Outputs:        na.vfsList(yapycOut),
-		KV:             &pyCodegenKV,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        na.refList(info.ProducerRef),
-		ForeignDepRefs: na.refList(py3ccRef, py3ccSlowRef),
-		Resources:      usesPython3,
-	}
-
-	yapycRef := ctx.emit.emitNode(yapycNode)
-
-	e.register(GeneratedFileInfo{OutputPath: yapycOut, ProducerRef: yapycRef})
-}
-
-func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
-	d := e.d
-	entries := e.resEntries[:0]
-
-	for _, ps := range e.pySrcsReg {
-		if ps.Group != pyGroupProto || ps.SrcGroup != srcGroup {
-			continue
-		}
-
-		entries = e.appendPyProtoResEntries(entries, ps)
-	}
-
-	e.resEntries = retainMaxLen(e.resEntries, entries)
-
-	if len(entries) == 0 {
-		return nil, nil
-	}
-
-	return e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawSource: e.registerPyProtoAuxSource})
-}
-
-func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	entries := e.resEntries[:0]
-
-	for _, ps := range e.pySrcsReg {
-		if ps.Group != pyGroupProto {
-			continue
-		}
-
-		entries = e.appendPyProtoResEntries(entries, ps)
-	}
-
-	e.resEntries = retainMaxLen(e.resEntries, entries)
-
-	if len(entries) == 0 {
-		return nil
-	}
-
-	var cppSibling *ModuleEmitResult
-
-	if d.moduleStmt.Name == tokProtoLibrary && !moduleExcludesTag(d, "CPP_PROTO") {
-		cppInstance := instance
-
-		cppInstance.Language = LangCPP
-
-		if cppInstance.Demand != demandNone {
-			cppInstance.Demand = demandLinked
-		}
-
-		cppSibling = genModule(ctx, cppInstance)
-	}
-
-	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawSource: e.registerPyProtoAuxSource})
-
-	if len(genRefs) == 0 {
-		return nil
-	}
-
-	protoLibName := ""
-
-	if len(d.moduleStmt.Args) > 0 {
-		protoLibName = d.moduleStmt.Args[0].string()
-	}
-
-	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.relString(), d.unit.ARPrefix, protoLibName)
-	gRef := emitARGlobalNamedTagged(instance, globalBaseName, d.unit.GlobalARTag, genRefs, genOuts, d.tc, ctx.host, ctx.emit)
-	globalPath := build(instance.Path.relString(), "/", globalBaseName)
-
-	result := &ProtoSrcsResult{
-		GlobalRef:  &gRef,
-		GlobalPath: &globalPath,
-	}
-
-	if cppSibling != nil && cppSibling.ARPath != nil {
-		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
-		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
-	} else if moduleExcludesTag(d, "CPP_PROTO") {
-		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, build(instance.Path.relString(), "/", e.arName(instance.Path.relString(), "lib", "")))
-	}
-
-	return result
+	e.enqueuePyProtoOutputs(src, srcGroup, pyOut, grpcPyOut, generatedProto)
 }
 
 func protoPythonOutputRoot(d *ModuleData) string {
@@ -589,38 +429,4 @@ func protoPythonOutputRoot(d *ModuleData) string {
 	}
 
 	return ""
-}
-
-func pyProtoAuxPy3Suffix(d *ModuleData) bool {
-	return d.unit.Tag == unitTagPy3Proto || d.moduleStmt.Name == tokPy23Library || d.moduleStmt.Name == tokPy23NativeLibrary
-}
-
-func (e *EmitContext) registerPyProtoAuxSource(aux VFS, seed []VFS, ref NodeRef) CompileSpec {
-	ctx, d := e.ctx, e.d
-	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-	na := ctx.na
-	emits := na.dirs.alloc(len(seed))[:0]
-
-	for _, in := range seed {
-		if in.isSource() {
-			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(in.rel().any())})
-		}
-	}
-
-	na.dirs.commit(len(emits))
-
-	emits = emits[:len(emits):len(emits)]
-
-	e.register(GeneratedFileInfo{
-		OutputPath:     aux,
-		ProducerRef:    ref,
-		GeneratorRefs:  e.ctx.na.refList(rescompilerRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-	})
-
-	return CompileSpec{
-		ForceCxx:  true,
-		Py3Suffix: pyProtoAuxPy3Suffix(d),
-		CFlags:    e.ctx.na.anyList(argX.any(), argC.any()),
-	}
 }

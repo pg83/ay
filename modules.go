@@ -260,14 +260,14 @@ type CompileSpec struct {
 }
 
 type SrcMeta struct {
-	Source       ANY
-	Prio         int
-	Seq          int
-	Global       bool
-	Bucket       int
-	Compile      CompileSpec
-	CompileRef   NodeRef
-	PyProtoGroup *int
+	Source     ANY
+	Prio       int
+	Seq        int
+	Global     bool
+	Bucket     int
+	Compile    CompileSpec
+	CompileRef NodeRef
+	Py         *PySourceMeta
 }
 
 func (m SrcMeta) sortKey(round uint64) uint64 {

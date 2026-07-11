@@ -208,9 +208,9 @@ type ResourceItem struct {
 }
 
 type ResourcePack struct {
-	Tag       STR
-	Items     []ResourceItem
-	RawSource func(aux VFS, inputs []VFS, ref NodeRef) CompileSpec
+	Tag        STR
+	Items      []ResourceItem
+	RawCompile CompileSpec
 }
 
 func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
@@ -446,8 +446,8 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 
-	if p.RawSource == nil {
-		throwFmt("packResources: %s has raw-routed resource items but no RawSource", instance.Path.relString())
+	if !p.RawCompile.ForceCxx {
+		throwFmt("packResources: %s has raw-routed resource items but no RawCompile", instance.Path.relString())
 	}
 
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
@@ -538,7 +538,23 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		aux := build(instance.Path.relString(), "/", hash, "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
-		compile := p.RawSource(aux, adjacent, auxRef)
+		seed := na.dedupSourceVFS(adjacent, nil)
+		emits := na.dirs.alloc(len(seed))[:0]
+
+		for _, v := range seed {
+			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel().any())})
+		}
+
+		na.dirs.commit(len(emits))
+		emits = emits[:len(emits):len(emits)]
+
+		e.register(GeneratedFileInfo{
+			OutputPath:     aux,
+			ProducerRef:    auxRef,
+			GeneratorRefs:  na.refList(rescompilerRef),
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
+		})
+
 		nodeCmd := na.anys.alloc(2 + 2*len(chunk))[:0]
 
 		nodeCmd = append(nodeCmd, rescompilerBinVFS.any(), aux.any())
@@ -600,15 +616,14 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		}, auxRef)
 
 		ccRef := ctx.emit.reserve()
-		ccOut := e.ccOutputFor(aux, compile)
 
 		e.enqueueSrc(SrcMeta{
 			Source: aux.any(), Prio: stmtPrioDefault,
-			Compile: compile, CompileRef: ccRef,
+			Compile: p.RawCompile, CompileRef: ccRef,
 		})
 
 		refs = append(refs, ccRef)
-		outs = append(outs, ccOut)
+		outs = append(outs, e.ccOutputFor(aux, p.RawCompile))
 	}
 
 	return refs, outs

@@ -17,11 +17,24 @@ var (
 	yaConfResourceRE     = regexp.MustCompile(`"resource"\s*:\s*"([^"]+)"`)
 )
 
+const b32Lower = "abcdefghijklmnopqrstuvwxyz234567"
+
+type PySourceKind uint8
+
 const (
-	pyGroupGenAux = -2
-	pyGroupProto  = -1
-	b32Lower      = "abcdefghijklmnopqrstuvwxyz234567"
+	pySourcePlain PySourceKind = iota + 1
+	pySourceGenerated
+	pySourceProtoInput
+	pySourceProto
 )
+
+type PySourceMeta struct {
+	Module      STR
+	Token       ANY
+	ExtraInputs []VFS
+	Group       int
+	Kind        PySourceKind
+}
 
 func pyResourceKeyPrefix(topLevel bool, namespace *ANY, modulePath string) string {
 	if topLevel {
@@ -40,11 +53,12 @@ func generatedPyResourceKey(modulePath string, d *ModuleData, srcRel string) str
 }
 
 type PySrc struct {
-	Path     VFS
-	Module   STR
-	Token    ANY
-	Group    int
-	SrcGroup int
+	Path        VFS
+	Module      STR
+	Token       ANY
+	ExtraInputs []VFS
+	Group       int
+	Kind        PySourceKind
 }
 
 func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
@@ -101,9 +115,10 @@ func (e *EmitContext) registerCollectPySrcs() {
 
 		for _, srcRel := range group.Srcs {
 			if extIsProto(srcRel.string()) {
-				group := gi
-
-				e.enqueueSrc(SrcMeta{Source: srcRel, Prio: stmtPrioDefault, PyProtoGroup: &group})
+				e.enqueueSrc(SrcMeta{
+					Source: srcRel, Prio: stmtPrioDefault,
+					Py: &PySourceMeta{Group: gi, Kind: pySourceProtoInput},
+				})
 
 				continue
 			}
@@ -114,21 +129,42 @@ func (e *EmitContext) registerCollectPySrcs() {
 				path = resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 			}
 
-			e.pySrcsReg = append(e.pySrcsReg, PySrc{
-				Path:   path,
-				Module: internV(keyPrefix, srcRel.string()),
-				Token:  srcRel,
-				Group:  gi,
+			e.enqueueSrc(SrcMeta{
+				Source: path.any(), Prio: stmtPrioDefault,
+				Py: &PySourceMeta{
+					Module: internV(keyPrefix, srcRel.string()),
+					Token:  srcRel,
+					Group:  gi,
+					Kind:   pySourcePlain,
+				},
 			})
 		}
 	}
 }
 
+func (e *EmitContext) collectPySource(path VFS, meta PySourceMeta) {
+	e.pySrcsReg = append(e.pySrcsReg, PySrc{
+		Path: path, Module: meta.Module, Token: meta.Token,
+		ExtraInputs: meta.ExtraInputs, Group: meta.Group, Kind: meta.Kind,
+	})
+}
+
 func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
+	if ps.Kind == pySourceProto {
+		rel := ps.Path.relString()
+		token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
+
+		if strings.Contains(token, "/") {
+			return build(rel, ".", pySrcYapycSuffix(e.instance.Path.relString()), ".yapyc3")
+		}
+
+		return build(rel, ".yapyc3")
+	}
+
 	module := e.instance.Path.relString()
 	srcRel := ps.Token.string()
 
-	if ps.Group == pyGroupGenAux {
+	if ps.Kind == pySourceGenerated {
 		srcRel = strings.TrimPrefix(ps.Path.relString(), module+"/")
 	}
 
@@ -143,8 +179,30 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 	d := e.d
 	module := e.instance.Path.relString()
 
-	switch ps.Group {
-	case pyGroupGenAux:
+	switch ps.Kind {
+	case pySourceProto:
+		rel := ps.Path.relString()
+		info := e.codegen.use(ps.Path)
+
+		if info == nil {
+			throwFmt("appendPyResEntries: unregistered proto producer for %q", ps.Path.string())
+		}
+
+		token := ps.Token.string()
+		yapycOut := e.pyYapycOutFor(ps)
+
+		if !strings.HasPrefix(token, "${ARCADIA_BUILD_ROOT}/") {
+			return append(out,
+				PyGenResEntry{token: token, key: ps.Module, path: ps.Path},
+				PyGenResEntry{token: e.resStr2(token, strings.TrimPrefix(yapycOut.relString(), rel)), key: ps.Module, yapyc: true, path: yapycOut})
+		}
+
+		entryInputs := concat(info.SourceInputs, ps.ExtraInputs)
+
+		return append(out,
+			PyGenResEntry{token: token, key: ps.Module, path: ps.Path, inputs: entryInputs},
+			PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut, inputs: info.SourceInputs})
+	case pySourceGenerated:
 		info := e.codegen.use(ps.Path)
 
 		if info == nil {
@@ -201,9 +259,9 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 	return out
 }
 
-func (e *EmitContext) hasEnginePySrcs() bool {
+func (e *EmitContext) hasPySrcKind(kind PySourceKind) bool {
 	for _, ps := range e.pySrcsReg {
-		if ps.Group != pyGroupProto {
+		if ps.Kind == kind {
 			return true
 		}
 	}
@@ -211,107 +269,149 @@ func (e *EmitContext) hasEnginePySrcs() bool {
 	return false
 }
 
-func (e *EmitContext) emitPyBytecode() {
-	ctx, _, d := e.ctx, e.instance, e.d
+func (e *EmitContext) hasEnginePySrcs() bool {
+	return e.hasPySrcKind(pySourcePlain) || e.hasPySrcKind(pySourceGenerated)
+}
 
-	if d.pyBuildNoPYC || !e.hasEnginePySrcs() {
+func (e *EmitContext) emitPyBytecode(moduleSources bool) {
+	ctx, _, d := e.ctx, e.instance, e.d
+	hasProto := e.hasPySrcKind(pySourceProto)
+	hasEngine := moduleSources && !d.pyBuildNoPYC && e.hasEnginePySrcs()
+
+	if !hasProto && !hasEngine {
 		return
 	}
 
 	py3ccLDRef, py3ccBinary := ctx.tool(argToolsPy3cc)
 	py3ccSlowLDRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
 
+	if hasProto {
+		for _, ps := range e.pySrcsReg {
+			if ps.Kind == pySourceProto {
+				e.emitPyYapyc(ps, py3ccLDRef, py3ccSlowLDRef, py3ccBinary, py3ccSlowBin)
+			}
+		}
+	}
+
+	if !hasEngine {
+		return
+	}
+
 	ctx.tool(argToolsRescompiler)
 	ctx.tool(argToolsRescompressor)
 	ctx.tool(argToolsArchiver)
 
 	for _, ps := range e.pySrcsReg {
-		if ps.Group == pyGroupProto || extIsPyi(ps.Token.string()) {
+		if ps.Kind == pySourceProto || extIsPyi(ps.Token.string()) {
 			continue
 		}
 
-		e.emitEnginePyYapyc(ps, py3ccLDRef, py3ccSlowLDRef, py3ccBinary, py3ccSlowBin)
+		e.emitPyYapyc(ps, py3ccLDRef, py3ccSlowLDRef, py3ccBinary, py3ccSlowBin)
 	}
 }
 
-func (e *EmitContext) emitEnginePyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, py3ccBinary, py3ccSlowBin VFS) {
+func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, py3ccBinary, py3ccSlowBin VFS) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	srcAbs := ps.Path
-
-	var genInfo *GeneratedFileInfo
-	var moduleName string
-
-	if ps.Group == pyGroupGenAux {
-		genInfo = e.codegen.use(ps.Path)
-
-		if genInfo == nil {
-			throwFmt("emitEnginePyYapyc: unregistered producer for %q", ps.Path.string())
-		}
-
-		moduleName = e.resStr2(srcAbs.relString(), "-")
-	} else {
-		genInfo = e.codegen.useSplit(instance.Path, ps.Token)
-
-		if genInfo != nil {
-			moduleName = e.resStr2(ps.Token.string(), "-")
-		} else {
-			moduleName = e.resStr2(srcAbs.relString(), "-")
-		}
-	}
-
+	toolRefs := na.refList(py3ccLDRef, py3ccSlowLDRef)
+	env := envVarsVCSPyHash
 	outputPath := e.pyYapycOutFor(ps)
 
-	cmdArgs := na.chunkList(e.ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
-		na.anyList(internStr(moduleName).any(), srcAbs.any(), outputPath.any()))
+	if e.codegen.lookup(outputPath) != nil {
+		return
+	}
 
-	env := envVarsVCSPyHash
-
+	var cmdArgs ArgChunks
 	var nodeInputs InputChunks
-	var inputs []VFS
+	var deps []NodeRef
+	var generatorRefs []NodeRef
 
-	if genInfo != nil {
-		block := na.vfs.alloc(3 + len(genInfo.SourceInputs))[:0]
+	if ps.Kind == pySourceProto {
+		info := e.codegen.use(ps.Path)
 
-		block = append(block, srcAbs)
-		block = append(block, genInfo.SourceInputs...)
-		block = append(block, py3ccBinary, py3ccSlowBin)
-		na.vfs.commit(len(block))
+		if info == nil {
+			throwFmt("emitPyYapyc: unregistered proto producer for %q", ps.Path.string())
+		}
 
-		inputs = block[:len(block):len(block)]
-		nodeInputs = na.inputList(inputs)
+		token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
+
+		cmdArgs = na.chunkList(ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
+			na.anyList(internV(token, "-").any(), ps.Path.any(), outputPath.any()))
+		inputsHead := na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path)
+
+		if len(ps.ExtraInputs) > 0 {
+			nodeInputs = na.inputList(inputsHead, info.SourceInputs, ps.ExtraInputs)
+		} else {
+			nodeInputs = na.inputList(inputsHead, info.SourceInputs)
+		}
+
+		deps = na.refList(info.ProducerRef)
 	} else {
-		nodeInputs = na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin), na.srcChunk(srcAbs))
+		var genInfo *GeneratedFileInfo
+		var moduleName string
+
+		if ps.Kind == pySourceGenerated {
+			genInfo = e.codegen.use(ps.Path)
+
+			if genInfo == nil {
+				throwFmt("emitPyYapyc: unregistered generated producer for %q", ps.Path.string())
+			}
+
+			moduleName = e.resStr2(srcAbs.relString(), "-")
+		} else {
+			genInfo = e.codegen.useSplit(instance.Path, ps.Token)
+
+			if genInfo != nil {
+				moduleName = e.resStr2(ps.Token.string(), "-")
+			} else {
+				moduleName = e.resStr2(srcAbs.relString(), "-")
+			}
+		}
+
+		cmdArgs = na.chunkList(ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
+			na.anyList(internStr(moduleName).any(), srcAbs.any(), outputPath.any()))
+
+		var inputs []VFS
+
+		if genInfo != nil {
+			block := na.vfs.alloc(3 + len(genInfo.SourceInputs))[:0]
+
+			block = append(block, srcAbs)
+			block = append(block, genInfo.SourceInputs...)
+			block = append(block, py3ccBinary, py3ccSlowBin)
+			na.vfs.commit(len(block))
+
+			inputs = block[:len(block):len(block)]
+			nodeInputs = na.inputList(inputs)
+
+			deps = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputs)
+		} else {
+			nodeInputs = na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin), na.srcChunk(srcAbs))
+		}
+
+		generatorRefs = toolRefs
 	}
 
 	node := Node{
-		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Env: env}),
-		Env:          env,
-		Inputs:       nodeInputs,
-		Outputs:      na.vfsList(outputPath),
-		KV:           &pyCodegenKV,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Resources:    usesPython3,
+		Platform:       instance.Platform,
+		Cmds:           na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
+		Env:            env,
+		Inputs:         nodeInputs,
+		Outputs:        na.vfsList(outputPath),
+		KV:             &pyCodegenKV,
+		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		DepRefs:        deps,
+		ForeignDepRefs: toolRefs,
+		Resources:      usesPython3,
 	}
-
-	toolRefs := na.refList(py3ccLDRef, py3ccSlowLDRef)
-
-	if genInfo != nil {
-		if extras := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputs); len(extras) > 0 {
-			node.DepRefs = extras
-		}
-	}
-
-	node.ForeignDepRefs = toolRefs
 
 	pyRef := ctx.emit.emitNode(node)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    outputPath,
 		ProducerRef:   pyRef,
-		GeneratorRefs: toolRefs,
+		GeneratorRefs: generatorRefs,
 	})
 }
 
@@ -348,7 +448,7 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 		entries := e.resEntries[:0]
 
 		for _, ps := range e.pySrcsReg {
-			if ps.Group != gi {
+			if ps.Kind != pySourcePlain || ps.Group != gi {
 				continue
 			}
 
@@ -365,7 +465,7 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 		}
 
 		if d.moduleStmt.Name != tokProtoLibrary {
-			protoRefs, protoOuts := e.flushPyProtoGroup(gi)
+			protoRefs, protoOuts := e.emitPyProtoGroupResources(gi)
 
 			res.Refs = append(res.Refs, protoRefs...)
 			res.Outputs = append(res.Outputs, protoOuts...)
@@ -377,6 +477,53 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 	}
 
 	return res
+}
+
+func (e *EmitContext) collectPyProtoGroupResEntries(group int) []PyGenResEntry {
+	entries := e.resEntries[:0]
+
+	for _, ps := range e.pySrcsReg {
+		if ps.Kind == pySourceProto && ps.Group == group {
+			entries = e.appendPyResEntries(entries, ps)
+		}
+	}
+
+	e.resEntries = retainMaxLen(e.resEntries, entries)
+
+	return entries
+}
+
+func (e *EmitContext) collectAllPyProtoResEntries() []PyGenResEntry {
+	entries := e.resEntries[:0]
+
+	for _, ps := range e.pySrcsReg {
+		if ps.Kind == pySourceProto {
+			entries = e.appendPyResEntries(entries, ps)
+		}
+	}
+
+	e.resEntries = retainMaxLen(e.resEntries, entries)
+
+	return entries
+}
+
+func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef, []VFS) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+
+	return e.packResources(ResourcePack{
+		Tag: e.d.unit.HashTag, Items: e.pyGenResourceItems(entries),
+		RawCompile: CompileSpec{
+			ForceCxx:  true,
+			Py3Suffix: pyProtoAuxPy3Suffix(e.d),
+			CFlags:    e.ctx.na.anyList(argX.any(), argC.any()),
+		},
+	})
+}
+
+func (e *EmitContext) emitPyProtoGroupResources(group int) ([]NodeRef, []VFS) {
+	return e.packPyProtoResEntries(e.collectPyProtoGroupResEntries(group))
 }
 
 func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VFS) {
@@ -554,11 +701,17 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 	d := e.d
 
 	for _, ps := range e.pySrcsReg {
-		if ps.Group != pyGroupGenAux {
+		if ps.Kind != pySourceGenerated {
 			continue
 		}
 
-		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)), RawSource: e.registerRawAuxSource})
+		r, o := e.packResources(ResourcePack{
+			Tag: d.unit.HashTag, Items: e.pyGenResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)),
+			RawCompile: CompileSpec{
+				ForceCxx: true,
+				CFlags:   e.ctx.na.anyList(argX.any(), argC.any()),
+			},
+		})
 
 		refs = append(refs, r...)
 		outs = append(outs, o...)
@@ -567,31 +720,8 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 	return refs, outs
 }
 
-func (e *EmitContext) registerRawAuxSource(aux VFS, inputs []VFS, ref NodeRef) CompileSpec {
-	ctx := e.ctx
-	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-	na := ctx.na
-	seed := na.dedupSourceVFS(inputs, nil)
-	emits := na.dirs.alloc(len(seed))[:0]
-
-	for _, v := range seed {
-		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel().any())})
-	}
-
-	na.dirs.commit(len(emits))
-
-	emits = emits[:len(emits):len(emits)]
-
-	cflags := na.anyList(argX.any(), argC.any())
-
-	e.register(GeneratedFileInfo{
-		OutputPath:     aux,
-		ProducerRef:    ref,
-		GeneratorRefs:  na.refList(rescompilerRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-	})
-
-	return CompileSpec{ForceCxx: true, CFlags: cflags}
+func pyProtoAuxPy3Suffix(d *ModuleData) bool {
+	return d.unit.Tag == unitTagPy3Proto || d.moduleStmt.Name == tokPy23Library || d.moduleStmt.Name == tokPy23NativeLibrary
 }
 
 func (e *EmitContext) emitPyRegister(py3Suffix bool) {

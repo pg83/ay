@@ -100,11 +100,13 @@ func (e *EmitContext) emitSwigC() {
 			OnUse:         pending,
 		})
 
-		e.pySrcsReg = append(e.pySrcsReg, PySrc{
-			Path:   pyOutVFS,
-			Module: internStr(generatedPyResourceKey(instance.Path.relString(), d, pyOutRel)),
-			Token:  internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.relString()).any(),
-			Group:  pyGroupGenAux,
+		e.enqueueSrc(SrcMeta{
+			Source: pyOutVFS.any(), Prio: stmtPrioDefault,
+			Py: &PySourceMeta{
+				Module: internStr(generatedPyResourceKey(instance.Path.relString(), d, pyOutRel)),
+				Token:  internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.relString()).any(),
+				Kind:   pySourceGenerated,
+			},
 		})
 
 		e.enqueueSrc(SrcMeta{Source: cOutVFS.any(), Prio: stmtPrioDefault, Bucket: bkSwig})
