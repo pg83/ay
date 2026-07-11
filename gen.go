@@ -251,29 +251,11 @@ func useProducers(reg *CodegenRegistry, paths []VFS, refs []NodeRef) []NodeRef {
 }
 
 func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, includeInputs []VFS, incl ...NodeRef) []NodeRef {
-	var reg *CodegenRegistry
-	var refs []NodeRef
-
-	for _, input := range includeInputs {
-		if !input.isBuild() {
-			continue
-		}
-
-		if reg == nil {
-			reg = ctx.codegenFor(consumer)
-			refs = nodeRefScratches.get()
-		}
-
-		if info := reg.useBuild(input); info != nil {
-			refs = append(refs, info.ProducerRef)
-		}
-	}
-
-	if reg == nil {
-		return incl
-	}
+	refs := nodeRefScratches.get()
 
 	defer func() { nodeRefScratches.put(refs) }()
+
+	refs = useProducers(ctx.codegenFor(consumer), includeInputs, refs)
 	var result []NodeRef
 
 	dedupers.with(func(deduper *DeDuper) {
@@ -346,13 +328,12 @@ func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []Nod
 }
 
 func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, cv Closure, incl ...NodeRef) []NodeRef {
-	var reg *CodegenRegistry
-	var refs []NodeRef
+	reg := ctx.codegenFor(consumer)
+	refs := nodeRefScratches.get()
+
+	defer func() { nodeRefScratches.put(refs) }()
 
 	if cv.self.isBuild() {
-		reg = ctx.codegenFor(consumer)
-		refs = nodeRefScratches.get()
-
 		if info := reg.useBuild(cv.self); info != nil {
 			refs = append(refs, info.ProducerRef)
 		}
@@ -360,26 +341,13 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 
 	for _, bucket := range cv.buckets {
 		for _, p := range bucket {
-			if !p.isBuild() {
-				continue
-			}
-
-			if reg == nil {
-				reg = ctx.codegenFor(consumer)
-				refs = nodeRefScratches.get()
-			}
-
-			if info := reg.useBuild(p); info != nil {
-				refs = append(refs, info.ProducerRef)
+			if p.isBuild() {
+				if info := reg.useBuild(p); info != nil {
+					refs = append(refs, info.ProducerRef)
+				}
 			}
 		}
 	}
-
-	if reg == nil {
-		return incl
-	}
-
-	defer func() { nodeRefScratches.put(refs) }()
 
 	var result []NodeRef
 
