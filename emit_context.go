@@ -1,7 +1,5 @@
 package main
 
-import "unsafe"
-
 type PeerContext struct {
 	SelfAddInclGlobal []VFS
 	PeerAddInclGlobal []VFS
@@ -162,33 +160,15 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 	defer func() { nodeRefScratches.put(refs) }()
 
 	for _, chunk := range node.Inputs {
-		if len(chunk) == 0 {
-			continue
-		}
-
-		key := mix64(uint64(uintptr(unsafe.Pointer(unsafe.SliceData(chunk)))))
-
-		if cached, ok := e.scanner.cachedChunkDepRefs(key); ok {
-			refs = append(refs, cached...)
-
-			continue
-		}
-
-		start := len(refs)
-
 		for _, input := range chunk {
 			if !input.isBuild() {
 				continue
 			}
 
-			info := e.codegen.useBuild(input)
-
-			if info != nil {
+			if info := e.codegen.useBuild(input); info != nil {
 				refs = append(refs, info.ProducerRef)
 			}
 		}
-
-		e.scanner.putChunkDepRefs(key, refs[start:])
 	}
 
 	if len(refs) == 0 {

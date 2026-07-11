@@ -4,13 +4,11 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"unsafe"
 )
 
 const (
-	closureAllocHint          = 1 << 13
-	chunkDepRefsCacheCapacity = 1 << 16
-	resolveNoRank             = int(^uint(0) >> 1)
+	closureAllocHint = 1 << 13
+	resolveNoRank    = int(^uint(0) >> 1)
 )
 
 const (
@@ -33,37 +31,6 @@ type IncludeKind int
 type IncludeDirective struct {
 	kind   IncludeKind
 	target ANY
-}
-
-type chunkDepRefsEntry struct {
-	key    uint64
-	header *NodeRef
-}
-
-type chunkDepRefsCache struct {
-	entries []chunkDepRefsEntry
-	mask    uint64
-}
-
-func newChunkDepRefsCache(capacity int) chunkDepRefsCache {
-	return chunkDepRefsCache{
-		entries: make([]chunkDepRefsEntry, capacity),
-		mask:    uint64(capacity - 1),
-	}
-}
-
-func (c *chunkDepRefsCache) get(key uint64) (*NodeRef, bool) {
-	entry := &c.entries[key&c.mask]
-
-	if entry.key != key {
-		return nil, false
-	}
-
-	return entry.header, true
-}
-
-func (c *chunkDepRefsCache) put(key uint64, header *NodeRef) {
-	c.entries[key&c.mask] = chunkDepRefsEntry{key: key, header: header}
 }
 
 func includeTarget(s ANY) ANY {
@@ -99,8 +66,6 @@ type IncludeScanner struct {
 	scanCtxPool    sync.Pool
 	onWarn         func(Warn)
 	codegen        *CodegenRegistry
-	chunkDepRefs   chunkDepRefsCache
-	chunkDepArena  *BumpAllocator[NodeRef]
 	moduleByRef    *DenseMap[NodeRef, *ModuleEmitResult]
 }
 
@@ -137,8 +102,6 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		closureArena:   newBumpAllocator[VFS](),
 		childArena:     newBumpAllocator[VFS](),
 		searchTierFlat: newIntMap[VFS](4096),
-		chunkDepRefs:   newChunkDepRefsCache(chunkDepRefsCacheCapacity),
-		chunkDepArena:  newBumpAllocator[NodeRef](),
 	}
 
 	s.visitedIDPool.New = func() any {
@@ -150,35 +113,6 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 	}
 
 	return s
-}
-
-func (s *IncludeScanner) cachedChunkDepRefs(key uint64) ([]NodeRef, bool) {
-	header, cached := s.chunkDepRefs.get(key)
-
-	if !cached || header == nil {
-		return nil, cached
-	}
-
-	block := unsafe.Slice(header, int(*header)+1)
-
-	return block[1:], true
-}
-
-func (s *IncludeScanner) putChunkDepRefs(key uint64, refs []NodeRef) {
-	if len(refs) == 0 {
-		s.chunkDepRefs.put(key, nil)
-
-		return
-	}
-
-	n := len(refs) + 1
-	block := s.chunkDepArena.alloc(n)
-
-	block[0] = NodeRef(len(refs))
-	copy(block[1:], refs)
-	s.chunkDepArena.commit(n)
-
-	s.chunkDepRefs.put(key, &block[0])
 }
 
 type ScanDomain uint8
