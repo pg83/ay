@@ -24,7 +24,7 @@ func gperfSymbolName(srcRel string) string {
 	return "-Nin_" + base + "_set"
 }
 
-func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, ref NodeRef, emit *StreamingEmitter) {
+func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, depRefs []NodeRef, ref NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 	env := envVarsVCS
 	head := na.anys.alloc(3 + len(gperfFlags))[:0]
@@ -45,6 +45,7 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 		KV:             &gperfKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(gperfLD),
+		DepRefs:        depRefs,
 	}
 
 	emit.emitReservedNode(node, ref)
@@ -53,7 +54,7 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
-	srcRel := src.string()
+	srcRel := e.moduleSourceRel(src)
 	gperfLDRef, gperfBinVFS := ctx.tool(argContribToolsGperf)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	genVFS := build(instance.Path.relString(), "/", gperfGeneratedRel(srcRel))
@@ -66,9 +67,18 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 	scanCtx := d.scanCtx
 
 	pe := func() {
-		srcInputs := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC).collect(ctx.na, func(v VFS) bool { return v.isSource() })
+		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
+		sourceClosure := cv.collect(ctx.na, func(v VFS) bool { return v.isSource() })
+		srcInputs := ctx.na.vfsList(srcVFS)
 
-		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef, ctx.emit)
+		if srcVFS.isSource() {
+			srcInputs = nil
+		}
+
+		srcInputs = ctx.na.dedupClosure(srcInputs, [][]VFS{sourceClosure})
+		depRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{srcVFS})
+
+		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, depRefs, gpRef, ctx.emit)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

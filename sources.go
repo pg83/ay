@@ -115,3 +115,19 @@ func (e *EmitContext) resolveModuleSourceVFS(srcAny ANY, srcDirs []VFS) VFS {
 
 	return resolveSourceVFS(ctx, instance, srcRel, srcDirs)
 }
+
+func (e *EmitContext) moduleSourceRel(src ANY) string {
+	if v := src.vfs(); v != 0 {
+		return trimModulePrefix(v.relString(), e.instance.Path.relString())
+	}
+
+	return src.string()
+}
+
+func (e *EmitContext) moduleSourceName(src ANY) string {
+	if v := src.vfs(); v != 0 && v.isBuild() {
+		return e.moduleSourceRel(src)
+	}
+
+	return src.string()
+}

@@ -2,7 +2,7 @@ package main
 
 var scKV = KV{P: pkSC, PC: pcYellow}
 
-func emitSCReserved(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure Closure, domschemecLDRef NodeRef, id NodeRef, emit *StreamingEmitter) {
+func emitSCReserved(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure Closure, domschemecLDRef NodeRef, depRefs []NodeRef, id NodeRef, emit *StreamingEmitter) {
 	na := emit.nodeArenas()
 	env := envVarsVCS
 
@@ -18,6 +18,7 @@ func emitSCReserved(instance ModuleInstance, srcVFS, headerVFS, domschemecBinary
 		Outputs:        na.vfsList(headerVFS),
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(domschemecLDRef),
+		DepRefs:        depRefs,
 	}
 
 	emit.emitReservedNode(node, id)
@@ -37,8 +38,10 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 
 	pe := func() {
 		runtimeClosure := scanner.walkClosure(domschemeRuntimeVFS, scanCtx, scanDomainCC)
+		depRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{srcVFS})
+		depRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, runtimeClosure, depRefs...)
 
-		emitSCReserved(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, scRef, ctx.emit)
+		emitSCReserved(instance, srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, depRefs, scRef, ctx.emit)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

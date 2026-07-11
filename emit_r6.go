@@ -89,11 +89,7 @@ func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef,
 func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
-	srcRel := src.string()
-
-	if srcVFS := src.vfs(); srcVFS != 0 {
-		srcRel = trimModulePrefix(srcVFS.relString(), instance.Path.relString())
-	}
+	srcRel := e.moduleSourceRel(src)
 
 	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
 	rl6SourceVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)

@@ -259,7 +259,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	src := srcTok.string()
+	src := e.moduleSourceName(srcTok)
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 	duplicateOutputRootInclude := false
 

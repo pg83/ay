@@ -113,29 +113,40 @@ func (e *EmitContext) registerCollectPySrcs() {
 	for gi, group := range e.collectPyGroups() {
 		keyPrefix := pyResourceKeyPrefix(group.TopLevel, group.Namespace, module)
 
-		for _, srcRel := range group.Srcs {
-			if extIsProto(srcRel.string()) {
+		for _, src := range group.Srcs {
+			if extIsProto(src.relOrSelf().string()) {
 				e.enqueueSrc(SrcMeta{
-					Source: srcRel, Prio: stmtPrioDefault,
+					Source: src, Prio: stmtPrioDefault,
 					Py: &PySourceMeta{Group: gi, Kind: pySourceProtoInput},
 				})
 
 				continue
 			}
 
-			path := build(module, "/", srcRel.string())
+			token := src
+			path := src.vfs()
+			kind := pySourcePlain
 
-			if e.codegen.lookupSplit(instance.Path, srcRel) == nil {
-				path = resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
+			if path != 0 {
+				if path.isBuild() {
+					kind = pySourceGenerated
+					token = internStr(trimModulePrefix(path.relString(), module)).any()
+				}
+			} else {
+				path = build(module, "/", src.string())
+
+				if e.codegen.lookupSplit(instance.Path, src) == nil {
+					path = resolveSourceVFS(ctx, instance, src.string(), d.srcDirs)
+				}
 			}
 
 			e.enqueueSrc(SrcMeta{
 				Source: path.any(), Prio: stmtPrioDefault,
 				Py: &PySourceMeta{
-					Module: internV(keyPrefix, srcRel.string()),
-					Token:  srcRel,
+					Module: internV(keyPrefix, token.string()),
+					Token:  token,
 					Group:  gi,
-					Kind:   pySourcePlain,
+					Kind:   kind,
 				},
 			})
 		}
