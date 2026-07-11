@@ -46,12 +46,7 @@ func bucketMix64Scalar(elems []VFS) (sum, xr uint64) {
 func bucketMix64AVX2(elems []VFS) (sum, xr uint64) {
 	k := len(elems) &^ 3
 
-	if k != 0 {
-		sum, xr = bucketMix64BlockAVX2(&elems[0], k)
-	}
-	if k == len(elems) {
-		return sum, xr
-	}
+	sum, xr = bucketMix64BlockAVX2(&elems[0], k)
 
 	elems = elems[k:]
 
@@ -81,12 +76,7 @@ func bucketMix64AVX2(elems []VFS) (sum, xr uint64) {
 func bucketMix64AVX512(elems []VFS) (sum, xr uint64) {
 	k := len(elems) &^ 7
 
-	if k != 0 {
-		sum, xr = bucketMix64BlockAVX512(&elems[0], k)
-	}
-	if k == len(elems) {
-		return sum, xr
-	}
+	sum, xr = bucketMix64BlockAVX512(&elems[0], k)
 
 	elems = elems[k:]
 
