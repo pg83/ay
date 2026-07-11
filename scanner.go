@@ -176,15 +176,7 @@ func (ctx *ScanContext) modulePaths(domain ScanDomain) (own, peer []VFS) {
 	case scanDomainCython:
 		return appendCythonScanAddIncl(ctx.ccOwn, ctx.cythonAddIncl, ctx.cythonPy23), ctx.ccPeer
 	case scanDomainProto:
-		own = make([]VFS, 0, 2+len(ctx.protoInclude))
-
-		own = append(own, pbRuntimeBaseVFS)
-
-		if ctx.protoOutRoot != 0 {
-			own = append(own, ctx.protoOutRoot)
-		}
-
-		return append(own, ctx.protoInclude...), nil
+		return ctx.parsers.protoScanOwnPaths(ctx.protoOutRoot, ctx.protoInclude), nil
 	case scanDomainAux:
 		return ctx.ccOwn, ctx.fullPeer
 	case scanDomainFlatc:
