@@ -236,18 +236,26 @@ type GenCtx struct {
 	goEnvMemo       map[[2]STR]EnvVars
 }
 
-func useProducers(reg *CodegenRegistry, paths []VFS) {
+func useProducers(reg *CodegenRegistry, paths []VFS, refs []NodeRef) []NodeRef {
 	for _, p := range paths {
 		if !p.isBuild() {
 			continue
 		}
 
-		reg.use(p)
+		if info := reg.use(p); info != nil {
+			refs = append(refs, info.ProducerRef)
+		}
 	}
+
+	return refs
 }
 
 func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, includeInputs []VFS, incl ...NodeRef) []NodeRef {
-	useProducers(ctx.codegenFor(consumer), includeInputs)
+	refs := nodeRefScratches.get()
+
+	defer func() { nodeRefScratches.put(refs) }()
+
+	refs = useProducers(ctx.codegenFor(consumer), includeInputs, refs)
 	var result []NodeRef
 
 	dedupers.with(func(deduper *DeDuper) {
@@ -260,24 +268,12 @@ func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeAre
 			k++
 		}
 
-		reg := ctx.codegenFor(consumer)
-
-		for _, p := range includeInputs {
-			if !p.isBuild() {
+		for _, ref := range refs {
+			if !deduper.add(ref.strID()) {
 				continue
 			}
 
-			info := reg.lookup(p)
-
-			if info == nil {
-				continue
-			}
-
-			if !deduper.add(info.ProducerRef.strID()) {
-				continue
-			}
-
-			out[k] = info.ProducerRef
+			out[k] = ref
 			k++
 		}
 
@@ -292,21 +288,20 @@ func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeAre
 }
 
 func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []NodeRef) []NodeRef {
+	refs := nodeRefScratches.get()
+
+	defer func() { nodeRefScratches.put(refs) }()
+
 	for _, ch := range chunks {
-		useProducers(e.codegen, ch)
+		refs = useProducers(e.codegen, ch, refs)
 	}
 
 	na := e.ctx.na
-	total := len(incl)
-
-	for _, ch := range chunks {
-		total += len(ch)
-	}
 
 	var result []NodeRef
 
 	dedupers.with(func(deduper *DeDuper) {
-		out := na.noderefs.alloc(total)
+		out := na.noderefs.alloc(len(incl) + len(refs))
 		k := 0
 
 		for _, r := range incl {
@@ -315,25 +310,9 @@ func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []Nod
 			k++
 		}
 
-		reg := e.codegen
-
-		for _, ch := range chunks {
-			for _, p := range ch {
-				if !p.isBuild() {
-					continue
-				}
-
-				info := reg.lookup(p)
-
-				if info == nil {
-					continue
-				}
-
-				if !deduper.add(info.ProducerRef.strID()) {
-					continue
-				}
-
-				out[k] = info.ProducerRef
+		for _, ref := range refs {
+			if deduper.add(ref.strID()) {
+				out[k] = ref
 				k++
 			}
 		}
@@ -350,15 +329,22 @@ func (e *EmitContext) resolveCodegenDepRefsChunks(chunks InputChunks, incl []Nod
 
 func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *NodeArenas, cv Closure, incl ...NodeRef) []NodeRef {
 	reg := ctx.codegenFor(consumer)
+	refs := nodeRefScratches.get()
+
+	defer func() { nodeRefScratches.put(refs) }()
 
 	if cv.self.isBuild() {
-		reg.use(cv.self)
+		if info := reg.use(cv.self); info != nil {
+			refs = append(refs, info.ProducerRef)
+		}
 	}
 
 	for _, bucket := range cv.buckets {
 		for _, p := range bucket {
 			if p.isBuild() {
-				reg.use(p)
+				if info := reg.use(p); info != nil {
+					refs = append(refs, info.ProducerRef)
+				}
 			}
 		}
 	}
@@ -375,26 +361,9 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 			k++
 		}
 
-		if cv.self.isBuild() {
-			if info := reg.lookup(cv.self); info != nil && deduper.add(info.ProducerRef.strID()) {
-				out[k] = info.ProducerRef
-				k++
-			}
-		}
-
-		for _, bucket := range cv.buckets {
-			for _, p := range bucket {
-				if !p.isBuild() {
-					continue
-				}
-
-				info := reg.lookup(p)
-
-				if info == nil || !deduper.add(info.ProducerRef.strID()) {
-					continue
-				}
-
-				out[k] = info.ProducerRef
+		for _, ref := range refs {
+			if deduper.add(ref.strID()) {
+				out[k] = ref
 				k++
 			}
 		}
