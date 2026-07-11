@@ -26,23 +26,6 @@ func newBucketCache() *BucketCache {
 	}
 }
 
-func bucketHash(elems []VFS) (uint64, uint64) {
-	sum, xr := bucketHashPlatform(elems)
-	count := mix64(uint64(len(elems)) + 1)
-	h1 := sum + count
-	h2 := xr ^ count
-
-	if h1 == 0 {
-		h1 = 1
-	}
-
-	if h2 == 0 {
-		h2 = 1
-	}
-
-	return h1, h2
-}
-
 func (c *BucketCache) internBucket(elems []VFS) []VFS {
 	h1, h2 := bucketHash(elems)
 	cell, found := c.intern.cell(h1)
