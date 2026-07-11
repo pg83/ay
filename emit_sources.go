@@ -8,6 +8,16 @@ import (
 func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	src := meta.Source
 
+	if meta.Py != nil {
+		if meta.Py.Kind == pySourceProtoInput {
+			e.emitPyProtoSource(src, meta.Py.Group)
+		} else {
+			e.collectPySource(src.vfs(), *meta.Py)
+		}
+
+		return
+	}
+
 	if e.producersOnly() {
 		switch srcExtClassOf(src.relOrSelf().any()) {
 		case srcExtCSource, srcExtRodata, srcExtCuda, srcExtYasm, srcExtAsm, srcExtGo:
@@ -49,9 +59,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtGztProto:
 		e.emitLibraryGztProtoCompile(src)
 	case srcExtProto:
-		if meta.PyProtoGroup != nil {
-			e.emitPyProtoSource(src, *meta.PyProtoGroup)
-		} else if e.d.unit.Tag == unitTagPy3Proto {
+		if e.d.unit.Tag == unitTagPy3Proto {
 			e.emitPyProtoSource(src, 0)
 		} else {
 			e.emitCppProtoFamilySource(meta, cppProtoSpec)

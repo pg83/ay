@@ -684,6 +684,55 @@ func (e *EmitContext) markProtoPendingAR() {
 	e.protoRes = &e.protoResVal
 }
 
+func (e *EmitContext) emitPyProtoLibraryResult() *ProtoSrcsResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	entries := e.collectAllPyProtoResEntries()
+
+	if len(entries) == 0 {
+		return nil
+	}
+
+	var cppSibling *ModuleEmitResult
+
+	if !moduleExcludesTag(d, "CPP_PROTO") {
+		cppInstance := instance
+
+		cppInstance.Language = LangCPP
+
+		if cppInstance.Demand != demandNone {
+			cppInstance.Demand = demandLinked
+		}
+
+		cppSibling = genModule(ctx, cppInstance)
+	}
+
+	genRefs, genOuts := e.packPyProtoResEntries(entries)
+
+	if len(genRefs) == 0 {
+		return nil
+	}
+
+	protoLibName := ""
+
+	if len(d.moduleStmt.Args) > 0 {
+		protoLibName = d.moduleStmt.Args[0].string()
+	}
+
+	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.relString(), d.unit.ARPrefix, protoLibName)
+	gRef := emitARGlobalNamedTagged(instance, globalBaseName, d.unit.GlobalARTag, genRefs, genOuts, d.tc, ctx.host, ctx.emit)
+	globalPath := build(instance.Path.relString(), "/", globalBaseName)
+	result := &ProtoSrcsResult{GlobalRef: &gRef, GlobalPath: &globalPath}
+
+	if cppSibling != nil && cppSibling.ARPath != nil {
+		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
+		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
+	} else if moduleExcludesTag(d, "CPP_PROTO") {
+		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, build(instance.Path.relString(), "/", e.arName(instance.Path.relString(), "lib", "")))
+	}
+
+	return result
+}
+
 type ResolvedCPPProtoPlugin struct {
 	Spec   CppProtoPlugin
 	LDRef  NodeRef
