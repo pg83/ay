@@ -738,7 +738,7 @@ func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem
 	}
 
 	e.resStrBuf = buf
-	e.resItems = items
+	e.resItems = retainMaxLen(e.resItems, items)
 
 	return items
 }
