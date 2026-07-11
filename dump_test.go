@@ -774,3 +774,38 @@ func TestCanonInputs_CythonDropsGeneratedCIncludeClosure(t *testing.T) {
 		t.Fatalf("canonInputs(CY) = %v, want %v", got, want)
 	}
 }
+
+func TestCanonInputs_RawAuxDropsCompileClosure(t *testing.T) {
+	node := &RawNode{
+		Kv:      map[string]any{"p": "PR"},
+		Outputs: []string{"$(B)/pkg/012345_raw.auxcpp"},
+		Inputs: []string{
+			"$(B)/tools/rescompiler/rescompiler",
+			"$(B)/pkg/mod.py",
+			"$(S)/build/scripts/gen_py_protos.py",
+			"$(S)/pkg/mod.proto",
+			"$(S)/pkg/payload.h",
+			"$(S)/pkg/transitive.h",
+			"$(S)/contrib/libs/cxxsupp/libcxx/include/vector",
+			"$(S)/contrib/tools/swig/Lib/python/typemaps.i",
+			"$(S)/util/system/thread.i",
+		},
+		Cmds: []any{map[string]any{"cmd_args": []any{
+			"$(B)/tools/rescompiler/rescompiler",
+			"$(B)/pkg/012345_raw.auxcpp",
+			"$(B)/pkg/mod.py", "-resfs/file/py/pkg/mod.py",
+			"$(S)/pkg/payload.h", "-resfs/file/payload.h",
+		}}},
+	}
+
+	got := canonInputs(node, true)
+	want := []string{
+		"$(B)/pkg/mod.py",
+		"$(B)/tools/rescompiler/rescompiler",
+		"$(S)/pkg/payload.h",
+	}
+
+	if !slices.Equal(got, want) {
+		t.Fatalf("canonInputs(raw aux) = %v, want %v", got, want)
+	}
+}

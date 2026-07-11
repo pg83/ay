@@ -558,9 +558,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 			continue
 		}
 
-		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) (Closure, CompileSpec) {
-			return e.rawAuxInputClosure(aux, e.ctx.na.dedupSourceVFS(inputs, nil), ref)
-		}})
+		r, o := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)), RawSource: e.registerRawAuxSource})
 
 		refs = append(refs, r...)
 		outs = append(outs, o...)
@@ -569,10 +567,11 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 	return refs, outs
 }
 
-func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) (Closure, CompileSpec) {
-	ctx, _, d := e.ctx, e.instance, e.d
+func (e *EmitContext) registerRawAuxSource(aux VFS, inputs []VFS, ref NodeRef) CompileSpec {
+	ctx := e.ctx
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	na := ctx.na
+	seed := na.dedupSourceVFS(inputs, nil)
 	emits := na.dirs.alloc(len(seed))[:0]
 
 	for _, v := range seed {
@@ -592,7 +591,7 @@ func (e *EmitContext) rawAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) (Clos
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 	})
 
-	return e.scanner.walkClosure(aux, d.scanCtx, scanDomainCC), CompileSpec{ForceCxx: true, CFlags: cflags}
+	return CompileSpec{ForceCxx: true, CFlags: cflags}
 }
 
 func (e *EmitContext) emitPyRegister(py3Suffix bool) {
