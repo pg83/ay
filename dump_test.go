@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -731,5 +732,45 @@ func TestCanonInputs_ArchiveByKeysIgnoresKeyListBasename(t *testing.T) {
 		if has(drop) {
 			t.Errorf("canonInputs kept source lua %q named only via the -k key list; got %v", drop, got)
 		}
+	}
+}
+
+func TestCanonInputs_CythonDropsGeneratedCIncludeClosure(t *testing.T) {
+	node := &RawNode{
+		Kv: map[string]any{"p": "CY"},
+		Inputs: []string{
+			"$(B)/contrib/tools/python3/python3",
+			"$(S)/contrib/tools/cython/cython.py",
+			"$(S)/contrib/tools/cython/Cython/Utility/UFuncs_C.c",
+			"$(S)/pkg/mod.pyx",
+			"$(S)/pkg/dep.pxd",
+			"$(S)/pkg/inc.pxi",
+			"$(S)/pkg/helper.py",
+			"$(S)/build/scripts/cpp_proto_wrapper.py",
+			"$(S)/pkg/extern.h",
+			"$(S)/contrib/python/numpy/include/numpy/arrayobject.h",
+			"$(S)/contrib/libs/cxxsupp/libcxx/include/vector",
+		},
+		Cmds: []any{map[string]any{"cmd_args": []any{
+			"$(B)/contrib/tools/python3/python3",
+			"$(S)/contrib/tools/cython/cython.py",
+			"$(S)/pkg/mod.pyx",
+			"-o", "$(B)/pkg/mod.pyx.cpp",
+		}}},
+	}
+
+	got := canonInputs(node, true)
+	want := []string{
+		"$(B)/contrib/tools/python3/python3",
+		"$(S)/contrib/tools/cython/Cython/Utility/UFuncs_C.c",
+		"$(S)/contrib/tools/cython/cython.py",
+		"$(S)/pkg/dep.pxd",
+		"$(S)/pkg/helper.py",
+		"$(S)/pkg/inc.pxi",
+		"$(S)/pkg/mod.pyx",
+	}
+
+	if !slices.Equal(got, want) {
+		t.Fatalf("canonInputs(CY) = %v, want %v", got, want)
 	}
 }

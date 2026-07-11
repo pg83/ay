@@ -156,7 +156,7 @@ func TestGen_CythonCApiHeaderEmitsCompanionHeaders(t *testing.T) {
 	}
 }
 
-func TestGen_CythonHeaderVariantOmitsInducedCppClosure(t *testing.T) {
+func TestGen_CythonNodesOmitGeneratedCIncludeClosure(t *testing.T) {
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
@@ -186,16 +186,13 @@ func TestGen_CythonHeaderVariantOmitsInducedCppClosure(t *testing.T) {
 		}
 	}
 
-	plain := mustNodeByOutput(t, g, "$(B)/pkg/plain.pyx.c")
-	plainInputs := map[string]bool{}
+	for _, cy := range []*Node{header, mustNodeByOutput(t, g, "$(B)/pkg/plain.pyx.c")} {
+		for _, in := range cy.flatInputs() {
+			s := in.string()
 
-	for _, in := range plain.flatInputs() {
-		plainInputs[in.string()] = true
-	}
-
-	for _, want := range []string{externHeader, pythonInclude} {
-		if !plainInputs[want] {
-			t.Fatalf("non-Header CY node missing input %q; inputs=%v", want, plain.flatInputs())
+			if s == externHeader || s == pythonInclude {
+				t.Fatalf("CY node carries generated-C include %q; inputs=%v", s, cy.flatInputs())
+			}
 		}
 	}
 }
@@ -229,7 +226,6 @@ func TestGen_CythonizePyPxdSideInputClosure(t *testing.T) {
 	for _, want := range []string{
 		"$(S)/pkg/gevent/_helper.pxd",
 		"$(S)/pkg/gevent/_dep.pxd",
-		"$(S)/pkg/gevent/api.h",
 	} {
 		switch counts[want] {
 		case 0:
@@ -238,6 +234,10 @@ func TestGen_CythonizePyPxdSideInputClosure(t *testing.T) {
 		default:
 			t.Fatalf("CY node lists pxd-side input %q %d times, want exactly once", want, counts[want])
 		}
+	}
+
+	if counts["$(S)/pkg/gevent/api.h"] != 0 {
+		t.Fatalf("CY node carries compile-only pxd-side header; inputs=%v", cy.flatInputs())
 	}
 
 	cc := mustNodeByOutputSuffix(t, g, "gevent/helper.py.c.o")
@@ -380,16 +380,14 @@ func TestGen_CythonApiHeaderPyxClosurePassThrough(t *testing.T) {
 	}
 
 	for _, want := range []string{
+		"$(S)/pkg/app/cons.pyx",
+		"$(S)/pkg/app/pub.pxd",
 		"$(S)/pkg/app/prod.pyx",
 		"$(S)/pkg/app/helper.pxd",
 		"$(S)/pkg/app/h.pxi",
 	} {
-		switch counts[want] {
-		case 0:
-			t.Fatalf("consumer CY node missing producer pyx-closure input %q; inputs=%v", want, cons.flatInputs())
-		case 1:
-		default:
-			t.Fatalf("consumer CY node lists producer pyx-closure input %q %d times, want exactly once", want, counts[want])
+		if counts[want] != 1 {
+			t.Fatalf("consumer CY node input %q occurs %d times, want once; inputs=%v", want, counts[want], cons.flatInputs())
 		}
 	}
 

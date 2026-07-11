@@ -273,6 +273,45 @@ func objcopySourceLeafKept(rel string) bool {
 	return true
 }
 
+func filterCythonInputs(in []string, cmdText string) []string {
+	out := in[:0]
+
+	for _, s := range in {
+		if cythonInputKept(s, cmdText) {
+			out = append(out, s)
+		}
+	}
+
+	return out
+}
+
+func cythonInputKept(s, cmdText string) bool {
+	if strings.Contains(cmdText, s+"\x00") {
+		return true
+	}
+
+	rel, isSource := strings.CutPrefix(s, "$(S)/")
+
+	if !isSource {
+		return true
+	}
+
+	if strings.HasPrefix(rel, "contrib/tools/cython/Cython/Utility/") {
+		return true
+	}
+
+	if strings.HasPrefix(rel, "build/scripts/") && fileExt(rel) == ".py" {
+		return false
+	}
+
+	switch fileExt(rel) {
+	case ".py", ".pyx", ".pxd", ".pxi":
+		return true
+	}
+
+	return false
+}
+
 func getString(node map[string]any, key string) string {
 	s, _ := node[key].(string)
 
@@ -291,6 +330,8 @@ func canonInputs(node *RawNode, refGraph bool) []string {
 	switch {
 	case kind == "AR" || kind == "LD":
 		inputs = filterARLDInputs(inputs, kind, nodeCmdBasenames(node))
+	case kind == "CY":
+		inputs = filterCythonInputs(inputs, nodeCmdText(node))
 	case kind == "PY":
 
 		cmdBases := nodeCmdBasenames(node)
