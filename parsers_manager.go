@@ -68,6 +68,30 @@ func (pm *IncludeParserManager) protoParser() ProtoIncludeDirectiveParser {
 	return pm.registry.proto
 }
 
+func (pm *IncludeParserManager) protoScanOwnPaths(outRoot VFS, includes []VFS) []VFS {
+	n := 1 + len(includes)
+
+	if outRoot != 0 {
+		n++
+	}
+
+	paths := pm.addinclArena.alloc(n)
+	k := 0
+
+	paths[k] = pbRuntimeBaseVFS
+	k++
+
+	if outRoot != 0 {
+		paths[k] = outRoot
+		k++
+	}
+
+	copy(paths[k:], includes)
+	pm.addinclArena.commit(n)
+
+	return paths[:n:n]
+}
+
 func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser IncludeDirectiveParser) ParsedIncludeSet {
 	key := vfsPath.rel()
 	rel := key.string()
