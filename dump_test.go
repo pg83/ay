@@ -809,3 +809,32 @@ func TestCanonInputs_RawAuxDropsCompileClosure(t *testing.T) {
 		t.Fatalf("canonInputs(raw aux) = %v, want %v", got, want)
 	}
 }
+
+func TestCanonInputs_EnumParserKeepsOnlyActionInputs(t *testing.T) {
+	node := &RawNode{
+		Kv: map[string]any{"p": "EN"},
+		Inputs: []string{
+			"$(B)/tools/enum_parser/enum_parser",
+			"$(S)/pkg/mode.h",
+			"$(S)/pkg/dep.h",
+			"$(S)/util/generic/serialized_enum.h",
+			"$(S)/contrib/libs/cxxsupp/libcxx/include/vector",
+		},
+		Cmds: []any{map[string]any{"cmd_args": []any{
+			"$(B)/tools/enum_parser/enum_parser",
+			"$(S)/pkg/mode.h",
+			"--include-path", "pkg/mode.h",
+			"--output", "$(B)/pkg/mode.h_serialized.cpp",
+		}}},
+	}
+
+	got := canonInputs(node, true)
+	want := []string{
+		"$(B)/tools/enum_parser/enum_parser",
+		"$(S)/pkg/mode.h",
+	}
+
+	if !slices.Equal(got, want) {
+		t.Fatalf("canonInputs(EN) = %v, want %v", got, want)
+	}
+}

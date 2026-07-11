@@ -41,6 +41,45 @@ func TestGen_CppEnumsSerialization(t *testing.T) {
 	}
 }
 
+func TestGen_EnumParserDoesNotOwnGeneratedCPPClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+GENERATE_ENUM_SERIALIZATION(mode.h)
+END()
+`)
+	writeTestModuleFile(files, "mod/mode.h", "#include \"dep.h\"\nenum class Mode { A = 0 };\n")
+	writeTestModuleFile(files, "mod/dep.h", "#pragma once\n")
+	writeTestModuleFile(files, "util/generic/serialized_enum.h", "#pragma once\n")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "mod")
+	en := mustNodeByOutput(t, g, "$(B)/mod/mode.h_serialized.cpp")
+
+	if !nodeHasInput(en, "$(S)/mod/mode.h") {
+		t.Fatalf("EN inputs missing direct header: %v", en.flatInputs())
+	}
+
+	for _, absent := range []string{"$(S)/mod/dep.h", "$(S)/util/generic/serialized_enum.h"} {
+		if nodeHasInput(en, absent) {
+			t.Errorf("EN inputs contain generated C++ closure member %q: %v", absent, en.flatInputs())
+		}
+	}
+
+	cc := mustNodeByOutputSuffix(t, g, "mode.h_serialized.cpp.o")
+
+	for _, want := range []string{"$(S)/mod/dep.h", "$(S)/util/generic/serialized_enum.h"} {
+		if !nodeHasInput(cc, want) {
+			t.Errorf("serialized C++ compile inputs missing %q: %v", want, cc.flatInputs())
+		}
+	}
+}
+
 func TestGen_CppEnumsSerializationNamespaceControlToken(t *testing.T) {
 	g := testGen(newMemFS(cppEnumsSerializationProtoFiles("NAMESPACE something package.pb.h")), "pe/proto")
 
@@ -187,22 +226,21 @@ END()
 
 	enA := mustNodeByOutput(t, g, "$(B)/m/a.h_serialized.cpp")
 
-	if !nodeHasInput(enA, "$(B)/m/b.h_serialized.h") {
-		t.Fatalf("EN a.h_serialized.cpp missing sibling $(B)/m/b.h_serialized.h: %v", enA.flatInputs())
+	for _, absent := range []string{"$(B)/m/b.h_serialized.h", "$(B)/m/b.h_serialized.cpp"} {
+		if nodeHasInput(enA, absent) {
+			t.Errorf("EN a.h_serialized.cpp contains compile-closure input %q: %v", absent, enA.flatInputs())
+		}
 	}
 
-	if !nodeHasInput(enA, "$(B)/m/b.h_serialized.cpp") {
-		t.Fatalf("EN a.h_serialized.cpp missing sibling $(B)/m/b.h_serialized.cpp: %v", enA.flatInputs())
-	}
-
+	aCC := mustNodeByOutputSuffix(t, g, "a.h_serialized.cpp.o")
 	use := mustNodeByOutputSuffix(t, g, "use.cpp.o")
 
-	if !nodeHasInput(use, "$(B)/m/b.h_serialized.h") {
-		t.Fatalf("CC use.cpp.o missing sibling $(B)/m/b.h_serialized.h: %v", use.flatInputs())
-	}
-
-	if !nodeHasInput(use, "$(B)/m/b.h_serialized.cpp") {
-		t.Fatalf("CC use.cpp.o missing sibling $(B)/m/b.h_serialized.cpp: %v", use.flatInputs())
+	for _, cc := range []*Node{aCC, use} {
+		for _, want := range []string{"$(B)/m/b.h_serialized.h", "$(B)/m/b.h_serialized.cpp"} {
+			if !nodeHasInput(cc, want) {
+				t.Errorf("CC %v missing sibling %q: %v", cc.Outputs, want, cc.flatInputs())
+			}
+		}
 	}
 }
 

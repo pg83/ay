@@ -317,6 +317,34 @@ func filterRawAuxInputs(in []string, node *RawNode) []string {
 	return out
 }
 
+func filterEnumParserInputs(in []string, node *RawNode) []string {
+	cmds, _ := node.Cmds.([]any)
+	keep := map[string]struct{}{}
+
+	for _, c := range cmds {
+		m, _ := c.(map[string]any)
+		args := toStrings(m["cmd_args"])
+
+		if len(args) > 0 {
+			keep[normPath(args[0])] = struct{}{}
+		}
+
+		if len(args) > 1 {
+			keep[normPath(args[1])] = struct{}{}
+		}
+	}
+
+	out := in[:0]
+
+	for _, s := range in {
+		if _, ok := keep[s]; ok {
+			out = append(out, s)
+		}
+	}
+
+	return out
+}
+
 func isRawAuxNode(node *RawNode) bool {
 	for _, out := range node.Outputs {
 		if strings.HasSuffix(normPath(out), "_raw.auxcpp") {
@@ -374,6 +402,8 @@ func canonInputs(node *RawNode, refGraph bool) []string {
 		inputs = filterARLDInputs(inputs, kind, nodeCmdBasenames(node))
 	case kind == "CY":
 		inputs = filterCythonInputs(inputs, nodeCmdText(node))
+	case kind == "EN":
+		inputs = filterEnumParserInputs(inputs, node)
 	case kind == "PR" && isRawAuxNode(node):
 		inputs = filterRawAuxInputs(inputs, node)
 	case kind == "PY":
