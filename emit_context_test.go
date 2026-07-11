@@ -120,7 +120,7 @@ func nodeTestEmitContext(emit *StreamingEmitter, instance ModuleInstance) *EmitC
 	scanner := &IncludeScanner{codegen: reg}
 
 	return &EmitContext{
-		ctx:      &GenCtx{emit: emit, na: na, target: instance.Platform, scannerTarget: scanner},
+		ctx:      &GenCtx{emit: emit, na: na, target: instance.Platform, scannerTarget: scanner, srcOnly: newIntSet(8)},
 		instance: instance,
 		codegen:  reg,
 	}
