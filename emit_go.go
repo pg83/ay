@@ -402,7 +402,7 @@ func (e *EmitContext) goAsmIncludeSrcs() []VFS {
 			cvs = append(cvs, e.scanner.walkClosure(src, e.d.scanCtx, scanDomainGoAsm))
 		}
 
-		e.cvScratch = cvs
+		e.cvScratch = retainMaxLen(e.cvScratch, cvs)
 
 		block := na.vfs.alloc(bound)
 		k := 0
@@ -805,7 +805,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			cvs = append(cvs, e.scanner.walkClosure(src, d.scanCtx, scanDomainCC))
 		}
 
-		e.cvScratch = cvs
+		e.cvScratch = retainMaxLen(e.cvScratch, cvs)
 
 		block := na.vfs.alloc(extrasCap)
 		k := 0
