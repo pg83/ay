@@ -5,6 +5,12 @@ func ptr[T any](v T) *T {
 }
 
 func scrub[T any](s []T) []T {
+	clear(s)
+
+	return s[:0]
+}
+
+func scrubCap[T any](s []T) []T {
 	clear(s[:cap(s)])
 
 	return s[:0]
