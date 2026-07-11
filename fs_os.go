@@ -11,6 +11,13 @@ var emptyDirNames = []uint32{}
 
 const mmapReadThreshold = 2 << 20
 
+const sourceUnderHotMask = 1<<14 - 1
+
+type sourceUnderHotEntry struct {
+	key uint64
+	val STR
+}
+
 func hashSourceFile(srcRoot, rel string) uint64 {
 	data, err := os.ReadFile(filepath.Join(srcRoot, cleanRel(rel)))
 
@@ -22,18 +29,19 @@ func hashSourceFile(srcRoot, rel string) uint64 {
 }
 
 type OsFS struct {
-	srcRoot       string
-	rootSlash     string
-	dirs          DenseMap[STR, DirView]
-	dirNames      *BumpAllocator[uint32]
-	dirEntries    *IntSet
-	contentHashes PageVec[uint64]
-	sourceUnder   *IntMap[STR]
-	readBuf       []byte
-	mmapCur       []byte
-	direntBuf     []byte
-	rootFD        int
-	pathBuf       []byte
+	srcRoot        string
+	rootSlash      string
+	dirs           DenseMap[STR, DirView]
+	dirNames       *BumpAllocator[uint32]
+	dirEntries     *IntSet
+	contentHashes  PageVec[uint64]
+	sourceUnder    *IntMap[STR]
+	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
+	readBuf        []byte
+	mmapCur        []byte
+	direntBuf      []byte
+	rootFD         int
+	pathBuf        []byte
 }
 
 func newFS(srcRoot string) FS {
@@ -159,9 +167,20 @@ func (fs *OsFS) isFile(prefix STR, suffix string) bool {
 }
 
 func (fs *OsFS) resolveSourceUnder(prefix, target STR) STR {
-	key := splitMix64(uint32(prefix), uint32(target))
+	p, t := uint32(prefix), uint32(target)
+	pair := uint64(p)<<32 | uint64(t)
+	hot := &fs.sourceUnderHot[(p*0x9e3779b1^t)&sourceUnderHotMask]
+
+	if hot.key == pair {
+		return hot.val
+	}
+
+	key := mix64(pair)
 
 	if p := fs.sourceUnder.get(key); p != nil {
+		hot.key = pair
+		hot.val = *p
+
 		return *p
 	}
 
@@ -192,6 +211,8 @@ func (fs *OsFS) resolveSourceUnder(prefix, target STR) STR {
 	}
 
 	fs.sourceUnder.put(key, v)
+	hot.key = pair
+	hot.val = v
 
 	return v
 }
