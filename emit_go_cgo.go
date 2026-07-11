@@ -137,7 +137,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 	srcVFS := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 	dstVFS := build(module, "/", srcRel.string())
 	ref := ctx.emit.reserve()
-	parsed := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil)
+	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
 
 	var cgoContext []VFS
 
@@ -229,7 +229,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 		OutputPath:     dstVFS,
 		SourcePath:     srcVFS,
 		ProducerRef:    ref,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed[parsedIncludesLocal]},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 		ClosureLeaves:  leafBlock[:nl:nl],
 		OnUse:          pending,
 	})

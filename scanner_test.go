@@ -707,6 +707,33 @@ include "machine.rl";
 	}
 }
 
+func TestParsedBucketForInput_SourceAndGenerated(t *testing.T) {
+	scanner := newTestScanner(newMemFS(map[string]string{
+		"src.rl6": "#include <source.h>\n",
+	}), SysInclSet{})
+
+	generated := build("generated.rl6")
+	scanner.codegen.register(GeneratedFileInfo{
+		OutputPath: generated,
+		ParsedIncludes: ParsedIncludeSet{
+			parsedIncludesLocal: {{kind: includeQuoted, target: includeTarget(internStr("generated.h").any())}},
+			parsedIncludesCpp:   {{kind: includeQuoted, target: includeTarget(internStr("compile-extra.h").any())}},
+		},
+	})
+
+	sourceParsed := scanner.parsedBucketForInput(source("src.rl6"), parsedIncludesCpp, nil)
+
+	if len(sourceParsed) != 2 || sourceParsed[0].target.string() != "src.rl6" || sourceParsed[1].target.string() != "source.h" {
+		t.Fatalf("source input parsed bucket = %+v, want induced C++ bucket", sourceParsed)
+	}
+
+	generatedParsed := scanner.parsedBucketForInput(generated, parsedIncludesCpp, nil)
+
+	if len(generatedParsed) != 1 || generatedParsed[0].target.string() != "generated.h" {
+		t.Fatalf("generated input parsed bucket = %+v, want generated local bucket", generatedParsed)
+	}
+}
+
 func TestScanner_RagelNativeInclude_DoesNotBleedCHeaders(t *testing.T) {
 	sysincl := parseSysInclYAML("test.yml", []byte(`
 - includes:

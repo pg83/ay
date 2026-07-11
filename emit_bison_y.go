@@ -37,7 +37,7 @@ func appendBisonCppHeaderParsed(dst []IncludeDirective) []IncludeDirective {
 
 func (e *EmitContext) bisonGeneratedCPPParsed(srcVFS, headerVFS VFS) []IncludeDirective {
 	na := e.ctx.na
-	localBucket := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)
+	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
 	parsed := na.dirs.alloc(2 + len(localBucket))[:0]
 
 	parsed = append(parsed,
@@ -72,7 +72,7 @@ func (e *EmitContext) emitBisonProducer(src STR) []ANY {
 	headerVFS := build(instance.Path.relString(), "/", headerRel)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
 	srcVFS := source(instance.Path.relString(), "/", srcRel)
-	localBucket := e.scanner.parsers.sourceParsedBuckets(srcVFS, nil).bucket(parsedIncludesLocal)
+	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
 	headerParsed := na.dirs.alloc(2 + len(bisonCppSkeletonDirectives) + len(localBucket))[:0]
 
 	headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})

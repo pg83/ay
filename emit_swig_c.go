@@ -76,7 +76,7 @@ func (e *EmitContext) emitSwigC() {
 			OutputPath:     cOutVFS,
 			ProducerRef:    swRef,
 			GeneratorRefs:  e.ctx.na.refList(swigRef),
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(ctx, srcVFS, swigClosure)},
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(e.scanner, srcVFS, swigClosure)},
 			ClosureLeaves:  append(append([]VFS{}, swigClosure...), srcVFS),
 			OnUse:          pending,
 		})
@@ -135,13 +135,13 @@ func swigModuleName(module string) string {
 	return module
 }
 
-func collectSwigInducedIncludes(ctx *GenCtx, src VFS, closure []VFS) []IncludeDirective {
+func collectSwigInducedIncludes(scanner *IncludeScanner, src VFS, closure []VFS) []IncludeDirective {
 	swigParser := IncludeDirectiveParser(SwigIncludeDirectiveParser{})
 
 	var out []IncludeDirective
 
 	add := func(v VFS) {
-		out = append(out, ctx.parsers.sourceParsedBuckets(v, swigParser).bucket(parsedIncludesCpp)...)
+		out = append(out, scanner.parsedBucketForInput(v, parsedIncludesCpp, swigParser)...)
 	}
 
 	add(src)
