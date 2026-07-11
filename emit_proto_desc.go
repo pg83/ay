@@ -246,7 +246,6 @@ func (e *EmitContext) emitProtoDescProducer(protoRelPath string,
 		Inputs:         na.inputList(inputs, imports.buckets...),
 		KV:             &protoDescKV,
 		Outputs:        na.vfsList(descOut, rawprotoOut),
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(protocLDRef),
 		Resources:      usesPython3,
 	}
@@ -302,7 +301,6 @@ func (e *EmitContext) emitDescProtoMerge(selfProtodesc, protosrc VFS,
 		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[collectRawprotoVFS.rel()]),
 		KV:           &protoDescKV,
 		Outputs:      na.vfsList(selfProtodesc, protosrc),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      na.noderefs.list(producerRefs...),
 		Resources:    usesPython3,
 	}
@@ -377,7 +375,6 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[mergeProtosrcVFS.rel()]),
 		KV:           &protoDescKV,
 		Outputs:      na.vfsList(protodesc, tar),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
 		Resources:    usesPython3,
 	}

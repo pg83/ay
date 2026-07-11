@@ -55,7 +55,6 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 			Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
 			Outputs:        na.vfsList(prefixCpp, prefixH),
 			KV:             &baseCodegenKV,
-			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(toolLDRef),
 		}
 

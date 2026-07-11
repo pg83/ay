@@ -22,7 +22,6 @@ func (e *EmitContext) emitAS(srcRel string, srcVFS VFS, in ModuleCCInputs, hostP
 		Inputs:       na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.buckets...),
 		Outputs:      na.vfsList(outVFS),
 		KV:           &asKV,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    instance.Platform.UsesClangOnly,
 	}
 

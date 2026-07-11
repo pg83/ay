@@ -42,7 +42,6 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 			Inputs:         na.inputList(inputs, imports.buckets...),
 			Outputs:        na.vfsList(genProto),
 			KV:             &gztprotoKV,
-			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(converterRef),
 		}
 

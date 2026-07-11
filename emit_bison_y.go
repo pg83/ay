@@ -153,7 +153,6 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 			Inputs:       na.inputList(inputs),
 			Outputs:      na.vfsList(headerVFS, generatedVFS),
 			KV:           &bisonYKV,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}, ycRef)
 	}

@@ -6,7 +6,10 @@ var fromSandboxScriptInputs = []VFS{
 	buildScriptsFetchFromPy,
 }
 
-var fromSandboxKV = KV{P: pkSB, PC: pcYellow, ShowOut: true}
+var (
+	fromSandboxKV           = KV{P: pkSB, PC: pcYellow, ShowOut: true}
+	fromSandboxRequirements = Requirements{CPU: 1, Network: nwFull, RAM: 32}
+)
 
 func (e *EmitContext) emitFromSandboxes() (memberRefs []NodeRef, memberPaths []VFS) {
 	_, _, d := e.ctx, e.instance, e.d
@@ -88,7 +91,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 			Inputs:       na.inputList(fromSandboxScriptInputs),
 			KV:           &fromSandboxKV,
 			Outputs:      na.vfsList(outVFSs...),
-			Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
+			Requirements: &fromSandboxRequirements,
 			Resources:    usesPython3,
 		}
 

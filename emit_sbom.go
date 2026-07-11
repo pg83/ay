@@ -91,7 +91,6 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 		Inputs:       na.inputList(na.vfsList(scriptVFS)),
 		KV:           &sbomKV,
 		Outputs:      na.vfsList(out),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
 	}
 
@@ -126,7 +125,6 @@ func (e *EmitContext) emitSbomToolchainComponent(toolchainName, ver string) (*No
 		Inputs:       na.inputList(na.vfsList(scriptVFS)),
 		KV:           &sbomKV,
 		Outputs:      na.vfsList(out),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
 	}
 

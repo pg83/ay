@@ -16,7 +16,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		KV:           &r6TestKV,
 		Outputs:      ToVFSSlice([]string{"$(B)/contrib/tools/ragel6/ragel6"}),
 		Platform:     &Platform{Target: "default-linux-x86_64"},
-		Requirements: Requirements{},
+		Requirements: &emptyRequirements,
 	})
 
 	inst := targetInstance("util")
@@ -74,8 +74,8 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 		t.Errorf("ForeignDepRefs[tool] = %v, want [%v]", got.ForeignDepRefs, ragel6LD)
 	}
 
-	if got.Requirements.Network != nwRestricted {
-		t.Errorf("requirements.network = %v, want restricted", got.Requirements.Network.string())
+	if got.Requirements != nil {
+		t.Errorf("requirements = %#v, want default", got.Requirements)
 	}
 }
 

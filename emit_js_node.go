@@ -52,7 +52,6 @@ func (e *EmitContext) emitJSReserved(allName string, sources []string, closure [
 		Inputs:       inputs,
 		KV:           &jsNodeKV,
 		Outputs:      na.vfsList(outVFS),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
 	}
 

@@ -53,7 +53,6 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 			Inputs:         na.inputList(na.vfsList(toolBin, srcVFS)),
 			KV:             &sfKV,
 			Outputs:        na.vfsList(tmpVFS, incVFS),
-			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(toolRef),
 			Resources:      instance.Platform.CCUsesResources,
 		}

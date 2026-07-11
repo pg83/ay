@@ -5,7 +5,11 @@ import (
 	"strings"
 )
 
-var testNodesKV = KV{P: pkCP, PC: pcLightBlue}
+var (
+	testNodesKV             = KV{P: pkCP, PC: pcLightBlue}
+	testContextRequirements = Requirements{Network: nwRestricted}
+	testRunRequirements     = Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true}
+)
 
 const (
 	testToolHostPath          = "$(TEST_TOOL_HOST)/test_tool"
@@ -64,7 +68,7 @@ func buildTestCtxNode(na *NodeArenas, p *Platform) *Node {
 		Inputs:       na.inputList(na.vfsList(source(testAppendFileScriptRel))),
 		KV:           &testNodesKV,
 		Outputs:      na.vfsList(bldCommonTestContext),
-		Requirements: Requirements{Network: nwRestricted},
+		Requirements: &testContextRequirements,
 		Resources:    usesPython3,
 	}
 }
@@ -140,13 +144,8 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 			HasSpecialRunner: true,
 			DisableCache:     true,
 		},
-		Outputs: testOutputs(info.ProjectPath, "unittest"),
-		Requirements: Requirements{
-			CPU:        1,
-			Network:    nwRestricted,
-			RAM:        8,
-			HasRAMDisk: true,
-		},
+		Outputs:      testOutputs(info.ProjectPath, "unittest"),
+		Requirements: &testRunRequirements,
 	}
 }
 
@@ -239,13 +238,8 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 			ShowOutBool:      true,
 			HasSpecialRunner: true,
 		},
-		Outputs: testOutputs(info.ProjectPath, "clang_format"),
-		Requirements: Requirements{
-			CPU:        1,
-			Network:    nwRestricted,
-			RAM:        8,
-			HasRAMDisk: true,
-		},
+		Outputs:      testOutputs(info.ProjectPath, "clang_format"),
+		Requirements: &testRunRequirements,
 	}
 }
 

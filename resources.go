@@ -447,7 +447,6 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		Inputs:       inputsChunks,
 		KV:           &resourcesKV,
 		Outputs:      na.vfsList(dst),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      depRefs,
 		Resources:    usesPython3,
 	}

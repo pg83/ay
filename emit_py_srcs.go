@@ -414,7 +414,6 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 		Inputs:         nodeInputs,
 		Outputs:        na.vfsList(outputPath),
 		KV:             &pyCodegenKV,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: toolRefs,
 		Resources:      usesPython3,
 	}
@@ -777,7 +776,6 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 			Inputs:       na.inputList(genPy3RegScriptChunk),
 			Outputs:      na.vfsList(regCppVFS),
 			KV:           &pyCodegenKV,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}
 

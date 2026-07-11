@@ -10,6 +10,7 @@ var (
 	vcsJSONBase64      = base64.StdEncoding.EncodeToString([]byte(vcsJSONContent))
 	ldKV               = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
 	ldKV2              = KV{P: pkCP, PC: pcYellow, ShowOut: true}
+	vcsRequirements    = Requirements{CPU: 1, Network: nwRestricted, RAM: 16}
 )
 
 var ldScriptInputs = []VFS{
@@ -223,15 +224,14 @@ func emitLD(
 	outputs = outputs[:len(outputs):len(outputs)]
 
 	n := Node{
-		Platform:     instance.Platform,
-		Cmds:         cmds,
-		Env:          envFull,
-		Inputs:       inputs,
-		Outputs:      outputs,
-		KV:           &ldKV,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:      deps,
-		Resources:    instance.Platform.UsesLinkResources,
+		Platform:  instance.Platform,
+		Cmds:      cmds,
+		Env:       envFull,
+		Inputs:    inputs,
+		Outputs:   outputs,
+		KV:        &ldKV,
+		DepRefs:   deps,
+		Resources: instance.Platform.UsesLinkResources,
 	}
 
 	return emit.emitNode(n)
@@ -254,7 +254,7 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 			output.any()))}),
 		KV:           &ldKV2,
 		Outputs:      na.vfsList(output),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(16)},
+		Requirements: &vcsRequirements,
 	}
 
 	node.PresetUID = resourceFetchUID("base64:vcs.json:"+vcsJSONBase64, output.string())

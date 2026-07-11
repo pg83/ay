@@ -41,7 +41,6 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 			Inputs:         na.inputList(na.vfsList(archiverBin, buildMnScriptVFS, infoVFS)),
 			KV:             &mnKV,
 			Outputs:        na.vfsList(cppVFS, rodataVFS),
-			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(archiverRef),
 			Resources:      usesPython3,
 		}

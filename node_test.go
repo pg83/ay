@@ -26,6 +26,8 @@ var expectedKeyOrderMinimal = []string{
 	"requirements",
 }
 
+var nodeTestRequirements = Requirements{CPU: 1, RAM: 32}
+
 func extractKeyOrder(t *testing.T, raw []byte) []string {
 	t.Helper()
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
@@ -79,7 +81,7 @@ func TestNodeJSONKeyOrder_AllFieldsPresent(t *testing.T) {
 		KV:           &KV{P: pkLD},
 		Outputs:      ToVFSSlice([]string{"out"}),
 		Platform:     &Platform{Target: "default-linux-aarch64"},
-		Requirements: Requirements{CPU: 1, RAM: 32},
+		Requirements: &nodeTestRequirements,
 	}
 	raw, err := json.Marshal(n)
 
@@ -109,7 +111,7 @@ func TestNodeJSONKeyOrder_OmitemptyFieldsZero(t *testing.T) {
 		KV:           &KV{},
 		Outputs:      ToVFSSlice([]string{}),
 		Platform:     nil,
-		Requirements: Requirements{},
+		Requirements: &emptyRequirements,
 	}
 	raw, err := json.Marshal(n)
 
@@ -146,7 +148,7 @@ func TestNodeJSON_DoesNotSerializeInternalRefs(t *testing.T) {
 		Inputs:         InputChunks{ToVFSSlice([]string{})},
 		KV:             &KV{},
 		Outputs:        ToVFSSlice([]string{}),
-		Requirements:   Requirements{},
+		Requirements:   &emptyRequirements,
 		DepRefs:        []NodeRef{7},
 		ForeignDepRefs: []NodeRef{9},
 	}

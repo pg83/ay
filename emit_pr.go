@@ -697,7 +697,6 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		Inputs:         inputs,
 		Outputs:        outputs,
 		KV:             &prKV,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: toolRefs,
 	}
 

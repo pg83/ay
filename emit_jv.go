@@ -106,7 +106,6 @@ func (e *EmitContext) emitJVNodeReserved(cmdArgs []ANY, inputs InputChunks, outp
 		Inputs:       inputs,
 		KV:           &jvKV,
 		Outputs:      na.vfsList(outputs...),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      na.noderefs.list(depRefs...),
 		Resources:    usesPython3JDK17,
 	}
