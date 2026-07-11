@@ -11,7 +11,7 @@ var emptyDirNames = []uint32{}
 
 const mmapReadThreshold = 2 << 20
 
-const sourceUnderHotMask = 1<<14 - 1
+const sourceUnderHotMask = 1<<15 - 1
 
 type sourceUnderHotEntry struct {
 	key uint64
