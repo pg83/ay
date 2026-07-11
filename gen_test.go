@@ -1828,12 +1828,12 @@ int use() { return 0; }
 		t.Fatalf("enum node deps missing pb producer ref %d: %v", mainPB.Ref, graphDeps(g, en))
 	}
 
-	if !slices.Contains(graphDeps(g, en), depPB.Ref) {
-		t.Fatalf("enum node deps missing imported pb producer ref %d: %v", depPB.Ref, graphDeps(g, en))
+	if slices.Contains(graphDeps(g, en), depPB.Ref) {
+		t.Fatalf("enum node deps contain imported pb producer ref %d: %v", depPB.Ref, graphDeps(g, en))
 	}
 
-	if !nodeHasInput(en, "$(B)/protos/dep.pb.h") {
-		t.Fatalf("enum node inputs missing imported pb.h dep.pb.h: %#v", en.flatInputs())
+	if nodeHasInput(en, "$(B)/protos/dep.pb.h") {
+		t.Fatalf("enum node inputs contain imported pb.h dep.pb.h: %#v", en.flatInputs())
 	}
 
 	if !nodeHasInput(ar, "$(B)/protos/main.pb.h_serialized.cpp.o") {
