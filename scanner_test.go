@@ -1149,25 +1149,3 @@ func TestScanner_CythonExternFromSingleQuotedResolves(t *testing.T) {
 		t.Fatalf("closure[0] = %q, want %q", got, "$(S)/library/cpp/logger/priority.h")
 	}
 }
-
-func TestChunkDepRefsCache_ReplacesCollidingEntry(t *testing.T) {
-	cache := newChunkDepRefsCache(2)
-	first := NodeRef(1)
-	second := NodeRef(2)
-
-	cache.put(1, &first)
-
-	if got, ok := cache.get(1); !ok || got != &first {
-		t.Fatalf("get(1) = (%p, %t), want (%p, true)", got, ok, &first)
-	}
-
-	cache.put(3, &second)
-
-	if got, ok := cache.get(1); ok || got != nil {
-		t.Fatalf("get evicted key = (%p, %t), want (nil, false)", got, ok)
-	}
-
-	if got, ok := cache.get(3); !ok || got != &second {
-		t.Fatalf("get(3) = (%p, %t), want (%p, true)", got, ok, &second)
-	}
-}

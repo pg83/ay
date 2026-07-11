@@ -117,16 +117,11 @@ END()
 func nodeTestEmitContext(emit *StreamingEmitter, instance ModuleInstance) *EmitContext {
 	na := emit.nodeArenas()
 	reg := newCodegenRegistry(na)
-	scanner := &IncludeScanner{
-		codegen:       reg,
-		chunkDepRefs:  newChunkDepRefsCache(8),
-		chunkDepArena: newBumpAllocator[NodeRef](),
-	}
+	scanner := &IncludeScanner{codegen: reg}
 
 	return &EmitContext{
 		ctx:      &GenCtx{emit: emit, na: na, target: instance.Platform, scannerTarget: scanner},
 		instance: instance,
-		scanner:  scanner,
 		codegen:  reg,
 	}
 }
@@ -151,7 +146,6 @@ func TestEmitContext_NodeEmissionUsesBuildInputProducers(t *testing.T) {
 			})
 
 			e.codegen.register(GeneratedFileInfo{OutputPath: generated, ProducerRef: producerRef, OnUse: pending})
-			sourceOnly := e.ctx.na.vfsList(source("mod/header.h"))
 
 			node := Node{
 				Platform: instance.Platform,
@@ -159,7 +153,6 @@ func TestEmitContext_NodeEmissionUsesBuildInputProducers(t *testing.T) {
 				Inputs: e.ctx.na.inputList(
 					e.ctx.na.vfsList(source("mod/source.cpp"), generated),
 					e.ctx.na.vfsList(build("mod/unregistered.cpp"), generated),
-					sourceOnly,
 				),
 				DepRefs: e.ctx.na.refList(explicitRef),
 			}
@@ -184,13 +177,6 @@ func TestEmitContext_NodeEmissionUsesBuildInputProducers(t *testing.T) {
 
 			if fires != 1 {
 				t.Fatalf("producer emitted %d times, want 1", fires)
-			}
-
-			cachedConsumerRef := e.emitNode(Node{Platform: instance.Platform, KV: &ccKV, Inputs: node.Inputs})
-			cachedConsumer := emit.nodes.s[cachedConsumerRef]
-
-			if !slices.Equal(cachedConsumer.DepRefs, []NodeRef{producerRef}) {
-				t.Fatalf("cached DepRefs = %v, want [%v]", cachedConsumer.DepRefs, producerRef)
 			}
 		})
 	}
