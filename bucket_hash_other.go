@@ -2,15 +2,13 @@
 
 package main
 
-func bucketHashPlatform(elems []VFS) (sum, xr, sq, cb uint32) {
+func bucketHashPlatform(elems []VFS) (sum, xr uint64) {
 	for _, v := range elems {
-		x := uint32(v)
+		z := mix64(uint64(v))
 
-		sum += x
-		xr ^= x
-		sq += x * x
-		cb += x * x * x
+		sum += z
+		xr ^= z
 	}
 
-	return sum, xr, sq, cb
+	return sum, xr
 }

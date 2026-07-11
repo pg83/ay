@@ -8,74 +8,84 @@ import (
 	"testing"
 )
 
-func bucketAccumScalar(elems []VFS) (sum, xr, sq, cb uint32) {
-	for _, v := range elems {
-		x := uint32(v)
+var (
+	bucketHashBenchSum uint64
+	bucketHashBenchXor uint64
+)
 
-		sum += x
-		xr ^= x
-		sq += x * x
-		cb += x * x * x
-	}
+func TestBucketMix64MatchesScalar(t *testing.T) {
+	rng := rand.New(rand.NewSource(2))
 
-	return sum, xr, sq, cb
-}
-
-func TestBucketAccumAVX2_MatchesScalar(t *testing.T) {
-	if !useBucketHashAVX2 {
-		t.Skip("no AVX2")
-	}
-
-	rng := rand.New(rand.NewSource(1))
-
-	for _, n := range []int{8, 16, 24, 64, 120, 256, 1024} {
+	for n := 0; n <= 1024; n++ {
 		elems := make([]VFS, n)
 
 		for i := range elems {
 			elems[i] = VFS(rng.Uint32())
 		}
 
-		s0, x0, q0, c0 := bucketAccumScalar(elems)
-		s1, x1, q1, c1 := bucketAccumAVX2(&elems[0], n)
+		sum, xr := bucketMix64Scalar(elems)
 
-		if s0 != s1 || x0 != x1 || q0 != q1 || c0 != c1 {
-			t.Fatalf("n=%d: scalar (%d,%d,%d,%d) != avx2 (%d,%d,%d,%d)", n, s0, x0, q0, c0, s1, x1, q1, c1)
+		if useBucketHashAVX2 {
+			avxSum, avxXor := bucketMix64AVX2(elems)
+
+			if sum != avxSum || xr != avxXor {
+				t.Fatalf("avx2 n=%d: scalar (%d,%d) != vector (%d,%d)", n, sum, xr, avxSum, avxXor)
+			}
+		}
+
+		if useBucketHashAVX512 {
+			avxSum, avxXor := bucketMix64AVX512(elems)
+
+			if sum != avxSum || xr != avxXor {
+				t.Fatalf("avx512 n=%d: scalar (%d,%d) != vector (%d,%d)", n, sum, xr, avxSum, avxXor)
+			}
 		}
 	}
 }
 
-func BenchmarkBucketAccum(b *testing.B) {
-	for _, n := range []int{8, 16, 32, 64, 256} {
+func BenchmarkBucketMix64(b *testing.B) {
+	for _, n := range bucketHashBenchSizes() {
 		elems := make([]VFS, n)
 
 		for i := range elems {
 			elems[i] = VFS(i*2654435761 + 12345)
 		}
 
-		b.Run("scalar/"+strconv.Itoa(n), func(b *testing.B) {
-			var s uint32
-
-			for b.Loop() {
-				a, x, q, c := bucketAccumScalar(elems)
-
-				s += a + x + q + c
-			}
-
-			_ = s
-		})
+		benchBucketMix64(b, "scalar/"+strconv.Itoa(n), elems, bucketMix64Scalar)
 
 		if useBucketHashAVX2 {
-			b.Run("avx2/"+strconv.Itoa(n), func(b *testing.B) {
-				var s uint32
+			benchBucketMix64(b, "avx2/"+strconv.Itoa(n), elems, bucketMix64AVX2)
+		}
 
-				for b.Loop() {
-					a, x, q, c := bucketAccumAVX2(&elems[0], n&^7)
-
-					s += a + x + q + c
-				}
-
-				_ = s
-			})
+		if useBucketHashAVX512 {
+			benchBucketMix64(b, "avx512/"+strconv.Itoa(n), elems, bucketMix64AVX512)
 		}
 	}
+}
+
+func bucketHashBenchSizes() []int {
+	sizes := make([]int, 41)
+
+	for i := range sizes {
+		sizes[i] = i
+	}
+
+	return append(sizes, 48, 64, 96, 128, 192, 256, 512, 1024, 4096)
+}
+
+func benchBucketMix64(b *testing.B, name string, elems []VFS, mix func([]VFS) (uint64, uint64)) {
+	b.Run(name, func(b *testing.B) {
+		var sum, xr uint64
+
+		for b.Loop() {
+			s, x := mix(elems)
+
+			sum += s
+			xr ^= x
+		}
+
+		bucketHashBenchSum = sum
+		bucketHashBenchXor = xr
+		b.ReportMetric(float64(len(elems)*b.N)/float64(b.Elapsed().Nanoseconds()), "elem/ns")
+	})
 }
