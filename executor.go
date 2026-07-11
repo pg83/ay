@@ -22,8 +22,7 @@ import (
 )
 
 const (
-	executorGCPercent = 400
-	prepBatchMax      = 128
+	prepBatchMax = 128
 )
 
 type CmdPrefix struct {
