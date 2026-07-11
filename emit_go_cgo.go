@@ -221,7 +221,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 			Resources:    usesPython3,
 		}
 
-		ctx.emit.emitReservedNode(node, ref)
+		e.emitReservedNode(node, ref)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 
@@ -374,7 +374,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 		Resources:    goToolResources(na, e.peers.ResourceGlobals),
 	}
 
-	ref := ctx.emit.emitNode(node)
+	ref := e.emitNode(node)
 	leafCap := 2 + inputCap
 	cgoLeaves := na.vfs.alloc(leafCap)
 	nl := 0
@@ -669,11 +669,11 @@ func (e *EmitContext) flushGoCgo2() {
 		KV:           &goToolKV,
 		Outputs:      na.vfsList(mainO, cgoO, importGo),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:      resolveCodegenDepRefsIncl(ctx, instance, na, []VFS{mainC, exportH}, deps[:nd]...),
+		DepRefs:      deps[:nd],
 		Resources:    goToolResources(na, e.peers.ResourceGlobals),
 	}
 
-	ref := ctx.emit.emitNode(node)
+	ref := e.emitNode(node)
 
 	e.register(GeneratedFileInfo{OutputPath: importGo, ProducerRef: ref})
 

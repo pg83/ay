@@ -58,7 +58,7 @@ func (e *EmitContext) emitSwigC() {
 				cOutVFS.any(),
 				srcVFS.any()))
 
-			ctx.emit.emitReservedNode(Node{
+			e.emitReservedNode(Node{
 				Platform: instance.Platform,
 				Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 					Env: envVarsVCS}),

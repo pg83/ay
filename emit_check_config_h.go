@@ -27,7 +27,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 	pe := func() {
 		cv := scanner.walkClosure(confVFS, scanCtx, scanDomainCC)
 
-		ctx.emit.emitReservedNode(Node{
+		e.emitReservedNode(Node{
 			Platform: ctx.target,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(python3.any(),
 				argSBuildScriptsCheckConfigHPy.any(),

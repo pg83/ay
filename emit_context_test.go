@@ -113,3 +113,71 @@ END()
 		t.Fatalf("generated source compile flags = %v", anyStrs(cc.Cmds[0].CmdArgs.flat()))
 	}
 }
+
+func nodeTestEmitContext(emit *StreamingEmitter, instance ModuleInstance) *EmitContext {
+	na := emit.nodeArenas()
+	reg := newCodegenRegistry(na)
+	scanner := &IncludeScanner{codegen: reg}
+
+	return &EmitContext{
+		ctx:      &GenCtx{emit: emit, na: na, target: instance.Platform, scannerTarget: scanner},
+		instance: instance,
+		codegen:  reg,
+	}
+}
+
+func TestEmitContext_NodeEmissionUsesBuildInputProducers(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		reserved bool
+	}{{name: "node"}, {name: "reserved", reserved: true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			emit := newStreamingEmitter(nil)
+			instance := targetInstance("mod")
+			e := nodeTestEmitContext(emit, instance)
+			_ = e.emitNode(Node{Platform: instance.Platform, KV: &prKV})
+			explicitRef := e.emitNode(Node{Platform: instance.Platform, KV: &prKV})
+			generated := build("mod/generated.cpp")
+			producerRef := emit.reserve()
+			fires := 0
+			pending := e.ctx.na.pendingEmit(func() {
+				fires++
+				e.emitReservedNode(Node{Platform: instance.Platform, KV: &prKV, Outputs: e.ctx.na.vfsList(generated)}, producerRef)
+			})
+
+			e.codegen.register(GeneratedFileInfo{OutputPath: generated, ProducerRef: producerRef, OnUse: pending})
+
+			node := Node{
+				Platform: instance.Platform,
+				KV:       &ccKV,
+				Inputs: e.ctx.na.inputList(
+					e.ctx.na.vfsList(source("mod/source.cpp"), generated),
+					e.ctx.na.vfsList(build("mod/unregistered.cpp"), generated),
+				),
+				DepRefs: e.ctx.na.refList(explicitRef),
+			}
+			var consumerRef NodeRef
+
+			if tc.reserved {
+				consumerRef = emit.reserve()
+				e.emitReservedNode(node, consumerRef)
+			} else {
+				consumerRef = e.emitNode(node)
+			}
+
+			consumer := emit.nodes.s[consumerRef]
+
+			if !slices.Equal(consumer.DepRefs, []NodeRef{explicitRef, producerRef}) {
+				t.Fatalf("DepRefs = %v, want [%v %v]", consumer.DepRefs, explicitRef, producerRef)
+			}
+
+			if emit.nodes.s[producerRef] == nil {
+				t.Fatal("build input producer was not emitted")
+			}
+
+			if fires != 1 {
+				t.Fatalf("producer emitted %d times, want 1", fires)
+			}
+		})
+	}
+}

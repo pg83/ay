@@ -59,11 +59,7 @@ type CopyEmitState struct {
 
 func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 	st, info := e.registerCopyFile(entry)
-	ctx, instance, scanner := e.ctx, e.instance, e.scanner
-	scanCtx := e.d.scanCtx
-	moduleTag := e.d.cc.ModuleTag
-	tc := e.d.tc
-	demanded := instance.Demand != demandNone
+	demanded := e.instance.Demand != demandNone
 
 	if demanded && extIsArchiveMember(entry.Dst) {
 		e.collectObj(st.ref, st.dstVFS, SrcMeta{Prio: stmtPrioDefault})
@@ -73,7 +69,7 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 	// as its return value — register() there happens before pe can exist,
 	// and is skipped entirely on the merge-existing-dst path (info == nil).
 	pe := func() {
-		emitCopyFileNodeSnap(ctx, instance, scanner, scanCtx, moduleTag, tc, entry, st)
+		e.emitCopyFileNodeSnap(entry, st)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 
@@ -154,13 +150,12 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	return CopyEmitState{srcVFS: srcVFS, dstVFS: dstVFS, ref: ref, producerSource: producerSource}, nil
 }
 
-func emitCopyFileNodeSnap(ctx *GenCtx, instance ModuleInstance, scanner *IncludeScanner, scanCtx *ScanContext, moduleTag STR, tc ModuleToolchain, entry CopyFileEntry, st CopyEmitState) {
-	deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{st.srcVFS})
-
+func (e *EmitContext) emitCopyFileNodeSnap(entry CopyFileEntry, st CopyEmitState) {
+	ctx := e.ctx
 	var closure []VFS
 
 	if entry.WithContext || len(entry.OutputIncludes) > 0 {
-		raw := rewriteClosureCPSource(ctx.na, scanner, scanner.walkClosure(st.dstVFS, scanCtx, scanDomainCC))
+		raw := rewriteClosureCPSource(ctx.na, e.scanner, e.scanner.walkClosure(st.dstVFS, e.d.scanCtx, scanDomainCC))
 
 		raw = filterSourceVFS(ctx.na, raw)
 
@@ -182,5 +177,5 @@ func emitCopyFileNodeSnap(ctx *GenCtx, instance ModuleInstance, scanner *Include
 		closure = ctx.na.vfsList(st.producerSource...)
 	}
 
-	emitCPWithDeps(instance, st.srcVFS, st.dstVFS, deps, closure, st.ref, moduleTag, tc, ctx.scripts, ctx.emit)
+	e.emitCPWithDeps(st.srcVFS, st.dstVFS, nil, closure, st.ref, e.d.cc.ModuleTag, e.d.tc, ctx.scripts)
 }

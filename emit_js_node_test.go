@@ -11,7 +11,7 @@ func TestEmitJS_UsesRequestedPlatformTags(t *testing.T) {
 
 	ref := emit.reserve()
 
-	emitJSReserved(hostInstance("joinmod"), "all.cpp", []string{"a.cpp"}, nil, target, testToolchain(), nil, emit, ref)
+	nodeTestEmitContext(emit, hostInstance("joinmod")).emitJSReserved("all.cpp", []string{"a.cpp"}, nil, target, testToolchain(), nil, ref)
 
 	got := emit.nodes.s[ref]
 

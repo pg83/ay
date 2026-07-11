@@ -57,9 +57,8 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 
 	pe := func() {
 		lxClosure := scanner.walkClosure(outVFS, scanCtx, scanDomainCC).collect(ctx.na, func(v VFS) bool { return v.isSource() })
-		depRefs := resolveCodegenDepRefsIncl(ctx, instance, na, []VFS{srcVFS})
 
-		emitFlexLX(instance, flexRef, flexBin, srcVFS, outVFS, lxClosure, depRefs, lxRef, ctx.emit)
+		e.emitFlexLX(flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 
@@ -72,8 +71,8 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	})
 }
 
-func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, depRefs []NodeRef, id NodeRef, emit *StreamingEmitter) {
-	na := emit.nodeArenas()
+func (e *EmitContext) emitFlexLX(flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef) {
+	na := e.ctx.na
 
 	cmdArgs := na.chunkList(na.anyList(
 		flexBin.any(),
@@ -83,8 +82,8 @@ func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, o
 
 	env := envVarsVCS
 
-	emit.emitReservedNode(Node{
-		Platform:       instance.Platform,
+	e.emitReservedNode(Node{
+		Platform:       e.instance.Platform,
 		Cmds:           na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(flexBin, srcVFS), closure),
@@ -92,6 +91,5 @@ func emitFlexLX(instance ModuleInstance, flexRef NodeRef, flexBin VFS, srcVFS, o
 		KV:             &flexKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(flexRef),
-		DepRefs:        depRefs,
 	}, id)
 }

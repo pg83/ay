@@ -52,7 +52,6 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		outputs = append(outputs, vfs)
 	}
 
-	deps := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputs)
 	args := antlrRunCmdArgs(instance, run, inVFSByToken, outVFSByToken)
 	cwd := ""
 
@@ -67,7 +66,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	outputsSnap := ctx.na.vfsList(outputs...)
 
 	pe := func() {
-		emitJVGeneralReserved(instance, jarVFS, args, inputsSnap, outputsSnap, cwd, deps, ccTag, tc, ctx.emit, jvRef)
+		e.emitJVGeneralReserved(jarVFS, args, inputsSnap, outputsSnap, cwd, ccTag, tc, jvRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

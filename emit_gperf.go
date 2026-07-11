@@ -24,8 +24,8 @@ func gperfSymbolName(srcRel string) string {
 	return "-Nin_" + base + "_set"
 }
 
-func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, depRefs []NodeRef, ref NodeRef, emit *StreamingEmitter) {
-	na := emit.nodeArenas()
+func (e *EmitContext) emitGP(srcRel string, srcVFS, genVFS, gperfBin VFS, gperfLD NodeRef, srcInputs []VFS, ref NodeRef) {
+	na := e.ctx.na
 	env := envVarsVCS
 	head := na.anys.alloc(3 + len(gperfFlags))[:0]
 
@@ -37,7 +37,7 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 	head = head[:len(head):len(head)]
 
 	node := Node{
-		Platform:       instance.Platform,
+		Platform:       e.instance.Platform,
 		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env, Stdout: genVFS}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(gperfBin), srcInputs),
@@ -45,10 +45,9 @@ func emitGP(instance ModuleInstance, srcRel string, srcVFS, genVFS, gperfBin VFS
 		KV:             &gperfKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(gperfLD),
-		DepRefs:        depRefs,
 	}
 
-	emit.emitReservedNode(node, ref)
+	e.emitReservedNode(node, ref)
 }
 
 func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
@@ -76,9 +75,7 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 		}
 
 		srcInputs = ctx.na.dedupClosure(srcInputs, [][]VFS{sourceClosure})
-		depRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{srcVFS})
-
-		emitGP(instance, srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, depRefs, gpRef, ctx.emit)
+		e.emitGP(srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

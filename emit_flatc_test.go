@@ -1,8 +1,8 @@
 package main
 
 import (
-	"strings"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -19,10 +19,9 @@ func TestEmitFL_NodeShape(t *testing.T) {
 	ref := e.reserve()
 	header := build("mod/File.fbs", ".h")
 	cpp := build("mod/File.fbs", ".cpp")
-	bfbs := build("mod/" + strings.TrimSuffix("File.fbs", ".fbs"), ".bfbs")
+	bfbs := build("mod/"+strings.TrimSuffix("File.fbs", ".fbs"), ".bfbs")
 
-	emitFLReserved(
-		instance,
+	nodeTestEmitContext(e, instance).emitFLReserved(
 		"mod/File.fbs",
 		source("mod/File.fbs"),
 		NodeRef(9),
@@ -31,9 +30,7 @@ func TestEmitFL_NodeShape(t *testing.T) {
 		closureViewOf(source("mod/Schema.fbs")),
 		tagCppFbs,
 		testToolchain(),
-		e,
 		&flatcVariantFL,
-		nil,
 		ref,
 	)
 
@@ -231,10 +228,9 @@ func TestEmitFL64_NodeShape(t *testing.T) {
 	ref := e.reserve()
 	header := build("mod/File.fbs64", ".h")
 	cpp := build("mod/File.fbs64", ".cpp")
-	bfbs := build("mod/" + strings.TrimSuffix("File.fbs64", ".fbs64"), ".bfbs64")
+	bfbs := build("mod/"+strings.TrimSuffix("File.fbs64", ".fbs64"), ".bfbs64")
 
-	emitFLReserved(
-		instance,
+	nodeTestEmitContext(e, instance).emitFLReserved(
 		"mod/File.fbs64",
 		source("mod/File.fbs64"),
 		NodeRef(9),
@@ -243,9 +239,7 @@ func TestEmitFL64_NodeShape(t *testing.T) {
 		closureViewOf(source("mod/Schema.fbs64")),
 		tagCppFbs,
 		testToolchain(),
-		e,
 		&flatcVariantFL64,
-		nil,
 		ref,
 	)
 

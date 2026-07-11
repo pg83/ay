@@ -2454,8 +2454,7 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, "", false,
 		internAnys([]string{"--fatal_warnings"}), nil, nil)
-	emitPB(
-		inst,
+	nodeTestEmitContext(e, inst).emitPB(
 		"pkg/proto/test.proto",
 		VFS(0),
 		NodeRef(1),
@@ -2470,11 +2469,9 @@ func TestEmitPB_ExtraProtocFlags(t *testing.T) {
 		nil,
 		Closure{},
 		nil,
-		nil,
 		blocks,
 		cppProtoSpec,
 		e.reserve(),
-		e,
 	)
 
 	if e.nodes.len() != 1 {
@@ -2496,8 +2493,7 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp"),
 		false, "", true,
 		nil, nil, nil)
-	emitPB(
-		inst,
+	nodeTestEmitContext(e, inst).emitPB(
 		"pkg/proto/test.proto",
 		VFS(0),
 		NodeRef(1),
@@ -2512,11 +2508,9 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 		nil,
 		Closure{},
 		nil,
-		nil,
 		blocks,
 		cppProtoSpec,
 		e.reserve(),
-		e,
 	)
 
 	if e.nodes.len() != 1 {

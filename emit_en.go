@@ -44,7 +44,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		return
 	}
 
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, d := e.ctx, e.d
 	withHeader := stmt.Variant == "with_header"
 	headerInput := e.resolveEnumHeaderInput(stmt.Header, d.srcDirs)
 	baseDir, baseSep, baseName := e.enumSerializedBaseParts(stmt)
@@ -85,10 +85,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			codegen.lookup(serializedHPath).GeneratorRefs = generatorRefs
 		}
 
-		depENRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{headerInput})
-
-		emitEN(
-			instance,
+		e.emitEN(
 			headerInput,
 			serializedCPPPath,
 			serializedHPath,
@@ -96,9 +93,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			withHeader,
 			enumParserLD,
 			enumParserBin,
-			depENRefs,
 			enRef,
-			ctx.emit,
 		)
 	})
 
@@ -127,8 +122,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	}
 }
 
-func emitEN(
-	instance ModuleInstance,
+func (e *EmitContext) emitEN(
 	headerInput VFS,
 	serializedCPPVFS VFS,
 	serializedHVFS VFS,
@@ -136,11 +130,9 @@ func emitEN(
 	withHeader bool,
 	enumParserLD NodeRef,
 	enumParserBin VFS,
-	depENRefs []NodeRef,
 	id NodeRef,
-	emit *StreamingEmitter,
 ) {
-	na := emit.nodeArenas()
+	na := e.ctx.na
 	cmdArgs := na.anys.alloc(8)[:0]
 
 	cmdArgs = append(cmdArgs,
@@ -169,11 +161,10 @@ func emitEN(
 	}
 
 	env := envVarsVCS
-	deps := na.noderefs.list(depENRefs...)
 	foreignDepRefs := na.refList(enumParserLD)
 
 	node := Node{
-		Platform: instance.Platform,
+		Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:            env,
@@ -181,9 +172,8 @@ func emitEN(
 		KV:             &enKV,
 		Outputs:        outputs,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        deps,
 		ForeignDepRefs: foreignDepRefs,
 	}
 
-	emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 }

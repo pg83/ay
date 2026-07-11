@@ -390,7 +390,6 @@ func (e *EmitContext) flushGoSrcs() {
 	na.anys.commit(nt)
 
 	e.goRes.AsmInclSrcs = e.goAsmIncludeSrcs()
-	depRefs := resolveCodegenDepRefsIncl(ctx, instance, na, e.goRes.AsmFiles)
 
 	node := Node{
 		Platform:     instance.Platform,
@@ -401,10 +400,9 @@ func (e *EmitContext) flushGoSrcs() {
 		Outputs:      na.vfsList(out),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    goToolResources(na, e.peers.ResourceGlobals),
-		DepRefs:      depRefs,
 	}
 
-	e.goRes.SymabisRef = ctx.emit.emitNode(node)
+	e.goRes.SymabisRef = e.emitNode(node)
 	e.goRes.SymabisOut = out
 }
 
@@ -967,7 +965,6 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 	na.noderefs.commit(ndep)
 
-	deps := e.resolveCodegenDepRefsChunks(inputs, depBlock[:ndep])
 	env := goCmdEnv(ctx, instance.Platform, d.tc)
 
 	node := Node{
@@ -988,11 +985,11 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		KV:           &goKV,
 		Outputs:      na.vfsList(outPath, build(dir, "/", outName, ".a.vet.out"), build(dir, "/", outName, ".a.vet.txt")),
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:      deps,
+		DepRefs:      depBlock[:ndep],
 		Resources:    goToolResources(na, resourceGlobals),
 	}
 
-	return ctx.emit.emitNode(node), outPath, srcClosure
+	return e.emitNode(node), outPath, srcClosure
 }
 
 func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
@@ -1162,7 +1159,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		Resources:    goToolResources(na, resourceGlobals),
 	}
 
-	return ctx.emit.emitNode(node), outPath
+	return e.emitNode(node), outPath
 }
 
 func isGoArchivePath(rel string) bool {

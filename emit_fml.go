@@ -9,7 +9,6 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 	toolRef, toolBin := ctx.tool(argToolsRelevFmlCodegen)
 	srcVFS := e.resolveModuleSourceVFS(src, e.d.cc.SrcDirs)
 	outVFS := build(instance.Path.relString(), "/", srcRel, ".inc")
-	depRefs := resolveCodegenDepRefsIncl(ctx, instance, na, []VFS{srcVFS})
 	env := envVarsVCS
 
 	ref := ctx.emit.reserve()
@@ -31,10 +30,9 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 			Outputs:        na.vfsList(outVFS),
 			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(toolRef),
-			DepRefs:        depRefs,
 		}
 
-		ctx.emit.emitReservedNode(node, ref)
+		e.emitReservedNode(node, ref)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

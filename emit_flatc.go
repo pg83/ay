@@ -111,8 +111,9 @@ func flatcDirectGeneratedHeaderIncludes(na *NodeArenas, pm *IncludeParserManager
 	return out[:len(out):len(out)]
 }
 
-func emitFLReserved(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ANY, transitiveImports Closure, moduleTag STR, tc ModuleToolchain, emit *StreamingEmitter, v *FlatcVariant, genDeps []NodeRef, id NodeRef) {
-	na := emit.nodeArenas()
+func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ANY, transitiveImports Closure, moduleTag STR, tc ModuleToolchain, v *FlatcVariant, id NodeRef) {
+	instance := e.instance
+	na := e.ctx.na
 	headerVFS := build(srcRel, ".h")
 	cppVFS := build(srcRel, ".cpp")
 	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt), v.bfbsExt)
@@ -144,7 +145,6 @@ func emitFLReserved(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDR
 			Cwd: bldRootDirVFS,
 			Env: env}),
 		Env:            env,
-		DepRefs:        na.noderefs.list(genDeps...),
 		ForeignDepRefs: na.refList(flatcLDRef),
 		Inputs:         na.inputList(na.vfsList(flatcBinary, flatcWrapperVFS, srcVFS), transitiveImports.buckets...),
 		KV:             v.kv,
@@ -153,11 +153,11 @@ func emitFLReserved(instance ModuleInstance, srcRel string, srcVFS VFS, flatcLDR
 		Resources:      usesPython3,
 	}
 
-	emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 }
 
-func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []NodeRef) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
+	ctx, d := e.ctx, e.d
 	flatcRes := ctx.toolResult(v.toolArg)
 	flatcLDRef, flatcBinary := flatcRes.LDRef, *flatcRes.LDPath
 	transitiveImports := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainFlatc)
@@ -169,10 +169,9 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 	flatcFlags := ctx.na.anyList(d.flatcFlags...)
 	ccTag := d.unit.CCTag
 	tc := d.tc
-	genDepsSnap := ctx.na.refList(genDeps...)
 
 	pe := func() {
-		emitFLReserved(instance, srcRel, srcVFS, flatcLDRef, flatcBinary, flatcFlags, transitiveImports, ccTag, tc, ctx.emit, v, genDepsSnap, flRef)
+		e.emitFLReserved(srcRel, srcVFS, flatcLDRef, flatcBinary, flatcFlags, transitiveImports, ccTag, tc, v, flRef)
 	}
 
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.na, ctx.parsers, srcVFS.relString())
@@ -222,21 +221,12 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant, genDeps []N
 func (e *EmitContext) emitLibraryFlatcSource(meta SrcMeta, variant *FlatcVariant) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	srcVFS := meta.Source.vfs()
-	var genDeps []NodeRef
 
 	if srcVFS == 0 {
 		srcVFS = resolveSourceVFS(ctx, instance, meta.Source.string(), d.srcDirs)
-	} else if srcVFS.isBuild() {
-		genInfo := e.codegen.use(srcVFS)
-
-		if genInfo == nil {
-			throwFmt("flatc generated source: unregistered producer for %q", srcVFS.string())
-		}
-
-		genDeps = []NodeRef{genInfo.ProducerRef}
 	}
 
-	e.emitFlatcProducer(srcVFS, variant, genDeps)
+	e.emitFlatcProducer(srcVFS, variant)
 
 	cpp := meta
 

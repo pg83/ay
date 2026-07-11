@@ -6,12 +6,12 @@ var ljKV = KV{P: pkLJ, PC: pcLightCyan}
 
 const luajit21CwdRel = "contrib/libs/luajit_21"
 
-func emitLJReserved(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, compilerLDRef NodeRef, cwd VFS, id NodeRef, emit *StreamingEmitter) {
-	na := emit.nodeArenas()
+func (e *EmitContext) emitLJReserved(luaSrc, rawOut, compilerBin VFS, compilerLDRef NodeRef, cwd VFS, id NodeRef) {
+	na := e.ctx.na
 	env := envVarsVCS
 
 	node := Node{
-		Platform: instance.Platform,
+		Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{
 			CmdArgs: na.chunkList(na.anyList(compilerBin.any(), argB2.any(), argDashG.any(), luaSrc.any(), rawOut.any())),
 			Cwd:     cwd,
@@ -25,7 +25,7 @@ func emitLJReserved(instance ModuleInstance, luaSrc, rawOut, compilerBin VFS, co
 		ForeignDepRefs: na.refList(compilerLDRef),
 	}
 
-	emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 }
 
 func (e *EmitContext) emitLuaJit21() {
@@ -44,7 +44,7 @@ func (e *EmitContext) emitLuaJit21() {
 		ref := ctx.emit.reserve()
 
 		pe := func() {
-			emitLJReserved(instance, luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ref, ctx.emit)
+			e.emitLJReserved(luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ref)
 		}
 		pending := e.ctx.na.pendingEmit(pe)
 

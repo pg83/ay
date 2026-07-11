@@ -15,7 +15,6 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	tmpVFS := build(instance.Path.relString(), "/", srcRel, ".tmp")
 	incVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)))
-	depRefs := resolveCodegenDepRefsIncl(ctx, instance, na, []VFS{srcVFS})
 	plainEnv := envVarsVCS
 	toolEnv := instance.Platform.ToolEnvVars
 	blocks := d.cc.CCBlocks
@@ -56,11 +55,10 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 			Outputs:        na.vfsList(tmpVFS, incVFS),
 			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(toolRef),
-			DepRefs:        depRefs,
 			Resources:      instance.Platform.CCUsesResources,
 		}
 
-		ctx.emit.emitReservedNode(node, ref)
+		e.emitReservedNode(node, ref)
 	}
 
 	pending := e.ctx.na.pendingEmit(pe)

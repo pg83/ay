@@ -106,17 +106,16 @@ func (e *EmitContext) moduleSourceVFS(src ANY) VFS {
 }
 
 func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS) {
-	ctx, instance := e.ctx, e.instance
+	ctx := e.ctx
 
 	in.IncludeView = e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
-	in.ExtraDepRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, in.IncludeView)
 
 	if in.MainOutInducedInputs {
 		in.IncludeInputs = e.mainOutInducedInputs(ctx.na, in.IncludeView)
 		in.IncludeView = Closure{}
 	}
 
-	ref, outPath, _ := composeCCNodeAt(instance, srcVFS, in, ctx.host, ctx.emit, reserved)
+	ref, outPath, _ := e.composeCCNodeAt(srcVFS, in, ctx.host, reserved)
 
 	return ref, outPath
 }
@@ -148,12 +147,13 @@ func (e *EmitContext) mainOutInducedInputs(na *NodeArenas, includeView Closure) 
 	return out[:len(out):len(out)]
 }
 
-func composeCCNode(instance ModuleInstance, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
-	return composeCCNodeAt(instance, srcVFS, in, hostP, emit, 0)
+func (e *EmitContext) composeCCNode(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (NodeRef, VFS, InputChunks) {
+	return e.composeCCNodeAt(srcVFS, in, hostP, 0)
 }
 
-func composeCCNodeAt(instance ModuleInstance, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter, reserved NodeRef) (NodeRef, VFS, InputChunks) {
-	na := emit.nodeArenas()
+func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Platform, reserved NodeRef) (NodeRef, VFS, InputChunks) {
+	instance := e.instance
+	na := e.ctx.na
 	srcRel := trimModulePrefix(srcVFS.relString(), instance.Path.relString())
 	suffix := ccObjectSuffix(instance, in)
 
@@ -265,12 +265,12 @@ func composeCCNodeAt(instance ModuleInstance, srcVFS VFS, in ModuleCCInputs, hos
 	}
 
 	if reserved != 0 {
-		emit.emitReservedNode(node, reserved)
+		e.emitReservedNode(node, reserved)
 
 		return reserved, outVFS, allInputs
 	}
 
-	return emit.emitNode(node), outVFS, allInputs
+	return e.emitNode(node), outVFS, allInputs
 }
 
 func ccObjectSuffix(instance ModuleInstance, in ModuleCCInputs) string {

@@ -19,7 +19,6 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 
 	pe := func() {
 		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
-		depRefs := resolveCodegenDepRefsInclView(ctx, instance, na, cv)
 		block := na.vfs.alloc(2 + cv.len())
 		k := 0
 
@@ -48,10 +47,9 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 			Outputs:        na.vfsList(outVFS),
 			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(toolRef),
-			DepRefs:        depRefs,
 		}
 
-		ctx.emit.emitReservedNode(node, ref)
+		e.emitReservedNode(node, ref)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

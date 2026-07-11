@@ -6,8 +6,9 @@ import (
 
 var asKV = KV{P: pkAS, PC: pcLightGreen}
 
-func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform, emit *StreamingEmitter) (NodeRef, VFS) {
-	na := emit.nodeArenas()
+func (e *EmitContext) emitAS(srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform) (NodeRef, VFS) {
+	instance := e.instance
+	na := e.ctx.na
 	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
 	cmdArgs := composeASCmdArgs(na, instance, outVFS, inVFS, in)
 	env := hostP.toolEnv()
@@ -29,7 +30,7 @@ func emitAS(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInput
 		node.DepRefs = in.ExtraDepRefs
 	}
 
-	return emit.emitNode(node), outVFS
+	return e.emitNode(node), outVFS
 }
 
 func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs) (out, input VFS) {
@@ -102,7 +103,7 @@ func composeASIncludes(in ModuleCCInputs) []ANY {
 
 func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {
 	src := meta.Source
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, d := e.ctx, e.d
 	srcVFS := src.vfs()
 	srcRel := e.moduleSourceRel(src)
 
@@ -119,9 +120,8 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {
 	}
 
 	asIn.IncludeView = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainAsm)
-	asIn.ExtraDepRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, asIn.IncludeView)
 
-	ref, outPath := emitAS(instance, srcRel, srcVFS, asIn, ctx.host, ctx.emit)
+	ref, outPath := e.emitAS(srcRel, srcVFS, asIn, ctx.host)
 
 	e.collectObj(ref, outPath, meta)
 }

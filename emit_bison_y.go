@@ -110,8 +110,6 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 
 	pe := func() {
 		inputs := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS)
-		depRefs := na.refList(bisonRef, m4Ref)
-		depRefs = resolveCodegenDepRefsIncl(ctx, instance, na, []VFS{srcVFS}, depRefs...)
 
 		if preprocessHeader {
 			ext := na.vfs.alloc(len(inputs) + 1 + len(bisonCppSkeletonInputs))[:0]
@@ -147,10 +145,10 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 
 		cmds = cmds[:len(cmds):len(cmds)]
 
-		ctx.emit.emitReservedNode(Node{
+		e.emitReservedNode(Node{
 			Platform:     instance.Platform,
 			Cmds:         cmds,
-			DepRefs:      depRefs,
+			DepRefs:      na.refList(bisonRef, m4Ref),
 			Env:          env,
 			Inputs:       na.inputList(inputs),
 			Outputs:      na.vfsList(headerVFS, generatedVFS),

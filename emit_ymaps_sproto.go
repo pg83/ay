@@ -44,7 +44,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	scanner := e.scanner
 
 	pe := func() {
-		emitYmapsSprotoHeaderSnap(ctx, instance, scanner, pending, outRoot, sprotocLDRef, sprotocBinary, scanCtx)
+		e.emitYmapsSprotoHeaderSnap(scanner, pending, outRoot, sprotocLDRef, sprotocBinary, scanCtx)
 	}
 	onUse := e.ctx.na.pendingEmit(pe)
 
@@ -58,8 +58,8 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	})
 }
 
-func emitYmapsSprotoHeaderSnap(ctx *GenCtx, instance ModuleInstance, scanner *IncludeScanner, p YmapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCtx *ScanContext) {
-	na := ctx.emit.nodeArenas()
+func (e *EmitContext) emitYmapsSprotoHeaderSnap(scanner *IncludeScanner, p YmapsSprotoPending, outRoot string, sprotocLDRef NodeRef, sprotocBinary VFS, scanCtx *ScanContext) {
+	na := e.ctx.na
 
 	cmdArgs := na.chunkList(na.anyList(
 		sprotocBinary.any(),
@@ -79,7 +79,7 @@ func emitYmapsSprotoHeaderSnap(ctx *GenCtx, instance ModuleInstance, scanner *In
 	})
 
 	node := Node{
-		Platform: instance.Platform,
+		Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: srcRootDirVFS,
 			Env: env}),
@@ -91,5 +91,5 @@ func emitYmapsSprotoHeaderSnap(ctx *GenCtx, instance ModuleInstance, scanner *In
 		ForeignDepRefs: na.refList(sprotocLDRef),
 	}
 
-	ctx.emit.emitReservedNode(node, p.ref)
+	e.emitReservedNode(node, p.ref)
 }

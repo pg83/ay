@@ -46,7 +46,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 			Resources:      usesPython3,
 		}
 
-		ctx.emit.emitReservedNode(node, ref)
+		e.emitReservedNode(node, ref)
 	}
 
 	pending := e.ctx.na.pendingEmit(pe)

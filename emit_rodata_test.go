@@ -12,7 +12,7 @@ func TestEmitRD_NodeShape(t *testing.T) {
 	}
 
 	e := newStreamingEmitter(nil)
-	_, asmOut, objOut := emitRD(instance, "icudt78_dat.rodata", source("contrib/libs/icu/icudt78_dat.rodata"), NodeRef(7), Closure{}, nil, testToolchain(), e)
+	_, asmOut, objOut := nodeTestEmitContext(e, instance).emitRD("icudt78_dat.rodata", source("contrib/libs/icu/icudt78_dat.rodata"), NodeRef(7), Closure{}, nil, testToolchain())
 
 	if asmOut.string() != "$(B)/contrib/libs/icu/icudt78_dat.rodata.asm" {
 		t.Fatalf("asmOut = %q", asmOut)

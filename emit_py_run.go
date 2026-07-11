@@ -146,9 +146,8 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 
 	pe := func() {
 		inputClosure := pyInputClosure(snap, stmt)
-		extraDepRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputClosure)
 
-		emitPYRun(instance, stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, extraDepRefs, pyRef, interp, interpInput, toolRefs, kv, resources, ctx.emit)
+		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, pyRef, interp, interpInput, toolRefs, kv, resources)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 
@@ -382,24 +381,21 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 	return includes[:len(includes):len(includes)]
 }
 
-func emitPYRun(
-	instance ModuleInstance,
+func (e *EmitContext) emitPYRun(
 	stmt *RunPythonStmt,
 	scriptVFS VFS,
 	inVFSByToken map[string]VFS,
 	outVFSByToken map[string]VFS,
 	stdoutVFS *VFS,
 	inputClosure []VFS,
-	extraDepRefs []NodeRef,
 	id NodeRef,
 	interp ANY,
 	interpInput *VFS,
 	toolRefs []NodeRef,
 	kv *KV,
 	resources []STR,
-	emit *StreamingEmitter,
 ) NodeRef {
-	na := emit.nodeArenas()
+	na := e.ctx.na
 	env := envVarsVCS
 
 	if len(stmt.EnvPairs) > 0 {
@@ -507,19 +503,18 @@ func emitPYRun(
 	}
 
 	node := Node{
-		Platform:       instance.Platform,
+		Platform:       e.instance.Platform,
 		Cmds:           na.cmdList(cmd),
 		Env:            env,
 		Inputs:         inputs,
 		KV:             kv,
 		Outputs:        outputs,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        na.noderefs.list(extraDepRefs...),
 		ForeignDepRefs: na.noderefs.list(toolRefs...),
 		Resources:      resources,
 	}
 
-	emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 
 	return id
 }

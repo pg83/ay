@@ -66,7 +66,18 @@ func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scrip
 }
 
 func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, id NodeRef, moduleTag STR, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) {
-	na := emit.nodeArenas()
+	node := composeCPNode(instance, src, dst, depRefs, extraInputs, moduleTag, tc, scripts, emit.nodeArenas())
+
+	emit.emitReservedNode(node, id)
+}
+
+func (e *EmitContext) emitCPWithDeps(src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, id NodeRef, moduleTag STR, tc ModuleToolchain, scripts ScriptDeps) {
+	node := composeCPNode(e.instance, src, dst, depRefs, extraInputs, moduleTag, tc, scripts, e.ctx.na)
+
+	e.emitReservedNode(node, id)
+}
+
+func composeCPNode(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, moduleTag STR, tc ModuleToolchain, scripts ScriptDeps, na *NodeArenas) Node {
 	fsTools := copyFsToolsVFS
 
 	cmdArgs := na.anyList(
@@ -96,7 +107,7 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 
 	inputs := na.inputList(scripts[fsTools.rel()], ownInputs)
 
-	node := Node{
+	return Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
@@ -108,6 +119,4 @@ func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef
 		DepRefs:      na.noderefs.list(depRefs...),
 		Resources:    usesPython3,
 	}
-
-	emit.emitReservedNode(node, id)
 }

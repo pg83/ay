@@ -179,23 +179,23 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 	return ResolvedResource{Input: fallback}
 }
 
-func buildObjcopyNode(ctx *GenCtx, instance ModuleInstance, oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs InputChunks, deps []NodeRef) NodeRef {
+func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs InputChunks, deps []NodeRef) NodeRef {
 	na := oc.na
 	env := envVarsVCS
 
 	node := Node{
-		Platform:     instance.Platform,
+		Platform:     e.instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Env: env}),
 		Env:          env,
 		Inputs:       inputs,
 		Outputs:      na.vfsList(outputObj),
 		KV:           kv,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		Resources:    instance.Platform.UsesPython3Clang,
+		Resources:    e.instance.Platform.UsesPython3Clang,
 		DepRefs:      deps,
 	}
 
-	return ctx.emit.emitNode(node)
+	return e.emitNode(node)
 }
 
 type ResourceItem struct {
@@ -432,10 +432,9 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		hash, hashBuf = resourceHashInto(hashBuf, hashScratch, tag)
 
 		outputObj := build(instance.Path.relString(), "/objcopy_", hash, ".o")
-		dataInputs := concat(adjacent, tail)
-		deps := resolveCodegenDepRefsIncl(ctx, instance, na, dataInputs, depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)...)
+		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
 
-		refs = append(refs, buildObjcopyNode(ctx, instance, oc, &pyObjcopyKV, outputObj, payload, inputs, deps))
+		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, inputs, deps))
 		outs = append(outs, outputObj)
 	}
 
@@ -571,9 +570,8 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		nodeCmd = nodeCmd[:len(nodeCmd):len(nodeCmd)]
 
-		codegenDeps := resolveCodegenDepRefsIncl(ctx, instance, na, payloads)
-		deps := na.noderefs.alloc(len(codegenDeps) + 1)
-		nd := copy(deps, codegenDeps)
+		deps := na.noderefs.alloc(1)
+		nd := 0
 
 		if rescompilerRef != 0 {
 			deps[nd] = rescompilerRef
@@ -604,7 +602,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		tail = tail[:len(tail):len(tail)]
 
-		ctx.emit.emitReservedNode(Node{
+		e.emitReservedNode(Node{
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
 			Env:          env,

@@ -31,9 +31,6 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	srcCV := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
 	runtimeCV := e.scanner.walkClosure(cudaRuntimeIncludeVFS, d.scanCtx, scanDomainCC)
 	closure := na.dedupClosure([]VFS{srcCV.self, runtimeCV.self}, srcCV.buckets, runtimeCV.buckets)
-	compileDepRefs := in.ExtraDepRefs
-	compileDepRefs = resolveCodegenDepRefsInclView(ctx, instance, na, srcCV, compileDepRefs...)
-	compileDepRefs = resolveCodegenDepRefsInclView(ctx, instance, na, runtimeCV, compileDepRefs...)
 	mtimeRef, mtimeVFS := ctx.tool(cudaMtimeArg)
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)
 	cuCxxTail := blocks.cxxTail
@@ -67,12 +64,12 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 
 	cmdArgs := ArgChunks(chunks[:k])
 	env := envVarsVCSCuda
-	cudaDeps := na.noderefs.alloc(2 + len(compileDepRefs))
+	cudaDeps := na.noderefs.alloc(2 + len(in.ExtraDepRefs))
 
 	cudaDeps[0] = mtimeRef
 	cudaDeps[1] = pidRef
 
-	cdn := 2 + copy(cudaDeps[2:], compileDepRefs)
+	cdn := 2 + copy(cudaDeps[2:], in.ExtraDepRefs)
 
 	na.noderefs.commit(cdn)
 
@@ -90,5 +87,5 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 		DepRefs:      cudaDeps,
 	}
 
-	e.collectObj(ctx.emit.emitNode(node), outVFS, meta)
+	e.collectObj(e.emitNode(node), outVFS, meta)
 }

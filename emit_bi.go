@@ -7,15 +7,14 @@ var (
 	biKV               = KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: true}
 )
 
-func emitBIReserved(
-	instance ModuleInstance,
+func (e *EmitContext) emitBIReserved(
 	outputHeader string,
 	cxxFlags []ANY,
 	tc ModuleToolchain,
-	emit *StreamingEmitter,
 	id NodeRef,
 ) {
-	na := emit.nodeArenas()
+	instance := e.instance
+	na := e.ctx.na
 	outPrefix := instance.Path.relString() + "/"
 	argsFileVFS := build(outPrefix, "__args")
 	outVFS := build(outPrefix, outputHeader)
@@ -71,7 +70,7 @@ func emitBIReserved(
 		Resources:    instance.Platform.UsesPython3Clang,
 	}
 
-	emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 }
 
 func biFlagsForInstance(targetP *Platform) []ANY {
@@ -97,7 +96,7 @@ func (e *EmitContext) emitBuildInfoStmt() {
 	tc := d.tc
 
 	pe := func() {
-		emitBIReserved(instance, createFor, biFlagsForInstance(instance.Platform), tc, ctx.emit, biRef)
+		e.emitBIReserved(createFor, biFlagsForInstance(instance.Platform), tc, biRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

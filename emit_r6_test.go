@@ -21,7 +21,7 @@ func TestEmitR6_RagelHostRecursion_Synthetic(t *testing.T) {
 
 	inst := targetInstance("util")
 	r6Ref := e.reserve()
-	emitR6(inst, "datetime/parser.rl6", source("util/datetime/parser.rl6"), ragel6LD, build("contrib/tools/ragel6/ragel6"), nil, nil, nil, r6Ref, e)
+	nodeTestEmitContext(e, inst).emitR6("datetime/parser.rl6", source("util/datetime/parser.rl6"), ragel6LD, build("contrib/tools/ragel6/ragel6"), nil, nil, r6Ref)
 	outPath := ragel6OutVFS(inst, "datetime/parser.rl6")
 
 	wantOut := "$(B)/util/_/datetime/parser.rl6.cpp"
@@ -106,17 +106,14 @@ func TestEmitR6_ModuleSetOverridesDefault_PR_M3_ragel_flags(t *testing.T) {
 	})
 
 	r6Ref := e.reserve()
-	emitR6(
-		targetInstance("devtools/ymake/lang/makelists"),
+	nodeTestEmitContext(e, targetInstance("devtools/ymake/lang/makelists")).emitR6(
 		"makefile_lang.rl6",
 		source("devtools/ymake/lang/makelists/makefile_lang.rl6"),
 		ragel6LD,
 		build("contrib/tools/ragel6/ragel6"),
 		internAnys([]string{"-lF1"}),
 		nil,
-		nil,
 		r6Ref,
-		e,
 	)
 
 	got := e.nodes.s[r6Ref]
@@ -159,22 +156,20 @@ func TestEmitR6_X8664HostDefault_PR_M3_ragel_flags(t *testing.T) {
 	releaseHost := newPlatform(newMemFS(nil), OSLinux, ISAX8664, releaseHostFlags, "", "")
 
 	r6Ref := e.reserve()
-	emitR6(
-		ModuleInstance{
-			Path:     source("util"),
-			Kind:     KindLib,
-			Language: LangCPP,
-			Platform: releaseHost,
-		},
+	instance := ModuleInstance{
+		Path:     source("util"),
+		Kind:     KindLib,
+		Language: LangCPP,
+		Platform: releaseHost,
+	}
+	nodeTestEmitContext(e, instance).emitR6(
 		"datetime/parser.rl6",
 		source("util/datetime/parser.rl6"),
 		ragel6LD,
 		build("contrib/tools/ragel6/ragel6"),
 		nil,
 		nil,
-		nil,
 		r6Ref,
-		e,
 	)
 
 	got := e.nodes.s[r6Ref]
@@ -203,7 +198,7 @@ func TestEmitR6_InputsIncludeBinarySourceAndClosure_PR35z(t *testing.T) {
 	}
 
 	r6Ref := e.reserve()
-	emitR6(targetInstance("util"), "datetime/parser.rl6", source("util/datetime/parser.rl6"), ragel6LD, build("contrib/tools/ragel6/ragel6"), nil, closure, nil, r6Ref, e)
+	nodeTestEmitContext(e, targetInstance("util")).emitR6("datetime/parser.rl6", source("util/datetime/parser.rl6"), ragel6LD, build("contrib/tools/ragel6/ragel6"), nil, closure, r6Ref)
 
 	got := e.nodes.s[r6Ref]
 

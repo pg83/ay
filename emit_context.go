@@ -143,6 +143,66 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 	return &frame.emitCtx
 }
 
+func (e *EmitContext) emitNode(node Node) NodeRef {
+	e.resolveNodeCodegenDeps(&node)
+
+	return e.ctx.emit.emitNode(node)
+}
+
+func (e *EmitContext) emitReservedNode(node Node, ref NodeRef) {
+	e.resolveNodeCodegenDeps(&node)
+	e.ctx.emit.emitReservedNode(node, ref)
+}
+
+func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
+	refs := nodeRefScratches.get()
+
+	defer func() { nodeRefScratches.put(refs) }()
+
+	for _, chunk := range node.Inputs {
+		for _, input := range chunk {
+			if !input.isBuild() {
+				continue
+			}
+
+			if info := e.codegen.useBuild(input); info != nil {
+				refs = append(refs, info.ProducerRef)
+			}
+		}
+	}
+
+	if len(refs) == 0 {
+		return
+	}
+
+	var result []NodeRef
+
+	dedupers.with(func(deduper *DeDuper) {
+		out := e.ctx.na.noderefs.alloc(len(node.DepRefs) + len(refs))
+		k := 0
+
+		for _, ref := range node.DepRefs {
+			deduper.add(ref.strID())
+			out[k] = ref
+			k++
+		}
+
+		for _, ref := range refs {
+			if !deduper.add(ref.strID()) {
+				continue
+			}
+
+			out[k] = ref
+			k++
+		}
+
+		e.ctx.na.noderefs.commit(k)
+		result = out[:k]
+	})
+
+	node.DepRefs = result
+}
+
 func (e *EmitContext) resStr2(a, b string) string {
 	start := len(e.resStrBuf)
 

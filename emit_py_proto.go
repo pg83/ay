@@ -14,6 +14,7 @@ var (
 )
 
 type pyPBPending struct {
+	emit         *EmitContext
 	ctx          *GenCtx
 	instance     ModuleInstance
 	scanner      *IncludeScanner
@@ -24,7 +25,6 @@ type pyPBPending struct {
 	inputs       []VFS
 	outputs      []VFS
 	extOut       []KVExt
-	producerDeps []NodeRef
 	toolRefs     []NodeRef
 	pyPBRef      NodeRef
 }
@@ -45,7 +45,6 @@ func (p *pyPBPending) emitPending() {
 		KV:           &pbKV,
 		KVExts:       s.extOut,
 		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:      s.producerDeps,
 		Resources:    usesPython3,
 	}
 
@@ -53,7 +52,7 @@ func (p *pyPBPending) emitPending() {
 		node.ForeignDepRefs = s.toolRefs
 	}
 
-	s.ctx.emit.emitReservedNode(node, s.pyPBRef)
+	s.emit.emitReservedNode(node, s.pyPBRef)
 }
 
 func pyPBSuffixesFor(grpc, mypy bool) []string {
@@ -340,13 +339,11 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	protoCwd := srcRootDirVFS
 	generatedProto := false
 
-	var producerDeps []NodeRef
 	var producerSourceInputs []VFS
 
 	if info := e.codegen.use(build(protoRelPath)); info != nil {
 		protoSrcVFS = build(protoRelPath)
 		protoCwd = bldRootDirVFS
-		producerDeps = na.refList(info.ProducerRef)
 		producerSourceInputs = info.SourceInputs
 		generatedProto = true
 	}
@@ -397,10 +394,10 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	pending := na.pyPB.one()
 
 	*pending = pyPBPending{
-		ctx: ctx, instance: instance, scanner: e.scanner, scanCtx: scanCtx,
+		emit: e, ctx: ctx, instance: instance, scanner: e.scanner, scanCtx: scanCtx,
 		protoRelPath: protoRelPath, cmdArgs: cmdArgs, protoCwd: protoCwd,
 		inputs: inputs, outputs: outputs, extOut: extOut,
-		producerDeps: producerDeps, toolRefs: toolRefs, pyPBRef: pyPBRef,
+		toolRefs: toolRefs, pyPBRef: pyPBRef,
 	}
 	pyPBPE := na.pendingEmitter(pending)
 
