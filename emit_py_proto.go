@@ -507,7 +507,7 @@ func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
 		entries = e.appendPyProtoResEntries(entries, ps)
 	}
 
-	e.resEntries = entries
+	e.resEntries = retainMaxLen(e.resEntries, entries)
 
 	if len(entries) == 0 {
 		return nil, nil
@@ -530,7 +530,7 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		entries = e.appendPyProtoResEntries(entries, ps)
 	}
 
-	e.resEntries = entries
+	e.resEntries = retainMaxLen(e.resEntries, entries)
 
 	if len(entries) == 0 {
 		return nil

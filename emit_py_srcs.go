@@ -355,7 +355,7 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 			entries = e.appendPyResEntries(entries, ps)
 		}
 
-		e.resEntries = entries
+		e.resEntries = retainMaxLen(e.resEntries, entries)
 
 		if len(entries) > 0 {
 			groupRefs, groupOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries)})

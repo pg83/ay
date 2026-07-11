@@ -163,7 +163,7 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 
 	peers := e.peerScratch[:0]
 
-	defer func() { e.peerScratch = peers[:0] }()
+	defer func() { e.peerScratch = retainMaxLen(e.peerScratch, peers) }()
 
 	if addLinuxHeaders {
 		peers = append(peers, "contrib/libs/linux-headers")

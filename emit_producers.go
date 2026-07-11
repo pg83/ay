@@ -262,7 +262,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 	defer func() {
 		e.prodBacking = backing[:0]
-		e.prodPos = positions
+		e.prodPos = retainMaxLen(e.prodPos, positions)
 	}()
 
 	push := func(kind, index, outStart, outEnd int) {

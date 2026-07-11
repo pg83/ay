@@ -8,7 +8,7 @@ func applySbomComponentOrder(e *EmitContext, name TOK, linkTarget bool, resolved
 	cloneOrder := func() {
 		if len(resolved) > 0 && len(sbomOrder) == len(resolved) && &sbomOrder[0] == &resolved[0] {
 			sbomOrder = append(e.sbomOrder[:0], resolved...)
-			e.sbomOrder = sbomOrder[:0]
+			e.sbomOrder = retainMaxLen(e.sbomOrder, sbomOrder)
 		}
 	}
 

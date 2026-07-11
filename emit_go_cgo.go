@@ -302,7 +302,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 		cvs = append(cvs, e.scanner.walkClosure(f.src, d.scanCtx, scanDomainCC))
 	}
 
-	e.cvScratch = cvs
+	e.cvScratch = retainMaxLen(e.cvScratch, cvs)
 
 	inputs := na.vfs.alloc(inputCap)
 	ni := 0
@@ -537,7 +537,7 @@ func (e *EmitContext) flushGoCgo2() {
 		inputCap += 1 + cv.len()
 	}
 
-	e.cvScratch = cvs
+	e.cvScratch = retainMaxLen(e.cvScratch, cvs)
 
 	resolvedSrcs := e.prodVFSTake(srcMark)
 	inputs := na.vfs.alloc(inputCap)
