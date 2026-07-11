@@ -128,13 +128,17 @@ func (dd *DeDuper) reset() {
 }
 
 func (dd *DeDuper) add(id uint32) bool {
-	dd.gen.ensureLen(int(id) + 1)
+	if int(id) >= dd.gen.len() {
+		dd.gen.ensureLen(int(id) + 1)
+	}
 
-	if dd.gen.s[id] == dd.epoch {
+	gen := dd.gen.s
+
+	if gen[id] == dd.epoch {
 		return false
 	}
 
-	dd.gen.s[id] = dd.epoch
+	gen[id] = dd.epoch
 
 	return true
 }
