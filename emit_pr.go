@@ -24,7 +24,6 @@ type RunProgramNodeSpec struct {
 	outVFSByToken map[ANY]VFS
 	stdoutVFS     *VFS
 	inputClosure  []VFS
-	extraDepRefs  []NodeRef
 }
 
 func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
@@ -139,13 +138,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			}
 		}
 
-		depInputs := inputClosure
-
-		if len(snap.inVFSs) > 0 {
-			depInputs = concat(snap.inVFSs, inputClosure)
-		}
-
-		emitPR(instance, RunProgramNodeSpec{
+		e.emitPR(RunProgramNodeSpec{
 			stmt:          stmt,
 			toolBinPath:   *res.LDPath,
 			toolLDRef:     res.LDRef,
@@ -154,8 +147,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			outVFSByToken: outVFSByToken,
 			stdoutVFS:     stdoutVFS,
 			inputClosure:  inputClosure,
-			extraDepRefs:  resolveCodegenDepRefsIncl(ctx, instance, ctx.na, depInputs),
-		}, prRef, ctx.emit)
+		}, prRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 
@@ -541,9 +533,10 @@ func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 	return e.resolveModuleSourceVFS(internStr(rel).any(), d.srcDirs)
 }
 
-func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *StreamingEmitter) {
+func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
+	instance := e.instance
 	stmt := spec.stmt
-	na := emit.nodeArenas()
+	na := e.ctx.na
 	env := envVarsVCS
 
 	if len(stmt.EnvPairs) > 0 {
@@ -705,11 +698,10 @@ func emitPR(instance ModuleInstance, spec RunProgramNodeSpec, id NodeRef, emit *
 		Outputs:        outputs,
 		KV:             &prKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        na.noderefs.list(spec.extraDepRefs...),
 		ForeignDepRefs: toolRefs,
 	}
 
-	emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 }
 
 type PrFileToken struct {

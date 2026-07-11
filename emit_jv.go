@@ -93,12 +93,12 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 	}
 }
 
-func emitJVNodeReserved(instance ModuleInstance, cmdArgs []ANY, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, emit *StreamingEmitter, id NodeRef) {
-	na := emit.nodeArenas()
+func (e *EmitContext) emitJVNodeReserved(cmdArgs []ANY, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, id NodeRef) {
+	na := e.ctx.na
 	env := envVarsVCS
 
 	node := Node{
-		Platform: instance.Platform,
+		Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyChunkAny(cmdArgs)),
 			Env: env,
 			Cwd: cwdVFS(cwd)}),
@@ -111,21 +111,20 @@ func emitJVNodeReserved(instance ModuleInstance, cmdArgs []ANY, inputs InputChun
 		Resources:    usesPython3JDK17,
 	}
 
-	emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 }
 
-func emitJVReserved(
-	instance ModuleInstance,
+func (e *EmitContext) emitJVReserved(
 	grammar string,
 	options []string,
 	visitor bool,
 	listener bool,
 	moduleTag STR,
 	tc ModuleToolchain,
-	emit *StreamingEmitter,
 	id NodeRef,
 ) {
-	na := emit.nodeArenas()
+	instance := e.instance
+	na := e.ctx.na
 	grammarVFS := source(instance.Path.relString(), "/", grammar)
 	outDirVFS := instance.Path.rel().build()
 	outDir := outDirVFS.string()
@@ -169,21 +168,20 @@ func emitJVReserved(
 		build(outPrefix, "BaseVisitor.h"),
 	}
 
-	emitJVNodeReserved(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit, id)
+	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, nil, moduleTag, id)
 }
 
-func emitJVSplitReserved(
-	instance ModuleInstance,
+func (e *EmitContext) emitJVSplitReserved(
 	lexer string,
 	parser string,
 	visitor bool,
 	listener bool,
 	moduleTag STR,
 	tc ModuleToolchain,
-	emit *StreamingEmitter,
 	id NodeRef,
 ) {
-	na := emit.nodeArenas()
+	instance := e.instance
+	na := e.ctx.na
 	lexerVFS := source(instance.Path.relString(), "/", lexer)
 	parserVFS := source(instance.Path.relString(), "/", parser)
 	outDirVFS := instance.Path.rel().build()
@@ -231,23 +229,20 @@ func emitJVSplitReserved(
 		build(outPrefix, visitorBase, "BaseVisitor.h"),
 	}
 
-	emitJVNodeReserved(instance, cmdArgs, inputs, outputs, outDir, nil, moduleTag, emit, id)
+	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, nil, moduleTag, id)
 }
 
-func emitJVGeneralReserved(
-	instance ModuleInstance,
+func (e *EmitContext) emitJVGeneralReserved(
 	jarVFS VFS,
 	args []string,
 	inputs []VFS,
 	outputs []VFS,
 	cwd string,
-	depRefs []NodeRef,
 	moduleTag STR,
 	tc ModuleToolchain,
-	emit *StreamingEmitter,
 	id NodeRef,
 ) {
-	na := emit.nodeArenas()
+	na := e.ctx.na
 	cmdArgs := make([]ANY, 0, 5+len(args))
 
 	cmdArgs = append(cmdArgs,
@@ -262,5 +257,5 @@ func emitJVGeneralReserved(
 
 	jvInputs := na.inputList(na.vfsList(inputs...), na.vfsList(stdout2stderrVFS, jarVFS))
 
-	emitJVNodeReserved(instance, cmdArgs, jvInputs, outputs, cwd, depRefs, moduleTag, emit, id)
+	e.emitJVNodeReserved(cmdArgs, jvInputs, outputs, cwd, nil, moduleTag, id)
 }

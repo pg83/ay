@@ -29,8 +29,9 @@ func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
 	return build(base, ".asm"), build(base, instance.Platform.objectSuffix())
 }
 
-func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs Closure, extraDepRefs []NodeRef, tc ModuleToolchain, emit *StreamingEmitter) (NodeRef, VFS, VFS) {
-	na := emit.nodeArenas()
+func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs Closure, extraDepRefs []NodeRef, tc ModuleToolchain) (NodeRef, VFS, VFS) {
+	instance := e.instance
+	na := e.ctx.na
 	asmVFS, outVFS := composeRodataOutputs(instance, srcRel)
 	toolName := path.Base(strings.TrimSuffix(srcRel, ".rodata"))
 	pythonEnv := envVarsVCS
@@ -56,7 +57,7 @@ func emitRD(instance ModuleInstance, srcRel string, srcVFS VFS, yasmLD NodeRef, 
 		node.DepRefs = na.noderefs.list(extraDepRefs...)
 	}
 
-	return emit.emitNode(node), asmVFS, outVFS
+	return e.emitNode(node), asmVFS, outVFS
 }
 
 func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta, in ModuleCCInputs) {
@@ -78,19 +79,11 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta, in ModuleCCInputs) {
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 	cv := Closure{}
 
-	var deps []NodeRef
-
 	if srcVFS.isBuild() {
 		cv = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
-
-		if info := e.codegen.use(srcVFS); info != nil {
-			deps = depRefs(info.ProducerRef)
-		}
-
-		deps = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, cv, deps...)
 	}
 
-	ref, _, outPath := emitRD(instance, srcRel, srcVFS, yasmLDRef, cv, deps, in.TC, ctx.emit)
+	ref, _, outPath := e.emitRD(srcRel, srcVFS, yasmLDRef, cv, nil, in.TC)
 
 	e.collectObj(ref, outPath, meta)
 }

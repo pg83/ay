@@ -15,7 +15,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		tc := d.tc
 
 		jvPE := func() {
-			emitJVSplitReserved(instance, g.Lexer, g.Parser, g.Visitor, g.Listener, ccTag, tc, ctx.emit, jvRef)
+			e.emitJVSplitReserved(g.Lexer, g.Parser, g.Visitor, g.Listener, ccTag, tc, jvRef)
 		}
 		pending := e.ctx.na.pendingEmit(jvPE)
 
@@ -87,7 +87,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		tc := d.tc
 
 		jvPE := func() {
-			emitJVReserved(instance, g.Grammar, g.Options, g.Visitor, g.Listener, ccTag, tc, ctx.emit, jvRef)
+			e.emitJVReserved(g.Grammar, g.Options, g.Visitor, g.Listener, ccTag, tc, jvRef)
 		}
 		pending := e.ctx.na.pendingEmit(jvPE)
 

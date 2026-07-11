@@ -41,8 +41,9 @@ func ragel6OutName(base string) string {
 	return stem + ragel6DefaultOutExt
 }
 
-func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ANY, closure []VFS, producerRefs []NodeRef, id NodeRef, emit *StreamingEmitter) {
-	na := emit.nodeArenas()
+func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ANY, closure []VFS, id NodeRef) {
+	instance := e.instance
+	na := e.ctx.na
 	outVFS := ragel6OutVFS(instance, srcRel)
 	effectiveFlags := ragel6Flags
 
@@ -79,11 +80,10 @@ func emitR6(instance ModuleInstance, srcRel string, inVFS VFS, ragel6LD NodeRef,
 		Outputs:        na.vfsList(outVFS),
 		KV:             &r6KV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        na.noderefs.list(producerRefs...),
 		ForeignDepRefs: na.refList(ragel6LD),
 	}
 
-	emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 }
 
 func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
@@ -114,13 +114,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 			return v.isSource() && !extIsEnumSerialized(v.relString())
 		})
 
-		var producerRefs []NodeRef
-
-		if rl6SourceVFS.isBuild() {
-			producerRefs = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{rl6SourceVFS})
-		}
-
-		emitR6(instance, srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, producerRefs, r6Ref, ctx.emit)
+		e.emitR6(srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, r6Ref)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

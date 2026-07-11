@@ -92,7 +92,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 			Resources:    usesPython3,
 		}
 
-		ctx.emit.emitReservedNode(node, ref)
+		e.emitReservedNode(node, ref)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

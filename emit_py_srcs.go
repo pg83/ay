@@ -335,7 +335,6 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 
 	var cmdArgs ArgChunks
 	var nodeInputs InputChunks
-	var deps []NodeRef
 	var generatorRefs []NodeRef
 
 	if ps.Kind == pySourceProto {
@@ -357,7 +356,6 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 			nodeInputs = na.inputList(inputsHead, info.SourceInputs)
 		}
 
-		deps = na.refList(info.ProducerRef)
 	} else {
 		var genInfo *GeneratedFileInfo
 		var moduleName string
@@ -396,7 +394,6 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 			inputs = block[:len(block):len(block)]
 			nodeInputs = na.inputList(inputs)
 
-			deps = resolveCodegenDepRefsIncl(ctx, instance, ctx.na, inputs)
 		} else {
 			nodeInputs = na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin), na.srcChunk(srcAbs))
 		}
@@ -412,12 +409,11 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 		Outputs:        na.vfsList(outputPath),
 		KV:             &pyCodegenKV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        deps,
 		ForeignDepRefs: toolRefs,
 		Resources:      usesPython3,
 	}
 
-	pyRef := ctx.emit.emitNode(node)
+	pyRef := e.emitNode(node)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    outputPath,
@@ -779,7 +775,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 			Resources:    usesPython3,
 		}
 
-		pyRef := ctx.emit.emitNode(pyNode)
+		pyRef := e.emitNode(pyNode)
 		envCFlags := na.anys.alloc(len(d.cc.CFlags))[:0]
 
 		for _, f := range d.cc.CFlags {

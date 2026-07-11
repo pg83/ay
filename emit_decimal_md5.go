@@ -67,7 +67,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 
 		env := envVarsVCS
 
-		ctx.emit.emitReservedNode(Node{
+		e.emitReservedNode(Node{
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env, Stdout: outVFS}),
 			Env:          env,

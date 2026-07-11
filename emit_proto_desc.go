@@ -147,7 +147,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		descOut := build(descProtoOutputRel(instance.Path.relString(), srcRel, protoRelPath))
 		rawprotoOut := build(protoRelPath, ".", hash, ".rawproto")
 
-		ref := emitProtoDescProducer(ctx, instance, protoRelPath, descOut, rawprotoOut,
+		ref := e.emitProtoDescProducer(protoRelPath, descOut, rawprotoOut,
 			protocLDRef, protocBinary, mid, imports)
 
 		producerRefs = append(producerRefs, ref)
@@ -165,7 +165,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	prj := realPrjName(instance.Path.relString())
 	selfProtodesc := build(instance.Path.relString(), "/", prj, ".self.protodesc")
 	protosrc := build(instance.Path.relString(), "/", prj, ".protosrc")
-	mergeRef := emitDescProtoMerge(ctx, instance, selfProtodesc, protosrc, descOutputs, rawprotoOutputs, producerSourceInputs, producerRefs)
+	mergeRef := e.emitDescProtoMerge(selfProtodesc, protosrc, descOutputs, rawprotoOutputs, producerSourceInputs, producerRefs)
 	closure := append(span.peers, DescProtoPeer{SelfProtodesc: selfProtodesc, MergeRef: mergeRef})
 	selfPath := selfProtodesc
 
@@ -216,9 +216,9 @@ func descProtocIncludes(na *NodeArenas, peerProtoAddIncl []VFS, cppOutRoot strin
 	return out[:len(out):len(out)]
 }
 
-func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath string,
+func (e *EmitContext) emitProtoDescProducer(protoRelPath string,
 	descOut, rawprotoOut VFS, protocLDRef NodeRef, protocBinary VFS, mid []ANY, imports Closure) NodeRef {
-	na := ctx.emit.nodeArenas()
+	na := e.ctx.na
 
 	head := na.anyList(
 		wrapccPython3STR.any(),
@@ -238,7 +238,7 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 	inputs := na.vfsList(protocBinary, source(protoRelPath), descRawprotoWrapperVFS)
 
 	node := Node{
-		Platform: instance.Platform,
+		Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: srcRootDirVFS,
 			Env: env}),
@@ -251,12 +251,13 @@ func emitProtoDescProducer(ctx *GenCtx, instance ModuleInstance, protoRelPath st
 		Resources:      usesPython3,
 	}
 
-	return ctx.emit.emitNode(node)
+	return e.emitNode(node)
 }
 
-func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, protosrc VFS,
+func (e *EmitContext) emitDescProtoMerge(selfProtodesc, protosrc VFS,
 	descOutputs, rawprotoOutputs, producerSourceInputs []VFS, producerRefs []NodeRef) NodeRef {
-	na := ctx.emit.nodeArenas()
+	ctx := e.ctx
+	na := ctx.na
 	env := envVarsVCS
 	merge := na.anys.alloc(3 + len(descOutputs))[:0]
 
@@ -292,7 +293,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 	inputs = inputs[:ni:ni]
 
 	node := Node{
-		Platform: instance.Platform,
+		Platform: e.instance.Platform,
 		Cmds: na.cmdList(
 			Cmd{CmdArgs: na.chunkList(merge), Env: env},
 			Cmd{CmdArgs: na.chunkList(collect), Cwd: bldRootDirVFS, Env: env},
@@ -306,7 +307,7 @@ func emitDescProtoMerge(ctx *GenCtx, instance ModuleInstance, selfProtodesc, pro
 		Resources:    usesPython3,
 	}
 
-	return ctx.emit.emitNode(node)
+	return e.emitNode(node)
 }
 
 func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
@@ -381,7 +382,7 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 		Resources:    usesPython3,
 	}
 
-	mergeRef := ctx.emit.emitNode(node)
+	mergeRef := e.emitNode(node)
 	primary := protodesc
 
 	return &ModuleEmitResult{

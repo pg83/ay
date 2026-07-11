@@ -16,7 +16,7 @@ func (e *EmitContext) emitBundles() {
 		src, srcRef, resolved := e.resolveBundleSource(b.Target)
 		ref := ctx.emit.reserve()
 
-		emitBundleNode(ctx, instance, d.tc.Python3, src, dst, srcRef, resolved, ref)
+		e.emitBundleNode(d.tc.Python3, src, dst, srcRef, resolved, ref)
 
 		e.register(GeneratedFileInfo{
 			OutputPath:    dst,
@@ -66,8 +66,9 @@ func hasModuleOpener(stmts []Stmt) bool {
 	return false
 }
 
-func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 VFS, src, dst VFS, srcRef NodeRef, resolved bool, id NodeRef) {
-	na := ctx.emit.nodeArenas()
+func (e *EmitContext) emitBundleNode(python3 VFS, src, dst VFS, srcRef NodeRef, resolved bool, id NodeRef) {
+	ctx, instance := e.ctx, e.instance
+	na := ctx.na
 	fsTools := copyFsToolsVFS
 	cmdArgs := na.anys.alloc(5)[:0]
 
@@ -104,5 +105,5 @@ func emitBundleNode(ctx *GenCtx, instance ModuleInstance, python3 VFS, src, dst 
 		Resources:    usesPython3,
 	}
 
-	ctx.emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 }

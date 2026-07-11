@@ -330,7 +330,7 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 			pythonToolchainSbomComponent(ctx, instance.Platform)
 		}
 
-		sbomRef, sbomPath = emitSbomToolchainComponent(ctx, instance, d.toolchainName, d.modver)
+		sbomRef, sbomPath = e.emitSbomToolchainComponent(d.toolchainName, d.modver)
 	}
 
 	result := &ModuleEmitResult{
@@ -452,7 +452,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		Resources:    usesPython3,
 	}
 
-	ref := ctx.emit.emitNode(node)
+	ref := e.emitNode(node)
 
 	result := &ModuleEmitResult{
 		ModuleStmtName: d.moduleStmt.Name,

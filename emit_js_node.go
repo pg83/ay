@@ -2,8 +2,9 @@ package main
 
 var jsNodeKV = KV{P: pkJS, PC: pcMagenta}
 
-func emitJSReserved(instance ModuleInstance, allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter, id NodeRef) VFS {
-	na := emit.nodeArenas()
+func (e *EmitContext) emitJSReserved(allName string, sources []string, closure []VFS, p *Platform, tc ModuleToolchain, scripts ScriptDeps, id NodeRef) VFS {
+	instance := e.instance
+	na := e.ctx.na
 	joinSrcs := buildScriptsGenJoinSrcsPy
 	outVFS := build(instance.Path.relString(), "/", allName)
 	statsPlatform := instance.Platform
@@ -55,7 +56,7 @@ func emitJSReserved(instance ModuleInstance, allName string, sources []string, c
 		Resources:    usesPython3,
 	}
 
-	emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 
 	return outVFS
 }
@@ -75,7 +76,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	outputName := js.OutputName
 
 	pe := func() {
-		emitJSReserved(instance, outputName, jsSources, joinClosure, ctx.target, tc, ctx.scripts, ctx.emit, jsRef)
+		e.emitJSReserved(outputName, jsSources, joinClosure, ctx.target, tc, ctx.scripts, jsRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

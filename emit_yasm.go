@@ -15,8 +15,9 @@ var yasmConstHead = []ANY{
 	argReplaceToolRootT.any(),
 }
 
-func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, emit *StreamingEmitter) (NodeRef, VFS) {
-	na := emit.nodeArenas()
+func (e *EmitContext) emitASYasm(srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef) (NodeRef, VFS) {
+	instance := e.instance
+	na := e.ctx.na
 	stem := strings.TrimSuffix(srcRel, ".asm")
 	suffix := ".o"
 
@@ -88,12 +89,12 @@ func emitASYasm(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCI
 		node.DepRefs = in.ExtraDepRefs
 	}
 
-	return emit.emitNode(node), outVFS
+	return e.emitNode(node), outVFS
 }
 
 func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta, in ModuleCCInputs) {
 	src := meta.Source
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, d := e.ctx, e.d
 	srcVFS := src.vfs()
 	srcRel := e.moduleSourceRel(src)
 
@@ -110,10 +111,9 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta, in ModuleCCInputs) {
 	}
 
 	asIn.IncludeView = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainAsm)
-	asIn.ExtraDepRefs = resolveCodegenDepRefsInclView(ctx, instance, ctx.na, asIn.IncludeView)
 
 	yasmLD, _ := ctx.tool(argContribToolsYasm)
-	ref, outPath := emitASYasm(instance, srcRel, srcVFS, asIn, yasmLD, ctx.emit)
+	ref, outPath := e.emitASYasm(srcRel, srcVFS, asIn, yasmLD)
 
 	e.collectObj(ref, outPath, meta)
 }

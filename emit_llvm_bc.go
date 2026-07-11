@@ -36,12 +36,11 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	linksCopy := false
 
 	for _, src := range stmt.Sources {
-		inputVFS, producer := e.llvmBcSourceInfo(src)
+		inputVFS := e.llvmBcSourceInfo(src)
 		in := ModuleCCInputs{ModuleCompileEnv: d.cc}
 		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
 		bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 		cv := e.scanner.walkClosure(inputVFS, d.scanCtx, scanDomainCC)
-		deps := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, cv, depRefs(producer)...)
 		allInputs := na.inputList(na.vfsList(clangWrapperVFS, cv.self), cv.buckets...)
 
 		for _, ch := range allInputs {
@@ -64,7 +63,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			Outputs:      na.vfsList(bcOut),
 			KV:           &llvmBcKV,
 			Requirements: reqs,
-			DepRefs:      deps,
 			Resources:    usesPython3Clang16,
 		}
 
@@ -145,7 +143,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	pe := func() {
 		for i := range pendNodes {
-			ctx.emit.emitReservedNode(pendNodes[i], pendRefs[i])
+			e.emitReservedNode(pendNodes[i], pendRefs[i])
 		}
 	}
 	pending := e.ctx.na.pendingEmit(pe)
@@ -207,26 +205,22 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	return args
 }
 
-func (e *EmitContext) llvmBcSourceInfo(src string) (inputVFS VFS, producer NodeRef) {
+func (e *EmitContext) llvmBcSourceInfo(src string) VFS {
 	ctx, instance := e.ctx, e.instance
 	reg := e.codegen
 	outVFS := copyFileOutputVFS(instance.Path.relString(), src)
 
-	if info := reg.use(outVFS); info != nil {
-		return outVFS, info.ProducerRef
+	if reg.use(outVFS) != nil {
+		return outVFS
 	}
 
 	if buildVFS := e.generatedModuleSourceVFS(src); buildVFS != nil {
-		ref := NodeRef(0)
+		reg.use(*buildVFS)
 
-		if info := reg.use(*buildVFS); info != nil {
-			ref = info.ProducerRef
-		}
-
-		return *buildVFS, ref
+		return *buildVFS
 	}
 
-	return e.requireProducedInput("LLVM_BC source", src, copyFileInputVFS(ctx.fs, instance.Path, src)), NodeRef(0)
+	return e.requireProducedInput("LLVM_BC source", src, copyFileInputVFS(ctx.fs, instance.Path, src))
 }
 
 func (e *EmitContext) llvmBcRootRelArcSrc(src string) string {

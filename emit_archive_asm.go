@@ -111,7 +111,7 @@ func (e *EmitContext) emitArchiveAsmNode(
 		Resources:    instance.Platform.UsesPython3Clang,
 	}
 
-	rodataRef := ctx.emit.emitNode(n)
+	rodataRef := e.emitNode(n)
 
 	var leaves []VFS
 
@@ -144,7 +144,7 @@ func (e *EmitContext) emitArchiveAsmRodata(rodataRel string, producerRef NodeRef
 	rodataPath := build(instance.Path.relString(), "/", rodataRel)
 	leaves := e.scanner.walkClosure(rodataPath, d.scanCtx, scanDomainCC)
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
-	ref, _, outPath := emitRD(instance, rodataRel, rodataPath, yasmLDRef, leaves, []NodeRef{producerRef}, d.cc.TC, ctx.emit)
+	ref, _, outPath := e.emitRD(rodataRel, rodataPath, yasmLDRef, leaves, []NodeRef{producerRef}, d.cc.TC)
 
 	return ref, outPath
 }

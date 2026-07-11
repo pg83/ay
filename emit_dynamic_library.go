@@ -138,7 +138,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 
 	n.ForeignDepRefs = na.refList(fixElfRef)
 
-	ref := ctx.emit.emitNode(n)
+	ref := e.emitNode(n)
 
 	return &ModuleEmitResult{
 		LDRef:          ref,
@@ -351,7 +351,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	n.ForeignDepRefs = na.refList(fixElfRef)
 
-	ref := ctx.emit.emitNode(n)
+	ref := e.emitNode(n)
 	addInclGlobal := concat(d.addInclGlobal, peerAddInclGlobal)
 	cFlagsGlobal := concat(d.cFlagsGlobal, peerCFlagsGlobal)
 	cxxFlagsGlobal := concat(d.cxxFlagsGlobal, peerCXXFlagsGlobal)

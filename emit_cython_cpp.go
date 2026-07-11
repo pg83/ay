@@ -315,7 +315,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 				inputs = na.dedupClosure(inputs, [][]VFS{pxdInputs})
 			}
 
-			ctx.emit.emitReservedNode(Node{
+			e.emitReservedNode(Node{
 				Platform: instance.Platform,
 				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 					Env: env}),

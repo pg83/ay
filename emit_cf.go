@@ -68,9 +68,8 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
 		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
-		depRefs := resolveCodegenDepRefsInclView(ctx, instance, na, cv)
 
-		ctx.emit.emitReservedNode(Node{
+		e.emitReservedNode(Node{
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 			Env:          env,
@@ -79,7 +78,6 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 			Outputs:      na.vfsList(outVFS),
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
-			DepRefs:      depRefs,
 		}, cfRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)

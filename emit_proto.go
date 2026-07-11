@@ -217,8 +217,7 @@ type PbModuleEmission struct {
 }
 
 type protoPBCommon struct {
-	ctx                 *GenCtx
-	instance            ModuleInstance
+	emit                *EmitContext
 	cppStyleguideLDRef  NodeRef
 	protocLDRef         NodeRef
 	grpcCppLDRef        NodeRef
@@ -237,7 +236,6 @@ type protoPBPending struct {
 	imports                   Closure
 	protoRelPath              string
 	protoSrcOverride          VFS
-	extraProtoDep             NodeRef
 	protoProducerSourceInputs []VFS
 	spec                      *ProtoSpec
 	pbRef                     NodeRef
@@ -249,19 +247,12 @@ func (p *protoPBPending) emitPending() {
 	*p = protoPBPending{}
 
 	c := s.common
-	var depRefs []NodeRef
 
-	if s.extraProtoDep != 0 {
-		depRefs = resolveCodegenDepRefsInclView(c.ctx, c.instance, c.ctx.na, s.imports, s.extraProtoDep)
-	} else {
-		depRefs = resolveCodegenDepRefsInclView(c.ctx, c.instance, c.ctx.na, s.imports)
-	}
-
-	emitPB(
-		c.instance, s.protoRelPath, s.protoSrcOverride, c.cppStyleguideLDRef, c.protocLDRef,
+	c.emit.emitPB(
+		s.protoRelPath, s.protoSrcOverride, c.cppStyleguideLDRef, c.protocLDRef,
 		c.grpcCppLDRef, c.cppStyleguideBinary, c.protocBinary, c.grpcCppBinary,
-		c.grpc, c.moduleTag, c.liteHeaders, c.extraPlugins, s.imports, depRefs,
-		s.protoProducerSourceInputs, c.blocks, s.spec, s.pbRef, c.ctx.emit,
+		c.grpc, c.moduleTag, c.liteHeaders, c.extraPlugins, s.imports,
+		s.protoProducerSourceInputs, c.blocks, s.spec, s.pbRef,
 	)
 }
 
@@ -335,7 +326,7 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 		d.protocFlags, pe.extraPlugins, protoInclude)
 	pe.pendingCommon = na.protoPBC.one()
 	*pe.pendingCommon = protoPBCommon{
-		ctx: ctx, instance: e.instance,
+		emit:               e,
 		cppStyleguideLDRef: pe.cppStyleguideLDRef, protocLDRef: pe.protocLDRef, grpcCppLDRef: pe.grpcCppLDRef,
 		cppStyleguideBinary: pe.cppStyleguideBinary, protocBinary: pe.protocBinary, grpcCppBinary: pe.grpcCppBinary,
 		liteHeaders: pe.liteHeaders, grpc: cfg.grpc, moduleTag: cfg.moduleTag,
@@ -359,14 +350,12 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	scanCtx := d.scanCtx
 
 	var protoSrcOverride VFS
-	var extraProtoDep NodeRef
 	var protoProducerSourceInputs []VFS
 	var genProtoParsed []IncludeDirective
 
 	if info := e.codegen.use(buildProto); info != nil {
 		protoSrcOverride = buildProto
 		protoVFS = buildProto
-		extraProtoDep = info.ProducerRef
 		protoProducerSourceInputs = info.SourceInputs
 		genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
 	}
@@ -378,8 +367,8 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	*pending = protoPBPending{
 		common: pe.pendingCommon, imports: transitiveImports,
 		protoRelPath: protoRelPath, protoSrcOverride: protoSrcOverride,
-		extraProtoDep: extraProtoDep, protoProducerSourceInputs: protoProducerSourceInputs,
-		spec: spec, pbRef: pbRef,
+		protoProducerSourceInputs: protoProducerSourceInputs,
+		spec:                      spec, pbRef: pbRef,
 	}
 	pbPE := ctx.na.pendingEmitter(pending)
 
@@ -739,8 +728,7 @@ type ResolvedCPPProtoPlugin struct {
 	Binary VFS
 }
 
-func emitPB(
-	instance ModuleInstance,
+func (e *EmitContext) emitPB(
 	protoRelPath string,
 	protoSrcOverride VFS,
 	cppStyleguideLDRef NodeRef,
@@ -754,14 +742,13 @@ func emitPB(
 	liteHeaders bool,
 	extraPlugins []ResolvedCPPProtoPlugin,
 	transitiveProtoImports Closure,
-	extraDepRefs []NodeRef,
 	producerSourceInputs []VFS,
 	blocks PbArgBlocks,
 	spec *ProtoSpec,
 	id NodeRef,
-	emit *StreamingEmitter,
 ) {
-	na := emit.nodeArenas()
+	instance := e.instance
+	na := e.ctx.na
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := build(protoBase, ".pb.h")
 	pbCC := build(protoBase, ".pb.cc")
@@ -847,7 +834,6 @@ func emitPB(
 
 	foreignDepRefs = foreignDepRefs[:len(foreignDepRefs):len(foreignDepRefs)]
 
-	deps := na.noderefs.list(extraDepRefs...)
 	protocCwd := "$(S)"
 
 	if protoSrcOverride != 0 {
@@ -871,12 +857,11 @@ func emitPB(
 		Outputs:        outputs,
 		KV:             spec.kv,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
-		DepRefs:        deps,
 		ForeignDepRefs: foreignDepRefs,
 		Resources:      usesPython3,
 	}
 
-	emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 }
 
 func assembleProtoCmdOutputs(na *NodeArenas, protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, extraPlugins []ResolvedCPPProtoPlugin, liteHeaders, grpc bool) []VFS {

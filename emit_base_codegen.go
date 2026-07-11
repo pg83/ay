@@ -59,7 +59,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 			ForeignDepRefs: na.refList(toolLDRef),
 		}
 
-		ctx.emit.emitReservedNode(node, bcRef)
+		e.emitReservedNode(node, bcRef)
 	}
 
 	pending := e.ctx.na.pendingEmit(pe)

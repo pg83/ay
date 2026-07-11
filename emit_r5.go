@@ -7,19 +7,17 @@ import (
 
 var r5KV = KV{P: pkR5, PC: pcYellow}
 
-func emitR5Reserved(
-	instance ModuleInstance,
+func (e *EmitContext) emitR5Reserved(
 	srcRel string,
 	srcVFS VFS,
 	ragel5LD NodeRef,
 	rlgenCdLD NodeRef,
 	ragel5BinPath VFS,
 	rlgenCdBinPath VFS,
-	depRefs []NodeRef,
 	id NodeRef,
-	emit *StreamingEmitter,
 ) {
-	na := emit.nodeArenas()
+	instance := e.instance
+	na := e.ctx.na
 	tmpVFS := build(instance.Path.relString(), "/", srcRel, ".tmp")
 	cppVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".rl5.cpp")
 	env := envVarsVCS
@@ -58,10 +56,9 @@ func emitR5Reserved(
 		KV:             &r5KV,
 		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(ragel5LD, rlgenCdLD),
-		DepRefs:        depRefs,
 	}
 
-	emit.emitReservedNode(node, id)
+	e.emitReservedNode(node, id)
 }
 
 func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
@@ -75,10 +72,9 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 	r5TmpOut := build(instance.Path.relString(), "/", srcRel, ".tmp")
 	r5CppOut := build(instance.Path.relString(), "/", strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".rl5.cpp")
 	rlSourceVFS := e.resolveModuleSourceVFS(src, e.d.cc.SrcDirs)
-	depRefs := resolveCodegenDepRefsIncl(ctx, instance, ctx.na, []VFS{rlSourceVFS})
 
 	pe := func() {
-		emitR5Reserved(instance, srcRel, rlSourceVFS, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, depRefs, r5Ref, ctx.emit)
+		e.emitR5Reserved(srcRel, rlSourceVFS, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, r5Ref)
 	}
 
 	pending := e.ctx.na.pendingEmit(pe)

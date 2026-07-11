@@ -6,6 +6,10 @@ import (
 	"testing"
 )
 
+func composeCCNode(instance ModuleInstance, srcVFS VFS, in ModuleCCInputs, host *Platform, emit *StreamingEmitter) (NodeRef, VFS, InputChunks) {
+	return nodeTestEmitContext(emit, instance).composeCCNode(srcVFS, in, host)
+}
+
 const referenceCCOutput = "$(B)/build/cow/on/lib.c.o"
 
 func TestEmitCC_OutputPath_NestedSrc(t *testing.T) {

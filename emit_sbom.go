@@ -95,12 +95,13 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 		Resources:    usesPython3,
 	}
 
-	ref := ctx.emit.emitNode(node)
+	ref := e.emitNode(node)
 
 	return &ref, &out
 }
 
-func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainName, ver string) (*NodeRef, *VFS) {
+func (e *EmitContext) emitSbomToolchainComponent(toolchainName, ver string) (*NodeRef, *VFS) {
+	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	moddir := instance.Path.relString()
 
@@ -129,7 +130,7 @@ func emitSbomToolchainComponent(ctx *GenCtx, instance ModuleInstance, toolchainN
 		Resources:    usesPython3,
 	}
 
-	ref := ctx.emit.emitNode(node)
+	ref := e.emitNode(node)
 
 	return &ref, &out
 }

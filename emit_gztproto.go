@@ -16,7 +16,6 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	genProto := build(moddir, "/", genProtoName)
 	converterRef, converterBin := ctx.tool(argDictGazetteerConverter)
 	imports := e.scanner.walkClosure(gztSource, d.scanCtx, scanDomainProto)
-	depRefs := resolveCodegenDepRefsInclView(ctx, instance, ctx.na, imports)
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
@@ -45,10 +44,9 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 			KV:             &gztprotoKV,
 			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(converterRef),
-			DepRefs:        depRefs,
 		}
 
-		ctx.emit.emitReservedNode(node, gzRef)
+		e.emitReservedNode(node, gzRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

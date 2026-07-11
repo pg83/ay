@@ -87,7 +87,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 			ForeignDepRefs: na.refList(toolLDRef),
 		}
 
-		ctx.emit.emitReservedNode(node, scRef)
+		e.emitReservedNode(node, scRef)
 	}
 
 	pending := e.ctx.na.pendingEmit(pe)
