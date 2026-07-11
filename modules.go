@@ -267,7 +267,7 @@ type SrcMeta struct {
 	Bucket     int
 	Compile    CompileSpec
 	CompileRef NodeRef
-	Py         *PySourceMeta
+	PyMeta     uint32
 }
 
 func (m SrcMeta) sortKey(round uint64) uint64 {

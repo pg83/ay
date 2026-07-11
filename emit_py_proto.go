@@ -106,12 +106,12 @@ func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, pyOut, grp
 
 	e.enqueueSrc(SrcMeta{
 		Source: pyOut.any(), Prio: stmtPrioDefault,
-		Py: &PySourceMeta{
+		PyMeta: e.addPyMeta(PySourceMeta{
 			Module: internV(keyDir, keySep, keyBase, "_pb2.py"),
 			Token:  pyProtoOutputToken(instance, pyOut, generatedProto),
 			Group:  srcGroup,
 			Kind:   pySourceProto,
-		},
+		}),
 	})
 
 	if grpcPyOut == 0 {
@@ -120,13 +120,13 @@ func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, pyOut, grp
 
 	e.enqueueSrc(SrcMeta{
 		Source: grpcPyOut.any(), Prio: stmtPrioDefault,
-		Py: &PySourceMeta{
+		PyMeta: e.addPyMeta(PySourceMeta{
 			Module:      internV(keyDir, keySep, keyBase, "_pb2_grpc.py"),
 			Token:       pyProtoOutputToken(instance, grpcPyOut, generatedProto),
 			ExtraInputs: e.ctx.na.vfsList(pyOut),
 			Group:       srcGroup,
 			Kind:        pySourceProto,
-		},
+		}),
 	})
 }
 

@@ -27,6 +27,7 @@ type EmitContext struct {
 	goRes        *GoSrcsResult
 	goInclJoined []ANY
 	goInclSplit  []ANY
+	pyMetas      []PySourceMeta
 	pySrcsReg    []PySrc
 	resources    []ResourceEntry
 	localObjs    CollectedObjs
@@ -115,6 +116,7 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		refs:        prev.refs[:0],
 		outs:        prev.outs[:0],
 		metas:       prev.metas[:0],
+		pyMetas:     scrub(prev.pyMetas),
 		pySrcsReg:   prev.pySrcsReg[:0],
 		localObjs:   prev.localObjs.reset(),
 		globalObjs:  prev.globalObjs.reset(),

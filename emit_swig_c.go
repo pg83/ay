@@ -102,11 +102,11 @@ func (e *EmitContext) emitSwigC() {
 
 		e.enqueueSrc(SrcMeta{
 			Source: pyOutVFS.any(), Prio: stmtPrioDefault,
-			Py: &PySourceMeta{
+			PyMeta: e.addPyMeta(PySourceMeta{
 				Module: internStr(generatedPyResourceKey(instance.Path.relString(), d, pyOutRel)),
 				Token:  internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.relString()).any(),
 				Kind:   pySourceGenerated,
-			},
+			}),
 		})
 
 		e.enqueueSrc(SrcMeta{Source: cOutVFS.any(), Prio: stmtPrioDefault, Bucket: bkSwig})
