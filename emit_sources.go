@@ -8,11 +8,16 @@ import (
 func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	src := meta.Source
 
-	if meta.Py != nil {
-		if meta.Py.Kind == pySourceProtoInput {
-			e.emitPyProtoSource(src, meta.Py.Group)
+	if meta.PyMeta != 0 {
+		i := meta.PyMeta - 1
+		py := e.pyMetas[i]
+
+		e.pyMetas[i] = PySourceMeta{}
+
+		if py.Kind == pySourceProtoInput {
+			e.emitPyProtoSource(src, py.Group)
 		} else {
-			e.collectPySource(src.vfs(), *meta.Py)
+			e.collectPySource(src.vfs(), py)
 		}
 
 		return

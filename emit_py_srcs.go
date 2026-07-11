@@ -36,6 +36,12 @@ type PySourceMeta struct {
 	Kind        PySourceKind
 }
 
+func (e *EmitContext) addPyMeta(meta PySourceMeta) uint32 {
+	e.pyMetas = append(e.pyMetas, meta)
+
+	return uint32(len(e.pyMetas))
+}
+
 func pyResourceKeyPrefix(topLevel bool, namespace *ANY, modulePath string) string {
 	if topLevel {
 		return ""
@@ -117,7 +123,7 @@ func (e *EmitContext) registerCollectPySrcs() {
 			if extIsProto(src.relOrSelf().string()) {
 				e.enqueueSrc(SrcMeta{
 					Source: src, Prio: stmtPrioDefault,
-					Py: &PySourceMeta{Group: gi, Kind: pySourceProtoInput},
+					PyMeta: e.addPyMeta(PySourceMeta{Group: gi, Kind: pySourceProtoInput}),
 				})
 
 				continue
@@ -142,12 +148,12 @@ func (e *EmitContext) registerCollectPySrcs() {
 
 			e.enqueueSrc(SrcMeta{
 				Source: path.any(), Prio: stmtPrioDefault,
-				Py: &PySourceMeta{
+				PyMeta: e.addPyMeta(PySourceMeta{
 					Module: internV(keyPrefix, token.string()),
 					Token:  token,
 					Group:  gi,
 					Kind:   kind,
-				},
+				}),
 			})
 		}
 	}

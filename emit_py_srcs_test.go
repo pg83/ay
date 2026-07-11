@@ -294,8 +294,9 @@ func TestRegisterCollectPySrcs_EnqueuesProto(t *testing.T) {
 	}
 
 	meta := e.srcs[0]
+	py := e.pyMetas[meta.PyMeta-1]
 
-	if meta.Source.string() != "schema.proto" || meta.Py == nil || meta.Py.Kind != pySourceProtoInput || meta.Py.Group != 0 {
+	if meta.Source.string() != "schema.proto" || py.Kind != pySourceProtoInput || py.Group != 0 {
 		t.Fatalf("queued proto = %#v", meta)
 	}
 
@@ -318,8 +319,9 @@ func TestRegisterCollectPySrcs_EnqueuesPython(t *testing.T) {
 	}
 
 	meta := e.srcs[0]
+	py := e.pyMetas[meta.PyMeta-1]
 
-	if meta.Source.string() != "$(S)/mod/pkg/mod.py" || meta.Py == nil || meta.Py.Kind != pySourcePlain || meta.Py.Group != 0 {
+	if meta.Source.string() != "$(S)/mod/pkg/mod.py" || py.Kind != pySourcePlain || py.Group != 0 {
 		t.Fatalf("queued Python source = %#v", meta)
 	}
 
