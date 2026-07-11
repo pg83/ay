@@ -242,7 +242,7 @@ func useProducers(reg *CodegenRegistry, paths []VFS, refs []NodeRef) []NodeRef {
 			continue
 		}
 
-		if info := reg.use(p); info != nil {
+		if info := reg.useBuild(p); info != nil {
 			refs = append(refs, info.ProducerRef)
 		}
 	}
@@ -259,7 +259,7 @@ func resolveCodegenDepRefsIncl(ctx *GenCtx, consumer ModuleInstance, na *NodeAre
 	var result []NodeRef
 
 	dedupers.with(func(deduper *DeDuper) {
-		out := na.noderefs.alloc(len(incl) + len(includeInputs))
+		out := na.noderefs.alloc(len(incl) + len(refs))
 		k := 0
 
 		for _, r := range incl {
@@ -334,7 +334,7 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 	defer func() { nodeRefScratches.put(refs) }()
 
 	if cv.self.isBuild() {
-		if info := reg.use(cv.self); info != nil {
+		if info := reg.useBuild(cv.self); info != nil {
 			refs = append(refs, info.ProducerRef)
 		}
 	}
@@ -342,7 +342,7 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 	for _, bucket := range cv.buckets {
 		for _, p := range bucket {
 			if p.isBuild() {
-				if info := reg.use(p); info != nil {
+				if info := reg.useBuild(p); info != nil {
 					refs = append(refs, info.ProducerRef)
 				}
 			}
@@ -352,7 +352,7 @@ func resolveCodegenDepRefsInclView(ctx *GenCtx, consumer ModuleInstance, na *Nod
 	var result []NodeRef
 
 	dedupers.with(func(deduper *DeDuper) {
-		out := na.noderefs.alloc(len(incl) + cv.len())
+		out := na.noderefs.alloc(len(incl) + len(refs))
 		k := 0
 
 		for _, r := range incl {

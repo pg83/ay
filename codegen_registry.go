@@ -74,6 +74,14 @@ func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
 	return info
 }
 
+func (r *CodegenRegistry) useBuild(path VFS) *GeneratedFileInfo {
+	info := r.lookupSTR(path.rel())
+
+	fireOnUse(info)
+
+	return info
+}
+
 func (r *CodegenRegistry) useSplit(prefix VFS, suffix ANY) *GeneratedFileInfo {
 	info := r.lookupSplit(prefix, suffix)
 
