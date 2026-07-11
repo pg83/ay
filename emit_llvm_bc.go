@@ -19,7 +19,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	python := d.tc.Python3.string()
 	env := envVarsVCS
-	reqs := Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)}
 	clangRoot := resolveResourceGlobalRef(stmt.ClangBCRoot, e.peers.ResourceGlobals)
 	clangxx := clangRoot + "/bin/clang++"
 	llvmLink := clangRoot + "/bin/llvm-link"
@@ -56,14 +55,13 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		}
 
 		node := Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(bcArgs), Env: env}),
-			Env:          env,
-			Inputs:       allInputs,
-			Outputs:      na.vfsList(bcOut),
-			KV:           &llvmBcKV,
-			Requirements: reqs,
-			Resources:    usesPython3Clang16,
+			Platform:  instance.Platform,
+			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(bcArgs), Env: env}),
+			Env:       env,
+			Inputs:    allInputs,
+			Outputs:   na.vfsList(bcOut),
+			KV:        &llvmBcKV,
+			Resources: usesPython3Clang16,
 		}
 
 		ref := ctx.emit.reserve()
@@ -90,15 +88,14 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	}
 
 	ldNode := Node{
-		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
-		Env:          env,
-		Inputs:       mergeInputs,
-		Outputs:      na.vfsList(mergedOut),
-		KV:           &llvmBcKV2,
-		Requirements: reqs,
-		DepRefs:      append([]NodeRef(nil), bcRefs...),
-		Resources:    usesPython3Clang16,
+		Platform:  instance.Platform,
+		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
+		Env:       env,
+		Inputs:    mergeInputs,
+		Outputs:   na.vfsList(mergedOut),
+		KV:        &llvmBcKV2,
+		DepRefs:   append([]NodeRef(nil), bcRefs...),
+		Resources: usesPython3Clang16,
 	}
 
 	ldRef := ctx.emit.reserve()
@@ -125,15 +122,14 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	optChunks := na.inputList(concat(optInputs, bcSourceInputs))
 
 	optNode := Node{
-		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
-		Env:          env,
-		Inputs:       optChunks,
-		Outputs:      na.vfsList(optOut),
-		KV:           &llvmBcKV3,
-		Requirements: reqs,
-		DepRefs:      na.refList(ldRef),
-		Resources:    usesPython3Clang16,
+		Platform:  instance.Platform,
+		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
+		Env:       env,
+		Inputs:    optChunks,
+		Outputs:   na.vfsList(optOut),
+		KV:        &llvmBcKV3,
+		DepRefs:   na.refList(ldRef),
+		Resources: usesPython3Clang16,
 	}
 
 	opRef := ctx.emit.reserve()

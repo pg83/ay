@@ -89,7 +89,6 @@ func (e *EmitContext) emitFlexLX(flexRef NodeRef, flexBin VFS, srcVFS, outVFS VF
 		Inputs:         na.inputList(na.vfsList(flexBin, srcVFS), closure),
 		Outputs:        na.vfsList(outVFS),
 		KV:             &flexKV,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(flexRef),
 	}, id)
 }

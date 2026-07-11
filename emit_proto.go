@@ -856,7 +856,6 @@ func (e *EmitContext) emitPB(
 		Inputs:         pbInputChunks,
 		Outputs:        outputs,
 		KV:             spec.kv,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: foreignDepRefs,
 		Resources:      usesPython3,
 	}

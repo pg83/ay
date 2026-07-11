@@ -149,7 +149,6 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 		Inputs:         na.inputList(na.vfsList(flatcBinary, flatcWrapperVFS, srcVFS), transitiveImports.buckets...),
 		KV:             v.kv,
 		Outputs:        na.vfsList(headerVFS, cppVFS, bfbsVFS),
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:      usesPython3,
 	}
 

@@ -48,7 +48,6 @@ func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInp
 			srcVFS), extraInputs.buckets...),
 		KV:             &rodataKV,
 		Outputs:        na.vfsList(asmVFS, outVFS),
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(yasmLD),
 		Resources:      usesPython3,
 	}

@@ -190,7 +190,6 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 		Inputs:       inputs,
 		Outputs:      na.vfsList(outputObj),
 		KV:           kv,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    e.instance.Platform.UsesPython3Clang,
 		DepRefs:      deps,
 	}
@@ -609,7 +608,6 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			Inputs:       na.inputList(payloads, tail),
 			Outputs:      na.vfsList(aux),
 			KV:           &rawAuxKV,
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			DepRefs:      deps,
 		}, auxRef)
 

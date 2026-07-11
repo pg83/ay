@@ -79,7 +79,6 @@ func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6B
 		Inputs:         na.inputList(head2, na.vfsList(closure...)),
 		Outputs:        na.vfsList(outVFS),
 		KV:             &r6KV,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(ragel6LD),
 	}
 

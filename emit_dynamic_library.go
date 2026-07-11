@@ -131,7 +131,6 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 		Inputs:       inputsChunks,
 		Outputs:      na.vfsList(build(instance.Path.relString(), "/", outputName)),
 		KV:           &dynamicLibraryKV,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesLinkResources,
 	}
@@ -344,7 +343,6 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		Inputs:       inputs,
 		Outputs:      na.vfsList(build(instance.Path.relString(), "/", outputName)),
 		KV:           &dynamicLibraryKV,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesLinkResources,
 	}

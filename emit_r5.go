@@ -54,7 +54,6 @@ func (e *EmitContext) emitR5Reserved(
 		Inputs:         na.inputList(inputs),
 		Outputs:        na.vfsList(tmpVFS, cppVFS),
 		KV:             &r5KV,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(ragel5LD, rlgenCdLD),
 	}
 

@@ -49,7 +49,6 @@ func emitJVCPG4(
 		Inputs:       inputs,
 		KV:           &cpKV,
 		Outputs:      na.vfsList(dst),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      na.refList(jvRef),
 		Resources:    usesPython3,
 	}
@@ -115,7 +114,6 @@ func composeCPNode(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef,
 		Inputs:       inputs,
 		KV:           &cpKV,
 		Outputs:      na.vfsList(dst),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      na.noderefs.list(depRefs...),
 		Resources:    usesPython3,
 	}

@@ -398,7 +398,6 @@ func (e *EmitContext) flushGoSrcs() {
 		Inputs:       na.inputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs),
 		KV:           &goToolKV,
 		Outputs:      na.vfsList(out),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    goToolResources(na, e.peers.ResourceGlobals),
 	}
 
@@ -984,7 +983,6 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		Inputs:       inputs,
 		KV:           &goKV,
 		Outputs:      na.vfsList(outPath, build(dir, "/", outName, ".a.vet.out"), build(dir, "/", outName, ".a.vet.txt")),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      depBlock[:ndep],
 		Resources:    goToolResources(na, resourceGlobals),
 	}
@@ -1154,7 +1152,6 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		Inputs:       inputs,
 		KV:           &goLdKV,
 		Outputs:      na.vfsList(outPath, build(dir, "/", outName, ".vet.txt")),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps[:k:k],
 		Resources:    goToolResources(na, resourceGlobals),
 	}

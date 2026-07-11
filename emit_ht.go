@@ -45,7 +45,6 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 			Inputs:         na.inputList(block[:k:k]),
 			KV:             &htKV,
 			Outputs:        na.vfsList(outVFS),
-			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(toolRef),
 		}
 

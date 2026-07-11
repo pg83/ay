@@ -171,7 +171,6 @@ func (e *EmitContext) emitEN(
 		Inputs:         na.inputList(na.vfsList(enumParserBin, headerInput)),
 		KV:             &enKV,
 		Outputs:        outputs,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: foreignDepRefs,
 	}
 

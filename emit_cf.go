@@ -76,7 +76,6 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 			Inputs:       na.inputList(na.vfsList(configureFilePyVFS, cv.self), cv.buckets...),
 			KV:           &cfKV,
 			Outputs:      na.vfsList(outVFS),
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}, cfRef)
 	}

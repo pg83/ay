@@ -509,7 +509,6 @@ func (e *EmitContext) emitPYRun(
 		Inputs:         inputs,
 		KV:             kv,
 		Outputs:        outputs,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.noderefs.list(toolRefs...),
 		Resources:      resources,
 	}

@@ -94,13 +94,12 @@ func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 
 func testYasmLDRef(e *StreamingEmitter) NodeRef {
 	return e.emitNode(Node{
-		Cmds:         []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"yasm"}))}, Env: nil}},
-		Env:          nil,
-		Inputs:       InputChunks{ToVFSSlice([]string{})},
-		Outputs:      ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
-		KV:           &asTestKV,
-		Platform:     &Platform{Target: PlatformDefaultLinuxX8664},
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
+		Cmds:     []Cmd{{CmdArgs: ArgChunks{ToAnySlice(appendInternStrs(nil, []string{"yasm"}))}, Env: nil}},
+		Env:      nil,
+		Inputs:   InputChunks{ToVFSSlice([]string{})},
+		Outputs:  ToVFSSlice([]string{"$(B)/tools/yasm/yasm"}),
+		KV:       &asTestKV,
+		Platform: &Platform{Target: PlatformDefaultLinuxX8664},
 	})
 }
 

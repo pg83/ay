@@ -223,7 +223,6 @@ func emitARNode(
 		Inputs:       na.inputList(objInputs, inputTail),
 		KV:           &arKV,
 		Outputs:      na.vfsList(archivePath),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesPython3Clang,
 	}

@@ -16,7 +16,6 @@ func (e *EmitContext) emitSCReserved(srcVFS, headerVFS, domschemecBinary VFS, ru
 		Inputs:         na.inputList(na.vfsList(domschemecBinary, srcVFS, runtimeClosure.self), runtimeClosure.buckets...),
 		KV:             &scKV,
 		Outputs:        na.vfsList(headerVFS),
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(domschemecLDRef),
 	}
 

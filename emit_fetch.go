@@ -1,6 +1,9 @@
 package main
 
-var fetchKV = KV{P: pkFETCH, PC: pcYellow, ShowOut: true}
+var (
+	fetchKV           = KV{P: pkFETCH, PC: pcYellow, ShowOut: true}
+	fetchRequirements = Requirements{CPU: 1, Network: nwFull, RAM: 32}
+)
 
 func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 	na := ctx.na
@@ -22,7 +25,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 		Inputs:       na.inputList(fetchScriptInputs(na, ctx.scripts)),
 		KV:           &fetchKV,
 		Outputs:      na.vfsList(output),
-		Requirements: Requirements{CPU: float64(1), Network: nwFull, RAM: float64(32)},
+		Requirements: &fetchRequirements,
 	}
 
 	node.PresetUID = resourceFetchUID(decl.URI.string(), output.string())

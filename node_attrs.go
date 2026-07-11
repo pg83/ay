@@ -149,6 +149,8 @@ type Requirements struct {
 	HasRAMDisk bool
 }
 
+var emptyRequirements = Requirements{}
+
 func (r Requirements) isEmpty() bool {
 	return r.CPU == 0 && r.RAM == 0 && r.Network == nwNone && !r.HasRAMDisk
 }
@@ -248,7 +250,11 @@ func (o *JsonObj) num(key string, v float64) {
 	o.buf = strconv.AppendFloat(o.buf, v, 'f', -1, 64)
 }
 
-func appendRequirements(buf []byte, r Requirements) []byte {
+func appendRequirements(buf []byte, r *Requirements) []byte {
+	if r == nil {
+		return append(buf, `{"cpu":1,"network":"restricted","ram":32}`...)
+	}
+
 	if r.isEmpty() {
 		return append(buf, '{', '}')
 	}
@@ -319,7 +325,7 @@ func (kv KV) MarshalJSON() ([]byte, error) {
 }
 
 func (r Requirements) marshalJSON() ([]byte, error) {
-	return appendRequirements(nil, r), nil
+	return appendRequirements(nil, &r), nil
 }
 
 func (r Requirements) MarshalJSON() ([]byte, error) {

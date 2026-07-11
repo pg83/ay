@@ -43,7 +43,6 @@ func (e *EmitContext) emitGP(srcRel string, srcVFS, genVFS, gperfBin VFS, gperfL
 		Inputs:         na.inputList(na.vfsList(gperfBin), srcInputs),
 		Outputs:        na.vfsList(genVFS),
 		KV:             &gperfKV,
-		Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		ForeignDepRefs: na.refList(gperfLD),
 	}
 

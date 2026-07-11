@@ -82,7 +82,6 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 		Inputs:       na.inputList(closure, na.vfsList(cudaCompileScriptVFS, mtimeVFS, pidVFS)),
 		Outputs:      na.vfsList(outVFS),
 		KV:           &cudaKV,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    p.CCUsesResources,
 		DepRefs:      cudaDeps,
 	}

@@ -83,7 +83,6 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 			Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
 			Outputs:        outputs,
 			KV:             &splitCodegenKV,
-			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(toolLDRef),
 		}
 

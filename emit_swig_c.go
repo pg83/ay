@@ -67,7 +67,6 @@ func (e *EmitContext) emitSwigC() {
 				Inputs:       inputs,
 				Outputs:      na.vfsList(cOutVFS, pyOutVFS),
 				KV:           &swigCKV,
-				Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			}, swRef)
 		}
 		pending := e.ctx.na.pendingEmit(pe)

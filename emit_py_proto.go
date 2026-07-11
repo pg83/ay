@@ -44,7 +44,6 @@ func (p *pyPBPending) emitPending() {
 		Outputs:      s.outputs,
 		KV:           &pbKV,
 		KVExts:       s.extOut,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    usesPython3,
 	}
 

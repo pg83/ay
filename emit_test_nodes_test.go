@@ -85,7 +85,7 @@ func expectedTestCtxNode() *Node {
 		KV:           &testNodesTestKV,
 		Outputs:      []VFS{build("common_test.context")},
 		Platform:     &Platform{Target: "default-linux-x86_64"},
-		Requirements: Requirements{Network: nwRestricted},
+		Requirements: &testContextRequirements,
 	}
 }
 
@@ -156,7 +156,7 @@ func expectedUnittestNode(info TestSuiteInfo) *Node {
 			build("util/ut/test-results/unittest/testing_out_stuff.tar.zstd"),
 		},
 		Platform:     &Platform{Target: "default-linux-x86_64"},
-		Requirements: Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
+		Requirements: &testRunRequirements,
 	}
 }
 
@@ -234,7 +234,7 @@ func expectedClangFormatNode() *Node {
 			build("util/ut/test-results/clang_format/testing_out_stuff.tar.zstd"),
 		},
 		Platform:     &Platform{Target: "default-linux-x86_64"},
-		Requirements: Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true},
+		Requirements: &testRunRequirements,
 	}
 }
 

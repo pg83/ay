@@ -256,7 +256,6 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 		Inputs:       allInputs,
 		Outputs:      na.vfsList(outVFS),
 		KV:           &ccKV,
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    instance.Platform.CCUsesResources,
 	}
 

@@ -74,7 +74,6 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 			Inputs:       na.inputList(optArena, na.vfsList(decimalMD5PyVFS)),
 			KV:           &decimalMd5KV,
 			Outputs:      na.vfsList(outVFS),
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}, svRef)
 	}

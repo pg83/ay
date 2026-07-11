@@ -217,7 +217,6 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 			Inputs:       na.inputList(block[:k:k]),
 			KV:           &cpKV,
 			Outputs:      na.vfsList(dstVFS),
-			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			Resources:    usesPython3,
 		}
 
@@ -370,7 +369,6 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 		Inputs:       na.inputList(inputs[:ni:ni]),
 		KV:           &goToolKV,
 		Outputs:      outputs[:no:no],
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		Resources:    goToolResources(na, e.peers.ResourceGlobals),
 	}
 
@@ -668,7 +666,6 @@ func (e *EmitContext) flushGoCgo2() {
 		Inputs:       na.inputList(inputs[:ni:ni]),
 		KV:           &goToolKV,
 		Outputs:      na.vfsList(mainO, cgoO, importGo),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps[:nd],
 		Resources:    goToolResources(na, e.peers.ResourceGlobals),
 	}

@@ -323,7 +323,6 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 				Inputs:       na.inputList(inputs),
 				Outputs:      outputs,
 				KV:           &cythonCppKV,
-				Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 				Resources:    usesPython3,
 			}, cyRef)
 		}

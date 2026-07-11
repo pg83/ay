@@ -100,7 +100,6 @@ func (e *EmitContext) emitBundleNode(python3 VFS, src, dst VFS, srcRef NodeRef, 
 		Inputs:       na.inputList(inputHead, ctx.scripts[fsTools.rel()]),
 		KV:           &bundleKV,
 		Outputs:      na.vfsList(dst),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      depRefs,
 		Resources:    usesPython3,
 	}

@@ -106,7 +106,6 @@ func (e *EmitContext) emitArchiveAsmNode(
 		Inputs:       na.inputList(inputs, na.srcChunk(toolBinPath)),
 		KV:           &archiveAsmKV,
 		Outputs:      na.vfsList(rodataVFS),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      deps,
 		Resources:    instance.Platform.UsesPython3Clang,
 	}

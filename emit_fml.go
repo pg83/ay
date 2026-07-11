@@ -28,7 +28,6 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 			Inputs:         na.inputList(na.vfsList(toolBin, srcVFS)),
 			KV:             &fmKV,
 			Outputs:        na.vfsList(outVFS),
-			Requirements:   Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 			ForeignDepRefs: na.refList(toolRef),
 		}
 

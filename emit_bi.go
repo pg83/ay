@@ -65,7 +65,6 @@ func (e *EmitContext) emitBIReserved(
 		Inputs:       na.inputList(inputs),
 		KV:           &biKV,
 		Outputs:      na.vfsList(outVFS),
-		Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
 		DepRefs:      na.refList(),
 		Resources:    instance.Platform.UsesPython3Clang,
 	}
