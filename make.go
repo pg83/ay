@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -113,14 +112,6 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	if len(mf.targets) == 0 {
 		throwFmt("make: no targets supplied and current working directory is outside the source root")
-	}
-
-	if os.Getenv("GOGC") == "" {
-		if mf.threads == 0 {
-			debug.SetGCPercent(-1)
-		} else {
-			debug.SetGCPercent(executorGCPercent)
-		}
 	}
 
 	fs := newFS(mf.srcRoot)
