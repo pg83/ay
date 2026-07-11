@@ -513,9 +513,7 @@ func (e *EmitContext) flushPyProtoGroup(srcGroup int) ([]NodeRef, []VFS) {
 		return nil, nil
 	}
 
-	return e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) (Closure, CompileSpec) {
-		return e.pyProtoAuxInputClosure(aux, inputs, ref)
-	}})
+	return e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawSource: e.registerPyProtoAuxSource})
 }
 
 func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
@@ -550,9 +548,7 @@ func (e *EmitContext) flushPyProtoSrcs() *ProtoSrcsResult {
 		cppSibling = genModule(ctx, cppInstance)
 	}
 
-	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawClosure: func(aux VFS, inputs []VFS, ref NodeRef) (Closure, CompileSpec) {
-		return e.pyProtoAuxInputClosure(aux, inputs, ref)
-	}})
+	genRefs, genOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries), RawSource: e.registerPyProtoAuxSource})
 
 	if len(genRefs) == 0 {
 		return nil
@@ -599,7 +595,7 @@ func pyProtoAuxPy3Suffix(d *ModuleData) bool {
 	return d.unit.Tag == unitTagPy3Proto || d.moduleStmt.Name == tokPy23Library || d.moduleStmt.Name == tokPy23NativeLibrary
 }
 
-func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) (Closure, CompileSpec) {
+func (e *EmitContext) registerPyProtoAuxSource(aux VFS, seed []VFS, ref NodeRef) CompileSpec {
 	ctx, d := e.ctx, e.d
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	na := ctx.na
@@ -622,7 +618,7 @@ func (e *EmitContext) pyProtoAuxInputClosure(aux VFS, seed []VFS, ref NodeRef) (
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
 	})
 
-	return e.scanner.walkClosure(aux, d.scanCtx, scanDomainAux), CompileSpec{
+	return CompileSpec{
 		ForceCxx:  true,
 		Py3Suffix: pyProtoAuxPy3Suffix(d),
 		CFlags:    e.ctx.na.anyList(argX.any(), argC.any()),

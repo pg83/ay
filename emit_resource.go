@@ -208,9 +208,9 @@ type ResourceItem struct {
 }
 
 type ResourcePack struct {
-	Tag        STR
-	Items      []ResourceItem
-	RawClosure func(aux VFS, inputs []VFS, ref NodeRef) (Closure, CompileSpec)
+	Tag       STR
+	Items     []ResourceItem
+	RawSource func(aux VFS, inputs []VFS, ref NodeRef) CompileSpec
 }
 
 func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
@@ -446,8 +446,8 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 
-	if p.RawClosure == nil {
-		throwFmt("packResources: %s has raw-routed resource items but no RawClosure", instance.Path.relString())
+	if p.RawSource == nil {
+		throwFmt("packResources: %s has raw-routed resource items but no RawSource", instance.Path.relString())
 	}
 
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
@@ -482,7 +482,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			adjBound += 1 + len(it.Extra)
 		}
 
-		var adjacent []VFS
+		var adjacent, payloads []VFS
 
 		hashScratch = hashScratch[:0]
 
@@ -516,6 +516,20 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 			adjacent = adjacent[:len(adjacent):len(adjacent)]
 		})
+
+		dedupers.with(func(deduper *DeDuper) {
+			payloads = na.vfs.alloc(len(chunk))[:0]
+
+			for _, it := range chunk {
+				if it.Path != "-" && it.Input != 0 && deduper.add(it.Input.strID()) {
+					payloads = append(payloads, it.Input)
+				}
+			}
+
+			na.vfs.commit(len(payloads))
+
+			payloads = payloads[:len(payloads):len(payloads)]
+		})
 		hashScratch = append(hashScratch, unitElem)
 
 		var hash string
@@ -524,8 +538,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		aux := build(instance.Path.relString(), "/", hash, "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
-		auxClosure, compile := p.RawClosure(aux, adjacent, auxRef)
-		auxLen := auxClosure.len()
+		compile := p.RawSource(aux, adjacent, auxRef)
 		nodeCmd := na.anys.alloc(2 + 2*len(chunk))[:0]
 
 		nodeCmd = append(nodeCmd, rescompilerBinVFS.any(), aux.any())
@@ -542,7 +555,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		nodeCmd = nodeCmd[:len(nodeCmd):len(nodeCmd)]
 
-		codegenDeps := resolveCodegenDepRefsIncl(ctx, instance, na, adjacent)
+		codegenDeps := resolveCodegenDepRefsIncl(ctx, instance, na, payloads)
 		deps := na.noderefs.alloc(len(codegenDeps) + 1)
 		nd := copy(deps, codegenDeps)
 
@@ -560,25 +573,15 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		var tail []VFS
 
 		dedupers.with(func(deduper *DeDuper) {
-			for _, v := range adjacent {
+			for _, v := range payloads {
 				deduper.add(v.strID())
 			}
 
-			tail = na.vfs.alloc(1 + auxLen)[:0]
+			tail = na.vfs.alloc(1)[:0]
 
 			if deduper.add(rescompilerBinVFS.strID()) {
 				tail = append(tail, rescompilerBinVFS)
 			}
-
-			auxClosure.each(func(v VFS) {
-				if v == aux {
-					return
-				}
-
-				if deduper.add(v.strID()) {
-					tail = append(tail, v)
-				}
-			})
 
 			na.vfs.commit(len(tail))
 		})
@@ -589,7 +592,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			Platform:     instance.Platform,
 			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
 			Env:          env,
-			Inputs:       na.inputList(adjacent, tail),
+			Inputs:       na.inputList(payloads, tail),
 			Outputs:      na.vfsList(aux),
 			KV:           &rawAuxKV,
 			Requirements: Requirements{CPU: float64(1), Network: nwRestricted, RAM: float64(32)},
