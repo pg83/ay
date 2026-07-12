@@ -227,7 +227,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	env := hostP.toolEnv()
 	wrap := len(instance.Platform.WrapccHead) > 0
 
-	nInputs := len(in.IncludeView.buckets)
+	nInputs := len(in.IncludeView.bucketList())
 
 	if in.IncludeView.self != 0 {
 		nInputs++
@@ -253,7 +253,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 		inputChunks = append(inputChunks, wrapccPyChunk)
 	}
 
-	inputChunks = append(inputChunks, in.IncludeView.buckets...)
+	inputChunks = append(inputChunks, in.IncludeView.bucketList()...)
 
 	if in.IncludeView.self != 0 && len(in.IncludeInputs) > 0 {
 		inputChunks = append(inputChunks, in.IncludeInputs)

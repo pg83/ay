@@ -1,5 +1,7 @@
 package main
 
+import "github.com/zeebo/xxh3"
+
 const closureBuckets = 16
 
 type BucketVal struct {
@@ -7,11 +9,19 @@ type BucketVal struct {
 	slice  []VFS
 }
 
+type BucketListVal struct {
+	verify uint64
+	list   *BucketList
+}
+
 type BucketCache struct {
 	chunks       *BumpAllocator[[]VFS]
+	lists        *BumpAllocator[BucketList]
 	pool         *BumpAllocator[VFS]
 	intern       *IntValueMap[BucketVal]
 	overflow     *IntValueMap[BucketVal]
+	listIntern   *IntValueMap[BucketListVal]
+	listOverflow *IntValueMap[BucketListVal]
 	h1Mismatches int
 	overflowed   int
 	scratch      [closureBuckets][]VFS
@@ -19,11 +29,70 @@ type BucketCache struct {
 
 func newBucketCache() *BucketCache {
 	return &BucketCache{
-		chunks:   newBumpAllocator[[]VFS](),
-		pool:     newBumpAllocator[VFS](),
-		intern:   newIntValueMap[BucketVal](1 << 18),
-		overflow: newIntValueMap[BucketVal](1 << 4),
+		chunks:       newBumpAllocator[[]VFS](),
+		lists:        newBumpAllocator[BucketList](),
+		pool:         newBumpAllocator[VFS](),
+		intern:       newIntValueMap[BucketVal](1 << 18),
+		overflow:     newIntValueMap[BucketVal](1 << 4),
+		listIntern:   newIntValueMap[BucketListVal](1 << 16),
+		listOverflow: newIntValueMap[BucketListVal](1 << 4),
 	}
+}
+
+func (c *BucketCache) internBucketList(buckets [][]VFS) *BucketList {
+	if len(buckets) == 0 {
+		return nil
+	}
+
+	sum := xxh3.Hash128(sliceBytes(buckets))
+	h1, h2 := sum.Hi, sum.Lo
+
+	if h1 == 0 {
+		h1 = 1
+	}
+
+	if h2 == 0 {
+		h2 = 1
+	}
+
+	cell, found := c.listIntern.cell(h1)
+
+	if found {
+		if cell.verify == h2 {
+			return cell.list
+		}
+
+		cell2, found2 := c.listOverflow.cell(h2)
+
+		if found2 {
+			if cell2.verify != h1 {
+				throwFmt("BucketCache: bucket-list hash pair collision (h1=%#x h2=%#x, %d buckets)", h1, h2, len(buckets))
+			}
+
+			return cell2.list
+		}
+
+		list := c.commitBucketList(buckets)
+
+		*cell2 = BucketListVal{verify: h1, list: list}
+
+		return list
+	}
+
+	list := c.commitBucketList(buckets)
+
+	*cell = BucketListVal{verify: h2, list: list}
+
+	return list
+}
+
+func (c *BucketCache) commitBucketList(buckets [][]VFS) *BucketList {
+	c.chunks.commit(len(buckets))
+	list := c.lists.one()
+
+	*list = BucketList(buckets[:len(buckets):len(buckets)])
+
+	return list
 }
 
 func (c *BucketCache) internBucket(elems []VFS) []VFS {
@@ -94,7 +163,7 @@ func (c *BucketCache) storeBuckets(self VFS, rest []VFS) Closure {
 		k++
 	}
 
-	c.chunks.commit(n)
+	list := c.internBucketList(buckets[:n])
 
-	return Closure{self: self, buckets: buckets[:n:n]}
+	return Closure{self: self, buckets: list}
 }

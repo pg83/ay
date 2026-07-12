@@ -138,12 +138,12 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 
 	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])
 	env := envVarsVCS
-	inputs := na.inputs.alloc(3 + len(transitiveImports.buckets))[:3+len(transitiveImports.buckets)]
+	inputs := na.inputs.alloc(3 + len(transitiveImports.bucketList()))[:3+len(transitiveImports.bucketList())]
 
 	inputs[0] = na.vfsList(flatcBinary)
 	inputs[1] = na.vfsList(flatcWrapperVFS)
 	inputs[2] = na.vfsList(srcVFS)
-	copy(inputs[3:], transitiveImports.buckets)
+	copy(inputs[3:], transitiveImports.bucketList())
 	na.inputs.commit(len(inputs))
 
 	node := Node{
@@ -190,7 +190,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 	}
 
 	headerLeaves = append(headerLeaves, v.runtimeVFS)
-	eachBucketVFS(transitiveImports.buckets, func(v VFS) { headerLeaves = append(headerLeaves, v) })
+	eachBucketVFS(transitiveImports.bucketList(), func(v VFS) { headerLeaves = append(headerLeaves, v) })
 	ctx.na.vfs.commit(len(headerLeaves))
 	headerLeaves = headerLeaves[:len(headerLeaves):len(headerLeaves)]
 

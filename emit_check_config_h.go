@@ -34,11 +34,11 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 				internV(instance.Path.relString(), "/", conf.string()).any(),
 				generatedVFS.any())),
 				Env: env}),
-			Env:          env,
-			Inputs:       na.inputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.buckets...),
-			Outputs:      na.vfsList(generatedVFS),
-			KV:           &checkConfigHKV,
-			Resources:    usesPython3,
+			Env:       env,
+			Inputs:    na.inputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.bucketList()...),
+			Outputs:   na.vfsList(generatedVFS),
+			KV:        &checkConfigHKV,
+			Resources: usesPython3,
 		}, chRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)

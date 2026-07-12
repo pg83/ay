@@ -18,11 +18,11 @@ func (e *EmitContext) emitAS(srcRel string, srcVFS VFS, in ModuleCCInputs, hostP
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: bldRootDirVFS,
 			Env: env}),
-		Env:          env,
-		Inputs:       na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.buckets...),
-		Outputs:      na.vfsList(outVFS),
-		KV:           &asKV,
-		Resources:    instance.Platform.UsesClangOnly,
+		Env:       env,
+		Inputs:    na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.bucketList()...),
+		Outputs:   na.vfsList(outVFS),
+		KV:        &asKV,
+		Resources: instance.Platform.UsesClangOnly,
 	}
 
 	if len(in.ExtraDepRefs) > 0 {

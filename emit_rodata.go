@@ -36,10 +36,10 @@ func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInp
 	toolName := path.Base(strings.TrimSuffix(srcRel, ".rodata"))
 	pythonEnv := envVarsVCS
 	yasmEnv := envVarsVCSYasm
-	inputs := na.inputs.alloc(3 + len(extraInputs.buckets))[:0]
+	inputs := na.inputs.alloc(3 + len(extraInputs.bucketList()))[:0]
 
 	inputs = append(inputs, na.vfsList(yasmBinaryVFS), na.vfsList(rodataScriptVFS), na.vfsList(srcVFS))
-	inputs = append(inputs, extraInputs.buckets...)
+	inputs = append(inputs, extraInputs.bucketList()...)
 	na.inputs.commit(len(inputs))
 	inputs = inputs[:len(inputs):len(inputs)]
 

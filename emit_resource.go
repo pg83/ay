@@ -789,7 +789,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 				it.AuxSources = auxSources[:len(auxSources):len(auxSources)]
 				auxBuilds := na.vfs.alloc(cv.len() + 1)[:0]
 
-				for _, bucket := range cv.buckets {
+				for _, bucket := range cv.bucketList() {
 					if bucket[0].isBuild() {
 						auxBuilds = append(auxBuilds, bucket...)
 					}

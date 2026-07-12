@@ -5,12 +5,12 @@ var scKV = KV{P: pkSC, PC: pcYellow}
 func (e *EmitContext) emitSCReserved(srcVFS, headerVFS, domschemecBinary VFS, runtimeClosure Closure, domschemecLDRef NodeRef, id NodeRef) {
 	na := e.ctx.na
 	env := envVarsVCS
-	inputs := na.inputs.alloc(3 + len(runtimeClosure.buckets))[:3+len(runtimeClosure.buckets)]
+	inputs := na.inputs.alloc(3 + len(runtimeClosure.bucketList()))[:3+len(runtimeClosure.bucketList())]
 
 	inputs[0] = na.vfsList(domschemecBinary)
 	inputs[1] = na.vfsList(srcVFS)
 	inputs[2] = na.vfsList(runtimeClosure.self)
-	copy(inputs[3:], runtimeClosure.buckets)
+	copy(inputs[3:], runtimeClosure.bucketList())
 	na.inputs.commit(len(inputs))
 
 	node := Node{

@@ -1,8 +1,18 @@
 package main
 
+type BucketList [][]VFS
+
 type Closure struct {
 	self    VFS
-	buckets [][]VFS
+	buckets *BucketList
+}
+
+func (cl Closure) bucketList() [][]VFS {
+	if cl.buckets == nil {
+		return nil
+	}
+
+	return *cl.buckets
 }
 
 func (cl Closure) len() int {
@@ -12,7 +22,7 @@ func (cl Closure) len() int {
 		n++
 	}
 
-	for _, b := range cl.buckets {
+	for _, b := range cl.bucketList() {
 		n += len(b)
 	}
 
@@ -24,7 +34,7 @@ func (cl Closure) each(fn func(VFS)) {
 		fn(cl.self)
 	}
 
-	eachBucketVFS(cl.buckets, fn)
+	eachBucketVFS(cl.bucketList(), fn)
 }
 
 func (cl Closure) collect(na *NodeArenas, keep func(VFS) bool) []VFS {
@@ -44,7 +54,7 @@ func (cl Closure) collect(na *NodeArenas, keep func(VFS) bool) []VFS {
 func (cl Closure) spliceInto(cs *IdSet, block []VFS, k int) int {
 	k = cs.spliceOne(cl.self, block, k)
 
-	for _, b := range cl.buckets {
+	for _, b := range cl.bucketList() {
 		k = cs.spliceNew(b, block, k)
 	}
 
