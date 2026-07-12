@@ -74,7 +74,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	na.noderefs.commit(cdn)
 
 	cudaDeps = cudaDeps[:cdn:cdn]
-	inputs := na.inputs.alloc(2 + len(closure))
+	inputs := na.inputs.alloc(2 + len(closure))[:2+len(closure)]
 
 	inputs[0] = na.vfsList(cudaCompileScriptVFS)
 	inputs[1] = na.vfsList(mtimeVFS, pidVFS)

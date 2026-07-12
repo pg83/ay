@@ -41,7 +41,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 		cv := e.scanner.walkClosure(inputVFS, d.scanCtx, scanDomainCC)
 		closureInputs := na.dedupClosureChunks(cv)
-		inputChunks := na.inputs.alloc(1 + len(closureInputs))
+		inputChunks := na.inputs.alloc(1 + len(closureInputs))[:1+len(closureInputs)]
 
 		inputChunks[0] = na.vfsList(clangWrapperVFS)
 		copy(inputChunks[1:], closureInputs)

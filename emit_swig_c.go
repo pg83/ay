@@ -44,7 +44,7 @@ func (e *EmitContext) emitSwigC() {
 		cOutVFS := build(instance.Path.relString(), "/", cOutRel)
 		pyOutVFS := build(instance.Path.relString(), "/", pyOutRel)
 		cv := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainSwig)
-		inputs := na.inputs.alloc(2 + len(cv.buckets))
+		inputs := na.inputs.alloc(2 + len(cv.buckets))[:2+len(cv.buckets)]
 
 		inputs[0] = na.vfsList(bldContribToolsSwigSwig)
 		inputs[1] = na.vfsList(srcVFS)
