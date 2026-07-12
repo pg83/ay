@@ -235,7 +235,7 @@ func (e *EmitContext) emitProtoDescProducer(protoRelPath string,
 
 	cmdArgs := na.chunkList(head, mid)
 	env := envVarsVCS
-	inputChunks := na.inputs.alloc(2 + len(imports.buckets))
+	inputChunks := na.inputs.alloc(2 + len(imports.buckets))[:2+len(imports.buckets)]
 
 	inputChunks[0] = na.vfsList(protocBinary)
 	inputChunks[1] = na.vfsList(source(protoRelPath), descRawprotoWrapperVFS)

@@ -69,7 +69,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 
 		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
 		closureInputs := na.dedupClosureChunks(cv)
-		inputs := na.inputs.alloc(1 + len(closureInputs))
+		inputs := na.inputs.alloc(1 + len(closureInputs))[:1+len(closureInputs)]
 
 		inputs[0] = na.vfsList(configureFilePyVFS)
 		copy(inputs[1:], closureInputs)

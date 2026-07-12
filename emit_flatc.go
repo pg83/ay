@@ -138,7 +138,7 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 
 	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])
 	env := envVarsVCS
-	inputs := na.inputs.alloc(3 + len(transitiveImports.buckets))
+	inputs := na.inputs.alloc(3 + len(transitiveImports.buckets))[:3+len(transitiveImports.buckets)]
 
 	inputs[0] = na.vfsList(flatcBinary)
 	inputs[1] = na.vfsList(flatcWrapperVFS)
