@@ -184,32 +184,51 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 	env := envVarsVCS
 
 	node := Node{
-		Platform:     e.instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Env: env}),
-		Env:          env,
-		Inputs:       inputs,
-		Outputs:      na.vfsList(outputObj),
-		KV:           kv,
-		Resources:    e.instance.Platform.UsesPython3Clang,
-		DepRefs:      deps,
+		Platform:  e.instance.Platform,
+		Cmds:      na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Env: env}),
+		Env:       env,
+		Inputs:    inputs,
+		Outputs:   na.vfsList(outputObj),
+		KV:        kv,
+		Resources: e.instance.Platform.UsesPython3Clang,
+		DepRefs:   deps,
 	}
 
 	return e.emitNode(node)
 }
 
 type ResourceItem struct {
-	Path  string
-	Key   string
-	Cmd   STR
-	Input VFS
-	Extra []VFS
-	Aux   []VFS
+	Path         string
+	Key          string
+	Cmd          STR
+	SourceInput  VFS
+	BuildInput   VFS
+	ExtraSources []VFS
+	ExtraBuilds  []VFS
+	AuxSources   []VFS
+	AuxBuilds    []VFS
+}
+
+func (it ResourceItem) input() VFS {
+	if it.BuildInput != 0 {
+		return it.BuildInput
+	}
+
+	return it.SourceInput
 }
 
 type ResourcePack struct {
 	Tag        STR
 	Items      []ResourceItem
 	RawCompile CompileSpec
+}
+
+func (it *ResourceItem) setInput(v VFS) {
+	if v.isBuild() {
+		it.BuildInput = v
+	} else {
+		it.SourceInput = v
+	}
 }
 
 func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
@@ -305,7 +324,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		lo = hi
 
-		nPaths, nKvs, cand := 0, 0, 0
+		nPaths, nKvs, sourceBound, buildBound := 0, 0, 0, 0
 
 		for _, it := range chunk {
 			if it.Path == "-" {
@@ -314,7 +333,16 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 				nPaths++
 			}
 
-			cand += 1 + len(it.Extra)
+			if it.SourceInput != 0 {
+				sourceBound++
+			}
+
+			if it.BuildInput != 0 {
+				buildBound++
+			}
+
+			sourceBound += len(it.ExtraSources) + len(it.AuxSources)
+			buildBound += len(it.ExtraBuilds) + len(it.AuxBuilds)
 		}
 
 		payloadCap := 0
@@ -336,7 +364,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 			for _, it := range chunk {
 				if it.Path != "-" {
-					payload = append(payload, it.Input.any())
+					payload = append(payload, it.input().any())
 					hashScratch = append(hashScratch, it.Path)
 				}
 			}
@@ -370,59 +398,73 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		payload = payload[:len(payload):len(payload)]
 
-		var adjacent, tail []VFS
+		var adjacentSources, adjacentBuilds, tailSources, tailBuilds []VFS
 
 		dedupers.with(func(deduper *DeDuper) {
-			adjacent = na.vfs.alloc(cand)[:0]
+			adjacentSources = na.vfs.alloc(sourceBound)[:0]
 
 			for _, it := range chunk {
-				if it.Input != 0 && deduper.add(it.Input.strID()) {
-					adjacent = append(adjacent, it.Input)
+				if it.SourceInput != 0 && deduper.add(it.SourceInput.strID()) {
+					adjacentSources = append(adjacentSources, it.SourceInput)
 				}
 
-				for _, v := range it.Extra {
+				for _, v := range it.ExtraSources {
 					if v != 0 && deduper.add(v.strID()) {
-						adjacent = append(adjacent, v)
+						adjacentSources = append(adjacentSources, v)
 					}
 				}
 			}
 
-			na.vfs.commit(len(adjacent))
+			na.vfs.commit(len(adjacentSources))
+			adjacentSources = adjacentSources[:len(adjacentSources):len(adjacentSources)]
+			adjacentBuilds = na.vfs.alloc(buildBound)[:0]
 
-			adjacent = adjacent[:len(adjacent):len(adjacent)]
+			for _, it := range chunk {
+				if it.BuildInput != 0 && deduper.add(it.BuildInput.strID()) {
+					adjacentBuilds = append(adjacentBuilds, it.BuildInput)
+				}
+
+				for _, v := range it.ExtraBuilds {
+					if v != 0 && deduper.add(v.strID()) {
+						adjacentBuilds = append(adjacentBuilds, v)
+					}
+				}
+			}
+
+			na.vfs.commit(len(adjacentBuilds))
+			adjacentBuilds = adjacentBuilds[:len(adjacentBuilds):len(adjacentBuilds)]
 
 			for _, v := range rescompilersWithScriptChunk {
 				deduper.add(v.strID())
 			}
 
-			auxBound := 0
+			tailSources = na.vfs.alloc(sourceBound)[:0]
 
 			for _, it := range chunk {
-				auxBound += len(it.Aux)
-			}
-
-			tail = na.vfs.alloc(auxBound)[:0]
-
-			for _, it := range chunk {
-				for _, v := range it.Aux {
+				for _, v := range it.AuxSources {
 					if v != 0 && deduper.add(v.strID()) {
-						tail = append(tail, v)
+						tailSources = append(tailSources, v)
 					}
 				}
 			}
 
-			na.vfs.commit(len(tail))
+			na.vfs.commit(len(tailSources))
+			tailSources = tailSources[:len(tailSources):len(tailSources)]
+			tailBuilds = na.vfs.alloc(buildBound)[:0]
 
-			tail = tail[:len(tail):len(tail)]
+			for _, it := range chunk {
+				for _, v := range it.AuxBuilds {
+					if v != 0 && deduper.add(v.strID()) {
+						tailBuilds = append(tailBuilds, v)
+					}
+				}
+			}
+
+			na.vfs.commit(len(tailBuilds))
+			tailBuilds = tailBuilds[:len(tailBuilds):len(tailBuilds)]
 		})
 
-		var inputs InputChunks
-
-		if len(tail) > 0 {
-			inputs = na.inputList(rescompilersChunk, adjacent, objcopyScriptChunk, tail)
-		} else {
-			inputs = na.inputList(rescompilersChunk, adjacent, objcopyScriptChunk)
-		}
+		inputs := na.inputList(rescompilersChunk, adjacentSources, adjacentBuilds, objcopyScriptChunk, tailSources, tailBuilds)
 
 		hashScratch = append(hashScratch, unitElem)
 
@@ -474,18 +516,27 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		lo = hi
 
-		adjBound := 0
+		sourceBound, buildBound := 0, 0
 
 		for _, it := range chunk {
-			adjBound += 1 + len(it.Extra)
+			if it.SourceInput != 0 {
+				sourceBound++
+			}
+
+			if it.BuildInput != 0 {
+				buildBound++
+			}
+
+			sourceBound += len(it.ExtraSources)
+			buildBound += len(it.ExtraBuilds)
 		}
 
-		var adjacent, payloads []VFS
+		var adjacentSources, payloadSources, payloadBuilds []VFS
 
 		hashScratch = hashScratch[:0]
 
 		dedupers.with(func(deduper *DeDuper) {
-			adjacent = na.vfs.alloc(adjBound)[:0]
+			adjacentSources = na.vfs.alloc(sourceBound)[:0]
 
 			for _, it := range chunk {
 				if it.Path == "-" {
@@ -499,34 +550,42 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 					hashScratch = append(hashScratch, it.Path, bytesString(dashBuf[dashStart:]))
 				}
 
-				if it.Input != 0 && deduper.add(it.Input.strID()) {
-					adjacent = append(adjacent, it.Input)
+				if it.SourceInput != 0 && deduper.add(it.SourceInput.strID()) {
+					adjacentSources = append(adjacentSources, it.SourceInput)
 				}
 
-				for _, v := range it.Extra {
+				for _, v := range it.ExtraSources {
 					if v != 0 && deduper.add(v.strID()) {
-						adjacent = append(adjacent, v)
+						adjacentSources = append(adjacentSources, v)
 					}
 				}
 			}
 
-			na.vfs.commit(len(adjacent))
-
-			adjacent = adjacent[:len(adjacent):len(adjacent)]
+			na.vfs.commit(len(adjacentSources))
+			adjacentSources = adjacentSources[:len(adjacentSources):len(adjacentSources)]
 		})
 
 		dedupers.with(func(deduper *DeDuper) {
-			payloads = na.vfs.alloc(len(chunk))[:0]
+			payloadSources = na.vfs.alloc(sourceBound)[:0]
 
 			for _, it := range chunk {
-				if it.Path != "-" && it.Input != 0 && deduper.add(it.Input.strID()) {
-					payloads = append(payloads, it.Input)
+				if it.Path != "-" && it.SourceInput != 0 && deduper.add(it.SourceInput.strID()) {
+					payloadSources = append(payloadSources, it.SourceInput)
 				}
 			}
 
-			na.vfs.commit(len(payloads))
+			na.vfs.commit(len(payloadSources))
+			payloadSources = payloadSources[:len(payloadSources):len(payloadSources)]
+			payloadBuilds = na.vfs.alloc(buildBound)[:0]
 
-			payloads = payloads[:len(payloads):len(payloads)]
+			for _, it := range chunk {
+				if it.Path != "-" && it.BuildInput != 0 && deduper.add(it.BuildInput.strID()) {
+					payloadBuilds = append(payloadBuilds, it.BuildInput)
+				}
+			}
+
+			na.vfs.commit(len(payloadBuilds))
+			payloadBuilds = payloadBuilds[:len(payloadBuilds):len(payloadBuilds)]
 		})
 		hashScratch = append(hashScratch, unitElem)
 
@@ -536,7 +595,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		aux := build(instance.Path.relString(), "/", hash, "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
-		seed := na.dedupSourceVFS(adjacent, nil)
+		seed := na.dedupSourceVFS(adjacentSources, nil)
 		emits := na.dirs.alloc(len(seed))[:0]
 
 		for _, v := range seed {
@@ -561,7 +620,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			if it.Path == "-" {
 				nodeCmd = append(nodeCmd, dash.any(), it.Cmd.any())
 			} else {
-				nodeCmd = append(nodeCmd, it.Input.any(), internV("-", it.Key).any())
+				nodeCmd = append(nodeCmd, it.input().any(), internV("-", it.Key).any())
 			}
 		}
 
@@ -586,7 +645,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		var tail []VFS
 
 		dedupers.with(func(deduper *DeDuper) {
-			for _, v := range payloads {
+			for _, v := range payloadBuilds {
 				deduper.add(v.strID())
 			}
 
@@ -602,13 +661,13 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		tail = tail[:len(tail):len(tail)]
 
 		e.emitReservedNode(Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
-			Env:          env,
-			Inputs:       na.inputList(payloads, tail),
-			Outputs:      na.vfsList(aux),
-			KV:           &rawAuxKV,
-			DepRefs:      deps,
+			Platform: instance.Platform,
+			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
+			Env:      env,
+			Inputs:   na.inputList(payloadSources, payloadBuilds, tail),
+			Outputs:  na.vfsList(aux),
+			KV:       &rawAuxKV,
+			DepRefs:  deps,
 		}, auxRef)
 
 		ccRef := ctx.emit.reserve()
@@ -693,7 +752,8 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 				}
 
 				e.resStrBuf = e.resStrBuf[:cmdStart]
-				it.Aux = na.vfsList(r.Input, r.ProducerMainOut)
+				it.setInput(r.Input)
+				it.AuxBuilds = na.vfsList(r.ProducerMainOut)
 			} else {
 				it.Key = entry.Key
 
@@ -701,7 +761,8 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 					r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
 
 					it.Cmd = internStr(renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.relString())))
-					it.Aux = na.vfsList(r.Input, r.ProducerMainOut)
+					it.setInput(r.Input)
+					it.AuxBuilds = na.vfsList(r.ProducerMainOut)
 				} else {
 					it.Cmd = internStr(renderResourceKvCmd(entry.Key))
 				}
@@ -710,29 +771,35 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			batch = append(batch, it)
 		} else {
 			r := e.resolveResourceInput(entry.Path, copyFileInputVFS(ctx.fs, instance.Path, entry.Path))
-			it := ResourceItem{Path: entry.Path, Key: entry.Key, Input: r.Input}
+			it := ResourceItem{Path: entry.Path, Key: entry.Key}
+
+			it.setInput(r.Input)
 
 			if r.ProducerRef != 0 {
 				cv := e.scanner.walkClosure(r.Input, d.scanCtx, scanDomainCC)
-				aux := na.vfs.alloc(cv.len() + len(r.SourceInputs) + 1)[:0]
-
-				eachBucketVFS(cv.buckets, func(v VFS) {
-					if v.isBuild() {
-						aux = append(aux, v)
-					}
-				})
+				auxSources := na.vfs.alloc(len(r.SourceInputs))[:0]
 
 				for _, v := range r.SourceInputs {
-					if v.isSource() && objcopySourceLeafKept(v.relString()) {
-						aux = append(aux, v)
+					if objcopySourceLeafKept(v.relString()) {
+						auxSources = append(auxSources, v)
 					}
 				}
 
-				aux = append(aux, r.ProducerMainOut)
-				na.vfs.commit(len(aux))
-				it.Aux = aux[:len(aux):len(aux)]
+				na.vfs.commit(len(auxSources))
+				it.AuxSources = auxSources[:len(auxSources):len(auxSources)]
+				auxBuilds := na.vfs.alloc(cv.len() + 1)[:0]
+
+				for _, bucket := range cv.buckets {
+					if bucket[0].isBuild() {
+						auxBuilds = append(auxBuilds, bucket...)
+					}
+				}
+
+				auxBuilds = append(auxBuilds, r.ProducerMainOut)
+				na.vfs.commit(len(auxBuilds))
+				it.AuxBuilds = auxBuilds[:len(auxBuilds):len(auxBuilds)]
 			} else {
-				it.Aux = na.vfsList(r.ProducerMainOut)
+				it.AuxBuilds = na.vfsList(r.ProducerMainOut)
 			}
 
 			batch = append(batch, it)

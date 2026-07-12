@@ -112,7 +112,6 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef
 
 	if in.MainOutInducedInputs {
 		in.IncludeInputs = e.mainOutInducedInputs(ctx.na, in.IncludeView)
-		in.IncludeView = Closure{}
 	}
 
 	ref, outPath, _ := e.composeCCNodeAt(srcVFS, in, ctx.host, reserved)
@@ -135,12 +134,7 @@ func (e *EmitContext) mainOutInducedInputs(na *NodeArenas, includeView Closure) 
 	})
 
 	extra := e.prodVFSTake(extraMark)
-	out := na.vfs.alloc(2 * includeView.len())[:0]
-
-	includeView.each(func(v VFS) {
-		out = append(out, v)
-	})
-
+	out := na.vfs.alloc(len(extra))[:0]
 	out = append(out, extra...)
 	na.vfs.commit(len(out))
 
@@ -233,18 +227,40 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	env := hostP.toolEnv()
 	wrap := len(instance.Platform.WrapccHead) > 0
 
-	var allInputs InputChunks
+	nInputs := len(in.IncludeView.buckets)
 
-	switch {
-	case in.IncludeView.self != 0 && wrap:
-		allInputs = na.inputList(na.vfsList(in.IncludeView.self, wrapccPyVFS), in.IncludeView.buckets...)
-	case in.IncludeView.self != 0:
-		allInputs = na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.buckets...)
-	case wrap:
-		allInputs = na.inputList(in.IncludeInputs, wrapccPyChunk)
-	default:
-		allInputs = na.inputList(in.IncludeInputs)
+	if in.IncludeView.self != 0 {
+		nInputs++
 	}
+
+	if wrap {
+		nInputs++
+	}
+
+	if len(in.IncludeInputs) > 0 {
+		nInputs++
+	}
+
+	inputChunks := na.inputs.alloc(nInputs)[:0]
+
+	if in.IncludeView.self != 0 {
+		inputChunks = append(inputChunks, na.vfsList(in.IncludeView.self))
+	} else if len(in.IncludeInputs) > 0 {
+		inputChunks = append(inputChunks, in.IncludeInputs)
+	}
+
+	if wrap {
+		inputChunks = append(inputChunks, wrapccPyChunk)
+	}
+
+	inputChunks = append(inputChunks, in.IncludeView.buckets...)
+
+	if in.IncludeView.self != 0 && len(in.IncludeInputs) > 0 {
+		inputChunks = append(inputChunks, in.IncludeInputs)
+	}
+
+	na.inputs.commit(len(inputChunks))
+	allInputs := InputChunks(inputChunks[:len(inputChunks):len(inputChunks)])
 
 	node := Node{
 		Platform: instance.Platform,
@@ -252,11 +268,11 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 			CmdArgs: cmdArgs,
 			Env:     env,
 		}),
-		Env:          env,
-		Inputs:       allInputs,
-		Outputs:      na.vfsList(outVFS),
-		KV:           &ccKV,
-		Resources:    instance.Platform.CCUsesResources,
+		Env:       env,
+		Inputs:    allInputs,
+		Outputs:   na.vfsList(outVFS),
+		KV:        &ccKV,
+		Resources: instance.Platform.CCUsesResources,
 	}
 
 	if len(in.ExtraDepRefs) > 0 {

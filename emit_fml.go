@@ -25,7 +25,7 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 				srcVFS.any(),
 			)), Env: env}),
 			Env:            env,
-			Inputs:         na.inputList(na.vfsList(toolBin, srcVFS)),
+			Inputs:         na.inputList(na.vfsList(toolBin), na.vfsList(srcVFS)),
 			KV:             &fmKV,
 			Outputs:        na.vfsList(outVFS),
 			ForeignDepRefs: na.refList(toolRef),

@@ -138,6 +138,13 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 
 	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])
 	env := envVarsVCS
+	inputs := na.inputs.alloc(3 + len(transitiveImports.buckets))
+
+	inputs[0] = na.vfsList(flatcBinary)
+	inputs[1] = na.vfsList(flatcWrapperVFS)
+	inputs[2] = na.vfsList(srcVFS)
+	copy(inputs[3:], transitiveImports.buckets)
+	na.inputs.commit(len(inputs))
 
 	node := Node{
 		Platform: instance.Platform,
@@ -146,7 +153,7 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 			Env: env}),
 		Env:            env,
 		ForeignDepRefs: na.refList(flatcLDRef),
-		Inputs:         na.inputList(na.vfsList(flatcBinary, flatcWrapperVFS, srcVFS), transitiveImports.buckets...),
+		Inputs:         InputChunks(inputs[:len(inputs):len(inputs)]),
 		KV:             v.kv,
 		Outputs:        na.vfsList(headerVFS, cppVFS, bfbsVFS),
 		Resources:      usesPython3,

@@ -235,7 +235,12 @@ func (e *EmitContext) emitProtoDescProducer(protoRelPath string,
 
 	cmdArgs := na.chunkList(head, mid)
 	env := envVarsVCS
-	inputs := na.vfsList(protocBinary, source(protoRelPath), descRawprotoWrapperVFS)
+	inputChunks := na.inputs.alloc(2 + len(imports.buckets))
+
+	inputChunks[0] = na.vfsList(protocBinary)
+	inputChunks[1] = na.vfsList(source(protoRelPath), descRawprotoWrapperVFS)
+	copy(inputChunks[2:], imports.buckets)
+	na.inputs.commit(len(inputChunks))
 
 	node := Node{
 		Platform: e.instance.Platform,
@@ -243,7 +248,7 @@ func (e *EmitContext) emitProtoDescProducer(protoRelPath string,
 			Cwd: srcRootDirVFS,
 			Env: env}),
 		Env:            env,
-		Inputs:         na.inputList(inputs, imports.buckets...),
+		Inputs:         InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]),
 		KV:             &protoDescKV,
 		Outputs:        na.vfsList(descOut, rawprotoOut),
 		ForeignDepRefs: na.refList(protocLDRef),
@@ -282,14 +287,13 @@ func (e *EmitContext) emitDescProtoMerge(selfProtodesc, protosrc VFS,
 
 	collect = collect[:len(collect):len(collect)]
 
-	inputs := na.vfs.alloc(len(descOutputs) + len(rawprotoOutputs) + len(producerSourceInputs))
-	ni := copy(inputs, descOutputs)
+	buildInputs := na.vfs.alloc(len(descOutputs) + len(rawprotoOutputs))
+	ni := copy(buildInputs, descOutputs)
 
-	ni += copy(inputs[ni:], rawprotoOutputs)
-	ni += copy(inputs[ni:], producerSourceInputs)
+	ni += copy(buildInputs[ni:], rawprotoOutputs)
 	na.vfs.commit(ni)
 
-	inputs = inputs[:ni:ni]
+	buildInputs = buildInputs[:ni:ni]
 
 	node := Node{
 		Platform: e.instance.Platform,
@@ -297,12 +301,12 @@ func (e *EmitContext) emitDescProtoMerge(selfProtodesc, protosrc VFS,
 			Cmd{CmdArgs: na.chunkList(merge), Env: env},
 			Cmd{CmdArgs: na.chunkList(collect), Cwd: bldRootDirVFS, Env: env},
 		),
-		Env:          env,
-		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[collectRawprotoVFS.rel()]),
-		KV:           &protoDescKV,
-		Outputs:      na.vfsList(selfProtodesc, protosrc),
-		DepRefs:      na.noderefs.list(producerRefs...),
-		Resources:    usesPython3,
+		Env:       env,
+		Inputs:    na.inputList(buildInputs, producerSourceInputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[collectRawprotoVFS.rel()]),
+		KV:        &protoDescKV,
+		Outputs:   na.vfsList(selfProtodesc, protosrc),
+		DepRefs:   na.noderefs.list(producerRefs...),
+		Resources: usesPython3,
 	}
 
 	return e.emitNode(node)
@@ -371,12 +375,12 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 			Cmd{CmdArgs: na.chunkList(merge), Env: env},
 			Cmd{CmdArgs: na.chunkList(collect), Cwd: bldRootDirVFS, Env: env},
 		),
-		Env:          env,
-		Inputs:       na.inputList(inputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[mergeProtosrcVFS.rel()]),
-		KV:           &protoDescKV,
-		Outputs:      na.vfsList(protodesc, tar),
-		DepRefs:      deps,
-		Resources:    usesPython3,
+		Env:       env,
+		Inputs:    na.inputList(inputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[mergeProtosrcVFS.rel()]),
+		KV:        &protoDescKV,
+		Outputs:   na.vfsList(protodesc, tar),
+		DepRefs:   deps,
+		Resources: usesPython3,
 	}
 
 	mergeRef := e.emitNode(node)

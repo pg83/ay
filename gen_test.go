@@ -2767,7 +2767,29 @@ func slicesContains(xs []string, want string) bool {
 }
 
 func Gen(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn)) *Graph {
-	return genWithResources(fs, targetDir, hostP, targetP, onWarn, false)
+	g := genWithResources(fs, targetDir, hostP, targetP, onWarn, false)
+
+	for _, node := range g.Graph {
+		if node == nil {
+			continue
+		}
+
+		for _, chunk := range node.Inputs {
+			if len(chunk) == 0 {
+				continue
+			}
+
+			build := chunk[0].isBuild()
+
+			for _, input := range chunk[1:] {
+				if input.isBuild() != build {
+					panic("mixed-root input chunk")
+				}
+			}
+		}
+	}
+
+	return g
 }
 
 func noWarn(Warn) {

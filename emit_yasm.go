@@ -71,15 +71,21 @@ func (e *EmitContext) emitASYasm(srcRel string, srcVFS VFS, in ModuleCCInputs, y
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
 	env := envVarsVCSYasm
+	inputs := na.inputs.alloc(2 + len(in.IncludeView.buckets))[:0]
+
+	inputs = append(inputs, na.vfsList(yasmBinaryVFS), na.vfsList(in.IncludeView.self))
+	inputs = append(inputs, in.IncludeView.buckets...)
+	na.inputs.commit(len(inputs))
+	inputs = inputs[:len(inputs):len(inputs)]
 
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:          env,
-		Inputs:       na.inputList(na.vfsList(yasmBinaryVFS, in.IncludeView.self), in.IncludeView.buckets...),
-		Outputs:      na.vfsList(outVFS),
-		KV:           &asKV,
+		Env:     env,
+		Inputs:  inputs,
+		Outputs: na.vfsList(outVFS),
+		KV:      &asKV,
 	}
 
 	node.ForeignDepRefs = na.refList(yasmLD)

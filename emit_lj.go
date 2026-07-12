@@ -18,7 +18,7 @@ func (e *EmitContext) emitLJReserved(luaSrc, rawOut, compilerBin VFS, compilerLD
 			Env:     env,
 		}),
 		Env:            env,
-		Inputs:         na.inputList(na.vfsList(compilerBin, luaSrc)),
+		Inputs:         na.inputList(na.vfsList(compilerBin), na.vfsList(luaSrc)),
 		KV:             &ljKV,
 		Outputs:        na.vfsList(rawOut),
 		ForeignDepRefs: na.refList(compilerLDRef),

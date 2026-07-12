@@ -68,15 +68,21 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
 		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
+		closureInputs := na.dedupClosureChunks(cv)
+		inputs := na.inputs.alloc(1 + len(closureInputs))
+
+		inputs[0] = na.vfsList(configureFilePyVFS)
+		copy(inputs[1:], closureInputs)
+		na.inputs.commit(len(inputs))
 
 		e.emitReservedNode(Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-			Env:          env,
-			Inputs:       na.inputList(na.vfsList(configureFilePyVFS, cv.self), cv.buckets...),
-			KV:           &cfKV,
-			Outputs:      na.vfsList(outVFS),
-			Resources:    usesPython3,
+			Platform:  instance.Platform,
+			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+			Env:       env,
+			Inputs:    InputChunks(inputs[:len(inputs):len(inputs)]),
+			KV:        &cfKV,
+			Outputs:   na.vfsList(outVFS),
+			Resources: usesPython3,
 		}, cfRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)

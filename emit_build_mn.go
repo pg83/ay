@@ -38,7 +38,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 				cppVFS.any(),
 			)), Env: env}),
 			Env:            env,
-			Inputs:         na.inputList(na.vfsList(archiverBin, buildMnScriptVFS, infoVFS)),
+			Inputs:         na.inputList(na.vfsList(archiverBin), na.vfsList(buildMnScriptVFS), na.vfsList(infoVFS)),
 			KV:             &mnKV,
 			Outputs:        na.vfsList(cppVFS, rodataVFS),
 			ForeignDepRefs: na.refList(archiverRef),

@@ -45,13 +45,11 @@ func (e *EmitContext) emitR5Reserved(
 		Env: env,
 	}
 
-	inputs := na.vfsList(ragel5BinPath, rlgenCdBinPath, srcVFS)
-
 	node := Node{
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(cmd0, cmd1),
 		Env:            env,
-		Inputs:         na.inputList(inputs),
+		Inputs:         na.inputList(na.vfsList(ragel5BinPath, rlgenCdBinPath), na.vfsList(srcVFS)),
 		Outputs:        na.vfsList(tmpVFS, cppVFS),
 		KV:             &r5KV,
 		ForeignDepRefs: na.refList(ragel5LD, rlgenCdLD),

@@ -120,7 +120,7 @@ func nodeTestEmitContext(emit *StreamingEmitter, instance ModuleInstance) *EmitC
 	scanner := &IncludeScanner{codegen: reg}
 
 	return &EmitContext{
-		ctx:      &GenCtx{emit: emit, na: na, target: instance.Platform, scannerTarget: scanner, srcOnly: newIntSet(8)},
+		ctx:      &GenCtx{emit: emit, na: na, target: instance.Platform, scannerTarget: scanner},
 		instance: instance,
 		codegen:  reg,
 	}
@@ -151,7 +151,8 @@ func TestEmitContext_NodeEmissionUsesBuildInputProducers(t *testing.T) {
 				Platform: instance.Platform,
 				KV:       &ccKV,
 				Inputs: e.ctx.na.inputList(
-					e.ctx.na.vfsList(source("mod/source.cpp"), generated),
+					e.ctx.na.vfsList(source("mod/source.cpp")),
+					e.ctx.na.vfsList(generated),
 					e.ctx.na.vfsList(build("mod/unregistered.cpp"), generated),
 				),
 				DepRefs: e.ctx.na.refList(explicitRef),

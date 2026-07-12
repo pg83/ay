@@ -109,24 +109,49 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 	head = head[:len(head):len(head)]
 
 	pe := func() {
-		inputs := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4, srcVFS)
+		inputs := na.inputs.alloc(3 + len(bisonCppSkeletonInputs)*closureBuckets)[:0]
 
-		if preprocessHeader {
-			ext := na.vfs.alloc(len(inputs) + 1 + len(bisonCppSkeletonInputs))[:0]
+		dedupers.with(func(deduper *DeDuper) {
+			tools := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4)
+			source := na.vfsList(srcVFS)
 
-			ext = append(ext, inputs...)
-			ext = append(ext, bisonPreprocessPyVFS)
-			ext = append(ext, bisonCppSkeletonInputs...)
-			na.vfs.commit(len(ext))
+			for _, v := range tools {
+				deduper.add(v.strID())
+			}
 
-			inputs = ext[:len(ext):len(ext)]
+			deduper.add(srcVFS.strID())
+			inputs = append(inputs, tools, source)
+
+			if !preprocessHeader {
+				return
+			}
+
+			scripts := na.vfs.alloc(1 + len(bisonCppSkeletonInputs))[:0]
+
+			scripts = append(scripts, bisonPreprocessPyVFS)
+			scripts = append(scripts, bisonCppSkeletonInputs...)
+			na.vfs.commit(len(scripts))
+			scripts = scripts[:len(scripts):len(scripts)]
+
+			for _, v := range scripts {
+				deduper.add(v.strID())
+			}
+
+			inputs = append(inputs, scripts)
 
 			for _, sk := range bisonCppSkeletonInputs {
 				skCV := scanner.walkClosure(sk, scanCtx, scanDomainCC)
 
-				inputs = na.dedupClosure(inputs, skCV.buckets)
+				for _, bucket := range skCV.buckets {
+					if filtered := na.filterSeen(deduper, bucket); len(filtered) > 0 {
+						inputs = append(inputs, filtered)
+					}
+				}
 			}
-		}
+		})
+
+		na.inputs.commit(len(inputs))
+		inputs = inputs[:len(inputs):len(inputs)]
 
 		cmds := na.cmds.alloc(2)[:0]
 
@@ -146,14 +171,14 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 		cmds = cmds[:len(cmds):len(cmds)]
 
 		e.emitReservedNode(Node{
-			Platform:     instance.Platform,
-			Cmds:         cmds,
-			DepRefs:      na.refList(bisonRef, m4Ref),
-			Env:          env,
-			Inputs:       na.inputList(inputs),
-			Outputs:      na.vfsList(headerVFS, generatedVFS),
-			KV:           &bisonYKV,
-			Resources:    usesPython3,
+			Platform:  instance.Platform,
+			Cmds:      cmds,
+			DepRefs:   na.refList(bisonRef, m4Ref),
+			Env:       env,
+			Inputs:    inputs,
+			Outputs:   na.vfsList(headerVFS, generatedVFS),
+			KV:        &bisonYKV,
+			Resources: usesPython3,
 		}, ycRef)
 	}
 

@@ -19,11 +19,9 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 
 	pe := func() {
 		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
-		block := na.vfs.alloc(2 + cv.len())
+		block := na.vfs.alloc(1 + cv.len())
 		k := 0
 
-		block[k] = toolBin
-		k++
 		block[k] = srcVFS
 		k++
 
@@ -42,7 +40,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 			Platform:       instance.Platform,
 			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolBin.any(), srcVFS.any(), outVFS.any())), Env: env}),
 			Env:            env,
-			Inputs:         na.inputList(block[:k:k]),
+			Inputs:         na.inputList(na.vfsList(toolBin), block[:k:k]),
 			KV:             &htKV,
 			Outputs:        na.vfsList(outVFS),
 			ForeignDepRefs: na.refList(toolRef),

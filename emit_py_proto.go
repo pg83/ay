@@ -22,7 +22,9 @@ type pyPBPending struct {
 	protoRelPath string
 	cmdArgs      ArgChunks
 	protoCwd     VFS
-	inputs       []VFS
+	toolInputs   []VFS
+	sourceInputs []VFS
+	protoInput   VFS
 	outputs      []VFS
 	extOut       []KVExt
 	toolRefs     []NodeRef
@@ -36,15 +38,21 @@ func (p *pyPBPending) emitPending() {
 
 	buckets := s.scanner.walkClosure(source(s.protoRelPath), s.scanCtx, scanDomainProto).buckets
 	na := s.ctx.na
+	inputChunks := na.inputs.alloc(3 + len(buckets))[:0]
+
+	inputChunks = append(inputChunks, s.toolInputs, s.sourceInputs, na.vfsList(s.protoInput))
+	inputChunks = append(inputChunks, buckets...)
+	na.inputs.commit(len(inputChunks))
+
 	node := Node{
-		Platform:     s.instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: s.cmdArgs, Cwd: s.protoCwd, Env: envVarsVCS}),
-		Env:          envVarsVCS,
-		Inputs:       na.inputList(s.inputs, buckets...),
-		Outputs:      s.outputs,
-		KV:           &pbKV,
-		KVExts:       s.extOut,
-		Resources:    usesPython3,
+		Platform:  s.instance.Platform,
+		Cmds:      na.cmdList(Cmd{CmdArgs: s.cmdArgs, Cwd: s.protoCwd, Env: envVarsVCS}),
+		Env:       envVarsVCS,
+		Inputs:    InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]),
+		Outputs:   s.outputs,
+		KV:        &pbKV,
+		KVExts:    s.extOut,
+		Resources: usesPython3,
 	}
 
 	if len(s.toolRefs) > 0 {
@@ -348,22 +356,30 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	}
 
 	transitive := e.scanner.walkClosure(source(protoRelPath), scanCtx, scanDomainProto)
-	inputs := na.vfs.alloc(5 + len(producerSourceInputs))[:0]
-
-	inputs = append(inputs, protocBinary, pbPyWrapperVFS, protoSrcVFS)
-	inputs = append(inputs, producerSourceInputs...)
+	toolInputs := na.vfs.alloc(3)[:0]
+	toolInputs = append(toolInputs, protocBinary)
 
 	if d.grpc {
-		inputs = append(inputs, pe.grpcPyBinary)
+		toolInputs = append(toolInputs, pe.grpcPyBinary)
 	}
 
 	if !d.noMypy {
-		inputs = append(inputs, pe.mypyBinary)
+		toolInputs = append(toolInputs, pe.mypyBinary)
 	}
 
-	na.vfs.commit(len(inputs))
+	na.vfs.commit(len(toolInputs))
+	toolInputs = toolInputs[:len(toolInputs):len(toolInputs)]
+	sourceInputsHead := na.vfs.alloc(2 + len(producerSourceInputs))[:0]
 
-	inputs = inputs[:len(inputs):len(inputs)]
+	sourceInputsHead = append(sourceInputsHead, pbPyWrapperVFS)
+	sourceInputsHead = append(sourceInputsHead, producerSourceInputs...)
+
+	if !generatedProto {
+		sourceInputsHead = append(sourceInputsHead, protoSrcVFS)
+	}
+
+	na.vfs.commit(len(sourceInputsHead))
+	sourceInputsHead = sourceInputsHead[:len(sourceInputsHead):len(sourceInputsHead)]
 
 	protoBaseName := filepath.Base(protoBase)
 	extOut := na.exts.alloc(len(outputs))[:0]
@@ -395,12 +411,13 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	*pending = pyPBPending{
 		emit: e, ctx: ctx, instance: instance, scanner: e.scanner, scanCtx: scanCtx,
 		protoRelPath: protoRelPath, cmdArgs: cmdArgs, protoCwd: protoCwd,
-		inputs: inputs, outputs: outputs, extOut: extOut,
+		toolInputs: toolInputs, sourceInputs: sourceInputsHead, protoInput: protoSrcVFS,
+		outputs: outputs, extOut: extOut,
 		toolRefs: toolRefs, pyPBRef: pyPBRef,
 	}
 	pyPBPE := na.pendingEmitter(pending)
 
-	sourceInputs := na.dedupSourceVFS(inputs, transitive.buckets)
+	sourceInputs := na.dedupSourceVFS(sourceInputsHead, transitive.buckets)
 
 	e.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})
 

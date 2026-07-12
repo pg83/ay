@@ -38,12 +38,20 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath.string())
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
+	inSources := make([]VFS, 0, len(stmt.INFiles))
+	inBuilds := make([]VFS, 0, len(stmt.INFiles))
 
 	for _, f := range stmt.INFiles {
 		vfs := e.runProgramInputVFS(f.string())
 
 		inVFSByToken[f.string()] = vfs
 		inVFSs = append(inVFSs, vfs)
+
+		if vfs.isBuild() {
+			inBuilds = append(inBuilds, vfs)
+		} else {
+			inSources = append(inSources, vfs)
+		}
 	}
 
 	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
@@ -87,18 +95,13 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		}
 	}
 
-	pySourceInputs := ctx.na.vfs.alloc(1 + len(inVFSs) + len(pyGeneratedFromSources))[:0]
+	pySourceInputs := ctx.na.vfs.alloc(1 + len(inSources) + len(pyGeneratedFromSources))[:0]
 
 	if scriptVFS.isSource() {
 		pySourceInputs = append(pySourceInputs, scriptVFS)
 	}
 
-	for _, v := range inVFSs {
-		if v.isSource() {
-			pySourceInputs = append(pySourceInputs, v)
-		}
-	}
-
+	pySourceInputs = append(pySourceInputs, inSources...)
 	pySourceInputs = append(pySourceInputs, pyGeneratedFromSources...)
 	ctx.na.vfs.commit(len(pySourceInputs))
 
@@ -122,6 +125,29 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		kv = &luaRunKV
 		resources = nil
 	}
+
+	directSources := ctx.na.vfs.alloc(1 + len(inSources))[:0]
+
+	if scriptVFS.isSource() {
+		directSources = append(directSources, scriptVFS)
+	}
+
+	directSources = append(directSources, inSources...)
+	ctx.na.vfs.commit(len(directSources))
+	directSources = directSources[:len(directSources):len(directSources)]
+	directBuilds := ctx.na.vfs.alloc(2 + len(inBuilds))[:0]
+
+	if interpInput != nil {
+		directBuilds = append(directBuilds, *interpInput)
+	}
+
+	if scriptVFS.isBuild() {
+		directBuilds = append(directBuilds, scriptVFS)
+	}
+
+	directBuilds = append(directBuilds, inBuilds...)
+	ctx.na.vfs.commit(len(directBuilds))
+	directBuilds = directBuilds[:len(directBuilds):len(directBuilds)]
 
 	outIncludeVFSs := make([]VFS, 0, len(stmt.OutputIncludes))
 
@@ -147,7 +173,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	pe := func() {
 		inputClosure := pyInputClosure(snap, stmt)
 
-		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, inputClosure, pyRef, interp, interpInput, toolRefs, kv, resources)
+		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, directSources, directBuilds, inputClosure, pyRef, interp, toolRefs, kv, resources)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 
@@ -186,18 +212,18 @@ type pyRunSnap struct {
 	outIncludeVFSs []VFS
 }
 
-func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) []VFS {
+func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) InputChunks {
 	ctx, instance := s.ctx, s.instance
 	na := ctx.na
 
-	var groups [][][]VFS
-	var selves []VFS
+	var closures []Closure
 
 	walkOne := func(rel string) {
 		buildRootPath := copyFileOutputVFS(instance.Path.relString(), rel)
 		cv := s.scanner.walkClosure(buildRootPath, s.scanCtx, scanDomainCC)
 
-		groups = append(groups, cv.buckets)
+		cv.self = 0
+		closures = append(closures, cv)
 	}
 
 	hasCCShard, _ := splitCodegenDetect(stmt)
@@ -206,8 +232,7 @@ func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) []VFS {
 		for i := range stmt.INFiles {
 			cv := s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC)
 
-			selves = append(selves, cv.self)
-			groups = append(groups, cv.buckets)
+			closures = append(closures, cv)
 		}
 	} else {
 		for _, f := range stmt.OUTFiles {
@@ -229,12 +254,11 @@ func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) []VFS {
 		for i := range stmt.OutputIncludes {
 			cv := s.scanner.walkClosure(s.outIncludeVFSs[i], s.scanCtx, scanDomainCC)
 
-			selves = append(selves, cv.self)
-			groups = append(groups, cv.buckets)
+			closures = append(closures, cv)
 		}
 	}
 
-	return na.dedupClosure(selves, groups...)
+	return na.dedupClosureChunks(closures...)
 }
 
 func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
@@ -387,10 +411,11 @@ func (e *EmitContext) emitPYRun(
 	inVFSByToken map[string]VFS,
 	outVFSByToken map[string]VFS,
 	stdoutVFS *VFS,
-	inputClosure []VFS,
+	directSources []VFS,
+	directBuilds []VFS,
+	inputClosure InputChunks,
 	id NodeRef,
 	interp ANY,
-	interpInput *VFS,
 	toolRefs []NodeRef,
 	kv *KV,
 	resources []STR,
@@ -454,23 +479,29 @@ func (e *EmitContext) emitPYRun(
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
-	head := na.vfs.alloc(2 + len(stmt.INFiles))[:0]
+	nInputs := len(inputClosure)
 
-	if interpInput != nil {
-		head = append(head, *interpInput)
+	if len(directSources) > 0 {
+		nInputs++
 	}
 
-	head = append(head, scriptVFS)
-
-	for _, f := range stmt.INFiles {
-		head = append(head, inVFSByToken[f.string()])
+	if len(directBuilds) > 0 {
+		nInputs++
 	}
 
-	na.vfs.commit(len(head))
+	inputs := na.inputs.alloc(nInputs)[:0]
 
-	head = head[:len(head):len(head)]
+	if len(directSources) > 0 {
+		inputs = append(inputs, directSources)
+	}
 
-	inputs := na.inputList(head, inputClosure)
+	if len(directBuilds) > 0 {
+		inputs = append(inputs, directBuilds)
+	}
+
+	inputs = append(inputs, inputClosure...)
+	na.inputs.commit(len(inputs))
+	inputChunks := InputChunks(inputs[:len(inputs):len(inputs)])
 	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
 
 	var stdoutPath VFS
@@ -506,7 +537,7 @@ func (e *EmitContext) emitPYRun(
 		Platform:       e.instance.Platform,
 		Cmds:           na.cmdList(cmd),
 		Env:            env,
-		Inputs:         inputs,
+		Inputs:         inputChunks,
 		KV:             kv,
 		Outputs:        outputs,
 		ForeignDepRefs: na.noderefs.list(toolRefs...),

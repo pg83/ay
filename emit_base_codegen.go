@@ -52,7 +52,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 			Platform:       instance.Platform,
 			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 			Env:            env,
-			Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
+			Inputs:         na.inputList(na.vfsList(toolBin), na.vfsList(inputIn)),
 			Outputs:        na.vfsList(prefixCpp, prefixH),
 			KV:             &baseCodegenKV,
 			ForeignDepRefs: na.refList(toolLDRef),

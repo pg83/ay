@@ -168,7 +168,7 @@ func (e *EmitContext) emitEN(
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:            env,
-		Inputs:         na.inputList(na.vfsList(enumParserBin, headerInput)),
+		Inputs:         na.inputList(na.vfsList(enumParserBin), na.vfsList(headerInput)),
 		KV:             &enKV,
 		Outputs:        outputs,
 		ForeignDepRefs: foreignDepRefs,

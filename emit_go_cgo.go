@@ -211,13 +211,13 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 		args := na.anyList(srcVFS.any(), dstVFS.any())
 
 		node := Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(goCgoCopyCmdHead, args), Env: goVcsEnv}),
-			Env:          goVcsEnv,
-			Inputs:       na.inputList(block[:k:k]),
-			KV:           &cpKV,
-			Outputs:      na.vfsList(dstVFS),
-			Resources:    usesPython3,
+			Platform:  instance.Platform,
+			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(goCgoCopyCmdHead, args), Env: goVcsEnv}),
+			Env:       goVcsEnv,
+			Inputs:    na.inputList(block[:k:k]),
+			KV:        &cpKV,
+			Outputs:   na.vfsList(dstVFS),
+			Resources: usesPython3,
 		}
 
 		e.emitReservedNode(node, ref)
@@ -365,11 +365,11 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 			cflagsStr,
 			srcsBlock,
 		), Env: env, Cwd: srcRootDirVFS}),
-		Env:          env,
-		Inputs:       na.inputList(inputs[:ni:ni]),
-		KV:           &goToolKV,
-		Outputs:      outputs[:no:no],
-		Resources:    goToolResources(na, e.peers.ResourceGlobals),
+		Env:       env,
+		Inputs:    na.inputList(inputs[:ni:ni]),
+		KV:        &goToolKV,
+		Outputs:   outputs[:no:no],
+		Resources: goToolResources(na, e.peers.ResourceGlobals),
 	}
 
 	ref := e.emitNode(node)
@@ -513,7 +513,6 @@ func (e *EmitContext) flushGoCgo2() {
 		copyFsScripts = nil
 	}
 
-	inputCap := len(linkOScripts) + len(copyFsScripts) + 4 + 1 + nObjs
 	srcMark := len(e.prodVFS)
 	cvs := e.cvScratch[:0]
 
@@ -523,7 +522,6 @@ func (e *EmitContext) flushGoCgo2() {
 
 		e.prodVFS = append(e.prodVFS, src)
 		cvs = append(cvs, cv)
-		inputCap += 1 + cv.len()
 	}
 
 	for _, f := range append(cFiles, sFiles...) {
@@ -532,15 +530,20 @@ func (e *EmitContext) flushGoCgo2() {
 
 		e.prodVFS = append(e.prodVFS, src)
 		cvs = append(cvs, cv)
-		inputCap += 1 + cv.len()
 	}
 
 	e.cvScratch = retainMaxLen(e.cvScratch, cvs)
 
 	resolvedSrcs := e.prodVFSTake(srcMark)
-	inputs := na.vfs.alloc(inputCap)
-	ni := 0
-	pushIn := func(v VFS) { inputs[ni] = v; ni++ }
+	sourceInputs := vfsScratches.get()
+	buildInputs := vfsScratches.get()
+	pushIn := func(v VFS) {
+		if v.isBuild() {
+			buildInputs = append(buildInputs, v)
+		} else {
+			sourceInputs = append(sourceInputs, v)
+		}
+	}
 
 	for _, s := range linkOScripts {
 		pushIn(s)
@@ -557,7 +560,11 @@ func (e *EmitContext) flushGoCgo2() {
 	pushIn(mainC)
 
 	dedupers.with(func(deduper *DeDuper) {
-		for _, v := range inputs[:ni] {
+		for _, v := range sourceInputs {
+			deduper.add(v.strID())
+		}
+
+		for _, v := range buildInputs {
 			deduper.add(v.strID())
 		}
 
@@ -600,9 +607,12 @@ func (e *EmitContext) flushGoCgo2() {
 		for _, o := range objOrder[:ko] {
 			pushIn(o)
 		}
-
-		na.vfs.commit(ni)
 	})
+	sourceChunk := na.vfsList(sourceInputs...)
+	buildChunk := na.vfsList(buildInputs...)
+
+	vfsScratches.put(sourceInputs)
+	vfsScratches.put(buildInputs)
 
 	objArgs := na.anys.alloc(1 + nObjs + len(d.cgoLdflags))
 	kd := 0
@@ -662,12 +672,12 @@ func (e *EmitContext) flushGoCgo2() {
 			), Env: goVcsEnv},
 			Cmd{CmdArgs: na.chunkList(cmd2Args), Env: goEnv},
 		),
-		Env:          goEnv,
-		Inputs:       na.inputList(inputs[:ni:ni]),
-		KV:           &goToolKV,
-		Outputs:      na.vfsList(mainO, cgoO, importGo),
-		DepRefs:      deps[:nd],
-		Resources:    goToolResources(na, e.peers.ResourceGlobals),
+		Env:       goEnv,
+		Inputs:    na.inputList(sourceChunk, buildChunk),
+		KV:        &goToolKV,
+		Outputs:   na.vfsList(mainO, cgoO, importGo),
+		DepRefs:   deps[:nd],
+		Resources: goToolResources(na, e.peers.ResourceGlobals),
 	}
 
 	ref := e.emitNode(node)

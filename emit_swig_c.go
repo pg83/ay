@@ -44,7 +44,13 @@ func (e *EmitContext) emitSwigC() {
 		cOutVFS := build(instance.Path.relString(), "/", cOutRel)
 		pyOutVFS := build(instance.Path.relString(), "/", pyOutRel)
 		cv := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainSwig)
-		inputs := na.inputList(na.vfsList(bldContribToolsSwigSwig, srcVFS), cv.buckets...)
+		inputs := na.inputs.alloc(2 + len(cv.buckets))
+
+		inputs[0] = na.vfsList(bldContribToolsSwigSwig)
+		inputs[1] = na.vfsList(srcVFS)
+		copy(inputs[2:], cv.buckets)
+		na.inputs.commit(len(inputs))
+		inputChunks := InputChunks(inputs[:len(inputs):len(inputs)])
 		swigClosure := collectBucketVFS(ctx.na, cv.buckets, func(VFS) bool { return true })
 
 		swRef := ctx.emit.reserve()
@@ -62,11 +68,11 @@ func (e *EmitContext) emitSwigC() {
 				Platform: instance.Platform,
 				Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 					Env: envVarsVCS}),
-				DepRefs:      na.refList(swigRef),
-				Env:          envVarsVCS,
-				Inputs:       inputs,
-				Outputs:      na.vfsList(cOutVFS, pyOutVFS),
-				KV:           &swigCKV,
+				DepRefs: na.refList(swigRef),
+				Env:     envVarsVCS,
+				Inputs:  inputChunks,
+				Outputs: na.vfsList(cOutVFS, pyOutVFS),
+				KV:      &swigCKV,
 			}, swRef)
 		}
 		pending := e.ctx.na.pendingEmit(pe)
@@ -80,16 +86,19 @@ func (e *EmitContext) emitSwigC() {
 			OnUse:          pending,
 		})
 
-		swigSourceInputs := na.vfs.alloc(2 + len(swigClosure))
+		swigSourceInputs := na.vfs.alloc(1 + len(swigClosure))[:0]
 
-		swigSourceInputs[0] = cOutVFS
-		swigSourceInputs[1] = srcVFS
+		swigSourceInputs = append(swigSourceInputs, srcVFS)
 
-		swigN := 2 + copy(swigSourceInputs[2:], swigClosure)
+		for _, bucket := range cv.buckets {
+			if bucket[0].isSource() {
+				swigSourceInputs = append(swigSourceInputs, bucket...)
+			}
+		}
 
-		na.vfs.commit(swigN)
+		na.vfs.commit(len(swigSourceInputs))
 
-		swigSourceInputs = swigSourceInputs[:swigN:swigN]
+		swigSourceInputs = swigSourceInputs[:len(swigSourceInputs):len(swigSourceInputs)]
 
 		e.register(GeneratedFileInfo{
 			OutputPath:    pyOutVFS,
@@ -102,9 +111,10 @@ func (e *EmitContext) emitSwigC() {
 		e.enqueueSrc(SrcMeta{
 			Source: pyOutVFS.any(), Prio: stmtPrioDefault,
 			PyMeta: e.addPyMeta(PySourceMeta{
-				Module: internStr(generatedPyResourceKey(instance.Path.relString(), d, pyOutRel)),
-				Token:  internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.relString()).any(),
-				Kind:   pySourceGenerated,
+				Module:      internStr(generatedPyResourceKey(instance.Path.relString(), d, pyOutRel)),
+				Token:       internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.relString()).any(),
+				ExtraInputs: na.vfsList(cOutVFS),
+				Kind:        pySourceGenerated,
 			}),
 		})
 

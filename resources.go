@@ -412,7 +412,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		pyRef, pyPath = pythonToolchainSbomComponent(ctx, instance.Platform)
 	}
 
-	inputs := na.inputs.alloc(3)[:0]
+	inputs := na.inputs.alloc(4)[:0]
 	depRefs := na.noderefs.alloc(3)[:0]
 
 	inputs = append(inputs, ctx.scripts[copyFsToolsVFS.rel()])
@@ -424,7 +424,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 	}
 
 	if ownSbomRef != nil && instance.Platform.BuildRelease {
-		inputs = append(inputs, na.vfsList(*ownSbomPath, source(sbomGenScriptRel)))
+		inputs = append(inputs, na.vfsList(*ownSbomPath), na.vfsList(source(sbomGenScriptRel)))
 		depRefs = append(depRefs, *ownSbomRef)
 	}
 
@@ -443,12 +443,12 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 			argCopy.any(),
 			srcVFS.any(),
 			dst.any())), Env: env}),
-		Env:          env,
-		Inputs:       inputsChunks,
-		KV:           &resourcesKV,
-		Outputs:      na.vfsList(dst),
-		DepRefs:      depRefs,
-		Resources:    usesPython3,
+		Env:       env,
+		Inputs:    inputsChunks,
+		KV:        &resourcesKV,
+		Outputs:   na.vfsList(dst),
+		DepRefs:   depRefs,
+		Resources: usesPython3,
 	}
 
 	ref := e.emitNode(node)

@@ -36,16 +36,20 @@ func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInp
 	toolName := path.Base(strings.TrimSuffix(srcRel, ".rodata"))
 	pythonEnv := envVarsVCS
 	yasmEnv := envVarsVCSYasm
+	inputs := na.inputs.alloc(3 + len(extraInputs.buckets))[:0]
+
+	inputs = append(inputs, na.vfsList(yasmBinaryVFS), na.vfsList(rodataScriptVFS), na.vfsList(srcVFS))
+	inputs = append(inputs, extraInputs.buckets...)
+	na.inputs.commit(len(inputs))
+	inputs = inputs[:len(inputs):len(inputs)]
 
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Python3.any()), rodataConstArgs, na.anyList(internStr(toolName).any(), srcVFS.any(), asmVFS.any())),
 			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.anyList(argD.any(), internV("_", string(instance.Platform.ISA), "_").any()), rodataYasmConstArgs, na.anyList(outVFS.any(), asmVFS.any())),
 			Env: yasmEnv}),
-		Env: yasmEnv,
-		Inputs: na.inputList(na.vfsList(yasmBinaryVFS,
-			rodataScriptVFS,
-			srcVFS), extraInputs.buckets...),
+		Env:            yasmEnv,
+		Inputs:         inputs,
 		KV:             &rodataKV,
 		Outputs:        na.vfsList(asmVFS, outVFS),
 		ForeignDepRefs: na.refList(yasmLD),

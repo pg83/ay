@@ -392,13 +392,13 @@ func (e *EmitContext) flushGoSrcs() {
 	e.goRes.AsmInclSrcs = e.goAsmIncludeSrcs()
 
 	node := Node{
-		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(goSymabisHead, e.goInclSplitArgs(), goSymabisDefs, tail[:nt:nt]), Env: goVcsEnv}),
-		Env:          goVcsEnv,
-		Inputs:       na.inputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs),
-		KV:           &goToolKV,
-		Outputs:      na.vfsList(out),
-		Resources:    goToolResources(na, e.peers.ResourceGlobals),
+		Platform:  instance.Platform,
+		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(goSymabisHead, e.goInclSplitArgs(), goSymabisDefs, tail[:nt:nt]), Env: goVcsEnv}),
+		Env:       goVcsEnv,
+		Inputs:    na.inputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs),
+		KV:        &goToolKV,
+		Outputs:   na.vfsList(out),
+		Resources: goToolResources(na, e.peers.ResourceGlobals),
 	}
 
 	e.goRes.SymabisRef = e.emitNode(node)
@@ -692,12 +692,20 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	srcCap := 1 + len(objOuts) + len(goRes.GoFiles) + len(goRes.AsmFiles) + len(d.cgoSrcs)
 	srcArgs := na.anys.alloc(srcCap)
 	srcInputs := na.vfs.alloc(srcCap)
+	ownSources := make([]VFS, 0, srcCap)
+	ownBuilds := make([]VFS, 0, srcCap)
 	nsrc := 0
 
 	addSrc := func(p VFS) {
 		srcArgs[nsrc] = p.any()
 		srcInputs[nsrc] = p
 		nsrc++
+
+		if p.isBuild() {
+			ownBuilds = append(ownBuilds, p)
+		} else {
+			ownSources = append(ownSources, p)
+		}
 	}
 
 	if goRes.SymabisRef != 0 {
@@ -771,9 +779,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	for _, f := range d.cgoSrcs {
 		cgoSrc := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
 
-		srcArgs[nsrc] = cgoSrc.any()
-		srcInputs[nsrc] = cgoSrc
-		nsrc++
+		addSrc(cgoSrc)
 	}
 
 	na.anys.commit(nsrc)
@@ -864,10 +870,12 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	}
 
 	srcClosure := goPeerSrcClosure(ctx, resolved, ownInputs, srcClosureExtras)
+	ownSourceInputs := na.vfsList(ownSources...)
+	ownBuildInputs := na.vfsList(ownBuilds...)
 	sbomRefs, sbomPaths := e.goToolchainSboms(false)
 	var mergedSbomRefs []NodeRef
 	var merged int
-	var extraInputs []VFS
+	var extraSources, extraBuilds []VFS
 
 	dedupers.with(func(deduper *DeDuper) {
 		mergedSbomRefs = na.noderefs.alloc(len(peerSbomRefs) + len(sbomRefs) + 1)
@@ -920,36 +928,34 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			deduper.add(p.strID())
 		}
 
-		extraBlock := na.vfs.alloc(len(srcClosure) + 1 + merged + 1)
-		nx := 0
+		extraSourceBlock := na.vfs.alloc(len(srcClosure) + 1)[:0]
 
 		for _, p := range srcClosure {
 			if deduper.add(p.strID()) {
-				extraBlock[nx] = p
-				nx++
+				extraSourceBlock = append(extraSourceBlock, p)
 			}
 		}
 
+		if hasGoSbom && deduper.add(source(sbomGenScriptRel).strID()) {
+			extraSourceBlock = append(extraSourceBlock, source(sbomGenScriptRel))
+		}
+
+		na.vfs.commit(len(extraSourceBlock))
+		extraSources = extraSourceBlock[:len(extraSourceBlock):len(extraSourceBlock)]
+		extraBuildBlock := na.vfs.alloc(1 + merged)[:0]
+
 		if len(d.cgoSrcs) > 0 {
-			extraBlock[nx] = build(dir, "/_cgo_main.c", instance.Platform.objectSuffix())
-			nx++
+			extraBuildBlock = append(extraBuildBlock, build(dir, "/_cgo_main.c", instance.Platform.objectSuffix()))
 		}
 
 		for _, p := range mergedSbomPaths[:merged] {
-			extraBlock[nx] = p
-			nx++
+			extraBuildBlock = append(extraBuildBlock, p)
 		}
 
-		if hasGoSbom {
-			extraBlock[nx] = source(sbomGenScriptRel)
-			nx++
-		}
-
-		na.vfs.commit(nx)
-
-		extraInputs = extraBlock[:nx:nx]
+		na.vfs.commit(len(extraBuildBlock))
+		extraBuilds = extraBuildBlock[:len(extraBuildBlock):len(extraBuildBlock)]
 	})
-	inputs := na.inputList(ownInputs, goToolScriptInputsChunk, peerArchivePaths, extraInputs)
+	inputs := na.inputList(ownSourceInputs, ownBuildInputs, goToolScriptInputsChunk, peerArchivePaths, extraSources, extraBuilds)
 	depBlock := na.noderefs.alloc(1 + len(objRefs) + len(peerArchiveRefs) + merged)
 	ndep := 0
 
@@ -979,12 +985,12 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			tail[:nt:nt],
 			goToolCmdEnd,
 		), Env: env}),
-		Env:          env,
-		Inputs:       inputs,
-		KV:           &goKV,
-		Outputs:      na.vfsList(outPath, build(dir, "/", outName, ".a.vet.out"), build(dir, "/", outName, ".a.vet.txt")),
-		DepRefs:      depBlock[:ndep],
-		Resources:    goToolResources(na, resourceGlobals),
+		Env:       env,
+		Inputs:    inputs,
+		KV:        &goKV,
+		Outputs:   na.vfsList(outPath, build(dir, "/", outName, ".a.vet.out"), build(dir, "/", outName, ".a.vet.txt")),
+		DepRefs:   depBlock[:ndep],
+		Resources: goToolResources(na, resourceGlobals),
 	}
 
 	return e.emitNode(node), outPath, srcClosure
@@ -1054,28 +1060,13 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 	na.anys.commit(nt)
 
 	sbomEmbed := instance.Platform.BuildRelease && sbomActive(ctx, instance) && len(peerSbomPaths) > 0
-	extraCap := 2
+	extraSources := na.vfsList(ldSvnInterfaceVFS, ldSvnversionHVFS)
+	var extraBuilds, extraTailSources []VFS
 
 	if sbomEmbed {
-		extraCap += len(peerSbomPaths) + 1
+		extraBuilds = na.vfsList(peerSbomPaths...)
+		extraTailSources = na.vfsList(linkSbomScriptVFS)
 	}
-
-	extraBlock := na.vfs.alloc(extraCap)
-
-	extraBlock[0] = ldSvnInterfaceVFS
-	extraBlock[1] = ldSvnversionHVFS
-
-	nx := 2
-
-	if sbomEmbed {
-		nx += copy(extraBlock[nx:], peerSbomPaths)
-		extraBlock[nx] = linkSbomScriptVFS
-		nx++
-	}
-
-	na.vfs.commit(nx)
-
-	extraInputs := extraBlock[:nx:nx]
 
 	inputs := na.inputList(
 		na.vfsList(goRes.GoFiles...),
@@ -1083,7 +1074,9 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		ctx.scripts[ldVcsInfoVFS.rel()],
 		ctx.scripts[ldFsToolsVFS.rel()],
 		peerArchivePaths,
-		extraInputs,
+		extraSources,
+		extraBuilds,
+		extraTailSources,
 	)
 
 	deps := na.noderefs.alloc(len(peerArchiveRefs) + len(peerSbomRefs) + 1)
@@ -1146,14 +1139,14 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 	na.cmds.commit(kc)
 
 	node := Node{
-		Platform:     instance.Platform,
-		Cmds:         cmds[:kc:kc],
-		Env:          env,
-		Inputs:       inputs,
-		KV:           &goLdKV,
-		Outputs:      na.vfsList(outPath, build(dir, "/", outName, ".vet.txt")),
-		DepRefs:      deps[:k:k],
-		Resources:    goToolResources(na, resourceGlobals),
+		Platform:  instance.Platform,
+		Cmds:      cmds[:kc:kc],
+		Env:       env,
+		Inputs:    inputs,
+		KV:        &goLdKV,
+		Outputs:   na.vfsList(outPath, build(dir, "/", outName, ".vet.txt")),
+		DepRefs:   deps[:k:k],
+		Resources: goToolResources(na, resourceGlobals),
 	}
 
 	return e.emitNode(node), outPath

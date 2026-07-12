@@ -278,6 +278,43 @@ func (na *NodeArenas) dedupClosure(extra []VFS, groups ...[][]VFS) []VFS {
 	return out[:len(out):len(out)]
 }
 
+func (na *NodeArenas) dedupClosureChunks(closures ...Closure) InputChunks {
+	bound := 0
+
+	for _, cl := range closures {
+		bound += len(cl.buckets)
+
+		if cl.self != 0 {
+			bound++
+		}
+	}
+
+	var result InputChunks
+
+	dedupers.with(func(deduper *DeDuper) {
+		chunks := na.inputs.alloc(bound)[:0]
+
+		for _, cl := range closures {
+			if cl.self != 0 && deduper.add(cl.self.strID()) {
+				chunks = append(chunks, na.vfsList(cl.self))
+			}
+
+			for _, bucket := range cl.buckets {
+				bucket = na.filterSeen(deduper, bucket)
+
+				if len(bucket) > 0 {
+					chunks = append(chunks, bucket)
+				}
+			}
+		}
+
+		na.inputs.commit(len(chunks))
+		result = InputChunks(chunks[:len(chunks):len(chunks)])
+	})
+
+	return result
+}
+
 func (na *NodeArenas) dedupSourceVFS(inputs []VFS, extra [][]VFS) []VFS {
 	bound := len(inputs)
 
