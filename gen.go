@@ -232,7 +232,6 @@ type GenCtx struct {
 	autoincludeIdx  *AutoincludeIndex
 	parsedFiles     map[string]*MakeFile
 	prodOuts        IdValueMap
-	srcOnly         *IntSet
 	py3NoStripDebug bool
 	goEnvMemo       map[[2]STR]EnvVars
 }
@@ -282,7 +281,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 
 		autoincludeIdx: loadAutoincludeIndex(fs),
 		parsedFiles:    map[string]*MakeFile{},
-		srcOnly:        newIntSet(1 << 12),
 
 		py3NoStripDebug: confPy3NoStripOnDebug(fs),
 	}

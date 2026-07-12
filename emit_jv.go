@@ -102,12 +102,12 @@ func (e *EmitContext) emitJVNodeReserved(cmdArgs []ANY, inputs InputChunks, outp
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyChunkAny(cmdArgs)),
 			Env: env,
 			Cwd: cwdVFS(cwd)}),
-		Env:          env,
-		Inputs:       inputs,
-		KV:           &jvKV,
-		Outputs:      na.vfsList(outputs...),
-		DepRefs:      na.noderefs.list(depRefs...),
-		Resources:    usesPython3JDK17,
+		Env:       env,
+		Inputs:    inputs,
+		KV:        &jvKV,
+		Outputs:   na.vfsList(outputs...),
+		DepRefs:   na.noderefs.list(depRefs...),
+		Resources: usesPython3JDK17,
 	}
 
 	e.emitReservedNode(node, id)
@@ -234,7 +234,8 @@ func (e *EmitContext) emitJVSplitReserved(
 func (e *EmitContext) emitJVGeneralReserved(
 	jarVFS VFS,
 	args []string,
-	inputs []VFS,
+	inputSources []VFS,
+	inputBuilds []VFS,
 	outputs []VFS,
 	cwd string,
 	moduleTag STR,
@@ -254,7 +255,7 @@ func (e *EmitContext) emitJVGeneralReserved(
 
 	cmdArgs = appendInternAnys(cmdArgs, args)
 
-	jvInputs := na.inputList(na.vfsList(inputs...), na.vfsList(stdout2stderrVFS, jarVFS))
+	jvInputs := na.inputList(inputSources, inputBuilds, na.vfsList(stdout2stderrVFS, jarVFS))
 
 	e.emitJVNodeReserved(cmdArgs, jvInputs, outputs, cwd, nil, moduleTag, id)
 }

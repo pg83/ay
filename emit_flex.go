@@ -86,7 +86,7 @@ func (e *EmitContext) emitFlexLX(flexRef NodeRef, flexBin VFS, srcVFS, outVFS VF
 		Platform:       e.instance.Platform,
 		Cmds:           na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 		Env:            env,
-		Inputs:         na.inputList(na.vfsList(flexBin, srcVFS), closure),
+		Inputs:         na.inputList(na.vfsList(flexBin), na.vfsList(srcVFS), closure),
 		Outputs:        na.vfsList(outVFS),
 		KV:             &flexKV,
 		ForeignDepRefs: na.refList(flexRef),

@@ -805,6 +805,8 @@ func (e *EmitContext) emitPB(
 		inputs = append(inputs, spec.toolBinary)
 	}
 
+	toolEnd := len(inputs)
+
 	inputs = append(inputs, pbWrapperVFS)
 	inputs = append(inputs, srcVFS)
 	na.vfs.commit(len(inputs))
@@ -840,9 +842,17 @@ func (e *EmitContext) emitPB(
 		protocCwd = "$(B)"
 	}
 
-	pbInputChunks := na.inputs.alloc(2 + len(transitiveProtoImports.buckets))[:0]
+	pbInputChunks := na.inputs.alloc(4 + len(transitiveProtoImports.buckets))[:0]
 
-	pbInputChunks = append(pbInputChunks, inputs, producerSourceInputs)
+	pbInputChunks = append(pbInputChunks, inputs[:toolEnd:toolEnd])
+
+	if srcVFS.isBuild() {
+		pbInputChunks = append(pbInputChunks, inputs[toolEnd:toolEnd+1:toolEnd+1], inputs[toolEnd+1:])
+	} else {
+		pbInputChunks = append(pbInputChunks, inputs[toolEnd:])
+	}
+
+	pbInputChunks = append(pbInputChunks, producerSourceInputs)
 	pbInputChunks = append(pbInputChunks, transitiveProtoImports.buckets...)
 	na.inputs.commit(len(pbInputChunks))
 

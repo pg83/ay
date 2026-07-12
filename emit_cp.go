@@ -45,12 +45,12 @@ func emitJVCPG4(
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:          env,
-		Inputs:       inputs,
-		KV:           &cpKV,
-		Outputs:      na.vfsList(dst),
-		DepRefs:      na.refList(jvRef),
-		Resources:    usesPython3,
+		Env:       env,
+		Inputs:    inputs,
+		KV:        &cpKV,
+		Outputs:   na.vfsList(dst),
+		DepRefs:   na.refList(jvRef),
+		Resources: usesPython3,
 	}
 
 	emit.emitReservedNode(node, id)
@@ -88,9 +88,7 @@ func composeCPNode(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef,
 	)
 
 	env := envVarsVCS
-	ownInputs := na.vfs.alloc(1 + len(extraInputs))[:0]
-
-	ownInputs = append(ownInputs, src)
+	ownInputs := na.vfs.alloc(len(extraInputs))[:0]
 
 	for _, v := range extraInputs {
 		if v == src || v == dst {
@@ -104,17 +102,17 @@ func composeCPNode(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef,
 
 	ownInputs = ownInputs[:len(ownInputs):len(ownInputs)]
 
-	inputs := na.inputList(scripts[fsTools.rel()], ownInputs)
+	inputs := na.inputList(scripts[fsTools.rel()], na.vfsList(src), ownInputs)
 
 	return Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:          env,
-		Inputs:       inputs,
-		KV:           &cpKV,
-		Outputs:      na.vfsList(dst),
-		DepRefs:      na.noderefs.list(depRefs...),
-		Resources:    usesPython3,
+		Env:       env,
+		Inputs:    inputs,
+		KV:        &cpKV,
+		Outputs:   na.vfsList(dst),
+		DepRefs:   na.noderefs.list(depRefs...),
+		Resources: usesPython3,
 	}
 }

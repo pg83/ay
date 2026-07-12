@@ -30,7 +30,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	blocks := in.CCBlocks
 	srcCV := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
 	runtimeCV := e.scanner.walkClosure(cudaRuntimeIncludeVFS, d.scanCtx, scanDomainCC)
-	closure := na.dedupClosure([]VFS{srcCV.self, runtimeCV.self}, srcCV.buckets, runtimeCV.buckets)
+	closure := na.dedupClosureChunks(srcCV, runtimeCV)
 	mtimeRef, mtimeVFS := ctx.tool(cudaMtimeArg)
 	pidRef, pidVFS := ctx.tool(cudaCustomPidArg)
 	cuCxxTail := blocks.cxxTail
@@ -74,16 +74,22 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	na.noderefs.commit(cdn)
 
 	cudaDeps = cudaDeps[:cdn:cdn]
+	inputs := na.inputs.alloc(2 + len(closure))
+
+	inputs[0] = na.vfsList(cudaCompileScriptVFS)
+	inputs[1] = na.vfsList(mtimeVFS, pidVFS)
+	copy(inputs[2:], closure)
+	na.inputs.commit(len(inputs))
 
 	node := Node{
-		Platform:     p,
-		Cmds:         na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
-		Env:          env,
-		Inputs:       na.inputList(closure, na.vfsList(cudaCompileScriptVFS, mtimeVFS, pidVFS)),
-		Outputs:      na.vfsList(outVFS),
-		KV:           &cudaKV,
-		Resources:    p.CCUsesResources,
-		DepRefs:      cudaDeps,
+		Platform:  p,
+		Cmds:      na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
+		Env:       env,
+		Inputs:    InputChunks(inputs[:len(inputs):len(inputs)]),
+		Outputs:   na.vfsList(outVFS),
+		KV:        &cudaKV,
+		Resources: p.CCUsesResources,
+		DepRefs:   cudaDeps,
 	}
 
 	e.collectObj(e.emitNode(node), outVFS, meta)

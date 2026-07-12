@@ -16,6 +16,8 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 
 	inVFSByToken := make(map[string]VFS, len(run.INFiles))
 	inputs := make([]VFS, 0, len(run.INFiles))
+	inputSources := make([]VFS, 0, len(run.INFiles))
+	inputBuilds := make([]VFS, 0, len(run.INFiles))
 
 	var cfExtraInputs []VFS
 
@@ -24,6 +26,12 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 
 		inVFSByToken[inTok.string()] = vfs
 		inputs = append(inputs, vfs)
+
+		if vfs.isBuild() {
+			inputBuilds = append(inputBuilds, vfs)
+		} else {
+			inputSources = append(inputSources, vfs)
+		}
 
 		if info := reg.use(vfs); info != nil {
 			for _, v := range info.SourceInputs {
@@ -34,6 +42,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 
 	cfExtraInputs = dedupInPlace(cfExtraInputs)
 	inputs = append(inputs, cfExtraInputs...)
+	inputSources = append(inputSources, cfExtraInputs...)
 
 	outVFSByToken := make(map[string]VFS, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
 	outputs := make([]VFS, 0, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
@@ -62,11 +71,12 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	jvRef := ctx.emit.reserve()
 	ccTag := d.unit.CCTag
 	tc := d.tc
-	inputsSnap := ctx.na.vfsList(inputs...)
+	inputSourcesSnap := ctx.na.vfsList(inputSources...)
+	inputBuildsSnap := ctx.na.vfsList(inputBuilds...)
 	outputsSnap := ctx.na.vfsList(outputs...)
 
 	pe := func() {
-		e.emitJVGeneralReserved(jarVFS, args, inputsSnap, outputsSnap, cwd, ccTag, tc, jvRef)
+		e.emitJVGeneralReserved(jarVFS, args, inputSourcesSnap, inputBuildsSnap, outputsSnap, cwd, ccTag, tc, jvRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 

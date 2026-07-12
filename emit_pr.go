@@ -21,9 +21,12 @@ type RunProgramNodeSpec struct {
 	toolLDRef     NodeRef
 	auxTools      []RunProgramAuxTool
 	inVFSs        []VFS
+	inSources     []VFS
+	inBuilds      []VFS
 	outVFSByToken map[ANY]VFS
 	stdoutVFS     *VFS
-	inputClosure  []VFS
+	closureSource []VFS
+	closureBuild  []VFS
 }
 
 func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
@@ -68,9 +71,19 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
 	auxTools := resolveRunProgramAuxTools(ctx, anyStrs(stmt.ToolPaths))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
+	inSources := make([]VFS, 0, len(stmt.INFiles))
+	inBuilds := make([]VFS, 0, len(stmt.INFiles))
 
 	for _, f := range stmt.INFiles {
-		inVFSs = append(inVFSs, e.runProgramInputVFS(f.string()))
+		v := e.runProgramInputVFS(f.string())
+
+		inVFSs = append(inVFSs, v)
+
+		if v.isBuild() {
+			inBuilds = append(inBuilds, v)
+		} else {
+			inSources = append(inSources, v)
+		}
 	}
 
 	outVFSByToken := make(map[ANY]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
@@ -121,20 +134,22 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	snap := &prSnap{
-		ctx:      ctx,
-		instance: instance,
-		scanner:  e.scanner,
-		codegen:  e.codegen,
-		scanCtx:  e.d.scanCtx,
-		inVFSs:   ctx.na.vfsList(inVFSs...),
+		ctx:       ctx,
+		instance:  instance,
+		scanner:   e.scanner,
+		codegen:   e.codegen,
+		scanCtx:   e.d.scanCtx,
+		inVFSs:    ctx.na.vfsList(inVFSs...),
+		inSources: ctx.na.vfsList(inSources...),
+		inBuilds:  ctx.na.vfsList(inBuilds...),
 	}
 
 	pe := func() {
 		inputClosure := prInputClosure(snap, stmt)
 
-		if prSourceClosure := filterSourceVFS(ctx.na, inputClosure); len(prSourceClosure) > 0 {
+		if len(inputClosure.sources) > 0 {
 			for out := range registeredPROut {
-				snap.codegen.addSourceInputs(ctx.na, out, prSourceClosure)
+				snap.codegen.addSourceInputs(ctx.na, out, inputClosure.sources)
 			}
 		}
 
@@ -144,9 +159,12 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			toolLDRef:     res.LDRef,
 			auxTools:      auxTools,
 			inVFSs:        snap.inVFSs,
+			inSources:     snap.inSources,
+			inBuilds:      snap.inBuilds,
 			outVFSByToken: outVFSByToken,
 			stdoutVFS:     stdoutVFS,
-			inputClosure:  inputClosure,
+			closureSource: inputClosure.sources,
+			closureBuild:  inputClosure.builds,
 		}, prRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
@@ -268,15 +286,22 @@ func pbhBasenameSet(vs []VFS) map[string]bool {
 }
 
 type prSnap struct {
-	ctx      *GenCtx
-	instance ModuleInstance
-	scanner  *IncludeScanner
-	codegen  *CodegenRegistry
-	scanCtx  *ScanContext
-	inVFSs   []VFS
+	ctx       *GenCtx
+	instance  ModuleInstance
+	scanner   *IncludeScanner
+	codegen   *CodegenRegistry
+	scanCtx   *ScanContext
+	inVFSs    []VFS
+	inSources []VFS
+	inBuilds  []VFS
 }
 
-func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
+type PrInputClosure struct {
+	sources []VFS
+	builds  []VFS
+}
+
+func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 	ctx, instance := s.ctx, s.instance
 	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
 	generatesHeader := stmt.StdoutFile != nil && isHeaderSource(stmt.StdoutFile.string())
@@ -290,7 +315,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 	fullSourceClosure := len(stmt.INFiles) == 0 && (!hasAutoCCSourceOut || isCCSourceExt(mainRel))
 
 	if len(stmt.INFiles) == 0 && !fullSourceClosure {
-		return nil
+		return PrInputClosure{}
 	}
 
 	hasProtoIN := false
@@ -301,11 +326,23 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 		hasParsedIN = hasParsedIN || ctx.parsers.registry.hasRegisteredParser(f.string())
 	}
 
-	scratch := vfsScratches.get()
+	sourceScratch := vfsScratches.get()
+	buildScratch := vfsScratches.get()
 
-	defer func() { vfsScratches.put(scratch) }()
+	defer func() {
+		vfsScratches.put(sourceScratch)
+		vfsScratches.put(buildScratch)
+	}()
 
-	out := scratch
+	sources := sourceScratch
+	builds := buildScratch
+	appendInput := func(v VFS) {
+		if v.isBuild() {
+			builds = append(builds, v)
+		} else {
+			sources = append(sources, v)
+		}
+	}
 
 	ridesMainHeader := func(ccRel string) bool {
 		return isHeaderSource(mainRel) && relStem(ccRel) == relStem(mainRel)
@@ -319,7 +356,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 
 			cv := s.scanner.walkClosure(copyFileOutputVFS(instance.Path.relString(), rel), s.scanCtx, scanDomainCC)
 
-			eachBucketVFS(cv.buckets, func(v VFS) { out = append(out, v) })
+			eachBucketVFS(cv.buckets, appendInput)
 		}
 
 		for _, f := range stmt.OUTFiles {
@@ -335,13 +372,13 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 		rel := f.string()
 
 		if ctx.parsers.registry.hasRegisteredParser(rel) {
-			s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC).each(func(v VFS) { out = append(out, v) })
+			s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC).each(appendInput)
 
 			continue
 		}
 
 		if info := s.codegen.use(s.inVFSs[i]); info != nil {
-			out = append(out, info.SourceInputs...)
+			sources = append(sources, info.SourceInputs...)
 		}
 	}
 
@@ -355,7 +392,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 
 			eachBucketVFS(cv.buckets, func(v VFS) {
 				if v.isSource() {
-					out = append(out, v)
+					sources = append(sources, v)
 				}
 			})
 		}
@@ -369,7 +406,11 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 		return extIsProto(v.relString())
 	}
 
-	pbhSeen := pbhBasenameSet(out)
+	pbhSeen := pbhBasenameSet(sources)
+
+	for name := range pbhBasenameSet(builds) {
+		pbhSeen[name] = true
+	}
 
 	for _, oi := range stmt.OutputIncludes {
 		target := oi.relOrSelf()
@@ -393,7 +434,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 				return
 			}
 
-			out = append(out, v)
+			appendInput(v)
 
 			if extIsPbH(v.relString()) {
 				pbhSeen[filepath.Base(v.relString())] = true
@@ -404,7 +445,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 				sibDir, sibBase := splitDirName(sibling)
 
 				if ctx.fs.isFile(dirKey(sibDir), sibBase) && !pbhSeen[sibBase] {
-					out = append(out, source(sibling))
+					sources = append(sources, source(sibling))
 					pbhSeen[sibBase] = true
 				}
 			}
@@ -417,13 +458,17 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) []VFS {
 		eachBucketVFS(sub.buckets, process)
 	}
 
-	scratch = out
+	sourceScratch = sources
+	buildScratch = builds
 
-	if len(out) == 0 {
-		return nil
+	if len(sources) == 0 && len(builds) == 0 {
+		return PrInputClosure{}
 	}
 
-	return ctx.na.dedupClosure(out)
+	return PrInputClosure{
+		sources: ctx.na.dedupClosure(sources),
+		builds:  ctx.na.dedupClosure(builds),
+	}
 }
 
 func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) ParsedIncludeSet {
@@ -604,14 +649,14 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	var inputs InputChunks
 
 	dedupers.with(func(deduper *DeDuper) {
-		head := na.vfs.alloc(1 + len(spec.auxTools) + len(spec.inVFSs))[:0]
+		tools := na.vfs.alloc(1 + len(spec.auxTools))[:0]
 
 		appendUnique := func(p VFS) {
 			if !deduper.add(p.strID()) {
 				return
 			}
 
-			head = append(head, p)
+			tools = append(tools, p)
 		}
 
 		appendUnique(spec.toolBinPath)
@@ -620,14 +665,14 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 			appendUnique(tool.bin)
 		}
 
-		for _, v := range spec.inVFSs {
-			appendUnique(v)
-		}
+		na.vfs.commit(len(tools))
 
-		na.vfs.commit(len(head))
-
-		head = head[:len(head):len(head)]
-		inputs = na.inputList(head, na.filterSeen(deduper, spec.inputClosure))
+		tools = tools[:len(tools):len(tools)]
+		sources := na.filterSeen(deduper, spec.inSources)
+		builds := na.filterSeen(deduper, spec.inBuilds)
+		closureSources := na.filterSeen(deduper, spec.closureSource)
+		closureBuilds := na.filterSeen(deduper, spec.closureBuild)
+		inputs = na.inputList(tools, sources, builds, closureSources, closureBuilds)
 	})
 	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
 

@@ -80,7 +80,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 			Platform:       instance.Platform,
 			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 			Env:            env,
-			Inputs:         na.inputList(na.vfsList(toolBin, inputIn)),
+			Inputs:         na.inputList(na.vfsList(toolBin), na.vfsList(inputIn)),
 			Outputs:        outputs,
 			KV:             &splitCodegenKV,
 			ForeignDepRefs: na.refList(toolLDRef),

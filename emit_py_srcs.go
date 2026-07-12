@@ -214,11 +214,9 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 				PyGenResEntry{token: e.resStr2(token, strings.TrimPrefix(yapycOut.relString(), rel)), key: ps.Module, yapyc: true, path: yapycOut})
 		}
 
-		entryInputs := concat(info.SourceInputs, ps.ExtraInputs)
-
 		return append(out,
-			PyGenResEntry{token: token, key: ps.Module, path: ps.Path, inputs: entryInputs},
-			PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut, inputs: info.SourceInputs})
+			PyGenResEntry{token: token, key: ps.Module, path: ps.Path, sourceInputs: info.SourceInputs, buildInputs: ps.ExtraInputs},
+			PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut, sourceInputs: info.SourceInputs})
 	case pySourceGenerated:
 		info := e.codegen.use(ps.Path)
 
@@ -226,12 +224,12 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 			throwFmt("appendPyResEntries: unregistered producer for %q", ps.Path.string())
 		}
 
-		out = append(out, PyGenResEntry{token: ps.Token.string(), key: ps.Module, path: ps.Path, inputs: info.SourceInputs})
+		out = append(out, PyGenResEntry{token: ps.Token.string(), key: ps.Module, path: ps.Path, sourceInputs: info.SourceInputs})
 
 		if !d.pyBuildNoPYC {
 			yapycOut := e.pyYapycOutFor(ps)
 
-			out = append(out, PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut, inputs: info.SourceInputs})
+			out = append(out, PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut, sourceInputs: info.SourceInputs})
 		}
 
 		return out
@@ -266,11 +264,20 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 			pyExtra = e.resVFS1(srcEdge)
 		}
 
-		out = append(out, PyGenResEntry{token: srcRel, key: ps.Module, path: pySource, inputs: pyExtra})
+		out = append(out, PyGenResEntry{token: srcRel, key: ps.Module, path: pySource, sourceInputs: pyExtra})
 	}
 
 	if !d.pyBuildNoPYC {
-		out = append(out, PyGenResEntry{token: e.resStr2(srcRel, suffix), key: ps.Module, yapyc: true, path: build(module, "/", srcRel, suffix), inputs: e.resVFS1(srcEdge)})
+		entry := PyGenResEntry{token: e.resStr2(srcRel, suffix), key: ps.Module, yapyc: true, path: build(module, "/", srcRel, suffix)}
+		inputs := e.resVFS1(srcEdge)
+
+		if srcEdge.isBuild() {
+			entry.buildInputs = inputs
+		} else {
+			entry.sourceInputs = inputs
+		}
+
+		out = append(out, entry)
 	}
 
 	return out
@@ -387,18 +394,13 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 		cmdArgs = na.chunkList(ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
 			na.anyList(internStr(moduleName).any(), srcAbs.any(), outputPath.any()))
 
-		var inputs []VFS
-
 		if genInfo != nil {
-			block := na.vfs.alloc(3 + len(genInfo.SourceInputs))[:0]
-
-			block = append(block, srcAbs)
-			block = append(block, genInfo.SourceInputs...)
-			block = append(block, py3ccBinary, py3ccSlowBin)
-			na.vfs.commit(len(block))
-
-			inputs = block[:len(block):len(block)]
-			nodeInputs = na.inputList(inputs)
+			nodeInputs = na.inputList(
+				na.vfsList(py3ccBinary, py3ccSlowBin),
+				na.vfsList(srcAbs),
+				genInfo.SourceInputs,
+				ps.ExtraInputs,
+			)
 
 		} else {
 			nodeInputs = na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin), na.srcChunk(srcAbs))
@@ -699,7 +701,7 @@ func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
 
 		refs, outs := e.packResources(ResourcePack{Tag: moduleTag, Items: []ResourceItem{
 			{Path: "-", Key: kvHash, Cmd: kvCmd},
-			{Path: res.hashPath, Key: key, Input: input},
+			{Path: res.hashPath, Key: key, SourceInput: input},
 		}})
 
 		outRefs = append(outRefs, refs...)
@@ -770,13 +772,13 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 		)
 
 		pyNode := Node{
-			Platform:     ctx.target,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
-			Env:          env,
-			Inputs:       na.inputList(genPy3RegScriptChunk),
-			Outputs:      na.vfsList(regCppVFS),
-			KV:           &pyCodegenKV,
-			Resources:    usesPython3,
+			Platform:  ctx.target,
+			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
+			Env:       env,
+			Inputs:    na.inputList(genPy3RegScriptChunk),
+			Outputs:   na.vfsList(regCppVFS),
+			KV:        &pyCodegenKV,
+			Resources: usesPython3,
 		}
 
 		pyRef := e.emitNode(pyNode)
@@ -830,11 +832,12 @@ func pyInitDefineShortname(flag string) (string, bool) {
 }
 
 type PyGenResEntry struct {
-	token  string
-	key    STR
-	yapyc  bool
-	path   VFS
-	inputs []VFS
+	token        string
+	key          STR
+	yapyc        bool
+	path         VFS
+	sourceInputs []VFS
+	buildInputs  []VFS
 }
 
 func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem {
@@ -872,9 +875,12 @@ func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem
 
 		buf = buf[:cmdStart]
 
-		items = append(items,
-			ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, Input: en.path, Extra: en.inputs},
-			ResourceItem{Path: en.token, Key: key, Input: en.path, Extra: en.inputs})
+		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, ExtraSources: en.sourceInputs, ExtraBuilds: en.buildInputs}
+		fileItem := ResourceItem{Path: en.token, Key: key, ExtraSources: en.sourceInputs, ExtraBuilds: en.buildInputs}
+
+		kvItem.setInput(en.path)
+		fileItem.setInput(en.path)
+		items = append(items, kvItem, fileItem)
 	}
 
 	e.resStrBuf = buf

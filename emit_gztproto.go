@@ -19,19 +19,29 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
-	inputs := na.vfs.alloc(2 + len(inducedProtos))[:0]
-
-	inputs = append(inputs, converterBin)
-	inputs = append(inputs, inducedProtos...)
-	inputs = append(inputs, gztSource)
-	na.vfs.commit(len(inputs))
-
-	inputs = inputs[:len(inputs):len(inputs)]
 
 	gzRef := ctx.emit.reserve()
 	protoIncludeSnap := na.vfsList(protoInclude...)
 
 	pe := func() {
+		nInputs := 2 + len(imports.buckets)
+
+		if len(inducedProtos) > 0 {
+			nInputs++
+		}
+
+		inputChunks := na.inputs.alloc(nInputs)[:0]
+
+		inputChunks = append(inputChunks, na.vfsList(converterBin))
+
+		if len(inducedProtos) > 0 {
+			inputChunks = append(inputChunks, inducedProtos)
+		}
+
+		inputChunks = append(inputChunks, na.vfsList(gztSource))
+		inputChunks = append(inputChunks, imports.buckets...)
+		na.inputs.commit(len(inputChunks))
+
 		node := Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{
@@ -39,7 +49,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 				Env:     env,
 			}),
 			Env:            env,
-			Inputs:         na.inputList(inputs, imports.buckets...),
+			Inputs:         InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]),
 			Outputs:        na.vfsList(genProto),
 			KV:             &gztprotoKV,
 			ForeignDepRefs: na.refList(converterRef),

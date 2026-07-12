@@ -40,11 +40,17 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
 		bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 		cv := e.scanner.walkClosure(inputVFS, d.scanCtx, scanDomainCC)
-		allInputs := na.inputList(na.vfsList(clangWrapperVFS, cv.self), cv.buckets...)
+		closureInputs := na.dedupClosureChunks(cv)
+		inputChunks := na.inputs.alloc(1 + len(closureInputs))
+
+		inputChunks[0] = na.vfsList(clangWrapperVFS)
+		copy(inputChunks[1:], closureInputs)
+		na.inputs.commit(len(inputChunks))
+		allInputs := InputChunks(inputChunks[:len(inputChunks):len(inputChunks)])
 
 		for _, ch := range allInputs {
 			for _, v := range ch {
-				if v.isSource() {
+				if v.isSource() && v.relString() != "" {
 					bcSourceInputs = append(bcSourceInputs, v)
 				}
 
@@ -81,10 +87,12 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	ldArgs = append(ldArgs, argDashO.any(), mergedOut.any())
 
-	mergeInputs := na.inputList(bcPaths)
+	var mergeInputs InputChunks
 
 	if linksCopy {
-		mergeInputs = append(mergeInputs, ctx.scripts[copyFsToolsVFS.rel()])
+		mergeInputs = na.inputList(bcPaths, ctx.scripts[copyFsToolsVFS.rel()])
+	} else {
+		mergeInputs = na.inputList(bcPaths)
 	}
 
 	ldNode := Node{
@@ -114,12 +122,19 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	optArgs = append(optArgs, internV(`-passes="`, strings.Join(passes, ","), `"`).any())
 
-	optInputs := make([]VFS, 0, 2+len(bcSourceInputs))
+	optSourceInputs := na.vfs.alloc(1 + len(bcSourceInputs))[:0]
 
-	optInputs = append(optInputs, mergedOut)
-	optInputs = append(optInputs, optWrapperVFS)
+	optSourceInputs = append(optSourceInputs, optWrapperVFS)
 
-	optChunks := na.inputList(concat(optInputs, bcSourceInputs))
+	for _, input := range bcSourceInputs {
+		if input.relString() != "" {
+			optSourceInputs = append(optSourceInputs, input)
+		}
+	}
+
+	na.vfs.commit(len(optSourceInputs))
+	optSourceInputs = optSourceInputs[:len(optSourceInputs):len(optSourceInputs)]
+	optChunks := na.inputList(na.vfsList(mergedOut), optSourceInputs)
 
 	optNode := Node{
 		Platform:  instance.Platform,
