@@ -53,7 +53,7 @@ type IncludeScanner struct {
 	sysincl        *SysinclCtx
 	parsers        *IncludeParserManager
 	buckets        *BucketCache
-	closureArena   *BumpAllocator[VFS]
+	closureScratch []VFS
 	inDfsFrame     bool
 	scanCache      DenseMap2[VFS, []VFS, Closure]
 	searchTierFlat *IntMap[VFS]
@@ -99,7 +99,7 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		onWarn:  onWarn,
 
 		buckets:        buckets,
-		closureArena:   newBumpAllocator[VFS](),
+		closureScratch: make([]VFS, closureAllocHint),
 		childArena:     newBumpAllocator[VFS](),
 		searchTierFlat: newIntMap[VFS](4096),
 	}
@@ -418,7 +418,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 	sc.tjc.closure.reset(vfsBound())
 
-	block := s.closureArena.alloc(closureAllocHint)
+	block := s.closureScratch
 	k := 0
 
 	sc.tjc.closure.add(abs)
@@ -503,7 +503,7 @@ func (sc *ScanCtx) cachedWindow(v VFS) (Closure, bool) {
 
 func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	s := sc.scanner
-	block := s.closureArena.alloc(closureAllocHint)
+	block := s.closureScratch
 	k := fill(block)
 
 	for i := 0; i < k; i++ {
