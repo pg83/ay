@@ -356,7 +356,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 
 			cv := s.scanner.walkClosure(copyFileOutputVFS(instance.Path.relString(), rel), s.scanCtx, scanDomainCC)
 
-			eachBucketVFS(cv.buckets, appendInput)
+			eachBucketVFS(cv.bucketList(), appendInput)
 		}
 
 		for _, f := range stmt.OUTFiles {
@@ -390,7 +390,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 
 			cv := s.scanner.walkClosure(copyFileOutputVFS(instance.Path.relString(), f.string()), s.scanCtx, scanDomainCC)
 
-			eachBucketVFS(cv.buckets, func(v VFS) {
+			eachBucketVFS(cv.bucketList(), func(v VFS) {
 				if v.isSource() {
 					sources = append(sources, v)
 				}
@@ -455,7 +455,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 			process(sub.self)
 		}
 
-		eachBucketVFS(sub.buckets, process)
+		eachBucketVFS(sub.bucketList(), process)
 	}
 
 	sourceScratch = sources

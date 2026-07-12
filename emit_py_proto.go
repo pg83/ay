@@ -36,7 +36,7 @@ func (p *pyPBPending) emitPending() {
 
 	*p = pyPBPending{}
 
-	buckets := s.scanner.walkClosure(source(s.protoRelPath), s.scanCtx, scanDomainProto).buckets
+	buckets := s.scanner.walkClosure(source(s.protoRelPath), s.scanCtx, scanDomainProto).bucketList()
 	na := s.ctx.na
 	inputChunks := na.inputs.alloc(3 + len(buckets))[:0]
 
@@ -417,7 +417,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	}
 	pyPBPE := na.pendingEmitter(pending)
 
-	sourceInputs := na.dedupSourceVFS(sourceInputsHead, transitive.buckets)
+	sourceInputs := na.dedupSourceVFS(sourceInputsHead, transitive.bucketList())
 
 	e.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})
 

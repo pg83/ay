@@ -24,5 +24,7 @@ func closureViewOf(vs ...VFS) Closure {
 		}
 	}
 
-	return Closure{buckets: buckets}
+	list := BucketList(buckets)
+
+	return Closure{buckets: &list}
 }

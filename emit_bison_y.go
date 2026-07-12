@@ -142,7 +142,7 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 			for _, sk := range bisonCppSkeletonInputs {
 				skCV := scanner.walkClosure(sk, scanCtx, scanDomainCC)
 
-				for _, bucket := range skCV.buckets {
+				for _, bucket := range skCV.bucketList() {
 					if filtered := na.filterSeen(deduper, bucket); len(filtered) > 0 {
 						inputs = append(inputs, filtered)
 					}

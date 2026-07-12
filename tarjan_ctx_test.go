@@ -57,7 +57,9 @@ func closureFromFlat(flat []VFS) Closure {
 		}
 	}
 
-	return Closure{self: flat[0], buckets: buckets}
+	list := BucketList(buckets)
+
+	return Closure{self: flat[0], buckets: &list}
 }
 
 func (m *MockSink) windowSubsumed(VFS) bool {

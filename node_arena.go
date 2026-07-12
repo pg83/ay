@@ -282,7 +282,7 @@ func (na *NodeArenas) dedupClosureChunks(closures ...Closure) InputChunks {
 	bound := 0
 
 	for _, cl := range closures {
-		bound += len(cl.buckets)
+		bound += len(cl.bucketList())
 
 		if cl.self != 0 {
 			bound++
@@ -299,7 +299,7 @@ func (na *NodeArenas) dedupClosureChunks(closures ...Closure) InputChunks {
 				chunks = append(chunks, na.vfsList(cl.self))
 			}
 
-			for _, bucket := range cl.buckets {
+			for _, bucket := range cl.bucketList() {
 				bucket = na.filterSeen(deduper, bucket)
 
 				if len(bucket) > 0 {

@@ -24,7 +24,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	protoIncludeSnap := na.vfsList(protoInclude...)
 
 	pe := func() {
-		nInputs := 2 + len(imports.buckets)
+		nInputs := 2 + len(imports.bucketList())
 
 		if len(inducedProtos) > 0 {
 			nInputs++
@@ -39,7 +39,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 		}
 
 		inputChunks = append(inputChunks, na.vfsList(gztSource))
-		inputChunks = append(inputChunks, imports.buckets...)
+		inputChunks = append(inputChunks, imports.bucketList()...)
 		na.inputs.commit(len(inputChunks))
 
 		node := Node{
@@ -63,7 +63,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 
 	sourceInputs = append(sourceInputs, gztSource)
 
-	eachBucketVFS(imports.buckets, func(v VFS) {
+	eachBucketVFS(imports.bucketList(), func(v VFS) {
 		if v.isSource() && extIsGztproto(v.relString()) {
 			sourceInputs = append(sourceInputs, v)
 		}

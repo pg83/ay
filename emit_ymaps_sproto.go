@@ -74,7 +74,7 @@ func (e *EmitContext) emitYmapsSprotoHeaderSnap(scanner *IncludeScanner, p Ymaps
 	env := envVarsVCS
 	sprotoCV := scanner.walkClosure(p.sprotoH, scanCtx, scanDomainAux)
 
-	closure := collectBucketVFS(na, sprotoCV.buckets, func(v VFS) bool {
+	closure := collectBucketVFS(na, sprotoCV.bucketList(), func(v VFS) bool {
 		return v.isSource() || !extIsProtoGeneratedHeader(v.relString())
 	})
 

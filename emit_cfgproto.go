@@ -27,7 +27,7 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	cfgHParsed = append(cfgHParsed, configIncludes...)
 	cfgHParsed = append(cfgHParsed, extras...)
 
-	eachBucketVFS(cfgImports.buckets, func(ti VFS) {
+	eachBucketVFS(cfgImports.bucketList(), func(ti VFS) {
 		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(ti.rel().any())})
 	})
 

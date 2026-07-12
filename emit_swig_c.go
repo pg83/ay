@@ -44,14 +44,14 @@ func (e *EmitContext) emitSwigC() {
 		cOutVFS := build(instance.Path.relString(), "/", cOutRel)
 		pyOutVFS := build(instance.Path.relString(), "/", pyOutRel)
 		cv := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainSwig)
-		inputs := na.inputs.alloc(2 + len(cv.buckets))[:2+len(cv.buckets)]
+		inputs := na.inputs.alloc(2 + len(cv.bucketList()))[:2+len(cv.bucketList())]
 
 		inputs[0] = na.vfsList(bldContribToolsSwigSwig)
 		inputs[1] = na.vfsList(srcVFS)
-		copy(inputs[2:], cv.buckets)
+		copy(inputs[2:], cv.bucketList())
 		na.inputs.commit(len(inputs))
 		inputChunks := InputChunks(inputs[:len(inputs):len(inputs)])
-		swigClosure := collectBucketVFS(ctx.na, cv.buckets, func(VFS) bool { return true })
+		swigClosure := collectBucketVFS(ctx.na, cv.bucketList(), func(VFS) bool { return true })
 
 		swRef := ctx.emit.reserve()
 		moduleName := swigModuleName(stmt.Module)
@@ -90,7 +90,7 @@ func (e *EmitContext) emitSwigC() {
 
 		swigSourceInputs = append(swigSourceInputs, srcVFS)
 
-		for _, bucket := range cv.buckets {
+		for _, bucket := range cv.bucketList() {
 			if bucket[0].isSource() {
 				swigSourceInputs = append(swigSourceInputs, bucket...)
 			}
