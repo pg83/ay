@@ -45,7 +45,7 @@ func closureFromFlat(flat []VFS) Closure {
 	var scratch [closureBuckets][]VFS
 
 	for _, v := range flat[1:] {
-		r := int(v.strID() & (closureBuckets - 1))
+		r := closureBucketIndex(v)
 		scratch[r] = append(scratch[r], v)
 	}
 

@@ -12,3 +12,35 @@ func TestBucketHashSeparatesPowerMomentCollision(t *testing.T) {
 		t.Fatal("bucketHash collides on distinct sets with equal count/sum/xor/square/cube")
 	}
 }
+
+func TestBucketCacheStoresBuildInputsInOneBucket(t *testing.T) {
+	var rest []VFS
+
+	for rel := uint32(1); rel <= closureSourceBuckets; rel++ {
+		rest = append(rest, VFS(rel<<1))
+	}
+
+	for rel := uint32(1); rel <= 4; rel++ {
+		rest = append(rest, VFS(rel<<1|1))
+	}
+
+	buckets := newBucketCache().storeBuckets(0, rest).bucketList()
+
+	if len(buckets) != closureBuckets {
+		t.Fatalf("got %d buckets, want %d", len(buckets), closureBuckets)
+	}
+
+	for _, v := range buckets[0] {
+		if !v.isBuild() {
+			t.Fatalf("build bucket contains source input %v", v)
+		}
+	}
+
+	for _, bucket := range buckets[1:] {
+		for _, v := range bucket {
+			if !v.isSource() {
+				t.Fatalf("source bucket contains build input %v", v)
+			}
+		}
+	}
+}

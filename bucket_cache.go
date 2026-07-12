@@ -2,7 +2,18 @@ package main
 
 import "github.com/zeebo/xxh3"
 
-const closureBuckets = 16
+const (
+	closureSourceBuckets = 8
+	closureBuckets       = 1 + closureSourceBuckets
+)
+
+func closureBucketIndex(v VFS) int {
+	if v.isBuild() {
+		return 0
+	}
+
+	return 1 + int((v.strID()>>1)&(closureSourceBuckets-1))
+}
 
 type BucketVal struct {
 	verify uint64
@@ -138,7 +149,7 @@ func (c *BucketCache) storeBuckets(self VFS, rest []VFS) Closure {
 	}
 
 	for _, v := range rest {
-		r := v.strID() & (closureBuckets - 1)
+		r := closureBucketIndex(v)
 
 		c.scratch[r] = append(c.scratch[r], v)
 	}
