@@ -98,7 +98,11 @@ func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data [][]byte, a *BumpAll
 }
 
 func parseProtoImportLine(line []byte) (STR, IncludeKind, bool) {
-	b := trimParserSpace(line)
+	b := line
+
+	for len(b) > 0 && isParserSpace(b[0]) {
+		b = b[1:]
+	}
 
 	if len(b) == 0 {
 		return 0, includeSystem, false
@@ -113,15 +117,19 @@ func parseProtoImportLine(line []byte) (STR, IncludeKind, bool) {
 	}
 
 	if idx := bytes.Index(b[len(protoImportKw):], protoLineComment); idx >= 0 {
-		b = trimParserSpace(b[:len(protoImportKw)+idx])
+		b = b[:len(protoImportKw)+idx]
 	}
 
-	rest := trimParserSpace(b[len("import"):])
+	rest := b[len("import"):]
+
+	for len(rest) > 0 && isParserSpace(rest[0]) {
+		rest = rest[1:]
+	}
 
 	if bytes.HasPrefix(rest, []byte("public")) && !isParserIdentContinuation(bytesString(rest), len("public")) {
-		rest = trimParserSpace(rest[len("public"):])
+		rest = rest[len("public"):]
 	} else if bytes.HasPrefix(rest, []byte("weak")) && !isParserIdentContinuation(bytesString(rest), len("weak")) {
-		rest = trimParserSpace(rest[len("weak"):])
+		rest = rest[len("weak"):]
 	}
 
 	target, kind, ok := parseDelimitedIncludeTarget(rest)
