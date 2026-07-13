@@ -70,7 +70,7 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 		}
 
 		block[i] = packed
-		fs.dirEntries.put(uint32(dir), uint32(id), e.IsDir())
+		fs.dirEntries.put(splitMix64(uint32(dir), uint32(id)), e.IsDir())
 	}
 
 	fs.dirNames.commit(len(entries))
