@@ -23,3 +23,16 @@ func TestParseCIncludes_IncludeNextNotMisparsed(t *testing.T) {
 		t.Fatalf("normal #include parsing regressed: %+v", norm)
 	}
 }
+
+func TestParseCIncludesChunks_LeadingBlockComment(t *testing.T) {
+	block := make([]IncludeDirective, 64)
+	chunks := [][]byte{
+		[]byte("#include \"before.h\"\n  /* comment starts"),
+		[]byte(" here\n#include \"hidden.h\"\n*/\n#include \"after.h\"\n"),
+	}
+	got := block[:parseCIncludesChunks(chunks, block, 0)]
+
+	if len(got) != 2 || got[0].target.string() != "before.h" || got[1].target.string() != "after.h" {
+		t.Fatalf("unexpected directives across a block-comment chunk boundary: %+v", got)
+	}
+}

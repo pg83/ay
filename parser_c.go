@@ -96,50 +96,18 @@ func (s *cChunkState) parseBlock(data []byte, block []IncludeDirective, k int) i
 		s.inBlockComment = false
 	}
 
-	k = parseCIncludes(data, block, k)
-	s.inBlockComment = leadingBlockCommentOpen(data)
+	k, s.inBlockComment = parseCIncludesBlock(data, block, k, true)
 
 	return k
 }
 
-func leadingBlockCommentOpen(data []byte) bool {
-	for i := 0; i < len(data); {
-		rel := bytes.Index(data[i:], blockCommentOpen)
+func parseCIncludes(data []byte, block []IncludeDirective, k int) int {
+	k, _ = parseCIncludesBlock(data, block, k, false)
 
-		if rel < 0 {
-			return false
-		}
-
-		open := i + rel
-		lineLeading := true
-
-		for k := open; k > 0 && data[k-1] != '\n'; k-- {
-			if !isCWSByte(data[k-1]) {
-				lineLeading = false
-
-				break
-			}
-		}
-
-		if !lineLeading {
-			i = open + len(blockCommentOpen)
-
-			continue
-		}
-
-		closeRel := bytes.Index(data[open+len(blockCommentOpen):], blockCommentClose)
-
-		if closeRel < 0 {
-			return true
-		}
-
-		i = open + len(blockCommentOpen) + closeRel + len(blockCommentClose)
-	}
-
-	return false
+	return k
 }
 
-func parseCIncludes(data []byte, block []IncludeDirective, k int) int {
+func parseCIncludesBlock(data []byte, block []IncludeDirective, k int, trackTrailingComment bool) (int, bool) {
 	n := len(data)
 	p := 0
 	clean := 0
@@ -164,7 +132,11 @@ func parseCIncludes(data []byte, block []IncludeDirective, k int) int {
 			continue
 		}
 
-		if end, covered := leadingBlockCoversHi(data, clean, hi); covered {
+		if end, covered, open := leadingBlockCoversHi(data, clean, hi); covered {
+			if open {
+				return k, true
+			}
+
 			p, clean = end, end
 
 			continue
@@ -181,7 +153,13 @@ func parseCIncludes(data []byte, block []IncludeDirective, k int) int {
 		p, clean = next, next
 	}
 
-	return k
+	if trackTrailingComment {
+		_, _, open := leadingBlockCoversHi(data, clean, n)
+
+		return k, open
+	}
+
+	return k, false
 }
 
 func parseDirectiveInline(data []byte, hashPos int) (IncludeDirective, bool, int) {
@@ -269,12 +247,12 @@ func isCWSByte(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\v' || c == '\f' || c == '\r'
 }
 
-func leadingBlockCoversHi(data []byte, from, hi int) (int, bool) {
+func leadingBlockCoversHi(data []byte, from, hi int) (int, bool, bool) {
 	for i := from; i < hi; {
 		rel := bytes.Index(data[i:hi], blockCommentOpen)
 
 		if rel < 0 {
-			return 0, false
+			return 0, false, false
 		}
 
 		open := i + rel
@@ -288,24 +266,26 @@ func leadingBlockCoversHi(data []byte, from, hi int) (int, bool) {
 			}
 		}
 
-		end := len(data)
-
-		if cl := bytes.Index(data[open+2:], blockCommentClose); cl >= 0 {
-			end = open + 2 + cl + 2
-		}
-
 		if lineLeading {
+			cl := bytes.Index(data[open+len(blockCommentOpen):], blockCommentClose)
+
+			if cl < 0 {
+				return len(data), true, true
+			}
+
+			end := open + len(blockCommentOpen) + cl + len(blockCommentClose)
+
 			if end > hi {
-				return end, true
+				return end, true, false
 			}
 
 			i = end
 		} else {
-			i = open + 2
+			i = open + len(blockCommentOpen)
 		}
 	}
 
-	return 0, false
+	return 0, false, false
 }
 
 func skipWSAndBlockComments(data []byte, i int) int {
