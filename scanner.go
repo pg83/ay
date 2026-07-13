@@ -520,35 +520,12 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 		return out
 	}
 
-	var sysinclClaimed bool
-
-	defer func() {
-		if d.cythonProbe() {
-			return
-		}
-
-		if len(out) > 0 || sysinclClaimed {
-			return
-		}
-
-		open, close := `<`, `>`
-
-		if d.kind == includeQuoted {
-			open, close = `"`, `"`
-		}
-
-		s.onWarn(Warn{
-			Kind: WarnMissingInclude,
-			Message: fmt.Sprintf("%s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
-				includerAbs.string(), open, d.target.string(), close),
-		})
-	}()
-
 	searchOut := sc.resolveSearchPath(includerAbs, incDir, d)
 	includerRel := includerAbs.relString()
 
 	var mappings []VFS
 	var hasMultiTarget bool
+	var sysinclClaimed bool
 	mappings, hasMultiTarget, sysinclClaimed = s.sysincl.lookup(includerRel, d.target.str())
 
 	if d.quotedLike() && len(searchOut) > 0 {
@@ -573,6 +550,10 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 	}
 
 	if len(mappings) == 0 {
+		if len(searchOut) == 0 {
+			sc.warnUnresolved(includerAbs, d, sysinclClaimed)
+		}
+
 		return searchOut
 	}
 
@@ -597,6 +578,8 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 		s.resolveOut = res
 
 		if len(res) == 0 {
+			sc.warnUnresolved(includerAbs, d, sysinclClaimed)
+
 			return nil
 		}
 
@@ -643,6 +626,24 @@ mapLoop:
 	out = merged
 
 	return out
+}
+
+func (sc *ScanCtx) warnUnresolved(includerAbs VFS, d IncludeDirective, sysinclClaimed bool) {
+	if d.cythonProbe() || sysinclClaimed {
+		return
+	}
+
+	open, close := `<`, `>`
+
+	if d.kind == includeQuoted {
+		open, close = `"`, `"`
+	}
+
+	sc.scanner.onWarn(Warn{
+		Kind: WarnMissingInclude,
+		Message: fmt.Sprintf("%s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
+			includerAbs.string(), open, d.target.string(), close),
+	})
 }
 
 type CfgResolveIndex struct {
@@ -782,9 +783,15 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 		return sc.cacheSearchTier(targetID, out)
 	}
 
-	first, _ := firstComponent(target)
+	canIndex := cleanTarget
 
-	if canRelFilter(first, target) && !strings.Contains(target, "/./") && !strings.Contains(target, "//") {
+	if !canIndex {
+		first, _ := firstComponent(target)
+
+		canIndex = canRelFilter(first, target) && !strings.Contains(target, "/./") && !strings.Contains(target, "//")
+	}
+
+	if canIndex {
 		idx := sc.cfg.ri
 
 		if idx.indexable {
@@ -902,8 +909,10 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 	searchPathFound := false
 
-	if candidate, ok := cythonPy2SiblingOverride(includerAbs, quoted, targetID); ok && addPath(candidate) {
-		searchPathFound = true
+	if _, isCython := sc.parser.(CythonIncludeDirectiveParser); isCython {
+		if candidate, ok := cythonPy2SiblingOverride(includerAbs, quoted, targetID); ok && addPath(candidate) {
+			searchPathFound = true
+		}
 	}
 
 	if includerAbs.isBuild() {

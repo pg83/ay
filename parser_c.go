@@ -170,6 +170,8 @@ func parseCIncludes(data []byte, block []IncludeDirective, k int) int {
 			continue
 		}
 
+		clean = hi
+
 		d, ok, next := parseDirectiveInline(data, hi)
 
 		if ok {
