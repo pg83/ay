@@ -30,7 +30,7 @@ func (fs *OsFS) platformInit() {
 	}
 }
 
-func (fs *OsFS) openatRel(rel string, flags int) (int, syscall.Errno) {
+func (fs *OsFS) openatRel(dirFD int, rel string, flags int) (int, syscall.Errno) {
 	if rel == "" {
 		rel = "."
 	}
@@ -41,7 +41,7 @@ func (fs *OsFS) openatRel(rel string, flags int) (int, syscall.Errno) {
 	fs.pathBuf = p
 
 	for {
-		r1, _, errno := syscall.Syscall6(syscall.SYS_OPENAT, uintptr(fs.rootFD), uintptr(unsafe.Pointer(&p[0])), uintptr(flags), 0, 0, 0)
+		r1, _, errno := syscall.Syscall6(syscall.SYS_OPENAT, uintptr(dirFD), uintptr(unsafe.Pointer(&p[0])), uintptr(flags), 0, 0, 0)
 
 		if errno == syscall.EINTR {
 			continue
@@ -58,7 +58,14 @@ func (fs *OsFS) readFileRel(rel string) [][]byte {
 		fs.mmapCur = nil
 	}
 
-	fd, errno := fs.openatRel(rel, syscall.O_RDONLY|syscall.O_CLOEXEC)
+	dir, name := splitDirName(rel)
+	dirFD, openRel := fs.rootFD, rel
+
+	if dir == fs.dirFDRel && fs.dirFD >= 0 {
+		dirFD, openRel = fs.dirFD, name
+	}
+
+	fd, errno := fs.openatRel(dirFD, openRel, syscall.O_RDONLY|syscall.O_CLOEXEC)
 
 	if errno != 0 {
 		throwFmt("open %s: %v", rel, errno)
@@ -121,13 +128,11 @@ func (fs *OsFS) fstatatRel(rel string, st *syscall.Stat_t) bool {
 }
 
 func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
-	fd, errno := fs.openatRel(rel, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY)
+	fd, errno := fs.openatRel(fs.rootFD, rel, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY)
 
 	if errno != 0 {
 		return 0, false
 	}
-
-	defer syscall.Close(fd)
 
 	total := 0
 
@@ -152,10 +157,19 @@ func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
 		}
 
 		if err != nil {
+			syscall.Close(fd)
+
 			return 0, false
 		}
 
 		if n == 0 {
+			if fs.dirFD >= 0 {
+				syscall.Close(fs.dirFD)
+			}
+
+			fs.dirFD = fd
+			fs.dirFDRel = rel
+
 			return total, true
 		}
 

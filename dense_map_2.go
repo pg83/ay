@@ -42,7 +42,7 @@ func (m *DenseMap2[K, V1, V2]) ensureRow(k K) uint32 {
 
 func (m *DenseMap2[K, V1, V2]) get1(k K) (V1, bool) {
 	if slot := m.rowSlot(k); slot != 0 {
-		row := &m.rows.s[slot]
+		row := unsafeAt(m.rows.s, uint64(slot))
 
 		if row.set&1 != 0 {
 			return row.v1, true
@@ -56,7 +56,7 @@ func (m *DenseMap2[K, V1, V2]) get1(k K) (V1, bool) {
 
 func (m *DenseMap2[K, V1, V2]) put1(k K, v V1) {
 	slot := m.ensureRow(k)
-	row := &m.rows.s[slot]
+	row := unsafeAt(m.rows.s, uint64(slot))
 
 	row.v1 = v
 	row.set |= 1
@@ -64,7 +64,7 @@ func (m *DenseMap2[K, V1, V2]) put1(k K, v V1) {
 
 func (m *DenseMap2[K, V1, V2]) get2(k K) (V2, bool) {
 	if slot := m.rowSlot(k); slot != 0 {
-		row := &m.rows.s[slot]
+		row := unsafeAt(m.rows.s, uint64(slot))
 
 		if row.set&2 != 0 {
 			return row.v2, true
@@ -78,7 +78,7 @@ func (m *DenseMap2[K, V1, V2]) get2(k K) (V2, bool) {
 
 func (m *DenseMap2[K, V1, V2]) put2(k K, v V2) {
 	slot := m.ensureRow(k)
-	row := &m.rows.s[slot]
+	row := unsafeAt(m.rows.s, uint64(slot))
 
 	row.v2 = v
 	row.set |= 2

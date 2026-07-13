@@ -48,7 +48,7 @@ func (m *IntMap[V]) get(k uint64) *V {
 
 		switch key {
 		case k:
-			return &values[i]
+			return unsafeAt(values, i)
 		case 0:
 			return nil
 		}
@@ -68,7 +68,7 @@ func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 			ek := *keyCell
 
 			if ek == k {
-				return &values[i], true
+				return unsafeAt(values, i), true
 			}
 
 			if ek == 0 {
@@ -76,7 +76,7 @@ func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 					*keyCell = k
 					m.count++
 
-					return &values[i], false
+					return unsafeAt(values, i), false
 				}
 
 				break

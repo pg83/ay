@@ -7,26 +7,40 @@ type Darts struct {
 }
 
 type DartsNode struct {
-	children [256]int32
-	nChild   int
-	key      int32
+	first int32
+	key   int32
+}
+
+type DartsEdge struct {
+	next  int32
+	child int32
+	code  byte
 }
 
 func newDarts(keys []string) *Darts {
 	nodes := make([]DartsNode, 1, 64)
+	edges := make([]DartsEdge, 1, 64)
 
 	for i, k := range keys {
 		n := int32(0)
 
 		for j := 0; j < len(k); j++ {
-			b := k[j]
-			c := nodes[n].children[b]
+			code := k[j]
+			c := int32(0)
+
+			for edge := nodes[n].first; edge != 0; edge = edges[edge].next {
+				if edges[edge].code == code {
+					c = edges[edge].child
+
+					break
+				}
+			}
 
 			if c == 0 {
 				nodes = append(nodes, DartsNode{})
 				c = int32(len(nodes) - 1)
-				nodes[n].children[b] = c
-				nodes[n].nChild++
+				edges = append(edges, DartsEdge{next: nodes[n].first, child: c, code: code})
+				nodes[n].first = int32(len(edges) - 1)
 			}
 
 			n = c
@@ -46,34 +60,33 @@ func newDarts(keys []string) *Darts {
 
 	queue := []item{{0, 0}}
 
-	var codesBuf [256]int32
+	var codesBuf, childrenBuf [256]int32
 
 	for qi := 0; qi < len(queue); qi++ {
 		it := queue[qi]
 		n := &nodes[it.node]
 
-		if n.nChild == 0 {
+		if n.first == 0 {
 			continue
 		}
 
 		codes := codesBuf[:0]
+		children := childrenBuf[:0]
 
-		for b := 0; b < 256; b++ {
-			if n.children[b] != 0 {
-				codes = append(codes, int32(b)+1)
-			}
+		for edge := n.first; edge != 0; edge = edges[edge].next {
+			codes = append(codes, int32(edges[edge].code)+1)
+			children = append(children, edges[edge].child)
 		}
 
 		base := d.findBase(codes)
 
 		d.base[it.state] = base
 
-		for _, c := range codes {
+		for i, c := range codes {
 			t := base + c
 
 			d.check[t] = it.state + 1
-
-			child := n.children[byte(c-1)]
+			child := children[i]
 
 			d.value[t] = nodes[child].key
 			queue = append(queue, item{child, t})
@@ -84,8 +97,16 @@ func newDarts(keys []string) *Darts {
 }
 
 func (d *Darts) findBase(codes []int32) int32 {
+	maxCode := int32(0)
+
+	for _, code := range codes {
+		if code > maxCode {
+			maxCode = code
+		}
+	}
+
 	for base := int32(1); ; base++ {
-		d.ensure(base + codes[len(codes)-1])
+		d.ensure(base + maxCode)
 
 		free := true
 

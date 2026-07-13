@@ -43,7 +43,7 @@ func (v VFS) rel() STR {
 }
 
 func (v VFS) relString() string {
-	return internTable.flat[uint32(v)>>1].str
+	return internCell(v.rel()).str
 }
 
 func (v VFS) sharedRel() string {

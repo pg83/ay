@@ -42,6 +42,8 @@ type OsFS struct {
 	direntBuf      []byte
 	mmapCur        []byte
 	rootFD         int
+	dirFD          int
+	dirFDRel       string
 	pathBuf        []byte
 }
 
@@ -53,6 +55,7 @@ func newFS(srcRoot string) FS {
 		dirNames:    newBumpAllocator[uint32](),
 		dirEntries:  newIntSet(1 << 12),
 		sourceUnder: newIntMap[STR](1 << 19),
+		dirFD:       -1,
 	}
 
 	fs.platformInit()

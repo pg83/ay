@@ -149,12 +149,12 @@ type SysinclContribution struct {
 type SysinclIndex struct {
 	byLower    map[string]int32
 	buckets    [][]SysinclContribution
-	byID       *IntValueMap[int32]
+	byID       *IntMap[int32]
 	outScratch []VFS
 }
 
 func buildSysinclIndex(set SysInclSet) *SysinclIndex {
-	m := &SysinclIndex{byLower: make(map[string]int32), byID: newIntValueMap[int32](4096)}
+	m := &SysinclIndex{byLower: make(map[string]int32), byID: newIntMap[int32](4096)}
 	contribArena := newBumpAllocator[SysinclContribution]()
 
 	bucketFor := func(lc string) int32 {
