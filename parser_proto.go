@@ -98,35 +98,33 @@ func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data [][]byte, a *BumpAll
 }
 
 func parseProtoImportLine(line []byte) (STR, IncludeKind, bool) {
-	b := bytes.TrimSpace(line)
+	b := trimParserSpace(line)
 
 	if len(b) == 0 {
 		return 0, includeSystem, false
 	}
 
 	if idx := bytes.Index(b, protoLineComment); idx >= 0 {
-		b = bytes.TrimSpace(b[:idx])
+		b = trimParserSpace(b[:idx])
 	}
 
 	if !bytes.HasPrefix(b, protoImportKw) {
 		return 0, includeSystem, false
 	}
 
-	trimmed := bytesString(b)
-
-	if isParserIdentContinuation(trimmed, len("import")) {
+	if isParserIdentContinuation(bytesString(b), len("import")) {
 		return 0, includeSystem, false
 	}
 
-	rest := strings.TrimSpace(trimmed[len("import"):])
+	rest := trimParserSpace(b[len("import"):])
 
-	if strings.HasPrefix(rest, "public") && !isParserIdentContinuation(rest, len("public")) {
-		rest = strings.TrimSpace(rest[len("public"):])
-	} else if strings.HasPrefix(rest, "weak") && !isParserIdentContinuation(rest, len("weak")) {
-		rest = strings.TrimSpace(rest[len("weak"):])
+	if bytes.HasPrefix(rest, []byte("public")) && !isParserIdentContinuation(bytesString(rest), len("public")) {
+		rest = trimParserSpace(rest[len("public"):])
+	} else if bytes.HasPrefix(rest, []byte("weak")) && !isParserIdentContinuation(bytesString(rest), len("weak")) {
+		rest = trimParserSpace(rest[len("weak"):])
 	}
 
-	target, kind, ok := parseDelimitedIncludeTarget(rest)
+	target, kind, ok := parseDelimitedIncludeTarget(bytesString(rest))
 
 	if !ok {
 		return 0, kind, false

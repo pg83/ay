@@ -2,18 +2,10 @@ package main
 
 import (
 	"bytes"
-	"regexp"
 	"strings"
 )
 
 var (
-	yasmIncludeRe          = regexp.MustCompile(`(?i)^\s*%\s*include\s*[<"]([^>"]+)[>"]`)
-	swigIncludeRe          = regexp.MustCompile(`^%(include|import|insert\s*\([^\)]*\))\s*([<"].*?[">])`)
-	cythonCimportFromRe    = regexp.MustCompile(`^\s*from\s+([A-Za-z0-9_\.]+)\s+cimport\s+(.+)$`)
-	cythonCimportRe        = regexp.MustCompile(`^\s*cimport\s+(.+)$`)
-	cythonIncludeRe        = regexp.MustCompile(`^\s*include\s+["']([^"']+)["']`)
-	cythonExternFromRe     = regexp.MustCompile(`^\s*cdef\s+extern\s+from\s+(<[^>]+>|"[^"]+"|'[^']+')`)
-	flatbuffersIncludeRe   = regexp.MustCompile(`^\s*include\s+"([^"]+)"\s*;`)
 	blockCommentOpen       = []byte("/*")
 	blockCommentClose      = []byte("*/")
 	backtraceHeaderInclude = []byte("BACKTRACE_HEADER")
@@ -23,6 +15,36 @@ var (
 	protoConfigIncludeKw   = []byte("option")
 	protoConfigIncludeExt  = []byte("(NProtoConfig.Include)")
 )
+
+func isParserSpace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\r' || b == '\n' || b == '\f' || b == '\v'
+}
+
+func trimParserSpace(b []byte) []byte {
+	for len(b) > 0 && isParserSpace(b[0]) {
+		b = b[1:]
+	}
+
+	for len(b) > 0 && isParserSpace(b[len(b)-1]) {
+		b = b[:len(b)-1]
+	}
+
+	return b
+}
+
+func cutParserKeyword(b []byte, keyword string) ([]byte, bool) {
+	if len(b) <= len(keyword) || !bytes.Equal(b[:len(keyword)], strBytes(keyword)) || !isParserSpace(b[len(keyword)]) {
+		return nil, false
+	}
+
+	b = b[len(keyword)+1:]
+
+	for len(b) > 0 && isParserSpace(b[0]) {
+		b = b[1:]
+	}
+
+	return b, len(b) > 0
+}
 
 var swigImplicitDirectives = func() []IncludeDirective {
 	names := []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}

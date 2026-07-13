@@ -35,7 +35,9 @@ func resourceCanObjcopy(path, key string) bool {
 }
 
 func resourceHashInto(buf []byte, list []string, moduleTag string) (string, []byte) {
-	sort.Strings(list)
+	if len(list) > 1 {
+		sort.Strings(list)
+	}
 
 	buf = buf[:0]
 

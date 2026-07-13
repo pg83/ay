@@ -27,7 +27,7 @@ func (SwigIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAlloca
 	}
 
 	eachLine(data, func(line []byte) {
-		trimmed := bytes.TrimSpace(line)
+		trimmed := trimParserSpace(line)
 
 		if len(trimmed) == 0 {
 			return
@@ -82,11 +82,44 @@ func (SwigIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAlloca
 }
 
 func parseSwigIncludeLine(line string) (string, IncludeKind, bool) {
-	m := swigIncludeRe.FindStringSubmatch(line)
+	b := strBytes(line)
 
-	if len(m) != 3 {
+	if len(b) == 0 || b[0] != '%' {
 		return "", includeSystem, false
 	}
 
-	return parseDelimitedIncludeTarget(m[2])
+	b = b[1:]
+
+	switch {
+	case bytes.HasPrefix(b, []byte("include")):
+		b = b[len("include"):]
+	case bytes.HasPrefix(b, []byte("import")):
+		b = b[len("import"):]
+	case bytes.HasPrefix(b, []byte("insert")):
+		b = b[len("insert"):]
+
+		for len(b) > 0 && isParserSpace(b[0]) {
+			b = b[1:]
+		}
+
+		if len(b) == 0 || b[0] != '(' {
+			return "", includeSystem, false
+		}
+
+		close := bytes.IndexByte(b[1:], ')')
+
+		if close < 0 {
+			return "", includeSystem, false
+		}
+
+		b = b[close+2:]
+	default:
+		return "", includeSystem, false
+	}
+
+	for len(b) > 0 && isParserSpace(b[0]) {
+		b = b[1:]
+	}
+
+	return parseDelimitedIncludeTarget(bytesString(b))
 }

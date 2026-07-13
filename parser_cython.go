@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"path"
 	"strings"
 )
@@ -25,47 +24,73 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 	}
 
 	eachLine(data, func(line []byte) {
-		t := bytes.TrimSpace(line)
+		t := trimParserSpace(line)
 
 		if len(t) == 0 || t[0] == '#' {
 			return
 		}
 
-		if m := cythonIncludeRe.FindSubmatch(t); len(m) == 2 {
-			add(IncludeDirective{kind: includeQuoted, target: includeTarget(internBytes(m[1]).any())})
-
-			return
-		}
-
-		if m := cythonExternFromRe.FindSubmatch(t); len(m) == 2 {
-			target, kind, ok := parseDelimitedIncludeTarget(string(m[1]))
-
-			if ok {
+		if rest, ok := cutParserKeyword(t, "include"); ok && (rest[0] == '"' || rest[0] == '\'') {
+			if target, kind, ok := parseDelimitedIncludeTarget(bytesString(rest)); ok {
 				add(IncludeDirective{kind: kind, target: includeTarget(internStr(target).any())})
 			}
 
 			return
 		}
 
-		if m := cythonCimportFromRe.FindSubmatch(t); len(m) == 3 {
-			addCythonCimportFrom(add, string(m[1]), string(m[2]))
+		if rest, ok := cutParserKeyword(t, "cdef"); ok {
+			if rest, ok = cutParserKeyword(rest, "extern"); ok {
+				if rest, ok = cutParserKeyword(rest, "from"); ok {
+					if target, kind, ok := parseDelimitedIncludeTarget(bytesString(rest)); ok {
+						add(IncludeDirective{kind: kind, target: includeTarget(internStr(target).any())})
+					}
+				}
+			}
 
 			return
 		}
 
-		if m := cythonCimportRe.FindSubmatch(t); len(m) == 2 {
-			for _, part := range strings.Split(string(m[1]), ",") {
-				part = strings.TrimSpace(part)
+		if rest, ok := cutParserKeyword(t, "from"); ok {
+			moduleEnd := 0
 
-				if part == "" {
+			for moduleEnd < len(rest) && isCythonModuleByte(rest[moduleEnd]) {
+				moduleEnd++
+			}
+
+			if moduleEnd > 0 {
+				if names, ok := cutParserKeyword(trimParserSpace(rest[moduleEnd:]), "cimport"); ok {
+					addCythonCimportFrom(add, bytesString(rest[:moduleEnd]), bytesString(names))
+				}
+			}
+
+			return
+		}
+
+		if rest, ok := cutParserKeyword(t, "cimport"); ok {
+			for len(rest) > 0 {
+				part := rest
+
+				if comma := strings.IndexByte(bytesString(part), ','); comma >= 0 {
+					part = rest[:comma]
+					rest = rest[comma+1:]
+				} else {
+					rest = nil
+				}
+
+				part = trimParserSpace(part)
+
+				if len(part) == 0 {
 					continue
 				}
 
-				if idx := strings.IndexAny(part, " \t"); idx >= 0 {
+				partString := bytesString(part)
+
+				if idx := strings.IndexAny(partString, " \t"); idx >= 0 {
 					part = part[:idx]
+					partString = bytesString(part)
 				}
 
-				addCythonPxdCandidates(add, strings.ReplaceAll(part, ".", "/"))
+				addCythonPxdCandidates(add, strings.ReplaceAll(partString, ".", "/"))
 			}
 		}
 	})
@@ -77,6 +102,10 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 	}
 
 	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
+}
+
+func isCythonModuleByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == '_' || b == '.'
 }
 
 func addCythonPxdCandidates(add func(IncludeDirective), path string) {
@@ -114,7 +143,7 @@ func addCythonCimportFrom(add func(IncludeDirective), module, names string) {
 		emit(includeCythonModule, searchPath+".pxd")
 	}
 
-	for _, name := range parseCythonCimportNames(names) {
+	eachCythonCimportName(names, func(name string) {
 		base := name
 
 		if searchPath != "" {
@@ -123,7 +152,7 @@ func addCythonCimportFrom(add func(IncludeDirective), module, names string) {
 
 		emit(includeCythonName, base+"/__init__.pxd")
 		emit(includeCythonFallback, base+".pxd")
-	}
+	})
 }
 
 func cythonFromSearchPath(module string) (string, bool) {
@@ -142,7 +171,7 @@ func cythonFromSearchPath(module string) (string, bool) {
 	return strings.Repeat("../", dots-1) + rest, true
 }
 
-func parseCythonCimportNames(names string) []string {
+func eachCythonCimportName(names string, fn func(string)) {
 	if i := strings.IndexByte(names, '#'); i >= 0 {
 		names = names[:i]
 	}
@@ -150,8 +179,6 @@ func parseCythonCimportNames(names string) []string {
 	names = strings.TrimSpace(names)
 	names = strings.TrimPrefix(names, "(")
 	names = strings.TrimSuffix(names, ")")
-
-	var out []string
 
 	for _, part := range strings.Split(names, ",") {
 		part = strings.TrimSpace(part)
@@ -164,8 +191,6 @@ func parseCythonCimportNames(names string) []string {
 			continue
 		}
 
-		out = append(out, part)
+		fn(part)
 	}
-
-	return out
 }
