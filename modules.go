@@ -518,7 +518,11 @@ func sourceInputVFS(fs FS, moduleDir VFS, path string) (VFS, bool) {
 		return vfs, true
 	}
 
-	clean := filepath.ToSlash(filepath.Clean(path))
+	clean := path
+
+	if clean == "" || !pathIsClean(clean) {
+		clean = filepath.ToSlash(filepath.Clean(clean))
+	}
 
 	if clean == "." || clean == "" {
 		return moduleDir, true

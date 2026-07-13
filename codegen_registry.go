@@ -39,37 +39,33 @@ func (p *PendingEmit) fire() {
 	}
 }
 
-func fireOnUse(info *GeneratedFileInfo) {
-	if info == nil || info.OnUse == nil {
-		return
-	}
-
-	pending := info.OnUse
-
-	info.OnUse = nil
-	pending.fire()
-}
-
 type CodegenRegistry struct {
-	byRel           DenseMap[STR, *GeneratedFileInfo]
-	splitPrefixSeen BitSet
-	leafEver        BitSet
-	bySplit         *IntMap[*GeneratedFileInfo]
-	na              *NodeArenas
-}
-
-func splitKey(prefix VFS, suffix ANY) uint64 {
-	return splitMix64(uint32(prefix), uint32(suffix))
+	byRel    DenseMap[STR, *GeneratedFileInfo]
+	leafEver BitSet
+	na       *NodeArenas
 }
 
 func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
-	return &CodegenRegistry{bySplit: newIntMap[*GeneratedFileInfo](1 << 17), na: na}
+	return &CodegenRegistry{na: na}
 }
 
 func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
 	info := r.lookup(path)
 
-	fireOnUse(info)
+	if info != nil && info.OnUse != nil {
+		pending := info.OnUse
+
+		info.OnUse = nil
+		fn, emitter := pending.fn, pending.emitter
+		pending.fn = nil
+		pending.emitter = nil
+
+		if emitter != nil {
+			emitter.emitPending()
+		} else if fn != nil {
+			fn()
+		}
+	}
 
 	return info
 }
@@ -77,7 +73,20 @@ func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
 func (r *CodegenRegistry) useBuild(path VFS) *GeneratedFileInfo {
 	info := r.lookupSTR(path.rel())
 
-	fireOnUse(info)
+	if info != nil && info.OnUse != nil {
+		pending := info.OnUse
+
+		info.OnUse = nil
+		fn, emitter := pending.fn, pending.emitter
+		pending.fn = nil
+		pending.emitter = nil
+
+		if emitter != nil {
+			emitter.emitPending()
+		} else if fn != nil {
+			fn()
+		}
+	}
 
 	return info
 }
@@ -85,7 +94,20 @@ func (r *CodegenRegistry) useBuild(path VFS) *GeneratedFileInfo {
 func (r *CodegenRegistry) useSplit(prefix VFS, suffix ANY) *GeneratedFileInfo {
 	info := r.lookupSplit(prefix, suffix)
 
-	fireOnUse(info)
+	if info != nil && info.OnUse != nil {
+		pending := info.OnUse
+
+		info.OnUse = nil
+		fn, emitter := pending.fn, pending.emitter
+		pending.fn = nil
+		pending.emitter = nil
+
+		if emitter != nil {
+			emitter.emitPending()
+		} else if fn != nil {
+			fn()
+		}
+	}
 
 	return info
 }
@@ -100,7 +122,6 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 			info.OutputPath.string(), existing.ProducerRef, info.ProducerRef)
 	}
 
-	rel := info.OutputPath.relString()
 	stored := r.na.geninfos.one()
 
 	*stored = info
@@ -111,18 +132,7 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 		r.leafEver.add(uint32(leaf))
 	}
 
-	for i := 0; i < len(rel); i++ {
-		if rel[i] == '/' {
-			r.putSplit(source(rel[:i]), internStr(rel[i+1:]), stored)
-		}
-	}
-
 	return stored
-}
-
-func (r *CodegenRegistry) putSplit(prefix VFS, suffix STR, info *GeneratedFileInfo) {
-	r.bySplit.put(splitKey(prefix, suffix.any()), info)
-	r.splitPrefixSeen.add(uint32(prefix.rel()))
 }
 
 func (r *CodegenRegistry) lookup(path VFS) *GeneratedFileInfo {
@@ -142,15 +152,26 @@ func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
 }
 
 func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix ANY) *GeneratedFileInfo {
-	if !r.splitPrefixSeen.has(uint32(prefix.rel())) {
+	suffixID := suffix.str()
+
+	if suffixID == 0 {
 		return nil
 	}
 
-	if info := r.bySplit.get(splitKey(prefix, suffix)); info != nil {
-		return *info
+	prefixRel := prefix.relString()
+	rel := suffixID
+
+	if prefixRel != "" {
+		rel = internedV(prefixRel, "/", suffixID.string())
+
+		if rel == 0 {
+			return nil
+		}
 	}
 
-	return nil
+	info, _ := r.byRel.get(rel)
+
+	return info
 }
 
 func (r *CodegenRegistry) mustInfo(path VFS, op string) *GeneratedFileInfo {

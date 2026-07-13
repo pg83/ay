@@ -157,13 +157,15 @@ func (e *EmitContext) emitReservedNode(node Node, ref NodeRef) {
 }
 
 func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
-	refs := nodeRefScratches.get()
-
-	defer func() { nodeRefScratches.put(refs) }()
+	var refs []NodeRef
 
 	for _, chunk := range node.Inputs {
 		if len(chunk) == 0 || chunk[0].isSource() {
 			continue
+		}
+
+		if refs == nil {
+			refs = nodeRefScratches.get()
 		}
 
 		for _, input := range chunk {
@@ -171,6 +173,10 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 				refs = append(refs, info.ProducerRef)
 			}
 		}
+	}
+
+	if refs != nil {
+		defer nodeRefScratches.put(refs)
 	}
 
 	if len(refs) == 0 {
