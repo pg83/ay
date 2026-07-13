@@ -633,6 +633,22 @@ func (l *Lexer) readToken() Token {
 
 func (l *Lexer) readString(startLine, startCol int, quote byte) Token {
 	l.advance()
+	start := l.pos
+
+	for pos := start; pos < len(l.src); pos++ {
+		switch l.src[pos] {
+		case quote:
+			l.pos = pos + 1
+			l.col += pos - start + 1
+			l.prevByte = quote
+
+			return Token{kind: tokString, val: internBytes(l.src[start:pos]).string(), line: startLine, col: startCol}
+		case '\\', '\n', '\r':
+			goto slow
+		}
+	}
+
+slow:
 
 	buf := l.tokBuf[:0]
 

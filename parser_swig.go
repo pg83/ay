@@ -34,7 +34,7 @@ func (SwigIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAlloca
 		}
 
 		if !inBlock && (bytes.HasPrefix(trimmed, []byte("%include")) || bytes.HasPrefix(trimmed, []byte("%import")) || bytes.HasPrefix(trimmed, []byte("%insert"))) {
-			target, kind, ok := parseSwigIncludeLine(string(trimmed))
+			target, kind, ok := parseSwigIncludeLine(trimmed)
 
 			if ok {
 				k = addDirective(block, k, IncludeDirective{kind: kind, target: includeTarget(internStr(target).any())})
@@ -81,9 +81,7 @@ func (SwigIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAlloca
 	return set
 }
 
-func parseSwigIncludeLine(line string) (string, IncludeKind, bool) {
-	b := strBytes(line)
-
+func parseSwigIncludeLine(b []byte) (string, IncludeKind, bool) {
 	if len(b) == 0 || b[0] != '%' {
 		return "", includeSystem, false
 	}
@@ -121,5 +119,7 @@ func parseSwigIncludeLine(line string) (string, IncludeKind, bool) {
 		b = b[1:]
 	}
 
-	return parseDelimitedIncludeTarget(bytesString(b))
+	target, kind, ok := parseDelimitedIncludeTarget(b)
+
+	return bytesString(target), kind, ok
 }

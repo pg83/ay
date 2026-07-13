@@ -31,8 +31,8 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 		}
 
 		if rest, ok := cutParserKeyword(t, "include"); ok && (rest[0] == '"' || rest[0] == '\'') {
-			if target, kind, ok := parseDelimitedIncludeTarget(bytesString(rest)); ok {
-				add(IncludeDirective{kind: kind, target: includeTarget(internStr(target).any())})
+			if target, kind, ok := parseDelimitedIncludeTarget(rest); ok {
+				add(IncludeDirective{kind: kind, target: includeTarget(internBytes(target).any())})
 			}
 
 			return
@@ -41,8 +41,8 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 		if rest, ok := cutParserKeyword(t, "cdef"); ok {
 			if rest, ok = cutParserKeyword(rest, "extern"); ok {
 				if rest, ok = cutParserKeyword(rest, "from"); ok {
-					if target, kind, ok := parseDelimitedIncludeTarget(bytesString(rest)); ok {
-						add(IncludeDirective{kind: kind, target: includeTarget(internStr(target).any())})
+					if target, kind, ok := parseDelimitedIncludeTarget(rest); ok {
+						add(IncludeDirective{kind: kind, target: includeTarget(internBytes(target).any())})
 					}
 				}
 			}

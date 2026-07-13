@@ -52,7 +52,7 @@ func newFS(srcRoot string) FS {
 		readBuf:     make([]byte, readChunkSize),
 		dirNames:    newBumpAllocator[uint32](),
 		dirEntries:  newIntSet(1 << 12),
-		sourceUnder: newIntMap[STR](1 << 16),
+		sourceUnder: newIntMap[STR](1 << 19),
 	}
 
 	fs.platformInit()

@@ -177,6 +177,33 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 		return
 	}
 
+	if len(node.DepRefs)+len(refs) <= 16 {
+		out := e.ctx.na.noderefs.alloc(len(node.DepRefs) + len(refs))
+		k := copy(out, node.DepRefs)
+
+		for _, ref := range refs {
+			seen := false
+
+			for _, previous := range out[:k] {
+				if previous == ref {
+					seen = true
+
+					break
+				}
+			}
+
+			if !seen {
+				out[k] = ref
+				k++
+			}
+		}
+
+		e.ctx.na.noderefs.commit(k)
+		node.DepRefs = out[:k]
+
+		return
+	}
+
 	var result []NodeRef
 
 	dedupers.with(func(deduper *DeDuper) {

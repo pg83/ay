@@ -65,7 +65,7 @@ func parseProtoConfigIncludeLine(line []byte) (string, bool) {
 		return "", false
 	}
 
-	target, _, ok := parseDelimitedIncludeTarget(string(rest[q:]))
+	target, _, ok := parseDelimitedIncludeTarget(rest[q:])
 
-	return target, ok
+	return bytesString(target), ok
 }

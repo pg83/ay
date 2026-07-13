@@ -69,13 +69,13 @@ func parseCTestTargets(t *testing.T, chunks [][]byte) []string {
 }
 
 func TestParseDelimitedIncludeTarget_QuotedAngleSystem(t *testing.T) {
-	target, kind, ok := parseDelimitedIncludeTarget("\"<util/system/error.h>\"")
+	target, kind, ok := parseDelimitedIncludeTarget([]byte("\"<util/system/error.h>\""))
 
 	if !ok {
 		t.Fatal("parseDelimitedIncludeTarget returned ok=false")
 	}
 
-	if target != "util/system/error.h" {
+	if bytesString(target) != "util/system/error.h" {
 		t.Fatalf("target = %q, want %q", target, "util/system/error.h")
 	}
 

@@ -110,7 +110,7 @@ func parseRagelNativeIncludeLine(line string) (string, bool) {
 		return "", false
 	}
 
-	target, _, ok := parseDelimitedIncludeTarget(rest[firstQuote:])
+	target, _, ok := parseDelimitedIncludeTarget(strBytes(rest[firstQuote:]))
 
-	return target, ok
+	return bytesString(target), ok
 }
