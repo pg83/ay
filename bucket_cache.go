@@ -71,7 +71,7 @@ func newBucketCache() *BucketCache {
 		chunks:       newBumpAllocator[[]VFS](),
 		lists:        newBumpAllocator[BucketList](),
 		pool:         newBumpAllocator[VFS](),
-		intern:       newIntValueMap[BucketVal](1 << 18),
+		intern:       newIntValueMap[BucketVal](1 << 17),
 		overflow:     newIntValueMap[BucketVal](1 << 4),
 		listIntern:   newIntValueMap[BucketListVal](1 << 16),
 		listOverflow: newIntValueMap[BucketListVal](1 << 4),

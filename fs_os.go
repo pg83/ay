@@ -63,7 +63,7 @@ func newFS(srcRoot string) FS {
 		readBuf:     make([]byte, readChunkSize),
 		dirNames:    newBumpAllocator[uint32](),
 		dirEntries:  newIntSet(1 << 18),
-		sourceUnder: newIntMap[STR](1 << 19),
+		sourceUnder: newIntMap[STR](1 << 18),
 		dirFD:       -1,
 		dirFDs:      make(map[string]int, dirFDCacheSize),
 	}
