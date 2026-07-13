@@ -8,7 +8,7 @@ type DenseMap[K ~uint32, V any] struct {
 func (m *DenseMap[K, V]) get(k K) (V, bool) {
 	if int(k) < len(m.idx.s) {
 		if slot := m.idx.s[k]; slot != 0 {
-			return m.vals.s[slot], true
+			return *unsafeAt(m.vals.s, uint64(slot)), true
 		}
 	}
 
@@ -20,7 +20,7 @@ func (m *DenseMap[K, V]) get(k K) (V, bool) {
 func (m *DenseMap[K, V]) put(k K, v V) {
 	if int(k) < len(m.idx.s) {
 		if slot := m.idx.s[k]; slot != 0 {
-			m.vals.s[slot] = v
+			*unsafeAt(m.vals.s, uint64(slot)) = v
 
 			return
 		}

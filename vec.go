@@ -1,5 +1,11 @@
 package main
 
+import "unsafe"
+
+func unsafeAt[T any](s []T, i uint64) *T {
+	return (*T)(unsafe.Add(unsafe.Pointer(unsafe.SliceData(s)), uintptr(i)*unsafe.Sizeof(*new(T))))
+}
+
 type Vec[T any] struct {
 	s []T
 }

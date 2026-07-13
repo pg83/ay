@@ -13,7 +13,7 @@ func newIntValueMap[V any](hint int) *IntValueMap[V] {
 
 func (m *IntValueMap[V]) get(k uint64) *V {
 	if i := m.idx.get(k); i != nil {
-		return &m.vals.s[*i]
+		return unsafeAt(m.vals.s, uint64(*i))
 	}
 
 	return nil
@@ -23,7 +23,7 @@ func (m *IntValueMap[V]) cell(k uint64) (*V, bool) {
 	cell, existed := m.idx.cell(k)
 
 	if existed {
-		return &m.vals.s[*cell], true
+		return unsafeAt(m.vals.s, uint64(*cell)), true
 	}
 
 	*cell = uint32(m.vals.len())
@@ -32,14 +32,14 @@ func (m *IntValueMap[V]) cell(k uint64) (*V, bool) {
 
 	m.vals.pushBack(zero)
 
-	return &m.vals.s[*cell], false
+	return unsafeAt(m.vals.s, uint64(*cell)), false
 }
 
 func (m *IntValueMap[V]) put(k uint64, v V) {
 	cell, existed := m.idx.cell(k)
 
 	if existed {
-		m.vals.s[*cell] = v
+		*unsafeAt(m.vals.s, uint64(*cell)) = v
 
 		return
 	}

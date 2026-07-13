@@ -45,16 +45,17 @@ func (s *IntSet) alloc(capacity int) {
 }
 
 func (s *IntSet) bit(i uint64) bool {
-	return s.bits[i>>6]>>(i&63)&1 != 0
+	return *unsafeAt(s.bits, i>>6)>>(i&63)&1 != 0
 }
 
 func (s *IntSet) setBit(i uint64, v bool) {
 	b := uint64(1) << (i & 63)
+	cell := unsafeAt(s.bits, i>>6)
 
 	if v {
-		s.bits[i>>6] |= b
+		*cell |= b
 	} else {
-		s.bits[i>>6] &^= b
+		*cell &^= b
 	}
 }
 

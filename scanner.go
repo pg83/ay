@@ -235,7 +235,7 @@ func hashScanConfig(ownAddIncl, peerAddIncl, baseSearchPaths []VFS) uint64 {
 		h = mix64(h ^ uint64(len(ss)))
 
 		for _, v := range ss {
-			h = mix64(h ^ internTable.flat[uint32(v.rel())].lo ^ uint64(uint32(v)&1))
+			h = mix64(h ^ internCell(v.rel()).lo ^ uint64(uint32(v)&1))
 		}
 	}
 

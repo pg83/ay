@@ -169,9 +169,17 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 		}
 
 		for _, input := range chunk {
-			if info := e.codegen.useBuild(input); info != nil {
-				refs = append(refs, info.ProducerRef)
+			info := e.codegen.lookupSTR(input.rel())
+
+			if info == nil {
+				continue
 			}
+
+			if info.OnUse != nil {
+				fireGenerated(info)
+			}
+
+			refs = append(refs, info.ProducerRef)
 		}
 	}
 

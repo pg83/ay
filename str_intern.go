@@ -29,6 +29,10 @@ type InternCell struct {
 	lo  uint64
 }
 
+func internCell(id STR) *InternCell {
+	return unsafeAt(internTable.flat, uint64(id))
+}
+
 func internOwnedCopy(b []byte) string {
 	n := len(b)
 
@@ -99,7 +103,7 @@ func internStr(s string) STR {
 	h := xxh3.HashString128(s)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.flat[uint32(*p)].lo == h.Lo {
+		if internCell(*p).lo == h.Lo {
 			return *p
 		}
 
@@ -210,7 +214,7 @@ func internBlock(block []byte, n int) STR {
 	h := xxh3.Hash128(buf)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.flat[uint32(*p)].lo == h.Lo {
+		if internCell(*p).lo == h.Lo {
 			return *p
 		}
 
@@ -246,7 +250,7 @@ func internBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.flat[uint32(*p)].lo == h.Lo {
+		if internCell(*p).lo == h.Lo {
 			return *p
 		}
 
@@ -273,7 +277,7 @@ func internedBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.flat[uint32(*p)].lo == h.Lo {
+		if internCell(*p).lo == h.Lo {
 			return *p
 		}
 
@@ -290,7 +294,7 @@ func (id STR) str() STR {
 }
 
 func (id STR) string() string {
-	return internTable.flat[uint32(id)].str
+	return internCell(id).str
 }
 
 func (id STR) sharedString() string {
@@ -319,7 +323,7 @@ func interned(s string) STR {
 	h := xxh3.HashString128(s)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internTable.flat[uint32(*p)].lo == h.Lo {
+		if internCell(*p).lo == h.Lo {
 			return *p
 		}
 
@@ -344,7 +348,7 @@ func (id STR) build() VFS {
 }
 
 func (id STR) vfs() VFS {
-	s := internTable.flat[uint32(id)].str
+	s := internCell(id).str
 
 	if !vfsHasPrefix(s) {
 		return 0
