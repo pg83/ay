@@ -104,16 +104,16 @@ func parseProtoImportLine(line []byte) (STR, IncludeKind, bool) {
 		return 0, includeSystem, false
 	}
 
-	if idx := bytes.Index(b, protoLineComment); idx >= 0 {
-		b = trimParserSpace(b[:idx])
-	}
-
 	if !bytes.HasPrefix(b, protoImportKw) {
 		return 0, includeSystem, false
 	}
 
 	if isParserIdentContinuation(bytesString(b), len("import")) {
 		return 0, includeSystem, false
+	}
+
+	if idx := bytes.Index(b[len(protoImportKw):], protoLineComment); idx >= 0 {
+		b = trimParserSpace(b[:len(protoImportKw)+idx])
 	}
 
 	rest := trimParserSpace(b[len("import"):])
