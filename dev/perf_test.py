@@ -74,6 +74,27 @@ class PairedPermutationTest(unittest.TestCase):
 
         self.assertEqual(runs, 14)
 
+    def test_holm_rejects_only_the_leading_family(self):
+        rejected = PERF.holm_rejections(
+            {
+                "instructions": 0.0001,
+                "cycles": 0.004,
+                "task_clock": 0.02,
+                "wall": 0.5,
+            },
+            0.01,
+        )
+
+        self.assertEqual(rejected, {"instructions"})
+
+    def test_opposite_sign_tests_for_regression(self):
+        values = [1.0, 2.0, 3.0]
+        faster = PERF.paired_permutation(values)
+        slower = PERF.paired_permutation([-value for value in values])
+
+        self.assertEqual(faster.p_right_faster, 1.0)
+        self.assertEqual(slower.p_right_faster, 0.125)
+
 
 class RawMeasurementTest(unittest.TestCase):
     def test_perf_stat_parser(self):

@@ -29,6 +29,7 @@ from statistics import NormalDist
 PERF_EVENTS = ("task-clock:u", "cycles:u", "instructions:u")
 PERF_METRICS = ("task_clock", "cycles", "instructions")
 BASE_METRICS = ("wall", "user", "system")
+DECISION_METRICS = ("wall", "task_clock", "cycles", "instructions")
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,19 @@ def paired_permutation(values, exact_max_blocks=20, permutations=200_000, seed=0
         method = "sampled"
 
     return PermutationResult(statistics.fmean(values), p_value, method, count)
+
+
+def holm_rejections(p_values, alpha):
+    rejected = set()
+    ordered = sorted(p_values.items(), key=lambda item: item[1])
+
+    for rank, (name, p_value) in enumerate(ordered):
+        if p_value > alpha / (len(ordered) - rank):
+            break
+
+        rejected.add(name)
+
+    return rejected
 
 
 def minimum_detectable_effect(values, blocks, alpha, power):
@@ -405,12 +419,6 @@ def _parse_args(argv):
         help="pin the harness and all measured children to this CPU",
     )
     parser.add_argument(
-        "--metric",
-        choices=(*BASE_METRICS, *PERF_METRICS),
-        default="cycles",
-        help="primary metric used for the sequential decision",
-    )
-    parser.add_argument(
         "--calibration-json",
         metavar="PATH",
         help="raw A/A samples used to estimate MDE and required run count",
@@ -525,7 +533,7 @@ def main(argv=None):
     print(f"seed : {args.seed}")
     print(f"cpu  : {args.cpu}")
     print(f"perf : {args.perf}")
-    print(f"gate : {args.metric}; one-sided right-faster")
+    print(f"gate : Holm over {', '.join(DECISION_METRICS)}; any faster, none slower")
     print(f"looks: {checkpoints}; per-look p <= {decision_alpha:.6g} (FWER {args.alpha:g})")
 
     if calibration_mode:
@@ -536,6 +544,8 @@ def main(argv=None):
         print("noise: current A/B blocks (run A/A once for an independent MDE estimate)")
 
     _write_json(args.json, raw_samples)
+    improved = set()
+    regressed = set()
 
     try:
         for cycle in range(args.warmup_cycles):
@@ -574,6 +584,7 @@ def main(argv=None):
 
             n = len(measurements["left"])
             permutations = {}
+            regression_permutations = {}
 
             if n in checkpoint_set:
                 # Keep test randomness independent of the execution schedule and
@@ -587,6 +598,29 @@ def main(argv=None):
                         args.permutations,
                         test_seed ^ (offset * 0xD1B54A32D192ED03),
                     )
+
+                for offset, metric in enumerate(DECISION_METRICS):
+                    regression_permutations[metric] = paired_permutation(
+                        [-value for value in block_log_ratios[metric]],
+                        args.exact_max_blocks,
+                        args.permutations,
+                        test_seed ^ (offset * 0x94D049BB133111EB) ^ 0xA24BAED4963EE407,
+                    )
+
+                improved = holm_rejections(
+                    {
+                        metric: permutations[metric].p_right_faster
+                        for metric in DECISION_METRICS
+                    },
+                    decision_alpha,
+                )
+                regressed = holm_rejections(
+                    {
+                        metric: regression_permutations[metric].p_right_faster
+                        for metric in DECISION_METRICS
+                    },
+                    decision_alpha,
+                )
 
             result = summarize(
                 [sample["wall"] for sample in measurements["left"]],
@@ -631,29 +665,40 @@ def main(argv=None):
                     )
                     mde_text = "n/a" if mde is None else f"{mde:.3f}%"
                     required_text = "n/a" if required is None else str(required)
+                    slow_text = ""
+                    status = ""
+
+                    if metric in regression_permutations:
+                        slow_text = (
+                            f" p_slow={regression_permutations[metric].p_right_faster:.6g}"
+                        )
+                    if metric in improved:
+                        status = " BETTER"
+                    if metric in regressed:
+                        status = " WORSE"
 
                     print(
                         f"  {metric:12s} R/L={effect:+.4f}% "
-                        f"p_right={permutation.p_right_faster:.6g} "
+                        f"p_fast={permutation.p_right_faster:.6g}"
+                        f"{slow_text} "
                         f"MDE{args.power:.0%}={mde_text} "
-                        f"runs/side@{args.target_effect:g}%={required_text}",
+                        f"runs/side@{args.target_effect:g}%={required_text}"
+                        f"{status}",
                         flush=True,
                     )
 
-            primary = permutations.get(args.metric)
-
-            if (
-                primary is not None
-                and not calibration_mode
-                and primary.p_right_faster <= decision_alpha
-            ):
-                effect = math.expm1(primary.mean_log_ratio) * 100
-
+            if regressed and not calibration_mode:
                 print(
-                    f"SEPARATED: right is faster on {args.metric}; n={n} each, "
-                    f"blocks={result.blocks}, "
-                    f"p={primary.p_right_faster:.6g} <= {decision_alpha:.6g}, "
-                    f"R/L={effect:+.4f}%"
+                    f"REGRESSED: {', '.join(sorted(regressed))}; "
+                    f"n={n} each, blocks={result.blocks}"
+                )
+
+                return 3
+
+            if improved and not calibration_mode:
+                print(
+                    f"IMPROVED: {', '.join(sorted(improved))}; "
+                    f"n={n} each, blocks={result.blocks}; no detected regressions"
                 )
 
                 return 0
@@ -665,21 +710,16 @@ def main(argv=None):
         print(f"perf.py: {error}", file=sys.stderr)
         return 1
 
-    primary = permutations[args.metric]
-    effect = math.expm1(primary.mean_log_ratio) * 100
-
     if calibration_mode:
         print(
-            f"CALIBRATION: n={args.max_runs} each, blocks={result.blocks}, "
-            f"{args.metric} R/L={effect:+.4f}%"
+            f"CALIBRATION: n={args.max_runs} each, blocks={result.blocks}"
         )
 
         return 0
 
     print(
         f"INCONCLUSIVE: n={args.max_runs} each, blocks={result.blocks}, "
-        f"metric={args.metric}, p={primary.p_right_faster:.6g} > {decision_alpha:.6g}, "
-        f"R/L={effect:+.4f}%"
+        "no Holm-significant improvement or regression"
     )
 
     return 2
