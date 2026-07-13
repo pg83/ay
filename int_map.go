@@ -7,15 +7,11 @@ const (
 )
 
 type IntMap[V any] struct {
-	data     []IntMapEntry[V]
+	keys     []uint64
+	values   []V
 	mask     uint64
 	count    int
 	resizeAt int
-}
-
-type IntMapEntry[V any] struct {
-	k uint64
-	v V
 }
 
 func newIntMap[V any](hint int) *IntMap[V] {
@@ -33,19 +29,21 @@ func newIntMap[V any](hint int) *IntMap[V] {
 }
 
 func (m *IntMap[V]) alloc(capacity int) {
-	m.data = make([]IntMapEntry[V], capacity)
+	m.keys = make([]uint64, capacity)
+	m.values = make([]V, capacity)
 	m.mask = uint64(capacity - 1)
 	m.resizeAt = capacity * intMapFillNum / intMapFillDen
 }
 
 func (m *IntMap[V]) get(k uint64) *V {
-	data := m.data
+	keys := m.keys
+	values := m.values
 	mask := m.mask
 
 	for i := k & mask; ; i = (i + 1) & mask {
-		switch data[i].k {
+		switch keys[i] {
 		case k:
-			return &data[i].v
+			return &values[i]
 		case 0:
 			return nil
 		}
@@ -54,23 +52,24 @@ func (m *IntMap[V]) get(k uint64) *V {
 
 func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 	for {
-		data := m.data
+		keys := m.keys
+		values := m.values
 		mask := m.mask
 		i := k & mask
 
 		for {
-			ek := data[i].k
+			ek := keys[i]
 
 			if ek == k {
-				return &data[i].v, true
+				return &values[i], true
 			}
 
 			if ek == 0 {
 				if m.count < m.resizeAt {
-					data[i].k = k
+					keys[i] = k
 					m.count++
 
-					return &data[i].v, false
+					return &values[i], false
 				}
 
 				break
@@ -90,14 +89,15 @@ func (m *IntMap[V]) put(k uint64, v V) {
 }
 
 func (m *IntMap[V]) grow() {
-	old := m.data
+	oldKeys := m.keys
+	oldValues := m.values
 
-	m.alloc(len(old) * 2)
+	m.alloc(len(oldKeys) * 2)
 	m.count = 0
 
-	for _, e := range old {
-		if e.k != 0 {
-			m.put(e.k, e.v)
+	for i, k := range oldKeys {
+		if k != 0 {
+			m.put(k, oldValues[i])
 		}
 	}
 }
