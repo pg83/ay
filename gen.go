@@ -358,7 +358,7 @@ func confPy3NoStripOnDebug(fs FS) bool {
 		return false
 	}
 
-	return strings.Contains(string(fs.read("build/conf/python.conf")), "NO_STRIP=yes")
+	return strings.Contains(string(concatChunks(fs.read("build/conf/python.conf"))), "NO_STRIP=yes")
 }
 
 func isFinalTargetModuleType(name TOK) bool {

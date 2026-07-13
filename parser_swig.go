@@ -11,7 +11,7 @@ func (SwigIncludeDirectiveParser) id() uint32 {
 	return 6
 }
 
-func (SwigIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+func (SwigIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0
 	inBlock := false

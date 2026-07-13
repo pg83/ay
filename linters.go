@@ -25,7 +25,7 @@ func loadAutoincludeIndex(fs FS) *AutoincludeIndex {
 
 		var roots []string
 
-		if err := json.Unmarshal(fs.read(f), &roots); err != nil {
+		if err := json.Unmarshal(concatChunks(fs.read(f)), &roots); err != nil {
 			throwFmt("autoinclude: parse %s: %v", f, err)
 		}
 

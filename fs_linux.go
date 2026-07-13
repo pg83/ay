@@ -51,7 +51,7 @@ func (fs *OsFS) openatRel(rel string, flags int) (int, syscall.Errno) {
 	}
 }
 
-func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
+func (fs *OsFS) readFileRel(rel string) [][]byte {
 	if fs.mmapCur != nil {
 		throw(syscall.Munmap(fs.mmapCur))
 
@@ -66,49 +66,27 @@ func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
 
 	defer syscall.Close(fd)
 
-	buf = buf[:0]
+	n := readEINTR(fd, fs.readBuf)
+	fs.readResult[0] = fs.readBuf[:n]
+
+	if n < len(fs.readBuf) {
+		return fs.readResult[:1]
+	}
 
 	var st syscall.Stat_t
 
-	if statErr := syscall.Fstat(fd, &st); statErr == nil {
-		sz := int(st.Size)
+	throw(syscall.Fstat(fd, &st))
 
-		if sz >= mmapReadThreshold {
-			fs.mmapCur = throw2(syscall.Mmap(fd, 0, sz, syscall.PROT_READ, syscall.MAP_PRIVATE|syscall.MAP_POPULATE))
+	tailSize := int(st.Size) - n
 
-			return fs.mmapCur
-		}
-
-		if sz > cap(buf) {
-			buf = make([]byte, 0, sz)
-		}
-
-		for len(buf) < sz {
-			n := readEINTR(fd, buf[len(buf):sz])
-
-			if n == 0 {
-				return buf
-			}
-
-			buf = buf[:len(buf)+n]
-		}
-
-		return buf
+	if tailSize <= 0 {
+		return fs.readResult[:1]
 	}
 
-	for {
-		if len(buf) == cap(buf) {
-			buf = append(buf, 0)[:len(buf)]
-		}
+	fs.mmapCur = throw2(syscall.Mmap(fd, int64(n), tailSize, syscall.PROT_READ, syscall.MAP_PRIVATE|syscall.MAP_POPULATE))
+	fs.readResult[1] = fs.mmapCur
 
-		n := readEINTR(fd, buf[len(buf):cap(buf)])
-
-		if n == 0 {
-			return buf
-		}
-
-		buf = buf[:len(buf)+n]
-	}
+	return fs.readResult[:2]
 }
 
 func readEINTR(fd int, p []byte) int {

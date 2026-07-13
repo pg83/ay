@@ -3,13 +3,13 @@ package main
 import (
 	"os"
 	"path/filepath"
-
-	"github.com/zeebo/xxh3"
 )
 
 var emptyDirNames = []uint32{}
 
-const mmapReadThreshold = 2 << 20
+// readChunkSize is part of the source content-hash format: content hashes are
+// XORs of hashes of these stable chunks. Changing it invalidates those hashes.
+const readChunkSize = 1 << 20
 
 const sourceUnderHotMask = 1<<15 - 1
 
@@ -25,7 +25,7 @@ func hashSourceFile(srcRoot, rel string) uint64 {
 		return 0
 	}
 
-	return xxh3.Hash(data)
+	return contentHashBytes(data)
 }
 
 type OsFS struct {
@@ -38,8 +38,9 @@ type OsFS struct {
 	sourceUnder    *IntMap[STR]
 	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
 	readBuf        []byte
-	mmapCur        []byte
+	readResult     [2][]byte
 	direntBuf      []byte
+	mmapCur        []byte
 	rootFD         int
 	pathBuf        []byte
 }
@@ -48,7 +49,7 @@ func newFS(srcRoot string) FS {
 	fs := &OsFS{
 		srcRoot:     srcRoot,
 		rootSlash:   srcRoot + "/",
-		readBuf:     make([]byte, 0, mmapReadThreshold),
+		readBuf:     make([]byte, readChunkSize),
 		dirNames:    newBumpAllocator[uint32](),
 		dirEntries:  newIntSet(1 << 12),
 		sourceUnder: newIntMap[STR](1 << 16),
@@ -57,10 +58,6 @@ func newFS(srcRoot string) FS {
 	fs.platformInit()
 
 	return fs
-}
-
-func (fs *OsFS) recordContentHash(rel string, data []byte) {
-	fs.contentHashes.set(uint32(internStr(cleanRel(rel))), xxh3.Hash(data))
 }
 
 func (fs *OsFS) contentHash(rel STR) uint64 {
@@ -246,20 +243,12 @@ func (fs *OsFS) listdirRel(rel string) DirView {
 	return fs.listdir(dirKey(rel))
 }
 
-func (fs *OsFS) read(rel string) []byte {
-	data := fs.readIntoRaw(rel, fs.readBuf)
+func (fs *OsFS) read(rel string) [][]byte {
+	rel = cleanRel(rel)
+	chunks := fs.readFileRel(rel)
+	fs.contentHashes.set(uint32(internStr(rel)), contentHashChunks(chunks))
 
-	if fs.mmapCur == nil {
-		fs.readBuf = data
-	}
-
-	fs.recordContentHash(rel, data)
-
-	return data
-}
-
-func (fs *OsFS) readIntoRaw(rel string, buf []byte) []byte {
-	return fs.readFileRel(cleanRel(rel), buf)
+	return chunks
 }
 
 func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool) bool) {

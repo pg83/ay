@@ -136,7 +136,7 @@ func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, os OS, onWar
 			continue
 		}
 
-		records := parseSysInclYAML(entry.file, fs.read(baseSysInclDir+"/"+entry.file), onWarn)
+		records := parseSysInclYAML(entry.file, concatChunks(fs.read(baseSysInclDir+"/"+entry.file)), onWarn)
 
 		set = append(set, records...)
 	}
@@ -189,7 +189,7 @@ func loadSysInclDir(fs FS, dir string, env SysInclEnv, onWarn func(Warn)) SysInc
 			continue
 		}
 
-		records := parseSysInclYAML(name, fs.read(dir+"/"+name), onWarn)
+		records := parseSysInclYAML(name, concatChunks(fs.read(dir+"/"+name)), onWarn)
 
 		set = append(set, records...)
 	}

@@ -1,5 +1,7 @@
 package main
 
+import "github.com/zeebo/xxh3"
+
 type FS interface {
 	listdir(dir STR) DirView
 	dirHas(v DirView, name string) (present bool, isDir bool)
@@ -10,11 +12,50 @@ type FS interface {
 
 	resolveSourceUnder(prefix, target STR) STR
 
-	read(rel string) []byte
+	// read returns chunks that remain valid until the next read call.
+	read(rel string) [][]byte
 
 	walk(rel string, visit func(rel string, isDir bool) bool)
 
 	contentHash(rel STR) uint64
+}
+
+func concatChunks(chunks [][]byte) []byte {
+	if len(chunks) == 1 {
+		return chunks[0]
+	}
+
+	n := 0
+
+	for _, chunk := range chunks {
+		n += len(chunk)
+	}
+
+	data := make([]byte, 0, n)
+
+	for _, chunk := range chunks {
+		data = append(data, chunk...)
+	}
+
+	return data
+}
+
+func contentHashChunks(chunks [][]byte) uint64 {
+	var hash uint64
+
+	for _, chunk := range chunks {
+		hash ^= xxh3.Hash(chunk)
+	}
+
+	return hash
+}
+
+func contentHashBytes(data []byte) uint64 {
+	if len(data) <= readChunkSize {
+		return xxh3.Hash(data)
+	}
+
+	return xxh3.Hash(data[:readChunkSize]) ^ xxh3.Hash(data[readChunkSize:])
 }
 
 func dirKey(dir string) STR {

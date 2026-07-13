@@ -11,9 +11,9 @@ func (RagelIncludeDirectiveParser) id() uint32 {
 	return 5
 }
 
-func (RagelIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+func (RagelIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
-	local := block[:parseCIncludes(data, block, 0)]
+	local := block[:parseCIncludesChunks(data, block, 0)]
 
 	local = local[:len(local)]
 	a.commit(len(local))

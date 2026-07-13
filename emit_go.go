@@ -229,7 +229,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			continue
 		}
 
-		data := ctx.fs.read(path)
+		data := concatChunks(ctx.fs.read(path))
 
 		for _, imp := range parseGoImports(data) {
 			addPeer(goImportDir(ctx, dir, imp.string()))
@@ -243,7 +243,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			continue
 		}
 
-		data := ctx.fs.read(path)
+		data := concatChunks(ctx.fs.read(path))
 
 		for _, imp := range parseGoImports(data) {
 			addPeer(goImportDir(ctx, dir, imp.string()))

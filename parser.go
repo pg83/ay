@@ -38,7 +38,7 @@ var swigImplicitDirectives = func() []IncludeDirective {
 const directiveBlockHint = 1 << 14
 
 type IncludeDirectiveParser interface {
-	parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet
+	parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet
 
 	id() uint32
 }
@@ -171,7 +171,88 @@ func isParserIdentContinuation(s string, idx int) bool {
 	}
 }
 
-func eachLine(data []byte, fn func(line []byte)) {
+func eachLine(chunks [][]byte, fn func(line []byte)) {
+	if len(chunks) == 1 {
+		data := chunks[0]
+
+		for len(data) > 0 {
+			i := bytes.IndexByte(data, '\n')
+
+			if i < 0 {
+				fn(data)
+
+				return
+			}
+
+			line := data[:i]
+
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
+
+			fn(line)
+			data = data[i+1:]
+		}
+
+		return
+	}
+
+	var pending []byte
+
+	for chunkIdx, chunk := range chunks {
+		last := chunkIdx == len(chunks)-1
+
+		if len(pending) > 0 {
+			i := bytes.IndexByte(chunk, '\n')
+
+			if i < 0 {
+				pending = append(pending, chunk...)
+
+				if last {
+					fn(pending)
+				}
+
+				continue
+			}
+
+			pending = append(pending, chunk[:i]...)
+			line := pending
+
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
+
+			fn(line)
+			pending = pending[:0]
+			chunk = chunk[i+1:]
+		}
+
+		for len(chunk) > 0 {
+			i := bytes.IndexByte(chunk, '\n')
+
+			if i < 0 {
+				if last {
+					fn(chunk)
+				} else {
+					pending = append(pending[:0], chunk...)
+				}
+
+				break
+			}
+
+			line := chunk[:i]
+
+			if len(line) > 0 && line[len(line)-1] == '\r' {
+				line = line[:len(line)-1]
+			}
+
+			fn(line)
+			chunk = chunk[i+1:]
+		}
+	}
+}
+
+func eachChunkLine(data []byte, fn func(line []byte)) {
 	for len(data) > 0 {
 		i := bytes.IndexByte(data, '\n')
 

@@ -18,7 +18,7 @@ func confCompressesDebug(fs FS) bool {
 		return false
 	}
 
-	return bytes.Contains(fs.read("build/ymake_conf.py"), []byte(gzZstdRule))
+	return bytes.Contains(concatChunks(fs.read("build/ymake_conf.py")), []byte(gzZstdRule))
 }
 
 type Platform struct {

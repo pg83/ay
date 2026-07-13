@@ -56,7 +56,7 @@ func readYaConfSections(fs FS, wantSection string, rels ...string) map[string]st
 			continue
 		}
 
-		raw := fs.read(rel)
+		raw := concatChunks(fs.read(rel))
 
 		section := ""
 

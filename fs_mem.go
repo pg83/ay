@@ -1,7 +1,5 @@
 package main
 
-import "github.com/zeebo/xxh3"
-
 type MemFS struct {
 	srcRoot     string
 	rootSlash   string
@@ -170,14 +168,18 @@ func (fs *MemFS) isDir(prefix STR, suffix string) bool {
 	return p && d
 }
 
-func (fs *MemFS) read(rel string) []byte {
+func (fs *MemFS) read(rel string) [][]byte {
 	data, ok := fs.files[cleanRel(rel)]
 
 	if !ok {
 		throwFmt("memFS: no such file %q", rel)
 	}
 
-	return append([]byte(nil), data...)
+	if len(data) <= readChunkSize {
+		return [][]byte{data}
+	}
+
+	return [][]byte{data[:readChunkSize], data[readChunkSize:]}
 }
 
 func (fs *MemFS) contentHash(rel STR) uint64 {
@@ -187,7 +189,7 @@ func (fs *MemFS) contentHash(rel STR) uint64 {
 		return 0
 	}
 
-	return xxh3.Hash(data)
+	return contentHashBytes(data)
 }
 
 func (fs *MemFS) walk(rel string, visit func(rel string, isDir bool) bool) {

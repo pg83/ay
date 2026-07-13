@@ -13,7 +13,7 @@ func (ProtoIncludeDirectiveParser) id() uint32 {
 	return 4
 }
 
-func (p ProtoIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+func (p ProtoIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	return p.parseDirectiveSet(data, a)
 }
 
@@ -54,7 +54,7 @@ func protoImportInducedHeader(target string) (STR, bool) {
 	return 0, false
 }
 
-func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+func (p ProtoIncludeDirectiveParser) parseDirectiveSet(data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0
 
