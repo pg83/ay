@@ -11,7 +11,7 @@ func (b *TwoBitSet) get(v uint32) uint8 {
 		return 0
 	}
 
-	return uint8(b.words.s[w] >> ((v & 31) * 2) & 3)
+	return uint8(*unsafeAt(b.words.s, uint64(w)) >> ((v & 31) * 2) & 3)
 }
 
 func (b *TwoBitSet) set(v uint32, val uint8) {
@@ -21,5 +21,6 @@ func (b *TwoBitSet) set(v uint32, val uint8) {
 
 	shift := (v & 31) * 2
 
-	b.words.s[w] = b.words.s[w]&^(3<<shift) | uint64(val&3)<<shift
+	cell := unsafeAt(b.words.s, uint64(w))
+	*cell = *cell&^(3<<shift) | uint64(val&3)<<shift
 }

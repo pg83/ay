@@ -152,16 +152,16 @@ func (d *Darts) longestSuffixMatch(s string) (int, bool) {
 	}
 
 	for i := len(s) - 1; i >= 0; i-- {
-		t := d.base[st] + int32(s[i]) + 1
+		t := *unsafeAt(d.base, uint64(st)) + int32(s[i]) + 1
 
-		if t >= int32(len(d.check)) || d.check[t] != st+1 {
+		if t >= int32(len(d.check)) || *unsafeAt(d.check, uint64(t)) != st+1 {
 			return int(best), found
 		}
 
 		st = t
 
-		if d.value[st] != 0 {
-			best = d.value[st] - 1
+		if value := *unsafeAt(d.value, uint64(st)); value != 0 {
+			best = value - 1
 			found = true
 		}
 	}
@@ -181,16 +181,16 @@ func (d *Darts) longestMatch(parts ...string) (int, bool) {
 
 	for _, p := range parts {
 		for i := 0; i < len(p); i++ {
-			t := d.base[s] + int32(p[i]) + 1
+			t := *unsafeAt(d.base, uint64(s)) + int32(p[i]) + 1
 
-			if t >= int32(len(d.check)) || d.check[t] != s+1 {
+			if t >= int32(len(d.check)) || *unsafeAt(d.check, uint64(t)) != s+1 {
 				return int(best), found
 			}
 
 			s = t
 
-			if d.value[s] != 0 {
-				best = d.value[s] - 1
+			if value := *unsafeAt(d.value, uint64(s)); value != 0 {
+				best = value - 1
 				found = true
 			}
 		}

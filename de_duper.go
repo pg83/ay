@@ -107,8 +107,8 @@ type IdKey interface {
 }
 
 type DeDuper struct {
-	gen   Vec[uint32]
-	epoch uint32
+	gen   Vec[uint16]
+	epoch uint16
 }
 
 func (dd *DeDuper) reset() {

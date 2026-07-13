@@ -2,8 +2,6 @@ package main
 
 import (
 	"unsafe"
-
-	"github.com/zeebo/xxh3"
 )
 
 const (
@@ -12,11 +10,36 @@ const (
 )
 
 func closureBucketIndex(v VFS) int {
-	if v.isBuild() {
+	x := uint32(v)
+
+	if x&1 != 0 {
 		return 0
 	}
 
-	return 1 + int((v.strID()>>1)&(closureSourceBuckets-1))
+	return 1 + int((x>>1)&(closureSourceBuckets-1))
+}
+
+func bucketListHash(buckets [][]VFS) (uint64, uint64) {
+	h1 := uint64(0x9e3779b97f4a7c15) ^ uint64(len(buckets))
+	h2 := uint64(0xd1b54a32d192ed03) + uint64(len(buckets))
+
+	for _, bucket := range buckets {
+		p := uint64(uintptr(unsafe.Pointer(unsafe.SliceData(bucket))))
+		x := p ^ uint64(len(bucket))*0x94d049bb133111eb
+
+		h1 = mix64(h1 ^ x)
+		h2 = mix64(h2 + x + 0x9e3779b97f4a7c15)
+	}
+
+	if h1 == 0 {
+		h1 = 1
+	}
+
+	if h2 == 0 {
+		h2 = 1
+	}
+
+	return h1, h2
 }
 
 type BucketVal struct {
@@ -63,16 +86,7 @@ func (c *BucketCache) internBucketList(buckets [][]VFS) *BucketList {
 		return nil
 	}
 
-	sum := xxh3.Hash128(sliceBytes(buckets))
-	h1, h2 := sum.Hi, sum.Lo
-
-	if h1 == 0 {
-		h1 = 1
-	}
-
-	if h2 == 0 {
-		h2 = 1
-	}
+	h1, h2 := bucketListHash(buckets)
 
 	cell, found := c.listIntern.cell(h1)
 
@@ -265,27 +279,17 @@ func (c *BucketCache) buildScratch() []VFS {
 }
 
 func (c *BucketCache) storeScratch(self VFS) Closure {
-	n := 0
-
-	for r := 0; r < closureBuckets; r++ {
-		if len(c.scratch[r]) > 0 {
-			n++
-		}
-	}
-
-	buckets := c.chunks.alloc(n)
-	k := 0
+	buckets := c.chunks.alloc(closureBuckets)[:0]
 
 	for r := 0; r < closureBuckets; r++ {
 		if len(c.scratch[r]) == 0 {
 			continue
 		}
 
-		buckets[k] = c.internBucket(c.scratch[r])
-		k++
+		buckets = append(buckets, c.internBucket(c.scratch[r]))
 	}
 
-	list := c.internBucketList(buckets[:n])
+	list := c.internBucketList(buckets)
 
 	return Closure{self: self, buckets: list}
 }
