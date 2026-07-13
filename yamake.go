@@ -698,8 +698,52 @@ func (l *Lexer) appendQuotedSegment(buf []byte, quote byte, startLine, startCol 
 }
 
 func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
-	buf := l.tokBuf[:0]
+	start := l.pos
+	pos := start
 	pureIdent := true
+	complex := false
+
+	for pos < len(l.src) {
+		b := l.src[pos]
+
+		if (b == '\\' && pos+1 < len(l.src) && l.src[pos+1] == '"') || b == '"' || b == '\'' {
+			complex = true
+
+			break
+		}
+
+		if isIdentCont(b) {
+			pos++
+
+			continue
+		}
+
+		if isWordByte(b) || b == '@' && pos > start {
+			pureIdent = false
+			pos++
+
+			continue
+		}
+
+		break
+	}
+
+	if !complex {
+		l.pos = pos
+		l.col += pos - start
+		l.prevByte = l.src[pos-1]
+
+		kind := tokIdent
+
+		if !pureIdent {
+			kind = tokWord
+		}
+
+		return Token{kind: kind, val: internBytes(l.src[start:pos]).string(), line: startLine, col: startCol}
+	}
+
+	buf := l.tokBuf[:0]
+	pureIdent = true
 
 	for l.pos < len(l.src) {
 		b := l.src[l.pos]
@@ -749,6 +793,34 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 }
 
 func (l *Lexer) readWord(startLine, startCol int) Token {
+	start := l.pos
+	pos := start
+	complex := false
+
+	for pos < len(l.src) {
+		b := l.src[pos]
+
+		if (b == '\\' && pos+1 < len(l.src) && l.src[pos+1] == '"') || (b == '"' || b == '\'') && pos > start {
+			complex = true
+
+			break
+		}
+
+		if !isWordByte(b) && !(b == '@' && pos > start) {
+			break
+		}
+
+		pos++
+	}
+
+	if !complex {
+		l.pos = pos
+		l.col += pos - start
+		l.prevByte = l.src[pos-1]
+
+		return Token{kind: tokWord, val: internBytes(l.src[start:pos]).string(), line: startLine, col: startCol}
+	}
+
 	buf := l.tokBuf[:0]
 
 	for l.pos < len(l.src) {
@@ -781,20 +853,27 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 
 func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 	start := l.pos
+	pos := start
 
-	for l.pos < len(l.src) && l.src[l.pos] >= '0' && l.src[l.pos] <= '9' {
-		l.advance()
+	for pos < len(l.src) && l.src[pos] >= '0' && l.src[pos] <= '9' {
+		pos++
 	}
 
-	if l.pos < len(l.src) && isWordByte(l.src[l.pos]) {
-		for l.pos < len(l.src) && isWordByte(l.src[l.pos]) {
-			l.advance()
+	kind := tokInt
+
+	if pos < len(l.src) && isWordByte(l.src[pos]) {
+		kind = tokWord
+
+		for pos < len(l.src) && isWordByte(l.src[pos]) {
+			pos++
 		}
-
-		return Token{kind: tokWord, val: internBytes(l.src[start:l.pos]).string(), line: startLine, col: startCol}
 	}
 
-	return Token{kind: tokInt, val: internBytes(l.src[start:l.pos]).string(), line: startLine, col: startCol}
+	l.pos = pos
+	l.col += pos - start
+	l.prevByte = l.src[pos-1]
+
+	return Token{kind: kind, val: internBytes(l.src[start:pos]).string(), line: startLine, col: startCol}
 }
 
 func parse(fs FS, name string, src []byte) (mf *MakeFile, err error) {

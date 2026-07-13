@@ -299,10 +299,18 @@ func internedVInto(prefix string, parts []string) STR {
 }
 
 func internV(parts ...string) STR {
+	if len(parts) == 1 {
+		return internStr(parts[0])
+	}
+
 	return internVInto("", parts)
 }
 
 func internedV(parts ...string) STR {
+	if len(parts) == 1 {
+		return interned(parts[0])
+	}
+
 	return internedVInto("", parts)
 }
 

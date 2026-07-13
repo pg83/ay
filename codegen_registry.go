@@ -122,7 +122,7 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 
 func (r *CodegenRegistry) putSplit(prefix VFS, suffix STR, info *GeneratedFileInfo) {
 	r.bySplit.put(splitKey(prefix, suffix.any()), info)
-	r.splitPrefixSeen.add(uint32(prefix))
+	r.splitPrefixSeen.add(uint32(prefix.rel()))
 }
 
 func (r *CodegenRegistry) lookup(path VFS) *GeneratedFileInfo {
@@ -142,7 +142,7 @@ func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
 }
 
 func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix ANY) *GeneratedFileInfo {
-	if !r.splitPrefixSeen.has(uint32(prefix)) {
+	if !r.splitPrefixSeen.has(uint32(prefix.rel())) {
 		return nil
 	}
 

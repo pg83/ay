@@ -356,7 +356,13 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 
 			cv := s.scanner.walkClosure(copyFileOutputVFS(instance.Path.relString(), rel), s.scanCtx, scanDomainCC)
 
-			eachBucketVFS(cv.bucketList(), appendInput)
+			for _, bucket := range cv.bucketList() {
+				if bucket[0].isBuild() {
+					builds = append(builds, bucket...)
+				} else {
+					sources = append(sources, bucket...)
+				}
+			}
 		}
 
 		for _, f := range stmt.OUTFiles {
@@ -372,7 +378,17 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 		rel := f.string()
 
 		if ctx.parsers.registry.hasRegisteredParser(rel) {
-			s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC).each(appendInput)
+			cv := s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC)
+
+			appendInput(cv.self)
+
+			for _, bucket := range cv.bucketList() {
+				if bucket[0].isBuild() {
+					builds = append(builds, bucket...)
+				} else {
+					sources = append(sources, bucket...)
+				}
+			}
 
 			continue
 		}
@@ -390,11 +406,11 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 
 			cv := s.scanner.walkClosure(copyFileOutputVFS(instance.Path.relString(), f.string()), s.scanCtx, scanDomainCC)
 
-			eachBucketVFS(cv.bucketList(), func(v VFS) {
-				if v.isSource() {
-					sources = append(sources, v)
+			for _, bucket := range cv.bucketList() {
+				if bucket[0].isSource() {
+					sources = append(sources, bucket...)
 				}
-			})
+			}
 		}
 	}
 

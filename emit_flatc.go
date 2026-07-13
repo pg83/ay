@@ -138,12 +138,13 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 
 	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])
 	env := envVarsVCS
-	inputs := na.inputs.alloc(3 + len(transitiveImports.bucketList()))[:3+len(transitiveImports.bucketList())]
+	transitiveBuckets := transitiveImports.bucketList()
+	inputs := na.inputs.alloc(3 + len(transitiveBuckets))[:3+len(transitiveBuckets)]
 
 	inputs[0] = na.vfsList(flatcBinary)
 	inputs[1] = na.vfsList(flatcWrapperVFS)
 	inputs[2] = na.vfsList(srcVFS)
-	copy(inputs[3:], transitiveImports.bucketList())
+	copy(inputs[3:], transitiveBuckets)
 	na.inputs.commit(len(inputs))
 
 	node := Node{
@@ -182,6 +183,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.na, ctx.parsers, srcVFS.relString())
 	headerLeaves := ctx.na.vfs.alloc(3 + transitiveImports.len())[:0]
+	transitiveBuckets := transitiveImports.bucketList()
 
 	headerLeaves = append(headerLeaves, flatcWrapperVFS)
 
@@ -190,7 +192,9 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 	}
 
 	headerLeaves = append(headerLeaves, v.runtimeVFS)
-	eachBucketVFS(transitiveImports.bucketList(), func(v VFS) { headerLeaves = append(headerLeaves, v) })
+	for _, bucket := range transitiveBuckets {
+		headerLeaves = append(headerLeaves, bucket...)
+	}
 	ctx.na.vfs.commit(len(headerLeaves))
 	headerLeaves = headerLeaves[:len(headerLeaves):len(headerLeaves)]
 

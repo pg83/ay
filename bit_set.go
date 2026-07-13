@@ -13,7 +13,9 @@ func (b *BitSet) has(v uint32) bool {
 func (b *BitSet) add(v uint32) {
 	w := v >> 6
 
-	b.words.ensureLen(int(w) + 1)
+	if int(w) >= b.words.len() {
+		b.words.ensureLen(int(w) + 1)
+	}
 
 	b.words.s[w] |= uint64(1) << (v & 63)
 }

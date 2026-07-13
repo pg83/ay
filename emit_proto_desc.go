@@ -157,9 +157,11 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		addSourceInput(descRawprotoWrapperVFS)
 		addSourceInput(protoVFS)
 
-		eachBucketVFS(imports.bucketList(), func(im VFS) {
-			addSourceInput(im)
-		})
+		for _, bucket := range imports.bucketList() {
+			for _, im := range bucket {
+				addSourceInput(im)
+			}
+		}
 	}
 
 	prj := realPrjName(instance.Path.relString())
@@ -235,11 +237,12 @@ func (e *EmitContext) emitProtoDescProducer(protoRelPath string,
 
 	cmdArgs := na.chunkList(head, mid)
 	env := envVarsVCS
-	inputChunks := na.inputs.alloc(2 + len(imports.bucketList()))[:2+len(imports.bucketList())]
+	importBuckets := imports.bucketList()
+	inputChunks := na.inputs.alloc(2 + len(importBuckets))[:2+len(importBuckets)]
 
 	inputChunks[0] = na.vfsList(protocBinary)
 	inputChunks[1] = na.vfsList(source(protoRelPath), descRawprotoWrapperVFS)
-	copy(inputChunks[2:], imports.bucketList())
+	copy(inputChunks[2:], importBuckets)
 	na.inputs.commit(len(inputChunks))
 
 	node := Node{

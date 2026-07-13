@@ -225,15 +225,15 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 
 	cmdArgs := ArgChunks(chunks[:k])
 	env := hostP.toolEnv()
-	wrap := len(instance.Platform.WrapccHead) > 0
+	includeSelf := in.IncludeView.self
+	includeBuckets := in.IncludeView.bucketList()
+	nInputs := len(includeBuckets)
 
-	nInputs := len(in.IncludeView.bucketList())
-
-	if in.IncludeView.self != 0 {
+	if includeSelf != 0 {
 		nInputs++
 	}
 
-	if wrap {
+	if wrapcc {
 		nInputs++
 	}
 
@@ -243,19 +243,19 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 
 	inputChunks := na.inputs.alloc(nInputs)[:0]
 
-	if in.IncludeView.self != 0 {
-		inputChunks = append(inputChunks, na.vfsList(in.IncludeView.self))
+	if includeSelf != 0 {
+		inputChunks = append(inputChunks, na.vfsList(includeSelf))
 	} else if len(in.IncludeInputs) > 0 {
 		inputChunks = append(inputChunks, in.IncludeInputs)
 	}
 
-	if wrap {
+	if wrapcc {
 		inputChunks = append(inputChunks, wrapccPyChunk)
 	}
 
-	inputChunks = append(inputChunks, in.IncludeView.bucketList()...)
+	inputChunks = append(inputChunks, includeBuckets...)
 
-	if in.IncludeView.self != 0 && len(in.IncludeInputs) > 0 {
+	if includeSelf != 0 && len(in.IncludeInputs) > 0 {
 		inputChunks = append(inputChunks, in.IncludeInputs)
 	}
 

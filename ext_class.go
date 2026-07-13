@@ -289,19 +289,21 @@ func extIsProtoGeneratedHeader(p string) bool {
 type SrcExtClass uint8
 
 func srcExtClassOf(id ANY) SrcExtClass {
-	if int(id) < len(srcExtClasses) {
-		if c := SrcExtClass(srcExtClasses[id]); c != srcExtUnseen {
+	rel := id.relOrSelf()
+
+	if int(rel) < len(srcExtClasses) {
+		if c := SrcExtClass(srcExtClasses[rel]); c != srcExtUnseen {
 			return c
 		}
 	}
 
-	c := classifySrcExt(id.string())
+	c := classifySrcExt(rel.string())
 
-	for int(id) >= len(srcExtClasses) {
+	for int(rel) >= len(srcExtClasses) {
 		grown := len(srcExtClasses) * 2
 
-		if grown <= int(id) {
-			grown = int(id) + 1
+		if grown <= int(rel) {
+			grown = int(rel) + 1
 		}
 
 		next := make([]uint8, grown)
@@ -310,7 +312,7 @@ func srcExtClassOf(id ANY) SrcExtClass {
 		srcExtClasses = next
 	}
 
-	srcExtClasses[id] = uint8(c)
+	srcExtClasses[rel] = uint8(c)
 
 	return c
 }
