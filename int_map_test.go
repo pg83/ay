@@ -40,7 +40,11 @@ func TestIntMapOverwrite(t *testing.T) {
 func TestIntMapCapacityIsPowerOfTwo(t *testing.T) {
 	for _, hint := range []int{0, 1, 7, 8, 100, 1000, 1 << 20} {
 		m := newIntMap[int](hint)
-		c := len(m.data)
+		c := len(m.keys)
+
+		if len(m.values) != c {
+			t.Fatalf("hint %d: %d keys but %d values", hint, c, len(m.values))
+		}
 
 		if c&(c-1) != 0 || c < intMapMinCap {
 			t.Fatalf("hint %d: capacity %d not a power of two >= %d", hint, c, intMapMinCap)
@@ -54,7 +58,7 @@ func TestIntMapCapacityIsPowerOfTwo(t *testing.T) {
 
 func TestIntMapCollisionAndWraparound(t *testing.T) {
 	m := newIntMap[int](0)
-	cap0 := uint64(len(m.data))
+	cap0 := uint64(len(m.keys))
 
 	keys := []uint64{1, 1 + cap0, 1 + 2*cap0, 7, 7 + cap0, 7 + 2*cap0}
 
