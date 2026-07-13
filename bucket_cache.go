@@ -232,10 +232,7 @@ func (c *BucketCache) spliceOne(seen *IdSet, v VFS) {
 }
 
 func (c *BucketCache) spliceBucket(seen *IdSet, bucket []VFS) {
-	if len(bucket) == 0 {
-		return
-	}
-
+	// Closure bucket lists contain only non-empty interned buckets.
 	if !c.firstBucketVisit(bucket) {
 		return
 	}

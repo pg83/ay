@@ -132,13 +132,13 @@ func (dd *DeDuper) add(id uint32) bool {
 		dd.grow(id)
 	}
 
-	gen := dd.gen.s
+	cell := unsafeAt(dd.gen.s, uint64(id))
 
-	if gen[id] == dd.epoch {
+	if *cell == dd.epoch {
 		return false
 	}
 
-	gen[id] = dd.epoch
+	*cell = dd.epoch
 
 	return true
 }

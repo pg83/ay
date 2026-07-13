@@ -11,7 +11,7 @@ var emptyDirNames = []uint32{}
 // XORs of hashes of these stable chunks. Changing it invalidates those hashes.
 const readChunkSize = 256 << 10
 
-const sourceUnderHotMask = 1<<16 - 1
+const sourceUnderHotMask = 1<<18 - 1
 const dirFDCacheSize = 768
 
 type sourceUnderHotEntry struct {

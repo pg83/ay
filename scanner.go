@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	closureAllocHint = 1 << 13
-	resolveNoRank    = int(^uint(0) >> 1)
+	closureAllocHint  = 1 << 13
+	resolveNoRank     = int(^uint(0) >> 1)
+	searchTierHotMask = 1<<15 - 1
 )
 
 const (
@@ -58,6 +59,7 @@ type IncludeScanner struct {
 	scanCache      DenseMap2[VFS, []VFS, Closure]
 	searchTierFlat *IntMap[VFS]
 	searchTierSeen BitSet
+	searchTierHot  [searchTierHotMask + 1]searchTierHotEntry
 	childArena     *BumpAllocator[VFS]
 	spOut          []VFS
 	resolveOut     []VFS
@@ -67,6 +69,11 @@ type IncludeScanner struct {
 	onWarn         func(Warn)
 	codegen        *CodegenRegistry
 	moduleByRef    *DenseMap[NodeRef, *ModuleEmitResult]
+}
+
+type searchTierHotEntry struct {
+	key uint64
+	val VFS
 }
 
 type ScanCtx struct {
@@ -708,18 +715,29 @@ func buildCfgResolveIndex(cfg *ScanConfig) *CfgResolveIndex {
 
 func (sc *ScanCtx) cacheSearchTier(targetID STR, out VFS) VFS {
 	s := sc.scanner
+	key := splitMix64(sc.cfg.num, uint32(targetID))
 
-	s.searchTierFlat.put(splitMix64(sc.cfg.num, uint32(targetID)), out)
+	s.searchTierFlat.put(key, out)
 	s.searchTierSeen.add(uint32(targetID))
+	s.searchTierHot[key&searchTierHotMask] = searchTierHotEntry{key: key, val: out}
 
 	return out
 }
 
 func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	s := sc.scanner
+	key := splitMix64(sc.cfg.num, uint32(targetID))
+	hot := &s.searchTierHot[key&searchTierHotMask]
+
+	if hot.key == key {
+		return hot.val
+	}
 
 	if s.searchTierSeen.has(uint32(targetID)) {
-		if cached := s.searchTierFlat.get(splitMix64(sc.cfg.num, uint32(targetID))); cached != nil {
+		if cached := s.searchTierFlat.get(key); cached != nil {
+			hot.key = key
+			hot.val = *cached
+
 			return *cached
 		}
 	}
