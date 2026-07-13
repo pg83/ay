@@ -1,6 +1,10 @@
 package main
 
-import "github.com/zeebo/xxh3"
+import (
+	"unsafe"
+
+	"github.com/zeebo/xxh3"
+)
 
 const (
 	closureSourceBuckets = 8
@@ -36,10 +40,11 @@ type BucketCache struct {
 	h1Mismatches int
 	overflowed   int
 	scratch      [closureBuckets][]VFS
+	bucketEpoch  uint32
 }
 
 func newBucketCache() *BucketCache {
-	return &BucketCache{
+	c := &BucketCache{
 		chunks:       newBumpAllocator[[]VFS](),
 		lists:        newBumpAllocator[BucketList](),
 		pool:         newBumpAllocator[VFS](),
@@ -47,7 +52,10 @@ func newBucketCache() *BucketCache {
 		overflow:     newIntValueMap[BucketVal](1 << 4),
 		listIntern:   newIntValueMap[BucketListVal](1 << 16),
 		listOverflow: newIntValueMap[BucketListVal](1 << 4),
+		bucketEpoch:  1,
 	}
+
+	return c
 }
 
 func (c *BucketCache) internBucketList(buckets [][]VFS) *BucketList {
@@ -129,23 +137,71 @@ func (c *BucketCache) internBucket(elems []VFS) []VFS {
 
 		c.overflowed++
 
-		slice := c.pool.list(elems...)
+		slice := c.storeBucket(elems)
 
 		*cell2 = BucketVal{verify: h1, slice: slice}
 
 		return slice
 	}
 
-	slice := c.pool.list(elems...)
+	slice := c.storeBucket(elems)
 
 	*cell = BucketVal{verify: h2, slice: slice}
 
 	return slice
 }
 
+func (c *BucketCache) storeBucket(elems []VFS) []VFS {
+	n := len(elems) + 1
+	block := c.pool.alloc(n)[:n]
+
+	// Keep the mutable visit epoch outside the immutable slice: it must not
+	// affect bucket hashing, equality, capacity, or downstream input chunks.
+	block[0] = 0
+	copy(block[1:], elems)
+	c.pool.commit(n)
+
+	return block[1:n:n]
+}
+
+func bucketEpochCell(bucket []VFS) *uint32 {
+	// Every interned bucket is returned by storeBucket with this arena-backed
+	// header immediately before its first element.
+	return (*uint32)(unsafe.Add(unsafe.Pointer(unsafe.SliceData(bucket)), -int(unsafe.Sizeof(VFS(0)))))
+}
+
+func (c *BucketCache) firstBucketVisit(bucket []VFS) bool {
+	epoch := bucketEpochCell(bucket)
+
+	if *epoch == c.bucketEpoch {
+		return false
+	}
+
+	*epoch = c.bucketEpoch
+
+	return true
+}
+
+func (c *BucketCache) clearBucketEpochs() {
+	for i := range c.intern.vals.s {
+		*bucketEpochCell(c.intern.vals.s[i].slice) = 0
+	}
+
+	for i := range c.overflow.vals.s {
+		*bucketEpochCell(c.overflow.vals.s[i].slice) = 0
+	}
+}
+
 func (c *BucketCache) resetScratch() {
 	for r := range c.scratch {
 		c.scratch[r] = c.scratch[r][:0]
+	}
+
+	c.bucketEpoch++
+
+	if c.bucketEpoch == 0 {
+		c.clearBucketEpochs()
+		c.bucketEpoch = 1
 	}
 }
 
@@ -163,6 +219,10 @@ func (c *BucketCache) spliceOne(seen *IdSet, v VFS) {
 
 func (c *BucketCache) spliceBucket(seen *IdSet, bucket []VFS) {
 	if len(bucket) == 0 {
+		return
+	}
+
+	if !c.firstBucketVisit(bucket) {
 		return
 	}
 

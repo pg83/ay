@@ -44,3 +44,39 @@ func TestBucketCacheStoresBuildInputsInOneBucket(t *testing.T) {
 		}
 	}
 }
+
+func TestBucketCacheVisitsInternedBucketOncePerEpoch(t *testing.T) {
+	c := newBucketCache()
+	bucket := c.storeBuckets(0, []VFS{2, 4}).bucketList()[0]
+
+	if !c.firstBucketVisit(bucket) {
+		t.Fatal("first bucket visit was rejected")
+	}
+
+	if c.firstBucketVisit(bucket) {
+		t.Fatal("second bucket visit in the same epoch was accepted")
+	}
+
+	c.resetScratch()
+
+	if !c.firstBucketVisit(bucket) {
+		t.Fatal("bucket visit after reset was rejected")
+	}
+}
+
+func TestBucketCacheClearsEpochsOnWraparound(t *testing.T) {
+	c := newBucketCache()
+	bucket := c.storeBuckets(0, []VFS{2, 4}).bucketList()[0]
+
+	*bucketEpochCell(bucket) = 1
+	c.bucketEpoch = ^uint32(0)
+	c.resetScratch()
+
+	if c.bucketEpoch != 1 {
+		t.Fatalf("wrapped epoch = %d, want 1", c.bucketEpoch)
+	}
+
+	if !c.firstBucketVisit(bucket) {
+		t.Fatal("stale wrapped epoch was not cleared")
+	}
+}
