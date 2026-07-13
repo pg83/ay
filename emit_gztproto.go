@@ -16,6 +16,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	genProto := build(moddir, "/", genProtoName)
 	converterRef, converterBin := ctx.tool(argDictGazetteerConverter)
 	imports := e.scanner.walkClosure(gztSource, d.scanCtx, scanDomainProto)
+	importBuckets := imports.bucketList()
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
@@ -24,7 +25,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	protoIncludeSnap := na.vfsList(protoInclude...)
 
 	pe := func() {
-		nInputs := 2 + len(imports.bucketList())
+		nInputs := 2 + len(importBuckets)
 
 		if len(inducedProtos) > 0 {
 			nInputs++
@@ -39,7 +40,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 		}
 
 		inputChunks = append(inputChunks, na.vfsList(gztSource))
-		inputChunks = append(inputChunks, imports.bucketList()...)
+		inputChunks = append(inputChunks, importBuckets...)
 		na.inputs.commit(len(inputChunks))
 
 		node := Node{
@@ -63,11 +64,17 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 
 	sourceInputs = append(sourceInputs, gztSource)
 
-	eachBucketVFS(imports.bucketList(), func(v VFS) {
-		if v.isSource() && extIsGztproto(v.relString()) {
-			sourceInputs = append(sourceInputs, v)
+	for _, bucket := range importBuckets {
+		if bucket[0].isBuild() {
+			continue
 		}
-	})
+
+		for _, v := range bucket {
+			if extIsGztproto(v.relString()) {
+				sourceInputs = append(sourceInputs, v)
+			}
+		}
+	}
 
 	na.vfs.commit(len(sourceInputs))
 

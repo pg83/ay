@@ -27,9 +27,11 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	cfgHParsed = append(cfgHParsed, configIncludes...)
 	cfgHParsed = append(cfgHParsed, extras...)
 
-	eachBucketVFS(cfgImports.bucketList(), func(ti VFS) {
-		cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(ti.rel().any())})
-	})
+	for _, bucket := range cfgImports.bucketList() {
+		for _, ti := range bucket {
+			cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(ti.rel().any())})
+		}
+	}
 
 	ctx.na.dirs.commit(len(cfgHParsed))
 	cfgHParsed = cfgHParsed[:len(cfgHParsed):len(cfgHParsed)]

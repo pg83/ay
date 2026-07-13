@@ -343,7 +343,17 @@ func (na *NodeArenas) dedupSourceVFS(inputs []VFS, extra [][]VFS) []VFS {
 			keep(input)
 		}
 
-		eachBucketVFS(extra, keep)
+		for _, bucket := range extra {
+			if bucket[0].isBuild() {
+				continue
+			}
+
+			for _, input := range bucket {
+				if deduper.add(input.strID()) {
+					out = append(out, input)
+				}
+			}
+		}
 		na.vfs.commit(len(out))
 	})
 

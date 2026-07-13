@@ -457,13 +457,15 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbHCompile = append(pbHCompile, pbHImports...)
 	pbHCompile = append(pbHCompile, extras...)
 
-	eachBucketVFS(transitiveImports.bucketList(), func(ti VFS) {
-		if ti.isBuild() {
-			return
+	for _, bucket := range transitiveImports.bucketList() {
+		if bucket[0].isBuild() {
+			continue
 		}
 
-		pbHCompile = append(pbHCompile, IncludeDirective{kind: includeQuoted, target: includeTarget(ti.rel().any())})
-	})
+		for _, ti := range bucket {
+			pbHCompile = append(pbHCompile, IncludeDirective{kind: includeQuoted, target: includeTarget(ti.rel().any())})
+		}
+	}
 
 	na.dirs.commit(len(pbHCompile))
 
@@ -842,7 +844,8 @@ func (e *EmitContext) emitPB(
 		protocCwd = "$(B)"
 	}
 
-	pbInputChunks := na.inputs.alloc(4 + len(transitiveProtoImports.bucketList()))[:0]
+	transitiveBuckets := transitiveProtoImports.bucketList()
+	pbInputChunks := na.inputs.alloc(4 + len(transitiveBuckets))[:0]
 
 	pbInputChunks = append(pbInputChunks, inputs[:toolEnd:toolEnd])
 
@@ -853,7 +856,7 @@ func (e *EmitContext) emitPB(
 	}
 
 	pbInputChunks = append(pbInputChunks, producerSourceInputs)
-	pbInputChunks = append(pbInputChunks, transitiveProtoImports.bucketList()...)
+	pbInputChunks = append(pbInputChunks, transitiveBuckets...)
 	na.inputs.commit(len(pbInputChunks))
 
 	node := Node{
