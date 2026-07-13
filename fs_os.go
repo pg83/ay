@@ -24,6 +24,95 @@ type dirFDCacheEntry struct {
 	fd  int
 }
 
+const dirEntryIsDir = uint64(1) << 63
+
+type dirEntryMap struct {
+	data     []uint64
+	mask     uint64
+	count    int
+	resizeAt int
+}
+
+func newDirEntryMap(hint int) *dirEntryMap {
+	capacity := 8
+
+	for capacity*5 < hint*8 {
+		capacity <<= 1
+	}
+
+	m := &dirEntryMap{}
+	m.alloc(capacity)
+
+	return m
+}
+
+func (m *dirEntryMap) alloc(capacity int) {
+	m.data = make([]uint64, capacity)
+	m.mask = uint64(capacity - 1)
+	m.resizeAt = capacity * 5 / 8
+}
+
+func (m *dirEntryMap) get(dir, name uint32) (bool, bool) {
+	pair := uint64(dir)<<32 | uint64(name)
+
+	for i := splitMix64(dir, name) & m.mask; ; i = (i + 1) & m.mask {
+		entry := m.data[i]
+
+		if entry == 0 {
+			return false, false
+		}
+
+		if entry&^dirEntryIsDir == pair {
+			return entry&dirEntryIsDir != 0, true
+		}
+	}
+}
+
+func (m *dirEntryMap) put(dir, name uint32, isDir bool) {
+	pair := uint64(dir)<<32 | uint64(name)
+	entry := pair
+
+	if isDir {
+		entry |= dirEntryIsDir
+	}
+
+	for {
+		for i := splitMix64(dir, name) & m.mask; ; i = (i + 1) & m.mask {
+			cell := &m.data[i]
+
+			if *cell&^dirEntryIsDir == pair {
+				*cell = entry
+
+				return
+			}
+
+			if *cell == 0 {
+				if m.count < m.resizeAt {
+					*cell = entry
+					m.count++
+
+					return
+				}
+
+				break
+			}
+		}
+
+		old := m.data
+		m.alloc(len(old) * 2)
+		m.count = 0
+
+		for _, oldEntry := range old {
+			if oldEntry == 0 {
+				continue
+			}
+
+			oldPair := oldEntry &^ dirEntryIsDir
+			m.put(uint32(oldPair>>32), uint32(oldPair), oldEntry&dirEntryIsDir != 0)
+		}
+	}
+}
+
 func hashSourceFile(srcRoot, rel string) uint64 {
 	data, err := os.ReadFile(filepath.Join(srcRoot, cleanRel(rel)))
 
@@ -39,7 +128,7 @@ type OsFS struct {
 	rootSlash      string
 	dirs           DenseMap[STR, DirView]
 	dirNames       *BumpAllocator[uint32]
-	dirEntries     *IntSet
+	dirEntries     *dirEntryMap
 	contentHashes  PageVec[uint64]
 	sourceUnder    *IntMap[STR]
 	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
@@ -62,7 +151,7 @@ func newFS(srcRoot string) FS {
 		rootSlash:   srcRoot + "/",
 		readBuf:     make([]byte, readChunkSize),
 		dirNames:    newBumpAllocator[uint32](),
-		dirEntries:  newIntSet(1 << 18),
+		dirEntries:  newDirEntryMap(1 << 18),
 		sourceUnder: newIntMap[STR](1 << 19),
 		dirFD:       -1,
 		dirFDs:      make(map[string]int, dirFDCacheSize),
@@ -96,7 +185,7 @@ func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 		return false, false
 	}
 
-	isDir, ok := fs.dirEntries.get(splitMix64(uint32(v.dir), uint32(id)))
+	isDir, ok := fs.dirEntries.get(uint32(v.dir), uint32(id))
 
 	if !ok {
 		return false, false

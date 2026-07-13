@@ -916,16 +916,12 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	}
 
 	if quoted {
-		matched := false
 		sv := s.parsers.fs.resolveSourceUnder(incDir.rel(), targetID)
 
 		if sv != 0 {
 			out = append(out, sv.source())
 			searchPathFound = true
-			matched = true
-		}
-
-		if !matched {
+		} else {
 			if info := s.codegen.lookupSplit(incDir, targetID.any()); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
