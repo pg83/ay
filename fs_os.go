@@ -11,8 +11,8 @@ var emptyDirNames = []uint32{}
 // XORs of hashes of these stable chunks. Changing it invalidates those hashes.
 const readChunkSize = 256 << 10
 
-const sourceUnderHotMask = 1<<15 - 1
-const dirFDCacheSize = 256
+const sourceUnderHotMask = 1<<16 - 1
+const dirFDCacheSize = 512
 
 type sourceUnderHotEntry struct {
 	key uint64
@@ -62,7 +62,7 @@ func newFS(srcRoot string) FS {
 		rootSlash:   srcRoot + "/",
 		readBuf:     make([]byte, readChunkSize),
 		dirNames:    newBumpAllocator[uint32](),
-		dirEntries:  newIntSet(1 << 12),
+		dirEntries:  newIntSet(1 << 18),
 		sourceUnder: newIntMap[STR](1 << 19),
 		dirFD:       -1,
 		dirFDs:      make(map[string]int, dirFDCacheSize),

@@ -2037,12 +2037,25 @@ func (e *EmitContext) reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcM
 	}
 
 	members := e.arMembers[:0]
+	ordered := true
+	var previous uint64
 
 	for i := range paths {
-		members = append(members, ARMember{refs[i], paths[i], metas[i].sortKey(e.srcRound(metas[i]))})
+		key := metas[i].sortKey(e.srcRound(metas[i]))
+
+		if i > 0 && key < previous {
+			ordered = false
+		}
+
+		members = append(members, ARMember{refs[i], paths[i], key})
+		previous = key
 	}
 
 	e.arMembers = members[:0]
+
+	if ordered {
+		return refs, paths
+	}
 
 	slices.SortStableFunc(members, func(a, b ARMember) int {
 		return cmp.Compare(a.key, b.key)
