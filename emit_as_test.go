@@ -17,13 +17,14 @@ var builtinsASOwnAddIncl = []VFS{
 func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 	e := newStreamingEmitter(nil)
 	inst := hostInstance("contrib/libs/foolib")
-	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{
+	in := ModuleCCInputs{ModuleCompileEnv: &ModuleCompileEnv{
 		InclArgs: newInclArgMemo(),
 		AddIncl: []VFS{
 			source("custom/foolib/arch/x86_64"),
 			source("custom/foolib/include"),
 		},
 	}}
+	in = newModuleCCInputs(in.ModuleCompileEnv)
 	nodeTestEmitContext(e, inst).emitAS("src/math/x86_64/ceill.s", source("contrib/libs/foolib/src/math/x86_64/ceill.s"), in, testHostP)
 
 	args := e.nodes.s[0].Cmds[0].CmdArgs.flat()
@@ -57,7 +58,7 @@ func TestEmitAS_NoStdInc_IncludeTailFollowsOwnAddIncl(t *testing.T) {
 
 func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 	e := newStreamingEmitter(nil)
-	_, outPath := nodeTestEmitContext(e, targetInstance("some/module")).emitAS("flat.S", source("some/module/flat.S"), ModuleCCInputs{}, testHostP)
+	_, outPath := nodeTestEmitContext(e, targetInstance("some/module")).emitAS("flat.S", source("some/module/flat.S"), newModuleCCInputs(&ModuleCompileEnv{}), testHostP)
 	want := "$(B)/some/module/flat.S.o"
 
 	if outPath.string() != want {
@@ -67,7 +68,7 @@ func TestEmitAS_OutputPath_FlatSrcRel(t *testing.T) {
 
 func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 	e := newStreamingEmitter(nil)
-	_, outPath := nodeTestEmitContext(e, targetInstance("contrib/libs/cxxsupp/builtins")).emitAS("aarch64/chkstk.S", source("contrib/libs/cxxsupp/builtins/aarch64/chkstk.S"), ModuleCCInputs{}, testHostP)
+	_, outPath := nodeTestEmitContext(e, targetInstance("contrib/libs/cxxsupp/builtins")).emitAS("aarch64/chkstk.S", source("contrib/libs/cxxsupp/builtins/aarch64/chkstk.S"), newModuleCCInputs(&ModuleCompileEnv{}), testHostP)
 	want := "$(B)/contrib/libs/cxxsupp/builtins/_/aarch64/chkstk.S.o"
 
 	if outPath.string() != want {
@@ -78,7 +79,8 @@ func TestEmitAS_OutputPath_NestedSrc(t *testing.T) {
 func TestEmitAS_OutputPath_SrcDir(t *testing.T) {
 	e := newStreamingEmitter(nil)
 
-	in := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{SrcDirs: []VFS{dirKey("contrib/libs/tcmalloc").source()}, FS: newMemFS(nil)}}
+	in := ModuleCCInputs{ModuleCompileEnv: &ModuleCompileEnv{SrcDirs: []VFS{dirKey("contrib/libs/tcmalloc").source()}, FS: newMemFS(nil)}}
+	in = newModuleCCInputs(in.ModuleCompileEnv)
 	_, outPath := nodeTestEmitContext(e, targetInstance("contrib/libs/tcmalloc/no_percpu_cache")).emitAS(
 		"tcmalloc/internal/percpu_rseq_asm.S",
 		source("contrib/libs/tcmalloc/tcmalloc/internal/percpu_rseq_asm.S"),
@@ -108,7 +110,8 @@ func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 	_ = e.reserve()
 	yasmLDRef := testYasmLDRef(e)
 
-	yasmTestIn := ModuleCCInputs{ModuleCompileEnv: ModuleCompileEnv{InclArgs: newInclArgMemo(), AddIncl: builtinsASOwnAddIncl}}
+	yasmTestIn := ModuleCCInputs{ModuleCompileEnv: &ModuleCompileEnv{InclArgs: newInclArgMemo(), AddIncl: builtinsASOwnAddIncl}}
+	yasmTestIn = newModuleCCInputs(yasmTestIn.ModuleCompileEnv)
 	ref, _ := nodeTestEmitContext(e, hostInstance("contrib/libs/asmlib")).emitASYasm("memset64.asm", source("contrib/libs/asmlib/memset64.asm"), yasmTestIn, yasmLDRef)
 
 	if e.nodes.len() != 3 {
@@ -131,7 +134,7 @@ func TestEmitASYasm_YasmLD_PopulatesDepRefs(t *testing.T) {
 
 func TestEmitAS_KV(t *testing.T) {
 	e := newStreamingEmitter(nil)
-	nodeTestEmitContext(e, targetInstance("some/module")).emitAS("aarch64/foo.S", source("some/module/aarch64/foo.S"), ModuleCCInputs{}, testHostP)
+	nodeTestEmitContext(e, targetInstance("some/module")).emitAS("aarch64/foo.S", source("some/module/aarch64/foo.S"), newModuleCCInputs(&ModuleCompileEnv{}), testHostP)
 
 	if e.nodes.len() != 1 {
 		t.Fatalf("emitter buffered %d nodes, want 1", e.nodes.len())
@@ -147,7 +150,7 @@ func TestEmitAS_KV(t *testing.T) {
 
 func TestEmitAS_AsmlibYasm_OutputPath_NoUnderscoreInfix(t *testing.T) {
 	e := newStreamingEmitter(nil)
-	_, outPath := nodeTestEmitContext(e, hostInstance("contrib/libs/asmlib")).emitASYasm("memset64.asm", source("contrib/libs/asmlib/memset64.asm"), ModuleCCInputs{}, testYasmLDRef(e))
+	_, outPath := nodeTestEmitContext(e, hostInstance("contrib/libs/asmlib")).emitASYasm("memset64.asm", source("contrib/libs/asmlib/memset64.asm"), newModuleCCInputs(&ModuleCompileEnv{}), testYasmLDRef(e))
 	want := "$(B)/contrib/libs/asmlib/memset64.pic.o"
 
 	if outPath.string() != want {
@@ -164,7 +167,7 @@ func TestEmitAS_AsmlibYasm_TargetSide_NoPicSuffix(t *testing.T) {
 		Language: LangCPP,
 		Platform: targetX86,
 	}
-	_, outPath := nodeTestEmitContext(e, instance).emitASYasm("memset64.asm", source("contrib/libs/asmlib/memset64.asm"), ModuleCCInputs{}, testYasmLDRef(e))
+	_, outPath := nodeTestEmitContext(e, instance).emitASYasm("memset64.asm", source("contrib/libs/asmlib/memset64.asm"), newModuleCCInputs(&ModuleCompileEnv{}), testYasmLDRef(e))
 	wantYasmPath := "$(B)/contrib/libs/asmlib/memset64.o"
 
 	if outPath.string() != wantYasmPath {

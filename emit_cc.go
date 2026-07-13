@@ -50,21 +50,34 @@ type ModuleCompileEnv struct {
 }
 
 type ModuleCCInputs struct {
-	ModuleCompileEnv
+	*ModuleCompileEnv
 
 	PerSourceCFlags []ANY
+	AddIncl         []VFS
+	CFlags          []ANY
+	CCBlocks        *CcModuleArgBlocks
 	FlatOutput      bool
 	ForceCxx        bool
+	Py3Suffix       bool
 	Variant         *string
 	ExtraDepRefs    []NodeRef
 	IncludeInputs   []VFS
 	IncludeView     Closure
 }
 
+func newModuleCCInputs(env *ModuleCompileEnv) ModuleCCInputs {
+	return ModuleCCInputs{
+		ModuleCompileEnv: env,
+		AddIncl:          env.AddIncl,
+		CFlags:           env.CFlags,
+		CCBlocks:         &env.CCBlocks,
+		Py3Suffix:        env.Py3Suffix,
+	}
+}
+
 func (e *EmitContext) ccInputsFor(compile CompileSpec) ModuleCCInputs {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	env := d.cc
-	in := ModuleCCInputs{ModuleCompileEnv: env}
+	in := newModuleCCInputs(&d.cc)
 
 	in.PerSourceCFlags = compile.CFlags
 	in.FlatOutput = compile.FlatOutput
@@ -93,7 +106,14 @@ func (e *EmitContext) ccInputsFor(compile CompileSpec) ModuleCCInputs {
 	}
 
 	if envDelta {
-		in.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &in.ModuleCompileEnv)
+		env := d.cc
+
+		env.AddIncl = in.AddIncl
+		env.CFlags = in.CFlags
+
+		blocks := composeCCModuleArgBlocks(ctx.na, instance.Platform, &env)
+
+		in.CCBlocks = &blocks
 	}
 
 	return in
@@ -317,7 +337,9 @@ func ccObjectSuffix(instance ModuleInstance, in ModuleCCInputs) string {
 }
 
 func (e *EmitContext) ccOutputFor(srcVFS VFS, compile CompileSpec) VFS {
-	in := ModuleCCInputs{ModuleCompileEnv: e.d.cc, FlatOutput: compile.FlatOutput}
+	in := newModuleCCInputs(&e.d.cc)
+
+	in.FlatOutput = compile.FlatOutput
 
 	if compile.Py3Suffix {
 		in.Py3Suffix = true
@@ -498,19 +520,11 @@ func appendCxxStdAndOwn(cmdArgs []ANY, isCxx bool, noCompilerWarnings bool, inje
 	return cmdArgs
 }
 
-func composePeerExtras(in ModuleCompileEnv, isCxx bool) []ANY {
-	if isCxx {
-		return in.PeerCXXFlagsGlobal
-	}
-
-	return in.PeerCOnlyFlagsGlobal
-}
-
-func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCompileEnv, p *Platform) []ANY {
+func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []ANY {
 	return concat(p.CFlags, in.CFlags, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal)
 }
 
-func composeOwnAndPeerGlobalBucket(in ModuleCompileEnv, isCxx bool) []ANY {
+func composeOwnAndPeerGlobalBucket(in *ModuleCompileEnv, isCxx bool) []ANY {
 	out := make([]ANY, 0,
 		len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+
 			len(in.OwnCOnlyFlagsGlobal)+len(in.PeerCOnlyFlagsGlobal))
@@ -664,7 +678,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 		cxxOwnExtras = concat(in.CXXFlags, p.CXXFlags)
 	}
 
-	cxxBucket := composeOwnAndPeerGlobalBucket(*in, true)
+	cxxBucket := composeOwnAndPeerGlobalBucket(in, true)
 
 	cxxTailParts := [6][]ANY{
 		cxxStandardFlagChunk,

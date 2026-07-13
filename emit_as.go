@@ -60,7 +60,7 @@ func composeASCmdArgs(na *NodeArenas, instance ModuleInstance, outVFS, inVFS VFS
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 2 + len(bundle.ArchArgs) + len(instance.Platform.SysrootArgs)
 	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in.ModuleCompileEnv, instance.Platform)
+	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
 	includes := composeASIncludes(in)
 	betweenBlocks := len(catboostOpenSourceDefine)
 

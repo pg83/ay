@@ -36,7 +36,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	for _, src := range stmt.Sources {
 		inputVFS := e.llvmBcSourceInfo(src)
-		in := ModuleCCInputs{ModuleCompileEnv: d.cc}
+		in := newModuleCCInputs(&d.cc)
 		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
 		bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
 		cv := e.scanner.walkClosure(inputVFS, d.scanCtx, scanDomainCC)
@@ -180,7 +180,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []ANY {
 	bundle := compileFlagBundleFor(platform)
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in.ModuleCompileEnv, platform)
+	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, platform)
 	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in.ModuleCompileEnv, true)
 	ownExtras := in.CXXFlags
 
