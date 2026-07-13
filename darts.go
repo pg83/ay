@@ -1,9 +1,10 @@
 package main
 
 type Darts struct {
-	base  []int32
-	check []int32
-	value []int32
+	base     []int32
+	check    []int32
+	value    []int32
+	baseHint int32
 }
 
 type DartsNode struct {
@@ -105,7 +106,13 @@ func (d *Darts) findBase(codes []int32) int32 {
 		}
 	}
 
-	for base := int32(1); ; base++ {
+	base := d.baseHint
+
+	if base < 1 {
+		base = 1
+	}
+
+	for ; ; base++ {
 		d.ensure(base + maxCode)
 
 		free := true
@@ -119,6 +126,8 @@ func (d *Darts) findBase(codes []int32) int32 {
 		}
 
 		if free {
+			d.baseHint = base
+
 			return base
 		}
 	}

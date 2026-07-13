@@ -21,12 +21,12 @@ type YmapsSprotoPending struct {
 }
 
 func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, d := e.ctx, e.d
 	outRoot := protoCPPOutRoot(d)
 	sprotocRes := ctx.toolResult(argMapsLibsSprotoSprotoc)
 	sprotocLDRef, sprotocBinary := sprotocRes.LDRef, *sprotocRes.LDPath
 	scanCtx := d.scanCtx
-	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcTok.string())
+	protoRelPath := e.protoSourceRelPath(srcTok.string())
 	sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")
 	sprotoRef := ctx.emit.reserve()
 	pbhImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, outRoot, e.dirScratch[:0])

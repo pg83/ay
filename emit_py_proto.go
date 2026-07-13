@@ -275,7 +275,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	pe := e.newPyPBModuleEmission(protocBinary, e.peers.ProtoInclude, duplicateOutputRootInclude)
 	scanCtx := d.scanCtx
-	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, src)
+	protoRelPath := e.protoSourceRelPath(src)
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pyOut := build(protoBase, "__intpy3___pb2.py")
 
