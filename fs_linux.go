@@ -63,6 +63,8 @@ func (fs *OsFS) readFileRel(rel string) [][]byte {
 
 	if dir == fs.dirFDRel && fs.dirFD >= 0 {
 		dirFD, openRel = fs.dirFD, name
+	} else if cached, ok := fs.dirFDs[dir]; ok {
+		dirFD, openRel = cached, name
 	}
 
 	fd, errno := fs.openatRel(dirFD, openRel, syscall.O_RDONLY|syscall.O_CLOEXEC)
@@ -163,10 +165,16 @@ func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
 		}
 
 		if n == 0 {
-			if fs.dirFD >= 0 {
-				syscall.Close(fs.dirFD)
+			slot := &fs.dirFDRing[fs.dirFDNext]
+
+			if slot.fd > 0 {
+				syscall.Close(slot.fd)
+				delete(fs.dirFDs, slot.rel)
 			}
 
+			*slot = dirFDCacheEntry{rel: rel, fd: fd}
+			fs.dirFDNext = (fs.dirFDNext + 1) & (dirFDCacheSize - 1)
+			fs.dirFDs[rel] = fd
 			fs.dirFD = fd
 			fs.dirFDRel = rel
 

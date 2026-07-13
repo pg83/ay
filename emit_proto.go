@@ -343,8 +343,8 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 }
 
 func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, spec *ProtoSpec) ProtoPBEmission {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	protoRelPath := protoSourceRelPath(ctx.fs, instance, d, srcRel)
+	ctx, d := e.ctx, e.d
+	protoRelPath := e.protoSourceRelPath(srcRel)
 	buildProto := build(protoRelPath)
 	protoVFS := source(protoRelPath)
 	scanCtx := d.scanCtx
@@ -954,6 +954,35 @@ type ProtoSrcsResult struct {
 
 func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src string) string {
 	return filepath.ToSlash(filepath.Clean(resolvePySrcRel(fs, d.srcDirs, instance.Path, src).string()))
+}
+
+const protoPathCacheSize = 16
+
+type protoPathEntry struct {
+	src string
+	rel string
+}
+
+func (e *EmitContext) protoSourceRelPath(src string) string {
+	for i := range e.protoPaths {
+		if e.protoPaths[i].src == src {
+			return e.protoPaths[i].rel
+		}
+	}
+
+	rel := protoSourceRelPath(e.ctx.fs, e.instance, e.d, src)
+	entry := protoPathEntry{src: src, rel: rel}
+
+	if len(e.protoPaths) < protoPathCacheSize {
+		e.protoPaths = append(e.protoPaths, entry)
+
+		return rel
+	}
+
+	e.protoPaths[e.protoPathPos] = entry
+	e.protoPathPos = (e.protoPathPos + 1) & (protoPathCacheSize - 1)
+
+	return rel
 }
 
 type PbArgBlocks struct {

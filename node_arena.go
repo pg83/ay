@@ -257,7 +257,7 @@ func (na *NodeArenas) dedupClosure(extra []VFS, groups ...[][]VFS) []VFS {
 		out = na.vfs.alloc(total)[:0]
 
 		for _, v := range extra {
-			if deduper.add(v.strID()) {
+			if deduper.addStable(v.strID()) {
 				out = append(out, v)
 			}
 		}
@@ -265,7 +265,7 @@ func (na *NodeArenas) dedupClosure(extra []VFS, groups ...[][]VFS) []VFS {
 		for _, g := range groups {
 			for _, b := range g {
 				for _, v := range b {
-					if deduper.add(v.strID()) {
+					if deduper.addStable(v.strID()) {
 						out = append(out, v)
 					}
 				}
@@ -295,7 +295,7 @@ func (na *NodeArenas) dedupClosureChunks(closures ...Closure) InputChunks {
 		chunks := na.inputs.alloc(bound)[:0]
 
 		for _, cl := range closures {
-			if cl.self != 0 && deduper.add(cl.self.strID()) {
+			if cl.self != 0 && deduper.addStable(cl.self.strID()) {
 				chunks = append(chunks, na.vfsList(cl.self))
 			}
 
@@ -332,7 +332,7 @@ func (na *NodeArenas) dedupSourceVFS(inputs []VFS, extra [][]VFS) []VFS {
 				return
 			}
 
-			if !deduper.add(input.strID()) {
+			if !deduper.addStable(input.strID()) {
 				return
 			}
 
@@ -349,7 +349,7 @@ func (na *NodeArenas) dedupSourceVFS(inputs []VFS, extra [][]VFS) []VFS {
 			}
 
 			for _, input := range bucket {
-				if deduper.add(input.strID()) {
+				if deduper.addStable(input.strID()) {
 					out = append(out, input)
 				}
 			}
@@ -362,7 +362,7 @@ func (na *NodeArenas) dedupSourceVFS(inputs []VFS, extra [][]VFS) []VFS {
 
 func (na *NodeArenas) filterSeen(dd *DeDuper, list []VFS) []VFS {
 	for i, v := range list {
-		if dd.add(v.strID()) {
+		if dd.addStable(v.strID()) {
 			continue
 		}
 
@@ -371,7 +371,7 @@ func (na *NodeArenas) filterSeen(dd *DeDuper, list []VFS) []VFS {
 		out = append(out, list[:i]...)
 
 		for _, w := range list[i+1:] {
-			if dd.add(w.strID()) {
+			if dd.addStable(w.strID()) {
 				out = append(out, w)
 			}
 		}

@@ -12,10 +12,16 @@ var emptyDirNames = []uint32{}
 const readChunkSize = 256 << 10
 
 const sourceUnderHotMask = 1<<15 - 1
+const dirFDCacheSize = 256
 
 type sourceUnderHotEntry struct {
 	key uint64
 	val STR
+}
+
+type dirFDCacheEntry struct {
+	rel string
+	fd  int
 }
 
 func hashSourceFile(srcRoot, rel string) uint64 {
@@ -44,6 +50,9 @@ type OsFS struct {
 	rootFD         int
 	dirFD          int
 	dirFDRel       string
+	dirFDs         map[string]int
+	dirFDRing      [dirFDCacheSize]dirFDCacheEntry
+	dirFDNext      int
 	pathBuf        []byte
 }
 
@@ -56,6 +65,7 @@ func newFS(srcRoot string) FS {
 		dirEntries:  newIntSet(1 << 12),
 		sourceUnder: newIntMap[STR](1 << 19),
 		dirFD:       -1,
+		dirFDs:      make(map[string]int, dirFDCacheSize),
 	}
 
 	fs.platformInit()

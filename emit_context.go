@@ -47,6 +47,8 @@ type EmitContext struct {
 	sbomOrder    []ResolvedPeer
 	orderedCC    []VFS
 	prodOrder    []int
+	protoPaths   []protoPathEntry
+	protoPathPos int
 	pbEmission   [2]PbModuleEmission
 	pbEmissionOk [2]bool
 	pyPBEmission PyPBModuleEmission
@@ -135,6 +137,7 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		sbomOrder:   scrub(prev.sbomOrder),
 		orderedCC:   prev.orderedCC[:0],
 		prodOrder:   prev.prodOrder[:0],
+		protoPaths:  prev.protoPaths[:0],
 	}
 
 	frame.emitCtx.pbEmissionOk = [2]bool{}
@@ -226,13 +229,13 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 		k := 0
 
 		for _, ref := range node.DepRefs {
-			deduper.add(ref.strID())
+			deduper.addStable(ref.strID())
 			out[k] = ref
 			k++
 		}
 
 		for _, ref := range refs {
-			if !deduper.add(ref.strID()) {
+			if !deduper.addStable(ref.strID()) {
 				continue
 			}
 

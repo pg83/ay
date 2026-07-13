@@ -8,11 +8,11 @@ var cfgprotoGenCCExtras = []IncludeDirective{
 
 func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	src := meta.Source
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, d := e.ctx, e.d
 	protocLDRef, _ := ctx.tool(argContribToolsProtoc)
 	cppStyleguideLDRef, _ := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
-	cfgRelPath := protoSourceRelPath(ctx.fs, instance, d, e.moduleSourceName(src))
+	cfgRelPath := e.protoSourceRelPath(e.moduleSourceName(src))
 	cfgSource := source(cfgRelPath)
 	cfgImports := e.scanner.walkClosure(cfgSource, d.scanCtx, scanDomainProto)
 	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, protoCPPOutRoot(d), e.dirScratch[:0])

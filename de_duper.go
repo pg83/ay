@@ -180,7 +180,7 @@ func dedupInPlaceWith[T IdKey](deduper *DeDuper, xs []T) []T {
 	out := xs[:0]
 
 	for _, x := range xs {
-		if deduper.add(x.strID()) {
+		if deduper.addStable(x.strID()) {
 			out = append(out, x)
 		}
 	}
@@ -206,7 +206,7 @@ func dedup[T IdKey](lists ...[]T) []T {
 
 		for _, l := range lists {
 			for _, x := range l {
-				if deduper.add(x.strID()) {
+				if deduper.addStable(x.strID()) {
 					out = append(out, x)
 				}
 			}

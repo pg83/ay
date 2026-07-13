@@ -94,7 +94,7 @@ func (e *EmitContext) srcPosition(tok STR) ([]VFS, []VFS) {
 
 	switch class {
 	case srcExtProto, srcExtEv, srcExtCfgProto:
-		protoRel = protoSourceRelPath(e.ctx.fs, e.instance, d, src)
+		protoRel = e.protoSourceRelPath(src)
 	}
 
 	switch class {
@@ -442,7 +442,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	for i, srcTok := range d.ymapsSprotoSrcs {
-		protoRelPath := protoSourceRelPath(e.ctx.fs, e.instance, d, srcTok.string())
+		protoRelPath := e.protoSourceRelPath(srcTok.string())
 		sprotoMark := len(e.prodVFS)
 
 		e.prodVFS = append(e.prodVFS, build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h"))
