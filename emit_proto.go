@@ -950,7 +950,7 @@ func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src strin
 	return filepath.ToSlash(filepath.Clean(resolvePySrcRel(fs, d.srcDirs, instance.Path, src).string()))
 }
 
-const protoPathCacheSize = 16
+const protoPathCacheSize = 64
 
 type protoPathEntry struct {
 	src string
