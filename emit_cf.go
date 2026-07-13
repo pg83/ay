@@ -103,7 +103,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 
 func buildCFGVars(fs FS, rel string, setVars, defaultVars map[STR]STR, buildTypeUpper string) []string {
 	referenced := map[string]bool{}
-	data := fs.read(rel)
+	data := concatChunks(fs.read(rel))
 
 	for _, re := range []*regexp.Regexp{cfgVarRefRe, cfgCmakeDefineRe} {
 		for _, m := range re.FindAllSubmatch(data, -1) {

@@ -10,9 +10,15 @@ func (CIncludeDirectiveParser) id() uint32 {
 	return 1
 }
 
-func (CIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+func (CIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
-	k := parseCIncludes(data, block, 0)
+	k := 0
+
+	if len(data) == 1 {
+		k = parseCIncludes(data[0], block, k)
+	} else {
+		k = parseCIncludesChunks(data, block, k)
+	}
 
 	a.commit(k)
 
@@ -21,6 +27,116 @@ func (CIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[I
 	}
 
 	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
+}
+
+type cChunkState struct {
+	inBlockComment bool
+}
+
+func parseCIncludesChunks(chunks [][]byte, block []IncludeDirective, k int) int {
+	if len(chunks) == 1 {
+		return parseCIncludes(chunks[0], block, k)
+	}
+
+	var state cChunkState
+	var pending []byte
+
+	for i, chunk := range chunks {
+		last := i == len(chunks)-1
+
+		if len(pending) > 0 {
+			if nl := bytes.IndexByte(chunk, '\n'); nl >= 0 {
+				pending = append(pending, chunk[:nl+1]...)
+				k = state.parseBlock(pending, block, k)
+				pending = pending[:0]
+				chunk = chunk[nl+1:]
+			} else {
+				pending = append(pending, chunk...)
+
+				if last {
+					k = state.parseBlock(pending, block, k)
+				}
+
+				continue
+			}
+		}
+
+		if last {
+			if len(chunk) > 0 {
+				k = state.parseBlock(chunk, block, k)
+			}
+
+			continue
+		}
+
+		lastNL := bytes.LastIndexByte(chunk, '\n')
+
+		if lastNL < 0 {
+			pending = append(pending[:0], chunk...)
+
+			continue
+		}
+
+		k = state.parseBlock(chunk[:lastNL+1], block, k)
+		pending = append(pending[:0], chunk[lastNL+1:]...)
+	}
+
+	return k
+}
+
+func (s *cChunkState) parseBlock(data []byte, block []IncludeDirective, k int) int {
+	if s.inBlockComment {
+		end := bytes.Index(data, blockCommentClose)
+
+		if end < 0 {
+			return k
+		}
+
+		data = data[end+len(blockCommentClose):]
+		s.inBlockComment = false
+	}
+
+	k = parseCIncludes(data, block, k)
+	s.inBlockComment = leadingBlockCommentOpen(data)
+
+	return k
+}
+
+func leadingBlockCommentOpen(data []byte) bool {
+	for i := 0; i < len(data); {
+		rel := bytes.Index(data[i:], blockCommentOpen)
+
+		if rel < 0 {
+			return false
+		}
+
+		open := i + rel
+		lineLeading := true
+
+		for k := open; k > 0 && data[k-1] != '\n'; k-- {
+			if !isCWSByte(data[k-1]) {
+				lineLeading = false
+
+				break
+			}
+		}
+
+		if !lineLeading {
+			i = open + len(blockCommentOpen)
+
+			continue
+		}
+
+		closeRel := bytes.Index(data[open+len(blockCommentOpen):], blockCommentClose)
+
+		if closeRel < 0 {
+			return true
+		}
+
+		i = open + len(blockCommentOpen) + closeRel + len(blockCommentClose)
+	}
+
+	return false
 }
 
 func parseCIncludes(data []byte, block []IncludeDirective, k int) int {

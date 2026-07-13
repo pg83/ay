@@ -477,7 +477,7 @@ some_label:
 `)
 
 	dblock := make([]IncludeDirective, 64)
-	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
+	dirs := dblock[:parseYasmIncludes([][]byte{in}, dblock, 0)]
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
@@ -497,7 +497,7 @@ func TestParseYasmIncludes_UppercaseDirective(t *testing.T) {
 `)
 
 	dblock := make([]IncludeDirective, 64)
-	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
+	dirs := dblock[:parseYasmIncludes([][]byte{in}, dblock, 0)]
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
@@ -518,7 +518,7 @@ func TestParseYasmIncludes_LineCommentIgnored(t *testing.T) {
 `)
 
 	dblock := make([]IncludeDirective, 64)
-	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
+	dirs := dblock[:parseYasmIncludes([][]byte{in}, dblock, 0)]
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
@@ -534,7 +534,7 @@ func TestParseYasmIncludes_TrailingSemicolonComment(t *testing.T) {
 `)
 
 	dblock := make([]IncludeDirective, 64)
-	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
+	dirs := dblock[:parseYasmIncludes([][]byte{in}, dblock, 0)]
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)
@@ -550,7 +550,7 @@ func TestParseYasmIncludes_NoMatchOnCInclude(t *testing.T) {
 `)
 
 	dblock := make([]IncludeDirective, 64)
-	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
+	dirs := dblock[:parseYasmIncludes([][]byte{in}, dblock, 0)]
 
 	if len(dirs) != 0 {
 		t.Errorf("got %d directives, want 0; %+v", len(dirs), dirs)
@@ -562,7 +562,7 @@ func TestParseYasmIncludes_AngleBracketForm(t *testing.T) {
 `)
 
 	dblock := make([]IncludeDirective, 64)
-	dirs := dblock[:parseYasmIncludes(in, dblock, 0)]
+	dirs := dblock[:parseYasmIncludes([][]byte{in}, dblock, 0)]
 
 	if len(dirs) != 1 {
 		t.Fatalf("got %d directives, want 1; %+v", len(dirs), dirs)

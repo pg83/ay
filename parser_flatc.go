@@ -6,13 +6,13 @@ func (FlatbuffersIncludeDirectiveParser) id() uint32 {
 	return 3
 }
 
-func (FlatbuffersIncludeDirectiveParser) parse(_ string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
-	data = stripComments(data)
+func (FlatbuffersIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	raw := stripComments(concatChunks(data))
 
 	block := a.alloc(directiveBlockHint)
 	k := 0
 
-	eachLine(data, func(line []byte) {
+	eachChunkLine(raw, func(line []byte) {
 		m := flatbuffersIncludeRe.FindSubmatch(line)
 
 		if len(m) != 2 {

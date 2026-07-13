@@ -131,8 +131,8 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 
 	data := pm.fs.read(rel)
 
-	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
-		data = data[3:]
+	if first := data[0]; len(first) >= 3 && first[0] == 0xEF && first[1] == 0xBB && first[2] == 0xBF {
+		data[0] = first[3:]
 	}
 
 	out := parser.parse(rel, data, pm.cache.directives)

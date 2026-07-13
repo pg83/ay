@@ -7,61 +7,39 @@ import (
 	"os"
 )
 
-func readFileInto(path string, buf []byte) []byte {
-	f := throw2(os.Open(path))
-
-	defer f.Close()
-
-	buf = buf[:0]
-
-	if info, err := f.Stat(); err == nil {
-		sz := int(info.Size())
-
-		if sz > cap(buf) {
-			buf = make([]byte, 0, sz)
-		}
-
-		for len(buf) < sz {
-			n, err := f.Read(buf[len(buf):sz])
-
-			buf = buf[:len(buf)+n]
-
-			if err != nil {
-				if err == io.EOF {
-					return buf
-				}
-
-				throw(err)
-			}
-		}
-
-		return buf
-	}
-
-	for {
-		if len(buf) == cap(buf) {
-			buf = append(buf, 0)[:len(buf)]
-		}
-
-		n, err := f.Read(buf[len(buf):cap(buf)])
-
-		buf = buf[:len(buf)+n]
-
-		if err != nil {
-			if err == io.EOF {
-				return buf
-			}
-
-			throw(err)
-		}
-	}
-}
-
 func (fs *OsFS) platformInit() {
 }
 
-func (fs *OsFS) readFileRel(rel string, buf []byte) []byte {
-	return readFileInto(fs.rootSlash+rel, buf)
+func (fs *OsFS) readFileRel(rel string) [][]byte {
+	f := throw2(os.Open(fs.rootSlash + rel))
+
+	defer f.Close()
+
+	n, err := io.ReadFull(f, fs.readBuf)
+
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		throw(err)
+	}
+
+	fs.readResult[0] = fs.readBuf[:n]
+
+	if n < len(fs.readBuf) {
+		return fs.readResult[:1]
+	}
+
+	info := throw2(f.Stat())
+	tailSize := int(info.Size()) - n
+
+	if tailSize <= 0 {
+		return fs.readResult[:1]
+	}
+
+	tail := make([]byte, tailSize)
+	_, err = io.ReadFull(f, tail)
+	throw(err)
+	fs.readResult[1] = tail
+
+	return fs.readResult[:2]
 }
 
 func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {

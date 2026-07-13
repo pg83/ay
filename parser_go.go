@@ -143,8 +143,8 @@ func (GoCgoIncludeDirectiveParser) id() uint32 {
 	return 10
 }
 
-func (GoCgoIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
-	comments := goCommentBodies(data)
+func (GoCgoIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	comments := goCommentBodies(concatChunks(data))
 
 	if len(comments) == 0 {
 		return ParsedIncludeSet{}

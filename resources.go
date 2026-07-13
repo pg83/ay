@@ -477,7 +477,7 @@ type ResourceBundleJSON struct {
 
 func readResourceBundleJSON(fs FS, rel string) map[string]string {
 	var data ResourceBundleJSON
-	throw(json.Unmarshal(fs.read(rel), &data))
+	throw(json.Unmarshal(concatChunks(fs.read(rel)), &data))
 
 	out := make(map[string]string, len(data.ByPlatform))
 

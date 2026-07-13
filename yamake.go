@@ -429,7 +429,11 @@ func parseFile(fs FS, rel string) (mf *MakeFile, err error) {
 func readForParse(fs FS, rel string) *[]byte {
 	bp := parseBufPool.Get().(*[]byte)
 
-	*bp = append((*bp)[:0], fs.read(rel)...)
+	*bp = (*bp)[:0]
+
+	for _, chunk := range fs.read(rel) {
+		*bp = append(*bp, chunk...)
+	}
 
 	return bp
 }

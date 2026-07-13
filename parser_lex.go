@@ -15,20 +15,11 @@ func (LexIncludeDirectiveParser) id() uint32 {
 	return 11
 }
 
-func (LexIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+func (LexIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0
 
-	for len(data) > 0 {
-		line := data
-
-		if nl := bytes.IndexByte(data, '\n'); nl >= 0 {
-			line = data[:nl]
-			data = data[nl+1:]
-		} else {
-			data = nil
-		}
-
+	eachLine(data, func(line []byte) {
 		if c := bytes.Index(line, lexLineComment); c >= 0 {
 			line = line[:c]
 		}
@@ -58,13 +49,13 @@ func (LexIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator
 		parts := fields
 
 		if len(parts) == 0 || !bytes.Equal(parts[0], lexIncludePrefix) {
-			continue
+			return
 		}
 
 		inc := lexValidInclude(parts[1:])
 
 		if inc == nil {
-			continue
+			return
 		}
 
 		kind := includeQuoted
@@ -75,7 +66,7 @@ func (LexIncludeDirectiveParser) parse(rel string, data []byte, a *BumpAllocator
 
 		block[k] = IncludeDirective{kind: kind, target: includeTarget(internBytes(inc[1 : len(inc)-1]).any())}
 		k++
-	}
+	})
 
 	a.commit(k)
 

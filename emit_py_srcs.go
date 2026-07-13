@@ -890,7 +890,7 @@ func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem
 }
 
 func yaConfFormulaResources(fs FS, confPath string) []string {
-	raw := fs.read(confPath)
+	raw := concatChunks(fs.read(confPath))
 
 	var out []string
 

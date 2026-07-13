@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/zeebo/xxh3"
 )
 
 func writeTree(t *testing.T, root string, files map[string]string) {
@@ -168,7 +172,7 @@ func TestFS_Read(t *testing.T) {
 	})
 	fs := newFS(root)
 
-	data := fs.read("file.txt")
+	data := concatChunks(fs.read("file.txt"))
 
 	if string(data) != "hello world" {
 		t.Errorf("got %q", string(data))
@@ -176,6 +180,59 @@ func TestFS_Read(t *testing.T) {
 
 	if exc := try(func() { fs.read("missing.txt") }); exc == nil {
 		t.Error("missing file should Throw")
+	}
+}
+
+func TestFS_ReadAroundChunkSize(t *testing.T) {
+	for _, size := range []int{readChunkSize - 1, readChunkSize, readChunkSize + 1} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			root := t.TempDir()
+			want := make([]byte, size)
+
+			for i := range want {
+				want[i] = byte(i*31 + 7)
+			}
+
+			if err := os.WriteFile(filepath.Join(root, "data"), want, 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			fs := newFS(root)
+
+			chunks := fs.read("data")
+
+			if got := concatChunks(chunks); !bytes.Equal(got, want) {
+				t.Fatalf("read %d bytes: got %d bytes with different content", size, len(got))
+			}
+
+			wantChunks := 1
+
+			if size > readChunkSize {
+				wantChunks = 2
+			}
+
+			if len(chunks) != wantChunks {
+				t.Fatalf("read %d bytes returned %d chunks, want %d", size, len(chunks), wantChunks)
+			}
+
+			if len(chunks[0]) != min(size, readChunkSize) {
+				t.Fatalf("read %d bytes: first chunk has %d bytes", size, len(chunks[0]))
+			}
+
+			if len(chunks) == 2 && len(chunks[1]) != size-readChunkSize {
+				t.Fatalf("read %d bytes: mmap tail has %d bytes", size, len(chunks[1]))
+			}
+
+			wantHash := xxh3.Hash(want)
+
+			if size > readChunkSize {
+				wantHash = xxh3.Hash(want[:readChunkSize]) ^ xxh3.Hash(want[readChunkSize:])
+			}
+
+			if got := fs.contentHash(internStr("data")); got != wantHash {
+				t.Fatalf("content hash for %d bytes = %#x, want %#x", size, got, wantHash)
+			}
+		})
 	}
 }
 
