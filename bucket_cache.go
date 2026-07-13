@@ -143,17 +143,67 @@ func (c *BucketCache) internBucket(elems []VFS) []VFS {
 	return slice
 }
 
-func (c *BucketCache) storeBuckets(self VFS, rest []VFS) Closure {
+func (c *BucketCache) resetScratch() {
 	for r := range c.scratch {
 		c.scratch[r] = c.scratch[r][:0]
 	}
+}
 
-	for _, v := range rest {
-		r := closureBucketIndex(v)
+func (c *BucketCache) spliceOne(seen *IdSet, v VFS) {
+	id := v.strID()
 
-		c.scratch[r] = append(c.scratch[r], v)
+	if seen.gen.s[id] == seen.epoch {
+		return
 	}
 
+	seen.gen.s[id] = seen.epoch
+	r := closureBucketIndex(v)
+	c.scratch[r] = append(c.scratch[r], v)
+}
+
+func (c *BucketCache) spliceBucket(seen *IdSet, bucket []VFS) {
+	if len(bucket) == 0 {
+		return
+	}
+
+	gen := seen.gen.s
+	epoch := seen.epoch
+	r := closureBucketIndex(bucket[0])
+	dst := c.scratch[r]
+
+	for _, v := range bucket {
+		id := v.strID()
+
+		if gen[id] == epoch {
+			continue
+		}
+
+		gen[id] = epoch
+		dst = append(dst, v)
+	}
+
+	c.scratch[r] = dst
+}
+
+func (c *BucketCache) spliceClosure(seen *IdSet, cl Closure) {
+	c.spliceOne(seen, cl.self)
+
+	for _, bucket := range cl.bucketList() {
+		c.spliceBucket(seen, bucket)
+	}
+}
+
+func (c *BucketCache) spliceLeaves(seen *IdSet, leaves []VFS) {
+	for _, v := range leaves {
+		c.spliceOne(seen, v)
+	}
+}
+
+func (c *BucketCache) buildScratch() []VFS {
+	return c.scratch[0]
+}
+
+func (c *BucketCache) storeScratch(self VFS) Closure {
 	n := 0
 
 	for r := 0; r < closureBuckets; r++ {
@@ -177,4 +227,16 @@ func (c *BucketCache) storeBuckets(self VFS, rest []VFS) Closure {
 	list := c.internBucketList(buckets[:n])
 
 	return Closure{self: self, buckets: list}
+}
+
+func (c *BucketCache) storeBuckets(self VFS, rest []VFS) Closure {
+	c.resetScratch()
+
+	for _, v := range rest {
+		r := closureBucketIndex(v)
+
+		c.scratch[r] = append(c.scratch[r], v)
+	}
+
+	return c.storeScratch(self)
 }
