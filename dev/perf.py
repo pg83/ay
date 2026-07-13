@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Sequential wall-time comparison for two ay binaries.
+"""Sequential paired wall-time comparison for two ay binaries.
 
 The arguments after ``--`` are passed to ``<binary> make -j0`` verbatim.
-Measured rounds alternate their execution order: left/right, then right/left.
-Mann-Whitney U is reported after every round, while stopping decisions are made
-only at a precomputed set of group-sequential checkpoints.
+Measurements are made in randomized LRRL/RLLR blocks.  Each block contributes
+one log(right/left) observation, and decisions use a paired sign-flip
+permutation test at precomputed group-sequential checkpoints.
 """
 
 import argparse
 import json
 import math
 import os
+import random
 import shlex
 import shutil
 import statistics
@@ -21,144 +22,125 @@ from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True)
-class MWWResult:
-    u_left: float
+class PermutationResult:
+    mean_log_ratio: float
     p_two_sided: float
-    rank_biserial: float
     method: str
+    permutations: int
 
 
 @dataclass(frozen=True)
 class Summary:
     runs: int
+    blocks: int
     left_mean: float
     right_mean: float
     left_median: float
     right_median: float
     right_vs_left_pct: float
-    mww: MWWResult
+    geometric_right_vs_left_pct: float
+    right_faster_blocks: int
+    permutation: PermutationResult | None
 
 
-def _average_ranks_twice(left, right):
-    """Return twice the average rank for every value, preserving input order."""
-    tagged = [(value, i) for i, value in enumerate(left)]
-    tagged.extend((value, len(left) + i) for i, value in enumerate(right))
-    tagged.sort(key=lambda item: item[0])
+def _extreme(observed, candidate):
+    tolerance = 1e-14 * max(1.0, observed)
 
-    ranks = [0] * len(tagged)
-    pos = 0
-
-    while pos < len(tagged):
-        end = pos + 1
-
-        while end < len(tagged) and tagged[end][0] == tagged[pos][0]:
-            end += 1
-
-        # The one-based ranks are pos+1 through end.  Their doubled average is
-        # therefore pos+1+end, which remains integral even in the presence of ties.
-        rank_twice = pos + 1 + end
-
-        for _, original in tagged[pos:end]:
-            ranks[original] = rank_twice
-
-        pos = end
-
-    return ranks
+    return abs(candidate) >= observed - tolerance
 
 
-def _exact_two_sided_p(ranks_twice, n_left, observed_sum_twice):
-    """Exact conditional permutation p-value for the average-rank statistic."""
-    total_n = len(ranks_twice)
-    center_twice = n_left * (total_n + 1)
-    observed_distance = abs(observed_sum_twice - center_twice)
-    ways = [dict() for _ in range(n_left + 1)]
-    ways[0][0] = 1
-
-    for seen, rank in enumerate(ranks_twice, 1):
-        for count in range(min(seen, n_left), 0, -1):
-            previous = ways[count - 1]
-            current = ways[count]
-
-            for rank_sum, combinations in previous.items():
-                new_sum = rank_sum + rank
-                current[new_sum] = current.get(new_sum, 0) + combinations
-
-    total = 0
+def _exact_sign_flip_p(values):
+    observed = abs(math.fsum(values))
     extreme = 0
 
-    for rank_sum, combinations in ways[n_left].items():
-        total += combinations
+    def visit(pos, total):
+        nonlocal extreme
 
-        if abs(rank_sum - center_twice) >= observed_distance:
-            extreme += combinations
+        if pos == len(values):
+            if _extreme(observed, total):
+                extreme += 1
 
-    return extreme / total
+            return
 
+        value = values[pos]
+        visit(pos + 1, total - value)
+        visit(pos + 1, total + value)
 
-def _asymptotic_two_sided_p(left, right, u_left):
-    """Tie-corrected normal approximation with a continuity correction."""
-    n_left = len(left)
-    n_right = len(right)
-    total_n = n_left + n_right
-    counts = {}
+    visit(0, 0.0)
 
-    for value in (*left, *right):
-        counts[value] = counts.get(value, 0) + 1
-
-    tie_sum = sum(count**3 - count for count in counts.values())
-    variance = n_left * n_right / 12 * (
-        total_n + 1 - tie_sum / (total_n * (total_n - 1))
-    )
-
-    if variance == 0:
-        return 1.0
-
-    mean = n_left * n_right / 2
-    distance = max(0.0, abs(u_left - mean) - 0.5)
-    z = distance / math.sqrt(variance)
-
-    return math.erfc(z / math.sqrt(2))
+    return extreme / (1 << len(values)), 1 << len(values)
 
 
-def mann_whitney(left, right, exact_max_total=60):
-    if not left or not right:
-        raise ValueError("Mann-Whitney U needs two non-empty samples")
+def _sampled_sign_flip_p(values, permutations, seed):
+    observed = abs(math.fsum(values))
+    rng = random.Random(seed)
+    extreme = 0
 
-    n_left = len(left)
-    n_right = len(right)
-    ranks_twice = _average_ranks_twice(left, right)
-    rank_sum_left_twice = sum(ranks_twice[:n_left])
-    u_left = rank_sum_left_twice / 2 - n_left * (n_left + 1) / 2
+    for _ in range(permutations):
+        signs = rng.getrandbits(len(values))
+        total = 0.0
 
-    if n_left + n_right <= exact_max_total:
-        p_value = _exact_two_sided_p(ranks_twice, n_left, rank_sum_left_twice)
+        for value in values:
+            total += value if signs & 1 else -value
+            signs >>= 1
+
+        if _extreme(observed, total):
+            extreme += 1
+
+    # Including the observed assignment makes this a valid randomized p-value,
+    # rather than a possibly zero estimate of the exact p-value.
+    return (extreme + 1) / (permutations + 1), permutations
+
+
+def paired_permutation(values, exact_max_blocks=20, permutations=200_000, seed=0):
+    if not values:
+        raise ValueError("paired permutation test needs a non-empty sample")
+    if exact_max_blocks < 1:
+        raise ValueError("exact_max_blocks must be positive")
+    if permutations < 1:
+        raise ValueError("permutations must be positive")
+
+    if len(values) <= exact_max_blocks:
+        p_value, count = _exact_sign_flip_p(values)
         method = "exact"
     else:
-        p_value = _asymptotic_two_sided_p(left, right, u_left)
-        method = "normal"
+        p_value, count = _sampled_sign_flip_p(values, permutations, seed)
+        method = "sampled"
 
-    rank_biserial = 1 - 2 * u_left / (n_left * n_right)
-
-    return MWWResult(u_left, p_value, rank_biserial, method)
+    return PermutationResult(statistics.fmean(values), p_value, method, count)
 
 
-def summarize(left, right, exact_max_total=60):
+def block_log_ratio(left, right):
+    if len(left) != 2 or len(right) != 2:
+        raise ValueError("a measurement block needs two runs per binary")
+
+    return (math.log(right[0]) + math.log(right[1]) - math.log(left[0]) - math.log(left[1])) / 2
+
+
+def summarize(left, right, block_log_ratios, permutation=None):
     left_mean = statistics.fmean(left)
     right_mean = statistics.fmean(right)
+    mean_log_ratio = statistics.fmean(block_log_ratios)
 
     return Summary(
         runs=len(left),
+        blocks=len(block_log_ratios),
         left_mean=left_mean,
         right_mean=right_mean,
         left_median=statistics.median(left),
         right_median=statistics.median(right),
         right_vs_left_pct=(right_mean - left_mean) / left_mean * 100,
-        mww=mann_whitney(left, right, exact_max_total),
+        geometric_right_vs_left_pct=math.expm1(mean_log_ratio) * 100,
+        right_faster_blocks=sum(value < 0 for value in block_log_ratios),
+        permutation=permutation,
     )
 
 
-def run_order(round_index):
-    return ("left", "right") if round_index % 2 == 0 else ("right", "left")
+def block_order(swapped):
+    if swapped:
+        return ("right", "left", "left", "right")
+
+    return ("left", "right", "right", "left")
 
 
 def decision_checkpoints(min_runs, max_runs, growth):
@@ -166,16 +148,19 @@ def decision_checkpoints(min_runs, max_runs, growth):
         raise ValueError("--min-runs must be positive")
     if max_runs < min_runs:
         raise ValueError("--max-runs must be at least --min-runs")
+    if min_runs % 2 != 0 or max_runs % 2 != 0:
+        raise ValueError("--min-runs and --max-runs must be even for complete blocks")
     if growth <= 1:
         raise ValueError("--growth must be greater than 1")
 
     result = []
-    current = min_runs
+    current = min_runs // 2
+    max_blocks = max_runs // 2
 
-    while current < max_runs:
-        result.append(current)
+    while current < max_blocks:
+        result.append(current * 2)
         following = max(current + 1, math.ceil(current * growth))
-        current = min(following, max_runs)
+        current = min(following, max_blocks)
 
     result.append(max_runs)
 
@@ -241,7 +226,7 @@ def _parse_args(argv):
         raise ValueError("missing `--` before the command passed to the binaries")
 
     parser = argparse.ArgumentParser(
-        description="Compare two ay binaries using alternating wall-time runs and MWW.",
+        description="Compare two ay binaries using paired wall-time permutation tests.",
         epilog=(
             "Example: ./dev/perf.py --left ./ay1 --right ./ay2 -- "
             "--target-platform default-linux-x86_64 --source-root /path/to/slice target"
@@ -254,8 +239,20 @@ def _parse_args(argv):
     parser.add_argument("--max-runs", type=int, default=120, help="hard run limit per binary")
     parser.add_argument("--growth", type=float, default=1.5, help="checkpoint growth factor")
     parser.add_argument("--alpha", type=float, default=0.05, help="family-wise false-positive budget")
-    parser.add_argument("--warmup-cycles", type=int, default=1, help="unmeasured L/R/R/L cycles")
-    parser.add_argument("--exact-max-total", type=int, default=60, help="largest pooled sample for exact MWW")
+    parser.add_argument("--warmup-cycles", type=int, default=1, help="unmeasured four-run blocks")
+    parser.add_argument("--seed", type=int, help="randomized block schedule seed")
+    parser.add_argument(
+        "--exact-max-blocks",
+        type=int,
+        default=20,
+        help="largest block sample for exhaustive sign flips",
+    )
+    parser.add_argument(
+        "--permutations",
+        type=int,
+        default=200_000,
+        help="sampled sign flips after --exact-max-blocks",
+    )
     parser.add_argument("--json", metavar="PATH", help="continuously write samples and summary as JSON")
     parser.add_argument("--show-output", action="store_true", help="do not suppress child stdout/stderr")
     args = parser.parse_args(own_args)
@@ -267,8 +264,10 @@ def _parse_args(argv):
         parser.error("--alpha must be between 0 and 1")
     if args.warmup_cycles < 0:
         parser.error("--warmup-cycles cannot be negative")
-    if args.exact_max_total < 2:
-        parser.error("--exact-max-total must be at least 2")
+    if args.exact_max_blocks < 1:
+        parser.error("--exact-max-blocks must be positive")
+    if args.permutations < 1:
+        parser.error("--permutations must be positive")
 
     try:
         checkpoints = decision_checkpoints(args.min_runs, args.max_runs, args.growth)
@@ -278,6 +277,7 @@ def _parse_args(argv):
         parser.error(str(error))
 
     args.cwd = os.path.abspath(args.cwd)
+    args.seed = args.seed if args.seed is not None else int.from_bytes(os.urandom(8), "little")
 
     if not os.path.isdir(args.cwd):
         parser.error(f"working directory not found: {args.cwd}")
@@ -298,44 +298,91 @@ def main(argv=None):
     env.setdefault("GOGC", "off")
     binaries = {"left": args.left, "right": args.right}
     samples = {"left": [], "right": []}
+    blocks = []
+    block_log_ratios = []
     decision_alpha = args.alpha / len(checkpoints)
     checkpoint_set = set(checkpoints)
+    schedule_rng = random.Random(args.seed)
 
     print(f"left : {args.left}")
     print(f"right: {args.right}")
     print(f"cwd  : {args.cwd}")
     print(f"cmd  : {shlex.join(command)}")
+    print(f"seed : {args.seed}")
     print(f"looks: {checkpoints}; per-look p <= {decision_alpha:.6g} (FWER {args.alpha:g})")
 
     try:
         for cycle in range(args.warmup_cycles):
-            print(f"[warmup {cycle + 1}/{args.warmup_cycles}] L R R L", flush=True)
-
-            for name in ("left", "right", "right", "left"):
-                _run_once(binaries[name], command, args.cwd, env, args.show_output)
-
-        for round_index in range(args.max_runs):
-            elapsed = {}
-            order = run_order(round_index)
+            order = block_order(bool(schedule_rng.getrandbits(1)))
+            order_label = "".join(name[0].upper() for name in order)
+            print(
+                f"[warmup {cycle + 1}/{args.warmup_cycles}] {order_label}",
+                flush=True,
+            )
 
             for name in order:
-                elapsed[name] = _run_once(
-                    binaries[name], command, args.cwd, env, args.show_output
+                _run_once(binaries[name], command, args.cwd, env, args.show_output)
+
+        for block_index in range(args.max_runs // 2):
+            elapsed = {"left": [], "right": []}
+            order = block_order(bool(schedule_rng.getrandbits(1)))
+
+            for name in order:
+                elapsed[name].append(
+                    _run_once(binaries[name], command, args.cwd, env, args.show_output)
                 )
 
-            samples["left"].append(elapsed["left"])
-            samples["right"].append(elapsed["right"])
-            result = summarize(samples["left"], samples["right"], args.exact_max_total)
+            samples["left"].extend(elapsed["left"])
+            samples["right"].extend(elapsed["right"])
+            log_ratio = block_log_ratio(elapsed["left"], elapsed["right"])
+            block_log_ratios.append(log_ratio)
+            order_label = "".join(name[0].upper() for name in order)
+            blocks.append(
+                {
+                    "order": order_label,
+                    "left": elapsed["left"],
+                    "right": elapsed["right"],
+                    "log_ratio": log_ratio,
+                }
+            )
+
+            n = len(samples["left"])
+            permutation = None
+
+            if n in checkpoint_set:
+                # Keep test randomness independent of the execution schedule and
+                # reproducible for every checkpoint.
+                test_seed = args.seed ^ (n * 0x9E3779B97F4A7C15)
+                permutation = paired_permutation(
+                    block_log_ratios,
+                    args.exact_max_blocks,
+                    args.permutations,
+                    test_seed,
+                )
+
+            result = summarize(
+                samples["left"], samples["right"], block_log_ratios, permutation
+            )
             n = result.runs
             marker = " look" if n in checkpoint_set else ""
+            p_text = ""
+
+            if permutation is not None:
+                p_text = (
+                    f" p={permutation.p_two_sided:.6g}"
+                    f" ({permutation.method}, {permutation.permutations:g})"
+                )
+
             print(
                 f"[{n:3d}/{args.max_runs}{marker}] "
-                f"order={order[0][0].upper()}{order[1][0].upper()} "
-                f"L={elapsed['left']:.3f}s R={elapsed['right']:.3f}s "
+                f"order={order_label} "
+                f"L={elapsed['left'][0]:.3f},{elapsed['left'][1]:.3f}s "
+                f"R={elapsed['right'][0]:.3f},{elapsed['right'][1]:.3f}s "
                 f"mean={result.left_mean:.3f}/{result.right_mean:.3f}s "
-                f"R-L={result.right_vs_left_pct:+.3f}% "
-                f"U={result.mww.u_left:g} p={result.mww.p_two_sided:.6g} "
-                f"({result.mww.method})",
+                f"R/L={result.geometric_right_vs_left_pct:+.3f}% "
+                f"mean-delta={result.right_vs_left_pct:+.3f}% "
+                f"wins={result.right_faster_blocks}/{result.blocks}"
+                f"{p_text}",
                 flush=True,
             )
 
@@ -343,22 +390,25 @@ def main(argv=None):
                 "left": args.left,
                 "right": args.right,
                 "command": command,
+                "seed": args.seed,
                 "checkpoints": checkpoints,
                 "decision_alpha": decision_alpha,
                 "samples": samples,
+                "blocks": blocks,
                 "summary": asdict(result),
                 "status": "running",
             }
 
-            if n in checkpoint_set and result.mww.p_two_sided <= decision_alpha:
-                winner = "left" if result.mww.rank_biserial > 0 else "right"
+            if permutation is not None and permutation.p_two_sided <= decision_alpha:
+                winner = "left" if permutation.mean_log_ratio > 0 else "right"
                 state["status"] = "separated"
                 state["winner"] = winner
                 _write_json(args.json, state)
                 print(
                     f"SEPARATED: {winner} is faster; n={n} each, "
-                    f"p={result.mww.p_two_sided:.6g} <= {decision_alpha:.6g}, "
-                    f"R-L={result.right_vs_left_pct:+.3f}%"
+                    f"blocks={result.blocks}, "
+                    f"p={permutation.p_two_sided:.6g} <= {decision_alpha:.6g}, "
+                    f"R/L={result.geometric_right_vs_left_pct:+.3f}%"
                 )
 
                 return 0
@@ -376,8 +426,9 @@ def main(argv=None):
     _write_json(args.json, state)
     print(
         f"INCONCLUSIVE: n={args.max_runs} each, "
-        f"p={result.mww.p_two_sided:.6g} > {decision_alpha:.6g}, "
-        f"R-L={result.right_vs_left_pct:+.3f}%"
+        f"blocks={result.blocks}, "
+        f"p={result.permutation.p_two_sided:.6g} > {decision_alpha:.6g}, "
+        f"R/L={result.geometric_right_vs_left_pct:+.3f}%"
     )
 
     return 2
