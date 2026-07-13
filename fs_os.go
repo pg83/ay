@@ -179,6 +179,14 @@ func (fs *OsFS) isFile(prefix STR, suffix string) bool {
 }
 
 func (fs *OsFS) resolveSourceUnder(prefix, target STR) STR {
+	return fs.resolveSourceUnder0(prefix, target, false, false)
+}
+
+func (fs *OsFS) resolveSourceUnderClean(prefix, target STR, targetClean bool) STR {
+	return fs.resolveSourceUnder0(prefix, target, targetClean, true)
+}
+
+func (fs *OsFS) resolveSourceUnder0(prefix, target STR, targetClean, cleanKnown bool) STR {
 	p, t := uint32(prefix), uint32(target)
 	pair := uint64(p)<<32 | uint64(t)
 	hot := &fs.sourceUnderHot[(p*0x9e3779b1^t)&sourceUnderHotMask]
@@ -197,7 +205,11 @@ func (fs *OsFS) resolveSourceUnder(prefix, target STR) STR {
 	}
 
 	suffix := target.string()
-	clean := suffix != "" && pathIsClean(suffix)
+	clean := targetClean
+
+	if !cleanKnown {
+		clean = suffix != "" && pathIsClean(suffix)
+	}
 
 	var v STR
 

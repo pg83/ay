@@ -144,20 +144,31 @@ func (e *EmitContext) srcPosition(tok STR) ([]VFS, []VFS) {
 	case srcExtProto, srcExtEv:
 		if e.ctx.fs.isFile(srcRootRel, protoRel) {
 			outputRoot := protoCPPOutRoot(e.d)
+			outputRootClean := outputRoot != "" && pathIsClean(outputRoot)
 
-			protoEachDirectImportName(e.ctx.parsers, protoRel, func(name string) {
-				clean := name
+			for _, directive := range e.ctx.parsers.sourceParsedBuckets(source(protoRel), nil).bucket(parsedIncludesLocal) {
+				nameID := directive.target.str()
+				name := directive.target.string()
 
-				if name == "" || !pathIsClean(name) {
-					clean = filepath.ToSlash(filepath.Clean(name))
+				if nameID != 0 && name != "" && pathIsClean(name) {
+					e.prodVFS = append(e.prodVFS, nameID.build())
+
+					if outputRootClean {
+						e.prodVFS = append(e.prodVFS, internV(outputRoot, "/", name).build())
+					} else if outputRoot != "" {
+						e.prodVFS = append(e.prodVFS, build(protoOutputRel(outputRoot, name)))
+					}
+
+					continue
 				}
 
+				clean := filepath.ToSlash(filepath.Clean(name))
 				e.prodVFS = append(e.prodVFS, build(clean))
 
 				if outputRoot != "" {
 					e.prodVFS = append(e.prodVFS, build(protoOutputRel(outputRoot, clean)))
 				}
-			})
+			}
 		}
 	}
 

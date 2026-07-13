@@ -732,7 +732,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	cleanTarget := normTarget == target
 
 	addSource := func(prefix VFS) bool {
-		rel := s.parsers.fs.resolveSourceUnder(prefix.rel(), targetID)
+		rel := s.parsers.fs.resolveSourceUnderClean(prefix.rel(), targetID, cleanTarget)
 
 		if rel == 0 {
 			return false
