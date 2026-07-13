@@ -146,12 +146,12 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 func (e *EmitContext) emitNode(node Node) NodeRef {
 	e.resolveNodeCodegenDeps(&node)
 
-	return e.ctx.emit.emitNode(node)
+	return e.ctx.emit.emitNodePtr(&node)
 }
 
 func (e *EmitContext) emitReservedNode(node Node, ref NodeRef) {
 	e.resolveNodeCodegenDeps(&node)
-	e.ctx.emit.emitReservedNode(node, ref)
+	e.ctx.emit.emitReservedNodePtr(&node, ref)
 }
 
 func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {

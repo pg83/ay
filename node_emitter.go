@@ -74,21 +74,29 @@ func (e *StreamingEmitter) newNode() *Node {
 }
 
 func (e *StreamingEmitter) emitNode(n Node) NodeRef {
-	ownershipCheckNode(&n)
+	return e.emitNodePtr(&n)
+}
+
+func (e *StreamingEmitter) emitNodePtr(n *Node) NodeRef {
+	ownershipCheckNode(n)
 
 	p := e.na.nodes.one()
 
-	*p = n
+	*p = *n
 
 	return e.emit(p)
 }
 
 func (e *StreamingEmitter) emitReservedNode(n Node, id NodeRef) {
-	ownershipCheckNode(&n)
+	e.emitReservedNodePtr(&n, id)
+}
+
+func (e *StreamingEmitter) emitReservedNodePtr(n *Node, id NodeRef) {
+	ownershipCheckNode(n)
 
 	p := e.na.nodes.one()
 
-	*p = n
+	*p = *n
 
 	e.emitReserved(p, id)
 }
