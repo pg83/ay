@@ -1055,8 +1055,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	)
 
 	dedupers.with(func(deduper *DeDuper) {
-		deduper.reset()
-
 		declBlock := ctx.declSlices.alloc(resGlobalsSum)
 		k := 0
 

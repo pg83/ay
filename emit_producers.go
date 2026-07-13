@@ -209,53 +209,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		return nil, nil
 	}
 
-	total := 2*len(d.copyFiles) + 2*len(d.configureFiles) + 2*len(d.baseCodegens)
-
-	if d.createBuildInfoFor != nil {
-		total++
-	}
-
-	for _, run := range d.antlrRuns {
-		total += len(run.OUTFiles) + len(run.OUTNoAutoFiles) + len(run.INFiles)
-	}
-
-	for _, stmt := range d.decimalMD5 {
-		total += 1 + len(stmt.Opts)
-	}
-
-	for _, sc := range d.splitCodegens {
-		total += sc.OutNum + 2
-	}
-
-	for _, rp := range d.runPrograms {
-		total += len(rp.OUTFiles) + len(rp.OUTNoAutoFiles) + len(rp.INFiles)
-
-		if rp.StdoutFile != nil {
-			total++
-		}
-	}
-
-	for _, rp := range d.runPython {
-		total += len(rp.OUTFiles) + len(rp.OUTNoAutoFiles) + len(rp.INFiles)
-
-		if rp.StdoutFile != nil {
-			total++
-		}
-	}
-
 	goModule := isGoModuleType(d.moduleStmt.Name)
-
-	if goModule {
-		cgoC := goModuleCgoCFiles(d)
-
-		n += len(cgoC)
-		total += 2 * len(cgoC)
-
-		if len(d.cgoSrcs) > 0 {
-			n++
-			total += 3*len(d.cgoSrcs) + 4
-		}
-	}
 
 	backing := e.prodBacking[:0]
 	positions := e.prodPos[:0]
@@ -424,8 +378,6 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 	defer func() { e.prodSrcs = srcs }()
 
-	var gztChildren []SrcMeta
-
 	for _, meta := range d.srcs {
 		src := meta.Source
 
@@ -434,16 +386,21 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		}
 
 		srcs = append(srcs, meta)
+	}
+
+	srcCount := len(srcs)
+
+	for i := 0; i < srcCount; i++ {
+		meta := srcs[i]
+		src := meta.Source
 
 		if srcExtClassOf(src) == srcExtGztProto && d.unit.Tag != unitTagPy3Proto {
 			childMeta := meta
 
 			childMeta.Source = internStr(e.gztGenProtoName(src.string())).any()
-			gztChildren = append(gztChildren, childMeta)
+			srcs = append(srcs, childMeta)
 		}
 	}
-
-	srcs = append(srcs, gztChildren...)
 
 	for i, m := range srcs {
 		positions = append(positions, ProducerPos{
@@ -510,22 +467,26 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 	if !isProgramModuleType(d.moduleStmt.Name) {
 		for i, stmt := range d.llvmBc {
-			ins := make([]VFS, 0, len(stmt.Sources))
+			outsMark := len(e.prodVFS)
+
+			e.prodVFS = append(e.prodVFS,
+				build(module, "/", stmt.Name, "_optimized", stmt.Suffix, ".bc"),
+				build(module, "/", stmt.Name, "_merged", stmt.Suffix, ".bc"))
+
+			outs := e.prodVFSTake(outsMark)
+			insMark := len(e.prodVFS)
 
 			for _, src := range stmt.Sources {
 				if v := runInputBuildCandidate(module, src); v != 0 {
-					ins = append(ins, v)
+					e.prodVFS = append(e.prodVFS, v)
 				}
 			}
 
 			positions = append(positions, ProducerPos{
 				kind:  prodLlvmBc,
 				index: i,
-				outs: []VFS{
-					build(module, "/", stmt.Name, "_optimized", stmt.Suffix, ".bc"),
-					build(module, "/", stmt.Name, "_merged", stmt.Suffix, ".bc"),
-				},
-				ins: ins,
+				outs:  outs,
+				ins:   e.prodVFSTake(insMark),
 			})
 		}
 	}
@@ -533,50 +494,66 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	for i := range d.enumSrcs {
 		stmt := d.enumSrcs[i]
 		enDir, enSep, enBase := e.enumSerializedBaseParts(stmt)
-		outs := []VFS{build(enDir, enSep, enBase, "_serialized.cpp")}
+		outsMark := len(e.prodVFS)
+
+		e.prodVFS = append(e.prodVFS, build(enDir, enSep, enBase, "_serialized.cpp"))
 
 		if stmt.Variant == "with_header" {
-			outs = append(outs, build(enDir, enSep, enBase, "_serialized.h"))
+			e.prodVFS = append(e.prodVFS, build(enDir, enSep, enBase, "_serialized.h"))
 		}
+
+		outs := e.prodVFSTake(outsMark)
+		insMark := len(e.prodVFS)
+
+		e.prodVFS = append(e.prodVFS, build(e.enumHeaderSourceInput(stmt.Header, d.srcDirs).relString()))
 
 		positions = append(positions, ProducerPos{
 			kind:  prodEnum,
 			index: i,
 			outs:  outs,
-			ins:   []VFS{build(e.enumHeaderSourceInput(stmt.Header, d.srcDirs).relString())},
+			ins:   e.prodVFSTake(insMark),
 		})
 	}
 
 	if d.lj21 != nil {
-		outs := make([]VFS, 0, len(d.lj21.Luas))
+		outsMark := len(e.prodVFS)
 
 		for _, lua := range d.lj21.Luas {
-			outs = append(outs, build(module, "/", strings.TrimSuffix(lua, ".lua"), ".raw"))
+			e.prodVFS = append(e.prodVFS, build(module, "/", strings.TrimSuffix(lua, ".lua"), ".raw"))
 		}
 
-		positions = append(positions, ProducerPos{kind: prodLj21, outs: outs})
+		positions = append(positions, ProducerPos{kind: prodLj21, outs: e.prodVFSTake(outsMark)})
 	}
 
 	for i, a := range d.archives {
-		ins := make([]VFS, 0, len(a.Files))
+		outsMark := len(e.prodVFS)
+
+		e.prodVFS = append(e.prodVFS, build(module, "/", a.Name))
+
+		outs := e.prodVFSTake(outsMark)
+		insMark := len(e.prodVFS)
 
 		for _, f := range a.Files {
-			ins = append(ins, copyFileOutputVFS(module, f))
+			e.prodVFS = append(e.prodVFS, copyFileOutputVFS(module, f))
 		}
 
 		positions = append(positions, ProducerPos{
 			kind:  prodArchive,
 			index: i,
-			outs:  []VFS{build(module, "/", a.Name)},
-			ins:   ins,
+			outs:  outs,
+			ins:   e.prodVFSTake(insMark),
 		})
 	}
 
 	for i, conf := range d.checkConfigHeaders {
+		outsMark := len(e.prodVFS)
+
+		e.prodVFS = append(e.prodVFS, checkConfigHGeneratedVFS(module, conf))
+
 		positions = append(positions, ProducerPos{
 			kind:  prodCheckConfigH,
 			index: i,
-			outs:  []VFS{checkConfigHGeneratedVFS(module, conf)},
+			outs:  e.prodVFSTake(outsMark),
 		})
 	}
 
@@ -589,19 +566,24 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	for i, js := range d.joinSrcs {
-		ins := make([]VFS, 0, len(js.Sources))
+		outsMark := len(e.prodVFS)
+
+		e.prodVFS = append(e.prodVFS, build(module, "/", js.OutputName))
+
+		outs := e.prodVFSTake(outsMark)
+		insMark := len(e.prodVFS)
 
 		for _, src := range js.Sources {
 			if v := runInputBuildCandidate(module, src.string()); v != 0 {
-				ins = append(ins, v)
+				e.prodVFS = append(e.prodVFS, v)
 			}
 		}
 
 		positions = append(positions, ProducerPos{
 			kind:  prodJoinSrcs,
 			index: i,
-			outs:  []VFS{build(module, "/", js.OutputName)},
-			ins:   ins,
+			outs:  outs,
+			ins:   e.prodVFSTake(insMark),
 		})
 	}
 
