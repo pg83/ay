@@ -18,7 +18,7 @@ import statistics
 import subprocess
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -205,14 +205,14 @@ def _run_once(binary, command, cwd, env, show_output):
     return elapsed
 
 
-def _write_json(path, state):
+def _write_json(path, samples):
     if path is None:
         return
 
     tmp = path + ".tmp"
 
     with open(tmp, "w", encoding="utf-8") as stream:
-        json.dump(state, stream, indent=2, sort_keys=True)
+        json.dump(samples, stream, indent=2)
         stream.write("\n")
 
     os.replace(tmp, path)
@@ -257,7 +257,11 @@ def _parse_args(argv):
         default=200_000,
         help="sampled sign flips after --exact-max-blocks",
     )
-    parser.add_argument("--json", metavar="PATH", help="continuously write samples and summary as JSON")
+    parser.add_argument(
+        "--json",
+        metavar="PATH",
+        help="continuously write chronological raw side/wall samples as JSON",
+    )
     parser.add_argument("--show-output", action="store_true", help="do not suppress child stdout/stderr")
     args = parser.parse_args(own_args)
 
@@ -302,7 +306,7 @@ def main(argv=None):
     env.setdefault("GOGC", "off")
     binaries = {"left": args.left, "right": args.right}
     samples = {"left": [], "right": []}
-    blocks = []
+    raw_samples = []
     block_log_ratios = []
     decision_alpha = args.alpha / len(checkpoints)
     checkpoint_set = set(checkpoints)
@@ -314,6 +318,7 @@ def main(argv=None):
     print(f"cmd  : {shlex.join(command)}")
     print(f"seed : {args.seed}")
     print(f"looks: {checkpoints}; per-look p <= {decision_alpha:.6g} (FWER {args.alpha:g})")
+    _write_json(args.json, raw_samples)
 
     try:
         for cycle in range(args.warmup_cycles):
@@ -327,28 +332,21 @@ def main(argv=None):
             for name in order:
                 _run_once(binaries[name], command, args.cwd, env, args.show_output)
 
-        for block_index in range(args.max_runs // 2):
+        for _ in range(args.max_runs // 2):
             elapsed = {"left": [], "right": []}
             order = block_order(bool(schedule_rng.getrandbits(1)))
 
             for name in order:
-                elapsed[name].append(
-                    _run_once(binaries[name], command, args.cwd, env, args.show_output)
-                )
+                wall = _run_once(binaries[name], command, args.cwd, env, args.show_output)
+                elapsed[name].append(wall)
+                raw_samples.append({"side": name[0].upper(), "wall": wall})
+                _write_json(args.json, raw_samples)
 
             samples["left"].extend(elapsed["left"])
             samples["right"].extend(elapsed["right"])
             log_ratio = block_log_ratio(elapsed["left"], elapsed["right"])
             block_log_ratios.append(log_ratio)
             order_label = "".join(name[0].upper() for name in order)
-            blocks.append(
-                {
-                    "order": order_label,
-                    "left": elapsed["left"],
-                    "right": elapsed["right"],
-                    "log_ratio": log_ratio,
-                }
-            )
 
             n = len(samples["left"])
             permutation = None
@@ -391,24 +389,8 @@ def main(argv=None):
                 flush=True,
             )
 
-            state = {
-                "left": args.left,
-                "right": args.right,
-                "command": command,
-                "seed": args.seed,
-                "checkpoints": checkpoints,
-                "decision_alpha": decision_alpha,
-                "samples": samples,
-                "blocks": blocks,
-                "summary": asdict(result),
-                "status": "running",
-            }
-
             if permutation is not None and permutation.p_two_sided <= decision_alpha:
                 winner = "left" if permutation.mean_log_ratio > 0 else "right"
-                state["status"] = "separated"
-                state["winner"] = winner
-                _write_json(args.json, state)
                 print(
                     f"SEPARATED: {winner} is faster; n={n} each, "
                     f"blocks={result.blocks}, "
@@ -418,8 +400,6 @@ def main(argv=None):
 
                 return 0
 
-            _write_json(args.json, state)
-
     except KeyboardInterrupt:
         print("\nperf.py: interrupted", file=sys.stderr)
         return 130
@@ -427,8 +407,6 @@ def main(argv=None):
         print(f"perf.py: {error}", file=sys.stderr)
         return 1
 
-    state["status"] = "inconclusive"
-    _write_json(args.json, state)
     print(
         f"INCONCLUSIVE: n={args.max_runs} each, "
         f"blocks={result.blocks}, "
