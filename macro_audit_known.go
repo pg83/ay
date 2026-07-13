@@ -1,15 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"embed"
-	"regexp"
 	"sync"
 )
 
 var (
 	//go:embed *.go
 	goSources              embed.FS
-	stringLiteralRE        = regexp.MustCompile(`"([A-Z][A-Z0-9_]*|[A-Z0-9_]*[A-Z][A-Z0-9_]*)"`)
 	knownServiceTokensOnce sync.Once
 	knownServiceTokensVal  map[string]struct{}
 )
@@ -41,10 +40,51 @@ func mineServiceTokensFromSources() map[string]struct{} {
 			continue
 		}
 
-		for _, match := range stringLiteralRE.FindAllSubmatch(data, -1) {
-			if looksLikeServiceWord(bytesString(match[1])) {
-				tokens[internBytes(match[1]).string()] = struct{}{}
+		for len(data) > 0 {
+			open := bytes.IndexByte(data, '"')
+
+			if open < 0 {
+				break
 			}
+
+			data = data[open+1:]
+			n := 0
+			hasLetter := false
+
+			for n < len(data) {
+				c := data[n]
+
+				if c >= 'A' && c <= 'Z' {
+					hasLetter = true
+					n++
+
+					continue
+				}
+
+				if (c >= '0' && c <= '9') || c == '_' {
+					n++
+
+					continue
+				}
+
+				break
+			}
+
+			if n < len(data) && data[n] == '"' {
+				if n > 0 && hasLetter && looksLikeServiceWord(bytesString(data[:n])) {
+					tokens[internBytes(data[:n]).string()] = struct{}{}
+				}
+
+				data = data[n+1:]
+
+				continue
+			}
+
+			if n == len(data) {
+				break
+			}
+
+			data = data[n+1:]
 		}
 	}
 
