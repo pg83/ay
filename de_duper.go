@@ -143,6 +143,18 @@ func (dd *DeDuper) add(id uint32) bool {
 	return true
 }
 
+func (dd *DeDuper) addStable(id uint32) bool {
+	gen := dd.gen.s
+
+	if gen[id] == dd.epoch {
+		return false
+	}
+
+	gen[id] = dd.epoch
+
+	return true
+}
+
 //go:noinline
 func (dd *DeDuper) grow(id uint32) {
 	dd.gen.ensureLen(int(id) + 1)

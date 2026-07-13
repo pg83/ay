@@ -1,5 +1,7 @@
 package main
 
+import "unsafe"
+
 const (
 	intSetMinCap  = 8
 	intSetFillNum = 5
@@ -57,8 +59,12 @@ func (s *IntSet) setBit(i uint64, v bool) {
 }
 
 func (s *IntSet) get(k uint64) (bool, bool) {
+	keyData := unsafe.SliceData(s.keys)
+
 	for i := k & s.mask; ; i = (i + 1) & s.mask {
-		switch s.keys[i] {
+		key := *(*uint64)(unsafe.Add(unsafe.Pointer(keyData), uintptr(i)*unsafe.Sizeof(k)))
+
+		switch key {
 		case k:
 			return s.bit(i), true
 		case 0:
@@ -70,9 +76,11 @@ func (s *IntSet) get(k uint64) (bool, bool) {
 func (s *IntSet) put(k uint64, v bool) {
 	for {
 		i := k & s.mask
+		keyData := unsafe.SliceData(s.keys)
 
 		for {
-			ek := s.keys[i]
+			keyCell := (*uint64)(unsafe.Add(unsafe.Pointer(keyData), uintptr(i)*unsafe.Sizeof(k)))
+			ek := *keyCell
 
 			if ek == k {
 				s.setBit(i, v)
@@ -82,7 +90,7 @@ func (s *IntSet) put(k uint64, v bool) {
 
 			if ek == 0 {
 				if s.count < s.resizeAt {
-					s.keys[i] = k
+					*keyCell = k
 					s.setBit(i, v)
 					s.count++
 
