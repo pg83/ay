@@ -35,6 +35,8 @@ class Summary:
     blocks: int
     left_mean: float
     right_mean: float
+    left_min: float
+    right_min: float
     left_median: float
     right_median: float
     right_vs_left_pct: float
@@ -127,6 +129,8 @@ def summarize(left, right, block_log_ratios, permutation=None):
         blocks=len(block_log_ratios),
         left_mean=left_mean,
         right_mean=right_mean,
+        left_min=min(left),
+        right_min=min(right),
         left_median=statistics.median(left),
         right_median=statistics.median(right),
         right_vs_left_pct=(right_mean - left_mean) / left_mean * 100,
@@ -379,6 +383,7 @@ def main(argv=None):
                 f"L={elapsed['left'][0]:.3f},{elapsed['left'][1]:.3f}s "
                 f"R={elapsed['right'][0]:.3f},{elapsed['right'][1]:.3f}s "
                 f"mean={result.left_mean:.3f}/{result.right_mean:.3f}s "
+                f"min={result.left_min:.3f}/{result.right_min:.3f}s "
                 f"R/L={result.geometric_right_vs_left_pct:+.3f}% "
                 f"mean-delta={result.right_vs_left_pct:+.3f}% "
                 f"wins={result.right_faster_blocks}/{result.blocks}"

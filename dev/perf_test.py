@@ -44,6 +44,12 @@ class PairedPermutationTest(unittest.TestCase):
             0.0,
         )
 
+    def test_summary_reports_minimum_wall_times(self):
+        result = PERF.summarize([3.0, 1.0], [4.0, 2.0], [0.1])
+
+        self.assertEqual(result.left_min, 1.0)
+        self.assertEqual(result.right_min, 2.0)
+
 
 class ScheduleTest(unittest.TestCase):
     def test_block_order(self):
