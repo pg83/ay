@@ -39,10 +39,13 @@ func (m *IntMap[V]) alloc(capacity int) {
 }
 
 func (m *IntMap[V]) get(k uint64) *V {
-	for i := k & m.mask; ; i = (i + 1) & m.mask {
-		switch m.data[i].k {
+	data := m.data
+	mask := m.mask
+
+	for i := k & mask; ; i = (i + 1) & mask {
+		switch data[i].k {
 		case k:
-			return &m.data[i].v
+			return &data[i].v
 		case 0:
 			return nil
 		}
@@ -51,27 +54,29 @@ func (m *IntMap[V]) get(k uint64) *V {
 
 func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 	for {
-		i := k & m.mask
+		data := m.data
+		mask := m.mask
+		i := k & mask
 
 		for {
-			ek := m.data[i].k
+			ek := data[i].k
 
 			if ek == k {
-				return &m.data[i].v, true
+				return &data[i].v, true
 			}
 
 			if ek == 0 {
 				if m.count < m.resizeAt {
-					m.data[i].k = k
+					data[i].k = k
 					m.count++
 
-					return &m.data[i].v, false
+					return &data[i].v, false
 				}
 
 				break
 			}
 
-			i = (i + 1) & m.mask
+			i = (i + 1) & mask
 		}
 
 		m.grow()
