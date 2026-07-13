@@ -892,7 +892,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	addPath := func(rel string) bool {
 		rel = normalisePath(rel)
 
-		if !s.parsers.fs.isFile(srcRootRel, rel) {
+		if !s.parsers.fs.isFileClean(srcRootRel, rel) {
 			return false
 		}
 

@@ -116,6 +116,11 @@ func (fs *MemFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 func (fs *MemFS) existsRel(rel string) (present bool, isDir bool) {
 	rel = normalisePath(cleanRel(rel))
 
+	return fs.existsRelClean(rel)
+}
+
+func (fs *MemFS) existsRelClean(rel string) (present bool, isDir bool) {
+
 	if rel == "" {
 		return true, true
 	}
@@ -138,6 +143,12 @@ func (fs *MemFS) exists(prefix STR, suffix string) (present bool, isDir bool) {
 
 func (fs *MemFS) isFile(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
+
+	return p && !d
+}
+
+func (fs *MemFS) isFileClean(prefix STR, suffix string) bool {
+	p, d := fs.existsRelClean(joinRel(prefix.string(), suffix))
 
 	return p && !d
 }
