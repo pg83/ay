@@ -200,7 +200,7 @@ type GenCtx struct {
 	resDashBuf      []byte
 	resB64Scratch   []byte
 	inclArgs        InclArgMemo
-	memo            *IntValueMap[*ModuleEmitResult]
+	memo            *moduleMemo
 	refSlices       *SliceCache[NodeRef]
 	vfsSlices       *SliceCache[VFS]
 	argSlices       *SliceCache[ANY]
@@ -236,6 +236,21 @@ type GenCtx struct {
 	goEnvMemo       map[[2]STR]EnvVars
 }
 
+type moduleMemoEntry struct {
+	next    *moduleMemoEntry
+	result  *ModuleEmitResult
+	variant uint16
+}
+
+type moduleMemo struct {
+	heads   PageVec[*moduleMemoEntry]
+	entries *BumpAllocator[moduleMemoEntry]
+}
+
+func newModuleMemo() *moduleMemo {
+	return &moduleMemo{entries: newBumpAllocator[moduleMemoEntry]()}
+}
+
 func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) NodeRef {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
@@ -258,7 +273,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		onWarn:    onWarn,
 		keepGoing: keepGoing,
 		na:        plainEmit.nodeArenas(),
-		memo:      newIntValueMap[*ModuleEmitResult](1 << 14),
+		memo:      newModuleMemo(),
 
 		refSlices:   newSliceCache[NodeRef](1 << 12),
 		vfsSlices:   newSliceCache[VFS](1 << 12),
@@ -685,15 +700,15 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		r = &ModuleEmitResult{}
 
-		ctx.memo.put(ctx.instanceKey(instance), r)
+		ctx.memoPut(instance, r)
 	}
 
 	return r
 }
 
 func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
-	if existing := ctx.memo.get(ctx.instanceKey(instance)); existing != nil {
-		return *existing
+	if existing := ctx.memoGet(instance); existing != nil {
+		return existing
 	}
 
 	if ctx.walking[instance] {
@@ -724,7 +739,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		result := genModule(ctx, cpp)
 
-		ctx.memo.put(ctx.instanceKey(instance), result)
+		ctx.memoPut(instance, result)
 
 		return result
 	}
@@ -744,7 +759,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDescProto {
 		result := e.emitDescProtoSubmodule()
 
-		ctx.memo.put(ctx.instanceKey(instance), result)
+		ctx.memoPut(instance, result)
 
 		return result
 	}
@@ -752,7 +767,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if d.moduleStmt.Name == tokProtoDescriptions {
 		result := e.emitProtoDescriptions()
 
-		ctx.memo.put(ctx.instanceKey(instance), result)
+		ctx.memoPut(instance, result)
 
 		return result
 	}
@@ -812,7 +827,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if d.moduleStmt.Name == tokDynamicLibrary {
 		result := e.emitDynamicLibrary()
 
-		ctx.memo.put(ctx.instanceKey(instance), result)
+		ctx.memoPut(instance, result)
 
 		return result
 	}
@@ -1022,20 +1037,51 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	waCmdCap := 0
 	dynCap := 0
 	ldplugCap := 0
-	linkCmdCap := 0
+	protoCap := 0
+	cflagsCap := 0
+	cxxflagsCap := 0
+	conlyflagsCap := 0
+	objAddLibsCap := 0
+	ldflagsCap := 0
+	rpathflagsCap := 0
 
 	for _, rp := range resolved {
 		pr := rp.result
 
 		resGlobalsSum += len(pr.ResourceGlobalClosure)
-		archiveCap += len(pr.PeerArchiveClosurePaths) + 1
-		sbomCap += len(pr.PeerSbomClosurePaths) + 1
-		globalCap += len(pr.PeerGlobalClosurePaths) + 1
+		archiveCap += len(pr.PeerArchiveClosurePaths)
+		globalCap += len(pr.PeerGlobalClosurePaths)
 		waCap += len(pr.PeerWholeArchiveClosurePaths) + len(pr.WholeArchivePaths)
 		waCmdCap += len(pr.PeerWholeArchiveCmdClosurePaths) + len(pr.WholeArchiveCmdPaths)
-		dynCap += len(pr.PeerDynamicClosurePaths) + 1
+		dynCap += len(pr.PeerDynamicClosurePaths)
 		ldplugCap += len(pr.LDPluginPaths)
-		linkCmdCap += len(pr.PeerArchiveClosurePaths) + len(pr.PeerDynamicClosurePaths) + 2
+		protoCap += len(pr.ProtoInclude)
+		cflagsCap += len(pr.CFlagsGlobal)
+		cxxflagsCap += len(pr.CXXFlagsGlobal)
+		conlyflagsCap += len(pr.COnlyFlagsGlobal)
+		objAddLibsCap += len(pr.ObjAddLibsGlobal)
+		ldflagsCap += len(pr.LDFlagsGlobal)
+		rpathflagsCap += len(pr.RPathFlagsGlobal)
+
+		if pr.ARPath != nil {
+			archiveCap++
+		}
+
+		if pr.GlobalRef != nil && pr.GlobalPath != nil {
+			globalCap++
+		}
+
+		if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil {
+			dynCap++
+		}
+
+		if ctx.sbomEnabled {
+			sbomCap += len(pr.PeerSbomClosurePaths)
+
+			if pr.SbomComponentRef != nil {
+				sbomCap++
+			}
+		}
 	}
 
 	peerLinkCmdPaths := frame.peerLinkCmdPaths[:0]
@@ -1051,216 +1097,230 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		effectiveCFlagsGlobal, effectiveCXXFlagsGlobal, effectiveCOnlyFlagsGlobal, effectiveRPathFlagsGlobal []ANY
 
-		ownSbomInsertIdx int
+		ownSbomInsertIdx = -1
 	)
 
 	dedupers.with(func(deduper *DeDuper) {
-		declBlock := ctx.declSlices.alloc(resGlobalsSum)
 		k := 0
 
-		for _, rp := range resolved {
-			for _, decl := range rp.result.ResourceGlobalClosure {
-				if deduper.add(decl.GlobalVar.strID()) {
-					declBlock[k] = decl
-					k++
+		if resGlobalsSum != 0 {
+			declBlock := ctx.declSlices.alloc(resGlobalsSum)
+
+			for _, rp := range resolved {
+				for _, decl := range rp.result.ResourceGlobalClosure {
+					if deduper.add(decl.GlobalVar.strID()) {
+						declBlock[k] = decl
+						k++
+					}
 				}
 			}
-		}
 
-		resourceGlobalsClosure = ctx.declSlices.intern(declBlock[:k])
+			resourceGlobalsClosure = ctx.declSlices.intern(declBlock[:k])
+		}
 
 		d.tc = resolveModuleToolchain(ctx, resourceGlobalsClosure, instance.Platform.ClangVer)
 
 		deduper.reset()
 
-		ldplugBlockR := ctx.refSlices.alloc(ldplugCap)
-		ldplugBlockP := ctx.vfsSlices.alloc(ldplugCap)
+		if ldplugCap != 0 {
+			ldplugBlockR := ctx.refSlices.alloc(ldplugCap)
+			ldplugBlockP := ctx.vfsSlices.alloc(ldplugCap)
+			k = 0
 
-		k = 0
-
-		for _, rp := range resolved {
-			for i, p := range rp.result.LDPluginPaths {
-				if deduper.add(p.strID()) {
-					ldplugBlockR[k] = rp.result.LDPluginRefs[i]
-					ldplugBlockP[k] = p
-					k++
+			for _, rp := range resolved {
+				for i, p := range rp.result.LDPluginPaths {
+					if deduper.add(p.strID()) {
+						ldplugBlockR[k] = rp.result.LDPluginRefs[i]
+						ldplugBlockP[k] = p
+						k++
+					}
 				}
 			}
-		}
 
-		peerLDPluginRefs = ctx.refSlices.intern(ldplugBlockR[:k])
-		peerLDPluginPaths = ctx.vfsSlices.intern(ldplugBlockP[:k])
+			peerLDPluginRefs = ctx.refSlices.intern(ldplugBlockR[:k])
+			peerLDPluginPaths = ctx.vfsSlices.intern(ldplugBlockP[:k])
+		}
 
 		deduper.reset()
 
-		archiveBlockR := ctx.refSlices.alloc(archiveCap)
-		archiveBlockP := ctx.vfsSlices.alloc(archiveCap)
+		if archiveCap != 0 {
+			archiveBlockR := ctx.refSlices.alloc(archiveCap)
+			archiveBlockP := ctx.vfsSlices.alloc(archiveCap)
+			k = 0
 
-		k = 0
+			for _, rp := range resolved {
+				pr := rp.result
 
-		for _, rp := range resolved {
-			pr := rp.result
+				for i, p := range pr.PeerArchiveClosurePaths {
+					if deduper.add(p.strID()) {
+						archiveBlockR[k] = pr.PeerArchiveClosureRefs[i]
+						archiveBlockP[k] = p
+						k++
+					}
+				}
 
-			for i, p := range pr.PeerArchiveClosurePaths {
-				if deduper.add(p.strID()) {
-					archiveBlockR[k] = pr.PeerArchiveClosureRefs[i]
-					archiveBlockP[k] = p
+				if pr.ARPath != nil && deduper.add(pr.ARPath.strID()) {
+					archiveBlockR[k] = pr.ARRef
+					archiveBlockP[k] = *pr.ARPath
 					k++
 				}
 			}
 
-			if pr.ARPath != nil && deduper.add(pr.ARPath.strID()) {
-				archiveBlockR[k] = pr.ARRef
-				archiveBlockP[k] = *pr.ARPath
-				k++
-			}
+			peerArchiveRefs = ctx.refSlices.intern(archiveBlockR[:k])
+			peerArchivePaths = ctx.vfsSlices.intern(archiveBlockP[:k])
 		}
-
-		peerArchiveRefs = ctx.refSlices.intern(archiveBlockR[:k])
-		peerArchivePaths = ctx.vfsSlices.intern(archiveBlockP[:k])
 
 		deduper.reset()
 
-		globalBlockR := ctx.refSlices.alloc(globalCap)
-		globalBlockP := ctx.vfsSlices.alloc(globalCap)
+		if globalCap != 0 {
+			globalBlockR := ctx.refSlices.alloc(globalCap)
+			globalBlockP := ctx.vfsSlices.alloc(globalCap)
+			k = 0
 
-		k = 0
+			for _, rp := range resolved {
+				pr := rp.result
 
-		for _, rp := range resolved {
-			pr := rp.result
+				for i, p := range pr.PeerGlobalClosurePaths {
+					if deduper.add(p.strID()) {
+						globalBlockR[k] = pr.PeerGlobalClosureRefs[i]
+						globalBlockP[k] = p
+						k++
+					}
+				}
 
-			for i, p := range pr.PeerGlobalClosurePaths {
-				if deduper.add(p.strID()) {
-					globalBlockR[k] = pr.PeerGlobalClosureRefs[i]
-					globalBlockP[k] = p
+				if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.add(pr.GlobalPath.strID()) {
+					globalBlockR[k] = *pr.GlobalRef
+					globalBlockP[k] = *pr.GlobalPath
 					k++
 				}
 			}
 
-			if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.add(pr.GlobalPath.strID()) {
-				globalBlockR[k] = *pr.GlobalRef
-				globalBlockP[k] = *pr.GlobalPath
-				k++
-			}
+			peerGlobalRefs = ctx.refSlices.intern(globalBlockR[:k])
+			peerGlobalPaths = ctx.vfsSlices.intern(globalBlockP[:k])
 		}
 
-		peerGlobalRefs = ctx.refSlices.intern(globalBlockR[:k])
-		peerGlobalPaths = ctx.vfsSlices.intern(globalBlockP[:k])
-		linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
-		sbomBlockR := ctx.refSlices.alloc(sbomCap)
-		sbomBlockP := ctx.vfsSlices.alloc(sbomCap)
-		peerSbomRefsRaw, peerSbomPathsRaw, sbomInsertIdx := aggregateSbomComponents(deduper, e, d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
-		ownSbomInsertIdx = sbomInsertIdx
-		peerSbomRefs = ctx.refSlices.intern(peerSbomRefsRaw)
-		peerSbomPaths = ctx.vfsSlices.intern(peerSbomPathsRaw)
+		if ctx.sbomEnabled {
+			linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
+			sbomBlockR := ctx.refSlices.alloc(sbomCap)
+			sbomBlockP := ctx.vfsSlices.alloc(sbomCap)
+			peerSbomRefsRaw, peerSbomPathsRaw, sbomInsertIdx := aggregateSbomComponents(deduper, e, d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
+			ownSbomInsertIdx = sbomInsertIdx
+			peerSbomRefs = ctx.refSlices.intern(peerSbomRefsRaw)
+			peerSbomPaths = ctx.vfsSlices.intern(peerSbomPathsRaw)
+		}
 
 		deduper.reset()
 
-		waBlockR := ctx.refSlices.alloc(waCap)
-		waBlockP := ctx.vfsSlices.alloc(waCap)
+		if waCap != 0 {
+			waBlockR := ctx.refSlices.alloc(waCap)
+			waBlockP := ctx.vfsSlices.alloc(waCap)
+			k = 0
 
-		k = 0
+			for _, rp := range resolved {
+				pr := rp.result
 
-		for _, rp := range resolved {
-			pr := rp.result
+				for i, p := range pr.PeerWholeArchiveClosurePaths {
+					if deduper.add(p.strID()) {
+						waBlockR[k] = pr.PeerWholeArchiveClosureRefs[i]
+						waBlockP[k] = p
+						k++
+					}
+				}
 
-			for i, p := range pr.PeerWholeArchiveClosurePaths {
-				if deduper.add(p.strID()) {
-					waBlockR[k] = pr.PeerWholeArchiveClosureRefs[i]
-					waBlockP[k] = p
-					k++
+				for i, p := range pr.WholeArchivePaths {
+					if deduper.add(p.strID()) {
+						waBlockR[k] = pr.WholeArchiveRefs[i]
+						waBlockP[k] = p
+						k++
+					}
 				}
 			}
 
-			for i, p := range pr.WholeArchivePaths {
-				if deduper.add(p.strID()) {
-					waBlockR[k] = pr.WholeArchiveRefs[i]
-					waBlockP[k] = p
-					k++
-				}
-			}
+			peerWholeArchiveRefs = ctx.refSlices.intern(waBlockR[:k])
+			peerWholeArchivePaths = ctx.vfsSlices.intern(waBlockP[:k])
 		}
-
-		peerWholeArchiveRefs = ctx.refSlices.intern(waBlockR[:k])
-		peerWholeArchivePaths = ctx.vfsSlices.intern(waBlockP[:k])
 
 		deduper.reset()
 
-		waCmdBlock := ctx.vfsSlices.alloc(waCmdCap)
+		if waCmdCap != 0 {
+			waCmdBlock := ctx.vfsSlices.alloc(waCmdCap)
+			k = 0
 
-		k = 0
+			for _, rp := range resolved {
+				pr := rp.result
 
-		for _, rp := range resolved {
-			pr := rp.result
+				for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
+					if deduper.add(p.strID()) {
+						waCmdBlock[k] = p
+						k++
+					}
+				}
 
-			for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
-				if deduper.add(p.strID()) {
-					waCmdBlock[k] = p
-					k++
+				for _, p := range pr.WholeArchiveCmdPaths {
+					if deduper.add(p.strID()) {
+						waCmdBlock[k] = p
+						k++
+					}
 				}
 			}
 
-			for _, p := range pr.WholeArchiveCmdPaths {
-				if deduper.add(p.strID()) {
-					waCmdBlock[k] = p
-					k++
-				}
-			}
+			peerWholeArchiveCmdPaths = ctx.vfsSlices.intern(waCmdBlock[:k])
 		}
-
-		peerWholeArchiveCmdPaths = ctx.vfsSlices.intern(waCmdBlock[:k])
 
 		deduper.reset()
 
-		dynBlockR := ctx.refSlices.alloc(dynCap)
-		dynBlockP := ctx.vfsSlices.alloc(dynCap)
+		if dynCap != 0 {
+			dynBlockR := ctx.refSlices.alloc(dynCap)
+			dynBlockP := ctx.vfsSlices.alloc(dynCap)
+			k = 0
 
-		k = 0
+			for _, rp := range resolved {
+				pr := rp.result
 
-		for _, rp := range resolved {
-			pr := rp.result
+				for i, p := range pr.PeerDynamicClosurePaths {
+					if deduper.add(p.strID()) {
+						dynBlockR[k] = pr.PeerDynamicClosureRefs[i]
+						dynBlockP[k] = p
+						k++
+					}
+				}
 
-			for i, p := range pr.PeerDynamicClosurePaths {
-				if deduper.add(p.strID()) {
-					dynBlockR[k] = pr.PeerDynamicClosureRefs[i]
-					dynBlockP[k] = p
+				if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(pr.LDPath.strID()) {
+					dynBlockR[k] = pr.LDRef
+					dynBlockP[k] = *pr.LDPath
 					k++
 				}
 			}
 
-			if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(pr.LDPath.strID()) {
-				dynBlockR[k] = pr.LDRef
-				dynBlockP[k] = *pr.LDPath
-				k++
-			}
+			peerDynamicRefs = ctx.refSlices.intern(dynBlockR[:k])
+			peerDynamicPaths = ctx.vfsSlices.intern(dynBlockP[:k])
 		}
-
-		peerDynamicRefs = ctx.refSlices.intern(dynBlockR[:k])
-		peerDynamicPaths = ctx.vfsSlices.intern(dynBlockP[:k])
 
 		deduper.reset()
 
-		for _, rp := range resolved {
-			pr := rp.result
+		if archiveCap+dynCap != 0 {
+			for _, rp := range resolved {
+				pr := rp.result
 
-			for _, p := range pr.PeerArchiveClosurePaths {
-				if deduper.add(p.strID()) {
-					peerLinkCmdPaths = append(peerLinkCmdPaths, p)
+				for _, p := range pr.PeerArchiveClosurePaths {
+					if deduper.add(p.strID()) {
+						peerLinkCmdPaths = append(peerLinkCmdPaths, p)
+					}
 				}
-			}
 
-			for _, p := range pr.PeerDynamicClosurePaths {
-				if deduper.add(p.strID()) {
-					peerLinkCmdPaths = append(peerLinkCmdPaths, p)
+				for _, p := range pr.PeerDynamicClosurePaths {
+					if deduper.add(p.strID()) {
+						peerLinkCmdPaths = append(peerLinkCmdPaths, p)
+					}
 				}
-			}
 
-			if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(pr.LDPath.strID()) {
-				peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.LDPath)
-			}
+				if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(pr.LDPath.strID()) {
+					peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.LDPath)
+				}
 
-			if pr.ARPath != nil && deduper.add(pr.ARPath.strID()) {
-				peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.ARPath)
+				if pr.ARPath != nil && deduper.add(pr.ARPath.strID()) {
+					peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.ARPath)
+				}
 			}
 		}
 
@@ -1317,60 +1377,72 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		deduper.reset()
 
-		for _, rp := range cflagsAggOrder {
-			for _, a := range rp.result.CFlagsGlobal {
-				if deduper.add(a.strID()) {
-					peerCFlagsGlobal = append(peerCFlagsGlobal, a)
+		if cflagsCap != 0 {
+			for _, rp := range cflagsAggOrder {
+				for _, a := range rp.result.CFlagsGlobal {
+					if deduper.add(a.strID()) {
+						peerCFlagsGlobal = append(peerCFlagsGlobal, a)
+					}
 				}
 			}
 		}
 
 		deduper.reset()
 
-		for _, rp := range cflagsAggOrder {
-			for _, a := range rp.result.CXXFlagsGlobal {
-				if deduper.add(a.strID()) {
-					peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
+		if cxxflagsCap != 0 {
+			for _, rp := range cflagsAggOrder {
+				for _, a := range rp.result.CXXFlagsGlobal {
+					if deduper.add(a.strID()) {
+						peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
+					}
 				}
 			}
 		}
 
 		deduper.reset()
 
-		for _, rp := range cflagsAggOrder {
-			for _, a := range rp.result.COnlyFlagsGlobal {
-				if deduper.add(a.strID()) {
-					peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
+		if conlyflagsCap != 0 {
+			for _, rp := range cflagsAggOrder {
+				for _, a := range rp.result.COnlyFlagsGlobal {
+					if deduper.add(a.strID()) {
+						peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
+					}
 				}
 			}
 		}
 
 		deduper.reset()
 
-		for _, rp := range cflagsAggOrder {
-			for _, a := range rp.result.ObjAddLibsGlobal {
-				if deduper.add(a.strID()) {
-					peerObjAddLibsGlobal = append(peerObjAddLibsGlobal, a)
+		if objAddLibsCap != 0 {
+			for _, rp := range cflagsAggOrder {
+				for _, a := range rp.result.ObjAddLibsGlobal {
+					if deduper.add(a.strID()) {
+						peerObjAddLibsGlobal = append(peerObjAddLibsGlobal, a)
+					}
 				}
 			}
 		}
 
 		deduper.reset()
 
-		for _, rp := range cflagsAggOrder {
-			for _, a := range rp.result.LDFlagsGlobal {
-				if deduper.add(a.strID()) {
-					peerLDFlagsGlobal = append(peerLDFlagsGlobal, a)
+		if ldflagsCap != 0 {
+			for _, rp := range cflagsAggOrder {
+				for _, a := range rp.result.LDFlagsGlobal {
+					if deduper.add(a.strID()) {
+						peerLDFlagsGlobal = append(peerLDFlagsGlobal, a)
+					}
 				}
 			}
 		}
 
 		deduper.reset()
 
-		for _, rp := range cflagsAggOrder {
-			for _, a := range rp.result.RPathFlagsGlobal {
-				if deduper.add(a.strID()) {
-					peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
+		if rpathflagsCap != 0 {
+			for _, rp := range cflagsAggOrder {
+				for _, a := range rp.result.RPathFlagsGlobal {
+					if deduper.add(a.strID()) {
+						peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
+					}
 				}
 			}
 		}
@@ -1404,10 +1476,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		deduper.reset()
 
-		for _, rp := range resolved {
-			for _, p := range rp.result.ProtoInclude {
-				if deduper.add(p.strID()) {
-					peerProtoInclude = append(peerProtoInclude, p)
+		if protoCap != 0 {
+			for _, rp := range resolved {
+				for _, p := range rp.result.ProtoInclude {
+					if deduper.add(p.strID()) {
+						peerProtoInclude = append(peerProtoInclude, p)
+					}
 				}
 			}
 		}
@@ -1603,7 +1677,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if instance.Demand == demandNone {
 		result := newResult()
 
-		ctx.memo.put(ctx.instanceKey(instance), result)
+		ctx.memoPut(instance, result)
 
 		return result
 	}
@@ -1639,7 +1713,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		result.ARRef = goRef
 		result.ARPath = ptr(goPath)
 
-		ctx.memo.put(ctx.instanceKey(instance), result)
+		ctx.memoPut(instance, result)
 
 		return result
 	}
@@ -1758,7 +1832,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		result.ResourceGlobalClosure = resourceGlobalsClosure
 		result.testSuiteInfo = suiteInfo
 
-		ctx.memo.put(ctx.instanceKey(instance), result)
+		ctx.memoPut(instance, result)
 
 		return result
 	}
@@ -1800,7 +1874,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if d.moduleStmt.Name == tokDllTool {
 		result := e.emitDllShared(local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths)
 
-		ctx.memo.put(ctx.instanceKey(instance), result)
+		ctx.memoPut(instance, result)
 
 		return result
 	}
@@ -1877,7 +1951,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	ctx.memo.put(ctx.instanceKey(instance), result)
+	ctx.memoPut(instance, result)
 
 	return result
 }
@@ -2007,16 +2081,47 @@ func (ctx *GenCtx) scannerFor(instance ModuleInstance) *IncludeScanner {
 	return ctx.scannerForPlatform(instance.Platform)
 }
 
-func (ctx *GenCtx) instanceKey(in ModuleInstance) uint64 {
-	pbit := uint64(0)
+func (ctx *GenCtx) instanceVariant(in ModuleInstance) uint16 {
+	pbit := uint16(0)
 
 	if in.Platform == ctx.host {
 		pbit = 1
 	} else if in.Platform != ctx.target {
-		throwFmt("instanceKey: unknown platform for %s", in.Path.string())
+		throwFmt("instanceVariant: unknown platform for %s", in.Path.string())
 	}
 
-	return uint64(in.Path)<<16 | uint64(in.Kind)<<8 | uint64(in.Demand)<<4 | uint64(in.Language)<<1 | pbit
+	return uint16(in.Path&1)<<15 | uint16(in.Kind)<<8 | uint16(in.Demand)<<4 | uint16(in.Language)<<1 | pbit
+}
+
+func (ctx *GenCtx) memoGet(in ModuleInstance) *ModuleEmitResult {
+	variant := ctx.instanceVariant(in)
+
+	for entry := ctx.memo.heads.getSafe(uint32(in.Path.rel())); entry != nil; entry = entry.next {
+		if entry.variant == variant {
+			return entry.result
+		}
+	}
+
+	return nil
+}
+
+func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) {
+	path := uint32(in.Path.rel())
+	variant := ctx.instanceVariant(in)
+	head := ctx.memo.heads.getSafe(path)
+
+	for entry := head; entry != nil; entry = entry.next {
+		if entry.variant == variant {
+			entry.result = result
+
+			return
+		}
+	}
+
+	entry := ctx.memo.entries.one()
+
+	*entry = moduleMemoEntry{next: head, result: result, variant: variant}
+	ctx.memo.heads.set(path, entry)
 }
 
 func (ctx *GenCtx) scannerForPlatform(p *Platform) *IncludeScanner {

@@ -125,7 +125,9 @@ func addDirective(block []IncludeDirective, k int, d IncludeDirective) int {
 }
 
 func parseDelimitedIncludeTarget(b []byte) ([]byte, IncludeKind, bool) {
-	b = trimParserSpace(b)
+	for len(b) > 0 && isParserSpace(b[0]) {
+		b = b[1:]
+	}
 
 	if len(b) == 0 {
 		return nil, includeSystem, false

@@ -957,9 +957,10 @@ func cythonPy2SiblingOverride(includerAbs VFS, quoted bool, targetID STR) (strin
 	}
 
 	includer := includerAbs.relString()
-	target := targetID.string()
 
-	if strings.HasPrefix(includer, "contrib/tools/cython_py2/Cython/Includes/") {
+	if len(includer) > 0 && includer[0] == 'c' && strings.HasPrefix(includer, "contrib/tools/cython_py2/Cython/Includes/") {
+		target := targetID.string()
+
 		if strings.HasPrefix(target, "libc/") || strings.HasPrefix(target, "libcpp/") {
 			return "contrib/tools/cython_py2/Cython/Includes/" + target, true
 		}
@@ -969,14 +970,20 @@ func cythonPy2SiblingOverride(includerAbs VFS, quoted bool, targetID STR) (strin
 
 	switch includer {
 	case "util/generic/string.pxd":
+		target := targetID.string()
+
 		if target == "libcpp/string.pxd" {
 			return "contrib/tools/cython_py2/Cython/Includes/" + target, true
 		}
 	case "util/generic/hash.pxd", "util/generic/hash_set.pxd":
+		target := targetID.string()
+
 		if target == "libcpp/pair.pxd" {
 			return "contrib/tools/cython_py2/Cython/Includes/" + target, true
 		}
 	case "util/system/types.pxd":
+		target := targetID.string()
+
 		if target == "libc/stdint.pxd" {
 			return "contrib/tools/cython_py2/Cython/Includes/" + target, true
 		}

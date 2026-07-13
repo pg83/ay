@@ -93,16 +93,18 @@ func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 }
 
 func (fs *OsFS) exists(prefix STR, suffix string) (present bool, isDir bool) {
+	return fs.existsClean(prefix, suffix, suffix != "" && pathIsClean(suffix))
+}
+
+func (fs *OsFS) existsClean(prefix STR, suffix string, clean bool) (present bool, isDir bool) {
 	if suffix == "" {
 		return fs.listdir(prefix).listable(), true
 	}
 
-	prefixRel := prefix.string()
-
-	if !pathIsClean(suffix) {
+	if !clean {
 		var jb, nb [256]byte
 
-		joined := joinRelInto(jb[:0], prefixRel, suffix)
+		joined := joinRelInto(jb[:0], prefix.string(), suffix)
 		normB, ok := normaliseAppend(nb[:0], bytesString(joined))
 		rel := bytesString(normB)
 
@@ -146,7 +148,7 @@ func (fs *OsFS) exists(prefix STR, suffix string) (present bool, isDir bool) {
 
 	dname, base := splitDirName(suffix)
 
-	v = fs.listdir(internJoined(prefixRel, dname))
+	v = fs.listdir(internJoined(prefix.string(), dname))
 
 	if !v.listable() {
 		return false, false
@@ -182,12 +184,13 @@ func (fs *OsFS) resolveSourceUnder(prefix, target STR) STR {
 	}
 
 	suffix := target.string()
+	clean := suffix != "" && pathIsClean(suffix)
 
 	var v STR
 
-	if fs.isFile(prefix, suffix) {
+	if present, isDir := fs.existsClean(prefix, suffix, clean); present && !isDir {
 		switch {
-		case suffix != "" && pathIsClean(suffix):
+		case clean:
 			if prefix == srcRootRel {
 				v = target
 			} else {
