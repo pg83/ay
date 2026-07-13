@@ -137,12 +137,6 @@ func pbHEmitsIncludesExtras() []IncludeDirective {
 	return pbHEmitsIncludesExtrasChunk
 }
 
-func protoEachDirectImportName(pm *IncludeParserManager, srcRel string, fn func(string)) {
-	for _, d := range pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal) {
-		fn(d.target.string())
-	}
-}
-
 func protoOutputRel(outputRoot, rel string) string {
 	if outputRoot == "" {
 		return rel

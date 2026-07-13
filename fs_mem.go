@@ -162,6 +162,10 @@ func (fs *MemFS) resolveSourceUnder(prefix, target STR) STR {
 	return v
 }
 
+func (fs *MemFS) resolveSourceUnderClean(prefix, target STR, _ bool) STR {
+	return fs.resolveSourceUnder(prefix, target)
+}
+
 func (fs *MemFS) isDir(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
 

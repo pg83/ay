@@ -140,11 +140,6 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		protoPaths:  prev.protoPaths[:0],
 	}
 
-	frame.emitCtx.pbEmissionOk = [2]bool{}
-	frame.emitCtx.pyPBOk = false
-	frame.emitCtx.objcopyOk = false
-	frame.emitCtx.protoResVal = ProtoSrcsResult{}
-
 	return &frame.emitCtx
 }
 
