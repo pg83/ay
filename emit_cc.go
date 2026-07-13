@@ -717,9 +717,10 @@ func (m InclArgMemo) arg(path VFS) STR {
 		return a
 	}
 
-	a := internV("-I", path.prefix(), path.relString())
+	rel := path.relString()
+	a := internV("-I", path.prefix(), rel)
 
-	if path.relString() == "" {
+	if rel == "" {
 		a = internV("-I", path.prefix()[:vfsPrefixLen-1])
 	}
 

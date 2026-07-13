@@ -70,23 +70,30 @@ type PySrc struct {
 func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
 	srcRelClean := srcRel != "" && pathIsClean(srcRel)
 
-	for i := len(srcDirs) - 1; i >= 1; i-- {
-		var present bool
+	if srcRelClean {
+		target := internStr(srcRel)
 
-		if srcRelClean {
-			present = fs.isFileClean(srcDirs[i].rel(), srcRel)
-		} else {
-			present = fs.isFile(srcDirs[i].rel(), srcRel)
+		for i := len(srcDirs) - 1; i >= 1; i-- {
+			if resolved := fs.resolveSourceUnderClean(srcDirs[i].rel(), target, true); resolved != 0 {
+				return resolved
+			}
 		}
 
-		if present {
-			return internV(srcDirs[i].relString(), "/", srcRel)
+		if resolved := fs.resolveSourceUnderClean(moduleVFS.rel(), target, true); resolved != 0 {
+			return resolved
 		}
+
+		if resolved := fs.resolveSourceUnderClean(srcRootRel, target, true); resolved != 0 {
+			return resolved
+		}
+
+		return internV(moduleVFS.relString(), "/", srcRel)
 	}
 
-	if srcRelClean &&
-		!fs.isFileClean(moduleVFS.rel(), srcRel) && fs.isFileClean(srcRootRel, srcRel) {
-		return internStr(srcRel)
+	for i := len(srcDirs) - 1; i >= 1; i-- {
+		if fs.isFile(srcDirs[i].rel(), srcRel) {
+			return internV(srcDirs[i].relString(), "/", srcRel)
+		}
 	}
 
 	return internV(moduleVFS.relString(), "/", srcRel)
