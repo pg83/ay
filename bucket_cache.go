@@ -260,14 +260,6 @@ func (c *BucketCache) spliceBucket(seen *IdSet, bucket []VFS) {
 	c.scratch[r] = dst
 }
 
-func (c *BucketCache) spliceClosure(seen *IdSet, cl Closure) {
-	c.spliceOne(seen, cl.self)
-
-	for _, bucket := range cl.bucketList() {
-		c.spliceBucket(seen, bucket)
-	}
-}
-
 func (c *BucketCache) spliceLeaves(seen *IdSet, leaves []VFS) {
 	for _, v := range leaves {
 		c.spliceOne(seen, v)

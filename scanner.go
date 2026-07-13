@@ -425,13 +425,17 @@ func (sc *ScanCtx) dfs(abs VFS) {
 			return
 		}
 
-		if sc.windowSubsumed(ch) {
+		if sc.tjc.closure.has(ch) && !s.codegen.isLeafEver(ch) {
 			return
 		}
 
 		cl, _ := s.closure(ch)
 
-		s.buckets.spliceClosure(&sc.tjc.closure, cl)
+		s.buckets.spliceOne(&sc.tjc.closure, cl.self)
+
+		for _, bucket := range cl.bucketList() {
+			s.buckets.spliceBucket(&sc.tjc.closure, bucket)
+		}
 	})
 
 	leafStart := len(s.buckets.buildScratch())
@@ -473,17 +477,11 @@ func (sc *ScanCtx) closureOf(abs VFS) Closure {
 }
 
 func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
-	s := sc.scanner
-
 	if !sc.tjc.closure.has(ch) {
 		return false
 	}
 
-	if s.codegen.isLeafEver(ch) {
-		return false
-	}
-
-	return true
+	return !sc.scanner.codegen.isLeafEver(ch)
 }
 
 func (sc *ScanCtx) forEachChild(v VFS, fn func(VFS)) {

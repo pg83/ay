@@ -233,7 +233,7 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 
 		block[k] = packed
 		k++
-		fs.dirEntries.put(uint32(dir), uint32(id), isDir)
+		fs.dirEntries.put(splitMix64(uint32(dir), uint32(id)), isDir)
 	}
 
 	if k == 0 {
