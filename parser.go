@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"strings"
 )
 
 var (
@@ -125,47 +124,47 @@ func addDirective(block []IncludeDirective, k int, d IncludeDirective) int {
 	return k + 1
 }
 
-func parseDelimitedIncludeTarget(s string) (string, IncludeKind, bool) {
-	s = strings.TrimSpace(s)
+func parseDelimitedIncludeTarget(b []byte) ([]byte, IncludeKind, bool) {
+	b = trimParserSpace(b)
 
-	if s == "" {
-		return "", includeSystem, false
+	if len(b) == 0 {
+		return nil, includeSystem, false
 	}
 
 	kind := includeSystem
 
-	switch s[0] {
+	switch b[0] {
 	case '"', '\'':
 		kind = includeQuoted
 	case '<':
 		kind = includeSystem
 	default:
-		return "", includeSystem, false
+		return nil, includeSystem, false
 	}
 
-	close := s[0]
+	close := b[0]
 
 	if close == '<' {
 		close = '>'
 	}
 
-	end := strings.IndexByte(s[1:], close)
+	end := bytes.IndexByte(b[1:], close)
 
 	if end < 0 {
-		return "", includeSystem, false
+		return nil, includeSystem, false
 	}
 
-	target := s[1 : 1+end]
+	target := b[1 : 1+end]
 
-	if target == "" {
-		return "", includeSystem, false
+	if len(target) == 0 {
+		return nil, includeSystem, false
 	}
 
 	if kind == includeQuoted && len(target) >= 2 && target[0] == '<' && target[len(target)-1] == '>' {
 		target = target[1 : len(target)-1]
 
-		if target == "" {
-			return "", includeSystem, false
+		if len(target) == 0 {
+			return nil, includeSystem, false
 		}
 
 		kind = includeSystem

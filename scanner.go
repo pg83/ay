@@ -101,7 +101,7 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		buckets:        buckets,
 		closureScratch: make([]VFS, closureAllocHint),
 		childArena:     newBumpAllocator[VFS](),
-		searchTierFlat: newIntMap[VFS](4096),
+		searchTierFlat: newIntMap[VFS](1 << 16),
 	}
 
 	s.visitedIDPool.New = func() any {
@@ -730,6 +730,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	var out VFS
 
 	normTarget := normalisePath(target)
+	cleanTarget := normTarget == target
 
 	addSource := func(prefix VFS) bool {
 		rel := s.parsers.fs.resolveSourceUnder(prefix.rel(), targetID)
@@ -743,19 +744,23 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 		return true
 	}
 
-	buildSuffix := interned(normTarget)
+	buildSuffix := targetID
 
-	addBuild := func(prefixRel string) bool {
+	if !cleanTarget {
+		buildSuffix = interned(normTarget)
+	}
+
+	addBuild := func(prefix VFS) bool {
 		if buildSuffix == 0 {
 			return false
 		}
 
 		var info *GeneratedFileInfo
 
-		if prefixRel == "" {
+		if prefix == bldRootDirVFS {
 			info = s.codegen.lookupSTR(buildSuffix)
-		} else if pid := interned(prefixRel); pid != 0 {
-			info = s.codegen.lookupSplit(pid.source(), buildSuffix.any())
+		} else {
+			info = s.codegen.lookupSplit(prefix.rel().source(), buildSuffix.any())
 		}
 
 		if info == nil {
@@ -769,7 +774,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 
 	addInclPath := func(prefix VFS) bool {
 		if prefix.isBuild() {
-			return addBuild(prefix.relString())
+			return addBuild(prefix)
 		}
 
 		return addSource(prefix)
@@ -866,6 +871,8 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective) []VFS {
 	s := sc.scanner
 	out := s.spOut[:0]
+	targetID := d.target.str()
+	quoted := d.quotedLike()
 
 	defer func() {
 		s.spOut = out[:0]
@@ -901,20 +908,20 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 
 	searchPathFound := false
 
-	if candidate, ok := cythonPy2SiblingOverride(includerAbs, d); ok && addPath(candidate) {
+	if candidate, ok := cythonPy2SiblingOverride(includerAbs, quoted, targetID); ok && addPath(candidate) {
 		searchPathFound = true
 	}
 
 	if includerAbs.isBuild() {
-		if info := s.codegen.lookupSTR(d.target.str()); info != nil && !outHas(info.OutputPath) {
+		if info := s.codegen.lookupSTR(targetID); info != nil && !outHas(info.OutputPath) {
 			out = append(out, info.OutputPath)
 			searchPathFound = true
 		}
 	}
 
-	if d.quotedLike() {
+	if quoted {
 		matched := false
-		sv := s.parsers.fs.resolveSourceUnder(incDir.rel(), d.target.str())
+		sv := s.parsers.fs.resolveSourceUnder(incDir.rel(), targetID)
 
 		if sv != 0 {
 			out = append(out, sv.source())
@@ -923,7 +930,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 		}
 
 		if !matched {
-			if info := s.codegen.lookupSplit(incDir, d.target.str().any()); info != nil {
+			if info := s.codegen.lookupSplit(incDir, targetID.any()); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true
@@ -933,7 +940,7 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	}
 
 	if !searchPathFound {
-		tier := sc.resolveContextSearchTier(d.target.str())
+		tier := sc.resolveContextSearchTier(targetID)
 
 		if tier != 0 {
 			out = append(out, tier)
@@ -944,31 +951,34 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	return out
 }
 
-func cythonPy2SiblingOverride(includerAbs VFS, d IncludeDirective) (string, bool) {
-	if !includerAbs.isSource() || !d.quotedLike() {
+func cythonPy2SiblingOverride(includerAbs VFS, quoted bool, targetID STR) (string, bool) {
+	if !includerAbs.isSource() || !quoted {
 		return "", false
 	}
 
-	if strings.HasPrefix(includerAbs.relString(), "contrib/tools/cython_py2/Cython/Includes/") {
-		if strings.HasPrefix(d.target.string(), "libc/") || strings.HasPrefix(d.target.string(), "libcpp/") {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.string(), true
+	includer := includerAbs.relString()
+	target := targetID.string()
+
+	if strings.HasPrefix(includer, "contrib/tools/cython_py2/Cython/Includes/") {
+		if strings.HasPrefix(target, "libc/") || strings.HasPrefix(target, "libcpp/") {
+			return "contrib/tools/cython_py2/Cython/Includes/" + target, true
 		}
 
 		return "", false
 	}
 
-	switch includerAbs.relString() {
+	switch includer {
 	case "util/generic/string.pxd":
-		if d.target.string() == "libcpp/string.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.string(), true
+		if target == "libcpp/string.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + target, true
 		}
 	case "util/generic/hash.pxd", "util/generic/hash_set.pxd":
-		if d.target.string() == "libcpp/pair.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.string(), true
+		if target == "libcpp/pair.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + target, true
 		}
 	case "util/system/types.pxd":
-		if d.target.string() == "libc/stdint.pxd" {
-			return "contrib/tools/cython_py2/Cython/Includes/" + d.target.string(), true
+		if target == "libc/stdint.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + target, true
 		}
 	}
 

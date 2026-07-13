@@ -258,7 +258,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		onWarn:    onWarn,
 		keepGoing: keepGoing,
 		na:        plainEmit.nodeArenas(),
-		memo:      newIntValueMap[*ModuleEmitResult](4096),
+		memo:      newIntValueMap[*ModuleEmitResult](1 << 14),
 
 		refSlices:   newSliceCache[NodeRef](1 << 12),
 		vfsSlices:   newSliceCache[VFS](1 << 12),

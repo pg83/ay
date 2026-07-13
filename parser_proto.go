@@ -124,11 +124,11 @@ func parseProtoImportLine(line []byte) (STR, IncludeKind, bool) {
 		rest = trimParserSpace(rest[len("weak"):])
 	}
 
-	target, kind, ok := parseDelimitedIncludeTarget(bytesString(rest))
+	target, kind, ok := parseDelimitedIncludeTarget(rest)
 
 	if !ok {
 		return 0, kind, false
 	}
 
-	return internBytes(strBytes(target)), kind, true
+	return internBytes(target), kind, true
 }
