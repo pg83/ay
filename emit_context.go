@@ -175,11 +175,11 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 		}
 	}
 
-	if refs != nil {
-		defer nodeRefScratches.put(refs)
-	}
-
 	if len(refs) == 0 {
+		if refs != nil {
+			nodeRefScratches.put(refs)
+		}
+
 		return
 	}
 
@@ -206,6 +206,7 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 
 		e.ctx.na.noderefs.commit(k)
 		node.DepRefs = out[:k]
+		nodeRefScratches.put(refs)
 
 		return
 	}
@@ -236,6 +237,7 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 	})
 
 	node.DepRefs = result
+	nodeRefScratches.put(refs)
 }
 
 func (e *EmitContext) resStr2(a, b string) string {

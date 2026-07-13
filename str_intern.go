@@ -123,20 +123,60 @@ func internStr(s string) STR {
 }
 
 func internFill(prefix string, parts []string) ([]byte, int) {
-	n := len(prefix)
+	switch len(parts) {
+	case 0:
+		n := len(prefix)
+		block := internTable.bytes.alloc(n)
 
-	for _, p := range parts {
-		n += len(p)
+		copy(block, prefix)
+
+		return block, n
+	case 1:
+		p0 := parts[0]
+		n := len(prefix) + len(p0)
+		block := internTable.bytes.alloc(n)
+		off := copy(block, prefix)
+
+		copy(block[off:], p0)
+
+		return block, n
+	case 2:
+		p0, p1 := parts[0], parts[1]
+		n := len(prefix) + len(p0) + len(p1)
+		block := internTable.bytes.alloc(n)
+		off := copy(block, prefix)
+		off += copy(block[off:], p0)
+
+		copy(block[off:], p1)
+
+		return block, n
+	case 3:
+		p0, p1, p2 := parts[0], parts[1], parts[2]
+		n := len(prefix) + len(p0) + len(p1) + len(p2)
+		block := internTable.bytes.alloc(n)
+		off := copy(block, prefix)
+		off += copy(block[off:], p0)
+		off += copy(block[off:], p1)
+
+		copy(block[off:], p2)
+
+		return block, n
+	default:
+		n := len(prefix)
+
+		for _, p := range parts {
+			n += len(p)
+		}
+
+		block := internTable.bytes.alloc(n)
+		off := copy(block, prefix)
+
+		for _, p := range parts {
+			off += copy(block[off:], p)
+		}
+
+		return block, n
 	}
-
-	block := internTable.bytes.alloc(n)
-	off := copy(block, prefix)
-
-	for _, p := range parts {
-		off += copy(block[off:], p)
-	}
-
-	return block, n
 }
 
 func internBuild(prefix string, parts []string) STR {

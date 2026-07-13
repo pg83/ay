@@ -46,3 +46,19 @@ func TestCodegenRegistryLookupSplitJoinsRegisteredPath(t *testing.T) {
 		t.Fatalf("lookupSplit returned mismatched prefix: %v", got)
 	}
 }
+
+func TestCodegenRegistryLookupSplitMissDoesNotHideLaterRegistration(t *testing.T) {
+	r := newCodegenRegistry(newNodeArenas())
+	prefix := source("pkg")
+	suffix := internStr("gen/out.h")
+
+	if got := r.lookupSplit(prefix, suffix.any()); got != nil {
+		t.Fatalf("lookupSplit before register = %v, want nil", got)
+	}
+
+	want := r.register(GeneratedFileInfo{OutputPath: build("pkg/gen/out.h"), ProducerRef: 7})
+
+	if got := r.lookupSplit(prefix, suffix.any()); got != want {
+		t.Fatalf("lookupSplit after register = %p, want %p", got, want)
+	}
+}

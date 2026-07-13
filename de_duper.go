@@ -128,8 +128,8 @@ func (dd *DeDuper) reset() {
 }
 
 func (dd *DeDuper) add(id uint32) bool {
-	if int(id) >= dd.gen.len() {
-		dd.gen.ensureLen(int(id) + 1)
+	if int(id) >= len(dd.gen.s) {
+		dd.grow(id)
 	}
 
 	gen := dd.gen.s
@@ -141,6 +141,11 @@ func (dd *DeDuper) add(id uint32) bool {
 	gen[id] = dd.epoch
 
 	return true
+}
+
+//go:noinline
+func (dd *DeDuper) grow(id uint32) {
+	dd.gen.ensureLen(int(id) + 1)
 }
 
 func (dd *DeDuper) has(id uint32) bool {
