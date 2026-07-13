@@ -62,7 +62,7 @@ func newFS(srcRoot string) FS {
 		rootSlash:   srcRoot + "/",
 		readBuf:     make([]byte, readChunkSize),
 		dirNames:    newBumpAllocator[uint32](),
-		dirEntries:  newIntSet(1 << 18),
+		dirEntries:  newIntSet(1 << 17),
 		sourceUnder: newIntMap[STR](1 << 18),
 		dirFD:       -1,
 		dirFDs:      make(map[string]int, dirFDCacheSize),
@@ -174,6 +174,12 @@ func (fs *OsFS) existsClean(prefix STR, suffix string, clean bool) (present bool
 
 func (fs *OsFS) isFile(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
+
+	return p && !d
+}
+
+func (fs *OsFS) isFileClean(prefix STR, suffix string) bool {
+	p, d := fs.existsClean(prefix, suffix, true)
 
 	return p && !d
 }

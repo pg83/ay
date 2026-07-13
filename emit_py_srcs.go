@@ -68,14 +68,24 @@ type PySrc struct {
 }
 
 func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
+	srcRelClean := srcRel != "" && pathIsClean(srcRel)
+
 	for i := len(srcDirs) - 1; i >= 1; i-- {
-		if fs.isFile(srcDirs[i].rel(), srcRel) {
+		var present bool
+
+		if srcRelClean {
+			present = fs.isFileClean(srcDirs[i].rel(), srcRel)
+		} else {
+			present = fs.isFile(srcDirs[i].rel(), srcRel)
+		}
+
+		if present {
 			return internV(srcDirs[i].relString(), "/", srcRel)
 		}
 	}
 
-	if srcRel != "" && pathIsClean(srcRel) &&
-		!fs.isFile(moduleVFS.rel(), srcRel) && fs.isFile(srcRootRel, srcRel) {
+	if srcRelClean &&
+		!fs.isFileClean(moduleVFS.rel(), srcRel) && fs.isFileClean(srcRootRel, srcRel) {
 		return internStr(srcRel)
 	}
 

@@ -115,7 +115,7 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 		return cached
 	}
 
-	if !pm.fs.isFile(srcRootRel, rel) {
+	if !pm.fs.isFileClean(srcRootRel, rel) {
 		var empty ParsedIncludeSet
 
 		if ambKey != 0 {

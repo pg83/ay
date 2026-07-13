@@ -16,9 +16,19 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 		return vfs
 	}
 
+	srcRelClean := srcRel != "" && pathIsClean(srcRel)
+
 	for i := len(srcDirs) - 1; i >= 1; i-- {
-		if ctx.fs.isFile(srcDirs[i].rel(), srcRel) {
-			if srcRel != "" && pathIsClean(srcRel) {
+		var present bool
+
+		if srcRelClean {
+			present = ctx.fs.isFileClean(srcDirs[i].rel(), srcRel)
+		} else {
+			present = ctx.fs.isFile(srcDirs[i].rel(), srcRel)
+		}
+
+		if present {
+			if srcRelClean {
 				return sourceJoined(srcDirs[i].relString(), srcRel)
 			}
 
@@ -26,13 +36,13 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 		}
 	}
 
-	if srcRel != "" && pathIsClean(srcRel) &&
-		!ctx.fs.isFile(srcInstance.Path.rel(), srcRel) &&
-		ctx.fs.isFile(srcRootRel, srcRel) {
+	if srcRelClean &&
+		!ctx.fs.isFileClean(srcInstance.Path.rel(), srcRel) &&
+		ctx.fs.isFileClean(srcRootRel, srcRel) {
 		return source(srcRel)
 	}
 
-	if srcRel != "" && pathIsClean(srcRel) {
+	if srcRelClean {
 		return sourceJoined(srcInstance.Path.relString(), srcRel)
 	}
 
