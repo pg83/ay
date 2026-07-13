@@ -115,18 +115,16 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 		return cached
 	}
 
-	put := func(set ParsedIncludeSet) ParsedIncludeSet {
+	if !pm.fs.isFile(srcRootRel, rel) {
+		var empty ParsedIncludeSet
+
 		if ambKey != 0 {
-			pm.cache.ambiguous[ambKey] = set
+			pm.cache.ambiguous[ambKey] = empty
 		} else {
-			pm.cache.parsed.put(key, set)
+			pm.cache.parsed.put(key, empty)
 		}
 
-		return set
-	}
-
-	if !pm.fs.isFile(srcRootRel, rel) {
-		return put(ParsedIncludeSet{})
+		return empty
 	}
 
 	data := pm.fs.read(rel)
@@ -137,7 +135,13 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 
 	out := parser.parse(rel, data, pm.cache.directives)
 
-	return put(out)
+	if ambKey != 0 {
+		pm.cache.ambiguous[ambKey] = out
+	} else {
+		pm.cache.parsed.put(key, out)
+	}
+
+	return out
 }
 
 func (pm *IncludeParserManager) indexAddincl(a VFS) {

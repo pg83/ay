@@ -327,7 +327,7 @@ func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 
 	info := s.codegen.use(vfsPath)
 
-	if info == nil {
+	if info == nil || len(info.GeneratorRefs) == 0 {
 		return
 	}
 
@@ -874,10 +874,6 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 	targetID := d.target.str()
 	quoted := d.quotedLike()
 
-	defer func() {
-		s.spOut = out[:0]
-	}()
-
 	outHas := func(v VFS) bool {
 		for _, x := range out {
 			if x == v {
@@ -947,6 +943,8 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 			searchPathFound = true
 		}
 	}
+
+	s.spOut = out[:0]
 
 	return out
 }

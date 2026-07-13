@@ -337,29 +337,28 @@ func (e *EmitContext) ccOutputFor(srcVFS VFS, compile CompileSpec) VFS {
 
 func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {
 	input = srcVFS
+	dir := instance.Path.relString()
+	rel := srcVFS.relString()
+	srcRelClean := srcRel != "" && srcRel != "." && pathIsClean(srcRel)
 
 	canonMatches := func() bool {
-		if srcRel != "" && pathIsClean(srcRel) {
-			rel, dir := srcVFS.relString(), instance.Path.relString()
-
+		if srcRelClean {
 			return len(rel) == len(dir)+1+len(srcRel) &&
 				rel[:len(dir)] == dir && rel[len(dir)] == '/' && rel[len(dir)+1:] == srcRel
 		}
 
-		return srcVFS.relString() == filepath.ToSlash(filepath.Clean(instance.Path.relString()+"/"+srcRel))
+		return rel == filepath.ToSlash(filepath.Clean(dir+"/"+srcRel))
 	}
 
 	if srcVFS.isSource() && !canonMatches() {
-		outputRel := composeSrcDirOutputRel(instance.Path.relString(), srcVFS.relString())
+		outputRel := composeSrcDirOutputRel(dir, rel)
 
-		out = build(instance.Path.relString(), "/", outputRel, suffix)
+		out = build(dir, "/", outputRel, suffix)
 
 		return out, input
 	}
 
 	if srcVFS.isBuild() && !in.FlatOutput {
-		rel, dir := srcVFS.relString(), instance.Path.relString()
-
 		if rel != dir && !(len(rel) > len(dir) && rel[len(dir)] == '/' && rel[:len(dir)] == dir) {
 			outputRel := composeSrcDirOutputRel(dir, rel)
 
@@ -367,21 +366,23 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		}
 	}
 
-	srcRel = cleanRel(srcRel)
+	if !srcRelClean {
+		srcRel = cleanRel(srcRel)
+	}
 
 	switch {
 	case in.FlatOutput:
-		return build(instance.Path.relString(), "/", srcRel, suffix), input
+		return build(dir, "/", srcRel, suffix), input
 	case strings.Contains(srcRel, "/"):
 		body, underscore := normalizeDotDotSegments(srcRel)
 
 		if underscore {
-			return build(instance.Path.relString(), "/_/", body, suffix), input
+			return build(dir, "/_/", body, suffix), input
 		}
 
-		return build(instance.Path.relString(), "/", body, suffix), input
+		return build(dir, "/", body, suffix), input
 	default:
-		return build(instance.Path.relString(), "/", srcRel, suffix), input
+		return build(dir, "/", srcRel, suffix), input
 	}
 }
 

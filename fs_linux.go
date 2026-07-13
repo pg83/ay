@@ -171,20 +171,27 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	}
 
 	ents := fs.direntBuf[:n]
-	count := 0
-
-	forEachDirent(ents, func([]byte, byte) {
-		count++
-	})
-
-	if count == 0 {
-		return DirView{dir: dir, names: emptyDirNames}
-	}
-
-	block := fs.dirNames.alloc(count)
+	// A linux_dirent64 record is at least 24 bytes including alignment.  The
+	// arena only commits the entries actually written, so this upper bound lets
+	// us decode and intern each name in one pass.
+	block := fs.dirNames.alloc(len(ents) / 24)
 	k := 0
 
-	forEachDirent(ents, func(name []byte, typ byte) {
+	for off := 0; off < len(ents); {
+		reclen := int(binary.LittleEndian.Uint16(ents[off+16:]))
+		typ := ents[off+18]
+		name := ents[off+19 : off+reclen]
+
+		if i := bytes.IndexByte(name, 0); i >= 0 {
+			name = name[:i]
+		}
+
+		off += reclen
+
+		if len(name) == 1 && name[0] == '.' || len(name) == 2 && name[0] == '.' && name[1] == '.' {
+			continue
+		}
+
 		isDir := typ == syscall.DT_DIR
 
 		if typ == syscall.DT_UNKNOWN {
@@ -205,27 +212,13 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 		block[k] = packed
 		k++
 		fs.dirEntries.put(splitMix64(uint32(dir), uint32(id)), isDir)
-	})
+	}
+
+	if k == 0 {
+		return DirView{dir: dir, names: emptyDirNames}
+	}
 
 	fs.dirNames.commit(k)
 
 	return DirView{dir: dir, names: block[:k]}
-}
-
-func forEachDirent(b []byte, visit func(name []byte, typ byte)) {
-	for off := 0; off < len(b); {
-		reclen := int(binary.LittleEndian.Uint16(b[off+16:]))
-		typ := b[off+18]
-		name := b[off+19 : off+reclen]
-
-		if i := bytes.IndexByte(name, 0); i >= 0 {
-			name = name[:i]
-		}
-
-		if !(len(name) == 1 && name[0] == '.') && !(len(name) == 2 && name[0] == '.' && name[1] == '.') {
-			visit(name, typ)
-		}
-
-		off += reclen
-	}
 }

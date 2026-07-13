@@ -85,14 +85,21 @@ func (e *EmitContext) prodVFSTake(mark int) []VFS {
 	return e.prodVFS[mark:n:n]
 }
 
-func (e *EmitContext) srcPositionOuts(tok STR) []VFS {
+func (e *EmitContext) srcPosition(tok STR) ([]VFS, []VFS) {
 	d := e.d
-	mark := len(e.prodVFS)
+	src := tok.string()
+	class := srcExtClassOf(tok.any())
+	outsMark := len(e.prodVFS)
+	protoRel := ""
 
-	switch srcExtClassOf(tok.any()) {
+	switch class {
+	case srcExtProto, srcExtEv, srcExtCfgProto:
+		protoRel = protoSourceRelPath(e.ctx.fs, e.instance, d, src)
+	}
+
+	switch class {
 	case srcExtProto:
-		rel := protoSourceRelPath(e.ctx.fs, e.instance, d, tok.string())
-		base := strings.TrimSuffix(rel, ".proto")
+		base := strings.TrimSuffix(protoRel, ".proto")
 
 		if d.unit.Tag == unitTagPy3Proto {
 			e.prodVFS = append(e.prodVFS, build(base, "__intpy3___pb2.py"))
@@ -100,44 +107,61 @@ func (e *EmitContext) srcPositionOuts(tok STR) []VFS {
 			if d.grpc {
 				e.prodVFS = append(e.prodVFS, build(base, "__intpy3___pb2_grpc.py"))
 			}
+		} else {
+			e.prodVFS = append(e.prodVFS, build(base, ".pb.h"), build(base, ".pb.cc"))
 
-			return e.prodVFSTake(mark)
-		}
+			if !protoTransitiveHeadersEnabled(d) {
+				e.prodVFS = append(e.prodVFS, build(base, ".deps.pb.h"))
+			}
 
-		e.prodVFS = append(e.prodVFS, build(base, ".pb.h"), build(base, ".pb.cc"))
+			if d.grpc {
+				e.prodVFS = append(e.prodVFS, build(base, ".grpc.pb.cc"), build(base, ".grpc.pb.h"))
+			}
 
-		if !protoTransitiveHeadersEnabled(d) {
-			e.prodVFS = append(e.prodVFS, build(base, ".deps.pb.h"))
-		}
-
-		if d.grpc {
-			e.prodVFS = append(e.prodVFS, build(base, ".grpc.pb.cc"), build(base, ".grpc.pb.h"))
-		}
-
-		for _, plugin := range d.cppProtoPlugins {
-			for _, suffix := range plugin.OutputSuffixes {
-				e.prodVFS = append(e.prodVFS, build(base, suffix))
+			for _, plugin := range d.cppProtoPlugins {
+				for _, suffix := range plugin.OutputSuffixes {
+					e.prodVFS = append(e.prodVFS, build(base, suffix))
+				}
 			}
 		}
-
-		return e.prodVFSTake(mark)
 	case srcExtEv, srcExtCfgProto:
-		rel := protoSourceRelPath(e.ctx.fs, e.instance, d, tok.string())
-
-		e.prodVFS = append(e.prodVFS, build(rel, ".pb.h"), build(rel, ".pb.cc"))
-
-		return e.prodVFSTake(mark)
+		e.prodVFS = append(e.prodVFS, build(protoRel, ".pb.h"), build(protoRel, ".pb.cc"))
 	case srcExtGztProto:
-		if d.unit.Tag == unitTagPy3Proto {
-			return nil
+		if d.unit.Tag != unitTagPy3Proto {
+			e.prodVFS = append(e.prodVFS, build(e.instance.Path.relString(), "/", e.gztGenProtoName(src)))
 		}
-
-		e.prodVFS = append(e.prodVFS, build(e.instance.Path.relString(), "/", e.gztGenProtoName(tok.string())))
-
-		return e.prodVFSTake(mark)
 	}
 
-	return nil
+	outs := e.prodVFSTake(outsMark)
+	module := e.instance.Path.relString()
+	insMark := len(e.prodVFS)
+
+	if v := runInputBuildCandidate(module, src); v != 0 {
+		e.prodVFS = append(e.prodVFS, v)
+	}
+
+	switch class {
+	case srcExtProto, srcExtEv:
+		if e.ctx.fs.isFile(srcRootRel, protoRel) {
+			outputRoot := protoCPPOutRoot(e.d)
+
+			protoEachDirectImportName(e.ctx.parsers, protoRel, func(name string) {
+				clean := name
+
+				if name == "" || !pathIsClean(name) {
+					clean = filepath.ToSlash(filepath.Clean(name))
+				}
+
+				e.prodVFS = append(e.prodVFS, build(clean))
+
+				if outputRoot != "" {
+					e.prodVFS = append(e.prodVFS, build(protoOutputRel(outputRoot, clean)))
+				}
+			})
+		}
+	}
+
+	return outs, e.prodVFSTake(insMark)
 }
 
 func (e *EmitContext) srcInsCandidate(tok ANY) []VFS {
@@ -150,42 +174,6 @@ func (e *EmitContext) srcInsCandidate(tok ANY) []VFS {
 	}
 
 	return nil
-}
-
-func (e *EmitContext) srcPositionIns(tok STR) []VFS {
-	module := e.instance.Path.relString()
-	mark := len(e.prodVFS)
-
-	if v := runInputBuildCandidate(module, tok.string()); v != 0 {
-		e.prodVFS = append(e.prodVFS, v)
-	}
-
-	switch srcExtClassOf(tok.any()) {
-	case srcExtProto, srcExtEv:
-		rel := protoSourceRelPath(e.ctx.fs, e.instance, e.d, tok.string())
-
-		if !e.ctx.fs.isFile(srcRootRel, rel) {
-			return e.prodVFSTake(mark)
-		}
-
-		outputRoot := protoCPPOutRoot(e.d)
-
-		protoEachDirectImportName(e.ctx.parsers, rel, func(name string) {
-			clean := name
-
-			if name == "" || !pathIsClean(name) {
-				clean = filepath.ToSlash(filepath.Clean(name))
-			}
-
-			e.prodVFS = append(e.prodVFS, build(clean))
-
-			if outputRoot != "" {
-				e.prodVFS = append(e.prodVFS, build(protoOutputRel(outputRoot, clean)))
-			}
-		})
-	}
-
-	return e.prodVFSTake(mark)
 }
 
 func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMeta) {
@@ -403,11 +391,13 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	for i, m := range srcs {
+		outs, ins := e.srcPosition(m.Source.str())
+
 		positions = append(positions, ProducerPos{
 			kind:  prodSrc,
 			index: i,
-			outs:  e.srcPositionOuts(m.Source.str()),
-			ins:   e.srcPositionIns(m.Source.str()),
+			outs:  outs,
+			ins:   ins,
 		})
 	}
 

@@ -11,6 +11,9 @@ var internTable = struct {
 	overflow map[string]STR
 	flat     []InternCell
 	cells    PageVec[InternCell]
+	cellPage []InternCell
+	cellBase uint32
+	cellIdx  int
 	count    uint32
 	bytes    *BumpAllocator[byte]
 }{
@@ -24,10 +27,6 @@ var internTable = struct {
 type InternCell struct {
 	str string
 	lo  uint64
-}
-
-func init() {
-	internTable.cells.set(0, InternCell{})
 }
 
 func internOwnedCopy(b []byte) string {
@@ -60,7 +59,37 @@ func internAppend(s string, lo uint64) STR {
 	cell := InternCell{str: s, lo: lo}
 
 	internTable.flat = append(internTable.flat, cell)
-	internTable.cells.set(internTable.count, cell)
+
+	if internTable.cellPage == nil {
+		zeroPage := make([]InternCell, 1)
+		page := make([]InternCell, 2)
+
+		page[0] = cell
+		internTable.cellPage = page
+		internTable.cellBase = internTable.count
+		internTable.cellIdx = 1
+		internTable.cells.pages[0].Store(&zeroPage)
+		internTable.cells.pages[1].Store(&page)
+		internTable.count++
+
+		return id
+	}
+
+	off := internTable.count - internTable.cellBase
+
+	if int(off) == len(internTable.cellPage) {
+		page := make([]InternCell, 2*len(internTable.cellPage))
+
+		internTable.cellPage = page
+		internTable.cellBase = internTable.count
+		internTable.cellIdx++
+		off = 0
+		page[0] = cell
+		internTable.cells.pages[internTable.cellIdx].Store(&page)
+	} else {
+		internTable.cellPage[off] = cell
+	}
+
 	internTable.count++
 
 	return id
