@@ -1108,7 +1108,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 			for _, rp := range resolved {
 				for _, decl := range rp.result.ResourceGlobalClosure {
-					if deduper.add(decl.GlobalVar.strID()) {
+					if deduper.addStable(decl.GlobalVar.strID()) {
 						declBlock[k] = decl
 						k++
 					}
@@ -1129,7 +1129,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 			for _, rp := range resolved {
 				for i, p := range rp.result.LDPluginPaths {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						ldplugBlockR[k] = rp.result.LDPluginRefs[i]
 						ldplugBlockP[k] = p
 						k++
@@ -1152,14 +1152,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				pr := rp.result
 
 				for i, p := range pr.PeerArchiveClosurePaths {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						archiveBlockR[k] = pr.PeerArchiveClosureRefs[i]
 						archiveBlockP[k] = p
 						k++
 					}
 				}
 
-				if pr.ARPath != nil && deduper.add(pr.ARPath.strID()) {
+				if pr.ARPath != nil && deduper.addStable(pr.ARPath.strID()) {
 					archiveBlockR[k] = pr.ARRef
 					archiveBlockP[k] = *pr.ARPath
 					k++
@@ -1181,14 +1181,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				pr := rp.result
 
 				for i, p := range pr.PeerGlobalClosurePaths {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						globalBlockR[k] = pr.PeerGlobalClosureRefs[i]
 						globalBlockP[k] = p
 						k++
 					}
 				}
 
-				if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.add(pr.GlobalPath.strID()) {
+				if pr.GlobalRef != nil && pr.GlobalPath != nil && deduper.addStable(pr.GlobalPath.strID()) {
 					globalBlockR[k] = *pr.GlobalRef
 					globalBlockP[k] = *pr.GlobalPath
 					k++
@@ -1220,7 +1220,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				pr := rp.result
 
 				for i, p := range pr.PeerWholeArchiveClosurePaths {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						waBlockR[k] = pr.PeerWholeArchiveClosureRefs[i]
 						waBlockP[k] = p
 						k++
@@ -1228,7 +1228,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				}
 
 				for i, p := range pr.WholeArchivePaths {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						waBlockR[k] = pr.WholeArchiveRefs[i]
 						waBlockP[k] = p
 						k++
@@ -1250,14 +1250,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				pr := rp.result
 
 				for _, p := range pr.PeerWholeArchiveCmdClosurePaths {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						waCmdBlock[k] = p
 						k++
 					}
 				}
 
 				for _, p := range pr.WholeArchiveCmdPaths {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						waCmdBlock[k] = p
 						k++
 					}
@@ -1278,14 +1278,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				pr := rp.result
 
 				for i, p := range pr.PeerDynamicClosurePaths {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						dynBlockR[k] = pr.PeerDynamicClosureRefs[i]
 						dynBlockP[k] = p
 						k++
 					}
 				}
 
-				if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(pr.LDPath.strID()) {
+				if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.addStable(pr.LDPath.strID()) {
 					dynBlockR[k] = pr.LDRef
 					dynBlockP[k] = *pr.LDPath
 					k++
@@ -1303,22 +1303,22 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				pr := rp.result
 
 				for _, p := range pr.PeerArchiveClosurePaths {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						peerLinkCmdPaths = append(peerLinkCmdPaths, p)
 					}
 				}
 
 				for _, p := range pr.PeerDynamicClosurePaths {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						peerLinkCmdPaths = append(peerLinkCmdPaths, p)
 					}
 				}
 
-				if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.add(pr.LDPath.strID()) {
+				if pr.ModuleStmtName == tokDynamicLibrary && pr.LDPath != nil && deduper.addStable(pr.LDPath.strID()) {
 					peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.LDPath)
 				}
 
-				if pr.ARPath != nil && deduper.add(pr.ARPath.strID()) {
+				if pr.ARPath != nil && deduper.addStable(pr.ARPath.strID()) {
 					peerLinkCmdPaths = append(peerLinkCmdPaths, *pr.ARPath)
 				}
 			}
@@ -1330,25 +1330,25 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			switch rp.kind {
 			case peerKindLangDefault:
 				for _, p := range rp.result.OwnAddInclGlobal {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						peerAddInclGlobal = append(peerAddInclGlobal, p)
 					}
 				}
 
 				for _, p := range rp.result.AddInclGlobal {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						peerAddInclGlobal = append(peerAddInclGlobal, p)
 					}
 				}
 			case peerKindUnitTestPeer, peerKindProgramDefault:
 				for _, p := range rp.result.AddInclGlobal {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						peerAddInclGlobal = append(peerAddInclGlobal, p)
 					}
 				}
 			case peerKindUserPeer:
 				for _, p := range rp.result.AddInclUserGlobal {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						peerAddInclGlobal = append(peerAddInclGlobal, p)
 					}
 				}
@@ -1362,7 +1362,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 				}
 
 				for _, p := range rp.result.AddInclGlobal {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						peerAddInclGlobal = append(peerAddInclGlobal, p)
 					}
 
@@ -1380,7 +1380,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if cflagsCap != 0 {
 			for _, rp := range cflagsAggOrder {
 				for _, a := range rp.result.CFlagsGlobal {
-					if deduper.add(a.strID()) {
+					if deduper.addStable(a.strID()) {
 						peerCFlagsGlobal = append(peerCFlagsGlobal, a)
 					}
 				}
@@ -1392,7 +1392,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if cxxflagsCap != 0 {
 			for _, rp := range cflagsAggOrder {
 				for _, a := range rp.result.CXXFlagsGlobal {
-					if deduper.add(a.strID()) {
+					if deduper.addStable(a.strID()) {
 						peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
 					}
 				}
@@ -1404,7 +1404,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if conlyflagsCap != 0 {
 			for _, rp := range cflagsAggOrder {
 				for _, a := range rp.result.COnlyFlagsGlobal {
-					if deduper.add(a.strID()) {
+					if deduper.addStable(a.strID()) {
 						peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
 					}
 				}
@@ -1416,7 +1416,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if objAddLibsCap != 0 {
 			for _, rp := range cflagsAggOrder {
 				for _, a := range rp.result.ObjAddLibsGlobal {
-					if deduper.add(a.strID()) {
+					if deduper.addStable(a.strID()) {
 						peerObjAddLibsGlobal = append(peerObjAddLibsGlobal, a)
 					}
 				}
@@ -1428,7 +1428,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if ldflagsCap != 0 {
 			for _, rp := range cflagsAggOrder {
 				for _, a := range rp.result.LDFlagsGlobal {
-					if deduper.add(a.strID()) {
+					if deduper.addStable(a.strID()) {
 						peerLDFlagsGlobal = append(peerLDFlagsGlobal, a)
 					}
 				}
@@ -1440,7 +1440,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if rpathflagsCap != 0 {
 			for _, rp := range cflagsAggOrder {
 				for _, a := range rp.result.RPathFlagsGlobal {
-					if deduper.add(a.strID()) {
+					if deduper.addStable(a.strID()) {
 						peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
 					}
 				}
@@ -1479,7 +1479,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if protoCap != 0 {
 			for _, rp := range resolved {
 				for _, p := range rp.result.ProtoInclude {
-					if deduper.add(p.strID()) {
+					if deduper.addStable(p.strID()) {
 						peerProtoInclude = append(peerProtoInclude, p)
 					}
 				}
@@ -1505,7 +1505,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			k := 0
 
 			for i, p := range ownLDPlugins.Paths {
-				if deduper.add(p.strID()) {
+				if deduper.addStable(p.strID()) {
 					mergeBlockR[k] = ownLDPlugins.Refs[i]
 					mergeBlockP[k] = p
 					k++
@@ -1513,7 +1513,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			}
 
 			for i, p := range peerLDPluginPaths {
-				if deduper.add(p.strID()) {
+				if deduper.addStable(p.strID()) {
 					mergeBlockR[k] = peerLDPluginRefs[i]
 					mergeBlockP[k] = p
 					k++

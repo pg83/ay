@@ -12,7 +12,7 @@ type DenseMap2[K ~uint32, V1, V2 any] struct {
 }
 
 func (m *DenseMap2[K, V1, V2]) rowSlot(k K) uint32 {
-	if int(k) < m.idx.len() {
+	if int(k) < len(m.idx.s) {
 		return m.idx.s[k]
 	}
 
@@ -20,20 +20,20 @@ func (m *DenseMap2[K, V1, V2]) rowSlot(k K) uint32 {
 }
 
 func (m *DenseMap2[K, V1, V2]) ensureRow(k K) uint32 {
-	if int(k) < m.idx.len() {
+	if int(k) < len(m.idx.s) {
 		if slot := m.idx.s[k]; slot != 0 {
 			return slot
 		}
 	}
 
-	if m.rows.len() == 0 {
+	if len(m.rows.s) == 0 {
 		m.rows.pushBack(DenseRow2{})
 	}
 
 	m.idx.ensureLen(int(k) + 1)
 	m.rows.pushBack(DenseRow2{})
 
-	slot := uint32(m.rows.len() - 1)
+	slot := uint32(len(m.rows.s) - 1)
 
 	m.idx.s[k] = slot
 
@@ -61,12 +61,12 @@ func (m *DenseMap2[K, V1, V2]) put1(k K, v V1) {
 		return
 	}
 
-	if m.vals1.len() == 0 {
+	if len(m.vals1.s) == 0 {
 		m.vals1.pushBack(*new(V1))
 	}
 
 	m.vals1.pushBack(v)
-	m.rows.s[slot].i1 = uint32(m.vals1.len() - 1)
+	m.rows.s[slot].i1 = uint32(len(m.vals1.s) - 1)
 }
 
 func (m *DenseMap2[K, V1, V2]) get2(k K) (V2, bool) {
@@ -90,18 +90,18 @@ func (m *DenseMap2[K, V1, V2]) put2(k K, v V2) {
 		return
 	}
 
-	if m.vals2.len() == 0 {
+	if len(m.vals2.s) == 0 {
 		m.vals2.pushBack(*new(V2))
 	}
 
 	m.vals2.pushBack(v)
-	m.rows.s[slot].i2 = uint32(m.vals2.len() - 1)
+	m.rows.s[slot].i2 = uint32(len(m.vals2.s) - 1)
 }
 
 func (m *DenseMap2[K, V1, V2]) len() int {
-	if m.rows.len() == 0 {
+	if len(m.rows.s) == 0 {
 		return 0
 	}
 
-	return m.rows.len() - 1
+	return len(m.rows.s) - 1
 }

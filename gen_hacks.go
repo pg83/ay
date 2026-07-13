@@ -80,7 +80,7 @@ func aggregateSbomComponents(deduper *DeDuper, e *EmitContext, name TOK, linkTar
 				continue
 			}
 
-			if deduper.add(p.strID()) {
+			if deduper.addStable(p.strID()) {
 				refs = append(refs, pr.PeerSbomClosureRefs[i])
 				paths = append(paths, p)
 			}
@@ -90,7 +90,7 @@ func aggregateSbomComponents(deduper *DeDuper, e *EmitContext, name TOK, linkTar
 			ownInsertIdx = len(paths)
 		}
 
-		if pr.SbomComponentRef != nil && (*pr.SbomComponentPath != lldToolchainSbomVFS || keepLld) && deduper.add(pr.SbomComponentPath.strID()) {
+		if pr.SbomComponentRef != nil && (*pr.SbomComponentPath != lldToolchainSbomVFS || keepLld) && deduper.addStable(pr.SbomComponentPath.strID()) {
 			refs = append(refs, *pr.SbomComponentRef)
 			paths = append(paths, *pr.SbomComponentPath)
 		}

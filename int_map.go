@@ -1,5 +1,7 @@
 package main
 
+import "unsafe"
+
 const (
 	intMapMinCap  = 8
 	intMapFillNum = 5
@@ -39,9 +41,12 @@ func (m *IntMap[V]) get(k uint64) *V {
 	keys := m.keys
 	values := m.values
 	mask := m.mask
+	keyData := unsafe.SliceData(keys)
 
 	for i := k & mask; ; i = (i + 1) & mask {
-		switch keys[i] {
+		key := *(*uint64)(unsafe.Add(unsafe.Pointer(keyData), uintptr(i)*unsafe.Sizeof(k)))
+
+		switch key {
 		case k:
 			return &values[i]
 		case 0:
@@ -56,9 +61,11 @@ func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 		values := m.values
 		mask := m.mask
 		i := k & mask
+		keyData := unsafe.SliceData(keys)
 
 		for {
-			ek := keys[i]
+			keyCell := (*uint64)(unsafe.Add(unsafe.Pointer(keyData), uintptr(i)*unsafe.Sizeof(k)))
+			ek := *keyCell
 
 			if ek == k {
 				return &values[i], true
@@ -66,7 +73,7 @@ func (m *IntMap[V]) cell(k uint64) (*V, bool) {
 
 			if ek == 0 {
 				if m.count < m.resizeAt {
-					keys[i] = k
+					*keyCell = k
 					m.count++
 
 					return &values[i], false
