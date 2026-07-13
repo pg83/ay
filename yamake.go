@@ -410,12 +410,16 @@ func (e *ParseError) Error() string {
 }
 
 func parseFile(fs FS, rel string) (mf *MakeFile, err error) {
+	return parseFileClean(fs, cleanRel(rel))
+}
+
+func parseFileClean(fs FS, rel string) (mf *MakeFile, err error) {
 	exc := try(func() {
-		bp := readForParse(fs, cleanRel(rel))
+		bp := readForParse(fs, rel)
 
 		defer releaseParseBuf(bp)
 
-		mf = throw2(parse(fs, cleanRel(rel), *bp))
+		mf = throw2(parse(fs, rel, *bp))
 	})
 
 	if exc != nil {

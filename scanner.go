@@ -266,7 +266,7 @@ func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIn
 
 func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
-	incDir := dirKey(pathDir(vfsPath.relString()))
+	incDir := internStr(pathDir(vfsPath.relString()))
 	suppressCimportNames := false
 	prevProbeMissed := false
 

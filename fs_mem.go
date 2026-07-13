@@ -173,7 +173,7 @@ func (fs *MemFS) isDir(prefix STR, suffix string) bool {
 }
 
 func (fs *MemFS) read(rel string) [][]byte {
-	data, ok := fs.files[cleanRel(rel)]
+	data, ok := fs.files[rel]
 
 	if !ok {
 		throwFmt("memFS: no such file %q", rel)
@@ -187,7 +187,7 @@ func (fs *MemFS) read(rel string) [][]byte {
 }
 
 func (fs *MemFS) contentHash(rel STR) uint64 {
-	data, ok := fs.files[cleanRel(rel.string())]
+	data, ok := fs.files[rel.string()]
 
 	if !ok {
 		return 0

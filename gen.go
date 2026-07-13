@@ -499,7 +499,7 @@ func (ctx *GenCtx) parseFileCached(rel string) []Stmt {
 		return mf.Stmts
 	}
 
-	mf := throw2(parseFile(ctx.fs, rel))
+	mf := throw2(parseFileClean(ctx.fs, rel))
 
 	ctx.parsedFiles[rel] = mf
 
