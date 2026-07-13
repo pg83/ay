@@ -350,7 +350,7 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 		SbomComponentPath:     sbomPath,
 	}
 
-	ctx.memo.put(ctx.instanceKey(instance), result)
+	ctx.memoPut(instance, result)
 
 	return result
 }
@@ -464,7 +464,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		InducedDeps: d.inducedDeps,
 	}
 
-	ctx.memo.put(ctx.instanceKey(instance), result)
+	ctx.memoPut(instance, result)
 
 	return result
 }

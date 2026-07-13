@@ -63,7 +63,7 @@ func splitKey(prefix VFS, suffix ANY) uint64 {
 }
 
 func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
-	return &CodegenRegistry{bySplit: newIntMap[*GeneratedFileInfo](1 << 14), na: na}
+	return &CodegenRegistry{bySplit: newIntMap[*GeneratedFileInfo](1 << 17), na: na}
 }
 
 func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
