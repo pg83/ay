@@ -226,19 +226,20 @@ func (c *BucketCache) spliceBucket(seen *IdSet, bucket []VFS) {
 		return
 	}
 
-	gen := seen.gen.s
+	gen := unsafe.SliceData(seen.gen.s)
 	epoch := seen.epoch
 	r := closureBucketIndex(bucket[0])
 	dst := c.scratch[r]
 
 	for _, v := range bucket {
 		id := v.strID()
+		cell := (*uint16)(unsafe.Add(unsafe.Pointer(gen), uintptr(id)*unsafe.Sizeof(epoch)))
 
-		if gen[id] == epoch {
+		if *cell == epoch {
 			continue
 		}
 
-		gen[id] = epoch
+		*cell = epoch
 		dst = append(dst, v)
 	}
 
