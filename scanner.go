@@ -417,13 +417,8 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	}
 
 	sc.tjc.closure.reset(vfsBound())
-
-	block := s.closureScratch
-	k := 0
-
 	sc.tjc.closure.add(abs)
-	block[k] = abs
-	k++
+	s.buckets.resetScratch()
 
 	sc.forEachResolvedChildID(abs, func(ch VFS) {
 		if ch == abs {
@@ -436,22 +431,20 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 		cl, _ := s.closure(ch)
 
-		k = cl.spliceInto(&sc.tjc.closure, block, k)
+		s.buckets.spliceClosure(&sc.tjc.closure, cl)
 	})
 
-	leafStart := k
+	leafStart := len(s.buckets.buildScratch())
 
 	if abs.isBuild() {
-		k = sc.tjc.closure.spliceNew(s.codegen.closureLeaves(abs), block, k)
+		s.buckets.spliceLeaves(&sc.tjc.closure, s.codegen.closureLeaves(abs))
 	}
 
-	for i := leafStart; i < k; i++ {
-		if block[i].isBuild() {
-			k = sc.tjc.closure.spliceNew(s.codegen.closureLeaves(block[i]), block, k)
-		}
+	for i := leafStart; i < len(s.buckets.buildScratch()); i++ {
+		s.buckets.spliceLeaves(&sc.tjc.closure, s.codegen.closureLeaves(s.buckets.buildScratch()[i]))
 	}
 
-	s.putClosure(abs, s.buckets.storeBuckets(block[0], block[1:k]))
+	s.putClosure(abs, s.buckets.storeScratch(abs))
 
 	if ownershipOn {
 		s.inDfsFrame = false
