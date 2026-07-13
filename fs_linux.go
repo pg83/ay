@@ -173,7 +173,12 @@ func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
 			}
 
 			*slot = dirFDCacheEntry{rel: rel, fd: fd}
-			fs.dirFDNext = (fs.dirFDNext + 1) & (dirFDCacheSize - 1)
+			fs.dirFDNext++
+
+			if fs.dirFDNext == dirFDCacheSize {
+				fs.dirFDNext = 0
+			}
+
 			fs.dirFDs[rel] = fd
 			fs.dirFD = fd
 			fs.dirFDRel = rel

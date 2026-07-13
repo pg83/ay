@@ -12,7 +12,7 @@ var emptyDirNames = []uint32{}
 const readChunkSize = 256 << 10
 
 const sourceUnderHotMask = 1<<16 - 1
-const dirFDCacheSize = 512
+const dirFDCacheSize = 768
 
 type sourceUnderHotEntry struct {
 	key uint64
@@ -272,7 +272,6 @@ func (fs *OsFS) listdirRel(rel string) DirView {
 }
 
 func (fs *OsFS) read(rel string) [][]byte {
-	rel = cleanRel(rel)
 	chunks := fs.readFileRel(rel)
 	fs.contentHashes.set(uint32(internStr(rel)), contentHashChunks(chunks))
 
