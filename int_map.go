@@ -91,15 +91,29 @@ func (m *IntMap[V]) put(k uint64, v V) {
 func (m *IntMap[V]) grow() {
 	oldKeys := m.keys
 	oldValues := m.values
+	count := m.count
 
 	m.alloc(len(oldKeys) * 2)
-	m.count = 0
+	keys := m.keys
+	values := m.values
+	mask := m.mask
 
 	for i, k := range oldKeys {
-		if k != 0 {
-			m.put(k, oldValues[i])
+		if k == 0 {
+			continue
 		}
+
+		j := k & mask
+
+		for keys[j] != 0 {
+			j = (j + 1) & mask
+		}
+
+		keys[j] = k
+		values[j] = oldValues[i]
 	}
+
+	m.count = count
 }
 
 func (m *IntMap[V]) len() int {
