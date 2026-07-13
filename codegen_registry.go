@@ -40,10 +40,16 @@ func (p *PendingEmit) fire() {
 }
 
 type CodegenRegistry struct {
-	byRel    DenseMap[STR, *GeneratedFileInfo]
-	bySplit  *IntMap[*GeneratedFileInfo]
-	leafEver BitSet
-	na       *NodeArenas
+	byRel           DenseMap[STR, *GeneratedFileInfo]
+	bySplit         *IntMap[splitLookup]
+	leafEver        BitSet
+	splitGeneration uint32
+	na              *NodeArenas
+}
+
+type splitLookup struct {
+	info       *GeneratedFileInfo
+	generation uint32
 }
 
 func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
@@ -93,6 +99,7 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	*stored = info
 
 	r.byRel.put(stored.OutputPath.rel(), stored)
+	r.splitGeneration++
 
 	for _, leaf := range stored.ClosureLeaves {
 		r.leafEver.add(uint32(leaf))
@@ -128,7 +135,9 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix ANY) *GeneratedFileInfo
 
 	if r.bySplit != nil {
 		if cached := r.bySplit.get(key); cached != nil {
-			return *cached
+			if cached.info != nil || cached.generation == r.splitGeneration {
+				return cached.info
+			}
 		}
 	}
 
@@ -137,21 +146,19 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix ANY) *GeneratedFileInfo
 
 	if prefixRel != "" {
 		rel = internedV(prefixRel, "/", suffixID.string())
-
-		if rel == 0 {
-			return nil
-		}
 	}
 
-	info, _ := r.byRel.get(rel)
+	var info *GeneratedFileInfo
 
-	if info != nil {
-		if r.bySplit == nil {
-			r.bySplit = newIntMap[*GeneratedFileInfo](1 << 10)
-		}
-
-		r.bySplit.put(key, info)
+	if rel != 0 {
+		info, _ = r.byRel.get(rel)
 	}
+
+	if r.bySplit == nil {
+		r.bySplit = newIntMap[splitLookup](1 << 15)
+	}
+
+	r.bySplit.put(key, splitLookup{info: info, generation: r.splitGeneration})
 
 	return info
 }
