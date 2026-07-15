@@ -184,10 +184,15 @@ func (fs *MemFS) isDir(prefix STR, suffix string) bool {
 }
 
 func (fs *MemFS) read(rel string) [][]byte {
-	data, ok := fs.files[rel]
+	return fs.readPath(internStr(rel))
+}
+
+func (fs *MemFS) readPath(rel STR) [][]byte {
+	path := rel.string()
+	data, ok := fs.files[path]
 
 	if !ok {
-		throwFmt("memFS: no such file %q", rel)
+		throwFmt("memFS: no such file %q", path)
 	}
 
 	if len(data) <= readChunkSize {

@@ -17,6 +17,7 @@ type FS interface {
 	// read accepts a clean source-relative path and returns chunks that remain
 	// valid until the next read call.
 	read(rel string) [][]byte
+	readPath(rel STR) [][]byte
 
 	walk(rel string, visit func(rel string, isDir bool) bool)
 

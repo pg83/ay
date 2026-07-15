@@ -93,9 +93,26 @@ func (pm *IncludeParserManager) protoScanOwnPaths(outRoot VFS, includes []VFS) [
 }
 
 func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser IncludeDirectiveParser) ParsedIncludeSet {
+	set, _ := pm.sourceParsed(vfsPath, ctxParser)
+
+	return set
+}
+
+func (pm *IncludeParserManager) sourceParsedWalkable(vfsPath VFS, ctxParser IncludeDirectiveParser) []IncludeDirective {
+	set, bucket := pm.sourceParsed(vfsPath, ctxParser)
+
+	return set.bucket(bucket)
+}
+
+func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirectiveParser) (ParsedIncludeSet, ParsedIncludeBucket) {
 	key := vfsPath.rel()
 	rel := key.string()
 	parser := pm.registry.registeredParserFor(rel)
+	bucket := parsedIncludesLocal
+
+	if _, ok := parser.(RagelIncludeDirectiveParser); ok {
+		bucket = parsedIncludesRagelNative
+	}
 
 	var ambKey uint64
 
@@ -109,10 +126,10 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 		ambKey = splitMix64(uint32(key), parser.id())
 
 		if cached, ok := pm.cache.ambiguous[ambKey]; ok {
-			return cached
+			return cached, bucket
 		}
 	} else if cached, ok := pm.cache.parsed.get(key); ok {
-		return cached
+		return cached, bucket
 	}
 
 	if !pm.fs.isFileClean(srcRootRel, rel) {
@@ -124,10 +141,10 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 			pm.cache.parsed.put(key, empty)
 		}
 
-		return empty
+		return empty, bucket
 	}
 
-	data := pm.fs.read(rel)
+	data := pm.fs.readPath(key)
 
 	if first := data[0]; len(first) >= 3 && first[0] == 0xEF && first[1] == 0xBB && first[2] == 0xBF {
 		data[0] = first[3:]
@@ -141,7 +158,7 @@ func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser Inclu
 		pm.cache.parsed.put(key, out)
 	}
 
-	return out
+	return out, bucket
 }
 
 func (pm *IncludeParserManager) indexAddincl(a VFS) {
