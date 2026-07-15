@@ -108,16 +108,12 @@ func parseProtoImportLine(line []byte) (STR, IncludeKind, bool) {
 		return 0, includeSystem, false
 	}
 
-	if !bytes.HasPrefix(b, protoImportKw) {
+	if b[0] != 'i' || !bytes.HasPrefix(b, protoImportKw) {
 		return 0, includeSystem, false
 	}
 
 	if isParserIdentContinuation(bytesString(b), len("import")) {
 		return 0, includeSystem, false
-	}
-
-	if idx := bytes.Index(b[len(protoImportKw):], protoLineComment); idx >= 0 {
-		b = b[:len(protoImportKw)+idx]
 	}
 
 	rest := b[len("import"):]
@@ -135,6 +131,10 @@ func parseProtoImportLine(line []byte) (STR, IncludeKind, bool) {
 	target, kind, ok := parseDelimitedIncludeTarget(rest)
 
 	if !ok {
+		return 0, kind, false
+	}
+
+	if bytes.Contains(target, protoLineComment) {
 		return 0, kind, false
 	}
 

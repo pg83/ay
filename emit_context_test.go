@@ -6,6 +6,32 @@ import (
 	"testing"
 )
 
+func TestEmitContext_PartitionCollected(t *testing.T) {
+	refs := []NodeRef{11, 12, 13}
+	outs := []VFS{build("a.o"), build("b.o"), build("c.o")}
+	metas := []SrcMeta{{}, {}, {}}
+	e := &EmitContext{refs: refs, outs: outs, metas: metas}
+
+	local, global := e.partitionCollected()
+
+	if !slices.Equal(local.refs, refs) || !slices.Equal(local.outs, outs) || len(local.metas) != len(metas) || len(global.refs) != 0 {
+		t.Fatalf("local-only partition = (%v, %v), want (%v, empty)", local, global, refs)
+	}
+
+	if &local.refs[0] != &refs[0] || &local.metas[0] != &metas[0] {
+		t.Fatal("local-only partition copied collected slices")
+	}
+
+	metas[1].Global = true
+	e = &EmitContext{refs: refs, outs: outs, metas: metas}
+	local, global = e.partitionCollected()
+
+	if !slices.Equal(local.refs, []NodeRef{11, 13}) || !slices.Equal(global.refs, []NodeRef{12}) ||
+		!slices.Equal(local.outs, []VFS{outs[0], outs[2]}) || !slices.Equal(global.outs, []VFS{outs[1]}) {
+		t.Fatalf("mixed partition = (%v, %v)", local, global)
+	}
+}
+
 func TestEmitContext_SourceOccurrencesUseOneCompilePipeline(t *testing.T) {
 	files := map[string]string{
 		"mod/ya.make": `LIBRARY()

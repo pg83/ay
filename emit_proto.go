@@ -181,16 +181,7 @@ type ProtoSpec struct {
 
 type ProtoPBConfig struct {
 	grpc       bool
-	moduleTag  STR
 	cppOutRoot string
-}
-
-type ProtoPBEmission struct {
-	pbRef     NodeRef
-	pbCC      VFS
-	grpcPbCC  VFS
-	orderedCC []VFS
-	relPath   string
 }
 
 type PbModuleEmission struct {
@@ -206,7 +197,6 @@ type PbModuleEmission struct {
 	grpcCCRefs          []NodeRef
 	grpcHRefs           []NodeRef
 	blocks              PbArgBlocks
-	searchPaths         []VFS
 	pendingCommon       *protoPBCommon
 }
 
@@ -218,9 +208,7 @@ type protoPBCommon struct {
 	cppStyleguideBinary VFS
 	protocBinary        VFS
 	grpcCppBinary       VFS
-	liteHeaders         bool
 	grpc                bool
-	moduleTag           STR
 	extraPlugins        []ResolvedCPPProtoPlugin
 	blocks              PbArgBlocks
 }
@@ -228,9 +216,10 @@ type protoPBCommon struct {
 type protoPBPending struct {
 	common                    *protoPBCommon
 	imports                   Closure
-	protoRelPath              string
-	protoSrcOverride          VFS
+	protoRel                  STR
+	protoSrc                  VFS
 	protoProducerSourceInputs []VFS
+	outputs                   []VFS
 	spec                      *ProtoSpec
 	pbRef                     NodeRef
 }
@@ -243,10 +232,10 @@ func (p *protoPBPending) emitPending() {
 	c := s.common
 
 	c.emit.emitPB(
-		s.protoRelPath, s.protoSrcOverride, c.cppStyleguideLDRef, c.protocLDRef,
+		s.protoRel, s.protoSrc, c.cppStyleguideLDRef, c.protocLDRef,
 		c.grpcCppLDRef, c.cppStyleguideBinary, c.protocBinary, c.grpcCppBinary,
-		c.grpc, c.moduleTag, c.liteHeaders, c.extraPlugins, s.imports,
-		s.protoProducerSourceInputs, c.blocks, s.spec, s.pbRef,
+		c.grpc, c.extraPlugins, s.imports,
+		s.protoProducerSourceInputs, c.blocks, s.spec, s.outputs, s.pbRef,
 	)
 }
 
@@ -323,32 +312,28 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 		emit:               e,
 		cppStyleguideLDRef: pe.cppStyleguideLDRef, protocLDRef: pe.protocLDRef, grpcCppLDRef: pe.grpcCppLDRef,
 		cppStyleguideBinary: pe.cppStyleguideBinary, protocBinary: pe.protocBinary, grpcCppBinary: pe.grpcCppBinary,
-		liteHeaders: pe.liteHeaders, grpc: cfg.grpc, moduleTag: cfg.moduleTag,
+		grpc:         cfg.grpc,
 		extraPlugins: pe.extraPlugins, blocks: pe.blocks,
-	}
-
-	pe.searchPaths = d.cc.ProtoInclude
-
-	if cfg.cppOutRoot != "" {
-		pe.searchPaths = append([]VFS{source(cfg.cppOutRoot)}, d.cc.ProtoInclude...)
 	}
 
 	return pe
 }
 
-func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, spec *ProtoSpec) ProtoPBEmission {
+func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, spec *ProtoSpec) []VFS {
 	ctx, d := e.ctx, e.d
-	protoRelPath := e.protoSourceRelPath(srcRel)
-	buildProto := build(protoRelPath)
-	protoVFS := source(protoRelPath)
+	na := ctx.na
+	protoRel := e.protoSourceRel(srcRel)
+	protoRelPath := protoRel.string()
+	buildProto := protoRel.build()
+	protoVFS := protoRel.source()
 	scanCtx := d.scanCtx
 
-	var protoSrcOverride VFS
+	generatedProto := false
 	var protoProducerSourceInputs []VFS
 	var genProtoParsed []IncludeDirective
 
 	if info := e.codegen.use(buildProto); info != nil {
-		protoSrcOverride = buildProto
+		generatedProto = true
 		protoVFS = buildProto
 		protoProducerSourceInputs = info.SourceInputs
 		genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
@@ -356,15 +341,15 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	transitiveImports := e.scanner.walkClosure(protoVFS, scanCtx, scanDomainProto)
 	pbRef := ctx.emit.reserve()
-	pending := ctx.na.protoPB.one()
+	pending := na.protoPB.one()
 
 	*pending = protoPBPending{
 		common: pe.pendingCommon, imports: transitiveImports,
-		protoRelPath: protoRelPath, protoSrcOverride: protoSrcOverride,
+		protoRel: protoRel, protoSrc: protoVFS,
 		protoProducerSourceInputs: protoProducerSourceInputs,
 		spec:                      spec, pbRef: pbRef,
 	}
-	pbPE := ctx.na.pendingEmitter(pending)
+	pbPE := na.pendingEmitter(pending)
 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := build(protoBase, ".pb.h")
@@ -372,29 +357,34 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbDepsH := build(protoBase, ".deps.pb.h")
 	grpcPbH := build(protoBase, ".grpc.pb.h")
 	grpcPbCC := build(protoBase, ".grpc.pb.cc")
-	extraOutputPaths := make([]VFS, 0, 4)
-
-	for _, plugin := range d.cppProtoPlugins {
-		for _, suffix := range plugin.OutputSuffixes {
-			extraOutputPaths = append(extraOutputPaths, build(protoBase, suffix))
-		}
-	}
 
 	needsGRPCParsed := cfg.grpc
 
 	if !needsGRPCParsed {
-		for _, out := range extraOutputPaths {
-			if out.relString() == grpcPbH.relString() || out.relString() == grpcPbCC.relString() {
-				needsGRPCParsed = true
+		for _, plugin := range d.cppProtoPlugins {
+			for _, suffix := range plugin.OutputSuffixes {
+				if suffix == ".grpc.pb.h" || suffix == ".grpc.pb.cc" {
+					needsGRPCParsed = true
 
+					break
+				}
+			}
+
+			if needsGRPCParsed {
 				break
 			}
 		}
 	}
 
-	directImports := protoInducedPbH(ctx.parsers, ctx.parsers.sourceParsedBuckets(source(protoRelPath), nil).bucket(parsedIncludesLocal), e.dirScratch[:0])
+	if spec.ccFirstOuts {
+		pending.outputs = na.vfsList(pbCC, pbH)
+	} else {
+		pending.outputs = assembleProtoCmdOutputs(na, protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, pe.extraPlugins, pe.liteHeaders, cfg.grpc)
+	}
 
-	if protoSrcOverride != 0 {
+	directImports := protoInducedPbH(ctx.parsers, ctx.parsers.sourceParsedBuckets(protoRel.source(), nil).bucket(parsedIncludesLocal), e.dirScratch[:0])
+
+	if generatedProto {
 		directImports = protoInducedPbH(ctx.parsers, genProtoParsed, directImports[:0])
 	}
 
@@ -410,11 +400,11 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			OnUse:          pbPE,
 		})
 
-		ccParsed := e.ctx.na.dirs.alloc(len(spec.genHParsed) + len(spec.genCCExtras))
+		ccParsed := na.dirs.alloc(len(spec.genHParsed) + len(spec.genCCExtras))
 		cn := copy(ccParsed, spec.genHParsed)
 
 		cn += copy(ccParsed[cn:], spec.genCCExtras)
-		e.ctx.na.dirs.commit(cn)
+		na.dirs.commit(cn)
 		ccParsed = ccParsed[:cn:cn]
 
 		e.register(GeneratedFileInfo{
@@ -426,12 +416,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			OnUse:          pbPE,
 		})
 
-		return ProtoPBEmission{
-			pbRef:     pbRef,
-			pbCC:      pbCC,
-			orderedCC: []VFS{pbCC},
-			relPath:   protoRelPath,
-		}
+		return e.protoCCOutputs(pending.outputs)
 	}
 
 	pbHImports := directImports
@@ -444,7 +429,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		e.dirScratch = grown
 	}
 
-	na := e.ctx.na
 	extras := pbHEmitsIncludesExtras()
 	pbHCompile := na.dirs.alloc(len(pbHImports) + len(extras) + transitiveImports.len())[:0]
 
@@ -466,9 +450,9 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbHCompile = pbHCompile[:len(pbHCompile):len(pbHCompile)]
 
 	pbGenRefs := pe.pbGenRefs
-	pbHLeaves := na.vfsList(source(protoRelPath))
+	pbHLeaves := na.vfsList(protoRel.source())
 
-	if protoSrcOverride != 0 {
+	if generatedProto {
 		pbHLeaves = protoProducerSourceInputs
 	}
 
@@ -591,32 +575,29 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		})
 	}
 
+	return e.protoCCOutputs(pending.outputs)
+}
+
+func (e *EmitContext) protoCCOutputs(outputs []VFS) []VFS {
 	orderedCC := e.orderedCC[:0]
 
-	defer func() { e.orderedCC = orderedCC[:0] }()
-
-	for _, out := range assembleProtoCmdOutputs(ctx.emit.nodeArenas(), protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, pe.extraPlugins, pe.liteHeaders, cfg.grpc) {
+	for _, out := range outputs {
 		if isCCSourceExt(out.relString()) {
 			orderedCC = append(orderedCC, out)
 		}
 	}
 
-	return ProtoPBEmission{
-		pbRef:     pbRef,
-		pbCC:      pbCC,
-		grpcPbCC:  grpcPbCC,
-		orderedCC: orderedCC,
-		relPath:   protoRelPath,
-	}
+	e.orderedCC = orderedCC[:0]
+
+	return orderedCC
 }
 
-func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) ProtoPBEmission {
+func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) []VFS {
 	d := e.d
 
 	cfg := ProtoPBConfig{
 		cppOutRoot: protoCPPOutRoot(d),
 		grpc:       d.grpc && spec.modulePlugins,
-		moduleTag:  d.cc.ModuleTag,
 	}
 
 	pe := e.pbModuleEmission(cfg, d.cc.ProtoIncludePeers, spec)
@@ -639,9 +620,7 @@ func appendPbHCompanions(dst []IncludeDirective, pbhImports []IncludeDirective, 
 }
 
 func (e *EmitContext) emitCppProtoFamilySource(meta SrcMeta, spec *ProtoSpec) {
-	pb := e.cppProtoPB(e.moduleSourceName(meta.Source), spec)
-
-	for _, cc := range pb.orderedCC {
+	for _, cc := range e.cppProtoPB(e.moduleSourceName(meta.Source), spec) {
 		child := meta
 
 		child.Source = cc.any()
@@ -725,8 +704,8 @@ type ResolvedCPPProtoPlugin struct {
 }
 
 func (e *EmitContext) emitPB(
-	protoRelPath string,
-	protoSrcOverride VFS,
+	protoRel STR,
+	srcVFS VFS,
 	cppStyleguideLDRef NodeRef,
 	protocLDRef NodeRef,
 	grpcCppLDRef NodeRef,
@@ -734,39 +713,19 @@ func (e *EmitContext) emitPB(
 	protocBinary VFS,
 	grpcCppBinary VFS,
 	grpc bool,
-	moduleTag STR,
-	liteHeaders bool,
 	extraPlugins []ResolvedCPPProtoPlugin,
 	transitiveProtoImports Closure,
 	producerSourceInputs []VFS,
 	blocks PbArgBlocks,
 	spec *ProtoSpec,
+	outputs []VFS,
 	id NodeRef,
 ) {
 	instance := e.instance
 	na := e.ctx.na
-	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
-	pbH := build(protoBase, ".pb.h")
-	pbCC := build(protoBase, ".pb.cc")
-	pbDepsH := build(protoBase, ".deps.pb.h")
-	grpcPbCC := build(protoBase, ".grpc.pb.cc")
-	grpcPbH := build(protoBase, ".grpc.pb.h")
-	srcVFS := source(protoRelPath)
-
-	if protoSrcOverride != 0 {
-		srcVFS = protoSrcOverride
-	}
-
-	var outputs []VFS
-
-	if spec.ccFirstOuts {
-		outputs = na.vfsList(pbCC, pbH)
-	} else {
-		outputs = assembleProtoCmdOutputs(na, protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, extraPlugins, liteHeaders, grpc)
-	}
 
 	outsChunk := na.anyChunkVFS(outputs)
-	relChunk := na.anyList(internStr(protoRelPath).any())
+	relChunk := na.anyList(protoRel.any())
 	chunks := na.chunks.alloc(6)[:0]
 
 	chunks = append(chunks, blocks.head, outsChunk, blocks.mid, relChunk)
@@ -832,10 +791,10 @@ func (e *EmitContext) emitPB(
 
 	foreignDepRefs = foreignDepRefs[:len(foreignDepRefs):len(foreignDepRefs)]
 
-	protocCwd := "$(S)"
+	protocCwd := srcRootDirVFS
 
-	if protoSrcOverride != 0 {
-		protocCwd = "$(B)"
+	if srcVFS.isBuild() {
+		protocCwd = bldRootDirVFS
 	}
 
 	transitiveBuckets := transitiveProtoImports.bucketList()
@@ -856,7 +815,7 @@ func (e *EmitContext) emitPB(
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Cwd: cwdVFS(protocCwd),
+			Cwd: protocCwd,
 			Env: env}),
 		Env: env,
 
@@ -946,25 +905,33 @@ type ProtoSrcsResult struct {
 	ProtoLibName         string
 }
 
-func protoSourceRelPath(fs FS, instance ModuleInstance, d *ModuleData, src string) string {
-	return filepath.ToSlash(filepath.Clean(resolvePySrcRel(fs, d.srcDirs, instance.Path, src).string()))
+func protoSourceRel(fs FS, instance ModuleInstance, d *ModuleData, src string) STR {
+	resolved := resolvePySrcRel(fs, d.srcDirs, instance.Path, src)
+	raw := resolved.string()
+	clean := filepath.ToSlash(filepath.Clean(raw))
+
+	if clean == raw {
+		return resolved
+	}
+
+	return internStr(clean)
 }
 
 const protoPathCacheSize = 64
 
 type protoPathEntry struct {
 	src string
-	rel string
+	rel STR
 }
 
-func (e *EmitContext) protoSourceRelPath(src string) string {
+func (e *EmitContext) protoSourceRel(src string) STR {
 	for i := range e.protoPaths {
 		if e.protoPaths[i].src == src {
 			return e.protoPaths[i].rel
 		}
 	}
 
-	rel := protoSourceRelPath(e.ctx.fs, e.instance, e.d, src)
+	rel := protoSourceRel(e.ctx.fs, e.instance, e.d, src)
 	entry := protoPathEntry{src: src, rel: rel}
 
 	if len(e.protoPaths) < protoPathCacheSize {
@@ -977,6 +944,10 @@ func (e *EmitContext) protoSourceRelPath(src string) string {
 	e.protoPathPos = (e.protoPathPos + 1) & (protoPathCacheSize - 1)
 
 	return rel
+}
+
+func (e *EmitContext) protoSourceRelPath(src string) string {
+	return e.protoSourceRel(src).string()
 }
 
 type PbArgBlocks struct {

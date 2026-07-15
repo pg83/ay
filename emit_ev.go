@@ -30,10 +30,10 @@ func evWitnessExtrasBound() int {
 	return 3 + len(pbDescriptorImporterDirectives) + len(evExtraProtobufDirectives) + len(evAbseilCleanupDirectives)
 }
 
-func appendEvWitnessExtras(dst []IncludeDirective, evRelPath string) []IncludeDirective {
+func appendEvWitnessExtras(dst []IncludeDirective, evRel STR) []IncludeDirective {
 	dst = append(dst, IncludeDirective{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())})
 	dst = append(dst, IncludeDirective{kind: includeQuoted, target: includeTarget(pbDescriptorVFS.rel().any())})
-	dst = append(dst, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(evRelPath).any())})
+	dst = append(dst, IncludeDirective{kind: includeQuoted, target: includeTarget(evRel.any())})
 	dst = append(dst, pbDescriptorImporterDirectives...)
 	dst = append(dst, evExtraProtobufDirectives...)
 	dst = append(dst, evAbseilCleanupDirectives...)
@@ -52,7 +52,8 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 	}
 
 	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
-	evRelPath := e.protoSourceRelPath(e.moduleSourceName(src))
+	evRel := e.protoSourceRel(e.moduleSourceName(src))
+	evRelPath := evRel.string()
 	directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d), e.dirScratch[:0])
 
 	e.dirScratch = directImports
@@ -61,7 +62,7 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 
 	evHParsed = append(evHParsed, directImports...)
 	evHParsed = append(evHParsed, protobufRuntimeDirectives...)
-	evHParsed = appendEvWitnessExtras(evHParsed, evRelPath)
+	evHParsed = appendEvWitnessExtras(evHParsed, evRel)
 	ctx.na.dirs.commit(len(evHParsed))
 	evHParsed = evHParsed[:len(evHParsed):len(evHParsed)]
 

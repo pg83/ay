@@ -275,7 +275,8 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	pe := e.newPyPBModuleEmission(protocBinary, e.peers.ProtoInclude, duplicateOutputRootInclude)
 	scanCtx := d.scanCtx
-	protoRelPath := e.protoSourceRelPath(src)
+	protoRel := e.protoSourceRel(src)
+	protoRelPath := protoRel.string()
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pyOut := build(protoBase, "__intpy3___pb2.py")
 
@@ -286,7 +287,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 			grpcPyOut = build(protoBase, "__intpy3___pb2_grpc.py")
 		}
 
-		e.enqueuePyProtoOutputs(src, srcGroup, pyOut, grpcPyOut, e.codegen.lookup(build(protoRelPath)) != nil)
+		e.enqueuePyProtoOutputs(src, srcGroup, pyOut, grpcPyOut, e.codegen.lookup(protoRel.build()) != nil)
 
 		return
 	}
@@ -314,7 +315,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	outputs = outputs[:len(outputs):len(outputs)]
 
-	relChunk := na.anyList(internStr(protoRelPath).any())
+	relChunk := na.anyList(protoRel.any())
 	chunks := na.chunks.alloc(5)[:0]
 
 	chunks = append(chunks, pe.head, relChunk, pe.mid, relChunk)

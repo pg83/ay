@@ -90,11 +90,13 @@ func (e *EmitContext) srcPosition(tok STR) ([]VFS, []VFS) {
 	src := tok.string()
 	class := srcExtClassOf(tok.any())
 	outsMark := len(e.prodVFS)
+	var protoRelID STR
 	protoRel := ""
 
 	switch class {
 	case srcExtProto, srcExtEv, srcExtCfgProto:
-		protoRel = e.protoSourceRelPath(src)
+		protoRelID = e.protoSourceRel(src)
+		protoRel = protoRelID.string()
 	}
 
 	switch class {
@@ -146,9 +148,15 @@ func (e *EmitContext) srcPosition(tok STR) ([]VFS, []VFS) {
 			outputRoot := protoCPPOutRoot(e.d)
 			outputRootClean := outputRoot != "" && pathIsClean(outputRoot)
 
-			for _, directive := range e.ctx.parsers.sourceParsedBuckets(source(protoRel), nil).bucket(parsedIncludesLocal) {
+			for _, directive := range e.ctx.parsers.sourceParsedBuckets(protoRelID.source(), nil).bucket(parsedIncludesLocal) {
 				nameID := directive.target.str()
-				name := directive.target.string()
+				name := ""
+
+				if nameID != 0 {
+					name = nameID.string()
+				} else {
+					name = directive.target.string()
+				}
 
 				if nameID != 0 && name != "" && pathIsClean(name) {
 					e.prodVFS = append(e.prodVFS, nameID.build())
