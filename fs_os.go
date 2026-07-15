@@ -10,7 +10,7 @@ var emptyDirNames = []uint32{}
 
 // readChunkSize is part of the source content-hash format: content hashes are
 // XORs of hashes of these stable chunks. Changing it invalidates those hashes.
-const readChunkSize = 256 << 10
+const readChunkSize = 1 << 20
 
 const sourceUnderHotMask = 1<<18 - 1
 const dirFDCacheSize = 768
