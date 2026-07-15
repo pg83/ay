@@ -38,7 +38,7 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 
 	if srcRelClean &&
 		!ctx.fs.isFileClean(srcInstance.Path.rel(), srcRel) &&
-		ctx.fs.isFileClean(srcRootRel, srcRel) {
+		ctx.fs.isFilePathClean(srcRel) {
 		return source(srcRel)
 	}
 
