@@ -912,13 +912,14 @@ type ProtoSrcsResult struct {
 }
 
 func protoSourceRel(fs FS, instance ModuleInstance, d *ModuleData, src string) STR {
-	resolved := resolvePySrcRel(fs, d.srcDirs, instance.Path, src)
-	raw := resolved.string()
+	srcClean := src != "" && pathIsClean(src)
+	resolved := resolvePySrcRelKnown(fs, d.srcDirs, instance.Path, src, srcClean)
 
-	if raw != "" && pathIsClean(raw) {
+	if srcClean {
 		return resolved
 	}
 
+	raw := resolved.string()
 	clean := filepath.ToSlash(filepath.Clean(raw))
 
 	if clean == raw {

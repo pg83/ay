@@ -295,8 +295,12 @@ func (fs *OsFS) listdirRel(rel string) DirView {
 }
 
 func (fs *OsFS) read(rel string) [][]byte {
-	chunks := fs.readFileRel(rel)
-	fs.contentHashes.set(uint32(internStr(rel)), contentHashChunks(chunks))
+	return fs.readPath(internStr(rel))
+}
+
+func (fs *OsFS) readPath(rel STR) [][]byte {
+	chunks := fs.readFileRel(rel.string())
+	fs.contentHashes.set(uint32(rel), contentHashChunks(chunks))
 
 	return chunks
 }

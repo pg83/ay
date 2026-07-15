@@ -995,9 +995,7 @@ func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
 			return p.takeStmts(mark), tok
 		}
 
-		value := tok.string()
-
-		if tok.kind != tokIdent && !(tok.kind == tokWord && isIdentShapedName(value)) {
+		if tok.kind != tokIdent && !(tok.kind == tokWord && isIdentShapedName(tok.string())) {
 			p.lex.throwParse(tok.line, tok.col, "expected macro name, got %s", describeToken(tok))
 		}
 

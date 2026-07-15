@@ -90,14 +90,6 @@ func (r *IncludeDirectiveParserRegistry) lookup(rel string) IncludeDirectivePars
 	return p
 }
 
-func (r *IncludeDirectiveParserRegistry) walkableBucketFor(rel string) ParsedIncludeBucket {
-	if _, ok := r.lookup(rel).(RagelIncludeDirectiveParser); ok {
-		return parsedIncludesRagelNative
-	}
-
-	return parsedIncludesLocal
-}
-
 func (r *IncludeDirectiveParserRegistry) registeredParserFor(rel string) IncludeDirectiveParser {
 	return r.lookup(rel)
 }

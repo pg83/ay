@@ -22,7 +22,7 @@ func copyFileParsedIncludes(na *NodeArenas, scanner *IncludeScanner, fs FS, modu
 	if entry.Text {
 		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
 
-		own, compileExtra = scanner.parsedIncludes(srcVFS, nil)
+		own, compileExtra, _ = scanner.parsedIncludes(srcVFS, nil)
 	} else if entry.WithContext {
 		hasCtx = true
 	}

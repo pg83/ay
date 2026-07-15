@@ -61,8 +61,6 @@ type IncludeScanner struct {
 	searchTierSeen BitSet
 	searchTierHot  [searchTierHotMask + 1]searchTierHotEntry
 	childArena     *BumpAllocator[VFS]
-	spOut          []VFS
-	resolveOut     []VFS
 	dfsActive      BitSet
 	visitedIDPool  sync.Pool
 	scanCtxPool    sync.Pool
@@ -253,14 +251,20 @@ func hashScanConfig(ownAddIncl, peerAddIncl, baseSearchPaths []VFS) uint64 {
 	return h
 }
 
-func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) (own, compileExtra []IncludeDirective) {
+func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) (own, compileExtra []IncludeDirective, info *GeneratedFileInfo) {
 	if vfsPath.isBuild() {
-		set := s.codegen.buildParsedFor(vfsPath)
+		info = s.codegen.lookup(vfsPath)
 
-		return set.bucket(parsedIncludesLocal), set.bucket(parsedIncludesCpp)
+		if info == nil {
+			return nil, nil, nil
+		}
+
+		set := info.ParsedIncludes
+
+		return set.bucket(parsedIncludesLocal), set.bucket(parsedIncludesCpp), info
 	}
 
-	return s.parsers.sourceParsedBuckets(vfsPath, ctxParser).bucket(s.parsers.registry.walkableBucketFor(vfsPath.relString())), nil
+	return s.parsers.sourceParsedWalkable(vfsPath, ctxParser), nil, nil
 }
 
 func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIncludeBucket, ctxParser IncludeDirectiveParser) []IncludeDirective {
@@ -273,7 +277,7 @@ func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIn
 
 func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	s := sc.scanner
-	own, compileExtra := s.parsedIncludes(vfsPath, sc.parser)
+	own, compileExtra, info := s.parsedIncludes(vfsPath, sc.parser)
 
 	if len(own) == 0 && len(compileExtra) == 0 && !vfsPath.isBuild() {
 		return out
@@ -288,7 +292,7 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	for pass := 0; pass < 2; pass++ {
 		for _, entry := range entries {
 			if entry.kind == includeCythonSibling {
-				out = append(out, sc.resolve(vfsPath, incDir, entry)...)
+				out = sc.resolve(out, vfsPath, incDir, entry)
 
 				continue
 			}
@@ -306,12 +310,11 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 				continue
 			}
 
-			resolved := sc.resolve(vfsPath, incDir, entry)
-			out = append(out, resolved...)
+			mark := len(out)
+			out = sc.resolve(out, vfsPath, incDir, entry)
+			prevProbeMissed = len(out) == mark
 
-			prevProbeMissed = len(resolved) == 0
-
-			if entry.kind == includeCythonModule && len(resolved) > 0 {
+			if entry.kind == includeCythonModule && len(out) != mark {
 				suppressCimportNames = true
 			}
 		}
@@ -319,19 +322,25 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 		entries = compileExtra
 	}
 
-	return sc.appendResolvedInducedDeps(out, vfsPath, incDir)
+	return sc.appendResolvedInducedDeps(out, vfsPath, incDir, info)
 }
 
-func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS) []VFS {
+func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS, info *GeneratedFileInfo) []VFS {
 	s := sc.scanner
 
 	if !vfsPath.isBuild() {
 		return out
 	}
 
-	info := s.codegen.use(vfsPath)
+	if info == nil {
+		return out
+	}
 
-	if info == nil || len(info.GeneratorRefs) == 0 {
+	if info.OnUse != nil {
+		fireGenerated(info)
+	}
+
+	if len(info.GeneratorRefs) == 0 {
 		return out
 	}
 
@@ -349,7 +358,7 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS)
 		}
 
 		for _, entry := range tool.InducedDeps.bucket(bucket) {
-			out = append(out, sc.resolve(vfsPath, incDir, entry)...)
+			out = sc.resolve(out, vfsPath, incDir, entry)
 		}
 	}
 
@@ -513,17 +522,16 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	}
 }
 
-func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []VFS) {
+func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirective) []VFS {
 	s := sc.scanner
+	mark := len(out)
 
 	if v := d.target.vfs(); v != 0 {
-		out = append(s.resolveOut[:0], v)
-		s.resolveOut = out
-
-		return out
+		return append(out, v)
 	}
 
-	searchOut := sc.resolveSearchPath(includerAbs, incDir, d)
+	out = sc.resolveSearchPath(out, includerAbs, incDir, d)
+	searchOut := out[mark:]
 	includerRel := includerAbs.relString()
 
 	var mappings []VFS
@@ -548,7 +556,7 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 		}
 
 		if bypass {
-			return searchOut
+			return out
 		}
 	}
 
@@ -557,15 +565,13 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 			sc.warnUnresolved(includerAbs, d, sysinclClaimed)
 		}
 
-		return searchOut
+		return out
 	}
 
 	if len(searchOut) == 0 {
-		res := s.resolveOut[:0]
-
 	fastLoop:
 		for _, abs := range mappings {
-			for _, q := range res {
+			for _, q := range out[mark:] {
 				if q == abs {
 					continue fastLoop
 				}
@@ -575,34 +581,21 @@ func (sc *ScanCtx) resolve(includerAbs, incDir VFS, d IncludeDirective) (out []V
 				continue
 			}
 
-			res = append(res, abs)
+			out = append(out, abs)
 		}
 
-		s.resolveOut = res
-
-		if len(res) == 0 {
+		if len(out) == mark {
 			sc.warnUnresolved(includerAbs, d, sysinclClaimed)
 
-			return nil
+			return out
 		}
-
-		out = res
 
 		return out
 	}
 
-	merged := s.resolveOut[:0]
-	added := false
-
 mapLoop:
 	for _, abs := range mappings {
-		base := searchOut
-
-		if added {
-			base = merged
-		}
-
-		for _, q := range base {
+		for _, q := range out[mark:] {
 			if q == abs {
 				continue mapLoop
 			}
@@ -612,21 +605,8 @@ mapLoop:
 			continue
 		}
 
-		if !added {
-			merged = append(merged, searchOut...)
-			added = true
-		}
-
-		merged = append(merged, abs)
+		out = append(out, abs)
 	}
-
-	s.resolveOut = merged
-
-	if !added {
-		return searchOut
-	}
-
-	out = merged
 
 	return out
 }
@@ -893,14 +873,14 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	return sc.cacheSearchTier(targetID, out)
 }
 
-func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective) []VFS {
+func (sc *ScanCtx) resolveSearchPath(out []VFS, includerAbs, incDir VFS, d IncludeDirective) []VFS {
 	s := sc.scanner
-	out := s.spOut[:0]
+	mark := len(out)
 	targetID := d.target.str()
 	quoted := d.quotedLike()
 
 	outHas := func(v VFS) bool {
-		for _, x := range out {
+		for _, x := range out[mark:] {
 			if x == v {
 				return true
 			}
@@ -966,8 +946,6 @@ func (sc *ScanCtx) resolveSearchPath(includerAbs, incDir VFS, d IncludeDirective
 			searchPathFound = true
 		}
 	}
-
-	s.spOut = out[:0]
 
 	return out
 }

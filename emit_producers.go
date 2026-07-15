@@ -144,11 +144,13 @@ func (e *EmitContext) srcPosition(tok STR) ([]VFS, []VFS) {
 
 	switch class {
 	case srcExtProto, srcExtEv:
-		if e.ctx.fs.isFile(srcRootRel, protoRel) {
+		directives := e.ctx.parsers.sourceParsedBuckets(protoRelID.source(), nil).bucket(parsedIncludesLocal)
+
+		if len(directives) > 0 {
 			outputRoot := protoCPPOutRoot(e.d)
 			outputRootClean := outputRoot != "" && pathIsClean(outputRoot)
 
-			for _, directive := range e.ctx.parsers.sourceParsedBuckets(protoRelID.source(), nil).bucket(parsedIncludesLocal) {
+			for _, directive := range directives {
 				nameID := directive.target.str()
 				name := ""
 

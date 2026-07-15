@@ -202,8 +202,8 @@ func TestScanner_SearchTierCacheReuse_OwnAddIncl(t *testing.T) {
 	sc := scanner.getScanCtx(testScanContext(scanner, VFSesFromStrings([]string{"include"}), nil, nil, ""), scanDomainCC, nil)
 	d := IncludeDirective{kind: includeSystem, target: includeTarget(internStr("foo.h").any())}
 
-	got1 := sc.resolveSearchPath(source("pkg/a.cpp"), dirKey("pkg").source(), d)
-	got2 := sc.resolveSearchPath(source("pkg/b.cpp"), dirKey("pkg").source(), d)
+	got1 := sc.resolveSearchPath(nil, source("pkg/a.cpp"), dirKey("pkg").source(), d)
+	got2 := sc.resolveSearchPath(nil, source("pkg/b.cpp"), dirKey("pkg").source(), d)
 	want := []VFS{source("include/foo.h")}
 
 	if len(got1) != len(want) || got1[0] != want[0] {
@@ -224,8 +224,8 @@ func TestScanner_SearchTierCacheReuse_NotFound(t *testing.T) {
 	sc := scanner.getScanCtx(testScanContext(scanner, VFSesFromStrings([]string{"include"}), nil, nil, ""), scanDomainCC, nil)
 	d := IncludeDirective{kind: includeSystem, target: includeTarget(internStr("missing.h").any())}
 
-	got1 := sc.resolveSearchPath(source("pkg/a.cpp"), dirKey("pkg").source(), d)
-	got2 := sc.resolveSearchPath(source("pkg/b.cpp"), dirKey("pkg").source(), d)
+	got1 := sc.resolveSearchPath(nil, source("pkg/a.cpp"), dirKey("pkg").source(), d)
+	got2 := sc.resolveSearchPath(nil, source("pkg/b.cpp"), dirKey("pkg").source(), d)
 
 	if got1 != nil || got2 != nil {
 		t.Fatalf("missing header resolved unexpectedly: first=%v second=%v", got1, got2)
@@ -248,7 +248,7 @@ func TestScanner_SearchTierCacheBypassedBySameDirQuoted(t *testing.T) {
 
 	scanner := newTestScanner(fs, nil)
 	sc := scanner.getScanCtx(testScanContext(scanner, VFSesFromStrings([]string{"include"}), nil, nil, ""), scanDomainCC, nil)
-	got := sc.resolveSearchPath(source("pkg/a.cpp"), dirKey("pkg").source(), IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("foo.h").any())})
+	got := sc.resolveSearchPath(nil, source("pkg/a.cpp"), dirKey("pkg").source(), IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("foo.h").any())})
 	want := []VFS{source("pkg/foo.h")}
 
 	if len(got) != len(want) || got[0] != want[0] {
@@ -935,7 +935,7 @@ func TestScanDirectives_MacroIndirectAugmentation(t *testing.T) {
 }
 
 func (s *IncludeScanner) scanDirectives(vfsPath VFS) []IncludeDirective {
-	own, compileExtra := s.parsedIncludes(vfsPath, nil)
+	own, compileExtra, _ := s.parsedIncludes(vfsPath, nil)
 
 	return concat(own, compileExtra)
 }
@@ -1049,7 +1049,7 @@ func TestScanner_AddInclBuildBeforeSourceWinsWhenBothExist(t *testing.T) {
 	}, nil, ""), scanDomainCC, nil)
 
 	d := IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("llvm/Frontend/OpenMP/OMP.inc").any())}
-	got := sc.resolveSearchPath(source("contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP").source(), d)
+	got := sc.resolveSearchPath(nil, source("contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP").source(), d)
 	want := []VFS{build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
 
 	if len(got) != 1 || got[0] != want[0] {
@@ -1074,7 +1074,7 @@ func TestScanner_AddInclSourceBeforeBuildKeepsSource(t *testing.T) {
 	}, nil, ""), scanDomainCC, nil)
 
 	d := IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("llvm/Frontend/OpenMP/OMP.inc").any())}
-	got := sc.resolveSearchPath(source("contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP").source(), d)
+	got := sc.resolveSearchPath(nil, source("contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP").source(), d)
 	want := []VFS{source("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc")}
 
 	if len(got) != 1 || got[0] != want[0] {
@@ -1096,7 +1096,7 @@ func TestScanner_AddInclBuildOnlyMatchesCodegen(t *testing.T) {
 	}, nil, ""), scanDomainCC, nil)
 
 	d := IncludeDirective{kind: includeQuoted, target: includeTarget(internStr("llvm/Frontend/OpenMP/OMP.h.inc").any())}
-	got := sc.resolveSearchPath(source("contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP").source(), d)
+	got := sc.resolveSearchPath(nil, source("contrib/libs/llvm16/lib/Frontend/OpenMP/OMP.cpp"), dirKey("contrib/libs/llvm16/lib/Frontend/OpenMP").source(), d)
 	want := []VFS{build("contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc")}
 
 	if len(got) != 1 || got[0] != want[0] {
@@ -1110,7 +1110,7 @@ func TestScanCtx_Resolve_RootedTargetBindsDirectly(t *testing.T) {
 
 	for _, target := range []string{"$(S)/util/generic/typetraits.h", "$(B)/pkg/gen.h"} {
 		d := IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(target).any())}
-		got := sc.resolve(source("pkg/a.cpp"), dirKey("pkg").source(), d)
+		got := sc.resolve(nil, source("pkg/a.cpp"), dirKey("pkg").source(), d)
 
 		if len(got) != 1 || got[0] != intern(target) {
 			t.Errorf("resolve(%s) = %v, want [%s]", target, got, target)

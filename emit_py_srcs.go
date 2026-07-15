@@ -68,8 +68,10 @@ type PySrc struct {
 }
 
 func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
-	srcRelClean := srcRel != "" && pathIsClean(srcRel)
+	return resolvePySrcRelKnown(fs, srcDirs, moduleVFS, srcRel, srcRel != "" && pathIsClean(srcRel))
+}
 
+func resolvePySrcRelKnown(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string, srcRelClean bool) STR {
 	if srcRelClean {
 		target := internStr(srcRel)
 
@@ -860,6 +862,11 @@ type PyGenResEntry struct {
 func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem {
 	items := e.resItems[:0]
 	buf := e.resStrBuf
+	need := 2 * len(entries)
+
+	if cap(items) < need {
+		items = make([]ResourceItem, 0, need)
+	}
 
 	for _, en := range entries {
 		keyStart := len(buf)
