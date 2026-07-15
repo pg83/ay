@@ -319,11 +319,11 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 				Platform: instance.Platform,
 				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 					Env: env}),
-				Env:          env,
-				Inputs:       na.inputList(inputs),
-				Outputs:      outputs,
-				KV:           &cythonCppKV,
-				Resources:    usesPython3,
+				Env:       env,
+				Inputs:    na.inputList(inputs),
+				Outputs:   outputs,
+				KV:        &cythonCppKV,
+				Resources: usesPython3,
 			}, cyRef)
 		}
 		pending := e.ctx.na.pendingEmit(pe)
@@ -368,11 +368,11 @@ func (scanner *IncludeScanner) cythonPyxLangClosure(src VFS, cfg *ScanContext) [
 		seen[v] = struct{}{}
 		out = append(out, v)
 
-		sc.forEachResolvedChildID(v, func(ch VFS) {
+		for _, ch := range sc.resolvedChildren(v) {
 			if isCythonLangFile(ch.relString()) {
 				visit(ch)
 
-				return
+				continue
 			}
 
 			if ch.isBuild() {
@@ -382,7 +382,7 @@ func (scanner *IncludeScanner) cythonPyxLangClosure(src VFS, cfg *ScanContext) [
 					}
 				}
 			}
-		})
+		}
 	}
 
 	visit(src)

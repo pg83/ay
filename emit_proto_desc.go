@@ -141,8 +141,9 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		}
 
 		srcRel := src.string()
-		protoRelPath := e.protoSourceRelPath(srcRel)
-		protoVFS := source(protoRelPath)
+		protoRel := e.protoSourceRel(srcRel)
+		protoRelPath := protoRel.string()
+		protoVFS := protoRel.source()
 		imports := e.scanner.walkClosure(protoVFS, d.scanCtx, scanDomainProto)
 		descOut := build(descProtoOutputRel(instance.Path.relString(), srcRel, protoRelPath))
 		rawprotoOut := build(protoRelPath, ".", hash, ".rawproto")

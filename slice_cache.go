@@ -111,24 +111,33 @@ func dedupShared[T IdKey](c *SliceCache[T], lists ...[]T) []T {
 }
 
 func dedupSharedWith[T IdKey](deduper *DeDuper, c *SliceCache[T], lists ...[]T) []T {
-	deduper.reset()
-
 	total := 0
+	last := -1
 
-	for _, l := range lists {
+	for i, l := range lists {
 		total += len(l)
+
+		if len(l) > 0 {
+			last = i
+		}
 	}
 
 	if total == 0 {
 		return nil
 	}
 
+	if total == 1 {
+		return lists[last]
+	}
+
+	deduper.reset()
+
 	block := c.alloc(total)
 	k := 0
 
 	for _, l := range lists {
 		for _, x := range l {
-			if deduper.add(x.strID()) {
+			if deduper.addStable(x.strID()) {
 				block[k] = x
 				k++
 			}

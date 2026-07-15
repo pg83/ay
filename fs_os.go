@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 var emptyDirNames = []uint32{}
@@ -95,6 +96,11 @@ func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 	if id == 0 {
 		return false, false
 	}
+
+	return fs.dirHasID(v, id)
+}
+
+func (fs *OsFS) dirHasID(v DirView, id STR) (present bool, isDir bool) {
 
 	isDir, ok := fs.dirEntries.get(splitMix64(uint32(v.dir), uint32(id)))
 
@@ -218,8 +224,19 @@ func (fs *OsFS) resolveSourceUnder0(prefix, target STR, targetClean, cleanKnown 
 	}
 
 	var v STR
+	var present, isDir bool
 
-	if present, isDir := fs.existsClean(prefix, suffix, clean); present && !isDir {
+	if clean && suffix != "" && strings.IndexByte(suffix, '/') < 0 {
+		view := fs.listdir(prefix)
+
+		if view.listable() {
+			present, isDir = fs.dirHasID(view, target)
+		}
+	} else {
+		present, isDir = fs.existsClean(prefix, suffix, clean)
+	}
+
+	if present && !isDir {
 		switch {
 		case clean:
 			if prefix == srcRootRel {

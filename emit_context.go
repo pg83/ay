@@ -71,6 +71,22 @@ func (c CollectedObjs) reset() CollectedObjs {
 func (e *EmitContext) partitionCollected() (local, global CollectedObjs) {
 	local = e.localObjs
 	global = e.globalObjs
+	firstGlobal := -1
+
+	for i, m := range e.metas {
+		if m.Global {
+			firstGlobal = i
+
+			break
+		}
+	}
+
+	if firstGlobal < 0 {
+		e.localObjs = local.reset()
+		e.globalObjs = global.reset()
+
+		return CollectedObjs{refs: e.refs, outs: e.outs, metas: e.metas}, global
+	}
 
 	if n := len(e.metas); cap(local.refs) < n {
 		local.refs = make([]NodeRef, 0, n)
@@ -78,7 +94,15 @@ func (e *EmitContext) partitionCollected() (local, global CollectedObjs) {
 		local.metas = make([]SrcMeta, 0, n)
 	}
 
-	for i, m := range e.metas {
+	local.refs = append(local.refs, e.refs[:firstGlobal]...)
+	local.outs = append(local.outs, e.outs[:firstGlobal]...)
+	local.metas = append(local.metas, e.metas[:firstGlobal]...)
+	global.refs = append(global.refs, e.refs[firstGlobal])
+	global.outs = append(global.outs, e.outs[firstGlobal])
+	global.metas = append(global.metas, e.metas[firstGlobal])
+
+	for i := firstGlobal + 1; i < len(e.metas); i++ {
+		m := e.metas[i]
 		dst := &local
 
 		if m.Global {
@@ -162,15 +186,15 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 			continue
 		}
 
-		if refs == nil {
-			refs = nodeRefScratches.get()
-		}
-
 		for _, input := range chunk {
 			info := e.codegen.lookupSTR(input.rel())
 
 			if info == nil {
 				continue
+			}
+
+			if refs == nil {
+				refs = nodeRefScratches.get()
 			}
 
 			if info.OnUse != nil {

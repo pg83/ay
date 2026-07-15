@@ -525,35 +525,36 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 }
 
 func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
+	needProto := instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary
+	hasGztproto := false
+	hasProto := false
+
 	for _, meta := range d.srcs {
-		src := meta.Source
+		src := meta.Source.string()
 
-		if extIsGztproto(src.string()) {
+		if !hasGztproto && extIsGztproto(src) {
 			d.peerdirs = append(d.peerdirs, internStr("kernel/gazetteer/proto").any())
+			hasGztproto = true
+		}
 
+		if needProto && !hasProto && extIsProto(src) {
+			hasProto = true
+		}
+
+		if hasGztproto && (!needProto || hasProto) {
 			break
 		}
 	}
 
-	if instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary {
-		hasProtoSrc := false
+	if needProto {
+		modulePath := instance.Path.relString()
 
-		for _, meta := range d.srcs {
-			src := meta.Source
-
-			if extIsProto(src.string()) {
-				hasProtoSrc = true
-
-				break
-			}
-		}
-
-		if hasProtoSrc && !strings.HasPrefix(instance.Path.relString(), "contrib/libs/protobuf/builtin_proto") &&
-			!strings.HasPrefix(instance.Path.relString(), "contrib/python/protobuf") {
+		if hasProto && !strings.HasPrefix(modulePath, "contrib/libs/protobuf/builtin_proto") &&
+			!strings.HasPrefix(modulePath, "contrib/python/protobuf") {
 			d.peerdirs = append(d.peerdirs, strContribPythonProtobuf.any())
 		}
 
-		if hasProtoSrc && d.grpc {
+		if hasProto && d.grpc {
 			d.peerdirs = append(d.peerdirs, strContribPythonGrpcio.any())
 		}
 	}

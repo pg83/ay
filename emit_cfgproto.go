@@ -12,8 +12,9 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	protocLDRef, _ := ctx.tool(argContribToolsProtoc)
 	cppStyleguideLDRef, _ := ctx.tool(argContribToolsProtocPluginsCppStyleguide)
 	configPluginLDRef, configPluginBinary := ctx.tool(argLibraryCppProtoConfigPlugin)
-	cfgRelPath := e.protoSourceRelPath(e.moduleSourceName(src))
-	cfgSource := source(cfgRelPath)
+	cfgRel := e.protoSourceRel(e.moduleSourceName(src))
+	cfgRelPath := cfgRel.string()
+	cfgSource := cfgRel.source()
 	cfgImports := e.scanner.walkClosure(cfgSource, d.scanCtx, scanDomainProto)
 	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, protoCPPOutRoot(d), e.dirScratch[:0])
 

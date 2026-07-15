@@ -100,6 +100,16 @@ func TestSliceCache_DedupShared(t *testing.T) {
 	}
 }
 
+func TestSliceCache_DedupSharedSingletonIsShared(t *testing.T) {
+	c := newSliceCache[VFS](8)
+	in := []VFS{2}
+	out := dedupShared(c, nil, in)
+
+	if &out[0] != &in[0] {
+		t.Fatal("single input element was copied")
+	}
+}
+
 func TestSliceCache_ConcatSharedSingleInputIsShared(t *testing.T) {
 	c := newSliceCache[ARG](8)
 

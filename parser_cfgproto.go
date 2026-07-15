@@ -39,7 +39,7 @@ func (p CfgProtoIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAl
 func parseProtoConfigIncludeLine(line []byte) (string, bool) {
 	b := trimParserSpace(line)
 
-	if !bytes.HasPrefix(b, protoConfigIncludeKw) {
+	if len(b) == 0 || b[0] != 'o' || !bytes.HasPrefix(b, protoConfigIncludeKw) {
 		return "", false
 	}
 

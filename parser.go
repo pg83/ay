@@ -32,7 +32,7 @@ func trimParserSpace(b []byte) []byte {
 }
 
 func cutParserKeyword(b []byte, keyword string) ([]byte, bool) {
-	if len(b) <= len(keyword) || !bytes.Equal(b[:len(keyword)], strBytes(keyword)) || !isParserSpace(b[len(keyword)]) {
+	if len(b) <= len(keyword) || b[0] != keyword[0] || !bytes.Equal(b[:len(keyword)], strBytes(keyword)) || !isParserSpace(b[len(keyword)]) {
 		return nil, false
 	}
 

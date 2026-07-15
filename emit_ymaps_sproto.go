@@ -15,9 +15,9 @@ func (e *EmitContext) sprotoAdjustProtoEnv() {
 }
 
 type YmapsSprotoPending struct {
-	ref          NodeRef
-	sprotoH      VFS
-	protoRelPath string
+	ref      NodeRef
+	sprotoH  VFS
+	protoRel STR
 }
 
 func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
@@ -26,7 +26,8 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	sprotocRes := ctx.toolResult(argMapsLibsSprotoSprotoc)
 	sprotocLDRef, sprotocBinary := sprotocRes.LDRef, *sprotocRes.LDPath
 	scanCtx := d.scanCtx
-	protoRelPath := e.protoSourceRelPath(srcTok.string())
+	protoRel := e.protoSourceRel(srcTok.string())
+	protoRelPath := protoRel.string()
 	sprotoH := build(strings.TrimSuffix(protoRelPath, ".proto"), ".sproto.h")
 	sprotoRef := ctx.emit.reserve()
 	pbhImports := protoDirectPbHIncludes(ctx.parsers, protoRelPath, outRoot, e.dirScratch[:0])
@@ -40,7 +41,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	ctx.na.dirs.commit(len(parsed))
 	parsed = parsed[:len(parsed):len(parsed)]
 
-	pending := YmapsSprotoPending{ref: sprotoRef, sprotoH: sprotoH, protoRelPath: protoRelPath}
+	pending := YmapsSprotoPending{ref: sprotoRef, sprotoH: sprotoH, protoRel: protoRel}
 	scanner := e.scanner
 
 	pe := func() {
@@ -53,7 +54,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 		ProducerRef:    sprotoRef,
 		GeneratorRefs:  e.ctx.na.refList(sprotocLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-		ClosureLeaves:  e.ctx.na.vfsList(source(protoRelPath)),
+		ClosureLeaves:  e.ctx.na.vfsList(protoRel.source()),
 		OnUse:          onUse,
 	})
 }
@@ -68,7 +69,7 @@ func (e *EmitContext) emitYmapsSprotoHeaderSnap(scanner *IncludeScanner, p Ymaps
 		argIB2.any(),
 		argISContribLibsProtobufSrc.any(),
 		internV("--sproto_out=$(B)/", outRoot).any(),
-		internStr(p.protoRelPath).any(),
+		p.protoRel.any(),
 	))
 
 	env := envVarsVCS

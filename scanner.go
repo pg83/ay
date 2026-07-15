@@ -273,53 +273,55 @@ func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIn
 
 func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	s := sc.scanner
+	own, compileExtra := s.parsedIncludes(vfsPath, sc.parser)
+
+	if len(own) == 0 && len(compileExtra) == 0 && !vfsPath.isBuild() {
+		return
+	}
+
 	incDir := internStr(pathDir(vfsPath.relString()))
 	suppressCimportNames := false
 	prevProbeMissed := false
 
-	process := func(entry IncludeDirective) {
-		if entry.kind == includeCythonSibling {
-			for _, rabs := range sc.resolve(vfsPath, incDir.source(), entry) {
+	entries := own
+
+	for pass := 0; pass < 2; pass++ {
+		for _, entry := range entries {
+			if entry.kind == includeCythonSibling {
+				for _, rabs := range sc.resolve(vfsPath, incDir.source(), entry) {
+					fn(rabs)
+				}
+
+				continue
+			}
+
+			isName := entry.kind == includeCythonName
+			isFallback := entry.kind == includeCythonFallback
+
+			if !isName && !isFallback {
+				suppressCimportNames = false
+			}
+
+			if (isName && suppressCimportNames) || (isFallback && !prevProbeMissed) {
+				prevProbeMissed = false
+
+				continue
+			}
+
+			resolved := sc.resolve(vfsPath, incDir.source(), entry)
+
+			for _, rabs := range resolved {
 				fn(rabs)
 			}
 
-			return
+			prevProbeMissed = len(resolved) == 0
+
+			if entry.kind == includeCythonModule && len(resolved) > 0 {
+				suppressCimportNames = true
+			}
 		}
 
-		isName := entry.kind == includeCythonName
-		isFallback := entry.kind == includeCythonFallback
-
-		if !isName && !isFallback {
-			suppressCimportNames = false
-		}
-
-		if (isName && suppressCimportNames) || (isFallback && !prevProbeMissed) {
-			prevProbeMissed = false
-
-			return
-		}
-
-		resolved := sc.resolve(vfsPath, incDir.source(), entry)
-
-		for _, rabs := range resolved {
-			fn(rabs)
-		}
-
-		prevProbeMissed = len(resolved) == 0
-
-		if entry.kind == includeCythonModule && len(resolved) > 0 {
-			suppressCimportNames = true
-		}
-	}
-
-	own, compileExtra := s.parsedIncludes(vfsPath, sc.parser)
-
-	for _, entry := range own {
-		process(entry)
-	}
-
-	for _, entry := range compileExtra {
-		process(entry)
+		entries = compileExtra
 	}
 
 	sc.resolveInducedDeps(vfsPath, incDir.source(), fn)
@@ -359,15 +361,11 @@ func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 	}
 }
 
-func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
+func (sc *ScanCtx) resolvedChildren(abs VFS) []VFS {
 	s := sc.scanner
 
 	if cached, ok := s.cachedChildren(abs); ok {
-		for _, id := range cached {
-			fn(id)
-		}
-
-		return
+		return cached
 	}
 
 	scratch := vfsScratches.get()
@@ -391,7 +389,11 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 
 	s.putChildren(abs, children)
 
-	for _, id := range children {
+	return children
+}
+
+func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
+	for _, id := range sc.resolvedChildren(abs) {
 		fn(id)
 	}
 }
@@ -407,13 +409,15 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 	s.dfsActive.add(uint32(abs))
 
-	sc.forEachResolvedChildID(abs, func(ch VFS) {
+	children := sc.resolvedChildren(abs)
+
+	for _, ch := range children {
 		if ch == abs {
-			return
+			continue
 		}
 
 		sc.ensureClosure(ch)
-	})
+	}
 
 	if ownershipOn {
 		if s.inDfsFrame {
@@ -427,13 +431,13 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	sc.tjc.closure.add(abs)
 	s.buckets.resetScratch()
 
-	sc.forEachResolvedChildID(abs, func(ch VFS) {
+	for _, ch := range children {
 		if ch == abs {
-			return
+			continue
 		}
 
 		if sc.tjc.closure.has(ch) && !s.codegen.isLeafEver(ch) {
-			return
+			continue
 		}
 
 		cl, _ := s.closure(ch)
@@ -443,7 +447,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		for _, bucket := range cl.bucketList() {
 			s.buckets.spliceBucket(&sc.tjc.closure, bucket)
 		}
-	})
+	}
 
 	leafStart := len(s.buckets.buildScratch())
 
