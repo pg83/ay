@@ -64,6 +64,7 @@ type BucketCache struct {
 	overflowed   int
 	scratch      [closureBuckets][]VFS
 	bucketEpoch  uint32
+	selfBucket   int
 }
 
 func newBucketCache() *BucketCache {
@@ -206,11 +207,12 @@ func (c *BucketCache) clearBucketEpochs() {
 	}
 }
 
-func (c *BucketCache) resetScratch() {
+func (c *BucketCache) resetScratch(self VFS) {
 	for r := range c.scratch {
 		c.scratch[r] = c.scratch[r][:0]
 	}
 
+	c.selfBucket = closureBucketIndex(self)
 	c.bucketEpoch++
 
 	if c.bucketEpoch == 0 {
@@ -231,12 +233,8 @@ func (c *BucketCache) spliceOne(seen *IdSet, v VFS) {
 	c.scratch[r] = append(c.scratch[r], v)
 }
 
-func (c *BucketCache) spliceBucket(seen *IdSet, bucket []VFS) {
-	// Closure bucket lists contain only non-empty interned buckets.
-	if !c.firstBucketVisit(bucket) {
-		return
-	}
-
+//go:noinline
+func (c *BucketCache) spliceBucketSlow(seen *IdSet, bucket []VFS) {
 	gen := unsafe.SliceData(seen.gen.s)
 	epoch := seen.epoch
 	r := closureBucketIndex(bucket[0])
@@ -255,6 +253,36 @@ func (c *BucketCache) spliceBucket(seen *IdSet, bucket []VFS) {
 	}
 
 	c.scratch[r] = dst
+}
+
+func (c *BucketCache) spliceBucket(seen *IdSet, bucket []VFS) {
+	// Closure bucket lists contain only non-empty interned buckets.
+	if !c.firstBucketVisit(bucket) {
+		return
+	}
+
+	r := closureBucketIndex(bucket[0])
+
+	// All seen values except the closure's self are also present in scratch.
+	// Thus the first bucket in any other partition is known to be disjoint:
+	// stamp it without probes and copy it as one block.
+	if len(c.scratch[r]) == 0 && r != c.selfBucket {
+		gen := unsafe.SliceData(seen.gen.s)
+		epoch := seen.epoch
+
+		for _, v := range bucket {
+			id := v.strID()
+			cell := (*uint16)(unsafe.Add(unsafe.Pointer(gen), uintptr(id)*unsafe.Sizeof(epoch)))
+
+			*cell = epoch
+		}
+
+		c.scratch[r] = append(c.scratch[r], bucket...)
+
+		return
+	}
+
+	c.spliceBucketSlow(seen, bucket)
 }
 
 func (c *BucketCache) spliceLeaves(seen *IdSet, leaves []VFS) {
@@ -284,7 +312,7 @@ func (c *BucketCache) storeScratch(self VFS) Closure {
 }
 
 func (c *BucketCache) storeBuckets(self VFS, rest []VFS) Closure {
-	c.resetScratch()
+	c.resetScratch(self)
 
 	for _, v := range rest {
 		r := closureBucketIndex(v)
