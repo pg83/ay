@@ -450,9 +450,13 @@ type TokKind int
 
 type Token struct {
 	kind TokKind
-	val  string
+	id   STR
 	line int
 	col  int
+}
+
+func (t Token) string() string {
+	return t.id.string()
 }
 
 type Lexer struct {
@@ -646,7 +650,7 @@ func (l *Lexer) readString(startLine, startCol int, quote byte) Token {
 			l.col += pos - start + 1
 			l.prevByte = quote
 
-			return Token{kind: tokString, val: internBytes(l.src[start:pos]).string(), line: startLine, col: startCol}
+			return Token{kind: tokString, id: internBytes(l.src[start:pos]), line: startLine, col: startCol}
 		case '\\', '\n', '\r':
 			goto slow
 		}
@@ -668,7 +672,7 @@ slow:
 
 			l.tokBuf = buf
 
-			return Token{kind: tokString, val: internBytes(buf).string(), line: startLine, col: startCol}
+			return Token{kind: tokString, id: internBytes(buf), line: startLine, col: startCol}
 		}
 
 		if b == '\n' || b == '\r' {
@@ -759,7 +763,7 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 			kind = tokWord
 		}
 
-		return Token{kind: kind, val: internBytes(l.src[start:pos]).string(), line: startLine, col: startCol}
+		return Token{kind: kind, id: internBytes(l.src[start:pos]), line: startLine, col: startCol}
 	}
 
 	buf := l.tokBuf[:0]
@@ -802,14 +806,14 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 
 	l.tokBuf = buf
 
-	val := internBytes(buf).string()
+	id := internBytes(buf)
 	kind := tokIdent
 
 	if !pureIdent {
 		kind = tokWord
 	}
 
-	return Token{kind: kind, val: val, line: startLine, col: startCol}
+	return Token{kind: kind, id: id, line: startLine, col: startCol}
 }
 
 func (l *Lexer) readWord(startLine, startCol int) Token {
@@ -838,7 +842,7 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 		l.col += pos - start
 		l.prevByte = l.src[pos-1]
 
-		return Token{kind: tokWord, val: internBytes(l.src[start:pos]).string(), line: startLine, col: startCol}
+		return Token{kind: tokWord, id: internBytes(l.src[start:pos]), line: startLine, col: startCol}
 	}
 
 	buf := l.tokBuf[:0]
@@ -868,7 +872,7 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 
 	l.tokBuf = buf
 
-	return Token{kind: tokWord, val: internBytes(buf).string(), line: startLine, col: startCol}
+	return Token{kind: tokWord, id: internBytes(buf), line: startLine, col: startCol}
 }
 
 func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
@@ -893,7 +897,7 @@ func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 	l.col += pos - start
 	l.prevByte = l.src[pos-1]
 
-	return Token{kind: kind, val: internBytes(l.src[start:pos]).string(), line: startLine, col: startCol}
+	return Token{kind: kind, id: internBytes(l.src[start:pos]), line: startLine, col: startCol}
 }
 
 func parse(fs FS, name string, src []byte) (mf *MakeFile, err error) {
@@ -991,11 +995,13 @@ func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
 			return p.takeStmts(mark), tok
 		}
 
-		if tok.kind != tokIdent && !(tok.kind == tokWord && isIdentShapedName(tok.val)) {
+		value := tok.string()
+
+		if tok.kind != tokIdent && !(tok.kind == tokWord && isIdentShapedName(value)) {
 			p.lex.throwParse(tok.line, tok.col, "expected macro name, got %s", describeToken(tok))
 		}
 
-		if term == termIfBody && (tok.val == "ELSE" || tok.val == "ELSEIF" || tok.val == "ENDIF") {
+		if term == termIfBody && (tok.id == kwELSE || tok.id == kwELSEIF || tok.id == kwENDIF) {
 			return p.takeStmts(mark), tok
 		}
 
@@ -1004,18 +1010,18 @@ func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
 }
 
 func (p *Parser) parseMacroInto(nameTok Token) {
-	switch nameTok.val {
-	case "IF":
+	switch nameTok.id {
+	case kwIF:
 		st := p.parseIf(nameTok)
 
 		p.stmtScratch = append(p.stmtScratch, st)
 
 		return
-	case "INCLUDE":
+	case kwINCLUDE:
 		p.expandInclude(nameTok)
 
 		return
-	case "INCLUDE_ONCE":
+	case kwINCLUDE_ONCE:
 		p.applyIncludeOnce(nameTok)
 
 		return
@@ -1023,7 +1029,7 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 
 	args := p.parseMacroArgs(nameTok)
 
-	if nameTok.val == "CPP_ENUMS_SERIALIZATION" {
+	if nameTok.id == tokCppEnumsSerialization.str() {
 		for i := 0; i < len(args); i++ {
 			if args[i].string() == "NAMESPACE" {
 				i++
@@ -1077,7 +1083,7 @@ func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
 	lp := p.lex.next()
 
 	if lp.kind != tokLParen {
-		p.lex.throwParse(lp.line, lp.col, "expected '(' after macro name %q, got %s", nameTok.val, describeToken(lp))
+		p.lex.throwParse(lp.line, lp.col, "expected '(' after macro name %q, got %s", nameTok.string(), describeToken(lp))
 	}
 
 	for {
@@ -1091,14 +1097,13 @@ func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
 
 			return astArgs.list(scratch...)
 		case tokEOF:
-			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.val)
+			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.string())
 		case tokIdent, tokWord, tokString, tokInt:
-
-			scratch = append(scratch, internStr(tok.val).any())
+			scratch = append(scratch, tok.id.any())
 		case tokLParen:
-			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.val)
+			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.string())
 		default:
-			p.lex.throwParse(tok.line, tok.col, "unexpected %s inside macro call %q", describeToken(tok), nameTok.val)
+			p.lex.throwParse(tok.line, tok.col, "unexpected %s inside macro call %q", describeToken(tok), nameTok.string())
 		}
 	}
 }
@@ -1142,12 +1147,18 @@ type Parser struct {
 }
 
 func (p *Parser) buildStmt(nameTok Token, args []ANY) Stmt {
-	return buildStmtFor(nameTok.val, args, nameTok.line, func(format string, a ...any) {
+	return buildStmtForID(nameTok.id, args, nameTok.line, func(format string, a ...any) {
 		p.lex.throwParse(nameTok.line, nameTok.col, format, a...)
 	})
 }
 
 func buildStmtFor(name string, args []ANY, line int, fail func(format string, a ...any)) Stmt {
+	return buildStmtForID(internStr(name), args, line, fail)
+}
+
+func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a ...any)) Stmt {
+	name := nameID.string()
+
 	switch name {
 	case "PROGRAM", "LIBRARY",
 
@@ -1162,14 +1173,14 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 		"FBS_LIBRARY",
 		"GO_LIBRARY", "GO_PROGRAM",
 		"UNITTEST_FOR":
-		return astOne(astModules, ModuleStmt{Name: internTok(name), Args: args, Line: line})
+		return astOne(astModules, ModuleStmt{Name: internTokSTR(nameID), Args: args, Line: line})
 	case "PROTO_SCHEMA":
 
 		return astOne(astModules, ModuleStmt{Name: tokProtoLibrary, Schema: true, Args: args, Line: line})
 	case "DECLARE_EXTERNAL_RESOURCE",
 		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE",
 		"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON":
-		return &DeclareResourceStmt{Macro: internTok(name), Args: args, Line: line}
+		return &DeclareResourceStmt{Macro: internTokSTR(nameID), Args: args, Line: line}
 	case "PEERDIR":
 		return astOne(astPeerdirs, PeerdirStmt{Paths: args, Line: line})
 	case "SRCS":
@@ -1287,7 +1298,7 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 			fail("%s expects at least 1 argument", name)
 		}
 
-		return parseRunAntlr(args, Token{val: name, line: line})
+		return parseRunAntlr(args, Token{id: nameID, line: line})
 	case "RUN_PROGRAM", "RUN_PY3_PROGRAM":
 
 		if len(args) == 0 {
@@ -1338,7 +1349,7 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 		return parseFromSandbox(args, line)
 	case "RESOURCE":
 
-		return parseResource(args, Token{val: name, line: line})
+		return parseResource(args, Token{id: nameID, line: line})
 	case "RESOURCE_FILES":
 		return &ResourceFilesStmt{Args: astArgs.list(args...), Line: line}
 	case "ALL_RESOURCE_FILES":
@@ -1350,7 +1361,7 @@ func buildStmtFor(name string, args []ANY, line int, fail func(format string, a 
 	case "ALL_RESOURCE_FILES_FROM_DIRS":
 		return &AllResourceFilesStmt{Args: astArgs.list(args...), FromDirs: true, Line: line}
 	default:
-		return astOne(astUnknowns, UnknownStmt{Name: internTokMaybe(name), Raw: internStr(name), Args: args, Line: line})
+		return astOne(astUnknowns, UnknownStmt{Name: internTokMaybeSTR(nameID), Raw: nameID, Args: args, Line: line})
 	}
 }
 
@@ -1433,7 +1444,7 @@ func parseRunAntlr4CppSplit(args []ANY, line int) *RunAntlr4CppSplitStmt {
 }
 
 func parseRunAntlr(args []ANY, nameTok Token) *RunAntlrStmt {
-	stmt := &RunAntlrStmt{Macro: nameTok.val, Line: nameTok.line}
+	stmt := &RunAntlrStmt{Macro: nameTok.string(), Line: nameTok.line}
 	currentSection := kwARGS.any()
 
 	for i := 0; i < len(args); i++ {
@@ -1853,25 +1864,25 @@ func (p *Parser) parseIf(ifTok Token) *IfStmt {
 	thenBody, endTok := p.parseStmts(termIfBody)
 	node := astOne(astIfs, IfStmt{Cond: cond, Then: thenBody, Line: ifTok.line})
 
-	switch endTok.val {
-	case "ENDIF":
+	switch endTok.id {
+	case kwENDIF:
 		p.consumeEmptyMacroArgs(endTok)
 
 		return node
-	case "ELSE":
+	case kwELSE:
 		p.consumeEmptyMacroArgs(endTok)
 
 		elseBody, endIf := p.parseStmts(termIfBody)
 
-		if endIf.val != "ENDIF" {
-			p.lex.throwParse(endIf.line, endIf.col, "expected ENDIF after ELSE block, got %s", endIf.val)
+		if endIf.id != kwENDIF {
+			p.lex.throwParse(endIf.line, endIf.col, "expected ENDIF after ELSE block, got %s", endIf.string())
 		}
 
 		p.consumeEmptyMacroArgs(endIf)
 		node.Else = elseBody
 
 		return node
-	case "ELSEIF":
+	case kwELSEIF:
 
 		nested := p.parseIf(endTok)
 
@@ -1880,7 +1891,7 @@ func (p *Parser) parseIf(ifTok Token) *IfStmt {
 		return node
 	}
 
-	p.lex.throwParse(endTok.line, endTok.col, "internal: unexpected IF terminator %q", endTok.val)
+	p.lex.throwParse(endTok.line, endTok.col, "internal: unexpected IF terminator %q", endTok.string())
 
 	return nil
 }
@@ -1975,7 +1986,7 @@ func (c *CondParser) parseOr() int32 {
 	for {
 		t, ok := c.peek()
 
-		if !ok || !(t.kind == tokIdent && t.val == "OR") {
+		if !ok || !(t.kind == tokIdent && t.id == kwOR) {
 			return left
 		}
 
@@ -1993,7 +2004,7 @@ func (c *CondParser) parseAnd() int32 {
 	for {
 		t, ok := c.peek()
 
-		if !ok || !(t.kind == tokIdent && t.val == "AND") {
+		if !ok || !(t.kind == tokIdent && t.id == kwAND) {
 			return left
 		}
 
@@ -2008,13 +2019,13 @@ func (c *CondParser) parseAnd() int32 {
 func (c *CondParser) parseNot() int32 {
 	t, ok := c.peek()
 
-	if ok && t.kind == tokIdent && t.val == "NOT" {
+	if ok && t.kind == tokIdent && t.id == kwNOT {
 		c.consume()
 
 		return c.emit(CondNode{Kind: ckNot, L: c.parseNot()})
 	}
 
-	if ok && t.kind == tokIdent && t.val == "DEFINED" {
+	if ok && t.kind == tokIdent && t.id == kwDEFINED {
 		c.consume()
 
 		return c.emit(CondNode{Kind: ckDefined, L: c.parseAtom()})
@@ -2031,7 +2042,7 @@ func (c *CondParser) parseCmp() int32 {
 		return left
 	}
 
-	if t.kind == tokIdent && t.val == "STARTS_WITH" {
+	if t.kind == tokIdent && t.id == kwSTARTS_WITH {
 		c.consume()
 
 		right := c.parseAtom()
@@ -2041,7 +2052,7 @@ func (c *CondParser) parseCmp() int32 {
 		return c.emit(CondNode{Kind: ckStartsWith, L: left, R: right})
 	}
 
-	if t.kind == tokIdent && t.val == "MATCHES" {
+	if t.kind == tokIdent && t.id == kwMATCHES {
 		c.consume()
 
 		right := c.parseAtom()
@@ -2051,14 +2062,15 @@ func (c *CondParser) parseCmp() int32 {
 		return c.emit(CondNode{Kind: ckMatches, L: left, R: right})
 	}
 
-	if t.kind == tokIdent && strings.HasPrefix(t.val, "VERSION_") {
+	if t.kind == tokIdent && strings.HasPrefix(t.string(), "VERSION_") {
+		value := t.string()
 		c.consume()
 
 		right := c.parseAtom()
 
 		c.rejectChainedCmp(t)
 
-		return c.emit(CondNode{Kind: ckVersionCmp, Name: t.val, L: left, R: right})
+		return c.emit(CondNode{Kind: ckVersionCmp, Name: value, L: left, R: right})
 	}
 
 	switch t.kind {
@@ -2151,35 +2163,38 @@ func (c *CondParser) parseAtom() int32 {
 	if t.kind == tokString {
 		c.consume()
 
-		return c.emit(CondNode{Kind: ckString, Name: t.val})
+		return c.emit(CondNode{Kind: ckString, Name: t.string()})
 	}
 
 	if t.kind == tokInt {
 		c.consume()
 
 		n := 0
+		value := t.string()
 
-		for i := 0; i < len(t.val); i++ {
-			n = n*10 + int(t.val[i]-'0')
+		for i := 0; i < len(value); i++ {
+			n = n*10 + int(value[i]-'0')
 		}
 
 		return c.emit(CondNode{Kind: ckInt, Ival: n})
 	}
 
-	if t.kind == tokIdent || (t.kind == tokWord && isIdentShapedName(t.val)) {
-		if t.val == "AND" || t.val == "OR" || t.val == "NOT" {
-			c.parent.lex.throwParse(t.line, t.col, "operator %q used as identifier in IF condition", t.val)
+	value := t.string()
+
+	if t.kind == tokIdent || (t.kind == tokWord && isIdentShapedName(value)) {
+		if t.id == kwAND || t.id == kwOR || t.id == kwNOT {
+			c.parent.lex.throwParse(t.line, t.col, "operator %q used as identifier in IF condition", value)
 		}
 
 		c.consume()
 
-		return c.emit(CondNode{Kind: ckIdent, Name: t.val, Env: internEnv(t.val)})
+		return c.emit(CondNode{Kind: ckIdent, Name: value, Env: internEnvSTR(t.id)})
 	}
 
 	if t.kind == tokWord {
 		c.consume()
 
-		return c.emit(CondNode{Kind: ckString, Name: t.val})
+		return c.emit(CondNode{Kind: ckString, Name: value})
 	}
 
 	c.parent.lex.throwParse(t.line, t.col, "unexpected %s in IF condition", describeToken(t))
@@ -2251,17 +2266,17 @@ func describeToken(t Token) string {
 	case tokEOF:
 		return "end of file"
 	case tokIdent:
-		return fmt.Sprintf("identifier %q", t.val)
+		return fmt.Sprintf("identifier %q", t.string())
 	case tokString:
-		return fmt.Sprintf("string %q", t.val)
+		return fmt.Sprintf("string %q", t.string())
 	case tokWord:
-		return fmt.Sprintf("word %q", t.val)
+		return fmt.Sprintf("word %q", t.string())
 	case tokLParen:
 		return "'('"
 	case tokRParen:
 		return "')'"
 	case tokInt:
-		return fmt.Sprintf("integer %s", t.val)
+		return fmt.Sprintf("integer %s", t.string())
 	case tokEq:
 		return "'=='"
 	case tokLt:

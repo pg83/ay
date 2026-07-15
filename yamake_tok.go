@@ -242,6 +242,18 @@ var tokByName = func() map[string]TOK {
 	return m
 }()
 
+var tokBySTR = func() []TOK {
+	out := make([]TOK, strBound())
+
+	for t, s := range tokName {
+		if s != 0 {
+			out[s] = TOK(t)
+		}
+	}
+
+	return out
+}()
+
 const (
 	tokInvalid TOK = iota
 	tokAddInclSelf
@@ -486,6 +498,26 @@ func internTok(s string) TOK {
 
 func internTokMaybe(s string) TOK {
 	return tokByName[s]
+}
+
+func internTokSTR(s STR) TOK {
+	if int(s) < len(tokBySTR) {
+		if t := tokBySTR[s]; t != tokInvalid {
+			return t
+		}
+	}
+
+	throwFmt("internTokSTR: unknown macro name %q (closed TOK set)", s.string())
+
+	return tokInvalid
+}
+
+func internTokMaybeSTR(s STR) TOK {
+	if int(s) < len(tokBySTR) {
+		return tokBySTR[s]
+	}
+
+	return tokInvalid
 }
 
 func (t TOK) str() STR {
