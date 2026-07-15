@@ -9,6 +9,7 @@ type FS interface {
 	exists(prefix STR, suffix string) (present bool, isDir bool)
 	isFile(prefix STR, suffix string) bool
 	isFileClean(prefix STR, suffix string) bool
+	isFilePathClean(rel string) bool
 	isDir(prefix STR, suffix string) bool
 
 	resolveSourceUnder(prefix, target STR) STR

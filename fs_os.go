@@ -190,6 +190,19 @@ func (fs *OsFS) isFileClean(prefix STR, suffix string) bool {
 	return p && !d
 }
 
+func (fs *OsFS) isFilePathClean(rel string) bool {
+	dir, name := splitDirName(rel)
+	v := fs.listdir(internStr(dir))
+
+	if !v.listable() {
+		return false
+	}
+
+	present, isDir := fs.dirHas(v, name)
+
+	return present && !isDir
+}
+
 func (fs *OsFS) resolveSourceUnder(prefix, target STR) STR {
 	return fs.resolveSourceUnder0(prefix, target, false, false)
 }

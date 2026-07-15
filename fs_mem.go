@@ -153,6 +153,12 @@ func (fs *MemFS) isFileClean(prefix STR, suffix string) bool {
 	return p && !d
 }
 
+func (fs *MemFS) isFilePathClean(rel string) bool {
+	_, ok := fs.files[rel]
+
+	return ok
+}
+
 func (fs *MemFS) resolveSourceUnder(prefix, target STR) STR {
 	key := splitMix64(uint32(prefix), uint32(target))
 
