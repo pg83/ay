@@ -242,7 +242,7 @@ func hashScanConfig(ownAddIncl, peerAddIncl, baseSearchPaths []VFS) uint64 {
 		h = mix64(h ^ uint64(len(ss)))
 
 		for _, v := range ss {
-			h = mix64(h ^ internCell(v.rel()).lo ^ uint64(uint32(v)&1))
+			h = mix64(h ^ internLo(v.rel()) ^ uint64(uint32(v)&1))
 		}
 	}
 
@@ -271,15 +271,15 @@ func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIn
 	return s.parsers.sourceParsedBuckets(vfsPath, ctxParser).bucket(sourceBucket)
 }
 
-func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
+func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	s := sc.scanner
 	own, compileExtra := s.parsedIncludes(vfsPath, sc.parser)
 
 	if len(own) == 0 && len(compileExtra) == 0 && !vfsPath.isBuild() {
-		return
+		return out
 	}
 
-	incDir := internStr(pathDir(vfsPath.relString()))
+	incDir := internStr(pathDir(vfsPath.relString())).source()
 	suppressCimportNames := false
 	prevProbeMissed := false
 
@@ -288,9 +288,7 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 	for pass := 0; pass < 2; pass++ {
 		for _, entry := range entries {
 			if entry.kind == includeCythonSibling {
-				for _, rabs := range sc.resolve(vfsPath, incDir.source(), entry) {
-					fn(rabs)
-				}
+				out = append(out, sc.resolve(vfsPath, incDir, entry)...)
 
 				continue
 			}
@@ -308,11 +306,8 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 				continue
 			}
 
-			resolved := sc.resolve(vfsPath, incDir.source(), entry)
-
-			for _, rabs := range resolved {
-				fn(rabs)
-			}
+			resolved := sc.resolve(vfsPath, incDir, entry)
+			out = append(out, resolved...)
 
 			prevProbeMissed = len(resolved) == 0
 
@@ -324,20 +319,20 @@ func (sc *ScanCtx) forEachResolvedChild(vfsPath VFS, fn func(rabs VFS)) {
 		entries = compileExtra
 	}
 
-	sc.resolveInducedDeps(vfsPath, incDir.source(), fn)
+	return sc.appendResolvedInducedDeps(out, vfsPath, incDir)
 }
 
-func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)) {
+func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS) []VFS {
 	s := sc.scanner
 
 	if !vfsPath.isBuild() {
-		return
+		return out
 	}
 
 	info := s.codegen.use(vfsPath)
 
 	if info == nil || len(info.GeneratorRefs) == 0 {
-		return
+		return out
 	}
 
 	bucket := parsedIncludesCpp
@@ -354,11 +349,11 @@ func (sc *ScanCtx) resolveInducedDeps(vfsPath VFS, incDir VFS, fn func(rabs VFS)
 		}
 
 		for _, entry := range tool.InducedDeps.bucket(bucket) {
-			for _, rabs := range sc.resolve(vfsPath, incDir, entry) {
-				fn(rabs)
-			}
+			out = append(out, sc.resolve(vfsPath, incDir, entry)...)
 		}
 	}
+
+	return out
 }
 
 func (sc *ScanCtx) resolvedChildren(abs VFS) []VFS {
@@ -369,10 +364,7 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) []VFS {
 	}
 
 	scratch := vfsScratches.get()
-
-	sc.forEachResolvedChild(abs, func(rabs VFS) {
-		scratch = append(scratch, rabs)
-	})
+	scratch = sc.appendResolvedChildren(scratch, abs)
 
 	k := len(scratch)
 	block := s.childArena.alloc(k)
@@ -801,8 +793,14 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 		return addSource(prefix)
 	}
 
-	if addInclPath(bld) || addInclPath(v) {
-		return sc.cacheSearchTier(targetID, out)
+	if buildSuffix != 0 {
+		if info := s.codegen.lookupSTR(buildSuffix); info != nil {
+			return sc.cacheSearchTier(targetID, info.OutputPath)
+		}
+	}
+
+	if rel := s.parsers.fs.resolveSourceUnderClean(srcRootRel, targetID, cleanTarget); rel != 0 {
+		return sc.cacheSearchTier(targetID, rel.source())
 	}
 
 	canIndex := cleanTarget

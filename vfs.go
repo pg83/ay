@@ -43,7 +43,7 @@ func (v VFS) rel() STR {
 }
 
 func (v VFS) relString() string {
-	return internCell(v.rel()).str
+	return internString(v.rel())
 }
 
 func (v VFS) sharedRel() string {

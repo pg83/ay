@@ -15,18 +15,18 @@ var (
 	pbHEmitsIncludesExtrasChunk    = concat([]IncludeDirective{{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())}}, pbDescriptorImporterDirectives)
 )
 
-var yaffBaseRuntimeHeaders = []string{
-	yaffRuntimeBase + "yaff.h",
-	yaffRuntimeBase + "struct.h",
-	yaffRuntimeBase + "protobuf.h",
-	yaffRuntimeBase + "reflect.h",
-}
+var yaffBaseRuntimeDirectives = quotedDirectives([]VFS{
+	source(yaffRuntimeBase + "yaff.h"),
+	source(yaffRuntimeBase + "struct.h"),
+	source(yaffRuntimeBase + "protobuf.h"),
+	source(yaffRuntimeBase + "reflect.h"),
+})
 
-var yaffExperimentsRuntimeHeaders = []string{
-	yaffRuntimeBase + "experiments/serializer.h",
-	yaffRuntimeBase + "experiments/column.h",
-	yaffRuntimeBase + "experiments/merge.h",
-}
+var yaffExperimentsRuntimeDirectives = quotedDirectives([]VFS{
+	source(yaffRuntimeBase + "experiments/serializer.h"),
+	source(yaffRuntimeBase + "experiments/column.h"),
+	source(yaffRuntimeBase + "experiments/merge.h"),
+})
 
 var protobufRuntimeHeaders = []VFS{
 	source(pbRuntimeBase, "google/protobuf/arena.h"),
@@ -59,24 +59,19 @@ const (
 )
 
 func yaffGeneratedHeaderIncludes(na *NodeArenas, experimental bool, pbHRel string) []IncludeDirective {
-	n := len(yaffBaseRuntimeHeaders) + 1
+	n := len(yaffBaseRuntimeDirectives) + 1
 
 	if experimental {
-		n += len(yaffExperimentsRuntimeHeaders)
+		n += len(yaffExperimentsRuntimeDirectives)
 	}
 
 	dirs := na.dirs.alloc(n)[:0]
-
-	for _, h := range yaffBaseRuntimeHeaders {
-		dirs = append(dirs, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(h).any())})
-	}
+	dirs = append(dirs, yaffBaseRuntimeDirectives...)
 
 	dirs = append(dirs, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(pbHRel).any())})
 
 	if experimental {
-		for _, h := range yaffExperimentsRuntimeHeaders {
-			dirs = append(dirs, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(h).any())})
-		}
+		dirs = append(dirs, yaffExperimentsRuntimeDirectives...)
 	}
 
 	na.dirs.commit(len(dirs))
@@ -98,6 +93,10 @@ func protoPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string, bucke
 
 		if strings.HasPrefix(target, "google/protobuf/") && extIsPbH(target) {
 			target = pbRuntimeBase + target
+		} else if outputRoot == "" {
+			dst = append(dst, d)
+
+			continue
 		} else {
 			target = protoOutputRel(outputRoot, target)
 		}
@@ -118,8 +117,15 @@ func protoInducedPbH(pm *IncludeParserManager, local, dst []IncludeDirective) []
 	start := len(dst)
 
 	for _, d := range local {
-		name := filepath.ToSlash(filepath.Clean(d.target.string()))
-		pbH, ok := pm.protoParser().inducedHeader(internStr(name))
+		name := d.target.string()
+		nameID := d.target.str()
+
+		if nameID == 0 || name == "" || !pathIsClean(name) {
+			name = filepath.ToSlash(filepath.Clean(name))
+			nameID = internStr(name)
+		}
+
+		pbH, ok := pm.protoParser().inducedHeader(nameID)
 
 		if !ok {
 			continue
@@ -908,6 +914,11 @@ type ProtoSrcsResult struct {
 func protoSourceRel(fs FS, instance ModuleInstance, d *ModuleData, src string) STR {
 	resolved := resolvePySrcRel(fs, d.srcDirs, instance.Path, src)
 	raw := resolved.string()
+
+	if raw != "" && pathIsClean(raw) {
+		return resolved
+	}
+
 	clean := filepath.ToSlash(filepath.Clean(raw))
 
 	if clean == raw {

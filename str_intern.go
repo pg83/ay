@@ -9,7 +9,8 @@ import (
 var internTable = struct {
 	ids      *IntMap[STR]
 	overflow map[string]STR
-	flat     []InternCell
+	flatStr  []string
+	flatLo   []uint64
 	cells    PageVec[InternCell]
 	cellPage []InternCell
 	cellBase uint32
@@ -19,7 +20,8 @@ var internTable = struct {
 }{
 	ids:      newIntMap[STR](1 << 19),
 	overflow: make(map[string]STR),
-	flat:     make([]InternCell, 1, 1<<20),
+	flatStr:  make([]string, 1, 1<<20),
+	flatLo:   make([]uint64, 1, 1<<20),
 	count:    1,
 	bytes:    newBumpAllocator[byte](),
 }
@@ -29,8 +31,12 @@ type InternCell struct {
 	lo  uint64
 }
 
-func internCell(id STR) *InternCell {
-	return unsafeAt(internTable.flat, uint64(id))
+func internString(id STR) string {
+	return *unsafeAt(internTable.flatStr, uint64(id))
+}
+
+func internLo(id STR) uint64 {
+	return *unsafeAt(internTable.flatLo, uint64(id))
 }
 
 func internOwnedCopy(b []byte) string {
@@ -62,7 +68,8 @@ func internAppend(s string, lo uint64) STR {
 	id := STR(internTable.count)
 	cell := InternCell{str: s, lo: lo}
 
-	internTable.flat = append(internTable.flat, cell)
+	internTable.flatStr = append(internTable.flatStr, s)
+	internTable.flatLo = append(internTable.flatLo, lo)
 
 	if internTable.cellPage == nil {
 		zeroPage := make([]InternCell, 1)
@@ -103,7 +110,7 @@ func internStr(s string) STR {
 	h := xxh3.HashString128(s)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internCell(*p).lo == h.Lo {
+		if internLo(*p) == h.Lo {
 			return *p
 		}
 
@@ -214,7 +221,7 @@ func internBlock(block []byte, n int) STR {
 	h := xxh3.Hash128(buf)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internCell(*p).lo == h.Lo {
+		if internLo(*p) == h.Lo {
 			return *p
 		}
 
@@ -250,7 +257,7 @@ func internBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internCell(*p).lo == h.Lo {
+		if internLo(*p) == h.Lo {
 			return *p
 		}
 
@@ -277,7 +284,7 @@ func internedBytes(b []byte) STR {
 	h := xxh3.Hash128(b)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internCell(*p).lo == h.Lo {
+		if internLo(*p) == h.Lo {
 			return *p
 		}
 
@@ -294,7 +301,7 @@ func (id STR) str() STR {
 }
 
 func (id STR) string() string {
-	return internCell(id).str
+	return internString(id)
 }
 
 func (id STR) sharedString() string {
@@ -323,7 +330,7 @@ func interned(s string) STR {
 	h := xxh3.HashString128(s)
 
 	if p := internTable.ids.get(h.Hi); p != nil {
-		if internCell(*p).lo == h.Lo {
+		if internLo(*p) == h.Lo {
 			return *p
 		}
 
@@ -348,7 +355,7 @@ func (id STR) build() VFS {
 }
 
 func (id STR) vfs() VFS {
-	s := internCell(id).str
+	s := internString(id)
 
 	if !vfsHasPrefix(s) {
 		return 0

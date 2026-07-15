@@ -5,12 +5,12 @@ type GeneratedFileInfo struct {
 	SourcePath      VFS
 	OwnerModule     VFS
 	ProducerRef     NodeRef
+	OnUse           *PendingEmit
 	GeneratorRefs   []NodeRef
 	SourceInputs    []VFS
 	ProducerMainOut VFS
 	ClosureLeaves   []VFS
 	ParsedIncludes  ParsedIncludeSet
-	OnUse           *PendingEmit
 }
 
 type pendingEmitter interface {
