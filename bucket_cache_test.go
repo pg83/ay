@@ -57,7 +57,7 @@ func TestBucketCacheVisitsInternedBucketOncePerEpoch(t *testing.T) {
 		t.Fatal("second bucket visit in the same epoch was accepted")
 	}
 
-	c.resetScratch()
+	c.resetScratch(0)
 
 	if !c.firstBucketVisit(bucket) {
 		t.Fatal("bucket visit after reset was rejected")
@@ -70,7 +70,7 @@ func TestBucketCacheClearsEpochsOnWraparound(t *testing.T) {
 
 	*bucketEpochCell(bucket) = 1
 	c.bucketEpoch = ^uint32(0)
-	c.resetScratch()
+	c.resetScratch(0)
 
 	if c.bucketEpoch != 1 {
 		t.Fatalf("wrapped epoch = %d, want 1", c.bucketEpoch)
@@ -78,5 +78,50 @@ func TestBucketCacheClearsEpochsOnWraparound(t *testing.T) {
 
 	if !c.firstBucketVisit(bucket) {
 		t.Fatal("stale wrapped epoch was not cleared")
+	}
+}
+
+func TestBucketCacheSplicesFreshPartitionAsBlock(t *testing.T) {
+	c := newBucketCache()
+	self := VFS(2)
+	elems := []VFS{4, 20, 36}
+	bucket := c.storeBuckets(0, elems).bucketList()[0]
+	var seen IdSet
+
+	seen.reset(64)
+	seen.add(self)
+	c.resetScratch(self)
+	c.spliceBucket(&seen, bucket)
+
+	r := closureBucketIndex(bucket[0])
+	got := c.scratch[r]
+
+	if len(got) != len(elems) {
+		t.Fatalf("spliced %d elements, want %d", len(got), len(elems))
+	}
+
+	for i, v := range elems {
+		if got[i] != v || !seen.has(v) {
+			t.Fatalf("element %d: scratch=%v seen=%v, want %v/true", i, got[i], seen.has(v), v)
+		}
+	}
+}
+
+func TestBucketCacheProbesSelfPartition(t *testing.T) {
+	c := newBucketCache()
+	self := VFS(2)
+	other := VFS(18)
+	bucket := c.storeBuckets(0, []VFS{self, other}).bucketList()[0]
+	var seen IdSet
+
+	seen.reset(32)
+	seen.add(self)
+	c.resetScratch(self)
+	c.spliceBucket(&seen, bucket)
+
+	got := c.scratch[closureBucketIndex(self)]
+
+	if len(got) != 1 || got[0] != other {
+		t.Fatalf("scratch=%v, want [%v]", got, other)
 	}
 }

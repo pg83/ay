@@ -430,7 +430,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 	sc.tjc.closure.reset(vfsBound())
 	sc.tjc.closure.add(abs)
-	s.buckets.resetScratch()
+	s.buckets.resetScratch(abs)
 
 	for _, ch := range children {
 		if ch == abs {
