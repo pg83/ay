@@ -503,3 +503,40 @@ END()
 
 	assertNoMissingInclude(t, warns, "parser.h")
 }
+
+func TestGen_GeneratedRagel6CarriesOutputIncludesClosure(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "tools/lua", "lua")
+	writeToolProgram(files, "contrib/tools/ragel6", "ragel6")
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_LUA(
+    gen.lua patterns.rl6
+    IN template.rl6
+    OUT patterns.rl6
+    OUTPUT_INCLUDES ${ARCADIA_ROOT}/mod/scanner.h
+)
+END()
+`)
+	writeTestModuleFile(files, "mod/gen.lua", "-- stub\n")
+	writeTestModuleFile(files, "mod/template.rl6", "%%{ machine template; }%%\n")
+	writeTestModuleFile(files, "mod/scanner.h", `#include "detail.h"
+`)
+	writeTestModuleFile(files, "mod/detail.h", "// transitive dependency\n")
+
+	g := testGen(newMemFS(files), "mod")
+	r6 := mustNodeByOutput(t, g, "$(B)/mod/patterns.rl6.cpp")
+
+	for _, want := range []string{
+		"$(S)/mod/gen.lua",
+		"$(S)/mod/template.rl6",
+		"$(S)/mod/scanner.h",
+		"$(S)/mod/detail.h",
+	} {
+		if !nodeHasInput(r6, want) {
+			t.Fatalf("generated R6 inputs missing OUTPUT_INCLUDES closure %q: %v", want, vfsStringsT3(r6.flatInputs()))
+		}
+	}
+}

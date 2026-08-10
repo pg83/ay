@@ -326,8 +326,9 @@ func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS
 
 func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scriptVFS VFS, splitSrcs []VFS, splitHasCCShard bool) []IncludeDirective {
 	_, instance, _ := e.ctx, e.instance, e.d
+	carries := generatedOutputCarriesIncludes(outFile) || isCodegenProducingSrc(outFile)
 
-	if !generatedOutputCarriesIncludes(outFile) {
+	if !carries && len(stmt.OutputIncludes) == 0 {
 		return nil
 	}
 
@@ -384,12 +385,20 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 		}
 	}
 
-	includes := e.ctx.na.dirs.alloc(1 + len(stmt.INFiles) + len(stmt.OutputIncludes))[:0]
+	capacity := len(stmt.OutputIncludes)
 
-	includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(scriptVFS.rel().any())})
+	if carries {
+		capacity += 1 + len(stmt.INFiles)
+	}
 
-	for _, f := range stmt.INFiles {
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(e.runProgramInputVFS(f.string()).rel().any())})
+	includes := e.ctx.na.dirs.alloc(capacity)[:0]
+
+	if carries {
+		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(scriptVFS.rel().any())})
+
+		for _, f := range stmt.INFiles {
+			includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(e.runProgramInputVFS(f.string()).rel().any())})
+		}
 	}
 
 	for _, f := range stmt.OutputIncludes {
