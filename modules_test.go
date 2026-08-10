@@ -95,6 +95,48 @@ func TestApplyUnknownStmt_AddInclSelf(t *testing.T) {
 	}
 }
 
+func TestCollectModule_DeclareInDirsExpandedSourceRoot(t *testing.T) {
+	fs := newMemFS(map[string]string{
+		"mod/ya.make": `LIBRARY()
+SET(OPTION_DIRS search/options/a search/options/b)
+DECLARE_IN_DIRS(OPTIONS options.json DIRS $OPTION_DIRS SRCDIR ${ARCADIA_ROOT})
+RUN_PROGRAM(
+    tools/generator ${OPTIONS_FILES}
+    IN ${OPTIONS_FILES}
+    OUT result.json
+)
+END()
+`,
+		"search/options/a/options.json": "{}\n",
+		"search/options/b/options.json": "{}\n",
+	})
+	mf := throw2(parseFile(fs, "mod/ya.make"))
+	d := collectModule(
+		newIncludeParserManagerFS(fs, newSharedParseCache()),
+		ModuleInstance{Path: source("mod"), Kind: KindLib},
+		mf.Stmts,
+		buildIfEnv(ModuleInstance{Path: source("mod"), Kind: KindLib, Platform: testTargetP}),
+		noWarn,
+	)
+
+	if len(d.runPrograms) != 1 {
+		t.Fatalf("run programs = %d, want 1", len(d.runPrograms))
+	}
+
+	want := []string{
+		"$(S)/search/options/a/options.json",
+		"$(S)/search/options/b/options.json",
+	}
+
+	if got := anyStrs(d.runPrograms[0].INFiles); !slices.Equal(got, want) {
+		t.Fatalf("RUN_PROGRAM IN = %v, want %v", got, want)
+	}
+
+	if got := anyStrs(d.runPrograms[0].Args[1:]); !slices.Equal(got, want) {
+		t.Fatalf("RUN_PROGRAM args = %v, want %v", got, want)
+	}
+}
+
 func internalContourPlatform(os OS, isa ISA, sanitizer string) *Platform {
 	flags := make(map[string]string, len(testToolchainFlags)+1)
 
