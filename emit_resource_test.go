@@ -757,6 +757,40 @@ END()
 	}
 }
 
+func TestGen_ResourceResolvesStaticSourceThroughSrcdir(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeTestModuleFile(files, "shared/data.json", "{}\n")
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCDIR(shared)
+RESOURCE(
+    data.json /data.json
+)
+END()
+`)
+
+	g := testGen(newMemFS(files), "mod")
+	objcopy := findNodeByOutputPrefix(g, "$(B)/mod/objcopy_")
+
+	if objcopy == nil {
+		t.Fatal("graph is missing mod objcopy output")
+	}
+
+	if !nodeHasInput(objcopy, "$(S)/shared/data.json") {
+		t.Fatalf("objcopy inputs missing SRCDIR resource source: %#v", objcopy.flatInputs())
+	}
+
+	if nodeHasInput(objcopy, "$(S)/mod/data.json") {
+		t.Fatalf("objcopy inputs contain module-relative phantom resource: %#v", objcopy.flatInputs())
+	}
+}
+
 func TestEmitProgramResource_CppProgramLinksObjcopy(t *testing.T) {
 	files := map[string]string{}
 
