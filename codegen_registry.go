@@ -1,16 +1,17 @@
 package main
 
 type GeneratedFileInfo struct {
-	OutputPath      VFS
-	SourcePath      VFS
-	OwnerModule     VFS
-	ProducerRef     NodeRef
-	OnUse           *PendingEmit
-	GeneratorRefs   []NodeRef
-	SourceInputs    []VFS
-	ProducerMainOut VFS
-	ClosureLeaves   []VFS
-	ParsedIncludes  ParsedIncludeSet
+	OutputPath             VFS
+	SourcePath             VFS
+	OwnerModule            VFS
+	ProducerRef            NodeRef
+	OnUse                  *PendingEmit
+	GeneratorRefs          []NodeRef
+	SourceInputs           []VFS
+	ProducerMainOut        VFS
+	ClosureLeaves          []VFS
+	ParsedIncludes         ParsedIncludeSet
+	CarryClosureToProducer bool
 }
 
 type pendingEmitter interface {

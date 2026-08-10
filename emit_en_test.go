@@ -113,12 +113,15 @@ RUN_PROGRAM(
     tools/genhdr --header gen.h
     IN gen.in
     OUT gen.cpp gen.h
+    OUTPUT_INCLUDES mod/dep.h
 )
 SRCS(real.cpp)
 GENERATE_ENUM_SERIALIZATION(gen.h)
 END()
 `)
 	writeTestModuleFile(files, "mod/gen.in", "enum class E { A = 0 };\n")
+	writeTestModuleFile(files, "mod/dep.h", "#pragma once\n#include <mod/detail.h>\n")
+	writeTestModuleFile(files, "mod/detail.h", "#pragma once\n")
 	writeTestModuleFile(files, "mod/real.cpp", "int real(){return 0;}\n")
 
 	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
@@ -142,6 +145,12 @@ END()
 	}
 
 	genH := mustNodeByAnyOutput(t, g, "$(B)/mod/gen.h")
+
+	for _, want := range []string{"$(S)/mod/dep.h", "$(S)/mod/detail.h"} {
+		if !nodeHasInput(genH, want) {
+			t.Fatalf("generated-header producer inputs missing enum-consumer closure %q: %v", want, genH.flatInputs())
+		}
+	}
 
 	if !slices.Contains(graphDeps(g, en), genH.Ref) {
 		t.Fatalf("EN node deps missing generated-header producer ref %d: %v", genH.Ref, graphDeps(g, en))

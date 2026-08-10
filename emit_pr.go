@@ -145,7 +145,17 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	pe := func() {
-		inputClosure := prInputClosure(snap, stmt)
+		carryOutputIncludes := false
+
+		for out := range registeredPROut {
+			if info := snap.codegen.lookup(out); info != nil && info.CarryClosureToProducer {
+				carryOutputIncludes = true
+
+				break
+			}
+		}
+
+		inputClosure := prInputClosure(snap, stmt, carryOutputIncludes)
 
 		if len(inputClosure.sources) > 0 {
 			for out := range registeredPROut {
@@ -301,7 +311,7 @@ type PrInputClosure struct {
 	builds  []VFS
 }
 
-func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
+func prInputClosure(s *prSnap, stmt *RunProgramStmt, carryOutputIncludes bool) PrInputClosure {
 	ctx, instance := s.ctx, s.instance
 	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
 	generatesHeader := stmt.StdoutFile != nil && isHeaderSource(stmt.StdoutFile.string())
@@ -313,8 +323,9 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 
 	mainRel := prMainOutputRel(stmt)
 	fullSourceClosure := len(stmt.INFiles) == 0 && (!hasAutoCCSourceOut || isCCSourceExt(mainRel))
+	fullOutputIncludesClosure := fullSourceClosure || carryOutputIncludes
 
-	if len(stmt.INFiles) == 0 && !fullSourceClosure {
+	if len(stmt.INFiles) == 0 && !fullOutputIncludesClosure {
 		return PrInputClosure{}
 	}
 
@@ -415,7 +426,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 	}
 
 	keep := func(v VFS) bool {
-		if fullSourceClosure {
+		if fullOutputIncludesClosure {
 			return v.isSource()
 		}
 
@@ -438,7 +449,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 		switch info := s.codegen.lookup(target.build()); {
 		case info != nil:
 			sub = s.scanner.walkClosure(info.OutputPath, s.scanCtx, scanDomainCC)
-		case fullSourceClosure && ctx.fs.isFile(srcRootRel, target.string()):
+		case fullOutputIncludesClosure && ctx.fs.isFile(srcRootRel, target.string()):
 			sub = s.scanner.walkClosure(target.source(), s.scanCtx, scanDomainCC)
 			selfIsInput = true
 		default:
