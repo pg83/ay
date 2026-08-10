@@ -147,7 +147,7 @@ func downloadResourceArchive(sourceRoot, uri, archivePath string) {
 }
 
 func cmdFetchSandbox(_ GlobalFlags, args []string) int {
-	var sourceRoot, id, copyToDir, untarTo string
+	var sourceRoot, id, copyToDir, untarTo, resourceFile string
 
 	executable := false
 
@@ -175,6 +175,7 @@ func cmdFetchSandbox(_ GlobalFlags, args []string) int {
 			executable = true
 		case "--resource-file":
 			i++
+			resourceFile = args[i]
 		case "--ya-start-command-file", "--ya-end-command-file":
 
 		case "--":
@@ -195,13 +196,17 @@ func cmdFetchSandbox(_ GlobalFlags, args []string) int {
 		throwFmt("fetch sandbox: missing --resource-id")
 	}
 
-	tmp := throw2(os.MkdirTemp("", "ay-sb-*"))
+	archivePath := resourceFile
 
-	defer os.RemoveAll(tmp)
+	if archivePath == "" {
+		tmp := throw2(os.MkdirTemp("", "ay-sb-*"))
 
-	archivePath := filepath.Join(tmp, "resource")
+		defer os.RemoveAll(tmp)
 
-	downloadResourceArchive(sourceRoot, "sbr:"+id, archivePath)
+		archivePath = filepath.Join(tmp, "resource")
+
+		downloadResourceArchive(sourceRoot, "sbr:"+id, archivePath)
+	}
 
 	placeSandboxResource(archivePath, copyToDir, untarTo, renames, outs, executable)
 

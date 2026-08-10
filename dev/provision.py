@@ -44,12 +44,14 @@ Env:
          into the tree's repo ya). The SAME launcher is used for both runs.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 
 ROOT_MARKERS = (".arcadia.root", "ya", "ya.conf")
 # ymake's config tree: small, always needed, and partly only stat'd (lint
@@ -412,6 +414,32 @@ def ya_upload(path, tar, owner, descr):
     return url
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def pack_validation_archive(source, destination):
+    """Create the exact upload bytes locally so config can pin SHA-256."""
+    with tarfile.open(destination, "w:gz") as archive:
+        archive.add(source, arcname=os.path.basename(source.rstrip(os.sep)))
+    return destination
+
+
+def parse_xfail(value):
+    normalized = str(value).lower()
+    if normalized == "false":
+        return False
+    if normalized == "true":
+        return True
+    if normalized == "auto":
+        return "auto"
+    raise SystemExit("provision: --xfail must be false, true or auto")
+
+
 def load_config(config_path):
     if not os.path.exists(config_path):
         return []
@@ -536,8 +564,9 @@ def main():
         repo_dir = os.path.join(ws, "repo")
 
         # same url already uploaded? reuse its repo blob link, rebuild only the graph.
-        reuse_slice = next((e.get("slice_url") for e in load_config(args.config)
+        reuse_entry = next((e for e in load_config(args.config)
                             if e.get("vcs") == "git" and e.get("remote") == remote and e.get("slice_url")), None)
+        reuse_slice = reuse_entry.get("slice_url") if reuse_entry else None
 
         root = find_arcadia_root(repo_dir) if (args.reuse and os.path.isdir(repo_dir)) else None
         if root is None:
@@ -595,7 +624,7 @@ def main():
         "sha": sha,
         "command": ya_cmd,
         "target": target,
-        "xfail": args.xfail,
+        "xfail": parse_xfail(args.xfail),
     }
 
     with open(os.path.join(ws, "meta.json"), "w") as f:
@@ -606,8 +635,21 @@ def main():
         return 0
 
     print("[provision] phase 6: upload + config", flush=True)
-    entry["slice_url"] = slice_url or ya_upload(slice_artifact, slice_tar, owner, f"ay acceptance slice {case_id} @ {sha}")
-    entry["graph_url"] = ya_upload(graph_fuse, True, owner, f"ay acceptance ref graph {case_id} @ {sha}")
+    if slice_url:
+        entry["slice_url"] = slice_url
+        if reuse_entry and reuse_entry.get("slice_sha256"):
+            entry["slice_sha256"] = reuse_entry["slice_sha256"]
+    else:
+        slice_upload = (
+            pack_validation_archive(slice_artifact, os.path.join(ws, "slice.tar.gz"))
+            if slice_tar else slice_artifact
+        )
+        entry["slice_url"] = ya_upload(slice_upload, False, owner, f"ay acceptance slice {case_id} @ {sha}")
+        entry["slice_sha256"] = sha256_file(slice_upload)
+
+    graph_upload = pack_validation_archive(graph_fuse, os.path.join(ws, "graph.tar.gz"))
+    entry["graph_url"] = ya_upload(graph_upload, False, owner, f"ay acceptance ref graph {case_id} @ {sha}")
+    entry["graph_sha256"] = sha256_file(graph_upload)
     append_config(args.config, entry)
 
     print(f"[provision]   slice_url: {entry['slice_url']}", flush=True)

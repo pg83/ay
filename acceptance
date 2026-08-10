@@ -3,10 +3,10 @@
 
     ./acceptance <OLD_REPO> <NEW_REPO>
 
-Runs <repo>/dev/validate.py in BOTH repos — each in its own writable out-dir
-under $TMPDIR, so the repos themselves may be READ-ONLY — parses the per-case
-metrics from each run, and decides whether NEW may be merged over OLD per the
-PROMPTS.md gating rules:
+For build-integrated revisions, builds `validation_results` in BOTH repos and
+compares their structured summary.json files. OLD and NEW use separate writable
+build roots and a shared CAS/UID cache. Revisions predating build.py keep using
+their `dev/validate.py` text protocol.
 
   * gating `[<case>] OK` count must NOT drop (it may rise);
   * `XFAIL` count must NOT grow;
@@ -15,14 +15,14 @@ PROMPTS.md gating rules:
 
 Only cases evaluated (non-SKIP) in BOTH repos are compared.
 
-Each `./dev/validate.py` run is bounded to VALIDATE_TIMEOUT_S; if a run exceeds
-it (e.g. an sg7 generation that wedges on the arc FUSE), the whole process tree
-is killed and acceptance exits non-zero — a candidate that cannot even validate
-in the budget is not mergeable.
+Each side is bounded to VALIDATE_TIMEOUT_S; if a run exceeds it, the whole
+process tree is killed and acceptance exits non-zero — a candidate that cannot
+produce a summary in the budget is not mergeable.
 
 exit 0 -> ACCEPT (mergeable);  exit 1 -> REJECT (or a validate.py run failed /
 timed out);  exit 2 -> bad usage.
 """
+import json
 import os
 import re
 import shutil
@@ -81,14 +81,13 @@ def log(msg=""):
 
 @dataclass
 class RunResult:
-    """Outcome of one `dev/validate.py` run.
+    """Outcome of one build-summary or legacy validate.py run.
 
     completed  — the run launched, streamed, and exited without timing out or
                  raising in the orchestrator (it may still have crashed: check
                  returncode). A False here always carries a non-empty `error`.
-    returncode — validate.py's exit code (None if it never launched / was killed
-                 before exit).
-    output     — captured stdout (validate.py's stdout+stderr, streamed).
+    returncode — validator exit code (None if it never launched / was killed).
+    output     — captured combined stdout/stderr, streamed live.
     error      — non-empty iff this side is UNUSABLE for comparison and the
                  string explains why (launch error, timeout, worker crash, …).
     """
@@ -98,30 +97,47 @@ class RunResult:
     returncode: object = None
     output: str = ""
     error: str = ""
+    summary: object = None
+    structured: bool = False
 
 
-def run_validate(label, repo, out_dir):
-    """Run <repo>/dev/validate.py out_dir, streaming its output live (prefixed)
-    and capturing it. Returns a RunResult. A launch failure, timeout, or stream
-    error is captured into RunResult.error (and logged to stdout) rather than
-    raised — the orchestrator must never lose the reason to stderr."""
+def run_validate(label, repo, out_dir, shared_cache):
+    """Produce one side's results via build summary or legacy validate.py."""
     validate = os.path.join(repo, "dev", "validate.py")
+    build = os.path.join(repo, "build")
+    structured = os.path.isfile(os.path.join(repo, "build.py")) and os.path.isfile(build)
 
-    if not os.path.isfile(validate):
+    if not structured and not os.path.isfile(validate):
         msg = f"missing {validate}"
         log(f"[acceptance] {label}: {msg}")
 
         return RunResult(label, False, error=msg)
 
     os.makedirs(out_dir, exist_ok=True)
-    log(f"[acceptance] === {label}: {validate} {out_dir}  (timeout {VALIDATE_TIMEOUT_S}s) ===")
+    if structured:
+        build_root = os.path.join(out_dir, "build")
+        command = [
+            build,
+            "-B", build_root,
+            "--cache-dir", shared_cache,
+            "-k",
+            "validation_results",
+        ]
+        summary_path = os.path.join(build_root, "validation", "summary.json")
+    else:
+        command = [sys.executable, validate, out_dir]
+        summary_path = None
+    log(
+        f"[acceptance] === {label}: {' '.join(command)}  "
+        f"(timeout {VALIDATE_TIMEOUT_S}s) ==="
+    )
 
     t0 = time.monotonic()
     # start_new_session so the whole tree (validate.py + ay) shares a process
     # group we can kill on timeout; ay does not orphan if we only kill validate.
     try:
         proc = subprocess.Popen(
-            [sys.executable, validate, out_dir],
+            command,
             cwd=repo,
             text=True,
             bufsize=1,
@@ -130,7 +146,7 @@ def run_validate(label, repo, out_dir):
             start_new_session=True,
         )
     except OSError as e:
-        msg = f"failed to launch validate.py: {e!r}"
+        msg = f"failed to launch validator: {e!r}"
         log(f"[acceptance] {label}: {msg}")
 
         return RunResult(label, False, error=msg)
@@ -160,10 +176,14 @@ def run_validate(label, repo, out_dir):
             lines.append(ln)
             log(f"  [{label}] {ln.rstrip()}")
     except Exception as e:
-        stream_error = f"reading validate.py stdout failed after {len(lines)} line(s): {e!r}"
+        stream_error = f"reading validator stdout failed after {len(lines)} line(s): {e!r}"
         lines.append(f"<stream error: {e!r}>\n")
         log(f"[acceptance] {label}: {stream_error}")
     finally:
+        try:
+            proc.stdout.close()
+        except Exception:
+            pass
         try:
             proc.wait()
         except Exception as e:
@@ -180,16 +200,52 @@ def run_validate(label, repo, out_dir):
         msg = f"TIMEOUT after {VALIDATE_TIMEOUT_S}s — killed; not mergeable"
         log(f"[acceptance] {label}: {msg}")
 
-        return RunResult(label, False, returncode=proc.returncode, output=output, error=msg)
+        return RunResult(
+            label, False, returncode=proc.returncode, output=output,
+            error=msg, structured=structured,
+        )
 
     if stream_error is not None:
         # The transcript is truncated/unreliable; reject this side regardless of
         # the child's return code or how many case lines parsed before the fault.
-        return RunResult(label, False, returncode=proc.returncode, output=output, error=stream_error)
+        return RunResult(
+            label, False, returncode=proc.returncode, output=output,
+            error=stream_error, structured=structured,
+        )
 
-    log(f"[acceptance] {label}: validate.py exit={proc.returncode} in {dt:.1f}s")
+    summary = None
+    if structured and proc.returncode == 0:
+        try:
+            with open(summary_path, encoding="utf-8") as stream:
+                summary = json.load(stream)
+            if summary.get("schema") != 1 or not isinstance(summary.get("cases"), dict):
+                raise ValueError("unsupported or malformed validation summary")
+            for case, case_result in summary["cases"].items():
+                if not isinstance(case, str) or not isinstance(case_result, dict):
+                    raise ValueError("malformed case entry in validation summary")
+                if case_result.get("status") not in {"OK", "XFAIL", "FAIL"}:
+                    raise ValueError(f"invalid status for validation case {case!r}")
+                parity = case_result.get("parity")
+                if parity is not None and not all(
+                    isinstance(parity.get(key), int)
+                    for key in ("matched", "our_only", "ref_only")
+                ):
+                    raise ValueError(f"invalid parity for validation case {case!r}")
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+            message = f"cannot read structured validation summary {summary_path}: {error}"
+            log(f"[acceptance] {label}: {message}")
+            return RunResult(
+                label, False, returncode=proc.returncode, output=output,
+                error=message, structured=True,
+            )
 
-    return RunResult(label, True, returncode=proc.returncode, output=output)
+    mode = "build summary" if structured else "validate.py"
+    log(f"[acceptance] {label}: {mode} exit={proc.returncode} in {dt:.1f}s")
+
+    return RunResult(
+        label, True, returncode=proc.returncode, output=output,
+        summary=summary, structured=structured,
+    )
 
 
 def parse(output):
@@ -216,6 +272,21 @@ def parse(output):
     return status, matched, onlies
 
 
+def result_metrics(result):
+    if result.summary is None:
+        return parse(result.output)
+    status = {}
+    matched = {}
+    onlies = {}
+    for case, case_result in result.summary["cases"].items():
+        status[case] = case_result["status"]
+        parity = case_result.get("parity")
+        if parity is not None:
+            matched[case] = parity["matched"]
+            onlies[case] = (parity["our_only"], parity["ref_only"])
+    return status, matched, onlies
+
+
 def _tail(output, n=DIAG_TAIL_LINES):
     lines = output.splitlines()
     shown = lines[-n:]
@@ -236,16 +307,17 @@ def usability_reason(res, status):
         return res.error
     if res.returncode is None:
         return "validate.py never reported an exit code"
-    if res.returncode not in VALIDATE_OK_EXITS:
-        return f"validate.py crashed (exit={res.returncode}); not a candidate rejection"
-    if res.returncode != 0 and TRACEBACK_LINE.search(res.output):
+    valid_exits = (0,) if res.structured else VALIDATE_OK_EXITS
+    if res.returncode not in valid_exits:
+        return f"validator crashed (exit={res.returncode}); not a candidate rejection"
+    if not res.structured and res.returncode != 0 and TRACEBACK_LINE.search(res.output):
         return (
             f"validate.py raised an unhandled exception (exit={res.returncode}; "
             f"Python traceback in output) — validator crash, not a candidate rejection"
         )
     if not status:
         return (
-            f"validate.py exited {res.returncode} but produced no case results "
+            f"validator exited {res.returncode} but produced no case results "
             f"(no [<case>] OK/FAIL/XFAIL/SKIP line) — validator failure, not a candidate rejection"
         )
     return ""
@@ -315,10 +387,14 @@ def main():
     old_repo = os.path.abspath(sys.argv[1])
     new_repo = os.path.abspath(sys.argv[2])
     work = tempfile.mkdtemp(prefix="acceptance-", dir=os.environ.get("TMPDIR") or None)
+    shared_cache = os.path.abspath(
+        os.environ.get("AY_BUILD_CACHE_DIR") or os.path.join(work, "shared-cache")
+    )
 
     log(f"[acceptance] OLD  = {old_repo}")
     log(f"[acceptance] NEW  = {new_repo}")
     log(f"[acceptance] work = {work}")
+    log(f"[acceptance] shared build cache = {shared_cache}")
 
     try:
         # Run OLD and NEW concurrently in two threads — the sg7 generation
@@ -335,7 +411,7 @@ def main():
             # never an uncaught thread exception lost to stderr — otherwise main's
             # results[label] lookup raises and the merger sees only the header.
             try:
-                res = run_validate(label, repo, out)
+                res = run_validate(label, repo, out, shared_cache)
             except Exception:
                 tb = traceback.format_exc()
                 log(f"[acceptance] {label}: worker crashed:\n{tb}")
@@ -360,8 +436,8 @@ def main():
         res_old = results.get("OLD", RunResult("OLD", False, error="no result recorded (worker did not run)"))
         res_new = results.get("NEW", RunResult("NEW", False, error="no result recorded (worker did not run)"))
 
-        so, mo, oo = parse(res_old.output)
-        sn, mn, on = parse(res_new.output)
+        so, mo, oo = result_metrics(res_old)
+        sn, mn, on = result_metrics(res_new)
 
         # A side is comparable only if it ran cleanly and produced case results.
         # Any infrastructure failure (launch error, timeout, crash, empty output,
@@ -376,7 +452,7 @@ def main():
 
         if unusable:
             log("")
-            log("[acceptance] VERDICT: REJECT (validate.py run did not yield usable results)")
+            log("[acceptance] VERDICT: REJECT (validation run did not yield usable results)")
             for label, reason, output in unusable:
                 log(f"  - {label}: {reason}")
                 log(f"    last output:\n{_tail(output)}")

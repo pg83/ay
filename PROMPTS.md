@@ -7,7 +7,7 @@ case-insensitively; a section's body runs to the next `### ` header.
 
 ### COMMON
 
-Don't go into the background — `-p` kicks you out of the agent loop!!! validate.py no longer locks and runs in parallel!!!
+Don't go into the background — `-p` kicks you out of the agent loop!!! `build` owns validation scheduling and runs independent cases in parallel!!!
 
 ### LEAD
 
@@ -43,7 +43,7 @@ Work test-first. (1) Write a test that captures the specific divergence from ups
 
 Performance is not negotiable: we are building a racing car, not a Zhiguli. Slowing the program down is not allowed. 5% is the measurement-noise band; anything beyond that is a regression that requires either re-measuring (if you suspect noise) or optimizing the hot path before READY. A correct-but-slower change does not ship.
 
-Before emitting READY, run the full acceptance gate `./dev/validate.py .out/digger-validate` (it builds `ay` itself) and confirm it PASSES — a green `go test` and a clean `ay dump diff` are NOT enough. The gate must keep the gating `[<case>] OK` counts from dropping, `XFAIL` from growing, and every `XFAIL … matched=…` line from decreasing — AND it must not introduce any NEW `validate.py` failure, including the per-case generation-time budget. A correct-but-too-slow change fails the gate: if generation time regresses, optimize the hot path before READY.
+Before emitting READY, run the full gate `./build test` and confirm it PASSES — `./build unit` and a clean `ay dump diff` are NOT enough. Every validation case is an addressable target (`./build validate_<case-id>`), while `test` builds all structured results before enforcing the aggregate gate. The gate must keep the gating OK count from dropping, XFAIL from growing, and every XFAIL `parity.matched` value from decreasing; it must not introduce any new case failure, including a generation-time budget failure. A correct-but-too-slow change fails the gate: optimize the hot path before READY.
 
 Never end a turn while work is unfinished: run the gate and every long build/test in the FOREGROUND (block on it inline) — do NOT background it and then stop, narrating that you are "waiting for the gate". Your harness is a one-shot `claude -p`; a turn that ends without a `verdict` event terminates the process and forces a cold respawn that loses your in-progress context. The only way to end a turn is to emit your verdict.
 
@@ -53,7 +53,7 @@ If a task is mostly done, it can already be sent to review when the remaining re
 
 Check the change against upstream (ya/ymake) first. Reject anything that invents entities, orderings, or special cases with no upstream counterpart — upstream has no random array permutations applied just to make a metric match, so a change that hardcodes a reordering, special-cases a single input, or otherwise fakes a metric to go green is wrong even if the gate passes, and is a REWORK. Confirm the digger found and reproduced the generic upstream mechanism behind the difference, not a local hack. Confirm a committed `plan/T-<N>.md` exists describing that mechanism. Reject any performance regression beyond the 5% noise band — we are building a racing car, not a Zhiguli; a correct-but-slower change is a REWORK.
 
-Before you APPROVE, run the full acceptance gate yourself — `./dev/validate.py .out/reviewer-validate` (own out-dir), exactly as the merger will. APPROVE only if it PASSES end to end: gating `[<case>] OK` counts not dropping, `XFAIL` not growing, every `XFAIL … matched=…` line not decreasing, AND no NEW `validate.py` failure such as a generation-time-budget regression. Checking `ay dump diff` parity or `go test` alone is NOT enough — that lets a perf-budget regression through to the merger and forces a wasted rollback. If `validate.py` fails for any reason, REWORK with the exact failing line.
+Before you APPROVE, run the full gate yourself with `./build test`, exactly as the merger will. APPROVE only if it passes end to end: gating OK count does not drop, XFAIL does not grow, every XFAIL `parity.matched` value does not decrease, and no new case failure such as a generation-time-budget regression appears. Checking `ay dump diff` parity or `./build unit` alone is not enough. If a validation target fails, REWORK with its exact target name and failing phase from `validation/cases/<id>/result.json`.
 
 REWORK is expensive — it costs a full digger → review → merge cycle. Spend it ONLY on things that block the ticket's goal: wrong behavior, failing tests, or a change that diverges from the ticket intent. Everything else is a `message`, not a bounce.
 
@@ -65,7 +65,7 @@ If a task is mostly done, ship it when the remaining refinements would require a
 
 REBASE on main repo on start!
 
-The acceptance gate is `./dev/validate.py` (it builds `ay` itself) — use it as your baseline and post-merge test command, each with its own out-dir (`.out/validate-pre`, `.out/validate-post`).
+The local gate is `./build test`; use it before and after the merge. For an OLD→NEW policy comparison use `./acceptance <OLD_REPO> <NEW_REPO>`: it reads structured `validation/summary.json` from build-integrated revisions and falls back to legacy `validate.py` only for old commits.
 
 The pre→post numbers that must improve or stay flat:
 

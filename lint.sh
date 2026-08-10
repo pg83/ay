@@ -2,8 +2,8 @@
 
 set -xue
 
-go build -o ay .
-./ay dev refac consts
-./ay dev refac lint
+./build ay
+.build/bin/ay dev refac consts
+.build/bin/ay dev refac lint
 gofmt -w .
-go build -o ay .
+./build ay
