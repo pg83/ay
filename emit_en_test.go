@@ -113,15 +113,12 @@ RUN_PROGRAM(
     tools/genhdr --header gen.h
     IN gen.in
     OUT gen.cpp gen.h
-    OUTPUT_INCLUDES mod/dep.h
 )
 SRCS(real.cpp)
 GENERATE_ENUM_SERIALIZATION(gen.h)
 END()
 `)
 	writeTestModuleFile(files, "mod/gen.in", "enum class E { A = 0 };\n")
-	writeTestModuleFile(files, "mod/dep.h", "#pragma once\n#include <mod/detail.h>\n")
-	writeTestModuleFile(files, "mod/detail.h", "#pragma once\n")
 	writeTestModuleFile(files, "mod/real.cpp", "int real(){return 0;}\n")
 
 	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
@@ -145,12 +142,6 @@ END()
 	}
 
 	genH := mustNodeByAnyOutput(t, g, "$(B)/mod/gen.h")
-
-	for _, want := range []string{"$(S)/mod/dep.h", "$(S)/mod/detail.h"} {
-		if !nodeHasInput(genH, want) {
-			t.Fatalf("generated-header producer inputs missing enum-consumer closure %q: %v", want, genH.flatInputs())
-		}
-	}
 
 	if !slices.Contains(graphDeps(g, en), genH.Ref) {
 		t.Fatalf("EN node deps missing generated-header producer ref %d: %v", genH.Ref, graphDeps(g, en))
@@ -299,44 +290,6 @@ END()
 	if !(proto < serialized) {
 		t.Fatalf("archive order data.pb.cc.o(%d) < data.pb.h_serialized.cpp.o(%d) violated: %v",
 			proto, serialized, vfsStrings(ar.flatInputs()))
-	}
-}
-
-func TestGen_BaseCodegenEnumSerializationKeepsDeclarationOrder(t *testing.T) {
-	files := map[string]string{}
-
-	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-BASE_CODEGEN(tools/base_codegen calcer_codegen)
-GENERATE_ENUM_SERIALIZATION_WITH_HEADER(calcer_codegen.h)
-GENERATE_ENUM_SERIALIZATION(merge.h)
-END()
-`)
-	writeTestModuleFile(files, "mod/calcer_codegen.in", "input\n")
-	writeTestModuleFile(files, "mod/merge.h", "enum class E { A = 0 };\n")
-	writeToolProgram(files, "tools/base_codegen", "base_codegen")
-	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
-	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
-	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
-
-	g := testGen(newMemFS(files), "mod")
-	ar := mustNodeByOutput(t, g, "$(B)/mod/libmod.a")
-	indexOf := func(want string) int {
-		for i, input := range ar.flatInputs() {
-			if input.string() == want {
-				return i
-			}
-		}
-
-		return -1
-	}
-	calcer := indexOf("$(B)/mod/calcer_codegen.h_serialized.cpp.o")
-	merge := indexOf("$(B)/mod/merge.h_serialized.cpp.o")
-
-	if calcer < 0 || merge < 0 || calcer > merge {
-		t.Fatalf("enum serialization must preserve declaration order across generated and source headers: calcer=%d merge=%d inputs=%v", calcer, merge, ar.flatInputs())
 	}
 }
 

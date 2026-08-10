@@ -737,7 +737,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 				it.Key = bytesString(e.resStrBuf[hashStart:])
 
-				r := e.resolveResourceInput(entry.SrcPath, resolveSourceVFS(ctx, instance, entry.SrcPath, d.srcDirs))
+				r := e.resolveResourceInput(entry.SrcPath, copyFileInputVFS(ctx.fs, instance.Path, entry.SrcPath))
 				cmdStart := len(e.resStrBuf)
 
 				e.resStrBuf = append(e.resStrBuf, "resfs/src/"...)
@@ -760,7 +760,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 				it.Key = entry.Key
 
 				if inner, ok := rootrelInputPath(entry.Key); ok {
-					r := e.resolveResourceInput(inner, resolveSourceVFS(ctx, instance, inner, d.srcDirs))
+					r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
 
 					it.Cmd = internStr(renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.relString())))
 					it.setInput(r.Input)
@@ -772,7 +772,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 			batch = append(batch, it)
 		} else {
-			r := e.resolveResourceInput(entry.Path, resolveSourceVFS(ctx, instance, entry.Path, d.srcDirs))
+			r := e.resolveResourceInput(entry.Path, copyFileInputVFS(ctx.fs, instance.Path, entry.Path))
 			it := ResourceItem{Path: entry.Path, Key: entry.Key}
 
 			it.setInput(r.Input)

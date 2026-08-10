@@ -71,7 +71,6 @@ type CppProtoPlugin struct {
 	Experimental              []string
 	Files                     []string
 	DeclaredBeforeLiteHeaders bool
-	SkipCoreInducedDeps       bool
 }
 
 func (p CppProtoPlugin) isYaff() bool {
@@ -1905,14 +1904,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			env.setBool(internEnv(a), false)
 
-			if a == "PROTOC_TRANSITIVE_HEADERS" {
-				if d.setVars == nil {
-					d.setVars = map[STR]STR{}
-				}
-
-				d.setVars[strProtocTransitiveHeaders] = strNo
-			}
-
 			if a == "PYTHON_SQLITE3" {
 				d.pythonSQLite3 = false
 			}
@@ -2353,11 +2344,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
 	case tokAliceCapability:
 		addCPPProtoPlugin(d, CppProtoPlugin{
-			Name:                "alice_capability_cpp",
-			ToolPath:            "yandex_io/tools/capability_gen",
-			OutputSuffixes:      []string{".cap.h"},
-			Deps:                []string{"yandex_io/libs/protobuf_utils"},
-			SkipCoreInducedDeps: true,
+			Name:           "alice_capability_cpp",
+			ToolPath:       "yandex_io/tools/capability_gen",
+			OutputSuffixes: []string{".cap.h"},
+			Deps:           []string{"yandex_io/libs/protobuf_utils"},
 		})
 	case tokApphost:
 		itemDispatcher := ""
@@ -2383,12 +2373,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		addCPPProtoPlugin(d, CppProtoPlugin{
-			Name:                "cpp_plugin",
-			ToolPath:            "apphost/tools/stub_generator/cpp_plugin",
-			OutputSuffixes:      []string{".apphost.h"},
-			Deps:                []string{"apphost/tools/stub_generator/cpp_includes"},
-			ExtraOutFlag:        "item_dispatcher=" + itemDispatcher + ",item_dispatcher_header=" + itemDispatcherHeader,
-			SkipCoreInducedDeps: true,
+			Name:           "cpp_plugin",
+			ToolPath:       "apphost/tools/stub_generator/cpp_plugin",
+			OutputSuffixes: []string{".apphost.h"},
+			Deps:           []string{"apphost/tools/stub_generator/cpp_includes"},
+			ExtraOutFlag:   "item_dispatcher=" + itemDispatcher + ",item_dispatcher_header=" + itemDispatcherHeader,
 		})
 	case tokCppEvlog:
 
@@ -3302,11 +3291,9 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 		}
 	}
 
-	sourceRoot := srcdir == "${ARCADIA_ROOT}" || srcdir == "$(S)"
-
 	rootRel := func(dir string) string {
 		switch {
-		case sourceRoot:
+		case srcdir == "${ARCADIA_ROOT}":
 			return path.Clean(dir)
 		case srcdir == "":
 			return path.Clean(modulePath + "/" + dir)
@@ -3316,8 +3303,8 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 	}
 
 	filePrefix := func(dirRel string) string {
-		if sourceRoot {
-			return "$(S)/" + dirRel + "/"
+		if srcdir == "${ARCADIA_ROOT}" {
+			return "${ARCADIA_ROOT}/" + dirRel + "/"
 		}
 
 		return strings.TrimPrefix(dirRel+"/", modulePath+"/")

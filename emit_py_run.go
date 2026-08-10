@@ -313,7 +313,7 @@ func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS
 				addSource(si)
 			}
 
-			for _, gref := range info.inducedGeneratorRefs() {
+			for _, gref := range info.GeneratorRefs {
 				if tool, ok := ctx.moduleByRef.get(gref); ok {
 					addInducedSources(tool.InducedDeps.bucket(parsedIncludesCpp))
 				}

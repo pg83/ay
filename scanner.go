@@ -292,7 +292,7 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	for pass := 0; pass < 2; pass++ {
 		for _, entry := range entries {
 			if entry.kind == includeCythonSibling {
-				out = sc.resolveInclude(out, vfsPath, incDir, entry)
+				out = sc.resolve(out, vfsPath, incDir, entry)
 
 				continue
 			}
@@ -311,7 +311,7 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 			}
 
 			mark := len(out)
-			out = sc.resolveInclude(out, vfsPath, incDir, entry)
+			out = sc.resolve(out, vfsPath, incDir, entry)
 			prevProbeMissed = len(out) == mark
 
 			if entry.kind == includeCythonModule && len(out) != mark {
@@ -323,62 +323,6 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	}
 
 	return sc.appendResolvedInducedDeps(out, vfsPath, incDir, info)
-}
-
-func (sc *ScanCtx) resolveInclude(out []VFS, includerAbs, incDir VFS, entry IncludeDirective) []VFS {
-	mark := len(out)
-	out = sc.resolve(out, includerAbs, incDir, entry)
-
-	return sc.appendConsumerInducedDeps(out, includerAbs, mark)
-}
-
-func (sc *ScanCtx) appendConsumerInducedDeps(out []VFS, includerAbs VFS, mark int) []VFS {
-	s := sc.scanner
-	var includerInfo *GeneratedFileInfo
-
-	if includerAbs.isBuild() {
-		includerInfo = s.codegen.lookup(includerAbs)
-	}
-
-	childrenEnd := len(out)
-
-	for _, child := range out[mark:childrenEnd] {
-		if !child.isBuild() {
-			continue
-		}
-
-		info := s.codegen.lookup(child)
-
-		if info == nil || len(info.ConsumerGeneratorRefs) == 0 {
-			continue
-		}
-
-		if includerInfo != nil && info.ProducerRef != 0 && info.ProducerRef == includerInfo.ProducerRef {
-			continue
-		}
-
-		bucket := parsedIncludesCpp
-
-		if isHeaderSource(child.relString()) {
-			bucket = parsedIncludesHeader
-		}
-
-		childDir := internStr(pathDir(child.relString())).source()
-
-		for _, gref := range info.ConsumerGeneratorRefs {
-			tool, ok := s.moduleByRef.get(gref)
-
-			if !ok {
-				continue
-			}
-
-			for _, induced := range tool.InducedDeps.bucket(bucket) {
-				out = sc.resolve(out, child, childDir, induced)
-			}
-		}
-	}
-
-	return out
 }
 
 func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS, info *GeneratedFileInfo) []VFS {
@@ -396,9 +340,7 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 		fireGenerated(info)
 	}
 
-	generatorRefs := info.inducedGeneratorRefs()
-
-	if len(generatorRefs) == 0 {
+	if len(info.GeneratorRefs) == 0 {
 		return out
 	}
 
@@ -408,7 +350,7 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 		bucket = parsedIncludesHeader
 	}
 
-	for _, gref := range generatorRefs {
+	for _, gref := range info.GeneratorRefs {
 		tool, ok := s.moduleByRef.get(gref)
 
 		if !ok {

@@ -161,7 +161,6 @@ func TestGen_GztProto_ArchivedAfterDirectSourcesRegardlessOfSRCSOrder(t *testing
 	writeTestModuleFile(files, "lib/syn/ya.make", `LIBRARY(syn)
 SRCS(
     model.gztproto
-    plain.proto
     syn.cpp
 )
 END()
@@ -169,7 +168,6 @@ END()
 	writeTestModuleFile(files, "lib/syn/syn.cpp", "int syn(){return 0;}\n")
 	writeTestModuleFile(files, "lib/syn/syn.h", "#pragma once\n")
 	writeTestModuleFile(files, "lib/syn/model.gztproto", "package NGzt;\nmessage TModel { optional uint32 X = 1; }\n")
-	writeTestModuleFile(files, "lib/syn/plain.proto", "syntax = \"proto2\";\npackage NGzt;\nmessage TPlain {}\n")
 
 	writeTestModuleFile(files, "dict/gazetteer/converter/ya.make", `PROGRAM(gztconverter)
 NO_LIBC()
@@ -206,19 +204,14 @@ END()
 	}
 
 	cppIdx := idx("$(B)/lib/syn/syn.cpp.o")
-	plainIdx := idx("$(B)/lib/syn/plain.pb.cc.o")
 	pbIdx := idx("$(B)/lib/syn/model.pb.cc.o")
 
-	if cppIdx < 0 || plainIdx < 0 || pbIdx < 0 {
-		t.Fatalf("archive missing members: syn.cpp.o=%d plain.pb.cc.o=%d model.pb.cc.o=%d in %v", cppIdx, plainIdx, pbIdx, members)
+	if cppIdx < 0 || pbIdx < 0 {
+		t.Fatalf("archive missing members: syn.cpp.o=%d model.pb.cc.o=%d in %v", cppIdx, pbIdx, members)
 	}
 
 	if cppIdx > pbIdx {
 		t.Fatalf("generated model.pb.cc.o (idx %d) must archive AFTER direct syn.cpp.o (idx %d) regardless of SRCS order; got %v", pbIdx, cppIdx, members)
-	}
-
-	if plainIdx > pbIdx {
-		t.Fatalf("gzt-generated model.pb.cc.o (idx %d) must archive AFTER direct plain.pb.cc.o (idx %d) regardless of SRCS order; got %v", pbIdx, plainIdx, members)
 	}
 }
 

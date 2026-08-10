@@ -2887,44 +2887,39 @@ END()
 	}
 }
 
-func TestGen_ProtoLibrary_ApphostPluginDoesNotInduceCoreOutputs(t *testing.T) {
+func TestGen_ProtoLibrary_CPPProtoPluginOutputsReachWrapper(t *testing.T) {
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
-APPHOST()
-SRCS(test.proto consumer.cpp)
+CPP_PROTO_PLUGIN(tasklet_cpp tools/tasklet_plugin .tasklet.h)
+SRCS(test.proto)
 END()
 `)
 	writeTestModuleFile(files, "protos/test.proto", `syntax = "proto3";
 package test;
 message Row {}
 `)
-	writeTestModuleFile(files, "protos/consumer.cpp", `#include <protos/test.pb.h>
-int consume_proto() { return 0; }
-`)
+
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	writeTestModuleFile(files, "apphost/tools/stub_generator/cpp_plugin/ya.make", `PROGRAM(cpp_plugin)
+	writeTestModuleFile(files, "tools/tasklet_plugin/ya.make", `PROGRAM(tasklet_cpp)
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
-INDUCED_DEPS(h ${ARCADIA_ROOT}/apphost/tools/stub_generator/cpp_plugin/runtime.h)
 SRCS(main.cpp)
 END()
 `)
-	writeTestModuleFile(files, "apphost/tools/stub_generator/cpp_plugin/main.cpp", "int main(){return 0;}\n")
-	writeTestModuleFile(files, "apphost/tools/stub_generator/cpp_plugin/runtime.h", "#pragma once\n")
-	writeTestModuleFile(files, "apphost/tools/stub_generator/cpp_includes/ya.make", "LIBRARY()\nEND()\n")
+	writeTestModuleFile(files, "tools/tasklet_plugin/main.cpp", "int main(){return 0;}\n")
 
 	g := testGen(newMemFS(files), "protos")
 
 	pb := findGraphNodeByOutputs(t, g,
 		"$(B)/protos/test.pb.h",
 		"$(B)/protos/test.pb.cc",
-		"$(B)/protos/test.apphost.h",
+		"$(B)/protos/test.tasklet.h",
 	)
 
 	outputsIdx := indexOfArg(pb.Cmds[0].CmdArgs.flat(), "--outputs")
@@ -2937,24 +2932,12 @@ END()
 	wantWrapperOutputs := []string{
 		"$(B)/protos/test.pb.h",
 		"$(B)/protos/test.pb.cc",
-		"$(B)/protos/test.apphost.h",
+		"$(B)/protos/test.tasklet.h",
 	}
 	gotWrapperOutputs := pb.Cmds[0].CmdArgs.flat()[outputsIdx+1 : separatorIdx]
 
 	if !equalStrings(genericStrs(gotWrapperOutputs), wantWrapperOutputs) {
 		t.Fatalf("pb wrapper outputs = %v, want %v", gotWrapperOutputs, wantWrapperOutputs)
-	}
-
-	pbCC := mustNodeByOutput(t, g, "$(B)/protos/test.pb.cc.o")
-
-	if nodeHasInput(pbCC, "$(S)/apphost/tools/stub_generator/cpp_plugin/runtime.h") {
-		t.Fatalf("core pb.cc inherited dedicated-output plugin header: %v", pbCC.flatInputs())
-	}
-
-	consumer := mustNodeByOutput(t, g, "$(B)/protos/consumer.cpp.o")
-
-	if !nodeHasInput(consumer, "$(S)/apphost/tools/stub_generator/cpp_plugin/runtime.h") {
-		t.Fatalf("pb.h consumer did not inherit plugin header: %v", consumer.flatInputs())
 	}
 }
 
