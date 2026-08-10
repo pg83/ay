@@ -152,6 +152,48 @@ END()
 	}
 }
 
+func TestGen_RunProgramGeneratedEnumHeaderCarriesOwnOutputIncludeClosure(t *testing.T) {
+	files := map[string]string{}
+
+	writeToolProgram(files, "tools/genhdr", "genhdr")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+END()
+`)
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_PROGRAM(
+    tools/genhdr template.in gen.h
+    IN
+        template.in
+    OUTPUT_INCLUDES
+        mod/kind.h
+    OUT
+        gen.h
+)
+GENERATE_ENUM_SERIALIZATION(gen.h)
+END()
+`)
+	writeTestModuleFile(files, "mod/template.in", "fixture\n")
+	writeTestModuleFile(files, "mod/kind.h", "#pragma once\n#include <mod/leaf.h>\n")
+	writeTestModuleFile(files, "mod/leaf.h", "#pragma once\n")
+
+	g := testGen(newMemFS(files), "mod")
+	pr := mustNodeByOutput(t, g, "$(B)/mod/gen.h")
+
+	for _, want := range []string{"$(S)/mod/kind.h", "$(S)/mod/leaf.h"} {
+		if !nodeHasInput(pr, want) {
+			t.Fatalf("generated enum-header producer inputs missing OUTPUT_INCLUDES closure %q: %#v", want, vfsStrings(pr.flatInputs()))
+		}
+	}
+}
+
 func TestGen_RunProgramOutputIncludesPbHReachConsumerNotProducer(t *testing.T) {
 	files := map[string]string{}
 
