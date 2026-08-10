@@ -2541,6 +2541,32 @@ func TestEmitPB_LiteHeadersAddDepsOutputAndCppOutOption(t *testing.T) {
 	}
 }
 
+func TestGen_ProtoLibrary_DisableTransitiveHeadersAddsDepsOutput(t *testing.T) {
+	files := map[string]string{}
+	writeTestModuleFile(files, "proto/ya.make", `PROTO_LIBRARY()
+DISABLE(PROTOC_TRANSITIVE_HEADERS)
+SRCS(test.proto)
+END()
+`)
+	writeTestModuleFile(files, "proto/test.proto", "syntax = \"proto3\";\nmessage Test {}\n")
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "proto")
+	pb := mustNodeByOutput(t, g, "$(B)/proto/test.pb.h")
+
+	if !slices.Contains(pb.Outputs, build("proto/test.deps.pb.h")) {
+		t.Fatalf("PB outputs missing lite-header dependency file: %v", vfsStringsT3(pb.Outputs))
+	}
+
+	if args := anyStrs(pb.Cmds[0].CmdArgs.flat()); !slices.Contains(args, "--cpp_out=proto_h=true:$(B)/") {
+		t.Fatalf("PB command missing proto_h=true after DISABLE(PROTOC_TRANSITIVE_HEADERS): %v", args)
+	}
+}
+
 func TestGen_ProtoLibrary_PluginDepAddInclLeadsDeclaredPeer(t *testing.T) {
 	files := map[string]string{}
 
