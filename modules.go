@@ -3291,9 +3291,11 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 		}
 	}
 
+	sourceRoot := srcdir == "${ARCADIA_ROOT}" || srcdir == "$(S)"
+
 	rootRel := func(dir string) string {
 		switch {
-		case srcdir == "${ARCADIA_ROOT}":
+		case sourceRoot:
 			return path.Clean(dir)
 		case srcdir == "":
 			return path.Clean(modulePath + "/" + dir)
@@ -3303,8 +3305,8 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 	}
 
 	filePrefix := func(dirRel string) string {
-		if srcdir == "${ARCADIA_ROOT}" {
-			return "${ARCADIA_ROOT}/" + dirRel + "/"
+		if sourceRoot {
+			return "$(S)/" + dirRel + "/"
 		}
 
 		return strings.TrimPrefix(dirRel+"/", modulePath+"/")
