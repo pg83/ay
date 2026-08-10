@@ -2027,6 +2027,10 @@ func (e *EmitContext) srcRound(m SrcMeta) uint64 {
 			return round
 		}
 
+		if next.SourceRoundBoundary {
+			return round
+		}
+
 		round++
 		cur = info.SourcePath
 	}
