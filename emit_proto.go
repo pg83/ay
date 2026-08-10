@@ -297,7 +297,7 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 	}
 
 	for _, p := range pe.extraPlugins {
-		if len(p.Spec.OutputSuffixes) == 0 && p.LDRef != 0 {
+		if p.LDRef != 0 {
 			refs = append(refs, p.LDRef)
 		}
 	}
@@ -473,20 +473,9 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	protoBaseName := filepath.Base(protoRelPath)
 
-	for pluginIdx, plugin := range d.cppProtoPlugins {
+	for _, plugin := range d.cppProtoPlugins {
 		if !plugin.isYaff() || len(plugin.OutputSuffixes) != 2 {
 			continue
-		}
-
-		var pluginRefs []NodeRef
-		yaffCCRefs := pbGenRefs
-
-		if ref := pe.extraPlugins[pluginIdx].LDRef; ref != 0 {
-			pluginRefs = na.refList(ref)
-			yaffCCRefs = na.noderefs.alloc(len(pbGenRefs) + 1)
-			copy(yaffCCRefs, pbGenRefs)
-			yaffCCRefs[len(pbGenRefs)] = ref
-			na.noderefs.commit(len(yaffCCRefs))
 		}
 
 		yaffH := build(protoBase, plugin.OutputSuffixes[0])
@@ -501,7 +490,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		e.register(GeneratedFileInfo{
 			OutputPath:     yaffH,
 			ProducerRef:    pbRef,
-			GeneratorRefs:  pluginRefs,
+			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffHParsed},
 			OnUse:          pbPE,
 		})
@@ -516,7 +505,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		e.register(GeneratedFileInfo{
 			OutputPath:     yaffCC,
 			ProducerRef:    pbRef,
-			GeneratorRefs:  yaffCCRefs,
+			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffCCParsed},
 			OnUse:          pbPE,
 		})
@@ -572,38 +561,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internV(pbRuntimeBase, "google/protobuf/port_def.inc").any())})
 		na.dirs.commit(len(grpcHParsed))
 		grpcHParsed = grpcHParsed[:len(grpcHParsed):len(grpcHParsed)]
-	}
-
-	for _, plugin := range pe.extraPlugins {
-		if plugin.Spec.isYaff() || len(plugin.Spec.OutputSuffixes) == 0 {
-			continue
-		}
-
-		var pluginRefs []NodeRef
-
-		if plugin.LDRef != 0 {
-			pluginRefs = na.refList(plugin.LDRef)
-		}
-
-		for _, suffix := range plugin.Spec.OutputSuffixes {
-			out := build(protoBase, suffix)
-			var parsed ParsedIncludeSet
-
-			switch out {
-			case grpcPbCC:
-				parsed = ParsedIncludeSet{parsedIncludesLocal: grpcCCParsed}
-			case grpcPbH:
-				parsed = ParsedIncludeSet{parsedIncludesLocal: grpcHParsed}
-			}
-
-			e.register(GeneratedFileInfo{
-				OutputPath:     out,
-				ProducerRef:    pbRef,
-				GeneratorRefs:  pluginRefs,
-				ParsedIncludes: parsed,
-				OnUse:          pbPE,
-			})
-		}
 	}
 
 	if cfg.grpc {
