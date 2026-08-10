@@ -996,7 +996,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 
 			if v.Schema && d.unit.Tag == unitTagPy3Proto {
-				d.unit.HashTag = internStr("PY_PROTO_FROM_SCHEMA")
+				d.unit.HashTag = internStr("PY3_PROTO_FROM_SCHEMA")
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)

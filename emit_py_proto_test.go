@@ -287,6 +287,68 @@ END()
 	}
 }
 
+func TestEmitPyProto_ProtoSchemaUsesPy3SchemaHashTag(t *testing.T) {
+	const modPath = "irt/test/schema"
+	const consumer = "irt/test/schemaapp"
+
+	files := map[string]string{
+		consumer + "/ya.make": `PY3_LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+NO_PYTHON_INCLUDES()
+PEERDIR(` + modPath + `)
+END()
+`,
+		modPath + "/ya.make": `PROTO_SCHEMA()
+NO_MYPY()
+SRCS(foo.proto)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
+END()
+`,
+		modPath + "/foo.proto":            "syntax = \"proto3\";\nmessage Foo { int32 x = 1; }\n",
+		"contrib/libs/protobuf/ya.make":   "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(p.cpp)\nEND()\n",
+		"contrib/python/protobuf/ya.make": "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PYTHON_INCLUDES()\nEND()\n",
+		"contrib/libs/python/ya.make":     "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nEND()\n",
+	}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeToolProgram(files, "tools/py3cc", "py3cc")
+	writeToolProgram(files, "tools/py3cc/slow", "slow")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeToolProgram(files, "tools/archiver", "archiver")
+
+	g := testGen(newMemFS(files), consumer)
+	pyOut := "${ARCADIA_BUILD_ROOT}/" + modPath + "/foo__intpy3___pb2.py"
+	module := modPath + "/foo_pb2.py"
+	key := "resfs/file/py/" + module
+	yapycOut := pyOut + "." + pySrcYapycSuffix(modPath) + ".yapyc3"
+	yapycKey := key + ".yapyc3"
+	hashItems := []string{
+		"-",
+		"resfs/src/" + key + "=${rootrel;context=TEXT;input=TEXT:\"" + pyOut + "\"}",
+		pyOut,
+		"-" + key,
+		"-",
+		"resfs/src/" + yapycKey + "=${rootrel;context=TEXT;input=TEXT:\"" + yapycOut + "\"}",
+		yapycOut,
+		"-" + yapycKey,
+		"$S/" + modPath,
+	}
+
+	expectedHash, _ := resourceHashInto(nil, append([]string(nil), hashItems...), "PY3_PROTO_FROM_SCHEMA")
+	legacyHash, _ := resourceHashInto(nil, append([]string(nil), hashItems...), "PY_PROTO_FROM_SCHEMA")
+	expected := "$(B)/" + modPath + "/" + expectedHash + "_raw.auxcpp"
+	legacy := "$(B)/" + modPath + "/" + legacyHash + "_raw.auxcpp"
+
+	mustNodeByOutput(t, g, expected)
+
+	if nodeByOutput(g, legacy) != nil {
+		t.Fatalf("PROTO_SCHEMA used the legacy Python 2 hash tag: %q", legacy)
+	}
+}
+
 func TestGen_PyProtoAux_ExcludesModuleLangCppClangWarnings(t *testing.T) {
 	const modPath = "ads/bsyeti/test/proto"
 	const consumer = "ads/bsyeti/test/app"
