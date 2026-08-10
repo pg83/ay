@@ -489,9 +489,11 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbInducedRefs := pe.pbInducedRefs
 	pbConsumerRefs := pe.pbConsumerRefs
 	pbHLeaves := na.vfsList(protoRel.source())
+	var pbCCSourcePath VFS
 
 	if generatedProto {
 		pbHLeaves = protoProducerSourceInputs
+		pbCCSourcePath = protoVFS
 	}
 
 	e.register(GeneratedFileInfo{
@@ -578,6 +580,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	e.register(GeneratedFileInfo{
 		OutputPath:           pbCC,
+		SourcePath:           pbCCSourcePath,
 		ProducerRef:          pbRef,
 		GeneratorRefs:        pbGenRefs,
 		InducedGeneratorRefs: pbInducedRefs,
