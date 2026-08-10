@@ -22,6 +22,11 @@ def main() -> int:
             print(line, flush=True)
         if result["status"] == "FAIL":
             failed.append(case)
+    counts = summary["counts"]
+    print(
+        f"validation: OK={counts['OK']} XFAIL={counts['XFAIL']} FAIL={counts['FAIL']}",
+        flush=True,
+    )
     if failed:
         print("validation: failing cases: " + ", ".join(failed), flush=True)
         return 1

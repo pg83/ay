@@ -11,6 +11,7 @@ Common commands:
 ./build unit            # one Go test node plus one Python test node
 ./build validate        # all validation results, then the aggregate gate
 ./build test            # unit + complete validation gate
+./build validation_report
 ./build validation_resources
 ./build validate_catboost_app
 ```
@@ -23,6 +24,11 @@ small structured bundle below `$(B)/validation/cases/<case-id>`. Semantic
 differences are data in `result.json`; the corresponding gate node turns that
 status into a pass/fail stamp. `validation_summary` aggregates every result at
 `$(B)/validation/summary.json` before the aggregate gate is evaluated.
+`validate`, `test`, and `validation_report` publish both the structured report
+and its human-readable `$(B)/validation/summary.txt`. The report always names
+every XFAIL case, its matched/our-only/reference-only counts, and the final
+OK/XFAIL/FAIL totals; a successful gate therefore cannot hide accepted
+differences behind a bare green stamp.
 
 Sandbox archives are ordinary CAS outputs and do not depend on the candidate
 `ay` binary. New resources provisioned by `dev/provision.py` are uploaded as
