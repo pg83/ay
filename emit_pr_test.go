@@ -152,17 +152,10 @@ END()
 	}
 }
 
-func TestGen_RunProgramGeneratedEnumHeaderCarriesOwnOutputIncludeClosure(t *testing.T) {
+func TestGen_RunProgramSingleHeaderOutputCarriesOutputIncludeClosure(t *testing.T) {
 	files := map[string]string{}
 
 	writeToolProgram(files, "tools/genhdr", "genhdr")
-	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
-	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", `LIBRARY()
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-END()
-`)
 	writeTestModuleFile(files, "dep/ya.make", `LIBRARY()
 NO_LIBC()
 NO_RUNTIME()
@@ -175,6 +168,7 @@ NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 PEERDIR(dep)
+SRCS(use.cpp)
 RUN_PROGRAM(
     tools/genhdr template.in gen.h
     IN
@@ -184,10 +178,10 @@ RUN_PROGRAM(
     OUT
         gen.h
 )
-GENERATE_ENUM_SERIALIZATION(gen.h)
 END()
 `)
 	writeTestModuleFile(files, "mod/template.in", "fixture\n")
+	writeTestModuleFile(files, "mod/use.cpp", "#include <mod/gen.h>\n")
 	writeTestModuleFile(files, "dep/kind.h", "#pragma once\n#include <dep/leaf.h>\n")
 	writeTestModuleFile(files, "dep/leaf.h", "#pragma once\n")
 
@@ -196,7 +190,7 @@ END()
 
 	for _, want := range []string{"$(S)/dep/kind.h", "$(S)/dep/leaf.h"} {
 		if !nodeHasInput(pr, want) {
-			t.Fatalf("generated enum-header producer inputs missing OUTPUT_INCLUDES closure %q: %#v", want, vfsStrings(pr.flatInputs()))
+			t.Fatalf("single-output header producer inputs missing OUTPUT_INCLUDES closure %q: %#v", want, vfsStrings(pr.flatInputs()))
 		}
 	}
 }
