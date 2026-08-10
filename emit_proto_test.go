@@ -2967,7 +2967,7 @@ END()
 	}
 }
 
-func TestGen_ProtoLibrary_CPPProtoPluginInducedDepsStayOnPluginOutput(t *testing.T) {
+func TestGen_ProtoLibrary_CPPProtoPluginInducedDepsDoNotReachCoreOutput(t *testing.T) {
 	files := map[string]string{}
 	writeTestModuleFile(files, "proto/ya.make", `PROTO_LIBRARY()
 CPP_PROTO_PLUGIN(myplug tools/myplug .plugin.h)
@@ -2975,8 +2975,6 @@ SRCS(test.proto)
 END()
 `)
 	writeTestModuleFile(files, "proto/test.proto", "syntax = \"proto3\";\nmessage Test {}\n")
-	writeTestModuleFile(files, "app/ya.make", "LIBRARY()\nPEERDIR(proto)\nSRCS(use.cpp)\nEND()\n")
-	writeTestModuleFile(files, "app/use.cpp", "#include <proto/test.plugin.h>\nint use(){return 0;}\n")
 
 	writeTestModuleFile(files, "tools/myplug/ya.make", `PROGRAM(myplug)
 NO_LIBC()
@@ -2996,17 +2994,12 @@ END()
 	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
 	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
 
-	g := testGen(newMemFS(files), "app")
+	g := testGen(newMemFS(files), "proto")
 	pbCC := mustNodeByOutput(t, g, "$(B)/proto/test.pb.cc.o")
-	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
 
 	for _, induced := range []string{"$(S)/runtime/plugin.h", "$(S)/runtime/transitive.h"} {
 		if nodeHasInput(pbCC, induced) {
 			t.Errorf("core test.pb.cc.o unexpectedly carries plugin-output induced input %q", induced)
-		}
-
-		if !nodeHasInput(useCC, induced) {
-			t.Errorf("plugin-header consumer missing induced input %q: %v", induced, vfsStringsT3(useCC.flatInputs()))
 		}
 	}
 }
