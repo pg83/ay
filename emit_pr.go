@@ -303,6 +303,13 @@ type PrInputClosure struct {
 
 func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 	ctx, instance := s.ctx, s.instance
+	outputCount := len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles)
+
+	if stmt.StdoutFile != nil {
+		outputCount++
+	}
+
+	outputIncludesRideProducer := outputCount == 1
 	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
 	generatesHeader := stmt.StdoutFile != nil && isHeaderSource(stmt.StdoutFile.string())
 
@@ -415,7 +422,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 	}
 
 	keep := func(v VFS) bool {
-		if fullSourceClosure {
+		if fullSourceClosure || outputIncludesRideProducer {
 			return v.isSource()
 		}
 
@@ -438,7 +445,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 		switch info := s.codegen.lookup(target.build()); {
 		case info != nil:
 			sub = s.scanner.walkClosure(info.OutputPath, s.scanCtx, scanDomainCC)
-		case fullSourceClosure && ctx.fs.isFile(srcRootRel, target.string()):
+		case (fullSourceClosure || outputIncludesRideProducer) && ctx.fs.isFile(srcRootRel, target.string()):
 			sub = s.scanner.walkClosure(target.source(), s.scanCtx, scanDomainCC)
 			selfIsInput = true
 		default:
