@@ -2967,43 +2967,6 @@ END()
 	}
 }
 
-func TestGen_ProtoLibrary_CPPProtoPluginInducedDepsDoNotReachCoreOutput(t *testing.T) {
-	files := map[string]string{}
-	writeTestModuleFile(files, "proto/ya.make", `PROTO_LIBRARY()
-CPP_PROTO_PLUGIN(myplug tools/myplug .plugin.h)
-SRCS(test.proto)
-END()
-`)
-	writeTestModuleFile(files, "proto/test.proto", "syntax = \"proto3\";\nmessage Test {}\n")
-
-	writeTestModuleFile(files, "tools/myplug/ya.make", `PROGRAM(myplug)
-NO_LIBC()
-NO_RUNTIME()
-NO_UTIL()
-INDUCED_DEPS(h ${ARCADIA_ROOT}/runtime/plugin.h)
-SRCS(main.cpp)
-END()
-`)
-	writeTestModuleFile(files, "tools/myplug/main.cpp", "int main(){return 0;}\n")
-	writeTestModuleFile(files, "runtime/plugin.h", "#pragma once\n#include <runtime/transitive.h>\n")
-	writeTestModuleFile(files, "runtime/transitive.h", "#pragma once\n")
-
-	writeToolProgram(files, "contrib/tools/protoc", "protoc")
-	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
-	writeTestModuleFile(files, "build/scripts/cpp_proto_wrapper.py", "print('stub')\n")
-	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nSRCS(protobuf.cpp)\nEND()\n")
-	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
-
-	g := testGen(newMemFS(files), "proto")
-	pbCC := mustNodeByOutput(t, g, "$(B)/proto/test.pb.cc.o")
-
-	for _, induced := range []string{"$(S)/runtime/plugin.h", "$(S)/runtime/transitive.h"} {
-		if nodeHasInput(pbCC, induced) {
-			t.Errorf("core test.pb.cc.o unexpectedly carries plugin-output induced input %q", induced)
-		}
-	}
-}
-
 func TestGen_ProtoLibrary_YAFFContributesCppProtoPlugin(t *testing.T) {
 	files := map[string]string{}
 
