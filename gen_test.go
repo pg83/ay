@@ -29,9 +29,9 @@ func TestGen_AcceptsProgramModule_Synthetic(t *testing.T) {
 	nodesByOutput := make(map[string]*Node, len(g.Graph))
 
 	for _, n := range g.Graph {
-		if n == nil {
-			continue
-		}
+if n == nil {
+	continue
+}
 
 		if len(n.Outputs) == 0 {
 			t.Fatalf("node ref=%d has no outputs", n.Ref)
@@ -112,9 +112,9 @@ func TestGen_UnittestFor_Synthetic(t *testing.T) {
 	byOut := make(map[string]*Node, len(g.Graph))
 
 	for _, n := range g.Graph {
-		if n == nil {
-			continue
-		}
+if n == nil {
+	continue
+}
 
 		if len(n.Outputs) > 0 {
 			byOut[n.Outputs[0].string()] = n
@@ -347,9 +347,9 @@ END()
 	var ccInputs []string
 
 	for _, n := range g.Graph {
-		if n == nil {
-			continue
-		}
+if n == nil {
+	continue
+}
 
 		if n.KV.P == pkCC {
 			ccInputs = append(ccInputs, vfsStrings(n.flatInputs())...)
@@ -414,9 +414,9 @@ func TestGen_AllocatorMacro_ResolvesToPeer(t *testing.T) {
 	var sawMimDir bool
 
 	for _, n := range g.Graph {
-		if n == nil {
-			continue
-		}
+if n == nil {
+	continue
+}
 
 		if len(n.Outputs) > 0 && strings.HasPrefix(n.Outputs[0].relString(), "library/cpp/malloc/mimalloc/") {
 			sawMimDir = true
@@ -2396,9 +2396,9 @@ func mustNodeByOutput(t *testing.T, g *Graph, output string) *Node {
 	t.Helper()
 
 	for _, n := range g.Graph {
-		if n == nil {
-			continue
-		}
+	if n == nil {
+		continue
+	}
 
 		if n == nil {
 			continue
@@ -2418,9 +2418,9 @@ func mustNodeByOutputSuffix(t *testing.T, g *Graph, suffix string) *Node {
 	t.Helper()
 
 	for _, n := range g.Graph {
-		if n == nil {
-			continue
-		}
+	if n == nil {
+		continue
+	}
 
 		if n == nil {
 			continue
@@ -2454,9 +2454,9 @@ func mustNodeByAnyOutput(t *testing.T, g *Graph, output string) *Node {
 	t.Helper()
 
 	for _, n := range g.Graph {
-		if n == nil {
-			continue
-		}
+	if n == nil {
+		continue
+	}
 
 		if n == nil {
 			continue
@@ -2810,9 +2810,9 @@ func testGenSelfTarget(fs FS, targetDir string) *Graph {
 
 func graphHasOutput(g *Graph, output string) bool {
 	for _, n := range g.Graph {
-		if n == nil {
-			continue
-		}
+	if n == nil {
+		continue
+	}
 
 		if n == nil {
 			continue
