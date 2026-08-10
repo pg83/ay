@@ -200,8 +200,6 @@ type PbModuleEmission struct {
 	liteHeaders         bool
 	extraPlugins        []ResolvedCPPProtoPlugin
 	pbGenRefs           []NodeRef
-	pbInducedRefs       []NodeRef
-	pbConsumerRefs      []NodeRef
 	grpcCCRefs          []NodeRef
 	grpcHRefs           []NodeRef
 	blocks              PbArgBlocks
@@ -298,42 +296,14 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 		refs = append(refs, pe.grpcCppLDRef)
 	}
 
-	for _, plugin := range pe.extraPlugins {
-		if plugin.LDRef != 0 {
-			refs = append(refs, plugin.LDRef)
+	for _, p := range pe.extraPlugins {
+		if p.LDRef != 0 {
+			refs = append(refs, p.LDRef)
 		}
 	}
 
 	na.noderefs.commit(len(refs))
 	pe.pbGenRefs = refs[:len(refs):len(refs)]
-
-	inducedRefs := na.noderefs.alloc(3 + len(pe.extraPlugins))[:0]
-
-	inducedRefs = append(inducedRefs, pe.protocLDRef, pe.cppStyleguideLDRef)
-
-	if cfg.grpc {
-		inducedRefs = append(inducedRefs, pe.grpcCppLDRef)
-	}
-
-	for _, plugin := range pe.extraPlugins {
-		if plugin.LDRef != 0 && !plugin.Spec.SkipCoreInducedDeps {
-			inducedRefs = append(inducedRefs, plugin.LDRef)
-		}
-	}
-
-	na.noderefs.commit(len(inducedRefs))
-	pe.pbInducedRefs = inducedRefs[:len(inducedRefs):len(inducedRefs)]
-
-	consumerRefs := na.noderefs.alloc(len(pe.extraPlugins))[:0]
-
-	for _, plugin := range pe.extraPlugins {
-		if plugin.LDRef != 0 && plugin.Spec.SkipCoreInducedDeps {
-			consumerRefs = append(consumerRefs, plugin.LDRef)
-		}
-	}
-
-	na.noderefs.commit(len(consumerRefs))
-	pe.pbConsumerRefs = consumerRefs[:len(consumerRefs):len(consumerRefs)]
 
 	if cfg.grpc {
 		pe.grpcCCRefs = na.refList(pe.protocLDRef, pe.grpcCppLDRef)
@@ -486,25 +456,19 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbHCompile = pbHCompile[:len(pbHCompile):len(pbHCompile)]
 
 	pbGenRefs := pe.pbGenRefs
-	pbInducedRefs := pe.pbInducedRefs
-	pbConsumerRefs := pe.pbConsumerRefs
 	pbHLeaves := na.vfsList(protoRel.source())
-	var pbCCSourcePath VFS
 
 	if generatedProto {
 		pbHLeaves = protoProducerSourceInputs
-		pbCCSourcePath = protoVFS
 	}
 
 	e.register(GeneratedFileInfo{
-		OutputPath:            pbH,
-		ProducerRef:           pbRef,
-		GeneratorRefs:         pbGenRefs,
-		InducedGeneratorRefs:  pbInducedRefs,
-		ConsumerGeneratorRefs: pbConsumerRefs,
-		ParsedIncludes:        ParsedIncludeSet{parsedIncludesCpp: pbHCompile},
-		ClosureLeaves:         pbHLeaves,
-		OnUse:                 pbPE,
+		OutputPath:     pbH,
+		ProducerRef:    pbRef,
+		GeneratorRefs:  pbGenRefs,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesCpp: pbHCompile},
+		ClosureLeaves:  pbHLeaves,
+		OnUse:          pbPE,
 	})
 
 	protoBaseName := filepath.Base(protoRelPath)
@@ -556,13 +520,11 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		depsParsed = depsParsed[:len(depsParsed):len(depsParsed)]
 
 		e.register(GeneratedFileInfo{
-			OutputPath:            pbDepsH,
-			ProducerRef:           pbRef,
-			GeneratorRefs:         pbGenRefs,
-			InducedGeneratorRefs:  pbInducedRefs,
-			ConsumerGeneratorRefs: pbConsumerRefs,
-			ParsedIncludes:        ParsedIncludeSet{parsedIncludesLocal: depsParsed},
-			OnUse:                 pbPE,
+			OutputPath:     pbDepsH,
+			ProducerRef:    pbRef,
+			GeneratorRefs:  pbGenRefs,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: depsParsed},
+			OnUse:          pbPE,
 		})
 	}
 
@@ -579,13 +541,11 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbCCParsed = pbCCParsed[:len(pbCCParsed):len(pbCCParsed)]
 
 	e.register(GeneratedFileInfo{
-		OutputPath:           pbCC,
-		SourcePath:           pbCCSourcePath,
-		ProducerRef:          pbRef,
-		GeneratorRefs:        pbGenRefs,
-		InducedGeneratorRefs: pbInducedRefs,
-		ParsedIncludes:       ParsedIncludeSet{parsedIncludesLocal: pbCCParsed},
-		OnUse:                pbPE,
+		OutputPath:     pbCC,
+		ProducerRef:    pbRef,
+		GeneratorRefs:  pbGenRefs,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbCCParsed},
+		OnUse:          pbPE,
 	})
 
 	var grpcCCParsed, grpcHParsed []IncludeDirective

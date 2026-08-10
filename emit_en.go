@@ -24,9 +24,7 @@ func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VF
 	headerInput := e.enumHeaderSourceInput(headerRel, srcDirs)
 	buildHeader := headerInput.rel().build()
 
-	if info := e.codegen.lookup(buildHeader); info != nil {
-		info.CarryClosureToProducer = true
-
+	if e.codegen.lookup(buildHeader) != nil {
 		return buildHeader
 	}
 

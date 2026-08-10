@@ -145,17 +145,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	pe := func() {
-		carryOutputIncludes := false
-
-		for out := range registeredPROut {
-			if info := snap.codegen.lookup(out); info != nil && info.CarryClosureToProducer {
-				carryOutputIncludes = true
-
-				break
-			}
-		}
-
-		inputClosure := prInputClosure(snap, stmt, carryOutputIncludes)
+		inputClosure := prInputClosure(snap, stmt)
 
 		if len(inputClosure.sources) > 0 {
 			for out := range registeredPROut {
@@ -311,7 +301,7 @@ type PrInputClosure struct {
 	builds  []VFS
 }
 
-func prInputClosure(s *prSnap, stmt *RunProgramStmt, carryOutputIncludes bool) PrInputClosure {
+func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 	ctx, instance := s.ctx, s.instance
 	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
 	generatesHeader := stmt.StdoutFile != nil && isHeaderSource(stmt.StdoutFile.string())
@@ -323,9 +313,8 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt, carryOutputIncludes bool) P
 
 	mainRel := prMainOutputRel(stmt)
 	fullSourceClosure := len(stmt.INFiles) == 0 && (!hasAutoCCSourceOut || isCCSourceExt(mainRel))
-	fullOutputIncludesClosure := fullSourceClosure || carryOutputIncludes
 
-	if len(stmt.INFiles) == 0 && !fullOutputIncludesClosure {
+	if len(stmt.INFiles) == 0 && !fullSourceClosure {
 		return PrInputClosure{}
 	}
 
@@ -426,7 +415,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt, carryOutputIncludes bool) P
 	}
 
 	keep := func(v VFS) bool {
-		if fullOutputIncludesClosure {
+		if fullSourceClosure {
 			return v.isSource()
 		}
 
@@ -449,7 +438,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt, carryOutputIncludes bool) P
 		switch info := s.codegen.lookup(target.build()); {
 		case info != nil:
 			sub = s.scanner.walkClosure(info.OutputPath, s.scanCtx, scanDomainCC)
-		case fullOutputIncludesClosure && ctx.fs.isFile(srcRootRel, target.string()):
+		case fullSourceClosure && ctx.fs.isFile(srcRootRel, target.string()):
 			sub = s.scanner.walkClosure(target.source(), s.scanCtx, scanDomainCC)
 			selfIsInput = true
 		default:

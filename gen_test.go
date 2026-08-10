@@ -1727,7 +1727,7 @@ func TestGen_ProtoLibrary_TransitiveHeadersNoAddsDepsHeaderAndEnumUsesGeneratedP
 	files := map[string]string{}
 
 	writeTestModuleFile(files, "protos/ya.make", `PROTO_LIBRARY()
-DISABLE(PROTOC_TRANSITIVE_HEADERS)
+SET(PROTOC_TRANSITIVE_HEADERS "no")
 GRPC()
 GENERATE_ENUM_SERIALIZATION(main.pb.h)
 SRCS(
