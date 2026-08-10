@@ -132,7 +132,7 @@ END()
 		t.Fatalf("RUN_PROGRAM IN = %v, want %v", got, want)
 	}
 
-	if got := anyStrs(d.runPrograms[0].Args[1:]); !slices.Equal(got, want) {
+	if got := anyStrs(d.runPrograms[0].Args); !slices.Equal(got, want) {
 		t.Fatalf("RUN_PROGRAM args = %v, want %v", got, want)
 	}
 }
