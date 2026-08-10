@@ -71,6 +71,7 @@ type CppProtoPlugin struct {
 	Experimental              []string
 	Files                     []string
 	DeclaredBeforeLiteHeaders bool
+	SkipCoreInducedDeps       bool
 }
 
 func (p CppProtoPlugin) isYaff() bool {
@@ -2352,10 +2353,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
 	case tokAliceCapability:
 		addCPPProtoPlugin(d, CppProtoPlugin{
-			Name:           "alice_capability_cpp",
-			ToolPath:       "yandex_io/tools/capability_gen",
-			OutputSuffixes: []string{".cap.h"},
-			Deps:           []string{"yandex_io/libs/protobuf_utils"},
+			Name:                "alice_capability_cpp",
+			ToolPath:            "yandex_io/tools/capability_gen",
+			OutputSuffixes:      []string{".cap.h"},
+			Deps:                []string{"yandex_io/libs/protobuf_utils"},
+			SkipCoreInducedDeps: true,
 		})
 	case tokApphost:
 		itemDispatcher := ""
@@ -2381,11 +2383,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		addCPPProtoPlugin(d, CppProtoPlugin{
-			Name:           "cpp_plugin",
-			ToolPath:       "apphost/tools/stub_generator/cpp_plugin",
-			OutputSuffixes: []string{".apphost.h"},
-			Deps:           []string{"apphost/tools/stub_generator/cpp_includes"},
-			ExtraOutFlag:   "item_dispatcher=" + itemDispatcher + ",item_dispatcher_header=" + itemDispatcherHeader,
+			Name:                "cpp_plugin",
+			ToolPath:            "apphost/tools/stub_generator/cpp_plugin",
+			OutputSuffixes:      []string{".apphost.h"},
+			Deps:                []string{"apphost/tools/stub_generator/cpp_includes"},
+			ExtraOutFlag:        "item_dispatcher=" + itemDispatcher + ",item_dispatcher_header=" + itemDispatcherHeader,
+			SkipCoreInducedDeps: true,
 		})
 	case tokCppEvlog:
 

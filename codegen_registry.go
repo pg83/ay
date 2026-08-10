@@ -7,11 +7,21 @@ type GeneratedFileInfo struct {
 	ProducerRef            NodeRef
 	OnUse                  *PendingEmit
 	GeneratorRefs          []NodeRef
+	InducedGeneratorRefs   []NodeRef
+	ConsumerGeneratorRefs  []NodeRef
 	SourceInputs           []VFS
 	ProducerMainOut        VFS
 	ClosureLeaves          []VFS
 	ParsedIncludes         ParsedIncludeSet
 	CarryClosureToProducer bool
+}
+
+func (i *GeneratedFileInfo) inducedGeneratorRefs() []NodeRef {
+	if i.InducedGeneratorRefs != nil {
+		return i.InducedGeneratorRefs
+	}
+
+	return i.GeneratorRefs
 }
 
 type pendingEmitter interface {
