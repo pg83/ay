@@ -302,6 +302,44 @@ END()
 	}
 }
 
+func TestGen_BaseCodegenEnumSerializationKeepsDeclarationOrder(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+BASE_CODEGEN(tools/base_codegen calcer_codegen)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(calcer_codegen.h)
+GENERATE_ENUM_SERIALIZATION(merge.h)
+END()
+`)
+	writeTestModuleFile(files, "mod/calcer_codegen.in", "input\n")
+	writeTestModuleFile(files, "mod/merge.h", "enum class E { A = 0 };\n")
+	writeToolProgram(files, "tools/base_codegen", "base_codegen")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "mod")
+	ar := mustNodeByOutput(t, g, "$(B)/mod/libmod.a")
+	indexOf := func(want string) int {
+		for i, input := range ar.flatInputs() {
+			if input.string() == want {
+				return i
+			}
+		}
+
+		return -1
+	}
+	calcer := indexOf("$(B)/mod/calcer_codegen.h_serialized.cpp.o")
+	merge := indexOf("$(B)/mod/merge.h_serialized.cpp.o")
+
+	if calcer < 0 || merge < 0 || calcer > merge {
+		t.Fatalf("enum serialization must preserve declaration order across generated and source headers: calcer=%d merge=%d inputs=%v", calcer, merge, ar.flatInputs())
+	}
+}
+
 func TestGen_EnumSerializationOwnerKeepsModuleDirAcrossConsumer(t *testing.T) {
 	files := map[string]string{}
 
