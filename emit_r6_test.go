@@ -518,6 +518,7 @@ RUN_LUA(
     OUT patterns.rl6
     OUTPUT_INCLUDES ${ARCADIA_ROOT}/mod/scanner.h
 )
+SRCS(direct.rl6)
 END()
 `)
 	writeTestModuleFile(files, "mod/gen.lua", "-- stub\n")
@@ -525,6 +526,7 @@ END()
 	writeTestModuleFile(files, "mod/scanner.h", `#include "detail.h"
 `)
 	writeTestModuleFile(files, "mod/detail.h", "// transitive dependency\n")
+	writeTestModuleFile(files, "mod/direct.rl6", "%%{ machine direct; }%%\n")
 
 	g := testGen(newMemFS(files), "mod")
 	r6 := mustNodeByOutput(t, g, "$(B)/mod/patterns.rl6.cpp")
@@ -538,5 +540,22 @@ END()
 		if !nodeHasInput(r6, want) {
 			t.Fatalf("generated R6 inputs missing OUTPUT_INCLUDES closure %q: %v", want, vfsStringsT3(r6.flatInputs()))
 		}
+	}
+
+	ar := mustNodeByOutput(t, g, "$(B)/mod/libmod.a")
+	indexOf := func(want string) int {
+		for i, input := range ar.flatInputs() {
+			if input.string() == want {
+				return i
+			}
+		}
+
+		return -1
+	}
+	directIdx := indexOf("$(B)/mod/direct.rl6.cpp.o")
+	generatedIdx := indexOf("$(B)/mod/patterns.rl6.cpp.o")
+
+	if directIdx < 0 || generatedIdx < 0 || directIdx > generatedIdx {
+		t.Fatalf("direct Ragel output must archive before RUN_LUA-derived output: direct=%d generated=%d inputs=%v", directIdx, generatedIdx, ar.flatInputs())
 	}
 }

@@ -119,6 +119,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     r6Out,
+		SourcePath:     rl6SourceVFS,
 		ProducerRef:    r6Ref,
 		GeneratorRefs:  e.ctx.na.refList(ragelLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r6Parsed},
