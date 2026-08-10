@@ -1904,6 +1904,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			env.setBool(internEnv(a), false)
 
+			if d.setVars == nil {
+				d.setVars = map[STR]STR{}
+			}
+
+			d.setVars[internStr(a)] = strNo
+
 			if a == "PYTHON_SQLITE3" {
 				d.pythonSQLite3 = false
 			}
