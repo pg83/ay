@@ -1,5 +1,6 @@
 # Build artifacts
 /ay
+/.build/
 *.test
 *.out
 

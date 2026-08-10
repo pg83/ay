@@ -1,0 +1,38 @@
+# github.com/BurntSushi/toml v1.5.0
+## explicit; go 1.18
+github.com/BurntSushi/toml
+github.com/BurntSushi/toml/internal
+# github.com/goccy/go-json v0.10.6
+## explicit; go 1.19
+github.com/goccy/go-json
+github.com/goccy/go-json/internal/decoder
+github.com/goccy/go-json/internal/encoder
+github.com/goccy/go-json/internal/encoder/vm
+github.com/goccy/go-json/internal/encoder/vm_color
+github.com/goccy/go-json/internal/encoder/vm_color_indent
+github.com/goccy/go-json/internal/encoder/vm_indent
+github.com/goccy/go-json/internal/errors
+github.com/goccy/go-json/internal/runtime
+# github.com/jon-codes/getopt v0.2.1
+## explicit; go 1.23.1
+github.com/jon-codes/getopt
+# github.com/klauspost/cpuid/v2 v2.0.9
+## explicit; go 1.13
+github.com/klauspost/cpuid/v2
+# github.com/zeebo/xxh3 v1.0.2
+## explicit; go 1.17
+github.com/zeebo/xxh3
+# golang.org/x/crypto v0.42.0
+## explicit; go 1.24.0
+golang.org/x/crypto/blowfish
+golang.org/x/crypto/chacha20
+golang.org/x/crypto/curve25519
+golang.org/x/crypto/internal/alias
+golang.org/x/crypto/internal/poly1305
+golang.org/x/crypto/ssh
+golang.org/x/crypto/ssh/agent
+golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
+# golang.org/x/sys v0.42.0
+## explicit; go 1.25.0
+golang.org/x/sys/cpu
+golang.org/x/sys/windows

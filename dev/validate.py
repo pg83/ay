@@ -1,683 +1,148 @@
 #!/usr/bin/env python3
-"""validate.py — config-driven byte-exact acceptance gate (parallel DAG).
+"""Compatibility CLI for the build-integrated validation graph.
 
-Reads dev/config.json (one entry per case, produced by dev/provision.py), and
-for each case:
-
-  * fetch the source slice and the raw upstream reference graph from Sandbox
-    (authenticated `ay fetch sandbox`, cached under .out/acceptance/cache so a
-    ~200MB slice downloads once),
-  * generate our graph with `ay make -G ... --source-root <slice>`,
-  * normalize+sort both ours and the reference, then byte-compare (gating cases)
-    or count normalized-node parity + write the diff (xfail cases).
-
-Each case entry:
-    {id, command:[ya,make,...,target], target, slice_url, graph_url, xfail}
-xfail: false = gating (byte-compare); true = xfail (parity only); "auto" = gate
-when byte-exact else xfail (self-promoting).
-
-All work is a DAG of nodes (one per program invocation) joined on shared files
-and run up to VALIDATE_JOBS concurrently. Fetch nodes are cached; everything
-else always runs.
-
-Usage: validate.py [out-dir] [case-id...] [--warm] [--cache DIR]
-         out-dir   writable scratch (default: <repo>/.out/validate)
-         case-id   restrict to the named case(s) from config.json
-         --warm    only download+unpack every slice/graph into the cache, so a
-                   swarm of agents can share one warmed cache dir (no gen/compare)
-         --cache   cache dir (default: <repo>/.out/acceptance/cache); also read
-                   from AY_VALIDATE_CACHE_DIR (CLI --cache wins)
-Env:   VALIDATE_JOBS — max concurrent nodes (default: cpu count).
-       AY_VALIDATE_CACHE_DIR — shared cache dir (overridden by --cache).
+The build runner owns resource caching, case scheduling and dependencies.
+This wrapper preserves the historical CLI and text output for humans and old
+automation while reading structured per-case results from the build root.
 """
+
+from __future__ import annotations
+
 import json
 import os
-import shlex
-import shutil
+import re
 import subprocess
 import sys
-import threading
-import time
-from dataclasses import dataclass
+from pathlib import Path
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.dirname(SCRIPT_DIR)
-GO = "go"
-CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
-CACHE_DIR = os.path.join(REPO_ROOT, ".out", "acceptance", "cache")
-
-# AY (the built binary) and WORK_CWD are repointed at the writable out-dir in
-# main(), so REPO_ROOT may be read-only.
-AY = os.path.join(REPO_ROOT, "ay")
-WORK_CWD = REPO_ROOT
-
-GEN_TIME_SLACK = 1.2
-
-# ay reads CFLAGS/CXXFLAGS/CPPFLAGS/... from the environment and injects them into
-# the generated compile commands (as USER_CFLAGS). The reference graph is built in
-# a clean toolchain env, so the caller's CC/CXX/*FLAGS must be stripped before any
-# ay (or go build) invocation, else every CC node diverges by the leaked flags.
-TOOLCHAIN_ENV_VARS = (
-    "CC", "CXX", "CPP", "LD", "AR", "NM", "RANLIB", "STRIP", "OBJCOPY",
-    "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "LDLIBS",
-    "CGO_CFLAGS", "CGO_CXXFLAGS", "CGO_CPPFLAGS", "CGO_LDFLAGS",
-    "NIX_CFLAGS_COMPILE", "NIX_CFLAGS_LINK", "NIX_LDFLAGS",
-)
+from validation_lib import format_result_lines, read_result, read_summary
 
 
-def clean_env(extra=None):
-    env = {k: v for k, v in os.environ.items() if k not in TOOLCHAIN_ENV_VARS}
-
-    if extra:
-        env.update(extra)
-
-    return env
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+CONFIG_PATH = SCRIPT_DIR / "config.json"
 
 
-@dataclass(frozen=True)
-class ParityCounts:
-    exact: int
-    left_only: int
-    right_only: int
-    left_total: int
-    right_total: int
+def slug(value: str) -> str:
+    result = re.sub(r"[^A-Za-z0-9_]+", "_", value).strip("_")
+    if not result:
+        raise ValueError(f"cannot make target name from {value!r}")
+    return result
 
 
-def _remove_if_exists(path):
-    try:
-        os.remove(path)
-    except FileNotFoundError:
-        pass
-
-
-def _advance_line(handle):
-    line = handle.readline()
-    if line == "":
-        return None
-    return line
-
-
-def normalized_node_parity_counts(left_path, right_path):
-    """Count exact normalized-node matches between two sorted JSONL files."""
-    exact = left_only = right_only = left_total = right_total = 0
-    with open(left_path, encoding="utf-8") as left, open(right_path, encoding="utf-8") as right:
-        left_line = _advance_line(left)
-        right_line = _advance_line(right)
-        if left_line is not None:
-            left_total += 1
-        if right_line is not None:
-            right_total += 1
-
-        while left_line is not None and right_line is not None:
-            if left_line == right_line:
-                exact += 1
-                left_line = _advance_line(left)
-                right_line = _advance_line(right)
-                if left_line is not None:
-                    left_total += 1
-                if right_line is not None:
-                    right_total += 1
-                continue
-            if left_line < right_line:
-                left_only += 1
-                left_line = _advance_line(left)
-                if left_line is not None:
-                    left_total += 1
-                continue
-            right_only += 1
-            right_line = _advance_line(right)
-            if right_line is not None:
-                right_total += 1
-
-        while left_line is not None:
-            left_only += 1
-            left_line = _advance_line(left)
-            if left_line is not None:
-                left_total += 1
-
-        while right_line is not None:
-            right_only += 1
-            right_line = _advance_line(right)
-            if right_line is not None:
-                right_total += 1
-
-    return ParityCounts(exact, left_only, right_only, left_total, right_total)
-
-
-# ---------------------------------------------------------------------------
-# DAG micro-executor
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class Node:
-    name: str
-    action: object
-    inputs: list
-    outputs: list
-
-
-def run_graph(nodes, jobs):
-    """Run the node DAG, joining each node on the producers of its input files,
-    up to `jobs` concurrently. A node whose any dependency failed is skipped
-    (marked failed, propagating). Returns {name: result}."""
-    by_out = {o: n.name for n in nodes for o in n.outputs}
-    deps = {n.name: {by_out[i] for i in n.inputs if i in by_out} for n in nodes}
-    dependents = {n.name: [] for n in nodes}
-
-    for n in nodes:
-        for d in deps[n.name]:
-            dependents[d].append(n.name)
-
-    node_by_name = {n.name: n for n in nodes}
-    results = {}
-    failed = set()
-    remaining = {n.name: len(deps[n.name]) for n in nodes}
-    left = [len(nodes)]
-    lock = threading.Lock()
-    sem = threading.Semaphore(jobs)
-    done = threading.Event()
-
-    def complete(name, result):
-        ready = []
-
-        with lock:
-            results[name] = result
-
-            if not result.get("ok"):
-                failed.add(name)
-
-            for dep in dependents[name]:
-                remaining[dep] -= 1
-
-                if remaining[dep] == 0:
-                    ready.append(dep)
-
-            left[0] -= 1
-
-            if left[0] == 0:
-                done.set()
-
-        for dep in ready:
-            dispatch(dep)
-
-    def dispatch(name):
-        with lock:
-            blocked = bool(deps[name] & failed)
-
-        if blocked:
-            complete(name, {"ok": False, "skipped": True})
-
-            return
-
-        def task():
-            sem.acquire()
-
-            try:
-                res = node_by_name[name].action()
-            except Exception as e:  # noqa: BLE001 — surface, don't crash the run
-                res = {"ok": False, "error": str(e)}
-            finally:
-                sem.release()
-
-            complete(name, res)
-
-        threading.Thread(target=task, daemon=True).start()
-
-    for n in nodes:
-        if remaining[n.name] == 0:
-            dispatch(n.name)
-
-    done.wait()
-
-    return results
-
-
-def _fmt_cmd(cmd, cwd, env_extra, stdout):
-    """A copy-pasteable shell line: cd, the env delta, the quoted argv and any
-    stdout redirect. clean_env only *strips* toolchain vars (unset in a clean
-    shell anyway), so only the added vars need to show."""
-    parts = [f"cd {shlex.quote(cwd)} &&"]
-
-    if env_extra:
-        parts += [f"{k}={shlex.quote(str(v))}" for k, v in env_extra.items()]
-
-    parts.append(" ".join(shlex.quote(c) for c in cmd))
-
-    if stdout is not None:
-        parts.append(f"> {shlex.quote(stdout)}")
-
-    return " ".join(parts)
-
-
-def sh(cmd, stdout=None, label=None, cwd=None, env_extra=None):
-    """Run a subprocess and print the full runnable command line with its wall
-    time. cwd defaults to WORK_CWD; env_extra adds vars."""
-    extra = dict(env_extra or {})
-
-    env = clean_env(extra)
-    run_cwd = cwd or WORK_CWD
-    t = time.monotonic()
-
-    if stdout is not None:
-        with open(stdout, "wb") as f:
-            rc = subprocess.run(cmd, cwd=run_cwd, env=env, stdout=f).returncode
-    else:
-        rc = subprocess.run(cmd, cwd=run_cwd, env=env).returncode
-
-    tag = f"[{label}] " if label else ""
-    print(f"{tag}{time.monotonic() - t:.2f}s rc={rc}  $ {_fmt_cmd(cmd, run_cwd, extra, stdout)}", flush=True)
-
-    return rc
-
-
-# ---------------------------------------------------------------------------
-# Config + cache
-# ---------------------------------------------------------------------------
-
-
-def load_config():
-    if not os.path.exists(CONFIG_PATH):
-        return []
-    with open(CONFIG_PATH) as f:
-        cases = json.load(f)
-    for c in cases:
-        cmd = c.get("command", [])
+def load_config() -> list[dict]:
+    with CONFIG_PATH.open(encoding="utf-8") as stream:
+        cases = json.load(stream)
+    for case in cases:
+        command = case.get("command", [])
         for flag in ("--target-platform", "--host-platform"):
-            if not any(t == flag or t.startswith(flag + "=") for t in cmd):
-                sys.exit(
-                    "config.json: case %r is missing %s — both --target-platform "
-                    "and --host-platform must be pinned so the gate is reproducible "
-                    "on any host" % (c.get("id"), flag)
+            if not any(token == flag or token.startswith(flag + "=") for token in command):
+                raise SystemExit(
+                    f"config.json: case {case.get('id')!r} is missing {flag}; "
+                    "both platforms must be pinned"
                 )
     return cases
 
 
-def resource_id(url):
-    return url.rstrip("/").rsplit("/", 1)[-1]
-
-
-def resolve_slice_root(slice_dir):
-    """The arcadia root inside the unpacked slice — `ya upload --tar` nests the
-    tree under the uploaded dir's basename, so the root is not slice_dir itself."""
-    if os.path.exists(os.path.join(slice_dir, ".arcadia.root")):
-        return slice_dir
-    for root, _dirs, files in os.walk(slice_dir):
-        if ".arcadia.root" in files:
-            return root
-    return slice_dir
-
-
-def resolve_ref_raw(graph_dir):
-    cand = os.path.join(graph_dir, "graph.fuse.json")
-    if os.path.exists(cand):
-        return cand
-    for root, _dirs, files in os.walk(graph_dir):
-        for f in files:
-            if f.endswith(".json"):
-                return os.path.join(root, f)
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Node actions
-# ---------------------------------------------------------------------------
-
-
-def build_action():
-    rc = sh([GO, "build", "-o", AY, "."], label="build", cwd=REPO_ROOT, env_extra={"CGO_ENABLED": "0"})
-
-    return {"ok": rc == 0}
-
-
-def fetch_action(kind, rid, dst_dir, ready):
-    def action():
-        if os.path.exists(ready):
-            print(f"[{kind}:{rid}] cached", flush=True)
-            return {"ok": True}
-
-        if os.path.exists(dst_dir):
-            shutil.rmtree(dst_dir)
-        os.makedirs(dst_dir, exist_ok=True)
-        rc = sh([AY, "fetch", "sandbox", "--resource-id", rid, "--untar-to", dst_dir], label=f"fetch:{kind}:{rid}")
-
-        if rc == 0:
-            open(ready, "wb").close()
-
-        return {"ok": rc == 0}
-
-    return action
-
-
-def _relink(target, link):
-    if os.path.islink(link) or os.path.lexists(link):
-        if os.path.isdir(link) and not os.path.islink(link):
-            shutil.rmtree(link)
+def parse_arguments(case_ids: set[str]) -> tuple[bool, str | None, list[str], Path | None]:
+    warm = False
+    cache = None
+    selected: list[str] = []
+    out_dir = None
+    arguments = sys.argv[1:]
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--warm":
+            warm = True
+        elif argument == "--cache":
+            index += 1
+            if index >= len(arguments):
+                raise SystemExit("validate.py: --cache requires a directory")
+            cache = arguments[index]
+        elif argument.startswith("--cache="):
+            cache = argument.split("=", 1)[1]
+        elif argument in case_ids:
+            selected.append(argument)
+        elif argument.startswith("-"):
+            raise SystemExit(f"validate.py: unknown option {argument}")
+        elif out_dir is None:
+            out_dir = Path(argument).resolve()
         else:
-            os.remove(link)
-
-    os.symlink(target, link)
-
-
-def link_case_action(cid, slice_dir, graph_dir):
-    """Create a stable <cache>/<id>/ dir with `slice` → the repo root (resolved
-    past the untar nesting, where .arcadia.root lives) and `graph` → the ref
-    graph json, so an agent debugging <id> has a fixed path independent of the
-    numeric resource ids."""
-    def action():
-        case_dir = os.path.join(CACHE_DIR, cid)
-        os.makedirs(case_dir, exist_ok=True)
-        _relink(resolve_slice_root(slice_dir), os.path.join(case_dir, "slice"))
-        ref = resolve_ref_raw(graph_dir)
-
-        if ref is not None:
-            _relink(ref, os.path.join(case_dir, "graph"))
-
-        print(f"[link:{cid}] {case_dir}", flush=True)
-
-        return {"ok": ref is not None}
-
-    return action
+            raise SystemExit(f"validate.py: unexpected argument {argument}")
+        index += 1
+    return warm, cache, selected, out_dir
 
 
-def gen_action(name, command, slice_dir, slice_ready, raw, budget):
-    def action():
-        cmd = [AY] + command[1:] + ["--source-root", resolve_slice_root(slice_dir)]
-        _remove_if_exists(raw)
-        t = time.monotonic()
-        rc = sh(cmd, stdout=raw, label=f"gen:{name}")
-        secs = time.monotonic() - t
-        over = budget is not None and secs > GEN_TIME_SLACK * budget
-
-        return {"ok": rc == 0, "secs": secs, "budget_over": over}
-
-    return action
-
-
-def normalize_our_action(label, raw, target, out_unsorted):
-    def action():
-        _remove_if_exists(out_unsorted)
-        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted], label=f"norm-our:{label}")
-
-        return {"ok": rc == 0}
-
-    return action
-
-
-def normalize_ref_action(label, graph_dir, target, out_unsorted):
-    def action():
-        raw = resolve_ref_raw(graph_dir)
-        if raw is None:
-            print(f"[{label}] no ref graph json under {graph_dir}", flush=True)
-            return {"ok": False}
-
-        _remove_if_exists(out_unsorted)
-        rc = sh([AY, "dev", "dump", "normalize", "--in", raw, "--target", target, "--out", out_unsorted, "--ref-graph"], label=f"norm-ref:{label}")
-
-        return {"ok": rc == 0}
-
-    return action
-
-
-def sort_action(label, in_unsorted, out_sorted, side):
-    def action():
-        _remove_if_exists(out_sorted)
-        rc = sh([AY, "dev", "dump", "sort", "--in", in_unsorted, "--out", out_sorted], label=f"sort-{side}:{label}")
-
-        if rc == 0:
-            _remove_if_exists(in_unsorted)
-
-        return {"ok": rc == 0}
-
-    return action
-
-
-def compare_action(name, xfail, our_sorted, ref_sorted, out_dir):
-    def action():
-        if xfail is False:
-            rc = sh(["cmp", "-s", our_sorted, ref_sorted], label=f"cmp:{name}")
-
-            return {"ok": True, "verdict": "OK" if rc == 0 else "FAIL"}
-
-        if xfail == "auto" and sh(["cmp", "-s", our_sorted, ref_sorted], label=f"cmp:{name}") == 0:
-            return {"ok": True, "verdict": "OK"}
-
-        parity = normalized_node_parity_counts(our_sorted, ref_sorted)
-        diff_file = os.path.join(out_dir, f"{name}.diff.txt")
-        sh([AY, "dev", "dump", "diff", "--left", our_sorted, "--right", ref_sorted, "--out", diff_file], label=f"diff:{name}")
-
-        return {"ok": True, "verdict": "XFAIL", "parity": parity, "diff_file": diff_file}
-
-    return action
-
-
-# ---------------------------------------------------------------------------
-# Graph construction + gating evaluation
-# ---------------------------------------------------------------------------
-
-
-def _fetch_node(fetched, kind, url):
-    """Register (once) a fetch node for the resource behind `url`; return its
-    (dst_dir, ready_marker). `fetched` is keyed by the ready path so a slice or
-    graph shared by several cases is fetched + unpacked exactly once."""
-    rid = resource_id(url)
-    dst = os.path.join(CACHE_DIR, f"{kind}-{rid}")
-    ready = dst + ".ready"
-
-    if ready not in fetched:
-        fetched[ready] = Node(f"fetch-{kind}:{rid}", fetch_action(kind, rid, dst, ready), [AY], [ready])
-
-    return dst, ready
-
-
-def warm_nodes(cases):
-    """Just the build + fetch nodes: download and unpack every slice/graph into
-    the cache so a swarm of agents can share a warmed cache dir."""
-    nodes = [Node("build", build_action, [], [AY])]
-    fetched = {}
-
-    for e in cases:
-        slice_dir, slice_ready = _fetch_node(fetched, "slice", e["slice_url"])
-        graph_dir, graph_ready = _fetch_node(fetched, "graph", e["graph_url"])
-        nodes.append(Node(f"link:{e['id']}", link_case_action(e["id"], slice_dir, graph_dir), [slice_ready, graph_ready], []))
-
-    return nodes + list(fetched.values())
-
-
-def build_nodes(out_dir, cases):
-    nodes = [Node("build", build_action, [], [AY])]
-    fetched = {}
-
-    def fetch(kind, url):
-        return _fetch_node(fetched, kind, url)
-
-    for e in cases:
-        cid = e["id"]
-        xfail = e.get("xfail", False)
-        budget = e.get("budget")
-
-        slice_dir, slice_ready = fetch("slice", e["slice_url"])
-        graph_dir, graph_ready = fetch("graph", e["graph_url"])
-
-        raw = os.path.join(out_dir, f"{cid}.our.json")
-        our_u = os.path.join(out_dir, f"{cid}.our.norm.unsorted")
-        ref_u = os.path.join(out_dir, f"{cid}.ref.norm.unsorted")
-        our_s = os.path.join(out_dir, f"{cid}.our.norm.jsonl")
-        ref_s = os.path.join(out_dir, f"{cid}.ref.norm.jsonl")
-
-        nodes += [
-            Node(f"link:{cid}", link_case_action(cid, slice_dir, graph_dir), [slice_ready, graph_ready], []),
-            Node(f"gen:{cid}", gen_action(cid, e["command"], slice_dir, slice_ready, raw, budget), [AY, slice_ready], [raw]),
-            Node(f"norm-our:{cid}", normalize_our_action(cid, raw, e["target"], our_u), [AY, raw], [our_u]),
-            Node(f"sort-our:{cid}", sort_action(cid, our_u, our_s, "our"), [AY, our_u], [our_s]),
-            Node(f"norm-ref:{cid}", normalize_ref_action(cid, graph_dir, e["target"], ref_u), [AY, graph_ready], [ref_u]),
-            Node(f"sort-ref:{cid}", sort_action(cid, ref_u, ref_s, "ref"), [AY, ref_u], [ref_s]),
-            Node(f"cmp:{cid}", compare_action(cid, xfail, our_s, ref_s, out_dir), [our_s, ref_s], []),
-        ]
-
-    return nodes + list(fetched.values())
-
-
-def print_debug(cid, e, out_dir):
-    slice_dir = os.path.join(CACHE_DIR, "slice-" + resource_id(e["slice_url"]))
-    graph_dir = os.path.join(CACHE_DIR, "graph-" + resource_id(e["graph_url"]))
-    our_raw = os.path.join(out_dir, f"{cid}.our.json")
-    ref_raw = resolve_ref_raw(graph_dir)
-    our_s = os.path.join(out_dir, f"{cid}.our.norm.jsonl")
-    ref_s = os.path.join(out_dir, f"{cid}.ref.norm.jsonl")
-
-    print(f"[{cid}] debug:")
-    print(f"[{cid}]   source-root : {resolve_slice_root(slice_dir)}")
-    print(f"[{cid}]   target      : {e['target']}")
-    print(f"[{cid}]   our graph   : {our_raw}")
-    print(f"[{cid}]   ref graph   : {ref_raw}")
-    print(f"[{cid}]   our sorted  : {our_s}")
-    print(f"[{cid}]   ref sorted  : {ref_s}")
-    print(f"[{cid}]   diff        : {os.path.join(out_dir, f'{cid}.diff.txt')}")
-    print(f"[{cid}]   inspect     : {AY} dev dump diff --left {our_s} --right {ref_s} --by-token")
-
-
-def evaluate(cases, results, out_dir):
-    status = 0
-
-    for e in cases:
-        cid = e["id"]
-        xfail = e.get("xfail", False)
-
-        fetch_ok = (results.get(f"fetch-slice:{resource_id(e['slice_url'])}", {}).get("ok")
-                    and results.get(f"fetch-graph:{resource_id(e['graph_url'])}", {}).get("ok"))
-        if not fetch_ok:
-            print(f"[{cid}] FAIL (fetch)")
-            if xfail is not True:
-                status = 1
-            continue
-
-        gen = results.get(f"gen:{cid}", {})
-        if not gen.get("ok"):
-            print(f"[{cid}] FAIL (generate)")
-            print_debug(cid, e, out_dir)
-            if xfail is not True:
-                status = 1
-            continue
-
-        if gen.get("budget_over"):
-            budget = e.get("budget")
-            print(f"[{cid}] FAIL (perf regression): gen {gen['secs']:.2f}s > "
-                  f"{GEN_TIME_SLACK:g}x budget {budget:.2f}s — optimize the code, do NOT raise the budget")
-            status = 1
-
-        norm_ok = all(results.get(f"{step}:{cid}", {}).get("ok")
-                      for step in ("norm-our", "sort-our", "norm-ref", "sort-ref"))
-        if not norm_ok:
-            print(f"[{cid}] FAIL (normalize)")
-            print_debug(cid, e, out_dir)
-            if xfail is not True:
-                status = 1
-            continue
-
-        verdict = results.get(f"cmp:{cid}", {}).get("verdict")
-
-        if verdict == "OK":
-            print(f"[{cid}] OK")
-        elif verdict == "XFAIL":
-            cmp = results[f"cmp:{cid}"]
-            p = cmp["parity"]
-            print(f"[{cid}] exact normalized-node parity: "
-                  f"matched={p.exact} our_only={p.left_only} ref_only={p.right_only} "
-                  f"our_total={p.left_total} ref_total={p.right_total}")
-            print(f"[{cid}] XFAIL (not gating) — full diff: {cmp['diff_file']}")
-            print_debug(cid, e, out_dir)
-        else:
-            print(f"[{cid}] FAIL")
-            print_debug(cid, e, out_dir)
-            status = 1
-
-    return status
+def run_build(build_root: Path, cache_root: Path, targets: list[str]) -> int:
+    command = [
+        str(REPO_ROOT / "build"),
+        "-B", str(build_root),
+        "--cache-dir", str(cache_root),
+        "-k",
+        *targets,
+    ]
+    print("[validate] $ " + " ".join(command), flush=True)
+    return subprocess.run(command, cwd=REPO_ROOT).returncode
 
 
 def main() -> int:
     cases = load_config()
-    ids = {e["id"] for e in cases}
+    by_id = {case["id"]: case for case in cases}
+    warm, cache_option, selected, out_dir = parse_arguments(set(by_id))
 
-    # Args: `--warm` (fetch only), `--cache DIR` (or --cache=DIR), a known case
-    # id selects that case (repeatable), anything else is the out-dir. So
-    # `validate.py <id>` runs one case, `validate.py <out-dir>` keeps the
-    # acceptance contract, `validate.py --warm` warms the whole cache.
-    warm = False
-    cache = None
-    selected, out_dir = [], None
-    argv = sys.argv[1:]
-    i = 0
+    configured_build_root = os.environ.get("AY_BUILD_ROOT")
+    if configured_build_root:
+        build_root = Path(configured_build_root).resolve()
+    elif out_dir is not None:
+        build_root = out_dir / "build"
+    else:
+        build_root = REPO_ROOT / ".build"
 
-    while i < len(argv):
-        a = argv[i]
-
-        if a == "--warm":
-            warm = True
-        elif a == "--cache":
-            i += 1
-            cache = argv[i]
-        elif a.startswith("--cache="):
-            cache = a.split("=", 1)[1]
-        elif a in ids:
-            selected.append(a)
-        else:
-            out_dir = a
-
-        i += 1
-
-    global CACHE_DIR, AY, WORK_CWD
-    CACHE_DIR = os.path.abspath(cache or os.environ.get("AY_VALIDATE_CACHE_DIR") or CACHE_DIR)
-
-    out_dir = os.path.abspath(out_dir or os.path.join(REPO_ROOT, ".out", "validate"))
-    os.makedirs(out_dir, exist_ok=True)
-    os.makedirs(CACHE_DIR, exist_ok=True)
-
-    AY = os.path.join(out_dir, "ay")
-    WORK_CWD = out_dir
-
-    if selected:
-        cases = [e for e in cases if e["id"] in selected]
-
-    if not cases:
-        print(f"validate.py: no cases in {CONFIG_PATH}")
-        return 0
-
-    jobs = int(os.environ.get("VALIDATE_JOBS", os.cpu_count() or 4))
+    configured_cache = os.environ.get("AY_BUILD_CACHE_DIR")
+    cache_root = Path(configured_cache or cache_option or build_root).resolve()
+    build_root.mkdir(parents=True, exist_ok=True)
+    cache_root.mkdir(parents=True, exist_ok=True)
 
     if warm:
-        nodes = warm_nodes(cases)
-        n_fetch = sum(1 for n in nodes if n.name.startswith("fetch-"))
-        print(f"[warm] {len(cases)} cases, {n_fetch} resources -> {CACHE_DIR}, jobs={jobs}", flush=True)
-        results = run_graph(nodes, jobs)
+        rc = run_build(build_root, cache_root, ["validation_resources"])
+        if rc == 0:
+            print(
+                f"validate.py: warmed {len(cases)} cases into build cache {cache_root}",
+                flush=True,
+            )
+        return rc
 
-        if not results.get("build", {}).get("ok"):
-            print("validate.py: build failed")
-            return 1
-
-        bad = sorted(name for name, r in results.items()
-                     if (name.startswith("fetch-") or name.startswith("link:")) and not r.get("ok"))
-        print(f"validate.py: warmed {n_fetch} resources + {len(cases)} case links into {CACHE_DIR}")
-
-        for name in bad:
-            print(f"  FAILED {name}")
-
-        return 1 if bad else 0
-
-    print(f"[graph] {len(cases)} cases, jobs={jobs}", flush=True)
-
-    t0 = time.monotonic()
-    results = run_graph(build_nodes(out_dir, cases), jobs)
-    print(f"[total] graph wall {time.monotonic() - t0:.2f}s", flush=True)
-
-    if not results.get("build", {}).get("ok"):
-        print("validate.py: build failed")
+    targets = (
+        [f"validation_result_{slug(case_id)}" for case_id in selected]
+        if selected
+        else ["validation_results"]
+    )
+    rc = run_build(build_root, cache_root, targets)
+    if rc != 0:
+        print("validate.py: validation build graph failed", flush=True)
         return 1
 
-    status = evaluate(cases, results, out_dir)
-    print("validate.py: all gating cases byte-exact" if status == 0 else "validate.py: failures above")
+    if selected:
+        results = [
+            read_result(build_root / "validation" / "cases" / case_id / "result.json")
+            for case_id in selected
+        ]
+    else:
+        summary = read_summary(build_root / "validation" / "summary.json")
+        results = [summary["cases"][case_id] for case_id in sorted(summary["cases"])]
 
-    return status
+    failed = False
+    for result in results:
+        for line in format_result_lines(result):
+            print(line, flush=True)
+        failed = failed or result["status"] == "FAIL"
+
+    if failed:
+        print("validate.py: failures above", flush=True)
+        return 1
+    print("validate.py: all gating cases byte-exact", flush=True)
+    return 0
 
 
 if __name__ == "__main__":

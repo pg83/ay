@@ -125,6 +125,40 @@ func TestPlaceSandboxResource_UntarTo(t *testing.T) {
 	}
 }
 
+func TestCmdFetchSandbox_UsesProvidedResourceFile(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	fetched := filepath.Join(t.TempDir(), "resource")
+	f, err := os.Create(fetched)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tw := tar.NewWriter(f)
+	body := []byte("from-local-archive")
+	throw(tw.WriteHeader(&tar.Header{Name: "payload.txt", Mode: 0o644, Size: int64(len(body))}))
+	throw2(tw.Write(body))
+	throw(tw.Close())
+	throw(f.Close())
+
+	cmdFetchSandbox(GlobalFlags{}, []string{
+		"--resource-id", "immutable-test-resource",
+		"--resource-file", fetched,
+		"--untar-to", "out",
+	})
+
+	got, err := os.ReadFile("out/payload.txt")
+
+	if err != nil {
+		t.Fatalf("provided resource file was not unpacked: %v", err)
+	}
+
+	if string(got) != string(body) {
+		t.Fatalf("output content = %q, want %q", got, body)
+	}
+}
+
 func TestResourceGraphEmitter_OnlyMaterializesUsedFetchNodes(t *testing.T) {
 	host := newTestPlatform(OSLinux, ISAX8664, "yes")
 	target := sandboxedX8664TargetPlatform()
