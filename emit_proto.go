@@ -297,7 +297,7 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 	}
 
 	for _, p := range pe.extraPlugins {
-		if p.LDRef != 0 {
+		if len(p.Spec.OutputSuffixes) == 0 && p.LDRef != 0 {
 			refs = append(refs, p.LDRef)
 		}
 	}
