@@ -3019,8 +3019,8 @@ END()
 			t.Errorf("core test.pb.cc.o unexpectedly carries plugin-output induced input %q", induced)
 		}
 
-		if nodeHasInput(useCoreCC, induced) {
-			t.Errorf("core-header consumer unexpectedly carries plugin-output induced input %q", induced)
+		if !nodeHasInput(useCoreCC, induced) {
+			t.Errorf("external core-header consumer missing h induced input %q: %v", induced, vfsStringsT3(useCoreCC.flatInputs()))
 		}
 
 		if !nodeHasInput(usePluginCC, induced) {
