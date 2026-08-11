@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -538,5 +539,37 @@ END()
 		if !nodeHasInput(r6, want) {
 			t.Fatalf("generated R6 inputs missing OUTPUT_INCLUDES closure %q: %v", want, vfsStringsT3(r6.flatInputs()))
 		}
+	}
+}
+
+func TestGen_GeneratedRagel6ArchivesAfterDirectRagel6(t *testing.T) {
+	files := map[string]string{}
+	writeToolProgram(files, "tools/lua", "lua")
+	writeToolProgram(files, "contrib/tools/ragel6", "ragel6")
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+RUN_LUA(
+    gen.lua generated.rl6
+    IN template.rl6
+    OUT generated.rl6
+)
+SRCS(direct.rl6)
+END()
+`)
+	writeTestModuleFile(files, "mod/gen.lua", "-- stub\n")
+	writeTestModuleFile(files, "mod/template.rl6", "%%{ machine template; }%%\n")
+	writeTestModuleFile(files, "mod/direct.rl6", "%%{ machine direct; }%%\n")
+
+	g := testGen(newMemFS(files), "mod")
+	ar := mustNodeByOutput(t, g, "$(B)/mod/libmod.a")
+	members := vfsStrings(ar.flatInputs())
+
+	direct := slices.Index(members, "$(B)/mod/direct.rl6.cpp.o")
+	generated := slices.Index(members, "$(B)/mod/generated.rl6.cpp.o")
+
+	if direct < 0 || generated < 0 || direct > generated {
+		t.Fatalf("direct ragel output must precede RUN_LUA -> ragel output: direct=%d generated=%d members=%v", direct, generated, members)
 	}
 }
