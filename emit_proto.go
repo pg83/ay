@@ -303,7 +303,13 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 	}
 
 	for _, p := range pe.extraPlugins {
-		if len(p.Spec.OutputSuffixes) != 0 && p.LDRef != 0 {
+		if len(p.Spec.OutputSuffixes) == 0 || p.LDRef == 0 {
+			continue
+		}
+
+		tool, ok := ctx.moduleByRef.get(p.LDRef)
+
+		if ok && len(tool.InducedDeps.bucket(parsedIncludesCpp)) != 0 {
 			refs = append(refs, p.LDRef)
 		}
 	}
@@ -461,20 +467,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	pbHCompile = pbHCompile[:len(pbHCompile):len(pbHCompile)]
 
-	pbCoreRefCount := 2
-
-	if cfg.grpc {
-		pbCoreRefCount++
-	}
-
-	for _, plugin := range pe.extraPlugins {
-		if len(plugin.Spec.OutputSuffixes) == 0 && plugin.LDRef != 0 {
-			pbCoreRefCount++
-		}
-	}
-
-	pbCoreRefs := pe.pbGenRefs[:pbCoreRefCount:pbCoreRefCount]
-	pbCCRefs := pe.pbGenRefs
+	pbGenRefs := pe.pbGenRefs
 	pbHLeaves := na.vfsList(protoRel.source())
 
 	if generatedProto {
@@ -484,7 +477,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	e.register(GeneratedFileInfo{
 		OutputPath:     pbH,
 		ProducerRef:    pbRef,
-		GeneratorRefs:  pbCoreRefs,
+		GeneratorRefs:  pbGenRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesCpp: pbHCompile},
 		ClosureLeaves:  pbHLeaves,
 		OnUse:          pbPE,
@@ -498,14 +491,17 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		}
 
 		var pluginRefs []NodeRef
-		yaffCCRefs := pbCoreRefs
+		yaffCCRefs := pbGenRefs
 
 		if ref := pe.extraPlugins[pluginIdx].LDRef; ref != 0 {
 			pluginRefs = na.refList(ref)
-			yaffCCRefs = na.noderefs.alloc(len(pbCoreRefs) + 1)
-			copy(yaffCCRefs, pbCoreRefs)
-			yaffCCRefs[len(pbCoreRefs)] = ref
-			na.noderefs.commit(len(yaffCCRefs))
+
+			if !slices.Contains(pbGenRefs, ref) {
+				yaffCCRefs = na.noderefs.alloc(len(pbGenRefs) + 1)
+				copy(yaffCCRefs, pbGenRefs)
+				yaffCCRefs[len(pbGenRefs)] = ref
+				na.noderefs.commit(len(yaffCCRefs))
+			}
 		}
 
 		yaffH := build(protoBase, plugin.OutputSuffixes[0])
@@ -552,7 +548,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		e.register(GeneratedFileInfo{
 			OutputPath:     pbDepsH,
 			ProducerRef:    pbRef,
-			GeneratorRefs:  pbCoreRefs,
+			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: depsParsed},
 			OnUse:          pbPE,
 		})
@@ -573,7 +569,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	e.register(GeneratedFileInfo{
 		OutputPath:     pbCC,
 		ProducerRef:    pbRef,
-		GeneratorRefs:  pbCCRefs,
+		GeneratorRefs:  pbGenRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbCCParsed},
 		OnUse:          pbPE,
 	})
