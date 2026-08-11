@@ -1797,3 +1797,19 @@ func TestParseInclude_ModdirDefaultIncludeSetListFeedsRunProgram(t *testing.T) {
 func condRoot(c []CondNode) CondNode {
 	return c[len(c)-1]
 }
+
+func TestParseBaseCodegen(t *testing.T) {
+	stmt := parseBaseCodegen(anysOf("kernel/fill_factors_codegen", "fill_factors", "NTop"), 1)
+
+	if stmt.ToolPath.string() != "kernel/fill_factors_codegen" {
+		t.Fatalf("ToolPath = %q", stmt.ToolPath.string())
+	}
+
+	if stmt.Prefix.string() != "fill_factors" {
+		t.Fatalf("Prefix = %q", stmt.Prefix.string())
+	}
+
+	if got := anyStrs(stmt.Opts); !equalStrings(got, []string{"NTop"}) {
+		t.Fatalf("Opts = %v, want [NTop]", got)
+	}
+}
