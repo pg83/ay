@@ -36,13 +36,13 @@ def run(*args, timeout=10, env=None):
     return result
 
 
-def make(files, target, *args):
+def make(files, target, *args, opensource=True):
     with tempfile.TemporaryDirectory(prefix="ay-make-test-") as directory:
         root = Path(directory)
         (root / ".arcadia.root").touch()
+        value = 'OPENSOURCE = "yes"\n' if opensource else ""
         (root / "ya.conf").write_text(
-            '[flags]\nOPENSOURCE = "yes"\n\n'
-            '[host_platform_flags]\nOPENSOURCE = "yes"\n'
+            f"[flags]\n{value}\n[host_platform_flags]\n{value}"
         )
         for relative, content in files.items():
             path = root / relative
@@ -70,3 +70,22 @@ def node_by_output(graph, output):
         if output in node.get("outputs", []):
             return node
     raise AssertionError(f"graph has no node producing {output!r}")
+
+
+def node_by_output_prefix(graph, prefix):
+    for node in graph["graph"]:
+        if any(output.startswith(prefix) for output in node.get("outputs", [])):
+            return node
+    raise AssertionError(f"graph has no node producing prefix {prefix!r}")
+
+
+def tool_program(files, path, name):
+    files[f"{path}/ya.make"] = (
+        f"PROGRAM({name})\n"
+        "NO_LIBC()\n"
+        "NO_RUNTIME()\n"
+        "NO_UTIL()\n"
+        "SRCS(main.cpp)\n"
+        "END()\n"
+    )
+    files[f"{path}/main.cpp"] = "int main(){return 0;}\n"
