@@ -1813,3 +1813,38 @@ func TestParseBaseCodegen(t *testing.T) {
 		t.Fatalf("Opts = %v, want [NTop]", got)
 	}
 }
+
+func TestParseSplitCodegen_KeywordsAnywhere(t *testing.T) {
+	stmt := parseSplitCodegen(anysOf(
+		"OUT_NUM", "30", "tools/codegen", "factors_gen", "NTop",
+		"OUTPUT_INCLUDES", "a.h", "b.h",
+	), 1)
+
+	if stmt.ToolPath.string() != "tools/codegen" {
+		t.Fatalf("ToolPath = %q, want tools/codegen", stmt.ToolPath.string())
+	}
+
+	if stmt.Prefix.string() != "factors_gen" {
+		t.Fatalf("Prefix = %q, want factors_gen", stmt.Prefix.string())
+	}
+
+	if stmt.OutNum != 30 {
+		t.Fatalf("OutNum = %d, want 30", stmt.OutNum)
+	}
+
+	if got := anyStrs(stmt.Opts); !equalStrings(got, []string{"NTop"}) {
+		t.Fatalf("Opts = %v, want [NTop]", got)
+	}
+
+	if got := anyStrs(stmt.OutputIncludes); !equalStrings(got, []string{"a.h", "b.h"}) {
+		t.Fatalf("OutputIncludes = %v, want [a.h b.h]", got)
+	}
+}
+
+func TestParseSplitCodegen_DefaultOutNum(t *testing.T) {
+	stmt := parseSplitCodegen(anysOf("tools/codegen", "factors_gen", "NTop"), 1)
+
+	if stmt.OutNum != splitCodegenDefaultOutNum {
+		t.Fatalf("OutNum = %d, want %d", stmt.OutNum, splitCodegenDefaultOutNum)
+	}
+}

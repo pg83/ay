@@ -3,13 +3,6 @@ import unittest
 import lib
 
 
-def only_kind(graph, kind):
-    nodes = [node for node in graph["graph"] if node.get("kv", {}).get("p") == kind]
-    if len(nodes) != 1:
-        raise AssertionError(f"expected one {kind} node, got {len(nodes)}")
-    return nodes[0]
-
-
 class EmitBaseCodegenTest(unittest.TestCase):
     def test_generated_closure_reaches_consumer(self):
         files = {
@@ -66,7 +59,7 @@ class EmitBaseCodegenTest(unittest.TestCase):
         }
         lib.tool_program(files, "tool2", "tool2")
         graph = lib.make(files, "consumer")
-        base_codegen = only_kind(graph, "BC")
+        base_codegen = lib.only_node_by_kind(graph, "BC")
         self.assertEqual(base_codegen["kv"]["pc"], "yellow")
         self.assertEqual(base_codegen["outputs"], [
             "$(B)/consumer/fill_factors.cpp",
@@ -141,7 +134,7 @@ class EmitBaseCodegenTest(unittest.TestCase):
             files[header] = "#pragma once\n"
 
         graph = lib.make(files, "app")
-        base_codegen = only_kind(graph, "BC")
+        base_codegen = lib.only_node_by_kind(graph, "BC")
         self.assertEqual(base_codegen["outputs"], [
             "$(B)/lib/gen.cpp",
             "$(B)/lib/gen.h",
