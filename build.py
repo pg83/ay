@@ -115,6 +115,7 @@ GO_OVERLAY_CMD = [
     "--source-root", "$(S)",
     *GENERATED_DENSE_MAPS,
 ]
+GO_GCFLAGS = "-c=16"
 
 GO_ENV = {
     "CGO_ENABLED": "0",
@@ -133,6 +134,7 @@ ay = command(
         GO_OVERLAY_CMD,
         [
             "go", "build",
+            "-gcflags=" + GO_GCFLAGS,
             "-overlay=" + GO_OVERLAY,
             "-trimpath",
             "-buildvcs=false",
@@ -156,6 +158,7 @@ go_test = command(
         GO_OVERLAY_CMD,
         [
             "go", "test",
+            "-gcflags=" + GO_GCFLAGS,
             "-overlay=" + GO_OVERLAY,
             "-count=1", "-timeout=2m", ".",
         ],
