@@ -65,60 +65,36 @@ def validation_partition():
 
 partition = validation_partition()
 
-GENERATED_DENSE_MAPS = {
-    "dense_map_2.go",
-    "dense_map_2_test.go",
-    "dense_map_3.go",
-    "dense_map_3_test.go",
-}
-
 GO_SOURCES = [
     path for path in build.glob("$(S)/*.go")
     if not path.endswith("_test.go")
-    and path.rsplit("/", 1)[-1] not in GENERATED_DENSE_MAPS
 ]
-GO_TEST_SOURCES = [
-    path for path in build.glob("$(S)/*_test.go")
-    if path.rsplit("/", 1)[-1] not in GENERATED_DENSE_MAPS
-]
-GO_ASM_SOURCES = build.glob("$(S)/*.s")
+GO_TEST_SOURCES = build.glob("$(S)/*_test.go")
 
-go_source_tree = command(
-    name="go_source_tree",
-    inputs=[
-        "$(S)/dev/gen_densemap.py",
-        *GO_SOURCES,
-        *GO_TEST_SOURCES,
-        *GO_ASM_SOURCES,
-        "$(S)/perf_darts_data.txt",
-        "$(S)/go.mod",
-        "$(S)/go.sum",
-        *source_files("vendor"),
-    ],
-    outputs=["$(B)/go-src"],
+GENERATED_DENSE_MAPS = [
+    "$(B)/generated/go/dense_map_2.go",
+    "$(B)/generated/go/dense_map_2_test.go",
+    "$(B)/generated/go/dense_map_3.go",
+    "$(B)/generated/go/dense_map_3_test.go",
+]
+
+dense_maps = command(
+    name="dense_maps",
+    inputs=["$(S)/dev/gen_densemap.py"],
+    outputs=GENERATED_DENSE_MAPS,
     cmd=[
-        [
-            "python3", "$(S)/dev/gen_densemap.py",
-            "--out-dir", "$(B)/go-src",
-        ],
-        [
-            "cp", "--",
-            *GO_SOURCES,
-            *GO_TEST_SOURCES,
-            *GO_ASM_SOURCES,
-            "$(S)/perf_darts_data.txt",
-            "$(S)/go.mod",
-            "$(S)/go.sum",
-            "$(B)/go-src/",
-        ],
-        ["cp", "-a", "$(S)/vendor", "$(B)/go-src/vendor"],
+        "python3", "$(S)/dev/gen_densemap.py",
+        "--out-dir", "$(B)/generated/go",
     ],
     descr="GS",
     color="magenta",
 )
 
 GO_INPUTS = [
-    "$(B)/go-src",
+    *GO_SOURCES,
+    *build.glob("$(S)/*.s"),
+    *GENERATED_DENSE_MAPS,
+    "$(S)/dev/go_overlay.py",
     "$(S)/.gitignore",
     "$(S)/CLAUDE.md",
     "$(S)/GOALS.md",
@@ -126,12 +102,23 @@ GO_INPUTS = [
     "$(S)/PROMPTS.md",
     "$(S)/STYLE.md",
     "$(S)/acceptance",
+    "$(S)/go.mod",
+    "$(S)/go.sum",
     "$(S)/perf_darts_data.txt",
+    *source_files("vendor"),
+]
+
+GO_OVERLAY = "$(B)/go-overlay.json"
+GO_OVERLAY_CMD = [
+    "python3", "$(S)/dev/go_overlay.py",
+    "--output", GO_OVERLAY,
+    "--source-root", "$(S)",
+    *GENERATED_DENSE_MAPS,
 ]
 
 GO_ENV = {
     "CGO_ENABLED": "0",
-    "GOCACHE": "$(B)/go-cache",
+    "GOCACHE": "$(S)/.build/go-cache",
     "GOFLAGS": "-mod=vendor -buildvcs=false",
     "GOTOOLCHAIN": "local",
     "GOWORK": "off",
@@ -141,15 +128,19 @@ ay = command(
     name="ay",
     inputs=GO_INPUTS,
     outputs=["$(B)/bin/ay"],
-    deps=[go_source_tree],
+    deps=[dense_maps],
     cmd=[
-        "go", "build",
-        "-trimpath",
-        "-buildvcs=false",
-        "-o", "$(B)/bin/ay",
-        ".",
+        GO_OVERLAY_CMD,
+        [
+            "go", "build",
+            "-overlay=" + GO_OVERLAY,
+            "-trimpath",
+            "-buildvcs=false",
+            "-o", "$(B)/bin/ay",
+            ".",
+        ],
     ],
-    cwd="$(B)/go-src",
+    cwd="$(S)",
     env=GO_ENV,
     descr="GO",
     color="cyan",
@@ -158,14 +149,19 @@ ay = command(
 go_test_stamp = "$(B)/tests/go.stamp"
 go_test = command(
     name="go_test",
-    inputs=GO_INPUTS,
+    inputs=[*GO_INPUTS, *GO_TEST_SOURCES],
     outputs=[go_test_stamp],
-    deps=[go_source_tree],
+    deps=[dense_maps],
     cmd=[
-        ["go", "test", "-count=1", "-timeout=2m", "."],
+        GO_OVERLAY_CMD,
+        [
+            "go", "test",
+            "-overlay=" + GO_OVERLAY,
+            "-count=1", "-timeout=2m", ".",
+        ],
         touch(go_test_stamp),
     ],
-    cwd="$(B)/go-src",
+    cwd="$(S)",
     env={**GO_ENV, "AY_TEST_SSH_OAUTH": ""},
     descr="UT",
     color="green",
