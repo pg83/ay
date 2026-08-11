@@ -65,8 +65,16 @@ def validation_partition():
 
 partition = validation_partition()
 
+GO_SOURCES = [
+    path for path in build.glob("$(S)/*.go")
+    if not path.endswith("_test.go")
+]
+GO_TEST_SOURCES = [
+    path for path in build.glob("$(S)/*_test.go")
+]
+
 GO_INPUTS = [
-    *build.glob("$(S)/*.go"),
+    *GO_SOURCES,
     *build.glob("$(S)/*.s"),
     "$(S)/.gitignore",
     "$(S)/CLAUDE.md",
@@ -109,7 +117,7 @@ ay = command(
 go_test_stamp = "$(B)/tests/go.stamp"
 go_test = command(
     name="go_test",
-    inputs=GO_INPUTS,
+    inputs=[*GO_INPUTS, *GO_TEST_SOURCES],
     outputs=[go_test_stamp],
     cmd=[
         ["go", "test", "-count=1", "-timeout=2m", "."],
@@ -140,6 +148,31 @@ python_test = command(
     descr="PY",
     color="green",
 )
+
+
+binary_tests = []
+for test_path in build.glob("$(S)/tst/test_*.py"):
+    test_name = test_path.rsplit("/", 1)[-1][len("test_"):-len(".py")]
+    test_slug = slug(test_name)
+    test_stamp = f"$(B)/tests/{test_slug}.stamp"
+    binary_tests.append(command(
+        name=f"unit_{test_slug}",
+        inputs=[test_path, "$(S)/tst/lib.py"],
+        outputs=[test_stamp],
+        deps=[ay],
+        cmd=[
+            ["python3", test_path],
+            touch(test_stamp),
+        ],
+        cwd="$(S)",
+        env={
+            "AY_TEST_BINARY": ay.outputs[0],
+            "AY_TEST_SSH_OAUTH": "",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        },
+        descr="BT",
+        color="green",
+    ))
 
 
 with (ROOT / "dev" / "config.json").open(encoding="utf-8") as stream:
@@ -298,11 +331,11 @@ if partition is not None:
     ]
 
 group("install", ay)
-group("unit", go_test, python_test)
+group("unit", go_test, python_test, *binary_tests)
 group("validation_resources", *resource_targets.values())
 group("validation_results", validation_summary)
 group("validation_report", validation_summary)
 group("validation_cases", *validation_gates)
 group("validation_shard", *selected_validation_gates)
 group("validate", validation_summary, validation_gate)
-group("test", go_test, python_test, validation_summary, validation_gate)
+group("test", go_test, python_test, *binary_tests, validation_summary, validation_gate)
