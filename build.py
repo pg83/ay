@@ -65,17 +65,60 @@ def validation_partition():
 
 partition = validation_partition()
 
+GENERATED_DENSE_MAPS = {
+    "dense_map_2.go",
+    "dense_map_2_test.go",
+    "dense_map_3.go",
+    "dense_map_3_test.go",
+}
+
 GO_SOURCES = [
     path for path in build.glob("$(S)/*.go")
     if not path.endswith("_test.go")
+    and path.rsplit("/", 1)[-1] not in GENERATED_DENSE_MAPS
 ]
 GO_TEST_SOURCES = [
     path for path in build.glob("$(S)/*_test.go")
+    if path.rsplit("/", 1)[-1] not in GENERATED_DENSE_MAPS
 ]
+GO_ASM_SOURCES = build.glob("$(S)/*.s")
+
+go_source_tree = command(
+    name="go_source_tree",
+    inputs=[
+        "$(S)/dev/gen_densemap.py",
+        *GO_SOURCES,
+        *GO_TEST_SOURCES,
+        *GO_ASM_SOURCES,
+        "$(S)/perf_darts_data.txt",
+        "$(S)/go.mod",
+        "$(S)/go.sum",
+        *source_files("vendor"),
+    ],
+    outputs=["$(B)/go-src"],
+    cmd=[
+        [
+            "python3", "$(S)/dev/gen_densemap.py",
+            "--out-dir", "$(B)/go-src",
+        ],
+        [
+            "cp", "--",
+            *GO_SOURCES,
+            *GO_TEST_SOURCES,
+            *GO_ASM_SOURCES,
+            "$(S)/perf_darts_data.txt",
+            "$(S)/go.mod",
+            "$(S)/go.sum",
+            "$(B)/go-src/",
+        ],
+        ["cp", "-a", "$(S)/vendor", "$(B)/go-src/vendor"],
+    ],
+    descr="GS",
+    color="magenta",
+)
 
 GO_INPUTS = [
-    *GO_SOURCES,
-    *build.glob("$(S)/*.s"),
+    "$(B)/go-src",
     "$(S)/.gitignore",
     "$(S)/CLAUDE.md",
     "$(S)/GOALS.md",
@@ -83,10 +126,7 @@ GO_INPUTS = [
     "$(S)/PROMPTS.md",
     "$(S)/STYLE.md",
     "$(S)/acceptance",
-    "$(S)/go.mod",
-    "$(S)/go.sum",
     "$(S)/perf_darts_data.txt",
-    *source_files("vendor"),
 ]
 
 GO_ENV = {
@@ -101,6 +141,7 @@ ay = command(
     name="ay",
     inputs=GO_INPUTS,
     outputs=["$(B)/bin/ay"],
+    deps=[go_source_tree],
     cmd=[
         "go", "build",
         "-trimpath",
@@ -108,7 +149,7 @@ ay = command(
         "-o", "$(B)/bin/ay",
         ".",
     ],
-    cwd="$(S)",
+    cwd="$(B)/go-src",
     env=GO_ENV,
     descr="GO",
     color="cyan",
@@ -117,13 +158,14 @@ ay = command(
 go_test_stamp = "$(B)/tests/go.stamp"
 go_test = command(
     name="go_test",
-    inputs=[*GO_INPUTS, *GO_TEST_SOURCES],
+    inputs=GO_INPUTS,
     outputs=[go_test_stamp],
+    deps=[go_source_tree],
     cmd=[
         ["go", "test", "-count=1", "-timeout=2m", "."],
         touch(go_test_stamp),
     ],
-    cwd="$(S)",
+    cwd="$(B)/go-src",
     env={**GO_ENV, "AY_TEST_SSH_OAUTH": ""},
     descr="UT",
     color="green",
