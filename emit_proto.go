@@ -314,6 +314,18 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 		}
 	}
 
+	for _, p := range pe.extraPlugins {
+		if len(p.Spec.OutputSuffixes) == 0 || p.LDRef == 0 {
+			continue
+		}
+
+		tool, ok := ctx.moduleByRef.get(p.LDRef)
+
+		if !ok || len(tool.InducedDeps.bucket(parsedIncludesCpp)) == 0 {
+			refs = append(refs, p.LDRef)
+		}
+	}
+
 	na.noderefs.commit(len(refs))
 	pe.pbGenRefs = refs[:len(refs):len(refs)]
 
@@ -467,7 +479,22 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	pbHCompile = pbHCompile[:len(pbHCompile):len(pbHCompile)]
 
+	pbCCRefCount := len(pe.pbGenRefs)
+
+	for _, plugin := range pe.extraPlugins {
+		if len(plugin.Spec.OutputSuffixes) == 0 || plugin.LDRef == 0 {
+			continue
+		}
+
+		tool, ok := ctx.moduleByRef.get(plugin.LDRef)
+
+		if !ok || len(tool.InducedDeps.bucket(parsedIncludesCpp)) == 0 {
+			pbCCRefCount--
+		}
+	}
+
 	pbGenRefs := pe.pbGenRefs
+	pbCCRefs := pe.pbGenRefs[:pbCCRefCount:pbCCRefCount]
 	pbHLeaves := na.vfsList(protoRel.source())
 
 	if generatedProto {
@@ -554,23 +581,12 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		})
 	}
 
-	pbCCParsed := na.dirs.alloc(3 + len(directImports))[:0]
-
-	pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(pbH.rel().any())})
-
-	if pe.liteHeaders {
-		pbCCParsed = append(pbCCParsed, directImports...)
-	}
-
-	pbCCParsed = append(pbCCParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())})
-	na.dirs.commit(len(pbCCParsed))
-	pbCCParsed = pbCCParsed[:len(pbCCParsed):len(pbCCParsed)]
-
 	e.register(GeneratedFileInfo{
 		OutputPath:     pbCC,
 		ProducerRef:    pbRef,
-		GeneratorRefs:  pbGenRefs,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbCCParsed},
+		GeneratorRefs:  pbCCRefs,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbHCompile},
+		ClosureLeaves:  na.vfsList(pbH),
 		OnUse:          pbPE,
 	})
 
