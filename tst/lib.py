@@ -63,3 +63,10 @@ def make(files, target, *args):
             env=env,
         )
         return json.loads(result.stdout)
+
+
+def node_by_output(graph, output):
+    for node in graph["graph"]:
+        if output in node.get("outputs", []):
+            return node
+    raise AssertionError(f"graph has no node producing {output!r}")
