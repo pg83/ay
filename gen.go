@@ -1999,12 +1999,49 @@ type ARMember struct {
 	key  uint64
 }
 
-// srcRound classifies a source for archive-member ordering: the length of
-// its producer chain. Relative paths and $(S) paths are hand-written sources
-// in round 0. A $(B) path starts in round 1; each further hop through a
-// registered producer's own SourcePath adds 1, provided that next producer
-// was registered by this same module (a peer's generated header feeding a
-// local producer doesn't count — only within-module codegen chains do).
+func (e *EmitContext) emittedProducer(ref NodeRef) *Node {
+	if e.ctx == nil || e.ctx.emit == nil || int(ref) >= len(e.ctx.emit.nodes.s) {
+		return nil
+	}
+
+	return e.ctx.emit.nodes.s[ref]
+}
+
+// queuedSourceInput returns the generated input which caused an extension
+// rule to enter the upstream FIFO after its producer. Most emitters already
+// retain that relation as SourcePath. PB and R6 don't need it for scanning,
+// so recover it from their emitted command inputs instead of transporting a
+// second copy solely for archive ordering.
+func (e *EmitContext) queuedSourceInput(info *GeneratedFileInfo) VFS {
+	if info.SourcePath != 0 {
+		return info.SourcePath
+	}
+
+	producer := e.emittedProducer(info.ProducerRef)
+
+	if producer == nil || producer.KV == nil || producer.KV.P != pkPB && producer.KV.P != pkR6 {
+		return 0
+	}
+
+	for _, chunk := range producer.Inputs {
+		for _, input := range chunk {
+			next := e.codegen.lookup(input)
+
+			if next != nil && next.OwnerModule == e.instance.Path && next.ProducerRef != info.ProducerRef {
+				return input
+			}
+		}
+	}
+
+	return 0
+}
+
+// srcRound classifies a source by the upstream command-queue pass in which
+// its compiler becomes available. Relative paths and $(S) paths compile in
+// the initial pass. A $(B) source needs one producer pass; an extension rule
+// fed by another in-module generated source needs the next pass. Explicit
+// BASE_CODEGEN precedes its dependent enum statement in the same priority-2
+// queue, so that producer edge is not a pass boundary.
 func (e *EmitContext) srcRound(m SrcMeta) uint64 {
 	cur := m.Source.vfs()
 
@@ -2016,19 +2053,28 @@ func (e *EmitContext) srcRound(m SrcMeta) uint64 {
 
 	for {
 		info := e.codegen.lookup(cur)
+		nextPath := VFS(0)
 
-		if info == nil || info.SourcePath == 0 {
+		if info != nil {
+			nextPath = e.queuedSourceInput(info)
+		}
+
+		if nextPath == 0 {
 			return round
 		}
 
-		next := e.codegen.lookup(info.SourcePath)
+		next := e.codegen.lookup(nextPath)
 
 		if next == nil || next.OwnerModule != e.instance.Path {
 			return round
 		}
 
+		if producer := e.emittedProducer(next.ProducerRef); producer != nil && producer.KV == &baseCodegenKV {
+			return round
+		}
+
 		round++
-		cur = info.SourcePath
+		cur = nextPath
 	}
 }
 
