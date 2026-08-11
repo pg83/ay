@@ -293,6 +293,86 @@ END()
 	}
 }
 
+func TestGen_ProtoHeaderEnumArchivesBeforeGztProtoChain(t *testing.T) {
+	const modPath = "mod/pg_gzt"
+
+	files := map[string]string{}
+	writeToolProgram(files, "contrib/tools/protoc", "protoc")
+	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+	writeTestModuleFile(files, "contrib/libs/protobuf/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nNO_PLATFORM()\nSRCS(protobuf.cpp)\nEND()\n")
+	writeTestModuleFile(files, "contrib/libs/protobuf/protobuf.cpp", "int protobuf(){return 0;}\n")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	writeTestModuleFile(files, "dict/gazetteer/converter/ya.make", `PROGRAM(gztconverter)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(main.cpp)
+INDUCED_DEPS(proto ${ARCADIA_ROOT}/kernel/gazetteer/proto/base.proto)
+INDUCED_DEPS(h+cpp ${ARCADIA_BUILD_ROOT}/kernel/gazetteer/proto/base.pb.h)
+END()
+`)
+	writeTestModuleFile(files, "dict/gazetteer/converter/main.cpp", "int main(){return 0;}\n")
+	writeTestModuleFile(files, "kernel/gazetteer/proto/ya.make", "PROTO_LIBRARY()\nSRCS(base.proto)\nEND()\n")
+	writeTestModuleFile(files, "kernel/gazetteer/proto/base.proto", "syntax = \"proto2\";\npackage NGztBase;\nmessage TBase {}\n")
+
+	writeTestModuleFile(files, modPath+"/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCS(data.proto late.gztproto)
+GENERATE_ENUM_SERIALIZATION(data.pb.h)
+END()
+`)
+	writeTestModuleFile(files, modPath+"/data.proto", "syntax = \"proto3\";\npackage test;\nenum E { E0 = 0; }\nmessage M { E e = 1; }\n")
+	writeTestModuleFile(files, modPath+"/late.gztproto", "package test;\nmessage Late { optional uint32 X = 1; }\n")
+
+	g := testGen(newMemFS(files), modPath)
+	ar := mustNodeByOutput(t, g, "$(B)/"+modPath+"/"+archiveNameWithPrefixOrName(modPath, "lib", ""))
+	members := vfsStrings(ar.flatInputs())
+
+	direct := slices.Index(members, "$(B)/"+modPath+"/data.pb.cc.o")
+	serialized := slices.Index(members, "$(B)/"+modPath+"/data.pb.h_serialized.cpp.o")
+	gzt := slices.Index(members, "$(B)/"+modPath+"/late.pb.cc.o")
+
+	if direct < 0 || serialized < 0 || gzt < 0 || !(direct < serialized && serialized < gzt) {
+		t.Fatalf("want direct proto, delayed enum, then gztproto chain: direct=%d serialized=%d gzt=%d members=%v", direct, serialized, gzt, members)
+	}
+}
+
+func TestGen_BaseCodegenEnumSerializationKeepsDeclarationOrder(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "mod/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+BASE_CODEGEN(tools/base_codegen calcer_codegen)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(calcer_codegen.h)
+GENERATE_ENUM_SERIALIZATION(merge.h)
+END()
+`)
+	writeTestModuleFile(files, "mod/calcer_codegen.in", "input\n")
+	writeTestModuleFile(files, "mod/merge.h", "enum class E { A = 0 };\n")
+	writeToolProgram(files, "tools/base_codegen", "base_codegen")
+	writeToolProgram(files, "tools/enum_parser/enum_parser", "enum_parser")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(runtime.cpp)\nEND()\n")
+	writeTestModuleFile(files, "tools/enum_parser/enum_serialization_runtime/runtime.cpp", "int runtime(){return 0;}\n")
+
+	g := testGen(newMemFS(files), "mod")
+	ar := mustNodeByOutput(t, g, "$(B)/mod/libmod.a")
+	members := vfsStrings(ar.flatInputs())
+
+	calcer := slices.Index(members, "$(B)/mod/calcer_codegen.h_serialized.cpp.o")
+	merge := slices.Index(members, "$(B)/mod/merge.h_serialized.cpp.o")
+
+	if calcer < 0 || merge < 0 || calcer > merge {
+		t.Fatalf("enum serialization must preserve declaration order across generated and source headers: calcer=%d merge=%d members=%v", calcer, merge, members)
+	}
+}
+
 func TestGen_EnumSerializationOwnerKeepsModuleDirAcrossConsumer(t *testing.T) {
 	files := map[string]string{}
 
