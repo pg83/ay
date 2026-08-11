@@ -79,6 +79,13 @@ def node_by_output_prefix(graph, prefix):
     raise AssertionError(f"graph has no node producing prefix {prefix!r}")
 
 
+def only_node_by_kind(graph, kind):
+    nodes = [node for node in graph["graph"] if node.get("kv", {}).get("p") == kind]
+    if len(nodes) != 1:
+        raise AssertionError(f"expected one {kind} node, got {len(nodes)}")
+    return nodes[0]
+
+
 def tool_program(files, path, name):
     files[f"{path}/ya.make"] = (
         f"PROGRAM({name})\n"
