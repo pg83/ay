@@ -2970,24 +2970,34 @@ END()
 func TestGen_ProtoLibrary_CPPProtoPluginInducedDepsStayOnPluginOutput(t *testing.T) {
 	files := map[string]string{}
 	writeTestModuleFile(files, "proto/ya.make", `PROTO_LIBRARY()
-CPP_PROTO_PLUGIN(myplug tools/myplug .plugin.h)
+CPP_PROTO_PLUGIN(headerplug tools/headerplug .plugin.h)
+CPP_PROTO_PLUGIN(sharedplug tools/sharedplug .shared.h)
 SRCS(test.proto)
 END()
 `)
 	writeTestModuleFile(files, "proto/test.proto", "syntax = \"proto3\";\nmessage Test {}\n")
-	writeTestModuleFile(files, "app/ya.make", "LIBRARY()\nPEERDIR(proto)\nSRCS(use.cpp)\nEND()\n")
-	writeTestModuleFile(files, "app/use.cpp", "#include <proto/test.plugin.h>\nint use(){return 0;}\n")
+	writeTestModuleFile(files, "app/ya.make", "LIBRARY()\nPEERDIR(proto)\nSRCS(use_core.cpp use_plugin.cpp)\nEND()\n")
+	writeTestModuleFile(files, "app/use_core.cpp", "#include <proto/test.pb.h>\nint use_core(){return 0;}\n")
+	writeTestModuleFile(files, "app/use_plugin.cpp", "#include <proto/test.plugin.h>\nint use_plugin(){return 0;}\n")
 
-	writeTestModuleFile(files, "tools/myplug/ya.make", `PROGRAM(myplug)
+	writeTestModuleFile(files, "tools/headerplug/ya.make", `PROGRAM(headerplug)
 NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 INDUCED_DEPS(h ${ARCADIA_ROOT}/runtime/plugin.h)
+SRCS(main.cpp)
+END()
+`)
+	writeTestModuleFile(files, "tools/headerplug/main.cpp", "int main(){return 0;}\n")
+	writeTestModuleFile(files, "tools/sharedplug/ya.make", `PROGRAM(sharedplug)
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
 INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/runtime/shared.h)
 SRCS(main.cpp)
 END()
 `)
-	writeTestModuleFile(files, "tools/myplug/main.cpp", "int main(){return 0;}\n")
+	writeTestModuleFile(files, "tools/sharedplug/main.cpp", "int main(){return 0;}\n")
 	writeTestModuleFile(files, "runtime/plugin.h", "#pragma once\n#include <runtime/transitive.h>\n")
 	writeTestModuleFile(files, "runtime/transitive.h", "#pragma once\n")
 	writeTestModuleFile(files, "runtime/shared.h", "#pragma once\n#include <runtime/shared_transitive.h>\n")
@@ -3001,15 +3011,20 @@ END()
 
 	g := testGen(newMemFS(files), "app")
 	pbCC := mustNodeByOutput(t, g, "$(B)/proto/test.pb.cc.o")
-	useCC := mustNodeByOutput(t, g, "$(B)/app/use.cpp.o")
+	useCoreCC := mustNodeByOutput(t, g, "$(B)/app/use_core.cpp.o")
+	usePluginCC := mustNodeByOutput(t, g, "$(B)/app/use_plugin.cpp.o")
 
 	for _, induced := range []string{"$(S)/runtime/plugin.h", "$(S)/runtime/transitive.h"} {
 		if nodeHasInput(pbCC, induced) {
 			t.Errorf("core test.pb.cc.o unexpectedly carries plugin-output induced input %q", induced)
 		}
 
-		if !nodeHasInput(useCC, induced) {
-			t.Errorf("plugin-header consumer missing induced input %q: %v", induced, vfsStringsT3(useCC.flatInputs()))
+		if nodeHasInput(useCoreCC, induced) {
+			t.Errorf("core-header consumer unexpectedly carries plugin-output induced input %q", induced)
+		}
+
+		if !nodeHasInput(usePluginCC, induced) {
+			t.Errorf("plugin-header consumer missing induced input %q: %v", induced, vfsStringsT3(usePluginCC.flatInputs()))
 		}
 	}
 
@@ -3018,8 +3033,8 @@ END()
 			t.Errorf("core test.pb.cc.o missing shared h+cpp induced input %q: %v", shared, vfsStringsT3(pbCC.flatInputs()))
 		}
 
-		if !nodeHasInput(useCC, shared) {
-			t.Errorf("plugin-header consumer missing shared h+cpp induced input %q: %v", shared, vfsStringsT3(useCC.flatInputs()))
+		if !nodeHasInput(useCoreCC, shared) {
+			t.Errorf("core-header consumer missing shared h+cpp induced input %q: %v", shared, vfsStringsT3(useCoreCC.flatInputs()))
 		}
 	}
 }
