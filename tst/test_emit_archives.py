@@ -3,18 +3,6 @@ import unittest
 import lib
 
 
-def tool_program(files, path, name):
-    files[f"{path}/ya.make"] = (
-        f"PROGRAM({name})\n"
-        "NO_LIBC()\n"
-        "NO_RUNTIME()\n"
-        "NO_UTIL()\n"
-        "SRCS(main.cpp)\n"
-        "END()\n"
-    )
-    files[f"{path}/main.cpp"] = "int main(){return 0;}\n"
-
-
 class EmitArchivesTest(unittest.TestCase):
     def test_plain_archive_propagates_source_members(self):
         files = {
@@ -30,7 +18,7 @@ class EmitArchivesTest(unittest.TestCase):
             "mod/payload.lst": "row\n",
             "mod/use.cpp": '#include "data.inc"\n',
         }
-        tool_program(files, "tools/archiver", "archiver")
+        lib.tool_program(files, "tools/archiver", "archiver")
         graph = lib.make(files, "mod")
         use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
         self.assertIn("$(S)/mod/payload.lst", use["inputs"])
@@ -55,7 +43,7 @@ class EmitArchivesTest(unittest.TestCase):
             "mod/sub/b.txt": "beta\n",
             "mod/use.cpp": '#include "data.inc"\n',
         }
-        tool_program(files, "tools/archiver", "archiver")
+        lib.tool_program(files, "tools/archiver", "archiver")
         graph = lib.make(files, "mod")
         archive = lib.node_by_output(graph, "$(B)/mod/data.inc")
         self.assertEqual(archive["kv"]["p"], "AR")
