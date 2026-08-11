@@ -772,7 +772,8 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 			batch = append(batch, it)
 		} else {
-			r := e.resolveResourceInput(entry.Path, copyFileInputVFS(ctx.fs, instance.Path, entry.Path))
+			fallback := e.resolveModuleSourceVFS(internStr(entry.Path).any(), d.srcDirs)
+			r := e.resolveResourceInput(entry.Path, fallback)
 			it := ResourceItem{Path: entry.Path, Key: entry.Key}
 
 			it.setInput(r.Input)
