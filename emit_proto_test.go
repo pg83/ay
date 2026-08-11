@@ -2983,12 +2983,15 @@ NO_LIBC()
 NO_RUNTIME()
 NO_UTIL()
 INDUCED_DEPS(h ${ARCADIA_ROOT}/runtime/plugin.h)
+INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/runtime/shared.h)
 SRCS(main.cpp)
 END()
 `)
 	writeTestModuleFile(files, "tools/myplug/main.cpp", "int main(){return 0;}\n")
 	writeTestModuleFile(files, "runtime/plugin.h", "#pragma once\n#include <runtime/transitive.h>\n")
 	writeTestModuleFile(files, "runtime/transitive.h", "#pragma once\n")
+	writeTestModuleFile(files, "runtime/shared.h", "#pragma once\n#include <runtime/shared_transitive.h>\n")
+	writeTestModuleFile(files, "runtime/shared_transitive.h", "#pragma once\n")
 
 	writeToolProgram(files, "contrib/tools/protoc", "protoc")
 	writeToolProgram(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
@@ -3007,6 +3010,16 @@ END()
 
 		if !nodeHasInput(useCC, induced) {
 			t.Errorf("plugin-header consumer missing induced input %q: %v", induced, vfsStringsT3(useCC.flatInputs()))
+		}
+	}
+
+	for _, shared := range []string{"$(S)/runtime/shared.h", "$(S)/runtime/shared_transitive.h"} {
+		if !nodeHasInput(pbCC, shared) {
+			t.Errorf("core test.pb.cc.o missing shared h+cpp induced input %q: %v", shared, vfsStringsT3(pbCC.flatInputs()))
+		}
+
+		if !nodeHasInput(useCC, shared) {
+			t.Errorf("plugin-header consumer missing shared h+cpp induced input %q: %v", shared, vfsStringsT3(useCC.flatInputs()))
 		}
 	}
 }
