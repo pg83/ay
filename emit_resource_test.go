@@ -191,6 +191,39 @@ END()
 	}
 }
 
+func TestGen_ResourceStaticInputUsesSrcDir(t *testing.T) {
+	files := map[string]string{}
+
+	writeTestModuleFile(files, "library/cpp/resource/ya.make", "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n")
+	writeToolProgram(files, "tools/rescompiler", "rescompiler")
+	writeToolProgram(files, "tools/rescompressor", "rescompressor")
+	writeTestModuleFile(files, "shared/assets/payload.json", "{}\n")
+
+	writeTestModuleFile(files, "app/ya.make", `LIBRARY()
+NO_LIBC()
+NO_RUNTIME()
+NO_UTIL()
+SRCDIR(shared/assets)
+RESOURCE(payload.json /payload.json)
+END()
+`)
+
+	g := testGen(newMemFS(files), "app")
+	objcopy := findNodeByOutputPrefix(g, "$(B)/app/objcopy_")
+
+	if objcopy == nil {
+		t.Fatal("graph is missing app objcopy output")
+	}
+
+	if !nodeHasInput(objcopy, "$(S)/shared/assets/payload.json") {
+		t.Fatalf("objcopy inputs missing SRCDIR resource: %#v", objcopy.flatInputs())
+	}
+
+	if nodeHasInput(objcopy, "$(S)/app/payload.json") {
+		t.Fatalf("objcopy inputs use module-relative fallback instead of SRCDIR: %#v", objcopy.flatInputs())
+	}
+}
+
 func TestGen_ResourceRootRelativeFromSandboxOutputFeedsObjcopyFromBuildRoot(t *testing.T) {
 	files := map[string]string{}
 
