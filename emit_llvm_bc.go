@@ -25,6 +25,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	opt := clangRoot + "/bin/opt"
 	clangWrapperVFS := intern(clangWrapper)
 	optWrapperVFS := intern(optWrapper)
+	bcResources := []STR{strYMakePython3Name, internStr(strings.TrimSuffix(strings.TrimPrefix(stmt.ClangBCRoot, "$"), "_RESOURCE_GLOBAL"))}
 
 	var bcSourceInputs []VFS
 
@@ -67,7 +68,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			Inputs:    allInputs,
 			Outputs:   na.vfsList(bcOut),
 			KV:        &llvmBcKV,
-			Resources: usesPython3Clang16,
+			Resources: bcResources,
 		}
 
 		ref := ctx.emit.reserve()
@@ -103,7 +104,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		Outputs:   na.vfsList(mergedOut),
 		KV:        &llvmBcKV2,
 		DepRefs:   append([]NodeRef(nil), bcRefs...),
-		Resources: usesPython3Clang16,
+		Resources: bcResources,
 	}
 
 	ldRef := ctx.emit.reserve()
@@ -144,7 +145,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		Outputs:   na.vfsList(optOut),
 		KV:        &llvmBcKV3,
 		DepRefs:   na.refList(ldRef),
-		Resources: usesPython3Clang16,
+		Resources: bcResources,
 	}
 
 	opRef := ctx.emit.reserve()
