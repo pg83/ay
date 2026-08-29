@@ -48,7 +48,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"SIZE":                            {},
 	"TIMEOUT":                         {},
 	"ALLOCATOR_IMPL":                  {},
-	"NO_LTO":                          {},
 	"NO_CLANG_COVERAGE":               {},
 	"NO_CLANG_MCDC_COVERAGE":          {},
 	"NO_CLANG_TIDY":                   {},
@@ -1655,6 +1654,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		BisonFlags:  d.bisonFlags,
 		BisonGenExt: d.bisonGenExt.string(),
 		NoOptimize:  d.noOptimize,
+		NoLto:       d.noLto,
 		TC:          d.tc,
 
 		ForceConsistentDebug: isGoModuleType(d.moduleStmt.Name),

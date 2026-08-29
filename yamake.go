@@ -24,6 +24,7 @@ var (
 	astCFlags    = newBumpAllocator[CFlagsStmt]()
 	astCXXFlags  = newBumpAllocator[CXXFlagsStmt]()
 	astEnumSers  = newBumpAllocator[GenerateEnumSerializationStmt]()
+	astYTRecords = newBumpAllocator[GenerateYTRecordStmt]()
 	astConds     = newBumpAllocator[CondNode]()
 	astEnds      = newBumpAllocator[EndStmt]()
 )
@@ -249,6 +250,13 @@ type GenerateEnumSerializationStmt struct {
 	Variant string
 	Line    int
 	DeclSeq int
+}
+
+type GenerateYTRecordStmt struct {
+	Yaml           ANY
+	OutputIncludes []ANY
+	Line           int
+	DeclSeq        int
 }
 
 type DefaultVarStmt struct {
@@ -1332,6 +1340,14 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		}
 
 		return parseBaseCodegen(args, line)
+	case "GENERATE_YT_RECORD":
+		if len(args) < 1 {
+			fail("GENERATE_YT_RECORD expects at least 1 argument (yaml path), got %d", len(args))
+		}
+
+		return astOne(astYTRecords, *parseGenerateYTRecord(args, line))
+	case "EXPLICIT_DATA":
+		return astOne(astSets, SetStmt{Name: "ADD_SRCDIR_TO_TEST_DATA", NameEnv: internEnv("ADD_SRCDIR_TO_TEST_DATA"), Value: "no", Line: line})
 	case "STRUCT_CODEGEN":
 		if len(args) != 1 {
 			fail("STRUCT_CODEGEN expects exactly 1 argument (prefix), got %d", len(args))
@@ -1673,6 +1689,20 @@ func parseSplitCodegen(args []ANY, line int) *SplitCodegenStmt {
 
 	if len(positional) > 2 {
 		stmt.Opts = positional[2:]
+	}
+
+	return stmt
+}
+
+func parseGenerateYTRecord(args []ANY, line int) *GenerateYTRecordStmt {
+	stmt := &GenerateYTRecordStmt{Yaml: args[0], Line: line}
+
+	for _, tok := range args[1:] {
+		if tok == kwOUTPUT_INCLUDES.any() {
+			continue
+		}
+
+		stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
 	}
 
 	return stmt
@@ -2360,6 +2390,9 @@ func (*SplitCodegenStmt) stmtMarker() {
 }
 
 func (*BaseCodegenStmt) stmtMarker() {
+}
+
+func (*GenerateYTRecordStmt) stmtMarker() {
 }
 
 func (*ConfigureFileStmt) stmtMarker() {

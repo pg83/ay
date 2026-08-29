@@ -142,6 +142,7 @@ type ModuleData struct {
 	pyYapycSuffix            string
 	noExtendedPySearch       bool
 	enumSrcs                 []*GenerateEnumSerializationStmt
+	ytRecords                []*GenerateYTRecordStmt
 	peerdirs                 []ANY
 	protoCmdPeers            []ANY
 	joinSrcs                 []*JoinSrcsStmt
@@ -190,6 +191,7 @@ type ModuleData struct {
 	ymapsSprotoSrcs          []ANY
 	noMypy                   bool
 	noOptimize               bool
+	noLto                    bool
 	optimizePyProtos         bool
 	optimizePyProtosSet      bool
 	needGoogleProtoPeerdirs  bool
@@ -1157,6 +1159,17 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			if modulePath != enumSerPeer {
 				d.peerdirs = append(d.peerdirs, internStr(enumSerPeer).any())
 			}
+		case *GenerateYTRecordStmt:
+			expandedRC := astOne(astYTRecords, *v)
+
+			expandedRC.DeclSeq = d.nextDeclSeq()
+			d.ytRecords = append(d.ytRecords, expandedRC)
+
+			const ytRecordPeer = "yt/yt/client"
+
+			if modulePath != ytRecordPeer {
+				d.peerdirs = append(d.peerdirs, internStr(ytRecordPeer).any())
+			}
 		case *DefaultVarStmt:
 
 			if d.defaultVars == nil {
@@ -1926,6 +1939,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.noMypy = true
 	case tokNoOptimize:
 		d.noOptimize = true
+	case tokNoLto:
+		d.noLto = true
 	case tokNoOptimizePyProtos:
 		d.optimizePyProtos = false
 		d.optimizePyProtosSet = true
@@ -1958,7 +1973,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		filename := v.Args[0]
 
-		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{FlatOutput: true}})
+		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{FlatOutput: true, CFlags: []ANY{argFnoLto.any()}}})
 	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
 		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 

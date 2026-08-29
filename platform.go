@@ -30,6 +30,7 @@ type Platform struct {
 	BuildType             string
 	BuildRelease          bool
 	BuildSanitized        bool
+	ThinLTO               bool
 	RagelOptimized        bool
 	Triple                string
 	March                 string
@@ -128,6 +129,7 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 		BuildType:         buildType,
 		BuildRelease:      buildRelease,
 		BuildSanitized:    buildSanitized,
+		ThinLTO:           flags["USE_THINLTO"] == "yes" && buildRelease,
 		RagelOptimized:    buildRelease && !buildSanitized,
 		Triple:            string(isa) + "-" + string(os) + "-gnu",
 		March:             marchFor(isa),

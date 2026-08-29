@@ -416,6 +416,10 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	trailer = append(trailer, argWlNoAsNeeded.any())
 	trailer = appendAnyLists(trailer, ownRPathFlags)
 
+	if p.ThinLTO {
+		trailer = append(trailer, argFltoThin.any())
+	}
+
 	if p.PIC {
 		trailer = append(trailer, argFPIC.any())
 	}

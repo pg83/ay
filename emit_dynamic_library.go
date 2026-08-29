@@ -125,14 +125,14 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 	deps = deps[:len(deps):len(deps)]
 
 	n := Node{
-		Platform:     instance.Platform,
-		Cmds:         cmds,
-		Env:          envFull,
-		Inputs:       inputsChunks,
-		Outputs:      na.vfsList(build(instance.Path.relString(), "/", outputName)),
-		KV:           &dynamicLibraryKV,
-		DepRefs:      deps,
-		Resources:    instance.Platform.UsesLinkResources,
+		Platform:  instance.Platform,
+		Cmds:      cmds,
+		Env:       envFull,
+		Inputs:    inputsChunks,
+		Outputs:   na.vfsList(build(instance.Path.relString(), "/", outputName)),
+		KV:        &dynamicLibraryKV,
+		DepRefs:   deps,
+		Resources: instance.Platform.UsesLinkResources,
 	}
 
 	n.ForeignDepRefs = na.refList(fixElfRef)
@@ -337,14 +337,14 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	deps = deps[:len(deps):len(deps)]
 
 	n := Node{
-		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly}),
-		Env:          envFull,
-		Inputs:       inputs,
-		Outputs:      na.vfsList(build(instance.Path.relString(), "/", outputName)),
-		KV:           &dynamicLibraryKV,
-		DepRefs:      deps,
-		Resources:    instance.Platform.UsesLinkResources,
+		Platform:  instance.Platform,
+		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly}),
+		Env:       envFull,
+		Inputs:    inputs,
+		Outputs:   na.vfsList(build(instance.Path.relString(), "/", outputName)),
+		KV:        &dynamicLibraryKV,
+		DepRefs:   deps,
+		Resources: instance.Platform.UsesLinkResources,
 	}
 
 	n.ForeignDepRefs = na.refList(fixElfRef)
@@ -449,6 +449,10 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 
 	cmdArgs = append(cmdArgs, p.LinkPreludeExtra...)
 	cmdArgs = append(cmdArgs, argWlNoAsNeeded.any())
+
+	if p.ThinLTO {
+		cmdArgs = append(cmdArgs, argFltoThin.any())
+	}
 
 	if p.PIC {
 		cmdArgs = append(cmdArgs, argFPIC.any())
