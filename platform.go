@@ -63,7 +63,7 @@ type Platform struct {
 }
 
 func platformUsesSDKRoot(os OS, flags map[string]string) bool {
-	return os == OSLinux && flags["OS_SDK"] != "local" && flags["OPENSOURCE"] != "yes"
+	return os == OSLinux && flags["OS_SDK"] != "local"
 }
 
 func sysrootArgsFor(os OS, flags map[string]string) []ANY {
