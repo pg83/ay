@@ -1319,8 +1319,8 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			for i, pair := range v.Pairs {
 				d.resources = append(d.resources, ResourceEntry{
-					Path:      pair.Path,
-					Key:       pair.Key,
+					Path:      expandStmtToken(pair.Path, env),
+					Key:       expandStmtToken(pair.Key, env),
 					EndsBatch: i == len(v.Pairs)-1,
 				})
 			}
