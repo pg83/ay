@@ -118,9 +118,9 @@ func buildCFGVars(fs FS, rel string, setVars, defaultVars map[STR]STR, buildType
 
 		switch {
 		case mapHas(setVars, k):
-			vars = append(vars, name+"="+setVars[k].string())
+			vars = append(vars, name+"="+trimSurroundingQuotes(setVars[k].string()))
 		case mapHas(defaultVars, k):
-			vars = append(vars, name+"="+defaultVars[k].string())
+			vars = append(vars, name+"="+trimSurroundingQuotes(defaultVars[k].string()))
 		case name == "BUILD_TYPE":
 			vars = append(vars, "BUILD_TYPE="+buildTypeUpper)
 		}

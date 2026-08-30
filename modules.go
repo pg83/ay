@@ -1088,7 +1088,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			}
 		case *SetStmt:
 
-			value := decodeYamakerEscapes(expandScalarVarRef(v.Value, env))
+			value := expandScalarVarRef(v.Value, env)
 
 			env.setFromString(v.NameEnv, value)
 
