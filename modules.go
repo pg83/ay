@@ -375,6 +375,7 @@ type Antlr4GrammarInfo struct {
 	Visitor        bool
 	Listener       bool
 	OutputIncludes []string
+	INFiles        []string
 }
 
 type AntlrRunInfo struct {
@@ -1205,6 +1206,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
 				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
+				INFiles:        anyStrs(expandStmtTokens(v.INFiles, env)),
 			})
 
 			// upstream RUN_ANTLR4_CPP ends with PEERDIR(contrib/libs/antlr4_cpp_runtime)
@@ -1217,6 +1219,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
 				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
+				INFiles:        anyStrs(expandStmtTokens(v.INFiles, env)),
 			})
 
 			// upstream RUN_ANTLR4_CPP_SPLIT ends with PEERDIR(contrib/libs/antlr4_cpp_runtime)

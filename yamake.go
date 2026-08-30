@@ -344,6 +344,7 @@ type RunAntlr4CppStmt struct {
 	Visitor        bool
 	Listener       bool
 	OutputIncludes []ANY
+	INFiles        []ANY
 	Line           int
 }
 
@@ -353,6 +354,7 @@ type RunAntlr4CppSplitStmt struct {
 	Visitor        bool
 	Listener       bool
 	OutputIncludes []ANY
+	INFiles        []ANY
 	Line           int
 }
 
@@ -1405,7 +1407,15 @@ func parseRunAntlr4Cpp(args []ANY, line int) *RunAntlr4CppStmt {
 				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
 				i++
 			}
-		case kwIN.any(), kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
+		case kwIN.any():
+
+			i++
+
+			for i < len(args) && !isRunAntlrKeyword(args[i]) {
+				stmt.INFiles = append(stmt.INFiles, args[i])
+				i++
+			}
+		case kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
 
 			i++
 
@@ -1442,7 +1452,17 @@ func parseRunAntlr4CppSplit(args []ANY, line int) *RunAntlr4CppSplitStmt {
 			}
 
 			i--
-		case kwIN.any(), kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
+		case kwIN.any():
+
+			i++
+
+			for i < len(args) && !isRunAntlrKeyword(args[i]) {
+				stmt.INFiles = append(stmt.INFiles, args[i])
+				i++
+			}
+
+			i--
+		case kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
 
 			i++
 

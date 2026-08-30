@@ -121,6 +121,7 @@ func (e *EmitContext) emitJVReserved(
 	moduleTag STR,
 	tc ModuleToolchain,
 	id NodeRef,
+	extraInputs []VFS,
 ) {
 	instance := e.instance
 	na := e.ctx.na
@@ -153,7 +154,7 @@ func (e *EmitContext) emitJVReserved(
 
 	inputs := na.inputList(na.vfsList(grammarVFS,
 		stdout2stderrVFS,
-		antlr4JarVFS))
+		antlr4JarVFS), na.vfsList(extraInputs...))
 
 	base := antlrGrammarBase(grammar)
 	outPrefix := instance.Path.relString() + "/" + base
@@ -178,6 +179,7 @@ func (e *EmitContext) emitJVSplitReserved(
 	moduleTag STR,
 	tc ModuleToolchain,
 	id NodeRef,
+	extraInputs []VFS,
 ) {
 	instance := e.instance
 	na := e.ctx.na
@@ -212,7 +214,7 @@ func (e *EmitContext) emitJVSplitReserved(
 	inputs := na.inputList(na.vfsList(lexerVFS,
 		parserVFS,
 		stdout2stderrVFS,
-		antlr4JarVFS))
+		antlr4JarVFS), na.vfsList(extraInputs...))
 
 	lexerBase := antlrGrammarBase(lexer)
 	parserBase := antlrGrammarBase(parser)

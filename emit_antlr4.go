@@ -9,13 +9,22 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	outPrefix := instance.Path.relString() + "/"
 
+	// IN files (e.g. the customized ANTLR .stg templates copied next to the
+	// grammar) must be materialized in the JV node's sandbox: ANTLR loads
+	// template overrides from its working directory.
+	inVFSs := make([]VFS, 0, len(g.INFiles))
+
+	for _, in := range g.INFiles {
+		inVFSs = append(inVFSs, e.requireProducedInput("IN", in, copyFileInputVFS(ctx.fs, instance.Path, in)))
+	}
+
 	if g.IsSplit {
 		jvRef := ctx.emit.reserve()
 		ccTag := d.unit.CCTag
 		tc := d.tc
 
 		jvPE := func() {
-			e.emitJVSplitReserved(g.Lexer, g.Parser, g.Visitor, g.Listener, ccTag, tc, jvRef)
+			e.emitJVSplitReserved(g.Lexer, g.Parser, g.Visitor, g.Listener, ccTag, tc, jvRef, inVFSs)
 		}
 		pending := e.ctx.na.pendingEmit(jvPE)
 
@@ -66,12 +75,12 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			})
 		}
 
-		jvInputs := []VFS{
+		jvInputs := concat([]VFS{
 			antlrGrammarVFS(instance, g.Lexer),
 			antlrGrammarVFS(instance, g.Parser),
 			stdout2stderrVFS,
 			antlr4JarVFS,
-		}
+		}, inVFSs)
 
 		jvPrimary := build(outPrefix, lexerBase, ".cpp")
 
@@ -87,7 +96,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		tc := d.tc
 
 		jvPE := func() {
-			e.emitJVReserved(g.Grammar, g.Options, g.Visitor, g.Listener, ccTag, tc, jvRef)
+			e.emitJVReserved(g.Grammar, g.Options, g.Visitor, g.Listener, ccTag, tc, jvRef, inVFSs)
 		}
 		pending := e.ctx.na.pendingEmit(jvPE)
 
@@ -135,11 +144,11 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			})
 		}
 
-		jvInputs := []VFS{
+		jvInputs := concat([]VFS{
 			antlrGrammarVFS(instance, g.Grammar),
 			stdout2stderrVFS,
 			antlr4JarVFS,
-		}
+		}, inVFSs)
 
 		jvPrimary := build(outPrefix, base, "Lexer.cpp")
 
