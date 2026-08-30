@@ -2160,11 +2160,13 @@ func (ctx *GenCtx) instanceVariant(in ModuleInstance) uint16 {
 
 	if in.Platform == ctx.host {
 		pbit = 1
+	} else if in.Platform == picVariantOf(ctx.fs, ctx.target) {
+		pbit = 2
 	} else if in.Platform != ctx.target {
 		throwFmt("instanceVariant: unknown platform for %s", in.Path.string())
 	}
 
-	return uint16(in.Path&1)<<15 | uint16(in.Kind)<<8 | uint16(in.Demand)<<4 | uint16(in.Language)<<1 | pbit
+	return uint16(in.Path&1)<<15 | uint16(in.Kind)<<9 | uint16(in.Demand)<<5 | uint16(in.Language)<<2 | pbit
 }
 
 func (ctx *GenCtx) memoGet(in ModuleInstance) *ModuleEmitResult {

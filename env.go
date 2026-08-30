@@ -2,6 +2,7 @@ package main
 
 import (
 	"strconv"
+	"strings"
 )
 
 type EnvKind uint8
@@ -191,7 +192,46 @@ func (e Environment) setBool(id ENV, v bool) {
 	}
 }
 
+// decodeYamakerEscapes decodes yamaker's special-char placeholders and ya.make
+// backslash escapes that the lexer preserves verbatim in SET values:
+//
+//	\\ -> \    \" -> "    #BACKSLASH# -> \    #DOUBLE_QUOTE# -> "
+//
+// (#...# codes decode last so their backslash result is not re-processed.)
+func decodeYamakerEscapes(s string) string {
+	if !strings.ContainsAny(s, "#\\") {
+		return s
+	}
+
+	var b strings.Builder
+
+	b.Grow(len(s))
+
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+
+		if c == '\\' && i+1 < len(s) {
+			switch s[i+1] {
+			case '\\', '"':
+				b.WriteByte(s[i+1])
+				i++
+
+				continue
+			}
+		}
+
+		b.WriteByte(c)
+	}
+
+	out := b.String()
+	out = strings.ReplaceAll(out, "#BACKSLASH#", "\\")
+
+	return strings.ReplaceAll(out, "#DOUBLE_QUOTE#", `"`)
+}
+
 func (e Environment) setFromString(id ENV, v string) {
+	v = decodeYamakerEscapes(v)
+
 	switch v {
 	case "yes":
 		e.setBool(id, true)

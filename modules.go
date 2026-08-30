@@ -1088,7 +1088,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			}
 		case *SetStmt:
 
-			value := expandScalarVarRef(v.Value, env)
+			value := decodeYamakerEscapes(expandScalarVarRef(v.Value, env))
 
 			env.setFromString(v.NameEnv, value)
 
@@ -1206,6 +1206,9 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				Listener:       v.Listener,
 				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
 			})
+
+			// upstream RUN_ANTLR4_CPP ends with PEERDIR(contrib/libs/antlr4_cpp_runtime)
+			d.peerdirs = append(d.peerdirs, internStr("contrib/libs/antlr4_cpp_runtime").any())
 		case *RunAntlr4CppSplitStmt:
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        true,
@@ -1215,6 +1218,9 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				Listener:       v.Listener,
 				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
 			})
+
+			// upstream RUN_ANTLR4_CPP_SPLIT ends with PEERDIR(contrib/libs/antlr4_cpp_runtime)
+			d.peerdirs = append(d.peerdirs, internStr("contrib/libs/antlr4_cpp_runtime").any())
 		case *RunAntlrStmt:
 			expanded := AntlrRunInfo{
 				Macro:          v.Macro,
