@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"slices"
 	"strings"
+	"sync"
 )
 
 var (
@@ -100,6 +101,36 @@ func internFlags(flags map[string]string) map[ENV]STR {
 	}
 
 	return out
+}
+
+var picPlatformVariants sync.Map // *Platform -> *Platform
+
+// picVariantOf returns the PIC=yes variant of p (libraries linked into
+// DYNAMIC_LIBRARYs must be built PIC even when the target platform is not).
+func picVariantOf(fs FS, p *Platform) *Platform {
+	if p.PIC {
+		return p
+	}
+
+	if v, ok := picPlatformVariants.Load(p); ok {
+		return v.(*Platform)
+	}
+
+	flags := make(map[string]string, len(p.Flags)+1)
+
+	for k, v := range p.Flags {
+		flags[k.string()] = v.string()
+	}
+
+	flags["PIC"] = "yes"
+
+	q := newPlatform(fs, p.OS, p.ISA, flags, "", "")
+	q.CFlags = p.CFlags
+	q.CXXFlags = p.CXXFlags
+
+	picPlatformVariants.Store(p, q)
+
+	return q
 }
 
 func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxflagsEnv string) *Platform {

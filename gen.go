@@ -825,6 +825,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt.Name == tokDynamicLibrary {
+		if !instance.Platform.PIC {
+			picInstance := instance
+			picInstance.Platform = picVariantOf(ctx.fs, instance.Platform)
+			e.instance = picInstance
+		}
+
 		result := e.emitDynamicLibrary()
 
 		ctx.memoPut(instance, result)
@@ -1597,7 +1603,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		archiveName = d.moduleStmt.Args[0].string()
 	}
 
-	arNameFn = func(dir string) string { return e.arName(dir, d.unit.ARPrefix, archiveName) }
+	arNameFn = func(dir string) string {
+		name := e.arName(dir, d.unit.ARPrefix, archiveName)
+
+		if instance.Platform.PIC {
+			name = strings.TrimSuffix(name, ".a") + ".pic.a"
+		}
+
+		return name
+	}
 	globalArNameFn = func(dir string) string { return e.globalArName(dir, d.unit.ARPrefix, archiveName) }
 
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.relString(), peerAddInclGlobal, dedupedAddIncl)
