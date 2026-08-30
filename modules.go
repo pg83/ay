@@ -2281,6 +2281,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 					ns = ""
 				}
 
+				if namespace != nil {
+					ns = strings.TrimSuffix(namespace.string(), ".") + "."
+				}
+
 				modName := modNameOverride
 
 				if modName == "" {
@@ -2298,6 +2302,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 				if topLevel {
 					ns = ""
+				}
+
+				if namespace != nil {
+					ns = strings.TrimSuffix(namespace.string(), ".") + "."
 				}
 
 				modName := strings.TrimSuffix(src, ".py")
