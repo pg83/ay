@@ -2037,7 +2037,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("gen: EXPORTS_SCRIPT expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.exportsScript = ptr(v.Args[0])
+		// The link emission prepends $(S)/ itself; normalize ${ARCADIA_ROOT}/x -> x
+		expanded := expandStmtToken(v.Args[0].string(), env)
+		expanded = strings.TrimPrefix(expanded, "$(S)/")
+
+		d.exportsScript = ptr(internStr(expanded).any())
 	case tokExtralibs:
 
 		libs := make([]string, 0, len(v.Args))
