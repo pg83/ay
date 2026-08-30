@@ -164,8 +164,13 @@ func (e *EmitContext) emitJVReserved(
 		build(outPrefix, "Lexer.h"),
 		build(outPrefix, "Parser.cpp"),
 		build(outPrefix, "Parser.h"),
-		build(outPrefix, "Visitor.h"),
-		build(outPrefix, "BaseVisitor.h"),
+	}
+
+	if visitor {
+		outputs = append(outputs,
+			build(outPrefix, "Visitor.h"),
+			build(outPrefix, "BaseVisitor.h"),
+		)
 	}
 
 	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, nil, moduleTag, id)
@@ -226,8 +231,13 @@ func (e *EmitContext) emitJVSplitReserved(
 		build(outPrefix, lexerBase, ".h"),
 		build(outPrefix, parserBase, ".cpp"),
 		build(outPrefix, parserBase, ".h"),
-		build(outPrefix, visitorBase, "Visitor.h"),
-		build(outPrefix, visitorBase, "BaseVisitor.h"),
+	}
+
+	if visitor {
+		outputs = append(outputs,
+			build(outPrefix, visitorBase, "Visitor.h"),
+			build(outPrefix, visitorBase, "BaseVisitor.h"),
+		)
 	}
 
 	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, nil, moduleTag, id)

@@ -60,12 +60,16 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 
 		parsed := antlrWitnessParsed(e.ctx.na, witnessIncludes)
 
-		for _, suffix := range []string{
+		suffixes := []string{
 			lexerBase + ".h",
 			parserBase + ".h",
-			parserBase + "Visitor.h",
-			parserBase + "BaseVisitor.h",
-		} {
+		}
+
+		if g.Visitor {
+			suffixes = append(suffixes, parserBase+"Visitor.h", parserBase+"BaseVisitor.h")
+		}
+
+		for _, suffix := range suffixes {
 			e.register(GeneratedFileInfo{
 				OutputPath:     build(outPrefix, suffix),
 				ProducerRef:    jvRef,
@@ -129,12 +133,16 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 
 		parsed := antlrWitnessParsed(e.ctx.na, witnessIncludes)
 
-		for _, suffix := range []string{
+		suffixes := []string{
 			base + "Lexer.h",
 			base + "Parser.h",
-			base + "Visitor.h",
-			base + "BaseVisitor.h",
-		} {
+		}
+
+		if g.Visitor {
+			suffixes = append(suffixes, base+"Visitor.h", base+"BaseVisitor.h")
+		}
+
+		for _, suffix := range suffixes {
 			e.register(GeneratedFileInfo{
 				OutputPath:     build(outPrefix, suffix),
 				ProducerRef:    jvRef,
