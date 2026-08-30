@@ -1,6 +1,7 @@
 package main
 
 import (
+	pathpkg "path"
 	"slices"
 	"strings"
 )
@@ -10,9 +11,11 @@ var (
 	dynamicLibraryKV = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
 )
 
-func dllOutputName(stmt *ModuleStmt) string {
+func dllOutputName(stmt *ModuleStmt, modulePath string) string {
 	prefix := "lib"
-	name := ""
+	// No explicit name: upstream ymake defaults the module name to the
+	// directory basename (e.g. contrib/libs/libidn/dynamic -> libdynamic.so).
+	name := pathpkg.Base(modulePath)
 
 	if len(stmt.Args) > 0 {
 		name = stmt.Args[0].string()
@@ -46,7 +49,7 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 		}
 	}
 
-	outputName := dllOutputName(d.moduleStmt)
+	outputName := dllOutputName(d.moduleStmt, instance.Path.relString())
 	outputVFS := build(instance.Path.relString(), "/", outputName)
 	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")
 	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c", instance.Platform.objectSuffix())
@@ -150,10 +153,6 @@ func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchi
 func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-
-	if len(d.moduleStmt.Args) == 0 {
-		throwFmt("gen: %s DYNAMIC_LIBRARY requires a basename argument", instance.Path.relString())
-	}
 
 	if len(d.dynamicLibraryFrom) == 0 {
 		throwFmt("gen: %s DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)", instance.Path.relString())
@@ -316,7 +315,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	d.tc = resolveModuleToolchain(ctx, resourceGlobals, instance.Platform.ClangVer)
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
-	outputName := "lib" + d.moduleStmt.Args[0].string() + ".so"
+	outputName := dllOutputName(d.moduleStmt, instance.Path.relString())
 	outputVFS := build(instance.Path.relString(), "/", outputName)
 	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")
 	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c.pic.o")
