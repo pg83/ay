@@ -124,7 +124,7 @@ func (e *EmitContext) emitJVReserved(
 ) {
 	instance := e.instance
 	na := e.ctx.na
-	grammarVFS := source(instance.Path.relString(), "/", grammar)
+	grammarVFS := antlrGrammarVFS(instance, grammar)
 	outDirVFS := instance.Path.rel().build()
 	outDir := outDirVFS.string()
 	cmdArgs := make([]ANY, 0, 8+len(antlrJavaConstHead))
@@ -155,7 +155,7 @@ func (e *EmitContext) emitJVReserved(
 		stdout2stderrVFS,
 		antlr4JarVFS))
 
-	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
+	base := antlrGrammarBase(grammar)
 	outPrefix := instance.Path.relString() + "/" + base
 
 	outputs := []VFS{
@@ -181,8 +181,8 @@ func (e *EmitContext) emitJVSplitReserved(
 ) {
 	instance := e.instance
 	na := e.ctx.na
-	lexerVFS := source(instance.Path.relString(), "/", lexer)
-	parserVFS := source(instance.Path.relString(), "/", parser)
+	lexerVFS := antlrGrammarVFS(instance, lexer)
+	parserVFS := antlrGrammarVFS(instance, parser)
 	outDirVFS := instance.Path.rel().build()
 	outDir := outDirVFS.string()
 
@@ -214,8 +214,8 @@ func (e *EmitContext) emitJVSplitReserved(
 		stdout2stderrVFS,
 		antlr4JarVFS))
 
-	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
-	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
+	lexerBase := antlrGrammarBase(lexer)
+	parserBase := antlrGrammarBase(parser)
 	visitorBase := parserBase
 	outPrefix := instance.Path.relString() + "/"
 

@@ -19,10 +19,10 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		}
 		pending := e.ctx.na.pendingEmit(jvPE)
 
-		lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
-		parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
-		lexerG4 := source(instance.Path.relString(), "/", g.Lexer)
-		parserG4 := source(instance.Path.relString(), "/", g.Parser)
+		lexerBase := antlrGrammarBase(g.Lexer)
+		parserBase := antlrGrammarBase(g.Parser)
+		lexerG4 := antlrGrammarVFS(instance, g.Lexer)
+		parserG4 := antlrGrammarVFS(instance, g.Parser)
 		lexerCpp := build(outPrefix, lexerBase, ".cpp")
 		parserCpp := build(outPrefix, parserBase, ".cpp")
 
@@ -67,8 +67,8 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		}
 
 		jvInputs := []VFS{
-			source(instance.Path.relString(), "/", g.Lexer),
-			source(instance.Path.relString(), "/", g.Parser),
+			antlrGrammarVFS(instance, g.Lexer),
+			antlrGrammarVFS(instance, g.Parser),
 			stdout2stderrVFS,
 			antlr4JarVFS,
 		}
@@ -91,8 +91,8 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		}
 		pending := e.ctx.na.pendingEmit(jvPE)
 
-		base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
-		grammarG4 := source(instance.Path.relString(), "/", g.Grammar)
+		base := antlrGrammarBase(g.Grammar)
+		grammarG4 := antlrGrammarVFS(instance, g.Grammar)
 		lexerCpp := build(outPrefix, base, "Lexer.cpp")
 		parserCpp := build(outPrefix, base, "Parser.cpp")
 
@@ -136,7 +136,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		}
 
 		jvInputs := []VFS{
-			source(instance.Path.relString(), "/", g.Grammar),
+			antlrGrammarVFS(instance, g.Grammar),
 			stdout2stderrVFS,
 			antlr4JarVFS,
 		}
@@ -150,6 +150,25 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 
 		e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
 	}
+}
+
+// antlrGrammarVFS resolves a grammar reference that may be module-relative or
+// an already-rooted VFS path ($(B)/... from ${BINDIR} expansion, $(S)/... etc).
+func antlrGrammarVFS(instance ModuleInstance, grammar string) VFS {
+	if vfs, ok := moduleRootedVFS(instance.Path.relString(), grammar); ok {
+		return vfs
+	}
+
+	return source(instance.Path.relString(), "/", grammar)
+}
+
+// antlrGrammarBase mirrors ymake's ${noext:GRAMMAR}: strip the last extension
+// (.g or .g4) from the grammar file name. ANTLR names its outputs after the
+// grammar declaration, so the declared outputs use this base.
+func antlrGrammarBase(grammar string) string {
+	b := filepath.Base(grammar)
+
+	return strings.TrimSuffix(b, filepath.Ext(b))
 }
 
 func antlrWitnessParsed(na *NodeArenas, witnessIncludes []VFS) []IncludeDirective {

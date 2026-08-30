@@ -3268,7 +3268,19 @@ func expandStmtTokens(items []ANY, env Environment) []ANY {
 			continue
 		}
 
-		for _, f := range strings.Fields(expandStmtToken(item.string(), env)) {
+		expanded := expandStmtToken(item.string(), env)
+
+		if strings.Contains(expanded, `"`) {
+			// Tokens with quoted/escaped content (e.g. -DNAME=\"...\" string-literal
+			// defines whose values contain spaces) must stay a single argument.
+			// Collapse the residual ya.make escape artifact: \\" -> "
+			expanded = strings.ReplaceAll(expanded, `\\"`, `"`)
+			out = append(out, internAny(expanded))
+
+			continue
+		}
+
+		for _, f := range strings.Fields(expanded) {
 			out = append(out, internAny(f))
 		}
 	}
