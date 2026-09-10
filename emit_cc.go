@@ -40,6 +40,7 @@ type ModuleCompileEnv struct {
 	Py3Suffix            bool
 	ObjectSuffixStem     *string
 	NoOptimize           bool
+	NoLto                bool
 	MainOutInducedInputs bool
 	ModuleTag            STR
 	Ragel6Flags          []ANY
@@ -618,8 +619,12 @@ func suppressOptimize(cf []ANY) []ANY {
 func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv) CcModuleArgBlocks {
 	cflagsStr := p.CompileCFlags
 
+	if p.ThinLTO && !in.NoLto {
+		cflagsStr = na.anyConcat(cflagsStr, []ANY{argFltoThin.any()})
+	}
+
 	if in.NoOptimize {
-		cflagsStr = suppressOptimize(p.CompileCFlags)
+		cflagsStr = suppressOptimize(cflagsStr)
 	}
 
 	catboostStr := catboostOpenSourceChunk(p)

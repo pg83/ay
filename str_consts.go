@@ -103,6 +103,7 @@ var (
 	kwTOOL                                           = internStr("TOOL")
 	kwTOP_LEVEL                                      = internStr("TOP_LEVEL")
 	kwUNION                                          = internStr("UNION")
+	kwUNITTEST                                       = internStr("UNITTEST")
 	kwUNITTEST_FOR                                   = internStr("UNITTEST_FOR")
 	kwVISITOR                                        = internStr("VISITOR")
 	kwYQL_UDF_CONTRIB                                = internStr("YQL_UDF_CONTRIB")

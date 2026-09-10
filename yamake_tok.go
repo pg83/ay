@@ -182,6 +182,7 @@ var tokName = [...]STR{
 	tokTimeout:                         internStr("TIMEOUT"),
 	tokToolchain:                       internStr("TOOLCHAIN"),
 	tokUnion:                           kwUNION,
+	tokUnittest:                        kwUNITTEST,
 	tokUnittestFor:                     kwUNITTEST_FOR,
 	tokUseCommonGoogleApis:             internStr("USE_COMMON_GOOGLE_APIS"),
 	tokUseCxx:                          internStr("USE_CXX"),
@@ -228,6 +229,7 @@ var tokName = [...]STR{
 	tokStructCodegen:         internStr("STRUCT_CODEGEN"),
 	tokStyleDetekt:           internStr("STYLE_DETEKT"),
 	tokYmapsSproto:           internStr("YMAPS_SPROTO"),
+	tokGenerateYTRecord:      internStr("GENERATE_YT_RECORD"),
 }
 
 var tokByName = func() map[string]TOK {
@@ -433,6 +435,7 @@ const (
 	tokTimeout
 	tokToolchain
 	tokUnion
+	tokUnittest
 	tokUnittestFor
 	tokUseCommonGoogleApis
 	tokUseCxx
@@ -482,6 +485,7 @@ const (
 	tokCudaNvccFlags
 	tokSetAppendWithGlobal
 	tokDllTool
+	tokGenerateYTRecord
 )
 
 type TOK uint16

@@ -42,3 +42,24 @@ func (m *DenseMap[K, V]) len() int {
 
 	return len(m.vals.s) - 1
 }
+
+type DenseMap2[K ~uint32, V1 any, V2 any] struct {
+	m1 DenseMap[K, V1]
+	m2 DenseMap[K, V2]
+}
+
+func (m *DenseMap2[K, V1, V2]) get1(k K) (V1, bool) {
+	return m.m1.get(k)
+}
+
+func (m *DenseMap2[K, V1, V2]) put1(k K, v V1) {
+	m.m1.put(k, v)
+}
+
+func (m *DenseMap2[K, V1, V2]) get2(k K) (V2, bool) {
+	return m.m2.get(k)
+}
+
+func (m *DenseMap2[K, V1, V2]) put2(k K, v V2) {
+	m.m2.put(k, v)
+}

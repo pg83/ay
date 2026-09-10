@@ -191,6 +191,9 @@ func (e Environment) setBool(id ENV, v bool) {
 	}
 }
 
+// (configure_file.py decodes yamaker's #BACKSLASH#/#DOUBLE_QUOTE# placeholders
+// itself at substitution time; SET values keep them verbatim.)
+
 func (e Environment) setFromString(id ENV, v string) {
 	switch v {
 	case "yes":

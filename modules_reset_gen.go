@@ -10,6 +10,7 @@ func (x *ModuleData) reset() {
 		pySrcGroups:         scrub(x.pySrcGroups),
 		pyPyiResources:      scrub(x.pyPyiResources),
 		enumSrcs:            scrub(x.enumSrcs),
+		ytRecords:           scrub(x.ytRecords),
 		peerdirs:            x.peerdirs[:0],
 		protoCmdPeers:       x.protoCmdPeers[:0],
 		joinSrcs:            scrub(x.joinSrcs),

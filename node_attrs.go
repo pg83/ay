@@ -22,6 +22,7 @@ var procKindStr = [...]string{
 	pkSF:   "SF",
 	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
 	pkld: "ld", pkDX: "DX", pkBN: "BN", pkSV: "SV", pkSC: "SC", pkPD: "PD", pkCU: "CU",
+	pkRC: "RC",
 }
 
 var pColorStr = [...]string{
@@ -90,6 +91,7 @@ const (
 	pkSC
 	pkPD
 	pkCU
+	pkRC
 )
 
 const (

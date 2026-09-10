@@ -121,10 +121,11 @@ func (e *EmitContext) emitJVReserved(
 	moduleTag STR,
 	tc ModuleToolchain,
 	id NodeRef,
+	extraInputs []VFS,
 ) {
 	instance := e.instance
 	na := e.ctx.na
-	grammarVFS := source(instance.Path.relString(), "/", grammar)
+	grammarVFS := antlrGrammarVFS(instance, grammar)
 	outDirVFS := instance.Path.rel().build()
 	outDir := outDirVFS.string()
 	cmdArgs := make([]ANY, 0, 8+len(antlrJavaConstHead))
@@ -153,9 +154,9 @@ func (e *EmitContext) emitJVReserved(
 
 	inputs := na.inputList(na.vfsList(grammarVFS,
 		stdout2stderrVFS,
-		antlr4JarVFS))
+		antlr4JarVFS), na.vfsList(extraInputs...))
 
-	base := strings.TrimSuffix(filepath.Base(grammar), ".g4")
+	base := antlrGrammarBase(grammar)
 	outPrefix := instance.Path.relString() + "/" + base
 
 	outputs := []VFS{
@@ -163,8 +164,13 @@ func (e *EmitContext) emitJVReserved(
 		build(outPrefix, "Lexer.h"),
 		build(outPrefix, "Parser.cpp"),
 		build(outPrefix, "Parser.h"),
-		build(outPrefix, "Visitor.h"),
-		build(outPrefix, "BaseVisitor.h"),
+	}
+
+	if visitor {
+		outputs = append(outputs,
+			build(outPrefix, "Visitor.h"),
+			build(outPrefix, "BaseVisitor.h"),
+		)
 	}
 
 	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, nil, moduleTag, id)
@@ -178,11 +184,12 @@ func (e *EmitContext) emitJVSplitReserved(
 	moduleTag STR,
 	tc ModuleToolchain,
 	id NodeRef,
+	extraInputs []VFS,
 ) {
 	instance := e.instance
 	na := e.ctx.na
-	lexerVFS := source(instance.Path.relString(), "/", lexer)
-	parserVFS := source(instance.Path.relString(), "/", parser)
+	lexerVFS := antlrGrammarVFS(instance, lexer)
+	parserVFS := antlrGrammarVFS(instance, parser)
 	outDirVFS := instance.Path.rel().build()
 	outDir := outDirVFS.string()
 
@@ -212,10 +219,10 @@ func (e *EmitContext) emitJVSplitReserved(
 	inputs := na.inputList(na.vfsList(lexerVFS,
 		parserVFS,
 		stdout2stderrVFS,
-		antlr4JarVFS))
+		antlr4JarVFS), na.vfsList(extraInputs...))
 
-	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
-	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
+	lexerBase := antlrGrammarBase(lexer)
+	parserBase := antlrGrammarBase(parser)
 	visitorBase := parserBase
 	outPrefix := instance.Path.relString() + "/"
 
@@ -224,8 +231,13 @@ func (e *EmitContext) emitJVSplitReserved(
 		build(outPrefix, lexerBase, ".h"),
 		build(outPrefix, parserBase, ".cpp"),
 		build(outPrefix, parserBase, ".h"),
-		build(outPrefix, visitorBase, "Visitor.h"),
-		build(outPrefix, visitorBase, "BaseVisitor.h"),
+	}
+
+	if visitor {
+		outputs = append(outputs,
+			build(outPrefix, visitorBase, "Visitor.h"),
+			build(outPrefix, visitorBase, "BaseVisitor.h"),
+		)
 	}
 
 	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, nil, moduleTag, id)

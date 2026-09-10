@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"slices"
 	"strings"
+	"sync"
 )
 
 var (
@@ -30,6 +31,7 @@ type Platform struct {
 	BuildType             string
 	BuildRelease          bool
 	BuildSanitized        bool
+	ThinLTO               bool
 	RagelOptimized        bool
 	Triple                string
 	March                 string
@@ -62,7 +64,7 @@ type Platform struct {
 }
 
 func platformUsesSDKRoot(os OS, flags map[string]string) bool {
-	return os == OSLinux && flags["OS_SDK"] != "local" && flags["OPENSOURCE"] != "yes"
+	return os == OSLinux && flags["OS_SDK"] != "local"
 }
 
 func sysrootArgsFor(os OS, flags map[string]string) []ANY {
@@ -101,6 +103,36 @@ func internFlags(flags map[string]string) map[ENV]STR {
 	return out
 }
 
+var picPlatformVariants sync.Map // *Platform -> *Platform
+
+// picVariantOf returns the PIC=yes variant of p (libraries linked into
+// DYNAMIC_LIBRARYs must be built PIC even when the target platform is not).
+func picVariantOf(fs FS, p *Platform) *Platform {
+	if p.PIC {
+		return p
+	}
+
+	if v, ok := picPlatformVariants.Load(p); ok {
+		return v.(*Platform)
+	}
+
+	flags := make(map[string]string, len(p.Flags)+1)
+
+	for k, v := range p.Flags {
+		flags[k.string()] = v.string()
+	}
+
+	flags["PIC"] = "yes"
+
+	q := newPlatform(fs, p.OS, p.ISA, flags, "", "")
+	q.CFlags = p.CFlags
+	q.CXXFlags = p.CXXFlags
+
+	picPlatformVariants.Store(p, q)
+
+	return q
+}
+
 func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxflagsEnv string) *Platform {
 	if flags == nil {
 		flags = map[string]string{}
@@ -128,6 +160,7 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 		BuildType:         buildType,
 		BuildRelease:      buildRelease,
 		BuildSanitized:    buildSanitized,
+		ThinLTO:           flags["USE_THINLTO"] == "yes" && buildRelease,
 		RagelOptimized:    buildRelease && !buildSanitized,
 		Triple:            string(isa) + "-" + string(os) + "-gnu",
 		March:             marchFor(isa),

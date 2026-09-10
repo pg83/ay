@@ -48,7 +48,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"SIZE":                            {},
 	"TIMEOUT":                         {},
 	"ALLOCATOR_IMPL":                  {},
-	"NO_LTO":                          {},
 	"NO_CLANG_COVERAGE":               {},
 	"NO_CLANG_MCDC_COVERAGE":          {},
 	"NO_CLANG_TIDY":                   {},
@@ -359,6 +358,8 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		}
 	}
 
+	// The binary itself (LDRef) is always demanded above. Test-runner nodes
+	// (test_tool + clang-format) only under an explicit test level (-t/-tt/-ttt).
 	if ctx.testMode && root.testSuiteInfo != nil {
 		for _, ref := range emitTestRunNodes(plainEmit, plainEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
@@ -463,7 +464,7 @@ func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn 
 }
 
 func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
-	if moduleStmt != nil && moduleStmt.Name == tokUnittestFor {
+	if moduleStmt != nil && (moduleStmt.Name == tokUnittestFor || moduleStmt.Name == tokUnittest) {
 		return strings.ReplaceAll(path.Clean(instance.Path.relString()), "/", "-")
 	}
 
@@ -826,6 +827,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt.Name == tokDynamicLibrary {
+		if !instance.Platform.PIC {
+			picInstance := instance
+			picInstance.Platform = picVariantOf(ctx.fs, instance.Platform)
+			e.instance = picInstance
+		}
+
 		result := e.emitDynamicLibrary()
 
 		ctx.memoPut(instance, result)
@@ -1598,7 +1605,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		archiveName = d.moduleStmt.Args[0].string()
 	}
 
-	arNameFn = func(dir string) string { return e.arName(dir, d.unit.ARPrefix, archiveName) }
+	arNameFn = func(dir string) string {
+		name := e.arName(dir, d.unit.ARPrefix, archiveName)
+
+		if instance.Platform.PIC {
+			name = strings.TrimSuffix(name, ".a") + ".pic.a"
+		}
+
+		return name
+	}
 	globalArNameFn = func(dir string) string { return e.globalArName(dir, d.unit.ARPrefix, archiveName) }
 
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.relString(), peerAddInclGlobal, dedupedAddIncl)
@@ -1655,6 +1670,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		BisonFlags:  d.bisonFlags,
 		BisonGenExt: d.bisonGenExt.string(),
 		NoOptimize:  d.noOptimize,
+		NoLto:       d.noLto,
 		TC:          d.tc,
 
 		ForceConsistentDebug: isGoModuleType(d.moduleStmt.Name),
@@ -1817,7 +1833,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		var suiteInfo *TestSuiteInfo
 
-		if ctx.testMode && d.moduleStmt.Name == tokUnittestFor {
+		if ctx.testMode && (d.moduleStmt.Name == tokUnittestFor || d.moduleStmt.Name == tokUnittest) {
 			suiteInfo = buildTestSuiteInfo(instance, d, ldPath)
 		}
 
@@ -2146,11 +2162,13 @@ func (ctx *GenCtx) instanceVariant(in ModuleInstance) uint16 {
 
 	if in.Platform == ctx.host {
 		pbit = 1
+	} else if in.Platform == picVariantOf(ctx.fs, ctx.target) {
+		pbit = 2
 	} else if in.Platform != ctx.target {
 		throwFmt("instanceVariant: unknown platform for %s", in.Path.string())
 	}
 
-	return uint16(in.Path&1)<<15 | uint16(in.Kind)<<8 | uint16(in.Demand)<<4 | uint16(in.Language)<<1 | pbit
+	return uint16(in.Path&1)<<15 | uint16(in.Kind)<<9 | uint16(in.Demand)<<5 | uint16(in.Language)<<2 | pbit
 }
 
 func (ctx *GenCtx) memoGet(in ModuleInstance) *ModuleEmitResult {

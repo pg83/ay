@@ -21,10 +21,12 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	env := envVarsVCS
 	clangRoot := resolveResourceGlobalRef(stmt.ClangBCRoot, e.peers.ResourceGlobals)
 	clangxx := clangRoot + "/bin/clang++"
+	clangc := clangRoot + "/bin/clang"
 	llvmLink := clangRoot + "/bin/llvm-link"
 	opt := clangRoot + "/bin/opt"
 	clangWrapperVFS := intern(clangWrapper)
 	optWrapperVFS := intern(optWrapper)
+	bcResources := []STR{strYMakePython3Name, internStr(strings.TrimSuffix(strings.TrimPrefix(stmt.ClangBCRoot, "$"), "_RESOURCE_GLOBAL"))}
 
 	var bcSourceInputs []VFS
 
@@ -38,7 +40,15 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		inputVFS := e.llvmBcSourceInfo(src)
 		in := newModuleCCInputs(&d.cc)
 		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
-		bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
+		compiler := clangxx
+		isCxx := true
+
+		if strings.HasSuffix(src, ".c") {
+			compiler = clangc
+			isCxx = false
+		}
+
+		bcArgs := composeBCCompileCmd(python, clangWrapper, compiler, isCxx, instance.Platform, in, inputVFS, bcOut)
 		cv := e.scanner.walkClosure(inputVFS, d.scanCtx, scanDomainCC)
 		closureInputs := na.dedupClosureChunks(cv)
 		inputChunks := na.inputs.alloc(1 + len(closureInputs))[:1+len(closureInputs)]
@@ -67,7 +77,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			Inputs:    allInputs,
 			Outputs:   na.vfsList(bcOut),
 			KV:        &llvmBcKV,
-			Resources: usesPython3Clang16,
+			Resources: bcResources,
 		}
 
 		ref := ctx.emit.reserve()
@@ -103,7 +113,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		Outputs:   na.vfsList(mergedOut),
 		KV:        &llvmBcKV2,
 		DepRefs:   append([]NodeRef(nil), bcRefs...),
-		Resources: usesPython3Clang16,
+		Resources: bcResources,
 	}
 
 	ldRef := ctx.emit.reserve()
@@ -144,7 +154,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		Outputs:   na.vfsList(optOut),
 		KV:        &llvmBcKV3,
 		DepRefs:   na.refList(ldRef),
-		Resources: usesPython3Clang16,
+		Resources: bcResources,
 	}
 
 	opRef := ctx.emit.reserve()
@@ -177,7 +187,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	})
 }
 
-func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []ANY {
+func composeBCCompileCmd(python, clangWrapper, clangBC string, isCxx bool, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []ANY {
 	bundle := compileFlagBundleFor(platform)
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, platform)
@@ -206,7 +216,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 
 	args = appendAddIncl(args, peerAddIncl, in.InclArgs)
 	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(platform))
-	args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
+	args = appendCxxStdAndOwn(args, isCxx, in.Flags.NoCompilerWarnings, true, ownExtras)
 	args = appendAnyLists(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket))
 	args = append(args, platform.TargetArg.any())
 	args = appendAnyLists(args, bundle.ArchArgs)

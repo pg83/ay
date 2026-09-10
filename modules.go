@@ -142,6 +142,7 @@ type ModuleData struct {
 	pyYapycSuffix            string
 	noExtendedPySearch       bool
 	enumSrcs                 []*GenerateEnumSerializationStmt
+	ytRecords                []*GenerateYTRecordStmt
 	peerdirs                 []ANY
 	protoCmdPeers            []ANY
 	joinSrcs                 []*JoinSrcsStmt
@@ -190,6 +191,7 @@ type ModuleData struct {
 	ymapsSprotoSrcs          []ANY
 	noMypy                   bool
 	noOptimize               bool
+	noLto                    bool
 	optimizePyProtos         bool
 	optimizePyProtosSet      bool
 	needGoogleProtoPeerdirs  bool
@@ -373,6 +375,7 @@ type Antlr4GrammarInfo struct {
 	Visitor        bool
 	Listener       bool
 	OutputIncludes []string
+	INFiles        []string
 }
 
 type AntlrRunInfo struct {
@@ -989,6 +992,12 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				}
 			}
 
+			if v.Name == tokUnittest {
+				const unittestMainPeer = "library/cpp/testing/unittest_main"
+
+				d.peerdirs = append(d.peerdirs, internStr(unittestMainPeer).any())
+			}
+
 			if isYqlUdfStaticModule(v.Name) {
 				d.peerdirs = append(d.peerdirs, internAnys(yqlUdfImplicitPeers())...)
 			}
@@ -1157,6 +1166,17 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			if modulePath != enumSerPeer {
 				d.peerdirs = append(d.peerdirs, internStr(enumSerPeer).any())
 			}
+		case *GenerateYTRecordStmt:
+			expandedRC := astOne(astYTRecords, *v)
+
+			expandedRC.DeclSeq = d.nextDeclSeq()
+			d.ytRecords = append(d.ytRecords, expandedRC)
+
+			const ytRecordPeer = "yt/yt/client"
+
+			if modulePath != ytRecordPeer {
+				d.peerdirs = append(d.peerdirs, internStr(ytRecordPeer).any())
+			}
 		case *DefaultVarStmt:
 
 			if d.defaultVars == nil {
@@ -1192,7 +1212,11 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
 				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
+				INFiles:        anyStrs(expandStmtTokens(v.INFiles, env)),
 			})
+
+			// upstream RUN_ANTLR4_CPP ends with PEERDIR(contrib/libs/antlr4_cpp_runtime)
+			d.peerdirs = append(d.peerdirs, internStr("contrib/libs/antlr4_cpp_runtime").any())
 		case *RunAntlr4CppSplitStmt:
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        true,
@@ -1201,7 +1225,11 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				Visitor:        v.Visitor,
 				Listener:       v.Listener,
 				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
+				INFiles:        anyStrs(expandStmtTokens(v.INFiles, env)),
 			})
+
+			// upstream RUN_ANTLR4_CPP_SPLIT ends with PEERDIR(contrib/libs/antlr4_cpp_runtime)
+			d.peerdirs = append(d.peerdirs, internStr("contrib/libs/antlr4_cpp_runtime").any())
 		case *RunAntlrStmt:
 			expanded := AntlrRunInfo{
 				Macro:          v.Macro,
@@ -1306,8 +1334,8 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			for i, pair := range v.Pairs {
 				d.resources = append(d.resources, ResourceEntry{
-					Path:      pair.Path,
-					Key:       pair.Key,
+					Path:      expandStmtToken(pair.Path, env),
+					Key:       expandStmtToken(pair.Key, env),
 					EndsBatch: i == len(v.Pairs)-1,
 				})
 			}
@@ -1926,6 +1954,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.noMypy = true
 	case tokNoOptimize:
 		d.noOptimize = true
+	case tokNoLto:
+		d.noLto = true
 	case tokNoOptimizePyProtos:
 		d.optimizePyProtos = false
 		d.optimizePyProtosSet = true
@@ -1958,7 +1988,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		filename := v.Args[0]
 
-		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{FlatOutput: true}})
+		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{FlatOutput: true, CFlags: []ANY{argFnoLto.any()}}})
 	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
 		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 
@@ -2013,7 +2043,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("gen: EXPORTS_SCRIPT expects exactly 1 argument, got %d", len(v.Args))
 		}
 
-		d.exportsScript = ptr(v.Args[0])
+		// The link emission prepends $(S)/ itself; normalize ${ARCADIA_ROOT}/x -> x
+		expanded := expandStmtToken(v.Args[0].string(), env)
+		expanded = strings.TrimPrefix(expanded, "$(S)/")
+
+		d.exportsScript = ptr(internStr(expanded).any())
 	case tokExtralibs:
 
 		libs := make([]string, 0, len(v.Args))
@@ -2266,6 +2300,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 					ns = ""
 				}
 
+				if namespace != nil {
+					ns = strings.TrimSuffix(namespace.string(), ".") + "."
+				}
+
 				modName := modNameOverride
 
 				if modName == "" {
@@ -2283,6 +2321,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 				if topLevel {
 					ns = ""
+				}
+
+				if namespace != nil {
+					ns = strings.TrimSuffix(namespace.string(), ".") + "."
 				}
 
 				modName := strings.TrimSuffix(src, ".py")
@@ -2982,7 +3024,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittestFor, tokGoProgram:
+	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittest, tokUnittestFor, tokGoProgram:
 		return true
 	}
 
@@ -3245,7 +3287,19 @@ func expandStmtTokens(items []ANY, env Environment) []ANY {
 			continue
 		}
 
-		for _, f := range strings.Fields(expandStmtToken(item.string(), env)) {
+		expanded := expandStmtToken(item.string(), env)
+
+		if strings.Contains(expanded, `"`) {
+			// Tokens with quoted/escaped content (e.g. -DNAME=\"...\" string-literal
+			// defines whose values contain spaces) must stay a single argument.
+			// Collapse the residual ya.make escape artifact: \\" -> "
+			expanded = strings.ReplaceAll(expanded, `\\"`, `"`)
+			out = append(out, internAny(expanded))
+
+			continue
+		}
+
+		for _, f := range strings.Fields(expanded) {
 			out = append(out, internAny(f))
 		}
 	}

@@ -24,6 +24,7 @@ var (
 	astCFlags    = newBumpAllocator[CFlagsStmt]()
 	astCXXFlags  = newBumpAllocator[CXXFlagsStmt]()
 	astEnumSers  = newBumpAllocator[GenerateEnumSerializationStmt]()
+	astYTRecords = newBumpAllocator[GenerateYTRecordStmt]()
 	astConds     = newBumpAllocator[CondNode]()
 	astEnds      = newBumpAllocator[EndStmt]()
 )
@@ -251,6 +252,13 @@ type GenerateEnumSerializationStmt struct {
 	DeclSeq int
 }
 
+type GenerateYTRecordStmt struct {
+	Yaml           ANY
+	OutputIncludes []ANY
+	Line           int
+	DeclSeq        int
+}
+
 type DefaultVarStmt struct {
 	VarName string
 	NameEnv ENV
@@ -336,6 +344,7 @@ type RunAntlr4CppStmt struct {
 	Visitor        bool
 	Listener       bool
 	OutputIncludes []ANY
+	INFiles        []ANY
 	Line           int
 }
 
@@ -345,6 +354,7 @@ type RunAntlr4CppSplitStmt struct {
 	Visitor        bool
 	Listener       bool
 	OutputIncludes []ANY
+	INFiles        []ANY
 	Line           int
 }
 
@@ -1170,7 +1180,7 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		"PREBUILT_PROGRAM",
 		"FBS_LIBRARY",
 		"GO_LIBRARY", "GO_PROGRAM",
-		"UNITTEST_FOR":
+		"UNITTEST", "UNITTEST_FOR":
 		return astOne(astModules, ModuleStmt{Name: internTokSTR(nameID), Args: args, Line: line})
 	case "PROTO_SCHEMA":
 
@@ -1332,6 +1342,14 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		}
 
 		return parseBaseCodegen(args, line)
+	case "GENERATE_YT_RECORD":
+		if len(args) < 1 {
+			fail("GENERATE_YT_RECORD expects at least 1 argument (yaml path), got %d", len(args))
+		}
+
+		return astOne(astYTRecords, *parseGenerateYTRecord(args, line))
+	case "EXPLICIT_DATA":
+		return astOne(astSets, SetStmt{Name: "ADD_SRCDIR_TO_TEST_DATA", NameEnv: internEnv("ADD_SRCDIR_TO_TEST_DATA"), Value: "no", Line: line})
 	case "STRUCT_CODEGEN":
 		if len(args) != 1 {
 			fail("STRUCT_CODEGEN expects exactly 1 argument (prefix), got %d", len(args))
@@ -1389,7 +1407,15 @@ func parseRunAntlr4Cpp(args []ANY, line int) *RunAntlr4CppStmt {
 				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
 				i++
 			}
-		case kwIN.any(), kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
+		case kwIN.any():
+
+			i++
+
+			for i < len(args) && !isRunAntlrKeyword(args[i]) {
+				stmt.INFiles = append(stmt.INFiles, args[i])
+				i++
+			}
+		case kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
 
 			i++
 
@@ -1426,7 +1452,17 @@ func parseRunAntlr4CppSplit(args []ANY, line int) *RunAntlr4CppSplitStmt {
 			}
 
 			i--
-		case kwIN.any(), kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
+		case kwIN.any():
+
+			i++
+
+			for i < len(args) && !isRunAntlrKeyword(args[i]) {
+				stmt.INFiles = append(stmt.INFiles, args[i])
+				i++
+			}
+
+			i--
+		case kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
 
 			i++
 
@@ -1673,6 +1709,20 @@ func parseSplitCodegen(args []ANY, line int) *SplitCodegenStmt {
 
 	if len(positional) > 2 {
 		stmt.Opts = positional[2:]
+	}
+
+	return stmt
+}
+
+func parseGenerateYTRecord(args []ANY, line int) *GenerateYTRecordStmt {
+	stmt := &GenerateYTRecordStmt{Yaml: args[0], Line: line}
+
+	for _, tok := range args[1:] {
+		if tok == kwOUTPUT_INCLUDES.any() {
+			continue
+		}
+
+		stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
 	}
 
 	return stmt
@@ -2360,6 +2410,9 @@ func (*SplitCodegenStmt) stmtMarker() {
 }
 
 func (*BaseCodegenStmt) stmtMarker() {
+}
+
+func (*GenerateYTRecordStmt) stmtMarker() {
 }
 
 func (*ConfigureFileStmt) stmtMarker() {

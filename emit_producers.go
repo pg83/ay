@@ -32,6 +32,7 @@ const (
 	prodLlvmBc
 	prodGoCgoCopy
 	prodGoCgo1
+	prodYTRecord
 )
 
 type ProducerPos struct {
@@ -204,7 +205,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	n := len(d.copyFiles) + len(d.configureFiles) + len(d.antlrRuns) + len(d.antlr4Grammars) +
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
-		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs)
+		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.ytRecords)
 
 	if d.createBuildInfoFor != nil {
 		n++
@@ -526,6 +527,26 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		})
 	}
 
+	for i := range d.ytRecords {
+		stmt := d.ytRecords[i]
+		cppOut, hOut := e.ytRecordOutputs(stmt)
+		outsMark := len(e.prodVFS)
+
+		e.prodVFS = append(e.prodVFS, cppOut, hOut)
+
+		outs := e.prodVFSTake(outsMark)
+		insMark := len(e.prodVFS)
+
+		e.prodVFS = append(e.prodVFS, e.ytRecordInput(stmt))
+
+		positions = append(positions, ProducerPos{
+			kind:  prodYTRecord,
+			index: i,
+			outs:  outs,
+			ins:   e.prodVFSTake(insMark),
+		})
+	}
+
 	if d.lj21 != nil {
 		outsMark := len(e.prodVFS)
 
@@ -719,6 +740,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 			e.emitGoCgo1Stmt()
 		case prodEnum:
 			e.emitEnumSrcStmt(e.d.enumSrcs[pos.index])
+		case prodYTRecord:
+			e.emitYTRecordStmt(e.d.ytRecords[pos.index])
 		case prodLj21:
 			e.emitLuaJit21()
 		case prodArchive:
