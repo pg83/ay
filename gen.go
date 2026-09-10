@@ -358,6 +358,8 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		}
 	}
 
+	// The binary itself (LDRef) is always demanded above. Test-runner nodes
+	// (test_tool + clang-format) only under an explicit test level (-t/-tt/-ttt).
 	if ctx.testMode && root.testSuiteInfo != nil {
 		for _, ref := range emitTestRunNodes(plainEmit, plainEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
@@ -462,7 +464,7 @@ func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn 
 }
 
 func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
-	if moduleStmt != nil && moduleStmt.Name == tokUnittestFor {
+	if moduleStmt != nil && (moduleStmt.Name == tokUnittestFor || moduleStmt.Name == tokUnittest) {
 		return strings.ReplaceAll(path.Clean(instance.Path.relString()), "/", "-")
 	}
 
@@ -1831,7 +1833,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		var suiteInfo *TestSuiteInfo
 
-		if ctx.testMode && d.moduleStmt.Name == tokUnittestFor {
+		if ctx.testMode && (d.moduleStmt.Name == tokUnittestFor || d.moduleStmt.Name == tokUnittest) {
 			suiteInfo = buildTestSuiteInfo(instance, d, ldPath)
 		}
 

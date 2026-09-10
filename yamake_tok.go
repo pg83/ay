@@ -182,6 +182,7 @@ var tokName = [...]STR{
 	tokTimeout:                         internStr("TIMEOUT"),
 	tokToolchain:                       internStr("TOOLCHAIN"),
 	tokUnion:                           kwUNION,
+	tokUnittest:                        kwUNITTEST,
 	tokUnittestFor:                     kwUNITTEST_FOR,
 	tokUseCommonGoogleApis:             internStr("USE_COMMON_GOOGLE_APIS"),
 	tokUseCxx:                          internStr("USE_CXX"),
@@ -434,6 +435,7 @@ const (
 	tokTimeout
 	tokToolchain
 	tokUnion
+	tokUnittest
 	tokUnittestFor
 	tokUseCommonGoogleApis
 	tokUseCxx

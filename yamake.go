@@ -1180,7 +1180,7 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		"PREBUILT_PROGRAM",
 		"FBS_LIBRARY",
 		"GO_LIBRARY", "GO_PROGRAM",
-		"UNITTEST_FOR":
+		"UNITTEST", "UNITTEST_FOR":
 		return astOne(astModules, ModuleStmt{Name: internTokSTR(nameID), Args: args, Line: line})
 	case "PROTO_SCHEMA":
 

@@ -992,6 +992,12 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				}
 			}
 
+			if v.Name == tokUnittest {
+				const unittestMainPeer = "library/cpp/testing/unittest_main"
+
+				d.peerdirs = append(d.peerdirs, internStr(unittestMainPeer).any())
+			}
+
 			if isYqlUdfStaticModule(v.Name) {
 				d.peerdirs = append(d.peerdirs, internAnys(yqlUdfImplicitPeers())...)
 			}
@@ -3018,7 +3024,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittestFor, tokGoProgram:
+	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittest, tokUnittestFor, tokGoProgram:
 		return true
 	}
 
