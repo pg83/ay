@@ -74,7 +74,12 @@ def defaults_fixture():
             "SRCS(x.cpp)\n"
             "ADDINCL(GLOBAL contrib/libs/cxxsupp/libcxx/include)\n"
             "CXXFLAGS(GLOBAL -nostdinc++)\n"
+            "PEERDIR(contrib/libs/cxxsupp/builtins)\n"
         ),
+        "contrib/libs/cxxsupp/builtins/ya.make": library(
+            "ADDINCL(GLOBAL contrib/libs/cxxsupp/builtins/include)\n"
+        ),
+        "contrib/libs/cxxsupp/builtins/include/b.h": "\n",
         "contrib/libs/cxxsupp/libcxx/x.cpp": "int x;\n",
         "contrib/libs/cxxsupp/libcxx/include/v": "\n",
         "build/cow/on/ya.make": library(
@@ -152,6 +157,7 @@ class PeerPropagationTest(unittest.TestCase):
                     [arg for arg in test_object["cmds"][0]["cmd_args"] if arg.startswith("-I$(S)/")],
                     [
                         "-I$(S)/contrib/libs/cxxsupp/libcxx/include",
+                        "-I$(S)/contrib/libs/cxxsupp/builtins/include",
                         "-I$(S)/build/cow/on/include",
                     ],
                 )
