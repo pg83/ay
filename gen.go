@@ -2091,6 +2091,10 @@ func (e *EmitContext) reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcM
 func (ctx *GenCtx) tool(modulePath ARG) (NodeRef, VFS) {
 	res := ctx.toolResult(modulePath)
 
+	if res.LDPath == nil {
+		throwFmt("gen: tool %s has no linkable output", modulePath.string())
+	}
+
 	return res.LDRef, *res.LDPath
 }
 
