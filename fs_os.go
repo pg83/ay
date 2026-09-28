@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 var emptyDirNames = []uint32{}
@@ -35,13 +36,44 @@ func hashSourceFile(srcRoot, rel string) uint64 {
 	return contentHashBytes(data)
 }
 
+// ContentHashes maps interned source paths to the content hashes generation
+// computed while reading them. Executor goroutines read the hashes while
+// generation still stores them, so elements are accessed atomically; pages are
+// allocated only by the single generating goroutine.
+type ContentHashes struct {
+	vec PageVec[uint64]
+}
+
+func (h *ContentHashes) store(rel STR, hash uint64) {
+	p, off := pageOffset(rel.strID())
+
+	if page := h.vec.pages[p].Load(); page != nil {
+		atomic.StoreUint64(unsafeAt(*page, uint64(off)), hash)
+
+		return
+	}
+
+	h.vec.set(rel.strID(), hash)
+}
+
+func (h *ContentHashes) load(rel STR) uint64 {
+	p, off := pageOffset(rel.strID())
+	page := h.vec.pages[p].Load()
+
+	if page == nil {
+		return 0
+	}
+
+	return atomic.LoadUint64(unsafeAt(*page, uint64(off)))
+}
+
 type OsFS struct {
 	srcRoot        string
 	rootSlash      string
 	dirs           DenseMap[STR, DirView]
 	dirNames       *BumpAllocator[uint32]
 	dirEntries     *IntSet
-	contentHashes  PageVec[uint64]
+	contentHashes  ContentHashes
 	sourceUnder    *IntMap[STR]
 	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
 	readBuf        []byte
@@ -72,10 +104,6 @@ func newFS(srcRoot string) FS {
 	fs.platformInit()
 
 	return fs
-}
-
-func (fs *OsFS) contentHash(rel STR) uint64 {
-	return fs.contentHashes.getSafe(rel.strID())
 }
 
 func (fs *OsFS) listdir(dir STR) DirView {
@@ -313,7 +341,7 @@ func (fs *OsFS) read(rel string) [][]byte {
 
 func (fs *OsFS) readPath(rel STR) [][]byte {
 	chunks := fs.readFileRel(rel.string())
-	fs.contentHashes.set(uint32(rel), contentHashChunks(chunks))
+	fs.contentHashes.store(rel, contentHashChunks(chunks))
 
 	return chunks
 }

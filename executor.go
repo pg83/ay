@@ -33,7 +33,6 @@ type CmdPrefix struct {
 type Executor struct {
 	srcRoot      string
 	bldRoot      string
-	fs           FS
 	sema         chan struct{}
 	keepGoing    bool
 	cmdPrefixes  []CmdPrefix
@@ -47,7 +46,6 @@ type Executor struct {
 	events       *EventQueue
 	taskStats    []TaskStat
 	canon        CanonBuf
-	localHash    map[STR]uint64
 	prepBatch    []*NodeFuture
 	prepBatchCap int
 	pending      atomic.Uint64
@@ -78,11 +76,10 @@ type NodeFuture struct {
 	err  *Exception
 }
 
-func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ninja bool, sandboxing bool, cmdPrefixes []CmdPrefix, events *EventQueue) *Executor {
+func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ninja bool, sandboxing bool, clear bool, cmdPrefixes []CmdPrefix, events *EventQueue) *Executor {
 	ex := &Executor{
 		srcRoot:     srcRoot,
 		bldRoot:     bldRoot,
-		fs:          fs,
 		sema:        make(chan struct{}, threads),
 		keepGoing:   keepGoing,
 		ninja:       ninja,
@@ -91,7 +88,6 @@ func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ni
 		cmdPrefixes: cmdPrefixes,
 		futs:        &PageVec[*NodeFuture]{},
 		events:      events,
-		localHash:   map[STR]uint64{},
 
 		prepBatchCap: 1,
 	}
@@ -100,6 +96,12 @@ func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ni
 
 	if osfs, ok := fs.(*OsFS); ok {
 		ex.canon.fsHashes = &osfs.contentHashes
+	}
+
+	// The cache must be cleared before loadUidSet lists it, or the set keeps
+	// UIDs whose metadata files clearCache has already moved away.
+	if clear {
+		ex.clearCache()
 	}
 
 	ex.uidSetReady = make(chan struct{})
@@ -145,28 +147,12 @@ func (ex *Executor) uidCached(uid UID) bool {
 }
 
 func (ex *Executor) contentHash(v VFS) uint64 {
-	if h := ex.fs.contentHash(v.rel()); h != 0 {
-		return h
-	}
-
-	s := v.any()
-
-	if h, ok := ex.localHash[s.str()]; ok {
-		return h
-	}
-
-	h := hashSourceFile(ex.srcRoot, v.sharedRel())
-
-	ex.localHash[s.str()] = h
-
-	return h
+	return hashSourceFile(ex.srcRoot, v.sharedRel())
 }
 
 func (ex *Executor) onNode(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
 	if ex.fetchRefs == nil {
 		ex.fetchRefs = fetchRefs
-	} else if ex.fetchRefs != fetchRefs {
-		throwFmt("executor: fetchRefs changed mid-stream")
 	}
 
 	f := &NodeFuture{node: n, ref: n.Ref}
@@ -200,21 +186,7 @@ func (ex *Executor) flushPrepBatch() {
 }
 
 func (ex *Executor) prepare(f *NodeFuture) {
-	exc := try(func() {
-		f.uid = ex.uidOf(f.node)
-	})
-
-	if exc != nil {
-		f.err = exc
-
-		f.once.Do(func() {})
-
-		if !ex.keepGoing {
-			fatalException(exc)
-		}
-
-		return
-	}
+	f.uid = ex.uidOf(f.node)
 
 	if ex.uidCached(f.uid) {
 		f.once.Do(func() {})
@@ -255,8 +227,6 @@ func fatalException(e *Exception) {
 		fmt.Fprintf(os.Stderr, "\x1b[31m%s\x1b[0m\n", e.Error())
 		os.Exit(1)
 	})
-
-	select {}
 }
 
 func (ex *Executor) run(roots []NodeRef) {
@@ -731,10 +701,6 @@ func (ex *Executor) restoreManifest(uid UID, where string, symlink bool) {
 }
 
 func (ex *Executor) installRoot(ref NodeRef, where string) {
-	if where == "" {
-		return
-	}
-
 	ex.restoreInto(ex.futs.get(uint32(ref)).uid, where, true)
 }
 
@@ -855,10 +821,6 @@ func (ex *Executor) printCriticalPath(durOf map[NodeRef]time.Duration) {
 
 	for ref := top; ; {
 		f := ex.futs.get(uint32(ref))
-
-		if f == nil {
-			break
-		}
 
 		fmt.Fprintf(os.Stderr, "  %10s  %s %s\n", durOf[ref].Round(time.Millisecond), coloredKind(f.node.KV.PC, f.node.KV.P), nodeOutName(f.node))
 
