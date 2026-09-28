@@ -12,10 +12,11 @@ RED = "\x1b[31m"
 RESET = "\x1b[0m"
 
 
-def run_ay(*args, cwd, timeout=60):
+def run_ay(*args, cwd, timeout=60, env=None):
     return subprocess.run(
         [str(lib.AY), *map(str, args)],
         cwd=cwd,
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -1271,6 +1272,27 @@ class RefacCaseTest(RefacTestCase):
             check=False,
         )
         self.assertEqual(build.returncode, 0, build.stdout)
+
+    def test_case_gives_up_without_a_fixpoint(self):
+        # Each build reports one more stale reference, as a chain of packages
+        # does when every fix only lets the next package fail.
+        fakebin = self.root / "fakebin"
+        fakebin.mkdir()
+        (fakebin / "go").write_text(
+            "#!/bin/sh\n"
+            "[ \"$1\" = build ] || exit 0\n"
+            "line=$(grep -n -m1 '= foo{}' main.go | cut -d: -f1)\n"
+            "[ -z \"$line\" ] || echo \"./main.go:$line:6: undefined: foo\"\n"
+        )
+        (fakebin / "go").chmod(0o755)
+        references = "\t_ = foo{}\n" * 510
+        (self.root / "main.go").write_text(
+            f"package main\n\ntype foo struct{{}}\n\nfunc main() {{\n{references}}}\n"
+        )
+        env = {**os.environ, "PATH": f"{fakebin}{os.pathsep}{os.environ['PATH']}"}
+        result = run_ay("dev", "refac", "case", cwd=self.root, env=env, timeout=120)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("refac case: no fixpoint after 501 rounds", result.stderr)
 
     def test_case_reports_unfixable_build_errors(self):
         result = self.case("package main\n\nfunc main() {\n\tundefinedThing()\n}\n")

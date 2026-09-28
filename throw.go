@@ -56,6 +56,13 @@ func throwFmt(format string, args ...any) {
 	exceptionf(format, args...).throw()
 }
 
+// assert guards an invariant: ok is false only when ay itself is defective.
+func assert(ok bool, msg string) {
+	if !ok {
+		throwFmt("%s", msg)
+	}
+}
+
 func try(cb func()) (err *Exception) {
 	defer func() {
 		if rec := recover(); rec != nil {

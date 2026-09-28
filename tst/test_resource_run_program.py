@@ -251,6 +251,14 @@ class RunProgramTest(unittest.TestCase):
             "$(B)/lib/g.h",
         ])
 
+    def test_cwd_outside_both_roots_is_rejected(self):
+        files = library(
+            "RUN_PROGRAM(tools/gen OUT out.h CWD relative/dir)\nSRCS(user.cpp)\n",
+            user__cpp='#include "out.h"\n',
+        )
+        with self.assertRaisesRegex(AssertionError, r'cwdVFS: unexpected cwd "relative/dir"'):
+            lib.make(files, "lib")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
