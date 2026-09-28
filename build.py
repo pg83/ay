@@ -46,6 +46,10 @@ build.flags.allow({
         "descr": "build ay with -cover and merge unit coverage into $(B)/coverage/cover.out",
         "default": "",
     },
+    "race": {
+        "descr": "build ay with the Go race detector; run with `./build -Drace unit`",
+        "default": "",
+    },
 })
 
 
@@ -68,6 +72,8 @@ def validation_partition():
 
 partition = validation_partition()
 coverage_enabled = bool(build.flags.coverage)
+race_enabled = bool(build.flags.race)
+COVERAGE_MINIMUM = "39"
 
 GO_SOURCES = build.glob("$(S)/*.go")
 
@@ -116,13 +122,16 @@ GO_OVERLAY_CMD = [
 ]
 
 GO_ENV = {
-    "CGO_ENABLED": "0",
+    "CGO_ENABLED": "1" if race_enabled else "0",
     "GOFLAGS": "-buildvcs=false",
     "GOTOOLCHAIN": "local",
     "GOWORK": "off",
 }
 
-GO_BUILD_TAIL = ["-trimpath", "-buildvcs=false", "-o", "$(B)/bin/ay", "."]
+GO_BUILD_TAIL = [
+    *(["-race"] if race_enabled else []),
+    "-trimpath", "-buildvcs=false", "-o", "$(B)/bin/ay", ".",
+]
 
 if coverage_enabled:
     # The cover tool opens sources by their original names and ignores
@@ -131,7 +140,7 @@ if coverage_enabled:
     ay_cmd = [
         mkdir(GO_STAGED_MODULE),
         ["cp", "--", *GO_MODULE_FILES, *GENERATED_DENSE_MAPS, GO_STAGED_MODULE + "/"],
-        ["go", "build", "-C", GO_STAGED_MODULE, "-cover", *GO_BUILD_TAIL],
+        ["go", "build", "-C", GO_STAGED_MODULE, "-cover", "-covermode=atomic", *GO_BUILD_TAIL],
     ]
 else:
     ay_cmd = [
@@ -149,6 +158,24 @@ ay = command(
     env=GO_ENV,
     descr="GO",
     color="cyan",
+)
+
+# go vet needs the generated dense maps, so it runs inside the build graph.
+vet_stamp = "$(B)/tests/vet.stamp"
+vet = command(
+    name="vet",
+    inputs=GO_INPUTS,
+    outputs=[vet_stamp],
+    deps=[dense_maps],
+    cmd=[
+        GO_OVERLAY_CMD,
+        ["go", "vet", "-overlay=" + GO_OVERLAY, "."],
+        touch(vet_stamp),
+    ],
+    cwd="$(S)",
+    env=GO_ENV,
+    descr="VT",
+    color="green",
 )
 
 python_test_stamp = "$(B)/tests/python.stamp"
@@ -186,6 +213,8 @@ for test_path in build.glob("$(S)/tst/test_*.py"):
         "AY_TEST_SSH_OAUTH": "",
         "PYTHONDONTWRITEBYTECODE": "1",
     }
+    if race_enabled:
+        test_env["GORACE"] = "halt_on_error=1 atexit_sleep_ms=0"
     if coverage_enabled:
         covdata_dir = f"$(B)/coverage/raw/{test_slug}"
         coverage_archive = f"$(B)/coverage/{test_slug}.tar"
@@ -223,6 +252,7 @@ if coverage_enabled:
         cmd=[
             "python3", "$(S)/dev/coverage.py", "merge",
             "--out", coverage_profile, "--report", coverage_report,
+            "--minimum", COVERAGE_MINIMUM,
             *coverage_archives,
         ],
         env=GO_ENV,

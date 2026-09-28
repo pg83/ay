@@ -94,14 +94,14 @@ func (e *EmitContext) emitBundleNode(python3 VFS, src, dst VFS, srcRef NodeRef, 
 	}
 
 	node := Node{
-		Platform:     instance.Platform,
-		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-		Env:          env,
-		Inputs:       na.inputList(inputHead, ctx.scripts[fsTools.rel()]),
-		KV:           &bundleKV,
-		Outputs:      na.vfsList(dst),
-		DepRefs:      depRefs,
-		Resources:    usesPython3,
+		Platform:  instance.Platform,
+		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+		Env:       env,
+		Inputs:    na.inputList(inputHead, ctx.scripts[fsTools.rel()]),
+		KV:        &bundleKV,
+		Outputs:   na.vfsList(dst),
+		DepRefs:   depRefs,
+		Resources: usesPython3,
 	}
 
 	e.emitReservedNode(node, id)

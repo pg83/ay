@@ -9,13 +9,25 @@ Common commands:
 ```sh
 ./build                 # build and publish ./ay -> .build/bin/ay
 ./build unit            # Python unit tests plus the binary-driven graph tests
-./build -Dcoverage unit # same, with ay built -cover; profile at $(B)/coverage/cover.out, per-file table in report.txt
+./build vet             # go vet with the generated dense maps overlaid
+./build -Drace unit     # unit against a -race build
+./build -Dcoverage coverage  # unit tests against a -cover build; see below
 ./build validate        # all validation results, then the aggregate gate
 ./build test            # unit + complete validation gate
 ./build validation_report
 ./build validation_resources
 ./build validate_catboost_app
 ```
+
+With `-Dcoverage`, every binary test packs its `GOCOVERDIR` counters into
+`$(B)/coverage/<test>.tar`, and the `coverage` node merges them into the
+textfmt profile `$(B)/coverage/cover.out`. It prints a per-file statement table,
+stores it as `$(B)/coverage/report.txt`, and fails below the statement floor
+`COVERAGE_MINIMUM` in `build.py`.
+
+CI in `.github/workflows/ci.yml` runs gofmt, `vet`, `unit`, `-Drace unit` and
+`-Dcoverage coverage`, and uploads the profile to Codecov. The validation cases
+need the internal Sandbox and run only locally.
 
 Each entry in `dev/config.json` becomes an independent result node and a public
 `validate_<case-id>` gate target. A result node consumes the `ay` binary plus

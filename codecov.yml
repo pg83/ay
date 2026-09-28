@@ -1,0 +1,30 @@
+codecov:
+  branch: master
+
+coverage:
+  precision: 2
+  round: down
+  range: "50...90"
+  status:
+    project:
+      go:
+        # Codecov counts a line that ran only in part as uncovered, so its
+        # figure sits below the statement floor that build.py enforces.
+        target: 37%
+        threshold: 0%
+        informational: false
+        flags:
+          - go
+    patch: off
+
+comment:
+  layout: "reach, diff, files"
+  require_changes: false
+
+# Go profiles name files by import path.
+fixes:
+  - "ay/::"
+
+ignore:
+  - "tst/**/*"
+  - "dev/**/*"

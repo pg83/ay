@@ -102,12 +102,12 @@ func (e *EmitContext) emitArchiveAsmNode(
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:          env,
-		Inputs:       na.inputList(inputs, na.srcChunk(toolBinPath)),
-		KV:           &archiveAsmKV,
-		Outputs:      na.vfsList(rodataVFS),
-		DepRefs:      deps,
-		Resources:    instance.Platform.UsesPython3Clang,
+		Env:       env,
+		Inputs:    na.inputList(inputs, na.srcChunk(toolBinPath)),
+		KV:        &archiveAsmKV,
+		Outputs:   na.vfsList(rodataVFS),
+		DepRefs:   deps,
+		Resources: instance.Platform.UsesPython3Clang,
 	}
 
 	rodataRef := e.emitNode(n)

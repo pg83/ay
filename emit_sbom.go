@@ -87,11 +87,11 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 			strPath.any(), internStr(moddir).any(),
 			strVer.any(), internStr(modver).any(),
 			strLang.any(), internStr(lang).any())), Env: env}),
-		Env:          env,
-		Inputs:       na.inputList(na.vfsList(scriptVFS)),
-		KV:           &sbomKV,
-		Outputs:      na.vfsList(out),
-		Resources:    usesPython3,
+		Env:       env,
+		Inputs:    na.inputList(na.vfsList(scriptVFS)),
+		KV:        &sbomKV,
+		Outputs:   na.vfsList(out),
+		Resources: usesPython3,
 	}
 
 	ref := e.emitNode(node)
@@ -121,11 +121,11 @@ func (e *EmitContext) emitSbomToolchainComponent(toolchainName, ver string) (*No
 			strType.any(), strToolchain.any(),
 			strToolchainName.any(), internStr(toolchainName).any(),
 			strVer.any(), internStr(ver).any())), Env: env}),
-		Env:          env,
-		Inputs:       na.inputList(na.vfsList(scriptVFS)),
-		KV:           &sbomKV,
-		Outputs:      na.vfsList(out),
-		Resources:    usesPython3,
+		Env:       env,
+		Inputs:    na.inputList(na.vfsList(scriptVFS)),
+		KV:        &sbomKV,
+		Outputs:   na.vfsList(out),
+		Resources: usesPython3,
 	}
 
 	ref := e.emitNode(node)
