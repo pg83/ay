@@ -130,15 +130,12 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 		}
 
 		return []ResourceDecl{selectHostResourceDecl(host, modulePath, name.string(), bundle)}
-	case tokDeclareExternalHostResourcesBundleByJson:
-
-		name, jsonRel := stmt.Args[0], stmt.Args[1]
-		bundle := readResourceBundleJSON(fs, filepath.ToSlash(filepath.Join(modulePath, jsonRel.string())))
-
-		return []ResourceDecl{selectHostResourceDecl(host, modulePath, name.string(), bundle)}
 	}
 
-	return nil
+	name, jsonRel := stmt.Args[0], stmt.Args[1]
+	bundle := readResourceBundleJSON(fs, filepath.ToSlash(filepath.Join(modulePath, jsonRel.string())))
+
+	return []ResourceDecl{selectHostResourceDecl(host, modulePath, name.string(), bundle)}
 }
 
 func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[string]string) ResourceDecl {
