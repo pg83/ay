@@ -48,6 +48,10 @@ def fixture():
         "py3/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(p)\nEND()\n",
         "pylib/ya.make": f"PY3_LIBRARY()\n{NO_PLATFORM}PEERDIR(p)\nEND()\n",
         "py3t/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(pylib)\nEND()\n",
+        "q/ya.make": "PROTO_LIBRARY()\nSRCS(b.proto)\nEXCLUDE_TAGS(CPP_PROTO)\nEND()\n",
+        "q/b.proto": 'syntax = "proto3";\nmessage B {}\n',
+        "pyq/ya.make": f"PY3_LIBRARY()\n{NO_PLATFORM}PEERDIR(q)\nEND()\n",
+        "py3q/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(pyq)\nEND()\n",
     }
     for path in TOOLS:
         lib.tool_program(files, path, path.split("/")[-1])
@@ -105,6 +109,23 @@ class ProtoPeersTest(unittest.TestCase):
                 link = lib.node_by_output(graph, f"$(B)/{target}/{target}")
                 self.assertIn("$(B)/p/libp.a", link["inputs"])
                 self.assertIn("$(B)/p/libpy3p.global.a", link["inputs"])
+
+    def test_python_only_proto_names_whole_archive_on_command_line_only(self):
+        graph = lib.make(fixture(), "py3q")
+        args = link_args(graph, "$(B)/py3q/py3q")
+        self.assertEqual(
+            args[args.index("--whole-archive-libs"):args.index("--arch=LINUX")],
+            ["--whole-archive-libs", "q/libq.a"],
+        )
+        self.assertEqual(
+            between(args, "--ya-start-command-file", "--ya-end-command-file"),
+            ["q/libpy3q.global.a"],
+        )
+        link = lib.node_by_output(graph, "$(B)/py3q/py3q")
+        self.assertNotIn("$(B)/q/libq.a", link["inputs"])
+        produced = {out for node in graph["graph"] for out in node["outputs"]}
+        self.assertNotIn("$(B)/q/libq.a", produced)
+        self.assertNotIn("$(B)/q/b.pb.cc", produced)
 
 
 if __name__ == "__main__":
