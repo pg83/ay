@@ -176,5 +176,38 @@ class ScriptDependenciesTest(unittest.TestCase):
         ])
 
 
+ARM = {
+    "arm/ya.make": (
+        "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(a.cpp)\n"
+        "IF (ARCH_AARCH64)\n    SRCS(aarch64.cpp)\nENDIF()\n"
+        "IF (ARCH_ARM64)\n    SRCS(arm64.cpp)\nENDIF()\nEND()\n"
+    ),
+    "arm/a.cpp": "int a(){return 0;}\n",
+    "arm/aarch64.cpp": "int b(){return 0;}\n",
+    "arm/arm64.cpp": "int c(){return 0;}\n",
+}
+
+
+class Arm64TargetTest(unittest.TestCase):
+    # macOS calls 64-bit ARM "arm64". Upstream counts it as armv8: ARCH_ARM64
+    # and ARCH_AARCH64 are set, so -mno-outline-atomics applies, while
+    # -march=armv8-a is added for Linux only.
+    def test_darwin_arm64_target_compiles_as_aarch64_family(self):
+        tree = Tree(self, ARM)
+        for target, march in (
+            ("default-darwin-arm64", []),
+            ("default-linux-aarch64", ["-march=armv8-a"]),
+        ):
+            with self.subTest(target=target):
+                graph, _ = tree.graph("--target-platform", target, "arm")
+                node = lib.node_by_output(graph, "$(B)/arm/a.cpp.o")
+                self.assertEqual(node["platform"], target)
+                args = node["cmds"][0]["cmd_args"]
+                self.assertIn("-mno-outline-atomics", args)
+                self.assertEqual(picked(args, "-march"), march)
+                for source in ("aarch64", "arm64"):
+                    lib.node_by_output(graph, f"$(B)/arm/{source}.cpp.o")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
