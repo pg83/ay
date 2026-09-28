@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"slices"
+	"strings"
 	"syscall"
 	"unsafe"
 )
@@ -247,5 +249,12 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 
 	fs.dirNames.commit(k)
 
-	return DirView{dir: dir, names: block[:k]}
+	names := block[:k]
+
+	// readdir order depends on the filesystem; walks intern paths in view order.
+	slices.SortFunc(names, func(a, b uint32) int {
+		return strings.Compare(STR(a>>1).string(), STR(b>>1).string())
+	})
+
+	return DirView{dir: dir, names: names}
 }

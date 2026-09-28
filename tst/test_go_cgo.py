@@ -213,7 +213,7 @@ class GoCgoGraphTest(unittest.TestCase):
         self.assertEqual(args[-4:], ["-w", "-pthread", "-fpic", f"$(S)/{cgo}/cgo.go"])
         self.assertEqual(cgo1["inputs"], [
             "$(S)/build/scripts/cgo1_wrapper.py", f"$(S)/{cgo}/cgo.go",
-            f"$(S)/{STD}/runtime/textflag.h", f"$(S)/{cgo}/libcgo.h",
+            f"$(S)/{cgo}/libcgo.h", f"$(S)/{STD}/runtime/textflag.h",
         ])
         link_o = lib.node_by_output(graph, f"$(B)/{cgo}/_cgo_.o")["cmds"][1]["cmd_args"]
         self.assertEqual(link_o[-3:], ["-lpthread", "-ldl", "-lresolv"])
