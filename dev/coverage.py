@@ -3,8 +3,10 @@
 
 `pack` archives one GOCOVERDIR into a single tar so a test node has a file
 output. `merge` unpacks every archive, merges them with `go tool covdata`,
-writes the textfmt profile, prints a per-file statement coverage table with
-a total to stdout and to the report file, and fails below the given floor.
+and writes the textfmt profile. `combine` adds up the textfmt profiles of
+several runs, such as the CI jobs on different platforms. Both print a
+per-file statement coverage table with a total to stdout and to the report
+file, and fail below the given floor.
 """
 
 from __future__ import annotations
@@ -60,6 +62,14 @@ def report(profile: str) -> tuple[str, int, int]:
     return "\n".join(lines) + "\n", total_covered, total_stmts
 
 
+def finish(profile: str, report_path: str, minimum: float) -> None:
+    text, covered, total = report(profile)
+    Path(report_path).write_text(text, encoding="utf-8")
+    sys.stdout.write(text)
+    if not total or 100 * covered < minimum * total:
+        sys.exit(f"coverage {covered}/{total} statements is below {minimum}%")
+
+
 def merge(args: argparse.Namespace) -> None:
     with tempfile.TemporaryDirectory(prefix="covdata-") as scratch:
         inputs = []
@@ -73,11 +83,51 @@ def merge(args: argparse.Namespace) -> None:
         merged.mkdir()
         covdata("merge", "-i=" + ",".join(inputs), "-o", str(merged))
         covdata("textfmt", "-i=" + str(merged), "-o", args.out)
-    text, covered, total = report(args.out)
-    Path(args.report).write_text(text, encoding="utf-8")
-    sys.stdout.write(text)
-    if not total or 100 * covered < args.minimum * total:
-        sys.exit(f"coverage {covered}/{total} statements is below {args.minimum}%")
+    finish(args.out, args.report, args.minimum)
+
+
+def read_profile(path: str) -> dict[str, tuple[int, int]]:
+    """A textfmt profile as {block: (statements, count)}."""
+    blocks: dict[str, tuple[int, int]] = {}
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        if not line or line.startswith("mode:"):
+            continue
+        where, stmts, count = line.rsplit(" ", 2)
+        held = blocks.get(where, (0, 0))
+        blocks[where] = (int(stmts), max(int(count), held[1]))
+    return blocks
+
+
+def blocks_by_file(blocks: dict[str, tuple[int, int]]) -> dict[str, set[str]]:
+    files: dict[str, set[str]] = collections.defaultdict(set)
+    for where in blocks:
+        files[where.split(":")[0]].add(where)
+    return files
+
+
+def combine(args: argparse.Namespace) -> None:
+    merged: dict[str, tuple[int, int]] = {}
+    for path in args.profiles:
+        blocks = read_profile(path)
+        if not blocks:
+            sys.exit(f"{path} carries no measured block")
+        # A file compiled on several platforms has the same blocks everywhere,
+        # so differing blocks mean the runs measured different sources. A file
+        # only one platform compiles is carried over as it stands.
+        held = blocks_by_file(merged)
+        for name, found in blocks_by_file(blocks).items():
+            if name in held and held[name] != found:
+                sys.exit(f"{path} was measured on other sources: {name} has other blocks")
+        total = sum(stmts for stmts, _ in blocks.values())
+        hit = sum(stmts for stmts, count in blocks.values() if count)
+        print(f"{path}: {100.0 * hit / total:.1f}% ({hit}/{total} statements)")
+        for where, (stmts, count) in blocks.items():
+            merged[where] = (stmts, max(count, merged.get(where, (0, 0))[1]))
+    Path(args.out).write_text(
+        "mode: atomic\n" + "".join(f"{where} {stmts} {count}\n" for where, (stmts, count) in sorted(merged.items())),
+        encoding="utf-8",
+    )
+    finish(args.out, args.report, args.minimum)
 
 
 def main() -> None:
@@ -93,6 +143,12 @@ def main() -> None:
     merge_parser.add_argument("--minimum", type=float, required=True)
     merge_parser.add_argument("archives", nargs="+")
     merge_parser.set_defaults(run=merge)
+    combine_parser = commands.add_parser("combine", help="add up textfmt profiles of several runs")
+    combine_parser.add_argument("--out", required=True)
+    combine_parser.add_argument("--report", required=True)
+    combine_parser.add_argument("--minimum", type=float, required=True)
+    combine_parser.add_argument("profiles", nargs="+")
+    combine_parser.set_defaults(run=combine)
     args = parser.parse_args()
     args.run(args)
 

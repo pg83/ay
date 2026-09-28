@@ -119,7 +119,7 @@ func (fs *OsFS) fstatatRel(rel string, st *syscall.Stat_t) bool {
 	fs.pathBuf = p
 
 	for {
-		_, _, errno := syscall.Syscall6(syscall.SYS_NEWFSTATAT, uintptr(fs.rootFD), uintptr(unsafe.Pointer(&p[0])), uintptr(unsafe.Pointer(st)), uintptr(atSymlinkNofollow), 0, 0)
+		_, _, errno := syscall.Syscall6(sysFstatat, uintptr(fs.rootFD), uintptr(unsafe.Pointer(&p[0])), uintptr(unsafe.Pointer(st)), uintptr(atSymlinkNofollow), 0, 0)
 
 		if errno == syscall.EINTR {
 			continue

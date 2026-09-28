@@ -13,8 +13,12 @@ permissions:
 
 jobs:
   test:
-    name: Build and test
-    runs-on: ubuntu-24.04
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - name: Check out source
@@ -42,8 +46,12 @@ jobs:
           ./build ay
 
   race:
-    name: Race detector
-    runs-on: ubuntu-24.04
+    name: Race detector (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - name: Check out source
@@ -56,6 +64,7 @@ jobs:
           cache: false
 
       - name: Install test dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gcc
@@ -64,8 +73,12 @@ jobs:
         run: ./build -k -j 2 -Drace unit
 
   coverage:
-    name: Coverage
-    runs-on: ubuntu-24.04
+    name: Coverage (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - name: Check out source
@@ -77,19 +90,50 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      # The coverage node prints the per-file table and fails below the
-      # statement floor set in build.py.
       - name: Run the tests against the instrumented binary
         run: ./build -k -j 4 -Dcoverage coverage
 
-      - name: Summarize coverage
-        if: ${{ !cancelled() && hashFiles('.build/coverage/report.txt') != '' }}
+      # Reported by the job that puts the platforms together, not here: one
+      # platform compiles only part of the sources.
+      - name: Save the coverage profile
+        if: ${{ !cancelled() && hashFiles('.build/coverage/cover.out') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ay-coverage-go-${{ matrix.os }}
+          path: |
+            .build/coverage/cover.out
+            .build/coverage/report.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  aggregate:
+    name: Coverage aggregate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [coverage]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Collect the profiles of every platform
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ay-coverage-go-*
+          path: ${{ runner.temp }}/profiles
+
+      - name: Add the platforms up
         run: |
+          set -o pipefail
+          python3 dev/coverage.py combine \
+            --out "$RUNNER_TEMP/cover.out" \
+            --report "$RUNNER_TEMP/report.txt" \
+            --minimum 39 \
+            "$RUNNER_TEMP"/profiles/ay-coverage-go-*/cover.out | tee "$RUNNER_TEMP/summary.txt"
           {
             echo "## Coverage"
             echo
             echo '```text'
-            cat .build/coverage/report.txt
+            cat "$RUNNER_TEMP/summary.txt"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -97,24 +141,23 @@ jobs:
       # activated before it takes an upload; until then this step warns and
       # the job stays green.
       - name: Upload coverage to Codecov
-        if: ${{ !cancelled() && hashFiles('.build/coverage/cover.out') != '' }}
         continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           use_oidc: true
-          files: .build/coverage/cover.out
+          files: ${{ runner.temp }}/cover.out
           flags: go
           disable_search: true
           fail_ci_if_error: true
           verbose: true
 
-      - name: Save the coverage profile
-        if: ${{ !cancelled() && hashFiles('.build/coverage/cover.out') != '' }}
+      - name: Save the merged profile
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ay-coverage-go
           path: |
-            .build/coverage/cover.out
-            .build/coverage/report.txt
+            ${{ runner.temp }}/cover.out
+            ${{ runner.temp }}/report.txt
           if-no-files-found: error
           retention-days: 7
