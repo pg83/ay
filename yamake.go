@@ -187,11 +187,6 @@ type IfStmt struct {
 	Line int
 }
 
-type IncludeStmt struct {
-	Path string
-	Line int
-}
-
 type JoinSrcsStmt struct {
 	OutputName string
 	Sources    []ANY
@@ -398,11 +393,7 @@ type ParseError struct {
 }
 
 func (e *ParseError) error() string {
-	if e.File != "" {
-		return fmt.Sprintf("%s:%d:%d: %s", e.File, e.Line, e.Col, e.Message)
-	}
-
-	return fmt.Sprintf("%d:%d: %s", e.Line, e.Col, e.Message)
+	return fmt.Sprintf("%s:%d:%d: %s", e.File, e.Line, e.Col, e.Message)
 }
 
 func (e *ParseError) Error() string {
@@ -1103,10 +1094,6 @@ func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
 }
 
 func isIdentShapedName(s string) bool {
-	if s == "" {
-		return false
-	}
-
 	for i := 0; i < len(s); i++ {
 		b := s[i]
 		isLetter := (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
@@ -1872,18 +1859,13 @@ func (p *Parser) parseIf(ifTok Token) *IfStmt {
 		node.Else = elseBody
 
 		return node
-	case kwELSEIF:
-
-		nested := p.parseIf(endTok)
-
-		node.Else = astStmts.list(nested)
-
-		return node
 	}
 
-	p.lex.throwParse(endTok.line, endTok.col, "internal: unexpected IF terminator %q", endTok.string())
+	nested := p.parseIf(endTok)
 
-	return nil
+	node.Else = astStmts.list(nested)
+
+	return node
 }
 
 func (p *Parser) readCondTokens(ifTok Token) []Token {
@@ -2275,11 +2257,9 @@ func describeToken(t Token) string {
 		return "'!='"
 	case tokGe:
 		return "'>='"
-	case tokGt:
-		return "'>'"
-	default:
-		return fmt.Sprintf("token(kind=%d)", t.kind)
 	}
+
+	return "'>'"
 }
 
 func (*ModuleStmt) stmtMarker() {
@@ -2304,9 +2284,6 @@ func (*UnknownStmt) stmtMarker() {
 }
 
 func (*IfStmt) stmtMarker() {
-}
-
-func (*IncludeStmt) stmtMarker() {
 }
 
 func (*JoinSrcsStmt) stmtMarker() {

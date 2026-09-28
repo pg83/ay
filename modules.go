@@ -1352,8 +1352,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			expanded.Args = expandStmtTokens(v.Args, env)
 			applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
-		default:
-			throwFmt("gen: %s: unhandled Stmt type %T (parser added a new Stmt subclass without updating gen.go)", modulePath, s)
 		}
 	}
 }
