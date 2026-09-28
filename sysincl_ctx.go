@@ -106,13 +106,7 @@ func (c *SysinclCtx) ciClaims(target STR) bool {
 		return false
 	}
 
-	bi, ok := c.merged.byLower[lower]
-
-	if !ok {
-		throwFmt("sysincl: CI key %q has no merged-index bucket", lower)
-	}
-
-	c.merged.byID.put(uint64(target), bi)
+	c.merged.byID.put(uint64(target), c.merged.byLower[lower])
 
 	return true
 }
@@ -131,8 +125,6 @@ func caseVariants(b byte) []byte {
 	switch {
 	case b >= 'a' && b <= 'z':
 		return []byte{b, b - 32}
-	case b >= 'A' && b <= 'Z':
-		return []byte{b, b + 32}
 	default:
 		return []byte{b}
 	}

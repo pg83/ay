@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"strings"
 )
 
 func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
@@ -54,7 +53,6 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 			s := string(unquoteYScalar(name, lineNo, val))
 
 			rec.Filter = compileSourceFilter(name, lineNo, s, onWarn)
-			rec.KeyBySource = strings.Contains(s, "(?!")
 		case "case_sensitive":
 			rec.CaseInsensitive = string(val) == "false"
 		case "includes":
@@ -130,7 +128,7 @@ func parseSysInclYAML(name string, data []byte, onWarn func(Warn)) []SysIncl {
 				j++
 			}
 
-			if j == len(rest) || rest[j] == '#' {
+			if j == len(rest) {
 				continue
 			}
 

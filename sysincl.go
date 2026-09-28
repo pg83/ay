@@ -41,11 +41,6 @@ var sysInclYamlSequence = []SysInclEntry{
 	{file: "python-2-disable-numpy.yml"},
 }
 
-var supportedSysInclArchs = map[string]struct{}{
-	"aarch64": {},
-	"x86_64":  {},
-}
-
 const (
 	baseSysInclDir         = "build/sysincl"
 	internalSysInclDir     = "build/internal/sysincl"
@@ -54,7 +49,6 @@ const (
 
 type SysIncl struct {
 	Filter          *SourceFilter
-	KeyBySource     bool
 	HasMultiTarget  bool
 	CaseInsensitive bool
 	pairs           []SysinclPair
@@ -111,10 +105,6 @@ func muslArchIs(want string) func(SysInclEnv) bool {
 func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, os OS, onWarn func(Warn)) SysInclSet {
 	if !fs.isDir(srcRootRel, baseSysInclDir) {
 		return nil
-	}
-
-	if _, ok := supportedSysInclArchs[arch]; !ok {
-		throwFmt("LoadSysInclSetFor: unsupported arch %q (want aarch64 or x86_64)", arch)
 	}
 
 	env := SysInclEnv{arch: arch, musl: musl, opensource: opensource, os: os}
@@ -496,11 +486,7 @@ func extractPrefixedNegativeLookahead(pat string) (literal string, excludes []st
 		return "", nil, "", false
 	}
 
-	ex, res, isExc := extractNegativeLookahead("^" + body[i:])
-
-	if !isExc {
-		return "", nil, "", false
-	}
+	ex, res, _ := extractNegativeLookahead("^" + body[i:])
 
 	return literal, ex, res, true
 }

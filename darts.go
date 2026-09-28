@@ -52,8 +52,6 @@ func newDarts(keys []string) *Darts {
 
 	d := &Darts{base: []int32{0}, check: []int32{0}, value: []int32{0}}
 
-	d.value[0] = nodes[0].key
-
 	type item struct {
 		node  int32
 		state int32
@@ -146,11 +144,6 @@ func (d *Darts) longestSuffixMatch(s string) (int, bool) {
 	best := int32(0)
 	found := false
 
-	if d.value[0] != 0 {
-		best = d.value[0] - 1
-		found = true
-	}
-
 	for i := len(s) - 1; i >= 0; i-- {
 		t := *unsafeAt(d.base, uint64(st)) + int32(s[i]) + 1
 
@@ -173,11 +166,6 @@ func (d *Darts) longestMatch(parts ...string) (int, bool) {
 	s := int32(0)
 	best := int32(0)
 	found := false
-
-	if d.value[0] != 0 {
-		best = d.value[0] - 1
-		found = true
-	}
 
 	for _, p := range parts {
 		for i := 0; i < len(p); i++ {

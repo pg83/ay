@@ -609,10 +609,6 @@ directive:
 	return 0, false
 
 target:
-	if j >= n {
-		return 0, false
-	}
-
 	var close byte
 
 	switch data[j] {

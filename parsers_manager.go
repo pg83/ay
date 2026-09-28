@@ -18,10 +18,6 @@ type ParsedInclude = IncludeDirective
 type ParsedIncludeSet [parsedIncludeBucketCount][]IncludeDirective
 
 func appendParsedDirectives(set ParsedIncludeSet, bucket ParsedIncludeBucket, directives ...IncludeDirective) ParsedIncludeSet {
-	if len(directives) == 0 {
-		return set
-	}
-
 	set[bucket] = append(set[bucket], directives...)
 
 	return set
