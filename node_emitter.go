@@ -95,6 +95,9 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 }
 
 func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
+	// Nodes are emitted on demand for their outputs, so every node has one.
+	assert(len(n.Outputs) > 0, "emitter: node without outputs")
+
 	if e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
 		e.pendingIdx = append(e.pendingIdx, id)

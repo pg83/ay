@@ -4,7 +4,7 @@ package main
 
 var (
 	useBucketHashAVX2   = cpuHasAVX2()
-	useBucketHashAVX512 = cpuHasAVX512()
+	useBucketHashAVX512 = chaosAVX512(cpuHasAVX512())
 )
 
 const bucketHashSIMDMin = 16

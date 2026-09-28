@@ -16,7 +16,7 @@ const (
 
 func (fs *OsFS) platformInit() {
 	for {
-		fd, err := syscall.Open(fs.srcRoot, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY, 0)
+		fd, err := chaosOpen(fs.srcRoot, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_DIRECTORY, 0)
 
 		if err == syscall.EINTR {
 			continue
@@ -43,14 +43,26 @@ func (fs *OsFS) openatRel(dirFD int, rel string, flags int) (int, syscall.Errno)
 	fs.pathBuf = p
 
 	for {
-		r1, _, errno := syscall.Syscall6(syscall.SYS_OPENAT, uintptr(dirFD), uintptr(unsafe.Pointer(&p[0])), uintptr(flags), 0, 0, 0)
+		fd, errno := chaosOpenat(dirFD, &p[0], flags)
 
 		if errno == syscall.EINTR {
 			continue
 		}
 
-		return int(r1), errno
+		return fd, errno
 	}
+}
+
+func openatRaw(dirFD int, path *byte, flags int) (int, syscall.Errno) {
+	r1, _, errno := syscall.Syscall6(syscall.SYS_OPENAT, uintptr(dirFD), uintptr(unsafe.Pointer(path)), uintptr(flags), 0, 0, 0)
+
+	return int(r1), errno
+}
+
+func fstatatRaw(dirFD int, path *byte, st *syscall.Stat_t) syscall.Errno {
+	_, _, errno := syscall.Syscall6(sysFstatat, uintptr(dirFD), uintptr(unsafe.Pointer(path)), uintptr(unsafe.Pointer(st)), uintptr(atSymlinkNofollow), 0, 0)
+
+	return errno
 }
 
 func (fs *OsFS) readFileRel(rel string) [][]byte {
@@ -102,7 +114,7 @@ func (fs *OsFS) readFileRel(rel string) [][]byte {
 
 func readEINTR(fd int, p []byte) int {
 	for {
-		n, err := syscall.Read(fd, p)
+		n, err := chaosRead(fd, p)
 
 		if err == syscall.EINTR {
 			continue
@@ -121,7 +133,7 @@ func (fs *OsFS) fstatatRel(rel string, st *syscall.Stat_t) bool {
 	fs.pathBuf = p
 
 	for {
-		_, _, errno := syscall.Syscall6(sysFstatat, uintptr(fs.rootFD), uintptr(unsafe.Pointer(&p[0])), uintptr(unsafe.Pointer(st)), uintptr(atSymlinkNofollow), 0, 0)
+		errno := chaosFstatat(fs.rootFD, &p[0], st)
 
 		if errno == syscall.EINTR {
 			continue
@@ -154,10 +166,10 @@ func (fs *OsFS) readDirAll(rel string, buf *[]byte) (int, bool) {
 			*buf = next
 		}
 
-		n, err := syscall.Getdents(fd, (*buf)[total:])
+		n, err := chaosGetdents(fd, (*buf)[total:])
 
 		for err == syscall.EINTR {
-			n, err = syscall.Getdents(fd, (*buf)[total:])
+			n, err = chaosGetdents(fd, (*buf)[total:])
 		}
 
 		if err != nil {
@@ -208,7 +220,7 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 
 	for off := 0; off < len(ents); {
 		reclen := int(binary.LittleEndian.Uint16(ents[off+16:]))
-		typ := ents[off+18]
+		typ := chaosDirentType(ents[off+18])
 		name := ents[off+19 : off+reclen]
 
 		if i := bytes.IndexByte(name, 0); i >= 0 {

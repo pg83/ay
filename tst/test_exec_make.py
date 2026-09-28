@@ -508,6 +508,22 @@ class ExecFailureTest(unittest.TestCase):
         self.assertIn("\nclang: error: refusing a.cpp\n", stderr)
         self.assertFalse((ws.inst / "tool").exists())
 
+    def test_failing_link_into_the_cache_aborts_build(self):
+        ws = Workspace(self, BASIC)
+        result = ws.make("-j", "1", env=ws.env(AY_CHAOS="link-exdev=0"), check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertRegex(
+            plain(result.stderr),
+            r"\Alink \S+/bld/tmp/\S+ \S+/bld/cas/\S+: invalid cross-device link\n\Z",
+        )
+        self.assertFalse((ws.inst / "tool").exists())
+
+    def test_scratch_directory_that_cannot_be_listed_is_not_cleared(self):
+        ws = Workspace(self, BASIC)
+        ws.make("-j", "1", env=ws.env(AY_CHAOS="readdir-fail=0 readdir-fail=3"))
+        run = subprocess.run([str(ws.inst / "tool" / "tool"), "x"], stdout=subprocess.PIPE, text=True, check=True)
+        self.assertEqual(run.stdout, "tool-output x\n")
+
     def test_keep_going_builds_independent_targets_and_reports_failed_roots(self):
         ws = Workspace(self, {
             **BASIC,

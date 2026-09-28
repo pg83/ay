@@ -103,10 +103,11 @@ class DumpToolTest(unittest.TestCase):
     def write_jsonl(self, name, nodes):
         return self.write(name, "".join(compact(node) + "\n" for node in nodes))
 
-    def ay(self, *args, input=None):
+    def ay(self, *args, input=None, env=None):
         return subprocess.run(
             [str(lib.AY), *map(str, args)],
             cwd=self.root,
+            env=env,
             input=input,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -120,8 +121,8 @@ class DumpToolTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return result
 
-    def fails(self, message, *args, input=None):
-        result = self.ay(*args, input=input)
+    def fails(self, message, *args, input=None, env=None):
+        result = self.ay(*args, input=input, env=env)
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertEqual(result.stderr, RED + message + RESET + "\n")
 
@@ -131,6 +132,16 @@ class DumpSortTest(DumpToolTest):
         result = self.ok("dev", "dump", "sort", input="b\nc\na\n")
         self.assertEqual(result.stdout, "a\nb\nc\n")
         self.assertEqual(sorted(path.name for path in self.root.iterdir()), [])
+
+    def test_sort_reports_a_failing_chunk_read(self):
+        # Two chunks: reads 0 and 1 start the merge, read 2 continues it.
+        for words in ("read-eio=0", "read-eio=2"):
+            with self.subTest(words=words):
+                self.fails(
+                    "input/output error",
+                    "dev", "dump", "sort", "--in", "-", "--out", "-", "--chunk-bytes", "2",
+                    input="b\na\n", env={**os.environ, "AY_CHAOS": words},
+                )
 
     def test_sort_dash_paths_and_exact_chunk_boundary(self):
         result = self.ok(

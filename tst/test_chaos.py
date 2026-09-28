@@ -6,7 +6,7 @@ import lib
 
 
 ROOT = Path(__file__).resolve().parent.parent
-POINT = re.compile(r'newChaos(?:Fault|Number)\("([^"]+)"\)')
+POINT = re.compile(r'newChaos(?:Fault|Number|Text)\("([^"]+)"\)')
 ARMED = re.compile(r"(?<![\w-])([a-z][a-z0-9-]*)=\S")
 
 FILES = {

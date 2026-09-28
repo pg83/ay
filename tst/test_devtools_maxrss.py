@@ -19,9 +19,10 @@ ALLOCATE = (
 )
 
 
-def run_ay(*args, input=None):
+def run_ay(*args, input=None, env=None):
     return subprocess.run(
         [str(lib.AY), *map(str, args)],
+        env=env,
         input=input,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -56,6 +57,16 @@ class MaxRSSTest(unittest.TestCase):
         result = run_ay("dev", "maxrss", "--hz", "50", "--", "sh", "-c", script, ALLOCATE)
         self.assertEqual(result.returncode, 7, result.stderr)
         assert_allocation_peak(self, result.stderr)
+
+    def test_unlistable_proc_counts_nothing(self):
+        # One sample: it runs as the child starts, and the child is gone long
+        # before the first tick of a 1 Hz ticker.
+        result = run_ay(
+            "dev", "maxrss", "--hz", "1", "--", "sh", "-c", "exit 3",
+            env={**os.environ, "AY_CHAOS": "readdir-fail=0"},
+        )
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertEqual(result.stderr, "maxrss (subtree): 0 kB (0.0 MiB)\n")
 
     def test_equals_form_and_implicit_command(self):
         result = run_ay("dev", "maxrss", "--hz=20", "--", sys.executable, "-c", ALLOCATE, "0")
