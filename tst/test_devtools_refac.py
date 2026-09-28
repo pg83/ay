@@ -1294,6 +1294,25 @@ class RefacCaseTest(RefacTestCase):
             "refac case: unfixable build errors remain:\n",
         )
 
+    def test_case_leaves_positions_remapped_by_line_directives(self):
+        source = (
+            "package main\n\nfunc Helper() {}\n\n"
+            "func main() {\n//line main.go:1:1\n\tHelper()\n}\n"
+        )
+        result = self.case(source)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(
+            result.stderr,
+            "refac case: renamed decls: 1 types, 0 method names\n"
+            "refac case: unfixable build errors remain:\n"
+            "# casefix\n"
+            "main.go:1:2: undefined: Helper\n",
+        )
+        self.assertEqual(
+            (self.root / "main.go").read_text(),
+            source.replace("func Helper", "func helper"),
+        )
+
     def test_case_falls_back_across_rename_tables(self):
         result = self.case(CASE_FALLBACKS)
         self.assertEqual(result.returncode, 1)
