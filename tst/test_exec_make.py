@@ -480,6 +480,22 @@ class ExecBuildTest(unittest.TestCase):
         ws.make("-j", "2")
         self.assertIn("main.cpp.o liblib.a!missing", (ws.inst / "tool" / "tool").read_text())
 
+    def test_garbage_collector_removes_garbage_when_rm_fails(self):
+        ws = Workspace(self, BASIC)
+        ws.make("-j", "2")
+        for path in ws.uid_files():
+            path.unlink()
+        fakebin = ws.root / "fakebin"
+        fakebin.mkdir()
+        (fakebin / "rm").write_text("#!/bin/sh\nexit 1\n")
+        (fakebin / "rm").chmod(0o755)
+        leftover = ws.bld / "grb" / "leftover"
+        leftover.mkdir(parents=True)
+        (leftover / "file").write_text("garbage\n")
+        env = ws.env(SLOW_COMPILE="a.cpp", PATH=f"{fakebin}:{os.environ['PATH']}")
+        ws.make("-j", "4", env=env)
+        self.assertFalse(leftover.exists())
+
 
 class ExecFailureTest(unittest.TestCase):
     def test_failing_command_aborts_build(self):
