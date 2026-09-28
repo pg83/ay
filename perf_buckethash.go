@@ -14,10 +14,6 @@ func bucketHashMix64(elems []VFS) uint64 {
 		h += mix64(uint64(v))
 	}
 
-	if h == 0 {
-		h = 1
-	}
-
 	return h
 }
 
