@@ -6,9 +6,11 @@ import lib
 NO_PLATFORM = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
 TOOLS = [
     "contrib/tools/protoc",
+    "tools/archiver",
     "tools/py3cc",
     "tools/py3cc/slow",
     "tools/rescompiler",
+    "tools/rescompressor",
 ]
 LIBRARIES = [
     "contrib/libs/python",
@@ -56,6 +58,12 @@ def fixture():
         "c/ya.make": f"PY3_LIBRARY()\n{NO_PLATFORM}PY_SRCS(x.pyx)\nEND()\n",
         "c/x.pyx": "def f():\n    pass\n",
         "pyc/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(c)\nEND()\n",
+        "gp/ya.make": (
+            f"PY3_LIBRARY()\n{NO_PLATFORM}COPY_FILE(a.in gen.py)\nPY_SRCS(gen.py m.py)\nEND()\n"
+        ),
+        "gp/a.in": "x = 1\n",
+        "gp/m.py": "y = 1\n",
+        "pygp/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(gp)\nEND()\n",
     }
     for path in TOOLS:
         lib.tool_program(files, path, path.split("/")[-1])
@@ -94,6 +102,16 @@ class PythonNativeCompileTest(unittest.TestCase):
         for output in ("$(B)/c/x.pyx.cpp.o", "$(B)/c/c.x.reg3.cpp.o"):
             with self.subTest(output=output):
                 self.assertIn(NUMPY_INCLUDE, cc_args(graph, output))
+
+    def test_generated_python_source_compiles_after_its_copy(self):
+        graph = lib.make(fixture(), "pygp")
+        copy = lib.node_by_output(graph, "$(B)/gp/gen.py")
+        self.assertEqual(copy["kv"]["p"], "CP")
+        generated = lib.node_by_output(graph, "$(B)/gp/gen.py.yapyc3")
+        plain = lib.node_by_output(graph, "$(B)/gp/m.py.yapyc3")
+        self.assertIn(copy["uid"], generated["deps"])
+        self.assertNotIn(copy["uid"], plain["deps"])
+        self.assertIn("$(B)/gp/gen.py", generated["inputs"])
 
 
 if __name__ == "__main__":
