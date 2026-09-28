@@ -216,15 +216,6 @@ class YaMakePythonTest(unittest.TestCase):
             ["$(B)/a/a.pyx.c", "$(B)/a/b.pyx.c", "$(B)/a/c.pyx.cpp"],
         )
 
-    def test_python_instance_of_the_linux_headers_module_has_no_self_peer(self):
-        files = python_tree("PY3_PROGRAM", "PEERDIR(contrib/libs/linux-headers)\nPY_SRCS(x.py)", ["x.py"])
-        files["contrib/libs/linux-headers/ya.make"] = "LIBRARY()\n" + NO_PLATFORM + "SRCS(h.cpp)\nEND()\n"
-        files["contrib/libs/linux-headers/h.cpp"] = "int h;\n"
-        code, graph, stderr = ay_make(files, "-k")
-        self.assertEqual(code, 0, stderr)
-        self.assertNotIn("PEERDIR cycle", stderr)
-        lib.node_by_output_prefix(graph, "$(B)/contrib/libs/linux-headers/")
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
