@@ -52,6 +52,7 @@ def fixture():
         "q/b.proto": 'syntax = "proto3";\nmessage B {}\n',
         "pyq/ya.make": f"PY3_LIBRARY()\n{NO_PLATFORM}PEERDIR(q)\nEND()\n",
         "py3q/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(pyq)\nEND()\n",
+        "d/ya.make": "PROTO_DESCRIPTIONS(descs)\nPEERDIR(p)\nEND()\n",
     }
     for path in TOOLS:
         lib.tool_program(files, path, path.split("/")[-1])
@@ -126,6 +127,24 @@ class ProtoPeersTest(unittest.TestCase):
         produced = {out for node in graph["graph"] for out in node["outputs"]}
         self.assertNotIn("$(B)/q/libq.a", produced)
         self.assertNotIn("$(B)/q/b.pb.cc", produced)
+
+    def test_proto_descriptions_merge_peer_descriptor_sets(self):
+        graph = lib.make(fixture(), "d")
+        per_file = lib.node_by_output(graph, "$(B)/p/a.proto.desc")
+        self_desc = lib.node_by_output(graph, "$(B)/p/p.self.protodesc")
+        merged = lib.node_by_output(graph, "$(B)/d/d.protodesc")
+        for node in (per_file, self_desc, merged):
+            self.assertEqual(node["kv"]["p"], "PD")
+        self.assertEqual(merged["outputs"], ["$(B)/d/d.protodesc", "$(B)/d/d.tar"])
+        self.assertEqual(
+            merged["cmds"][0]["cmd_args"][1:],
+            ["$(S)/build/scripts/merge_files.py", "$(B)/d/d.protodesc", "$(B)/p/p.self.protodesc"],
+        )
+        self.assertEqual(
+            merged["cmds"][1]["cmd_args"][-3:],
+            ["--output", "$(B)/d/d.tar", "p/p.self.protodesc"],
+        )
+        self.assertIn(self_desc["uid"], merged["deps"])
 
 
 if __name__ == "__main__":
