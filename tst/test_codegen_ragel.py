@@ -83,6 +83,20 @@ class Ragel6Test(unittest.TestCase):
         use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
         self.assertIn(header["uid"], use["deps"])
 
+    def test_default_flags_follow_build_type(self):
+        files = {
+            "mod/ya.make": (
+                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(scan.rl6)\nEND()\n"
+            ),
+            "mod/scan.rl6": "%%{ machine m; }%%\n",
+        }
+        lib.tool_program(files, "contrib/tools/ragel6", "ragel6")
+        for build_type, flag in (("--debug", "-CT0"), ("--release", "-CG2")):
+            with self.subTest(build_type=build_type):
+                graph = lib.make(files, "mod", build_type)
+                node = lib.node_by_output(graph, "$(B)/mod/scan.rl6.cpp")
+                self.assertEqual(node["cmds"][0]["cmd_args"][:3], [RAGEL6, flag, "-L"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

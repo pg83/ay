@@ -26,6 +26,8 @@ class EnumSerializationTest(unittest.TestCase):
                 "GENERATE_ENUM_SERIALIZATION(${ARCADIA_ROOT}/other/enums3.h)\n"
                 "COPY_FILE(tpl.h gen.h)\n"
                 "GENERATE_ENUM_SERIALIZATION(gen.h)\n"
+                "COPY_FILE(tpl.h gen2.h)\n"
+                "GENERATE_ENUM_SERIALIZATION(mod/gen2.h)\n"
                 "GENERATE_ENUM_SERIALIZATION(mod/rooted.h)\n"
                 "SRCDIR(srcd)\n"
                 "GENERATE_ENUM_SERIALIZATION(enums4.h)\n"
@@ -86,6 +88,10 @@ class EnumSerializationTest(unittest.TestCase):
             "$(S)/mod/rooted.h", "--include-path", "mod/rooted.h",
         ])
         lib.node_by_output(graph, "$(B)/mod/_/mod/rooted.h_serialized.cpp.o")
+
+        module_generated = lib.node_by_output(graph, "$(B)/mod/mod/gen2.h_serialized.cpp")
+        self.assertEqual(module_generated["inputs"], [ENUM_PARSER, "$(B)/mod/gen2.h"])
+        self.assertIn(lib.node_by_output(graph, "$(B)/mod/gen2.h")["uid"], module_generated["deps"])
 
         srcdir = lib.node_by_output(graph, "$(B)/mod/enums4.h_serialized.cpp")
         self.assertEqual(srcdir["cmds"][0]["cmd_args"][1:4], [
