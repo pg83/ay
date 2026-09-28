@@ -225,22 +225,26 @@ class YaMakeEdgesTest(unittest.TestCase):
         size = len('#include "b.h"\n') + len("#pragma once\n")
         self.assertRegex(result.stdout, rf"^files=2 bytes={size} iters=[1-9][0-9]* per-pass=")
 
-    def test_sproto_header_is_emitted_when_a_source_includes_it(self):
+    def test_sproto_headers_depend_on_imported_protos_not_their_generated_headers(self):
         files = {
-            "a/ya.make": module("LIBRARY", "YMAPS_SPROTO(y.proto)\nSRCS(u.cpp)"),
-            "a/y.proto": 'syntax = "proto3";\n',
+            "a/ya.make": module("LIBRARY", "YMAPS_SPROTO(y.proto z.proto)\nSRCS(u.cpp z.proto)"),
+            "a/y.proto": 'syntax = "proto3";\nimport "a/z.proto";\n',
+            "a/z.proto": 'syntax = "proto3";\n',
             "a/u.cpp": '#include "a/y.sproto.h"\n',
             "contrib/libs/protobuf/ya.make": module("LIBRARY", ""),
             "maps/libs/sproto/ya.make": module("LIBRARY", ""),
         }
-        for tool in ("maps/libs/sproto/sprotoc", "contrib/tools/protoc"):
+        for tool in ("maps/libs/sproto/sprotoc", "contrib/tools/protoc", "contrib/tools/protoc/plugins/cpp_styleguide"):
             lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
-        graph, _ = self.make(files)
+        graph, _ = self.make(files, "a", "-k")
         self.assertEqual(
             lib.node_by_output(graph, "$(B)/a/y.sproto.h")["inputs"],
-            ["$(B)/maps/libs/sproto/sprotoc/sprotoc", "$(S)/a/y.proto"],
+            ["$(B)/maps/libs/sproto/sprotoc/sprotoc", "$(S)/a/z.proto", "$(S)/a/y.proto"],
         )
-        self.assertIn("$(B)/a/y.sproto.h", lib.node_by_output(graph, "$(B)/a/u.cpp.o")["inputs"])
+        self.assertEqual(lib.node_by_output(graph, "$(B)/a/u.cpp.o")["inputs"], [
+            "$(S)/a/u.cpp", "$(B)/a/y.sproto.h", "$(B)/a/z.pb.h", "$(B)/a/z.sproto.h",
+            "$(S)/a/z.proto", "$(S)/a/y.proto",
+        ])
 
     def test_copy_file_of_the_module_directory(self):
         graph, _ = self.make({"a/ya.make": module("LIBRARY", "COPY_FILE(AUTO . d.cpp)")})
