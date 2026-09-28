@@ -16,10 +16,9 @@ TOOLCHAIN_ENV_VARS = {
 }
 
 
-def run(*args, timeout=10, env=None):
-    command = [str(AY), *map(str, args)]
-    result = subprocess.run(
-        command,
+def run_process(*args, timeout=10, env=None):
+    return subprocess.run(
+        [str(AY), *map(str, args)],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -27,16 +26,21 @@ def run(*args, timeout=10, env=None):
         timeout=timeout,
         check=False,
     )
+
+
+def run(*args, timeout=10, env=None):
+    result = run_process(*args, timeout=timeout, env=env)
     if result.returncode != 0:
         raise AssertionError(
-            f"command failed with exit code {result.returncode}: {command!r}\n"
+            f"command failed with exit code {result.returncode}: {result.args!r}\n"
             f"--- stdout ---\n{result.stdout}"
             f"--- stderr ---\n{result.stderr}"
         )
     return result
 
 
-def make(files, target, *args, opensource=True):
+def make_process(files, target, *args, opensource=True, env=None):
+    """Generates the graph of target in a fresh tree; returns the finished process."""
     with tempfile.TemporaryDirectory(prefix="ay-make-test-") as directory:
         root = Path(directory)
         (root / ".arcadia.root").touch()
@@ -49,11 +53,14 @@ def make(files, target, *args, opensource=True):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
         env = {
-            key: value
-            for key, value in os.environ.items()
-            if key not in TOOLCHAIN_ENV_VARS
+            **{
+                key: value
+                for key, value in os.environ.items()
+                if key not in TOOLCHAIN_ENV_VARS
+            },
+            **(env or {}),
         }
-        result = run(
+        return run_process(
             "make", "-j0", "-G", "--sandboxing",
             "--source-root", root,
             "--target-platform", "default-linux-aarch64",
@@ -62,7 +69,17 @@ def make(files, target, *args, opensource=True):
             target,
             env=env,
         )
-        return json.loads(result.stdout)
+
+
+def make(files, target, *args, opensource=True, env=None):
+    result = make_process(files, target, *args, opensource=opensource, env=env)
+    if result.returncode != 0:
+        raise AssertionError(
+            f"command failed with exit code {result.returncode}: {result.args!r}\n"
+            f"--- stdout ---\n{result.stdout}"
+            f"--- stderr ---\n{result.stderr}"
+        )
+    return json.loads(result.stdout)
 
 
 def node_by_output(graph, output):

@@ -1,5 +1,6 @@
 # Build artifacts
 /ay
+/ay_test
 /coverage
 /vet
 /unit_*

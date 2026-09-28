@@ -127,37 +127,56 @@ GO_ENV = {
     "GOWORK": "off",
 }
 
-GO_BUILD_TAIL = [
-    *(["-race"] if race_enabled else []),
-    "-trimpath", "-buildvcs=false", "-o", "$(B)/bin/ay", ".",
-]
+# The unit tests run a binary built with the fault seam (chaos_on.go), which
+# AY_CHAOS drives; the production binary compiles the seam away.
+TEST_TAGS = ["aychaos", *(["aycoverage"] if coverage_enabled else [])]
+
+
+def go_build_tail(output, tags):
+    return [
+        *(["-race"] if race_enabled else []),
+        *(["-tags", ",".join(tags)] if tags else []),
+        "-trimpath", "-buildvcs=false", "-o", output, ".",
+    ]
+
+
+def go_overlay_build(output, tags):
+    return [
+        GO_OVERLAY_CMD,
+        ["go", "build", "-overlay=" + GO_OVERLAY, *go_build_tail(output, tags)],
+    ]
+
+
+def go_binary(name, output, cmd):
+    return command(
+        name=name,
+        inputs=GO_INPUTS,
+        outputs=[output],
+        deps=[dense_maps],
+        cmd=cmd,
+        cwd="$(S)",
+        env=GO_ENV,
+        descr="GO",
+        color="cyan",
+    )
+
+
+ay = go_binary("ay", "$(B)/bin/ay", go_overlay_build("$(B)/bin/ay", []))
 
 if coverage_enabled:
     # The cover tool opens sources by their original names and ignores
     # -overlay, so the instrumented build compiles a staged copy of the module.
     GO_STAGED_MODULE = "$(B)/go-src"
-    ay_cmd = [
+    ay_test_cmd = [
         mkdir(GO_STAGED_MODULE),
         ["cp", "--", *GO_MODULE_FILES, *GENERATED_DENSE_MAPS, GO_STAGED_MODULE + "/"],
-        ["go", "build", "-C", GO_STAGED_MODULE, "-cover", "-covermode=atomic", *GO_BUILD_TAIL],
+        ["go", "build", "-C", GO_STAGED_MODULE, "-cover", "-covermode=atomic",
+         *go_build_tail("$(B)/bin/ay-test", TEST_TAGS)],
     ]
 else:
-    ay_cmd = [
-        GO_OVERLAY_CMD,
-        ["go", "build", "-overlay=" + GO_OVERLAY, *GO_BUILD_TAIL],
-    ]
+    ay_test_cmd = go_overlay_build("$(B)/bin/ay-test", TEST_TAGS)
 
-ay = command(
-    name="ay",
-    inputs=GO_INPUTS,
-    outputs=["$(B)/bin/ay"],
-    deps=[dense_maps],
-    cmd=ay_cmd,
-    cwd="$(S)",
-    env=GO_ENV,
-    descr="GO",
-    color="cyan",
-)
+ay_test = go_binary("ay_test", "$(B)/bin/ay-test", ay_test_cmd)
 
 # go vet needs the generated dense maps, so it runs inside the build graph.
 vet_stamp = "$(B)/tests/vet.stamp"
@@ -169,6 +188,7 @@ vet = command(
     cmd=[
         GO_OVERLAY_CMD,
         ["go", "vet", "-overlay=" + GO_OVERLAY, "."],
+        ["go", "vet", "-overlay=" + GO_OVERLAY, "-tags", "aychaos,aycoverage", "."],
         touch(vet_stamp),
     ],
     cwd="$(S)",
@@ -208,7 +228,7 @@ for test_path in build.glob("$(S)/tst/test_*.py"):
     test_commands = [["python3", test_path], touch(test_stamp)]
     test_outputs = [test_stamp]
     test_env = {
-        "AY_TEST_BINARY": ay.outputs[0],
+        "AY_TEST_BINARY": ay_test.outputs[0],
         "AY_TEST_SSH_OAUTH": "",
         "PYTHONDONTWRITEBYTECODE": "1",
     }
@@ -231,7 +251,7 @@ for test_path in build.glob("$(S)/tst/test_*.py"):
         name=f"unit_{test_slug}",
         inputs=test_inputs,
         outputs=test_outputs,
-        deps=[ay],
+        deps=[ay_test],
         cmd=test_commands,
         cwd="$(S)",
         env=test_env,
