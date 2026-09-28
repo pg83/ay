@@ -1887,9 +1887,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		goSrcClosure = srcClosure
 	} else if len(local.refs) > 0 {
 		if perModuleCCTag != 0 {
-			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, local.refs, local.outs, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		} else {
-			arRef = emitARNamed(arInstance, arBaseName, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamed(arInstance, arBaseName, local.refs, local.outs, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		}
 
 		p := ctx.emit.nodeArenas().vfs.one()
