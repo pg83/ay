@@ -335,6 +335,11 @@ class FetchURLTest(FetchCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn(f"fetch: {url} returned 404 Not Found", result.stderr)
 
+    def test_empty_url_fails(self):
+        result = self.ay("fetch", self.bld, self.src, "", self.bld / "none", check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("fetch: empty URL", result.stderr)
+
     def test_usage_error(self):
         result = self.ay("fetch", self.bld, self.src, check=False)
         self.assertEqual(result.returncode, 1)
@@ -582,6 +587,35 @@ class FetchSandboxCommandTest(FetchCase):
         self.assertEqual(dst.read_text(), "moved\n")
         self.assertFalse(moved.exists())
 
+    def test_copy_errors(self):
+        missing = self.root / "missing"
+        result = self.ay(
+            "fetch", "sandbox", "--resource-file", missing, "--resource-id", "9",
+            "--rename", "RESOURCE", "--", self.bld / "out", check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"open {missing}: no such file or directory", result.stderr)
+
+        fetched = self.root / "fetched.bin"
+        fetched.write_text("blob\n")
+        occupied = self.bld / "copy" / "taken"
+        occupied.mkdir(parents=True)
+        result = self.ay(
+            "fetch", "sandbox", "--resource-file", fetched, "--resource-id", "9",
+            "--copy-to-dir", self.bld / "copy", "--", "taken", check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"open {occupied}: is a directory", result.stderr)
+
+        result = self.ay(
+            "fetch", "sandbox", "--resource-file", self.bld, "--resource-id", "9",
+            "--copy-to-dir", self.root / "dir-copy", check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        # The copy_file_range fast path reports the directory source on the
+        # write side; a plain read reports it on the read side.
+        self.assertRegex(result.stderr, r"(read \S+|write \S+/dir-copy/resource: copy_file_range): is a directory")
+
     def test_argument_errors(self):
         result = self.ay("fetch", "sandbox", "--copy-to-dir", self.bld, check=False)
         self.assertEqual(result.returncode, 1)
@@ -592,6 +626,68 @@ class FetchSandboxCommandTest(FetchCase):
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("fetch sandbox: 2 renames exceed 1 outputs", result.stderr)
+
+
+class ExecutorSandboxTokenTest(FetchCase):
+    """The executor resolves the Sandbox token once and hands it to FETCH/SB nodes."""
+
+    def setUp(self):
+        super().setUp()
+        self.agent = MockSSHAgent(self.root / "agent.sock", [("ssh-ed25519", "k", "sig")])
+        self.addCleanup(self.agent.close)
+        self.net.serve(OAUTH_HOST, "/token", '{"access_token": "agent-token"}')
+        self.write(".arcadia.root", "")
+        self.write("ya.conf", '[flags]\nOPENSOURCE = "yes"\n')
+
+    def make(self, target):
+        return self.ay(
+            "make", "-j", "2", "-k", "--source-root", self.src, "-B", self.bld,
+            "-I", self.root / "inst", target,
+            env=self.env(SSH_AUTH_SOCK=str(self.root / "agent.sock"), YA_USER="robot"),
+            check=False,
+        )
+
+    def test_fetch_nodes_share_one_token(self):
+        self.write("build/platform/sb/ya.make", (
+            "RESOURCES_LIBRARY()\n"
+            "DECLARE_EXTERNAL_RESOURCE(FIRST sbr:41)\n"
+            "DECLARE_EXTERNAL_RESOURCE(SECOND sbr:42)\n"
+            "END()\n"
+        ))
+        for rid in (41, 42):
+            self.net.serve(SANDBOX_HOST, f"/api/v1.0/resource/{rid}", json.dumps({
+                "state": "READY", "http": {"proxy": f"{self.net.base}/proxy/{rid}"},
+            }))
+            self.net.local(f"/proxy/{rid}", tar_bytes({f"r{rid}.txt": f"{rid}\n"}))
+        result = self.make("build/platform/sb")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.net.requests_to(OAUTH_HOST)), 1)
+        api = self.net.requests_to(SANDBOX_HOST)
+        self.assertEqual(sorted(r.path for r in api), [
+            "/api/v1.0/resource/41", "/api/v1.0/resource/42",
+        ])
+        self.assertEqual({r.headers["Authorization"] for r in api}, {"OAuth agent-token"})
+        self.assertEqual(len(list(self.bld.glob("uid/*/*"))), 3)
+
+    def test_from_sandbox_node_runs_fetch_sandbox(self):
+        # Characterization: the SB command keeps ya's
+        # "--resource-file $(RESOURCE_ROOT)/sbr/<id>/resource", which nothing
+        # substitutes, so `ay fetch sandbox` never downloads and the node fails.
+        self.write("sb/ya.make", (
+            "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+            "FROM_SANDBOX(FILE 123 OUT sb.cpp)\nSRCS(sb.cpp)\nEND()\n"
+        ))
+        result = self.make("sb")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f" fetch sandbox --source-root {self.src} --ya-start-command-file"
+            " --resource-file $(RESOURCE_ROOT)/sbr/123/resource --resource-id 123"
+            " --copy-to-dir . -- sb.cpp --ya-end-command-file\n",
+            result.stderr,
+        )
+        self.assertIn("open $(RESOURCE_ROOT)/sbr/123/resource: no such file or directory", result.stderr)
+        self.assertEqual(len(self.net.requests_to(OAUTH_HOST)), 1)
+        self.assertEqual(self.net.requests_to(SANDBOX_HOST), [])
 
 
 if __name__ == "__main__":
