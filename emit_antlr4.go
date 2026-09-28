@@ -11,11 +11,10 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 
 	if g.IsSplit {
 		jvRef := ctx.emit.reserve()
-		ccTag := d.unit.CCTag
 		tc := d.tc
 
 		jvPE := func() {
-			e.emitJVSplitReserved(g.Lexer, g.Parser, g.Visitor, g.Listener, ccTag, tc, jvRef)
+			e.emitJVSplitReserved(g.Lexer, g.Parser, g.Visitor, g.Listener, tc, jvRef)
 		}
 		pending := e.ctx.na.pendingEmit(jvPE)
 
@@ -83,11 +82,10 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
 	} else {
 		jvRef := ctx.emit.reserve()
-		ccTag := d.unit.CCTag
 		tc := d.tc
 
 		jvPE := func() {
-			e.emitJVReserved(g.Grammar, g.Options, g.Visitor, g.Listener, ccTag, tc, jvRef)
+			e.emitJVReserved(g.Grammar, g.Options, g.Visitor, g.Listener, tc, jvRef)
 		}
 		pending := e.ctx.na.pendingEmit(jvPE)
 

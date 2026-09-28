@@ -93,20 +93,23 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 	}
 }
 
-func (e *EmitContext) emitJVNodeReserved(cmdArgs []ANY, inputs InputChunks, outputs []VFS, cwd string, depRefs []NodeRef, moduleTag STR, id NodeRef) {
+func (e *EmitContext) emitJVNodeReserved(cmdArgs []ANY, inputs InputChunks, outputs []VFS, cwd string, id NodeRef) {
 	na := e.ctx.na
 	env := envVarsVCS
+	cmd := Cmd{CmdArgs: na.chunkList(na.anyChunkAny(cmdArgs)), Env: env}
+
+	// RUN_ANTLR/RUN_ANTLR4 without CWD run in the default directory (upstream CWD="").
+	if cwd != "" {
+		cmd.Cwd = cwdVFS(cwd)
+	}
 
 	node := Node{
-		Platform: e.instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyChunkAny(cmdArgs)),
-			Env: env,
-			Cwd: cwdVFS(cwd)}),
+		Platform:  e.instance.Platform,
+		Cmds:      na.cmdList(cmd),
 		Env:       env,
 		Inputs:    inputs,
 		KV:        &jvKV,
 		Outputs:   na.vfsList(outputs...),
-		DepRefs:   na.noderefs.list(depRefs...),
 		Resources: usesPython3JDK17,
 	}
 
@@ -118,7 +121,6 @@ func (e *EmitContext) emitJVReserved(
 	options []string,
 	visitor bool,
 	listener bool,
-	moduleTag STR,
 	tc ModuleToolchain,
 	id NodeRef,
 ) {
@@ -167,7 +169,7 @@ func (e *EmitContext) emitJVReserved(
 		build(outPrefix, "BaseVisitor.h"),
 	}
 
-	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, nil, moduleTag, id)
+	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, id)
 }
 
 func (e *EmitContext) emitJVSplitReserved(
@@ -175,7 +177,6 @@ func (e *EmitContext) emitJVSplitReserved(
 	parser string,
 	visitor bool,
 	listener bool,
-	moduleTag STR,
 	tc ModuleToolchain,
 	id NodeRef,
 ) {
@@ -228,7 +229,7 @@ func (e *EmitContext) emitJVSplitReserved(
 		build(outPrefix, visitorBase, "BaseVisitor.h"),
 	}
 
-	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, nil, moduleTag, id)
+	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, id)
 }
 
 func (e *EmitContext) emitJVGeneralReserved(
@@ -238,7 +239,6 @@ func (e *EmitContext) emitJVGeneralReserved(
 	inputBuilds []VFS,
 	outputs []VFS,
 	cwd string,
-	moduleTag STR,
 	tc ModuleToolchain,
 	id NodeRef,
 ) {
@@ -257,5 +257,5 @@ func (e *EmitContext) emitJVGeneralReserved(
 
 	jvInputs := na.inputList(inputSources, inputBuilds, na.vfsList(stdout2stderrVFS, jarVFS))
 
-	e.emitJVNodeReserved(cmdArgs, jvInputs, outputs, cwd, nil, moduleTag, id)
+	e.emitJVNodeReserved(cmdArgs, jvInputs, outputs, cwd, id)
 }

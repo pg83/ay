@@ -25,10 +25,6 @@ func (e *EmitContext) emitAS(srcRel string, srcVFS VFS, in ModuleCCInputs, hostP
 		Resources: instance.Platform.UsesClangOnly,
 	}
 
-	if len(in.ExtraDepRefs) > 0 {
-		node.DepRefs = in.ExtraDepRefs
-	}
-
 	return e.emitNode(node), outVFS
 }
 
@@ -42,10 +38,6 @@ func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	var outRel string
 
 	outName := srcRel + ".o"
-
-	if extIsAsm(srcRel) {
-		outName = strings.TrimSuffix(srcRel, ".asm") + ".o"
-	}
 
 	if strings.Contains(srcRel, "/") {
 		outRel = instance.Path.relString() + "/_/" + outName
