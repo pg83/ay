@@ -154,10 +154,6 @@ func archiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
 	return archiveNameWithPrefix(moduleDir, prefix)
 }
 
-func archiveName(moduleDir string) string {
-	return archiveNameWithPrefix(moduleDir, "lib")
-}
-
 func globalArchiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
 	base := archiveNameWithPrefixOrName(moduleDir, prefix, name)
 

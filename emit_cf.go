@@ -136,7 +136,3 @@ func mapHas(m map[STR]STR, k STR) bool {
 
 	return ok
 }
-
-func cfTemplateParsedIncludes(pm *IncludeParserManager, rel string) []IncludeDirective {
-	return pm.sourceParsedBuckets(source(rel), nil).bucket(parsedIncludesLocal)
-}

@@ -2,6 +2,8 @@
 /ay
 /coverage
 /vet
+/unit_*
+/python_test
 /.build/
 *.test
 *.out

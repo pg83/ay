@@ -122,7 +122,3 @@ func (s *IntSet) grow() {
 		}
 	}
 }
-
-func (s *IntSet) len() int {
-	return s.count
-}

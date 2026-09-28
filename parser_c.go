@@ -367,18 +367,6 @@ func hasYIgnoreComment(data []byte, i int) bool {
 	return bytesHasPrefixAt(data, i, "Y_IGNORE")
 }
 
-func indexOfAngleOrQuote(b []byte) int {
-	for i := 0; i < len(b); i++ {
-		c := b[i]
-
-		if c == '<' || c == '"' {
-			return i
-		}
-	}
-
-	return -1
-}
-
 func stripComments(data []byte) []byte {
 	hasTrigger := false
 

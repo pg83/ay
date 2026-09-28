@@ -69,10 +69,6 @@ func (e *StreamingEmitter) emitReserved(n *Node, id NodeRef) {
 	e.resolveOrPend(n, id)
 }
 
-func (e *StreamingEmitter) newNode() *Node {
-	return e.na.nodes.one()
-}
-
 func (e *StreamingEmitter) emitNode(n Node) NodeRef {
 	return e.emitNodePtr(&n)
 }
@@ -245,8 +241,4 @@ func finalize(e *StreamingEmitter) *Graph {
 	e.finish()
 
 	return graphFromEmitter(e)
-}
-
-func finalizeDumpGraph(e *StreamingEmitter) *Graph {
-	return finalize(e)
 }

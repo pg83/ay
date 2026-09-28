@@ -12,11 +12,3 @@ const (
 	resourcePatternJDK17        = "JDK17"
 	resourcePatternOSSDKRoot    = "OS_SDK_ROOT"
 )
-
-func resourcePatternRef(pattern string) string {
-	return "$(" + pattern + ")"
-}
-
-func resourceGlobalRef(name, pattern string) string {
-	return name + "::" + resourcePatternRef(pattern)
-}

@@ -105,10 +105,6 @@ func isaPlatformKey(isa ISA) string {
 	return string(isa)
 }
 
-func stripSbrPrefix(uri string) string {
-	return strings.TrimPrefix(uri, "sbr:")
-}
-
 func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *DeclareResourceStmt) []ResourceDecl {
 	switch stmt.Macro {
 	case tokDeclareExternalResource:

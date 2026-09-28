@@ -200,16 +200,6 @@ func internBuild(prefix string, parts []string) STR {
 	return internBlock(block, n)
 }
 
-func internBuildBytes(prefix string, rel []byte) STR {
-	n := len(prefix) + len(rel)
-	block := internTable.bytes.alloc(n)
-	off := copy(block, prefix)
-
-	copy(block[off:], rel)
-
-	return internBlock(block, n)
-}
-
 func internedBuild(prefix string, parts []string) STR {
 	block, n := internFill(prefix, parts)
 
@@ -296,10 +286,6 @@ func internedBytes(b []byte) STR {
 	return 0
 }
 
-func (id STR) str() STR {
-	return id
-}
-
 func (id STR) string() string {
 	return internString(id)
 }
@@ -310,20 +296,6 @@ func (id STR) sharedString() string {
 
 func (id STR) String() string {
 	return id.string()
-}
-
-func internStrs(ss []string) []STR {
-	if len(ss) == 0 {
-		return nil
-	}
-
-	out := make([]STR, len(ss))
-
-	for i, s := range ss {
-		out[i] = internStr(s)
-	}
-
-	return out
 }
 
 func interned(s string) STR {
@@ -340,10 +312,6 @@ func interned(s string) STR {
 	}
 
 	return 0
-}
-
-func internBound() uint32 {
-	return internTable.count
 }
 
 func (id STR) source() VFS {
@@ -394,20 +362,8 @@ func internedV(parts ...string) STR {
 	return internedVInto("", parts)
 }
 
-func internPrefixed(prefix, rel string) STR {
-	return internVInto(prefix, []string{rel})
-}
-
 func internedPrefixed(prefix, rel string) STR {
 	return internedVInto(prefix, []string{rel})
-}
-
-func internPrefixedJoined(prefix, dir, rel string) STR {
-	if dir == "" {
-		return internVInto(prefix, []string{rel})
-	}
-
-	return internVInto(prefix, []string{dir, "/", rel})
 }
 
 func internedPrefixedJoined(prefix, dir, rel string) STR {

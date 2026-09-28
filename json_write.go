@@ -172,20 +172,6 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 	return append(buf, ']')
 }
 
-func appendStringSlice(buf []byte, ss []string) []byte {
-	buf = append(buf, '[')
-
-	for i, s := range ss {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
-
-		buf = appendString(buf, s)
-	}
-
-	return append(buf, ']')
-}
-
 func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 	buf = append(buf, '[')
 
@@ -205,20 +191,6 @@ func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 				buf = appendString(buf, a.str().string())
 			}
 		}
-	}
-
-	return append(buf, ']')
-}
-
-func appendStrSlice(buf []byte, as []STR) []byte {
-	buf = append(buf, '[')
-
-	for i, a := range as {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
-
-		buf = appendString(buf, a.string())
 	}
 
 	return append(buf, ']')
@@ -274,27 +246,6 @@ func appendVFSSlice(buf []byte, vs []VFS) []byte {
 			buf = append(buf, ',')
 		}
 
-		buf = appendVFS(buf, v)
-	}
-
-	return append(buf, ']')
-}
-
-func appendBuildOnlyVFSSlice(buf []byte, vs []VFS) []byte {
-	buf = append(buf, '[')
-
-	first := true
-
-	for _, v := range vs {
-		if v.isSource() {
-			continue
-		}
-
-		if !first {
-			buf = append(buf, ',')
-		}
-
-		first = false
 		buf = appendVFS(buf, v)
 	}
 

@@ -208,7 +208,3 @@ func (r *CodegenRegistry) buildParsedFor(out VFS) ParsedIncludeSet {
 
 	return ParsedIncludeSet{}
 }
-
-func (ctx *GenCtx) codegenFor(instance ModuleInstance) *CodegenRegistry {
-	return ctx.scannerFor(instance).codegen
-}

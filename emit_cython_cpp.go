@@ -97,10 +97,6 @@ type CythonStmtPlan struct {
 	infos             []*GeneratedFileInfo
 }
 
-func (e *EmitContext) emitCythonCpp() {
-	e.emitCythonCppPlanned(e.planCythonCpp())
-}
-
 func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 	ctx, instance, d := e.ctx, e.instance, e.d
 

@@ -212,12 +212,6 @@ func (e Environment) hasBindingID(id ENV) bool {
 	return k != envAbsent
 }
 
-func (e Environment) hasBinding(name string) bool {
-	id := internedEnv(name)
-
-	return id != 0 && e.hasBindingID(id)
-}
-
 func (e Environment) lookup(name string) (string, bool) {
 	id := internedEnv(name)
 
