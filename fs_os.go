@@ -74,10 +74,6 @@ func newFS(srcRoot string) FS {
 	return fs
 }
 
-func (fs *OsFS) contentHash(rel STR) uint64 {
-	return fs.contentHashes.getSafe(rel.strID())
-}
-
 func (fs *OsFS) listdir(dir STR) DirView {
 	if cached, ok := fs.dirs.get(dir); ok {
 		return cached
