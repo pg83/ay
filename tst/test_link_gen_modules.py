@@ -204,6 +204,31 @@ class GenModulesTest(unittest.TestCase):
                 args = lib.node_by_output(graph, output)["cmds"][0]["cmd_args"]
                 self.assertEqual("-DLINTED" in args, linted)
 
+    def test_tool_without_linkable_output_is_reported(self):
+        files = {
+            "tools/archiver/ya.make": library(),
+            "user/ya.make": library(
+                "SRCS(use.cpp)\nARCHIVE(NAME data.inc payload.lst)\n"
+            ),
+            "user/use.cpp": '#include "data.inc"\n',
+            "user/payload.lst": "row\n",
+        }
+        result = make_raw(files, "user")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(
+            "gen: tool tools/archiver has no linkable output",
+            result.stderr,
+        )
+        self.assertNotIn("panic", result.stderr)
+
+        result = make_raw(files, "user", "-k")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "module-failed: user: gen: tool tools/archiver has no linkable "
+            "output",
+            result.stderr,
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
