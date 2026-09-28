@@ -1,16 +1,6 @@
 package main
 
-import "encoding/json"
-
 type ArgChunks [][]ANY
-
-func (c ArgChunks) marshalJSON() ([]byte, error) {
-	return json.Marshal(c.flat())
-}
-
-func (c ArgChunks) MarshalJSON() ([]byte, error) {
-	return c.marshalJSON()
-}
 
 func (c ArgChunks) flat() []ANY {
 	total := 0
@@ -110,27 +100,3 @@ func dedupRefs(refs []NodeRef) []NodeRef {
 }
 
 type InputChunks [][]VFS
-
-func (c InputChunks) marshalJSON() ([]byte, error) {
-	return json.Marshal(c.flat())
-}
-
-func (c InputChunks) MarshalJSON() ([]byte, error) {
-	return c.marshalJSON()
-}
-
-func (c InputChunks) flat() []VFS {
-	total := 0
-
-	for _, ch := range c {
-		total += len(ch)
-	}
-
-	out := make([]VFS, 0, total)
-
-	for _, ch := range c {
-		out = append(out, ch...)
-	}
-
-	return out
-}

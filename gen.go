@@ -113,13 +113,7 @@ var acknowledgedTokSet = func() BitSet {
 	var b BitSet
 
 	for name := range acknowledgedMacros {
-		t, ok := tokByName[name]
-
-		if !ok {
-			panic("acknowledgedMacros name missing from the TOK enum: " + name)
-		}
-
-		b.add(uint32(t))
+		b.add(uint32(tokByName[name]))
 	}
 
 	return b
@@ -180,10 +174,6 @@ type ModuleEmitResult struct {
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
-	if res == nil {
-		return nil
-	}
-
 	return slices.Clone(res.WholeArchiveCmdPaths)
 }
 
@@ -353,14 +343,10 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		if sub.LDRef != 0 {
 			ctx.emit.result(sub.LDRef)
 		}
-
-		if sub.GlobalRef != nil {
-			ctx.emit.result(*sub.GlobalRef)
-		}
 	}
 
 	if ctx.testMode && root.testSuiteInfo != nil {
-		for _, ref := range emitTestRunNodes(plainEmit, plainEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
+		for _, ref := range emitTestRunNodes(plainEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
 		}
 	}
@@ -791,12 +777,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return e.genPrebuiltProgram()
 	}
 
-	if d.moduleStmt.Name != tokLibrary && d.moduleStmt.Name != tokFbsLibrary && d.moduleStmt.Name != tokDllTool && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) && d.moduleStmt.Name != tokGoLibrary && d.moduleStmt.Name != tokGoProgram {
-		ctx.onWarn(Warn{Kind: WarnUnsupportedSource, Message: fmt.Sprintf("%s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only); module skipped", instance.Path.relString(), d.moduleStmt.Name)})
-
-		return &ModuleEmitResult{}
-	}
-
 	applyImplicitPeerdirs(ctx, instance, d)
 
 	if isGoModuleType(d.moduleStmt.Name) {
@@ -898,9 +878,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		for _, p := range languageDefaults {
-			if peerSeen(p) {
-				continue
-			}
+			peerSeen(p)
 
 			allPeers = append(allPeers, p)
 			peerKinds = append(peerKinds, peerKindLangDefault)
@@ -1897,9 +1875,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		goSrcClosure = srcClosure
 	} else if len(local.refs) > 0 {
 		if perModuleCCTag != 0 {
-			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, local.refs, local.outs, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		} else {
-			arRef = emitARNamed(arInstance, arBaseName, local.refs, local.outs, nil, arPluginVFS, d.tc, ctx.host, ctx.emit)
+			arRef = emitARNamed(arInstance, arBaseName, local.refs, local.outs, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		}
 
 		p := ctx.emit.nodeArenas().vfs.one()
@@ -1996,10 +1974,6 @@ type ARMember struct {
 }
 
 func (e *EmitContext) emittedProducer(ref NodeRef) *Node {
-	if e.ctx == nil || e.ctx.emit == nil || int(ref) >= len(e.ctx.emit.nodes.s) {
-		return nil
-	}
-
 	return e.ctx.emit.nodes.s[ref]
 }
 
@@ -2115,6 +2089,10 @@ func (e *EmitContext) reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcM
 func (ctx *GenCtx) tool(modulePath ARG) (NodeRef, VFS) {
 	res := ctx.toolResult(modulePath)
 
+	if res.LDPath == nil {
+		throwFmt("gen: tool %s has no linkable output", modulePath.string())
+	}
+
 	return res.LDRef, *res.LDPath
 }
 
@@ -2142,8 +2120,6 @@ func (ctx *GenCtx) instanceVariant(in ModuleInstance) uint16 {
 
 	if in.Platform == ctx.host {
 		pbit = 1
-	} else if in.Platform != ctx.target {
-		throwFmt("instanceVariant: unknown platform for %s", in.Path.string())
 	}
 
 	return uint16(in.Path&1)<<15 | uint16(in.Kind)<<8 | uint16(in.Demand)<<4 | uint16(in.Language)<<1 | pbit
@@ -2165,15 +2141,6 @@ func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) {
 	path := uint32(in.Path.rel())
 	variant := ctx.instanceVariant(in)
 	head := ctx.memo.heads.getSafe(path)
-
-	for entry := head; entry != nil; entry = entry.next {
-		if entry.variant == variant {
-			entry.result = result
-
-			return
-		}
-	}
-
 	entry := ctx.memo.entries.one()
 
 	*entry = moduleMemoEntry{next: head, result: result, variant: variant}

@@ -291,10 +291,6 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 		Resources: instance.Platform.CCUsesResources,
 	}
 
-	if len(in.ExtraDepRefs) > 0 {
-		node.DepRefs = in.ExtraDepRefs
-	}
-
 	if reserved != 0 {
 		e.emitReservedNode(node, reserved)
 

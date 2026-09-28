@@ -137,10 +137,6 @@ func (m NetworkMode) string() string {
 	return networkModeStr[m]
 }
 
-func (m NetworkMode) String() string {
-	return m.string()
-}
-
 type Requirements struct {
 	CPU        float64
 	RAM        float64
@@ -149,28 +145,16 @@ type Requirements struct {
 	HasRAMDisk bool
 }
 
-func (r Requirements) isEmpty() bool {
-	return r.CPU == 0 && r.RAM == 0 && r.Network == nwNone && !r.HasRAMDisk
-}
-
 type ProcKind uint8
 
 func (k ProcKind) string() string {
 	return procKindStr[k]
 }
 
-func (k ProcKind) String() string {
-	return k.string()
-}
-
 type PColor uint8
 
 func (c PColor) string() string {
 	return pColorStr[c]
-}
-
-func (c PColor) String() string {
-	return c.string()
 }
 
 type KV struct {
@@ -253,10 +237,6 @@ func appendRequirements(buf []byte, r *Requirements) []byte {
 		return append(buf, `{"cpu":1,"network":"restricted","ram":32}`...)
 	}
 
-	if r.isEmpty() {
-		return append(buf, '{', '}')
-	}
-
 	o := JsonObj{buf: append(buf, '{')}
 
 	if r.CPU != 0 {
@@ -304,28 +284,4 @@ func appendKV(buf []byte, kv KV, exts []KVExt) []byte {
 	}
 
 	return append(o.buf, '}')
-}
-
-func (e EnvVars) marshalJSON() ([]byte, error) {
-	return appendEnv(nil, e), nil
-}
-
-func (e EnvVars) MarshalJSON() ([]byte, error) {
-	return e.marshalJSON()
-}
-
-func (kv KV) marshalJSON() ([]byte, error) {
-	return appendKV(nil, kv, nil), nil
-}
-
-func (kv KV) MarshalJSON() ([]byte, error) {
-	return kv.marshalJSON()
-}
-
-func (r Requirements) marshalJSON() ([]byte, error) {
-	return appendRequirements(nil, &r), nil
-}
-
-func (r Requirements) MarshalJSON() ([]byte, error) {
-	return r.marshalJSON()
 }
