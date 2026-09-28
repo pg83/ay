@@ -135,6 +135,7 @@ class InducedDepsTest(unittest.TestCase):
                 "INDUCED_DEPS(h ${ARCADIA_ROOT}/ind/h_only.h)\n"
                 "INDUCED_DEPS(cpp ind/cpp_only.h)\n"
                 "INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/ind/both.h ${ARCADIA_BUILD_ROOT}/ind/none.h)\n"
+                "INDUCED_DEPS(h ${ARCADIA_ROOT}/ind/absent.inc)\n"
                 "SRCS(main.cpp)\nEND()\n"
             ),
             "tool/main.cpp": "int main(){return 0;}\n",
@@ -151,8 +152,85 @@ class InducedDepsTest(unittest.TestCase):
             inputs_of(graph, "$(B)/lib/base_gen.cpp.o"),
         )
         self.assertEqual(
-            generated | both | {"$(S)/lib/use.cpp", "$(B)/lib/base_gen.h", "$(S)/ind/h_only.h"},
+            generated | both | {
+                "$(S)/lib/use.cpp", "$(B)/lib/base_gen.h", "$(S)/ind/h_only.h",
+                "$(S)/ind/absent.inc",
+            },
             inputs_of(graph, "$(B)/lib/use.cpp.o"),
+        )
+
+
+class GeneratedHeaderDomainTest(unittest.TestCase):
+    def test_ymaps_sproto_header_closure(self):
+        files = {
+            "m/ya.make": library("YMAPS_SPROTO(x.proto)", "SRCS(a.cpp)"),
+            "m/x.proto": 'import "m/y.proto";\n',
+            "m/y.proto": "",
+            "m/a.cpp": '#include "m/x.sproto.h"\n',
+            "maps/libs/sproto/ya.make": library("SRCS(s.cpp)"),
+            "maps/libs/sproto/s.cpp": "",
+        }
+        lib.tool_program(files, "maps/libs/sproto/sprotoc", "sprotoc")
+        graph = lib.make(files, "m", "-k")
+        self.assertEqual(
+            {"$(B)/maps/libs/sproto/sprotoc/sprotoc", "$(S)/m/x.proto"},
+            inputs_of(graph, "$(B)/m/x.sproto.h"),
+        )
+        self.assertEqual(
+            {"$(S)/m/a.cpp", "$(B)/m/x.sproto.h", "$(S)/m/x.proto"},
+            inputs_of(graph, "$(B)/m/a.cpp.o"),
+        )
+
+    def test_empty_parser_context_for_unregistered_extension(self):
+        files = {
+            "m/ya.make": library(
+                "COPY_FILE(src.m4 dst.m4 OUTPUT_INCLUDES y.inc)", "SRCS(a.cpp)"
+            ),
+            "m/src.m4": "",
+            "m/y.inc": '#include "z.h"\n',
+            "m/z.h": "",
+            "m/a.cpp": '#include "dst.m4"\n',
+            "build/scripts/fs_tools.py": "",
+        }
+        graph = lib.make(files, "m")
+        # y.inc has no registered parser; reached from an .m4 closure it is
+        # parsed with the (empty) m4 parser, so z.h is not followed.
+        self.assertEqual(
+            {"$(S)/build/scripts/fs_tools.py", "$(S)/m/src.m4", "$(S)/m/y.inc"},
+            inputs_of(graph, "$(B)/m/dst.m4"),
+        )
+
+
+class PlatformDomainTest(unittest.TestCase):
+    def test_x86_64_join_sources_rescan_for_target(self):
+        files = {
+            "j/ya.make": library("JOIN_SRCS(all.cpp s1.cpp)", "PEERDIR(p)", "SRCS(other.cpp)"),
+            "j/s1.cpp": "#include <ph.h>\n",
+            "j/other.cpp": "",
+            "p/ya.make": library("ADDINCL(GLOBAL p/inc)", "SRCS(p.cpp)"),
+            "p/p.cpp": "",
+            "p/inc/ph.h": "",
+        }
+        graph = lib.make(files, "j", "--target-platform", "default-linux-x86_64")
+        self.assertEqual(
+            {"$(S)/j/s1.cpp", "$(S)/p/inc/ph.h"}, inputs_of(graph, "$(B)/j/all.cpp")
+        )
+
+    def test_go_assembly_includes(self):
+        files = {
+            "g/ya.make": "GO_LIBRARY()\nSRCS(a.go b.s)\nEND()\n",
+            "g/a.go": "package g\n",
+            "g/b.s": '#include "textflag.h"\n#include "local.h"\n',
+            "g/local.h": "",
+            "build/scripts/go_fake_include/textflag.h": "",
+        }
+        graph = lib.make(files, "g", "-k")
+        self.assertEqual(
+            {
+                "$(S)/g/b.s", "$(S)/g/local.h",
+                "$(S)/build/scripts/go_fake_include/textflag.h",
+            },
+            inputs_of(graph, "$(B)/g/gen.symabis"),
         )
 
 
