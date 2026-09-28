@@ -203,6 +203,22 @@ class ResourceFilesTest(unittest.TestCase):
             ],
         )])
 
+    def test_directory_named_past_the_expansion_limit(self):
+        # ${D1} -> ... -> ${D8} = ${ARCADIA_ROOT}/res: the root reference is
+        # left unexpanded when the chain runs out of passes.
+        passes = 8
+        defines = [f"-DD{i}=${{D{i + 1}}}" for i in range(1, passes)] + [f"-DD{passes}=${{ARCADIA_ROOT}}/res"]
+        files = base_files("ALL_RESOURCE_FILES_FROM_DIRS(${D1})\n")
+        files.update({"res/one.txt": "", "res/two.txt": ""})
+        self.assertEqual(payloads(lib.make(files, "lib", *defines)), [(
+            ["$(S)/res/one.txt", "$(S)/res/two.txt"],
+            ["resfs/file/${ARCADIA_ROOT}/res/one.txt", "resfs/file/${ARCADIA_ROOT}/res/two.txt"],
+            [
+                "resfs/src/resfs/file/$(S)/res/one.txt=res/one.txt",
+                "resfs/src/resfs/file/$(S)/res/two.txt=res/two.txt",
+            ],
+        )])
+
     def test_directory_with_more_files_than_interned_strings(self):
         # The glob interns every match while the deduper is borrowed, so the
         # deduper grows past the size it was reset to.

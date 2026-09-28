@@ -4,6 +4,32 @@ import lib
 
 
 class EmitBaseCodegenTest(unittest.TestCase):
+    def test_enum_over_a_base_codegen_header_compiles_in_the_same_pass(self):
+        files = {
+            "m/ya.make": (
+                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                "BASE_CODEGEN(tool base_gen)\n"
+                "GENERATE_ENUM_SERIALIZATION(${BINDIR}/base_gen.h)\n"
+                "END()\n"
+            ),
+            "tools/enum_parser/enum_serialization_runtime/ya.make": (
+                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n"
+            ),
+        }
+        lib.tool_program(files, "tool", "base_gen")
+        lib.tool_program(files, "tools/enum_parser/enum_parser", "enum_parser")
+        graph = lib.make(files, "m", "-k")
+        self.assertEqual(
+            [(node["kv"]["p"], node["outputs"][0]) for node in graph["graph"]
+             if node["outputs"][0].startswith("$(B)/m/")],
+            [
+                ("BC", "$(B)/m/base_gen.cpp"),
+                ("EN", "$(B)/m/base_gen.h_serialized.cpp"),
+                ("CC", "$(B)/m/base_gen.h_serialized.cpp.o"),
+                ("AR", "$(B)/m/libm.a"),
+            ],
+        )
+
     def test_generated_closure_reaches_consumer(self):
         files = {
             "lib/ya.make": (

@@ -110,6 +110,32 @@ class YaMakeEdgesTest(unittest.TestCase):
             "$(B)/gen/e3.h_serialized.cpp": "$(B)/gen/e3.h",
         })
 
+    def test_enum_headers_with_unclean_root_variable_paths(self):
+        files = {
+            "a/ya.make": module("LIBRARY", (
+                "GENERATE_ENUM_SERIALIZATION(${CURDIR}/sub/../e1.h)\n"
+                "CONFIGURE_FILE(e3.h.in ${ARCADIA_BUILD_ROOT}/gen/e3.h)\n"
+                "GENERATE_ENUM_SERIALIZATION(${ARCADIA_BUILD_ROOT}/gen/../gen/e3.h)"
+            )),
+            "a/e1.h": "enum A {};\n", "a/e3.h.in": "",
+            "tools/enum_parser/enum_serialization_runtime/ya.make": module("LIBRARY", ""),
+        }
+        lib.tool_program(files, "tools/enum_parser/enum_parser", "enum_parser")
+        graph, _ = self.make(files, "a", "-k")
+        self.assertEqual({
+            node["outputs"][0]: node["inputs"][-1]
+            for node in graph["graph"] if node["kv"]["p"] == "EN"
+        }, {
+            "$(B)/a/e1.h_serialized.cpp": "$(S)/a/e1.h",
+            "$(B)/gen/e3.h_serialized.cpp": "$(B)/gen/e3.h",
+        })
+
+    def test_empty_include_and_json_paths_name_the_module_directory(self):
+        for body in ('INCLUDE("")', 'SET_RESOURCE_URI_FROM_JSON(V "")'):
+            with self.subTest(body=body):
+                code, _, stderr = ay_make({"a/ya.make": module("LIBRARY", body)}, "a")
+                self.assertEqual((code, stderr), (1, "is a directory"))
+
     def test_archives_resources_and_matrixnet(self):
         files = {
             "a/ya.make": module("LIBRARY", (

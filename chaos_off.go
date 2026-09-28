@@ -50,6 +50,10 @@ func chaosBucketListHash(h1, h2 uint64) (uint64, uint64) {
 	return h1, h2
 }
 
+func chaosSourceUnderSlot(slot uint32) uint32 {
+	return slot
+}
+
 func chaosLink(src, dst string) error {
 	return os.Link(src, dst)
 }

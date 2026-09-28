@@ -55,11 +55,11 @@ func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) b
 			}
 		}
 
+		// A fetch node has no dependencies, so it is resolved as soon as it is
+		// emitted and no caller stops the iteration at one.
 		for _, pat := range n.Resources {
 			if ref, ok := fetchRefs.get(pat); ok {
-				if !yield(ref) {
-					return
-				}
+				yield(ref)
 			}
 		}
 	}

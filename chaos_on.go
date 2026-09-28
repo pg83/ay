@@ -37,6 +37,7 @@ var (
 	chaosHashBucketH2  = newChaosNumber("hash-bucket-h2")
 	chaosHashListH1    = newChaosNumber("hash-list-h1")
 	chaosHashListH2    = newChaosNumber("hash-list-h2")
+	chaosSlotMask      = newChaosNumber("hash-source-under-slot")
 	chaosLinkEXDEV     = newChaosFault("link-exdev")
 	chaosReadDirFail   = newChaosFault("readdir-fail")
 	chaosReadEIO       = newChaosFault("read-eio")
@@ -103,6 +104,12 @@ func chaosBucketHash(h1, h2 uint64) (uint64, uint64) {
 
 func chaosBucketListHash(h1, h2 uint64) (uint64, uint64) {
 	return chaosMaskPair(chaosHashListH1, chaosHashListH2, h1, h2)
+}
+
+// chaosSourceUnderSlot narrows the slot of the source resolution hot cache, so
+// lookups evict each other.
+func chaosSourceUnderSlot(slot uint32) uint32 {
+	return slot & uint32(chaosSlotMask.number(^uint64(0)))
 }
 
 func chaosMaskPair(p1, p2 ChaosPoint, h1, h2 uint64) (uint64, uint64) {

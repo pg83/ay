@@ -242,7 +242,7 @@ func (fs *OsFS) resolveSourceUnderClean(prefix, target STR, targetClean bool) ST
 func (fs *OsFS) resolveSourceUnder0(prefix, target STR, targetClean, cleanKnown bool) STR {
 	p, t := uint32(prefix), uint32(target)
 	pair := uint64(p)<<32 | uint64(t)
-	hot := &fs.sourceUnderHot[(p*0x9e3779b1^t)&sourceUnderHotMask]
+	hot := &fs.sourceUnderHot[chaosSourceUnderSlot((p*0x9e3779b1^t)&sourceUnderHotMask)]
 
 	if hot.key == pair {
 		return hot.val
