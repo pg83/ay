@@ -9,6 +9,7 @@ import lib
 
 NO_PLATFORM = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
 COPIES = 17
+HEADERS = 16
 
 
 def fixture():
@@ -28,7 +29,16 @@ def fixture():
             f"LIBRARY()\n{NO_PLATFORM}FROM_SANDBOX(123 OUT blob.o)\nSRCS(y.cpp)\nEND()\n"
         ),
         "fs/y.cpp": "int y;\n",
+        "hdr/ya.make": (
+            f"LIBRARY()\n{NO_PLATFORM}"
+            + "".join(f"COPY_FILE(h{i}.in h{i}.h)\n" for i in range(HEADERS))
+            + "FROM_SANDBOX(7 OUT a.h b.h)\nSRCS(x.cpp)\nEND()\n"
+        ),
+        "hdr/x.cpp": "".join(f'#include "h{i}.h"\n' for i in range(HEADERS))
+        + '#include "a.h"\n#include "b.h"\n',
     }
+    for i in range(HEADERS):
+        files[f"hdr/h{i}.in"] = f"int h{i};\n"
     for i in range(COPIES):
         files[f"m/o{i}.bin"] = f"{i}\n"
     return files
@@ -68,7 +78,7 @@ def make_raw(files, target):
 
 
 class CodegenDepsTest(unittest.TestCase):
-    def test_many_generated_members_are_deduplicated_in_archive_deps(self):
+    def test_generated_archive_members_are_archive_deps(self):
         graph = lib.make(fixture(), "m")
         copies = [lib.node_by_output(graph, f"$(B)/m/d{i}.o") for i in range(COPIES)]
         compile_node = lib.node_by_output(graph, "$(B)/m/x.cpp.o")
@@ -102,6 +112,17 @@ class CodegenDepsTest(unittest.TestCase):
             archive["cmds"][0]["cmd_args"][-2:],
             ["$(B)/fs/blob.o", "$(B)/fs/y.cpp.o"],
         )
+
+    def test_compile_depends_once_on_each_generated_header_producer(self):
+        graph = lib.make(fixture(), "hdr")
+        compile_node = lib.node_by_output(graph, "$(B)/hdr/x.cpp.o")
+        producers = [lib.node_by_output(graph, f"$(B)/hdr/h{i}.h")["uid"] for i in range(HEADERS)]
+        sandbox = lib.node_by_output(graph, "$(B)/hdr/a.h")
+        self.assertEqual(sandbox["outputs"], ["$(B)/hdr/a.h", "$(B)/hdr/b.h"])
+        self.assertEqual(sorted(compile_node["deps"]), sorted(producers + [sandbox["uid"]]))
+        for header in ["$(B)/hdr/a.h", "$(B)/hdr/b.h"] + [f"$(B)/hdr/h{i}.h" for i in range(HEADERS)]:
+            with self.subTest(header=header):
+                self.assertIn(header, compile_node["inputs"])
 
 
 if __name__ == "__main__":
