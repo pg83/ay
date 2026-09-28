@@ -175,6 +175,23 @@ class YaMakeDefaultPeersTest(unittest.TestCase):
             TOOLCHAIN + HEADERS + COW + RUNTIME + ["util"] + SANITIZER + ["l"],
         )
 
+    def test_host_tools_follow_the_target_compiler_runtime_switch(self):
+        for args, expected in (
+            ((), LIBRARY_DEFAULTS + COW + TCMALLOC + CPUID),
+            (("-DUSE_ARCADIA_COMPILER_RUNTIME=no",), TOOLCHAIN + HEADERS + RUNTIME + ["util"] + COW + TCMALLOC + CPUID),
+        ):
+            with self.subTest(args=args):
+                tree = stub_tree("NO_PLATFORM()\nRUN_PROGRAM(tools/gen OUT gen.cpp)")
+                tree["tools/gen/ya.make"] = "PROGRAM()\nSRCS(main.cpp)\nEND()\n"
+                tree["tools/gen/main.cpp"] = "int main(){return 0;}\n"
+                code, graph, stderr = ay_make(tree, *args, platform=AARCH64)
+                self.assertEqual(code, 0, stderr)
+                tool = lib.node_by_output(graph, "$(B)/tools/gen/gen")
+                self.assertEqual([
+                    path[len("$(B)/"):path.rindex("/")]
+                    for path in tool["inputs"] if path.endswith(".a")
+                ], expected)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
