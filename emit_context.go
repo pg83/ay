@@ -24,7 +24,6 @@ type EmitContext struct {
 	protoRes     *ProtoSrcsResult
 	goRes        *GoSrcsResult
 	goInclJoined []ANY
-	goInclSplit  []ANY
 	pyMetas      []PySourceMeta
 	pySrcsReg    []PySrc
 	resources    []ResourceEntry
