@@ -515,18 +515,11 @@ func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []ANY {
 	return concat(p.CFlags, in.CFlags, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal)
 }
 
-func composeOwnAndPeerGlobalBucket(in *ModuleCompileEnv, isCxx bool) []ANY {
-	out := make([]ANY, 0,
-		len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal)+
-			len(in.OwnCOnlyFlagsGlobal)+len(in.PeerCOnlyFlagsGlobal))
+func composeOwnAndPeerGlobalBucket(in *ModuleCompileEnv) []ANY {
+	out := make([]ANY, 0, len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal))
 
-	if isCxx {
-		out = append(out, in.OwnCXXFlagsGlobal...)
-		out = append(out, in.PeerCXXFlagsGlobal...)
-	} else {
-		out = append(out, in.OwnCOnlyFlagsGlobal...)
-		out = append(out, in.PeerCOnlyFlagsGlobal...)
-	}
+	out = append(out, in.OwnCXXFlagsGlobal...)
+	out = append(out, in.PeerCXXFlagsGlobal...)
 
 	if len(out) == 0 {
 		return nil
@@ -669,7 +662,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 		cxxOwnExtras = concat(in.CXXFlags, p.CXXFlags)
 	}
 
-	cxxBucket := composeOwnAndPeerGlobalBucket(in, true)
+	cxxBucket := composeOwnAndPeerGlobalBucket(in)
 
 	cxxTailParts := [6][]ANY{
 		cxxStandardFlagChunk,

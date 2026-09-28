@@ -219,7 +219,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 			for _, target := range mf.targets {
 				g := genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing, demandSelf)
 
-				writeGraph("-", g, !mf.sandboxing)
+				writeGraph(g, !mf.sandboxing)
 			}
 		} else {
 			genStream(fs, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, mf.testLevel > 0, mf.keepGoing)

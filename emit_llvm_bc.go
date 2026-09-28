@@ -181,7 +181,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	bundle := compileFlagBundleFor(platform)
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, platform)
-	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in.ModuleCompileEnv, true)
+	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in.ModuleCompileEnv)
 	ownExtras := in.CXXFlags
 
 	if len(platform.CXXFlags) > 0 {
