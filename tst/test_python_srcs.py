@@ -1,5 +1,9 @@
 import base64
+import os
+import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 
 import lib
 
@@ -32,6 +36,35 @@ def python_base():
     for path in TOOLS:
         lib.tool_program(files, path, path.rsplit("/", 1)[-1])
     return files
+
+
+def make_failure(files, target):
+    with tempfile.TemporaryDirectory(prefix="ay-make-test-") as directory:
+        root = Path(directory)
+        (root / ".arcadia.root").touch()
+        (root / "ya.conf").write_text(
+            '[flags]\nOPENSOURCE = "yes"\n\n[host_platform_flags]\nOPENSOURCE = "yes"\n'
+        )
+        for relative, content in files.items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in lib.TOOLCHAIN_ENV_VARS
+        }
+        return subprocess.run(
+            [
+                str(lib.AY), "make", "-j0", "-G", "--sandboxing",
+                "--source-root", str(root),
+                "--target-platform", "default-linux-aarch64",
+                "--host-platform", "default-linux-x86_64",
+                target,
+            ],
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            timeout=10, check=False,
+        )
 
 
 def cmd(node):
@@ -448,6 +481,23 @@ class PySrcsTest(unittest.TestCase):
         nodes = objcopy_nodes(graph, "lib")
         self.assertEqual(len(nodes), 1)
         self.assertEqual(kvs(nodes[0]), ["PY_MAIN=lib.cli:run"])
+
+    def test_unproduced_build_root_source_is_rejected(self):
+        for switches, message in (
+            ("", "emitPyYapyc: unregistered generated producer for \"$(B)/lib/missing.py\""),
+            ("ENABLE(PYBUILD_NO_PYC)\n",
+             "appendPyResEntries: unregistered producer for \"$(B)/lib/missing.py\""),
+        ):
+            files = python_base()
+            files["lib/ya.make"] = (
+                "PY3_LIBRARY()\n"
+                + switches
+                + "PY_SRCS(${ARCADIA_BUILD_ROOT}/lib/missing.py)\n"
+                "END()\n"
+            )
+            result = make_failure(files, "lib")
+            self.assertEqual(result.returncode, 1)
+            self.assertIn(message, result.stderr)
 
 
 if __name__ == "__main__":

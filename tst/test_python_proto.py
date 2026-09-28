@@ -1,4 +1,8 @@
+import os
+import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 
 import lib
 
@@ -51,6 +55,35 @@ def python_base():
     files["app/main.py"] = ""
     files["build/scripts/gen_py_protos.py"] = ""
     return files
+
+
+def make_failure(files, target):
+    with tempfile.TemporaryDirectory(prefix="ay-make-test-") as directory:
+        root = Path(directory)
+        (root / ".arcadia.root").touch()
+        (root / "ya.conf").write_text(
+            '[flags]\nOPENSOURCE = "yes"\n\n[host_platform_flags]\nOPENSOURCE = "yes"\n'
+        )
+        for relative, content in files.items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in lib.TOOLCHAIN_ENV_VARS
+        }
+        return subprocess.run(
+            [
+                str(lib.AY), "make", "-j0", "-G", "--sandboxing",
+                "--source-root", str(root),
+                "--target-platform", "default-linux-aarch64",
+                "--host-platform", "default-linux-x86_64",
+                target,
+            ],
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            timeout=10, check=False,
+        )
 
 
 def args(node):
@@ -314,6 +347,65 @@ class PyProtoTest(unittest.TestCase):
         pb = lib.node_by_output(graph, "$(B)/proto/x__intpy3___pb2.py")
         self.assertNotIn("-I=$(S)/contrib/libs/protoc/src", args(pb))
         self.assertIn("-I=$(S)/contrib/libs/protobuf/src", args(pb))
+
+    def test_proto_shared_with_grpc_module_needs_registered_outputs(self):
+        files = python_base()
+        files.update({
+            "app/ya.make": (
+                "PY3_PROGRAM()\nPY_SRCS(MAIN main.py)\nPEERDIR(p b)\nEND()\n"
+            ),
+            "p/ya.make": (
+                "PROTO_LIBRARY()\nSRCS(x.proto)\nEXCLUDE_TAGS(CPP_PROTO)\nEND()\n"
+            ),
+            "p/x.proto": 'syntax = "proto3";\n',
+            "b/ya.make": (
+                "PROTO_LIBRARY()\nGRPC()\nSRCDIR(p)\nSRCS(x.proto)\n"
+                "EXCLUDE_TAGS(CPP_PROTO)\nEND()\n"
+            ),
+        })
+        result = make_failure(files, "app")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            'emitPyYapyc: unregistered proto producer for "$(B)/p/x__intpy3___pb2_grpc.py"',
+            result.stderr,
+        )
+
+        # A foreign producer of b's bytecode path makes emitPyYapyc skip the
+        # grpc module, so the missing producer surfaces while packing.
+        files["p/ya.make"] = (
+            "PROTO_LIBRARY()\n"
+            "RUN_PYTHON3(gen.py OUT x__intpy3___pb2_grpc.py.pslk.yapyc3)\n"
+            "SRCS(x.proto)\nEXCLUDE_TAGS(CPP_PROTO)\nEND()\n"
+        )
+        files["p/gen.py"] = ""
+        result = make_failure(files, "app")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            'appendPyResEntries: unregistered proto producer for "$(B)/p/x__intpy3___pb2_grpc.py"',
+            result.stderr,
+        )
+
+    def test_py_srcs_in_proto_library_skip_namespace_resources(self):
+        files = python_base()
+        files.update({
+            "proto/ya.make": (
+                "PROTO_LIBRARY()\nSRCS(x.proto)\nPY_SRCS(extra.py)\n"
+                "EXCLUDE_TAGS(CPP_PROTO)\nEND()\n"
+            ),
+            "proto/x.proto": 'syntax = "proto3";\n',
+            "proto/extra.py": "",
+        })
+        graph = lib.make(files, "app")
+        pyc = lib.node_by_output(graph, "$(B)/proto/extra.py.yapyc3")
+        self.assertEqual(args(pyc)[-3:], [
+            "proto/extra.py-", "$(S)/proto/extra.py", "$(B)/proto/extra.py.yapyc3",
+        ])
+        objcopy = lib.node_by_output_prefix(graph, "$(B)/proto/objcopy_")
+        kvs = args(objcopy)[args(objcopy).index("--kvs") + 1:]
+        self.assertEqual(kvs, [
+            "resfs/src/resfs/file/py/proto/extra.py=proto/extra.py",
+            "resfs/src/resfs/file/py/proto/extra.py.yapyc3=proto/extra.py.yapyc3",
+        ])
 
 
 if __name__ == "__main__":
