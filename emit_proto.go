@@ -981,14 +981,7 @@ func protoSourceRel(fs FS, instance ModuleInstance, d *ModuleData, src string) S
 		return resolved
 	}
 
-	raw := resolved.string()
-	clean := filepath.ToSlash(filepath.Clean(raw))
-
-	if clean == raw {
-		return resolved
-	}
-
-	return internStr(clean)
+	return internStr(filepath.ToSlash(filepath.Clean(resolved.string())))
 }
 
 const protoPathCacheSize = 64
