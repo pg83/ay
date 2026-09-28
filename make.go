@@ -204,10 +204,6 @@ func cmdMake(g GlobalFlags, args []string) int {
 		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
 	)
 
-	if platformsEquivalent(hostP, targetP) {
-		targetP = hostP
-	}
-
 	events := newEventQueue()
 
 	defer events.close()
@@ -236,13 +232,9 @@ func cmdMake(g GlobalFlags, args []string) int {
 		return 0
 	}
 
-	ex := newExecutor(mf.srcRoot, mf.bldRoot, fs, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.cmdPrefixes, events)
+	ex := newExecutor(mf.srcRoot, mf.bldRoot, fs, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.clear, mf.cmdPrefixes, events)
 
 	ex.startGarbageCollector()
-
-	if mf.clear {
-		ex.clearCache()
-	}
 
 	results := genStream(fs, mf.targets, hostP, targetP, ex.onNode, onWarn, mf.testLevel > 0, mf.keepGoing)
 
@@ -303,10 +295,6 @@ func parseMakeFlags(args []string) *MakeFlags {
 	}
 
 	for opt, err := range state.All(config) {
-		if err == getopt.ErrDone {
-			break
-		}
-
 		throw(err)
 
 		switch {
@@ -366,8 +354,6 @@ func parseMakeFlags(args []string) *MakeFlags {
 		case opt.Char == 1:
 
 			mf.targets = append(mf.targets, opt.OptArg)
-		default:
-			throwFmt("make: unhandled flag %v", opt)
 		}
 	}
 
@@ -493,10 +479,7 @@ func colorizeFlagLine(line string) string {
 	}
 
 	indent := line[:len(line)-len(trimmed)]
+	gap := strings.Index(trimmed, "  ")
 
-	if gap := strings.Index(trimmed, "  "); gap >= 0 {
-		return indent + clFlag(trimmed[:gap]) + trimmed[gap:]
-	}
-
-	return indent + clFlag(trimmed)
+	return indent + clFlag(trimmed[:gap]) + trimmed[gap:]
 }
