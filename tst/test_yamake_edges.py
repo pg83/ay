@@ -134,7 +134,10 @@ class YaMakeEdgesTest(unittest.TestCase):
         for body in ('INCLUDE("")', 'SET_RESOURCE_URI_FROM_JSON(V "")'):
             with self.subTest(body=body):
                 code, _, stderr = ay_make({"a/ya.make": module("LIBRARY", body)}, "a")
-                self.assertEqual((code, stderr), (1, "is a directory"))
+                self.assertEqual(code, 1)
+                # Linux reads through raw syscalls and reports the bare errno;
+                # other systems read through the os package, which names the path.
+                self.assertRegex(stderr, r"\A(read /\S+/a: )?is a directory\Z")
 
     def test_archives_resources_and_matrixnet(self):
         files = {
