@@ -29,11 +29,6 @@ func (e *EmitContext) emitLJReserved(luaSrc, rawOut, compilerBin VFS, compilerLD
 
 func (e *EmitContext) emitLuaJit21() {
 	ctx, instance, d := e.ctx, e.instance, e.d
-
-	if d.lj21 == nil {
-		return
-	}
-
 	compilerLDRef, compilerBin := ctx.tool(argLuajit21Compiler)
 	cwd := source(luajit21CwdRel)
 

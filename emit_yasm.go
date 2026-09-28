@@ -91,10 +91,6 @@ func (e *EmitContext) emitASYasm(srcRel string, srcVFS VFS, in ModuleCCInputs, y
 
 	node.ForeignDepRefs = na.refList(yasmLD)
 
-	if len(in.ExtraDepRefs) > 0 {
-		node.DepRefs = in.ExtraDepRefs
-	}
-
 	return e.emitNode(node), outVFS
 }
 

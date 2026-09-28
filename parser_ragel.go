@@ -15,7 +15,6 @@ func (RagelIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAlloc
 	block := a.alloc(directiveBlockHint)
 	local := block[:parseCIncludesChunks(data, block, 0)]
 
-	local = local[:len(local)]
 	a.commit(len(local))
 
 	nblock := a.alloc(directiveBlockHint)
