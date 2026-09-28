@@ -140,6 +140,24 @@ class ResourceRawTest(unittest.TestCase):
         producer = lib.node_by_output(graph, "$(B)/lib/gen.py")
         self.assertIn(producer["uid"], sources["deps"])
 
+    def test_bytecode_only_build_lists_generated_source_as_extra_input(self):
+        graph = lib.make(py3_library(
+            "ENABLE(PYBUILD_NO_PY)\n"
+            "RUN_PROGRAM(tools/gen IN in.txt OUT_NOAUTO gen.py)\n"
+            "PY_SRCS(gen.py)\n"
+        ), "lib")
+        [inputs] = [
+            node_inputs for node_inputs in objcopy_inputs(graph)
+            if "$(B)/lib/gen.py.yapyc3" in node_inputs
+        ]
+        self.assertEqual(inputs, [
+            "$(B)/tools/rescompiler/rescompiler",
+            "$(B)/tools/rescompressor/rescompressor",
+            "$(B)/lib/gen.py.yapyc3",
+            "$(B)/lib/gen.py",
+            "$(S)/build/scripts/objcopy.py",
+        ])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
