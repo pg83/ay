@@ -24,9 +24,7 @@ func newBumpAllocator[T any]() *BumpAllocator[T] {
 
 func (a *BumpAllocator[T]) alloc(n int) []T {
 	if ownershipOn && a.strict {
-		if a.open {
-			throwFmt("bump: nested alloc on strict arena (open window)")
-		}
+		assert(!a.open, "bump: nested alloc on strict arena (open window)")
 
 		a.open = true
 	}

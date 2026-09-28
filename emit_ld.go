@@ -88,9 +88,7 @@ func emitLD(
 ) NodeRef {
 	na := emit.nodeArenas()
 
-	if len(objcopyRefs) != len(objcopyPaths) {
-		throwFmt("EmitLD: objcopyRefs/objcopyPaths length mismatch (%d vs %d)", len(objcopyRefs), len(objcopyPaths))
-	}
+	assert(len(objcopyRefs) == len(objcopyPaths), "emitLD: objcopyRefs/objcopyPaths length mismatch")
 
 	binaryDir := instance.Path.relString()
 	binPrefix := binaryDir + "/"

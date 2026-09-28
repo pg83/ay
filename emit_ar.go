@@ -48,9 +48,7 @@ func emitARGlobalNamedTagged(
 	hostP *Platform,
 	emit *StreamingEmitter,
 ) NodeRef {
-	if len(objRefs) != len(objPaths) {
-		throwFmt("EmitARGlobalNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
-	}
+	assert(len(objRefs) == len(objPaths), "emitARGlobalNamedTagged: objRefs/objPaths length mismatch")
 
 	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 

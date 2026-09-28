@@ -163,18 +163,16 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix ANY) *GeneratedFileInfo
 	return info
 }
 
-func (r *CodegenRegistry) mustInfo(path VFS, op string) *GeneratedFileInfo {
-	if info := r.lookup(path); info != nil {
-		return info
-	}
+func (r *CodegenRegistry) mustInfo(path VFS) *GeneratedFileInfo {
+	info := r.lookup(path)
 
-	throwFmt("CodegenRegistry: %s on unregistered path %q", op, path.string())
+	assert(info != nil, "CodegenRegistry: unregistered path")
 
-	return nil
+	return info
 }
 
 func (r *CodegenRegistry) addClosureLeafNoSubsume(node, leaf VFS) {
-	info := r.mustInfo(node, "addClosureLeafNoSubsume")
+	info := r.mustInfo(node)
 
 	info.ClosureLeaves = arenaAppend(r.na.vfs, info.ClosureLeaves, leaf)
 }
@@ -196,7 +194,7 @@ func (r *CodegenRegistry) addSourceInputs(na *NodeArenas, path VFS, extra []VFS)
 		return
 	}
 
-	info := r.mustInfo(path, "addSourceInputs")
+	info := r.mustInfo(path)
 
 	info.SourceInputs = na.dedupClosure(info.SourceInputs, [][]VFS{extra})
 }

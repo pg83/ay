@@ -27,15 +27,7 @@ func (p *DeDuperPool) get() *DeDuper {
 		}
 	}
 
-	if p.live {
-		sites := strings.Join(p.sites, " || ")
-
-		if dedupDebug {
-			p.sites = p.sites[:len(p.sites)-1]
-		}
-
-		panic("deduper already borrowed: " + sites)
-	}
+	assert(!p.live, "deduper already borrowed")
 
 	p.live = true
 	p.deduper.reset()
@@ -52,9 +44,7 @@ func (p *DeDuperPool) with(f func(*DeDuper)) {
 }
 
 func (p *DeDuperPool) put(d *DeDuper) {
-	if !p.live || d != &p.deduper {
-		panic("deduper pool: invalid return")
-	}
+	assert(p.live && d == &p.deduper, "deduper pool: invalid return")
 
 	if dedupDebug && len(p.sites) > 0 {
 		p.sites = p.sites[:len(p.sites)-1]

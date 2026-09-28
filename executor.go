@@ -249,9 +249,7 @@ func (ex *Executor) run(roots []NodeRef) {
 func (ex *Executor) visit(ref NodeRef) {
 	f := ex.futs.get(uint32(ref))
 
-	if f == nil {
-		throwFmt("executor: unknown NodeRef %d", ref)
-	}
+	assert(f != nil, "executor: unknown NodeRef")
 
 	f.once.Do(func() {
 		f.err = try(func() {
@@ -486,9 +484,7 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 	var result CommandResult
 
 	for _, out := range n.Outputs {
-		if !out.isBuild() {
-			continue
-		}
+		assert(out.isBuild(), "executor: non-Build output")
 
 		mounted := filepath.Join(bldMount, out.sharedRel())
 
@@ -608,9 +604,7 @@ func (ex *Executor) storeOutputs(n *Node, uid UID, tmp string) {
 	meta := make(map[string]OutputEntry, len(n.Outputs))
 
 	for _, out := range n.Outputs {
-		if !out.isBuild() {
-			throwFmt("node ref=%d: non-Build output %v", n.Ref, out)
-		}
+		assert(out.isBuild(), "executor: non-Build output")
 
 		ex.storePath(filepath.Join(tmp, out.sharedRel()), out.sharedString(), meta)
 	}
