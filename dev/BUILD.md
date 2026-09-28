@@ -8,7 +8,7 @@ Common commands:
 
 ```sh
 ./build                 # build and publish ./ay -> .build/bin/ay
-./build unit            # one Go test node plus one Python test node
+./build unit            # Python unit tests plus the binary-driven graph tests
 ./build validate        # all validation results, then the aggregate gate
 ./build test            # unit + complete validation gate
 ./build validation_report

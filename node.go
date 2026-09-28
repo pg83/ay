@@ -134,7 +134,3 @@ func (c InputChunks) flat() []VFS {
 
 	return out
 }
-
-func (n *Node) flatInputs() []VFS {
-	return n.Inputs.flat()
-}

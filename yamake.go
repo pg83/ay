@@ -409,10 +409,6 @@ func (e *ParseError) Error() string {
 	return e.error()
 }
 
-func parseFile(fs FS, rel string) (mf *MakeFile, err error) {
-	return parseFileClean(fs, cleanRel(rel))
-}
-
 func parseFileClean(fs FS, rel string) (mf *MakeFile, err error) {
 	exc := try(func() {
 		bp := readForParse(fs, rel)
