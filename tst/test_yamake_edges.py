@@ -225,6 +225,66 @@ class YaMakeEdgesTest(unittest.TestCase):
         size = len('#include "b.h"\n') + len("#pragma once\n")
         self.assertRegex(result.stdout, rf"^files=2 bytes={size} iters=[1-9][0-9]* per-pass=")
 
+    def test_sproto_header_is_emitted_when_a_source_includes_it(self):
+        files = {
+            "a/ya.make": module("LIBRARY", "YMAPS_SPROTO(y.proto)\nSRCS(u.cpp)"),
+            "a/y.proto": 'syntax = "proto3";\n',
+            "a/u.cpp": '#include "a/y.sproto.h"\n',
+            "contrib/libs/protobuf/ya.make": module("LIBRARY", ""),
+            "maps/libs/sproto/ya.make": module("LIBRARY", ""),
+        }
+        for tool in ("maps/libs/sproto/sprotoc", "contrib/tools/protoc"):
+            lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
+        graph, _ = self.make(files)
+        self.assertEqual(
+            lib.node_by_output(graph, "$(B)/a/y.sproto.h")["inputs"],
+            ["$(B)/maps/libs/sproto/sprotoc/sprotoc", "$(S)/a/y.proto"],
+        )
+        self.assertIn("$(B)/a/y.sproto.h", lib.node_by_output(graph, "$(B)/a/u.cpp.o")["inputs"])
+
+    def test_copy_file_of_the_module_directory(self):
+        graph, _ = self.make({"a/ya.make": module("LIBRARY", "COPY_FILE(AUTO . d.cpp)")})
+        self.assertEqual(lib.node_by_output(graph, "$(B)/a/d.cpp")["inputs"], ["$(S)/a"])
+
+    def test_python_program_cannot_link_a_program_peer(self):
+        files = {
+            "a/ya.make": module("PY3_PROGRAM", "PEERDIR(prog)\nPY_SRCS(x.py)"),
+            "a/x.py": "\n",
+            "prog/ya.make": module("PROGRAM", "SRCS(m.cpp)"),
+            "prog/m.cpp": "int main(){return 0;}\n",
+        }
+        for path in (
+            "contrib/libs/python", "contrib/tools/python3/Modules/_sqlite", "library/cpp/malloc/jemalloc",
+            "library/cpp/resource", "library/python/import_tracing/constructor",
+            "library/python/runtime_py3/main", "library/python/testing/import_test",
+        ):
+            files[f"{path}/ya.make"] = module("LIBRARY", "")
+        for tool in ("contrib/tools/swig", "tools/archiver", "tools/py3cc", "tools/py3cc/slow", "tools/rescompiler", "tools/rescompressor"):
+            lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
+        _, stderr = self.make(files, "a", "-k")
+        self.assertEqual(stderr, "module-failed: a: gen: a peers PROGRAM module prog; only LIBRARY peers are linkable")
+
+    def test_go_program_inside_the_linux_headers_tree(self):
+        target = "contrib/libs/linux-headers/goprog"
+        files = {f"{target}/ya.make": "GO_PROGRAM()\nSRCS(main.go)\nEND()\n", f"{target}/main.go": "package main\n"}
+        for path in (
+            "build/external_resources/go_tools", "build/external_resources/yolint",
+            "contrib/go/_std_1.26/src/runtime", "contrib/go/_std_1.26/src/runtime/cgo", "library/go/core/buildinfo",
+        ):
+            files[f"{path}/ya.make"] = module("LIBRARY", "")
+        for path in ("build/platform/lld", "build/cow/on", "contrib/libs/linux-headers"):
+            files[f"{path}/ya.make"] = "LIBRARY()\nNO_PLATFORM()\nSRCS(stub.cpp)\nEND()\n"
+            files[f"{path}/stub.cpp"] = "int stub;\n"
+        graph, _ = self.make(files, target, "-k")
+        self.assertEqual(
+            [path for path in lib.node_by_output(graph, f"$(B)/{target}/goprog")["inputs"] if path.endswith(".a")],
+            [
+                "$(B)/contrib/libs/linux-headers/libcontrib-libs-linux-headers.a",
+                "$(B)/build/platform/lld/libbuild-platform-lld.a",
+                "$(B)/build/cow/on/libbuild-cow-on.a",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
