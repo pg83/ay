@@ -60,6 +60,16 @@ def fixture():
         "two/two.cpp": "int main(){return 0;}\n",
         "globalonly/ya.make": f"LIBRARY()\n{NO_PLATFORM}SRCS(GLOBAL g.cpp)\nEND()\n",
         "globalonly/g.cpp": "int g;\n",
+        "tools/fix_elf/ya.make": (
+            f"PROGRAM()\n{NO_PLATFORM}SRCS(main.cpp)\nPEERDIR(dup)\nEND()\n"
+        ),
+        "tools/fix_elf/main.cpp": "int main(){return 0;}\n",
+        "build/platform/local_so/ya.make": f"LIBRARY()\n{NO_PLATFORM}END()\n",
+        "dyn/ya.make": (
+            f"DYNAMIC_LIBRARY(d)\n{NO_PLATFORM}EXPORTS_SCRIPT(d.exports)\n"
+            "DYNAMIC_LIBRARY_FROM(one)\nEND()\n"
+        ),
+        "dyn/d.exports": "{};\n",
     }
 
 
@@ -120,6 +130,16 @@ class StreamingEmitterTest(unittest.TestCase):
             "$(B)/globalonly/libglobalonly.global.a",
             [node["outputs"][0] for node in graph["graph"] if node["uid"] in graph["result"]],
         )
+
+    def test_unresolvable_tool_blocks_its_consumers(self):
+        result = run_make(fixture(), "-G", "dyn", extra_env={"AY_DEBUG_PENDING": "1"})
+        self.assertEqual(result.returncode, 1)
+        pending = [line for line in result.stderr.splitlines() if line.startswith("pending node ")]
+        self.assertEqual(
+            [line.split(" out=")[1].split(" ")[0] for line in pending],
+            ["$(B)/dup/libdup.a", "$(B)/tools/fix_elf/fix_elf", "$(B)/dyn/libd.so"],
+        )
+        self.assertIn("finish: 3 pending node(s) form a dependency cycle", result.stderr)
 
 
 if __name__ == "__main__":

@@ -50,6 +50,16 @@ def fixture():
         "SRCS(${ARCADIA_BUILD_ROOT}/unproduced/nogen.cpp x.cpp)\nEND()\n"
     )
     files["unproduced/x.cpp"] = "int x;\n"
+    files["dt/ya.make"] = (
+        f"DLL_TOOL(t)\n{NO_PLATFORM}EXPORTS_SCRIPT(t.exports)\n"
+        + "".join(f"COPY_FILE(o{i}.bin d{i}.o)\n" for i in range(COPIES))
+        + "SRCS(x.cpp)\nEND()\n"
+    )
+    files["dt/x.cpp"] = "int x;\n"
+    files["dt/t.exports"] = "{};\n"
+    for i in range(COPIES):
+        files[f"dt/o{i}.bin"] = f"{i}\n"
+    lib.tool_program(files, "tools/fix_elf", "fix_elf")
     for i in range(COPIES):
         files[f"m/o{i}.bin"] = f"{i}\n"
     return files
@@ -148,6 +158,15 @@ class CodegenDepsTest(unittest.TestCase):
         node = lib.node_by_output(graph, "$(B)/unproduced/nogen.cpp.o")
         self.assertEqual(node["inputs"], ["$(B)/unproduced/nogen.cpp"])
         self.assertEqual(node["deps"], [])
+
+    def test_shared_object_depends_once_on_generated_members(self):
+        graph = lib.make(fixture(), "dt")
+        node = lib.node_by_output(graph, "$(B)/dt/libt.so")
+        copies = [lib.node_by_output(graph, f"$(B)/dt/d{i}.o")["uid"] for i in range(COPIES)]
+        self.assertEqual(len(node["deps"]), len(set(node["deps"])))
+        self.assertTrue(set(copies) <= set(node["deps"]))
+        for i in range(COPIES):
+            self.assertIn(f"$(B)/dt/d{i}.o", node["inputs"])
 
 
 if __name__ == "__main__":
