@@ -122,7 +122,3 @@ func (m *IntMap[V]) grow() {
 
 	m.count = count
 }
-
-func (m *IntMap[V]) len() int {
-	return m.count
-}

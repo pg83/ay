@@ -89,14 +89,6 @@ var programAllocatorDefaults = []ImplicitPeerRule{
 	},
 }
 
-func isAncestorPath(srcDir, instancePath string) bool {
-	if srcDir == instancePath {
-		return true
-	}
-
-	return strings.HasPrefix(instancePath, srcDir+"/")
-}
-
 func isRuntimeAncestor(path string) bool {
 	return runtimeAncestorPaths[path]
 }

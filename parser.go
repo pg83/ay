@@ -94,14 +94,6 @@ func (r *IncludeDirectiveParserRegistry) registeredParserFor(rel string) Include
 	return r.lookup(rel)
 }
 
-func (r *IncludeDirectiveParserRegistry) parserFor(rel string) IncludeDirectiveParser {
-	if p := r.lookup(rel); p != nil {
-		return p
-	}
-
-	return r.defaultParser
-}
-
 func (r *IncludeDirectiveParserRegistry) hasRegisteredParser(rel string) bool {
 	return r.lookup(rel) != nil
 }

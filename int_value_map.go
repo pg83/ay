@@ -47,7 +47,3 @@ func (m *IntValueMap[V]) put(k uint64, v V) {
 	*cell = uint32(m.vals.len())
 	m.vals.pushBack(v)
 }
-
-func (m *IntValueMap[V]) len() int {
-	return m.vals.len()
-}

@@ -486,20 +486,6 @@ const (
 
 type TOK uint16
 
-func internTok(s string) TOK {
-	if t, ok := tokByName[s]; ok {
-		return t
-	}
-
-	throwFmt("internTok: unknown macro name %q (closed TOK set)", s)
-
-	return tokInvalid
-}
-
-func internTokMaybe(s string) TOK {
-	return tokByName[s]
-}
-
 func internTokSTR(s STR) TOK {
 	if int(s) < len(tokBySTR) {
 		if t := tokBySTR[s]; t != tokInvalid {

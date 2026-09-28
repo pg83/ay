@@ -1,7 +1,5 @@
 package main
 
-import "strconv"
-
 var ansiCols = map[string]string{
 	"red":           ansiESC + "[31m",
 	"green":         ansiESC + "[32m",
@@ -23,14 +21,6 @@ const (
 	ansiESC = "\x1b"
 	ansiRST = ansiESC + "[0m"
 )
-
-func trueColor(r, g, b uint8, s string) string {
-	return ansiESC + "[38;2;" +
-		strconv.Itoa(int(r)) + ";" +
-		strconv.Itoa(int(g)) + ";" +
-		strconv.Itoa(int(b)) + "m" +
-		s + ansiRST
-}
 
 func color(name, s string) string {
 	c, ok := ansiCols[name]

@@ -100,10 +100,6 @@ func notOpensource(e SysInclEnv) bool {
 	return !e.opensource
 }
 
-func archIs(want string) func(SysInclEnv) bool {
-	return func(e SysInclEnv) bool { return e.arch == want }
-}
-
 func muslOn(e SysInclEnv) bool {
 	return e.musl
 }

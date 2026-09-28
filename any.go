@@ -26,14 +26,6 @@ func (a ANY) string() string {
 	return a.str().string()
 }
 
-func (a ANY) sharedString() string {
-	if v := a.vfs(); v != 0 {
-		return v.sharedString()
-	}
-
-	return a.str().sharedString()
-}
-
 func (a ANY) relOrSelf() STR {
 	if v := a.vfs(); v != 0 {
 		return v.rel()

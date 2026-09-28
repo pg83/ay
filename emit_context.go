@@ -120,13 +120,6 @@ func (e *EmitContext) partitionCollected() (local, global CollectedObjs) {
 	return local, global
 }
 
-func newEmitContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *PeerContext) *EmitContext {
-	scanner := ctx.scannerFor(instance)
-	k := len(d.resources)
-
-	return &EmitContext{ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen, resources: d.resources[:k:k]}
-}
-
 func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *PeerContext) *EmitContext {
 	scanner := ctx.scannerFor(instance)
 	k := len(d.resources)
@@ -291,10 +284,6 @@ func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
 	e.refs = append(e.refs, ref)
 	e.outs = append(e.outs, out)
 	e.metas = append(e.metas, meta)
-}
-
-func (e *EmitContext) at(instance ModuleInstance) *EmitContext {
-	return newEmitContext(e.ctx, instance, e.d, e.peers)
 }
 
 func (e *EmitContext) enqueueSrc(meta SrcMeta) {

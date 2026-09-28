@@ -175,32 +175,8 @@ func (na *NodeArenas) anyConcat(parts ...[]ANY) []ANY {
 	return block[:n:n]
 }
 
-func (na *NodeArenas) inclAnyList(addIncl []VFS, memo InclArgMemo) []ANY {
-	block := na.anys.alloc(len(addIncl))
-
-	for i, p := range addIncl {
-		block[i] = memo.arg(p).any()
-	}
-
-	na.anys.commit(len(addIncl))
-
-	return block[:len(addIncl):len(addIncl)]
-}
-
 func (na *NodeArenas) chunkList(ch ...[]ANY) ArgChunks {
 	return ArgChunks(na.chunks.list(ch...))
-}
-
-func (na *NodeArenas) anyChunk(ss []STR) []ANY {
-	block := na.anys.alloc(len(ss))
-
-	for i, s := range ss {
-		block[i] = s.any()
-	}
-
-	na.anys.commit(len(ss))
-
-	return block[:len(ss):len(ss)]
 }
 
 func (na *NodeArenas) anyChunkVFS(vs []VFS) []ANY {

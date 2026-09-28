@@ -92,14 +92,6 @@ func (c *CanonBuf) writeUint64(n uint64) {
 		byte(n>>32), byte(n>>40), byte(n>>48), byte(n>>56))
 }
 
-func (c *CanonBuf) writeBool(b bool) {
-	if b {
-		c.buf = append(c.buf, 1)
-	} else {
-		c.buf = append(c.buf, 0)
-	}
-}
-
 func (c *CanonBuf) writeBytes(s string) {
 	c.writeUint32(uint32(len(s)))
 	c.buf = append(c.buf, s...)
@@ -145,22 +137,6 @@ func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 			c.writeUint64(u.Hi)
 			c.writeUint64(u.Lo)
 		}
-	}
-}
-
-func (c *CanonBuf) writeStringSlice(ss []string) {
-	c.writeUint32(uint32(len(ss)))
-
-	for _, s := range ss {
-		c.writeBytes(s)
-	}
-}
-
-func (c *CanonBuf) writeStrSlice(as []STR) {
-	c.writeUint32(uint32(len(as)))
-
-	for _, a := range as {
-		c.writeSTR(a)
 	}
 }
 

@@ -1146,10 +1146,6 @@ func (p *Parser) buildStmt(nameTok Token, args []ANY) Stmt {
 	})
 }
 
-func buildStmtFor(name string, args []ANY, line int, fail func(format string, a ...any)) Stmt {
-	return buildStmtForID(internStr(name), args, line, fail)
-}
-
 func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a ...any)) Stmt {
 	name := nameID.string()
 
