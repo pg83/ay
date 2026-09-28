@@ -64,12 +64,6 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	slices.SortFunc(cppParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
 
-	var moduleTag STR
-
-	if d.moduleStmt.Name == tokProtoLibrary {
-		moduleTag = tagCppProto
-	}
-
 	codegen := e.codegen
 
 	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq})
@@ -89,7 +83,6 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			headerInput,
 			serializedCPPPath,
 			serializedHPath,
-			moduleTag,
 			withHeader,
 			enumParserLD,
 			enumParserBin,
@@ -126,7 +119,6 @@ func (e *EmitContext) emitEN(
 	headerInput VFS,
 	serializedCPPVFS VFS,
 	serializedHVFS VFS,
-	moduleTag STR,
 	withHeader bool,
 	enumParserLD NodeRef,
 	enumParserBin VFS,

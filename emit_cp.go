@@ -59,24 +59,18 @@ func emitJVCPG4(
 func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) NodeRef {
 	id := emit.reserve()
 
-	emitCPWithDeps(instance, src, dst, nil, nil, id, 0, tc, scripts, emit)
+	emit.emitReservedNode(composeCPNode(instance, src, dst, nil, tc, scripts, emit.nodeArenas()), id)
 
 	return id
 }
 
-func emitCPWithDeps(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, id NodeRef, moduleTag STR, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) {
-	node := composeCPNode(instance, src, dst, depRefs, extraInputs, moduleTag, tc, scripts, emit.nodeArenas())
-
-	emit.emitReservedNode(node, id)
-}
-
-func (e *EmitContext) emitCPWithDeps(src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, id NodeRef, moduleTag STR, tc ModuleToolchain, scripts ScriptDeps) {
-	node := composeCPNode(e.instance, src, dst, depRefs, extraInputs, moduleTag, tc, scripts, e.ctx.na)
+func (e *EmitContext) emitCPWithInputs(src VFS, dst VFS, extraInputs []VFS, id NodeRef, tc ModuleToolchain, scripts ScriptDeps) {
+	node := composeCPNode(e.instance, src, dst, extraInputs, tc, scripts, e.ctx.na)
 
 	e.emitReservedNode(node, id)
 }
 
-func composeCPNode(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef, extraInputs []VFS, moduleTag STR, tc ModuleToolchain, scripts ScriptDeps, na *NodeArenas) Node {
+func composeCPNode(instance ModuleInstance, src VFS, dst VFS, extraInputs []VFS, tc ModuleToolchain, scripts ScriptDeps, na *NodeArenas) Node {
 	fsTools := copyFsToolsVFS
 
 	cmdArgs := na.anyList(
@@ -112,7 +106,6 @@ func composeCPNode(instance ModuleInstance, src VFS, dst VFS, depRefs []NodeRef,
 		Inputs:    inputs,
 		KV:        &cpKV,
 		Outputs:   na.vfsList(dst),
-		DepRefs:   na.noderefs.list(depRefs...),
 		Resources: usesPython3,
 	}
 }

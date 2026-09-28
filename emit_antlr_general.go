@@ -69,14 +69,13 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	}
 
 	jvRef := ctx.emit.reserve()
-	ccTag := d.unit.CCTag
 	tc := d.tc
 	inputSourcesSnap := ctx.na.vfsList(inputSources...)
 	inputBuildsSnap := ctx.na.vfsList(inputBuilds...)
 	outputsSnap := ctx.na.vfsList(outputs...)
 
 	pe := func() {
-		e.emitJVGeneralReserved(jarVFS, args, inputSourcesSnap, inputBuildsSnap, outputsSnap, cwd, ccTag, tc, jvRef)
+		e.emitJVGeneralReserved(jarVFS, args, inputSourcesSnap, inputBuildsSnap, outputsSnap, cwd, tc, jvRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)
 
@@ -198,10 +197,6 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 
 	for _, include := range run.OutputIncludes {
 		appendUnique(copyFileIncludeTarget(modulePath, include.string()))
-	}
-
-	if len(parsed) == 0 {
-		return nil
 	}
 
 	return parsed

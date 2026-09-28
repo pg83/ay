@@ -72,10 +72,6 @@ func parseYasmIncludes(data [][]byte, block []IncludeDirective, k int) int {
 }
 
 func equalFoldASCII(b []byte, s string) bool {
-	if len(b) != len(s) {
-		return false
-	}
-
 	for i, c := range b {
 		if c >= 'A' && c <= 'Z' {
 			c += 'a' - 'A'
