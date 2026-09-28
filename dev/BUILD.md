@@ -26,8 +26,10 @@ stores it as `$(B)/coverage/report.txt`, and fails below the statement floor
 `COVERAGE_MINIMUM` in `build.py`.
 
 CI in `.github/workflows/ci.yml` runs gofmt, `vet`, `unit`, `-Drace unit` and
-`-Dcoverage coverage`, and uploads the profile to Codecov. The validation cases
-need the internal Sandbox and run only locally.
+`-Dcoverage coverage` on Linux x86_64, Linux aarch64 and macOS. The aggregate
+job adds the per-platform profiles up with `dev/coverage.py combine`, checks the
+floor on the sum, and uploads it to Codecov. The validation cases need the
+internal Sandbox and run only locally.
 
 Each entry in `dev/config.json` becomes an independent result node and a public
 `validate_<case-id>` gate target. A result node consumes the `ay` binary plus

@@ -4,6 +4,10 @@
 /vet
 /unit_*
 /python_test
+/validate_*
+/validation_*
+/validate
+/test
 /.build/
 *.test
 *.out
