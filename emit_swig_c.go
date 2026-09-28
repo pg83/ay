@@ -29,7 +29,7 @@ type SwigSrc struct {
 func (e *EmitContext) emitSwigC() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	swigRef, swigBin := swigTool(ctx, instance)
+	swigRef, swigBin := ctx.tool(argContribToolsSwig)
 
 	for _, stmt := range d.swigC {
 		prefix := swigOutputPrefix(stmt.Src, stmt.Module)
@@ -116,10 +116,6 @@ func (e *EmitContext) emitSwigC() {
 
 		e.enqueueSrc(SrcMeta{Source: cOutVFS.any(), Prio: stmtPrioDefault, Bucket: bkSwig})
 	}
-}
-
-func swigTool(ctx *GenCtx, instance ModuleInstance) (NodeRef, VFS) {
-	return ctx.tool(argContribToolsSwig)
 }
 
 func swigOutputPrefix(src, module string) string {
