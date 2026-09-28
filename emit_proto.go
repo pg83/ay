@@ -518,17 +518,9 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		}
 
 		var pluginRefs []NodeRef
-		yaffCCRefs := pbGenRefs
 
 		if ref := pe.extraPlugins[pluginIdx].LDRef; ref != 0 {
 			pluginRefs = na.refList(ref)
-
-			if !slices.Contains(pbGenRefs, ref) {
-				yaffCCRefs = na.noderefs.alloc(len(pbGenRefs) + 1)
-				copy(yaffCCRefs, pbGenRefs)
-				yaffCCRefs[len(pbGenRefs)] = ref
-				na.noderefs.commit(len(yaffCCRefs))
-			}
 		}
 
 		yaffH := build(protoBase, plugin.OutputSuffixes[0])
@@ -558,7 +550,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		e.register(GeneratedFileInfo{
 			OutputPath:     yaffCC,
 			ProducerRef:    pbRef,
-			GeneratorRefs:  yaffCCRefs,
+			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffCCParsed},
 			OnUse:          pbPE,
 		})
