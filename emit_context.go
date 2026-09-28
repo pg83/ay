@@ -199,10 +199,6 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 	}
 
 	if len(refs) == 0 {
-		if refs != nil {
-			nodeRefScratches.put(refs)
-		}
-
 		return
 	}
 

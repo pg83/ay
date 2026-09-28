@@ -36,18 +36,18 @@ type TestSuiteInfo struct {
 	CppSources  []string
 }
 
-func emitTestRunNodes(ctxEmit *StreamingEmitter, runEmit *StreamingEmitter, p *Platform, info TestSuiteInfo, ldRef NodeRef, resourceGlobals []ResourceDecl) []NodeRef {
-	ctxRef := ctxEmit.emit(buildTestCtxNode(ctxEmit.nodeArenas(), p))
-	unittest := buildUnittestNode(runEmit.nodeArenas(), p, info, resourceGlobals)
+func emitTestRunNodes(emit *StreamingEmitter, p *Platform, info TestSuiteInfo, ldRef NodeRef, resourceGlobals []ResourceDecl) []NodeRef {
+	ctxRef := emit.emit(buildTestCtxNode(emit.nodeArenas(), p))
+	unittest := buildUnittestNode(emit.nodeArenas(), p, info, resourceGlobals)
 
 	unittest.DepRefs = []NodeRef{ldRef, ctxRef}
 
-	unittestRef := runEmit.emit(unittest)
-	clangFormat := buildClangFormatNode(runEmit.nodeArenas(), p, info)
+	unittestRef := emit.emit(unittest)
+	clangFormat := buildClangFormatNode(emit.nodeArenas(), p, info)
 
 	clangFormat.DepRefs = []NodeRef{ctxRef}
 
-	clangFormatRef := runEmit.emit(clangFormat)
+	clangFormatRef := emit.emit(clangFormat)
 
 	return []NodeRef{unittestRef, clangFormatRef}
 }
@@ -281,10 +281,6 @@ func targetPlatformDescriptor(p *Platform) string {
 }
 
 func buildTestSuiteInfo(instance ModuleInstance, d *ModuleData, ldPath VFS) *TestSuiteInfo {
-	if d == nil || d.moduleStmt == nil {
-		return nil
-	}
-
 	srcBase := instance.Path.relString()
 
 	if d.moduleStmt.Name == tokUnittestFor && len(d.moduleStmt.Args) > 0 {

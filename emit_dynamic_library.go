@@ -184,7 +184,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		peerPaths = append(peerPaths, p.string())
 	}
 
-	seen := make(map[string]struct{}, len(peerPaths)+len(dynLibRPathHelperPeers))
+	seen := make(map[string]struct{}, len(peerPaths))
 	resolved := make([]*ModuleEmitResult, 0, len(peerPaths))
 
 	for _, p := range peerPaths {
@@ -202,12 +202,6 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	rpathOnly := make([]*ModuleEmitResult, 0, len(dynLibRPathHelperPeers))
 
 	for _, p := range dynLibRPathHelperPeers {
-		if _, dup := seen[p]; dup {
-			continue
-		}
-
-		seen[p] = struct{}{}
-
 		peerInstance := e.derivePeerInstance(p)
 
 		rpathOnly = append(rpathOnly, genModule(ctx, peerInstance))

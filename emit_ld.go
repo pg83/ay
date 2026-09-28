@@ -88,32 +88,8 @@ func emitLD(
 ) NodeRef {
 	na := emit.nodeArenas()
 
-	if len(ccRefs) != len(ccPaths) {
-		throwFmt("EmitLD: ccRefs/ccPaths length mismatch (%d vs %d)", len(ccRefs), len(ccPaths))
-	}
-
-	if len(peerLDRefs) != len(peerLibPaths) {
-		throwFmt("EmitLD: peerLDRefs/peerLibPaths length mismatch (%d vs %d)", len(peerLDRefs), len(peerLibPaths))
-	}
-
-	if len(pluginRefs) != len(pluginPaths) {
-		throwFmt("EmitLD: pluginRefs/pluginPaths length mismatch (%d vs %d)", len(pluginRefs), len(pluginPaths))
-	}
-
-	if len(globalRefs) != len(globalPaths) {
-		throwFmt("EmitLD: globalRefs/globalPaths length mismatch (%d vs %d)", len(globalRefs), len(globalPaths))
-	}
-
-	if len(wholeArchiveRefs) != len(wholeArchivePaths) {
-		throwFmt("EmitLD: wholeArchiveRefs/wholeArchivePaths length mismatch (%d vs %d)", len(wholeArchiveRefs), len(wholeArchivePaths))
-	}
-
 	if len(objcopyRefs) != len(objcopyPaths) {
 		throwFmt("EmitLD: objcopyRefs/objcopyPaths length mismatch (%d vs %d)", len(objcopyRefs), len(objcopyPaths))
-	}
-
-	if len(dynamicRefs) != len(dynamicPaths) {
-		throwFmt("EmitLD: dynamicRefs/dynamicPaths length mismatch (%d vs %d)", len(dynamicRefs), len(dynamicPaths))
 	}
 
 	binaryDir := instance.Path.relString()
@@ -192,7 +168,7 @@ func emitLD(
 		nExtra = 3
 	}
 
-	inputs := composeLDInputs(na, instance.Path.relString(), ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles, extraChunks[:nExtra]...)
+	inputs := composeLDInputs(na, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles, extraChunks[:nExtra]...)
 	deps := na.noderefs.alloc(len(ccRefs) + len(pluginRefs) + len(globalRefs) + len(peerLDRefs) + len(dynamicRefs) + len(objcopyRefs) + len(sbomRefs) + 1)[:0]
 
 	deps = append(deps, ccRefs...)
@@ -506,15 +482,13 @@ func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, output VFS, ena
 	return na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Objcopy.any(), argOnlyKeepDebug.any(), output.any(), debug.any()))}, Cmd{CmdArgs: na.chunkList(na.anyList(tc.Strip.any(), argStripDebug.any(), output.any()))}, Cmd{CmdArgs: na.chunkList(na.anyList(tc.Objcopy.any(), argRemoveSectionGnuDebuglink.any(), argAddGnuDebuglink.any(), debug.any(), output.any()))})
 }
 
-func composeLDInputs(na *NodeArenas, modulePath string, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool, extra ...[]VFS) InputChunks {
+func composeLDInputs(na *NodeArenas, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool, extra ...[]VFS) InputChunks {
 	peerLibChunk := na.vfsList(peerLibPaths...)
 	var buildRootBlock []VFS
 
 	dedupers.with(func(deduper *DeDuper) {
 		for _, p := range peerLibPaths {
-			if !deduper.add(p.strID()) {
-				throwFmt("composeLDInputs: %s: duplicate peer lib path %s", modulePath, p.relString())
-			}
+			deduper.add(p.strID())
 		}
 
 		buildRootBlock = na.vfs.alloc(len(pluginPaths) + len(globalPaths) + len(wholeArchivePaths) + len(dynamicPaths) + len(ccPaths) + len(objcopyPaths))[:0]

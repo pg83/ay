@@ -12,19 +12,14 @@ func emitARNamed(
 	archiveBaseName string,
 	objRefs []NodeRef,
 	objPaths []VFS,
-	peerArchiveRefs []NodeRef,
 	arPluginPath *VFS,
 	tc ModuleToolchain,
 	hostP *Platform,
 	emit *StreamingEmitter,
 ) NodeRef {
-	if len(objRefs) != len(objPaths) {
-		throwFmt("EmitARNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
-	}
-
 	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 
-	return emitARNode(instance, archivePath, 0, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
+	return emitARNode(instance, archivePath, 0, objRefs, objPaths, arPluginPath, tc, hostP, emit)
 }
 
 func emitARNamedTagged(
@@ -33,19 +28,14 @@ func emitARNamedTagged(
 	tag STR,
 	objRefs []NodeRef,
 	objPaths []VFS,
-	peerArchiveRefs []NodeRef,
 	arPluginPath *VFS,
 	tc ModuleToolchain,
 	hostP *Platform,
 	emit *StreamingEmitter,
 ) NodeRef {
-	if len(objRefs) != len(objPaths) {
-		throwFmt("EmitARNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
-	}
-
 	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, peerArchiveRefs, arPluginPath, tc, hostP, emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, arPluginPath, tc, hostP, emit)
 }
 
 func emitARGlobalNamedTagged(
@@ -64,7 +54,7 @@ func emitARGlobalNamedTagged(
 
 	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, nil, tc, hostP, emit)
+	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, tc, hostP, emit)
 }
 
 func archiveTailFor(moduleDir string) string {
@@ -166,7 +156,6 @@ func emitARNode(
 	tag STR,
 	objRefs []NodeRef,
 	objPaths []VFS,
-	peerArchiveRefs []NodeRef,
 	arPluginPath *VFS,
 	tc ModuleToolchain,
 	hostP *Platform,
@@ -203,13 +192,7 @@ func emitARNode(
 
 	objInputs := na.vfsList(objPaths...)
 	topEnv := hostP.toolEnv()
-	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs))
-	nd := copy(deps, objRefs)
-
-	nd += copy(deps[nd:], peerArchiveRefs)
-	na.noderefs.commit(nd)
-
-	deps = deps[:nd:nd]
+	deps := na.noderefs.list(objRefs...)
 
 	n := Node{
 		Platform: instance.Platform,
