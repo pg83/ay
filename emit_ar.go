@@ -17,10 +17,6 @@ func emitARNamed(
 	hostP *Platform,
 	emit *StreamingEmitter,
 ) NodeRef {
-	if len(objRefs) != len(objPaths) {
-		throwFmt("EmitARNamed: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
-	}
-
 	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 
 	return emitARNode(instance, archivePath, 0, objRefs, objPaths, arPluginPath, tc, hostP, emit)
@@ -37,10 +33,6 @@ func emitARNamedTagged(
 	hostP *Platform,
 	emit *StreamingEmitter,
 ) NodeRef {
-	if len(objRefs) != len(objPaths) {
-		throwFmt("EmitARNamedTagged: objRefs/objPaths length mismatch (%d vs %d)", len(objRefs), len(objPaths))
-	}
-
 	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 
 	return emitARNode(instance, archivePath, tag, objRefs, objPaths, arPluginPath, tc, hostP, emit)

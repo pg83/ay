@@ -25,7 +25,6 @@ type StreamingEmitter struct {
 	pendingSet map[NodeRef]bool
 	results    []NodeRef
 	onNode     func(*Node, *DenseMap[STR, NodeRef])
-	finalized  bool
 	na         *NodeArenas
 	fetchRefs  *DenseMap[STR, NodeRef]
 }
@@ -44,10 +43,6 @@ func (e *StreamingEmitter) nodeArenas() *NodeArenas {
 }
 
 func (e *StreamingEmitter) reserve() NodeRef {
-	if e.finalized {
-		panic("StreamingEmitter.reserve called after Finish")
-	}
-
 	id := NodeRef(e.nodes.len())
 
 	e.nodes.pushBack(nil)
@@ -56,14 +51,6 @@ func (e *StreamingEmitter) reserve() NodeRef {
 }
 
 func (e *StreamingEmitter) emitReserved(n *Node, id NodeRef) {
-	if e.finalized {
-		panic("StreamingEmitter.emitReserved called after Finish")
-	}
-
-	if e.nodes.s[id] != nil {
-		throwFmt("emitReserved: slot %d already filled", id)
-	}
-
 	n.Ref = id
 	e.nodes.s[id] = n
 	e.resolveOrPend(n, id)
@@ -98,10 +85,6 @@ func (e *StreamingEmitter) emitReservedNodePtr(n *Node, id NodeRef) {
 }
 
 func (e *StreamingEmitter) emit(n *Node) NodeRef {
-	if e.finalized {
-		panic("StreamingEmitter.Emit called after Finish")
-	}
-
 	id := NodeRef(e.nodes.len())
 
 	n.Ref = id
@@ -137,18 +120,10 @@ func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
 }
 
 func (e *StreamingEmitter) result(r NodeRef) {
-	if e.finalized {
-		panic("StreamingEmitter.Result called after Finish")
-	}
-
 	e.results = append(e.results, r)
 }
 
 func (e *StreamingEmitter) finish() []NodeRef {
-	if e.finalized {
-		panic("StreamingEmitter.Finish called twice")
-	}
-
 	pending := e.pendingIdx
 
 	for len(pending) > 0 {
@@ -203,8 +178,6 @@ func (e *StreamingEmitter) finish() []NodeRef {
 		pending = next
 	}
 
-	e.finalized = true
-
 	return dedupResultRefs(e.results)
 }
 
@@ -234,10 +207,6 @@ func graphFromEmitter(e *StreamingEmitter) *Graph {
 }
 
 func finalize(e *StreamingEmitter) *Graph {
-	if e.finalized {
-		throwFmt("finalize: emitter already finalized")
-	}
-
 	e.finish()
 
 	return graphFromEmitter(e)
