@@ -154,10 +154,6 @@ func dumpMacroAudit(w io.Writer) {
 
 	defer macroAudit.mu.Unlock()
 
-	if !macroAudit.enabled {
-		return
-	}
-
 	fmt.Fprintln(w, "=== ya.make macros gen acknowledges but emits nothing for ===")
 
 	if len(macroAudit.ignored) == 0 {
