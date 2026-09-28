@@ -113,13 +113,7 @@ var acknowledgedTokSet = func() BitSet {
 	var b BitSet
 
 	for name := range acknowledgedMacros {
-		t, ok := tokByName[name]
-
-		if !ok {
-			panic("acknowledgedMacros name missing from the TOK enum: " + name)
-		}
-
-		b.add(uint32(t))
+		b.add(uint32(tokByName[name]))
 	}
 
 	return b
@@ -180,10 +174,6 @@ type ModuleEmitResult struct {
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
-	if res == nil {
-		return nil
-	}
-
 	return slices.Clone(res.WholeArchiveCmdPaths)
 }
 
@@ -1986,10 +1976,6 @@ type ARMember struct {
 }
 
 func (e *EmitContext) emittedProducer(ref NodeRef) *Node {
-	if e.ctx == nil || e.ctx.emit == nil || int(ref) >= len(e.ctx.emit.nodes.s) {
-		return nil
-	}
-
 	return e.ctx.emit.nodes.s[ref]
 }
 
@@ -2132,8 +2118,6 @@ func (ctx *GenCtx) instanceVariant(in ModuleInstance) uint16 {
 
 	if in.Platform == ctx.host {
 		pbit = 1
-	} else if in.Platform != ctx.target {
-		throwFmt("instanceVariant: unknown platform for %s", in.Path.string())
 	}
 
 	return uint16(in.Path&1)<<15 | uint16(in.Kind)<<8 | uint16(in.Demand)<<4 | uint16(in.Language)<<1 | pbit
