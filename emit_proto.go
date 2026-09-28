@@ -144,10 +144,6 @@ func pbHEmitsIncludesExtras() []IncludeDirective {
 }
 
 func protoOutputRel(outputRoot, rel string) string {
-	if outputRoot == "" {
-		return rel
-	}
-
 	if pathIsClean(outputRoot) && pathIsClean(rel) {
 		return internV(outputRoot, "/", rel).string()
 	}
@@ -518,17 +514,9 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		}
 
 		var pluginRefs []NodeRef
-		yaffCCRefs := pbGenRefs
 
 		if ref := pe.extraPlugins[pluginIdx].LDRef; ref != 0 {
 			pluginRefs = na.refList(ref)
-
-			if !slices.Contains(pbGenRefs, ref) {
-				yaffCCRefs = na.noderefs.alloc(len(pbGenRefs) + 1)
-				copy(yaffCCRefs, pbGenRefs)
-				yaffCCRefs[len(pbGenRefs)] = ref
-				na.noderefs.commit(len(yaffCCRefs))
-			}
 		}
 
 		yaffH := build(protoBase, plugin.OutputSuffixes[0])
@@ -558,7 +546,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		e.register(GeneratedFileInfo{
 			OutputPath:     yaffCC,
 			ProducerRef:    pbRef,
-			GeneratorRefs:  yaffCCRefs,
+			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffCCParsed},
 			OnUse:          pbPE,
 		})
@@ -687,11 +675,7 @@ func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) []VFS {
 
 func appendPbHCompanions(dst []IncludeDirective, pbhImports []IncludeDirective, ext string) []IncludeDirective {
 	for _, dir := range pbhImports {
-		base, ok := strings.CutSuffix(dir.target.string(), ".pb.h")
-
-		if !ok {
-			continue
-		}
+		base := strings.TrimSuffix(dir.target.string(), ".pb.h")
 
 		dst = append(dst, IncludeDirective{kind: dir.kind, target: includeTarget(internV(base, ext).any())})
 	}
@@ -751,10 +735,6 @@ func (e *EmitContext) emitPyProtoLibraryResult() *ProtoSrcsResult {
 	}
 
 	genRefs, genOuts := e.packPyProtoResEntries(entries)
-
-	if len(genRefs) == 0 {
-		return nil
-	}
 
 	protoLibName := ""
 
@@ -974,8 +954,6 @@ func protoCPPOutRoot(d *ModuleData) string {
 }
 
 type ProtoSrcsResult struct {
-	ARRef                NodeRef
-	ARPath               *VFS
 	GlobalRef            *NodeRef
 	GlobalPath           *VFS
 	WholeArchiveRefs     []NodeRef
@@ -993,14 +971,7 @@ func protoSourceRel(fs FS, instance ModuleInstance, d *ModuleData, src string) S
 		return resolved
 	}
 
-	raw := resolved.string()
-	clean := filepath.ToSlash(filepath.Clean(raw))
-
-	if clean == raw {
-		return resolved
-	}
-
-	return internStr(clean)
+	return internStr(filepath.ToSlash(filepath.Clean(resolved.string())))
 }
 
 const protoPathCacheSize = 64
