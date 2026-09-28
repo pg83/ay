@@ -1616,7 +1616,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		if stmt.Name == "" {
-			throwFmt("LLVM_BC: NAME keyword is required (got args %v)", v.Args)
+			throwFmt("LLVM_BC: NAME keyword is required (got args %v)", anyStrs(v.Args))
 		}
 
 		d.llvmBc = append(d.llvmBc, stmt)
@@ -2374,7 +2374,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 					itemDispatcherHeader = v.Args[i].string()
 				}
 			default:
-				throwFmt("gen: %s: APPHOST: unexpected argument %q", modulePath, v.Args[i])
+				throwFmt("gen: %s: APPHOST: unexpected argument %q", modulePath, v.Args[i].string())
 			}
 		}
 
@@ -2641,7 +2641,7 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 			plugin.ExtraOutFlag = v.Args[tail].string()
 			tail++
 		default:
-			throwFmt("gen: %s got unexpected tail token %q; supported suffixes are DEPS and EXTRA_OUT_FLAG", v.Name, v.Args[tail])
+			throwFmt("gen: %s got unexpected tail token %q; supported suffixes are DEPS and EXTRA_OUT_FLAG", v.Name, v.Args[tail].string())
 		}
 	}
 
@@ -2973,7 +2973,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 	name := v.Args[0]
 
 	if _, ok := allocatorPeers[name.string()]; !ok {
-		throwFmt("gen: unknown allocator %q (line %d); extend allocatorPeers in gen.go", name, v.Line)
+		throwFmt("gen: unknown allocator %q (line %d); extend allocatorPeers in gen.go", name.string(), v.Line)
 	}
 
 	d.hadAllocator = true
