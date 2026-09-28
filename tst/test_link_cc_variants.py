@@ -201,6 +201,56 @@ class CcVariantsTest(unittest.TestCase):
         c_args = cc_args(graph, "$(B)/k/c.c.o")
         self.assertEqual(c_args[-2:], ["-DOWN_CONLY", "$(S)/k/c.c"])
 
+    def test_raw_asm_source_names_map_into_module_output_dir(self):
+        files = {
+            "k/ya.make": module(
+                "LIBRARY()", "SRCS(./a.S ./sub/b.S ../k/c.S)\nNO_WSHADOW()\n"
+            ),
+            "k/a.S": "\n",
+            "k/sub/b.S": "\n",
+            "k/c.S": "\n",
+        }
+        graph = lib.make(files, "k")
+        for output, source in (
+            ("$(B)/k/a.S.o", "$(S)/k/a.S"),
+            ("$(B)/k/_/sub/b.S.o", "$(S)/k/sub/b.S"),
+            ("$(B)/k/c.S.o", "$(S)/k/c.S"),
+        ):
+            with self.subTest(output=output):
+                node = lib.node_by_output(graph, output)
+                self.assertEqual(node["kv"]["p"], "AS")
+                self.assertIn(source, node["inputs"])
+                self.assertIn("-Wno-shadow", node["cmds"][0]["cmd_args"])
+
+    def test_llvm_bc_compile_uses_cxx_standard_and_warning_bundles(self):
+        for warnings, expected in (("", "-Woverloaded-virtual"), ("NO_COMPILER_WARNINGS()\n", "-Wno-everything")):
+            with self.subTest(warnings=warnings):
+                files = {
+                    "bc/ya.make": module(
+                        "LIBRARY()",
+                        "SRCS(x.cpp)\nUSE_LLVM_BC20()\n"
+                        "LLVM_BC(f.cpp NAME fbc SYMBOLS a b)\nPEERDIR(res peer)\n"
+                        f"CXXFLAGS(-DOWNCXX)\n{warnings}",
+                    ),
+                    "bc/x.cpp": "int x;\n",
+                    "bc/f.cpp": "int f;\n",
+                    "res/ya.make": (
+                        "RESOURCES_LIBRARY()\n"
+                        "DECLARE_EXTERNAL_RESOURCE(CLANG20 sbr:1)\nEND()\n"
+                    ),
+                    "peer/ya.make": module("LIBRARY()", "CXXFLAGS(GLOBAL -DPEERCXX)\n"),
+                }
+                lib.tool_program(files, "tools/rescompiler", "rescompiler")
+                lib.tool_program(files, "tools/rescompressor", "rescompressor")
+                graph = lib.make(files, "bc")
+                args = cc_args(graph, "$(B)/bc/f.cpp.bc")
+                self.assertEqual(args[3], "$(B)/resources/CLANG20/bin/clang++")
+                self.assertEqual(args[-5:], ["-emit-llvm", "-c", "$(S)/bc/f.cpp", "-o", "$(B)/bc/f.cpp.bc"])
+                std = args.index("-std=c++20")
+                self.assertIn(expected, args[std + 1:])
+                self.assertLess(std, args.index("-DOWNCXX"))
+                self.assertIn("-DPEERCXX", args)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
