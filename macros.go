@@ -35,14 +35,6 @@ func evalAtomString(nodes []CondNode, i int32, env Environment) string {
 	return v.str
 }
 
-func identEnvNode(n *CondNode) ENV {
-	if n.Env != 0 {
-		return n.Env
-	}
-
-	return internEnv(n.Name)
-}
-
 func evalCond(nodes []CondNode, env Environment) bool {
 	return evalCondAt(nodes, int32(len(nodes)-1), env)
 }
@@ -60,7 +52,7 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 			return false
 		}
 
-		return env.boolID(identEnvNode(n), n.Name)
+		return env.boolID(n.Env, n.Name)
 	case ckNot:
 		return !evalCondAt(nodes, n.L, env)
 	case ckAnd:
@@ -69,8 +61,6 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 		return evalCondAt(nodes, n.L, env) || evalCondAt(nodes, n.R, env)
 	case ckString:
 		throwFmt("macros: bare string %q cannot be evaluated as a boolean condition", n.Name)
-	case ckInt:
-		throwFmt("macros: bare integer %d cannot be evaluated as a boolean condition", n.Ival)
 	case ckEq:
 		return evalEq(nodes, n, env)
 	case ckLt:
@@ -88,12 +78,12 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 			throwFmt("macros: DEFINED expects a variable name, got kind %d", d.Kind)
 		}
 
-		k, _ := env.s.lookup(identEnvNode(d))
+		k, _ := env.s.lookup(d.Env)
 
 		return k != envAbsent
 	}
 
-	throwFmt("macros: unhandled cond kind %d", n.Kind)
+	throwFmt("macros: bare integer %d cannot be evaluated as a boolean condition", n.Ival)
 
 	return false
 }
@@ -121,7 +111,7 @@ func evalAtomNode(nodes []CondNode, i int32, env Environment) AtomVal {
 			return AtomVal{str: n.Name}
 		}
 
-		switch k, v := env.s.lookup(identEnvNode(n)); k {
+		switch k, v := env.s.lookup(n.Env); k {
 		case envStr:
 			return AtomVal{str: v.string()}
 		case envVFS:
