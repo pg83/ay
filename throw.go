@@ -56,9 +56,14 @@ func throwFmt(format string, args ...any) {
 	exceptionf(format, args...).throw()
 }
 
+var (
+	chaosAssert       = newChaosFault("assert")
+	chaosForeignPanic = newChaosFault("foreign-panic")
+)
+
 // assert guards an invariant: ok is false only when ay itself is defective.
 func assert(ok bool, msg string) {
-	if !ok {
+	if !chaosSwap(chaosAssert, ok, false) {
 		throwFmt("%s", msg)
 	}
 }
@@ -69,10 +74,15 @@ func try(cb func()) (err *Exception) {
 			if exc, ok := rec.(*Exception); ok {
 				err = exc
 			} else {
+				flushCoverage()
 				panic(rec)
 			}
 		}
 	}()
+
+	if chaosForeignPanic.fire() {
+		panic("chaos: foreign panic")
+	}
 
 	cb()
 
