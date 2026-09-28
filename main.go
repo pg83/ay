@@ -143,7 +143,7 @@ func parseGlobalFlags(argv []string) (g GlobalFlags, rest []string) {
 
 		switch {
 		case k == "probe" && v == "map":
-			atExit(reportMapProbe)
+			atExit(mapProbeReport)
 		case k == "probe" && v == "callsite":
 		case k == "probe":
 			throwFmt("unknown --probe=%q (want map|callsite)", v)

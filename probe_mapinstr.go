@@ -12,7 +12,82 @@ import (
 	"sort"
 )
 
+// mapProbeReport prints the tally of an instrumented build on exit; the
+// runtime that mapinstr writes next to the instrumented files replaces it.
+var mapProbeReport = func() {}
+
+const probeMapRuntimeFile = "probe_runtime_map.go"
+
+const probeMapRuntime = `package main
+
+// Written by ay dev probe mapinstr: the counters the instrumented map
+// operations report to. Build with the instrumented files, run with
+// --probe=map, delete with them.
+
+import (
+	"fmt"
+	"os"
+	"sort"
+)
+
+type MapProbeEntry struct {
+	reads  uint64
+	writes uint64
+}
+
 var mapProbeCounts = map[string]*MapProbeEntry{}
+
+func init() {
+	mapProbeReport = reportMapProbe
+}
+
+func mapProbeAt(site string, write bool) {
+	e := mapProbeCounts[site]
+
+	if e == nil {
+		e = &MapProbeEntry{}
+		mapProbeCounts[site] = e
+	}
+
+	if write {
+		e.writes++
+	} else {
+		e.reads++
+	}
+}
+
+func mapKR[K any](k K, site string) K {
+	mapProbeAt(site, false)
+
+	return k
+}
+
+func mapKW[K any](k K, site string) K {
+	mapProbeAt(site, true)
+
+	return k
+}
+
+func reportMapProbe() {
+	type row struct {
+		site   string
+		reads  uint64
+		writes uint64
+	}
+
+	rows := make([]row, 0, len(mapProbeCounts))
+
+	for s, e := range mapProbeCounts {
+		rows = append(rows, row{s, e.reads, e.writes})
+	}
+
+	sort.Slice(rows, func(i, j int) bool { return rows[i].reads+rows[i].writes > rows[j].reads+rows[j].writes })
+
+	for _, r := range rows {
+		fmt.Fprintf(os.Stderr, "mapop\t%d\t%d\t%s\n", r.reads, r.writes, r.site)
+	}
+}
+`
 
 func probeMapInstr(_ GlobalFlags, args []string) int {
 	files := goFilesFromArgs(args)
@@ -66,7 +141,8 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 	for _, p := range order {
 		base := filepath.Base(p)
 
-		if base == "probe_mapinstr.go" || base == "probe_callsite.go" || base == "probe.go" {
+		if base == "probe_mapinstr.go" || base == "probe_callsite.go" || base == "probe.go" ||
+			base == probeMapRuntimeFile || base == probeCallSiteRuntimeFile {
 			continue
 		}
 
@@ -140,6 +216,8 @@ func probeMapInstr(_ GlobalFlags, args []string) int {
 		}
 	}
 
+	throw(os.WriteFile(probeMapRuntimeFile, []byte(probeMapRuntime), 0o644))
+
 	fmt.Fprintf(os.Stderr, "mapinstr: wrapped %d reads + %d writes across %d files\n", reads, writes, len(edits))
 
 	return 0
@@ -155,56 +233,4 @@ func isMapExpr(info *types.Info, e ast.Expr) bool {
 	_, ok := t.Underlying().(*types.Map)
 
 	return ok
-}
-
-type MapProbeEntry struct {
-	reads  uint64
-	writes uint64
-}
-
-func mapProbeAt(site string, write bool) {
-	e := mapProbeCounts[site]
-
-	if e == nil {
-		e = &MapProbeEntry{}
-		mapProbeCounts[site] = e
-	}
-
-	if write {
-		e.writes++
-	} else {
-		e.reads++
-	}
-}
-
-func mapKR[K any](k K, site string) K {
-	mapProbeAt(site, false)
-
-	return k
-}
-
-func mapKW[K any](k K, site string) K {
-	mapProbeAt(site, true)
-
-	return k
-}
-
-func reportMapProbe() {
-	type row struct {
-		site   string
-		reads  uint64
-		writes uint64
-	}
-
-	rows := make([]row, 0, len(mapProbeCounts))
-
-	for s, e := range mapProbeCounts {
-		rows = append(rows, row{s, e.reads, e.writes})
-	}
-
-	sort.Slice(rows, func(i, j int) bool { return rows[i].reads+rows[i].writes > rows[j].reads+rows[j].writes })
-
-	for _, r := range rows {
-		fmt.Fprintf(os.Stderr, "mapop\t%d\t%d\t%s\n", r.reads, r.writes, r.site)
-	}
 }

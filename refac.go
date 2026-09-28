@@ -258,10 +258,6 @@ func lintCoalesceAssign(path string) bool {
 
 	formatted := throw2(format.Source([]byte(b.String())))
 
-	if bytes.Equal(formatted, src) {
-		return false
-	}
-
 	throw(os.WriteFile(path, formatted, 0o644))
 
 	return true
@@ -749,10 +745,6 @@ func applyConstEdits(pf *ParsedFile, edits []ConstEdit) bool {
 		return false
 	}
 
-	if bytes.Equal(formatted, pf.src) {
-		return false
-	}
-
 	throw(os.WriteFile(pf.path, formatted, 0o644))
 
 	return true
@@ -935,23 +927,11 @@ func lintStripComments(path string) bool {
 
 	var buf bytes.Buffer
 
-	if err := format.Node(&buf, fset, f); err != nil {
-		fmt.Fprintf(os.Stderr, "refac lint: %s: strip-comments format failed (left unchanged): %v\n", path, err)
+	// The tree comes from parsing the file and only loses comments, so it
+	// prints and reparses.
+	throw(format.Node(&buf, fset, f))
 
-		return false
-	}
-
-	formatted, err := format.Source(buf.Bytes())
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "refac lint: %s: strip-comments reformat failed (left unchanged): %v\n", path, err)
-
-		return false
-	}
-
-	if bytes.Equal(formatted, src) {
-		return false
-	}
+	formatted := throw2(format.Source(buf.Bytes()))
 
 	throw(os.WriteFile(path, formatted, 0o644))
 
@@ -1593,10 +1573,6 @@ func lintControlBlankLines(path string) bool {
 
 	formatted := throw2(format.Source([]byte(b.String())))
 
-	if bytes.Equal(formatted, src) {
-		return false
-	}
-
 	throw(os.WriteFile(path, formatted, 0o644))
 
 	return true
@@ -1665,10 +1641,6 @@ func lintTightBraces(path string) bool {
 
 	formatted := throw2(format.Source([]byte(strings.Join(kept, "\n"))))
 
-	if bytes.Equal(formatted, src) {
-		return false
-	}
-
 	throw(os.WriteFile(path, formatted, 0o644))
 
 	return true
@@ -1723,10 +1695,6 @@ func lintExpandFuncBodies(path string) bool {
 	}
 
 	formatted := throw2(format.Source(b))
-
-	if bytes.Equal(formatted, src) {
-		return false
-	}
 
 	throw(os.WriteFile(path, formatted, 0o644))
 
@@ -1796,10 +1764,6 @@ func lintFuncBlankLines(path string) bool {
 	}
 
 	formatted := throw2(format.Source([]byte(b.String())))
-
-	if bytes.Equal(formatted, src) {
-		return false
-	}
 
 	throw(os.WriteFile(path, formatted, 0o644))
 

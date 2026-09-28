@@ -33,17 +33,15 @@ func ownershipCallSite() string {
 	n := runtime.Callers(3, pcs[:])
 	frames := runtime.CallersFrames(pcs[:n])
 
+	// Past the last frame Next returns an empty one, which ends the walk; the
+	// stack always leaves node_emitter.go well within 16 frames.
 	for {
-		f, more := frames.Next()
+		f, _ := frames.Next()
 
 		if !strings.HasSuffix(f.File, "/node_emitter.go") {
 			short := f.File[strings.LastIndexByte(f.File, '/')+1:]
 
 			return fmt.Sprintf("%s:%d", short, f.Line)
-		}
-
-		if !more {
-			return "?"
 		}
 	}
 }
