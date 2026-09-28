@@ -149,8 +149,6 @@ type Requirements struct {
 	HasRAMDisk bool
 }
 
-var emptyRequirements = Requirements{}
-
 func (r Requirements) isEmpty() bool {
 	return r.CPU == 0 && r.RAM == 0 && r.Network == nwNone && !r.HasRAMDisk
 }

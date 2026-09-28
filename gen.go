@@ -458,10 +458,6 @@ func genDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform
 	return finalize(emitter)
 }
 
-func genWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool) *Graph {
-	return genDumpGraphWithResources(fs, targetDir, hostP, targetP, onWarn, testMode, false, demandLinked)
-}
-
 func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 	if moduleStmt != nil && moduleStmt.Name == tokUnittestFor {
 		return strings.ReplaceAll(path.Clean(instance.Path.relString()), "/", "-")

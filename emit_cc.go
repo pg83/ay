@@ -161,10 +161,6 @@ func (e *EmitContext) mainOutInducedInputs(na *NodeArenas, includeView Closure) 
 	return out[:len(out):len(out)]
 }
 
-func (e *EmitContext) composeCCNode(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (NodeRef, VFS, InputChunks) {
-	return e.composeCCNodeAt(srcVFS, in, hostP, 0)
-}
-
 func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Platform, reserved NodeRef) (NodeRef, VFS, InputChunks) {
 	instance := e.instance
 	na := e.ctx.na

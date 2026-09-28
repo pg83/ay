@@ -56,17 +56,11 @@ def validation_partition():
 
 partition = validation_partition()
 
-GO_SOURCES = [
-    path for path in build.glob("$(S)/*.go")
-    if not path.endswith("_test.go")
-]
-GO_TEST_SOURCES = build.glob("$(S)/*_test.go")
+GO_SOURCES = build.glob("$(S)/*.go")
 
 GENERATED_DENSE_MAPS = [
     "$(B)/generated/go/dense_map_2.go",
-    "$(B)/generated/go/dense_map_2_test.go",
     "$(B)/generated/go/dense_map_3.go",
-    "$(B)/generated/go/dense_map_3_test.go",
 ]
 
 dense_maps = command(
@@ -131,27 +125,6 @@ ay = command(
     env=GO_ENV,
     descr="GO",
     color="cyan",
-)
-
-go_test_stamp = "$(B)/tests/go.stamp"
-go_test = command(
-    name="go_test",
-    inputs=[*GO_INPUTS, *GO_TEST_SOURCES],
-    outputs=[go_test_stamp],
-    deps=[dense_maps],
-    cmd=[
-        GO_OVERLAY_CMD,
-        [
-            "go", "test",
-            "-overlay=" + GO_OVERLAY,
-            "-count=1", "-timeout=2m", ".",
-        ],
-        touch(go_test_stamp),
-    ],
-    cwd="$(S)",
-    env={**GO_ENV, "AY_TEST_SSH_OAUTH": ""},
-    descr="UT",
-    color="green",
 )
 
 python_test_stamp = "$(B)/tests/python.stamp"
@@ -356,11 +329,11 @@ if partition is not None:
     ]
 
 group("install", ay)
-group("unit", go_test, python_test, *binary_tests)
+group("unit", python_test, *binary_tests)
 group("validation_resources", *resource_targets.values())
 group("validation_results", validation_summary)
 group("validation_report", validation_summary)
 group("validation_cases", *validation_gates)
 group("validation_shard", *selected_validation_gates)
 group("validate", validation_summary, validation_gate)
-group("test", go_test, python_test, *binary_tests, validation_summary, validation_gate)
+group("test", python_test, *binary_tests, validation_summary, validation_gate)

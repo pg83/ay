@@ -3048,10 +3048,6 @@ func isResourceContainerType(name TOK) bool {
 	return false
 }
 
-func buildIfEnv(instance ModuleInstance) Environment {
-	return buildIfEnvInto(&EnvStore{}, instance)
-}
-
 func buildIfEnvInto(store *EnvStore, instance ModuleInstance) Environment {
 	env := instance.Platform.ifEnv.cloneInto(store)
 
@@ -3394,22 +3390,6 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 
 	env.setFromString(internEnv(prefix+"_FILES"), strings.Join(files, " "))
 	env.setFromString(internEnv(prefix+"_SRCDIR"), srcdir)
-}
-
-func expandStmtTokensStrings(items []string, env Environment) []string {
-	out := make([]string, 0, len(items))
-
-	for _, item := range items {
-		if !strings.Contains(item, "$") {
-			out = append(out, item)
-
-			continue
-		}
-
-		out = append(out, strings.Fields(expandStmtToken(item, env))...)
-	}
-
-	return out
 }
 
 func isExpandVarName(s string) bool {

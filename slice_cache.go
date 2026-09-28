@@ -100,16 +100,6 @@ func (c *SliceCache[T]) commit(block []T) []T {
 	return block[:len(block):len(block)]
 }
 
-func dedupShared[T IdKey](c *SliceCache[T], lists ...[]T) []T {
-	var out []T
-
-	dedupers.with(func(deduper *DeDuper) {
-		out = dedupSharedWith(deduper, c, lists...)
-	})
-
-	return out
-}
-
 func dedupSharedWith[T IdKey](deduper *DeDuper, c *SliceCache[T], lists ...[]T) []T {
 	total := 0
 	last := -1
