@@ -1144,16 +1144,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 }
 
 func isGoArchivePath(rel string) bool {
-	if !strings.HasSuffix(rel, ".a") {
-		return false
-	}
-
 	slash := strings.LastIndexByte(rel, '/')
-
-	if slash < 0 {
-		return false
-	}
-
 	base := strings.TrimSuffix(rel[slash+1:], ".a")
 	dir := rel[:slash]
 
