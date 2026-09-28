@@ -44,10 +44,6 @@ func (id ENV) sharedString() string {
 	return envTable.strs.get(uint32(id)).sharedString()
 }
 
-func (id ENV) String() string {
-	return id.string()
-}
-
 func internedEnv(name string) ENV {
 	st := interned(name)
 

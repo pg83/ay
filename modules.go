@@ -1352,8 +1352,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			expanded.Args = expandStmtTokens(v.Args, env)
 			applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
-		default:
-			throwFmt("gen: %s: unhandled Stmt type %T (parser added a new Stmt subclass without updating gen.go)", modulePath, s)
 		}
 	}
 }
@@ -1616,7 +1614,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		if stmt.Name == "" {
-			throwFmt("LLVM_BC: NAME keyword is required (got args %v)", v.Args)
+			throwFmt("LLVM_BC: NAME keyword is required (got args %v)", anyStrs(v.Args))
 		}
 
 		d.llvmBc = append(d.llvmBc, stmt)
@@ -1962,11 +1960,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
 		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 
-		variant, ok := simdVariantFor(v.Name)
-
-		if !ok {
-			throwFmt("gen: unrecognised SIMD-permutation macro %q at line %d (simdVariants table out of sync)", v.Name, v.Line)
-		}
+		variant, _ := simdVariantFor(v.Name)
 
 		if len(v.Args) == 0 {
 			throwFmt("gen: %s() requires at least 1 argument (filename); got 0 at line %d", v.Name, v.Line)
@@ -2374,7 +2368,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 					itemDispatcherHeader = v.Args[i].string()
 				}
 			default:
-				throwFmt("gen: %s: APPHOST: unexpected argument %q", modulePath, v.Args[i])
+				throwFmt("gen: %s: APPHOST: unexpected argument %q", modulePath, v.Args[i].string())
 			}
 		}
 
@@ -2548,10 +2542,6 @@ func reorderCythonVariantBuckets(d *ModuleData, start int, regIdx []int) {
 
 	copy(d.cythonCpp[start:], stmts)
 
-	if len(regIdx) != n {
-		return
-	}
-
 	names := make([]STR, n)
 	explicit := make([]bool, n)
 
@@ -2598,8 +2588,6 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 	case tokCppProtoPlugin2:
 		requiredArgs = 4
 		outputSuffixes = 2
-	default:
-		throwFmt("gen: internal error: parseCPPProtoPlugin called for %q", v.Name)
 	}
 
 	if len(v.Args) < requiredArgs {
@@ -2641,7 +2629,7 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 			plugin.ExtraOutFlag = v.Args[tail].string()
 			tail++
 		default:
-			throwFmt("gen: %s got unexpected tail token %q; supported suffixes are DEPS and EXTRA_OUT_FLAG", v.Name, v.Args[tail])
+			throwFmt("gen: %s got unexpected tail token %q; supported suffixes are DEPS and EXTRA_OUT_FLAG", v.Name, v.Args[tail].string())
 		}
 	}
 
@@ -2973,7 +2961,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 	name := v.Args[0]
 
 	if _, ok := allocatorPeers[name.string()]; !ok {
-		throwFmt("gen: unknown allocator %q (line %d); extend allocatorPeers in gen.go", name, v.Line)
+		throwFmt("gen: unknown allocator %q (line %d); extend allocatorPeers in gen.go", name.string(), v.Line)
 	}
 
 	d.hadAllocator = true
