@@ -1,6 +1,8 @@
 import json
 import os
+import platform
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -186,7 +188,9 @@ class DevtoolsCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         graph = json.loads(result.stdout)
         compile_node = lib.node_by_output(graph, "$(B)/lib/a.c.o")
-        self.assertEqual(compile_node["platform"], "default-linux-x86_64")
+        # ay names the host after GOOS and its ISA: x86_64, aarch64 on Linux,
+        # arm64 on macOS, which are also what Python reports for the host.
+        self.assertEqual(compile_node["platform"], f"default-{sys.platform}-{platform.machine()}")
 
     def test_ya_conf_scalar_types_reach_flags(self):
         root = self.source_root(

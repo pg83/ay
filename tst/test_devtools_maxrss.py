@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 import sys
@@ -30,6 +31,18 @@ def run_ay(*args, input=None):
     )
 
 
+# maxrss samples the process subtree through /proc; where there is no /proc
+# (macOS) it cannot see any process and reports a zero peak.
+HAS_PROC = os.path.isdir("/proc/self")
+
+
+def assert_allocation_peak(test, stderr):
+    if HAS_PROC:
+        test.assertGreaterEqual(peak_kb(stderr), 64 << 10)
+    else:
+        test.assertEqual(peak_kb(stderr), 0)
+
+
 def peak_kb(stderr):
     match = REPORT.search(stderr)
     if match is None:
@@ -42,12 +55,12 @@ class MaxRSSTest(unittest.TestCase):
         script = f"{sys.executable} -c \"$0\" 7; exit $?"
         result = run_ay("dev", "maxrss", "--hz", "50", "--", "sh", "-c", script, ALLOCATE)
         self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertGreaterEqual(peak_kb(result.stderr), 64 << 10)
+        assert_allocation_peak(self, result.stderr)
 
     def test_equals_form_and_implicit_command(self):
         result = run_ay("dev", "maxrss", "--hz=20", "--", sys.executable, "-c", ALLOCATE, "0")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertGreaterEqual(peak_kb(result.stderr), 64 << 10)
+        assert_allocation_peak(self, result.stderr)
         result = run_ay(
             "dev", "maxrss", "sh", "-c", "echo out; echo err >&2; cat",
             input="from-stdin\n",
