@@ -32,6 +32,8 @@ def fixture():
             f"PROGRAM()\n{NO_PLATFORM}SRCS(m.cpp)\nPEERDIR(nomod ok dyn)\nEND()\n"
         ),
         "app/m.cpp": "int main(){return 0;}\n",
+        "build/scripts/link_exe.py": "import process_command_files\n",
+        "build/scripts/process_command_files.py": "\n",
     }
     lib.tool_program(files, "tools/fix_elf", "fix_elf")
     return files
@@ -86,6 +88,7 @@ class OwnershipDebugTest(unittest.TestCase):
         link = lib.node_by_output(json.loads(audited.stdout), "$(B)/app/app")
         self.assertIn("$(B)/ok/libok.a", link["inputs"])
         self.assertIn("$(B)/dyn/libd.so", link["inputs"])
+        self.assertIn("$(S)/build/scripts/process_command_files.py", link["inputs"])
 
 
 if __name__ == "__main__":
