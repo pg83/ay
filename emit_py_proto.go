@@ -434,7 +434,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 }
 
 func protoPythonOutputRoot(d *ModuleData) string {
-	if d != nil && d.protoNamespace != nil {
+	if d.protoNamespace != nil {
 		root := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(d.protoNamespace.string())), "/")
 
 		if root != "." && root != "" {
