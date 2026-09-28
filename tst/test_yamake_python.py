@@ -209,6 +209,22 @@ class YaMakePythonTest(unittest.TestCase):
             source for node in graph["graph"] for source in node["inputs"]
         })
 
+    def test_cython_sources_already_in_bucket_order_keep_their_order(self):
+        graph = self.make("PY3_LIBRARY", "PY_SRCS(CYTHON_C a.pyx CYTHON_C b.pyx CYTHON_CPP c.pyx)", ["a.pyx", "b.pyx", "c.pyx"])
+        self.assertEqual(
+            [node["outputs"][0] for node in graph["graph"] if node["kv"]["p"] == "CY"],
+            ["$(B)/a/a.pyx.c", "$(B)/a/b.pyx.c", "$(B)/a/c.pyx.cpp"],
+        )
+
+    def test_python_instance_of_the_linux_headers_module_has_no_self_peer(self):
+        files = python_tree("PY3_PROGRAM", "PEERDIR(contrib/libs/linux-headers)\nPY_SRCS(x.py)", ["x.py"])
+        files["contrib/libs/linux-headers/ya.make"] = "LIBRARY()\n" + NO_PLATFORM + "SRCS(h.cpp)\nEND()\n"
+        files["contrib/libs/linux-headers/h.cpp"] = "int h;\n"
+        code, graph, stderr = ay_make(files, "-k")
+        self.assertEqual(code, 0, stderr)
+        self.assertNotIn("PEERDIR cycle", stderr)
+        lib.node_by_output_prefix(graph, "$(B)/contrib/libs/linux-headers/")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
