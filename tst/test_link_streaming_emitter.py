@@ -58,6 +58,8 @@ def fixture():
         "one/one.cpp": "int one;\n",
         "two/ya.make": f"PROGRAM()\n{NO_PLATFORM}SRCS(two.cpp)\nPEERDIR(one)\nEND()\n",
         "two/two.cpp": "int main(){return 0;}\n",
+        "globalonly/ya.make": f"LIBRARY()\n{NO_PLATFORM}SRCS(GLOBAL g.cpp)\nEND()\n",
+        "globalonly/g.cpp": "int g;\n",
     }
 
 
@@ -108,6 +110,16 @@ class StreamingEmitterTest(unittest.TestCase):
             for graph in graphs
         ]
         self.assertEqual(results, [["$(B)/one/libone.a"], ["$(B)/two/two"]])
+
+    def test_repeated_target_without_archive_streams_cleanly(self):
+        result = run_make(fixture(), "globalonly", "globalonly")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((result.stdout, result.stderr), ("", ""))
+        graph = json.loads(run_make(fixture(), "-G", "globalonly").stdout)
+        self.assertIn(
+            "$(B)/globalonly/libglobalonly.global.a",
+            [node["outputs"][0] for node in graph["graph"] if node["uid"] in graph["result"]],
+        )
 
 
 if __name__ == "__main__":

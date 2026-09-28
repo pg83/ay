@@ -196,6 +196,52 @@ class SbomTest(unittest.TestCase):
             ],
         )
 
+    def test_py3_program_component_precedes_lld_and_unversioned_toolchain(self):
+        files = fixture()
+        python_peers = [
+            "contrib/libs/python",
+            "library/python/runtime_py3/main",
+            "library/python/import_tracing/constructor",
+            "library/python/testing/import_test",
+            "contrib/tools/python3/Modules/_sqlite",
+        ]
+        for path in python_peers:
+            name = path.replace("/", "_")
+            files[f"{path}/ya.make"] = (
+                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                f"LICENSE(PSF)\nSRCS({name}.cpp)\nEND()\n"
+            )
+            files[f"{path}/{name}.cpp"] = f"int {name};\n"
+        files["build/platform/nover/ya.make"] = (
+            "RESOURCES_LIBRARY()\nTOOLCHAIN(nover)\nEND()\n"
+        )
+        files["lib/ya.make"] = library(
+            "LICENSE(Apache-2.0)\nVERSION(2 1)\nSRCS(a.cpp)\nPEERDIR(build/platform/nover)\n"
+        )
+        files["py3/ya.make"] = "PY3_PROGRAM()\nLICENSE(MIT)\nPEERDIR(lib)\nEND()\n"
+        graph = lib.make(files, "py3", *X86_64, "-r")
+
+        nover = lib.node_by_output(graph, component("build/platform/nover/toolchain.component.sbom"))
+        self.assertEqual(
+            nover["cmds"][0]["cmd_args"][-4:],
+            ["--toolchain-name", "nover", "--ver", "unknown"],
+        )
+        own = component("py3/py3.PY3.component.sbom")
+        self.assertIn("--lang", lib.node_by_output(graph, own)["cmds"][0]["cmd_args"])
+        self.assertEqual(lib.node_by_output(graph, own)["cmds"][0]["cmd_args"][-1], "PY3")
+        link_sbom = command_with(lib.node_by_output(graph, "$(B)/py3/py3"), "link_sbom.py")
+        self.assertEqual(link_sbom[2:4], ["--lang", "PY3"])
+        components = link_sbom[10:]
+        self.assertEqual(
+            components[components.index(own) - 2:components.index(own) + 2],
+            [
+                component("build/platform/nover/toolchain.component.sbom"),
+                component("lib/lib.CPP.component.sbom"),
+                own,
+                component("build/platform/lld/toolchain.component.sbom"),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
