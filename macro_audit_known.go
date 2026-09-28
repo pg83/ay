@@ -23,22 +23,9 @@ func knownServiceTokens() map[string]struct{} {
 
 func mineServiceTokensFromSources() map[string]struct{} {
 	tokens := map[string]struct{}{}
-	entries, err := goSources.ReadDir(".")
 
-	if err != nil {
-		return tokens
-	}
-
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-
-		data, err := goSources.ReadFile(e.Name())
-
-		if err != nil {
-			continue
-		}
+	for _, e := range throw2(goSources.ReadDir(".")) {
+		data := throw2(goSources.ReadFile(e.Name()))
 
 		for len(data) > 0 {
 			open := bytes.IndexByte(data, '"')

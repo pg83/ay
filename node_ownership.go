@@ -56,10 +56,6 @@ func init() {
 }
 
 func registerOwnedRange(p unsafe.Pointer, bytes int) {
-	if !ownershipOn || bytes == 0 {
-		return
-	}
-
 	lo := uintptr(p)
 
 	ownershipRanges = append(ownershipRanges, OwnedRange{lo: lo, hi: lo + uintptr(bytes)})
