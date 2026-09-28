@@ -20,6 +20,33 @@ PROTOBUF_HEADERS = (
     "unknown_field_set.h", "wire_format.h",
 )
 
+CYTHON_UTILITY = (
+    "arrayarray.h", "AsyncGen.c", "Buffer.c", "Builtins.c", "CConvert.pyx",
+    "CMath.c", "CommonStructures.c", "CommonTypes.c", "Complex.c",
+    "Coroutine.c", "CpdefEnums.pyx", "CppConvert.pyx", "CppSupport.cpp",
+    "CythonFunction.c", "Dataclasses.c", "Embed.c", "Exceptions.c",
+    "ExtensionTypes.c", "FunctionArguments.c", "ImportExport.c",
+    "MemoryView.pyx", "MemoryView_C.c", "ModuleSetupCode.c",
+    "NumpyImportArray.c", "ObjectHandling.c", "Optimize.c", "Overflow.c",
+    "Printing.c", "Profile.c", "StringTools.c", "TestCyUtilityLoader.pyx",
+    "TestCythonScope.pyx", "TestUtilityLoader.c", "UFuncs_C.c",
+)
+CYTHON_HEADERS = (
+    "contrib/tools/cython/cython.py",
+    "contrib/tools/cython/generated_c_headers.h",
+    "contrib/tools/cython/generated_cpp_headers.h",
+    "contrib/libs/python/Include/compile.h",
+    "contrib/libs/python/Include/frameobject.h",
+    "contrib/libs/python/Include/longintrepr.h",
+    "contrib/libs/python/Include/pyconfig.h",
+    "contrib/libs/python/Include/Python.h",
+    "contrib/libs/python/Include/pythread.h",
+    "contrib/libs/python/Include/structmember.h",
+    "contrib/libs/python/Include/traceback.h",
+    "contrib/libs/cxxsupp/openmp/omp.h",
+)
+SWIG_LIBRARY = ("swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg")
+
 
 def with_tools(files, *paths):
     for path in paths:
@@ -394,6 +421,51 @@ class OtherGeneratorTest(unittest.TestCase):
         self.assertIn("$(S)/gol/c.go", cgo["inputs"])
         for output in ("$(B)/gol/b.c.o", "$(B)/gol/c.cgo2.c.o", "$(B)/gol/_cgo_export.c.o"):
             lib.node_by_output(graph, output)
+
+    def test_cython_and_swig_sources(self):
+        files = {
+            "cy/ya.make": f"LIBRARY()\n{BARE}BUILDWITH_CYTHON_CPP(cy.pyx)\nEND()\n",
+            "cy/cy.pyx": "",
+            "sw/ya.make": "PY3_LIBRARY()\nPY_SRCS(SWIG_C sw.swg)\nEND()\n",
+            "sw/sw.swg": "%module sw\n",
+            "contrib/libs/python/ya.make": LIBRARY_STUB,
+            "contrib/tools/cython/Cython/ya.make": LIBRARY_STUB,
+            "library/cpp/resource/ya.make": LIBRARY_STUB,
+        }
+        for name in CYTHON_UTILITY:
+            files[f"contrib/tools/cython/Cython/Utility/{name}"] = ""
+        for path in CYTHON_HEADERS:
+            files[path] = ""
+        for name in SWIG_LIBRARY:
+            files[f"contrib/tools/swig/Lib/{name}"] = ""
+        with_tools(
+            files,
+            "contrib/tools/swig",
+            "tools/archiver",
+            "tools/py3cc",
+            "tools/py3cc/slow",
+            "tools/rescompiler",
+            "tools/rescompressor",
+        )
+        cython = lib.make(files, "cy")
+        node = lib.node_by_output(cython, "$(B)/cy/cy.pyx.cpp")
+        self.assertEqual(node["kv"]["p"], "CY")
+        self.assertEqual(node["cmds"][0]["cmd_args"][-3:], [
+            "$(S)/cy/cy.pyx", "-o", "$(B)/cy/cy.pyx.cpp",
+        ])
+        self.assertIn(
+            "$(B)/cy/cy.pyx.cpp.o",
+            lib.node_by_output(cython, "$(B)/cy/libcy.a")["inputs"],
+        )
+
+        swig = lib.make(files, "sw")
+        node = lib.node_by_output(swig, "$(B)/sw/sw.swg.c")
+        self.assertEqual(node["kv"]["p"], "SW")
+        self.assertEqual(node["outputs"], ["$(B)/sw/sw.swg.c", "$(B)/sw/sw.py"])
+        self.assertIn(
+            "$(B)/sw/sw.swg.c.o",
+            lib.node_by_output(swig, "$(B)/sw/libpy3sw.a")["inputs"],
+        )
 
 
 if __name__ == "__main__":
