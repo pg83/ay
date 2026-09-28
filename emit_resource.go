@@ -67,42 +67,23 @@ func renderResourceKvCmd(kv string) string {
 	return kv
 }
 
-func rootrelExpand(kv string, resolved string) string {
+func rootrelSplit(kv string) (head, input, tail string, ok bool) {
 	const marker = "${rootrel;context=TEXT;input=TEXT:\""
 
 	idx := strings.Index(kv, marker)
 
 	if idx < 0 {
-		return kv
+		return "", "", "", false
 	}
 
-	tail := kv[idx+len(marker):]
-	end := strings.Index(tail, "\"}")
+	rest := kv[idx+len(marker):]
+	end := strings.Index(rest, "\"}")
 
 	if end < 0 {
-		return kv
+		return "", "", "", false
 	}
 
-	return kv[:idx] + resolved + tail[end+len("\"}"):]
-}
-
-func rootrelInputPath(kv string) (string, bool) {
-	const marker = "${rootrel;context=TEXT;input=TEXT:\""
-
-	idx := strings.Index(kv, marker)
-
-	if idx < 0 {
-		return "", false
-	}
-
-	tail := kv[idx+len(marker):]
-	end := strings.Index(tail, "\"}")
-
-	if end < 0 {
-		return "", false
-	}
-
-	return tail[:end], true
+	return kv[:idx], rest[:end], rest[end+len("\"}"):], true
 }
 
 type ObjcopyArgBlocks struct {
@@ -521,10 +502,6 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		sourceBound, buildBound := 0, 0
 
 		for _, it := range chunk {
-			if it.SourceInput != 0 {
-				sourceBound++
-			}
-
 			if it.BuildInput != 0 {
 				buildBound++
 			}
@@ -533,7 +510,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			buildBound += len(it.ExtraBuilds)
 		}
 
-		var adjacentSources, payloadSources, payloadBuilds []VFS
+		var adjacentSources, payloadBuilds []VFS
 
 		hashScratch = hashScratch[:0]
 
@@ -552,10 +529,6 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 					hashScratch = append(hashScratch, it.Path, bytesString(dashBuf[dashStart:]))
 				}
 
-				if it.SourceInput != 0 && deduper.add(it.SourceInput.strID()) {
-					adjacentSources = append(adjacentSources, it.SourceInput)
-				}
-
 				for _, v := range it.ExtraSources {
 					if v != 0 && deduper.add(v.strID()) {
 						adjacentSources = append(adjacentSources, v)
@@ -568,16 +541,6 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		})
 
 		dedupers.with(func(deduper *DeDuper) {
-			payloadSources = na.vfs.alloc(sourceBound)[:0]
-
-			for _, it := range chunk {
-				if it.Path != "-" && it.SourceInput != 0 && deduper.add(it.SourceInput.strID()) {
-					payloadSources = append(payloadSources, it.SourceInput)
-				}
-			}
-
-			na.vfs.commit(len(payloadSources))
-			payloadSources = payloadSources[:len(payloadSources):len(payloadSources)]
 			payloadBuilds = na.vfs.alloc(buildBound)[:0]
 
 			for _, it := range chunk {
@@ -666,7 +629,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			Platform: instance.Platform,
 			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
 			Env:      env,
-			Inputs:   na.inputList(payloadSources, payloadBuilds, tail),
+			Inputs:   na.inputList(payloadBuilds, tail),
 			Outputs:  na.vfsList(aux),
 			KV:       &rawAuxKV,
 			DepRefs:  deps,
@@ -759,10 +722,10 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			} else {
 				it.Key = entry.Key
 
-				if inner, ok := rootrelInputPath(entry.Key); ok {
+				if head, inner, tail, ok := rootrelSplit(entry.Key); ok {
 					r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
 
-					it.Cmd = internStr(renderResourceKvCmd(rootrelExpand(entry.Key, r.Input.relString())))
+					it.Cmd = internStr(renderResourceKvCmd(head + r.Input.relString() + tail))
 					it.setInput(r.Input)
 					it.AuxBuilds = na.vfsList(r.ProducerMainOut)
 				} else {
