@@ -29,11 +29,6 @@ type SwigSrc struct {
 func (e *EmitContext) emitSwigC() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-
-	if len(d.swigC) == 0 {
-		return
-	}
-
 	swigRef, swigBin := swigTool(ctx, instance)
 
 	for _, stmt := range d.swigC {
