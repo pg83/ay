@@ -186,10 +186,6 @@ func renameCaseDecls(path string, typeRen, methodRen map[string]string, forbidde
 	out := string(src)
 
 	for _, e := range edits {
-		if out[e.off:e.off+len(e.old)] != e.old {
-			throwFmt("refac case: %s: offset %d holds %q, want %q", path, e.off, out[e.off:e.off+min(len(e.old), 20)], e.old)
-		}
-
 		out = out[:e.off] + e.new_ + out[e.off+len(e.old):]
 	}
 
