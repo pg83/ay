@@ -1,4 +1,8 @@
+import json
+import os
+import tempfile
 import unittest
+from pathlib import Path
 
 import lib
 
@@ -8,14 +12,18 @@ TOOLS = [
     "contrib/python/mypy-protobuf/bin/protoc-gen-mypy",
     "contrib/tools/protoc",
     "contrib/tools/protoc/plugins/cpp_styleguide",
+    "contrib/tools/protoc/plugins/grpc_cpp",
+    "contrib/tools/protoc/plugins/grpc_python",
+    "tools/archiver",
     "tools/py3cc",
     "tools/py3cc/slow",
     "tools/rescompiler",
+    "tools/rescompressor",
 ]
 LIBRARIES = [
     "contrib/libs/protobuf",
     "contrib/libs/python",
-    "contrib/python/protobuf",
+    "library/cpp/resource",
     "contrib/tools/python3/Modules/_sqlite",
     "library/cpp/malloc/jemalloc",
     "library/python/import_tracing/constructor",
@@ -53,7 +61,22 @@ def fixture():
         "pyq/ya.make": f"PY3_LIBRARY()\n{NO_PLATFORM}PEERDIR(q)\nEND()\n",
         "py3q/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(pyq)\nEND()\n",
         "d/ya.make": "PROTO_DESCRIPTIONS(descs)\nPEERDIR(p)\nEND()\n",
+        "gr/ya.make": "PROTO_LIBRARY()\nSRCS(s.proto)\nGRPC()\nEND()\n",
+        "gr/s.proto": 'syntax = "proto3";\nservice S {}\n',
+        "pygr/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(gr)\nEND()\n",
+        "ps/ya.make": f"PY3_LIBRARY()\n{NO_PLATFORM}PY_SRCS(m.py x.proto)\nEND()\n",
+        "ps/m.py": "x = 1\n",
+        "ps/x.proto": 'syntax = "proto3";\nmessage X {}\n',
+        "pyps/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(ps)\nEND()\n",
+        "ap/ya.make": f"PY3_LIBRARY()\n{NO_PLATFORM}ALL_PY_SRCS()\nEND()\n",
+        "ap/m.py": "x = 1\n",
+        "ap/n.py": "y = 2\n",
+        "pyap/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(ap)\nEND()\n",
     }
+    for path in ("contrib/libs/grpc", "contrib/python/grpcio", "contrib/python/protobuf"):
+        name = path.split("/")[-1]
+        files[f"{path}/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS({name}.cpp)\nEND()\n"
+        files[f"{path}/{name}.cpp"] = f"int {name};\n"
     for path in TOOLS:
         lib.tool_program(files, path, path.split("/")[-1])
     for path in LIBRARIES:
@@ -61,6 +84,34 @@ def fixture():
     for path in PLAIN_FILES:
         files[path] = "\n"
     return files
+
+
+def make_with_env(files, target, extra_env):
+    with tempfile.TemporaryDirectory(prefix="ay-link-proto-") as directory:
+        root = Path(directory)
+        (root / ".arcadia.root").touch()
+        (root / "ya.conf").write_text(
+            '[flags]\nOPENSOURCE = "yes"\n\n[host_platform_flags]\nOPENSOURCE = "yes"\n'
+        )
+        for relative, content in files.items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in lib.TOOLCHAIN_ENV_VARS
+        }
+        env.update(extra_env)
+        result = lib.run(
+            "make", "-j0", "-G", "--sandboxing",
+            "--source-root", root,
+            "--target-platform", "default-linux-aarch64",
+            "--host-platform", "default-linux-x86_64",
+            target,
+            env=env,
+        )
+        return json.loads(result.stdout), result.stderr
 
 
 def link_args(graph, output):
@@ -145,6 +196,42 @@ class ProtoPeersTest(unittest.TestCase):
             ["--output", "$(B)/d/d.tar", "p/p.self.protodesc"],
         )
         self.assertIn(self_desc["uid"], merged["deps"])
+
+    def test_grpc_proto_adds_grpc_peers_for_cpp_and_python(self):
+        graph = lib.make(fixture(), "pygr")
+        cpp = lib.node_by_output(graph, "$(B)/gr/s.pb.h")
+        self.assertEqual(
+            cpp["outputs"],
+            ["$(B)/gr/s.pb.h", "$(B)/gr/s.pb.cc", "$(B)/gr/s.grpc.pb.cc", "$(B)/gr/s.grpc.pb.h"],
+        )
+        python = lib.node_by_output(graph, "$(B)/gr/s__intpy3___pb2_grpc.py")
+        self.assertEqual(python["kv"]["p"], "PB")
+        group = between(link_args(graph, "$(B)/pygr/pygr"), "-Wl,--start-group", "-Wl,--end-group")
+        self.assertLess(group.index("contrib/libs/grpc/libcontrib-libs-grpc.a"), group.index("gr/libgr.a"))
+        self.assertIn("contrib/python/grpcio/libcontrib-python-grpcio.a", group)
+        self.assertIn("contrib/python/protobuf/libcontrib-python-protobuf.a", group)
+
+    def test_python_sources_with_protos_and_all_py_srcs(self):
+        graph = lib.make(fixture(), "pyps")
+        self.assertEqual(
+            lib.node_by_output(graph, "$(B)/ps/x__intpy3___pb2.py")["kv"]["p"], "PB"
+        )
+        self.assertIn(
+            "contrib/python/protobuf/libcontrib-python-protobuf.a",
+            between(link_args(graph, "$(B)/pyps/pyps"), "-Wl,--start-group", "-Wl,--end-group"),
+        )
+        graph = lib.make(fixture(), "pyap")
+        for name in ("m", "n"):
+            with self.subTest(name=name):
+                node = lib.node_by_output(graph, f"$(B)/ap/{name}.py.yapyc3")
+                self.assertIn(f"$(S)/ap/{name}.py", node["inputs"])
+
+    def test_python_proto_pipeline_passes_arena_ownership_audit(self):
+        audited, stderr = make_with_env(fixture(), "py3", {"AY_DEBUG_OWNERSHIP": "1"})
+        self.assertIn("ownership: 0 violating (field, site) pairs\n", stderr)
+        self.assertEqual(audited, lib.make(fixture(), "py3"))
+        compile_node = lib.node_by_output(audited, "$(B)/p/a__intpy3___pb2.py.b45u.yapyc3")
+        self.assertEqual(compile_node["cmds"][0]["cmd_args"][1], "--slow-py3cc")
 
 
 if __name__ == "__main__":
