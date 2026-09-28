@@ -73,7 +73,7 @@ def validation_partition():
 partition = validation_partition()
 coverage_enabled = bool(build.flags.coverage)
 race_enabled = bool(build.flags.race)
-COVERAGE_MINIMUM = "39"
+COVERAGE_MINIMUM = "95"
 
 GO_SOURCES = build.glob("$(S)/*.go")
 
