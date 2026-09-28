@@ -143,6 +143,18 @@ class BisonTest(unittest.TestCase):
 
 
 class FlexTest(unittest.TestCase):
+    def test_unproduced_build_root_grammar_has_no_includes(self):
+        files = {
+            "lib/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(${ARCADIA_BUILD_ROOT}/lib/lex.l)\nEND()\n",
+        }
+        lib.tool_program(files, "contrib/tools/flex-old", "flex")
+        graph = lib.make(files, "lib", "-k")
+        self.assertEqual(
+            lib.node_by_output(graph, "$(B)/lib/lex.l.cpp")["inputs"],
+            ["$(B)/contrib/tools/flex-old/flex", "$(B)/lib/lex.l"],
+        )
+        self.assertEqual(lib.node_by_output(graph, "$(B)/lib/lex.l.cpp.o")["inputs"], ["$(B)/lib/lex.l.cpp"])
+
     def test_lex_sources_include_parser_and_outputs(self):
         scanner = (
             '// #include "commented.h"\n'

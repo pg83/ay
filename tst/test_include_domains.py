@@ -48,6 +48,20 @@ class AsmIncludeTest(unittest.TestCase):
         # C++ sources do not see ADDINCL(FOR asm ...).
         self.assertEqual({"$(S)/m/z.cpp"}, inputs_of(graph, "$(B)/m/z.cpp.o"))
 
+    def test_includes_addressed_by_root_prefix(self):
+        files = {
+            "m/ya.make": library("RUN_PROGRAM(tools/gen OUT gen.inc)", "SRCS(y.asm)"),
+            "m/y.asm": '%include "$(B)/m/gen.inc"\n%include "$(S)/m/src.inc"\n',
+            "m/src.inc": "",
+        }
+        lib.tool_program(files, "contrib/tools/yasm", "yasm")
+        lib.tool_program(files, "tools/gen", "gen")
+        graph = lib.make(files, "m", "-k")
+        self.assertEqual(
+            {"$(B)/contrib/tools/yasm/yasm", "$(S)/m/y.asm", "$(B)/m/gen.inc", "$(S)/m/src.inc"},
+            inputs_of(graph, "$(B)/m/y.o"),
+        )
+
 
 class CythonIncludeTest(unittest.TestCase):
     def test_cimport_probes_and_py2_include_overrides(self):

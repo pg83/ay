@@ -269,6 +269,20 @@ class CcVariantsTest(unittest.TestCase):
         archive = lib.node_by_output(graph, "$(B)/m/libm.a")
         self.assertEqual(archive["inputs"][:2], ["$(B)/m/x.cpp.o", "$(B)/m/__/other/gen.cpp.o"])
 
+    def test_generated_source_at_an_ancestor_path_of_the_module(self):
+        # In the build tree x/a.cpp is a generated file; in the source tree it
+        # is the directory of the module compiling it.
+        files = {
+            "x/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nRUN_PROGRAM(tools/gen OUT a.cpp)\nEND()\n",
+            "x/a.cpp/m/ya.make": (
+                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(x)\n"
+                "SRCS(${ARCADIA_BUILD_ROOT}/x/a.cpp)\nEND()\n"
+            ),
+        }
+        lib.tool_program(files, "tools/gen", "gen")
+        graph = lib.make(files, "x/a.cpp/m")
+        self.assertEqual(lib.node_by_output(graph, "$(B)/x/a.cpp/m/__.o")["inputs"], ["$(B)/x/a.cpp"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

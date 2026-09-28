@@ -189,11 +189,8 @@ func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
 	return nil
 }
 
+// addSourceInputs takes a non-empty list: its only caller checks it.
 func (r *CodegenRegistry) addSourceInputs(na *NodeArenas, path VFS, extra []VFS) {
-	if len(extra) == 0 {
-		return
-	}
-
 	info := r.mustInfo(path)
 
 	info.SourceInputs = na.dedupClosure(info.SourceInputs, [][]VFS{extra})
