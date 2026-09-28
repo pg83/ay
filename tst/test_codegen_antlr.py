@@ -156,6 +156,21 @@ class RunAntlrTest(unittest.TestCase):
             self.assertIn(path, use["inputs"])
         self.assertIn(java["uid"], use["deps"])
 
+    def test_run_without_cwd_and_empty_output_include(self):
+        graph = lib.make(antlr_files(
+            'RUN_ANTLR(Calc.g IN Calc.g OUT x.h OUTPUT_INCLUDES "" mod/extra.h)\n'
+            "SRCS(use.cpp)\n",
+            {"mod/Calc.g": "", "mod/use.cpp": '#include "x.h"\n'},
+        ), "mod")
+        java = lib.node_by_output(graph, "$(B)/mod/x.h")
+        self.assertNotIn("cwd", java["cmds"][0])
+        self.assertEqual(java["cmds"][0]["cmd_args"][1:], JAVA_HEAD + [ANTLR3_JAR, "$(S)/mod/Calc.g"])
+        use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
+        self.assertEqual(sorted(use["inputs"]), sorted([
+            "$(S)/mod/use.cpp", "$(B)/mod/x.h", "$(S)/mod/Calc.g", "$(S)/mod/extra.h",
+            ANTLR3_JAR, "$(S)/build/scripts/stdout2stderr.py",
+        ]))
+
     def test_compiled_output_outside_module_is_rejected(self):
         with self.assertRaisesRegex(
             AssertionError, 'antlr output "other/x.cpp" is outside module "mod"',

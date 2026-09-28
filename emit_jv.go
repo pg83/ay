@@ -96,12 +96,16 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 func (e *EmitContext) emitJVNodeReserved(cmdArgs []ANY, inputs InputChunks, outputs []VFS, cwd string, id NodeRef) {
 	na := e.ctx.na
 	env := envVarsVCS
+	cmd := Cmd{CmdArgs: na.chunkList(na.anyChunkAny(cmdArgs)), Env: env}
+
+	// RUN_ANTLR/RUN_ANTLR4 without CWD run in the default directory (upstream CWD="").
+	if cwd != "" {
+		cmd.Cwd = cwdVFS(cwd)
+	}
 
 	node := Node{
-		Platform: e.instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyChunkAny(cmdArgs)),
-			Env: env,
-			Cwd: cwdVFS(cwd)}),
+		Platform:  e.instance.Platform,
+		Cmds:      na.cmdList(cmd),
 		Env:       env,
 		Inputs:    inputs,
 		KV:        &jvKV,
