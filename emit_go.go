@@ -596,7 +596,7 @@ func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadi
 	return block[:k:k]
 }
 
-func (e *EmitContext) goToolchainSboms(withLinker bool) ([]NodeRef, []VFS) {
+func (e *EmitContext) goToolchainSboms() ([]NodeRef, []VFS) {
 	ctx, instance := e.ctx, e.instance
 
 	if !sbomActive(ctx, instance) {
@@ -611,10 +611,6 @@ func (e *EmitContext) goToolchainSboms(withLinker bool) ([]NodeRef, []VFS) {
 			refs = append(refs, *r)
 			paths = append(paths, *p)
 		}
-	}
-
-	if withLinker {
-		add(clangToolchainSbomComponent(ctx, instance.Platform))
 	}
 
 	add(pythonToolchainSbomComponent(ctx, instance.Platform))
@@ -867,7 +863,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	srcClosure := goPeerSrcClosure(ctx, resolved, ownInputs, srcClosureExtras)
 	ownSourceInputs := na.vfsList(ownSources...)
 	ownBuildInputs := na.vfsList(ownBuilds...)
-	sbomRefs, sbomPaths := e.goToolchainSboms(false)
+	sbomRefs, sbomPaths := e.goToolchainSboms()
 	var mergedSbomRefs []NodeRef
 	var merged int
 	var extraSources, extraBuilds []VFS
