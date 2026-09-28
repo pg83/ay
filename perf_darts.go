@@ -12,13 +12,6 @@ var perfDartsData string
 
 func perfDarts() int {
 	sections := strings.SplitN(strings.TrimRight(perfDartsData, "\n"), "\n\n", 2)
-
-	if len(sections) != 2 {
-		fmt.Println("perf darts: malformed perf_darts_data.txt (want roots, blank line, dirs)")
-
-		return 2
-	}
-
 	roots := strings.Split(sections[0], "\n")
 	dirs := strings.Split(sections[1], "\n")
 	keys := make([]string, len(roots))
