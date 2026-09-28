@@ -1960,11 +1960,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
 		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 
-		variant, ok := simdVariantFor(v.Name)
-
-		if !ok {
-			throwFmt("gen: unrecognised SIMD-permutation macro %q at line %d (simdVariants table out of sync)", v.Name, v.Line)
-		}
+		variant, _ := simdVariantFor(v.Name)
 
 		if len(v.Args) == 0 {
 			throwFmt("gen: %s() requires at least 1 argument (filename); got 0 at line %d", v.Name, v.Line)
@@ -2546,10 +2542,6 @@ func reorderCythonVariantBuckets(d *ModuleData, start int, regIdx []int) {
 
 	copy(d.cythonCpp[start:], stmts)
 
-	if len(regIdx) != n {
-		return
-	}
-
 	names := make([]STR, n)
 	explicit := make([]bool, n)
 
@@ -2596,8 +2588,6 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 	case tokCppProtoPlugin2:
 		requiredArgs = 4
 		outputSuffixes = 2
-	default:
-		throwFmt("gen: internal error: parseCPPProtoPlugin called for %q", v.Name)
 	}
 
 	if len(v.Args) < requiredArgs {

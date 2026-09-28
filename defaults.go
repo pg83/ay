@@ -94,21 +94,7 @@ func isRuntimeAncestor(path string) bool {
 }
 
 func suppressMallocAPIDefault(defaults []string, allocatorName ANY) []string {
-	if allocatorName != strFAKE.any() {
-		return defaults
-	}
-
-	out := make([]string, 0, len(defaults))
-
-	for _, p := range defaults {
-		if p == "library/cpp/malloc/api" {
-			continue
-		}
-
-		out = append(out, p)
-	}
-
-	return out
+	return defaults
 }
 
 func (e *EmitContext) defaultPeerdirsForModule() []string {
@@ -204,14 +190,8 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 }
 
 func useArcadiaCompilerRuntime(ctx *GenCtx, instance ModuleInstance) bool {
-	if instance.Platform != nil {
-		if v := instance.Platform.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]; v != 0 {
-			return v != strNo
-		}
-	}
-
-	if ctx == nil {
-		return false
+	if v := instance.Platform.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]; v != 0 {
+		return v != strNo
 	}
 
 	if v := ctx.target.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]; v != 0 {

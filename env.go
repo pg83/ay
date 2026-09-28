@@ -1,9 +1,5 @@
 package main
 
-import (
-	"strconv"
-)
-
 type EnvKind uint8
 
 type EnvStore struct {
@@ -89,10 +85,6 @@ func (e Environment) boolID(id ENV, name string) bool {
 	case envVFS:
 		return true
 	case envInt:
-		if name == "" {
-			name = id.string()
-		}
-
 		throwFmt("macros: identifier %q has int binding but is used in boolean position", name)
 	}
 
@@ -118,14 +110,6 @@ func (e Environment) string(id ENV) string {
 
 		return v.string()
 	}
-
-	name := id.string()
-
-	if isImplicitBuildVar(name) {
-		return ""
-	}
-
-	throwFmt("macros: unknown IF identifier %q", name)
 
 	return ""
 }
@@ -173,14 +157,7 @@ func (e Environment) setString(id ENV, v string) {
 func (e Environment) setInt(id ENV, n int) {
 	e.s.ensure(id)
 	e.s.kind[id] = envInt
-
-	if uint(n) < uint(len(intSTR)) {
-		e.s.val[id] = intSTR[n]
-
-		return
-	}
-
-	e.s.val[id] = internStr(strconv.Itoa(n))
+	e.s.val[id] = intSTR[n]
 }
 
 func (e Environment) setBool(id ENV, v bool) {
