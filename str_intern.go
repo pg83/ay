@@ -107,7 +107,7 @@ func internAppend(s string, lo uint64) STR {
 }
 
 func internStr(s string) STR {
-	h := xxh3.HashString128(s)
+	h := chaosInternHash(xxh3.HashString128(s))
 
 	if p := internTable.ids.get(h.Hi); p != nil {
 		if internLo(*p) == h.Lo {
@@ -208,7 +208,7 @@ func internedBuild(prefix string, parts []string) STR {
 
 func internBlock(block []byte, n int) STR {
 	buf := block[:n]
-	h := xxh3.Hash128(buf)
+	h := chaosInternHash(xxh3.Hash128(buf))
 
 	if p := internTable.ids.get(h.Hi); p != nil {
 		if internLo(*p) == h.Lo {
@@ -244,7 +244,7 @@ func internCommitBlock(block []byte, n int) string {
 }
 
 func internBytes(b []byte) STR {
-	h := xxh3.Hash128(b)
+	h := chaosInternHash(xxh3.Hash128(b))
 
 	if p := internTable.ids.get(h.Hi); p != nil {
 		if internLo(*p) == h.Lo {
@@ -271,7 +271,7 @@ func internBytes(b []byte) STR {
 }
 
 func internedBytes(b []byte) STR {
-	h := xxh3.Hash128(b)
+	h := chaosInternHash(xxh3.Hash128(b))
 
 	if p := internTable.ids.get(h.Hi); p != nil {
 		if internLo(*p) == h.Lo {
@@ -299,7 +299,7 @@ func (id STR) String() string {
 }
 
 func interned(s string) STR {
-	h := xxh3.HashString128(s)
+	h := chaosInternHash(xxh3.HashString128(s))
 
 	if p := internTable.ids.get(h.Hi); p != nil {
 		if internLo(*p) == h.Lo {
