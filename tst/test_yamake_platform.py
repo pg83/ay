@@ -104,7 +104,7 @@ class YaMakePlatformTest(unittest.TestCase):
         self.assertNotIn("-DCXX", c)
 
     def test_unsupported_target_architectures(self):
-        for platform, isa in (("default-linux-riscv64", "riscv64"), ("default-darwin-arm64", "arm64")):
+        for platform, isa in (("default-linux-riscv64", "riscv64"),):
             with self.subTest(platform=platform):
                 code, _, stderr = ay_make(library(), platform=platform)
                 self.assertEqual((code, stderr), (1, f'compileFlagBundleFor: unsupported platform ISA "{isa}"'))

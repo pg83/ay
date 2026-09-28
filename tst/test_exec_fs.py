@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -138,7 +139,13 @@ class SourcePathResolutionTest(unittest.TestCase):
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30, check=False,
         )
         self.assertEqual(result.returncode, 1)
-        self.assertIn(f"open source root {tree.src / 'absent'}: no such file or directory", result.stderr)
+        # Linux opens the root directory up front; elsewhere the first read
+        # of ya.conf is what finds it missing.
+        if sys.platform == "linux":
+            expected = f"open source root {tree.src / 'absent'}: no such file or directory"
+        else:
+            expected = f"open {tree.src / 'absent' / 'ya.conf'}: no such file or directory"
+        self.assertIn(expected, result.stderr)
 
 
 class DirectoryListingTest(unittest.TestCase):

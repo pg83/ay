@@ -162,7 +162,9 @@ class MakeUsageTest(unittest.TestCase):
         lonely.mkdir()
         result = tree.ay("make", "-j0", cwd=lonely)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("open ya.conf: no such file or directory", plain(result.stderr))
+        # Linux opens files relative to the root directory, other systems by
+        # full path, so the message names ya.conf with or without the root.
+        self.assertRegex(plain(result.stderr), r"open (\S*/)?ya\.conf: no such file or directory")
 
     def test_generation_without_dump(self):
         tree = Tree(self, SWITCHED)
