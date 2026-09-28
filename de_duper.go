@@ -1,32 +1,13 @@
 package main
 
-import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
-)
-
 var dedupers DeDuperPool
-
-var dedupDebug = os.Getenv("AY_DEBUG_DEDUP") != ""
 
 type DeDuperPool struct {
 	deduper DeDuper
 	live    bool
-	sites   []string
 }
 
 func (p *DeDuperPool) get() *DeDuper {
-	if dedupDebug {
-		p.sites = append(p.sites, dedupSite())
-
-		if len(p.sites) >= 2 {
-			dedupReport(p.sites)
-		}
-	}
-
 	assert(!p.live, "deduper already borrowed")
 
 	p.live = true
@@ -46,49 +27,7 @@ func (p *DeDuperPool) with(f func(*DeDuper)) {
 func (p *DeDuperPool) put(d *DeDuper) {
 	assert(p.live && d == &p.deduper, "deduper pool: invalid return")
 
-	if dedupDebug && len(p.sites) > 0 {
-		p.sites = p.sites[:len(p.sites)-1]
-	}
-
 	p.live = false
-}
-
-func dedupSite() string {
-	pc := make([]uintptr, 4)
-	n := runtime.Callers(4, pc)
-	frames := runtime.CallersFrames(pc[:n])
-
-	var parts []string
-
-	for i := 0; i < 3; i++ {
-		f, more := frames.Next()
-
-		parts = append(parts, fmt.Sprintf("%s@%s:%d", strings.TrimPrefix(f.Function, "main."), filepath.Base(f.File), f.Line))
-
-		if !more {
-			break
-		}
-	}
-
-	return strings.Join(parts, " <- ")
-}
-
-var dedupStacks = map[string]bool{}
-
-func dedupReport(sites []string) {
-	sig := strings.Join(sites, " || ")
-
-	if dedupStacks[sig] {
-		return
-	}
-
-	dedupStacks[sig] = true
-
-	fmt.Fprintf(os.Stderr, "=== %d live dedupers ===\n", len(sites))
-
-	for i, s := range sites {
-		fmt.Fprintf(os.Stderr, "  #%d  %s\n", i+1, s)
-	}
 }
 
 type IdKey interface {
@@ -103,7 +42,7 @@ type DeDuper struct {
 
 func (dd *DeDuper) reset() {
 	if dd.gen.freshLen(int(vfsBound())) {
-		dd.epoch = 1
+		dd.epoch = uint16(chaosEpochStart.number(1))
 
 		return
 	}

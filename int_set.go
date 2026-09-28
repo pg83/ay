@@ -17,6 +17,7 @@ type IntSet struct {
 }
 
 func newIntSet(hint int) *IntSet {
+	hint = int(chaosTableHint.number(uint64(hint)))
 	c := intSetMinCap
 
 	for c*intSetFillNum < hint*intSetFillDen {

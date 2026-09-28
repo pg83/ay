@@ -36,14 +36,7 @@ func (m *IntValueMap[V]) cell(k uint64) (*V, bool) {
 }
 
 func (m *IntValueMap[V]) put(k uint64, v V) {
-	cell, existed := m.idx.cell(k)
+	cell, _ := m.cell(k)
 
-	if existed {
-		*unsafeAt(m.vals.s, uint64(*cell)) = v
-
-		return
-	}
-
-	*cell = uint32(m.vals.len())
-	m.vals.pushBack(v)
+	*cell = v
 }

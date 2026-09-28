@@ -60,7 +60,7 @@ class PerfTest(unittest.TestCase):
         result = run_ay("dev", "perf", "darts")
         self.assertEqual(result.returncode, 0, result.stderr)
         lines = result.stdout.splitlines()
-        self.assertEqual(lines[0], "roots=327 queries=2000 darts-vs-old mismatches=0")
+        self.assertEqual(lines[0], "roots=327 queries=2000, the trie agrees with the ancestor walk")
         self.assertRegex(lines[1], r"^darts: [0-9.]+ ns/op \(.+ total\)$")
         self.assertRegex(lines[2], r"^old:   [0-9.]+ ns/op \(.+ total\)$")
         self.assertEqual(lines[3:], ["sink=120376000"])

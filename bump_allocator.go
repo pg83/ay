@@ -7,6 +7,10 @@ const (
 	bumpChunkBytes   = 1 << 21
 )
 
+// chaosBumpChunkBytes stands in for the chunk size cap, which production
+// inputs reach after a few megabytes of allocations in one arena.
+var chaosBumpChunkBytes = newChaosNumber("bump-chunk-bytes")
+
 type BumpAllocator[T any] struct {
 	chunk  []T
 	next   int
@@ -32,7 +36,7 @@ func (a *BumpAllocator[T]) alloc(n int) []T {
 	if len(a.chunk) < n {
 		var zero T
 
-		limit := bumpChunkBytes / int(unsafe.Sizeof(zero))
+		limit := int(chaosBumpChunkBytes.number(bumpChunkBytes)) / int(unsafe.Sizeof(zero))
 		size := a.next
 
 		if size > limit {

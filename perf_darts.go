@@ -45,18 +45,14 @@ func perfDarts() int {
 		}
 	}
 
-	mismatch := 0
-
 	for _, d := range dirs {
 		di, dok := darts.longestMatch(d, "/")
 		oi, ook := oldLookup(d)
 
-		if dok != ook || (dok && di != oi) {
-			mismatch++
-		}
+		assert(dok == ook && (!dok || di == oi), "perf darts: the trie disagrees with the ancestor walk")
 	}
 
-	fmt.Printf("roots=%d queries=%d darts-vs-old mismatches=%d\n", len(roots), len(dirs), mismatch)
+	fmt.Printf("roots=%d queries=%d, the trie agrees with the ancestor walk\n", len(roots), len(dirs))
 
 	const iters = 2000
 

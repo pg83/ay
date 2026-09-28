@@ -203,6 +203,18 @@ class ResourceFilesTest(unittest.TestCase):
             ],
         )])
 
+    def test_directory_with_more_files_than_interned_strings(self):
+        # The glob interns every match while the deduper is borrowed, so the
+        # deduper grows past the size it was reset to.
+        count = 40000
+        files = base_files("ALL_RESOURCE_FILES_FROM_DIRS(big)\n")
+        files.update({f"lib/big/f{i:05}": "" for i in range(count)})
+        inputs = [inputs for inputs, _, _ in payloads(lib.make(files, "lib", timeout=120))]
+        self.assertEqual(
+            sorted(path for chunk in inputs for path in chunk),
+            [f"$(S)/lib/big/f{i:05}" for i in range(count)],
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

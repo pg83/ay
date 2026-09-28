@@ -8,6 +8,10 @@ const (
 	intMapFillDen = 8
 )
 
+// chaosTableHint stands in for the capacity hint of every IntMap and IntSet,
+// so tests reach growth without inputs of production size.
+var chaosTableHint = newChaosNumber("table-hint")
+
 type IntMap[V any] struct {
 	keys     []uint64
 	values   []V
@@ -17,6 +21,7 @@ type IntMap[V any] struct {
 }
 
 func newIntMap[V any](hint int) *IntMap[V] {
+	hint = int(chaosTableHint.number(uint64(hint)))
 	c := intMapMinCap
 
 	for c*intMapFillNum < hint*intMapFillDen {

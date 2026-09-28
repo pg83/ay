@@ -39,7 +39,7 @@ def run(*args, timeout=10, env=None):
     return result
 
 
-def make_process(files, target, *args, opensource=True, env=None):
+def make_process(files, target, *args, opensource=True, env=None, timeout=10):
     """Generates the graph of target in a fresh tree; returns the finished process."""
     with tempfile.TemporaryDirectory(prefix="ay-make-test-") as directory:
         root = Path(directory)
@@ -68,11 +68,12 @@ def make_process(files, target, *args, opensource=True, env=None):
             *args,
             target,
             env=env,
+            timeout=timeout,
         )
 
 
-def make(files, target, *args, opensource=True, env=None):
-    result = make_process(files, target, *args, opensource=opensource, env=env)
+def make(files, target, *args, opensource=True, env=None, timeout=10):
+    result = make_process(files, target, *args, opensource=opensource, env=env, timeout=timeout)
     if result.returncode != 0:
         raise AssertionError(
             f"command failed with exit code {result.returncode}: {result.args!r}\n"

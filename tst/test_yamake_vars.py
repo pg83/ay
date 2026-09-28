@@ -148,14 +148,16 @@ class YaMakeVariablesTest(unittest.TestCase):
             "INCLUDE(once.inc)\nINCLUDE(once.inc)\n"
             "INCLUDE(yes.inc)\nINCLUDE(yes.inc)\n"
             "INCLUDE(twice.inc)\nINCLUDE(twice.inc)\n"
-            "INCLUDE(no.inc)\nINCLUDE(no.inc)",
+            "INCLUDE(no.inc)\nINCLUDE(no.inc)\n"
+            "INCLUDE(repeated.inc)\nINCLUDE(repeated.inc)",
             **{
                 "a/once.inc": "INCLUDE_ONCE()\nCFLAGS(-DONCE)\n",
+                "a/repeated.inc": "INCLUDE_ONCE()\nINCLUDE_ONCE()\nCFLAGS(-DREPEATED)\n",
                 "a/yes.inc": "INCLUDE_ONCE(yes)\nCFLAGS(-DYES)\n",
                 "a/twice.inc": "CFLAGS(-DTWICE)\n",
                 "a/no.inc": "INCLUDE_ONCE(no)\nCFLAGS(-DNO)\n",
             },
-        )), ["-DONCE", "-DYES", "-DTWICE", "-DTWICE", "-DNO", "-DNO"])
+        )), ["-DONCE", "-DYES", "-DTWICE", "-DTWICE", "-DNO", "-DNO", "-DREPEATED"])
 
     def test_include_errors_carry_the_included_file_position(self):
         self.assert_parse_error(
