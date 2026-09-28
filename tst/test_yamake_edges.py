@@ -77,10 +77,11 @@ class YaMakeEdgesTest(unittest.TestCase):
             + reference_chain("P", "plain.h")
         )
         graph, stderr = self.make(files, "a", "-k", *args)
-        self.assertEqual(
-            lib.node_by_output(graph, "$(B)/a/d.cpp")["inputs"],
-            ["$(S)/a/s.cpp", "$(S)/plain.h", "$(S)/inc/x.h", "$(S)/a/b.h"],
-        )
+        # The source comes first; the order of its include closure follows
+        # closure buckets, which depend on path ids.
+        inputs = lib.node_by_output(graph, "$(B)/a/d.cpp")["inputs"]
+        self.assertEqual(inputs[0], "$(S)/a/s.cpp")
+        self.assertCountEqual(inputs[1:], ["$(S)/plain.h", "$(S)/inc/x.h", "$(S)/a/b.h"])
         self.assertEqual(
             stderr,
             'missing-include: $(B)/a/d.cpp: unresolved include "gen/y.h" — not found in source, build, search path, or sysincl',

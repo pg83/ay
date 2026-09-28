@@ -662,6 +662,7 @@ class FetchSandboxCommandTest(FetchCase):
         self.assertIn("fetch sandbox: 2 renames exceed 1 outputs", result.stderr)
 
 
+@unittest.skipUnless(TLS_MOCKABLE, NO_TLS_MOCK)
 class ExecutorSandboxTokenTest(FetchCase):
     """The executor resolves the Sandbox token once and hands it to FETCH/SB nodes."""
 
