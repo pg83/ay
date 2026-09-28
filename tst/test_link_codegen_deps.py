@@ -39,6 +39,17 @@ def fixture():
     }
     for i in range(HEADERS):
         files[f"hdr/h{i}.in"] = f"int h{i};\n"
+    files["srcdst/ya.make"] = (
+        f"LIBRARY()\n{NO_PLATFORM}COPY_FILE(a.txt ${{ARCADIA_ROOT}}/srcdst/b.txt)\n"
+        "SRCS(x.cpp)\nEND()\n"
+    )
+    files["srcdst/a.txt"] = "a\n"
+    files["srcdst/x.cpp"] = "int x;\n"
+    files["unproduced/ya.make"] = (
+        f"LIBRARY()\n{NO_PLATFORM}"
+        "SRCS(${ARCADIA_BUILD_ROOT}/unproduced/nogen.cpp x.cpp)\nEND()\n"
+    )
+    files["unproduced/x.cpp"] = "int x;\n"
     for i in range(COPIES):
         files[f"m/o{i}.bin"] = f"{i}\n"
     return files
@@ -123,6 +134,20 @@ class CodegenDepsTest(unittest.TestCase):
         for header in ["$(B)/hdr/a.h", "$(B)/hdr/b.h"] + [f"$(B)/hdr/h{i}.h" for i in range(HEADERS)]:
             with self.subTest(header=header):
                 self.assertIn(header, compile_node["inputs"])
+
+    def test_copy_into_source_root_is_rejected(self):
+        result = make_raw(fixture(), "srcdst")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            'CodegenRegistry: register of a source path "$(S)/srcdst/b.txt"',
+            result.stderr,
+        )
+
+    def test_unproduced_build_source_compiles_without_producer_dep(self):
+        graph = lib.make(fixture(), "unproduced")
+        node = lib.node_by_output(graph, "$(B)/unproduced/nogen.cpp.o")
+        self.assertEqual(node["inputs"], ["$(B)/unproduced/nogen.cpp"])
+        self.assertEqual(node["deps"], [])
 
 
 if __name__ == "__main__":
