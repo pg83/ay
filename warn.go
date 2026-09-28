@@ -27,29 +27,20 @@ type Warn struct {
 
 type WarnKind int
 
-func (k WarnKind) string() string {
-	switch k {
-	case WarnSysIncl:
-		return "sysincl"
-	case WarnMissingInclude:
-		return "missing-include"
-	case WarnUnsupportedSource:
-		return "unsupported-source"
-	case WarnMissingAddincl:
-		return "missing-addincl"
-	case WarnBucketHash:
-		return "bucket-hash"
-	case WarnUnknownMacro:
-		return "unknown-macro"
-	case WarnBadMacroArgs:
-		return "bad-macro-args"
-	case WarnMissingProducer:
-		return "missing-producer"
-	case WarnModuleFailed:
-		return "module-failed"
-	}
+var warnKindStr = [...]string{
+	WarnSysIncl:           "sysincl",
+	WarnMissingInclude:    "missing-include",
+	WarnUnsupportedSource: "unsupported-source",
+	WarnMissingAddincl:    "missing-addincl",
+	WarnBucketHash:        "bucket-hash",
+	WarnUnknownMacro:      "unknown-macro",
+	WarnBadMacroArgs:      "bad-macro-args",
+	WarnMissingProducer:   "missing-producer",
+	WarnModuleFailed:      "module-failed",
+}
 
-	return "warn"
+func (k WarnKind) string() string {
+	return warnKindStr[k]
 }
 
 func (k WarnKind) String() string {

@@ -238,6 +238,20 @@ class PyProtoTest(unittest.TestCase):
         aux = lib.node_by_output(graph, packs[0]["outputs"][0] + ".py3.o")
         self.assertEqual(aux["kv"]["p"], "CC")
 
+    def test_library_peer_of_a_library_compiles_no_protos(self):
+        # A PY3_LIBRARY links nothing, so its PROTO_LIBRARY peer only needs
+        # its producers, and it has none.
+        files = python_base()
+        files.update({
+            "proto/ya.make": "PROTO_LIBRARY()\nPY_NAMESPACE(.)\nSRCS(a.proto)\nEXCLUDE_TAGS(CPP_PROTO)\nEND()\n",
+            "proto/a.proto": 'syntax = "proto3";\n',
+            "pylib/ya.make": "PY3_LIBRARY()\nPEERDIR(proto)\nPY_SRCS(x.py)\nEND()\n",
+            "pylib/x.py": "",
+        })
+        graph = lib.make(files, "pylib")
+        self.assertEqual([node["outputs"] for node in graph["graph"] if "/proto/" in node["outputs"][0]], [])
+        self.assertIn("$(B)/pylib/x.py.yapyc3", [node["outputs"][0] for node in graph["graph"]])
+
     def test_source_proto_importing_a_generated_proto(self):
         files = python_base()
         files.update({

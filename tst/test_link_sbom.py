@@ -165,6 +165,63 @@ class SbomTest(unittest.TestCase):
         link = " ".join(command_with(lib.node_by_output(graph, "$(B)/prog/prog"), "link_exe.py"))
         self.assertIn("contrib/libs/cxxsupp/libcontrib-libs-cxxsupp.a lib/liblib.a", link)
 
+    def test_proto_library_without_the_cpp_variant_is_no_component(self):
+        files = fixture()
+        files.update({
+            "pl/ya.make": "PROTO_LIBRARY()\nLICENSE(MIT)\nSRCS(p.proto)\nEXCLUDE_TAGS(CPP_PROTO)\nEND()\n",
+            "pl/p.proto": 'syntax = "proto3";\n',
+            "build/scripts/cpp_proto_wrapper.py": "",
+            "contrib/libs/protobuf/ya.make": library(
+                "LICENSE(BSD)\nVERSION(3)\nADDINCL(GLOBAL contrib/libs/protobuf/src)\nSRCS(pb.cpp)\n"
+            ),
+            "contrib/libs/protobuf/pb.cpp": "int pb;\n",
+        })
+        lib.tool_program(files, "contrib/tools/protoc", "protoc")
+        lib.tool_program(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+        graph = lib.make(files, "pl", *X86_64, "-r", "-k")
+        self.assertEqual(
+            [(node["kv"]["p"], node["outputs"][0]) for node in graph["graph"]
+             if node["outputs"][0].startswith("$(B)/pl/")],
+            [("PB", "$(B)/pl/p.pb.h"), ("CC", "$(B)/pl/p.pb.cc.o"), ("AR", "$(B)/pl/libpl.a")],
+        )
+
+    def test_release_program_over_a_proto_library(self):
+        # A PROTO_LIBRARY keeps its peers' components in their own order.
+        files = fixture()
+        files.update({
+            "pl/ya.make": (
+                "PROTO_LIBRARY()\nLICENSE(MIT)\nSRCS(p.proto)\n"
+                "EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)\nEND()\n"
+            ),
+            "pl/p.proto": 'syntax = "proto3";\n',
+            "app/ya.make": "PROGRAM()\nLICENSE(MIT)\nSRCS(m.cpp)\nPEERDIR(pl)\nEND()\n",
+            "app/m.cpp": "int main(){return 0;}\n",
+            "build/scripts/cpp_proto_wrapper.py": "",
+            "contrib/libs/protobuf/ya.make": library(
+                "LICENSE(BSD)\nVERSION(3)\nADDINCL(GLOBAL contrib/libs/protobuf/src)\nSRCS(pb.cpp)\n"
+            ),
+            "contrib/libs/protobuf/pb.cpp": "int pb;\n",
+        })
+        for header in (
+            "generated_message_bases.h", "map_entry.h", "map_entry_lite.h",
+            "map_field.h", "map_field_inl.h", "map_field_lite.h", "reflection_ops.h",
+        ):
+            files[f"contrib/libs/protobuf/src/google/protobuf/{header}"] = ""
+        lib.tool_program(files, "contrib/tools/protoc", "protoc")
+        lib.tool_program(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
+        graph = lib.make(files, "app", *X86_64, "-r")
+        node = lib.node_by_output(graph, "$(B)/app/app")
+        self.assertEqual(command_with(node, "link_sbom.py")[10:], [
+            component("build/platform/python/ymake_python3/toolchain.component.sbom"),
+            component("build/internal/platform/clang_toolchain_info/toolchain.component.sbom"),
+            component("contrib/libs/cxxsupp/libcxx/libs-cxxsupp-libcxx.CPP.component.sbom"),
+            component("contrib/libs/cxxsupp/contrib-libs-cxxsupp.CPP.component.sbom"),
+            component("build/platform/lld/toolchain.component.sbom"),
+            component("contrib/libs/protobuf/contrib-libs-protobuf.CPP.component.sbom"),
+            component("pl/pl.CPP.component.sbom"),
+            component("app/app.CPP.component.sbom"),
+        ])
+
     def test_release_dll_tool_embeds_components(self):
         graph = lib.make(fixture(), "dlltool", *X86_64, "-r")
         node = lib.node_by_output(graph, "$(B)/dlltool/libt.so")

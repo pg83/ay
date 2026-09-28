@@ -25,6 +25,9 @@ class ChaosHashesTest(unittest.TestCase):
             with self.subTest(words=words):
                 self.assert_same_graph(words)
 
+    def test_evicting_source_resolution_cache_keeps_the_graph(self):
+        self.assert_same_graph("hash-source-under-slot=0")
+
     def test_zero_verify_halves_keep_the_graph(self):
         for words in ("xxh-intern-lo=0", "xxh-slice-lo=0", "hash-bucket-h2=0", "hash-list-h2=0"):
             with self.subTest(words=words):

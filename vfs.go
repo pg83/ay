@@ -107,14 +107,9 @@ func (v VFS) string() string {
 	return v.prefix() + rel
 }
 
+// sharedString names node outputs, which are files below the build root.
 func (v VFS) sharedString() string {
-	rel := v.sharedRel()
-
-	if rel == "" {
-		return v.prefix()[:vfsPrefixLen-1]
-	}
-
-	return v.prefix() + rel
+	return v.prefix() + v.sharedRel()
 }
 
 func vfsHasPrefix(s string) bool {
