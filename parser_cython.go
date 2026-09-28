@@ -109,10 +109,6 @@ func isCythonModuleByte(b byte) bool {
 }
 
 func addCythonPxdCandidates(add func(IncludeDirective), path string) {
-	if path == "" {
-		return
-	}
-
 	if first, _ := firstComponent(path); first == "cython" {
 		return
 	}
@@ -122,11 +118,7 @@ func addCythonPxdCandidates(add func(IncludeDirective), path string) {
 }
 
 func addCythonCimportFrom(add func(IncludeDirective), module, names string) {
-	searchPath, ok := cythonFromSearchPath(module)
-
-	if !ok {
-		return
-	}
+	searchPath := cythonFromSearchPath(module)
 
 	if first, _ := firstComponent(searchPath); first == "cython" {
 		return
@@ -155,7 +147,7 @@ func addCythonCimportFrom(add func(IncludeDirective), module, names string) {
 	})
 }
 
-func cythonFromSearchPath(module string) (string, bool) {
+func cythonFromSearchPath(module string) string {
 	dots := 0
 
 	for dots < len(module) && module[dots] == '.' {
@@ -165,10 +157,10 @@ func cythonFromSearchPath(module string) (string, bool) {
 	rest := strings.ReplaceAll(module[dots:], ".", "/")
 
 	if dots == 0 {
-		return rest, true
+		return rest
 	}
 
-	return strings.Repeat("../", dots-1) + rest, true
+	return strings.Repeat("../", dots-1) + rest
 }
 
 func eachCythonCimportName(names string, fn func(string)) {
