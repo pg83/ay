@@ -142,6 +142,23 @@ class LlvmBcTest(unittest.TestCase):
             for node in graph["graph"] for output in node["outputs"]
         ))
 
+    def test_platform_cxxflags_and_unresolved_source_name(self):
+        files = llvm_bc_files("LLVM_BC(a.cpp missing.cpp NAME foo)\n", {
+            "mod/a.cpp": "",
+            "build/internal/ya.conf": '[flags]\nCXXFLAGS = "-DFROM_INTERNAL_CONF"\n',
+        })
+        graph = make(files)
+        compile_a = lib.node_by_output(graph, "$(B)/mod/a.cpp.bc")
+        args = compile_a["cmds"][0]["cmd_args"]
+        self.assertEqual(args.count("-DFROM_INTERNAL_CONF"), 1)
+        self.assertLess(args.index("-DFROM_INTERNAL_CONF"), args.index("-emit-llvm"))
+        missing = lib.node_by_output(graph, "$(B)/missing.cpp.bc")
+        self.assertEqual(missing["inputs"], [
+            "$(S)/build/scripts/clang_wrapper.py", "$(S)/mod/missing.cpp",
+        ])
+        merge = lib.node_by_output(graph, "$(B)/mod/foo_merged.bc")
+        self.assertEqual(merge["inputs"], ["$(B)/mod/a.cpp.bc", "$(B)/missing.cpp.bc"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

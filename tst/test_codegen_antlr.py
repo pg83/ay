@@ -67,6 +67,15 @@ class Antlr4CppTest(unittest.TestCase):
             self.assertIn("-Wno-unused-variable", compile_node["cmds"][0]["cmd_args"])
             self.assertIn(f"$(B)/mod/{base}.h", compile_node["inputs"])
 
+    def test_combined_grammar_defaults_to_no_listener(self):
+        graph = lib.make(antlr_files(
+            "RUN_ANTLR4_CPP(Calc.g4)\n", {"mod/Calc.g4": "grammar Calc;\n"},
+        ), "mod")
+        java = lib.node_by_output(graph, "$(B)/mod/CalcLexer.cpp")
+        self.assertEqual(java["cmds"][0]["cmd_args"][-5:], [
+            "$(S)/mod/Calc.g4", "-Dlanguage=Cpp", "-o", "$(B)/mod", "-no-listener",
+        ])
+
     def test_split_grammar_defaults_to_no_listener(self):
         graph = lib.make(antlr_files(
             "RUN_ANTLR4_CPP_SPLIT(CalcLexer.g4 CalcParser.g4 NO_LISTENER "
