@@ -186,8 +186,10 @@ class GoPackageGraphTest(unittest.TestCase):
                 graph = lib.make(files, path)
                 symabis = lib.node_by_output(graph, f"$(B)/{path}/gen.symabis")
                 self.assertEqual(symabis["kv"]["p"], "go")
-                self.assertEqual(symabis["inputs"], [
-                    f"$(S)/{path}/{name}_amd64.s",
+                # The source comes first; the order of its include closure
+                # follows closure buckets, which depend on path ids.
+                self.assertEqual(symabis["inputs"][0], f"$(S)/{path}/{name}_amd64.s")
+                self.assertCountEqual(symabis["inputs"][1:], [
                     "$(S)/build/scripts/go_fake_include/go_asm.h",
                     f"$(S)/{STD}/runtime/textflag.h",
                 ])
@@ -210,7 +212,7 @@ class GoPackageGraphTest(unittest.TestCase):
                     f"$(S)/{path}/{name}_amd64.s",
                 ])
                 self.assertEqual(package_node["deps"][0], symabis["uid"])
-                self.assertEqual(package_node["inputs"][-2:], [
+                self.assertCountEqual(package_node["inputs"][-2:], [
                     "$(S)/build/scripts/go_fake_include/go_asm.h",
                     f"$(S)/{STD}/runtime/textflag.h",
                 ])
