@@ -120,7 +120,7 @@ func cmdMaxRSS(g GlobalFlags, args []string) int {
 }
 
 func subtreeRSSKB(root int) uint64 {
-	entries, err := os.ReadDir("/proc")
+	entries, err := chaosReadDir("/proc")
 
 	if err != nil {
 		return 0
@@ -168,30 +168,19 @@ func readProcStat(pid int) (ppid int, rssKB uint64, ok bool) {
 		return 0, 0, false
 	}
 
+	// The kernel writes "pid (comm) state ppid ...": comm may hold any byte, so
+	// the fields start after the last ')'. The format itself is fixed.
 	s := string(data)
 	rp := strings.LastIndexByte(s, ')')
 
-	if rp < 0 || rp+2 >= len(s) {
-		return 0, 0, false
-	}
+	assert(rp >= 0 && rp+2 < len(s), "maxrss: /proc stat without a command name")
 
 	fields := strings.Fields(s[rp+2:])
 
-	if len(fields) < 22 {
-		return 0, 0, false
-	}
+	assert(len(fields) >= 22, "maxrss: /proc stat with too few fields")
 
-	ppid, err = strconv.Atoi(fields[1])
-
-	if err != nil {
-		return 0, 0, false
-	}
-
-	pages, err := strconv.ParseUint(fields[21], 10, 64)
-
-	if err != nil {
-		return 0, 0, false
-	}
+	ppid = throw2(strconv.Atoi(fields[1]))
+	pages := throw2(strconv.ParseUint(fields[21], 10, 64))
 
 	return ppid, pages * uint64(os.Getpagesize()) / 1024, true
 }

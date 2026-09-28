@@ -145,7 +145,7 @@ func mergeChunks(chunks []string, out io.Writer) {
 	for _, path := range chunks {
 		f := throw2(os.Open(path))
 		r := bufio.NewReaderSize(f, 1<<20)
-		line, err := r.ReadString('\n')
+		line, err := chaosReadString(r)
 
 		if err != nil && err != io.EOF {
 			throw(err)
@@ -159,7 +159,7 @@ func mergeChunks(chunks []string, out io.Writer) {
 
 		throw2(bw.WriteString(it.line))
 
-		next, err := it.reader.ReadString('\n')
+		next, err := chaosReadString(it.reader)
 
 		if err != nil && err != io.EOF {
 			throw(err)

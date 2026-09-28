@@ -115,11 +115,7 @@ func ownershipCheckNode(n *Node) {
 	ownershipSite = ownershipCallSite()
 
 	outSample := func() string {
-		if len(n.Outputs) > 0 {
-			return n.Outputs[0].string()
-		}
-
-		return "?"
+		return n.Outputs[0].string()
 	}
 
 	ownershipCheckSlice("Cmds", n.Cmds, outSample)

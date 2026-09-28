@@ -192,6 +192,27 @@ class DevtoolsCliTest(unittest.TestCase):
         # arm64 on macOS, which are also what Python reports for the host.
         self.assertEqual(compile_node["platform"], f"default-{sys.platform}-{platform.machine()}")
 
+    def test_make_names_the_host_after_its_os_and_isa(self):
+        root = self.source_root('[flags]\nOPENSOURCE = "yes"\n')
+        for words, expected in (
+            ("host-os=linux host-arch=amd64", "default-linux-x86_64"),
+            ("host-os=linux host-arch=arm64", "default-linux-aarch64"),
+            ("host-os=darwin host-arch=arm64", "default-darwin-arm64"),
+            ("host-os=ios host-arch=arm64", "default-ios-arm64"),
+        ):
+            with self.subTest(words=words):
+                result = self.make(root, env=toolchain_free_env(AY_CHAOS=words))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                graph = json.loads(result.stdout)
+                self.assertEqual(lib.node_by_output(graph, "$(B)/lib/a.c.o")["platform"], expected)
+
+    def test_make_on_an_unsupported_host_isa_fails(self):
+        root = self.source_root('[flags]\nOPENSOURCE = "yes"\n')
+        result = self.make(root, env=toolchain_free_env(AY_CHAOS="host-os=linux host-arch=riscv64"))
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr, fatal('compileFlagBundleFor: unsupported platform ISA "riscv64"'))
+
     def test_ya_conf_scalar_types_reach_flags(self):
         root = self.source_root(
             "host_platform_flags = 1\n"

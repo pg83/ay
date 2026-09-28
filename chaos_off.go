@@ -2,7 +2,12 @@
 
 package main
 
-import "github.com/zeebo/xxh3"
+import (
+	"bufio"
+	"os"
+
+	"github.com/zeebo/xxh3"
+)
 
 // The fault seam. A call site hands a chaos function the value it has just
 // got and carries on with whatever comes back. The production build hands
@@ -43,4 +48,28 @@ func chaosBucketHash(h1, h2 uint64) (uint64, uint64) {
 
 func chaosBucketListHash(h1, h2 uint64) (uint64, uint64) {
 	return h1, h2
+}
+
+func chaosLink(src, dst string) error {
+	return os.Link(src, dst)
+}
+
+func chaosReadDir(dir string) ([]os.DirEntry, error) {
+	return os.ReadDir(dir)
+}
+
+func chaosReadString(r *bufio.Reader) (string, error) {
+	return r.ReadString('\n')
+}
+
+func chaosAVX512(has bool) bool {
+	return has
+}
+
+func chaosHostOS(goos string) string {
+	return goos
+}
+
+func chaosHostArch(goarch string) string {
+	return goarch
 }

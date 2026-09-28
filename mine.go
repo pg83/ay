@@ -70,21 +70,23 @@ func yaConfScalar(v any) (string, bool) {
 }
 
 func hostOS() OS {
-	return OS(runtime.GOOS)
+	return OS(chaosHostOS(runtime.GOOS))
 }
 
 func hostISA() ISA {
-	switch runtime.GOARCH {
+	goarch := chaosHostArch(runtime.GOARCH)
+
+	switch goarch {
 	case "amd64":
 		return ISAX8664
 	case "arm64":
-		if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
+		if goos := chaosHostOS(runtime.GOOS); goos == "darwin" || goos == "ios" {
 			return ISAArm64
 		}
 
 		return ISAAArch64
 	default:
-		return ISA(runtime.GOARCH)
+		return ISA(goarch)
 	}
 }
 

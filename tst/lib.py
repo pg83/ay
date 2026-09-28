@@ -114,3 +114,56 @@ def tool_program(files, path, name):
         "END()\n"
     )
     files[f"{path}/main.cpp"] = "int main(){return 0;}\n"
+
+
+BARE_MODULE = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+
+
+def layered_project():
+    """A program over three libraries with header chains, generated headers and a tool."""
+    files = {}
+    for name, peers in (("a", ""), ("b", "a"), ("c", "a b")):
+        headers = [f"{name}/h{i}.h" for i in range(6)]
+        for i, header in enumerate(headers):
+            nested = f'#include "{headers[i + 1]}"\n' if i + 1 < len(headers) else ""
+            files[header] = f"#pragma once\n{nested}"
+        sources = []
+        for i in range(4):
+            source = f"s{i}.cpp"
+            sources.append(source)
+            includes = "".join(f'#include "{p}/h0.h"\n' for p in peers.split())
+            files[f"{name}/{source}"] = f'{includes}#include "{headers[i]}"\nint {name}{i}(){{return 0;}}\n'
+        peerdir = f"PEERDIR({peers})\n" if peers else ""
+        files[f"{name}/ya.make"] = (
+            f"LIBRARY()\n{BARE_MODULE}{peerdir}"
+            f"RUN_PROGRAM(tools/gen OUT {name}_gen.h)\n"
+            f"SRCS({' '.join(sources)})\nEND()\n"
+        )
+        files[f"{name}/s0.cpp"] = f'#include "{name}_gen.h"\n' + files[f"{name}/s0.cpp"]
+    files["app/ya.make"] = (
+        f"PROGRAM()\n{BARE_MODULE}PEERDIR(a b c)\n"
+        "RUN_PROGRAM(tools/gen OUT gen.h)\n"
+        "SRCS(main.cpp)\nEND()\n"
+    )
+    files["app/main.cpp"] = '#include "gen.h"\n#include "c/h0.h"\nint main(){return 0;}\n'
+    tool_program(files, "tools/gen", "gen")
+    return files
+
+
+def wide_project(count):
+    """Libraries in a peer chain, each exporting a global include directory."""
+    files = {}
+    for i in range(count):
+        peers = " ".join(f"l{j}" for j in range(max(0, i - 3), i))
+        peerdir = f"PEERDIR({peers})\n" if peers else ""
+        files[f"l{i}/ya.make"] = (
+            f"LIBRARY()\n{BARE_MODULE}{peerdir}ADDINCL(GLOBAL l{i}/inc)\nSRCS(x.cpp)\nEND()\n"
+        )
+        files[f"l{i}/x.cpp"] = "int x(){return 0;}\n"
+        files[f"l{i}/inc/.keep"] = ""
+    files["app/ya.make"] = (
+        f"PROGRAM()\n{BARE_MODULE}PEERDIR({' '.join(f'l{i}' for i in range(count))})\n"
+        "SRCS(main.cpp)\nEND()\n"
+    )
+    files["app/main.cpp"] = "int main(){return 0;}\n"
+    return files

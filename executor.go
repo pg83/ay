@@ -283,11 +283,7 @@ func (ex *Executor) failedRoots(roots []NodeRef) []NodeRef {
 }
 
 func nodeOutName(n *Node) string {
-	if len(n.Outputs) > 0 {
-		return n.Outputs[0].sharedString()
-	}
-
-	return fmt.Sprintf("ref=%d", n.Ref)
+	return n.Outputs[0].sharedString()
 }
 
 func (ex *Executor) reportFailure(err *Exception) {
@@ -645,7 +641,7 @@ func (ex *Executor) storeFileToCAS(src string) string {
 
 	throw(os.MkdirAll(filepath.Dir(dst), 0o755))
 
-	if err := os.Link(src, dst); err != nil && !os.IsExist(err) {
+	if err := chaosLink(src, dst); err != nil && !os.IsExist(err) {
 		throw(err)
 	}
 
@@ -829,7 +825,7 @@ func (ex *Executor) printCriticalPath(durOf map[NodeRef]time.Duration) {
 }
 
 func (ex *Executor) removeContents(dir string) {
-	entries, err := os.ReadDir(dir)
+	entries, err := chaosReadDir(dir)
 
 	if err != nil {
 		return
