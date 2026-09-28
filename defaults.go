@@ -257,10 +257,6 @@ func (e *EmitContext) defaultProgramPeerdirsForModule(postUser bool) []string {
 func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string {
 	_, instance, d := e.ctx, e.instance, e.d
 
-	if instance.Language != LangCPP {
-		return nil
-	}
-
 	if d.moduleStmt != nil && d.moduleStmt.Name == tokGoProgram {
 		if postUser {
 			return nil
