@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
 	"time"
 )
 
@@ -93,6 +95,12 @@ func cmdPerfBucketHash(_ GlobalFlags, args []string) int {
 
 	fmt.Printf("=> pair hash %.2fx faster than mix64\n\n", float64(mx)/float64(pair))
 
+	interrupted := make(chan os.Signal, 1)
+
+	signal.Notify(interrupted, os.Interrupt)
+
+	defer signal.Stop(interrupted)
+
 	fmt.Println("=== pair collision stress ===")
 
 	type pairVal struct {
@@ -108,6 +116,15 @@ func cmdPerfBucketHash(_ GlobalFlags, args []string) int {
 	var count, h1Hits uint64
 
 	for {
+		select {
+		case <-interrupted:
+			fmt.Printf("interrupted after %d sequences (%d distinct, %d h1-collisions), no pair collision, %.0fs\n",
+				count, len(seen), h1Hits, time.Since(start).Seconds())
+
+			return 0
+		default:
+		}
+
 		n := int(next() % (maxLen + 1))
 
 		elems = elems[:0]
