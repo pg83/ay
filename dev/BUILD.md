@@ -9,6 +9,7 @@ Common commands:
 ```sh
 ./build                 # build and publish ./ay -> .build/bin/ay
 ./build unit            # Python unit tests plus the binary-driven graph tests
+./build -Dcoverage unit # same, with ay built -cover; profile at $(B)/coverage/cover.out, per-file table in report.txt
 ./build validate        # all validation results, then the aggregate gate
 ./build test            # unit + complete validation gate
 ./build validation_report
