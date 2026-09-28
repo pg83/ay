@@ -334,7 +334,7 @@ func (e *EmitContext) emitPyBytecode(moduleSources bool) {
 	ctx.tool(argToolsArchiver)
 
 	for _, ps := range e.pySrcsReg {
-		if ps.Kind == pySourceProto || extIsPyi(ps.Token.string()) {
+		if ps.Kind == pySourceProto {
 			continue
 		}
 
