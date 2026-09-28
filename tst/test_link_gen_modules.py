@@ -183,6 +183,27 @@ class GenModulesTest(unittest.TestCase):
         produced = {out for node in graph["graph"] for out in node["outputs"]}
         self.assertIn("$(B)/top/lib/libtop-lib.a", produced)
 
+    def test_autoinclude_roots_append_linters_make_inc(self):
+        files = {
+            "build/conf/autoincludes.json": '["proj"]\n',
+            "proj/linters.make.inc": "CFLAGS(-DLINTED)\n",
+            "proj/a/ya.make": library("SRCS(a.cpp)\n"),
+            "proj/a/a.cpp": "int a;\n",
+            "proj/b/ya.make": program("b", "PEERDIR(proj/a other)\n"),
+            "proj/b/m.cpp": "int main(){return 0;}\n",
+            "other/ya.make": library("SRCS(o.cpp)\n"),
+            "other/o.cpp": "int o;\n",
+        }
+        graph = lib.make(files, "proj/b")
+        for output, linted in (
+            ("$(B)/proj/a/a.cpp.o", True),
+            ("$(B)/proj/b/m.cpp.o", True),
+            ("$(B)/other/o.cpp.o", False),
+        ):
+            with self.subTest(output=output):
+                args = lib.node_by_output(graph, output)["cmds"][0]["cmd_args"]
+                self.assertEqual("-DLINTED" in args, linted)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
