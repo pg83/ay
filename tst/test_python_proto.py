@@ -238,6 +238,38 @@ class PyProtoTest(unittest.TestCase):
         aux = lib.node_by_output(graph, packs[0]["outputs"][0] + ".py3.o")
         self.assertEqual(aux["kv"]["p"], "CC")
 
+    def test_source_proto_importing_a_generated_proto(self):
+        files = python_base()
+        files.update({
+            "proto/ya.make": (
+                "PROTO_LIBRARY()\nPY_NAMESPACE(.)\nRUN_PYTHON3(gen.py OUT gen.proto)\n"
+                "SRCS(user.proto)\nEXCLUDE_TAGS(CPP_PROTO)\nEND()\n"
+            ),
+            "proto/gen.py": "",
+            "proto/user.proto": 'syntax = "proto3";\nimport "proto/gen.proto";\n',
+        })
+        graph = lib.make(files, "app")
+        self.assertEqual(lib.node_by_output(graph, "$(B)/proto/user__intpy3___pb2.py")["inputs"], [
+            PROTOC, MYPY, "$(S)/build/scripts/gen_py_protos.py",
+            "$(S)/proto/user.proto", "$(S)/proto/user.proto",
+            "$(B)/proto/gen.proto", "$(S)/proto/gen.py",
+        ])
+
+    def test_generated_proto_made_by_the_protoc_wrapper(self):
+        files = python_base()
+        files.update({
+            "proto/ya.make": (
+                "PROTO_LIBRARY()\nPY_NAMESPACE(.)\n"
+                "RUN_PYTHON3(${ARCADIA_ROOT}/build/scripts/gen_py_protos.py OUT gen.proto)\n"
+                "EXCLUDE_TAGS(CPP_PROTO)\nEND()\n"
+            ),
+        })
+        graph = lib.make(files, "app")
+        self.assertEqual(lib.node_by_output(graph, "$(B)/proto/gen__intpy3___pb2.py")["inputs"], [
+            PROTOC, MYPY, "$(S)/build/scripts/gen_py_protos.py",
+            "$(S)/build/scripts/gen_py_protos.py", "$(B)/proto/gen.proto",
+        ])
+
     def test_generated_proto_runs_protoc_in_build_root(self):
         files = python_base()
         files.update({

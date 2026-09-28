@@ -135,13 +135,6 @@ func internStr(s string) STR {
 
 func internFill(prefix string, parts []string) ([]byte, int) {
 	switch len(parts) {
-	case 0:
-		n := len(prefix)
-		block := internTable.bytes.alloc(n)
-
-		copy(block, prefix)
-
-		return block, n
 	case 1:
 		p0 := parts[0]
 		n := len(prefix) + len(p0)
@@ -192,10 +185,6 @@ func internFill(prefix string, parts []string) ([]byte, int) {
 
 func internBuild(prefix string, parts []string) STR {
 	block, n := internFill(prefix, parts)
-
-	if n == 0 {
-		return strEmpty
-	}
 
 	return internBlock(block, n)
 }
@@ -294,10 +283,6 @@ func (id STR) sharedString() string {
 	return internTable.cells.get(uint32(id)).str
 }
 
-func (id STR) String() string {
-	return id.string()
-}
-
 func interned(s string) STR {
 	h := chaosInternHash(xxh3.HashString128(s))
 
@@ -355,10 +340,6 @@ func internV(parts ...string) STR {
 }
 
 func internedV(parts ...string) STR {
-	if len(parts) == 1 {
-		return interned(parts[0])
-	}
-
 	return internedVInto("", parts)
 }
 

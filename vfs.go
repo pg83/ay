@@ -1,9 +1,5 @@
 package main
 
-import (
-	"encoding/json"
-)
-
 var (
 	srcRootDirVFS = source("")
 	bldRootDirVFS = build("")
@@ -121,20 +117,8 @@ func (v VFS) sharedString() string {
 	return v.prefix() + rel
 }
 
-func (v VFS) String() string {
-	return v.string()
-}
-
 func vfsHasPrefix(s string) bool {
 	return len(s) >= vfsPrefixLen && s[0] == '$' && s[1] == '('
-}
-
-func (v VFS) marshalJSON() ([]byte, error) {
-	return json.Marshal(v.string())
-}
-
-func (v VFS) MarshalJSON() ([]byte, error) {
-	return v.marshalJSON()
 }
 
 func (v VFS) any() ANY {

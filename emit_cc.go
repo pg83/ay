@@ -258,10 +258,10 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 
 	inputChunks := na.inputs.alloc(nInputs)[:0]
 
+	// A closure holds its own source whenever it holds anything, and the
+	// induced inputs come from the same closure.
 	if includeSelf != 0 {
 		inputChunks = append(inputChunks, na.vfsList(includeSelf))
-	} else if len(in.IncludeInputs) > 0 {
-		inputChunks = append(inputChunks, in.IncludeInputs)
 	}
 
 	if wrapcc {
@@ -334,12 +334,6 @@ func (e *EmitContext) ccOutputFor(srcVFS VFS, compile CompileSpec) VFS {
 
 	if compile.Py3Suffix {
 		in.Py3Suffix = true
-	}
-
-	if compile.Variant != 0 {
-		variant := compile.Variant.string()
-
-		in.Variant = &variant
 	}
 
 	srcRel := trimModulePrefix(srcVFS.relString(), e.instance.Path.relString())
@@ -432,11 +426,9 @@ func composeSrcDirOutputRel(instancePath, target string) string {
 		}
 	}
 
+	// The target is a file, so it never equals the module directory: b is not
+	// empty here.
 	if a == "" {
-		if b == "" {
-			return "."
-		}
-
 		if strings.Contains(b, "/") {
 			return "_/" + b
 		}

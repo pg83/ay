@@ -291,6 +291,8 @@ func (na *NodeArenas) dedupClosureChunks(closures ...Closure) InputChunks {
 	return result
 }
 
+// dedupSourceVFS takes source paths in inputs; from extra it keeps the source
+// buckets.
 func (na *NodeArenas) dedupSourceVFS(inputs []VFS, extra [][]VFS) []VFS {
 	bound := len(inputs)
 
@@ -304,10 +306,6 @@ func (na *NodeArenas) dedupSourceVFS(inputs []VFS, extra [][]VFS) []VFS {
 		out = na.vfs.alloc(bound)[:0]
 
 		keep := func(input VFS) {
-			if !input.isSource() {
-				return
-			}
-
 			if !deduper.addStable(input.strID()) {
 				return
 			}

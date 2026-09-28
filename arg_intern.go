@@ -40,10 +40,6 @@ func (a ARG) string() string {
 	return argTable.strs.get(uint32(a)).string()
 }
 
-func (a ARG) String() string {
-	return a.string()
-}
-
 func (a ARG) any() ANY {
 	return a.str().any()
 }
