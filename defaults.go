@@ -93,10 +93,6 @@ func isRuntimeAncestor(path string) bool {
 	return runtimeAncestorPaths[path]
 }
 
-func suppressMallocAPIDefault(defaults []string, allocatorName ANY) []string {
-	return defaults
-}
-
 func (e *EmitContext) defaultPeerdirsForModule() []string {
 	_, instance, d := e.ctx, e.instance, e.d
 	inst := instance
