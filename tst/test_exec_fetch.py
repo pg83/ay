@@ -529,6 +529,28 @@ class FetchTokenFromSSHAgentTest(FetchCase):
             SSH_AUTH_SOCK=str(self.root / "agent.sock"), YA_USER="robot",
         ))
 
+    def test_unknown_user_without_login_name_yields_no_token(self):
+        # A uid without a passwd entry and an empty USER leave no login name.
+        unshare = ["unshare", "-U", "--map-user=3999999"]
+        probe = subprocess.run([*unshare, "true"], stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, check=False)
+        if probe.returncode != 0:
+            self.skipTest("unprivileged user namespaces are unavailable")
+        agent = self.start_agent([("ssh-ed25519", "k", "sig")])
+        self.write("build/scripts/fetch_from_sandbox.py", (
+            "import sys\n"
+            "args = sys.argv[1:]\n"
+            "open(args[args.index('--copy-to') + 1], 'w').write('anonymous')\n"
+        ))
+        result = subprocess.run(
+            [*unshare, str(lib.AY), "fetch", str(self.bld), str(self.src), "sbr:31"],
+            env=self.env(SSH_AUTH_SOCK=str(self.root / "agent.sock"), USER=""),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.bld / "resources" / "31" / "resource").read_text(), "anonymous")
+        self.assertEqual(agent.signed, [])
+
     def test_dead_agent_socket_yields_no_token(self):
         self.assert_falls_back_to_script(self.env(
             SSH_AUTH_SOCK=str(self.root / "missing.sock"),
