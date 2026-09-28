@@ -1605,7 +1605,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				stmt.GenerateMachineCode = true
 				i++
 			case "NO_COMPILE":
-				stmt.NoCompile = true
 				i++
 			default:
 				stmt.Sources = append(stmt.Sources, v.Args[i].string())
@@ -2475,7 +2474,6 @@ type LlvmBcStmt struct {
 	Suffix              string
 	Symbols             []string
 	GenerateMachineCode bool
-	NoCompile           bool
 	ClangBCRoot         string
 }
 
@@ -3021,15 +3019,6 @@ func isSpecializedLibraryType(name TOK) bool {
 	switch name {
 	case tokProtoLibrary,
 		tokDll, tokSoProgram, tokDynamicLibrary:
-		return true
-	}
-
-	return false
-}
-
-func isResourceContainerType(name TOK) bool {
-	switch name {
-	case tokPackage, tokUnion, tokResourcesLibrary:
 		return true
 	}
 

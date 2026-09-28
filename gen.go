@@ -811,8 +811,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	languageDefaults := e.defaultPeerdirsForModule()
 
-	languageDefaults = suppressMallocAPIDefault(languageDefaults, d.allocatorName)
-
 	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path.relString())
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
 

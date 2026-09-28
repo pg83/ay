@@ -226,10 +226,6 @@ func extIsPbH(p string) bool {
 	return strings.HasSuffix(p, ".pb.h")
 }
 
-func extIsAsm(p string) bool {
-	return strings.HasSuffix(p, ".asm")
-}
-
 func extIsFlexL(p string) bool {
 	return strings.HasSuffix(p, ".l")
 }
