@@ -163,6 +163,44 @@ class CcVariantsTest(unittest.TestCase):
         self.assertIn("-DFROM_ENV_C", c)
         self.assertIn("-DFROM_ENV_C", cxx)
 
+    def test_raw_source_names_are_normalized_for_cuda_c_and_asm(self):
+        files = {
+            "k/ya.make": module(
+                "LIBRARY()",
+                "SRCS(./a.cu ../k/b.cu sub/../c.cu sub/d.cu c.c sub/k.S)\n"
+                "CONLYFLAGS(-DOWN_CONLY)\n",
+            ),
+            "k/a.cu": "\n",
+            "k/b.cu": "\n",
+            "k/c.cu": "\n",
+            "k/sub/d.cu": "\n",
+            "k/c.c": "int c;\n",
+            "k/sub/k.S": "\n",
+        }
+        lib.tool_program(files, "tools/mtime0", "mtime0")
+        lib.tool_program(files, "tools/custom_pid", "custom_pid")
+        graph = lib.make(files, "k")
+        expected = [
+            ("CU", "$(B)/k/a.cu.o", "$(S)/k/a.cu"),
+            ("CU", "$(B)/k/__/k/b.cu.o", "$(S)/k/b.cu"),
+            ("CU", "$(B)/k/c.cu.o", "$(S)/k/c.cu"),
+            ("CU", "$(B)/k/_/sub/d.cu.o", "$(S)/k/sub/d.cu"),
+            ("CC", "$(B)/k/c.c.o", "$(S)/k/c.c"),
+            ("AS", "$(B)/k/_/sub/k.S.o", "$(S)/k/sub/k.S"),
+        ]
+        objects = [
+            (node["kv"]["p"], node["outputs"][0])
+            for node in graph["graph"]
+            if node["kv"]["p"] in ("CU", "CC", "AS")
+            and node["outputs"][0].startswith("$(B)/k/")
+        ]
+        self.assertEqual(objects, [(kind, output) for kind, output, _ in expected])
+        for _, output, source in expected:
+            with self.subTest(output=output):
+                self.assertIn(source, lib.node_by_output(graph, output)["inputs"])
+        c_args = cc_args(graph, "$(B)/k/c.c.o")
+        self.assertEqual(c_args[-2:], ["-DOWN_CONLY", "$(S)/k/c.c"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
