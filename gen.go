@@ -353,10 +353,6 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 		if sub.LDRef != 0 {
 			ctx.emit.result(sub.LDRef)
 		}
-
-		if sub.GlobalRef != nil {
-			ctx.emit.result(*sub.GlobalRef)
-		}
 	}
 
 	if ctx.testMode && root.testSuiteInfo != nil {
@@ -789,12 +785,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		return e.genPrebuiltProgram()
-	}
-
-	if d.moduleStmt.Name != tokLibrary && d.moduleStmt.Name != tokFbsLibrary && d.moduleStmt.Name != tokDllTool && !isProgramModuleType(d.moduleStmt.Name) && !isPyLibraryType(d.moduleStmt.Name) && !isYqlUdfStaticModule(d.moduleStmt.Name) && !isSpecializedLibraryType(d.moduleStmt.Name) && !isResourceContainerType(d.moduleStmt.Name) && d.moduleStmt.Name != tokGoLibrary && d.moduleStmt.Name != tokGoProgram {
-		ctx.onWarn(Warn{Kind: WarnUnsupportedSource, Message: fmt.Sprintf("%s declares unsupported module type %q (PR-25 accepts LIBRARY and PROGRAM only); module skipped", instance.Path.relString(), d.moduleStmt.Name)})
-
-		return &ModuleEmitResult{}
 	}
 
 	applyImplicitPeerdirs(ctx, instance, d)
