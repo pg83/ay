@@ -954,8 +954,6 @@ func protoCPPOutRoot(d *ModuleData) string {
 }
 
 type ProtoSrcsResult struct {
-	ARRef                NodeRef
-	ARPath               *VFS
 	GlobalRef            *NodeRef
 	GlobalPath           *VFS
 	WholeArchiveRefs     []NodeRef
