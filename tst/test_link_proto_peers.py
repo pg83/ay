@@ -61,6 +61,10 @@ def fixture():
         "pyq/ya.make": f"PY3_LIBRARY()\n{NO_PLATFORM}PEERDIR(q)\nEND()\n",
         "py3q/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(pyq)\nEND()\n",
         "d/ya.make": "PROTO_DESCRIPTIONS(descs)\nPEERDIR(p)\nEND()\n",
+        "nested/deep/pp/ya.make": "PROTO_LIBRARY(named)\nSRCS(n.proto)\nEND()\n",
+        "nested/deep/pp/n.proto": 'syntax = "proto3";\nmessage N {}\n',
+        "d2/ya.make": "PROTO_DESCRIPTIONS(descs)\nPEERDIR(nested/deep/pp)\nEND()\n",
+        "pyn/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(nested/deep/pp)\nEND()\n",
         "gr/ya.make": "PROTO_LIBRARY()\nSRCS(s.proto)\nGRPC()\nEND()\n",
         "gr/s.proto": 'syntax = "proto3";\nservice S {}\n',
         "pygr/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(gr)\nEND()\n",
@@ -232,6 +236,27 @@ class ProtoPeersTest(unittest.TestCase):
         self.assertEqual(audited, lib.make(fixture(), "py3"))
         compile_node = lib.node_by_output(audited, "$(B)/p/a__intpy3___pb2.py.b45u.yapyc3")
         self.assertEqual(compile_node["cmds"][0]["cmd_args"][1], "--slow-py3cc")
+
+    def test_nested_and_named_proto_archive_names(self):
+        graph = lib.make(fixture(), "d2")
+        self_desc = lib.node_by_output(graph, "$(B)/nested/deep/pp/nested-deep-pp.self.protodesc")
+        self.assertEqual(
+            self_desc["outputs"],
+            [
+                "$(B)/nested/deep/pp/nested-deep-pp.self.protodesc",
+                "$(B)/nested/deep/pp/nested-deep-pp.protosrc",
+            ],
+        )
+        graph = lib.make(fixture(), "pyn")
+        args = link_args(graph, "$(B)/pyn/pyn")
+        self.assertEqual(
+            args[args.index("--whole-archive-libs"):args.index("--arch=LINUX")],
+            ["--whole-archive-libs", "nested/deep/pp/libnamed.a"],
+        )
+        self.assertEqual(
+            between(args, "--ya-start-command-file", "--ya-end-command-file"),
+            ["nested/deep/pp/libpy3named.global.a"],
+        )
 
 
 if __name__ == "__main__":
