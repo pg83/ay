@@ -346,7 +346,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	}
 
 	if ctx.testMode && root.testSuiteInfo != nil {
-		for _, ref := range emitTestRunNodes(plainEmit, plainEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
+		for _, ref := range emitTestRunNodes(plainEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
 		}
 	}
