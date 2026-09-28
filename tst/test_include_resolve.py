@@ -261,6 +261,39 @@ class IncludeResolutionOrderTest(unittest.TestCase):
         inputs, _ = closure(files, "m", "$(B)/m/a.cpp.o")
         self.assertTrue({"$(B)/m/first.h", "$(B)/m/second.h"} <= inputs)
 
+    def test_generated_headers_at_build_root(self):
+        files = {
+            "m/ya.make": library(
+                "a.cpp",
+                "CONFIGURE_FILE(top.h.in ${ARCADIA_BUILD_ROOT}/top.h)",
+                "CONFIGURE_FILE(other.h.in ${ARCADIA_BUILD_ROOT}/other.h)",
+            ),
+            "m/a.cpp": "#include <top.h>\n",
+            "m/top.h.in": '#include "other.h"\n',
+            "m/other.h.in": "",
+            "build/scripts/configure_file.py": "",
+        }
+        inputs, warnings = closure(files, "m", "$(B)/m/a.cpp.o")
+        self.assertEqual(
+            {
+                "$(S)/m/a.cpp", "$(B)/top.h", "$(B)/other.h", "$(S)/m/top.h.in",
+                "$(S)/m/other.h.in", "$(S)/build/scripts/configure_file.py",
+            },
+            inputs,
+        )
+        self.assertEqual("", warnings)
+
+    def test_deep_non_canonical_target(self):
+        deep = "d/" * 70
+        files = {
+            "m/ya.make": library("a.cpp"),
+            "m/a.cpp": f"#include <.//../sub/../{deep}x.h>\n",
+            f"{deep}x.h": "",
+        }
+        inputs, warnings = closure(files, "m", "$(B)/m/a.cpp.o")
+        self.assertEqual({"$(S)/m/a.cpp", f"$(S)/{deep}x.h"}, inputs)
+        self.assertEqual("", warnings)
+
     def test_same_target_under_different_scan_configs(self):
         files = {
             "app/ya.make": (
