@@ -242,6 +242,24 @@ class SbomTest(unittest.TestCase):
             ],
         )
 
+    def test_prebuilt_program_component_is_language_agnostic(self):
+        files = fixture()
+        files["pre/ya.make"] = (
+            "PREBUILT_PROGRAM(tool)\nLICENSE(MIT)\n"
+            "DECLARE_EXTERNAL_RESOURCE(TOOL sbr:1)\n"
+            "PRIMARY_OUTPUT(${TOOL_RESOURCE_GLOBAL}/tool${MODULE_SUFFIX})\nEND()\n"
+        )
+        graph = lib.make(files, "pre", *X86_64, "-r")
+        own = lib.node_by_output(graph, component("pre/tool.AGNOSTIC.component.sbom"))
+        self.assertEqual(own["cmds"][0]["cmd_args"][-2:], ["--lang", "AGNOSTIC"])
+        program = lib.node_by_output(graph, "$(B)/pre/tool")
+        self.assertEqual(program["kv"]["p"], "ld")
+        self.assertEqual(
+            program["cmds"][0]["cmd_args"][-3:],
+            ["copy", "$(B)/resources/TOOL/tool", "$(B)/pre/tool"],
+        )
+        self.assertIn(own["uid"], program["deps"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
