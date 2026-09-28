@@ -31,6 +31,12 @@ def fixture(sbom):
     }
     for path in GO_SUPPORT:
         files[f"{path}/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}END()\n"
+    files["g2/ya.make"] = "GO_LIBRARY()\nSRCS(b.go)\nPEERDIR(build/platform/lld)\nEND()\n"
+    files["g2/b.go"] = "package g2\n"
+    files["cl/ya.make"] = "LIBRARY()\nLICENSE(MIT)\nSRCS(c.cpp)\nPEERDIR(g g2)\nEND()\n"
+    files["cl/c.cpp"] = "int c;\n"
+    files["cp/ya.make"] = "PROGRAM()\nLICENSE(MIT)\nSRCS(m.cpp)\nPEERDIR(cl)\nEND()\n"
+    files["cp/m.cpp"] = "int main(){return 0;}\n"
     if sbom:
         files["build/internal/conf/sbom.conf"] = "\n"
         files["build/internal/platform/clang_toolchain_info/ya.make"] = toolchain("clang", "20")
@@ -82,6 +88,13 @@ class GoModulesTest(unittest.TestCase):
         self.assertEqual(link_sbom[2:4], ["--lang", "GO"])
         self.assertEqual(link_sbom[-1], "$(B)/g/g.GO.component.sbom")
         self.assertIn("$(B)/build/platform/lld/toolchain.component.sbom", link_sbom)
+
+    def test_cpp_program_over_go_package_lists_lld_component_once(self):
+        graph = lib.make(fixture(sbom=True), "cp", *X86_64_RELEASE)
+        link_sbom = command_with(lib.node_by_output(graph, "$(B)/cp/cp"), "link_sbom.py")
+        lld = "$(B)/build/platform/lld/toolchain.component.sbom"
+        self.assertEqual(link_sbom.count(lld), 1)
+        self.assertEqual(link_sbom[-2:], ["$(B)/cl/cl.CPP.component.sbom", "$(B)/cp/cp.CPP.component.sbom"])
 
 
 if __name__ == "__main__":

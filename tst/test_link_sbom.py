@@ -260,6 +260,25 @@ class SbomTest(unittest.TestCase):
         )
         self.assertIn(own["uid"], program["deps"])
 
+    def test_sourceless_dll_tool_adds_clang_component_itself(self):
+        files = fixture()
+        files["dll0/ya.make"] = (
+            "DLL_TOOL(z)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nLICENSE(MIT)\n"
+            "EXPORTS_SCRIPT(z.exports)\nEND()\n"
+        )
+        files["dll0/z.exports"] = "{};\n"
+        graph = lib.make(files, "dll0", *X86_64, "-r")
+        node = lib.node_by_output(graph, "$(B)/dll0/libz.so")
+        self.assertEqual(
+            command_with(node, "link_sbom.py")[10:],
+            [
+                component("build/platform/lld/toolchain.component.sbom"),
+                component("build/platform/python/ymake_python3/toolchain.component.sbom"),
+                component("build/internal/platform/clang_toolchain_info/toolchain.component.sbom"),
+                component("dll0/libz.CPP.component.sbom"),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
