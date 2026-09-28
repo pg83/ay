@@ -285,7 +285,9 @@ def built_kinds(stderr):
 class ExecBuildTest(unittest.TestCase):
     def test_builds_program_from_fetched_toolchain_and_installs_it(self):
         ws = Workspace(self, BASIC)
-        result = ws.make("-j", "4", "-T", "--stat")
+        # The slow compile makes the chain through a.cpp.o and the clang fetch
+        # the longest, whatever the other fetches take.
+        result = ws.make("-j", "4", "-T", "--stat", env=ws.env(SLOW_COMPILE="a.cpp"))
         installed = ws.inst / "tool" / "tool"
         self.assertTrue(installed.is_symlink())
         self.assertTrue(os.readlink(installed).startswith(str(ws.bld / "cas") + "/"))
@@ -315,10 +317,9 @@ class ExecBuildTest(unittest.TestCase):
         self.assertEqual([line.split()[-1] for line in critical], [
             "$(B)/tool/tool",
             "$(B)/lib/liblib.a",
-            critical[2].split()[-1],
+            "$(B)/lib/a.cpp.o",
             "$(B)/resources/CLANG20",
         ])
-        self.assertIn(critical[2].split()[-1], ("$(B)/lib/a.cpp.o", "$(B)/lib/b.c.o"))
 
         clang_meta = json.loads(ws.meta_for("$(B)/resources/CLANG20").read_text())
         self.assertEqual(clang_meta["$(B)/resources/CLANG20/bin/clang"], {"link": "clang++"})
