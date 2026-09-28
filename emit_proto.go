@@ -740,10 +740,6 @@ func (e *EmitContext) emitPyProtoLibraryResult() *ProtoSrcsResult {
 
 	genRefs, genOuts := e.packPyProtoResEntries(entries)
 
-	if len(genRefs) == 0 {
-		return nil
-	}
-
 	protoLibName := ""
 
 	if len(d.moduleStmt.Args) > 0 {
