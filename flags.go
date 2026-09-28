@@ -199,7 +199,7 @@ func noLibcBlock(p *Platform) []ANY {
 		out = append(out, argUNDEBUG.any())
 	}
 
-	if p.ISA == ISAAArch64 {
+	if p.ISA == ISAAArch64 || p.ISA == ISAArm64 {
 		out = append(out, argNoOutlineAtomics.any())
 	}
 
@@ -245,7 +245,7 @@ func composeCompileCFlags(isa ISA, release bool, debugInfo []ANY) []ANY {
 		}
 
 		return concat(x86TargetCFlagsPre, debugInfo, x86TargetCFlagsPost)
-	case ISAAArch64:
+	case ISAAArch64, ISAArm64:
 		return concat(commonCFlagsPre, debugInfo, commonCFlagsPost)
 	}
 
@@ -260,7 +260,7 @@ func compileFlagBundleFor(p *Platform) CompileFlagBundle {
 			Defines:     hostDefines,
 			NoLibcBlock: p.NoLibcBlock,
 		}
-	case ISAAArch64:
+	case ISAAArch64, ISAArm64:
 		bundle := CompileFlagBundle{
 			CFlags:      p.CompileCFlags,
 			Defines:     commonDefines,
