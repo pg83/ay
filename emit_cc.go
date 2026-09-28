@@ -60,7 +60,6 @@ type ModuleCCInputs struct {
 	ForceCxx        bool
 	Py3Suffix       bool
 	Variant         *string
-	ExtraDepRefs    []NodeRef
 	IncludeInputs   []VFS
 	IncludeView     Closure
 }
