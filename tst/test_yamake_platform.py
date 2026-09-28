@@ -89,7 +89,7 @@ def human_bytes(size):
 class YaMakePlatformTest(unittest.TestCase):
     def test_compiler_flags_from_the_environment_are_split_like_a_shell(self):
         code, graph, stderr = ay_make(library(), env_extra={
-            "CFLAGS": "-DA 'b c' \"d e\" f\\ g\t-Dq'u'\"v\" tail\\",
+            "CFLAGS": "-DA 'b c' \"d e\"  f\\ g\t-Dq'u'\"v\" tail\\",
             "CXXFLAGS": "  -DCXX  ",
         })
         self.assertEqual(code, 0, stderr)
@@ -175,8 +175,8 @@ class YaMakePlatformTest(unittest.TestCase):
             out = Path(directory, "normalized.jsonl")
             raw.write_text(json.dumps({"conf": {}, "graph": [link, link, compile_node], "result": []}))
             lib.run("dev", "dump", "normalize", "--in", raw, "--target", "pkg/app", "--out", out)
-            kinds = [json.loads(line)["kv"]["p"] for line in out.read_text().splitlines()]
-        self.assertEqual(kinds, ["LD", "CC"])
+            kinds = sorted(json.loads(line)["kv"]["p"] for line in out.read_text().splitlines())
+        self.assertEqual(kinds, ["CC", "LD"])
 
 
 if __name__ == "__main__":

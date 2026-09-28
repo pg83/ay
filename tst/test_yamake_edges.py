@@ -185,6 +185,46 @@ class YaMakeEdgesTest(unittest.TestCase):
             'missing-include: $(B)/a/x.cpp: unresolved include "a" — not found in source, build, search path, or sysincl',
         )
 
+    def test_gas_sources_and_generated_proto_sources(self):
+        graph, _ = self.make({
+            "a/ya.make": module("LIBRARY", "SRCS(x.S sub/y.s)"),
+            "a/x.S": "", "a/sub/y.s": "",
+        })
+        self.assertEqual(
+            sorted(node["outputs"][0] for node in graph["graph"] if node["kv"]["p"] == "AS"),
+            ["$(B)/a/_/sub/y.s.o", "$(B)/a/x.S.o"],
+        )
+
+        files = {
+            "a/ya.make": module("PROTO_LIBRARY", "CONFIGURE_FILE(x.proto.in x.proto)\nSRCS(${BINDIR}/x.proto)"),
+            "a/x.proto.in": 'syntax = "proto3";\n',
+            "contrib/libs/protobuf/ya.make": module("LIBRARY", ""),
+        }
+        for tool in ("contrib/tools/protoc", "contrib/tools/protoc/plugins/cpp_styleguide"):
+            lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
+        graph, _ = self.make(files, "a", "-k")
+        protoc = lib.node_by_output(graph, "$(B)/a/x.pb.h")
+        self.assertEqual(protoc["outputs"], ["$(B)/a/x.pb.h", "$(B)/a/x.pb.cc"])
+        self.assertIn("$(B)/a/x.proto", protoc["inputs"])
+
+    def test_declare_in_dirs_excludes_match_source_root_relative_paths(self):
+        graph, _ = self.make({
+            "a/ya.make": module("LIBRARY", "DECLARE_IN_DIRS(R *.txt DIRS d RECURSIVE EXCLUDES a/d/sub/x.txt)\nCFLAGS(-DR ${R_FILES})\nSRCS(x.cpp)"),
+            "a/x.cpp": "", "a/d/a.txt": "", "a/d/sub/x.txt": "", "a/d/sub/y.txt": "",
+        })
+        args = lib.node_by_output(graph, "$(B)/a/x.cpp.o")["cmds"][0]["cmd_args"]
+        start = args.index("-DR")
+        self.assertEqual(args[start:start + 3], ["-DR", "d/a.txt", "d/sub/y.txt"])
+
+    def test_perf_parser_scans_c_family_sources(self):
+        with tempfile.TemporaryDirectory(prefix="ay-perf-test-") as directory:
+            Path(directory, "a.cpp").write_text('#include "b.h"\n')
+            Path(directory, "b.h").write_text("#pragma once\n")
+            Path(directory, "notes.txt").write_text("not a source\n")
+            result = lib.run("dev", "perf", "parser", directory, timeout=30)
+        size = len('#include "b.h"\n') + len("#pragma once\n")
+        self.assertRegex(result.stdout, rf"^files=2 bytes={size} iters=[1-9][0-9]* per-pass=")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
