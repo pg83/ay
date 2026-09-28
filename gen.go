@@ -878,9 +878,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		for _, p := range languageDefaults {
-			if peerSeen(p) {
-				continue
-			}
+			peerSeen(p)
 
 			allPeers = append(allPeers, p)
 			peerKinds = append(peerKinds, peerKindLangDefault)
@@ -2143,15 +2141,6 @@ func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) {
 	path := uint32(in.Path.rel())
 	variant := ctx.instanceVariant(in)
 	head := ctx.memo.heads.getSafe(path)
-
-	for entry := head; entry != nil; entry = entry.next {
-		if entry.variant == variant {
-			entry.result = result
-
-			return
-		}
-	}
-
 	entry := ctx.memo.entries.one()
 
 	*entry = moduleMemoEntry{next: head, result: result, variant: variant}
