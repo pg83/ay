@@ -61,6 +61,11 @@ def fixture():
         "pyq/ya.make": f"PY3_LIBRARY()\n{NO_PLATFORM}PEERDIR(q)\nEND()\n",
         "py3q/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(pyq)\nEND()\n",
         "d/ya.make": "PROTO_DESCRIPTIONS(descs)\nPEERDIR(p)\nEND()\n",
+        "pl/ya.make": (
+            "PROTO_LIBRARY()\nSRCS(z.proto)\n"
+            "CPP_PROTO_PLUGIN0(sg2 contrib/tools/protoc/plugins/cpp_styleguide)\nEND()\n"
+        ),
+        "pl/z.proto": 'syntax = "proto3";\nmessage Z {}\n',
         "nested/deep/pp/ya.make": "PROTO_LIBRARY(named)\nSRCS(n.proto)\nEND()\n",
         "nested/deep/pp/n.proto": 'syntax = "proto3";\nmessage N {}\n',
         "d2/ya.make": "PROTO_DESCRIPTIONS(descs)\nPEERDIR(nested/deep/pp)\nEND()\n",
@@ -257,6 +262,21 @@ class ProtoPeersTest(unittest.TestCase):
             between(args, "--ya-start-command-file", "--ya-end-command-file"),
             ["nested/deep/pp/libpy3named.global.a"],
         )
+
+    def test_plugin_sharing_a_builtin_tool_depends_on_it_once(self):
+        graph = lib.make(fixture(), "pl")
+        protoc = lib.node_by_output(graph, "$(B)/contrib/tools/protoc/protoc")
+        styleguide = lib.node_by_output(
+            graph, "$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide"
+        )
+        node = lib.node_by_output(graph, "$(B)/pl/z.pb.h")
+        self.assertEqual(sorted(node["deps"]), sorted([protoc["uid"], styleguide["uid"]]))
+        args = node["cmds"][0]["cmd_args"]
+        self.assertIn(
+            "--plugin=protoc-gen-sg2=$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide",
+            args,
+        )
+        self.assertIn("--sg2_out=$(B)/", args)
 
 
 if __name__ == "__main__":
