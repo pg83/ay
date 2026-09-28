@@ -11,8 +11,8 @@ class ContextParserTest(unittest.TestCase):
         files = {
             "mod/ya.make": (
                 "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
-                "RUN_PROGRAM(tools/gen x.rl y.l OUT out.cpp IN x.rl y.l)\n"
-                "SRCS(a.asm)\nEND()\n"
+                "RUN_PROGRAM(tools/gen x.rl y.l OUT out.h IN x.rl y.l)\n"
+                "SRCS(a.asm use.cpp)\nEND()\n"
             ),
             "mod/x.rl": '%%{\n  include "rdefs.inc";\n}%%\n',
             "mod/rdefs.inc": '%%{\n  include "r2.rl";\n}%%\n',
@@ -23,12 +23,13 @@ class ContextParserTest(unittest.TestCase):
             "mod/a.asm": '%include "adefs.inc"\n',
             "mod/adefs.inc": '%include "a2.asm"\n',
             "mod/a2.asm": "",
+            "mod/use.cpp": '#include "out.h"\n',
         }
         lib.tool_program(files, "tools/gen", "gen")
         lib.tool_program(files, "contrib/tools/yasm", "yasm")
         graph = lib.make(files, "mod", "--target-platform", "default-linux-x86_64")
 
-        run = lib.node_by_output(graph, "$(B)/mod/out.cpp")
+        run = lib.node_by_output(graph, "$(B)/mod/out.h")
         self.assertEqual(run["inputs"][:3], [
             "$(B)/tools/gen/gen", "$(S)/mod/x.rl", "$(S)/mod/y.l",
         ])

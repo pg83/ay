@@ -89,8 +89,11 @@ class CopyFileTest(unittest.TestCase):
 
     def test_auto_copy_feeds_codegen_source(self):
         files = {
-            "mod/ya.make": LIBRARY_HEAD + "COPY_FILE(AUTO gram.src gram.y)\nEND()\n",
+            "mod/ya.make": (
+                LIBRARY_HEAD + "COPY_FILE(AUTO gram.src gram.y)\nSRCS(own.y)\nEND()\n"
+            ),
             "mod/gram.src": "%%\n",
+            "mod/own.y": "%%\n",
             "build/scripts/preprocess.py": "",
             "build/induced/by_bison/ya.make": "LIBRARY()\nNO_UTIL()\nNO_RUNTIME()\nEND()\n",
         }
@@ -113,6 +116,8 @@ class CopyFileTest(unittest.TestCase):
         self.assertIn(copy["uid"], bison["deps"])
         compile_node = lib.node_by_output(graph, "$(B)/mod/gram.y.cpp.o")
         self.assertIn("$(S)/mod/gram.src", compile_node["inputs"])
+        own = lib.node_by_output(graph, "$(B)/mod/own.y.cpp")
+        self.assertEqual(own["cmds"][0]["cmd_args"][-1], "$(S)/mod/own.y")
 
 
 class LdPluginTest(unittest.TestCase):
