@@ -362,8 +362,6 @@ func parseMakeFlags(args []string) *MakeFlags {
 		case opt.Char == 1:
 
 			mf.targets = append(mf.targets, opt.OptArg)
-		default:
-			throwFmt("make: unhandled flag %v", opt)
 		}
 	}
 
