@@ -156,10 +156,6 @@ func casAnalyze(casDir string, chunkAvg int, minLen int64) int {
 	chunkedStore := uniqueBytes + refOverhead
 
 	pct := func(part, whole int64) float64 {
-		if whole == 0 {
-			return 0
-		}
-
 		return 100 * float64(part) / float64(whole)
 	}
 

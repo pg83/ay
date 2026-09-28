@@ -163,14 +163,7 @@ func sigAssignBoundary(a, b ast.Stmt, sizeA, sizeB int) bool {
 func lintCoalesceAssign(path string) bool {
 	src := throw2(os.ReadFile(path))
 	fset := gotoken.NewFileSet()
-	f, err := goparser.ParseFile(fset, path, src, goparser.ParseComments)
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
-
-		return false
-	}
-
+	f := throw2(goparser.ParseFile(fset, path, src, goparser.ParseComments))
 	lineOf := func(p gotoken.Pos) int { return fset.Position(p).Line }
 	commentLine := map[int]bool{}
 
@@ -263,13 +256,7 @@ func lintCoalesceAssign(path string) bool {
 		}
 	}
 
-	formatted, err := format.Source([]byte(b.String()))
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "refac lint: %s: coalesce-assign format failed (left unchanged): %v\n", path, err)
-
-		return false
-	}
+	formatted := throw2(format.Source([]byte(b.String())))
 
 	if bytes.Equal(formatted, src) {
 		return false
@@ -427,11 +414,7 @@ func collectOccurrences(pf *ParsedFile, fileIdx int, occs *[]Occurrence) {
 			}
 
 			for _, spec := range d.Specs {
-				vs, ok := spec.(*ast.ValueSpec)
-
-				if !ok {
-					continue
-				}
+				vs := spec.(*ast.ValueSpec)
 
 				for _, val := range vs.Values {
 					ast.Inspect(val, func(n ast.Node) bool {
@@ -540,11 +523,7 @@ func hoistCall(call *ast.CallExpr) (HoistKey, bool) {
 		return HoistKey{}, false
 	}
 
-	lit, err := strconv.Unquote(bl.Value)
-
-	if err != nil {
-		return HoistKey{}, false
-	}
+	lit := throw2(strconv.Unquote(bl.Value))
 
 	switch id.Name {
 	case "intern":
@@ -623,12 +602,7 @@ func internArgsRewrites(pf *ParsedFile, existing map[HoistKey]string, used map[s
 				return true
 			}
 
-			lit, err := strconv.Unquote(bl.Value)
-
-			if err != nil {
-				return true
-			}
-
+			lit := throw2(strconv.Unquote(bl.Value))
 			key := HoistKey{kind: hoistArg, canon: lit}
 			name, seen := existing[key]
 
@@ -1042,15 +1016,7 @@ func genNodeOwnershipGlobals(files []string) bool {
 			continue
 		}
 
-		f, err := goparser.ParseFile(fset, path, nil, 0)
-
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "refac lint: %s: parse: %v\n", path, err)
-
-			continue
-		}
-
-		parsed = append(parsed, f)
+		parsed = append(parsed, throw2(goparser.ParseFile(fset, path, nil, 0)))
 	}
 
 	sliceFns := map[string]bool{}
@@ -1625,13 +1591,7 @@ func lintControlBlankLines(path string) bool {
 		}
 	}
 
-	formatted, err := format.Source([]byte(b.String()))
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "refac lint: %s: blank-around-blocks format failed (left unchanged): %v\n", path, err)
-
-		return false
-	}
+	formatted := throw2(format.Source([]byte(b.String())))
 
 	if bytes.Equal(formatted, src) {
 		return false
@@ -1663,10 +1623,6 @@ func lintTightBraces(path string) bool {
 	del := map[int]bool{}
 
 	tighten := func(open, close gotoken.Pos) {
-		if !open.IsValid() || !close.IsValid() {
-			return
-		}
-
 		openLine, closeLine := lineOf(open), lineOf(close)
 
 		for l := openLine + 1; l < closeLine && isBlank(l); l++ {
@@ -1685,13 +1641,9 @@ func lintTightBraces(path string) bool {
 		case *ast.CompositeLit:
 			tighten(x.Lbrace, x.Rbrace)
 		case *ast.StructType:
-			if x.Fields != nil {
-				tighten(x.Fields.Opening, x.Fields.Closing)
-			}
+			tighten(x.Fields.Opening, x.Fields.Closing)
 		case *ast.InterfaceType:
-			if x.Methods != nil {
-				tighten(x.Methods.Opening, x.Methods.Closing)
-			}
+			tighten(x.Methods.Opening, x.Methods.Closing)
 		}
 
 		return true
@@ -1711,13 +1663,7 @@ func lintTightBraces(path string) bool {
 		kept = append(kept, ln)
 	}
 
-	formatted, err := format.Source([]byte(strings.Join(kept, "\n")))
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "refac lint: %s: tight-braces format failed (left unchanged): %v\n", path, err)
-
-		return false
-	}
+	formatted := throw2(format.Source([]byte(strings.Join(kept, "\n"))))
 
 	if bytes.Equal(formatted, src) {
 		return false
@@ -1776,13 +1722,7 @@ func lintExpandFuncBodies(path string) bool {
 		b = append(b[:off:off], append([]byte("\n"), b[off:]...)...)
 	}
 
-	formatted, err := format.Source(b)
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "refac lint: %s: expand-func-bodies format failed (left unchanged): %v\n", path, err)
-
-		return false
-	}
+	formatted := throw2(format.Source(b))
 
 	if bytes.Equal(formatted, src) {
 		return false
@@ -1855,13 +1795,7 @@ func lintFuncBlankLines(path string) bool {
 		}
 	}
 
-	formatted, err := format.Source([]byte(b.String()))
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "refac lint: %s: func-blank-lines format failed (left unchanged): %v\n", path, err)
-
-		return false
-	}
+	formatted := throw2(format.Source([]byte(b.String())))
 
 	if bytes.Equal(formatted, src) {
 		return false

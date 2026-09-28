@@ -14,14 +14,6 @@ func (e *Exception) Error() string {
 	return e.error()
 }
 
-func (e *Exception) unwrap() error {
-	return e.what()
-}
-
-func (e *Exception) Unwrap() error {
-	return e.unwrap()
-}
-
 func (e *Exception) throw() {
 	panic(e)
 }
@@ -33,10 +25,6 @@ func (e *Exception) catch(cb func(*Exception)) {
 }
 
 func (e *Exception) asError() error {
-	if e == nil {
-		return nil
-	}
-
 	return e.what()
 }
 

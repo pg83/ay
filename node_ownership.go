@@ -36,7 +36,7 @@ func ownershipCallSite() string {
 	for {
 		f, more := frames.Next()
 
-		if !strings.HasSuffix(f.File, "/ownership_debug.go") && !strings.HasSuffix(f.File, "/node_emitter.go") {
+		if !strings.HasSuffix(f.File, "/node_emitter.go") {
 			short := f.File[strings.LastIndexByte(f.File, '/')+1:]
 
 			return fmt.Sprintf("%s:%d", short, f.Line)
@@ -56,10 +56,6 @@ func init() {
 }
 
 func registerOwnedRange(p unsafe.Pointer, bytes int) {
-	if !ownershipOn || bytes == 0 {
-		return
-	}
-
 	lo := uintptr(p)
 
 	ownershipRanges = append(ownershipRanges, OwnedRange{lo: lo, hi: lo + uintptr(bytes)})
