@@ -332,7 +332,7 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 		return nil
 	}
 
-	if splitHasCCShard && len(splitSrcs) > 0 {
+	if splitHasCCShard {
 		var firstShardFile string
 		var firstShardVFS VFS
 
@@ -355,7 +355,7 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 
 			includes := e.ctx.na.dirs.alloc(capacity)[:0]
 
-			if isNonFirst && firstShardVFS != 0 {
+			if isNonFirst {
 				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel().any())})
 			}
 
@@ -370,10 +370,7 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 
 		if isHeaderSource(outFile) {
 			includes := e.ctx.na.dirs.alloc(1 + len(splitSrcs))[:0]
-
-			if firstShardVFS != 0 {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel().any())})
-			}
+			includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel().any())})
 
 			for _, src := range splitSrcs {
 				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel().any())})
