@@ -159,6 +159,25 @@ class LlvmBcTest(unittest.TestCase):
         merge = lib.node_by_output(graph, "$(B)/mod/foo_merged.bc")
         self.assertEqual(merge["inputs"], ["$(B)/mod/a.cpp.bc", "$(B)/missing.cpp.bc"])
 
+    def test_root_module_uses_generated_source_registered_by_codegen(self):
+        files = llvm_bc_files("", {})
+        del files["mod/ya.make"]
+        files["ya.make"] = (
+            "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nUSE_LLVM_BC20()\n"
+            "BASE_CODEGEN(tools/codegen gen)\nLLVM_BC(gen.cpp NAME foo)\nEND()\n"
+        )
+        files["gen.in"] = ""
+        lib.tool_program(files, "tools/codegen", "codegen")
+        graph = lib.make(files, ".", "--target-platform", "default-linux-x86_64")
+        codegen = lib.node_by_output_prefix(graph, "$(B)/./gen.cpp")
+        generated = codegen["outputs"][0]
+        compile_node = lib.node_by_output(graph, "$(B)/gen.cpp.bc")
+        self.assertEqual(compile_node["inputs"][1], generated)
+        self.assertEqual(compile_node["cmds"][0]["cmd_args"][-3:], [
+            generated, "-o", "$(B)/gen.cpp.bc",
+        ])
+        self.assertIn(codegen["uid"], compile_node["deps"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
