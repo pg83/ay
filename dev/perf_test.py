@@ -154,22 +154,27 @@ class ScheduleTest(unittest.TestCase):
             PERF.decision_checkpoints(31, 120, 1.5)
 
     def test_perf_is_required(self):
-        cpu = next(iter(PERF.os.sched_getaffinity(0)))
+        # The perf binary is resolved before the CPU affinity check, so the
+        # CPU number is irrelevant here and the test also runs where the
+        # platform has no sched_getaffinity.
         argv = [
             "--left",
             PERF.sys.executable,
             "--right",
             PERF.sys.executable,
             "--cpu",
-            str(cpu),
+            "0",
             "--",
             "target",
         ]
+        stderr = io.StringIO()
 
         with mock.patch.object(PERF.shutil, "which", return_value=None):
-            with contextlib.redirect_stderr(io.StringIO()):
+            with contextlib.redirect_stderr(stderr):
                 with self.assertRaises(SystemExit):
                     PERF._parse_args(argv)
+
+        self.assertIn("binary not found: perf", stderr.getvalue())
 
 
 if __name__ == "__main__":
