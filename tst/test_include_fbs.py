@@ -125,6 +125,7 @@ class FlatbuffersIncludeTest(unittest.TestCase):
             'include "m/b.fbs";\n#  ': {"b.fbs"},
             'include "m/b.fbs";\n   ': {"b.fbs"},
             'include "m/b.fbs";\n/* open': {"b.fbs"},
+            'R"(\ninclude "m/hidden.fbs";\n)"\ninclude "m/b.fbs";': {"b.fbs"},
         }
         for schema, expected in cases.items():
             with self.subTest(schema=schema):

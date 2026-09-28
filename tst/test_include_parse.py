@@ -19,6 +19,7 @@ LIBRARY = (
     "END()\n"
 )
 READ_CHUNK = 1 << 20
+DIRECTIVE_BLOCK = 1 << 14
 
 
 def make_process(files, target, *args):
@@ -170,6 +171,33 @@ class CIncludeDirectiveParsingTest(unittest.TestCase):
                     ["first.h", "last.h", "LAST_H"],
                 )
                 self.assertEqual({"first.h"} | expected, included)
+
+    def test_extensionless_header_uses_includer_parser(self):
+        files = {
+            f"{MODULE}/ya.make": LIBRARY,
+            f"{MODULE}/a.cpp": "#include <h>\n",
+            # "h" is a proper prefix of the reversed ".h" key, so the
+            # extension matcher consumes the whole name without a match.
+            "h": '#include "m/deep.h"\n',
+            f"{MODULE}/deep.h": "",
+        }
+        graph = json.loads(make_process(files, MODULE).stdout)
+        self.assertEqual(
+            {"$(S)/m/a.cpp", "$(S)/h", "$(S)/m/deep.h"},
+            set(lib.node_by_output(graph, OBJECT)["inputs"]),
+        )
+
+    def test_directive_count_limit_is_fatal(self):
+        files = {
+            f"{MODULE}/ya.make": LIBRARY,
+            f"{MODULE}/a.cpp": '#include "h.h"\n' * (DIRECTIVE_BLOCK + 1),
+            f"{MODULE}/h.h": "",
+        }
+        result = make_process(files, MODULE)
+        self.assertEqual(1, result.returncode)
+        self.assertIn(
+            f"directive block overflowed {DIRECTIVE_BLOCK} entries", result.stderr
+        )
 
     def test_byte_order_mark_is_skipped(self):
         files = {
