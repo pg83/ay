@@ -144,10 +144,6 @@ func pbHEmitsIncludesExtras() []IncludeDirective {
 }
 
 func protoOutputRel(outputRoot, rel string) string {
-	if outputRoot == "" {
-		return rel
-	}
-
 	if pathIsClean(outputRoot) && pathIsClean(rel) {
 		return internV(outputRoot, "/", rel).string()
 	}
