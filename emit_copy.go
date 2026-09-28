@@ -177,5 +177,5 @@ func (e *EmitContext) emitCopyFileNodeSnap(entry CopyFileEntry, st CopyEmitState
 		closure = ctx.na.vfsList(st.producerSource...)
 	}
 
-	e.emitCPWithDeps(st.srcVFS, st.dstVFS, nil, closure, st.ref, e.d.cc.ModuleTag, e.d.tc, ctx.scripts)
+	e.emitCPWithInputs(st.srcVFS, st.dstVFS, closure, st.ref, e.d.tc, ctx.scripts)
 }

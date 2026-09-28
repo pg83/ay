@@ -4,11 +4,6 @@ var archiveAsmKV = KV{P: pkAR, PC: pcLightCyan}
 
 func (e *EmitContext) emitArchiveAsmForAR() {
 	ctx, _, d := e.ctx, e.instance, e.d
-
-	if len(d.archiveAsm) == 0 {
-		return
-	}
-
 	toolLDRef, toolBinPath := ctx.tool(argToolsArchiver)
 	reg := e.codegen
 
