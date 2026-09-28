@@ -9,7 +9,7 @@ type IdValueMap struct {
 func (m *IdValueMap) reset(size uint32) {
 	if m.gen.freshLen(int(size)) {
 		m.val = make([]int32, m.gen.len())
-		m.epoch = uint32(chaosEpochStart.number(1))
+		m.epoch = uint32(chaosFirstEpoch(1))
 
 		return
 	}

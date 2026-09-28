@@ -42,7 +42,7 @@ type DeDuper struct {
 
 func (dd *DeDuper) reset() {
 	if dd.gen.freshLen(int(vfsBound())) {
-		dd.epoch = uint16(chaosEpochStart.number(1))
+		dd.epoch = uint16(chaosFirstEpoch(1))
 
 		return
 	}

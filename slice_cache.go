@@ -40,7 +40,7 @@ func (c *SliceCache[T]) intern(block []T) []T {
 		return nil
 	}
 
-	sum := xxh3.Hash128(sliceBytes(block))
+	sum := chaosSliceHash(xxh3.Hash128(sliceBytes(block)))
 	h1, h2 := sum.Hi, sum.Lo
 
 	if h1 == 0 {

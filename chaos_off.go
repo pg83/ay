@@ -2,36 +2,45 @@
 
 package main
 
-// ChaosPoint is a fault seam. A call site hands it the result it has just
+import "github.com/zeebo/xxh3"
+
+// The fault seam. A call site hands a chaos function the value it has just
 // got and carries on with whatever comes back. The production build hands
-// every result back untouched, so the compiler folds the seam away; the test
+// every value back untouched, so the compiler folds the calls away; the test
 // build (chaos_on.go) breaks what AY_CHAOS asks for.
-type ChaosPoint struct{}
 
-func newChaosFault(string) ChaosPoint {
-	return ChaosPoint{}
+func chaosAssert(ok bool) bool {
+	return ok
 }
 
-func newChaosNumber(string) ChaosPoint {
-	return ChaosPoint{}
+func chaosTry(cb func()) func() {
+	return cb
 }
 
-func newChaosText(string) ChaosPoint {
-	return ChaosPoint{}
+func chaosTableHint(hint int) int {
+	return hint
 }
 
-func (ChaosPoint) fire() bool {
-	return false
+func chaosFirstEpoch(epoch uint64) uint64 {
+	return epoch
 }
 
-func (ChaosPoint) number(got uint64) uint64 {
-	return got
+func chaosBumpChunkBytes(n int) int {
+	return n
 }
 
-func (ChaosPoint) text(got string) string {
-	return got
+func chaosInternHash(h xxh3.Uint128) xxh3.Uint128 {
+	return h
 }
 
-func chaosSwap[T any](_ ChaosPoint, got, _ T) T {
-	return got
+func chaosSliceHash(h xxh3.Uint128) xxh3.Uint128 {
+	return h
+}
+
+func chaosBucketHash(h1, h2 uint64) (uint64, uint64) {
+	return h1, h2
+}
+
+func chaosBucketListHash(h1, h2 uint64) (uint64, uint64) {
+	return h1, h2
 }

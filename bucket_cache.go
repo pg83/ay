@@ -31,6 +31,8 @@ func bucketListHash(buckets [][]VFS) (uint64, uint64) {
 		h2 = mix64(h2 + x + 0x9e3779b97f4a7c15)
 	}
 
+	h1, h2 = chaosBucketListHash(h1, h2)
+
 	if h1 == 0 {
 		h1 = 1
 	}
@@ -76,7 +78,7 @@ func newBucketCache() *BucketCache {
 		overflow:     newIntValueMap[BucketVal](1 << 4),
 		listIntern:   newIntValueMap[BucketListVal](1 << 16),
 		listOverflow: newIntValueMap[BucketListVal](1 << 4),
-		bucketEpoch:  uint32(chaosEpochStart.number(1)),
+		bucketEpoch:  uint32(chaosFirstEpoch(1)),
 	}
 
 	return c
