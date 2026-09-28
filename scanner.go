@@ -55,7 +55,6 @@ type IncludeScanner struct {
 	parsers        *IncludeParserManager
 	buckets        *BucketCache
 	closureScratch []VFS
-	inDfsFrame     bool
 	scanCache      DenseMap2[VFS, []VFS, Closure]
 	searchTierFlat *IntMap[VFS]
 	searchTierSeen BitSet
@@ -351,11 +350,7 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 	}
 
 	for _, gref := range info.GeneratorRefs {
-		tool, ok := s.moduleByRef.get(gref)
-
-		if !ok {
-			continue
-		}
+		tool, _ := s.moduleByRef.get(gref)
 
 		for _, entry := range tool.InducedDeps.bucket(bucket) {
 			out = sc.resolve(out, vfsPath, incDir, entry)
@@ -420,14 +415,6 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		sc.ensureClosure(ch)
 	}
 
-	if ownershipOn {
-		if s.inDfsFrame {
-			throwFmt("scanner: nested dfs frame (closure assembly reentered)")
-		}
-
-		s.inDfsFrame = true
-	}
-
 	sc.tjc.closure.reset(vfsBound())
 	sc.tjc.closure.add(abs)
 	s.buckets.resetScratch(abs)
@@ -461,10 +448,6 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	}
 
 	s.putClosure(abs, s.buckets.storeScratch(abs))
-
-	if ownershipOn {
-		s.inDfsFrame = false
-	}
 }
 
 func (sc *ScanCtx) ensureClosure(abs VFS) {
@@ -896,13 +879,7 @@ func (sc *ScanCtx) resolveSearchPath(out []VFS, includerAbs, incDir VFS, d Inclu
 			return false
 		}
 
-		v := source(rel)
-
-		if outHas(v) {
-			return false
-		}
-
-		out = append(out, v)
+		out = append(out, source(rel))
 
 		return true
 	}
