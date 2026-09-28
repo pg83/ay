@@ -514,7 +514,8 @@ class ExecFailureTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertRegex(
             plain(result.stderr),
-            r"\Alink \S+/bld/tmp/\S+ \S+/bld/cas/\S+: invalid cross-device link\n\Z",
+            # Linux says "invalid cross-device link", macOS "cross-device link".
+            r"\Alink \S+/bld/tmp/\S+ \S+/bld/cas/\S+: (invalid )?cross-device link\n\Z",
         )
         self.assertFalse((ws.inst / "tool").exists())
 
