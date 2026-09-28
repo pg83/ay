@@ -144,6 +144,20 @@ class YaMakeProtoTest(unittest.TestCase):
                 cc = lib.node_by_output(graph, "$(B)/a/x.pb.cc.o")["cmds"][0]["cmd_args"]
                 self.assertIn(cc_include, cc)
 
+    def test_yaff_file_filter_decides_generated_header_includes(self):
+        cases = [
+            ("YAFF(NAMESPACE yns FILES x.proto EXPERIMENTAL x.proto)", ["$(S)/a/u.cpp", "$(B)/a/x.yaff.h", "$(B)/a/x.pb.h", "$(S)/a/x.proto"]),
+            ("YAFF(NAMESPACE yns FILES x.proto)", ["$(S)/a/u.cpp", "$(B)/a/x.yaff.h", "$(B)/a/x.pb.h", "$(S)/a/x.proto"]),
+            ("YAFF(NAMESPACE yns FILES other.proto)", ["$(S)/a/u.cpp", "$(B)/a/x.yaff.h"]),
+        ]
+        for body, expected in cases:
+            with self.subTest(body=body):
+                files = proto_tree(body + "\nSRCS(u.cpp)")
+                files["a/u.cpp"] = '#include "a/x.yaff.h"\n'
+                code, graph, stderr = ay_make(files, "-k")
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(lib.node_by_output(graph, "$(B)/a/u.cpp.o")["inputs"], expected)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
