@@ -112,8 +112,10 @@ class SourcePathResolutionTest(unittest.TestCase):
             "$(B)/mod/_/nodir/z.cpp.o",
         ]))
         shared = nodes["$(B)/mod/__/shared/x.cpp.o"]
-        self.assertEqual(shared["inputs"], [
-            "$(S)/shared/x.cpp",
+        # The source comes first; the order of its include closure follows
+        # closure buckets, which depend on path ids.
+        self.assertEqual(shared["inputs"][0], "$(S)/shared/x.cpp")
+        self.assertCountEqual(shared["inputs"][1:], [
             "$(S)/shared/h.h",
             f"$(S)/{LONG_DIR}/{LONG_FILE[:-4]}.h",
         ])
