@@ -79,7 +79,6 @@ GO_SOURCES = build.glob("$(S)/*.go")
 
 GENERATED_DENSE_MAPS = [
     "$(B)/generated/go/dense_map_2.go",
-    "$(B)/generated/go/dense_map_3.go",
 ]
 
 dense_maps = command(
