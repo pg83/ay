@@ -1,9 +1,5 @@
 package main
 
-import (
-	"strings"
-)
-
 var (
 	PlatformDefaultLinuxAArch64 = makePlatformID(OSLinux, ISAAArch64)
 	PlatformDefaultLinuxX8664   = makePlatformID(OSLinux, ISAX8664)
@@ -42,45 +38,7 @@ const (
 
 type Language int
 
-func (l Language) string() string {
-	switch l {
-	case LangNone:
-		return ""
-	case LangCPP:
-		return "cpp"
-	case LangProto:
-		return "proto"
-	case LangGo:
-		return "go"
-	case LangPy:
-		return "py"
-	case LangJava:
-		return "java"
-	case LangDescProto:
-		return "desc_proto"
-	}
-
-	throwFmt("Language.string: unknown language %d", int(l))
-
-	return ""
-}
-
 type ModuleKind int
-
-func (k ModuleKind) string() string {
-	switch k {
-	case KindBin:
-		return "bin"
-	case KindLib:
-		return "lib"
-	default:
-		return "unknown"
-	}
-}
-
-func (k ModuleKind) String() string {
-	return k.string()
-}
 
 type OS string
 
@@ -121,22 +79,4 @@ func newToolInstance(host *Platform, path string) ModuleInstance {
 		Language: LangCPP,
 		Platform: host,
 	}
-}
-
-func (mi ModuleInstance) string() string {
-	var b strings.Builder
-	b.WriteString(mi.Path.relString())
-	b.WriteString("[")
-	b.WriteString(mi.Kind.string())
-	b.WriteString("]")
-	b.WriteString(":")
-	b.WriteString(mi.Language.string())
-	b.WriteString("@")
-	b.WriteString(string(mi.Platform.Target))
-
-	return b.String()
-}
-
-func (mi ModuleInstance) String() string {
-	return mi.string()
 }
