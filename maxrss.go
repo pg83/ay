@@ -116,12 +116,6 @@ func cmdMaxRSS(g GlobalFlags, args []string) int {
 		return ee.ExitCode()
 	}
 
-	if waitErr != nil {
-		fmt.Fprintf(os.Stderr, "maxrss: %v\n", waitErr)
-
-		return 1
-	}
-
 	return 0
 }
 
