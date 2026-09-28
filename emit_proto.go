@@ -675,11 +675,7 @@ func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) []VFS {
 
 func appendPbHCompanions(dst []IncludeDirective, pbhImports []IncludeDirective, ext string) []IncludeDirective {
 	for _, dir := range pbhImports {
-		base, ok := strings.CutSuffix(dir.target.string(), ".pb.h")
-
-		if !ok {
-			continue
-		}
+		base := strings.TrimSuffix(dir.target.string(), ".pb.h")
 
 		dst = append(dst, IncludeDirective{kind: dir.kind, target: includeTarget(internV(base, ext).any())})
 	}
