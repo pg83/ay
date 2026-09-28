@@ -1,5 +1,9 @@
 package main
 
+// chaosEpochStart stands in for the first epoch of every epoch-stamped table,
+// so tests reach the wraparound without 2^16 or 2^32 resets.
+var chaosEpochStart = newChaosNumber("epoch-start")
+
 type IdSet struct {
 	gen   Vec[uint16]
 	epoch uint16
@@ -7,7 +11,7 @@ type IdSet struct {
 
 func (s *IdSet) reset(size uint32) {
 	if s.gen.freshLen(int(size)) {
-		s.epoch = 1
+		s.epoch = uint16(chaosEpochStart.number(1))
 
 		return
 	}

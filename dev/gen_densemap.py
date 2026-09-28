@@ -88,10 +88,6 @@ def gen_packed(n):
         w(f"\n\t*unsafeAt(m.vals{i}.s, uint64(slot)) = v")
         w(f"\n\t*unsafeAt(m.set.s, uint64(slot)) |= {bit}\n}}\n")
 
-    w(f"\nfunc {rv} len() int {{")
-    w("\n\tif len(m.set.s) == 0 {\n\t\treturn 0\n\t}\n")
-    w("\n\treturn len(m.set.s) - 1\n}\n")
-
     return "".join(out)
 
 

@@ -9,7 +9,7 @@ type IdValueMap struct {
 func (m *IdValueMap) reset(size uint32) {
 	if m.gen.freshLen(int(size)) {
 		m.val = make([]int32, m.gen.len())
-		m.epoch = 1
+		m.epoch = uint32(chaosEpochStart.number(1))
 
 		return
 	}
@@ -23,17 +23,10 @@ func (m *IdValueMap) reset(size uint32) {
 	}
 }
 
+// put takes keys below the bound of the last reset: scheduleProducers resets
+// with vfsBound() and then stores outputs that already exist.
 func (m *IdValueMap) put(k VFS, v int32) {
 	id := uint32(k)
-
-	if id >= uint32(m.gen.len()) {
-		m.gen.ensureLen(int(id) + 1)
-
-		grown := make([]int32, m.gen.len())
-
-		copy(grown, m.val)
-		m.val = grown
-	}
 
 	m.gen.s[id] = m.epoch
 	m.val[id] = v

@@ -76,7 +76,7 @@ func newBucketCache() *BucketCache {
 		overflow:     newIntValueMap[BucketVal](1 << 4),
 		listIntern:   newIntValueMap[BucketListVal](1 << 16),
 		listOverflow: newIntValueMap[BucketListVal](1 << 4),
-		bucketEpoch:  1,
+		bucketEpoch:  uint32(chaosEpochStart.number(1)),
 	}
 
 	return c

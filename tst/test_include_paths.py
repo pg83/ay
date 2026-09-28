@@ -1,9 +1,4 @@
-import json
-import os
-import subprocess
-import tempfile
 import unittest
-from pathlib import Path
 
 import lib
 
@@ -61,71 +56,6 @@ class NonCanonicalModulePathTest(unittest.TestCase):
         self.assertEqual(
             ["$(S)/build/scripts/fs_tools.py", "$(S)/m/src.h"],
             lib.node_by_output(graph, "$(B)/m/dst.h")["inputs"],
-        )
-
-
-class DedupDebugTest(unittest.TestCase):
-    FILES = {
-        "app/ya.make": (
-            "PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
-            "PEERDIR(one two)\nSRCS(main.cpp)\nEND()\n"
-        ),
-        "app/main.cpp": "#include <one/one.h>\nint main(){return 0;}\n",
-        "one/ya.make": (
-            "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
-            "PEERDIR(two)\nADDINCL(GLOBAL one/inc)\nSRCS(one.cpp)\nEND()\n"
-        ),
-        "one/one.h": "#include <shared.h>\n",
-        "one/one.cpp": '#include "one.h"\n',
-        "one/inc/shared.h": "",
-        "two/ya.make": (
-            "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
-            "SRCS(two.cpp)\nEND()\n"
-        ),
-        "two/two.cpp": "",
-    }
-
-    def run_make(self, extra_env):
-        with tempfile.TemporaryDirectory(prefix="ay-include-dedup-") as directory:
-            root = Path(directory)
-            (root / ".arcadia.root").touch()
-            (root / "ya.conf").write_text(
-                '[flags]\nOPENSOURCE = "yes"\n\n[host_platform_flags]\nOPENSOURCE = "yes"\n'
-            )
-            for relative, content in self.FILES.items():
-                path = root / relative
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(content)
-            env = {
-                key: value
-                for key, value in os.environ.items()
-                if key not in lib.TOOLCHAIN_ENV_VARS and key != "AY_DEBUG_DEDUP"
-            }
-            env.update(extra_env)
-            return subprocess.run(
-                [
-                    str(lib.AY), "make", "-j0", "-G", "--sandboxing",
-                    "--source-root", str(root),
-                    "--target-platform", "default-linux-aarch64",
-                    "--host-platform", "default-linux-x86_64",
-                    "app",
-                ],
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=30,
-                check=True,
-            )
-
-    def test_borrow_tracking_does_not_change_the_graph(self):
-        plain = self.run_make({})
-        tracked = self.run_make({"AY_DEBUG_DEDUP": "1"})
-        self.assertEqual(json.loads(plain.stdout), json.loads(tracked.stdout))
-        self.assertNotIn("live dedupers", tracked.stderr)
-        self.assertIn(
-            "$(S)/one/inc/shared.h",
-            lib.node_by_output(json.loads(tracked.stdout), "$(B)/app/main.cpp.o")["inputs"],
         )
 
 

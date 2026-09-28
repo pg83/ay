@@ -59,41 +59,51 @@ func newChaosPoint(name string, kind ChaosKind) ChaosPoint {
 
 	chaosPoints[name] = state
 
+	// Points arm while the package initializes: some sites run in the
+	// initializers of other package-level variables. init() rejects the words
+	// that arm nothing; exiting from there still writes coverage counters.
+	for _, word := range strings.Fields(os.Getenv("AY_CHAOS")) {
+		if strings.HasPrefix(word, name+"=") {
+			chaosArm(state, word[len(name)+1:])
+		}
+	}
+
 	return ChaosPoint{state: state}
 }
 
 func init() {
 	for _, word := range strings.Fields(os.Getenv("AY_CHAOS")) {
-		chaosArm(word)
+		name, arg, ok := strings.Cut(word, "=")
+		state := chaosPoints[name]
+
+		if !ok || state == nil || !chaosArm(state, arg) {
+			fmt.Fprintf(os.Stderr, "AY_CHAOS: bad word %q\n", word)
+			os.Exit(2)
+		}
 	}
 }
 
-func chaosArm(word string) {
-	name, arg, ok := strings.Cut(word, "=")
-	state := chaosPoints[name]
-
-	if !ok || state == nil {
-		chaosBadWord(word)
-	}
-
+// chaosArm applies a word's argument to its point; arming twice with the same
+// argument changes nothing. It reports whether the argument suits the point.
+func chaosArm(state *ChaosState, arg string) bool {
 	if state.kind == chaosKindText {
 		state.set = true
 		state.text = arg
 
-		return
+		return true
 	}
 
 	n, err := strconv.ParseUint(arg, 0, 64)
 
 	if err != nil {
-		chaosBadWord(word)
+		return false
 	}
 
 	if state.kind == chaosKindNumber {
 		state.set = true
 		state.number = n
 
-		return
+		return true
 	}
 
 	if state.fires == nil {
@@ -101,11 +111,8 @@ func chaosArm(word string) {
 	}
 
 	state.fires[n] = true
-}
 
-func chaosBadWord(word string) {
-	fmt.Fprintf(os.Stderr, "AY_CHAOS: bad word %q\n", word)
-	os.Exit(2)
+	return true
 }
 
 func (p ChaosPoint) fire() bool {
