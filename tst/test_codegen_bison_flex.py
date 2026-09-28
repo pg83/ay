@@ -37,7 +37,7 @@ def bison_files(body, sources):
         **sources,
     }
     for skeleton in BISON_SKELETONS:
-        files[f"contrib/tools/bison/data/{skeleton}"] = ""
+        files.setdefault(f"contrib/tools/bison/data/{skeleton}", "")
     lib.tool_program(files, "contrib/tools/bison", "bison")
     lib.tool_program(files, "contrib/tools/m4", "m4")
     return files
@@ -59,6 +59,10 @@ class BisonTest(unittest.TestCase):
             "mod/gram.y": '%{\n#include "local.h"\n%}\n%%\n',
             "mod/local.h": "",
             "mod/sub/lex.ypp": "%%\n",
+            "contrib/tools/bison/data/skeletons/lalr1.cc": (
+                '#include "stack.hh"\n#include "extra.hh"\n'
+            ),
+            "contrib/tools/bison/data/skeletons/extra.hh": "",
         }), "mod")
 
         node = lib.node_by_output(graph, "$(B)/mod/gram.y.cpp")
@@ -81,8 +85,9 @@ class BisonTest(unittest.TestCase):
             "$(S)/mod/gram.y",
             "$(S)/build/scripts/preprocess.py",
         ])
-        for skeleton in BISON_SKELETONS:
-            self.assertIn(f"$(S)/contrib/tools/bison/data/{skeleton}", node["inputs"])
+        self.assertEqual(node["inputs"][4:], [
+            f"$(S)/contrib/tools/bison/data/{skeleton}" for skeleton in BISON_SKELETONS
+        ] + ["$(S)/contrib/tools/bison/data/skeletons/extra.hh"])
 
         compile_node = lib.node_by_output(graph, "$(B)/mod/gram.y.cpp.o")
         args = compile_node["cmds"][0]["cmd_args"]

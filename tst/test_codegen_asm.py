@@ -146,6 +146,25 @@ class AssemblerTest(unittest.TestCase):
         yasm = lib.node_by_output(graph, "$(B)/mod/y.o")
         self.assertEqual(yasm["cmds"][0]["cmd_args"][-1], "$(S)/other/dir/y.asm")
 
+    def test_go_module_assembler_forces_consistent_debug_paths(self):
+        empty = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n"
+        graph = lib.make({
+            "gomod/ya.make": "GO_LIBRARY()\nSRCS(a.go x.S)\nEND()\n",
+            "gomod/a.go": "package gomod\n",
+            "gomod/x.S": "",
+            "build/external_resources/go_tools/ya.make": empty,
+            "build/external_resources/yolint/ya.make": empty,
+        }, "gomod", *X86_64)
+        node = lib.node_by_output(graph, "$(B)/gomod/x.S.o")
+        args = node["cmds"][0]["cmd_args"]
+        self.assertEqual(args[1:4], ["--target=x86_64-linux-gnu", "-B/usr/bin", "-fdebug-prefix-map=$(B)=/-B"])
+        self.assertEqual(args.count("-fdebug-prefix-map=$(B)=/-B"), 2)
+        self.assertEqual(args.count("-fdebug-compilation-dir"), 2)
+        start = args.index("-c")
+        self.assertEqual(args[start:start + 6], [
+            "-c", "-o", "$(B)/gomod/x.S.o", "$(S)/gomod/x.S", "-I$(B)", "-I$(S)",
+        ])
+
 
 class ArchiveAsmTest(unittest.TestCase):
     def files(self, archive):
@@ -205,6 +224,28 @@ class ArchiveAsmTest(unittest.TestCase):
         self.assertEqual(archive["cmds"][0]["cmd_args"][1:], [
             "-q", "$(S)/mod/x.bin:", "-o", "$(B)/mod/blob.rodata",
         ])
+
+    def test_archive_asm_member_produced_by_copy_file(self):
+        files = self.files("COPY_FILE(x.bin gen.bin)\nARCHIVE_ASM(NAME blob gen.bin y.bin)\n")
+        graph = lib.make(files, "mod", *X86_64)
+        copy = lib.node_by_output(graph, "$(B)/mod/gen.bin")
+        archive = lib.node_by_output(graph, "$(B)/mod/blob.rodata")
+        self.assertEqual(archive["cmds"][0]["cmd_args"][1:], [
+            "-q", "$(B)/mod/gen.bin:", "$(S)/mod/y.bin:", "-o", "$(B)/mod/blob.rodata",
+        ])
+        self.assertEqual(archive["inputs"], [
+            "$(B)/mod/gen.bin", "$(S)/mod/y.bin", "$(B)/tools/archiver/archiver",
+        ])
+        self.assertIn(copy["uid"], archive["deps"])
+        rodata = lib.node_by_output(graph, "$(B)/mod/blob.rodata.o")
+        self.assertEqual(rodata["inputs"][3:], ["$(S)/mod/y.bin", "$(S)/mod/x.bin"])
+
+    def test_archive_asm_requires_x86_64_target(self):
+        with self.assertRaisesRegex(
+            AssertionError,
+            'unsupported .rodata platform aarch64 for ARCHIVE_ASM "blob.rodata"',
+        ):
+            lib.make(self.files("ARCHIVE_ASM(NAME blob x.bin)\n"), "mod")
 
 
 if __name__ == "__main__":
