@@ -127,7 +127,7 @@ jobs:
           python3 dev/coverage.py combine \
             --out "$RUNNER_TEMP/cover.out" \
             --report "$RUNNER_TEMP/report.txt" \
-            --minimum 39 \
+            --minimum 98 \
             "$RUNNER_TEMP"/profiles/ay-coverage-go-*/cover.out | tee "$RUNNER_TEMP/summary.txt"
           {
             echo "## Coverage"
