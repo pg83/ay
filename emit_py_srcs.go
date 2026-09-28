@@ -120,22 +120,11 @@ func pySrcYapycSuffix(modulePath string) string {
 	return internBytes(out[:]).string()
 }
 
-func (e *EmitContext) collectPyGroups() []PySrcGroup {
-	d := e.d
-	groups := d.pySrcGroups
-
-	if len(groups) == 0 && len(d.pySrcs) > 0 {
-		groups = []PySrcGroup{{Srcs: d.pySrcs, TopLevel: d.pyTopLevel, Namespace: d.pyNamespace}}
-	}
-
-	return groups
-}
-
 func (e *EmitContext) registerCollectPySrcs() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	module := instance.Path.relString()
 
-	for gi, group := range e.collectPyGroups() {
+	for gi, group := range d.pySrcGroups {
 		keyPrefix := pyResourceKeyPrefix(group.TopLevel, group.Namespace, module)
 
 		for _, src := range group.Srcs {
@@ -345,7 +334,7 @@ func (e *EmitContext) emitPyBytecode(moduleSources bool) {
 	ctx.tool(argToolsArchiver)
 
 	for _, ps := range e.pySrcsReg {
-		if ps.Kind == pySourceProto || extIsPyi(ps.Token.string()) {
+		if ps.Kind == pySourceProto {
 			continue
 		}
 
@@ -470,7 +459,7 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 
 	res := &ObjcopyEmitResult{}
 
-	for gi, group := range e.collectPyGroups() {
+	for gi, group := range d.pySrcGroups {
 		if namespaceEnabled {
 			nsRefs, nsOuts := e.emitPyNamespaceForGroup(group)
 
@@ -769,7 +758,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 		priorShort := make(map[string]struct{}, i)
 
 		for j := 0; j < i; j++ {
-			if j < len(d.pyRegisterExplicit) && !d.pyRegisterExplicit[j] {
+			if !d.pyRegisterExplicit[j] {
 				continue
 			}
 

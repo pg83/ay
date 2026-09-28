@@ -82,10 +82,6 @@ func (SwigIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAlloca
 }
 
 func parseSwigIncludeLine(b []byte) (string, IncludeKind, bool) {
-	if len(b) == 0 || b[0] != '%' {
-		return "", includeSystem, false
-	}
-
 	b = b[1:]
 
 	switch {
@@ -111,8 +107,6 @@ func parseSwigIncludeLine(b []byte) (string, IncludeKind, bool) {
 		}
 
 		b = b[close+2:]
-	default:
-		return "", includeSystem, false
 	}
 
 	for len(b) > 0 && isParserSpace(b[0]) {

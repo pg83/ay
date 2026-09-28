@@ -227,11 +227,6 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-
-	if len(plans) == 0 {
-		return
-	}
-
 	scanCtx := d.scanCtx
 
 	for i := range plans {
