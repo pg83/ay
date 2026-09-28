@@ -59,11 +59,9 @@ func prMainOutputRel(stmt *RunProgramStmt) string {
 		return stmt.OUTFiles[0].string()
 	case len(stmt.OUTNoAutoFiles) > 0:
 		return stmt.OUTNoAutoFiles[0].string()
-	case stmt.StdoutFile != nil:
-		return stmt.StdoutFile.string()
 	}
 
-	return ""
+	return stmt.StdoutFile.string()
 }
 
 func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
