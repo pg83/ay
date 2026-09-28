@@ -18,6 +18,14 @@ def touch(path):
     ]
 
 
+def mkdir(path):
+    return [
+        "python3",
+        "-c",
+        f"from pathlib import Path; Path(r'{path}').mkdir(parents=True, exist_ok=True)",
+    ]
+
+
 def slug(value):
     result = re.sub(r"[^A-Za-z0-9_]+", "_", value).strip("_")
     if not result:
@@ -32,6 +40,10 @@ build.flags.allow({
     },
     "group_count": {
         "descr": "total number of validation shards",
+        "default": "",
+    },
+    "coverage": {
+        "descr": "build ay with -cover and merge unit coverage into $(B)/coverage/cover.out",
         "default": "",
     },
 })
@@ -55,6 +67,7 @@ def validation_partition():
 
 
 partition = validation_partition()
+coverage_enabled = bool(build.flags.coverage)
 
 GO_SOURCES = build.glob("$(S)/*.go")
 
@@ -75,9 +88,16 @@ dense_maps = command(
     color="magenta",
 )
 
-GO_INPUTS = [
+GO_MODULE_FILES = [
     *GO_SOURCES,
     *build.glob("$(S)/*.s"),
+    "$(S)/go.mod",
+    "$(S)/go.sum",
+    "$(S)/perf_darts_data.txt",
+]
+
+GO_INPUTS = [
+    *GO_MODULE_FILES,
     *GENERATED_DENSE_MAPS,
     "$(S)/dev/go_overlay.py",
     "$(S)/.gitignore",
@@ -85,9 +105,6 @@ GO_INPUTS = [
     "$(S)/PROMPTS.md",
     "$(S)/STYLE.md",
     "$(S)/acceptance",
-    "$(S)/go.mod",
-    "$(S)/go.sum",
-    "$(S)/perf_darts_data.txt",
 ]
 
 GO_OVERLAY = "$(B)/go-overlay.json"
@@ -105,22 +122,29 @@ GO_ENV = {
     "GOWORK": "off",
 }
 
+GO_BUILD_TAIL = ["-trimpath", "-buildvcs=false", "-o", "$(B)/bin/ay", "."]
+
+if coverage_enabled:
+    # The cover tool opens sources by their original names and ignores
+    # -overlay, so the instrumented build compiles a staged copy of the module.
+    GO_STAGED_MODULE = "$(B)/go-src"
+    ay_cmd = [
+        mkdir(GO_STAGED_MODULE),
+        ["cp", "--", *GO_MODULE_FILES, *GENERATED_DENSE_MAPS, GO_STAGED_MODULE + "/"],
+        ["go", "build", "-C", GO_STAGED_MODULE, "-cover", *GO_BUILD_TAIL],
+    ]
+else:
+    ay_cmd = [
+        GO_OVERLAY_CMD,
+        ["go", "build", "-overlay=" + GO_OVERLAY, *GO_BUILD_TAIL],
+    ]
+
 ay = command(
     name="ay",
     inputs=GO_INPUTS,
     outputs=["$(B)/bin/ay"],
     deps=[dense_maps],
-    cmd=[
-        GO_OVERLAY_CMD,
-        [
-            "go", "build",
-            "-overlay=" + GO_OVERLAY,
-            "-trimpath",
-            "-buildvcs=false",
-            "-o", "$(B)/bin/ay",
-            ".",
-        ],
-    ],
+    cmd=ay_cmd,
     cwd="$(S)",
     env=GO_ENV,
     descr="GO",
@@ -149,28 +173,63 @@ python_test = command(
 
 
 binary_tests = []
+coverage_archives = []
 for test_path in build.glob("$(S)/tst/test_*.py"):
     test_name = test_path.rsplit("/", 1)[-1][len("test_"):-len(".py")]
     test_slug = slug(test_name)
     test_stamp = f"$(B)/tests/{test_slug}.stamp"
+    test_inputs = [test_path, "$(S)/tst/lib.py"]
+    test_commands = [["python3", test_path], touch(test_stamp)]
+    test_outputs = [test_stamp]
+    test_env = {
+        "AY_TEST_BINARY": ay.outputs[0],
+        "AY_TEST_SSH_OAUTH": "",
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }
+    if coverage_enabled:
+        covdata_dir = f"$(B)/coverage/raw/{test_slug}"
+        coverage_archive = f"$(B)/coverage/{test_slug}.tar"
+        test_commands = [
+            mkdir(covdata_dir),
+            ["python3", test_path],
+            ["python3", "$(S)/dev/coverage.py", "pack", "--dir", covdata_dir, "--out", coverage_archive],
+            touch(test_stamp),
+        ]
+        test_inputs.append("$(S)/dev/coverage.py")
+        test_outputs = [test_stamp, coverage_archive]
+        test_env["GOCOVERDIR"] = covdata_dir
+        coverage_archives.append(coverage_archive)
     binary_tests.append(command(
         name=f"unit_{test_slug}",
-        inputs=[test_path, "$(S)/tst/lib.py"],
-        outputs=[test_stamp],
+        inputs=test_inputs,
+        outputs=test_outputs,
         deps=[ay],
-        cmd=[
-            ["python3", test_path],
-            touch(test_stamp),
-        ],
+        cmd=test_commands,
         cwd="$(S)",
-        env={
-            "AY_TEST_BINARY": ay.outputs[0],
-            "AY_TEST_SSH_OAUTH": "",
-            "PYTHONDONTWRITEBYTECODE": "1",
-        },
+        env=test_env,
         descr="BT",
         color="green",
     ))
+
+unit_members = [python_test, *binary_tests]
+if coverage_enabled:
+    coverage_profile = "$(B)/coverage/cover.out"
+    coverage_report = "$(B)/coverage/report.txt"
+    coverage = command(
+        name="coverage",
+        inputs=["$(S)/dev/coverage.py", *coverage_archives],
+        outputs=[coverage_profile, coverage_report],
+        deps=binary_tests,
+        cmd=[
+            "python3", "$(S)/dev/coverage.py", "merge",
+            "--out", coverage_profile, "--report", coverage_report,
+            *coverage_archives,
+        ],
+        env=GO_ENV,
+        descr="CV",
+        color="yellow",
+    )
+    unit_members.append(coverage)
 
 
 with (ROOT / "dev" / "config.json").open(encoding="utf-8") as stream:
@@ -329,11 +388,11 @@ if partition is not None:
     ]
 
 group("install", ay)
-group("unit", python_test, *binary_tests)
+group("unit", *unit_members)
 group("validation_resources", *resource_targets.values())
 group("validation_results", validation_summary)
 group("validation_report", validation_summary)
 group("validation_cases", *validation_gates)
 group("validation_shard", *selected_validation_gates)
 group("validate", validation_summary, validation_gate)
-group("test", python_test, *binary_tests, validation_summary, validation_gate)
+group("test", *unit_members, validation_summary, validation_gate)
