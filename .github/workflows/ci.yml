@@ -30,6 +30,12 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # Ubuntu's AppArmor profile forbids unprivileged user namespaces, which
+      # the tests use to run ay as a user the system does not know.
+      - name: Allow unprivileged user namespaces
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Format
         run: test -z "$(gofmt -l *.go)" || { gofmt -d *.go; exit 1; }
 
@@ -63,6 +69,12 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # Ubuntu's AppArmor profile forbids unprivileged user namespaces, which
+      # the tests use to run ay as a user the system does not know.
+      - name: Allow unprivileged user namespaces
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Install test dependencies
         if: runner.os == 'Linux'
         run: |
@@ -90,8 +102,27 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # Ubuntu's AppArmor profile forbids unprivileged user namespaces, which
+      # the tests use to run ay as a user the system does not know.
+      - name: Allow unprivileged user namespaces
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # The runner's CPU may lack AVX-512; Intel SDE emulates one for the test
+      # of the AVX-512 bucket hash.
+      - name: Set up Intel SDE
+        if: matrix.os == 'ubuntu-24.04'
+        uses: petarpetrovt/setup-sde@6d2773bc0ef3005fd52e0ae0bb91782321793aec # v6.0
+        with:
+          environmentVariableName: SDE_PATH
+          sdeVersion: 10.13.1
+
       - name: Run the tests against the instrumented binary
-        run: ./build -k -j 4 -Dcoverage coverage
+        run: |
+          if [ -n "${SDE_PATH:-}" ]; then
+            export AY_TEST_SDE="$SDE_PATH/sde64"
+          fi
+          ./build -k -j 4 -Dcoverage coverage
 
       # Reported by the job that puts the platforms together, not here: one
       # platform compiles only part of the sources.
@@ -127,7 +158,7 @@ jobs:
           python3 dev/coverage.py combine \
             --out "$RUNNER_TEMP/cover.out" \
             --report "$RUNNER_TEMP/report.txt" \
-            --minimum 98 \
+            --minimum 99.98 \
             "$RUNNER_TEMP"/profiles/ay-coverage-go-*/cover.out | tee "$RUNNER_TEMP/summary.txt"
           {
             echo "## Coverage"

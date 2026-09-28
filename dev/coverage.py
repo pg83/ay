@@ -123,8 +123,13 @@ def combine(args: argparse.Namespace) -> None:
         print(f"{path}: {100.0 * hit / total:.1f}% ({hit}/{total} statements)")
         for where, (stmts, count) in blocks.items():
             merged[where] = (stmts, max(count, merged.get(where, (0, 0))[1]))
+    # Blocks without statements (empty function bodies and case clauses) weigh
+    # nothing in statement coverage, but line-based services such as Codecov
+    # would count their lines as missed.
     Path(args.out).write_text(
-        "mode: atomic\n" + "".join(f"{where} {stmts} {count}\n" for where, (stmts, count) in sorted(merged.items())),
+        "mode: atomic\n" + "".join(
+            f"{where} {stmts} {count}\n" for where, (stmts, count) in sorted(merged.items()) if stmts
+        ),
         encoding="utf-8",
     )
     finish(args.out, args.report, args.minimum)
