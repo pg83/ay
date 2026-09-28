@@ -151,12 +151,6 @@ func mergeChunks(chunks []string, out io.Writer) {
 			throw(err)
 		}
 
-		if line == "" && err == io.EOF {
-			throw(f.Close())
-
-			continue
-		}
-
 		heap.Push(h, &MergeItem{line: line, reader: r, closer: f})
 	}
 

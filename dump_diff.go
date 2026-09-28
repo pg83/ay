@@ -482,11 +482,6 @@ func byTokenGroupKey(n map[string]any, dims []string) string {
 
 func nodePrimaryDir(n map[string]any) string {
 	outs := toStrings(n["outputs"])
-
-	if len(outs) == 0 {
-		return "(no-output)"
-	}
-
 	first := outs[0]
 
 	for _, o := range outs[1:] {
@@ -775,10 +770,6 @@ func computeRootOutputs(leftPath, rightPath string) (map[string]bool, int) {
 	leafSet := map[string]bool{}
 
 	for uid, outs := range uidToDivergentOuts {
-		if len(outs) == 0 {
-			continue
-		}
-
 		leaf := true
 
 		for _, d := range uidToDeps[uid] {
