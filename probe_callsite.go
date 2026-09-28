@@ -9,10 +9,50 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+)
+
+const probeCallSiteRuntimeFile = "probe_runtime_callsite.go"
+
+const probeCallSiteRuntime = `package main
+
+// Written by ay dev probe callsite: records every instrumented function
+// entry and appends the sites to $CALLSITE_OUT on exit. Build with the
+// instrumented files, delete with them.
+
+import (
+	"fmt"
+	"os"
 	"sync"
 )
 
 var callSiteSeen sync.Map
+
+func recordCall(site string) {
+	callSiteSeen.Store(site, struct{}{})
+}
+
+func init() {
+	if os.Getenv("CALLSITE_OUT") != "" {
+		atExit(dumpCalls)
+	}
+}
+
+func dumpCalls() {
+	f, err := os.OpenFile(os.Getenv("CALLSITE_OUT"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+
+	if err != nil {
+		return
+	}
+
+	callSiteSeen.Range(func(k, _ any) bool {
+		fmt.Fprintln(f, k.(string))
+
+		return true
+	})
+
+	f.Close()
+}
+`
 
 func probeCallSite(_ GlobalFlags, args []string) int {
 	if len(args) < 1 {
@@ -30,7 +70,8 @@ func probeCallSite(_ GlobalFlags, args []string) int {
 	for _, p := range files {
 		base := filepath.Base(p)
 
-		if base == "probe_callsite.go" || base == "probe_mapinstr.go" || base == "probe.go" {
+		if base == "probe_callsite.go" || base == "probe_mapinstr.go" || base == "probe.go" ||
+			base == probeMapRuntimeFile || base == probeCallSiteRuntimeFile {
 			continue
 		}
 
@@ -104,33 +145,9 @@ func probeCallSite(_ GlobalFlags, args []string) int {
 		return 1
 	}
 
+	throw(os.WriteFile(probeCallSiteRuntimeFile, []byte(probeCallSiteRuntime), 0o644))
+
 	fmt.Fprintf(os.Stderr, "callsite: injected %d sites across %d files\n", len(allSites), len(files))
 
 	return 0
-}
-
-func recordCall(site string) {
-	callSiteSeen.Store(site, struct{}{})
-}
-
-func init() {
-	if os.Getenv("CALLSITE_OUT") != "" {
-		atExit(dumpCalls)
-	}
-}
-
-func dumpCalls() {
-	f, err := os.OpenFile(os.Getenv("CALLSITE_OUT"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-
-	if err != nil {
-		return
-	}
-
-	callSiteSeen.Range(func(k, _ any) bool {
-		fmt.Fprintln(f, k.(string))
-
-		return true
-	})
-
-	f.Close()
 }

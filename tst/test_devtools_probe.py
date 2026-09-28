@@ -143,6 +143,11 @@ class ProbeTest(unittest.TestCase):
         self.assertEqual((self.root / "maps.go").read_text(), MAPS_INSTRUMENTED)
         self.assertEqual((self.root / "globals.go").read_text(), GLOBALS_INSTRUMENTED)
         self.assertEqual((self.root / "probe.go").read_text(), PROBE_SELF)
+        runtime = (self.root / "probe_runtime_map.go").read_text()
+        self.assertTrue(runtime.startswith("package main\n\n// Written by ay dev probe mapinstr"))
+        for definition in ("func mapKR[K any](k K, site string) K", "func mapKW[K any](k K, site string) K",
+                           "mapProbeReport = reportMapProbe"):
+            self.assertIn(definition, runtime)
 
     def test_mapinstr_defaults_to_package_files(self):
         self.write("maps.go", MAPS)
@@ -199,6 +204,10 @@ class ProbeTest(unittest.TestCase):
         )
         self.assertEqual((self.root / "calls.go").read_text(), CALLS_INSTRUMENTED)
         self.assertEqual((self.root / "probe_callsite.go").read_text(), PROBE_SELF)
+        runtime = (self.root / "probe_runtime_callsite.go").read_text()
+        self.assertTrue(runtime.startswith("package main\n\n// Written by ay dev probe callsite"))
+        for definition in ("func recordCall(site string)", "atExit(dumpCalls)"):
+            self.assertIn(definition, runtime)
         self.assertEqual(
             (self.root / "out/sites.txt").read_text(),
             "calls.go:7\ncalls.go:9\n",

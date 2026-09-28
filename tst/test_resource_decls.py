@@ -121,6 +121,30 @@ class ResourceDeclsTest(unittest.TestCase):
             debug = lib.make(toolchain_files(), "prog")
         self.assertEqual(debug["graph"], plain["graph"])
 
+    def test_ownership_report_ranks_violations_by_node_count(self):
+        files = {
+            "library/cpp/resource/ya.make": f"LIBRARY()\n{BARE}END()\n",
+            "lib/ya.make": f"LIBRARY()\n{BARE}USE_LLVM_BC20()\nLLVM_BC(a.cpp NAME kern SYMBOLS f)\nEND()\n",
+            "lib/a.cpp": "int f(){return 0;}\n",
+            "build/platform/clang/ya.make": resources_library("DECLARE_EXTERNAL_RESOURCE(CLANG20 sbr:20)\n"),
+        }
+        lib.tool_program(files, "tools/rescompiler", "rescompiler")
+        lib.tool_program(files, "tools/rescompressor", "rescompressor")
+        result = lib.make_process(files, "lib", env={"AY_DEBUG_OWNERSHIP": "1"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), lib.make(files, "lib"))
+        lines = result.stderr.splitlines()
+        self.assertEqual(lines[0], "ownership: 3 violating (field, site) pairs")
+        # Rows with equal node counts come in no particular order.
+        self.assertEqual(
+            lines[1],
+            "ownership        3 nodes        3 backings  Cmd.CmdArgs.chunk @ emit_context.go:170     e.g. $(B)/lib/a.cpp.bc",
+        )
+        self.assertCountEqual(lines[2:], [
+            "ownership        1 nodes        1 backings  DepRefs @ emit_context.go:170               e.g. $(B)/lib/kern_merged.bc",
+            "ownership        1 nodes        1 backings  Inputs.chunk @ emit_context.go:170          e.g. $(B)/lib/kern_merged.bc",
+        ])
+
     def test_host_bundle_rejects_malformed_or_missing_entries(self):
         for body, message in (
             (
