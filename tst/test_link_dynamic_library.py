@@ -333,6 +333,32 @@ class DynamicLibraryTest(unittest.TestCase):
                     {out for n in graph["graph"] for out in n["outputs"]},
                 )
 
+    def test_peer_resource_globals_select_dynamic_library_toolchain(self):
+        files = base_files()
+        files["res/ya.make"] = (
+            "RESOURCES_LIBRARY()\n"
+            "DECLARE_EXTERNAL_RESOURCE(CLANG20 sbr:20 LLD_ROOT sbr:21)\n"
+            "END()\n"
+        )
+        files["lib/ya.make"] = library("SRCS(a.cpp)\nPEERDIR(res)\n")
+        files["lib2/ya.make"] = library("SRCS(b.cpp)\nPEERDIR(res)\n")
+        files["dyn/ya.make"] = (
+            f"DYNAMIC_LIBRARY(foo)\n{NO_PLATFORM}EXPORTS_SCRIPT(foo.exports)\n"
+            "DYNAMIC_LIBRARY_FROM(lib lib2)\nEND()\n"
+        )
+        files["dyn/foo.exports"] = "{};\n"
+        graph = lib.make(files, "dyn")
+        dyn = lib.node_by_output(graph, "$(B)/dyn/libfoo.so")
+        clang = lib.node_by_output(graph, "$(B)/resources/CLANG20")
+        lld = lib.node_by_output(graph, "$(B)/resources/LLD_ROOT")
+        self.assertIn(clang["uid"], dyn["deps"])
+        self.assertIn(lld["uid"], dyn["deps"])
+        self.assertEqual(dyn["cmds"][1]["cmd_args"][0], "$(B)/resources/CLANG20/bin/clang")
+        link = command_with(dyn, "link_dyn_lib.py")["cmd_args"]
+        self.assertIn("$(B)/resources/CLANG20/bin/llvm-objcopy", link)
+        self.assertIn("$(B)/resources/CLANG20/bin/clang++", link)
+        self.assertIn("--ld-path=$(B)/resources/LLD_ROOT/bin/ld.lld", link)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
