@@ -21,8 +21,6 @@ type FS interface {
 	readPath(rel STR) [][]byte
 
 	walk(rel string, visit func(rel string, isDir bool) bool)
-
-	contentHash(rel STR) uint64
 }
 
 func concatChunks(chunks [][]byte) []byte {
