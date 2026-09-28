@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"slices"
 	"strings"
 )
 
@@ -102,10 +101,6 @@ func internFlags(flags map[string]string) map[ENV]STR {
 }
 
 func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxflagsEnv string) *Platform {
-	if flags == nil {
-		flags = map[string]string{}
-	}
-
 	buildType := platformBuildType(flags)
 	buildSanitized := platformBuildSanitized(flags)
 	buildRelease := isReleaseBuildType(buildType)
@@ -391,24 +386,6 @@ func parsePlatformID(s string) (OS, ISA) {
 	}
 
 	return OS(rest[:dash]), ISA(rest[dash+1:])
-}
-
-func platformsEquivalent(a, b *Platform) bool {
-	if a.OS != b.OS || a.ISA != b.ISA || a.Target != b.Target || a.PIC != b.PIC || a.BuildType != b.BuildType {
-		return false
-	}
-
-	if len(a.Flags) != len(b.Flags) {
-		return false
-	}
-
-	for k, v := range a.Flags {
-		if b.Flags[k] != v {
-			return false
-		}
-	}
-
-	return slices.Equal(a.CFlags, b.CFlags) && slices.Equal(a.CXXFlags, b.CXXFlags)
 }
 
 func registerPlatformOwned(p *Platform) {
