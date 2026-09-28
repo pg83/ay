@@ -758,7 +758,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 		priorShort := make(map[string]struct{}, i)
 
 		for j := 0; j < i; j++ {
-			if j < len(d.pyRegisterExplicit) && !d.pyRegisterExplicit[j] {
+			if !d.pyRegisterExplicit[j] {
 				continue
 			}
 
