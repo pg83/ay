@@ -12,7 +12,11 @@ func newChaosFault(string) ChaosPoint {
 	return ChaosPoint{}
 }
 
-func newChaosValue(string) ChaosPoint {
+func newChaosNumber(string) ChaosPoint {
+	return ChaosPoint{}
+}
+
+func newChaosText(string) ChaosPoint {
 	return ChaosPoint{}
 }
 
@@ -21,6 +25,10 @@ func (ChaosPoint) fire() bool {
 }
 
 func (ChaosPoint) number(got uint64) uint64 {
+	return got
+}
+
+func (ChaosPoint) text(got string) string {
 	return got
 }
 

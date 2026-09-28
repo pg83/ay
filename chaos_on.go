@@ -12,9 +12,10 @@ import (
 
 // The test binary's seam. AY_CHAOS lists NAME=ARG words, read once at start:
 //
-//	fault=K   the fault point's call number K (counting from 0) fails; one
-//	          word per failing call
-//	value=V   the value point hands back V in place of what its site passes
+//	fault=K    the fault point's call number K (counting from 0) fails; one
+//	           word per failing call
+//	number=N   the number point hands back N in place of what its site passes
+//	text=S     the text point hands back S in place of what its site passes
 //
 // An unknown name or a malformed word stops the process before it does
 // anything else.
@@ -22,26 +23,39 @@ type ChaosPoint struct {
 	state *ChaosState
 }
 
+type ChaosKind int
+
+const (
+	chaosKindFault ChaosKind = iota
+	chaosKindNumber
+	chaosKindText
+)
+
 type ChaosState struct {
-	value bool
-	calls atomic.Uint64
-	fires map[uint64]bool
-	set   bool
-	arg   uint64
+	kind   ChaosKind
+	calls  atomic.Uint64
+	fires  map[uint64]bool
+	set    bool
+	number uint64
+	text   string
 }
 
 var chaosPoints = map[string]*ChaosState{}
 
 func newChaosFault(name string) ChaosPoint {
-	return newChaosPoint(name, false)
+	return newChaosPoint(name, chaosKindFault)
 }
 
-func newChaosValue(name string) ChaosPoint {
-	return newChaosPoint(name, true)
+func newChaosNumber(name string) ChaosPoint {
+	return newChaosPoint(name, chaosKindNumber)
 }
 
-func newChaosPoint(name string, value bool) ChaosPoint {
-	state := &ChaosState{value: value}
+func newChaosText(name string) ChaosPoint {
+	return newChaosPoint(name, chaosKindText)
+}
+
+func newChaosPoint(name string, kind ChaosKind) ChaosPoint {
+	state := &ChaosState{kind: kind}
 
 	chaosPoints[name] = state
 
@@ -57,16 +71,27 @@ func init() {
 func chaosArm(word string) {
 	name, arg, ok := strings.Cut(word, "=")
 	state := chaosPoints[name]
-	n, err := strconv.ParseUint(arg, 0, 64)
 
-	if !ok || state == nil || err != nil {
-		fmt.Fprintf(os.Stderr, "AY_CHAOS: bad word %q\n", word)
-		os.Exit(2)
+	if !ok || state == nil {
+		chaosBadWord(word)
 	}
 
-	if state.value {
+	if state.kind == chaosKindText {
 		state.set = true
-		state.arg = n
+		state.text = arg
+
+		return
+	}
+
+	n, err := strconv.ParseUint(arg, 0, 64)
+
+	if err != nil {
+		chaosBadWord(word)
+	}
+
+	if state.kind == chaosKindNumber {
+		state.set = true
+		state.number = n
 
 		return
 	}
@@ -76,6 +101,11 @@ func chaosArm(word string) {
 	}
 
 	state.fires[n] = true
+}
+
+func chaosBadWord(word string) {
+	fmt.Fprintf(os.Stderr, "AY_CHAOS: bad word %q\n", word)
+	os.Exit(2)
 }
 
 func (p ChaosPoint) fire() bool {
@@ -93,7 +123,15 @@ func (p ChaosPoint) number(got uint64) uint64 {
 		return got
 	}
 
-	return p.state.arg
+	return p.state.number
+}
+
+func (p ChaosPoint) text(got string) string {
+	if !p.state.set {
+		return got
+	}
+
+	return p.state.text
 }
 
 func chaosSwap[T any](p ChaosPoint, got, fault T) T {
