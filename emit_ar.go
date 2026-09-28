@@ -219,12 +219,12 @@ func emitARNode(
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: cmdEnv}),
-		Env:          topEnv,
-		Inputs:       na.inputList(objInputs, inputTail),
-		KV:           &arKV,
-		Outputs:      na.vfsList(archivePath),
-		DepRefs:      deps,
-		Resources:    instance.Platform.UsesPython3Clang,
+		Env:       topEnv,
+		Inputs:    na.inputList(objInputs, inputTail),
+		KV:        &arKV,
+		Outputs:   na.vfsList(archivePath),
+		DepRefs:   deps,
+		Resources: instance.Platform.UsesPython3Clang,
 	}
 
 	return emit.emitNode(n)

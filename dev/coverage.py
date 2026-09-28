@@ -3,8 +3,8 @@
 
 `pack` archives one GOCOVERDIR into a single tar so a test node has a file
 output. `merge` unpacks every archive, merges them with `go tool covdata`,
-writes the textfmt profile, and prints a per-file statement coverage table
-with a total to stdout and to the report file.
+writes the textfmt profile, prints a per-file statement coverage table with
+a total to stdout and to the report file, and fails below the given floor.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def covdata(*command: str) -> None:
     subprocess.run(["go", "tool", "covdata", *command], check=True)
 
 
-def report(profile: str) -> str:
+def report(profile: str) -> tuple[str, int, int]:
     stmts: dict[str, int] = collections.defaultdict(int)
     covered: dict[str, int] = collections.defaultdict(int)
     with open(profile, encoding="utf-8") as stream:
@@ -54,8 +54,10 @@ def report(profile: str) -> str:
 
     for name in sorted(stmts):
         emit(name, stmts[name], covered[name])
-    emit("total", sum(stmts.values()), sum(covered.values()))
-    return "\n".join(lines) + "\n"
+    total_stmts = sum(stmts.values())
+    total_covered = sum(covered.values())
+    emit("total", total_stmts, total_covered)
+    return "\n".join(lines) + "\n", total_covered, total_stmts
 
 
 def merge(args: argparse.Namespace) -> None:
@@ -71,9 +73,11 @@ def merge(args: argparse.Namespace) -> None:
         merged.mkdir()
         covdata("merge", "-i=" + ",".join(inputs), "-o", str(merged))
         covdata("textfmt", "-i=" + str(merged), "-o", args.out)
-    text = report(args.out)
+    text, covered, total = report(args.out)
     Path(args.report).write_text(text, encoding="utf-8")
     sys.stdout.write(text)
+    if not total or 100 * covered < args.minimum * total:
+        sys.exit(f"coverage {covered}/{total} statements is below {args.minimum}%")
 
 
 def main() -> None:
@@ -86,6 +90,7 @@ def main() -> None:
     merge_parser = commands.add_parser("merge", help="merge archives into a textfmt profile")
     merge_parser.add_argument("--out", required=True)
     merge_parser.add_argument("--report", required=True)
+    merge_parser.add_argument("--minimum", type=float, required=True)
     merge_parser.add_argument("archives", nargs="+")
     merge_parser.set_defaults(run=merge)
     args = parser.parse_args()

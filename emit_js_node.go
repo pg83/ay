@@ -48,11 +48,11 @@ func (e *EmitContext) emitJSReserved(allName string, sources []string, closure [
 		Platform: statsPlatform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:          env,
-		Inputs:       inputs,
-		KV:           &jsNodeKV,
-		Outputs:      na.vfsList(outVFS),
-		Resources:    usesPython3,
+		Env:       env,
+		Inputs:    inputs,
+		KV:        &jsNodeKV,
+		Outputs:   na.vfsList(outVFS),
+		Resources: usesPython3,
 	}
 
 	e.emitReservedNode(node, id)

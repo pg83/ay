@@ -68,13 +68,13 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 		env := envVarsVCS
 
 		e.emitReservedNode(Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env, Stdout: outVFS}),
-			Env:          env,
-			Inputs:       na.inputList(optArena, na.vfsList(decimalMD5PyVFS)),
-			KV:           &decimalMd5KV,
-			Outputs:      na.vfsList(outVFS),
-			Resources:    usesPython3,
+			Platform:  instance.Platform,
+			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env, Stdout: outVFS}),
+			Env:       env,
+			Inputs:    na.inputList(optArena, na.vfsList(decimalMD5PyVFS)),
+			KV:        &decimalMd5KV,
+			Outputs:   na.vfsList(outVFS),
+			Resources: usesPython3,
 		}, svRef)
 	}
 	pending := e.ctx.na.pendingEmit(pe)

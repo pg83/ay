@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Format
+        run: test -z "$(gofmt -l *.go)" || { gofmt -d *.go; exit 1; }
+
+      # The dense maps are generated inside the build graph, so vet runs there.
+      - name: Vet
+        run: ./build vet
+
+      # The validation cases fetch their source slices and reference graphs
+      # from the internal Sandbox, which a GitHub runner cannot reach, so the
+      # suite that runs here is `unit`.
+      - name: Build and test
+        run: |
+          ./build -k -j 4 unit
+          ./build ay
+
+  race:
+    name: Race detector
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gcc
+
+      - name: Run the unit tests with the race detector
+        run: ./build -k -j 2 -Drace unit
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # The coverage node prints the per-file table and fails below the
+      # statement floor set in build.py.
+      - name: Run the tests against the instrumented binary
+        run: ./build -k -j 4 -Dcoverage coverage
+
+      - name: Summarize coverage
+        if: ${{ !cancelled() && hashFiles('.build/coverage/report.txt') != '' }}
+        run: |
+          {
+            echo "## Coverage"
+            echo
+            echo '```text'
+            cat .build/coverage/report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The floor above is the gate. Codecov has to have the repository
+      # activated before it takes an upload; until then this step warns and
+      # the job stays green.
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() && hashFiles('.build/coverage/cover.out') != '' }}
+        continue-on-error: true
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          use_oidc: true
+          files: .build/coverage/cover.out
+          flags: go
+          disable_search: true
+          fail_ci_if_error: true
+          verbose: true
+
+      - name: Save the coverage profile
+        if: ${{ !cancelled() && hashFiles('.build/coverage/cover.out') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ay-coverage-go
+          path: |
+            .build/coverage/cover.out
+            .build/coverage/report.txt
+          if-no-files-found: error
+          retention-days: 7
