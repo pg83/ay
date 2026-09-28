@@ -63,5 +63,34 @@ class IncludeCycleTest(unittest.TestCase):
             )
 
 
+    def test_component_splices_overlapping_child_closures(self):
+        files = {
+            "m/ya.make": library("c.cpp").replace(
+                "SRCS", "CONFIGURE_FILE(g.h.in g.h)\nSRCS"
+            ),
+            # u <-> v is one component; the closures of its children w and x
+            # overlap in k, and g.h.in is both a generated-header leaf and a
+            # direct child.
+            "m/c.cpp": '#include "u.h"\n',
+            "m/u.h": '#include "v.h"\n#include "w.h"\n#include "g.h"\n',
+            "m/v.h": '#include "u.h"\n#include "x.h"\n#include "g.h.in"\n',
+            "m/w.h": '#include "k.h"\n',
+            "m/x.h": '#include "k.h"\n',
+            "m/k.h": "",
+            "m/g.h.in": "",
+            "build/scripts/configure_file.py": "",
+        }
+        graph = lib.make(files, "m")
+        inputs = set(lib.node_by_output(graph, "$(B)/m/c.cpp.o")["inputs"])
+        self.assertEqual(
+            {
+                "$(S)/m/c.cpp", "$(S)/m/u.h", "$(S)/m/v.h", "$(S)/m/w.h",
+                "$(S)/m/x.h", "$(S)/m/k.h", "$(S)/m/g.h.in", "$(B)/m/g.h",
+                "$(S)/build/scripts/configure_file.py",
+            },
+            inputs,
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
