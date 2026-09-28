@@ -88,6 +88,38 @@ class SourcePathResolutionTest(unittest.TestCase):
             nodes[f"$(B)/mod/__/{LONG_DIR}/{LONG_FILE}.o"]["inputs"],
         )
 
+    def test_unclean_paths_under_srcdir_includes_and_addincl(self):
+        long_header = f"../{LONG_DIR}/{LONG_FILE[:-4]}.h"
+        tree = Tree(self, {
+            "mod/ya.make": library(
+                ["../shared/x.cpp", f"../{LONG_DIR}/{LONG_FILE}", "../nodir/w.cpp", "nodir/z.cpp"],
+                "ADDINCL(mod/.. mod/sub/..)\nSRCDIR(other)\n",
+            ),
+            "other/.keep": "",
+            "shared/x.cpp": f'#include "../shared/h.h"\n#include "{long_header}"\nint x(){{return 0;}}\n',
+            "shared/h.h": "#pragma once\n",
+            f"{LONG_DIR}/{LONG_FILE}": "int l(){return 0;}\n",
+            f"{LONG_DIR}/{LONG_FILE[:-4]}.h": "#pragma once\n",
+            "mod/sub/.keep": "",
+            "build/scripts": "not a directory\n",
+        })
+        graph, _ = tree.graph("-k", "mod")
+        nodes = cc_nodes(graph)
+        self.assertEqual(sorted(nodes), sorted([
+            "$(B)/mod/__/shared/x.cpp.o",
+            f"$(B)/mod/__/{LONG_DIR}/{LONG_FILE}.o",
+            "$(B)/mod/__/nodir/w.cpp.o",
+            "$(B)/mod/_/nodir/z.cpp.o",
+        ]))
+        shared = nodes["$(B)/mod/__/shared/x.cpp.o"]
+        self.assertEqual(shared["inputs"], [
+            "$(S)/shared/x.cpp",
+            "$(S)/shared/h.h",
+            f"$(S)/{LONG_DIR}/{LONG_FILE[:-4]}.h",
+        ])
+        self.assertIn("-I$(S)/mod/..", shared["cmds"][0]["cmd_args"])
+        self.assertEqual(nodes["$(B)/mod/_/nodir/z.cpp.o"]["inputs"], ["$(S)/mod/nodir/z.cpp"])
+
     def test_include_below_missing_directory_is_unresolved(self):
         tree = Tree(self, {
             "mod/ya.make": library(["a.cpp"]),
