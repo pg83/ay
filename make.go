@@ -236,13 +236,9 @@ func cmdMake(g GlobalFlags, args []string) int {
 		return 0
 	}
 
-	ex := newExecutor(mf.srcRoot, mf.bldRoot, fs, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.cmdPrefixes, events)
+	ex := newExecutor(mf.srcRoot, mf.bldRoot, fs, mf.threads, mf.keepGoing, mf.ninja, mf.sandboxing, mf.clear, mf.cmdPrefixes, events)
 
 	ex.startGarbageCollector()
-
-	if mf.clear {
-		ex.clearCache()
-	}
 
 	results := genStream(fs, mf.targets, hostP, targetP, ex.onNode, onWarn, mf.testLevel > 0, mf.keepGoing)
 

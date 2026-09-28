@@ -78,7 +78,7 @@ type NodeFuture struct {
 	err  *Exception
 }
 
-func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ninja bool, sandboxing bool, cmdPrefixes []CmdPrefix, events *EventQueue) *Executor {
+func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ninja bool, sandboxing bool, clear bool, cmdPrefixes []CmdPrefix, events *EventQueue) *Executor {
 	ex := &Executor{
 		srcRoot:     srcRoot,
 		bldRoot:     bldRoot,
@@ -100,6 +100,12 @@ func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ni
 
 	if osfs, ok := fs.(*OsFS); ok {
 		ex.canon.fsHashes = &osfs.contentHashes
+	}
+
+	// The cache must be cleared before loadUidSet lists it, or the set keeps
+	// UIDs whose metadata files clearCache has already moved away.
+	if clear {
+		ex.clearCache()
 	}
 
 	ex.uidSetReady = make(chan struct{})
