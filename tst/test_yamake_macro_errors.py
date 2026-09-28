@@ -71,6 +71,7 @@ ERRORS = [
     ("DECLARE_IN_DIRS(x *.txt bogus)", 'gen: a: DECLARE_IN_DIRS: unexpected argument "bogus"'),
     ("ALL_PY_SRCS(NAMESPACE)", "ALL_PY_SRCS NAMESPACE expects a value"),
     ("FOO_BAR_BAZ()", 'unknown-macro: a: macro "FOO_BAR_BAZ" is not in the modelled set (line 5); skipped'),
+    ("STRIP()", 'unknown-macro: a: macro "STRIP" not modelled'),
     ("ALLOCATOR(NOT_AN_ALLOCATOR)", 'gen: macro ALLOCATOR received service-keyword "NOT_AN_ALLOCATOR" that no handler models'),
 ]
 
