@@ -335,10 +335,6 @@ func (e *EmitContext) collectGoSource(meta SrcMeta, asm bool) {
 }
 
 func (e *EmitContext) goInclSplitArgs() []ANY {
-	if e.goInclSplit != nil {
-		return e.goInclSplit
-	}
-
 	na := e.ctx.na
 	joined := e.goCgoIncludeArgs()
 	block := na.anys.alloc(2 * len(joined))
@@ -352,9 +348,8 @@ func (e *EmitContext) goInclSplitArgs() []ANY {
 	}
 
 	na.anys.commit(k)
-	e.goInclSplit = block[:k:k]
 
-	return e.goInclSplit
+	return block[:k:k]
 }
 
 func (e *EmitContext) flushGoSrcs() {
