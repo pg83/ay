@@ -10,7 +10,7 @@ coverage:
       go:
         # Codecov counts a line that ran only in part as uncovered, so its
         # figure sits below the statement floor the aggregate job enforces.
-        target: 97%
+        target: 99.9%
         threshold: 0%
         informational: false
         flags:
