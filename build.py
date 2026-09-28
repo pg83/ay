@@ -10,15 +10,6 @@ import build
 ROOT = Path(__file__).parent
 
 
-def source_files(directory):
-    root = ROOT / directory
-    return [
-        "$(S)/" + path.relative_to(ROOT).as_posix()
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
-    ]
-
-
 def touch(path):
     return [
         "python3",
@@ -96,8 +87,6 @@ GO_INPUTS = [
     *GENERATED_DENSE_MAPS,
     "$(S)/dev/go_overlay.py",
     "$(S)/.gitignore",
-    "$(S)/CLAUDE.md",
-    "$(S)/GOALS.md",
     "$(S)/LICENSE",
     "$(S)/PROMPTS.md",
     "$(S)/STYLE.md",
@@ -105,7 +94,6 @@ GO_INPUTS = [
     "$(S)/go.mod",
     "$(S)/go.sum",
     "$(S)/perf_darts_data.txt",
-    *source_files("vendor"),
 ]
 
 GO_OVERLAY = "$(B)/go-overlay.json"
@@ -118,7 +106,7 @@ GO_OVERLAY_CMD = [
 
 GO_ENV = {
     "CGO_ENABLED": "0",
-    "GOFLAGS": "-mod=vendor -buildvcs=false",
+    "GOFLAGS": "-buildvcs=false",
     "GOTOOLCHAIN": "local",
     "GOWORK": "off",
 }
