@@ -8,6 +8,7 @@ import socketserver
 import ssl
 import struct
 import subprocess
+import sys
 import tarfile
 import tempfile
 import threading
@@ -22,6 +23,11 @@ import lib
 SANDBOX_HOST = "sandbox.yandex-team.ru"
 OAUTH_HOST = "oauth.yandex-team.ru"
 MDS_HOST = "storage-int.mds.yandex.net"
+
+# Go verifies TLS through the system trust store on macOS and ignores
+# SSL_CERT_FILE, so the mock's test CA can only be trusted elsewhere.
+TLS_MOCKABLE = sys.platform != "darwin"
+NO_TLS_MOCK = "Go on macOS ignores SSL_CERT_FILE, so the mock CA cannot be trusted"
 
 
 def tar_bytes(members):
@@ -92,9 +98,12 @@ class MockInternet:
     def __init__(self, directory):
         self.routes = {}
         self.requests = []
-        self.cert, self.key = make_certificate(directory)
-        self.tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        self.tls.load_cert_chain(self.cert, self.key)
+        self.cert = None
+        self.tls = None
+        if TLS_MOCKABLE:
+            self.cert, key = make_certificate(directory)
+            self.tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            self.tls.load_cert_chain(self.cert, key)
         mock = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -251,8 +260,9 @@ class FetchCase(unittest.TestCase):
             "HOME": str(self.home),
             "HTTP_PROXY": self.net.base,
             "HTTPS_PROXY": self.net.base,
-            "SSL_CERT_FILE": str(self.net.cert),
         })
+        if self.net.cert is not None:
+            env["SSL_CERT_FILE"] = str(self.net.cert)
         env.update(extra)
         return env
 
@@ -388,6 +398,7 @@ class FetchMappedAndScriptedTest(FetchCase):
         self.assertEqual(self.net.requests, [])
 
 
+@unittest.skipUnless(TLS_MOCKABLE, NO_TLS_MOCK)
 class FetchFromSandboxAPITest(FetchCase):
     def resource(self, rid, state="READY", mds="", multifile=False):
         info = {
@@ -441,6 +452,7 @@ class FetchFromSandboxAPITest(FetchCase):
         self.assertIn("sandbox resource 14 API returned 404 Not Found", result.stderr)
 
 
+@unittest.skipUnless(TLS_MOCKABLE, NO_TLS_MOCK)
 class FetchTokenFromSSHAgentTest(FetchCase):
     def start_agent(self, keys, list_fails=False):
         agent = MockSSHAgent(self.root / "agent.sock", keys, list_fails)
