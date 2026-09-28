@@ -95,7 +95,7 @@ def fixture():
     return files
 
 
-def make_with_env(files, target, extra_env):
+def make_with_env(files, target, extra_env, dump=True):
     with tempfile.TemporaryDirectory(prefix="ay-link-proto-") as directory:
         root = Path(directory)
         (root / ".arcadia.root").touch()
@@ -113,13 +113,15 @@ def make_with_env(files, target, extra_env):
         }
         env.update(extra_env)
         result = lib.run(
-            "make", "-j0", "-G", "--sandboxing",
+            "make", "-j0", *(("-G",) if dump else ()), "--sandboxing",
             "--source-root", root,
             "--target-platform", "default-linux-aarch64",
             "--host-platform", "default-linux-x86_64",
             target,
             env=env,
         )
+        if not dump:
+            return result.stdout, result.stderr
         return json.loads(result.stdout), result.stderr
 
 
@@ -277,6 +279,13 @@ class ProtoPeersTest(unittest.TestCase):
             args,
         )
         self.assertIn("--sg2_out=$(B)/", args)
+
+    def test_python_proto_program_streams_without_dump(self):
+        graph = lib.make(fixture(), "py3")
+        global_archive = lib.node_by_output(graph, "$(B)/p/libpy3p.global.a")
+        program = lib.node_by_output(graph, "$(B)/py3/py3")
+        self.assertIn(global_archive["uid"], program["deps"])
+        self.assertEqual(make_with_env(fixture(), "py3", {}, dump=False), ("", ""))
 
 
 if __name__ == "__main__":
