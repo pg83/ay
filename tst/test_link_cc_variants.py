@@ -251,6 +251,24 @@ class CcVariantsTest(unittest.TestCase):
                 self.assertLess(std, args.index("-DOWNCXX"))
                 self.assertIn("-DPEERCXX", args)
 
+    def test_generated_source_of_another_module_maps_outside_its_dir(self):
+        files = {
+            "other/ya.make": module("LIBRARY()", "COPY_FILE(g.in gen.cpp)\n"),
+            "other/g.in": "int gen;\n",
+            "m/ya.make": module(
+                "LIBRARY()",
+                "PEERDIR(other)\nSRCS(${ARCADIA_BUILD_ROOT}/other/gen.cpp x.cpp)\n",
+            ),
+            "m/x.cpp": "int x;\n",
+        }
+        graph = lib.make(files, "m")
+        copy = lib.node_by_output(graph, "$(B)/other/gen.cpp")
+        compile_node = lib.node_by_output(graph, "$(B)/m/__/other/gen.cpp.o")
+        self.assertEqual(compile_node["inputs"], ["$(B)/other/gen.cpp"])
+        self.assertEqual(compile_node["deps"], [copy["uid"]])
+        archive = lib.node_by_output(graph, "$(B)/m/libm.a")
+        self.assertEqual(archive["inputs"][:2], ["$(B)/m/x.cpp.o", "$(B)/m/__/other/gen.cpp.o"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
