@@ -65,6 +65,14 @@ func (ctx *GenCtx) javaSrcsGlobs(jm *JavaModule) []javaSrcsGlob {
 	return out
 }
 
+func javaJoin(dir VFS, rel string) VFS {
+	if dir.isBuild() {
+		return build(dir.relString(), "/", rel)
+	}
+
+	return source(dir.relString(), "/", rel)
+}
+
 func javaClassesDir(base VFS, pkg string) VFS {
 	if pkg == "" {
 		return base
@@ -121,7 +129,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 		}
 
 		for _, f := range g.spec.files {
-			prep = append(prep, source(jm.dir, "/", f).any())
+			prep = append(prep, javaJoin(g.absDir, f).any())
 		}
 
 		b.input(g.files...)
@@ -357,6 +365,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	b.setKV(pkJV, pcLightBlue, true)
 	b.closure(closure)
+	b.macroOuts(jm)
 	b.emitTo(jm.outRef, ctx.target)
 }
 
@@ -389,13 +398,13 @@ func (ctx *GenCtx) javaEmitIJar(jm *JavaModule) {
 func (ctx *GenCtx) javaKaptCmds(jm *JavaModule, b *javaNodeBuilder, compileKt []ANY) {
 	d := jm.data
 	bindir := jm.path.rel().build().string()
-	ap := ctx.javaToolJar(jm, "contrib/java/org/jetbrains/kotlin/kotlin-annotation-processing/"+javaKotlinVersion)
+	ap := ctx.javaToolJar(jm, b, "contrib/java/org/jetbrains/kotlin/kotlin-annotation-processing/"+javaKotlinVersion)
 	args := b.python("build/scripts/with_kapt_args.py")
 
 	args = append(args, strApClasspath.any())
 
 	for _, dir := range d.kaptAPClasspath {
-		if tool := ctx.javaToolJar(jm, dir); tool != 0 {
+		if tool := ctx.javaToolJar(jm, b, dir); tool != 0 {
 			args = append(args, tool.any())
 		}
 	}
@@ -429,11 +438,16 @@ func (ctx *GenCtx) javaKaptCmds(jm *JavaModule, b *javaNodeBuilder, compileKt []
 	b.cmd(res, 0)
 }
 
-func (ctx *GenCtx) javaToolJar(jm *JavaModule, dir string) VFS {
+func (ctx *GenCtx) javaToolJar(jm *JavaModule, b *javaNodeBuilder, dir string) VFS {
 	res := ctx.javaPeerResult(jm, dir, false)
 
 	if res == nil || res.java == nil {
 		return 0
+	}
+
+	if ref := ctx.javaUse(res.java.target); ref != 0 {
+		b.input(res.java.target)
+		b.deps = append(b.deps, ref)
 	}
 
 	return res.java.target

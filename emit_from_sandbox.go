@@ -29,8 +29,35 @@ func fromSandboxAutoLinkMember(name string) bool {
 }
 
 func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	na := ctx.emit.nodeArenas()
+	ctx := e.ctx
+	node, outVFSs := fromSandboxNode(ctx.emit.nodeArenas(), e.instance, e.d.tc.Python3.any(), stmt)
+	ref := ctx.emit.reserve()
+	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
+
+	for i, f := range stmt.OUTFiles {
+		if fromSandboxAutoLinkMember(f.string()) {
+			memberRefs = append(memberRefs, ref)
+			memberPaths = append(memberPaths, outVFSs[i])
+		}
+	}
+
+	parsed := fromSandboxOutputIncludes(ctx.na, stmt)
+
+	for _, out := range outVFSs {
+		e.register(GeneratedFileInfo{
+			OutputPath:      out,
+			ProducerRef:     ref,
+			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
+			SourceInputs:    fromSandboxScriptInputs,
+			ProducerMainOut: outVFSs[0],
+			OnUse:           pending,
+		})
+	}
+
+	return memberRefs, memberPaths
+}
+
+func fromSandboxNode(na *NodeArenas, instance ModuleInstance, python3 ANY, stmt *FromSandboxStmt) (Node, []VFS) {
 	id := stmt.ResourceId.string()
 	mode := "--untar-to"
 
@@ -41,7 +68,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	args := na.anys.alloc(12 + 2*len(stmt.Renames) + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
 
 	args = append(args,
-		d.tc.Python3.any(),
+		python3,
 		buildScriptsFetchFromSandboxPy.any(),
 		argYaStartCommandFile.any(),
 		strResourceFile.any(),
@@ -80,46 +107,17 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	args = args[:len(args):len(args)]
 
 	env := envVarsVCS
-	ref := ctx.emit.reserve()
 
-	pe := func() {
-		node := Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: instance.Path.rel().build(), Env: env}),
-			Env:          env,
-			Inputs:       na.inputList(fromSandboxScriptInputs),
-			KV:           &fromSandboxKV,
-			Outputs:      na.vfsList(outVFSs...),
-			Requirements: &fromSandboxRequirements,
-			Resources:    usesPython3,
-		}
-
-		e.emitReservedNode(node, ref)
-	}
-
-	pending := e.pendingEmit(pe)
-
-	for i, f := range stmt.OUTFiles {
-		if fromSandboxAutoLinkMember(f.string()) {
-			memberRefs = append(memberRefs, ref)
-			memberPaths = append(memberPaths, outVFSs[i])
-		}
-	}
-
-	parsed := fromSandboxOutputIncludes(ctx.na, stmt)
-
-	for _, out := range outVFSs {
-		e.register(GeneratedFileInfo{
-			OutputPath:      out,
-			ProducerRef:     ref,
-			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
-			SourceInputs:    fromSandboxScriptInputs,
-			ProducerMainOut: outVFSs[0],
-			OnUse:           pending,
-		})
-	}
-
-	return memberRefs, memberPaths
+	return Node{
+		Platform:     instance.Platform,
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: instance.Path.rel().build(), Env: env}),
+		Env:          env,
+		Inputs:       na.inputList(fromSandboxScriptInputs),
+		KV:           &fromSandboxKV,
+		Outputs:      na.vfsList(outVFSs...),
+		Requirements: &fromSandboxRequirements,
+		Resources:    usesPython3,
+	}, outVFSs
 }
 
 func fromSandboxOutputIncludes(na *NodeArenas, stmt *FromSandboxStmt) []IncludeDirective {

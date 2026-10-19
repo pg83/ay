@@ -139,6 +139,8 @@ type javaDMFlags struct {
 }
 
 func javaPathIsPrefixOf(prefix, path string) bool {
+	prefix = strings.TrimSuffix(prefix, "/")
+
 	return path == prefix || strings.HasPrefix(path, prefix) && path[len(prefix)] == '/'
 }
 

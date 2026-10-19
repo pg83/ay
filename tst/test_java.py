@@ -330,5 +330,60 @@ class JavaStartTargetsTest(unittest.TestCase):
         ])
 
 
+class JavaModuleMacrosTest(unittest.TestCase):
+    def test_exclude_with_trailing_separator(self):
+        classpath = JavaDependencyManagementTest.library(
+            self, "PEERDIR(contrib/java/x/a)\nDEPENDENCY_MANAGEMENT(contrib/java/x/a/2.0)\nEXCLUDE(contrib/java/x/b/)\n")
+        self.assertEqual(classpath, ["contrib/java/x/a/2.0/a-2.0.jar"])
+
+    def test_proto_sources_resolve_by_srcdir_and_root(self):
+        files = java_tree(**{
+            "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nPEERDIR(p/q)\nEND()\n",
+            "p/q/ya.make": "PROTO_LIBRARY()\nSRCDIR(p)\nSRCS(a.proto r/b.proto)\nEND()\n",
+            "p/a.proto": 'syntax = "proto3";\n',
+            "r/b.proto": 'syntax = "proto3";\n',
+            **contrib("contrib/java/com/google/protobuf/protobuf-java/4.33.0", jar=7),
+        })
+        graph = lib.make(files, "app")
+        for jsrc, proto in (("$(B)/p/a.jsrc", "p/a.proto"), ("$(B)/r/b.jsrc", "r/b.proto")):
+            pb = lib.node_by_output(graph, jsrc)
+            self.assertEqual(pb["cmds"][0]["cmd_args"][-1], proto)
+
+    def test_ev_source_is_copied_to_a_proto(self):
+        files = java_tree(**{
+            "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nPEERDIR(p)\nEND()\n",
+            "p/ya.make": "PROTO_LIBRARY()\nSRCS(a.proto events.ev)\nEND()\n",
+            "p/a.proto": 'syntax = "proto3";\n',
+            "p/events.ev": 'syntax = "proto3";\n',
+            **contrib("contrib/java/com/google/protobuf/protobuf-java/4.33.0", jar=7),
+        })
+        graph = lib.make(files, "app")
+        ev = lib.node_by_output(graph, "$(B)/p/events_ev.proto")
+        self.assertEqual(ev["kv"], {"p": "EV", "pc": "yellow"})
+        self.assertEqual(ev["cmds"][0]["cmd_args"][2:], ["copy", "$(S)/p/events.ev", "$(B)/p/events_ev.proto"])
+        pb = lib.node_by_output(graph, "$(B)/p/events_ev.jsrc")
+        self.assertEqual(pb["cmds"][0]["cwd"], "$(B)")
+        self.assertEqual(pb["cmds"][0]["cmd_args"][-1], "p/events_ev.proto")
+        self.assertIn(ev["uid"], pb["deps"])
+        jv = lib.node_by_output(graph, "$(B)/p/p.jar")
+        args = jv["cmds"][0]["cmd_args"]
+        self.assertEqual(args[args.index("DELIM") - 2:args.index("DELIM")], ["$(B)/p/a.jsrc", "$(B)/p/events_ev.jsrc"])
+
+    def test_from_sandbox_outputs_are_module_dependencies(self):
+        files = java_tree(**{
+            "app/ya.make": (
+                "JAVA_LIBRARY_NON_SPLIT()\nFROM_SANDBOX(FILE 42 OUT_NOAUTO data.tgz)\n"
+                "JAVA_SRCS(SRCDIR ${ARCADIA_BUILD_ROOT}/app FILES data.tgz)\nEND()\n"
+            ),
+        })
+        graph = lib.make(files, "app")
+        sb = lib.node_by_output(graph, "$(B)/app/data.tgz")
+        self.assertEqual(sb["kv"], {"p": "SB", "pc": "yellow", "show_out": "yes"})
+        jv = jv_node(graph, "$(B)/app/app.jar")
+        self.assertIn("$(B)/app/data.tgz", jv["cmds"][0]["cmd_args"])
+        self.assertIn("$(B)/app/data.tgz", jv["inputs"])
+        self.assertIn(sb["uid"], jv["deps"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

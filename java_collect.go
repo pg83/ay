@@ -145,7 +145,7 @@ func (d *JavaData) expandJavaProtobufPeers() {
 }
 
 func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment) *JavaData {
-	d := &JavaData{jdkReal: ctx.javaDefaultJDK(), env: env, lintLevel: "extended", abiJar: true}
+	d := &JavaData{jdkReal: ctx.javaDefaultJDK(), env: env, lintLevel: "extended", abiJar: true, srcDirs: []VFS{jm.path}}
 
 	d.javacOpts.base = []string{"-J-XX:ActiveProcessorCount=4"}
 	d.javacOpts.cur = d.javacOpts.base
@@ -229,6 +229,14 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			d.rawVars[v.Name] = d.rawExpand(v.Value)
 		case *DefaultVarStmt:
 			env.setDefaultString(v.NameEnv, expandScalarVarRef(v.Value, env))
+
+			if _, ok := d.rawVars[v.VarName]; !ok {
+				if d.rawVars == nil {
+					d.rawVars = map[string]string{}
+				}
+
+				d.rawVars[v.VarName] = d.rawExpand(v.Value)
+			}
 		case *IfStmt:
 			taken := v.Then
 
@@ -245,11 +253,27 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 					continue
 				}
 
-				if jm.unit.proto && strings.HasSuffix(ss, ".proto") {
+				switch {
+				case jm.unit.proto && strings.HasSuffix(ss, ".proto"):
 					d.protoSrcs = append(d.protoSrcs, ss)
-				} else {
+				case jm.unit.proto && strings.HasSuffix(ss, ".ev"):
+					d.evSrcs = append(d.evSrcs, ss)
+				default:
 					d.srcs = append(d.srcs, ss)
 				}
+			}
+		case *FromSandboxStmt:
+			expanded := *v
+
+			expanded.ResourceId = expandStmtTokenAny(v.ResourceId, env)
+			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
+			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
+			expanded.Renames = expandStmtTokens(v.Renames, env)
+
+			d.fromSandboxes = append(d.fromSandboxes, &expanded)
+		case *SrcDirStmt:
+			for _, dir := range expandStmtTokens(v.Dirs, env) {
+				d.srcDirs = append(d.srcDirs, dirKey(dir.string()).source())
 			}
 		case *AddInclStmt:
 			for _, dir := range expandConfigVFSPaths(v.ProtoGlobalPaths, env) {

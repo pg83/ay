@@ -231,6 +231,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 		b.javaScriptgenScripts(jm, globals, closure, jdk)
 		b.setKV(pkUJ, pcNone, false)
 		b.closure(closure)
+		b.macroOuts(jm)
 		b.emitTo(jm.outRef, ctx.target)
 
 		return
@@ -295,6 +296,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 	b.javaScriptgenScripts(jm, globals, closure, jdk)
 	b.outputs = append(b.outputs, lateOuts...)
 	b.closure(closure)
+	b.macroOuts(jm)
 	b.setKV(pkJP, pcLightBlue, true)
 	b.emitTo(jm.outRef, ctx.target)
 }

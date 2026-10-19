@@ -173,6 +173,8 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
 		ctx.javaRegisterRunPrograms(jm)
 	}
 
+	ctx.javaRegisterFromSandboxes(jm)
+
 	outs := jm.outputs()
 
 	if len(outs) == 0 {
@@ -192,6 +194,41 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
 			ProducerMainOut: outs[0],
 			OnUse:           pending,
 		})
+	}
+}
+
+func (ctx *GenCtx) javaRegisterFromSandboxes(jm *JavaModule) {
+	reg := ctx.scannerTarget.codegen
+
+	for _, stmt := range jm.data.fromSandboxes {
+		node, outs := fromSandboxNode(ctx.na, jm.instance, javaPython3.any(), stmt)
+
+		jm.macroOuts = append(jm.macroOuts, outs...)
+
+		if reg.lookup(outs[0]) != nil {
+			continue
+		}
+
+		ref := ctx.emit.reserve()
+		pending := ctx.javaPendingEmit(func() { ctx.emit.emitReservedNodePtr(&node, ref) })
+
+		for _, out := range outs {
+			reg.register(GeneratedFileInfo{
+				OutputPath:      out,
+				OwnerModule:     jm.path,
+				ProducerRef:     ref,
+				ProducerMainOut: outs[0],
+				SourceInputs:    fromSandboxScriptInputs,
+				OnUse:           pending,
+			})
+		}
+	}
+}
+
+func (b *javaNodeBuilder) macroOuts(jm *JavaModule) {
+	for _, out := range jm.macroOuts {
+		b.input(out)
+		b.deps = append(b.deps, b.ctx.javaUse(out))
 	}
 }
 
@@ -245,6 +282,7 @@ func (ctx *GenCtx) javaEmitTest(jm *JavaModule) {
 	b.cmd(append(w, strYaEndCommandFile.any()), 0)
 	b.cmd(append(b.python("build/scripts/make_manifest_from_bf.py"), runBf.any(), jm.target.any()), 0)
 	b.closure(closure)
+	b.macroOuts(jm)
 	b.setKV(pkJT, pcNone, false)
 	b.outputs = []VFS{jm.target}
 	b.emitTo(jm.outRef, ctx.target)
@@ -370,7 +408,11 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 		scanCtx.protoInclude = ctx.na.vfsList(jm.protoInclude...)
 
 		for _, src := range d.protoSrcs {
-			autoInputs = append(autoInputs, ctx.javaEmitProtoPB(jm, globals, scanCtx, src))
+			autoInputs = append(autoInputs, ctx.javaEmitProtoPB(jm, globals, scanCtx, resolveSourceVFS(ctx, jm.instance, src, d.srcDirs)))
+		}
+
+		for _, src := range d.evSrcs {
+			autoInputs = append(autoInputs, ctx.javaEmitProtoPB(jm, globals, scanCtx, ctx.javaEmitEvProto(jm, scanCtx, resolveSourceVFS(ctx, jm.instance, src, d.srcDirs))))
 		}
 	}
 
@@ -419,6 +461,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 	b.setKV(pkJV, pcLightBlue, true)
 	b.outputs = []VFS{jm.target, srcJar}
 	b.closure(closure)
+	b.macroOuts(jm)
 
 	for _, in := range autoInputs {
 		b.deps = append(b.deps, ctx.javaUse(in))
@@ -456,10 +499,37 @@ func (b *javaNodeBuilder) closure(closure []JavaClosureEntry) {
 	}
 }
 
-func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanCtx *ScanContext, src string) VFS {
+func (ctx *GenCtx) javaEmitEvProto(jm *JavaModule, scanCtx *ScanContext, ev VFS) VFS {
+	rel := ev.relString()
+	out := build(jm.dir, "/", strings.TrimSuffix(path.Base(rel), path.Ext(rel)), "_ev.proto")
+	b := &javaNodeBuilder{ctx: ctx}
+
+	b.cmd(b.fsTools(strCopy.any(), ev.any(), out.any()), 0)
+	b.input(ev)
+
+	for _, bucket := range ctx.scannerTarget.walkClosure(ev, scanCtx, scanDomainProto).bucketList() {
+		b.input(bucket...)
+	}
+
+	b.setKV(pkEV, pcYellow, false)
+	b.outputs = []VFS{out}
+
+	ref := ctx.emit.reserve()
+
+	ctx.scannerTarget.codegen.register(GeneratedFileInfo{
+		OutputPath:      out,
+		OwnerModule:     jm.path,
+		ProducerRef:     ref,
+		ProducerMainOut: out,
+		OnUse:           ctx.javaPendingEmit(func() { b.emitTo(ref, ctx.target) }),
+	})
+
+	return out
+}
+
+func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanCtx *ScanContext, protoVFS VFS) VFS {
 	d := jm.data
-	protoRel := path.Clean(jm.dir + "/" + src)
-	protoVFS := source(protoRel)
+	protoRel := protoVFS.relString()
 	out := build(strings.TrimSuffix(protoRel, path.Ext(protoRel)), ".jsrc")
 	b := &javaNodeBuilder{ctx: ctx}
 	javaOut := strBJavaOut.any()
@@ -507,11 +577,17 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 		args = append(args, internV("--plugin=protoc-gen-kotlin_grpc=", kgrpc.string(), "/grpc_kotlin").any(), strKotlinGrpcOutBJavaOut.any())
 	}
 
-	b.cmd(args, srcRootDirVFS, extraEnv...)
-	b.input(protoVFS)
+	if protoVFS.isBuild() {
+		b.cmd(args, bldRootDirVFS, extraEnv...)
+		b.input(protoVFS)
+		b.deps = append(b.deps, ctx.javaUse(protoVFS))
+	} else {
+		b.cmd(args, srcRootDirVFS, extraEnv...)
+		b.input(protoVFS)
 
-	for _, bucket := range ctx.scannerTarget.walkClosure(protoVFS, scanCtx, scanDomainProto).bucketList() {
-		b.input(bucket...)
+		for _, bucket := range ctx.scannerTarget.walkClosure(protoVFS, scanCtx, scanDomainProto).bucketList() {
+			b.input(bucket...)
+		}
 	}
 
 	b.setKV(pkPB, pcYellow, false)

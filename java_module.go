@@ -277,6 +277,9 @@ type JavaData struct {
 	localJar            string
 	localSourcesJar     string
 	protoSrcs           []string
+	evSrcs              []string
+	fromSandboxes       []*FromSandboxStmt
+	srcDirs             []VFS
 	srcs                []string
 	grpc                bool
 	kotlinProto         bool
@@ -346,6 +349,7 @@ type JavaModule struct {
 	protoInclude   []VFS
 	toolRefs       []NodeRef
 	gentars        []VFS
+	macroOuts      []VFS
 }
 
 func (jm *JavaModule) fileName() string {
