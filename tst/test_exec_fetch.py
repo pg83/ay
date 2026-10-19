@@ -53,9 +53,13 @@ def zip_bytes(members):
 def make_certificate(directory):
     key = directory / "mock.key"
     cert = directory / "mock.pem"
+    # openssl req reads a config file; hosts without /etc/ssl/openssl.cnf need
+    # one, and -subj with -addext is all the certificate takes from it.
+    config = directory / "openssl.cnf"
+    config.write_text("[req]\ndistinguished_name = dn\n[dn]\n")
     subprocess.run(
         [
-            "openssl", "req", "-x509", "-newkey", "ec",
+            "openssl", "req", "-config", config, "-x509", "-newkey", "ec",
             "-pkeyopt", "ec_paramgen_curve:prime256v1", "-nodes",
             "-keyout", key, "-out", cert, "-days", "2",
             "-subj", "/CN=ay-test-mock",
