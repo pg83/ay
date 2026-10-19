@@ -98,5 +98,26 @@ class Ragel6Test(unittest.TestCase):
                 self.assertEqual(node["cmds"][0]["cmd_args"][:3], [RAGEL6, flag, "-L"])
 
 
+    def test_distbuild_ragel_inputs_are_native_include_closures(self):
+        # Under ya --dist (ymake --add-inputs) the R6 node takes the .rl6 and
+        # its ragel includes; the generated source brings its C++ includes.
+        files = {
+            "mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(scan.rl6)\nEND()\n",
+            "mod/scan.rl6": SCANNER,
+            "mod/hdr.h": "",
+            "mod/common.rl": "",
+            "mod/common2.rl": "",
+            "mod/commented.rl": "",
+        }
+        lib.tool_program(files, "contrib/tools/ragel6", "ragel6")
+        graph = lib.make(files, "mod", "--dist")
+        scan = lib.node_by_output(graph, "$(B)/mod/scan.rl6.cpp")
+        self.assertEqual(sorted(scan["inputs"][1:]), ["$(S)/mod/common.rl", "$(S)/mod/common2.rl", "$(S)/mod/scan.rl6"])
+        compiled = lib.node_by_output(graph, "$(B)/mod/scan.rl6.cpp.o")
+        self.assertIn("$(S)/mod/hdr.h", compiled["inputs"])
+        self.assertNotIn("$(S)/mod/scan.rl6", compiled["inputs"])
+        self.assertNotIn("$(S)/mod/common.rl", compiled["inputs"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

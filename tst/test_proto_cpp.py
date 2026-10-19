@@ -68,6 +68,23 @@ def pb_node(graph, pb_h):
 
 
 class ProtoCppTest(unittest.TestCase):
+    def test_distbuild_generated_sources_bring_no_generator_inputs(self):
+        # Under ya --dist (ymake --add-inputs) a compile takes the include
+        # closure of the generated .pb.cc, not the inputs of protoc.
+        files = proto_files()
+        files.update({
+            "p/ya.make": "PROTO_LIBRARY()\nSRCS(a.proto)\nEND()\n",
+            "p/a.proto": 'syntax = "proto3";\nimport "google/protobuf/descriptor.proto";\nmessage A {}\n',
+        })
+        for args, local in (((), True), (("--dist",), False)):
+            with self.subTest(args=args):
+                graph = lib.make(files, "p", *args)
+                compiled = lib.node_by_output(graph, "$(B)/p/a.pb.cc.o")
+                self.assertIn("$(B)/p/a.pb.h", compiled["inputs"])
+                self.assertIn(f"{PB_RUNTIME}/descriptor.pb.h", compiled["inputs"])
+                self.assertEqual(WRAPPER in compiled["inputs"], local)
+                self.assertEqual("$(S)/p/a.proto" in compiled["inputs"], local)
+
     def test_grpc_imports_and_named_archive(self):
         files = proto_files()
         grpc_files(files)

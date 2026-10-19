@@ -457,13 +457,19 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	extras := pbHEmitsIncludesExtras()
+	addInputs := e.instance.Platform.AddInputs
+
+	if addInputs {
+		extras = pbDescriptorImporterDirectives
+	}
+
 	pbHCompile := na.dirs.alloc(len(pbHImports) + len(extras) + transitiveImports.len())[:0]
 
 	pbHCompile = append(pbHCompile, pbHImports...)
 	pbHCompile = append(pbHCompile, extras...)
 
 	for _, bucket := range transitiveImports.bucketList() {
-		if bucket[0].isBuild() {
+		if bucket[0].isBuild() || addInputs {
 			continue
 		}
 
@@ -494,7 +500,10 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbCCRefs := pe.pbGenRefs[:pbCCRefCount:pbCCRefCount]
 	pbHLeaves := na.vfsList(protoRel.source())
 
-	if generatedProto {
+	switch {
+	case addInputs:
+		pbHLeaves = nil
+	case generatedProto:
 		pbHLeaves = protoProducerSourceInputs
 	}
 
@@ -570,11 +579,17 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		})
 	}
 
+	pbCCParsed := pbHCompile
+
+	if addInputs {
+		pbCCParsed = na.dirList(append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(pbH.rel().any())}}, pbHCompile...)...)
+	}
+
 	e.register(GeneratedFileInfo{
 		OutputPath:     pbCC,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbCCRefs,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbHCompile},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbCCParsed},
 		ClosureLeaves:  na.vfsList(pbH),
 		OnUse:          pbPE,
 	})

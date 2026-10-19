@@ -200,7 +200,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 	cpDir := build(jm.dir, "/", jm.name)
 	cplst := build(jm.dir, "/", jm.name, ".run.cp.jar.cplst")
 	tarball := build(jm.dir, "/", jm.name, ".tar")
-	b := &javaNodeBuilder{ctx: ctx}
+	b := ctx.javaBuilder(jm)
 
 	b.outputs = jm.runnableOutputs()
 
@@ -223,7 +223,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 
 		b.cmd(append(lc, strYaEndCommandFile.any(), cpDir.any()), 0)
 
-		if ref := ctx.javaUse(self); ref != 0 {
+		if ref := b.use(self); ref != 0 {
 			b.deps = append(b.deps, ref)
 		}
 
@@ -232,7 +232,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 		b.setKV(pkUJ, pcNone, false)
 		b.closure(closure)
 		b.macroOuts(jm)
-		b.emitTo(jm.outRef, ctx.target)
+		b.emitTo(jm.outRef)
 
 		return
 	}
@@ -298,7 +298,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 	b.closure(closure)
 	b.macroOuts(jm)
 	b.setKV(pkJP, pcLightBlue, true)
-	b.emitTo(jm.outRef, ctx.target)
+	b.emitTo(jm.outRef)
 }
 
 func javaEntryPaths(closure []JavaClosureEntry) []VFS {
@@ -389,7 +389,7 @@ func (ctx *GenCtx) javaTool(dir string) *JavaModule {
 
 	for _, u := range javaModuleUnits[name] {
 		if u.kind == juRunnable {
-			res := genModule(ctx, ModuleInstance{Path: source(dir), Kind: u.sub, Language: LangJava, Platform: ctx.target, Demand: demandSelf})
+			res := genModule(ctx, ModuleInstance{Path: source(dir), Kind: u.sub, Language: LangJava, Platform: ctx.host, Demand: demandSelf})
 
 			return res.java
 		}
@@ -409,7 +409,7 @@ func (ctx *GenCtx) javaRegisterRunPrograms(jm *JavaModule) {
 		ref := ctx.emit.reserve()
 		pending := ctx.javaPendingEmit(func() { ctx.javaEmitRunProgram(jm, r, ref) })
 
-		ctx.scannerTarget.codegen.register(GeneratedFileInfo{
+		ctx.javaReg(jm).register(GeneratedFileInfo{
 			OutputPath:      r.gentar,
 			OwnerModule:     jm.path,
 			ProducerRef:     ref,
@@ -424,7 +424,7 @@ func (ctx *GenCtx) javaRegisterRunPrograms(jm *JavaModule) {
 func (ctx *GenCtx) javaEmitRunProgram(jm *JavaModule, r javaRunProgram, ref NodeRef) {
 	d := jm.data
 	globals := ctx.javaGlobals(jm)
-	b := &javaNodeBuilder{ctx: ctx}
+	b := ctx.javaBuilder(jm)
 	bindir := build(jm.dir)
 	outDir := r.outDir
 
@@ -443,7 +443,7 @@ func (ctx *GenCtx) javaEmitRunProgram(jm *JavaModule, r javaRunProgram, ref Node
 
 		run = append(run, internV("@", cplst.string()).any())
 
-		if dep := ctx.javaUse(cplst); dep != 0 {
+		if dep := ctx.javaBuilder(tool).use(cplst); dep != 0 {
 			b.input(tool.target)
 			b.deps = append(b.deps, dep)
 		}
@@ -495,5 +495,5 @@ func (ctx *GenCtx) javaEmitRunProgram(jm *JavaModule, r javaRunProgram, ref Node
 	b.setKV(pkRJ, pcBlue, false)
 	b.exts = []KVExt{{Key: "tared_kind", Val: "nodir"}}
 	b.outputs = []VFS{r.gentar}
-	b.emitTo(ref, ctx.target)
+	b.emitTo(ref)
 }

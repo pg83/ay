@@ -52,6 +52,7 @@ type CodegenRegistry struct {
 	leafEver        BitSet
 	splitGeneration uint32
 	na              *NodeArenas
+	addInputs       bool
 }
 
 type splitLookup struct {
@@ -59,8 +60,8 @@ type splitLookup struct {
 	generation uint32
 }
 
-func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
-	return &CodegenRegistry{na: na}
+func newCodegenRegistry(na *NodeArenas, addInputs bool) *CodegenRegistry {
+	return &CodegenRegistry{na: na, addInputs: addInputs}
 }
 
 func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
@@ -107,6 +108,10 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 
 	r.byRel.put(stored.OutputPath.rel(), stored)
 	r.splitGeneration++
+
+	if r.addInputs {
+		return stored
+	}
 
 	for _, leaf := range stored.ClosureLeaves {
 		r.leafEver.add(uint32(leaf))
@@ -189,6 +194,10 @@ func (r *CodegenRegistry) isLeafEver(v VFS) bool {
 }
 
 func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
+	if r.addInputs {
+		return nil
+	}
+
 	if info := r.lookup(node); info != nil {
 		return info.ClosureLeaves
 	}

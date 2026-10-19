@@ -12,6 +12,7 @@ var (
 
 type javaNodeBuilder struct {
 	ctx       *GenCtx
+	p         *Platform
 	cmds      []Cmd
 	inputs    []VFS
 	outputs   []VFS
@@ -91,7 +92,32 @@ func (b *javaNodeBuilder) setKV(p ProcKind, pc PColor, showOut bool) {
 	b.kv.ShowOut = b.kv.ShowOut || showOut
 }
 
-func (b *javaNodeBuilder) emitTo(ref NodeRef, platform *Platform) {
+func (ctx *GenCtx) javaBuilderReq(jm *JavaModule, req *Requirements) *javaNodeBuilder {
+	b := ctx.javaBuilder(jm)
+
+	b.req = req
+
+	return b
+}
+
+func (ctx *GenCtx) javaBuilder(jm *JavaModule) *javaNodeBuilder {
+	return &javaNodeBuilder{ctx: ctx, p: jm.instance.Platform}
+}
+
+func (ctx *GenCtx) javaReg(jm *JavaModule) *CodegenRegistry {
+	return ctx.scannerForPlatform(jm.instance.Platform).codegen
+}
+
+func (b *javaNodeBuilder) use(out VFS) NodeRef {
+	if info := b.ctx.scannerForPlatform(b.p).codegen.use(out); info != nil {
+		return info.ProducerRef
+	}
+
+	return 0
+}
+
+func (b *javaNodeBuilder) emitTo(ref NodeRef) {
+	platform := b.p
 	na := b.ctx.na
 	env := envVarsVCS
 
@@ -184,7 +210,7 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
 	jm.outRef = ctx.emit.reserve()
 
 	pending := ctx.javaPendingEmit(func() { ctx.javaEmit(jm) })
-	reg := ctx.scannerTarget.codegen
+	reg := ctx.javaReg(jm)
 
 	for _, out := range outs {
 		reg.register(GeneratedFileInfo{
@@ -198,7 +224,7 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
 }
 
 func (ctx *GenCtx) javaRegisterFromSandboxes(jm *JavaModule) {
-	reg := ctx.scannerTarget.codegen
+	reg := ctx.javaReg(jm)
 
 	for _, stmt := range jm.data.fromSandboxes {
 		node, outs := fromSandboxNode(ctx.na, jm.instance, javaPython3.any(), stmt)
@@ -228,7 +254,7 @@ func (ctx *GenCtx) javaRegisterFromSandboxes(jm *JavaModule) {
 func (b *javaNodeBuilder) macroOuts(jm *JavaModule) {
 	for _, out := range jm.macroOuts {
 		b.input(out)
-		b.deps = append(b.deps, b.ctx.javaUse(out))
+		b.deps = append(b.deps, b.use(out))
 	}
 }
 
@@ -238,14 +264,6 @@ func (ctx *GenCtx) javaPendingEmit(fn func()) *PendingEmit {
 	*p = PendingEmit{fn: fn}
 
 	return p
-}
-
-func (ctx *GenCtx) javaUse(out VFS) NodeRef {
-	if info := ctx.scannerTarget.codegen.use(out); info != nil {
-		return info.ProducerRef
-	}
-
-	return 0
 }
 
 func (ctx *GenCtx) javaEmit(jm *JavaModule) {
@@ -268,7 +286,7 @@ func (ctx *GenCtx) javaEmit(jm *JavaModule) {
 func (ctx *GenCtx) javaEmitTest(jm *JavaModule) {
 	closure := ctx.javaManagedPeersClosure(jm)
 	runBf := build(jm.dir, "/run-bf.txt")
-	b := &javaNodeBuilder{ctx: ctx}
+	b := ctx.javaBuilder(jm)
 	w := b.python("build/scripts/writer.py")
 
 	b.script("build/scripts/process_command_files.py")
@@ -285,7 +303,7 @@ func (ctx *GenCtx) javaEmitTest(jm *JavaModule) {
 	b.macroOuts(jm)
 	b.setKV(pkJT, pcNone, false)
 	b.outputs = []VFS{jm.target}
-	b.emitTo(jm.outRef, ctx.target)
+	b.emitTo(jm.outRef)
 }
 
 func (ctx *GenCtx) javaGlobals(jm *JavaModule) map[string]VFS {
@@ -332,7 +350,7 @@ func javaJDKResource(jdk string) string {
 
 func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 	d := jm.data
-	b := &javaNodeBuilder{ctx: ctx}
+	b := ctx.javaBuilder(jm)
 	bindir := build(jm.dir)
 	srcJar := build(jm.dir, "/", jm.name, "-sources.jar")
 	globals := ctx.javaGlobals(jm)
@@ -390,7 +408,7 @@ func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 		b.setKV(pkFS, pcYellow, false)
 	}
 
-	b.emitTo(jm.outRef, ctx.target)
+	b.emitTo(jm.outRef)
 }
 
 func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
@@ -398,7 +416,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 	globals := ctx.javaGlobals(jm)
 	closure := ctx.javaManagedPeersClosure(jm)
 	srcJar := build(jm.dir, "/", jm.name, "-sources.jar")
-	b := &javaNodeBuilder{ctx: ctx, req: &javaReqCPU4}
+	b := ctx.javaBuilderReq(jm, &javaReqCPU4)
 
 	var autoInputs []VFS
 
@@ -464,10 +482,10 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 	b.macroOuts(jm)
 
 	for _, in := range autoInputs {
-		b.deps = append(b.deps, ctx.javaUse(in))
+		b.deps = append(b.deps, b.use(in))
 	}
 
-	b.emitTo(jm.outRef, ctx.target)
+	b.emitTo(jm.outRef)
 }
 
 func javaKotlinJVMTarget(jdk string) string {
@@ -487,7 +505,7 @@ func (b *javaNodeBuilder) closure(closure []JavaClosureEntry) {
 
 		switch {
 		case e.java != nil:
-			ref = b.ctx.javaUse(e.path)
+			ref = b.use(e.path)
 		case e.foreign.LDPath != nil:
 			ref = e.foreign.LDRef
 		}
@@ -502,12 +520,12 @@ func (b *javaNodeBuilder) closure(closure []JavaClosureEntry) {
 func (ctx *GenCtx) javaEmitEvProto(jm *JavaModule, scanCtx *ScanContext, ev VFS) VFS {
 	rel := ev.relString()
 	out := build(jm.dir, "/", strings.TrimSuffix(path.Base(rel), path.Ext(rel)), "_ev.proto")
-	b := &javaNodeBuilder{ctx: ctx}
+	b := ctx.javaBuilder(jm)
 
 	b.cmd(b.fsTools(strCopy.any(), ev.any(), out.any()), 0)
 	b.input(ev)
 
-	for _, bucket := range ctx.scannerTarget.walkClosure(ev, scanCtx, scanDomainProto).bucketList() {
+	for _, bucket := range ctx.scannerForPlatform(jm.instance.Platform).walkClosure(ev, scanCtx, scanDomainProto).bucketList() {
 		b.input(bucket...)
 	}
 
@@ -516,12 +534,12 @@ func (ctx *GenCtx) javaEmitEvProto(jm *JavaModule, scanCtx *ScanContext, ev VFS)
 
 	ref := ctx.emit.reserve()
 
-	ctx.scannerTarget.codegen.register(GeneratedFileInfo{
+	ctx.javaReg(jm).register(GeneratedFileInfo{
 		OutputPath:      out,
 		OwnerModule:     jm.path,
 		ProducerRef:     ref,
 		ProducerMainOut: out,
-		OnUse:           ctx.javaPendingEmit(func() { b.emitTo(ref, ctx.target) }),
+		OnUse:           ctx.javaPendingEmit(func() { b.emitTo(ref) }),
 	})
 
 	return out
@@ -531,7 +549,7 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 	d := jm.data
 	protoRel := protoVFS.relString()
 	out := build(strings.TrimSuffix(protoRel, path.Ext(protoRel)), ".jsrc")
-	b := &javaNodeBuilder{ctx: ctx}
+	b := ctx.javaBuilder(jm)
 	javaOut := strBJavaOut.any()
 	args := b.python("build/scripts/tared_protoc.py")
 
@@ -580,12 +598,12 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 	if protoVFS.isBuild() {
 		b.cmd(args, bldRootDirVFS, extraEnv...)
 		b.input(protoVFS)
-		b.deps = append(b.deps, ctx.javaUse(protoVFS))
+		b.deps = append(b.deps, b.use(protoVFS))
 	} else {
 		b.cmd(args, srcRootDirVFS, extraEnv...)
 		b.input(protoVFS)
 
-		for _, bucket := range ctx.scannerTarget.walkClosure(protoVFS, scanCtx, scanDomainProto).bucketList() {
+		for _, bucket := range ctx.scannerForPlatform(jm.instance.Platform).walkClosure(protoVFS, scanCtx, scanDomainProto).bucketList() {
 			b.input(bucket...)
 		}
 	}
@@ -594,9 +612,9 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 	b.outputs = []VFS{out}
 
 	ref := ctx.emit.reserve()
-	pending := ctx.javaPendingEmit(func() { b.emitTo(ref, ctx.target) })
+	pending := ctx.javaPendingEmit(func() { b.emitTo(ref) })
 
-	ctx.scannerTarget.codegen.register(GeneratedFileInfo{
+	ctx.javaReg(jm).register(GeneratedFileInfo{
 		OutputPath:      out,
 		OwnerModule:     jm.path,
 		ProducerRef:     ref,

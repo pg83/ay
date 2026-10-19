@@ -585,7 +585,7 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool)
 
 	name := ctx.moduleName(dir)
 	tags := parent.peerdirTags()
-	inst := ModuleInstance{Path: source(dir), Language: LangJava, Platform: ctx.target, Demand: demandSelf}
+	inst := ModuleInstance{Path: source(dir), Language: LangJava, Platform: parent.instance.Platform, Demand: demandSelf}
 
 	switch units := javaModuleUnits[name]; {
 	case len(units) > 1:
@@ -677,7 +677,7 @@ func (ctx *GenCtx) genJavaTarget(dir string, name TOK) {
 			continue
 		}
 
-		if ref := ctx.javaUse(res.java.target); ref != 0 {
+		if ref := ctx.javaBuilder(res.java).use(res.java.target); ref != 0 {
 			ctx.emit.result(ref)
 		}
 	}

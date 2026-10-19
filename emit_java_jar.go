@@ -85,7 +85,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	d := jm.data
 	globals := ctx.javaGlobals(jm)
 	closure := ctx.javaManagedPeersClosure(jm)
-	b := &javaNodeBuilder{ctx: ctx, req: &javaReqCPU4}
+	b := ctx.javaBuilderReq(jm, &javaReqCPU4)
 	bindir := build(jm.dir)
 	moddir := source(jm.dir)
 	jdk := javaJDKResource(d.jdkReal)
@@ -118,7 +118,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	for _, gt := range jm.gentars {
 		prep = append(prep, gt.any())
 		b.input(gt)
-		b.deps = append(b.deps, ctx.javaUse(gt))
+		b.deps = append(b.deps, b.use(gt))
 	}
 
 	for _, g := range globs {
@@ -366,13 +366,13 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	b.setKV(pkJV, pcLightBlue, true)
 	b.closure(closure)
 	b.macroOuts(jm)
-	b.emitTo(jm.outRef, ctx.target)
+	b.emitTo(jm.outRef)
 }
 
 func (ctx *GenCtx) javaEmitIJar(jm *JavaModule) {
 	full := jm.selfPeers[0]
 	d := full.data
-	b := &javaNodeBuilder{ctx: ctx}
+	b := ctx.javaBuilder(jm)
 	ref, ijar := ctx.tool(argContribToolsIjar)
 	abi := d.abiJar && d.withKotlin && !d.uberjar
 	args := []ANY{ijar.any()}
@@ -391,8 +391,8 @@ func (ctx *GenCtx) javaEmitIJar(jm *JavaModule) {
 	b.setKV(pkIJ, pcLightBlue, false)
 	b.exts = []KVExt{{Key: "exclude_from_idea", Val: "yes"}}
 	b.outputs = []VFS{jm.target}
-	b.deps = append(b.deps, ref, ctx.javaUse(full.target))
-	b.emitTo(jm.outRef, ctx.target)
+	b.deps = append(b.deps, ref, b.use(full.target))
+	b.emitTo(jm.outRef)
 }
 
 func (ctx *GenCtx) javaKaptCmds(jm *JavaModule, b *javaNodeBuilder, compileKt []ANY) {
@@ -445,7 +445,7 @@ func (ctx *GenCtx) javaToolJar(jm *JavaModule, b *javaNodeBuilder, dir string) V
 		return 0
 	}
 
-	if ref := ctx.javaUse(res.java.target); ref != 0 {
+	if ref := b.use(res.java.target); ref != 0 {
 		b.input(res.java.target)
 		b.deps = append(b.deps, ref)
 	}

@@ -214,6 +214,12 @@ class JavaProgramTest(unittest.TestCase):
         jar = lib.node_by_output(graph, "$(B)/app/app.jar")
         self.assertEqual({jar["uid"], lib.node_by_output(graph, produced[1])["uid"]} - set(jp["deps"]), set())
 
+    def test_run_java_program_tool_is_built_for_the_host(self):
+        graph = lib.make(self.tree(), "gen")
+        cp = lib.node_by_output(graph, "$(B)/app/app.run.cp.jar")
+        self.assertEqual(cp["platform"], "default-linux-x86_64")
+        self.assertEqual(jv_node(graph, "$(B)/gen/gen.jar")["platform"], "default-linux-aarch64")
+
     def test_run_java_program_packs_out_dir_for_the_module(self):
         graph = lib.make(self.tree(), "gen")
         gentar = "$(B)/gen/out.119b890a970620da84eb1a8574f10d77.gentar"

@@ -83,19 +83,27 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 
 	pending := e.pendingEmit(pe)
 	joinOutVFS := build(instance.Path.relString(), "/", js.OutputName)
-	ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
-	leaves := ccIncl[1:]
 
-	if instance.Platform.AddInputs {
-		leaves = leaves[len(ctx.scripts[buildScriptsGenJoinSrcsPy.rel()]):]
+	info := GeneratedFileInfo{
+		OutputPath:  joinOutVFS,
+		ProducerRef: jsRef,
+		OnUse:       pending,
 	}
 
-	e.register(GeneratedFileInfo{
-		OutputPath:    joinOutVFS,
-		ProducerRef:   jsRef,
-		ClosureLeaves: leaves,
-		OnUse:         pending,
-	})
+	if instance.Platform.AddInputs {
+		includes := ctx.na.dirs.alloc(len(jsSources))
+
+		for i, s := range jsSources {
+			includes[i] = IncludeDirective{kind: includeQuoted, target: includeTarget(internV(instance.Path.relString(), "/", s).any())}
+		}
+
+		ctx.na.dirs.commit(len(jsSources))
+		info.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: includes[:len(jsSources):len(jsSources)]}
+	} else {
+		info.ClosureLeaves = jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)[1:]
+	}
+
+	e.register(info)
 
 	e.enqueueSrc(SrcMeta{Source: joinOutVFS.any(), Prio: stmtPrioDefault, Seq: js.Seq})
 }

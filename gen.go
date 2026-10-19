@@ -276,8 +276,8 @@ func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *Stre
 
 	fetchRefs := emitter.fetchRefs
 	parsers := caches.parsers
-	targetReg := newCodegenRegistry(plainEmit.nodeArenas())
-	hostReg := newCodegenRegistry(plainEmit.nodeArenas())
+	targetReg := newCodegenRegistry(plainEmit.nodeArenas(), targetP.AddInputs)
+	hostReg := newCodegenRegistry(plainEmit.nodeArenas(), hostP.AddInputs)
 
 	ctx := &GenCtx{
 		fs:        fs,
@@ -2399,7 +2399,7 @@ func (ctx *GenCtx) targetPICScanner() *IncludeScanner {
 		s := newIncludeScannerWith(ctx.parsers, nil, ctx.onWarn, ctx.buckets)
 
 		s.sysincl = ctx.scannerTarget.sysincl
-		s.codegen = newCodegenRegistry(ctx.na)
+		s.codegen = newCodegenRegistry(ctx.na, ctx.target.AddInputs)
 		s.moduleByRef = &ctx.moduleByRef
 
 		ctx.scannerTargetPIC = s
