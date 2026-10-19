@@ -173,14 +173,25 @@ TOOLCHAIN_ENV_VARS = (
 )
 
 
+# devtools/ya/app/modules/caller_info AGENTS, JUMP_RAMPS and IDES env markers.
+CALLER_ENV_VARS = (
+    "OPENCODE", "CLAUDECODE", "CODEX_THREAD_ID", "CURSOR_TRACE_ID", "CODEIUM_EDITOR_APP_ROOT",
+    "AIDER_API_KEY", "AMP_CURRENT_THREAD_ID", "ANTIGRAVITY_AGENT", "AUGMENT_AGENT", "GEMINI_CLI",
+    "QWEN_CODE", "REPL_ID", "YA_CODE", "CODENV", "VSCODE_INJECTION", "VSCODE_IPC_HOOK_CLI",
+)
+
+
 def ya_env():
     """Env for every ya/ay invocation here. YA_TC=no keeps ya from spawning the
     persistent tools-cache daemon — under `strace -f` that daemon never exits,
     so strace would hang forever after ymake itself finished. YA_NO_RESPAWN
     stops the launcher re-exec'ing itself. -xx (added to run_command) bypasses
     the graph cache, so reads stay complete without a cold cache dir. The
-    caller's toolchain vars are stripped so they don't leak into compile cmds."""
-    env = {k: v for k, v in os.environ.items() if k not in TOOLCHAIN_ENV_VARS}
+    caller's toolchain vars are stripped so they don't leak into compile cmds.
+    So are the variables by which ya recognizes a coding agent as its caller
+    (devtools/ya/app/modules/caller_info): with one detected ya switches to
+    --output-style jsonl, which ends up in the test nodes of the graph."""
+    env = {k: v for k, v in os.environ.items() if k not in TOOLCHAIN_ENV_VARS and k not in CALLER_ENV_VARS}
     env.update(YA_TC="no", YA_NO_RESPAWN="yes")
 
     return env
