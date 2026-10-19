@@ -27,12 +27,13 @@ def oauth_token() -> str:
         return ""
 
 
-def sandbox_sources(url: str, token: str) -> list[tuple[str, bool]]:
-    """Return direct plus API-derived immutable download locations."""
+def sandbox_sources(url: str, token: str) -> tuple[list[tuple[str, bool]], str]:
+    """Return direct plus API-derived immutable download locations and the md5
+    Sandbox reports for the resource ("" when the API is not reachable)."""
     direct = (url, bool(token))
     resource = url.rstrip("/").rsplit("/", 1)[-1]
     if not token or not resource.isdigit():
-        return [direct]
+        return [direct], ""
     request = urllib.request.Request(
         SANDBOX_API + resource,
         headers={"Authorization": "OAuth " + token, "User-Agent": "ay-build-validator/1"},
@@ -41,9 +42,9 @@ def sandbox_sources(url: str, token: str) -> list[tuple[str, bool]]:
         with urllib.request.urlopen(request, timeout=30) as response:
             info = json.load(response)
     except Exception:  # noqa: BLE001 - the direct source may still work
-        return [direct]
+        return [direct], ""
     if info.get("state") != "READY":
-        return [direct]
+        return [direct], ""
     sources = []
     mds = info.get("attributes", {}).get("mds")
     if mds:
@@ -57,7 +58,7 @@ def sandbox_sources(url: str, token: str) -> list[tuple[str, bool]]:
         sources.append((proxy, True))
     sources.append(direct)
     # Preserve order while removing duplicate URLs.
-    return list(dict.fromkeys(sources))
+    return list(dict.fromkeys(sources)), info.get("md5") or ""
 
 
 def download(url: str, output: Path, expected_sha256: str, attempts: int = 4) -> None:
@@ -65,7 +66,9 @@ def download(url: str, output: Path, expected_sha256: str, attempts: int = 4) ->
     token = oauth_token()
 
     last_error: Exception | None = None
-    for source_url, authenticated in sandbox_sources(url, token):
+    sources, expected_md5 = sandbox_sources(url, token)
+
+    for source_url, authenticated in sources:
         headers = {"User-Agent": "ay-build-validator/1"}
         if authenticated and token:
             headers["Authorization"] = "OAuth " + token
@@ -76,17 +79,30 @@ def download(url: str, output: Path, expected_sha256: str, attempts: int = 4) ->
             )
             temporary = Path(temporary_name)
             digest = hashlib.sha256()
+            md5 = hashlib.md5()
+            size = 0
             try:
                 request = urllib.request.Request(source_url, headers=headers)
                 with os.fdopen(descriptor, "wb") as destination, urllib.request.urlopen(
                     request,
                     timeout=120,
                 ) as source:
+                    length = source.headers.get("Content-Length")
                     while chunk := source.read(1024 * 1024):
                         destination.write(chunk)
                         digest.update(chunk)
+                        md5.update(chunk)
+                        size += len(chunk)
                     destination.flush()
                     os.fsync(destination.fileno())
+                # An empty or cut body once landed in the cache as the
+                # resource: unpinned entries are checked by length and md5.
+                if size == 0:
+                    raise ValueError(f"empty download from {source_url}")
+                if length is not None and size != int(length):
+                    raise ValueError(f"short download from {source_url}: {size} of {length} bytes")
+                if expected_md5 and md5.hexdigest() != expected_md5:
+                    raise ValueError(f"md5 mismatch for {url}: got {md5.hexdigest()}, want {expected_md5}")
                 actual = digest.hexdigest()
                 if expected_sha256 and actual != expected_sha256:
                     raise ValueError(

@@ -2,6 +2,7 @@ import hashlib
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from fetch_validation_resource import download
@@ -118,6 +119,28 @@ class ValidationTest(unittest.TestCase):
             digest = hashlib.sha256(source.read_bytes()).hexdigest()
             download(source.as_uri(), output, digest, attempts=1)
             self.assertEqual(output.read_bytes(), b"immutable")
+
+    def test_resource_download_rejects_empty_body(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            output = root / "output"
+            source.write_bytes(b"")
+            with self.assertRaisesRegex(ValueError, "empty download"):
+                download(source.as_uri(), output, "", attempts=1)
+            self.assertFalse(output.exists())
+
+    def test_resource_download_checks_sandbox_md5(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            output = root / "output"
+            source.write_bytes(b"cut")
+            sources = ([(source.as_uri(), False)], hashlib.md5(b"complete").hexdigest())
+            with mock.patch("fetch_validation_resource.sandbox_sources", return_value=sources):
+                with self.assertRaisesRegex(ValueError, "md5 mismatch"):
+                    download(source.as_uri(), output, "", attempts=1)
+            self.assertFalse(output.exists())
 
     def test_summary_is_structured_and_readable(self):
         results = [
