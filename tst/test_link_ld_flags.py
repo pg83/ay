@@ -46,6 +46,30 @@ def trailer(args):
 
 
 class LinkFlagsTest(unittest.TestCase):
+    def test_resource_globals_in_link_flags_resolve_in_the_linking_program(self):
+        # The flag names a resource its own module does not declare; the
+        # program renders it with the resources of its closure, as ymake does.
+        files = {
+            "res/ya.make": "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(TOOLX sbr:1)\nEND()\n",
+            "plugin/ya.make": (
+                f"LIBRARY()\n{NO_PLATFORM}"
+                "LDFLAGS(-L/X=$TOOLX_RESOURCE_GLOBAL/bin/x -L/Y=${TOOLY_RESOURCE_GLOBAL}/y)\nEND()\n"
+            ),
+            "both/ya.make": f"LIBRARY()\n{NO_PLATFORM}PEERDIR(res plugin)\nEND()\n",
+            "with/ya.make": f"PROGRAM()\n{NO_PLATFORM}SRCS(m.cpp)\nPEERDIR(both)\nEND()\n",
+            "with/m.cpp": "int main(){return 0;}\n",
+            "without/ya.make": f"PROGRAM()\n{NO_PLATFORM}SRCS(m.cpp)\nPEERDIR(plugin)\nEND()\n",
+            "without/m.cpp": "int main(){return 0;}\n",
+        }
+        for target, expected in (
+            ("with", ["-L/X=$(B)/resources/TOOLX/bin/x", "-L/Y=${TOOLY_RESOURCE_GLOBAL}/y"]),
+            ("without", ["-L/X=$TOOLX_RESOURCE_GLOBAL/bin/x", "-L/Y=${TOOLY_RESOURCE_GLOBAL}/y"]),
+        ):
+            with self.subTest(target=target):
+                graph = lib.make(files, target, *X86_64)
+                link = command_with(lib.node_by_output(graph, f"$(B)/{target}/{target}"), "link_exe.py")
+                self.assertEqual([arg for arg in link if arg.startswith("-L/")], expected)
+
     def test_program_link_flags_exports_and_split_dwarf(self):
         graph = lib.make(fixture(), "prog", "-r", *X86_64)
         node = lib.node_by_output(graph, "$(B)/prog/prog")

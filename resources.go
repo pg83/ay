@@ -196,6 +196,43 @@ func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 	return ""
 }
 
+func resolveResourceGlobalArgs(args []ANY, globals []ResourceDecl) []ANY {
+	var env Environment
+	var out []ANY
+
+	for i, a := range args {
+		s := a.string()
+
+		if !strings.Contains(s, resourceGlobalSuffix) {
+			if out != nil {
+				out = append(out, a)
+			}
+
+			continue
+		}
+
+		if env.s == nil {
+			env = newEnvironment()
+
+			for _, d := range globals {
+				env.setVFS(internEnvSTR(d.GlobalVar), d.Value)
+			}
+		}
+
+		if out == nil {
+			out = append(make([]ANY, 0, len(args)), args[:i]...)
+		}
+
+		out = append(out, internAny(expandStmtToken(s, env)))
+	}
+
+	if out == nil {
+		return args
+	}
+
+	return out
+}
+
 func (e *EmitContext) bindResourceGlobalVars(env Environment) bool {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	bound := false
