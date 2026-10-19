@@ -86,7 +86,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		}, cfRef)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     outVFS,

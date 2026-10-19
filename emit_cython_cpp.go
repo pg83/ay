@@ -320,7 +320,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			}, cyRef)
 		}
 
-		pending := e.ctx.na.pendingEmit(pe)
+		pending := e.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{
 			OutputPath:     generatedVFS,

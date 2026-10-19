@@ -97,7 +97,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 		e.emitReservedNode(node, ref)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	for i, f := range stmt.OUTFiles {
 		if fromSandboxAutoLinkMember(f.string()) {

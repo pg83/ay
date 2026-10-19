@@ -48,7 +48,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 		e.emitYmapsSprotoHeaderSnap(scanner, pending, outRoot, sprotocLDRef, sprotocBinary, scanCtx)
 	}
 
-	onUse := e.ctx.na.pendingEmit(pe)
+	onUse := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     sprotoH,

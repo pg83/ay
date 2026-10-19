@@ -420,7 +420,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		toolRefs: toolRefs, pyPBRef: pyPBRef,
 	}
 
-	pyPBPE := na.pendingEmitter(pending)
+	pyPBPE := e.pendingEmitter(pending)
 	sourceInputs := na.dedupSourceVFS(sourceInputsHead, transitive.bucketList())
 
 	e.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})

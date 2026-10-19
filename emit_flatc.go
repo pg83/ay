@@ -200,7 +200,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 	ctx.na.vfs.commit(len(headerLeaves))
 	headerLeaves = headerLeaves[:len(headerLeaves):len(headerLeaves)]
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,

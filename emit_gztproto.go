@@ -58,7 +58,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 		e.emitReservedNode(node, gzRef)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 	sourceInputs := na.vfs.alloc(1 + imports.len())[:0]
 
 	sourceInputs = append(sourceInputs, gztSource)

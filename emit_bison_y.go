@@ -181,7 +181,7 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 		}, ycRef)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,

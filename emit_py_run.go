@@ -175,7 +175,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, directSources, directBuilds, inputClosure, pyRef, interp, toolRefs, kv, resources)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
 		e.register(GeneratedFileInfo{

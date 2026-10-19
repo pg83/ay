@@ -42,7 +42,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 		}, chRef)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:  generatedVFS,

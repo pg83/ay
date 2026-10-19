@@ -20,6 +20,7 @@ type pendingEmitter interface {
 type PendingEmit struct {
 	fn      func()
 	emitter pendingEmitter
+	frame   *ModuleFrame
 }
 
 func (p *PendingEmit) fire() {
@@ -27,10 +28,13 @@ func (p *PendingEmit) fire() {
 		return
 	}
 
-	fn, emitter := p.fn, p.emitter
+	fn, emitter, frame := p.fn, p.emitter, p.frame
 
 	p.fn = nil
 	p.emitter = nil
+	p.frame = nil
+
+	defer func() { frame.pending-- }()
 
 	if emitter != nil {
 		emitter.emitPending()

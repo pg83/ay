@@ -9,6 +9,7 @@ type PeerContext struct {
 
 type EmitContext struct {
 	ctx          *GenCtx
+	frame        *ModuleFrame
 	instance     ModuleInstance
 	d            *ModuleData
 	peers        *PeerContext
@@ -127,7 +128,7 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 	prev := &frame.emitCtx
 
 	frame.emitCtx = EmitContext{
-		ctx: ctx, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen,
+		ctx: ctx, frame: frame, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen,
 		resources: d.resources[:k:k],
 
 		srcs:        prev.srcs[:0],
@@ -301,6 +302,24 @@ func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	info.OwnerModule = e.instance.Path
 
 	return e.codegen.register(info)
+}
+
+func (e *EmitContext) pendingEmit(fn func()) *PendingEmit {
+	p := e.ctx.na.pending.one()
+
+	*p = PendingEmit{fn: fn, frame: e.frame}
+	e.frame.pending++
+
+	return p
+}
+
+func (e *EmitContext) pendingEmitter(emitter pendingEmitter) *PendingEmit {
+	p := e.ctx.na.pending.one()
+
+	*p = PendingEmit{emitter: emitter, frame: e.frame}
+	e.frame.pending++
+
+	return p
 }
 
 func (e *EmitContext) emit() {

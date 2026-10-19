@@ -72,7 +72,7 @@ func (e *EmitContext) emitSwigC() {
 			}, swRef)
 		}
 
-		pending := e.ctx.na.pendingEmit(pe)
+		pending := e.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{
 			OutputPath:     cOutVFS,

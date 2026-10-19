@@ -82,22 +82,6 @@ func newNodeArenas() *NodeArenas {
 	}
 }
 
-func (na *NodeArenas) pendingEmit(fn func()) *PendingEmit {
-	p := na.pending.one()
-
-	*p = PendingEmit{fn: fn}
-
-	return p
-}
-
-func (na *NodeArenas) pendingEmitter(emitter pendingEmitter) *PendingEmit {
-	p := na.pending.one()
-
-	*p = PendingEmit{emitter: emitter}
-
-	return p
-}
-
 func newStrictNodeArenas() *NodeArenas {
 	na := newNodeArenas()
 

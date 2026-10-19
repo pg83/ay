@@ -48,7 +48,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 		e.emitReservedNode(node, ref)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     outVFS,

@@ -46,7 +46,7 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		e.emitReservedNode(node, ref)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     cppVFS,

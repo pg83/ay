@@ -78,7 +78,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 		e.emitJSReserved(outputName, jsSources, joinClosure, ctx.target, tc, ctx.scripts, jsRef)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 	joinOutVFS := build(instance.Path.relString(), "/", js.OutputName)
 	ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
 

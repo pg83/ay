@@ -61,7 +61,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		e.emitReservedNode(node, bcRef)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     prefixH,

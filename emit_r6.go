@@ -113,7 +113,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 		e.emitR6(srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, r6Ref)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     r6Out,

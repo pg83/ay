@@ -68,7 +68,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	e.enqueueSrc(SrcMeta{Source: serializedCPPPath.any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq})
 
-	pe := ctx.na.pendingEmit(func() {
+	pe := e.pendingEmit(func() {
 		enumParserLD, enumParserBin := ctx.tool(argToolsEnumParserEnumParser)
 		generatorRefs := ctx.na.refList(enumParserLD)
 		cppInfo := codegen.lookup(serializedCPPPath)

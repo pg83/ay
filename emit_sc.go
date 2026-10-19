@@ -47,7 +47,7 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 		e.emitSCReserved(srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, scRef)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     headerVFS,

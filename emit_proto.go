@@ -378,7 +378,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		spec:                      spec, pbRef: pbRef,
 	}
 
-	pbPE := na.pendingEmitter(pending)
+	pbPE := e.pendingEmitter(pending)
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := build(protoBase, ".pb.h")
 	pbCC := build(protoBase, ".pb.cc")

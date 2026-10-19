@@ -166,7 +166,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		}, prRef)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet, ridesHeaderViaParsed bool) {
 		if registeredPROut[out] {

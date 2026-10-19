@@ -78,7 +78,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		e.emitJVGeneralReserved(jarVFS, args, inputSourcesSnap, inputBuildsSnap, outputsSnap, cwd, tc, jvRef)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 	jvSourceInputs := ctx.na.vfs.alloc(len(inputs) + 2)[:0]
 
 	for _, v := range inputs {

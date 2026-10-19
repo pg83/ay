@@ -61,7 +61,7 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 		e.emitFlexLX(flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     outVFS,

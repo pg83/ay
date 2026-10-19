@@ -73,7 +73,7 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 		e.emitR5Reserved(srcRel, rlSourceVFS, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, r5Ref)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    r5TmpOut,

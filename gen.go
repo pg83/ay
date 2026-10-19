@@ -2216,6 +2216,7 @@ func (ctx *GenCtx) py3ccHead(py3ccBinary, py3ccSlowBin VFS) []ANY {
 }
 
 type ModuleFrame struct {
+	pending              int
 	d                    ModuleData
 	emitCtx              EmitContext
 	peerCtx              PeerContext
@@ -2241,6 +2242,11 @@ func (ctx *GenCtx) pushFrame() *ModuleFrame {
 	}
 
 	f := ctx.frames[ctx.frameDepth]
+
+	if f.pending != 0 {
+		f = &ModuleFrame{}
+		ctx.frames[ctx.frameDepth] = f
+	}
 
 	ctx.frameDepth++
 

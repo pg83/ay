@@ -76,7 +76,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, tc, ctx.scripts, ctx.emit)
 		}
 
-		pending := e.ctx.na.pendingEmit(pe)
+		pending := e.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{
 			OutputPath:     g4CppPath,

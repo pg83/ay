@@ -33,7 +33,7 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 		e.emitReservedNode(node, ref)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    outVFS,

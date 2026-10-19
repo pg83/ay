@@ -77,7 +77,7 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 		e.emitGP(srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef)
 	}
 
-	pending := e.ctx.na.pendingEmit(pe)
+	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     genVFS,
