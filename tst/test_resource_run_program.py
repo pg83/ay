@@ -198,6 +198,29 @@ class RunProgramTest(unittest.TestCase):
             ],
         ])
 
+    def test_generated_empty_parser_inputs_bring_their_sources(self):
+        files = library(
+            "RUN_PROGRAM(tools/gen IN seed.txt OUT_NOAUTO main.bin gen.py)\n"
+            "RUN_PROGRAM(tools/gen IN ${BINDIR}/main.bin ${BINDIR}/gen.py rule.txt OUT_NOAUTO out.bin)\n"
+            "RESOURCE(${BINDIR}/out.bin out)\n",
+            seed__txt="",
+            rule__txt="",
+        )
+        files["library/cpp/resource/ya.make"] = f"LIBRARY()\n{BARE}END()\n"
+        lib.tool_program(files, "tools/rescompiler", "rescompiler")
+        lib.tool_program(files, "tools/rescompressor", "rescompressor")
+        graph = lib.make(files, "lib")
+        producer = lib.node_by_output(graph, "$(B)/lib/main.bin")
+        node = lib.node_by_output(graph, "$(B)/lib/out.bin")
+        self.assertEqual(sorted(set(node["inputs"])), [
+            "$(B)/lib/gen.py",
+            "$(B)/lib/main.bin",
+            "$(B)/tools/gen/gen",
+            "$(S)/lib/rule.txt",
+            "$(S)/lib/seed.txt",
+        ])
+        self.assertIn(producer["uid"], node["deps"])
+
     def test_proto_inputs_and_pb_h_siblings(self):
         files = library(
             "RUN_PROGRAM(tools/gen IN seed.txt OUT_NOAUTO g.h x.pb.h"

@@ -329,7 +329,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 
 	for _, f := range stmt.INFiles {
 		hasProtoIN = hasProtoIN || extIsProto(f.string())
-		hasParsedIN = hasParsedIN || ctx.parsers.registry.hasRegisteredParser(f.string())
+		hasParsedIN = hasParsedIN || ctx.parsers.registry.scansIncludes(f.string())
 	}
 
 	sourceScratch := vfsScratches.get()
@@ -384,7 +384,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 	for i, f := range stmt.INFiles {
 		rel := f.string()
 
-		if ctx.parsers.registry.hasRegisteredParser(rel) {
+		if ctx.parsers.registry.scansIncludes(rel) {
 			cv := s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC)
 
 			appendInput(cv.self)

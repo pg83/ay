@@ -94,8 +94,10 @@ func (r *IncludeDirectiveParserRegistry) registeredParserFor(rel string) Include
 	return r.lookup(rel)
 }
 
-func (r *IncludeDirectiveParserRegistry) hasRegisteredParser(rel string) bool {
-	return r.lookup(rel) != nil
+func (r *IncludeDirectiveParserRegistry) scansIncludes(rel string) bool {
+	p := r.lookup(rel)
+
+	return p != nil && p != IncludeDirectiveParser(emptyParser)
 }
 
 func addDirective(block []IncludeDirective, k int, d IncludeDirective) int {
