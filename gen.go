@@ -205,6 +205,7 @@ type GenCtx struct {
 	tcMemo          map[ToolchainKey]ModuleToolchain
 	moduleStmts     map[string][]Stmt
 	ifEnvScratch    EnvStore
+	moduleDirsEnv   EnvStore
 	walking         map[ModuleInstance]bool
 	cyclesTolerated int
 	traceStack      []string
@@ -2307,4 +2308,14 @@ func (ctx *GenCtx) pushFrame() *ModuleFrame {
 
 func (ctx *GenCtx) popFrame() {
 	ctx.frameDepth--
+}
+
+func (ctx *GenCtx) renderModuleDirs() Environment {
+	path := ctx.frames[ctx.frameDepth-1].emitCtx.instance.Path
+	env := Environment{s: &ctx.moduleDirsEnv}
+
+	env.setVFS(envCURDIR, path)
+	env.setVFS(envBINDIR, path.rel().build())
+
+	return env
 }

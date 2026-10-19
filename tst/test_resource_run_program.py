@@ -274,6 +274,42 @@ class RunProgramTest(unittest.TestCase):
             "$(B)/lib/g.h",
         ])
 
+    def test_module_dirs_render_in_the_module_that_first_uses_the_output(self):
+        files = {
+            "gen/ya.make": (
+                f"LIBRARY()\n{BARE}"
+                "RUN_PROGRAM(\n"
+                "  tools/gen --out out.cpp --dir ${BINDIR}/sub --src ${CURDIR}\n"
+                "  OUT_NOAUTO out.cpp\n"
+                "  ENV DIR=${BINDIR}\n"
+                "  CWD ${BINDIR}\n"
+                ")\n"
+                "END()\n"
+            ),
+            "lib/ya.make": (
+                f"LIBRARY()\n{BARE}"
+                "PEERDIR(gen)\n"
+                "COPY_FILE(AUTO ${ARCADIA_BUILD_ROOT}/gen/out.cpp copy.cpp)\n"
+                "END()\n"
+            ),
+        }
+        lib.tool_program(files, "tools/gen", "gen")
+        graph = lib.make(files, "lib")
+        node = lib.node_by_output(graph, "$(B)/gen/out.cpp")
+        [cmd] = node["cmds"]
+        self.assertEqual(cmd["cmd_args"], [
+            "$(B)/tools/gen/gen",
+            "--out",
+            "$(B)/gen/out.cpp",
+            "--dir",
+            "$(B)/lib/sub",
+            "--src",
+            "$(S)/lib",
+        ])
+        self.assertEqual(cmd["cwd"], "$(B)/lib")
+        self.assertEqual(cmd["env"], {"ARCADIA_ROOT_DISTBUILD": "$(S)", "DIR": "$(B)/lib"})
+        self.assertEqual(node["outputs"], ["$(B)/gen/out.cpp"])
+
     def test_cwd_outside_both_roots_is_rejected(self):
         files = library(
             "RUN_PROGRAM(tools/gen OUT out.h CWD relative/dir)\nSRCS(user.cpp)\n",

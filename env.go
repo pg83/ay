@@ -183,6 +183,22 @@ func (e Environment) setFromStringID(id ENV, v STR) {
 	e.setStrID(id, v)
 }
 
+func (e Environment) unbind(id ENV) EnvKind {
+	k, _ := e.s.lookup(id)
+
+	if k != envAbsent {
+		e.s.kind[id] = envAbsent
+	}
+
+	return k
+}
+
+func (e Environment) rebind(id ENV, k EnvKind) {
+	if k != envAbsent {
+		e.s.kind[id] = k
+	}
+}
+
 func (e Environment) hasBindingID(id ENV) bool {
 	k, _ := e.s.lookup(id)
 

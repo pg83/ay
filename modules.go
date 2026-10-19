@@ -1267,11 +1267,9 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded := *v
 
 			expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
-			expanded.Args = expandStmtTokens(v.Args, env)
 			expanded.INFiles = expandStmtTokens(v.INFiles, env)
 			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
-			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
 			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
 			expanded.ToolPaths = expandStmtTokens(v.ToolPaths, env)
 
@@ -1281,11 +1279,19 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				expanded.StdoutFile = &stdout
 			}
 
+			bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
+
+			expanded.Args = expandStmtTokens(v.Args, env)
+			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
+
 			if v.CWD != nil {
 				cwd := expandStmtTokenAny(*v.CWD, env)
 
 				expanded.CWD = &cwd
 			}
+
+			env.rebind(envBINDIR, bindir)
+			env.rebind(envCURDIR, curdir)
 
 			expanded.DeclSeq = d.nextDeclSeq()
 			d.runPrograms = append(d.runPrograms, &expanded)

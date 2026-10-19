@@ -606,13 +606,15 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	stmt := spec.stmt
 	na := e.ctx.na
 	env := envVarsVCS
+	dirs := e.ctx.renderModuleDirs()
+	envPairs := expandStmtTokens(stmt.EnvPairs, dirs)
 
-	if len(stmt.EnvPairs) > 0 {
-		block := na.envs.alloc(1 + len(stmt.EnvPairs))[:0]
+	if len(envPairs) > 0 {
+		block := na.envs.alloc(1 + len(envPairs))[:0]
 
 		block = append(block, envVarsVCS...)
 
-		for _, kv := range stmt.EnvPairs {
+		for _, kv := range envPairs {
 			parts := strings.SplitN(kv.string(), "=", 2)
 
 			if len(parts) == 2 {
@@ -627,13 +629,14 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		env = EnvVars(block[:len(block):len(block)])
 	}
 
-	cmdArgs := na.anys.alloc(1 + len(stmt.Args))[:0]
+	args := expandStmtTokens(stmt.Args, dirs)
+	cmdArgs := na.anys.alloc(1 + len(args))[:0]
 
 	cmdArgs = append(cmdArgs, spec.toolBinPath.any())
 
 	fileTokens := prBareFileTokens(stmt, spec.inVFSs, spec.outVFSByToken)
 
-	for _, aTok := range stmt.Args {
+	for _, aTok := range args {
 		a := aTok.string()
 		key := aTok
 		toolReplaced := false
@@ -758,7 +761,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = cwdVFS((*stmt.CWD).string())
+		cmd.Cwd = cwdVFS(expandStmtToken((*stmt.CWD).string(), dirs))
 	}
 
 	node := Node{

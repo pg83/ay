@@ -93,7 +93,7 @@
       "yabs/server/daemons/bs_static"
     ],
     "target": "yabs/server/daemons/bs_static",
-    "xfail": "auto",
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12551534996",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12551535753"
   },
