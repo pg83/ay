@@ -53,7 +53,10 @@ func (c *GenCaches) prewarm(fs FS, targets []string) {
 		w.pushDir(t, prewarmRecurse|prewarmContent)
 	}
 
-	for w.step() {
+	for more := true; more; {
+		try(func() {
+			more = w.step()
+		})
 	}
 }
 

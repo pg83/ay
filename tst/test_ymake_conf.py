@@ -229,6 +229,41 @@ class ConfCommandLineTest(unittest.TestCase):
         self.assertEqual(params["name"], "clang18")
 
 
+class PrewarmTest(unittest.TestCase):
+    def test_unreadable_file_outside_the_graph_is_skipped(self):
+        tree = Tree(self, {
+            "m/ya.make": library(
+                "SRCS(a.cpp)\nIF (OS_WINDOWS)\n    SRCS(win.cpp)\nENDIF()\n"
+                "IF (OS_WINDOWS)\n    PEERDIR(winlib)\nENDIF()\n"
+            ),
+            "m/a.cpp": "",
+            "m/win.cpp": '#include "m/win.h"\n',
+            "winlib/ya.make": library("SRCS(w.cpp)\n"),
+            "winlib/w.cpp": "",
+        })
+        for unreadable in ("m/win.cpp", "winlib/ya.make"):
+            (tree.src / unreadable).chmod(0)
+            self.addCleanup((tree.src / unreadable).chmod, 0o644)
+        self.assertEqual(compiled(tree.graph("m")), ["a.cpp.o"])
+
+    def test_graph_is_the_same_from_run_to_run(self):
+        files = {
+            "m/ya.make": library("SRCS(a.cpp b.cpp)\nPEERDIR(p)\n"),
+            "m/a.cpp": '#include "p/x.h"\n#include "m/y.h"\n',
+            "m/b.cpp": '#include "m/y.h"\n#include <p/z.h>\n',
+            "m/y.h": '#include "p/x.h"\n',
+            "p/ya.make": library("SRCS(p.cpp)\n"),
+            "p/p.cpp": '#include "x.h"\n',
+            "p/x.h": '#include "z.h"\n',
+            "p/z.h": "",
+        }
+        tree = Tree(self, files)
+        first = tree.make("m")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        for _ in range(3):
+            self.assertEqual(tree.make("m").stdout, first.stdout)
+
+
 class ConfFailuresTest(unittest.TestCase):
     def failure(self, files, *args):
         result = Tree(self, {"m/ya.make": library("SRCS(a.cpp)\n"), "m/a.cpp": "", **files}).make(*args, "m")
