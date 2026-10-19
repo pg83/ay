@@ -9,6 +9,7 @@ import lib
 
 
 RED = "\x1b[31m"
+YELLOW = "\x1b[33m"
 RESET = "\x1b[0m"
 
 
@@ -366,20 +367,23 @@ class DumpNormalizeTest(DumpToolTest):
         normalized = self.normalize(nodes, "java", result=result)
         self.assertEqual([node["outputs"][0] for node in normalized], ["$(B)/java/lib.jar"])
 
-    def test_normalize_target_without_roots_fails(self):
+    def test_normalize_target_without_roots(self):
         raw = self.write("roots.json", compact({"graph": [
             raw_node("ld", "LD", ["$(B)/app/app"]),
             raw_node("cp", "CP", ["$(B)/pkg/file"]),
         ], "result": ["ld", "cp"]}))
-        self.fails(
-            'dump normalize: no LD/AR/TS root node found for target "missing"',
-            "dev", "dump", "normalize", "--in", raw, "--target", "app", "--target", "missing",
+        warning = (
+            YELLOW + 'dump normalize: no LD/AR/TS root node found for target "missing"; '
+            "it contributes no nodes" + RESET + "\n"
         )
-        self.fails(
-            'dump normalize: no LD/AR/TS root node found for target "missing"',
-            "dev", "dump", "normalize", "--in", raw, "--target", "missing", "--target", "pkg",
-            "--streaming",
-        )
+        for flags, outputs in (
+            (["--target", "app", "--target", "missing"], ["$(B)/app/app"]),
+            (["--target", "missing", "--target", "pkg", "--streaming"], ["$(B)/pkg/file"]),
+            (["--target", "app", "--target", "missing", "--ref-graph"], ["$(B)/app/app"]),
+        ):
+            result = self.ok("dev", "dump", "normalize", "--in", raw, *flags)
+            self.assertEqual(result.stderr, warning)
+            self.assertEqual([json.loads(line)["outputs"][0] for line in result.stdout.splitlines()], outputs)
 
     def test_normalize_ref_graph_strips_unused_deps(self):
         nodes = [
@@ -511,14 +515,18 @@ class DumpNormalizeTest(DumpToolTest):
         raw = self.write("two_ar.json", compact({"graph": [
             raw_node("a1", "AR", ["$(B)/lib/one.a"]),
             raw_node("a2", "AR", ["$(B)/lib/two.a"]),
+            raw_node("a3", "AR", ["$(B)/mirror/lib/three.a"]),
+            raw_node("x1", "AR", ["$(B)/m1/x/one.a"]),
+            raw_node("x2", "AR", ["$(B)/m2/x/two.a"]),
         ]}))
-        self.fails(
-            'dump normalize: 2 AR roots for target "lib"; expected 1',
-            "dev", "dump", "normalize", "--in", raw, "--target", "lib",
+        result = self.ok("dev", "dump", "normalize", "--in", raw, "--target", "lib")
+        self.assertEqual(
+            sorted(json.loads(line)["outputs"][0] for line in result.stdout.splitlines()),
+            ["$(B)/lib/one.a", "$(B)/lib/two.a"],
         )
         self.fails(
-            'dump normalize: no LD/AR/TS root node found for target "other"',
-            "dev", "dump", "normalize", "--in", raw, "--target", "other",
+            'dump normalize: 2 AR roots for target "x", none under $(B)/x/',
+            "dev", "dump", "normalize", "--in", raw, "--target", "x",
         )
 
 
