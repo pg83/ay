@@ -227,6 +227,7 @@ func makeDefaultIfEnv() Environment {
 		envUSE_ARCADIA_PYTHON, envPYTHON3,
 
 		envUSE_PREBUILT_TOOLS,
+		envTsUsePrebuiltNotsTool,
 	} {
 		e.setBool(n, true)
 	}

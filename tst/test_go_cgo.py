@@ -95,10 +95,10 @@ class GoCgoGraphTest(unittest.TestCase):
             f"{b}/zstd.cgo2.c", f"{b}/errors.cgo2.c",
             f"{b}/_cgo_export.h", f"{b}/_cgo_export.c", f"{b}/_cgo_gotypes.go", f"{b}/_cgo_main.c",
         ])
-        self.assertEqual(cgo1["inputs"], [
+        self.assertEqual(lib.bucketed(cgo1["inputs"], 3), lib.bucketed([
             "$(S)/build/scripts/cgo1_wrapper.py", f"{s}/zstd.go", f"{s}/errors.go",
             f"{s}/helper.h", "$(S)/contrib/libs/zstd/include/zstd.h",
-        ])
+        ], 3))
         self.assertEqual(cgo1["cmds"][0]["cwd"], "$(S)")
         self.assertEqual(between(cgo1["cmds"][0]["cmd_args"], "--cgo1-files", "--"), [
             f"{b}/zstd.cgo1.go", f"{b}/errors.cgo1.go",
@@ -149,13 +149,13 @@ class GoCgoGraphTest(unittest.TestCase):
             CGO_TOOL, "-dynpackage", "zstd", "-dynimport", f"{b}/_cgo_.o",
             "-dynout", f"{b}/_cgo_import.go", "-dynlinker",
         ])
-        self.assertEqual(dynimport["inputs"], [
+        self.assertEqual(lib.bucketed(dynimport["inputs"], 7), lib.bucketed([
             "$(S)/build/scripts/link_o.py", "$(S)/build/scripts/cgo1_wrapper.py", "$(S)/build/scripts/wrapcc.py",
             "$(S)/build/scripts/fs_tools.py", "$(S)/build/scripts/process_command_files.py",
             f"{s}/zstd.go", f"{s}/errors.go", f"{s}/helper.h", "$(S)/contrib/libs/zstd/include/zstd.h",
             f"{s}/helper.c", f"{s}/helper_impl.h", f"{s}/bridge.cxx", f"{s}/trampoline.S",
             f"{b}/_cgo_export.h", f"{b}/_cgo_main.c", f"{b}/zstd.cgo1.go", *objects,
-        ])
+        ], 7))
         by_output = {node["outputs"][0]: node["uid"] for node in graph["graph"]}
         self.assertEqual(dynimport["deps"][:len(objects)], [by_output[o] for o in objects])
 

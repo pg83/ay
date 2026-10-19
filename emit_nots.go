@@ -1,0 +1,462 @@
+package main
+
+import (
+	"path"
+	"regexp"
+	"slices"
+	"strings"
+)
+
+var notsBaseExcludes = []string{"a.yaml", ".npmrc", "package.json", "pnpm-lock.yaml", "output.tar", "output.tar.uuid", "node_modules.layer", "workspace_node_modules.tar", "(.idea|.vscode|node_modules)/**/*"}
+
+const notsBuilderDir = "devtools/frontend_build_platform/nots/builder"
+
+type NotsModule struct {
+	Kind             TOK
+	Hermetic         bool
+	LocalCLI         bool
+	Bundle           bool
+	ProductionBundle bool
+	BuildScript      string
+	BuildCommand     string
+	Outputs          []string
+	Excludes         []string
+	Configs          []string
+	VCSInfo          string
+	OutputPrefix     string
+	HasOutputPrefix  bool
+}
+
+func isNotsModule(name TOK) bool {
+	switch name {
+	case tokTsPackage, tokTsLibrary, tokTsNext, tokTsVite, tokTsTsc:
+		return true
+	}
+
+	return false
+}
+
+func newNotsModule(kind TOK, env Environment) *NotsModule {
+	c := &NotsModule{Kind: kind, Configs: []string{"tsconfig.json"}, LocalCLI: env.bool(envTsLocalCli)}
+
+	c.Hermetic = env.bool(envAutocheck) && !env.bool(envTsDisableHermeticNodeModules) && !c.LocalCLI
+
+	switch kind {
+	case tokTsTsc:
+		c.BuildScript = "nots:build"
+		c.setTSCCommand()
+	case tokTsNext:
+		c.BuildScript, c.BuildCommand, c.Outputs = "nots:build", "next build", []string{".next"}
+	case tokTsVite:
+		c.BuildScript, c.BuildCommand, c.Outputs = "nots:build", "vite build --config vite.config.ts", []string{"dist"}
+	}
+
+	return c
+}
+
+func (c *NotsModule) setTSCCommand() {
+	var commands []string
+
+	for _, config := range c.Configs {
+		commands = append(commands, "tsc --project "+config+" --incremental false --composite false --pretty")
+	}
+
+	c.BuildCommand = strings.Join(commands, " && ")
+}
+
+func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
+	name := v.Raw.string()
+
+	if v.Name != tokInvalid {
+		name = v.Name.string()
+	}
+
+	args := make([]string, len(v.Args))
+
+	for i, a := range v.Args {
+		args[i] = a.string()
+	}
+
+	switch name {
+	case "DISABLE_HERMETIC_NODE_MODULES":
+		c.Hermetic = false
+	case "WITH_NODE_MODULES":
+		c.Bundle, c.ProductionBundle = true, slices.Contains(args, "PROD")
+	case "TS_BUILD_SCRIPT":
+		if len(args) > 0 {
+			c.BuildScript, c.BuildCommand = args[0], strings.Join(args[1:], " ")
+		}
+	case "TS_BUILD_OUTPUTS", "TS_NEXT_OUTPUT", "TS_VITE_OUTPUT", "VITE_OUTPUT":
+		c.Outputs = args
+	case "TS_EXCLUDE_FILES_GLOB":
+		c.Excludes = append(c.Excludes, args...)
+	case "TS_CONFIG":
+		c.Configs = args
+
+		if c.Kind == tokTsTsc {
+			c.setTSCCommand()
+		}
+	case "TS_VITE_CONFIG":
+		var commands []string
+
+		for _, config := range args {
+			commands = append(commands, "vite build --config "+config)
+		}
+
+		c.BuildCommand = strings.Join(commands, " && ")
+	case "TS_NEXT_BUILD_OPTIONS":
+		c.BuildCommand = strings.TrimSpace("next build " + strings.Join(args, " "))
+	case "TS_NEXT_CONFIG", "TS_FILES", "TS_FILES_GLOB", "USE_LEGACY_PNPM_VIRTUAL_STORE", "INJECT_PEERS":
+	case "VCS_INFO_FILE":
+		c.VCSInfo = "vcs_info.json"
+
+		if len(args) == 2 && args[0] == "FILE" {
+			c.VCSInfo = args[1]
+		}
+	case "TS_OUTPUT_PREFIX":
+		c.HasOutputPrefix = true
+		c.OutputPrefix = strings.Join(args, " ")
+	default:
+		return false
+	}
+
+	return true
+}
+
+func (e *EmitContext) notsResource(dir, name string) ResourceDecl {
+	result := genModule(e.ctx, e.derivePeerInstance(dir))
+
+	for _, decl := range result.ResourceGlobalClosure {
+		if decl.Name.string() == name {
+			return decl
+		}
+	}
+
+	throwFmt("nots: %s did not declare resource %s", dir, name)
+
+	return ResourceDecl{}
+}
+
+func (e *EmitContext) notsBaseArgs(pj map[string]any) ([]string, []ResourceDecl) {
+	pm, c := e.ctx.parsers, e.d.nots
+	version := pm.notsVersion("nodejs", notsString(notsObject(pj["engines"])["node"]))
+	parts := notsVersionParts(version)
+
+	if parts[0] < 20 {
+		throwFmt("nots: Node.js %s is unsupported", version)
+	}
+
+	node := e.notsResource("build/platform/nodejs/"+version, "NODEJS_"+strings.ReplaceAll(version, ".", "_"))
+	pnpm := e.notsResource("build/external_resources/pnpm", "PNPM")
+	globals := []ResourceDecl{node, pnpm}
+	local := "no"
+
+	if c.LocalCLI {
+		local = "yes"
+	}
+
+	args := []string{"--arcadia-root", "$(S)", "--arcadia-build-root", "$(B)", "--moddir", e.instance.Path.relString(), "--local-cli", local, "--nodejs-bin", node.Value.string() + "/node", "--pm-script", pnpm.Value.string() + "/node_modules/pnpm/dist/pnpm.cjs", "--pm-type", "pnpm"}
+
+	if parts[0] >= 25 && e.instance.Platform.OS == OSLinux {
+		atomic := e.notsResource("build/platform/nodejs/libatomic", "LIBATOMIC_1_2_0")
+
+		globals = append(globals, atomic)
+		args = append(args, "--ld-library-path", atomic.Value.string())
+	}
+
+	if c.Hermetic {
+		args = append(args, "--hermetic-node-modules", "yes")
+
+		if e.instance.Platform.OS == OSLinux && e.instance.Platform.ISA == ISAX8664 {
+			squash := e.notsResource("devtools/frontend_build_platform/nots/squashfs", "SQUASHFS_TOOLS")
+
+			globals = append(globals, squash)
+			args = append(args, "--squashfs-tools-path", squash.Value.string())
+		}
+	}
+
+	if pj["usePrebuilder"] == true {
+		v := pm.notsVersion("@yatool/prebuilder", "")
+		name := "YATOOL_PREBUILDER_" + strings.ReplaceAll(v, ".", "_")
+		prebuilder := e.notsResource("build/external_resources/yatool_prebuilder/"+v, name)
+
+		globals = append(globals, prebuilder)
+		args = append(args, "--yatool-prebuilder-path", prebuilder.Value.string()+"/node_modules/@yatool/prebuilder")
+	}
+
+	return args, globals
+}
+
+func (e *EmitContext) notsRequirements() *Requirements {
+	req := &Requirements{CPU: 4, RAM: 32, Network: nwRestricted}
+
+	if e.d.nots.Hermetic {
+		req.HasRAMDisk, req.RAMDisk = true, 4
+	}
+
+	return req
+}
+
+func (e *EmitContext) emitNotsNode(n Node) NodeRef {
+	ref := e.emitNode(n)
+
+	for _, out := range n.Outputs {
+		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, ProducerMainOut: n.Outputs[0]})
+	}
+
+	return ref
+}
+
+func (e *EmitContext) emitNotsModule() *ModuleEmitResult {
+	ctx, dir, c := e.ctx, e.instance.Path.relString(), e.d.nots
+	pm, na := ctx.parsers, ctx.na
+	output := build(dir, "/output.tar")
+
+	if info := e.codegen.use(output); info != nil {
+		return &ModuleEmitResult{ARRef: info.ProducerRef, ARPath: ptr(output), LDRef: info.ProducerRef, LDPath: ptr(output), ModuleStmtName: c.Kind}
+	}
+
+	pj := pm.notsJSON(dir + "/package.json")
+	base, globals := e.notsBaseArgs(pj)
+
+	var resourceNames []STR
+
+	for _, decl := range globals {
+		resourceNames = append(resourceNames, decl.Name)
+	}
+
+	var peerRefs []NodeRef
+	var prepInputs []VFS
+
+	for _, peer := range pm.notsPeers(dir, pj) {
+		result := genModule(ctx, e.derivePeerInstance(peer))
+
+		if result.ARRef != 0 {
+			peerRefs = append(peerRefs, result.ARRef)
+		}
+
+		prepInputs = append(prepInputs, build(peer, "/pnpm-workspace.yaml"))
+	}
+
+	for _, peer := range e.d.peerdirs {
+		result := genModule(ctx, e.derivePeerInstance(peer.string()))
+
+		if result.ARRef != 0 {
+			peerRefs = append(peerRefs, result.ARRef)
+		}
+	}
+
+	toolRef, toolPath := ctx.tool(internArg(notsBuilderDir))
+	head := append([]string{toolPath.string()}, base...)
+	prepArgs := append(slices.Clone(head), "prepare-deps", "--tarballs-store", "__tarballs__")
+
+	prepInputs = append(prepInputs, source(dir, "/package.json"))
+
+	hasDeps := notsHasDependencies(pj)
+
+	if hasDeps || ctx.fs.isFilePathClean(dir+"/pnpm-lock.yaml") {
+		prepInputs = append(prepInputs, source(dir, "/pnpm-lock.yaml"))
+	}
+
+	if config := notsString(notsObject(pj["nots"])["commonConfigPath"]); config != "" {
+		prepInputs = append(prepInputs, source(path.Join(dir, config)))
+	}
+
+	if c.Hermetic {
+		for _, patch := range notsObject(notsObject(pj["pnpm"])["patchedDependencies"]) {
+			prepInputs = append(prepInputs, source(path.Join(dir, notsString(patch))))
+		}
+	}
+
+	prepOutputs := []VFS{build(dir, "/package.json"), build(dir, "/pnpm-lock.yaml"), build(dir, "/pnpm-workspace.yaml")}
+
+	if c.Hermetic {
+		prepOutputs = append(prepOutputs, build(dir, "/node_modules.layer"))
+	}
+
+	var uris []string
+	var tarballs []string
+
+	if hasDeps {
+		if !c.LocalCLI {
+			for _, pkg := range pm.notsLockfile(dir + "/pnpm-lock.yaml").Packages {
+				uris = append(uris, pkg.URI)
+				tarballs = append(tarballs, pkg.Path)
+			}
+		}
+
+		prepArgs = append(prepArgs, "--resource-root", "$(RESOURCE_ROOT)")
+	}
+
+	slices.Sort(uris)
+	slices.Sort(tarballs)
+
+	for _, tarball := range tarballs {
+		prepOutputs = append(prepOutputs, build(dir, "/__tarballs__/", tarball))
+	}
+
+	prep := Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(appendInternAnys(nil, prepArgs)...)), Env: envVarsVCS}), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(prepInputs...)), Outputs: na.vfsList(prepOutputs...), KV: &KV{P: pkTSDep, PC: pcMagenta}, KVExts: []KVExt{{Key: "text", Val: dir}}, ForeignDepRefs: na.refList(toolRef), Requirements: e.notsRequirements(), Resources: resourceNames, ResourceURIs: make([]STR, len(uris))}
+
+	for i, uri := range uris {
+		prep.ResourceURIs[i] = internStr(uri)
+	}
+
+	if c.Hermetic {
+		prep.DepRefs = na.refList(peerRefs...)
+	}
+
+	prepRef := e.emitNotsNode(prep)
+	autotar := buildScriptsAutotarGendirsPy
+	cmds := []Cmd{{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), autotar.any(), strUnpack.any(), strExt.any(), strGentar.any())), Env: envVarsVCS, Cwd: build(dir)}}
+	inputs := []VFS{autotar}
+	outputs := []VFS{output}
+
+	if c.VCSInfo != "" && c.Kind != tokTsPackage {
+		vcs := ldVcsInfoVFS
+		vcsOut := build(dir, "/", c.VCSInfo)
+
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), vcs.any(), strOutputJson.any(), strVcsVcsJson.any(), vcsOut.any())), Env: envVarsVCS})
+		inputs = append(inputs, vcs)
+		outputs = append(outputs, vcsOut)
+	}
+
+	buildHead := slices.Clone(head)
+
+	if c.Bundle && hasDeps {
+		buildHead = append(buildHead, "--nm-bundle", "yes")
+
+		if c.ProductionBundle {
+			buildHead = append(buildHead, "--nm-bundle-prod", "yes")
+		}
+	}
+
+	kind, command := pkTSLib, "build-library"
+
+	if c.Kind == tokTsPackage {
+		kind, command = pkTSPkg, "build-package"
+	}
+
+	args := append(buildHead, command)
+
+	if c.HasOutputPrefix {
+		prefix := c.OutputPrefix
+
+		if prefix == "" {
+			prefix = dir
+		}
+
+		args = append(args, "--output-prefix="+prefix)
+	}
+
+	args = append(args, "--output-file", output.string(), "--vcs-info", c.VCSInfo)
+	outputs = append(outputs, build(dir, "/output.tar.uuid"))
+
+	if len(c.Outputs) > 0 {
+		args = append(args, "--outputs")
+		args = append(args, c.Outputs...)
+	}
+
+	args = append(args, "--exclude-globs")
+	args = append(args, notsBaseExcludes...)
+	args = append(args, c.Excludes...)
+
+	if c.Kind != tokTsPackage {
+		args = append(args, "--build-script", c.BuildScript)
+
+		if c.BuildCommand != "" {
+			args = append(args, "--build-command", c.BuildCommand)
+		}
+	}
+
+	inputs = append(inputs, notsSourceFiles(ctx.fs, dir, c.Outputs, c.Excludes)...)
+	inputs = append(inputs, source(dir, "/ya.make"), source(dir, "/package.json"))
+	inputs = dedup(inputs)
+
+	if c.Bundle && hasDeps {
+		outputs = append(outputs, build(dir, "/workspace_node_modules.tar"))
+	}
+
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(appendInternAnys(nil, args)...)), Env: envVarsVCS})
+
+	refs := append(peerRefs, prepRef)
+
+	if c.VCSInfo != "" {
+		refs = append(refs, ctx.vcsRef)
+	}
+
+	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(toolRef), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
+	ref := e.emitNotsNode(n)
+
+	return &ModuleEmitResult{ARRef: ref, ARPath: ptr(output), LDRef: ref, LDPath: ptr(output), ModuleStmtName: c.Kind, ResourceGlobalClosure: globals}
+}
+
+func notsGlob(pattern string) *regexp.Regexp {
+	var b strings.Builder
+	b.WriteString("^")
+
+	for i := 0; i < len(pattern); i++ {
+		switch pattern[i] {
+		case '*':
+			if i+1 < len(pattern) && pattern[i+1] == '*' {
+				i++
+
+				if i+1 < len(pattern) && pattern[i+1] == '/' {
+					b.WriteString("(?:.*/)?")
+					i++
+				} else {
+					b.WriteString(".*")
+				}
+			} else {
+				b.WriteString("[^/]*")
+			}
+		case '?':
+			b.WriteString("[^/]")
+		case '(', ')', '|':
+			b.WriteByte(pattern[i])
+		default:
+			b.WriteString(regexp.QuoteMeta(pattern[i : i+1]))
+		}
+	}
+
+	b.WriteString("$")
+
+	return regexp.MustCompile(b.String())
+}
+
+func notsSourceFiles(fs FS, dir string, outputs, excludes []string) []VFS {
+	patterns := append(slices.Clone(notsBaseExcludes), excludes...)
+
+	for _, output := range outputs {
+		patterns = append(patterns, strings.Trim(output, "/")+"/**/*")
+	}
+
+	var filters []*regexp.Regexp
+
+	for _, pattern := range patterns {
+		filters = append(filters, notsGlob(pattern))
+	}
+
+	var files []VFS
+
+	fs.walk(dir, func(rel string, isDir bool) bool {
+		local := strings.TrimPrefix(rel, dir+"/")
+
+		if isDir {
+			return local != "node_modules" && local != ".idea" && local != ".vscode"
+		}
+
+		for _, filter := range filters {
+			if filter.MatchString(local) {
+				return false
+			}
+		}
+
+		files = append(files, source(rel))
+
+		return false
+	})
+
+	slices.SortFunc(files, func(a, b VFS) int { return strings.Compare(a.relString(), b.relString()) })
+
+	return files
+}

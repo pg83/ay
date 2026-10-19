@@ -17,6 +17,7 @@ var (
 	buildInfoGenPyVFS                   = source("build/scripts/build_info_gen.py")
 	buildMappingConfJson                = source("build/mapping.conf.json")
 	buildMnScriptVFS                    = source("build/internal/scripts/build_mn.py")
+	buildScriptsAutotarGendirsPy        = source("build/scripts/autotar_gendirs.py")
 	buildScriptsCheckConfigHPy          = source("build/scripts/check_config_h.py")
 	buildScriptsFetchFromMdsPy          = source("build/scripts/fetch_from_mds.py")
 	buildScriptsFetchFromPy             = source("build/scripts/fetch_from.py")

@@ -222,6 +222,11 @@ class ProtoPeersTest(unittest.TestCase):
         self.assertIn("contrib/python/grpcio/libcontrib-python-grpcio.a", group)
         self.assertIn("contrib/python/protobuf/libcontrib-python-protobuf.a", group)
 
+    def test_peer_dedup_keeps_distinct_paths_with_shuffled_intern_ids(self):
+        graph = lib.make(fixture(), "pygr", env={"AY_CHAOS": "intern-seed=58"})
+        group = between(link_args(graph, "$(B)/pygr/pygr"), "-Wl,--start-group", "-Wl,--end-group")
+        self.assertLess(group.index("contrib/libs/grpc/libcontrib-libs-grpc.a"), group.index("gr/libgr.a"))
+
     def test_python_sources_with_protos_and_all_py_srcs(self):
         graph = lib.make(fixture(), "pyps")
         self.assertEqual(

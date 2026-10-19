@@ -132,6 +132,23 @@ func appendNode(buf []byte, n *Node, fetchRefs *DenseMap[STR, NodeRef], dropSrcI
 	buf = appendString(buf, string(n.Platform.Target))
 	buf = append(buf, `,"requirements":`...)
 	buf = appendRequirements(buf, n.Requirements)
+
+	if len(n.ResourceURIs) > 0 {
+		buf = append(buf, `,"resources":[`...)
+
+		for i, uri := range n.ResourceURIs {
+			if i > 0 {
+				buf = append(buf, ',')
+			}
+
+			buf = append(buf, `{"uri":`...)
+			buf = appendString(buf, uri.string())
+			buf = append(buf, '}')
+		}
+
+		buf = append(buf, ']')
+	}
+
 	buf = append(buf, `,"self_uid":`...)
 	buf = appendRefNum(buf, n.Ref)
 	buf = append(buf, `,"uid":`...)

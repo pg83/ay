@@ -28,6 +28,7 @@ type MakeFlags struct {
 	threads           int
 	keepGoing         bool
 	dumpGraph         bool
+	distGraph         bool
 	stats             bool
 	ninja             bool
 	buildType         string
@@ -218,7 +219,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		if mf.dumpGraph {
 			g := genDumpGraphWithResources(fs, mf.targets, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing, demandSelf)
 
-			writeGraph(g, !mf.sandboxing)
+			writeGraph(g, !mf.sandboxing && !mf.distGraph)
 		} else {
 			genStream(fs, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, mf.testLevel > 0, mf.keepGoing)
 		}
@@ -359,7 +360,9 @@ func parseMakeFlags(args []string) *MakeFlags {
 			parseKV(mf.tflags, opt.OptArg)
 		case opt.Name == "target-platform-tests":
 			mf.testLevel = max(mf.testLevel, 1)
-		case opt.Char == 'x', opt.Name == "test-size", opt.Name == "dist", opt.Name == "ignore-nodes-exit-code",
+		case opt.Name == "dist":
+			mf.distGraph = true
+		case opt.Char == 'x', opt.Name == "test-size", opt.Name == "ignore-nodes-exit-code",
 			opt.Name == "warning-mode", opt.Name == "cache-tests", opt.Name == "output-only-tests",
 			opt.Name == "cache-namespace", opt.Name == "report-skipped-suites", opt.Name == "tests-retries",
 			opt.Name == "backup-test-results", opt.Name == "add-modules-to-results", opt.Name == "do-not-output-stderrs",

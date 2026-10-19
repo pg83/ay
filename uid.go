@@ -264,4 +264,8 @@ func (c *CanonBuf) writeNode(n *Node) {
 	c.writeVFSChunks(n.Inputs)
 	c.writeVFSSlice(n.Outputs)
 	c.writeBytes(string(n.Platform.Target))
+
+	for _, uri := range n.ResourceURIs {
+		c.writeSTR(uri)
+	}
 }

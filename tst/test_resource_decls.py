@@ -83,6 +83,13 @@ def toolchain_files():
 
 
 class ResourceDeclsTest(unittest.TestCase):
+    def test_json_bundle_with_single_any_platform(self):
+        files = {
+            "res/ya.make": resources_library("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(PNPM resource.json)\n"),
+            "res/resource.json": bundle_json({"any": "sbr:123"}),
+        }
+        self.assertEqual(fetched_uri(lib.make(files, "res"), "PNPM"), "sbr:123")
+
     def test_toolchain_resources_select_host_entries(self):
         graph = lib.make(toolchain_files(), "prog")
         self.assertEqual(fetched_uri(graph, "CLANG20"), "sbr:1")

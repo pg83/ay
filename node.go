@@ -26,6 +26,7 @@ type Cmd struct {
 }
 
 type Node struct {
+	ResourceURIs   []STR         `json:"-"`
 	Cmds           []Cmd         `json:"cmds"`
 	Env            EnvVars       `json:"env"`
 	Inputs         InputChunks   `json:"inputs"`

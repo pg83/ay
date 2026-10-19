@@ -139,6 +139,14 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 }
 
 func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[string]string) ResourceDecl {
+	if len(bundle) == 1 {
+		for platform, uri := range bundle {
+			if strings.EqualFold(platform, "any") {
+				return makeResourceDecl(name, uri)
+			}
+		}
+	}
+
 	want := canonizePlatformKey(hostPlatformKey(host))
 	keys := make([]string, 0, len(bundle))
 

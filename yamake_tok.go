@@ -228,6 +228,11 @@ var tokName = [...]STR{
 	tokStructCodegen:         internStr("STRUCT_CODEGEN"),
 	tokStyleDetekt:           internStr("STYLE_DETEKT"),
 	tokYmapsSproto:           internStr("YMAPS_SPROTO"),
+	tokTsPackage:             internStr("TS_PACKAGE"),
+	tokTsLibrary:             internStr("TS_LIBRARY"),
+	tokTsNext:                internStr("TS_NEXT"),
+	tokTsVite:                internStr("TS_VITE"),
+	tokTsTsc:                 internStr("TS_TSC"),
 }
 
 var tokByName = func() map[string]TOK {
@@ -482,6 +487,11 @@ const (
 	tokCudaNvccFlags
 	tokSetAppendWithGlobal
 	tokDllTool
+	tokTsPackage
+	tokTsLibrary
+	tokTsNext
+	tokTsVite
+	tokTsTsc
 )
 
 type TOK uint16

@@ -123,6 +123,7 @@ func protoCmdPeers(d *ModuleData) []ANY {
 }
 
 type ModuleData struct {
+	nots                     *NotsModule
 	moduleStmt               *ModuleStmt
 	modver                   string
 	hasLicense               bool
@@ -655,6 +656,10 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 
 	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d, onWarn)
 
+	if d.nots != nil {
+		return d
+	}
+
 	if len(d.pySrcs) > 0 {
 		d.pyYapycSuffix = pySrcYapycSuffix(modulePath)
 	}
@@ -992,6 +997,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			if isYqlUdfStaticModule(v.Name) {
 				d.peerdirs = append(d.peerdirs, internAnys(yqlUdfImplicitPeers())...)
+			}
+
+			if isNotsModule(v.Name) {
+				d.nots = newNotsModule(v.Name, env)
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
@@ -1461,6 +1470,10 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 }
 
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
+	if d.nots != nil && applyNotsStmt(v, d.nots, env) {
+		return
+	}
+
 	if v.Name == tokInvalid {
 		onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q is not in the modelled set (line %d); skipped", modulePath, v.Raw.string(), v.Line)})
 

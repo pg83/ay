@@ -794,6 +794,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
+	if d.nots != nil {
+		result := e.emitNotsModule()
+
+		ctx.memoPut(instance, result)
+
+		return result
+	}
+
 	if d.moduleStmt.Name == tokProtoDescriptions {
 		result := e.emitProtoDescriptions()
 
@@ -906,7 +914,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	dedupers.with(func(deduper *DeDuper) {
 		peerSeen := func(p string) bool {
-			return !deduper.add(internStr(p).strID())
+			return !deduper.add(internStr(p).any().strID())
 		}
 
 		if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
