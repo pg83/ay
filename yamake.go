@@ -454,6 +454,7 @@ type Lexer struct {
 	col      int
 	prevByte byte
 	tokBuf   []byte
+	inArgs   bool
 }
 
 func (l *Lexer) throwParse(line, col int, format string, args ...any) {
@@ -506,6 +507,10 @@ func isIdentStart(b byte) bool {
 
 func isIdentCont(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
+}
+
+func (l *Lexer) isWordByte(b byte) bool {
+	return isWordByte(b) || l.inArgs && (b == ';' || b == '&')
 }
 
 func isWordByte(b byte) bool {
@@ -615,7 +620,7 @@ func (l *Lexer) readToken() Token {
 		return l.readNumberOrWord(startLine, startCol)
 	case isIdentStart(b):
 		return l.readIdentOrWord(startLine, startCol)
-	case isWordByte(b):
+	case l.isWordByte(b):
 		return l.readWord(startLine, startCol)
 	default:
 
@@ -730,7 +735,7 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 			continue
 		}
 
-		if isWordByte(b) || b == '@' && pos > start {
+		if l.isWordByte(b) || b == '@' && pos > start {
 			pureIdent = false
 			pos++
 
@@ -776,7 +781,7 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 			continue
 		}
 
-		if isWordByte(b) || (b == '@' && len(buf) > 0) {
+		if l.isWordByte(b) || (b == '@' && len(buf) > 0) {
 			pureIdent = false
 			buf = append(buf, l.advance())
 
@@ -819,7 +824,7 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 			break
 		}
 
-		if !isWordByte(b) && !(b == '@' && pos > start) {
+		if !l.isWordByte(b) && !(b == '@' && pos > start) {
 			break
 		}
 
@@ -852,7 +857,7 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 			continue
 		}
 
-		if !isWordByte(b) && !(b == '@' && len(buf) > 0) {
+		if !l.isWordByte(b) && !(b == '@' && len(buf) > 0) {
 			break
 		}
 
@@ -874,10 +879,10 @@ func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 
 	kind := tokInt
 
-	if pos < len(l.src) && isWordByte(l.src[pos]) {
+	if pos < len(l.src) && l.isWordByte(l.src[pos]) {
 		kind = tokWord
 
-		for pos < len(l.src) && isWordByte(l.src[pos]) {
+		for pos < len(l.src) && l.isWordByte(l.src[pos]) {
 			pos++
 		}
 	}
@@ -952,6 +957,10 @@ func acquireIncludeState() *IncludeState {
 	st.once.reset()
 	st.env.s.val = st.env.s.val[:0]
 	st.env.s.kind = st.env.s.kind[:0]
+
+	for _, g := range javaConfGlobalEnv {
+		st.env.setStringID(g.name, g.value)
+	}
 
 	return st
 }
@@ -1073,6 +1082,10 @@ func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
 		p.lex.throwParse(lp.line, lp.col, "expected '(' after macro name %q, got %s", nameTok.string(), describeToken(lp))
 	}
 
+	p.lex.inArgs = true
+
+	defer func() { p.lex.inArgs = false }()
+
 	for {
 		tok := p.lex.next()
 
@@ -1139,7 +1152,7 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 	name := nameID.string()
 
 	switch name {
-	case "PROGRAM", "LIBRARY", "DOCS", "DOCS_LIBRARY", "JAVA_PROGRAM", "JAVA_CONTRIB",
+	case "PROGRAM", "LIBRARY", "DOCS", "DOCS_LIBRARY",
 		"TS_PACKAGE", "TS_LIBRARY", "TS_NEXT", "TS_VITE", "TS_TSC", "TS_TEST_FOR", "TS_TEST_JEST_FOR", "TS_TEST_VITEST_FOR",
 
 		"PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",
@@ -1152,7 +1165,8 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		"PREBUILT_PROGRAM",
 		"FBS_LIBRARY",
 		"GO_LIBRARY", "GO_PROGRAM",
-		"UNITTEST_FOR":
+		"UNITTEST_FOR",
+		"JAVA_LIBRARY", "JAVA_LIBRARY_SPLIT", "JAVA_LIBRARY_NON_SPLIT", "JAVA_PROGRAM", "JAVA_CONTRIB", "JAVA_CONTRIB_PROXY", "JAVA_CONTRIB_PROGRAM", "JAVA_CONTRIB_ANNOTATION_PROCESSOR", "JAVA_ANNOTATION_PROCESSOR", "JAVA_TEST_LIBRARY", "JUNIT5", "JUNIT6", "JTEST", "JTEST_FOR", "EXTERNAL_JAVA_LIBRARY", "JAR_LIBRARY":
 		return astOne(astModules, ModuleStmt{Name: internTokSTR(nameID), Args: args, Line: line})
 	case "PROTO_SCHEMA":
 

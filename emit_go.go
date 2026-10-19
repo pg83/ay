@@ -26,7 +26,7 @@ var (
 	goToolCmdFlags       = goToolCmdFlagsChunk(false)
 	goToolCmdFlagsPic    = goToolCmdFlagsChunk(true)
 	goToolCmdPeers       = []STR{internStr("++peers")}
-	goToolCmdEnd         = []ANY{internStr("--ya-end-command-file").any()}
+	goToolCmdEnd         = []ANY{strYaEndCommandFile.any()}
 	goExeCmdExtld        = []ANY{internStr("++extld").any(), strClang.any(), internStr("++extldflags").any()}
 )
 

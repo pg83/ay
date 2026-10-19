@@ -217,6 +217,16 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		env.setFromStringID(k, v)
 	}
 
+	if !env.hasBindingID(envJdkRealVersion) {
+		env.setString(envJdkRealVersion, "17")
+	}
+
+	for name, value := range javaConfGlobals {
+		if !env.hasBindingID(internEnv(name)) {
+			env.setString(internEnv(name), value)
+		}
+	}
+
 	if !env.hasBindingID(envGOSTD_VERSION) {
 		env.setString(envGOSTD_VERSION, "1.26")
 	}

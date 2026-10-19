@@ -23,11 +23,12 @@ var procKindStr = [...]string{
 	pkSF:   "SF",
 	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
 	pkld: "ld", pkDX: "DX", pkBN: "BN", pkSV: "SV", pkSC: "SC", pkPD: "PD", pkCU: "CU", pkTSDep: "TS_DEP", pkTSLib: "TS_LIB", pkTSPkg: "TS_PKG", pkTSTest: "TS_TST", pkTSJest: "TS_JST", pkUN: "UN", pkDO: "DO", pkUJ: "UJ",
+	pkFS: "FS", pkIJ: "IJ", pkJP: "JP", pkJT: "JT", pkRJ: "RJ", pkTM: "TM", pkTA: "TA",
 }
 
 var pColorStr = [...]string{
 	pcNone: "", pcGreen: "green", pcLightBlue: "light-blue", pcLightCyan: "light-cyan",
-	pcLightGreen: "light-green", pcLightRed: "light-red", pcMagenta: "magenta", pcYellow: "yellow",
+	pcLightGreen: "light-green", pcLightRed: "light-red", pcMagenta: "magenta", pcYellow: "yellow", pcBlue: "blue",
 }
 
 var networkModeStr = [...]string{
@@ -100,6 +101,13 @@ const (
 	pkTSProto
 	pkDO
 	pkUJ
+	pkFS
+	pkIJ
+	pkJP
+	pkJT
+	pkRJ
+	pkTM
+	pkTA
 )
 
 const (
@@ -111,6 +119,7 @@ const (
 	pcLightRed
 	pcMagenta
 	pcYellow
+	pcBlue
 )
 
 type EnvVar struct {

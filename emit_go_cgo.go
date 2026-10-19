@@ -6,7 +6,7 @@ import (
 
 var (
 	goCgoBaseCFlags    = []ANY{internStr("-w").any(), internStr("-pthread").any(), internStr("-fpic").any()}
-	goCgoCopyCmdHead   = []ANY{wrapccPython3STR.any(), copyFsToolsVFS.any(), internStr("copy").any()}
+	goCgoCopyCmdHead   = []ANY{wrapccPython3STR.any(), copyFsToolsVFS.any(), strCopy.any()}
 	goCgo1ToolChunk    = []ANY{str3.any(), strGoCgoTool.any(), internStr("-objdir").any()}
 	goCgoImportStd     = []ANY{internStr("-import_runtime_cgo=false").any(), internStr("-import_syscall=false").any()}
 	goCgoImportDefault = []ANY{internStr("-import_runtime_cgo=true").any(), internStr("-import_syscall=true").any()}

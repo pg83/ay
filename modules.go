@@ -124,7 +124,6 @@ func protoCmdPeers(d *ModuleData) []ANY {
 
 type ModuleData struct {
 	nots                     *NotsModule
-	java                     *JavaData
 	docs                     *DocsData
 	moduleStmt               *ModuleStmt
 	modver                   string
@@ -1018,10 +1017,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
 
-			if v.Name == tokJavaProgram || v.Name == tokJavaContrib {
-				d.java = &JavaData{jdk: "17"}
-			}
-
 			if v.Name == tokDocs || v.Name == tokDocsLibrary {
 				d.docs = &DocsData{config: modulePath + "/.yfm"}
 			}
@@ -1511,12 +1506,6 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
 	if d.nots != nil && applyNotsStmt(v, d.nots) {
-		return
-	}
-
-	if d.java != nil && d.java.apply(v) {
-		recordHandledMacro(v.Name, v.Args)
-
 		return
 	}
 
@@ -3441,7 +3430,7 @@ func isExpandVarName(s string) bool {
 	for i := 0; i < len(s); i++ {
 		b := s[i]
 
-		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') || b == '_' {
+		if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') || b == '_' || b == '-' {
 			continue
 		}
 

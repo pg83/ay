@@ -33,6 +33,7 @@ var (
 	argContribToolsBison                         = internArg("contrib/tools/bison")
 	argContribToolsFlexOld                       = internArg("contrib/tools/flex-old")
 	argContribToolsGperf                         = internArg("contrib/tools/gperf")
+	argContribToolsIjar                          = internArg("contrib/tools/ijar")
 	argContribToolsM4                            = internArg("contrib/tools/m4")
 	argContribToolsProtoc                        = internArg("contrib/tools/protoc")
 	argContribToolsProtocPluginsCppStyleguide    = internArg("contrib/tools/protoc/plugins/cpp_styleguide")

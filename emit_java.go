@@ -6,196 +6,503 @@ import (
 )
 
 var (
-	javaKV           = KV{P: pkJV, PC: pcLightBlue, ShowOut: true}
-	uberjarKV        = KV{P: pkUJ}
-	javaRequirements = Requirements{CPU: 4, RAM: 32, Network: nwRestricted}
+	javaReqCPU4       = Requirements{CPU: 4, Network: nwRestricted, RAM: 32}
+	javaReqNetworkAll = Requirements{CPU: 1, Network: nwFull, RAM: 32}
 )
 
-func (e *EmitContext) genJava() *ModuleEmitResult {
-	var peers []VFS
-	var globals []ResourceDecl
+type javaNodeBuilder struct {
+	ctx       *GenCtx
+	cmds      []Cmd
+	inputs    []VFS
+	outputs   []VFS
+	deps      []NodeRef
+	resources []STR
+	kv        KV
+	exts      []KVExt
+	req       *Requirements
+	env       EnvVars
+}
 
-	for _, p := range e.d.peerdirs {
-		res := genModule(e.ctx, ModuleInstance{Path: source(p.string()), Kind: KindLib, Platform: e.instance.Platform})
+func (b *javaNodeBuilder) useResource(name string) {
+	id := internStr(name)
 
-		peers = append(peers, res.JavaClosure...)
-		globals = append(globals, res.ResourceGlobalClosure...)
-	}
-
-	peers = dedup(peers)
-
-	jd := e.d.java
-	resources := []string{"build/platform/python/ymake_python3"}
-
-	if e.d.moduleStmt.Name == tokJavaProgram {
-		resources = append(resources, "build/platform/java/jdk/jdk"+jd.jdk, "build/platform/java/uberjar/uberjar"+jd.jdk)
-	}
-
-	globals = e.scriptModuleResources(globals, resources...)
-
-	module := e.instance.Path.relString()
-	name := path.Base(module)
-
-	if parent := path.Base(path.Dir(module)); parent != "." {
-		name = parent + "-" + name
-	}
-
-	if len(e.d.moduleStmt.Args) > 0 {
-		name = e.d.moduleStmt.Args[0].string()
-	}
-
-	out := build(module, "/", name, ".jar")
-
-	if e.d.moduleStmt.Name == tokJavaContrib {
-		ref := e.emitJavaContrib(out)
-
-		return e.scriptModuleResult(ref, out, peers, globals)
-	}
-
-	if !jd.uberjar {
-		throwFmt("JAVA_PROGRAM: only UBERJAR programs are modelled")
-	}
-
-	var jars []VFS
-
-	for _, p := range peers {
-		if strings.HasSuffix(p.relString(), ".jar") {
-			jars = append(jars, p)
+	for _, r := range b.resources {
+		if r == id {
+			return
 		}
 	}
 
-	ref := e.emitJavaUberjar(out, jars)
-	result := e.scriptModuleResult(ref, out, peers, globals)
-	runnable := build(module, "/", name, ".run.cp.jar")
-	runRef := e.emitJavaRunnable(runnable, out, peers)
-
-	result.LDPath, result.LDRef = ptr(runnable), runRef
-
-	return result
+	b.resources = append(b.resources, id)
 }
 
-func (e *EmitContext) emitJavaContrib(out VFS) NodeRef {
-	jd, na := e.d.java, e.ctx.na
+func (b *javaNodeBuilder) cmd(args []ANY, cwd VFS, extra ...EnvVar) {
+	env := make(EnvVars, 0, 1+len(extra))
 
-	if jd.jarResource == "" || jd.srcResource == "" {
-		throwFmt("JAVA_CONTRIB: JAR_RESOURCE and SRC_RESOURCE are required by the current model")
+	env = append(env, envVarsVCS...)
+	env = append(env, extra...)
+
+	for _, e := range extra {
+		found := false
+
+		for i := range b.env {
+			if b.env[i].Name == e.Name {
+				b.env[i] = e
+				found = true
+			}
+		}
+
+		if !found {
+			b.env = append(b.env, e)
+		}
 	}
 
-	outputs := []VFS{out, intern(strings.TrimSuffix(out.string(), ".jar") + "-sources.jar")}
+	b.cmds = append(b.cmds, Cmd{CmdArgs: b.ctx.na.chunkList(b.ctx.na.anyList(args...)), Cwd: cwd, Env: env})
+}
 
-	var cmds []Cmd
+func (b *javaNodeBuilder) input(vs ...VFS) {
+	b.inputs = append(b.inputs, vs...)
+}
 
-	for i, id := range []string{jd.jarResource, jd.srcResource} {
-		cmd := e.pythonScriptCmd("fetch_from_sandbox.py", "--resource-file", "$(RESOURCE_ROOT)/sbr/"+id+"/resource", "--resource-id", id, "--copy-to", outputs[i].string())
+func (b *javaNodeBuilder) script(rel string) VFS {
+	v := source(rel)
 
-		cmd.Cwd = build(e.instance.Path.relString())
-		cmds = append(cmds, cmd)
+	b.inputs = append(b.inputs, v)
+
+	return v
+}
+
+func (b *javaNodeBuilder) python(script string) []ANY {
+	b.useResource("YMAKE_PYTHON3")
+
+	return []ANY{javaPython3.any(), b.script(script).any()}
+}
+
+func (b *javaNodeBuilder) fsTools(args ...ANY) []ANY {
+	out := b.python("build/scripts/fs_tools.py")
+
+	b.script("build/scripts/process_command_files.py")
+
+	return append(out, args...)
+}
+
+func (b *javaNodeBuilder) setKV(p ProcKind, pc PColor, showOut bool) {
+	b.kv.P = p
+	b.kv.PC = pc
+	b.kv.ShowOut = b.kv.ShowOut || showOut
+}
+
+func (b *javaNodeBuilder) emitTo(ref NodeRef, platform *Platform) {
+	na := b.ctx.na
+	env := envVarsVCS
+
+	if len(b.env) > 0 {
+		env = append(append(EnvVars{}, envVarsVCS...), b.env...)
 	}
+
+	kv := new(KV)
+
+	*kv = b.kv
 
 	node := Node{
-		Module: true, Platform: e.instance.Platform, KV: &fromSandboxKV, Requirements: &fromSandboxRequirements,
-		Cmds: na.cmdList(cmds...), Env: envVarsVCS, Resources: usesPython3,
-		Inputs: na.inputList(na.vfsList(scriptInputs("fetch_from_sandbox.py", "fetch_from.py")...)), Outputs: na.vfsList(outputs...),
+		Platform:     platform,
+		Cmds:         na.cmdList(b.cmds...),
+		Env:          env,
+		Inputs:       na.inputList(dedupVFSKeepOrder(b.inputs)),
+		KV:           kv,
+		KVExts:       b.exts,
+		Outputs:      na.vfsList(b.outputs...),
+		Requirements: b.req,
+		DepRefs:      na.refList(dedupRefs(b.deps)...),
+		Resources:    b.resources,
 	}
 
-	return e.emitLazyModuleNode(node, nil)
+	b.ctx.emit.emitReservedNodePtr(&node, ref)
 }
 
-func (e *EmitContext) emitJavaUberjar(out VFS, peers []VFS) NodeRef {
-	na, jd := e.ctx.na, e.d.java
-	module := e.instance.Path.relString()
-	bindir := build(module).string()
-	jdk := "$(B)/resources/JDK" + jd.jdk + "/bin/"
-	sources := bindir + "/all-java.srclst"
-	vcs := out.string() + ".__vcs_version__.mf"
-	env := na.envList(envVarsVCS[0], EnvVar{Name: envLcAll, Value: strEnUsUtf8.any()})
-	prepare := e.pythonScriptCmd("prepare_jar_build.py", "--bindir", bindir, "--moddir", source(module).string(), "--java", sources, "--ya-start-command-file", "--ya-end-command-file")
+func dedupVFSKeepOrder(vs []VFS) []VFS {
+	seen := make(map[VFS]bool, len(vs))
+	out := vs[:0:0]
 
-	prepare.Cwd = build(module)
-
-	cpArgs := []string{"--file", bindir + "/bfg.txt", "-m", "--ya-start-command-file"}
-
-	for _, peer := range peers {
-		cpArgs = append(cpArgs, peer.relString())
+	for _, v := range vs {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
 	}
 
-	cpArgs = append(cpArgs, "--ya-end-command-file")
-
-	javac := e.pythonScriptCmd("run_javac.py", "--with-setup-java-tmpdir", "--sources-list", sources, jdk+"javac", "@"+sources, "-classpath", "$(B)/bfg.jar", "-Xpkginfo:always", "-J-XX:ActiveProcessorCount=4", "-proc:none", "-d", bindir+"/cls", "-g", "-encoding", "UTF-8")
-
-	javac.Cwd, javac.Env = bld, env
-
-	vcsCmd := e.pythonScriptCmd("vcs_info.py", "output-java", "$(VCS)/vcs.json", vcs, ".")
-
-	vcsCmd.Cwd = build(module, "/cls")
-
-	pack := Cmd{CmdArgs: na.chunkList(na.anyList(internAnys([]string{jdk + "jar", "cfvm", strings.TrimSuffix(out.string(), ".jar") + ".lib.jar", vcs, "."})...)), Cwd: build(module, "/cls"), Env: env}
-
-	cmds := []Cmd{prepare, e.pythonScriptCmd("writer.py", cpArgs...), e.pythonScriptCmd("make_manifest_from_bf.py", bindir+"/bfg.txt", "$(B)/bfg.jar"), javac, vcsCmd, pack,
-		e.pythonScriptCmd("writer.py", "--file", bindir+"/lint-java.srclst", "-m", "--ya-start-command-file", "--ya-end-command-file")}
-
-	uberArgs := []string{jdk + "java", "-cp", "$(B)/resources/UBERJAR" + jd.jdk + "/devtools-java_shader.jar", "ru.yandex.devtools.emigrante.Main", "--out-jar", out.string()}
-
-	for _, peer := range peers {
-		uberArgs = append(uberArgs, "--jar", peer.string())
-	}
-
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(internAnys(uberArgs)...)), Env: envVarsVCS},
-		e.pythonScriptCmd("mkdir.py", bindir+"/_empty/META-INF"), e.pythonScriptCmd("touch.py", bindir+"/_empty/META-INF/MANIFEST.MF"),
-		e.pythonScriptCmd("vcs_info.py", "output-java", "$(VCS)/vcs.json", vcs, out.string()),
-		Cmd{CmdArgs: na.chunkList(na.anyList(internAnys([]string{jdk + "jar", "ufv", out.string(), "META-INF/MANIFEST.MF"})...)), Cwd: build(module, "/_empty"), Env: envVarsVCS},
-		Cmd{CmdArgs: na.chunkList(na.anyList(internAnys([]string{jdk + "jar", "ufvm", out.string(), vcs})...)), Env: envVarsVCS})
-
-	inputs := scriptInputs("prepare_jar_build.py", "process_command_files.py", "java_pack_to_file.py", "autotar_gendirs.py", "resolve_java_srcs.py",
-		"writer.py", "make_manifest_from_bf.py", "run_javac.py", "build_java_with_error_prone2.py", "setup_java_tmpdir.py", "javac_daemon_client.py", "JavacDaemon.jar", "vcs_info.py", "mkdir.py", "touch.py")
-
-	inputs = append(inputs, peers...)
-
-	return e.emitLazyModuleNode(Node{
-		Module: true, Platform: e.instance.Platform, KV: &javaKV, Requirements: &javaRequirements, Env: env,
-		Cmds: na.cmdList(cmds...), Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(out, build(module, "/lint-java.srclst")),
-		Resources: na.strs.list(strYMakePython3Name, internStr("JDK"+jd.jdk), internStr("UBERJAR"+jd.jdk)),
-	}, peers)
+	return out
 }
 
-func (e *EmitContext) emitJavaRunnable(out, jar VFS, peers []VFS) NodeRef {
-	na := e.ctx.na
-	module := e.instance.Path.relString()
-	name := strings.TrimSuffix(baseName(jar.relString()), ".jar")
-	dir := build(module, "/", name)
-	cp := intern(out.string() + ".cplst")
-	outputs := []VFS{out, cp, build(dir.relString(), "/", name, ".jar")}
-	copyArgs := []string{"link_or_copy_to_dir", "--ya-start-command-file", jar.string()}
+func (jm *JavaModule) outputs() []VFS {
+	d := jm.data
 
-	for _, ext := range []string{".so", ".dll", ".dylib"} {
-		for _, peer := range peers {
-			if strings.HasSuffix(peer.relString(), ext) {
-				copyArgs = append(copyArgs, peer.string())
-				outputs = append(outputs, build(dir.relString(), "/", baseName(peer.relString())))
+	switch jm.unit.kind {
+	case juContrib, juExternal:
+		return []VFS{jm.target, build(jm.dir, "/", jm.name, "-sources.jar")}
+	case juIJar:
+		return []VFS{jm.target}
+	case juJar:
+		outs := []VFS{jm.target}
+
+		if d.withKotlin {
+			outs = append(outs, build(jm.dir, "/all-kt-sources.txt"))
+		}
+
+		if jm.unit.sub == KindJavaFull && d.abiJar && d.withKotlin && !d.uberjar {
+			outs = append(outs, build(jm.dir, "/", jm.name, "-stripped.jar"))
+		}
+
+		if d.sourcesJar {
+			outs = append(outs, build(jm.dir, "/", jm.name, "-sources.jar"))
+		}
+
+		if d.lintLevel != "none" {
+			outs = append(outs, build(jm.dir, "/lint-java.srclst"))
+		}
+
+		return outs
+	}
+
+	return nil
+}
+
+func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
+	outs := jm.outputs()
+
+	if len(outs) == 0 {
+		return
+	}
+
+	jm.outRef = ctx.emit.reserve()
+
+	pending := ctx.javaPendingEmit(func() { ctx.javaEmit(jm) })
+	reg := ctx.scannerTarget.codegen
+
+	for _, out := range outs {
+		reg.register(GeneratedFileInfo{
+			OutputPath:      out,
+			OwnerModule:     jm.path,
+			ProducerRef:     jm.outRef,
+			ProducerMainOut: outs[0],
+			OnUse:           pending,
+		})
+	}
+}
+
+func (ctx *GenCtx) javaUse(out VFS) NodeRef {
+	if info := ctx.scannerTarget.codegen.use(out); info != nil {
+		return info.ProducerRef
+	}
+
+	return 0
+}
+
+func (ctx *GenCtx) javaPendingEmit(fn func()) *PendingEmit {
+	p := ctx.na.pending.one()
+
+	*p = PendingEmit{fn: fn}
+
+	return p
+}
+
+func (ctx *GenCtx) javaEmit(jm *JavaModule) {
+	switch jm.unit.kind {
+	case juContrib:
+		ctx.javaEmitContrib(jm)
+	case juExternal:
+		ctx.javaEmitExternal(jm)
+	case juJar:
+		ctx.javaEmitJar(jm)
+	case juIJar:
+		ctx.javaEmitIJar(jm)
+	}
+}
+
+func (ctx *GenCtx) javaGlobals(jm *JavaModule) map[string]VFS {
+	out := map[string]VFS{}
+
+	add := func(decls []ResourceDecl) {
+		for _, decl := range decls {
+			name := strings.TrimSuffix(decl.GlobalVar.string(), resourceGlobalSuffix)
+
+			if _, ok := out[name]; !ok {
+				out[name] = decl.Value
 			}
 		}
 	}
 
-	copyArgs = append(copyArgs, "--ya-end-command-file", dir.string())
+	add(jm.globals)
 
-	tar := build(module, "/", name, ".tar")
+	for _, e := range ctx.javaManagedPeersClosure(jm) {
+		if e.java != nil {
+			add(e.java.globals)
+		} else {
+			add(e.foreign.ResourceGlobalClosure)
+		}
+	}
 
-	outputs = append(outputs, tar)
+	return out
+}
 
-	tarCmd := e.pythonScriptCmd("find_and_tar.py", tar.string())
+func (b *javaNodeBuilder) resourcePath(globals map[string]VFS, name, suffix string) ANY {
+	v, ok := globals[name]
 
-	tarCmd.Cwd = dir
+	if !ok {
+		return internStr(suffix).any()
+	}
 
-	cmds := []Cmd{e.pythonScriptCmd("make_java_classpath_file.py", "--from-args", cp.string(), out.string()),
-		e.pythonScriptCmd("fs_tools.py", "md", dir.string()), e.pythonScriptCmd("fs_tools.py", "link_or_copy", jar.string(), out.string()),
-		e.pythonScriptCmd("fs_tools.py", copyArgs...), tarCmd}
+	b.useResource(name)
 
-	inputs := append([]VFS{jar}, peers...)
+	return internV(v.string(), suffix).any()
+}
 
-	inputs = append(inputs, scriptInputs("make_java_classpath_file.py", "process_command_files.py", "fs_tools.py", "find_and_tar.py")...)
+func javaJDKResource(jdk string) string {
+	return "JDK" + jdk
+}
 
-	return e.emitLazyModuleNode(Node{
-		Module: true, Platform: e.instance.Platform, KV: &uberjarKV, Env: envVarsVCS, Resources: usesPython3,
-		Cmds: na.cmdList(cmds...), Inputs: na.inputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(outputs...),
-	}, nil)
+func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
+	d := jm.data
+	b := &javaNodeBuilder{ctx: ctx}
+	bindir := build(jm.dir)
+	srcJar := build(jm.dir, "/", jm.name, "-sources.jar")
+	globals := ctx.javaGlobals(jm)
+	jdk := javaJDKResource(d.jdkReal)
+
+	b.outputs = []VFS{jm.target, srcJar}
+
+	fetch := func(id string, out VFS) {
+		args := b.python("build/scripts/fetch_from_sandbox.py")
+
+		b.script("build/scripts/fetch_from.py")
+
+		args = append(args,
+			strResourceFile.any(), internV("$(RESOURCE_ROOT)/sbr/", id, "/resource").any(),
+			strResourceId.any(), internStr(id).any(),
+			strCopyTo.any(), out.any())
+
+		b.cmd(args, bindir)
+		b.setKV(pkSB, pcYellow, true)
+		b.req = &javaReqNetworkAll
+	}
+
+	switch {
+	case d.jarResource != "":
+		fetch(d.jarResource, jm.target)
+	case d.localJar != "":
+		local := source(jm.dir, "/", d.localJar)
+
+		b.input(local)
+		b.cmd(b.fsTools(strCopy.any(), local.any(), jm.target.any()), 0)
+		b.setKV(pkFS, pcYellow, false)
+	default:
+		mf := build(jm.dir, "/", jm.name, ".jar.__vcs_version__.mf")
+
+		b.cmd(append(b.python("build/scripts/vcs_info.py"), strOutputJava.any(), bldVcsJson.any(), mf.any()), 0)
+		b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strCfvm.any(), jm.target.any(), mf.any(), str4.any()}, bindir)
+		b.setKV(pkFS, pcYellow, false)
+		b.deps = append(b.deps, ctx.vcsRef)
+	}
+
+	switch {
+	case d.srcResource != "":
+		fetch(d.srcResource, srcJar)
+	case d.localSourcesJar != "":
+		local := source(jm.dir, "/", d.localSourcesJar)
+
+		b.input(local)
+		b.cmd(b.fsTools(strCopy.any(), local.any(), srcJar.any()), 0)
+		b.setKV(pkFS, pcYellow, false)
+	default:
+		fake := build(jm.dir, "/fake-src")
+
+		b.cmd(b.fsTools(strMd.any(), fake.any()), 0)
+		b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strCfvm2.any(), srcJar.any(), str4.any()}, fake)
+		b.setKV(pkFS, pcYellow, false)
+	}
+
+	b.emitTo(jm.outRef, ctx.target)
+}
+
+func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
+	d := jm.data
+	globals := ctx.javaGlobals(jm)
+	closure := ctx.javaManagedPeersClosure(jm)
+	srcJar := build(jm.dir, "/", jm.name, "-sources.jar")
+	b := &javaNodeBuilder{ctx: ctx, req: &javaReqCPU4}
+
+	var autoInputs []VFS
+
+	if jm.unit.proto {
+		for _, src := range d.protoSrcs {
+			autoInputs = append(autoInputs, ctx.javaEmitProtoPB(jm, globals, src))
+		}
+	}
+
+	jdk := javaJDKResource(d.jdkReal)
+	extJDK := "JDK17"
+
+	if d.hasPerModuleJDK {
+		extJDK = jdk
+	}
+
+	args := b.python("build/scripts/compile_java.py")
+
+	args = append(args,
+		strYaStartCommandFile.any(),
+		strJavaBin.any(), b.resourcePath(globals, extJDK, "/bin/java"),
+		strJavacBin.any(), b.resourcePath(globals, extJDK, "/bin/javac"),
+		strJarBin.any(), b.resourcePath(globals, jdk, "/bin/jar"),
+		strKotlinCompiler.any(), b.resourcePath(globals, "KOTLIN_COMPILER", "/kotlin-compiler.jar"),
+		strJarOutput.any(), jm.target.any(),
+		strSrcsJarOutput.any(), srcJar.any(),
+	)
+
+	for _, in := range autoInputs {
+		args = append(args, in.any())
+	}
+
+	args = append(args, strDelim.any())
+	args = append(args, internAnys(d.javacOpts.cur)...)
+	args = append(args, strSource.any(), str11.any(), strTarget.any(), str11.any(), strDelim.any())
+
+	for _, e := range closure {
+		args = append(args, e.path.any())
+	}
+
+	args = append(args, strDelim.any(), strNoStdlib.any(), strModuleName.any(), internStr(jm.name).any())
+	args = append(args, b.renderKotlincOpts(globals, d.kotlincOpts.cur)...)
+	args = append(args, strJvmTarget.any(), internStr(javaKotlinJVMTarget(d.jdkReal)).any(), strYaEndCommandFile.any())
+
+	b.cmd(args, bldRootDirVFS)
+	b.input(autoInputs...)
+
+	for _, s := range []string{"build/scripts/java_command_file.py", "build/scripts/process_command_files.py", "build/scripts/javac_daemon_client.py", "build/scripts/JavacDaemon.jar", "build/scripts/canonicalize_java_abi_jar.py"} {
+		b.script(s)
+	}
+
+	b.setKV(pkJV, pcLightBlue, true)
+	b.outputs = []VFS{jm.target, srcJar}
+	b.deps = append(b.deps, ctx.javaClosureDeps(closure)...)
+
+	for _, in := range autoInputs {
+		b.deps = append(b.deps, ctx.javaUse(in))
+	}
+
+	b.emitTo(jm.outRef, ctx.target)
+}
+
+func javaKotlinJVMTarget(jdk string) string {
+	switch jdk {
+	case "8":
+		return "1.8"
+	case "26":
+		return "25"
+	}
+
+	return jdk
+}
+
+func (ctx *GenCtx) javaClosureDeps(closure []JavaClosureEntry) []NodeRef {
+	var out []NodeRef
+
+	for _, e := range closure {
+		if e.java != nil {
+			if ref := ctx.javaUse(e.path); ref != 0 {
+				out = append(out, ref)
+			}
+
+			continue
+		}
+
+		if e.foreign.LDPath != nil && e.foreign.LDRef != 0 {
+			out = append(out, e.foreign.LDRef)
+		}
+	}
+
+	return out
+}
+
+func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, src string) VFS {
+	d := jm.data
+	protoRel := path.Clean(jm.dir + "/" + src)
+	protoVFS := source(protoRel)
+	out := build(strings.TrimSuffix(protoRel, path.Ext(protoRel)), ".jsrc")
+	b := &javaNodeBuilder{ctx: ctx}
+	javaOut := strBJavaOut.any()
+	args := b.python("build/scripts/tared_protoc.py")
+
+	args = append(args,
+		strTarOutput.any(), out.any(),
+		strProtocOutDir.any(), javaOut,
+		b.resourcePath(globals, "JAVA_PROTOC", "/bin/protoc"),
+		internV("-I=./", d.protoNamespace).any(),
+		strIB2.any(), strIS2.any(),
+	)
+
+	for _, inc := range jm.protoInclude {
+		args = append(args, internV("-I=", inc.string()).any())
+	}
+
+	args = append(args, strIS2.any(), strJavaOutBJavaOut.any())
+
+	if d.kotlinProto {
+		args = append(args, strKotlinOutBJavaOut.any())
+	}
+
+	args = append(args, internAnys(d.protocFlags)...)
+	args = append(args, internStr(protoRel).any())
+
+	for _, plugin := range d.javaProtoArgs {
+		ref, bin := ctx.tool(internArg(plugin.tool))
+
+		b.deps = append(b.deps, ref)
+		args = append(args, internV("--plugin=protoc-gen-", plugin.name, "=", bin.string()).any(), internV("--", plugin.name, "_out=$(B)/java_out").any())
+	}
+
+	var extraEnv []EnvVar
+
+	if d.kotlinGrpc {
+		kgrpc := b.resourcePath(globals, "KOTLIN_GRPC", "/grpc_kotlin")
+
+		extraEnv = append(extraEnv,
+			EnvVar{Name: envJavaHome, Value: b.resourcePath(globals, javaJDKResource(d.jdkReal), "")},
+			EnvVar{Name: envKotlinGrpcJar, Value: internV(kgrpc.string(), "/protoc-gen-grpc-kotlin-", javaKotlinGrpcVersion, ".jar").any()},
+		)
+
+		args = append(args, internV("--plugin=protoc-gen-kotlin_grpc=", kgrpc.string(), "/grpc_kotlin").any(), strKotlinGrpcOutBJavaOut.any())
+	}
+
+	b.cmd(args, srcRootDirVFS, extraEnv...)
+	b.input(protoVFS)
+	b.setKV(pkPB, pcYellow, false)
+	b.outputs = []VFS{out}
+
+	ref := ctx.emit.reserve()
+	pending := ctx.javaPendingEmit(func() { b.emitTo(ref, ctx.target) })
+
+	ctx.scannerTarget.codegen.register(GeneratedFileInfo{
+		OutputPath:      out,
+		OwnerModule:     jm.path,
+		ProducerRef:     ref,
+		ProducerMainOut: out,
+		OnUse:           pending,
+	})
+
+	return out
+}
+
+func (b *javaNodeBuilder) renderKotlincOpts(globals map[string]VFS, opts []string) []ANY {
+	out := make([]ANY, 0, len(opts))
+
+	for _, o := range opts {
+		if strings.Contains(o, javaKotlinCompilerGlobal) {
+			kc := b.resourcePath(globals, "KOTLIN_COMPILER", "")
+
+			o = strings.ReplaceAll(o, javaKotlinCompilerGlobal, kc.string())
+		}
+
+		out = append(out, internStr(o).any())
+	}
+
+	return out
 }

@@ -175,6 +175,7 @@ type ModuleEmitResult struct {
 	DescClosure                     []DescProtoPeer
 	ResourceGlobalClosure           []ResourceDecl
 	GoSrcClosure                    []VFS
+	java                            *JavaModule
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
@@ -378,6 +379,12 @@ func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance 
 }
 
 func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
+	if name := ctx.moduleName(filepath.Clean(targetDir)); isJavaModuleType(name) {
+		ctx.genJavaTarget(filepath.Clean(targetDir), name)
+
+		return
+	}
+
 	root := genModule(ctx, ctx.rootInstance(targetDir, rootDemand))
 
 	if root.LDPath != nil {
@@ -761,6 +768,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	defer ctx.popFrame()
 
+	if instance.Language == LangJava {
+		return genJavaModule(ctx, instance, ctx.moduleName(instance.Path.relString()), stmts, env)
+	}
+
 	d := collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
 	e := newEmitContextIn(frame, ctx, instance, d, nil)
 
@@ -822,10 +833,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ctx.memoPut(instance, result)
 
 		return result
-	}
-
-	if d.java != nil {
-		return e.genJava()
 	}
 
 	if d.moduleStmt.Name == tokUnion {

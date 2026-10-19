@@ -93,6 +93,9 @@ class YaMakeSyntaxTest(unittest.TestCase):
             "-DT=a\"b",
         ])
 
+    def test_macro_argument_atoms_take_url_symbols(self):
+        self.assert_cflags(library("CFLAGS(-DU=http://h/p?a=b;c=d&e)"), ["-DU=http://h/p?a=b;c=d&e"])
+
     def test_comments_line_endings_and_bom(self):
         text = (
             "# leading comment\r\n"
@@ -121,7 +124,6 @@ class YaMakeSyntaxTest(unittest.TestCase):
             ('LIBRARY()\nCFLAGS(-DX="abc', "a/ya.make:2:8: unterminated string"),
             ('LIBRARY()\nCFLAGS(-DX="abc\n")\n', "a/ya.make:2:8: unterminated string"),
             ('LIBRARY()\nCFLAGS(FOO="a\r")\n', "a/ya.make:2:8: unterminated string"),
-            ("LIBRARY()\nCFLAGS(a;b)\n", "a/ya.make:2:9: unexpected character ';'"),
             ("LIBRARY()\n;\n", "a/ya.make:2:1: unexpected character ';'"),
         ]
         for text, expected in cases:

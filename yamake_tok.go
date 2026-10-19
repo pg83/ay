@@ -1,13 +1,6 @@
 package main
 
 var tokName = [...]STR{
-	tokJavaProgram: internStr("JAVA_PROGRAM"),
-	tokJavaContrib: internStr("JAVA_CONTRIB"),
-	tokJdkVersion:  internStr("JDK_VERSION"),
-	tokUberjar:     internStr("UBERJAR"),
-	tokJarResource: internStr("JAR_RESOURCE"),
-	tokSrcResource: internStr("SRC_RESOURCE"),
-
 	tokDocs:               internStr("DOCS"),
 	tokDocsLibrary:        internStr("DOCS_LIBRARY"),
 	tokDocsDir:            internStr("DOCS_DIR"),
@@ -252,6 +245,22 @@ var tokName = [...]STR{
 	tokTsTestFor:             internStr("TS_TEST_FOR"),
 	tokTsTestJestFor:         internStr("TS_TEST_JEST_FOR"),
 	tokTsTestVitestFor:       internStr("TS_TEST_VITEST_FOR"),
+	tokJavaLibrary:                    internStr("JAVA_LIBRARY"),
+	tokJavaLibrarySplit:               internStr("JAVA_LIBRARY_SPLIT"),
+	tokJavaLibraryNonSplit:            internStr("JAVA_LIBRARY_NON_SPLIT"),
+	tokJavaProgram:                    internStr("JAVA_PROGRAM"),
+	tokJavaContrib:                    internStr("JAVA_CONTRIB"),
+	tokJavaContribProxy:               internStr("JAVA_CONTRIB_PROXY"),
+	tokJavaContribProgram:             internStr("JAVA_CONTRIB_PROGRAM"),
+	tokJavaContribAnnotationProcessor: internStr("JAVA_CONTRIB_ANNOTATION_PROCESSOR"),
+	tokJavaAnnotationProcessor:        internStr("JAVA_ANNOTATION_PROCESSOR"),
+	tokJavaTestLibrary:                internStr("JAVA_TEST_LIBRARY"),
+	tokJunit5:                         internStr("JUNIT5"),
+	tokJunit6:                         internStr("JUNIT6"),
+	tokJtest:                          internStr("JTEST"),
+	tokJtestFor:                       internStr("JTEST_FOR"),
+	tokExternalJavaLibrary:            internStr("EXTERNAL_JAVA_LIBRARY"),
+	tokJarLibrary:                     internStr("JAR_LIBRARY"),
 }
 
 var tokByName = func() map[string]TOK {
@@ -524,10 +533,20 @@ const (
 	tokUsePlantuml
 	tokJavaProgram
 	tokJavaContrib
-	tokJdkVersion
-	tokUberjar
-	tokJarResource
-	tokSrcResource
+	tokJavaLibrary
+	tokJavaLibrarySplit
+	tokJavaLibraryNonSplit
+	tokJavaContribProxy
+	tokJavaContribProgram
+	tokJavaContribAnnotationProcessor
+	tokJavaAnnotationProcessor
+	tokJavaTestLibrary
+	tokJunit5
+	tokJunit6
+	tokJtest
+	tokJtestFor
+	tokExternalJavaLibrary
+	tokJarLibrary
 )
 
 type TOK uint16

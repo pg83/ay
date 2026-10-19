@@ -1,0 +1,706 @@
+package main
+
+import (
+	"fmt"
+	"path"
+	"strings"
+)
+
+var (
+	javaTagsJarBase = []string{"JAVA", "JAVA_PROTO", "JAVA_PROTO_FROM_SCHEMA", "JAVA_FBS", "JAVA_IDL", "DLL", "JAR_COMPILATION", "__EMPTY__", "RESOURCE_LIB", "JUNIT6_JAR_COMPILATION", "JUNIT5_JAR_COMPILATION", "JTEST_JAR_COMPILATION", "JTEST_FOR_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}
+	javaTagsIJar    = []string{"IJAR"}
+	javaTagsFull    = []string{"FULL_JAR_COMPILATION"}
+	javaUnitContrib = &javaUnit{kind: juContrib, sub: KindJavaMain, tag: "JAVA", moduleType: "JAVA_CONTRIB", peerdirTags: javaTags(javaTagsJarBase, javaTagsFull), dmTagsExclude: javaTagsIJar, suffix: ".jar"}
+	javaUnitProxy   = &javaUnit{kind: juProxy, sub: KindJavaMain, tag: "JAVA", moduleType: "JAVA_CONTRIB_PROXY", peerdirTags: javaTagsJarBase}
+	javaUnitJar     = &javaUnit{kind: juJar, sub: KindJavaMain, tag: "JAVA", moduleType: "JAVA_LIBRARY", peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar), dmTagsExclude: javaTagsFull, suffix: ".jar", compileView: true}
+	javaUnitTestLib = &javaUnit{kind: juJar, sub: KindJavaMain, tag: "JAVA_TEST_LIBRARY", moduleType: "JAVA_TEST_LIBRARY", peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar, []string{"JAVA_TEST_LIBRARY"}), dmTagsExclude: javaTagsFull, suffix: ".jar", compileView: true}
+	javaUnitFull    = &javaUnit{kind: juJar, sub: KindJavaFull, tag: "FULL_JAR_COMPILATION", moduleType: "JAVA_LIBRARY", peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar), dmTagsExclude: javaTagsFull, suffix: ".jar", compileView: true}
+	javaUnitIJar    = &javaUnit{kind: juIJar, sub: KindJavaIJar, tag: "IJAR", moduleType: "JAVA_LIBRARY", peerdirTags: javaTagsJarBase, suffix: "-interface.jar", transparent: true, ignorePeerdir: true, selfPeers: []ModuleKind{KindJavaFull}}
+	javaUnitExt     = &javaUnit{kind: juExternal, sub: KindJavaMain, tag: "JAVA", moduleType: "EXTERNAL_JAVA_LIBRARY", peerdirTags: []string{"JAVA", "JAVA_PROTO", "JAVA_PROTO_FROM_SCHEMA", "JAVA_FBS", "JAVA_IDL", "PACKAGE_UNION", "IJAR"}, dmTagsExclude: javaTagsFull, nameGen: javaNameThreeDirs, suffix: ".jar"}
+	javaUnitProto   = &javaUnit{kind: juExternal, sub: KindJavaMain, tag: "JAVA_PROTO", moduleType: "PROTO_LIBRARY", peerdirTags: []string{"JAVA", "IJAR", "JAVA_PROTO"}, dmTagsExclude: javaTagsFull, nameGen: javaNameThreeDirs, suffix: ".jar", proto: true}
+)
+
+var javaModuleUnits = map[TOK][]*javaUnit{
+	tokJavaContrib:                    {javaUnitContrib},
+	tokJavaContribProxy:               {javaUnitProxy},
+	tokJavaLibraryNonSplit:            {javaUnitJar},
+	tokJarLibrary:                     {javaUnitJar},
+	tokJavaTestLibrary:                {javaUnitTestLib},
+	tokJavaLibrary:                    {javaUnitFull, javaUnitIJar},
+	tokJavaLibrarySplit:               {javaUnitFull, javaUnitIJar},
+	tokExternalJavaLibrary:            {javaUnitExt},
+	tokJavaProgram:                    {javaRunnable("JAVA_PROGRAM", false, javaTagsIJar), javaCompilation("JAVA_PROGRAM")},
+	tokJavaAnnotationProcessor:        {javaRunnable("JAVA_ANNOTATION_PROCESSOR", false, nil), javaCompilation("JAVA_ANNOTATION_PROCESSOR")},
+	tokJavaContribProgram:             {javaRunnable("JAVA_PROGRAM", true, nil), javaContribCompilation("JAVA_PROGRAM")},
+	tokJavaContribAnnotationProcessor: {javaRunnable("JAVA_ANNOTATION_PROCESSOR", true, nil), javaContribCompilation("JAVA_ANNOTATION_PROCESSOR")},
+	tokJunit5:                         javaTestUnits("JUNIT5", "JUNIT5_JAR_COMPILATION", "junit5", []string{"JUNIT5_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
+	tokJunit6:                         javaTestUnits("JUNIT6", "JUNIT6_JAR_COMPILATION", "junit6", []string{"JUNIT6_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
+	tokJtest:                          javaTestUnits("JTEST", "JTEST_JAR_COMPILATION", "junit4", []string{"JTEST_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
+	tokJtestFor:                       javaTestUnits("JTEST_FOR", "JTEST_FOR_JAR_COMPILATION", "junit4", []string{"JTEST_FOR_JAR_COMPILATION", "JTEST_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
+}
+
+const (
+	KindJavaMain ModuleKind = iota + 2
+	KindJavaFull
+	KindJavaIJar
+	KindJavaRunnable
+	KindJavaCompilation
+	KindJavaTestable
+)
+
+const (
+	juContrib javaUnitKind = iota + 1
+	juProxy
+	juJar
+	juIJar
+	juRunnable
+	juTest
+	juExternal
+)
+
+const (
+	javaNameTwoDirs javaNameGen = iota
+	javaNameThreeDirs
+	javaNameFullPath
+)
+
+type javaUnitKind uint8
+
+type javaNameGen uint8
+
+type javaUnit struct {
+	kind                 javaUnitKind
+	sub                  ModuleKind
+	tag                  string
+	moduleType           string
+	peerdirTags          []string
+	dmTagsExclude        []string
+	nameGen              javaNameGen
+	suffix               string
+	transparent          bool
+	consumeNonManageable bool
+	ignorePeerdir        bool
+	selfPeers            []ModuleKind
+	compileView          bool
+	proto                bool
+	contribRunnable      bool
+	testRunner           string
+}
+
+func javaTags(groups ...[]string) []string {
+	var out []string
+
+	for _, g := range groups {
+		out = append(out, g...)
+	}
+
+	return out
+}
+
+func javaTagIn(tag string, tags []string) bool {
+	for _, t := range tags {
+		if t == tag || t == "__EMPTY__" && tag == "" {
+			return true
+		}
+	}
+
+	return false
+}
+
+func javaRunnable(moduleType string, contrib bool, dmExclude []string) *javaUnit {
+	tags := javaTags(javaTagsJarBase, javaTagsFull)
+
+	if contrib {
+		tags = javaTagsJarBase
+	}
+
+	return &javaUnit{kind: juRunnable, sub: KindJavaRunnable, tag: "JAR_RUNNABLE", moduleType: moduleType, peerdirTags: tags, dmTagsExclude: dmExclude, suffix: ".run.cp.jar", consumeNonManageable: true, selfPeers: []ModuleKind{KindJavaCompilation}, contribRunnable: contrib}
+}
+
+func javaCompilation(moduleType string) *javaUnit {
+	return &javaUnit{kind: juJar, sub: KindJavaCompilation, tag: "JAR_COMPILATION", moduleType: moduleType, peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar), dmTagsExclude: javaTagsFull, suffix: ".jar", compileView: true}
+}
+
+func javaContribCompilation(moduleType string) *javaUnit {
+	u := *javaUnitContrib
+
+	u.sub = KindJavaCompilation
+	u.tag = "JAR_COMPILATION"
+	u.moduleType = moduleType
+
+	return &u
+}
+
+func javaTestUnits(moduleType, compTag, runner string, extraCompTags []string) []*javaUnit {
+	testable := &javaUnit{kind: juTest, sub: KindJavaTestable, tag: "JAR_TESTABLE", moduleType: moduleType, peerdirTags: javaTags(javaTagsJarBase, []string{"JAR_TESTABLE", "JAVA_TEST_LIBRARY", "FULL_JAR_COMPILATION"}), dmTagsExclude: javaTagsIJar, nameGen: javaNameFullPath, suffix: ".test.cp.jar", consumeNonManageable: true, selfPeers: []ModuleKind{KindJavaCompilation}, testRunner: runner}
+	comp := &javaUnit{kind: juJar, sub: KindJavaCompilation, tag: compTag, moduleType: moduleType, peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar, extraCompTags), dmTagsExclude: javaTagsFull, nameGen: javaNameFullPath, suffix: ".jar", compileView: true, testRunner: runner}
+
+	return []*javaUnit{testable, comp}
+}
+
+func isJavaModuleType(name TOK) bool {
+	_, ok := javaModuleUnits[name]
+
+	return ok
+}
+
+func javaUnitFor(name TOK, sub ModuleKind) *javaUnit {
+	if name == tokProtoLibrary {
+		return javaUnitProto
+	}
+
+	for _, u := range javaModuleUnits[name] {
+		if u.sub == sub {
+			return u
+		}
+	}
+
+	return nil
+}
+
+type JavaClosureEntry struct {
+	path    VFS
+	java    *JavaModule
+	foreign *ModuleEmitResult
+}
+
+type javaForeignPeer struct {
+	dir string
+	res *ModuleEmitResult
+}
+
+type javaIncDirs struct {
+	localUserGlobal      []VFS
+	userGlobal           []VFS
+	global               []VFS
+	userGlobalPropagated []VFS
+	globalPropagated     []VFS
+}
+
+func javaPushUniq(dst []VFS, vs ...VFS) []VFS {
+	for _, v := range vs {
+		found := false
+
+		for _, d := range dst {
+			if d == v {
+				found = true
+
+				break
+			}
+		}
+
+		if !found {
+			dst = append(dst, v)
+		}
+	}
+
+	return dst
+}
+
+func (inc *javaIncDirs) add(dir VFS, global bool) {
+	inc.localUserGlobal = javaPushUniq(inc.localUserGlobal, dir)
+
+	if global {
+		inc.userGlobal = javaPushUniq(inc.userGlobal, dir)
+		inc.global = javaPushUniq(inc.global, dir)
+	}
+}
+
+func (inc *javaIncDirs) propagateTo(other *javaIncDirs) {
+	other.userGlobalPropagated = javaPushUniq(other.userGlobalPropagated, inc.userGlobal...)
+	other.userGlobalPropagated = javaPushUniq(other.userGlobalPropagated, inc.globalPropagated...)
+	other.globalPropagated = javaPushUniq(other.globalPropagated, inc.global...)
+	other.globalPropagated = javaPushUniq(other.globalPropagated, inc.globalPropagated...)
+}
+
+func (inc *javaIncDirs) get() []VFS {
+	return append(append([]VFS(nil), inc.localUserGlobal...), inc.userGlobalPropagated...)
+}
+
+type javaAddIncl struct {
+	dir    VFS
+	global bool
+}
+
+type JavaSrcsSpec struct {
+	resources       bool
+	srcDir          string
+	packagePrefix   string
+	excludes        []string
+	files           []string
+	globs           []string
+	skipCheckSrcdir bool
+	salt            string
+}
+
+type JavaPeerSpec struct {
+	dir      string
+	explicit bool
+}
+
+type JavaRunProgram struct {
+	args []string
+}
+
+type JavaData struct {
+	name                string
+	prefix              string
+	jdkReal             string
+	hasPerModuleJDK     bool
+	withKotlin          bool
+	withKapt            bool
+	kaptOpts            []string
+	kaptProcessors      []string
+	kaptAPClasspath     []string
+	kaptAPOptions       []string
+	allopen             bool
+	lombok              bool
+	noarg               bool
+	serialization       bool
+	detekt              bool
+	kotlincOpts         javaCondVar
+	javacOpts           javaCondVar
+	abiJar              bool
+	errorProne          bool
+	uberjar             bool
+	uberjarOpts         []string
+	javaSrcs            []JavaSrcsSpec
+	javaSrcsRaw         [][]string
+	javaSrcsCalled      bool
+	peerStmts           []JavaPeerSpec
+	dm                  []string
+	excludes            []string
+	depsConfig          []string
+	jarResource         string
+	srcResource         string
+	localJar            string
+	localSourcesJar     string
+	protoSrcs           []string
+	srcs                []string
+	grpc                bool
+	kotlinProto         bool
+	kotlinGrpc          bool
+	javaProtobufPeers   []string
+	javaProtoArgs       []JavaProtoPlugin
+	protocFlags         []string
+	protoNamespace      string
+	protoAddIncl        []javaAddIncl
+	excludeTags         map[string]bool
+	commonGoogleAPIs    bool
+	lintLevel           string
+	noLint              string
+	rawVars             map[string]string
+	annotationProcs     []string
+	useAnnotationProc   string
+	jarMainClass        string
+	jvmArgs             []string
+	runJavaPrograms     []JavaRunProgram
+	generateScripts     [][]string
+	withJDK             bool
+	externalDeps        []string
+	addDLLs             bool
+	disableScriptgen    bool
+	enablePreview       bool
+	unittestDir         string
+	implPeers           []string
+	collectKotlinLint   [][]string
+	ktlintOld           bool
+	checkJavaDeps       string
+	sourcesJar          bool
+	noYmakePython3      bool
+	javaDependencyNoDep bool
+	env                 Environment
+}
+
+type JavaProtoPlugin struct {
+	name string
+	tool string
+}
+
+type JavaModule struct {
+	dir            string
+	path           VFS
+	instance       ModuleInstance
+	unit           *javaUnit
+	stmt           TOK
+	name           string
+	target         VFS
+	data           *JavaData
+	contribWithVer bool
+	passPeers      bool
+	proxyFor       *JavaModule
+	implPeers      map[string]bool
+	managedPeers   []*JavaModule
+	unmanageable   []javaForeignPeer
+	incDirs        javaIncDirs
+	selfPeers      []*JavaModule
+	direct         []javaResolvedPeer
+	closure        *javaPeersClosure
+	rules          *javaDMRules
+	managed        []JavaClosureEntry
+	managedDone    bool
+	globals        []ResourceDecl
+	result         *ModuleEmitResult
+	outRef         NodeRef
+	protoInclude   []VFS
+	toolRefs       []NodeRef
+}
+
+func (jm *JavaModule) fileName() string {
+	return jm.target.relString()
+}
+
+func javaRealPrjName(dir string, gen javaNameGen) string {
+	parts := strings.Split(dir, "/")
+
+	switch gen {
+	case javaNameFullPath:
+		return strings.ReplaceAll(dir, "/", "-")
+	case javaNameThreeDirs:
+		if len(parts) > 3 {
+			parts = parts[len(parts)-3:]
+		}
+	default:
+		if len(parts) > 2 {
+			parts = parts[len(parts)-2:]
+		}
+	}
+
+	return strings.Join(parts, "-")
+}
+
+func (ctx *GenCtx) javaDefaultJDK() string {
+	return "17"
+}
+
+func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts []Stmt, env Environment) *ModuleEmitResult {
+	unit := javaUnitFor(moduleName, instance.Kind)
+
+	if unit == nil {
+		throwFmt("gen: %s: no Java submodule %d for %s", instance.Path.relString(), instance.Kind, moduleName.string())
+	}
+
+	dir := instance.Path.relString()
+
+	jm := &JavaModule{
+		dir:            dir,
+		path:           instance.Path,
+		instance:       instance,
+		unit:           unit,
+		stmt:           moduleName,
+		contribWithVer: !unit.transparent && javaPathIsPrefixOf("contrib/java", dir),
+		passPeers:      true,
+	}
+
+	jm.data = collectJavaData(ctx, jm, stmts, env)
+
+	if unit.proto && jm.data.excludeTags["JAVA_PROTO"] {
+		r := &ModuleEmitResult{ModuleStmtName: moduleName}
+
+		ctx.memoPut(instance, r)
+
+		return r
+	}
+
+	jm.name = jm.data.name
+
+	if jm.name == "" {
+		jm.name = javaRealPrjName(dir, unit.nameGen)
+	}
+
+	jm.target = build(dir, "/", jm.data.prefix, jm.name, unit.suffix)
+
+	if jm.data.uberjar {
+		jm.passPeers = false
+	}
+
+	result := &ModuleEmitResult{ModuleStmtName: moduleName, java: jm}
+
+	jm.result = result
+
+	ctx.memoPut(instance, result)
+	ctx.javaResolvePeers(jm)
+
+	jm.rules = jm.dmRules()
+
+	if unit.transparent {
+		jm.direct = make([]javaResolvedPeer, 0, len(jm.managedPeers))
+
+		for _, p := range jm.managedPeers {
+			jm.direct = append(jm.direct, javaResolvedPeer{m: p, resolution: jprUnversioned, impl: jm.implPeers[p.dir]})
+		}
+
+		jm.closure = newJavaPeersClosure()
+
+		for _, d := range jm.direct {
+			jm.closure.merge(d.m, emptyJavaPeersClosure, 1)
+		}
+	} else {
+		jm.direct = ctx.javaManageLocalPeers(jm, jm.managedPeers, jm.rules)
+		jm.closure = jm.mergeClosure(jm.rules)
+	}
+
+	jm.globals = javaOwnGlobals(jm.unmanageable)
+
+	jm.setupIncDirs()
+
+	ctx.javaRegisterOutputs(jm)
+
+	return result
+}
+
+func (jm *JavaModule) dmRules() *javaDMRules {
+	r := &javaDMRules{lib2Ver: map[string]string{}}
+
+	if jm.unit.transparent {
+		return r
+	}
+
+	for _, item := range jm.data.dm {
+		r.addDependencyManagement(item)
+	}
+
+	r.excludes = append(r.excludes, jm.data.excludes...)
+
+	for _, f := range jm.data.depsConfig {
+		switch f {
+		case "FORBID_DIRECT_PEERDIRS":
+			r.flags.forbidDirectPeerdirs = true
+		case "FORBID_CONFLICT":
+			r.flags.forbidConflict = true
+		case "FORBID_CONFLICT_DM":
+			r.flags.forbidConflictDM = true
+		case "FORBID_CONFLICT_DM_RECENT":
+			r.flags.forbidConflictDMRecent = true
+		case "REQUIRE_DM":
+			r.flags.requireDM = true
+		}
+	}
+
+	return r
+}
+
+func javaOwnGlobals(peers []javaForeignPeer) []ResourceDecl {
+	var out []ResourceDecl
+
+	seen := map[STR]bool{}
+
+	for _, p := range peers {
+		for _, decl := range p.res.ResourceGlobalClosure {
+			if !seen[decl.GlobalVar] {
+				seen[decl.GlobalVar] = true
+				out = append(out, decl)
+			}
+		}
+	}
+
+	return out
+}
+
+func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
+	for _, sub := range jm.unit.selfPeers {
+		self := jm.instance
+
+		self.Kind = sub
+
+		res := genModule(ctx, self)
+
+		if res.java != nil {
+			jm.selfPeers = append(jm.selfPeers, res.java)
+			jm.managedPeers = append(jm.managedPeers, res.java)
+		}
+	}
+
+	seen := map[string]bool{}
+
+	add := func(dir string, explicit bool) {
+		dir = path.Clean(dir)
+
+		if dir == "" || dir == "." || seen[dir] {
+			return
+		}
+
+		seen[dir] = true
+
+		res := ctx.javaPeerResult(jm, dir, explicit)
+
+		if res == nil {
+			return
+		}
+
+		if res.java != nil {
+			jm.managedPeers = append(jm.managedPeers, res.java)
+		} else {
+			jm.unmanageable = append(jm.unmanageable, javaForeignPeer{dir: dir, res: res})
+		}
+	}
+
+	for _, p := range jm.varPeers() {
+		add(p, false)
+	}
+
+	if jm.unit.ignorePeerdir {
+		return
+	}
+
+	for _, p := range jm.data.peerStmts {
+		add(p.dir, p.explicit)
+	}
+
+	for _, p := range jm.macroPeers() {
+		add(p, false)
+	}
+
+	if len(jm.data.implPeers) > 0 {
+		jm.implPeers = map[string]bool{}
+
+		for _, p := range jm.data.implPeers {
+			jm.implPeers[path.Clean(p)] = true
+		}
+	}
+}
+
+func (jm *JavaModule) peerdirTags() []string {
+	if jm.data.uberjar {
+		return javaTags(javaTagsJarBase, javaTagsFull)
+	}
+
+	return jm.unit.peerdirTags
+}
+
+func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool) *ModuleEmitResult {
+	if !ctx.fs.isFile(internStr(dir), "ya.make") {
+		ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to directory without ya.make: %s", parent.dir, dir)})
+
+		return nil
+	}
+
+	name := ctx.moduleName(dir)
+	tags := parent.peerdirTags()
+	inst := ModuleInstance{Path: source(dir), Language: LangJava, Platform: ctx.target, Demand: demandSelf}
+
+	switch units := javaModuleUnits[name]; {
+	case len(units) > 1:
+		var picked *javaUnit
+
+		for _, u := range units {
+			if javaTagIn(u.tag, tags) {
+				picked = u
+
+				break
+			}
+		}
+
+		if picked == nil {
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to %s is prohibited by incompatible tags and skipped", parent.dir, dir)})
+
+			return nil
+		}
+
+		inst.Kind = picked.sub
+	case len(units) == 1:
+		if explicit && !javaTagIn(units[0].tag, tags) {
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("%s: PEERDIR to %s is prohibited by incompatible tags and skipped", parent.dir, dir)})
+
+			return nil
+		}
+
+		inst.Kind = units[0].sub
+	case name == tokProtoLibrary:
+		if !javaTagIn("JAVA_PROTO", tags) {
+			return nil
+		}
+
+		inst.Kind = KindJavaMain
+	default:
+		inst.Language = LangCPP
+		inst.Kind = KindLib
+		inst.Demand = demandLinked
+	}
+
+	res := genModule(ctx, inst)
+
+	if res.java == nil && inst.Language == LangJava {
+		return nil
+	}
+
+	return res
+}
+
+func (ctx *GenCtx) javaContrib(parent *JavaModule, dir string) *JavaModule {
+	if !ctx.fs.isFile(internStr(dir), "ya.make") {
+		return nil
+	}
+
+	res := ctx.javaPeerResult(parent, dir, false)
+
+	if res == nil {
+		return nil
+	}
+
+	return res.java
+}
+
+func javaForeignFileName(p javaForeignPeer) VFS {
+	if p.res.LDPath != nil {
+		return *p.res.LDPath
+	}
+
+	if p.res.ModuleStmtName == tokResourcesLibrary {
+		return build(p.dir, "/", javaRealPrjName(p.dir, javaNameThreeDirs), ".pkg.fake")
+	}
+
+	return 0
+}
+
+func (ctx *GenCtx) genJavaTarget(dir string, name TOK) {
+	for _, u := range javaModuleUnits[name] {
+		res := genModule(ctx, ModuleInstance{Path: source(dir), Kind: u.sub, Language: LangJava, Platform: ctx.target, Demand: demandSelf})
+
+		if res.java == nil {
+			continue
+		}
+
+		if ref := ctx.javaUse(res.java.target); ref != 0 {
+			ctx.emit.result(ref)
+		}
+	}
+}
+
+func (jm *JavaModule) setupIncDirs() {
+	d := jm.data
+
+	if jm.unit.proto {
+		if d.commonGoogleAPIs {
+			jm.incDirs.add(contribLibsGoogleapisCommonProtos, true)
+		}
+
+		jm.incDirs.add(contribLibsProtobufSrc, false)
+	}
+
+	for _, a := range d.protoAddIncl {
+		jm.incDirs.add(a.dir, a.global)
+	}
+
+	for _, p := range jm.managedPeers {
+		p.incDirs.propagateTo(&jm.incDirs)
+	}
+
+	jm.protoInclude = jm.incDirs.get()
+}
+
+func (jm *JavaModule) macroPeers() []string {
+	d := jm.data
+
+	var out []string
+
+	if jm.unit.kind == juJar && len(d.runJavaPrograms) > 0 {
+		out = append(out, "build/platform/java/jdk", "build/platform/java/jdk/jdk"+d.jdkReal)
+	}
+
+	if jm.unit.proto && len(d.protoSrcs) > 0 {
+		out = append(out, "build/platform/java/protoc")
+	}
+
+	return out
+}
