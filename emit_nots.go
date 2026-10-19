@@ -12,21 +12,28 @@ var notsBaseExcludes = []string{"a.yaml", ".npmrc", "package.json", "pnpm-lock.y
 const notsBuilderDir = "devtools/frontend_build_platform/nots/builder"
 
 type NotsModule struct {
-	Checks           []NotsCheck
-	DependsOnBuild   bool
-	Kind             TOK
-	Hermetic         bool
-	LocalCLI         bool
-	Bundle           bool
-	ProductionBundle bool
-	BuildScript      string
-	BuildCommand     string
-	Outputs          []string
-	Excludes         []string
-	Configs          []string
-	VCSInfo          string
-	OutputPrefix     string
-	HasOutputPrefix  bool
+	Checks            []NotsCheck
+	DependsOnBuild    bool
+	Kind              TOK
+	Hermetic          bool
+	LocalCLI          bool
+	Bundle            bool
+	ProductionBundle  bool
+	BuildScript       string
+	BuildCommand      string
+	Outputs           []string
+	Excludes          []string
+	Configs           []string
+	VCSInfo           string
+	OutputPrefix      string
+	HasOutputPrefix   bool
+	IncludeTags       []string
+	ProtoOptions      []string
+	ProtoPeers        []ANY
+	ProtoPackage      string
+	ProtoDeps         string
+	AutoProto         bool
+	ProtoNonRecursive bool
 }
 
 type NotsCheck struct {
@@ -51,6 +58,8 @@ func newNotsModule(kind TOK, env Environment) *NotsModule {
 	c.Hermetic = env.bool(envAutocheck) && !env.bool(envTsDisableHermeticNodeModules) && !c.LocalCLI
 
 	switch kind {
+	case tokProtoLibrary:
+		c.ProtoPackage, c.ProtoDeps = "@yandex-proto/*", "library/typescript/ts-proto-deps"
 	case tokTsTsc:
 		c.BuildScript = "nots:build"
 		c.setTSCCommand()
@@ -87,6 +96,16 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule) bool {
 	}
 
 	switch name {
+	case "INCLUDE_TAGS":
+		c.IncludeTags = append(c.IncludeTags, args...)
+	case "TS_PROTO_OPT":
+		c.ProtoOptions = append(c.ProtoOptions, args...)
+	case "TS_PROTO_PACKAGE_NAME":
+		if len(args) > 0 {
+			c.ProtoPackage = args[0]
+		}
+	case "TS_PROTO_NON_RECURSIVE":
+		c.ProtoNonRecursive = true
 	case "TS_TEST", "TS_LINT":
 		if len(args) == 0 {
 			throwFmt("%s requires a script name", name)
@@ -167,6 +186,14 @@ func (e *EmitContext) notsResource(dir, name string) ResourceDecl {
 	throwFmt("nots: %s did not declare resource %s", dir, name)
 
 	return ResourceDecl{}
+}
+
+func (e *EmitContext) notsPeerInstance(dir string) ModuleInstance {
+	instance := e.derivePeerInstance(dir)
+
+	instance.Language = LangTS
+
+	return instance
 }
 
 func (e *EmitContext) notsBaseArgs(pj map[string]any) ([]string, []ResourceDecl) {
@@ -274,7 +301,12 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 		return notsResult(output, info.ProducerRef, c, info.Nots.Globals)
 	}
 
-	pj := pm.notsJSON(dir + "/package.json")
+	var pj map[string]any
+
+	if !c.AutoProto {
+		pj = pm.notsJSON(dir + "/package.json")
+	}
+
 	base, globals := e.notsBaseArgs(pj)
 
 	var resourceNames []STR
@@ -302,15 +334,27 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	}
 
 	for _, peer := range pm.notsPeers(dir, pj) {
-		result := genModule(ctx, e.derivePeerInstance(peer))
+		result := genModule(ctx, e.notsPeerInstance(peer))
 
 		addPeer(result)
 
 		prepInputs = append(prepInputs, build(peer, "/pnpm-workspace.yaml"))
 	}
 
-	for _, peer := range e.d.peerdirs {
-		result := genModule(ctx, e.derivePeerInstance(peer.string()))
+	var explicitPeers []ANY
+
+	if c.Kind != tokProtoLibrary {
+		explicitPeers = e.d.peerdirs
+	} else if c.ProtoNonRecursive {
+		explicitPeers = c.ProtoPeers
+	}
+
+	if c.AutoProto {
+		explicitPeers = append(slices.Clone(explicitPeers), internStr(c.ProtoDeps).any())
+	}
+
+	for _, peer := range explicitPeers {
+		result := genModule(ctx, e.notsPeerInstance(peer.string()))
 
 		addPeer(result)
 	}
@@ -329,7 +373,9 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	head := append([]string{toolPath.string()}, base...)
 	prepArgs := append(slices.Clone(head), "prepare-deps", "--tarballs-store", "__tarballs__")
 
-	prepInputs = append(prepInputs, source(dir, "/package.json"))
+	if !c.AutoProto {
+		prepInputs = append(prepInputs, source(dir, "/package.json"))
+	}
 
 	hasDeps := notsHasDependencies(pj)
 
@@ -365,6 +411,26 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 		}
 
 		prepArgs = append(prepArgs, "--resource-root", "$(RESOURCE_ROOT)")
+	}
+
+	if c.AutoProto {
+		if c.Hermetic {
+			for _, pkg := range pm.notsLockfile(c.ProtoDeps + "/pnpm-lock.yaml").Packages {
+				uris = append(uris, pkg.URI)
+			}
+
+			prepArgs = append(prepArgs, "--resource-root", "$(RESOURCE_ROOT)")
+		}
+
+		prepArgs = append(prepArgs, "--ts-proto-auto-deps-path", c.ProtoDeps, "--ts-proto-auto-package-name", c.ProtoPackage)
+
+		if c.ProtoNonRecursive && len(c.ProtoPeers) > 0 {
+			peers := anyStrs(c.ProtoPeers)
+
+			slices.Sort(peers)
+			prepArgs = append(prepArgs, "--ts-proto-workspace-peers")
+			prepArgs = append(prepArgs, slices.Compact(peers)...)
+		}
 	}
 
 	slices.Sort(uris)
@@ -418,6 +484,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 	inputs = append(inputs, e.codegen.lookup(*prepare.ARPath).ClosureLeaves...)
 
+	buildLeaves := append(slices.Clone(e.codegen.lookup(*prepare.ARPath).ClosureLeaves), *prepare.ARPath)
 	outputs := []VFS{output}
 
 	if c.VCSInfo != "" && c.Kind != tokTsPackage {
@@ -443,6 +510,8 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 	if c.Kind == tokTsPackage {
 		kind, command = pkTSPkg, "build-package"
+	} else if c.Kind == tokProtoLibrary {
+		kind, command = pkTSProto, "build-ts-proto"
 	}
 
 	args := append(buildHead, command)
@@ -460,25 +529,42 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	args = append(args, "--output-file", output.string(), "--vcs-info", c.VCSInfo)
 	outputs = append(outputs, build(dir, "/output.tar.uuid"))
 
-	if len(c.Outputs) > 0 {
-		args = append(args, "--outputs")
-		args = append(args, c.Outputs...)
-	}
+	foreignRefs := []NodeRef{toolRef}
 
-	args = append(args, "--exclude-globs")
-	args = append(args, notsBaseExcludes...)
-	args = append(args, c.Excludes...)
+	if c.Kind == tokProtoLibrary {
+		protoArgs, protoInputs, protoRefs, protoLeaves, protocRef := e.notsProtoInputs()
 
-	if c.Kind != tokTsPackage {
-		args = append(args, "--build-script", c.BuildScript)
+		foreignRefs = append(foreignRefs, protocRef)
+		args = append(args, protoArgs...)
+		inputs = append(inputs, protoInputs...)
+		peerRefs = append(slices.Clone(peerRefs), protoRefs...)
+		inputs = append(inputs, protoLeaves...)
+		buildLeaves = append(buildLeaves, protoLeaves...)
+	} else {
+		if len(c.Outputs) > 0 {
+			args = append(args, "--outputs")
+			args = append(args, c.Outputs...)
+		}
 
-		if c.BuildCommand != "" {
-			args = append(args, "--build-command", c.BuildCommand)
+		args = append(args, "--exclude-globs")
+		args = append(args, notsBaseExcludes...)
+		args = append(args, c.Excludes...)
+
+		if c.Kind != tokTsPackage {
+			args = append(args, "--build-script", c.BuildScript)
+
+			if c.BuildCommand != "" {
+				args = append(args, "--build-command", c.BuildCommand)
+			}
 		}
 	}
 
 	inputs = append(inputs, notsSourceFiles(ctx.fs, dir, c.Outputs, c.Excludes)...)
-	inputs = append(inputs, source(dir, "/ya.make"), source(dir, "/package.json"))
+
+	if c.Kind != tokProtoLibrary {
+		inputs = append(inputs, source(dir, "/ya.make"), source(dir, "/package.json"))
+	}
+
 	inputs = dedup(inputs)
 
 	if c.Bundle && hasDeps {
@@ -493,13 +579,13 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 		refs = append(refs, ctx.vcsRef)
 	}
 
-	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(toolRef), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
+	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(foreignRefs...), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
 	ref := e.emitNotsNode(n)
 	info := e.codegen.lookup(output)
 
 	info.Nots = state
 	info.GeneratorRefs = dedupRefs(append(slices.Clone(peerRefs), prepRef))
-	info.ClosureLeaves = append(slices.Clone(e.codegen.lookup(*prepare.ARPath).ClosureLeaves), *prepare.ARPath)
+	info.ClosureLeaves = dedup(buildLeaves)
 
 	return notsResult(output, ref, c, globals)
 }
@@ -535,9 +621,14 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 	result := genModule(e.ctx, instance)
 	refs := []NodeRef{result.ARRef}
 
+	var inputs []VFS
+
 	if result.ARPath != nil {
+		inputs = append(inputs, *result.ARPath)
+
 		if info := e.codegen.lookup(*result.ARPath); info != nil {
 			refs = append(refs, info.GeneratorRefs...)
+			inputs = append(inputs, info.ClosureLeaves...)
 		}
 	}
 
@@ -546,33 +637,41 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 
 	if c.Kind == tokTsTestFor {
 		bridge := build(dir, "/", name, ".test_for.prepare_deps.fake")
-		ref := e.emitNotsTouch(bridge, refs, &KV{P: pkUN, PC: pcLightCyan})
+		ref := e.emitNotsTouch(bridge, refs, inputs, &KV{P: pkUN, PC: pcLightCyan})
 
 		refs = append(refs, ref)
+		inputs = append(inputs, bridge)
 		kind = pkTSTest
 
 		if c.DependsOnBuild {
 			instance.Language = LangCPP
-			refs = append(refs, genModule(e.ctx, instance).ARRef)
+
+			built := genModule(e.ctx, instance)
+
+			refs = append(refs, built.ARRef)
+
+			if built.ARPath != nil {
+				inputs = append(inputs, *built.ARPath)
+			}
 		}
 	} else {
 		name += ".ts_test.fake"
 	}
 
 	output := build(dir, "/", name)
-	ref := e.emitNotsTouch(output, na.refList(dedupRefs(refs)...), &KV{P: kind, PC: pcMagenta})
+	ref := e.emitNotsTouch(output, na.refList(dedupRefs(refs)...), inputs, &KV{P: kind, PC: pcMagenta})
 
 	return notsResult(output, ref, c, result.ResourceGlobalClosure)
 }
 
-func (e *EmitContext) emitNotsTouch(output VFS, refs []NodeRef, kv *KV) NodeRef {
+func (e *EmitContext) emitNotsTouch(output VFS, refs []NodeRef, inputs []VFS, kv *KV) NodeRef {
 	na := e.ctx.na
 	script := buildScriptsTouchPy
 
 	return e.emitNotsNode(Node{
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), script.any(), output.any())), Env: envVarsVCS}),
-		Env:      envVarsVCS, Inputs: na.inputList(na.vfsList(script)), Outputs: na.vfsList(output), KV: kv,
+		Env:      envVarsVCS, Inputs: na.inputList(na.vfsList(script), na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(output), KV: kv,
 		DepRefs: na.refList(dedupRefs(refs)...), Resources: usesPython3,
 		Requirements: &Requirements{CPU: 1, RAM: 32, Network: nwRestricted},
 	})

@@ -96,6 +96,8 @@ var (
 	envTSAN_SYMBOLIZER_PATH         = internEnv("TSAN_SYMBOLIZER_PATH")
 	envTsDisableHermeticNodeModules = internEnv("TS_DISABLE_HERMETIC_NODE_MODULES")
 	envTsLocalCli                   = internEnv("TS_LOCAL_CLI")
+	envTsProto                      = internEnv("TS_PROTO")
+	envTsProtoPrepareDeps           = internEnv("TS_PROTO_PREPARE_DEPS")
 	envTsUsePrebuiltNotsTool        = internEnv("TS_USE_PREBUILT_NOTS_TOOL")
 	envUBSAN_OPTIONS                = internEnv("UBSAN_OPTIONS")
 	envUBSAN_SYMBOLIZER_PATH        = internEnv("UBSAN_SYMBOLIZER_PATH")

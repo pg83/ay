@@ -108,6 +108,9 @@ packages:
         self.assertEqual(test['kv']['p'], 'TS_TST')
         self.assertIn(prepare['uid'], bridge['deps'])
         self.assertIn(bridge['uid'], test['deps'])
+        self.assertIn('$(B)/web/package.json', bridge['inputs'])
+        self.assertIn('$(B)/web/package.json', test['inputs'])
+        self.assertIn(bridge['outputs'][0], test['inputs'])
         self.assertNotIn('$(B)/web/output.tar', [out for node in graph['graph'] for out in node['outputs']])
 
     def test_build_and_test_share_one_preparation(self):
@@ -159,6 +162,71 @@ packages:
         self.assertIn(peer['uid'], prepare['deps'])
         self.assertIn('$(B)/peer/pnpm-workspace.yaml', prepare['inputs'])
         self.assertNotIn('$(B)/peer/output.tar', prepare['inputs'])
+
+    def test_proto_workspace_selects_typescript_build_and_descriptor_peers(self):
+        files = self.project()
+        files['web/package.json'] = '{"dependencies":{"api":"workspace:../api"}}'
+        files['api/ya.make'] = (
+            'PROTO_LIBRARY()\nINCLUDE_TAGS(TS_PROTO TS_PREPARE_DEPS)\n'
+            'SRCS(api.proto)\nPEERDIR(raw)\nTS_PROTO_OPT(outputJsonMethods=false)\n'
+            'IF(TS_PROTO)\nTS_PROTO_OPT(useOptionals=all)\nENDIF()\nEND()\n'
+        )
+        files['api/package.json'] = '{}'
+        files['api/tsconfig.json'] = '{}'
+        files['api/api.proto'] = 'syntax = "proto3";\nimport "raw/value.proto";\n'
+        files['raw/ya.make'] = 'PROTO_LIBRARY()\nNO_RUNTIME()\nNO_UTIL()\nNO_LIBC()\nSRCS(value.proto)\nEND()\n'
+        files['raw/value.proto'] = 'syntax = "proto3";\nmessage Value {}\n'
+        tool_program(files, 'contrib/tools/protoc', 'protoc')
+        graph = make(files, 'web', '-DAUTOCHECK=yes')
+        api = node_by_output(graph, '$(B)/api/output.tar')
+        self.assertEqual(api['kv']['p'], 'TS_PRO')
+        args = api['cmds'][-1]['cmd_args']
+        self.assertIn('build-ts-proto', args)
+        self.assertEqual(args[args.index('--tsconfigs') + 1:args.index('--protoc-bin')], [
+            'tsconfig.json', '--ts-proto-opt', 'outputJsonMethods=false', '--ts-proto-opt', 'useOptionals=all',
+        ])
+        self.assertIn('$(S)/raw/value.proto', api['inputs'])
+        self.assertIn('$(B)/raw/raw.self.protodesc', api['inputs'])
+        self.assertNotIn('$(S)/api/package.json', api['inputs'])
+        bundle = node_by_output(graph, '$(B)/web/output.tar')
+        self.assertIn('$(B)/api/output.tar', bundle['inputs'])
+        self.assertIn('$(B)/raw/raw.self.protodesc', bundle['inputs'])
+        self.assertFalse(any(out.endswith('.pb.cc') for n in graph['graph'] for out in n['outputs']))
+
+        files['api/ya.make'] = files['api/ya.make'].replace('SRCS(api.proto)', 'TS_PROTO_NON_RECURSIVE()\nSRCS(api.proto)')
+        graph = make(files, 'web', '-DAUTOCHECK=yes')
+        prepare = node_by_output(graph, '$(B)/api/package.json')
+        self.assertNotIn('$(B)/raw/raw.self.protodesc', prepare['inputs'])
+        self.assertFalse(any('$(B)/raw/package.json' in n['outputs'] for n in graph['graph']))
+
+    def test_proto_without_manifest_uses_auto_dependency_package(self):
+        files = self.project()
+        files['web/package.json'] = '{"dependencies":{"api":"workspace:../api"}}'
+        files['api/ya.make'] = (
+            'PROTO_LIBRARY()\nINCLUDE_TAGS(TS_PROTO TS_PREPARE_DEPS)\n'
+            'SRCS(api.proto)\nTS_PROTO_PACKAGE_NAME(@scope/api)\nEND()\n'
+        )
+        files['api/api.proto'] = 'syntax = "proto3";\nmessage Api {}\n'
+        deps = 'library/typescript/ts-proto-deps'
+        files[f'{deps}/ya.make'] = 'TS_PACKAGE()\nEND()\n'
+        files[f'{deps}/package.json'] = files['web/package.json'].replace('api', 'dep').replace('workspace:../dep', '1.2.3')
+        files[f'{deps}/pnpm-lock.yaml'] = files['web/pnpm-lock.yaml']
+        tool_program(files, 'contrib/tools/protoc', 'protoc')
+        graph = make(files, 'web', '-DAUTOCHECK=yes')
+        prepare = node_by_output(graph, '$(B)/api/package.json')
+        self.assertEqual(prepare['cmds'][0]['cmd_args'][-4:], [
+            '--ts-proto-auto-deps-path', deps, '--ts-proto-auto-package-name', '@scope/api',
+        ])
+        self.assertNotIn('$(S)/api/package.json', prepare['inputs'])
+        self.assertIn(f'$(B)/{deps}/output.tar', prepare['inputs'])
+        self.assertFalse(any(out.endswith('.tgz') for out in prepare['outputs']))
+        self.assertEqual(prepare['resources'], node_by_output(graph, f'$(B)/{deps}/package.json')['resources'])
+        api = node_by_output(graph, '$(B)/api/output.tar')
+        self.assertIn('$(B)/api/node_modules.layer', api['inputs'])
+        args = api['cmds'][-1]['cmd_args']
+        self.assertEqual(args[args.index('--auto-package-name'):args.index('--protoc-bin')], [
+            '--auto-package-name', '@scope/api', '--auto-deps-path', deps,
+        ])
 
 
 if __name__ == '__main__':

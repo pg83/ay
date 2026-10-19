@@ -45,7 +45,7 @@ func isProtoLibraryPeer(ctx *GenCtx, peerPath string) bool {
 	return false
 }
 
-func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []ANY, injectBuiltins bool) DescPeerSpan {
+func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []ANY, injectBuiltins, commonGoogle bool) DescPeerSpan {
 	var span DescPeerSpan
 
 	seen := make(map[VFS]struct{})
@@ -88,11 +88,19 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []ANY, injec
 		}
 	}
 
+	if commonGoogle {
+		enter("contrib/libs/googleapis-common-protos")
+	}
+
 	if injectBuiltins && instance.Path.relString() != protosFromProtocPeer {
 		enter(protosFromProtocPeer)
 	}
 
 	for _, p := range peerdirs {
+		if commonGoogle && p.string() == "contrib/libs/googleapis-common-protos" {
+			continue
+		}
+
 		enter(p.string())
 	}
 
@@ -107,7 +115,7 @@ func descProtoOutputRel(instancePath, srcRel, resolvedRel string) string {
 
 func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	span := descPeerClosure(ctx, instance, d.peerdirs, d.needGoogleProtoPeerdirs)
+	span := descPeerClosure(ctx, instance, d.peerdirs, d.needGoogleProtoPeerdirs, d.useCommonGoogleAPIs)
 	protoInclude := dedup(protoNamespaceContribs(d), span.includes)
 
 	d.scanCtx = newModuleScanContext(ctx, instance, d, dedup(d.addIncl, d.addInclGlobal), nil, nil, protoInclude)
@@ -115,24 +123,14 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 	cppOutRoot := protoCPPOutRoot(d)
 	mid := descProtocIncludes(ctx.na, span.includes, cppOutRoot)
+
+	mid = ctx.na.anyList(appendAnyLists(mid, d.protocFlags)...)
+
 	hash := moddirHash(instance.Path.relString())
 
 	var producerRefs []NodeRef
 	var descOutputs []VFS
 	var rawprotoOutputs []VFS
-
-	var producerSourceInputs []VFS
-
-	sourceInputSeen := make(map[VFS]struct{})
-
-	addSourceInput := func(v VFS) {
-		if _, dup := sourceInputSeen[v]; dup {
-			return
-		}
-
-		sourceInputSeen[v] = struct{}{}
-		producerSourceInputs = append(producerSourceInputs, v)
-	}
 
 	for _, meta := range d.srcs {
 		src := meta.Source
@@ -155,21 +153,12 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		producerRefs = append(producerRefs, ref)
 		descOutputs = append(descOutputs, descOut)
 		rawprotoOutputs = append(rawprotoOutputs, rawprotoOut)
-
-		addSourceInput(descRawprotoWrapperVFS)
-		addSourceInput(protoVFS)
-
-		for _, bucket := range imports.bucketList() {
-			for _, im := range bucket {
-				addSourceInput(im)
-			}
-		}
 	}
 
 	prj := realPrjName(instance.Path.relString())
 	selfProtodesc := build(instance.Path.relString(), "/", prj, ".self.protodesc")
 	protosrc := build(instance.Path.relString(), "/", prj, ".protosrc")
-	mergeRef := e.emitDescProtoMerge(selfProtodesc, protosrc, descOutputs, rawprotoOutputs, producerSourceInputs, producerRefs)
+	mergeRef := e.emitDescProtoMerge(selfProtodesc, protosrc, descOutputs, rawprotoOutputs, producerRefs)
 	closure := append(span.peers, DescProtoPeer{SelfProtodesc: selfProtodesc, MergeRef: mergeRef})
 	selfPath := selfProtodesc
 
@@ -264,7 +253,7 @@ func (e *EmitContext) emitProtoDescProducer(protoRelPath string,
 }
 
 func (e *EmitContext) emitDescProtoMerge(selfProtodesc, protosrc VFS,
-	descOutputs, rawprotoOutputs, producerSourceInputs []VFS, producerRefs []NodeRef) NodeRef {
+	descOutputs, rawprotoOutputs []VFS, producerRefs []NodeRef) NodeRef {
 	ctx := e.ctx
 	na := ctx.na
 	env := envVarsVCS
@@ -307,7 +296,7 @@ func (e *EmitContext) emitDescProtoMerge(selfProtodesc, protosrc VFS,
 			Cmd{CmdArgs: na.chunkList(collect), Cwd: bldRootDirVFS, Env: env},
 		),
 		Env:       env,
-		Inputs:    na.inputList(buildInputs, producerSourceInputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[collectRawprotoVFS.rel()]),
+		Inputs:    na.inputList(buildInputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[collectRawprotoVFS.rel()]),
 		KV:        &protoDescKV,
 		Outputs:   na.vfsList(selfProtodesc, protosrc),
 		DepRefs:   na.noderefs.list(producerRefs...),
@@ -319,7 +308,7 @@ func (e *EmitContext) emitDescProtoMerge(selfProtodesc, protosrc VFS,
 
 func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	closure := descPeerClosure(ctx, instance, d.peerdirs, false).peers
+	closure := descPeerClosure(ctx, instance, d.peerdirs, false, false).peers
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
 	prj := realPrjName(instance.Path.relString())

@@ -999,8 +999,9 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				d.peerdirs = append(d.peerdirs, internAnys(yqlUdfImplicitPeers())...)
 			}
 
-			if isNotsModule(v.Name) {
+			if isNotsModule(v.Name) || v.Name == tokProtoLibrary && (language == LangTS || language == LangTSPrepare) {
 				d.nots = newNotsModule(v.Name, env)
+				d.nots.AutoProto = v.Name == tokProtoLibrary && !fs.isFilePathClean(modulePath+"/package.json")
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
@@ -1014,6 +1015,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			if d.moduleStmt.Name == tokProtoLibrary {
 				if language == LangPy {
 					env.setBool(envPY3_PROTO, true)
+				} else if language == LangTS {
+					env.setBool(envTsProto, true)
+				} else if language == LangTSPrepare {
+					env.setBool(envTsProtoPrepareDeps, true)
 				} else {
 					env.setStringID(envMODULE_TAG, strCPPProto)
 					env.setStringID(envCPP_PROTO, strCPPProto)
@@ -1093,6 +1098,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				}
 
 				d.peerdirs = append(d.peerdirs, pTok)
+
+				if d.nots != nil && d.nots.Kind == tokProtoLibrary {
+					d.nots.ProtoPeers = append(d.nots.ProtoPeers, pTok)
+				}
 			}
 		case *SetStmt:
 

@@ -120,8 +120,8 @@ var acknowledgedTokSet = func() BitSet {
 }()
 
 const (
-	variantDemandShift     = 4
-	variantDemandMask      = uint16(0xF) << variantDemandShift
+	variantDemandShift     = 5
+	variantDemandMask      = uint16(0x7) << variantDemandShift
 	peerKindLangDefault    = 0
 	peerKindProgramDefault = 1
 	peerKindUserPeer       = 2
@@ -795,6 +795,26 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.nots != nil {
+		if d.moduleStmt.Name == tokProtoLibrary {
+			tag := "TS_PROTO"
+
+			if d.moduleStmt.Schema {
+				tag = "TS_PROTO_FROM_SCHEMA"
+			}
+
+			if instance.Language == LangTSPrepare {
+				tag = "TS_PREPARE_DEPS"
+			}
+
+			if !slices.Contains(d.nots.IncludeTags, tag) || moduleExcludesTag(d, tag) {
+				result := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name}
+
+				ctx.memoPut(instance, result)
+
+				return result
+			}
+		}
+
 		result := e.emitNotsModule()
 
 		ctx.memoPut(instance, result)

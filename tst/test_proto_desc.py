@@ -41,6 +41,18 @@ def desc_node(graph, output):
 
 
 class ProtoDescTest(unittest.TestCase):
+    def test_descriptor_flags_and_implicit_peer_precedence(self):
+        files = desc_files()
+        google = 'contrib/libs/googleapis-common-protos'
+        files[f'{google}/ya.make'] = f'PROTO_LIBRARY()\nPROTO_NAMESPACE(GLOBAL {google})\nEND()\n'
+        files['p/ya.make'] = 'PROTO_LIBRARY()\nUSE_COMMON_GOOGLE_APIS(api/annotations)\nPROTOC_FATAL_WARNINGS()\nSRCS(p.proto)\nEND()\n'
+        files['p/p.proto'] = 'syntax = "proto3";\nmessage P {}\n'
+        files['d/ya.make'] = 'PROTO_DESCRIPTIONS()\nPEERDIR(p)\nEND()\n'
+        graph = lib.make(files, 'd')
+        args = desc_node(graph, '$(B)/p/p.proto.desc')['cmds'][0]['cmd_args']
+        self.assertEqual(args[-1], '--fatal_warnings')
+        self.assertLess(args.index(f'-I=$(S)/{google}'), args.index('-I=$(S)/contrib/libs/protobuf/src'))
+
     def test_descriptions_merge_proto_library_closure(self):
         files = desc_files()
         files.update({
@@ -120,19 +132,12 @@ class ProtoDescTest(unittest.TestCase):
             PYTHON, COLLECT_RAWPROTO, "--output", "$(B)/mid/mid.protosrc",
             f"mid/m.proto.{MID_HASH}.rawproto", f"mid/n.proto.{MID_HASH}.rawproto",
         ])
-        self.assertEqual(mid_merge["inputs"][:6], [
+        self.assertEqual(mid_merge["inputs"], [
             "$(B)/mid/m.proto.desc", "$(B)/mid/n.proto.desc",
             f"$(B)/mid/m.proto.{MID_HASH}.rawproto",
             f"$(B)/mid/n.proto.{MID_HASH}.rawproto",
-            DESC_WRAPPER, "$(S)/mid/m.proto",
+            MERGE_FILES, COLLECT_RAWPROTO,
         ])
-        self.assertEqual(set(mid_merge["inputs"][6:8]), {
-            "$(S)/leaf/leaf.proto",
-            "$(S)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto",
-        })
-        self.assertEqual(
-            mid_merge["inputs"][8:], ["$(S)/mid/n.proto", MERGE_FILES, COLLECT_RAWPROTO]
-        )
         self.assertFalse(
             [n for n in graph["graph"] if any("events" in o for o in n["outputs"])]
         )
