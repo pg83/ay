@@ -127,6 +127,39 @@ packages:
         self.assertEqual(test['kv']['p'], 'TS_JST')
         self.assertIn(bundle['uid'], test['deps'])
 
+    def test_sandbox_inputs_contain_workspace_closure_once(self):
+        files = self.project()
+        for name, peers in [('web', ['left', 'right']), ('left', ['leaf']), ('right', ['leaf']), ('leaf', [])]:
+            files[f'{name}/ya.make'] = 'TS_PACKAGE()\nEND()\n'
+            files[f'{name}/package.json'] = json.dumps({
+                'dependencies': {peer: f'workspace:../{peer}' for peer in peers},
+            })
+            files[f'{name}/pnpm-lock.yaml'] = "lockfileVersion: '9.0'\npackages: {}\n"
+        graph = make(files, 'web', '-DAUTOCHECK=yes')
+        prepare = node_by_output(graph, '$(B)/web/package.json')
+        bundle = node_by_output(graph, '$(B)/web/output.tar')
+        for node in [prepare, bundle]:
+            self.assertIn('$(B)/devtools/frontend_build_platform/nots/builder/builder', node['inputs'])
+            for peer in ['left', 'right', 'leaf']:
+                for output in ['package.json', 'output.tar']:
+                    filename = f'$(B)/{peer}/{output}'
+                    self.assertEqual(node['inputs'].count(filename), 1)
+                    self.assertEqual(node['deps'].count(node_by_output(graph, filename)['uid']), 1)
+            self.assertEqual(len(node['deps']), len(set(node['deps'])))
+        self.assertIn('$(B)/web/package.json', bundle['inputs'])
+
+    def test_legacy_prepare_still_depends_on_direct_workspace_manifest(self):
+        files = self.project()
+        files['web/package.json'] = '{"dependencies":{"peer":"workspace:../peer"}}'
+        files['peer/ya.make'] = 'TS_PACKAGE()\nEND()\n'
+        files['peer/package.json'] = '{}'
+        graph = make(files, 'web')
+        prepare = node_by_output(graph, '$(B)/web/package.json')
+        peer = node_by_output(graph, '$(B)/peer/pnpm-workspace.yaml')
+        self.assertIn(peer['uid'], prepare['deps'])
+        self.assertIn('$(B)/peer/pnpm-workspace.yaml', prepare['inputs'])
+        self.assertNotIn('$(B)/peer/output.tar', prepare['inputs'])
+
 
 if __name__ == '__main__':
     unittest.main()

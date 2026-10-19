@@ -79,6 +79,12 @@ def sbom_nodes(graph):
 
 
 class SbomTest(unittest.TestCase):
+    def test_autocheck_disables_component_generation_and_embedding(self):
+        graph = lib.make(fixture(), "prog", *X86_64, "-r", "-DAUTOCHECK=yes")
+        self.assertEqual(sbom_nodes(graph), [])
+        program = lib.node_by_output(graph, "$(B)/prog/prog")
+        self.assertNotIn("$(S)/build/internal/scripts/link_sbom.py", program["inputs"])
+
     def test_release_program_embeds_ordered_components(self):
         graph = lib.make(fixture(), "prog", *X86_64, "-r")
 

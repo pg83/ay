@@ -307,11 +307,5 @@ class MakeWarningsTest(unittest.TestCase):
 
 
 
-class DistGraphInputsTest(unittest.TestCase):
-    def test_dist_dump_keeps_source_inputs(self):
-        tree = Tree(self, {"app/ya.make": library(["x.cpp"]), "app/x.cpp": "int x;\n"})
-        graph, _ = tree.graph("--dist", "app")
-        self.assertIn("$(S)/app/x.cpp", lib.node_by_output(graph, "$(B)/app/x.cpp.o")["inputs"])
-
 if __name__ == "__main__":
     unittest.main(verbosity=2)

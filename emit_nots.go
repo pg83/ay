@@ -244,6 +244,7 @@ type NotsPrepared struct {
 	Globals         []ResourceDecl
 	ResourceNames   []STR
 	ToolRef         NodeRef
+	ToolPath        VFS
 	HasDependencies bool
 }
 
@@ -283,18 +284,27 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	}
 
 	var peerRefs []NodeRef
+	var peerInputs []VFS
 	var prepInputs []VFS
+
+	addPeer := func(result *ModuleEmitResult) {
+		if result.ARPath == nil {
+			return
+		}
+
+		if info := e.codegen.lookup(*result.ARPath); info != nil {
+			peerRefs = append(peerRefs, info.GeneratorRefs...)
+			peerInputs = append(peerInputs, info.ClosureLeaves...)
+		}
+
+		peerRefs = append(peerRefs, result.ARRef)
+		peerInputs = append(peerInputs, *result.ARPath)
+	}
 
 	for _, peer := range pm.notsPeers(dir, pj) {
 		result := genModule(ctx, e.derivePeerInstance(peer))
 
-		if result.ARRef != 0 {
-			if info := e.codegen.lookup(*result.ARPath); info != nil {
-				peerRefs = append(peerRefs, info.GeneratorRefs...)
-			}
-
-			peerRefs = append(peerRefs, result.ARRef)
-		}
+		addPeer(result)
 
 		prepInputs = append(prepInputs, build(peer, "/pnpm-workspace.yaml"))
 	}
@@ -302,16 +312,20 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	for _, peer := range e.d.peerdirs {
 		result := genModule(ctx, e.derivePeerInstance(peer.string()))
 
-		if result.ARRef != 0 {
-			if info := e.codegen.lookup(*result.ARPath); info != nil {
-				peerRefs = append(peerRefs, info.GeneratorRefs...)
-			}
-
-			peerRefs = append(peerRefs, result.ARRef)
-		}
+		addPeer(result)
 	}
 
+	peerRefs = dedupRefs(peerRefs)
+	peerInputs = dedup(peerInputs)
+
 	toolRef, toolPath := ctx.tool(internArg(notsBuilderDir))
+
+	prepInputs = append(prepInputs, toolPath)
+
+	if c.Hermetic {
+		prepInputs = append(prepInputs, peerInputs...)
+	}
+
 	head := append([]string{toolPath.string()}, base...)
 	prepArgs := append(slices.Clone(head), "prepare-deps", "--tarballs-store", "__tarballs__")
 
@@ -371,11 +385,12 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	}
 
 	prepRef := e.emitNotsNode(prep)
-	state := &NotsPrepared{Head: head, Globals: globals, ResourceNames: resourceNames, ToolRef: toolRef, HasDependencies: hasDeps}
+	state := &NotsPrepared{Head: head, Globals: globals, ResourceNames: resourceNames, ToolRef: toolRef, ToolPath: toolPath, HasDependencies: hasDeps}
 	info := e.codegen.lookup(output)
 
 	info.Nots = state
-	info.GeneratorRefs = dedupRefs(peerRefs)
+	info.GeneratorRefs = peerRefs
+	info.ClosureLeaves = peerInputs
 
 	return notsResult(output, prepRef, c, globals)
 }
@@ -399,7 +414,10 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	head, globals, resourceNames, peerRefs, toolRef, hasDeps := state.Head, state.Globals, state.ResourceNames, e.codegen.lookup(*prepare.ARPath).GeneratorRefs, state.ToolRef, state.HasDependencies
 	autotar := buildScriptsAutotarGendirsPy
 	cmds := []Cmd{{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), autotar.any(), strUnpack.any(), strExt.any(), strGentar.any())), Env: envVarsVCS, Cwd: build(dir)}}
-	inputs := []VFS{autotar}
+	inputs := []VFS{autotar, state.ToolPath, *prepare.ARPath}
+
+	inputs = append(inputs, e.codegen.lookup(*prepare.ARPath).ClosureLeaves...)
+
 	outputs := []VFS{output}
 
 	if c.VCSInfo != "" && c.Kind != tokTsPackage {
@@ -469,7 +487,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(appendInternAnys(nil, args)...)), Env: envVarsVCS})
 
-	refs := append(peerRefs, prepRef)
+	refs := append(slices.Clone(peerRefs), prepRef)
 
 	if c.VCSInfo != "" {
 		refs = append(refs, ctx.vcsRef)
@@ -481,6 +499,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 	info.Nots = state
 	info.GeneratorRefs = dedupRefs(append(slices.Clone(peerRefs), prepRef))
+	info.ClosureLeaves = append(slices.Clone(e.codegen.lookup(*prepare.ARPath).ClosureLeaves), *prepare.ARPath)
 
 	return notsResult(output, ref, c, globals)
 }
