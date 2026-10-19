@@ -181,7 +181,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.ifEnv = buildPlatformIfEnv(p)
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
-	p.CompileCFlags = composeCompileCFlags(isa, p.BuildRelease, p.DebugInfoFlags)
+	p.CompileCFlags = composeCompileCFlags(p.ifEnv, flags, p.DebugInfoFlags)
 	p.NoLibcBlock = noLibcBlock(p)
 
 	bundle := compileFlagBundleFor(p)

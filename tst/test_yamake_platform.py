@@ -115,7 +115,11 @@ class YaMakePlatformTest(unittest.TestCase):
     def test_debug_info_and_optimization_flags(self):
         code, graph, stderr = ay_make(library(), "-r", platform="default-linux-x86_64")
         self.assertEqual(code, 0, stderr)
-        self.assertEqual(after_compilation_dir(compile_args(graph, "$(B)/a/x.cpp.o"), 4), ["-pipe", "-m64", "-O3", "-fno-common"])
+        self.assertEqual(
+            after_compilation_dir(compile_args(graph, "$(B)/a/x.cpp.o"), 9),
+            ["-pipe", "-m64", "-O3", "-g", "-fdebug-default-version=4", "-ggnu-pubnames",
+             "-fdebug-info-for-profiling", "-fno-common", "-ffunction-sections"],
+        )
 
         compressed = library()
         compressed["build/ymake_conf.py"] = lib.ymake_conf(compress_debug=True)
@@ -128,8 +132,8 @@ class YaMakePlatformTest(unittest.TestCase):
         code, graph, stderr = ay_make(compressed, "-r")
         self.assertEqual(code, 0, stderr)
         self.assertEqual(
-            after_compilation_dir(compile_args(graph, "$(B)/a/x.cpp.o"), 4),
-            ["-pipe", "-g", "-fdebug-default-version=4", "-ggnu-pubnames"],
+            after_compilation_dir(compile_args(graph, "$(B)/a/x.cpp.o"), 5),
+            ["-pipe", "-O3", "-g", "-fdebug-default-version=4", "-ggnu-pubnames"],
         )
 
         code, graph, stderr = ay_make(library(), platform="default-darwin-x86_64")
@@ -137,6 +141,33 @@ class YaMakePlatformTest(unittest.TestCase):
         args = compile_args(graph, "$(B)/a/x.cpp.o")
         self.assertEqual(args[1], "--target=x86_64-darwin-gnu")
         self.assertEqual(after_compilation_dir(args, 5), ["-pipe", "-m64", "-g", "-fdebug-default-version=4", "-fno-common"])
+
+    def test_target_platform_flags_select_the_target_debug_info(self):
+        files = library()
+        files["a/ya.make"] = "LIBRARY()\n" + NO_PLATFORM + "RUN_PROGRAM(tools/gen OUT gen.h)\nSRCS(x.cpp y.c)\nEND()\n"
+        lib.tool_program(files, "tools/gen", "gen")
+        lines_only = ("--target-platform-flag", "DEBUGINFO_LINES_ONLY=yes")
+        for flags, debug_info in (
+            ((), ["-g", "-fdebug-default-version=4", "-ggnu-pubnames", "-fdebug-info-for-profiling"]),
+            (lines_only, ["-gline-tables-only"]),
+            ((*lines_only, "--target-platform-flag", "NO_DEBUGINFO=yes"), []),
+        ):
+            with self.subTest(flags=flags):
+                code, graph, stderr = ay_make(
+                    files, "--build", "release", "--target-platform-build-type", "relwithdebinfo", *flags,
+                    platform="default-linux-x86_64",
+                )
+                self.assertEqual(code, 0, stderr)
+                for source in ("$(B)/a/x.cpp.o", "$(B)/a/y.c.o"):
+                    self.assertEqual(
+                        after_compilation_dir(compile_args(graph, source), 5 + len(debug_info)),
+                        ["-pipe", "-m64", "-O3", *debug_info, "-fno-common", "-ffunction-sections"],
+                    )
+                tool = next(
+                    node["cmds"][0]["cmd_args"] for node in graph["graph"]
+                    if node["kv"]["p"] == "CC" and "$(S)/tools/gen/main.cpp" in node["cmds"][0]["cmd_args"]
+                )
+                self.assertEqual(after_compilation_dir(tool, 4), ["-pipe", "-m64", "-O3", "-fno-common"])
 
     def test_partial_command_lists_matching_subcommands(self):
         result = ay("dev")

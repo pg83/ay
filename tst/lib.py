@@ -90,7 +90,8 @@ def main(argv):
         emit("UNIX", "yes")
     if presets.get("FORCE_NO_PIC", "").lower() not in ("yes", "true", "on", "1"):
         emit("PIC", "yes")
-    if build_type in ("debug", "debugnoasserts", "fastdebug") or build_type.endswith("-debug"):
+    debug = build_type in ("debug", "debugnoasserts", "fastdebug") or build_type.endswith("-debug")
+    if debug:
         emit("_BUILD_DEBUG", "yes")
     if release:
         emit("_BUILD_RELEASE", "yes")
@@ -111,6 +112,23 @@ def main(argv):
         if release:
             debug_info.append("-fdebug-info-for-profiling")
     emit("_DEBUG_INFO_FLAGS", *debug_info)
+    c_flags = ["$CL_DEBUG_INFO", "$CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__", "-pipe"]
+    if target["x86_64"]:
+        c_flags.append("-m64")
+    c_foptions = ["-fno-common", "-ffunction-sections", "-fdata-sections"]
+    if target["armv8"]:
+        c_foptions.append("-fsigned-char")
+    c_foptions += ["-fsized-deallocation", "-fexceptions"]
+    if target["linux"]:
+        c_foptions.append("-fuse-init-array")
+    c_foptions += ["-fcolor-diagnostics", "-faligned-allocation"]
+    if debug:
+        c_foptions.append("$FSTACK")
+    if release:
+        c_flags.append("$OPTIMIZE")
+    emit("OPTIMIZE", "-O3" if release else None)
+    emit("_C_FLAGS", *c_flags)
+    emit("_C_FOPTIONS", *c_foptions)
     print("C_DEFINES+=-D_THREAD_SAFE -D_PTHREADS")
     print('@import "${CONF_ROOT}/conf/compilers/gnu_compiler.conf"')
     emit("OBJCOPY_TOOL_VENDOR", tc.get("objcopy"))

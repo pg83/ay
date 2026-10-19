@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 var cxxStandardFlagChunk = []ANY{cxxStandardFlag.any()}
 
 var ccIncludesPrefix = []ANY{
@@ -18,54 +20,6 @@ var xclangDebugCompilationDir = []ANY{
 	argFdebugCompilationDir.any(),
 	argXclang.any(),
 	argTmp.any(),
-}
-
-var commonCFlagsPre = []ANY{
-	argPipe.any(),
-}
-
-var commonCFlagsPost = []ANY{
-	argFnoCommon.any(),
-	argFfunctionSections.any(),
-	argFdataSections.any(),
-	argFsignedChar.any(),
-	argFsizedDeallocation.any(),
-	argFexceptions.any(),
-	argFuseInitArray.any(),
-	argFcolorDiagnostics.any(),
-	argFalignedAllocation.any(),
-	argFstackProtector.any(),
-}
-
-var x86TargetCFlagsPre = []ANY{
-	argPipe.any(),
-	argM64.any(),
-}
-
-var x86TargetCFlagsPost = []ANY{
-	argFnoCommon.any(),
-	argFfunctionSections.any(),
-	argFdataSections.any(),
-	argFsizedDeallocation.any(),
-	argFexceptions.any(),
-	argFuseInitArray.any(),
-	argFcolorDiagnostics.any(),
-	argFalignedAllocation.any(),
-	argFstackProtector.any(),
-}
-
-var hostCFlags = []ANY{
-	argPipe.any(),
-	argM64.any(),
-	argO3.any(),
-	argFnoCommon.any(),
-	argFfunctionSections.any(),
-	argFdataSections.any(),
-	argFsizedDeallocation.any(),
-	argFexceptions.any(),
-	argFuseInitArray.any(),
-	argFcolorDiagnostics.any(),
-	argFalignedAllocation.any(),
 }
 
 var warningFlags = []ANY{
@@ -220,19 +174,44 @@ type CompileFlagBundle struct {
 	NoLibcBlock []ANY
 }
 
-func composeCompileCFlags(isa ISA, release bool, debugInfo []ANY) []ANY {
-	switch isa {
-	case ISAX8664:
-		if release {
-			return hostCFlags
-		}
+func composeCompileCFlags(env Environment, flags map[string]string, debugInfo []ANY) []ANY {
+	return concat(expandCompilerConfFlags(env, flags["_C_FLAGS"]), debugInfo, expandCompilerConfFlags(env, flags["_C_FOPTIONS"]))
+}
 
-		return concat(x86TargetCFlagsPre, debugInfo, x86TargetCFlagsPost)
-	case ISAAArch64, ISAArm64:
-		return concat(commonCFlagsPre, debugInfo, commonCFlagsPost)
+func expandCompilerConfFlags(env Environment, value string) []ANY {
+	words := splitShellWords(value)
+	out := make([]ANY, 0, len(words))
+
+	for _, w := range words {
+		switch w {
+		case "$CL_DEBUG_INFO", "$CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__":
+		case "$OPTIMIZE":
+			out = append(out, optimizeFlags(env)...)
+		case "$FSTACK":
+			out = append(out, argFstackProtector.any())
+		default:
+			if strings.HasPrefix(w, "$") {
+				throwFmt("ymake conf: compiler flag %s is not modelled", w)
+			}
+
+			out = append(out, internAny(w))
+		}
 	}
 
-	return nil
+	return out
+}
+
+func optimizeFlags(env Environment) []ANY {
+	switch {
+	case env.string(envBuildRelease) != "yes":
+		return nil
+	case env.string(envBuildSizeOptimized) != "yes":
+		return []ANY{argO3.any()}
+	case env.string(envCLANG) == "yes":
+		return []ANY{argOz.any()}
+	}
+
+	return []ANY{argOs.any()}
 }
 
 func compileFlagBundleFor(p *Platform) CompileFlagBundle {

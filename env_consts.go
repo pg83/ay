@@ -24,6 +24,8 @@ var (
 	envBINDIR                       = internEnv("BINDIR")
 	envBISON_PKGDATADIR             = internEnv("BISON_PKGDATADIR")
 	envBUILD_TYPE                   = internEnv("BUILD_TYPE")
+	envBuildRelease                 = internEnv("_BUILD_RELEASE")
+	envBuildSizeOptimized           = internEnv("_BUILD_SIZE_OPTIMIZED")
 	envCATBOOST_OPENSOURCE          = internEnv("CATBOOST_OPENSOURCE")
 	envCC                           = internEnv("CC")
 	envCGO_ENABLED                  = internEnv("CGO_ENABLED")
