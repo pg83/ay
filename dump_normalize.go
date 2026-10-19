@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"os"
 	"runtime"
@@ -81,7 +80,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	fetch := map[string]bool{}
 	outputsByUID := map[string][]string{}
 	targetOut0 := map[string]string{}
-	arOut0 := map[string]string{}
 
 	type p1Result struct {
 		uid        string
@@ -90,7 +88,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		isFetch    bool
 		roots      []NormalizeRoot
 		targetOut0 string
-		arOut0     string
 		outputs    []string
 	}
 
@@ -140,7 +137,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 					r.roots = append(r.roots, NormalizeRoot{target: t, kind: 'L'})
 				case p == "AR" && strings.Contains(out0, target.arInfix):
 					r.roots = append(r.roots, NormalizeRoot{target: t, kind: 'A'})
-					r.arOut0 = out0
 				case p == "TS" && strings.HasPrefix(tsPath, target.tsPrefix):
 					r.roots = append(r.roots, NormalizeRoot{target: t, kind: 'T'})
 				}
@@ -172,7 +168,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 					target.ld = append(target.ld, r.uid)
 				case 'A':
 					target.ar = append(target.ar, r.uid)
-					arOut0[r.uid] = r.arOut0
 				case 'T':
 					target.ts = append(target.ts, r.uid)
 				}
@@ -225,15 +220,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		case len(target.ar) == 1:
 			roots = append(roots, target.ar[0])
 		case len(target.ar) > 1:
-			for _, uid := range target.ar {
-				if strings.HasPrefix(arOut0[uid], target.ldPrefix) {
-					roots = append(roots, uid)
-				}
-			}
-
-			if len(roots) == n {
-				throwFmt("dump normalize: %d AR roots for target %q, none under %s", len(target.ar), target.name, target.ldPrefix)
-			}
+			throwFmt("dump normalize: %d AR roots for target %q; expected 1", len(target.ar), target.name)
 		}
 
 		roots = append(roots, target.ts...)
@@ -247,7 +234,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		}
 
 		if len(roots) == n {
-			fmt.Fprintf(os.Stderr, "\x1b[33mdump normalize: no LD/AR/TS root node found for target %q; it contributes no nodes\x1b[0m\n", target.name)
+			throwFmt("dump normalize: no LD/AR/TS root node found for target %q", target.name)
 		}
 	}
 
