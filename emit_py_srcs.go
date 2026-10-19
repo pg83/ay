@@ -19,14 +19,14 @@ var (
 
 const b32Lower = "abcdefghijklmnopqrstuvwxyz234567"
 
-type PySourceKind uint8
-
 const (
 	pySourcePlain PySourceKind = iota + 1
 	pySourceGenerated
 	pySourceProtoInput
 	pySourceProto
 )
+
+type PySourceKind uint8
 
 type PySourceMeta struct {
 	Module      STR
@@ -369,6 +369,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 
 		cmdArgs = na.chunkList(ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
 			na.anyList(internV(token, "-").any(), ps.Path.any(), outputPath.any()))
+
 		inputsHead := na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path)
 
 		if len(ps.ExtraInputs) > 0 {
@@ -376,7 +377,6 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 		} else {
 			nodeInputs = na.inputList(inputsHead, info.SourceInputs)
 		}
-
 	} else {
 		var genInfo *GeneratedFileInfo
 		var moduleName string
@@ -409,7 +409,6 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 				genInfo.SourceInputs,
 				ps.ExtraInputs,
 			)
-
 		} else {
 			nodeInputs = na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin), na.srcChunk(srcAbs))
 		}

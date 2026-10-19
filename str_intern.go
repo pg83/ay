@@ -16,6 +16,7 @@ var internTable = struct {
 	cellBase uint32
 	cellIdx  int
 	count    uint32
+	bound    uint32
 	bytes    *BumpAllocator[byte]
 }{
 	ids:      newIntMap[STR](1 << 19),
@@ -61,10 +62,43 @@ func (s STR) strID() uint32 {
 }
 
 func strBound() uint32 {
+	if chaosInternShuffle {
+		return internTable.bound
+	}
+
 	return internTable.count
 }
 
+func internPlace(s string, lo uint64) STR {
+	if internTable.count == 1 {
+		internTable.cells.set(0, InternCell{})
+	}
+
+	id := chaosInternID(internTable.count)
+
+	internTable.count++
+
+	if id >= internTable.bound {
+		internTable.bound = id + 1
+	}
+
+	if grow := int(id) + 1 - len(internTable.flatStr); grow > 0 {
+		internTable.flatStr = append(internTable.flatStr, make([]string, grow)...)
+		internTable.flatLo = append(internTable.flatLo, make([]uint64, grow)...)
+	}
+
+	internTable.flatStr[id] = s
+	internTable.flatLo[id] = lo
+	internTable.cells.set(id, InternCell{str: s, lo: lo})
+
+	return STR(id)
+}
+
 func internAppend(s string, lo uint64) STR {
+	if chaosInternShuffle {
+		return internPlace(s, lo)
+	}
+
 	id := STR(internTable.count)
 	cell := InternCell{str: s, lo: lo}
 
@@ -76,6 +110,7 @@ func internAppend(s string, lo uint64) STR {
 		page := make([]InternCell, 2)
 
 		page[0] = cell
+
 		internTable.cellPage = page
 		internTable.cellBase = internTable.count
 		internTable.cellIdx = 1
@@ -149,6 +184,7 @@ func internFill(prefix string, parts []string) ([]byte, int) {
 		n := len(prefix) + len(p0) + len(p1)
 		block := internTable.bytes.alloc(n)
 		off := copy(block, prefix)
+
 		off += copy(block[off:], p0)
 
 		copy(block[off:], p1)
@@ -159,6 +195,7 @@ func internFill(prefix string, parts []string) ([]byte, int) {
 		n := len(prefix) + len(p0) + len(p1) + len(p2)
 		block := internTable.bytes.alloc(n)
 		off := copy(block, prefix)
+
 		off += copy(block[off:], p0)
 		off += copy(block[off:], p1)
 

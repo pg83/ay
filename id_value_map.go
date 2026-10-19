@@ -23,8 +23,6 @@ func (m *IdValueMap) reset(size uint32) {
 	}
 }
 
-// put takes keys below the bound of the last reset: scheduleProducers resets
-// with vfsBound() and then stores outputs that already exist.
 func (m *IdValueMap) put(k VFS, v int32) {
 	id := uint32(k)
 

@@ -201,6 +201,7 @@ func (pm *IncludeParserManager) resolveScanConfig(ownAddIncl, peerAddIncl, baseS
 		peerAddInclSet:  peerAddIncl,
 		baseSearchPaths: baseSearchPaths,
 	}
+
 	sc.ri = buildCfgResolveIndex(sc)
 
 	pm.scanConfigCount++

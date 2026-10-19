@@ -89,13 +89,10 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
 	srcRel := e.moduleSourceRel(src)
-
 	ragelLDRef, ragelBinaryVFS := ctx.tool(argContribToolsRagel6)
 	rl6SourceVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	r6Out := ragel6OutVFS(instance, srcRel)
-
 	r6Parsed := e.scanner.parsedBucketForInput(rl6SourceVFS, parsedIncludesCpp, nil)
-
 	r6Ref := ctx.emit.reserve()
 
 	if isCxxSource(r6Out.relString()) {
@@ -115,6 +112,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 
 		e.emitR6(srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, r6Ref)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{

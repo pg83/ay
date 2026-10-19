@@ -8,7 +8,6 @@ func (FlatbuffersIncludeDirectiveParser) id() uint32 {
 
 func (FlatbuffersIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	raw := stripComments(concatChunks(data))
-
 	block := a.alloc(directiveBlockHint)
 	k := 0
 

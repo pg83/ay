@@ -46,9 +46,9 @@ func (e *EmitContext) emitSwigC() {
 		inputs[1] = na.vfsList(srcVFS)
 		copy(inputs[2:], cvBuckets)
 		na.inputs.commit(len(inputs))
+
 		inputChunks := InputChunks(inputs[:len(inputs):len(inputs)])
 		swigClosure := collectBucketVFS(ctx.na, cvBuckets, func(VFS) bool { return true })
-
 		swRef := ctx.emit.reserve()
 		moduleName := swigModuleName(stmt.Module)
 
@@ -71,6 +71,7 @@ func (e *EmitContext) emitSwigC() {
 				KV:      &swigCKV,
 			}, swRef)
 		}
+
 		pending := e.ctx.na.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{

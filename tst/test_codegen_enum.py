@@ -52,11 +52,11 @@ class EnumSerializationTest(unittest.TestCase):
         self.assertEqual(plain["inputs"], [ENUM_PARSER, "$(S)/mod/enums.h"])
         self.assertEqual(plain["foreign_deps"], {"tool": [parser["uid"]]})
         plain_compile = lib.node_by_output(graph, "$(B)/mod/enums.h_serialized.cpp.o")
-        self.assertEqual(plain_compile["inputs"], [
+        self.assertEqual(lib.bucketed(plain_compile["inputs"], 1), lib.bucketed([
             "$(B)/mod/enums.h_serialized.cpp",
             "$(S)/mod/enums.h",
             "$(S)/util/generic/serialized_enum.h",
-        ])
+        ], 1))
 
         with_header = lib.node_by_output(graph, "$(B)/mod/sub/enums2.h_serialized.h")
         self.assertEqual(with_header["outputs"], [

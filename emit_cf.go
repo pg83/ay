@@ -45,6 +45,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
+
 	var cfgVars []string
 
 	if srcVFS.isSource() {
@@ -54,7 +55,6 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	python3 := d.cc.TC.Python3
 	cfRef := ctx.emit.reserve()
 	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
-
 	scanner := e.scanner
 	scanCtx := d.scanCtx
 
@@ -85,6 +85,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 			Resources: usesPython3,
 		}, cfRef)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{

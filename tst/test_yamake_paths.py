@@ -103,8 +103,8 @@ class YaMakePathsTest(unittest.TestCase):
             "d10.cpp": "$(B)/a/s10.cpp",
         })
         self.assertEqual(
-            lib.node_by_output(graph, "$(B)/a/d0.cpp")["inputs"],
-            ["$(S)/other/s0.cpp", "$(S)/a/plain/h4.h", "$(S)/other/h0.h", "$(S)/other/h1.h"],
+            lib.bucketed(lib.node_by_output(graph, "$(B)/a/d0.cpp")["inputs"], 1),
+            lib.bucketed(["$(S)/other/s0.cpp", "$(S)/a/plain/h4.h", "$(S)/other/h0.h", "$(S)/other/h1.h"], 1),
         )
 
     def test_source_path_forms(self):

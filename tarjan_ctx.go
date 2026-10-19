@@ -1,5 +1,7 @@
 package main
 
+var tarjans TarjanPool
+
 type TarjanScratch struct {
 	slots map[VFS]int
 	nodes []tarjanNode
@@ -99,8 +101,6 @@ func (p *TarjanPool) put(tc *TarjanCtx) {
 	p.free = append(p.free, tc)
 }
 
-var tarjans TarjanPool
-
 func (tc *TarjanCtx) runSCC(g ClosureSink, root VFS) uint64 {
 	tc.scratch.reset(vfsBound())
 	tc.stack = tc.stack[:0]
@@ -138,8 +138,6 @@ func (tc *TarjanCtx) visitChild(w VFS) {
 			tc.scratch.setLow(v, tc.scratch.lowOf(w))
 		}
 	} else if tc.scratch.indexOf(w) < tc.scratch.lowOf(v) {
-		// w is visited but not cached, so it is still on the stack:
-		// emitClosure caches every member of a finished SCC.
 		tc.scratch.setLow(v, tc.scratch.indexOf(w))
 	}
 }

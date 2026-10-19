@@ -38,7 +38,6 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 	headerVFS := build(srcVFS.relString(), ".h")
 	scRef := ctx.emit.reserve()
 	runtimeInclude := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(domschemeRuntimeVFS.rel().any())})
-
 	scanner := e.scanner
 	scanCtx := d.scanCtx
 
@@ -47,6 +46,7 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 
 		e.emitSCReserved(srcVFS, headerVFS, domBinary, runtimeClosure, domLDRef, scRef)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{

@@ -76,6 +76,7 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 		srcInputs = ctx.na.dedupClosure(srcInputs, [][]VFS{sourceClosure})
 		e.emitGP(srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{

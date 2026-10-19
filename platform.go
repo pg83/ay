@@ -254,7 +254,7 @@ func buildPlatformIfEnv(p *Platform) Environment {
 	}
 
 	if !env.hasBindingID(envCUDA_ROOT) {
-		env.setVFS(envCUDA_ROOT, build("resources/CUDA"))
+		env.setVFS(envCUDA_ROOT, bldResourcesCuda)
 	}
 
 	if !env.hasBindingID(envCUDA_ARCHITECTURES) {

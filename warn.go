@@ -1,5 +1,17 @@
 package main
 
+var warnKindStr = [...]string{
+	WarnSysIncl:           "sysincl",
+	WarnMissingInclude:    "missing-include",
+	WarnUnsupportedSource: "unsupported-source",
+	WarnMissingAddincl:    "missing-addincl",
+	WarnBucketHash:        "bucket-hash",
+	WarnUnknownMacro:      "unknown-macro",
+	WarnBadMacroArgs:      "bad-macro-args",
+	WarnMissingProducer:   "missing-producer",
+	WarnModuleFailed:      "module-failed",
+}
+
 const (
 	WarnSysIncl WarnKind = iota
 
@@ -26,18 +38,6 @@ type Warn struct {
 }
 
 type WarnKind int
-
-var warnKindStr = [...]string{
-	WarnSysIncl:           "sysincl",
-	WarnMissingInclude:    "missing-include",
-	WarnUnsupportedSource: "unsupported-source",
-	WarnMissingAddincl:    "missing-addincl",
-	WarnBucketHash:        "bucket-hash",
-	WarnUnknownMacro:      "unknown-macro",
-	WarnBadMacroArgs:      "bad-macro-args",
-	WarnMissingProducer:   "missing-producer",
-	WarnModuleFailed:      "module-failed",
-}
 
 func (k WarnKind) string() string {
 	return warnKindStr[k]

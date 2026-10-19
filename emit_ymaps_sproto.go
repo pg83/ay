@@ -47,6 +47,7 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 	pe := func() {
 		e.emitYmapsSprotoHeaderSnap(scanner, pending, outRoot, sprotocLDRef, sprotocBinary, scanCtx)
 	}
+
 	onUse := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{

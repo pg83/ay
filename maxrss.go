@@ -14,6 +14,7 @@ import (
 func cmdMaxRSS(g GlobalFlags, args []string) int {
 	hz := 1.0
 	sub := args
+
 	var own []string
 
 	for i, a := range args {
@@ -56,8 +57,8 @@ func cmdMaxRSS(g GlobalFlags, args []string) int {
 	}
 
 	interval := time.Duration(float64(time.Second) / hz)
-
 	cmd := exec.Command(sub[0], sub[1:]...)
+
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -152,6 +153,7 @@ func subtreeRSSKB(root int) uint64 {
 
 	for len(stack) > 0 {
 		pid := stack[len(stack)-1]
+
 		stack = stack[:len(stack)-1]
 
 		total += rss[pid]
@@ -168,8 +170,6 @@ func readProcStat(pid int) (ppid int, rssKB uint64, ok bool) {
 		return 0, 0, false
 	}
 
-	// The kernel writes "pid (comm) state ppid ...": comm may hold any byte, so
-	// the fields start after the last ')'. The format itself is fixed.
 	s := string(data)
 	rp := strings.LastIndexByte(s, ')')
 
@@ -180,6 +180,7 @@ func readProcStat(pid int) (ppid int, rssKB uint64, ok bool) {
 	assert(len(fields) >= 22, "maxrss: /proc stat with too few fields")
 
 	ppid = throw2(strconv.Atoi(fields[1]))
+
 	pages := throw2(strconv.ParseUint(fields[21], 10, 64))
 
 	return ppid, pages * uint64(os.Getpagesize()) / 1024, true

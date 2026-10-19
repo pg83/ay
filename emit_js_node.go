@@ -77,8 +77,8 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	pe := func() {
 		e.emitJSReserved(outputName, jsSources, joinClosure, ctx.target, tc, ctx.scripts, jsRef)
 	}
-	pending := e.ctx.na.pendingEmit(pe)
 
+	pending := e.ctx.na.pendingEmit(pe)
 	joinOutVFS := build(instance.Path.relString(), "/", js.OutputName)
 	ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
 
@@ -122,6 +122,7 @@ func (e *EmitContext) joinSrcsIncludeClosure(scanPlatform *Platform, sources []s
 	}
 
 	order := make([]VFS, 0, 1024)
+
 	for _, srcRelOnDisk := range srcRels {
 		sc := scanner.getScanCtx(d.scanCtx, domain, scanner.parsers.registry.registeredParserFor(srcRelOnDisk))
 

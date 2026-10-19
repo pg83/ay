@@ -90,7 +90,9 @@ func (e *EmitContext) srcPosition(tok STR) ([]VFS, []VFS) {
 	src := tok.string()
 	class := srcExtClassOf(tok.any())
 	outsMark := len(e.prodVFS)
+
 	var protoRelID STR
+
 	protoRel := ""
 
 	switch class {
@@ -173,6 +175,7 @@ func (e *EmitContext) srcPosition(tok STR) ([]VFS, []VFS) {
 				}
 
 				clean := filepath.ToSlash(filepath.Clean(name))
+
 				e.prodVFS = append(e.prodVFS, build(clean))
 
 				if outputRoot != "" {
@@ -219,7 +222,6 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	goModule := isGoModuleType(d.moduleStmt.Name)
-
 	backing := e.prodBacking[:0]
 	positions := e.prodPos[:0]
 

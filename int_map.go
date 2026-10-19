@@ -18,6 +18,7 @@ type IntMap[V any] struct {
 
 func newIntMap[V any](hint int) *IntMap[V] {
 	hint = chaosTableHint(hint)
+
 	c := intMapMinCap
 
 	for c*intMapFillNum < hint*intMapFillDen {
@@ -102,6 +103,7 @@ func (m *IntMap[V]) grow() {
 	count := m.count
 
 	m.alloc(len(oldKeys) * 2)
+
 	keys := m.keys
 	values := m.values
 	mask := m.mask

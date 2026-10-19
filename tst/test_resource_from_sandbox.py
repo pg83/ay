@@ -65,12 +65,12 @@ class FromSandboxTest(unittest.TestCase):
         )
 
         compile_node = lib.node_by_output(graph, "$(B)/lib/user.cpp.o")
-        self.assertEqual(compile_node["inputs"], [
+        self.assertEqual(lib.bucketed(compile_node["inputs"], 2), lib.bucketed([
             "$(S)/lib/user.cpp",
             "$(B)/lib/extra.h",
             "$(S)/lib/dep.h",
             "$(S)/lib/dep2.h",
-        ])
+        ], 2))
         self.assertIn(sandbox["uid"], compile_node["deps"])
 
         archive = lib.node_by_output(graph, "$(B)/lib/liblib.a")

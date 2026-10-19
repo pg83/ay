@@ -90,7 +90,6 @@ func (c *BucketCache) internBucketList(buckets [][]VFS) *BucketList {
 	}
 
 	h1, h2 := bucketListHash(buckets)
-
 	cell, found := c.listIntern.cell(h1)
 
 	if found {
@@ -124,6 +123,7 @@ func (c *BucketCache) internBucketList(buckets [][]VFS) *BucketList {
 
 func (c *BucketCache) commitBucketList(buckets [][]VFS) *BucketList {
 	c.chunks.commit(len(buckets))
+
 	list := c.lists.one()
 
 	*list = BucketList(buckets[:len(buckets):len(buckets)])
@@ -172,8 +172,6 @@ func (c *BucketCache) storeBucket(elems []VFS) []VFS {
 	n := len(elems) + 1
 	block := c.pool.alloc(n)[:n]
 
-	// Keep the mutable visit epoch outside the immutable slice: it must not
-	// affect bucket hashing, equality, capacity, or downstream input chunks.
 	block[0] = 0
 	copy(block[1:], elems)
 	c.pool.commit(n)
@@ -182,8 +180,6 @@ func (c *BucketCache) storeBucket(elems []VFS) []VFS {
 }
 
 func bucketEpochCell(bucket []VFS) *uint32 {
-	// Every interned bucket is returned by storeBucket with this arena-backed
-	// header immediately before its first element.
 	return (*uint32)(unsafe.Add(unsafe.Pointer(unsafe.SliceData(bucket)), -int(unsafe.Sizeof(VFS(0)))))
 }
 
@@ -231,7 +227,9 @@ func (c *BucketCache) spliceOne(seen *IdSet, v VFS) {
 	}
 
 	seen.gen.s[id] = seen.epoch
+
 	r := closureBucketIndex(v)
+
 	c.scratch[r] = append(c.scratch[r], v)
 }
 
@@ -258,16 +256,12 @@ func (c *BucketCache) spliceBucketSlow(seen *IdSet, bucket []VFS) {
 }
 
 func (c *BucketCache) spliceBucket(seen *IdSet, bucket []VFS) {
-	// Closure bucket lists contain only non-empty interned buckets.
 	if !c.firstBucketVisit(bucket) {
 		return
 	}
 
 	r := closureBucketIndex(bucket[0])
 
-	// All seen values except the closure's self are also present in scratch.
-	// Thus the first bucket in any other partition is known to be disjoint:
-	// stamp it without probes and copy it as one block.
 	if len(c.scratch[r]) == 0 && r != c.selfBucket {
 		gen := unsafe.SliceData(seen.gen.s)
 		epoch := seen.epoch

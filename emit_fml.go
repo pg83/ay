@@ -10,7 +10,6 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 	srcVFS := e.resolveModuleSourceVFS(src, e.d.cc.SrcDirs)
 	outVFS := build(instance.Path.relString(), "/", srcRel, ".inc")
 	env := envVarsVCS
-
 	ref := ctx.emit.reserve()
 
 	pe := func() {
@@ -33,6 +32,7 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 
 		e.emitReservedNode(node, ref)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{

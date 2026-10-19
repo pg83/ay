@@ -13,7 +13,6 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 	outVFS := build(module, "/", srcRel, ".cpp")
 	ref := ctx.emit.reserve()
 	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
-
 	scanner := e.scanner
 	scanCtx := d.scanCtx
 
@@ -48,6 +47,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 
 		e.emitReservedNode(node, ref)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{

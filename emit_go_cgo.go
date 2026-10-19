@@ -222,6 +222,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 
 		e.emitReservedNode(node, ref)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
@@ -537,6 +538,7 @@ func (e *EmitContext) flushGoCgo2() {
 	resolvedSrcs := e.prodVFSTake(srcMark)
 	sourceInputs := vfsScratches.get()
 	buildInputs := vfsScratches.get()
+
 	pushIn := func(v VFS) {
 		if v.isBuild() {
 			buildInputs = append(buildInputs, v)
@@ -608,6 +610,7 @@ func (e *EmitContext) flushGoCgo2() {
 			pushIn(o)
 		}
 	})
+
 	sourceChunk := na.vfsList(sourceInputs...)
 	buildChunk := na.vfsList(buildInputs...)
 

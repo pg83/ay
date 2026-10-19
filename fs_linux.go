@@ -90,6 +90,7 @@ func (fs *OsFS) readFileRel(rel string) [][]byte {
 	defer syscall.Close(fd)
 
 	n := readEINTR(fd, fs.readBuf)
+
 	fs.readResult[0] = fs.readBuf[:n]
 
 	if n < len(fs.readBuf) {
@@ -212,9 +213,6 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	}
 
 	ents := fs.direntBuf[:n]
-	// A linux_dirent64 record is at least 24 bytes including alignment.  The
-	// arena only commits the entries actually written, so this upper bound lets
-	// us decode and intern each name in one pass.
 	block := fs.dirNames.alloc(len(ents) / 24)
 	k := 0
 
@@ -263,7 +261,6 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 
 	names := block[:k]
 
-	// readdir order depends on the filesystem; walks intern paths in view order.
 	slices.SortFunc(names, func(a, b uint32) int {
 		return strings.Compare(STR(a>>1).string(), STR(b>>1).string())
 	})

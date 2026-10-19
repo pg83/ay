@@ -56,7 +56,6 @@ func throwFmt(format string, args ...any) {
 	exceptionf(format, args...).throw()
 }
 
-// assert guards an invariant: ok is false only when ay itself is defective.
 func assert(ok bool, msg string) {
 	if !chaosAssert(ok) {
 		throwFmt("%s", msg)

@@ -40,6 +40,7 @@ func (e *EmitContext) emitLuaJit21() {
 		pe := func() {
 			e.emitLJReserved(luaSrc, rawOut, compilerBin, compilerLDRef, cwd, ref)
 		}
+
 		pending := e.ctx.na.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{

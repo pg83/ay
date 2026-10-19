@@ -1,10 +1,5 @@
 package main
 
-var (
-	srcRootDirVFS = source("")
-	bldRootDirVFS = build("")
-)
-
 const vfsPrefixLen = len("$(S)/")
 
 const (
@@ -17,7 +12,7 @@ type VFSRoot uint8
 type VFS uint32
 
 func vfsBound() uint32 {
-	return internTable.count << 1
+	return strBound() << 1
 }
 
 func intern(full string) VFS {
@@ -107,7 +102,6 @@ func (v VFS) string() string {
 	return v.prefix() + rel
 }
 
-// sharedString names node outputs, which are files below the build root.
 func (v VFS) sharedString() string {
 	return v.prefix() + v.sharedRel()
 }

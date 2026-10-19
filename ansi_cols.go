@@ -22,8 +22,6 @@ const (
 	ansiRST = ansiESC + "[0m"
 )
 
-// color takes a name from ansiCols: the callers pass constants and node
-// colors, which every node sets.
 func color(name, s string) string {
 	c, ok := ansiCols[name]
 

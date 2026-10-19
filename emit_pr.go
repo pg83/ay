@@ -165,6 +165,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			closureBuild:  inputClosure.builds,
 		}, prRef)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet, ridesHeaderViaParsed bool) {
@@ -341,6 +342,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 
 	sources := sourceScratch
 	builds := buildScratch
+
 	appendInput := func(v VFS) {
 		if v.isBuild() {
 			builds = append(builds, v)
@@ -689,12 +691,15 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		na.vfs.commit(len(tools))
 
 		tools = tools[:len(tools):len(tools)]
+
 		sources := na.filterSeen(deduper, spec.inSources)
 		builds := na.filterSeen(deduper, spec.inBuilds)
 		closureSources := na.filterSeen(deduper, spec.closureSource)
 		closureBuilds := na.filterSeen(deduper, spec.closureBuild)
+
 		inputs = na.inputList(tools, sources, builds, closureSources, closureBuilds)
 	})
+
 	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
 
 	var stdoutPath VFS

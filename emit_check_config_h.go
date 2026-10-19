@@ -41,6 +41,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 			Resources: usesPython3,
 		}, chRef)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{

@@ -259,6 +259,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 
 	na.anys.commit(len(tail))
 	pe.tail = tail[:len(tail):len(tail)]
+
 	return pe
 }
 
@@ -358,6 +359,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	transitive := e.scanner.walkClosure(source(protoRelPath), scanCtx, scanDomainProto)
 	toolInputs := na.vfs.alloc(3)[:0]
+
 	toolInputs = append(toolInputs, protocBinary)
 
 	if d.grpc {
@@ -370,6 +372,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	na.vfs.commit(len(toolInputs))
 	toolInputs = toolInputs[:len(toolInputs):len(toolInputs)]
+
 	sourceInputsHead := na.vfs.alloc(2 + len(producerSourceInputs))[:0]
 
 	sourceInputsHead = append(sourceInputsHead, pbPyWrapperVFS)
@@ -416,8 +419,8 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		outputs: outputs, extOut: extOut,
 		toolRefs: toolRefs, pyPBRef: pyPBRef,
 	}
-	pyPBPE := na.pendingEmitter(pending)
 
+	pyPBPE := na.pendingEmitter(pending)
 	sourceInputs := na.dedupSourceVFS(sourceInputsHead, transitive.bucketList())
 
 	e.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})

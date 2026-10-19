@@ -100,26 +100,12 @@ class StreamingEmitterTest(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertEqual(result.stderr, "")
 
-    def test_dump_writes_one_graph_per_target(self):
+    def test_dump_writes_one_graph_for_all_targets(self):
         result = run_make(fixture(), "-G", "one", "two")
         self.assertEqual(result.returncode, 0, result.stderr)
-        decoder = json.JSONDecoder()
-        text = result.stdout
-        graphs = []
-        position = 0
-        while position < len(text):
-            while position < len(text) and text[position].isspace():
-                position += 1
-            if position == len(text):
-                break
-            graph, position = decoder.raw_decode(text, position)
-            graphs.append(graph)
-        self.assertEqual(len(graphs), 2)
-        results = [
-            [node["outputs"][0] for node in graph["graph"] if node["uid"] in graph["result"]]
-            for graph in graphs
-        ]
-        self.assertEqual(results, [["$(B)/one/libone.a"], ["$(B)/two/two"]])
+        graph = json.loads(result.stdout)
+        results = sorted(node["outputs"][0] for node in graph["graph"] if node["uid"] in graph["result"])
+        self.assertEqual(results, ["$(B)/one/libone.a", "$(B)/two/two"])
 
     def test_repeated_target_without_archive_streams_cleanly(self):
         result = run_make(fixture(), "globalonly", "globalonly")

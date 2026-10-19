@@ -97,6 +97,7 @@ func (e *EmitContext) emitBuildInfoStmt() {
 	pe := func() {
 		e.emitBIReserved(createFor, biFlagsForInstance(instance.Platform), tc, biRef)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{

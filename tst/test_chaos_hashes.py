@@ -25,6 +25,21 @@ class ChaosHashesTest(unittest.TestCase):
             with self.subTest(words=words):
                 self.assert_same_graph(words)
 
+    def test_interning_order_changes_only_closure_order(self):
+        # Inputs list the include closure in buckets of interned ids; every
+        # other part of the graph is independent of the interning order.
+        def canonical(graph):
+            for node in graph["graph"]:
+                node["inputs"] = sorted(node["inputs"])
+            return graph
+
+        for seed in (1, 2):
+            with self.subTest(seed=seed):
+                self.assertEqual(
+                    canonical(lib.make(self.files, "app", env={"AY_CHAOS": f"intern-seed={seed}"})),
+                    canonical(lib.make(self.files, "app")),
+                )
+
     def test_evicting_source_resolution_cache_keeps_the_graph(self):
         self.assert_same_graph("hash-source-under-slot=0")
 

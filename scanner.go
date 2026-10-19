@@ -27,6 +27,19 @@ const (
 	includeCythonSibling
 )
 
+const (
+	scanDomainCC ScanDomain = iota
+	scanDomainAsm
+	scanDomainCython
+	scanDomainProto
+	scanDomainAux
+	scanDomainFlatc
+	scanDomainGoAsm
+	scanDomainSwig
+	scanDomainJoinTarget
+	scanDomainCount
+)
+
 type IncludeKind int
 
 type IncludeDirective struct {
@@ -120,19 +133,6 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 }
 
 type ScanDomain uint8
-
-const (
-	scanDomainCC ScanDomain = iota
-	scanDomainAsm
-	scanDomainCython
-	scanDomainProto
-	scanDomainAux
-	scanDomainFlatc
-	scanDomainGoAsm
-	scanDomainSwig
-	scanDomainJoinTarget
-	scanDomainCount
-)
 
 type ScanContext struct {
 	configs  [scanDomainCount]*ScanConfig
@@ -285,7 +285,6 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	incDir := internStr(pathDir(vfsPath.relString())).source()
 	suppressCimportNames := false
 	prevProbeMissed := false
-
 	entries := own
 
 	for pass := 0; pass < 2; pass++ {
@@ -310,6 +309,7 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 			}
 
 			mark := len(out)
+
 			out = sc.resolve(out, vfsPath, incDir, entry)
 			prevProbeMissed = len(out) == mark
 
@@ -368,6 +368,7 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) []VFS {
 	}
 
 	scratch := vfsScratches.get()
+
 	scratch = sc.appendResolvedChildren(scratch, abs)
 
 	k := len(scratch)
@@ -514,6 +515,7 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	}
 
 	out = sc.resolveSearchPath(out, includerAbs, incDir, d)
+
 	searchOut := out[mark:]
 	includerRel := includerAbs.relString()
 
@@ -641,6 +643,7 @@ func buildCfgResolveIndex(cfg *ScanConfig) *CfgResolveIndex {
 
 	idx.indexable = true
 	idx.rank = newIntValueMap[int32](2 * (len(cfg.ownAddIncl) + len(cfg.peerAddInclSet)))
+
 	r := int32(0)
 
 	add := func(p VFS) {

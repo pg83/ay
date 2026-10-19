@@ -120,6 +120,8 @@ var acknowledgedTokSet = func() BitSet {
 }()
 
 const (
+	variantDemandShift     = 4
+	variantDemandMask      = uint16(0xF) << variantDemandShift
 	peerKindLangDefault    = 0
 	peerKindProgramDefault = 1
 	peerKindUserPeer       = 2
@@ -241,7 +243,23 @@ func newModuleMemo() *moduleMemo {
 	return &moduleMemo{entries: newBumpAllocator[moduleMemoEntry]()}
 }
 
-func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) NodeRef {
+func runGenIntoWithResources(fs FS, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) {
+	ctx := newGenCtx(fs, hostP, targetP, emitter, onWarn, testMode, keepGoing)
+
+	for _, t := range ctx.linkingTargetsFirst(targets) {
+		ctx.genTarget(t, rootDemand)
+	}
+
+	if ctx.buckets.h1Mismatches > 0 {
+		onWarn(Warn{
+			Kind: WarnBucketHash,
+			Message: fmt.Sprintf("%d h1 mismatches, %d buckets in overflow (pair-collision headroom shrinking)",
+				ctx.buckets.h1Mismatches, ctx.buckets.overflowed),
+		})
+	}
+}
+
+func newGenCtx(fs FS, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool) *GenCtx {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
 
@@ -307,23 +325,60 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	ctx.scannerHost = hostScanner
 	ctx.vcsRef = emitVCSNode(ctx.emit, ctx.host)
 
-	seed := ModuleInstance{
-		Path:     source(filepath.Clean(targetDir)),
-		Kind:     KindBin,
+	return ctx
+}
+
+func (ctx *GenCtx) linkingTargetsFirst(targets []string) []string {
+	if len(targets) < 2 {
+		return targets
+	}
+
+	out := slices.Clone(targets)
+
+	slices.SortStableFunc(out, func(a, b string) int {
+		la, lb := isLinkingModuleType(ctx.moduleName(a)), isLinkingModuleType(ctx.moduleName(b))
+
+		switch {
+		case la == lb:
+			return 0
+		case la:
+			return -1
+		default:
+			return 1
+		}
+	})
+
+	return out
+}
+
+func (ctx *GenCtx) moduleName(dir string) TOK {
+	for _, st := range moduleStmts(ctx, filepath.Clean(dir)) {
+		if m, ok := st.(*ModuleStmt); ok {
+			return m.Name
+		}
+	}
+
+	return 0
+}
+
+func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance {
+	kind := KindLib
+
+	if name := ctx.moduleName(dir); name == tokPy3Program || name == 0 {
+		kind = KindBin
+	}
+
+	return ModuleInstance{
+		Path:     source(filepath.Clean(dir)),
+		Kind:     kind,
 		Language: LangCPP,
-		Platform: targetP,
-		Demand:   rootDemand,
+		Platform: ctx.target,
+		Demand:   demand,
 	}
+}
 
-	root := genModule(ctx, seed)
-
-	if ctx.buckets.h1Mismatches > 0 {
-		onWarn(Warn{
-			Kind: WarnBucketHash,
-			Message: fmt.Sprintf("%d h1 mismatches, %d buckets in overflow (pair-collision headroom shrinking)",
-				ctx.buckets.h1Mismatches, ctx.buckets.overflowed),
-		})
-	}
+func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
+	root := genModule(ctx, ctx.rootInstance(targetDir, rootDemand))
 
 	ctx.emit.result(root.LDRef)
 
@@ -332,13 +387,7 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	}
 
 	for _, dir := range discoverRecursedFinalTargets(ctx, filepath.Clean(targetDir)) {
-		sub := genModule(ctx, ModuleInstance{
-			Path:     source(dir),
-			Kind:     KindBin,
-			Language: LangCPP,
-			Platform: targetP,
-			Demand:   rootDemand,
-		})
+		sub := genModule(ctx, ctx.rootInstance(dir, rootDemand))
 
 		if sub.LDRef != 0 {
 			ctx.emit.result(sub.LDRef)
@@ -346,12 +395,10 @@ func runGenIntoWithResources(fs FS, targetDir string, hostP, targetP *Platform, 
 	}
 
 	if ctx.testMode && root.testSuiteInfo != nil {
-		for _, ref := range emitTestRunNodes(plainEmit, targetP, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
+		for _, ref := range emitTestRunNodes(ctx.emit, ctx.target, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
 		}
 	}
-
-	return root.LDRef
 }
 
 func confPy3NoStripOnDebug(fs FS) bool {
@@ -436,10 +483,10 @@ func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
 	return finals
 }
 
-func genDumpGraphWithResources(fs FS, targetDir string, hostP, targetP *Platform, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) *Graph {
+func genDumpGraphWithResources(fs FS, targets []string, hostP, targetP *Platform, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) *Graph {
 	emitter := newStreamingEmitter(nil)
 
-	runGenIntoWithResources(fs, targetDir, hostP, targetP, emitter, onWarn, testMode, keepGoing, rootDemand)
+	runGenIntoWithResources(fs, targets, hostP, targetP, emitter, onWarn, testMode, keepGoing, rootDemand)
 
 	return finalize(emitter)
 }
@@ -515,7 +562,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		src := meta.Source.string()
 
 		if !hasGztproto && extIsGztproto(src) {
-			d.peerdirs = append(d.peerdirs, internStr("kernel/gazetteer/proto").any())
+			d.peerdirs = append(d.peerdirs, strKernelGazetteerProto.any())
 			hasGztproto = true
 		}
 
@@ -643,6 +690,7 @@ type ResolvedPeer struct {
 
 func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccOwn, ccPeer, fullPeer, protoInclude []VFS) *ScanContext {
 	scanCtx := newScanContext(ctx.na, ctx.parsers, ccOwn, ccPeer, fullPeer, includeScannerBasePaths())
+
 	scanCtx.asmAddIncl = ctx.na.vfsList(d.asmAddIncl...)
 	scanCtx.cythonAddIncl = ctx.na.vfsList(d.cythonAddIncl...)
 	scanCtx.protoInclude = ctx.na.vfsList(protoInclude...)
@@ -712,7 +760,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	defer ctx.popFrame()
 
 	d := collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
-
 	e := newEmitContextIn(frame, ctx, instance, d, nil)
 
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary {
@@ -758,7 +805,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if d.moduleStmt.Name == tokResourcesLibrary {
 		if e.bindResourceGlobalVars(env) {
 			d = collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
-
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
 
@@ -770,7 +816,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if e.bindResourceGlobalVars(env) {
 			d = collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
-
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
 
@@ -810,7 +855,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	languageDefaults := e.defaultPeerdirsForModule()
-
 	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path.relString())
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
 
@@ -1098,6 +1142,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if ldplugCap != 0 {
 			ldplugBlockR := ctx.refSlices.alloc(ldplugCap)
 			ldplugBlockP := ctx.vfsSlices.alloc(ldplugCap)
+
 			k = 0
 
 			for _, rp := range resolved {
@@ -1119,6 +1164,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if archiveCap != 0 {
 			archiveBlockR := ctx.refSlices.alloc(archiveCap)
 			archiveBlockP := ctx.vfsSlices.alloc(archiveCap)
+
 			k = 0
 
 			for _, rp := range resolved {
@@ -1148,6 +1194,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if globalCap != 0 {
 			globalBlockR := ctx.refSlices.alloc(globalCap)
 			globalBlockP := ctx.vfsSlices.alloc(globalCap)
+
 			k = 0
 
 			for _, rp := range resolved {
@@ -1177,6 +1224,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			sbomBlockR := ctx.refSlices.alloc(sbomCap)
 			sbomBlockP := ctx.vfsSlices.alloc(sbomCap)
 			peerSbomRefsRaw, peerSbomPathsRaw, sbomInsertIdx := aggregateSbomComponents(deduper, e, d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])
+
 			ownSbomInsertIdx = sbomInsertIdx
 			peerSbomRefs = ctx.refSlices.intern(peerSbomRefsRaw)
 			peerSbomPaths = ctx.vfsSlices.intern(peerSbomPathsRaw)
@@ -1187,6 +1235,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if waCap != 0 {
 			waBlockR := ctx.refSlices.alloc(waCap)
 			waBlockP := ctx.vfsSlices.alloc(waCap)
+
 			k = 0
 
 			for _, rp := range resolved {
@@ -1217,6 +1266,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if waCmdCap != 0 {
 			waCmdBlock := ctx.vfsSlices.alloc(waCmdCap)
+
 			k = 0
 
 			for _, rp := range resolved {
@@ -1245,6 +1295,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if dynCap != 0 {
 			dynBlockR := ctx.refSlices.alloc(dynCap)
 			dynBlockP := ctx.vfsSlices.alloc(dynCap)
+
 			k = 0
 
 			for _, rp := range resolved {
@@ -1433,6 +1484,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		effectiveAddInclGlobal = dedupSharedWith(deduper, ctx.vfsSlices, d.addInclGlobal, peerAddInclForProp)
+
 		ownProtoInclude := frame.ownProtoInclude[:0]
 
 		defer func() { frame.ownProtoInclude = ownProtoInclude[:0] }()
@@ -1442,7 +1494,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		ownProtoInclude = append(ownProtoInclude, d.protoAddInclGlobal...)
-
 		peerProtoInclude = frame.peerProtoInclude[:0]
 
 		defer func() { frame.peerProtoInclude = peerProtoInclude[:0] }()
@@ -1467,6 +1518,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	})
 
 	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
+
 	mergedLDPluginRefs = peerLDPluginRefs
 	mergedLDPluginPaths = peerLDPluginPaths
 
@@ -1581,8 +1633,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	dedupedAddIncl = ctx.na.vfsList(dedupedAddIncl...)
 	selfPeerAddInclGlobal = ctx.na.vfsList(selfPeerAddInclGlobal...)
-	fullPeerAddInclGlobal := ctx.na.vfsList(peerAddInclGlobal...)
 
+	fullPeerAddInclGlobal := ctx.na.vfsList(peerAddInclGlobal...)
 	effectiveSrcDirs := d.srcDirs
 
 	if pd := programSourceDir(d.moduleStmt); pd != nil {
@@ -1643,6 +1695,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	e = newEmitContextIn(frame, ctx, instance, d, &frame.peerCtx)
 
 	scanAddIncl := e.cythonAdjustModuleCCBlocks()
+
 	e.sprotoAdjustProtoEnv()
 	d.scanCtx = newModuleScanContext(ctx, instance, d, scanAddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
 	e.emit()
@@ -1975,11 +2028,6 @@ func (e *EmitContext) emittedProducer(ref NodeRef) *Node {
 	return e.ctx.emit.nodes.s[ref]
 }
 
-// queuedSourceInput returns the generated input which caused an extension
-// rule to enter the upstream FIFO after its producer. Most emitters already
-// retain that relation as SourcePath. PB and R6 don't need it for scanning,
-// so recover it from their emitted command inputs instead of transporting a
-// second copy solely for archive ordering.
 func (e *EmitContext) queuedSourceInput(info *GeneratedFileInfo) VFS {
 	if info.SourcePath != 0 {
 		return info.SourcePath
@@ -2004,12 +2052,6 @@ func (e *EmitContext) queuedSourceInput(info *GeneratedFileInfo) VFS {
 	return 0
 }
 
-// srcRound classifies a source by the upstream command-queue pass in which
-// its compiler becomes available. Relative paths and $(S) paths compile in
-// the initial pass. A $(B) source needs one producer pass; an extension rule
-// fed by another in-module generated source needs the next pass. Explicit
-// BASE_CODEGEN precedes its dependent enum statement in the same priority-2
-// queue, so that producer edge is not a pass boundary.
 func (e *EmitContext) srcRound(m SrcMeta) uint64 {
 	cur := m.Source.vfs()
 
@@ -2053,6 +2095,7 @@ func (e *EmitContext) reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcM
 
 	members := e.arMembers[:0]
 	ordered := true
+
 	var previous uint64
 
 	for i := range paths {
@@ -2120,19 +2163,26 @@ func (ctx *GenCtx) instanceVariant(in ModuleInstance) uint16 {
 		pbit = 1
 	}
 
-	return uint16(in.Path&1)<<15 | uint16(in.Kind)<<8 | uint16(in.Demand)<<4 | uint16(in.Language)<<1 | pbit
+	return uint16(in.Path&1)<<15 | uint16(in.Kind)<<8 | uint16(in.Demand)<<variantDemandShift | uint16(in.Language)<<1 | pbit
 }
 
 func (ctx *GenCtx) memoGet(in ModuleInstance) *ModuleEmitResult {
 	variant := ctx.instanceVariant(in)
+	other := variant &^ variantDemandMask
+
+	var stronger *ModuleEmitResult
 
 	for entry := ctx.memo.heads.getSafe(uint32(in.Path.rel())); entry != nil; entry = entry.next {
 		if entry.variant == variant {
 			return entry.result
 		}
+
+		if entry.variant&^variantDemandMask == other && entry.variant&variantDemandMask > variant&variantDemandMask {
+			stronger = entry.result
+		}
 	}
 
-	return nil
+	return stronger
 }
 
 func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) {

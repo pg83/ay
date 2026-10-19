@@ -54,8 +54,9 @@ var pbDescriptorImporterHeaders = []VFS{
 }
 
 const (
-	yaffRuntimeBase = "library/cpp/yaff/"
-	pbRuntimeBase   = "contrib/libs/protobuf/src/"
+	yaffRuntimeBase    = "library/cpp/yaff/"
+	pbRuntimeBase      = "contrib/libs/protobuf/src/"
+	protoPathCacheSize = 64
 )
 
 func yaffGeneratedHeaderIncludes(na *NodeArenas, experimental bool, pbHRel string) []IncludeDirective {
@@ -66,8 +67,8 @@ func yaffGeneratedHeaderIncludes(na *NodeArenas, experimental bool, pbHRel strin
 	}
 
 	dirs := na.dirs.alloc(n)[:0]
-	dirs = append(dirs, yaffBaseRuntimeDirectives...)
 
+	dirs = append(dirs, yaffBaseRuntimeDirectives...)
 	dirs = append(dirs, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(pbHRel).any())})
 
 	if experimental {
@@ -333,6 +334,7 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 	pe.blocks = composePBArgBlocks(ctx.emit.nodeArenas(), d.tc, pe.protocBinary, pe.cppStyleguideBinary, pe.grpcCppBinary,
 		cfg.grpc, cfg.cppOutRoot, pe.liteHeaders,
 		d.protocFlags, pe.extraPlugins, protoInclude)
+
 	pe.pendingCommon = na.protoPBC.one()
 	*pe.pendingCommon = protoPBCommon{
 		emit:               e,
@@ -353,8 +355,8 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	buildProto := protoRel.build()
 	protoVFS := protoRel.source()
 	scanCtx := d.scanCtx
-
 	generatedProto := false
+
 	var protoProducerSourceInputs []VFS
 	var genProtoParsed []IncludeDirective
 
@@ -375,15 +377,14 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		protoProducerSourceInputs: protoProducerSourceInputs,
 		spec:                      spec, pbRef: pbRef,
 	}
-	pbPE := na.pendingEmitter(pending)
 
+	pbPE := na.pendingEmitter(pending)
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	pbH := build(protoBase, ".pb.h")
 	pbCC := build(protoBase, ".pb.cc")
 	pbDepsH := build(protoBase, ".deps.pb.h")
 	grpcPbH := build(protoBase, ".grpc.pb.h")
 	grpcPbCC := build(protoBase, ".grpc.pb.cc")
-
 	needsGRPCParsed := cfg.grpc
 
 	if !needsGRPCParsed {
@@ -606,6 +607,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 		for _, suffix := range plugin.Spec.OutputSuffixes {
 			out := build(protoBase, suffix)
+
 			var parsed ParsedIncludeSet
 
 			switch out {
@@ -735,7 +737,6 @@ func (e *EmitContext) emitPyProtoLibraryResult() *ProtoSrcsResult {
 	}
 
 	genRefs, genOuts := e.packPyProtoResEntries(entries)
-
 	protoLibName := ""
 
 	if len(d.moduleStmt.Args) > 0 {
@@ -783,7 +784,6 @@ func (e *EmitContext) emitPB(
 ) {
 	instance := e.instance
 	na := e.ctx.na
-
 	outsChunk := na.anyChunkVFS(outputs)
 	relChunk := na.anyList(protoRel.any())
 	chunks := na.chunks.alloc(6)[:0]
@@ -973,8 +973,6 @@ func protoSourceRel(fs FS, instance ModuleInstance, d *ModuleData, src string) S
 
 	return internStr(filepath.ToSlash(filepath.Clean(resolved.string())))
 }
-
-const protoPathCacheSize = 64
 
 type protoPathEntry struct {
 	src string

@@ -35,6 +35,7 @@ func (fs *OsFS) readFileRel(rel string) [][]byte {
 	}
 
 	tail := make([]byte, tailSize)
+
 	_, err = io.ReadFull(f, tail)
 	throw(err)
 	fs.readResult[1] = tail

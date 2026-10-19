@@ -85,6 +85,7 @@ func newDarts(keys []string) *Darts {
 			t := base + c
 
 			d.check[t] = it.state + 1
+
 			child := children[i]
 
 			d.value[t] = nodes[child].key

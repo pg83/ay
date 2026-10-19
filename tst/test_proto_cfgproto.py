@@ -91,8 +91,12 @@ class ProtoCfgprotoTest(unittest.TestCase):
             "c/a.cfgproto",
             f"--plugin=protoc-gen-config={CONFIG_PLUGIN}", "--config_out=$(B)/",
         ])
-        self.assertEqual(node["inputs"], [
+        self.assertEqual(node["inputs"][:5], [
             STYLEGUIDE, PROTOC, CONFIG_PLUGIN, WRAPPER, "$(S)/c/a.cfgproto",
+        ])
+        # The import closure follows in closure-bucket order, which depends on
+        # interning order; graphs are compared with inputs sorted.
+        self.assertEqual(sorted(node["inputs"][5:]), [
             "$(S)/c/b.proto", f"{PB_RUNTIME}/descriptor.proto",
         ])
         self.assertIn(lib.node_by_output(graph, CONFIG_PLUGIN)["uid"], node["deps"])

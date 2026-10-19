@@ -249,6 +249,7 @@ var (
 	argToolsEvent2cpp                            = internArg("tools/event2cpp")
 	argToolsFixElf                               = internArg("tools/fix_elf")
 	argToolsHtml2cpp                             = internArg("tools/html2cpp")
+	argToolsLua                                  = internArg("tools/lua")
 	argToolsPy3cc                                = internArg("tools/py3cc")
 	argToolsPy3ccSlow                            = internArg("tools/py3cc/slow")
 	argToolsRelevFmlCodegen                      = internArg("tools/relev_fml_codegen")

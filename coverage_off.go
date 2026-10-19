@@ -2,4 +2,5 @@
 
 package main
 
-func flushCoverage() {}
+func flushCoverage() {
+}

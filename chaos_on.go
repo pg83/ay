@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"strconv"
 	"strings"
@@ -14,15 +15,6 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-// The test build's seam. AY_CHAOS lists NAME=ARG words, read once at start:
-//
-//	fault=K    the fault point's call number K (counting from 0) fails; one
-//	           word per failing call
-//	number=N   the number point hands back N in place of what it is given
-//	text=S     the text point hands back S in place of what it is given
-//
-// An unknown name or a malformed word stops the process before it does
-// anything else.
 var (
 	chaosAssertFault   = newChaosFault("assert")
 	chaosForeignPanic  = newChaosFault("foreign-panic")
@@ -44,17 +36,60 @@ var (
 	chaosCPUAVX512     = newChaosNumber("cpu-avx512")
 	chaosHostGOOS      = newChaosText("host-os")
 	chaosHostGOARCH    = newChaosText("host-arch")
+	chaosInternSeed    = newChaosNumber("intern-seed")
+	chaosPoints        = map[string]*ChaosState{}
+	chaosInternPerms   [][]uint32
 )
 
-// chaosAssert fails the assert whose call number the assert word names.
+const (
+	chaosInternShuffle     = true
+	chaosInternWindow      = 1 << 12
+	chaosInternDefaultSeed = 0x9e3779b97f4a7c15
+)
+
+const (
+	chaosKindFault ChaosKind = iota
+	chaosKindNumber
+	chaosKindText
+)
+
+func chaosInternID(seq uint32) uint32 {
+	block := int(seq / chaosInternWindow)
+
+	for len(chaosInternPerms) <= block {
+		chaosInternPerms = append(chaosInternPerms, chaosInternPerm(len(chaosInternPerms)))
+	}
+
+	return uint32(block)*chaosInternWindow + chaosInternPerms[block][seq%chaosInternWindow]
+}
+
+func chaosInternPerm(block int) []uint32 {
+	rng := rand.New(rand.NewPCG(chaosInternSeed.number(chaosInternDefaultSeed), uint64(block)))
+	perm := make([]uint32, chaosInternWindow)
+
+	for i := range perm {
+		perm[i] = uint32(i)
+	}
+
+	first := 0
+
+	if block == 0 {
+		first = 1
+	}
+
+	rng.Shuffle(len(perm)-first, func(i, j int) {
+		perm[first+i], perm[first+j] = perm[first+j], perm[first+i]
+	})
+
+	return perm
+}
+
 func chaosAssert(ok bool) bool {
 	fired := chaosAssertFault.fire()
 
 	return ok && !fired
 }
 
-// chaosTry hands try a callback that panics with a value other than an
-// *Exception on the call number the foreign-panic word names.
 func chaosTry(cb func()) func() {
 	if chaosForeignPanic.fire() {
 		return func() {
@@ -65,26 +100,17 @@ func chaosTry(cb func()) func() {
 	return cb
 }
 
-// chaosTableHint stands in for the capacity hint of every IntMap and IntSet,
-// so tests reach growth without inputs of production size.
 func chaosTableHint(hint int) int {
 	return int(chaosTableHintSize.number(uint64(hint)))
 }
 
-// chaosFirstEpoch stands in for the first epoch of every epoch-stamped table,
-// so tests reach the wraparound without 2^16 or 2^32 resets.
 func chaosFirstEpoch(epoch uint64) uint64 {
 	return chaosEpochStart.number(epoch)
 }
 
-// chaosBumpChunkBytes stands in for the chunk size cap of the bump allocator,
-// which production inputs reach after a few megabytes in one arena.
 func chaosBumpChunkBytes(n int) int {
 	return int(chaosBumpChunk.number(uint64(n)))
 }
-
-// The hash functions below narrow the halves their words mask, so the tables
-// keyed by one half and verified by the other meet collisions on real inputs.
 
 func chaosInternHash(h xxh3.Uint128) xxh3.Uint128 {
 	h.Hi, h.Lo = chaosMaskPair(chaosXXHInternHi, chaosXXHInternLo, h.Hi, h.Lo)
@@ -106,8 +132,6 @@ func chaosBucketListHash(h1, h2 uint64) (uint64, uint64) {
 	return chaosMaskPair(chaosHashListH1, chaosHashListH2, h1, h2)
 }
 
-// chaosSourceUnderSlot narrows the slot of the source resolution hot cache, so
-// lookups evict each other.
 func chaosSourceUnderSlot(slot uint32) uint32 {
 	return slot & uint32(chaosSlotMask.number(^uint64(0)))
 }
@@ -116,7 +140,6 @@ func chaosMaskPair(p1, p2 ChaosPoint, h1, h2 uint64) (uint64, uint64) {
 	return h1 & p1.number(^uint64(0)), h2 & p2.number(^uint64(0))
 }
 
-// chaosLink fails a hard link as linking across filesystems does.
 func chaosLink(src, dst string) error {
 	if chaosLinkEXDEV.fire() {
 		return &os.LinkError{Op: "link", Old: src, New: dst, Err: syscall.EXDEV}
@@ -125,7 +148,6 @@ func chaosLink(src, dst string) error {
 	return os.Link(src, dst)
 }
 
-// chaosReadDir fails a listing as a directory removed meanwhile does.
 func chaosReadDir(dir string) ([]os.DirEntry, error) {
 	if chaosReadDirFail.fire() {
 		return nil, &os.PathError{Op: "open", Path: dir, Err: syscall.ENOENT}
@@ -134,7 +156,6 @@ func chaosReadDir(dir string) ([]os.DirEntry, error) {
 	return os.ReadDir(dir)
 }
 
-// chaosReadString fails a line read as a failing disk does.
 func chaosReadString(r *bufio.Reader) (string, error) {
 	if chaosReadEIO.fire() {
 		return "", syscall.EIO
@@ -143,13 +164,10 @@ func chaosReadString(r *bufio.Reader) (string, error) {
 	return r.ReadString('\n')
 }
 
-// chaosAVX512 hides AVX-512 while cpu-avx512 is set to 0, as a CPU without it
-// does; a CPU cannot be given a feature it lacks.
 func chaosAVX512(has bool) bool {
 	return has && chaosCPUAVX512.number(1) != 0
 }
 
-// chaosHostOS and chaosHostArch stand in for the host the binary runs on.
 func chaosHostOS(goos string) string {
 	return chaosHostGOOS.text(goos)
 }
@@ -164,12 +182,6 @@ type ChaosPoint struct {
 
 type ChaosKind int
 
-const (
-	chaosKindFault ChaosKind = iota
-	chaosKindNumber
-	chaosKindText
-)
-
 type ChaosState struct {
 	kind  ChaosKind
 	calls atomic.Uint64
@@ -178,8 +190,6 @@ type ChaosState struct {
 	value uint64
 	text  string
 }
-
-var chaosPoints = map[string]*ChaosState{}
 
 func newChaosFault(name string) ChaosPoint {
 	return newChaosPoint(name, chaosKindFault)
@@ -198,9 +208,6 @@ func newChaosPoint(name string, kind ChaosKind) ChaosPoint {
 
 	chaosPoints[name] = state
 
-	// Points arm while the package initializes: some sites run in the
-	// initializers of other package-level variables. init() rejects the words
-	// that arm nothing; exiting from there still writes coverage counters.
 	for _, word := range strings.Fields(os.Getenv("AY_CHAOS")) {
 		if strings.HasPrefix(word, name+"=") {
 			chaosArm(state, word[len(name)+1:])
@@ -222,8 +229,6 @@ func init() {
 	}
 }
 
-// chaosArm applies a word's argument to its point; arming twice with the same
-// argument changes nothing. It reports whether the argument suits the point.
 func chaosArm(state *ChaosState, arg string) bool {
 	if state.kind == chaosKindText {
 		state.set = true

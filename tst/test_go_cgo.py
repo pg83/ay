@@ -115,11 +115,11 @@ class GoCgoGraphTest(unittest.TestCase):
         self.assertEqual(copy["cmds"][0]["cmd_args"][1:], [
             "$(S)/build/scripts/fs_tools.py", "copy", f"{s}/helper.c", f"{b}/helper.c",
         ])
-        self.assertEqual(copy["inputs"], [
+        self.assertEqual(lib.bucketed(copy["inputs"], 3), lib.bucketed([
             "$(S)/build/scripts/fs_tools.py", "$(S)/build/scripts/process_command_files.py",
             f"{s}/helper.c", f"{s}/helper.h", f"{s}/helper_impl.h",
             "$(S)/build/scripts/cgo1_wrapper.py", f"{s}/zstd.go", f"{s}/errors.go",
-        ])
+        ], 3))
         helper_cc = lib.node_by_output(graph, f"{b}/helper.c.o")
         self.assertEqual(helper_cc["cmds"][0]["cmd_args"][-5:], [*cflags, f"{b}/helper.c"])
         self.assertIn(f"{b}/_cgo_export.h", helper_cc["inputs"])
@@ -171,12 +171,12 @@ class GoCgoGraphTest(unittest.TestCase):
         self.assertEqual(between(args, "++peers", "--ya-end-command-file"), [
             f"{STD}/syscall/syscall.a", f"{STD}/runtime/cgo/cgo.a", f"{STD}/errors/errors.a",
         ])
-        self.assertEqual(package["inputs"][-10:], [
+        self.assertEqual(sorted(package["inputs"][-10:]), sorted([
             "$(S)/build/scripts/cgo1_wrapper.py", "$(S)/build/scripts/wrapcc.py",
             "$(S)/build/scripts/fs_tools.py", "$(S)/build/scripts/link_o.py",
             f"{s}/helper.c", f"{s}/helper.h", f"{s}/helper_impl.h", f"{s}/bridge.cxx", f"{s}/trampoline.S",
             f"{b}/_cgo_main.c.o",
-        ])
+        ]))
 
         link = lib.node_by_output(graph, "$(B)/cmd/app/app")
         link_args = link["cmds"][-1]["cmd_args"]
@@ -211,10 +211,10 @@ class GoCgoGraphTest(unittest.TestCase):
             "runtime/cgo", "-import_runtime_cgo=false", "-import_syscall=false",
         ])
         self.assertEqual(args[-4:], ["-w", "-pthread", "-fpic", f"$(S)/{cgo}/cgo.go"])
-        self.assertEqual(cgo1["inputs"], [
+        self.assertEqual(lib.bucketed(cgo1["inputs"], 2), lib.bucketed([
             "$(S)/build/scripts/cgo1_wrapper.py", f"$(S)/{cgo}/cgo.go",
             f"$(S)/{cgo}/libcgo.h", f"$(S)/{STD}/runtime/textflag.h",
-        ])
+        ], 2))
         link_o = lib.node_by_output(graph, f"$(B)/{cgo}/_cgo_.o")["cmds"][1]["cmd_args"]
         self.assertEqual(link_o[-3:], ["-lpthread", "-ldl", "-lresolv"])
         package = lib.node_by_output(graph, f"$(B)/{cgo}/cgo.a")

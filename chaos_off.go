@@ -9,10 +9,11 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-// The fault seam. A call site hands a chaos function the value it has just
-// got and carries on with whatever comes back. The production build hands
-// every value back untouched, so the compiler folds the calls away; the test
-// build (chaos_on.go) breaks what AY_CHAOS asks for.
+const chaosInternShuffle = false
+
+func chaosInternID(seq uint32) uint32 {
+	return seq
+}
 
 func chaosAssert(ok bool) bool {
 	return ok

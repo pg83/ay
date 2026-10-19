@@ -403,7 +403,9 @@ func (e *EmitContext) flushGoSrcs() {
 func (e *EmitContext) goAsmIncludeSrcs() []VFS {
 	ctx := e.ctx
 	na := ctx.na
+
 	var out []VFS
+
 	bound := 0
 	cvs := e.cvScratch[:0]
 
@@ -864,12 +866,14 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	ownSourceInputs := na.vfsList(ownSources...)
 	ownBuildInputs := na.vfsList(ownBuilds...)
 	sbomRefs, sbomPaths := e.goToolchainSboms()
+
 	var mergedSbomRefs []NodeRef
 	var merged int
 	var extraSources, extraBuilds []VFS
 
 	dedupers.with(func(deduper *DeDuper) {
 		mergedSbomRefs = na.noderefs.alloc(len(peerSbomRefs) + len(sbomRefs) + 1)
+
 		mergedSbomPaths := na.vfs.alloc(len(peerSbomPaths) + len(sbomPaths) + 1)
 
 		addSbom := func(ref NodeRef, p VFS) {
@@ -933,6 +937,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 		na.vfs.commit(len(extraSourceBlock))
 		extraSources = extraSourceBlock[:len(extraSourceBlock):len(extraSourceBlock)]
+
 		extraBuildBlock := na.vfs.alloc(1 + merged)[:0]
 
 		if len(d.cgoSrcs) > 0 {
@@ -946,6 +951,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		na.vfs.commit(len(extraBuildBlock))
 		extraBuilds = extraBuildBlock[:len(extraBuildBlock):len(extraBuildBlock)]
 	})
+
 	inputs := na.inputList(ownSourceInputs, ownBuildInputs, goToolScriptInputsChunk, peerArchivePaths, extraSources, extraBuilds)
 	depBlock := na.noderefs.alloc(1 + len(objRefs) + len(peerArchiveRefs) + merged)
 	ndep := 0
@@ -1052,6 +1058,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 
 	sbomEmbed := instance.Platform.BuildRelease && sbomActive(ctx, instance) && len(peerSbomPaths) > 0
 	extraSources := na.vfsList(ldSvnInterfaceVFS, ldSvnversionHVFS)
+
 	var extraBuilds, extraTailSources []VFS
 
 	if sbomEmbed {

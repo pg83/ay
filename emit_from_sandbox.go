@@ -1,15 +1,15 @@
 package main
 
+var (
+	fromSandboxKV           = KV{P: pkSB, PC: pcYellow, ShowOut: true}
+	fromSandboxRequirements = Requirements{CPU: 1, Network: nwFull, RAM: 32}
+)
+
 var fromSandboxScriptInputs = []VFS{
 	buildScriptsFetchFromSandboxPy,
 	buildScriptsProcessCommandFilesPy,
 	buildScriptsFetchFromPy,
 }
-
-var (
-	fromSandboxKV           = KV{P: pkSB, PC: pcYellow, ShowOut: true}
-	fromSandboxRequirements = Requirements{CPU: 1, Network: nwFull, RAM: 32}
-)
 
 func (e *EmitContext) emitFromSandboxes() (memberRefs []NodeRef, memberPaths []VFS) {
 	_, _, d := e.ctx, e.instance, e.d
@@ -80,7 +80,6 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	args = args[:len(args):len(args)]
 
 	env := envVarsVCS
-
 	ref := ctx.emit.reserve()
 
 	pe := func() {
@@ -97,6 +96,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 		e.emitReservedNode(node, ref)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	for i, f := range stmt.OUTFiles {

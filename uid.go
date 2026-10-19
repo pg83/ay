@@ -197,8 +197,6 @@ func (c *CanonBuf) writeVFSSlice(vs []VFS) {
 	c.writeVFSSliceBody(vs)
 }
 
-// writeVFSSliceBody writes node outputs, which are build paths: nothing to
-// hash beyond their names.
 func (c *CanonBuf) writeVFSSliceBody(vs []VFS) {
 	for _, v := range vs {
 		c.writeVFS(v)

@@ -482,6 +482,7 @@ func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, output VFS, ena
 
 func composeLDInputs(na *NodeArenas, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool, extra ...[]VFS) InputChunks {
 	peerLibChunk := na.vfsList(peerLibPaths...)
+
 	var buildRootBlock []VFS
 
 	dedupers.with(func(deduper *DeDuper) {

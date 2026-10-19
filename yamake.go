@@ -628,6 +628,7 @@ func (l *Lexer) readToken() Token {
 
 func (l *Lexer) readString(startLine, startCol int, quote byte) Token {
 	l.advance()
+
 	start := l.pos
 
 	for pos := start; pos < len(l.src); pos++ {
@@ -754,6 +755,7 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 	}
 
 	buf := l.tokBuf[:0]
+
 	pureIdent = true
 
 	for l.pos < len(l.src) {
@@ -2036,6 +2038,7 @@ func (c *CondParser) parseCmp() int32 {
 
 	if t.kind == tokIdent && strings.HasPrefix(t.string(), "VERSION_") {
 		value := t.string()
+
 		c.consume()
 
 		right := c.parseAtom()

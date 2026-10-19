@@ -927,8 +927,6 @@ func lintStripComments(path string) bool {
 
 	var buf bytes.Buffer
 
-	// The tree comes from parsing the file and only loses comments, so it
-	// prints and reparses.
 	throw(format.Node(&buf, fset, f))
 
 	formatted := throw2(format.Source(buf.Bytes()))

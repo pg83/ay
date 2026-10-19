@@ -22,7 +22,6 @@ func (e *EmitContext) emitArchive(
 	na := emit.nodeArenas()
 	archiveVFS := build(instance.Path.relString(), "/", a.Name)
 	producerRefs := []NodeRef{}
-
 	pathMark := len(e.prodVFS)
 
 	for _, f := range a.Files {

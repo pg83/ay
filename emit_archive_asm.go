@@ -26,7 +26,6 @@ func (e *EmitContext) emitArchiveAsmNode(
 	na := ctx.emit.nodeArenas()
 	rodataVFS := build(instance.Path.relString(), "/", a.Name, ".rodata")
 	producerRefs := []NodeRef{}
-
 	pathMark := len(e.prodVFS)
 
 	for _, f := range a.Files {
@@ -34,7 +33,6 @@ func (e *EmitContext) emitArchiveAsmNode(
 
 		if info := reg.use(copyFileOutputVFS(instance.Path.relString(), f)); info != nil {
 			memberVFS = copyFileOutputVFS(instance.Path.relString(), f)
-
 			producerRefs = append(producerRefs, info.ProducerRef)
 		} else {
 			memberVFS = e.requireProducedInput("ARCHIVE_ASM member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))

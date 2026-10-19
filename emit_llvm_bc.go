@@ -46,6 +46,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		inputChunks[0] = na.vfsList(clangWrapperVFS)
 		copy(inputChunks[1:], closureInputs)
 		na.inputs.commit(len(inputChunks))
+
 		allInputs := InputChunks(inputChunks[:len(inputChunks):len(inputChunks)])
 
 		for _, ch := range allInputs {
@@ -110,6 +111,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	pendNodes = append(pendNodes, ldNode)
 	pendRefs = append(pendRefs, ldRef)
+
 	optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
 	optOut := build(instance.Path.relString(), "/", optOutName)
 	optArgs := []ANY{internStr(python).any(), internStr(optWrapper).any(), internStr(opt).any(), mergedOut.any(), argDashO.any(), optOut.any()}
@@ -134,6 +136,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	na.vfs.commit(len(optSourceInputs))
 	optSourceInputs = optSourceInputs[:len(optSourceInputs):len(optSourceInputs)]
+
 	optChunks := na.inputList(na.vfsList(mergedOut), optSourceInputs)
 
 	optNode := Node{
@@ -157,6 +160,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			e.emitReservedNode(pendNodes[i], pendRefs[i])
 		}
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	if stmt.GenerateMachineCode {

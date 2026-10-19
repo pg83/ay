@@ -192,9 +192,11 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 	}
 
 	headerLeaves = append(headerLeaves, v.runtimeVFS)
+
 	for _, bucket := range transitiveBuckets {
 		headerLeaves = append(headerLeaves, bucket...)
 	}
+
 	ctx.na.vfs.commit(len(headerLeaves))
 	headerLeaves = headerLeaves[:len(headerLeaves):len(headerLeaves)]
 

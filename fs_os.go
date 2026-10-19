@@ -9,12 +9,11 @@ import (
 
 var emptyDirNames = []uint32{}
 
-// readChunkSize is part of the source content-hash format: content hashes are
-// XORs of hashes of these stable chunks. Changing it invalidates those hashes.
-const readChunkSize = 1 << 20
-
-const sourceUnderHotMask = 1<<18 - 1
-const dirFDCacheSize = 768
+const (
+	readChunkSize      = 1 << 20
+	sourceUnderHotMask = 1<<18 - 1
+	dirFDCacheSize     = 768
+)
 
 type sourceUnderHotEntry struct {
 	key uint64
@@ -36,10 +35,6 @@ func hashSourceFile(srcRoot, rel string) uint64 {
 	return contentHashBytes(data)
 }
 
-// ContentHashes maps interned source paths to the content hashes generation
-// computed while reading them. Executor goroutines read the hashes while
-// generation still stores them, so elements are accessed atomically; pages are
-// allocated only by the single generating goroutine.
 type ContentHashes struct {
 	vec PageVec[uint64]
 }
@@ -129,7 +124,6 @@ func (fs *OsFS) dirHas(v DirView, name string) (present bool, isDir bool) {
 }
 
 func (fs *OsFS) dirHasID(v DirView, id STR) (present bool, isDir bool) {
-
 	isDir, ok := fs.dirEntries.get(splitMix64(uint32(v.dir), uint32(id)))
 
 	if !ok {
@@ -341,6 +335,7 @@ func (fs *OsFS) read(rel string) [][]byte {
 
 func (fs *OsFS) readPath(rel STR) [][]byte {
 	chunks := fs.readFileRel(rel.string())
+
 	fs.contentHashes.store(rel, contentHashChunks(chunks))
 
 	return chunks

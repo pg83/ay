@@ -76,10 +76,10 @@ class ProtoFlatcTest(unittest.TestCase):
             "--filename-suffix", ".fbs", "--scoped-enums", "--gen-name-strings",
             "-I", "$(B)", "-I", "$(S)", "-o", "$(B)/f/a.fbs.h", "$(S)/f/a.fbs",
         ])
-        self.assertEqual(fl["inputs"], [
+        self.assertEqual(lib.bucketed(fl["inputs"], 3), lib.bucketed([
             FLATC, WRAPPER, "$(S)/f/a.fbs", "$(S)/f/b.fbs", "$(S)/f/common.inc",
             "$(S)/f/leaf.fbs",
-        ])
+        ], 3))
         self.assertIn(lib.node_by_output(graph, FLATC)["uid"], fl["deps"])
 
         fl64 = lib.node_by_output(graph, "$(B)/f/c.fbs64.h")

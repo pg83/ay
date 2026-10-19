@@ -65,12 +65,10 @@ func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 		e.collectObj(st.ref, st.dstVFS, SrcMeta{Prio: stmtPrioDefault})
 	}
 
-	// pe captures st (CopyEmitState), which registerCopyFile only produces
-	// as its return value — register() there happens before pe can exist,
-	// and is skipped entirely on the merge-existing-dst path (info == nil).
 	pe := func() {
 		e.emitCopyFileNodeSnap(entry, st)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	if info != nil {
@@ -152,6 +150,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 
 func (e *EmitContext) emitCopyFileNodeSnap(entry CopyFileEntry, st CopyEmitState) {
 	ctx := e.ctx
+
 	var closure []VFS
 
 	if entry.WithContext || len(entry.OutputIncludes) > 0 {

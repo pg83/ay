@@ -17,10 +17,8 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 	cppVFS := build(module, "/mn.", stmt.Name, ".cpp")
 	rodataVFS := build(module, "/MN_External_", stmt.Name, ".rodata")
 	env := envVarsVCS
-
 	ref := ctx.emit.reserve()
 	mnSSEInclude := IncludeDirective{kind: includeQuoted, target: includeTarget(strKernelMatrixnetMnSseH.any())}
-
 	python3 := d.tc.Python3
 
 	pe := func() {

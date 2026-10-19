@@ -21,9 +21,7 @@ import (
 	"time"
 )
 
-const (
-	prepBatchMax = 128
-)
+const prepBatchMax = 128
 
 type CmdPrefix struct {
 	suffix string
@@ -98,8 +96,6 @@ func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ni
 		ex.canon.fsHashes = &osfs.contentHashes
 	}
 
-	// The cache must be cleared before loadUidSet lists it, or the set keeps
-	// UIDs whose metadata files clearCache has already moved away.
 	if clear {
 		ex.clearCache()
 	}
@@ -788,6 +784,7 @@ func (ex *Executor) printCriticalPath(durOf map[NodeRef]time.Duration) {
 		}
 
 		total := durOf[ref] + best
+
 		finish[ref] = total
 
 		if best > 0 {

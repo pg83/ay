@@ -216,11 +216,9 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	if mf.threads == 0 {
 		if mf.dumpGraph {
-			for _, target := range mf.targets {
-				g := genDumpGraphWithResources(fs, target, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing, demandSelf)
+			g := genDumpGraphWithResources(fs, mf.targets, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing, demandSelf)
 
-				writeGraph(g, !mf.sandboxing)
-			}
+			writeGraph(g, !mf.sandboxing)
 		} else {
 			genStream(fs, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, mf.testLevel > 0, mf.keepGoing)
 		}
@@ -270,9 +268,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool, keepGoing bool) []NodeRef {
 	emitter := newStreamingEmitter(onNode)
 
-	for _, t := range targets {
-		runGenIntoWithResources(fs, t, hostP, targetP, emitter, onWarn, testMode, keepGoing, demandSelf)
-	}
+	runGenIntoWithResources(fs, targets, hostP, targetP, emitter, onWarn, testMode, keepGoing, demandSelf)
 
 	return emitter.finish()
 }
@@ -281,11 +277,16 @@ func parseMakeFlags(args []string) *MakeFlags {
 	state := getopt.NewState(append([]string{"ay-make"}, args...))
 
 	config := getopt.Config{
-		Opts:     getopt.OptStr("GrdktThD:j:B:o:I:"),
-		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stat,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:,jobs:,ninja,define:"),
-		Mode:     getopt.ModeInOrder,
-		Func:     getopt.FuncGetOptLong,
+		Opts: getopt.OptStr("GrdktThxD:j:B:o:I:C:"),
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stat,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:,jobs:,ninja,define:," +
+			"target:,build:,target-platform-build-type:,target-platform-flag:,target-platform-tests,test-size:," +
+			"dist,ignore-nodes-exit-code,warning-mode:,cache-tests,output-only-tests,cache-namespace:,report-skipped-suites,tests-retries:," +
+			"backup-test-results,add-modules-to-results,do-not-output-stderrs,no-src-links,add-changed-ok-configures,no-yt-store"),
+		Mode: getopt.ModeInOrder,
+		Func: getopt.FuncGetOptLong,
 	}
+
+	targetBuildType := ""
 
 	mf := &MakeFlags{
 		buildType: "debug",
@@ -344,6 +345,25 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.hostPlat = opt.OptArg
 		case opt.Name == "host-platform-flag":
 			parseKV(mf.hflags, opt.OptArg)
+		case opt.Char == 'C' || opt.Name == "target":
+			for _, t := range strings.Split(opt.OptArg, ";") {
+				if t != "" {
+					mf.targets = append(mf.targets, t)
+				}
+			}
+		case opt.Name == "build":
+			mf.buildType = opt.OptArg
+		case opt.Name == "target-platform-build-type":
+			targetBuildType = opt.OptArg
+		case opt.Name == "target-platform-flag":
+			parseKV(mf.tflags, opt.OptArg)
+		case opt.Name == "target-platform-tests":
+			mf.testLevel = max(mf.testLevel, 1)
+		case opt.Char == 'x', opt.Name == "test-size", opt.Name == "dist", opt.Name == "ignore-nodes-exit-code",
+			opt.Name == "warning-mode", opt.Name == "cache-tests", opt.Name == "output-only-tests",
+			opt.Name == "cache-namespace", opt.Name == "report-skipped-suites", opt.Name == "tests-retries",
+			opt.Name == "backup-test-results", opt.Name == "add-modules-to-results", opt.Name == "do-not-output-stderrs",
+			opt.Name == "no-src-links", opt.Name == "add-changed-ok-configures", opt.Name == "no-yt-store":
 		case opt.Name == "verbose":
 			mf.verbose = true
 		case opt.Name == "sandboxing":
@@ -355,6 +375,10 @@ func parseMakeFlags(args []string) *MakeFlags {
 
 			mf.targets = append(mf.targets, opt.OptArg)
 		}
+	}
+
+	if targetBuildType != "" {
+		mf.buildType = targetBuildType
 	}
 
 	if mf.srcRoot == "" {
@@ -445,10 +469,36 @@ configuration flags:
   -d, --debug                   GG_BUILD_TYPE=debug (default).
   --xbuild <value>              GG_BUILD_TYPE=<value> (overrides -r/-d).
   --musl                        MUSL=yes.
+  --build <value>               GG_BUILD_TYPE=<value>, as --xbuild.
   --target-platform <id>        Target platform id (default: <host>).
+  --target-platform-build-type T  Target GG_BUILD_TYPE; overrides --build.
+  --target-platform-flag KEY=V  Target-axis -D flag (repeatable).
+  --target-platform-tests       Generate test nodes, as -t.
   --host-platform <id>          Host platform id (default: <host>).
   -D, --define KEY=VALUE        Target-axis -D flag (repeatable).
   --host-platform-flag KEY=V    Host-axis -D flag (repeatable).
+
+target flags:
+  -C, --target <dirs>           Targets separated by ';', as positional ones
+                                (repeatable). Several targets make one graph.
+
+ya compatibility flags:
+  -x                            Accepted from ya command lines, not modeled.
+  --test-size <size>            Accepted, not modeled.
+  --dist                        Accepted, not modeled.
+  --ignore-nodes-exit-code      Accepted, not modeled.
+  --warning-mode <modes>        Accepted, not modeled.
+  --cache-tests                 Accepted, not modeled.
+  --output-only-tests           Accepted, not modeled.
+  --cache-namespace <name>      Accepted, not modeled.
+  --report-skipped-suites       Accepted, not modeled.
+  --tests-retries <n>           Accepted, not modeled.
+  --backup-test-results         Accepted, not modeled.
+  --add-modules-to-results      Accepted, not modeled.
+  --do-not-output-stderrs       Accepted, not modeled.
+  --no-src-links                Accepted, not modeled.
+  --add-changed-ok-configures   Accepted, not modeled.
+  --no-yt-store                 Accepted, not modeled.
 `
 
 	fmt.Fprint(w, colorizeMakeUsage(usage))

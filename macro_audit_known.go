@@ -35,6 +35,7 @@ func mineServiceTokensFromSources() map[string]struct{} {
 			}
 
 			data = data[open+1:]
+
 			n := 0
 			hasLetter := false
 
@@ -67,8 +68,6 @@ func mineServiceTokensFromSources() map[string]struct{} {
 				continue
 			}
 
-			// The embedded sources end with a newline, so a run of token bytes
-			// never reaches the end of the data.
 			data = data[n+1:]
 		}
 	}

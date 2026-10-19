@@ -119,13 +119,13 @@ class RunPython3Test(unittest.TestCase):
         self.assertIn("$(S)/lib/proto.in", run["inputs"])
         self.assertIn(codegen["uid"], run["deps"])
         first = lib.node_by_output(graph, "$(B)/lib/shard0.cpp.o")
-        self.assertEqual(first["inputs"], [
+        self.assertEqual(lib.bucketed(first["inputs"], 1), lib.bucketed([
             "$(B)/lib/shard0.cpp", "$(S)/lib/split.py", "$(S)/lib/induced.h",
-        ])
+        ], 1))
         second = lib.node_by_output(graph, "$(B)/lib/shard1.cpp.o")
-        self.assertEqual(second["inputs"], [
+        self.assertEqual(lib.bucketed(second["inputs"], 1), lib.bucketed([
             "$(B)/lib/shard1.cpp", "$(B)/lib/shard0.cpp", "$(S)/lib/split.py", "$(S)/lib/induced.h",
-        ])
+        ], 1))
 
     def test_arcadia_root_left_by_expansion_limit_maps_to_source_root(self):
         # Each expansion pass consumes one "O1}" suffix, so the literal

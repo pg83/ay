@@ -4,8 +4,6 @@ package main
 
 import "syscall"
 
-// Linux syscalls behind the seam. An interrupted call fails with EINTR
-// before it runs, as a signal arriving first makes it do.
 var (
 	chaosEINTROpen     = newChaosFault("eintr-open")
 	chaosEINTROpenat   = newChaosFault("eintr-openat")
@@ -48,8 +46,6 @@ func chaosFstatat(dirFD int, path *byte, st *syscall.Stat_t) syscall.Errno {
 	return fstatatRaw(dirFD, path, st)
 }
 
-// chaosGetdents interrupts a listing or fails it with EIO, as a failing disk
-// or a FUSE server does.
 func chaosGetdents(fd int, buf []byte) (int, error) {
 	if chaosEINTRGetdents.fire() {
 		return 0, syscall.EINTR
@@ -62,8 +58,6 @@ func chaosGetdents(fd int, buf []byte) (int, error) {
 	return syscall.Getdents(fd, buf)
 }
 
-// chaosDirentType reports every entry's type as unknown while dirent-unknown
-// is set to 1, as filesystems without d_type do.
 func chaosDirentType(typ byte) byte {
 	if chaosDirentUnknown.number(0) == 1 {
 		return syscall.DT_UNKNOWN

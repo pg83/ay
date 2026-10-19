@@ -673,6 +673,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
 	d.cfAddIncl = nil
 	d.cfAddInclGlobal = nil
+
 	dedupers.with(func(deduper *DeDuper) {
 		filterInvalidAddIncl(fs, deduper, d, modulePath, onWarn)
 	})
@@ -797,7 +798,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	}
 
 	if len(d.antlr4Grammars) > 0 || len(d.antlrRuns) > 0 {
-		d.peerdirs = append(d.peerdirs, internStr("build/platform/java/jdk/jdk17").any())
+		d.peerdirs = append(d.peerdirs, strBuildPlatformJavaJdkJdk17.any())
 	}
 
 	return d
@@ -996,7 +997,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 
 			if v.Schema && d.unit.Tag == unitTagPy3Proto {
-				d.unit.HashTag = internStr("PY3_PROTO_FROM_SCHEMA")
+				d.unit.HashTag = strPy3ProtoFromSchema
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)

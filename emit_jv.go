@@ -75,6 +75,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 
 			emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, tc, ctx.scripts, ctx.emit)
 		}
+
 		pending := e.ctx.na.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{
@@ -98,7 +99,6 @@ func (e *EmitContext) emitJVNodeReserved(cmdArgs []ANY, inputs InputChunks, outp
 	env := envVarsVCS
 	cmd := Cmd{CmdArgs: na.chunkList(na.anyChunkAny(cmdArgs)), Env: env}
 
-	// RUN_ANTLR/RUN_ANTLR4 without CWD run in the default directory (upstream CWD="").
 	if cwd != "" {
 		cmd.Cwd = cwdVFS(cwd)
 	}

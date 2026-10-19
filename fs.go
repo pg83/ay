@@ -15,8 +15,6 @@ type FS interface {
 	resolveSourceUnder(prefix, target STR) STR
 	resolveSourceUnderClean(prefix, target STR, targetClean bool) STR
 
-	// read accepts a clean source-relative path and returns chunks that remain
-	// valid until the next read call.
 	read(rel string) [][]byte
 	readPath(rel STR) [][]byte
 

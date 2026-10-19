@@ -70,6 +70,7 @@ func (c CollectedObjs) reset() CollectedObjs {
 func (e *EmitContext) partitionCollected() (local, global CollectedObjs) {
 	local = e.localObjs
 	global = e.globalObjs
+
 	firstGlobal := -1
 
 	for i, m := range e.metas {
@@ -96,6 +97,7 @@ func (e *EmitContext) partitionCollected() (local, global CollectedObjs) {
 	local.refs = append(local.refs, e.refs[:firstGlobal]...)
 	local.outs = append(local.outs, e.outs[:firstGlobal]...)
 	local.metas = append(local.metas, e.metas[:firstGlobal]...)
+
 	global.refs = append(global.refs, e.refs[firstGlobal])
 	global.outs = append(global.outs, e.outs[firstGlobal])
 	global.metas = append(global.metas, e.metas[firstGlobal])

@@ -159,6 +159,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			headerInduced = append(headerInduced, emittedInputs[0])
 			headerInduced = append(headerInduced, emittedInputs[2:]...)
 			headerInduced = dedup(headerInduced)
+
 			headerParsed := ctx.na.dirs.alloc(len(headerInduced))[:0]
 
 			for _, v := range headerInduced {
@@ -240,6 +241,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		cyRef := p.cyRef
 		emitsIncludes := p.emittedInputs
 		pxdVFS, pxdOK := resolveCythonPxd(ctx, instance, stmt.Pxd)
+
 		var pxdInputs []VFS
 
 		if pxdOK {
@@ -317,6 +319,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 				Resources: usesPython3,
 			}, cyRef)
 		}
+
 		pending := e.ctx.na.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{
@@ -327,8 +330,6 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			OnUse:          pending,
 		})
 
-		// p.infos were registered earlier in planCythonCpp (pass1 header
-		// registration), before pe existed; attach post hoc.
 		for _, info := range p.infos {
 			info.OnUse = pending
 		}
@@ -457,6 +458,7 @@ func (e *EmitContext) cythonAdjustModuleCCBlocks() []VFS {
 
 	cy.AddIncl = appendCythonCCAddIncl(ctx.na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
 	cy.CFlags = filterPyRegisterCFlags(d.cc.CFlags)
+
 	d.cc.MainOutInducedInputs = true
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &cy)
 

@@ -552,6 +552,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			na.vfs.commit(len(payloadBuilds))
 			payloadBuilds = payloadBuilds[:len(payloadBuilds):len(payloadBuilds)]
 		})
+
 		hashScratch = append(hashScratch, unitElem)
 
 		var hash string
@@ -753,6 +754,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 				na.vfs.commit(len(auxSources))
 				it.AuxSources = auxSources[:len(auxSources):len(auxSources)]
+
 				auxBuilds := na.vfs.alloc(cv.len() + 1)[:0]
 
 				for _, bucket := range cv.bucketList() {

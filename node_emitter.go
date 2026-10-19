@@ -95,7 +95,6 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 }
 
 func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
-	// Nodes are emitted on demand for their outputs, so every node has one.
 	assert(len(n.Outputs) > 0, "emitter: node without outputs")
 
 	if e.hasUnresolvedDeps(n) {
@@ -152,7 +151,6 @@ func (e *StreamingEmitter) finish() []NodeRef {
 			if os.Getenv("AY_DEBUG_PENDING") != "" {
 				for _, id := range next {
 					n := e.nodes.s[id]
-
 					outs := ""
 
 					if len(n.Outputs) > 0 {

@@ -12,8 +12,6 @@ import (
 	"sort"
 )
 
-// mapProbeReport prints the tally of an instrumented build on exit; the
-// runtime that mapinstr writes next to the instrumented files replaces it.
 var mapProbeReport = func() {}
 
 const probeMapRuntimeFile = "probe_runtime_map.go"

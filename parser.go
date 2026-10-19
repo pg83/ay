@@ -15,6 +15,19 @@ var (
 	protoConfigIncludeExt  = []byte("(NProtoConfig.Include)")
 )
 
+var swigImplicitDirectives = func() []IncludeDirective {
+	names := []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}
+	out := make([]IncludeDirective, 0, len(names))
+
+	for _, n := range names {
+		out = append(out, IncludeDirective{kind: includeSystem, target: includeTarget(internStr(n).any())})
+	}
+
+	return out
+}()
+
+const directiveBlockHint = 1 << 14
+
 func isParserSpace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\r' || b == '\n' || b == '\f' || b == '\v'
 }
@@ -44,19 +57,6 @@ func cutParserKeyword(b []byte, keyword string) ([]byte, bool) {
 
 	return b, len(b) > 0
 }
-
-var swigImplicitDirectives = func() []IncludeDirective {
-	names := []string{"swig.swg", "go.swg", "java.swg", "perl5.swg", "python.swg"}
-	out := make([]IncludeDirective, 0, len(names))
-
-	for _, n := range names {
-		out = append(out, IncludeDirective{kind: includeSystem, target: includeTarget(internStr(n).any())})
-	}
-
-	return out
-}()
-
-const directiveBlockHint = 1 << 14
 
 type IncludeDirectiveParser interface {
 	parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet
@@ -223,6 +223,7 @@ func eachLine(chunks [][]byte, fn func(line []byte)) {
 			}
 
 			pending = append(pending, chunk[:i]...)
+
 			line := pending
 
 			if len(line) > 0 && line[len(line)-1] == '\r' {

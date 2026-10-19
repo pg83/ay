@@ -5,9 +5,8 @@ import (
 )
 
 var (
-	pyRunKV     = KV{P: pkPY, PC: pcYellow, ShowOut: true}
-	luaRunKV    = KV{P: pkLU, PC: pcYellow, ShowOut: true}
-	argToolsLua = internArg("tools/lua")
+	pyRunKV  = KV{P: pkPY, PC: pcYellow, ShowOut: true}
+	luaRunKV = KV{P: pkLU, PC: pcYellow, ShowOut: true}
 )
 
 func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
@@ -108,7 +107,6 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	pySourceInputs = pySourceInputs[:len(pySourceInputs):len(pySourceInputs)]
 
 	pyRef := ctx.emit.reserve()
-
 	interp := d.cc.TC.Python3.any()
 	kv := &pyRunKV
 	resources := usesPython3
@@ -135,6 +133,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	directSources = append(directSources, inSources...)
 	ctx.na.vfs.commit(len(directSources))
 	directSources = directSources[:len(directSources):len(directSources)]
+
 	directBuilds := ctx.na.vfs.alloc(2 + len(inBuilds))[:0]
 
 	if interpInput != nil {
@@ -175,6 +174,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 
 		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, directSources, directBuilds, inputClosure, pyRef, interp, toolRefs, kv, resources)
 	}
+
 	pending := e.ctx.na.pendingEmit(pe)
 
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
@@ -370,6 +370,7 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 
 		if isHeaderSource(outFile) {
 			includes := e.ctx.na.dirs.alloc(1 + len(splitSrcs))[:0]
+
 			includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel().any())})
 
 			for _, src := range splitSrcs {
@@ -507,6 +508,7 @@ func (e *EmitContext) emitPYRun(
 
 	inputs = append(inputs, inputClosure...)
 	na.inputs.commit(len(inputs))
+
 	inputChunks := InputChunks(inputs[:len(inputs):len(inputs)])
 	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
 

@@ -167,3 +167,13 @@ def wide_project(count):
     )
     files["app/main.cpp"] = "int main(){return 0;}\n"
     return files
+
+
+def bucketed(inputs, fixed):
+    """Inputs with their first `fixed` entries in order and the rest sorted.
+
+    A node lists its include closure after its own inputs, laid out in buckets
+    of interned path ids, so the closure order moves with interning order; the
+    validation gate compares inputs sorted, and so do the tests.
+    """
+    return list(inputs[:fixed]) + sorted(inputs[fixed:])

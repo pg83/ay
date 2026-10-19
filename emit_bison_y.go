@@ -87,7 +87,6 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 	headerParsed = headerParsed[:len(headerParsed):len(headerParsed)]
 
 	ycRef := ctx.emit.reserve()
-
 	env := na.envList(EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, EnvVar{Name: envBISON_PKGDATADIR, Value: strBisonPkgData.any()}, EnvVar{Name: envM4, Value: m4Bin.any()})
 	preprocessEnv := envVarsVCS
 	python3 := d.cc.TC.Python3
@@ -222,11 +221,10 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 func (e *EmitContext) emitBisonY(meta SrcMeta) {
 	_, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
-
 	cflags := e.emitBisonProducer(src)
-
 	generatedRel := bisonGeneratedRel(e.moduleSourceRel(src), d.cc.BisonGenExt)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
+
 	meta.Source = generatedVFS.any()
 	meta.Compile.CFlags = concat(meta.Compile.CFlags, cflags)
 	e.enqueueSrc(meta)

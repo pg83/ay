@@ -154,6 +154,7 @@ func (e *EmitContext) mainOutInducedInputs(na *NodeArenas, includeView Closure) 
 
 	extra := e.prodVFSTake(extraMark)
 	out := na.vfs.alloc(len(extra))[:0]
+
 	out = append(out, extra...)
 	na.vfs.commit(len(out))
 
@@ -165,7 +166,6 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	na := e.ctx.na
 	srcRel := trimModulePrefix(srcVFS.relString(), instance.Path.relString())
 	suffix := ccObjectSuffix(instance, in)
-
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, suffix)
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
 	blocks := in.CCBlocks
@@ -258,8 +258,6 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 
 	inputChunks := na.inputs.alloc(nInputs)[:0]
 
-	// A closure holds its own source whenever it holds anything, and the
-	// induced inputs come from the same closure.
 	if includeSelf != 0 {
 		inputChunks = append(inputChunks, na.vfsList(includeSelf))
 	}
@@ -275,6 +273,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	}
 
 	na.inputs.commit(len(inputChunks))
+
 	allInputs := InputChunks(inputChunks[:len(inputChunks):len(inputChunks)])
 
 	node := Node{
@@ -344,6 +343,7 @@ func (e *EmitContext) ccOutputFor(srcVFS VFS, compile CompileSpec) VFS {
 
 func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {
 	input = srcVFS
+
 	dir := instance.Path.relString()
 	rel := srcVFS.relString()
 	srcRelClean := srcRel != "" && srcRel != "." && pathIsClean(srcRel)
@@ -426,8 +426,6 @@ func composeSrcDirOutputRel(instancePath, target string) string {
 		}
 	}
 
-	// The target is a file, so it never equals the module directory: b is not
-	// empty here.
 	if a == "" {
 		if strings.Contains(b, "/") {
 			return "_/" + b

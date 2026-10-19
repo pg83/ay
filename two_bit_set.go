@@ -20,7 +20,7 @@ func (b *TwoBitSet) set(v uint32, val uint8) {
 	b.words.ensureLen(int(w) + 1)
 
 	shift := (v & 31) * 2
-
 	cell := unsafeAt(b.words.s, uint64(w))
+
 	*cell = *cell&^(3<<shift) | uint64(val&3)<<shift
 }
