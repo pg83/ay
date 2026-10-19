@@ -131,6 +131,18 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	var producerRefs []NodeRef
 	var descOutputs []VFS
 	var rawprotoOutputs []VFS
+	var producerSourceInputs []VFS
+
+	sourceInputSeen := make(map[VFS]struct{})
+
+	addSourceInput := func(v VFS) {
+		if _, dup := sourceInputSeen[v]; dup {
+			return
+		}
+
+		sourceInputSeen[v] = struct{}{}
+		producerSourceInputs = append(producerSourceInputs, v)
+	}
 
 	for _, meta := range d.srcs {
 		src := meta.Source
@@ -153,12 +165,20 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		producerRefs = append(producerRefs, ref)
 		descOutputs = append(descOutputs, descOut)
 		rawprotoOutputs = append(rawprotoOutputs, rawprotoOut)
+		addSourceInput(descRawprotoWrapperVFS)
+		addSourceInput(protoVFS)
+
+		for _, bucket := range imports.bucketList() {
+			for _, im := range bucket {
+				addSourceInput(im)
+			}
+		}
 	}
 
 	prj := realPrjName(instance.Path.relString())
 	selfProtodesc := build(instance.Path.relString(), "/", prj, ".self.protodesc")
 	protosrc := build(instance.Path.relString(), "/", prj, ".protosrc")
-	mergeRef := e.emitDescProtoMerge(selfProtodesc, protosrc, descOutputs, rawprotoOutputs, producerRefs)
+	mergeRef := e.emitDescProtoMerge(selfProtodesc, protosrc, descOutputs, rawprotoOutputs, producerSourceInputs, producerRefs)
 	closure := append(span.peers, DescProtoPeer{SelfProtodesc: selfProtodesc, MergeRef: mergeRef})
 	selfPath := selfProtodesc
 
@@ -253,7 +273,7 @@ func (e *EmitContext) emitProtoDescProducer(protoRelPath string,
 }
 
 func (e *EmitContext) emitDescProtoMerge(selfProtodesc, protosrc VFS,
-	descOutputs, rawprotoOutputs []VFS, producerRefs []NodeRef) NodeRef {
+	descOutputs, rawprotoOutputs, producerSourceInputs []VFS, producerRefs []NodeRef) NodeRef {
 	ctx := e.ctx
 	na := ctx.na
 	env := envVarsVCS
@@ -296,7 +316,7 @@ func (e *EmitContext) emitDescProtoMerge(selfProtodesc, protosrc VFS,
 			Cmd{CmdArgs: na.chunkList(collect), Cwd: bldRootDirVFS, Env: env},
 		),
 		Env:       env,
-		Inputs:    na.inputList(buildInputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[collectRawprotoVFS.rel()]),
+		Inputs:    na.inputList(buildInputs, producerSourceInputs, ctx.scripts[mergeFilesVFS.rel()], ctx.scripts[collectRawprotoVFS.rel()]),
 		KV:        &protoDescKV,
 		Outputs:   na.vfsList(selfProtodesc, protosrc),
 		DepRefs:   na.noderefs.list(producerRefs...),
