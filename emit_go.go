@@ -96,8 +96,8 @@ var goSymabisHead = []ANY{
 
 var goSymabisDefs = []ANY{
 	strI.any(), strGoToolsPkgInclude.any(),
-	internStr("-D").any(), internStr("GOOS_linux").any(),
-	internStr("-D").any(), internStr("GOARCH_amd64").any(),
+	strD2.any(), internStr("GOOS_linux").any(),
+	strD2.any(), internStr("GOARCH_amd64").any(),
 	internStr("-p").any(),
 }
 

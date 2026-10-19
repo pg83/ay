@@ -17,7 +17,7 @@ var goCgo1Head = []ANY{
 	cgo1WrapperVFS.any(),
 	internStr("--build-prefix=/-B").any(),
 	internStr("--source-prefix=/-S").any(),
-	internStr("--build-root").any(), strB.any(),
+	strBuildRoot2.any(), strB.any(),
 	internStr("--source-root").any(), strS.any(),
 	internStr("--cgo1-files").any(),
 }

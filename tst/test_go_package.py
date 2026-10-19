@@ -389,6 +389,14 @@ class GoPackageGraphTest(unittest.TestCase):
             "library/go/empty/empty.a", "vendor/github.com/x/nocgo/nocgo.a", *PROGRAM_PEERS,
         ])
 
+    def test_autocheck_generates_no_sbom_components(self):
+        files = go_world()
+        files["build/internal/conf/sbom.conf"] = "# sbom\n"
+        go_module(files, "vendor/github.com/pkg/errors", macros="LICENSE(BSD-2-Clause)\nVERSION(v0.9.1)\n")
+        go_module(files, "cmd/app", 'import "github.com/pkg/errors"\n', module="GO_PROGRAM")
+        graph = lib.make(files, "cmd/app", "--target-platform", "default-linux-x86_64", "--release", "-DAUTOCHECK=yes")
+        self.assertEqual([o for n in graph["graph"] for o in n["outputs"] if o.endswith(".sbom")], [])
+
     def test_release_program_embeds_go_sbom_components(self):
         files = go_world()
         files["build/internal/conf/sbom.conf"] = "# sbom\n"

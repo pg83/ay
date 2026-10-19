@@ -17,6 +17,7 @@ var (
 	envARCH_X86_64                  = internEnv("ARCH_X86_64")
 	envASAN_OPTIONS                 = internEnv("ASAN_OPTIONS")
 	envASAN_SYMBOLIZER_PATH         = internEnv("ASAN_SYMBOLIZER_PATH")
+	envAUTOCHECK                    = internEnv("AUTOCHECK")
 	envAVX2_CFLAGS                  = internEnv("AVX2_CFLAGS")
 	envAVX512_CFLAGS                = internEnv("AVX512_CFLAGS")
 	envAVX_CFLAGS                   = internEnv("AVX_CFLAGS")

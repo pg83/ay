@@ -46,6 +46,10 @@ var javaConfGlobalEnv = func() []javaConfGlobal {
 	return out
 }()
 
+var javaPathVars = map[string]bool{
+	"BINDIR": true, "CURDIR": true, "ARCADIA_ROOT": true, "ARCADIA_BUILD_ROOT": true, "MODDIR": true,
+}
+
 const (
 	javaKotlinVersion          = "2.3.10"
 	javaProtoRuntimeVersion    = "4.33.0"
@@ -322,17 +326,41 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	u := jm.unit
 	arg0 := ""
 
-	for i, a := range args {
-		if strings.Contains(a, "${$}") {
-			args[i] = strings.ReplaceAll(a, "${$}", "$")
-		}
-	}
+	args = javaDropUnresolved(args)
 
 	if len(args) > 0 {
 		arg0 = args[0]
 	}
 
 	switch name {
+	case "SET_APPEND":
+		if len(args) == 0 {
+			return
+		}
+
+		value := strings.Join(args[1:], " ")
+
+		if prev, ok := env.lookup(args[0]); ok && prev != "" {
+			value = prev + " " + value
+		}
+
+		env.setString(internEnv(args[0]), value)
+
+		if d.rawVars == nil {
+			d.rawVars = map[string]string{}
+		}
+
+		rawValue := d.rawExpand(strings.Join(raw[1:], " "))
+
+		if prev := d.rawVars[args[0]]; prev != "" {
+			rawValue = prev + " " + rawValue
+		}
+
+		d.rawVars[args[0]] = rawValue
+
+		if args[0] == "_PROTOC_FLAGS" {
+			d.protocFlags = append(d.protocFlags, args[1:]...)
+		}
 	case "JDK_VERSION", "DEFAULT_JDK_VERSION":
 		javaSetJDK(d, env, arg0)
 
@@ -405,6 +433,30 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.recalcKotlincOpts(jm)
 	case "UBERJAR_HIDING_PREFIX":
 		d.uberjarOpts = append(d.uberjarOpts, "--shade-prefix", arg0)
+	case "UBERJAR_HIDE_EXCLUDE_PATTERN":
+		for _, a := range args {
+			d.uberjarOpts = append(d.uberjarOpts, "--shade-exclude", a)
+		}
+	case "UBERJAR_HIDE_INCLUDE_PATTERN":
+		for _, a := range args {
+			d.uberjarOpts = append(d.uberjarOpts, "--shade-include", a)
+		}
+	case "UBERJAR_PATH_EXCLUDE_PREFIX":
+		for _, a := range args {
+			d.uberjarOpts = append(d.uberjarOpts, "--uber-exclude", a)
+		}
+	case "UBERJAR_MANIFEST_TRANSFORMER_MAIN":
+		d.uberjarOpts = append(d.uberjarOpts, "--manifest-main", arg0)
+	case "UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE":
+		if len(args) > 1 {
+			d.uberjarOpts = append(d.uberjarOpts, "--manifest-attribute", arg0+":'"+strings.Join(args[1:], " ")+"'")
+		}
+	case "UBERJAR_APPENDING_TRANSFORMER":
+		for _, a := range args {
+			d.uberjarOpts = append(d.uberjarOpts, "--append-transformer", a)
+		}
+	case "UBERJAR_SERVICES_RESOURCE_TRANSFORMER":
+		d.uberjarOpts = append(d.uberjarOpts, "--service-transformer")
 	case "DEPENDENCY_MANAGEMENT":
 		d.dm = append(d.dm, args...)
 	case "EXCLUDE", "JAVA_RUNTIME_EXCLUDE", "JAVA_TEST_EXCLUDE":
@@ -466,13 +518,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 
 		if u.kind == juJar && !u.proto {
 			spec := parseJavaSrcs(args)
-			rawArgs := make([]string, len(raw))
 
-			for i, r := range raw {
-				rawArgs[i] = d.rawExpand(r)
-			}
-
-			spec.salt = javaSrcsSalt(parseJavaSrcs(rawArgs))
+			spec.salt = javaSrcsSalt(parseJavaSrcs(d.javaRawArgs(raw)))
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
 	case "DEFAULT_JAVA_SRCS_LAYOUT", "DEFAULT_JUNIT_JAVA_SRCS_LAYOUT":
@@ -504,7 +551,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
 	case "RUN_JAVA_PROGRAM":
-		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args})
+		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: d.javaRawArgs(raw)})
 	case "GENERATE_SCRIPT":
 		d.generateScripts = append(d.generateScripts, args)
 	case "WITH_JDK":
@@ -831,17 +878,92 @@ func javaProtoNamespace(d *JavaData, ns string) {
 }
 
 func (d *JavaData) rawExpand(s string) string {
-	for i := 0; i < 8 && strings.Contains(s, "$"); i++ {
-		prev := s
+	for i := 0; i < 8 && strings.Contains(s, "${"); i++ {
+		var sb strings.Builder
 
-		for name, value := range d.rawVars {
-			s = strings.ReplaceAll(s, "${"+name+"}", value)
+		rest := s
+
+		for {
+			start := strings.Index(rest, "${")
+
+			if start < 0 {
+				sb.WriteString(rest)
+
+				break
+			}
+
+			end := strings.IndexByte(rest[start:], '}')
+
+			if end < 0 {
+				sb.WriteString(rest)
+
+				break
+			}
+
+			name := rest[start+2 : start+end]
+
+			sb.WriteString(rest[:start])
+
+			switch value, ok := d.rawVars[name]; {
+			case ok:
+				sb.WriteString(value)
+			case javaPathVars[name]:
+				sb.WriteString(rest[start : start+end+1])
+			default:
+				if g, ok := javaConfGlobals[name]; ok {
+					sb.WriteString(g)
+				}
+			}
+
+			rest = rest[start+end+1:]
 		}
 
-		if s == prev {
+		if sb.String() == s {
 			break
 		}
+
+		s = sb.String()
 	}
 
 	return s
+}
+
+func (d *JavaData) javaRawArgs(raw []string) []string {
+	var out []string
+
+	for _, r := range raw {
+		out = append(out, strings.Fields(d.rawExpand(r))...)
+	}
+
+	return out
+}
+
+func javaDropUnresolved(args []string) []string {
+	out := args[:0:0]
+
+	for _, a := range args {
+		a = strings.ReplaceAll(a, "${$}", "$")
+
+		for {
+			start := strings.Index(a, "${")
+
+			if start < 0 {
+				break
+			}
+
+			end := strings.IndexByte(a[start:], '}')
+
+			if end < 0 {
+				break
+			}
+
+			a = a[:start] + a[start+end+1:]
+		}
+
+		if a != "" {
+			out = append(out, a)
+		}
+	}
+
+	return out
 }

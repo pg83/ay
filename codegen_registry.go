@@ -35,7 +35,9 @@ func (p *PendingEmit) fire() {
 	p.emitter = nil
 	p.frame = nil
 
-	defer func() { frame.pending-- }()
+	if frame != nil {
+		defer func() { frame.pending-- }()
+	}
 
 	if emitter != nil {
 		emitter.emitPending()

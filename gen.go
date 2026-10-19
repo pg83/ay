@@ -1771,7 +1771,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	globalOutputs := global.outs
 	globalMetas := global.metas
 
-	if ctx.sbomEnabled && env.bool(envCLANG) && len(local.refs) > 0 {
+	if sbomActive(ctx, instance) && env.bool(envCLANG) && len(local.refs) > 0 {
 		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !slices.Contains(peerSbomPaths, *p) {
 			peerSbomRefs = append(peerSbomRefs, *r)
 			peerSbomPaths = append(peerSbomPaths, *p)

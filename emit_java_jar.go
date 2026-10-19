@@ -107,6 +107,12 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	prep = append(prep, strYaStartCommandFile.any())
 
+	for _, gt := range jm.gentars {
+		prep = append(prep, gt.any())
+		b.input(gt)
+		b.deps = append(b.deps, ctx.javaUse(gt))
+	}
+
 	for _, g := range globs {
 		prep = append(prep, strJsources.any(), g.srcTxt.any(), strResources.any(), g.resTxt.any(), strSrcdir.any(), internStr(g.srcDir).any())
 
@@ -211,6 +217,11 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 		kt = append(kt, b.renderKotlincOpts(globals, d.kotlincOpts.cur)...)
 		kt = append(kt, strJvmTarget.any(), internStr(javaKotlinJVMTarget(d.jdkReal)).any())
+
+		if d.withKapt {
+			ctx.javaKaptCmds(jm, b, kt)
+		}
+
 		b.cmd(kt, bldRootDirVFS, lcAll)
 
 		allKt := build(jm.dir, "/all-kt-sources.txt")
@@ -291,7 +302,13 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 		b.outputs = append(b.outputs, srcJar)
 	}
 
-	b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strCfvm.any(), jm.target.any(), mf.any(), str4.any()}, cls, lcAll)
+	packed := jm.target
+
+	if d.uberjar {
+		packed = build(jm.dir, "/", jm.name, ".lib.jar")
+	}
+
+	b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strCfvm.any(), packed.any(), mf.any(), str4.any()}, cls, lcAll)
 
 	if d.lintLevel != "none" {
 		lint := build(jm.dir, "/lint-java.srclst")
@@ -314,6 +331,10 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 		b.outputs = append(b.outputs, lint)
 	}
 
+	if d.uberjar {
+		ctx.javaLinkUberjar(jm, b, globals, closure, packed, len(globs) > 0)
+	}
+
 	for _, dep := range d.externalDeps {
 		if rel, ok := strings.CutPrefix(dep, "$(S)/"); ok {
 			b.input(source(rel))
@@ -323,7 +344,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	}
 
 	b.setKV(pkJV, pcLightBlue, true)
-	b.deps = append(b.deps, ctx.javaClosureDeps(closure)...)
+	b.closure(closure)
 	b.emitTo(jm.outRef, ctx.target)
 }
 
@@ -345,9 +366,91 @@ func (ctx *GenCtx) javaEmitIJar(jm *JavaModule) {
 
 	b.cmd(args, 0)
 	b.cmd(append(b.python("build/scripts/canonicalize_java_abi_jar.py"), strIjar.any(), jm.target.any()), 0)
+	b.input(ijar, full.target)
 	b.setKV(pkIJ, pcLightBlue, false)
 	b.exts = []KVExt{{Key: "exclude_from_idea", Val: "yes"}}
 	b.outputs = []VFS{jm.target}
 	b.deps = append(b.deps, ref, ctx.javaUse(full.target))
 	b.emitTo(jm.outRef, ctx.target)
+}
+
+func (ctx *GenCtx) javaKaptCmds(jm *JavaModule, b *javaNodeBuilder, compileKt []ANY) {
+	d := jm.data
+	bindir := jm.path.rel().build().string()
+	ap := ctx.javaToolJar(jm, "contrib/java/org/jetbrains/kotlin/kotlin-annotation-processing/"+javaKotlinVersion)
+	args := b.python("build/scripts/with_kapt_args.py")
+
+	args = append(args, strApClasspath.any())
+
+	for _, dir := range d.kaptAPClasspath {
+		if tool := ctx.javaToolJar(jm, dir); tool != 0 {
+			args = append(args, tool.any())
+		}
+	}
+
+	args = append(args, strApOptions.any())
+	args = append(args, internAnys(d.kaptAPOptions)...)
+	args = append(args, str3.any())
+	args = append(args, compileKt...)
+
+	args = append(args, internV("-Xplugin=", ap.string()).any(),
+		strP.any(), internV("plugin:org.jetbrains.kotlin.kapt3:sources=", bindir, "/kapt_gen_src").any(),
+		strP.any(), internV("plugin:org.jetbrains.kotlin.kapt3:classes=", bindir, "/kt_cls").any(),
+		strP.any(), internV("plugin:org.jetbrains.kotlin.kapt3:stubs=", bindir, "/kapt_gen_stubs").any(),
+		strP.any(), strPluginOrgJetbrainsKotlinKapt3AptmodeStubsandapt.any())
+
+	args = append(args, internAnys(d.kaptOpts)...)
+
+	for _, p := range d.kaptProcessors {
+		args = append(args, strP.any(), internV("plugin:org.jetbrains.kotlin.kapt3:processors=", p).any())
+	}
+
+	b.cmd(args, bldRootDirVFS, EnvVar{Name: envLcAll, Value: strEnUsUtf8.any()})
+
+	res := b.python("build/scripts/resolve_java_srcs.py")
+
+	res = append(res, strD.any(), internV(bindir, "/kapt_gen_src").any(), strIncludePatterns.any(),
+		strJava2.any(), strKt.any(), strResolveKotlin.any(), strAppend.any(),
+		strS2.any(), internV(bindir, "/all-java.srclst").any(), strK.any(), internV(bindir, "/misc/all-kt-sources.txt").any(),
+		strR.any(), internV(bindir, "/not-used.txt").any())
+
+	b.cmd(res, 0)
+}
+
+func (ctx *GenCtx) javaToolJar(jm *JavaModule, dir string) VFS {
+	res := ctx.javaPeerResult(jm, dir, false)
+
+	if res == nil || res.java == nil {
+		return 0
+	}
+
+	return res.java.target
+}
+
+func (ctx *GenCtx) javaLinkUberjar(jm *JavaModule, b *javaNodeBuilder, globals map[string]VFS, closure []JavaClosureEntry, libJar VFS, hasSources bool) {
+	d := jm.data
+	jdk := javaJDKResource(d.jdkReal)
+	bindir := jm.path.rel().build().string()
+
+	args := []ANY{b.resourcePath(globals, jdk, "/bin/java"), strCp.any(), b.resourcePath(globals, "UBERJAR"+d.jdkReal, "/devtools-java_shader.jar"),
+		strRuYandexDevtoolsEmigranteMain.any(), strOutJar.any(), jm.target.any()}
+
+	if hasSources {
+		args = append(args, strJar2.any(), libJar.any())
+	}
+
+	for _, p := range javaClosureJars(closure, ".jar") {
+		args = append(args, strJar2.any(), p.any())
+	}
+
+	args = append(args, internAnys(d.uberjarOpts)...)
+	b.cmd(args, 0)
+
+	mf := build(jm.dir, "/", jm.name, ".jar.__vcs_version__.mf")
+
+	b.cmd(append(b.python("build/scripts/mkdir.py"), internV(bindir, "/_empty/META-INF").any()), 0)
+	b.cmd(append(b.python("build/scripts/touch.py"), internV(bindir, "/_empty/META-INF/MANIFEST.MF").any()), 0)
+	b.cmd(append(b.python("build/scripts/vcs_info.py"), strOutputJava.any(), bldVcsJson.any(), mf.any(), jm.target.any()), 0)
+	b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strUfv.any(), jm.target.any(), strMetaInfManifestMf.any()}, build(jm.dir, "/_empty"))
+	b.cmd([]ANY{b.resourcePath(globals, jdk, "/bin/jar"), strUfvm.any(), jm.target.any(), mf.any()}, 0)
 }

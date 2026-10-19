@@ -141,6 +141,8 @@ func (jm *JavaModule) outputs() []VFS {
 		return []VFS{jm.target, build(jm.dir, "/", jm.name, "-sources.jar")}
 	case juIJar:
 		return []VFS{jm.target}
+	case juRunnable:
+		return jm.runnableOutputs()
 	case juJar:
 		outs := []VFS{jm.target}
 
@@ -167,6 +169,10 @@ func (jm *JavaModule) outputs() []VFS {
 }
 
 func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
+	if jm.unit.kind == juJar {
+		ctx.javaRegisterRunPrograms(jm)
+	}
+
 	outs := jm.outputs()
 
 	if len(outs) == 0 {
@@ -189,20 +195,20 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
 	}
 }
 
-func (ctx *GenCtx) javaUse(out VFS) NodeRef {
-	if info := ctx.scannerTarget.codegen.use(out); info != nil {
-		return info.ProducerRef
-	}
-
-	return 0
-}
-
 func (ctx *GenCtx) javaPendingEmit(fn func()) *PendingEmit {
 	p := ctx.na.pending.one()
 
 	*p = PendingEmit{fn: fn}
 
 	return p
+}
+
+func (ctx *GenCtx) javaUse(out VFS) NodeRef {
+	if info := ctx.scannerTarget.codegen.use(out); info != nil {
+		return info.ProducerRef
+	}
+
+	return 0
 }
 
 func (ctx *GenCtx) javaEmit(jm *JavaModule) {
@@ -215,6 +221,8 @@ func (ctx *GenCtx) javaEmit(jm *JavaModule) {
 		ctx.javaEmitJar(jm)
 	case juIJar:
 		ctx.javaEmitIJar(jm)
+	case juRunnable:
+		ctx.javaEmitRunnable(jm)
 	}
 }
 
@@ -333,8 +341,12 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 	var autoInputs []VFS
 
 	if jm.unit.proto {
+		scanCtx := newScanContext(ctx.na, ctx.parsers, nil, nil, nil, includeScannerBasePaths())
+
+		scanCtx.protoInclude = ctx.na.vfsList(jm.protoInclude...)
+
 		for _, src := range d.protoSrcs {
-			autoInputs = append(autoInputs, ctx.javaEmitProtoPB(jm, globals, src))
+			autoInputs = append(autoInputs, ctx.javaEmitProtoPB(jm, globals, scanCtx, src))
 		}
 	}
 
@@ -382,7 +394,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 
 	b.setKV(pkJV, pcLightBlue, true)
 	b.outputs = []VFS{jm.target, srcJar}
-	b.deps = append(b.deps, ctx.javaClosureDeps(closure)...)
+	b.closure(closure)
 
 	for _, in := range autoInputs {
 		b.deps = append(b.deps, ctx.javaUse(in))
@@ -402,27 +414,25 @@ func javaKotlinJVMTarget(jdk string) string {
 	return jdk
 }
 
-func (ctx *GenCtx) javaClosureDeps(closure []JavaClosureEntry) []NodeRef {
-	var out []NodeRef
-
+func (b *javaNodeBuilder) closure(closure []JavaClosureEntry) {
 	for _, e := range closure {
-		if e.java != nil {
-			if ref := ctx.javaUse(e.path); ref != 0 {
-				out = append(out, ref)
-			}
+		ref := NodeRef(0)
 
-			continue
+		switch {
+		case e.java != nil:
+			ref = b.ctx.javaUse(e.path)
+		case e.foreign.LDPath != nil:
+			ref = e.foreign.LDRef
 		}
 
-		if e.foreign.LDPath != nil && e.foreign.LDRef != 0 {
-			out = append(out, e.foreign.LDRef)
+		if ref != 0 {
+			b.inputs = append(b.inputs, e.path)
+			b.deps = append(b.deps, ref)
 		}
 	}
-
-	return out
 }
 
-func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, src string) VFS {
+func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanCtx *ScanContext, src string) VFS {
 	d := jm.data
 	protoRel := path.Clean(jm.dir + "/" + src)
 	protoVFS := source(protoRel)
@@ -456,6 +466,7 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, src s
 		ref, bin := ctx.tool(internArg(plugin.tool))
 
 		b.deps = append(b.deps, ref)
+		b.input(bin)
 		args = append(args, internV("--plugin=protoc-gen-", plugin.name, "=", bin.string()).any(), internV("--", plugin.name, "_out=$(B)/java_out").any())
 	}
 
@@ -474,6 +485,11 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, src s
 
 	b.cmd(args, srcRootDirVFS, extraEnv...)
 	b.input(protoVFS)
+
+	for _, bucket := range ctx.scannerTarget.walkClosure(protoVFS, scanCtx, scanDomainProto).bucketList() {
+		b.input(bucket...)
+	}
+
 	b.setKV(pkPB, pcYellow, false)
 	b.outputs = []VFS{out}
 

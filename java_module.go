@@ -240,6 +240,7 @@ type JavaPeerSpec struct {
 
 type JavaRunProgram struct {
 	args []string
+	raw  []string
 }
 
 type JavaData struct {
@@ -344,6 +345,7 @@ type JavaModule struct {
 	outRef         NodeRef
 	protoInclude   []VFS
 	toolRefs       []NodeRef
+	gentars        []VFS
 }
 
 func (jm *JavaModule) fileName() string {
@@ -693,6 +695,10 @@ func (jm *JavaModule) macroPeers() []string {
 	d := jm.data
 
 	var out []string
+
+	if jm.unit.kind == juJar && d.lintLevel != "none" && d.noLint != "none" && len(d.javaSrcs) > 0 {
+		out = append(out, "build/platform/java/jdk/jdk"+javaConfGlobals["JDK_LATEST_VERSION"])
+	}
 
 	if jm.unit.kind == juJar && len(d.runJavaPrograms) > 0 {
 		out = append(out, "build/platform/java/jdk", "build/platform/java/jdk/jdk"+d.jdkReal)
