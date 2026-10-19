@@ -204,7 +204,7 @@ class MockSSHAgent:
                     reply = agent.answer(message)
                     self.wfile.write(struct.pack(">I", len(reply)) + reply)
 
-        self.server = socketserver.ThreadingUnixStreamServer(str(path), Handler)
+        self.server = socketserver.ThreadingUnixStreamServer("\0" + path.removeprefix("@"), Handler)
         self.server.daemon_threads = True
         threading.Thread(target=self.server.serve_forever, args=(POLL_INTERVAL,), daemon=True).start()
 
@@ -249,6 +249,7 @@ class FetchCase(unittest.TestCase):
             directory.mkdir()
         self.net = MockInternet(self.root)
         self.addCleanup(self.net.close)
+        self.agent_sock = f"@{self.root.name}-agent"
 
     def env(self, **extra):
         env = {
@@ -459,7 +460,7 @@ class FetchFromSandboxAPITest(FetchCase):
 @unittest.skipUnless(TLS_MOCKABLE, NO_TLS_MOCK)
 class FetchTokenFromSSHAgentTest(FetchCase):
     def start_agent(self, keys, list_fails=False):
-        agent = MockSSHAgent(self.root / "agent.sock", keys, list_fails)
+        agent = MockSSHAgent(self.agent_sock, keys, list_fails)
         self.addCleanup(agent.close)
         return agent
 
@@ -479,7 +480,7 @@ class FetchTokenFromSSHAgentTest(FetchCase):
         answers = iter([(403, b"{}"), (200, b'{"access_token": "agent-token"}')])
         self.net.routes[(OAUTH_HOST, "/token")] = lambda: next(answers)
         self.ay("fetch", self.bld, self.src, "sbr:20", env=self.env(
-            SSH_AUTH_SOCK=str(self.root / "agent.sock"), YA_USER="robot",
+            SSH_AUTH_SOCK=self.agent_sock, YA_USER="robot",
         ))
         self.assertEqual((self.bld / "resources" / "20" / "ok.txt").read_text(), "ok\n")
         self.assertEqual([f for f, _ in agent.signed], [
@@ -528,21 +529,21 @@ class FetchTokenFromSSHAgentTest(FetchCase):
         agent = self.start_agent([("ssh-ed25519", "k", "sig")])
         self.net.serve(OAUTH_HOST, "/token", "not json")
         self.assert_falls_back_to_script(self.env(
-            SSH_AUTH_SOCK=str(self.root / "agent.sock"), YA_USER="robot",
+            SSH_AUTH_SOCK=self.agent_sock, YA_USER="robot",
         ))
         self.assertEqual(len(agent.signed), 1)
         self.assertEqual(len(self.oauth_forms()), 1)
 
     def test_unreachable_oauth_yields_no_token(self):
         self.start_agent([("ssh-ed25519", "k", "sig")])
-        env = self.env(SSH_AUTH_SOCK=str(self.root / "agent.sock"), YA_USER="robot")
+        env = self.env(SSH_AUTH_SOCK=self.agent_sock, YA_USER="robot")
         env["HTTPS_PROXY"] = "http://127.0.0.1:1"
         self.assert_falls_back_to_script(env)
 
     def test_agent_refusing_to_list_yields_no_token(self):
         self.start_agent([], list_fails=True)
         self.assert_falls_back_to_script(self.env(
-            SSH_AUTH_SOCK=str(self.root / "agent.sock"), YA_USER="robot",
+            SSH_AUTH_SOCK=self.agent_sock, YA_USER="robot",
         ))
 
     def test_unknown_user_without_login_name_yields_no_token(self):
@@ -560,7 +561,7 @@ class FetchTokenFromSSHAgentTest(FetchCase):
         ))
         result = subprocess.run(
             [*unshare, str(lib.AY), "fetch", str(self.bld), str(self.src), "sbr:31"],
-            env=self.env(SSH_AUTH_SOCK=str(self.root / "agent.sock"), USER=""),
+            env=self.env(SSH_AUTH_SOCK=self.agent_sock, USER=""),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30, check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -569,7 +570,7 @@ class FetchTokenFromSSHAgentTest(FetchCase):
 
     def test_dead_agent_socket_yields_no_token(self):
         self.assert_falls_back_to_script(self.env(
-            SSH_AUTH_SOCK=str(self.root / "missing.sock"),
+            SSH_AUTH_SOCK=f"@{self.root.name}-missing",
         ))
 
 
@@ -672,7 +673,7 @@ class ExecutorSandboxTokenTest(FetchCase):
 
     def setUp(self):
         super().setUp()
-        self.agent = MockSSHAgent(self.root / "agent.sock", [("ssh-ed25519", "k", "sig")])
+        self.agent = MockSSHAgent(self.agent_sock, [("ssh-ed25519", "k", "sig")])
         self.addCleanup(self.agent.close)
         self.net.serve(OAUTH_HOST, "/token", '{"access_token": "agent-token"}')
         self.write(".arcadia.root", "")
@@ -682,7 +683,7 @@ class ExecutorSandboxTokenTest(FetchCase):
         return self.ay(
             "make", "-j", "2", "-k", "--source-root", self.src, "-B", self.bld,
             "-I", self.root / "inst", target,
-            env=self.env(SSH_AUTH_SOCK=str(self.root / "agent.sock"), YA_USER="robot"),
+            env=self.env(SSH_AUTH_SOCK=self.agent_sock, YA_USER="robot"),
             check=False,
         )
 
