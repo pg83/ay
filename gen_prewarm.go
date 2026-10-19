@@ -27,6 +27,7 @@ type GenPrewarm struct {
 	files     []VFS
 	seenDirs  map[string]uint8
 	seenFiles *IntSet
+	probed    *IntSet
 }
 
 func newGenCaches(fs FS) *GenCaches {
@@ -42,6 +43,7 @@ func (c *GenCaches) prewarm(fs FS, targets []string) {
 		caches:    c,
 		seenDirs:  map[string]uint8{},
 		seenFiles: newIntSet(1 << 12),
+		probed:    newIntSet(1 << 12),
 	}
 
 	for _, t := range targets {
@@ -204,16 +206,33 @@ func (w *GenPrewarm) file(v VFS) {
 	dir := internStr(path.Dir(rel))
 
 	for _, d := range pm.sourceParsedWalkable(v, nil) {
-		target := d.target.string()
-
-		if !prewarmPath(target) {
+		if d.kind == includeQuoted && w.probe(dir, d.target) {
 			continue
 		}
 
-		if d.kind == includeQuoted && w.fs.isFile(dir, target) {
-			w.pushFile(sourceJoinClean(dir.string(), target))
-		} else if w.fs.isFile(srcRootRel, target) {
-			w.pushFile(sourceClean(target))
-		}
+		w.probe(srcRootRel, d.target)
 	}
+}
+
+func (w *GenPrewarm) probe(dir STR, target ANY) bool {
+	key := uint64(dir)<<32 | uint64(target)
+
+	if found, probed := w.probed.get(key); probed {
+		return found
+	}
+
+	t := target.string()
+	found := prewarmPath(t) && w.fs.isFile(dir, t)
+
+	w.probed.put(key, found)
+
+	switch {
+	case !found:
+	case dir == srcRootRel:
+		w.pushFile(sourceClean(t))
+	default:
+		w.pushFile(sourceJoinClean(dir.string(), t))
+	}
+
+	return found
 }
