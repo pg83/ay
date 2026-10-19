@@ -48,7 +48,7 @@ func sbomQualifies(d *ModuleData) bool {
 
 func sbomComponentLang(moduleName TOK) string {
 	switch {
-	case moduleName == tokGoLibrary || moduleName == tokGoProgram:
+	case isGoModuleType(moduleName):
 		return "GO"
 	case moduleName == tokPrebuiltProgram:
 		return moduleLangTokenAgnostic

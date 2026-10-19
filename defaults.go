@@ -181,7 +181,6 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 		} else {
 			peers = append(peers,
 				"build/platform/clang",
-				"build/platform/clang/clang-format",
 				"build/platform/lld",
 				"build/platform/python/ymake_python3",
 			)
@@ -263,9 +262,13 @@ func (e *EmitContext) defaultProgramPeerdirsForModule(postUser bool) []string {
 func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string {
 	_, instance, d := e.ctx, e.instance, e.d
 
-	if d.moduleStmt != nil && d.moduleStmt.Name == tokGoProgram {
+	if d.moduleStmt != nil && isGoExeModuleType(d.moduleStmt.Name) {
 		if postUser {
 			return nil
+		}
+
+		if instance.Platform.ifEnv.bool(envAutocheck) && instance.Platform.OS == OSLinux {
+			return []string{"build/platform/lld", "contrib/libs/libeatmydata", "build/cow/on"}
 		}
 
 		return []string{"build/platform/lld", "build/cow/on"}

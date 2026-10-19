@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -106,6 +107,7 @@ type GoStd struct {
 	AsmIncludeDirs []VFS
 	HeadLib        []ANY
 	HeadExe        []ANY
+	HeadTest       []ANY
 }
 
 func confGoStdVersion(fs FS) string {
@@ -133,11 +135,13 @@ func newGoStd(version string) *GoStd {
 	g.AsmIncludeDirs = []VFS{g.Runtime, goFakeIncludeVFS, contribLibsLinuxHeaders, contribLibsLinuxHeadersNf}
 	g.HeadLib = g.toolCmdHead("lib")
 	g.HeadExe = g.toolCmdHead("exe")
+	g.HeadTest = g.toolCmdHead("test")
 
 	if ownershipOn {
 		registerOwnedSlice(g.AsmIncludeDirs)
 		registerOwnedSlice(g.HeadLib)
 		registerOwnedSlice(g.HeadExe)
+		registerOwnedSlice(g.HeadTest)
 	}
 
 	return g
@@ -176,7 +180,11 @@ func goToolCmdFlagsChunk(pic bool) []ANY {
 }
 
 func isGoModuleType(name TOK) bool {
-	return name == tokGoLibrary || name == tokGoProgram
+	return name == tokGoLibrary || isGoExeModuleType(name)
+}
+
+func isGoExeModuleType(name TOK) bool {
+	return name == tokGoProgram || name == tokGoTest || name == tokGoDll
 }
 
 func (g *GoStd) importPath(dir string) string {
@@ -233,10 +241,33 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		d.peerdirs = append(d.peerdirs, internStr(p).any())
 	}
 
-	if d.moduleStmt.Name == tokGoProgram {
+	if isGoExeModuleType(d.moduleStmt.Name) {
+		user := slices.Clone(d.peerdirs)
+
+		d.peerdirs = d.peerdirs[:0]
+
 		addPeer(std.Prefix + "/runtime/cgo")
+
+		if d.moduleStmt.Name == tokGoTest {
+			addPeer(std.Prefix + "/internal/coverage/cfile")
+			addPeer(std.Prefix + "/runtime/coverage")
+		}
+
 		addPeer(std.Prefix + "/runtime")
 		addPeer("library/go/core/buildinfo")
+
+		if d.moduleStmt.Name == tokGoTest {
+			addPeer(std.Prefix + "/os")
+			addPeer(std.Prefix + "/testing/internal/testdeps")
+			addPeer(std.Prefix + "/testing")
+			addPeer("library/go/test/yatest")
+		}
+
+		for _, p := range user {
+			if !slices.Contains(d.peerdirs, p) {
+				d.peerdirs = append(d.peerdirs, p)
+			}
+		}
 	}
 
 	if len(d.cgoSrcs) > 0 {
@@ -245,42 +276,35 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		addPeer(std.Prefix + "/runtime/cgo")
 	}
 
+	addImports := func(src ANY) {
+		path := src.vfs()
+
+		if path == 0 {
+			path = resolveSourceVFS(ctx, instance, src.string(), d.srcDirs)
+		}
+
+		if path.isBuild() {
+			return
+		}
+
+		for _, imp := range parseGoImports(concatChunks(ctx.fs.read(path.relString()))) {
+			addPeer(goImportDir(ctx, std, dir, imp.string()))
+		}
+	}
+
 	for _, meta := range d.srcs {
 		if meta.Global || meta.Compile.Variant != 0 {
 			continue
 		}
 
-		src := meta.Source
-		rel := src.relOrSelf().string()
-
-		if !strings.HasSuffix(rel, ".go") {
-			continue
-		}
-
-		path, ok := goReadableSourcePath(dir, src)
-
-		if !ok {
-			continue
-		}
-
-		data := concatChunks(ctx.fs.read(path))
-
-		for _, imp := range parseGoImports(data) {
-			addPeer(goImportDir(ctx, std, dir, imp.string()))
+		if strings.HasSuffix(meta.Source.relOrSelf().string(), ".go") {
+			addImports(meta.Source)
 		}
 	}
 
-	for _, src := range d.cgoSrcs {
-		path, ok := goReadableSourcePath(dir, src)
-
-		if !ok {
-			continue
-		}
-
-		data := concatChunks(ctx.fs.read(path))
-
-		for _, imp := range parseGoImports(data) {
-			addPeer(goImportDir(ctx, std, dir, imp.string()))
+	for _, srcs := range [][]ANY{d.cgoSrcs, d.goTestSrcs, d.goXTestSrcs} {
+		for _, src := range srcs {
+			addImports(src)
 		}
 	}
 
@@ -332,18 +356,6 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			meta.Compile.CFlags = concat(meta.Compile.CFlags, cgoFlags)
 		}
 	}
-}
-
-func goReadableSourcePath(module string, src ANY) (string, bool) {
-	if v := src.vfs(); v != 0 {
-		if v.isBuild() {
-			return "", false
-		}
-
-		return v.relString(), true
-	}
-
-	return module + "/" + src.string(), true
 }
 
 type GoSrcsResult struct {
@@ -1090,7 +1102,49 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 
 	na.anys.commit(nt)
 
-	sbomEmbed := instance.Platform.BuildRelease && sbomActive(ctx, instance) && len(peerSbomPaths) > 0
+	isTest := d.moduleStmt.Name == tokGoTest
+	head, kv := instance.Platform.Go.HeadExe, &goLdKV
+
+	var testArgs, testTail []ANY
+	var testInputs []VFS
+	var minerRef NodeRef
+
+	if isTest {
+		var minerPath VFS
+
+		head, kv = instance.Platform.Go.HeadTest, &goKV
+		minerRef, minerPath = ctx.tool(argToolsGoTestMiner)
+		testArgs = []ANY{strTestMiner.any(), minerPath.any(), strTestImportPath.any()}
+
+		if imp := d.setVars[strGO_TEST_IMPORT_PATH]; imp != 0 {
+			testArgs = append(testArgs, imp.any())
+		}
+
+		testTail = append(testTail, strTestSrcs.any())
+
+		for _, src := range d.goTestSrcs {
+			p := resolveSourceVFS(ctx, instance, src.string(), d.srcDirs)
+
+			testTail = append(testTail, p.any())
+			testInputs = append(testInputs, p)
+		}
+
+		testTail = append(testTail, strXTestSrcs.any())
+
+		for _, src := range d.goXTestSrcs {
+			p := resolveSourceVFS(ctx, instance, src.string(), d.srcDirs)
+
+			testTail = append(testTail, p.any())
+			testInputs = append(testInputs, p)
+		}
+
+		testTail = append(testTail, strSkipTests.any())
+		testTail = append(testTail, d.goSkipTests...)
+
+		testInputs = append(testInputs, minerPath)
+	}
+
+	sbomEmbed := !isTest && instance.Platform.BuildRelease && sbomActive(ctx, instance) && len(peerSbomPaths) > 0
 	extraSources := na.vfsList(ldSvnInterfaceVFS, ldSvnversionHVFS)
 
 	var extraBuilds, extraTailSources []VFS
@@ -1102,6 +1156,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 
 	inputs := na.inputList(
 		na.vfsList(goRes.GoFiles...),
+		testInputs,
 		goToolScriptInputsChunk,
 		ctx.scripts[ldVcsInfoVFS.rel()],
 		ctx.scripts[ldFsToolsVFS.rel()],
@@ -1111,22 +1166,27 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		extraTailSources,
 	)
 
-	deps := na.noderefs.alloc(len(peerArchiveRefs) + len(peerSbomRefs) + 1)
+	deps := na.noderefs.alloc(len(peerArchiveRefs) + len(peerSbomRefs) + 2)
 	k := copy(deps, peerArchiveRefs)
 
-	if instance.Platform.BuildRelease && sbomActive(ctx, instance) {
+	if !isTest && instance.Platform.BuildRelease && sbomActive(ctx, instance) {
 		k += copy(deps[k:], peerSbomRefs)
 	}
 
 	deps[k] = ctx.vcsRef
 	k++
 
+	if minerRef != 0 {
+		deps[k] = minerRef
+		k++
+	}
+
 	na.noderefs.commit(k)
 
 	env := goCmdEnv(ctx, instance.Platform, d.tc)
 
 	goCmd := Cmd{CmdArgs: na.chunkList(
-		instance.Platform.Go.HeadExe,
+		head,
 		na.anyList(build(dir).any()),
 		goToolCmdMid,
 		na.anyList(outPath.any()),
@@ -1137,7 +1197,9 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		na.anyList(vcsGoPath.any()),
 		goExeCmdExtld,
 		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm),
+		testArgs,
 		tail[:nt:nt],
+		testTail,
 		goToolCmdEnd,
 	), Env: env}
 
@@ -1175,7 +1237,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		Cmds:      cmds[:kc:kc],
 		Env:       env,
 		Inputs:    inputs,
-		KV:        &goLdKV,
+		KV:        kv,
 		Outputs:   na.vfsList(outPath, build(dir, "/", outName, ".vet.txt")),
 		DepRefs:   deps[:k:k],
 		Resources: goToolResources(na, resourceGlobals),

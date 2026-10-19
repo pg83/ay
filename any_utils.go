@@ -57,3 +57,13 @@ func internAnys(ss []string) []ANY {
 
 	return out
 }
+
+func anyStrings(items []ANY) []string {
+	out := make([]string, len(items))
+
+	for i, item := range items {
+		out[i] = item.string()
+	}
+
+	return out
+}

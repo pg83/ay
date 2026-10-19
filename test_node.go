@@ -12,6 +12,8 @@ import (
 var (
 	testContextAllowedFlags = []string{"AUTOCHECK", "TESTS_REQUESTED", "USE_ARCADIA_PYTHON", "USE_SYSTEM_PYTHON"}
 	testSizeTimeouts        = map[string]int{"small": 60, "medium": 600, "large": 3600}
+	testSizeNames           = map[string]string{"SMALL": "small", "MEDIUM": "medium", "LARGE": "large"}
+	testPartitionModes      = map[string]string{"SEQUENTIAL": "SEQUENTIAL", "MODULO": "MODULO"}
 	testSizeKinds           = map[string]ProcKind{"small": pkTS, "medium": pkTM, "large": pkTL}
 	testCommonEnvSkip       = []string{"YA_CACHE_DIR", "YA_TIMEOUT", "YA_TOKEN", "YA_SOURCE_ROOT"}
 	testSanitizerOptVars    = []string{"LSAN_OPTIONS", "ASAN_OPTIONS", "UBSAN_OPTIONS", "MSAN_OPTIONS", "TSAN_OPTIONS"}
@@ -57,6 +59,7 @@ type TestSuite struct {
 	Globals       []ResourceDecl
 	Tags          []string
 	Env           []string
+	RunCwd        string
 	Canonization  bool
 	TestParams    bool
 	SmoothSignals []string
@@ -345,6 +348,10 @@ func (ctx *GenCtx) emitTestSuite(p *Platform, s *TestSuite) (NodeRef, bool) {
 	}
 
 	push("--verify-results", "--tests-limit-in-chunk", strconv.Itoa(testDefaultTestsLimit), "--output-style", opts.outputStyle, "--python-bin", testPythonBin)
+
+	if s.RunCwd != "" {
+		args = append(args, strTestRunCwd.any(), source(s.RunCwd).any())
+	}
 
 	for _, tag := range s.Tags {
 		push("--tag", tag)

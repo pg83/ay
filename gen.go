@@ -52,13 +52,11 @@ var acknowledgedMacros = map[string]struct{}{
 	"NO_CLANG_COVERAGE":               {},
 	"NO_CLANG_MCDC_COVERAGE":          {},
 	"NO_CLANG_TIDY":                   {},
-	"NO_LINT":                         {},
 	"NO_PROFILE_RUNTIME":              {},
 	"NO_PYTHON_COVERAGE":              {},
 	"NO_SANITIZE":                     {},
 	"NO_SANITIZE_COVERAGE":            {},
 	"NO_JOIN_SRC":                     {},
-	"STYLE_CPP":                       {},
 	"STYLE_CPP_YT":                    {},
 	"STYLE_PYTHON":                    {},
 	"NO_OPTIMIZE":                     {},
@@ -518,7 +516,7 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 }
 
 func isFinalTargetModuleType(name TOK) bool {
-	return isProgramModuleType(name) || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib
+	return isProgramModuleType(name) && name != tokGoTest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib
 }
 
 func picTransition(name TOK) bool {
@@ -690,7 +688,7 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 		return cached
 	}
 
-	stmts := ctx.parseFileCached(internJoined(dir, "ya.make").string())
+	stmts := expandGoTestFor(ctx, ctx.parseFileCached(internJoined(dir, "ya.make").string()))
 
 	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootRel, inc.relString()) {
 		incStmts := ctx.parseFileCached(inc.relString())
@@ -701,6 +699,61 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 	ctx.moduleStmts[dir] = stmts
 
 	return stmts
+}
+
+func expandGoTestFor(ctx *GenCtx, stmts []Stmt) []Stmt {
+	at := slices.IndexFunc(stmts, func(st Stmt) bool {
+		u, ok := st.(*UnknownStmt)
+
+		return ok && u.Name == tokGoTestFor && len(u.Args) > 0
+	})
+
+	if at < 0 {
+		return stmts
+	}
+
+	stmt := stmts[at].(*UnknownStmt)
+	forDir := path.Clean(stmt.Args[0].string())
+	out := make([]Stmt, 0, len(stmts)+8)
+
+	out = append(out, stmts[:at]...)
+
+	out = append(out,
+		&SetStmt{Name: "GO_TEST_IMPORT_PATH", NameEnv: envGO_TEST_IMPORT_PATH, Value: forDir, Line: stmt.Line},
+		&SetStmt{Name: "_GO_IMPORT_PATH", NameEnv: env_GO_IMPORT_PATH, Value: forDir, Line: stmt.Line},
+		&SrcDirStmt{Dirs: []ANY{internStr(forDir).any()}, Line: stmt.Line},
+	)
+
+	out = appendGoTestForModule(out, ctx.parseFileCached(internJoined(forDir, "ya.make").string()))
+
+	return append(out, stmts[at+1:]...)
+}
+
+func appendGoTestForModule(out, stmts []Stmt) []Stmt {
+	for _, st := range stmts {
+		switch v := st.(type) {
+		case *ModuleStmt:
+			module := *v
+
+			module.Name = tokGoTest
+			out = append(out, &module)
+		case *UnknownStmt:
+			if v.Name != tokRecurse && v.Name != tokRecurseForTests && v.Name != tokRecurseRootRelative {
+				out = append(out, v)
+			}
+		case *IfStmt:
+			branch := *v
+
+			branch.Then = appendGoTestForModule(nil, v.Then)
+			branch.Else = appendGoTestForModule(nil, v.Else)
+
+			out = append(out, &branch)
+		default:
+			out = append(out, st)
+		}
+	}
+
+	return out
 }
 
 func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
@@ -1942,6 +1995,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if instance.Demand == demandNone {
 		result := newResult()
 
+		result.ResourceGlobalClosure = resourceGlobalsClosure
+
 		ctx.memoPut(instance, result)
 
 		return result
@@ -1968,7 +2023,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 	}
 
-	if d.moduleStmt.Name == tokGoProgram {
+	if isGoExeModuleType(d.moduleStmt.Name) {
 		goRef, goPath := e.emitGoExe(resolved, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
 		result := newResult()
 

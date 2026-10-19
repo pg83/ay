@@ -122,12 +122,30 @@ func protoCmdPeers(d *ModuleData) []ANY {
 	return front
 }
 
+type TestMeta struct {
+	size         string
+	timeout      int
+	tags         []string
+	requirements []string
+	env          []string
+	data         []string
+	cwd          string
+	forkMode     string
+	partition    string
+	splitFactor  int
+}
+
 type ModuleData struct {
 	nots                     *NotsModule
 	docs                     *DocsData
 	moduleStmt               *ModuleStmt
 	modver                   string
 	hasLicense               bool
+	goTestSrcs               []ANY
+	goXTestSrcs              []ANY
+	goSkipTests              []ANY
+	noLint                   string
+	test                     TestMeta
 	cgoSrcs                  []ANY
 	cgoLdflags               []ANY
 	cgoCflags                []ANY
@@ -1473,7 +1491,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	switch name {
 	case tokDllJava:
 		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp, SwigLang: strSwigLangJniCpp}
-	case tokGoLibrary, tokGoProgram:
+	case tokGoLibrary, tokGoProgram, tokGoTest, tokGoDll:
 		return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy3Program:
 		return ModuleUnit{Type: name, Tag: unitTagPy3Bin, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
@@ -1743,7 +1761,71 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.bundles = append(d.bundles, BundleEntry{Target: target, Name: name, Suffix: suffix})
 		}
 
-	case tokGoTestSrcs, tokGoXtestSrcs, tokGoSkipTests, tokGoEmbedPattern:
+	case tokGoTestSrcs:
+		if d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
+			d.goTestSrcs = append(d.goTestSrcs, v.Args...)
+		}
+	case tokGoXtestSrcs:
+		if d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
+			d.goXTestSrcs = append(d.goXTestSrcs, v.Args...)
+		}
+	case tokGoSkipTests:
+		d.goSkipTests = append(d.goSkipTests, v.Args...)
+	case tokGoEmbedPattern:
+	case tokAllGoSrcs:
+		dir := modulePath
+
+		if imp := env.string(env_GO_IMPORT_PATH); imp != "" {
+			dir = imp
+		}
+
+		for _, name := range goDirSources(fs, dir) {
+			d.srcs = append(d.srcs, SrcMeta{Source: source(dir + "/" + name).any(), Prio: stmtPrioDefault})
+		}
+	case tokNoLint:
+		d.noLint = "none"
+
+		if len(v.Args) > 0 && v.Args[0].string() == "ktlint" {
+			d.noLint = "ktlint"
+		}
+	case tokStyleCpp:
+		if d.noLint != "none" && d.noLint != "none_internal" {
+			d.peerdirs = append(d.peerdirs, strBuildPlatformClangFormat.any())
+		}
+	case tokSize:
+		if len(v.Args) > 0 {
+			d.test.size = testSizeNames[v.Args[0].string()]
+		}
+	case tokTimeout:
+		if len(v.Args) > 0 {
+			d.test.timeout, _ = strconv.Atoi(v.Args[0].string())
+		}
+	case tokTag:
+		d.test.tags = append(d.test.tags, anyStrings(v.Args)...)
+	case tokRequirements:
+		d.test.requirements = append(d.test.requirements, anyStrings(v.Args)...)
+	case tokEnv:
+		d.test.env = append(d.test.env, anyStrings(v.Args)...)
+	case tokData:
+		d.test.data = append(d.test.data, anyStrings(v.Args)...)
+	case tokTestCwd:
+		if len(v.Args) > 0 {
+			d.test.cwd = v.Args[0].string()
+		}
+	case tokForkTests, tokForkSubtests:
+		d.test.forkMode = "tests"
+
+		if v.Name == tokForkSubtests {
+			d.test.forkMode = "subtests"
+		}
+
+		if len(v.Args) > 0 {
+			d.test.partition = testPartitionModes[v.Args[0].string()]
+		}
+	case tokSplitFactor:
+		if len(v.Args) > 0 {
+			d.test.splitFactor, _ = strconv.Atoi(v.Args[0].string())
+		}
 
 	case tokCgoSrcs:
 
@@ -3070,7 +3152,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittestFor, tokGoProgram:
+	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittestFor, tokGoProgram, tokGoTest, tokGoDll:
 		return true
 	}
 

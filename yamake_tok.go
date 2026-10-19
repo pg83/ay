@@ -263,6 +263,11 @@ var tokName = [...]STR{
 	tokJarLibrary:                     internStr("JAR_LIBRARY"),
 	tokDllJava:                        internStr("DLL_JAVA"),
 	tokAddDllsToJar:                   internStr("ADD_DLLS_TO_JAR"),
+	tokGoTest:                         internStr("GO_TEST"),
+	tokGoTestFor:                      internStr("GO_TEST_FOR"),
+	tokGoDll:                          internStr("GO_DLL"),
+	tokAllGoSrcs:                      internStr("ALL_GO_SRCS"),
+	tokTestCwd:                        internStr("TEST_CWD"),
 }
 
 var tokByName = func() map[string]TOK {
@@ -551,6 +556,11 @@ const (
 	tokJarLibrary
 	tokDllJava
 	tokAddDllsToJar
+	tokGoTest
+	tokGoTestFor
+	tokGoDll
+	tokAllGoSrcs
+	tokTestCwd
 )
 
 type TOK uint16

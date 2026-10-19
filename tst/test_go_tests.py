@@ -38,7 +38,8 @@ def go_world():
         "ya.conf": YA_CONF,
         "build/conf/go.conf": "# tag:go-specific\nGOSTD_VERSION=1.27\nwhen ($GOSTD_VERSION == \"1.26\") {\n}\n",
         "build/scripts/append_file.py": "import sys\n",
-        "build/cow/on/ya.make": f"LIBRARY()\n{NO_PLATFORM}END()\n",
+        "build/cow/on/ya.make": f"LIBRARY()\n{NO_PLATFORM}SRCS(on.c)\nEND()\n",
+        "build/cow/on/on.c": "int on;\n",
         "contrib/libs/linux-headers/ya.make": (
             f"LIBRARY()\n{NO_PLATFORM}DISABLE(NEED_PLATFORM_PEERDIRS)\nEND()\n"
         ),
@@ -211,6 +212,138 @@ class GoStyleTestsTest(unittest.TestCase):
         go_module(files, "library/go/greet")
         graph = lib.make(files, "library/go/greet", *AUTOCHECK, "--test-size", "medium")
         self.assertEqual(test_paths(graph), [])
+
+
+def go_test_world():
+    files = go_world()
+    for path in (
+        f"{STD}/os", f"{STD}/testing/internal/testdeps", f"{STD}/testing",
+        f"{STD}/internal/coverage/cfile", f"{STD}/runtime/coverage", "library/go/test/yatest",
+    ):
+        go_module(files, path)
+    go_module(files, "tools/go_test_miner", module="GO_PROGRAM")
+    files["contrib/libs/libeatmydata/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(e.c)\nEND()\n"
+    files["contrib/libs/libeatmydata/e.c"] = "int e;\n"
+    return files
+
+
+def between(args, start, end):
+    begin = args.index(start) + 1
+    return args[begin:args.index(end, begin)]
+
+
+class GoTestModuleTest(unittest.TestCase):
+    def test_go_test_links_a_test_binary_and_runs_it(self):
+        files = go_test_world()
+        go_module(files, "lib/greet")
+        files["lib/greet/tests/ya.make"] = (
+            "GO_TEST()\nGO_TEST_SRCS(greet_test.go)\nSIZE(MEDIUM)\nTAG(ya:manual)\nEND()\n"
+        )
+        files["lib/greet/tests/greet_test.go"] = (
+            'package greet_test\nimport (\n\t"testing"\n\t"a.yandex-team.ru/lib/greet"\n)\n'
+        )
+        graph = lib.make(files, "lib/greet/tests", *AUTOCHECK)
+        self.assertEqual(test_paths(graph), [
+            "lib/greet/tests/gofmt", "lib/greet/tests/govet", "lib/greet/tests/tests",
+        ])
+        binary = lib.node_by_output(graph, "$(B)/lib/greet/tests/tests")
+        self.assertEqual(binary["kv"]["p"], "GO")
+        self.assertEqual(binary["outputs"], ["$(B)/lib/greet/tests/tests", "$(B)/lib/greet/tests/tests.vet.txt"])
+        args = go_tool_args(binary)
+        self.assertEqual(arg_after(args, "++mode"), "test")
+        self.assertEqual(between(args, "++srcs", "++asm-flags"), [])
+        self.assertEqual(between(args, "++test-miner", "++test-import-path"), [
+            "$(B)/tools/go_test_miner/go_test_miner",
+        ])
+        self.assertEqual(between(args, "++test-import-path", "++peers"), [])
+        self.assertEqual(between(args, "++peers", "++non-local-peers"), [
+            f"{STD}/runtime/cgo/cgo.a", f"{STD}/internal/coverage/cfile/cfile.a",
+            f"{STD}/runtime/coverage/coverage.a", f"{STD}/runtime/runtime.a",
+            "library/go/core/buildinfo/buildinfo.a", f"{STD}/os/os.a",
+            f"{STD}/testing/internal/testdeps/testdeps.a", f"{STD}/testing/testing.a",
+            "library/go/test/yatest/yatest.a", "lib/greet/greet.a",
+        ])
+        self.assertEqual(between(args, "++cgo-peers", "++test_srcs"), [
+            "lib/greet/tests/__vcs_version__.c.o",
+            "contrib/libs/libeatmydata/libcontrib-libs-libeatmydata.a",
+            "build/cow/on/libbuild-cow-on.a",
+        ])
+        self.assertEqual(args[args.index("++test_srcs"):], [
+            "++test_srcs", "$(S)/lib/greet/tests/greet_test.go", "++xtest_srcs", "++skip-tests",
+            "--ya-end-command-file",
+        ])
+        self.assertIn("$(B)/tools/go_test_miner/go_test_miner", binary["inputs"])
+
+        run = test_node(graph, "lib/greet/tests/tests")
+        self.assertEqual(run["kv"]["p"], "TM")
+        context = lib.node_by_output(graph, "$(B)/common_test.context")
+        self.assertEqual(run["deps"], [binary["uid"], context["uid"]])
+        self.assertEqual(run["inputs"], ["$(S)/lib/greet/tests"])
+        args = run["cmds"][0]["cmd_args"]
+        self.assertEqual(arg_after(args, "--test-type"), "go_test")
+        self.assertEqual(arg_after(args, "--test-size"), "medium")
+        self.assertEqual(arg_after(args, "--timeout"), "600")
+        self.assertEqual(args_after(args, "--test-related-path"), ["$(S)/lib/greet/tests"])
+        self.assertEqual(args_after(args, "--tag"), ["ya:manual"])
+        self.assertIn("--supports-canonization", args)
+        self.assertEqual(args_after(args, "--smooth-shutdown-signals"), ["SIGUSR2"])
+        self.assertEqual(args[args.index("run_go_test"):-1], [
+            "run_go_test", "--binary", "$(B)/lib/greet/tests/tests",
+            "--test-work-dir", "$(B)/lib/greet/tests/test-results/tests",
+            "--tracefile", "$(B)/lib/greet/tests/test-results/tests/ytest.report.trace",
+            "--modulo", "1", "--modulo-index", "0", "--partition-mode", "SEQUENTIAL",
+            "--output-dir", "$(B)/lib/greet/tests/test-results/tests/testing_out_stuff",
+            "--project-path", "lib/greet/tests", "--timeout", "600", "--verbose",
+        ])
+        fmt = test_node(graph, "lib/greet/tests/gofmt")
+        self.assertEqual(args_after(fmt["cmds"][0]["cmd_args"], "--test-related-path"), [
+            "$(S)/lib/greet/tests/greet_test.go",
+        ])
+
+    def test_go_test_for_compiles_the_tested_package(self):
+        files = go_test_world()
+        files["lib/svc/ya.make"] = (
+            "GO_LIBRARY(svc)\nALL_GO_SRCS()\nGO_TEST_SRCS(svc_test.go)\nEND()\n"
+            "RECURSE(sub)\nRECURSE_FOR_TESTS(gotest)\n"
+        )
+        files["lib/svc/b.go"] = "package svc\n"
+        files["lib/svc/a.go"] = "package svc\n"
+        files["lib/svc/svc_test.go"] = "package svc\n"
+        go_module(files, "lib/svc/sub")
+        files["lib/svc/gotest/ya.make"] = "GO_TEST_FOR(lib/svc)\nEND()\n"
+        graph = lib.make(files, "lib/svc", *AUTOCHECK)
+        self.assertEqual(test_paths(graph), [
+            "lib/svc/gofmt", "lib/svc/gotest/govet", "lib/svc/gotest/svc", "lib/svc/govet",
+            "lib/svc/sub/gofmt", "lib/svc/sub/govet",
+        ])
+        package = lib.node_by_output(graph, "$(B)/lib/svc/svc.a")
+        self.assertEqual(between(go_tool_args(package), "++srcs", "++asm-flags"), [
+            "$(S)/lib/svc/a.go", "$(S)/lib/svc/b.go",
+        ])
+        binary = lib.node_by_output(graph, "$(B)/lib/svc/gotest/svc")
+        args = go_tool_args(binary)
+        self.assertEqual(between(args, "++srcs", "++asm-flags"), ["$(S)/lib/svc/a.go", "$(S)/lib/svc/b.go"])
+        self.assertEqual(between(args, "++test-import-path", "++peers"), ["lib/svc"])
+        self.assertEqual(between(args, "++test_srcs", "++xtest_srcs"), ["$(S)/lib/svc/svc_test.go"])
+        self.assertNotIn("lib/svc/svc.a", args)
+        self.assertEqual(
+            test_node(graph, "lib/svc/gotest/govet")["inputs"],
+            ["$(S)/lib/svc/gotest", "$(B)/lib/svc/gotest/svc.vet.txt"],
+        )
+
+    def test_style_cpp_brings_the_clang_format_resource(self):
+        files = go_world()
+        files["c/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(c.cpp)\nSTYLE_CPP()\nEND()\n"
+        files["c/c.cpp"] = "int c;\n"
+        files["n/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(n.cpp)\nNO_LINT()\nSTYLE_CPP()\nEND()\n"
+        files["n/n.cpp"] = "int n;\n"
+        go_module(files, "g/withc", macros="PEERDIR(c)\n")
+        go_module(files, "g/withn", macros="PEERDIR(n)\n")
+        for module, expected in (("g/withc", True), ("g/withn", False)):
+            graph = lib.make(files, module, *AUTOCHECK)
+            args = test_node(graph, f"{module}/govet")["cmds"][0]["cmd_args"]
+            globals_ = [g.split("::")[0] for g in args_after(args, "--global-resource")]
+            self.assertEqual("CLANG_FORMAT_RESOURCE_GLOBAL" in globals_, expected, module)
 
 
 if __name__ == "__main__":

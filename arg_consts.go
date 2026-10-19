@@ -249,6 +249,7 @@ var (
 	argToolsEnumParserEnumParser                 = internArg("tools/enum_parser/enum_parser")
 	argToolsEvent2cpp                            = internArg("tools/event2cpp")
 	argToolsFixElf                               = internArg("tools/fix_elf")
+	argToolsGoTestMiner                          = internArg("tools/go_test_miner")
 	argToolsHtml2cpp                             = internArg("tools/html2cpp")
 	argToolsLua                                  = internArg("tools/lua")
 	argToolsPy3cc                                = internArg("tools/py3cc")

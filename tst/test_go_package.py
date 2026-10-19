@@ -387,7 +387,7 @@ class GoPackageGraphTest(unittest.TestCase):
         link = go_tool_args(lib.node_by_output(graph, "$(B)/cmd/nothing/nothing"))
         self.assertEqual(between(link, "++srcs", "++asm-flags"), [])
         self.assertEqual(between(link, "++peers", "++non-local-peers"), [
-            "library/go/empty/empty.a", "vendor/github.com/x/nocgo/nocgo.a", *PROGRAM_PEERS,
+            *PROGRAM_PEERS, "library/go/empty/empty.a", "vendor/github.com/x/nocgo/nocgo.a",
         ])
 
     def test_autocheck_generates_no_sbom_components(self):

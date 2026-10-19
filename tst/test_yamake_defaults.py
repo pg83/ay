@@ -43,7 +43,6 @@ DEFAULT_PEERS = [
 ]
 TOOLCHAIN = [
     "build/platform/clang",
-    "build/platform/clang/clang-format",
     "build/platform/lld",
     "build/platform/python/ymake_python3",
 ]

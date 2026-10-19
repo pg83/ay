@@ -2,6 +2,8 @@ package main
 
 import (
 	"path"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -20,14 +22,27 @@ func (e *EmitContext) goTestSuites(goRef NodeRef, vetReport VFS, globals []Resou
 	project := instance.Path.relString()
 
 	var suites []*TestSuite
+	var fmtFiles []VFS
 
-	if e.goRes != nil {
+	isTestFor := e.d.moduleStmt.Name == tokGoTest && e.d.setVars[strGO_TEST_IMPORT_PATH] != 0
+
+	if e.goRes != nil && !isTestFor {
+		fmtFiles = e.goRes.GoFiles
+	}
+
+	for _, src := range concat(e.d.goTestSrcs, e.d.goXTestSrcs) {
+		if e.ctx.fs.isFile(instance.Path.rel(), src.string()) {
+			fmtFiles = append(fmtFiles, source(project, "/", src.string()))
+		}
+	}
+
+	{
 		var dirs []string
 
 		byDir := map[string][]VFS{}
 		seen := map[VFS]bool{}
 
-		for _, f := range e.goRes.GoFiles {
+		for _, f := range fmtFiles {
 			if !goNeedLint(f) || seen[f] {
 				continue
 			}
@@ -52,7 +67,89 @@ func (e *EmitContext) goTestSuites(goRef NodeRef, vetReport VFS, globals []Resou
 		suites = append(suites, goVetSuite(project, goRef, vetReport, globals))
 	}
 
+	if e.d.moduleStmt.Name == tokGoTest {
+		suites = append(suites, e.goTestRunSuite(goRef, globals))
+	}
+
 	return suites
+}
+
+func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *TestSuite {
+	instance, d := e.instance, e.d
+	project := instance.Path.relString()
+	name := programBinaryName(instance, d.moduleStmt)
+	binary := build(project, "/", name)
+	size := d.test.size
+
+	if size == "" {
+		size = "small"
+	}
+
+	timeout := d.test.timeout
+
+	if timeout == 0 {
+		timeout = testSizeTimeouts[size]
+	}
+
+	data := slices.Clone(d.test.data)
+
+	if d.setVars[strADD_SRCDIR_TO_TEST_DATA] != strNo {
+		data = append(data, "arcadia/"+project)
+	}
+
+	slices.Sort(data)
+
+	var related []VFS
+
+	for _, entry := range slices.Compact(data) {
+		if rel, ok := strings.CutPrefix(entry, "arcadia/"); ok {
+			related = append(related, source(path.Clean(rel)))
+		}
+	}
+
+	tags := slices.Clone(d.test.tags)
+
+	slices.Sort(tags)
+
+	return &TestSuite{
+		Project:       project,
+		Name:          name,
+		Type:          "go_test",
+		CIType:        "test",
+		Size:          size,
+		Timeout:       timeout,
+		Related:       related,
+		Inputs:        []VFS{source(project)},
+		Deps:          []NodeRef{binRef},
+		Globals:       globals,
+		Tags:          slices.Compact(tags),
+		Env:           d.test.env,
+		RunCwd:        d.test.cwd,
+		Canonization:  true,
+		TestParams:    true,
+		SmoothSignals: []string{"SIGUSR2"},
+		RunCmd: func(wd string) []ANY {
+			partition := d.test.partition
+
+			if partition == "" {
+				partition = "SEQUENTIAL"
+			}
+
+			return []ANY{
+				internStr(testToolHostPath).any(), strRunGoTest.any(),
+				strBinary.any(), binary.any(),
+				strTestWorkDir.any(), build(wd).any(),
+				strTracefile.any(), build(wd, "/ytest.report.trace").any(),
+				strModulo.any(), strOne.any(),
+				strModuloIndex.any(), strZero.any(),
+				strPartitionMode.any(), internStr(partition).any(),
+				strOutputDir.any(), build(wd, "/testing_out_stuff").any(),
+				strProjectPath.any(), internStr(project).any(),
+				strTimeout.any(), internStr(strconv.Itoa(timeout)).any(),
+				strVerbose.any(),
+			}
+		},
+	}
 }
 
 func goFmtSuite(project string, files []VFS, globals []ResourceDecl) *TestSuite {
@@ -119,4 +216,25 @@ func goVetSuite(project string, goRef NodeRef, vetReport VFS, globals []Resource
 			}
 		},
 	}
+}
+
+func goDirSources(fs FS, dir string) []string {
+	view := fs.listdir(dirKey(dir))
+	names := make([]string, 0, len(view.names))
+
+	for _, packed := range view.names {
+		if packed&1 != 0 {
+			continue
+		}
+
+		name := STR(packed >> 1).string()
+
+		if strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") {
+			names = append(names, name)
+		}
+	}
+
+	slices.Sort(names)
+
+	return names
 }
