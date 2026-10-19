@@ -69,6 +69,7 @@ type Platform struct {
 	ifEnv                 Environment
 	Defines               []ANY
 	NoLibcBlock           []ANY
+	Go                    *GoStd
 }
 
 func platformUsesSDKRoot(os OS, flags map[string]string) bool {
@@ -201,6 +202,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		{Name: envSDKROOT, Value: strEmpty.any()},
 	}
 
+	p.Go = newGoStd(flags["GOSTD_VERSION"])
 	p.ifEnv = buildPlatformIfEnv(p)
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
@@ -250,9 +252,7 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		}
 	}
 
-	if !env.hasBindingID(envGOSTD_VERSION) {
-		env.setString(envGOSTD_VERSION, "1.26")
-	}
+	env.setString(envGOSTD, p.Go.Prefix)
 
 	if !env.hasBindingID(envCGO_ENABLED) {
 		env.setBool(envCGO_ENABLED, true)

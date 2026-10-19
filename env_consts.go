@@ -56,6 +56,7 @@ var (
 	envGOARCH                       = internEnv("GOARCH")
 	envGOOS                         = internEnv("GOOS")
 	envGORACE                       = internEnv("GORACE")
+	envGOSTD                        = internEnv("GOSTD")
 	envGOSTD_VERSION                = internEnv("GOSTD_VERSION")
 	envHAVE_CUDA                    = internEnv("HAVE_CUDA")
 	envHAVE_MKL                     = internEnv("HAVE_MKL")

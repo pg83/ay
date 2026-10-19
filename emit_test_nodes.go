@@ -36,8 +36,7 @@ type TestSuiteInfo struct {
 	CppSources  []string
 }
 
-func emitTestRunNodes(emit *StreamingEmitter, p *Platform, info TestSuiteInfo, ldRef NodeRef, resourceGlobals []ResourceDecl) []NodeRef {
-	ctxRef := emit.emit(buildTestCtxNode(emit.nodeArenas(), p))
+func emitTestRunNodes(emit *StreamingEmitter, p *Platform, info TestSuiteInfo, ldRef, ctxRef NodeRef, resourceGlobals []ResourceDecl) []NodeRef {
 	unittest := buildUnittestNode(emit.nodeArenas(), p, info, resourceGlobals)
 
 	unittest.DepRefs = []NodeRef{ldRef, ctxRef}
@@ -50,27 +49,6 @@ func emitTestRunNodes(emit *StreamingEmitter, p *Platform, info TestSuiteInfo, l
 	clangFormatRef := emit.emit(clangFormat)
 
 	return []NodeRef{unittestRef, clangFormatRef}
-}
-
-func buildTestCtxNode(na *NodeArenas, p *Platform) *Node {
-	return &Node{
-		Platform: p,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(internStr(testYMakePython3).any(),
-			(source(testAppendFileScriptRel)).any(),
-			internStr(testContextPath).any(),
-			arg3.any(),
-			internStr(`  "build_type": "`+p.BuildType+`",`).any(),
-			argFlags.any(),
-			argTestsRequestedYes.any(),
-			arg4.any(),
-			arg5.any()))}),
-		Env:          nil,
-		Inputs:       na.inputList(na.vfsList(source(testAppendFileScriptRel))),
-		KV:           &testNodesKV,
-		Outputs:      na.vfsList(bldCommonTestContext),
-		Requirements: &testContextRequirements,
-		Resources:    usesPython3,
-	}
 }
 
 func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resourceGlobals []ResourceDecl) *Node {

@@ -394,6 +394,7 @@ class OtherGeneratorTest(unittest.TestCase):
             "gol/a.go": "package gol\n",
             "gol/b.c": "int b(void){return 0;}\n",
             "gol/c.go": 'package gol\nimport "C"\n',
+            "build/conf/go.conf": "GOSTD_VERSION=1.26\n",
         }
         for path in ("contrib/go/_std_1.26/src/syscall", "contrib/go/_std_1.26/src/runtime/cgo"):
             files[f"{path}/ya.make"] = "GO_LIBRARY()\nSRCS(x.go)\nEND()\n"

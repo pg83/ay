@@ -50,6 +50,7 @@ def go_world():
         "contrib/libs/linux-headers/ya.make": f"LIBRARY()\n{NO_PLATFORM}END()\n",
         "build/scripts/go_fake_include/go_asm.h": "// written by the go tool\n",
         f"{STD}/runtime/textflag.h": "#define NOSPLIT 4\n",
+        "build/conf/go.conf": "GOSTD_VERSION=1.26\n",
     }
     resources_library(files, "build/external_resources/go_tools", "GO_TOOLS")
     resources_library(files, "build/external_resources/yolint", "YOLINT")

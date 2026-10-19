@@ -28,6 +28,7 @@ def fixture(sbom):
         "gp/main.go": "package main\nfunc main(){}\n",
         "build/platform/python/ymake_python3/ya.make": toolchain("python3", "3.12"),
         "build/platform/lld/ya.make": toolchain("lld", "20"),
+        "build/conf/go.conf": "GOSTD_VERSION=1.26\n",
     }
     for path in GO_SUPPORT:
         files[f"{path}/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}END()\n"

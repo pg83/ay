@@ -1,6 +1,16 @@
 package main
 
 var (
+	strCheckName                                                                             = internStr("--check-name")
+	strChecker                                                                               = internStr("--checker")
+	strGoToolsResourceGlobalBinGofmt                                                         = internStr("GO_TOOLS_RESOURCE_GLOBAL/bin/gofmt")
+	strGofmt                                                                                 = internStr("--gofmt")
+	strGovet                                                                                 = internStr("govet")
+	strNeedPlatformPeerdirs                                                                  = internStr("NEED_PLATFORM_PEERDIRS")
+	strNoSnippetFromStdout                                                                   = internStr("--no-snippet-from-stdout")
+	strRunCheck                                                                              = internStr("run_check")
+	strRunGoFmt                                                                              = internStr("run_go_fmt")
+	strRunGoVet                                                                              = internStr("run_go_vet")
 	cudaCflagsStr                                                                            = internStr("--cflags")
 	cudaCustomPidFlagStr                                                                     = internStr("--custom-pid")
 	cudaMtimeFlagStr                                                                         = internStr("--mtime")

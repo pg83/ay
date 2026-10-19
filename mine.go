@@ -8,13 +8,17 @@ import (
 )
 
 func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
+	return yaConfStringTable(readYaConf(fs, rel)[wantSection])
+}
+
+func readYaConf(fs FS, rel string) map[string]any {
 	var root map[string]any
 
 	if _, err := toml.Decode(string(concatChunks(fs.read(rel))), &root); err != nil {
 		throwFmt("ya.conf %s: %v", rel, err)
 	}
 
-	return yaConfStringTable(root[wantSection])
+	return root
 }
 
 func readYaConfTop(fs FS, rel string) map[string]string {

@@ -37,6 +37,7 @@ type YaTestOpts struct {
 	contextFlags [][2]string
 	processEnv   [][2]string
 	contextRef   NodeRef
+	goOpts       *TestOpts
 }
 
 func newYaTestOpts(mf *MakeFlags, conf map[string]string, buildType string) *YaTestOpts {

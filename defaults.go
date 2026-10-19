@@ -114,11 +114,17 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 		!strings.HasPrefix(instance.Path.relString(), "contrib/libs/linux-headers/")
 
 	if d.moduleStmt != nil && isGoModuleType(d.moduleStmt.Name) {
-		if addLinuxHeaders {
-			return []string{"contrib/libs/linux-headers"}
+		peers := []string{"build/platform/python/ymake_python3"}
+
+		if instance.Platform.UsesSDKRoot {
+			peers = append(peers, "build/platform/linux_sdk")
 		}
 
-		return nil
+		if addLinuxHeaders {
+			peers = append(peers, "contrib/libs/linux-headers")
+		}
+
+		return append(peers, "build/platform/clang")
 	}
 
 	if instance.Language != LangCPP {
@@ -170,15 +176,19 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 	}
 
 	if !strings.HasPrefix(instance.Path.relString(), "build/platform/") {
-		peers = append(peers,
-			"build/platform/clang",
-			"build/platform/clang/clang-format",
-			"build/platform/lld",
-			"build/platform/python/ymake_python3",
-		)
+		if d.setVars[strNeedPlatformPeerdirs] == strNo {
+			peers = append(peers, "build/platform/python/ymake_python3")
+		} else {
+			peers = append(peers,
+				"build/platform/clang",
+				"build/platform/clang/clang-format",
+				"build/platform/lld",
+				"build/platform/python/ymake_python3",
+			)
 
-		if instance.Platform.UsesSDKRoot {
-			peers = append(peers, "build/platform/linux_sdk")
+			if instance.Platform.UsesSDKRoot {
+				peers = append(peers, "build/platform/linux_sdk")
+			}
 		}
 	}
 

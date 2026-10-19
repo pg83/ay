@@ -48,15 +48,17 @@ type MakeFlags struct {
 	dflags              map[string]string
 	tflags              map[string]string
 	hflags              map[string]string
+	platformFlags       map[string]string
 	targets             []string
 	verbose             bool
 	testLevel           int
+	runTests            int
+	testSizes           []string
 	sandboxing          bool
 	dist                bool
 	dumpIgnoredMacros   bool
 	clear               bool
 	cmdPrefixes         []CmdPrefix
-	testSizes           []string
 }
 
 func copyStatsFlags(dst, src map[string]string) {
@@ -131,13 +133,19 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	fs := newFS(mf.srcRoot)
 	caches := newGenCaches(fs)
-	hostP, targetP := makePlatforms(fs, mf, caches)
+	rootYaConf := readYaConf(fs, "ya.conf")
+	hostP, targetP := makePlatforms(fs, mf, caches, rootYaConf)
 
 	for _, p := range []*Platform{hostP, targetP} {
 		p.AddInputs = mf.dist && mf.sandboxing
 	}
 
 	tests := newYaTestOpts(mf, readYaConfTop(fs, "ya.conf"), targetP.BuildType)
+
+	if tests != nil {
+		tests.goOpts = newTestOpts(mf, rootYaConf)
+	}
+
 	events := newEventQueue()
 
 	defer events.close()
@@ -199,9 +207,9 @@ func cmdMake(g GlobalFlags, args []string) int {
 	return 0
 }
 
-func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Platform) {
-	rootHostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
-	rootTargetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
+func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[string]any) (hostP, targetP *Platform) {
+	rootHostYaFlags := yaConfStringTable(rootYaConf["host_platform_flags"])
+	rootTargetYaFlags := yaConfStringTable(rootYaConf["flags"])
 	hostInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
 	targetInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
 	hostPlatformFlags := map[string]string{}
@@ -272,13 +280,14 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Pla
 	caches.prewarm(fs, mf.targets)
 
 	wlSystemLibs := confSystemLibsViaWl(fs)
+	goStdVersion := confGoStdVersion(fs)
 
 	hostP = newPlatform(
 		hOS,
 		hISA,
 		mf.hostBuildType,
 		hostTC,
-		hostRun.wait(),
+		withGoStdVersion(hostRun.wait(), goStdVersion),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
 		wlSystemLibs,
@@ -287,7 +296,7 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Pla
 	targetCFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS"))
 	targetCXXFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS"))
 
-	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, targetRun.wait(), targetCFlags, targetCXXFlags, wlSystemLibs)
+	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, withGoStdVersion(targetRun.wait(), goStdVersion), targetCFlags, targetCXXFlags, wlSystemLibs)
 	targetP.picMake = func() *Platform {
 		picFlags := maps.Clone(targetFlags)
 
@@ -295,10 +304,18 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Pla
 
 		picRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
 
-		return newPlatform(tOS, tISA, mf.buildType, targetTC, picRun.wait(), targetCFlags, targetCXXFlags, wlSystemLibs)
+		return newPlatform(tOS, tISA, mf.buildType, targetTC, withGoStdVersion(picRun.wait(), goStdVersion), targetCFlags, targetCXXFlags, wlSystemLibs)
 	}
 
 	return hostP, targetP
+}
+
+func withGoStdVersion(conf map[string]string, confVersion string) map[string]string {
+	if _, ok := conf["GOSTD_VERSION"]; !ok {
+		conf["GOSTD_VERSION"] = confVersion
+	}
+
+	return conf
 }
 
 func yaToolchainFlags(flags map[string]string, tc *Toolchain, tcFlags map[string]string) {
@@ -351,6 +368,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 		threads:       runtime.NumCPU(),
 		tflags:        map[string]string{},
 		hflags:        map[string]string{},
+		platformFlags: map[string]string{},
 	}
 
 	for opt, err := range state.All(config) {
@@ -374,6 +392,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.ninja = true
 		case opt.Char == 't':
 			mf.testLevel++
+			mf.runTests++
 		case opt.Char == 'o' || opt.Name == "output":
 			mf.outRoot = opt.OptArg
 		case opt.Char == 'I' || opt.Name == "install":
@@ -417,10 +436,11 @@ func parseMakeFlags(args []string) *MakeFlags {
 			targetBuildType = opt.OptArg
 		case opt.Name == "target-platform-flag":
 			parseKV(mf.tflags, opt.OptArg)
-		case opt.Name == "test-size":
-			mf.testSizes = append(mf.testSizes, strings.ToLower(opt.OptArg))
+			parseKV(mf.platformFlags, opt.OptArg)
 		case opt.Name == "target-platform-tests":
 			mf.testLevel = max(mf.testLevel, 1)
+		case opt.Name == "test-size":
+			mf.testSizes = append(mf.testSizes, strings.ToLower(opt.OptArg))
 		case opt.Name == "dist":
 			mf.dist = true
 		case opt.Char == 'x', opt.Name == "ignore-nodes-exit-code",

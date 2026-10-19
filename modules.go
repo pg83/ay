@@ -1748,7 +1748,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokCgoSrcs:
 
 		d.cgoSrcs = append(d.cgoSrcs, expandStmtTokens(v.Args, env)...)
-		d.peerdirs = append(d.peerdirs, internStr(goStdPrefix+"/syscall").any())
+		d.peerdirs = append(d.peerdirs, internV(env.string(envGOSTD), "/syscall").any())
 	case tokCgoLdflags:
 
 		d.cgoLdflags = append(d.cgoLdflags, expandStmtTokens(v.Args, env)...)
@@ -3635,14 +3635,19 @@ func (e *EmitContext) derivePeerInstance(peerPath string) ModuleInstance {
 }
 
 func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
-	_, parent, d := e.ctx, e.instance, e.d
+	ctx, parent, d := e.ctx, e.instance, e.d
+	demand := e.peerDemand()
+
+	if demand == demandNone && isGoModuleType(d.moduleStmt.Name) && peerYaMakeExists(ctx.fs, peerVFS) && isGoModuleType(ctx.moduleName(peerVFS.relString())) {
+		demand = demandSelf
+	}
 
 	return ModuleInstance{
 		Path:     peerVFS,
 		Kind:     KindLib,
 		Language: peerEntryLanguage(parent, d.moduleStmt.Name),
 		Platform: parent.Platform,
-		Demand:   e.peerDemand(),
+		Demand:   demand,
 	}
 }
 

@@ -36,6 +36,7 @@ def cgo_world():
         "build/scripts/process_command_files.py": "import sys\n",
         "build/scripts/link_o.py": "import subprocess\n",
         f"{STD}/runtime/textflag.h": "#define NOSPLIT 4\n",
+        "build/conf/go.conf": "GOSTD_VERSION=1.26\n",
     }
     resources_library(files, "build/external_resources/go_tools", "GO_TOOLS")
     resources_library(files, "build/external_resources/yolint", "YOLINT")
@@ -224,7 +225,8 @@ class GoCgoGraphTest(unittest.TestCase):
         srcs = between(package["cmds"][0]["cmd_args"], "++srcs", "++asm-flags")
         self.assertEqual([srcs[0], srcs[-1]], [f"$(B)/{cgo}/gen.symabis", f"$(S)/{cgo}/asm_amd64.s"])
         tool_inputs_end = package["inputs"].index("$(S)/build/rules/go/risky_imports.yaml") + 1
-        self.assertEqual(package["inputs"][tool_inputs_end:tool_inputs_end + 2], [
+        self.assertEqual(package["inputs"][tool_inputs_end:tool_inputs_end + 4], [
+            f"$(B)/{STD}/syscall/syscall.a", f"$(S)/{STD}/syscall/syscall.go",
             f"$(S)/{STD}/runtime/textflag.h", "$(S)/build/scripts/cgo1_wrapper.py",
         ])
         symabis = lib.node_by_output(graph, f"$(B)/{cgo}/gen.symabis")["cmds"][0]["cmd_args"]

@@ -9,7 +9,6 @@ var (
 	goToolKV             = KV{P: pkGoTool, PC: pcLightBlue, ShowOut: true}
 	goLdKV               = KV{P: pkLD, PC: pcLightRed, ShowOut: true}
 	goVcsEnv             = envVarsVCS
-	goStdRuntimeVFS      = source(goStdPrefix + "/runtime")
 	strGoToolsRoot       = internV("$(B)/resources/", "GO_TOOLS")
 	strGoAsmTool         = internV("$(B)/resources/", "GO_TOOLS", "/pkg/tool/linux_amd64/asm")
 	strGoCgoTool         = internV("$(B)/resources/", "GO_TOOLS", "/pkg/tool/linux_amd64/cgo")
@@ -21,21 +20,12 @@ var (
 	strGoMigrationsCfg   = internV("-migration.config=", "$(S)/", "build/rules/go/migrations.yaml")
 	strGoScopelintCfg    = internV("-scopelint.config=", "$(S)/", "build/rules/go/extended_lint.yaml")
 	strGoRiskyCfg        = internV("-riskyimports.config=", "$(S)/", "build/rules/go/risky_imports.yaml")
-	goToolCmdHeadLib     = goToolCmdHeadChunk("lib")
-	goToolCmdHeadExe     = goToolCmdHeadChunk("exe")
 	goToolCmdFlags       = goToolCmdFlagsChunk(false)
 	goToolCmdFlagsPic    = goToolCmdFlagsChunk(true)
 	goToolCmdPeers       = []STR{internStr("++peers")}
 	goToolCmdEnd         = []ANY{strYaEndCommandFile.any()}
 	goExeCmdExtld        = []ANY{internStr("++extld").any(), strClang.any(), internStr("++extldflags").any()}
 )
-
-var goAsmIncludeDirs = []VFS{
-	goStdRuntimeVFS,
-	goFakeIncludeVFS,
-	contribLibsLinuxHeaders,
-	contribLibsLinuxHeadersNf,
-}
 
 var goToolScriptInputsChunk = []VFS{
 	source("build/scripts/go_tool.py"),
@@ -102,23 +92,66 @@ var goSymabisDefs = []ANY{
 }
 
 const (
-	goStdPrefix    = "contrib/go/_std_1.26/src"
+	goConfRel      = "build/conf/go.conf"
 	goArcPrefix    = "a.yandex-team.ru/"
-	goVersion      = "1.26"
 	goToolsPeer    = "build/external_resources/go_tools"
 	goYolintPeer   = "build/external_resources/yolint"
 	goVendorPrefix = "vendor"
 )
 
-func goToolCmdHeadChunk(mode string) []ANY {
+type GoStd struct {
+	Version        string
+	Prefix         string
+	Runtime        VFS
+	AsmIncludeDirs []VFS
+	HeadLib        []ANY
+	HeadExe        []ANY
+}
+
+func confGoStdVersion(fs FS) string {
+	if !fs.isFile(srcRootRel, goConfRel) {
+		return ""
+	}
+
+	for _, line := range strings.Split(string(concatChunks(fs.read(goConfRel))), "\n") {
+		if v, ok := strings.CutPrefix(line, "GOSTD_VERSION="); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+
+	return ""
+}
+
+func newGoStd(version string) *GoStd {
+	g := &GoStd{Version: version, Prefix: "contrib/go/_std_" + version + "/src"}
+
+	if version == "" {
+		g.Prefix = "__unsupported_go_std_library_version_[]__"
+	}
+
+	g.Runtime = source(g.Prefix + "/runtime")
+	g.AsmIncludeDirs = []VFS{g.Runtime, goFakeIncludeVFS, contribLibsLinuxHeaders, contribLibsLinuxHeadersNf}
+	g.HeadLib = g.toolCmdHead("lib")
+	g.HeadExe = g.toolCmdHead("exe")
+
+	if ownershipOn {
+		registerOwnedSlice(g.AsmIncludeDirs)
+		registerOwnedSlice(g.HeadLib)
+		registerOwnedSlice(g.HeadExe)
+	}
+
+	return g
+}
+
+func (g *GoStd) toolCmdHead(mode string) []ANY {
 	return []ANY{
 		wrapccPython3STR.any(),
 		strGoToolScript.any(),
 		strYaStartCommandFile.any(),
 		strMode.any(), internStr(mode).any(),
-		strStdLibPrefix.any(), internStr(goStdPrefix + "/").any(),
+		strStdLibPrefix.any(), internStr(g.Prefix + "/").any(),
 		strArcProjectPrefix.any(), internStr(goArcPrefix).any(),
-		strGoversion.any(), internStr(goVersion).any(),
+		strGoversion.any(), internStr(g.Version).any(),
 		strLang2.any(),
 		strSourceRoot.any(), strS.any(),
 		strBuildRoot.any(), strB.any(),
@@ -146,8 +179,8 @@ func isGoModuleType(name TOK) bool {
 	return name == tokGoLibrary || name == tokGoProgram
 }
 
-func goImportPathFor(dir string) string {
-	if rest, ok := strings.CutPrefix(dir, goStdPrefix+"/"); ok {
+func (g *GoStd) importPath(dir string) string {
+	if rest, ok := strings.CutPrefix(dir, g.Prefix+"/"); ok {
 		return rest
 	}
 
@@ -158,7 +191,7 @@ func goImportPathFor(dir string) string {
 	return goArcPrefix + dir
 }
 
-func goImportDir(ctx *GenCtx, importerDir, imp string) string {
+func goImportDir(ctx *GenCtx, std *GoStd, importerDir, imp string) string {
 	if imp == "unsafe" || imp == "C" {
 		return ""
 	}
@@ -167,10 +200,10 @@ func goImportDir(ctx *GenCtx, importerDir, imp string) string {
 		imp = rest
 	}
 
-	candidates := []string{goVendorPrefix + "/" + imp, goStdPrefix + "/" + imp, imp}
+	candidates := []string{goVendorPrefix + "/" + imp, std.Prefix + "/" + imp, imp}
 
-	if strings.HasPrefix(importerDir, goStdPrefix+"/") {
-		candidates = []string{goStdPrefix + "/vendor/" + imp, goStdPrefix + "/" + imp, imp}
+	if strings.HasPrefix(importerDir, std.Prefix+"/") {
+		candidates = []string{std.Prefix + "/vendor/" + imp, std.Prefix + "/" + imp, imp}
 	}
 
 	for _, cand := range candidates {
@@ -184,6 +217,7 @@ func goImportDir(ctx *GenCtx, importerDir, imp string) string {
 
 func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
 	dir := instance.Path.relString()
+	std := instance.Platform.Go
 
 	addPeer := func(p string) {
 		if p == "" || p == dir {
@@ -200,15 +234,15 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	}
 
 	if d.moduleStmt.Name == tokGoProgram {
-		addPeer(goStdPrefix + "/runtime/cgo")
-		addPeer(goStdPrefix + "/runtime")
+		addPeer(std.Prefix + "/runtime/cgo")
+		addPeer(std.Prefix + "/runtime")
 		addPeer("library/go/core/buildinfo")
 	}
 
 	if len(d.cgoSrcs) > 0 {
 		addPeer("build/internal/platform/clang_toolchain_info")
 		addPeer("build/platform/lld")
-		addPeer(goStdPrefix + "/runtime/cgo")
+		addPeer(std.Prefix + "/runtime/cgo")
 	}
 
 	for _, meta := range d.srcs {
@@ -232,7 +266,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		data := concatChunks(ctx.fs.read(path))
 
 		for _, imp := range parseGoImports(data) {
-			addPeer(goImportDir(ctx, dir, imp.string()))
+			addPeer(goImportDir(ctx, std, dir, imp.string()))
 		}
 	}
 
@@ -246,7 +280,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		data := concatChunks(ctx.fs.read(path))
 
 		for _, imp := range parseGoImports(data) {
-			addPeer(goImportDir(ctx, dir, imp.string()))
+			addPeer(goImportDir(ctx, std, dir, imp.string()))
 		}
 	}
 
@@ -255,7 +289,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 	goIncl := make([]VFS, 0, 3)
 
-	goIncl = append(goIncl, goStdRuntimeVFS)
+	goIncl = append(goIncl, std.Runtime)
 
 	hasDotS := false
 
@@ -365,7 +399,7 @@ func (e *EmitContext) flushGoSrcs() {
 	nt := 0
 	push := func(x STR) { tail[nt] = x.any(); nt++ }
 
-	push(internStr(goImportPathFor(dir)))
+	push(internStr(instance.Platform.Go.importPath(dir)))
 
 	if instance.Platform.PIC {
 		push(strShared)
@@ -972,7 +1006,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(
-			goToolCmdHeadLib,
+			instance.Platform.Go.HeadLib,
 			na.anyList(build(dir).any()),
 			goToolCmdMid,
 			na.anyList(outPath.any()),
@@ -1092,7 +1126,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 	env := goCmdEnv(ctx, instance.Platform, d.tc)
 
 	goCmd := Cmd{CmdArgs: na.chunkList(
-		goToolCmdHeadExe,
+		instance.Platform.Go.HeadExe,
 		na.anyList(build(dir).any()),
 		goToolCmdMid,
 		na.anyList(outPath.any()),

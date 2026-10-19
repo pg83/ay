@@ -122,8 +122,8 @@ func (e *EmitContext) goCgoIncludeArgs() []ANY {
 	return e.goInclJoined
 }
 
-func goCgoImportPathFlags(dir string) []ANY {
-	if dir == goStdPrefix+"/runtime/cgo" {
+func goCgoImportPathFlags(std *GoStd, dir string) []ANY {
+	if dir == std.Prefix+"/runtime/cgo" {
 		return goCgoImportStd
 	}
 
@@ -358,8 +358,8 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 			goCgo1Head,
 			pathBlock[:k:k],
 			goCgo1ToolChunk,
-			na.anyList(build(dir).any(), strImportpath.any(), internStr(goImportPathFor(dir)).any()),
-			goCgoImportPathFlags(dir),
+			na.anyList(build(dir).any(), strImportpath.any(), internStr(instance.Platform.Go.importPath(dir)).any()),
+			goCgoImportPathFlags(instance.Platform.Go, dir),
 			na.anyList(str3.any(), instance.Platform.TargetArg.any()),
 			instance.Platform.SysrootArgs,
 			inclArgs,

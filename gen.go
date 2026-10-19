@@ -180,6 +180,8 @@ type ModuleEmitResult struct {
 	ResourceGlobalClosure           []ResourceDecl
 	GoSrcClosure                    []VFS
 	java                            *JavaModule
+	TestSuites                      []*TestSuite
+	testsEmitted                    bool
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
@@ -229,6 +231,7 @@ type GenCtx struct {
 	vcsRef           NodeRef
 	testMode         bool
 	tests            *YaTestOpts
+	testOpts         *TestOpts
 	sbomEnabled      bool
 	autoincludeIdx   *AutoincludeIndex
 	parsedFiles      map[string]*MakeFile
@@ -317,6 +320,10 @@ func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *Stre
 		parsedFiles:    caches.parsedFiles,
 	}
 
+	if tests != nil {
+		ctx.testOpts = tests.goOpts
+	}
+
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
 	ctx.buckets = newBucketCache()
 
@@ -401,7 +408,11 @@ func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
 		ctx.emit.result(*root.GlobalRef)
 	}
 
-	for _, dir := range discoverRecursedFinalTargets(ctx, filepath.Clean(targetDir)) {
+	if ctx.testMode {
+		ctx.emitModuleTests(root)
+	}
+
+	for _, dir := range discoverRecursedTargets(ctx, filepath.Clean(targetDir)) {
 		if name := ctx.moduleName(dir); isJavaModuleType(name) {
 			ctx.genJavaTarget(dir, name)
 
@@ -417,10 +428,14 @@ func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
 		if sub.LDRef != 0 {
 			ctx.emit.result(sub.LDRef)
 		}
+
+		if ctx.testMode {
+			ctx.emitModuleTests(sub)
+		}
 	}
 
 	if ctx.testMode && root.testSuiteInfo != nil {
-		for _, ref := range emitTestRunNodes(ctx.emit, ctx.target, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
+		for _, ref := range emitTestRunNodes(ctx.emit, ctx.target, *root.testSuiteInfo, root.LDRef, ctx.testContextRef(ctx.target), root.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
 		}
 	}
@@ -549,7 +564,21 @@ func (e *EmitContext) peerDemand() ModuleDemand {
 	return demandNone
 }
 
-func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
+func (ctx *GenCtx) emitModuleTests(r *ModuleEmitResult) {
+	if r.testsEmitted {
+		return
+	}
+
+	r.testsEmitted = true
+
+	for _, s := range r.TestSuites {
+		if ref, ok := ctx.emitTestSuite(ctx.target, s); ok {
+			ctx.emit.result(ref)
+		}
+	}
+}
+
+func discoverRecursedTargets(ctx *GenCtx, targetDir string) []string {
 	seen := map[string]bool{targetDir: true}
 
 	var finals []string
@@ -576,14 +605,14 @@ func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
 			case *ModuleStmt:
 				moduleName = v.Name
 			case *UnknownStmt:
-				if v.Name != tokRecurse && v.Name != tokRecurseRootRelative {
+				if v.Name != tokRecurse && v.Name != tokRecurseRootRelative && (v.Name != tokRecurseForTests || !ctx.testMode) {
 					continue
 				}
 
 				for _, a := range v.Args {
 					child := a.string()
 
-					if v.Name == tokRecurse {
+					if v.Name != tokRecurseRootRelative {
 						child = dir + "/" + child
 					}
 
@@ -592,7 +621,7 @@ func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
 			}
 		}
 
-		if !root && moduleName != 0 && isFinalTargetModuleType(moduleName) {
+		if !root && moduleName != 0 && (ctx.testMode || isFinalTargetModuleType(moduleName)) {
 			finals = append(finals, dir)
 		}
 	}
@@ -822,6 +851,7 @@ func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, c
 	scanCtx.protoInclude = ctx.na.vfsList(protoInclude...)
 	scanCtx.swigInclude = ctx.na.vfsList(d.cc.SwigInclude...)
 	scanCtx.cythonPy23 = cythonUsesPy23Variant(d.moduleStmt.Name)
+	scanCtx.goAsmIncl = instance.Platform.Go.AsmIncludeDirs
 	scanCtx.joinFrom = instance.Platform.ISA
 	scanCtx.joinTo = ctx.target.ISA
 
@@ -1947,6 +1977,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		result.LDPath = ptr(goPath)
 		result.ARRef = goRef
 		result.ARPath = ptr(goPath)
+		result.TestSuites = e.goTestSuites(goRef, build(goPath.relString(), ".vet.txt"), resourceGlobalsClosure)
 
 		ctx.memoPut(instance, result)
 
@@ -2180,6 +2211,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	result.SbomComponentPath = ownSbomPath
 	result.ResourceGlobalClosure = resourceGlobalsClosure
 	result.GoSrcClosure = goSrcClosure
+
+	if isGoModuleType(d.moduleStmt.Name) {
+		result.TestSuites = e.goTestSuites(arRef, build(arPath.relString(), ".vet.txt"), resourceGlobalsClosure)
+	}
 
 	if len(globalRefs) > 0 {
 		globalBaseName := globalArNameFn(instance.Path.relString())
