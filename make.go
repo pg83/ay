@@ -21,27 +21,28 @@ const (
 )
 
 type MakeFlags struct {
-	srcRoot           string
-	bldRoot           string
-	outRoot           string
-	installRoot       string
-	threads           int
-	keepGoing         bool
-	dumpGraph         bool
-	stats             bool
-	ninja             bool
-	buildType         string
-	targetPlat        string
-	hostPlat          string
-	tflags            map[string]string
-	hflags            map[string]string
-	targets           []string
-	verbose           bool
-	testLevel         int
-	sandboxing        bool
-	dumpIgnoredMacros bool
-	clear             bool
-	cmdPrefixes       []CmdPrefix
+	addModulesToResults bool
+	srcRoot             string
+	bldRoot             string
+	outRoot             string
+	installRoot         string
+	threads             int
+	keepGoing           bool
+	dumpGraph           bool
+	stats               bool
+	ninja               bool
+	buildType           string
+	targetPlat          string
+	hostPlat            string
+	tflags              map[string]string
+	hflags              map[string]string
+	targets             []string
+	verbose             bool
+	testLevel           int
+	sandboxing          bool
+	dumpIgnoredMacros   bool
+	clear               bool
+	cmdPrefixes         []CmdPrefix
 }
 
 func copyStatsFlags(dst, src map[string]string) {
@@ -216,7 +217,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	if mf.threads == 0 {
 		if mf.dumpGraph {
-			g := genDumpGraphWithResources(fs, mf.targets, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing, demandSelf)
+			g := genDumpGraphWithResources(fs, mf.targets, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing, demandSelf, mf.addModulesToResults)
 
 			writeGraph(g, !mf.sandboxing)
 		} else {
@@ -362,10 +363,12 @@ func parseMakeFlags(args []string) *MakeFlags {
 		case opt.Char == 'x', opt.Name == "test-size", opt.Name == "dist", opt.Name == "ignore-nodes-exit-code",
 			opt.Name == "warning-mode", opt.Name == "cache-tests", opt.Name == "output-only-tests",
 			opt.Name == "cache-namespace", opt.Name == "report-skipped-suites", opt.Name == "tests-retries",
-			opt.Name == "backup-test-results", opt.Name == "add-modules-to-results", opt.Name == "do-not-output-stderrs",
+			opt.Name == "backup-test-results", opt.Name == "do-not-output-stderrs",
 			opt.Name == "no-src-links", opt.Name == "add-changed-ok-configures", opt.Name == "no-yt-store":
 		case opt.Name == "verbose":
 			mf.verbose = true
+		case opt.Name == "add-modules-to-results":
+			mf.addModulesToResults = true
 		case opt.Name == "sandboxing":
 			mf.sandboxing = true
 		case opt.Name == "dump-ignored-macros":

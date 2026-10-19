@@ -1,6 +1,15 @@
 package main
 
 var tokName = [...]STR{
+	tokDocs:               internStr("DOCS"),
+	tokDocsLibrary:        internStr("DOCS_LIBRARY"),
+	tokDocsDir:            internStr("DOCS_DIR"),
+	tokDocsConfig:         internStr("DOCS_CONFIG"),
+	tokDocsVars:           internStr("DOCS_VARS"),
+	tokDocsIncludeSources: internStr("DOCS_INCLUDE_SOURCES"),
+	tokDocsCopyFiles:      internStr("DOCS_COPY_FILES"),
+	tokUsePlantuml:        internStr("USE_PLANTUML"),
+
 	tokInvalid:                            0,
 	tokAddInclSelf:                        internStr("ADDINCLSELF"),
 	tokAliceCapability:                    internStr("ALICE_CAPABILITY"),
@@ -498,6 +507,14 @@ const (
 	tokTsTestFor
 	tokTsTestJestFor
 	tokTsTestVitestFor
+	tokDocs
+	tokDocsLibrary
+	tokDocsDir
+	tokDocsConfig
+	tokDocsVars
+	tokDocsIncludeSources
+	tokDocsCopyFiles
+	tokUsePlantuml
 )
 
 type TOK uint16

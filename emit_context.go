@@ -301,6 +301,10 @@ func (e *EmitContext) producersOnly() bool {
 func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	info.OwnerModule = e.instance.Path
 
+	if e.d.docs != nil {
+		e.outs = append(e.outs, info.OutputPath)
+	}
+
 	return e.codegen.register(info)
 }
 

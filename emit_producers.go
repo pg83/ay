@@ -32,6 +32,7 @@ const (
 	prodLlvmBc
 	prodGoCgoCopy
 	prodGoCgo1
+	prodDocsCopy
 )
 
 type ProducerPos struct {
@@ -209,6 +210,10 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
 		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs)
 
+	if d.docs != nil {
+		n += len(d.docs.copies)
+	}
+
 	if d.createBuildInfoFor != nil {
 		n++
 	}
@@ -250,6 +255,25 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 		if stdout != nil {
 			backing = append(backing, copyFileOutputVFS(module, stdout.string()))
+		}
+	}
+
+	if d.docs != nil {
+		for i, entry := range d.docs.copies {
+			start := len(backing)
+			dst := buildJoinClean(module, entry.namespace)
+
+			for _, file := range entry.files {
+				backing = append(backing, buildJoinClean(dst.relString(), file))
+			}
+
+			end := len(backing)
+
+			for _, file := range entry.files {
+				backing = append(backing, docsSource(strings.TrimRight(entry.from, "/")+"/"+file))
+			}
+
+			push(prodDocsCopy, i, start, end)
 		}
 	}
 
@@ -689,6 +713,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		pos := positions[pi]
 
 		switch pos.kind {
+		case prodDocsCopy:
+			e.emitDocsCopy(e.d.docs.copies[pos.index])
 		case prodCopyFile:
 			e.emitCopyFileStmt(e.d.copyFiles[pos.index])
 		case prodConfigureFile:

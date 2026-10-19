@@ -16,6 +16,18 @@ func persistResult(ctx *GenCtx, r *ModuleEmitResult) {
 	}
 
 	r.persisted = true
+
+	if ctx.emit.addModulesToResults {
+		for _, ref := range []NodeRef{r.ARRef, r.LDRef} {
+			if ref != 0 {
+				if n := ctx.emit.nodes.s[ref]; n != nil {
+					n.Module = true
+				}
+			}
+		}
+	}
+
+	r.DocsClosure = ctx.vfsSlices.internCopy(r.DocsClosure)
 	r.WholeArchiveRefs = ctx.refSlices.internCopy(r.WholeArchiveRefs)
 	r.WholeArchivePaths = ctx.vfsSlices.internCopy(r.WholeArchivePaths)
 	r.WholeArchiveCmdPaths = ctx.vfsSlices.internCopy(r.WholeArchiveCmdPaths)

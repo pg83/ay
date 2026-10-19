@@ -118,12 +118,10 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				r.isFetch = true
 			}
 
-			if refGraph {
-				r.outputs = make([]string, 0, len(outs))
+			r.outputs = make([]string, 0, len(outs))
 
-				for _, o := range outs {
-					r.outputs = append(r.outputs, normPath(o))
-				}
+			for _, o := range outs {
+				r.outputs = append(r.outputs, normPath(o))
 			}
 
 			tsPath, _ := kv["path"].(string)
@@ -151,10 +149,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		func(r p1Result) {
 			contentHash[r.uid] = r.content
 			deps[r.uid] = r.deps
-
-			if refGraph {
-				outputsByUID[r.uid] = r.outputs
-			}
+			outputsByUID[r.uid] = r.outputs
 
 			if r.isFetch {
 				fetch[r.uid] = true
@@ -179,7 +174,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			}
 		})
 
-	if refGraph {
+	{
 		type stripResult struct {
 			uid  string
 			deps []string

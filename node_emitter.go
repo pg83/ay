@@ -19,14 +19,15 @@ type Graph struct {
 }
 
 type StreamingEmitter struct {
-	nodes      Vec[*Node]
-	resolved   BitSet
-	pendingIdx []NodeRef
-	pendingSet map[NodeRef]bool
-	results    []NodeRef
-	onNode     func(*Node, *DenseMap[STR, NodeRef])
-	na         *NodeArenas
-	fetchRefs  *DenseMap[STR, NodeRef]
+	addModulesToResults bool
+	nodes               Vec[*Node]
+	resolved            BitSet
+	pendingIdx          []NodeRef
+	pendingSet          map[NodeRef]bool
+	results             []NodeRef
+	onNode              func(*Node, *DenseMap[STR, NodeRef])
+	na                  *NodeArenas
+	fetchRefs           *DenseMap[STR, NodeRef]
 }
 
 func newStreamingEmitter(onNode func(*Node, *DenseMap[STR, NodeRef])) *StreamingEmitter {
@@ -177,6 +178,14 @@ func (e *StreamingEmitter) finish() []NodeRef {
 		}
 
 		pending = next
+	}
+
+	if e.addModulesToResults {
+		for _, n := range e.nodes.s {
+			if n != nil && n.Module {
+				e.result(n.Ref)
+			}
+		}
 	}
 
 	return dedupResultRefs(e.results)

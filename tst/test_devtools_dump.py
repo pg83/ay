@@ -259,11 +259,11 @@ class DumpNormalizeTest(DumpToolTest):
                 "root", "LD", ["$(BUILD_ROOT)/app/app"],
                 deps=["left", "right", "fetch", "vcs", "ghost"],
                 inputs=["$(B)/resources/CLANG20/bin/clang", "$(B)/resources/LLD_ROOT/ld"],
-                args=["ld", "-o", "$(BUILD_ROOT)/app/app"],
+                args=["ld", "$(B)/app/l.o", "$(B)/app/r.o", "-o", "$(BUILD_ROOT)/app/app"],
                 requirements={"cpu": 4, "network": "restricted", "sandbox": True},
             ),
-            raw_node("left", "CC", ["$(B)/app/l.o"], deps=["leaf", "fetch"]),
-            raw_node("right", "CC", ["$(B)/app/r.o"], deps=["leaf"]),
+            raw_node("left", "CC", ["$(B)/app/l.o"], deps=["leaf", "fetch"], inputs=["$(B)/app/gen.h"]),
+            raw_node("right", "CC", ["$(B)/app/r.o"], deps=["leaf"], inputs=["$(B)/app/gen.h"]),
             raw_node("leaf", "PB", ["$(B)/app/gen.h"]),
             raw_node("fetch", "FT", ["$(B)/fetched"]),
             raw_node("vcs", "CP", ["$(BUILD_ROOT)/vcs.json"]),
@@ -302,9 +302,9 @@ class DumpNormalizeTest(DumpToolTest):
         self.assertEqual(len({node["uid"] for node in normalized}), 4)
 
     def test_normalize_roots_by_kind(self):
-        archive = raw_node("ar", "AR", ["$(B)/lib/liblib.a"], deps=["cc"])
+        archive = raw_node("ar", "AR", ["$(B)/lib/liblib.a"], deps=["cc"], inputs=["$(B)/lib/a.o"])
         compile_node = raw_node("cc", "CC", ["$(B)/lib/a.o"])
-        test_node = raw_node("ts", "TS", ["$(B)/lib/test.out"], deps=["cc"], kv={"p": "TS", "path": "lib/ut"})
+        test_node = raw_node("ts", "TS", ["$(B)/lib/test.out"], deps=["cc"], inputs=["$(B)/lib/a.o"], kv={"p": "TS", "path": "lib/ut"})
         other_test = raw_node("ts2", "TS", ["$(B)/x/test.out"], kv={"p": "TS", "path": "x/ut"})
         normalized = self.normalize([archive, compile_node, test_node, other_test], "lib")
         self.assertEqual(
@@ -329,11 +329,11 @@ class DumpNormalizeTest(DumpToolTest):
 
     def test_normalize_several_targets_unions_roots(self):
         nodes = [
-            raw_node("ld", "LD", ["$(B)/app/app"], deps=["cc"]),
+            raw_node("ld", "LD", ["$(B)/app/app"], deps=["cc"], inputs=["$(B)/app/main.o"]),
             raw_node("cc", "CC", ["$(B)/app/main.o"]),
-            raw_node("ar", "AR", ["$(B)/lib/liblib.a"], deps=["lcc"]),
+            raw_node("ar", "AR", ["$(B)/lib/liblib.a"], deps=["lcc"], inputs=["$(B)/lib/a.o"]),
             raw_node("lcc", "CC", ["$(B)/lib/a.o"]),
-            raw_node("ts", "TS", ["$(B)/lib/ut/test.out"], deps=["ar"], kv={"p": "TS", "path": "lib/ut"}),
+            raw_node("ts", "TS", ["$(B)/lib/ut/test.out"], deps=["ar"], inputs=["$(B)/lib/liblib.a"], kv={"p": "TS", "path": "lib/ut"}),
             raw_node("outside", "CC", ["$(B)/other/o.o"]),
         ]
         both = self.normalize(nodes, ["app", "lib"])
@@ -351,8 +351,8 @@ class DumpNormalizeTest(DumpToolTest):
     def test_normalize_result_roots_for_targets_without_ld_ar_ts(self):
         nodes = [
             raw_node(1, "LD", ["$(B)/app/app"]),
-            raw_node(2, "PK", ["$(B)/pkg/pkg.tar"], deps=[3]),
-            raw_node(3, "CP", ["$(B)/pkg/data/file"], deps=[1]),
+            raw_node(2, "PK", ["$(B)/pkg/pkg.tar"], deps=[3], inputs=["$(B)/pkg/data/file"]),
+            raw_node(3, "CP", ["$(B)/pkg/data/file"], deps=[1], inputs=["$(B)/app/app"]),
             raw_node(4, "CP", ["$(B)/pkg/stray"]),
             raw_node(5, "JV", ["$(B)/java/lib.jar"]),
             raw_node(6, "CP", ["$(B)/app/extra"]),

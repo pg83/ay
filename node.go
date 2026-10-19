@@ -27,19 +27,21 @@ type Cmd struct {
 
 type Node struct {
 	ResourceURIs   []STR         `json:"-"`
-	Cmds           []Cmd         `json:"cmds"`
-	Env            EnvVars       `json:"env"`
-	Inputs         InputChunks   `json:"inputs"`
-	KV             *KV           `json:"kv"`
-	KVExts         []KVExt       `json:"-"`
-	Outputs        []VFS         `json:"outputs"`
-	Platform       *Platform     `json:"platform"`
-	Requirements   *Requirements `json:"requirements"`
-	Ref            NodeRef       `json:"-"`
-	PresetUID      *UID          `json:"-"`
-	DepRefs        []NodeRef     `json:"-"`
-	ForeignDepRefs []NodeRef     `json:"-"`
-	Resources      []STR         `json:"-"`
+	Module              bool          `json:"-"`
+	ExplicitInputChunks uint8         `json:"-"`
+	Cmds                []Cmd         `json:"cmds"`
+	Env                 EnvVars       `json:"env"`
+	Inputs              InputChunks   `json:"inputs"`
+	KV                  *KV           `json:"kv"`
+	KVExts              []KVExt       `json:"-"`
+	Outputs             []VFS         `json:"outputs"`
+	Platform            *Platform     `json:"platform"`
+	Requirements        *Requirements `json:"requirements"`
+	Ref                 NodeRef       `json:"-"`
+	PresetUID           *UID          `json:"-"`
+	DepRefs             []NodeRef     `json:"-"`
+	ForeignDepRefs      []NodeRef     `json:"-"`
+	Resources           []STR         `json:"-"`
 }
 
 func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) bool) {

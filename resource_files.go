@@ -163,6 +163,30 @@ func globMatch(fs FS, pattern string) []string {
 		var next []string
 
 		for _, d := range dirs {
+			if seg == "**" {
+				if !last {
+					next = append(next, d)
+				}
+
+				fs.walk(d, func(rel string, isDir bool) bool {
+					if rel == d {
+						return true
+					}
+
+					if isDir {
+						if !last {
+							next = append(next, rel)
+						}
+					} else if last {
+						matches = append(matches, rel)
+					}
+
+					return true
+				})
+
+				continue
+			}
+
 			if !wild {
 				child := joinRel(d, seg)
 				present, isDir := fs.exists(srcRootRel, child)

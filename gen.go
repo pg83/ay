@@ -129,6 +129,7 @@ const (
 )
 
 type ModuleEmitResult struct {
+	DocsClosure                     []VFS
 	ARRef                           NodeRef
 	ARPath                          *VFS
 	isPROGRAM                       bool
@@ -364,7 +365,7 @@ func (ctx *GenCtx) moduleName(dir string) TOK {
 func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance {
 	kind := KindLib
 
-	if name := ctx.moduleName(dir); name == tokPy3Program || name == 0 {
+	if name := ctx.moduleName(dir); name == tokPy3Program || name == tokDocs || name == 0 {
 		kind = KindBin
 	}
 
@@ -380,6 +381,10 @@ func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance 
 func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
 	root := genModule(ctx, ctx.rootInstance(targetDir, rootDemand))
 
+	if root.LDPath != nil {
+		ctx.scannerForPlatform(ctx.target).codegen.use(*root.LDPath)
+	}
+
 	ctx.emit.result(root.LDRef)
 
 	if root.GlobalRef != nil {
@@ -388,6 +393,10 @@ func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
 
 	for _, dir := range discoverRecursedFinalTargets(ctx, filepath.Clean(targetDir)) {
 		sub := genModule(ctx, ctx.rootInstance(dir, rootDemand))
+
+		if sub.LDPath != nil {
+			ctx.scannerForPlatform(ctx.target).codegen.use(*sub.LDPath)
+		}
 
 		if sub.LDRef != 0 {
 			ctx.emit.result(sub.LDRef)
@@ -410,7 +419,7 @@ func confPy3NoStripOnDebug(fs FS) bool {
 }
 
 func isFinalTargetModuleType(name TOK) bool {
-	return isProgramModuleType(name) || name == tokDllTool
+	return isProgramModuleType(name) || name == tokDllTool || name == tokDocs
 }
 
 func isLinkingModuleType(name TOK) bool {
@@ -483,8 +492,10 @@ func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
 	return finals
 }
 
-func genDumpGraphWithResources(fs FS, targets []string, hostP, targetP *Platform, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) *Graph {
+func genDumpGraphWithResources(fs FS, targets []string, hostP, targetP *Platform, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand, addModulesToResults bool) *Graph {
 	emitter := newStreamingEmitter(nil)
+
+	emitter.addModulesToResults = addModulesToResults
 
 	runGenIntoWithResources(fs, targets, hostP, targetP, emitter, onWarn, testMode, keepGoing, rootDemand)
 
@@ -820,6 +831,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ctx.memoPut(instance, result)
 
 		return result
+	}
+
+	if d.docs != nil {
+		return e.genDocs()
 	}
 
 	if d.moduleStmt.Name == tokProtoDescriptions {

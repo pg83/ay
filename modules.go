@@ -124,6 +124,7 @@ func protoCmdPeers(d *ModuleData) []ANY {
 
 type ModuleData struct {
 	nots                     *NotsModule
+	docs                     *DocsData
 	moduleStmt               *ModuleStmt
 	modver                   string
 	hasLicense               bool
@@ -664,6 +665,10 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 		d.pyYapycSuffix = pySrcYapycSuffix(modulePath)
 	}
 
+	if d.docs != nil {
+		d.docs.finish(fs, modulePath, env)
+	}
+
 	d.materializeAddIncl()
 
 	srcDirs := append(d.srcDirs, 0)
@@ -1012,6 +1017,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
 
+			if v.Name == tokDocs || v.Name == tokDocsLibrary {
+				d.docs = &DocsData{config: modulePath + "/.yfm"}
+			}
+
 			if d.moduleStmt.Name == tokProtoLibrary {
 				if language == LangPy {
 					env.setBool(envPY3_PROTO, true)
@@ -1035,6 +1044,11 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			env.setString(envMODULE_LANG, moduleLang)
 
 		case *SrcsStmt:
+			if d.docs != nil {
+				d.docs.addSources(fs, modulePath, anyStrs(expandStmtTokens(v.Sources, env)))
+
+				continue
+			}
 
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
 			globalNext := false
@@ -1480,6 +1494,12 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
 	if d.nots != nil && applyNotsStmt(v, d.nots) {
+		return
+	}
+
+	if d.docs != nil && d.docs.apply(v, modulePath) {
+		recordHandledMacro(v.Name, v.Args)
+
 		return
 	}
 
