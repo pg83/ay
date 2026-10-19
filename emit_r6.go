@@ -3,17 +3,11 @@ package main
 import "strings"
 
 var (
-	ragel6ArgOptimized = internArg(ragel6DefaultFlagOptimized)
-	ragel6ArgDebug     = internArg(ragel6DefaultFlagDebug)
-	ragel6ConstArgs    = []ANY{argL.any(), argIS.any(), argDashO.any()}
-	r6KV               = KV{P: pkR6, PC: pcYellow}
+	ragel6ConstArgs = []ANY{argL.any(), argIS.any(), argDashO.any()}
+	r6KV            = KV{P: pkR6, PC: pcYellow}
 )
 
-const (
-	ragel6DefaultFlagOptimized = "-CG2"
-	ragel6DefaultFlagDebug     = "-CT0"
-	ragel6DefaultOutExt        = ".rl6.cpp"
-)
+const ragel6DefaultOutExt = ".rl6.cpp"
 
 func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
 	dir := instance.Path.relString() + "/"
@@ -48,11 +42,7 @@ func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6B
 	effectiveFlags := ragel6Flags
 
 	if len(effectiveFlags) == 0 {
-		if instance.Platform.RagelOptimized {
-			effectiveFlags = []ANY{ragel6ArgOptimized.any()}
-		} else {
-			effectiveFlags = []ANY{ragel6ArgDebug.any()}
-		}
+		effectiveFlags = instance.Platform.Ragel6Flags
 	}
 
 	head := na.anys.alloc(1 + len(effectiveFlags))[:0]

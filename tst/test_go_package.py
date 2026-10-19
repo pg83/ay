@@ -74,7 +74,7 @@ def between(args, start, end):
 def make_with_env(files, target, extra_env):
     with tempfile.TemporaryDirectory(prefix="ay-go-test-") as directory:
         root = Path(directory)
-        (root / ".arcadia.root").touch()
+        lib.seed_root(root)
         (root / "ya.conf").write_text('[flags]\nOPENSOURCE = "yes"\n\n[host_platform_flags]\nOPENSOURCE = "yes"\n')
         for relative, content in files.items():
             path = root / relative
@@ -255,7 +255,7 @@ class GoPackageGraphTest(unittest.TestCase):
         base = go_world()
         go_module(base, "cmd/app", module="GO_PROGRAM")
         cases = (
-            ("compressed-debug", {"build/ymake_conf.py": "debug_info_flags.append('-gz=zstd')\n"}, (), [
+            ("compressed-debug", {"build/ymake_conf.py": lib.ymake_conf(compress_debug=True)}, (), [
                 "--target=aarch64-linux-gnu", "-B/usr/bin",
                 "-Wl,--whole-archive", "-Wl,--no-whole-archive", "--cgo-peers",
                 "-Wl,--compress-debug-sections=zstd", "-ldl", "-lrt", "-Wl,--no-as-needed",

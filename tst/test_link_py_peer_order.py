@@ -85,7 +85,7 @@ class PythonPeerOrderTest(unittest.TestCase):
             link_group(args),
             [PYTHON, USERLIB, JEMALLOC, SQLITE, MAIN, TRACING, IMPORT_TEST],
         )
-        self.assertIn("-Wl,--strip-all", args)
+        self.assertNotIn("-Wl,--strip-all", args)
 
     def test_py3_program_without_optional_runtime_peers(self):
         graph = lib.make(fixture(), "py3min")
@@ -93,13 +93,15 @@ class PythonPeerOrderTest(unittest.TestCase):
         self.assertEqual(link_group(args), [PYTHON, USERLIB, JEMALLOC, MAIN])
         self.assertNotIn("-Wl,--strip-all", args)
 
-    def test_python_conf_disables_strip_for_debug_only(self):
-        files = fixture()
-        files["build/conf/python.conf"] = "when ($X) {\n    NO_STRIP=yes\n}\n"
-        debug = link_args(lib.make(files, "py3"), "$(B)/py3/py3")
-        self.assertNotIn("-Wl,--strip-all", debug)
-        release = link_args(lib.make(files, "py3", "-r"), "$(B)/py3/py3")
-        self.assertIn("-Wl,--strip-all", release)
+    def test_py3_program_strips_only_unsanitized_non_debug_builds(self):
+        for flags, strip in (
+            ((), False),
+            (("--build", "fastdebug"), False),
+            (("-r",), True),
+            (("-r", "-DSANITIZER_TYPE=address"), False),
+        ):
+            args = link_args(lib.make(fixture(), "py3", *flags), "$(B)/py3/py3")
+            self.assertEqual("-Wl,--strip-all" in args, strip, flags)
 
     def test_py3_program_bin_splices_runtime_after_python(self):
         graph = lib.make(fixture(), "py3bin")
@@ -108,7 +110,7 @@ class PythonPeerOrderTest(unittest.TestCase):
             link_group(args),
             [JEMALLOC, SQLITE, MAIN, TRACING, USERLIB, IMPORT_TEST, PYTHON],
         )
-        self.assertIn("-Wl,--strip-all", args)
+        self.assertNotIn("-Wl,--strip-all", args)
 
     def test_py2_program_moves_python_runtime_to_tail(self):
         graph = lib.make(fixture(), "py2")

@@ -119,6 +119,7 @@ var (
 	argGenMutable                                = internArg("--gen-mutable")
 	argGenObjectApi                              = internArg("--gen-object-api")
 	argGgnuPubnames                              = internArg("-ggnu-pubnames")
+	argGlineTablesOnly                           = internArg("-gline-tables-only")
 	argGlobalResource                            = internArg("--global-resource")
 	argGpCtTLANSIC                               = internArg("-CtTLANSI-C")
 	argGpDk                                      = internArg("-Dk*")

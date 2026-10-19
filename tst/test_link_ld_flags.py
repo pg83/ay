@@ -99,7 +99,7 @@ class LinkFlagsTest(unittest.TestCase):
 
     def test_debug_build_compresses_debug_sections_when_configured(self):
         files = fixture()
-        files["build/ymake_conf.py"] = "debug_info_flags.append('-gz=zstd')\n"
+        files["build/ymake_conf.py"] = lib.ymake_conf(compress_debug=True)
         graph = lib.make(files, "prog")
         link = command_with(lib.node_by_output(graph, "$(B)/prog/prog"), "link_exe.py")
         self.assertEqual(

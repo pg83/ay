@@ -8,9 +8,6 @@ from pathlib import Path
 import lib
 
 
-GZ_RULE = "debug_info_flags.append('-gz=zstd')"
-
-
 def library(sources, extra=""):
     return (
         "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
@@ -35,7 +32,7 @@ class Tree:
         tmp = tempfile.TemporaryDirectory(prefix="ay-platform-test-")
         test.addCleanup(tmp.cleanup)
         self.src = Path(tmp.name).resolve()
-        for relative, content in {".arcadia.root": "", "ya.conf": ya_conf, **files}.items():
+        for relative, content in {".arcadia.root": "", "ya.conf": ya_conf, **lib.CONF_FILES, **files}.items():
             path = self.src / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
@@ -108,24 +105,20 @@ class PlatformVariantsTest(unittest.TestCase):
             ["--sysroot=/nowhere", "-B$(B)/resources/OS_SDK_ROOT/usr/bin"],
         )
 
-    def test_clang_version_selects_resource_paths(self):
-        # Compile nodes carry the host platform's tool environment.
-        tree = Tree(self, RAGEL)
-        library_path = "DYLD_LIBRARY_PATH"
-        for flags, prefix in (
-            ((), "$(B)/resources/CLANG20/lib:"),
-            (("--host-platform-flag", "CLANG_VER="), "$(B)/resources/CLANG20/lib:"),
-            (("--host-platform-flag", "CLANG_VER=18"), "$(B)/resources/CLANG18/lib:"),
-        ):
-            graph, _ = tree.graph(*flags, "lexer")
+    def test_toolchain_version_selects_resource_paths(self):
+        # Compile nodes carry the host platform's tool environment; the
+        # version is the tool chain's, as ymake_conf.py reports it.
+        for version in ("20", "18"):
+            tree = Tree(self, {**RAGEL, "build/ya.conf.json": lib.ya_conf_json(version=version)})
+            graph, _ = tree.graph("lexer")
             env = lib.node_by_output(graph, "$(B)/lexer/b.c.o")["cmds"][0]["env"]
-            self.assertTrue(env[library_path].startswith(prefix), (flags, env))
+            self.assertTrue(env["DYLD_LIBRARY_PATH"].startswith(f"$(B)/resources/CLANG{version}/lib:"), env)
 
     def test_ymake_conf_enables_compressed_debug_sections(self):
-        plain_tree = Tree(self, {**RAGEL, "build/ymake_conf.py": "debug_info_flags = []\n"})
+        plain_tree = Tree(self, RAGEL)
         graph, _ = plain_tree.graph("lexer")
         self.assertNotIn("-gz=zstd", args_of(graph, "$(B)/lexer/a.cpp.o"))
-        tree = Tree(self, {**RAGEL, "build/ymake_conf.py": f"if x:\n    {GZ_RULE}\n"})
+        tree = Tree(self, {**RAGEL, "build/ymake_conf.py": lib.ymake_conf(compress_debug=True)})
         graph, _ = tree.graph("lexer")
         self.assertIn("-gz=zstd", args_of(graph, "$(B)/lexer/a.cpp.o"))
         graph, _ = tree.graph("-r", "lexer")

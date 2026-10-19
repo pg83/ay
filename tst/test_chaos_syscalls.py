@@ -28,12 +28,14 @@ class ChaosSyscallsTest(unittest.TestCase):
         self.assert_same_graph("dirent-unknown=1 eintr-fstatat=0 eintr-fstatat=4")
 
     def test_unreadable_directory_hides_its_files(self):
-        result = lib.make_process(self.files, "app", env={"AY_CHAOS": "getdents-eio=0"})
+        # Two getdents per listing: the root, build/, app/ and c/ come first,
+        # the fifth listing is a/.
+        result = lib.make_process(self.files, "app", env={"AY_CHAOS": "getdents-eio=8"})
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertEqual(result.stdout, "")
         self.assertEqual(
             result.stderr,
-            "\x1b[31mmissing-include: $(S)/a/s0.cpp: unresolved include \"a/h0.h\" — "
+            "\x1b[31mmissing-include: $(S)/b/s0.cpp: unresolved include \"a/h0.h\" — "
             "not found in source, build, search path, or sysincl\x1b[0m\n",
         )
 

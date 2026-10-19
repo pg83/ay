@@ -14,7 +14,7 @@ NO_PLATFORM = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
 def run_make(files, *args, extra_env=None):
     with tempfile.TemporaryDirectory(prefix="ay-link-stream-") as directory:
         root = Path(directory)
-        (root / ".arcadia.root").touch()
+        lib.seed_root(root)
         (root / "ya.conf").write_text(
             '[flags]\nOPENSOURCE = "yes"\n\n[host_platform_flags]\nOPENSOURCE = "yes"\n'
         )

@@ -72,7 +72,7 @@ def stub_tree(program_body):
 def ay_make(files, *args, platform=X86_64, conf=OPENSOURCE_CONF):
     with tempfile.TemporaryDirectory(prefix="ay-yamake-test-") as directory:
         root = Path(directory)
-        (root / ".arcadia.root").touch()
+        lib.seed_root(root)
         (root / "ya.conf").write_text(conf)
         for relative, content in files.items():
             path = root / relative

@@ -7,25 +7,6 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-const linuxSDKDefault = "ubuntu-16"
-
-func toolchainFlags(fs FS) map[string]string {
-	return prebuiltToolchainFlags()
-}
-
-func prebuiltToolchainFlags() map[string]string {
-	return map[string]string{
-		"CONSISTENT_DEBUG":   "yes",
-		"NO_DEBUGINFO":       "yes",
-		"OS_SDK":             linuxSDKDefault,
-		"TIDY":               "no",
-		"USE_ARCADIA_PYTHON": "yes",
-		"USE_PYTHON3":        "yes",
-
-		"CLANG_VER": "20",
-	}
-}
-
 func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	var root map[string]any
 

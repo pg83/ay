@@ -30,15 +30,8 @@ func (e *EmitContext) emitR5Reserved(
 		Env: env,
 	}
 
-	rlgenMode := argT0
-
-	if instance.Platform.RagelOptimized {
-		rlgenMode = argG2
-	}
-
 	cmd1 := Cmd{
-		CmdArgs: na.chunkList(na.anyList(rlgenCdBinPath.any(),
-			rlgenMode.any(),
+		CmdArgs: na.chunkList(na.anyList(rlgenCdBinPath.any()), instance.Platform.RlgenFlags, na.anyList(
 			argDashO.any(),
 			cppVFS.any(),
 			tmpVFS.any())),

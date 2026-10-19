@@ -8,6 +8,197 @@ from pathlib import Path
 AY = Path(os.environ["AY_TEST_BINARY"])
 
 
+# A reduced build/ymake_conf.py: the real script's rules for the variables ay
+# reads, the same command line and the same output forms. COMPRESS_DEBUG and
+# EXTRA are the knobs tests turn; ymake_conf() renders a variant.
+FAKE_YMAKE_CONF = r'''
+import base64
+import json
+import sys
+
+COMPRESS_DEBUG = False
+EXTRA = ""
+
+
+def emit(key, *value):
+    print("{}={}".format(key, " ".join(str(v) for v in value if v is not None)))
+
+
+def platform(data):
+    os_ = data["os"].lower()
+    os_ = {"darwin": "macos", "win": "windows"}.get(os_, os_)
+    arch = data["arch"].lower()
+    p = {"os": os_, "arch": arch}
+    p["x86_64"] = arch in ("x86_64", "amd64")
+    p["armv8"] = arch in ("armv8", "armv8a", "arm64", "aarch64")
+    p["linux"] = os_ == "linux"
+    p["macos"] = os_ == "macos"
+    p["posix"] = os_ in ("linux", "macos", "ios", "android", "freebsd")
+    p["os_compat"] = "DARWIN" if p["macos"] else os_.upper()
+    os_vars = [os_.upper(), "OS_" + os_.upper()] + (["DARWIN", "OS_DARWIN"] if p["macos"] else [])
+    arch_vars = [v for on, v in (
+        (p["x86_64"], "ARCH_X86_64"),
+        (p["armv8"], "ARCH_ARM64"),
+        (p["armv8"], "ARCH_ARM"),
+        (p["armv8"] and (p["linux"] or p["macos"]), "ARCH_AARCH64"),
+        (True, "ARCH_TYPE_64"),
+    ) if on]
+    p["vars"] = os_vars, arch_vars
+    return p
+
+
+def main(argv):
+    presets, args, params, i = {}, [], None, 1
+    while i < len(argv):
+        if argv[i] == "--toolchain-params":
+            params = json.loads(base64.b64decode(argv[i + 1]))
+            i += 2
+        elif argv[i] == "-D":
+            key, _, value = argv[i + 1].partition("=")
+            presets[key] = value
+            i += 2
+        elif argv[i] == "-l":
+            i += 1
+        else:
+            args.append(argv[i])
+            i += 1
+    for key in ("CFLAGS", "CXXFLAGS", "CONLYFLAGS", "LDFLAGS", "GO_COMPILE_FLAGS", "GO_LINK_FLAGS", "STD_CXX_VERSION"):
+        presets["USER_" + key] = " ".join(filter(None, [presets.pop(key, None), presets.get("USER_" + key)]))
+    build_type = args[1].lower()
+    if build_type.startswith("dist-"):
+        build_type = build_type[len("dist-"):]
+    release = build_type in ("release", "relwithdebinfo", "minsizerel", "profile", "gprof") or build_type.endswith("-release")
+    sanitizer = presets.get("SANITIZER_TYPE", "")
+    sanitized = bool(sanitizer) and sanitizer.lower() not in ("no", "false", "off", "0")
+    host = platform(params["platform"]["host"])
+    target = platform(params["platform"]["target"])
+    tc = params["params"]
+
+    print('@import "${CONF_ROOT}/ymake.core.conf"')
+    emit("BUILD_TYPE", build_type.upper())
+    emit("BT_" + build_type.upper().replace("-", "_"), "yes")
+    emit("DISTBUILD", "yes")
+    emit("HOST_PLATFORM", host["os_compat"])
+    for var in host["vars"][0] + host["vars"][1]:
+        emit("HOST_" + var, "yes")
+    emit("TARGET_PLATFORM", target["os_compat"])
+    emit("HARDWARE_TYPE", target["arch"])
+    for var in target["vars"][1] + target["vars"][0]:
+        emit(var, "yes")
+    if target["posix"]:
+        emit("UNIX", "yes")
+    if presets.get("FORCE_NO_PIC", "").lower() not in ("yes", "true", "on", "1"):
+        emit("PIC", "yes")
+    if build_type in ("debug", "debugnoasserts", "fastdebug") or build_type.endswith("-debug"):
+        emit("_BUILD_DEBUG", "yes")
+    if release:
+        emit("_BUILD_RELEASE", "yes")
+    if sanitized:
+        emit("_BUILD_SANITIZED", "yes")
+    os_sdk = presets.get("OS_SDK") or ("ubuntu-16" if target["linux"] else None)
+    if "OS_SDK" not in presets:
+        emit("OS_SDK", os_sdk)
+    emit("CLANG", "yes")
+    emit("COMPILER_ID", tc["type"].upper())
+    emit("COMPILER_VERSION", tc["version"].split(".")[0])
+    debug_info = ["-g"]
+    if COMPRESS_DEBUG and not release and target["linux"]:
+        debug_info.append("-gz=zstd")
+    debug_info.append("-fdebug-default-version=4")
+    if target["linux"]:
+        debug_info.append("-ggnu-pubnames")
+        if release:
+            debug_info.append("-fdebug-info-for-profiling")
+    emit("_DEBUG_INFO_FLAGS", *debug_info)
+    print("C_DEFINES+=-D_THREAD_SAFE -D_PTHREADS")
+    print('@import "${CONF_ROOT}/conf/compilers/gnu_compiler.conf"')
+    emit("OBJCOPY_TOOL_VENDOR", tc.get("objcopy"))
+    ld_flags = []
+    if COMPRESS_DEBUG and not release and target["linux"]:
+        ld_flags.append("-Wl,--compress-debug-sections=zstd")
+    if presets.get("MUSL") == "yes":
+        ld_flags.append("-Wl,--no-as-needed")
+    elif target["linux"]:
+        ld_flags.extend(["-ldl", "-lrt", "-Wl,--no-as-needed"])
+    emit("_LD_FLAGS", *ld_flags)
+    optimized = release and not sanitized
+    emit("RLGEN_FLAGS", "-G2" if optimized else "-T0")
+    emit("RAGEL6_FLAGS", "-CG2" if optimized else "-CT0")
+    if "HAVE_CUDA" not in presets:
+        have_cuda = (presets.get("MUSL") != "yes" and not sanitized and host["linux"] and host["x86_64"]
+                     and target["linux"] and target["x86_64"])
+        emit("HAVE_CUDA", "yes" if have_cuda else "no")
+        if have_cuda:
+            emit("CUDA_ROOT", "$CUDA_RESOURCE_GLOBAL")
+            emit("CUDA_VERSION", "12.9")
+    sys.stdout.write(EXTRA)
+    print("# Variables set from command line by -D options")
+    for key in sorted(presets):
+        emit(key, presets[key])
+
+
+main(sys.argv)
+'''
+
+
+def ymake_conf(compress_debug=False, extra=""):
+    """The fake build/ymake_conf.py, optionally compressing debug info or printing extra lines."""
+    return (
+        FAKE_YMAKE_CONF
+        .replace("COMPRESS_DEBUG = False", f"COMPRESS_DEBUG = {compress_debug}")
+        .replace('EXTRA = ""', f"EXTRA = {extra!r}")
+    )
+
+
+def ya_conf_json(version="20", formula=None):
+    """A build/ya.conf.json whose clang toolchain is the default on every platform the tests name."""
+    platforms = [
+        ("LINUX", "x86_64"), ("LINUX", "aarch64"), ("DARWIN", "x86_64"), ("DARWIN", "arm64"),
+        ("WINDOWS", "x86_64"), ("IOS", "arm64"),
+    ]
+    return json.dumps({
+        "toolchain": {
+            f"clang{version}": {
+                "tools": {"c++": {"bottle": f"clang{version}", "executable": "c++"}},
+                "platforms": [
+                    {"host": {"os": hos, "arch": harch}, "target": {"os": tos, "arch": tarch}, "default": True}
+                    for hos, harch in platforms for tos, tarch in platforms
+                ],
+                "params": {
+                    "type": "clang",
+                    "match_root": "CLANG",
+                    "use_bundle": True,
+                    "c_compiler": "$(CLANG)/bin/clang",
+                    "cxx_compiler": "$(CLANG)/bin/clang++",
+                    "objcopy": "$(CLANG)/bin/llvm-objcopy",
+                    "version": version,
+                },
+                "env": {"CPATH": [""], "LIBRARY_PATH": [""], "SDKROOT": [""]},
+            },
+        },
+        "bottles": {
+            f"clang{version}": {
+                "formula": formula or {"by_platform": {"linux-x86_64": {"uri": "sbr:1"}, "darwin-arm64": {"uri": "sbr:2"}}},
+            },
+        },
+    }, indent=1) + "\n"
+
+
+CONF_FILES = {
+    "build/ymake_conf.py": FAKE_YMAKE_CONF,
+    "build/ya.conf.json": ya_conf_json(),
+}
+
+
+def seed_root(root):
+    """Marks root as a source root with the configuration files ay make runs."""
+    (root / ".arcadia.root").touch()
+    for relative, content in CONF_FILES.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+
+
 TOOLCHAIN_ENV_VARS = {
     "AR", "CC", "CFLAGS", "CGO_CFLAGS", "CGO_CPPFLAGS", "CGO_CXXFLAGS",
     "CGO_LDFLAGS", "CPP", "CPPFLAGS", "CXX", "CXXFLAGS", "LD", "LDFLAGS",
@@ -43,7 +234,7 @@ def make_process(files, target, *args, opensource=True, env=None, timeout=10):
     """Generates the graph of target in a fresh tree; returns the finished process."""
     with tempfile.TemporaryDirectory(prefix="ay-make-test-") as directory:
         root = Path(directory)
-        (root / ".arcadia.root").touch()
+        seed_root(root)
         value = 'OPENSOURCE = "yes"\n' if opensource else ""
         (root / "ya.conf").write_text(
             f"[flags]\n{value}\n[host_platform_flags]\n{value}"

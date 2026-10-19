@@ -29,6 +29,7 @@ class Tree:
         for relative, content in {
             ".arcadia.root": "",
             "ya.conf": '[flags]\nOPENSOURCE = "yes"\n',
+            **lib.CONF_FILES,
             **files,
         }.items():
             path = self.src / relative

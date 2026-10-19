@@ -193,9 +193,10 @@ func sseBaseCFlags(x8664 bool) []ANY {
 func noLibcBlock(p *Platform) []ANY {
 	out := make([]ANY, 0, 3+len(noLibcWarningSuppressions))
 
-	if p.BuildRelease {
+	switch p.ifEnv.string(envBUILD_TYPE) {
+	case "RELEASE", "MINSIZEREL", "VALGRIND-RELEASE", "PROFILE", "GPROF", "DEBUGNOASSERTS":
 		out = append(out, argNDEBUG.any())
-	} else {
+	default:
 		out = append(out, argUNDEBUG.any())
 	}
 
@@ -217,24 +218,6 @@ type CompileFlagBundle struct {
 	CFlags      []ANY
 	Defines     []ANY
 	NoLibcBlock []ANY
-}
-
-func buildDebugInfoFlags(os OS, release, compress bool) []ANY {
-	out := make([]ANY, 0, 4)
-
-	out = append(out, argDashG.any())
-
-	if compress && !release && os == OSLinux {
-		out = append(out, argGzZstd.any())
-	}
-
-	out = append(out, argFdebugDefaultVersion4.any())
-
-	if os == OSLinux {
-		out = append(out, argGgnuPubnames.any())
-	}
-
-	return out
 }
 
 func composeCompileCFlags(isa ISA, release bool, debugInfo []ANY) []ANY {

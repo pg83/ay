@@ -57,7 +57,7 @@ class DevtoolsCliTest(unittest.TestCase):
     def source_root(self, ya_conf):
         root = self.root / "src"
         (root / "lib").mkdir(parents=True)
-        (root / ".arcadia.root").touch()
+        lib.seed_root(root)
         (root / "ya.conf").write_text(ya_conf)
         (root / "lib/ya.make").write_text(LIBRARY_YA_MAKE)
         (root / "lib/a.c").write_text("int f(void){return 0;}\n")
@@ -211,7 +211,9 @@ class DevtoolsCliTest(unittest.TestCase):
         result = self.make(root, env=toolchain_free_env(AY_CHAOS="host-os=linux host-arch=riscv64"))
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, "")
-        self.assertEqual(result.stderr, fatal('compileFlagBundleFor: unsupported platform ISA "riscv64"'))
+        self.assertEqual(result.stderr, fatal(
+            "ymake conf: unsupported platforms host=DEFAULT-LINUX-RISCV64 target=DEFAULT-LINUX-RISCV64 for tool c++"
+        ))
 
     def test_ya_conf_scalar_types_reach_flags(self):
         root = self.source_root(
@@ -271,8 +273,11 @@ class DevtoolsCliTest(unittest.TestCase):
         self.assertIn("-DB=\\", args)
 
     def test_large_graph_is_written_in_several_chunks(self):
+        # Linux caps one argument at 128 KiB: a ya.conf flag this size would not
+        # pass on ymake_conf.py's command line, a module flag does.
         big = "-DBIG=" + "x" * (300 << 10)
-        root = self.source_root(f'[flags]\nOPENSOURCE = "yes"\nCFLAGS = "{big}"\n')
+        root = self.source_root('[flags]\nOPENSOURCE = "yes"\n')
+        (root / "lib/ya.make").write_text(LIBRARY_YA_MAKE.replace("SRCS(", f"CFLAGS({big})\nSRCS("))
         result = self.make(
             root,
             "--target-platform", "default-linux-aarch64",

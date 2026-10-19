@@ -77,7 +77,7 @@ class ChaosHashesTest(unittest.TestCase):
     def test_pairs_colliding_in_both_halves_are_rejected(self):
         wide = lib.wide_project(20)
         for files, words, message in (
-            (self.files, "hash-bucket-h1=3 hash-bucket-h2=7",
+            (self.files, "hash-bucket-h1=3 hash-bucket-h2=4",
              r"BucketCache: bucket hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ elems\)"),
             (self.files, "hash-list-h1=3 hash-list-h2=3",
              r"BucketCache: bucket-list hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ buckets\)"),

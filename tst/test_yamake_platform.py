@@ -30,7 +30,7 @@ def ay(*args, env=None):
 def ay_make(files, *args, platform="default-linux-aarch64", env_extra=None):
     with tempfile.TemporaryDirectory(prefix="ay-yamake-test-") as directory:
         root = Path(directory)
-        (root / ".arcadia.root").touch()
+        lib.seed_root(root)
         (root / "ya.conf").write_text(
             '[flags]\nOPENSOURCE = "yes"\n\n'
             '[host_platform_flags]\nOPENSOURCE = "yes"\n'
@@ -104,10 +104,13 @@ class YaMakePlatformTest(unittest.TestCase):
         self.assertNotIn("-DCXX", c)
 
     def test_unsupported_target_architectures(self):
-        for platform, isa in (("default-linux-riscv64", "riscv64"),):
+        for platform in ("default-linux-riscv64",):
             with self.subTest(platform=platform):
                 code, _, stderr = ay_make(library(), platform=platform)
-                self.assertEqual((code, stderr), (1, f'compileFlagBundleFor: unsupported platform ISA "{isa}"'))
+                self.assertEqual((code, stderr), (1, (
+                    "ymake conf: unsupported platforms host=DEFAULT-LINUX-X86_64 "
+                    f"target={platform.upper()} for tool c++"
+                )))
 
     def test_debug_info_and_optimization_flags(self):
         code, graph, stderr = ay_make(library(), "-r", platform="default-linux-x86_64")
@@ -115,7 +118,7 @@ class YaMakePlatformTest(unittest.TestCase):
         self.assertEqual(after_compilation_dir(compile_args(graph, "$(B)/a/x.cpp.o"), 4), ["-pipe", "-m64", "-O3", "-fno-common"])
 
         compressed = library()
-        compressed["build/ymake_conf.py"] = "debug_info_flags.append('-gz=zstd')\n"
+        compressed["build/ymake_conf.py"] = lib.ymake_conf(compress_debug=True)
         code, graph, stderr = ay_make(compressed)
         self.assertEqual(code, 0, stderr)
         self.assertEqual(

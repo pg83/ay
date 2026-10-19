@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"slices"
 	"strings"
 )
 
@@ -9,16 +9,6 @@ var (
 	wrapccPython3STR = internV("$(B)/resources/", resourcePatternYMakePython3, "/bin/python3")
 	wrapccPyChunk    = []VFS{wrapccPyVFS}
 )
-
-const gzZstdRule = "debug_info_flags.append('-gz=zstd')"
-
-func confCompressesDebug(fs FS) bool {
-	if !fs.isFile(srcRootRel, "build/ymake_conf.py") {
-		return false
-	}
-
-	return bytes.Contains(concatChunks(fs.read("build/ymake_conf.py")), []byte(gzZstdRule))
-}
 
 type Platform struct {
 	OS                    OS
@@ -29,7 +19,8 @@ type Platform struct {
 	BuildType             string
 	BuildRelease          bool
 	BuildSanitized        bool
-	RagelOptimized        bool
+	RlgenFlags            []ANY
+	Ragel6Flags           []ANY
 	Triple                string
 	March                 string
 	MultiarchLibPathSTR   STR
@@ -100,10 +91,14 @@ func internFlags(flags map[string]string) map[ENV]STR {
 	return out
 }
 
-func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxflagsEnv string) *Platform {
-	buildType := platformBuildType(flags)
-	buildSanitized := platformBuildSanitized(flags)
-	buildRelease := isReleaseBuildType(buildType)
+func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[string]string, cflagsEnv, cxxflagsEnv string) *Platform {
+	rebaseToolchainRoot(flags, tc)
+
+	clangVer := flags["COMPILER_VERSION"]
+
+	if clangVer == "" {
+		throwFmt("ymake conf: %s printed no COMPILER_VERSION", ymakeConfScript)
+	}
 
 	var systemLibs, linkPreludeExtra []string
 
@@ -115,24 +110,25 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	}
 
 	p := &Platform{
-		OS:                os,
-		ISA:               isa,
-		Target:            makePlatformID(os, isa),
-		Flags:             internFlags(flags),
-		PIC:               flags["PIC"] == "yes",
-		BuildType:         buildType,
-		BuildRelease:      buildRelease,
-		BuildSanitized:    buildSanitized,
-		RagelOptimized:    buildRelease && !buildSanitized,
-		Triple:            string(isa) + "-" + string(os) + "-gnu",
-		March:             marchFor(isa),
-		CFlags:            internAnys(splitShellWords(cflagsEnv)),
-		CXXFlags:          internAnys(splitShellWords(cxxflagsEnv)),
-		SystemLibs:        internAnys(systemLibs),
-		LinkPreludeExtra:  internAnys(linkPreludeExtra),
-		ClangVer:          platformClangVersion(flags),
-		ClangVerSTR:       internStr(platformClangVersion(flags)),
-		BuildTypeUpperSTR: internStr(strings.ToUpper(buildType)),
+		OS:                    os,
+		ISA:                   isa,
+		Target:                makePlatformID(os, isa),
+		Flags:                 internFlags(flags),
+		PIC:                   flags["PIC"] == "yes",
+		BuildType:             strings.ToLower(buildType),
+		BuildRelease:          flags["_BUILD_RELEASE"] == "yes",
+		BuildSanitized:        flags["_BUILD_SANITIZED"] == "yes",
+		RlgenFlags:            internAnys(splitShellWords(flags["RLGEN_FLAGS"])),
+		Ragel6Flags:           internAnys(splitShellWords(flags["RAGEL6_FLAGS"])),
+		Triple:                string(isa) + "-" + string(os) + "-gnu",
+		March:                 marchFor(isa),
+		CFlags:                internAnys(splitShellWords(cflagsEnv)),
+		CXXFlags:              internAnys(splitShellWords(cxxflagsEnv)),
+		SystemLibs:            internAnys(systemLibs),
+		LinkPreludeExtra:      internAnys(linkPreludeExtra),
+		ClangVer:              clangVer,
+		ClangVerSTR:           internStr(clangVer),
+		CompressDebugSections: slices.Contains(splitShellWords(flags["_LD_FLAGS"]), argWlCompressDebugSectionsZstd.string()),
 	}
 
 	p.TargetArg = internV("--target=", p.Triple)
@@ -175,12 +171,10 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 		{Name: envSDKROOT, Value: strEmpty.any()},
 	}
 
-	compress := confCompressesDebug(fs)
-
-	p.CompressDebugSections = compress && !buildRelease && os == OSLinux
-	p.DebugInfoFlags = buildDebugInfoFlags(os, buildRelease, compress)
-	p.CompileCFlags = composeCompileCFlags(isa, buildRelease, p.DebugInfoFlags)
 	p.ifEnv = buildPlatformIfEnv(p)
+	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
+	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
+	p.CompileCFlags = composeCompileCFlags(isa, p.BuildRelease, p.DebugInfoFlags)
 	p.NoLibcBlock = noLibcBlock(p)
 
 	bundle := compileFlagBundleFor(p)
@@ -194,6 +188,21 @@ func newPlatform(fs FS, os OS, isa ISA, flags map[string]string, cflagsEnv, cxxf
 	return p
 }
 
+func rebaseToolchainRoot(flags map[string]string, tc *Toolchain) {
+	if tc.ToolVar == "" {
+		return
+	}
+
+	marker := "$(" + tc.ToolVar + ")"
+	mount := "$(B)/resources/" + tc.MatchRoot + flags["COMPILER_VERSION"]
+
+	for k, v := range flags {
+		if strings.Contains(v, marker) {
+			flags[k] = strings.ReplaceAll(v, marker, mount)
+		}
+	}
+}
+
 func buildPlatformIfEnv(p *Platform) Environment {
 	env := DefaultIfEnv.clone()
 
@@ -205,8 +214,13 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		env.setString(envGOSTD_VERSION, "1.26")
 	}
 
-	if !env.bool(envOS_WINDOWS) {
+	if !env.hasBindingID(envCGO_ENABLED) {
 		env.setBool(envCGO_ENABLED, true)
+	}
+
+	if sanitizer := env.string(envSANITIZER_TYPE); env.bool(envOS_WINDOWS) || env.bool(envOS_EMSCRIPTEN) ||
+		sanitizer != "" && sanitizer != "no" && sanitizer != "address" && sanitizer != "memory" {
+		env.setBool(envCGO_ENABLED, false)
 	}
 
 	if env.bool(envOPENSOURCE) || env.string(envOPENSOURCE_PROJECT) == "ymake" || env.string(envOPENSOURCE_PROJECT) == "ya" {
@@ -221,61 +235,31 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		env.setString(env_USE_IDN, "dynamic")
 	}
 
-	switch p.ISA {
-	case ISAX8664:
-		env.setBool(envARCH_X86_64, true)
-		env.setBool(envARCH_TYPE_64, true)
-	case ISAAArch64, ISAArm64:
-		env.setBool(envARCH_AARCH64, true)
-		env.setBool(envARCH_ARM64, true)
-		env.setBool(envARCH_TYPE_64, true)
-	}
-
-	if !env.hasBindingID(envHAVE_MKL) {
-		haveMkl := env.bool(envOS_LINUX) && env.bool(envARCH_X86_64) &&
-			env.string(envSANITIZER_TYPE) == ""
-
-		env.setBool(envHAVE_MKL, haveMkl)
+	if env.string(envHAVE_MKL) == "" {
+		env.setBool(envHAVE_MKL, env.bool(envOS_LINUX) && env.bool(envARCH_X86_64) && env.string(envSANITIZER_TYPE) == "")
 	}
 
 	if env.bool(envOPENSOURCE) {
 		env.setBool(envHAVE_MKL, false)
 	}
 
-	if !env.hasBindingID(envHAVE_CUDA) {
-		haveCuda := !env.bool(envMUSL) && env.bool(envOS_LINUX) && env.bool(envARCH_X86_64) &&
-			env.string(envSANITIZER_TYPE) == ""
-
-		env.setBool(envHAVE_CUDA, haveCuda)
-	}
-
-	if !env.hasBindingID(envCUDA_VERSION) {
-		env.setString(envCUDA_VERSION, "12.9")
-	}
-
-	if !env.hasBindingID(envCUDA_ROOT) {
-		env.setVFS(envCUDA_ROOT, bldResourcesCuda)
-	}
-
-	if !env.hasBindingID(envCUDA_ARCHITECTURES) {
-		env.setString(envCUDA_ARCHITECTURES, cudaArchitectures129)
-	}
-
 	if !env.hasBindingID(envOBJCOPY_TOOL) {
-		env.setVFS(envOBJCOPY_TOOL, build("resources/CLANG", p.ClangVer, "/bin/llvm-objcopy"))
+		if vendor := env.string(envOBJCOPY_TOOL_VENDOR); vendor != "" {
+			env.setString(envOBJCOPY_TOOL, vendor)
+		} else {
+			env.setString(envOBJCOPY_TOOL, "${LLVM_TOOLS_ROOT}/bin/llvm-objcopy")
+		}
 	}
 
 	env.setString(envARCADIA_ROOT, "$(S)")
 	env.setString(envARCADIA_BUILD_ROOT, "$(B)")
 
-	useRuntime := p.Flags[envUSE_ARCADIA_COMPILER_RUNTIME]
+	if !env.hasBindingID(envUSE_ARCADIA_COMPILER_RUNTIME) {
+		env.setBool(envUSE_ARCADIA_COMPILER_RUNTIME, !(env.bool(envLOCAL) && env.bool(envXCODE)))
+	}
 
-	env.setBool(envUSE_ARCADIA_COMPILER_RUNTIME, useRuntime != strNo)
-	env.setStringID(envCOMPILER_VERSION, p.ClangVerSTR)
-	env.setStringID(envBUILD_TYPE, p.BuildTypeUpperSTR)
-
-	if (p.ISA == ISAX8664 || env.bool(envARCH_I386)) &&
-		!env.bool(envDISABLE_INSTRUCTION_SETS) {
+	if (env.bool(envARCH_X86_64) || env.bool(envARCH_I386)) && !env.bool(envDISABLE_INSTRUCTION_SETS) &&
+		(env.bool(envCLANG) || env.bool(envCLANG_CL) || env.bool(envGCC)) {
 		env.setStringID(envSSE41_CFLAGS, strSSE41CFlags)
 		env.setStringID(envSSE42_CFLAGS, strSSE42CFlags)
 		env.setStringID(envPOPCNT_CFLAGS, strPopcntCFlags)
@@ -291,39 +275,22 @@ func buildPlatformIfEnv(p *Platform) Environment {
 	return env
 }
 
-func platformClangVersion(flags map[string]string) string {
-	if v := flags["CLANG_VER"]; v != "" {
-		return v
+func debugInfoFlags(env Environment, flags map[string]string) []ANY {
+	switch {
+	case env.bool(envNO_DEBUGINFO):
+		return nil
+	case env.bool(envCLANG) && env.string(envDEBUGINFO_LINES_ONLY) == "yes":
+		return []ANY{argGlineTablesOnly.any()}
 	}
 
-	return "20"
+	return internAnys(splitShellWords(flags["_DEBUG_INFO_FLAGS"]))
 }
 
-func platformBuildType(flags map[string]string) string {
-	if v := flags["GG_BUILD_TYPE"]; v != "" {
-		return strings.ToLower(v)
-	}
+func (p *Platform) pythonNoStrip() bool {
+	buildType := p.ifEnv.string(envBUILD_TYPE)
+	sanitizer := p.ifEnv.string(envSANITIZER_TYPE)
 
-	if v := flags["BUILD_TYPE"]; v != "" {
-		return strings.ToLower(v)
-	}
-
-	return "debug"
-}
-
-func isReleaseBuildType(buildType string) bool {
-	switch buildType {
-	case "release", "relwithdebinfo", "minsizerel", "profile", "gprof":
-		return true
-	}
-
-	return strings.HasSuffix(buildType, "-release")
-}
-
-func platformBuildSanitized(flags map[string]string) bool {
-	sanitizer := strings.ToLower(flags["SANITIZER_TYPE"])
-
-	return sanitizer != "" && sanitizer != "no" && sanitizer != "false" && sanitizer != "0"
+	return buildType == "DEBUG" || buildType == "FASTDEBUG" || sanitizer != "" && sanitizer != "no"
 }
 
 func marchFor(isa ISA) string {
@@ -389,6 +356,8 @@ func parsePlatformID(s string) (OS, ISA) {
 }
 
 func registerPlatformOwned(p *Platform) {
+	registerOwnedSlice(p.RlgenFlags)
+	registerOwnedSlice(p.Ragel6Flags)
 	registerOwnedSlice(p.MarchArgs)
 	registerOwnedSlice(p.CFlags)
 	registerOwnedSlice(p.CXXFlags)

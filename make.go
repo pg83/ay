@@ -15,6 +15,15 @@ import (
 
 var fatalOnce sync.Once
 
+var yaHostToolchainFlags = map[string]string{
+	"NO_DEBUGINFO":     "yes",
+	"TOOL_BUILD_MODE":  "yes",
+	"CLANG_COVERAGE":   "no",
+	"TRAVERSE_RECURSE": "no",
+	"CONSISTENT_DEBUG": "yes",
+	"TIDY":             "no",
+}
+
 const (
 	cmdFileStartMarker = "--ya-start-command-file"
 	cmdFileEndMarker   = "--ya-end-command-file"
@@ -32,8 +41,10 @@ type MakeFlags struct {
 	stats               bool
 	ninja               bool
 	buildType           string
+	hostBuildType       string
 	targetPlat          string
 	hostPlat            string
+	dflags              map[string]string
 	tflags              map[string]string
 	hflags              map[string]string
 	targets             []string
@@ -116,95 +127,8 @@ func cmdMake(g GlobalFlags, args []string) int {
 	}
 
 	fs := newFS(mf.srcRoot)
-	tools := toolchainFlags(fs)
-	rootHostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
-	rootTargetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
-	hostYaFlags := map[string]string{}
-	targetYaFlags := map[string]string{}
-
-	copyStatsFlags(hostYaFlags, rootHostYaFlags)
-	copyStatsFlags(targetYaFlags, rootTargetYaFlags)
-
-	hostInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
-	targetInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
-
-	copyStatsFlags(hostYaFlags, hostInternalYaFlags)
-	copyStatsFlags(targetYaFlags, targetInternalYaFlags)
-
-	hOS, hISA := resolvePlatform(mf.hostPlat)
-	hostFlags := make(map[string]string, len(tools)+len(hostYaFlags)+len(mf.hflags)+1)
-
-	for k, v := range tools {
-		hostFlags[k] = v
-	}
-
-	for k, v := range hostYaFlags {
-		hostFlags[k] = v
-	}
-
-	for k, v := range mf.hflags {
-		hostFlags[k] = v
-	}
-
-	hostFlags["PIC"] = "yes"
-
-	if _, ok := hostFlags["GG_BUILD_TYPE"]; !ok {
-		hostFlags["GG_BUILD_TYPE"] = "release"
-	}
-
-	hostP := newPlatform(
-		fs,
-		hOS,
-		hISA,
-		hostFlags,
-		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
-		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
-	)
-
-	targetSpec := mf.targetPlat
-
-	if targetSpec == "" {
-		targetSpec = string(makePlatformID(hOS, hISA))
-	}
-
-	tOS, tISA := resolvePlatform(targetSpec)
-	targetFlags := make(map[string]string, len(tools)+len(targetYaFlags)+len(mf.tflags)+3)
-
-	for k, v := range tools {
-		targetFlags[k] = v
-	}
-
-	for k, v := range targetYaFlags {
-		targetFlags[k] = v
-	}
-
-	for k, v := range mf.tflags {
-		targetFlags[k] = v
-	}
-
-	if mf.buildType != "" {
-		targetFlags["GG_BUILD_TYPE"] = mf.buildType
-	}
-
-	if mf.testLevel > 0 {
-		targetFlags["TESTS_REQUESTED"] = "yes"
-	}
-
-	if mf.sandboxing {
-		targetFlags["SANDBOXING"] = "yes"
-	}
-
-	targetFlags["PIC"] = "no"
-
-	targetP := newPlatform(
-		fs,
-		tOS,
-		tISA,
-		targetFlags,
-		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS")),
-		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
-	)
-
+	caches := newGenCaches(fs)
+	hostP, targetP := makePlatforms(fs, mf, caches)
 	events := newEventQueue()
 
 	defer events.close()
@@ -217,11 +141,11 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	if mf.threads == 0 {
 		if mf.dumpGraph {
-			g := genDumpGraphWithResources(fs, mf.targets, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing, demandSelf, mf.addModulesToResults)
+			g := genDumpGraphWithResources(fs, caches, mf.targets, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing, demandSelf, mf.addModulesToResults)
 
 			writeGraph(g, !mf.sandboxing)
 		} else {
-			genStream(fs, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, mf.testLevel > 0, mf.keepGoing)
+			genStream(fs, caches, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, mf.testLevel > 0, mf.keepGoing)
 		}
 
 		if mf.dumpIgnoredMacros {
@@ -235,7 +159,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	ex.startGarbageCollector()
 
-	results := genStream(fs, mf.targets, hostP, targetP, ex.onNode, onWarn, mf.testLevel > 0, mf.keepGoing)
+	results := genStream(fs, caches, mf.targets, hostP, targetP, ex.onNode, onWarn, mf.testLevel > 0, mf.keepGoing)
 
 	ex.run(results)
 
@@ -266,10 +190,124 @@ func cmdMake(g GlobalFlags, args []string) int {
 	return 0
 }
 
-func genStream(fs FS, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool, keepGoing bool) []NodeRef {
+func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Platform) {
+	rootHostYaFlags := readYaConfSection(fs, "ya.conf", "host_platform_flags")
+	rootTargetYaFlags := readYaConfSection(fs, "ya.conf", "flags")
+	hostInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
+	targetInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "flags")
+	hostPlatformFlags := map[string]string{}
+	targetOptFlags := map[string]string{}
+
+	copyStatsFlags(hostPlatformFlags, rootHostYaFlags)
+	copyStatsFlags(hostPlatformFlags, hostInternalYaFlags)
+	copyStatsFlags(hostPlatformFlags, mf.hflags)
+	copyStatsFlags(targetOptFlags, rootTargetYaFlags)
+	copyStatsFlags(targetOptFlags, targetInternalYaFlags)
+	copyStatsFlags(targetOptFlags, mf.dflags)
+
+	hOS, hISA := resolvePlatform(mf.hostPlat)
+	targetSpec := mf.targetPlat
+
+	if targetSpec == "" {
+		targetSpec = string(makePlatformID(hOS, hISA))
+	}
+
+	tOS, tISA := resolvePlatform(targetSpec)
+	toolchains := readYaConfToolchains(fs)
+	hostName := toolchainPlatformName(hOS, hISA)
+	hostTC := resolveCxxToolchain(fs, toolchains, hostName, hostName)
+	targetTC := resolveCxxToolchain(fs, toolchains, hostName, toolchainPlatformName(tOS, tISA))
+	hostTCFlags := map[string]string{}
+
+	copyStatsFlags(hostTCFlags, yaHostToolchainFlags)
+	copyStatsFlags(hostTCFlags, hostPlatformFlags)
+
+	targetTCFlags := map[string]string{}
+
+	copyStatsFlags(targetTCFlags, mf.tflags)
+
+	if mf.sandboxing {
+		hostTCFlags["SANDBOXING"] = "yes"
+		targetTCFlags["SANDBOXING"] = "yes"
+	}
+
+	hostFlags := map[string]string{}
+
+	if mf.testLevel > 0 {
+		hostFlags["TESTS_REQUESTED"] = "yes"
+		targetOptFlags["TESTS_REQUESTED"] = "yes"
+	}
+
+	copyStatsFlags(hostFlags, hostPlatformFlags)
+	hostFlags["IS_CROSS_TOOLS"] = "yes"
+	hostFlags["IS_CROSS_SANITIZE"] = "yes"
+	yaToolchainFlags(hostFlags, hostTC, hostTCFlags)
+
+	targetFlags := map[string]string{}
+
+	copyStatsFlags(targetFlags, targetOptFlags)
+	targetFlags["IS_CROSS_SANITIZE"] = "yes"
+	targetFlags["FORCE_NO_PIC"] = "yes"
+	yaToolchainFlags(targetFlags, targetTC, targetTCFlags)
+
+	if mf.testLevel > 0 {
+		targetFlags["TRAVERSE_RECURSE_FOR_TESTS"] = "yes"
+		targetFlags["TRAVERSE_DEPENDS"] = "yes"
+	}
+
+	srcRoot := throw2(filepath.Abs(mf.srcRoot))
+	hostRun := startYmakeConf(fs, srcRoot, mf.hostBuildType, hostFlags, hostTC)
+	targetRun := startYmakeConf(fs, srcRoot, mf.buildType, targetFlags, targetTC)
+
+	caches.prewarm(fs, mf.targets)
+
+	hostP = newPlatform(
+		hOS,
+		hISA,
+		mf.hostBuildType,
+		hostTC,
+		hostRun.wait(),
+		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
+		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
+	)
+
+	targetP = newPlatform(
+		tOS,
+		tISA,
+		mf.buildType,
+		targetTC,
+		targetRun.wait(),
+		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS")),
+		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
+	)
+
+	return hostP, targetP
+}
+
+func yaToolchainFlags(flags map[string]string, tc *Toolchain, tcFlags map[string]string) {
+	if params, ok := tc.Params["params"].(map[string]any); ok {
+		if extra, ok := params["extra_flags"].(map[string]any); ok {
+			for k, v := range extra {
+				if s, ok := yaConfScalar(v); ok {
+					flags[k] = s
+				}
+			}
+		}
+	}
+
+	if tcFlags["SANDBOXING"] == "yes" {
+		tcFlags["FAKEID"] += "sandboxing"
+	}
+
+	copyStatsFlags(flags, tcFlags)
+	flags[strings.ToUpper(tc.Name)] = "yes"
+	flags["YA"] = "yes"
+}
+
+func genStream(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool, keepGoing bool) []NodeRef {
 	emitter := newStreamingEmitter(onNode)
 
-	runGenIntoWithResources(fs, targets, hostP, targetP, emitter, onWarn, testMode, keepGoing, demandSelf)
+	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, testMode, keepGoing, demandSelf)
 
 	return emitter.finish()
 }
@@ -279,7 +317,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 
 	config := getopt.Config{
 		Opts: getopt.OptStr("GrdktThxD:j:B:o:I:C:"),
-		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stat,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:,jobs:,ninja,define:," +
+		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stat,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,host-build-type:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:,jobs:,ninja,define:," +
 			"target:,build:,target-platform-build-type:,target-platform-flag:,target-platform-tests,test-size:," +
 			"dist,ignore-nodes-exit-code,warning-mode:,cache-tests,output-only-tests,cache-namespace:,report-skipped-suites,tests-retries:," +
 			"backup-test-results,add-modules-to-results,do-not-output-stderrs,no-src-links,add-changed-ok-configures,no-yt-store"),
@@ -290,10 +328,12 @@ func parseMakeFlags(args []string) *MakeFlags {
 	targetBuildType := ""
 
 	mf := &MakeFlags{
-		buildType: "debug",
-		threads:   runtime.NumCPU(),
-		tflags:    map[string]string{},
-		hflags:    map[string]string{},
+		buildType:     "debug",
+		hostBuildType: "release",
+		dflags:        map[string]string{},
+		threads:       runtime.NumCPU(),
+		tflags:        map[string]string{},
+		hflags:        map[string]string{},
 	}
 
 	for opt, err := range state.All(config) {
@@ -328,7 +368,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 		case opt.Name == "cmd-prefix":
 			mf.cmdPrefixes = append(mf.cmdPrefixes, parseCmdPrefix(opt.OptArg))
 		case opt.Char == 'D' || opt.Name == "define":
-			parseKV(mf.tflags, opt.OptArg)
+			parseKV(mf.dflags, opt.OptArg)
 		case opt.Char == 'j' || opt.Name == "jobs":
 			n, perr := strconv.Atoi(opt.OptArg)
 
@@ -346,6 +386,8 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.hostPlat = opt.OptArg
 		case opt.Name == "host-platform-flag":
 			parseKV(mf.hflags, opt.OptArg)
+		case opt.Name == "host-build-type":
+			mf.hostBuildType = opt.OptArg
 		case opt.Char == 'C' || opt.Name == "target":
 			for _, t := range strings.Split(opt.OptArg, ";") {
 				if t != "" {
@@ -468,16 +510,17 @@ execution flags:
                                 source/build sandbox; with -G, keep $(S) inputs in the dump.
 
 configuration flags:
-  -r, --release                 GG_BUILD_TYPE=release.
-  -d, --debug                   GG_BUILD_TYPE=debug (default).
-  --xbuild <value>              GG_BUILD_TYPE=<value> (overrides -r/-d).
+  -r, --release                 Build type release.
+  -d, --debug                   Build type debug (default).
+  --xbuild <value>              Build type <value> (overrides -r/-d).
   --musl                        MUSL=yes.
-  --build <value>               GG_BUILD_TYPE=<value>, as --xbuild.
+  --build <value>               Build type <value>, as --xbuild.
   --target-platform <id>        Target platform id (default: <host>).
-  --target-platform-build-type T  Target GG_BUILD_TYPE; overrides --build.
+  --target-platform-build-type T  Target build type; overrides --build.
   --target-platform-flag KEY=V  Target-axis -D flag (repeatable).
   --target-platform-tests       Generate test nodes, as -t.
   --host-platform <id>          Host platform id (default: <host>).
+  --host-build-type <value>     Host build type (default: release).
   -D, --define KEY=VALUE        Target-axis -D flag (repeatable).
   --host-platform-flag KEY=V    Host-axis -D flag (repeatable).
 

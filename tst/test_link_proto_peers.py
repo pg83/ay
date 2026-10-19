@@ -98,7 +98,7 @@ def fixture():
 def make_with_env(files, target, extra_env, dump=True):
     with tempfile.TemporaryDirectory(prefix="ay-link-proto-") as directory:
         root = Path(directory)
-        (root / ".arcadia.root").touch()
+        lib.seed_root(root)
         (root / "ya.conf").write_text(
             '[flags]\nOPENSOURCE = "yes"\n\n[host_platform_flags]\nOPENSOURCE = "yes"\n'
         )

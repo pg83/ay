@@ -72,7 +72,7 @@ def py_proto_files():
 def make_keep_going(files, target):
     with tempfile.TemporaryDirectory(prefix="ay-make-test-") as directory:
         root = Path(directory)
-        (root / ".arcadia.root").touch()
+        lib.seed_root(root)
         value = 'OPENSOURCE = "yes"\n'
         (root / "ya.conf").write_text(
             f"[flags]\n{value}\n[host_platform_flags]\n{value}"

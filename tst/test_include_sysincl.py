@@ -61,7 +61,7 @@ UNSUPPORTED_FILTERS = [
 def make_process(files, target, *args, opensource=True):
     with tempfile.TemporaryDirectory(prefix="ay-include-sysincl-") as directory:
         root = Path(directory)
-        (root / ".arcadia.root").touch()
+        lib.seed_root(root)
         value = 'OPENSOURCE = "yes"\n' if opensource else ""
         (root / "ya.conf").write_text(
             f"[flags]\n{value}\n[host_platform_flags]\n{value}"

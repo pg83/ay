@@ -676,7 +676,7 @@ class ExecutorSandboxTokenTest(FetchCase):
         self.agent = MockSSHAgent(self.agent_sock, [("ssh-ed25519", "k", "sig")])
         self.addCleanup(self.agent.close)
         self.net.serve(OAUTH_HOST, "/token", '{"access_token": "agent-token"}')
-        self.write(".arcadia.root", "")
+        lib.seed_root(self.src)
         self.write("ya.conf", '[flags]\nOPENSOURCE = "yes"\n')
 
     def make(self, target):

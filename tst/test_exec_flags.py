@@ -38,7 +38,7 @@ class Tree:
         self.src = self.root / "src"
         self.home = self.root / "home"
         self.home.mkdir()
-        for relative, content in {".arcadia.root": "", "ya.conf": ya_conf, **files}.items():
+        for relative, content in {".arcadia.root": "", "ya.conf": ya_conf, **lib.CONF_FILES, **files}.items():
             path = self.src / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
@@ -199,14 +199,14 @@ class MakeConfigurationFlagsTest(unittest.TestCase):
         graph, _ = tree.graph("-r", "--debug", "sw")
         self.assertIn("-UNDEBUG", cc_args(graph, out))
 
-    def test_host_build_type_falls_back_to_build_type_flag(self):
+    def test_host_build_type_configures_the_host_platform(self):
         tree = Tree(self, RAGEL)
         tool = "$(B)/contrib/tools/ragel6/host_off.cpp.pic.o"
         for flags, expected in (
             ((), "-DNDEBUG"),
-            (("--host-platform-flag", "GG_BUILD_TYPE="), "-UNDEBUG"),
-            (("--host-platform-flag", "GG_BUILD_TYPE=", "--host-platform-flag", "BUILD_TYPE=Release"), "-DNDEBUG"),
-            (("--host-platform-flag", "GG_BUILD_TYPE=Debug"), "-UNDEBUG"),
+            (("--host-build-type", "debug"), "-UNDEBUG"),
+            (("--host-build-type", "debug", "--host-platform-flag", "BUILD_TYPE=RELEASE"), "-DNDEBUG"),
+            (("--host-build-type", "relwithdebinfo"), "-UNDEBUG"),
         ):
             graph, _ = tree.graph("--target-platform", "default-linux-aarch64", *flags, "lexer")
             self.assertIn(expected, cc_args(graph, tool), flags)

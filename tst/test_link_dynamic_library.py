@@ -9,7 +9,7 @@ import lib
 
 
 NO_PLATFORM = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
-COMPRESS_DEBUG_CONF = "debug_info_flags.append('-gz=zstd')\n"
+COMPRESS_DEBUG_CONF = lib.ymake_conf(compress_debug=True)
 
 
 def library(body=""):
@@ -19,7 +19,7 @@ def library(body=""):
 def make_raw(files, target, *args):
     with tempfile.TemporaryDirectory(prefix="ay-link-dyn-") as directory:
         root = Path(directory)
-        (root / ".arcadia.root").touch()
+        lib.seed_root(root)
         (root / "ya.conf").write_text(
             '[flags]\nOPENSOURCE = "yes"\n\n[host_platform_flags]\nOPENSOURCE = "yes"\n'
         )

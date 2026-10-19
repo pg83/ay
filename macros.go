@@ -222,11 +222,10 @@ func makeDefaultIfEnv() Environment {
 	e := newEnvironment()
 
 	for _, n := range []ENV{
-		envOS_LINUX, envLINUX, envUnix,
-		envCLANG, envTRUE, envUSE_SSE4,
+		envTRUE, envUSE_SSE4,
 		envUSE_ARCADIA_PYTHON, envPYTHON3,
 
-		envUSE_PREBUILT_TOOLS,
+		envUSE_PREBUILT_TOOLS, envCONSISTENT_DEBUG,
 		envTsUsePrebuiltNotsTool,
 	} {
 		e.setBool(n, true)

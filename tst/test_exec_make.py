@@ -192,6 +192,7 @@ class Workspace:
         base = self.server.base
         tree = {
             ".arcadia.root": "",
+            **lib.CONF_FILES,
             "ya.conf": '[flags]\nOPENSOURCE = "yes"\n\n[host_platform_flags]\nOPENSOURCE = "yes"\n',
             "build/platform/clang/ya.make": (
                 "RESOURCES_LIBRARY()\n"

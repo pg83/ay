@@ -68,7 +68,7 @@ def fixture():
 def make_raw(files, target):
     with tempfile.TemporaryDirectory(prefix="ay-link-codegen-") as directory:
         root = Path(directory)
-        (root / ".arcadia.root").touch()
+        lib.seed_root(root)
         (root / "ya.conf").write_text(
             '[flags]\nOPENSOURCE = "yes"\n\n[host_platform_flags]\nOPENSOURCE = "yes"\n'
         )

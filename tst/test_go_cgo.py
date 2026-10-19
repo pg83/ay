@@ -238,7 +238,7 @@ class GoCgoGraphTest(unittest.TestCase):
     def test_cgo_link_object_flags_follow_platform(self):
         files = cgo_world()
         zstd_binding(files)
-        files["build/ymake_conf.py"] = "debug_info_flags.append('-gz=zstd')\n"
+        files["build/ymake_conf.py"] = lib.ymake_conf(compress_debug=True)
         go_module(files, "tools/gogen", 'import "github.com/DataDog/zstd"\n', module="GO_PROGRAM")
         files["lib/gen/ya.make"] = (
             f"LIBRARY()\n{NO_PLATFORM}RUN_PROGRAM(tools/gogen out.cpp OUT out.cpp)\nEND()\n"

@@ -227,7 +227,6 @@ type GenCtx struct {
 	autoincludeIdx  *AutoincludeIndex
 	parsedFiles     map[string]*MakeFile
 	prodOuts        IdValueMap
-	py3NoStripDebug bool
 	goEnvMemo       map[[2]STR]EnvVars
 }
 
@@ -246,8 +245,8 @@ func newModuleMemo() *moduleMemo {
 	return &moduleMemo{entries: newBumpAllocator[moduleMemoEntry]()}
 }
 
-func runGenIntoWithResources(fs FS, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) {
-	ctx := newGenCtx(fs, hostP, targetP, emitter, onWarn, testMode, keepGoing)
+func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) {
+	ctx := newGenCtx(fs, caches, hostP, targetP, emitter, onWarn, testMode, keepGoing)
 
 	for _, t := range ctx.linkingTargetsFirst(targets) {
 		ctx.genTarget(t, rootDemand)
@@ -262,7 +261,7 @@ func runGenIntoWithResources(fs FS, targets []string, hostP, targetP *Platform, 
 	}
 }
 
-func newGenCtx(fs FS, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool) *GenCtx {
+func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool) *GenCtx {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
 
@@ -273,7 +272,7 @@ func newGenCtx(fs FS, hostP, targetP *Platform, emitter *StreamingEmitter, onWar
 	}
 
 	fetchRefs := emitter.fetchRefs
-	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
+	parsers := caches.parsers
 	targetReg := newCodegenRegistry(plainEmit.nodeArenas())
 	hostReg := newCodegenRegistry(plainEmit.nodeArenas())
 
@@ -306,9 +305,7 @@ func newGenCtx(fs FS, hostP, targetP *Platform, emitter *StreamingEmitter, onWar
 		sbomEnabled: fs.isFile(srcRootRel, sbomConfRel),
 
 		autoincludeIdx: loadAutoincludeIndex(fs),
-		parsedFiles:    map[string]*MakeFile{},
-
-		py3NoStripDebug: confPy3NoStripOnDebug(fs),
+		parsedFiles:    caches.parsedFiles,
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
@@ -412,14 +409,6 @@ func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
 	}
 }
 
-func confPy3NoStripOnDebug(fs FS) bool {
-	if !fs.isFile(srcRootRel, "build/conf/python.conf") {
-		return false
-	}
-
-	return strings.Contains(string(concatChunks(fs.read("build/conf/python.conf"))), "NO_STRIP=yes")
-}
-
 func isFinalTargetModuleType(name TOK) bool {
 	return isProgramModuleType(name) || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib
 }
@@ -494,12 +483,12 @@ func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
 	return finals
 }
 
-func genDumpGraphWithResources(fs FS, targets []string, hostP, targetP *Platform, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand, addModulesToResults bool) *Graph {
+func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand, addModulesToResults bool) *Graph {
 	emitter := newStreamingEmitter(nil)
 
 	emitter.addModulesToResults = addModulesToResults
 
-	runGenIntoWithResources(fs, targets, hostP, targetP, emitter, onWarn, testMode, keepGoing, rootDemand)
+	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, testMode, keepGoing, rootDemand)
 
 	return finalize(emitter)
 }
@@ -1826,7 +1815,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		wantsStrip := (d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Program) && !d.noStrip &&
-			!(ctx.py3NoStripDebug && !instance.Platform.BuildRelease)
+			!instance.Platform.pythonNoStrip()
 
 		var programModuleTag STR
 

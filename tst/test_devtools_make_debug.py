@@ -47,7 +47,7 @@ class MakeDebugTest(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="ay-make-debug-test-")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        (self.root / ".arcadia.root").touch()
+        lib.seed_root(self.root)
         (self.root / "ya.conf").write_text(YA_CONF)
 
     def write(self, files):
