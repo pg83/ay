@@ -80,5 +80,35 @@ packages:
         self.assertEqual(prepare['outputs'].count('$(B)/web/__tarballs__/dep/-/dep-1.2.3.tgz'), 1)
 
 
+    def test_modern_test_prepares_target_without_building_it(self):
+        files = self.project()
+        files['web/tests/ya.make'] = 'TS_TEST_FOR(web)\nTS_TEST(test)\nEND()\n'
+        graph = make(files, 'web/tests', '-DAUTOCHECK=yes')
+        prepare = node_by_output(graph, '$(B)/web/package.json')
+        bridge = node_by_output(graph, '$(B)/web/tests/web-tests.test_for.prepare_deps.fake')
+        test = node_by_output(graph, '$(B)/web/tests/web-tests')
+        self.assertEqual(test['kv']['p'], 'TS_TST')
+        self.assertIn(prepare['uid'], bridge['deps'])
+        self.assertIn(bridge['uid'], test['deps'])
+        self.assertNotIn('$(B)/web/output.tar', [out for node in graph['graph'] for out in node['outputs']])
+
+    def test_build_and_test_share_one_preparation(self):
+        files = self.project('TS_TSC()\nTS_BUILD_OUTPUTS(build)')
+        files['web/tests/ya.make'] = 'TS_TEST_FOR(web)\nTS_TEST(test)\nEND()\n'
+        graph = make(files, 'web/tests', 'web', '-DAUTOCHECK=yes')
+        self.assertEqual(sum('$(B)/web/package.json' in node['outputs'] for node in graph['graph']), 1)
+        bundle = node_by_output(graph, '$(B)/web/output.tar')
+        self.assertEqual(bundle['cmds'][-1]['cmd_args'][-2:], ['--build-command', 'tsc --project tsconfig.json --incremental false --composite false --pretty'])
+
+    def test_legacy_test_resolves_relative_target(self):
+        files = self.project()
+        files['web/tests/ya.make'] = 'TS_TEST_VITEST_FOR(RELATIVE ../)\nEND()\n'
+        graph = make(files, 'web/tests', '-DAUTOCHECK=yes')
+        test = node_by_output(graph, '$(B)/web/tests/web-tests.ts_test.fake')
+        bundle = node_by_output(graph, '$(B)/web/output.tar')
+        self.assertEqual(test['kv']['p'], 'TS_JST')
+        self.assertIn(bundle['uid'], test['deps'])
+
+
 if __name__ == '__main__':
     unittest.main()

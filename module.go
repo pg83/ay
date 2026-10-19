@@ -23,6 +23,7 @@ const (
 	LangJava
 
 	LangDescProto
+	LangTSPrepare
 )
 
 const (

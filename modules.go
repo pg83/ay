@@ -1470,7 +1470,7 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 }
 
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
-	if d.nots != nil && applyNotsStmt(v, d.nots, env) {
+	if d.nots != nil && applyNotsStmt(v, d.nots) {
 		return
 	}
 

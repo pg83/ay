@@ -233,6 +233,9 @@ var tokName = [...]STR{
 	tokTsNext:                internStr("TS_NEXT"),
 	tokTsVite:                internStr("TS_VITE"),
 	tokTsTsc:                 internStr("TS_TSC"),
+	tokTsTestFor:             internStr("TS_TEST_FOR"),
+	tokTsTestJestFor:         internStr("TS_TEST_JEST_FOR"),
+	tokTsTestVitestFor:       internStr("TS_TEST_VITEST_FOR"),
 }
 
 var tokByName = func() map[string]TOK {
@@ -492,6 +495,9 @@ const (
 	tokTsNext
 	tokTsVite
 	tokTsTsc
+	tokTsTestFor
+	tokTsTestJestFor
+	tokTsTestVitestFor
 )
 
 type TOK uint16

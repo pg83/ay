@@ -42,9 +42,7 @@ func (pm *IncludeParserManager) notsJSON(rel string) map[string]any {
 
 	v := map[string]any{}
 
-	if pm.fs.isFilePathClean(rel) {
-		throw(json.Unmarshal(concatChunks(pm.fs.readPath(key)), &v))
-	}
+	throw(json.Unmarshal(concatChunks(pm.fs.readPath(key)), &v))
 
 	pm.cache.notsJSON.put(key, v)
 
@@ -249,10 +247,11 @@ func (pm *IncludeParserManager) notsLockfile(rel string) *NotsLockfile {
 
 		u := throw2(url.Parse(tarball))
 		filename := path.Base(u.Path)
-		packagePath, _, layout := strings.Cut(u.Path, "/-/")
+		packageEnd := strings.LastIndex(u.Path, "/-/")
 		local := ""
 
-		if layout {
+		if packageEnd >= 0 {
+			packagePath := u.Path[:packageEnd]
 			parts := strings.Split(strings.TrimRight(packagePath, "/"), "/")
 
 			local = parts[len(parts)-1]
@@ -263,7 +262,7 @@ func (pm *IncludeParserManager) notsLockfile(rel string) *NotsLockfile {
 
 			local += "/-/" + filename
 
-			rawPackage, _, _ := strings.Cut(u.EscapedPath(), "/-/")
+			rawPackage := u.EscapedPath()[:strings.LastIndex(u.EscapedPath(), "/-/")]
 
 			tarball = strings.TrimSuffix(tarball, u.EscapedPath()) + rawPackage + "/-/" + filename
 		} else {

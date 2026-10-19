@@ -21,7 +21,7 @@ var procKindStr = [...]string{
 	pkSB:   "SB",
 	pkSF:   "SF",
 	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
-	pkld: "ld", pkDX: "DX", pkBN: "BN", pkSV: "SV", pkSC: "SC", pkPD: "PD", pkCU: "CU", pkTSDep: "TS_DEP", pkTSLib: "TS_LIB", pkTSPkg: "TS_PKG",
+	pkld: "ld", pkDX: "DX", pkBN: "BN", pkSV: "SV", pkSC: "SC", pkPD: "PD", pkCU: "CU", pkTSDep: "TS_DEP", pkTSLib: "TS_LIB", pkTSPkg: "TS_PKG", pkTSTest: "TS_TST", pkTSJest: "TS_JST", pkUN: "UN",
 }
 
 var pColorStr = [...]string{
@@ -93,6 +93,9 @@ const (
 	pkTSDep
 	pkTSLib
 	pkTSPkg
+	pkTSTest
+	pkTSJest
+	pkUN
 )
 
 const (

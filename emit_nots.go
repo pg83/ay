@@ -12,6 +12,8 @@ var notsBaseExcludes = []string{"a.yaml", ".npmrc", "package.json", "pnpm-lock.y
 const notsBuilderDir = "devtools/frontend_build_platform/nots/builder"
 
 type NotsModule struct {
+	Checks           []NotsCheck
+	DependsOnBuild   bool
 	Kind             TOK
 	Hermetic         bool
 	LocalCLI         bool
@@ -27,9 +29,16 @@ type NotsModule struct {
 	HasOutputPrefix  bool
 }
 
+type NotsCheck struct {
+	Script  string
+	Command string
+	Lint    bool
+	Medium  bool
+}
+
 func isNotsModule(name TOK) bool {
 	switch name {
-	case tokTsPackage, tokTsLibrary, tokTsNext, tokTsVite, tokTsTsc:
+	case tokTsPackage, tokTsLibrary, tokTsNext, tokTsVite, tokTsTsc, tokTsTestFor, tokTsTestJestFor, tokTsTestVitestFor:
 		return true
 	}
 
@@ -64,7 +73,7 @@ func (c *NotsModule) setTSCCommand() {
 	c.BuildCommand = strings.Join(commands, " && ")
 }
 
-func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
+func applyNotsStmt(v UnknownStmt, c *NotsModule) bool {
 	name := v.Raw.string()
 
 	if v.Name != tokInvalid {
@@ -78,6 +87,29 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
 	}
 
 	switch name {
+	case "TS_TEST", "TS_LINT":
+		if len(args) == 0 {
+			throwFmt("%s requires a script name", name)
+		}
+
+		check := NotsCheck{Lint: name == "TS_LINT"}
+
+		var command []string
+
+		for _, a := range args {
+			if a == "TIMEOUT_MEDIUM" {
+				check.Medium = true
+			} else if check.Script == "" {
+				check.Script = a
+			} else {
+				command = append(command, a)
+			}
+		}
+
+		check.Command = strings.Join(command, " ")
+		c.Checks = append(c.Checks, check)
+	case "TS_TEST_DEPENDS_ON_BUILD":
+		c.DependsOnBuild = true
 	case "DISABLE_HERMETIC_NODE_MODULES":
 		c.Hermetic = false
 	case "WITH_NODE_MODULES":
@@ -207,13 +239,38 @@ func (e *EmitContext) emitNotsNode(n Node) NodeRef {
 	return ref
 }
 
+type NotsPrepared struct {
+	Head            []string
+	Globals         []ResourceDecl
+	ResourceNames   []STR
+	ToolRef         NodeRef
+	HasDependencies bool
+}
+
+func notsResult(output VFS, ref NodeRef, c *NotsModule, globals []ResourceDecl) *ModuleEmitResult {
+	return &ModuleEmitResult{ARRef: ref, ARPath: ptr(output), LDRef: ref, LDPath: ptr(output), ModuleStmtName: c.Kind, ResourceGlobalClosure: globals}
+}
+
 func (e *EmitContext) emitNotsModule() *ModuleEmitResult {
+	switch e.d.nots.Kind {
+	case tokTsTestFor, tokTsTestJestFor, tokTsTestVitestFor:
+		return e.emitNotsTest()
+	}
+
+	if e.instance.Language == LangTSPrepare {
+		return e.emitNotsPrepare()
+	}
+
+	return e.emitNotsBuild()
+}
+
+func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	ctx, dir, c := e.ctx, e.instance.Path.relString(), e.d.nots
 	pm, na := ctx.parsers, ctx.na
-	output := build(dir, "/output.tar")
+	output := build(dir, "/package.json")
 
 	if info := e.codegen.use(output); info != nil {
-		return &ModuleEmitResult{ARRef: info.ProducerRef, ARPath: ptr(output), LDRef: info.ProducerRef, LDPath: ptr(output), ModuleStmtName: c.Kind}
+		return notsResult(output, info.ProducerRef, c, info.Nots.Globals)
 	}
 
 	pj := pm.notsJSON(dir + "/package.json")
@@ -232,6 +289,10 @@ func (e *EmitContext) emitNotsModule() *ModuleEmitResult {
 		result := genModule(ctx, e.derivePeerInstance(peer))
 
 		if result.ARRef != 0 {
+			if info := e.codegen.lookup(*result.ARPath); info != nil {
+				peerRefs = append(peerRefs, info.GeneratorRefs...)
+			}
+
 			peerRefs = append(peerRefs, result.ARRef)
 		}
 
@@ -242,6 +303,10 @@ func (e *EmitContext) emitNotsModule() *ModuleEmitResult {
 		result := genModule(ctx, e.derivePeerInstance(peer.string()))
 
 		if result.ARRef != 0 {
+			if info := e.codegen.lookup(*result.ARPath); info != nil {
+				peerRefs = append(peerRefs, info.GeneratorRefs...)
+			}
+
 			peerRefs = append(peerRefs, result.ARRef)
 		}
 	}
@@ -306,6 +371,32 @@ func (e *EmitContext) emitNotsModule() *ModuleEmitResult {
 	}
 
 	prepRef := e.emitNotsNode(prep)
+	state := &NotsPrepared{Head: head, Globals: globals, ResourceNames: resourceNames, ToolRef: toolRef, HasDependencies: hasDeps}
+	info := e.codegen.lookup(output)
+
+	info.Nots = state
+	info.GeneratorRefs = dedupRefs(peerRefs)
+
+	return notsResult(output, prepRef, c, globals)
+}
+
+func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
+	ctx, dir, c := e.ctx, e.instance.Path.relString(), e.d.nots
+	na := ctx.na
+	output := build(dir, "/output.tar")
+
+	if info := e.codegen.use(output); info != nil {
+		return notsResult(output, info.ProducerRef, c, info.Nots.Globals)
+	}
+
+	instance := e.instance
+
+	instance.Language = LangTSPrepare
+
+	prepare := genModule(ctx, instance)
+	prepRef := prepare.ARRef
+	state := e.codegen.lookup(*prepare.ARPath).Nots
+	head, globals, resourceNames, peerRefs, toolRef, hasDeps := state.Head, state.Globals, state.ResourceNames, e.codegen.lookup(*prepare.ARPath).GeneratorRefs, state.ToolRef, state.HasDependencies
 	autotar := buildScriptsAutotarGendirsPy
 	cmds := []Cmd{{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), autotar.any(), strUnpack.any(), strExt.any(), strGentar.any())), Env: envVarsVCS, Cwd: build(dir)}}
 	inputs := []VFS{autotar}
@@ -386,8 +477,86 @@ func (e *EmitContext) emitNotsModule() *ModuleEmitResult {
 
 	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(toolRef), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
 	ref := e.emitNotsNode(n)
+	info := e.codegen.lookup(output)
 
-	return &ModuleEmitResult{ARRef: ref, ARPath: ptr(output), LDRef: ref, LDPath: ptr(output), ModuleStmtName: c.Kind, ResourceGlobalClosure: globals}
+	info.Nots = state
+	info.GeneratorRefs = dedupRefs(append(slices.Clone(peerRefs), prepRef))
+
+	return notsResult(output, ref, c, globals)
+}
+
+func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
+	dir, c, na := e.instance.Path.relString(), e.d.nots, e.ctx.na
+	args := e.d.moduleStmt.Args
+	relative := false
+	target := ""
+
+	for _, arg := range args {
+		if arg.string() == "RELATIVE" {
+			relative = true
+		} else {
+			target = arg.string()
+		}
+	}
+
+	if target == "" || target == "." || target == "./" || relative && c.Kind == tokTsTestFor {
+		throwFmt("%s: %s requires a tested module path", dir, c.Kind.string())
+	}
+
+	if relative {
+		target = path.Join(dir, target)
+	}
+
+	instance := e.derivePeerInstance(target)
+
+	if c.Kind == tokTsTestFor {
+		instance.Language = LangTSPrepare
+	}
+
+	result := genModule(e.ctx, instance)
+	refs := []NodeRef{result.ARRef}
+
+	if result.ARPath != nil {
+		if info := e.codegen.lookup(*result.ARPath); info != nil {
+			refs = append(refs, info.GeneratorRefs...)
+		}
+	}
+
+	name := strings.ReplaceAll(archiveTailFor(dir), "/", "-")
+	kind := pkTSJest
+
+	if c.Kind == tokTsTestFor {
+		bridge := build(dir, "/", name, ".test_for.prepare_deps.fake")
+		ref := e.emitNotsTouch(bridge, refs, &KV{P: pkUN, PC: pcLightCyan})
+
+		refs = append(refs, ref)
+		kind = pkTSTest
+
+		if c.DependsOnBuild {
+			instance.Language = LangCPP
+			refs = append(refs, genModule(e.ctx, instance).ARRef)
+		}
+	} else {
+		name += ".ts_test.fake"
+	}
+
+	output := build(dir, "/", name)
+	ref := e.emitNotsTouch(output, na.refList(dedupRefs(refs)...), &KV{P: kind, PC: pcMagenta})
+
+	return notsResult(output, ref, c, result.ResourceGlobalClosure)
+}
+
+func (e *EmitContext) emitNotsTouch(output VFS, refs []NodeRef, kv *KV) NodeRef {
+	na := e.ctx.na
+	script := buildScriptsTouchPy
+
+	return e.emitNotsNode(Node{
+		Platform: e.instance.Platform,
+		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), script.any(), output.any())), Env: envVarsVCS}),
+		Env:      envVarsVCS, Inputs: na.inputList(na.vfsList(script)), Outputs: na.vfsList(output), KV: kv,
+		DepRefs: na.refList(dedupRefs(refs)...), Resources: usesPython3,
+		Requirements: &Requirements{CPU: 1, RAM: 32, Network: nwRestricted},
+	})
 }
 
 func notsGlob(pattern string) *regexp.Regexp {

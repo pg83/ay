@@ -1,6 +1,7 @@
 package main
 
 type GeneratedFileInfo struct {
+	Nots            *NotsPrepared
 	OutputPath      VFS
 	SourcePath      VFS
 	OwnerModule     VFS
