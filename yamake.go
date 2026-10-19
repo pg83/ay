@@ -26,6 +26,7 @@ var (
 	astEnumSers  = newBumpAllocator[GenerateEnumSerializationStmt]()
 	astConds     = newBumpAllocator[CondNode]()
 	astEnds      = newBumpAllocator[EndStmt]()
+	condFalse    = []CondNode{{Kind: ckIdent, Name: "no"}}
 )
 
 var runAntlrKeywords = strKeySet(
@@ -1936,12 +1937,18 @@ func parseCondExpr(parent *Parser, ifTok Token, toks []Token) []CondNode {
 
 	cp := CondParser{toks: toks, parent: parent, ifTok: ifTok}
 
-	cp.parseOr()
+	exc := try(func() {
+		cp.parseOr()
 
-	if cp.pos != len(cp.toks) {
-		t := cp.toks[cp.pos]
+		if cp.pos != len(cp.toks) {
+			t := cp.toks[cp.pos]
 
-		parent.lex.throwParse(t.line, t.col, "unexpected %s in IF condition", describeToken(t))
+			parent.lex.throwParse(t.line, t.col, "unexpected %s in IF condition", describeToken(t))
+		}
+	})
+
+	if exc != nil {
+		return condFalse
 	}
 
 	return astConds.list(parent.condScratch...)
@@ -2172,10 +2179,6 @@ func (c *CondParser) parseAtom() int32 {
 	value := t.string()
 
 	if t.kind == tokIdent || (t.kind == tokWord && isIdentShapedName(value)) {
-		if t.id == kwAND || t.id == kwOR || t.id == kwNOT {
-			c.parent.lex.throwParse(t.line, t.col, "operator %q used as identifier in IF condition", value)
-		}
-
 		c.consume()
 
 		return c.emit(CondNode{Kind: ckIdent, Name: value, Env: internEnvSTR(t.id)})

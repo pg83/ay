@@ -161,26 +161,28 @@ class YaMakeSyntaxTest(unittest.TestCase):
             ("LIBRARY()\nIF (A\n", "a/ya.make:2:1: unterminated IF condition (missing ')')"),
             ("LIBRARY()\nIF (A)\nELSE()\nELSE()\nENDIF()\n", "a/ya.make:4:1: expected ENDIF after ELSE block, got ELSE"),
             ("LIBRARY()\nIF (A)\nELSE()\nELSEIF(B)\nENDIF()\n", "a/ya.make:4:1: expected ENDIF after ELSE block, got ELSEIF"),
-            ("LIBRARY()\nIF (A B)\nENDIF()\n", "a/ya.make:2:7: unexpected identifier \"B\" in IF condition"),
-            ("LIBRARY()\nIF (NOT)\nENDIF()\n", "a/ya.make:2:1: unexpected end of IF condition"),
-            ("LIBRARY()\nIF (A ==)\nENDIF()\n", "a/ya.make:2:1: unexpected end of IF condition"),
-            ("LIBRARY()\nIF ((A B))\nENDIF()\n", "a/ya.make:2:5: missing ')' in IF condition"),
             ("LIBRARY()\nIF ((A)\nENDIF()\n", "a/ya.make:2:1: unterminated IF condition (missing ')')"),
-            ("LIBRARY()\nIF (A AND OR)\nENDIF()\n", "a/ya.make:2:11: operator \"OR\" used as identifier in IF condition"),
-            ("LIBRARY()\nIF (NOT AND)\nENDIF()\n", "a/ya.make:2:9: operator \"AND\" used as identifier in IF condition"),
-            ("LIBRARY()\nIF (== A)\nENDIF()\n", "a/ya.make:2:5: unexpected '==' in IF condition"),
-            ("LIBRARY()\nIF (A == B == C)\nENDIF()\n", "a/ya.make:2:12: chained comparison '==' after '==' is not supported"),
-            ("LIBRARY()\nIF (A < B >= C)\nENDIF()\n", "a/ya.make:2:11: chained comparison '>=' after '<' is not supported"),
-            ("LIBRARY()\nIF (A > B < C)\nENDIF()\n", "a/ya.make:2:11: chained comparison '<' after '>' is not supported"),
-            ("LIBRARY()\nIF (A != B != C)\nENDIF()\n", "a/ya.make:2:12: chained comparison '!=' after '!=' is not supported"),
-            ("LIBRARY()\nIF (A >= B > C)\nENDIF()\n", "a/ya.make:2:12: chained comparison '>' after '>=' is not supported"),
-            ("LIBRARY()\nIF (A STARTS_WITH B == C)\nENDIF()\n", "a/ya.make:2:21: chained comparison '==' after identifier \"STARTS_WITH\" is not supported"),
-            ("LIBRARY()\nIF (A MATCHES B == C)\nENDIF()\n", "a/ya.make:2:17: chained comparison '==' after identifier \"MATCHES\" is not supported"),
-            ("LIBRARY()\nIF (A VERSION_LT B == C)\nENDIF()\n", "a/ya.make:2:20: chained comparison '==' after identifier \"VERSION_LT\" is not supported"),
         ]
         for text, expected in cases:
             with self.subTest(text=text):
                 self.assert_parse_error(text, expected)
+
+    def test_malformed_if_conditions_are_false(self):
+        # TEvalContext::BoolExpr ignores logic errors of an IF expression and
+        # takes it for false; AND and OR read as operands are variables.
+        cases = [
+            ("A B", "else"), ("NOT", "else"), ("A ==", "else"), ("(A B)", "else"), ("== A", "else"),
+            ("A == B == C", "else"), ("A < B >= C", "else"), ("A STARTS_WITH B == C", "else"),
+            ("MODULE_TAG == CPP AND AND B", "else"), ("A AND OR", "else"), ("NOT AND", "then"),
+        ]
+        for cond, branch in cases:
+            with self.subTest(cond=cond):
+                code, graph, stderr = ay_make({
+                    "a/ya.make": f"LIBRARY()\n{NO_PLATFORM}IF ({cond})\nSRCS(then.cpp)\nELSE()\nSRCS(else.cpp)\nENDIF()\nEND()\n",
+                    "a/then.cpp": "", "a/else.cpp": "",
+                })
+                self.assertEqual(code, 0, stderr)
+                lib.node_by_output(graph, f"$(B)/a/{branch}.cpp.o")
 
     def test_macro_arity_errors(self):
         cases = [
