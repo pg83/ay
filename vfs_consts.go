@@ -11,7 +11,6 @@ var (
 	bldContribToolsBisonBison           = build("contrib/tools/bison/bison")
 	bldContribToolsM4M4                 = build("contrib/tools/m4/m4")
 	bldContribToolsSwigSwig             = build("contrib/tools/swig/swig")
-	bldResourcesCuda                    = build("resources/CUDA")
 	bldRootDirVFS                       = build("")
 	bldVcsJson                          = build("vcs.json")
 	buildInfoGenPyVFS                   = source("build/scripts/build_info_gen.py")

@@ -277,7 +277,7 @@ func buildPlatformIfEnv(p *Platform) Environment {
 
 func debugInfoFlags(env Environment, flags map[string]string) []ANY {
 	switch {
-	case env.bool(envNO_DEBUGINFO):
+	case env.string(envNO_DEBUGINFO) == "yes":
 		return nil
 	case env.bool(envCLANG) && env.string(envDEBUGINFO_LINES_ONLY) == "yes":
 		return []ANY{argGlineTablesOnly.any()}

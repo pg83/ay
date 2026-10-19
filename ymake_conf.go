@@ -403,7 +403,7 @@ func extendConfBuildType(buildType string) string {
 	return confBuildTypeDist + buildType
 }
 
-func startYmakeConf(fs FS, srcRoot, buildType string, flags map[string]string, tc *Toolchain) *YmakeConfRun {
+func startYmakeConf(fs FS, srcRoot, buildType string, localFlags [][2]string, flags map[string]string, tc *Toolchain) *YmakeConfRun {
 	if !fs.isFile(srcRootRel, ymakeConfScript) {
 		throwFmt("ymake conf: %s is missing in %s", ymakeConfScript, srcRoot)
 	}
@@ -416,7 +416,7 @@ func startYmakeConf(fs FS, srcRoot, buildType string, flags map[string]string, t
 		"--toolchain-params", base64.StdEncoding.EncodeToString(params), "-l",
 	}
 
-	for _, kv := range readLocalYmake(fs) {
+	for _, kv := range localFlags {
 		args = append(args, "-D", kv[0]+"="+kv[1])
 	}
 

@@ -256,8 +256,9 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Pla
 	}
 
 	srcRoot := throw2(filepath.Abs(mf.srcRoot))
-	hostRun := startYmakeConf(fs, srcRoot, mf.hostBuildType, hostFlags, hostTC)
-	targetRun := startYmakeConf(fs, srcRoot, mf.buildType, targetFlags, targetTC)
+	localFlags := readLocalYmake(fs)
+	hostRun := startYmakeConf(fs, srcRoot, mf.hostBuildType, localFlags, hostFlags, hostTC)
+	targetRun := startYmakeConf(fs, srcRoot, mf.buildType, localFlags, targetFlags, targetTC)
 
 	caches.prewarm(fs, mf.targets)
 
