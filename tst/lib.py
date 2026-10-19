@@ -48,7 +48,7 @@ def platform(data):
 
 
 def main(argv):
-    presets, args, params, i = {}, [], None, 1
+    presets, args, params, local, i = {}, [], None, False, 1
     while i < len(argv):
         if argv[i] == "--toolchain-params":
             params = json.loads(base64.b64decode(argv[i + 1]))
@@ -58,6 +58,7 @@ def main(argv):
             presets[key] = value
             i += 2
         elif argv[i] == "-l":
+            local = True
             i += 1
         else:
             args.append(argv[i])
@@ -122,6 +123,7 @@ def main(argv):
         ld_flags.extend(["-ldl", "-lrt", "-Wl,--no-as-needed"])
     emit("_LD_FLAGS", *ld_flags)
     optimized = release and not sanitized
+    emit("USE_LOCAL_TOOLS", "yes" if local else "no")
     emit("RLGEN_FLAGS", "-G2" if optimized else "-T0")
     emit("RAGEL6_FLAGS", "-CG2" if optimized else "-CT0")
     if "HAVE_CUDA" not in presets:
@@ -131,6 +133,8 @@ def main(argv):
         if have_cuda:
             emit("CUDA_ROOT", "$CUDA_RESOURCE_GLOBAL")
             emit("CUDA_VERSION", "12.9")
+    print("# IGNORE YMAKE CONF CONTEXT")
+    emit("SVN_DEPENDS_CACHE__NO_UID__", '${hide;kv:"disable_cache"}' if local else None)
     sys.stdout.write(EXTRA)
     print("# Variables set from command line by -D options")
     for key in sorted(presets):

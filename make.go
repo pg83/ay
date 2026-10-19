@@ -51,6 +51,7 @@ type MakeFlags struct {
 	verbose             bool
 	testLevel           int
 	sandboxing          bool
+	dist                bool
 	dumpIgnoredMacros   bool
 	clear               bool
 	cmdPrefixes         []CmdPrefix
@@ -257,8 +258,8 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Pla
 
 	srcRoot := throw2(filepath.Abs(mf.srcRoot))
 	localFlags := readLocalYmake(fs)
-	hostRun := startYmakeConf(fs, srcRoot, mf.hostBuildType, localFlags, hostFlags, hostTC)
-	targetRun := startYmakeConf(fs, srcRoot, mf.buildType, localFlags, targetFlags, targetTC)
+	hostRun := startYmakeConf(fs, srcRoot, mf.hostBuildType, !mf.dist, localFlags, hostFlags, hostTC)
+	targetRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, targetFlags, targetTC)
 
 	caches.prewarm(fs, mf.targets)
 
@@ -403,7 +404,9 @@ func parseMakeFlags(args []string) *MakeFlags {
 			parseKV(mf.tflags, opt.OptArg)
 		case opt.Name == "target-platform-tests":
 			mf.testLevel = max(mf.testLevel, 1)
-		case opt.Char == 'x', opt.Name == "test-size", opt.Name == "dist", opt.Name == "ignore-nodes-exit-code",
+		case opt.Name == "dist":
+			mf.dist = true
+		case opt.Char == 'x', opt.Name == "test-size", opt.Name == "ignore-nodes-exit-code",
 			opt.Name == "warning-mode", opt.Name == "cache-tests", opt.Name == "output-only-tests",
 			opt.Name == "cache-namespace", opt.Name == "report-skipped-suites", opt.Name == "tests-retries",
 			opt.Name == "backup-test-results", opt.Name == "do-not-output-stderrs",
@@ -532,7 +535,8 @@ target flags:
 ya compatibility flags:
   -x                            Accepted from ya command lines, not modeled.
   --test-size <size>            Accepted, not modeled.
-  --dist                        Accepted, not modeled.
+  --dist                        Configure for distbuild: ymake_conf.py runs
+                                without -l.
   --ignore-nodes-exit-code      Accepted, not modeled.
   --warning-mode <modes>        Accepted, not modeled.
   --cache-tests                 Accepted, not modeled.

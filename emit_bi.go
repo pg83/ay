@@ -4,7 +4,6 @@ var (
 	yieldLinePyPath    = yieldLinePyVFS.string()
 	xargsPyPath        = xargsPyVFS.string()
 	buildInfoGenPyPath = buildInfoGenPyVFS.string()
-	biKV               = KV{P: pkBI, PC: pcYellow, ShowOut: true, DisableCache: true}
 )
 
 func (e *EmitContext) emitBIReserved(
@@ -63,7 +62,7 @@ func (e *EmitContext) emitBIReserved(
 		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
 		Env:       env,
 		Inputs:    na.inputList(inputs),
-		KV:        &biKV,
+		KV:        &instance.Platform.BuildInfoKV,
 		Outputs:   na.vfsList(outVFS),
 		DepRefs:   na.refList(),
 		Resources: instance.Platform.UsesPython3Clang,

@@ -90,7 +90,9 @@ def cc_args(graph, output):
 
 
 def presets(argv):
-    flags = argv[argv.index("-l") + 1:]
+    flags = argv[argv.index("--toolchain-params") + 2:]
+    if flags[:1] == ["-l"]:
+        flags = flags[1:]
     assert all(flag == "-D" for flag in flags[::2]), flags
     return [tuple(kv.split("=", 1)) for kv in flags[1::2]]
 
@@ -154,6 +156,22 @@ class ConfVariablesTest(unittest.TestCase):
         self.assertIn("-DCXX=$(CLANG-1907384126)/bin/clang++", args)
 
 
+    def test_local_distbuild_keeps_build_info_out_of_the_cache(self):
+        tree = Tree(self, {
+            "m/ya.make": library("CREATE_BUILDINFO_FOR(buildinfo_data.h)\nSRCS(a.cpp)\n"),
+            "m/a.cpp": '#include "m/buildinfo_data.h"\n',
+            "build/scripts/build_info_gen.py": "",
+            "build/scripts/xargs.py": "",
+            "build/scripts/yield_line.py": "",
+        })
+        for args, cached in (((), False), (("--dist",), True)):
+            with self.subTest(args=args):
+                info = lib.node_by_output(tree.graph(*args, "m"), "$(B)/m/buildinfo_data.h")
+                self.assertEqual(info["kv"]["p"], "BI")
+                self.assertEqual("disable_cache" in info["kv"], not cached)
+                self.assertEqual(info.get("cache", True), cached)
+
+
 class ConfCommandLineTest(unittest.TestCase):
     def tree(self, **files):
         return Tree(self, {
@@ -201,6 +219,15 @@ class ConfCommandLineTest(unittest.TestCase):
             "OPENSOURCE": "yes", "SANDBOXING": "yes", "TIDY": "no", "TOOL_BUILD_MODE": "yes",
             "TRAVERSE_RECURSE": "no", "YA": "yes",
         })
+
+    def test_distbuild_runs_the_script_without_local_distbuild(self):
+        tree = self.tree()
+        tree.graph("--dist", "m")
+        for build_type in ("dist-debug", "dist-release"):
+            with self.subTest(build_type=build_type):
+                argv = tree.recorded(build_type)["argv"]
+                self.assertNotIn("-l", argv)
+                self.assertEqual(argv[6], "-D")
 
     def test_tests_and_build_types_reach_the_command_line(self):
         tree = self.tree()

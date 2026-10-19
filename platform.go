@@ -31,6 +31,7 @@ type Platform struct {
 	DebugInfoFlags        []ANY
 	CompileCFlags         []ANY
 	CompressDebugSections bool
+	BuildInfoKV           KV
 	SystemLibs            []ANY
 	LinkPreludeExtra      []ANY
 	ClangVer              string
@@ -129,6 +130,12 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		ClangVer:              clangVer,
 		ClangVerSTR:           internStr(clangVer),
 		CompressDebugSections: slices.Contains(splitShellWords(flags["_LD_FLAGS"]), argWlCompressDebugSectionsZstd.string()),
+		BuildInfoKV: KV{
+			P:            pkBI,
+			PC:           pcYellow,
+			ShowOut:      true,
+			DisableCache: strings.Contains(flags["SVN_DEPENDS_CACHE__NO_UID__"], `kv:"disable_cache"`),
+		},
 	}
 
 	p.TargetArg = internV("--target=", p.Triple)
