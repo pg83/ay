@@ -27,6 +27,7 @@ func persistResult(ctx *GenCtx, r *ModuleEmitResult) {
 		}
 	}
 
+	r.JavaClosure = ctx.vfsSlices.internCopy(r.JavaClosure)
 	r.DocsClosure = ctx.vfsSlices.internCopy(r.DocsClosure)
 	r.WholeArchiveRefs = ctx.refSlices.internCopy(r.WholeArchiveRefs)
 	r.WholeArchivePaths = ctx.vfsSlices.internCopy(r.WholeArchivePaths)

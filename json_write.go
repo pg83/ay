@@ -119,7 +119,7 @@ func appendNode(buf []byte, n *Node, fetchRefs *DenseMap[STR, NodeRef], dropSrcI
 	buf = append(buf, `,"inputs":`...)
 
 	if dropSrcInputs {
-		buf = appendRegularVFSChunks(buf, n.Inputs, n.ExplicitInputChunks)
+		buf = appendBuildOnlyVFSChunks(buf, n.Inputs)
 	} else {
 		buf = appendVFSChunks(buf, n.Inputs)
 	}
@@ -232,14 +232,14 @@ func appendVFSChunks(buf []byte, chunks [][]VFS) []byte {
 	return append(buf, ']')
 }
 
-func appendRegularVFSChunks(buf []byte, chunks [][]VFS, explicit uint8) []byte {
+func appendBuildOnlyVFSChunks(buf []byte, chunks [][]VFS) []byte {
 	buf = append(buf, '[')
 
 	first := true
 
-	for i, ch := range chunks {
+	for _, ch := range chunks {
 		for _, v := range ch {
-			if i >= int(explicit) && v.isSource() {
+			if v.isSource() {
 				continue
 			}
 

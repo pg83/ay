@@ -25,6 +25,7 @@ var (
 	buildScriptsGenJoinSrcsPy           = source("build/scripts/gen_join_srcs.py")
 	buildScriptsLinkLibPy               = source("build/scripts/link_lib.py")
 	buildScriptsProcessCommandFilesPy   = source("build/scripts/process_command_files.py")
+	buildScriptsTarSourcesPy            = source("build/scripts/tar_sources.py")
 	buildScriptsTouchPy                 = source("build/scripts/touch.py")
 	cgo1WrapperVFS                      = source("build/scripts/cgo1_wrapper.py")
 	collectRawprotoVFS                  = source("build/scripts/collect_rawproto.py")

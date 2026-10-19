@@ -129,6 +129,7 @@ const (
 )
 
 type ModuleEmitResult struct {
+	JavaClosure                     []VFS
 	DocsClosure                     []VFS
 	ARRef                           NodeRef
 	ARPath                          *VFS
@@ -419,7 +420,7 @@ func confPy3NoStripOnDebug(fs FS) bool {
 }
 
 func isFinalTargetModuleType(name TOK) bool {
-	return isProgramModuleType(name) || name == tokDllTool || name == tokDocs
+	return isProgramModuleType(name) || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib
 }
 
 func isLinkingModuleType(name TOK) bool {
@@ -831,6 +832,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ctx.memoPut(instance, result)
 
 		return result
+	}
+
+	if d.java != nil {
+		return e.genJava()
+	}
+
+	if d.moduleStmt.Name == tokUnion {
+		return e.genUnion()
 	}
 
 	if d.docs != nil {

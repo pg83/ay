@@ -1,0 +1,107 @@
+package main
+
+func (e *EmitContext) pythonScriptCmd(script string, args ...string) Cmd {
+	na := e.ctx.na
+	head := []ANY{e.d.tc.Python3.any(), source("build/scripts/", script).any()}
+
+	for _, arg := range args {
+		head = append(head, internStr(arg).any())
+	}
+
+	return Cmd{CmdArgs: na.chunkList(na.anyList(head...)), Env: envVarsVCS}
+}
+
+func scriptInputs(scripts ...string) []VFS {
+	inputs := make([]VFS, 0, len(scripts))
+
+	for _, script := range scripts {
+		inputs = append(inputs, source("build/scripts/", script))
+	}
+
+	return inputs
+}
+
+func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ...VFS) NodeRef {
+	ctx, reg, na := e.ctx, e.codegen, e.ctx.na
+	ref := ctx.emit.reserve()
+
+	needs = append([]VFS{}, needs...)
+
+	for _, chunk := range node.Inputs {
+		for _, input := range chunk {
+			if input.isBuild() {
+				needs = append(needs, input)
+			}
+		}
+	}
+
+	needs = dedup(needs)
+
+	refs := append([]NodeRef{}, node.DepRefs...)
+
+	for _, input := range needs {
+		if info := reg.lookup(input); info != nil {
+			refs = append(refs, info.ProducerRef)
+		}
+	}
+
+	node.DepRefs = na.refList(dedupRefs(refs)...)
+
+	pending := e.pendingEmit(func() {
+		for _, input := range needs {
+			reg.use(input)
+		}
+
+		ctx.emit.emitReservedNode(node, ref)
+	})
+
+	if len(ownedOutputs) == 0 {
+		ownedOutputs = node.Outputs
+	}
+
+	for _, out := range ownedOutputs {
+		reg.register(GeneratedFileInfo{OutputPath: out, OwnerModule: e.instance.Path, ProducerRef: ref, OnUse: pending})
+	}
+
+	return ref
+}
+
+func (e *EmitContext) scriptModuleResources(globals []ResourceDecl, peers ...string) []ResourceDecl {
+	for _, peer := range peers {
+		if !peerYaMakeExists(e.ctx.fs, source(peer)) {
+			continue
+		}
+
+		res := genModule(e.ctx, ModuleInstance{Path: source(peer), Kind: KindLib, Platform: e.instance.Platform})
+
+		globals = append(globals, res.ResourceGlobalClosure...)
+	}
+
+	e.d.tc = resolveModuleToolchain(e.ctx, globals, e.instance.Platform.ClangVer)
+
+	if e.d.tc.Python3 == 0 {
+		e.d.tc.Python3 = build("resources/", resourcePatternYMakePython3, "/bin/python3")
+	}
+
+	e.d.cc.TC = e.d.tc
+	e.d.scanCtx = newModuleScanContext(e.ctx, e.instance, e.d, nil, nil, nil, nil)
+
+	return globals
+}
+
+func (e *EmitContext) scriptModuleResult(ref NodeRef, out VFS, peers []VFS, globals []ResourceDecl) *ModuleEmitResult {
+	res := &ModuleEmitResult{ARRef: ref, ARPath: ptr(out), LDRef: ref, LDPath: ptr(out), ModuleStmtName: e.d.moduleStmt.Name, ResourceGlobalClosure: globals}
+
+	res.JavaClosure = append(append([]VFS{}, peers...), out)
+
+	for _, kind := range []ModuleKind{KindLib, KindBin} {
+		for _, demand := range []ModuleDemand{demandNone, demandSelf, demandLinked} {
+			alias := e.instance
+
+			alias.Kind, alias.Demand = kind, demand
+			e.ctx.memoPut(alias, res)
+		}
+	}
+
+	return res
+}

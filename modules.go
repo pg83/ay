@@ -124,6 +124,7 @@ func protoCmdPeers(d *ModuleData) []ANY {
 
 type ModuleData struct {
 	nots                     *NotsModule
+	java                     *JavaData
 	docs                     *DocsData
 	moduleStmt               *ModuleStmt
 	modver                   string
@@ -1017,6 +1018,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
 
+			if v.Name == tokJavaProgram || v.Name == tokJavaContrib {
+				d.java = &JavaData{jdk: "17"}
+			}
+
 			if v.Name == tokDocs || v.Name == tokDocsLibrary {
 				d.docs = &DocsData{config: modulePath + "/.yfm"}
 			}
@@ -1044,6 +1049,12 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			env.setString(envMODULE_LANG, moduleLang)
 
 		case *SrcsStmt:
+			if d.moduleStmt != nil && d.moduleStmt.Name == tokUnion {
+				d.addFiles(expandStmtTokens(v.Sources, env))
+
+				continue
+			}
+
 			if d.docs != nil {
 				d.docs.addSources(fs, modulePath, anyStrs(expandStmtTokens(v.Sources, env)))
 
@@ -1497,6 +1508,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		return
 	}
 
+	if d.java != nil && d.java.apply(v) {
+		recordHandledMacro(v.Name, v.Args)
+
+		return
+	}
+
 	if d.docs != nil && d.docs.apply(v, modulePath) {
 		recordHandledMacro(v.Name, v.Args)
 
@@ -1518,6 +1535,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}()
 
 	switch v.Name {
+	case tokFiles:
+		if d.docs != nil || d.moduleStmt != nil && d.moduleStmt.Name == tokUnion {
+			d.addFiles(v.Args)
+		} else {
+			handled = false
+		}
 	case tokDeclareInDirs:
 		applyDeclareInDirs(fs, modulePath, v, env)
 	case tokAddInclSelf:

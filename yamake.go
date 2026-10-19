@@ -1139,7 +1139,7 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 	name := nameID.string()
 
 	switch name {
-	case "PROGRAM", "LIBRARY", "DOCS", "DOCS_LIBRARY",
+	case "PROGRAM", "LIBRARY", "DOCS", "DOCS_LIBRARY", "JAVA_PROGRAM", "JAVA_CONTRIB",
 		"TS_PACKAGE", "TS_LIBRARY", "TS_NEXT", "TS_VITE", "TS_TSC", "TS_TEST_FOR", "TS_TEST_JEST_FOR", "TS_TEST_VITEST_FOR",
 
 		"PY23_NATIVE_LIBRARY", "PY3_LIBRARY", "PY23_LIBRARY", "PY2_LIBRARY",

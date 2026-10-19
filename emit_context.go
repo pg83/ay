@@ -301,7 +301,7 @@ func (e *EmitContext) producersOnly() bool {
 func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	info.OwnerModule = e.instance.Path
 
-	if e.d.docs != nil {
+	if e.d.docs != nil || e.d.moduleStmt.Name == tokUnion {
 		e.outs = append(e.outs, info.OutputPath)
 	}
 

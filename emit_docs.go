@@ -39,24 +39,8 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 		}
 	}
 
-	for _, peer := range resourcePeers {
-		if !peerYaMakeExists(ctx.fs, source(peer)) {
-			continue
-		}
+	globals = e.scriptModuleResources(globals, resourcePeers...)
 
-		res := genModule(ctx, ModuleInstance{Path: source(peer), Kind: KindLib, Language: instance.Language, Platform: instance.Platform})
-
-		globals = append(globals, res.ResourceGlobalClosure...)
-	}
-
-	d.tc = resolveModuleToolchain(ctx, globals, instance.Platform.ClangVer)
-
-	if d.tc.Python3 == 0 {
-		d.tc.Python3 = build("resources/", resourcePatternYMakePython3, "/bin/python3")
-	}
-
-	d.cc.TC = d.tc
-	d.scanCtx = newModuleScanContext(ctx, instance, d, nil, nil, nil, nil)
 	e.emitFromSandboxes()
 
 	e.emitDeclaredProducers(nil)
@@ -115,72 +99,21 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 	return res
 }
 
-func (e *EmitContext) docsCmd(script string, args ...string) Cmd {
+func (e *EmitContext) docsNode(cmds []Cmd, inputs, outputs, needs []VFS, render, module bool, env EnvVars, resources []STR, foreign ...NodeRef) NodeRef {
 	na := e.ctx.na
-	head := []ANY{e.d.tc.Python3.any(), source("build/scripts/", script).any()}
-
-	head = append(head, internAnys(args)...)
-
-	return Cmd{CmdArgs: na.chunkList(na.anyList(head...)), Env: envVarsVCS}
-}
-
-func docsScriptInputs(scripts ...string) []VFS {
-	inputs := make([]VFS, 0, len(scripts))
-
-	for _, script := range scripts {
-		inputs = append(inputs, source("build/scripts/", script))
-	}
-
-	return inputs
-}
-
-func (e *EmitContext) docsNode(cmds []Cmd, inputs, outputs, needs []VFS, render, module bool, env EnvVars, resources []STR) NodeRef {
-	ctx, reg, na := e.ctx, e.codegen, e.ctx.na
-	ref := ctx.emit.reserve()
-
-	needs = append([]VFS{}, needs...)
-
-	for _, input := range inputs {
-		if input.isBuild() {
-			needs = append(needs, input)
-		}
-	}
-
-	needs = dedup(needs)
-
-	var refs []NodeRef
-
-	for _, p := range needs {
-		if info := reg.lookup(p); info != nil {
-			refs = append(refs, info.ProducerRef)
-		}
-	}
 
 	node := Node{
-		ExplicitInputChunks: 1, Module: module,
-		Cmds: na.cmdList(cmds...), Inputs: na.inputList(na.vfsList(dedup(inputs)...)),
-		Outputs: na.vfsList(outputs...), DepRefs: na.refList(dedupRefs(refs)...),
+		Module: module, Cmds: na.cmdList(cmds...),
+		Inputs: na.inputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(outputs...),
 		KV: &docsKV, Env: env, Platform: e.instance.Platform,
-		Resources: na.strs.list(resources...),
+		Resources: na.strs.list(resources...), ForeignDepRefs: na.refList(foreign...),
 	}
 
 	if render {
 		node.Requirements = &docsRequirements
 	}
 
-	pending := na.pendingEmit(func() {
-		for _, p := range needs {
-			reg.use(p)
-		}
-
-		ctx.emit.emitReservedNode(node, ref)
-	})
-
-	for _, out := range outputs {
-		reg.register(GeneratedFileInfo{OutputPath: out, OwnerModule: e.instance.Path, ProducerRef: ref, OnUse: pending})
-	}
-
-	return ref
+	return e.emitLazyModuleNode(node, needs)
 }
 
 func (e *EmitContext) emitDocsCopy(c DocsCopy) {
@@ -190,7 +123,7 @@ func (e *EmitContext) emitDocsCopy(c DocsCopy) {
 
 	args = append(args, c.files...)
 
-	inputs := docsScriptInputs("copy_docs_files.py", "process_command_files.py")
+	inputs := scriptInputs("copy_docs_files.py", "process_command_files.py")
 
 	var outputs []VFS
 
@@ -199,7 +132,7 @@ func (e *EmitContext) emitDocsCopy(c DocsCopy) {
 		outputs = append(outputs, buildJoinClean(dst.relString(), file))
 	}
 
-	e.docsNode([]Cmd{e.docsCmd("copy_docs_files.py", args...)}, inputs, outputs, nil, false, false, envVarsVCS, usesPython3)
+	e.docsNode([]Cmd{e.pythonScriptCmd("copy_docs_files.py", args...)}, inputs, outputs, nil, false, false, envVarsVCS, usesPython3)
 	e.outs = append(e.outs, outputs...)
 }
 
@@ -248,14 +181,14 @@ func (e *EmitContext) docsLibrary(out VFS, generated []VFS, internal bool) NodeR
 		args = append(args, "--skip-namespace", module+"/")
 	}
 
-	cmds := []Cmd{e.docsCmd("copy_docs_files_to_dir.py", args...), e.docsCmd("tar_sources.py", "--output", out.string(), "--input", bindir+"/__s")}
+	cmds := []Cmd{e.pythonScriptCmd("copy_docs_files_to_dir.py", args...), e.pythonScriptCmd("tar_sources.py", "--output", out.string(), "--input", bindir+"/__s")}
 	inputs := append([]VFS{}, generated...)
 
-	inputs = append(inputs, docsScriptInputs("copy_docs_files_to_dir.py", "process_command_files.py")...)
+	inputs = append(inputs, scriptInputs("copy_docs_files_to_dir.py", "process_command_files.py")...)
 	inputs = append(inputs, docs.implicit...)
 	inputs = append(inputs, docs.sources...)
 	inputs = append(inputs, docs.includes...)
-	inputs = append(inputs, source("build/scripts/tar_sources.py"))
+	inputs = append(inputs, buildScriptsTarSourcesPy)
 
 	return e.docsNode(cmds, inputs, []VFS{out}, generated, false, true, envVarsVCS, usesPython3)
 }
@@ -270,11 +203,30 @@ func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
 		extractArgs = append(extractArgs, peer.relString())
 	}
 
+	var toolRef NodeRef
+	var toolPath VFS
+
 	if docs.plantuml && !book {
-		extractArgs = append(extractArgs, "contrib/java/openjdk-fontconfig/"+realPrjName("contrib/java/openjdk-fontconfig")+".pkg.fake")
+		fontModule := "contrib/java/openjdk-fontconfig"
+
+		if peerYaMakeExists(e.ctx.fs, source(fontModule)) {
+			res := genModule(e.ctx, ModuleInstance{Path: source(fontModule), Kind: KindLib, Platform: e.instance.Platform})
+
+			if res.LDPath != nil {
+				peers = append(peers, *res.LDPath)
+				extractArgs = append(extractArgs, res.LDPath.relString())
+			}
+		}
+
+		toolModule := "contrib/tools/plantuml"
+
+		if peerYaMakeExists(e.ctx.fs, source(toolModule)) {
+			toolRef, toolPath = e.ctx.tool(internArg(toolModule))
+			e.ctx.scannerForPlatform(e.ctx.host).codegen.use(toolPath)
+		}
 	}
 
-	extract := e.docsCmd("extract_docs.py", extractArgs...)
+	extract := e.pythonScriptCmd("extract_docs.py", extractArgs...)
 
 	extract.Cwd = bld
 
@@ -294,46 +246,57 @@ func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
 
 	args = append(args, "-j2", "--no-strict", "--allow-html", "--allow-custom-resources", "-e", "unarchive-includer", "-q", "--config", config.string())
 
-	render := e.docsCmd("stdout2stderr.py", args...)
+	render := e.pythonScriptCmd("stdout2stderr.py", args...)
 
 	render.Cwd = bld
 
 	env := envVarsVCS
 	resources := append([]STR{}, usesPython3...)
 
-	resources = append(resources, internStr("YFM_TOOL"))
+	resources = append(resources, strYfmTool)
 
 	if docs.plantuml && !book {
 		env = e.ctx.na.envList(
 			envVarsVCS[0],
-			EnvVar{Name: envJavaPath, Value: internStr("$(B)/resources/JDK21/bin/java").any()},
-			EnvVar{Name: envLang, Value: internStr("en_US.UTF-8").any()},
-			EnvVar{Name: envLcAll, Value: internStr("C.UTF-8").any()},
-			EnvVar{Name: envPlantumlPath, Value: internStr("contrib/tools/plantuml/plantuml.run.cp.jar").any()},
-			EnvVar{Name: envJavaOptions, Value: internStr("-Dsun.awt.fontconfig=contrib/java/openjdk-fontconfig/fontconfig.properties -Djava.awt.headless=true").any()},
+			EnvVar{Name: envJavaPath, Value: strBResourcesJdk21BinJava.any()},
+			EnvVar{Name: envLang, Value: strEnUsUtf8.any()},
+			EnvVar{Name: envLcAll, Value: strCUtf8.any()},
+			EnvVar{Name: envPlantumlPath, Value: strContribToolsPlantumlPlantumlRunCpJar.any()},
+			EnvVar{Name: envJavaOptions, Value: strDsunAwtFontconfigContribJavaOpenjdkFontconfigFontconfigPropertiesDjavaAwtHeadlessTrue.any()},
 		)
 
 		render.Env = env
-		resources = append(resources, internStr("JDK21"))
+		resources = append(resources, strJdk21)
 	}
 
-	cmds := []Cmd{extract, render, e.docsCmd("tar_sources.py", "--output", out.string(), "--input", bindir+"/__docsbuild")}
-	inputs := docsScriptInputs("extract_docs.py", "process_command_files.py", "stdout2stderr.py")
+	cmds := []Cmd{extract, render, e.pythonScriptCmd("tar_sources.py", "--output", out.string(), "--input", bindir+"/__docsbuild")}
+	inputs := scriptInputs("extract_docs.py", "process_command_files.py", "stdout2stderr.py")
 
-	inputs = append(inputs, config, source("build/scripts/tar_sources.py"))
+	inputs = append(inputs, config, buildScriptsTarSourcesPy)
+	inputs = append(inputs, peers...)
+
+	if toolPath != 0 {
+		inputs = append(inputs, toolPath)
+	}
 
 	outputs := []VFS{out}
 
 	if book {
 		pre := build(module, "/preprocessed.tar.gz")
 		manifest := build(module, "/docs.manifest")
-		link := e.docsCmd("fs_tools.py", "link_or_copy", "_preprocessed.tar.gz", pre.string())
+		link := e.pythonScriptCmd("fs_tools.py", "link_or_copy", "_preprocessed.tar.gz", pre.string())
 
 		link.Cwd = build(module)
-		cmds = append(cmds, link, e.docsCmd("docs_manifest.py", "--output", manifest.string(), "html="+baseName(out.relString()), "preprocessed=preprocessed.tar.gz"))
-		inputs = append(inputs, docsScriptInputs("fs_tools.py", "docs_manifest.py")...)
+		cmds = append(cmds, link, e.pythonScriptCmd("docs_manifest.py", "--output", manifest.string(), "html="+baseName(out.relString()), "preprocessed=preprocessed.tar.gz"))
+		inputs = append(inputs, scriptInputs("fs_tools.py", "docs_manifest.py")...)
 		outputs = append(outputs, pre, manifest)
 	}
 
-	return e.docsNode(cmds, inputs, outputs, peers, true, true, env, resources)
+	var foreign []NodeRef
+
+	if toolRef != 0 {
+		foreign = append(foreign, toolRef)
+	}
+
+	return e.docsNode(cmds, inputs, outputs, peers, true, true, env, resources, foreign...)
 }

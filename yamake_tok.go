@@ -1,6 +1,13 @@
 package main
 
 var tokName = [...]STR{
+	tokJavaProgram: internStr("JAVA_PROGRAM"),
+	tokJavaContrib: internStr("JAVA_CONTRIB"),
+	tokJdkVersion:  internStr("JDK_VERSION"),
+	tokUberjar:     internStr("UBERJAR"),
+	tokJarResource: internStr("JAR_RESOURCE"),
+	tokSrcResource: internStr("SRC_RESOURCE"),
+
 	tokDocs:               internStr("DOCS"),
 	tokDocsLibrary:        internStr("DOCS_LIBRARY"),
 	tokDocsDir:            internStr("DOCS_DIR"),
@@ -515,6 +522,12 @@ const (
 	tokDocsIncludeSources
 	tokDocsCopyFiles
 	tokUsePlantuml
+	tokJavaProgram
+	tokJavaContrib
+	tokJdkVersion
+	tokUberjar
+	tokJarResource
+	tokSrcResource
 )
 
 type TOK uint16

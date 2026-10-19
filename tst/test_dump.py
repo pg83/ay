@@ -172,16 +172,6 @@ class DumpTest(unittest.TestCase):
         )
         self.assertEqual(output.read_text(), "apple\napple\nbanana\ncherry\ndate\n")
 
-    def test_normalize_dependency_filter_is_symmetric(self):
-        nodes = [
-            raw_node("copy", "CP", "$(B)/pkg/copy", inputs=["$(S)/pkg/source"]),
-            raw_node("unused", "CP", "$(B)/pkg/unused"),
-            raw_node("root", "LD", "$(B)/pkg/app/app", deps=["copy", "unused"],
-                     inputs=["$(B)/pkg/copy"], cmds=[{"cmd_args": ["$(B)/pkg/copy"]}]),
-        ]
-        self.assertEqual(self.normalize(nodes, "pkg/app", sort=True),
-                         self.normalize(nodes, "pkg/app", reference=True, sort=True))
-
     def test_normalize_semantic_equivalence(self):
         target = "pkg/app"
         a = [

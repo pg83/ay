@@ -103,7 +103,7 @@ class YaMakeModulesTest(unittest.TestCase):
             ("DLL()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("SO_PROGRAM()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("PACKAGE()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
-            ("UNION()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
+            ("UNION()", [], [("CP", "$(B)/a/x.cpp"), ("UN", "$(B)/a/a.pkg.fake"), ("UN", "$(B)/a/x.cpp")]),
             ("FBS_LIBRARY()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("RESOURCES_LIBRARY()", [], []),
         ]
@@ -114,6 +114,18 @@ class YaMakeModulesTest(unittest.TestCase):
                     "a/x.cpp": "int x;\n",
                 }, stubs)
                 self.assertEqual(module_outputs(self.make(files)), expected)
+
+    def test_files_in_native_peer_do_not_shadow_source_headers(self):
+        graph = self.make({
+            "a/ya.make": "LIBRARY()\n" + NO_PLATFORM + "PEERDIR(dep)\nSRCS(x.cpp)\nEND()\n",
+            "a/x.cpp": '#include "dep/api.h"\nint x;\n',
+            "dep/ya.make": "LIBRARY()\n" + NO_PLATFORM + "FILES(api.h)\nEND()\n",
+            "dep/api.h": "#pragma once\n",
+        })
+        node = lib.node_by_output(graph, "$(B)/a/x.cpp.o")
+        self.assertIn("$(S)/dep/api.h", node["inputs"])
+        self.assertNotIn("$(B)/dep/api.h", node["inputs"])
+        self.assertFalse(any("$(B)/dep/api.h" in n["outputs"] for n in graph["graph"]))
 
     def test_unittest_for_links_the_tested_library(self):
         graph = self.make({

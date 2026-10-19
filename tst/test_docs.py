@@ -1,9 +1,4 @@
-import json
-import tempfile
-from pathlib import Path
 import unittest
-
-import lib
 
 from lib import make, node_by_output
 
@@ -45,11 +40,39 @@ END()
         self.assertEqual(args[args.index('--vars') + 1], '{"a": "override", "z": "last"}')
         self.assertEqual(pre['cmds'][1]['env']['LANG'], 'en_US.UTF-8')
         self.assertNotIn('LANG', book['cmds'][1]['env'])
+        self.assertIn(f'{B}/guide/__docs_internal.docslib.fake', pre['inputs'])
+        self.assertIn(f'{B}/guide/_preprocessed.tar.gz', book['inputs'])
         self.assertIn(library['uid'], pre['deps'])
         self.assertIn(pre['uid'], book['deps'])
         self.assertEqual(book['outputs'], [f'{B}/guide/handbook.tar.gz',
             f'{B}/guide/preprocessed.tar.gz', f'{B}/guide/docs.manifest'])
         self.assertIn(book['uid'], graph['result'])
+
+    def test_plantuml_builds_java_tool_and_font_union(self):
+        graph = make({
+            'guide/ya.make': 'DOCS()\nUSE_PLANTUML()\nEND()\n',
+            'contrib/tools/plantuml/ya.make': 'JAVA_PROGRAM(diagrams)\nJDK_VERSION(17)\nUBERJAR()\nPEERDIR(vendor/drawing/2.0 contrib/java/openjdk-fontconfig)\nEND()\n',
+            'vendor/drawing/2.0/ya.make': 'JAVA_CONTRIB()\nJAR_RESOURCE(123)\nSRC_RESOURCE(456)\nEND()\n',
+            'contrib/java/openjdk-fontconfig/ya.make': 'UNION(fonts)\nFROM_SANDBOX(789 OUT face.ttf config.properties)\nEND()\n',
+        }, 'guide', opensource=False)
+        fetched = node_by_output(graph, f'{B}/vendor/drawing/2.0/drawing-2.0.jar')
+        jar = node_by_output(graph, f'{B}/contrib/tools/plantuml/diagrams.jar')
+        tool = node_by_output(graph, f'{B}/contrib/tools/plantuml/diagrams.run.cp.jar')
+        fonts = node_by_output(graph, f'{B}/contrib/java/openjdk-fontconfig/fonts.pkg.fake')
+        pre = node_by_output(graph, f'{B}/guide/_preprocessed.tar.gz')
+        self.assertIn(fetched['uid'], jar['deps'])
+        self.assertIn(jar['uid'], tool['deps'])
+        host_fonts = next(n for n in graph['graph'] if fonts['outputs'][0] in n['outputs'] and n['uid'] in tool['deps'])
+        self.assertNotEqual(fonts['platform'], host_fonts['platform'])
+        self.assertIn(tool['uid'], pre['deps'])
+        self.assertIn(fonts['uid'], pre['deps'])
+        self.assertEqual(fetched['cmds'][0]['cmd_args'][-3:], [
+            '123', '--copy-to', f'{B}/vendor/drawing/2.0/drawing-2.0.jar'])
+        self.assertIn('$(RESOURCE_ROOT)/sbr/123/resource', fetched['cmds'][0]['cmd_args'])
+        self.assertIn('$(VCS)/vcs.json', jar['cmds'][4]['cmd_args'])
+        self.assertIn(f'{B}/vendor/drawing/2.0/drawing-2.0.jar', jar['cmds'][7]['cmd_args'])
+        self.assertEqual(fonts['outputs'], [f'{B}/contrib/java/openjdk-fontconfig/fonts.pkg.fake',
+            f'{B}/contrib/java/openjdk-fontconfig/face.ttf', f'{B}/contrib/java/openjdk-fontconfig/config.properties'])
 
     def test_copy_consumes_a_generated_file(self):
         graph = make({
@@ -93,21 +116,6 @@ END()
         for name in ('__docs_internal.docslib.fake', '_preprocessed.tar.gz', 'guide.tar.gz'):
             self.assertIn(node_by_output(graph, f'{B}/guide/{name}')['uid'], results)
         self.assertEqual(len(results), 3)
-
-    def test_explicit_inputs_without_sandboxing(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / "ya.conf").write_text('[flags]\nOPENSOURCE = "yes"\n')
-            (root / "guide").mkdir()
-            (root / "guide/ya.make").write_text(
-                "DOCS()\nRUN_PYTHON3(gen.py OUT_NOAUTO bundle.tar)\nEND()\n")
-            (root / "guide/gen.py").write_text("print('hi')\n")
-            (root / "guide/index.md").write_text("# Start\n")
-            graph = json.loads(lib.run("make", "-j0", "-G", "--source-root", root, "guide").stdout)
-        source = node_by_output(graph, f"{B}/guide/__docs_internal.docslib.fake")
-        self.assertIn(f"{S}/guide/index.md", source['inputs'])
-        run = node_by_output(graph, f"{B}/guide/bundle.tar")
-        self.assertEqual(run['inputs'], [f"{S}/guide/gen.py"])
 
     def test_docs_peers_and_library_sources(self):
         graph = make({

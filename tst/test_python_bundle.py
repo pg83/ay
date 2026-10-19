@@ -40,12 +40,19 @@ class BundleTest(unittest.TestCase):
         ])
         self.assertEqual(resolved["inputs"], ["$(B)/prog/prog"])
         self.assertEqual(resolved["deps"], [program["uid"]])
-        for node, name in zip(bundles[1:], ("m.bin", "n.bin", "e.bin")):
+        for node, name in zip(bundles[1:3], ("m.bin", "n.bin")):
             self.assertEqual(node["cmds"][0]["cmd_args"][1:], [
                 "$(S)/build/scripts/fs_tools.py", "rename", f"$(B)/cons/{name}",
             ])
             self.assertEqual(node["inputs"], [])
             self.assertEqual(node.get("deps", []), [])
+
+        union = lib.node_by_output(graph, "$(B)/empty/empty.pkg.fake")
+        self.assertEqual(bundles[3]["cmds"][0]["cmd_args"][1:], [
+            "$(S)/build/scripts/fs_tools.py", "rename", "$(B)/empty/empty.pkg.fake", "$(B)/cons/e.bin",
+        ])
+        self.assertEqual(bundles[3]["inputs"], ["$(B)/empty/empty.pkg.fake"])
+        self.assertEqual(bundles[3]["deps"], [union["uid"]])
 
         objcopy = lib.node_by_output_prefix(graph, "$(B)/cons/objcopy_")
         for node in bundles:
