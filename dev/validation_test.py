@@ -6,7 +6,7 @@ from unittest import mock
 from pathlib import Path
 
 from fetch_validation_resource import download
-from provision import parse_xfail
+from provision import parse_trace, parse_xfail
 from validate_case import CaseRunner
 from validation_lib import (
     format_result_lines,
@@ -175,6 +175,19 @@ class ValidationTest(unittest.TestCase):
                 "[known_gap] XFAIL (not gating) — normalized graphs differ",
             ],
         )
+
+    def test_provision_joins_stats_split_across_threads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trace = Path(directory) / "trace"
+            trace.write_text(
+                '11 lstat("/m/a/gotest/ya.make",  <unfinished ...>\n'
+                '12 lstat("/m/b/ya.make",  <unfinished ...>\n'
+                '11 <... lstat resumed>{st_mode=S_IFREG|0644, st_size=10, ...}) = 0\n'
+                '12 <... lstat resumed>0x7ffd) = -1 ENOENT (No such file or directory)\n'
+                '13 newfstatat(AT_FDCWD, "/m/c/x.h", {st_mode=S_IFREG|0644, st_size=1, ...}, 0) = 0\n'
+            )
+            _, _, exists, _ = parse_trace(str(trace), "/m")
+        self.assertEqual(exists, {"a/gotest/ya.make", "c/x.h"})
 
     def test_provision_normalizes_xfail_values(self):
         self.assertIs(parse_xfail("false"), False)

@@ -71,6 +71,13 @@ RE_READLINK = re.compile(r'readlink\("(?P<link>[^"]*)"(?:<[^>]*>)?,\s*"(?P<targe
 RE_STAT = re.compile(
     r'(?:newfstatat|statx|lstat|stat|faccessat2?|access)\('
     r'(?:AT_FDCWD(?:<[^>]*>)?,\s*)?"(?P<path>[^"]*)".*=\s*0(?:\s|$)')
+# strace -f splits a call interrupted by another thread: `PID lstat("p",
+# <unfinished ...>` and later `PID <... lstat resumed>...) = 0`. ymake is
+# multithreaded, so its existence checks must be joined across the two lines.
+RE_STAT_UNFINISHED = re.compile(
+    r'^(?P<pid>\d+)\s+(?P<call>newfstatat|statx|lstat|stat|faccessat2?|access)\('
+    r'(?:AT_FDCWD(?:<[^>]*>)?,\s*)?"(?P<path>[^"]*)".*<unfinished \.\.\.>')
+RE_STAT_RESUMED = re.compile(r'^(?P<pid>\d+)\s+<\.\.\. (?P<call>\w+) resumed>.*=\s*(?P<rc>-?\d+)')
 
 
 def run(cmd, **kw):
@@ -199,6 +206,7 @@ def strace_run(mount, ya_cmd, trace_path, graph_path, strace_bin):
 def parse_trace(trace_path, mount):
     """Return (reads, listed_dirs, exists, symlinks{link:target}) mount-relative."""
     reads, listed, exists, links = set(), set(), set(), {}
+    unfinished = {}
     prefix = mount.rstrip("/") + "/"
 
     def rel(p):
@@ -224,6 +232,17 @@ def parse_trace(trace_path, mount):
             m = RE_STAT.search(line)
             if m and (r := rel(m["path"])):
                 exists.add(r)
+                continue
+
+            m = RE_STAT_UNFINISHED.search(line)
+            if m:
+                unfinished[(m["pid"], m["call"])] = m["path"]
+                continue
+
+            m = RE_STAT_RESUMED.search(line)
+            if m and (path := unfinished.pop((m["pid"], m["call"]), None)) is not None:
+                if m["rc"] == "0" and (r := rel(path)):
+                    exists.add(r)
 
     return reads, listed, exists, links
 
