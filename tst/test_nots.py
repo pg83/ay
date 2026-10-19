@@ -80,6 +80,24 @@ packages:
         self.assertEqual(prepare['outputs'].count('$(B)/web/__tarballs__/dep/-/dep-1.2.3.tgz'), 1)
 
 
+    def test_tarball_local_path_decodes_url_but_resource_uri_keeps_escaping(self):
+        for tarball, normalized in [
+            ('dep%2f-%2fdep-1.2.3.tgz', 'dep%2f-%2fdep-1.2.3.tgz'),
+            ('dep/-/legacy/%64ep-1.2.3.tgz', 'dep/-/%64ep-1.2.3.tgz'),
+        ]:
+            with self.subTest(tarball=tarball):
+                files = self.project()
+                files['web/pnpm-lock.yaml'] = (
+                    "lockfileVersion: '9.0'\npackages:\n  dep@1.2.3:\n"
+                    f"    resolution: {{integrity: sha512-YWJj, tarball: https://npm.yandex-team.ru/{tarball}}}\n"
+                )
+                graph = make(files, 'web')
+                prepare = node_by_output(graph, '$(B)/web/package.json')
+                self.assertIn('$(B)/web/__tarballs__/dep/-/dep-1.2.3.tgz', prepare['outputs'])
+                self.assertEqual(prepare['resources'], [
+                    {'uri': f'https://npm.yandex-team.ru/{normalized}#integrity=sha512-YWJj'},
+                ])
+
     def test_modern_test_prepares_target_without_building_it(self):
         files = self.project()
         files['web/tests/ya.make'] = 'TS_TEST_FOR(web)\nTS_TEST(test)\nEND()\n'

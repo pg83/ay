@@ -261,14 +261,19 @@ func (pm *IncludeParserManager) notsLockfile(rel string) *NotsLockfile {
 			}
 
 			local += "/-/" + filename
-
-			rawPackage := u.EscapedPath()[:strings.LastIndex(u.EscapedPath(), "/-/")]
-
-			tarball = strings.TrimSuffix(tarball, u.EscapedPath()) + rawPackage + "/-/" + filename
 		} else {
 			parts := strings.Split(u.Path, "/")
 
 			local = strings.Join(parts[max(0, len(parts)-3):], "/")
+		}
+
+		rawPath := u.EscapedPath()
+
+		if sep := strings.LastIndex(rawPath, "/-/"); sep >= 0 && strings.Contains(rawPath[sep+3:], "/") {
+			u.RawPath = rawPath[:sep+3] + path.Base(rawPath)
+			u.Path = throw2(url.PathUnescape(u.RawPath))
+
+			tarball = u.String()
 		}
 
 		if !strings.HasPrefix(tarball, "https://") && !strings.HasPrefix(tarball, "http://") {
