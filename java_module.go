@@ -507,10 +507,12 @@ func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
 
 		res := genModule(ctx, self)
 
-		if res.java != nil {
-			jm.selfPeers = append(jm.selfPeers, res.java)
-			jm.managedPeers = append(jm.managedPeers, res.java)
+		if res.java == nil {
+			throwFmt("gen: %s: submodule %d of %s failed", jm.dir, sub, jm.stmt.string())
 		}
+
+		jm.selfPeers = append(jm.selfPeers, res.java)
+		jm.managedPeers = append(jm.managedPeers, res.java)
 	}
 
 	seen := map[string]bool{}
@@ -655,8 +657,16 @@ func javaForeignFileName(p javaForeignPeer) VFS {
 	return 0
 }
 
+func (u *javaUnit) finalTarget() bool {
+	return u.sub != KindJavaCompilation && u.kind != juIJar && u.kind != juExternal && u.kind != juProxy
+}
+
 func (ctx *GenCtx) genJavaTarget(dir string, name TOK) {
 	for _, u := range javaModuleUnits[name] {
+		if !u.finalTarget() {
+			continue
+		}
+
 		res := genModule(ctx, ModuleInstance{Path: source(dir), Kind: u.sub, Language: LangJava, Platform: ctx.target, Demand: demandSelf})
 
 		if res.java == nil {

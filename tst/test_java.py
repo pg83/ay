@@ -299,5 +299,36 @@ class JavaJniTest(unittest.TestCase):
         ])
 
 
+class JavaStartTargetsTest(unittest.TestCase):
+    def test_recursed_tests_and_dlls_are_results(self):
+        bare = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+        files = java_tree(**{
+            "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nEND()\nRECURSE(jni)\nRECURSE_FOR_TESTS(ut)\n",
+            "app/ut/ya.make": "JUNIT5()\nPEERDIR(app)\nEND()\n",
+            "app/jni/ya.make": f"DLL(app_jni)\n{bare}SRCS(j.cpp)\nEND()\n",
+            "app/jni/j.cpp": "int j;\n",
+            "devtools/junit5-runner/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nEND()\n",
+            "devtools/jtest-annotations/junit5/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nEND()\n",
+            "build/platform/java/jacoco-agent/ya.make": resource_lib("JACOCO_AGENT", 6),
+        })
+        graph = lib.make(files, "app")
+        results = [graph["graph"][ref]["outputs"][0] for ref in graph["result"]]
+        self.assertEqual(results, ["$(B)/app/app.jar", "$(B)/app/jni/libapp_jni.so"])
+        graph = lib.make(files, "app", "--target-platform-tests")
+        results = [graph["graph"][ref]["outputs"][0] for ref in graph["result"]]
+        self.assertEqual(results, ["$(B)/app/app.jar", "$(B)/app/jni/libapp_jni.so", "$(B)/app/ut/app-ut.test.cp.jar"])
+        jt = lib.node_by_output(graph, "$(B)/app/ut/app-ut.test.cp.jar")
+        self.assertEqual(jt["kv"], {"p": "JT"})
+        self.assertEqual(writer_args(jt, "run-bf.txt"), [
+            "$(B)/app/ut/app-ut.jar",
+            "$(B)/devtools/junit5-runner/devtools-junit5-runner.jar",
+            "$(B)/devtools/jtest-annotations/junit5/jtest-annotations-junit5.jar",
+            "$(B)/app/app.jar",
+        ])
+        self.assertEqual(jt["cmds"][1]["cmd_args"][1:], [
+            "$(S)/build/scripts/make_manifest_from_bf.py", "$(B)/app/ut/run-bf.txt", "$(B)/app/ut/app-ut.test.cp.jar",
+        ])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

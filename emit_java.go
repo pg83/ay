@@ -139,7 +139,7 @@ func (jm *JavaModule) outputs() []VFS {
 	switch jm.unit.kind {
 	case juContrib, juExternal:
 		return []VFS{jm.target, build(jm.dir, "/", jm.name, "-sources.jar")}
-	case juIJar:
+	case juIJar, juTest:
 		return []VFS{jm.target}
 	case juRunnable:
 		return jm.runnableOutputs()
@@ -223,7 +223,31 @@ func (ctx *GenCtx) javaEmit(jm *JavaModule) {
 		ctx.javaEmitIJar(jm)
 	case juRunnable:
 		ctx.javaEmitRunnable(jm)
+	case juTest:
+		ctx.javaEmitTest(jm)
 	}
+}
+
+func (ctx *GenCtx) javaEmitTest(jm *JavaModule) {
+	closure := ctx.javaManagedPeersClosure(jm)
+	runBf := build(jm.dir, "/run-bf.txt")
+	b := &javaNodeBuilder{ctx: ctx}
+	w := b.python("build/scripts/writer.py")
+
+	b.script("build/scripts/process_command_files.py")
+
+	w = append(w, strFile.any(), runBf.any(), strQ.any(), strM.any(), strYaStartCommandFile.any())
+
+	for _, p := range javaClosureJars(closure, ".jar") {
+		w = append(w, p.any())
+	}
+
+	b.cmd(append(w, strYaEndCommandFile.any()), 0)
+	b.cmd(append(b.python("build/scripts/make_manifest_from_bf.py"), runBf.any(), jm.target.any()), 0)
+	b.closure(closure)
+	b.setKV(pkJT, pcNone, false)
+	b.outputs = []VFS{jm.target}
+	b.emitTo(jm.outRef, ctx.target)
 }
 
 func (ctx *GenCtx) javaGlobals(jm *JavaModule) map[string]VFS {

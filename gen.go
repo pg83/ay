@@ -376,7 +376,9 @@ func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance 
 
 func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
 	if name := ctx.moduleName(filepath.Clean(targetDir)); isJavaModuleType(name) {
-		ctx.genJavaTarget(filepath.Clean(targetDir), name)
+		for _, dir := range ctx.recurseClosure(filepath.Clean(targetDir)) {
+			ctx.genStartTarget(dir)
+		}
 
 		return
 	}
@@ -408,6 +410,82 @@ func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
 	if ctx.testMode && root.testSuiteInfo != nil {
 		for _, ref := range emitTestRunNodes(ctx.emit, ctx.target, *root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
+		}
+	}
+}
+
+func (ctx *GenCtx) recurseClosure(root string) []string {
+	seen := map[string]bool{}
+
+	var out []string
+
+	var walk func(dir string)
+
+	walk = func(dir string) {
+		if seen[dir] || !ctx.fs.isFile(internStr(dir), "ya.make") {
+			return
+		}
+
+		seen[dir] = true
+		out = append(out, dir)
+
+		env := buildIfEnvInto(&ctx.ifEnvScratch, ModuleInstance{Path: source(dir), Platform: ctx.target})
+
+		var children []string
+
+		var scan func(stmts []Stmt)
+
+		scan = func(stmts []Stmt) {
+			for _, st := range stmts {
+				switch v := st.(type) {
+				case *IfStmt:
+					if evalCond(v.Cond, env) {
+						scan(v.Then)
+					} else {
+						scan(v.Else)
+					}
+				case *UnknownStmt:
+					if v.Name != tokRecurse && v.Name != tokRecurseRootRelative && (v.Name != tokRecurseForTests || !ctx.testMode) {
+						continue
+					}
+
+					for _, a := range v.Args {
+						child := a.string()
+
+						if v.Name != tokRecurseRootRelative {
+							child = dir + "/" + child
+						}
+
+						children = append(children, filepath.Clean(child))
+					}
+				}
+			}
+		}
+
+		scan(moduleStmts(ctx, dir))
+
+		for _, child := range children {
+			walk(child)
+		}
+	}
+
+	walk(root)
+
+	return out
+}
+
+func (ctx *GenCtx) genStartTarget(dir string) {
+	name := ctx.moduleName(dir)
+
+	switch {
+	case name == 0:
+	case isJavaModuleType(name):
+		ctx.genJavaTarget(dir, name)
+	default:
+		root := genModule(ctx, ctx.rootInstance(dir, demandSelf))
+
+		if root.LDRef != 0 {
+			ctx.emit.result(root.LDRef)
 		}
 	}
 }
