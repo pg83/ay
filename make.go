@@ -131,6 +131,11 @@ func cmdMake(g GlobalFlags, args []string) int {
 	fs := newFS(mf.srcRoot)
 	caches := newGenCaches(fs)
 	hostP, targetP := makePlatforms(fs, mf, caches)
+
+	for _, p := range []*Platform{hostP, targetP, targetP.picVariant} {
+		p.AddInputs = mf.dist && mf.sandboxing
+	}
+
 	events := newEventQueue()
 
 	defer events.close()
@@ -542,7 +547,8 @@ ya compatibility flags:
   -x                            Accepted from ya command lines, not modeled.
   --test-size <size>            Accepted, not modeled.
   --dist                        Configure for distbuild: ymake_conf.py runs
-                                without -l.
+                                without -l; with --sandboxing a node's inputs
+                                are its include closure (ymake --add-inputs).
   --ignore-nodes-exit-code      Accepted, not modeled.
   --warning-mode <modes>        Accepted, not modeled.
   --cache-tests                 Accepted, not modeled.

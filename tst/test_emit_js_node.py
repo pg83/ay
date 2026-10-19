@@ -35,5 +35,30 @@ class EmitJoinSourcesTest(unittest.TestCase):
         self.assertIn("$(B)/joinmod/other.cpp.o", archive["inputs"])
 
 
+    def test_distbuild_inputs_are_include_closures(self):
+        # ya --dist runs ymake with --add-inputs: a node's inputs are its
+        # inputs' include closures; JOIN_SRCS reads its sources as TEXT and a
+        # generated file does not bring its generator's inputs.
+        files = {
+            "joinmod/ya.make": (
+                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                "JOIN_SRCS(all_my.cpp src1.cpp)\nEND()\n"
+            ),
+            "joinmod/src1.cpp": '#include "h.h"\n',
+            "joinmod/h.h": "",
+            "build/scripts/gen_join_srcs.py": "",
+        }
+        for args, local in (((), True), (("--dist",), False)):
+            with self.subTest(args=args):
+                graph = lib.make(files, "joinmod", *args)
+                joined = lib.node_by_output(graph, "$(B)/joinmod/all_my.cpp")
+                compile_node = lib.node_by_output(graph, "$(B)/joinmod/all_my.cpp.o")
+                self.assertIn("$(S)/joinmod/src1.cpp", joined["inputs"])
+                self.assertIn("$(S)/build/scripts/gen_join_srcs.py", joined["inputs"])
+                self.assertEqual("$(S)/joinmod/h.h" in joined["inputs"], local)
+                self.assertIn("$(S)/joinmod/h.h", compile_node["inputs"])
+                self.assertEqual("$(S)/build/scripts/gen_join_srcs.py" in compile_node["inputs"], local)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

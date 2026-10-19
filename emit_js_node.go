@@ -66,7 +66,10 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	joinClosure := e.joinSrcsIncludeClosure(instance.Platform, jsSources, scanDomainCC)
 	ccClosure := joinClosure
 
-	if instance.Platform.ISA == ISAX8664 {
+	switch {
+	case instance.Platform.AddInputs:
+		joinClosure = nil
+	case instance.Platform.ISA == ISAX8664:
 		joinClosure = e.joinSrcsIncludeClosure(ctx.target, jsSources, scanDomainJoinTarget)
 	}
 
@@ -81,11 +84,16 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	pending := e.pendingEmit(pe)
 	joinOutVFS := build(instance.Path.relString(), "/", js.OutputName)
 	ccIncl := jsCCIncludeInputs(instance, joinOutVFS, jsSources, ccClosure, ctx.scripts)
+	leaves := ccIncl[1:]
+
+	if instance.Platform.AddInputs {
+		leaves = leaves[len(ctx.scripts[buildScriptsGenJoinSrcsPy.rel()]):]
+	}
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    joinOutVFS,
 		ProducerRef:   jsRef,
-		ClosureLeaves: ccIncl[1:],
+		ClosureLeaves: leaves,
 		OnUse:         pending,
 	})
 

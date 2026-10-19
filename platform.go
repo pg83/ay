@@ -26,6 +26,7 @@ func confSystemLibsViaWl(fs FS) bool {
 
 type Platform struct {
 	picVariant            *Platform
+	AddInputs             bool
 	OS                    OS
 	ISA                   ISA
 	Target                PlatformID
