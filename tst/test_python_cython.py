@@ -226,11 +226,12 @@ class CythonTest(unittest.TestCase):
         cy = lib.node_by_output(graph, "$(B)/lib/mod.pyx.cpp")
         for expected in (
             "$(S)/lib/mod.pyx", "$(S)/lib/mod.pxd", "$(S)/lib/inc.pxi", "$(S)/lib/dq.pxi",
-            "$(S)/lib/helper.py", "$(S)/lib/frompy.pxd",
+            "$(S)/lib/helper.py",
             "$(S)/lib/deps.pxd", "$(S)/lib/pkg/__init__.pxd", "$(S)/lib/pkg/sub.pxd",
             "$(S)/lib/mod2.pxd", "$(S)/lib/single.pxd", "$(S)/lib/pkg/nested/__init__.pxd",
         ):
             self.assertIn(expected, cy["inputs"])
+        self.assertNotIn("$(S)/lib/frompy.pxd", cy["inputs"])
         self.assertNotIn("$(S)/lib/ext.h", cy["inputs"])
         compiled = lib.node_by_output(graph, "$(B)/lib/mod.pyx.cpp.o")
         self.assertIn("$(S)/lib/ext.h", compiled["inputs"])

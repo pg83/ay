@@ -127,6 +127,62 @@ class RunPython3Test(unittest.TestCase):
             "$(B)/lib/shard1.cpp", "$(B)/lib/shard0.cpp", "$(S)/lib/split.py", "$(S)/lib/induced.h",
         ], 1))
 
+    def test_script_text_naming_own_output_is_not_an_include(self):
+        files = {
+            "lib/ya.make": (
+                LIBRARY_HEAD
+                + "DECLARE_IN_DIRS(CONF *.toml DIRS conf)\n"
+                "RUN_PYTHON3(\n"
+                "  gen.py --header gen.h --cpp gen.cpp \\${CONF_FILES}\n"
+                "  IN ${CONF_FILES}\n"
+                "  OUT gen.h gen.cpp\n"
+                "  OUTPUT_INCLUDES lib/dep.h\n"
+                ")\n"
+                "SRCS(gen.h)\n"
+                "END()\n"
+            ),
+            "lib/gen.py": 'CPP = """\n#include "gen.h"\n"""\n',
+            "lib/conf/a.toml": "",
+            "lib/conf/b.toml": "",
+            "lib/dep.h": "",
+        }
+        graph = lib.make(files, "lib")
+        run = lib.node_by_output(graph, "$(B)/lib/gen.h")
+        self.assertEqual(run["outputs"], ["$(B)/lib/gen.h", "$(B)/lib/gen.cpp"])
+        self.assertEqual(cmd(run)["cmd_args"][1:], [
+            "$(S)/lib/gen.py", "--header", "$(B)/lib/gen.h", "--cpp", "$(B)/lib/gen.cpp",
+            "$(S)/lib/conf/a.toml", "$(S)/lib/conf/b.toml",
+        ])
+        self.assertEqual(run["deps"], [])
+        self.assertEqual(sorted(set(run["inputs"])), [
+            "$(S)/lib/conf/a.toml", "$(S)/lib/conf/b.toml", "$(S)/lib/dep.h", "$(S)/lib/gen.py",
+        ])
+        compiled = lib.node_by_output(graph, "$(B)/lib/gen.cpp.o")
+        self.assertEqual(compiled["deps"], [run["uid"]])
+
+    def test_inputs_with_empty_parser_extensions_are_not_scanned(self):
+        extensions = ("fml", "fml2", "fml3", "pln", "info", "a", "lua", "sh", "bin", "py", "pyi", "pysrc")
+        files = {
+            "lib/ya.make": (
+                LIBRARY_HEAD
+                + "RUN_PYTHON3(gen.py IN "
+                + " ".join(f"in.{ext}" for ext in extensions)
+                + " OUT gen.cpp)\n"
+                "END()\n"
+            ),
+            "lib/gen.py": "",
+            "lib/dep.h": "",
+        }
+        for ext in extensions:
+            files[f"lib/in.{ext}"] = '#include "lib/dep.h"\n'
+        graph = lib.make(files, "lib")
+        run = lib.node_by_output(graph, "$(B)/lib/gen.cpp")
+        compiled = lib.node_by_output(graph, "$(B)/lib/gen.cpp.o")
+        for ext in extensions:
+            self.assertIn(f"$(S)/lib/in.{ext}", run["inputs"])
+        self.assertNotIn("$(S)/lib/dep.h", run["inputs"])
+        self.assertNotIn("$(S)/lib/dep.h", compiled["inputs"])
+
     def test_arcadia_root_left_by_expansion_limit_maps_to_source_root(self):
         # Each expansion pass consumes one "O1}" suffix, so the literal
         # ${ARCADIA_ROOT} only appears after the last of the eight passes.
