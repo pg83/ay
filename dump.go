@@ -489,7 +489,7 @@ type RawNode struct {
 	Requirements any      `json:"requirements"`
 }
 
-func loadGraph(path string) []*RawNode {
+func loadGraph(path string) ([]*RawNode, []NodeID) {
 	f := throw2(os.Open(path))
 
 	defer func() { throw(f.Close()) }()
@@ -508,22 +508,23 @@ func loadGraph(path string) []*RawNode {
 		nodes = append(nodes, node)
 	}
 
-	return nodes
+	return nodes, readGraphResult(dec, path)
 }
 
 type NodeSource struct {
-	path  string
-	nodes []*RawNode
+	path   string
+	nodes  []*RawNode
+	result []NodeID
 }
 
-func fanoutNodes[R any](src NodeSource, workers int, process func(*RawNode) R, collect func(R)) {
+func fanoutNodes[R any](src NodeSource, workers int, process func(*RawNode) R, collect func(R)) []NodeID {
 	if src.nodes != nil {
 		sliceFanout(src.nodes, workers, process, collect)
 
-		return
+		return src.result
 	}
 
-	streamGraphFanout(src.path, workers, process, collect)
+	return streamGraphFanout(src.path, workers, process, collect)
 }
 
 func sliceFanout[R any](nodes []*RawNode, workers int, process func(*RawNode) R, collect func(R)) {
@@ -564,7 +565,7 @@ func sliceFanout[R any](nodes []*RawNode, workers int, process func(*RawNode) R,
 	<-done
 }
 
-func streamGraphFanout[R any](path string, workers int, process func(*RawNode) R, collect func(R)) {
+func streamGraphFanout[R any](path string, workers int, process func(*RawNode) R, collect func(R)) []NodeID {
 	f := throw2(os.Open(path))
 
 	defer func() { throw(f.Close()) }()
@@ -612,6 +613,8 @@ func streamGraphFanout[R any](path string, workers int, process func(*RawNode) R
 	wg.Wait()
 	close(results)
 	<-done
+
+	return readGraphResult(dec, path)
 }
 
 func streamJSONL(path string, fn func(map[string]any)) {
@@ -675,4 +678,29 @@ func seekToGraph(dec *json.Decoder, path string) {
 	}
 
 	throwFmt("dump: %s: no \"graph\" key found", path)
+}
+
+func readGraphResult(dec *json.Decoder, path string) []NodeID {
+	throw2(dec.Token())
+
+	var result []NodeID
+
+	for dec.More() {
+		key, ok := throw2(dec.Token()).(string)
+
+		if !ok {
+			throwFmt("dump: %s: expected object key", path)
+		}
+
+		if key == "result" {
+			throw(dec.Decode(&result))
+
+			continue
+		}
+
+		var skip json.RawMessage
+		throw(dec.Decode(&skip))
+	}
+
+	return result
 }

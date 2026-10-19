@@ -13,8 +13,24 @@ import (
 
 const dumpUIDLen = 22
 
+type NormalizeTarget struct {
+	name     string
+	ldPrefix string
+	arInfix  string
+	tsPrefix string
+	ld       []string
+	ar       []string
+	ts       []string
+}
+
+type NormalizeRoot struct {
+	target int
+	kind   byte
+}
+
 func cmdDumpNormalize(_ GlobalFlags, args []string) int {
-	var inPath, target, outPath string
+	var inPath, outPath string
+	var targets []*NormalizeTarget
 	var refGraph, streaming bool
 
 	for i := 0; i < len(args); i++ {
@@ -24,7 +40,15 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			inPath = arg(args, i)
 		case "--target":
 			i++
-			target = arg(args, i)
+
+			name := arg(args, i)
+
+			targets = append(targets, &NormalizeTarget{
+				name:     name,
+				ldPrefix: "$(B)/" + name + "/",
+				arInfix:  "/" + name + "/",
+				tsPrefix: name + "/",
+			})
 		case "--out":
 			i++
 			outPath = arg(args, i)
@@ -39,7 +63,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		}
 	}
 
-	if inPath == "" || target == "" {
+	if inPath == "" || len(targets) == 0 {
 		throwFmt("dump normalize: --in and --target are required")
 	}
 
@@ -47,7 +71,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	workers := 4
 
 	if !streaming {
-		src.nodes = loadGraph(inPath)
+		src.nodes, src.result = loadGraph(inPath)
 		workers = min(runtime.NumCPU(), 24)
 	}
 
@@ -55,23 +79,19 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
 	outputsByUID := map[string][]string{}
-
-	var ldRoots, tsRoots, arRoots []string
-
-	ldPrefix := "$(B)/" + target + "/"
-	arInfix := "/" + target + "/"
-	tsPrefix := target + "/"
+	targetOut0 := map[string]string{}
 
 	type p1Result struct {
-		uid      string
-		deps     []string
-		content  [32]byte
-		isFetch  bool
-		rootKind byte
-		outputs  []string
+		uid        string
+		deps       []string
+		content    [32]byte
+		isFetch    bool
+		roots      []NormalizeRoot
+		targetOut0 string
+		outputs    []string
 	}
 
-	fanoutNodes(src, workers,
+	result := fanoutNodes(src, workers,
 		func(node *RawNode) p1Result {
 			uid := string(node.UID)
 			kv, _ := node.Kv.(map[string]any)
@@ -103,20 +123,22 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				}
 			}
 
-			switch p {
-			case "LD":
-				if strings.HasPrefix(out0, ldPrefix) {
-					r.rootKind = 'L'
-				}
-			case "AR":
-				if strings.Contains(out0, arInfix) {
-					r.rootKind = 'A'
-				}
-			case "TS":
-				path, _ := kv["path"].(string)
+			tsPath, _ := kv["path"].(string)
 
-				if strings.HasPrefix(path, tsPrefix) {
-					r.rootKind = 'T'
+			for t, target := range targets {
+				underTarget := strings.HasPrefix(out0, target.ldPrefix)
+
+				if underTarget {
+					r.targetOut0 = out0
+				}
+
+				switch {
+				case p == "LD" && underTarget:
+					r.roots = append(r.roots, NormalizeRoot{target: t, kind: 'L'})
+				case p == "AR" && strings.Contains(out0, target.arInfix):
+					r.roots = append(r.roots, NormalizeRoot{target: t, kind: 'A'})
+				case p == "TS" && strings.HasPrefix(tsPath, target.tsPrefix):
+					r.roots = append(r.roots, NormalizeRoot{target: t, kind: 'T'})
 				}
 			}
 
@@ -134,13 +156,21 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				fetch[r.uid] = true
 			}
 
-			switch r.rootKind {
-			case 'L':
-				ldRoots = append(ldRoots, r.uid)
-			case 'A':
-				arRoots = append(arRoots, r.uid)
-			case 'T':
-				tsRoots = append(tsRoots, r.uid)
+			if r.targetOut0 != "" {
+				targetOut0[r.uid] = r.targetOut0
+			}
+
+			for _, root := range r.roots {
+				target := targets[root.target]
+
+				switch root.kind {
+				case 'L':
+					target.ld = append(target.ld, r.uid)
+				case 'A':
+					target.ar = append(target.ar, r.uid)
+				case 'T':
+					target.ts = append(target.ts, r.uid)
+				}
 			}
 		})
 
@@ -181,25 +211,34 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 
 	roots := []string{}
 
-	if len(ldRoots) > 0 || len(arRoots) > 0 {
+	for _, target := range targets {
+		n := len(roots)
+
 		switch {
-		case len(ldRoots) == 1:
-			roots = append(roots, ldRoots[0])
-		case len(ldRoots) > 1:
-			roots = append(roots, ldRoots...)
-		case len(arRoots) == 1:
-			roots = append(roots, arRoots[0])
-		default:
-			throwFmt("dump normalize: %d AR roots for target %q; expected 1", len(arRoots), target)
+		case len(target.ld) > 0:
+			roots = append(roots, target.ld...)
+		case len(target.ar) == 1:
+			roots = append(roots, target.ar[0])
+		case len(target.ar) > 1:
+			throwFmt("dump normalize: %d AR roots for target %q; expected 1", len(target.ar), target.name)
+		}
+
+		roots = append(roots, target.ts...)
+
+		if len(roots) == n {
+			for _, uid := range result {
+				if strings.HasPrefix(targetOut0[string(uid)], target.ldPrefix) {
+					roots = append(roots, string(uid))
+				}
+			}
+		}
+
+		if len(roots) == n {
+			throwFmt("dump normalize: no LD/AR/TS root node found for target %q", target.name)
 		}
 	}
 
-	roots = append(roots, tsRoots...)
 	roots = dedupKeepOrder(roots)
-
-	if len(roots) == 0 {
-		throwFmt("dump normalize: no LD/AR/TS root node found for target %q", target)
-	}
 
 	closure := map[string]bool{}
 	queue := append([]string(nil), roots...)

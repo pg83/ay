@@ -245,10 +245,12 @@ class DumpGraphErrorsTest(DumpToolTest):
 
 
 class DumpNormalizeTest(DumpToolTest):
-    def normalize(self, nodes, target, *args):
-        raw = self.write("raw.json", compact({"conf": {}, "graph": nodes, "result": []}))
-        result = self.ok("dev", "dump", "normalize", "--in", raw, "--target", target, *args)
-        return [json.loads(line) for line in result.stdout.splitlines()]
+    def normalize(self, nodes, target, *args, result=()):
+        raw = self.write("raw.json", compact({"conf": {}, "graph": nodes, "result": list(result)}))
+        targets = [target] if isinstance(target, str) else target
+        flags = [flag for name in targets for flag in ("--target", name)]
+        normalized = self.ok("dev", "dump", "normalize", "--in", raw, *flags, *args)
+        return [json.loads(line) for line in normalized.stdout.splitlines()]
 
     def test_normalize_closure_uids_fetch_and_streaming(self):
         nodes = [
@@ -322,6 +324,61 @@ class DumpNormalizeTest(DumpToolTest):
         self.assertEqual(
             sorted(node["outputs"][0] for node in normalized),
             ["$(B)/app/one", "$(B)/app/two"],
+        )
+
+    def test_normalize_several_targets_unions_roots(self):
+        nodes = [
+            raw_node("ld", "LD", ["$(B)/app/app"], deps=["cc"]),
+            raw_node("cc", "CC", ["$(B)/app/main.o"]),
+            raw_node("ar", "AR", ["$(B)/lib/liblib.a"], deps=["lcc"]),
+            raw_node("lcc", "CC", ["$(B)/lib/a.o"]),
+            raw_node("ts", "TS", ["$(B)/lib/ut/test.out"], deps=["ar"], kv={"p": "TS", "path": "lib/ut"}),
+            raw_node("outside", "CC", ["$(B)/other/o.o"]),
+        ]
+        both = self.normalize(nodes, ["app", "lib"])
+        self.assertEqual(
+            sorted(node["outputs"][0] for node in both),
+            ["$(B)/app/app", "$(B)/app/main.o", "$(B)/lib/a.o", "$(B)/lib/liblib.a", "$(B)/lib/ut/test.out"],
+        )
+        singles = self.normalize(nodes, "app") + self.normalize(nodes, "lib")
+        self.assertEqual(sorted(map(compact, both)), sorted(set(map(compact, singles))))
+        self.assertEqual(
+            sorted(map(compact, both)),
+            sorted(map(compact, self.normalize(nodes, ["app", "lib"], "--streaming"))),
+        )
+
+    def test_normalize_result_roots_for_targets_without_ld_ar_ts(self):
+        nodes = [
+            raw_node(1, "LD", ["$(B)/app/app"]),
+            raw_node(2, "PK", ["$(B)/pkg/pkg.tar"], deps=[3]),
+            raw_node(3, "CP", ["$(B)/pkg/data/file"], deps=[1]),
+            raw_node(4, "CP", ["$(B)/pkg/stray"]),
+            raw_node(5, "JV", ["$(B)/java/lib.jar"]),
+            raw_node(6, "CP", ["$(B)/app/extra"]),
+        ]
+        result = [1, 2, 5, 6]
+        for streaming in ((), ("--streaming",)):
+            normalized = self.normalize(nodes, ["pkg", "app"], *streaming, result=result)
+            self.assertEqual(
+                sorted(node["outputs"][0] for node in normalized),
+                ["$(B)/app/app", "$(B)/pkg/data/file", "$(B)/pkg/pkg.tar"],
+            )
+        normalized = self.normalize(nodes, "java", result=result)
+        self.assertEqual([node["outputs"][0] for node in normalized], ["$(B)/java/lib.jar"])
+
+    def test_normalize_target_without_roots_fails(self):
+        raw = self.write("roots.json", compact({"graph": [
+            raw_node("ld", "LD", ["$(B)/app/app"]),
+            raw_node("cp", "CP", ["$(B)/pkg/file"]),
+        ], "result": ["ld", "cp"]}))
+        self.fails(
+            'dump normalize: no LD/AR/TS root node found for target "missing"',
+            "dev", "dump", "normalize", "--in", raw, "--target", "app", "--target", "missing",
+        )
+        self.fails(
+            'dump normalize: no LD/AR/TS root node found for target "missing"',
+            "dev", "dump", "normalize", "--in", raw, "--target", "missing", "--target", "pkg",
+            "--streaming",
         )
 
     def test_normalize_ref_graph_strips_unused_deps(self):

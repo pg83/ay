@@ -58,6 +58,11 @@ def resolve_reference_graph(directory: Path) -> Path:
     return candidates[0]
 
 
+def spec_targets(spec: dict) -> list[str]:
+    target = spec["target"]
+    return [target] if isinstance(target, str) else list(target)
+
+
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -74,9 +79,19 @@ class CaseRunner:
         self.timeout = timeout
         self.log = None
 
-    def run_command(self, command: list[str], *, cwd: Path, stdout: Path | None = None) -> tuple[int, float]:
+    def run_command(
+        self,
+        command: list[str],
+        *,
+        cwd: Path,
+        stdout: Path | None = None,
+        extra_env: dict[str, str] | None = None,
+    ) -> tuple[int, float]:
         assert self.log is not None
+        extra_env = extra_env or {}
+        env = {**clean_env(), **extra_env}
         self.log.write("$ cd " + shlex.quote(str(cwd)) + " && ")
+        self.log.write("".join(f"{key}={shlex.quote(value)} " for key, value in extra_env.items()))
         self.log.write(" ".join(shlex.quote(item) for item in command) + "\n")
         self.log.flush()
         started = time.monotonic()
@@ -85,7 +100,7 @@ class CaseRunner:
                 result = subprocess.run(
                     command,
                     cwd=cwd,
-                    env=clean_env(),
+                    env=env,
                     stdout=self.log,
                     stderr=subprocess.STDOUT,
                     timeout=self.timeout,
@@ -95,7 +110,7 @@ class CaseRunner:
                     result = subprocess.run(
                         command,
                         cwd=cwd,
-                        env=clean_env(),
+                        env=env,
                         stdout=stream,
                         stderr=self.log,
                         timeout=self.timeout,
@@ -150,14 +165,18 @@ class CaseRunner:
                 ref_sorted = work / "ref.norm.jsonl"
 
                 generation = [str(self.ay), *self.spec["command"][1:], "--source-root", str(source_root)]
-                rc, generation_seconds = self.run_command(generation, cwd=work, stdout=our_raw)
+                rc, generation_seconds = self.run_command(
+                    generation, cwd=work, stdout=our_raw, extra_env=self.spec.get("env"),
+                )
                 if rc != 0:
                     return self.phase_failure("generate", rc, generation_seconds=generation_seconds)
 
+                targets = spec_targets(self.spec)
+                target_flags = [flag for target in targets for flag in ("--target", target)]
                 commands = (
-                    ("normalize-our", [str(self.ay), "dev", "dump", "normalize", "--in", str(our_raw), "--target", self.spec["target"], "--out", str(our_unsorted)]),
+                    ("normalize-our", [str(self.ay), "dev", "dump", "normalize", "--in", str(our_raw), *target_flags, "--out", str(our_unsorted)]),
                     ("sort-our", [str(self.ay), "dev", "dump", "sort", "--in", str(our_unsorted), "--out", str(our_sorted)]),
-                    ("normalize-reference", [str(self.ay), "dev", "dump", "normalize", "--in", str(reference_raw), "--target", self.spec["target"], "--out", str(ref_unsorted), "--ref-graph"]),
+                    ("normalize-reference", [str(self.ay), "dev", "dump", "normalize", "--in", str(reference_raw), *target_flags, "--out", str(ref_unsorted), "--ref-graph"]),
                     ("sort-reference", [str(self.ay), "dev", "dump", "sort", "--in", str(ref_unsorted), "--out", str(ref_sorted)]),
                 )
                 for phase, command in commands:

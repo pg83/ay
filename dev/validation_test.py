@@ -1,4 +1,6 @@
 import hashlib
+import json
+import os
 import tarfile
 import tempfile
 import unittest
@@ -18,12 +20,16 @@ from validation_lib import (
 
 
 FAKE_AY = r'''#!/usr/bin/env python3
+import json
+import os
 import shutil
 import sys
 import tarfile
 from pathlib import Path
 
 args = sys.argv[1:]
+with (Path(__file__).parent / "calls.jsonl").open("a") as calls:
+    calls.write(json.dumps({"args": args, "env": dict(os.environ)}) + "\n")
 if args[:2] == ["fetch", "sandbox"]:
     archive = Path(args[args.index("--resource-file") + 1])
     destination = Path(args[args.index("--untar-to") + 1])
@@ -57,7 +63,7 @@ class ValidationTest(unittest.TestCase):
             for item in sorted(staging.rglob("*")):
                 stream.add(item, arcname=item.relative_to(staging))
 
-    def run_case(self, reference: str, xfail=False):
+    def run_case(self, reference: str, xfail=False, **extra):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
@@ -75,10 +81,18 @@ class ValidationTest(unittest.TestCase):
             "slice_url": "https://example/100",
             "graph_url": "https://example/200",
             "xfail": xfail,
+            **extra,
         }
         output = root / "output"
         result = CaseRunner(ay, spec, output, 10).execute(source, graph)
         return result, output
+
+    def fake_ay_calls(self, output: Path) -> dict[str, list[dict]]:
+        calls: dict[str, list[dict]] = {}
+        for line in (output.parent / "calls.jsonl").read_text().splitlines():
+            call = json.loads(line)
+            calls.setdefault(call["args"][0] if call["args"][0] != "dev" else call["args"][2], []).append(call)
+        return calls
 
     def test_parity_counts_and_sample(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -102,6 +116,37 @@ class ValidationTest(unittest.TestCase):
         self.assertEqual(result["status"], "OK")
         self.assertTrue(result["exact"])
         self.assertTrue((output / "commands.txt").is_file())
+
+    def test_case_runner_passes_targets_and_env(self):
+        env = {"AUTOCHECK": "1", "YA_NO_GEN_RENAMED_RESULTS": "1"}
+        targets = ["pkg/app", "pkg/lib"]
+        with mock.patch.dict(os.environ, {"CC": "gcc"}):
+            for name in env:
+                os.environ.pop(name, None)
+            result, output = self.run_case(
+                '{"node":1}\n',
+                target=targets,
+                command=["ya", "make", "-G", *targets],
+                env=env,
+            )
+        self.assertEqual(result["status"], "OK")
+        self.assertEqual(result["target"], targets)
+        calls = self.fake_ay_calls(output)
+        self.assertEqual(sorted(calls), ["fetch", "make", "normalize", "sort"])
+        [make] = calls["make"]
+        self.assertEqual(make["args"][:4], ["make", "-G", *targets])
+        self.assertEqual({name: make["env"].get(name) for name in env}, env)
+        self.assertNotIn("CC", make["env"])
+        for call in calls["normalize"]:
+            target_values = [
+                call["args"][index + 1]
+                for index, value in enumerate(call["args"])
+                if value == "--target"
+            ]
+            self.assertEqual(target_values, targets)
+        for name in ("fetch", "normalize", "sort"):
+            for call in calls[name]:
+                self.assertFalse(env.keys() & call["env"].keys(), call["args"])
 
     def test_case_runner_reports_auto_xfail_with_parity(self):
         result, output = self.run_case('{"node":2}\n', xfail="auto")
@@ -144,7 +189,7 @@ class ValidationTest(unittest.TestCase):
 
     def test_summary_is_structured_and_readable(self):
         results = [
-            {"schema": 1, "case": "b", "target": "b", "status": "XFAIL", "exact": False},
+            {"schema": 1, "case": "b", "target": ["b/x", "b/y"], "status": "XFAIL", "exact": False},
             {"schema": 1, "case": "a", "target": "a", "status": "OK", "exact": True},
         ]
         with tempfile.TemporaryDirectory() as directory:
