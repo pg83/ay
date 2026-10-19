@@ -10,6 +10,11 @@ const (
 	prewarmContent
 )
 
+const (
+	prewarmRootMissing = 1 + iota
+	prewarmRootFound
+)
+
 type GenCaches struct {
 	parsers     *IncludeParserManager
 	parsedFiles map[string]*MakeFile
@@ -26,8 +31,8 @@ type GenPrewarm struct {
 	dirs      []PrewarmDir
 	files     []VFS
 	seenDirs  map[string]uint8
-	seenFiles *IntSet
-	probed    *IntSet
+	seenFiles BitSet
+	rooted    TwoBitSet
 }
 
 func newGenCaches(fs FS) *GenCaches {
@@ -39,11 +44,9 @@ func newGenCaches(fs FS) *GenCaches {
 
 func (c *GenCaches) prewarm(fs FS, targets []string) {
 	w := &GenPrewarm{
-		fs:        fs,
-		caches:    c,
-		seenDirs:  map[string]uint8{},
-		seenFiles: newIntSet(1 << 12),
-		probed:    newIntSet(1 << 12),
+		fs:       fs,
+		caches:   c,
+		seenDirs: map[string]uint8{},
 	}
 
 	for _, t := range targets {
@@ -98,11 +101,11 @@ func (w *GenPrewarm) pushDir(dir string, mode uint8) {
 }
 
 func (w *GenPrewarm) pushFile(v VFS) {
-	if seen, _ := w.seenFiles.get(uint64(v)); seen {
+	if w.seenFiles.has(uint32(v)) {
 		return
 	}
 
-	w.seenFiles.put(uint64(v), true)
+	w.seenFiles.add(uint32(v))
 	w.files = append(w.files, v)
 }
 
@@ -206,33 +209,31 @@ func (w *GenPrewarm) file(v VFS) {
 	dir := internStr(path.Dir(rel))
 
 	for _, d := range pm.sourceParsedWalkable(v, nil) {
-		if d.kind == includeQuoted && w.probe(dir, d.target) {
+		target := d.target.string()
+
+		if d.kind == includeQuoted && prewarmPath(target) && w.fs.isFile(dir, target) {
+			w.pushFile(sourceJoinClean(dir.string(), target))
+
 			continue
 		}
 
-		w.probe(srcRootRel, d.target)
+		w.probeRoot(d.target)
 	}
 }
 
-func (w *GenPrewarm) probe(dir STR, target ANY) bool {
-	key := uint64(dir)<<32 | uint64(target)
-
-	if found, probed := w.probed.get(key); probed {
-		return found
+func (w *GenPrewarm) probeRoot(target ANY) {
+	if w.rooted.get(uint32(target)) != 0 {
+		return
 	}
 
 	t := target.string()
-	found := prewarmPath(t) && w.fs.isFile(dir, t)
 
-	w.probed.put(key, found)
+	if !prewarmPath(t) || !w.fs.isFile(srcRootRel, t) {
+		w.rooted.set(uint32(target), prewarmRootMissing)
 
-	switch {
-	case !found:
-	case dir == srcRootRel:
-		w.pushFile(sourceClean(t))
-	default:
-		w.pushFile(sourceJoinClean(dir.string(), t))
+		return
 	}
 
-	return found
+	w.rooted.set(uint32(target), prewarmRootFound)
+	w.pushFile(sourceClean(t))
 }
