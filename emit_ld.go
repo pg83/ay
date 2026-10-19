@@ -41,6 +41,12 @@ const vcsJSONContent = `{
     "ARCADIA_TAG": ""
 }`
 
+type DynLibLink struct {
+	soname    string
+	fixElf    VFS
+	fixElfRef NodeRef
+}
+
 func emitLD(
 	instance ModuleInstance,
 	binaryName string,
@@ -85,6 +91,7 @@ func emitLD(
 	scripts ScriptDeps,
 	emit *StreamingEmitter,
 	vcsRef NodeRef,
+	dyn *DynLibLink,
 ) NodeRef {
 	na := emit.nodeArenas()
 
@@ -97,13 +104,13 @@ func emitLD(
 	vcsOVFS := build(binPrefix, "__vcs_version__.c", instance.Platform.objectSuffix())
 	cmd0 := composeLDCmdVcsInfo(na, tc, vcsCVFS)
 	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, tc, vcsCVFS, vcsOVFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
-	cmd2 := composeLDCmdLinkExe(na, instance.Platform, tc, outputVFS, vcsOVFS, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm)
+	cmd2 := composeLDCmdLinkExe(na, instance.Platform, tc, outputVFS, vcsOVFS, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm, dyn)
 	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputVFS, wantsSplitDwarf)
 	envVcsOnly := envVarsVCS
 	envFull := hostP.toolEnv()
 	sbomEmbed := len(sbomPaths) > 0
 	sbomJSON := build(binPrefix, "__sbomdata.json")
-	emitCopy := instance.Platform.Flags[envOPENSOURCE] == strYes || len(dynamicPaths) > 0
+	emitCopy := dyn == nil && (instance.Platform.Flags[envOPENSOURCE] == strYes || len(dynamicPaths) > 0)
 
 	var cmdLinkSbom, cmd3, cmdObjcopy []ANY
 
@@ -156,7 +163,7 @@ func emitLD(
 
 	inputTail = inputTail[:len(inputTail):len(inputTail)]
 
-	extraChunks := [3][]VFS{inputTail, nil, nil}
+	extraChunks := [5][]VFS{inputTail}
 	nExtra := 1
 
 	if len(sbomPaths) > 0 {
@@ -164,6 +171,16 @@ func emitLD(
 		extraChunks[2] = na.srcChunk(linkSbomScriptVFS)
 
 		nExtra = 3
+	}
+
+	if dyn != nil {
+		extraChunks[nExtra] = scripts[ldLinkDynLibVFS.rel()]
+		nExtra++
+
+		if dyn.fixElf != 0 {
+			extraChunks[nExtra] = na.srcChunk(dyn.fixElf)
+			nExtra++
+		}
 	}
 
 	inputs := composeLDInputs(na, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles, extraChunks[:nExtra]...)
@@ -206,6 +223,10 @@ func emitLD(
 		KV:        &ldKV,
 		DepRefs:   deps,
 		Resources: instance.Platform.UsesLinkResources,
+	}
+
+	if dyn != nil && dyn.fixElfRef != 0 {
+		n.ForeignDepRefs = na.refList(dyn.fixElfRef)
 	}
 
 	return emit.emitNode(n)
@@ -290,17 +311,18 @@ func composeLDCmdVcsCompileForced(na *NodeArenas, p *Platform, tc ModuleToolchai
 	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
-func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
-	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
+func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm bool, dyn *DynLibLink) []ANY {
+	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + 7 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
-	argCap += 2 + len(pluginPaths)
+	argCap += 2 + len(pluginPaths) + 2*len(wholeArchiveCmdPaths) + 2*len(wholeArchivePaths)
 
 	cmdArgs := na.anys.alloc(argCap)[:0]
 
-	cmdArgs = append(cmdArgs,
-		tc.Python3.any(),
-		ldLinkExeVFS.any(),
-	)
+	if dyn != nil {
+		cmdArgs = append(cmdArgs, tc.Python3.any(), ldLinkDynLibVFS.any(), argTarget.any(), output.any())
+	} else {
+		cmdArgs = append(cmdArgs, tc.Python3.any(), ldLinkExeVFS.any())
+	}
 
 	cmdArgs = append(cmdArgs, argStartPlugins.any())
 
@@ -310,11 +332,12 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 
 	cmdArgs = append(cmdArgs, argEndPlugins.any())
 
-	cmdArgs = append(cmdArgs,
-		argClangVer.any(), internStr(p.ClangVer).any(),
-		argSourceRoot.any(), argS.any(),
-		argBuildRoot.any(), argB.any(),
-	)
+	roots := []ANY{argSourceRoot.any(), argS.any(), argBuildRoot.any(), argB.any()}
+
+	if dyn == nil {
+		cmdArgs = append(cmdArgs, argClangVer.any(), internStr(p.ClangVer).any())
+		cmdArgs = append(cmdArgs, roots...)
+	}
 
 	for _, p := range wholeArchiveCmdPaths {
 		cmdArgs = append(cmdArgs, argWholeArchiveLibs.any(), p.rel().any())
@@ -324,9 +347,17 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 		cmdArgs = append(cmdArgs, argWholeArchiveLibs.any(), p.rel().any())
 	}
 
+	if dyn != nil {
+		cmdArgs = append(cmdArgs, roots...)
+	}
+
+	cmdArgs = append(cmdArgs, argArchLinux.any(), argObjcopyExe.any(), tc.Objcopy.any())
+
+	if dyn != nil && dyn.fixElf != 0 {
+		cmdArgs = append(cmdArgs, argFixElf.any(), dyn.fixElf.any())
+	}
+
 	cmdArgs = append(cmdArgs,
-		argArchLinux.any(),
-		argObjcopyExe.any(), tc.Objcopy.any(),
 		tc.CXX.any(),
 		argWlWholeArchive.any(),
 		argYaStartCommandFile.any(),
@@ -353,6 +384,10 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 
 	cmdArgs = append(cmdArgs, argDashO.any(), output.any())
 
+	if dyn != nil {
+		cmdArgs = append(cmdArgs, argShared.any(), internV("-Wl,-soname,", dyn.soname).any())
+	}
+
 	bundle := compileFlagBundleFor(p)
 
 	cmdArgs = append(cmdArgs, p.TargetArg.any())
@@ -365,13 +400,13 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 	}
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.any())
-	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm)...)
+	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm, dyn != nil)...)
 	na.anys.commit(len(cmdArgs))
 
 	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
-func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
+func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm, dynLib bool) []ANY {
 	var trailer []ANY
 
 	if !noExportDynSymbols {
@@ -395,6 +430,11 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	}
 
 	trailer = appendInternAnys(trailer, p.linkerSelectionGDBIndexFlags())
+
+	if dynLib && p.OS == OSLinux {
+		trailer = append(trailer, argWlZNotext.any())
+	}
+
 	trailer = appendAnyLists(trailer, peerRPathFlagsGlobal)
 
 	if p.PIC {

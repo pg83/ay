@@ -289,6 +289,10 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 			peers = append(peers, "contrib/libs/libm")
 		}
 
+		if env.bool(envAUTOCHECK) && env.bool(envOS_LINUX) {
+			peers = append(peers, "contrib/libs/libeatmydata")
+		}
+
 		peers = append(peers, "build/cow/on")
 		peers = appendImplicitPeers(peers, programAllocatorDefaults, rc)
 	} else {

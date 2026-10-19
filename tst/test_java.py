@@ -270,5 +270,34 @@ class JavaSandboxedInputsTest(unittest.TestCase):
         self.assertIn("$(B)/build/platform/java/grpc/grpc", pb["inputs"])
 
 
+class JavaJniTest(unittest.TestCase):
+    def test_dll_peer_is_a_pic_shared_object_packed_into_the_jar(self):
+        bare = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+        files = java_tree(**{
+            "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nADD_DLLS_TO_JAR()\nPEERDIR(jni)\nEND()\n",
+            "jni/ya.make": f"DLL(app_jni)\n{bare}EXPORTS_SCRIPT(jni.exports)\nSRCS(j.cpp)\nPEERDIR(dep)\nEND()\n",
+            "jni/j.cpp": "int j;\n",
+            "jni/jni.exports": "{};\n",
+            "dep/ya.make": f"LIBRARY()\n{bare}SRCS(d.cpp)\nEND()\n",
+            "dep/d.cpp": "int d;\n",
+        })
+        graph = lib.make(files, "app")
+        so = lib.node_by_output(graph, "$(B)/jni/libapp_jni.so")
+        link = next(c["cmd_args"] for c in so["cmds"] if "$(S)/build/scripts/link_dyn_lib.py" in c["cmd_args"])
+        self.assertIn("$(B)/jni/j.cpp.pic.o", link)
+        self.assertIn("-Wl,--version-script=$(S)/jni/jni.exports", link)
+        self.assertIn("dep/libdep.a", link)
+        self.assertIn("-fPIC", lib.node_by_output(graph, "$(B)/dep/d.cpp.pic.o")["cmds"][0]["cmd_args"])
+        jv = jv_node(graph, "$(B)/app/app.jar")
+        self.assertIn("jni/libapp_jni.so", writer_args(jv, "bfg.txt"))
+        self.assertIn("$(B)/jni/libapp_jni.so", jv["inputs"])
+        self.assertIn(so["uid"], jv["deps"])
+        jni = next(c["cmd_args"] for c in jv["cmds"] if "link_or_copy_to_dir" in c["cmd_args"])
+        start = jni.index("--ya-start-command-file")
+        self.assertEqual(jni[start:], [
+            "--ya-start-command-file", "$(B)/jni/libapp_jni.so", "--ya-end-command-file", "$(B)/app/cls",
+        ])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

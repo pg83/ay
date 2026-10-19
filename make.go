@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -260,9 +261,17 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Pla
 	localFlags := readLocalYmake(fs)
 	hostRun := startYmakeConf(fs, srcRoot, mf.hostBuildType, !mf.dist, localFlags, hostFlags, hostTC)
 	targetRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, targetFlags, targetTC)
+	picFlags := maps.Clone(targetFlags)
+
+	// ya configures the pic graph of a target with its flags minus FORCE_NO_PIC
+	// (devtools/ya/build/graph.py _build_no_pic).
+	delete(picFlags, "FORCE_NO_PIC")
+
+	picRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
 
 	caches.prewarm(fs, mf.targets)
 
+	wlSystemLibs := confSystemLibsViaWl(fs)
 	hostP = newPlatform(
 		hOS,
 		hISA,
@@ -271,17 +280,14 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Pla
 		hostRun.wait(),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
+		wlSystemLibs,
 	)
 
-	targetP = newPlatform(
-		tOS,
-		tISA,
-		mf.buildType,
-		targetTC,
-		targetRun.wait(),
-		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS")),
-		compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS")),
-	)
+	targetCFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS"))
+	targetCXXFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS"))
+
+	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, targetRun.wait(), targetCFlags, targetCXXFlags, wlSystemLibs)
+	targetP.picVariant = newPlatform(tOS, tISA, mf.buildType, targetTC, picRun.wait(), targetCFlags, targetCXXFlags, wlSystemLibs)
 
 	return hostP, targetP
 }

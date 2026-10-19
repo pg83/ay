@@ -100,7 +100,7 @@ class YaMakeModulesTest(unittest.TestCase):
             ("PROTO_LIBRARY()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("PROTO_SCHEMA()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("PROTO_DESCRIPTIONS()", [], [("PD", "$(B)/a/a.protodesc"), ("PD", "$(B)/a/a.tar")]),
-            ("DLL()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
+            ("DLL()", [], [("CC", "$(B)/a/x.cpp.pic.o"), ("LD", "$(B)/a/liba.so")]),
             ("SO_PROGRAM()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("PACKAGE()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("UNION()", [], [("CP", "$(B)/a/x.cpp"), ("UN", "$(B)/a/a.pkg.fake"), ("UN", "$(B)/a/x.cpp")]),
@@ -165,7 +165,6 @@ class YaMakeModulesTest(unittest.TestCase):
         cases = [
             ("LIBRARY()\nSRCS(x.cpp)\nPROGRAM()\nEND()\n", "gen: a declares multiple modules (LIBRARY and PROGRAM); only one is allowed"),
             ("SRCS(x.cpp)\n", "gen: a has no module declaration (PROGRAM/LIBRARY)"),
-            ("DLL_TOOL()\nSRCS(x.cpp)\nEND()\n", "gen: a DLL requires EXPORTS_SCRIPT(...)"),
             ("DYNAMIC_LIBRARY()\nSRCS(x.cpp)\nEND()\n", "gen: a DYNAMIC_LIBRARY requires a basename argument"),
             ("PREBUILT_PROGRAM()\nEND()\n", "gen: a: PREBUILT_PROGRAM has no PRIMARY_OUTPUT/resource"),
         ]

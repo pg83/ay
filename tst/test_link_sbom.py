@@ -251,13 +251,8 @@ class SbomTest(unittest.TestCase):
             ],
         )
         self.assertEqual(node["cmds"][2]["cwd"], "$(B)")
-        self.assertEqual(
-            node["inputs"][-2:],
-            [
-                component("dlltool/libt.CPP.component.sbom"),
-                "$(S)/build/internal/scripts/link_sbom.py",
-            ],
-        )
+        self.assertIn(component("dlltool/libt.CPP.component.sbom"), node["inputs"])
+        self.assertIn("$(S)/build/internal/scripts/link_sbom.py", node["inputs"])
 
     def test_py3_program_component_precedes_lld_and_unversioned_toolchain(self):
         files = fixture()

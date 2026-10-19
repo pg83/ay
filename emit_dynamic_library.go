@@ -2,7 +2,6 @@ package main
 
 import (
 	"slices"
-	"strings"
 )
 
 var (
@@ -10,12 +9,14 @@ var (
 	dynamicLibraryKV = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
 )
 
-func dllOutputName(stmt *ModuleStmt) string {
+func dllOutputName(instance ModuleInstance, stmt *ModuleStmt) string {
 	prefix := "lib"
 	name := ""
 
 	if len(stmt.Args) > 0 {
 		name = stmt.Args[0].string()
+	} else {
+		name = javaRealPrjName(instance.Path.relString(), javaNameTwoDirs)
 	}
 
 	for i := 1; i+1 < len(stmt.Args); i++ {
@@ -25,126 +26,6 @@ func dllOutputName(stmt *ModuleStmt) string {
 	}
 
 	return prefix + name + ".so"
-}
-
-func (e *EmitContext) emitDllShared(ccRefs []NodeRef, ccOutputs []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS) *ModuleEmitResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	na := ctx.na
-
-	if d.exportsScript == nil {
-		throwFmt("gen: %s DLL requires EXPORTS_SCRIPT(...)", instance.Path.relString())
-	}
-
-	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
-
-	if !effectiveNoPlatform(d.flags) {
-		cowRes := genModule(ctx, e.derivePeerInstance("build/cow/on"))
-
-		if cowRes.ARPath != nil {
-			peerArchiveRefs = append([]NodeRef{cowRes.ARRef}, peerArchiveRefs...)
-			peerArchivePaths = append([]VFS{*cowRes.ARPath}, peerArchivePaths...)
-		}
-	}
-
-	outputName := dllOutputName(d.moduleStmt)
-	outputVFS := build(instance.Path.relString(), "/", outputName)
-	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")
-	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c", instance.Platform.objectSuffix())
-	cmd0 := composeLDCmdVcsInfo(na, d.tc, vcsCVFS)
-	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
-	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, ccOutputs, peerArchivePaths, nil, nil, d.exportsScript.string(), fixElfPath)
-	envVcsOnly := envVarsVCS
-	envFull := ctx.host.toolEnv()
-	ldSbomRefs := peerSbomRefs
-	ldSbomPaths := peerSbomPaths
-	sbomJSON := build(instance.Path.relString(), "/__sbomdata.json")
-	sbomEmbed := false
-
-	if sbomActive(ctx, instance) && instance.Platform.BuildRelease {
-		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !slices.Contains(ldSbomPaths, *p) {
-			ldSbomRefs = append(ldSbomRefs, *r)
-			ldSbomPaths = append(ldSbomPaths, *p)
-		}
-
-		if sbomQualifies(d) {
-			if or, op := e.emitSbomComponent(strings.TrimSuffix(outputName, ".so")); or != nil {
-				ldSbomRefs = append(ldSbomRefs, *or)
-				ldSbomPaths = append(ldSbomPaths, *op)
-			}
-		}
-
-		sbomEmbed = len(ldSbomPaths) > 0
-	}
-
-	cmds := na.cmds.alloc(5)[:0]
-
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
-
-	if sbomEmbed {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkSbom(na, d.tc, d.unit.SbomLang, instance.Path.rel(), sbomJSON, ldSbomPaths)), Cwd: bldRootDirVFS, Env: envVcsOnly})
-	}
-
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
-
-	if sbomEmbed {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(na, d.tc, sbomJSON, outputVFS)), Env: envVcsOnly})
-	}
-
-	na.cmds.commit(len(cmds))
-
-	cmds = cmds[:len(cmds):len(cmds)]
-
-	peerChunk := na.vfsList(peerArchivePaths...)
-	svnChunk := na.vfsList(ldSvnInterfaceVFS, ldSvnversionHVFS, source(instance.Path.relString(), "/", d.exportsScript.string()))
-	ccChunk := na.vfsList(ccOutputs...)
-	inputs := na.inputs.alloc(8)[:0]
-
-	inputs = append(inputs, peerChunk, na.srcChunk(fixElfPath), ctx.scripts[ldVcsInfoVFS.rel()], ctx.scripts[ldLinkDynLibVFS.rel()])
-	inputs = append(inputs, svnChunk, ccChunk)
-
-	if sbomEmbed {
-		inputs = append(inputs, na.vfsList(ldSbomPaths...))
-		inputs = append(inputs, na.srcChunk(linkSbomScriptVFS))
-	}
-
-	na.inputs.commit(len(inputs))
-
-	inputsChunks := InputChunks(inputs[:len(inputs):len(inputs)])
-	deps := na.noderefs.alloc(len(peerArchiveRefs) + len(ccRefs) + len(ldSbomRefs) + 1)[:0]
-
-	deps = append(deps, peerArchiveRefs...)
-	deps = append(deps, ccRefs...)
-
-	if sbomEmbed {
-		deps = append(deps, ldSbomRefs...)
-	}
-
-	deps = append(deps, ctx.vcsRef)
-	na.noderefs.commit(len(deps))
-
-	deps = deps[:len(deps):len(deps)]
-
-	n := Node{
-		Platform:  instance.Platform,
-		Cmds:      cmds,
-		Env:       envFull,
-		Inputs:    inputsChunks,
-		Outputs:   na.vfsList(build(instance.Path.relString(), "/", outputName)),
-		KV:        &dynamicLibraryKV,
-		DepRefs:   deps,
-		Resources: instance.Platform.UsesLinkResources,
-	}
-
-	n.ForeignDepRefs = na.refList(fixElfRef)
-
-	ref := e.emitNode(n)
-
-	return &ModuleEmitResult{
-		LDRef:          ref,
-		LDPath:         ptr(build(instance.Path.relString(), "/", outputName)),
-		ModuleStmtName: d.moduleStmt.Name,
-		InducedDeps:    d.inducedDeps,
-	}
 }
 
 func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {

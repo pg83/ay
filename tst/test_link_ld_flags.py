@@ -162,5 +162,45 @@ class LinkFlagsTest(unittest.TestCase):
         )
 
 
+class AutocheckLinkTest(unittest.TestCase):
+    def tree(self):
+        files = fixture()
+        files["contrib/libs/libeatmydata/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(e.c)\nEND()\n"
+        files["contrib/libs/libeatmydata/e.c"] = "int e;\n"
+        files["build/cow/on/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(c.c)\nEND()\n"
+        files["build/cow/on/c.c"] = "int c;\n"
+        lib.tool_program(files, "tools/gen", "gen")
+        files["gen/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}RUN_PROGRAM(tools/gen OUT g.h)\nSRCS(g.cpp)\nEND()\n"
+        files["gen/g.cpp"] = '#include "g.h"\n'
+        return files
+
+    def test_autocheck_links_eatmydata(self):
+        files = self.tree()
+        files["prog/ya.make"] = "PROGRAM()\nNO_LIBC()\nNO_UTIL()\nSRCS(m.cpp)\nEND()\n"
+        graph = lib.make(files, "prog", *X86_64, "-DAUTOCHECK=yes")
+        link = command_with(lib.node_by_output(graph, "$(B)/prog/prog"), "link_exe.py")
+        self.assertIn("contrib/libs/libeatmydata/libcontrib-libs-libeatmydata.a", link)
+        graph = lib.make(files, "prog", *X86_64)
+        link = command_with(lib.node_by_output(graph, "$(B)/prog/prog"), "link_exe.py")
+        self.assertNotIn("contrib/libs/libeatmydata/libcontrib-libs-libeatmydata.a", link)
+
+    def test_autocheck_links_pic_tools_without_pie(self):
+        files = self.tree()
+        host = ("--host-platform", "default-linux-x86_64")
+        graph = lib.make(files, "gen", *X86_64, *host)
+        tool = command_with(lib.node_by_output(graph, "$(B)/tools/gen/gen"), "link_exe.py")
+        self.assertNotIn("-Wl,-no-pie", tool)
+        graph = lib.make(files, "gen", *X86_64, *host, "--host-platform-flag", "AUTOCHECK=yes")
+        tool = command_with(lib.node_by_output(graph, "$(B)/tools/gen/gen"), "link_exe.py")
+        self.assertEqual(tool[-1], "-Wl,-no-pie")
+
+    def test_system_libraries_follow_ld_conf(self):
+        files = fixture()
+        files["build/conf/linkers/ld.conf"] = "    _C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB -Wl,-lpthread,-lc\n"
+        graph = lib.make(files, "plain", *X86_64)
+        link = trailer(command_with(lib.node_by_output(graph, "$(B)/plain/plain"), "link_exe.py"))
+        self.assertEqual(link[link.index("-nodefaultlibs"):link.index("-lm")], ["-nodefaultlibs", "-Wl,-lpthread,-lc"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

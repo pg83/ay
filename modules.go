@@ -234,6 +234,7 @@ type ModuleData struct {
 	bundles                  []BundleEntry
 	pyMain                   *ANY
 	noStrip                  bool
+	strip                    bool
 	unit                     ModuleUnit
 	noCheckImports           []ANY
 	noCheckImportsDisabled   bool
@@ -1976,6 +1977,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.noMypy = true
 	case tokNoOptimize:
 		d.noOptimize = true
+	case tokStrip:
+		d.strip = true
 	case tokNoOptimizePyProtos:
 		d.optimizePyProtos = false
 		d.optimizePyProtosSet = true

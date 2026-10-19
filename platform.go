@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"slices"
 	"strings"
 )
@@ -10,7 +11,21 @@ var (
 	wrapccPyChunk    = []VFS{wrapccPyVFS}
 )
 
+const (
+	ldConfRel         = "build/conf/linkers/ld.conf"
+	ldSystemLibsViaWl = "_C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB -Wl,-lpthread,-lc"
+)
+
+func confSystemLibsViaWl(fs FS) bool {
+	if !fs.isFile(srcRootRel, ldConfRel) {
+		return false
+	}
+
+	return bytes.Contains(concatChunks(fs.read(ldConfRel)), []byte(ldSystemLibsViaWl))
+}
+
 type Platform struct {
+	picVariant            *Platform
 	OS                    OS
 	ISA                   ISA
 	Target                PlatformID
@@ -92,7 +107,7 @@ func internFlags(flags map[string]string) map[ENV]STR {
 	return out
 }
 
-func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[string]string, cflagsEnv, cxxflagsEnv string) *Platform {
+func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[string]string, cflagsEnv, cxxflagsEnv string, wlSystemLibs bool) *Platform {
 	rebaseToolchainRoot(flags, tc)
 
 	clangVer := flags["COMPILER_VERSION"]
@@ -108,6 +123,10 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	} else {
 		linkPreludeExtra = []string{"-ldl", "-lrt"}
 		systemLibs = []string{"-nodefaultlibs", "-lpthread", "-lc"}
+
+		if wlSystemLibs {
+			systemLibs = []string{"-nodefaultlibs", "-Wl,-lpthread,-lc"}
+		}
 	}
 
 	p := &Platform{
@@ -342,11 +361,19 @@ func (p *Platform) linkerSelectionTailFlags() []string {
 }
 
 func (p *Platform) linkerSelectionNoPieFlags() []string {
-	if p.PIC {
+	if p.PIC && p.Flags[envAUTOCHECK] != strYes {
 		return nil
 	}
 
 	return []string{"-Wl,-no-pie"}
+}
+
+func (p *Platform) pic() *Platform {
+	if p.PIC {
+		return p
+	}
+
+	return p.picVariant
 }
 
 func (p *Platform) objectSuffix() string {

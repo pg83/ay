@@ -302,6 +302,18 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 		b.outputs = append(b.outputs, srcJar)
 	}
 
+	if d.addDLLs {
+		jni := b.fsTools(strLinkOrCopyToDir.any(), strYaStartCommandFile.any())
+
+		for _, ext := range []string{".so", ".dll", ".dylib"} {
+			for _, p := range javaClosureJars(closure, ext) {
+				jni = append(jni, p.any())
+			}
+		}
+
+		b.cmd(append(jni, strYaEndCommandFile.any(), cls.any()), 0)
+	}
+
 	packed := jm.target
 
 	if d.uberjar {

@@ -122,6 +122,7 @@ var acknowledgedTokSet = func() BitSet {
 const (
 	variantDemandShift     = 5
 	variantDemandMask      = uint16(0x7) << variantDemandShift
+	variantPIC             = uint16(1) << 14
 	peerKindLangDefault    = 0
 	peerKindProgramDefault = 1
 	peerKindUserPeer       = 2
@@ -229,6 +230,7 @@ type GenCtx struct {
 	parsedFiles     map[string]*MakeFile
 	prodOuts        IdValueMap
 	goEnvMemo       map[[2]STR]EnvVars
+	scannerTargetPIC *IncludeScanner
 }
 
 type moduleMemoEntry struct {
@@ -353,13 +355,7 @@ func (ctx *GenCtx) linkingTargetsFirst(targets []string) []string {
 }
 
 func (ctx *GenCtx) moduleName(dir string) TOK {
-	for _, st := range moduleStmts(ctx, filepath.Clean(dir)) {
-		if m, ok := st.(*ModuleStmt); ok {
-			return m.Name
-		}
-	}
-
-	return 0
+	return stmtsModuleName(moduleStmts(ctx, filepath.Clean(dir)))
 }
 
 func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance {
@@ -418,6 +414,32 @@ func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
 
 func isFinalTargetModuleType(name TOK) bool {
 	return isProgramModuleType(name) || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib
+}
+
+func picTransition(name TOK) bool {
+	return isDllModuleType(name)
+}
+
+func isDllModuleType(name TOK) bool {
+	return name == tokDll || name == tokDllTool
+}
+
+func (e *EmitContext) moduleInputArg(arg *ANY) *ANY {
+	if arg == nil || !e.ctx.fs.isFile(e.instance.Path.rel(), arg.string()) {
+		return arg
+	}
+
+	return ptr(internV(e.instance.Path.relString(), "/", arg.string()).any())
+}
+
+func stmtsModuleName(stmts []Stmt) TOK {
+	for _, st := range stmts {
+		if m, ok := st.(*ModuleStmt); ok {
+			return m.Name
+		}
+	}
+
+	return 0
 }
 
 func isLinkingModuleType(name TOK) bool {
@@ -602,6 +624,11 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		d.allocatorName = strJ.any()
 	}
 
+	if !d.hadAllocator && isDllModuleType(d.moduleStmt.Name) {
+		d.hadAllocator = true
+		d.allocatorName = strFAKE.any()
+	}
+
 	py3ProtoVariant := d.moduleStmt.Name == tokProtoLibrary && d.usePython3
 
 	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
@@ -763,6 +790,19 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	defer delete(ctx.walking, instance)
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
+
+	if !instance.Platform.PIC && instance.Language == LangCPP && picTransition(stmtsModuleName(stmts)) {
+		pic := instance
+
+		pic.Platform = instance.Platform.pic()
+
+		r := genModule(ctx, pic)
+
+		ctx.memoPut(instance, r)
+
+		return r
+	}
+
 	frame := ctx.pushFrame()
 	env := buildIfEnvInto(&frame.ifEnv, instance)
 
@@ -904,7 +944,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	languageDefaults := e.defaultPeerdirsForModule()
-	isProgram := isProgramModuleType(d.moduleStmt.Name) && !isRuntimeAncestor(instance.Path.relString())
+	isProgram := (isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name)) && !isRuntimeAncestor(instance.Path.relString())
 	unitTestPeer := unittestForPeerPath(d.moduleStmt)
 
 	var preUserProgDefaults []string
@@ -1793,8 +1833,21 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
-	if isProgramModuleType(d.moduleStmt.Name) {
+	if isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name) {
 		binaryName := programBinaryName(instance, d.moduleStmt)
+		exportsScript := e.moduleInputArg(d.exportsScript)
+
+		var dyn *DynLibLink
+
+		if isDllModuleType(d.moduleStmt.Name) {
+			binaryName = dllOutputName(instance, d.moduleStmt)
+			dyn = &DynLibLink{soname: binaryName}
+
+			if instance.Platform.OS == OSLinux && instance.Platform.ISA == ISAX8664 {
+				dyn.fixElfRef, dyn.fixElf = ctx.tool(argToolsFixElf)
+			}
+		}
+
 		ldPeerArchiveRefs := peerArchiveRefs
 		ldPeerArchivePaths := peerArchivePaths
 		ldPeerLinkCmdPaths := peerLinkCmdPaths
@@ -1821,8 +1874,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ownRPathFlags = append([]ANY(nil), peerRPathFlagsGlobal...)
 		}
 
-		wantsStrip := (d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Program) && !d.noStrip &&
+		py3Strip := (d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Program) &&
 			!instance.Platform.pythonNoStrip()
+
+		wantsStrip := (py3Strip || d.strip) && !d.noStrip
 
 		var programModuleTag STR
 
@@ -1834,7 +1889,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		var ownSbomPath *VFS
 
 		if sbomActive(ctx, instance) && sbomQualifies(d) {
-			ownSbomRef, ownSbomPath = e.emitSbomComponent(binaryName)
+			sbomName := binaryName
+
+			if dyn != nil {
+				sbomName = strings.TrimSuffix(binaryName, ".so")
+			}
+
+			ownSbomRef, ownSbomPath = e.emitSbomComponent(sbomName)
 		}
 
 		var ldSbomRefs []NodeRef
@@ -1870,7 +1931,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ownRPathFlags,
 			peerRPathFlagsGlobal,
 			peerObjAddLibsGlobal,
-			d.exportsScript,
+			exportsScript,
 			d.flags.NoExportDynSymbols,
 			d.flags.NoCompilerWarnings,
 			d.noOptimize,
@@ -1885,6 +1946,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ctx.scripts,
 			ctx.emit,
 			ctx.vcsRef,
+			dyn,
 		)
 
 		ldPath := lDOutputPath(instance, binaryName)
@@ -1897,9 +1959,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		result := newResult()
 
-		result.ARRef = ldRef
-		result.ARPath = &ldPath
-		result.isPROGRAM = true
+		if dyn == nil {
+			result.ARRef = ldRef
+			result.ARPath = &ldPath
+			result.isPROGRAM = true
+		}
+
 		result.LDRef = ldRef
 		result.LDPath = &ldPath
 		result.SbomComponentRef = ownSbomRef
@@ -1944,14 +2009,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
 			globalMetas = append(globalMetas, objMetas...)
 		}
-	}
-
-	if d.moduleStmt.Name == tokDllTool {
-		result := e.emitDllShared(local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths)
-
-		ctx.memoPut(instance, result)
-
-		return result
 	}
 
 	var arPath *VFS
@@ -2208,8 +2265,12 @@ func (ctx *GenCtx) scannerFor(instance ModuleInstance) *IncludeScanner {
 func (ctx *GenCtx) instanceVariant(in ModuleInstance) uint16 {
 	pbit := uint16(0)
 
-	if in.Platform == ctx.host {
+	switch in.Platform {
+	case ctx.host:
 		pbit = 1
+	case ctx.target:
+	default:
+		pbit = variantPIC
 	}
 
 	return uint16(in.Path&1)<<15 | uint16(in.Kind)<<8 | uint16(in.Demand)<<variantDemandShift | uint16(in.Language)<<1 | pbit
@@ -2245,11 +2306,28 @@ func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) {
 }
 
 func (ctx *GenCtx) scannerForPlatform(p *Platform) *IncludeScanner {
-	if p == ctx.host {
+	switch p {
+	case ctx.host:
 		return ctx.scannerHost
+	case ctx.target:
+		return ctx.scannerTarget
 	}
 
-	return ctx.scannerTarget
+	return ctx.targetPICScanner()
+}
+
+func (ctx *GenCtx) targetPICScanner() *IncludeScanner {
+	if ctx.scannerTargetPIC == nil {
+		s := newIncludeScannerWith(ctx.parsers, nil, ctx.onWarn, ctx.buckets)
+
+		s.sysincl = ctx.scannerTarget.sysincl
+		s.codegen = newCodegenRegistry(ctx.na)
+		s.moduleByRef = &ctx.moduleByRef
+
+		ctx.scannerTargetPIC = s
+	}
+
+	return ctx.scannerTargetPIC
 }
 
 func (ctx *GenCtx) py3ccHead(py3ccBinary, py3ccSlowBin VFS) []ANY {

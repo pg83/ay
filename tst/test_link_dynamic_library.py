@@ -247,8 +247,6 @@ class DynamicLibraryTest(unittest.TestCase):
                 "gen: dyn DYNAMIC_LIBRARY requires DYNAMIC_LIBRARY_FROM(...)",
             "DYNAMIC_LIBRARY(x)\nDYNAMIC_LIBRARY_FROM(lib)\nEND()\n":
                 "gen: dyn DYNAMIC_LIBRARY requires EXPORTS_SCRIPT(...)",
-            "DLL_TOOL(x)\nSRCS(t.cpp)\nEND()\n":
-                "gen: dyn DLL requires EXPORTS_SCRIPT(...)",
         }
         for declaration, message in cases.items():
             with self.subTest(message=message):
@@ -276,8 +274,8 @@ class DynamicLibraryTest(unittest.TestCase):
         ])
         text = " ".join(command_with(node, "link_dyn_lib.py")["cmd_args"])
         self.assertIn(
-            "-Wl,--no-whole-archive $(B)/dlltool/__vcs_version__.c.o "
-            "$(B)/dlltool/t.cpp.o -o $(B)/dlltool/mytool.so -shared "
+            "-Wl,--no-whole-archive $(B)/dlltool/__vcs_version__.c.pic.o "
+            "$(B)/dlltool/t.cpp.pic.o -o $(B)/dlltool/mytool.so -shared "
             "-Wl,-soname,mytool.so",
             text,
         )
@@ -287,18 +285,28 @@ class DynamicLibraryTest(unittest.TestCase):
             text,
         )
         self.assertIn("-Wl,--version-script=$(S)/dlltool/t.exports", text)
-        self.assertEqual(node["inputs"][-1], "$(B)/dlltool/t.cpp.o")
+        self.assertIn("$(B)/dlltool/t.cpp.pic.o", node["inputs"])
         self.assertIn("$(S)/dlltool/t.exports", node["inputs"])
         self.assertEqual(
             [graph["graph"][ref]["outputs"][0] for ref in graph["result"]],
             ["$(B)/dlltool/mytool.so"],
         )
 
-    def test_dll_and_so_program_build_archives_and_recurse_finds_dll_tool(self):
+    def test_dll_links_pic_shared_object(self):
         files = base_files()
-        files["dll/ya.make"] = (
-            f"DLL(d 1 2)\n{NO_PLATFORM}SRCS(d.cpp)\nPEERDIR(lib2)\nEND()\n"
-        )
+        files["dll/ya.make"] = f"DLL(d)\n{NO_PLATFORM}STRIP()\nSRCS(d.cpp)\nPEERDIR(lib2)\nEND()\n"
+        files["dll/d.cpp"] = "int d;\n"
+        graph = lib.make(files, "dll")
+        node = lib.node_by_output(graph, "$(B)/dll/libd.so")
+        self.assertEqual([graph["graph"][ref]["outputs"][0] for ref in graph["result"]], ["$(B)/dll/libd.so"])
+        text = " ".join(command_with(node, "link_dyn_lib.py")["cmd_args"])
+        self.assertIn("$(B)/dll/d.cpp.pic.o -o $(B)/dll/libd.so -shared -Wl,-soname,libd.so", text)
+        self.assertNotIn("--version-script", text)
+        self.assertIn("-Wl,--strip-all -Wl,--gc-sections", text)
+        self.assertIn("-fPIC", lib.node_by_output(graph, "$(B)/lib2/b.cpp.pic.o")["cmds"][0]["cmd_args"])
+
+    def test_so_program_builds_archive_and_recurse_finds_dll_tool(self):
+        files = base_files()
         files["dll/d.cpp"] = "int d;\n"
         files["so/ya.make"] = (
             f"SO_PROGRAM(s)\n{NO_PLATFORM}SRCS(s.cpp)\nPEERDIR(lib2)\nEND()\n"
@@ -310,7 +318,7 @@ class DynamicLibraryTest(unittest.TestCase):
         files["dlltool/t.cpp"] = "int t;\n"
         files["dlltool/t.exports"] = "{};\n"
         files["top/ya.make"] = (
-            library("SRCS(top.cpp)\n") + "RECURSE(../dll ../so ../dlltool)\n"
+            library("SRCS(top.cpp)\n") + "RECURSE(../so ../dlltool)\n"
         )
         files["top/top.cpp"] = "int top;\n"
         graph = lib.make(files, "top")
@@ -319,7 +327,7 @@ class DynamicLibraryTest(unittest.TestCase):
             ["$(B)/top/libtop.a", "$(B)/dlltool/libtool.so"],
         )
 
-        for target, archive in (("dll", "$(B)/dll/libd.a"), ("so", "$(B)/so/libs.a")):
+        for target, archive in (("so", "$(B)/so/libs.a"),):
             with self.subTest(target=target):
                 graph = lib.make(files, target)
                 node = lib.node_by_output(graph, archive)
