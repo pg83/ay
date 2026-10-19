@@ -64,7 +64,9 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtGztProto:
 		e.emitLibraryGztProtoCompile(src)
 	case srcExtProto:
-		if e.d.unit.Tag == unitTagPy3Proto {
+		if isGoModuleType(e.d.unit.Type) {
+			e.emitGoProtoSource(meta)
+		} else if e.d.unit.Tag == unitTagPy3Proto {
 			e.emitPyProtoSource(src, 0)
 		} else {
 			e.emitCppProtoFamilySource(meta, cppProtoSpec)

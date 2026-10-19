@@ -146,6 +146,9 @@ type ModuleData struct {
 	goSkipTests              []ANY
 	noLint                   string
 	test                     TestMeta
+	mockgen                  GoMockgenVars
+	goCodegens               []GoCodegenStmt
+	goProtoOpts              []GoProtoOpt
 	cgoSrcs                  []ANY
 	cgoLdflags               []ANY
 	cgoCflags                []ANY
@@ -797,7 +800,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 
 				isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
 
-				if !isProtoLibrary || !env.bool(envPY3_PROTO) {
+				if !isGoModuleType(d.unit.Type) && (!isProtoLibrary || !env.bool(envPY3_PROTO)) {
 					d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any())
 				}
 			}
@@ -1042,6 +1045,11 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				d.docs = &DocsData{config: modulePath + "/.yfm"}
 			}
 
+			if v.Name == tokProtoLibrary && language == LangGo {
+				env.setString(envMODULE_TAG, "GO_PROTO")
+				env.setBool(envGO_PROTO, true)
+			}
+
 			if d.moduleStmt.Name == tokProtoLibrary {
 				if language == LangPy {
 					env.setBool(envPY3_PROTO, true)
@@ -1217,6 +1225,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				d.srcs = append(d.srcs, SrcMeta{Source: src, Prio: stmtPrioDefault, Global: true})
 			}
 		case *GenerateEnumSerializationStmt:
+			if env.bool(envGO_PROTO) {
+				continue
+			}
+
 			expandedEN := astOne(astEnumSers, *v)
 
 			expandedEN.DeclSeq = d.nextDeclSeq()
@@ -1516,6 +1528,10 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	case tokFbsLibrary:
 		return ModuleUnit{Type: name, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokProtoLibrary:
+		if language == LangGo {
+			return ModuleUnit{Type: tokGoLibrary, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+		}
+
 		if language == LangPy {
 			return ModuleUnit{Type: name, Tag: unitTagPy3Proto, ARPrefix: "libpy3", GlobalARTag: tagPy3ProtoGlobal, SbomLang: unitSbomCpp}
 		}
@@ -1792,6 +1808,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if d.noLint != "none" && d.noLint != "none_internal" {
 			d.peerdirs = append(d.peerdirs, strBuildPlatformClangFormat.any())
 		}
+	case tokGoProtoPlugin:
+		positional, lists := goMacroLists(v.Args, "DEPS")
+
+		d.goProtoOpts = append(d.goProtoOpts, GoProtoOpt{plugin: positional[0].string(), ext: positional[1].string(), tool: positional[2].string()})
+		d.peerdirs = append(d.peerdirs, lists["DEPS"]...)
+	case tokGoMockgenFrom, tokGoMockgenContribFrom, tokGoMockgenTypes, tokGoMockgenExcludeIfaces, tokGoMockgenPackage,
+		tokGoMockgenReflect, tokGoMockgenMocks, tokGoMockgenSource, tokGoOapiCodegen, tokGoOapiCodegenV2, tokGoOapiCodegenTaxi:
+		applyGoCodegenStmt(modulePath, v, d, env)
 	case tokSize:
 		if len(v.Args) > 0 {
 			d.test.size = testSizeNames[v.Args[0].string()]
@@ -1945,6 +1969,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokUseCommonGoogleApis:
 
 		d.useCommonGoogleAPIs = true
+
+		if env.bool(envGO_PROTO) {
+			applyGoCommonGoogleApis(v.Args, d)
+
+			break
+		}
+
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]ANY{internStr(googleapisPeer).any()}, d.peerdirs...)
 	case tokClangWarnings:
@@ -2009,6 +2040,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		applyProtoNamespace(d, mapsDocProtoNS.any())
 	case tokYmapsSproto:
+		if env.bool(envGO_PROTO) {
+			break
+		}
 
 		for _, argTok := range v.Args {
 			if !extIsProto(argTok.string()) {
@@ -2216,6 +2250,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.usePython3 = true
 	case tokPySrcs:
+		if env.bool(envGO_PROTO) {
+			break
+		}
 
 		topLevel := false
 		mainNext := false
@@ -2590,6 +2627,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		if len(v.Args) >= 1 {
 			switch v.Args[0].string() {
+			case "GO_PROTO_OPTS":
+				for _, a := range v.Args[1:] {
+					d.goProtoOpts = append(d.goProtoOpts, GoProtoOpt{arg: a})
+				}
 			case "SFLAGS":
 				d.sFlags = append(d.sFlags, v.Args[1:]...)
 			case "_PROTOC_FLAGS":
@@ -3719,15 +3760,25 @@ func (e *EmitContext) derivePeerInstance(peerPath string) ModuleInstance {
 func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 	ctx, parent, d := e.ctx, e.instance, e.d
 	demand := e.peerDemand()
+	language := peerEntryLanguage(parent, d.moduleStmt.Name)
 
-	if demand == demandNone && isGoModuleType(d.moduleStmt.Name) && peerYaMakeExists(ctx.fs, peerVFS) && isGoModuleType(ctx.moduleName(peerVFS.relString())) {
-		demand = demandSelf
+	if isGoModuleType(d.moduleStmt.Name) && peerYaMakeExists(ctx.fs, peerVFS) {
+		switch peerName := ctx.moduleName(peerVFS.relString()); {
+		case peerName == tokProtoLibrary:
+			language = LangGo
+
+			fallthrough
+		case isGoModuleType(peerName):
+			if demand == demandNone {
+				demand = demandSelf
+			}
+		}
 	}
 
 	return ModuleInstance{
 		Path:     peerVFS,
 		Kind:     KindLib,
-		Language: peerEntryLanguage(parent, d.moduleStmt.Name),
+		Language: language,
 		Platform: parent.Platform,
 		Demand:   demand,
 	}

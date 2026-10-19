@@ -52,6 +52,7 @@ var (
 	flatcWrapperVFS                     = source("build/scripts/cpp_flatc_wrapper.py")
 	genPy3RegScriptVFS                  = source("build/scripts/gen_py3_reg.py")
 	goFakeIncludeVFS                    = source("build/scripts/go_fake_include")
+	goProtoWrapperVFS                   = source("build/scripts/go_proto_wrapper.py")
 	googleapisCommonProtosAddIncl       = build("contrib/libs/googleapis-common-protos")
 	javaPython3                         = build("resources/YMAKE_PYTHON3/bin/python3")
 	ldFsToolsVFS                        = source("build/scripts/fs_tools.py")

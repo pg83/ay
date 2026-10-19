@@ -33,6 +33,7 @@ const (
 	prodGoCgoCopy
 	prodGoCgo1
 	prodDocsCopy
+	prodGoCodegen
 )
 
 type ProducerPos struct {
@@ -208,7 +209,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	n := len(d.copyFiles) + len(d.configureFiles) + len(d.antlrRuns) + len(d.antlr4Grammars) +
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
-		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs)
+		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens)
 
 	if d.docs != nil {
 		n += len(d.docs.copies)
@@ -435,6 +436,13 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 			childMeta.Source = internStr(e.gztGenProtoName(src.string())).any()
 			srcs = append(srcs, childMeta)
 		}
+	}
+
+	for i, st := range d.goCodegens {
+		outsMark := len(e.prodVFS)
+
+		e.prodVFS = append(e.prodVFS, build(module, "/", st.out))
+		positions = append(positions, ProducerPos{kind: prodGoCodegen, index: i, outs: e.prodVFSTake(outsMark)})
 	}
 
 	for i, m := range srcs {
@@ -745,6 +753,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 			e.emitGoCgoCopyStmt(goModuleCgoCFiles(e.d)[pos.index])
 		case prodGoCgo1:
 			e.emitGoCgo1Stmt()
+		case prodGoCodegen:
+			e.emitGoCodegenStmt(e.d.goCodegens[pos.index])
 		case prodEnum:
 			e.emitEnumSrcStmt(e.d.enumSrcs[pos.index])
 		case prodLj21:

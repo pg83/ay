@@ -99,7 +99,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"FROM_SANDBOX":      {},
 	"LIST_PROTO":        {},
 	"JAVA_PROTO_PLUGIN": {},
-	"GO_PROTO_PLUGIN":   {},
 
 	"SPLIT_CODEGEN":             {},
 	"DECIMAL_MD5_LOWER_32_BITS": {},
@@ -376,11 +375,17 @@ func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance 
 		kind = KindBin
 	}
 
+	platform := ctx.target
+
+	if ctx.moduleName(dir) == tokGoDll {
+		platform = ctx.target.pic()
+	}
+
 	return ModuleInstance{
 		Path:     source(filepath.Clean(dir)),
 		Kind:     kind,
 		Language: LangCPP,
-		Platform: ctx.target,
+		Platform: platform,
 		Demand:   demand,
 	}
 }
@@ -2024,7 +2029,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if isGoExeModuleType(d.moduleStmt.Name) {
-		goRef, goPath := e.emitGoExe(resolved, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
+		goRef, goPath := e.emitGoExe(resolved, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
 		result := newResult()
 
 		result.isPROGRAM = true

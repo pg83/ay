@@ -21,7 +21,7 @@ var procKindStr = [...]string{
 	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
 	pkSB:   "SB",
 	pkSF:   "SF",
-	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
+	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC", pkGR: "GR", pkGM: "GM", pkGS: "GS", pkGC: "GC",
 	pkld: "ld", pkDX: "DX", pkBN: "BN", pkSV: "SV", pkSC: "SC", pkPD: "PD", pkCU: "CU", pkTSDep: "TS_DEP", pkTSLib: "TS_LIB", pkTSPkg: "TS_PKG", pkTSTest: "TS_TST", pkTSJest: "TS_JST", pkUN: "UN", pkDO: "DO", pkUJ: "UJ",
 	pkFS: "FS", pkIJ: "IJ", pkJP: "JP", pkJT: "JT", pkRJ: "RJ", pkTM: "TM", pkTA: "TA", pkTL: "TL",
 }
@@ -85,6 +85,10 @@ const (
 	pkTEST2
 	pkTS
 	pkYC
+	pkGR
+	pkGM
+	pkGS
+	pkGC
 	pkld
 	pkDX
 	pkBN

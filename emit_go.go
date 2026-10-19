@@ -108,6 +108,7 @@ type GoStd struct {
 	HeadLib        []ANY
 	HeadExe        []ANY
 	HeadTest       []ANY
+	HeadDll        []ANY
 }
 
 func confGoStdVersion(fs FS) string {
@@ -136,12 +137,14 @@ func newGoStd(version string) *GoStd {
 	g.HeadLib = g.toolCmdHead("lib")
 	g.HeadExe = g.toolCmdHead("exe")
 	g.HeadTest = g.toolCmdHead("test")
+	g.HeadDll = g.toolCmdHead("dll")
 
 	if ownershipOn {
 		registerOwnedSlice(g.AsmIncludeDirs)
 		registerOwnedSlice(g.HeadLib)
 		registerOwnedSlice(g.HeadExe)
 		registerOwnedSlice(g.HeadTest)
+		registerOwnedSlice(g.HeadDll)
 	}
 
 	return g
@@ -270,6 +273,18 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		}
 	}
 
+	if d.grpc {
+		for _, p := range goGrpcImports(std) {
+			addPeer(p)
+		}
+	}
+
+	if goModuleHasProtos(d) {
+		for _, p := range goProtobufImports(std) {
+			addPeer(p)
+		}
+	}
+
 	if len(d.cgoSrcs) > 0 {
 		addPeer("build/internal/platform/clang_toolchain_info")
 		addPeer("build/platform/lld")
@@ -359,11 +374,20 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 }
 
 type GoSrcsResult struct {
+	AutoFiles   []VFS
 	GoFiles     []VFS
 	AsmFiles    []VFS
 	AsmInclSrcs []VFS
 	SymabisRef  NodeRef
 	SymabisOut  VFS
+}
+
+func (e *EmitContext) collectGoAutoSource(out VFS) {
+	if e.goRes == nil {
+		e.goRes = &GoSrcsResult{}
+	}
+
+	e.goRes.AutoFiles = append(e.goRes.AutoFiles, out)
 }
 
 func (e *EmitContext) collectGoSource(meta SrcMeta, asm bool) {
@@ -585,12 +609,16 @@ func goClassifyClosure(na *NodeArenas, resolved []ResolvedPeer, closurePaths []V
 	return
 }
 
-func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadiaLibm bool) []ANY {
+func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadiaLibm bool, soname string, globals []VFS) []ANY {
 	gdb := p.linkerSelectionGDBIndexFlags()
-	bound := 1 + len(p.SysrootArgs) + len(goExtldWholeArchive) + 1 + len(p.LinkPreludeExtra) + 1 + 2 + len(gdb) + 2 + len(goExtldLinkerTail) + len(p.SystemLibs) + 1
+	bound := 2 + len(p.SysrootArgs) + len(goExtldWholeArchive) + len(globals) + 1 + len(p.LinkPreludeExtra) + 1 + 2 + len(gdb) + 2 + len(goExtldLinkerTail) + len(p.SystemLibs) + 1
 	block := na.anys.alloc(bound)
 	k := 0
 	push := func(x ANY) { block[k] = x; k++ }
+
+	if soname != "" {
+		push(internV("-Wl,-soname,", soname).any())
+	}
 
 	push(p.TargetArg.any())
 
@@ -598,9 +626,23 @@ func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadi
 		push(x)
 	}
 
-	for _, x := range goExtldWholeArchive {
-		push(x)
+	push(goExtldWholeArchive[0])
+
+	for _, g := range globals {
+		if strings.HasSuffix(g.relString(), ".a") {
+			push(g.rel().any())
+		}
 	}
+
+	push(goExtldWholeArchive[1])
+
+	for _, g := range globals {
+		if !strings.HasSuffix(g.relString(), ".a") {
+			push(g.rel().any())
+		}
+	}
+
+	push(goExtldWholeArchive[2])
 
 	if p.CompressDebugSections {
 		push(argWlCompressDebugSectionsZstd.any())
@@ -720,7 +762,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.relString()
-	outName := dir[strings.LastIndexByte(dir, '/')+1:]
+	outName := programBinaryName(instance, d.moduleStmt)
 	outPath := build(dir, "/", outName, ".a")
 	goRes := e.goRes
 
@@ -728,7 +770,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		goRes = &GoSrcsResult{}
 	}
 
-	srcCap := 1 + len(objOuts) + len(goRes.GoFiles) + len(goRes.AsmFiles) + len(d.cgoSrcs)
+	srcCap := 1 + len(objOuts) + len(goRes.AutoFiles) + len(goRes.GoFiles) + len(goRes.AsmFiles) + len(d.cgoSrcs)
 	srcArgs := na.anys.alloc(srcCap)
 	srcInputs := na.vfs.alloc(srcCap)
 	ownSources := make([]VFS, 0, srcCap)
@@ -778,6 +820,10 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 		importGoRel := dir + "/_cgo_import.go"
 
+		for _, src := range goRes.AutoFiles {
+			addSrc(src)
+		}
+
 		for _, src := range goRes.GoFiles {
 			if src.isBuild() && src.relString() != importGoRel {
 				addSrc(src)
@@ -804,6 +850,10 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	} else {
 		for _, o := range objOuts {
 			addSrc(o)
+		}
+
+		for _, src := range goRes.AutoFiles {
+			addSrc(src)
 		}
 
 		for _, src := range goRes.GoFiles {
@@ -1039,11 +1089,19 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	return e.emitNode(node), outPath, srcClosure
 }
 
-func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
+func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.relString()
 	outName := programBinaryName(instance, d.moduleStmt)
+	isDll := d.moduleStmt.Name == tokGoDll
+	soname := ""
+
+	if isDll {
+		outName = dllOutputName(instance, d.moduleStmt)
+		soname = outName
+	}
+
 	outPath := build(dir, "/", outName)
 	goRes := e.goRes
 
@@ -1066,15 +1124,16 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		internStr(goArcPrefix).any(),
 	)), Env: goVcsEnv}
 
-	srcArgs := na.anys.alloc(len(goRes.GoFiles))
+	goFiles := concat(goRes.AutoFiles, goRes.GoFiles)
+	srcArgs := na.anys.alloc(len(goFiles))
 
-	for i, src := range goRes.GoFiles {
+	for i, src := range goFiles {
 		srcArgs[i] = src.any()
 	}
 
-	na.anys.commit(len(goRes.GoFiles))
+	na.anys.commit(len(goFiles))
 
-	srcArgs = srcArgs[:len(goRes.GoFiles):len(goRes.GoFiles)]
+	srcArgs = srcArgs[:len(goFiles):len(goFiles)]
 
 	localARs, nonLocalARs, cgoARs := goClassifyClosure(na, resolved, peerArchivePaths)
 	tail := na.anys.alloc(4 + len(localARs) + len(nonLocalARs) + len(cgoARs))
@@ -1104,6 +1163,10 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 
 	isTest := d.moduleStmt.Name == tokGoTest
 	head, kv := instance.Platform.Go.HeadExe, &goLdKV
+
+	if isDll {
+		head = instance.Platform.Go.HeadDll
+	}
 
 	var testArgs, testTail []ANY
 	var testInputs []VFS
@@ -1154,10 +1217,18 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		extraTailSources = na.vfsList(linkSbomScriptVFS)
 	}
 
+	var dllInputs []VFS
+
+	if isDll {
+		dllInputs = ctx.scripts[copyFsToolsVFS.rel()]
+	}
+
 	inputs := na.inputList(
-		na.vfsList(goRes.GoFiles...),
+		na.vfsList(goFiles...),
 		testInputs,
 		goToolScriptInputsChunk,
+		dllInputs,
+		peerGlobalPaths,
 		ctx.scripts[ldVcsInfoVFS.rel()],
 		ctx.scripts[ldFsToolsVFS.rel()],
 		peerArchivePaths,
@@ -1166,8 +1237,10 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		extraTailSources,
 	)
 
-	deps := na.noderefs.alloc(len(peerArchiveRefs) + len(peerSbomRefs) + 2)
+	deps := na.noderefs.alloc(len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + 2)
 	k := copy(deps, peerArchiveRefs)
+
+	k += copy(deps[k:], peerGlobalRefs)
 
 	if !isTest && instance.Platform.BuildRelease && sbomActive(ctx, instance) {
 		k += copy(deps[k:], peerSbomRefs)
@@ -1196,7 +1269,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		goExeCmdLinkFlags,
 		na.anyList(vcsGoPath.any()),
 		goExeCmdExtld,
-		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm),
+		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm, soname, peerGlobalPaths),
 		testArgs,
 		tail[:nt:nt],
 		testTail,
@@ -1212,7 +1285,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		sbomObjcopyCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(na, d.tc, sbomJSON, outPath)), Env: goVcsEnv}
 	}
 
-	cmds := na.cmds.alloc(6)
+	cmds := na.cmds.alloc(7)
 	kc := 0
 	pushCmd := func(c Cmd) { cmds[kc] = c; kc++ }
 
@@ -1230,6 +1303,15 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		pushCmd(sbomObjcopyCmd)
 	}
 
+	outputs := na.vfsList(outPath, build(dir, "/", outName, ".vet.txt"))
+
+	if isDll {
+		header := build(dir, "/", strings.TrimSuffix(outName, ".so"), ".h")
+
+		pushCmd(Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), copyFsToolsVFS.any(), strFsToolsCopy.any(), build(dir, "/_cgo_export.h").any(), header.any())), Env: goVcsEnv})
+		outputs = na.vfsList(outPath, build(dir, "/", outName, ".vet.txt"), header)
+	}
+
 	na.cmds.commit(kc)
 
 	node := Node{
@@ -1238,7 +1320,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		Env:       env,
 		Inputs:    inputs,
 		KV:        kv,
-		Outputs:   na.vfsList(outPath, build(dir, "/", outName, ".vet.txt")),
+		Outputs:   outputs,
 		DepRefs:   deps[:k:k],
 		Resources: goToolResources(na, resourceGlobals),
 	}

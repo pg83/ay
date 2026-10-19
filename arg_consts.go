@@ -265,6 +265,7 @@ var (
 	argUnix                                      = internArg("UNIX")
 	argV                                         = internArg("-v")
 	argVcsVcsJson                                = internArg("$(B)/vcs.json")
+	argVendorProtocGenGo                         = internArg("vendor/github.com/golang/protobuf/protoc-gen-go")
 	argVerbose                                   = internArg("--verbose")
 	argVerifyResults                             = internArg("--verify-results")
 	argVisitor                                   = internArg("-visitor")

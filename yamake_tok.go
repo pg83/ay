@@ -268,6 +268,17 @@ var tokName = [...]STR{
 	tokGoDll:                          internStr("GO_DLL"),
 	tokAllGoSrcs:                      internStr("ALL_GO_SRCS"),
 	tokTestCwd:                        internStr("TEST_CWD"),
+	tokGoMockgenFrom:                  internStr("GO_MOCKGEN_FROM"),
+	tokGoMockgenContribFrom:           internStr("GO_MOCKGEN_CONTRIB_FROM"),
+	tokGoMockgenTypes:                 internStr("GO_MOCKGEN_TYPES"),
+	tokGoMockgenExcludeIfaces:         internStr("GO_MOCKGEN_EXCLUDE_INTERFACES"),
+	tokGoMockgenPackage:               internStr("GO_MOCKGEN_PACKAGE"),
+	tokGoMockgenReflect:               internStr("GO_MOCKGEN_REFLECT"),
+	tokGoMockgenMocks:                 internStr("GO_MOCKGEN_MOCKS"),
+	tokGoMockgenSource:                internStr("GO_MOCKGEN_SOURCE"),
+	tokGoOapiCodegen:                  internStr("GO_OAPI_CODEGEN"),
+	tokGoOapiCodegenV2:                internStr("GO_OAPI_CODEGEN_V2"),
+	tokGoOapiCodegenTaxi:              internStr("GO_OAPI_CODEGEN_TAXI"),
 }
 
 var tokByName = func() map[string]TOK {
@@ -561,6 +572,17 @@ const (
 	tokGoDll
 	tokAllGoSrcs
 	tokTestCwd
+	tokGoMockgenFrom
+	tokGoMockgenContribFrom
+	tokGoMockgenTypes
+	tokGoMockgenExcludeIfaces
+	tokGoMockgenPackage
+	tokGoMockgenReflect
+	tokGoMockgenMocks
+	tokGoMockgenSource
+	tokGoOapiCodegen
+	tokGoOapiCodegenV2
+	tokGoOapiCodegenTaxi
 )
 
 type TOK uint16

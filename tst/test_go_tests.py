@@ -346,5 +346,142 @@ class GoTestModuleTest(unittest.TestCase):
             self.assertEqual("CLANG_FORMAT_RESOURCE_GLOBAL" in globals_, expected, module)
 
 
+def go_proto_world():
+    files = go_world()
+    files["contrib/tools/protoc/ya.make"] = f"PROGRAM()\n{NO_PLATFORM}SRCS(main.cpp)\nEND()\n"
+    files["contrib/tools/protoc/main.cpp"] = "int main(){return 0;}\n"
+    go_module(files, "vendor/github.com/golang/protobuf/protoc-gen-go", module="GO_PROGRAM")
+    for path in (
+        f"{STD}/sync", f"{STD}/reflect", f"{STD}/fmt", f"{STD}/math",
+        "vendor/github.com/golang/protobuf/proto",
+        "vendor/google.golang.org/protobuf/types/descriptorpb",
+        "vendor/google.golang.org/protobuf/runtime/protoimpl",
+        "vendor/google.golang.org/protobuf/runtime/protoiface",
+        "vendor/google.golang.org/protobuf/reflect/protoreflect",
+        "vendor/google.golang.org/protobuf/types/known/anypb",
+        "vendor/google.golang.org/protobuf/types/known/apipb",
+        "vendor/google.golang.org/protobuf/types/known/durationpb",
+        "vendor/google.golang.org/protobuf/types/known/emptypb",
+        "vendor/google.golang.org/protobuf/types/known/fieldmaskpb",
+        "vendor/google.golang.org/protobuf/types/known/sourcecontextpb",
+        "vendor/google.golang.org/protobuf/types/known/structpb",
+        "vendor/google.golang.org/protobuf/types/known/timestamppb",
+        "vendor/google.golang.org/protobuf/types/known/typepb",
+        "vendor/google.golang.org/protobuf/types/known/wrapperspb",
+        "vendor/example.com/vtproto/protohelpers",
+    ):
+        go_module(files, path)
+    go_module(files, "vendor/example.com/vtproto/cmd/protoc-gen-go-vtproto", module="GO_PROGRAM")
+    files["contrib/libs/protobuf/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(p.cpp)\nEND()\n"
+    files["contrib/libs/protobuf/p.cpp"] = "int p;\n"
+    files["build/scripts/go_proto_wrapper.py"] = ""
+    return files
+
+
+class GoCodegenTest(unittest.TestCase):
+    def test_go_peer_of_a_proto_library_builds_its_go_variant(self):
+        files = go_proto_world()
+        files["p/base/ya.make"] = "PROTO_LIBRARY()\nSRCS(base.proto)\nEND()\n"
+        files["p/base/base.proto"] = 'syntax = "proto3";\n'
+        files["p/api/ya.make"] = (
+            "PROTO_LIBRARY(api_proto)\nPROTOC_FATAL_WARNINGS()\n"
+            "SET_APPEND(GO_PROTO_OPTS --go-vtproto_opt=allow-empty=true)\n"
+            "GO_PROTO_PLUGIN(go-vtproto _vtproto.pb.go vendor/example.com/vtproto/cmd/protoc-gen-go-vtproto "
+            "DEPS vendor/example.com/vtproto/protohelpers)\n"
+            "SRCS(api.proto)\nIF (GO_PROTO)\nSRCS(extra.go)\nENDIF()\nPEERDIR(p/base)\nEND()\n"
+        )
+        files["p/api/api.proto"] = 'syntax = "proto3";\nimport "p/base/base.proto";\n'
+        files["p/api/extra.go"] = "package api\n"
+        go_module(files, "g/user", macros="PEERDIR(p/api)\n")
+        graph = lib.make(files, "g/user")
+        pb = lib.node_by_output(graph, "$(B)/p/api/api.pb.go")
+        self.assertEqual(pb["kv"], {"p": "PB", "pc": "yellow"})
+        self.assertEqual(pb["outputs"], ["$(B)/p/api/api.pb.go", "$(B)/p/api/api_vtproto.pb.go"])
+        self.assertEqual(pb["cmds"][0]["cwd"], "$(S)")
+        self.assertEqual(pb["cmds"][0]["cmd_args"], [
+            "$(B)/resources/YMAKE_PYTHON3/bin/python3", "$(S)/build/scripts/go_proto_wrapper.py",
+            "--arcadia-prefix", "a.yandex-team.ru/", "--contrib-prefix", "vendor/",
+            "--namespace", "./", "--proto", "p/api/api.proto", "--", "$(B)/contrib/tools/protoc/protoc",
+            "-I=./", "-I=$(S)/", "-I=$(B)", "-I=$(S)", "-I=$(S)/contrib/libs/protobuf/src",
+            "-I=$(B)", "-I=$(S)/contrib/libs/protobuf/src", "--fatal_warnings",
+            "--plugin=protoc-gen-go=$(B)/vendor/github.com/golang/protobuf/protoc-gen-go/protoc-gen-go",
+            "--go_opt=", "--go_out=$(B)/", "--go-vtproto_opt=allow-empty=true",
+            "--plugin=protoc-gen-go-vtproto=$(B)/vendor/example.com/vtproto/cmd/protoc-gen-go-vtproto/protoc-gen-go-vtproto",
+            "--go-vtproto_out=$(B)/",
+        ])
+        self.assertIn("$(S)/p/base/base.proto", pb["inputs"])
+        package = lib.node_by_output(graph, "$(B)/p/api/api_proto.a")
+        args = go_tool_args(package)
+        self.assertEqual(between(args, "++srcs", "++asm-flags"), [
+            "$(B)/p/api/api.pb.go", "$(B)/p/api/api_vtproto.pb.go", "$(S)/p/api/extra.go",
+        ])
+        peers = between(args, "++peers", "--ya-end-command-file")
+        self.assertIn("p/base/base.a", peers)
+        self.assertIn("vendor/example.com/vtproto/protohelpers/protohelpers.a", peers)
+        self.assertIn("vendor/google.golang.org/protobuf/runtime/protoimpl/protoimpl.a", peers)
+        self.assertNotIn("$(B)/contrib/libs/protobuf/libcontrib-libs-protobuf.a", package["inputs"])
+
+    def test_mockgen_and_oapi_codegen_feed_the_package(self):
+        files = go_world()
+        for path in ("vendor/go.uber.org/mock/mockgen", "vendor/github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen"):
+            go_module(files, path, module="GO_PROGRAM")
+        for path in (f"{STD}/reflect", "vendor/go.uber.org/mock/gomock"):
+            go_module(files, path)
+        files["go.mod"] = "module a.yandex-team.ru\n"
+        files["vendor/modules.txt"] = ""
+        files["build/scripts/fs_tools.py"] = ""
+        go_module(files, "lib/iface")
+        files["lib/iface/mocks/ya.make"] = (
+            "GO_LIBRARY()\nGO_MOCKGEN_FROM(lib/iface)\nGO_MOCKGEN_SOURCE(iface.go)\n"
+            "GO_OAPI_CODEGEN_V2(types api spec.yaml)\nEND()\n"
+        )
+        files["lib/iface/mocks/spec.yaml"] = ""
+        graph = lib.make(files, "lib/iface/mocks")
+        source = lib.node_by_output(graph, "$(B)/lib/iface/mocks/iface.source.gen.go")
+        self.assertEqual(source["kv"], {"p": "GS", "pc": "blue"})
+        mockgen = source["cmds"][-1]
+        self.assertEqual(mockgen["cmd_args"], [
+            "$(B)/vendor/go.uber.org/mock/mockgen/mockgen", "-package", "mocks", "-source", "lib/iface/iface.go",
+        ])
+        self.assertEqual(mockgen["cwd"], "$(B)/lib/iface/mocks/.arcadia")
+        self.assertEqual(mockgen["stdout"], "$(B)/lib/iface/mocks/iface.source.gen.go")
+        self.assertEqual(mockgen["env"]["GOROOT"], "$(B)/resources/GO_TOOLS")
+        self.assertEqual(source["cmds"][2]["cmd_args"][2:], ["copy", "$(S)/go.mod", "$(B)/lib/iface/mocks/.arcadia/go.mod"])
+        oapi = lib.node_by_output(graph, "$(B)/lib/iface/mocks/types.gen.go")
+        self.assertEqual(oapi["kv"], {"p": "GC", "pc": "blue"})
+        self.assertEqual(oapi["cmds"][0]["cmd_args"], [
+            "$(B)/vendor/github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen/oapi-codegen",
+            "--generate", "types", "--package", "api", "$(S)/lib/iface/mocks/spec.yaml",
+        ])
+        package = lib.node_by_output(graph, "$(B)/lib/iface/mocks/mocks.a")
+        args = go_tool_args(package)
+        self.assertEqual(between(args, "++srcs", "++asm-flags"), [
+            "$(B)/lib/iface/mocks/iface.source.gen.go", "$(B)/lib/iface/mocks/types.gen.go",
+        ])
+        self.assertIn("vendor/go.uber.org/mock/gomock/gomock.a", between(args, "++peers", "--ya-end-command-file"))
+
+    def test_go_dll_links_a_position_independent_shared_object(self):
+        files = go_world()
+        files["build/scripts/fs_tools.py"] = ""
+        go_module(files, "lib/greet")
+        files["cmd/dll/ya.make"] = "GO_DLL(greet)\nSRCS(main.go)\nPEERDIR(lib/greet)\nEND()\n"
+        files["cmd/dll/main.go"] = "package main\n"
+        graph = lib.make(files, "cmd/dll", "--target-platform", "default-linux-x86_64")
+        dll = lib.node_by_output(graph, "$(B)/cmd/dll/libgreet.so")
+        self.assertEqual(dll["kv"]["p"], "LD")
+        self.assertEqual(dll["outputs"], [
+            "$(B)/cmd/dll/libgreet.so", "$(B)/cmd/dll/libgreet.so.vet.txt", "$(B)/cmd/dll/libgreet.h",
+        ])
+        args = go_tool_args(dll)
+        self.assertEqual(arg_after(args, "++mode"), "dll")
+        self.assertEqual(arg_after(args, "++extldflags"), "-Wl,-soname,libgreet.so")
+        self.assertIn("-shared", between(args, "++compile-flags", "++link-flags"))
+        self.assertEqual(dll["cmds"][-1]["cmd_args"][1:], [
+            "$(S)/build/scripts/fs_tools.py", "copy", "$(B)/cmd/dll/_cgo_export.h", "$(B)/cmd/dll/libgreet.h",
+        ])
+        package = lib.node_by_output(graph, "$(B)/lib/greet/greet.a")
+        self.assertIn("-shared", between(go_tool_args(package), "++compile-flags", "++link-flags"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
