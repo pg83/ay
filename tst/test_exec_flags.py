@@ -306,6 +306,5 @@ class MakeWarningsTest(unittest.TestCase):
         self.assertRegex(stderr, r"\n\s+SUBSCRIBER\b")
 
 
-
 if __name__ == "__main__":
     unittest.main(verbosity=2)

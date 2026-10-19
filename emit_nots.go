@@ -475,6 +475,11 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	instance.Language = LangTSPrepare
 
 	prepare := genModule(ctx, instance)
+
+	if prepare.ARPath == nil {
+		throwFmt("nots: %s requires the TS_PREPARE_DEPS variant", dir)
+	}
+
 	prepRef := prepare.ARRef
 	state := e.codegen.lookup(*prepare.ARPath).Nots
 	head, globals, resourceNames, peerRefs, toolRef, hasDeps := state.Head, state.Globals, state.ResourceNames, e.codegen.lookup(*prepare.ARPath).GeneratorRefs, state.ToolRef, state.HasDependencies

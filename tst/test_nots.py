@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from lib import make, node_by_output, tool_program
+from lib import make, make_process, node_by_output, tool_program
 
 
 class NotsTests(unittest.TestCase):
@@ -227,6 +227,16 @@ packages:
         self.assertEqual(args[args.index('--auto-package-name'):args.index('--protoc-bin')], [
             '--auto-package-name', '@scope/api', '--auto-deps-path', deps,
         ])
+
+    def test_proto_requires_enabled_preparation_variant(self):
+        files = self.project()
+        files['web/package.json'] = '{"dependencies":{"api":"workspace:../api"}}'
+        files['api/ya.make'] = 'PROTO_LIBRARY()\nINCLUDE_TAGS(TS_PROTO)\nEND()\n'
+        files['api/package.json'] = '{}'
+        result = make_process(files, 'web')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('TS_PREPARE_DEPS', result.stderr)
+        self.assertNotIn('panic:', result.stderr)
 
 
 if __name__ == '__main__':
