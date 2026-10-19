@@ -1567,15 +1567,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("gen: %s: SET_RESOURCE_URI_FROM_JSON expects 2 args (var json), got %d", modulePath, len(v.Args))
 		}
 
-		jsonRel := v.Args[1].string()
-
-		if suffix, ok := strings.CutPrefix(jsonRel, "$(S)/"); ok {
-			jsonRel = cleanRel(suffix)
-		} else {
-			jsonRel = cleanRel(joinRel(modulePath, jsonRel))
-		}
-
-		bundle := readResourceBundleJSON(fs, jsonRel)
+		bundle := readResourceBundleJSON(fs, moduleSourceRel(modulePath, v.Args[1].string()))
 
 		if uri, ok := resolveResourceURIFromBundle(bundle, env); ok {
 			env.setString(internEnv(v.Args[0].string()), uri)

@@ -152,6 +152,31 @@ class ResourceDeclsTest(unittest.TestCase):
             "ownership        1 nodes        1 backings  Inputs.chunk @ emit_context.go:173          e.g. $(B)/lib/kern_merged.bc",
         ])
 
+    def test_host_bundle_json_path_follows_include_path_rules(self):
+        modules = {
+            "plain": "all.json",
+            "curdir": "${CURDIR}/all.json",
+            "root": "${ARCADIA_ROOT}/shared/all.json",
+        }
+        files = {
+            "shared/all.json": bundle_json({"linux-x86_64": "sbr:7"}),
+            "lib/ya.make": (
+                f"LIBRARY()\n{BARE}"
+                f"PEERDIR({' '.join('res/' + name for name in modules)})\n"
+                "END()\n"
+            ),
+        }
+        for name, json_path in modules.items():
+            files[f"res/{name}/all.json"] = bundle_json({"linux-x86_64": f"sbr:{len(name)}"})
+            files[f"res/{name}/ya.make"] = resources_library(
+                f"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(B_{name.upper()} {json_path})\n"
+            )
+        graph = lib.make(files, "lib")
+        self.assertEqual(
+            {name: fetched_uri(graph, f"B_{name.upper()}") for name in modules},
+            {"plain": "sbr:5", "curdir": "sbr:6", "root": "sbr:7"},
+        )
+
     def test_host_bundle_rejects_malformed_or_missing_entries(self):
         for body, message in (
             (

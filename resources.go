@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -132,8 +131,8 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 		return []ResourceDecl{selectHostResourceDecl(host, modulePath, name.string(), bundle)}
 	}
 
-	name, jsonRel := stmt.Args[0], stmt.Args[1]
-	bundle := readResourceBundleJSON(fs, filepath.ToSlash(filepath.Join(modulePath, jsonRel.string())))
+	name := stmt.Args[0]
+	bundle := readResourceBundleJSON(fs, moduleSourceRel(modulePath, stmt.Args[1].string()))
 
 	return []ResourceDecl{selectHostResourceDecl(host, modulePath, name.string(), bundle)}
 }
@@ -474,6 +473,14 @@ type ResourceBundleJSON struct {
 	ByPlatform map[string]struct {
 		URI string `json:"uri"`
 	} `json:"by_platform"`
+}
+
+func moduleSourceRel(modulePath, arg string) string {
+	if suffix, ok := strings.CutPrefix(arg, "$(S)/"); ok {
+		return cleanRel(suffix)
+	}
+
+	return cleanRel(joinRel(modulePath, arg))
 }
 
 func readResourceBundleJSON(fs FS, rel string) map[string]string {
