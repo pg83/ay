@@ -171,6 +171,17 @@ class JavaProtoTest(unittest.TestCase):
 
 
 class JavaProgramTest(unittest.TestCase):
+    def test_run_java_archive_hash_unquotes_string_tokens(self):
+        files = self.tree()
+        files["gen/ya.make"] = (
+            'JAVA_LIBRARY_NON_SPLIT()\nSET(VALUE example)\n'
+            'RUN_JAVA_PROGRAM(Main "a b" \'c d\' "e\\f" --value="${VALUE}" '
+            'OUT_DIR out CLASSPATH app)\nEND()\n'
+        )
+        graph = lib.make(files, "gen")
+        salt = hashlib.md5(b'Main a b c d ef --value="example" OUT_DIR out CLASSPATH app').hexdigest()
+        lib.node_by_output(graph, f"$(B)/gen/out.{salt}.gentar")
+
     def test_run_java_archive_hash_preserves_lexical_quotes(self):
         files = self.tree()
         files["gen/ya.make"] = (
@@ -190,6 +201,19 @@ class JavaProgramTest(unittest.TestCase):
         archive = next(n for n in lib.make(files, "gen")["graph"] if n["kv"]["p"] == "RJ")
         self.assertIn("$(S)/gen/in.txt", archive["inputs"])
         self.assertFalse(any("/../" in p for p in archive["inputs"]))
+
+    def test_run_java_input_directories_can_cross_module_directory(self):
+        for directory in ("../../data", "../.."):
+            with self.subTest(directory=directory):
+                files = self.tree()
+                files["gen/sub/ya.make"] = (
+                    "JAVA_LIBRARY_NON_SPLIT()\n"
+                    f"RUN_JAVA_PROGRAM(Main IN_DIR {directory} OUT_DIR out CLASSPATH app)\nEND()\n"
+                )
+                files["data/in.txt"] = ""
+                archive = next(n for n in lib.make(files, "gen/sub")["graph"] if n["kv"]["p"] == "RJ")
+                self.assertIn("$(S)/data/in.txt", archive["inputs"])
+                self.assertFalse(any("/../" in p or "/./" in p for p in archive["inputs"]))
 
     def tree(self):
         return java_tree(**{

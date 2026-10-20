@@ -723,7 +723,15 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	if len(d.swigC) > 0 {
-		positions = append(positions, ProducerPos{kind: prodSwigAll})
+		outsMark := len(e.prodVFS)
+
+		for _, stmt := range d.swigC {
+			prefix := swigOutputPrefix(stmt.Src, stmt.Module)
+
+			e.prodVFS = append(e.prodVFS, build(module, "/", prefix, ".swg.c"), build(module, "/", prefix, ".py"))
+		}
+
+		positions = append(positions, ProducerPos{kind: prodSwigAll, outs: e.prodVFSTake(outsMark)})
 	}
 
 	for i, js := range d.joinSrcs {

@@ -1134,7 +1134,17 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 			scratch = append(scratch, tok.id.any())
 
 			if lexical != nil {
-				*lexical = append(*lexical, internBytes(p.lex.src[start:p.lex.pos]).any())
+				value := tok.id
+
+				if tok.kind == tokString {
+					if strings.ContainsRune(tok.string(), '\\') {
+						value = internStr(strings.ReplaceAll(tok.string(), "\\", ""))
+					}
+				} else {
+					value = internBytes(p.lex.src[start:p.lex.pos])
+				}
+
+				*lexical = append(*lexical, value.any())
 			}
 		case tokLParen:
 			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.string())
