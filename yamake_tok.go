@@ -42,6 +42,7 @@ var tokName = [...]STR{
 	tokCompileLuaOpenresty: internStr("COMPILE_LUA_OPENRESTY"),
 	tokCompileLua21:        internStr("COMPILE_LUA_21"),
 	tokCompileLua:          internStr("COMPILE_LUA"),
+	tokDebVersion:           internStr("DEB_VERSION"),
 	tokTsProtoPackageName:   internStr("TS_PROTO_PACKAGE_NAME"),
 	tokStyleCppUserSessions: internStr("STYLE_CPP_USER_SESSIONS"),
 	tokSetCustomClangTidy:   internStr("SET_CUSTOM_CLANG_TIDY"),
@@ -688,6 +689,7 @@ const (
 	tokSetCustomClangTidy
 	tokStyleCppUserSessions
 	tokTsProtoPackageName
+	tokDebVersion
 )
 
 type TOK uint16

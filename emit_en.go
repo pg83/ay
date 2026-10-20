@@ -36,6 +36,10 @@ func (e *EmitContext) enumSerializedBaseParts(stmt *GenerateEnumSerializationStm
 		return e.enumHeaderSourceInput(stmt.Header, e.d.srcDirs).relString(), "", ""
 	}
 
+	if !pathIsClean(stmt.Header) {
+		return buildJoinClean(e.instance.Path.relString(), stmt.Header).relString(), "", ""
+	}
+
 	return e.instance.Path.relString(), "/", stmt.Header
 }
 

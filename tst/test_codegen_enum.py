@@ -17,6 +17,22 @@ def enum_files(files):
 
 
 class EnumSerializationTest(unittest.TestCase):
+    def test_parent_header_output_is_normalized_before_registration(self):
+        graph = lib.make(enum_files({
+            "p/sub/ya.make": (
+                f"LIBRARY()\n{lib.BARE_MODULE}"
+                "GENERATE_ENUM_SERIALIZATION_WITH_HEADER(../enums.h)\nEND()\n"
+            ),
+            "p/enums.h": "enum E {A};\n",
+        }), "p/sub")
+        generated = lib.node_by_output(graph, "$(B)/p/enums.h_serialized.cpp")
+        self.assertEqual(generated["outputs"], [
+            "$(B)/p/enums.h_serialized.cpp", "$(B)/p/enums.h_serialized.h",
+        ])
+        compiled = lib.node_by_output(graph, "$(B)/p/sub/__/enums.h_serialized.cpp.o")
+        self.assertIn(generated["uid"], compiled["deps"])
+        self.assertFalse(any("/../" in a for c in generated["cmds"] for a in c["cmd_args"]))
+
     def test_variants_and_header_locations(self):
         graph = lib.make(enum_files({
             "mod/ya.make": (

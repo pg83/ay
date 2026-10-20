@@ -25,6 +25,14 @@ func realPrjName(moduleDir string) string {
 	return strings.TrimSuffix(archiveNameWithPrefix(moduleDir, ""), ".a")
 }
 
+func (e *EmitContext) descriptorName() string {
+	if len(e.d.moduleStmt.Args) > 0 {
+		return e.d.moduleStmt.Args[0].string()
+	}
+
+	return realPrjName(e.instance.Path.relString())
+}
+
 func moddirHash(moduleDir string) string {
 	sum := md5.Sum([]byte(moduleDir))
 
@@ -175,7 +183,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		}
 	}
 
-	prj := realPrjName(instance.Path.relString())
+	prj := e.descriptorName()
 	selfProtodesc := build(instance.Path.relString(), "/", prj, ".self.protodesc")
 	protosrc := build(instance.Path.relString(), "/", prj, ".protosrc")
 	mergeRef := e.emitDescProtoMerge(selfProtodesc, protosrc, descOutputs, rawprotoOutputs, producerSourceInputs, producerRefs)
@@ -321,7 +329,7 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	closure := descPeerClosure(ctx, instance, d.peerdirs, false, false).peers
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
-	prj := realPrjName(instance.Path.relString())
+	prj := e.descriptorName()
 	protodesc := build(instance.Path.relString(), "/", prj, ".protodesc")
 	tar := build(instance.Path.relString(), "/", prj, ".tar")
 	merge := na.anys.alloc(3 + len(closure))[:0]

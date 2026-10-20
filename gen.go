@@ -1046,7 +1046,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDescProto {
-		result := e.emitDescProtoSubmodule()
+		result := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name}
+
+		if !moduleExcludesTag(d, "DESC_PROTO") {
+			result = e.emitDescProtoSubmodule()
+		}
 
 		ctx.memoPut(instance, result)
 

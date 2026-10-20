@@ -12,13 +12,20 @@ var (
 )
 
 type PlatformConf struct {
-	GoStdVersion string
-	SystemLibs   []string
-	YqlStableABI bool
+	GoStdVersion        string
+	SystemLibs          []string
+	YqlStableABI        bool
+	ProtoHeaderEpilogue bool
 }
 
 func readPlatformConf(fs FS) PlatformConf {
-	return PlatformConf{GoStdVersion: confGoStdVersion(fs), SystemLibs: confLinuxSystemLibraries(fs), YqlStableABI: confYqlStableABI(fs)}
+	return PlatformConf{GoStdVersion: confGoStdVersion(fs), SystemLibs: confLinuxSystemLibraries(fs), YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
+}
+
+func confProtoHeaderEpilogue(fs FS) bool {
+	const conf = "build/conf/proto.conf"
+
+	return fs.isFile(srcRootRel, conf) && strings.Contains(string(concatChunks(fs.read(conf))), "SET(PROTOC_TRANSITIVE_HEADERS $_CPP_PROTO_HEADERS_TRANSITIVE)")
 }
 
 func confLinuxSystemLibraries(fs FS) []string {
@@ -37,6 +44,7 @@ func confLinuxSystemLibraries(fs FS) []string {
 
 type Platform struct {
 	YqlStableABI          bool
+	ProtoHeaderEpilogue   bool
 	picVariant            *Platform
 	picOnce               sync.Once
 	picMake               func() *Platform
@@ -143,6 +151,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 
 	p := &Platform{
 		YqlStableABI:          pc.YqlStableABI,
+		ProtoHeaderEpilogue:   pc.ProtoHeaderEpilogue,
 		OS:                    os,
 		ISA:                   isa,
 		Target:                makePlatformID(os, isa),

@@ -196,6 +196,7 @@ var (
 	strCythonCppH                                                                            = internStr("CYTHON_CPP_H")
 	strD                                                                                     = internStr("-d")
 	strD2                                                                                    = internStr("-D")
+	strDebianversionH                                                                        = internStr("DebianVersion.h")
 	strDelim                                                                                 = internStr("DELIM")
 	strDescOutput                                                                            = internStr("--desc-output")
 	strDescProtoTag                                                                          = internStr("desc_proto")

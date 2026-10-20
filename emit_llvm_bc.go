@@ -15,11 +15,11 @@ type LlvmCompileStmt struct {
 	Options   []ANY
 }
 
-func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, opts []ANY) Node {
+func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx bool, opts []ANY) Node {
 	na, d := e.ctx.na, e.d
 	input := e.llvmBcSourceInfo(src)
 	wrapper := buildScriptsClangWrapperPy
-	args := composeBCCompileCmd(d.tc.Python3.string(), wrapper.string(), compiler, e.instance.Platform, newModuleCCInputs(&d.cc), input, out)
+	args := composeBCCompileCmd(d.tc.Python3.string(), wrapper.string(), compiler, e.instance.Platform, newModuleCCInputs(&d.cc), input, out, cxx)
 	tail := len(args) - 5
 	llvmOpts := strings.Fields(d.setVars[strLlvmOpts].string())
 
@@ -45,7 +45,7 @@ func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, opts
 func (e *EmitContext) emitLlvmCompile(stmt LlvmCompileStmt) {
 	out := copyFileOutputVFS(e.instance.Path.relString(), stmt.Output)
 	compiler := resolveResourceGlobalRef(stmt.ClangRoot, e.peers.ResourceGlobals) + "/bin/clang++"
-	node := e.llvmCompileNode(stmt.Source, out, compiler, stmt.Options)
+	node := e.llvmCompileNode(stmt.Source, out, compiler, true, stmt.Options)
 	ref := e.ctx.emit.reserve()
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
@@ -78,7 +78,14 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	for _, src := range stmt.Sources {
 		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
-		node := e.llvmCompileNode(src, bcOut, clangxx, nil)
+		cxx := !strings.HasSuffix(src, ".c")
+		compiler := clangxx
+
+		if !cxx {
+			compiler = clangRoot + "/bin/clang"
+		}
+
+		node := e.llvmCompileNode(src, bcOut, compiler, cxx, nil)
 		allInputs := node.Inputs
 
 		for _, ch := range allInputs {
@@ -203,7 +210,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	})
 }
 
-func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS) []ANY {
+func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS, cxx bool) []ANY {
 	bundle := compileFlagBundleFor(platform)
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, platform)
@@ -232,12 +239,20 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 
 	args = appendAddIncl(args, peerAddIncl, in.InclArgs)
 	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(platform))
-	args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
-	args = appendAnyLists(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket))
+
+	if cxx {
+		args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
+		args = appendAnyLists(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket))
+	}
+
 	args = append(args, platform.TargetArg.any())
-	args = appendAnyLists(args, bundle.ArchArgs)
-	args = append(args, argDashBBin.any())
-	args = append(args, argWnoUnknownWarningOption.any(), argEmitLlvm.any(), argDashC.any(), inVFS.any(), argDashO.any(), outVFS.any())
+	args = appendAnyLists(args, bundle.ArchArgs, platform.SysrootArgs)
+
+	if cxx {
+		args = append(args, argWnoUnknownWarningOption.any())
+	}
+
+	args = append(args, argEmitLlvm.any(), argDashC.any(), inVFS.any(), argDashO.any(), outVFS.any())
 
 	return args
 }

@@ -303,6 +303,7 @@ type FromSandboxStmt struct {
 }
 
 type RunPythonStmt struct {
+	KV             *KV
 	Lua            bool
 	ScriptPath     ANY
 	Args           []ANY

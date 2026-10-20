@@ -33,6 +33,31 @@ class LuaCompileTest(unittest.TestCase):
                 lib.node_by_output(graph, f"$(B)/{peer}/runtime.c.o")
 
 class ConfigurationTest(unittest.TestCase):
+    def test_build_root_addincl_preserves_root_type(self):
+        graph = lib.make({
+            "a/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}ADDINCL(GLOBAL ${{ARCADIA_BUILD_ROOT}})\nSRCS(a.cpp)\nEND()\n",
+            "a/a.cpp": "",
+        }, "a")
+        args = lib.node_by_output(graph, "$(B)/a/a.cpp.o")["cmds"][0]["cmd_args"]
+        self.assertNotIn("-I$(S)/$(B)", args)
+        self.assertGreater(args.count("-I$(B)"), 1)
+
+    def test_debian_version_is_a_lazy_header_generator(self):
+        graph = lib.make({
+            "a/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}DEB_VERSION(pkg/changelog)\nSRCS(a.cpp)\nEND()\n",
+            "a/a.cpp": '#include "DebianVersion.h"\n',
+            "pkg/changelog": "package (1.2) stable; urgency=low\n",
+            "build/scripts/mkver.py": "",
+        }, "a")
+        node = lib.node_by_output(graph, "$(B)/a/DebianVersion.h")
+        self.assertEqual(node["kv"], {"p": "CL", "pc": "yellow"})
+        self.assertEqual(node["cmds"][0]["cmd_args"][-2:], [
+            "$(S)/build/scripts/mkver.py", "$(S)/pkg/changelog",
+        ])
+        self.assertEqual(node["cmds"][0]["stdout"], "$(B)/a/DebianVersion.h")
+        self.assertIn("$(S)/pkg/changelog", node["inputs"])
+        self.assertIn(node["uid"], lib.node_by_output(graph, "$(B)/a/a.cpp.o")["deps"])
+
     def test_custom_clang_tidy_declares_resource_peer_and_variables(self):
         graph = lib.make({
             "a/ya.make": (

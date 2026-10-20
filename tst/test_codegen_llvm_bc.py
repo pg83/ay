@@ -35,6 +35,17 @@ def nodes_of_kind(graph, kind):
 
 
 class LlvmBcTest(unittest.TestCase):
+    def test_c_bitcode_uses_c_compiler_and_platform_sdk_flags(self):
+        graph = lib.make(llvm_bc_files(
+            "LLVM_BC(a.c NAME c)\nNO_COMPILER_WARNINGS()\n", {"mod/a.c": ""},
+        ), "mod", "--target-platform", "default-linux-x86_64", opensource=False)
+        args = lib.node_by_output(graph, "$(B)/mod/a.c.bc")["cmds"][0]["cmd_args"]
+        self.assertIn(f"{CLANG}/bin/clang", args)
+        self.assertNotIn("-Wno-unknown-warning-option", args)
+        self.assertFalse(any(a.startswith("-std=c++") for a in args))
+        self.assertIn("--sysroot=$(B)/resources/OS_SDK_ROOT", args)
+        self.assertIn("-B$(B)/resources/OS_SDK_ROOT/usr/bin", args)
+
     def test_direct_compile_is_lazy_and_tracks_headers_and_options(self):
         files = llvm_bc_files(
             "SET(LLVM_OPTS -O1)\n"

@@ -68,14 +68,14 @@ const (
 )
 
 type CppProtoPlugin struct {
-	Name                      string
-	ToolPath                  string
-	OutputSuffixes            []string
-	Deps                      []string
-	ExtraOutFlag              string
-	Experimental              []string
-	Files                     []string
-	DeclaredBeforeLiteHeaders bool
+	Name              string
+	ToolPath          string
+	OutputSuffixes    []string
+	Deps              []string
+	ExtraOutFlag      string
+	Experimental      []string
+	Files             []string
+	OutputsBeforeBase bool
 }
 
 func (p CppProtoPlugin) isYaff() bool {
@@ -111,6 +111,12 @@ func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
 
 	if !isGoModuleType(d.unit.Type) {
 		d.peerdirs = append(d.peerdirs, internAnys(plugin.Deps)...)
+	}
+}
+
+func recalcProtoOutputs(d *ModuleData) {
+	for i := range d.cppProtoPlugins {
+		d.cppProtoPlugins[i].OutputsBeforeBase = true
 	}
 }
 
@@ -253,6 +259,7 @@ type ModuleData struct {
 	needGoogleProtoPeerdirs  bool
 	cppProtoPlugins          []CppProtoPlugin
 	excludeTags              map[STR]bool
+	onlyTags                 bool
 	dynamicLibraryFrom       []ANY
 	exportsScript            *ANY
 	ldPlugins                []ANY
@@ -1091,6 +1098,9 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 					env.setBool(envTsProto, true)
 				} else if language == LangTSPrepare {
 					env.setBool(envTsProtoPrepareDeps, true)
+				} else if language == LangDescProto {
+					env.setString(envMODULE_TAG, "DESC_PROTO")
+					env.setBool(envDescProto, true)
 				} else {
 					env.setStringID(envMODULE_TAG, strCPPProto)
 					env.setStringID(envCPP_PROTO, strCPPProto)
@@ -1102,6 +1112,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			if d.moduleStmt.Name == tokProtoLibrary && env.bool(envPY3_PROTO) {
 				moduleLang = moduleLangTokenPy3
+			}
+
+			if d.moduleStmt.Name == tokProtoLibrary && language == LangDescProto {
+				moduleLang = ""
 			}
 
 			env.setString(envMODULE_LANG, moduleLang)
@@ -1205,6 +1219,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			}
 
 			d.setVars[internStr(v.Name)] = internStr(value)
+
+			if v.Name == "PROTOC_TRANSITIVE_HEADERS" {
+				recalcProtoOutputs(d)
+			}
 
 			if v.Name == "RAGEL6_FLAGS" {
 				d.ragel6Flags = internAnys(strings.Fields(value))
@@ -1655,6 +1673,15 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}()
 
 	switch v.Name {
+	case tokDebVersion:
+		if len(v.Args) != 1 {
+			throwFmt("DEB_VERSION expects one changelog file")
+		}
+
+		d.runPython = append(d.runPython, &RunPythonStmt{
+			ScriptPath: buildScriptsMkverPy.any(), Args: v.Args, INFiles: v.Args,
+			StdoutFile: ptr(strDebianversionH.any()), KV: &debVersionKV,
+		})
 	case tokFiles:
 		if d.docs != nil || d.moduleStmt != nil && d.moduleStmt.Name == tokUnion {
 			d.addFiles(v.Args)
@@ -2142,7 +2169,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("gen: PROTO_NAMESPACE expects at least 1 argument")
 		}
 
-		applyProtoNamespace(d, v.Args[len(v.Args)-1])
+		withGen := false
+
+		for _, arg := range v.Args[:len(v.Args)-1] {
+			withGen = withGen || arg.string() == "WITH_GEN"
+		}
+
+		applyProtoNamespace(d, v.Args[len(v.Args)-1], withGen)
 	case tokProtoAddIncl:
 		applyProtoAddIncl(d, v.Args)
 	case tokUseSdcMeta:
@@ -2158,7 +2191,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.setVars[str_GO_PACKAGE_VALUE] = v.Args[0].str()
 	case tokExportYmapsProto:
-		applyProtoNamespace(d, mapsDocProtoNS.any())
+		applyProtoNamespace(d, mapsDocProtoNS.any(), false)
 
 		d.protoAddInclGlobal = append(d.protoAddInclGlobal, mapsDocProto)
 	case tokYmapsSproto:
@@ -2177,20 +2210,19 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if len(v.Args) > 0 {
 			d.peerdirs = append(d.peerdirs, strMapsLibsSproto.any())
 		}
-	case tokExcludeTags:
+	case tokExcludeTags, tokOnlyTags, tokIncludeTags:
 
 		if d.excludeTags == nil {
 			d.excludeTags = make(map[STR]bool)
 		}
 
+		if v.Name == tokOnlyTags {
+			clear(d.excludeTags)
+			d.onlyTags = true
+		}
+
 		for _, argTok := range v.Args {
-			arg := argTok.string()
-
-			switch arg {
-			case "GO_PROTO", "JAVA_PROTO":
-			}
-
-			d.excludeTags[internStr(arg)] = true
+			d.excludeTags[argTok.str()] = v.Name == tokExcludeTags
 		}
 	case tokYaConfJson:
 		if len(v.Args) != 1 {
@@ -2795,15 +2827,15 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			Deps:     []string{strLibraryCppEventlog.string()},
 		})
 	case tokYaff:
-		plugin := parseYAFF(v)
+		conf := confProtoPlugin(fs, yabsConfRel, "YAFF")
+		plugin := parseYAFF(v, conf.namespace)
 
-		plugin.Deps = confPluginDeps(fs, yabsConfRel, "YAFF")
+		plugin.Deps = conf.deps
 
 		if !isGoModuleType(d.unit.Type) {
 			d.peerdirs = append(d.peerdirs, internAnys(plugin.Deps)...)
 		}
 
-		plugin.DeclaredBeforeLiteHeaders = protoTransitiveHeadersEnabled(d)
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 	case tokYaffSchema:
 		plugin := parseYAFFSchema(v)
@@ -2814,7 +2846,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.peerdirs = append(d.peerdirs, internAnys(plugin.Deps)...)
 		}
 
-		plugin.DeclaredBeforeLiteHeaders = protoTransitiveHeadersEnabled(d)
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 	case tokPyRegister:
 
@@ -3155,8 +3186,12 @@ func yaffExtraOutFlag(lead string, s YaffSections) string {
 	return strings.Join(groups, ",")
 }
 
-func parseYAFF(v UnknownStmt) CppProtoPlugin {
+func parseYAFF(v UnknownStmt, defaultNamespace string) CppProtoPlugin {
 	s := parseYAFFSections(v)
+
+	if !slices.Contains(v.Args, kwNAMESPACE.any()) {
+		s.namespace = defaultNamespace
+	}
 
 	if len(s.positional) != 0 {
 		throwFmt("gen: YAFF got unexpected positional argument %q", s.positional[0])
@@ -3247,15 +3282,33 @@ func pythonInitSuffix(name string) string {
 	return string(mangled)
 }
 
-func applyProtoNamespace(d *ModuleData, namespace ANY) {
+func applyProtoNamespace(d *ModuleData, namespace ANY, withGen bool) {
 	d.protoNamespace = ptr(namespace)
-	d.protoAddInclGlobal = append(d.protoAddInclGlobal, sourceClean(namespace.string()))
 
-	protoBuildRoot := build(filepath.ToSlash(filepath.Clean(namespace.string())))
+	protoSourceRoot := protoIncludeDir(namespace.string())
+	protoBuildRoot := protoSourceRoot.rel().build()
+
+	if withGen {
+		d.protoAddInclGlobal = append(d.protoAddInclGlobal, protoBuildRoot)
+	}
+
+	if protoSourceRoot.relString() != "" {
+		d.protoAddInclGlobal = append(d.protoAddInclGlobal, protoSourceRoot)
+	}
 
 	d.addIncl = append(d.addIncl, protoBuildRoot)
 	d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
+}
+
+func protoIncludeDir(rel string) VFS {
+	rel = filepath.ToSlash(filepath.Clean(rel))
+
+	if rel == "." {
+		rel = ""
+	}
+
+	return source(rel)
 }
 
 func applyProtoAddIncl(d *ModuleData, args []ANY) {
@@ -3274,16 +3327,22 @@ func applyProtoAddIncl(d *ModuleData, args []ANY) {
 		}
 	}
 
+	src := protoIncludeDir(rel)
+	bld := src.rel().build()
+
 	if withGen {
-		d.protoAddInclGlobal = append(d.protoAddInclGlobal, build(rel))
+		d.protoAddInclGlobal = append(d.protoAddInclGlobal, bld)
 	}
 
-	d.protoAddInclGlobal = append(d.protoAddInclGlobal, source(rel))
-	d.addLocalIncl(prioAddIncl, build(rel))
+	if src.relString() != "" {
+		d.protoAddInclGlobal = append(d.protoAddInclGlobal, src)
+	}
+
+	d.addLocalIncl(prioAddIncl, bld)
 
 	if global {
-		d.addInclGlobal = append(d.addInclGlobal, build(rel))
-		d.addInclUserGlobal = append(d.addInclUserGlobal, build(rel))
+		d.addInclGlobal = append(d.addInclGlobal, bld)
+		d.addInclUserGlobal = append(d.addInclUserGlobal, bld)
 	}
 }
 
@@ -3540,6 +3599,12 @@ func expandConfigVFSPaths(paths []ANY, env Environment) []VFS {
 	out := make([]VFS, 0, len(expanded))
 
 	for _, path := range expanded {
+		if path.string() == "$(B)" {
+			out = append(out, bldRootDirVFS)
+
+			continue
+		}
+
 		if v := path.vfs(); v != 0 {
 			out = append(out, v)
 
@@ -4070,7 +4135,13 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 }
 
 func moduleExcludesTag(d *ModuleData, tag string) bool {
-	return d != nil && d.excludeTags != nil && d.excludeTags[internStr(tag)]
+	if d == nil {
+		return false
+	}
+
+	excluded, specified := d.excludeTags[internStr(tag)]
+
+	return excluded || d.onlyTags && !specified
 }
 
 func applyCompileNlg(modulePath string, v UnknownStmt, d *ModuleData) {
@@ -4149,13 +4220,22 @@ type ConfPluginKey struct {
 }
 
 func confPluginDeps(fs FS, confRel, macro string) []string {
+	return confProtoPlugin(fs, confRel, macro).deps
+}
+
+type ConfProtoPlugin struct {
+	deps      []string
+	namespace string
+}
+
+func confProtoPlugin(fs FS, confRel, macro string) ConfProtoPlugin {
 	key := ConfPluginKey{fs: fs, macro: macro}
 
 	if v, ok := confPluginDepsCache.Load(key); ok {
-		return v.([]string)
+		return v.(ConfProtoPlugin)
 	}
 
-	var deps []string
+	var conf ConfProtoPlugin
 
 	if fs.isFile(srcRootRel, confRel) {
 		inMacro := false
@@ -4166,6 +4246,10 @@ func confPluginDeps(fs FS, confRel, macro string) []string {
 			switch {
 			case strings.HasPrefix(line, "macro "+macro+"("):
 				inMacro = true
+
+				if _, value, ok := strings.Cut(line, `NAMESPACE="`); ok {
+					conf.namespace, _, _ = strings.Cut(value, `"`)
+				}
 			case inMacro && line == "}":
 				inMacro = false
 			case inMacro && strings.HasPrefix(line, "CPP_PROTO_PLUGIN"):
@@ -4177,14 +4261,14 @@ func confPluginDeps(fs FS, confRel, macro string) []string {
 							break
 						}
 
-						deps = append(deps, f)
+						conf.deps = append(conf.deps, f)
 					}
 				}
 			}
 		}
 	}
 
-	confPluginDepsCache.Store(key, deps)
+	confPluginDepsCache.Store(key, conf)
 
-	return deps
+	return conf
 }

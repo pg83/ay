@@ -41,6 +41,36 @@ def desc_node(graph, output):
 
 
 class ProtoDescTest(unittest.TestCase):
+    def test_explicit_names_and_selected_descriptor_variants(self):
+        for tags, included in (("", True), ("ONLY_TAGS(CPP_PROTO)\n", False),
+                               ("ONLY_TAGS(CPP_PROTO)\nINCLUDE_TAGS(DESC_PROTO)\n", True),
+                               ("EXCLUDE_TAGS(DESC_PROTO)\n", False)):
+            with self.subTest(tags=tags):
+                files = desc_files()
+                files.update({
+                    "p/ya.make": "PROTO_LIBRARY(named)\n" + tags + "INCLUDE_TAGS(DOCS_PROTO)\nSRCS(p.proto)\nEND()\n",
+                    "p/p.proto": 'syntax = "proto3";\n',
+                    "d/ya.make": "PROTO_DESCRIPTIONS(bundle)\nPEERDIR(p)\nEND()\n",
+                })
+                graph = lib.make(files, "d")
+                node = desc_node(graph, "$(B)/d/bundle.protodesc")
+                self.assertEqual("$(B)/p/named.self.protodesc" in node["inputs"], included)
+                self.assertEqual(any("$(B)/p/p.proto.desc" in n["outputs"] for n in graph["graph"]), included)
+
+    def test_descriptor_variant_does_not_run_cpp_linter_configuration(self):
+        files = desc_files()
+        files.update({
+            "p/ya.make": (
+                "PROTO_LIBRARY()\nSRCS(p.proto)\n"
+                "IF(MODULE_LANG == CPP)\nSET_APPEND(_PROTOC_FLAGS --fatal_warnings)\nENDIF()\nEND()\n"
+            ),
+            "p/p.proto": 'syntax = "proto3";\n',
+            "d/ya.make": "PROTO_DESCRIPTIONS()\nPEERDIR(p)\nEND()\n",
+        })
+        graph = lib.make(files, "d")
+        args = desc_node(graph, "$(B)/p/p.proto.desc")["cmds"][0]["cmd_args"]
+        self.assertNotIn("--fatal_warnings", args)
+
     def test_descriptor_flags_and_implicit_peer_precedence(self):
         files = desc_files()
         google = 'contrib/libs/googleapis-common-protos'

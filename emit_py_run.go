@@ -6,8 +6,9 @@ import (
 )
 
 var (
-	pyRunKV  = KV{P: pkPY, PC: pcYellow, ShowOut: true}
-	luaRunKV = KV{P: pkLU, PC: pcYellow, ShowOut: true}
+	pyRunKV      = KV{P: pkPY, PC: pcYellow, ShowOut: true}
+	luaRunKV     = KV{P: pkLU, PC: pcYellow, ShowOut: true}
+	debVersionKV = KV{P: pkCL, PC: pcYellow}
 )
 
 func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
@@ -160,6 +161,10 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	interp := d.cc.TC.Python3.any()
 	kv := &pyRunKV
 	resources := usesPython3
+
+	if stmt.KV != nil {
+		kv = stmt.KV
+	}
 
 	var interpInput *VFS
 	var toolRefs []NodeRef

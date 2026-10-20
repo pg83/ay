@@ -276,6 +276,8 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 		for _, plugin := range d.cppProtoPlugins {
 			ldRef, binary := ctx.tool(internArg(plugin.ToolPath))
 
+			plugin.OutputsBeforeBase = plugin.OutputsBeforeBase || d.moduleStmt.Name == tokProtoLibrary && e.instance.Platform.ProtoHeaderEpilogue
+
 			pe.extraPlugins = append(pe.extraPlugins, ResolvedCPPProtoPlugin{
 				Spec:   plugin,
 				LDRef:  ldRef,
@@ -916,7 +918,7 @@ func assembleProtoCmdOutputs(na *NodeArenas, protoBase string, pbH, pbCC, pbDeps
 	outputs = append(outputs, pbH)
 
 	for _, plugin := range extraPlugins {
-		if !pluginOutputsPrecedeCppGroup(plugin, liteHeaders) {
+		if !plugin.Spec.OutputsBeforeBase {
 			continue
 		}
 
@@ -936,7 +938,7 @@ func assembleProtoCmdOutputs(na *NodeArenas, protoBase string, pbH, pbCC, pbDeps
 	}
 
 	for _, plugin := range extraPlugins {
-		if pluginOutputsPrecedeCppGroup(plugin, liteHeaders) {
+		if plugin.Spec.OutputsBeforeBase {
 			continue
 		}
 
@@ -948,10 +950,6 @@ func assembleProtoCmdOutputs(na *NodeArenas, protoBase string, pbH, pbCC, pbDeps
 	na.vfs.commit(len(outputs))
 
 	return outputs[:len(outputs):len(outputs)]
-}
-
-func pluginOutputsPrecedeCppGroup(plugin ResolvedCPPProtoPlugin, liteHeaders bool) bool {
-	return liteHeaders && plugin.Spec.DeclaredBeforeLiteHeaders
 }
 
 func protoCPPOutRoot(d *ModuleData) string {
@@ -1058,7 +1056,7 @@ func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppSty
 	}
 
 	for _, p := range protoInclude {
-		mid = append(mid, internV("-I=", p.prefix(), p.relString()).any())
+		mid = append(mid, internV("-I=", p.string()).any())
 	}
 
 	if liteHeaders {

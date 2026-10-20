@@ -19,6 +19,8 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokDisable: {},
 
 	tokExcludeTags: {},
+	tokIncludeTags: {},
+	tokOnlyTags:    {},
 
 	tokDeclareInDirs: {},
 

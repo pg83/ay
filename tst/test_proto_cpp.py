@@ -68,6 +68,35 @@ def pb_node(graph, pb_h):
 
 
 class ProtoCppTest(unittest.TestCase):
+    def test_root_namespace_uses_typed_build_root_and_no_source_root_include(self):
+        files = proto_files()
+        files.update({
+            "p/ya.make": "PROTO_LIBRARY()\nPROTO_NAMESPACE(WITH_GEN .)\nSRCS(a.proto)\nEND()\n",
+            "p/a.proto": 'syntax = "proto3";\n',
+        })
+        graph = lib.make(files, "p")
+        args = lib.node_by_output(graph, "$(B)/p/a.pb.cc.o")["cmds"][0]["cmd_args"]
+        self.assertNotIn("-I$(B)/.", args)
+        self.assertGreater(args.count("-I$(B)"), 1)
+        proto_args = lib.node_by_output(graph, "$(B)/p/a.pb.h")["cmds"][0]["cmd_args"]
+        self.assertNotIn("-I=$(S)/.", proto_args)
+        self.assertGreater(proto_args.count("-I=$(B)"), 1)
+
+    def test_yaff_namespace_default_comes_from_macro_signature(self):
+        for default in ("NProtoYaFF", "CustomNamespace"):
+            files = proto_files()
+            yaff_files(files)
+            files.update({
+                "build/internal/conf/project_specific/yabs.conf": (
+                    f'macro YAFF(NAMESPACE="{default}", FILES[], EXPERIMENTAL[]) {{\n'
+                    "    CPP_PROTO_PLUGIN2(yaff $YAFF_PLUGIN_PATH .yaff.h .yaff.cpp)\n}\n"
+                ),
+                "p/ya.make": "PROTO_LIBRARY()\nYAFF()\nSRCS(a.proto)\nEND()\n",
+                "p/a.proto": 'syntax = "proto3";\n',
+            })
+            node = lib.node_by_output(lib.make(files, "p"), "$(B)/p/a.pb.h")
+            self.assertIn(f"--yaff_opt=namespace={default}", node["cmds"][0]["cmd_args"])
+
     def test_distbuild_generated_sources_bring_no_generator_inputs(self):
         # Under ya --dist (ymake --add-inputs) a compile takes the include
         # closure of the generated .pb.cc, not the inputs of protoc.
@@ -272,6 +301,36 @@ class ProtoCppTest(unittest.TestCase):
             "$(B)/p/a.pb.h", "$(B)/p/a.yaff.h", "$(B)/p/a.yaff.cpp",
             "$(B)/p/a.pb.cc", "$(B)/p/a.deps.pb.h",
         ])
+
+    def test_header_condition_recalculation_preserves_explicit_plugin_outputs_first(self):
+        for epilogue in (False, True):
+            with self.subTest(epilogue=epilogue):
+                files = proto_files()
+                lib.tool_program(files, "tools/plugin", "plugin")
+                if epilogue:
+                    files["build/conf/proto.conf"] = (
+                        "macro _CPP_PROTO_EPILOGUE() {\n"
+                        "    SET(PROTOC_TRANSITIVE_HEADERS $_CPP_PROTO_HEADERS_TRANSITIVE)\n"
+                        "}\n"
+                    )
+                files.update({
+                    "p/ya.make": (
+                        "PROTO_LIBRARY()\n"
+                        "CPP_PROTO_PLUGIN2(custom tools/plugin .custom.h .custom.cpp)\n"
+                        + ("" if epilogue else "SET(PROTOC_TRANSITIVE_HEADERS yes)\n")
+                        + "SRCS(a.proto)\nEND()\n"
+                    ),
+                    "p/a.proto": 'syntax = "proto3";\nmessage A {}\n',
+                })
+                graph = lib.make(files, "p")
+                node = pb_node(graph, "$(B)/p/a.pb.h")
+                outputs = [
+                    "$(B)/p/a.pb.h", "$(B)/p/a.custom.h",
+                    "$(B)/p/a.custom.cpp", "$(B)/p/a.pb.cc",
+                ]
+                self.assertEqual(node["outputs"], outputs)
+                args = node["cmds"][0]["cmd_args"]
+                self.assertEqual(args[args.index("--outputs") + 1:args.index("--")], outputs)
 
     def test_plugin_emitting_grpc_suffixes_without_grpc_macro(self):
         files = proto_files()

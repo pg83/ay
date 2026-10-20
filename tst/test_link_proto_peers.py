@@ -194,17 +194,17 @@ class ProtoPeersTest(unittest.TestCase):
         graph = lib.make(fixture(), "d")
         per_file = lib.node_by_output(graph, "$(B)/p/a.proto.desc")
         self_desc = lib.node_by_output(graph, "$(B)/p/p.self.protodesc")
-        merged = lib.node_by_output(graph, "$(B)/d/d.protodesc")
+        merged = lib.node_by_output(graph, "$(B)/d/descs.protodesc")
         for node in (per_file, self_desc, merged):
             self.assertEqual(node["kv"]["p"], "PD")
-        self.assertEqual(merged["outputs"], ["$(B)/d/d.protodesc", "$(B)/d/d.tar"])
+        self.assertEqual(merged["outputs"], ["$(B)/d/descs.protodesc", "$(B)/d/descs.tar"])
         self.assertEqual(
             merged["cmds"][0]["cmd_args"][1:],
-            ["$(S)/build/scripts/merge_files.py", "$(B)/d/d.protodesc", "$(B)/p/p.self.protodesc"],
+            ["$(S)/build/scripts/merge_files.py", "$(B)/d/descs.protodesc", "$(B)/p/p.self.protodesc"],
         )
         self.assertEqual(
             merged["cmds"][1]["cmd_args"][-3:],
-            ["--output", "$(B)/d/d.tar", "p/p.self.protodesc"],
+            ["--output", "$(B)/d/descs.tar", "p/p.self.protodesc"],
         )
         self.assertIn(self_desc["uid"], merged["deps"])
 
@@ -251,12 +251,12 @@ class ProtoPeersTest(unittest.TestCase):
 
     def test_nested_and_named_proto_archive_names(self):
         graph = lib.make(fixture(), "d2")
-        self_desc = lib.node_by_output(graph, "$(B)/nested/deep/pp/nested-deep-pp.self.protodesc")
+        self_desc = lib.node_by_output(graph, "$(B)/nested/deep/pp/named.self.protodesc")
         self.assertEqual(
             self_desc["outputs"],
             [
-                "$(B)/nested/deep/pp/nested-deep-pp.self.protodesc",
-                "$(B)/nested/deep/pp/nested-deep-pp.protosrc",
+                "$(B)/nested/deep/pp/named.self.protodesc",
+                "$(B)/nested/deep/pp/named.protosrc",
             ],
         )
         graph = lib.make(fixture(), "pyn")
