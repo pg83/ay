@@ -718,6 +718,21 @@ class SysinclConfTest(unittest.TestCase):
         extra = ("-DEXTRA_SYSINCL=build/sysincl/zephyr.yml",)
         self.assertEqual({"picolibc"}, claims(probes, files, *extra))
 
+    def test_define_and_exclude_operators(self):
+        # confreader.cpp AddAssignment: `-=` drops the words from the value,
+        # `:=` sets a variable only while it is undefined.
+        files = {
+            **self.YML,
+            "build/conf/sysincl.conf": (
+                "SYSINCL=build/sysincl/zephyr.yml\n"
+                "SYSINCL-=build/sysincl/zephyr.yml\n"
+                "EXTRA_SYSINCL:=build/sysincl/misc.yml\n"
+                "EXTRA_SYSINCL:=build/sysincl/zephyr.yml\n"
+                "SYSINCL+=$EXTRA_SYSINCL\n"
+            ),
+        }
+        self.assertEqual({"misc"}, claims(["misc", "picolibc"], files))
+
     def test_select_alternatives(self):
         files = {
             **self.YML,
