@@ -350,6 +350,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 	var cmdArgs ArgChunks
 	var nodeInputs InputChunks
 	var generatorRefs []NodeRef
+	var closure Closure
 
 	if ps.Kind == pySourceProto {
 		info := e.codegen.use(ps.Path)
@@ -396,11 +397,16 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 			na.anyList(internStr(moduleName).any(), srcAbs.any(), outputPath.any()))
 
 		if genInfo != nil {
-			nodeInputs = na.inputList(
-				na.vfsList(py3ccBinary, py3ccSlowBin),
-				na.vfsList(srcAbs),
-				ps.ExtraInputs,
-			)
+			closure = e.inputClosure(srcAbs)
+
+			buckets := closure.bucketList()
+			chunks := na.inputs.alloc(3 + len(buckets))[:0]
+
+			chunks = append(chunks, na.vfsList(py3ccBinary, py3ccSlowBin), na.vfsList(srcAbs))
+			chunks = append(chunks, buckets...)
+			chunks = append(chunks, ps.ExtraInputs)
+			na.inputs.commit(len(chunks))
+			nodeInputs = chunks[:len(chunks):len(chunks)]
 		} else {
 			nodeInputs = na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin), na.srcChunk(srcAbs))
 		}
@@ -413,6 +419,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 		Cmds:           na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 		Env:            env,
 		Inputs:         nodeInputs,
+		InputClosure:   closure,
 		Outputs:        na.vfsList(outputPath),
 		KV:             &pyCodegenKV,
 		ForeignDepRefs: toolRefs,

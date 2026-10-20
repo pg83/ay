@@ -137,6 +137,10 @@ class SwigTest(unittest.TestCase):
         ])
         self.assertIn("$(B)/lib/wrap.swg.c", pyc["inputs"])
         self.assertNotIn("$(S)/lib/common.i", pyc["inputs"])
+        # wrap.swg.c is the main output of the SW node, a path only: the
+        # devtools_yamaker _libarchive.py.gxhp.yapyc3 lists 4 inputs, none of
+        # the headers of _libarchive.swg.c.
+        self.assertNotIn("$(S)/lib/impl.h", pyc["inputs"])
         packs = [
             node for node in graph["graph"]
             if node["kv"].get("p") == "PR" and "$(B)/lib/wrap.py" in node["inputs"]

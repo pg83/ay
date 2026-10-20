@@ -284,17 +284,7 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 			}
 
 			if input.isBuild() && e.codegen.lookup(input) != nil || template {
-				if e.d.scanCtx == nil {
-					e.d.scanCtx = newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, includeScannerBasePaths())
-				}
-
-				cl, cached := e.scanner.closure(input)
-
-				if !cached {
-					cl = e.scanner.walkClosure(input, e.d.scanCtx, scanDomainCC)
-				}
-
-				if cl.buckets != nil {
+				if cl := e.inputClosure(input); cl.buckets != nil {
 					extra = append(extra, cl)
 				}
 			}
@@ -337,6 +327,20 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 		e.ctx.na.inputs.commit(len(chunks))
 		node.Inputs = chunks[:len(chunks):len(chunks)]
 	})
+}
+
+func (e *EmitContext) inputClosure(input VFS) Closure {
+	if e.d.scanCtx == nil {
+		e.d.scanCtx = newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, includeScannerBasePaths())
+	}
+
+	cl, cached := e.scanner.closure(input)
+
+	if !cached {
+		cl = e.scanner.walkClosure(input, e.d.scanCtx, scanDomainCC)
+	}
+
+	return cl
 }
 
 func (e *EmitContext) resStr2(a, b string) string {
