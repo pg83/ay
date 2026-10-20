@@ -99,6 +99,7 @@ const (
 	ckMatches
 	ckVersionCmp
 	ckDefined
+	ckUnsupportedOp
 )
 
 const (
@@ -2119,6 +2120,16 @@ func (c *CondParser) parseCmp() int32 {
 		c.rejectChainedCmp(t)
 
 		return c.emit(CondNode{Kind: ckVersionCmp, Name: value, L: left, R: right})
+	}
+
+	if t.kind == tokIdent && t.id != kwAND && t.id != kwOR {
+		c.consume()
+
+		right := c.parseAtom()
+
+		c.rejectChainedCmp(t)
+
+		return c.emit(CondNode{Kind: ckUnsupportedOp, Name: t.string(), L: left, R: right})
 	}
 
 	switch t.kind {

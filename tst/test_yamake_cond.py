@@ -174,6 +174,17 @@ class YaMakeConditionTest(unittest.TestCase):
         self.assertEqual(code, 0, stderr)
         self.assertEqual(compiled_sources(graph), {"d.cpp"})
 
+    def test_unsupported_operator_in_skipped_branch(self):
+        body = (
+            "IF (no)\n"
+            "  IF (FREEBSD_VER GREATER 7)\nSRCS(a.cpp)\nENDIF(FREEBSD_VER GREATER 7)\n"
+            "ENDIF(no)\n"
+            "SRCS(b.cpp)\n"
+        )
+        code, graph, stderr = ay_make(module(body, ["a.cpp", "b.cpp"]))
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(compiled_sources(graph), {"b.cpp"})
+
     def test_evaluation_errors(self):
         cases = [
             ("ANDROID_API", 'macros: identifier "ANDROID_API" has int binding but is used in boolean position'),
@@ -187,6 +198,7 @@ class YaMakeConditionTest(unittest.TestCase):
             ('DEFINED "x"', "macros: DEFINED expects a variable name, got kind 1"),
             ('ANDROID_API < "x"', "macros: < requires int operands, got left=int right=string"),
             ("SV < 1", "macros: < requires int operands, got left=string right=int"),
+            ("SONE GREATER 0", 'macros: unsupported IF operator "GREATER"'),
         ]
         for condition, expected in cases:
             with self.subTest(condition=condition):

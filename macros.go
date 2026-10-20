@@ -71,6 +71,8 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 		return evalVersionCmp(nodes, n, env)
 	case ckMatches:
 		return throw2(regexp.MatchString(evalAtomString(nodes, n.R, env, false), evalAtomString(nodes, n.L, env, true)))
+	case ckUnsupportedOp:
+		throwFmt("macros: unsupported IF operator %q", n.Name)
 	case ckDefined:
 		d := &nodes[n.L]
 
