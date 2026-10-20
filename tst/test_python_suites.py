@@ -154,6 +154,17 @@ class PythonSuitesTest(unittest.TestCase):
         graph = lib.make(files, "lib", "-t")
         self.assertEqual(lib.node_by_output(graph, "$(B)/lib/lib")["kv"].get("ld_test_node"), "1")
 
+    def test_python3_test_uses_its_multimodule_child_tag(self):
+        files = fixture(
+            'IF (MODULE_TAG == "PY3TEST_PROGRAM")\nPY_SRCS(selected.py)\n'
+            'ELSE()\nPY_SRCS(wrong.py)\nENDIF()\n', macro="PY3TEST",
+        )
+        files["library/python/pytest/ya.make"] = f"LIBRARY()\n{BARE}END()\n"
+        files.update({"lib/selected.py": "", "lib/wrong.py": ""})
+        graph = lib.make(files, "lib", "-t")
+        lib.node_by_output(graph, "$(B)/lib/selected.py.yapyc3")
+        self.assertFalse(any("$(B)/lib/wrong.py.yapyc3" in n["outputs"] for n in graph["graph"]))
+
     def test_runner_uses_declared_canonical_data_subpath(self):
         files = fixture("SET(CANONIZE_SUB_PATH selected)\n", macro="PY3TEST")
         files["library/python/pytest/ya.make"] = f"LIBRARY()\n{BARE}END()\n"

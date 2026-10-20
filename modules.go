@@ -1147,6 +1147,8 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			if d.unit.Tag == unitTagPy2 || d.unit.Tag == unitTagPy2Native {
 				usePython2(env, d, d.unit.Tag)
+			} else if d.unit.Tag != 0 {
+				env.setStringID(envMODULE_TAG, d.unit.Tag)
 			}
 
 			if isDllModuleType(v.Name) {
@@ -1678,7 +1680,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 			return ModuleUnit{Type: tokPytestBin, Tag: unitTagPy2, ObjSuf: tagPy2, ModulePrefix: "py2_", ARPrefix: "libpy", GlobalARTag: tagGlobal, SbomLang: unitSbomPy2}
 		}
 
-		return ModuleUnit{Type: tokPy3Test, Tag: unitTagPy3, ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
+		return ModuleUnit{Type: tokPy3Test, Tag: unitTagPy3TestProgram, ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
 	}
 
 	if name == tokPy3Program && kind == KindLib {
@@ -1705,7 +1707,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	case tokPy3ProgramBin:
 		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
 	case tokPy3Test:
-		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3, TestLD: true}
+		return ModuleUnit{Type: name, Tag: unitTagPy3TestProgram, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3, TestLD: true}
 	case tokUnittest, tokUnittestFor, tokGtest:
 		return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp, TestLD: true}
 	case tokPy3Library:

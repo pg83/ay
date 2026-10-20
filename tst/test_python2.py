@@ -290,7 +290,9 @@ class Python2Test(unittest.TestCase):
         files.update({
             "both/ya.make": "PY23_LIBRARY()\nNO_PYTHON_INCLUDES()\nPY_SRCS(m.py)\nEND()\nRECURSE_FOR_TESTS(test)\n",
             "both/m.py": "",
-            "both/test/ya.make": "PY23_TEST()\nNO_PYTHON_INCLUDES()\nTEST_SRCS(test_m.py)\nPEERDIR(both)\nEND()\n",
+            "both/test/ya.make": 'PY23_TEST()\nNO_PYTHON_INCLUDES()\nTEST_SRCS(test_m.py)\nPEERDIR(both)\n'
+                'IF (MODULE_TAG == "PY3TEST_PROGRAM")\nTEST_SRCS(test_py3_tag.py)\nENDIF()\nEND()\n',
+            "both/test/test_py3_tag.py": "",
             "both/test/test_m.py": "",
         })
         graph = lib.make(files, "both", "-t", opensource=False)
@@ -304,6 +306,7 @@ class Python2Test(unittest.TestCase):
         self.assertNotIn("build/rules/py2_deprecation", " ".join(py2["inputs"]))
         lib.node_by_output(graph, "$(B)/both/test/test_m.py.yapyc")
         lib.node_by_output(graph, "$(B)/both/test/test_m.py.yapyc3")
+        lib.node_by_output(graph, "$(B)/both/test/test_py3_tag.py.yapyc3")
         for suite, binary in (("pytest", py2), ("py3test", py3)):
             run = lib.node_by_output(graph, f"$(B)/both/test/test-results/{suite}/meta.json")
             self.assertIn(binary["uid"], run["deps"])
