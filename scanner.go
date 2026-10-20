@@ -581,6 +581,9 @@ func (sc *ScanCtx) cachedWindow(v VFS) (Closure, bool) {
 
 func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	s := sc.scanner
+
+	s.codegen.shareInputLoop(members)
+
 	block := s.closureScratch
 	k := fill(block)
 	cl := s.buckets.storeBuckets(block[0], block[1:k])

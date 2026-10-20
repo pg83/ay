@@ -1,7 +1,5 @@
 package main
 
-import "slices"
-
 func copyFileAutoSourceVFS(modulePath string, d *ModuleData, src STR) *VFS {
 	if d.copyFileAutoOutputs == nil {
 		return nil
@@ -111,35 +109,7 @@ func (e *EmitContext) emitCopyFileNodeSnap(entry CopyFileEntry, st CopyEmitState
 }
 
 func (e *EmitContext) copyLoopSources(dst VFS) []VFS {
-	if e.d.scanCtx == nil {
-		e.d.scanCtx = newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, includeScannerBasePaths())
-	}
+	e.inputClosure(dst)
 
-	sc := e.scanner.getScanCtx(e.d.scanCtx, scanDomainCC, e.ctx.parsers.registry.registeredParserFor(dst.relString()))
-
-	defer e.scanner.putScanCtx(sc)
-
-	reach := func(from VFS) []VFS {
-		seen := []VFS{from}
-
-		for i := 0; i < len(seen); i++ {
-			for _, ch := range sc.resolvedChildren(seen[i]) {
-				if ch.isBuild() && e.codegen.lookup(ch) != nil && !slices.Contains(seen, ch) {
-					seen = append(seen, ch)
-				}
-			}
-		}
-
-		return seen[1:]
-	}
-
-	var sources []VFS
-
-	for _, v := range reach(dst) {
-		if info := e.codegen.lookup(v); v != dst && info.SourcePath != 0 && slices.Contains(reach(v), dst) {
-			sources = append(sources, info.SourcePath)
-		}
-	}
-
-	return sources
+	return e.codegen.mustInfo(dst).InputLoopSources
 }

@@ -48,6 +48,30 @@ class CopyFileTest(unittest.TestCase):
             inputs = lib.node_by_output(graph, f"$(B)/mod/{out}")["inputs"]
             self.assertEqual(sorted(i for i in inputs if i.endswith(".txt")), [f"$(S)/mod/{s}" for s in sources], out)
 
+    def test_copy_cycle_through_a_source_header_shares_inputs(self):
+        graph = lib.make({
+            "mod/ya.make": (
+                LIBRARY_HEAD + "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
+                "COPY_FILE(TEXT a.h.txt ${BINDIR}/a.h OUTPUT_INCLUDES bridge.h)\n"
+                "COPY_FILE(TEXT b.h.txt ${BINDIR}/b.h OUTPUT_INCLUDES a.h)\n"
+                "COPY_FILE(TEXT tail.h.txt ${BINDIR}/tail.h OUTPUT_INCLUDES a.h)\n"
+                "SRCS(use.cpp)\nEND()\n"
+            ),
+            "mod/a.h.txt": "", "mod/b.h.txt": "", "mod/tail.h.txt": "",
+            "mod/bridge.h": '#include "b.h"\n',
+            "mod/use.cpp": '#include "tail.h"\n',
+        }, "mod", "--sandboxing")
+        for out, sources in (
+            ("a.h", {"a.h.txt", "b.h.txt"}),
+            ("b.h", {"a.h.txt", "b.h.txt"}),
+            ("tail.h", {"tail.h.txt"}),
+        ):
+            inputs = lib.node_by_output(graph, f"$(B)/mod/{out}")["inputs"]
+            self.assertEqual(
+                {i for i in inputs if i.endswith(".txt")},
+                {f"$(S)/mod/{s}" for s in sources}, out,
+            )
+
     def test_context_output_includes_chained_and_object_copies(self):
         graph = lib.make({
             "mod/ya.make": (

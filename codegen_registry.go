@@ -6,21 +6,22 @@ import (
 )
 
 type GeneratedFileInfo struct {
-	InputsOnly      bool
-	ModuleType      TOK
-	Nots            *NotsPrepared
-	OutputPath      VFS
-	SourcePath      VFS
-	PrimaryInput    VFS
-	OwnerModule     VFS
-	OwnerSerial     uint32
-	ProducerRef     NodeRef
-	OnUse           *PendingEmit
-	GeneratorRefs   []NodeRef
-	ProducerMainOut VFS
-	ClosureLeaves   []VFS
-	LateOutputs     []VFS
-	ParsedIncludes  ParsedIncludeSet
+	InputsOnly       bool
+	ModuleType       TOK
+	Nots             *NotsPrepared
+	OutputPath       VFS
+	SourcePath       VFS
+	PrimaryInput     VFS
+	OwnerModule      VFS
+	OwnerSerial      uint32
+	ProducerRef      NodeRef
+	OnUse            *PendingEmit
+	GeneratorRefs    []NodeRef
+	ProducerMainOut  VFS
+	ClosureLeaves    []VFS
+	InputLoopSources []VFS
+	LateOutputs      []VFS
+	ParsedIncludes   ParsedIncludeSet
 }
 
 type pendingEmitter interface {
@@ -145,6 +146,32 @@ func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates []VFS) {
 	}
 
 	info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{templates})
+}
+
+func (r *CodegenRegistry) shareInputLoop(members []VFS) {
+	if len(members) < 2 {
+		return
+	}
+
+	sources := vfsScratches.get()
+
+	for _, member := range members {
+		if info := r.lookup(member); info != nil && info.SourcePath != 0 {
+			sources = append(sources, info.SourcePath)
+		}
+	}
+
+	if len(sources) > 0 {
+		shared := r.na.dedupClosure(sources)
+
+		for _, member := range members {
+			if info := r.lookup(member); info != nil {
+				info.InputLoopSources = shared
+			}
+		}
+	}
+
+	vfsScratches.put(sources)
 }
 
 func (r *CodegenRegistry) setMainOut(ref NodeRef, outputs []VFS) {
