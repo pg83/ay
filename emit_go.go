@@ -1173,6 +1173,8 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		Resources: goToolResources(na, resourceGlobals),
 	}
 
+	e.appendSdcMeta(&node, programBinaryName(instance, d.moduleStmt))
+
 	return e.emitNode(node), outPath, srcClosure
 }
 
@@ -1302,12 +1304,6 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 
 	embedArgs, embedInputs := goEmbedArgs(na, d.goEmbeds)
 
-	var sdcInputs []VFS
-
-	if d.setVars[strUSE_SDC_META] == strYes {
-		sdcInputs = na.vfsList(mergeSdcmetaVFS)
-	}
-
 	var cgoBuilds []VFS
 
 	if len(d.cgoSrcs) > 0 {
@@ -1320,7 +1316,6 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		cgoBuilds,
 		testInputs,
 		embedInputs,
-		sdcInputs,
 		goToolScriptInputsChunk,
 		dllInputs,
 		peerGlobalPaths,
@@ -1412,13 +1407,6 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		outputs = na.vfsList(outPath, build(dir, "/", outName, ".vet.txt"), header)
 	}
 
-	if d.setVars[strUSE_SDC_META] == strYes {
-		sdcmeta := build(dir, "/", programBinaryName(instance, d.moduleStmt), ".sdcmeta")
-
-		pushCmd(Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), mergeSdcmetaVFS.any(), strB.any(), sdcmeta.any())), Env: goVcsEnv})
-		outputs = na.vfsList(concat(outputs, []VFS{sdcmeta})...)
-	}
-
 	na.cmds.commit(kc)
 
 	node := Node{
@@ -1431,6 +1419,8 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		DepRefs:   deps[:k:k],
 		Resources: goToolResources(na, resourceGlobals),
 	}
+
+	e.appendSdcMeta(&node, programBinaryName(instance, d.moduleStmt))
 
 	return e.emitNode(node), outPath
 }

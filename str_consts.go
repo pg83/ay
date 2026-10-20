@@ -374,6 +374,8 @@ var (
 	strSSE4CFlags                                                                            = internStr("-msse4.1 -msse4.2 -mpopcnt -mcx16")
 	strSSECFlags                                                                             = internStr("-msse2 -msse3 -mssse3")
 	strSandboxResource                                                                       = internStr("--sandbox-resource")
+	strSdgDevtoolsPyMonobinaryBuilderGenerateProgramStarter                                  = internStr("sdg/devtools/py_monobinary_builder/generate_program_starter")
+	strSdgTier0ToolsGenerateSupernodeLinkPy                                                  = internStr("sdg/tier0/tools/generate_supernode_link.py")
 	strShared                                                                                = internStr("-shared")
 	strSkipTests                                                                             = internStr("++skip-tests")
 	strSource                                                                                = internStr("-source")

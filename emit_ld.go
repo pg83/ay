@@ -47,7 +47,7 @@ type DynLibLink struct {
 	fixElfRef NodeRef
 }
 
-func emitLD(
+func (e *EmitContext) emitLD(
 	instance ModuleInstance,
 	binaryName string,
 	ccRefs []NodeRef,
@@ -229,6 +229,8 @@ func emitLD(
 	if dyn != nil && dyn.fixElfRef != 0 {
 		n.ForeignDepRefs = na.refList(dyn.fixElfRef)
 	}
+
+	e.appendSdcMeta(&n, binaryName)
 
 	return emit.emitNode(n)
 }

@@ -126,6 +126,7 @@ const (
 
 type ModuleEmitResult struct {
 	ProtoVariants                   uint16
+	GlobalSources                   []VFS
 	JavaClosure                     []VFS
 	DocsClosure                     []VFS
 	ARRef                           NodeRef
@@ -1138,7 +1139,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return e.genExecTest()
 	}
 
-	if d.moduleStmt.Name == tokUnion {
+	if isUnionModule(d.moduleStmt.Name) {
 		return e.genUnion()
 	}
 
@@ -1416,6 +1417,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		emitResourceFetch(ctx, decl)
 	}
 
+	var globalSources []VFS
+
 	resGlobalsSum := len(ownResourceGlobals)
 	archiveCap := 0
 	sbomCap := 0
@@ -1437,6 +1440,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		pr := rp.result
 
 		resGlobalsSum += len(pr.ResourceGlobalClosure)
+		globalSources = append(globalSources, pr.GlobalSources...)
 		archiveCap += len(pr.PeerArchiveClosurePaths)
 		globalCap += len(pr.PeerGlobalClosurePaths)
 		waCap += len(pr.PeerWholeArchiveClosurePaths) + len(pr.WholeArchivePaths)
@@ -1969,6 +1973,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		*r = ModuleEmitResult{
 			TestSuites:                      e.styleSuites(resourceGlobalsClosure),
 			ProtoVariants:                   d.protoVariants,
+			GlobalSources:                   e.globalSources,
 			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                d.addInclGlobal,
@@ -2108,6 +2113,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 
 	frame.peerCtx = PeerContext{
+		GlobalSources:     globalSources,
 		SelfAddInclGlobal: selfPeerAddInclGlobal,
 		PeerAddInclGlobal: fullPeerAddInclGlobal,
 		ResourceGlobals:   resourceGlobalsClosure,
@@ -2250,7 +2256,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			}
 		}
 
-		ldRef := emitLD(
+		ldRef := e.emitLD(
 			ldInstance,
 			binaryName,
 			ldCCRefs, ldCCOutputs,

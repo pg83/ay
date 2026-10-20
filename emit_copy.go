@@ -14,14 +14,12 @@ func copyFileAutoSourceVFS(modulePath string, d *ModuleData, src STR) *VFS {
 	return ptr(copyFileOutputVFS(modulePath, entry.Dst))
 }
 
-func copyFileParsedIncludes(na *NodeArenas, scanner *IncludeScanner, fs FS, moduleDir VFS, entry CopyFileEntry) []IncludeDirective {
+func copyFileParsedIncludes(na *NodeArenas, scanner *IncludeScanner, srcVFS, moduleDir VFS, entry CopyFileEntry) []IncludeDirective {
 	var own, compileExtra []IncludeDirective
 
 	hasCtx := false
 
 	if entry.Text {
-		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
-
 		own, compileExtra, _ = scanner.parsedIncludes(srcVFS, nil)
 	} else if entry.WithContext {
 		hasCtx = true
@@ -33,8 +31,6 @@ func copyFileParsedIncludes(na *NodeArenas, scanner *IncludeScanner, fs FS, modu
 	out = append(out, compileExtra...)
 
 	if hasCtx {
-		srcVFS := copyFileInputVFS(fs, moduleDir, entry.Src)
-
 		out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
 	}
 
@@ -78,6 +74,11 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	ctx, instance := e.ctx, e.instance
 	reg := e.codegen
 	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
+
+	if len(e.d.srcDirs) > 0 {
+		srcVFS = resolveSourceVFS(ctx, instance, entry.Src, e.d.srcDirs)
+	}
+
 	dstVFS := copyFileOutputVFS(instance.Path.relString(), entry.Dst)
 
 	if existing := reg.lookup(dstVFS); existing != nil && existing.SourcePath == srcVFS {
@@ -88,7 +89,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 		e.requireProducedInput("COPY_FILE src", entry.Src, srcVFS)
 	}
 
-	parsed := copyFileParsedIncludes(ctx.na, e.scanner, ctx.fs, instance.Path, entry)
+	parsed := copyFileParsedIncludes(ctx.na, e.scanner, srcVFS, instance.Path, entry)
 	ref := ctx.emit.reserve()
 
 	var producerSource []VFS

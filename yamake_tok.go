@@ -244,6 +244,12 @@ var tokName = [...]STR{
 	tokTestSrcs:                        internStr("TEST_SRCS"),
 	tokTimeout:                         internStr("TIMEOUT"),
 	tokToolchain:                       internStr("TOOLCHAIN"),
+	tokSdcUnion:                        internStr("SDC_UNION"),
+	tokSdcInstall:                      internStr("SDC_INSTALL"),
+	tokSdcResourceInfo:                 internStr("SDC_RESOURCE_INFO"),
+	tokSdcSbResourceInfo:               internStr("SDC_SB_RESOURCE_INFO"),
+	tokSdcRosnodeInfo:                  internStr("SDC_ROSNODE_INFO"),
+	tokSdcSolibInfo:                    internStr("SDC_SOLIB_INFO"),
 	tokUnion:                           kwUNION,
 	tokUnittestFor:                     kwUNITTEST_FOR,
 	tokUseCommonGoogleApis:             internStr("USE_COMMON_GOOGLE_APIS"),
@@ -557,6 +563,12 @@ const (
 	tokTestSrcs
 	tokTimeout
 	tokToolchain
+	tokSdcUnion
+	tokSdcInstall
+	tokSdcResourceInfo
+	tokSdcSbResourceInfo
+	tokSdcRosnodeInfo
+	tokSdcSolibInfo
 	tokUnion
 	tokUnittestFor
 	tokExectest

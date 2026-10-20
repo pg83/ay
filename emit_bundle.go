@@ -14,6 +14,11 @@ func (e *EmitContext) emitBundles() {
 		}
 
 		src, srcRef, resolved := e.resolveBundleSource(b.Target)
+
+		if resolved && b.Suffix != "" {
+			src = build(src.relString(), b.Suffix)
+		}
+
 		ref := ctx.emit.reserve()
 
 		e.emitBundleNode(d.tc.Python3, src, dst, srcRef, resolved, ref)

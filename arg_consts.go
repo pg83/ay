@@ -217,6 +217,7 @@ var (
 	argSBuildScriptsCheckConfigHPy                          = internArg("$(S)/build/scripts/check_config_h.py")
 	argSContribToolsCythonCythonPy                          = internArg("$(S)/contrib/tools/cython/cython.py")
 	argSchema                                               = internArg("--schema")
+	argSdgTier0ToolsBipWriter                               = internArg("sdg/tier0/tools/bip/writer")
 	argSequential                                           = internArg("SEQUENTIAL")
 	argShared                                               = internArg("-shared")
 	argSigusr2                                              = internArg("SIGUSR2")

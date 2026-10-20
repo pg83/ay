@@ -11,6 +11,8 @@ func persistParsedIncludeSet(ctx *GenCtx, set ParsedIncludeSet) ParsedIncludeSet
 }
 
 func persistResult(ctx *GenCtx, r *ModuleEmitResult) {
+	r.GlobalSources = ctx.vfsSlices.internCopy(r.GlobalSources)
+
 	if r.persisted {
 		return
 	}

@@ -4,6 +4,10 @@ import "strings"
 
 var unionKV = KV{P: pkUN, PC: pcLightCyan}
 
+func isUnionModule(t TOK) bool {
+	return t == tokUnion || t == tokSdcUnion
+}
+
 func (d *ModuleData) addFiles(files []ANY) {
 	for _, file := range files {
 		name := file.string()
@@ -25,10 +29,13 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 
 		peers = append(peers, res.JavaClosure...)
 		globals = append(globals, res.ResourceGlobalClosure...)
+		e.globalSources = append(e.globalSources, res.GlobalSources...)
 	}
 
 	globals = e.scriptModuleResources(globals, "build/platform/python/ymake_python3")
 	e.emitFromSandboxes()
+	e.emitBundles()
+	e.globalSources = dedup(e.globalSources, e.emitSdcMetas())
 	e.emitDeclaredProducers(nil)
 
 	generated := dedup(e.outs)
@@ -50,7 +57,12 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), strC2.any(), internStr("open('"+out.string()+"','w').close()").any())), Env: envVarsVCS}),
 	}
 
-	ref := e.emitLazyModuleNode(node, nil, out)
+	e.appendSdcMeta(&node, name)
 
-	return e.scriptModuleResult(ref, out, dedup(peers), globals)
+	ref := e.emitLazyModuleNode(node, peers, out)
+	res := e.scriptModuleResult(ref, out, dedup(peers), globals)
+
+	res.GlobalSources = e.globalSources
+
+	return res
 }

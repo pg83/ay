@@ -290,6 +290,7 @@ type ModuleData struct {
 	runPython                []*RunPythonStmt
 	fromSandboxes            []*FromSandboxStmt
 	fromArchives             []FromArchiveEntry
+	sdcMetas                 []SdcMetaEntry
 	checkConfigHeaders       []ANY
 	cythonCpp                []*CythonStmt
 	cythonNumpyBeforeInclude bool
@@ -1139,7 +1140,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			env.setString(envMODULE_LANG, moduleLang)
 
 		case *SrcsStmt:
-			if d.moduleStmt != nil && d.moduleStmt.Name == tokUnion {
+			if d.moduleStmt != nil && isUnionModule(d.moduleStmt.Name) {
 				d.addFiles(expandStmtTokens(v.Sources, env))
 
 				continue
@@ -1714,6 +1715,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}()
 
 	switch v.Name {
+	case tokSdcInstall:
+		applySdcInstall(modulePath, v.Args, d, env)
+	case tokSdcResourceInfo, tokSdcSbResourceInfo, tokSdcRosnodeInfo, tokSdcSolibInfo:
+		d.sdcMetas = append(d.sdcMetas, parseSdcMeta(v.Name, anyStrs(v.Args)))
 	case tokFromArchive:
 		options := parseFromSandbox(v.Args, v.Line)
 
@@ -1728,7 +1733,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			StdoutFile: ptr(strDebianversionH.any()), KV: &debVersionKV,
 		})
 	case tokFiles:
-		if d.docs != nil || d.moduleStmt != nil && (d.moduleStmt.Name == tokUnion || d.moduleStmt.Name == tokCiGroup) {
+		if d.docs != nil || d.moduleStmt != nil && (isUnionModule(d.moduleStmt.Name) || d.moduleStmt.Name == tokCiGroup) {
 			d.addFiles(v.Args)
 		} else {
 			handled = false
