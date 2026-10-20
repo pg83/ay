@@ -270,8 +270,6 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Pla
 	targetRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, targetFlags, targetTC)
 	picFlags := maps.Clone(targetFlags)
 
-	// ya configures the pic graph of a target with its flags minus FORCE_NO_PIC
-	// (devtools/ya/build/graph.py _build_no_pic).
 	delete(picFlags, "FORCE_NO_PIC")
 
 	picRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
@@ -279,6 +277,7 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Pla
 	caches.prewarm(fs, mf.targets)
 
 	wlSystemLibs := confSystemLibsViaWl(fs)
+
 	hostP = newPlatform(
 		hOS,
 		hISA,
