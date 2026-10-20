@@ -361,7 +361,8 @@
       "YA_STORE_LINKS_IN_MEMORY": "1",
       "YA_STRIP_IDLE_BUILD_RESULTS": "0",
       "YA_STRIP_PACKAGES_FROM_RESULTS": "1",
-      "YA_TC": "no"
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": [
       "alice/library/llm/stubs/nlg/proto_registry",
@@ -410,10 +411,10 @@
       "yweb/structhtml/microform/parser"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088276548",
-    "slice_sha256": "845d9009fc75ad11de9d60c86f850a65e335b8d9d2c076e5e5ca7d125e787eba",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088282288",
-    "graph_sha256": "8cd6baa5e66a2cfc0e8cef42866a6b5e0a24bfbb305cef0d1a6116b7721153ab"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088867440",
+    "slice_sha256": "0083b9838b610320cfaf6ced14f78901da208a22a994367b4d0fce5c82ac0b9a",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088873924",
+    "graph_sha256": "a5530754d96bd803b7b84d64bdac786e5597d364c133daa5b2b2703d361c79b3"
   },
   {
     "id": "p12_config",
@@ -523,7 +524,8 @@
       "YA_STORE_LINKS_IN_MEMORY": "1",
       "YA_STRIP_IDLE_BUILD_RESULTS": "0",
       "YA_STRIP_PACKAGES_FROM_RESULTS": "1",
-      "YA_TC": "no"
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": [
       "alice/boltalka/libs/function_calling/lib/calculator",
@@ -572,10 +574,10 @@
       "yweb/robot/js/lib/http"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088295047",
-    "slice_sha256": "110d524e0ec2dd988932590ec972679a347a5d4a687d46fce7523e56dcae3bc0",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088299229",
-    "graph_sha256": "324a09d6741f40bfdd2afccdc5b437a8be7681cae5108300439f4be2eda87b4a"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088879957",
+    "slice_sha256": "4450c2198dca4a75e7792447810105c7ebeb59aa7c562a39969460be64035870",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088884109",
+    "graph_sha256": "526edc6f161264c6f6b6f04d6579f84521870b9a9b05f6339688cd31cf755239"
   },
   {
     "id": "p12_cuda",
@@ -726,7 +728,8 @@
       "YA_STORE_LINKS_IN_MEMORY": "1",
       "YA_STRIP_IDLE_BUILD_RESULTS": "0",
       "YA_STRIP_PACKAGES_FROM_RESULTS": "1",
-      "YA_TC": "no"
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": [
       "devtools/contrib/piglet/docs",
@@ -734,10 +737,10 @@
       "maps/analytics/docs"
     ],
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087938491",
-    "slice_sha256": "6386b0ea3638218ad2dea942c2616c5ac8c3767d6ee5e2f3ee1b2c530ce8a28e",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087939087",
-    "graph_sha256": "1a043f87accf46369d606575cb610a1fe3adca43758a7f8fe1631909562bae0b"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088885427",
+    "slice_sha256": "7c9875128da72dedbb6caf7ab23ad328e56597262e51a941871fa96cdf854ce2",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088885899",
+    "graph_sha256": "8c0bd07beb73956dd5d8dc6e249487a74c7a284be9538e10e71aabbf8ad35c21"
   },
   {
     "id": "p12_go",
@@ -915,7 +918,8 @@
       "YA_STORE_LINKS_IN_MEMORY": "1",
       "YA_STRIP_IDLE_BUILD_RESULTS": "0",
       "YA_STRIP_PACKAGES_FROM_RESULTS": "1",
-      "YA_TC": "no"
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": [
       "cloud/kms/s3-fuzzing",
@@ -944,10 +948,10 @@
       "travel/orders/tools/db_migrator"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088006677",
-    "slice_sha256": "363dc016f5ad748b87597ad78549663e8838131bc71db07accc15883073eaf7e",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088009321",
-    "graph_sha256": "338f1481c10015145b8ab20ffe0d3b8fbba59c9ad6c4c1970f073df95272c0ab"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088890235",
+    "slice_sha256": "f539aefca4b67550287610fb7e0b60a07a5b4f0a14e707f5ec40d617abd46378",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088893695",
+    "graph_sha256": "2025602a7e7e4767b6a7db479160ad1d7f7299bdfa60b100cb003f66a1afafc0"
   },
   {
     "id": "p12_packaging",
@@ -1023,7 +1027,8 @@
       "YA_STORE_LINKS_IN_MEMORY": "1",
       "YA_STRIP_IDLE_BUILD_RESULTS": "0",
       "YA_STRIP_PACKAGES_FROM_RESULTS": "1",
-      "YA_TC": "no"
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": [
       "infra/qemu/bin",
@@ -1038,10 +1043,10 @@
       "sdg/sdc/third_party/ros/ros/core/roslib/sdc_install"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087980742",
-    "slice_sha256": "5f7aa90bf347302299f215f6ef0c4e9a0fca1fac8ae1d1821057c8d82784b621",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087985486",
-    "graph_sha256": "8f095310756ef3596d33d0abca4135ae4e416bc4cdc4d95cfe40df3f2447bc45"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088904072",
+    "slice_sha256": "d88dd29abd66964cca3317603165dcdf282153a4016900f314c18f069747cc18",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088907121",
+    "graph_sha256": "ca578d7a93d2dcfc65e2faec8eb86d48206385d2f570748748dcc44b476ae3d0"
   },
   {
     "id": "p12_proto",
@@ -1294,7 +1299,8 @@
       "YA_STORE_LINKS_IN_MEMORY": "1",
       "YA_STRIP_IDLE_BUILD_RESULTS": "0",
       "YA_STRIP_PACKAGES_FROM_RESULTS": "1",
-      "YA_TC": "no"
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": [
       "alice/iot/bastiodon/pkg/services/gotest",
@@ -1324,10 +1330,10 @@
       "yweb/news/rtmr/document_history/lib/util/ut"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088033315",
-    "slice_sha256": "965f226e302db147ce37bf14fbfc777020f9da771c79b106b56ab6e882570e0e",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088039024",
-    "graph_sha256": "58dae973819fb45913693388d0520f84384c072fc06c159309d2c7267a449ef8"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088918100",
+    "slice_sha256": "177b5f0d374e27aae576dd39d81b85311df731455e528f900ba9bcb8e6f39542",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088924599",
+    "graph_sha256": "a3530f7f0bffcd8587926725bf85b54b5fc904c93a9004a87f8452dc8b60bafb"
   },
   {
     "id": "p12_typescript",
