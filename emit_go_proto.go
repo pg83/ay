@@ -242,6 +242,9 @@ func applyGoCommonGoogleApis(args []ANY, d *ModuleData) {
 		}
 	}
 
-	d.peerdirs = append(peers, d.peerdirs...)
-	d.protoAddInclGlobal = slices.Insert(d.protoAddInclGlobal, 0, contribLibsGoogleapisCommonProtos)
+	d.goCommonGoogleApis = peers
+
+	if !slices.Contains(d.protoAddInclGlobal, contribLibsGoogleapisCommonProtos) {
+		d.protoAddInclGlobal = slices.Insert(d.protoAddInclGlobal, 0, contribLibsGoogleapisCommonProtos)
+	}
 }

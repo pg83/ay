@@ -149,6 +149,7 @@ type ModuleData struct {
 	mockgen                  GoMockgenVars
 	goCodegens               []GoCodegenStmt
 	goEmbeds                 []GoEmbed
+	goCommonGoogleApis       []ANY
 	goProtoOpts              []GoProtoOpt
 	cgoSrcs                  []ANY
 	cgoLdflags               []ANY

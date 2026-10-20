@@ -248,6 +248,8 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		d.peerdirs = append(d.peerdirs, internStr(p).any())
 	}
 
+	d.peerdirs = append(slices.Clip(d.goCommonGoogleApis), d.peerdirs...)
+
 	if isGoExeModuleType(d.moduleStmt.Name) {
 		user := slices.Clone(d.peerdirs)
 

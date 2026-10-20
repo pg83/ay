@@ -457,7 +457,7 @@ class GoCodegenTest(unittest.TestCase):
             go_module(files, path)
         files["contrib/libs/googleapis-common-protos/ya.make"] = "PROTO_LIBRARY()\nEND()\n"
         files["p/svc/ya.make"] = (
-            "PROTO_LIBRARY()\nPEERDIR(p/dep)\nGRPC()\nSRCS(GLOBAL svc.proto)\n"
+            "PROTO_LIBRARY()\nUSE_COMMON_GOOGLE_APIS(api/visibility)\nPEERDIR(p/dep)\nGRPC()\nSRCS(GLOBAL svc.proto)\n"
             "USE_COMMON_GOOGLE_APIS(api/annotations)\nEND()\n"
         )
         files["p/svc/svc.proto"] = 'syntax = "proto3";\n'
@@ -473,6 +473,7 @@ class GoCodegenTest(unittest.TestCase):
         ])
         self.assertEqual(peers[7], f"{STD}/sync/sync.a")
         self.assertIn("vendor/google.golang.org/protobuf/types/known/wrapperspb/wrapperspb.a", peers)
+        self.assertNotIn("vendor/google.golang.org/genproto/googleapis/api/visibility/visibility.a", peers)
 
     def test_ev_sources_of_the_go_variant_are_copied_to_proto(self):
         files = go_proto_world()
