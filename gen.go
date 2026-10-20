@@ -2068,6 +2068,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	scanAddIncl := e.cythonAdjustModuleCCBlocks()
 
 	e.sprotoAdjustProtoEnv()
+
+	if len(d.protoAddIncl) > 0 {
+		d.cc.ProtoInclude = dedup(d.protoAddInclGlobal, d.protoAddIncl, effectiveProtoInclude)
+	}
+
 	d.scanCtx = newModuleScanContext(ctx, instance, d, scanAddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
 	e.emit()
 

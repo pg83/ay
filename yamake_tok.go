@@ -1,6 +1,7 @@
 package main
 
 var tokName = [...]STR{
+	tokYtOrmProtoYson: internStr("YT_ORM_PROTO_YSON"),
 	tokUsrvStyleJSON: internStr("USRV_STYLE_JSON_CURRENT_DIRECTORY"),
 	tokUsrvStyleYAML: internStr("USRV_STYLE_YAML_CURRENT_DIRECTORY"),
 	tokStyleJSON:     internStr("STYLE_JSON"),
@@ -651,6 +652,7 @@ const (
 	tokGoDll
 	tokAllGoSrcs
 	tokGoMockgenFrom
+	tokYtOrmProtoYson
 	tokGoMockgenContribFrom
 	tokGoMockgenTypes
 	tokGoMockgenExcludeIfaces

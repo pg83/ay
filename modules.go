@@ -213,6 +213,7 @@ type ModuleData struct {
 	cythonAddIncl            []VFS
 	asmAddIncl               []VFS
 	protoAddInclGlobal       []VFS
+	protoAddIncl             []VFS
 	swigAddIncl              []VFS
 	swigAddInclGlobal        []VFS
 	llvmBc                   []*LlvmBcStmt
@@ -1962,6 +1963,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.goProtoOpts = append(d.goProtoOpts, GoProtoOpt{plugin: positional[0].string(), ext: positional[1].string(), tool: positional[2].string()})
 		d.peerdirs = append(d.peerdirs, lists["DEPS"]...)
+	case tokYtOrmProtoYson:
+		applyYtOrmProtoYson(modulePath, v.Args, d, env)
 	case tokGoGrpcGatewayV2OpenapiSrcs, tokGoGrpcGatewayV2Srcs, tokGoGrpcGatewaySrcs, tokGoGrpcGatewaySwagger:
 		applyGoGrpcGatewayStmt(v, d, env)
 	case tokGoMockgenFrom, tokGoMockgenContribFrom, tokGoMockgenTypes, tokGoMockgenExcludeIfaces, tokGoMockgenPackage,

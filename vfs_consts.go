@@ -14,6 +14,7 @@ var (
 	bldContribToolsSwigSwig             = build("contrib/tools/swig/swig")
 	bldRootDirVFS                       = build("")
 	bldVcsJson                          = build("vcs.json")
+	bldYt                               = build("yt")
 	buildInfoGenPyVFS                   = source("build/scripts/build_info_gen.py")
 	buildMappingConfJson                = source("build/mapping.conf.json")
 	buildMnScriptVFS                    = source("build/internal/scripts/build_mn.py")
@@ -89,4 +90,5 @@ var (
 	xargsPyVFS                          = source("build/scripts/xargs.py")
 	yasmBinaryVFS                       = build("contrib/tools/yasm/yasm")
 	yieldLinePyVFS                      = source("build/scripts/yield_line.py")
+	yt                                  = source("yt")
 )

@@ -43,6 +43,7 @@ const (
 	goCodegenSource
 	goCodegenOapi
 	goCodegenGateway
+	goCodegenYson
 )
 
 type GoMockgenVars struct {
@@ -68,6 +69,7 @@ type GoCodegenStmt struct {
 	out       string
 	args      []ANY
 	inNoParse []ANY
+	files     []ANY
 }
 
 func goMacroLists(args []ANY, keywords ...string) (positional []ANY, lists map[string][]ANY) {
@@ -164,6 +166,12 @@ func (e *EmitContext) goToolEnv() EnvVars {
 
 func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
+	if st.kind == goCodegenYson {
+		e.emitYtOrmProtoYson(st)
+
+		return
+	}
 
 	if st.kind == goCodegenGateway {
 		protoRel := e.goProtoRel(internStr(st.file).any())
@@ -358,6 +366,16 @@ func applyGoGrpcGatewayStmt(v UnknownStmt, d *ModuleData, env Environment) {
 }
 
 func (st GoCodegenStmt) outputNames() []string {
+	if st.kind == goCodegenYson {
+		names := make([]string, len(st.files))
+
+		for i, file := range st.files {
+			names[i] = strings.TrimSuffix(path.Base(file.string()), ".proto") + ".yson.go"
+		}
+
+		return names
+	}
+
 	if st.kind != goCodegenGateway {
 		return []string{st.out}
 	}
