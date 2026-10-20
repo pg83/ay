@@ -161,6 +161,20 @@ func (r *CodegenRegistry) lookup(path VFS) *GeneratedFileInfo {
 	return info
 }
 
+func (r *CodegenRegistry) moduleType(path VFS) TOK {
+	if !path.isBuild() {
+		return 0
+	}
+
+	info, _ := r.byRel.get(path.rel())
+
+	if info == nil {
+		return 0
+	}
+
+	return info.ModuleType
+}
+
 func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
 	info, _ := r.byRel.get(id)
 

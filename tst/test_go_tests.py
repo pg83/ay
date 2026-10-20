@@ -422,6 +422,21 @@ def go_proto_world():
 
 
 class GoCodegenTest(unittest.TestCase):
+    def test_recursed_proto_go_peer_has_one_dependency_per_archive(self):
+        files = go_proto_world()
+        files.update({
+            "root/ya.make": f"LIBRARY()\n{NO_PLATFORM}END()\nRECURSE(leaf parent)\n",
+            "root/leaf/ya.make": "PROTO_LIBRARY()\nONLY_TAGS(GO_PROTO)\nSRCS(leaf.proto)\nEND()\n",
+            "root/leaf/leaf.proto": 'syntax = "proto3";\n',
+            "root/parent/ya.make": "PROTO_LIBRARY()\nONLY_TAGS(GO_PROTO)\nSRCS(parent.proto)\nPEERDIR(root/leaf)\nEND()\n",
+            "root/parent/parent.proto": 'syntax = "proto3";\n',
+        })
+        graph = lib.make(files, "root", "-t")
+        package = lib.node_by_output(graph, "$(B)/root/parent/parent.a")
+        by_uid = {node["uid"]: node for node in graph["graph"]}
+        outputs = [by_uid[uid]["outputs"][0] for uid in package["deps"]]
+        self.assertEqual(outputs.count("$(B)/root/leaf/leaf.a"), 1)
+
     def test_go_peer_of_a_proto_library_builds_its_go_variant(self):
         files = go_proto_world()
         files["p/base/ya.make"] = "PROTO_LIBRARY()\nSRCS(base.proto)\nEND()\n"

@@ -1078,7 +1078,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 	ref := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{OutputPath: outPath, ProducerRef: ref, ModuleType: d.moduleStmt.Name})
+	e.register(GeneratedFileInfo{OutputPath: outPath, InputsOnly: true, ModuleType: d.moduleStmt.Name})
 
 	return ref, outPath
 }
@@ -1330,7 +1330,5 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 }
 
 func (e *EmitContext) isGoArchive(p VFS) bool {
-	info := e.codegen.lookup(p)
-
-	return info != nil && isGoModuleType(info.ModuleType)
+	return isGoModuleType(e.codegen.moduleType(p))
 }
