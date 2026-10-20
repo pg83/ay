@@ -475,6 +475,10 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		for _, bucket := range cl.bucketList() {
 			s.buckets.spliceBucket(&sc.tjc.closure, bucket)
 		}
+
+		if main := sc.opaqueMainOut(ch); main != 0 {
+			s.buckets.spliceOne(&sc.tjc.closure, main)
+		}
 	}
 
 	if main := sc.mainOut(abs); main != 0 {
@@ -482,6 +486,20 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	}
 
 	s.putClosure(abs, s.buckets.storeScratch(abs))
+}
+
+func (sc *ScanCtx) opaqueMainOut(v VFS) VFS {
+	s := sc.scanner
+
+	if !v.isBuild() || s.parsers.registry.scansIncludes(v.relString()) {
+		return 0
+	}
+
+	if info := s.codegen.lookup(v); info != nil && info.ProducerMainOut != v {
+		return info.ProducerMainOut
+	}
+
+	return 0
 }
 
 func (sc *ScanCtx) mainOut(v VFS) VFS {

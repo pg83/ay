@@ -76,6 +76,8 @@ type ClosureSink interface {
 
 	mainOut(v VFS) VFS
 
+	opaqueMainOut(v VFS) VFS
+
 	cachedWindow(v VFS) (window Closure, cached bool)
 
 	emitClosure(members []VFS, fill func(block []VFS) int)
@@ -156,6 +158,10 @@ func (tc *TarjanCtx) spliceChild(ch VFS) {
 	cl, _ := tc.g.cachedWindow(ch)
 
 	tc.emitK = cl.spliceInto(&tc.closure, tc.emitBuf, tc.emitK)
+
+	if main := tc.g.opaqueMainOut(ch); main != 0 {
+		tc.emitK = tc.closure.spliceOne(main, tc.emitBuf, tc.emitK)
+	}
 }
 
 func (tc *TarjanCtx) emitMembers(block []VFS) int {

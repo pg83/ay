@@ -89,7 +89,10 @@ class ToolDrivenSourcesTest(unittest.TestCase):
         ):
             self.assertIn(path, use["inputs"])
         self.assertNotIn('$(S)/mod/scheme.sc', use['inputs'])
-        self.assertNotIn('$(B)/mod/calc.sfdl.tmp', use['inputs'])
+        # calc.sfdl.tmp is the main output of the SF node, added by path for
+        # the included calc although it has no parser: basesearch
+        # kernel/relevstatic/calc_static.cpp.o lists static_factors.inc.sfdl.tmp.
+        self.assertIn('$(B)/mod/calc.sfdl.tmp', use['inputs'])
         self.assertNotIn('$(S)/mod/calc.sfdl', use['inputs'])
         self.assertNotIn('$(S)/mod/model.fml', use['inputs'])
         self.assertEqual(sorted(use["deps"]), sorted([scheme["uid"], calc["uid"], fml["uid"]]))
