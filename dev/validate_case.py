@@ -31,8 +31,21 @@ TOOLCHAIN_ENV_VARS = (
 )
 
 
+# The variables by which ya (and ay after it) recognizes a coding agent as its
+# caller (devtools/ya/app/modules/caller_info); references are cut without
+# them (provision.ya_env), so ay is run without them too.
+CALLER_ENV_VARS = (
+    "OPENCODE", "CLAUDECODE", "CODEX_THREAD_ID", "CURSOR_TRACE_ID", "CODEIUM_EDITOR_APP_ROOT",
+    "AIDER_API_KEY", "AMP_CURRENT_THREAD_ID", "ANTIGRAVITY_AGENT", "AUGMENT_AGENT", "GEMINI_CLI",
+    "QWEN_CODE", "REPL_ID", "YA_CODE", "CODENV", "VSCODE_INJECTION", "VSCODE_IPC_HOOK_CLI",
+)
+
+
 def clean_env() -> dict[str, str]:
-    return {key: value for key, value in os.environ.items() if key not in TOOLCHAIN_ENV_VARS}
+    return {
+        key: value for key, value in os.environ.items()
+        if key not in TOOLCHAIN_ENV_VARS and key not in CALLER_ENV_VARS
+    }
 
 
 def resource_id(url: str) -> str:
