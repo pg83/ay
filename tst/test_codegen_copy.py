@@ -48,6 +48,25 @@ class CopyFileTest(unittest.TestCase):
             inputs = lib.node_by_output(graph, f"$(B)/mod/{out}")["inputs"]
             self.assertEqual(sorted(i for i in inputs if i.endswith(".txt")), [f"$(S)/mod/{s}" for s in sources], out)
 
+    def test_branching_copy_cycle_keeps_all_member_sources(self):
+        for entry in ("a", "b", "c"):
+            with self.subTest(entry=entry):
+                graph = lib.make({
+                    "mod/ya.make": (
+                        LIBRARY_HEAD + "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
+                        "COPY_FILE(TEXT a.txt a.h OUTPUT_INCLUDES b.h)\n"
+                        "COPY_FILE_WITH_CONTEXT(src_b.h b.h OUTPUT_INCLUDES a.h c.h)\n"
+                        "COPY_FILE(TEXT c.txt c.h OUTPUT_INCLUDES a.h)\n"
+                        "SRCS(use.cpp)\nEND()\n"
+                    ),
+                    "mod/a.txt": "", "mod/src_b.h": "", "mod/c.txt": "",
+                    "mod/use.cpp": f'#include "{entry}.h"\n',
+                }, "mod")
+                for out in ("a", "b", "c"):
+                    inputs = lib.node_by_output(graph, f"$(B)/mod/{out}.h")["inputs"]
+                    for source in ("a.txt", "src_b.h", "c.txt"):
+                        self.assertIn(f"$(S)/mod/{source}", inputs, out)
+
     def test_copy_cycle_through_a_source_header_shares_inputs(self):
         graph = lib.make({
             "mod/ya.make": (

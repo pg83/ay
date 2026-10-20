@@ -156,8 +156,12 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 	sources := vfsScratches.get()
 
 	for _, member := range members {
-		if info := r.lookup(member); info != nil && info.SourcePath != 0 {
-			sources = append(sources, info.SourcePath)
+		if info := r.lookup(member); info != nil {
+			if info.SourcePath != 0 {
+				sources = append(sources, info.SourcePath)
+			}
+
+			sources = append(sources, info.InputLoopSources...)
 		}
 	}
 
