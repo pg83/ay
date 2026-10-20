@@ -35,7 +35,7 @@ type SharedParseCache struct {
 	directives *BumpAllocator[IncludeDirective]
 	parsed     DenseMap[STR, ParsedIncludeSet]
 
-	sysinclConfs DenseMap[STR, *ConfFile]
+	confFiles    DenseMap[STR, *ConfFile]
 	sysinclYAMLs DenseMap[STR, []SysIncl]
 }
 

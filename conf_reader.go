@@ -1,15 +1,30 @@
 package main
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
+
+var confVarRefRe = regexp.MustCompile(`\$\{(?:[^}:]*:)?([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
 
 const (
 	confRootRel    = "build/"
 	confRootImport = `@import "${CONF_ROOT}/`
 )
 
+const (
+	confSet ConfOp = iota
+	confAppend
+	confDefine
+	confExclude
+)
+
+type ConfOp uint8
+
 type ConfBranch struct {
 	parent   int
 	previous int
+	expr     string
 	cond     []CondNode
 }
 
@@ -17,19 +32,19 @@ type ConfStmt struct {
 	branch int
 	name   string
 	value  string
-	append bool
+	op     ConfOp
 }
 
 type ConfFile struct {
+	rel      string
 	branches []ConfBranch
 	stmts    []ConfStmt
 }
 
-func readConfFile(rel, text string, names map[string]bool) *ConfFile {
-	conf := &ConfFile{branches: []ConfBranch{{}}}
+func readConfFile(rel, text string) *ConfFile {
+	conf := &ConfFile{rel: rel, branches: []ConfBranch{{}}}
 	stack := []int{0}
-	expressions := []string{""}
-	needed := []bool{true}
+	selects := []string{""}
 	skipped := []bool{false}
 	previous := 0
 	pending := ""
@@ -66,13 +81,11 @@ func readConfFile(rel, text string, names map[string]bool) *ConfFile {
 			continue
 		}
 
-		if name, value, appendOp, ok := confStmtAssignment(line); ok {
-			if names[name] && !skipped[stack[len(stack)-1]] {
-				needed[stack[len(stack)-1]] = true
+		top := stack[len(stack)-1]
 
-				conf.stmts = append(conf.stmts, ConfStmt{
-					branch: stack[len(stack)-1], name: name, value: value, append: appendOp,
-				})
+		if name, value, op, ok := confStmtAssignment(line); ok {
+			if !skipped[top] {
+				conf.stmts = append(conf.stmts, ConfStmt{branch: top, name: name, value: value, op: op})
 			}
 
 			continue
@@ -83,45 +96,66 @@ func readConfFile(rel, text string, names map[string]bool) *ConfFile {
 		}
 
 		header := strings.TrimSpace(strings.TrimSuffix(line, "{"))
-		branch := ConfBranch{parent: stack[len(stack)-1], cond: condFalse}
-		expr := ""
+		branch := ConfBranch{parent: top, cond: condFalse}
+		selectVar := ""
 
 		switch {
 		case strings.HasPrefix(header, "when "):
-			expr = strings.TrimSpace(strings.TrimPrefix(header, "when"))
+			branch.expr = strings.TrimSpace(strings.TrimPrefix(header, "when"))
 		case strings.HasPrefix(header, "elsewhen "):
 			branch.previous = previous
-			expr = strings.TrimSpace(strings.TrimPrefix(header, "elsewhen"))
+			branch.expr = strings.TrimSpace(strings.TrimPrefix(header, "elsewhen"))
 		case header == "otherwise":
 			branch.previous = previous
+			branch.cond = nil
+		case strings.HasPrefix(header, "select "):
+			selectVar = strings.Trim(strings.TrimSpace(strings.TrimPrefix(header, "select")), "()$ ")
+			branch.cond = nil
+		case selects[top] != "" && strings.HasSuffix(header, "?"):
+			branch.previous = previous
+			branch.cond = nil
+
+			if alternatives := strings.TrimSpace(strings.TrimSuffix(header, "?")); alternatives != "default" {
+				branch.expr = confSelectCondition(selects[top], alternatives)
+			}
+		}
+
+		skip := skipped[branch.parent] || branch.expr == "" && branch.cond != nil
+
+		if branch.expr != "" {
 			branch.cond = nil
 		}
 
 		conf.branches = append(conf.branches, branch)
-		expressions = append(expressions, expr)
-		needed = append(needed, false)
-		skipped = append(skipped, skipped[branch.parent] || expr == "" && branch.cond != nil)
+		skipped = append(skipped, skip)
+		selects = append(selects, selectVar)
 		stack = append(stack, len(conf.branches)-1)
+		previous = 0
 	}
 
 	if len(stack) != 1 || pending != "" {
 		throwFmt("conf: unfinished block or assignment in %s", rel)
 	}
 
-	for i := len(conf.branches) - 1; i > 0; i-- {
-		if needed[i] {
-			needed[conf.branches[i].parent] = true
-			needed[conf.branches[i].previous] = true
-		}
-	}
-
-	for i, expr := range expressions {
-		if needed[i] && expr != "" {
-			conf.branches[i].cond = parseConfCondition(rel, expr)
-		}
-	}
-
 	return conf
+}
+
+func confSelectCondition(variable, alternatives string) string {
+	var b strings.Builder
+
+	b.WriteByte('(')
+
+	for i, alt := range strings.Split(alternatives, "|") {
+		if i > 0 {
+			b.WriteString(" || ")
+		}
+
+		b.WriteString("$" + variable + " == " + strings.TrimSpace(alt))
+	}
+
+	b.WriteByte(')')
+
+	return b.String()
 }
 
 func confImportPath(rel, line string) string {
@@ -135,13 +169,24 @@ func confImportPath(rel, line string) string {
 	return confRootRel + path
 }
 
-func confStmtAssignment(line string) (name, value string, appendOp, ok bool) {
+func confStmtAssignment(line string) (name, value string, op ConfOp, ok bool) {
 	name, value, ok = strings.Cut(line, "=")
 	name = strings.TrimSpace(name)
-	name, appendOp = strings.CutSuffix(name, "+")
-	name = strings.TrimSpace(name)
 
-	return name, strings.TrimSpace(value), appendOp, ok && name != "" && isConfVarName(name)
+	switch {
+	case strings.HasSuffix(name, "+"):
+		op = confAppend
+	case strings.HasSuffix(name, ":"):
+		op = confDefine
+	case strings.HasSuffix(name, "-"):
+		op = confExclude
+	}
+
+	if op != confSet {
+		name = strings.TrimSpace(name[:len(name)-1])
+	}
+
+	return name, strings.TrimSpace(value), op, ok && name != "" && isConfVarName(name)
 }
 
 func parseConfCondition(rel, expr string) []CondNode {
@@ -160,40 +205,98 @@ func parseConfCondition(rel, expr string) []CondNode {
 	return p.condScratch
 }
 
+func (c *ConfFile) cond(b int) []CondNode {
+	branch := &c.branches[b]
+
+	if branch.expr != "" && branch.cond == nil {
+		branch.cond = parseConfCondition(c.rel, branch.expr)
+	}
+
+	return branch.cond
+}
+
+func (c *ConfFile) condHolds(b int, env Environment) bool {
+	cond := c.cond(b)
+
+	return len(cond) == 0 || evalCond(cond, env)
+}
+
 func (c *ConfFile) holds(b int, env Environment) bool {
 	for b != 0 {
-		branch := &c.branches[b]
-
-		if !branch.condHolds(env) {
+		if !c.condHolds(b, env) {
 			return false
 		}
 
-		for p := branch.previous; p != 0; p = c.branches[p].previous {
-			if c.branches[p].condHolds(env) {
+		for p := c.branches[b].previous; p != 0; p = c.branches[p].previous {
+			if c.condHolds(p, env) {
 				return false
 			}
 		}
 
-		b = branch.parent
+		b = c.branches[b].parent
 	}
 
 	return true
 }
 
-func (b *ConfBranch) condHolds(env Environment) bool {
-	return len(b.cond) == 0 || evalCond(b.cond, env)
+func (c *ConfFile) condVars(b int, add func(string)) {
+	for b != 0 {
+		for p := b; p != 0; p = c.branches[p].previous {
+			for _, n := range c.cond(p) {
+				if n.Kind == ckIdent && n.Name != "yes" && n.Name != "no" {
+					add(n.Name)
+				}
+			}
+		}
+
+		b = c.branches[b].parent
+	}
 }
 
-func (c *ConfFile) active(env Environment) []bool {
-	active := make([]bool, len(c.branches))
-	matched := make([]bool, len(c.branches))
-
-	active[0] = true
-
-	for i, b := range c.branches[1:] {
-		active[i+1] = active[b.parent] && !matched[b.previous] && (len(b.cond) == 0 || evalCond(b.cond, env))
-		matched[i+1] = active[i+1] || matched[b.previous]
+func confValueVars(value string, add func(string)) {
+	if !strings.Contains(value, "$") {
+		return
 	}
 
-	return active
+	for _, m := range confVarRefRe.FindAllStringSubmatch(value, -1) {
+		if m[1] != "" {
+			add(m[1])
+		} else {
+			add(m[2])
+		}
+	}
+}
+
+func applyConfStmt(env Environment, s ConfStmt, conditional bool) {
+	key := internEnv(s.name)
+	bound := env.hasBindingID(key)
+
+	switch s.op {
+	case confSet:
+		env.setString(key, s.value)
+	case confAppend:
+		if cur := env.string(key); bound && cur != "" {
+			env.setString(key, cur+" "+s.value)
+		} else {
+			env.setString(key, s.value)
+		}
+	case confDefine:
+		if !bound {
+			env.setString(key, s.value)
+		}
+	case confExclude:
+		if conditional {
+			return
+		}
+
+		var kept []string
+
+		for _, word := range strings.Fields(env.string(key)) {
+			if !strings.Contains(" "+s.value+" ", " "+word+" ") {
+				kept = append(kept, word)
+			}
+		}
+
+		env.setString(key, strings.Join(kept, " "))
+	}
 }

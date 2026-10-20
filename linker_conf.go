@@ -11,8 +11,18 @@ var linkerConfNames = []string{
 	"LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG", "EXPORTS_VALUE",
 }
 
+var linkerConfNameSet = func() map[string]bool {
+	set := make(map[string]bool, len(linkerConfNames))
+
+	for _, name := range linkerConfNames {
+		set[name] = true
+	}
+
+	return set
+}()
+
 type LinkerConf struct {
-	ConfFile
+	*ConfFile
 }
 
 type LinkerFlags struct {
@@ -22,18 +32,12 @@ type LinkerFlags struct {
 	ArgCount                                      int
 }
 
-func readLinkerConf(fs FS) *LinkerConf {
-	if !fs.isFile(srcRootRel, ldConfRel) {
+func readLinkerConf(pm *IncludeParserManager) *LinkerConf {
+	if !pm.fs.isFile(srcRootRel, ldConfRel) {
 		throwFmt("linker conf: %s is missing", ldConfRel)
 	}
 
-	names := make(map[string]bool, len(linkerConfNames))
-
-	for _, name := range linkerConfNames {
-		names[name] = true
-	}
-
-	return &LinkerConf{*readConfFile(ldConfRel, string(concatChunks(fs.read(ldConfRel))), names)}
+	return &LinkerConf{pm.confFile(ldConfRel)}
 }
 
 func (c *LinkerConf) flags(p *Platform) LinkerFlags {
@@ -50,17 +54,21 @@ func (c *LinkerConf) flags(p *Platform) LinkerFlags {
 	env.setString(envExportsFile, "${input:EXPORTS_FILE}")
 	env.setString(envSoname, "$_SONAME")
 
-	active := c.active(env)
+	active := make([]bool, len(c.stmts))
 
-	for _, a := range c.stmts {
-		if !active[a.branch] {
+	for i, a := range c.stmts {
+		active[i] = linkerConfNameSet[a.name] && c.holds(a.branch, env)
+	}
+
+	for i, a := range c.stmts {
+		if !active[i] {
 			continue
 		}
 
 		key := internEnv(a.name)
 		value := a.value
 
-		if a.append {
+		if a.op == confAppend {
 			value = env.string(key) + " " + value
 		}
 

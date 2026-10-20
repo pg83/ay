@@ -20,7 +20,7 @@ type PlatformConf struct {
 }
 
 func readPlatformConf(fs FS, parsers *IncludeParserManager) PlatformConf {
-	return PlatformConf{GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(fs), Parsers: parsers, YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
+	return PlatformConf{GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(parsers), Parsers: parsers, YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
 }
 
 func confProtoHeaderEpilogue(fs FS) bool {
@@ -211,7 +211,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.Go = newGoStd(goStdVersion)
 	p.ifEnv = buildPlatformIfEnv(p)
 	p.Linker = pc.Linker.flags(p)
-	p.Sysincl = sysinclFiles(pc.Parsers, imports, p.ifEnv)
+	p.Sysincl = sysinclFiles(pc.Parsers, imports, p.ifEnv, p.Flags)
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
 	p.CompileCFlags = composeCompileCFlags(p.ifEnv, flags, p.DebugInfoFlags)

@@ -665,6 +665,76 @@ class SysinclConfTest(unittest.TestCase):
         }
         self.assertEqual({"misc", "picolibc"}, claims(["misc", "picolibc"], files))
 
+    def test_conf_variables_feed_the_list(self):
+        # SubstVarDeeply(SYSINCL) expands the variables the configuration
+        # itself assigns, in any imported file, under any condition.
+        probes = ["misc", "picolibc"]
+        for conf, core in (
+            ("ZEPHYR_SYSINCL=build/sysincl/zephyr.yml\nSYSINCL=build/sysincl/misc.yml $ZEPHYR_SYSINCL\n", ""),
+            ("SYSINCL=build/sysincl/misc.yml ${ZEPHYR_SYSINCL}\n", "ZEPHYR_SYSINCL=build/sysincl/zephyr.yml\n"),
+            (
+                "SYSINCL=build/sysincl/misc.yml\nSYSINCL+=$ZEPHYR_SYSINCL\n",
+                'when ($OS_LINUX == "yes") {\n    ZEPHYR_SYSINCL=build/sysincl/zephyr.yml\n}\n',
+            ),
+        ):
+            with self.subTest(conf=conf, core=core):
+                files = {
+                    **self.YML,
+                    "build/ymake.core.conf": core + '@import "${CONF_ROOT}/conf/sysincl.conf"\n',
+                    "build/conf/sysincl.conf": conf,
+                }
+                self.assertEqual({"misc", "picolibc"}, claims(probes, files))
+
+    def test_conditions_read_conf_variables(self):
+        # The unconditional default first, then the conditional assignments
+        # in order: the second condition sees USE_ZEPHYR=yes set by the first.
+        files = {
+            **self.YML,
+            "build/conf/sysincl.conf": (
+                "SYSINCL=build/sysincl/misc.yml\n"
+                "USE_ZEPHYR=no\n"
+                'when ($OS_LINUX == "yes") {\n'
+                "    USE_ZEPHYR=yes\n"
+                "}\n"
+                'when ($USE_ZEPHYR == "yes") {\n'
+                "    SYSINCL+=build/sysincl/zephyr.yml\n"
+                "}\n"
+            ),
+        }
+        probes = ["misc", "picolibc"]
+        self.assertEqual({"misc", "picolibc"}, claims(probes, files))
+        windows = ("--target-platform", "default-windows-x86_64")
+        self.assertEqual({"misc"}, claims(probes, files, *windows))
+
+    def test_command_line_overrides_conf_defaults(self):
+        # ymake_conf.py prints the -D presets after importing the conf, so
+        # they replace the unconditional defaults of the conf files.
+        files = {
+            **self.YML,
+            "build/conf/sysincl.conf": "EXTRA_SYSINCL=build/sysincl/misc.yml\nSYSINCL=$EXTRA_SYSINCL\n",
+        }
+        probes = ["misc", "picolibc"]
+        self.assertEqual({"misc"}, claims(probes, files))
+        extra = ("-DEXTRA_SYSINCL=build/sysincl/zephyr.yml",)
+        self.assertEqual({"picolibc"}, claims(probes, files, *extra))
+
+    def test_select_alternatives(self):
+        files = {
+            **self.YML,
+            "build/conf/sysincl.conf": (
+                "SYSINCL=\n"
+                "select ($HARDWARE_TYPE) {\n"
+                '    "x86_64" | "aarch64" ? {\n'
+                "        SYSINCL+=build/sysincl/zephyr.yml\n"
+                "    }\n"
+                "    default ? {\n"
+                "        SYSINCL+=build/sysincl/misc.yml\n"
+                "    }\n"
+                "}\n"
+            ),
+        }
+        self.assertEqual({"picolibc"}, claims(["misc", "picolibc"], files))
+
     def test_missing_sysincl_config_is_fatal(self):
         result = make_process({
             "m/ya.make": module("a.cpp"),

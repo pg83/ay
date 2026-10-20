@@ -8,7 +8,6 @@ import (
 )
 
 var (
-	sysinclNames  = map[string]bool{sysinclVar: true}
 	envSYSINCL    = internEnv(sysinclVar)
 	unsetVarRefRe = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
 )
@@ -45,15 +44,15 @@ func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 	}
 }
 
-type SysinclCondStmt struct {
+type ConfStmtRef struct {
 	file *ConfFile
 	stmt ConfStmt
 }
 
-func (pm *IncludeParserManager) sysinclConfFile(rel string) *ConfFile {
+func (pm *IncludeParserManager) confFile(rel string) *ConfFile {
 	key := internStr(rel)
 
-	if f, ok := pm.cache.sysinclConfs.get(key); ok {
+	if f, ok := pm.cache.confFiles.get(key); ok {
 		return f
 	}
 
@@ -61,36 +60,27 @@ func (pm *IncludeParserManager) sysinclConfFile(rel string) *ConfFile {
 		throwFmt("conf: @import %s: no such file", rel)
 	}
 
-	text := string(concatChunks(pm.fs.readPath(key)))
-	f := &ConfFile{branches: []ConfBranch{{}}}
+	f := readConfFile(rel, string(concatChunks(pm.fs.readPath(key))))
 
-	if strings.Contains(text, sysinclVar) || strings.Contains(text, "@import") {
-		f = readConfFile(rel, text, sysinclNames)
-	}
-
-	pm.cache.sysinclConfs.put(key, f)
+	pm.cache.confFiles.put(key, f)
 
 	return f
 }
 
-func sysinclFiles(pm *IncludeParserManager, imports []string, platformEnv Environment) []string {
+func sysinclFiles(pm *IncludeParserManager, imports []string, platformEnv Environment, printed map[ENV]STR) []string {
 	var (
-		value       string
-		conditional []SysinclCondStmt
-		walk        func(rel string)
+		stmts []ConfStmtRef
+		walk  func(rel string)
 	)
 
 	walk = func(rel string) {
-		f := pm.sysinclConfFile(rel)
+		f := pm.confFile(rel)
 
 		for _, s := range f.stmts {
-			switch {
-			case s.name == "":
+			if s.name == "" {
 				walk(s.value)
-			case s.branch == 0:
-				value = applyConfAssignment(value, s)
-			default:
-				conditional = append(conditional, SysinclCondStmt{file: f, stmt: s})
+			} else {
+				stmts = append(stmts, ConfStmtRef{file: f, stmt: s})
 			}
 		}
 	}
@@ -99,34 +89,57 @@ func sysinclFiles(pm *IncludeParserManager, imports []string, platformEnv Enviro
 		walk(rel)
 	}
 
-	env := platformEnv.clone()
+	needed := map[string]bool{sysinclVar: true}
+	used := make([]bool, len(stmts))
+	need := func(name string) { needed[name] = true }
 
-	env.setString(envSYSINCL, value)
+	for grown := true; grown; {
+		grown = false
 
-	for _, c := range conditional {
-		if c.file.holds(c.stmt.branch, env) {
-			value = applyConfAssignment(value, c.stmt)
-			env.setString(envSYSINCL, value)
+		for i, r := range stmts {
+			if used[i] || !needed[r.stmt.name] {
+				continue
+			}
+
+			used[i], grown = true, true
+			confValueVars(r.stmt.value, need)
+			r.file.condVars(r.stmt.branch, need)
 		}
 	}
+
+	env := platformEnv.clone()
+
+	isPrinted := func(name string) bool {
+		_, ok := printed[internEnv(name)]
+
+		return ok
+	}
+
+	for name := range needed {
+		if !isPrinted(name) {
+			env.unbind(internEnv(name))
+		}
+	}
+
+	for i, r := range stmts {
+		if used[i] && r.stmt.branch == 0 && !isPrinted(r.stmt.name) {
+			applyConfStmt(env, r.stmt, false)
+		}
+	}
+
+	for i, r := range stmts {
+		if used[i] && r.stmt.branch != 0 && r.file.holds(r.stmt.branch, env) {
+			applyConfStmt(env, r.stmt, true)
+		}
+	}
+
+	value := env.string(envSYSINCL)
 
 	if strings.Contains(value, "$") {
 		value = unsetVarRefRe.ReplaceAllString(expandStmtToken(value, env), "")
 	}
 
 	return strings.Fields(value)
-}
-
-func applyConfAssignment(value string, s ConfStmt) string {
-	if !s.append || value == "" {
-		return s.value
-	}
-
-	if s.value == "" {
-		return value
-	}
-
-	return value + " " + s.value
 }
 
 func (pm *IncludeParserManager) sysinclRecords(rel string, onWarn func(Warn)) []SysIncl {
