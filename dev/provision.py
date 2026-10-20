@@ -493,6 +493,19 @@ def ya_upload(path, tar, owner, descr):
     return url
 
 
+def file_contains(path, needle):
+    tail = b""
+
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 24), b""):
+            if needle in tail + chunk:
+                return True
+
+            tail = chunk[1 - len(needle):]
+
+    return False
+
+
 def sha256_file(path):
     digest = hashlib.sha256()
     with open(path, "rb") as stream:
@@ -631,7 +644,7 @@ def main():
     os.makedirs(ws, exist_ok=True)
 
     ya_cmd, target = split_command(cmd)
-    ya_run = run_command(ya_cmd)
+    ya_args = run_command(ya_cmd)
     case_id = args.id or target.replace("/", "_")
     graph_fuse = os.path.join(ws, "graph.fuse.json")
     owner = os.environ.get("USER") or "ay"
@@ -656,10 +669,9 @@ def main():
         print(f"[provision] id={case_id} sha={sha} target={target} (git, no slice)", flush=True)
         if reuse_slice:
             print(f"[provision] reusing repo blob {reuse_slice}", flush=True)
-        print(f"[provision] run cmd: {' '.join(ya_run)}  (root {root})", flush=True)
+        print(f"[provision] run cmd: {' '.join(ya_args)}  (root {root})", flush=True)
         print("[provision] build ref graph", flush=True)
-        with open(graph_fuse, "wb") as gf:
-            rc = run(repo_ya(root, ya_run), cwd=root, env=ya_env(), stdout=gf).returncode
+        rc = ya_run(repo_ya(root, ya_args), root, graph_fuse).returncode
         if rc != 0:
             raise SystemExit(f"provision: ya graph build failed (rc={rc})")
 
@@ -674,12 +686,12 @@ def main():
 
         print(f"[provision] id={case_id} sha={sha} target={target}", flush=True)
         print(f"[provision] config cmd: {' '.join(ya_cmd)}", flush=True)
-        print(f"[provision] run cmd:    {' '.join(ya_run)}", flush=True)
+        print(f"[provision] run cmd:    {' '.join(ya_args)}", flush=True)
 
         if not (args.reuse and os.path.exists(trace) and os.path.exists(graph_fuse)):
             strace_bin = resolve_strace(mount, args.strace)
             print(f"[provision] phase 1: strace FUSE run ({strace_bin})", flush=True)
-            strace_run(mount, ya_run, trace, graph_fuse, strace_bin)
+            strace_run(mount, ya_args, trace, graph_fuse, strace_bin)
 
         print("[provision] phase 2: parse trace", flush=True)
         reads, listed, exists, links = parse_trace(trace, mount)
@@ -691,7 +703,7 @@ def main():
         print(f"[provision]   slice files={nfiles}", flush=True)
 
         print("[provision] phase 4: verify (ya on slice == FUSE)", flush=True)
-        verify_slice(slice_dir, ya_run, graph_slice, graph_fuse)
+        verify_slice(slice_dir, ya_args, graph_slice, graph_fuse)
         print("[provision]   slice graph byte-identical to FUSE graph ✓", flush=True)
 
         slice_artifact, slice_tar, slice_url = slice_dir, True, None
@@ -712,6 +724,9 @@ def main():
     if args.no_upload:
         print(f"[provision] OK — artifact at {slice_artifact} (--no-upload: skipped upload + config)", flush=True)
         return 0
+
+    if file_contains(graph_fuse, b"y1__"):
+        raise SystemExit(f"provision: {graph_fuse} carries an OAuth token (y1__...): not uploading")
 
     print("[provision] phase 6: upload + config", flush=True)
     if slice_url:
