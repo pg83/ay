@@ -61,20 +61,8 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 	meta.Source = genVFS.any()
 	e.enqueueSrc(meta)
 
-	scanner := e.scanner
-	scanCtx := d.scanCtx
-
 	pe := func() {
-		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
-		sourceClosure := cv.collect(ctx.na, func(v VFS) bool { return v.isSource() })
-		srcInputs := ctx.na.vfsList(srcVFS)
-
-		if srcVFS.isSource() {
-			srcInputs = nil
-		}
-
-		srcInputs = ctx.na.dedupClosure(srcInputs, [][]VFS{sourceClosure})
-		e.emitGP(srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, srcInputs, gpRef)
+		e.emitGP(srcRel, srcVFS, genVFS, gperfBinVFS, gperfLDRef, ctx.na.vfsList(srcVFS), gpRef)
 	}
 
 	pending := e.pendingEmit(pe)
@@ -83,7 +71,7 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 		OutputPath:     genVFS,
 		ProducerRef:    gpRef,
 		GeneratorRefs:  e.ctx.na.refList(gperfLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)},
 		OnUse:          pending,
 	})
 }
