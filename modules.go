@@ -557,13 +557,17 @@ parsedFlags:
 
 	for _, file := range files {
 		src := filepath.ToSlash(filepath.Clean(fromDir + "/" + file))
+		includes := append([]string(nil), outputIncludes...)
+
+		if withContext {
+			includes = append(includes, src)
+		}
 
 		out = append(out, CopyFileEntry{
 			Src:            src,
 			Dst:            file,
 			Auto:           auto,
-			WithContext:    withContext,
-			OutputIncludes: append([]string(nil), outputIncludes...),
+			OutputIncludes: includes,
 		})
 	}
 
