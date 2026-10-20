@@ -83,19 +83,19 @@ func (e *EmitContext) emitSwigC() {
 		})
 
 		e.register(GeneratedFileInfo{
-			OutputPath:    pyOutVFS,
-			ProducerRef:   swRef,
-			GeneratorRefs: e.ctx.na.refList(swigRef),
-			OnUse:         pending,
+			OutputPath:      pyOutVFS,
+			ProducerRef:     swRef,
+			ProducerMainOut: cOutVFS,
+			GeneratorRefs:   e.ctx.na.refList(swigRef),
+			OnUse:           pending,
 		})
 
 		e.enqueueSrc(SrcMeta{
 			Source: pyOutVFS.any(), Prio: stmtPrioDefault,
 			PyMeta: e.addPyMeta(PySourceMeta{
-				Module:      internStr(generatedPyResourceKey(instance.Path.relString(), d, pyOutRel)),
-				Token:       internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.relString()).any(),
-				ExtraInputs: na.vfsList(cOutVFS),
-				Kind:        pySourceGenerated,
+				Module: internStr(generatedPyResourceKey(instance.Path.relString(), d, pyOutRel)),
+				Token:  internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.relString()).any(),
+				Kind:   pySourceGenerated,
 			}),
 		})
 

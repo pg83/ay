@@ -29,6 +29,16 @@ type RunProgramNodeSpec struct {
 	closureBuild  []VFS
 }
 
+func (spec *RunProgramNodeSpec) isOutput(v VFS) bool {
+	for _, out := range spec.outVFSByToken {
+		if out == v {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 	e.emitRunProgram(rp)
 
@@ -387,6 +397,8 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 
 	fileTokens := prBareFileTokens(stmt, spec.inVFSs, spec.outVFSByToken)
 
+	var argFiles []VFS
+
 	for _, aTok := range args {
 		a := aTok.string()
 		key := aTok
@@ -405,9 +417,11 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		}
 
 		if !toolReplaced {
-			if rooted, vfs, ok := rootBareFileArg(a, fileTokens); ok {
-				if vfs != 0 {
-					cmdArgs = append(cmdArgs, vfs.any())
+			if rooted, file, whole := rootBareFileArg(a, fileTokens); file != 0 {
+				argFiles = append(argFiles, file)
+
+				if whole {
+					cmdArgs = append(cmdArgs, file.any())
 
 					continue
 				}
@@ -474,6 +488,12 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		appendOutput(*spec.stdoutVFS)
 	}
 
+	for _, v := range argFiles {
+		if spec.isOutput(v) {
+			appendOutput(v)
+		}
+	}
+
 	for _, f := range stmt.OUTFiles {
 		appendOutput(spec.outVFSByToken[f])
 	}
@@ -525,6 +545,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		ForeignDepRefs: toolRefs,
 	}
 
+	e.codegen.setMainOut(id, outputs)
 	e.emitReservedNode(node, id)
 }
 
@@ -566,7 +587,7 @@ func prBareFileTokens(stmt *RunProgramStmt, inVFSs []VFS, outVFSByToken map[ANY]
 	return toks
 }
 
-func rootBareFileArg(arg string, toks []PrFileToken) (string, VFS, bool) {
+func rootBareFileArg(arg string, toks []PrFileToken) (rooted string, file VFS, whole bool) {
 	for _, c := range toks {
 		idx := strings.Index(arg, c.token)
 
@@ -583,7 +604,7 @@ func rootBareFileArg(arg string, toks []PrFileToken) (string, VFS, bool) {
 				return "", c.vfs, true
 			}
 
-			return arg[:idx] + c.rooted + arg[end:], 0, true
+			return arg[:idx] + c.rooted + arg[end:], c.vfs, false
 		}
 	}
 

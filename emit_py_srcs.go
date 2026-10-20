@@ -391,7 +391,11 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 
 			chunks = append(chunks, na.vfsList(py3ccBinary, py3ccSlowBin), na.vfsList(srcAbs))
 			chunks = append(chunks, buckets...)
-			chunks = append(chunks, ps.ExtraInputs)
+
+			if main := genInfo.ProducerMainOut; main != 0 && main != srcAbs {
+				chunks = append(chunks, na.vfsList(main))
+			}
+
 			na.inputs.commit(len(chunks))
 			nodeInputs = chunks[:len(chunks):len(chunks)]
 		} else {
