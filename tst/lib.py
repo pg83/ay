@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -275,7 +276,54 @@ _ROOT_FLAGS=--source-root $ARCADIA_ROOT --build-root $(BUILD_ROOT)
 '''
 
 
+FAKE_CORE_CONF = '''@import "${CONF_ROOT}/conf/sysincl.conf"
+when ($USE_PYTHON3_PREV == "yes") {
+    SYSINCL+=build/sysincl/cython-prev.yml
+}
+otherwise {
+    SYSINCL+=build/sysincl/cython.yml
+}
+@import "${CONF_ROOT}/internal/conf/sysincl.conf"
+'''
+
+FAKE_SYSINCL_CONF = '''SYSINCL=
+SYSINCL+=build/sysincl/macro.yml build/sysincl/misc.yml build/sysincl/windows.yml
+when ($OPENSOURCE == "yes") {
+    SYSINCL+=build/sysincl/opensource.yml
+}
+otherwise {
+    SYSINCL+=build/sysincl/proto.yml
+}
+when ($MUSL == "yes") {
+    SYSINCL+=build/sysincl/libc-to-musl.yml
+    when ($ARCH_AARCH64 == "yes") {
+        SYSINCL+=build/sysincl/linux-musl-aarch64.yml
+    }
+    otherwise {
+        SYSINCL+=build/sysincl/linux-musl.yml
+    }
+}
+'''
+
+FAKE_INTERNAL_SYSINCL_CONF = '''when ($OPENSOURCE != "yes") {
+    SYSINCL+=build/internal/sysincl/misc.yml build/internal/sysincl/taxi.yml
+    when ($OS_WINDOWS == "yes") {
+        SYSINCL+=build/internal/sysincl/misc-win.yml
+    }
+    when ($OS_LINUX == "yes") {
+        SYSINCL+=build/internal/sysincl/smart_devices_linux.yml
+    }
+    elsewhen ($OS_DARWIN == "yes") {
+        SYSINCL+=build/internal/sysincl/smart_devices_darwin.yml
+    }
+}
+'''
+
+
 CONF_FILES = {
+    "build/ymake.core.conf": FAKE_CORE_CONF,
+    "build/conf/sysincl.conf": FAKE_SYSINCL_CONF,
+    "build/internal/conf/sysincl.conf": FAKE_INTERNAL_SYSINCL_CONF,
     "build/ymake_conf.py": FAKE_YMAKE_CONF,
     "build/ya.conf.json": ya_conf_json(),
     "build/conf/linkers/ld.conf": FAKE_LD_CONF,
@@ -283,7 +331,12 @@ CONF_FILES = {
     "build/external_resources/flake8_py2/ya.make": (
         "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(FLAKE8_PY2 sbr:123)\nEND()\n"
     ),
+    "build/conf/compilers/gnu_compiler.conf": "",
 }
+
+
+for _yaml in re.findall(r"build/[a-zA-Z0-9_./-]+\.yml", FAKE_CORE_CONF + FAKE_SYSINCL_CONF + FAKE_INTERNAL_SYSINCL_CONF):
+    CONF_FILES.setdefault(_yaml, "")
 
 
 def seed_root(root):
