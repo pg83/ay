@@ -287,6 +287,7 @@ var tokName = [...]STR{
 	tokGoXTestEmbedPattern:            internStr("GO_XTEST_EMBED_PATTERN"),
 	tokUseSdcMeta:                     strUSE_SDC_META,
 	tokGenerateTopology:               internStr("GENERATE_TOPOLOGY"),
+	tokCompileNlg:                     internStr("COMPILE_NLG"),
 }
 
 var tokByName = func() map[string]TOK {
@@ -599,6 +600,7 @@ const (
 	tokGoXTestEmbedPattern
 	tokUseSdcMeta
 	tokGenerateTopology
+	tokCompileNlg
 )
 
 type TOK uint16

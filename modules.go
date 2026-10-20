@@ -8,6 +8,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+)
+
+var (
+	muslCFlagsChunk     = []ANY{argDMusl.any()}
+	confPluginDepsCache sync.Map
 )
 
 var allocatorPeers = map[string][]string{
@@ -37,8 +43,6 @@ var allocatorPeers = map[string][]string{
 	"DEFAULT":                   nil,
 }
 
-var muslCFlagsChunk = []ANY{argDMusl.any()}
-
 const (
 	event2cppPluginName = "event2cpp"
 	event2cppToolPath   = "tools/event2cpp"
@@ -47,6 +51,7 @@ const (
 	prioAddIncl         = 0
 	prioAddInclSelf     = 1
 	yaffPluginPath      = "library/cpp/yaff/tools/protoc_plugin"
+	yabsConfRel         = "build/internal/conf/project_specific/yabs.conf"
 )
 
 const (
@@ -2605,6 +2610,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
+	case tokCompileNlg:
+		applyCompileNlg(modulePath, v, d)
 	case tokGenerateTopology:
 		_, lists := goMacroLists(v.Args, "ROS_MESSAGE_HEADERS")
 
@@ -2620,7 +2627,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			Name:           "alice_capability_cpp",
 			ToolPath:       "yandex_io/tools/capability_gen",
 			OutputSuffixes: []string{".cap.h"},
-			Deps:           []string{"yandex_io/libs/protobuf_utils"},
+			Deps:           confPluginDeps(fs, "build/internal/conf/project_specific/alice.conf", "ALICE_CAPABILITY"),
 		})
 	case tokApphost:
 		itemDispatcher := ""
@@ -2662,10 +2669,22 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokYaff:
 		plugin := parseYAFF(v)
 
+		plugin.Deps = confPluginDeps(fs, yabsConfRel, "YAFF")
+
+		if !isGoModuleType(d.unit.Type) {
+			d.peerdirs = append(d.peerdirs, internAnys(plugin.Deps)...)
+		}
+
 		plugin.DeclaredBeforeLiteHeaders = protoTransitiveHeadersEnabled(d)
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 	case tokYaffSchema:
 		plugin := parseYAFFSchema(v)
+
+		plugin.Deps = confPluginDeps(fs, yabsConfRel, "YAFF_SCHEMA")
+
+		if !isGoModuleType(d.unit.Type) {
+			d.peerdirs = append(d.peerdirs, internAnys(plugin.Deps)...)
+		}
 
 		plugin.DeclaredBeforeLiteHeaders = protoTransitiveHeadersEnabled(d)
 		d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
@@ -3869,4 +3888,120 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 
 func moduleExcludesTag(d *ModuleData, tag string) bool {
 	return d != nil && d.excludeTags != nil && d.excludeTags[internStr(tag)]
+}
+
+func applyCompileNlg(modulePath string, v UnknownStmt, d *ModuleData) {
+	opts := map[string]string{}
+
+	var files []string
+
+	for i := 0; i < len(v.Args); i++ {
+		switch a := v.Args[i].string(); a {
+		case "NLG_CONFIG", "TRANSLATIONS_JSON", "PROTO_REGISTRY", "JAVA_PACKAGE_NAME":
+			i++
+			opts[a] = v.Args[i].string()
+		default:
+			files = append(files, a)
+		}
+	}
+
+	str := func(s string) ANY { return internStr(s).any() }
+	args := []ANY{str("compile-cpp")}
+
+	if d.setVars[strCOMPILE_NLG_EMPTY_CPP] == strYes {
+		args = append(args, str("--empty-cpp"))
+	}
+
+	args = append(args, str("--import-dir"), strS.any(), str("--out-dir"), strB.any(), str("--include-prefix"), str(modulePath))
+
+	var ins []ANY
+
+	for _, o := range [...][2]string{{"NLG_CONFIG", "--nlg-config-json"}, {"TRANSLATIONS_JSON", "--translations-json"}, {"PROTO_REGISTRY", "--proto-registry"}} {
+		if f := opts[o[0]]; f != "" {
+			args = append(args, str(o[1]), str(f))
+			ins = append(ins, str(f))
+		}
+	}
+
+	noAuto := []ANY{str("localizable_phrases.pb.txt"), str("tmacros.pb.txt"), str("nlg_renderer_factory.cpp"), str("nlg_renderer_factory.h"),
+		str("register.cpp"), str("translations.cpp"), str("translations.h")}
+
+	for _, suf := range []string{".cpp", ".h", ".pb.txt"} {
+		for _, f := range files {
+			noAuto = append(noAuto, str(f+suf))
+		}
+	}
+
+	for _, f := range files {
+		args = append(args, str(f))
+		ins = append(ins, str(f))
+	}
+
+	d.runPrograms = append(d.runPrograms, &RunProgramStmt{
+		ToolPath:       str("alice/nlg/tools/codegen"),
+		Args:           args,
+		INFiles:        ins,
+		OUTFiles:       []ANY{str("dummy.h"), str("dummy.cpp")},
+		OUTNoAutoFiles: noAuto,
+		Line:           v.Line,
+		DeclSeq:        d.nextDeclSeq(),
+	})
+
+	d.peerdirs = append(d.peerdirs, str("alice/nlg/library/nlg_project_runtime"))
+
+	for _, f := range append([]string{"nlg_renderer_factory.cpp", "translations.cpp"}, files...) {
+		if strings.HasSuffix(f, ".nlg") {
+			f += ".cpp"
+		}
+
+		d.srcs = append(d.srcs, SrcMeta{Source: str(f), Prio: stmtPrioSrcs, Seq: d.nextDeclSeq()})
+	}
+
+	d.srcs = append(d.srcs, SrcMeta{Source: str("register.cpp"), Prio: stmtPrioDefault, Global: true})
+}
+
+type confPluginKey struct {
+	fs    FS
+	macro string
+}
+
+func confPluginDeps(fs FS, confRel, macro string) []string {
+	key := confPluginKey{fs: fs, macro: macro}
+
+	if v, ok := confPluginDepsCache.Load(key); ok {
+		return v.([]string)
+	}
+
+	var deps []string
+
+	if fs.isFile(srcRootRel, confRel) {
+		inMacro := false
+
+		for _, line := range strings.Split(string(concatChunks(fs.read(confRel))), "\n") {
+			line = strings.TrimSpace(line)
+
+			switch {
+			case strings.HasPrefix(line, "macro "+macro+"("):
+				inMacro = true
+			case inMacro && line == "}":
+				inMacro = false
+			case inMacro && strings.HasPrefix(line, "CPP_PROTO_PLUGIN"):
+				fields := strings.Fields(line[strings.IndexByte(line, '(')+1 : strings.LastIndexByte(line, ')')])
+
+				if i := slices.Index(fields, "DEPS"); i >= 0 {
+					for _, f := range fields[i+1:] {
+						if f == "EXTRA_OUT_FLAG" {
+							break
+						}
+
+						deps = append(deps, f)
+					}
+				}
+			}
+		}
+	}
+
+	confPluginDepsCache.Store(key, deps)
+
+	return deps
 }

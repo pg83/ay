@@ -1012,10 +1012,16 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		na.vfs.commit(len(extraSourceBlock))
 		extraSources = extraSourceBlock[:len(extraSourceBlock):len(extraSourceBlock)]
 
-		extraBuildBlock := na.vfs.alloc(1 + merged)[:0]
+		extraBuildBlock := na.vfs.alloc(1 + merged + len(ownBuilds))[:0]
 
 		if len(d.cgoSrcs) > 0 {
 			extraBuildBlock = append(extraBuildBlock, build(dir, "/_cgo_main.c", instance.Platform.objectSuffix()))
+		}
+
+		for _, b := range ownBuilds {
+			if info := e.codegen.lookup(b); info != nil && info.ProducerMainOut != 0 && deduper.add(info.ProducerMainOut.strID()) {
+				extraBuildBlock = append(extraBuildBlock, info.ProducerMainOut)
+			}
 		}
 
 		for _, p := range mergedSbomPaths[:merged] {

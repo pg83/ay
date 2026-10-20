@@ -426,4 +426,5 @@ var (
 	strLibraryGoCoreResourceCc                                                               = internStr("library/go/core/resource/cc")
 	str_GO_PACKAGE_VALUE                                                                     = internStr("_GO_PACKAGE_VALUE")
 	strUSE_SDC_META                                                                          = internStr("USE_SDC_META")
+	strCOMPILE_NLG_EMPTY_CPP                                                                 = internStr("COMPILE_NLG_EMPTY_CPP")
 )

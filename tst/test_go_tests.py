@@ -570,6 +570,8 @@ class GoCodegenTest(unittest.TestCase):
         self.assertIn(f"{gateway}/v2/runtime/runtime.a", peers)
         self.assertIn(f"{gateway}/v2/protoc-gen-openapiv2/options/options.a", peers)
         self.assertEqual(peers[-1], "library/go/core/resource/resource.a")
+        # the gateway node is a dependency; its main output (the swagger json for V2) is an input
+        self.assertIn("$(B)/p/v2/svc.swagger.json", lib.node_by_output(graph, "$(B)/p/v2/v2.a")["inputs"])
 
     def test_mockgen_and_oapi_codegen_feed_the_package(self):
         files = go_world()
