@@ -342,6 +342,22 @@ class PrebuiltProgramTest(unittest.TestCase):
         lib.tool_program(files, "tools/rescompressor", "rescompressor")
         return files
 
+    def test_disabled_prebuilt_uses_source_tool_when_uri_is_unset(self):
+        files = self.prebuilt_files(
+            "IF (USE_PREBUILT_TOOLS)\n"
+            "SET_RESOURCE_URI_FROM_JSON(SANDBOX_RESOURCE_URI resources.json)\nENDIF()\n"
+            'IF (SANDBOX_RESOURCE_URI != "")\n'
+            "PREBUILT_PROGRAM()\nDECLARE_EXTERNAL_RESOURCE(GEN ${SANDBOX_RESOURCE_URI})\n"
+            "PRIMARY_OUTPUT(${GEN_RESOURCE_GLOBAL}/gen)\nEND()\nELSE()\n"
+            f"PROGRAM()\n{BARE}SRCS(main.cpp)\nEND()\nENDIF()\n"
+        )
+        files["build/prebuilt/tools/gen/main.cpp"] = "int main() { return 0; }\n"
+        graph = lib.make(files, "lib", "--host-platform-flag=USE_PREBUILT_TOOLS=no")
+        tool = lib.node_by_output(graph, "$(B)/build/prebuilt/tools/gen/gen")
+        self.assertEqual(tool["kv"]["p"], "LD")
+        obj = lib.node_by_output(graph, "$(B)/build/prebuilt/tools/gen/main.cpp.pic.o")
+        self.assertIn(obj["uid"], tool["deps"])
+
     def test_prebuilt_tool_copies_fetched_binary(self):
         graph = lib.make(self.prebuilt_files(
             "SET_RESOURCE_URI_FROM_JSON(SANDBOX_RESOURCE_URI resources.json)\n"

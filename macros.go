@@ -25,8 +25,8 @@ const (
 	envVFS
 )
 
-func evalAtomString(nodes []CondNode, i int32, env Environment) string {
-	v := evalAtomNode(nodes, i, env)
+func evalAtomString(nodes []CondNode, i int32, env Environment, variable bool) string {
+	v := evalAtomNode(nodes, i, env, variable)
 
 	if v.isNum {
 		return strconv.Itoa(v.num)
@@ -66,11 +66,11 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	case ckLt:
 		return evalLt(nodes, n, env)
 	case ckStartsWith:
-		return strings.HasPrefix(evalAtomString(nodes, n.L, env), evalAtomString(nodes, n.R, env))
+		return strings.HasPrefix(evalAtomString(nodes, n.L, env, true), evalAtomString(nodes, n.R, env, false))
 	case ckVersionCmp:
 		return evalVersionCmp(nodes, n, env)
 	case ckMatches:
-		return throw2(regexp.MatchString(evalAtomString(nodes, n.R, env), evalAtomString(nodes, n.L, env)))
+		return throw2(regexp.MatchString(evalAtomString(nodes, n.R, env, false), evalAtomString(nodes, n.L, env, true)))
 	case ckDefined:
 		d := &nodes[n.L]
 
@@ -102,7 +102,7 @@ func atomTypeName(v AtomVal) string {
 	return "string"
 }
 
-func evalAtomNode(nodes []CondNode, i int32, env Environment) AtomVal {
+func evalAtomNode(nodes []CondNode, i int32, env Environment, variable bool) AtomVal {
 	n := &nodes[i]
 
 	switch n.Kind {
@@ -120,6 +120,10 @@ func evalAtomNode(nodes []CondNode, i int32, env Environment) AtomVal {
 			x, _ := strconv.Atoi(v.string())
 
 			return AtomVal{num: x, isNum: true}
+		}
+
+		if variable {
+			return AtomVal{}
 		}
 
 		if isImplicitBuildVar(n.Name) {
@@ -141,7 +145,7 @@ func evalAtomNode(nodes []CondNode, i int32, env Environment) AtomVal {
 }
 
 func evalVersionCmp(nodes []CondNode, n *CondNode, env Environment) bool {
-	cmp := compareVersions(evalAtomString(nodes, n.L, env), evalAtomString(nodes, n.R, env))
+	cmp := compareVersions(evalAtomString(nodes, n.L, env, true), evalAtomString(nodes, n.R, env, false))
 
 	switch n.Name {
 	case "VERSION_LT":
@@ -189,8 +193,8 @@ func compareVersions(a, b string) int {
 }
 
 func evalEq(nodes []CondNode, n *CondNode, env Environment) bool {
-	l := evalAtomNode(nodes, n.L, env)
-	r := evalAtomNode(nodes, n.R, env)
+	l := evalAtomNode(nodes, n.L, env, true)
+	r := evalAtomNode(nodes, n.R, env, false)
 
 	if l.isNum {
 		if !r.isNum {
@@ -208,8 +212,8 @@ func evalEq(nodes []CondNode, n *CondNode, env Environment) bool {
 }
 
 func evalLt(nodes []CondNode, n *CondNode, env Environment) bool {
-	l := evalAtomNode(nodes, n.L, env)
-	r := evalAtomNode(nodes, n.R, env)
+	l := evalAtomNode(nodes, n.L, env, true)
+	r := evalAtomNode(nodes, n.R, env, false)
 
 	if !l.isNum || !r.isNum {
 		throwFmt("macros: < requires int operands, got left=%s right=%s", atomTypeName(l), atomTypeName(r))
