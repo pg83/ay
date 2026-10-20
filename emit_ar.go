@@ -159,7 +159,10 @@ func emitARNode(
 	hostP *Platform,
 	emit *StreamingEmitter,
 ) NodeRef {
-	na := emit.nodeArenas()
+	return emit.emitNode(composeARNode(instance, archivePath, objRefs, objPaths, arPluginPath, tc, hostP, emit.nodeArenas()))
+}
+
+func composeARNode(instance ModuleInstance, archivePath VFS, objRefs []NodeRef, objPaths []VFS, arPluginPath *VFS, tc ModuleToolchain, hostP *Platform, na *NodeArenas) Node {
 	cmdEnv := hostP.toolEnv()
 	tail := na.anys.alloc(4 + len(objPaths))[:0]
 
@@ -204,5 +207,5 @@ func emitARNode(
 		Resources: instance.Platform.UsesPython3Clang,
 	}
 
-	return emit.emitNode(n)
+	return n
 }

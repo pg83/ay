@@ -38,6 +38,8 @@ func (x *ModuleData) reset() {
 		rpathFlagsGlobal:     x.rpathFlagsGlobal[:0],
 		objAddLibsGlobal:     x.objAddLibsGlobal[:0],
 		srcDirs:              x.srcDirs[:0],
+		cudaSrcs:             scrub(x.cudaSrcs),
+		nvccDeviceSrcs:       x.nvccDeviceSrcs[:0],
 		implibs:              scrub(x.implibs),
 		linkExcludeLibraries: x.linkExcludeLibraries[:0],
 		cudaNvccFlags:        x.cudaNvccFlags[:0],

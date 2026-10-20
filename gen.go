@@ -2276,8 +2276,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		arRef = goRef
 		arPath = ptr(goPath)
 		goSrcClosure = srcClosure
-	} else if len(local.refs) > 0 {
-		if perModuleCCTag != 0 {
+	} else if len(local.refs) > 0 || d.moduleStmt.Name == tokCudaDeviceLinkLibrary {
+		if d.moduleStmt.Name == tokCudaDeviceLinkLibrary {
+			arRef = e.emitCudaDeviceLink(arBaseName, local, arPluginVFS)
+		} else if perModuleCCTag != 0 {
 			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, local.refs, local.outs, arPluginVFS, d.tc, ctx.host, ctx.emit)
 		} else {
 			arRef = emitARNamed(arInstance, arBaseName, local.refs, local.outs, arPluginVFS, d.tc, ctx.host, ctx.emit)

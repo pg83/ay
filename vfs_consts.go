@@ -19,6 +19,7 @@ var (
 	buildMnScriptVFS                    = source("build/internal/scripts/build_mn.py")
 	buildScriptsAutotarGendirsPy        = source("build/scripts/autotar_gendirs.py")
 	buildScriptsCheckConfigHPy          = source("build/scripts/check_config_h.py")
+	buildScriptsFatbinaryWrapperPy      = source("build/scripts/fatbinary_wrapper.py")
 	buildScriptsFetchFromMdsPy          = source("build/scripts/fetch_from_mds.py")
 	buildScriptsFetchFromPy             = source("build/scripts/fetch_from.py")
 	buildScriptsFetchFromSandboxPy      = source("build/scripts/fetch_from_sandbox.py")

@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	prodImplib = iota
+	prodCuda = iota
+	prodImplib
 	prodCopyFile
 	prodConfigureFile
 	prodAntlrRun
@@ -207,7 +208,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	d := e.d
 	module := e.instance.Path.relString()
 
-	n := len(d.implibs) + len(d.copyFiles) + len(d.configureFiles) + len(d.antlrRuns) + len(d.antlr4Grammars) +
+	n := len(d.cudaSrcs) + len(d.implibs) + len(d.copyFiles) + len(d.configureFiles) + len(d.antlrRuns) + len(d.antlr4Grammars) +
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
 		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens) + len(d.cgoSrcs)
@@ -277,6 +278,24 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 			push(prodDocsCopy, i, start, end)
 		}
+	}
+
+	for i, stmt := range d.cudaSrcs {
+		start := len(backing)
+
+		for _, src := range stmt.Sources {
+			backing = append(backing, build(module, "/", cudaSourceBase(src.string()), ".cudafe1.cpp"))
+		}
+
+		outEnd := len(backing)
+
+		for _, src := range stmt.Sources {
+			if v := runInputBuildCandidate(module, src.string()); v != 0 {
+				backing = append(backing, v)
+			}
+		}
+
+		push(prodCuda, i, start, outEnd)
 	}
 
 	for i, entry := range d.implibs {
@@ -745,6 +764,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		switch pos.kind {
 		case prodDocsCopy:
 			e.emitDocsCopy(e.d.docs.copies[pos.index])
+		case prodCuda:
+			e.emitCudaSrcs(e.d.cudaSrcs[pos.index])
 		case prodImplib:
 			e.emitImplib(e.d.implibs[pos.index])
 		case prodCopyFile:

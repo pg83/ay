@@ -210,6 +210,9 @@ type ModuleData struct {
 	hadAllocator             bool
 	allocatorName            ANY
 	muslLite                 bool
+	cudaSrcs                 []CudaSrcsStmt
+	nvccDeviceSrcs           []ANY
+	cuda                     CudaSettings
 	implibs                  []ImplibStmt
 	linkExcludeLibraries     []ANY
 	cudaNvccFlags            []ANY
@@ -729,6 +732,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 		d.pyMain = nil
 	}
 
+	d.cuda = cudaSettings(env)
 	d.muslEnabled = env.bool(envMUSL)
 	d.useArcadiaLibm = env.bool(envUSE_ARCADIA_LIBM) && !env.bool(envOS_EMSCRIPTEN)
 	d.noStrip = env.bool(envNO_STRIP)
@@ -2770,6 +2774,20 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.linkExcludeLibraries = append(d.linkExcludeLibraries, v.Args[0])
 	case tokLinkExcludeLibraries:
 		d.linkExcludeLibraries = append(d.linkExcludeLibraries, v.Args...)
+	case tokCudaSrcs:
+		arches := env.string(envCUDA_ARCHITECTURES)
+
+		if arches == "" {
+			arches = "sm_50"
+		}
+
+		d.cudaSrcs = append(d.cudaSrcs, CudaSrcsStmt{Sources: v.Args, Architectures: arches, EmbedPTX: !env.bool(envCUDA_NO_EMBED_PTX)})
+	case tokNvccDeviceLink:
+		d.nvccDeviceSrcs = append(d.nvccDeviceSrcs, v.Args...)
+
+		if fs.isFilePathClean("build/internal/platform/cuda/ya.make") {
+			d.peerdirs = append(d.peerdirs, strBuildInternalPlatformCuda.any())
+		}
 	case tokCudaNvccFlags:
 		d.cudaNvccFlags = append(d.cudaNvccFlags, v.Args...)
 	default:

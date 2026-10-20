@@ -4,6 +4,77 @@ import lib
 
 
 class CudaTest(unittest.TestCase):
+    def split_fixture(self, settings=""):
+        files = {
+            "mod/ya.make": (
+                f"LIBRARY()\n{lib.BARE_MODULE}"
+                "SET(CUDA_ARCHITECTURES sm_80:sm_90a)\n"
+                f"{settings}\nCUDA_NVCC_FLAGS(-DFOO)\nCUDA_SRCS(sub/k.cu)\nEND()\n"
+            ),
+            "mod/sub/k.cu": '#include "k.h"\n',
+            "mod/sub/k.h": "",
+            "build/scripts/compile_cuda.py": "",
+            "build/scripts/fatbinary_wrapper.py": "",
+            "build/scripts/fs_tools.py": "",
+            "build/internal/platform/cuda/cuda_runtime_include.h": '#include "rt.h"\n',
+            "build/internal/platform/cuda/rt.h": "",
+        }
+        lib.tool_program(files, "tools/mtime0", "mtime0")
+        lib.tool_program(files, "tools/custom_pid", "custom_pid")
+        return files
+
+    def test_split_cuda_compilation_and_generated_includes(self):
+        graph = lib.make(self.split_fixture(), "mod", "--target-platform", "default-linux-x86_64")
+        base = "$(B)/mod/sub/k"
+        for arch in ("80", "90a"):
+            device = lib.node_by_output(graph, f"{base}.{arch}.cubin")
+            self.assertEqual(device["outputs"], [f"{base}.{arch}.{ext}" for ext in
+                                               ("cubin", "ptx", "cudafe1.stub.c", "module_id")])
+            args = device["cmds"][0]["cmd_args"]
+            self.assertIn(f"arch=compute_{arch},code=sm_{arch}", args)
+            self.assertEqual(args[-2:], ["-U__CUDA_ARCH_LIST__", "-D__CUDA_ARCH_LIST__=900"])
+            self.assertIn("$(S)/mod/sub/k.h", device["inputs"])
+            self.assertIn("$(S)/build/internal/platform/cuda/rt.h", device["inputs"])
+            self.assertEqual(device["cmds"][1]["cmd_args"][-2:], ["k.ptx", f"{base}.{arch}.ptx"])
+            self.assertEqual(device["cmds"][1]["cwd"], "$(B)/mod")
+        fatbin = lib.node_by_output(graph, base + ".fatbin.c")
+        self.assertEqual(fatbin["cmds"][0]["cmd_args"][-7:-1],
+                         [f"{base}.{arch}.{ext}" for arch in ("80", "90a")
+                          for ext in ("ptx", "cubin", "module_id")])
+        host = lib.node_by_output(graph, base + ".cudafe1.cpp")
+        self.assertEqual(host["outputs"], [base + ".ii", base + ".cudafe1.cpp"])
+        self.assertIn("--preprocess", host["cmds"][0]["cmd_args"])
+        args = host["cmds"][1]["cmd_args"]
+        self.assertEqual(args[args.index("--stub_file_name") + 1], "k.90a.cudafe1.stub.c")
+        cc = lib.node_by_output(graph, base + ".cudafe1.cpp.o")
+        self.assertEqual(set(cc["inputs"]), {base + suffix for suffix in
+                         (".ii", ".cudafe1.cpp", ".fatbin.c", ".90a.cudafe1.stub.c", ".90a.cubin")})
+        self.assertIn("-D__NV_LEGACY_LAUNCH", cc["cmds"][0]["cmd_args"])
+        self.assertIn(fatbin["uid"], cc["deps"])
+        self.assertIn(host["uid"], cc["deps"])
+
+    def test_no_embed_ptx_omits_only_fatbinary_images(self):
+        graph = lib.make(self.split_fixture("SET(CUDA_NO_EMBED_PTX yes)"), "mod")
+        fatbin = lib.node_by_output(graph, "$(B)/mod/sub/k.fatbin.c")
+        self.assertFalse(any(x.endswith(".ptx") for x in fatbin["cmds"][0]["cmd_args"]))
+        lib.node_by_output(graph, "$(B)/mod/sub/k.80.ptx")
+
+    def test_device_link_is_part_of_archive_command(self):
+        files = self.split_fixture()
+        files["mod/ya.make"] = (
+            f"CUDA_DEVICE_LINK_LIBRARY()\n{lib.BARE_MODULE}"
+            "CUDA_NVCC_FLAGS(--device-c)\nSRCS(sub/k.cu)\nNVCC_DEVICE_LINK(sub/k.cu)\nEND()\n"
+        )
+        graph = lib.make(files, "mod", "--target-platform", "default-linux-x86_64")
+        ar = lib.node_by_output(graph, "$(B)/mod/libmod.a")
+        self.assertEqual(ar["outputs"], ["$(B)/mod/libmod.a", "$(B)/mod/devlink.o"])
+        self.assertEqual(len(ar["cmds"]), 2)
+        args = ar["cmds"][0]["cmd_args"]
+        self.assertEqual(args[0], "$(B)/resources/CUDA/bin/nvcc")
+        self.assertEqual(args[args.index("-dlink") + 1], "$(B)/mod/_/sub/k.cu.o")
+        self.assertEqual(ar["cmds"][1]["cmd_args"][-1], "$(B)/mod/devlink.o")
+        self.assertNotIn("$(B)/mod/devlink.o", ar["inputs"])
+
     def test_cuda_source_compiles_through_nvcc_wrapper(self):
         files = {
             "mod/ya.make": (

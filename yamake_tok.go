@@ -40,6 +40,9 @@ var tokName = [...]STR{
 	tokCppProtoPlugin2:                    internStr("CPP_PROTO_PLUGIN2"),
 	tokGenerateImplib:                     internStr("GENERATE_IMPLIB"),
 	tokLinkExcludeLibraries:               internStr("LINK_EXCLUDE_LIBRARIES"),
+	tokCudaSrcs:                           internStr("CUDA_SRCS"),
+	tokCudaDeviceLinkLibrary:              internStr("CUDA_DEVICE_LINK_LIBRARY"),
+	tokNvccDeviceLink:                     internStr("NVCC_DEVICE_LINK"),
 	tokCudaNvccFlags:                      internStr("CUDA_NVCC_FLAGS"),
 	tokSetAppendWithGlobal:                internStr("SET_APPEND_WITH_GLOBAL"),
 	tokData:                               internStr("DATA"),
@@ -544,6 +547,9 @@ const (
 	tokYmapsSproto
 	tokGenerateImplib
 	tokLinkExcludeLibraries
+	tokCudaSrcs
+	tokCudaDeviceLinkLibrary
+	tokNvccDeviceLink
 	tokCudaNvccFlags
 	tokSetAppendWithGlobal
 	tokDllTool
