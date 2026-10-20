@@ -25,7 +25,11 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	var globals []ResourceDecl
 
 	for _, p := range e.d.peerdirs {
-		res := genModule(e.ctx, ModuleInstance{Path: source(p.string()), Kind: KindLib, Platform: e.instance.Platform})
+		peer := e.derivePeerInstance(p.string())
+
+		peer.Demand = demandNone
+
+		res := genModule(e.ctx, peer)
 
 		peers = append(peers, res.JavaClosure...)
 		globals = append(globals, res.ResourceGlobalClosure...)

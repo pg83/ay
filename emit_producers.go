@@ -94,8 +94,9 @@ func (e *EmitContext) prodVFSTake(mark int) []VFS {
 	return e.prodVFS[mark:n:n]
 }
 
-func (e *EmitContext) srcPosition(tok STR) ([]VFS, []VFS) {
+func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	d := e.d
+	tok := meta.Source.str()
 	src := tok.string()
 	class := srcExtClassOf(tok.any())
 	outsMark := len(e.prodVFS)
@@ -113,7 +114,7 @@ func (e *EmitContext) srcPosition(tok STR) ([]VFS, []VFS) {
 	switch class {
 	case srcExtRos:
 		if d.ros != nil {
-			e.prodVFS = append(e.prodVFS, e.rosOutputPaths(src, false)...)
+			e.prodVFS = append(e.prodVFS, e.rosOutputPaths(src, meta.RosZeroCopy)...)
 		}
 	case srcExtProto:
 		base := strings.TrimSuffix(protoRel, ".proto")
@@ -547,7 +548,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	for i, m := range srcs {
-		outs, ins := e.srcPosition(m.Source.str())
+		outs, ins := e.srcPosition(m)
 
 		positions = append(positions, ProducerPos{
 			kind:  prodSrc,
@@ -869,7 +870,13 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		case prodArchiveAsm:
 			e.emitArchiveAsmForAR()
 		case prodSrc:
-			e.emitOneSource(srcs[pos.index])
+			meta := srcs[pos.index]
+
+			if srcExtClassOf(meta.Source) == srcExtRos {
+				e.emitRosSource(meta, pos.outs)
+			} else {
+				e.emitOneSource(meta)
+			}
 		case prodGoCgoCopy:
 			e.emitGoCgoCopyStmt(goModuleCgoExports(e.d)[pos.index])
 		case prodGoCgo1:

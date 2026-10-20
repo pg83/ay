@@ -7,7 +7,7 @@ var (
 	packageFinalKV = KV{P: pkPK, PC: pcLightRed}
 )
 
-func (e *EmitContext) emitMlaunch(resolved []ResolvedPeer, peerArchivePaths []VFS) {
+func (e *EmitContext) emitMlaunch(resolved []ResolvedPeer, peerArchivePaths []VFS, deps []string) {
 	if e.d.mlaunch == nil || e.d.mlaunch.Generate == "" {
 		return
 	}
@@ -32,7 +32,7 @@ func (e *EmitContext) emitMlaunch(resolved []ResolvedPeer, peerArchivePaths []VF
 	})
 
 	args = append(args, strDeps.any())
-	args = append(args, internAnys(mlaunchDeps(e.d, resolved))...)
+	args = append(args, internAnys(deps)...)
 	args = append(args, internAnys(e.d.mlaunch.Args)...)
 
 	ref := e.ctx.emit.reserve()

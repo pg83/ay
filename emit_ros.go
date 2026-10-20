@@ -42,7 +42,7 @@ func (e *EmitContext) rosOutputPaths(src string, zero bool) []VFS {
 	return outs
 }
 
-func (e *EmitContext) emitRosSource(meta SrcMeta) {
+func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 	ctx, d := e.ctx, e.d
 
 	if d.ros == nil {
@@ -51,7 +51,12 @@ func (e *EmitContext) emitRosSource(meta SrcMeta) {
 
 	src := resolveSourceVFS(ctx, e.instance, meta.Source.string(), d.srcDirs)
 	toolRef, tool := ctx.tool(internArg(rosGenerator))
-	outs := e.rosOutputPaths(src.relString(), meta.RosZeroCopy)
+
+	if outputs == nil {
+		outputs = e.rosOutputPaths(src.relString(), meta.RosZeroCopy)
+	}
+
+	outs := ctx.na.vfsList(outputs...)
 	closure := e.scanner.walkClosure(src, d.scanCtx, scanDomainRos)
 	lang := "cpp"
 

@@ -172,7 +172,7 @@ func applyRosStmt(module string, stmt UnknownStmt, env Environment, d *ModuleDat
 			}
 
 			if d.ros.Language == LangPy || (isMsg || d.ros.Language != LangRosBindings) && (isMsg || d.ros.Language != LangGo) {
-				d.srcs = append(d.srcs, SrcMeta{Source: internStr(file).any(), Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), RosZeroCopy: zero})
+				d.srcs = append(d.srcs, SrcMeta{Source: internStr(file).any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), RosZeroCopy: zero})
 			}
 
 			zero = false

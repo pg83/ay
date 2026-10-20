@@ -1998,6 +1998,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	linkExcludeLibraries = ctx.argSlices.internCopy(linkExcludeLibraries)
 
+	effectiveMlaunchDeps := mlaunchDeps(d, resolved)
+
 	newResult := func() *ModuleEmitResult {
 		r := ctx.results.one()
 
@@ -2005,7 +2007,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			TestSuites:                      e.styleSuites(resourceGlobalsClosure),
 			ModuleVariants:                  d.moduleVariants,
 			GlobalSources:                   e.globalSources,
-			MlaunchDeps:                     mlaunchDeps(d, resolved),
+			MlaunchDeps:                     effectiveMlaunchDeps,
 			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                d.addInclGlobal,
@@ -2164,7 +2166,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	d.scanCtx = newModuleScanContext(ctx, instance, d, scanAddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
 	d.scanCtx.rosInclude = rosInclude
-	e.emitMlaunch(resolved, peerArchivePaths)
+	e.emitMlaunch(resolved, peerArchivePaths, effectiveMlaunchDeps)
 	e.emit()
 
 	if instance.Demand == demandNone {

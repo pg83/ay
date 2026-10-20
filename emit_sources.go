@@ -36,7 +36,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 
 	switch srcExtClassOf(src.relOrSelf().any()) {
 	case srcExtRos:
-		e.emitRosSource(meta)
+		e.emitRosSource(meta, nil)
 	case srcExtHeader:
 		return
 	case srcExtCSource:

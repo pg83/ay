@@ -22,6 +22,20 @@ def files():
 
 
 class MlaunchTests(unittest.TestCase):
+    def test_resource_peers_select_nested_union_variants(self):
+        sources = files()
+        sources.update({
+            "pipeline/ya.make": f"MLAUNCH_PIPELINE(run)\n{lib.BARE_MODULE}\nPEERDIR(mid)\nEND()\n",
+            "mid/ya.make": f"MLAUNCH_LIBRARY(mid)\n{lib.BARE_MODULE}\nNO_GOLAUNCH_SRCS()\nRESOURCE_PEERDIR(leaf)\nEND()\n",
+            "leaf/ya.make": f"MLAUNCH_LIBRARY(leaf)\n{lib.BARE_MODULE}\nNO_GOLAUNCH_SRCS()\nRESOURCE_PEERDIR(data)\nEND()\n",
+            "data/ya.make": "UNION()\nFILES(asset.txt)\nEND()\n",
+            "data/asset.txt": "asset\n",
+        })
+        graph = lib.make(sources, "pipeline")
+        package = lib.node_by_output(graph, "$(B)/pipeline/run.final.pkg.fake")
+        self.assertIn("$(B)/data/asset.txt", package["inputs"])
+        self.assertIn("$(B)/pipeline/data/asset.txt", package["outputs"])
+
     def test_only_tags_selects_golaunch_variant(self):
         sources = files()
         sources["pipeline/ya.make"] = f"MLAUNCH_PIPELINE(run)\n{lib.BARE_MODULE}\nONLY_TAGS(GOLAUNCH)\nEND()\n"
