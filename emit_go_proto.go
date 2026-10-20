@@ -14,7 +14,7 @@ var goProtoHead = []ANY{
 	internStr("--namespace").any(),
 }
 
-var goProtobufInclude = []VFS{source("contrib/libs/protobuf/src")}
+var goProtobufInclude = []VFS{contribLibsProtobufSrc}
 
 var goCommonGoogleApis = []string{
 	"api/annotations", "api/configchange", "api/distribution", "api/expr/v1alpha1", "api/expr/v1beta1",
