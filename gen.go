@@ -175,7 +175,6 @@ type ModuleEmitResult struct {
 	persisted                       bool
 	DescClosure                     []DescProtoPeer
 	ResourceGlobalClosure           []ResourceDecl
-	GoSrcClosure                    []VFS
 	java                            *JavaModule
 	TestSuites                      []*TestSuite
 	testsEmitted                    bool
@@ -2220,8 +2219,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	var arPath *VFS
 
-	var goSrcClosure []VFS
-
 	var ownSbomRef *NodeRef
 	var ownSbomPath *VFS
 
@@ -2232,11 +2229,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ownSbomRef, ownSbomPath = e.emitSbomComponent(rel[strings.LastIndexByte(rel, '/')+1:])
 		}
 
-		goRef, goPath, srcClosure := e.emitGoPackage(resolved, local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths, ownSbomRef, ownSbomPath, resourceGlobalsClosure)
+		goRef, goPath := e.emitGoPackage(resolved, local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths, ownSbomRef, ownSbomPath, resourceGlobalsClosure)
 
 		arRef = goRef
 		arPath = ptr(goPath)
-		goSrcClosure = srcClosure
 	} else if len(local.refs) > 0 {
 		if perModuleCCTag != 0 {
 			arRef = emitARNamedTagged(arInstance, arBaseName, perModuleCCTag, local.refs, local.outs, arPluginVFS, d.tc, ctx.host, ctx.emit)
@@ -2266,7 +2262,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	result.SbomComponentRef = ownSbomRef
 	result.SbomComponentPath = ownSbomPath
 	result.ResourceGlobalClosure = resourceGlobalsClosure
-	result.GoSrcClosure = goSrcClosure
 
 	if isGoModuleType(d.moduleStmt.Name) {
 		result.TestSuites = e.goTestSuites(arRef, build(arPath.relString(), ".vet.txt"), resourceGlobalsClosure)

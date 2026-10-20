@@ -128,11 +128,11 @@ class GoPackageGraphTest(unittest.TestCase):
         ])
         self.assertEqual(greet["kv"]["p"], "GO")
         self.assertEqual(greet["inputs"][:7], ["$(S)/library/go/greet/greet.go", *TOOL_SCRIPTS])
-        self.assertEqual(greet["inputs"][-4:], [
-            f"$(S)/{STD}/internal/fmtsort/fmtsort.go",
-            f"$(S)/{STD}/vendor/golang.org/x/text/width/width.go",
-            f"$(S)/{STD}/fmt/fmt.go",
-            "$(S)/vendor/github.com/pkg/errors/errors.go",
+        self.assertEqual(greet["inputs"][7:], [
+            f"$(B)/{STD}/internal/fmtsort/fmtsort.a",
+            f"$(B)/{STD}/vendor/golang.org/x/text/width/width.a",
+            f"$(B)/{STD}/fmt/fmt.a",
+            "$(B)/vendor/github.com/pkg/errors/errors.a",
         ])
         self.assertEqual(greet["env"]["GOOS"], "linux")
         self.assertEqual(greet["env"]["GOARCH"], "amd64")

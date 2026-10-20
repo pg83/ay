@@ -225,9 +225,8 @@ class GoCgoGraphTest(unittest.TestCase):
         srcs = between(package["cmds"][0]["cmd_args"], "++srcs", "++asm-flags")
         self.assertEqual([srcs[0], srcs[-1]], [f"$(B)/{cgo}/gen.symabis", f"$(S)/{cgo}/asm_amd64.s"])
         tool_inputs_end = package["inputs"].index("$(S)/build/rules/go/risky_imports.yaml") + 1
-        self.assertEqual(package["inputs"][tool_inputs_end:tool_inputs_end + 4], [
-            f"$(B)/{STD}/syscall/syscall.a", f"$(S)/{STD}/syscall/syscall.go",
-            f"$(S)/{STD}/runtime/textflag.h", "$(S)/build/scripts/cgo1_wrapper.py",
+        self.assertEqual(package["inputs"][tool_inputs_end:tool_inputs_end + 3], [
+            f"$(B)/{STD}/syscall/syscall.a", f"$(S)/{STD}/runtime/textflag.h", "$(S)/build/scripts/cgo1_wrapper.py",
         ])
         symabis = lib.node_by_output(graph, f"$(B)/{cgo}/gen.symabis")["cmds"][0]["cmd_args"]
         self.assertEqual(between(symabis, "-trimpath", "-D")[1:], [
