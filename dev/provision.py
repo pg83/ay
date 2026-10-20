@@ -369,10 +369,35 @@ def build_slice(mount, slice_dir, reads, listed, exists, links):
 def graph_core(path):
     """The semantic part of a ya -G dump: nodes + results, minus the volatile
     `conf` header (gsid is a random per-run id, host/arc-version differ on the
-    arc-less slice) which must NOT count as a slice hole."""
+    arc-less slice) which must NOT count as a slice hole. Streamed node by node
+    (a --sandboxing graph can take several GB): uid -> (sha256 of the node,
+    its first output), and the result uid set. ya prints nodes in no stable
+    order under --dist with tests, so order does not count."""
+    nodes, result = {}, set()
+    section = None
+    block = []
+
     with open(path, encoding="utf-8") as f:
-        obj = json.load(f)
-    return obj.get("graph"), obj.get("result")
+        for line in f:
+            if section is None:
+                if line.startswith('    "graph": ['):
+                    section = "graph"
+                elif line.startswith('    "result": ['):
+                    section = "result"
+            elif line.startswith("    ]"):
+                section = None
+            elif section == "result":
+                result.add(json.loads(line.strip().rstrip(",")))
+            else:
+                block.append(line)
+
+                if line.startswith("        }"):
+                    node = json.loads("".join(block).strip().rstrip(","))
+                    digest = hashlib.sha256(json.dumps(node, sort_keys=True).encode()).hexdigest()
+                    nodes[node["uid"]] = (digest, fuse_node_label(node))
+                    block = []
+
+    return nodes, result
 
 
 def verify_slice(slice_dir, ya_cmd, graph_slice, graph_fuse):
@@ -387,19 +412,17 @@ def verify_slice(slice_dir, ya_cmd, graph_slice, graph_fuse):
     if fuse_g == slice_g and fuse_r == slice_r:
         return
 
-    msg = [f"provision: slice graph != FUSE graph (nodes fuse={len(fuse_g or [])} slice={len(slice_g or [])})"]
-
-    fg = {n.get("uid"): n for n in (fuse_g or [])}
-    sg = {n.get("uid"): n for n in (slice_g or [])}
-    only_fuse = sorted(set(fg) - set(sg))
-    only_slice = sorted(set(sg) - set(fg))
+    only_fuse = sorted(set(fuse_g) - set(slice_g))
+    only_slice = sorted(set(slice_g) - set(fuse_g))
+    changed = sorted(u for u in fuse_g if u in slice_g and fuse_g[u] != slice_g[u])
+    msg = [f"provision: slice graph != FUSE graph (nodes fuse={len(fuse_g)} slice={len(slice_g)}, results equal: {fuse_r == slice_r})"]
 
     if only_fuse:
-        msg.append(f"  nodes only in FUSE ({len(only_fuse)}): e.g. {fuse_node_label(fg[only_fuse[0]])}")
+        msg.append(f"  nodes only in FUSE ({len(only_fuse)}): e.g. {fuse_g[only_fuse[0]][1]}")
     if only_slice:
-        msg.append(f"  nodes only in SLICE ({len(only_slice)}): e.g. {fuse_node_label(sg[only_slice[0]])}")
-    if not only_fuse and not only_slice:
-        msg.append("  same uid set; content/order differs — see graph.*.json")
+        msg.append(f"  nodes only in SLICE ({len(only_slice)}): e.g. {slice_g[only_slice[0]][1]}")
+    if changed:
+        msg.append(f"  nodes with other content ({len(changed)}): e.g. {fuse_g[changed[0]][1]}")
 
     raise SystemExit("\n".join(msg))
 
