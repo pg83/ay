@@ -34,7 +34,7 @@ func testSuiteName(name TOK) string {
 
 func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 	switch v.Name {
-	case tokRun, tokSize, tokTimeout, tokTestCwd, tokData, tokDataFiles, tokExplicitData, tokDepends, tokUseRecipe, tokTag, tokEnv, tokRequirements, tokForkTests, tokForkSubtests, tokForkTestFiles, tokSplitFactor, tokBenchmarkOpts, tokFuzzOpts:
+	case tokDockerImage, tokRun, tokSize, tokTimeout, tokTestCwd, tokData, tokDataFiles, tokExplicitData, tokDepends, tokUseRecipe, tokTag, tokEnv, tokRequirements, tokForkTests, tokForkSubtests, tokForkTestFiles, tokSplitFactor, tokBenchmarkOpts, tokFuzzOpts:
 	default:
 		return false
 	}
@@ -44,6 +44,8 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 	value := strings.Join(args, " ")
 
 	switch v.Name {
+	case tokDockerImage:
+		t.dockerImages = append(t.dockerImages, args...)
 	case tokRun:
 		t.commands += "\n" + testCommandLine(args)
 	case tokSize:

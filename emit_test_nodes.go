@@ -111,6 +111,7 @@ func (s *TestSuite) applyTestMeta(meta TestMeta, addSource bool) {
 	s.env = meta.env
 	s.requirements = testRequirementsOf(meta.requirements)
 	s.depends = meta.depends
+	s.dockerImages = sortedUnique(meta.dockerImages)
 	s.recipes = testRecipes(meta.recipes)
 	s.data = slices.Clone(meta.data)
 

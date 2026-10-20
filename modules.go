@@ -140,6 +140,7 @@ func protoCmdPeers(d *ModuleData) []ANY {
 }
 
 type TestMeta struct {
+	dockerImages []string
 	commands     string
 	testFiles    []string
 	depends      []string

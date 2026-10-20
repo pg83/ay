@@ -279,6 +279,7 @@ func (o *TestOpts) sizeRequested(size string) bool {
 }
 
 type TestSuite struct {
+	dockerImages           []string
 	depends                []string
 	data                   []string
 	recipes                string
@@ -376,6 +377,10 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 		if res.ARRef != 0 {
 			s.deps = append(s.deps, res.ARRef)
 		}
+	}
+
+	for _, image := range s.dockerImages {
+		s.deps = append(s.deps, ctx.emitDockerImage(image))
 	}
 
 	for _, data := range s.data {

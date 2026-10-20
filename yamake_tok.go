@@ -244,6 +244,7 @@ var tokName = [...]STR{
 	tokTestSrcs:                        internStr("TEST_SRCS"),
 	tokTimeout:                         internStr("TIMEOUT"),
 	tokToolchain:                       internStr("TOOLCHAIN"),
+	tokDockerImage:                     internStr("DOCKER_IMAGE"),
 	tokSdcUnion:                        internStr("SDC_UNION"),
 	tokSdcInstall:                      internStr("SDC_INSTALL"),
 	tokSdcResourceInfo:                 internStr("SDC_RESOURCE_INFO"),
@@ -563,6 +564,7 @@ const (
 	tokTestSrcs
 	tokTimeout
 	tokToolchain
+	tokDockerImage
 	tokSdcUnion
 	tokSdcInstall
 	tokSdcResourceInfo
