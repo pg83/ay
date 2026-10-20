@@ -410,29 +410,41 @@ func goPackageName(modulePath string, d *ModuleData) string {
 	return path.Base(modulePath)
 }
 
-func applyGoResource(modulePath string, v *ResourceStmt, d *ModuleData) {
-	args := make([]string, 0, 2*len(v.Pairs))
+func applyGoResource(fs FS, modulePath string, entries []ResourceEntry, line int, d *ModuleData) {
+	hashArgs := make([]string, 0, 2*len(entries))
+	args := make([]ANY, 0, 2*len(entries))
 
-	for _, p := range v.Pairs {
-		args = append(args, p.Path, p.Key)
+	var inputs []ANY
+
+	for _, entry := range entries {
+		key, commandKey := entry.Key, entry.Key
+
+		if entry.SrcPath != "" {
+			key = "resfs/src/" + entry.Key + "=${rootrel;context=TEXT;input=TEXT:\"" + entry.SrcPath + "\"}"
+
+			input := copyFileInputVFS(fs, source(modulePath), entry.SrcPath)
+
+			commandKey = "resfs/src/" + entry.Key + "=" + input.relString()
+		}
+
+		hashArgs = append(hashArgs, entry.Path, key)
+
+		file := internStr(entry.Path).any()
+
+		if entry.Path != "-" {
+			file = copyFileInputVFS(fs, source(modulePath), entry.Path).any()
+			inputs = append(inputs, file)
+		}
+
+		args = append(args, file, internStr("notafile"+commandKey).any())
 	}
 
-	out := internStr(fmt.Sprintf("resource.%x.res.go", md5.Sum([]byte(strings.Join(args, "@"))))).any()
+	out := internStr(fmt.Sprintf("resource.%x.res.go", md5.Sum([]byte(strings.Join(hashArgs, "@"))))).any()
 
 	rp := &RunProgramStmt{
 		ToolPath: strLibraryGoCoreResourceCc.any(),
-		Args:     []ANY{strMockgenPkg.any(), internStr(goPackageName(modulePath, d)).any(), strO.any(), out},
-		OUTFiles: []ANY{out},
-		Line:     v.Line,
-		DeclSeq:  d.nextDeclSeq(),
-	}
-
-	for _, p := range v.Pairs {
-		rp.Args = append(rp.Args, internStr(p.Path).any(), internStr("notafile"+p.Key).any())
-
-		if p.Path != "-" {
-			rp.INFiles = append(rp.INFiles, internStr(p.Path).any())
-		}
+		Args:     append([]ANY{strMockgenPkg.any(), internStr(goPackageName(modulePath, d)).any(), strO.any(), out}, args...),
+		INFiles:  inputs, OUTFiles: []ANY{out}, Line: line, DeclSeq: d.nextDeclSeq(),
 	}
 
 	d.runPrograms = append(d.runPrograms, rp)

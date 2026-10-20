@@ -165,6 +165,20 @@ class PySrcsTest(unittest.TestCase):
         for node in objcopy_nodes(graph, "lib"):
             self.assertIn(node["outputs"][0], archive["inputs"])
 
+    def test_module_namespace_is_the_default_for_each_py_srcs_call(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": (
+                "PY3_LIBRARY()\nPY_NAMESPACE(public.api)\n"
+                "PY_SRCS(first.py)\nPY_SRCS(NAMESPACE private second.py)\n"
+                "PY_SRCS(third.py)\nEND()\n"
+            ),
+            "lib/first.py": "", "lib/second.py": "", "lib/third.py": "",
+        })
+        graph = lib.make(files, "lib")
+        for name, namespace in (("first", "public/api"), ("second", "private"), ("third", "public/api")):
+            objcopy_with_kv(graph, "lib", f"resfs/src/resfs/file/py/{namespace}/{name}.py=lib/{name}.py")
+
     def test_kv_only_resources(self):
         files = python_base()
         files.update({

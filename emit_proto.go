@@ -759,6 +759,13 @@ func (e *EmitContext) emitPyProtoLibraryResult() *ProtoSrcsResult {
 	}
 
 	genRefs, genOuts := e.packPyProtoResEntries(entries)
+
+	if e.objcopyRes != nil {
+		genRefs = concat(e.objcopyRes.Refs, genRefs)
+		genOuts = concat(e.objcopyRes.Outputs, genOuts)
+		e.objcopyRes = nil
+	}
+
 	protoLibName := ""
 
 	if len(d.moduleStmt.Args) > 0 {

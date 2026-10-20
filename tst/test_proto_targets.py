@@ -37,12 +37,22 @@ class ProtoTargetsTest(unittest.TestCase):
     def test_only_and_include_tags_select_start_variants(self):
         files = target_files()
         files["p/ya.make"] = (
-            "PROTO_LIBRARY()\nONLY_TAGS(GO_PROTO)\nINCLUDE_TAGS(DESC_PROTO)\n"
+            "PROTO_LIBRARY()\nONLY_TAGS(GO_PROTO UNRELATED_TAG)\nINCLUDE_TAGS(DESC_PROTO)\n"
             "SRCS(a.proto)\nEND()\n")
         graph = lib.make(files, "p")
         lib.node_by_output(graph, "$(B)/p/a.pb.go")
         lib.node_by_output(graph, "$(B)/p/p.self.protodesc")
         self.assertFalse(any("$(B)/p/a.pb.cc" in n["outputs"] for n in graph["graph"]))
+
+    def test_python_proto_library_keeps_explicit_resource_objects(self):
+        files = target_files()
+        files["p/ya.make"] = "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO PY3_PROTO)\nSRCS(a.proto)\nRESOURCE_FILES(data.txt)\nEND()\n"
+        files["p/data.txt"] = "data\n"
+        graph = lib.make(files, "p")
+        archive = lib.node_by_output(graph, "$(B)/p/libpy3p.global.a")
+        resources = [n for n in graph["graph"] if "$(S)/p/data.txt" in n["inputs"] and n["kv"]["p"] == "PY"]
+        self.assertTrue(resources)
+        self.assertTrue(any(n["uid"] in archive["deps"] for n in resources))
 
     def test_conditional_module_declaration_keeps_start_variants(self):
         files = target_files()
@@ -62,7 +72,7 @@ class ProtoTargetsTest(unittest.TestCase):
             "PROTO_NAMESPACE(p)\nPEERDIR(q)\nSRCS(a.proto)\nEND()\n"
         )
         files["q/ya.make"] = (
-            "PROTO_LIBRARY()\nPROTO_NAMESPACE(GLOBAL q)\nSRCS(a/same.proto b/same.proto)\nEND()\n"
+            "PROTO_LIBRARY()\nINCLUDE_TAGS(DOCS_PROTO)\nPROTO_NAMESPACE(GLOBAL q)\nSRCS(a/same.proto b/same.proto)\nEND()\n"
         )
         files["q/a/same.proto"] = files["q/b/same.proto"] = 'syntax = "proto3";\n'
         graph = lib.make(files, "p")

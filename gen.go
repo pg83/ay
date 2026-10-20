@@ -595,7 +595,7 @@ func isLinkingModuleType(name TOK) bool {
 }
 
 func (e *EmitContext) peerDemand() ModuleDemand {
-	if e.instance.Demand == demandLinked || (e.instance.Demand == demandSelf && isLinkingModuleType(e.d.moduleStmt.Name)) {
+	if e.instance.Demand == demandLinked || (e.instance.Demand == demandSelf && (isLinkingModuleType(e.d.moduleStmt.Name) || isGoModuleType(e.d.moduleStmt.Name))) {
 		return demandLinked
 	}
 

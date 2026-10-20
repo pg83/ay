@@ -377,16 +377,16 @@ func (e *EmitContext) emit() {
 			for i, ref := range genPyAuxRefs {
 				e.collectObj(ref, genPyAuxOuts[i], SrcMeta{Prio: stmtPrioDefault, Global: true})
 			}
-
-			if d.moduleStmt.Name == tokProtoLibrary {
-				if pyRes := e.emitPyProtoLibraryResult(); pyRes != nil {
-					e.protoRes = pyRes
-				}
-			}
 		}
 
 		if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 || d.moduleStmt.Name == tokPy2Test {
 			e.objcopyRes = e.emitResourceObjcopy()
+		}
+
+		if d.moduleStmt.Name == tokProtoLibrary {
+			if pyRes := e.emitPyProtoLibraryResult(); pyRes != nil {
+				e.protoRes = pyRes
+			}
 		}
 
 		for i, ref := range fsMemberRefs {

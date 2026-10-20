@@ -256,6 +256,7 @@ type ModuleData struct {
 	moduleScopeCFlags        []ANY
 	pythonSQLite3            bool
 	pyNamespace              *ANY
+	pyModuleNamespace        *ANY
 	protoNamespace           *ANY
 	ymapsSprotoSrcs          []ANY
 	noMypy                   bool
@@ -1458,7 +1459,13 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *ResourceStmt:
 			if isGoModuleType(d.unit.Type) {
-				applyGoResource(modulePath, v, d)
+				entries := make([]ResourceEntry, len(v.Pairs))
+
+				for i, pair := range v.Pairs {
+					entries[i] = ResourceEntry{Path: pair.Path, Key: pair.Key}
+				}
+
+				applyGoResource(fs, modulePath, entries, v.Line, d)
 
 				break
 			}
@@ -1474,6 +1481,14 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				})
 			}
 		case *ResourceFilesStmt:
+			if isGoModuleType(d.unit.Type) {
+				entries := expandResourceFiles(d, nil, anyStrs(expandStmtTokens(v.Args, env)))
+
+				applyGoResource(fs, modulePath, entries, v.Line, d)
+
+				break
+			}
+
 			ensureResourcePeer(modulePath, d)
 
 			before := len(d.resources)
@@ -1484,6 +1499,14 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				d.resources[len(d.resources)-1].EndsBatch = true
 			}
 		case *AllResourceFilesStmt:
+			if isGoModuleType(d.unit.Type) {
+				entries := expandAllResourceFiles(d, nil, fs, modulePath, env, v)
+
+				applyGoResource(fs, modulePath, entries, v.Line, d)
+
+				break
+			}
+
 			ensureResourcePeer(modulePath, d)
 
 			before := len(d.resources)
@@ -2088,6 +2111,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.pyNamespace = ptr(v.Args[0])
+		d.pyModuleNamespace = d.pyNamespace
 	case tokYqlLastAbiVersion:
 		if len(v.Args) != 0 {
 			throwFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
@@ -2250,7 +2274,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.listProtos = append(d.listProtos, stmt)
 	case tokOnlyTags, tokIncludeTags, tokExcludeTags:
 
-		applyProtoVariantTags(v, d)
+		if d.moduleStmt != nil && (d.moduleStmt.Name == tokProtoLibrary || env.bool(envGO_PROTO)) {
+			applyProtoVariantTags(v, d)
+		}
 
 		if d.excludeTags == nil {
 			d.excludeTags = make(map[STR]bool)
@@ -2508,8 +2534,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		cythonHeader := false
 		cythonApiHeader := false
 		swigCMode := false
+		namespace := d.pyModuleNamespace
 
-		var namespace *ANY
 		var groupSrcs []string
 
 		cythonStmtStart := len(d.cythonCpp)

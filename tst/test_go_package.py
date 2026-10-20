@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import tempfile
 import unittest
@@ -126,6 +127,31 @@ class GoPackageGraphTest(unittest.TestCase):
         self.assertEqual(between(package, "++srcs", "++asm-flags"), [out, "$(S)/library/go/certs/certs.go"])
         self.assertIn("library/go/core/resource/resource.a", between(package, "++peers", "--ya-end-command-file"))
         self.assertFalse([o for n in graph["graph"] for o in n["outputs"] if o.endswith(".global.a")])
+
+    def test_resource_files_dispatch_to_the_go_resource_compiler(self):
+        for macro, filename in (
+            ("RESOURCE_FILES(PREFIX assets/ STRIP data/ data/a.txt)", "data/a.txt"),
+            ("ALL_RESOURCE_FILES(txt PREFIX assets/ STRIP data/ data)", "${ARCADIA_ROOT}/p/data/a.txt"),
+        ):
+            with self.subTest(macro=macro):
+                files = go_world()
+                go_module(files, "library/go/core/resource")
+                go_module(files, "library/go/core/resource/cc", module="GO_PROGRAM")
+                go_module(files, "p", macros=macro + "\n")
+                files["p/data/a.txt"] = "data\n"
+                graph = lib.make(files, "p")
+                key = "resfs/file/assets/a.txt"
+                raw = ["-", 'resfs/src/' + key + '=${rootrel;context=TEXT;input=TEXT:"' + filename + '"}', filename, key]
+                digest = hashlib.md5("@".join(raw).encode()).hexdigest()
+                out = f"$(B)/p/resource.{digest}.res.go"
+                resource = lib.node_by_output(graph, out)
+                self.assertEqual(resource["cmds"][0]["cmd_args"][-4:], [
+                    "-", "notafileresfs/src/resfs/file/assets/a.txt=p/data/a.txt",
+                    "$(S)/p/data/a.txt", "notafileresfs/file/assets/a.txt",
+                ])
+                self.assertIn("$(S)/p/data/a.txt", resource["inputs"])
+                self.assertIn(out, go_tool_args(go_node(graph, "p")))
+                self.assertFalse(any(n["kv"]["p"] == "RC" for n in graph["graph"]))
 
     def test_embed_patterns_list_their_glob_matches(self):
         files = go_world()

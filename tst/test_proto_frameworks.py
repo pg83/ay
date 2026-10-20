@@ -20,7 +20,8 @@ class ProtoFrameworksTest(unittest.TestCase):
         lib.tool_program(files, "contrib/tools/protoc", "protoc")
         lib.tool_program(files, YSON_TOOL, "proto-yson-gen")
         files.update({
-            "contrib/libs/protobuf/ya.make": "LIBRARY()\nNO_UTIL()\nEND()\n",
+            "contrib/libs/protobuf/ya.make": "LIBRARY()\nNO_UTIL()\nNO_RUNTIME()\nNO_LIBC()\nSRCS(runtime.cpp)\nEND()\n",
+            "contrib/libs/protobuf/runtime.cpp": "int runtime;\n",
             "model/one.proto": 'syntax = "proto3";\nimport "shared.proto";\n',
             "model/two.proto": 'syntax = "proto3";\n',
             "model/shared.proto": 'syntax = "proto3";\n',
@@ -48,6 +49,10 @@ class ProtoFrameworksTest(unittest.TestCase):
         self.assertIn("$(S)/model/shared.proto", producer["inputs"])
         package = lib.node_by_output(graph, "$(B)/lib/lib.a")
         self.assertIn(producer["uid"], package["deps"])
+        runtime = lib.node_by_output(graph, "$(B)/contrib/libs/protobuf/libcontrib-libs-protobuf.a")
+        self.assertIn(runtime["uid"], package["deps"])
+        self.assertIn(runtime["outputs"][0], package["inputs"])
+        self.assertNotIn(runtime["outputs"][0], go_tool_args(package))
         for output in producer["outputs"]:
             self.assertIn(output, go_tool_args(package))
         for peer in YSON_PEERS:
