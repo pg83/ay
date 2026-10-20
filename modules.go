@@ -1885,6 +1885,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 				for i < len(v.Args) && !isLlvmBcKeyword(v.Args[i].string()) {
 					stmt.Symbols = append(stmt.Symbols, v.Args[i].string())
+					markUserArg(v.Args[i])
 					i++
 				}
 			case "GENERATE_MACHINE_CODE":
@@ -2528,6 +2529,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.collectStyleCheck(fs, modulePath, v, env)
 	case tokStyleJSON, tokStyleYAML:
 		d.collectStyleCheck(fs, modulePath, v, env)
+	case tokStyleYAMLConf:
+		d.collectYAMLStyleWithConfig(modulePath, env)
 	case tokUsrvBuild:
 		d.collectUsrvFiles(anyStrs(v.Args))
 	case tokUsrvAllSrcs:

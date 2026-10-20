@@ -27,6 +27,7 @@ var tokName = [...]STR{
 	tokUsrvStyleYAML:  internStr("USRV_STYLE_YAML_CURRENT_DIRECTORY"),
 	tokStyleJSON:      internStr("STYLE_JSON"),
 	tokStyleYAML:      internStr("STYLE_YAML"),
+	tokStyleYAMLConf:  internStr("STYLE_YAML_WITH_CONFIG"),
 	tokGenLibrary:     internStr("GEN_LIBRARY"),
 	tokUsrvBuild:      internStr("USRV_BUILD"),
 	tokUsrvAllSrcs:    internStr("USRV_ALL_SRCS"),
@@ -751,6 +752,7 @@ const (
 	tokUsrvAllSrcs
 	tokStyleJSON
 	tokStyleYAML
+	tokStyleYAMLConf
 	tokUsrvStyleJSON
 	tokUsrvStyleYAML
 	tokCompileLua
