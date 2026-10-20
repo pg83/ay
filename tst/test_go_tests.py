@@ -176,6 +176,14 @@ class GoStyleTestsTest(unittest.TestCase):
             *sources,
         ])
 
+    def test_style_checks_carry_the_module_test_env(self):
+        files = go_world()
+        go_module(files, "library/go/greet", macros="ENV(A=1)\n")
+        graph = lib.make(files, "library/go/greet", *AUTOCHECK)
+        for suite in ("gofmt", "govet"):
+            args = test_node(graph, f"library/go/greet/{suite}")["cmds"][0]["cmd_args"]
+            self.assertEqual(args_after(args, "--env"), ["A=1"], suite)
+
     def test_platform_resources_of_go_suites_skip_cpp_linters(self):
         files = go_world()
         go_module(files, "library/go/greet")

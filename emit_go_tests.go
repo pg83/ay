@@ -59,12 +59,12 @@ func (e *EmitContext) goTestSuites(goRef NodeRef, vetReport VFS, globals []Resou
 		}
 
 		for _, dir := range dirs {
-			suites = append(suites, goFmtSuite(project, byDir[dir], globals))
+			suites = append(suites, goFmtSuite(project, byDir[dir], globals, e.d.test.env))
 		}
 	}
 
 	if goNeedLint(instance.Path) {
-		suites = append(suites, goVetSuite(project, goRef, vetReport, globals))
+		suites = append(suites, goVetSuite(project, goRef, vetReport, globals, e.d.test.env))
 	}
 
 	if e.d.moduleStmt.Name == tokGoTest {
@@ -152,7 +152,7 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 	}
 }
 
-func goFmtSuite(project string, files []VFS, globals []ResourceDecl) *TestSuite {
+func goFmtSuite(project string, files []VFS, globals []ResourceDecl, env []string) *TestSuite {
 	gofmt := strGoToolsResourceGlobalBinGofmt.any()
 
 	for _, g := range globals {
@@ -171,6 +171,7 @@ func goFmtSuite(project string, files []VFS, globals []ResourceDecl) *TestSuite 
 		Related:    files,
 		Inputs:     append([]VFS{source(project)}, files...),
 		Globals:    globals,
+		Env:        env,
 		TestParams: true,
 		RunCmd: func(wd string) []ANY {
 			out := []ANY{
@@ -190,7 +191,7 @@ func goFmtSuite(project string, files []VFS, globals []ResourceDecl) *TestSuite 
 	}
 }
 
-func goVetSuite(project string, goRef NodeRef, vetReport VFS, globals []ResourceDecl) *TestSuite {
+func goVetSuite(project string, goRef NodeRef, vetReport VFS, globals []ResourceDecl, env []string) *TestSuite {
 	return &TestSuite{
 		Project:    project,
 		Name:       "govet",
@@ -201,6 +202,7 @@ func goVetSuite(project string, goRef NodeRef, vetReport VFS, globals []Resource
 		Inputs:     []VFS{source(project), vetReport},
 		Deps:       []NodeRef{goRef},
 		Globals:    globals,
+		Env:        env,
 		TestParams: true,
 		RunCmd: func(wd string) []ANY {
 			return []ANY{
