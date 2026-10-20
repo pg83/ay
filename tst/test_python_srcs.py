@@ -179,6 +179,32 @@ class PySrcsTest(unittest.TestCase):
         for name, namespace in (("first", "public/api"), ("second", "private"), ("third", "public/api")):
             objcopy_with_kv(graph, "lib", f"resfs/src/resfs/file/py/{namespace}/{name}.py=lib/{name}.py")
 
+    def test_scope_directives_apply_to_the_following_sources(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": "PY3_LIBRARY()\nPY_SRCS(a.py TOP_LEVEL b.py NAMESPACE n c.py)\nEND()\n",
+            "lib/a.py": "",
+            "lib/b.py": "",
+            "lib/c.py": "",
+        })
+        graph = lib.make(files, "lib")
+        node = objcopy_with_kv(graph, "lib", "resfs/src/resfs/file/py/lib/a.py=lib/a.py")
+        self.assertEqual(
+            [kv for kv in kvs(node) if not kv.endswith(".yapyc3")],
+            [
+                "resfs/src/resfs/file/py/lib/a.py=lib/a.py",
+                "resfs/src/resfs/file/py/b.py=lib/b.py",
+                "resfs/src/resfs/file/py/n/c.py=lib/c.py",
+            ],
+        )
+        namespaces = sorted(
+            kv.rsplit("/", 1)[-1]
+            for node in objcopy_nodes(graph, "lib")
+            for kv in kvs(node)
+            if kv.startswith("py/namespace/")
+        )
+        self.assertEqual(namespaces, ["lib=.:lib.:n."])
+
     def test_kv_only_resources(self):
         files = python_base()
         files.update({

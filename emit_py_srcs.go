@@ -5,6 +5,7 @@ import (
 	enc32 "encoding/base32"
 	enchex "encoding/hex"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -126,9 +127,9 @@ func (e *EmitContext) registerCollectPySrcs() {
 	module := instance.Path.relString()
 
 	for gi, group := range d.pySrcGroups {
-		keyPrefix := pyResourceKeyPrefix(group.TopLevel, group.Namespace, module)
+		for si, src := range group.Srcs {
+			scope := group.Scopes[si]
 
-		for _, src := range group.Srcs {
 			if d.usePython2 && extIsProto(src.relOrSelf().string()) {
 				throwFmt("PY_SRCS: %s: .proto sources of a Python 2 module are not modelled", module)
 			}
@@ -166,7 +167,7 @@ func (e *EmitContext) registerCollectPySrcs() {
 			e.enqueueSrc(SrcMeta{
 				Source: path.any(), Prio: stmtPrioDefault,
 				PyMeta: e.addPyMeta(PySourceMeta{
-					Module: e.pyModuleKey(keyPrefix, token.string(), group),
+					Module: e.pyModuleKey(scope, token.string()),
 					Token:  token,
 					Group:  gi,
 					Kind:   kind,
@@ -176,16 +177,18 @@ func (e *EmitContext) registerCollectPySrcs() {
 	}
 }
 
-func (e *EmitContext) pyModuleKey(keyPrefix, src string, group PySrcGroup) STR {
+func (e *EmitContext) pyModuleKey(scope PyScope, src string) STR {
+	module := e.instance.Path.relString()
+
 	if !e.d.usePython2 {
-		return internV(keyPrefix, src)
+		return internV(pyResourceKeyPrefix(scope.TopLevel, scope.Namespace, module), src)
 	}
 
 	if isProgramModuleType(e.d.moduleStmt.Name) && (src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
 		return strMain
 	}
 
-	return internStr(pythonModuleName(e.instance.Path.relString(), src, group.TopLevel, group.Namespace))
+	return internStr(pythonModuleName(module, src, scope.TopLevel, scope.Namespace))
 }
 
 func (e *EmitContext) pyYapycExt() string {
@@ -606,64 +609,52 @@ func (e *EmitContext) emitPyProtoGroupResources(group int) ([]NodeRef, []VFS) {
 func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	reg := e.codegen
-	pySources := make([]string, 0, len(group.Srcs))
-	arcSources := make([]string, 0, len(group.Srcs))
+	h := md5.New()
+	nsRoots := make(map[string][]string, len(group.Srcs))
+	hasPy := false
 
-	for _, srcRel := range group.Srcs {
-		if !extIsPy(srcRel.string()) {
+	for si, src := range group.Srcs {
+		srcRel := src.string()
+
+		if !extIsPy(srcRel) {
 			continue
 		}
 
-		pySources = append(pySources, srcRel.string())
+		hasPy = true
 
-		if reg.lookupSplit(instance.Path, srcRel) == nil {
-			arcSources = append(arcSources, srcRel.string())
+		scope := group.Scopes[si]
+		nsPrefix := strings.ReplaceAll(instance.Path.relString(), "/", ".") + "."
+
+		if scope.Namespace != nil {
+			nsPrefix = strings.TrimSuffix(scope.Namespace.string(), ".") + "."
+		}
+
+		nsValue := nsPrefix
+
+		if scope.TopLevel {
+			nsPrefix = ""
+			nsValue = "."
+		}
+
+		h.Write([]byte(nsPrefix + strings.ReplaceAll(strings.TrimSuffix(srcRel, ".py"), "/", ".")))
+
+		if reg.lookupSplit(instance.Path, src) != nil {
+			continue
+		}
+
+		resolvedRel := resolvePySrcRel(ctx.fs, d.srcDirs, instance.Path, srcRel).string()
+		root := resolvedRel[:max(len(resolvedRel)-len(srcRel)-1, 0)]
+
+		if !slices.Contains(nsRoots[root], nsValue) {
+			nsRoots[root] = append(nsRoots[root], nsValue)
 		}
 	}
 
-	if len(pySources) == 0 || len(arcSources) == 0 {
+	if !hasPy || len(nsRoots) == 0 {
 		return nil, nil
 	}
 
-	nsPrefix := strings.ReplaceAll(instance.Path.relString(), "/", ".") + "."
-
-	if group.Namespace != nil {
-		nsPrefix = strings.TrimSuffix(group.Namespace.string(), ".") + "."
-	}
-
-	nsValue := nsPrefix
-
-	if group.TopLevel {
-		nsPrefix = ""
-		nsValue = "."
-	}
-
-	h := md5.New()
-
-	for _, srcRel := range pySources {
-		modName := strings.TrimSuffix(srcRel, ".py")
-
-		modName = strings.ReplaceAll(modName, "/", ".")
-
-		mod := nsPrefix + modName
-
-		h.Write([]byte(mod))
-	}
-
 	modListMD5 := enchex.EncodeToString(h.Sum(nil))
-	nsRoots := make(map[string]struct{}, len(arcSources))
-
-	for _, srcRel := range arcSources {
-		resolvedRel := resolvePySrcRel(ctx.fs, d.srcDirs, instance.Path, srcRel).string()
-		end := len(resolvedRel) - len(srcRel) - 1
-
-		if end < 0 {
-			end = 0
-		}
-
-		nsRoots[resolvedRel[:end]] = struct{}{}
-	}
-
 	keyPaths := make([]string, 0, len(nsRoots))
 
 	for keyPath := range nsRoots {
@@ -677,6 +668,11 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VF
 
 	for _, keyPath := range keyPaths {
 		key := "py/namespace/" + modListMD5 + "/" + keyPath
+		values := nsRoots[keyPath]
+
+		sort.Strings(values)
+
+		nsValue := strings.Join(values, ":")
 
 		kvsHash = append(kvsHash, key+"=\""+nsValue+"\"")
 		kvsCmd = append(kvsCmd, internStr(key+"="+nsValue))

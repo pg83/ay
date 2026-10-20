@@ -422,7 +422,11 @@ func (d *ModuleData) resStr4(a, b, c, e string) string {
 }
 
 type PySrcGroup struct {
-	Srcs      []ANY
+	Srcs   []ANY
+	Scopes []PyScope
+}
+
+type PyScope struct {
 	TopLevel  bool
 	Namespace *ANY
 }
@@ -2616,6 +2620,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		namespace := d.pyModuleNamespace
 
 		var groupSrcs []string
+		var groupScopes []PyScope
 
 		cythonStmtStart := len(d.cythonCpp)
 
@@ -2629,6 +2634,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			switch a {
 			case kwTOP_LEVEL.any():
 				topLevel = true
+				namespace = nil
 				d.pyTopLevel = true
 
 				continue
@@ -2640,6 +2646,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				}
 
 				namespace = ptr(v.Args[i])
+				topLevel = false
 				d.pyNamespace = namespace
 
 				continue
@@ -2823,6 +2830,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			d.pySrcs = append(d.pySrcs, internStr(src).any())
 			groupSrcs = append(groupSrcs, src)
+			groupScopes = append(groupScopes, PyScope{TopLevel: topLevel, Namespace: namespace})
 
 			if mainNext {
 				ns := strings.ReplaceAll(modulePath, "/", ".") + "."
@@ -2867,9 +2875,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		if len(groupSrcs) > 0 {
 			d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
-				Srcs:      internAnys(groupSrcs),
-				TopLevel:  topLevel,
-				Namespace: namespace,
+				Srcs:   internAnys(groupSrcs),
+				Scopes: groupScopes,
 			})
 		}
 	case tokAllPySrcs:
@@ -4246,10 +4253,15 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 	d.pySrcs = append(d.pySrcs, internAnys(files)...)
 
 	if len(files) > 0 {
+		scopes := make([]PyScope, len(files))
+
+		for i := range scopes {
+			scopes[i] = PyScope{TopLevel: d.pyTopLevel, Namespace: d.pyNamespace}
+		}
+
 		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
-			Srcs:      internAnys(files),
-			TopLevel:  d.pyTopLevel,
-			Namespace: d.pyNamespace,
+			Srcs:   internAnys(files),
+			Scopes: scopes,
 		})
 	}
 }
