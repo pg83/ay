@@ -47,6 +47,26 @@ class YqlAbiTest(unittest.TestCase):
         self.assertLess(args.index("-DOWN"), flag)
         self.assertNotIn("-nostdinc++", args[flag:])
 
+    def test_abi_flag_closes_the_bitcode_cxxflags(self):
+        # The LLVM_COMPILE_CXX of ydb yt_codec_bc.cpp.16.bc renders the same
+        # CXXFLAGS order as the object compile.
+        files = {
+            "p/ya.make": f"PROGRAM()\n{BARE}PEERDIR(a)\nEND()\n",
+            "a/ya.make": f"YQL_LIBRARY()\n{BARE}USE_LLVM_BC20()\nLLVM_BC(a.cpp NAME n)\nEND()\n",
+            "a/a.cpp": "",
+            "build/platform/clang/ya.make": (
+                "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(CLANG20 sbr:1)\nEND()\n"
+            ),
+            "build/platform/python/ymake_python3/ya.make": (
+                "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(YMAKE_PYTHON3 sbr:2)\nEND()\n"
+            ),
+        }
+        lib.tool_program(files, "tools/rescompiler", "rescompiler")
+        lib.tool_program(files, "tools/rescompressor", "rescompressor")
+        graph = lib.make(files, "p", "--target-platform", "default-linux-x86_64")
+        args = lib.node_by_output(graph, "$(B)/a/a.cpp.abi_stable.bc")["cmds"][0]["cmd_args"]
+        self.assertNotIn("-nostdinc++", args[args.index("-DUSE_STABLE_UDF_ABI_VERSION"):])
+
     def test_direct_library_selects_stable_variant(self):
         graph = lib.make({
             "a/ya.make": f"YQL_LIBRARY()\n{BARE}SRCS(a.cpp)\nEND()\n",
