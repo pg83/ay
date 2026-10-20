@@ -76,8 +76,15 @@ class ChaosHashesTest(unittest.TestCase):
 
     def test_pairs_colliding_in_both_halves_are_rejected(self):
         wide = lib.wide_project(20)
+        bucket_files = {
+            "app/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}SRCS(" +
+                           " ".join(f"s{i}.cpp" for i in range(50)) + ")\nEND()\n",
+            **{f"app/s{i}.cpp": "".join(f'#include "h{j}.h"\n' for j in range(i % 31))
+               for i in range(50)},
+            **{f"app/h{i}.h": "" for i in range(31)},
+        }
         for files, words, message in (
-            (self.files, "hash-bucket-h1=3 hash-bucket-h2=4",
+            (bucket_files, "hash-bucket-h1=3 hash-bucket-h2=7",
              r"BucketCache: bucket hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ elems\)"),
             (self.files, "hash-list-h1=3 hash-list-h2=3",
              r"BucketCache: bucket-list hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ buckets\)"),

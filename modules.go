@@ -210,6 +210,8 @@ type ModuleData struct {
 	hadAllocator             bool
 	allocatorName            ANY
 	muslLite                 bool
+	implibs                  []ImplibStmt
+	linkExcludeLibraries     []ANY
 	cudaNvccFlags            []ANY
 	muslEnabled              bool
 	useAsmlib                bool
@@ -2763,6 +2765,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				}
 			}
 		}
+	case tokGenerateImplib:
+		d.implibs = append(d.implibs, parseImplib(v.Args))
+		d.linkExcludeLibraries = append(d.linkExcludeLibraries, v.Args[0])
+	case tokLinkExcludeLibraries:
+		d.linkExcludeLibraries = append(d.linkExcludeLibraries, v.Args...)
 	case tokCudaNvccFlags:
 		d.cudaNvccFlags = append(d.cudaNvccFlags, v.Args...)
 	default:

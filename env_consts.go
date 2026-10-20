@@ -43,6 +43,7 @@ var (
 	envCPP_PROTO                    = internEnv("CPP_PROTO")
 	envCUDA_ARCHITECTURES           = internEnv("CUDA_ARCHITECTURES")
 	envCUDA_ROOT                    = internEnv("CUDA_ROOT")
+	envCUDA_TARGET_ROOT             = internEnv("CUDA_TARGET_ROOT")
 	envCUDA_VERSION                 = internEnv("CUDA_VERSION")
 	envCURDIR                       = internEnv("CURDIR")
 	envCX16_FLAGS                   = internEnv("CX16_FLAGS")

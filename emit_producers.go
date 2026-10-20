@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	prodCopyFile = iota
+	prodImplib = iota
+	prodCopyFile
 	prodConfigureFile
 	prodAntlrRun
 	prodAntlr4Grammar
@@ -206,7 +207,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	d := e.d
 	module := e.instance.Path.relString()
 
-	n := len(d.copyFiles) + len(d.configureFiles) + len(d.antlrRuns) + len(d.antlr4Grammars) +
+	n := len(d.implibs) + len(d.copyFiles) + len(d.configureFiles) + len(d.antlrRuns) + len(d.antlr4Grammars) +
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
 		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens) + len(d.cgoSrcs)
@@ -276,6 +277,22 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 			push(prodDocsCopy, i, start, end)
 		}
+	}
+
+	for i, entry := range d.implibs {
+		start := len(backing)
+
+		backing = append(backing, implibOutputs(module, entry.Path)...)
+
+		outEnd := len(backing)
+
+		if entry.FromBundle {
+			if v := runInputBuildCandidate(module, entry.Path); v != 0 {
+				backing = append(backing, v)
+			}
+		}
+
+		push(prodImplib, i, start, outEnd)
 	}
 
 	for i, entry := range d.copyFiles {
@@ -728,6 +745,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		switch pos.kind {
 		case prodDocsCopy:
 			e.emitDocsCopy(e.d.docs.copies[pos.index])
+		case prodImplib:
+			e.emitImplib(e.d.implibs[pos.index])
 		case prodCopyFile:
 			e.emitCopyFileStmt(e.d.copyFiles[pos.index])
 		case prodConfigureFile:

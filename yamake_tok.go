@@ -38,6 +38,8 @@ var tokName = [...]STR{
 	tokCppProtoPlugin:                     internStr("CPP_PROTO_PLUGIN"),
 	tokCppProtoPlugin0:                    internStr("CPP_PROTO_PLUGIN0"),
 	tokCppProtoPlugin2:                    internStr("CPP_PROTO_PLUGIN2"),
+	tokGenerateImplib:                     internStr("GENERATE_IMPLIB"),
+	tokLinkExcludeLibraries:               internStr("LINK_EXCLUDE_LIBRARIES"),
 	tokCudaNvccFlags:                      internStr("CUDA_NVCC_FLAGS"),
 	tokSetAppendWithGlobal:                internStr("SET_APPEND_WITH_GLOBAL"),
 	tokData:                               internStr("DATA"),
@@ -540,6 +542,8 @@ const (
 	tokStructCodegen
 	tokStyleDetekt
 	tokYmapsSproto
+	tokGenerateImplib
+	tokLinkExcludeLibraries
 	tokCudaNvccFlags
 	tokSetAppendWithGlobal
 	tokDllTool

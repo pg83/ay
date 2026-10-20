@@ -148,6 +148,7 @@ type ModuleEmitResult struct {
 	CFlagsGlobal                    []ANY
 	CXXFlagsGlobal                  []ANY
 	COnlyFlagsGlobal                []ANY
+	LinkExcludeLibraries            []ANY
 	ObjAddLibsGlobal                []ANY
 	LDFlagsGlobal                   []ANY
 	RPathFlagsGlobal                []ANY
@@ -1857,6 +1858,26 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		})
 	}
 
+	var linkExcludeLibraries []ANY
+
+	dedupers.with(func(deduper *DeDuper) {
+		for _, rp := range resolved {
+			for _, lib := range rp.result.LinkExcludeLibraries {
+				if deduper.addStable(lib.strID()) {
+					linkExcludeLibraries = append(linkExcludeLibraries, lib)
+				}
+			}
+		}
+
+		for _, lib := range d.linkExcludeLibraries {
+			if deduper.addStable(lib.strID()) {
+				linkExcludeLibraries = append(linkExcludeLibraries, lib)
+			}
+		}
+	})
+
+	linkExcludeLibraries = ctx.argSlices.internCopy(linkExcludeLibraries)
+
 	newResult := func() *ModuleEmitResult {
 		r := ctx.results.one()
 
@@ -1870,6 +1891,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			AddInclUserGlobal:               d.addInclUserGlobal,
 			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
 			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
+			LinkExcludeLibraries:            linkExcludeLibraries,
 			ObjAddLibsGlobal:                concatShared(ctx.argSlices, peerObjAddLibsGlobal, d.objAddLibsGlobal),
 			LDFlagsGlobal:                   concatShared(ctx.argSlices, peerLDFlagsGlobal, d.ldFlags),
 			RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
@@ -2154,6 +2176,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ownRPathFlags,
 			peerRPathFlagsGlobal,
 			peerObjAddLibsGlobal,
+			linkExcludeLibraries,
 			exportsScript,
 			d.flags.NoExportDynSymbols,
 			d.flags.NoCompilerWarnings,

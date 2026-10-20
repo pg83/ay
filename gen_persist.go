@@ -40,6 +40,7 @@ func persistResult(ctx *GenCtx, r *ModuleEmitResult) {
 	r.CFlagsGlobal = ctx.argSlices.internCopy(r.CFlagsGlobal)
 	r.CXXFlagsGlobal = ctx.argSlices.internCopy(r.CXXFlagsGlobal)
 	r.COnlyFlagsGlobal = ctx.argSlices.internCopy(r.COnlyFlagsGlobal)
+	r.LinkExcludeLibraries = ctx.argSlices.internCopy(r.LinkExcludeLibraries)
 	r.ObjAddLibsGlobal = ctx.argSlices.internCopy(r.ObjAddLibsGlobal)
 	r.LDFlagsGlobal = ctx.argSlices.internCopy(r.LDFlagsGlobal)
 	r.RPathFlagsGlobal = ctx.argSlices.internCopy(r.RPathFlagsGlobal)
