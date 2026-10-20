@@ -346,4 +346,5 @@ var (
 	argToolsPy2ccStage0                                     = internArg("tools/py2cc/stage0pycc")
 	argISContribToolsCythonPy2CythonIncludes                = internArg("-I$(S)/contrib/tools/cython_py2/Cython/Includes")
 	argSContribToolsCythonPy2CythonPy                       = internArg("$(S)/contrib/tools/cython_py2/cython.py")
+	argWlBsymbolic                                          = internArg("-Wl,-Bsymbolic")
 )

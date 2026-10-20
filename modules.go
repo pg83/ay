@@ -1128,6 +1128,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				usePython2(env, d, d.unit.Tag)
 			}
 
+			if isDllModuleType(v.Name) {
+				d.exportsScript = dllExportsArg(v)
+			}
+
 			if v.Name == tokDocs || v.Name == tokDocsLibrary {
 				d.docs = &DocsData{config: modulePath + "/.yfm"}
 			}
@@ -1659,6 +1663,8 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return ModuleUnit{Type: name, Tag: unitTagPy2, ARPrefix: "libpy", GlobalARTag: tagGlobal, SbomLang: unitSbomPy2}
 	case tokPy2Test:
 		return ModuleUnit{Type: name, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
+	case tokPy2Module:
+		return ModuleUnit{Type: name, Tag: unitTagPy2Native, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy3ProgramBin, tokPy3Test:
 		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
 	case tokPy3Library:

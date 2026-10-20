@@ -86,6 +86,7 @@ var (
 	envHAVE_MKL                     = internEnv("HAVE_MKL")
 	envHOME                         = internEnv("HOME")
 	envJavaHome                     = internEnv("JAVA_HOME")
+	envIS_CROSS_TOOLS               = internEnv("IS_CROSS_TOOLS")
 	envJavaOptions                  = internEnv("_JAVA_OPTIONS")
 	envJavaPath                     = internEnv("JAVA_PATH")
 	envJavaProto                    = internEnv("JAVA_PROTO")

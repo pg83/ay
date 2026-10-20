@@ -228,6 +228,51 @@ class Python2Test(unittest.TestCase):
         self.assertIn(cy["uid"], compile_node["deps"])
         lib.node_by_output(graph, "$(B)/lib/m.reg.cpp")
 
+    def test_py2module_links_a_pic_shared_object(self):
+        files = python2_base()
+        lib.tool_program(files, "tools/fix_elf", "fix_elf")
+        files.update({
+            "mod/ya.make": f"PY2MODULE(ext)\n{NO_PLATFORM}SRCS(ext.c)\nPEERDIR(dep)\nLDFLAGS(-Wl,--own)\nEND()\n",
+            "mod/ext.c": "int ext;\n",
+            "dep/ya.make": f"LIBRARY()\n{NO_PLATFORM}SRCS(d.c)\nEND()\n",
+            "dep/d.c": "int d;\n",
+            "prog/ya.make": f"PROGRAM()\n{NO_PLATFORM}SRCS(m.cpp)\nPEERDIR(dep)\nEND()\n",
+            "prog/m.cpp": "int main(){return 0;}\n",
+        })
+        x86_64 = ("--target-platform", "default-linux-x86_64")
+        graph = lib.make(files, "mod", *x86_64)
+        link = lib.node_by_output(graph, "$(B)/mod/ext.so")
+        self.assertEqual(link["kv"]["p"], "LD")
+        link_args = next(cmd["cmd_args"] for cmd in link["cmds"] if any(arg.endswith("link_dyn_lib.py") for arg in cmd["cmd_args"]))
+        self.assertIn("$(B)/tools/fix_elf/fix_elf", link_args)
+        self.assertIn("-shared", link_args)
+        self.assertIn("-Wl,-soname,ext.so", link_args)
+        self.assertIn("dep/libdep.a", link_args)
+        tail = link_args[link_args.index("-Wl,-z,notext"):]
+        self.assertEqual(tail[:2], ["-Wl,-z,notext", "-Wl,-Bsymbolic"])
+        self.assertIn("-Wl,--own", tail)
+        self.assertNotIn("-Wl,--version-script", " ".join(link_args))
+        ext = args(lib.node_by_output(graph, "$(B)/mod/ext.c.pic.o"))
+        self.assertIn("-fPIC", ext)
+        self.assertIn("-DARCADIA_PYTHON_UNICODE_SIZE=4", ext)
+        self.assertIn("--target=x86_64-linux-gnu", ext)
+        self.assertIn("-fPIC", args(lib.node_by_output(graph, "$(B)/dep/d.c.pic.o")))
+
+        both = lib.make(files, "mod", "prog", *x86_64)
+        self.assertIn("-fPIC", args(lib.node_by_output(both, "$(B)/dep/d.c.pic.o")))
+        self.assertNotIn("-fPIC", args(lib.node_by_output(both, "$(B)/dep/d.c.o")))
+
+    def test_py2module_versions_are_not_modelled(self):
+        files = python2_base()
+        lib.tool_program(files, "tools/fix_elf", "fix_elf")
+        files.update({
+            "mod/ya.make": f"PY2MODULE(ext 1 2)\n{NO_PLATFORM}SRCS(ext.c)\nEND()\n",
+            "mod/ext.c": "int ext;\n",
+        })
+        result = lib.make_process(files, "mod")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("versions (1) are not modelled", result.stderr)
+
     def test_py2_bytecode_tool_follows_use_light_py2cc(self):
         files = python2_base()
         files.update({

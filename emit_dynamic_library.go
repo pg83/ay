@@ -13,19 +13,42 @@ func dllOutputName(instance ModuleInstance, stmt *ModuleStmt) string {
 	prefix := "lib"
 	name := ""
 
+	if stmt.Name == tokPy2Module {
+		prefix = ""
+	}
+
 	if len(stmt.Args) > 0 {
 		name = stmt.Args[0].string()
 	} else {
 		name = javaRealPrjName(instance.Path.relString(), javaNameTwoDirs)
 	}
 
-	for i := 1; i+1 < len(stmt.Args); i++ {
-		if stmt.Args[i].string() == "PREFIX" {
-			prefix = stmt.Args[i+1].string()
+	for i := 1; i < len(stmt.Args); i++ {
+		switch stmt.Args[i].string() {
+		case "PREFIX":
+			if i+1 < len(stmt.Args) {
+				prefix = stmt.Args[i+1].string()
+			}
+
+			i++
+		case "EXPORTS":
+			i++
+		default:
+			throwFmt("gen: %s: %s versions (%s) are not modelled", instance.Path.relString(), stmt.Name, stmt.Args[i].string())
 		}
 	}
 
 	return prefix + name + ".so"
+}
+
+func dllExportsArg(stmt *ModuleStmt) *ANY {
+	for i := 1; i+1 < len(stmt.Args); i++ {
+		if stmt.Args[i].string() == "EXPORTS" {
+			return &stmt.Args[i+1]
+		}
+	}
+
+	return nil
 }
 
 func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {

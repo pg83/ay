@@ -45,6 +45,7 @@ type DynLibLink struct {
 	soname    string
 	fixElf    VFS
 	fixElfRef NodeRef
+	symbolic  bool
 }
 
 func (e *EmitContext) emitLD(
@@ -390,13 +391,13 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 	}
 
 	cmdArgs = appendAnyLists(cmdArgs, p.Linker.EndGroup, p.Linker.AfterPeers)
-	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm, dyn != nil)...)
+	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm, dyn)...)
 	na.anys.commit(len(cmdArgs))
 
 	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
-func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm, dynLib bool) []ANY {
+func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm bool, dyn *DynLibLink) []ANY {
 	var trailer []ANY
 
 	if !noExportDynSymbols {
@@ -423,8 +424,12 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 
 	trailer = appendInternAnys(trailer, p.linkerSelectionGDBIndexFlags())
 
-	if dynLib && p.OS == OSLinux {
+	if dyn != nil && p.OS == OSLinux {
 		trailer = append(trailer, argWlZNotext.any())
+	}
+
+	if dyn != nil && dyn.symbolic {
+		trailer = append(trailer, argWlBsymbolic.any())
 	}
 
 	trailer = appendAnyLists(trailer, peerRPathFlagsGlobal)

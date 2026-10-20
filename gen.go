@@ -537,11 +537,11 @@ func isFinalTargetModuleType(name TOK) bool {
 }
 
 func picTransition(name TOK) bool {
-	return name == tokDll || name == tokDllJava
+	return name == tokDll || name == tokDllJava || name == tokPy2Module
 }
 
 func isDllModuleType(name TOK) bool {
-	return name == tokDll || name == tokDllTool
+	return name == tokDll || name == tokDllTool || name == tokPy2Module
 }
 
 func (e *EmitContext) moduleInputArg(arg *ANY) *ANY {
@@ -589,7 +589,7 @@ func stmtsModuleName(stmts []Stmt) TOK {
 
 func isLinkingModuleType(name TOK) bool {
 	switch name {
-	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary:
+	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary, tokPy2Module:
 		return true
 	}
 
@@ -845,6 +845,10 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	if !d.hadAllocator && isDllModuleType(d.moduleStmt.Name) {
 		d.hadAllocator = true
 		d.allocatorName = strFAKE.any()
+	}
+
+	if d.moduleStmt.Name == tokPy2Module && instance.Platform.ifEnv.bool(envIS_CROSS_TOOLS) {
+		d.peerdirs = append(d.peerdirs, strContribToolsPythonLib.any())
 	}
 
 	py3ProtoVariant := d.moduleStmt.Name == tokProtoLibrary && d.usePython3
@@ -2235,7 +2239,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if isDllModuleType(d.moduleStmt.Name) {
 			binaryName = dllOutputName(instance, d.moduleStmt)
-			dyn = &DynLibLink{soname: binaryName}
+			dyn = &DynLibLink{soname: binaryName, symbolic: d.moduleStmt.Name == tokPy2Module && instance.Platform.OS != OSDarwin && instance.Platform.OS != OSWindows}
 
 			if instance.Platform.OS == OSLinux && instance.Platform.ISA == ISAX8664 {
 				dyn.fixElfRef, dyn.fixElf = ctx.tool(argToolsFixElf)

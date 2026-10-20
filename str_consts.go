@@ -191,6 +191,7 @@ var (
 	strCopyFiles                                                                             = internStr("copy_files")
 	strCopyTo                                                                                = internStr("--copy-to")
 	strCp                                                                                    = internStr("-cp")
+	strContribToolsPythonLib                                                                 = internStr("contrib/tools/python/lib")
 	strCpp                                                                                   = internStr(".cpp")
 	strCpp2                                                                                  = internStr("cpp")
 	strCppParts                                                                              = internStr("--cpp-parts")
