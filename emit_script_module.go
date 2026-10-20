@@ -106,11 +106,13 @@ func (e *EmitContext) scriptModuleResult(ref NodeRef, out VFS, peers []VFS, glob
 	res.JavaClosure = append(append([]VFS{}, peers...), out)
 
 	for _, kind := range []ModuleKind{KindLib, KindBin} {
-		for _, demand := range []ModuleDemand{demandNone, demandSelf, demandLinked} {
-			alias := e.instance
+		for _, language := range []Language{e.instance.Language, LangNone, LangCPP} {
+			for _, demand := range []ModuleDemand{demandNone, demandSelf, demandLinked} {
+				alias := e.instance
 
-			alias.Kind, alias.Demand = kind, demand
-			e.ctx.memoPut(alias, res)
+				alias.Kind, alias.Language, alias.Demand = kind, language, demand
+				e.ctx.memoPut(alias, res)
+			}
 		}
 	}
 

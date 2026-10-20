@@ -59,6 +59,20 @@ END()
         self.assertIn(extract["uid"], compile["deps"])
         self.assertIn("$(S)/mod/dependency.h", compile["inputs"])
 
+    def test_union_peer_of_a_union_and_test_dependency_is_one_module(self):
+        graph = lib.make({
+            "data/ya.make": "UNION()\nFROM_SANDBOX(1 OUT_NOAUTO data.bin)\nEND()\n",
+            "run/ya.make": "UNION()\nPEERDIR(data)\nFROM_SANDBOX(2 OUT_NOAUTO jams.pb)\nEND()\n",
+            "lib/ut/ya.make": f"UNITTEST()\n{lib.BARE_MODULE}SRCS(t.cpp)\nDEPENDS(data)\nEND()\n",
+            "lib/ut/t.cpp": "",
+            "library/cpp/testing/unittest_main/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}SRCS(m.cpp)\nEND()\n",
+            "library/cpp/testing/unittest_main/m.cpp": "",
+        }, "run", "lib/ut", "-t")
+        package = lib.node_by_output(graph, "$(B)/data/data.pkg.fake")
+        self.assertEqual([n for n in graph["graph"] if "$(B)/data/data.pkg.fake" in n["outputs"]], [package])
+        run = lib.node_by_output(graph, "$(B)/lib/ut/test-results/unittest/meta.json")
+        self.assertIn(package["uid"], run["deps"])
+
 
 if __name__ == "__main__":
     unittest.main()
