@@ -791,7 +791,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 
 		switch srcExtClassOf(src) {
 		case srcExtEv:
-			if !evInduced {
+			if !evInduced && !isGoModuleType(d.unit.Type) {
 				evInduced = true
 				d.peerdirs = append(d.peerdirs, strLibraryCppEventlog.any(), strContribLibsProtobuf.any())
 			}

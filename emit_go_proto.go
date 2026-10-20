@@ -56,7 +56,9 @@ func goGrpcImports(std string) []string {
 
 func goModuleHasProtos(d *ModuleData) bool {
 	return slices.ContainsFunc(d.srcs, func(m SrcMeta) bool {
-		return srcExtClassOf(m.Source.relOrSelf().any()) == srcExtProto
+		c := srcExtClassOf(m.Source.relOrSelf().any())
+
+		return c == srcExtProto || c == srcExtEv
 	})
 }
 
@@ -137,12 +139,13 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 	protoSrc := source(protoRel)
 	cwd := srcRootDirVFS
 
-	if e.codegen.use(build(protoRel)) != nil {
+	if info := e.codegen.use(build(protoRel)); info != nil {
 		protoSrc = build(protoRel)
 		cwd = bldRootDirVFS
+		tools = append(tools, info.ProducerRef)
 	}
 
-	closure := e.scanner.walkClosure(source(protoRel), d.scanCtx, scanDomainProto).bucketList()
+	closure := e.scanner.walkClosure(protoSrc, d.scanCtx, scanDomainProto).bucketList()
 	inputs := na.inputs.alloc(2 + len(closure))[:0]
 
 	inputs = append(inputs, na.vfsList(toolPaths...), na.vfsList(goProtoWrapperVFS, protoSrc))
@@ -167,6 +170,14 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 			e.collectGoAutoSource(out)
 		}
 	}
+}
+
+func (e *EmitContext) emitGoEvSource(meta SrcMeta) {
+	name := e.moduleSourceName(meta.Source)
+	dst := build(e.instance.Path.relString(), "/", name, ".proto")
+
+	e.emitGoCopyWithContext(internStr(name).any(), dst, scanDomainProto)
+	e.emitGoProtoSource(SrcMeta{Source: dst.any()})
 }
 
 func (e *EmitContext) emitGoProtoSource(meta SrcMeta) {

@@ -474,6 +474,27 @@ class GoCodegenTest(unittest.TestCase):
         self.assertEqual(peers[7], f"{STD}/sync/sync.a")
         self.assertIn("vendor/google.golang.org/protobuf/types/known/wrapperspb/wrapperspb.a", peers)
 
+    def test_ev_sources_of_the_go_variant_are_copied_to_proto(self):
+        files = go_proto_world()
+        files["build/scripts/fs_tools.py"] = ""
+        files["library/cpp/eventlog/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(e.cpp)\nEND()\n"
+        files["library/cpp/eventlog/e.cpp"] = "int e;\n"
+        files["p/ev/ya.make"] = "PROTO_LIBRARY()\nSRCS(log.ev)\nEND()\n"
+        files["p/ev/log.ev"] = 'syntax = "proto3";\n'
+        go_module(files, "g/user", macros="PEERDIR(p/ev)\n")
+        graph = lib.make(files, "g/user")
+        copy = lib.node_by_output(graph, "$(B)/p/ev/log.ev.proto")
+        self.assertEqual(copy["kv"]["p"], "CP")
+        self.assertEqual(copy["cmds"][0]["cmd_args"][-2:], ["$(S)/p/ev/log.ev", "$(B)/p/ev/log.ev.proto"])
+        pb = lib.node_by_output(graph, "$(B)/p/ev/log.ev.pb.go")
+        self.assertEqual(pb["cmds"][0]["cwd"], "$(B)")
+        self.assertEqual(arg_after(pb["cmds"][0]["cmd_args"], "--proto"), "p/ev/log.ev.proto")
+        self.assertIn(copy["uid"], pb["deps"])
+        self.assertIn("$(S)/p/ev/log.ev", pb["inputs"])
+        package = lib.node_by_output(graph, "$(B)/p/ev/ev.a")
+        self.assertEqual(between(go_tool_args(package), "++srcs", "++asm-flags"), ["$(B)/p/ev/log.ev.pb.go"])
+        self.assertFalse([o for n in graph["graph"] for o in n["outputs"] if o.startswith("$(B)/library/cpp/eventlog/")])
+
     def test_go_protoc_lists_own_proto_includes_before_the_peer_ones(self):
         files = go_proto_world()
         files["p/base/ya.make"] = "PROTO_LIBRARY()\nPROTO_NAMESPACE(GLOBAL p/base)\nSRCS(base.proto)\nEND()\n"

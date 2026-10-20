@@ -84,7 +84,11 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtY:
 		e.emitBisonY(meta)
 	case srcExtEv:
-		e.emitLibraryEvSource(meta)
+		if isGoModuleType(e.d.unit.Type) {
+			e.emitGoEvSource(meta)
+		} else {
+			e.emitLibraryEvSource(meta)
+		}
 	case srcExtRl:
 		e.emitLibraryRagel5Source(meta)
 	case srcExtFml:

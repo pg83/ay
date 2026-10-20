@@ -174,24 +174,28 @@ func (e *EmitContext) goCgoOut(f ANY, suffix string) VFS {
 }
 
 func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
+	module := e.instance.Path.relString()
+	dstVFS := build(module, "/", srcRel.string())
+
+	if len(e.d.cgoSrcs) > 0 {
+		e.emitGoCopyWithContext(srcRel, dstVFS, scanDomainCC, build(module, "/_cgo_export.h"), e.goCgoOut(e.d.cgoSrcs[0], ".cgo1.go"))
+	} else {
+		e.emitGoCopyWithContext(srcRel, dstVFS, scanDomainCC)
+	}
+}
+
+func (e *EmitContext) emitGoCopyWithContext(srcRel ANY, dstVFS VFS, domain ScanDomain, leaves ...VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	module := instance.Path.relString()
 	srcVFS := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
-	dstVFS := build(module, "/", srcRel.string())
 	ref := ctx.emit.reserve()
 	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
 	scripts := ctx.scripts[copyFsToolsVFS.rel()]
-	leafBlock := na.vfs.alloc(3)
-	nl := 0
-	pushLeaf := func(p VFS) { leafBlock[nl] = p; nl++ }
+	leafBlock := na.vfs.alloc(1 + len(leaves))
 
-	pushLeaf(srcVFS)
+	leafBlock[0] = srcVFS
 
-	if len(d.cgoSrcs) > 0 {
-		pushLeaf(build(module, "/_cgo_export.h"))
-		pushLeaf(e.goCgoOut(d.cgoSrcs[0], ".cgo1.go"))
-	}
+	nl := 1 + copy(leafBlock[1:], leaves)
 
 	na.vfs.commit(nl)
 
@@ -199,7 +203,7 @@ func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
 	scanCtx := d.scanCtx
 
 	pe := func() {
-		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
+		cv := scanner.walkClosure(srcVFS, scanCtx, domain)
 		block := na.vfs.alloc(len(scripts) + cv.len())
 		k := 0
 
