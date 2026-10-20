@@ -318,6 +318,65 @@ class RunProgramTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, r'cwdVFS: unexpected cwd "relative/dir"'):
             lib.make(files, "lib")
 
+    def test_root_lazy_module_renders_its_deferred_program(self):
+        files = {
+            "pkg/ya.make": (
+                "UNION(pkg)\n"
+                "RUN_PROGRAM(tools/gen --build ${BINDIR} --source ${CURDIR}\n"
+                "  OUT_NOAUTO data.txt ENV DIR=${CURDIR} CWD ${BINDIR})\n"
+                "END()\n"
+            ),
+        }
+        lib.tool_program(files, "tools/gen", "gen")
+        graph = lib.make(files, "pkg")
+        producer = lib.only_node_by_kind(graph, "PR")
+        self.assertEqual(producer["outputs"], ["$(B)/pkg/data.txt"])
+        self.assertEqual(producer["cmds"][0]["cmd_args"], [
+            "$(B)/tools/gen/gen", "--build", "$(B)/pkg", "--source", "$(S)/pkg",
+        ])
+        self.assertEqual(producer["cmds"][0]["cwd"], "$(B)/pkg")
+        self.assertEqual(producer["cmds"][0]["env"]["DIR"], "$(S)/pkg")
+        module = lib.node_by_output(graph, "$(B)/pkg/pkg.pkg.fake")
+        self.assertIn(producer["uid"], module["deps"])
+        self.assertIn(module["uid"], graph["result"])
+
+    def test_nested_lazy_modules_restore_the_consumer_frame(self):
+        for root_type in ("UNION", "LIBRARY"):
+            with self.subTest(root_type=root_type):
+                files = {
+                    "inner/ya.make": (
+                        "UNION(inner)\n"
+                        "RUN_PROGRAM(tools/gen ${BINDIR} ${CURDIR}\n"
+                        "  OUT_NOAUTO data.txt ENV DIR=${CURDIR} CWD ${BINDIR})\n"
+                        "END()\n"
+                    ),
+                    "outer/ya.make": (
+                        f"{root_type}(outer)\n{BARE}"
+                        "PEERDIR(inner)\n"
+                        "RUN_PROGRAM(tools/gen ${BINDIR} ${CURDIR}\n"
+                        "  IN ${ARCADIA_BUILD_ROOT}/inner/inner.pkg.fake\n"
+                        "  OUT out.cpp ENV DIR=${CURDIR} CWD ${BINDIR})\n"
+                        "END()\n"
+                    ),
+                }
+                lib.tool_program(files, "tools/gen", "gen")
+                graph = lib.make(files, "outer")
+                producers = {
+                    node["outputs"][0]: node for node in graph["graph"]
+                    if node.get("kv", {}).get("p") == "PR"
+                }
+                for module, output in (("inner", "data.txt"), ("outer", "out.cpp")):
+                    node = producers[f"$(B)/{module}/{output}"]
+                    [cmd] = node["cmds"]
+                    self.assertEqual(cmd["cmd_args"], [
+                        "$(B)/tools/gen/gen", f"$(B)/{module}", f"$(S)/{module}",
+                    ])
+                    self.assertEqual(cmd["cwd"], f"$(B)/{module}")
+                    self.assertEqual(cmd["env"]["DIR"], f"$(S)/{module}")
+                inner = lib.node_by_output(graph, "$(B)/inner/inner.pkg.fake")
+                self.assertIn(producers["$(B)/inner/data.txt"]["uid"], inner["deps"])
+                self.assertIn(inner["uid"], producers["$(B)/outer/out.cpp"]["deps"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

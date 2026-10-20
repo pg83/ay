@@ -48,6 +48,17 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 	node.DepRefs = na.refList(dedupRefs(refs)...)
 
 	pending := e.pendingEmit(func() {
+		if node.Module {
+			previous := ctx.pushFrame()
+
+			ctx.frames[ctx.frameDepth-1] = e.frame
+
+			defer func() {
+				ctx.frames[ctx.frameDepth-1] = previous
+				ctx.popFrame()
+			}()
+		}
+
 		for _, input := range needs {
 			reg.use(input)
 		}
