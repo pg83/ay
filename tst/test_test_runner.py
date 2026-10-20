@@ -52,6 +52,25 @@ class TestRunnerOptions(unittest.TestCase):
         filtered = lib.make(files, "lib/ut", "-t", "--test-size", "small")
         self.assertFalse(any("/unittest/meta.json" in o for n in filtered["graph"] for o in n["outputs"]))
 
+    def test_pytest_uses_global_build_type_and_combined_flags(self):
+        graph = lib.make({"a/ya.make": "EXECTEST()\nRUN(tool)\nEND()\n"}, "a", "-t", "--build", "release", "--target-platform-build-type", "relwithdebinfo", "-DGLOBAL=one", "--target-platform-flag", "TARGET=two")
+        args = lib.node_by_output(graph, "$(B)/a/test-results/exectest/meta.json")["cmds"][0]["cmd_args"]
+        self.assertEqual(args[args.index("--build-type") + 1], "release")
+        flags = [args[i + 1] for i, arg in enumerate(args) if arg == "--flags"]
+        self.assertIn("GLOBAL=one", flags)
+        self.assertIn("TARGET=two", flags)
+        self.assertIn("SANDBOXING=yes", flags)
+        self.assertIn("DISABLE_FLAKE8_MIGRATIONS=yes", flags)
+        self.assertEqual(flags, sorted(flags))
+
+    def test_split_index_metadata_includes_zero(self):
+        files = fixture()
+        files["lib/ut/ya.make"] = files["lib/ut/ya.make"].replace("END()", "SPLIT_FACTOR(2)\nEND()")
+        graph = lib.make(files, "lib/ut", "-t")
+        for index in range(2):
+            node = lib.node_by_output(graph, f"$(B)/lib/ut/test-results/unittest/chunk{index}/meta.json")
+            self.assertEqual(node["kv"]["split_index"], index)
+
     def test_recipe_delimiters_and_run_quoting(self):
         graph = lib.make({"a/ya.make": 'EXECTEST()\nRUN(tool "two words")\nUSE_RECIPE(first start)\nUSE_RECIPE(second start)\nEND()\n'}, "a", "-t")
         run = lib.node_by_output(graph, "$(B)/a/test-results/exectest/meta.json")

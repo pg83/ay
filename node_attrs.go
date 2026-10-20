@@ -189,6 +189,9 @@ func (c PColor) string() string {
 }
 
 type KV struct {
+	SplitFile        string
+	SplitIndex       int
+	HasSplitIndex    bool
 	P                ProcKind
 	PC               PColor
 	ShowOut          bool
@@ -315,6 +318,8 @@ func appendKV(buf []byte, kv KV, exts []KVExt) []byte {
 	if kv.HasSpecialRunner {
 		o.forceStr("special_runner", kv.SpecialRunner)
 	}
+
+	o.str("split_file", kv.SplitFile)
 
 	if kv.HasSplitIndex {
 		o.num("split_index", float64(kv.SplitIndex))

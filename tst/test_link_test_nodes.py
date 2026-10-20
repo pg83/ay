@@ -243,6 +243,10 @@ class TestNodesTest(unittest.TestCase):
                 self.assertIn("--doctest-modules", args)
                 self.assertEqual(args[args.index("--test-type") + 1], "py3test" if macro == "PY3TEST" else "pytest")
                 self.assertEqual(run["env"]["PYTHONDONTWRITEBYTECODE"], "1")
+                self.assertEqual(run["env"]["ASAN_OPTIONS"], "exitcode=100:detect_leaks=0")
+                self.assertEqual(run["env"]["ASAN_OPTIONS_ORIGINAL"], "exitcode=100")
+                self.assertEqual(args[args.index("--dep-root") + 1], "a/ut")
+                self.assertEqual(args[args.index("--tb") + 1], "short")
 
     def test_generated_python_test_sources_retain_producer_dependencies(self):
         for macro in ("PY3TEST",):
@@ -270,6 +274,10 @@ class TestNodesTest(unittest.TestCase):
                 self.assertIn("--doctest-modules", args)
                 self.assertEqual(args[args.index("--test-type") + 1], "py3test" if macro == "PY3TEST" else "pytest")
                 self.assertEqual(run["env"]["PYTHONDONTWRITEBYTECODE"], "1")
+                self.assertEqual(run["env"]["ASAN_OPTIONS"], "exitcode=100:detect_leaks=0")
+                self.assertEqual(run["env"]["ASAN_OPTIONS_ORIGINAL"], "exitcode=100")
+                self.assertEqual(args[args.index("--dep-root") + 1], "a/ut")
+                self.assertEqual(args[args.index("--tb") + 1], "short")
 
                 generated = lib.node_by_output(graph, "$(B)/a/ut/test_sample.py")
                 bytecode = lib.node_by_output(graph, "$(B)/a/ut/test_sample.py.yapyc3")
@@ -311,6 +319,7 @@ class TestNodesTest(unittest.TestCase):
             node = lib.node_by_output(graph, f"$(B)/a/test-results/py3test/{name}/meta.json")
             args = node["cmds"][0]["cmd_args"]
             self.assertEqual(args[args.index("--test-file-filter") + 1], name + ".py")
+            self.assertEqual(node["kv"]["split_file"], name + ".py")
         result = lib.node_by_output(graph, "$(B)/a/test-results/py3test/meta.json")
         self.assertEqual(result["kv"]["p"], "TA")
 

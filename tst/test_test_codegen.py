@@ -42,6 +42,12 @@ class TestCodegenModules(unittest.TestCase):
             self.assertNotIn("$(S)/a/a.yaml", node["inputs"])
             self.assertNotIn("$(S)/a/canondata/result.json", node["inputs"])
 
+        files["a/ya.make"] = files["a/ya.make"].replace("STYLE_JSON()", "USRV_STYLE_JSON_CURRENT_DIRECTORY()").replace("STYLE_YAML(DIRS_RECURSE configs)", "USRV_STYLE_YAML_CURRENT_DIRECTORY()")
+        graph = lib.make(files, "a", "-t")
+        for name in ("clang_format_json", "yamlfmt"):
+            node = lib.node_by_output(graph, f"$(B)/a/test-results/{name}/meta.json")
+            self.assertNotIn("$(S)/a/configs/sub/options.yml", node["inputs"])
+
     def test_generated_library_can_be_both_peer_and_recursed_root(self):
         files = {
             "a/ya.make": "LIBRARY()\n" + BARE + "SRCS(a.cpp)\nPEERDIR(gen)\nEND()\nRECURSE_FOR_TESTS(ut)\n",

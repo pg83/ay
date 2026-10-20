@@ -133,7 +133,17 @@ func testInnerCommand(info TestSuiteInfo, resultsDir string, p *Platform) []ANY 
 			command = append(command, "--collect-cores")
 		}
 
-		command = append(command, "--build-type", p.BuildType)
+		buildType := info.Options.BuildType
+
+		if buildType == "" {
+			buildType = p.BuildType
+		}
+
+		command = append(command, "--build-type", buildType)
+
+		if info.Options.Traceback != "" {
+			command = append(command, "--tb", info.Options.Traceback)
+		}
 
 		if info.SplitFactor > 1 {
 			command = append(command, "--modulo", strconv.Itoa(info.SplitFactor), "--modulo-index", strconv.Itoa(info.SplitIndex), "--partition-mode", testPartition(info))
@@ -143,7 +153,19 @@ func testInnerCommand(info TestSuiteInfo, resultsDir string, p *Platform) []ANY 
 			command = append(command, "--split-by-tests")
 		}
 
-		command = append(command, "--dep-root", "$(B)/"+info.ProjectPath)
+		command = append(command, "--dep-root", info.ProjectPath)
+
+		for _, flag := range info.Options.Flags {
+			command = append(command, "--flags", flag)
+		}
+
+		for _, flag := range info.Options.Flags {
+			if sanitizer, found := strings.CutPrefix(flag, "SANITIZER_TYPE="); found && sanitizer != "" {
+				command = append(command, "--sanitize", sanitizer)
+
+				break
+			}
+		}
 
 		if info.SplitFile != "" {
 			command = append(command, "--test-file-filter", info.SplitFile)

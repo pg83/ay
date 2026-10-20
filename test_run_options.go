@@ -9,6 +9,9 @@ import (
 )
 
 type TestRunOptions struct {
+	BuildType   string
+	Traceback   string
+	Flags       []string
 	Dist        bool
 	Cache       bool
 	Retries     int
@@ -22,6 +25,31 @@ func (mf *MakeFlags) testRunOptions() TestRunOptions {
 
 	options.Dist = mf.dist
 	options.TargetFlags = mf.tflags
+
+	flags := map[string]string{}
+
+	copyStatsFlags(flags, mf.dflags)
+	copyStatsFlags(flags, mf.tflags)
+
+	if enabled, present := os.LookupEnv("YA_TEST_DISABLE_FLAKE8_MIGRATIONS"); !present || strIsTruthy(internStr(enabled)) {
+		flags["DISABLE_FLAKE8_MIGRATIONS"] = "yes"
+	}
+
+	if mf.sandboxing {
+		flags["SANDBOXING"] = "yes"
+		flags["FAKEID"] += "sandboxing"
+	}
+
+	for key, value := range flags {
+		switch key {
+		case "RECURSE_PARTITION_INDEX", "RECURSE_PARTITIONS_COUNT", "CONSISTENT_DEBUG":
+			continue
+		}
+
+		options.Flags = append(options.Flags, key+"="+value)
+	}
+
+	slices.Sort(options.Flags)
 
 	if mf.testLevel > 0 {
 		for _, entry := range os.Environ() {

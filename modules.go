@@ -2343,6 +2343,16 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if strict && enabled == (v.Name == tokNoBuildIf) {
 			d.discarded = true
 		}
+	case tokUsrvStyleJSON, tokUsrvStyleYAML:
+		v.Args = nil
+
+		if v.Name == tokUsrvStyleJSON {
+			v.Name = tokStyleJSON
+		} else {
+			v.Name = tokStyleYAML
+		}
+
+		d.collectStyleCheck(fs, modulePath, v, env)
 	case tokStyleJSON, tokStyleYAML:
 		d.collectStyleCheck(fs, modulePath, v, env)
 	case tokUsrvBuild:

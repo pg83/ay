@@ -341,7 +341,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 	config := getopt.Config{
 		Opts: getopt.OptStr("GrdktThxD:j:B:o:I:C:"),
 		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stat,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,host-build-type:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:,jobs:,ninja,define:," +
-			"target:,build:,target-platform-build-type:,target-platform-flag:,target-platform-tests,test-size:," +
+			"target:,build:,target-platform-build-type:,target-platform-flag:,target-platform-tests,test-size:,test-traceback:," +
 			"dist,ignore-nodes-exit-code,warning-mode:,cache-tests,output-only-tests,cache-namespace:,report-skipped-suites,tests-retries:," +
 			"backup-test-results,add-modules-to-results,do-not-output-stderrs,no-src-links,add-changed-ok-configures,no-yt-store"),
 		Mode: getopt.ModeInOrder,
@@ -352,6 +352,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 
 	mf := &MakeFlags{
 		buildType:     "debug",
+		testOptions:   TestRunOptions{Traceback: "short"},
 		hostBuildType: "release",
 		dflags:        map[string]string{},
 		threads:       runtime.NumCPU(),
@@ -436,6 +437,8 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.cacheTests = true
 		case opt.Name == "tests-retries":
 			mf.testOptions.Retries = throw2(strconv.Atoi(opt.OptArg))
+		case opt.Name == "test-traceback":
+			mf.testOptions.Traceback = opt.OptArg
 		case opt.Char == 'x', opt.Name == "ignore-nodes-exit-code",
 			opt.Name == "warning-mode", opt.Name == "output-only-tests",
 			opt.Name == "cache-namespace", opt.Name == "report-skipped-suites",
@@ -455,6 +458,8 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.targets = append(mf.targets, opt.OptArg)
 		}
 	}
+
+	mf.testOptions.BuildType = mf.buildType
 
 	if targetBuildType != "" {
 		mf.buildType = targetBuildType

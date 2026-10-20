@@ -297,6 +297,9 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 		Inputs: na.inputList(inputs),
 		KV: &KV{
 			P:                testNodeKind(info.Size),
+			SplitFile:        info.SplitFile,
+			SplitIndex:       info.SplitIndex,
+			HasSplitIndex:    info.SplitFactor > 1,
 			Path:             path.Join(info.ProjectPath, info.Name),
 			PC:               pcYellow,
 			RunTestNode:      true,
@@ -533,6 +536,15 @@ func suiteTestEnv(p *Platform, info TestSuiteInfo) EnvVars {
 
 	if isPythonSuite(info) {
 		vars = append(vars, EnvVar{Name: envPythondontwritebytecode, Value: strOne.any()})
+	}
+
+	if info.Type == "pytest" || info.Type == "py3test" {
+		for i, item := range vars {
+			if item.Name == envASAN_OPTIONS || item.Name == envLSAN_OPTIONS {
+				vars[i].Value = internStr(item.Value.string() + ":detect_leaks=0").any()
+				vars = append(vars, EnvVar{Name: internEnv(item.Name.string() + "_ORIGINAL"), Value: item.Value})
+			}
+		}
 	}
 
 	return vars

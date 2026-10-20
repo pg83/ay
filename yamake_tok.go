@@ -1,15 +1,17 @@
 package main
 
 var tokName = [...]STR{
-	tokStyleJSON:   internStr("STYLE_JSON"),
-	tokStyleYAML:   internStr("STYLE_YAML"),
-	tokGenLibrary:  internStr("GEN_LIBRARY"),
-	tokUsrvBuild:   internStr("USRV_BUILD"),
-	tokUsrvAllSrcs: internStr("USRV_ALL_SRCS"),
-	tokExectest:    internStr("EXECTEST"),
-	tokRun:         internStr("RUN"),
-	tokPy3Test:     internStr("PY3TEST"),
-	tokPy2Test:     internStr("PY2TEST"),
+	tokUsrvStyleJSON: internStr("USRV_STYLE_JSON_CURRENT_DIRECTORY"),
+	tokUsrvStyleYAML: internStr("USRV_STYLE_YAML_CURRENT_DIRECTORY"),
+	tokStyleJSON:     internStr("STYLE_JSON"),
+	tokStyleYAML:     internStr("STYLE_YAML"),
+	tokGenLibrary:    internStr("GEN_LIBRARY"),
+	tokUsrvBuild:     internStr("USRV_BUILD"),
+	tokUsrvAllSrcs:   internStr("USRV_ALL_SRCS"),
+	tokExectest:      internStr("EXECTEST"),
+	tokRun:           internStr("RUN"),
+	tokPy3Test:       internStr("PY3TEST"),
+	tokPy2Test:       internStr("PY2TEST"),
 
 	tokDepends:       internStr("DEPENDS"),
 	tokTestCwd:       internStr("TEST_CWD"),
@@ -348,11 +350,13 @@ var tokBySTR = func() []TOK {
 }()
 
 const (
-	tokGenLibrary  TOK = tokSrcResource + 1
-	tokUsrvBuild   TOK = tokSrcResource + 2
-	tokUsrvAllSrcs TOK = tokSrcResource + 3
-	tokStyleJSON   TOK = tokUsrvAllSrcs + 1
-	tokStyleYAML   TOK = tokUsrvAllSrcs + 2
+	tokGenLibrary    TOK = tokSrcResource + 1
+	tokUsrvBuild     TOK = tokSrcResource + 2
+	tokUsrvAllSrcs   TOK = tokSrcResource + 3
+	tokStyleJSON     TOK = tokUsrvAllSrcs + 1
+	tokStyleYAML     TOK = tokUsrvAllSrcs + 2
+	tokUsrvStyleJSON TOK = tokStyleYAML + 1
+	tokUsrvStyleYAML TOK = tokStyleYAML + 2
 )
 
 const (
