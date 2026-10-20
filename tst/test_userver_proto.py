@@ -25,6 +25,9 @@ def userver_files():
         "model/b.proto": 'syntax = "proto3";\nmessage B {}\n',
         "desc/ya.make": "PROTO_DESCRIPTIONS()\nPEERDIR(model)\nEND()\n",
     })
+    files["contrib/tools/protoc/ya.make"] = files["contrib/tools/protoc/ya.make"].replace(
+        "END()", "INDUCED_DEPS(cpp runtime/protoc.hpp)\nEND()")
+    files["runtime/protoc.hpp"] = ""
     return files
 
 
@@ -64,6 +67,7 @@ class UserverProtoTest(unittest.TestCase):
             compiled = next(n for n in graph["graph"] if n["kv"]["p"] == "CC" and src in n["inputs"])
             self.assertIn("$(S)/runtime/common.hpp", compiled["inputs"])
             self.assertIn("$(S)/runtime/impl.hpp", compiled["inputs"])
+            self.assertIn("$(S)/runtime/protoc.hpp", compiled["inputs"])
             self.assertIn(f"$(B)/model/{name}.pb.h", compiled["inputs"])
 
     def test_userver_structs_queries_origin_inputs_and_maps_imports(self):
@@ -93,6 +97,8 @@ class UserverProtoTest(unittest.TestCase):
         self.assertIn("$(B)/model/b.structs.usrv.pb.hpp", compiled["inputs"])
         self.assertIn(b["uid"], compiled["deps"])
         self.assertIn("$(S)/runtime/impl.hpp", compiled["inputs"])
+        self.assertIn("$(S)/runtime/protoc.hpp", compiled["inputs"])
+        self.assertIn("$(B)/model/a.structs.usrv.pb.hpp", compiled["inputs"])
 
 
 if __name__ == "__main__":

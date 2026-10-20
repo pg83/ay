@@ -454,7 +454,7 @@ class ExecBuildTest(unittest.TestCase):
         stats = plain(result.stderr).split("\n10 longest tasks:\n")[1]
         longest = stats.split("\n\n")[0].splitlines()
         self.assertEqual(len(longest), 10)
-        self.assertEqual(len(built_kinds(result.stderr)), 15)
+        self.assertEqual(len(built_kinds(result.stderr)), 14)
         archive = (ws.inst / "many" / "libmany.a").read_text()
         self.assertEqual(archive.count("obj s"), 10)
 

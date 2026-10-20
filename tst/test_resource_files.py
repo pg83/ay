@@ -58,6 +58,21 @@ def make_error(files):
 
 
 class ResourceFilesTest(unittest.TestCase):
+    def test_plugin_resource_peer_follows_explicit_peers(self):
+        for macro in ("RESOURCE_FILES(data.txt)", "ALL_RESOURCE_FILES(txt .)"):
+            with self.subTest(macro=macro):
+                files = base_files(f"{macro}\nPEERDIR(peer)\nSRCS(a.cpp)\n")
+                files.update({
+                    "lib/data.txt": "",
+                    "lib/a.cpp": "",
+                    "peer/ya.make": f"LIBRARY()\n{BARE}ADDINCL(GLOBAL peer)\nEND()\n",
+                    "library/cpp/resource/ya.make": f"LIBRARY()\n{BARE}ADDINCL(GLOBAL library/cpp/resource)\nEND()\n",
+                })
+                graph = lib.make(files, "lib", "--sandboxing")
+                compiled = lib.node_by_output(graph, "$(B)/lib/a.cpp.o")
+                includes = [a for a in compiled["cmds"][0]["cmd_args"] if a.startswith("-I")]
+                self.assertLess(includes.index("-I$(S)/peer"), includes.index("-I$(S)/library/cpp/resource"))
+
     def test_plugin_hash_preserves_module_root_variables(self):
         for root, resolved in (("BINDIR", "$(B)/lib"), ("CURDIR", "$(S)/lib")):
             with self.subTest(root=root):

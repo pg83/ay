@@ -68,6 +68,7 @@ class FromSandboxTest(unittest.TestCase):
         self.assertEqual(lib.bucketed(compile_node["inputs"], 2), lib.bucketed([
             "$(S)/lib/user.cpp",
             "$(B)/lib/extra.h",
+            "$(B)/lib/data.h",
             "$(S)/lib/dep.h",
             "$(S)/lib/dep2.h",
         ], 2))

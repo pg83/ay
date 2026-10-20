@@ -183,11 +183,11 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 	var refs []NodeRef
 
 	for _, chunk := range node.Inputs {
-		if len(chunk) == 0 || chunk[0].isSource() {
-			continue
-		}
-
 		for _, input := range chunk {
+			if input.isSource() {
+				continue
+			}
+
 			info := e.codegen.lookupSTR(input.rel())
 
 			if info == nil {

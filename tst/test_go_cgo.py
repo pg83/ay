@@ -138,6 +138,7 @@ class GoCgoGraphTest(unittest.TestCase):
             f"{b}/helper.c.o", f"{b}/trampoline.S.o",
         ]
         dynimport = lib.node_by_output(graph, f"{b}/_cgo_import.go")
+        self.assertIn(cgo1["uid"], dynimport["deps"])
         self.assertEqual(dynimport["outputs"], [f"{b}/_cgo_main.c.o", f"{b}/_cgo_.o", f"{b}/_cgo_import.go"])
         main_cc, link_o, dyn = (cmd["cmd_args"] for cmd in dynimport["cmds"])
         self.assertEqual(main_cc, [

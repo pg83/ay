@@ -109,6 +109,7 @@ class ResourceObjcopyTest(unittest.TestCase):
             '$(B)/tools/rescompressor/rescompressor',
             '$(B)/lib/gen_inc.h',
             '$(S)/build/scripts/objcopy.py',
+            '$(B)/lib/gen.h',
             '$(S)/lib/src.h',
         ])
         self.assertEqual(

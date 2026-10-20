@@ -221,6 +221,26 @@ func (r *CodegenRegistry) mustInfo(path VFS) *GeneratedFileInfo {
 	return info
 }
 
+func (r *CodegenRegistry) generatorRefsFor(closure Closure) []NodeRef {
+	refs := nodeRefScratches.get()
+
+	closure.each(func(path VFS) {
+		if info := r.lookup(path); info != nil {
+			refs = append(refs, info.GeneratorRefs...)
+		}
+	})
+
+	var result []NodeRef
+
+	if len(refs) > 0 {
+		result = r.na.uniqueRefs(refs)
+	}
+
+	nodeRefScratches.put(refs)
+
+	return result
+}
+
 func (r *CodegenRegistry) buildParsedFor(out VFS) ParsedIncludeSet {
 	if info := r.lookup(out); info != nil {
 		return info.ParsedIncludes

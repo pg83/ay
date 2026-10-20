@@ -717,7 +717,7 @@
       "contrib/libs/nvidia/cufft/callback_generator",
       "dict/mt/libs/nn/ynmt_backend/gpu/int4_fp8_gemm/codegen/hopper"
     ],
-    "xfail": true,
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14087942023",
     "slice_sha256": "e9e856f1016dcfa09c1e5d1339cd1173a9c81a3c1cecb2af40df2c25149134cc",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14087942701",
@@ -1188,7 +1188,7 @@
       "music/proto/ynison/redirector",
       "yp/go/yson/hq"
     ],
-    "xfail": true,
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14087952708",
     "slice_sha256": "d8f4057a2b788662f80f527b65563ddefd20956368c2ef19d3ade1703eea1731",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14087954527",

@@ -179,11 +179,13 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 		if d.setVars[strNeedPlatformPeerdirs] == strNo {
 			peers = append(peers, "build/platform/python/ymake_python3")
 		} else {
-			peers = append(peers,
-				"build/platform/clang",
-				"build/platform/lld",
-				"build/platform/python/ymake_python3",
-			)
+			peers = append(peers, "build/platform/clang")
+
+			if isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name) {
+				peers = append(peers, "build/platform/lld")
+			}
+
+			peers = append(peers, "build/platform/python/ymake_python3")
 
 			if instance.Platform.UsesSDKRoot {
 				peers = append(peers, "build/platform/linux_sdk")

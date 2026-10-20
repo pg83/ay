@@ -235,6 +235,7 @@ class RunProgramTest(unittest.TestCase):
             '$(B)/tools/gen/gen',
             '$(S)/lib/x.txt',
             '$(B)/lib/x.pb.h',
+            '$(B)/lib/g.h',
             '$(S)/lib/api.proto',
             '$(S)/lib/other.proto',
         ])

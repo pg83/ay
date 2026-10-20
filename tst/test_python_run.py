@@ -11,6 +11,18 @@ def cmd(node):
 
 
 class RunPython3Test(unittest.TestCase):
+    def test_arguments_expand_quoted_configuration_values(self):
+        files = {
+            "build/ymake_conf.py": lib.ymake_conf(extra='SCRIPT_ARG="two words"\n'),
+            "lib/ya.make": LIBRARY_HEAD + (
+                "RUN_PYTHON3(gen.py $SCRIPT_ARG OUT first.o)\nEND()\n"
+            ),
+            "lib/gen.py": "",
+        }
+        graph = lib.make(files, "lib", "--sandboxing")
+        run = lib.node_by_output(graph, "$(B)/lib/first.o")
+        self.assertEqual(cmd(run)["cmd_args"][2:], ["two words"])
+
     def test_object_outputs_become_archive_members(self):
         files = {
             "lib/ya.make": LIBRARY_HEAD + "RUN_PYTHON3(gen.py OUT first.o second.o OUT_NOAUTO unused.o)\nEND()\n",
@@ -21,6 +33,7 @@ class RunPython3Test(unittest.TestCase):
         archive = lib.node_by_output(graph, "$(B)/lib/liblib.a")
         self.assertEqual(archive["inputs"][:2], ["$(B)/lib/first.o", "$(B)/lib/second.o"])
         self.assertIn(generated["uid"], archive["deps"])
+        self.assertEqual(archive["deps"].count(generated["uid"]), 1)
         self.assertNotIn("$(B)/lib/unused.o", archive["inputs"])
 
     def test_outputs_follow_command_discovery_order(self):

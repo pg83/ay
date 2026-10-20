@@ -277,13 +277,6 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 
 	if !d.pyBuildNoPYC {
 		entry := PyGenResEntry{token: e.resStr2(srcRel, suffix), key: ps.Module, yapyc: true, path: build(module, "/", srcRel, suffix)}
-		inputs := e.resVFS1(srcEdge)
-
-		if srcEdge.isBuild() {
-			entry.buildInputs = inputs
-		} else {
-			entry.sourceInputs = inputs
-		}
 
 		out = append(out, entry)
 	}

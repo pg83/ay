@@ -387,6 +387,10 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 
 	out = append(out, info.ClosureLeaves...)
 
+	if main := info.ProducerMainOut; main != 0 && main != vfsPath && s.parsers.registry.scansIncludes(vfsPath.relString()) {
+		out = append(out, main)
+	}
+
 	if len(info.GeneratorRefs) == 0 || bucket == parsedIncludesLocal {
 		return out
 	}

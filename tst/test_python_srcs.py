@@ -412,6 +412,7 @@ class PySrcsTest(unittest.TestCase):
             graph, "nopy", "resfs/src/resfs/file/py/nopy/a.py.yapyc3=nopy/a.py.yapyc3")
         self.assertEqual(keys(res), ["resfs/file/py/nopy/a.py.yapyc3"])
         self.assertIn("$(B)/nopy/a.py.yapyc3", res["inputs"])
+        self.assertNotIn("$(S)/nopy/a.py", res["inputs"])
 
     def test_contrib_python_and_disabled_outputs_emit_no_source_objects(self):
         files = python_base()

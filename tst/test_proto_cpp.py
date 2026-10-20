@@ -68,6 +68,27 @@ def pb_node(graph, pb_h):
 
 
 class ProtoCppTest(unittest.TestCase):
+    def test_generated_proto_passes_generator_induced_headers(self):
+        files = proto_files()
+        files.update({
+            "p/ya.make": (
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\n"
+                "RUN_PROGRAM(gen OUT_NOAUTO a.proto OUTPUT_INCLUDES p/dep.proto)\n"
+                "SRCS(a.proto dep.proto)\nEND()\n"
+            ),
+            "p/dep.proto": 'syntax = "proto3";\n',
+            "rt/common.h": '#include "nested.h"\n',
+            "rt/nested.h": "",
+            "rt/impl.h": "",
+        })
+        lib.tool_program(files, "gen", "gen")
+        files["gen/ya.make"] = files["gen/ya.make"].replace(
+            "END()", "INDUCED_DEPS(h+cpp rt/common.h)\nINDUCED_DEPS(cpp rt/impl.h)\nEND()")
+        graph = lib.make(files, "p", "--sandboxing")
+        compiled = lib.node_by_output(graph, "$(B)/p/a.pb.cc.o")
+        for name in ("common.h", "nested.h", "impl.h"):
+            self.assertIn(f"$(S)/rt/{name}", compiled["inputs"])
+
     def test_root_namespace_uses_typed_build_root_and_no_source_root_include(self):
         files = proto_files()
         files.update({

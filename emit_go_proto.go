@@ -143,7 +143,6 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 	if info := e.codegen.use(build(protoRel)); info != nil {
 		protoSrc = build(protoRel)
 		cwd = bldRootDirVFS
-		tools = append(tools, info.ProducerRef)
 	}
 
 	closure := e.scanner.walkClosure(protoSrc, d.scanCtx, scanDomainProto).bucketList()

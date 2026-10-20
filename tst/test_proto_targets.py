@@ -29,6 +29,22 @@ def target_files():
 
 
 class ProtoTargetsTest(unittest.TestCase):
+    def test_secondary_generated_proto_keeps_main_output_in_inputs(self):
+        files = target_files()
+        lib.tool_program(files, "gen", "gen")
+        files["p/ya.make"] = (
+            "PROTO_LIBRARY()\nRUN_PROGRAM(gen OUT_NOAUTO main.proto extra.proto)\n"
+            "SRCS(extra.proto)\nEND()\n"
+        )
+        graph = lib.make(files, "p", "--sandboxing")
+        producer = lib.node_by_output(graph, "$(B)/p/main.proto")
+        for output in ("extra.pb.h", "extra.pb.go", "extra__intpy3___pb2.py"):
+            with self.subTest(output=output):
+                generated = lib.node_by_output(graph, "$(B)/p/" + output)
+                self.assertIn("$(B)/p/main.proto", generated["inputs"])
+                self.assertEqual(generated["deps"].count(producer["uid"]), 1)
+                self.assertNotIn(producer["uid"], generated.get("foreign_deps", {}).get("tool", []))
+
     def test_default_start_variants(self):
         graph = lib.make(target_files(), "p")
         for output in ("$(B)/p/a.pb.cc", "$(B)/p/a.pb.go", "$(B)/p/a__intpy3___pb2.py"):

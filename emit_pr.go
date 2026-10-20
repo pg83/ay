@@ -129,15 +129,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 	prRef := ctx.emit.reserve()
 	registeredPROut := map[VFS]bool{}
-	mainIsHeader := mainOutputVFS != 0 && isHeaderSource(mainOutputVFS.relString())
-
-	mainHeaderInclude := func(ccOutRel string) (IncludeDirective, bool) {
-		if !mainIsHeader || relStem(ccOutRel) != relStem(mainOutputVFS.relString()) {
-			return IncludeDirective{}, false
-		}
-
-		return IncludeDirective{kind: includeQuoted, target: includeTarget(mainOutputVFS.rel().any())}, true
-	}
 
 	snap := &prSnap{
 		ctx:       ctx,
@@ -176,42 +167,31 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		registeredPROut[out] = true
 
 		e.register(GeneratedFileInfo{
-			OutputPath:     out,
-			ProducerRef:    prRef,
-			GeneratorRefs:  e.ctx.na.refList(res.LDRef),
-			ParsedIncludes: parsed,
-			OnUse:          pending,
+			OutputPath:      out,
+			ProducerRef:     prRef,
+			ProducerMainOut: mainOutputVFS,
+			GeneratorRefs:   e.ctx.na.refList(res.LDRef),
+			ParsedIncludes:  parsed,
+			OnUse:           pending,
 		})
-	}
-
-	parsedFor := func(f ANY, out VFS, auto bool) ParsedIncludeSet {
-		parsed := prOutputParsedIncludes(ctx.na, f, stmt, protoImportPbH)
-
-		if auto && isCCSourceExt(f.string()) {
-			if inc, ok := mainHeaderInclude(out.relString()); ok {
-				return appendParsedDirectives(parsed, parsedIncludesCpp, inc)
-			}
-		}
-
-		return parsed
 	}
 
 	for _, f := range stmt.OUTFiles {
 		out := outVFSByToken[f]
-		parsed := parsedFor(f, out, true)
+		parsed := prOutputParsedIncludes(ctx.na, f, stmt, protoImportPbH)
 
 		registerOutput(out, parsed)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
 		out := outVFSByToken[f]
-		parsed := parsedFor(f, out, false)
+		parsed := prOutputParsedIncludes(ctx.na, f, stmt, protoImportPbH)
 
 		registerOutput(out, parsed)
 	}
 
 	if stmt.StdoutFile != nil {
-		parsed := parsedFor(*stmt.StdoutFile, *stdoutVFS, !stmt.StdoutNoAuto)
+		parsed := prOutputParsedIncludes(ctx.na, *stmt.StdoutFile, stmt, protoImportPbH)
 
 		registerOutput(*stdoutVFS, parsed)
 	}

@@ -43,9 +43,9 @@ DEFAULT_PEERS = [
 ]
 TOOLCHAIN = [
     "build/platform/clang",
-    "build/platform/lld",
     "build/platform/python/ymake_python3",
 ]
+LINKER = ["build/platform/lld"]
 RUNTIME = ["contrib/libs/cxxsupp/libcxx", "contrib/libs/cxxsupp/libcxxrt", "contrib/libs/libunwind"]
 HEADERS = ["contrib/libs/linux-headers"]
 SANITIZER = ["library/cpp/sanitizer/include"]
@@ -128,37 +128,37 @@ class YaMakeDefaultPeersTest(unittest.TestCase):
         self.assertNotIn(peer, self.peers("", files=files))
 
     def test_program_defaults_depend_on_architecture(self):
-        self.assertEqual(self.peers("", platform=AARCH64), LIBRARY_DEFAULTS + COW)
-        self.assertEqual(self.peers(""), LIBRARY_DEFAULTS + COW + TCMALLOC + GLIBCASM + CPUID)
+        self.assertEqual(self.peers("", platform=AARCH64), LIBRARY_DEFAULTS + LINKER + COW)
+        self.assertEqual(self.peers(""), LIBRARY_DEFAULTS + LINKER + COW + TCMALLOC + GLIBCASM + CPUID)
 
     def test_module_flags_and_platform_flags_shape_defaults(self):
         cases = [
-            ("NO_UTIL()", (), TOOLCHAIN + HEADERS + RUNTIME + SANITIZER + COW + TCMALLOC + GLIBCASM),
-            ("NO_RUNTIME()", (), TOOLCHAIN + HEADERS + COW + TCMALLOC + GLIBCASM),
-            ("NO_PLATFORM()", (), TOOLCHAIN + HEADERS + COW + TCMALLOC),
-            ("NO_LIBC()", (), TOOLCHAIN + HEADERS + COW + TCMALLOC),
-            ("DISABLE(USE_ASMLIB)", (), LIBRARY_DEFAULTS + COW + TCMALLOC + CPUID),
-            ("", ("-DSANITIZER_TYPE=address",), LIBRARY_DEFAULTS + COW + TCMALLOC + ASMLIB + CPUID),
-            ("", ("-DUSE_SSE4=no",), LIBRARY_DEFAULTS + COW + TCMALLOC + ASMLIB + CPUID),
-            ("", ("-DUSE_ARCADIA_COMPILER_RUNTIME=no",), TOOLCHAIN + HEADERS + RUNTIME + ["util"] + COW + TCMALLOC + GLIBCASM + CPUID),
-            ("", ("-DUSE_ARCADIA_LIBM=yes",), LIBRARY_DEFAULTS + ["contrib/libs/libm"] + COW + TCMALLOC + GLIBCASM + CPUID),
-            ("", ("--musl",), TOOLCHAIN + HEADERS + RUNTIME + ["util", "contrib/libs/musl/include"] + SANITIZER + COW + TCMALLOC + ASMLIB + ["contrib/libs/musl/full"] + CPUID),
-            ("ENABLE(MUSL_LITE)", ("--musl",), TOOLCHAIN + HEADERS + RUNTIME + ["contrib/libs/musl/include"] + SANITIZER + COW + TCMALLOC + ASMLIB + ["contrib/libs/musl"]),
-            ("", ("-DMUSL_LITE=yes", "--musl"), TOOLCHAIN + HEADERS + RUNTIME + ["util", "contrib/libs/musl/include"] + SANITIZER + COW + TCMALLOC + ASMLIB + ["contrib/libs/musl"] + CPUID),
+            ("NO_UTIL()", (), TOOLCHAIN + HEADERS + RUNTIME + SANITIZER + LINKER + COW + TCMALLOC + GLIBCASM),
+            ("NO_RUNTIME()", (), TOOLCHAIN + HEADERS + LINKER + COW + TCMALLOC + GLIBCASM),
+            ("NO_PLATFORM()", (), TOOLCHAIN + HEADERS + LINKER + COW + TCMALLOC),
+            ("NO_LIBC()", (), TOOLCHAIN + HEADERS + LINKER + COW + TCMALLOC),
+            ("DISABLE(USE_ASMLIB)", (), LIBRARY_DEFAULTS + LINKER + COW + TCMALLOC + CPUID),
+            ("", ("-DSANITIZER_TYPE=address",), LIBRARY_DEFAULTS + LINKER + COW + TCMALLOC + ASMLIB + CPUID),
+            ("", ("-DUSE_SSE4=no",), LIBRARY_DEFAULTS + LINKER + COW + TCMALLOC + ASMLIB + CPUID),
+            ("", ("-DUSE_ARCADIA_COMPILER_RUNTIME=no",), TOOLCHAIN + HEADERS + RUNTIME + ["util"] + LINKER + COW + TCMALLOC + GLIBCASM + CPUID),
+            ("", ("-DUSE_ARCADIA_LIBM=yes",), LIBRARY_DEFAULTS + LINKER + ["contrib/libs/libm"] + COW + TCMALLOC + GLIBCASM + CPUID),
+            ("", ("--musl",), TOOLCHAIN + HEADERS + RUNTIME + ["util", "contrib/libs/musl/include"] + SANITIZER + LINKER + COW + TCMALLOC + ASMLIB + ["contrib/libs/musl/full"] + CPUID),
+            ("ENABLE(MUSL_LITE)", ("--musl",), TOOLCHAIN + HEADERS + RUNTIME + ["contrib/libs/musl/include"] + SANITIZER + LINKER + COW + TCMALLOC + ASMLIB + ["contrib/libs/musl"]),
+            ("", ("-DMUSL_LITE=yes", "--musl"), TOOLCHAIN + HEADERS + RUNTIME + ["util", "contrib/libs/musl/include"] + SANITIZER + LINKER + COW + TCMALLOC + ASMLIB + ["contrib/libs/musl"] + CPUID),
         ]
         for body, args, expected in cases:
             with self.subTest(body=body, args=args):
                 self.assertEqual(self.peers(body, *args), expected)
         self.assertEqual(
             self.peers("", "--musl", platform=AARCH64),
-            TOOLCHAIN + HEADERS + RUNTIME + ["util", "contrib/libs/musl/include"] + SANITIZER + COW + TCMALLOC + ["contrib/libs/musl/full"],
+            TOOLCHAIN + HEADERS + RUNTIME + ["util", "contrib/libs/musl/include"] + SANITIZER + LINKER + COW + TCMALLOC + ["contrib/libs/musl/full"],
         )
 
     def test_allocators_replace_the_default_allocator(self):
         cases = [
-            ("ALLOCATOR(FAKE)", LIBRARY_DEFAULTS + COW + GLIBCASM),
-            ("ALLOCATOR(J)", LIBRARY_DEFAULTS + COW + ["library/cpp/malloc/jemalloc"] + GLIBCASM + CPUID),
-            ("ALLOCATOR(TCMALLOC)", LIBRARY_DEFAULTS + COW + ["library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/default"] + GLIBCASM + CPUID),
+            ("ALLOCATOR(FAKE)", LIBRARY_DEFAULTS + LINKER + COW + GLIBCASM),
+            ("ALLOCATOR(J)", LIBRARY_DEFAULTS + LINKER + COW + ["library/cpp/malloc/jemalloc"] + GLIBCASM + CPUID),
+            ("ALLOCATOR(TCMALLOC)", LIBRARY_DEFAULTS + LINKER + COW + ["library/cpp/malloc/tcmalloc", "contrib/libs/tcmalloc/default"] + GLIBCASM + CPUID),
         ]
         for body, expected in cases:
             with self.subTest(body=body):
@@ -167,7 +167,7 @@ class YaMakeDefaultPeersTest(unittest.TestCase):
     def test_internal_build_adds_the_sdk_peer(self):
         self.assertEqual(
             self.peers("", conf=INTERNAL_CONF),
-            TOOLCHAIN + ["build/platform/linux_sdk"] + HEADERS + RUNTIME + ["util"] + SANITIZER + COW + TCMALLOC + GLIBCASM + CPUID,
+            TOOLCHAIN + ["build/platform/linux_sdk"] + HEADERS + RUNTIME + ["util"] + SANITIZER + LINKER + COW + TCMALLOC + GLIBCASM + CPUID,
         )
 
     def test_library_defaults_reach_the_program_through_peers(self):
@@ -180,13 +180,13 @@ class YaMakeDefaultPeersTest(unittest.TestCase):
                     "l/l.cpp": "int l;\n",
                 },
             ),
-            TOOLCHAIN + HEADERS + COW + RUNTIME + ["util"] + SANITIZER + ["l"],
+            TOOLCHAIN + HEADERS + LINKER + COW + RUNTIME + ["util"] + SANITIZER + ["l"],
         )
 
     def test_host_tools_follow_the_target_compiler_runtime_switch(self):
         for args, expected in (
-            ((), LIBRARY_DEFAULTS + COW + TCMALLOC + CPUID),
-            (("-DUSE_ARCADIA_COMPILER_RUNTIME=no",), TOOLCHAIN + HEADERS + RUNTIME + ["util"] + COW + TCMALLOC + CPUID),
+            ((), LIBRARY_DEFAULTS + LINKER + COW + TCMALLOC + CPUID),
+            (("-DUSE_ARCADIA_COMPILER_RUNTIME=no",), TOOLCHAIN + HEADERS + RUNTIME + ["util"] + LINKER + COW + TCMALLOC + CPUID),
         ):
             with self.subTest(args=args):
                 tree = stub_tree("NO_PLATFORM()\nRUN_PROGRAM(tools/gen OUT gen.cpp)")

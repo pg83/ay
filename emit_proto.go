@@ -467,6 +467,11 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	pbGenRefs := pe.pbGenRefs
 	pbCCRefs := pe.pbGenRefs[:pbCCRefCount:pbCCRefCount]
 
+	if inherited := e.codegen.generatorRefsFor(transitiveImports); len(inherited) > 0 {
+		pbGenRefs = na.uniqueRefs(pbGenRefs, inherited)
+		pbCCRefs = na.uniqueRefs(pbCCRefs, inherited)
+	}
+
 	e.register(GeneratedFileInfo{
 		OutputPath:     pbH,
 		PrimaryInput:   protoVFS,

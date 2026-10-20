@@ -232,8 +232,8 @@ class YaMakeModuleDataTest(unittest.TestCase):
         self.assertEqual(
             [path for path in lib.node_by_output(graph, "$(B)/a/a")["inputs"] if path.endswith(".a")],
             [
-                "$(B)/build/platform/lld/libbuild-platform-lld.a",
                 "$(B)/contrib/libs/linux-headers/libcontrib-libs-linux-headers.a",
+                "$(B)/build/platform/lld/libbuild-platform-lld.a",
                 "$(B)/build/cow/on/libbuild-cow-on.a",
             ],
         )

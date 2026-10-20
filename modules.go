@@ -212,6 +212,7 @@ type ModuleData struct {
 	noExtendedPySearch       bool
 	enumSrcs                 []*GenerateEnumSerializationStmt
 	peerdirs                 []ANY
+	resourcePeerDeferred     bool
 	protoCmdPeers            []ANY
 	joinSrcs                 []*JoinSrcsStmt
 	addIncl                  []VFS
@@ -446,7 +447,6 @@ type CopyFileEntry struct {
 	Dst            string
 	Auto           bool
 	WithContext    bool
-	Text           bool
 	OutputIncludes []string
 }
 
@@ -474,7 +474,6 @@ type AntlrRunInfo struct {
 func parseCopyFileEntry(args []string, withContext bool, line int) CopyFileEntry {
 	i := 0
 	auto := false
-	text := false
 
 	for i < len(args) {
 		switch args[i] {
@@ -482,7 +481,6 @@ func parseCopyFileEntry(args []string, withContext bool, line int) CopyFileEntry
 			auto = true
 			i++
 		case "TEXT":
-			text = true
 			i++
 		default:
 			goto parsedFlags
@@ -498,8 +496,7 @@ parsedFlags:
 		Src:         args[i],
 		Dst:         args[i+1],
 		Auto:        auto,
-		WithContext: withContext || text,
-		Text:        text,
+		WithContext: withContext,
 	}
 
 	i += 2
@@ -891,7 +888,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 		d.protoCmdPeers = protoCmdPeers(d)
 	}
 
-	if len(d.pyPyiResources) > 0 || len(d.pySrcs) > 0 || len(d.pyRegister) > 0 {
+	if d.resourcePeerDeferred || len(d.pyPyiResources) > 0 || len(d.pySrcs) > 0 || len(d.pyRegister) > 0 {
 		ensureResourcePeer(modulePath, d)
 	}
 
@@ -1399,7 +1396,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
 
-			expanded.Args = expandStmtTokens(v.Args, env)
+			expanded.Args = expandCommandTokens(v.Args, env)
 			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
 
 			if v.CWD != nil {
@@ -1439,7 +1436,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded := *v
 
 			expanded.ScriptPath = expandStmtTokenAny(v.ScriptPath, env)
-			expanded.Args = expandStmtTokens(v.Args, env)
+			expanded.Args = expandCommandTokens(v.Args, env)
 			expanded.INFiles = expandStmtTokens(v.INFiles, env)
 			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
@@ -1501,7 +1498,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				break
 			}
 
-			ensureResourcePeer(modulePath, d)
+			d.resourcePeerDeferred = true
 
 			before := len(d.resources)
 
@@ -1519,7 +1516,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				break
 			}
 
-			ensureResourcePeer(modulePath, d)
+			d.resourcePeerDeferred = true
 
 			before := len(d.resources)
 
@@ -3852,6 +3849,14 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 }
 
 func expandStmtTokens(items []ANY, env Environment) []ANY {
+	return expandTokens(items, env, false)
+}
+
+func expandCommandTokens(items []ANY, env Environment) []ANY {
+	return expandTokens(items, env, true)
+}
+
+func expandTokens(items []ANY, env Environment, command bool) []ANY {
 	anyDollar := false
 
 	for _, item := range items {
@@ -3875,7 +3880,17 @@ func expandStmtTokens(items []ANY, env Environment) []ANY {
 			continue
 		}
 
-		for _, f := range strings.Fields(expandStmtToken(item.string(), env)) {
+		expanded := expandStmtToken(item.string(), env)
+
+		var words []string
+
+		if command {
+			words = splitShellWords(expanded)
+		} else {
+			words = strings.Fields(expanded)
+		}
+
+		for _, f := range words {
 			out = append(out, internAny(f))
 		}
 	}

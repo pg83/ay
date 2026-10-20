@@ -195,6 +195,15 @@ class GoStyleTestsTest(unittest.TestCase):
             "CLANG_RESOURCE_GLOBAL", "GO_TOOLS_RESOURCE_GLOBAL", "YMAKE_PYTHON3_RESOURCE_GLOBAL", "YOLINT_RESOURCE_GLOBAL",
         ])
 
+    def test_native_static_library_does_not_introduce_a_linker(self):
+        files = go_world()
+        go_module(files, "library/go/greet", macros="PEERDIR(native)\n")
+        files["native/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(n.cpp)\nEND()\n"
+        files["native/n.cpp"] = ""
+        graph = lib.make(files, "library/go/greet", *AUTOCHECK)
+        globals_ = args_after(test_node(graph, "library/go/greet/govet")["cmds"][0]["cmd_args"], "--global-resource")
+        self.assertNotIn("LLD_ROOT_RESOURCE_GLOBAL", [g.split("::")[0] for g in globals_])
+
     def test_vendored_and_contrib_packages_have_no_style_suites(self):
         files = go_world()
         go_module(files, "vendor/github.com/pkg/errors")

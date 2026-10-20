@@ -128,6 +128,25 @@ func (na *NodeArenas) refList(refs ...NodeRef) []NodeRef {
 	return block[:k:k]
 }
 
+func (na *NodeArenas) uniqueRefs(lists ...[]NodeRef) []NodeRef {
+	n := 0
+
+	for _, list := range lists {
+		n += len(list)
+	}
+
+	refs := na.noderefs.alloc(n)[:0]
+
+	for _, list := range lists {
+		refs = append(refs, list...)
+	}
+
+	refs = dedupInPlace(refs)
+	na.noderefs.commit(len(refs))
+
+	return refs[:len(refs):len(refs)]
+}
+
 func (na *NodeArenas) vfsList(vs ...VFS) []VFS {
 	return na.vfs.list(vs...)
 }

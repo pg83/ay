@@ -12,6 +12,21 @@ def copy_args(src, dst):
 
 
 class CopyFileTest(unittest.TestCase):
+    def test_default_copy_uses_text_input(self):
+        for option in ("", " TEXT"):
+            with self.subTest(option=option):
+                graph = lib.make({
+                    "mod/ya.make": (LIBRARY_HEAD + f"COPY_FILE(src.h dst.h{option})\n"
+                                    "SRCS(use.cpp)\nEND()\n"),
+                    "mod/src.h": '#include "dep.h"\n',
+                    "mod/dep.h": "",
+                    "mod/use.cpp": '#include "dst.h"\n',
+                }, "mod", "--sandboxing")
+                copied = lib.node_by_output(graph, "$(B)/mod/dst.h")
+                self.assertEqual(copied["inputs"], ["$(S)/mod/src.h"])
+                compiled = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
+                self.assertNotIn("$(S)/mod/dep.h", compiled["inputs"])
+
     def test_context_output_includes_chained_and_object_copies(self):
         graph = lib.make({
             "mod/ya.make": (

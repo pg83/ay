@@ -244,7 +244,8 @@ func (e *EmitContext) emitUserverProtos(batch UserverProtoBatch) {
 		for _, out := range outputs {
 			e.register(GeneratedFileInfo{
 				OutputPath: out, PrimaryInput: src, ProducerRef: ref,
-				GeneratorRefs: na.refList(toolRef), ParsedIncludes: parsed, OnUse: pending,
+				ProducerMainOut: outputs[0],
+				GeneratorRefs:   na.refList(protocRef, toolRef), ParsedIncludes: parsed, OnUse: pending,
 			})
 
 			if strings.HasSuffix(out.relString(), ".cpp") {

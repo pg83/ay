@@ -77,7 +77,7 @@ class SandboxInputsTest(unittest.TestCase):
                 self.assertIn(generated["uid"], compile_node["deps"])
                 self.assertIn(configured["uid"], compile_node["deps"])
 
-    def test_build_input_includes_belong_to_the_copy(self):
+    def test_text_copy_does_not_follow_source_includes(self):
         files = {
             "mod/ya.make": LIBRARY + "COPY_FILE(seed.txt generated.h)\nCOPY_FILE(src.h copied.h)\nSRCS(use.cpp)\nEND()\n",
             "mod/seed.txt": "",
@@ -85,13 +85,25 @@ class SandboxInputsTest(unittest.TestCase):
             "mod/use.cpp": '#include "copied.h"\n',
         }
         graph = lib.make(files, "mod", "--dist")
-        producer = lib.node_by_output(graph, "$(B)/mod/generated.h")
         copy = lib.node_by_output(graph, "$(B)/mod/copied.h")
         compiled = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
-        self.assertEqual(set(copy["inputs"]), {"$(S)/mod/src.h", "$(B)/mod/generated.h"})
+        self.assertEqual(set(copy["inputs"]), {"$(S)/mod/src.h"})
         self.assertEqual(set(compiled["inputs"]), {"$(S)/mod/use.cpp", "$(B)/mod/copied.h"})
-        self.assertIn(producer["uid"], copy["deps"])
+        self.assertFalse(any("$(B)/mod/generated.h" in n["outputs"] for n in graph["graph"]))
         self.assertIn(copy["uid"], compiled["deps"])
+
+    def test_secondary_opaque_input_does_not_expand_main_output(self):
+        files = {
+            "mod/ya.make": (LIBRARY + "RUN_PROGRAM(tool OUT_NOAUTO first.bin second.pyc)\n"
+                            "ARCHIVE(NAME data.inc second.pyc)\nSRCS(use.cpp)\nEND()\n"),
+            "mod/use.cpp": '#include "data.inc"\n',
+        }
+        lib.tool_program(files, "tool", "tool")
+        lib.tool_program(files, "tools/archiver", "archiver")
+        graph = lib.make(files, "mod", "--sandboxing")
+        archived = lib.node_by_output(graph, "$(B)/mod/data.inc")
+        self.assertIn("$(B)/mod/second.pyc", archived["inputs"])
+        self.assertNotIn("$(B)/mod/first.bin", archived["inputs"])
 
     def test_runner_outputs_only_forward_declared_includes(self):
         for runner in ("RUN_PROGRAM(tool IN seed.txt OUT generated.cpp OUTPUT_INCLUDES mod/public.h)",
