@@ -143,6 +143,85 @@ when ($OS_LINUX == "yes") {
                 inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
                 self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/first.h"}, set(inputs))
 
+    def test_unset_and_deep_scalar_expansion(self):
+        config = "SYSINCL=$YAML_0 ${UNSET_SYSINCL}\n"
+        config += "".join(f"YAML_{i}=${{YAML_{i+1}}}\n" for i in range(20))
+        for variant in ("SYSINCL=build/custom/first.yml ${UNSET_SYSINCL}\n", config + "YAML_20=build/custom/first.yml\n"):
+            with self.subTest(config=variant):
+                graph = lib.make(self.files(variant), "m")
+                inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
+                self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/first.h"}, set(inputs))
+
+    def test_define_and_exclude_scalar_assignments(self):
+        for config in (
+            "EXTRA_SYSINCL:=build/custom/notfirst.yml\n"
+            "EXTRA_SYSINCL:=build/custom/second.yml\n"
+            "EXTRA_SYSINCL-=not\nSYSINCL=$EXTRA_SYSINCL\n",
+            '''SYSINCL=build/custom/first.yml
+when ($OS_LINUX == "yes") {
+    SYSINCL-=build/custom/first.yml
+}
+''',
+        ):
+            with self.subTest(config=config):
+                graph = lib.make(self.files(config), "m")
+                inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
+                self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/first.h"}, set(inputs))
+
+    def test_select_expands_to_live_conditional_alternatives(self):
+        files = self.files('''SYSINCL=
+select ($HARDWARE_TYPE) {
+    "x86_64" | "aarch64" ? {
+        SYSINCL=build/custom/first.yml
+    }
+    default ? {
+        SYSINCL=build/custom/second.yml
+    }
+}
+''')
+        for flags, selected in (((), "first"), (("-DHARDWARE_TYPE=other",), "second")):
+            with self.subTest(flags=flags):
+                graph = lib.make(files, "m", *flags)
+                inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
+                self.assertEqual({"$(S)/m/a.cpp", f"$(S)/m/{selected}.h"}, set(inputs))
+
+    def test_printed_assignments_override_imported_defaults(self):
+        files = self.files("EXTRA_SYSINCL=build/custom/first.yml\nSYSINCL=$EXTRA_SYSINCL\n")
+        graph = lib.make(files, "m", "-DEXTRA_SYSINCL=build/custom/second.yml")
+        self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/second.h"}, set(lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]))
+        files["build/ymake_conf.py"] = lib.ymake_conf(extra='''when ($OS_LINUX == "yes") {
+    EXTRA_SYSINCL=build/custom/second.yml
+}
+''')
+        graph = lib.make(files, "m")
+        self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/second.h"}, set(lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]))
+
+    def test_appending_to_empty_variable_does_not_add_leading_space(self):
+        graph = lib.make(self.files('''SYSINCL=
+SYSINCL+=build/custom/first.yml
+when ($SYSINCL == "build/custom/first.yml") {
+    SYSINCL=build/custom/second.yml
+}
+'''), "m")
+        self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/second.h"}, set(lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]))
+
+    def test_select_rechecks_the_variable_after_an_action(self):
+        graph = lib.make(self.files('''SYSINCL=build/custom/first.yml
+CHOICE=first
+select ($CHOICE) {
+    "first" ? {
+        CHOICE=second
+    }
+    "second" ? {
+        SYSINCL=build/custom/second.yml
+    }
+    default ? {
+        SYSINCL=build/sysincl/unused.yml
+    }
+}
+'''), "m")
+        self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/second.h"}, set(lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]))
+
     def test_missing_configuration_files_are_reported(self):
         for config, missing in ((
             '@import "${CONF_ROOT}/conf/missing.conf"\n', "build/conf/missing.conf",

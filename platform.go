@@ -215,7 +215,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, conf *YmakeCon
 	sysinclEnv := p.ifEnv.clone()
 
 	conf.sysincl.apply(sysinclEnv, "SYSINCL")
-	p.SysInclFiles = strings.Fields(expandStmtToken(sysinclEnv.string(envSysincl), sysinclEnv))
+	p.SysInclFiles = strings.Fields(expandConfScalar(sysinclEnv.string(envSysincl), sysinclEnv))
 	p.Linker = pc.Linker.flags(p)
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)

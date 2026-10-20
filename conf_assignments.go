@@ -5,14 +5,19 @@ import (
 	"strings"
 )
 
-var confVarRef = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z_0-9]*)`)
+var (
+	confVarRef    = regexp.MustCompile(`\$(?:\{([A-Za-z_][A-Za-z_0-9]*)\}|([A-Za-z_][A-Za-z_0-9]*))`)
+	confSelectAlt = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
+)
 
 type ConfBranch struct {
-	parent   int
-	previous int
-	cond     []CondNode
-	expr     string
-	refs     []string
+	parent     int
+	previous   int
+	cond       []CondNode
+	expr       string
+	refs       []string
+	selectVar  string
+	selectExpr string
 }
 
 type ConfAssignment struct {
@@ -20,7 +25,7 @@ type ConfAssignment struct {
 	branch   int
 	name     string
 	value    string
-	append   bool
+	op       string
 	refs     []string
 }
 
@@ -99,10 +104,10 @@ func readConfAssignments(fs FS, filename string, data []byte, cache *SharedParse
 			continue
 		}
 
-		if name, value, appendOp, ok := confBranchAssignment(line); ok {
+		if name, value, op, ok := confBranchAssignment(line); ok {
 			if !skipped[stack[len(stack)-1]] {
 				conf.assignments = append(conf.assignments, ConfAssignment{
-					branch: stack[len(stack)-1], name: name, value: value, append: appendOp, refs: confValueRefs(value),
+					branch: stack[len(stack)-1], name: name, value: value, op: op, refs: confValueRefs(value),
 				})
 			}
 
@@ -119,16 +124,40 @@ func readConfAssignments(fs FS, filename string, data []byte, cache *SharedParse
 		expr := ""
 
 		switch {
-		case strings.HasPrefix(header, "when "):
+		case strings.HasPrefix(header, "when ") || strings.HasPrefix(header, "when("):
 			expr = strings.TrimSpace(strings.TrimPrefix(header, "when"))
-		case strings.HasPrefix(header, "elsewhen "):
+		case strings.HasPrefix(header, "elsewhen ") || strings.HasPrefix(header, "elsewhen("):
 			branch.previous = previous
 			expr = strings.TrimSpace(strings.TrimPrefix(header, "elsewhen"))
 		case header == "otherwise":
 			branch.previous = previous
 			branch.cond = nil
+		case strings.HasPrefix(header, "select ") || strings.HasPrefix(header, "select("):
+			branch.selectVar = strings.Trim(strings.TrimSpace(strings.TrimPrefix(header, "select")), "()$ {}")
+
+			if !isConfVarName(branch.selectVar) {
+				throwFmt("conf: invalid select variable in %s: %s", filename, header)
+			}
 		default:
-			unsupported = true
+			parent := &conf.branches[branch.parent]
+
+			if parent.selectVar != "" && strings.HasSuffix(header, "?") {
+				alternative := strings.TrimSpace(strings.TrimSuffix(header, "?"))
+
+				if alternative == "default" {
+					expr = "!(" + parent.selectExpr + ")"
+				} else {
+					expr = confSelectCondition(filename, parent.selectVar, alternative)
+
+					if parent.selectExpr != "" {
+						parent.selectExpr += " || "
+					}
+
+					parent.selectExpr += "(" + expr + ")"
+				}
+			} else {
+				unsupported = true
+			}
 		}
 
 		branch.expr = expr
@@ -144,17 +173,45 @@ func readConfAssignments(fs FS, filename string, data []byte, cache *SharedParse
 	return conf
 }
 
-func confBranchAssignment(line string) (name, value string, appendOp, ok bool) {
+func confSelectCondition(filename, variable, alternative string) string {
+	var terms []string
+
+	end := 0
+
+	for _, span := range confSelectAlt.FindAllStringIndex(alternative, -1) {
+		separator := strings.TrimSpace(alternative[end:span[0]])
+
+		if len(terms) == 0 && separator != "" || len(terms) != 0 && separator != "|" {
+			throwFmt("conf: invalid select alternative in %s: %s", filename, alternative)
+		}
+
+		terms = append(terms, "$"+variable+" == "+alternative[span[0]:span[1]])
+		end = span[1]
+	}
+
+	if len(terms) == 0 || strings.TrimSpace(alternative[end:]) != "" {
+		throwFmt("conf: invalid select alternative in %s: %s", filename, alternative)
+	}
+
+	return strings.Join(terms, " || ")
+}
+
+func confBranchAssignment(line string) (name, value, op string, ok bool) {
 	name, value, ok = strings.Cut(line, "=")
 	name = strings.TrimSpace(name)
-	name, appendOp = strings.CutSuffix(name, "+")
-	name = strings.TrimSpace(name)
 
-	return name, strings.TrimSpace(value), appendOp, ok && name != "" && isConfVarName(name)
+	op = "="
+
+	if len(name) != 0 && strings.ContainsRune("+:-", rune(name[len(name)-1])) {
+		op = name[len(name)-1:] + "="
+		name = strings.TrimSpace(name[:len(name)-1])
+	}
+
+	return name, strings.TrimSpace(value), op, ok && name != "" && isConfVarName(name)
 }
 
 func parseConfBranchCondition(filename, expr string) []CondNode {
-	expr = strings.NewReplacer("$", "", "&&", " AND ", "||", " OR ", "!=", "!=", "!", " NOT ").Replace(expr)
+	expr = "(" + strings.NewReplacer("$", "", "&&", " AND ", "||", " OR ", "!=", "!=", "!", " NOT ").Replace(expr) + ")"
 
 	p := &Parser{lex: &Lexer{name: filename, src: []byte(expr), line: 1, col: 1}}
 	tok := Token{line: 1, col: 1}
@@ -186,7 +243,7 @@ func confValueRefs(value string) []string {
 	var refs []string
 
 	for _, match := range confVarRef.FindAllStringSubmatch(value, -1) {
-		refs = append(refs, match[1])
+		refs = append(refs, match[1]+match[2])
 	}
 
 	return refs
@@ -298,8 +355,25 @@ func (c *ConfAssignments) applyPass(env Environment, conditional bool, names map
 		key := internEnv(a.name)
 		value := a.value
 
-		if a.append {
-			value = env.string(key) + " " + value
+		switch a.op {
+		case ":=":
+			if env.hasBindingID(key) {
+				continue
+			}
+		case "-=":
+			if conditional {
+				continue
+			}
+
+			value = strings.ReplaceAll(env.string(key), value, "")
+		case "+=":
+			previous := env.string(key)
+
+			if value == "" {
+				value = previous
+			} else if previous != "" {
+				value = previous + " " + value
+			}
 		}
 
 		env.setString(key, value)
@@ -324,4 +398,22 @@ func (c *ConfAssignments) priorBranchMatched(index int, env Environment) bool {
 	branch := c.branches[index]
 
 	return len(branch.cond) == 0 || evalCond(branch.cond, env) || c.priorBranchMatched(branch.previous, env)
+}
+
+func expandConfScalar(value string, env Environment) string {
+	for i := 0; i < 128; i++ {
+		next := confVarRef.ReplaceAllStringFunc(value, func(reference string) string {
+			return env.string(internEnv(strings.Trim(reference, "${}")))
+		})
+
+		if next == value {
+			return value
+		}
+
+		value = next
+	}
+
+	throwFmt("conf: scalar substitution exceeded the limit128")
+
+	return ""
 }
