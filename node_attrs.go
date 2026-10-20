@@ -14,6 +14,7 @@ var (
 )
 
 var procKindStr = [...]string{
+	pkCI: "CI",
 	pkFA: "FA",
 	pkIL: "IL",
 	pkTR: "TR", pkDL: "DL",
@@ -49,6 +50,7 @@ const (
 const (
 	pkNone ProcKind = iota
 	pkFA
+	pkCI
 	pkAS
 	pkAR
 	pkBI

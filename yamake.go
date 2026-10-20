@@ -519,7 +519,7 @@ func isIdentCont(b byte) bool {
 }
 
 func (l *Lexer) isWordByte(b byte) bool {
-	return isWordByte(b) || l.inArgs && (b == ';' || b == '&')
+	return isWordByte(b) || l.inArgs && (b == ';' || b == '&' || b == '|')
 }
 
 func isWordByte(b byte) bool {
@@ -1170,7 +1170,7 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		"PROTO_LIBRARY",
 		"PROTO_DESCRIPTIONS",
 		"DLL", "DLL_TOOL", "SO_PROGRAM", "DYNAMIC_LIBRARY",
-		"PACKAGE", "UNION", "RESOURCES_LIBRARY", "GEN_LIBRARY",
+		"PACKAGE", "UNION", "CI_GROUP", "RESOURCES_LIBRARY", "GEN_LIBRARY",
 		"PREBUILT_PROGRAM",
 		"FBS_LIBRARY",
 		"GO_LIBRARY", "GO_PROGRAM", "GO_TEST", "GO_DLL",

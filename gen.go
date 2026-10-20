@@ -1142,6 +1142,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return e.genUnion()
 	}
 
+	if d.moduleStmt.Name == tokCiGroup {
+		return e.genCiGroup()
+	}
+
 	if d.docs != nil {
 		return e.genDocs()
 	}

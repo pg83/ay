@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -1727,7 +1728,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			StdoutFile: ptr(strDebianversionH.any()), KV: &debVersionKV,
 		})
 	case tokFiles:
-		if d.docs != nil || d.moduleStmt != nil && d.moduleStmt.Name == tokUnion {
+		if d.docs != nil || d.moduleStmt != nil && (d.moduleStmt.Name == tokUnion || d.moduleStmt.Name == tokCiGroup) {
 			d.addFiles(v.Args)
 		} else {
 			handled = false
@@ -3875,6 +3876,7 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 
 	prefix := v.Args[0].string()
 	pattern := v.Args[1].string()
+	matcher := regexp.MustCompile("^(?:" + globSegmentRegex(pattern, true) + ")$")
 
 	var dirs, excludes []string
 
@@ -3904,12 +3906,12 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 		}
 	}
 
-	sourceRoot := srcdir == srcRootDirVFS.string()
+	sourceRoot := srcdir == srcRootDirVFS.string() || strings.HasPrefix(srcdir, srcRootDirVFS.string()+"/")
 
 	rootRel := func(dir string) string {
 		switch {
 		case sourceRoot:
-			return path.Clean(dir)
+			return path.Join(strings.TrimPrefix(strings.TrimPrefix(srcdir, srcRootDirVFS.string()), "/"), dir)
 		case srcdir == "":
 			return path.Clean(modulePath + "/" + dir)
 		default:
@@ -3952,7 +3954,7 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 
 			name := STR(packed >> 1).string()
 
-			if ok, _ := path.Match(pattern, name); !ok || excluded(dirRel, name) {
+			if !matcher.MatchString(name) || name == "ya.make" || name == "a.yaml" || excluded(dirRel, name) {
 				continue
 			}
 

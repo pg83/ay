@@ -96,6 +96,9 @@ class YaMakeSyntaxTest(unittest.TestCase):
     def test_macro_argument_atoms_take_url_symbols(self):
         self.assert_cflags(library("CFLAGS(-DU=http://h/p?a=b;c=d&e)"), ["-DU=http://h/p?a=b;c=d&e"])
 
+    def test_macro_argument_atoms_take_pattern_alternation(self):
+        self.assert_cflags(library("CFLAGS(-DPATTERN=*.h|*.cpp)"), ["-DPATTERN=*.h|*.cpp"])
+
     def test_comments_line_endings_and_bom(self):
         text = (
             "# leading comment\r\n"
