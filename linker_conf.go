@@ -8,7 +8,7 @@ var linkerConfNames = []string{
 	"LD_STRIP_FLAG", "_LD_DCE_FLAG_GC_SECTIONS", "_LD_DCE_FLAG_PRINT_SECTIONS", "LD_DCE_FLAG",
 	"_LD_ICF_FLAG", "_LD_ICF_FLAG_PRINT_SECTIONS", "LD_ICF_FLAG", "_LD_NO_PIE_FLAG",
 	"_LD_USE_STDLIB", "_C_SYSTEM_LIBRARIES", "C_SYSTEM_LIBRARIES", "C_SYSTEM_LIBRARIES_INTERCEPT",
-	"LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG", "EXPORTS_VALUE",
+	"LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG", "EXPORTS_VALUE", "LINKER_SCRIPT_VALUE",
 }
 
 var linkerConfNameSet = func() map[string]bool {
@@ -28,6 +28,7 @@ type LinkerConf struct {
 type LinkerFlags struct {
 	StartGroup, EndGroup, BeforePeers, AfterPeers []ANY
 	Globals, Roots, Shared, Soname, Exports       []ANY
+	Script                                        []ANY
 	SystemLibs, Intercept, Strip, DCE, ICF, NoPie []ANY
 	ArgCount                                      int
 }
@@ -107,6 +108,7 @@ func (c *LinkerConf) flags(p *Platform) LinkerFlags {
 	result.Shared = read("_SHARED_FLAG")
 	result.Soname = read("_SONAME_FLAG")
 	result.Exports = read("EXPORTS_VALUE")
+	result.Script = read("LINKER_SCRIPT_VALUE")
 	result.SystemLibs = read("C_SYSTEM_LIBRARIES")
 	result.Intercept = read("C_SYSTEM_LIBRARIES_INTERCEPT")
 	result.Strip = read("LD_STRIP_FLAG")
@@ -145,6 +147,22 @@ func appendLinkerGlobals(args []ANY, flags LinkerFlags, archives, objects []VFS)
 	return args
 }
 
+func appendLinkerScripts(args, template []ANY, scripts []VFS) []ANY {
+	for _, arg := range template {
+		if arg.string() != "${ext=.ld;pre=-T:SRCS_GLOBAL}" {
+			args = append(args, arg)
+
+			continue
+		}
+
+		for _, script := range scripts {
+			args = append(args, internV("-T", script.string()).any())
+		}
+	}
+
+	return args
+}
+
 func appendLinkerTemplate(args, template []ANY, variable, value string) []ANY {
 	for _, arg := range template {
 		if strings.Contains(arg.string(), variable) {
@@ -160,7 +178,7 @@ func appendLinkerTemplate(args, template []ANY, variable, value string) []ANY {
 }
 
 func (f LinkerFlags) registerOwned() {
-	for _, args := range [][]ANY{f.StartGroup, f.EndGroup, f.BeforePeers, f.AfterPeers, f.Globals, f.Roots, f.Shared, f.Soname, f.Exports, f.SystemLibs, f.Intercept, f.Strip, f.DCE, f.ICF, f.NoPie} {
+	for _, args := range [][]ANY{f.StartGroup, f.EndGroup, f.BeforePeers, f.AfterPeers, f.Globals, f.Roots, f.Shared, f.Soname, f.Exports, f.Script, f.SystemLibs, f.Intercept, f.Strip, f.DCE, f.ICF, f.NoPie} {
 		registerOwnedSlice(args)
 	}
 }

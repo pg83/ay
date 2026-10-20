@@ -1,9 +1,20 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"maps"
 	"path"
 	"slices"
+	"sort"
 	"strings"
+)
+
+const (
+	yaConfJSONName     = "ya.conf.json"
+	yaToolsFormulaTmpl = "build/external_resources/%s/resources.json"
+	yaToolSuffix       = ".tool.json"
+	yaToolchainSuffix  = ".toolchain.json"
 )
 
 func expandResourceFileArgs(args []ANY, env Environment) []string {
@@ -277,4 +288,100 @@ func globSegMatch(pat, name string) bool {
 	}
 
 	return px == len(pat)
+}
+
+func yaToolsConfResourceFiles(fs FS, confDir string) [][]string {
+	confDir = strings.TrimRight(confDir, "/")
+
+	confFile := confDir + "/" + yaConfJSONName
+
+	if !fs.isFile(srcRootRel, confFile) {
+		throwFmt("YA_TOOLS_CONF: file %s not found", confFile)
+	}
+
+	calls := [][]string{{"STRIP", confDir + "/", confFile}}
+	formulas := map[string]bool{}
+
+	addFormula := func(formula any) {
+		f, ok := formula.(string)
+
+		if ok && (strings.HasPrefix(f, "build/") || strings.HasPrefix(f, confDir+"/")) && fs.isFile(srcRootRel, f) {
+			formulas[f] = true
+		}
+	}
+
+	addBottles := func(conf map[string]any) {
+		bottles, _ := conf["bottles"].(map[string]any)
+
+		for _, bottle := range bottles {
+			if b, ok := bottle.(map[string]any); ok {
+				addFormula(b["formula"])
+			}
+		}
+	}
+
+	conf := readJSONObject(fs, confFile)
+	simpleTools, _ := conf["simple_tools"].(map[string]any)
+
+	for name, info := range simpleTools {
+		tool, _ := info.(map[string]any)
+
+		if resource, ok := tool["resource"].(string); ok {
+			name = resource
+		}
+
+		addFormula(fmt.Sprintf(yaToolsFormulaTmpl, name))
+	}
+
+	addBottles(conf)
+
+	var resourceFiles []string
+
+	if tiers := confDir + "/tools/internal/tiers.json"; fs.isFile(srcRootRel, tiers) {
+		resourceFiles = append(resourceFiles, tiers)
+	}
+
+	toolsDir := confDir + "/tools/tools/"
+
+	for _, rel := range ymakeGlob(fs, toolsDir+"**/*"+yaToolSuffix) {
+		resourceFiles = append(resourceFiles, rel)
+
+		tool, _ := readJSONObject(fs, rel)["tool"].(map[string]any)
+
+		if tool["type"] != "simple" {
+			continue
+		}
+
+		definition, _ := tool["definition"].(map[string]any)
+
+		if formula, ok := definition["formula"]; ok {
+			addFormula(formula)
+		} else {
+			addFormula(fmt.Sprintf(yaToolsFormulaTmpl, strings.TrimSuffix(strings.TrimPrefix(rel, toolsDir), yaToolSuffix)))
+		}
+	}
+
+	for _, rel := range ymakeGlob(fs, confDir+"/tools/toolchains/*"+yaToolchainSuffix) {
+		resourceFiles = append(resourceFiles, rel)
+		addBottles(readJSONObject(fs, rel))
+	}
+
+	if len(resourceFiles) > 0 {
+		sort.Strings(resourceFiles)
+		calls = append(calls, append([]string{"PREFIX", "yatools", "STRIP", confDir}, resourceFiles...))
+	}
+
+	for _, formula := range slices.Sorted(maps.Keys(formulas)) {
+		calls = append(calls, []string{formula})
+	}
+
+	return calls
+}
+
+func readJSONObject(fs FS, rel string) map[string]any {
+	var m map[string]any
+
+	throw(json.Unmarshal(concatChunks(fs.read(rel)), &m))
+
+	return m
 }

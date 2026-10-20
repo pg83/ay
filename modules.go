@@ -74,37 +74,11 @@ type CppProtoPlugin struct {
 	OutputSuffixes    []string
 	Deps              []string
 	ExtraOutFlag      string
-	Experimental      []string
-	Files             []string
 	OutputsBeforeBase bool
 }
 
 func (p CppProtoPlugin) isYaff() bool {
 	return p.ToolPath == yaffPluginPath
-}
-
-func (p CppProtoPlugin) isExperimental(protoBaseName string) bool {
-	for _, e := range p.Experimental {
-		if e == protoBaseName {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (p CppProtoPlugin) processesFile(protoBaseName string) bool {
-	if len(p.Files) == 0 {
-		return true
-	}
-
-	for _, f := range p.Files {
-		if f == protoBaseName {
-			return true
-		}
-	}
-
-	return false
 }
 
 func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
@@ -280,6 +254,7 @@ type ModuleData struct {
 	onlyTags                 bool
 	dynamicLibraryFrom       []ANY
 	exportsScript            *ANY
+	linkerScripts            []ANY
 	ldPlugins                []ANY
 	arPlugin                 *ANY
 	hasFbs                   bool
@@ -899,6 +874,24 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	return d
 }
 
+func applyResourceFiles(fs FS, modulePath string, args []string, line int, d *ModuleData) {
+	if isGoModuleType(d.unit.Type) {
+		applyGoResource(fs, modulePath, expandResourceFiles(d, nil, args), line, d)
+
+		return
+	}
+
+	d.resourcePeerDeferred = true
+
+	before := len(d.resources)
+
+	d.resources = expandResourceFiles(d, d.resources, args)
+
+	if len(d.resources) > before {
+		d.resources[len(d.resources)-1].EndsBatch = true
+	}
+}
+
 func ensureResourcePeer(modulePath string, d *ModuleData) {
 	const resourcePeer = "library/cpp/resource"
 
@@ -1490,23 +1483,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				})
 			}
 		case *ResourceFilesStmt:
-			if isGoModuleType(d.unit.Type) {
-				entries := expandResourceFiles(d, nil, expandResourceFileArgs(v.Args, env))
-
-				applyGoResource(fs, modulePath, entries, v.Line, d)
-
-				break
-			}
-
-			d.resourcePeerDeferred = true
-
-			before := len(d.resources)
-
-			d.resources = expandResourceFiles(d, d.resources, expandResourceFileArgs(v.Args, env))
-
-			if len(d.resources) > before {
-				d.resources[len(d.resources)-1].EndsBatch = true
-			}
+			applyResourceFiles(fs, modulePath, expandResourceFileArgs(v.Args, env), v.Line, d)
 		case *AllResourceFilesStmt:
 			if isGoModuleType(d.unit.Type) {
 				entries := expandAllResourceFiles(d, nil, fs, modulePath, env, v)
@@ -1754,6 +1731,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokDeclareInDirs:
 		applyDeclareInDirs(fs, modulePath, v, env)
+	case tokYaToolsConf:
+		if len(v.Args) != 1 {
+			throwFmt("%s: YA_TOOLS_CONF expects one directory, got %d arguments", modulePath, len(v.Args))
+		}
+
+		for _, args := range yaToolsConfResourceFiles(fs, expandStmtTokenAny(v.Args[0], env).string()) {
+			applyResourceFiles(fs, modulePath, args, v.Line, d)
+		}
 	case tokAddInclSelf:
 
 		self := source(modulePath)
@@ -2472,6 +2457,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.exportsScript = ptr(v.Args[0])
+	case tokLinkerScript:
+		if !isProgramModuleType(d.moduleStmt.Name) {
+			throwFmt("%s: LINKER_SCRIPT outside a PROGRAM is not modelled", modulePath)
+		}
+
+		for _, arg := range expandStmtTokens(v.Args, env) {
+			if !strings.HasSuffix(arg.string(), ".ld") {
+				throwFmt("%s: LINKER_SCRIPT %s: only .ld scripts are modelled", modulePath, arg.string())
+			}
+
+			d.linkerScripts = append(d.linkerScripts, arg)
+		}
 	case tokExtralibs:
 
 		libs := make([]string, 0, len(v.Args))
@@ -3296,8 +3293,6 @@ func parseYAFF(v UnknownStmt, defaultNamespace string) CppProtoPlugin {
 		ToolPath:       yaffPluginPath,
 		OutputSuffixes: []string{".yaff.h", ".yaff.cpp"},
 		ExtraOutFlag:   yaffExtraOutFlag("namespace="+s.namespace, s),
-		Experimental:   s.experimental,
-		Files:          s.files,
 	}
 }
 
@@ -3326,8 +3321,6 @@ func parseYAFFSchema(v UnknownStmt) CppProtoPlugin {
 		ToolPath:       yaffPluginPath,
 		OutputSuffixes: []string{"_" + schemaName + ".yaff.h", "_" + schemaName + ".yaff.cpp"},
 		ExtraOutFlag:   yaffExtraOutFlag(lead, s),
-		Experimental:   s.experimental,
-		Files:          s.files,
 	}
 }
 

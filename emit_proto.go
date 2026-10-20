@@ -14,19 +14,6 @@ var (
 	cppProtoSpec                   = &ProtoSpec{kv: &pbKV, modulePlugins: true}
 )
 
-var yaffBaseRuntimeDirectives = quotedDirectives([]VFS{
-	source(yaffRuntimeBase + "yaff.h"),
-	source(yaffRuntimeBase + "struct.h"),
-	source(yaffRuntimeBase + "protobuf.h"),
-	source(yaffRuntimeBase + "reflect.h"),
-})
-
-var yaffExperimentsRuntimeDirectives = quotedDirectives([]VFS{
-	source(yaffRuntimeBase + "experiments/serializer.h"),
-	source(yaffRuntimeBase + "experiments/column.h"),
-	source(yaffRuntimeBase + "experiments/merge.h"),
-})
-
 var protobufRuntimeHeaders = []VFS{
 	source(pbRuntimeBase, "google/protobuf/arena.h"),
 	source(pbRuntimeBase, "google/protobuf/arenastring.h"),
@@ -53,31 +40,9 @@ var pbDescriptorImporterHeaders = []VFS{
 }
 
 const (
-	yaffRuntimeBase    = "library/cpp/yaff/"
 	pbRuntimeBase      = "contrib/libs/protobuf/src/"
 	protoPathCacheSize = 64
 )
-
-func yaffGeneratedHeaderIncludes(na *NodeArenas, experimental bool, pbHRel string) []IncludeDirective {
-	n := len(yaffBaseRuntimeDirectives) + 1
-
-	if experimental {
-		n += len(yaffExperimentsRuntimeDirectives)
-	}
-
-	dirs := na.dirs.alloc(n)[:0]
-
-	dirs = append(dirs, yaffBaseRuntimeDirectives...)
-	dirs = append(dirs, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(pbHRel).any())})
-
-	if experimental {
-		dirs = append(dirs, yaffExperimentsRuntimeDirectives...)
-	}
-
-	na.dirs.commit(len(dirs))
-
-	return dirs[:len(dirs):len(dirs)]
-}
 
 func protoPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string, bucket ParsedIncludeBucket, dst []IncludeDirective) []IncludeDirective {
 	hcpp := pm.sourceParsedBuckets(source(srcRel), nil).bucket(bucket)
@@ -481,8 +446,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		OnUse:          pbPE,
 	})
 
-	protoBaseName := filepath.Base(protoRelPath)
-
 	for pluginIdx, plugin := range d.cppProtoPlugins {
 		if !plugin.isYaff() || len(plugin.OutputSuffixes) != 2 {
 			continue
@@ -496,33 +459,21 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 		yaffH := build(protoBase, plugin.OutputSuffixes[0])
 		yaffCC := build(protoBase, plugin.OutputSuffixes[1])
-
-		var yaffHParsed []IncludeDirective
-
-		if plugin.processesFile(protoBaseName) {
-			yaffHParsed = yaffGeneratedHeaderIncludes(na, plugin.isExperimental(protoBaseName), pbH.relString())
-		}
+		yaffParsed := ParsedIncludeSet{parsedIncludesLocal: na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(pbH.rel().any())})}
 
 		e.register(GeneratedFileInfo{
 			OutputPath:     yaffH,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pluginRefs,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffHParsed},
+			ParsedIncludes: yaffParsed,
 			OnUse:          pbPE,
 		})
-
-		yaffCCParsed := na.dirs.alloc(len(yaffHParsed) + 1)
-		yn := copy(yaffCCParsed, yaffHParsed)
-
-		yaffCCParsed[yn] = IncludeDirective{kind: includeQuoted, target: includeTarget(pbH.rel().any())}
-		na.dirs.commit(yn + 1)
-		yaffCCParsed = yaffCCParsed[: yn+1 : yn+1]
 
 		e.register(GeneratedFileInfo{
 			OutputPath:     yaffCC,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  pbGenRefs,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: yaffCCParsed},
+			ParsedIncludes: yaffParsed,
 			OnUse:          pbPE,
 		})
 	}

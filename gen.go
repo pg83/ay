@@ -2218,6 +2218,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name) {
 		binaryName := programBinaryName(instance, d.moduleStmt)
 		exportsScript := e.moduleInputArg(d.exportsScript)
+		linkerScripts := make([]VFS, len(d.linkerScripts))
+
+		for i, script := range d.linkerScripts {
+			linkerScripts[i] = e.moduleSourceVFS(script)
+		}
 
 		var dyn *DynLibLink
 
@@ -2315,6 +2320,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			peerObjAddLibsGlobal,
 			linkExcludeLibraries,
 			exportsScript,
+			linkerScripts,
 			d.flags.NoExportDynSymbols,
 			d.flags.NoCompilerWarnings,
 			d.noOptimize,
