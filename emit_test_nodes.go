@@ -29,10 +29,13 @@ const (
 	testClangFormatConfigRel  = "build/config/tests/cpp_style/.clang-format"
 	testClangFormatWrapperRel = "tools/cpp_style_checker/wrapper.py"
 	testAppendFileScriptRel   = "build/scripts/append_file.py"
-	testMandatoryEnvVars      = "ASAN_OPTIONS:ASAN_SYMBOLIZER_PATH:LSAN_OPTIONS:LSAN_SYMBOLIZER_PATH:MSAN_OPTIONS:MSAN_SYMBOLIZER_PATH:TSAN_SYMBOLIZER_PATH:UBSAN_OPTIONS:UBSAN_SYMBOLIZER_PATH:YA_MANDATORY_ENV_VARS"
+	testMandatoryEnvVars      = "ASAN_OPTIONS:ASAN_SYMBOLIZER_PATH:LSAN_OPTIONS:LSAN_SYMBOLIZER_PATH:MSAN_OPTIONS:MSAN_SYMBOLIZER_PATH:TSAN_OPTIONS:TSAN_SYMBOLIZER_PATH:UBSAN_OPTIONS:UBSAN_SYMBOLIZER_PATH:YA_MANDATORY_ENV_VARS"
 )
 
 type TestSuiteInfo struct {
+	Options TestRunOptions
+	Retry   int
+
 	Commands     string
 	TestFiles    []string
 	Type         string
@@ -62,7 +65,9 @@ type TestSuiteInfo struct {
 
 func (ctx *GenCtx) emitTestRunNodes(info TestSuiteInfo, ldRef NodeRef, resourceGlobals []ResourceDecl) []NodeRef {
 	emit, p := ctx.emit, ctx.target
-	deps := []NodeRef{ldRef}
+	deps := depRefs(ldRef)
+
+	info.Options = ctx.testOptions
 
 	for _, dep := range info.Depends {
 		res := genModule(ctx, ctx.rootInstance(dep, demandLinked))
@@ -75,6 +80,14 @@ func (ctx *GenCtx) emitTestRunNodes(info TestSuiteInfo, ldRef NodeRef, resourceG
 			deps = append(deps, res.ARRef)
 		}
 	}
+
+	for _, data := range info.Data {
+		if strings.HasPrefix(data, "sbr://") {
+			deps = append(deps, ctx.emitTestData(data))
+		}
+	}
+
+	deps = dedupRefs(deps)
 
 	ctxRef := ctx.testContext()
 	count := info.SplitFactor
@@ -92,36 +105,63 @@ func (ctx *GenCtx) emitTestRunNodes(info TestSuiteInfo, ldRef NodeRef, resourceG
 	}
 
 	info.SplitFactor = count
-	var nodes []*Node
-	var refs []NodeRef
+	var runNodes []*Node
+	var runRefs []NodeRef
 
-	files := []string{""}
+	retries := max(info.Options.Retries, 1)
 
-	if info.ForkFiles && len(info.TestFiles) > 0 {
-		files = slices.Clone(info.TestFiles)
-		slices.Sort(files)
-		files = slices.Compact(files)
+	if slices.Contains(info.Tags, "ya:noretries") {
+		retries = 1
 	}
 
-	for _, file := range files {
-		for i := 0; i < count; i++ {
-			chunk := info
+	for retry := 0; retry < retries; retry++ {
+		runInfo := info
 
-			chunk.SplitIndex = i
-			chunk.SplitFile = file
-
-			n := buildUnittestNode(emit.nodeArenas(), p, chunk, resourceGlobals)
-
-			n.DepRefs = append(deps, ctxRef)
-			refs = append(refs, emit.emit(n))
-			nodes = append(nodes, n)
+		if retries > 1 {
+			runInfo.Retry = retry + 1
 		}
+
+		var nodes []*Node
+		var refs []NodeRef
+
+		files := []string{""}
+
+		if info.ForkFiles && len(info.TestFiles) > 0 {
+			files = slices.Clone(info.TestFiles)
+			slices.Sort(files)
+			files = slices.Compact(files)
+		}
+
+		for _, file := range files {
+			for i := 0; i < count; i++ {
+				chunk := runInfo
+
+				chunk.SplitIndex = i
+				chunk.SplitFile = file
+
+				n := buildUnittestNode(emit.nodeArenas(), p, chunk, resourceGlobals)
+
+				n.DepRefs = append(slices.Clone(deps), ctxRef)
+				refs = append(refs, emit.emit(n))
+				nodes = append(nodes, n)
+			}
+		}
+
+		node, ref := nodes[0], refs[0]
+
+		if count > 1 || info.ForkFiles {
+			node = buildTestAccumulator(emit.nodeArenas(), p, runInfo, nodes, refs)
+			ref = emit.emit(node)
+		}
+
+		runNodes = append(runNodes, node)
+		runRefs = append(runRefs, ref)
 	}
 
-	unittestRef := refs[0]
+	unittestRef := runRefs[0]
 
-	if count > 1 || info.ForkFiles {
-		unittestRef = emit.emit(buildTestAccumulator(emit.nodeArenas(), p, info, nodes, refs))
+	if retries > 1 {
+		unittestRef = emit.emit(buildTestMerger(emit.nodeArenas(), p, info, runNodes, runRefs))
 	}
 
 	if isPythonSuite(info) {
@@ -171,15 +211,23 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 
 	cmdArgs = append(cmdArgs,
 
-		argTargetPlatformDescriptor.any(), internStr(targetPlatformDescriptor(p)).any(),
+		argTargetPlatformDescriptor.any(), internStr(info.Options.descriptor(p)).any(),
 		argRemoveTos.any(),
 		argGdbPath.any(), internStr(testGDBPath).any(),
-		argResultMaxFileSize.any(), arg0.any(),
+	)
+
+	cmdArgs = append(cmdArgs, testLoggingArgs(info.Options)...)
+
+	cmdArgs = append(cmdArgs,
 		argVerifyResults.any(),
 		argTestsLimitInChunk.any(), arg100000.any(),
 		argOutputStyle.any(), argNinja.any(),
 		argPythonBin.any(), internStr(testPythonBin).any(),
 	)
+
+	if info.Retry > 0 {
+		cmdArgs = append(cmdArgs, strRetry.any(), internStr(strconv.Itoa(info.Retry)).any())
+	}
 
 	if info.Cwd != "" {
 		cmdArgs = append(cmdArgs, strTestRunCwd.any(), source(info.Cwd).any())
@@ -193,12 +241,16 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 		cmdArgs = append(cmdArgs, strEnv.any(), internStr(env).any())
 	}
 
-	if info.Type == "unittest" || info.Type == "gtest" || isPythonSuite(info) {
-		cmdArgs = append(cmdArgs, argSupportsTestParameters.any())
+	if isPythonSuite(info) {
+		cmdArgs = append(cmdArgs, strSetupPythonpathEnv.any())
 	}
 
 	if info.Type == "g_benchmark" || isPythonSuite(info) {
 		cmdArgs = append(cmdArgs, strSupportsCanonization.any())
+	}
+
+	if info.Type == "unittest" || info.Type == "gtest" || isPythonSuite(info) {
+		cmdArgs = append(cmdArgs, argSupportsTestParameters.any())
 	}
 
 	cmdArgs = append(cmdArgs, argSmoothShutdownSignals.any(), argSigusr2.any())
@@ -217,10 +269,20 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 		cmdArgs = append(cmdArgs, argGlobalResource.any(), r.Token.any())
 	}
 
+	if info.Options.Dist {
+		cmdArgs = append(cmdArgs, strNodeTimeout.any(), internStr(strconv.Itoa(info.Timeout+300)).any())
+	}
+
 	if len(info.Recipes) > 0 {
-		recipes := strings.Join(info.Recipes, " \n") + " \n"
+		recipes := strings.Join(info.Recipes, " \n ") + " \n"
 
 		cmdArgs = append(cmdArgs, strRecipes.any(), internStr(base64.StdEncoding.EncodeToString([]byte(recipes))).any())
+	}
+
+	for _, data := range info.Data {
+		if strings.HasPrefix(data, "sbr://") {
+			cmdArgs = append(cmdArgs, strSandboxResource.any(), internStr(strings.TrimPrefix(data, "sbr://")).any())
+		}
 	}
 
 	cmdArgs = append(cmdArgs, argRamLimitGb.any(), internStr(strconv.FormatFloat(info.Requirements.RAM, 'f', -1, 64)).any(), argTar.any(), build(path.Join(resultsDir, "testing_out_stuff.tar.zstd")).any())
@@ -234,13 +296,13 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 		Env:    suiteTestEnv(p, info),
 		Inputs: na.inputList(inputs),
 		KV: &KV{
-			P:                pkTS,
+			P:                testNodeKind(info.Size),
 			Path:             path.Join(info.ProjectPath, info.Name),
 			PC:               pcYellow,
 			RunTestNode:      true,
 			ShowOutBool:      true,
 			HasSpecialRunner: true,
-			DisableCache:     true,
+			DisableCache:     !info.Options.Cache,
 		},
 		Outputs:      testOutputsAt(resultsDir),
 		Requirements: &info.Requirements,
@@ -279,10 +341,14 @@ func buildStyleNode(na *NodeArenas, p *Platform, info TestSuiteInfo, check Style
 	cmdArgs = append(cmdArgs,
 		argTestRelatedPath.any(), (source(check.Config)).any(),
 		argTestRelatedPath.any(), (source(check.Wrapper)).any(),
-		argTargetPlatformDescriptor.any(), internStr(targetPlatformDescriptor(p)).any(),
+		argTargetPlatformDescriptor.any(), internStr(info.Options.descriptor(p)).any(),
 		argRemoveTos.any(),
 		argGdbPath.any(), internStr(testGDBPath).any(),
-		argResultMaxFileSize.any(), arg0.any(),
+	)
+
+	cmdArgs = append(cmdArgs, testLoggingArgs(info.Options)...)
+
+	cmdArgs = append(cmdArgs,
 		argVerifyResults.any(),
 		argTestsLimitInChunk.any(), arg100000.any(),
 		argOutputStyle.any(), argNinja.any(),
@@ -291,6 +357,13 @@ func buildStyleNode(na *NodeArenas, p *Platform, info TestSuiteInfo, check Style
 		argCompressionFilter.any(), argZstd.any(),
 		argCompressionLevel.any(), arg1.any(),
 		argGlobalResource.any(), internStr(resource).any(),
+	)
+
+	if info.Options.Dist {
+		cmdArgs = append(cmdArgs, strNodeTimeout.any(), str360.any())
+	}
+
+	cmdArgs = append(cmdArgs,
 		argRamLimitGb.any(), arg8.any(),
 		argTar.any(), (build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))).any(),
 		internStr(testToolHostPath).any(),
@@ -327,7 +400,7 @@ func buildStyleNode(na *NodeArenas, p *Platform, info TestSuiteInfo, check Style
 		Platform: p,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: cwdVFS(testBuildRoot)}),
-		Env:    testEnv(p, check.Name),
+		Env:    suiteTestEnv(p, TestSuiteInfo{Name: check.Name, Options: info.Options}),
 		Inputs: na.inputList(inputs),
 		KV: &KV{
 			P:                pkTS,
@@ -356,6 +429,7 @@ func testEnv(_ *Platform, testName string) EnvVars {
 		{Name: envMSAN_SYMBOLIZER_PATH, Value: strTestClangSymbolizer.any()},
 		{Name: envTESTING_SAVE_OUTPUT, Value: strYes.any()},
 		{Name: envTEST_NAME, Value: internStr(testName).any()},
+		{Name: envTsanOptions, Value: strTestAsanOpt.any()},
 		{Name: envTSAN_SYMBOLIZER_PATH, Value: strTestClangSymbolizer.any()},
 		{Name: envUBSAN_OPTIONS, Value: strTestUbsanOpt.any()},
 		{Name: envUBSAN_SYMBOLIZER_PATH, Value: strTestClangSymbolizer.any()},
@@ -455,7 +529,7 @@ func testOutputsAt(resultsDir string) []VFS {
 }
 
 func suiteTestEnv(p *Platform, info TestSuiteInfo) EnvVars {
-	vars := testEnv(p, info.Name)
+	vars := testEnvironment(p, info)
 
 	if isPythonSuite(info) {
 		vars = append(vars, EnvVar{Name: envPythondontwritebytecode, Value: strOne.any()})

@@ -143,6 +143,7 @@ var (
 	envTsProto                      = internEnv("TS_PROTO")
 	envTsProtoPrepareDeps           = internEnv("TS_PROTO_PREPARE_DEPS")
 	envTsUsePrebuiltNotsTool        = internEnv("TS_USE_PREBUILT_NOTS_TOOL")
+	envTsanOptions                  = internEnv("TSAN_OPTIONS")
 	envUBSAN_OPTIONS                = internEnv("UBSAN_OPTIONS")
 	envUBSAN_SYMBOLIZER_PATH        = internEnv("UBSAN_SYMBOLIZER_PATH")
 	envUSE_ARCADIA_COMPILER_RUNTIME = internEnv("USE_ARCADIA_COMPILER_RUNTIME")

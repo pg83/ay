@@ -106,7 +106,7 @@ func (ctx *GenCtx) emitModuleTests(dir string, result *ModuleEmitResult) {
 		return
 	}
 
-	if result.testSuiteInfo != nil {
+	if result.testSuiteInfo != nil && (len(ctx.testOptions.Sizes) == 0 || slices.Contains(ctx.testOptions.Sizes, result.testSuiteInfo.Size)) {
 		for _, ref := range ctx.emitTestRunNodes(*result.testSuiteInfo, result.LDRef, result.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
 		}
@@ -126,11 +126,12 @@ func (ctx *GenCtx) emitModuleTests(dir string, result *ModuleEmitResult) {
 		for _, r := range sortedResourceGlobals(result.ResourceGlobalClosure) {
 			if r.GlobalVar.string() == check.Resource {
 				resource = r.Token.string()
+
 				break
 			}
 		}
 
-		node := buildStyleNode(ctx.na, ctx.target, TestSuiteInfo{ProjectPath: dir}, check, resource)
+		node := buildStyleNode(ctx.na, ctx.target, TestSuiteInfo{ProjectPath: dir, Options: ctx.testOptions}, check, resource)
 
 		node.DepRefs = []NodeRef{ctx.emit.emit(buildTestCtxNode(ctx.na, ctx.target))}
 		ctx.emit.result(ctx.emit.emit(node))

@@ -42,6 +42,25 @@ class TestCodegenModules(unittest.TestCase):
             self.assertNotIn("$(S)/a/a.yaml", node["inputs"])
             self.assertNotIn("$(S)/a/canondata/result.json", node["inputs"])
 
+    def test_generated_library_can_be_both_peer_and_recursed_root(self):
+        files = {
+            "a/ya.make": "LIBRARY()\n" + BARE + "SRCS(a.cpp)\nPEERDIR(gen)\nEND()\nRECURSE_FOR_TESTS(ut)\n",
+            "a/a.cpp": '#include "gen/generated.h"\n',
+            "a/ut/ya.make": "UNITTEST()\n" + BARE + "SRCS(test.cpp)\nPEERDIR(a)\nEND()\n",
+            "a/ut/test.cpp": "",
+            "library/cpp/testing/unittest_main/ya.make": "LIBRARY()\n" + BARE + "END()\n",
+            "gen/ya.make": "GEN_LIBRARY()\nRUN_PROGRAM(tools/gen OUT_NOAUTO generated.h)\nEND()\n",
+        }
+        lib.tool_program(files, "tools/gen", "gen")
+        graph = lib.make(files, "a", "-t")
+        self.assertEqual(sum("$(B)/gen/generated.h" in n["outputs"] for n in graph["graph"]), 1)
+        self.assertIsNotNone(lib.node_by_output(graph, "$(B)/a/ut/test-results/unittest/meta.json"))
+
+    def test_no_build_if_discards_test_module(self):
+        files = {"a/ya.make": "EXECTEST()\nNO_BUILD_IF(STRICT SANDBOXING)\nRUN(no-such-program)\nDEPENDS(no/such/module)\nEND()\n"}
+        graph = lib.make(files, "a", "-t")
+        self.assertFalse(any("/a/" in o for n in graph["graph"] for o in n["outputs"]))
+
     def test_gen_library_keeps_producers_without_link_archive(self):
         files = {
             "gen/ya.make": "GEN_LIBRARY()\nRUN_PROGRAM(tools/gen OUT_NOAUTO generated.h)\nEND()\n",

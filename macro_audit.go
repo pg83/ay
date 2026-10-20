@@ -30,6 +30,7 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokSetAppend:     {},
 	tokSetListPreSuf: {},
 	tokGoSkipTests: {},
+	tokNoBuildIf:     {}, tokBuildOnlyIf: {},
 }
 
 var serviceArgOK BitSet

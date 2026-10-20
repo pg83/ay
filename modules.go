@@ -144,6 +144,8 @@ type TestMeta struct {
 }
 
 type ModuleData struct {
+	discarded bool
+
 	styleChecks []StyleCheck
 
 	usrvFiles []UsrvFile
@@ -1023,6 +1025,10 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 
 func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn)) {
 	for _, s := range stmts {
+		if d.discarded {
+			return
+		}
+
 		switch v := s.(type) {
 		case *ModuleStmt:
 			if d.moduleStmt != nil {
@@ -2315,6 +2321,28 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		)
 
 		d.usePython3 = true
+	case tokNoBuildIf, tokBuildOnlyIf:
+		strict, args := true, v.Args
+
+		if len(args) > 0 {
+			switch args[0].string() {
+			case "WARNING":
+				strict = false
+				args = args[1:]
+			case "STRICT", "FATAL_ERROR":
+				args = args[1:]
+			}
+		}
+
+		enabled := false
+
+		for _, arg := range args {
+			enabled = enabled || env.bool(internEnv(arg.string()))
+		}
+
+		if strict && enabled == (v.Name == tokNoBuildIf) {
+			d.discarded = true
+		}
 	case tokStyleJSON, tokStyleYAML:
 		d.collectStyleCheck(fs, modulePath, v, env)
 	case tokUsrvBuild:

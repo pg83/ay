@@ -49,7 +49,7 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 
 	switch v.Name {
 	case tokRun:
-		t.Commands += "\n" + strings.Join(args, " ")
+		t.Commands += "\n" + testCommandLine(args)
 	case tokSize:
 		t.Size = strings.ToLower(value)
 	case tokTimeout:
@@ -70,7 +70,7 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 		}
 	case tokDataFiles:
 		for _, a := range args {
-			t.Data = append(t.Data, "arcadia/"+a)
+			t.Data = append(t.Data, "arcadia/"+strings.TrimPrefix(strings.TrimPrefix(a, "$(S)/"), "${ARCADIA_ROOT}/"))
 		}
 	case tokDepends:
 		t.Depends = append(t.Depends, args...)
@@ -127,7 +127,13 @@ func testInnerCommand(info TestSuiteInfo, resultsDir string, p *Platform) []ANY 
 			command = []string{"--test-param", "commands=" + base64.StdEncoding.EncodeToString([]byte(info.Commands)), testToolHostPath, "run_exectest"}
 		}
 
-		command = append(command, "--basetemp", "$(B)/tmp", "--capture", "no", "-c", "pkg:library.python.pytest:pytest.yatest.ini", "-p", "no:factor", "--doctest-modules", "--ya-trace", trace, "--build-root", testBuildRoot, "--source-root", testSourceRoot, "--output-dir", out, "--durations", "0", "--project-path", info.ProjectPath, "--test-tool-bin", testToolHostPath, "--ya-version", "2", "--collect-cores", "--build-type", p.BuildType)
+		command = append(command, "--basetemp", "$(B)/tmp", "--capture", "no", "-c", "pkg:library.python.pytest:pytest.yatest.ini", "-p", "no:factor", "--doctest-modules", "--ya-trace", trace, "--build-root", testBuildRoot, "--source-root", testSourceRoot, "--output-dir", out, "--durations", "0", "--project-path", info.ProjectPath, "--test-tool-bin", testToolHostPath, "--ya-version", "2")
+
+		if !info.Options.Dist {
+			command = append(command, "--collect-cores")
+		}
+
+		command = append(command, "--build-type", p.BuildType)
 
 		if info.SplitFactor > 1 {
 			command = append(command, "--modulo", strconv.Itoa(info.SplitFactor), "--modulo-index", strconv.Itoa(info.SplitIndex), "--partition-mode", testPartition(info))
@@ -152,6 +158,10 @@ func testInnerCommand(info TestSuiteInfo, resultsDir string, p *Platform) []ANY 
 	case "g_benchmark":
 		args = append(args, "run_g_benchmark", "--binary", info.BinaryPath, "--tracefile", trace, "--output-dir", out, "--project-path", info.ProjectPath, "--verbose", "--gdb-path", testGDBPath)
 
+		if info.Options.Dist {
+			args = append(args, "--truncate-logs")
+		}
+
 		for _, a := range info.BinaryArgs {
 			args = append(args, "--test-binary-args="+a)
 		}
@@ -169,6 +179,10 @@ func testInnerCommand(info TestSuiteInfo, resultsDir string, p *Platform) []ANY 
 		}
 
 		args = append(args, "run_ut", "--binary", info.BinaryPath, "--trace-path", trace, "--output-dir", out, "--modulo", strconv.Itoa(max(info.SplitFactor, 1)), "--modulo-index", strconv.Itoa(info.SplitIndex), "--partition-mode", partition, "--project-path", info.ProjectPath, "--list-timeout", strconv.Itoa(info.Timeout/2), "--verbose", "--gdb-path", testGDBPath)
+
+		if info.Options.Dist {
+			args = append(args, "--truncate-logs")
+		}
 
 		if info.ForkMode == "subtests" {
 			args = append(args, "--split-by-tests")

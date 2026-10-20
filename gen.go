@@ -1018,6 +1018,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d := collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
 	e := newEmitContextIn(frame, ctx, instance, d, nil)
 
+	if d.discarded {
+		result := &ModuleEmitResult{}
+
+		ctx.memoPut(instance, result)
+
+		return result
+	}
+
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary {
 		cpp := instance
 

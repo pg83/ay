@@ -244,6 +244,37 @@ class TestNodesTest(unittest.TestCase):
                 self.assertEqual(args[args.index("--test-type") + 1], "py3test" if macro == "PY3TEST" else "pytest")
                 self.assertEqual(run["env"]["PYTHONDONTWRITEBYTECODE"], "1")
 
+    def test_generated_python_test_sources_retain_producer_dependencies(self):
+        for macro in ("PY3TEST",):
+            with self.subTest(macro=macro):
+                files = {
+                    "a/ut/ya.make": f"{macro}()\n{NO_PLATFORM}"
+                    "NO_CHECK_IMPORTS()\nNO_IMPORT_TRACING()\nNO_PYTHON_INCLUDES()\n"
+                    "DISABLE(PYTHON_SQLITE3)\nALLOCATOR(FAKE)\n"
+                    "COPY_FILE(input.py test_sample.py)\nTEST_SRCS(test_sample.py)\nEND()\n",
+                    "a/ut/input.py": "def test_example(): pass\n",
+                }
+                for peer in ["library/python/pytest", "library/python/runtime_py3/main", "library/python/runtime/main", "contrib/deprecated/python/subprocess32", "library/cpp/resource"]:
+                    files[f"{peer}/ya.make"] = library()
+                for tool in ["tools/archiver", "tools/py3cc", "tools/py3cc/slow", "tools/rescompiler", "tools/rescompressor", "tools/py2cc"]:
+                    lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
+                graph = lib.make(files, "a/ut", "-t")
+                binary = lib.node_by_output(graph, "$(B)/a/ut/a-ut")
+                all_args = [arg for n in graph["graph"] for cmd in n["cmds"] for arg in cmd["cmd_args"]]
+                self.assertIn("__tests__/test_sample.py" if macro == "PY3TEST" else "/py_modules/__tests__.test_sample", " ".join(all_args))
+                self.assertIn("PY_MAIN=library.python.pytest.main:main", " ".join(all_args))
+                suite = "py3test" if macro == "PY3TEST" else "pytest"
+                run = lib.node_by_output(graph, f"$(B)/a/ut/test-results/{suite}/meta.json")
+                self.assertIn(binary["uid"], run["deps"])
+                args = run["cmds"][0]["cmd_args"]
+                self.assertIn("--doctest-modules", args)
+                self.assertEqual(args[args.index("--test-type") + 1], "py3test" if macro == "PY3TEST" else "pytest")
+                self.assertEqual(run["env"]["PYTHONDONTWRITEBYTECODE"], "1")
+
+                generated = lib.node_by_output(graph, "$(B)/a/ut/test_sample.py")
+                bytecode = lib.node_by_output(graph, "$(B)/a/ut/test_sample.py.yapyc3")
+                self.assertIn(generated["uid"], bytecode["deps"])
+
     def test_split_cpp_suite_accumulates_all_chunks(self):
         files = fixture()
         files["lib/ut/ya.make"] = files["lib/ut/ya.make"].replace("END()", "FORK_SUBTESTS(MODULO)\nSPLIT_FACTOR(3)\nEND()")

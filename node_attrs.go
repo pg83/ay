@@ -15,6 +15,7 @@ var (
 
 var procKindStr = [...]string{
 	pkIL:      "IL",
+	pkTR: "TR", pkTM: "TM", pkTL: "TL", pkDL: "DL",
 	pkTA:      "TA",
 	pkTSProto: "TS_PRO",
 	pkNone:    "", pkAS: "AS", pkAR: "AR", pkBI: "BI", pkBC: "BC", pkCC: "CC",
@@ -115,6 +116,8 @@ const (
 	pkRJ
 	pkTM
 	pkTA
+	pkDL
+	pkTR
 	pkTL
 	pkIL
 )

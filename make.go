@@ -31,6 +31,8 @@ const (
 )
 
 type MakeFlags struct {
+	testOptions TestRunOptions
+
 	addModulesToResults bool
 	srcRoot             string
 	bldRoot             string
@@ -432,9 +434,11 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.dist = true
 		case opt.Name == "cache-tests":
 			mf.cacheTests = true
+		case opt.Name == "tests-retries":
+			mf.testOptions.Retries = throw2(strconv.Atoi(opt.OptArg))
 		case opt.Char == 'x', opt.Name == "ignore-nodes-exit-code",
 			opt.Name == "warning-mode", opt.Name == "output-only-tests",
-			opt.Name == "cache-namespace", opt.Name == "report-skipped-suites", opt.Name == "tests-retries",
+			opt.Name == "cache-namespace", opt.Name == "report-skipped-suites",
 			opt.Name == "backup-test-results", opt.Name == "do-not-output-stderrs",
 			opt.Name == "no-src-links", opt.Name == "add-changed-ok-configures", opt.Name == "no-yt-store":
 		case opt.Name == "verbose":
@@ -571,7 +575,7 @@ ya compatibility flags:
   --output-only-tests           Accepted, not modeled.
   --cache-namespace <name>      Accepted, not modeled.
   --report-skipped-suites       Accepted, not modeled.
-  --tests-retries <n>           Accepted, not modeled.
+  --tests-retries <n>           Schedule n test runs and merge their results.
   --backup-test-results         Accepted, not modeled.
   --add-modules-to-results      Accepted, not modeled.
   --do-not-output-stderrs       Accepted, not modeled.

@@ -369,7 +369,7 @@ func (e *EmitContext) emit() {
 
 		finalized = true
 
-		if !isProgramModuleType(d.moduleStmt.Name) {
+		if !isProgramModuleType(d.moduleStmt.Name) || pyModuleTypeUsesPython3(d.moduleStmt.Name) {
 			e.emitPyBytecode(true)
 
 			genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()
@@ -383,8 +383,6 @@ func (e *EmitContext) emit() {
 					e.protoRes = pyRes
 				}
 			}
-		} else if pyModuleTypeUsesPython3(d.moduleStmt.Name) {
-			e.emitPyBytecode(false)
 		}
 
 		if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 || d.moduleStmt.Name == tokPy2Test {
