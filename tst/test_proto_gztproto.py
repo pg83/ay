@@ -72,10 +72,8 @@ class ProtoGztprotoTest(unittest.TestCase):
             "$(S)/g/a.gztproto", "$(B)/g/a.proto",
         ])
         self.assertNotIn("cwd", converter["cmds"][0])
-        self.assertEqual(converter["inputs"][:3], [
-            CONVERTER, "$(S)/kernel/gazetteer/proto/base.proto", "$(S)/g/a.gztproto",
-        ])
-        self.assertEqual(set(converter["inputs"][3:]), {
+        self.assertEqual(converter["inputs"][:2], [CONVERTER, "$(S)/g/a.gztproto"])
+        self.assertEqual(set(converter["inputs"][2:]), {
             "$(S)/kernel/gazetteer/proto/base.proto", "$(S)/g/b.gztproto",
         })
         self.assertNotIn("$(S)/kernel/gazetteer/rt.h", converter["inputs"])
@@ -125,9 +123,11 @@ class ProtoGztprotoTest(unittest.TestCase):
         graph = lib.make(files, "g")
 
         converter = lib.node_by_output(graph, "$(B)/g/a.proto")
+        # The converter's induced protos reach the generated .proto, not the
+        # GZ node: in basesearch/middlesearch kernel/gazetteer/proto/base.proto
+        # is a GZ input only for synset.gztproto, which imports it.
         self.assertEqual(converter["inputs"], [
-            CONVERTER, "$(S)/kernel/gazetteer/proto/syn.proto",
-            "$(S)/g/a.gztproto", "$(S)/kernel/gazetteer/proto/base.proto",
+            CONVERTER, "$(S)/g/a.gztproto", "$(S)/kernel/gazetteer/proto/base.proto",
         ])
         compile_node = lib.node_by_output(graph, "$(B)/g/a.pb.cc.o")
         self.assertIn("$(B)/kernel/gazetteer/proto/syn.pb.h", compile_node["inputs"])
