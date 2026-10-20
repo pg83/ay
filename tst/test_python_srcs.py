@@ -349,10 +349,11 @@ class PySrcsTest(unittest.TestCase):
             "resfs/src/resfs/file/py/lib/nowhere.py.yapyc3=lib/nowhere.py.yapyc3",
         ])
         for expected in (
-            "$(S)/lib/orig.py", "$(B)/lib/gen_out.py", "$(B)/lib/copied.py",
+            "$(B)/lib/gen_out.py", "$(B)/lib/copied.py",
             "$(S)/other/sub/in_other.py", "$(S)/top/rootfile.py", "$(S)/lib/nowhere.py",
         ):
             self.assertIn(expected, resources["inputs"])
+        self.assertNotIn("$(S)/lib/orig.py", resources["inputs"])
         objcopy_with_kv(
             graph, "lib", "resfs/src/resfs/file/py/only/generated/gen_out.py=lib/gen_out.py")
 

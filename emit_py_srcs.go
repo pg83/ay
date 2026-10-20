@@ -295,21 +295,8 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 		pySource = build(module, "/", srcRel)
 	}
 
-	srcEdge := pySource
-	copyStaged := genInfo != nil && genInfo.SourcePath != 0 && genInfo.SourcePath.isSource()
-
-	if copyStaged {
-		srcEdge = genInfo.SourcePath
-	}
-
 	if !d.pyBuildNoPY {
-		var pyExtra []VFS
-
-		if copyStaged {
-			pyExtra = e.resVFS1(srcEdge)
-		}
-
-		out = append(out, PyGenResEntry{token: srcRel, key: ps.Module, path: pySource, sourceInputs: pyExtra})
+		out = append(out, PyGenResEntry{token: srcRel, key: ps.Module, path: pySource})
 	}
 
 	if !d.pyBuildNoPYC {

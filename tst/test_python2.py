@@ -183,6 +183,19 @@ class Python2Test(unittest.TestCase):
         self.assertIn("-DUSE_PYTHON2", compile_args)
         self.assertNotIn("-DUSE_PYTHON3", compile_args)
 
+    def test_py2_resource_of_a_copied_source_takes_the_copy_only(self):
+        files = python2_base()
+        files.update({
+            "lib/ya.make": "PY2_LIBRARY()\nCOPY_FILE(orig.py copied.py)\nPY_SRCS(TOP_LEVEL copied.py)\nEND()\n",
+            "lib/orig.py": "",
+            "prog/ya.make": f"PROGRAM()\n{NO_PLATFORM}SRCS(m.cpp)\nPEERDIR(lib)\nEND()\n",
+            "prog/m.cpp": "int main(){return 0;}\n",
+        })
+        graph = lib.make(files, "prog")
+        res = objcopy_with_kv(graph, "lib", "resfs/src//py_modules/copied=lib/copied.py")
+        self.assertEqual(section(res, "--inputs"), ["$(B)/lib/copied.py", "$(B)/lib/copied.py.yapyc"])
+        self.assertNotIn("$(S)/lib/orig.py", res["inputs"])
+
     def test_py_srcs_scope_directives_apply_to_the_following_sources(self):
         files = python2_base()
         files.update({
