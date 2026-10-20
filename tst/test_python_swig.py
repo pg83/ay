@@ -66,6 +66,24 @@ class SwigTest(unittest.TestCase):
         producers = [n for n in graph["graph"] if "$(B)/lib/wrap.swg.c" in n["outputs"]]
         self.assertEqual(len(producers), 1)
 
+    def test_generic_runner_resolves_native_swig_include_paths(self):
+        files = python_base()
+        lib.tool_program(files, "tools/gen", "gen")
+        files.update({
+            "lib/ya.make": (
+                f"LIBRARY()\n{lib.BARE_MODULE}"
+                f"ADDINCL(FOR swig {SWIG_LIB}/python FOR swig {SWIG_LIB} FOR swig custom)\n"
+                "RUN_PROGRAM(tools/gen IN wrap.swg OUT gen.cpp)\nEND()\n"
+            ),
+            "lib/wrap.swg": '%include <custom.i>\n',
+            "custom/custom.i": '%include "nested.i"\n',
+            "custom/nested.i": "",
+        })
+        graph = lib.make(files, "lib")
+        generated = lib.node_by_output(graph, "$(B)/lib/gen.cpp")
+        for header in ("custom/custom.i", "custom/nested.i"):
+            self.assertIn(f"$(S)/{header}", generated["inputs"])
+
     def test_swig_c_sources_generate_wrapper_and_python_module(self):
         files = python_base()
         files.update({
