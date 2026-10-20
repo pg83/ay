@@ -1131,6 +1131,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			setupRosModule(v, modulePath, language, env, d)
 			setupMlaunchModule(v, modulePath, language, env, d)
+			setupSdcDiagsModule(v, language, env, d)
 
 			if v.Name == tokProtoLibrary && !v.Schema {
 				d.moduleVariants = defaultProtoVariants
@@ -1431,37 +1432,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			d.antlrRuns = append(d.antlrRuns, expanded)
 		case *RunProgramStmt:
-			expanded := *v
-
-			expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
-			expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env)
-			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
-			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
-			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
-			expanded.ToolPaths = expandStmtTokens(v.ToolPaths, env)
-
-			if v.StdoutFile != nil {
-				stdout := expandStmtTokenAny((*v.StdoutFile), env)
-
-				expanded.StdoutFile = &stdout
-			}
-
-			bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
-
-			expanded.Args = expandCommandTokens(v.Args, env)
-			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
-
-			if v.CWD != nil {
-				cwd := expandStmtTokenAny(*v.CWD, env)
-
-				expanded.CWD = &cwd
-			}
-
-			env.rebind(envBINDIR, bindir)
-			env.rebind(envCURDIR, curdir)
-
-			expanded.DeclSeq = d.nextDeclSeq()
-			d.runPrograms = append(d.runPrograms, &expanded)
+			appendRunProgram(v, env, d)
 		case *SplitCodegenStmt:
 			expanded := *v
 
@@ -1664,6 +1635,8 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return rosModuleUnit(language)
 	case tokMlaunchLibrary, tokMlaunchComponent, tokMlaunchPipeline, tokGolaunchProgram, tokGolaunchComposite:
 		return mlaunchModuleUnit(name, language)
+	case tokSdcDiagsLibrary:
+		return sdcDiagsModuleUnit(language)
 	case tokDllJava:
 		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp, SwigLang: strSwigLangJniCpp}
 	case tokGoLibrary, tokGoProgram, tokGoTest, tokGoDll:
@@ -1749,6 +1722,40 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 	addGeneratedHeaderInclude(modulePath, dst, d)
 }
 
+func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
+	expanded := *v
+
+	expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
+	expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env)
+	expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
+	expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
+	expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
+	expanded.ToolPaths = expandStmtTokens(v.ToolPaths, env)
+
+	if v.StdoutFile != nil {
+		stdout := expandStmtTokenAny((*v.StdoutFile), env)
+
+		expanded.StdoutFile = &stdout
+	}
+
+	bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
+
+	expanded.Args = expandCommandTokens(v.Args, env)
+	expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
+
+	if v.CWD != nil {
+		cwd := expandStmtTokenAny(*v.CWD, env)
+
+		expanded.CWD = &cwd
+	}
+
+	env.rebind(envBINDIR, bindir)
+	env.rebind(envCURDIR, curdir)
+
+	expanded.DeclSeq = d.nextDeclSeq()
+	d.runPrograms = append(d.runPrograms, &expanded)
+}
+
 func warnUnmodelledMacro(onWarn func(Warn), modulePath string, name TOK) {
 	onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf); skipped", modulePath, name.string())})
 }
@@ -1785,6 +1792,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	switch v.Name {
 	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks, tokGolaunchCompositeComps:
 		applyMlaunchStmt(modulePath, v, env, d)
+	case tokSdcDiagsSplitGeneratorV4:
+		applySdcDiagsSplitGenerator(modulePath, v, env, d)
 	case tokNodeBuilder:
 		if d.multimodule != tokMlaunchComponent || !isGoModuleType(d.unit.Type) {
 			handled = false
@@ -4404,7 +4413,7 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 
 	if isGoModuleType(d.moduleStmt.Name) && peerYaMakeExists(ctx.fs, peerVFS) {
 		switch peerName := ctx.moduleName(peerVFS.relString()); {
-		case peerName == tokProtoLibrary || peerName == tokRosLibrary || peerName == tokMlaunchLibrary || peerName == tokMlaunchComponent:
+		case peerName == tokProtoLibrary || peerName == tokRosLibrary || peerName == tokMlaunchLibrary || peerName == tokMlaunchComponent || peerName == tokSdcDiagsLibrary:
 			language = LangGo
 
 			fallthrough

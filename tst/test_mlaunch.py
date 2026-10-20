@@ -145,6 +145,64 @@ END()
         generated = lib.node_by_output(graph, "$(B)/app/launch.go")["cmds"][0]["cmd_args"]
         self.assertEqual(generated[generated.index("--deps") + 1:], ["comp:Start"])
 
+    def test_go_variant_of_sdc_diags_library_generates_go_diagnostics(self):
+        sources = files()
+        std = "contrib/go/_std_1.26/src"
+        for peer in (f"{std}/fmt", "sdg/sdc/ros/configuration/golaunch/common_node_parameters/common_node_proto",
+                     "sdg/sdc/ros/configuration/golaunch/node", "sdg/sdc/ros/configuration/proto"):
+            sources[f"{peer}/ya.make"] = f"GO_LIBRARY()\n{lib.BARE_MODULE}\nSRCS(a.go)\nEND()\n"
+            sources[f"{peer}/a.go"] = "package peer\n"
+        lib.tool_program(sources, "sdg/sdc/ros/monitorings/diag_updater/gen_utils/diags_go_gen", "diags_go_gen")
+        root = "sdg/sdc/ros/monitorings/diag_updater/etc/Descriptions"
+        mod = f"{root}/Control/Brakes"
+        sources[f"{mod}/ya.make"] = f"SDC_DIAGS_LIBRARY()\n\nSDC_DIAGS_SPLIT_GENERATOR_V4(\n    {mod}/Wear.yaml\n    {mod}/Pressure.yaml\n)\n\nEND()\n"
+        for name in ("Wear.yaml", "Pressure.yaml", "_manifest_.yaml"):
+            sources[f"{mod}/{name}"] = "x: 1\n"
+        sources[f"{root}/Control/_manifest_.yaml"] = "x: 1\n"
+        sources["app/ya.make"] = f"GO_PROGRAM()\n{lib.BARE_MODULE}\nSRCS(main.go)\nPEERDIR({mod})\nEND()\n"
+        sources["app/main.go"] = "package main\n"
+        graph = lib.make(sources, "app")
+        gen = lib.node_by_output(graph, f"$(B)/{mod}/Wear.go")
+        self.assertEqual(gen["outputs"], [f"$(B)/{mod}/Wear.go", f"$(B)/{mod}/Pressure.go"])
+        self.assertEqual(gen["cmds"][0]["cmd_args"], [
+            "$(B)/sdg/sdc/ros/monitorings/diag_updater/gen_utils/diags_go_gen/diags_go_gen", "--description_files",
+            f"$(S)/{mod}/Wear.yaml", f"$(S)/{mod}/Pressure.yaml", f"$(S)/{mod}/_manifest_.yaml", f"$(S)/{root}/Control/_manifest_.yaml",
+            "--out_dir", f"$(B)/{mod}", "--package", "Brakes",
+        ])
+        package = lib.node_by_output(graph, f"$(B)/{mod}/Brakes.a")
+        args = next(c["cmd_args"] for c in package["cmds"] if "++srcs" in c["cmd_args"])
+        self.assertEqual(args[args.index("++srcs") + 1:args.index("++asm-flags")], [f"$(B)/{mod}/Wear.go", f"$(B)/{mod}/Pressure.go"])
+        for archive in (f"{std}/fmt/fmt.a", "sdg/sdc/ros/configuration/proto/proto.a", "sdg/sdc/ros/configuration/golaunch/node/node.a"):
+            self.assertIn(archive, args)
+        link = next(c["cmd_args"] for c in lib.node_by_output(graph, "$(B)/app/app")["cmds"] if "++peers" in c["cmd_args"])
+        self.assertIn(f"{mod}/Brakes.a", link[link.index("++peers") + 1:link.index("++non-local-peers")])
+
+    def test_cpp_variant_of_sdc_diags_library_compiles_global_generated_sources(self):
+        sources = files()
+        for peer in ("contrib/libs/protobuf", "sdg/sdc/myriapoda/yamakes/diagnostics/utils"):
+            sources[f"{peer}/ya.make"] = f"LIBRARY()\n{lib.BARE_MODULE}\nEND()\n"
+        lib.tool_program(sources, "sdg/sdc/ros/monitorings/diag_updater/gen_utils/diags_split_gen", "diags_split_gen")
+        for header in ("sdg/sdc/myriapoda/diagnostics/diags_utils.h", "contrib/libs/protobuf/src/google/protobuf/io/coded_stream.h",
+                       "contrib/libs/protobuf/src/google/protobuf/io/zero_copy_stream_impl_lite.h",
+                       "contrib/libs/protobuf/src/google/protobuf/wire_format_lite.h"):
+            sources[header] = "#pragma once\n"
+        root = "sdg/sdc/ros/monitorings/diag_updater/etc/Descriptions"
+        mod = f"{root}/Endpoint"
+        sources[f"{mod}/ya.make"] = f"SDC_DIAGS_LIBRARY()\n\nSDC_DIAGS_SPLIT_GENERATOR_V4({mod}/State.yaml)\n\nEND()\n"
+        sources[f"{mod}/State.yaml"] = "x: 1\n"
+        sources[f"{mod}/_manifest_.yaml"] = "x: 1\n"
+        sources["user/ya.make"] = f"PROGRAM()\n{lib.BARE_MODULE}\nSRCS(u.cpp)\nPEERDIR({mod})\nEND()\n"
+        sources["user/u.cpp"] = "int main() { return 0; }\n"
+        graph = lib.make(sources, "user")
+        generated = "$(B)/sdg/sdc/ros/monitorings/diag_updater/generated"
+        gen = lib.node_by_output(graph, f"{generated}/Endpoint/State.h")
+        self.assertEqual(gen["outputs"], [f"{generated}/Endpoint/State.h", f"{generated}/Endpoint/State.cpp"])
+        self.assertEqual(gen["cmds"][0]["cmd_args"][1:], [
+            "--description_files", f"$(S)/{mod}/State.yaml", f"$(S)/{mod}/_manifest_.yaml", "--out_dir", generated,
+        ])
+        archive = lib.node_by_output_prefix(graph, f"$(B)/{mod}/lib")
+        self.assertTrue(archive["outputs"][0].endswith(".global.a"))
+
 
 if __name__ == "__main__":
     unittest.main()

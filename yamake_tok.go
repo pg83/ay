@@ -17,6 +17,8 @@ var tokName = [...]STR{
 	tokGolaunchCompositeComps:    internStr("GOLAUNCH_COMPOSITE_COMPONENTS"),
 	tokMlaunchComponent:          internStr("MLAUNCH_COMPONENT"),
 	tokNodeBuilder:               internStr("NODE_BUILDER"),
+	tokSdcDiagsLibrary:           internStr("SDC_DIAGS_LIBRARY"),
+	tokSdcDiagsSplitGeneratorV4:  internStr("SDC_DIAGS_SPLIT_GENERATOR_V4"),
 
 	tokRosLibrary:        internStr("ROS_LIBRARY"),
 	tokRosDir:            internStr("ROS_DIR"),
@@ -431,6 +433,8 @@ const (
 	tokGolaunchCompositeComps
 	tokMlaunchComponent
 	tokNodeBuilder
+	tokSdcDiagsLibrary
+	tokSdcDiagsSplitGeneratorV4
 
 	tokRosLibrary
 	tokRosDir

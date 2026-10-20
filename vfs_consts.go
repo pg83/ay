@@ -93,6 +93,7 @@ var (
 	rescompilerBinVFS                   = build("tools/rescompiler/rescompiler")
 	rescompressorBinVFS                 = build("tools/rescompressor/rescompressor")
 	rodataScriptVFS                     = source("build/scripts/rodata2asm.py")
+	sdgSdc                              = source("sdg/sdc")
 	srcRootDirVFS                       = source("")
 	srcRootVFS                          = source("")
 	stdout2stderrVFS                    = source("build/scripts/stdout2stderr.py")
