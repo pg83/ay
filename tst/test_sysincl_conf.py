@@ -115,6 +115,34 @@ SYSINCL=build/custom/second.yml
         inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
         self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/second.h"}, set(inputs))
 
+    def test_imported_scalar_dependencies_are_retained(self):
+        variants = (
+            "EXTRA_SYSINCL=build/custom/first.yml\nSYSINCL=$EXTRA_SYSINCL\n",
+            '''@import "${CONF_ROOT}/conf/aliases.conf"
+SYSINCL=${EXTRA_SYSINCL}
+''',
+            '''@import "${CONF_ROOT}/conf/aliases.conf"
+SYSINCL=build/custom/second.yml
+when ($USE_CUSTOM_SYSINCL == "yes") {
+    SYSINCL=$EXTRA_SYSINCL
+}
+''',
+        )
+        for config in variants:
+            with self.subTest(config=config):
+                files = self.files(config)
+                files["build/conf/aliases.conf"] = '''EXTRA_SYSINCL=${CUSTOM_SYSINCL}
+CUSTOM_SYSINCL=build/custom/second.yml
+USE_CUSTOM_SYSINCL=no
+when ($OS_LINUX == "yes") {
+    CUSTOM_SYSINCL=build/custom/first.yml
+    USE_CUSTOM_SYSINCL=yes
+}
+'''
+                graph = lib.make(files, "m")
+                inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
+                self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/first.h"}, set(inputs))
+
     def test_missing_configuration_files_are_reported(self):
         for config, missing in ((
             '@import "${CONF_ROOT}/conf/missing.conf"\n', "build/conf/missing.conf",

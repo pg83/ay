@@ -1,11 +1,18 @@
 package main
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
+
+var confVarRef = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z_0-9]*)`)
 
 type ConfBranch struct {
 	parent   int
 	previous int
 	cond     []CondNode
+	expr     string
+	refs     []string
 }
 
 type ConfAssignment struct {
@@ -14,11 +21,15 @@ type ConfAssignment struct {
 	name     string
 	value    string
 	append   bool
+	refs     []string
 }
 
 type ConfAssignments struct {
+	filename    string
 	branches    []ConfBranch
 	assignments []ConfAssignment
+	sysinclVars map[string]bool
+	linkerVars  map[string]bool
 }
 
 func (cache *SharedParseCache) confFile(fs FS, filename string) *ConfAssignments {
@@ -46,17 +57,8 @@ func (cache *SharedParseCache) confFile(fs FS, filename string) *ConfAssignments
 }
 
 func readConfAssignments(fs FS, filename string, data []byte, cache *SharedParseCache) *ConfAssignments {
-	conf := &ConfAssignments{branches: []ConfBranch{{}}}
-	selected := append([]string{"SYSINCL"}, linkerConfNames...)
-	names := make(map[string]bool, len(selected))
-
-	for _, name := range selected {
-		names[name] = true
-	}
-
+	conf := &ConfAssignments{filename: filename, branches: []ConfBranch{{}}}
 	stack := []int{0}
-	expressions := []string{""}
-	needed := []bool{true}
 	skipped := []bool{false}
 	previous := 0
 	pending := ""
@@ -98,11 +100,9 @@ func readConfAssignments(fs FS, filename string, data []byte, cache *SharedParse
 		}
 
 		if name, value, appendOp, ok := confBranchAssignment(line); ok {
-			if names[name] && !skipped[stack[len(stack)-1]] {
-				needed[stack[len(stack)-1]] = true
-
+			if !skipped[stack[len(stack)-1]] {
 				conf.assignments = append(conf.assignments, ConfAssignment{
-					branch: stack[len(stack)-1], name: name, value: value, append: appendOp,
+					branch: stack[len(stack)-1], name: name, value: value, append: appendOp, refs: confValueRefs(value),
 				})
 			}
 
@@ -114,7 +114,8 @@ func readConfAssignments(fs FS, filename string, data []byte, cache *SharedParse
 		}
 
 		header := strings.TrimSpace(strings.TrimSuffix(line, "{"))
-		branch := ConfBranch{parent: stack[len(stack)-1], cond: condFalse}
+		branch := ConfBranch{parent: stack[len(stack)-1]}
+		unsupported := false
 		expr := ""
 
 		switch {
@@ -126,30 +127,18 @@ func readConfAssignments(fs FS, filename string, data []byte, cache *SharedParse
 		case header == "otherwise":
 			branch.previous = previous
 			branch.cond = nil
+		default:
+			unsupported = true
 		}
 
+		branch.expr = expr
 		conf.branches = append(conf.branches, branch)
-		expressions = append(expressions, expr)
-		needed = append(needed, false)
-		skipped = append(skipped, skipped[branch.parent] || expr == "" && branch.cond != nil)
+		skipped = append(skipped, skipped[branch.parent] || unsupported)
 		stack = append(stack, len(conf.branches)-1)
 	}
 
 	if len(stack) != 1 || pending != "" {
 		throwFmt("conf: unfinished block or assignment in %s", filename)
-	}
-
-	for i := len(conf.branches) - 1; i > 0; i-- {
-		if needed[i] {
-			needed[conf.branches[i].parent] = true
-			needed[conf.branches[i].previous] = true
-		}
-	}
-
-	for i, expr := range expressions {
-		if needed[i] && expr != "" {
-			conf.branches[i].cond = parseConfBranchCondition(filename, expr)
-		}
 	}
 
 	return conf
@@ -193,20 +182,116 @@ func confImport(line string) (string, bool) {
 	return "build/" + value, ok
 }
 
-func (c *ConfAssignments) apply(env Environment, only string) {
-	c.applyPass(env, false, only)
-	c.applyPass(env, true, only)
+func confValueRefs(value string) []string {
+	var refs []string
+
+	for _, match := range confVarRef.FindAllStringSubmatch(value, -1) {
+		refs = append(refs, match[1])
+	}
+
+	return refs
 }
 
-func (c *ConfAssignments) applyPass(env Environment, conditional bool, only string) {
+type ConfAssignmentRef struct {
+	conf       *ConfAssignments
+	assignment *ConfAssignment
+}
+
+func (c *ConfAssignments) selectVars(only string) map[string]bool {
+	selected := &c.linkerVars
+	roots := linkerConfNames
+
+	if only == "SYSINCL" {
+		selected = &c.sysinclVars
+		roots = []string{only}
+	}
+
+	if *selected != nil {
+		return *selected
+	}
+
+	byName := make(map[string][]ConfAssignmentRef)
+
+	var collect func(*ConfAssignments)
+
+	collect = func(conf *ConfAssignments) {
+		for i := range conf.assignments {
+			a := &conf.assignments[i]
+
+			if a.imported != nil {
+				collect(a.imported)
+			} else {
+				byName[a.name] = append(byName[a.name], ConfAssignmentRef{conf, a})
+			}
+		}
+	}
+
+	collect(c)
+
+	names := make(map[string]bool)
+	queue := append([]string(nil), roots...)
+
+	for len(queue) != 0 {
+		name := queue[len(queue)-1]
+
+		queue = queue[:len(queue)-1]
+
+		if names[name] {
+			continue
+		}
+
+		names[name] = true
+
+		for _, ref := range byName[name] {
+			queue = append(queue, ref.assignment.refs...)
+			queue = ref.conf.branchVars(ref.assignment.branch, queue)
+		}
+	}
+
+	*selected = names
+
+	return names
+}
+
+func (c *ConfAssignments) branchVars(index int, vars []string) []string {
+	if index == 0 {
+		return vars
+	}
+
+	b := &c.branches[index]
+
+	if b.expr != "" && b.cond == nil {
+		b.cond = parseConfBranchCondition(c.filename, b.expr)
+
+		for _, node := range b.cond {
+			if node.Kind == ckIdent {
+				b.refs = append(b.refs, node.Name)
+			}
+		}
+	}
+
+	vars = append(vars, b.refs...)
+	vars = c.branchVars(b.parent, vars)
+
+	return c.branchVars(b.previous, vars)
+}
+
+func (c *ConfAssignments) apply(env Environment, only string) {
+	names := c.selectVars(only)
+
+	c.applyPass(env, false, names)
+	c.applyPass(env, true, names)
+}
+
+func (c *ConfAssignments) applyPass(env Environment, conditional bool, names map[string]bool) {
 	for _, a := range c.assignments {
 		if a.imported != nil {
-			a.imported.applyPass(env, conditional, only)
+			a.imported.applyPass(env, conditional, names)
 
 			continue
 		}
 
-		if only != "" && a.name != only || conditional != (a.branch != 0) || !c.branchActive(a.branch, env) {
+		if !names[a.name] || conditional != (a.branch != 0) || !c.branchActive(a.branch, env) {
 			continue
 		}
 
