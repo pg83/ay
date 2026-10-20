@@ -1119,6 +1119,12 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
+
+			if v.Name == tokProtoDescriptions || v.Name == tokProtoRegistry {
+				env.setStringID(envMODULE_TAG, v.Name.str())
+				env.setStringID(envMODULE_TYPE, v.Name.str())
+			}
+
 			setupRosModule(v, modulePath, language, env, d)
 			setupMlaunchModule(v, modulePath, language, env, d)
 

@@ -320,6 +320,7 @@ var tokName = [...]STR{
 	tokExportYmapsProto:               internStr("EXPORT_YMAPS_PROTO"),
 	tokLj21Archive:                    internStr("LJ_21_ARCHIVE"),
 	tokProtoDescriptions:              internStr("PROTO_DESCRIPTIONS"),
+	tokProtoRegistry:                  internStr("PROTO_REGISTRY"),
 	tokSplitCodegen:                   internStr("SPLIT_CODEGEN"),
 	tokStructCodegen:                  internStr("STRUCT_CODEGEN"),
 	tokStyleDetekt:                    internStr("STYLE_DETEKT"),
@@ -675,6 +676,7 @@ const (
 	tokExportYmapsProto
 	tokLj21Archive
 	tokProtoDescriptions
+	tokProtoRegistry
 	tokSplitCodegen
 	tokStructCodegen
 	tokStyleDetekt

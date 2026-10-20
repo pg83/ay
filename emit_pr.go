@@ -36,7 +36,15 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 
 	outs = append(outs, anyStrs(rp.OUTFiles)...)
 
-	if rp.StdoutFile != nil && !rp.StdoutNoAuto {
+	if isGoModuleType(e.d.unit.Type) {
+		for _, out := range rp.OUTNoAutoFiles {
+			if strings.HasSuffix(out.string(), ".go") {
+				outs = append(outs, out.string())
+			}
+		}
+	}
+
+	if rp.StdoutFile != nil && (!rp.StdoutNoAuto || isGoModuleType(e.d.unit.Type) && strings.HasSuffix(rp.StdoutFile.string(), ".go")) {
 		outs = append(outs, rp.StdoutFile.string())
 	}
 

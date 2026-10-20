@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path"
 	"slices"
 	"strings"
 )
@@ -358,7 +359,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	}
 
 	if goModuleUsesCgoC(d) {
-		goIncl = append(goIncl, instance.Path)
+		d.addIncl = append(d.addIncl, instance.Path)
 	}
 
 	d.addIncl = append(goIncl, d.addIncl...)
@@ -372,9 +373,9 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			continue
 		}
 
-		rel := meta.Source.string()
+		ext := path.Ext(meta.Source.string())
 
-		if strings.HasSuffix(rel, ".S") || strings.HasSuffix(rel, ".c") || strings.HasSuffix(rel, ".cxx") {
+		if ext == ".S" || slices.Contains(goCgoExportExts, ext) {
 			meta.Compile.CFlags = concat(meta.Compile.CFlags, cgoFlags)
 		}
 	}
@@ -579,7 +580,9 @@ func goCmdEnv(ctx *GenCtx, p *Platform, tc ModuleToolchain) EnvVars {
 	return env
 }
 
-func goClassifyClosure(na *NodeArenas, resolved []ResolvedPeer, closurePaths []VFS) (localARs, nonLocalARs, cgoARs []VFS) {
+func (e *EmitContext) goClassifyClosure(resolved []ResolvedPeer, closurePaths []VFS) (localARs, nonLocalARs, cgoARs []VFS) {
+	na := e.ctx.na
+
 	dedupers.with(func(deduper *DeDuper) {
 		for _, rp := range resolved {
 			if rp.result.ARPath != nil && isGoModuleType(rp.result.ModuleStmtName) {
@@ -591,7 +594,7 @@ func goClassifyClosure(na *NodeArenas, resolved []ResolvedPeer, closurePaths []V
 			switch {
 			case deduper.has(p.strID()):
 				return 0
-			case isGoArchivePath(p.relString()):
+			case e.isGoArchive(p):
 				return 1
 			default:
 				return 2
@@ -812,6 +815,10 @@ func (e *EmitContext) goSrcList(goRes *GoSrcsResult, objOuts []VFS) (srcArgs, cg
 		}
 	}
 
+	for _, src := range goRes.AutoFiles {
+		addSrc(src)
+	}
+
 	if goRes.SymabisRef != 0 {
 		addSrc(goRes.SymabisOut)
 	}
@@ -843,10 +850,6 @@ func (e *EmitContext) goSrcList(goRes *GoSrcsResult, objOuts []VFS) (srcArgs, cg
 
 		importGoRel := dir + "/_cgo_import.go"
 
-		for _, src := range goRes.AutoFiles {
-			addSrc(src)
-		}
-
 		for _, src := range goRes.GoFiles {
 			if src.isBuild() && src.relString() != importGoRel {
 				addSrc(src)
@@ -873,10 +876,6 @@ func (e *EmitContext) goSrcList(goRes *GoSrcsResult, objOuts []VFS) (srcArgs, cg
 	} else {
 		for _, o := range objOuts {
 			addSrc(o)
-		}
-
-		for _, src := range goRes.AutoFiles {
-			addSrc(src)
 		}
 
 		for _, src := range goRes.GoFiles {
@@ -919,7 +918,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	}
 
 	srcArgs, cgoSrcArgs, ownInputs, ownSources, ownBuilds := e.goSrcList(goRes, objOuts)
-	localARs, _, _ := goClassifyClosure(na, resolved, peerArchivePaths)
+	localARs, _, _ := e.goClassifyClosure(resolved, peerArchivePaths)
 	embedArgs, embedInputs := goEmbedArgs(na, d.goEmbeds)
 	tail := na.anys.alloc(4 + len(cgoSrcArgs) + len(embedArgs) + len(localARs))
 	nt := 0
@@ -1077,7 +1076,11 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 	e.appendSdcMeta(&node, programBinaryName(instance, d.moduleStmt))
 
-	return e.emitNode(node), outPath
+	ref := e.emitNode(node)
+
+	e.register(GeneratedFileInfo{OutputPath: outPath, InputsOnly: true, ModuleType: d.moduleStmt.Name})
+
+	return ref, outPath
 }
 
 func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerLDFlagsGlobal, peerObjAddLibsGlobal []ANY, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
@@ -1116,7 +1119,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	)), Env: goVcsEnv}
 
 	srcArgs, cgoSrcArgs, ownInputs, _, _ := e.goSrcList(goRes, objOuts)
-	localARs, nonLocalARs, cgoARs := goClassifyClosure(na, resolved, peerArchivePaths)
+	localARs, nonLocalARs, cgoARs := e.goClassifyClosure(resolved, peerArchivePaths)
 	tail := na.anys.alloc(4 + len(localARs) + len(nonLocalARs) + len(cgoARs))
 	nt := 0
 	pushTail := func(x STR) { tail[nt] = x.any(); nt++ }
@@ -1326,10 +1329,6 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	return e.emitNode(node), outPath
 }
 
-func isGoArchivePath(rel string) bool {
-	slash := strings.LastIndexByte(rel, '/')
-	base := strings.TrimSuffix(rel[slash+1:], ".a")
-	dir := rel[:slash]
-
-	return base == dir[strings.LastIndexByte(dir, '/')+1:]
+func (e *EmitContext) isGoArchive(p VFS) bool {
+	return isGoModuleType(e.codegen.moduleType(p))
 }

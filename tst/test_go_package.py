@@ -98,6 +98,35 @@ def go_node(graph, path):
 
 
 class GoPackageGraphTest(unittest.TestCase):
+    def test_generated_go_sources_precede_epilogue_symabis_output(self):
+        files = go_world()
+        lib.tool_program(files, "tools/generate", "generate")
+        go_module(files, "lib/assembly", srcs="assembly.go bits.s", macros=(
+            "RUN_PROGRAM(tools/generate OUT generated.go)\n"
+        ))
+        files["lib/assembly/bits.s"] = '#include "textflag.h"\n'
+        graph = lib.make(files, "lib/assembly")
+        args = go_tool_args(go_node(graph, "lib/assembly"))
+        self.assertEqual(between(args, "++srcs", "++asm-flags"), [
+            "$(B)/lib/assembly/generated.go", "$(B)/lib/assembly/gen.symabis",
+            "$(S)/lib/assembly/assembly.go", "$(S)/lib/assembly/bits.s",
+        ])
+
+    def test_renamed_transitive_go_archives_keep_their_language(self):
+        files = go_world()
+        go_module(files, "lib/leaf")
+        files["lib/leaf/ya.make"] = "GO_LIBRARY(renamed)\nSRCS(leaf.go)\nEND()\n"
+        go_module(files, "lib/middle", macros="PEERDIR(lib/leaf)\n")
+        files["lib/native/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(native.cpp)\nEND()\n"
+        files["lib/native/native.cpp"] = "int native;\n"
+        go_module(files, "cmd/app", macros="PEERDIR(lib/middle lib/native)\n", module="GO_PROGRAM")
+        graph = lib.make(files, "cmd/app")
+        args = go_tool_args(lib.node_by_output(graph, "$(B)/cmd/app/app"))
+        self.assertEqual(between(args, "++non-local-peers", "++cgo-peers"), ["lib/leaf/renamed.a"])
+        self.assertEqual(between(args, "++cgo-peers", "--ya-end-command-file"), [
+            "cmd/app/__vcs_version__.c.o", "lib/native/liblib-native.a",
+        ])
+
     def test_raw_string_imports_become_peers(self):
         files = go_world()
         go_module(files, f"{STD}/fmt")
@@ -127,6 +156,23 @@ class GoPackageGraphTest(unittest.TestCase):
         self.assertEqual(between(package, "++srcs", "++asm-flags"), [out, "$(S)/library/go/certs/certs.go"])
         self.assertIn("library/go/core/resource/resource.a", between(package, "++peers", "--ya-end-command-file"))
         self.assertFalse([o for n in graph["graph"] for o in n["outputs"] if o.endswith(".global.a")])
+
+    def test_go_resources_resolve_generated_inputs_after_their_producers(self):
+        files = go_world()
+        go_module(files, "library/go/core/resource")
+        go_module(files, "library/go/core/resource/cc", module="GO_PROGRAM")
+        lib.tool_program(files, "tools/generate", "generate")
+        go_module(files, "lib/assets", macros=(
+            "RESOURCE(lib/assets/schema.json schema.json)\n"
+            "RUN_PROGRAM(tools/generate OUT_NOAUTO schema.json)\n"
+        ))
+        graph = lib.make(files, "lib/assets")
+        producer = lib.node_by_output(graph, "$(B)/lib/assets/schema.json")
+        resource = next(n for n in graph["graph"] if any(o.endswith(".res.go") for o in n["outputs"]))
+        self.assertIn("$(B)/lib/assets/schema.json", resource["inputs"])
+        self.assertIn("$(B)/lib/assets/schema.json", resource["cmds"][0]["cmd_args"])
+        self.assertNotIn("$(S)/lib/assets/schema.json", resource["inputs"])
+        self.assertIn(producer["uid"], resource["deps"])
 
     def test_resource_files_dispatch_to_the_go_resource_compiler(self):
         for macro, filename in (

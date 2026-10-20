@@ -432,7 +432,6 @@ func applyGoResource(fs FS, modulePath string, entries []ResourceEntry, line int
 		file := internStr(entry.Path).any()
 
 		if entry.Path != "-" {
-			file = copyFileInputVFS(fs, source(modulePath), entry.Path).any()
 			inputs = append(inputs, file)
 		}
 
