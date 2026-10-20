@@ -222,6 +222,7 @@ var (
 	argSContribToolsCythonPy2CythonPy                       = internArg("$(S)/contrib/tools/cython_py2/cython.py")
 	argSchema                                               = internArg("--schema")
 	argSdgTier0ToolsBipWriter                               = internArg("sdg/tier0/tools/bip/writer")
+	argSdgTier0ToolsMakePchWrapper                          = internArg("sdg/tier0/tools/make_pch_wrapper")
 	argSequential                                           = internArg("SEQUENTIAL")
 	argShared                                               = internArg("-shared")
 	argSigusr2                                              = internArg("SIGUSR2")

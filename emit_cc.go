@@ -15,6 +15,7 @@ var (
 )
 
 type ModuleCompileEnv struct {
+	PchFlagsGlobal       []ANY
 	Flags                FlagSet
 	AddIncl              []VFS
 	InclArgs             InclArgMemo
@@ -183,7 +184,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	blocks := in.CCBlocks
 	tok := na.anyList(inVFS.any(), argDashC.any(), argDashO.any(), outVFS.any())
 	inChunk := tok[0:1]
-	wrapcc := len(instance.Platform.WrapccHead) > 0
+	wrapcc := len(blocks.wrapHead) > 0
 	compiler, tail := blocks.cHead, blocks.cxxTail
 
 	if isCxx {
@@ -218,7 +219,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	k := 0
 
 	if wrapcc {
-		chunks[k] = instance.Platform.WrapccHead
+		chunks[k] = blocks.wrapHead
 		chunks[k+1] = inChunk
 		chunks[k+2] = instance.Platform.WrapccTail
 		k += 3
@@ -564,6 +565,7 @@ func appendCompileFlagPipeline(cmdArgs []ANY, bundle CompileFlagBundle, warningB
 }
 
 type CcModuleArgBlocks struct {
+	wrapHead []ANY
 	cHead    []ANY
 	cxxHead  []ANY
 	includes []ANY
@@ -690,7 +692,15 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 		in.CXXFlagsVar,
 	}
 
+	wrapHead := p.WrapccHead
+
+	if p.WrapUnshare {
+		wrapHead = na.anyConcat([]ANY{bldResourcesUnshareWrapperBinWrapUnshare.any()}, in.PchFlagsGlobal,
+			[]ANY{argSourceRoot.any(), strS.any(), argBuildRoot.any(), strB.any(), strWrapUnshareEnd.any()}, wrapHead)
+	}
+
 	return CcModuleArgBlocks{
+		wrapHead: wrapHead,
 		cHead:    na.anyList(in.TC.CC.any()),
 		cxxHead:  na.anyList(in.TC.CXX.any()),
 		includes: includes,

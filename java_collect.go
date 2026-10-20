@@ -275,7 +275,6 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			expanded.Renames = expandStmtTokens(v.Renames, env)
 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
-			d.resourceValidation.addResource(expanded.ResourceId.string(), env)
 		case *SrcDirStmt:
 			for _, dir := range expandStmtTokens(v.Dirs, env) {
 				d.srcDirs = append(d.srcDirs, dirKey(dir.string()).source())
@@ -599,7 +598,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "DEPENDS":
 		d.test.depends = append(d.test.depends, args...)
 	case "DATA":
-		d.resourceValidation.addData(args, env)
 		d.test.data = append(d.test.data, args...)
 	case "DATA_FILES":
 		for _, a := range args {

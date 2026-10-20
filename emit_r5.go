@@ -87,4 +87,3 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 	meta.Source = r5CppOut.any()
 	e.enqueueSrc(meta)
 }
-

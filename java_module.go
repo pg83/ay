@@ -248,7 +248,6 @@ type JavaRunProgram struct {
 }
 
 type JavaData struct {
-	resourceValidation  ResourceValidation
 	name                string
 	prefix              string
 	jdkReal             string

@@ -132,6 +132,7 @@ type TestMeta struct {
 	forkMode     string
 	partition    string
 	splitFactor  int
+	validateData bool
 }
 
 type ModuleData struct {
@@ -143,8 +144,7 @@ type ModuleData struct {
 
 	discarded bool
 
-	styleChecks        []StyleCheck
-	resourceValidation ResourceValidation
+	styleChecks []StyleCheck
 
 	usrvFiles []UsrvFile
 
@@ -278,6 +278,7 @@ type ModuleData struct {
 	fromSandboxes            []*FromSandboxStmt
 	fromArchives             []FromArchiveEntry
 	sdcMetas                 []SdcMetaEntry
+	pchFiles                 []PchFileStmt
 	checkConfigHeaders       []ANY
 	cythonCpp                []*CythonStmt
 	cythonNumpyBeforeInclude bool
@@ -730,6 +731,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 
 	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d, onWarn)
 	finishYqlModule(modulePath, env, d)
+	d.test.validateData = resourceValidationEnabled(env)
 
 	if d.nots != nil {
 		return d
@@ -1514,7 +1516,6 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded.Renames = expandStmtTokens(v.Renames, env)
 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
-			d.resourceValidation.addResource(expanded.ResourceId.string(), env)
 		case *ResourceStmt:
 			if isGoModuleType(d.unit.Type) {
 				entries := make([]ResourceEntry, len(v.Pairs))
@@ -1743,7 +1744,7 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 }
 
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
-	if applyTestMacro(v, d, env) {
+	if applyTestMacro(v, d) {
 		return
 	}
 
@@ -1778,6 +1779,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyRosStmt(modulePath, v, env, d)
 	case tokSdcInstall:
 		applySdcInstall(modulePath, v.Args, d, env)
+	case tokGenPchFile:
+		if len(v.Args) != 2 {
+			throwFmt("GEN_PCH_FILE expects an input header and output file")
+		}
+
+		d.pchFiles = append(d.pchFiles, PchFileStmt{Header: v.Args[0], Output: v.Args[1]})
+
 	case tokSdcResourceInfo, tokSdcSbResourceInfo, tokSdcRosnodeInfo, tokSdcSolibInfo:
 		d.sdcMetas = append(d.sdcMetas, parseSdcMeta(v.Name, anyStrs(v.Args)))
 	case tokFromArchive:

@@ -108,6 +108,7 @@ var (
 	envLcAll                        = internEnv("LC_ALL")
 	envLinkerIcf                    = internEnv("LINKER_ICF")
 	envLinkerId                     = internEnv("_LINKER_ID")
+	envLlvmToolsRoot                = internEnv("LLVM_TOOLS_ROOT")
 	envM4                           = internEnv("M4")
 	envMODDIR                       = internEnv("MODDIR")
 	envMODULE_LANG                  = internEnv("MODULE_LANG")

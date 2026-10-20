@@ -28,10 +28,11 @@ class DataValidationTest(unittest.TestCase):
         for node in (data, resource):
             self.assertEqual(node["requirements"]["network"], "full")
             self.assertIn("check_resource", node["cmds"][-1]["cmd_args"])
-            self.assertEqual(node["deps"], [])
+            deps = [n["outputs"][0] for n in graph["graph"] if n["uid"] in node["deps"]]
+            self.assertEqual(deps, ["$(B)/common_test.context"])
         self.assertFalse(any("unused.bin" in output for node in graph["graph"] for output in node["outputs"]))
 
-    def test_validation_switch_is_applied_at_macro_invocation(self):
+    def test_validation_switch_uses_the_final_module_value(self):
         files = {
             "mod/ya.make": (
                 f"LIBRARY()\n{BARE}SET(VALIDATE_DATA yes)\n"
@@ -46,8 +47,19 @@ class DataValidationTest(unittest.TestCase):
         }
         graph = lib.make(files, "mod", "--target-platform-tests")
         checks = test_nodes(graph)
-        self.assertEqual(checks["mod/validate_data_sbr"]["inputs"], ["$(S)/mod", "12"])
-        self.assertEqual(checks["mod/validate_resource"]["inputs"], ["$(S)/mod", "78"])
+        self.assertEqual(checks["mod/validate_data_sbr"]["inputs"], ["$(S)/mod", "12", "34"])
+        self.assertEqual(checks["mod/validate_resource"]["inputs"], ["$(S)/mod", "56", "78"])
+        files["mod/ya.make"] = files["mod/ya.make"].replace("END()", "DISABLE_DATA_VALIDATION()\nEND()")
+        self.assertEqual(test_nodes(lib.make(files, "mod", "--target-platform-tests")), {})
+
+    def test_script_modules_get_resource_checks(self):
+        files = {"mod/ya.make": (
+            "EXECTEST()\nRUN(tool)\nSET(VALIDATE_DATA yes)\nDATA(sbr://12)\n"
+            "FROM_SANDBOX(FILE 34 OUT_NOAUTO unused.bin)\nEND()\n"
+        )}
+        checks = test_nodes(lib.make(files, "mod", "--target-platform-tests"))
+        self.assertIn("mod/validate_data_sbr", checks)
+        self.assertIn("mod/validate_resource", checks)
 
 
 if __name__ == "__main__":

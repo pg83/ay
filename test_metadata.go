@@ -32,7 +32,7 @@ func testSuiteName(name TOK) string {
 	return ""
 }
 
-func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
+func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 	switch v.Name {
 	case tokDockerImage, tokRun, tokSize, tokTimeout, tokTestCwd, tokData, tokDataFiles, tokExplicitData, tokDepends, tokUseRecipe, tokTag, tokEnv, tokRequirements, tokForkTests, tokForkSubtests, tokForkTestFiles, tokSplitFactor, tokBenchmarkOpts, tokFuzzOpts:
 	default:
@@ -57,7 +57,6 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 	case tokExplicitData:
 		t.explicitData = true
 	case tokData:
-		d.resourceValidation.addData(args, env)
 
 		for i := 0; i < len(args); i++ {
 			if args[i] == "AUTOUPDATED" {

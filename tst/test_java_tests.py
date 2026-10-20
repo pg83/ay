@@ -183,13 +183,13 @@ def junit_tree(test_body, **extra):
 
 class JavaJunitSuiteTest(unittest.TestCase):
     def test_data_checks_extract_resource_id_prefixes(self):
-        files = junit_tree("JUNIT5()\nSIZE(LARGE)\nDATA(sbr:12=label sbr:/34suffix sbr://56/path sbr:///78)\nEND()\n")
+        files = junit_tree("JUNIT5()\nSET(VALIDATE_DATA yes)\nSIZE(LARGE)\nDATA(sbr:12=label sbr:/34suffix sbr://56/path sbr:///78)\nEND()\n")
         graph = lib.make(files, "proj/sub/ut", "--target-platform-tests", "--test-size", "small")
         check = test_nodes(graph)["proj/sub/ut/validate_data_sbr"]
         self.assertEqual(check["inputs"], ["$(S)/proj/sub/ut", "12", "34", "56"])
 
     def test_data_checks_run_even_when_test_size_is_filtered(self):
-        files = junit_tree("JUNIT5()\nSIZE(LARGE)\nDATA(sbr://123=fixtures arcadia/proj/sub/ut/data.txt)\nENV(KEY=value)\nEND()\n")
+        files = junit_tree("JUNIT5()\nSET(VALIDATE_DATA yes)\nSIZE(LARGE)\nDATA(sbr://123=fixtures arcadia/proj/sub/ut/data.txt)\nENV(KEY=value)\nEND()\n")
         graph = lib.make(files, "proj/sub/ut", "--target-platform-tests", "--test-size", "small", "--tests-retries", "3", env={"YA_TOKEN": "test-token"})
         tests = test_nodes(graph)
         self.assertNotIn("proj/sub/ut/sub-ut", tests)
