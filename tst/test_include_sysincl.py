@@ -146,6 +146,15 @@ class SysinclCythonTest(unittest.TestCase):
         files = {
             "m/ya.make": module("a.cpp"),
             "m/a.cpp": "#include <Python.h>\n",
+            "build/conf/sysincl.conf": (
+                "SYSINCL=\n"
+                'when ($USE_PYTHON3_PREV == "yes") {\n'
+                "    SYSINCL+=build/sysincl/cython-prev.yml\n"
+                "}\n"
+                "otherwise {\n"
+                "    SYSINCL+=build/sysincl/cython.yml\n"
+                "}\n"
+            ),
             "build/sysincl/cython.yml": "- includes:\n  - Python.h: contrib/libs/python/Include/Python.h\n",
             "build/sysincl/cython-prev.yml": "- includes:\n  - Python.h: contrib/libs/python/Include_prev/Python.h\n",
             "contrib/libs/python/Include/Python.h": "",
@@ -427,8 +436,79 @@ class SysinclYamlSubsetTest(unittest.TestCase):
                 self.assertIn(message, result.stderr)
 
 
+# build/conf/sysincl.conf, the internal configuration ymake_conf.py imports and
+# a project conf, each listing sysincl files as the upstream ones do.
+SYSINCL_CONF = """SYSINCL=
+SYSINCL+=build/sysincl/misc.yml
+
+when ($OPENSOURCE == "yes") {
+    SYSINCL+=build/sysincl/opensource.yml
+}
+otherwise {
+    SYSINCL+=build/sysincl/proto.yml
+}
+
+when ($MUSL == "yes") {
+    SYSINCL+=build/sysincl/libc-to-musl.yml
+    when ($ARCH_AARCH64 == "yes") {
+        SYSINCL+=build/sysincl/linux-musl-aarch64.yml
+    }
+    otherwise {
+        SYSINCL+=build/sysincl/linux-musl.yml
+    }
+}
+"""
+
+INTERNAL_CONF = """@import "${CONF_ROOT}/internal/conf/sysincl.conf"
+
+@import "${CONF_ROOT}/internal/conf/project_specific/smart_devices.conf"
+"""
+
+INTERNAL_SYSINCL_CONF = """when ($OPENSOURCE != "yes") {
+    SYSINCL+=build/internal/sysincl/misc.yml
+}
+
+when ($OS_WINDOWS == "yes") {
+    when ($OPENSOURCE !="yes") {
+        SYSINCL+=build/internal/sysincl/misc-win.yml
+    }
+}
+
+when ($USE_STL_SYSTEM != "yes" && $NORUNTIME != "yes" && $OPENSOURCE != "yes") {
+    SYSINCL+=build/internal/sysincl/taxi.yml
+}
+"""
+
+SMART_DEVICES_CONF = """when ($OS_LINUX == "yes") {
+    SYSINCL+=build/internal/sysincl/smart_devices_linux.yml
+}
+elsewhen ($OS_ANDROID == "yes") {
+    SYSINCL+=build/internal/sysincl/smart_devices_android.yml
+}
+elsewhen ($OS_DARWIN == "yes") {
+    SYSINCL+=build/internal/sysincl/smart_devices_darwin.yml
+}
+"""
+
+
+def claims(probes, files, *args, opensource=True):
+    """The probe headers the sysincl configuration of the tree claims."""
+    files = {
+        "m/ya.make": module("a.cpp"),
+        "m/a.cpp": "".join(f"#include <{probe}.h>\n" for probe in probes),
+        **files,
+    }
+    _, stderr = succeed(files, "m", *args, opensource=opensource)
+    missing = {header[:-len(".h")] for _, header in unresolved(stderr)}
+    return set(probes) - missing
+
+
 class SysinclFileSelectionTest(unittest.TestCase):
     FILES = {
+        "build/conf/sysincl.conf": SYSINCL_CONF,
+        "build/internal/conf/internal.conf": INTERNAL_CONF,
+        "build/internal/conf/sysincl.conf": INTERNAL_SYSINCL_CONF,
+        "build/internal/conf/project_specific/smart_devices.conf": SMART_DEVICES_CONF,
         "build/sysincl/misc.yml": "- includes:\n  - misc.h\n",
         "build/sysincl/opensource.yml": "- includes:\n  - opensource.h\n",
         "build/sysincl/proto.yml": "- includes:\n  - proto.h\n",
@@ -441,33 +521,30 @@ class SysinclFileSelectionTest(unittest.TestCase):
         "build/internal/sysincl/smart_devices_linux.yml": "- includes:\n  - linux.h\n",
         "build/internal/sysincl/taxi.yml": "- includes:\n  - taxi.h\n",
         "build/internal/sysincl/qt.yml": "- includes:\n  - qt.h\n",
-        "build/internal/sysincl/notes.txt": "- includes:\n  - notes.h\n",
     }
     PROBES = [
         "misc", "opensource", "proto", "musl", "musl_aarch64", "musl_x86_64",
-        "internal", "windows", "darwin", "linux", "taxi", "qt", "notes",
+        "internal", "windows", "darwin", "linux", "taxi", "qt",
     ]
 
     def claimed(self, *args, opensource=True, internal=True):
         files = {
-            "m/ya.make": module("a.cpp"),
-            "m/a.cpp": "".join(f"#include <{probe}.h>\n" for probe in self.PROBES),
-        }
-        files.update(
-            (path, content)
+            path: content
             for path, content in self.FILES.items()
             if internal or not path.startswith("build/internal/")
-        )
-        _, stderr = succeed(files, "m", *args, opensource=opensource)
-        missing = {header[:-len(".h")] for _, header in unresolved(stderr)}
-        return set(self.PROBES) - missing
+        }
+        return claims(self.PROBES, files, *args, opensource=opensource)
 
     def test_opensource_linux(self):
-        self.assertEqual({"misc", "opensource"}, self.claimed())
+        self.assertEqual({"misc", "opensource"}, self.claimed(internal=False))
+        # ymake_conf.py imports the internal configuration whenever it exists;
+        # only the conditions inside it look at OPENSOURCE.
+        self.assertEqual({"misc", "opensource", "linux"}, self.claimed())
 
     def test_opensource_musl_aarch64(self):
         self.assertEqual(
-            {"misc", "opensource", "musl", "musl_aarch64"}, self.claimed("--musl")
+            {"misc", "opensource", "musl", "musl_aarch64"},
+            self.claimed("--musl", internal=False),
         )
 
     def test_internal_musl_x86_64(self):
@@ -489,8 +566,83 @@ class SysinclFileSelectionTest(unittest.TestCase):
             self.claimed("--target-platform", "default-darwin-x86_64", opensource=False),
         )
 
-    def test_internal_directory_is_optional(self):
+    def test_internal_configuration_is_optional(self):
         self.assertEqual({"misc", "proto"}, self.claimed(opensource=False, internal=False))
+
+
+class SysinclConfTest(unittest.TestCase):
+    YML = {
+        "build/sysincl/misc.yml": "- includes:\n  - misc.h\n",
+        "build/sysincl/zephyr.yml": (
+            '- source_filter: "^m/a[.]cpp"\n'
+            "  includes:\n"
+            "  - picolibc.h\n"
+        ),
+    }
+
+    def test_files_are_the_ones_sysincl_conf_lists(self):
+        older = "SYSINCL=\nSYSINCL+=build/sysincl/misc.yml\n"
+        newer = older + "SYSINCL+=build/sysincl/zephyr.yml\n"
+        for conf, claimed in ((older, {"misc"}), (newer, {"misc", "picolibc"})):
+            with self.subTest(conf=conf):
+                files = {**self.YML, "build/conf/sysincl.conf": conf}
+                self.assertEqual(claimed, claims(["misc", "picolibc"], files))
+
+    def test_every_imported_conf_contributes(self):
+        files = {
+            **self.YML,
+            "build/ymake.core.conf": (
+                '@import "${CONF_ROOT}/conf/sysincl.conf"\n'
+                "when ($USE_STL_SYSTEM != \"yes\") {\n"
+                "    when ($NORUNTIME != \"yes\") {\n"
+                "        SYSINCL+=build/sysincl/zephyr.yml\n"
+                "    }\n"
+                "}\n"
+                '@import "${CONF_ROOT}/conf/python.conf"\n'
+            ),
+            "build/conf/sysincl.conf": "SYSINCL=\n",
+            "build/conf/python.conf": (
+                "macro _NOT_A_CONF_STATEMENT() {\n"
+                "    SYSINCL+=build/sysincl/never.yml\n"
+                "}\n"
+                "CONTINUED = \\\n"
+                "  a \\\n"
+                "\n"
+                "when ($OPENSOURCE) {\n"
+                "    SYSINCL+=build/sysincl/misc.yml\n"
+                "}\n"
+            ),
+            "build/sysincl/never.yml": "- includes:\n  - never.h\n",
+        }
+        self.assertEqual({"misc", "picolibc"}, claims(["misc", "picolibc", "never"], files))
+        self.assertEqual({"picolibc"}, claims(["misc", "picolibc", "never"], files, opensource=False))
+
+    def test_conditional_assignments_apply_after_the_unconditional_ones(self):
+        # ymake applies the unconditional assignments while reading the conf
+        # and every conditional one afterwards, in order: the reset inside
+        # `when` drops misc.yml although misc.yml is appended after it.
+        files = {
+            **self.YML,
+            "build/conf/sysincl.conf": (
+                "SYSINCL=\n"
+                'when ($OS_LINUX == "yes") {\n'
+                "    SYSINCL=build/sysincl/zephyr.yml\n"
+                "}\n"
+                "SYSINCL+=build/sysincl/misc.yml\n"
+            ),
+        }
+        self.assertEqual({"picolibc"}, claims(["misc", "picolibc"], files))
+        windows = ("--target-platform", "default-windows-x86_64")
+        self.assertEqual({"misc"}, claims(["misc", "picolibc"], files, *windows))
+
+    def test_missing_import_is_fatal(self):
+        result = make_process({
+            "m/ya.make": module("a.cpp"),
+            "m/a.cpp": "",
+            "build/ymake.core.conf": '@import "${CONF_ROOT}/conf/absent.conf"\n',
+        }, "m")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("conf: @import build/conf/absent.conf: no such file", result.stderr)
 
 
 if __name__ == "__main__":

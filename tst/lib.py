@@ -14,6 +14,7 @@ AY = Path(os.environ["AY_TEST_BINARY"])
 FAKE_YMAKE_CONF = r'''
 import base64
 import json
+import os
 import sys
 
 COMPRESS_DEBUG = False
@@ -76,6 +77,8 @@ def main(argv):
     tc = params["params"]
 
     print('@import "${CONF_ROOT}/ymake.core.conf"')
+    if os.path.exists(os.path.join(args[0], "build/internal/conf/internal.conf")):
+        print('@import "${CONF_ROOT}/internal/conf/internal.conf"')
     emit("BUILD_TYPE", build_type.upper())
     emit("BT_" + build_type.upper().replace("-", "_"), "yes")
     emit("DISTBUILD", "yes")
@@ -275,9 +278,20 @@ _ROOT_FLAGS=--source-root $ARCADIA_ROOT --build-root $(BUILD_ROOT)
 '''
 
 
+# The sysincl configs the tests write, in the shape of build/conf/sysincl.conf.
+FAKE_SYSINCL_CONF = """SYSINCL=
+SYSINCL+=build/sysincl/macro.yml
+SYSINCL+=build/sysincl/windows.yml
+SYSINCL+=build/sysincl/misc.yml
+"""
+
+
 CONF_FILES = {
     "build/ymake_conf.py": FAKE_YMAKE_CONF,
     "build/ya.conf.json": ya_conf_json(),
+    "build/ymake.core.conf": '@import "${CONF_ROOT}/conf/sysincl.conf"\n',
+    "build/conf/sysincl.conf": FAKE_SYSINCL_CONF,
+    "build/conf/compilers/gnu_compiler.conf": "",
     "build/conf/linkers/ld.conf": FAKE_LD_CONF,
 }
 

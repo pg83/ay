@@ -459,7 +459,7 @@ func ymakeConfEnv() []string {
 	return env
 }
 
-func (r *YmakeConfRun) wait() map[string]string {
+func (r *YmakeConfRun) wait() (map[string]string, []string) {
 	if err := r.cmd.Wait(); err != nil {
 		throwFmt("Config was not generated due to errors in %s (%v)\n%s", r.script, err, r.stderr.String())
 	}
@@ -471,15 +471,23 @@ func (r *YmakeConfRun) wait() map[string]string {
 	return parseYmakeConf(r.stdout.Bytes())
 }
 
-func parseYmakeConf(out []byte) map[string]string {
+func parseYmakeConf(out []byte) (map[string]string, []string) {
 	vars := map[string]string{}
 	depth := 0
+
+	var imports []string
 
 	for _, raw := range strings.Split(string(out), "\n") {
 		line := strings.TrimRight(raw, "\r")
 		trimmed := strings.TrimSpace(line)
 
 		if depth == 0 {
+			if strings.HasPrefix(trimmed, "@import") {
+				imports = append(imports, confImportPath(ymakeConfScript, trimmed))
+
+				continue
+			}
+
 			if trimmed == "" || trimmed[0] == '#' || trimmed[0] == '@' {
 				continue
 			}
@@ -503,7 +511,7 @@ func parseYmakeConf(out []byte) map[string]string {
 		depth = max(depth, 0)
 	}
 
-	return vars
+	return vars, imports
 }
 
 func confAssignment(line string) (name, value string, appendOp, ok bool) {
