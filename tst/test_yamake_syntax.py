@@ -85,12 +85,12 @@ class YaMakeSyntaxTest(unittest.TestCase):
             "CFLAGS(-DA \"-DB=c d\" '-DE' -DF=\"g h\" -DI=\\\"j\\\" X-Y 12 12ab"
             " a@b -D#x #comment\n -DZ FOO\"bar\" FOO\\\"x\\\" FOO@y\"z\""
             " -w@v'u' -DQ'x y' -DR\\\"z \"a\\\\b\" \"-DS=\\\"q\\\"\" éx"
-            " -DT=\"a\\\"b\")"
+            " -DT=\"a\\\"b\" `a` x&&y a;b c^d e|f)"
         ), [
             "-DA", "-DB=c d", "-DE", "-DF=g h", "-DI=\"j\"", "X-Y", "12",
             "12ab", "a@b", "-D#x", "-DZ", "FOObar", "FOO\"x\"", "FOO@yz",
             "-w@vu", "-DQx y", "-DR\"z", "a\\\\b", "-DS=\"q\"", "éx",
-            "-DT=a\"b",
+            "-DT=a\"b", "`a`", "x&&y", "a;b", "c^d", "e|f",
         ])
 
     def test_macro_argument_atoms_take_url_symbols(self):

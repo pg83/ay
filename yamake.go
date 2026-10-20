@@ -520,7 +520,20 @@ func isIdentCont(b byte) bool {
 }
 
 func (l *Lexer) isWordByte(b byte) bool {
-	return isWordByte(b) || l.inArgs && (b == ';' || b == '&' || b == '|')
+	if isWordByte(b) {
+		return true
+	}
+
+	if !l.inArgs {
+		return false
+	}
+
+	switch b {
+	case ';', '&', '`', '^', '|':
+		return true
+	}
+
+	return false
 }
 
 func isWordByte(b byte) bool {
