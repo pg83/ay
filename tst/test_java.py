@@ -409,6 +409,21 @@ class JavaStartTargetsTest(unittest.TestCase):
 
 
 class JavaModuleMacrosTest(unittest.TestCase):
+    def test_variable_srcdir_is_also_scanned_at_build_time(self):
+        # _FILL_JAR_GEN_SRCS (build/plugins/java.py): resolve_arc_path leaves a
+        # ${ARCADIA_ROOT} SRCDIR unresolved, so the jar build appends a scan of it.
+        files = java_tree(**{
+            "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nJAVA_SRCS(SRCDIR ${ARCADIA_ROOT}/other/src **/*)\n"
+                           "JAVA_SRCS(SRCDIR own **/*)\nEND()\n",
+            "other/src/A.java": "class A {}\n",
+            "app/own/B.java": "class B {}\n",
+        })
+        args = lib.node_by_output(lib.make(files, "app"), "$(B)/app/app.jar")["cmds"][0]["cmd_args"]
+        self.assertIn("$(S)/other/src/A.java", args)
+        start = args.index("DELIM")
+        self.assertEqual(args[start:start + 4], ["DELIM", "--append", "-d", "$(S)/other/src"])
+        self.assertEqual(args.count("DELIM"), 1)
+
     def test_exclude_with_trailing_separator(self):
         classpath = JavaDependencyManagementTest.library(
             self, "PEERDIR(contrib/java/x/a)\nDEPENDENCY_MANAGEMENT(contrib/java/x/a/2.0)\nEXCLUDE(contrib/java/x/b/)\n")

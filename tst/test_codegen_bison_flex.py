@@ -106,6 +106,25 @@ class BisonTest(unittest.TestCase):
         nested_compile = lib.node_by_output(graph, "$(B)/mod/_/_/sub/lex.ypp.cpp.o")
         self.assertIn("$(B)/mod/sub/lex.h", nested_compile["inputs"])
 
+    def test_distbuild_outputs_bring_the_grammar_includes_only(self):
+        # Under ya --dist (ymake --add-inputs) a compile takes the include closure
+        # of the generated source: the grammar's includes induced on bison's
+        # outputs, not the grammar, the header preprocessor or the skeletons.
+        for grammar, out in (("gram.y", "gram.y.cpp"), ("cgram.y", "cgram.y.c")):
+            with self.subTest(grammar=grammar):
+                body = "SRCS(gram.y)\n" if grammar == "gram.y" else "BISON_GEN_C()\nSRCS(cgram.y)\n"
+                graph = lib.make(bison_files(body, {
+                    f"mod/{grammar}": '%{\n#include "local.h"\n%}\n%%\n',
+                    "mod/local.h": "",
+                }), "mod", "--dist")
+                inputs = lib.node_by_output(graph, f"$(B)/mod/{out}.o")["inputs"]
+                header = "$(B)/mod/" + grammar.replace(".y", ".h")
+                for path in (header, "$(S)/mod/local.h"):
+                    self.assertIn(path, inputs)
+                for path in (f"$(S)/mod/{grammar}", "$(S)/build/scripts/preprocess.py",
+                             "$(S)/contrib/tools/bison/data/skeletons/lalr1.cc"):
+                    self.assertNotIn(path, inputs)
+
     def test_c_grammar_skips_preprocessor_and_passes_flags(self):
         graph = lib.make(bison_files(
             "BISON_GEN_C()\nBISON_FLAGS(-Wno-other --report=all)\nSRCS(gram.y)\n",

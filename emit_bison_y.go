@@ -74,10 +74,13 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
 	headerParsed := na.dirs.alloc(2 + len(bisonCppSkeletonDirectives) + len(localBucket))[:0]
+	addInputs := instance.Platform.AddInputs
 
-	headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
+	if !addInputs {
+		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
+	}
 
-	if preprocessHeader {
+	if preprocessHeader && !addInputs {
 		headerParsed = appendBisonCppHeaderParsed(headerParsed)
 	} else {
 		headerParsed = append(headerParsed, localBucket...)
@@ -193,9 +196,12 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 
 	var generatedParsed []IncludeDirective
 
-	if preprocessHeader {
+	switch {
+	case addInputs:
+		generatedParsed = na.dirList(append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())}}, localBucket...)...)
+	case preprocessHeader:
 		generatedParsed = e.bisonGeneratedCPPParsed(srcVFS, headerVFS)
-	} else {
+	default:
 		generatedParsed = na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
 	}
 

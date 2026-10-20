@@ -143,7 +143,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	for _, kind := range []string{"JAR", "SRC_JAR"} {
 		for _, g := range globs {
-			if !g.genSrcs || kind == "SRC_JAR" && !d.sourcesJar {
+			if !g.genSrcs && !g.spec.varSrcDir || kind == "SRC_JAR" && !d.sourcesJar {
 				continue
 			}
 

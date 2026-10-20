@@ -598,8 +598,11 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 
 		if u.kind == juJar && !u.proto {
 			spec := parseJavaSrcs(args)
+			rawSpec := parseJavaSrcs(d.javaRawArgs(raw))
 
-			spec.salt = javaSrcsSalt(parseJavaSrcs(d.javaRawArgs(raw)))
+			spec.salt = javaSrcsSalt(rawSpec)
+			spec.varSrcDir = strings.HasPrefix(rawSpec.srcDir, "$") && !strings.HasPrefix(rawSpec.srcDir, "$S")
+
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
 	case "DEFAULT_JAVA_SRCS_LAYOUT", "DEFAULT_JUNIT_JAVA_SRCS_LAYOUT":

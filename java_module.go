@@ -233,6 +233,7 @@ type JavaSrcsSpec struct {
 	files           []string
 	globs           []string
 	skipCheckSrcdir bool
+	varSrcDir       bool
 	salt            string
 }
 
