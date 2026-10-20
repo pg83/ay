@@ -91,11 +91,12 @@ type searchTierHotEntry struct {
 }
 
 type ScanCtx struct {
-	scanner *IncludeScanner
-	cfg     *ScanConfig
-	ccCfg   *ScanConfig
-	parser  IncludeDirectiveParser
-	tjc     *TarjanCtx
+	scanner   *IncludeScanner
+	cfg       *ScanConfig
+	ccCfg     *ScanConfig
+	parser    IncludeDirectiveParser
+	tjc       *TarjanCtx
+	tsImports bool
 }
 
 func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
@@ -232,6 +233,7 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 	sc.cfg = ctx.config(domain)
 	sc.ccCfg = nil
 	sc.parser = parser
+	sc.tsImports = domain == scanDomainAux
 
 	if domain == scanDomainSwig {
 		sc.ccCfg = ctx.config(scanDomainCC)
@@ -564,6 +566,10 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	}
 
 	if d.kind == includeTypeScript {
+		if !sc.tsImports {
+			return out
+		}
+
 		if file := s.parsers.resolveTSImport(incDir.relString(), d.target.string()); file != 0 {
 			return append(out, file)
 		}

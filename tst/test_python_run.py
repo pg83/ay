@@ -244,6 +244,28 @@ class RunPython3Test(unittest.TestCase):
         self.assertNotIn("$(S)/lib/dep.h", run["inputs"])
         self.assertNotIn("$(S)/lib/dep.h", compiled["inputs"])
 
+    def test_js_imports_are_processed_only_in_ts_modules(self):
+        # include_processors/ts_processor.cpp ProcessIncludes handles imports
+        # only for modules tagged TS; ydb html_log feeds graphlib.js, whose
+        # require('./lib') resolves nowhere, to RUN_PYTHON3 in a LIBRARY and the
+        # reference lists only the named .js inputs.
+        files = {
+            "lib/ya.make": (
+                LIBRARY_HEAD
+                + "RUN_PYTHON3(cat.py IN a.js b.ts STDOUT out.cpp)\n"
+                "END()\n"
+            ),
+            "lib/cat.py": "",
+            "lib/a.js": "var x = require('./lib');\nvar y = require('./dep');\n",
+            "lib/b.ts": "import { z } from './dep';\n",
+            "lib/dep.js": "",
+        }
+        graph = lib.make(files, "lib")
+        run = lib.node_by_output(graph, "$(B)/lib/out.cpp")
+        self.assertEqual(sorted({i for i in run["inputs"] if i.startswith("$(S)/lib/")}), [
+            "$(S)/lib/a.js", "$(S)/lib/b.ts", "$(S)/lib/cat.py",
+        ])
+
     def test_arcadia_root_left_by_expansion_limit_maps_to_source_root(self):
         # Each expansion pass consumes one "O1}" suffix, so the literal
         # ${ARCADIA_ROOT} only appears after the last of the eight passes.
