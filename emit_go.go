@@ -734,23 +734,57 @@ func (e *EmitContext) goToolCmdFlagsFor() []ANY {
 	return goToolCmdFlags
 }
 
-func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, ownSbomRef *NodeRef, ownSbomPath *VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
+func (e *EmitContext) goIncludedSrcs(goRes *GoSrcsResult) []VFS {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	na := ctx.na
+	includedSrcs := goRes.AsmInclSrcs
+
+	if len(d.cgoSrcs) > 0 {
+		cvs := e.cvScratch[:0]
+		extrasCap := len(includedSrcs)
+
+		for _, f := range d.cgoSrcs {
+			cv := e.scanner.walkClosure(resolveSourceVFS(ctx, instance, f.string(), d.srcDirs), d.scanCtx, scanDomainCC)
+
+			extrasCap += cv.len()
+			cvs = append(cvs, cv)
+		}
+
+		e.cvScratch = retainMaxLen(e.cvScratch, cvs)
+
+		block := na.vfs.alloc(extrasCap)
+		k := copy(block, includedSrcs)
+
+		for _, cv := range cvs {
+			cv.each(func(p VFS) {
+				if p.isSource() {
+					block[k] = p
+					k++
+				}
+			})
+		}
+
+		na.vfs.commit(k)
+
+		includedSrcs = block[:k:k]
+	}
+
+	return includedSrcs
+}
+
+func (e *EmitContext) goSrcList(goRes *GoSrcsResult, objOuts []VFS) (srcArgs, cgoSrcArgs []ANY, ownInputs, ownSources, ownBuilds []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.relString()
-	outName := programBinaryName(instance, d.moduleStmt)
-	outPath := build(dir, "/", outName, ".a")
-	goRes := e.goRes
-
-	if goRes == nil {
-		goRes = &GoSrcsResult{}
-	}
-
 	srcCap := 1 + len(objOuts) + len(goRes.AutoFiles) + len(goRes.GoFiles) + len(goRes.AsmFiles) + len(d.cgoSrcs)
-	srcArgs := na.anys.alloc(srcCap)
+
+	srcArgs = na.anys.alloc(srcCap)
+
 	srcInputs := na.vfs.alloc(srcCap)
-	ownSources := make([]VFS, 0, srcCap)
-	ownBuilds := make([]VFS, 0, srcCap)
+
+	ownSources = make([]VFS, 0, srcCap)
+	ownBuilds = make([]VFS, 0, srcCap)
+
 	nsrc := 0
 
 	addSrc := func(p VFS) {
@@ -851,11 +885,27 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	na.vfs.commit(nsrc)
 
 	plain := nsrc - len(d.cgoSrcs)
-	cgoSrcArgs := srcArgs[plain:nsrc:nsrc]
 
+	cgoSrcArgs = srcArgs[plain:nsrc:nsrc]
 	srcArgs = srcArgs[:plain:plain]
+	ownInputs = srcInputs[:nsrc:nsrc]
 
-	ownInputs := srcInputs[:nsrc:nsrc]
+	return srcArgs, cgoSrcArgs, ownInputs, ownSources, ownBuilds
+}
+
+func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, ownSbomRef *NodeRef, ownSbomPath *VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	na := ctx.na
+	dir := instance.Path.relString()
+	outName := programBinaryName(instance, d.moduleStmt)
+	outPath := build(dir, "/", outName, ".a")
+	goRes := e.goRes
+
+	if goRes == nil {
+		goRes = &GoSrcsResult{}
+	}
+
+	srcArgs, cgoSrcArgs, ownInputs, ownSources, ownBuilds := e.goSrcList(goRes, objOuts)
 	localARs, _, _ := goClassifyClosure(na, resolved, peerArchivePaths)
 	embedArgs, embedInputs := goEmbedArgs(na, d.goEmbeds)
 	tail := na.anys.alloc(4 + len(cgoSrcArgs) + len(embedArgs) + len(localARs))
@@ -877,38 +927,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 	na.anys.commit(nt)
 
-	includedSrcs := goRes.AsmInclSrcs
-
-	if len(d.cgoSrcs) > 0 {
-		cvs := e.cvScratch[:0]
-		extrasCap := len(includedSrcs)
-
-		for _, f := range d.cgoSrcs {
-			cv := e.scanner.walkClosure(resolveSourceVFS(ctx, instance, f.string(), d.srcDirs), d.scanCtx, scanDomainCC)
-
-			extrasCap += cv.len()
-			cvs = append(cvs, cv)
-		}
-
-		e.cvScratch = retainMaxLen(e.cvScratch, cvs)
-
-		block := na.vfs.alloc(extrasCap)
-		k := copy(block, includedSrcs)
-
-		for _, cv := range cvs {
-			cv.each(func(p VFS) {
-				if p.isSource() {
-					block[k] = p
-					k++
-				}
-			})
-		}
-
-		na.vfs.commit(k)
-
-		includedSrcs = block[:k:k]
-	}
-
+	includedSrcs := e.goIncludedSrcs(goRes)
 	ownSourceInputs := na.vfsList(ownSources...)
 	ownBuildInputs := na.vfsList(ownBuilds...)
 	sbomRefs, sbomPaths := e.goToolchainSboms()
@@ -1040,7 +1059,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	return e.emitNode(node), outPath
 }
 
-func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
+func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.relString()
@@ -1075,17 +1094,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		internStr(goArcPrefix).any(),
 	)), Env: goVcsEnv}
 
-	goFiles := concat(goRes.AutoFiles, goRes.GoFiles)
-	srcArgs := na.anys.alloc(len(goFiles))
-
-	for i, src := range goFiles {
-		srcArgs[i] = src.any()
-	}
-
-	na.anys.commit(len(goFiles))
-
-	srcArgs = srcArgs[:len(goFiles):len(goFiles)]
-
+	srcArgs, cgoSrcArgs, ownInputs, _, _ := e.goSrcList(goRes, objOuts)
 	localARs, nonLocalARs, cgoARs := goClassifyClosure(na, resolved, peerArchivePaths)
 	tail := na.anys.alloc(4 + len(localARs) + len(nonLocalARs) + len(cgoARs))
 	nt := 0
@@ -1182,8 +1191,16 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		sdcInputs = na.vfsList(mergeSdcmetaVFS)
 	}
 
+	var cgoBuilds []VFS
+
+	if len(d.cgoSrcs) > 0 {
+		cgoBuilds = na.vfsList(build(dir, "/_cgo_main.c", instance.Platform.objectSuffix()))
+	}
+
 	inputs := na.inputList(
-		na.vfsList(goFiles...),
+		ownInputs,
+		e.goIncludedSrcs(goRes),
+		cgoBuilds,
 		testInputs,
 		embedInputs,
 		sdcInputs,
@@ -1197,8 +1214,10 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		extraTailSources,
 	)
 
-	deps := na.noderefs.alloc(len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + 2)
-	k := copy(deps, peerArchiveRefs)
+	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + 2)
+	k := copy(deps, objRefs)
+
+	k += copy(deps[k:], peerArchiveRefs)
 
 	k += copy(deps[k:], peerGlobalRefs)
 
@@ -1227,6 +1246,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		srcArgs,
 		e.goToolCmdFlagsFor(),
 		goExeCmdLinkFlags,
+		cgoSrcArgs,
 		embedArgs,
 		goExeCmdVcs,
 		na.anyList(vcsGoPath.any()),

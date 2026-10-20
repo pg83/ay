@@ -2023,7 +2023,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if isGoExeModuleType(d.moduleStmt.Name) {
-		goRef, goPath := e.emitGoExe(resolved, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
+		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
 		result := newResult()
 
 		result.isPROGRAM = true

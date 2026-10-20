@@ -308,6 +308,21 @@ class GoCgoGraphTest(unittest.TestCase):
         peers = between(lib.node_by_output(graph, f"$(B)/{pkg}/order.a")["cmds"][0]["cmd_args"], "++peers", "--ya-end-command-file")
         self.assertLess(peers.index("vendor/example.com/first/first.a"), peers.index("vendor/example.com/second/second.a"))
 
+    def test_go_dll_with_only_cgo_sources_runs_the_cgo_pipeline(self):
+        files = cgo_world()
+        files["build/scripts/fs_tools.py"] = ""
+        pkg = "cmd/dll"
+        files[f"{pkg}/ya.make"] = "GO_DLL(x)\nCGO_SRCS(lib.go)\nEND()\n"
+        files[f"{pkg}/lib.go"] = 'package main\nimport "C"\n'
+        graph = lib.make(files, pkg)
+        b = f"$(B)/{pkg}"
+        lib.node_by_output(graph, f"{b}/lib.cgo1.go")
+        args = lib.node_by_output(graph, f"{b}/libx.so")["cmds"][3]["cmd_args"]
+        self.assertEqual(between(args, "++srcs", "++asm-flags"), [
+            f"{b}/lib.cgo1.go", f"{b}/_cgo_gotypes.go", f"{b}/lib.cgo2.c.pic.o", f"{b}/_cgo_export.c.pic.o", f"{b}/_cgo_import.go",
+        ])
+        self.assertEqual(between(args, "++cgo-srcs", "++ld_plugins"), [f"$(S)/{pkg}/lib.go"])
+
     def test_generated_cgo_source_outputs_stay_in_module_build_dir(self):
         files = cgo_world()
         pkg = "library/go/gen"
@@ -379,9 +394,6 @@ const raw = `
         self.assertEqual(between(args, "++cgo-srcs", "++peers"), [f"$(S)/{pkg}/decode.go"])
         self.assertIn(dynimport["uid"], package["deps"])
 
-    # Defect: producerPositions() omits CGO_SRCS from its early-exit count, so a module whose only
-    # sources are CGO_SRCS never runs the cgo1 producer while _cgo_.o still links its outputs.
-    @unittest.expectedFailure
     def test_module_with_only_cgo_sources_emits_cgo1_node(self):
         files = cgo_world()
         pkg = "library/go/yandex/authparser"
