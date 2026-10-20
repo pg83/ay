@@ -58,6 +58,7 @@ var (
 	envCXX_RT                       = internEnv("CXX_RT")
 	envClangTidyBin                 = internEnv("CLANG_TIDY_BIN")
 	envCmakeCurrentBinaryDir        = internEnv("CMAKE_CURRENT_BINARY_DIR")
+	envCppRos                       = internEnv("CPP_ROS")
 	envCudaNvccFlags                = internEnv("CUDA_NVCC_FLAGS")
 	envCustomClangTidy              = internEnv("CUSTOM_CLANG_TIDY")
 	envDEBUGINFO_LINES_ONLY         = internEnv("DEBUGINFO_LINES_ONLY")

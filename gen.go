@@ -143,6 +143,7 @@ type ModuleEmitResult struct {
 	AddInclGlobal                   []VFS
 	OwnAddInclGlobal                []VFS
 	ProtoInclude                    []VFS
+	RosInclude                      []VFS
 	SwigInclude                     []VFS
 	AddInclOneLevel                 []VFS
 	AddInclUserGlobal               []VFS
@@ -1049,7 +1050,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
-	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary {
+	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary && d.multimodule != tokRosLibrary {
 		cpp := instance
 
 		cpp.Language = LangCPP
@@ -1345,6 +1346,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	preResolved = make([]ResolvedPeer, 0, 2)
 
+	for _, language := range d.selfPeers {
+		self := instance
+
+		self.Language = language
+		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: genModule(ctx, self), kind: peerKindLangDefault})
+	}
+
 	if resolveCppSelf {
 		cppSelf := instance
 
@@ -1416,6 +1424,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	for _, decl := range ownResourceGlobals {
 		emitResourceFetch(ctx, decl)
 	}
+
+	var rosInclude []VFS
+	rosInclude = append(rosInclude, d.rosInclude...)
+
+	for _, peer := range resolved {
+		rosInclude = append(rosInclude, peer.result.RosInclude...)
+	}
+
+	rosInclude = ctx.na.vfsList(dedup(rosInclude)...)
 
 	var globalSources []VFS
 
@@ -1978,6 +1995,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                d.addInclGlobal,
 			ProtoInclude:                    effectiveProtoInclude,
+			RosInclude:                      rosInclude,
 			SwigInclude:                     effectiveSwigInclude,
 			AddInclOneLevel:                 d.addInclOneLevel,
 			AddInclUserGlobal:               d.addInclUserGlobal,
@@ -2130,6 +2148,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	d.scanCtx = newModuleScanContext(ctx, instance, d, scanAddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
+	d.scanCtx.rosInclude = rosInclude
 	e.emit()
 
 	if instance.Demand == demandNone {

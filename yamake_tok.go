@@ -1,6 +1,14 @@
 package main
 
 var tokName = [...]STR{
+	tokRosLibrary:        internStr("ROS_LIBRARY"),
+	tokRosDir:            internStr("ROS_DIR"),
+	tokRosPartial:        internStr("ROS_PARTIAL"),
+	tokRosSrcs:           internStr("ROS_SRCS"),
+	tokRosMsgCmd:         internStr("ROS_MSG_CMD"),
+	tokRosZeroCopyMsgCmd: internStr("ROS_ZERO_COPY_MSG_CMD"),
+	tokRosSrvCmd:         internStr("ROS_SRV_CMD"),
+
 	tokYtOrmProtoYson: internStr("YT_ORM_PROTO_YSON"),
 	tokUsrvStyleJSON:  internStr("USRV_STYLE_JSON_CURRENT_DIRECTORY"),
 	tokUsrvStyleYAML:  internStr("USRV_STYLE_YAML_CURRENT_DIRECTORY"),
@@ -377,6 +385,13 @@ var tokBySTR = func() []TOK {
 
 const (
 	tokInvalid TOK = iota
+	tokRosLibrary
+	tokRosDir
+	tokRosPartial
+	tokRosSrcs
+	tokRosMsgCmd
+	tokRosZeroCopyMsgCmd
+	tokRosSrvCmd
 	tokAddInclSelf
 	tokAliceCapability
 	tokAliceTypedCallback

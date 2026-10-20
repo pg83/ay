@@ -111,6 +111,10 @@ func (e *EmitContext) srcPosition(tok STR) ([]VFS, []VFS) {
 	}
 
 	switch class {
+	case srcExtRos:
+		if d.ros != nil {
+			e.prodVFS = append(e.prodVFS, e.rosOutputPaths(src, false)...)
+		}
 	case srcExtProto:
 		base := strings.TrimSuffix(protoRel, ".proto")
 

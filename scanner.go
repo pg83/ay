@@ -14,6 +14,7 @@ const (
 
 const (
 	includeSystem IncludeKind = iota
+	includeRos
 	includeQuoted
 
 	includeCythonOptional
@@ -36,6 +37,7 @@ const (
 	scanDomainProto
 	scanDomainAux
 	scanDomainFlatc
+	scanDomainRos
 	scanDomainGoAsm
 	scanDomainSwig
 	scanDomainJoinTarget
@@ -148,6 +150,7 @@ type ScanContext struct {
 	asmAddIncl    []VFS
 	cythonAddIncl []VFS
 	protoInclude  []VFS
+	rosInclude    []VFS
 	swigInclude   []VFS
 	protoOutRoot  VFS
 	goAsmIncl     []VFS
@@ -188,6 +191,8 @@ func (ctx *ScanContext) modulePaths(domain ScanDomain) (own, peer []VFS) {
 		return ctx.parsers.protoScanOwnPaths(ctx.protoOutRoot, ctx.protoInclude), nil
 	case scanDomainAux:
 		return ctx.ccOwn, ctx.fullPeer
+	case scanDomainRos:
+		return ctx.rosInclude, nil
 	case scanDomainFlatc:
 		return nil, nil
 	case scanDomainGoAsm:
@@ -531,6 +536,14 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirective) []VFS {
 	s := sc.scanner
 	mark := len(out)
+
+	if d.kind == includeRos {
+		if resolved := resolveRosInclude(s.parsers.fs, sc.cfg.ownAddIncl, d.target.string()); resolved != 0 {
+			return append(out, resolved)
+		}
+
+		return out
+	}
 
 	if d.kind == includeTypeScript {
 		if file := s.parsers.resolveTSImport(incDir.relString(), d.target.string()); file != 0 {

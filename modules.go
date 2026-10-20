@@ -161,6 +161,11 @@ type TestMeta struct {
 }
 
 type ModuleData struct {
+	ros         *RosModule
+	multimodule TOK
+	selfPeers   []Language
+	rosInclude  []VFS
+
 	discarded bool
 
 	styleChecks []StyleCheck
@@ -339,14 +344,15 @@ type CompileSpec struct {
 }
 
 type SrcMeta struct {
-	Source     ANY
-	Prio       int
-	Seq        int
-	Global     bool
-	Bucket     int
-	Compile    CompileSpec
-	CompileRef NodeRef
-	PyMeta     uint32
+	RosZeroCopy bool
+	Source      ANY
+	Prio        int
+	Seq         int
+	Global      bool
+	Bucket      int
+	Compile     CompileSpec
+	CompileRef  NodeRef
+	PyMeta      uint32
 }
 
 func (m SrcMeta) sortKey(round uint64) uint64 {
@@ -1095,6 +1101,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
+			setupRosModule(v, modulePath, language, env, d)
 
 			if v.Name == tokProtoLibrary && !v.Schema {
 				d.protoVariants = defaultProtoVariants
@@ -1603,6 +1610,8 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	}
 
 	switch name {
+	case tokRosLibrary:
+		return rosModuleUnit(language)
 	case tokDllJava:
 		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp, SwigLang: strSwigLangJniCpp}
 	case tokGoLibrary, tokGoProgram, tokGoTest, tokGoDll:
@@ -1716,6 +1725,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}()
 
 	switch v.Name {
+	case tokRosDir, tokRosPartial, tokRosSrcs, tokRosMsgCmd, tokRosZeroCopyMsgCmd, tokRosSrvCmd:
+		applyRosStmt(modulePath, v, env, d)
 	case tokSdcInstall:
 		applySdcInstall(modulePath, v.Args, d, env)
 	case tokSdcResourceInfo, tokSdcSbResourceInfo, tokSdcRosnodeInfo, tokSdcSolibInfo:

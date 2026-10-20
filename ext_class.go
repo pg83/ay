@@ -19,6 +19,7 @@ const (
 
 const (
 	srcExtUnseen SrcExtClass = iota
+	srcExtRos
 	srcExtRegular
 	srcExtProto
 	srcExtGztProto
@@ -81,9 +82,11 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 	set(extAsmSource, ".yasm", ".asm", ".s", ".S")
 	set(extHeader, ".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx", ".inl")
 	set(extCopyAuto, ".c", ".cpp", ".cc", ".cxx", ".proto", ".ev", ".g4", ".y", ".ypp", ".rl", ".rl6", ".h.in", ".c.in", ".cpp.in")
-	set(extCodegen, ".proto", ".gztproto", ".fbs64", ".fbs", ".ev", ".cfgproto", ".rl6", ".rl", ".rl5", ".y", ".ypp", ".cpp.in", ".c.in", ".sc", ".gperf", ".lpp", ".lex", ".l", ".fml", ".sfdl", ".asp", ".swg")
+	set(extCodegen, ".msg", ".srv", ".proto", ".gztproto", ".fbs64", ".fbs", ".ev", ".cfgproto", ".rl6", ".rl", ".rl5", ".y", ".ypp", ".cpp.in", ".c.in", ".sc", ".gperf", ".lpp", ".lex", ".l", ".fml", ".sfdl", ".asp", ".swg")
 
 	for ext, cls := range map[string]SrcExtClass{
+		".msg":      srcExtRos,
+		".srv":      srcExtRos,
 		".gztproto": srcExtGztProto,
 		".proto":    srcExtProto,
 		".fbs64":    srcExtFbs64,
@@ -322,7 +325,7 @@ func srcExtClassOf(id ANY) SrcExtClass {
 
 func isCodegenProducingSrcID(id ANY) bool {
 	switch srcExtClassOf(id) {
-	case srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex, srcExtFml, srcExtSfdl, srcExtAsp, srcExtSwg:
+	case srcExtRos, srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex, srcExtFml, srcExtSfdl, srcExtAsp, srcExtSwg:
 		return true
 	}
 
