@@ -277,12 +277,6 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		}
 	}
 
-	if d.grpc {
-		for _, p := range goGrpcImports(std) {
-			addPeer(p)
-		}
-	}
-
 	if goModuleHasProtos(d) {
 		for _, p := range goProtobufImports(std) {
 			addPeer(p)
@@ -311,6 +305,10 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		}
 	}
 
+	for _, src := range d.cgoSrcs {
+		addImports(src)
+	}
+
 	for _, meta := range d.srcs {
 		if meta.Global || meta.Compile.Variant != 0 {
 			continue
@@ -321,7 +319,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		}
 	}
 
-	for _, srcs := range [][]ANY{d.cgoSrcs, d.goTestSrcs, d.goXTestSrcs} {
+	for _, srcs := range [][]ANY{d.goTestSrcs, d.goXTestSrcs} {
 		for _, src := range srcs {
 			addImports(src)
 		}

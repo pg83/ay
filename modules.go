@@ -1956,7 +1956,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokGrpc:
 		d.grpc = true
 
-		if !isGoModuleType(d.unit.Type) {
+		if isGoModuleType(d.unit.Type) {
+			for _, p := range goGrpcImports(env.string(envGOSTD)) {
+				d.peerdirs = append(d.peerdirs, internStr(p).any())
+			}
+		} else {
 			d.peerdirs = append(d.peerdirs, strContribLibsGrpc.any())
 		}
 	case tokPyNamespace:

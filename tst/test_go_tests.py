@@ -449,6 +449,31 @@ class GoCodegenTest(unittest.TestCase):
         self.assertIn("vendor/google.golang.org/grpc/grpc.a", peers)
         self.assertFalse([o for n in graph["graph"] for o in n["outputs"] if o.startswith("$(B)/contrib/libs/grpc/")])
 
+    def test_go_proto_peer_order_follows_conf_statement_and_plugin_order(self):
+        files = go_proto_world()
+        for path in (f"{STD}/context", "vendor/google.golang.org/grpc", "vendor/google.golang.org/grpc/codes",
+                     "vendor/google.golang.org/grpc/grpclog", "vendor/google.golang.org/grpc/status",
+                     "vendor/google.golang.org/genproto/googleapis/api/annotations", "p/dep"):
+            go_module(files, path)
+        files["contrib/libs/googleapis-common-protos/ya.make"] = "PROTO_LIBRARY()\nEND()\n"
+        files["p/svc/ya.make"] = (
+            "PROTO_LIBRARY()\nPEERDIR(p/dep)\nGRPC()\nSRCS(GLOBAL svc.proto)\n"
+            "USE_COMMON_GOOGLE_APIS(api/annotations)\nEND()\n"
+        )
+        files["p/svc/svc.proto"] = 'syntax = "proto3";\n'
+        go_module(files, "g/user", macros="PEERDIR(p/svc)\n")
+        graph = lib.make(files, "g/user")
+        peers = between(go_tool_args(lib.node_by_output(graph, "$(B)/p/svc/svc.a")), "++peers", "--ya-end-command-file")
+        self.assertEqual(peers[:3], [
+            "vendor/google.golang.org/genproto/googleapis/api/annotations/annotations.a", "p/dep/dep.a", f"{STD}/context/context.a",
+        ])
+        self.assertEqual(peers[3:7], [
+            "vendor/google.golang.org/grpc/grpc.a", "vendor/google.golang.org/grpc/codes/codes.a",
+            "vendor/google.golang.org/grpc/grpclog/grpclog.a", "vendor/google.golang.org/grpc/status/status.a",
+        ])
+        self.assertEqual(peers[7], f"{STD}/sync/sync.a")
+        self.assertIn("vendor/google.golang.org/protobuf/types/known/wrapperspb/wrapperspb.a", peers)
+
     def test_go_protoc_lists_own_proto_includes_before_the_peer_ones(self):
         files = go_proto_world()
         files["p/base/ya.make"] = "PROTO_LIBRARY()\nPROTO_NAMESPACE(GLOBAL p/base)\nSRCS(base.proto)\nEND()\n"

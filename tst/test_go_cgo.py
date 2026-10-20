@@ -294,6 +294,20 @@ class GoCgoGraphTest(unittest.TestCase):
             f"{b}/_cgo_export.c.o", f"{b}/internal.cgo2.c.o", f"{b}/plain.c.o", f"{b}/exported.c.o",
         ])
 
+    def test_cgo_source_imports_precede_go_file_imports(self):
+        files = cgo_world()
+        for name in ("first", "second"):
+            go_module(files, f"vendor/example.com/{name}")
+        pkg = "library/go/order"
+        files.update({
+            f"{pkg}/ya.make": "GO_LIBRARY()\nSRCS(plain.go)\nCGO_SRCS(bind.go)\nEND()\n",
+            f"{pkg}/plain.go": 'package order\nimport "example.com/second"\n',
+            f"{pkg}/bind.go": 'package order\nimport "C"\nimport "example.com/first"\n',
+        })
+        graph = lib.make(files, pkg)
+        peers = between(lib.node_by_output(graph, f"$(B)/{pkg}/order.a")["cmds"][0]["cmd_args"], "++peers", "--ya-end-command-file")
+        self.assertLess(peers.index("vendor/example.com/first/first.a"), peers.index("vendor/example.com/second/second.a"))
+
     def test_generated_cgo_source_outputs_stay_in_module_build_dir(self):
         files = cgo_world()
         pkg = "library/go/gen"

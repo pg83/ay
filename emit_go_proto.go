@@ -44,9 +44,9 @@ func goProtobufImports(std *GoStd) []string {
 	}
 }
 
-func goGrpcImports(std *GoStd) []string {
+func goGrpcImports(std string) []string {
 	return []string{
-		std.Prefix + "/context",
+		std + "/context",
 		"vendor/google.golang.org/grpc",
 		"vendor/google.golang.org/grpc/codes",
 		"vendor/google.golang.org/grpc/grpclog",
@@ -56,7 +56,7 @@ func goGrpcImports(std *GoStd) []string {
 
 func goModuleHasProtos(d *ModuleData) bool {
 	return slices.ContainsFunc(d.srcs, func(m SrcMeta) bool {
-		return !m.Global && srcExtClassOf(m.Source.relOrSelf().any()) == srcExtProto
+		return srcExtClassOf(m.Source.relOrSelf().any()) == srcExtProto
 	})
 }
 
@@ -201,9 +201,11 @@ type GoProtoOpt struct {
 func applyGoCommonGoogleApis(args []ANY, d *ModuleData) {
 	const genproto = "vendor/google.golang.org/genproto/googleapis/"
 
+	var peers []ANY
+
 	if len(args) == 0 {
 		for _, api := range goCommonGoogleApis {
-			d.peerdirs = append(d.peerdirs, internStr(genproto+api).any())
+			peers = append(peers, internStr(genproto+api).any())
 		}
 
 		for _, p := range []string{
@@ -211,7 +213,7 @@ func applyGoCommonGoogleApis(args []ANY, d *ModuleData) {
 			"vendor/cloud.google.com/go/servicemanagement/apiv1/servicemanagementpb",
 			"vendor/cloud.google.com/go/longrunning/autogen/longrunningpb",
 		} {
-			d.peerdirs = append(d.peerdirs, internStr(p).any())
+			peers = append(peers, internStr(p).any())
 		}
 
 		for _, api := range []string{
@@ -221,13 +223,14 @@ func applyGoCommonGoogleApis(args []ANY, d *ModuleData) {
 			"type/expr", "type/fraction", "type/interval", "type/latlng", "type/localized_text", "type/money",
 			"type/month", "type/phone_number", "type/postaladdress", "type/quaternion", "type/timeofday",
 		} {
-			d.peerdirs = append(d.peerdirs, internStr(genproto+api).any())
+			peers = append(peers, internStr(genproto+api).any())
 		}
 	} else {
 		for _, a := range args {
-			d.peerdirs = append(d.peerdirs, internStr(genproto+a.string()).any())
+			peers = append(peers, internStr(genproto+a.string()).any())
 		}
 	}
 
+	d.peerdirs = append(peers, d.peerdirs...)
 	d.protoAddInclGlobal = slices.Insert(d.protoAddInclGlobal, 0, contribLibsGoogleapisCommonProtos)
 }
