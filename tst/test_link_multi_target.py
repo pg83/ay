@@ -50,6 +50,41 @@ class MultiTargetGraphTest(unittest.TestCase):
         self.assertIn("$(B)/shared/libshared.a", result_outputs(graph))
         self.assertIn("$(B)/two/two", result_outputs(graph))
 
+    def test_recursed_libraries_wait_for_every_linking_target(self):
+        # In test mode the RECURSE closure of a target is generated too; a library there
+        # reaches its peers at a lower demand, and a later linking target would emit them
+        # a second time (a second producer of the joined source).
+        files = {
+            "joined/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}JOIN_SRCS(all.cpp a.cpp b.cpp)\nEND()\n",
+            "joined/a.cpp": "int a;\n",
+            "joined/b.cpp": "int b;\n",
+            "one/ya.make": f"PROGRAM()\n{lib.BARE_MODULE}SRCS(main.cpp)\nEND()\nRECURSE(lib)\n",
+            "one/main.cpp": "int main(){return 0;}\n",
+            "one/lib/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}PEERDIR(joined)\nEND()\n",
+            "two/ya.make": f"PROGRAM()\n{lib.BARE_MODULE}PEERDIR(joined)\nSRCS(main.cpp)\nEND()\n",
+            "two/main.cpp": "int main(){return 0;}\n",
+        }
+        counts = outputs(lib.make(files, "two", "one", "-t"))
+        self.assertEqual(1, counts["$(B)/joined/all.cpp"])
+        self.assertEqual(1, counts["$(B)/joined/libjoined.a"])
+
+    def test_library_target_peered_by_an_earlier_library_target(self):
+        # liba reaches libb as a peer before libb's own turn as a target; libb is built
+        # either way, so the peer takes the target's demand and is emitted once.
+        files = {
+            "libb/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}JOIN_SRCS(all.cpp a.cpp b.cpp)\nEND()\n",
+            "libb/a.cpp": "int a;\n",
+            "libb/b.cpp": "int b;\n",
+            "liba/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}PEERDIR(libb)\nSRCS(x.cpp)\nEND()\n",
+            "liba/x.cpp": "int x;\n",
+        }
+        for order in (("libb", "liba"), ("liba", "libb")):
+            graph = lib.make(files, *order)
+            counts = outputs(graph)
+            self.assertEqual(1, counts["$(B)/libb/all.cpp"])
+            self.assertEqual(1, counts["$(B)/libb/liblibb.a"])
+            self.assertTrue({"$(B)/liba/libliba.a", "$(B)/libb/liblibb.a"} <= result_outputs(graph))
+
     def test_target_option_lists_targets(self):
         positional = lib.make(project(), "two", "one", "shared")
         option = lib.make(project(), "two", "-C", "one;shared")

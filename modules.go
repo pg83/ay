@@ -3891,13 +3891,19 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		}
 	}
 
-	return ModuleInstance{
+	peer := ModuleInstance{
 		Path:     peerVFS,
 		Kind:     KindLib,
 		Language: language,
 		Platform: parent.Platform,
 		Demand:   demand,
 	}
+
+	if demand == demandNone && ctx.roots[peer] {
+		peer.Demand = ctx.rootDemand
+	}
+
+	return peer
 }
 
 func moduleExcludesTag(d *ModuleData, tag string) bool {

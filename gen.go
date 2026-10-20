@@ -234,6 +234,8 @@ type GenCtx struct {
 	goEnvMemo        map[[2]STR]EnvVars
 	frameSerial      uint32
 	scannerTargetPIC *IncludeScanner
+	roots            map[ModuleInstance]bool
+	rootDemand       ModuleDemand
 }
 
 type moduleMemoEntry struct {
@@ -253,9 +255,30 @@ func newModuleMemo() *moduleMemo {
 
 func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *YaTestOpts, keepGoing bool, rootDemand ModuleDemand) {
 	ctx := newGenCtx(fs, caches, hostP, targetP, emitter, onWarn, tests, keepGoing)
+	ordered := ctx.linkingTargetsFirst(targets)
+	recursed := make([][]string, len(ordered))
+	all := slices.Clone(ordered)
 
-	for _, t := range ctx.linkingTargetsFirst(targets) {
-		ctx.genTarget(t, rootDemand)
+	for i, t := range ordered {
+		recursed[i] = discoverRecursedTargets(ctx, filepath.Clean(t))
+		all = append(all, recursed[i]...)
+	}
+
+	ctx.roots = make(map[ModuleInstance]bool, len(all))
+	ctx.rootDemand = rootDemand
+
+	for _, dir := range all {
+		ctx.roots[ctx.rootInstance(dir, demandNone)] = true
+	}
+
+	for _, dir := range ctx.linkingTargetsFirst(all) {
+		if !isJavaModuleType(ctx.moduleName(dir)) {
+			genModule(ctx, ctx.rootInstance(dir, rootDemand))
+		}
+	}
+
+	for i, t := range ordered {
+		ctx.genTarget(t, recursed[i], rootDemand)
 	}
 
 	if ctx.buckets.h1Mismatches > 0 {
@@ -388,7 +411,7 @@ func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance 
 	}
 }
 
-func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
+func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand ModuleDemand) {
 	if name := ctx.moduleName(filepath.Clean(targetDir)); isJavaModuleType(name) {
 		for _, dir := range ctx.recurseClosure(filepath.Clean(targetDir)) {
 			ctx.genStartTarget(dir)
@@ -413,7 +436,7 @@ func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
 		ctx.emitModuleTests(root)
 	}
 
-	for _, dir := range discoverRecursedTargets(ctx, filepath.Clean(targetDir)) {
+	for _, dir := range recursed {
 		if name := ctx.moduleName(dir); isJavaModuleType(name) {
 			ctx.genJavaTarget(dir, name)
 
