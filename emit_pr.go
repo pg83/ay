@@ -158,6 +158,18 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	pending := e.pendingEmit(pe)
+	generatorRefs := ctx.na.noderefs.alloc(1 + len(auxTools))[:0]
+
+	generatorRefs = append(generatorRefs, res.LDRef)
+
+	for _, tool := range auxTools {
+		if tool.ref != 0 {
+			generatorRefs = append(generatorRefs, tool.ref)
+		}
+	}
+
+	ctx.na.noderefs.commit(len(generatorRefs))
+	generatorRefs = generatorRefs[:len(generatorRefs):len(generatorRefs)]
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet) {
 		if registeredPROut[out] {
@@ -170,7 +182,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			OutputPath:      out,
 			ProducerRef:     prRef,
 			ProducerMainOut: mainOutputVFS,
-			GeneratorRefs:   e.ctx.na.refList(res.LDRef),
+			GeneratorRefs:   generatorRefs,
 			ParsedIncludes:  parsed,
 			OnUse:           pending,
 		})

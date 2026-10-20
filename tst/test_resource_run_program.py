@@ -186,6 +186,22 @@ class RunProgramTest(unittest.TestCase):
             ],
         ])
 
+    def test_induced_deps_of_every_tool_reach_the_outputs(self):
+        # Each ${tool:...} of the command contributes its INDUCED_DEPS: the
+        # yabs library/cpp/yaff/proto/well_known_types outputs of
+        # RUN_PROGRAM(protoc ... TOOL library/cpp/yaff/tools/protoc_plugin)
+        # compile with the yaff runtime induced by the plugin.
+        files = library(
+            "RUN_PROGRAM(tools/gen TOOL tools/plugin OUT a.cpp)\n",
+        )
+        files["tools/plugin/ya.make"] = (
+            f"PROGRAM(plugin)\n{BARE}INDUCED_DEPS(h+cpp ${{ARCADIA_ROOT}}/inc/runtime.h)\nSRCS(main.cpp)\nEND()\n"
+        )
+        files["tools/plugin/main.cpp"] = "int main(){return 0;}\n"
+        files["inc/runtime.h"] = ""
+        graph = lib.make(files, "lib")
+        self.assertIn("$(S)/inc/runtime.h", lib.node_by_output(graph, "$(B)/lib/a.cpp.o")["inputs"])
+
     def test_generated_empty_parser_inputs_bring_their_sources(self):
         files = library(
             "RUN_PROGRAM(tools/gen IN seed.txt OUT_NOAUTO main.bin gen.py)\n"
