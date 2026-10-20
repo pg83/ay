@@ -249,7 +249,7 @@
       "search/daemons/ranking_middlesearch"
     ],
     "target": "search/daemons/ranking_middlesearch",
-    "xfail": "auto",
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/12703685538",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/12703687865"
   },
