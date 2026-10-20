@@ -30,10 +30,10 @@ var javaModuleUnits = map[TOK][]*javaUnit{
 	tokJavaLibrary:                    {javaUnitFull, javaUnitIJar},
 	tokJavaLibrarySplit:               {javaUnitFull, javaUnitIJar},
 	tokExternalJavaLibrary:            {javaUnitExt},
-	tokJavaProgram:                    {javaRunnable("JAVA_PROGRAM", false, javaTagsIJar), javaCompilation("JAVA_PROGRAM")},
-	tokJavaAnnotationProcessor:        {javaRunnable("JAVA_ANNOTATION_PROCESSOR", false, nil), javaCompilation("JAVA_ANNOTATION_PROCESSOR")},
-	tokJavaContribProgram:             {javaRunnable("JAVA_PROGRAM", true, nil), javaContribCompilation("JAVA_PROGRAM")},
-	tokJavaContribAnnotationProcessor: {javaRunnable("JAVA_ANNOTATION_PROCESSOR", true, nil), javaContribCompilation("JAVA_ANNOTATION_PROCESSOR")},
+	tokJavaProgram:                    {javaCompilation("JAVA_PROGRAM"), javaRunnable("JAVA_PROGRAM", false, javaTagsIJar)},
+	tokJavaAnnotationProcessor:        {javaCompilation("JAVA_ANNOTATION_PROCESSOR"), javaRunnable("JAVA_ANNOTATION_PROCESSOR", false, nil)},
+	tokJavaContribProgram:             {javaContribCompilation("JAVA_PROGRAM"), javaRunnable("JAVA_PROGRAM", true, nil)},
+	tokJavaContribAnnotationProcessor: {javaContribCompilation("JAVA_ANNOTATION_PROCESSOR"), javaRunnable("JAVA_ANNOTATION_PROCESSOR", true, nil)},
 	tokJunit5:                         javaTestUnits("JUNIT5", "JUNIT5_JAR_COMPILATION", "junit5", []string{"JUNIT5_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
 	tokJunit6:                         javaTestUnits("JUNIT6", "JUNIT6_JAR_COMPILATION", "junit6", []string{"JUNIT6_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
 	tokJtest:                          javaTestUnits("JTEST", "JTEST_JAR_COMPILATION", "junit4", []string{"JTEST_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
@@ -138,7 +138,7 @@ func javaTestUnits(moduleType, compTag, runner string, extraCompTags []string) [
 	testable := &javaUnit{kind: juTest, sub: KindJavaTestable, tag: "JAR_TESTABLE", moduleType: moduleType, peerdirTags: javaTags(javaTagsJarBase, []string{"JAR_TESTABLE", "JAVA_TEST_LIBRARY", "FULL_JAR_COMPILATION"}), dmTagsExclude: javaTagsIJar, nameGen: javaNameFullPath, suffix: ".test.cp.jar", consumeNonManageable: true, selfPeers: []ModuleKind{KindJavaCompilation}, testRunner: runner}
 	comp := &javaUnit{kind: juJar, sub: KindJavaCompilation, tag: compTag, moduleType: moduleType, peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar, extraCompTags), dmTagsExclude: javaTagsFull, nameGen: javaNameFullPath, suffix: ".jar", compileView: true, testRunner: runner}
 
-	return []*javaUnit{testable, comp}
+	return []*javaUnit{comp, testable}
 }
 
 func isJavaModuleType(name TOK) bool {
@@ -315,10 +315,26 @@ type JavaData struct {
 	ktlintOld           bool
 	checkJavaDeps       string
 	testEnv             []string
+	test                javaTestData
 	sourcesJar          bool
 	noYmakePython3      bool
 	javaDependencyNoDep bool
 	env                 Environment
+}
+
+type javaTestData struct {
+	size             string
+	timeout          string
+	tags             []string
+	requirements     []string
+	forkMode         string
+	splitFactor      string
+	experimentalFork bool
+	systemProperties []string
+	classpathCmdType string
+	data             []string
+
+	ignoreClasspathClash []string
 }
 
 type JavaProtoPlugin struct {
@@ -327,39 +343,63 @@ type JavaProtoPlugin struct {
 }
 
 type JavaModule struct {
-	dir            string
-	path           VFS
-	instance       ModuleInstance
-	unit           *javaUnit
-	stmt           TOK
-	name           string
-	target         VFS
-	data           *JavaData
-	contribWithVer bool
-	passPeers      bool
-	proxyFor       *JavaModule
-	implPeers      map[string]bool
-	managedPeers   []*JavaModule
-	unmanageable   []javaForeignPeer
-	incDirs        javaIncDirs
-	selfPeers      []*JavaModule
-	direct         []javaResolvedPeer
-	closure        *javaPeersClosure
-	rules          *javaDMRules
-	managed        []JavaClosureEntry
-	managedDone    bool
-	globals        []ResourceDecl
-	result         *ModuleEmitResult
-	outRef         NodeRef
-	protoInclude   []VFS
-	toolRefs       []NodeRef
-	gentars        []VFS
-	jsrcs          []VFS
-	macroOuts      []VFS
+	dir              string
+	path             VFS
+	instance         ModuleInstance
+	unit             *javaUnit
+	stmt             TOK
+	name             string
+	target           VFS
+	data             *JavaData
+	contribWithVer   bool
+	passPeers        bool
+	proxyFor         *JavaModule
+	implPeers        map[string]bool
+	managedPeers     []*JavaModule
+	unmanageable     []javaForeignPeer
+	incDirs          javaIncDirs
+	selfPeers        []*JavaModule
+	direct           []javaResolvedPeer
+	closure          *javaPeersClosure
+	rules            *javaDMRules
+	managed          []JavaClosureEntry
+	managedDone      bool
+	unmanageableDart []javaForeignPeer
+	unmanageableDone bool
+	globals          []ResourceDecl
+	result           *ModuleEmitResult
+	outRef           NodeRef
+	protoInclude     []VFS
+	toolRefs         []NodeRef
+	gentars          []VFS
+	jsrcs            []VFS
+	macroOuts        []VFS
 }
 
 func (jm *JavaModule) fileName() string {
 	return jm.target.relString()
+}
+
+func shortenFullPath(dir string) string {
+	limit := max(98-len(dir), 0)
+
+	if len(dir) <= limit {
+		return dir
+	}
+
+	pos := strings.IndexByte(dir[len(dir)-limit-1:], '/')
+
+	if pos >= 0 {
+		pos += len(dir) - limit - 1
+	} else {
+		pos = strings.LastIndexByte(dir, '/')
+	}
+
+	if pos < 0 {
+		return dir
+	}
+
+	return dir[pos+1:]
 }
 
 func javaRealPrjName(dir string, gen javaNameGen) string {
@@ -367,7 +407,7 @@ func javaRealPrjName(dir string, gen javaNameGen) string {
 
 	switch gen {
 	case javaNameFullPath:
-		return strings.ReplaceAll(dir, "/", "-")
+		return strings.ReplaceAll(shortenFullPath(dir), "/", "-")
 	case javaNameThreeDirs:
 		if len(parts) > 3 {
 			parts = parts[len(parts)-3:]

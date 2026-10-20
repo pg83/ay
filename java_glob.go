@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -201,7 +202,7 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []st
 				p := part.data
 
 				if dir != "" {
-					p = dir + "/" + part.data
+					p = path.Clean(dir + "/" + part.data)
 				}
 
 				present, isDir := ctx.fs.exists(srcRootRel, p)

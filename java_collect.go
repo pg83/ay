@@ -567,6 +567,32 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.jarMainClass = arg0
 	case "JVM_ARGS":
 		d.jvmArgs = append(d.jvmArgs, args...)
+	case "SIZE":
+		d.test.size = strings.ToLower(arg0)
+	case "TIMEOUT":
+		d.test.timeout = arg0
+	case "TAG":
+		d.test.tags = append(d.test.tags, args...)
+	case "REQUIREMENTS":
+		d.test.requirements = append(d.test.requirements, args...)
+	case "FORK_TESTS":
+		d.test.forkMode = "tests"
+	case "FORK_SUBTESTS":
+		d.test.forkMode = "subtests"
+	case "SPLIT_FACTOR":
+		d.test.splitFactor = arg0
+	case "EXPERIMENTAL_FORK":
+		d.test.experimentalFork = true
+	case "SYSTEM_PROPERTIES":
+		d.test.systemProperties = append(d.test.systemProperties, args...)
+	case "TEST_JAVA_CLASSPATH_CMD_TYPE":
+		d.test.classpathCmdType = arg0
+	case "DATA":
+		d.test.data = append(d.test.data, args...)
+	case "DATA_FILES":
+		for _, a := range args {
+			d.test.data = append(d.test.data, "arcadia/"+a)
+		}
 	case "JAVA_SRCS", "FULL_JAVA_SRCS":
 		d.javaSrcsCalled = true
 
@@ -615,7 +641,9 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "ADD_DLLS_TO_JAR":
 		d.addDLLs = true
 	case "CHECK_JAVA_DEPS":
-		d.checkJavaDeps = arg0
+		d.checkJavaDeps = strings.ToLower(arg0)
+	case "IGNORE_CLASSPATH_CLASH":
+		d.test.ignoreClasspathClash = append(d.test.ignoreClasspathClash, args...)
 	case "ENV":
 		d.testEnv = append(d.testEnv, splitShellWords(`"`+strings.Join(raw, " ")+`"`)...)
 	case "LINT":

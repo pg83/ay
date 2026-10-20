@@ -1,8 +1,12 @@
 package main
 
 import (
+	"cmp"
+	"encoding/base64"
+	"encoding/json"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -36,8 +40,15 @@ type javaCustomLint struct {
 func (ctx *GenCtx) javaEmitTests(jm *JavaModule) []NodeRef {
 	var suites []*yaTestSuite
 
-	if jm.unit.kind == juJar {
+	switch jm.unit.kind {
+	case juJar:
 		suites = append(suites, ctx.javaKtlintSuite(jm), ctx.javaStyleSuite(jm))
+	case juTest:
+		suites = append(suites, ctx.javaJunitSuite(jm))
+	}
+
+	if jm.checksClasspathClash() {
+		suites = append(suites, ctx.javaClasspathClashSuite(jm))
 	}
 
 	for _, l := range jm.data.customLints {
@@ -276,6 +287,252 @@ func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *yaTest
 		}
 
 		return yaTestArgs(append(strs, files...))
+	}
+
+	return s
+}
+
+func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *yaTestSuite {
+	d := jm.data
+	t := d.test
+	comp := jm.selfPeers[0]
+	testJar := comp.target
+	cpf := build(jm.dir, "/", jm.name, ".test.cpf")
+	closure := ctx.javaManagedPeersClosure(jm)
+	globals := ctx.javaGlobals(jm)
+	jdk := "JDK" + d.jdkReal
+	jdkForTests, ok := globals[jdk+"_FOR_TESTS"]
+
+	if !ok {
+		jdkForTests = globals[jdk]
+	}
+
+	s := ctx.javaSuiteBase(jm, path.Base(path.Dir(jm.dir))+"-"+path.Base(jm.dir), "java", "test")
+
+	s.size = cmp.Or(t.size, "small")
+	s.timeout = yaTestSizeTimeouts[s.size]
+
+	if t.timeout != "" {
+		s.timeout, _ = strconv.Atoi(t.timeout)
+	}
+
+	s.tags = sortedUnique(t.tags)
+	s.requirements = yaTestRequirementsOf(t.requirements)
+	s.env = slices.Clone(d.testEnv)
+	s.supportsCanonization = true
+	s.supportsTestParameters = true
+	s.smoothShutdown = []string{"SIGUSR1"}
+	s.split = 1
+
+	if t.forkMode != "" {
+		s.split = 10
+	}
+
+	if t.splitFactor != "" {
+		s.split, _ = strconv.Atoi(t.splitFactor)
+	}
+
+	data := []string{"build/scripts/run_junit.py", "build/scripts/unpacking_jtest_runner.py", jm.dir}
+
+	for _, e := range t.data {
+		if rel, ok := strings.CutPrefix(strings.TrimRight(e, "/"), "arcadia/"); ok {
+			data = append(data, path.Clean(rel))
+		}
+	}
+
+	for _, rel := range sortedUnique(data) {
+		s.relatedPaths = append(s.relatedPaths, "$(S)/"+rel)
+	}
+
+	var classpath []string
+
+	for _, e := range closure {
+		if rel := e.path.relString(); strings.HasSuffix(rel, ".jar") {
+			classpath = append(classpath, rel)
+		}
+	}
+
+	var libpath []string
+
+	for _, p := range ctx.javaUnmanageablePeersClosure(jm) {
+		if f := javaForeignFileName(p); strings.HasSuffix(f.relString(), ".so") {
+			libpath = append(libpath, "$(B)/"+path.Dir(f.relString()))
+		}
+	}
+
+	s.deps = ctx.javaProducer(comp, testJar)
+
+	py := internStr(testYMakePython3).any()
+
+	s.prepare = [][]ANY{
+		{py, buildScriptsMkdirPy.any(), internStr(path.Dir(cpf.string())).any()},
+		append(append([]ANY{py, buildScriptsWriterPy.any(), strFile.any(), cpf.any(), strM.any(), strYaStartCommandFile.any()},
+			yaTestArgs(classpath)...), strYaEndCommandFile.any()),
+	}
+
+	for _, f := range []string{"mkdir.py", "run_junit.py", "writer.py", "process_command_files.py"} {
+		s.prepareInputs = append(s.prepareInputs, source("build/scripts/", f))
+	}
+
+	jvm := []string{"-Dfile.encoding=utf8", "-Dya.make", "-DARCADIA_BUILD_ROOT=$(B)", "-DARCADIA_ROOT=$(S)",
+		"-DBINDIR=$(B)/" + jm.dir, "-DCURDIR=$(S)/" + jm.dir, "-ea"}
+
+	vars := strings.NewReplacer("${CURDIR}", "$(S)/"+jm.dir, "${ARCADIA_ROOT}", "$(S)", "${BINDIR}", "$(B)/"+jm.dir, "${ARCADIA_BUILD_ROOT}", "$(B)")
+
+	for _, a := range d.jvmArgs {
+		jvm = append(jvm, vars.Replace(a))
+	}
+
+	jvm = append(jvm, "-DJAVA="+jdkForTests.string()+"/bin/java")
+
+	props := javaTestProperties(t.systemProperties)
+	cpType := strings.ToLower(cmp.Or(t.classpathCmdType, "MANIFEST"))
+
+	s.runCmd = func(work string, split, index int) []ANY {
+		strs := []string{testYMakePython3, "$(S)/build/scripts/run_junit.py", testYMakePython3, "$(S)/build/scripts/unpacking_jtest_runner.py",
+			"--classpath-option-type", cpType, "--trace-file", work + "/ytest.report.trace",
+			"--jar-binary", jdkForTests.string() + "/bin/jar", "--tests-jar-path", testJar.string(), jdkForTests.string() + "/bin/java",
+			"-Djava.io.tmpdir=" + work + "/tests_tmp_dir"}
+
+		if len(libpath) != 0 {
+			libs := strings.Join(dedupKeepOrder(libpath), ":")
+
+			strs = append(strs, "-Djava.library.path="+libs, "-Djna.library.path="+libs)
+		}
+
+		strs = append(strs, jvm...)
+
+		strs = append(strs, "-classpath", "@"+cpf.string(), "ru.yandex.devtools.test.Runner", "--tests-jar", testJar.string(),
+			"--source-root", "$(S)", "--modulo", strconv.Itoa(split), "--modulo-index", strconv.Itoa(index))
+
+		if t.experimentalFork {
+			strs = append(strs, "--experimental-fork")
+		}
+
+		strs = append(strs, "--build-root", "$(B)", "--sandbox-resources-root", work, "--test-outputs-root", work+"/testing_out_stuff",
+			"--output", work+"/ytest.report.trace")
+
+		if t.forkMode == "subtests" {
+			strs = append(strs, "--fork-subtests")
+		}
+
+		strs = append(strs, "--runner-log-path", work+"/testing_out_stuff/run.log", "--properties", props)
+
+		return yaTestArgs(strs)
+	}
+
+	return s
+}
+
+func javaTestProperties(args []string) string {
+	props := []map[string]string{}
+
+	for i := 0; i+1 < len(args); i += 2 {
+		if args[i] == "FILE" {
+			props = append(props, map[string]string{"type": "file", "path": "${ARCADIA_ROOT}/" + args[i+1]})
+		} else {
+			props = append(props, map[string]string{"type": "inline", "key": args[i], "value": args[i+1]})
+		}
+	}
+
+	return base64.StdEncoding.EncodeToString(throw2(json.Marshal(props)))
+}
+
+func (ctx *GenCtx) javaUnmanageablePeersClosure(jm *JavaModule) []javaForeignPeer {
+	if jm.unmanageableDone {
+		return jm.unmanageableDart
+	}
+
+	jm.unmanageableDone = true
+
+	var out []javaForeignPeer
+
+	seen := map[*ModuleEmitResult]bool{}
+
+	add := func(peers []javaForeignPeer) {
+		for _, p := range peers {
+			if !seen[p.res] {
+				seen[p.res] = true
+				out = append(out, p)
+			}
+		}
+	}
+
+	for _, e := range ctx.javaManagedPeersClosure(jm) {
+		if e.java != nil && !e.java.consumesUnmanageable() {
+			add(ctx.javaUnmanageablePeersClosure(e.java))
+		}
+	}
+
+	add(jm.unmanageable)
+
+	jm.unmanageableDart = out
+
+	return out
+}
+
+func (jm *JavaModule) checksClasspathClash() bool {
+	if v := jm.data.checkJavaDeps; v != "yes" && v != "strict" {
+		return false
+	}
+
+	u := jm.unit
+
+	switch {
+	case u.kind == juTest, u.sub == KindJavaFull, u.kind == juJar && jm.stmt == tokJavaLibraryNonSplit:
+		return true
+	case u.kind == juRunnable:
+		return !jm.data.uberjar
+	case u.sub == KindJavaCompilation && (jm.stmt == tokJavaProgram || jm.stmt == tokJavaAnnotationProcessor):
+		return jm.data.uberjar
+	}
+
+	return false
+}
+
+func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *yaTestSuite {
+	d := jm.data
+	name := strings.Trim(path.Base(path.Dir(jm.dir))+"-"+path.Base(jm.dir)+"-dependencies", "-")
+	s := ctx.javaSuiteBase(jm, name, "classpath.clash", "style")
+
+	s.setupPythonpathEnv = true
+	s.supportsTestParameters = true
+
+	paths := []string{jm.dir + "/" + jm.name + ".jar"}
+
+	for _, e := range ctx.javaManagedPeersClosure(jm) {
+		if e.java != nil {
+			paths = append(paths, e.path.relString())
+		}
+	}
+
+	var ignored []string
+
+	for _, c := range sortedUnique(d.test.ignoreClasspathClash) {
+		ignored = append(ignored, "ignore_class:"+c)
+	}
+
+	s.runCmd = func(work string, _, _ int) []ANY {
+		strs := []string{yaTestTool, "run_check", "--source-root", "$(S)", "--checker", "run_classpath_clash", "--check-name", "classpath.clash",
+			"--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff",
+			"--log-path", work + "/testing_out_stuff/run_check.log", "--no-snippet-from-stderr", "--batch", "--batch-name", name,
+			"$(B)", yaTestCmdFileStart}
+
+		strs = append(append(append(strs, paths...), yaTestCmdFileEnd), ignored...)
+
+		if ctx.tests.dist || d.checkJavaDeps == "strict" {
+			strs = append(strs, "--")
+		}
+
+		if ctx.tests.dist {
+			strs = append(strs, "--verbose")
+		}
+
+		if d.checkJavaDeps == "strict" {
+			strs = append(strs, "--strict")
+		}
+
+		return yaTestArgs(strs)
 	}
 
 	return s

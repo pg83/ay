@@ -393,7 +393,8 @@ class JavaStartTargetsTest(unittest.TestCase):
         self.assertEqual(results, ["$(B)/app/app.jar", "$(B)/app/jni/libapp_jni.so"])
         graph = lib.make(files, "app", "--target-platform-tests")
         results = [graph["graph"][ref]["outputs"][0] for ref in graph["result"]]
-        self.assertEqual(results, ["$(B)/app/app.jar", "$(B)/app/jni/libapp_jni.so", "$(B)/app/ut/app-ut.test.cp.jar"])
+        self.assertEqual(results, ["$(B)/app/app.jar", "$(B)/app/jni/libapp_jni.so", "$(B)/app/ut/app-ut.test.cp.jar",
+                                   "$(B)/app/ut/test-results/app-ut/meta.json"])
         jt = lib.node_by_output(graph, "$(B)/app/ut/app-ut.test.cp.jar")
         self.assertEqual(jt["kv"], {"p": "JT"})
         self.assertEqual(writer_args(jt, "run-bf.txt"), [

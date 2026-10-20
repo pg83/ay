@@ -566,7 +566,7 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
 		out = append(out, JavaClosureEntry{path: m.target, java: m})
 	}
 
-	if jm.unit.consumeNonManageable || jm.data.addDLLs {
+	if jm.consumesUnmanageable() {
 		seen := map[*ModuleEmitResult]bool{}
 
 		appendUnmanageable := func(peers []javaForeignPeer) {
@@ -595,6 +595,10 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
 	jm.managed = out
 
 	return out
+}
+
+func (jm *JavaModule) consumesUnmanageable() bool {
+	return jm.unit.consumeNonManageable || jm.data.addDLLs
 }
 
 func (jm *JavaModule) isDirectPeer(m *JavaModule) bool {

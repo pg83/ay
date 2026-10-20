@@ -8,14 +8,13 @@ def test_nodes(graph):
     return {n["kv"]["path"]: n for n in graph["graph"] if n["kv"].get("run_test_node")}
 
 
-def run_args(node):
-    args = node["cmds"][-1]["cmd_args"]
-    return args[args.index("$(TEST_TOOL_HOST)/test_tool", 1):]
-
-
 def head_args(node):
     args = node["cmds"][-1]["cmd_args"]
-    return args[:args.index("$(TEST_TOOL_HOST)/test_tool", 1)]
+    return args[:args.index("--tar") + 2]
+
+
+def run_args(node):
+    return node["cmds"][-1]["cmd_args"][len(head_args(node)):]
 
 
 def option_values(args, option):
@@ -151,6 +150,108 @@ class JavaTestGlobalsTest(unittest.TestCase):
         # a module consuming non-manageable peers takes them from its peer closure.
         self.assertIn("NATIVE_TOOL_RESOURCE_GLOBAL", self.globals("JAVA_LIBRARY_NON_SPLIT()\nADD_DLLS_TO_JAR()"))
         self.assertNotIn("NATIVE_TOOL_RESOURCE_GLOBAL", self.globals("JAVA_LIBRARY_NON_SPLIT()"))
+
+
+def junit_tree(test_body, **extra):
+    bare = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+    return java_tree(**{
+        "devtools/junit5-runner/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nEND()\n",
+        "devtools/jtest-annotations/junit5/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nEND()\n",
+        "build/platform/java/jacoco-agent/ya.make": resource_lib("JACOCO_AGENT", 6),
+        "build/platform/java/jdk/jdk21/ya.make": resource_lib("JDK21", 7),
+        "lib/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nPEERDIR(lib/jni)\nEND()\n",
+        "lib/jni/ya.make": f"DLL(lib_jni)\n{bare}SRCS(j.cpp)\nEND()\n",
+        "lib/jni/j.cpp": "int j;\n",
+        "base/ut/ya.make": "JUNIT5()\nPEERDIR(lib)\nEND()\n",
+        "proj/sub/ut/ya.make": test_body,
+        "proj/sub/ut/data.txt": "x\n",
+        **extra,
+    })
+
+
+class JavaJunitSuiteTest(unittest.TestCase):
+    def test_junit_node(self):
+        files = junit_tree("JUNIT5()\nJDK_VERSION(21)\nPEERDIR(lib base/ut)\nENV(A=1)\nJVM_ARGS(-Dd=${CURDIR})\n"
+                           "SYSTEM_PROPERTIES(k v)\nDATA(arcadia/proj/sub/ut/data.txt sbr://1)\nEND()\n")
+        graph = lib.make(files, "proj/sub/ut", "--target-platform-tests")
+        node = test_nodes(graph)["proj/sub/ut/sub-ut"]
+        work = "$(B)/proj/sub/ut/test-results/sub-ut"
+        head = head_args(node)
+        self.assertEqual(option_values(head, "--test-type"), ["java"])
+        self.assertEqual(option_values(head, "--test-related-path"), [
+            "$(S)/build/scripts/run_junit.py", "$(S)/build/scripts/unpacking_jtest_runner.py",
+            "$(S)/proj/sub/ut", "$(S)/proj/sub/ut/data.txt",
+        ])
+        self.assertEqual(option_values(head, "--smooth-shutdown-signals"), ["SIGUSR1"])
+        self.assertIn("--supports-canonization", head)
+        writer = node["cmds"][1]["cmd_args"]
+        classpath = writer[writer.index("--ya-start-command-file") + 1:writer.index("--ya-end-command-file")]
+        self.assertEqual(classpath[0], "proj/sub/ut/proj-sub-ut.jar")
+        self.assertIn("base/ut/base-ut.jar", classpath)
+        self.assertNotIn("base/ut/base-ut.test.cp.jar", classpath)
+        run = run_args(node)
+        jdk = "$(B)/resources/JDK21"
+        self.assertEqual(run[:14], [
+            "$(YMAKE_PYTHON3)/bin/python3", "$(S)/build/scripts/run_junit.py",
+            "$(YMAKE_PYTHON3)/bin/python3", "$(S)/build/scripts/unpacking_jtest_runner.py",
+            "--classpath-option-type", "manifest", "--trace-file", work + "/ytest.report.trace",
+            "--jar-binary", jdk + "/bin/jar", "--tests-jar-path", "$(B)/proj/sub/ut/proj-sub-ut.jar", jdk + "/bin/java",
+            "-Djava.io.tmpdir=" + work + "/tests_tmp_dir",
+        ])
+        self.assertIn("-Djava.library.path=$(B)/lib/jni", run)
+        self.assertIn("-Dd=$(S)/proj/sub/ut", run)
+        self.assertEqual(run[run.index("-ea") + 2], "-DJAVA=" + jdk + "/bin/java")
+        # base64 of [{"key":"k","type":"inline","value":"v"}]
+        self.assertEqual(option_values(run, "--properties"), ["W3sia2V5IjoiayIsInR5cGUiOiJpbmxpbmUiLCJ2YWx1ZSI6InYifV0="])
+        deps = [n["outputs"][0] for n in graph["graph"] if n["uid"] in node["deps"]]
+        self.assertEqual(sorted(deps), ["$(B)/common_test.context", "$(B)/proj/sub/ut/proj-sub-ut.jar"])
+        self.assertIn(node["uid"], graph["result"])
+
+    def test_forked_suite_chunks_and_accumulator(self):
+        files = junit_tree("JUNIT5()\nSIZE(MEDIUM)\nFORK_TESTS()\nSPLIT_FACTOR(3)\nEXPERIMENTAL_FORK()\n"
+                           "REQUIREMENTS(ram:16 ram_disk:4)\nEND()\n")
+        graph = lib.make(files, "proj/sub/ut", "--target-platform-tests")
+        chunks = sorted((n for n in graph["graph"] if n["kv"].get("path") == "proj/sub/ut/sub-ut"),
+                        key=lambda n: n["kv"]["split_index"])
+        self.assertEqual([n["kv"]["split_index"] for n in chunks], [0, 1, 2])
+        self.assertEqual({n["kv"]["p"] for n in chunks}, {"TM"})
+        self.assertEqual(chunks[1]["requirements"], {"cpu": 4, "network": "restricted", "ram": 16, "ram_disk": 4})
+        head = head_args(chunks[1])
+        self.assertIn("--requires-ram-disk", head)
+        self.assertEqual(option_values(head, "--split-index"), ["1"])
+        self.assertEqual(option_values(head, "--timeout"), ["600"])
+        run = run_args(chunks[1])
+        self.assertEqual(run[run.index("--modulo"):run.index("--modulo") + 5], ["--modulo", "3", "--modulo-index", "1", "--experimental-fork"])
+        work = "$(B)/proj/sub/ut/test-results/sub-ut"
+        acc = lib.node_by_output(graph, work + "/results_accumulator.log")
+        self.assertEqual(acc["kv"], {"p": "TA", "pc": "light-cyan", "show_out": True})
+        self.assertNotIn("platform", acc)
+        self.assertEqual(option_values(acc["cmds"][0]["cmd_args"], "--output"), [work + f"/chunk{i}" for i in range(3)])
+        self.assertEqual(acc["outputs"][-1], work + "/results_accumulator.log")
+        self.assertEqual(sorted(acc["deps"]), sorted(n["uid"] for n in chunks))
+        self.assertIn(acc["uid"], graph["result"])
+        for n in chunks:
+            self.assertNotIn(n["uid"], graph["result"])
+
+    def test_classpath_clash_check(self):
+        files = junit_tree("JUNIT5()\nPEERDIR(lib)\nCHECK_JAVA_DEPS(strict)\nIGNORE_CLASSPATH_CLASH(b.C a.B)\nEND()\n")
+        node = test_nodes(lib.make(files, "proj/sub/ut", "--target-platform-tests"))["proj/sub/ut/sub-ut-dependencies"]
+        self.assertEqual(option_values(head_args(node), "--test-type"), ["classpath.clash"])
+        run = run_args(node)
+        start = run.index("--ya-start-command-file")
+        end = run.index("--ya-end-command-file")
+        self.assertEqual(run[start - 1], "$(B)")
+        self.assertEqual(run[start + 1:start + 3], ["proj/sub/ut/proj-sub-ut.jar", "proj/sub/ut/proj-sub-ut.jar"])
+        self.assertEqual(run[end + 1:], ["ignore_class:a.B", "ignore_class:b.C", "--", "--strict"])
+
+
+class JavaFullPathNameTest(unittest.TestCase):
+    def test_long_test_module_name_is_shortened(self):
+        deep = "aaaaaaaaaa/bbbbbbbbbbbb/cccccccccccccccccc/dddddddddddddddd/src/test"
+        files = junit_tree("JUNIT5()\nEND()\n", **{f"{deep}/ya.make": "JUNIT5()\nEND()\n"})
+        graph = lib.make(files, deep)
+        # dir and name fit in 98 chars: leading dirs are dropped (ShortenPath)
+        lib.node_by_output(graph, f"$(B)/{deep}/dddddddddddddddd-src-test.test.cp.jar")
 
 
 if __name__ == "__main__":

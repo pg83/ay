@@ -15,6 +15,7 @@ var (
 	yaTestSymbolizerVars = []string{"ASAN_SYMBOLIZER_PATH", "LSAN_SYMBOLIZER_PATH", "MSAN_SYMBOLIZER_PATH", "TSAN_SYMBOLIZER_PATH", "UBSAN_SYMBOLIZER_PATH"}
 	yaTestSizeKinds      = map[string]ProcKind{"small": pkTS, "medium": pkTM, "large": pkTL}
 	yaTestSizeTimeouts   = map[string]int{"small": 60, "medium": 600, "large": 3600}
+	yaTestNoPlatform     = &Platform{}
 )
 
 const (
@@ -213,13 +214,76 @@ func (ctx *GenCtx) emitYaTestSuite(s *yaTestSuite) []NodeRef {
 	}
 
 	split := max(s.split, 1)
-	refs := make([]NodeRef, 0, split)
 
-	for i := 0; i < split; i++ {
-		refs = append(refs, ctx.emit.emit(ctx.yaTestNode(s, split, i)))
+	if split == 1 {
+		return []NodeRef{ctx.emit.emit(ctx.yaTestNode(s, 1, 0))}
 	}
 
-	return refs
+	chunks := make([]*Node, split)
+	refs := make([]NodeRef, split)
+
+	for i := range chunks {
+		chunks[i] = ctx.yaTestNode(s, split, i)
+		refs[i] = ctx.emit.emit(chunks[i])
+	}
+
+	return []NodeRef{ctx.emit.emit(ctx.yaTestAccumulator(s, chunks, refs))}
+}
+
+func (ctx *GenCtx) yaTestAccumulator(s *yaTestSuite, chunks []*Node, refs []NodeRef) *Node {
+	na := ctx.na
+	work := s.workDir(1, 0)
+	log := work + "/results_accumulator.log"
+
+	strs := []string{yaTestTool, "results_accumulator", "--accumulator-path", work, "--source-root", "$(S)", "--log-path", log,
+		"--concatenate-binaries", "report.exec", "--concatenate-binaries", "operation.log"}
+
+	if ctx.tests.dist {
+		strs = append(strs, "--truncate", "--log-level", "DEBUG")
+	}
+
+	strs = append(strs, "--gdb-path", testGDBPath, "--tests-limit-in-suite", "100000", "--keep-paths", yaTestCmdFileStart)
+
+	outputs := []string{work + "/meta.json", work + "/run_test.log", work + "/ytest.report.trace"}
+
+	var inputs []VFS
+
+	for i := range chunks {
+		dir := s.workDir(len(chunks), i)
+
+		strs = append(strs, "--output", dir)
+		inputs = append(inputs, chunks[i].Outputs...)
+
+		if !ctx.tests.dirOutputs {
+			outputs = append(outputs, dir+"/testing_out_stuff.tar.zstd")
+		}
+	}
+
+	strs = append(strs, yaTestCmdFileEnd)
+
+	if ctx.tests.dirOutputs {
+		strs = append(strs, "--skip-dir", "testing_out_stuff", "--skip-file", "yt_run_test.tar")
+	} else {
+		strs = append(strs, "--skip-file", "testing_out_stuff.tar.zstd", "--skip-file", "yt_run_test.tar")
+	}
+
+	outs := make([]VFS, 0, len(outputs)+1)
+
+	for _, o := range sortedUnique(outputs) {
+		outs = append(outs, intern(o))
+	}
+
+	slices.SortFunc(inputs, func(a, b VFS) int { return strings.Compare(a.string(), b.string()) })
+
+	return &Node{
+		Platform: yaTestNoPlatform,
+		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(yaTestArgs(strs)...)), Cwd: bld}),
+		Env:      ctx.yaTestProcessEnv(),
+		Inputs:   na.inputList(na.vfsList(slices.Compact(inputs)...)),
+		KV:       &KV{P: pkTA, PC: pcLightCyan, ShowOutBool: true},
+		Outputs:  na.vfsList(append(outs, intern(log))...),
+		DepRefs:  na.refList(dedupRefs(refs)...),
+	}
 }
 
 func (ctx *GenCtx) yaTestNode(s *yaTestSuite, split, index int) *Node {
@@ -265,6 +329,10 @@ func (ctx *GenCtx) yaTestNode(s *yaTestSuite, split, index int) *Node {
 
 	for _, tag := range s.tags {
 		strs = append(strs, "--tag", tag)
+	}
+
+	if _, ok := s.requirements["ram_disk"]; ok {
+		strs = append(strs, "--requires-ram-disk")
 	}
 
 	for _, e := range s.env {
@@ -397,8 +465,18 @@ func (ctx *GenCtx) yaTestRequirements(s *yaTestSuite) *Requirements {
 		}
 	}
 
-	if v, ok := s.requirements["network"]; ok && v == "full" {
-		r.Network = nwFull
+	if v, ok := s.requirements["network"]; ok {
+		r.Network = nwRestricted
+
+		if v == "full" {
+			r.Network = nwFull
+		}
+	}
+
+	if v, ok := s.requirements["ram_disk"]; ok {
+		n, _ := strconv.Atoi(v)
+
+		r.RAMDisk = float64(n)
 	}
 
 	r.CPU, r.RAM = float64(cpu), float64(ram)
@@ -454,6 +532,20 @@ func (ctx *GenCtx) yaTestEnv(s *yaTestSuite) EnvVars {
 
 	env["YA_MANDATORY_ENV_VARS"] = strings.Join(names, ":")
 
+	return sortedEnvVars(env)
+}
+
+func (ctx *GenCtx) yaTestProcessEnv() EnvVars {
+	env := map[string]string{}
+
+	for _, kv := range ctx.tests.processEnv {
+		env[kv[0]] = kv[1]
+	}
+
+	return sortedEnvVars(env)
+}
+
+func sortedEnvVars(env map[string]string) EnvVars {
 	keys := make([]string, 0, len(env))
 
 	for k := range env {
