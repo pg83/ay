@@ -25,6 +25,7 @@ const (
 	includeCythonFallback
 
 	includeCythonSibling
+	includeTypeScript
 )
 
 const (
@@ -509,6 +510,16 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirective) []VFS {
 	s := sc.scanner
 	mark := len(out)
+
+	if d.kind == includeTypeScript {
+		if file := s.parsers.resolveTSImport(incDir.relString(), d.target.string()); file != 0 {
+			return append(out, file)
+		}
+
+		sc.warnUnresolved(includerAbs, d, false)
+
+		return out
+	}
 
 	if v := d.target.vfs(); v != 0 {
 		return append(out, v)

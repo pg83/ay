@@ -1,0 +1,153 @@
+package main
+
+import (
+	"path"
+	"regexp"
+	"strings"
+)
+
+var tsImportCall = regexp.MustCompile(`^(?:\s|/\*[\s\S]*?\*/)*\((?:\s|/\*[\s\S]*?\*/)*("[^"]*"|'[^']*')(?:\s|/\*[\s\S]*?\*/)*\)`)
+
+var tsImportDecl = func() *regexp.Regexp {
+	space := `(?:\s|/\*[\s\S]*?\*/)`
+	ident := `[a-zA-Z$_][a-zA-Z0-9$_]*`
+	alias := space + `+as` + space + `+` + ident
+	spec := ident + `(?:` + alias + `)?`
+	sep := space + `*,` + space + `*`
+	named := `\{` + space + `*(?:` + spec + `(?:` + sep + spec + `)*(?:` + sep + `)?)?` + space + `*\}`
+	namespace := `\*(?:` + alias + `)?`
+	clause := `(?:` + ident + `(?:` + sep + `(?:` + namespace + `|` + named + `))?|` + namespace + `|` + named + `)`
+
+	return regexp.MustCompile(`^` + space + `+(?:(?:type` + space + `+)?` + clause + space + `+from` + space + `+)?("[^"]*"|'[^']*')`)
+}()
+
+type TSIncludeDirectiveParser struct{}
+
+func (TSIncludeDirectiveParser) id() uint32 {
+	return 12
+}
+
+func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
+	s := string(concatChunks(data))
+	block := a.alloc(directiveBlockHint)
+	k := 0
+	ignore := false
+
+	for i := 0; i < len(s); {
+		switch {
+		case strings.HasPrefix(s[i:], "//"):
+			end := strings.IndexByte(s[i:], '\n')
+
+			if end < 0 {
+				end = len(s) - i
+			}
+
+			if strings.HasPrefix(strings.TrimSpace(s[i+2:i+end]), "nots-ignore-import") {
+				ignore = true
+			}
+
+			i += end
+		case strings.HasPrefix(s[i:], "/*"):
+			end := strings.Index(s[i+2:], "*/")
+
+			if end < 0 {
+				i = len(s)
+			} else {
+				i += end + 4
+			}
+		case s[i] == '\'' || s[i] == '"' || s[i] == '`':
+			quote := s[i]
+
+			i++
+
+			for i < len(s) {
+				c := s[i]
+
+				i++
+
+				if c == quote {
+					break
+				}
+
+				if c == '\\' && i < len(s) {
+					i++
+				}
+			}
+		case isParserIdentContinuation(s, i) || s[i] == '$':
+			start := i
+
+			for i < len(s) && (isParserIdentContinuation(s, i) || s[i] == '$') {
+				i++
+			}
+
+			word := s[start:i]
+
+			if start > 0 && s[start-1] == '.' || word != "import" && word != "export" && word != "require" {
+				continue
+			}
+
+			var match []int
+
+			if word != "export" {
+				match = tsImportCall.FindStringSubmatchIndex(s[i:])
+			}
+
+			if match == nil && word != "require" {
+				match = tsImportDecl.FindStringSubmatchIndex(s[i:])
+			}
+
+			if match == nil {
+				continue
+			}
+
+			target := s[i+match[2]+1 : i+match[3]-1]
+
+			if !ignore && (strings.HasPrefix(target, "./") || strings.HasPrefix(target, "../") || target == "." || target == "..") {
+				k = addDirective(block, k, IncludeDirective{kind: includeTypeScript, target: internStr(target).any()})
+			}
+
+			ignore = false
+			i += match[1]
+		default:
+			i++
+		}
+	}
+
+	a.commit(k)
+
+	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
+}
+
+func (pm *IncludeParserManager) resolveTSImport(dir, target string) VFS {
+	base := path.Join(dir, target)
+
+	probe := func(file string) VFS {
+		if pm.fs.isFilePathClean(file) {
+			return source(file)
+		}
+
+		return 0
+	}
+
+	if file := probe(base); file != 0 {
+		return file
+	}
+
+	for _, candidate := range []string{base, path.Join(base, "index")} {
+		for _, ext := range []string{"ts", "d.ts", "js", "tsx", "jsx"} {
+			if file := probe(candidate + "." + ext); file != 0 {
+				return file
+			}
+		}
+	}
+
+	if strings.HasSuffix(base, ".js") {
+		for _, ext := range []string{".ts", ".tsx"} {
+			if file := probe(strings.TrimSuffix(base, ".js") + ext); file != 0 {
+				return file
+			}
+		}
+	}
+
+	return 0
+}

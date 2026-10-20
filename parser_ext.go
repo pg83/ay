@@ -10,6 +10,7 @@ var (
 	cythonParser = CythonIncludeDirectiveParser{}
 	swigParser   = SwigIncludeDirectiveParser{}
 	lexParser    = LexIncludeDirectiveParser{}
+	tsParser     = TSIncludeDirectiveParser{}
 )
 
 func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[IncludeDirectiveParser] {
@@ -25,6 +26,10 @@ func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[Includ
 		{".H", cParser},
 		{".h", cParser},
 		{".go", goCgoParser},
+		{".ts", tsParser},
+		{".js", tsParser},
+		{".tsx", tsParser},
+		{".jsx", tsParser},
 		{".g4", emptyParser},
 		{".mm", cParser},
 		{".xh", cParser},

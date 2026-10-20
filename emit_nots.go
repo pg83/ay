@@ -13,6 +13,8 @@ const notsBuilderDir = "devtools/frontend_build_platform/nots/builder"
 
 type NotsModule struct {
 	Checks            []NotsCheck
+	TestDirs          []string
+	TestConfig        string
 	DependsOnBuild    bool
 	Kind              TOK
 	Hermetic          bool
@@ -96,6 +98,12 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule) bool {
 	}
 
 	switch name {
+	case "TS_TEST_SRCS":
+		c.TestDirs = args
+	case "TS_TEST_CONFIG":
+		if len(args) > 0 {
+			c.TestConfig = args[0]
+		}
 	case "INCLUDE_TAGS":
 		c.IncludeTags = append(c.IncludeTags, args...)
 	case "TS_PROTO_OPT":
@@ -661,12 +669,73 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 		}
 	} else {
 		name += ".ts_test.fake"
+		inputs = append(inputs, e.notsTestInputs(target)...)
 	}
 
 	output := build(dir, "/", name)
 	ref := e.emitNotsTouch(output, na.refList(dedupRefs(refs)...), inputs, &KV{P: kind, PC: pcMagenta})
 
 	return notsResult(output, ref, c, result.ResourceGlobalClosure)
+}
+
+func (e *EmitContext) notsTestInputs(target string) []VFS {
+	c, dir := e.d.nots, e.instance.Path.relString()
+
+	var files []VFS
+
+	testPattern := notsGlob("**/*.(test|spec).(ts|tsx|mts|cts|js|jsx|mjs|cjs)")
+	mockPattern := notsGlob("**/__mocks__/*")
+	hasTests := false
+
+	for _, testDir := range c.TestDirs {
+		base := path.Join(dir, testDir)
+
+		e.ctx.fs.walk(base, func(rel string, isDir bool) bool {
+			if isDir {
+				return true
+			}
+
+			local := strings.TrimPrefix(rel, base+"/")
+			isTest := testPattern.MatchString(local)
+
+			if isTest || mockPattern.MatchString(local) {
+				files = append(files, source(rel))
+				hasTests = hasTests || isTest
+			}
+
+			return false
+		})
+	}
+
+	if e.ctx.testMode && hasTests {
+		config := path.Join(dir, c.TestConfig)
+
+		if c.TestConfig == "" {
+			name := "jest.config.js"
+
+			if c.Kind == tokTsTestVitestFor {
+				name = "vitest.config.ts"
+			}
+
+			config = path.Join(target, name)
+		}
+
+		files = append(files, source(config))
+	}
+
+	ctx := newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, nil)
+
+	var inputs []VFS
+
+	for _, file := range dedup(files) {
+		inputs = append(inputs, file)
+
+		for _, bucket := range e.scanner.walkClosure(file, ctx, scanDomainAux).bucketList() {
+			inputs = append(inputs, bucket...)
+		}
+	}
+
+	return dedup(inputs)
 }
 
 func (e *EmitContext) emitNotsTouch(output VFS, refs []NodeRef, inputs []VFS, kv *KV) NodeRef {

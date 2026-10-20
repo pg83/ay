@@ -130,6 +130,51 @@ packages:
         self.assertEqual(test['kv']['p'], 'TS_JST')
         self.assertIn(bundle['uid'], test['deps'])
 
+    def test_legacy_test_inputs_follow_relative_imports(self):
+        files = self.project()
+        files.update({
+            'web/tests/ya.make': 'TS_TEST_VITEST_FOR(RELATIVE ../)\nTS_TEST_SRCS(../src)\nEND()\n',
+            'web/vitest.config.ts': "export {default} from './config.js';\n",
+            'web/config.ts': "import './data.json';\n",
+            'web/data.json': '{}',
+            'web/src/unit.test.ts': """import type {Value} from './value';
+import * as directory from './directory';
+const cjs = require('./common');
+const dynamic = import('./dynamic.js');
+export {thing as other} from './exported';
+import './cycle';
+// nots-ignore-import
+import './ignored';
+import 'external-package';
+// import './comment';
+/* require('./comment'); */
+const literal = "require('./comment')";
+const template = `import './comment'`;
+object.require('./comment');
+const myrequire = './comment';
+""",
+            'web/src/value.ts': 'export type Value = string;',
+            'web/src/value.js': 'wrong extension priority',
+            'web/src/directory/index.tsx': 'export default 1;',
+            'web/src/common.d.ts': 'declare const cjs: number;',
+            'web/src/dynamic.tsx': 'export default 1;',
+            'web/src/exported.js': 'export const thing = 1;',
+            'web/src/cycle.ts': "import './unit.test';",
+            'web/src/ignored.ts': 'ignored',
+            'web/src/comment.ts': 'ignored',
+            'web/src/__mocks__/mock.js': 'export default 1;',
+            'web/src/unused.ts': 'ignored',
+        })
+        graph = make(files, 'web/tests', '-DAUTOCHECK=yes', '-t')
+        test = node_by_output(graph, '$(B)/web/tests/web-tests.ts_test.fake')
+        for filename in ['vitest.config.ts', 'config.ts', 'data.json',
+                         'src/unit.test.ts', 'src/value.ts', 'src/directory/index.tsx',
+                         'src/common.d.ts', 'src/dynamic.tsx', 'src/exported.js',
+                         'src/cycle.ts', 'src/__mocks__/mock.js']:
+            self.assertEqual(test['inputs'].count(f'$(S)/web/{filename}'), 1, filename)
+        for filename in ['src/value.js', 'src/ignored.ts', 'src/comment.ts', 'src/unused.ts']:
+            self.assertNotIn(f'$(S)/web/{filename}', test['inputs'])
+
     def test_sandbox_inputs_contain_workspace_closure_once(self):
         files = self.project()
         for name, peers in [('web', ['left', 'right']), ('left', ['leaf']), ('right', ['leaf']), ('leaf', [])]:
