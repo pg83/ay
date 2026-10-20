@@ -48,6 +48,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -82,6 +83,26 @@ RE_STAT_RESUMED = re.compile(r'^(?P<pid>\d+)\s+<\.\.\. (?P<call>\w+) resumed>.*=
 
 def run(cmd, **kw):
     return subprocess.run(cmd, **kw)
+
+
+def ya_run(cmd, cwd, graph_path):
+    """Run ya with its graph (stdout) going to graph_path, on a pseudo-terminal.
+    Without a terminal ya exports YA_NEW_PGROUP=no to its children and test
+    nodes copy it into their env; an interactive run (the partition reference)
+    has none. ya's terminal output goes to graph_path + ".tty.log"; script
+    (BusyBox) does not pass the exit code on, so it goes through a file."""
+    rc_path = graph_path + ".rc"
+    shell = shlex.join(cmd) + " > " + shlex.quote(graph_path) + "; echo $? > " + shlex.quote(rc_path)
+
+    with open(graph_path + ".tty.log", "wb") as log:
+        run(["script", "-qc", shell, "/dev/null"], cwd=cwd, env=ya_env(), stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+
+    with open(rc_path) as f:
+        rc = int(f.read())
+
+    os.remove(rc_path)
+
+    return subprocess.CompletedProcess(cmd, rc)
 
 
 def resolve_sha(mount):
@@ -207,8 +228,7 @@ def strace_run(mount, ya_cmd, trace_path, graph_path, strace_bin):
         "-o", trace_path,
     ]
 
-    with open(graph_path, "wb") as gf:
-        r = run(strace + repo_ya(mount, ya_cmd), cwd=mount, env=ya_env(), stdout=gf)
+    r = ya_run(strace + repo_ya(mount, ya_cmd), mount, graph_path)
 
     if r.returncode != 0:
         raise SystemExit(f"provision: FUSE ya run failed (rc={r.returncode}); see {trace_path}")
@@ -356,8 +376,7 @@ def graph_core(path):
 
 
 def verify_slice(slice_dir, ya_cmd, graph_slice, graph_fuse):
-    with open(graph_slice, "wb") as gf:
-        r = run(repo_ya(slice_dir, ya_cmd), cwd=slice_dir, env=ya_env(), stdout=gf)
+    r = ya_run(repo_ya(slice_dir, ya_cmd), slice_dir, graph_slice)
 
     if r.returncode != 0:
         raise SystemExit(f"provision: slice ya run failed (rc={r.returncode}) — slice incomplete")
