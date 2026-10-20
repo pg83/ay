@@ -323,17 +323,10 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, split
 			}
 		}
 
-		if isCCSourceExt(outFile) {
-			isNonFirst := outFile != firstShardFile
-			capacity := len(splitSrcs)
+		if isCCSourceExt(outFile) || isHeaderSource(outFile) {
+			includes := e.ctx.na.dirs.alloc(1 + len(splitSrcs) + len(stmt.OutputIncludes))[:0]
 
-			if isNonFirst {
-				capacity++
-			}
-
-			includes := e.ctx.na.dirs.alloc(capacity)[:0]
-
-			if isNonFirst {
+			if outFile != firstShardFile {
 				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel().any())})
 			}
 
@@ -341,20 +334,7 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, split
 				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel().any())})
 			}
 
-			e.ctx.na.dirs.commit(len(includes))
-
-			return includes[:len(includes):len(includes)]
-		}
-
-		if isHeaderSource(outFile) {
-			includes := e.ctx.na.dirs.alloc(1 + len(splitSrcs))[:0]
-
-			includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel().any())})
-
-			for _, src := range splitSrcs {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel().any())})
-			}
-
+			includes = appendOutputIncludeDirectives(includes, stmt.OutputIncludes)
 			e.ctx.na.dirs.commit(len(includes))
 
 			return includes[:len(includes):len(includes)]
@@ -367,9 +347,15 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, split
 		capacity += 1 + len(stmt.INFiles)
 	}
 
-	includes := e.ctx.na.dirs.alloc(capacity)[:0]
+	includes := appendOutputIncludeDirectives(e.ctx.na.dirs.alloc(capacity)[:0], stmt.OutputIncludes)
 
-	for _, f := range stmt.OutputIncludes {
+	e.ctx.na.dirs.commit(len(includes))
+
+	return includes[:len(includes):len(includes)]
+}
+
+func appendOutputIncludeDirectives(includes []IncludeDirective, outputIncludes []ANY) []IncludeDirective {
+	for _, f := range outputIncludes {
 		if vfsHasPrefix(f.string()) {
 			f = f.vfs().rel().any()
 		}
@@ -377,9 +363,7 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, split
 		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
 	}
 
-	e.ctx.na.dirs.commit(len(includes))
-
-	return includes[:len(includes):len(includes)]
+	return includes
 }
 
 func (e *EmitContext) emitPYRun(

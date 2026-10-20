@@ -186,6 +186,26 @@ class RunPython3Test(unittest.TestCase):
             '$(S)/lib/induced.h',
         ])
 
+    def test_split_outputs_take_output_includes(self):
+        # OUTPUT_INCLUDES reach every output (model/action_graph.cpp
+        # addOutputIncludes), shards included: ydb
+        # yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4 compiles
+        # SQLv1Antlr4Parser.pb.code0.cc and every includer of pb.main.h with
+        # SQLv1Antlr4Parser.pb.h and .pb.cc.
+        files = {
+            "lib/ya.make": (
+                LIBRARY_HEAD
+                + "RUN_PYTHON3(split.py OUT_NOAUTO s0.cc s1.cc main.h OUTPUT_INCLUDES lib/dep.h)\n"
+                "SRCS(s0.cc s1.cc use.cpp)\nEND()\n"
+            ),
+            "lib/split.py": "",
+            "lib/dep.h": "",
+            "lib/use.cpp": '#include "lib/main.h"\n',
+        }
+        graph = lib.make(files, "lib")
+        for output in ("$(B)/lib/s0.cc.o", "$(B)/lib/s1.cc.o", "$(B)/lib/use.cpp.o"):
+            self.assertIn("$(S)/lib/dep.h", lib.node_by_output(graph, output)["inputs"], output)
+
     def test_script_text_naming_own_output_is_not_an_include(self):
         files = {
             "lib/ya.make": (
