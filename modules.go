@@ -144,6 +144,10 @@ type TestMeta struct {
 }
 
 type ModuleData struct {
+	styleChecks []StyleCheck
+
+	usrvFiles []UsrvFile
+
 	test                     *TestSuiteInfo
 	nots                     *NotsModule
 	docs                     *DocsData
@@ -687,6 +691,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	env.setString(envMODDIR, modulePath)
 	env.setVFS(envCURDIR, source(modulePath))
 	env.setVFS(envBINDIR, build(modulePath))
+	env.setVFS(envCmakeCurrentBinaryDir, build(modulePath))
 
 	d.reset()
 
@@ -2310,6 +2315,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		)
 
 		d.usePython3 = true
+	case tokStyleJSON, tokStyleYAML:
+		d.collectStyleCheck(fs, modulePath, v, env)
+	case tokUsrvBuild:
+		d.collectUsrvFiles(anyStrs(v.Args))
+	case tokUsrvAllSrcs:
+		for _, f := range usrvAllSources(fs, modulePath, anyStrs(v.Args)) {
+			d.srcs = append(d.srcs, SrcMeta{Source: internStr(f).any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq()})
+		}
 	case tokTestSrcs:
 		if d.moduleStmt != nil && isPythonTestModule(d.moduleStmt.Name) {
 			if d.test == nil {
@@ -3431,6 +3444,7 @@ func buildIfEnvInto(store *EnvStore, instance ModuleInstance) Environment {
 	if instance.Path != 0 {
 		env.setVFS(envCURDIR, instance.Path)
 		env.setVFS(envBINDIR, instance.Path.rel().build())
+		env.setVFS(envCmakeCurrentBinaryDir, instance.Path.rel().build())
 		env.setStringID(envMODDIR, instance.Path.rel())
 	}
 

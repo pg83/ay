@@ -54,6 +54,7 @@ var (
 	envCX16_FLAGS                   = internEnv("CX16_FLAGS")
 	envCXX_RT                       = internEnv("CXX_RT")
 	envCudaNvccFlags                = internEnv("CUDA_NVCC_FLAGS")
+	envCmakeCurrentBinaryDir        = internEnv("CMAKE_CURRENT_BINARY_DIR")
 	envDEBUGINFO_LINES_ONLY         = internEnv("DEBUGINFO_LINES_ONLY")
 	envDISABLE_INSTRUCTION_SETS     = internEnv("DISABLE_INSTRUCTION_SETS")
 	envDYLD_LIBRARY_PATH            = internEnv("DYLD_LIBRARY_PATH")

@@ -126,6 +126,8 @@ const (
 )
 
 type ModuleEmitResult struct {
+	styleChecks []StyleCheck
+
 	JavaClosure                     []VFS
 	DocsClosure                     []VFS
 	ARRef                           NodeRef
@@ -449,16 +451,10 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 			ctx.emit.result(sub.LDRef)
 		}
 
-		if ctx.testMode {
-			ctx.emitModuleTests(sub)
-		}
+		ctx.emitModuleTests(dir, sub)
 	}
 
-	if ctx.testMode && root.testSuiteInfo != nil {
-		for _, ref := range ctx.emitTestRunNodes(*root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
-			ctx.emit.result(ref)
-		}
-	}
+	ctx.emitModuleTests(targetDir, root)
 }
 
 func (ctx *GenCtx) recurseClosure(root string) []string {
@@ -1080,6 +1076,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ctx.memoPut(instance, result)
 
 		return result
+	}
+
+	if d.moduleStmt.Name == tokGenLibrary {
+		return e.genGeneratedLibrary()
 	}
 
 	if d.moduleStmt.Name == tokExectest {
@@ -1907,6 +1907,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		r := ctx.results.one()
 
 		*r = ModuleEmitResult{
+			styleChecks:                     slices.Clone(d.styleChecks),
 			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                d.addInclGlobal,

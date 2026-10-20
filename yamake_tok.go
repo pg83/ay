@@ -1,10 +1,15 @@
 package main
 
 var tokName = [...]STR{
-	tokExectest: internStr("EXECTEST"),
-	tokRun:      internStr("RUN"),
-	tokPy3Test:  internStr("PY3TEST"),
-	tokPy2Test:  internStr("PY2TEST"),
+	tokStyleJSON:   internStr("STYLE_JSON"),
+	tokStyleYAML:   internStr("STYLE_YAML"),
+	tokGenLibrary:  internStr("GEN_LIBRARY"),
+	tokUsrvBuild:   internStr("USRV_BUILD"),
+	tokUsrvAllSrcs: internStr("USRV_ALL_SRCS"),
+	tokExectest:    internStr("EXECTEST"),
+	tokRun:         internStr("RUN"),
+	tokPy3Test:     internStr("PY3TEST"),
+	tokPy2Test:     internStr("PY2TEST"),
 
 	tokDepends:       internStr("DEPENDS"),
 	tokTestCwd:       internStr("TEST_CWD"),
@@ -341,6 +346,14 @@ var tokBySTR = func() []TOK {
 
 	return out
 }()
+
+const (
+	tokGenLibrary  TOK = tokSrcResource + 1
+	tokUsrvBuild   TOK = tokSrcResource + 2
+	tokUsrvAllSrcs TOK = tokSrcResource + 3
+	tokStyleJSON   TOK = tokUsrvAllSrcs + 1
+	tokStyleYAML   TOK = tokUsrvAllSrcs + 2
+)
 
 const (
 	tokInvalid TOK = iota

@@ -248,7 +248,11 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 }
 
 func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node {
-	resultsDir := path.Join(info.ProjectPath, "test-results", "clang_format")
+	return buildStyleNode(na, p, info, StyleCheck{Name: "clang_format", Config: testClangFormatConfigRel, Wrapper: testClangFormatWrapperRel, Files: append([]string{testSVNInterfaceRel}, info.CppSources...)}, testClangFormatResource)
+}
+
+func buildStyleNode(na *NodeArenas, p *Platform, info TestSuiteInfo, check StyleCheck, resource string) *Node {
+	resultsDir := path.Join(info.ProjectPath, "test-results", check.Name)
 
 	cmdArgs := []ANY{
 		internStr(testToolHostPath).any(),
@@ -259,23 +263,22 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 		argTimeout.any(), arg60.any(),
 		argLogPath.any(), (build(path.Join(resultsDir, "run_test.log"))).any(),
 		argTestSize.any(), argSmall.any(),
-		argTestType.any(), argClangFormat.any(),
+		argTestType.any(), internStr(check.Name).any(),
 		argTestCiType.any(), argStyle.any(),
 		argContextFilename.any(), internStr(testContextPath).any(),
 		argSourceRoot.any(), internStr(testSourceRoot).any(),
 		argBuildRoot.any(), internStr(testBuildRoot).any(),
-		argTestSuiteName.any(), argClangFormat.any(),
+		argTestSuiteName.any(), internStr(check.Name).any(),
 		argProjectPath.any(), internStr(info.ProjectPath).any(),
-		argTestRelatedPath.any(), (source(testSVNInterfaceRel)).any(),
 	}
 
-	for _, src := range info.CppSources {
+	for _, src := range check.Files {
 		cmdArgs = append(cmdArgs, argTestRelatedPath.any(), (source(src)).any())
 	}
 
 	cmdArgs = append(cmdArgs,
-		argTestRelatedPath.any(), (source(testClangFormatConfigRel)).any(),
-		argTestRelatedPath.any(), (source(testClangFormatWrapperRel)).any(),
+		argTestRelatedPath.any(), (source(check.Config)).any(),
+		argTestRelatedPath.any(), (source(check.Wrapper)).any(),
 		argTargetPlatformDescriptor.any(), internStr(targetPlatformDescriptor(p)).any(),
 		argRemoveTos.any(),
 		argGdbPath.any(), internStr(testGDBPath).any(),
@@ -287,7 +290,7 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 		argSupportsTestParameters.any(),
 		argCompressionFilter.any(), argZstd.any(),
 		argCompressionLevel.any(), arg1.any(),
-		argGlobalResource.any(), internStr(testClangFormatResource).any(),
+		argGlobalResource.any(), internStr(resource).any(),
 		argRamLimitGb.any(), arg8.any(),
 		argTar.any(), (build(path.Join(resultsDir, "testing_out_stuff.tar.zstd"))).any(),
 		internStr(testToolHostPath).any(),
@@ -297,28 +300,26 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 		argProjectPath.any(), (source(info.ProjectPath)).any(),
 		argTracePath.any(), (build(path.Join(resultsDir, "ytest.report.trace"))).any(),
 		argOutPath.any(), (build(path.Join(resultsDir, "testing_out_stuff"))).any(),
-		argLintName.any(), argClangFormat.any(),
-		argWrapperScript.any(), internStr(testClangFormatWrapperRel).any(),
+		argLintName.any(), internStr(check.Name).any(),
+		argWrapperScript.any(), internStr(check.Wrapper).any(),
 		argDepends.any(), internStr(info.ProjectPath).any(),
-		argConfig.any(), (source(testClangFormatConfigRel)).any(),
-		argGlobalResource.any(), internStr(testClangFormatResource).any(),
-		(source(testSVNInterfaceRel)).any(),
+		argConfig.any(), (source(check.Config)).any(),
+		argGlobalResource.any(), internStr(resource).any(),
 	)
 
-	for _, src := range info.CppSources {
+	for _, src := range check.Files {
 		cmdArgs = append(cmdArgs, (source(src)).any())
 	}
 
 	cmdArgs = append(cmdArgs, argYaEndCommandFile.any())
 
 	inputs := []VFS{
-		source(testClangFormatConfigRel),
-		source(testSVNInterfaceRel),
-		source(testClangFormatWrapperRel),
+		source(check.Config),
+		source(check.Wrapper),
 		source(info.ProjectPath),
 	}
 
-	for _, src := range info.CppSources {
+	for _, src := range check.Files {
 		inputs = append(inputs, source(src))
 	}
 
@@ -326,17 +327,17 @@ func buildClangFormatNode(na *NodeArenas, p *Platform, info TestSuiteInfo) *Node
 		Platform: p,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: cwdVFS(testBuildRoot)}),
-		Env:    testEnv(p, "clang_format"),
+		Env:    testEnv(p, check.Name),
 		Inputs: na.inputList(inputs),
 		KV: &KV{
 			P:                pkTS,
-			Path:             path.Join(info.ProjectPath, "clang_format"),
+			Path:             path.Join(info.ProjectPath, check.Name),
 			PC:               pcYellow,
 			RunTestNode:      true,
 			ShowOutBool:      true,
 			HasSpecialRunner: true,
 		},
-		Outputs:      testOutputs(info.ProjectPath, "clang_format"),
+		Outputs:      testOutputs(info.ProjectPath, check.Name),
 		Requirements: &testRunRequirements,
 	}
 }

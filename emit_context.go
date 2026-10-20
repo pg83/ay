@@ -302,7 +302,7 @@ func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	info.OwnerModule = e.instance.Path
 	info.OwnerSerial = e.frame.serial
 
-	if e.d.docs != nil || e.d.moduleStmt.Name == tokUnion {
+	if e.d.docs != nil || (e.d.moduleStmt.Name == tokUnion || e.d.moduleStmt.Name == tokGenLibrary) {
 		e.outs = append(e.outs, info.OutputPath)
 	}
 
@@ -336,6 +336,7 @@ func (e *EmitContext) emit() {
 	cythonPlans := e.planCythonCpp()
 
 	e.emitDeclaredProducers(cythonPlans)
+	e.emitUsrvFiles()
 
 	for _, meta := range d.srcs {
 		if !isCodegenProducingSrcID(meta.Source) {

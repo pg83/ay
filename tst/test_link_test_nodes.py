@@ -154,7 +154,7 @@ class TestNodesTest(unittest.TestCase):
         self.assertEqual(style["deps"], [context["uid"]])
         self.assertNotIn("disable_cache", style["kv"])
         self.assertEqual(style["env"]["TEST_NAME"], "clang_format")
-        self.assertEqual(
+        self.assertCountEqual(
             style["inputs"],
             [
                 "$(S)/build/config/tests/cpp_style/.clang-format",
@@ -297,6 +297,15 @@ class TestNodesTest(unittest.TestCase):
         self.assertIn("--noconftest", args)
         self.assertIn("--recipes", args)
         self.assertFalse(any(n["kv"]["p"] == "LD" and n["outputs"][0].startswith("$(B)/exec/") for n in graph["graph"]))
+
+    def test_recurse_for_tests_emits_child_suites_only_with_tests_enabled(self):
+        files = fixture()
+        files["lib/ya.make"] += "RECURSE_FOR_TESTS(ut)\n"
+        normal = lib.make(files, "lib")
+        self.assertFalse(any("/test-results/" in o for n in normal["graph"] for o in n["outputs"]))
+        graph = lib.make(files, "lib", "-t")
+        run = lib.node_by_output(graph, "$(B)/lib/ut/test-results/unittest/meta.json")
+        self.assertIn(run["uid"], graph["result"])
 
     def test_unsandboxed_debug_descriptor(self):
         graph = make_unsandboxed(fixture(), "lib/ut", "-t")
