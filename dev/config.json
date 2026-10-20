@@ -733,7 +733,7 @@
       "education/docs",
       "maps/analytics/docs"
     ],
-    "xfail": true,
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14087938491",
     "slice_sha256": "6386b0ea3638218ad2dea942c2616c5ac8c3767d6ee5e2f3ee1b2c530ce8a28e",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14087939087",
