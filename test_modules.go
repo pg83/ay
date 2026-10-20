@@ -29,6 +29,20 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
 	case tokPy2Test:
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
+	case tokYqlUdfTest:
+		peers = []string{"library/python/pytest", "yql/essentials/tests/common/udf_test"}
+
+		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
+		d.test.depends = append(d.test.depends, "yql/essentials/tools/astdiff", "yql/tools/yqlrun", "yql/essentials/tools/udf_resolver")
+		d.test.data = append(d.test.data, "arcadia/yql/essentials/cfg/udf_test")
+
+		d.test.env = append(d.test.env,
+			"YQL_ASTDIFF_PATH=yql/essentials/tools/astdiff/astdiff",
+			"YQL_CONFIG_DIR=yql/essentials/cfg/udf_test",
+			"YQL_YQLRUN_PATH=yql/tools/yqlrun/yqlrun",
+			"YQL_SQL2YQL_PATH=yql/essentials/tools/sql2yql/sql2yql",
+			"YQL_UDFRESOLVER_PATH=yql/essentials/tools/udf_resolver/udf_resolver",
+		)
 	case tokGBenchmark:
 		peers = []string{"library/cpp/testing/gbenchmark"}
 	case tokFuzz:

@@ -296,6 +296,7 @@ var tokName = [...]STR{
 	tokYqlLastAbiVersion:               internStr("YQL_LAST_ABI_VERSION"),
 	tokYqlUdfContrib:                   kwYQL_UDF_CONTRIB,
 	tokYqlUdfYdb:                       kwYQL_UDF_YDB,
+	tokYqlUdfTest:                      internStr("YQL_UDF_TEST"),
 	tokGoLibrary:                       internStr("GO_LIBRARY"),
 	tokGoPackageName:                   internStr("GO_PACKAGE_NAME"),
 	tokGoGrpcGatewayV2OpenapiSrcs:      internStr("GO_GRPC_GATEWAY_V2_OPENAPI_SRCS"),
@@ -649,6 +650,7 @@ const (
 	tokYqlLastAbiVersion
 	tokYqlUdfContrib
 	tokYqlUdfYdb
+	tokYqlUdfTest
 	tokGoLibrary
 	tokGoPackageName
 	tokGoGrpcGatewayV2OpenapiSrcs

@@ -1642,6 +1642,10 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		}
 	}
 
+	if name == tokYqlUdfTest {
+		name = tokPy3Test
+	}
+
 	if name == tokPy3Program && kind == KindLib {
 		name = tokPy3Library
 

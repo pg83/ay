@@ -88,6 +88,42 @@ class YqlAbiTest(unittest.TestCase):
             self.assertIn("-DUSE_STABLE_UDF_ABI_VERSION" if modern else "-DUSE_CURRENT_UDF_ABI_VERSION", args)
             self.assertIn("-DMIN_UDF_ABI_VERSION_MINOR=40" if modern else "-DUDF_ABI_VERSION_MINOR=40", args)
 
+    def test_udf_test_is_a_python3_pytest_program_with_the_yql_test_tools(self):
+        files = {
+            "udf/ya.make": f"PROGRAM()\n{BARE}SRCS(u.cpp)\nEND()\nRECURSE_FOR_TESTS(test)\n",
+            "udf/u.cpp": "int main(){return 0;}\n",
+            "udf/test/ya.make": (
+                f"YQL_UDF_TEST()\n{BARE}NO_CHECK_IMPORTS()\nNO_IMPORT_TRACING()\nNO_PYTHON_INCLUDES()\n"
+                "DISABLE(PYTHON_SQLITE3)\nALLOCATOR(FAKE)\nSIZE(MEDIUM)\nDEPENDS(udf)\nEND()\n"
+            ),
+        }
+        for peer in ["library/python/pytest", "yql/essentials/tests/common/udf_test", "library/python/runtime_py3/main", "library/cpp/resource"]:
+            files[f"{peer}/ya.make"] = f"LIBRARY()\n{BARE}SRCS(p.cpp)\nEND()\n"
+            files[f"{peer}/p.cpp"] = ""
+        tools = ["yql/essentials/tools/astdiff", "yql/tools/yqlrun", "yql/essentials/tools/udf_resolver"]
+        for tool in ["tools/archiver", "tools/py3cc", "tools/py3cc/slow", "tools/rescompiler", "tools/rescompressor", *tools]:
+            lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
+        graph = lib.make(files, "udf", "-t")
+        binary = lib.node_by_output(graph, "$(B)/udf/test/udf-test")
+        self.assertIn("$(B)/library/python/pytest/liblibrary-python-pytest.a", binary["inputs"])
+        self.assertIn("$(B)/yql/essentials/tests/common/udf_test/libtests-common-udf_test.a", binary["inputs"])
+        self.assertIn("PY_MAIN=library.python.pytest.main:main", " ".join(a for n in graph["graph"] for c in n["cmds"] for a in c["cmd_args"]))
+        run = lib.node_by_output(graph, "$(B)/udf/test/test-results/py3test/meta.json")
+        self.assertIn(binary["uid"], run["deps"])
+        dep_outputs = {o for n in graph["graph"] if n["uid"] in run["deps"] for o in n["outputs"]}
+        for dep in [*tools, "udf"]:
+            self.assertIn(f"$(B)/{dep}/{dep.rsplit('/', 1)[-1]}", dep_outputs)
+        args = run["cmds"][0]["cmd_args"]
+        self.assertEqual(args[args.index("--test-type") + 1], "py3test")
+        self.assertEqual([args[i + 1] for i, a in enumerate(args) if a == "--env"], [
+            "YQL_ASTDIFF_PATH=yql/essentials/tools/astdiff/astdiff",
+            "YQL_CONFIG_DIR=yql/essentials/cfg/udf_test",
+            "YQL_YQLRUN_PATH=yql/tools/yqlrun/yqlrun",
+            "YQL_SQL2YQL_PATH=yql/essentials/tools/sql2yql/sql2yql",
+            "YQL_UDFRESOLVER_PATH=yql/essentials/tools/udf_resolver/udf_resolver",
+        ])
+        self.assertIn("$(S)/yql/essentials/cfg/udf_test", [args[i + 1] for i, a in enumerate(args) if a == "--test-related-path"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
