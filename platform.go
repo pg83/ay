@@ -18,8 +18,8 @@ type PlatformConf struct {
 	ProtoHeaderEpilogue bool
 }
 
-func readPlatformConf(fs FS) PlatformConf {
-	return PlatformConf{GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(fs), YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
+func readPlatformConf(fs FS, cache *SharedParseCache) PlatformConf {
+	return PlatformConf{GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(fs, cache), YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
 }
 
 func confProtoHeaderEpilogue(fs FS) bool {
@@ -214,7 +214,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, conf *YmakeCon
 
 	sysinclEnv := p.ifEnv.clone()
 
-	conf.sysincl.apply(sysinclEnv)
+	conf.sysincl.apply(sysinclEnv, "SYSINCL")
 	p.SysInclFiles = strings.Fields(expandStmtToken(sysinclEnv.string(envSysincl), sysinclEnv))
 	p.Linker = pc.Linker.flags(p)
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))

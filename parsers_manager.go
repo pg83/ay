@@ -28,12 +28,14 @@ func (set ParsedIncludeSet) bucket(bucket ParsedIncludeBucket) []IncludeDirectiv
 }
 
 type SharedParseCache struct {
-	notsJSON   DenseMap[STR, map[string]any]
-	notsYAML   DenseMap[STR, map[string]any]
-	notsLocks  DenseMap[STR, *NotsLockfile]
-	ambiguous  map[uint64]ParsedIncludeSet
-	directives *BumpAllocator[IncludeDirective]
-	parsed     DenseMap[STR, ParsedIncludeSet]
+	confFiles   DenseMap[STR, *ConfAssignments]
+	sysinclYAML DenseMap[STR, SysInclSet]
+	notsJSON    DenseMap[STR, map[string]any]
+	notsYAML    DenseMap[STR, map[string]any]
+	notsLocks   DenseMap[STR, *NotsLockfile]
+	ambiguous   map[uint64]ParsedIncludeSet
+	directives  *BumpAllocator[IncludeDirective]
+	parsed      DenseMap[STR, ParsedIncludeSet]
 }
 
 func newSharedParseCache() *SharedParseCache {

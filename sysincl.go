@@ -37,15 +37,21 @@ func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 	}
 }
 
-func loadSysInclSetForFS(fs FS, p *Platform, onWarn func(Warn)) SysInclSet {
+func loadSysInclSetForFS(fs FS, p *Platform, cache *SharedParseCache, onWarn func(Warn)) SysInclSet {
 	var set SysInclSet
 
 	for _, file := range p.SysInclFiles {
-		if !fs.isFile(srcRootRel, file) {
-			continue
-		}
+		key := internStr(file)
+		records, ok := cache.sysinclYAML.get(key)
 
-		records := parseSysInclYAML(path.Base(file), concatChunks(fs.read(file)), onWarn)
+		if !ok {
+			if !fs.isFile(srcRootRel, file) {
+				throwFmt("sysincl: configuration %s is missing", file)
+			}
+
+			records = parseSysInclYAML(path.Base(file), concatChunks(fs.read(file)), onWarn)
+			cache.sysinclYAML.put(key, records)
+		}
 
 		set = append(set, records...)
 	}

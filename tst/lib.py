@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -326,7 +327,12 @@ CONF_FILES = {
     "build/ymake_conf.py": FAKE_YMAKE_CONF,
     "build/ya.conf.json": ya_conf_json(),
     "build/conf/linkers/ld.conf": FAKE_LD_CONF,
+    "build/conf/compilers/gnu_compiler.conf": "",
 }
+
+
+for _yaml in re.findall(r"build/[a-zA-Z0-9_./-]+\.yml", FAKE_CORE_CONF + FAKE_SYSINCL_CONF + FAKE_INTERNAL_SYSINCL_CONF):
+    CONF_FILES.setdefault(_yaml, "")
 
 
 def seed_root(root):

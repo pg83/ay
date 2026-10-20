@@ -465,7 +465,7 @@ func ymakeConfEnv() []string {
 	return env
 }
 
-func (r *YmakeConfRun) wait() *YmakeConf {
+func (r *YmakeConfRun) wait(cache *SharedParseCache) *YmakeConf {
 	if err := r.cmd.Wait(); err != nil {
 		throwFmt("Config was not generated due to errors in %s (%v)\n%s", r.script, err, r.stderr.String())
 	}
@@ -474,7 +474,7 @@ func (r *YmakeConfRun) wait() *YmakeConf {
 		fmt.Fprintf(os.Stderr, "Non-empty stderr from ymake_conf.py:\n%s", r.stderr.String())
 	}
 
-	return &YmakeConf{vars: parseYmakeConf(r.stdout.Bytes()), sysincl: readConfAssignments(r.fs, r.script, r.stdout.Bytes(), []string{"SYSINCL"})}
+	return &YmakeConf{vars: parseYmakeConf(r.stdout.Bytes()), sysincl: readConfAssignments(r.fs, r.script, r.stdout.Bytes(), cache)}
 }
 
 func parseYmakeConf(out []byte) map[string]string {

@@ -55,14 +55,47 @@ when ($OS_LINUX == "yes" && !$MUSL) {
                 inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
                 self.assertEqual({"$(S)/m/a.cpp", f"$(S)/m/{selected}.h"}, set(inputs))
 
-    def test_imports_and_global_flags(self):
-        files = self.files("SYSINCL=build/custom/first.yml\n")
-        files["build/ymake_conf.py"] = lib.ymake_conf(extra='@import "${CONF_ROOT}/extra.conf"\n')
-        files["build/extra.conf"] = '''when ($WITH_EXTRA == "yes") {
-    @import "${CONF_ROOT}/nested.conf"
+    def test_conditions_apply_after_unconditional_assignments(self):
+        for op, selected in (("=", {"first"}), ("+=", {"first", "second"})):
+            with self.subTest(operator=op):
+                files = self.files(f'''when ($OS_LINUX == "yes") {{
+    SYSINCL{op}build/custom/first.yml
+}}
+SYSINCL=build/custom/second.yml
+''')
+                graph = lib.make(files, "m")
+                inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
+                self.assertEqual({"$(S)/m/a.cpp"} | {f"$(S)/m/{name}.h" for name in selected}, set(inputs))
+
+    def test_conditional_assignments_observe_prior_actions(self):
+        set_second = '''when ($OS_LINUX == "yes") {
+    SYSINCL=build/custom/second.yml
 }
 '''
-        files["build/nested.conf"] = "SYSINCL += build/sysincl/extra.yml\n"
+        append_third = '''when ($SYSINCL == "build/custom/second.yml") {
+    SYSINCL+=build/custom/third.yml
+}
+'''
+        for imported in (False, True):
+            with self.subTest(imported=imported):
+                config = "SYSINCL=build/custom/first.yml\n"
+                config += '@import "${CONF_ROOT}/conf/set_sysincl.conf"\n' if imported else set_second
+                files = self.files(config + append_third)
+                files["build/conf/set_sysincl.conf"] = set_second
+                files["build/custom/third.yml"] = "- includes:\n  - selected.h: m/third.h\n"
+                files["m/third.h"] = ""
+                graph = lib.make(files, "m")
+                inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
+                self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/second.h", "$(S)/m/third.h"}, set(inputs))
+
+    def test_imports_and_global_flags(self):
+        files = self.files("SYSINCL=build/custom/first.yml\n")
+        files["build/ymake_conf.py"] = lib.ymake_conf(extra='@import "${CONF_ROOT}/conf/extra.conf"\n')
+        files["build/conf/extra.conf"] = '@import "${CONF_ROOT}/conf/nested.conf"\n'
+        files["build/conf/nested.conf"] = '''when ($WITH_EXTRA == "yes") {
+    SYSINCL += build/sysincl/extra.yml
+}
+'''
         files["build/sysincl/extra.yml"] = "- includes:\n  - extra.h\n"
         files["m/first.h"] += "#include <extra.h>\n"
         graph = lib.make(files, "m", "-DWITH_EXTRA=yes")
@@ -75,6 +108,23 @@ when ($OS_LINUX == "yes" && !$MUSL) {
         self.assertEqual(1, result.returncode)
         self.assertIn("unresolved include <core.h>", result.stderr)
         self.assertNotIn("unresolved include <extra.h>", result.stderr)
+
+    def test_referenced_platform_variable_selects_yaml(self):
+        files = self.files("SYSINCL=${EXTRA_SYSINCL}\n")
+        graph = lib.make(files, "m", "-DEXTRA_SYSINCL=build/custom/second.yml", "--host-platform-flag=EXTRA_SYSINCL=build/custom/first.yml")
+        inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
+        self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/second.h"}, set(inputs))
+
+    def test_missing_configuration_files_are_reported(self):
+        for config, missing in ((
+            '@import "${CONF_ROOT}/conf/missing.conf"\n', "build/conf/missing.conf",
+        ), ("SYSINCL=build/sysincl/missing.yml\n", "build/sysincl/missing.yml")):
+            with self.subTest(missing=missing):
+                files = self.files(config)
+                files["m/a.cpp"] = ""
+                result = lib.make_process(files, "m")
+                self.assertEqual(1, result.returncode)
+                self.assertIn(missing, result.stderr)
 
     def test_host_and_target_evaluate_separately(self):
         files = self.files('''SYSINCL=

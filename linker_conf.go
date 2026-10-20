@@ -18,12 +18,12 @@ type LinkerFlags struct {
 	ArgCount                                      int
 }
 
-func readLinkerConf(fs FS) *ConfAssignments {
+func readLinkerConf(fs FS, cache *SharedParseCache) *ConfAssignments {
 	if !fs.isFile(srcRootRel, ldConfRel) {
 		throwFmt("linker conf: %s is missing", ldConfRel)
 	}
 
-	return readConfAssignments(fs, ldConfRel, concatChunks(fs.read(ldConfRel)), linkerConfNames)
+	return cache.confFile(fs, ldConfRel)
 }
 
 func (c *ConfAssignments) flags(p *Platform) LinkerFlags {
@@ -40,7 +40,7 @@ func (c *ConfAssignments) flags(p *Platform) LinkerFlags {
 	env.setString(envExportsFile, "${input:EXPORTS_FILE}")
 	env.setString(envSoname, "$_SONAME")
 
-	c.apply(env)
+	c.apply(env, "")
 
 	for _, name := range linkerConfNames {
 		key := internEnv(name)

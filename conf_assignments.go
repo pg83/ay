@@ -9,10 +9,11 @@ type ConfBranch struct {
 }
 
 type ConfAssignment struct {
-	branch int
-	name   string
-	value  string
-	append bool
+	imported *ConfAssignments
+	branch   int
+	name     string
+	value    string
+	append   bool
 }
 
 type ConfAssignments struct {
@@ -20,8 +21,33 @@ type ConfAssignments struct {
 	assignments []ConfAssignment
 }
 
-func readConfAssignments(fs FS, filename string, data []byte, selected []string) *ConfAssignments {
+func (cache *SharedParseCache) confFile(fs FS, filename string) *ConfAssignments {
+	key := internStr(filename)
+
+	if conf, ok := cache.confFiles.get(key); ok {
+		if conf == nil {
+			throwFmt("conf: import cycle at %s", filename)
+		}
+
+		return conf
+	}
+
+	if !fs.isFile(srcRootRel, filename) {
+		throwFmt("conf: imported configuration %s is missing", filename)
+	}
+
+	cache.confFiles.put(key, nil)
+
+	conf := readConfAssignments(fs, filename, concatChunks(fs.read(filename)), cache)
+
+	cache.confFiles.put(key, conf)
+
+	return conf
+}
+
+func readConfAssignments(fs FS, filename string, data []byte, cache *SharedParseCache) *ConfAssignments {
 	conf := &ConfAssignments{branches: []ConfBranch{{}}}
+	selected := append([]string{"SYSINCL"}, linkerConfNames...)
 	names := make(map[string]bool, len(selected))
 
 	for _, name := range selected {
@@ -35,93 +61,79 @@ func readConfAssignments(fs FS, filename string, data []byte, selected []string)
 	previous := 0
 	pending := ""
 
-	var read func(string, []byte)
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
 
-	reading := map[string]bool{}
+		line = pending + line
+		pending = ""
 
-	read = func(filename string, data []byte) {
-		if reading[filename] {
-			throwFmt("conf: import cycle at %s", filename)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
 		}
 
-		reading[filename] = true
+		if strings.HasSuffix(line, "\\") {
+			pending = strings.TrimSuffix(line, "\\") + " "
 
-		defer delete(reading, filename)
-
-		for _, raw := range strings.Split(string(data), "\n") {
-			line := strings.TrimSpace(raw)
-
-			line = pending + line
-			pending = ""
-
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-
-			if strings.HasSuffix(line, "\\") {
-				pending = strings.TrimSuffix(line, "\\") + " "
-
-				continue
-			}
-
-			for strings.HasPrefix(line, "}") {
-				if len(stack) == 1 {
-					throwFmt("conf: unmatched } in %s", filename)
-				}
-
-				previous = stack[len(stack)-1]
-				stack = stack[:len(stack)-1]
-				line = strings.TrimSpace(line[1:])
-			}
-
-			if imported, ok := confImport(line); ok && !skipped[stack[len(stack)-1]] {
-				if fs.isFile(srcRootRel, imported) {
-					read(imported, concatChunks(fs.read(imported)))
-				}
-
-				continue
-			}
-
-			if name, value, appendOp, ok := confBranchAssignment(line); ok {
-				if names[name] && !skipped[stack[len(stack)-1]] {
-					needed[stack[len(stack)-1]] = true
-
-					conf.assignments = append(conf.assignments, ConfAssignment{
-						branch: stack[len(stack)-1], name: name, value: value, append: appendOp,
-					})
-				}
-
-				continue
-			}
-
-			if !strings.HasSuffix(line, "{") {
-				continue
-			}
-
-			header := strings.TrimSpace(strings.TrimSuffix(line, "{"))
-			branch := ConfBranch{parent: stack[len(stack)-1], cond: condFalse}
-			expr := ""
-
-			switch {
-			case strings.HasPrefix(header, "when "):
-				expr = strings.TrimSpace(strings.TrimPrefix(header, "when"))
-			case strings.HasPrefix(header, "elsewhen "):
-				branch.previous = previous
-				expr = strings.TrimSpace(strings.TrimPrefix(header, "elsewhen"))
-			case header == "otherwise":
-				branch.previous = previous
-				branch.cond = nil
-			}
-
-			conf.branches = append(conf.branches, branch)
-			expressions = append(expressions, expr)
-			needed = append(needed, false)
-			skipped = append(skipped, skipped[branch.parent] || expr == "" && branch.cond != nil)
-			stack = append(stack, len(conf.branches)-1)
+			continue
 		}
+
+		for strings.HasPrefix(line, "}") {
+			if len(stack) == 1 {
+				throwFmt("conf: unmatched } in %s", filename)
+			}
+
+			previous = stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			line = strings.TrimSpace(line[1:])
+		}
+
+		if imported, ok := confImport(line); ok && !skipped[stack[len(stack)-1]] {
+			if len(stack) != 1 {
+				throwFmt("conf: @import inside a condition in %s", filename)
+			}
+
+			conf.assignments = append(conf.assignments, ConfAssignment{imported: cache.confFile(fs, imported)})
+
+			continue
+		}
+
+		if name, value, appendOp, ok := confBranchAssignment(line); ok {
+			if names[name] && !skipped[stack[len(stack)-1]] {
+				needed[stack[len(stack)-1]] = true
+
+				conf.assignments = append(conf.assignments, ConfAssignment{
+					branch: stack[len(stack)-1], name: name, value: value, append: appendOp,
+				})
+			}
+
+			continue
+		}
+
+		if !strings.HasSuffix(line, "{") {
+			continue
+		}
+
+		header := strings.TrimSpace(strings.TrimSuffix(line, "{"))
+		branch := ConfBranch{parent: stack[len(stack)-1], cond: condFalse}
+		expr := ""
+
+		switch {
+		case strings.HasPrefix(header, "when "):
+			expr = strings.TrimSpace(strings.TrimPrefix(header, "when"))
+		case strings.HasPrefix(header, "elsewhen "):
+			branch.previous = previous
+			expr = strings.TrimSpace(strings.TrimPrefix(header, "elsewhen"))
+		case header == "otherwise":
+			branch.previous = previous
+			branch.cond = nil
+		}
+
+		conf.branches = append(conf.branches, branch)
+		expressions = append(expressions, expr)
+		needed = append(needed, false)
+		skipped = append(skipped, skipped[branch.parent] || expr == "" && branch.cond != nil)
+		stack = append(stack, len(conf.branches)-1)
 	}
-
-	read(filename, data)
 
 	if len(stack) != 1 || pending != "" {
 		throwFmt("conf: unfinished block or assignment in %s", filename)
@@ -181,19 +193,20 @@ func confImport(line string) (string, bool) {
 	return "build/" + value, ok
 }
 
-func (c *ConfAssignments) apply(env Environment) {
-	active := make([]bool, len(c.branches))
-	matched := make([]bool, len(c.branches))
+func (c *ConfAssignments) apply(env Environment, only string) {
+	c.applyPass(env, false, only)
+	c.applyPass(env, true, only)
+}
 
-	active[0] = true
-
-	for i, b := range c.branches[1:] {
-		active[i+1] = active[b.parent] && !matched[b.previous] && (len(b.cond) == 0 || evalCond(b.cond, env))
-		matched[i+1] = active[i+1] || matched[b.previous]
-	}
-
+func (c *ConfAssignments) applyPass(env Environment, conditional bool, only string) {
 	for _, a := range c.assignments {
-		if !active[a.branch] {
+		if a.imported != nil {
+			a.imported.applyPass(env, conditional, only)
+
+			continue
+		}
+
+		if only != "" && a.name != only || conditional != (a.branch != 0) || !c.branchActive(a.branch, env) {
 			continue
 		}
 
@@ -206,4 +219,24 @@ func (c *ConfAssignments) apply(env Environment) {
 
 		env.setString(key, value)
 	}
+}
+
+func (c *ConfAssignments) branchActive(index int, env Environment) bool {
+	if index == 0 {
+		return true
+	}
+
+	branch := c.branches[index]
+
+	return c.branchActive(branch.parent, env) && !c.priorBranchMatched(branch.previous, env) && (len(branch.cond) == 0 || evalCond(branch.cond, env))
+}
+
+func (c *ConfAssignments) priorBranchMatched(index int, env Environment) bool {
+	if index == 0 {
+		return false
+	}
+
+	branch := c.branches[index]
+
+	return len(branch.cond) == 0 || evalCond(branch.cond, env) || c.priorBranchMatched(branch.previous, env)
 }
