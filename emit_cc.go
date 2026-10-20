@@ -21,6 +21,7 @@ type ModuleCompileEnv struct {
 	SwigInclude          []VFS
 	PbHCompanionExt      string
 	CXXFlags             []ANY
+	CXXFlagsVar          []ANY
 	COnlyFlags           []ANY
 	ClangWarnings        []ANY
 	SrcDirs              []VFS
@@ -655,13 +656,14 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 
 	cxxBucket := composeOwnAndPeerGlobalBucket(in)
 
-	cxxTailParts := [6][]ANY{
+	cxxTailParts := [7][]ANY{
 		cxxStandardFlagChunk,
 		cxxWarningChunk(in.Flags.NoCompilerWarnings),
 		na.anyConcat(cxxOwnExtras),
 		na.anyConcat(cxxBucket),
 		catboostStr,
 		composePostCatboostBucket(cxxBucket),
+		in.CXXFlagsVar,
 	}
 
 	return CcModuleArgBlocks{

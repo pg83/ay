@@ -208,6 +208,7 @@ type ModuleData struct {
 	cFlags                   []ANY
 	cFlagsGlobal             []ANY
 	cxxFlags                 []ANY
+	cxxFlagsVar              []ANY
 	cxxFlagsGlobal           []ANY
 	cOnlyFlags               []ANY
 	cOnlyFlagsGlobal         []ANY

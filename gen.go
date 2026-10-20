@@ -2107,6 +2107,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		SwigInclude:          moduleSwigInclude,
 		CFlags:               ownCFlags,
 		CXXFlags:             d.cxxFlags,
+		CXXFlagsVar:          d.cxxFlagsVar,
 		COnlyFlags:           d.cOnlyFlags,
 		ClangWarnings:        d.clangWarnings,
 		OwnCFlagsGlobal:      ownCFlagsGlobalSelf,

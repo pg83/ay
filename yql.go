@@ -32,12 +32,12 @@ func setupYqlModule(d *ModuleData, name TOK, env Environment) {
 		d.unit.ARPrefix = "yql-abi-" + variant + "-"
 		d.unit.ObjectSuffixStem = "abi_" + variant
 		d.unit.GlobalARTag = internStr(tag + "_GLOBAL")
-		d.cxxFlags = append(d.cxxFlags, internArg("-DUSE_"+strings.ToUpper(variant)+"_UDF_ABI_VERSION").any())
+		d.cxxFlagsVar = append(d.cxxFlagsVar, internArg("-DUSE_"+strings.ToUpper(variant)+"_UDF_ABI_VERSION").any())
 		env.setString(envMODULE_TAG, tag)
 	} else if d.yqlCurrent {
 		d.unit.ARPrefix = "yql-abi-current-"
 		d.unit.ObjectSuffixStem = "udfs.abi_current"
-		d.cxxFlags = append(d.cxxFlags, argDuseCurrentUdfAbiVersion.any())
+		d.cxxFlagsVar = append(d.cxxFlagsVar, argDuseCurrentUdfAbiVersion.any())
 	}
 
 	if d.yqlCurrent {

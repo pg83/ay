@@ -32,6 +32,21 @@ class YqlAbiTest(unittest.TestCase):
         current = lib.node_by_output(graph, "$(B)/a/a.cpp.abi_current.o")
         self.assertEqual(stable["inputs"], current["inputs"])
 
+    def test_abi_flag_is_appended_to_cxxflags(self):
+        # yql_udf.conf: the YQL_LIBRARY variants SET_APPEND(CXXFLAGS
+        # $YQL_ABI_FLAGS), after the configured CXXFLAGS; ydb
+        # .abi_stable.o compiles end their C++ flags with -nostdinc++
+        # -DCATBOOST_OPENSOURCE=yes -nostdinc++ -DUSE_STABLE_UDF_ABI_VERSION.
+        files = {
+            "p/ya.make": f"PROGRAM()\n{BARE}PEERDIR(a)\nEND()\n",
+            "a/ya.make": f"YQL_LIBRARY()\n{BARE}CXXFLAGS(-DOWN)\nSRCS(a.cpp)\nEND()\n",
+            "a/a.cpp": "",
+        }
+        args = lib.node_by_output(lib.make(files, "p"), "$(B)/a/a.cpp.abi_stable.o")["cmds"][0]["cmd_args"]
+        flag = args.index("-DUSE_STABLE_UDF_ABI_VERSION")
+        self.assertLess(args.index("-DOWN"), flag)
+        self.assertNotIn("-nostdinc++", args[flag:])
+
     def test_direct_library_selects_stable_variant(self):
         graph = lib.make({
             "a/ya.make": f"YQL_LIBRARY()\n{BARE}SRCS(a.cpp)\nEND()\n",
