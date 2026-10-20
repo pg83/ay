@@ -48,6 +48,15 @@ def resolve_slice_root(directory: Path) -> Path:
     raise RuntimeError(f"no .arcadia.root below extracted slice {directory}")
 
 
+# A --sandboxing graph can take several GB; normalizing one that size from a
+# fully loaded graph runs out of memory, so it is streamed.
+STREAMING_GRAPH_BYTES = 1 << 30
+
+
+def streaming_mode(graph: Path) -> list[str]:
+    return ["--streaming"] if graph.stat().st_size > STREAMING_GRAPH_BYTES else []
+
+
 def resolve_reference_graph(directory: Path) -> Path:
     direct = directory / "graph.fuse.json"
     if direct.is_file():
@@ -172,11 +181,13 @@ class CaseRunner:
                     return self.phase_failure("generate", rc, generation_seconds=generation_seconds)
 
                 targets = spec_targets(self.spec)
+                our_mode = streaming_mode(our_raw)
+                ref_mode = streaming_mode(reference_raw)
                 target_flags = [flag for target in targets for flag in ("--target", target)]
                 commands = (
-                    ("normalize-our", [str(self.ay), "dev", "dump", "normalize", "--in", str(our_raw), *target_flags, "--out", str(our_unsorted)]),
+                    ("normalize-our", [str(self.ay), "dev", "dump", "normalize", "--in", str(our_raw), *target_flags, "--out", str(our_unsorted), *our_mode]),
                     ("sort-our", [str(self.ay), "dev", "dump", "sort", "--in", str(our_unsorted), "--out", str(our_sorted)]),
-                    ("normalize-reference", [str(self.ay), "dev", "dump", "normalize", "--in", str(reference_raw), *target_flags, "--out", str(ref_unsorted), "--ref-graph"]),
+                    ("normalize-reference", [str(self.ay), "dev", "dump", "normalize", "--in", str(reference_raw), *target_flags, "--out", str(ref_unsorted), "--ref-graph", *ref_mode]),
                     ("sort-reference", [str(self.ay), "dev", "dump", "sort", "--in", str(ref_unsorted), "--out", str(ref_sorted)]),
                 )
                 for phase, command in commands:
