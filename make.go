@@ -275,7 +275,7 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 	caches.prewarm(fs, mf.targets)
 
 	pc := readPlatformConf(fs, caches.parsers)
-	hostVars, hostImports := hostRun.wait()
+	hostVars, hostRoot := hostRun.wait()
 
 	hostP = newPlatform(
 		hOS,
@@ -283,7 +283,7 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 		mf.hostBuildType,
 		hostTC,
 		hostVars,
-		hostImports,
+		hostRoot,
 		pc,
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
@@ -291,18 +291,18 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 
 	targetCFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS"))
 	targetCXXFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS"))
-	targetVars, targetImports := targetRun.wait()
+	targetVars, targetRoot := targetRun.wait()
 
-	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, targetVars, targetImports, pc, targetCFlags, targetCXXFlags)
+	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, targetVars, targetRoot, pc, targetCFlags, targetCXXFlags)
 	targetP.picMake = func() *Platform {
 		picFlags := maps.Clone(targetFlags)
 
 		delete(picFlags, "FORCE_NO_PIC")
 
 		picRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
-		picVars, picImports := picRun.wait()
+		picVars, picRoot := picRun.wait()
 
-		return newPlatform(tOS, tISA, mf.buildType, targetTC, picVars, picImports, pc, targetCFlags, targetCXXFlags)
+		return newPlatform(tOS, tISA, mf.buildType, targetTC, picVars, picRoot, pc, targetCFlags, targetCXXFlags)
 	}
 
 	return hostP, targetP

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"regexp/syntax"
+	"slices"
 	"strings"
 )
 
@@ -67,27 +68,32 @@ func (pm *IncludeParserManager) confFile(rel string) *ConfFile {
 	return f
 }
 
-func sysinclFiles(pm *IncludeParserManager, imports []string, platformEnv Environment, printed map[ENV]STR) []string {
+func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environment) []string {
 	var (
-		stmts []ConfStmtRef
-		walk  func(rel string)
+		stmts   []ConfStmtRef
+		walking []string
+		walk    func(f *ConfFile)
 	)
 
-	walk = func(rel string) {
-		f := pm.confFile(rel)
-
+	walk = func(f *ConfFile) {
 		for _, s := range f.stmts {
-			if s.name == "" {
-				walk(s.value)
-			} else {
+			if s.name != "" {
 				stmts = append(stmts, ConfStmtRef{file: f, stmt: s})
+
+				continue
 			}
+
+			if slices.Contains(walking, s.value) {
+				throwFmt("conf: @import loop: %s -> %s", strings.Join(walking, " -> "), s.value)
+			}
+
+			walking = append(walking, s.value)
+			walk(pm.confFile(s.value))
+			walking = walking[:len(walking)-1]
 		}
 	}
 
-	for _, rel := range imports {
-		walk(rel)
-	}
+	walk(root)
 
 	needed := map[string]bool{sysinclVar: true}
 	used := make([]bool, len(stmts))
@@ -109,20 +115,12 @@ func sysinclFiles(pm *IncludeParserManager, imports []string, platformEnv Enviro
 
 	env := platformEnv.clone()
 
-	isPrinted := func(name string) bool {
-		_, ok := printed[internEnv(name)]
-
-		return ok
-	}
-
 	for name := range needed {
-		if !isPrinted(name) {
-			env.unbind(internEnv(name))
-		}
+		env.unbind(internEnv(name))
 	}
 
 	for i, r := range stmts {
-		if used[i] && r.stmt.branch == 0 && !isPrinted(r.stmt.name) {
+		if used[i] && r.stmt.branch == 0 {
 			applyConfStmt(env, r.stmt, false)
 		}
 	}

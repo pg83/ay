@@ -118,7 +118,7 @@ func internFlags(flags map[string]string) map[ENV]STR {
 	return out
 }
 
-func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[string]string, imports []string, pc PlatformConf, cflagsEnv, cxxflagsEnv string) *Platform {
+func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[string]string, root *ConfFile, pc PlatformConf, cflagsEnv, cxxflagsEnv string) *Platform {
 	rebaseToolchainRoot(flags, tc)
 
 	clangVer := flags["COMPILER_VERSION"]
@@ -211,7 +211,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.Go = newGoStd(goStdVersion)
 	p.ifEnv = buildPlatformIfEnv(p)
 	p.Linker = pc.Linker.flags(p)
-	p.Sysincl = sysinclFiles(pc.Parsers, imports, p.ifEnv, p.Flags)
+	p.Sysincl = sysinclFiles(pc.Parsers, root, p.ifEnv)
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
 	p.CompileCFlags = composeCompileCFlags(p.ifEnv, flags, p.DebugInfoFlags)

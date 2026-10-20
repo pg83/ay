@@ -735,6 +735,28 @@ class SysinclConfTest(unittest.TestCase):
         }
         self.assertEqual({"picolibc"}, claims(["misc", "picolibc"], files))
 
+    def test_ymake_conf_output_takes_part(self):
+        # The conf ymake reads is the ymake_conf.py output with its imports
+        # inlined; a condition printed by ymake_conf.py feeds SYSINCL too.
+        files = {
+            **self.YML,
+            "build/conf/sysincl.conf": "SYSINCL=build/sysincl/misc.yml $ZEPHYR_SYSINCL\n",
+            "build/ymake_conf.py": lib.ymake_conf(
+                extra='when ($OS_LINUX == "yes") {\n    ZEPHYR_SYSINCL=build/sysincl/zephyr.yml\n}\n',
+            ),
+        }
+        self.assertEqual({"misc", "picolibc"}, claims(["misc", "picolibc"], files))
+
+    def test_import_loop_is_fatal(self):
+        result = make_process({
+            "m/ya.make": module("a.cpp"),
+            "m/a.cpp": "",
+            "build/conf/sysincl.conf": '@import "${CONF_ROOT}/conf/loop.conf"\n',
+            "build/conf/loop.conf": '@import "${CONF_ROOT}/conf/sysincl.conf"\n',
+        }, "m")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("conf: @import loop", result.stderr)
+
     def test_missing_sysincl_config_is_fatal(self):
         result = make_process({
             "m/ya.make": module("a.cpp"),
