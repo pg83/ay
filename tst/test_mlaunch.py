@@ -119,6 +119,32 @@ END()
         for archive in (f"{std}/fmt/fmt.a", f"{std}/sort/sort.a", "sdg/sdc/ros/configuration/golaunch/golaunch.a", "first/first.a", "second/second.a"):
             self.assertIn(archive, peers)
 
+    def test_go_variant_of_mlaunch_component_builds_its_golaunch_sources(self):
+        sources = files()
+        sources["comp/ya.make"] = f"""MLAUNCH_COMPONENT(part)
+{lib.BARE_MODULE}
+GOLAUNCH_SRCDIR(comp/launch)
+GOLAUNCH_FUNCTION(Start)
+GOLAUNCH_SRCS(part.go)
+RESOURCE_PEERDIR(data)
+NODE_BUILDER(
+    ns::Build
+    NAME part
+    TARGET comp/builder
+    HEADER comp/builder.h
+)
+END()
+"""
+        sources["comp/launch/part.go"] = "package part\n"
+        sources["app/ya.make"] = f"GOLAUNCH_PROGRAM(app)\n{lib.BARE_MODULE}\nPEERDIR(comp)\nEND()\n"
+        graph = lib.make(sources, "app")
+        package = lib.node_by_output(graph, "$(B)/comp/part.a")
+        args = next(c["cmd_args"] for c in package["cmds"] if "++srcs" in c["cmd_args"])
+        self.assertEqual(args[args.index("++srcs") + 1:args.index("++asm-flags")], ["$(S)/comp/launch/part.go"])
+        self.assertIn("sdg/sdc/ros/configuration/golaunch/golaunch_context/golaunch_context.a", args)
+        generated = lib.node_by_output(graph, "$(B)/app/launch.go")["cmds"][0]["cmd_args"]
+        self.assertEqual(generated[generated.index("--deps") + 1:], ["comp:Start"])
+
 
 if __name__ == "__main__":
     unittest.main()

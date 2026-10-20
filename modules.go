@@ -1662,7 +1662,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	switch name {
 	case tokRosLibrary:
 		return rosModuleUnit(language)
-	case tokMlaunchLibrary, tokMlaunchPipeline, tokGolaunchProgram, tokGolaunchComposite:
+	case tokMlaunchLibrary, tokMlaunchComponent, tokMlaunchPipeline, tokGolaunchProgram, tokGolaunchComposite:
 		return mlaunchModuleUnit(name, language)
 	case tokDllJava:
 		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp, SwigLang: strSwigLangJniCpp}
@@ -1749,6 +1749,10 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 	addGeneratedHeaderInclude(modulePath, dst, d)
 }
 
+func warnUnmodelledMacro(onWarn func(Warn), modulePath string, name TOK) {
+	onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf); skipped", modulePath, name.string())})
+}
+
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
 	if applyTestMacro(v, d) {
 		return
@@ -1781,6 +1785,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	switch v.Name {
 	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks, tokGolaunchCompositeComps:
 		applyMlaunchStmt(modulePath, v, env, d)
+	case tokNodeBuilder:
+		if d.multimodule != tokMlaunchComponent || !isGoModuleType(d.unit.Type) {
+			handled = false
+
+			warnUnmodelledMacro(onWarn, modulePath, v.Name)
+		} else {
+			checkNodeBuilderOptions(v.Args)
+		}
 	case tokRosDir, tokRosPartial, tokRosSrcs, tokRosMsgCmd, tokRosZeroCopyMsgCmd, tokRosSrvCmd:
 		applyRosStmt(modulePath, v, env, d)
 	case tokSdcInstall:
@@ -3193,7 +3205,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		handled = false
 
 		if !acknowledgedTokSet.has(uint32(v.Name)) {
-			onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf); skipped", modulePath, v.Name.string())})
+			warnUnmodelledMacro(onWarn, modulePath, v.Name)
 
 			return
 		}
@@ -4392,7 +4404,7 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 
 	if isGoModuleType(d.moduleStmt.Name) && peerYaMakeExists(ctx.fs, peerVFS) {
 		switch peerName := ctx.moduleName(peerVFS.relString()); {
-		case peerName == tokProtoLibrary || peerName == tokRosLibrary || peerName == tokMlaunchLibrary:
+		case peerName == tokProtoLibrary || peerName == tokRosLibrary || peerName == tokMlaunchLibrary || peerName == tokMlaunchComponent:
 			language = LangGo
 
 			fallthrough

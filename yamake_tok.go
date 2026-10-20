@@ -15,6 +15,8 @@ var tokName = [...]STR{
 	tokGenerateGolaunchCallbacks: internStr("GENERATE_GOLAUNCH_CALLBACKS"),
 	tokGolaunchComposite:         internStr("GOLAUNCH_COMPOSITE"),
 	tokGolaunchCompositeComps:    internStr("GOLAUNCH_COMPOSITE_COMPONENTS"),
+	tokMlaunchComponent:          internStr("MLAUNCH_COMPONENT"),
+	tokNodeBuilder:               internStr("NODE_BUILDER"),
 
 	tokRosLibrary:        internStr("ROS_LIBRARY"),
 	tokRosDir:            internStr("ROS_DIR"),
@@ -427,6 +429,8 @@ const (
 	tokGenerateGolaunchCallbacks
 	tokGolaunchComposite
 	tokGolaunchCompositeComps
+	tokMlaunchComponent
+	tokNodeBuilder
 
 	tokRosLibrary
 	tokRosDir
