@@ -213,7 +213,10 @@ class ProtoCppTest(unittest.TestCase):
 
         grpc_object = lib.node_by_output(graph, "$(B)/p/a.grpc.pb.cc.o")
         self.assertIn("$(B)/p/a.pb.h", grpc_object["inputs"])
-        self.assertIn(WRAPPER, grpc_object["inputs"])
+        # The protoc command inputs stay on the PB node: none of the 406
+        # .grpc.pb.cc.o compiles in the yabs, devtools_ya_bin_2 and
+        # arc_server_bin references lists cpp_proto_wrapper.py.
+        self.assertNotIn(WRAPPER, grpc_object["inputs"])
 
         consumer = lib.node_by_output(graph, "$(B)/c/c.cpp.o")
         for path in (
@@ -416,7 +419,7 @@ class ProtoCppTest(unittest.TestCase):
         ])
         rpc_object = lib.node_by_output(graph, "$(B)/p/a.grpc.pb.cc.o")
         self.assertIn("$(B)/p/a.pb.h", rpc_object["inputs"])
-        self.assertIn(WRAPPER, rpc_object["inputs"])
+        self.assertNotIn(WRAPPER, rpc_object["inputs"])
         deps_consumer = lib.node_by_output(graph, "$(B)/p/a.pb.cc.o")
         self.assertIn("$(B)/p/b.pb.h", deps_consumer["inputs"])
 

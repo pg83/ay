@@ -510,9 +510,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	var grpcCCParsed, grpcHParsed []IncludeDirective
 
 	if needsGRPCParsed {
-		grpcCCParsed = na.dirList(
-			IncludeDirective{kind: includeQuoted, target: includeTarget(pbH.rel().any())},
-			IncludeDirective{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())})
+		grpcCCParsed = na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(pbH.rel().any())})
 
 		grpcHParsed = na.dirs.alloc(2 + len(directImports))[:0]
 		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(pbH.rel().any())})
