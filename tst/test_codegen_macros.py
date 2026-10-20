@@ -95,6 +95,16 @@ class CheckConfigHTest(unittest.TestCase):
         self.assertEqual(compile_node["deps"], [node["uid"]])
         self.assertIn("$(S)/mod/conf.h", compile_node["inputs"])
 
+    def test_check_config_h_resolves_the_header_as_an_input(self):
+        graph = lib.make({
+            "mod/ya.make": LIBRARY_HEAD + "SRCDIR(inc)\nCHECK_CONFIG_H(conf.h)\nEND()\n",
+            "inc/conf.h": "",
+        }, "mod")
+        node = lib.node_by_output(graph, "$(B)/mod/conf.config.cpp")
+        self.assertEqual(node["cmds"][0]["cmd_args"][2], "inc/conf.h")
+        self.assertIn("$(S)/inc/conf.h", node["inputs"])
+        self.assertIn("$(S)/inc/conf.h", lib.node_by_output(graph, "$(B)/mod/conf.config.cpp.o")["inputs"])
+
 
 class LuaJitArchiveTest(unittest.TestCase):
     def test_lj_21_archive_compiles_and_archives_scripts(self):

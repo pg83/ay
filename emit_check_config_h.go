@@ -17,7 +17,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	generatedVFS := checkConfigHGeneratedVFS(instance.Path.relString(), conf)
-	confVFS := source(instance.Path.relString(), "/", conf.string())
+	confVFS := resolveSourceVFS(ctx, instance, conf.string(), d.srcDirs)
 	env := envVarsVCS
 	chRef := ctx.emit.reserve()
 	scanner := e.scanner
@@ -31,7 +31,7 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 			Platform: ctx.target,
 			Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(python3.any(),
 				argSBuildScriptsCheckConfigHPy.any(),
-				internV(instance.Path.relString(), "/", conf.string()).any(),
+				confVFS.rel().any(),
 				generatedVFS.any())),
 				Env: env}),
 			Env:       env,
