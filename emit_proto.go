@@ -497,7 +497,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		})
 	}
 
-	pbCCParsed := na.dirList(append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(pbH.rel().any())}}, pbHCompile...)...)
+	pbCCParsed := pbHCompile
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     pbCC,

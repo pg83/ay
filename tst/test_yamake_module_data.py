@@ -194,10 +194,12 @@ class YaMakeModuleDataTest(unittest.TestCase):
                     "tools/p2/main.cpp": "int main(){return 0;}\n",
                 }, ["contrib/libs/protobuf"], ["contrib/tools/protoc", "contrib/tools/protoc/plugins/cpp_styleguide"])
                 graph = self.make(files, "a", "-k")
+                # x.pb.h reaches its own x.pb.cc as the main output, by path:
+                # the middlesearch alice_limits/capability.pb.cc.o lacks
+                # capability_base.h, the INDUCED_DEPS(h ...) of capability_gen,
+                # which every compile importing capability.proto takes.
                 for output in ("$(B)/a/x.pb.cc.o", "$(B)/a/x.p2.cpp.o"):
-                    self.assertEqual(
-                        "$(S)/inc/ind.h" in lib.node_by_output(graph, output)["inputs"], reaches_sources or (output == "$(B)/a/x.pb.cc.o" and induced == "INDUCED_DEPS(h inc/ind.h)"),
-                    )
+                    self.assertEqual("$(S)/inc/ind.h" in lib.node_by_output(graph, output)["inputs"], reaches_sources)
 
     def test_go_modules(self):
         go_libraries = [
