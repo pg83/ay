@@ -87,12 +87,11 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 
 	ref := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{OutputPath: outVFS, ProducerRef: ref})
 	e.collectObj(ref, outVFS, meta)
 }
 
 func appendInputChunks(na *NodeArenas, a, b InputChunks) InputChunks {
-	chunks := na.inputs.alloc(len(a) + len(b))
+	chunks := na.inputs.alloc(len(a) + len(b))[:len(a)+len(b)]
 
 	copy(chunks, a)
 	copy(chunks[len(a):], b)
