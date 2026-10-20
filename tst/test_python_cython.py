@@ -158,6 +158,8 @@ class CythonTest(unittest.TestCase):
         hdr_cpp = lib.node_by_output(graph, "$(B)/lib/hdr_cpp.cpp")
         self.assertEqual(hdr_cpp["outputs"], ["$(B)/lib/hdr_cpp.cpp", "$(B)/lib/hdr_cpp.h"])
         self.assertIn("--cplus", args(hdr_cpp))
+        hdr_cpp_cc = lib.node_by_output(graph, "$(B)/lib/hdr_cpp.cpp.py3.o")
+        self.assertNotIn("-Wno-implicit-fallthrough", args(hdr_cpp_cc))
         hdr_c = lib.node_by_output(graph, "$(B)/lib/hdr_c.c")
         self.assertEqual(hdr_c["outputs"], ["$(B)/lib/hdr_c.c", "$(B)/lib/hdr_c.h"])
         api = lib.node_by_output(graph, "$(B)/lib/api.c")

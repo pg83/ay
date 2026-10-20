@@ -9,22 +9,51 @@ import (
 
 var dataValidationResourceID = regexp.MustCompile(`^sbr:/?/?([0-9]+)=?.*`)
 
-func (ctx *GenCtx) dataValidationSuite(project string, data, env []string, globals []ResourceDecl) *TestSuite {
-	var ids []string
+type ResourceValidation struct {
+	Data      []string
+	Resources []string
+}
+
+func resourceValidationEnabled(env Environment) bool {
+	return env.string(envValidateData) != "no" && env.string(envCppAnalysisMode) != "yes"
+}
+
+func (v *ResourceValidation) addData(data []string, env Environment) {
+	if !resourceValidationEnabled(env) {
+		return
+	}
 
 	for _, entry := range data {
 		if match := dataValidationResourceID.FindStringSubmatch(entry); match != nil {
-			ids = append(ids, match[1])
+			v.Data = append(v.Data, match[1])
 		}
 	}
+}
 
-	if len(ids) == 0 {
-		return nil
+func (v *ResourceValidation) addResource(id string, env Environment) {
+	if resourceValidationEnabled(env) {
+		v.Resources = append(v.Resources, id)
+	}
+}
+
+func (ctx *GenCtx) resourceValidationSuites(project string, v ResourceValidation, env []string, globals []ResourceDecl) []*TestSuite {
+	var suites []*TestSuite
+
+	if len(v.Data) > 0 {
+		suites = append(suites, ctx.resourceValidationSuite(project, "validate_data_sbr", v.Data, env, globals))
 	}
 
+	if len(v.Resources) > 0 {
+		suites = append(suites, ctx.resourceValidationSuite(project, "validate_resource", v.Resources, env, globals))
+	}
+
+	return suites
+}
+
+func (ctx *GenCtx) resourceValidationSuite(project, name string, ids, env []string, globals []ResourceDecl) *TestSuite {
 	ids = sortedUnique(ids)
 
-	s := &TestSuite{p: ctx.target, projectPath: project, name: "validate_data_sbr", testType: "validate_data_sbr", ciType: "test", size: "small", timeout: 60, env: env, globals: globals, network: "full", setupPythonpathEnv: true, supportsTestParameters: true, clearEnvironment: true, noRetries: true, runInputs: []VFS{source(project)}, inputNames: ids}
+	s := &TestSuite{p: ctx.target, projectPath: project, name: name, testType: name, ciType: "test", size: "small", timeout: 60, env: env, globals: globals, network: "full", setupPythonpathEnv: true, supportsTestParameters: true, clearEnvironment: true, noRetries: true, runInputs: []VFS{source(project)}, inputNames: ids}
 
 	s.runCmd = func(work string, _ TestChunk) []ANY {
 		checker := "check_resource"

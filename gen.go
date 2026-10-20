@@ -2030,7 +2030,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		r := ctx.results.one()
 
 		*r = ModuleEmitResult{
-			TestSuites:                      e.styleSuites(resourceGlobalsClosure),
+			TestSuites:                      append(e.styleSuites(resourceGlobalsClosure), ctx.resourceValidationSuites(instance.Path.relString(), d.resourceValidation, d.test.env, resourceGlobalsClosure)...),
 			ModuleVariants:                  d.moduleVariants,
 			GlobalSources:                   e.globalSources,
 			MlaunchDeps:                     effectiveMlaunchDeps,

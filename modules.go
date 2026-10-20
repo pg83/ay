@@ -143,7 +143,8 @@ type ModuleData struct {
 
 	discarded bool
 
-	styleChecks []StyleCheck
+	styleChecks        []StyleCheck
+	resourceValidation ResourceValidation
 
 	usrvFiles []UsrvFile
 
@@ -1513,6 +1514,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded.Renames = expandStmtTokens(v.Renames, env)
 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
+			d.resourceValidation.addResource(expanded.ResourceId.string(), env)
 		case *ResourceStmt:
 			if isGoModuleType(d.unit.Type) {
 				entries := make([]ResourceEntry, len(v.Pairs))
@@ -1741,7 +1743,7 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 }
 
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
-	if applyTestMacro(v, d) {
+	if applyTestMacro(v, d, env) {
 		return
 	}
 
@@ -2407,6 +2409,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyArchiveAsmStmt(v, d)
 	case tokLj21Archive:
 		applyLj21ArchiveStmt(v, d)
+	case tokDisableDataValidation:
+		env.setBool(envValidateData, false)
 	case tokEnable:
 
 		for _, aTok := range v.Args {

@@ -43,10 +43,7 @@ func (ctx *GenCtx) javaEmitTests(jm *JavaModule) []NodeRef {
 	switch jm.unit.kind {
 	case juJar:
 		suites = append(suites, ctx.javaKtlintSuite(jm), ctx.javaStyleSuite(jm))
-
-		if len(jm.data.test.data) > 0 && jm.data.env.string(envValidateData) != "no" {
-			suites = append(suites, ctx.dataValidationSuite(jm.dir, jm.data.test.data, jm.data.testEnv, ctx.javaResourceGlobals(jm)))
-		}
+		suites = append(suites, ctx.resourceValidationSuites(jm.dir, jm.data.resourceValidation, jm.data.testEnv, ctx.javaResourceGlobals(jm))...)
 	case juTest:
 		suites = append(suites, ctx.javaJunitSuite(jm))
 	}

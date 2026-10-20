@@ -6,8 +6,12 @@ import (
 )
 
 var (
-	argDashBBin = internV("-B", binPath)
-	ccKV        = KV{P: pkCC, PC: pcGreen}
+	argDashBBin   = internV("-B", binPath)
+	ccKV          = KV{P: pkCC, PC: pcGreen}
+	cxxBisonFlags = []ANY{argWnoUnusedButSetVariable.any(), argWnoDeprecatedCopy.any()}
+	cxxRagelFlags = []ANY{argWnoImplicitFallthrough.any()}
+	cxxSwigFlags  = []ANY{argWnoDeprecatedDeclarations.any()}
+	cxxLexerFlags = []ANY{argWnoUnusedVariable.any()}
 )
 
 type ModuleCompileEnv struct {
@@ -172,9 +176,8 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 
 	var langFlags []ANY
 
-	if isCxx && strings.HasSuffix(strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".swg") &&
-		(instance.Platform.ifEnv.bool(envCLANG) || instance.Platform.ifEnv.bool(envCLANG_CL) || instance.Platform.ifEnv.bool(envGCC)) {
-		langFlags = na.anyList(argWnoDeprecatedDeclarations.any())
+	if isCxx && (instance.Platform.ifEnv.bool(envCLANG) || instance.Platform.ifEnv.bool(envCLANG_CL) || instance.Platform.ifEnv.bool(envGCC)) {
+		langFlags = cxxLanguageFlags(strings.TrimSuffix(srcRel, filepath.Ext(srcRel)))
 	}
 
 	blocks := in.CCBlocks
@@ -725,4 +728,21 @@ func (m InclArgMemo) arg(path VFS) STR {
 	m.m.put(path, a)
 
 	return a
+}
+
+func cxxLanguageFlags(stem string) []ANY {
+	switch {
+	case strings.HasSuffix(stem, ".y"), strings.HasSuffix(stem, ".ypp"):
+		return cxxBisonFlags
+	case strings.HasSuffix(stem, ".rl5"), strings.HasSuffix(stem, ".rl6"), strings.HasSuffix(stem, ".pyx"),
+		strings.HasSuffix(stem, ".py.py3"), strings.HasSuffix(stem, ".py.py2"),
+		strings.HasSuffix(stem, ".pyx.py3"), strings.HasSuffix(stem, ".pyx.py2"):
+		return cxxRagelFlags
+	case strings.HasSuffix(stem, ".swg"):
+		return cxxSwigFlags
+	case strings.HasSuffix(stem, ".l"), strings.HasSuffix(stem, ".g4"):
+		return cxxLexerFlags
+	}
+
+	return nil
 }
