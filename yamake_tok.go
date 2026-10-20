@@ -281,6 +281,7 @@ var tokName = [...]STR{
 	tokUnittestFor:                     kwUNITTEST_FOR,
 	tokUseCommonGoogleApis:             internStr("USE_COMMON_GOOGLE_APIS"),
 	tokUseCxx:                          internStr("USE_CXX"),
+	tokUseUtil:                         internStr("USE_UTIL"),
 	tokUseLightPy2cc:                   internStr("USE_LIGHT_PY2CC"),
 	tokUseLlvmBc16:                     internStr("USE_LLVM_BC16"),
 	tokUseLlvmBc18:                     internStr("USE_LLVM_BC18"),
@@ -308,6 +309,9 @@ var tokName = [...]STR{
 	tokGoXtestSrcs:                     internStr("GO_XTEST_SRCS"),
 	tokGoSkipTests:                     internStr("GO_SKIP_TESTS"),
 	tokGoEmbedPattern:                  internStr("GO_EMBED_PATTERN"),
+	tokGoEmbedDir:                      internStr("GO_EMBED_DIR"),
+	tokGoEmbedTestDir:                  internStr("GO_EMBED_TEST_DIR"),
+	tokGoEmbedXtestDir:                 internStr("GO_EMBED_XTEST_DIR"),
 	tokCgoSrcs:                         internStr("CGO_SRCS"),
 	tokCgoLdflags:                      internStr("CGO_LDFLAGS"),
 	tokCgoCflags:                       internStr("CGO_CFLAGS"),
@@ -639,6 +643,7 @@ const (
 	tokFuzz
 	tokUseCommonGoogleApis
 	tokUseCxx
+	tokUseUtil
 	tokUseLightPy2cc
 	tokUseLlvmBc16
 	tokUseLlvmBc18
@@ -666,6 +671,9 @@ const (
 	tokGoXtestSrcs
 	tokGoSkipTests
 	tokGoEmbedPattern
+	tokGoEmbedDir
+	tokGoEmbedTestDir
+	tokGoEmbedXtestDir
 	tokCgoSrcs
 	tokCgoLdflags
 	tokCgoCflags

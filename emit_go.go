@@ -1069,7 +1069,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	return ref, outPath
 }
 
-func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerLDFlagsGlobal, peerObjAddLibsGlobal []ANY, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
+func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerObjAddLibsGlobal []ANY, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, pluginRefs []NodeRef, pluginPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.relString()
@@ -1201,6 +1201,15 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		cgoBuilds = na.vfsList(build(dir, "/_cgo_main.c", instance.Platform.objectSuffix()))
 	}
 
+	pluginArgs := na.anys.alloc(len(pluginPaths))
+
+	for i, path := range pluginPaths {
+		pluginArgs[i] = path.any()
+	}
+
+	na.anys.commit(len(pluginPaths))
+	pluginArgs = pluginArgs[:len(pluginPaths):len(pluginPaths)]
+
 	inputs := na.inputList(
 		ownInputs,
 		e.goIncludedSrcs(goRes),
@@ -1210,6 +1219,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		goToolScriptInputsChunk,
 		dllInputs,
 		peerGlobalPaths,
+		pluginPaths,
 		ctx.scripts[ldVcsInfoVFS.rel()],
 		peerArchivePaths,
 		extraSources,
@@ -1217,12 +1227,13 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		extraTailSources,
 	)
 
-	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + 2)
+	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + len(pluginRefs) + 2)
 	k := copy(deps, objRefs)
 
 	k += copy(deps[k:], peerArchiveRefs)
 
 	k += copy(deps[k:], peerGlobalRefs)
+	k += copy(deps[k:], pluginRefs)
 
 	if !isTest && instance.Platform.BuildRelease && sbomActive(ctx, instance) {
 		k += copy(deps[k:], peerSbomRefs)
@@ -1251,10 +1262,12 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		goExeCmdLinkFlags,
 		cgoSrcArgs,
 		embedArgs,
-		goExeCmdVcs,
+		goExeCmdVcs[:1],
+		pluginArgs,
+		goExeCmdVcs[1:],
 		na.anyList(vcsGoPath.any()),
 		goExeCmdExtld,
-		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm, soname, peerGlobalPaths, peerLDFlagsGlobal, peerObjAddLibsGlobal),
+		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm, soname, peerGlobalPaths, e.peers.LDFlagsGlobal, peerObjAddLibsGlobal),
 		testArgs,
 		tail[:nt:nt],
 		testTail,

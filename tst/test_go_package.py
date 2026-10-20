@@ -98,6 +98,58 @@ def go_node(graph, path):
 
 
 class GoPackageGraphTest(unittest.TestCase):
+    def test_go_program_consumes_own_and_inherited_ld_plugins(self):
+        files = go_world()
+        go_module(files, "plugins/peer", macros="LD_PLUGIN(peer.py)\n")
+        go_module(files, "app", srcs="app.go", module="GO_PROGRAM", macros="PEERDIR(plugins/peer)\nLD_PLUGIN(own.py)\n")
+        files["plugins/peer/peer.py"] = "def plugin(): pass\n"
+        files["app/own.py"] = "def plugin(): pass\n"
+        graph = lib.make(files, "app")
+        node = lib.node_by_output(graph, "$(B)/app/app")
+        plugins = ["$(B)/app/own.py.pyplugin", "$(B)/plugins/peer/peer.py.pyplugin"]
+        self.assertEqual(between(go_tool_args(node), "++ld_plugins", "++vcs"), plugins)
+        for output in plugins:
+            producer = lib.node_by_output(graph, output)
+            self.assertIn(output, node["inputs"])
+            self.assertIn(producer["uid"], node["deps"])
+
+    def test_go_runtime_opt_ins_follow_statement_order(self):
+        for macros, expected in (("", ()), ("USE_CXX()\n", ("cxxsupp",)),
+                                 ("USE_UTIL()\n", ("cxxsupp", "util")),
+                                 ("USE_UTIL()\nNO_RUNTIME()\n", ())):
+            with self.subTest(macros=macros):
+                files = go_world()
+                for directory in ("contrib/libs/cxxsupp", "util"):
+                    files[f"{directory}/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(runtime.cpp)\nEND()\n"
+                    files[f"{directory}/runtime.cpp"] = "int runtime;\n"
+                go_module(files, "library/go/example", macros=macros)
+                graph = lib.make(files, "library/go/example")
+                peers = go_node(graph, "library/go/example")["inputs"]
+                self.assertEqual(any("cxxsupp" in peer for peer in peers), "cxxsupp" in expected)
+                self.assertEqual("$(B)/util/libutil.a" in peers, "util" in expected)
+
+    def test_embed_directory_modes_include_only_the_requested_tree(self):
+        for all_files in (False, True):
+            with self.subTest(all_files=all_files):
+                files = go_world()
+                go_module(files, "embed/sample", macros=f"GO_EMBED_DIR({'ALL ' if all_files else ''}assets)\n")
+                for name in ("visible.txt", "nested/data.json", ".hidden", "_private", "nested/.hidden", "_cache/data"):
+                    files["embed/sample/assets/" + name] = name
+                files["embed/sample/outside.txt"] = "outside"
+                graph = lib.make(files, "embed/sample")
+                node = go_node(graph, "embed/sample")
+                args = go_tool_args(node)
+                start = args.index("++embed")
+                expected = ["nested/data.json", "visible.txt"]
+                if all_files:
+                    expected = [".hidden", "_cache/data", "_private", "nested/.hidden", *expected]
+                inputs = ["$(S)/embed/sample/assets/" + name for name in expected]
+                self.assertEqual(args[start:start + 3], [
+                    "++embed", "$(S)/embed/sample", ("all:" if all_files else "") + "assets",
+                ])
+                self.assertCountEqual(args[start + 3:args.index("++peers")], inputs)
+                self.assertTrue(set(inputs).issubset(node["inputs"]))
+
     def test_generated_go_sources_precede_epilogue_symabis_output(self):
         files = go_world()
         lib.tool_program(files, "tools/generate", "generate")

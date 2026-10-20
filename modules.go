@@ -1119,9 +1119,14 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
 
-			if v.Name == tokProtoDescriptions || v.Name == tokProtoRegistry {
-				env.setStringID(envMODULE_TAG, v.Name.str())
-				env.setStringID(envMODULE_TYPE, v.Name.str())
+			if isGoModuleType(d.unit.Type) {
+				d.flags.NoRuntime = true
+				d.flags.NoUtil = true
+			}
+
+			if d.moduleStmt.Name == tokProtoDescriptions || v.Name == tokProtoRegistry {
+				env.setStringID(envMODULE_TAG, d.moduleStmt.Name.str())
+				env.setStringID(envMODULE_TYPE, d.moduleStmt.Name.str())
 			}
 
 			setupRosModule(v, modulePath, language, env, d)
@@ -1684,6 +1689,10 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	case tokFbsLibrary:
 		return ModuleUnit{Type: name, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokProtoLibrary:
+		if language == LangProtoDescriptions {
+			return resolveModuleUnitBare(tokProtoDescriptions, kind, language)
+		}
+
 		if language == LangGo {
 			return ModuleUnit{Type: tokGoLibrary, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 		}
@@ -1845,6 +1854,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.flags.NoUtil = true
 	case tokNoUtil:
 		d.flags.NoUtil = true
+	case tokUseCxx:
+		d.flags.NoRuntime = false
+	case tokUseUtil:
+		d.flags.NoRuntime = false
+		d.flags.NoUtil = false
 	case tokNoRuntime:
 
 		d.flags.NoRuntime = true
@@ -2030,6 +2044,27 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			d.goEmbeds = append(d.goEmbeds, newGoEmbed(fs, v.Name == tokGoXTestEmbedPattern, importPath, v.Args[0].string()))
+		}
+	case tokGoEmbedDir, tokGoEmbedTestDir, tokGoEmbedXtestDir:
+		if v.Name == tokGoEmbedDir || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
+			args := anyStrs(v.Args)
+			all := len(args) > 0 && args[0] == "ALL"
+
+			if all {
+				args = args[1:]
+			}
+
+			if len(args) != 1 {
+				throwFmt("%s expects a directory", v.Name)
+			}
+
+			importPath := modulePath
+
+			if imp := env.string(env_GO_IMPORT_PATH); imp != "" {
+				importPath = imp
+			}
+
+			d.goEmbeds = append(d.goEmbeds, newGoEmbedDir(fs, v.Name == tokGoEmbedXtestDir, importPath, args[0], all))
 		}
 	case tokAllGoTestSrcs:
 		if d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {

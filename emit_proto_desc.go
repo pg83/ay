@@ -317,6 +317,27 @@ func (e *EmitContext) emitDescProtoMerge(selfProtodesc, protosrc VFS,
 func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	closure := descPeerClosure(ctx, instance, d.peerdirs, false, false).peers
+
+	if instance.Language == LangProtoDescriptions {
+		self := instance
+
+		self.Language = LangDescProto
+
+		result := genModule(ctx, self)
+
+		dedupers.with(func(dd *DeDuper) {
+			for _, peer := range closure {
+				dd.add(peer.SelfProtodesc.strID())
+			}
+
+			for _, peer := range result.DescClosure {
+				if dd.add(peer.SelfProtodesc.strID()) {
+					closure = append(closure, peer)
+				}
+			}
+		})
+	}
+
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
 	prj := e.descriptorName()

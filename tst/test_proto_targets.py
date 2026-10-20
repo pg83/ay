@@ -29,6 +29,29 @@ def target_files():
 
 
 class ProtoTargetsTest(unittest.TestCase):
+    def test_schema_root_starts_its_descriptor_target_with_own_and_peer_sources(self):
+        files = target_files()
+        files["p/ya.make"] = "PROTO_SCHEMA(catalog)\nPEERDIR(dep)\nSRCS(a.proto)\nEND()\n"
+        files["dep/ya.make"] = "PROTO_LIBRARY()\nSRCS(dep.proto)\nEND()\n"
+        files["dep/dep.proto"] = 'syntax = "proto3";\n'
+        graph = lib.make(files, "p")
+        merged = lib.node_by_output(graph, "$(B)/p/catalog.protodesc")
+        self.assertIn(merged["uid"], graph["result"])
+        self.assertEqual(merged["outputs"], ["$(B)/p/catalog.protodesc", "$(B)/p/catalog.tar"])
+        self.assertIn("$(B)/p/catalog.self.protodesc", merged["inputs"])
+        self.assertIn("$(B)/dep/dep.self.protodesc", merged["inputs"])
+        outputs = {path for node in graph["graph"] for path in node["outputs"]}
+        self.assertNotIn("$(B)/p/a.pb.cc", outputs)
+        self.assertNotIn("$(B)/p/a.pb.go", outputs)
+
+    def test_schema_is_a_recursed_final_target_without_test_mode(self):
+        files = target_files()
+        files["p/ya.make"] = "PROTO_SCHEMA(catalog)\nSRCS(a.proto)\nEND()\n"
+        files["root/ya.make"] = "LIBRARY()\nNO_LIBC()\nEND()\nRECURSE(../p)\n"
+        graph = lib.make(files, "root")
+        merged = lib.node_by_output(graph, "$(B)/p/catalog.protodesc")
+        self.assertIn(merged["uid"], graph["result"])
+
     def test_secondary_generated_proto_keeps_main_output_in_inputs(self):
         files = target_files()
         lib.tool_program(files, "gen", "gen")

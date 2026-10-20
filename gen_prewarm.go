@@ -145,11 +145,13 @@ func (w *GenPrewarm) dir(d PrewarmDir) {
 	}
 
 	var moduleName TOK
+	var finalTarget bool
 
 	for _, st := range mf.Stmts {
 		switch v := st.(type) {
 		case *ModuleStmt:
 			moduleName = v.Name
+			finalTarget = v.Schema || isFinalTargetModuleType(v.Name)
 		case *UnknownStmt:
 			if d.mode&prewarmRecurse == 0 || v.Name != tokRecurse && v.Name != tokRecurseRootRelative {
 				continue
@@ -172,7 +174,7 @@ func (w *GenPrewarm) dir(d PrewarmDir) {
 		w.onPICRoot = nil
 	}
 
-	if d.mode&prewarmContent == 0 && moduleName != 0 && isFinalTargetModuleType(moduleName) &&
+	if d.mode&prewarmContent == 0 && moduleName != 0 && finalTarget &&
 		w.seenDirs[d.dir]&prewarmContent == 0 {
 		w.seenDirs[d.dir] |= prewarmContent
 		d.mode |= prewarmContent

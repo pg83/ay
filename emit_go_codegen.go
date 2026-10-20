@@ -468,6 +468,25 @@ func newGoEmbed(fs FS, xtest bool, importPath, pattern string) GoEmbed {
 	return em
 }
 
+func newGoEmbedDir(fs FS, xtest bool, importPath, dir string, all bool) GoEmbed {
+	base := importPath + "/" + dir
+	em := GoEmbed{xtest: xtest, root: source(importPath), pattern: dir}
+
+	var excludes []string
+
+	if all {
+		em.pattern = "all:" + dir
+	} else {
+		excludes = []string{base + "/**/_*", base + "/**/.*"}
+	}
+
+	for _, rel := range ymakeGlob(fs, base+"/**/*", excludes...) {
+		em.files = append(em.files, source(rel))
+	}
+
+	return em
+}
+
 func goEmbedArgs(na *NodeArenas, embeds []GoEmbed) ([]ANY, []VFS) {
 	nargs, ninputs := 0, 0
 

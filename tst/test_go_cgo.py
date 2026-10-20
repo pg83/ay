@@ -41,6 +41,9 @@ def cgo_world():
     resources_library(files, "build/external_resources/go_tools", "GO_TOOLS")
     resources_library(files, "build/external_resources/yolint", "YOLINT")
     resources_library(files, "build/platform/lld", "LLD_ROOT")
+    files["build/platform/lld/ya.make"] = files["build/platform/lld/ya.make"].replace("END()", (
+        "LDFLAGS(-fuse-ld=lld --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld.lld "
+        "-Wl,--no-rosegment -Wl,--build-id=sha1)\nEND()"))
     resources_library(files, "build/internal/platform/clang_toolchain_info", "CLANG20")
     for path in (
         f"{STD}/runtime",
@@ -83,6 +86,20 @@ def between(args, start, end):
 
 
 class GoCgoGraphTest(unittest.TestCase):
+    def test_cgo_dynimport_link_inherits_transitive_global_ldflags(self):
+        files = cgo_world()
+        zstd_binding(files)
+        files["contrib/libs/zstd/ya.make"] = files["contrib/libs/zstd/ya.make"].replace(
+            "END()", "PEERDIR(native/leaf)\nLDFLAGS(-Wl,--direct-peer)\nEND()")
+        files["native/leaf/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}LDFLAGS(-Wl,--leaf-peer)\nEND()\n"
+        files[f"{ZSTD}/ya.make"] = files[f"{ZSTD}/ya.make"].replace("END()", "LDFLAGS(-Wl,--own-cgo)\nEND()")
+        graph = lib.make(files, ZSTD)
+        node = lib.node_by_output(graph, f"$(B)/{ZSTD}/_cgo_import.go")
+        args = node["cmds"][1]["cmd_args"]
+        values = ["-Wl,--leaf-peer", "-Wl,--direct-peer", "-Wl,--own-cgo"]
+        self.assertEqual([flag for flag in args if flag in values], values)
+        self.assertLess(args.index(values[-1]), args.index("-Wl,--unresolved-symbols=ignore-all"))
+
     def test_cgo_flags_apply_to_all_native_source_extensions(self):
         files = cgo_world()
         sources = ["native" + ext for ext in (".c", ".cc", ".cpp", ".cxx", ".C", ".S")]

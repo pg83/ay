@@ -388,21 +388,33 @@ func (ctx *GenCtx) moduleName(dir string) TOK {
 
 func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance {
 	kind := KindLib
+	language := LangCPP
+	decl := stmtsModuleDeclaration(moduleStmts(ctx, filepath.Clean(dir)))
 
-	if name := ctx.moduleName(dir); name == tokPy3Program || name == tokDocs || name == 0 {
+	var name TOK
+
+	if decl != nil {
+		name = decl.Name
+
+		if decl.Schema {
+			language = LangProtoDescriptions
+		}
+	}
+
+	if name == tokPy3Program || name == tokDocs || name == 0 {
 		kind = KindBin
 	}
 
 	platform := ctx.target
 
-	if ctx.moduleName(dir) == tokGoDll {
+	if name == tokGoDll {
 		platform = ctx.target.pic()
 	}
 
 	return ModuleInstance{
 		Path:     source(filepath.Clean(dir)),
 		Kind:     kind,
-		Language: LangCPP,
+		Language: language,
 		Platform: platform,
 		Demand:   demand,
 	}
@@ -483,7 +495,7 @@ func (ctx *GenCtx) recurseClosure(root string) []string {
 	return out
 }
 
-func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
+func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
 	instance := ctx.rootInstance(dir, demandNone)
 	env := buildIfEnvInto(&ctx.ifEnvScratch, instance)
 	d := ModuleData{}
@@ -492,7 +504,7 @@ func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
 		collectStmts(ctx.fs, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, &d, ctx.onWarn)
 	}
 
-	var module TOK
+	var module *ModuleStmt
 	var children []string
 
 	var scan func(stmts []Stmt)
@@ -501,7 +513,7 @@ func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
 		for _, st := range stmts {
 			switch v := st.(type) {
 			case *ModuleStmt:
-				module = v.Name
+				module = v
 				apply(st)
 			case *SetStmt, *DefaultVarStmt:
 				apply(st)
@@ -577,38 +589,46 @@ func (e *EmitContext) moduleInputArg(arg *ANY) *ANY {
 }
 
 func stmtsModuleName(stmts []Stmt) TOK {
-	var name TOK
+	if decl := stmtsModuleDeclaration(stmts); decl != nil {
+		return decl.Name
+	}
+
+	return 0
+}
+
+func stmtsModuleDeclaration(stmts []Stmt) *ModuleStmt {
+	var declaration *ModuleStmt
 
 	for _, st := range stmts {
-		var candidate TOK
+		var candidate *ModuleStmt
 
 		switch v := st.(type) {
 		case *ModuleStmt:
-			return v.Name
+			return v
 		case *IfStmt:
-			thenName, elseName := stmtsModuleName(v.Then), stmtsModuleName(v.Else)
+			thenDecl, elseDecl := stmtsModuleDeclaration(v.Then), stmtsModuleDeclaration(v.Else)
 
-			if thenName != 0 && elseName != 0 && thenName != elseName {
-				return 0
+			if thenDecl != nil && elseDecl != nil && thenDecl.Name != elseDecl.Name {
+				return nil
 			}
 
-			candidate = thenName
+			candidate = thenDecl
 
-			if candidate == 0 {
-				candidate = elseName
+			if candidate == nil {
+				candidate = elseDecl
 			}
 		}
 
-		if candidate != 0 {
-			if name != 0 && name != candidate {
-				return 0
+		if candidate != nil {
+			if declaration != nil && declaration.Name != candidate.Name {
+				return nil
 			}
 
-			name = candidate
+			declaration = candidate
 		}
 	}
 
-	return name
+	return declaration
 }
 
 func isLinkingModuleType(name TOK) bool {
@@ -662,13 +682,13 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) []string {
 			}
 		}
 
-		moduleName, children := ctx.recurseScan(dir)
+		module, children := ctx.recurseScan(dir)
 
 		for _, child := range children {
 			walk(child, false)
 		}
 
-		if !root && moduleName != 0 && (ctx.testMode || isFinalTargetModuleType(moduleName)) {
+		if !root && module != nil && (ctx.testMode || module.Schema || isFinalTargetModuleType(module.Name)) {
 			finals = append(finals, dir)
 		}
 	}
@@ -2025,6 +2045,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	linkExcludeLibraries = ctx.argSlices.internCopy(linkExcludeLibraries)
 
 	effectiveMlaunchDeps := mlaunchDeps(d, resolved)
+	effectiveLDFlagsGlobal := concatShared(ctx.argSlices, peerLDFlagsGlobal, d.ldFlags)
 
 	newResult := func() *ModuleEmitResult {
 		r := ctx.results.one()
@@ -2046,7 +2067,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
 			LinkExcludeLibraries:            linkExcludeLibraries,
 			ObjAddLibsGlobal:                concatShared(ctx.argSlices, peerObjAddLibsGlobal, d.objAddLibsGlobal),
-			LDFlagsGlobal:                   concatShared(ctx.argSlices, peerLDFlagsGlobal, d.ldFlags),
+			LDFlagsGlobal:                   effectiveLDFlagsGlobal,
 			RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 			PeerArchiveClosureRefs:          peerArchiveRefs,
 			PeerArchiveClosurePaths:         peerArchivePaths,
@@ -2177,6 +2198,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ResourceGlobals:   resourceGlobalsClosure,
 		ProtoInclude:      peerProtoInclude,
 	}
+
+	if isGoModuleType(d.moduleStmt.Name) {
+		frame.peerCtx.LDFlagsGlobal = resolveResourceGlobalArgs(effectiveLDFlagsGlobal, resourceGlobalsClosure)
+	}
+
 	e = newEmitContextIn(frame, ctx, instance, d, &frame.peerCtx)
 
 	scanAddIncl := e.cythonAdjustModuleCCBlocks()
@@ -2224,7 +2250,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if isGoExeModuleType(d.moduleStmt.Name) {
-		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerLDFlagsGlobal, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
+		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, mergedLDPluginRefs, mergedLDPluginPaths, resourceGlobalsClosure)
 		result := newResult()
 
 		result.isPROGRAM = true
