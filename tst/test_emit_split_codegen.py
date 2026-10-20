@@ -32,7 +32,10 @@ class EmitSplitCodegenTest(unittest.TestCase):
             "$(B)/lib/factor_names.cpp.o",
         ):
             node = lib.node_by_output(graph, output)
-            self.assertEqual("$(B)/lib/factors_gen.0.cpp" in node["inputs"], output != "$(B)/lib/factor_names.cpp.o")
+            # factors_gen.0.cpp is the main output: yabs reference compiles of
+            # factors_gen.1.cpp and of every source including factors_gen.h
+            # (kernel/web_factors_info) list it.
+            self.assertIn("$(B)/lib/factors_gen.0.cpp", node["inputs"])
             # A multi-output command keeps its inputs on the $L/ACTION node
             # (model/action_graph.cpp mainOutAsExtra), so the YMAKE-2169 .in
             # leak (json_visitor.cpp) never reaches the outputs: no SPLIT_CODEGEN

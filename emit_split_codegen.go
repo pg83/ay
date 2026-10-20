@@ -62,7 +62,6 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	env := envVarsVCS
 	scRef := ctx.emit.reserve()
 	part0 := build(moduleDir, "/", partRels[0])
-	part0Inc := IncludeDirective{kind: includeQuoted, target: includeTarget(part0.rel().any())}
 	headerParsed := ctx.na.dirs.alloc(len(sc.OutputIncludes))[:0]
 
 	for _, oi := range sc.OutputIncludes {
@@ -72,8 +71,6 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	ctx.na.dirs.commit(len(headerParsed))
 
 	headerParsed = headerParsed[:len(headerParsed):len(headerParsed)]
-
-	cppParsed := ctx.na.dirList(part0Inc)
 
 	pe := func() {
 		node := Node{
@@ -91,33 +88,17 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
-		OutputPath:     prefixH,
-		ProducerRef:    scRef,
-		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-
-		OnUse: pending,
-	})
-
-	e.register(GeneratedFileInfo{
-		OutputPath:     prefixCpp,
-		ProducerRef:    scRef,
-		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
-		OnUse:          pending,
-	})
-
-	for i, partRel := range partRels {
+	for _, out := range outputs {
 		info := GeneratedFileInfo{
-			OutputPath:     build(moduleDir, "/", partRel),
-			ProducerRef:    scRef,
-			GeneratorRefs:  e.ctx.na.refList(toolLDRef),
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
-			OnUse:          pending,
+			OutputPath:      out,
+			ProducerRef:     scRef,
+			ProducerMainOut: part0,
+			GeneratorRefs:   e.ctx.na.refList(toolLDRef),
+			OnUse:           pending,
 		}
 
-		if i == 0 {
+		if out == prefixH {
+			info.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: headerParsed}
 		}
 
 		e.register(info)
