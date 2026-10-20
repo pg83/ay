@@ -181,15 +181,14 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 }
 
 type ResourceItem struct {
-	Path         string
-	Key          string
-	Cmd          STR
-	SourceInput  VFS
-	BuildInput   VFS
-	ExtraSources []VFS
-	ExtraBuilds  []VFS
-	AuxSources   []VFS
-	AuxBuilds    []VFS
+	Path        string
+	Key         string
+	Cmd         STR
+	SourceInput VFS
+	BuildInput  VFS
+	ExtraBuilds []VFS
+	AuxSources  []VFS
+	AuxBuilds   []VFS
 }
 
 func (it ResourceItem) input() VFS {
@@ -336,7 +335,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 				buildBound++
 			}
 
-			sourceBound += len(it.ExtraSources) + len(it.AuxSources)
+			sourceBound += len(it.AuxSources)
 			buildBound += len(it.ExtraBuilds) + len(it.AuxBuilds)
 		}
 
@@ -401,12 +400,6 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 			for _, it := range chunk {
 				if it.SourceInput != 0 && deduper.add(it.SourceInput.strID()) {
 					adjacentSources = append(adjacentSources, it.SourceInput)
-				}
-
-				for _, v := range it.ExtraSources {
-					if v != 0 && deduper.add(v.strID()) {
-						adjacentSources = append(adjacentSources, v)
-					}
 				}
 			}
 
@@ -506,46 +499,32 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		lo = hi
 
-		sourceBound, buildBound := 0, 0
+		buildBound := 0
 
 		for _, it := range chunk {
 			if it.input() != 0 {
 				buildBound++
 			}
 
-			sourceBound += len(it.ExtraSources)
 			buildBound += len(it.ExtraBuilds)
 		}
 
-		var adjacentSources, payloadBuilds []VFS
+		var payloadBuilds []VFS
 
 		hashScratch = hashScratch[:0]
 
-		dedupers.with(func(deduper *DeDuper) {
-			adjacentSources = na.vfs.alloc(sourceBound)[:0]
+		for _, it := range chunk {
+			if it.Path == "-" {
+				hashScratch = append(hashScratch, "-", it.Key)
+			} else {
+				dashStart := len(dashBuf)
 
-			for _, it := range chunk {
-				if it.Path == "-" {
-					hashScratch = append(hashScratch, "-", it.Key)
-				} else {
-					dashStart := len(dashBuf)
+				dashBuf = append(dashBuf, '-')
+				dashBuf = append(dashBuf, it.Key...)
 
-					dashBuf = append(dashBuf, '-')
-					dashBuf = append(dashBuf, it.Key...)
-
-					hashScratch = append(hashScratch, it.Path, bytesString(dashBuf[dashStart:]))
-				}
-
-				for _, v := range it.ExtraSources {
-					if v != 0 && deduper.add(v.strID()) {
-						adjacentSources = append(adjacentSources, v)
-					}
-				}
+				hashScratch = append(hashScratch, it.Path, bytesString(dashBuf[dashStart:]))
 			}
-
-			na.vfs.commit(len(adjacentSources))
-			adjacentSources = adjacentSources[:len(adjacentSources):len(adjacentSources)]
-		})
+		}
 
 		dedupers.with(func(deduper *DeDuper) {
 			payloadBuilds = na.vfs.alloc(buildBound)[:0]
@@ -568,21 +547,11 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		aux := build(instance.Path.relString(), "/", hash, "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
-		seed := na.dedupSourceVFS(adjacentSources, nil)
-		emits := na.dirs.alloc(len(seed))[:0]
-
-		for _, v := range seed {
-			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel().any())})
-		}
-
-		na.dirs.commit(len(emits))
-		emits = emits[:len(emits):len(emits)]
 
 		e.register(GeneratedFileInfo{
-			OutputPath:     aux,
-			ProducerRef:    auxRef,
-			GeneratorRefs:  na.refList(rescompilerRef),
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
+			OutputPath:    aux,
+			ProducerRef:   auxRef,
+			GeneratorRefs: na.refList(rescompilerRef),
 		})
 
 		nodeCmd := na.anys.alloc(2 + 2*len(chunk))[:0]

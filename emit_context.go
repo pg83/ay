@@ -43,7 +43,6 @@ type EmitContext struct {
 	dirScratch    []IncludeDirective
 	resEntries    []PyGenResEntry
 	resStrBuf     []byte
-	resVFSBuf     []VFS
 	prodVFS       []VFS
 	cvScratch     []Closure
 	peerScratch   []string
@@ -152,7 +151,6 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		dirScratch:  prev.dirScratch[:0],
 		resEntries:  scrub(prev.resEntries),
 		resStrBuf:   prev.resStrBuf[:0],
-		resVFSBuf:   prev.resVFSBuf[:0],
 		prodVFS:     prev.prodVFS[:0],
 		cvScratch:   scrub(prev.cvScratch),
 		peerScratch: scrub(prev.peerScratch),
@@ -350,14 +348,6 @@ func (e *EmitContext) resStr2(a, b string) string {
 	e.resStrBuf = append(e.resStrBuf, b...)
 
 	return bytesString(e.resStrBuf[start:])
-}
-
-func (e *EmitContext) resVFS1(v VFS) []VFS {
-	e.resVFSBuf = append(e.resVFSBuf, v)
-
-	n := len(e.resVFSBuf)
-
-	return e.resVFSBuf[n-1 : n : n]
 }
 
 func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {

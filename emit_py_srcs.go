@@ -258,21 +258,8 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 		pySource = build(module, "/", srcRel)
 	}
 
-	srcEdge := pySource
-	copyStaged := genInfo != nil && genInfo.SourcePath != 0 && genInfo.SourcePath.isSource()
-
-	if copyStaged {
-		srcEdge = genInfo.SourcePath
-	}
-
 	if !d.pyBuildNoPY {
-		var pyExtra []VFS
-
-		if copyStaged {
-			pyExtra = e.resVFS1(srcEdge)
-		}
-
-		out = append(out, PyGenResEntry{token: srcRel, key: ps.Module, path: pySource, sourceInputs: pyExtra})
+		out = append(out, PyGenResEntry{token: srcRel, key: ps.Module, path: pySource})
 	}
 
 	if !d.pyBuildNoPYC {
@@ -841,12 +828,11 @@ func pyInitDefineShortname(flag string) (string, bool) {
 }
 
 type PyGenResEntry struct {
-	token        string
-	key          STR
-	yapyc        bool
-	path         VFS
-	sourceInputs []VFS
-	buildInputs  []VFS
+	token       string
+	key         STR
+	yapyc       bool
+	path        VFS
+	buildInputs []VFS
 }
 
 func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem {
@@ -889,8 +875,8 @@ func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem
 
 		buf = buf[:cmdStart]
 
-		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, ExtraSources: en.sourceInputs, ExtraBuilds: en.buildInputs}
-		fileItem := ResourceItem{Path: en.token, Key: key, ExtraSources: en.sourceInputs, ExtraBuilds: en.buildInputs}
+		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, ExtraBuilds: en.buildInputs}
+		fileItem := ResourceItem{Path: en.token, Key: key, ExtraBuilds: en.buildInputs}
 
 		kvItem.setInput(en.path)
 		fileItem.setInput(en.path)
