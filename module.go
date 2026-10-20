@@ -66,11 +66,12 @@ type FlagSet struct {
 type ModuleDemand uint8
 
 type ModuleInstance struct {
-	Path     VFS
-	Kind     ModuleKind
-	Language Language
-	Platform *Platform
-	Demand   ModuleDemand
+	Path       VFS
+	Kind       ModuleKind
+	Language   Language
+	Platform   *Platform
+	Demand     ModuleDemand
+	YqlCurrent bool
 }
 
 func newToolInstance(host *Platform, path string) ModuleInstance {

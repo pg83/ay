@@ -157,6 +157,9 @@ type ModuleData struct {
 
 	usrvFiles []UsrvFile
 
+	yqlCurrent               bool
+	yqlStableABI             bool
+	yqlPrebuiltResource      string
 	nots                     *NotsModule
 	docs                     *DocsData
 	moduleStmt               *ModuleStmt
@@ -709,8 +712,11 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	d.useAsmlib = true
 	d.bisonGenExt = strCpp
 	d.needGoogleProtoPeerdirs = true
+	d.yqlCurrent = instance.YqlCurrent
+	d.yqlStableABI = instance.Platform.YqlStableABI
 
 	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d, onWarn)
+	finishYqlModule(modulePath, env, d)
 
 	if d.nots != nil {
 		return d
@@ -1061,6 +1067,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
+			setupYqlModule(d, v.Name, env)
 
 			if v.Schema && d.unit.Tag == unitTagPy3Proto {
 				d.unit.HashTag = strPy3ProtoFromSchema
@@ -1478,14 +1485,15 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 }
 
 type ModuleUnit struct {
-	Type        TOK
-	Tag         STR
-	HashTag     STR
-	CCTag       STR
-	ARPrefix    string
-	GlobalARTag STR
-	SbomLang    STR
-	SwigLang    STR
+	Type             TOK
+	Tag              STR
+	HashTag          STR
+	CCTag            STR
+	ARPrefix         string
+	GlobalARTag      STR
+	SbomLang         STR
+	SwigLang         STR
+	ObjectSuffixStem string
 }
 
 func swigJNIPeerdirs(srcs []ANY, env Environment) []ANY {
@@ -1898,6 +1906,26 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if d.noLint != "none" && d.noLint != "none_internal" {
 			d.peerdirs = append(d.peerdirs, strBuildPlatformClangFormat.any())
 		}
+	case tokStyleCppUserSessions:
+		env.setBool(envUseAllSrcs, true)
+	case tokTsProtoPackageName:
+		if len(v.Args) != 1 {
+			throwFmt("TS_PROTO_PACKAGE_NAME expects one package name")
+		}
+
+		env.setString(envTsProtoAutoPackageName, v.Args[0].string())
+	case tokSetCustomClangTidy:
+		if len(v.Args) != 2 {
+			throwFmt("SET_CUSTOM_CLANG_TIDY expects a resource module and variable name")
+		}
+
+		env.setBool(envCustomClangTidy, true)
+		d.peerdirs = append(d.peerdirs, v.Args[0])
+
+		root := "${" + v.Args[1].string() + "_RESOURCE_GLOBAL}/bin/"
+
+		env.setString(envClangTidyBin, root+"clang-tidy")
+		env.setString(envYaml2jsonBin, root+"yaml2json")
 	case tokGoProtoPlugin:
 		positional, lists := goMacroLists(v.Args, "DEPS")
 
@@ -2013,16 +2041,33 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
 		}
 
-		d.cxxFlags = append(d.cxxFlags, argDuseCurrentUdfAbiVersion.any())
+		if d.yqlStableABI {
+			applyYqlABI(d, env, false)
+		} else {
+			d.cxxFlags = append(d.cxxFlags, argDuseCurrentUdfAbiVersion.any())
+		}
+	case tokYqlCurrentAbiVersion, tokYqlStableAbiVersion:
+		if len(v.Args) != 0 {
+			throwFmt("%s expects no arguments", v.Name.string())
+		}
+
+		applyYqlABI(d, env, v.Name == tokYqlCurrentAbiVersion)
 	case tokYqlAbiVersion:
 		if len(v.Args) != 3 {
 			throwFmt("YQL_ABI_VERSION expects exactly 3 arguments, got %d", len(v.Args))
 		}
 
+		prefix := "-DUDF_ABI_VERSION_"
+
+		if d.yqlStableABI {
+			applyYqlABI(d, env, false)
+			prefix = "-DMIN_UDF_ABI_VERSION_"
+		}
+
 		d.cxxFlags = append(d.cxxFlags,
-			internArg("-DUDF_ABI_VERSION_MAJOR="+v.Args[0].string()).any(),
-			internArg("-DUDF_ABI_VERSION_MINOR="+v.Args[1].string()).any(),
-			internArg("-DUDF_ABI_VERSION_PATCH="+v.Args[2].string()).any(),
+			internArg(prefix+"MAJOR="+v.Args[0].string()).any(),
+			internArg(prefix+"MINOR="+v.Args[1].string()).any(),
+			internArg(prefix+"PATCH="+v.Args[2].string()).any(),
 		)
 	case tokProtocFatalWarnings:
 		if len(v.Args) != 0 {
@@ -3420,7 +3465,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokPy3Test, tokPy2Test, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokGoProgram, tokGoTest, tokGoDll:
+	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokPy3Test, tokPy2Test, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokGoProgram, tokGoTest, tokGoDll:
 		return true
 	}
 
@@ -4009,6 +4054,12 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		Language: language,
 		Platform: parent.Platform,
 		Demand:   demand,
+	}
+
+	if d.yqlCurrent && peerYaMakeExists(ctx.fs, peerVFS) {
+		name := ctx.moduleName(peerVFS.relString())
+
+		peer.YqlCurrent = name == tokYqlLibrary || isYqlUdfStaticModule(name)
 	}
 
 	if demand == demandNone && ctx.roots[peer] {

@@ -14,10 +14,11 @@ var (
 type PlatformConf struct {
 	GoStdVersion string
 	SystemLibs   []string
+	YqlStableABI bool
 }
 
 func readPlatformConf(fs FS) PlatformConf {
-	return PlatformConf{GoStdVersion: confGoStdVersion(fs), SystemLibs: confLinuxSystemLibraries(fs)}
+	return PlatformConf{GoStdVersion: confGoStdVersion(fs), SystemLibs: confLinuxSystemLibraries(fs), YqlStableABI: confYqlStableABI(fs)}
 }
 
 func confLinuxSystemLibraries(fs FS) []string {
@@ -35,6 +36,7 @@ func confLinuxSystemLibraries(fs FS) []string {
 }
 
 type Platform struct {
+	YqlStableABI          bool
 	picVariant            *Platform
 	picOnce               sync.Once
 	picMake               func() *Platform
@@ -140,6 +142,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	}
 
 	p := &Platform{
+		YqlStableABI:          pc.YqlStableABI,
 		OS:                    os,
 		ISA:                   isa,
 		Target:                makePlatformID(os, isa),

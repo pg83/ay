@@ -432,6 +432,7 @@ var (
 	strYaStartCommandFile                                                                    = internStr("--ya-start-command-file")
 	strYes                                                                                   = internStr("yes")
 	strYfmTool                                                                               = internStr("YFM_TOOL")
+	strYqlEssentialsPublicUdfAbiConflict                                                     = internStr("yql/essentials/public/udf/abi_conflict")
 	strZero                                                                                  = internStr("0")
 	str_GO_PACKAGE_VALUE                                                                     = internStr("_GO_PACKAGE_VALUE")
 	tagCppFbs                                                                                = internStr("cpp_fbs")

@@ -32,6 +32,34 @@ class LuaCompileTest(unittest.TestCase):
                 self.assertIn(node["uid"], archive["deps"])
                 lib.node_by_output(graph, f"$(B)/{peer}/runtime.c.o")
 
+class ConfigurationTest(unittest.TestCase):
+    def test_custom_clang_tidy_declares_resource_peer_and_variables(self):
+        graph = lib.make({
+            "a/ya.make": (
+                f"LIBRARY()\n{lib.BARE_MODULE}SET_CUSTOM_CLANG_TIDY(tools/tidy CUSTOM)\n"
+                "IF(CUSTOM_CLANG_TIDY)\nSRCS(a.cpp)\nENDIF()\n"
+                "RUN_PYTHON3(gen.py ${CLANG_TIDY_BIN} ${_YAML2JSON_BIN} OUT gen.h)\nEND()\n"
+            ),
+            "a/a.cpp": '#include "gen.h"\n',
+            "a/gen.py": "",
+            "tools/tidy/ya.make": "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(CUSTOM sbr:42)\nEND()\n",
+        }, "a")
+        lib.node_by_output(graph, "$(B)/a/a.cpp.o")
+        node = lib.node_by_output(graph, "$(B)/a/gen.h")
+        args = node["cmds"][0]["cmd_args"]
+        self.assertIn("$(B)/resources/CUSTOM/bin/clang-tidy", args)
+        self.assertIn("$(B)/resources/CUSTOM/bin/yaml2json", args)
+
+    def test_proto_package_name_and_custom_style_are_valid_in_cpp_variant(self):
+        graph = lib.make({
+            "a/ya.make": (
+                f"LIBRARY()\n{lib.BARE_MODULE}TS_PROTO_PACKAGE_NAME(@scope/proto)\n"
+                "STYLE_CPP_USER_SESSIONS(CONFIG_TYPE custom)\nSRCS(a.cpp)\nEND()\n"
+            ),
+            "a/a.cpp": "",
+        }, "a")
+        lib.node_by_output(graph, "$(B)/a/a.cpp.o")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

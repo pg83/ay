@@ -42,6 +42,13 @@ var tokName = [...]STR{
 	tokCompileLuaOpenresty: internStr("COMPILE_LUA_OPENRESTY"),
 	tokCompileLua21:        internStr("COMPILE_LUA_21"),
 	tokCompileLua:          internStr("COMPILE_LUA"),
+	tokTsProtoPackageName:   internStr("TS_PROTO_PACKAGE_NAME"),
+	tokStyleCppUserSessions: internStr("STYLE_CPP_USER_SESSIONS"),
+	tokSetCustomClangTidy:   internStr("SET_CUSTOM_CLANG_TIDY"),
+	tokYqlStableAbiVersion:  internStr("YQL_STABLE_ABI_VERSION"),
+	tokYqlCurrentAbiVersion: internStr("YQL_CURRENT_ABI_VERSION"),
+	tokYqlPrebuiltProgram:   internStr("YQL_PREBUILT_PROGRAM"),
+	tokYqlLibrary:           internStr("YQL_LIBRARY"),
 
 	tokInvalid:                            0,
 	tokAddInclSelf:                        internStr("ADDINCLSELF"),
@@ -674,6 +681,13 @@ const (
 	tokCompileLua21
 	tokCompileLuaOpenresty
 	tokLlvmCompileCxx
+	tokYqlLibrary
+	tokYqlPrebuiltProgram
+	tokYqlCurrentAbiVersion
+	tokYqlStableAbiVersion
+	tokSetCustomClangTidy
+	tokStyleCppUserSessions
+	tokTsProtoPackageName
 )
 
 type TOK uint16

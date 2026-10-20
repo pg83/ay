@@ -1125,6 +1125,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return e.genPrebuiltProgram()
 	}
 
+	if d.yqlPrebuiltResource != "" {
+		return e.genYqlPrebuiltProgram()
+	}
+
 	applyImplicitPeerdirs(ctx, instance, d)
 
 	if isGoModuleType(d.moduleStmt.Name) {
@@ -2027,6 +2031,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		SetVars:              d.setVars,
 		Py3Suffix:            isPy3NativeLib,
 		ObjectSuffixStem: func() *string {
+			if d.unit.ObjectSuffixStem != "" {
+				return &d.unit.ObjectSuffixStem
+			}
+
 			if isYqlUdfStaticModule(d.moduleStmt.Name) {
 				return ptr("udfs")
 			}
@@ -2551,6 +2559,10 @@ func (ctx *GenCtx) instanceVariant(in ModuleInstance) uint16 {
 	case ctx.target:
 	default:
 		pbit = variantPIC
+	}
+
+	if in.YqlCurrent {
+		pbit |= 1 << 13
 	}
 
 	return uint16(in.Path&1)<<15 | uint16(in.Kind)<<8 | uint16(in.Demand)<<variantDemandShift | uint16(in.Language)<<1 | pbit
