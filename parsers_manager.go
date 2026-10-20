@@ -8,6 +8,7 @@ const (
 	parsedIncludesCpp
 
 	parsedIncludesProtoConfig
+	parsedIncludesAll
 	parsedIncludeBucketCount
 )
 

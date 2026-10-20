@@ -145,6 +145,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 	e.dirScratch = protoImportPbH
 
+	inputInduced := prInputInducedIncludes(ctx, inVFSs[:len(inVFSs)-stmt.INNoParse])
 	prRef := ctx.emit.reserve()
 	registeredPROut := map[VFS]bool{}
 
@@ -203,20 +204,20 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 	for _, f := range stmt.OUTFiles {
 		out := outVFSByToken[f]
-		parsed := prOutputParsedIncludes(ctx.na, f, stmt, protoImportPbH)
+		parsed := prOutputParsedIncludes(ctx.na, f, stmt, protoImportPbH, inputInduced)
 
 		registerOutput(out, parsed)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
 		out := outVFSByToken[f]
-		parsed := prOutputParsedIncludes(ctx.na, f, stmt, protoImportPbH)
+		parsed := prOutputParsedIncludes(ctx.na, f, stmt, protoImportPbH, inputInduced)
 
 		registerOutput(out, parsed)
 	}
 
 	if stmt.StdoutFile != nil {
-		parsed := prOutputParsedIncludes(ctx.na, *stmt.StdoutFile, stmt, protoImportPbH)
+		parsed := prOutputParsedIncludes(ctx.na, *stmt.StdoutFile, stmt, protoImportPbH, inputInduced)
 
 		registerOutput(*stdoutVFS, parsed)
 	}
@@ -280,8 +281,32 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 	return PrInputClosure{sources: s.ctx.na.dedupClosure(sources), builds: s.ctx.na.dedupClosure(builds)}
 }
 
-func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, protoImportPbH []IncludeDirective) ParsedIncludeSet {
-	local := na.dirs.alloc(len(stmt.OutputIncludes))[:0]
+func prInputInducedIncludes(ctx *GenCtx, inputs []VFS) ParsedIncludeSet {
+	var induced ParsedIncludeSet
+
+	for _, input := range inputs {
+		if !input.isSource() || extIsProto(input.relString()) || !ctx.parsers.registry.scansIncludes(input.relString()) {
+			continue
+		}
+
+		parsed := ctx.parsers.sourceParsedBuckets(input, nil)
+
+		for _, bucket := range [...]ParsedIncludeBucket{parsedIncludesAll, parsedIncludesHeader, parsedIncludesCpp} {
+			induced[bucket] = append(induced[bucket], parsed[bucket]...)
+		}
+	}
+
+	for _, bucket := range [...]ParsedIncludeBucket{parsedIncludesAll, parsedIncludesHeader, parsedIncludesCpp} {
+		if len(induced[bucket]) > 0 {
+			induced[bucket] = ctx.na.dirList(induced[bucket]...)
+		}
+	}
+
+	return induced
+}
+
+func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, protoImportPbH []IncludeDirective, inputInduced ParsedIncludeSet) ParsedIncludeSet {
+	local := na.dirs.alloc(len(stmt.OutputIncludes) + len(inputInduced[parsedIncludesAll]))[:0]
 
 	for _, f := range stmt.OutputIncludes {
 		if v := f.vfs(); v != 0 {
@@ -291,19 +316,21 @@ func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, p
 		local = append(local, IncludeDirective{kind: includeQuoted, target: includeTarget(f)})
 	}
 
+	local = append(local, inputInduced[parsedIncludesAll]...)
 	na.dirs.commit(len(local))
 	local = local[:len(local):len(local)]
 
 	carryProtoImportPbH := !extIsPbH(outFile.string())
-	compile := na.dirs.alloc(len(protoImportPbH))[:0]
+	compile := na.dirs.alloc(len(protoImportPbH) + len(inputInduced[parsedIncludesCpp]))[:0]
 
 	if carryProtoImportPbH {
 		compile = append(compile, protoImportPbH...)
 	}
 
+	compile = append(compile, inputInduced[parsedIncludesCpp]...)
 	na.dirs.commit(len(compile))
 
-	return ParsedIncludeSet{parsedIncludesLocal: local, parsedIncludesCpp: compile[:len(compile):len(compile)]}
+	return ParsedIncludeSet{parsedIncludesLocal: local, parsedIncludesAll: inputInduced[parsedIncludesAll], parsedIncludesHeader: inputInduced[parsedIncludesHeader], parsedIncludesCpp: compile[:len(compile):len(compile)]}
 }
 
 func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxTool {
