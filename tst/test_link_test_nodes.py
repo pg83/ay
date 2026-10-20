@@ -347,6 +347,14 @@ class TestNodesTest(unittest.TestCase):
         run = lib.node_by_output(graph, "$(B)/lib/ut/test-results/unittest/meta.json")
         self.assertIn(run["uid"], graph["result"])
 
+    def test_recurse_follows_the_branch_its_condition_selects(self):
+        files = fixture()
+        files["lib/ya.make"] += "IF (OS_LINUX)\n    RECURSE_FOR_TESTS(ut)\nELSE()\n    RECURSE_FOR_TESTS(other)\nENDIF()\n"
+        files["lib/other/ya.make"] = files["lib/ut/ya.make"]
+        graph = lib.make(files, "lib", "-t")
+        lib.node_by_output(graph, "$(B)/lib/ut/test-results/unittest/meta.json")
+        self.assertFalse(any(o.startswith("$(B)/lib/other/") for n in graph["graph"] for o in n["outputs"]))
+
     def test_unsandboxed_debug_descriptor(self):
         graph = make_unsandboxed(fixture(), "lib/ut", "-t")
         context = lib.node_by_output(graph, "$(B)/common_test.context")

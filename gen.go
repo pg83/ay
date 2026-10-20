@@ -471,40 +471,7 @@ func (ctx *GenCtx) recurseClosure(root string) []string {
 		seen[dir] = true
 		out = append(out, dir)
 
-		env := buildIfEnvInto(&ctx.ifEnvScratch, ModuleInstance{Path: source(dir), Platform: ctx.target})
-
-		var children []string
-
-		var scan func(stmts []Stmt)
-
-		scan = func(stmts []Stmt) {
-			for _, st := range stmts {
-				switch v := st.(type) {
-				case *IfStmt:
-					if evalCond(v.Cond, env) {
-						scan(v.Then)
-					} else {
-						scan(v.Else)
-					}
-				case *UnknownStmt:
-					if v.Name != tokRecurse && v.Name != tokRecurseRootRelative && (v.Name != tokRecurseForTests || !ctx.testMode) {
-						continue
-					}
-
-					for _, a := range v.Args {
-						child := a.string()
-
-						if v.Name != tokRecurseRootRelative {
-							child = dir + "/" + child
-						}
-
-						children = append(children, filepath.Clean(child))
-					}
-				}
-			}
-		}
-
-		scan(moduleStmts(ctx, dir))
+		_, children := ctx.recurseScan(dir)
 
 		for _, child := range children {
 			walk(child)
@@ -514,6 +481,48 @@ func (ctx *GenCtx) recurseClosure(root string) []string {
 	walk(root)
 
 	return out
+}
+
+func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
+	env := buildIfEnvInto(&ctx.ifEnvScratch, ModuleInstance{Path: source(dir), Platform: ctx.target})
+
+	var module TOK
+	var children []string
+
+	var scan func(stmts []Stmt)
+
+	scan = func(stmts []Stmt) {
+		for _, st := range stmts {
+			switch v := st.(type) {
+			case *ModuleStmt:
+				module = v.Name
+			case *IfStmt:
+				if evalCond(v.Cond, env) {
+					scan(v.Then)
+				} else {
+					scan(v.Else)
+				}
+			case *UnknownStmt:
+				if v.Name != tokRecurse && v.Name != tokRecurseRootRelative && (v.Name != tokRecurseForTests || !ctx.testMode) {
+					continue
+				}
+
+				for _, a := range v.Args {
+					child := a.string()
+
+					if v.Name != tokRecurseRootRelative {
+						child = dir + "/" + child
+					}
+
+					children = append(children, filepath.Clean(child))
+				}
+			}
+		}
+	}
+
+	scan(moduleStmts(ctx, dir))
+
+	return module, children
 }
 
 func (ctx *GenCtx) genStartTarget(dir string) {
@@ -638,27 +647,10 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) []string {
 			}
 		}
 
-		var moduleName TOK
+		moduleName, children := ctx.recurseScan(dir)
 
-		for _, st := range moduleStmts(ctx, dir) {
-			switch v := st.(type) {
-			case *ModuleStmt:
-				moduleName = v.Name
-			case *UnknownStmt:
-				if v.Name != tokRecurse && v.Name != tokRecurseRootRelative && (v.Name != tokRecurseForTests || !ctx.testMode) {
-					continue
-				}
-
-				for _, a := range v.Args {
-					child := a.string()
-
-					if v.Name != tokRecurseRootRelative {
-						child = dir + "/" + child
-					}
-
-					walk(filepath.Clean(child), false)
-				}
-			}
+		for _, child := range children {
+			walk(child, false)
 		}
 
 		if !root && moduleName != 0 && (ctx.testMode || isFinalTargetModuleType(moduleName)) {
