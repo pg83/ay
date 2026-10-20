@@ -35,6 +35,8 @@ var tokName = [...]STR{
 	tokRun:            internStr("RUN"),
 	tokPy3Test:        internStr("PY3TEST"),
 	tokPy2Test:        internStr("PY2TEST"),
+	tokPy23Test:       internStr("PY23_TEST"),
+	tokPytestBin:      internStr("PYTEST_BIN"),
 
 	tokDepends:       internStr("DEPENDS"),
 	tokTestCwd:       internStr("TEST_CWD"),
@@ -631,6 +633,8 @@ const (
 	tokRun
 	tokPy3Test
 	tokPy2Test
+	tokPy23Test
+	tokPytestBin
 	tokUnittest
 	tokUnittestWithCustomEntryPoint
 	tokYtUnittest

@@ -9,6 +9,7 @@ var (
 	ldFsToolsPath      = ldFsToolsVFS.string()
 	vcsJSONBase64      = base64.StdEncoding.EncodeToString([]byte(vcsJSONContent))
 	ldKV               = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
+	ldTestKV           = KV{P: pkLD, PC: pcLightBlue, ShowOut: true, LDTestNode: true}
 	ldKV2              = KV{P: pkCP, PC: pcYellow, ShowOut: true}
 	vcsRequirements    = Requirements{CPU: 1, Network: nwRestricted, RAM: 16}
 )
@@ -104,7 +105,7 @@ func (e *EmitContext) emitLD(
 	binPrefix := binaryDir + "/"
 	outputVFS := build(binPrefix, binaryName)
 	vcsCVFS := build(binPrefix, "__vcs_version__.c")
-	vcsOVFS := build(binPrefix, "__vcs_version__.c", instance.Platform.objectSuffix())
+	vcsOVFS := build(binPrefix, "__vcs_version__.c", e.d.unit.objectSuffix(instance.Platform))
 	cmd0 := composeLDCmdVcsInfo(na, tc, vcsCVFS)
 	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, tc, vcsCVFS, vcsOVFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
 	cmd2 := composeLDCmdLinkExe(na, instance.Platform, tc, outputVFS, vcsOVFS, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, linkExcludeLibraries, exportsScript, linkerScripts, noExportDynSymbols, wantsStrip, useArcadiaLibm, dyn)
@@ -219,13 +220,19 @@ func (e *EmitContext) emitLD(
 
 	outputs = outputs[:len(outputs):len(outputs)]
 
+	kv := &ldKV
+
+	if e.d.unit.TestLD {
+		kv = &ldTestKV
+	}
+
 	n := Node{
 		Platform:  instance.Platform,
 		Cmds:      cmds,
 		Env:       envFull,
 		Inputs:    inputs,
 		Outputs:   outputs,
-		KV:        &ldKV,
+		KV:        kv,
 		DepRefs:   deps,
 		Resources: instance.Platform.UsesLinkResources,
 	}

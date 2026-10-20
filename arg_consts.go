@@ -233,6 +233,7 @@ var (
 	argStartPlugins                                         = internArg("--start-plugins")
 	argStripDebug                                           = internArg("--strip-debug")
 	argStyle                                                = internArg("style")
+	argSubPath                                              = internArg("--sub-path")
 	argSuffixes                                             = internArg("--suffixes")
 	argSupportsTestParameters                               = internArg("--supports-test-parameters")
 	argSwig                                                 = internArg("--swig")

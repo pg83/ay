@@ -46,8 +46,10 @@ func multimoduleVariantTag(name TOK, language Language) string {
 	return ""
 }
 
-func (ctx *GenCtx) genMultimoduleTargets(dir string, variants uint16, demand ModuleDemand) {
-	for _, language := range []Language{LangJava, LangPy, LangGo, LangDescProto, LangDocsProto, LangTSPrepare, LangTS, LangRosBindings, LangPackage} {
+func (ctx *GenCtx) genMultimoduleTargets(dir string, variants uint16, demand ModuleDemand) []*ModuleEmitResult {
+	var results []*ModuleEmitResult
+
+	for _, language := range []Language{LangJava, LangPy, LangPy2, LangGo, LangDescProto, LangDocsProto, LangTSPrepare, LangTS, LangRosBindings, LangPackage} {
 		if variants&(1<<language) == 0 {
 			continue
 		}
@@ -66,6 +68,12 @@ func (ctx *GenCtx) genMultimoduleTargets(dir string, variants uint16, demand Mod
 
 		if result.java != nil {
 			ctx.emit.result(ctx.javaBuilder(result.java).use(result.java.target))
+		} else if result.LDRef != 0 {
+			if result.LDPath != nil {
+				ctx.scannerForPlatform(instance.Platform).codegen.use(*result.LDPath)
+			}
+
+			ctx.emit.result(result.LDRef)
 		} else {
 			if result.ARPath != nil {
 				ctx.scannerForPlatform(instance.Platform).codegen.use(*result.ARPath)
@@ -78,6 +86,8 @@ func (ctx *GenCtx) genMultimoduleTargets(dir string, variants uint16, demand Mod
 			}
 		}
 
-		ctx.emitModuleTests(result)
+		results = append(results, result)
 	}
+
+	return results
 }

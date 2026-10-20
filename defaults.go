@@ -102,6 +102,10 @@ func (e *EmitContext) defaultPeerdirsForModule() []string {
 		inst.Language = LangCPP
 	}
 
+	if instance.Language == LangPy2 {
+		inst.Language = LangCPP
+	}
+
 	return e.defaultPeerdirsForWithState(inst)
 }
 

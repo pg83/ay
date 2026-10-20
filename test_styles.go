@@ -14,47 +14,143 @@ type StyleCheck struct {
 	Name               string
 	ConfigMap          string
 	Config             string
+	ConfigType         string
+	ConfigDir          string
 	Wrapper            string
 	Resource           string
 	Files              []string
 	ExtraConfigs       []string
 	ExtraParams        []string
 	FileProcessingTime float64
+	Python             bool
+	Peer               string
 }
 
-func (d *ModuleData) collectPy2StyleCheck(env Environment) {
-	if !d.usePython2 {
+func (d *ModuleData) collectPythonStyleChecks(env Environment) {
+	if d.moduleStmt == nil {
 		return
 	}
+
+	name := ""
 
 	switch d.moduleStmt.Name {
-	case tokPy2Program, tokPy2Library, tokPy2Test:
-	default:
-		return
+	case tokPy2Program, tokPy2Library, tokPy2Test, tokPytestBin:
+		name = "py2_flake8"
+	case tokPy3Program, tokPy3ProgramBin, tokPy3Library, tokPy23Library, tokPy3Test:
+		name = "flake8"
 	}
 
-	if d.noLint == "none" || d.noLint == "none_internal" || env.bool(envCppAnalysisMode) || env.bool(envDisableFlake8) {
-		return
+	if name != "" {
+		d.styleChecks = append(d.styleChecks, pythonStyleCheck(name, env))
 	}
 
-	check := StyleCheck{Name: "py2_flake8", ConfigMap: "build/config/tests/py_style/default_configs.json", Wrapper: "tools/flake8_linter/__main__.py", Resource: "FLAKE8_PY2_RESOURCE_GLOBAL", FileProcessingTime: 1.5}
+	checks := d.styleChecks[:0]
+
+	for _, check := range d.styleChecks {
+		if check.Python {
+			if d.noLint == "none" || d.noLint == "none_internal" || env.bool(envCppAnalysisMode) {
+				continue
+			}
+
+			if (check.Name == "flake8" || check.Name == "py2_flake8") && env.bool(envDisableFlake8) {
+				continue
+			}
+
+			d.peerdirs = append(d.peerdirs, internStr(check.Peer).any())
+		}
+
+		checks = append(checks, check)
+	}
+
+	d.styleChecks = checks
+}
+
+func pythonStyleCheck(name string, env Environment) StyleCheck {
+	check := StyleCheck{Name: name, Python: true, ConfigMap: "build/config/tests/py_style/default_configs.json", FileProcessingTime: 1.5}
+	timeVar := "FLAKE8_FILE_PROCESSING_TIME"
+
+	switch name {
+	case "flake8", "py2_flake8":
+		version := "PY3"
+
+		if name == "py2_flake8" {
+			version = "PY2"
+		}
+
+		check.Peer = "build/external_resources/flake8_" + strings.ToLower(version)
+		check.Resource = "FLAKE8_" + version + "_RESOURCE_GLOBAL"
+		check.Wrapper = "tools/flake8_linter/__main__.py"
+
+		if env.bool(envDisableFlake8Migrations) {
+			check.ExtraParams = []string{"DISABLE_FLAKE8_MIGRATIONS=yes"}
+		} else {
+			check.ExtraConfigs = []string{"build/rules/flake8/migrations.yaml"}
+		}
+	case "black":
+		check.Peer, check.Resource, check.Wrapper = "build/external_resources/black", "BLACK_RESOURCE_GLOBAL", "tools/black_linter/wrapper.py"
+		timeVar = "BLACK_FILE_PROCESSING_TIME"
+	case "ruff":
+		check.Peer, check.Resource, check.Wrapper = "build/external_resources/ruff", "RUFF_RESOURCE_GLOBAL", "tools/ruff_linter/wrapper.py"
+		check.FileProcessingTime = 0.5
+
+		timeVar = "RUFF_FILE_PROCESSING_TIME"
+		check.ExtraParams = []string{"check_format=no", "run_in_source_root=no"}
+	}
 
 	if value, ok := env.lookup("PYTHON_LINTERS_DEFAULT_CONFIGS"); ok && value != "" {
 		check.ConfigMap = value
 	}
 
-	if value, ok := env.lookup("FLAKE8_FILE_PROCESSING_TIME"); ok && value != "" {
+	if value, ok := env.lookup(timeVar); ok && value != "" {
 		check.FileProcessingTime = throw2(strconv.ParseFloat(value, 64))
 	}
 
-	if env.bool(envDisableFlake8Migrations) {
-		check.ExtraParams = []string{"DISABLE_FLAKE8_MIGRATIONS=yes"}
-	} else {
-		check.ExtraConfigs = []string{"build/rules/flake8/migrations.yaml"}
+	return check
+}
+
+func (d *ModuleData) collectExplicitPythonStyle(stmt UnknownStmt, env Environment) {
+	if stmt.Name == tokStylePython && d.moduleStmt != nil {
+		switch d.moduleStmt.Name {
+		case tokPy2Program, tokPy2Test, tokPy2Library:
+			return
+		}
+	}
+
+	name := "black"
+
+	if stmt.Name == tokStyleRuff {
+		name = "ruff"
+	}
+
+	check := pythonStyleCheck(name, env)
+
+	for i := 0; i < len(stmt.Args); i++ {
+		switch arg := stmt.Args[i].string(); arg {
+		case "CONFIG_TYPE":
+			i++
+
+			if i >= len(stmt.Args) {
+				throwFmt("STYLE: CONFIG_TYPE requires a config type")
+			}
+
+			check.ConfigType = stmt.Args[i].string()
+			check.ConfigDir, _ = env.lookup("MODULE_COMMON_CONFIGS_DIR")
+		case "CHECK_FORMAT":
+			if name != "ruff" {
+				throwFmt("STYLE: CHECK_FORMAT requires ruff")
+			}
+
+			check.ExtraParams[0] = "check_format=yes"
+		case "RUN_IN_SOURCE_ROOT":
+			if name != "ruff" {
+				throwFmt("STYLE: RUN_IN_SOURCE_ROOT requires ruff")
+			}
+
+			check.ExtraParams[1] = "run_in_source_root=yes"
+		}
 	}
 
 	d.styleChecks = append(d.styleChecks, check)
-	d.peerdirs = append(d.peerdirs, strBuildExternalResourcesFlake8Py2.any())
 }
 
 func (d *ModuleData) collectYAMLStyleWithConfig(module string, env Environment) {
@@ -165,29 +261,72 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 	}
 
 	var suites []*TestSuite
+	var pythonFiles []string
+
+	for _, ps := range e.pySrcsReg {
+		if ps.Kind == pySourcePlain && ps.Path.isSource() {
+			pythonFiles = append(pythonFiles, ps.Path.relString())
+		}
+	}
+
+	for _, stmt := range e.d.cythonCpp {
+		if stmt.Generated == nil && extIsPy(stmt.Src) {
+			pythonFiles = append(pythonFiles, e.instance.Path.relString()+"/"+stmt.Src)
+		}
+	}
+
+	pythonFiles = sortedUnique(pythonFiles)
 
 	for _, check := range e.d.styleChecks {
-		if check.Name == "py2_flake8" {
-			for _, ps := range e.pySrcsReg {
-				if ps.Kind == pySourcePlain && ps.Path.isSource() {
-					check.Files = append(check.Files, ps.Path.relString())
-				}
-			}
-
-			check.Files = sortedUnique(check.Files)
+		if check.Python {
+			check.Files = pythonFiles
 
 			if len(check.Files) == 0 {
 				continue
 			}
+
+			if check.ConfigType != "" {
+				if check.ConfigType != "pyproject.toml" && (check.Name != "ruff" || check.ConfigType != "ruff.toml") {
+					throwFmt("STYLE: unknown %s config type %s", check.Name, check.ConfigType)
+				}
+
+				if check.ConfigDir == "" {
+					if inc, ok := e.ctx.autoincludeIdx.lintersMakeIncFor(e.instance.Path.relString()); ok {
+						check.ConfigDir = path.Dir(inc.relString())
+					}
+				}
+
+				if check.ConfigDir == "" {
+					throwFmt("STYLE: config type requires MODULE_COMMON_CONFIGS_DIR")
+				}
+
+				check.Config = path.Join(check.ConfigDir, check.ConfigType)
+
+				if !e.ctx.fs.isFilePathClean(check.Config) {
+					throwFmt("STYLE: missing config %s", check.Config)
+				}
+			}
+
+			if slices.Contains(check.ExtraParams, "run_in_source_root=yes") {
+				module := e.instance.Path.relString()
+				allowed := []string{"electro", "fintech/uservices", "maps/tariffs", "market/media_adv/madv-inspector", "taxi"}
+
+				if !slices.ContainsFunc(allowed, func(prefix string) bool { return strings.HasPrefix(module, prefix) }) {
+					throwFmt("STYLE: running ruff in source root is not allowed in %s", module)
+				}
+			}
 		}
 
-		config, ok := e.ctx.parsers.notsJSON(check.ConfigMap)[check.Name].(string)
+		if check.Config == "" {
+			config, ok := e.ctx.parsers.notsJSON(check.ConfigMap)[check.Name].(string)
 
-		if !ok {
-			throwFmt("STYLE: missing %s config in %s", check.Name, check.ConfigMap)
+			if !ok {
+				throwFmt("STYLE: missing %s config in %s", check.Name, check.ConfigMap)
+			}
+
+			check.Config = config
 		}
 
-		check.Config = config
 		var resources []ResourceDecl
 
 		for _, r := range globals {
