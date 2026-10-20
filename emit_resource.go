@@ -15,7 +15,7 @@ var (
 	objcopyScriptChunk          = []VFS{objcopyScriptVFS}
 	rawAuxKV                    = KV{P: pkPR, PC: pcYellow, ShowOut: true}
 	pyObjcopyKV                 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
-	resKvMacroPrefix            = []byte("${ARCADIA")
+	resKvMacroPrefix            = []byte("${")
 )
 
 const (
@@ -60,9 +60,11 @@ func resourceHashInto(buf []byte, list []string, moduleTag string) (string, []by
 	return bytesString(buf[mark : mark+hashLen]), buf
 }
 
-func renderResourceKvCmd(kv string) string {
+func renderResourceKvCmd(kv, modulePath string) string {
 	kv = strings.ReplaceAll(kv, "${ARCADIA_ROOT}/", "$(S)/")
 	kv = strings.ReplaceAll(kv, "${ARCADIA_BUILD_ROOT}/", "$(B)/")
+	kv = strings.ReplaceAll(kv, "${CURDIR}", "$(S)/"+modulePath)
+	kv = strings.ReplaceAll(kv, "${BINDIR}", "$(B)/"+modulePath)
 
 	return kv
 }
@@ -722,7 +724,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 				cmdView := e.resStrBuf[cmdStart:]
 
 				if bytes.Contains(cmdView, resKvMacroPrefix) {
-					it.Cmd = internStr(renderResourceKvCmd(string(cmdView)))
+					it.Cmd = internStr(renderResourceKvCmd(string(cmdView), instance.Path.relString()))
 				} else {
 					it.Cmd = internBytes(cmdView)
 				}
@@ -736,11 +738,11 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 				if head, inner, tail, ok := rootrelSplit(entry.Key); ok {
 					r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
 
-					it.Cmd = internStr(renderResourceKvCmd(head + r.Input.relString() + tail))
+					it.Cmd = internStr(renderResourceKvCmd(head+r.Input.relString()+tail, instance.Path.relString()))
 					it.setInput(r.Input)
 					it.AuxBuilds = na.vfsList(r.ProducerMainOut)
 				} else {
-					it.Cmd = internStr(renderResourceKvCmd(entry.Key))
+					it.Cmd = internStr(renderResourceKvCmd(entry.Key, instance.Path.relString()))
 				}
 			}
 

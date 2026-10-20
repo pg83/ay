@@ -1482,7 +1482,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			}
 		case *ResourceFilesStmt:
 			if isGoModuleType(d.unit.Type) {
-				entries := expandResourceFiles(d, nil, anyStrs(expandStmtTokens(v.Args, env)))
+				entries := expandResourceFiles(d, nil, expandResourceFileArgs(v.Args, env))
 
 				applyGoResource(fs, modulePath, entries, v.Line, d)
 
@@ -1493,7 +1493,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			before := len(d.resources)
 
-			d.resources = expandResourceFiles(d, d.resources, anyStrs(expandStmtTokens(v.Args, env)))
+			d.resources = expandResourceFiles(d, d.resources, expandResourceFileArgs(v.Args, env))
 
 			if len(d.resources) > before {
 				d.resources[len(d.resources)-1].EndsBatch = true

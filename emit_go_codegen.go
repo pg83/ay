@@ -436,7 +436,7 @@ func applyGoResource(fs FS, modulePath string, entries []ResourceEntry, line int
 			inputs = append(inputs, file)
 		}
 
-		args = append(args, file, internStr("notafile"+commandKey).any())
+		args = append(args, file, internStr("notafile"+renderResourceKvCmd(commandKey, modulePath)).any())
 	}
 
 	out := internStr(fmt.Sprintf("resource.%x.res.go", md5.Sum([]byte(strings.Join(hashArgs, "@"))))).any()

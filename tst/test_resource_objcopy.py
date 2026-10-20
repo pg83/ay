@@ -116,6 +116,10 @@ class ResourceObjcopyTest(unittest.TestCase):
             section(second["cmds"][0]["cmd_args"], "--kvs"),
             ["resfs/src/resfs/file/p/$(B)/lib/gen_inc.h=lib/gen_inc.h"],
         )
+        self.assertEqual(
+            [base64.b64decode(k).decode() for k in section(second["cmds"][0]["cmd_args"], "--keys")],
+            ["resfs/file/p/${BINDIR}/gen_inc.h"],
+        )
         for node in (first, second):
             self.assertIn(producer["uid"], node["deps"])
 

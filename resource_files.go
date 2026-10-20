@@ -6,6 +6,16 @@ import (
 	"strings"
 )
 
+func expandResourceFileArgs(args []ANY, env Environment) []string {
+	bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
+	expanded := anyStrs(expandStmtTokens(args, env))
+
+	env.rebind(envBINDIR, bindir)
+	env.rebind(envCURDIR, curdir)
+
+	return expanded
+}
+
 func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string) []ResourceEntry {
 	prefix := ""
 	prefixToStrip := ""

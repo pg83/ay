@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import unittest
 
 import lib
@@ -57,6 +58,27 @@ def make_error(files):
 
 
 class ResourceFilesTest(unittest.TestCase):
+    def test_plugin_hash_preserves_module_root_variables(self):
+        for root, resolved in (("BINDIR", "$(B)/lib"), ("CURDIR", "$(S)/lib")):
+            with self.subTest(root=root):
+                raw = "${" + root + "}/a.txt"
+                files = base_files(
+                    "SET(RESOURCE_PREFIX assets/)\n"
+                    "COPY_FILE(lib/input.txt a.txt)\n"
+                    f"RESOURCE_FILES(PREFIX $RESOURCE_PREFIX STRIP ${{{root}}}/ {raw})\n"
+                )
+                files["lib/input.txt"] = "generated"
+                files["lib/a.txt"] = "source"
+                graph = lib.make(files, "lib")
+                key = "resfs/file/assets/a.txt"
+                seed = [raw, base64.b64encode(key.encode()).decode(),
+                        'resfs/src/' + key + '=${rootrel;context=TEXT;input=TEXT:"' + raw + '"}',
+                        "$S/lib"]
+                digest = hashlib.md5(",".join(sorted(seed)).encode()).hexdigest()[:26]
+                node = lib.node_by_output(graph, f"$(B)/lib/objcopy_{digest}.o")
+                self.assertEqual(payload(node), ([resolved + "/a.txt"], [key],
+                                               ["resfs/src/" + key + "=lib/a.txt"]))
+
     def test_prefix_dest_and_strip_forms(self):
         files = base_files(
             "RESOURCE_FILES(PREFIX pfx/ data/a.txt data/b.txt)\n"
