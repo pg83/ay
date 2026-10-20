@@ -7,27 +7,27 @@ import (
 )
 
 const (
-	globFixed globPartKind = iota
+	globFixed GlobPartKind = iota
 	globPattern
 	globAnything
 	globRecursive
 )
 
-type globPartKind uint8
+type GlobPartKind uint8
 
-type globPart struct {
-	kind  globPartKind
+type GlobPart struct {
+	kind  GlobPartKind
 	fixed string
 	re    *regexp.Regexp
 }
 
-func globParts(pattern string) []globPart {
-	var parts []globPart
+func globParts(pattern string) []GlobPart {
+	var parts []GlobPart
 	var fixed []string
 
 	flush := func() {
 		if len(fixed) > 0 {
-			parts = append(parts, globPart{kind: globFixed, fixed: strings.Join(fixed, "/")})
+			parts = append(parts, GlobPart{kind: globFixed, fixed: strings.Join(fixed, "/")})
 			fixed = fixed[:0]
 		}
 	}
@@ -37,13 +37,13 @@ func globParts(pattern string) []globPart {
 		case seg == "":
 		case seg == "*":
 			flush()
-			parts = append(parts, globPart{kind: globAnything})
+			parts = append(parts, GlobPart{kind: globAnything})
 		case seg == "**":
 			flush()
-			parts = append(parts, globPart{kind: globRecursive})
+			parts = append(parts, GlobPart{kind: globRecursive})
 		case strings.ContainsAny(seg, "*?"):
 			flush()
-			parts = append(parts, globPart{kind: globPattern, re: regexp.MustCompile("^" + globSegmentRegex(seg, true) + "$")})
+			parts = append(parts, GlobPart{kind: globPattern, re: regexp.MustCompile("^" + globSegmentRegex(seg, true) + "$")})
 		default:
 			fixed = append(fixed, seg)
 		}

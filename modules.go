@@ -3974,13 +3974,13 @@ func applyCompileNlg(modulePath string, v UnknownStmt, d *ModuleData) {
 	d.srcs = append(d.srcs, SrcMeta{Source: str("register.cpp"), Prio: stmtPrioDefault, Global: true})
 }
 
-type confPluginKey struct {
+type ConfPluginKey struct {
 	fs    FS
 	macro string
 }
 
 func confPluginDeps(fs FS, confRel, macro string) []string {
-	key := confPluginKey{fs: fs, macro: macro}
+	key := ConfPluginKey{fs: fs, macro: macro}
 
 	if v, ok := confPluginDepsCache.Load(key); ok {
 		return v.([]string)
