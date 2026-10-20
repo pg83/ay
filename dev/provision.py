@@ -194,6 +194,11 @@ TOOLCHAIN_ENV_VARS = (
 )
 
 
+# ya puts its OAuth token into test node commands (devtools/ya/test/util/
+# shared.py get_oauth_token_options); without one it exchanges the user's ssh
+# key for the user's token. References carry this placeholder instead.
+CANONIZATION_TOKEN = "AY_CANONIZATION_NO_TOKEN"
+
 # devtools/ya/app/modules/caller_info AGENTS, JUMP_RAMPS and IDES env markers.
 CALLER_ENV_VARS = (
     "OPENCODE", "CLAUDECODE", "CODEX_THREAD_ID", "CURSOR_TRACE_ID", "CODEIUM_EDITOR_APP_ROOT",
@@ -213,7 +218,7 @@ def ya_env():
     (devtools/ya/app/modules/caller_info): with one detected ya switches to
     --output-style jsonl, which ends up in the test nodes of the graph."""
     env = {k: v for k, v in os.environ.items() if k not in TOOLCHAIN_ENV_VARS and k not in CALLER_ENV_VARS}
-    env.update(YA_TC="no", YA_NO_RESPAWN="yes")
+    env.update(YA_TC="no", YA_NO_RESPAWN="yes", YA_TOKEN=CANONIZATION_TOKEN)
 
     return env
 
