@@ -217,6 +217,16 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 	copyStatsFlags(targetOptFlags, targetInternalYaFlags)
 	copyStatsFlags(targetOptFlags, mf.dflags)
 
+	disableFlake8Migrations := rootYaConf["disable_flake8_migrations"] != false
+
+	if value, ok := os.LookupEnv("YA_TEST_DISABLE_FLAKE8_MIGRATIONS"); ok {
+		disableFlake8Migrations = envEnabled(value)
+	}
+
+	if disableFlake8Migrations {
+		targetOptFlags["DISABLE_FLAKE8_MIGRATIONS"] = "yes"
+	}
+
 	hOS, hISA := resolvePlatform(mf.hostPlat)
 	targetSpec := mf.targetPlat
 

@@ -279,6 +279,10 @@ CONF_FILES = {
     "build/ymake_conf.py": FAKE_YMAKE_CONF,
     "build/ya.conf.json": ya_conf_json(),
     "build/conf/linkers/ld.conf": FAKE_LD_CONF,
+    "build/config/tests/py_style/default_configs.json": '{"py2_flake8":"build/config/tests/flake8/flake8.conf"}',
+    "build/external_resources/flake8_py2/ya.make": (
+        "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(FLAKE8_PY2 sbr:123)\nEND()\n"
+    ),
 }
 
 

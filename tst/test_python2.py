@@ -127,6 +127,68 @@ def py2_resource_hash(module, items):
 
 
 class Python2Test(unittest.TestCase):
+    def test_py2_lint_uses_resolved_source_files_and_the_linter_resource(self):
+        files = python2_base()
+        files.update({
+            "prog/ya.make": (
+                f"PY2_PROGRAM()\n{NO_PLATFORM}NO_PYTHON_INCLUDES()\nNO_CHECK_IMPORTS()\n"
+                "SRCDIR(elsewhere)\nCOPY_FILE(a.py copied.py)\n"
+                "PY_SRCS(a.py copied.py)\nPY_SRCS(b.py)\nEND()\n"
+            ),
+            "prog/a.py": "",
+            "elsewhere/b.py": "",
+        })
+        graph = lib.make(files, "prog", "-t")
+        run = lib.node_by_output(graph, "$(B)/prog/test-results/py2_flake8/meta.json")
+        command = args(run)
+        self.assertEqual(run["kv"]["p"], "TS")
+        self.assertIn("FLAKE8_PY2_RESOURCE_GLOBAL::$(B)/resources/FLAKE8_PY2", command)
+        self.assertEqual(section(run, "--extra-param"), [
+            "DISABLE_FLAKE8_MIGRATIONS=yes", "$(S)/elsewhere/b.py", "$(S)/prog/a.py",
+        ])
+        self.assertEqual(run["inputs"], [
+            "$(S)/build/config/tests/flake8/flake8.conf", "$(S)/elsewhere/b.py",
+            "$(S)/prog", "$(S)/prog/a.py", "$(S)/tools/flake8_linter/__main__.py",
+        ])
+        context = lib.node_by_output(graph, "$(B)/common_test.context")
+        self.assertEqual(run["deps"], [context["uid"]])
+
+    def test_py2_lint_obeys_disable_flags(self):
+        for body, flags in (("NO_LINT()\n", []), ("", ["-DDISABLE_FLAKE8=yes"]), ("", ["-DCPP_ANALYSIS_MODE=yes"])):
+            with self.subTest(body=body, flags=flags):
+                files = python2_base()
+                files.update({
+                    "lib/ya.make": f"PY2_LIBRARY()\n{NO_PLATFORM}{body}PY_SRCS(a.py)\nEND()\n",
+                    "lib/a.py": "",
+                })
+                graph = lib.make(files, "lib", "-t", *flags)
+                self.assertFalse(any("py2_flake8" in out for n in graph["graph"] for out in n["outputs"]))
+
+    def test_py2_lint_config_and_processing_time_control_chunks(self):
+        files = python2_base()
+        files.update({
+            "ya.conf": 'disable_flake8_migrations = false\n[flags]\nOPENSOURCE = "yes"\n',
+            "lib/ya.make": (
+                f"PY2_LIBRARY()\n{NO_PLATFORM}SET(PYTHON_LINTERS_DEFAULT_CONFIGS lint/defaults.json)\n"
+                "SET(FLAKE8_FILE_PROCESSING_TIME 31)\nPY_SRCS(a.py b.py c.py)\nEND()\n"
+            ),
+            "lint/defaults.json": '{"py2_flake8":"lint/custom.conf"}',
+            "lib/a.py": "",
+            "lib/b.py": "",
+            "lib/c.py": "",
+        })
+        graph = lib.make(files, "lib", "-t")
+        runs = [n for n in graph["graph"] if n["kv"].get("run_test_node")]
+        self.assertEqual(len(runs), 2)
+        lint_files = []
+        for run in runs:
+            command = args(run)
+            self.assertIn("$(S)/lint/custom.conf", command)
+            self.assertIn("$(S)/build/rules/flake8/migrations.yaml", command)
+            self.assertNotIn("--extra-param", command)
+            lint_files.append([a for a in command[command.index("run_custom_lint"):] if a in ("$(S)/lib/a.py", "$(S)/lib/b.py", "$(S)/lib/c.py")])
+        self.assertEqual(sorted(lint_files), [["$(S)/lib/a.py", "$(S)/lib/c.py"], ["$(S)/lib/b.py"]])
+
     def test_py2_library_compiles_sources_with_py2cc_into_resources(self):
         files = python2_base()
         files.update({

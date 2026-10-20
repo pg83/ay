@@ -1,18 +1,58 @@
 package main
 
 import (
+	"math"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 )
 
 type StyleCheck struct {
-	Name      string
-	ConfigMap string
-	Config    string
-	Wrapper   string
-	Resource  string
-	Files     []string
+	Name               string
+	ConfigMap          string
+	Config             string
+	Wrapper            string
+	Resource           string
+	Files              []string
+	ExtraConfigs       []string
+	ExtraParams        []string
+	FileProcessingTime float64
+}
+
+func (d *ModuleData) collectPy2StyleCheck(env Environment) {
+	if !d.usePython2 {
+		return
+	}
+
+	switch d.moduleStmt.Name {
+	case tokPy2Program, tokPy2Library, tokPy2Test:
+	default:
+		return
+	}
+
+	if d.noLint == "none" || d.noLint == "none_internal" || env.bool(envCppAnalysisMode) || env.bool(envDisableFlake8) {
+		return
+	}
+
+	check := StyleCheck{Name: "py2_flake8", ConfigMap: "build/config/tests/py_style/default_configs.json", Wrapper: "tools/flake8_linter/__main__.py", Resource: "FLAKE8_PY2_RESOURCE_GLOBAL", FileProcessingTime: 1.5}
+
+	if value, ok := env.lookup("PYTHON_LINTERS_DEFAULT_CONFIGS"); ok && value != "" {
+		check.ConfigMap = value
+	}
+
+	if value, ok := env.lookup("FLAKE8_FILE_PROCESSING_TIME"); ok && value != "" {
+		check.FileProcessingTime = throw2(strconv.ParseFloat(value, 64))
+	}
+
+	if env.bool(envDisableFlake8Migrations) {
+		check.ExtraParams = []string{"DISABLE_FLAKE8_MIGRATIONS=yes"}
+	} else {
+		check.ExtraConfigs = []string{"build/rules/flake8/migrations.yaml"}
+	}
+
+	d.styleChecks = append(d.styleChecks, check)
+	d.peerdirs = append(d.peerdirs, strBuildExternalResourcesFlake8Py2.any())
 }
 
 func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, env Environment) {
@@ -109,6 +149,20 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 	var suites []*TestSuite
 
 	for _, check := range e.d.styleChecks {
+		if check.Name == "py2_flake8" {
+			for _, ps := range e.pySrcsReg {
+				if ps.Kind == pySourcePlain && ps.Path.isSource() {
+					check.Files = append(check.Files, ps.Path.relString())
+				}
+			}
+
+			check.Files = sortedUnique(check.Files)
+
+			if len(check.Files) == 0 {
+				continue
+			}
+		}
+
 		config, ok := e.ctx.parsers.notsJSON(check.ConfigMap)[check.Name].(string)
 
 		if !ok {
@@ -141,15 +195,32 @@ func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *Te
 	}
 
 	s.relatedPaths = append(s.relatedPaths, source(check.Config).string(), source(check.Wrapper).string())
-	s.runCmd = func(work string, _ TestChunk) []ANY {
+
+	for _, config := range check.ExtraConfigs {
+		s.relatedPaths = append(s.relatedPaths, source(config).string())
+	}
+
+	if check.FileProcessingTime > 0 {
+		s.split = max(1, int(math.Ceil(check.FileProcessingTime*float64(len(check.Files))/float64(s.timeout))))
+	}
+
+	s.runCmd = func(work string, chunk TestChunk) []ANY {
 		args := []string{testToolHostPath, "run_custom_lint", "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--project-path", source(project).string(), "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--lint-name", check.Name, "--wrapper-script", check.Wrapper, "--depends", project, "--config", source(check.Config).string()}
+
+		for _, config := range check.ExtraConfigs {
+			args = append(args, "--config", source(config).string())
+		}
 
 		for _, r := range sortedResourceGlobals(resources) {
 			args = append(args, "--global-resource", r.Token.string())
 		}
 
-		for _, f := range check.Files {
-			args = append(args, source(f).string())
+		for _, param := range check.ExtraParams {
+			args = append(args, "--extra-param", param)
+		}
+
+		for i := chunk.index; i < len(check.Files); i += max(chunk.split, 1) {
+			args = append(args, source(check.Files[i]).string())
 		}
 
 		return testArgs(args)

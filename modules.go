@@ -796,6 +796,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	}
 
 	applyPythonAddIncl(modulePath, d, env)
+	d.collectPy2StyleCheck(env)
 	applyBuildInfoAddIncl(modulePath, d)
 	applyArchiveAddIncl(modulePath, d)
 	applyCythonHeaderAddIncl(modulePath, d)

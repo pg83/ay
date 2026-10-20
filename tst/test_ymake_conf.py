@@ -213,6 +213,7 @@ class ConfCommandLineTest(unittest.TestCase):
         target = presets(tree.recorded("dist-debug")["argv"])
         self.assertEqual(target, sorted(target))
         self.assertEqual(dict(target), {
+            "DISABLE_FLAKE8_MIGRATIONS": "yes",
             "CLANG20": "yes", "FAKEID": "sandboxing", "FORCE_NO_PIC": "yes", "IS_CROSS_SANITIZE": "yes",
             "OPENSOURCE": "yes", "SANDBOXING": "yes", "TP_FLAG": "x", "USER_DEFINE": "1", "YA": "yes",
         })
