@@ -401,6 +401,8 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			OnUse:          pbPE,
 		})
 
+		e.codegen.setMainOut(pbRef, pending.outputs)
+
 		return e.protoCCOutputs(pending.outputs)
 	}
 
@@ -570,6 +572,8 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			OnUse:          pbPE,
 		})
 	}
+
+	e.codegen.setMainOut(pbRef, pending.outputs)
 
 	return e.protoCCOutputs(pending.outputs)
 }

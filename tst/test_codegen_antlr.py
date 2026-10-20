@@ -67,6 +67,17 @@ class Antlr4CppTest(unittest.TestCase):
             self.assertIn("-Wno-unused-variable", compile_node["cmds"][0]["cmd_args"])
             self.assertIn(f"$(B)/mod/{base}.h", compile_node["inputs"])
 
+    def test_generated_sources_bring_the_lexer_main_output(self):
+        # devtools_ymake_bin reference: CmdLexer.cpp, the first output of the
+        # devtools/ymake/lang JV node, is an input of the CmdParser.cpp copy,
+        # of both .g4.cpp compiles and of cmd_parser.cpp including CmdLexer.h.
+        graph = lib.make(antlr_files(
+            "RUN_ANTLR4_CPP(Calc.g4 VISITOR)\nSRCS(use.cpp)\n",
+            {"mod/Calc.g4": "grammar Calc;\n", "mod/use.cpp": '#include "CalcBaseVisitor.h"\n'},
+        ), "mod")
+        for output in ("$(B)/mod/CalcParser.g4.cpp", "$(B)/mod/CalcParser.g4.cpp.o", "$(B)/mod/use.cpp.o"):
+            self.assertIn("$(B)/mod/CalcLexer.cpp", lib.node_by_output(graph, output)["inputs"], output)
+
     def test_combined_grammar_defaults_to_no_listener(self):
         graph = lib.make(antlr_files(
             "RUN_ANTLR4_CPP(Calc.g4)\n", {"mod/Calc.g4": "grammar Calc;\n"},

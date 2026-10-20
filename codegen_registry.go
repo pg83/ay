@@ -146,6 +146,14 @@ func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates []VFS) {
 	info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{templates})
 }
 
+func (r *CodegenRegistry) setMainOut(ref NodeRef, outputs []VFS) {
+	for _, out := range outputs {
+		if info := r.lookup(out); info != nil && info.ProducerRef == ref {
+			info.ProducerMainOut = outputs[0]
+		}
+	}
+}
+
 func (r *CodegenRegistry) lookup(path VFS) *GeneratedFileInfo {
 	if !path.isBuild() {
 		return nil

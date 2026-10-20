@@ -177,6 +177,8 @@ class InducedDepsTest(unittest.TestCase):
                 '$(S)/lib/base_gen.in',
                 '$(S)/ind/nested.h',
                 '$(B)/lib/base_gen.h',
+                # The main output by path only: its cpp-only induced deps stay out.
+                '$(B)/lib/base_gen.cpp',
             },
             inputs_of(graph, "$(B)/lib/use.cpp.o"),
         )

@@ -48,7 +48,10 @@ class EmitBaseCodegenTest(unittest.TestCase):
         graph = lib.make(files, "lib")
         compile_node = lib.node_by_output(graph, "$(B)/lib/use.cpp.o")
         self.assertIn("$(B)/lib/base_gen.h", compile_node["inputs"])
-        self.assertNotIn("$(B)/lib/base_gen.cpp", compile_node["inputs"])
+        # base_gen.cpp is the main output of the BC node: the yabs and search
+        # references list factor_slices_gen.cpp in every compile including
+        # kernel/factor_slices/factor_slices_gen.h.
+        self.assertIn("$(B)/lib/base_gen.cpp", compile_node["inputs"])
         self.assertIn("$(S)/lib/base_gen.in", compile_node["inputs"])
 
     def test_tool_reachability_keeps_hidden_split_codegen(self):

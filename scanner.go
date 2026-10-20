@@ -387,10 +387,6 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 
 	out = append(out, info.ClosureLeaves...)
 
-	if main := info.ProducerMainOut; main != 0 && main != vfsPath && s.parsers.registry.scansIncludes(vfsPath.relString()) {
-		out = append(out, main)
-	}
-
 	if len(info.GeneratorRefs) == 0 || bucket == parsedIncludesLocal {
 		return out
 	}
@@ -488,7 +484,27 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		}
 	}
 
+	if main := sc.mainOut(abs); main != 0 {
+		s.buckets.spliceOne(&sc.tjc.closure, main)
+	}
+
 	s.putClosure(abs, s.buckets.storeScratch(abs))
+}
+
+func (sc *ScanCtx) mainOut(v VFS) VFS {
+	s := sc.scanner
+
+	if !v.isBuild() {
+		return 0
+	}
+
+	info := s.codegen.lookup(v)
+
+	if info == nil || info.ProducerMainOut == v || !s.parsers.registry.scansIncludes(v.relString()) {
+		return 0
+	}
+
+	return info.ProducerMainOut
 }
 
 func (sc *ScanCtx) ensureClosure(abs VFS) {

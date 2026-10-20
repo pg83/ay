@@ -31,19 +31,21 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		parserCpp := build(outPrefix, parserBase, ".cpp")
 
 		e.register(GeneratedFileInfo{
-			OutputPath:     lexerCpp,
-			ProducerRef:    jvRef,
-			GeneratorRefs:  nil,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			OnUse:          pending,
+			OutputPath:      lexerCpp,
+			ProducerRef:     jvRef,
+			ProducerMainOut: lexerCpp,
+			GeneratorRefs:   nil,
+			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
+			OnUse:           pending,
 		})
 
 		e.register(GeneratedFileInfo{
-			OutputPath:     parserCpp,
-			ProducerRef:    jvRef,
-			GeneratorRefs:  nil,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			OnUse:          pending,
+			OutputPath:      parserCpp,
+			ProducerRef:     jvRef,
+			ProducerMainOut: lexerCpp,
+			GeneratorRefs:   nil,
+			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
+			OnUse:           pending,
 		})
 
 		for _, suffix := range []string{
@@ -53,11 +55,12 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			parserBase + "BaseVisitor.h",
 		} {
 			e.register(GeneratedFileInfo{
-				OutputPath:     build(outPrefix, suffix),
-				ProducerRef:    jvRef,
-				GeneratorRefs:  nil,
-				ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-				OnUse:          pending,
+				OutputPath:      build(outPrefix, suffix),
+				ProducerRef:     jvRef,
+				ProducerMainOut: lexerCpp,
+				GeneratorRefs:   nil,
+				ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
+				OnUse:           pending,
 			})
 		}
 
@@ -81,19 +84,21 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		parserCpp := build(outPrefix, base, "Parser.cpp")
 
 		e.register(GeneratedFileInfo{
-			OutputPath:     lexerCpp,
-			ProducerRef:    jvRef,
-			GeneratorRefs:  nil,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			OnUse:          pending,
+			OutputPath:      lexerCpp,
+			ProducerRef:     jvRef,
+			ProducerMainOut: lexerCpp,
+			GeneratorRefs:   nil,
+			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
+			OnUse:           pending,
 		})
 
 		e.register(GeneratedFileInfo{
-			OutputPath:     parserCpp,
-			ProducerRef:    jvRef,
-			GeneratorRefs:  nil,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			OnUse:          pending,
+			OutputPath:      parserCpp,
+			ProducerRef:     jvRef,
+			ProducerMainOut: lexerCpp,
+			GeneratorRefs:   nil,
+			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
+			OnUse:           pending,
 		})
 
 		for _, suffix := range []string{
@@ -103,11 +108,12 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			base + "BaseVisitor.h",
 		} {
 			e.register(GeneratedFileInfo{
-				OutputPath:     build(outPrefix, suffix),
-				ProducerRef:    jvRef,
-				GeneratorRefs:  nil,
-				ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-				OnUse:          pending,
+				OutputPath:      build(outPrefix, suffix),
+				ProducerRef:     jvRef,
+				ProducerMainOut: lexerCpp,
+				GeneratorRefs:   nil,
+				ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
+				OnUse:           pending,
 			})
 		}
 
