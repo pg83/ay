@@ -52,7 +52,11 @@ class EmitBaseCodegenTest(unittest.TestCase):
         # references list factor_slices_gen.cpp in every compile including
         # kernel/factor_slices/factor_slices_gen.h.
         self.assertIn("$(B)/lib/base_gen.cpp", compile_node["inputs"])
-        self.assertIn("$(S)/lib/base_gen.in", compile_node["inputs"])
+        # The two outputs share a $L/ACTION node holding the inputs
+        # (model/action_graph.cpp), so base_gen.in does not leak into them:
+        # none of the factor_slices_gen.h compiles in the references lists
+        # factor_slices_gen.in.
+        self.assertNotIn("$(S)/lib/base_gen.in", compile_node["inputs"])
 
     def test_tool_reachability_keeps_hidden_split_codegen(self):
         files = {

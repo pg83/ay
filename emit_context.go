@@ -301,12 +301,8 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 		}
 	}
 
-	if len(templates) > 0 {
-		templates = e.ctx.na.vfsList(templates...)
-
-		for _, output := range node.Outputs {
-			e.codegen.forwardTemplateInputs(output, templates)
-		}
+	if len(templates) > 0 && len(node.Outputs) == 1 {
+		e.codegen.forwardTemplateInputs(node.Outputs[0], e.ctx.na.vfsList(templates...))
 	}
 
 	if len(extra) == 0 {

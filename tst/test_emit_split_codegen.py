@@ -33,7 +33,11 @@ class EmitSplitCodegenTest(unittest.TestCase):
         ):
             node = lib.node_by_output(graph, output)
             self.assertEqual("$(B)/lib/factors_gen.0.cpp" in node["inputs"], output != "$(B)/lib/factor_names.cpp.o")
-            self.assertIn("$(S)/lib/factors_gen.in", node["inputs"])
+            # A multi-output command keeps its inputs on the $L/ACTION node
+            # (model/action_graph.cpp mainOutAsExtra), so the YMAKE-2169 .in
+            # leak (json_visitor.cpp) never reaches the outputs: no SPLIT_CODEGEN
+            # consumer in the yabs/basesearch references lists factors_gen.in.
+            self.assertNotIn("$(S)/lib/factors_gen.in", node["inputs"])
             if output != "$(B)/lib/factor_names.cpp.o":
                 self.assertNotIn("$(B)/lib/factors_gen.h", node["inputs"])
 

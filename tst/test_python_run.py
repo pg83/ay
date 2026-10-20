@@ -175,7 +175,7 @@ class RunPython3Test(unittest.TestCase):
             "$(B)/lib/shard0.cpp", "$(B)/lib/shard1.cpp", "$(B)/lib/shard.h",
         ])
         self.assertIn("$(B)/lib/proto.cpp", run["inputs"])
-        self.assertIn("$(S)/lib/proto.in", run["inputs"])
+        self.assertNotIn("$(S)/lib/proto.in", run["inputs"])
         self.assertIn(codegen["uid"], run["deps"])
         first = lib.node_by_output(graph, "$(B)/lib/shard0.cpp.o")
         self.assertEqual(lib.bucketed(first["inputs"], 1), ['$(B)/lib/shard0.cpp', '$(S)/lib/induced.h'])
