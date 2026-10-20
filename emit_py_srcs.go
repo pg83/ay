@@ -127,8 +127,15 @@ func (e *EmitContext) registerCollectPySrcs() {
 	module := instance.Path.relString()
 
 	for gi, group := range d.pySrcGroups {
+		var scope PyScope
+
+		keyPrefix := ""
+
 		for si, src := range group.Srcs {
-			scope := group.Scopes[si]
+			if si == 0 || group.Scopes[si] != scope {
+				scope = group.Scopes[si]
+				keyPrefix = pyResourceKeyPrefix(scope.TopLevel, scope.Namespace, module)
+			}
 
 			if d.usePython2 && extIsProto(src.relOrSelf().string()) {
 				throwFmt("PY_SRCS: %s: .proto sources of a Python 2 module are not modelled", module)
@@ -167,7 +174,7 @@ func (e *EmitContext) registerCollectPySrcs() {
 			e.enqueueSrc(SrcMeta{
 				Source: path.any(), Prio: stmtPrioDefault,
 				PyMeta: e.addPyMeta(PySourceMeta{
-					Module: e.pyModuleKey(scope, token.string()),
+					Module: e.pyModuleKey(keyPrefix, scope, token.string()),
 					Token:  token,
 					Group:  gi,
 					Kind:   kind,
@@ -177,18 +184,16 @@ func (e *EmitContext) registerCollectPySrcs() {
 	}
 }
 
-func (e *EmitContext) pyModuleKey(scope PyScope, src string) STR {
-	module := e.instance.Path.relString()
-
+func (e *EmitContext) pyModuleKey(keyPrefix string, scope PyScope, src string) STR {
 	if !e.d.usePython2 {
-		return internV(pyResourceKeyPrefix(scope.TopLevel, scope.Namespace, module), src)
+		return internV(keyPrefix, src)
 	}
 
 	if isProgramModuleType(e.d.moduleStmt.Name) && (src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
 		return strMain
 	}
 
-	return internStr(pythonModuleName(module, src, scope.TopLevel, scope.Namespace))
+	return internStr(pythonModuleName(e.instance.Path.relString(), src, scope.TopLevel, scope.Namespace))
 }
 
 func (e *EmitContext) pyYapycExt() string {
