@@ -122,6 +122,7 @@ func ownershipCheckNode(n *Node) {
 	ownershipCheckSlice("ForeignDepRefs", n.ForeignDepRefs, outSample)
 	ownershipCheckSlice("Resources", n.Resources, outSample)
 	ownershipCheckSlice("Inputs", n.Inputs, outSample)
+	ownershipCheckSlice("InputNames", n.InputNames, outSample)
 
 	for _, ch := range n.Inputs {
 		ownershipCheckSlice("Inputs.chunk", ch, outSample)

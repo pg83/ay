@@ -268,4 +268,8 @@ func (c *CanonBuf) writeNode(n *Node) {
 	for _, uri := range n.ResourceURIs {
 		c.writeSTR(uri)
 	}
+
+	for _, name := range n.InputNames {
+		c.writeSTR(name)
+	}
 }

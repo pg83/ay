@@ -183,6 +183,7 @@ var (
 	envUnix                         = internEnv("UNIX")
 	envUseAllSrcs                   = internEnv("USE_ALL_SRCS")
 	envUseDynamicCuda               = internEnv("USE_DYNAMIC_CUDA")
+	envValidateData                 = internEnv("VALIDATE_DATA")
 	envWithKotlinValue              = internEnv("WITH_KOTLIN_VALUE")
 	envXCODE                        = internEnv("XCODE")
 	envYASM_TEST_SUITE              = internEnv("YASM_TEST_SUITE")

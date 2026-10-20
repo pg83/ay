@@ -455,6 +455,7 @@ class ExecBuildTest(unittest.TestCase):
         longest = stats.split("\n\n")[0].splitlines()
         self.assertEqual(len(longest), 10)
         self.assertEqual(len(built_kinds(result.stderr)), 14)
+        self.assertNotIn("/lld.tar", ws.server.requests)
         archive = (ws.inst / "many" / "libmany.a").read_text()
         self.assertEqual(archive.count("obj s"), 10)
 

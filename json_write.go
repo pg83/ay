@@ -124,6 +124,20 @@ func appendNode(buf []byte, n *Node, fetchRefs *DenseMap[STR, NodeRef], dropSrcI
 		buf = appendVFSChunks(buf, n.Inputs)
 	}
 
+	if len(n.InputNames) > 0 {
+		buf = buf[:len(buf)-1]
+
+		for _, name := range n.InputNames {
+			if buf[len(buf)-1] != '[' {
+				buf = append(buf, ',')
+			}
+
+			buf = appendString(buf, name.string())
+		}
+
+		buf = append(buf, ']')
+	}
+
 	buf = append(buf, `,"kv":`...)
 	buf = appendKV(buf, *n.KV, n.KVExts)
 	buf = append(buf, `,"outputs":`...)

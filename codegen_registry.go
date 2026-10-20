@@ -242,7 +242,7 @@ func (r *CodegenRegistry) generatorRefsFor(closure Closure) []NodeRef {
 }
 
 func (r *CodegenRegistry) buildParsedFor(out VFS) ParsedIncludeSet {
-	if info := r.lookup(out); info != nil {
+	if info := r.use(out); info != nil {
 		return info.ParsedIncludes
 	}
 

@@ -171,6 +171,50 @@ class JavaProtoTest(unittest.TestCase):
 
 
 class JavaProgramTest(unittest.TestCase):
+    def test_run_java_archive_hash_unquotes_string_tokens(self):
+        files = self.tree()
+        files["gen/ya.make"] = (
+            'JAVA_LIBRARY_NON_SPLIT()\nSET(VALUE example)\n'
+            'RUN_JAVA_PROGRAM(Main "a b" \'c d\' "e\\f" --value="${VALUE}" '
+            'OUT_DIR out CLASSPATH app)\nEND()\n'
+        )
+        graph = lib.make(files, "gen")
+        salt = hashlib.md5(b'Main a b c d ef --value="example" OUT_DIR out CLASSPATH app').hexdigest()
+        lib.node_by_output(graph, f"$(B)/gen/out.{salt}.gentar")
+
+    def test_run_java_archive_hash_preserves_lexical_quotes(self):
+        files = self.tree()
+        files["gen/ya.make"] = (
+            'JAVA_LIBRARY_NON_SPLIT()\nSET(VALUE example)\n'
+            'RUN_JAVA_PROGRAM(Main --value="${VALUE}" OUT_DIR out CLASSPATH app)\nEND()\n'
+        )
+        graph = lib.make(files, "gen")
+        salt = hashlib.md5(b'Main --value="example" OUT_DIR out CLASSPATH app').hexdigest()
+        archive = lib.node_by_output(graph, f"$(B)/gen/out.{salt}.gentar")
+        self.assertEqual(archive["cmds"][1]["cmd_args"][-2:], ["Main", "--value=example"])
+
+    def test_run_java_input_directories_are_normalized_before_globbing(self):
+        files = self.tree()
+        files["gen/ya.make"] = (
+            "JAVA_LIBRARY_NON_SPLIT()\nRUN_JAVA_PROGRAM(Main IN_DIR ${CURDIR}/in.txt/.. OUT_DIR out CLASSPATH app)\nEND()\n"
+        )
+        archive = next(n for n in lib.make(files, "gen")["graph"] if n["kv"]["p"] == "RJ")
+        self.assertIn("$(S)/gen/in.txt", archive["inputs"])
+        self.assertFalse(any("/../" in p for p in archive["inputs"]))
+
+    def test_run_java_input_directories_can_cross_module_directory(self):
+        for directory in ("../../data", "../.."):
+            with self.subTest(directory=directory):
+                files = self.tree()
+                files["gen/sub/ya.make"] = (
+                    "JAVA_LIBRARY_NON_SPLIT()\n"
+                    f"RUN_JAVA_PROGRAM(Main IN_DIR {directory} OUT_DIR out CLASSPATH app)\nEND()\n"
+                )
+                files["data/in.txt"] = ""
+                archive = next(n for n in lib.make(files, "gen/sub")["graph"] if n["kv"]["p"] == "RJ")
+                self.assertIn("$(S)/data/in.txt", archive["inputs"])
+                self.assertFalse(any("/../" in p or "/./" in p for p in archive["inputs"]))
+
     def tree(self):
         return java_tree(**{
             "app/ya.make": "JAVA_PROGRAM()\nPEERDIR(contrib/java/x/a/1.0)\nJAVA_SRCS(SRCDIR src **/*)\nEND()\n",
@@ -325,6 +369,37 @@ def swig_jni_tree(**extra):
 
 
 class JavaSwigTest(unittest.TestCase):
+    def test_swig_ambiguous_includes_follow_first_processed_source(self):
+        for native_include, sources in ((False, "impl.cpp wrap.swg"), (True, "impl.cpp wrap.swg"), (True, "wrap.swg impl.cpp")):
+            for order in (("shared.i", "api.h"), ("api.h", "shared.i")):
+                with self.subTest(native_include=native_include, sources=sources, order=order):
+                    files = swig_jni_tree(**{
+                        "jni/ya.make": f"DLL_JAVA(probe)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS({sources})\nEND()\n",
+                        "jni/impl.cpp": ('#include "api.h"\n' if native_include else '') + "int impl;\n",
+                        "jni/wrap.swg": ''.join(f'%include "{name}"\n' for name in order),
+                        "jni/api.h": '#include "shared.i"\n',
+                        "jni/shared.i": '#include "nested.h"\n#ifdef SWIG\n%include "swigchild.swg"\n#endif\n',
+                        "jni/nested.h": "", "jni/swigchild.swg": "",
+                    })
+                    graph = lib.make(files, "jni")
+                    selected = "nested.h" if native_include or order[0] == "api.h" else "swigchild.swg"
+                    jsrc = lib.node_by_output(graph, "$(B)/jni/wrap.swg.jsrc")
+                    leaves = [p for p in jsrc["inputs"] if p in ("$(S)/jni/nested.h", "$(S)/jni/swigchild.swg")]
+                    self.assertEqual(leaves, [f"$(S)/jni/{selected}"])
+                    obj = lib.node_by_output(graph, "$(B)/jni/impl.cpp.pic.o")
+                    self.assertEqual("$(S)/jni/nested.h" in obj["inputs"], native_include)
+                    self.assertNotIn("$(S)/jni/swigchild.swg", obj["inputs"])
+
+    def test_header_includes_inherit_cpp_parser_for_ambiguous_extensions(self):
+        files = swig_jni_tree(**{
+            "jni/api.h": '#include "detail.i"\n',
+            "jni/detail.i": '#include "nested.h"\n',
+            "jni/nested.h": "",
+        })
+        graph = lib.make(files, "jni")
+        jsrc = lib.node_by_output(graph, "$(B)/jni/wrap.swg.jsrc")
+        self.assertIn("$(S)/jni/nested.h", jsrc["inputs"])
+
     def test_dll_java_wraps_a_swig_interface_for_jni_and_java(self):
         graph = lib.make(swig_jni_tree(), "jni")
         head = [
@@ -342,6 +417,7 @@ class JavaSwigTest(unittest.TestCase):
                      "$(S)/contrib/libs/jdk/include/jni.h", "$(S)/contrib/libs/jdk/include/jni_types.h"):
             self.assertIn(path, cpp["inputs"])
         compiled = lib.node_by_output(graph, "$(B)/jni/wrap_wrap.swg.cpp.pic.o")
+        self.assertIn("-Wno-deprecated-declarations", compiled["cmds"][0]["cmd_args"])
         for path in ("$(B)/jni/wrap_wrap.swg.cpp", "$(B)/jni/wrap_wrap.swg.h", "$(S)/jni/api.h", "$(B)/dep/gen.h"):
             self.assertIn(path, compiled["inputs"])
         so = lib.node_by_output(graph, "$(B)/jni/libjni-lib.so")
@@ -356,8 +432,8 @@ class JavaSwigTest(unittest.TestCase):
                          + ["--jsrc", "$(B)/jni/wrap.swg.jsrc"] + include + ["-o", "$(B)/jni/unused.cpp"])
         self.assertEqual(sorted(jsrc["inputs"]), sorted(cpp["inputs"]))
         gen = [n for n in graph["graph"] if "$(B)/dep/gen.h" in n["outputs"]]
-        self.assertEqual(len(gen), 2)
-        self.assertEqual({n["uid"] for n in gen} & set(cpp["deps"]) & set(jsrc["deps"]), set())
+        self.assertEqual(len(gen), 1)
+        self.assertEqual({n["uid"] for n in gen} & set(cpp["deps"]) & set(jsrc["deps"]), {gen[0]["uid"]})
 
         jv = jv_node(graph, "$(B)/jni/jni-lib.jar")
         prep = jv["cmds"][0]["cmd_args"]

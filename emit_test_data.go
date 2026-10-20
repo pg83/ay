@@ -1,6 +1,52 @@
 package main
 
-import "strings"
+import (
+	"os"
+	"path"
+	"regexp"
+	"strings"
+)
+
+var dataValidationResourceID = regexp.MustCompile(`^sbr:/?/?([0-9]+)=?.*`)
+
+func (ctx *GenCtx) dataValidationSuite(project string, data, env []string, globals []ResourceDecl) *TestSuite {
+	var ids []string
+
+	for _, entry := range data {
+		if match := dataValidationResourceID.FindStringSubmatch(entry); match != nil {
+			ids = append(ids, match[1])
+		}
+	}
+
+	if len(ids) == 0 {
+		return nil
+	}
+
+	ids = sortedUnique(ids)
+
+	s := &TestSuite{p: ctx.target, projectPath: project, name: "validate_data_sbr", testType: "validate_data_sbr", ciType: "test", size: "small", timeout: 60, env: env, globals: globals, network: "full", setupPythonpathEnv: true, supportsTestParameters: true, clearEnvironment: true, noRetries: true, runInputs: []VFS{source(project)}, inputNames: ids}
+
+	s.runCmd = func(work string, _ TestChunk) []ANY {
+		checker := "check_resource"
+
+		if ctx.tests.dist {
+			checker += " --verbose"
+		}
+
+		if token := os.Getenv("YA_TOKEN"); token != "" {
+			checker += " --token " + token
+		}
+
+		args := []string{testToolHostPath, "run_check", "--source-root", testSourceRoot, "--checker", checker, "--check-name", s.testType, "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--log-path", work + "/testing_out_stuff/run_check.log"}
+
+		args = append(args, ids...)
+		args = append(args, "--batch", "--batch-name", path.Base(project))
+
+		return testArgs(args)
+	}
+
+	return s
+}
 
 func (ctx *GenCtx) emitTestData(uri string) NodeRef {
 	id, _, _ := strings.Cut(strings.TrimPrefix(uri, "sbr://"), "=")

@@ -24,6 +24,27 @@ def compile_inputs(graph, output):
 
 
 class RunProgramTest(unittest.TestCase):
+    def test_swig_flags_follow_cpp_source_name_for_any_generator(self):
+        files = library("RUN_PROGRAM(tools/gen OUT api.swg.cxx api.swg.cpp api.swg.c ordinary.cpp)\n")
+        graph = lib.make(files, "lib")
+        for name in ("api.swg.cxx", "api.swg.cpp", "api.swg.c", "ordinary.cpp"):
+            with self.subTest(name=name):
+                args = lib.node_by_output(graph, f"$(B)/lib/{name}.o")["cmds"][0]["cmd_args"]
+                self.assertEqual(args.count("-Wno-deprecated-declarations"), int(name.endswith((".swg.cpp", ".swg.cxx"))))
+
+    def test_auxiliary_tools_induce_dependencies_on_generated_sources(self):
+        files = library("RUN_PROGRAM(tools/gen TOOL tools/plugin OUT out.cpp)\n")
+        lib.tool_program(files, "tools/plugin", "plugin")
+        files["tools/plugin/ya.make"] = files["tools/plugin/ya.make"].replace(
+            "END()", "INDUCED_DEPS(cpp ${ARCADIA_ROOT}/runtime/runtime.h)\nEND()"
+        )
+        files["runtime/runtime.h"] = '#include "detail.h"\n'
+        files["runtime/detail.h"] = ""
+        graph = lib.make(files, "lib")
+        compiled = lib.node_by_output(graph, "$(B)/lib/out.cpp.o")
+        self.assertIn("$(S)/runtime/runtime.h", compiled["inputs"])
+        self.assertIn("$(S)/runtime/detail.h", compiled["inputs"])
+
     def test_arguments_inputs_env_and_tools(self):
         files = library(
             "RUN_PROGRAM(tools/pre IN seed.txt STDOUT_NOAUTO stage.txt)\n"

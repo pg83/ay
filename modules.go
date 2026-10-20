@@ -391,6 +391,7 @@ type BundleEntry struct {
 	Target string
 	Name   string
 	Suffix string
+	Output string
 }
 
 type ResourceEntry struct {
@@ -1963,6 +1964,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.llvmBc = append(d.llvmBc, stmt)
 
+	case tokBundleOutput:
+		if len(v.Args) < 2 {
+			throwFmt("BUNDLE_OUTPUT expects a target and an output name")
+		}
+
+		name := v.Args[1].string()
+
+		if len(v.Args) >= 4 && v.Args[2].string() == "RENAME" {
+			name = v.Args[3].string()
+		}
+
+		d.bundles = append(d.bundles, BundleEntry{Target: v.Args[0].string(), Name: name, Output: v.Args[1].string()})
 	case tokBundle:
 
 		i := 0
@@ -2040,6 +2053,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokStyleCpp:
 		if d.noLint != "none" && d.noLint != "none_internal" {
 			d.peerdirs = append(d.peerdirs, strBuildPlatformClangFormat.any())
+		}
+	case tokStylePython:
+		if d.noLint != "none" && d.noLint != "none_internal" {
+			d.peerdirs = append(d.peerdirs, strBuildExternalResourcesBlack.any())
 		}
 	case tokStyleCppUserSessions:
 		env.setBool(envUseAllSrcs, true)

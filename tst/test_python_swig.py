@@ -49,6 +49,23 @@ def args(node):
 
 
 class SwigTest(unittest.TestCase):
+    def test_generated_input_parser_initializes_swig_metadata(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": (
+                "PY3_LIBRARY()\nPY_SRCS(SWIG_C wrap.swg)\n"
+                "CONFIGURE_FILE(${ARCADIA_BUILD_ROOT}/lib/wrap.swg.c bridge.h)\nSRCS(main.cpp)\nEND()\n"
+            ),
+            "lib/wrap.swg": '%header %{\n#include "nested.h"\n%}\n',
+            "lib/nested.h": "",
+            "lib/main.cpp": '#include "bridge.h"\n',
+        })
+        graph = lib.make(files, "lib")
+        compiled = lib.node_by_output(graph, "$(B)/lib/main.cpp.o")
+        self.assertIn("$(S)/lib/nested.h", compiled["inputs"])
+        producers = [n for n in graph["graph"] if "$(B)/lib/wrap.swg.c" in n["outputs"]]
+        self.assertEqual(len(producers), 1)
+
     def test_swig_c_sources_generate_wrapper_and_python_module(self):
         files = python_base()
         files.update({

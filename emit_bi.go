@@ -103,10 +103,6 @@ func (e *EmitContext) emitBuildInfoStmt() {
 		OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
 		ProducerRef:   biRef,
 		GeneratorRefs: nil,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(
-			IncludeDirective{kind: includeQuoted, target: includeTarget(buildInfoGenPyVFS.rel().any())},
-			IncludeDirective{kind: includeQuoted, target: includeTarget(xargsPyVFS.rel().any())},
-			IncludeDirective{kind: includeQuoted, target: includeTarget(yieldLinePyVFS.rel().any())})},
-		OnUse: pending,
+		OnUse:         pending,
 	})
 }

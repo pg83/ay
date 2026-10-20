@@ -36,6 +36,13 @@ type NotsModule struct {
 	ProtoDeps         string
 	AutoProto         bool
 	ProtoNonRecursive bool
+	ESLintConfig      string
+	Typecheck         bool
+	TypecheckConfig   string
+	StylelintConfig   string
+	BiomeConfig       string
+	TestData          []string
+	ConfigChanged     bool
 }
 
 type NotsCheck struct {
@@ -104,6 +111,28 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule) bool {
 		if len(args) > 0 {
 			c.TestConfig = args[0]
 		}
+	case "TS_ESLINT_CONFIG":
+		if len(args) > 0 {
+			c.ESLintConfig = args[0]
+		}
+	case "TS_TYPECHECK":
+		c.Typecheck = true
+
+		if len(args) > 0 {
+			c.TypecheckConfig = args[0]
+		}
+	case "NO_TS_TYPECHECK":
+		c.Typecheck = false
+	case "TS_STYLELINT":
+		if len(args) > 0 {
+			c.StylelintConfig = args[0]
+		}
+	case "TS_BIOME":
+		if len(args) > 0 {
+			c.BiomeConfig = args[0]
+		}
+	case "TS_TEST_DATA":
+		c.TestData = append(c.TestData, args...)
 	case "INCLUDE_TAGS":
 		c.IncludeTags = append(c.IncludeTags, args...)
 	case "TS_PROTO_OPT":
@@ -151,6 +180,7 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule) bool {
 		c.Excludes = append(c.Excludes, args...)
 	case "TS_CONFIG":
 		c.Configs = args
+		c.ConfigChanged = true
 
 		if c.Kind == tokTsTsc {
 			c.setTSCCommand()
@@ -205,7 +235,11 @@ func (e *EmitContext) notsPeerInstance(dir string) ModuleInstance {
 }
 
 func (e *EmitContext) notsBaseArgs(pj map[string]any) ([]string, []ResourceDecl) {
-	pm, c := e.ctx.parsers, e.d.nots
+	return e.notsBaseArgsFor(pj, e.d.nots)
+}
+
+func (e *EmitContext) notsBaseArgsFor(pj map[string]any, c *NotsModule) ([]string, []ResourceDecl) {
+	pm := e.ctx.parsers
 	version := pm.notsVersion("nodejs", notsString(notsObject(pj["engines"])["node"]))
 	parts := notsVersionParts(version)
 
@@ -215,7 +249,8 @@ func (e *EmitContext) notsBaseArgs(pj map[string]any) ([]string, []ResourceDecl)
 
 	node := e.notsResource("build/platform/nodejs/"+version, "NODEJS_"+strings.ReplaceAll(version, ".", "_"))
 	pnpm := e.notsResource("build/external_resources/pnpm", "PNPM")
-	globals := []ResourceDecl{node, pnpm}
+	nodeResources := genModule(e.ctx, e.derivePeerInstance("build/platform/nodejs/"+version))
+	globals := append(slices.Clone(nodeResources.ResourceGlobalClosure), pnpm)
 	local := "no"
 
 	if c.LocalCLI {
@@ -281,6 +316,8 @@ type NotsPrepared struct {
 	ToolRef         NodeRef
 	ToolPath        VFS
 	HasDependencies bool
+	SourceFiles     []VFS
+	SourcesLoaded   bool
 }
 
 func notsResult(output VFS, ref NodeRef, c *NotsModule, globals []ResourceDecl) *ModuleEmitResult {
@@ -328,6 +365,8 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	var prepInputs []VFS
 
 	addPeer := func(result *ModuleEmitResult) {
+		globals = append(globals, result.ResourceGlobalClosure...)
+
 		if result.ARPath == nil {
 			return
 		}
@@ -459,6 +498,9 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	}
 
 	prepRef := e.emitNotsNode(prep)
+
+	globals = e.notsTestGlobals(globals)
+
 	state := &NotsPrepared{Head: head, Globals: globals, ResourceNames: resourceNames, ToolRef: toolRef, ToolPath: toolPath, HasDependencies: hasDeps}
 	info := e.codegen.lookup(output)
 
@@ -545,8 +587,12 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	foreignRefs := []NodeRef{toolRef}
 
 	if c.Kind == tokProtoLibrary {
-		protoArgs, protoInputs, protoRefs, protoLeaves, protocRef := e.notsProtoInputs()
+		protoArgs, protoInputs, protoRefs, protoLeaves, protocRef, protoGlobals := e.notsProtoInputs()
+		builtState := *state
 
+		globals = e.notsTestGlobals(append(slices.Clone(globals), protoGlobals...))
+		builtState.Globals = globals
+		state = &builtState
 		foreignRefs = append(foreignRefs, protocRef)
 		args = append(args, protoArgs...)
 		inputs = append(inputs, protoInputs...)
@@ -572,7 +618,9 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 		}
 	}
 
-	inputs = append(inputs, notsSourceFiles(ctx.fs, dir, c.Outputs, c.Excludes)...)
+	sourceFiles := e.notsFiles(dir, c.Outputs, c.Excludes)
+
+	inputs = append(inputs, sourceFiles...)
 
 	if c.Kind != tokProtoLibrary {
 		inputs = append(inputs, source(dir, "/ya.make"), source(dir, "/package.json"))
@@ -600,7 +648,11 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	info.GeneratorRefs = dedupRefs(append(slices.Clone(peerRefs), prepRef))
 	info.ClosureLeaves = dedup(buildLeaves)
 
-	return notsResult(output, ref, c, globals)
+	result := notsResult(output, ref, c, globals)
+
+	result.TestSuites = e.notsBuildSuites(dir, state, sourceFiles)
+
+	return result
 }
 
 func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
@@ -674,8 +726,11 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 
 	output := build(dir, "/", name)
 	ref := e.emitNotsTouch(output, na.refList(dedupRefs(refs)...), inputs, &KV{P: kind, PC: pcMagenta})
+	emitted := notsResult(output, ref, c, result.ResourceGlobalClosure)
 
-	return notsResult(output, ref, c, result.ResourceGlobalClosure)
+	emitted.TestSuites = e.notsForSuites(target, result.ResourceGlobalClosure)
+
+	return emitted
 }
 
 func (e *EmitContext) notsTestInputs(target string) []VFS {
@@ -784,19 +839,7 @@ func notsGlob(pattern string) *regexp.Regexp {
 	return regexp.MustCompile(b.String())
 }
 
-func notsSourceFiles(fs FS, dir string, outputs, excludes []string) []VFS {
-	patterns := append(slices.Clone(notsBaseExcludes), excludes...)
-
-	for _, output := range outputs {
-		patterns = append(patterns, strings.Trim(output, "/")+"/**/*")
-	}
-
-	var filters []*regexp.Regexp
-
-	for _, pattern := range patterns {
-		filters = append(filters, notsGlob(pattern))
-	}
-
+func notsAllSourceFiles(fs FS, dir string) []VFS {
 	var files []VFS
 
 	fs.walk(dir, func(rel string, isDir bool) bool {
@@ -804,12 +847,6 @@ func notsSourceFiles(fs FS, dir string, outputs, excludes []string) []VFS {
 
 		if isDir {
 			return local != "node_modules" && local != ".idea" && local != ".vscode"
-		}
-
-		for _, filter := range filters {
-			if filter.MatchString(local) {
-				return false
-			}
 		}
 
 		files = append(files, source(rel))

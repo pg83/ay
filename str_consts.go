@@ -141,6 +141,7 @@ var (
 	strBindir                                                                                = internStr("--bindir")
 	strBisonPkgData                                                                          = internStr("$(S)/contrib/tools/bison/data")
 	strBuildExternalResourcesFlake8Py2                                                       = internStr("build/external_resources/flake8_py2")
+	strBuildExternalResourcesBlack                                                           = internStr("build/external_resources/black")
 	strBuildInducedByBison                                                                   = internStr("build/induced/by_bison")
 	strBuildInternalPlatformCuda                                                             = internStr("build/internal/platform/cuda")
 	strBuildPlatformClang                                                                    = internStr("build/platform/clang")

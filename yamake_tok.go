@@ -313,6 +313,7 @@ var tokName = [...]STR{
 	tokArchiveByKeys:                  internStr("ARCHIVE_BY_KEYS"),
 	tokBisonFlags:                     internStr("BISON_FLAGS"),
 	tokBundle:                         internStr("BUNDLE"),
+	tokBundleOutput:                   internStr("BUNDLE_OUTPUT"),
 	tokCppEnumsSerialization:          internStr("CPP_ENUMS_SERIALIZATION"),
 	tokDecimalMd5Lower32Bits:          internStr("DECIMAL_MD5_LOWER_32_BITS"),
 	tokDefaultJdkVersion:              internStr("DEFAULT_JDK_VERSION"),
@@ -667,6 +668,7 @@ const (
 	tokArchiveByKeys
 	tokBisonFlags
 	tokBundle
+	tokBundleOutput
 	tokCppEnumsSerialization
 	tokDecimalMd5Lower32Bits
 	tokDefaultJdkVersion

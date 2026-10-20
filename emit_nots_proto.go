@@ -5,10 +5,12 @@ import (
 	"strings"
 )
 
-func (e *EmitContext) notsProtoInputs() (args []string, inputs []VFS, refs []NodeRef, leaves []VFS, toolRef NodeRef) {
+func (e *EmitContext) notsProtoInputs() (args []string, inputs []VFS, refs []NodeRef, leaves []VFS, toolRef NodeRef, globals []ResourceDecl) {
 	ctx, d, c := e.ctx, e.d, e.d.nots
 	dir := e.instance.Path.relString()
 	span := descPeerClosure(ctx, e.instance, d.peerdirs, false, false)
+
+	globals = span.globals
 
 	for _, peer := range span.peers {
 		refs = append(refs, peer.MergeRef)
