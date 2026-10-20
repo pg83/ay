@@ -12,6 +12,7 @@ var (
 	goReflectorTool = "library/go/mockgen/reflector"
 	strGoModRel     = "go.mod"
 	strGoModulesTxt = "vendor/modules.txt"
+	mergeSdcmetaVFS = source(mergeSdcmetaRel)
 )
 
 var goCodegenKVs = [...]KV{

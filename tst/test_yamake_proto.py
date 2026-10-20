@@ -21,6 +21,7 @@ PROTO_LIBRARIES = [
     "dep/p2a",
     "dep/p2b",
     "library/cpp/eventlog",
+    "sdg/sdc/ros/configuration/golaunch/topology/common_deps",
     "yandex_io/libs/protobuf_utils",
 ]
 PROTO_TOOLS = [
@@ -29,6 +30,7 @@ PROTO_TOOLS = [
     "contrib/tools/protoc/plugins/cpp_styleguide",
     "contrib/tools/protoc/plugins/grpc_cpp",
     "library/cpp/yaff/tools/protoc_plugin",
+    "sdg/sdc/ros/configuration/golaunch/topology/generator",
     "tools/event2cpp",
     "tools/p0",
     "tools/p1",
@@ -128,6 +130,17 @@ class YaMakeProtoTest(unittest.TestCase):
             "--cpp_plugin_opt=item_dispatcher=disp",
             "--cpp_plugin_opt=item_dispatcher_header=disp.h",
             "--alice_capability_cpp_out=$(B)/", "--event2cpp_out=$(B)/",
+        ):
+            self.assertIn(expected, args)
+
+    def test_generate_topology_is_a_cpp_proto_plugin(self):
+        graph = self.make("GENERATE_TOPOLOGY(ROS_MESSAGE_HEADERS m/a m/b)\n")
+        protoc = lib.only_node_by_kind(graph, "PB")
+        self.assertIn("$(B)/a/x.topology.pb.h", protoc["outputs"])
+        args = protoc["cmds"][0]["cmd_args"]
+        for expected in (
+            "--plugin=protoc-gen-golaunch_generator=$(B)/sdg/sdc/ros/configuration/golaunch/topology/generator/generator",
+            "--golaunch_generator_out=$(B)/", "--golaunch_generator_opt=m/a", "--golaunch_generator_opt=m/b",
         ):
             self.assertIn(expected, args)
 

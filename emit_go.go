@@ -96,12 +96,13 @@ var goSymabisDefs = []ANY{
 }
 
 const (
-	goConfRel      = "build/conf/go.conf"
-	ldConfRel      = "build/conf/linkers/ld.conf"
-	goArcPrefix    = "a.yandex-team.ru/"
-	goToolsPeer    = "build/external_resources/go_tools"
-	goYolintPeer   = "build/external_resources/yolint"
-	goVendorPrefix = "vendor"
+	goConfRel       = "build/conf/go.conf"
+	ldConfRel       = "build/conf/linkers/ld.conf"
+	mergeSdcmetaRel = "build/internal/scripts/merge_sdcmeta.py"
+	goArcPrefix     = "a.yandex-team.ru/"
+	goToolsPeer     = "build/external_resources/go_tools"
+	goYolintPeer    = "build/external_resources/yolint"
+	goVendorPrefix  = "vendor"
 )
 
 type GoStd struct {
@@ -1175,10 +1176,17 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 
 	embedArgs, embedInputs := goEmbedArgs(na, d.goEmbeds)
 
+	var sdcInputs []VFS
+
+	if d.setVars[strUSE_SDC_META] == strYes {
+		sdcInputs = na.vfsList(mergeSdcmetaVFS)
+	}
+
 	inputs := na.inputList(
 		na.vfsList(goFiles...),
 		testInputs,
 		embedInputs,
+		sdcInputs,
 		goToolScriptInputsChunk,
 		dllInputs,
 		peerGlobalPaths,
@@ -1239,7 +1247,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		sbomObjcopyCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(na, d.tc, sbomJSON, outPath)), Env: goVcsEnv}
 	}
 
-	cmds := na.cmds.alloc(7)
+	cmds := na.cmds.alloc(8)
 	kc := 0
 	pushCmd := func(c Cmd) { cmds[kc] = c; kc++ }
 
@@ -1264,6 +1272,13 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 
 		pushCmd(Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), copyFsToolsVFS.any(), strFsToolsCopy.any(), build(dir, "/_cgo_export.h").any(), header.any())), Env: goVcsEnv})
 		outputs = na.vfsList(outPath, build(dir, "/", outName, ".vet.txt"), header)
+	}
+
+	if d.setVars[strUSE_SDC_META] == strYes {
+		sdcmeta := build(dir, "/", programBinaryName(instance, d.moduleStmt), ".sdcmeta")
+
+		pushCmd(Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), mergeSdcmetaVFS.any(), strB.any(), sdcmeta.any())), Env: goVcsEnv})
+		outputs = na.vfsList(concat(outputs, []VFS{sdcmeta})...)
 	}
 
 	na.cmds.commit(kc)

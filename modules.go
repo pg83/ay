@@ -103,7 +103,10 @@ func (p CppProtoPlugin) processesFile(protoBaseName string) bool {
 
 func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
 	d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
-	d.peerdirs = append(d.peerdirs, internAnys(plugin.Deps)...)
+
+	if !isGoModuleType(d.unit.Type) {
+		d.peerdirs = append(d.peerdirs, internAnys(plugin.Deps)...)
+	}
 }
 
 func protoCmdPeers(d *ModuleData) []ANY {
@@ -2063,6 +2066,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyProtoNamespace(d, v.Args[len(v.Args)-1])
 	case tokProtoAddIncl:
 		applyProtoAddIncl(d, v.Args)
+	case tokUseSdcMeta:
+		if d.setVars == nil {
+			d.setVars = map[STR]STR{}
+		}
+
+		d.setVars[strUSE_SDC_META] = strYes
 	case tokGoPackageName:
 		if d.setVars == nil {
 			d.setVars = map[STR]STR{}
@@ -2596,6 +2605,16 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
+	case tokGenerateTopology:
+		_, lists := goMacroLists(v.Args, "ROS_MESSAGE_HEADERS")
+
+		addCPPProtoPlugin(d, CppProtoPlugin{
+			Name:           "golaunch_generator",
+			ToolPath:       "sdg/sdc/ros/configuration/golaunch/topology/generator",
+			OutputSuffixes: []string{".topology.pb.h"},
+			Deps:           []string{"sdg/sdc/ros/configuration/golaunch/topology/common_deps"},
+			ExtraOutFlag:   strings.Join(anyStrs(lists["ROS_MESSAGE_HEADERS"]), ","),
+		})
 	case tokAliceCapability:
 		addCPPProtoPlugin(d, CppProtoPlugin{
 			Name:           "alice_capability_cpp",

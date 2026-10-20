@@ -146,6 +146,17 @@ class GoPackageGraphTest(unittest.TestCase):
         self.assertIn(f"{s}/templates/a/deep/y.tmpl", package["inputs"])
         self.assertIn(f"{s}/one.txt", package["inputs"])
 
+    def test_use_sdc_meta_merges_sdcmeta_after_the_go_link(self):
+        files = go_world()
+        go_module(files, "cmd/sdc", macros="USE_SDC_META()\n", module="GO_PROGRAM")
+        graph = lib.make(files, "cmd/sdc")
+        link = lib.node_by_output(graph, "$(B)/cmd/sdc/sdc")
+        self.assertEqual(link["outputs"], ["$(B)/cmd/sdc/sdc", "$(B)/cmd/sdc/sdc.vet.txt", "$(B)/cmd/sdc/sdc.sdcmeta"])
+        self.assertEqual(link["cmds"][-1]["cmd_args"][1:], [
+            "$(S)/build/internal/scripts/merge_sdcmeta.py", "$(B)", "$(B)/cmd/sdc/sdc.sdcmeta",
+        ])
+        self.assertIn("$(S)/build/internal/scripts/merge_sdcmeta.py", link["inputs"])
+
     def test_program_link_partitions_direct_transitive_and_cxx_archives(self):
         files = go_world()
         go_module(files, f"{STD}/fmt", 'import (\n\t"internal/fmtsort"\n\t"golang.org/x/text/width"\n)\n')
