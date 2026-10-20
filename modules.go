@@ -1117,7 +1117,11 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				d.unit.HashTag = strPy3ProtoFromSchema
 			}
 
-			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
+			d.moduleStmt = moduleStmtForKind(v, d.unit)
+
+			if v.Name == tokPy23Test && language != LangPy2 {
+				d.moduleVariants = 1 << LangPy2
+			}
 
 			if v.Name == tokProtoDescriptions || v.Name == tokProtoRegistry {
 				env.setStringID(envMODULE_TAG, v.Name.str())
@@ -1587,11 +1591,13 @@ type ModuleUnit struct {
 	HashTag          STR
 	CCTag            STR
 	ObjSuf           STR
+	ModulePrefix     string
 	ARPrefix         string
 	GlobalARTag      STR
 	SbomLang         STR
 	SwigLang         STR
 	ObjectSuffixStem string
+	TestLD           bool
 }
 
 func swigJNIPeerdirs(srcs []ANY, env Environment) []ANY {
@@ -1645,7 +1651,15 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	}
 
 	if name == tokYqlUdfTest {
-		name = tokPy3Test
+		return ModuleUnit{Type: tokPy3Test, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
+	}
+
+	if name == tokPy23Test {
+		if language == LangPy2 {
+			return ModuleUnit{Type: tokPytestBin, Tag: unitTagPy2, ObjSuf: tagPy2, ModulePrefix: "py2_", ARPrefix: "libpy", GlobalARTag: tagGlobal, SbomLang: unitSbomPy2}
+		}
+
+		return ModuleUnit{Type: tokPy3Test, Tag: unitTagPy3, ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3, TestLD: true}
 	}
 
 	if name == tokPy3Program && kind == KindLib {
@@ -1669,8 +1683,12 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return ModuleUnit{Type: name, Tag: unitTagPy2, ARPrefix: "libpy", GlobalARTag: tagGlobal, SbomLang: unitSbomPy2}
 	case tokPy2Module:
 		return ModuleUnit{Type: name, Tag: unitTagPy2Native, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
-	case tokPy3ProgramBin, tokPy3Test:
+	case tokPy3ProgramBin:
 		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
+	case tokPy3Test:
+		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3, TestLD: true}
+	case tokUnittest, tokUnittestFor, tokGtest:
+		return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp, TestLD: true}
 	case tokPy3Library:
 		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy2Library:
@@ -1698,14 +1716,23 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 }
 
-func moduleStmtForKind(stmt *ModuleStmt, unitType TOK) *ModuleStmt {
-	if stmt.Name == unitType {
+func (u ModuleUnit) objectSuffix(p *Platform) string {
+	if u.ObjSuf == 0 {
+		return p.objectSuffix()
+	}
+
+	return "." + u.ObjSuf.string() + p.objectSuffix()
+}
+
+func moduleStmtForKind(stmt *ModuleStmt, unit ModuleUnit) *ModuleStmt {
+	if stmt.Name == unit.Type && unit.ModulePrefix == "" {
 		return stmt
 	}
 
 	out := *stmt
 
-	out.Name = unitType
+	out.Name = unit.Type
+	out.Prefix = unit.ModulePrefix
 
 	return &out
 }
@@ -2054,10 +2081,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokStyleCpp:
 		if d.noLint != "none" && d.noLint != "none_internal" {
 			d.peerdirs = append(d.peerdirs, strBuildPlatformClangFormat.any())
-		}
-	case tokStylePython:
-		if d.noLint != "none" && d.noLint != "none_internal" {
-			d.peerdirs = append(d.peerdirs, strBuildExternalResourcesBlack.any())
 		}
 	case tokStyleCppUserSessions:
 		env.setBool(envUseAllSrcs, true)
@@ -3715,7 +3738,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokPy3Test, tokPy2Test, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokGoProgram, tokGoTest, tokGoDll:
+	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokPy3Test, tokPy2Test, tokPytestBin, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokGoProgram, tokGoTest, tokGoDll:
 		return true
 	}
 
@@ -3724,7 +3747,7 @@ func isProgramModuleType(name TOK) bool {
 
 func isPyProgramType(name TOK) bool {
 	switch name {
-	case tokPy2Program, tokPy2Test, tokPy3Program, tokPy3ProgramBin, tokPy3Test:
+	case tokPy2Program, tokPy2Test, tokPytestBin, tokPy3Program, tokPy3ProgramBin, tokPy3Test:
 		return true
 	}
 
@@ -3750,7 +3773,7 @@ func yqlUdfImplicitPeers() []string {
 func isPyLibraryType(name TOK) bool {
 	switch name {
 	case tokPy23NativeLibrary, tokPy3Library, tokPy23Library, tokPy2Library,
-		tokPy2Program, tokPy3Program, tokPy2Test, tokPy3Test:
+		tokPy2Program, tokPy3Program, tokPy2Test, tokPytestBin, tokPy3Test:
 		return true
 	}
 
@@ -3760,7 +3783,7 @@ func isPyLibraryType(name TOK) bool {
 func pyLibraryAutoPythonPeer(name TOK) bool {
 	switch name {
 	case tokPy3Library, tokPy23Library, tokPy2Library, tokPy3ProgramBin,
-		tokPy2Program, tokPy3Program, tokPy2Test, tokPy3Test:
+		tokPy2Program, tokPy3Program, tokPy2Test, tokPytestBin, tokPy3Test:
 		return true
 	}
 

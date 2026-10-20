@@ -99,6 +99,52 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	return suites
 }
 
+func (e *EmitContext) importTestSuites(binary VFS, ref NodeRef, globals []ResourceDecl) []*TestSuite {
+	d := e.d
+
+	if !e.ctx.testMode || !isPyProgramType(d.moduleStmt.Name) || d.noCheckImportsDisabled {
+		return nil
+	}
+
+	if e.instance.Platform.ifEnv.bool(envCppAnalysisMode) {
+		return nil
+	}
+
+	if sanitizer, _ := e.instance.Platform.ifEnv.lookup("SANITIZER_TYPE"); sanitizer != "" && sanitizer != "no" {
+		return nil
+	}
+
+	project := e.instance.Path.relString()
+
+	s := &TestSuite{p: e.ctx.target, projectPath: project, name: "import_test", testType: "import_test", ciType: "test", size: "small",
+		timeout: testSizeTimeouts["small"], runInputs: []VFS{source(project)}, checkFiles: []VFS{binary}, deps: depRefs(ref), globals: globals,
+		env: d.test.env, supportsTestParameters: true, smoothShutdown: []string{"SIGUSR2"}, importCheckEnv: true, noRetries: true}
+
+	skips := d.noCheckImports
+
+	s.runCmd = func(work string, _ TestChunk) []ANY {
+		out := work + "/testing_out_stuff"
+		checker := "run_pyimports --markup"
+
+		for _, skip := range skips {
+			checker += " --skip " + skip.string()
+		}
+
+		checker += " --trace-dir=" + out
+
+		args := []string{testToolHostPath, "run_check", "--source-root", testSourceRoot, "--checker", checker, "--check-name", "import_test",
+			"--trace-path", work + "/ytest.report.trace", "--out-path", out, "--log-path", out + "/run_check.log"}
+
+		for _, file := range s.checkFiles {
+			args = append(args, file.string())
+		}
+
+		return testArgs(append(args, "--no-snippet-from-stdout"))
+	}
+
+	return []*TestSuite{s}
+}
+
 func (s *TestSuite) applyTestMeta(meta TestMeta, addSource bool) {
 	s.size = cmp.Or(meta.size, "small")
 	s.timeout = meta.timeout

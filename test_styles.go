@@ -34,7 +34,7 @@ func (d *ModuleData) collectPythonStyleChecks(env Environment) {
 	name := ""
 
 	switch d.moduleStmt.Name {
-	case tokPy2Program, tokPy2Library, tokPy2Test:
+	case tokPy2Program, tokPy2Library, tokPy2Test, tokPytestBin:
 		name = "py2_flake8"
 	case tokPy3Program, tokPy3ProgramBin, tokPy3Library, tokPy23Library, tokPy3Test:
 		name = "flake8"
@@ -109,6 +109,13 @@ func pythonStyleCheck(name string, env Environment) StyleCheck {
 }
 
 func (d *ModuleData) collectExplicitPythonStyle(stmt UnknownStmt, env Environment) {
+	if stmt.Name == tokStylePython && d.moduleStmt != nil {
+		switch d.moduleStmt.Name {
+		case tokPy2Program, tokPy2Test, tokPy2Library:
+			return
+		}
+	}
+
 	name := "black"
 
 	if stmt.Name == tokStyleRuff {
@@ -262,6 +269,12 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 		}
 	}
 
+	for _, stmt := range e.d.cythonCpp {
+		if stmt.Generated == nil && extIsPy(stmt.Src) {
+			pythonFiles = append(pythonFiles, e.instance.Path.relString()+"/"+stmt.Src)
+		}
+	}
+
 	pythonFiles = sortedUnique(pythonFiles)
 
 	for _, check := range e.d.styleChecks {
@@ -275,6 +288,12 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 			if check.ConfigType != "" {
 				if check.ConfigType != "pyproject.toml" && (check.Name != "ruff" || check.ConfigType != "ruff.toml") {
 					throwFmt("STYLE: unknown %s config type %s", check.Name, check.ConfigType)
+				}
+
+				if check.ConfigDir == "" {
+					if inc, ok := e.ctx.autoincludeIdx.lintersMakeIncFor(e.instance.Path.relString()); ok {
+						check.ConfigDir = path.Dir(inc.relString())
+					}
 				}
 
 				if check.ConfigDir == "" {

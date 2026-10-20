@@ -319,6 +319,17 @@ class CythonTest(unittest.TestCase):
         self.assertNotIn("$(S)/lib/shared.pxd", user["inputs"])
         self.assertIn(exported["uid"], user["deps"])
 
+    def test_cythonized_python_sources_are_linted_like_plain_ones(self):
+        files = python_base()
+        files.update({
+            "cy/ya.make": "PY3_LIBRARY()\nPY_SRCS(plain.py)\nPY_SRCS(CYTHONIZE_PY fast.py)\nEND()\n",
+            "cy/plain.py": "",
+            "cy/fast.py": "",
+        })
+        graph = lib.make(files, "cy", "-t", opensource=False)
+        lint = lib.node_by_output(graph, "$(B)/cy/test-results/flake8/meta.json")["cmds"][0]["cmd_args"]
+        self.assertEqual(lint[-2:], ["$(S)/cy/fast.py", "$(S)/cy/plain.py"])
+
     def test_buildwith_cython_without_cflags(self):
         files = python_base()
         files.update({

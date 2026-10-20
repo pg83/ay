@@ -21,7 +21,7 @@ func testSuiteName(name TOK) string {
 		return "exectest"
 	case tokPy3Test:
 		return "py3test"
-	case tokPy2Test:
+	case tokPy2Test, tokPytestBin:
 		return "pytest"
 	case tokGBenchmark:
 		return "g_benchmark"

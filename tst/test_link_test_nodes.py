@@ -114,6 +114,7 @@ class TestNodesTest(unittest.TestCase):
         )
 
         binary = lib.node_by_output(graph, "$(B)/lib/ut/lib-ut")
+        self.assertEqual(binary["kv"]["ld_test_node"], "1")
         run = lib.node_by_output(graph, suite_outputs("unittest")[0])
         self.assertEqual(run["outputs"], suite_outputs("unittest"))
         self.assertCountEqual(run["deps"], [binary["uid"], context["uid"]])
@@ -182,12 +183,12 @@ class TestNodesTest(unittest.TestCase):
         )
 
     def test_cpp_suites_select_runners_and_metadata(self):
-        for macro, name, runner, peers in [
-            ("UNITTEST", "unittest", "run_ut", ["unittest_main"]),
-            ("UNITTEST_WITH_CUSTOM_ENTRY_POINT", "unittest", "run_ut", []),
-            ("GTEST", "gtest", "run_ut", ["gtest", "gtest_main"]),
-            ("G_BENCHMARK", "tests", "run_g_benchmark", ["gbenchmark"]),
-            ("FUZZ", "fuzz", "run_fuzz", ["nofuzz", "contrib/libs/libfuzzer"]),
+        for macro, name, runner, peers, test_ld in [
+            ("UNITTEST", "unittest", "run_ut", ["unittest_main"], True),
+            ("UNITTEST_WITH_CUSTOM_ENTRY_POINT", "unittest", "run_ut", [], False),
+            ("GTEST", "gtest", "run_ut", ["gtest", "gtest_main"], True),
+            ("G_BENCHMARK", "tests", "run_g_benchmark", ["gbenchmark"], False),
+            ("FUZZ", "fuzz", "run_fuzz", ["nofuzz", "contrib/libs/libfuzzer"], False),
         ]:
             with self.subTest(macro=macro):
                 files = {
@@ -216,6 +217,8 @@ class TestNodesTest(unittest.TestCase):
                 self.assertIn(tool["uid"], run["deps"])
                 binary = next(n for n in graph["graph"] if n.get("kv", {}).get("p") == "LD" and n["outputs"][0].startswith("$(B)/tests/"))
                 self.assertNotIn(tool["uid"], binary["deps"])
+                kv = {"p": "LD", "pc": "light-blue", "show_out": "yes"}
+                self.assertEqual(binary["kv"], {**kv, "ld_test_node": "1"} if test_ld else kv)
 
     def test_python_test_sources_use_tests_namespace_and_pytest_entrypoint(self):
         for macro in ("PY3TEST", "PY2TEST"):
@@ -233,6 +236,7 @@ class TestNodesTest(unittest.TestCase):
                     lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
                 graph = lib.make(files, "a/ut", "-t")
                 binary = lib.node_by_output(graph, "$(B)/a/ut/a-ut")
+                self.assertEqual(binary["kv"].get("ld_test_node"), "1" if macro == "PY3TEST" else None)
                 all_args = [arg for n in graph["graph"] for cmd in n["cmds"] for arg in cmd["cmd_args"]]
                 self.assertIn("__tests__/test_sample.py" if macro == "PY3TEST" else "/py_modules/__tests__.test_sample", " ".join(all_args))
                 self.assertIn("PY_MAIN=library.python.pytest.main:main", " ".join(all_args))

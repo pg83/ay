@@ -282,6 +282,10 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 		ctx.genTarget(t, recursed[i], rootDemand)
 	}
 
+	for _, dir := range all {
+		ctx.emitConfiguredSubmoduleTests(dir)
+	}
+
 	if ctx.buckets.h1Mismatches > 0 {
 		onWarn(Warn{
 			Kind: WarnBucketHash,
@@ -429,9 +433,7 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 		ctx.emit.result(*root.GlobalRef)
 	}
 
-	ctx.genMultimoduleTargets(targetDir, root.ModuleVariants, rootDemand)
-
-	ctx.emitModuleTests(root)
+	ctx.emitModuleTests(append(ctx.genMultimoduleTargets(targetDir, root.ModuleVariants, rootDemand), root)...)
 
 	for _, dir := range recursed {
 		if name := ctx.moduleName(dir); isJavaModuleType(name) {
@@ -450,9 +452,7 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 			ctx.emit.result(sub.LDRef)
 		}
 
-		ctx.genMultimoduleTargets(dir, sub.ModuleVariants, rootDemand)
-
-		ctx.emitModuleTests(sub)
+		ctx.emitModuleTests(append(ctx.genMultimoduleTargets(dir, sub.ModuleVariants, rootDemand), sub)...)
 	}
 }
 
@@ -628,18 +628,74 @@ func (e *EmitContext) peerDemand() ModuleDemand {
 	return demandNone
 }
 
-func (ctx *GenCtx) emitModuleTests(r *ModuleEmitResult) {
-	if !ctx.testMode || r.testsEmitted {
+func (ctx *GenCtx) emitConfiguredSubmoduleTests(dir string) {
+	if !ctx.testMode {
 		return
 	}
 
-	r.testsEmitted = true
+	instance := ctx.rootInstance(dir, demandNone)
 
-	for _, s := range r.TestSuites {
+	switch ctx.moduleName(dir) {
+	case tokPy23Library:
+		instance.Language = LangPy2
+	case tokPy3Program:
+		instance.Kind = KindLib
+	default:
+		return
+	}
+
+	if r := ctx.memoGet(instance); r != nil {
+		ctx.emitModuleTests(r)
+	}
+}
+
+func (ctx *GenCtx) emitModuleTests(results ...*ModuleEmitResult) {
+	if !ctx.testMode {
+		return
+	}
+
+	var suites []*TestSuite
+
+	for _, r := range results {
+		if r.testsEmitted {
+			continue
+		}
+
+		r.testsEmitted = true
+
+		for _, s := range r.TestSuites {
+			if merged := mergeCheckSuite(suites, s); !merged {
+				suites = append(suites, s)
+			}
+		}
+	}
+
+	for _, s := range suites {
 		for _, ref := range ctx.emitTestSuite(s) {
 			ctx.emit.result(ref)
 		}
 	}
+}
+
+func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
+	if len(s.checkFiles) == 0 {
+		return false
+	}
+
+	for _, prev := range suites {
+		if prev.testType == s.testType && prev.projectPath == s.projectPath && len(prev.checkFiles) > 0 {
+			prev.checkFiles = append(prev.checkFiles, s.checkFiles...)
+			prev.deps = append(prev.deps, s.deps...)
+
+			slices.SortFunc(prev.checkFiles, func(a, b VFS) int { return strings.Compare(a.string(), b.string()) })
+
+			prev.checkFiles = slices.Compact(prev.checkFiles)
+
+			return true
+		}
+	}
+
+	return false
 }
 
 func discoverRecursedTargets(ctx *GenCtx, targetDir string) []string {
@@ -694,11 +750,11 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 	}
 
 	if moduleStmt != nil && len(moduleStmt.Args) > 0 {
-		return moduleStmt.Args[0].string()
+		return moduleStmt.Prefix + moduleStmt.Args[0].string()
 	}
 
 	if moduleStmt != nil && (isUnitTestModule(moduleStmt.Name) || isPythonTestModule(moduleStmt.Name)) {
-		return fullPathTestName(instance.Path.relString())
+		return moduleStmt.Prefix + fullPathTestName(instance.Path.relString())
 	}
 
 	return baseName(instance.Path.relString())
@@ -895,7 +951,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
 		}
 
-		if d.usePython2 && !instance.Platform.ifEnv.bool(envFAIL_PY2) && !instance.Platform.ifEnv.bool(envOPENSOURCE) {
+		if (d.moduleStmt.Name == tokPy2Program || d.moduleStmt.Name == tokPy2Test) && !instance.Platform.ifEnv.bool(envFAIL_PY2) && !instance.Platform.ifEnv.bool(envOPENSOURCE) {
 			earlyPeers = append(earlyPeers, "build/rules/py2_deprecation")
 		}
 
@@ -2377,6 +2433,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		result.SbomComponentPath = ownSbomPath
 		result.ResourceGlobalClosure = resourceGlobalsClosure
 		result.TestSuites = append(result.TestSuites, e.testRunSuites(ldPath, ldRef, resourceGlobalsClosure)...)
+		result.TestSuites = append(result.TestSuites, e.importTestSuites(ldPath, ldRef, resourceGlobalsClosure)...)
 
 		ctx.memoPut(instance, result)
 

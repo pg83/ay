@@ -24,7 +24,7 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 		peers = []string{"library/cpp/testing/unittest_main", "yt/cpp/mapreduce/tests/yt_initialize_hook"}
 	case tokGtest:
 		peers = []string{"library/cpp/testing/gtest", "library/cpp/testing/gtest_main"}
-	case tokPy3Test, tokPy2Test:
+	case tokPy3Test, tokPy2Test, tokPy23Test:
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
 	case tokYqlUdfTest:
 		peers = []string{"yql/essentials/tests/common/udf_test"}
@@ -90,5 +90,5 @@ func fullPathTestName(dir string) string {
 }
 
 func isPythonTestModule(name TOK) bool {
-	return name == tokPy3Test || name == tokPy2Test
+	return name == tokPy3Test || name == tokPy2Test || name == tokPytestBin
 }

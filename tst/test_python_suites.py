@@ -84,6 +84,13 @@ class PythonSuitesTest(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("config", result.stderr.lower())
 
+    def test_autoincluded_linter_selects_its_common_configuration(self):
+        files = fixture()
+        files["build/conf/autoincludes.json"] = '["lib"]'
+        files["lib/linters.make.inc"] = "STYLE_RUFF(CONFIG_TYPE ruff.toml)\n"
+        files["lib/ruff.toml"] = ""
+        self.assertEqual(values(lint(lib.make(files, "lib", "-t"), "ruff"), "--config"), ["$(S)/lib/ruff.toml"])
+
     def test_flake8_processing_time_chunks_unique_source_files(self):
         files = fixture("SET(FLAKE8_FILE_PROCESSING_TIME 31)\nPY_SRCS(a.py b.py c.py)\n")
         files.update({"lib/b.py": "", "lib/c.py": ""})
@@ -117,6 +124,35 @@ class PythonSuitesTest(unittest.TestCase):
         graph = lib.make(files, "lib", "-t")
         lib.node_by_output(graph, "$(B)/resources/RUFF")
         self.assertFalse(any(n["kv"].get("run_test_node") for n in graph["graph"]))
+
+    def test_python_program_import_suite_uses_binary_masks_and_own_environment(self):
+        for body, enabled in (("", True), ("NO_CHECK_IMPORTS(a.b c.*)\n", True), ("NO_CHECK_IMPORTS()\n", False)):
+            with self.subTest(body=body):
+                graph = lib.make(fixture(body, macro="PY3_PROGRAM_BIN"), "lib", "-t", "--tests-retries", "3")
+                imports = [n for n in graph["graph"] if n["kv"].get("run_test_node") and "/import_test/" in n["outputs"][0]]
+                self.assertEqual(len(imports), int(enabled))
+                if not enabled:
+                    continue
+                run = imports[0]
+                self.assertEqual(run["inputs"], ["$(B)/lib/lib", "$(S)/lib"])
+                self.assertIn(lib.node_by_output(graph, "$(B)/lib/lib")["uid"], run["deps"])
+                self.assertNotIn("--setup-pythonpath-env", args(run))
+                self.assertEqual(run["env"]["LSAN_OPTIONS"], "exitcode=100:detect_leaks=0")
+                self.assertEqual(run["env"]["ASAN_OPTIONS"], "exitcode=100")
+                self.assertNotIn("YA_PYTHON_BIN", run["env"])
+                self.assertNotIn("--retry", args(run))
+                checker = "run_pyimports --markup" + (" --skip a.b --skip c.*" if body else "")
+                self.assertEqual(values(run, "--checker"), [checker + " --trace-dir=$(B)/lib/test-results/import_test/testing_out_stuff"])
+
+    def test_python_import_checks_are_disabled_for_analysis(self):
+        graph = lib.make(fixture(macro="PY3_PROGRAM_BIN"), "lib", "-t", "-DCPP_ANALYSIS_MODE=yes")
+        self.assertFalse(any("/import_test/" in out for n in graph["graph"] for out in n["outputs"]))
+
+    def test_python3_test_program_has_test_link_metadata(self):
+        files = fixture(macro="PY3TEST")
+        files["library/python/pytest/ya.make"] = f"LIBRARY()\n{BARE}END()\n"
+        graph = lib.make(files, "lib", "-t")
+        self.assertEqual(lib.node_by_output(graph, "$(B)/lib/lib")["kv"].get("ld_test_node"), "1")
 
 
 if __name__ == "__main__":

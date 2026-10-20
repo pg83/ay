@@ -286,6 +286,8 @@ type TestSuite struct {
 	files                  []string
 	pythonNoBytecode       bool
 	disableLeaks           bool
+	importCheckEnv         bool
+	checkFiles             []VFS
 	p                      *Platform
 	projectPath            string
 	name                   string
@@ -657,7 +659,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(head...)), Cwd: bld})
 
-	inputs := append(append([]VFS{}, s.runInputs...), s.prepareInputs...)
+	inputs := append(append(append([]VFS{}, s.runInputs...), s.checkFiles...), s.prepareInputs...)
 
 	for _, p := range related {
 		inputs = append(inputs, intern(p))
@@ -790,7 +792,9 @@ func (ctx *GenCtx) testEnv(s *TestSuite) EnvVars {
 	extend("UBSAN_OPTIONS", "print_stacktrace=1,halt_on_error=1")
 	extend("MSAN_OPTIONS", "report_umrs=1")
 
-	env["YA_PYTHON_BIN"] = testPythonBin
+	if !s.importCheckEnv {
+		env["YA_PYTHON_BIN"] = testPythonBin
+	}
 
 	if s.clearEnvironment {
 		clear(env)
@@ -819,6 +823,10 @@ func (ctx *GenCtx) testEnv(s *TestSuite) EnvVars {
 			env[name+"_ORIGINAL"] = env[name]
 			env[name] += ":detect_leaks=0"
 		}
+	}
+
+	if s.importCheckEnv {
+		env["LSAN_OPTIONS"] += ":detect_leaks=0"
 	}
 
 	names := make([]string, 0, len(mandatory))

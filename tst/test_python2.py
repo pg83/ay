@@ -280,6 +280,56 @@ class Python2Test(unittest.TestCase):
         self.assertEqual(section(res, "--inputs"), ["$(B)/lib/copied.py", "$(B)/lib/copied.py.yapyc"])
         self.assertNotIn("$(S)/lib/orig.py", res["inputs"])
 
+    def test_py23_test_builds_a_python2_and_a_python3_test_program(self):
+        files = python2_base()
+        for peer in ("library/python/pytest", "library/python/runtime_py3/main", "contrib/tools/python3/Modules/_sqlite"):
+            files[f"{peer}/ya.make"] = STUB_LIBRARY
+            files[f"{peer}/s.cpp"] = "int s;\n"
+        for tool in ("tools/py3cc", "tools/py3cc/slow"):
+            lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
+        files.update({
+            "both/ya.make": "PY23_LIBRARY()\nNO_PYTHON_INCLUDES()\nPY_SRCS(m.py)\nEND()\nRECURSE_FOR_TESTS(test)\n",
+            "both/m.py": "",
+            "both/test/ya.make": "PY23_TEST()\nNO_PYTHON_INCLUDES()\nTEST_SRCS(test_m.py)\nPEERDIR(both)\nEND()\n",
+            "both/test/test_m.py": "",
+        })
+        graph = lib.make(files, "both", "-t", opensource=False)
+        py2 = lib.node_by_output(graph, "$(B)/both/test/py2_both-test")
+        py3 = lib.node_by_output(graph, "$(B)/both/test/both-test")
+        self.assertIn("$(B)/both/libpyboth.global.a", py2["inputs"])
+        self.assertIn("$(B)/both/test/__vcs_version__.c.py2.o", py2["outputs"] + [a for c in py2["cmds"] for a in c["cmd_args"]])
+        self.assertIn("$(B)/both/test/__vcs_version__.c.py3.o", [a for c in py3["cmds"] for a in c["cmd_args"]])
+        self.assertNotIn("build/rules/py2_deprecation", " ".join(py2["inputs"]))
+        lib.node_by_output(graph, "$(B)/both/test/test_m.py.yapyc")
+        lib.node_by_output(graph, "$(B)/both/test/test_m.py.yapyc3")
+        for suite, binary in (("pytest", py2), ("py3test", py3)):
+            run = lib.node_by_output(graph, f"$(B)/both/test/test-results/{suite}/meta.json")
+            self.assertIn(binary["uid"], run["deps"])
+        for suite in ("py2_flake8", "flake8"):
+            lib.node_by_output(graph, f"$(B)/both/test/test-results/{suite}/meta.json")
+            lib.node_by_output(graph, f"$(B)/both/test-results/{suite}/meta.json")
+        files["both/ya.make"] = files["both/ya.make"].replace("RECURSE_FOR_TESTS(test)\n", "")
+        graph = lib.make(files, "both", "-t", opensource=False)
+        lib.node_by_output(graph, "$(B)/both/test-results/flake8/meta.json")
+        self.assertFalse(any("py2_flake8" in o for n in graph["graph"] for o in n["outputs"]))
+
+    def test_python2_submodules_take_the_platform_peers(self):
+        files = python2_base()
+        for peer in ("library/python/pytest", "library/python/runtime_py3/main", "contrib/tools/python3/Modules/_sqlite"):
+            files[f"{peer}/ya.make"] = STUB_LIBRARY
+            files[f"{peer}/s.cpp"] = "int s;\n"
+        for tool in ("tools/py3cc", "tools/py3cc/slow"):
+            lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
+        files["build/platform/lld/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(LLD_ROOT sbr:1)\nEND()\n"
+        files.update({
+            "t23/ya.make": "PY23_TEST()\nTEST_SRCS(test_m.py)\nEND()\n", "t23/test_m.py": "",
+            "t2/ya.make": "PY2TEST()\nTEST_SRCS(test_m.py)\nEND()\n", "t2/test_m.py": "",
+        })
+        for target, suite in (("t2", "pytest"), ("t23", "pytest"), ("t23", "py3test")):
+            with self.subTest(target=target, suite=suite):
+                cmd = args(lib.node_by_output(lib.make(files, target, "-t", opensource=False), f"$(B)/{target}/test-results/{suite}/meta.json"))
+                self.assertIn("LLD_ROOT_RESOURCE_GLOBAL", [cmd[i + 1].split("::")[0] for i, a in enumerate(cmd) if a == "--global-resource"])
+
     def test_py_srcs_scope_directives_apply_to_the_following_sources(self):
         files = python2_base()
         files.update({

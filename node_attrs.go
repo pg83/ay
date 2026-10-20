@@ -222,6 +222,7 @@ type KV struct {
 	SpecialRunner    string
 	HasSpecialRunner bool
 	RunTestNode      bool
+	LDTestNode       bool
 }
 
 type KVExt struct {
@@ -319,6 +320,10 @@ func appendKV(buf []byte, kv KV, exts []KVExt) []byte {
 
 	for _, e := range sortedKVExts(exts) {
 		o.forceStr(e.Key, e.Val)
+	}
+
+	if kv.LDTestNode {
+		o.forceStr("ld_test_node", "1")
 	}
 
 	o.str("name", kv.Name)
