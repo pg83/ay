@@ -73,6 +73,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 				return v != g4CppPath && !leafSet[v]
 			})
 
+			e.codegen.use(jvPrimary)
 			emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, tc, ctx.scripts, ctx.emit)
 		}
 

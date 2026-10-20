@@ -100,6 +100,18 @@ class Antlr4CppTest(unittest.TestCase):
         self.assertIn("$(S)/mod/CalcLexer.g4", parser_copy["inputs"])
         lib.node_by_output(graph, "$(B)/mod/CalcLexer.g4.cpp.o")
 
+    def test_distbuild_copies_emit_the_generator(self):
+        # Under --dist a generated file brings no closure leaves, so the copy of
+        # the generated source uses the runner's output itself.
+        for macro in ("RUN_ANTLR4_CPP(Calc.g4)\n", "RUN_ANTLR4_CPP_SPLIT(CalcLexer.g4 CalcParser.g4)\n"):
+            with self.subTest(macro=macro):
+                graph = lib.make(antlr_files(macro, {
+                    "mod/Calc.g4": "grammar Calc;\n", "mod/CalcLexer.g4": "", "mod/CalcParser.g4": "",
+                }), "mod", "--dist")
+                java = lib.node_by_output(graph, "$(B)/mod/CalcLexer.cpp")
+                copy = lib.node_by_output(graph, "$(B)/mod/CalcLexer.g4.cpp")
+                self.assertEqual(copy["deps"], [java["uid"]])
+
     def test_split_grammar_visitor_and_listener_flags(self):
         graph = lib.make(antlr_files(
             "RUN_ANTLR4_CPP_SPLIT(CalcLexer.g4 CalcParser.g4 VISITOR LISTENER)\n",
