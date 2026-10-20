@@ -187,52 +187,52 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 }
 
 type GenCtx struct {
-	fs              FS
-	parsers         *IncludeParserManager
-	emit            *StreamingEmitter
-	onWarn          func(Warn)
-	keepGoing       bool
-	na              *NodeArenas
-	inclArgValues   DenseMap[VFS, STR]
-	resHashScratch  []string
-	resHashBuf      []byte
-	resDashBuf      []byte
-	resB64Scratch   []byte
-	inclArgs        InclArgMemo
-	memo            *moduleMemo
-	refSlices       *SliceCache[NodeRef]
-	vfsSlices       *SliceCache[VFS]
-	argSlices       *SliceCache[ANY]
-	declSlices      *SliceCache[ResourceDecl]
-	results         *BumpAllocator[ModuleEmitResult]
-	dirSlices       *SliceCache[IncludeDirective]
-	descSlices      *SliceCache[DescProtoPeer]
-	tcMemo          map[ToolchainKey]ModuleToolchain
-	moduleStmts     map[string][]Stmt
-	ifEnvScratch    EnvStore
-	moduleDirsEnv   EnvStore
-	walking         map[ModuleInstance]bool
-	cyclesTolerated int
-	traceStack      []string
-	scannerTarget   *IncludeScanner
-	scannerHost     *IncludeScanner
-	buckets         *BucketCache
-	moduleByRef     DenseMap[NodeRef, *ModuleEmitResult]
-	tools           DenseMap[ARG, *ModuleEmitResult]
-	frames          []*ModuleFrame
-	frameDepth      int
-	py3ccHeadChunk  []ANY
-	scripts         ScriptDeps
-	fetchRefs       *DenseMap[STR, NodeRef]
-	host            *Platform
-	target          *Platform
-	vcsRef          NodeRef
-	testMode        bool
-	sbomEnabled     bool
-	autoincludeIdx  *AutoincludeIndex
-	parsedFiles     map[string]*MakeFile
-	prodOuts        IdValueMap
-	goEnvMemo       map[[2]STR]EnvVars
+	fs               FS
+	parsers          *IncludeParserManager
+	emit             *StreamingEmitter
+	onWarn           func(Warn)
+	keepGoing        bool
+	na               *NodeArenas
+	inclArgValues    DenseMap[VFS, STR]
+	resHashScratch   []string
+	resHashBuf       []byte
+	resDashBuf       []byte
+	resB64Scratch    []byte
+	inclArgs         InclArgMemo
+	memo             *moduleMemo
+	refSlices        *SliceCache[NodeRef]
+	vfsSlices        *SliceCache[VFS]
+	argSlices        *SliceCache[ANY]
+	declSlices       *SliceCache[ResourceDecl]
+	results          *BumpAllocator[ModuleEmitResult]
+	dirSlices        *SliceCache[IncludeDirective]
+	descSlices       *SliceCache[DescProtoPeer]
+	tcMemo           map[ToolchainKey]ModuleToolchain
+	moduleStmts      map[string][]Stmt
+	ifEnvScratch     EnvStore
+	moduleDirsEnv    EnvStore
+	walking          map[ModuleInstance]bool
+	cyclesTolerated  int
+	traceStack       []string
+	scannerTarget    *IncludeScanner
+	scannerHost      *IncludeScanner
+	buckets          *BucketCache
+	moduleByRef      DenseMap[NodeRef, *ModuleEmitResult]
+	tools            DenseMap[ARG, *ModuleEmitResult]
+	frames           []*ModuleFrame
+	frameDepth       int
+	py3ccHeadChunk   []ANY
+	scripts          ScriptDeps
+	fetchRefs        *DenseMap[STR, NodeRef]
+	host             *Platform
+	target           *Platform
+	vcsRef           NodeRef
+	testMode         bool
+	sbomEnabled      bool
+	autoincludeIdx   *AutoincludeIndex
+	parsedFiles      map[string]*MakeFile
+	prodOuts         IdValueMap
+	goEnvMemo        map[[2]STR]EnvVars
 	frameSerial      uint32
 	scannerTargetPIC *IncludeScanner
 }
@@ -400,6 +400,12 @@ func (ctx *GenCtx) genTarget(targetDir string, rootDemand ModuleDemand) {
 	}
 
 	for _, dir := range discoverRecursedFinalTargets(ctx, filepath.Clean(targetDir)) {
+		if name := ctx.moduleName(dir); isJavaModuleType(name) {
+			ctx.genJavaTarget(dir, name)
+
+			continue
+		}
+
 		sub := genModule(ctx, ctx.rootInstance(dir, rootDemand))
 
 		if sub.LDPath != nil {
@@ -2361,7 +2367,13 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 		return res
 	}
 
-	res := genModule(ctx, newToolInstance(ctx.host, modulePath.string()))
+	var res *ModuleEmitResult
+
+	if dir := modulePath.string(); isJavaModuleType(ctx.moduleName(dir)) {
+		res = ctx.javaToolResult(dir)
+	} else {
+		res = genModule(ctx, newToolInstance(ctx.host, dir))
+	}
 
 	if res.LDRef != NodeRef(0) {
 		ctx.tools.put(modulePath, res)

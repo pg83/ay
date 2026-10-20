@@ -398,6 +398,22 @@ func (ctx *GenCtx) javaTool(dir string) *JavaModule {
 	return nil
 }
 
+func (ctx *GenCtx) javaToolResult(dir string) *ModuleEmitResult {
+	jm := ctx.javaTool(dir)
+
+	if jm == nil {
+		throwFmt("gen: tool %s is not a Java program", dir)
+	}
+
+	res := *jm.result
+
+	res.LDPath = ptr(jm.target)
+	res.LDRef = ctx.javaBuilder(jm).use(jm.target)
+	res.ResourceGlobalClosure = ctx.javaResourceGlobals(jm)
+
+	return &res
+}
+
 func (ctx *GenCtx) javaRegisterRunPrograms(jm *JavaModule) {
 	for _, rp := range jm.data.runJavaPrograms {
 		r := parseJavaRunProgram(jm, rp)

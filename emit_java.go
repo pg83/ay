@@ -307,15 +307,16 @@ func (ctx *GenCtx) javaEmitTest(jm *JavaModule) {
 	b.emitTo(jm.outRef)
 }
 
-func (ctx *GenCtx) javaGlobals(jm *JavaModule) map[string]VFS {
-	out := map[string]VFS{}
+func (ctx *GenCtx) javaResourceGlobals(jm *JavaModule) []ResourceDecl {
+	var out []ResourceDecl
+
+	seen := map[STR]bool{}
 
 	add := func(decls []ResourceDecl) {
 		for _, decl := range decls {
-			name := strings.TrimSuffix(decl.GlobalVar.string(), resourceGlobalSuffix)
-
-			if _, ok := out[name]; !ok {
-				out[name] = decl.Value
+			if !seen[decl.GlobalVar] {
+				seen[decl.GlobalVar] = true
+				out = append(out, decl)
 			}
 		}
 	}
@@ -328,6 +329,16 @@ func (ctx *GenCtx) javaGlobals(jm *JavaModule) map[string]VFS {
 		} else {
 			add(e.foreign.ResourceGlobalClosure)
 		}
+	}
+
+	return out
+}
+
+func (ctx *GenCtx) javaGlobals(jm *JavaModule) map[string]VFS {
+	out := map[string]VFS{}
+
+	for _, decl := range ctx.javaResourceGlobals(jm) {
+		out[strings.TrimSuffix(decl.GlobalVar.string(), resourceGlobalSuffix)] = decl.Value
 	}
 
 	return out
@@ -509,6 +520,10 @@ func (b *javaNodeBuilder) closure(closure []JavaClosureEntry) {
 			ref = b.use(e.path)
 		case e.foreign.LDPath != nil:
 			ref = e.foreign.LDRef
+
+			if lazy := b.use(e.path); lazy != 0 {
+				ref = lazy
+			}
 		}
 
 		if ref != 0 {

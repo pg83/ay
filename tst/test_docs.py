@@ -49,7 +49,20 @@ END()
         self.assertIn(book['uid'], graph['result'])
 
     def test_plantuml_builds_java_tool_and_font_union(self):
+        resources = {
+            'build/platform/python/ymake_python3': 'YMAKE_PYTHON3',
+            'build/platform/java/jdk': 'JDK_DEFAULT',
+            'build/platform/java/jdk/jdk17': 'JDK17',
+            'build/platform/java/uberjar': 'UBERJAR',
+            'build/platform/java/uberjar/uberjar17': 'UBERJAR17',
+            'build/platform/java/scriptgen': 'SCRIPTGEN',
+        }
+        files = {
+            f'{path}/ya.make': f'RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE({name} sbr:{i})\nEND()\n'
+            for i, (path, name) in enumerate(resources.items(), 1)
+        }
         graph = make({
+            **files,
             'guide/ya.make': 'DOCS()\nUSE_PLANTUML()\nEND()\n',
             'contrib/tools/plantuml/ya.make': 'JAVA_PROGRAM(diagrams)\nJDK_VERSION(17)\nUBERJAR()\nPEERDIR(vendor/drawing/2.0 contrib/java/openjdk-fontconfig)\nEND()\n',
             'vendor/drawing/2.0/ya.make': 'JAVA_CONTRIB()\nJAR_RESOURCE(123)\nSRC_RESOURCE(456)\nEND()\n',
@@ -69,7 +82,7 @@ END()
         self.assertEqual(fetched['cmds'][0]['cmd_args'][-3:], [
             '123', '--copy-to', f'{B}/vendor/drawing/2.0/drawing-2.0.jar'])
         self.assertIn('$(RESOURCE_ROOT)/sbr/123/resource', fetched['cmds'][0]['cmd_args'])
-        self.assertIn('$(VCS)/vcs.json', jar['cmds'][4]['cmd_args'])
+        self.assertIn('$(B)/vcs.json', jar['cmds'][4]['cmd_args'])
         self.assertIn(f'{B}/vendor/drawing/2.0/drawing-2.0.jar', jar['cmds'][7]['cmd_args'])
         self.assertEqual(fonts['outputs'], [f'{B}/contrib/java/openjdk-fontconfig/fonts.pkg.fake',
             f'{B}/contrib/java/openjdk-fontconfig/face.ttf', f'{B}/contrib/java/openjdk-fontconfig/config.properties'])
