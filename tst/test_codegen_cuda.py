@@ -53,6 +53,26 @@ class CudaTest(unittest.TestCase):
         self.assertIn(fatbin["uid"], cc["deps"])
         self.assertIn(host["uid"], cc["deps"])
 
+    def test_cuda_defaults_follow_the_source_configuration(self):
+        files = self.split_fixture()
+        files["build/ymake_conf.py"] = (
+            "class Cuda:\n"
+            "    def auto_cuda_version(self):\n"
+            "        if self.use_arcadia_cuda.value:\n"
+            "            return '12.9'\n"
+        )
+        files["mod/ya.make"] = (
+            f"LIBRARY()\n{lib.BARE_MODULE}"
+            "CUDA_NVCC_FLAGS(-DVERSION=$CUDA_VERSION)\n"
+            "SRCS(sub/k.cu)\nEND()\n"
+        )
+        graph = lib.make(files, "mod")
+        node = lib.node_by_output(graph, "$(B)/mod/_/sub/k.cu.o")
+        self.assertIn("-DVERSION=12.9", node["cmds"][0]["cmd_args"])
+        graph = lib.make(files, "mod", "-DCUDA_VERSION=13.0")
+        node = lib.node_by_output(graph, "$(B)/mod/_/sub/k.cu.o")
+        self.assertIn("-DVERSION=13.0", node["cmds"][0]["cmd_args"])
+
     def test_no_embed_ptx_omits_only_fatbinary_images(self):
         graph = lib.make(self.split_fixture("SET(CUDA_NO_EMBED_PTX yes)"), "mod")
         fatbin = lib.node_by_output(graph, "$(B)/mod/sub/k.fatbin.c")

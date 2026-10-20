@@ -257,6 +257,25 @@ class DynamicLibraryTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 1)
                 self.assertIn(message, result.stderr)
 
+    def test_autocheck_common_link_peers_precede_explicit_dll_peers(self):
+        files = base_files()
+        files["dlltool/ya.make"] = (
+            "DLL_TOOL(tool)\nNO_RUNTIME()\nEXPORTS_SCRIPT(t.exports)\n"
+            "SRCS(t.cpp)\nPEERDIR(lib2)\nEND()\n"
+        )
+        files["dlltool/t.cpp"] = ""
+        files["dlltool/t.exports"] = ""
+        files["contrib/libs/libeatmydata/ya.make"] = library("SRCS(x.cpp)\n")
+        files["contrib/libs/libeatmydata/x.cpp"] = ""
+        graph = lib.make(files, "dlltool", "-DAUTOCHECK=yes")
+        node = lib.node_by_output(graph, "$(B)/dlltool/libtool.so")
+        args = command_with(node, "link_dyn_lib.py")["cmd_args"]
+        group = args[args.index("-Wl,--start-group") + 1:args.index("-Wl,--end-group")]
+        self.assertEqual(group, [
+            "contrib/libs/libeatmydata/libcontrib-libs-libeatmydata.a",
+            "build/cow/on/libbuild-cow-on.a", "lib2/liblib2.a",
+        ])
+
     def test_dll_tool_links_shared_object_with_prefix(self):
         files = base_files()
         files["dlltool/ya.make"] = (

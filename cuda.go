@@ -9,6 +9,7 @@ type CudaSrcsStmt struct {
 }
 
 type CudaSettings struct {
+	NvccFlags           []ANY
 	Root                string
 	TargetRoot          string
 	Std                 string

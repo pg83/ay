@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	wrapccPython3STR = internV("$(B)/resources/", resourcePatternYMakePython3, "/bin/python3")
-	wrapccPyChunk    = []VFS{wrapccPyVFS}
+	wrapccPython3STR       = internV("$(B)/resources/", resourcePatternYMakePython3, "/bin/python3")
+	wrapccPyChunk          = []VFS{wrapccPyVFS}
 )
 
 type PlatformConf struct {
@@ -271,6 +271,10 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		}
 	}
 
+	if !env.hasBindingID(envPicNoPie) {
+		env.setBool(envPicNoPie, env.bool(envAutocheck))
+	}
+
 	if !env.hasBindingID(envGOSTD_VERSION) {
 		env.setString(envGOSTD_VERSION, p.Go.Version)
 	}
@@ -388,7 +392,7 @@ func (p *Platform) linkerSelectionTailFlags() []string {
 }
 
 func (p *Platform) linkerSelectionNoPieFlags() []string {
-	if p.PIC && p.Flags[envAUTOCHECK] != strYes {
+	if p.OS != OSLinux || p.ifEnv.bool(envPie) || p.PIC && !p.ifEnv.bool(envPicNoPie) {
 		return nil
 	}
 

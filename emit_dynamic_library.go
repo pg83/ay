@@ -54,7 +54,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	peerPaths := make([]string, 0, 1+len(d.dynamicLibraryFrom))
 
 	if !effectiveNoPlatform(d.flags) {
-		peerPaths = append(peerPaths, "build/cow/on")
+		peerPaths = append(peerPaths, e.defaultCommonLinkPeerdirs()...)
 	}
 
 	for _, p := range d.dynamicLibraryFrom {

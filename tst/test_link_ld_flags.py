@@ -139,6 +139,33 @@ class LinkFlagsTest(unittest.TestCase):
         link = command_with(lib.node_by_output(graph, "$(B)/prog/prog"), "link_exe.py")
         self.assertNotIn("-Wl,--compress-debug-sections=zstd", link)
 
+    def test_autocheck_disables_pie_for_pic_tools(self):
+        files = {
+            "lib/ya.make": f"LIBRARY()\n{NO_PLATFORM}RUN_PROGRAM(tools/gen OUT a.o)\nEND()\n",
+        }
+        lib.tool_program(files, "tools/gen", "gen")
+        for flags, expected in (
+            ((), False),
+            (("AUTOCHECK=yes",), True),
+            (("PIC_NO_PIE=yes",), True),
+            (("AUTOCHECK=yes", "PIC_NO_PIE=no"), False),
+            (("AUTOCHECK=yes", "PIE=yes"), False),
+        ):
+            with self.subTest(flags=flags):
+                args = [item for flag in flags for item in ("--host-platform-flag", flag)]
+                graph = lib.make(files, "lib", *X86_64, *args)
+                link = command_with(lib.node_by_output(graph, "$(B)/tools/gen/gen"), "link_exe.py")
+                self.assertEqual("-Wl,-no-pie" in link, expected)
+
+    def test_system_libraries_use_configured_linker_passthrough(self):
+        files = fixture()
+        files["build/conf/linkers/ld.conf"] = "_C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB -Wl,-lpthread,-lc\n"
+        graph = lib.make(files, "plain", *X86_64)
+        link = command_with(lib.node_by_output(graph, "$(B)/plain/plain"), "link_exe.py")
+        self.assertIn("-Wl,-lpthread,-lc", link)
+        self.assertNotIn("-lpthread", link)
+        self.assertNotIn("-lc", link)
+
     def test_no_export_dynamic_symbols_drops_rdynamic_and_version_script(self):
         graph = lib.make(fixture(), "noexp")
         node = lib.node_by_output(graph, "$(B)/noexp/noexp")

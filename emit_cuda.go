@@ -15,7 +15,11 @@ func (e *EmitContext) cudaEnv() EnvVars {
 }
 
 func (e *EmitContext) nvccFlags() []ANY {
-	c := e.d.cuda
+	c := &e.d.cuda
+
+	if c.NvccFlags != nil {
+		return c.NvccFlags
+	}
 
 	args := internAnys([]string{
 		"-Xfatbin=-compress-all", "--expt-extended-lambda", "--expt-relaxed-constexpr",
@@ -34,7 +38,9 @@ func (e *EmitContext) nvccFlags() []ANY {
 		args = append(args, strW.any())
 	}
 
-	return args
+	c.NvccFlags = e.ctx.na.anyList(args...)
+
+	return c.NvccFlags
 }
 
 func (e *EmitContext) cudaCompileArgs(in ModuleCCInputs, mtime, pid VFS, flags []ANY, split bool) ArgChunks {
@@ -54,7 +60,7 @@ func (e *EmitContext) cudaCompileArgs(in ModuleCCInputs, mtime, pid VFS, flags [
 
 	nvcc := na.anyList(internV(c.Root, "/bin/nvcc").any(), internV("-std=c++", c.Std).any())
 
-	return na.chunkList(head, na.anyList(wrapper...), nvcc, na.anyList(e.nvccFlags()...), flags, in.CCBlocks.includes,
+	return na.chunkList(head, na.anyList(wrapper...), nvcc, e.nvccFlags(), flags, in.CCBlocks.includes,
 		na.anyList(cudaCflagsStr.any()), e.instance.Platform.CCHead, in.CCBlocks.flags, in.CCBlocks.cxxTail,
 		na.anyList(internV("-std=c++", c.Std).any()), in.PerSourceCFlags)
 }

@@ -191,8 +191,8 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 		}
 	}
 
-	if isLinkingModuleType(d.moduleStmt.Name) && instance.Platform.OS == OSLinux && instance.Platform.ifEnv.bool(envAutocheck) {
-		peers = append(peers, "contrib/libs/libeatmydata")
+	if isLinkingModuleType(d.moduleStmt.Name) && !isProgramModuleType(d.moduleStmt.Name) && !isDllModuleType(d.moduleStmt.Name) && !noPlatform {
+		peers = append(peers, e.defaultCommonLinkPeerdirs()...)
 	}
 
 	return peers
@@ -301,16 +301,7 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 	var peers []string
 
 	if !postUser {
-		if instance.Platform.ifEnv.bool(envAutocheck) && instance.Platform.OS == OSLinux {
-			peers = append(peers, "contrib/libs/libeatmydata")
-		}
-
-		if d.useArcadiaLibm && instance.Path.relString() != "contrib/libs/libm" &&
-			!strings.HasPrefix(instance.Path.relString(), "contrib/libs/libm/") {
-			peers = append(peers, "contrib/libs/libm")
-		}
-
-		peers = append(peers, "build/cow/on")
+		peers = append(peers, e.defaultCommonLinkPeerdirs()...)
 		peers = appendImplicitPeers(peers, programAllocatorDefaults, rc)
 	} else {
 		if !isDllModuleType(d.moduleStmt.Name) {
@@ -323,6 +314,22 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 	}
 
 	return peers
+}
+
+func (e *EmitContext) defaultCommonLinkPeerdirs() []string {
+	instance, d := e.instance, e.d
+
+	var peers []string
+
+	if instance.Platform.OS == OSLinux && instance.Platform.ifEnv.bool(envAutocheck) {
+		peers = append(peers, "contrib/libs/libeatmydata")
+	}
+
+	if d.useArcadiaLibm && instance.Path.relString() != "contrib/libs/libm" && !strings.HasPrefix(instance.Path.relString(), "contrib/libs/libm/") {
+		peers = append(peers, "contrib/libs/libm")
+	}
+
+	return append(peers, "build/cow/on")
 }
 
 func effectiveNoPlatform(f FlagSet) bool {

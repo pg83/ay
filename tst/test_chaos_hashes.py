@@ -86,7 +86,7 @@ class ChaosHashesTest(unittest.TestCase):
         for files, words, message in (
             (bucket_files, "hash-bucket-h1=3 hash-bucket-h2=7",
              r"BucketCache: bucket hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ elems\)"),
-            (self.files, "hash-list-h1=3 hash-list-h2=3",
+            (bucket_files, "hash-list-h1=3 hash-list-h2=3",
              r"BucketCache: bucket-list hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ buckets\)"),
             (wide, "xxh-slice-hi=3 xxh-slice-lo=7",
              r"SliceCache: hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ elems\)"),

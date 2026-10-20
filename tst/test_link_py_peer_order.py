@@ -78,6 +78,17 @@ USERLIB = "userlib/libuserlib.a"
 
 
 class PythonPeerOrderTest(unittest.TestCase):
+    def test_common_link_peers_follow_python_language_peers(self):
+        files = fixture()
+        for path in ("contrib/libs/libeatmydata", "build/cow/on"):
+            files[path + "/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(x.cpp)\nEND()\n"
+            files[path + "/x.cpp"] = ""
+        graph = lib.make(files, "py3", "-DAUTOCHECK=yes")
+        group = link_group(link_args(graph, "$(B)/py3/py3"))
+        self.assertEqual(group[:4], [PYTHON, USERLIB,
+            "contrib/libs/libeatmydata/libcontrib-libs-libeatmydata.a",
+            "build/cow/on/libbuild-cow-on.a"])
+
     def test_py3_program_defers_runtime_peers(self):
         graph = lib.make(fixture(), "py3")
         args = link_args(graph, "$(B)/py3/py3")

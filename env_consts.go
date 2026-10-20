@@ -119,6 +119,8 @@ var (
 	envPYTHON3                      = internEnv("PYTHON3")
 	envPYTHONHASHSEED               = internEnv("PYTHONHASHSEED")
 	envPlantumlPath                 = internEnv("PLANTUML_PATH")
+	envPicNoPie                     = internEnv("PIC_NO_PIE")
+	envPie                          = internEnv("PIE")
 	envSANDBOXING                   = internEnv("SANDBOXING")
 	envSANITIZER_TYPE               = internEnv("SANITIZER_TYPE")
 	envSDKROOT                      = internEnv("SDKROOT")
