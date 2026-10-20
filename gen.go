@@ -1766,10 +1766,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		defer func() { frame.ownProtoInclude = ownProtoInclude[:0] }()
 
-		if d.protoNamespace != nil {
-			ownProtoInclude = append(ownProtoInclude, sourceClean(d.protoNamespace.string()))
-		}
-
 		ownProtoInclude = append(ownProtoInclude, d.protoAddInclGlobal...)
 		peerProtoInclude = frame.peerProtoInclude[:0]
 

@@ -421,6 +421,67 @@ class GoCodegenTest(unittest.TestCase):
         self.assertIn("vendor/google.golang.org/protobuf/runtime/protoimpl/protoimpl.a", peers)
         self.assertNotIn("$(B)/contrib/libs/protobuf/libcontrib-libs-protobuf.a", package["inputs"])
 
+    def test_go_protoc_lists_own_proto_includes_before_the_peer_ones(self):
+        files = go_proto_world()
+        files["p/base/ya.make"] = "PROTO_LIBRARY()\nPROTO_NAMESPACE(GLOBAL p/base)\nSRCS(base.proto)\nEND()\n"
+        files["p/base/base.proto"] = 'syntax = "proto3";\n'
+        files["p/api/ya.make"] = (
+            "PROTO_LIBRARY()\nPROTO_NAMESPACE(p)\nPROTO_ADDINCL(yt)\nSRCS(api.proto)\n"
+            "USE_COMMON_GOOGLE_APIS(api/annotations)\nPEERDIR(p/base)\nEND()\n"
+        )
+        files["p/api/api.proto"] = 'syntax = "proto3";\n'
+        files["contrib/libs/googleapis-common-protos/ya.make"] = "PROTO_LIBRARY()\nEND()\n"
+        go_module(files, "vendor/google.golang.org/genproto/googleapis/api/annotations")
+        go_module(files, "g/user", macros="PEERDIR(p/api)\n")
+        graph = lib.make(files, "g/user")
+        args = lib.node_by_output(graph, "$(B)/p/api/api.pb.go")["cmds"][0]["cmd_args"]
+        self.assertEqual([a for a in args if a.startswith("-I=")], [
+            "-I=./p", "-I=$(S)/p", "-I=$(B)", "-I=$(S)",
+            "-I=$(S)/contrib/libs/googleapis-common-protos", "-I=$(S)/p", "-I=$(S)/yt",
+            "-I=$(S)/contrib/libs/protobuf/src",
+            "-I=$(S)/p/base",
+            "-I=$(B)", "-I=$(S)/contrib/libs/protobuf/src",
+        ])
+
+    def test_grpc_gateway_runs_protoc_with_the_gateway_plugins(self):
+        files = go_proto_world()
+        gateway = "vendor/github.com/grpc-ecosystem/grpc-gateway"
+        for path in (f"{gateway}/v2/protoc-gen-grpc-gateway", f"{gateway}/v2/protoc-gen-openapiv2",
+                     f"{gateway}/protoc-gen-grpc-gateway", f"{gateway}/protoc-gen-swagger"):
+            go_module(files, path, module="GO_PROGRAM")
+        for path in (f"{STD}/errors", f"{STD}/io", f"{STD}/net/http", "vendor/github.com/golang/protobuf/descriptor",
+                     f"{gateway}/v2/runtime", f"{gateway}/v2/utilities", f"{gateway}/v2/protoc-gen-openapiv2/options",
+                     f"{gateway}/runtime", f"{gateway}/utilities", f"{gateway}/protoc-gen-swagger/options",
+                     "vendor/google.golang.org/grpc/metadata", "vendor/google.golang.org/protobuf/proto"):
+            go_module(files, path)
+        files["p/v2/ya.make"] = (
+            "PROTO_LIBRARY()\nSRCS(svc.proto)\nGO_GRPC_GATEWAY_V2_OPENAPI_SRCS(NO_JSON_NAMES_FOR_FIELDS svc.proto)\nEND()\n"
+        )
+        files["p/v2/svc.proto"] = 'syntax = "proto3";\n'
+        files["p/v1/ya.make"] = "PROTO_LIBRARY()\nSRCS(svc.proto)\nGO_GRPC_GATEWAY_SWAGGER_SRCS(svc.proto)\nEND()\n"
+        files["p/v1/svc.proto"] = 'syntax = "proto3";\n'
+        go_module(files, "g/user", macros="PEERDIR(p/v1 p/v2)\n")
+        graph = lib.make(files, "g/user")
+        v2 = lib.node_by_output(graph, "$(B)/p/v2/svc.pb.gw.go")
+        self.assertEqual(v2["kv"], {"p": "PB", "pc": "yellow"})
+        self.assertEqual(v2["outputs"], ["$(B)/p/v2/svc.swagger.json", "$(B)/p/v2/svc.pb.gw.go"])
+        args = v2["cmds"][0]["cmd_args"]
+        last_include = max(i for i, a in enumerate(args) if a.startswith("-I="))
+        self.assertEqual(args[last_include + 1:], [
+            f"--plugin=protoc-gen-go_grpc_gw=$(B)/{gateway}/v2/protoc-gen-grpc-gateway/protoc-gen-grpc-gateway",
+            "--go_grpc_gw_out=$(B)/", "--go_grpc_gw_opt=allow_repeated_fields_in_body=true",
+            f"--plugin=protoc-gen-openapiv2=$(B)/{gateway}/v2/protoc-gen-openapiv2/protoc-gen-openapiv2",
+            "--openapiv2_out=$(B)/", "--openapiv2_opt=json_names_for_fields=false", "--openapiv2_opt=logtostderr=true",
+        ])
+        v1 = lib.node_by_output(graph, "$(B)/p/v1/svc.pb.gw.go")
+        self.assertEqual(v1["outputs"], ["$(B)/p/v1/svc.pb.gw.go", "$(B)/p/v1/svc.swagger.json"])
+        self.assertIn("--swagger_opt=allow_repeated_fields_in_body=true", v1["cmds"][0]["cmd_args"])
+        srcs = between(go_tool_args(lib.node_by_output(graph, "$(B)/p/v2/v2.a")), "++srcs", "++asm-flags")
+        self.assertEqual(srcs, ["$(B)/p/v2/svc.pb.gw.go", "$(B)/p/v2/svc.pb.go"])
+        peers = between(go_tool_args(lib.node_by_output(graph, "$(B)/p/v2/v2.a")), "++peers", "--ya-end-command-file")
+        self.assertIn(f"{gateway}/v2/runtime/runtime.a", peers)
+        self.assertIn(f"{gateway}/v2/protoc-gen-openapiv2/options/options.a", peers)
+
     def test_mockgen_and_oapi_codegen_feed_the_package(self):
         files = go_world()
         for path in ("vendor/go.uber.org/mock/mockgen", "vendor/github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen"):

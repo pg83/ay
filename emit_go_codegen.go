@@ -26,10 +26,20 @@ var goOapiCodegenTool = map[TOK]string{
 }
 
 const (
+	goGatewayV1Tool    = "vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway"
+	goGatewayV1Swagger = "vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger"
+	goGatewayV1Options = "vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger/options"
+	goGatewayV2Tool    = "vendor/github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway"
+	goGatewayV2Openapi = "vendor/github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2"
+	goGatewayV2Options = "vendor/github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
+)
+
+const (
 	goCodegenReflect = iota
 	goCodegenMocks
 	goCodegenSource
 	goCodegenOapi
+	goCodegenGateway
 )
 
 type GoMockgenVars struct {
@@ -44,6 +54,8 @@ type GoMockgenVars struct {
 
 type GoCodegenStmt struct {
 	kind      int
+	plugins   []GoProtoOpt
+	outs      []string
 	tool      string
 	file      string
 	in        string
@@ -148,6 +160,20 @@ func (e *EmitContext) goToolEnv() EnvVars {
 
 func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
+	if st.kind == goCodegenGateway {
+		protoRel := e.goProtoRel(internStr(st.file).any())
+		outs := make([]VFS, 0, len(st.outs))
+
+		for _, name := range st.outputNames() {
+			outs = append(outs, build(instance.Path.relString(), "/", name))
+		}
+
+		e.emitGoProtoCmd(protoRel, nil, st.plugins, outs)
+
+		return
+	}
+
 	na := ctx.na
 	dir := instance.Path.relString()
 	bindir := build(dir)
@@ -239,4 +265,105 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 
 	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
 	e.collectGoAutoSource(out)
+}
+
+func applyGoGrpcGatewayStmt(v UnknownStmt, d *ModuleData, env Environment) {
+	std := env.string(envGOSTD)
+	files := v.Args
+	noJSONNames := len(files) > 0 && files[0].string() == "NO_JSON_NAMES_FOR_FIELDS"
+
+	if noJSONNames {
+		files = files[1:]
+	}
+
+	peer := func(paths ...string) {
+		for _, p := range paths {
+			d.peerdirs = append(d.peerdirs, internStr(p).any())
+		}
+	}
+
+	if !isGoModuleType(d.unit.Type) {
+		switch v.Name {
+		case tokGoGrpcGatewayV2OpenapiSrcs:
+			peer(goGatewayV2Options)
+		case tokGoGrpcGatewaySwagger:
+			peer(goGatewayV1Options)
+		}
+
+		return
+	}
+
+	v2 := v.Name == tokGoGrpcGatewayV2OpenapiSrcs || v.Name == tokGoGrpcGatewayV2Srcs
+	gateway := GoProtoOpt{plugin: "go_grpc_gw", tool: goGatewayV1Tool, opts: []string{"allow_repeated_fields_in_body=true"}}
+
+	if v2 {
+		gateway.tool = goGatewayV2Tool
+	}
+
+	plugins := []GoProtoOpt{gateway}
+
+	var outs []string
+
+	switch v.Name {
+	case tokGoGrpcGatewayV2OpenapiSrcs:
+		openapi := GoProtoOpt{plugin: "openapiv2", tool: goGatewayV2Openapi, opts: []string{"logtostderr=true"}}
+
+		if noJSONNames {
+			openapi.opts = []string{"json_names_for_fields=false", "logtostderr=true"}
+		}
+
+		plugins = append(plugins, openapi)
+		outs = append(outs, ".swagger.json")
+	case tokGoGrpcGatewaySwagger:
+		plugins = append(plugins, GoProtoOpt{plugin: "swagger", tool: goGatewayV1Swagger, opts: []string{"logtostderr=true", "allow_repeated_fields_in_body=true"}})
+	}
+
+	outs = append(outs, ".pb.gw.go")
+
+	if v.Name == tokGoGrpcGatewaySwagger {
+		outs = append(outs, ".swagger.json")
+	}
+
+	for _, f := range files {
+		if strings.HasSuffix(f.string(), ".proto") {
+			d.goCodegens = append(d.goCodegens, GoCodegenStmt{kind: goCodegenGateway, file: f.string(), plugins: plugins, outs: outs})
+		}
+	}
+
+	if v2 {
+		peer(std+"/context", std+"/errors", std+"/io", std+"/net/http",
+			"vendor/github.com/golang/protobuf/descriptor",
+			"vendor/github.com/grpc-ecosystem/grpc-gateway/v2/runtime",
+			"vendor/github.com/grpc-ecosystem/grpc-gateway/v2/utilities",
+			"vendor/google.golang.org/grpc/metadata",
+			"vendor/google.golang.org/protobuf/proto")
+	} else {
+		peer(std+"/context", std+"/io", std+"/net/http",
+			"vendor/github.com/golang/protobuf/descriptor",
+			"vendor/github.com/grpc-ecosystem/grpc-gateway/runtime",
+			"vendor/github.com/grpc-ecosystem/grpc-gateway/utilities",
+			"vendor/google.golang.org/grpc/metadata")
+	}
+
+	switch v.Name {
+	case tokGoGrpcGatewayV2OpenapiSrcs:
+		peer(goGatewayV2Options)
+	case tokGoGrpcGatewaySwagger:
+		peer(goGatewayV1Options)
+	}
+}
+
+func (st GoCodegenStmt) outputNames() []string {
+	if st.kind != goCodegenGateway {
+		return []string{st.out}
+	}
+
+	base := strings.TrimSuffix(path.Base(st.file), ".proto")
+	names := make([]string, len(st.outs))
+
+	for i, ext := range st.outs {
+		names[i] = base + ext
+	}
+
+	return names
 }

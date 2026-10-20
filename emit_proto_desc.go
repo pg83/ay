@@ -116,7 +116,7 @@ func descProtoOutputRel(instancePath, srcRel, resolvedRel string) string {
 func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	span := descPeerClosure(ctx, instance, d.peerdirs, d.needGoogleProtoPeerdirs, d.useCommonGoogleAPIs)
-	protoInclude := dedup(protoNamespaceContribs(d), span.includes)
+	protoInclude := dedup(d.protoAddInclGlobal, span.includes)
 
 	d.scanCtx = newModuleScanContext(ctx, instance, d, dedup(d.addIncl, d.addInclGlobal), nil, nil, protoInclude)
 
@@ -188,16 +188,6 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		DescClosure:  closure,
 		ProtoInclude: protoInclude,
 	}
-}
-
-func protoNamespaceContribs(d *ModuleData) []VFS {
-	var own []VFS
-
-	if d.protoNamespace != nil {
-		own = []VFS{sourceClean(d.protoNamespace.string())}
-	}
-
-	return append(own, d.protoAddInclGlobal...)
 }
 
 func descProtocIncludes(na *NodeArenas, peerProtoAddIncl []VFS, cppOutRoot string) []ANY {

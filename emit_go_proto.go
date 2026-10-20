@@ -13,6 +13,8 @@ var goProtoHead = []ANY{
 	internStr("--namespace").any(),
 }
 
+var goProtobufInclude = []VFS{source("contrib/libs/protobuf/src")}
+
 var goCommonGoogleApis = []string{
 	"api/annotations", "api/configchange", "api/distribution", "api/expr/v1alpha1", "api/expr/v1beta1",
 	"api/httpbody", "api/label", "api/metric", "api/monitoredres", "api/serviceconfig",
@@ -58,51 +60,52 @@ func goModuleHasProtos(d *ModuleData) bool {
 	})
 }
 
-func (e *EmitContext) emitGoProtoSource(meta SrcMeta) {
+func (e *EmitContext) goProtoRel(src ANY) string {
+	if v := src.vfs(); v != 0 && v.isSource() {
+		return v.relString()
+	}
+
+	return e.protoSourceRelPath(e.moduleSourceName(src))
+}
+
+func (e *EmitContext) goProtoNamespace() string {
+	if e.d.protoNamespace != nil {
+		return e.d.protoNamespace.string()
+	}
+
+	return ""
+}
+
+func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []GoProtoOpt, outs []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	dir := instance.Path.relString()
-	protoRel := e.protoSourceRelPath(e.moduleSourceName(meta.Source))
 	protocRef, protoc := ctx.tool(argContribToolsProtoc)
-	genRef, gen := ctx.tool(argVendorProtocGenGo)
-	ns := ""
-
-	if d.protoNamespace != nil {
-		ns = d.protoNamespace.string()
-	}
-
-	base := strings.TrimSuffix(path.Base(protoRel), ".proto")
-	outs := []VFS{build(dir, "/", base, ".pb.go")}
-	tools := []NodeRef{protocRef, genRef}
-	toolPaths := []VFS{protoc, gen}
-	plugins := ""
-
-	if d.grpc {
-		plugins = "plugins=grpc"
-	}
-
+	ns := e.goProtoNamespace()
+	tools := []NodeRef{protocRef}
+	toolPaths := []VFS{protoc}
 	args := []ANY{internV("-I=./", ns).any(), internV("-I=$(S)/", ns).any(), argIB2.any(), argIS3.any()}
 
-	for _, p := range e.peers.ProtoInclude {
-		if token := internV("-I=", p.prefix(), p.relString()).any(); !slices.Contains(args, token) {
-			args = append(args, token)
-		}
-	}
-
-	if !slices.Contains(args, argISContribLibsProtobufSrc.any()) {
-		args = append(args, argISContribLibsProtobufSrc.any())
+	for _, p := range concat(dedup(d.protoAddInclGlobal, goProtobufInclude), e.peers.ProtoInclude) {
+		args = append(args, internV("-I=", p.prefix(), p.relString()).any())
 	}
 
 	args = append(args, argIB2.any(), argISContribLibsProtobufSrc.any())
 	args = append(args, d.protocFlags...)
 
-	args = append(args,
-		internV("--plugin=protoc-gen-go=", gen.prefix(), gen.relString()).any(),
-		internV("--go_opt=", plugins).any(),
-		internV("--go_out=$(B)/", ns).any(),
-	)
+	if goOpts != nil {
+		ref, gen := ctx.tool(argVendorProtocGenGo)
 
-	for _, opt := range d.goProtoOpts {
+		tools = append(tools, ref)
+		toolPaths = append(toolPaths, gen)
+
+		args = append(args,
+			internV("--plugin=protoc-gen-go=", gen.prefix(), gen.relString()).any(),
+			internV("--go_opt=", *goOpts).any(),
+			internV("--go_out=$(B)/", ns).any(),
+		)
+	}
+
+	for _, opt := range plugins {
 		if opt.plugin == "" {
 			args = append(args, opt.arg)
 
@@ -113,12 +116,15 @@ func (e *EmitContext) emitGoProtoSource(meta SrcMeta) {
 
 		tools = append(tools, ref)
 		toolPaths = append(toolPaths, tool)
-		outs = append(outs, build(dir, "/", base, opt.ext))
 
 		args = append(args,
 			internV("--plugin=protoc-gen-", opt.plugin, "=", tool.prefix(), tool.relString()).any(),
 			internV("--", opt.plugin, "_out=$(B)/", ns).any(),
 		)
+
+		for _, o := range opt.opts {
+			args = append(args, internV("--", opt.plugin, "_opt=", o).any())
+		}
 	}
 
 	cmd := na.chunkList(
@@ -156,8 +162,32 @@ func (e *EmitContext) emitGoProtoSource(meta SrcMeta) {
 
 	for _, out := range outs {
 		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
-		e.collectGoAutoSource(out)
+
+		if strings.HasSuffix(out.relString(), ".go") {
+			e.collectGoAutoSource(out)
+		}
 	}
+}
+
+func (e *EmitContext) emitGoProtoSource(meta SrcMeta) {
+	d := e.d
+	dir := e.instance.Path.relString()
+	protoRel := e.goProtoRel(meta.Source)
+	base := strings.TrimSuffix(path.Base(protoRel), ".proto")
+	outs := []VFS{build(dir, "/", base, ".pb.go")}
+	goOpts := ""
+
+	if d.grpc {
+		goOpts = "plugins=grpc"
+	}
+
+	for _, opt := range d.goProtoOpts {
+		if opt.plugin != "" {
+			outs = append(outs, build(dir, "/", base, opt.ext))
+		}
+	}
+
+	e.emitGoProtoCmd(protoRel, &goOpts, d.goProtoOpts, outs)
 }
 
 type GoProtoOpt struct {
@@ -165,6 +195,7 @@ type GoProtoOpt struct {
 	plugin string
 	ext    string
 	tool   string
+	opts   []string
 }
 
 func applyGoCommonGoogleApis(args []ANY, d *ModuleData) {
@@ -198,5 +229,5 @@ func applyGoCommonGoogleApis(args []ANY, d *ModuleData) {
 		}
 	}
 
-	d.protoAddInclGlobal = append(d.protoAddInclGlobal, contribLibsGoogleapisCommonProtos)
+	d.protoAddInclGlobal = slices.Insert(d.protoAddInclGlobal, 0, contribLibsGoogleapisCommonProtos)
 }

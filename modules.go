@@ -1813,6 +1813,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.goProtoOpts = append(d.goProtoOpts, GoProtoOpt{plugin: positional[0].string(), ext: positional[1].string(), tool: positional[2].string()})
 		d.peerdirs = append(d.peerdirs, lists["DEPS"]...)
+	case tokGoGrpcGatewayV2OpenapiSrcs, tokGoGrpcGatewayV2Srcs, tokGoGrpcGatewaySrcs, tokGoGrpcGatewaySwagger:
+		applyGoGrpcGatewayStmt(v, d, env)
 	case tokGoMockgenFrom, tokGoMockgenContribFrom, tokGoMockgenTypes, tokGoMockgenExcludeIfaces, tokGoMockgenPackage,
 		tokGoMockgenReflect, tokGoMockgenMocks, tokGoMockgenSource, tokGoOapiCodegen, tokGoOapiCodegenV2, tokGoOapiCodegenTaxi:
 		applyGoCodegenStmt(modulePath, v, d, env)
@@ -2034,11 +2036,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		applyProtoNamespace(d, v.Args[len(v.Args)-1])
+	case tokProtoAddIncl:
+		applyProtoAddIncl(d, v.Args)
 	case tokExportYmapsProto:
+		applyProtoNamespace(d, mapsDocProtoNS.any())
 
 		d.protoAddInclGlobal = append(d.protoAddInclGlobal, mapsDocProto)
-
-		applyProtoNamespace(d, mapsDocProtoNS.any())
 	case tokYmapsSproto:
 		if env.bool(envGO_PROTO) {
 			break
@@ -3007,12 +3010,42 @@ func pythonInitSuffix(name string) string {
 
 func applyProtoNamespace(d *ModuleData, namespace ANY) {
 	d.protoNamespace = ptr(namespace)
+	d.protoAddInclGlobal = append(d.protoAddInclGlobal, sourceClean(namespace.string()))
 
 	protoBuildRoot := build(filepath.ToSlash(filepath.Clean(namespace.string())))
 
 	d.addIncl = append(d.addIncl, protoBuildRoot)
 	d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
+}
+
+func applyProtoAddIncl(d *ModuleData, args []ANY) {
+	global, withGen := false, false
+
+	var rel string
+
+	for _, a := range args {
+		switch a.string() {
+		case "GLOBAL":
+			global = true
+		case "WITH_GEN":
+			withGen = true
+		default:
+			rel = filepath.ToSlash(filepath.Clean(a.string()))
+		}
+	}
+
+	if withGen {
+		d.protoAddInclGlobal = append(d.protoAddInclGlobal, build(rel))
+	}
+
+	d.protoAddInclGlobal = append(d.protoAddInclGlobal, source(rel))
+	d.addLocalIncl(prioAddIncl, build(rel))
+
+	if global {
+		d.addInclGlobal = append(d.addInclGlobal, build(rel))
+		d.addInclUserGlobal = append(d.addInclUserGlobal, build(rel))
+	}
 }
 
 func applyArchiveStmt(v UnknownStmt, d *ModuleData) {

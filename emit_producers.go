@@ -441,7 +441,10 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	for i, st := range d.goCodegens {
 		outsMark := len(e.prodVFS)
 
-		e.prodVFS = append(e.prodVFS, build(module, "/", st.out))
+		for _, name := range st.outputNames() {
+			e.prodVFS = append(e.prodVFS, build(module, "/", name))
+		}
+
 		positions = append(positions, ProducerPos{kind: prodGoCodegen, index: i, outs: e.prodVFSTake(outsMark)})
 	}
 

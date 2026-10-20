@@ -279,6 +279,10 @@ var tokName = [...]STR{
 	tokGoOapiCodegen:                  internStr("GO_OAPI_CODEGEN"),
 	tokGoOapiCodegenV2:                internStr("GO_OAPI_CODEGEN_V2"),
 	tokGoOapiCodegenTaxi:              internStr("GO_OAPI_CODEGEN_TAXI"),
+	tokGoGrpcGatewayV2Srcs:            internStr("GO_GRPC_GATEWAY_V2_SRCS"),
+	tokGoGrpcGatewaySrcs:              internStr("GO_GRPC_GATEWAY_SRCS"),
+	tokGoGrpcGatewaySwagger:           internStr("GO_GRPC_GATEWAY_SWAGGER_SRCS"),
+	tokProtoAddIncl:                   internStr("PROTO_ADDINCL"),
 }
 
 var tokByName = func() map[string]TOK {
@@ -583,6 +587,10 @@ const (
 	tokGoOapiCodegen
 	tokGoOapiCodegenV2
 	tokGoOapiCodegenTaxi
+	tokGoGrpcGatewayV2Srcs
+	tokGoGrpcGatewaySrcs
+	tokGoGrpcGatewaySwagger
+	tokProtoAddIncl
 )
 
 type TOK uint16

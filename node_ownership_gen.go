@@ -36,6 +36,7 @@ func registerKnownGlobalChunks() {
 	registerOwnedSlice(goExtldLinkerTail)
 	registerOwnedSlice(goExtldWholeArchive)
 	registerOwnedSlice(goProtoHead)
+	registerOwnedSlice(goProtobufInclude)
 	registerOwnedSlice(goSymabisDefs)
 	registerOwnedSlice(goSymabisHead)
 	registerOwnedSlice(goToolCmdEnd)

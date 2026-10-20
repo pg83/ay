@@ -15,7 +15,7 @@ func (e *EmitContext) notsProtoInputs() (args []string, inputs []VFS, refs []Nod
 		leaves = append(leaves, peer.SelfProtodesc)
 	}
 
-	protoInclude := dedup(protoNamespaceContribs(d), span.includes)
+	protoInclude := dedup(d.protoAddInclGlobal, span.includes)
 
 	d.scanCtx = newModuleScanContext(ctx, e.instance, d, nil, nil, nil, protoInclude)
 	d.srcDirs = append([]VFS{e.instance.Path}, d.srcDirs...)
