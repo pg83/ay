@@ -427,4 +427,5 @@ var (
 	str_GO_PACKAGE_VALUE                                                                     = internStr("_GO_PACKAGE_VALUE")
 	strUSE_SDC_META                                                                          = internStr("USE_SDC_META")
 	strCOMPILE_NLG_EMPTY_CPP                                                                 = internStr("COMPILE_NLG_EMPTY_CPP")
+	strBuildPlatformJavaKotlinGrpc                                                           = internStr("build/platform/java/kotlin_grpc")
 )

@@ -92,7 +92,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"EXCLUDE_TAGS":                    {},
 	"CHECK_DEPENDENT_DIRS":            {},
 	"WINDOWS_LONG_PATH_MANIFEST":      {},
-	"WITH_KOTLIN_GRPC":                {},
 	"DISABLE_DATA_VALIDATION":         {},
 
 	"FROM_SANDBOX":      {},
@@ -2023,7 +2022,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if isGoExeModuleType(d.moduleStmt.Name) {
-		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
+		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerLDFlagsGlobal, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
 		result := newResult()
 
 		result.isPROGRAM = true

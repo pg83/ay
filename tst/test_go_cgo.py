@@ -324,6 +324,22 @@ class GoCgoGraphTest(unittest.TestCase):
             f"{b}/lib.cgo1.go", f"{b}/_cgo_gotypes.go", f"{b}/lib.cgo2.c.pic.o", f"{b}/_cgo_export.c.pic.o", f"{b}/_cgo_import.go",
         ])
         self.assertEqual(between(args, "++cgo-srcs", "++ld_plugins"), [f"$(S)/{pkg}/lib.go"])
+        cgo1 = lib.node_by_output(graph, f"{b}/lib.cgo1.go")["cmds"][0]["cmd_args"]
+        self.assertEqual(cgo1[cgo1.index("-importpath") + 1], "main")
+        dynimport = lib.node_by_output(graph, f"{b}/_cgo_import.go")["cmds"]
+        self.assertEqual(dynimport[2]["cmd_args"][1:3], ["-dynpackage", "main"])
+        self.assertIn("-Wl,--gdb-index", dynimport[1]["cmd_args"])
+
+    def test_addincl_for_other_languages_stays_out_of_c_includes(self):
+        files = cgo_world()
+        pkg = "library/go/swigged"
+        files.update({
+            f"{pkg}/ya.make": "GO_LIBRARY()\nADDINCL(FOR swig contrib/tools/swig/Lib)\nCGO_SRCS(a.go)\nEND()\n",
+            f"{pkg}/a.go": 'package swigged\nimport "C"\n',
+        })
+        graph = lib.make(files, pkg)
+        cgo1 = lib.node_by_output(graph, f"$(B)/{pkg}/a.cgo1.go")["cmds"][0]["cmd_args"]
+        self.assertNotIn("-I$(S)/contrib/tools/swig/Lib", cgo1)
 
     def test_generated_cgo_source_outputs_stay_in_module_build_dir(self):
         files = cgo_world()

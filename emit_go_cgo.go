@@ -369,7 +369,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 			goCgo1Head,
 			pathBlock[:k:k],
 			goCgo1ToolChunk,
-			na.anyList(build(dir).any(), strImportpath.any(), internStr(instance.Platform.Go.importPath(dir)).any()),
+			na.anyList(build(dir).any(), strImportpath.any(), internStr(e.goCgoImportPath()).any()),
 			goCgoImportPathFlags(instance.Platform.Go, dir),
 			na.anyList(str3.any(), instance.Platform.TargetArg.any()),
 			instance.Platform.SysrootArgs,
@@ -439,11 +439,19 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	e.enqueueSrc(SrcMeta{Source: gotypes.any(), Prio: stmtPrioDefault})
 }
 
+func (e *EmitContext) goCgoImportPath() string {
+	if dir := e.instance.Path.relString(); goPackageName(dir, e.d) != "main" {
+		return e.instance.Platform.Go.importPath(dir)
+	}
+
+	return "main"
+}
+
 func (e *EmitContext) goCgoLinkOFlags() []ANY {
 	p := e.instance.Platform
 	tc := e.d.tc
 	na := e.ctx.na
-	block := na.anys.alloc(6 + len(p.LinkPreludeExtra))
+	block := na.anys.alloc(7 + len(p.LinkPreludeExtra))
 	k := 0
 	push := func(x ANY) { block[k] = x; k++ }
 
@@ -459,6 +467,15 @@ func (e *EmitContext) goCgoLinkOFlags() []ANY {
 
 	if p.PIC {
 		push(argFPIC.any())
+	}
+
+	if isGoExeModuleType(e.d.moduleStmt.Name) {
+		for _, f := range p.linkerSelectionGDBIndexFlags() {
+			push(internStr(f).any())
+		}
+	}
+
+	if p.PIC {
 		push(argFPIC.any())
 	}
 
@@ -561,7 +578,7 @@ func (e *EmitContext) flushGoCgo2() {
 
 	cmd2Args := na.anyList(
 		strGoCgoTool.any(),
-		strDynpackage.any(), internStr(dir[strings.LastIndexByte(dir, '/')+1:]).any(),
+		strDynpackage.any(), internStr(goPackageName(dir, d)).any(),
 		strDynimport.any(), cgoO.any(),
 		strDynout.any(), importGo.any(),
 		strDynlinker.any(),

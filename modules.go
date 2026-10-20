@@ -2610,6 +2610,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
+	case tokWithKotlinGrpc:
+		d.peerdirs = append(d.peerdirs, strBuildPlatformJavaKotlinGrpc.any())
 	case tokCompileNlg:
 		applyCompileNlg(modulePath, v, d)
 	case tokGenerateTopology:

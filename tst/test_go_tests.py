@@ -13,6 +13,8 @@ YA_CONF = (
 )
 
 
+LLD_LDFLAGS = "IF (OS_LINUX)\n    LDFLAGS(-fuse-ld=lld --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld.lld -Wl,--no-rosegment -Wl,--build-id=sha1)\nENDIF()\n"
+
 def resources_library(files, path, name, extra=""):
     bundle = f"{name.lower()}.json"
     files[f"{path}/ya.make"] = (
@@ -46,7 +48,7 @@ def go_world():
     }
     resources_library(files, "build/external_resources/go_tools", "GO_TOOLS")
     resources_library(files, "build/external_resources/yolint", "YOLINT")
-    resources_library(files, "build/platform/lld", "LLD_ROOT")
+    resources_library(files, "build/platform/lld", "LLD_ROOT", extra=LLD_LDFLAGS)
     resources_library(files, "build/platform/clang", "CLANG")
     resources_library(files, "build/platform/clang/clang-format", "CLANG_FORMAT")
     resources_library(files, "build/platform/python/ymake_python3", "YMAKE_PYTHON3")

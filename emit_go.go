@@ -75,8 +75,6 @@ var goExtldWholeArchive = []ANY{
 }
 
 var goExtldLinkerTail = []ANY{
-	internStr("-Wl,--no-rosegment").any(),
-	internStr("-Wl,--build-id=sha1").any(),
 	internStr("-lpthread").any(),
 	internStr("-ldl").any(),
 	internStr("-lresolv").any(),
@@ -627,9 +625,10 @@ func goClassifyClosure(na *NodeArenas, resolved []ResolvedPeer, closurePaths []V
 	return
 }
 
-func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadiaLibm bool, soname string, globals []VFS) []ANY {
+func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadiaLibm bool, soname string, globals []VFS, ldFlagsGlobal, objAddLibsGlobal []ANY) []ANY {
 	gdb := p.linkerSelectionGDBIndexFlags()
-	bound := 2 + len(p.SysrootArgs) + len(goExtldWholeArchive) + len(globals) + 1 + len(p.LinkPreludeExtra) + 1 + 2 + len(gdb) + 2 + len(goExtldLinkerTail) + len(p.SystemLibs) + 1
+	objAddLibs := appendArgGroupStr(nil, objAddLibsGlobal)
+	bound := len(objAddLibs) + 2 + len(p.SysrootArgs) + len(goExtldWholeArchive) + len(globals) + 1 + len(p.LinkPreludeExtra) + 1 + 2 + len(gdb) + len(ldFlagsGlobal) + len(goExtldLinkerTail) + len(p.SystemLibs) + 1
 	block := na.anys.alloc(bound)
 	k := 0
 	push := func(x ANY) { block[k] = x; k++ }
@@ -684,8 +683,13 @@ func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadi
 		push(argFPIC.any())
 	}
 
-	push(argFuseLdLld.any())
-	push(internV("--ld-path=", tc.LLD.prefix(), tc.LLD.relString()).any())
+	for _, x := range ldFlagsGlobal {
+		push(x)
+	}
+
+	for _, x := range objAddLibs {
+		push(x)
+	}
 
 	for _, x := range goExtldLinkerTail {
 		push(x)
@@ -1074,7 +1078,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	return e.emitNode(node), outPath
 }
 
-func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
+func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerLDFlagsGlobal, peerObjAddLibsGlobal []ANY, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.relString()
@@ -1098,7 +1102,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	vcsOPath := build(dir, "/__vcs_version__.c", instance.Platform.objectSuffix())
 	vcsGoPath := build(dir, "/__vcs_version__.go")
 	cmd0 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsInfo(na, d.tc, vcsCPath)), Env: goVcsEnv}
-	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(na, instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars}
+	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(na, instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, d.cc.PeerCFlagsGlobal, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars}
 
 	cmd2 := Cmd{CmdArgs: na.chunkList(na.anyList(
 		wrapccPython3STR.any(),
@@ -1266,7 +1270,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		goExeCmdVcs,
 		na.anyList(vcsGoPath.any()),
 		goExeCmdExtld,
-		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm, soname, peerGlobalPaths),
+		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm, soname, peerGlobalPaths, peerLDFlagsGlobal, peerObjAddLibsGlobal),
 		testArgs,
 		tail[:nt:nt],
 		testTail,

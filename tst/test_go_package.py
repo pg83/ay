@@ -24,6 +24,8 @@ PROGRAM_PEERS = [
 ]
 
 
+LLD_LDFLAGS = "IF (OS_LINUX)\n    LDFLAGS(-fuse-ld=lld --ld-path=${LLD_ROOT_RESOURCE_GLOBAL}/bin/ld.lld -Wl,--no-rosegment -Wl,--build-id=sha1)\nENDIF()\n"
+
 def resources_library(files, path, name, extra=""):
     bundle = f"{name.lower()}.json"
     files[f"{path}/ya.make"] = (
@@ -54,7 +56,7 @@ def go_world():
     }
     resources_library(files, "build/external_resources/go_tools", "GO_TOOLS")
     resources_library(files, "build/external_resources/yolint", "YOLINT")
-    resources_library(files, "build/platform/lld", "LLD_ROOT")
+    resources_library(files, "build/platform/lld", "LLD_ROOT", extra=LLD_LDFLAGS)
     for path in (f"{STD}/runtime", f"{STD}/runtime/cgo", "library/go/core/buildinfo"):
         go_module(files, path)
     return files
@@ -353,6 +355,19 @@ class GoPackageGraphTest(unittest.TestCase):
                 link = go_tool_args(lib.node_by_output(graph, "$(B)/cmd/app/app"))
                 self.assertEqual(between(link, "++extldflags", "++peers"), expected)
 
+    def test_go_link_takes_peer_ldflags_extralibs_and_global_cflags(self):
+        files = go_world()
+        files["c/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}CFLAGS(GLOBAL -DFROM_PEER)\nEXTRALIBS(-lrt -ldl)\nSRCS(c.cpp)\nEND()\n"
+        files["c/c.cpp"] = "int c;\n"
+        go_module(files, "cmd/app", macros="PEERDIR(c)\n", module="GO_PROGRAM")
+        graph = lib.make(files, "cmd/app")
+        link = lib.node_by_output(graph, "$(B)/cmd/app/app")
+        extld = between(go_tool_args(link), "++extldflags", "++peers")
+        self.assertEqual(extld[extld.index("-Wl,--build-id=sha1") + 1:extld.index("-lresolv") + 1], [
+            "-lrt", "-ldl", "-lpthread", "-ldl", "-lresolv",
+        ])
+        self.assertIn("-DFROM_PEER", link["cmds"][1]["cmd_args"])
+
     def test_import_declarations_become_implicit_peerdirs(self):
         files = go_world()
         imported = ("bufio", "bytes", "context", "errors", "flag", "hash", "io", "sort", "strconv", "gopkg.in/yaml.v2")
@@ -478,7 +493,7 @@ class GoPackageGraphTest(unittest.TestCase):
         files["build/platform/python/ymake_python3/ya.make"] = (
             "RESOURCES_LIBRARY()\nTOOLCHAIN(python3)\nVERSION(3.12.6)\nEND()\n"
         )
-        resources_library(files, "build/platform/lld", "LLD_ROOT", extra="TOOLCHAIN(lld)\nVERSION(20)\n")
+        resources_library(files, "build/platform/lld", "LLD_ROOT", extra="TOOLCHAIN(lld)\nVERSION(20)\n" + LLD_LDFLAGS)
         go_module(files, "vendor/github.com/pkg/errors", macros="LICENSE(BSD-2-Clause)\nVERSION(v0.9.1)\n")
         go_module(files, "library/go/wrap", 'import "github.com/pkg/errors"\n')
         go_module(files, "cmd/app", 'import "a.yandex-team.ru/library/go/wrap"\n', module="GO_PROGRAM")

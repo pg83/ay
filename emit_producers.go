@@ -381,6 +381,10 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 			if v := runInputBuildCandidate(module, f.string()); v != 0 {
 				backing = append(backing, v)
 			}
+
+			if !vfsHasPrefix(f.string()) {
+				backing = append(backing, buildClean(f.string()))
+			}
 		}
 	}
 

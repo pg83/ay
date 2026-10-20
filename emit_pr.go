@@ -607,6 +607,10 @@ func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 		return source(rel)
 	}
 
+	if rootBuild := buildClean(rel); e.codegen.use(rootBuild) != nil {
+		return rootBuild
+	}
+
 	return e.resolveModuleSourceVFS(internStr(rel).any(), d.srcDirs)
 }
 

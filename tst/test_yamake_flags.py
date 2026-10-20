@@ -96,13 +96,14 @@ class YaMakeFlagsTest(unittest.TestCase):
         )
         self.assertEqual(includes(graph, "$(B)/l/l.cpp.o"), [
             "-I$(B)", "-I$(S)", "-I$(S)/l/g", "-I$(S)/l/one", "-I$(S)/l/own",
-            "-I$(B)/gen", "-I$(S)/$S/unexpanded", "-I$(S)/l/x", "-I$(S)/l/y",
+            "-I$(B)/gen", "-I$(S)/$S/unexpanded",
         ])
+        # FOR <lang> dirs belong to that language's include list, not to the C/C++ one
         self.assertEqual(includes(graph, "$(B)/mid/mid.cpp.o"), [
-            "-I$(B)", "-I$(S)", "-I$(S)/l/g", "-I$(S)/l/one", "-I$(S)/l/x",
+            "-I$(B)", "-I$(S)", "-I$(S)/l/g", "-I$(S)/l/one",
         ])
         self.assertEqual(includes(graph, "$(B)/top/main.cpp.o"), [
-            "-I$(B)", "-I$(S)", "-I$(S)/l/g", "-I$(S)/l/x",
+            "-I$(B)", "-I$(S)", "-I$(S)/l/g",
         ])
 
     def test_self_and_asm_include_dirs(self):

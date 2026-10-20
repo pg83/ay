@@ -1812,7 +1812,13 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 				continue
 			}
 
-			i++
+			if i+1 < len(args) && args[i+1].string() == "c" {
+				i++
+
+				continue
+			}
+
+			i += 2
 
 			continue
 		}
@@ -1845,6 +1851,12 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 				if i+2 < len(args) && args[i+1].string() == "swig" {
 					swigPaths = append(swigPaths, args[i+2])
 					swigGlobalPaths = append(swigGlobalPaths, args[i+2])
+					i += 2
+
+					continue
+				}
+
+				if i+1 < len(args) && args[i+1].string() != "c" {
 					i += 2
 
 					continue
