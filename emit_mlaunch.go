@@ -13,7 +13,7 @@ func (e *EmitContext) emitMlaunch(resolved []ResolvedPeer, peerArchivePaths []VF
 		return
 	}
 
-	if len(e.d.mlaunch.Components) > 0 {
+	if e.d.mlaunch.Generate == "composite" {
 		script := buildInternalScriptsGenCompositeGo
 		args := append([]ANY{e.d.tc.Python3.any(), script.any(), strLocalPeers.any()}, e.d.mlaunch.Components...)
 

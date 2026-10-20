@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/md5"
 	enchex "encoding/hex"
+	"slices"
 	"strings"
 )
 
@@ -137,7 +138,6 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 
 	d.scanCtx = newModuleScanContext(ctx, instance, d, dedup(d.addIncl, d.addInclGlobal), nil, nil, protoInclude)
 
-	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
 	cppOutRoot := protoCPPOutRoot(d)
 	mid := descProtocIncludes(ctx.na, span.includes, cppOutRoot)
 
@@ -148,12 +148,18 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	var producerRefs []NodeRef
 	var descOutputs []VFS
 	var rawprotoOutputs []VFS
+	var protocLDRef NodeRef
+	var protocBinary VFS
 
 	for _, meta := range d.srcs {
 		src := meta.Source
 
 		if !extIsProto(src.string()) {
 			continue
+		}
+
+		if protocBinary == 0 {
+			protocLDRef, protocBinary = ctx.tool(argContribToolsProtoc)
 		}
 
 		srcRel := src.string()
@@ -316,28 +322,13 @@ func (e *EmitContext) emitDescProtoMerge(selfProtodesc, protosrc VFS,
 
 func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	closure := descPeerClosure(ctx, instance, d.peerdirs, false, false).peers
+	peerdirs := d.peerdirs
 
 	if instance.Language == LangProtoDescriptions {
-		self := instance
-
-		self.Language = LangDescProto
-
-		result := genModule(ctx, self)
-
-		dedupers.with(func(dd *DeDuper) {
-			for _, peer := range closure {
-				dd.add(peer.SelfProtodesc.strID())
-			}
-
-			for _, peer := range result.DescClosure {
-				if dd.add(peer.SelfProtodesc.strID()) {
-					closure = append(closure, peer)
-				}
-			}
-		})
+		peerdirs = append(slices.Clip(peerdirs), instance.Path.rel().any())
 	}
 
+	closure := descPeerClosure(ctx, instance, peerdirs, false, false).peers
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
 	prj := e.descriptorName()

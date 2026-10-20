@@ -81,6 +81,8 @@ func setupMlaunchModule(stmt *ModuleStmt, module string, language Language, env 
 		d.mlaunch.Generate = "golaunch"
 		peer("sdg/sdc/ros/configuration/golaunch")
 	case tokGolaunchComposite:
+		d.mlaunch.Generate = "composite"
+
 		std := env.string(envGOSTD)
 
 		peer(std+"/fmt", std+"/sort", "sdg/sdc/ros/configuration/golaunch")

@@ -119,6 +119,22 @@ END()
         for archive in (f"{std}/fmt/fmt.a", f"{std}/sort/sort.a", "sdg/sdc/ros/configuration/golaunch/golaunch.a", "first/first.a", "second/second.a"):
             self.assertIn(archive, peers)
 
+    def test_empty_composite_still_generates_its_main_source(self):
+        sources = files()
+        std = "contrib/go/_std_1.26/src"
+        for peer in (f"{std}/fmt", f"{std}/sort"):
+            sources[f"{peer}/ya.make"] = f"GO_LIBRARY()\n{lib.BARE_MODULE}\nEND()\n"
+        sources["build/internal/scripts/gen_composite_golaunch.py"] = ""
+        sources["empty/ya.make"] = f"GOLAUNCH_COMPOSITE()\n{lib.BARE_MODULE}\nEND()\n"
+        graph = lib.make(sources, "empty")
+        main = lib.node_by_output(graph, "$(B)/empty/main.go")
+        self.assertEqual(main["cmds"][0]["cmd_args"][1:], [
+            "$(S)/build/internal/scripts/gen_composite_golaunch.py", "--local-peers",
+        ])
+        link = lib.node_by_output(graph, "$(B)/empty/empty")
+        self.assertIn(main["uid"], link["deps"])
+        self.assertIn("$(B)/empty/main.go", link["inputs"])
+
     def test_go_variant_of_mlaunch_component_builds_its_golaunch_sources(self):
         sources = files()
         sources["comp/ya.make"] = f"""MLAUNCH_COMPONENT(part)
