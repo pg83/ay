@@ -133,7 +133,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 	caches := newGenCaches(fs)
 	hostP, targetP := makePlatforms(fs, mf, caches)
 
-	for _, p := range []*Platform{hostP, targetP, targetP.picVariant} {
+	for _, p := range []*Platform{hostP, targetP} {
 		p.AddInputs = mf.dist && mf.sandboxing
 	}
 
@@ -268,11 +268,6 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Pla
 	localFlags := readLocalYmake(fs)
 	hostRun := startYmakeConf(fs, srcRoot, mf.hostBuildType, !mf.dist, localFlags, hostFlags, hostTC)
 	targetRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, targetFlags, targetTC)
-	picFlags := maps.Clone(targetFlags)
-
-	delete(picFlags, "FORCE_NO_PIC")
-
-	picRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
 
 	caches.prewarm(fs, mf.targets)
 
@@ -293,7 +288,15 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches) (hostP, targetP *Pla
 	targetCXXFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS"))
 
 	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, targetRun.wait(), targetCFlags, targetCXXFlags, wlSystemLibs)
-	targetP.picVariant = newPlatform(tOS, tISA, mf.buildType, targetTC, picRun.wait(), targetCFlags, targetCXXFlags, wlSystemLibs)
+	targetP.picMake = func() *Platform {
+		picFlags := maps.Clone(targetFlags)
+
+		delete(picFlags, "FORCE_NO_PIC")
+
+		picRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
+
+		return newPlatform(tOS, tISA, mf.buildType, targetTC, picRun.wait(), targetCFlags, targetCXXFlags, wlSystemLibs)
+	}
 
 	return hostP, targetP
 }

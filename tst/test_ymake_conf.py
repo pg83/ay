@@ -26,8 +26,8 @@ CLANG20_FORMULA = {
 
 # Records the command line and environment ay runs the script with, then
 # behaves as the fake.
-# The target is configured twice, nopic and pic (ya's _build_no_pic adds
-# FORCE_NO_PIC); the pic run, neither nopic nor the host tools, records '.pic'.
+# A PIC transition configures the target a second time without FORCE_NO_PIC
+# (ya's _build_no_pic adds it); that run, neither nopic nor host, records '.pic'.
 RECORDER = (
     "import json as _json, os as _os, sys as _sys\n"
     "_pic = '' if {'FORCE_NO_PIC=yes', 'IS_CROSS_TOOLS=yes'} & set(_sys.argv) else '.pic'\n"
@@ -216,15 +216,21 @@ class ConfCommandLineTest(unittest.TestCase):
             "CLANG20": "yes", "FAKEID": "sandboxing", "FORCE_NO_PIC": "yes", "IS_CROSS_SANITIZE": "yes",
             "OPENSOURCE": "yes", "SANDBOXING": "yes", "TP_FLAG": "x", "USER_DEFINE": "1", "YA": "yes",
         })
-        pic = dict(target)
-        del pic["FORCE_NO_PIC"]
-        self.assertEqual(dict(presets(tree.recorded("dist-debug.pic")["argv"])), pic)
         self.assertEqual(dict(presets(tree.recorded("dist-release")["argv"])), {
             "CLANG20": "yes", "CLANG_COVERAGE": "no", "CONSISTENT_DEBUG": "yes", "FAKEID": "sandboxing",
             "HP_FLAG": "y", "IS_CROSS_SANITIZE": "yes", "IS_CROSS_TOOLS": "yes", "NO_DEBUGINFO": "yes",
             "OPENSOURCE": "yes", "SANDBOXING": "yes", "TIDY": "no", "TOOL_BUILD_MODE": "yes",
             "TRAVERSE_RECURSE": "no", "YA": "yes",
         })
+
+    def test_pic_variant_is_configured_only_for_a_pic_transition(self):
+        tree = self.tree(**{"d/ya.make": "DLL(d)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n", "d/d.cpp": ""})
+        tree.graph("--sandboxing", "m")
+        self.assertFalse((tree.src / "build" / "argv.dist-debug.pic.json").exists())
+        tree.graph("--sandboxing", "d")
+        nopic = dict(presets(tree.recorded("dist-debug")["argv"]))
+        del nopic["FORCE_NO_PIC"]
+        self.assertEqual(dict(presets(tree.recorded("dist-debug.pic")["argv"])), nopic)
 
     def test_distbuild_runs_the_script_without_local_distbuild(self):
         tree = self.tree()

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"slices"
 	"strings"
+	"sync"
 )
 
 var (
@@ -26,6 +27,8 @@ func confSystemLibsViaWl(fs FS) bool {
 
 type Platform struct {
 	picVariant            *Platform
+	picOnce               sync.Once
+	picMake               func() *Platform
 	AddInputs             bool
 	OS                    OS
 	ISA                   ISA
@@ -373,6 +376,11 @@ func (p *Platform) pic() *Platform {
 	if p.PIC {
 		return p
 	}
+
+	p.picOnce.Do(func() {
+		p.picVariant = p.picMake()
+		p.picVariant.AddInputs = p.AddInputs
+	})
 
 	return p.picVariant
 }
