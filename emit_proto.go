@@ -188,19 +188,21 @@ type ProtoPBConfig struct {
 }
 
 type PbModuleEmission struct {
-	protocLDRef         NodeRef
-	cppStyleguideLDRef  NodeRef
-	grpcCppLDRef        NodeRef
-	protocBinary        VFS
-	cppStyleguideBinary VFS
-	grpcCppBinary       VFS
-	liteHeaders         bool
-	extraPlugins        []ResolvedCPPProtoPlugin
-	pbGenRefs           []NodeRef
-	grpcCCRefs          []NodeRef
-	grpcHRefs           []NodeRef
-	blocks              PbArgBlocks
-	pendingCommon       *protoPBCommon
+	protocLDRef           NodeRef
+	cppStyleguideLDRef    NodeRef
+	grpcCppLDRef          NodeRef
+	protocBinary          VFS
+	cppStyleguideBinary   VFS
+	grpcCppBinary         VFS
+	liteHeaders           bool
+	grpcOutputIndex       int
+	grpcOutputsBeforeBase bool
+	extraPlugins          []ResolvedCPPProtoPlugin
+	pbGenRefs             []NodeRef
+	grpcCCRefs            []NodeRef
+	grpcHRefs             []NodeRef
+	blocks                PbArgBlocks
+	pendingCommon         *protoPBCommon
 }
 
 type protoPBCommon struct {
@@ -259,8 +261,10 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 	ctx, d := e.ctx, e.d
 
 	*pe = PbModuleEmission{
-		liteHeaders:   !protoTransitiveHeadersEnabled(d),
-		grpcCppBinary: pbGrpcCppVFS,
+		liteHeaders:           !protoTransitiveHeadersEnabled(d),
+		grpcCppBinary:         pbGrpcCppVFS,
+		grpcOutputIndex:       d.grpcOutputIndex,
+		grpcOutputsBeforeBase: d.grpcOutputsBeforeBase || d.moduleStmt.Name == tokProtoLibrary && e.instance.Platform.ProtoHeaderEpilogue,
 	}
 
 	pe.protocLDRef, pe.protocBinary = ctx.tool(argContribToolsProtoc)
@@ -408,7 +412,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	if spec.ccFirstOuts {
 		pending.outputs = na.vfsList(pbCC, pbH)
 	} else {
-		pending.outputs = assembleProtoCmdOutputs(na, protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, pe.extraPlugins, pe.liteHeaders, cfg.grpc)
+		pending.outputs = assembleProtoCmdOutputs(na, protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, pe, cfg.grpc)
 	}
 
 	directImports := protoInducedPbH(ctx.parsers, ctx.parsers.sourceParsedBuckets(protoRel.source(), nil).bucket(parsedIncludesLocal), e.dirScratch[:0])
@@ -906,10 +910,10 @@ func (e *EmitContext) emitPB(
 	e.emitReservedNode(node, id)
 }
 
-func assembleProtoCmdOutputs(na *NodeArenas, protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, extraPlugins []ResolvedCPPProtoPlugin, liteHeaders, grpc bool) []VFS {
-	bound := 4
+func assembleProtoCmdOutputs(na *NodeArenas, protoBase string, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH VFS, pe *PbModuleEmission, grpc bool) []VFS {
+	bound := 5
 
-	for _, plugin := range extraPlugins {
+	for _, plugin := range pe.extraPlugins {
 		bound += len(plugin.Spec.OutputSuffixes)
 	}
 
@@ -917,35 +921,30 @@ func assembleProtoCmdOutputs(na *NodeArenas, protoBase string, pbH, pbCC, pbDeps
 
 	outputs = append(outputs, pbH)
 
-	for _, plugin := range extraPlugins {
-		if !plugin.Spec.OutputsBeforeBase {
-			continue
-		}
+	appendPlugins := func(beforeBase bool) {
+		for i := 0; i <= len(pe.extraPlugins); i++ {
+			if grpc && i == pe.grpcOutputIndex && pe.grpcOutputsBeforeBase == beforeBase {
+				outputs = append(outputs, grpcPbCC, grpcPbH)
+			}
 
-		for _, suffix := range plugin.Spec.OutputSuffixes {
-			outputs = append(outputs, build(protoBase, suffix))
+			if i == len(pe.extraPlugins) || pe.extraPlugins[i].Spec.OutputsBeforeBase != beforeBase {
+				continue
+			}
+
+			for _, suffix := range pe.extraPlugins[i].Spec.OutputSuffixes {
+				outputs = append(outputs, build(protoBase, suffix))
+			}
 		}
 	}
 
+	appendPlugins(true)
 	outputs = append(outputs, pbCC)
 
-	if liteHeaders {
+	if pe.liteHeaders {
 		outputs = append(outputs, pbDepsH)
 	}
 
-	if grpc {
-		outputs = append(outputs, grpcPbCC, grpcPbH)
-	}
-
-	for _, plugin := range extraPlugins {
-		if plugin.Spec.OutputsBeforeBase {
-			continue
-		}
-
-		for _, suffix := range plugin.Spec.OutputSuffixes {
-			outputs = append(outputs, build(protoBase, suffix))
-		}
-	}
+	appendPlugins(false)
 
 	na.vfs.commit(len(outputs))
 

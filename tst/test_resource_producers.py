@@ -241,7 +241,7 @@ class ProtoProducerTest(unittest.TestCase):
         )
         graph = lib.make(files, "lib")
         producer = lib.node_by_output(graph, "$(B)/lib/gen.proto")
-        suffixes = (".pb.h", ".pb.cc", ".deps.pb.h", ".grpc.pb.cc", ".grpc.pb.h", ".cap.h")
+        suffixes = (".pb.h", ".grpc.pb.cc", ".grpc.pb.h", ".pb.cc", ".deps.pb.h", ".cap.h")
         for stem, source in (("a", "$(S)/lib/a.proto"), ("gen", "$(B)/lib/gen.proto")):
             with self.subTest(stem=stem):
                 node = lib.node_by_output(graph, f"$(B)/lib/{stem}.pb.h")

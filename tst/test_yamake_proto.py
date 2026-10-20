@@ -110,12 +110,13 @@ class YaMakeProtoTest(unittest.TestCase):
         )
         protoc = lib.only_node_by_kind(graph, "PB")
         self.assertEqual(protoc["outputs"], [
-            "$(B)/a/x.pb.h", "$(B)/a/x.pb.cc", "$(B)/a/x.grpc.pb.cc", "$(B)/a/x.grpc.pb.h",
+            "$(B)/a/x.pb.h", "$(B)/a/x.pb.cc",
             "$(B)/a/x.p1.h", "$(B)/a/x.p2.h", "$(B)/a/x.p2.cpp",
             "$(B)/a/x.yaff.h", "$(B)/a/x.yaff.cpp",
             "$(B)/a/x_sch.yaff.h", "$(B)/a/x_sch.yaff.cpp",
             "$(B)/a/x_sch2.yaff.h", "$(B)/a/x_sch2.yaff.cpp",
             "$(B)/a/x.apphost.h", "$(B)/a/x.cap.h",
+            "$(B)/a/x.grpc.pb.cc", "$(B)/a/x.grpc.pb.h",
         ])
         args = protoc["cmds"][0]["cmd_args"]
         for expected in (

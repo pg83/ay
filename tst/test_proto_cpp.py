@@ -332,6 +332,32 @@ class ProtoCppTest(unittest.TestCase):
                 args = node["cmds"][0]["cmd_args"]
                 self.assertEqual(args[args.index("--outputs") + 1:args.index("--")], outputs)
 
+    def test_grpc_outputs_participate_in_header_condition_recalculation(self):
+        for grpc_first in (False, True):
+            with self.subTest(grpc_first=grpc_first):
+                files = proto_files()
+                grpc_files(files)
+                lib.tool_program(files, "tools/plugin", "plugin")
+                macros = ["GRPC()", "CPP_PROTO_PLUGIN(custom tools/plugin .custom.h)"]
+                if not grpc_first:
+                    macros.reverse()
+                files.update({
+                    "p/ya.make": (
+                        "PROTO_LIBRARY()\n" + "\n".join(macros)
+                        + "\nSET(PROTOC_TRANSITIVE_HEADERS no)\nSRCS(a.proto)\nEND()\n"
+                    ),
+                    "p/a.proto": 'syntax = "proto3";\nmessage A {}\n',
+                })
+                graph = lib.make(files, "p")
+                grpc_outputs = ["$(B)/p/a.grpc.pb.cc", "$(B)/p/a.grpc.pb.h"]
+                plugin_outputs = ["$(B)/p/a.custom.h"]
+                extra = grpc_outputs + plugin_outputs if grpc_first else plugin_outputs + grpc_outputs
+                expected = ["$(B)/p/a.pb.h", *extra, "$(B)/p/a.pb.cc", "$(B)/p/a.deps.pb.h"]
+                node = pb_node(graph, "$(B)/p/a.pb.h")
+                self.assertEqual(node["outputs"], expected)
+                args = node["cmds"][0]["cmd_args"]
+                self.assertEqual(args[args.index("--outputs") + 1:args.index("--")], expected)
+
     def test_plugin_emitting_grpc_suffixes_without_grpc_macro(self):
         files = proto_files()
         lib.tool_program(files, "tools/gen", "gen")

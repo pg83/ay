@@ -115,6 +115,8 @@ func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
 }
 
 func recalcProtoOutputs(d *ModuleData) {
+	d.grpcOutputsBeforeBase = d.grpc
+
 	for i := range d.cppProtoPlugins {
 		d.cppProtoPlugins[i].OutputsBeforeBase = true
 	}
@@ -258,6 +260,8 @@ type ModuleData struct {
 	optimizePyProtosSet      bool
 	needGoogleProtoPeerdirs  bool
 	cppProtoPlugins          []CppProtoPlugin
+	grpcOutputIndex          int
+	grpcOutputsBeforeBase    bool
 	excludeTags              map[STR]bool
 	onlyTags                 bool
 	dynamicLibraryFrom       []ANY
@@ -2048,6 +2052,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.bisonFlags = append(d.bisonFlags, internArg(a.string()).any())
 		}
 	case tokGrpc:
+		if !d.grpc {
+			d.grpcOutputIndex = len(d.cppProtoPlugins)
+		}
+
 		d.grpc = true
 
 		if isGoModuleType(d.unit.Type) {

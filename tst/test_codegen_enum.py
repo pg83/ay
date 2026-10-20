@@ -17,6 +17,20 @@ def enum_files(files):
 
 
 class EnumSerializationTest(unittest.TestCase):
+    def test_root_relative_generated_header_resolves_from_registry(self):
+        graph = lib.make(enum_files({
+            "p/ya.make": (
+                f"LIBRARY()\n{lib.BARE_MODULE}COPY_FILE(template.h ${{ARCADIA_BUILD_ROOT}}/shared/enums.h)\n"
+                "GENERATE_ENUM_SERIALIZATION(shared/enums.h)\nEND()\n"
+            ),
+            "p/template.h": "enum E {A};\n",
+        }), "p")
+        source = lib.node_by_output(graph, "$(B)/shared/enums.h")
+        generated = lib.node_by_output(graph, "$(B)/p/shared/enums.h_serialized.cpp")
+        self.assertIn("$(B)/shared/enums.h", generated["inputs"])
+        self.assertIn(source["uid"], generated["deps"])
+        self.assertEqual(generated["cmds"][0]["cmd_args"][1], "$(B)/shared/enums.h")
+
     def test_parent_header_output_is_normalized_before_registration(self):
         graph = lib.make(enum_files({
             "p/sub/ya.make": (

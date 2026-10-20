@@ -28,6 +28,12 @@ func (e *EmitContext) resolveEnumHeaderInput(headerRel string, srcDirs []VFS) VF
 		return buildHeader
 	}
 
+	rootHeader := buildClean(headerRel)
+
+	if e.codegen.lookup(rootHeader) != nil {
+		return rootHeader
+	}
+
 	return headerInput
 }
 
