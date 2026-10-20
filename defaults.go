@@ -181,7 +181,7 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 		} else {
 			peers = append(peers, "build/platform/clang")
 
-			if isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name) {
+			if isLinkingModuleType(d.unit.Type) {
 				peers = append(peers, "build/platform/lld")
 			}
 

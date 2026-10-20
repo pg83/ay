@@ -118,6 +118,21 @@ class YaMakeDefaultPeersTest(unittest.TestCase):
         self.assertEqual(code, 0, stderr)
         return linked_peers(graph)
 
+    def test_linking_variants_receive_the_linker_peer(self):
+        for module in ("PROGRAM", "DLL", "DLL_TOOL", "SO_PROGRAM"):
+            with self.subTest(module=module):
+                files = stub_tree("")
+                files["a/ya.make"] = files["a/ya.make"].replace("PROGRAM()", f"{module}()")
+                peer = "build/platform/lld"
+                files[f"{peer}/ya.make"] = files[f"{peer}/ya.make"].replace(
+                    "END()", f"ADDINCL(GLOBAL {peer})\nEND()")
+                lib.tool_program(files, "tools/fix_elf", "fix_elf")
+                code, graph, stderr = ay_make(files)
+                self.assertEqual(code, 0, stderr)
+                compiled = next(node for node in graph["graph"]
+                                if node["kv"]["p"] == "CC" and "$(S)/a/x.cpp" in node["inputs"])
+                self.assertIn(f"-I$(S)/{peer}", compiled["cmds"][0]["cmd_args"])
+
     def test_autocheck_program_links_eatmydata_on_linux(self):
         peer = "contrib/libs/libeatmydata"
         files = {
