@@ -260,6 +260,7 @@ type RunProgramStmt struct {
 	ToolPath       ANY
 	Args           []ANY
 	INFiles        []ANY
+	INNoParse      int
 	OUTFiles       []ANY
 	OUTNoAutoFiles []ANY
 	StdoutFile     *ANY
@@ -312,6 +313,7 @@ type RunPythonStmt struct {
 	ScriptPath     ANY
 	Args           []ANY
 	INFiles        []ANY
+	INNoParse      int
 	OUTFiles       []ANY
 	OUTNoAutoFiles []ANY
 	StdoutFile     *ANY
@@ -1550,6 +1552,8 @@ func parseRunProgram(args []ANY, line int) *RunProgramStmt {
 	i := 1
 	currentSection := kwARGS.any()
 
+	var noParse []ANY
+
 	for i < len(args) {
 		tok := args[i]
 
@@ -1563,8 +1567,10 @@ func parseRunProgram(args []ANY, line int) *RunProgramStmt {
 		switch currentSection {
 		case kwARGS.any():
 			stmt.Args = append(stmt.Args, tok)
-		case kwIN.any(), kwIN_NOPARSE.any(), kwIN_DEPS.any():
+		case kwIN.any(), kwIN_DEPS.any():
 			stmt.INFiles = append(stmt.INFiles, tok)
+		case kwIN_NOPARSE.any():
+			noParse = append(noParse, tok)
 		case kwOUT.any():
 			stmt.OUTFiles = append(stmt.OUTFiles, tok)
 		case kwOUT_NOAUTO.any():
@@ -1589,6 +1595,9 @@ func parseRunProgram(args []ANY, line int) *RunProgramStmt {
 		i++
 	}
 
+	stmt.INFiles = append(stmt.INFiles, noParse...)
+	stmt.INNoParse = len(noParse)
+
 	return stmt
 }
 
@@ -1596,6 +1605,8 @@ func parseRunPython(args []ANY, line int) *RunPythonStmt {
 	stmt := &RunPythonStmt{ScriptPath: args[0], Line: line}
 	i := 1
 	currentSection := kwARGS.any()
+
+	var noParse []ANY
 
 	for i < len(args) {
 		tok := args[i]
@@ -1610,8 +1621,10 @@ func parseRunPython(args []ANY, line int) *RunPythonStmt {
 		switch currentSection {
 		case kwARGS.any():
 			stmt.Args = append(stmt.Args, tok)
-		case kwIN.any(), kwIN_NOPARSE.any(), kwIN_DEPS.any():
+		case kwIN.any(), kwIN_DEPS.any():
 			stmt.INFiles = append(stmt.INFiles, tok)
+		case kwIN_NOPARSE.any():
+			noParse = append(noParse, tok)
 		case kwOUT.any():
 			stmt.OUTFiles = append(stmt.OUTFiles, tok)
 		case kwOUT_NOAUTO.any():
@@ -1633,6 +1646,9 @@ func parseRunPython(args []ANY, line int) *RunPythonStmt {
 
 		i++
 	}
+
+	stmt.INFiles = append(stmt.INFiles, noParse...)
+	stmt.INNoParse = len(noParse)
 
 	return stmt
 }

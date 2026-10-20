@@ -1375,7 +1375,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded := *v
 
 			expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
-			expanded.INFiles = expandStmtTokens(v.INFiles, env)
+			expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env)
 			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
 			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
@@ -1430,7 +1430,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			expanded.ScriptPath = expandStmtTokenAny(v.ScriptPath, env)
 			expanded.Args = expandCommandTokens(v.Args, env)
-			expanded.INFiles = expandStmtTokens(v.INFiles, env)
+			expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env)
 			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
 			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
@@ -3842,6 +3842,19 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 	}
 
 	return string(b)
+}
+
+func expandInFiles(files []ANY, noParse int, env Environment) ([]ANY, int) {
+	split := len(files) - noParse
+	parsed := expandStmtTokens(files[:split:split], env)
+
+	if noParse == 0 {
+		return parsed, 0
+	}
+
+	text := expandStmtTokens(files[split:], env)
+
+	return append(parsed[:len(parsed):len(parsed)], text...), len(text)
 }
 
 func expandStmtTokens(items []ANY, env Environment) []ANY {

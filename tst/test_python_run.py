@@ -266,6 +266,35 @@ class RunPython3Test(unittest.TestCase):
             "$(S)/lib/a.js", "$(S)/lib/b.ts", "$(S)/lib/cat.py",
         ])
 
+    def test_in_noparse_files_are_text_inputs(self):
+        # build/ymake.core.conf passes IN_NOPARSE as ${hide;input=TEXT:...}:
+        # middlesearch yabs/models_services/feature_store/mappers/argus/py
+        # lists argus.h, whose include exists nowhere in the slice, alone.
+        for macro in ("RUN_PROGRAM(tool", "RUN_PYTHON3(gen.py"):
+            with self.subTest(macro=macro):
+                files = {
+                    "lib/ya.make": (
+                        LIBRARY_HEAD
+                        + "SET(HDRS lib/a.h lib/b.h)\n"
+                        + macro + " IN c.h IN_NOPARSE ${HDRS} IN_DEPS d.h OUT gen.cpp)\n"
+                        "END()\n"
+                    ),
+                    "lib/gen.py": "",
+                    "lib/a.h": '#include "nowhere/missing.h"\n',
+                    "lib/b.h": '#include "lib/dep.h"\n',
+                    "lib/c.h": '#include "lib/dep2.h"\n',
+                    "lib/d.h": "",
+                    "lib/dep.h": "",
+                    "lib/dep2.h": "",
+                }
+                lib.tool_program(files, "tool", "tool")
+                graph = lib.make(files, "lib", "-k")
+                run = lib.node_by_output(graph, "$(B)/lib/gen.cpp")
+                inputs = {i for i in run["inputs"] if i.startswith("$(S)/lib/")}
+                self.assertEqual(inputs - {"$(S)/lib/gen.py"}, {
+                    "$(S)/lib/a.h", "$(S)/lib/b.h", "$(S)/lib/c.h", "$(S)/lib/d.h", "$(S)/lib/dep2.h",
+                })
+
     def test_arcadia_root_left_by_expansion_limit_maps_to_source_root(self):
         # Each expansion pass consumes one "O1}" suffix, so the literal
         # ${ARCADIA_ROOT} only appears after the last of the eight passes.

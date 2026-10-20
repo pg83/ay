@@ -234,7 +234,7 @@ type pyRunSnap struct {
 func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) InputChunks {
 	var closures []Closure
 
-	for i, f := range stmt.INFiles {
+	for i, f := range stmt.INFiles[:len(stmt.INFiles)-stmt.INNoParse] {
 		if s.inVFSs[i].isBuild() || !s.ctx.parsers.registry.scansIncludes(f.string()) {
 			continue
 		}
