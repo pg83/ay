@@ -183,6 +183,30 @@ class CythonTest(unittest.TestCase):
             "$(B)/lib/hdr_cpp.cpp.py3.o",
         ])
 
+    def test_py_srcs_cython_objects_follow_macro_generated_sources(self):
+        # PY_SRCS is a plugin (build/plugins/pybuild.py) run after the whole
+        # ya.make: middlesearch search/split_bert archives
+        # split_bert_versions_mapping.cpp.o, the GENERATE_ENUM_SERIALIZATION
+        # object declared after PY_SRCS, then bert_versions.pyx.cpp.o.
+        files = python_base()
+        files.update({
+            "lib/ya.make": (
+                "LIBRARY()\nUSE_PYTHON3()\nSRCS(m.cpp)\nPY_SRCS(b.pyx)\n"
+                "GENERATE_ENUM_SERIALIZATION(m.h)\nEND()\n"
+            ),
+            "lib/m.cpp": "",
+            "lib/m.h": "",
+            "lib/b.pyx": "",
+            "util/generic/serialized_enum.h": "",
+            "tools/enum_parser/enum_serialization_runtime/ya.make": STUB_LIBRARY,
+            "library/python/runtime_py3/ya.make": STUB_LIBRARY,
+        })
+        lib.tool_program(files, "tools/enum_parser/enum_parser", "enum_parser")
+        graph = lib.make(files, "lib")
+        archive = lib.node_by_output_prefix(graph, "$(B)/lib/liblib")
+        objects = [i.rsplit("/", 1)[1] for i in archive["inputs"] if i.endswith(".o")]
+        self.assertEqual(objects, ["m.cpp.o", "m.h_serialized.cpp.o", "b.pyx.cpp.o"])
+
     def test_cimport_forms_reach_cython_inputs(self):
         files = python_base()
         files.update({

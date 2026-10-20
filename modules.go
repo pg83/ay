@@ -2086,6 +2086,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{
 			Src:     v.Args[0].string(),
 			Options: anyStrs(v.Args[1:]),
+			Seq:     d.nextDeclSeq(),
 		})
 
 		d.cythonNumpyBeforeInclude = true
@@ -2098,6 +2099,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			Src:     v.Args[0].string(),
 			Options: anyStrs(v.Args[1:]),
 			CMode:   true,
+			Seq:     d.nextDeclSeq(),
 		})
 
 		d.cythonNumpyBeforeInclude = true

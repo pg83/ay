@@ -80,6 +80,7 @@ type CythonStmt struct {
 	Header    bool
 	ApiHeader bool
 	Pxd       string
+	Seq       int
 }
 
 type CythonStmtPlan struct {
@@ -318,8 +319,14 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			info.OnUse = pending
 		}
 
+		seq := p.stmt.Seq
+
+		if seq == 0 {
+			seq = e.d.nextDeclSeq()
+		}
+
 		e.enqueueSrc(SrcMeta{
-			Source: generatedVFS.any(), Prio: stmtPrioDefault, Bucket: bkCython,
+			Source: generatedVFS.any(), Prio: stmtPrioDefault, Seq: seq, Bucket: bkCython,
 			Compile: CompileSpec{Py3Suffix: py3Suffix, CFlags: ccCFlags},
 		})
 	}
