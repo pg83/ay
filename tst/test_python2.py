@@ -189,6 +189,23 @@ class Python2Test(unittest.TestCase):
             lint_files.append([a for a in command[command.index("run_custom_lint"):] if a in ("$(S)/lib/a.py", "$(S)/lib/b.py", "$(S)/lib/c.py")])
         self.assertEqual(sorted(lint_files), [["$(S)/lib/a.py", "$(S)/lib/c.py"], ["$(S)/lib/b.py"]])
 
+    def test_py23_python2_variant_inherits_lint_but_native_variant_does_not(self):
+        for macro, sources, has_linter in (("PY23_LIBRARY", "PY_SRCS(a.py)", True), ("PY23_NATIVE_LIBRARY", "SRCS(a.cpp)", False)):
+            with self.subTest(macro=macro):
+                files = python2_base()
+                files["contrib/libs/python/ya.make"] = CONTRIB_LIBS_PYTHON.replace("END()", "NO_LINT()\nEND()")
+                files.update({
+                    "lib/ya.make": f"{macro}()\n{NO_PLATFORM}{sources}\nEND()\n",
+                    "lib/a.py": "",
+                    "lib/a.cpp": "int a;\n",
+                    "prog/ya.make": f"PROGRAM()\n{NO_PLATFORM}USE_PYTHON2()\nPEERDIR(lib)\nSRCS(m.cpp)\nEND()\n",
+                    "prog/m.cpp": "int main(){return 0;}\n",
+                })
+                graph = lib.make(files, "prog", "-t")
+                outputs = {out for n in graph["graph"] for out in n["outputs"]}
+                self.assertEqual("$(B)/resources/FLAKE8_PY2" in outputs, has_linter)
+                self.assertNotIn("$(B)/lib/test-results/py2_flake8/meta.json", outputs)
+
     def test_py2_library_compiles_sources_with_py2cc_into_resources(self):
         files = python2_base()
         files.update({
