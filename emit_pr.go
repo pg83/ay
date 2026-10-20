@@ -281,7 +281,7 @@ func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, p
 	na.dirs.commit(len(local))
 	local = local[:len(local):len(local)]
 
-	carryProtoImportPbH := isHeaderSource(outFile.string()) && !extIsPbH(outFile.string())
+	carryProtoImportPbH := !extIsPbH(outFile.string())
 	compile := na.dirs.alloc(len(protoImportPbH))[:0]
 
 	if carryProtoImportPbH {
