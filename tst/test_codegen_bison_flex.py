@@ -204,28 +204,24 @@ class FlexTest(unittest.TestCase):
             "$(S)/mod/scan.l",
         ])
         self.assertEqual(node["cmds"][0]["env"], {"ARCADIA_ROOT_DISTBUILD": "$(S)"})
-        self.assertEqual(node["inputs"][:2], [
-            "$(B)/contrib/tools/flex-old/flex", "$(S)/mod/scan.l",
-        ])
-        self.assertEqual(set(node["inputs"]), {
-            "$(B)/contrib/tools/flex-old/flex",
-            "$(S)/mod/scan.l",
+        # The includes of the .l are induced deps of the generated source:
+        # the middlesearch kernel/remorph LX nodes list flex and the .l only,
+        # their compiles take the includes but not the .l.
+        self.assertEqual(node["inputs"], ["$(B)/contrib/tools/flex-old/flex", "$(S)/mod/scan.l"])
+        self.assertEqual(node["foreign_deps"]["tool"], node["deps"])
+
+        compile_node = lib.node_by_output(graph, "$(B)/mod/scan.l.cpp.o")
+        self.assertIn("-Wno-unused-variable", compile_node["cmds"][0]["cmd_args"])
+        self.assertEqual(set(compile_node["inputs"]), {
+            "$(B)/mod/scan.l.cpp",
             "$(S)/mod/local.h",
             "$(S)/mod/q.h",
             "$(S)/mod/sysinc.h",
             "$(S)/util/system/compiler.h",
         })
-        self.assertEqual(node["foreign_deps"]["tool"], node["deps"])
-
-        compile_node = lib.node_by_output(graph, "$(B)/mod/scan.l.cpp.o")
-        self.assertIn("-Wno-unused-variable", compile_node["cmds"][0]["cmd_args"])
 
         empty = lib.node_by_output(graph, "$(B)/mod/empty.lex.cpp")
-        self.assertEqual(empty["inputs"], [
-            "$(B)/contrib/tools/flex-old/flex",
-            "$(S)/mod/empty.lex",
-            "$(S)/util/system/compiler.h",
-        ])
+        self.assertEqual(empty["inputs"], ["$(B)/contrib/tools/flex-old/flex", "$(S)/mod/empty.lex"])
         empty_compile = lib.node_by_output(graph, "$(B)/mod/empty.lex.cpp.o")
         self.assertNotIn("-Wno-unused-variable", empty_compile["cmds"][0]["cmd_args"])
 
