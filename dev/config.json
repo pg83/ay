@@ -2,8 +2,8 @@
   {
     "id": "devtools_ymake_bin",
     "vcs": "git",
-    "remote": "https://github.com/yandex/yatool/archive/890be997710d6e15d284fe21092e88cc28bfb57a.zip",
-    "sha": "890be997710d6e15d284fe21092e88cc28bfb57a",
+    "remote": "https://github.com/yandex/yatool/archive/1287bd110e8660b8418aa67f3479f66b6d268536.zip",
+    "sha": "1287bd110e8660b8418aa67f3479f66b6d268536",
     "command": [
       "ya",
       "make",
@@ -22,14 +22,16 @@
     ],
     "target": "devtools/ymake/bin",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12550817609",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12550818182"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14091056242",
+    "slice_sha256": "0b6b6bf45c729af9e5b277b58aaec49555e488362582fe8f09bce2b9a343b117",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14091057998",
+    "graph_sha256": "01f93fab892f1f2a1f4f9884c8d67b6d1829f3698e05a2e1fb6ff553d5672112"
   },
   {
     "id": "devtools_ya_bin",
     "vcs": "git",
-    "remote": "https://github.com/yandex/yatool/archive/890be997710d6e15d284fe21092e88cc28bfb57a.zip",
-    "sha": "890be997710d6e15d284fe21092e88cc28bfb57a",
+    "remote": "https://github.com/yandex/yatool/archive/1287bd110e8660b8418aa67f3479f66b6d268536.zip",
+    "sha": "1287bd110e8660b8418aa67f3479f66b6d268536",
     "command": [
       "ya",
       "make",
@@ -48,14 +50,16 @@
     ],
     "target": "devtools/ya/bin",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12550817609",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12550826032"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14091056242",
+    "slice_sha256": "0b6b6bf45c729af9e5b277b58aaec49555e488362582fe8f09bce2b9a343b117",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14091061202",
+    "graph_sha256": "49964545d261cb76cf6b0e81c74975e61bce3f1920bda9ce7f0a37834d93e896"
   },
   {
     "id": "ydb_apps_ydbd",
     "vcs": "git",
-    "remote": "https://github.com/ydb-platform/ydb/archive/99e6ef53013b6196105a0e05fe92b7f4c3985e6d.zip",
-    "sha": "99e6ef53013b6196105a0e05fe92b7f4c3985e6d",
+    "remote": "https://github.com/ydb-platform/ydb/archive/420d7f3d259946b52c7c9dbf8b9e592ab309b1dc.zip",
+    "sha": "420d7f3d259946b52c7c9dbf8b9e592ab309b1dc",
     "command": [
       "ya",
       "make",
@@ -72,14 +76,16 @@
     ],
     "target": "ydb/apps/ydbd",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12550902338",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12550903467"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14091073513",
+    "slice_sha256": "93d48d3ee1efe3235e33f04388c32f3fecf90d09bc5f35a8a24186ec5d6f3bff",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14091078396",
+    "graph_sha256": "b5afc307d8dd50ce3e019e0ea38225e6bc2452371de4e2f9c85491e785c04a40"
   },
   {
     "id": "yabs_server_daemons_bs_static",
     "vcs": "arc",
     "remote": "arcadia",
-    "sha": "976f1514372af5ab20a7be93072b63385792f50b",
+    "sha": "d02375f881ac1b9d5811b1394da0d23420506eac",
     "command": [
       "ya",
       "make",
@@ -92,16 +98,23 @@
       "default-linux-x86_64",
       "yabs/server/daemons/bs_static"
     ],
+    "env": {
+      "YA_NO_RESPAWN": "yes",
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
     "target": "yabs/server/daemons/bs_static",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12551534996",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12551535753"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14090237178",
+    "slice_sha256": "a55418acc49afc02d5d574607c06e74c93ee34590c0b750f8bf4a2cdd7a01bc3",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14090243221",
+    "graph_sha256": "0dd58f0488f4fca8644ef8089b14504973582157195da1a55686f15f3cd1a440"
   },
   {
     "id": "devtools_ya_bin_2",
     "vcs": "arc",
     "remote": "arcadia",
-    "sha": "976f1514372af5ab20a7be93072b63385792f50b",
+    "sha": "d02375f881ac1b9d5811b1394da0d23420506eac",
     "command": [
       "ya",
       "make",
@@ -114,16 +127,23 @@
       "default-linux-x86_64",
       "devtools/ya/bin"
     ],
+    "env": {
+      "YA_NO_RESPAWN": "yes",
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
     "target": "devtools/ya/bin",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12551939953",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12551940409"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14090252883",
+    "slice_sha256": "0a9737b7253d1cfac065265f7f11f814f181d73b775257301fcbab5e930b4947",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14090255893",
+    "graph_sha256": "1349e5b92415bc41e0661b9a64779e020e0f64f4f1454d12c720da07d70c6f4b"
   },
   {
     "id": "devtools_ymake_bin_2",
     "vcs": "arc",
     "remote": "arcadia",
-    "sha": "976f1514372af5ab20a7be93072b63385792f50b",
+    "sha": "d02375f881ac1b9d5811b1394da0d23420506eac",
     "command": [
       "ya",
       "make",
@@ -136,16 +156,23 @@
       "default-linux-x86_64",
       "devtools/ymake/bin"
     ],
+    "env": {
+      "YA_NO_RESPAWN": "yes",
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
     "target": "devtools/ymake/bin",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12551946674",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12551947029"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14090258996",
+    "slice_sha256": "1540edabf4aedbfa2d6a5aab14bd1d828ff0d3bbdc9ea89a73145fde52297d56",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14090260524",
+    "graph_sha256": "d0a38b874eee3d7d53b7180033808f837735c02e40bf5a189637fcda9a35f161"
   },
   {
     "id": "arc_server_bin",
     "vcs": "arc",
     "remote": "arcadia",
-    "sha": "976f1514372af5ab20a7be93072b63385792f50b",
+    "sha": "d02375f881ac1b9d5811b1394da0d23420506eac",
     "command": [
       "ya",
       "make",
@@ -160,16 +187,23 @@
       "default-linux-x86_64",
       "arc/server/bin"
     ],
+    "env": {
+      "YA_NO_RESPAWN": "yes",
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
     "target": "arc/server/bin",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12552083137",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12552083400"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14090265265",
+    "slice_sha256": "703ab1c725e039c1628281585fed68b10169c44c9c35cac9f28fc4fb3bc92a95",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14090267208",
+    "graph_sha256": "00db3435ceb11df3292bc3a2a4b432a74a8f06a8f9b41b8f470ab8cb38e75021"
   },
   {
     "id": "catboost_app",
     "vcs": "arc",
     "remote": "arcadia",
-    "sha": "976f1514372af5ab20a7be93072b63385792f50b",
+    "sha": "d02375f881ac1b9d5811b1394da0d23420506eac",
     "command": [
       "ya",
       "make",
@@ -182,16 +216,23 @@
       "default-linux-x86_64",
       "catboost/app"
     ],
+    "env": {
+      "YA_NO_RESPAWN": "yes",
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
     "target": "catboost/app",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12552128438",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12552129011"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14090294527",
+    "slice_sha256": "bd1599710f2f00305488dc18e996cdddfa6bddc1748132d0af237e30beb2986a",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14090300087",
+    "graph_sha256": "d016cb7eb96c7d59cef885549aa04bb90d1c5f98cae00731585586b704bc8a7a"
   },
   {
     "id": "devtools_yamaker",
     "vcs": "arc",
     "remote": "arcadia",
-    "sha": "20e866ddbfdcc132c16f91ae7bafdf4f6ca0973f",
+    "sha": "d02375f881ac1b9d5811b1394da0d23420506eac",
     "command": [
       "ya",
       "make",
@@ -204,16 +245,23 @@
       "default-linux-x86_64",
       "devtools/yamaker"
     ],
+    "env": {
+      "YA_NO_RESPAWN": "yes",
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
     "target": "devtools/yamaker",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12687148441",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12687148769"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14090308782",
+    "slice_sha256": "3b1063b8e65a672812a640f31a754c8309ab76c8b3f441e30ebd6393d8a86807",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14090315179",
+    "graph_sha256": "36f15aaeb183200870088cde7c0b916e38383c0523eea50b44c477392bb69bba"
   },
   {
     "id": "search_daemons_basesearch",
     "vcs": "arc",
     "remote": "arcadia",
-    "sha": "20e866ddbfdcc132c16f91ae7bafdf4f6ca0973f",
+    "sha": "d02375f881ac1b9d5811b1394da0d23420506eac",
     "command": [
       "ya",
       "make",
@@ -226,16 +274,23 @@
       "default-linux-x86_64",
       "search/daemons/basesearch"
     ],
+    "env": {
+      "YA_NO_RESPAWN": "yes",
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
     "target": "search/daemons/basesearch",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12695071273",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12695073975"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14090346121",
+    "slice_sha256": "698cf025837358e24a44554ded53f70d85d7c68aa89d59b4a6545f8b0c24ccc2",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14090352163",
+    "graph_sha256": "9404ff5097515e28386568b8d375cb5e75bc81c4cf69be3c7ca5b89eb67e4881"
   },
   {
     "id": "search_daemons_ranking_middlesearch",
     "vcs": "arc",
     "remote": "arcadia",
-    "sha": "20e866ddbfdcc132c16f91ae7bafdf4f6ca0973f",
+    "sha": "d02375f881ac1b9d5811b1394da0d23420506eac",
     "command": [
       "ya",
       "make",
@@ -248,10 +303,17 @@
       "default-linux-x86_64",
       "search/daemons/ranking_middlesearch"
     ],
+    "env": {
+      "YA_NO_RESPAWN": "yes",
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
     "target": "search/daemons/ranking_middlesearch",
     "xfail": false,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/12703685538",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/12703687865"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14090393631",
+    "slice_sha256": "36427fe53f3e16b417dd6a002d33fb20ea0b5eb88378fa7b3e7a395d00fbc268",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14090407891",
+    "graph_sha256": "66b960ec03be10d4036d8be717685d6cfeca93c80c730ff5e6148b7516aa0006"
   },
   {
     "id": "p12_codegen_tail",
