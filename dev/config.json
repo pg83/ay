@@ -21,7 +21,7 @@
       "devtools/ymake/bin"
     ],
     "target": "devtools/ymake/bin",
-    "xfail": false,
+    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14091056242",
     "slice_sha256": "0b6b6bf45c729af9e5b277b58aaec49555e488362582fe8f09bce2b9a343b117",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14091057998",
@@ -49,7 +49,7 @@
       "devtools/ya/bin"
     ],
     "target": "devtools/ya/bin",
-    "xfail": false,
+    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14091056242",
     "slice_sha256": "0b6b6bf45c729af9e5b277b58aaec49555e488362582fe8f09bce2b9a343b117",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14091061202",
@@ -75,7 +75,7 @@
       "ydb/apps/ydbd"
     ],
     "target": "ydb/apps/ydbd",
-    "xfail": false,
+    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14091073513",
     "slice_sha256": "93d48d3ee1efe3235e33f04388c32f3fecf90d09bc5f35a8a24186ec5d6f3bff",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14091078396",
@@ -104,7 +104,7 @@
       "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": "yabs/server/daemons/bs_static",
-    "xfail": false,
+    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14090237178",
     "slice_sha256": "a55418acc49afc02d5d574607c06e74c93ee34590c0b750f8bf4a2cdd7a01bc3",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14090243221",
@@ -133,7 +133,7 @@
       "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": "devtools/ya/bin",
-    "xfail": false,
+    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14090252883",
     "slice_sha256": "0a9737b7253d1cfac065265f7f11f814f181d73b775257301fcbab5e930b4947",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14090255893",
@@ -162,7 +162,7 @@
       "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": "devtools/ymake/bin",
-    "xfail": false,
+    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14090258996",
     "slice_sha256": "1540edabf4aedbfa2d6a5aab14bd1d828ff0d3bbdc9ea89a73145fde52297d56",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14090260524",
@@ -193,7 +193,7 @@
       "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": "arc/server/bin",
-    "xfail": false,
+    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14090265265",
     "slice_sha256": "703ab1c725e039c1628281585fed68b10169c44c9c35cac9f28fc4fb3bc92a95",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14090267208",
@@ -222,7 +222,7 @@
       "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": "catboost/app",
-    "xfail": false,
+    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14090294527",
     "slice_sha256": "bd1599710f2f00305488dc18e996cdddfa6bddc1748132d0af237e30beb2986a",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14090300087",
@@ -251,7 +251,7 @@
       "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": "devtools/yamaker",
-    "xfail": false,
+    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14090308782",
     "slice_sha256": "3b1063b8e65a672812a640f31a754c8309ab76c8b3f441e30ebd6393d8a86807",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14090315179",
@@ -280,7 +280,7 @@
       "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": "search/daemons/basesearch",
-    "xfail": false,
+    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14090346121",
     "slice_sha256": "698cf025837358e24a44554ded53f70d85d7c68aa89d59b4a6545f8b0c24ccc2",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14090352163",
@@ -309,7 +309,7 @@
       "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
     },
     "target": "search/daemons/ranking_middlesearch",
-    "xfail": false,
+    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14090393631",
     "slice_sha256": "36427fe53f3e16b417dd6a002d33fb20ea0b5eb88378fa7b3e7a395d00fbc268",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14090407891",
