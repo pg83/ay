@@ -296,6 +296,8 @@ class Python2Test(unittest.TestCase):
         graph = lib.make(files, "both", "-t", opensource=False)
         py2 = lib.node_by_output(graph, "$(B)/both/test/py2_both-test")
         py3 = lib.node_by_output(graph, "$(B)/both/test/both-test")
+        self.assertNotIn("ld_test_node", py2["kv"])
+        self.assertNotIn("ld_test_node", py3["kv"])
         self.assertIn("$(B)/both/libpyboth.global.a", py2["inputs"])
         self.assertIn("$(B)/both/test/__vcs_version__.c.py2.o", py2["outputs"] + [a for c in py2["cmds"] for a in c["cmd_args"]])
         self.assertIn("$(B)/both/test/__vcs_version__.c.py3.o", [a for c in py3["cmds"] for a in c["cmd_args"]])
@@ -305,6 +307,9 @@ class Python2Test(unittest.TestCase):
         for suite, binary in (("pytest", py2), ("py3test", py3)):
             run = lib.node_by_output(graph, f"$(B)/both/test/test-results/{suite}/meta.json")
             self.assertIn(binary["uid"], run["deps"])
+            command = args(run)
+            self.assertEqual(command[command.index("--sub-path") + 1], "py2test" if suite == "pytest" else "py3test")
+            self.assertLess(command.index("--sub-path"), command.index("--tar"))
         for suite in ("py2_flake8", "flake8"):
             lib.node_by_output(graph, f"$(B)/both/test/test-results/{suite}/meta.json")
             lib.node_by_output(graph, f"$(B)/both/test-results/{suite}/meta.json")

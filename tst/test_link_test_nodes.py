@@ -342,6 +342,21 @@ class TestNodesTest(unittest.TestCase):
         self.assertIn("--recipes", args)
         self.assertFalse(any(n["kv"]["p"] == "LD" and n["outputs"][0].startswith("$(B)/exec/") for n in graph["graph"]))
 
+    def test_exectest_preserves_runtime_variables_and_sets_its_dependency_path(self):
+        import base64
+
+        files = {
+            "exec/ya.make": "EXECTEST()\nSET(command tool)\nRUN(${command} ${ARCADIA_ROOT}/input ENV OUTPUT=${TEST_OUT_ROOT})\nDEPENDS(tool)\nEND()\n",
+        }
+        lib.tool_program(files, "tool", "tool")
+        run = lib.node_by_output(lib.make(files, "exec", "-t"), "$(B)/exec/test-results/exectest/meta.json")
+        command = run["cmds"][0]["cmd_args"]
+        blob = next(arg[len("commands="):] for arg in command if arg.startswith("commands="))
+        self.assertEqual(base64.b64decode(blob).decode(), "\ntool ${ARCADIA_ROOT}/input ENV OUTPUT=${TEST_OUT_ROOT}")
+        self.assertEqual(run["env"]["PATH"], "$(B)/:$(B)/tool")
+        self.assertEqual(run["env"]["ASAN_OPTIONS"], "exitcode=100:detect_leaks=0")
+        self.assertEqual(run["env"]["LSAN_OPTIONS_ORIGINAL"], "exitcode=100")
+
     def test_recurse_for_tests_emits_child_suites_only_with_tests_enabled(self):
         files = fixture()
         files["lib/ya.make"] += "RECURSE_FOR_TESTS(ut)\n"

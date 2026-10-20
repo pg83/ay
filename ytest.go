@@ -305,6 +305,8 @@ type TestSuite struct {
 	env                    []string
 	tags                   []string
 	runCwd                 string
+	canonizeSubPath        string
+	execPath               string
 	setupPythonpathEnv     bool
 	supportsCanonization   bool
 	supportsTestParameters bool
@@ -373,8 +375,18 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 		return nil
 	}
 
+	var execDirs []string
+
 	for _, dep := range s.depends {
 		res := genModule(ctx, ctx.rootInstance(dep, demandLinked))
+
+		if s.testType == "exectest" {
+			execDirs = append(execDirs, testExecDependencyDir(dep))
+
+			if res.ARPath != nil {
+				execDirs = append(execDirs, testExecDependencyDir(res.ARPath.relString()))
+			}
+		}
 
 		if res.ARPath != nil {
 			ctx.scannerForPlatform(ctx.target).codegen.use(*res.ARPath)
@@ -383,6 +395,10 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 		if res.ARRef != 0 {
 			s.deps = append(s.deps, res.ARRef)
 		}
+	}
+
+	if s.testType == "exectest" {
+		s.execPath = strings.Join(sortedUnique(execDirs), ":")
 	}
 
 	for _, image := range s.dockerImages {
@@ -638,6 +654,10 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		head = append(head, argRamLimitGb.any(), internStr(strconv.Itoa(int(req.RAM))).any())
 	}
 
+	if s.canonizeSubPath != "" {
+		head = append(head, argSubPath.any(), internStr(s.canonizeSubPath).any())
+	}
+
 	if o.dirOutputs {
 		head = append(head, argDirOutputs.any())
 	} else {
@@ -827,6 +847,10 @@ func (ctx *GenCtx) testEnv(s *TestSuite) EnvVars {
 
 	if s.importCheckEnv {
 		env["LSAN_OPTIONS"] += ":detect_leaks=0"
+	}
+
+	if s.testType == "exectest" {
+		env["PATH"] = s.execPath
 	}
 
 	names := make([]string, 0, len(mandatory))

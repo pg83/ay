@@ -53,7 +53,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 
 	s.setupPythonpathEnv = python
 	s.pythonNoBytecode = python
-	s.disableLeaks = testType == "pytest" || testType == "py3test"
+	s.disableLeaks = python
 	s.supportsCanonization = python || testType == "g_benchmark"
 	s.supportsTestParameters = python || testType == "unittest" || testType == "gtest"
 
@@ -154,6 +154,7 @@ func (s *TestSuite) applyTestMeta(meta TestMeta, addSource bool) {
 	}
 
 	s.tags = sortedUnique(meta.tags)
+	s.canonizeSubPath = meta.canonizeSubPath
 	s.env = meta.env
 	s.requirements = testRequirementsOf(meta.requirements)
 	s.depends = meta.depends

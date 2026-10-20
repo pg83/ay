@@ -154,9 +154,15 @@ class PythonSuitesTest(unittest.TestCase):
         graph = lib.make(files, "lib", "-t")
         self.assertEqual(lib.node_by_output(graph, "$(B)/lib/lib")["kv"].get("ld_test_node"), "1")
 
+    def test_runner_uses_declared_canonical_data_subpath(self):
+        files = fixture("SET(CANONIZE_SUB_PATH selected)\n", macro="PY3TEST")
+        files["library/python/pytest/ya.make"] = f"LIBRARY()\n{BARE}END()\n"
+        run = lint(lib.make(files, "lib", "-t"), "py3test")
+        self.assertEqual(values(run, "--sub-path"), ["selected"])
+
     def test_python_test_resolves_usrv_generated_source_from_build_srcdir(self):
         files = fixture(
-            "RUN_PROGRAM(tools/gen OUT_NOAUTO generated.tar)\n"
+            "RUN_PROGRAM(tools/gen OUT_NOAUTO manifest.dat generated.tar)\n"
             "USRV_BUILD(FROM ${BINDIR}/generated.tar lib/nested/test_generated.py)\n"
             "SRCDIR(${CMAKE_CURRENT_BINARY_DIR}/lib/nested)\n"
             "TEST_SRCS(test_generated.py)\n", macro="PY3TEST",
@@ -170,6 +176,8 @@ class PythonSuitesTest(unittest.TestCase):
             with self.subTest(flags=flags):
                 graph = lib.make(files, "lib", "-t", *flags)
                 generated = lib.node_by_output(graph, "$(B)/lib/lib/nested/test_generated.py")
+                self.assertEqual(generated["inputs"], ["$(B)/lib/generated.tar", "$(B)/lib/manifest.dat"])
+                self.assertEqual(generated["kv"], {"p": "UT", "pc": "light-cyan", "show_out": "yes"})
                 self.assertEqual(args(generated)[-3:], ["--target", "$(B)/lib", "$(B)/lib/lib/nested/test_generated.py"])
                 if not flags:
                     bytecode = lib.node_by_output(graph, "$(B)/lib/test_generated.py.yapyc3")

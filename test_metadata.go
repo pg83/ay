@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"encoding/base64"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -30,6 +31,34 @@ func testSuiteName(name TOK) string {
 	}
 
 	return ""
+}
+
+func testExecDependencyDir(dep string) string {
+	dir := path.Dir(dep)
+
+	if dir == "." {
+		dir = ""
+	}
+
+	return testBuildRoot + "/" + dir
+}
+
+func expandTestRunArgs(args []ANY, env Environment) []ANY {
+	runtimeVars := []ENV{envARCADIA_ROOT, envARCADIA_BUILD_ROOT, envTestSourceRoot, envTestWorkRoot, envTestOutRoot, envTestCaseRoot, envPythonBin}
+
+	var kinds [7]EnvKind
+
+	for i, id := range runtimeVars {
+		kinds[i] = env.unbind(id)
+	}
+
+	defer func() {
+		for i, id := range runtimeVars {
+			env.rebind(id, kinds[i])
+		}
+	}()
+
+	return expandStmtTokens(args, env)
 }
 
 func applyTestMacro(v UnknownStmt, d *ModuleData) bool {

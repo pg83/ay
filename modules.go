@@ -114,24 +114,25 @@ func protoCmdPeers(d *ModuleData) []ANY {
 }
 
 type TestMeta struct {
-	dockerImages []string
-	commands     string
-	testFiles    []string
-	depends      []string
-	recipes      []string
-	binaryArgs   []string
-	forkFiles    bool
-	explicitData bool
-	size         string
-	timeout      int
-	tags         []string
-	requirements []string
-	env          []string
-	data         []string
-	cwd          string
-	forkMode     string
-	partition    string
-	splitFactor  int
+	dockerImages    []string
+	commands        string
+	testFiles       []string
+	depends         []string
+	recipes         []string
+	binaryArgs      []string
+	forkFiles       bool
+	explicitData    bool
+	size            string
+	timeout         int
+	tags            []string
+	requirements    []string
+	env             []string
+	data            []string
+	cwd             string
+	canonizeSubPath string
+	forkMode        string
+	partition       string
+	splitFactor     int
 }
 
 type ModuleData struct {
@@ -729,6 +730,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 
 	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d, onWarn)
 	finishYqlModule(modulePath, env, d)
+	d.test.canonizeSubPath = env.string(envCanonizeSubPath)
 
 	if d.nots != nil {
 		return d
@@ -1119,8 +1121,16 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit)
 
-			if v.Name == tokPy23Test && language != LangPy2 {
-				d.moduleVariants = 1 << LangPy2
+			if v.Name == tokPy23Test {
+				subPath := "py3test"
+
+				if language == LangPy2 {
+					subPath = "py2test"
+				} else {
+					d.moduleVariants = 1 << LangPy2
+				}
+
+				env.setString(envCanonizeSubPath, subPath)
 			}
 
 			if v.Name == tokProtoDescriptions || v.Name == tokProtoRegistry {
@@ -1583,7 +1593,12 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			expanded := *v
 
-			expanded.Args = expandStmtTokens(v.Args, env)
+			if v.Name == tokRun {
+				expanded.Args = expandTestRunArgs(v.Args, env)
+			} else {
+				expanded.Args = expandStmtTokens(v.Args, env)
+			}
+
 			applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
 		}
 	}
@@ -1663,7 +1678,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 			return ModuleUnit{Type: tokPytestBin, Tag: unitTagPy2, ObjSuf: tagPy2, ModulePrefix: "py2_", ARPrefix: "libpy", GlobalARTag: tagGlobal, SbomLang: unitSbomPy2}
 		}
 
-		return ModuleUnit{Type: tokPy3Test, Tag: unitTagPy3, ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3, TestLD: true}
+		return ModuleUnit{Type: tokPy3Test, Tag: unitTagPy3, ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
 	}
 
 	if name == tokPy3Program && kind == KindLib {
