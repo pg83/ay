@@ -288,6 +288,7 @@ type ModuleData struct {
 	baseCodegens             []*BaseCodegenStmt
 	runPython                []*RunPythonStmt
 	fromSandboxes            []*FromSandboxStmt
+	fromArchives             []FromArchiveEntry
 	checkConfigHeaders       []ANY
 	cythonCpp                []*CythonStmt
 	cythonNumpyBeforeInclude bool
@@ -1712,6 +1713,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}()
 
 	switch v.Name {
+	case tokFromArchive:
+		options := parseFromSandbox(v.Args, v.Line)
+
+		d.fromArchives = append(d.fromArchives, FromArchiveEntry{Source: options.ResourceId, ArchiveExtraction: options.ArchiveExtraction})
 	case tokDebVersion:
 		if len(v.Args) != 1 {
 			throwFmt("DEB_VERSION expects one changelog file")

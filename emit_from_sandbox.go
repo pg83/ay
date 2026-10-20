@@ -41,7 +41,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 		}
 	}
 
-	parsed := fromSandboxOutputIncludes(ctx.na, stmt)
+	parsed := extractionOutputIncludes(ctx.na, stmt.OutputIncludes)
 
 	for _, out := range outVFSs {
 		e.register(GeneratedFileInfo{
@@ -120,14 +120,14 @@ func fromSandboxNode(na *NodeArenas, instance ModuleInstance, python3 ANY, stmt 
 	}, outVFSs
 }
 
-func fromSandboxOutputIncludes(na *NodeArenas, stmt *FromSandboxStmt) []IncludeDirective {
-	if len(stmt.OutputIncludes) == 0 {
+func extractionOutputIncludes(na *NodeArenas, files []ANY) []IncludeDirective {
+	if len(files) == 0 {
 		return nil
 	}
 
-	includes := na.dirs.alloc(len(stmt.OutputIncludes))[:0]
+	includes := na.dirs.alloc(len(files))[:0]
 
-	for _, f := range stmt.OutputIncludes {
+	for _, f := range files {
 		if v := f.vfs(); v != 0 {
 			f = v.rel().any()
 		}

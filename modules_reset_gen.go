@@ -62,6 +62,7 @@ func (x *ModuleData) reset() {
 		baseCodegens:         scrub(x.baseCodegens),
 		runPython:            scrub(x.runPython),
 		fromSandboxes:        scrub(x.fromSandboxes),
+		fromArchives:         scrub(x.fromArchives),
 		checkConfigHeaders:   x.checkConfigHeaders[:0],
 		cythonCpp:            scrub(x.cythonCpp),
 		swigC:                scrub(x.swigC),

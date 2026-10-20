@@ -291,15 +291,19 @@ type BaseCodegenStmt struct {
 }
 
 type FromSandboxStmt struct {
-	ResourceId     ANY
+	ResourceId ANY
+	ArchiveExtraction
+	File bool
+	Line int
+}
+
+type ArchiveExtraction struct {
 	OUTFiles       []ANY
 	OUTNoAutoFiles []ANY
 	OutputIncludes []ANY
 	Renames        []ANY
-	File           bool
 	Executable     bool
 	Prefix         string
-	Line           int
 }
 
 type RunPythonStmt struct {
@@ -1491,7 +1495,7 @@ func isRunAntlrKeyword(s ANY) bool {
 }
 
 func parseFromSandbox(args []ANY, line int) *FromSandboxStmt {
-	stmt := &FromSandboxStmt{Line: line, Prefix: "."}
+	stmt := &FromSandboxStmt{Line: line, ArchiveExtraction: ArchiveExtraction{Prefix: "."}}
 	section := ""
 
 	for i := 0; i < len(args); i++ {

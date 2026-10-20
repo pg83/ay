@@ -1,0 +1,84 @@
+package main
+
+var fromArchiveKV = KV{P: pkFA, PC: pcYellow, ShowOut: true}
+
+type FromArchiveEntry struct {
+	Source ANY
+	ArchiveExtraction
+}
+
+func (e *EmitContext) emitFromArchive(stmt FromArchiveEntry) {
+	na := e.ctx.na
+	src := e.runProgramInputVFS(stmt.Source.string())
+	script := buildScriptsFetchFromArchivePy
+	inputs := []VFS{script, src, buildScriptsFetchFromPy}
+
+	var refs []NodeRef
+
+	sources := []VFS{script, buildScriptsFetchFromPy}
+
+	if info := e.codegen.lookup(src); info != nil {
+		refs = append(refs, info.ProducerRef)
+		sources = append(sources, info.SourceInputs...)
+	} else if src.isSource() {
+		sources = append(sources, src)
+	}
+
+	args := []ANY{
+		e.d.tc.Python3.any(), script.any(), strArchive.any(), src.any(),
+		strFileName.any(), internStr(stmt.Source.string() + "-").any(),
+		strUntarTo.any(), internStr(stmt.Prefix).any(),
+	}
+
+	for _, rename := range stmt.Renames {
+		args = append(args, strRename.any(), rename)
+	}
+
+	if stmt.Executable {
+		args = append(args, strExecutable.any())
+	}
+
+	args = append(args, arg2.any())
+
+	var outputs []VFS
+
+	for _, list := range [][]ANY{stmt.OUTFiles, stmt.OUTNoAutoFiles} {
+		for _, file := range list {
+			args = append(args, file)
+			outputs = append(outputs, copyFileOutputVFS(e.instance.Path.relString(), file.string()))
+		}
+	}
+
+	node := Node{
+		Platform: e.instance.Platform, KV: &fromArchiveKV, Env: envVarsVCS,
+		Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Cwd: e.instance.Path.rel().build(), Env: envVarsVCS}),
+		Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(outputs...),
+		DepRefs: na.refList(refs...), Resources: usesPython3,
+	}
+
+	ref := e.ctx.emit.reserve()
+
+	pending := e.pendingEmit(func() {
+		e.codegen.use(src)
+		e.emitReservedNode(node, ref)
+	})
+
+	parsed := extractionOutputIncludes(na, stmt.OutputIncludes)
+	sourceInputs := na.vfsList(sources...)
+
+	for i, out := range outputs {
+		e.register(GeneratedFileInfo{
+			OutputPath: out, ProducerRef: ref, OnUse: pending,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+			SourceInputs:   sourceInputs, ProducerMainOut: outputs[0],
+		})
+
+		if i < len(stmt.OUTFiles) {
+			if extIsArchiveMember(out.relString()) && !e.producersOnly() {
+				e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault})
+			} else if isCCSourceExt(out.relString()) || isAsmSourceExt(out.relString()) || isCodegenProducingSrc(out.relString()) {
+				e.enqueueSrc(SrcMeta{Source: out.any(), Prio: stmtPrioDefault})
+			}
+		}
+	}
+}

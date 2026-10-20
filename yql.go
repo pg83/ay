@@ -126,8 +126,11 @@ func (e *EmitContext) genYqlPrebuiltProgram() *ModuleEmitResult {
 	out := lDOutputPath(e.instance, name)
 
 	e.emitFromSandbox(&FromSandboxStmt{
-		ResourceId: internStr(d.yqlPrebuiltResource).any(), File: true, Executable: true, Prefix: ".",
-		Renames: []ANY{kwRESOURCE.any()}, OUTNoAutoFiles: []ANY{internStr(prebuilt).any()},
+		ResourceId: internStr(d.yqlPrebuiltResource).any(), File: true,
+		ArchiveExtraction: ArchiveExtraction{
+			Executable: true, Prefix: ".",
+			Renames: []ANY{kwRESOURCE.any()}, OUTNoAutoFiles: []ANY{internStr(prebuilt).any()},
+		},
 	})
 
 	info := e.codegen.use(src)

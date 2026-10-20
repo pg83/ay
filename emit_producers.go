@@ -40,6 +40,7 @@ const (
 	prodLuaCompile
 	prodUserverProto
 	prodListProto
+	prodFromArchive
 )
 
 type ProducerPos struct {
@@ -216,7 +217,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
 		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens) + len(d.cgoSrcs) +
-		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos) + len(d.listProtos)
+		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos) + len(d.listProtos) + len(d.fromArchives)
 
 	if d.docs != nil {
 		n += len(d.docs.copies)
@@ -331,6 +332,20 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		}
 
 		push(prodCopyFile, i, start, outEnd)
+	}
+
+	for i, entry := range d.fromArchives {
+		start := len(backing)
+
+		runOuts(entry.OUTFiles, entry.OUTNoAutoFiles, nil)
+
+		outEnd := len(backing)
+
+		if v := runInputBuildCandidate(module, entry.Source.string()); v != 0 {
+			backing = append(backing, v)
+		}
+
+		push(prodFromArchive, i, start, outEnd)
 	}
 
 	for i, cf := range d.configureFiles {
@@ -817,6 +832,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		pos := positions[pi]
 
 		switch pos.kind {
+		case prodFromArchive:
+			e.emitFromArchive(e.d.fromArchives[pos.index])
 		case prodDocsCopy:
 			e.emitDocsCopy(e.d.docs.copies[pos.index])
 		case prodCuda:

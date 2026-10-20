@@ -24,6 +24,7 @@ var (
 	buildScriptsDocsProtoMarkdownTmpl   = source("build/scripts/docs_proto_markdown.tmpl")
 	buildScriptsDocsProtoWrapperPy      = source("build/scripts/docs_proto_wrapper.py")
 	buildScriptsFatbinaryWrapperPy      = source("build/scripts/fatbinary_wrapper.py")
+	buildScriptsFetchFromArchivePy      = source("build/scripts/fetch_from_archive.py")
 	buildScriptsFetchFromMdsPy          = source("build/scripts/fetch_from_mds.py")
 	buildScriptsFetchFromPy             = source("build/scripts/fetch_from.py")
 	buildScriptsFetchFromSandboxPy      = source("build/scripts/fetch_from_sandbox.py")

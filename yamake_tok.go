@@ -118,6 +118,7 @@ var tokName = [...]STR{
 	tokForkSubtests:                    internStr("FORK_SUBTESTS"),
 	tokForkTests:                       internStr("FORK_TESTS"),
 	tokFromSandbox:                     internStr("FROM_SANDBOX"),
+	tokFromArchive:                     internStr("FROM_ARCHIVE"),
 	tokGlobalCflags:                    internStr("GLOBAL_CFLAGS"),
 	tokGoProtoPlugin:                   internStr("GO_PROTO_PLUGIN"),
 	tokGrpc:                            internStr("GRPC"),
@@ -420,6 +421,7 @@ const (
 	tokForkSubtests
 	tokForkTests
 	tokFromSandbox
+	tokFromArchive
 	tokGlobalCflags
 	tokGoProtoPlugin
 	tokGrpc
