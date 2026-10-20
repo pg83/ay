@@ -461,9 +461,10 @@ def find_url(obj):
 
 
 def ya_upload(path, tar, owner, descr):
-    """Upload one artifact eternally (ttl inf); return its http link. tar=True
-    tars+zstd a directory; tar=False uploads a single file as-is (e.g. a zip)."""
-    cmd = ["ya", "upload", path, "--ttl", "inf",
+    """Upload one artifact; return its http link. Sandbox caps resources owned
+    by a user at 30 days (ttl inf needs a group owner). tar=True tars+zstd a
+    directory; tar=False uploads a single file as-is (e.g. a zip)."""
+    cmd = ["ya", "upload", path, "--ttl", "30",
            "--owner", owner, "-d", descr, "--json-output"]
     if tar:
         cmd[3:3] = ["--tar", "--zstd"]
