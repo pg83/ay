@@ -616,6 +616,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.addDLLs = true
 	case "CHECK_JAVA_DEPS":
 		d.checkJavaDeps = arg0
+	case "ENV":
+		d.testEnv = append(d.testEnv, splitShellWords(`"`+strings.Join(raw, " ")+`"`)...)
 	case "LINT":
 		d.lintLevel = arg0
 	case "NO_LINT":
@@ -625,7 +627,11 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.noLint = "ktlint"
 		}
 	case "COLLECT_KOTLIN_LINT_SRCS":
-		d.collectKotlinLint = append(d.collectKotlinLint, args)
+		d.collectKotlinLint = args
+	case "STYLE_DETEKT":
+		if d.noLint != "none" {
+			d.customLints = append(d.customLints, javaCustomLint{linter: javaDetekt, configTypes: javaMacroKeyword(args, "CONFIG_TYPE")})
+		}
 	case "USE_KTLINT_OLD":
 		d.ktlintOld = true
 	case "NO_YMAKE_PYTHON3":

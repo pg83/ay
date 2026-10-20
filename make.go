@@ -56,6 +56,7 @@ type MakeFlags struct {
 	dumpIgnoredMacros   bool
 	clear               bool
 	cmdPrefixes         []CmdPrefix
+	testSizes           []string
 }
 
 func copyStatsFlags(dst, src map[string]string) {
@@ -136,6 +137,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		p.AddInputs = mf.dist && mf.sandboxing
 	}
 
+	tests := newYaTestOpts(mf, readYaConfTop(fs, "ya.conf"), targetP.BuildType)
 	events := newEventQueue()
 
 	defer events.close()
@@ -148,11 +150,11 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	if mf.threads == 0 {
 		if mf.dumpGraph {
-			g := genDumpGraphWithResources(fs, caches, mf.targets, hostP, targetP, onWarn, mf.testLevel > 0, mf.keepGoing, demandSelf, mf.addModulesToResults)
+			g := genDumpGraphWithResources(fs, caches, mf.targets, hostP, targetP, onWarn, tests, mf.keepGoing, demandSelf, mf.addModulesToResults)
 
 			writeGraph(g, !mf.sandboxing)
 		} else {
-			genStream(fs, caches, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, mf.testLevel > 0, mf.keepGoing)
+			genStream(fs, caches, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, tests, mf.keepGoing)
 		}
 
 		if mf.dumpIgnoredMacros {
@@ -166,7 +168,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	ex.startGarbageCollector()
 
-	results := genStream(fs, caches, mf.targets, hostP, targetP, ex.onNode, onWarn, mf.testLevel > 0, mf.keepGoing)
+	results := genStream(fs, caches, mf.targets, hostP, targetP, ex.onNode, onWarn, tests, mf.keepGoing)
 
 	ex.run(results)
 
@@ -317,10 +319,10 @@ func yaToolchainFlags(flags map[string]string, tc *Toolchain, tcFlags map[string
 	flags["YA"] = "yes"
 }
 
-func genStream(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), testMode bool, keepGoing bool) []NodeRef {
+func genStream(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), tests *YaTestOpts, keepGoing bool) []NodeRef {
 	emitter := newStreamingEmitter(onNode)
 
-	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, testMode, keepGoing, demandSelf)
+	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, demandSelf)
 
 	return emitter.finish()
 }
@@ -413,11 +415,13 @@ func parseMakeFlags(args []string) *MakeFlags {
 			targetBuildType = opt.OptArg
 		case opt.Name == "target-platform-flag":
 			parseKV(mf.tflags, opt.OptArg)
+		case opt.Name == "test-size":
+			mf.testSizes = append(mf.testSizes, strings.ToLower(opt.OptArg))
 		case opt.Name == "target-platform-tests":
 			mf.testLevel = max(mf.testLevel, 1)
 		case opt.Name == "dist":
 			mf.dist = true
-		case opt.Char == 'x', opt.Name == "test-size", opt.Name == "ignore-nodes-exit-code",
+		case opt.Char == 'x', opt.Name == "ignore-nodes-exit-code",
 			opt.Name == "warning-mode", opt.Name == "cache-tests", opt.Name == "output-only-tests",
 			opt.Name == "cache-namespace", opt.Name == "report-skipped-suites", opt.Name == "tests-retries",
 			opt.Name == "backup-test-results", opt.Name == "do-not-output-stderrs",

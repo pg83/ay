@@ -228,6 +228,7 @@ type GenCtx struct {
 	target           *Platform
 	vcsRef           NodeRef
 	testMode         bool
+	tests            *YaTestOpts
 	sbomEnabled      bool
 	autoincludeIdx   *AutoincludeIndex
 	parsedFiles      map[string]*MakeFile
@@ -252,8 +253,8 @@ func newModuleMemo() *moduleMemo {
 	return &moduleMemo{entries: newBumpAllocator[moduleMemoEntry]()}
 }
 
-func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand) {
-	ctx := newGenCtx(fs, caches, hostP, targetP, emitter, onWarn, testMode, keepGoing)
+func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *YaTestOpts, keepGoing bool, rootDemand ModuleDemand) {
+	ctx := newGenCtx(fs, caches, hostP, targetP, emitter, onWarn, tests, keepGoing)
 
 	for _, t := range ctx.linkingTargetsFirst(targets) {
 		ctx.genTarget(t, rootDemand)
@@ -268,7 +269,7 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 	}
 }
 
-func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), testMode bool, keepGoing bool) *GenCtx {
+func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *YaTestOpts, keepGoing bool) *GenCtx {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
 
@@ -307,7 +308,8 @@ func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *Stre
 		target:    targetP,
 		fetchRefs: fetchRefs,
 		scripts:   scriptTbl,
-		testMode:  testMode,
+		testMode:  tests != nil,
+		tests:     tests,
 
 		sbomEnabled: fs.isFile(srcRootRel, sbomConfRel),
 
@@ -504,8 +506,6 @@ func isFinalTargetModuleType(name TOK) bool {
 	return isProgramModuleType(name) || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib
 }
 
-// ya merges the pic and nopic graphs keeping the pic variant of shared
-// libraries only; DLL_TOOL renders as a program and keeps its nopic build.
 func picTransition(name TOK) bool {
 	return name == tokDll || name == tokDllJava
 }
@@ -602,12 +602,12 @@ func discoverRecursedFinalTargets(ctx *GenCtx, targetDir string) []string {
 	return finals
 }
 
-func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onWarn func(Warn), testMode bool, keepGoing bool, rootDemand ModuleDemand, addModulesToResults bool) *Graph {
+func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *YaTestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults bool) *Graph {
 	emitter := newStreamingEmitter(nil)
 
 	emitter.addModulesToResults = addModulesToResults
 
-	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, testMode, keepGoing, rootDemand)
+	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand)
 
 	return finalize(emitter)
 }

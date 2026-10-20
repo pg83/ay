@@ -2,22 +2,7 @@ import hashlib
 import unittest
 
 import lib
-
-
-def resource_lib(name, sbr):
-    return f"RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE({name} sbr:{sbr})\nEND()\n"
-
-
-def java_tree(**extra):
-    files = {
-        "build/platform/python/ymake_python3/ya.make": resource_lib("YMAKE_PYTHON3", 1),
-        "build/platform/java/jdk/ya.make": resource_lib("JDK_DEFAULT", 2),
-        "build/platform/java/jdk/jdk17/ya.make": resource_lib("JDK17", 3),
-        "build/platform/java/jdk/jdk26/ya.make": resource_lib("JDK26", 5),
-        "build/platform/java/protoc/ya.make": resource_lib("JAVA_PROTOC", 4),
-    }
-    files.update(extra)
-    return files
+from lib import java_tree, resource_lib
 
 
 def contrib(path, *peers, jar=None, src=None):

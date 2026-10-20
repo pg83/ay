@@ -23,7 +23,7 @@ var procKindStr = [...]string{
 	pkSF:   "SF",
 	pkSTUB: "STUB", pkSW: "SW", pkTEST: "TEST", pkTEST2: "TEST2", pkTS: "TS", pkYC: "YC",
 	pkld: "ld", pkDX: "DX", pkBN: "BN", pkSV: "SV", pkSC: "SC", pkPD: "PD", pkCU: "CU", pkTSDep: "TS_DEP", pkTSLib: "TS_LIB", pkTSPkg: "TS_PKG", pkTSTest: "TS_TST", pkTSJest: "TS_JST", pkUN: "UN", pkDO: "DO", pkUJ: "UJ",
-	pkFS: "FS", pkIJ: "IJ", pkJP: "JP", pkJT: "JT", pkRJ: "RJ", pkTM: "TM", pkTA: "TA",
+	pkFS: "FS", pkIJ: "IJ", pkJP: "JP", pkJT: "JT", pkRJ: "RJ", pkTM: "TM", pkTA: "TA", pkTL: "TL",
 }
 
 var pColorStr = [...]string{
@@ -108,6 +108,7 @@ const (
 	pkRJ
 	pkTM
 	pkTA
+	pkTL
 )
 
 const (
@@ -187,6 +188,8 @@ type KV struct {
 	SpecialRunner    string
 	HasSpecialRunner bool
 	RunTestNode      bool
+	SplitIndex       int
+	HasSplitIndex    bool
 }
 
 type KVExt struct {
@@ -300,6 +303,10 @@ func appendKV(buf []byte, kv KV, exts []KVExt) []byte {
 
 	if kv.HasSpecialRunner {
 		o.forceStr("special_runner", kv.SpecialRunner)
+	}
+
+	if kv.HasSplitIndex {
+		o.num("split_index", float64(kv.SplitIndex))
 	}
 
 	return append(o.buf, '}')

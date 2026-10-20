@@ -17,6 +17,20 @@ func readYaConfSection(fs FS, rel, wantSection string) map[string]string {
 	return yaConfStringTable(root[wantSection])
 }
 
+func readYaConfTop(fs FS, rel string) map[string]string {
+	if !fs.isFile(srcRootRel, rel) {
+		return map[string]string{}
+	}
+
+	var root map[string]any
+
+	if _, err := toml.Decode(string(concatChunks(fs.read(rel))), &root); err != nil {
+		throwFmt("ya.conf %s: %v", rel, err)
+	}
+
+	return yaConfStringTable(root)
+}
+
 func yaConfStringTable(v any) map[string]string {
 	tbl, ok := v.(map[string]any)
 

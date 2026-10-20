@@ -310,9 +310,11 @@ type JavaData struct {
 	enablePreview       bool
 	unittestDir         string
 	implPeers           []string
-	collectKotlinLint   [][]string
+	collectKotlinLint   []string
+	customLints         []javaCustomLint
 	ktlintOld           bool
 	checkJavaDeps       string
+	testEnv             []string
 	sourcesJar          bool
 	noYmakePython3      bool
 	javaDependencyNoDep bool
@@ -490,12 +492,20 @@ func (jm *JavaModule) dmRules() *javaDMRules {
 	return r
 }
 
+func passesPeerGlobals(r *ModuleEmitResult) bool {
+	return !isLinkingModuleType(r.ModuleStmtName) && r.ModuleStmtName != tokDllJava
+}
+
 func javaOwnGlobals(peers []javaForeignPeer) []ResourceDecl {
 	var out []ResourceDecl
 
 	seen := map[STR]bool{}
 
 	for _, p := range peers {
+		if !passesPeerGlobals(p.res) {
+			continue
+		}
+
 		for _, decl := range p.res.ResourceGlobalClosure {
 			if !seen[decl.GlobalVar] {
 				seen[decl.GlobalVar] = true
@@ -693,6 +703,22 @@ func (ctx *GenCtx) genJavaTarget(dir string, name TOK) {
 			ctx.emit.result(ref)
 		}
 	}
+
+	if !ctx.testMode {
+		return
+	}
+
+	for _, u := range javaModuleUnits[name] {
+		res := genModule(ctx, ModuleInstance{Path: source(dir), Kind: u.sub, Language: LangJava, Platform: ctx.target, Demand: demandSelf})
+
+		if res.java == nil {
+			continue
+		}
+
+		for _, ref := range ctx.javaEmitTests(res.java) {
+			ctx.emit.result(ref)
+		}
+	}
 }
 
 func (jm *JavaModule) setupIncDirs() {
@@ -732,6 +758,10 @@ func (jm *JavaModule) macroPeers() []string {
 
 	if jm.unit.proto && len(d.protoSrcs) > 0 {
 		out = append(out, "build/platform/java/protoc")
+	}
+
+	for _, l := range d.customLints {
+		out = append(out, l.linter.resourcePeer)
 	}
 
 	if jm.unit.jni && len(d.swigSrcs()) > 0 {
