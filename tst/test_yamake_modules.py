@@ -141,6 +141,45 @@ class YaMakeModulesTest(unittest.TestCase):
             ["$(B)/u/libu.a", "$(B)/library/cpp/testing/unittest_main/libcpp-testing-unittest_main.a"],
         )
 
+    def test_cpp_test_modules_use_upstream_peers_and_names(self):
+        cases = [
+            ("UNITTEST", ["unittest_main"], "suite-case"),
+            ("UNITTEST_WITH_CUSTOM_ENTRY_POINT", [], "suite-case"),
+            ("YT_UNITTEST", ["unittest_main", "yt/cpp/mapreduce/tests/yt_initialize_hook"], "suite-case"),
+            ("GTEST", ["gtest", "gtest_main"], "suite-case"),
+            ("G_BENCHMARK", ["gbenchmark"], "case"),
+            ("FUZZ", ["contrib/libs/libfuzzer", "nofuzz"], "case"),
+        ]
+        for macro, peers, name in cases:
+            with self.subTest(macro=macro):
+                peers = [p if "/" in p else "library/cpp/testing/" + p for p in peers]
+                files = stub_libraries({
+                    "suite/case/ya.make": f"{macro}()\n{NO_PLATFORM}SRCS(x.cpp)\nEND()\n",
+                    "suite/case/x.cpp": "int x;\n",
+                }, peers)
+                for peer in peers:
+                    files[f"{peer}/ya.make"] = "LIBRARY()\n" + NO_PLATFORM + "SRCS(main.cpp)\nEND()\n"
+                    files[f"{peer}/main.cpp"] = "int m;\n"
+                graph = self.make(files, "suite/case")
+                node = lib.node_by_output(graph, f"$(B)/suite/case/{name}")
+                self.assertEqual(node["kv"]["p"], "LD")
+                linked = [p for p in node["inputs"] if p.endswith(".a")]
+                self.assertEqual(len(linked), len(peers))
+                for peer in peers:
+                    self.assertTrue(any(p.startswith(f"$(B)/{peer}/") for p in linked), peer)
+                files["suite/case/ya.make"] = files["suite/case/ya.make"].replace(
+                    f"{macro}()", f"{macro}(chosen)"
+                )
+                lib.node_by_output(self.make(files, "suite/case"), "$(B)/suite/case/chosen")
+
+    def test_test_binary_full_path_name_respects_linker_path_limit(self):
+        target = "parent/" + "a" * 40 + "/suite"
+        graph = self.make({
+            f"{target}/ya.make": "UNITTEST_WITH_CUSTOM_ENTRY_POINT()\n" + NO_PLATFORM + "SRCS(x.cpp)\nEND()\n",
+            f"{target}/x.cpp": "int main(){return 0;}\n",
+        }, target)
+        lib.node_by_output(graph, f"$(B)/{target}/suite")
+
     def test_module_statement_binds_module_variables(self):
         body = (
             "CFLAGS(-DLANG=${MODULE_LANG} -DTAG=${MODULE_TAG})\n"

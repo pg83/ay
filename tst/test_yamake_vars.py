@@ -123,6 +123,17 @@ class YaMakeVariablesTest(unittest.TestCase):
             "-DE=x", "-DE2=no",
         ])
 
+    def test_set_list_pre_suf_expands_each_item_and_replaces_value(self):
+        self.assertEqual(self.user_cflags(library(
+            "SET(ITEMS one two)\n"
+            "SET_LIST_PRE_SUF(FLAGS -D _FLAG ${ITEMS})\n"
+            "SET_LIST_PRE_SUF(EMPTY pre suf)\n"
+            "SET_LIST_PRE_SUF(REPLACED old tail discard)\n"
+            "SET_LIST_PRE_SUF(REPLACED begin end final)\n"
+            "SET_LIST_PRE_SUF(BARE \"\" \"\" ${ITEMS})\n"
+            "CFLAGS(${FLAGS} ${EMPTY} ${REPLACED} ${BARE})"
+        )), ["-Done_FLAG", "-Dtwo_FLAG", "beginfinalend", "one", "two"])
+
     def test_include_paths(self):
         self.assertEqual(self.user_cflags(library(
             "INCLUDE(common.inc)\n"

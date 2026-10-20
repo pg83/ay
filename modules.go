@@ -144,6 +144,7 @@ type TestMeta struct {
 }
 
 type ModuleData struct {
+	test                     *TestSuiteInfo
 	nots                     *NotsModule
 	docs                     *DocsData
 	moduleStmt               *ModuleStmt
@@ -1029,15 +1030,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				d.peerdirs = append([]ANY{internStr(modulePath).any()}, d.peerdirs...)
 			}
 
-			if v.Name == tokUnittestFor {
-				const unittestMainPeer = "library/cpp/testing/unittest_main"
-
-				d.peerdirs = append(d.peerdirs, internStr(unittestMainPeer).any())
-
-				if len(v.Args) > 0 {
-					d.peerdirs = append(d.peerdirs, internStr(path.Clean(v.Args[0].string())).any())
-				}
-			}
+			applyCppTestModule(v, d, env)
 
 			if isYqlUdfStaticModule(v.Name) {
 				d.peerdirs = append(d.peerdirs, internAnys(yqlUdfImplicitPeers())...)
@@ -1606,6 +1599,10 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 }
 
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
+	if applyTestMacro(v, d) {
+		return
+	}
+
 	if d.nots != nil && applyNotsStmt(v, d.nots) {
 		return
 	}
@@ -2713,6 +2710,27 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			appendPyRegister(d, name, true)
 		}
+	case tokSetListPreSuf:
+		if len(v.Args) < 3 {
+			throwFmt("gen: SET_LIST_PRE_SUF expects an output, prefix and suffix (line %d)", v.Line)
+		}
+
+		values := make([]string, 0, len(v.Args)-3)
+
+		for _, value := range v.Args[3:] {
+			values = append(values, v.Args[1].string()+value.string()+v.Args[2].string())
+		}
+
+		value := strings.Join(values, " ")
+		name := v.Args[0].string()
+
+		env.setFromString(internEnv(name), value)
+
+		if d.setVars == nil {
+			d.setVars = map[STR]STR{}
+		}
+
+		d.setVars[internStr(name)] = internStr(value)
 	case tokSetAppend:
 
 		if len(v.Args) >= 1 {
@@ -3334,7 +3352,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittestFor, tokGoProgram, tokGoTest, tokGoDll:
+	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokGoProgram, tokGoTest, tokGoDll:
 		return true
 	}
 

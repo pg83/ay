@@ -455,7 +455,7 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 	}
 
 	if ctx.testMode && root.testSuiteInfo != nil {
-		for _, ref := range emitTestRunNodes(ctx.emit, ctx.target, *root.testSuiteInfo, root.LDRef, ctx.testContext(), root.ResourceGlobalClosure) {
+		for _, ref := range ctx.emitTestRunNodes(*root.testSuiteInfo, root.LDRef, root.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
 		}
 	}
@@ -663,11 +663,15 @@ func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP
 
 func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 	if moduleStmt != nil && moduleStmt.Name == tokUnittestFor {
-		return strings.ReplaceAll(path.Clean(instance.Path.relString()), "/", "-")
+		return fullPathTestName(instance.Path.relString())
 	}
 
 	if moduleStmt != nil && len(moduleStmt.Args) > 0 {
 		return moduleStmt.Args[0].string()
+	}
+
+	if moduleStmt != nil && isUnitTestModule(moduleStmt.Name) {
+		return fullPathTestName(instance.Path.relString())
 	}
 
 	return baseName(instance.Path.relString())
@@ -2215,7 +2219,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		var suiteInfo *TestSuiteInfo
 
-		if ctx.testMode && d.moduleStmt.Name == tokUnittestFor {
+		if ctx.testMode && testSuiteName(d.moduleStmt.Name) != "" {
 			suiteInfo = buildTestSuiteInfo(instance, d, ldPath)
 		}
 

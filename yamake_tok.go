@@ -1,6 +1,23 @@
 package main
 
 var tokName = [...]STR{
+	tokDepends:       internStr("DEPENDS"),
+	tokTestCwd:       internStr("TEST_CWD"),
+	tokUseRecipe:     internStr("USE_RECIPE"),
+	tokExplicitData:  internStr("EXPLICIT_DATA"),
+	tokDataFiles:     internStr("DATA_FILES"),
+	tokBenchmarkOpts: internStr("BENCHMARK_OPTS"),
+	tokFuzzOpts:      internStr("FUZZ_OPTS"),
+	tokForkTestFiles: internStr("FORK_TEST_FILES"),
+
+	tokSetListPreSuf:                internStr("SET_LIST_PRE_SUF"),
+	tokUnittest:                     internStr("UNITTEST"),
+	tokUnittestWithCustomEntryPoint: internStr("UNITTEST_WITH_CUSTOM_ENTRY_POINT"),
+	tokYtUnittest:                   internStr("YT_UNITTEST"),
+	tokGtest:                        internStr("GTEST"),
+	tokGBenchmark:                   internStr("G_BENCHMARK"),
+	tokFuzz:                         internStr("FUZZ"),
+
 	tokDocs:               internStr("DOCS"),
 	tokDocsLibrary:        internStr("DOCS_LIBRARY"),
 	tokDocsDir:            internStr("DOCS_DIR"),
@@ -468,6 +485,15 @@ const (
 	tokSourceGroup
 	tokTsProtoOpt
 	tokSetAppend
+	tokSetListPreSuf
+	tokDepends
+	tokTestCwd
+	tokUseRecipe
+	tokExplicitData
+	tokDataFiles
+	tokBenchmarkOpts
+	tokFuzzOpts
+	tokForkTestFiles
 	tokSetResourceUriFromJson
 	tokSize
 	tokSoProgram
@@ -500,6 +526,12 @@ const (
 	tokToolchain
 	tokUnion
 	tokUnittestFor
+	tokUnittest
+	tokUnittestWithCustomEntryPoint
+	tokYtUnittest
+	tokGtest
+	tokGBenchmark
+	tokFuzz
 	tokUseCommonGoogleApis
 	tokUseCxx
 	tokUseLightPy2cc

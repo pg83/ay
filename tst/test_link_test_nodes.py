@@ -181,6 +181,42 @@ class TestNodesTest(unittest.TestCase):
             )
         )
 
+    def test_cpp_suites_select_runners_and_metadata(self):
+        for macro, name, runner, peers in [
+            ("UNITTEST", "unittest", "run_ut", ["unittest_main"]),
+            ("UNITTEST_WITH_CUSTOM_ENTRY_POINT", "unittest", "run_ut", []),
+            ("GTEST", "gtest", "run_ut", ["gtest", "gtest_main"]),
+            ("G_BENCHMARK", "tests", "run_g_benchmark", ["gbenchmark"]),
+            ("FUZZ", "fuzz", "run_fuzz", ["nofuzz", "contrib/libs/libfuzzer"]),
+        ]:
+            with self.subTest(macro=macro):
+                files = {
+                    "tests/ya.make": f"{macro}()\n{NO_PLATFORM}SRCS(t.cpp)\n"
+                    "SIZE(MEDIUM)\nTIMEOUT(75)\nTEST_CWD(data)\n"
+                    "DATA(arcadia/data)\nDEPENDS(tool)\n"
+                    "REQUIREMENTS(ram:4 cpu:2 network:full)\nEND()\n",
+                    "tests/t.cpp": "int main(){return 0;}\n",
+                    "data/input.txt": "input\n",
+                    "tool/ya.make": f"PROGRAM()\n{NO_PLATFORM}SRCS(t.cpp)\nEND()\n",
+                    "tool/t.cpp": "int main(){return 0;}\n",
+                }
+                for peer in peers:
+                    peer = peer if "/" in peer else "library/cpp/testing/" + peer
+                    files[f"{peer}/ya.make"] = library()
+                graph = lib.make(files, "tests", "-t")
+                run = lib.node_by_output(graph, f"$(B)/tests/test-results/{name}/meta.json")
+                args = run["cmds"][0]["cmd_args"]
+                self.assertIn(runner, args)
+                self.assertEqual(args[args.index("--timeout") + 1], "75")
+                self.assertEqual(args[args.index("--test-size") + 1], "medium")
+                self.assertEqual(args[args.index("--test-run-cwd") + 1], "$(S)/data")
+                self.assertEqual(run["requirements"], {"cpu": 2, "ram": 4, "network": "full", "ram_disk": 0})
+                self.assertEqual(set(run["inputs"]), {"$(S)/data", "$(S)/tests"})
+                tool = lib.node_by_output(graph, "$(B)/tool/tool")
+                self.assertIn(tool["uid"], run["deps"])
+                binary = next(n for n in graph["graph"] if n.get("kv", {}).get("p") == "LD" and n["outputs"][0].startswith("$(B)/tests/"))
+                self.assertNotIn(tool["uid"], binary["deps"])
+
     def test_unsandboxed_debug_descriptor(self):
         graph = make_unsandboxed(fixture(), "lib/ut", "-t")
         context = lib.node_by_output(graph, "$(B)/common_test.context")

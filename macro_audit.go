@@ -27,14 +27,9 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 
 	tokLicense: {},
 
-	tokSetAppend: {},
-
-	tokEnv:          {},
-	tokTag:          {},
-	tokRequirements: {},
-	tokData:         {},
-	tokTestCwd:      {},
-	tokGoSkipTests:  {},
+	tokSetAppend:     {},
+	tokSetListPreSuf: {},
+	tokGoSkipTests: {},
 }
 
 var serviceArgOK BitSet
