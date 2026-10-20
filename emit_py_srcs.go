@@ -483,7 +483,7 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 		e.resEntries = retainMaxLen(e.resEntries, entries)
 
 		if len(entries) > 0 {
-			groupRefs, groupOuts := e.packResources(ResourcePack{Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries)})
+			groupRefs, groupOuts := e.packResources(ResourcePack{DontCompress: true, Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries)})
 
 			res.Refs = append(res.Refs, groupRefs...)
 			res.Outputs = append(res.Outputs, groupOuts...)
@@ -537,7 +537,7 @@ func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef,
 		return nil, nil
 	}
 
-	return e.packResources(ResourcePack{
+	return e.packResources(ResourcePack{DontCompress: true,
 		Tag: e.d.unit.HashTag, Items: e.pyGenResourceItems(entries),
 		RawCompile: CompileSpec{
 			ForceCxx:  true,
@@ -710,7 +710,7 @@ func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
 		kvCmd := internStr("resfs/src/" + key + "=" + res.sourcePath)
 		input := source(res.sourcePath)
 
-		refs, outs := e.packResources(ResourcePack{Tag: moduleTag, Items: []ResourceItem{
+		refs, outs := e.packResources(ResourcePack{DontCompress: true, Tag: moduleTag, Items: []ResourceItem{
 			{Path: "-", Key: kvHash, Cmd: kvCmd},
 			{Path: res.hashPath, Key: key, SourceInput: input},
 		}})
@@ -730,7 +730,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 			continue
 		}
 
-		r, o := e.packResources(ResourcePack{
+		r, o := e.packResources(ResourcePack{DontCompress: true,
 			Tag: d.unit.HashTag, Items: e.pyGenResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)),
 			RawCompile: CompileSpec{
 				ForceCxx: true,

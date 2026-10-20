@@ -20,6 +20,7 @@ func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string) []Re
 	prefix := ""
 	prefixToStrip := ""
 	dest := ""
+	dontCompress := false
 	i := 0
 	dontCompress := false
 

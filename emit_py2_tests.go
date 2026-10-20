@@ -53,7 +53,7 @@ func (e *EmitContext) emitPy2TestSources() *ObjcopyEmitResult {
 			}
 		}
 
-		refs, outs := e.packResources(ResourcePack{Items: items})
+		refs, outs := e.packResources(ResourcePack{DontCompress: true, Items: items})
 
 		result.Refs = append(result.Refs, refs...)
 		result.Outputs = append(result.Outputs, outs...)
