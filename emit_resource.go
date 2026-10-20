@@ -789,7 +789,7 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 		return out
 	}
 
-	moduleTag := d.unit.Tag
+	moduleTag := d.unit.HashTag
 	py3BinProgramSide := d.unit.Tag == unitTagPy3Bin
 
 	if !py3BinProgramSide {

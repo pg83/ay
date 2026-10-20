@@ -1587,7 +1587,9 @@ func jniCppSwigSrcs(srcs []ANY) []ANY {
 func resolveModuleUnit(name TOK, kind ModuleKind, language Language) ModuleUnit {
 	u := resolveModuleUnitBare(name, kind, language)
 
-	u.HashTag = u.Tag
+	if u.HashTag == 0 {
+		u.HashTag = u.Tag
+	}
 
 	return u
 }
@@ -1627,7 +1629,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	case tokPy23NativeLibrary:
 		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3Native, ARPrefix: "libpy3c", GlobalARTag: tagPy3NativeGlobal, SbomLang: unitSbomCpp}
 	case tokYqlUdfYdb, tokYqlUdfContrib:
-		return ModuleUnit{Type: name, CCTag: tagYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
+		return ModuleUnit{Type: name, CCTag: tagYqlUdfStatic, HashTag: strYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
 	case tokFbsLibrary:
 		return ModuleUnit{Type: name, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokProtoLibrary:

@@ -470,6 +470,7 @@ var (
 	strYes                                                                                   = internStr("yes")
 	strYfmTool                                                                               = internStr("YFM_TOOL")
 	strYqlEssentialsPublicUdfAbiConflict                                                     = internStr("yql/essentials/public/udf/abi_conflict")
+	strYqlUdfStatic                                                                          = internStr("YQL_UDF_STATIC")
 	strZero                                                                                  = internStr("0")
 	str_GO_PACKAGE_VALUE                                                                     = internStr("_GO_PACKAGE_VALUE")
 	tagCppFbs                                                                                = internStr("cpp_fbs")
