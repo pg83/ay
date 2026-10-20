@@ -158,6 +158,13 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	pending := e.pendingEmit(pe)
+	generatorRefs := []NodeRef{res.LDRef}
+
+	for _, tool := range auxTools {
+		generatorRefs = append(generatorRefs, tool.ref)
+	}
+
+	generatorRefs = ctx.na.refList(dedupRefs(generatorRefs)...)
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet) {
 		if registeredPROut[out] {
@@ -170,7 +177,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			OutputPath:      out,
 			ProducerRef:     prRef,
 			ProducerMainOut: mainOutputVFS,
-			GeneratorRefs:   e.ctx.na.refList(res.LDRef),
+			GeneratorRefs:   generatorRefs,
 			ParsedIncludes:  parsed,
 			OnUse:           pending,
 		})

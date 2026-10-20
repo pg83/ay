@@ -496,7 +496,7 @@ func (ctx *GenCtx) javaEmitRunProgram(jm *JavaModule, r javaRunProgram, ref Node
 	}
 
 	for _, dir := range r.inDirs {
-		pattern := dir + "/**/*"
+		pattern := path.Clean(dir) + "/**/*"
 
 		if !strings.HasPrefix(dir, "$(") {
 			pattern = jm.dir + "/" + pattern

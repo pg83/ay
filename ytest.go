@@ -295,6 +295,10 @@ type TestSuite struct {
 	timeout                int
 	relatedPaths           []string
 	runInputs              []VFS
+	inputNames             []string
+	noCleanEnvironment     bool
+	clearEnvironment       bool
+	noRetries              bool
 	deps                   []NodeRef
 	env                    []string
 	tags                   []string
@@ -392,7 +396,7 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 	split := max(s.split, 1)
 	retries := 1
 
-	if s.ciType == "test" && !slices.Contains(s.tags, "ya:noretries") {
+	if s.ciType == "test" && !s.noRetries && !slices.Contains(s.tags, "ya:noretries") {
 		retries = ctx.tests.retries
 	}
 
@@ -522,6 +526,10 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 
 	for _, p := range related {
 		strs = append(strs, "--test-related-path", p)
+	}
+
+	if s.noCleanEnvironment {
+		strs = append(strs, "--no-clean-environment")
 	}
 
 	strs = append(strs, "--target-platform-descriptor", o.descriptor)
@@ -666,12 +674,20 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	kv.SplitFile = chunk.file
 
 	deps := append([]NodeRef{ctx.testContext()}, s.deps...)
+	names := na.strs.alloc(len(s.inputNames))[:len(s.inputNames):len(s.inputNames)]
+
+	for i, name := range s.inputNames {
+		names[i] = internStr(name)
+	}
+
+	na.strs.commit(len(names))
 
 	return &Node{
 		Platform:     s.p,
 		Cmds:         na.cmdList(cmds...),
 		Env:          ctx.testEnv(s),
 		Inputs:       na.inputList(na.vfsList(slices.Compact(inputs)...)),
+		InputNames:   names,
 		KV:           kv,
 		Outputs:      na.vfsList(outputs...),
 		Requirements: req,
@@ -775,6 +791,12 @@ func (ctx *GenCtx) testEnv(s *TestSuite) EnvVars {
 	extend("MSAN_OPTIONS", "report_umrs=1")
 
 	env["YA_PYTHON_BIN"] = testPythonBin
+
+	if s.clearEnvironment {
+		clear(env)
+		clear(mandatory)
+		mandatory["YA_MANDATORY_ENV_VARS"] = true
+	}
 
 	for _, name := range testSymbolizerVars {
 		env[name] = testClangSymbolizerPath

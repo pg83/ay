@@ -284,7 +284,13 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir, global: true})
 			}
 		case *UnknownStmt:
-			applyJavaMacro(ctx, jm, d, v.Raw.string(), anyStrs(expandStmtTokens(v.Args, env)), anyStrs(v.Args), env)
+			raw := v.Args
+
+			if v.LexicalArgs != nil {
+				raw = v.LexicalArgs
+			}
+
+			applyJavaMacro(ctx, jm, d, v.Raw.string(), anyStrs(expandStmtTokens(v.Args, env)), anyStrs(raw), env)
 		}
 	}
 }

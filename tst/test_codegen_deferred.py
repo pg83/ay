@@ -53,6 +53,7 @@ class DeferredCodegenTest(unittest.TestCase):
                 self.assertEqual(info["cmds"][-1]["cmd_args"][-1], "$(B)/a/info.h")
                 consumer = lib.node_by_output(graph, "$(B)/r/r.cpp.o")
                 self.assertIn(info["uid"], consumer["deps"])
+                self.assertFalse(set(info["inputs"]) & set(consumer["inputs"]))
 
     def test_one_fired_producer_does_not_release_another(self):
         files = project(

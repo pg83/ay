@@ -31,6 +31,7 @@ type Node struct {
 	Cmds           []Cmd         `json:"cmds"`
 	Env            EnvVars       `json:"env"`
 	Inputs         InputChunks   `json:"inputs"`
+	InputNames     []STR         `json:"-"`
 	InputClosure   Closure       `json:"-"`
 	KV             *KV           `json:"kv"`
 	KVExts         []KVExt       `json:"-"`

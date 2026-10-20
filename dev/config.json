@@ -1487,7 +1487,7 @@
       "yabs/telegram/max-webhook/gen/tests_update",
       "yql/library/ide/docs/yfm/build"
     ],
-    "xfail": true,
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14087988215",
     "slice_sha256": "1403c3d78fab0e72fd22927a587b5d49f0201be5ae6853db87e7a4a31846102d",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14087989831",

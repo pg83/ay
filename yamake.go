@@ -175,10 +175,11 @@ type EndStmt struct {
 }
 
 type UnknownStmt struct {
-	Name TOK
-	Raw  STR
-	Args []ANY
-	Line int
+	Name        TOK
+	Raw         STR
+	Args        []ANY
+	LexicalArgs []ANY
+	Line        int
 }
 
 type IfStmt struct {
@@ -1032,7 +1033,14 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 		return
 	}
 
-	args := p.parseMacroArgs(nameTok)
+	var lexical []ANY
+	var capture *[]ANY
+
+	if nameTok.string() == "RUN_JAVA_PROGRAM" {
+		capture = &lexical
+	}
+
+	args := p.parseMacroArgsLexical(nameTok, capture)
 
 	if nameTok.id == tokCppEnumsSerialization.str() {
 		for i := 0; i < len(args); i++ {
@@ -1049,6 +1057,10 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 	}
 
 	stmt := p.buildStmt(nameTok, args)
+
+	if len(lexical) != 0 {
+		stmt.(*UnknownStmt).LexicalArgs = lexical
+	}
 
 	if set, ok := stmt.(*SetStmt); ok {
 		p.includes.env.setFromString(set.NameEnv, expandScalarVarRef(set.Value, p.includes.env))
@@ -1081,6 +1093,10 @@ func (p *Parser) applyIncludeOnce(nameTok Token) {
 }
 
 func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
+	return p.parseMacroArgsLexical(nameTok, nil)
+}
+
+func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 	scratch := p.argScratch[:0]
 
 	defer func() { p.argScratch = scratch[:0] }()
@@ -1096,6 +1112,13 @@ func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
 	defer func() { p.lex.inArgs = false }()
 
 	for {
+		start := 0
+
+		if lexical != nil {
+			p.lex.skipTrivia()
+			start = p.lex.pos
+		}
+
 		tok := p.lex.next()
 
 		switch tok.kind {
@@ -1109,6 +1132,10 @@ func (p *Parser) parseMacroArgs(nameTok Token) []ANY {
 			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.string())
 		case tokIdent, tokWord, tokString, tokInt:
 			scratch = append(scratch, tok.id.any())
+
+			if lexical != nil {
+				*lexical = append(*lexical, internBytes(p.lex.src[start:p.lex.pos]).any())
+			}
 		case tokLParen:
 			p.lex.throwParse(tok.line, tok.col, "unexpected '(' inside macro call %q", nameTok.string())
 		default:

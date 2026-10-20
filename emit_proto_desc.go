@@ -19,6 +19,7 @@ type DescProtoPeer struct {
 type DescPeerSpan struct {
 	peers    []DescProtoPeer
 	includes []VFS
+	globals  []ResourceDecl
 }
 
 func realPrjName(moduleDir string) string {
@@ -71,7 +72,13 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []ANY, injec
 	}
 
 	enter := func(peerPath string) {
-		if !isProtoLibraryPeer(ctx, peerPath) {
+		if !peerYaMakeExists(ctx.fs, source(peerPath)) {
+			return
+		}
+
+		name := ctx.moduleName(peerPath)
+
+		if name != tokProtoLibrary && name != tokResourcesLibrary {
 			return
 		}
 
@@ -83,6 +90,8 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []ANY, injec
 		}
 
 		res := genModule(ctx, peerInstance)
+
+		span.globals = append(span.globals, res.ResourceGlobalClosure...)
 
 		add(res.DescClosure)
 
@@ -171,10 +180,11 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	selfPath := selfProtodesc
 
 	return &ModuleEmitResult{
-		ARRef:        mergeRef,
-		ARPath:       &selfPath,
-		DescClosure:  closure,
-		ProtoInclude: protoInclude,
+		ARRef:                 mergeRef,
+		ARPath:                &selfPath,
+		DescClosure:           closure,
+		ProtoInclude:          protoInclude,
+		ResourceGlobalClosure: span.globals,
 	}
 }
 

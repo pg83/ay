@@ -171,6 +171,26 @@ class JavaProtoTest(unittest.TestCase):
 
 
 class JavaProgramTest(unittest.TestCase):
+    def test_run_java_archive_hash_preserves_lexical_quotes(self):
+        files = self.tree()
+        files["gen/ya.make"] = (
+            'JAVA_LIBRARY_NON_SPLIT()\nSET(VALUE example)\n'
+            'RUN_JAVA_PROGRAM(Main --value="${VALUE}" OUT_DIR out CLASSPATH app)\nEND()\n'
+        )
+        graph = lib.make(files, "gen")
+        salt = hashlib.md5(b'Main --value="example" OUT_DIR out CLASSPATH app').hexdigest()
+        archive = lib.node_by_output(graph, f"$(B)/gen/out.{salt}.gentar")
+        self.assertEqual(archive["cmds"][1]["cmd_args"][-2:], ["Main", "--value=example"])
+
+    def test_run_java_input_directories_are_normalized_before_globbing(self):
+        files = self.tree()
+        files["gen/ya.make"] = (
+            "JAVA_LIBRARY_NON_SPLIT()\nRUN_JAVA_PROGRAM(Main IN_DIR ${CURDIR}/in.txt/.. OUT_DIR out CLASSPATH app)\nEND()\n"
+        )
+        archive = next(n for n in lib.make(files, "gen")["graph"] if n["kv"]["p"] == "RJ")
+        self.assertIn("$(S)/gen/in.txt", archive["inputs"])
+        self.assertFalse(any("/../" in p for p in archive["inputs"]))
+
     def tree(self):
         return java_tree(**{
             "app/ya.make": "JAVA_PROGRAM()\nPEERDIR(contrib/java/x/a/1.0)\nJAVA_SRCS(SRCDIR src **/*)\nEND()\n",
@@ -342,6 +362,7 @@ class JavaSwigTest(unittest.TestCase):
                      "$(S)/contrib/libs/jdk/include/jni.h", "$(S)/contrib/libs/jdk/include/jni_types.h"):
             self.assertIn(path, cpp["inputs"])
         compiled = lib.node_by_output(graph, "$(B)/jni/wrap_wrap.swg.cpp.pic.o")
+        self.assertIn("-Wno-deprecated-declarations", compiled["cmds"][0]["cmd_args"])
         for path in ("$(B)/jni/wrap_wrap.swg.cpp", "$(B)/jni/wrap_wrap.swg.h", "$(S)/jni/api.h", "$(B)/dep/gen.h"):
             self.assertIn(path, compiled["inputs"])
         so = lib.node_by_output(graph, "$(B)/jni/libjni-lib.so")

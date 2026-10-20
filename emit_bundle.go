@@ -21,7 +21,14 @@ func (e *EmitContext) emitBundles() {
 
 		ref := ctx.emit.reserve()
 
-		e.emitBundleNode(d.tc.Python3, src, dst, srcRef, resolved, ref)
+		if b.Output != "" {
+			script := buildScriptsBundleOutputPy
+			args := ctx.na.anyList(d.tc.Python3.any(), script.any(), argResult.any(), src.any(), argName.any(), internStr(b.Output).any(), strOutput.any(), dst.any())
+
+			e.emitReservedNode(Node{Platform: instance.Platform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(args), Env: envVarsVCS}), Env: envVarsVCS, Inputs: ctx.na.inputList(ctx.na.vfsList(src, script)), Outputs: ctx.na.vfsList(dst), DepRefs: ctx.na.refList(srcRef), KV: &bundleKV, Resources: usesPython3}, ref)
+		} else {
+			e.emitBundleNode(d.tc.Python3, src, dst, srcRef, resolved, ref)
+		}
 
 		e.register(GeneratedFileInfo{
 			OutputPath:    dst,

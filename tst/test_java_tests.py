@@ -134,6 +134,16 @@ class JavaCustomLintTest(unittest.TestCase):
 
 
 class JavaTestGlobalsTest(unittest.TestCase):
+    def test_static_peers_do_not_declare_linker_resources(self):
+        files = style_tree(**{
+            "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nPEERDIR(native)\nJAVA_SRCS(SRCDIR src **/*)\nEND()\n",
+            "native/ya.make": "LIBRARY()\nSRCS(native.cpp)\nEND()\n",
+            "native/native.cpp": "",
+            "build/platform/lld/ya.make": resource_lib("LLD_ROOT", 10),
+        })
+        style = test_nodes(lib.make(files, "app", "--target-platform-tests"))["app/java_style"]
+        self.assertNotIn("LLD_ROOT_RESOURCE_GLOBAL", global_names(style["cmds"][-1]["cmd_args"]))
+
     def tree(self, header):
         bare = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
         return style_tree(**{
@@ -172,6 +182,29 @@ def junit_tree(test_body, **extra):
 
 
 class JavaJunitSuiteTest(unittest.TestCase):
+    def test_data_checks_extract_resource_id_prefixes(self):
+        files = junit_tree("JUNIT5()\nSIZE(LARGE)\nDATA(sbr:12=label sbr:/34suffix sbr://56/path sbr:///78)\nEND()\n")
+        graph = lib.make(files, "proj/sub/ut", "--target-platform-tests", "--test-size", "small")
+        check = test_nodes(graph)["proj/sub/ut/validate_data_sbr"]
+        self.assertEqual(check["inputs"], ["$(S)/proj/sub/ut", "12", "34", "56"])
+
+    def test_data_checks_run_even_when_test_size_is_filtered(self):
+        files = junit_tree("JUNIT5()\nSIZE(LARGE)\nDATA(sbr://123=fixtures arcadia/proj/sub/ut/data.txt)\nENV(KEY=value)\nEND()\n")
+        graph = lib.make(files, "proj/sub/ut", "--target-platform-tests", "--test-size", "small", "--tests-retries", "3", env={"YA_TOKEN": "test-token"})
+        tests = test_nodes(graph)
+        self.assertNotIn("proj/sub/ut/sub-ut", tests)
+        check = tests["proj/sub/ut/validate_data_sbr"]
+        self.assertEqual(check["inputs"], ["$(S)/proj/sub/ut", "123"])
+        self.assertEqual(run_args(check)[1:], [
+            "run_check", "--source-root", "$(S)", "--checker", "check_resource --token test-token",
+            "--check-name", "validate_data_sbr", "--trace-path", "$(B)/proj/sub/ut/test-results/validate_data_sbr/ytest.report.trace",
+            "--out-path", "$(B)/proj/sub/ut/test-results/validate_data_sbr/testing_out_stuff",
+            "--log-path", "$(B)/proj/sub/ut/test-results/validate_data_sbr/testing_out_stuff/run_check.log",
+            "123", "--batch", "--batch-name", "ut",
+        ])
+        self.assertEqual(option_values(head_args(check), "--env"), ["KEY=value"])
+        self.assertEqual(check["requirements"]["network"], "full")
+
     def test_junit_node(self):
         files = junit_tree("JUNIT5()\nJDK_VERSION(21)\nPEERDIR(lib base/ut)\nENV(A=1)\nJVM_ARGS(-Dd=${CURDIR})\n"
                            "SYSTEM_PROPERTIES(k v)\nDATA(arcadia/proj/sub/ut/data.txt sbr://1)\nEND()\n")

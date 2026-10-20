@@ -68,6 +68,7 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 	python3 := d.tc.Python3
 
 	meta.Source = cpp.any()
+	meta.Compile.CFlags = append(e.ctx.na.anyList(meta.Compile.CFlags...), argWnoDeprecatedDeclarations.any())
 	e.enqueueSrc(meta)
 
 	pe := func() {

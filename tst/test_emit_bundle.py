@@ -31,6 +31,27 @@ def base_files():
 
 
 class EmitBundleTest(unittest.TestCase):
+    def test_bundle_output_selects_secondary_docs_output_and_renames_it(self):
+        files = base_files()
+        files.update({
+            "guide/ya.make": "DOCS(book)\nEND()\n",
+            "guide/index.md": "# Guide\n",
+            "cons/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                            "BUNDLE_OUTPUT(guide preprocessed.tar.gz RENAME input.tar.gz)\n"
+                            "FROM_ARCHIVE(input.tar.gz OUT_NOAUTO index.md)\nRESOURCE(index.md key)\nEND()\n",
+        })
+        graph = lib.make(files, "cons")
+        bundle = lib.node_by_output(graph, "$(B)/cons/input.tar.gz")
+        book = lib.node_by_output(graph, "$(B)/guide/book.tar.gz")
+        self.assertEqual(bundle["cmds"][0]["cmd_args"][1:], [
+            "$(S)/build/scripts/bundle_output.py", "--result", "$(B)/guide/book.tar.gz",
+            "--name", "preprocessed.tar.gz", "--output", "$(B)/cons/input.tar.gz",
+        ])
+        self.assertIn(book["uid"], bundle["deps"])
+        extracted = lib.node_by_output(graph, "$(B)/cons/index.md")
+        self.assertIn(bundle["uid"], extracted["deps"])
+        self.assertIn("$(B)/cons/input.tar.gz", extracted["inputs"])
+
     def test_generated_file_wires_producer_dependency(self):
         files = base_files()
         files.update({

@@ -24,6 +24,19 @@ def compile_inputs(graph, output):
 
 
 class RunProgramTest(unittest.TestCase):
+    def test_auxiliary_tools_induce_dependencies_on_generated_sources(self):
+        files = library("RUN_PROGRAM(tools/gen TOOL tools/plugin OUT out.cpp)\n")
+        lib.tool_program(files, "tools/plugin", "plugin")
+        files["tools/plugin/ya.make"] = files["tools/plugin/ya.make"].replace(
+            "END()", "INDUCED_DEPS(cpp ${ARCADIA_ROOT}/runtime/runtime.h)\nEND()"
+        )
+        files["runtime/runtime.h"] = '#include "detail.h"\n'
+        files["runtime/detail.h"] = ""
+        graph = lib.make(files, "lib")
+        compiled = lib.node_by_output(graph, "$(B)/lib/out.cpp.o")
+        self.assertIn("$(S)/runtime/runtime.h", compiled["inputs"])
+        self.assertIn("$(S)/runtime/detail.h", compiled["inputs"])
+
     def test_arguments_inputs_env_and_tools(self):
         files = library(
             "RUN_PROGRAM(tools/pre IN seed.txt STDOUT_NOAUTO stage.txt)\n"
