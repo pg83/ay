@@ -152,6 +152,16 @@ when ($OS_LINUX == "yes") {
                 inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
                 self.assertEqual({"$(S)/m/a.cpp", "$(S)/m/first.h"}, set(inputs))
 
+    def test_scalar_cycles_do_not_disappear(self):
+        for config, expected in (
+            ("SYSINCL=$ALIAS\nALIAS=$ALIAS\n", "sysincl: $ALIAS: no such file"),
+            ("SYSINCL=$FIRST\nFIRST=$SECOND\nSECOND=$FIRST\n", "substitution exceeded the limit 128"),
+        ):
+            with self.subTest(config=config):
+                result = lib.make_process(self.files(config), "m")
+                self.assertEqual(1, result.returncode)
+                self.assertIn(expected, result.stderr)
+
     def test_define_and_exclude_scalar_assignments(self):
         for config in (
             "EXTRA_SYSINCL:=build/custom/notfirst.yml\n"

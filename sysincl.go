@@ -8,10 +8,7 @@ import (
 	"strings"
 )
 
-var (
-	envSYSINCL    = internEnv(sysinclVar)
-	unsetVarRefRe = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
-)
+var envSYSINCL = internEnv(sysinclVar)
 
 const (
 	sysinclVar             = "SYSINCL"
@@ -131,13 +128,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 		}
 	}
 
-	value := env.string(envSYSINCL)
-
-	if strings.Contains(value, "$") {
-		value = unsetVarRefRe.ReplaceAllString(expandStmtToken(value, env), "")
-	}
-
-	return strings.Fields(value)
+	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env))
 }
 
 func (pm *IncludeParserManager) sysinclRecords(rel string, onWarn func(Warn)) []SysIncl {

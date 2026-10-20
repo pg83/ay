@@ -5,7 +5,10 @@ import (
 	"strings"
 )
 
-var confVarRefRe = regexp.MustCompile(`\$\{(?:[^}:]*:)?([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
+var (
+	confScalarRefRe = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
+	confVarRefRe    = regexp.MustCompile(`\$\{(?:[^}:]*:)?([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
+)
 
 const (
 	confRootRel    = "build/"
@@ -305,4 +308,28 @@ func applyConfStmt(env Environment, s ConfStmt, conditional bool) {
 
 		env.setString(key, value)
 	}
+}
+
+func expandConfScalar(value string, env Environment) string {
+	if !strings.Contains(value, "$") {
+		return value
+	}
+
+	for iteration := 1; value != ""; iteration++ {
+		expanded := confScalarRefRe.ReplaceAllStringFunc(value, func(reference string) string {
+			return env.string(internEnv(strings.Trim(reference, "${}")))
+		})
+
+		if iteration >= 128 {
+			throwFmt("conf: scalar substitution exceeded the limit 128")
+		}
+
+		if expanded == value {
+			return value
+		}
+
+		value = expanded
+	}
+
+	return value
 }
