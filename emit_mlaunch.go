@@ -4,17 +4,29 @@ import "strings"
 
 var (
 	mlaunchKV      = KV{P: pkML, PC: pcCyan}
+	golaunchKV     = KV{P: pkGL, PC: pcCyan}
 	packageFinalKV = KV{P: pkPK, PC: pcLightRed}
 )
 
 func (e *EmitContext) emitMlaunch(resolved []ResolvedPeer, peerArchivePaths []VFS, deps []string) {
-	if e.d.mlaunch == nil || e.d.mlaunch.Generate == "" {
+	if e.d.mlaunch == nil {
 		return
 	}
 
-	na := e.ctx.na
+	if len(e.d.mlaunch.Components) > 0 {
+		script := buildInternalScriptsGenCompositeGo
+		args := append([]ANY{e.d.tc.Python3.any(), script.any(), strLocalPeers.any()}, e.d.mlaunch.Components...)
+
+		e.emitGolaunchSource(&golaunchKV, script, args, build(e.instance.Path.relString(), "/main.go"))
+
+		return
+	}
+
+	if e.d.mlaunch.Generate == "" {
+		return
+	}
+
 	script := buildInternalScriptsGenMlaunchPy
-	out := build(e.instance.Path.relString(), "/launch.go")
 	args := []ANY{e.d.tc.Python3.any(), script.any(), strType.any(), internStr(e.d.mlaunch.Generate).any(), strLocalPeers.any()}
 
 	dedupers.with(func(deduper *DeDuper) {
@@ -35,9 +47,14 @@ func (e *EmitContext) emitMlaunch(resolved []ResolvedPeer, peerArchivePaths []VF
 	args = append(args, internAnys(deps)...)
 	args = append(args, internAnys(e.d.mlaunch.Args)...)
 
+	e.emitGolaunchSource(&mlaunchKV, script, args, build(e.instance.Path.relString(), "/launch.go"))
+}
+
+func (e *EmitContext) emitGolaunchSource(kv *KV, script VFS, args []ANY, out VFS) {
+	na := e.ctx.na
 	ref := e.ctx.emit.reserve()
 	inputs := append([]VFS{script}, e.ctx.scripts[script.rel()]...)
-	node := Node{Platform: e.instance.Platform, KV: &mlaunchKV, Resources: usesPython3, Env: envVarsVCS, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Stdout: out, Env: envVarsVCS}), Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(out)}
+	node := Node{Platform: e.instance.Platform, KV: kv, Resources: usesPython3, Env: envVarsVCS, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(args), Stdout: out, Env: envVarsVCS}), Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(out)}
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
 	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending})

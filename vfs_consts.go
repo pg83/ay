@@ -16,6 +16,7 @@ var (
 	bldVcsJson                          = build("vcs.json")
 	bldYt                               = build("yt")
 	buildInfoGenPyVFS                   = source("build/scripts/build_info_gen.py")
+	buildInternalScriptsGenCompositeGo  = source("build/internal/scripts/gen_composite_golaunch.py")
 	buildInternalScriptsGenMlaunchPy    = source("build/internal/scripts/gen_mlaunch.py")
 	buildInternalScriptsMergeSdcmetaPy  = source("build/internal/scripts/merge_sdcmeta.py")
 	buildMappingConfJson                = source("build/mapping.conf.json")

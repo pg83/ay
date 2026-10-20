@@ -3,17 +3,18 @@ package main
 import "strings"
 
 type MlaunchModule struct {
-	Generate  string
-	Args      []string
-	Functions []string
-	Suffix    string
+	Generate   string
+	Args       []string
+	Functions  []string
+	Suffix     string
+	Components []ANY
 }
 
 func mlaunchModuleUnit(name TOK, language Language) ModuleUnit {
 	base := tokLibrary
 	tag := "CPP_MLAUNCH"
 
-	if name == tokGolaunchProgram {
+	if name == tokGolaunchProgram || name == tokGolaunchComposite {
 		base = tokGoProgram
 		tag = ""
 	}
@@ -54,7 +55,7 @@ func mlaunchModuleUnit(name TOK, language Language) ModuleUnit {
 
 func setupMlaunchModule(stmt *ModuleStmt, module string, language Language, env Environment, d *ModuleData) {
 	switch stmt.Name {
-	case tokMlaunchLibrary, tokMlaunchPipeline, tokGolaunchProgram:
+	case tokMlaunchLibrary, tokMlaunchPipeline, tokGolaunchProgram, tokGolaunchComposite:
 	default:
 		return
 	}
@@ -75,6 +76,10 @@ func setupMlaunchModule(stmt *ModuleStmt, module string, language Language, env 
 	case tokGolaunchProgram:
 		d.mlaunch.Generate = "golaunch"
 		peer("sdg/sdc/ros/configuration/golaunch")
+	case tokGolaunchComposite:
+		std := env.string(envGOSTD)
+
+		peer(std+"/fmt", std+"/sort", "sdg/sdc/ros/configuration/golaunch")
 	case tokMlaunchPipeline:
 		d.moduleVariants = 1<<LangCPP | 1<<LangGo | 1<<LangPackage
 		applyUnknownStmt(nil, module, UnknownStmt{Name: tokUseSdcMeta}, d, env, nil)
@@ -150,6 +155,9 @@ func applyMlaunchStmt(module string, stmt UnknownStmt, env Environment, d *Modul
 		}
 
 		ensureMlaunch(d).Args = append(ensureMlaunch(d).Args, "--deps-override", strings.Join(args, ":"))
+	case tokGolaunchCompositeComps:
+		ensureMlaunch(d).Components = append(ensureMlaunch(d).Components, stmt.Args...)
+		d.peerdirs = append(d.peerdirs, stmt.Args...)
 	case tokGenerateGolaunchCallbacks:
 		if len(args) != 1 {
 			throwFmt("GENERATE_GOLAUNCH_CALLBACKS expects one name")

@@ -95,6 +95,30 @@ END()
         app = lib.node_by_output(graph, "$(B)/app/launch.go")
         self.assertEqual(app["cmds"][0]["cmd_args"][-4:], ["--deps", "component:Launch", "--deps-override", "component:Other"])
 
+    def test_golaunch_composite_links_generated_main_over_component_go_variants(self):
+        sources = files()
+        std = "contrib/go/_std_1.26/src"
+        for peer in (f"{std}/fmt", f"{std}/sort"):
+            sources[f"{peer}/ya.make"] = f"GO_LIBRARY()\n{lib.BARE_MODULE}\nSRCS(a.go)\nEND()\n"
+            sources[f"{peer}/a.go"] = "package std\n"
+        for name in ("first", "second"):
+            sources[f"{name}/ya.make"] = f"MLAUNCH_LIBRARY({name})\n{lib.BARE_MODULE}\nGOLAUNCH_SRCS({name}.go)\nGOLAUNCH_FUNCTION(Run)\nEND()\n"
+            sources[f"{name}/{name}.go"] = f"package {name}\n"
+        sources["build/internal/scripts/gen_composite_golaunch.py"] = ""
+        sources["composite/ya.make"] = f"GOLAUNCH_COMPOSITE(mono)\n{lib.BARE_MODULE}\nGOLAUNCH_COMPOSITE_COMPONENTS(\n    first\n    second\n)\nEND()\n"
+        graph = lib.make(sources, "composite")
+        main = lib.node_by_output(graph, "$(B)/composite/main.go")
+        self.assertEqual(main["kv"], {"p": "GL", "pc": "cyan"})
+        self.assertEqual(main["cmds"][0]["cmd_args"][1:], [
+            "$(S)/build/internal/scripts/gen_composite_golaunch.py", "--local-peers", "first", "second",
+        ])
+        self.assertEqual(main["inputs"], ["$(S)/build/internal/scripts/gen_composite_golaunch.py"])
+        link = next(c["cmd_args"] for c in lib.node_by_output(graph, "$(B)/composite/mono")["cmds"] if "++srcs" in c["cmd_args"])
+        self.assertEqual(link[link.index("++srcs") + 1], "$(B)/composite/main.go")
+        peers = link[link.index("++peers") + 1:link.index("++non-local-peers")]
+        for archive in (f"{std}/fmt/fmt.a", f"{std}/sort/sort.a", "sdg/sdc/ros/configuration/golaunch/golaunch.a", "first/first.a", "second/second.a"):
+            self.assertIn(archive, peers)
+
 
 if __name__ == "__main__":
     unittest.main()
