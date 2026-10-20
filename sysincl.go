@@ -2,52 +2,13 @@ package main
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"regexp/syntax"
-	"sort"
 	"strings"
 )
 
-var sysInclYamlSequence = []SysInclEntry{
-	{file: "macro.yml"},
-	{file: "libc-to-compat.yml"},
-	{file: "libc-to-nothing.yml"},
-	{file: "stl-to-libstdcxx.yml"},
-	{file: "stl-to-nothing.yml"},
-	{file: "windows.yml"},
-	{file: "darwin.yml"},
-	{file: "android.yml"},
-	{file: "freebsd.yml"},
-	{file: "freertos.yml"},
-	{file: "intrinsic.yml"},
-	{file: "nvidia.yml"},
-	{file: "misc.yml"},
-	{file: "unsorted.yml"},
-	{file: "swig.yml"},
-	{file: "libiconv.yml"},
-	{file: "libidn.yml"},
-	{file: "jdk-to-arcadia.yml"},
-
-	{file: "opensource.yml", predicate: opensourceOn},
-	{file: "proto.yml", predicate: notOpensource},
-	{file: "libc-to-musl.yml", predicate: muslOn},
-	{file: "linux-musl-aarch64.yml", predicate: muslArchIs("aarch64")},
-	{file: "linux-musl.yml", predicate: muslArchIs("x86_64")},
-	{file: "emscripten-to-nothing.yml"},
-	{file: "nvidia-cccl.yml"},
-	{file: "stl-to-libcxx.yml"},
-	{file: "libc-musl-libcxx.yml", predicate: muslOn},
-	{file: "cython.yml", predicate: notPython3Prev},
-	{file: "cython-prev.yml", predicate: python3Prev},
-	{file: "python-2-disable.yml"},
-	{file: "python-2-disable-numpy.yml"},
-}
-
-const (
-	baseSysInclDir         = "build/sysincl"
-	internalSysInclDir     = "build/internal/sysincl"
-	maxLiteralAltExpansion = 64
-)
+const maxLiteralAltExpansion = 64
 
 type SysIncl struct {
 	Filter          *SourceFilter
@@ -76,118 +37,15 @@ func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 	}
 }
 
-type SysInclEnv struct {
-	arch        string
-	musl        bool
-	opensource  bool
-	os          OS
-	python3Prev bool
-}
-
-type SysInclEntry struct {
-	file      string
-	predicate func(SysInclEnv) bool
-}
-
-func opensourceOn(e SysInclEnv) bool {
-	return e.opensource
-}
-
-func notOpensource(e SysInclEnv) bool {
-	return !e.opensource
-}
-
-func python3Prev(e SysInclEnv) bool {
-	return e.python3Prev
-}
-
-func notPython3Prev(e SysInclEnv) bool {
-	return !e.python3Prev
-}
-
-func muslOn(e SysInclEnv) bool {
-	return e.musl
-}
-
-func muslArchIs(want string) func(SysInclEnv) bool {
-	return func(e SysInclEnv) bool { return e.musl && e.arch == want }
-}
-
 func loadSysInclSetForFS(fs FS, p *Platform, onWarn func(Warn)) SysInclSet {
-	if !fs.isDir(srcRootRel, baseSysInclDir) {
-		return nil
-	}
-
-	opensource := p.Flags[envOPENSOURCE] == strYes
-	env := SysInclEnv{arch: string(p.ISA), musl: p.Flags[envMUSL] == strYes, opensource: opensource, os: p.OS, python3Prev: p.Flags[envUSE_PYTHON3_PREV] == strYes}
-
 	var set SysInclSet
 
-	sysinclDir := dirKey(baseSysInclDir)
-
-	for _, entry := range sysInclYamlSequence {
-		if entry.predicate != nil && !entry.predicate(env) {
+	for _, file := range p.SysInclFiles {
+		if !fs.isFile(srcRootRel, file) {
 			continue
 		}
 
-		if !fs.isFile(sysinclDir, entry.file) {
-			continue
-		}
-
-		records := parseSysInclYAML(entry.file, concatChunks(fs.read(baseSysInclDir+"/"+entry.file)), onWarn)
-
-		set = append(set, records...)
-	}
-
-	if !opensource {
-		set = append(set, loadSysInclDir(fs, internalSysInclDir, env, onWarn)...)
-	}
-
-	return set
-}
-
-func internalSysInclApplies(name string, env SysInclEnv) bool {
-	switch name {
-	case "macro.yml", "misc.yml", "sdc.yml", "smart_devices.yml", "speechkit.yml", "weird.yml":
-		return true
-	case "taxi.yml":
-
-		return true
-	case "misc-win.yml":
-		return env.os == OSWindows
-	case "smart_devices_linux.yml":
-		return env.os == OSLinux
-	case "smart_devices_darwin.yml":
-		return env.os == OSDarwin
-	}
-
-	return false
-}
-
-func loadSysInclDir(fs FS, dir string, env SysInclEnv, onWarn func(Warn)) SysInclSet {
-	if !fs.isDir(srcRootRel, dir) {
-		return nil
-	}
-
-	view := fs.listdir(internStr(dir))
-	names := make([]string, 0, len(view.names))
-
-	for _, packed := range view.names {
-		if name := STR(packed >> 1).string(); strings.HasSuffix(name, ".yml") {
-			names = append(names, name)
-		}
-	}
-
-	sort.Strings(names)
-
-	var set SysInclSet
-
-	for _, name := range names {
-		if !internalSysInclApplies(name, env) {
-			continue
-		}
-
-		records := parseSysInclYAML(name, concatChunks(fs.read(dir+"/"+name)), onWarn)
+		records := parseSysInclYAML(path.Base(file), concatChunks(fs.read(file)), onWarn)
 
 		set = append(set, records...)
 	}

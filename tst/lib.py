@@ -275,7 +275,54 @@ _ROOT_FLAGS=--source-root $ARCADIA_ROOT --build-root $(BUILD_ROOT)
 '''
 
 
+FAKE_CORE_CONF = '''@import "${CONF_ROOT}/conf/sysincl.conf"
+when ($USE_PYTHON3_PREV == "yes") {
+    SYSINCL+=build/sysincl/cython-prev.yml
+}
+otherwise {
+    SYSINCL+=build/sysincl/cython.yml
+}
+@import "${CONF_ROOT}/internal/conf/sysincl.conf"
+'''
+
+FAKE_SYSINCL_CONF = '''SYSINCL=
+SYSINCL+=build/sysincl/macro.yml build/sysincl/misc.yml build/sysincl/windows.yml
+when ($OPENSOURCE == "yes") {
+    SYSINCL+=build/sysincl/opensource.yml
+}
+otherwise {
+    SYSINCL+=build/sysincl/proto.yml
+}
+when ($MUSL == "yes") {
+    SYSINCL+=build/sysincl/libc-to-musl.yml
+    when ($ARCH_AARCH64 == "yes") {
+        SYSINCL+=build/sysincl/linux-musl-aarch64.yml
+    }
+    otherwise {
+        SYSINCL+=build/sysincl/linux-musl.yml
+    }
+}
+'''
+
+FAKE_INTERNAL_SYSINCL_CONF = '''when ($OPENSOURCE != "yes") {
+    SYSINCL+=build/internal/sysincl/misc.yml build/internal/sysincl/taxi.yml
+    when ($OS_WINDOWS == "yes") {
+        SYSINCL+=build/internal/sysincl/misc-win.yml
+    }
+    when ($OS_LINUX == "yes") {
+        SYSINCL+=build/internal/sysincl/smart_devices_linux.yml
+    }
+    elsewhen ($OS_DARWIN == "yes") {
+        SYSINCL+=build/internal/sysincl/smart_devices_darwin.yml
+    }
+}
+'''
+
+
 CONF_FILES = {
+    "build/ymake.core.conf": FAKE_CORE_CONF,
+    "build/conf/sysincl.conf": FAKE_SYSINCL_CONF,
+    "build/internal/conf/sysincl.conf": FAKE_INTERNAL_SYSINCL_CONF,
     "build/ymake_conf.py": FAKE_YMAKE_CONF,
     "build/ya.conf.json": ya_conf_json(),
     "build/conf/linkers/ld.conf": FAKE_LD_CONF,

@@ -39,7 +39,13 @@ type Toolchain struct {
 	Params    map[string]any
 }
 
+type YmakeConf struct {
+	vars    map[string]string
+	sysincl *ConfAssignments
+}
+
 type YmakeConfRun struct {
+	fs     FS
 	cmd    *exec.Cmd
 	script string
 	stdout bytes.Buffer
@@ -436,7 +442,7 @@ func startYmakeConf(fs FS, srcRoot, buildType string, localDistbuild bool, local
 		args = append(args, "-D", k+"="+flags[k])
 	}
 
-	run := &YmakeConfRun{cmd: exec.Command("python3", args...), script: script}
+	run := &YmakeConfRun{fs: fs, cmd: exec.Command("python3", args...), script: script}
 
 	run.cmd.Env = ymakeConfEnv()
 	run.cmd.Stdout = &run.stdout
@@ -459,7 +465,7 @@ func ymakeConfEnv() []string {
 	return env
 }
 
-func (r *YmakeConfRun) wait() map[string]string {
+func (r *YmakeConfRun) wait() *YmakeConf {
 	if err := r.cmd.Wait(); err != nil {
 		throwFmt("Config was not generated due to errors in %s (%v)\n%s", r.script, err, r.stderr.String())
 	}
@@ -468,7 +474,7 @@ func (r *YmakeConfRun) wait() map[string]string {
 		fmt.Fprintf(os.Stderr, "Non-empty stderr from ymake_conf.py:\n%s", r.stderr.String())
 	}
 
-	return parseYmakeConf(r.stdout.Bytes())
+	return &YmakeConf{vars: parseYmakeConf(r.stdout.Bytes()), sysincl: readConfAssignments(r.fs, r.script, r.stdout.Bytes(), []string{"SYSINCL"})}
 }
 
 func parseYmakeConf(out []byte) map[string]string {
