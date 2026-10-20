@@ -26,9 +26,12 @@ CLANG20_FORMULA = {
 
 # Records the command line and environment ay runs the script with, then
 # behaves as the fake.
+# The target is configured twice, nopic and pic (ya's _build_no_pic adds
+# FORCE_NO_PIC); the pic run, neither nopic nor the host tools, records '.pic'.
 RECORDER = (
     "import json as _json, os as _os, sys as _sys\n"
-    "_out = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'argv.' + _sys.argv[2] + '.json')\n"
+    "_pic = '' if {'FORCE_NO_PIC=yes', 'IS_CROSS_TOOLS=yes'} & set(_sys.argv) else '.pic'\n"
+    "_out = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'argv.' + _sys.argv[2] + _pic + '.json')\n"
     "with open(_out, 'w') as _f:\n"
     "    _json.dump({'argv': _sys.argv, 'env': dict(_os.environ)}, _f)\n"
 ) + lib.FAKE_YMAKE_CONF
@@ -213,6 +216,9 @@ class ConfCommandLineTest(unittest.TestCase):
             "CLANG20": "yes", "FAKEID": "sandboxing", "FORCE_NO_PIC": "yes", "IS_CROSS_SANITIZE": "yes",
             "OPENSOURCE": "yes", "SANDBOXING": "yes", "TP_FLAG": "x", "USER_DEFINE": "1", "YA": "yes",
         })
+        pic = dict(target)
+        del pic["FORCE_NO_PIC"]
+        self.assertEqual(dict(presets(tree.recorded("dist-debug.pic")["argv"])), pic)
         self.assertEqual(dict(presets(tree.recorded("dist-release")["argv"])), {
             "CLANG20": "yes", "CLANG_COVERAGE": "no", "CONSISTENT_DEBUG": "yes", "FAKEID": "sandboxing",
             "HP_FLAG": "y", "IS_CROSS_SANITIZE": "yes", "IS_CROSS_TOOLS": "yes", "NO_DEBUGINFO": "yes",
