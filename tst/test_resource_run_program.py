@@ -207,6 +207,46 @@ class RunProgramTest(unittest.TestCase):
             ],
         ])
 
+    def test_induced_deps_of_every_tool_reach_the_outputs(self):
+        # Each ${tool:...} of the command contributes its INDUCED_DEPS: the
+        # yabs library/cpp/yaff/proto/well_known_types outputs of
+        # RUN_PROGRAM(protoc ... TOOL library/cpp/yaff/tools/protoc_plugin)
+        # compile with the yaff runtime induced by the plugin.
+        files = library(
+            "RUN_PROGRAM(tools/gen TOOL tools/plugin OUT a.cpp)\n",
+        )
+        files["tools/plugin/ya.make"] = (
+            f"PROGRAM(plugin)\n{BARE}INDUCED_DEPS(h+cpp ${{ARCADIA_ROOT}}/inc/runtime.h)\nSRCS(main.cpp)\nEND()\n"
+        )
+        files["tools/plugin/main.cpp"] = "int main(){return 0;}\n"
+        files["inc/runtime.h"] = ""
+        graph = lib.make(files, "lib")
+        self.assertIn("$(S)/inc/runtime.h", lib.node_by_output(graph, "$(B)/lib/a.cpp.o")["inputs"])
+
+    def test_induced_deps_follow_the_output_extension(self):
+        # parser_manager.cpp IndDepsRuleByPath picks the induced deps rule of
+        # an output by its extension, without a default: basesearch
+        # contrib/libs/cel-cpp feeds the protoc-made empty_descriptor_set_embed.pb
+        # to cel_cc_embed, whose node lists the tool and the .pb only.
+        files = library(
+            "RUN_PROGRAM(tools/plugin IN seed.txt OUT_NOAUTO d.pb x.h)\n"
+            "RUN_PROGRAM(tools/gen IN ${BINDIR}/d.pb OUT_NOAUTO e.inc)\n"
+            "RUN_PROGRAM(tools/gen IN ${BINDIR}/e.inc OUT a.cpp)\n",
+            seed__txt="",
+            use__cpp='#include "lib/x.h"\n',
+        )
+        files["lib/ya.make"] = files["lib/ya.make"].replace("END()", "SRCS(use.cpp)\nEND()")
+        files["tools/plugin/ya.make"] = (
+            f"PROGRAM(plugin)\n{BARE}INDUCED_DEPS(h+cpp ${{ARCADIA_ROOT}}/inc/runtime.h)\nSRCS(main.cpp)\nEND()\n"
+        )
+        files["tools/plugin/main.cpp"] = "int main(){return 0;}\n"
+        files["inc/runtime.h"] = ""
+        graph = lib.make(files, "lib")
+        self.assertEqual(sorted(set(lib.node_by_output(graph, "$(B)/lib/e.inc")["inputs"])), [
+            "$(B)/lib/d.pb", "$(B)/tools/gen/gen",
+        ])
+        self.assertIn("$(S)/inc/runtime.h", lib.node_by_output(graph, "$(B)/lib/use.cpp.o")["inputs"])
+
     def test_generated_empty_parser_inputs_bring_their_sources(self):
         files = library(
             "RUN_PROGRAM(tools/gen IN seed.txt OUT_NOAUTO main.bin gen.py)\n"
@@ -278,6 +318,23 @@ class RunProgramTest(unittest.TestCase):
             '$(S)/lib/other.pb.h',
             '$(S)/lib/api.pb.h',
         ])
+
+    def test_proto_input_imports_reach_every_output(self):
+        # yabs yabs/server/libs/constant/generated: RUN_PROGRAM(... IN
+        # sys_const.proto OUT sys_const.h sys_const.cpp); the compile of the
+        # secondary sys_const.cpp takes const_options.pb.h, the pb.h of the
+        # proto import, with its closure.
+        files = library(
+            "RUN_PROGRAM(tools/gen IN api.proto OUT x.h x.cpp)\n",
+            api__proto='syntax = "proto3";\nimport "lib/other.proto";\n',
+            other__proto='syntax = "proto3";\n',
+            other__pb__h='#include "lib/dep.h"\n',
+            dep__h="",
+        )
+        graph = lib.make(files, "lib")
+        inputs = lib.node_by_output(graph, "$(B)/lib/x.cpp.o")["inputs"]
+        for expected in ("$(B)/lib/x.h", "$(S)/lib/other.pb.h", "$(S)/lib/dep.h"):
+            self.assertIn(expected, inputs)
 
     def test_module_dirs_render_in_the_module_that_first_uses_the_output(self):
         files = {

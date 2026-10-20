@@ -94,7 +94,7 @@ class YaMakeSysinclFiltersTest(unittest.TestCase):
             "$(B)/a/pz.cpp.o": ["$(S)/a/pz.cpp", "$(S)/a/include/pneg.h"],
         })
         self.assertIn(
-            'sysincl: misc.yml:17: source_filter "^(?!a/(x.y))" unsupported (sysincl: negative-lookahead'
+            'sysincl: build/sysincl/misc.yml:17: source_filter "^(?!a/(x.y))" unsupported (sysincl: negative-lookahead'
             ' alt "a/(x.y)" has regex metacharacters; only literal prefixes are supported) — record disabled',
             stderr.splitlines(),
         )

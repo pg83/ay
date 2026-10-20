@@ -70,9 +70,10 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 	})
 
 	e.register(GeneratedFileInfo{
-		OutputPath:    incVFS,
-		ProducerRef:   ref,
-		GeneratorRefs: e.ctx.na.refList(toolRef),
+		OutputPath:      incVFS,
+		ProducerRef:     ref,
+		ProducerMainOut: tmpVFS,
+		GeneratorRefs:   e.ctx.na.refList(toolRef),
 
 		OnUse: pending,
 	})

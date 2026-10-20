@@ -292,6 +292,26 @@ class PySrcsTest(unittest.TestCase):
         self.assertIn("$(B)/lib/my.module.reg3.cpp.o", archive["inputs"])
         self.assertIn("$(B)/lib/other.reg3.cpp.o", archive["inputs"])
 
+    def test_run_program_outputs_follow_the_arguments(self):
+        # Outputs named in the arguments come first and the first one is the
+        # main output: middlesearch yabs/models_services/feature_store/mappers/*
+        # (--save_file_path generated.py --init_file_path __init__.py ...
+        # OUT_NOAUTO __init__.py generated.py) has outputs [generated.py,
+        # __init__.py], and __init__.py.yapyc3 lists generated.py.
+        files = python_base()
+        files.update({
+            "lib/ya.make": (
+                "PY3_LIBRARY()\nPY_SRCS(__init__.py generated.py)\n"
+                "RUN_PROGRAM(tools/gen --save generated.py --init __init__.py"
+                " OUT_NOAUTO __init__.py generated.py)\nEND()\n"
+            ),
+        })
+        lib.tool_program(files, "tools/gen", "gen")
+        graph = lib.make(files, "lib")
+        producer = lib.node_by_output(graph, "$(B)/lib/generated.py")
+        self.assertEqual(producer["outputs"], ["$(B)/lib/generated.py", "$(B)/lib/__init__.py"])
+        self.assertIn("$(B)/lib/generated.py", lib.node_by_output(graph, "$(B)/lib/__init__.py.yapyc3")["inputs"])
+
     def test_generated_and_relocated_sources(self):
         files = python_base()
         files.update({
@@ -353,6 +373,9 @@ class PySrcsTest(unittest.TestCase):
             "$(S)/other/sub/in_other.py", "$(S)/top/rootfile.py", "$(S)/lib/nowhere.py",
         ):
             self.assertIn(expected, resources["inputs"])
+        # The source of a COPY_FILE stays on the copy: the yabs
+        # yabs/server/cs/pylibs/settings_defs objcopy lists keys.py, not
+        # yabs/server/cs/package/plugin/keys.py.
         self.assertNotIn("$(S)/lib/orig.py", resources["inputs"])
         objcopy_with_kv(
             graph, "lib", "resfs/src/resfs/file/py/only/generated/gen_out.py=lib/gen_out.py")

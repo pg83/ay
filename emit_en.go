@@ -171,6 +171,7 @@ func (e *EmitContext) emitEN(
 			Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(enumParserBin), na.vfsList(headerInput)),
+		InputClosure:   Closure{self: headerInput},
 		KV:             &enKV,
 		Outputs:        outputs,
 		ForeignDepRefs: foreignDepRefs,

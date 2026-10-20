@@ -84,7 +84,6 @@ class GeneratorEdgeCasesTest(unittest.TestCase):
             '$(S)/lib/extra.h',
             '$(S)/util/x.h',
             '$(B)/lib/base_gen.h',
-            '$(S)/other/base_gen.in',
             '$(B)/lib/cfg.h',
             '$(S)/lib/cfg.h.in',
             '$(B)/lib/data.inc',
@@ -92,6 +91,9 @@ class GeneratorEdgeCasesTest(unittest.TestCase):
         ):
             self.assertIn(path, use["inputs"])
         self.assertNotIn('$(S)/lib/a.txt', use['inputs'])
+        # The template of the single-output CONFIGURE_FILE reaches the
+        # consumer; the one of the two-output BASE_CODEGEN stays on its action.
+        self.assertNotIn('$(S)/other/base_gen.in', use['inputs'])
 
 
 if __name__ == "__main__":

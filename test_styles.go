@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+const yamlfmtResourcePeer = "build/external_resources/yamlfmt"
+
 type StyleCheck struct {
 	Name               string
 	ConfigMap          string
@@ -55,6 +57,22 @@ func (d *ModuleData) collectPy2StyleCheck(env Environment) {
 	d.peerdirs = append(d.peerdirs, strBuildExternalResourcesFlake8Py2.any())
 }
 
+func (d *ModuleData) collectYAMLStyleWithConfig(module string, env Environment) {
+	if value, _ := env.lookup("NO_LINT"); value == "none" || value == "none_internal" {
+		return
+	}
+
+	if value, _ := env.lookup("TIDY"); value == "yes" {
+		return
+	}
+
+	d.peerdirs = append(d.peerdirs, internStr(yamlfmtResourcePeer).any())
+
+	if files, _ := env.lookup("YAML_LINT_SRCS"); strings.TrimSpace(files) != "" {
+		throwFmt("%s: STYLE_YAML_WITH_CONFIG over YAML_LINT_SRCS is not modelled", module)
+	}
+}
+
 func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, env Environment) {
 	if value, _ := env.lookup("NO_LINT"); value == "none" || value == "none_internal" {
 		return
@@ -70,7 +88,7 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 
 	if yaml {
 		check = StyleCheck{Name: "yamlfmt", ConfigMap: "build/config/tests/yaml_style/default_configs.json", Wrapper: "tools/yamlfmt_linter/wrapper.py", Resource: "YAMLFMT_RESOURCE_GLOBAL"}
-		peer, configVar = "build/external_resources/yamlfmt", "YAML_LINTER_DEFAULT_CONFIGS"
+		peer, configVar = yamlfmtResourcePeer, "YAML_LINTER_DEFAULT_CONFIGS"
 	}
 
 	if value, ok := env.lookup(configVar); ok && value != "" {

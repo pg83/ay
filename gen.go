@@ -342,12 +342,12 @@ func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *Stre
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
 	ctx.buckets = newBucketCache()
 
-	targetScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, targetP, onWarn), onWarn, ctx.buckets)
+	targetScanner := newIncludeScannerWith(parsers, loadSysInclSet(parsers, targetP, onWarn), onWarn, ctx.buckets)
 
 	targetScanner.codegen = targetReg
 	targetScanner.moduleByRef = &ctx.moduleByRef
 
-	hostScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, hostP, onWarn), onWarn, ctx.buckets)
+	hostScanner := newIncludeScannerWith(parsers, loadSysInclSet(parsers, hostP, onWarn), onWarn, ctx.buckets)
 
 	hostScanner.codegen = hostReg
 	hostScanner.moduleByRef = &ctx.moduleByRef
@@ -2130,6 +2130,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		SwigInclude:          moduleSwigInclude,
 		CFlags:               ownCFlags,
 		CXXFlags:             d.cxxFlags,
+		CXXFlagsVar:          d.cxxFlagsVar,
 		COnlyFlags:           d.cOnlyFlags,
 		ClangWarnings:        d.clangWarnings,
 		OwnCFlagsGlobal:      ownCFlagsGlobalSelf,
@@ -2241,6 +2242,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name) {
 		binaryName := programBinaryName(instance, d.moduleStmt)
 		exportsScript := e.moduleInputArg(d.exportsScript)
+		linkerScripts := make([]VFS, len(d.linkerScripts))
+
+		for i, script := range d.linkerScripts {
+			linkerScripts[i] = e.moduleSourceVFS(script)
+		}
 
 		var dyn *DynLibLink
 
@@ -2338,6 +2344,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			peerObjAddLibsGlobal,
 			linkExcludeLibraries,
 			exportsScript,
+			linkerScripts,
 			d.flags.NoExportDynSymbols,
 			d.flags.NoCompilerWarnings,
 			d.noOptimize,

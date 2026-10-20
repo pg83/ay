@@ -4,48 +4,17 @@ import (
 	"fmt"
 	"regexp"
 	"regexp/syntax"
-	"sort"
+	"slices"
 	"strings"
 )
 
-var sysInclYamlSequence = []SysInclEntry{
-	{file: "macro.yml"},
-	{file: "libc-to-compat.yml"},
-	{file: "libc-to-nothing.yml"},
-	{file: "stl-to-libstdcxx.yml"},
-	{file: "stl-to-nothing.yml"},
-	{file: "windows.yml"},
-	{file: "darwin.yml"},
-	{file: "android.yml"},
-	{file: "freebsd.yml"},
-	{file: "freertos.yml"},
-	{file: "intrinsic.yml"},
-	{file: "nvidia.yml"},
-	{file: "misc.yml"},
-	{file: "unsorted.yml"},
-	{file: "swig.yml"},
-	{file: "libiconv.yml"},
-	{file: "libidn.yml"},
-	{file: "jdk-to-arcadia.yml"},
-
-	{file: "opensource.yml", predicate: opensourceOn},
-	{file: "proto.yml", predicate: notOpensource},
-	{file: "libc-to-musl.yml", predicate: muslOn},
-	{file: "linux-musl-aarch64.yml", predicate: muslArchIs("aarch64")},
-	{file: "linux-musl.yml", predicate: muslArchIs("x86_64")},
-	{file: "emscripten-to-nothing.yml"},
-	{file: "nvidia-cccl.yml"},
-	{file: "stl-to-libcxx.yml"},
-	{file: "libc-musl-libcxx.yml", predicate: muslOn},
-	{file: "cython.yml", predicate: notPython3Prev},
-	{file: "cython-prev.yml", predicate: python3Prev},
-	{file: "python-2-disable.yml"},
-	{file: "python-2-disable-numpy.yml"},
-}
+var (
+	envSYSINCL    = internEnv(sysinclVar)
+	unsetVarRefRe = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
+)
 
 const (
-	baseSysInclDir         = "build/sysincl"
-	internalSysInclDir     = "build/internal/sysincl"
+	sysinclVar             = "SYSINCL"
 	maxLiteralAltExpansion = 64
 )
 
@@ -76,120 +45,124 @@ func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 	}
 }
 
-type SysInclEnv struct {
-	arch        string
-	musl        bool
-	opensource  bool
-	os          OS
-	python3Prev bool
+type ConfStmtRef struct {
+	file *ConfFile
+	stmt ConfStmt
 }
 
-type SysInclEntry struct {
-	file      string
-	predicate func(SysInclEnv) bool
-}
+func (pm *IncludeParserManager) confFile(rel string) *ConfFile {
+	key := internStr(rel)
 
-func opensourceOn(e SysInclEnv) bool {
-	return e.opensource
-}
-
-func notOpensource(e SysInclEnv) bool {
-	return !e.opensource
-}
-
-func python3Prev(e SysInclEnv) bool {
-	return e.python3Prev
-}
-
-func notPython3Prev(e SysInclEnv) bool {
-	return !e.python3Prev
-}
-
-func muslOn(e SysInclEnv) bool {
-	return e.musl
-}
-
-func muslArchIs(want string) func(SysInclEnv) bool {
-	return func(e SysInclEnv) bool { return e.musl && e.arch == want }
-}
-
-func loadSysInclSetForFS(fs FS, p *Platform, onWarn func(Warn)) SysInclSet {
-	if !fs.isDir(srcRootRel, baseSysInclDir) {
-		return nil
+	if f, ok := pm.cache.confFiles.get(key); ok {
+		return f
 	}
 
-	opensource := p.Flags[envOPENSOURCE] == strYes
-	env := SysInclEnv{arch: string(p.ISA), musl: p.Flags[envMUSL] == strYes, opensource: opensource, os: p.OS, python3Prev: p.Flags[envUSE_PYTHON3_PREV] == strYes}
+	if !pm.fs.isFile(srcRootRel, rel) {
+		throwFmt("conf: @import %s: no such file", rel)
+	}
 
+	f := readConfFile(rel, string(concatChunks(pm.fs.readPath(key))))
+
+	pm.cache.confFiles.put(key, f)
+
+	return f
+}
+
+func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environment) []string {
+	var (
+		stmts   []ConfStmtRef
+		walking []string
+		walk    func(f *ConfFile)
+	)
+
+	walk = func(f *ConfFile) {
+		for _, s := range f.stmts {
+			if s.name != "" {
+				stmts = append(stmts, ConfStmtRef{file: f, stmt: s})
+
+				continue
+			}
+
+			if slices.Contains(walking, s.value) {
+				throwFmt("conf: @import loop: %s -> %s", strings.Join(walking, " -> "), s.value)
+			}
+
+			walking = append(walking, s.value)
+			walk(pm.confFile(s.value))
+			walking = walking[:len(walking)-1]
+		}
+	}
+
+	walk(root)
+
+	needed := map[string]bool{sysinclVar: true}
+	used := make([]bool, len(stmts))
+	need := func(name string) { needed[name] = true }
+
+	for grown := true; grown; {
+		grown = false
+
+		for i, r := range stmts {
+			if used[i] || !needed[r.stmt.name] {
+				continue
+			}
+
+			used[i], grown = true, true
+			confValueVars(r.stmt.value, need)
+			r.file.condVars(r.stmt.branch, need)
+		}
+	}
+
+	env := platformEnv.clone()
+
+	for name := range needed {
+		env.unbind(internEnv(name))
+	}
+
+	for i, r := range stmts {
+		if used[i] && r.stmt.branch == 0 {
+			applyConfStmt(env, r.stmt, false)
+		}
+	}
+
+	for i, r := range stmts {
+		if used[i] && r.stmt.branch != 0 && r.file.holds(r.stmt.branch, env) {
+			applyConfStmt(env, r.stmt, true)
+		}
+	}
+
+	value := env.string(envSYSINCL)
+
+	if strings.Contains(value, "$") {
+		value = unsetVarRefRe.ReplaceAllString(expandStmtToken(value, env), "")
+	}
+
+	return strings.Fields(value)
+}
+
+func (pm *IncludeParserManager) sysinclRecords(rel string, onWarn func(Warn)) []SysIncl {
+	key := internStr(rel)
+
+	if records, ok := pm.cache.sysinclYAMLs.get(key); ok {
+		return records
+	}
+
+	if !pm.fs.isFile(srcRootRel, rel) {
+		throwFmt("sysincl: %s: no such file", rel)
+	}
+
+	records := parseSysInclYAML(rel, concatChunks(pm.fs.readPath(key)), onWarn)
+
+	pm.cache.sysinclYAMLs.put(key, records)
+
+	return records
+}
+
+func loadSysInclSet(pm *IncludeParserManager, p *Platform, onWarn func(Warn)) SysInclSet {
 	var set SysInclSet
 
-	sysinclDir := dirKey(baseSysInclDir)
-
-	for _, entry := range sysInclYamlSequence {
-		if entry.predicate != nil && !entry.predicate(env) {
-			continue
-		}
-
-		if !fs.isFile(sysinclDir, entry.file) {
-			continue
-		}
-
-		records := parseSysInclYAML(entry.file, concatChunks(fs.read(baseSysInclDir+"/"+entry.file)), onWarn)
-
-		set = append(set, records...)
-	}
-
-	if !opensource {
-		set = append(set, loadSysInclDir(fs, internalSysInclDir, env, onWarn)...)
-	}
-
-	return set
-}
-
-func internalSysInclApplies(name string, env SysInclEnv) bool {
-	switch name {
-	case "macro.yml", "misc.yml", "sdc.yml", "smart_devices.yml", "speechkit.yml", "weird.yml":
-		return true
-	case "taxi.yml":
-
-		return true
-	case "misc-win.yml":
-		return env.os == OSWindows
-	case "smart_devices_linux.yml":
-		return env.os == OSLinux
-	case "smart_devices_darwin.yml":
-		return env.os == OSDarwin
-	}
-
-	return false
-}
-
-func loadSysInclDir(fs FS, dir string, env SysInclEnv, onWarn func(Warn)) SysInclSet {
-	if !fs.isDir(srcRootRel, dir) {
-		return nil
-	}
-
-	view := fs.listdir(internStr(dir))
-	names := make([]string, 0, len(view.names))
-
-	for _, packed := range view.names {
-		if name := STR(packed >> 1).string(); strings.HasSuffix(name, ".yml") {
-			names = append(names, name)
-		}
-	}
-
-	sort.Strings(names)
-
-	var set SysInclSet
-
-	for _, name := range names {
-		if !internalSysInclApplies(name, env) {
-			continue
-		}
-
-		records := parseSysInclYAML(name, concatChunks(fs.read(dir+"/"+name)), onWarn)
-
-		set = append(set, records...)
+	for _, rel := range p.Sysincl {
+		set = append(set, pm.sysinclRecords(rel, onWarn)...)
 	}
 
 	return set

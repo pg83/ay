@@ -14,12 +14,13 @@ var (
 type PlatformConf struct {
 	GoStdVersion        string
 	Linker              *LinkerConf
+	Parsers             *IncludeParserManager
 	YqlStableABI        bool
 	ProtoHeaderEpilogue bool
 }
 
-func readPlatformConf(fs FS) PlatformConf {
-	return PlatformConf{GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(fs), YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
+func readPlatformConf(fs FS, parsers *IncludeParserManager) PlatformConf {
+	return PlatformConf{GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(parsers), Parsers: parsers, YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
 }
 
 func confProtoHeaderEpilogue(fs FS) bool {
@@ -56,6 +57,7 @@ type Platform struct {
 	CompressDebugSections bool
 	BuildInfoKV           KV
 	Linker                LinkerFlags
+	Sysincl               []string
 	LinkPreludeExtra      []ANY
 	ClangVer              string
 	ClangVerSTR           STR
@@ -116,7 +118,7 @@ func internFlags(flags map[string]string) map[ENV]STR {
 	return out
 }
 
-func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[string]string, pc PlatformConf, cflagsEnv, cxxflagsEnv string) *Platform {
+func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[string]string, root *ConfFile, pc PlatformConf, cflagsEnv, cxxflagsEnv string) *Platform {
 	rebaseToolchainRoot(flags, tc)
 
 	clangVer := flags["COMPILER_VERSION"]
@@ -209,6 +211,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.Go = newGoStd(goStdVersion)
 	p.ifEnv = buildPlatformIfEnv(p)
 	p.Linker = pc.Linker.flags(p)
+	p.Sysincl = sysinclFiles(pc.Parsers, root, p.ifEnv)
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
 	p.CompileCFlags = composeCompileCFlags(p.ifEnv, flags, p.DebugInfoFlags)

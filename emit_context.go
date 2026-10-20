@@ -43,7 +43,6 @@ type EmitContext struct {
 	dirScratch    []IncludeDirective
 	resEntries    []PyGenResEntry
 	resStrBuf     []byte
-	resVFSBuf     []VFS
 	prodVFS       []VFS
 	cvScratch     []Closure
 	peerScratch   []string
@@ -152,7 +151,6 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		dirScratch:  prev.dirScratch[:0],
 		resEntries:  scrub(prev.resEntries),
 		resStrBuf:   prev.resStrBuf[:0],
-		resVFSBuf:   prev.resVFSBuf[:0],
 		prodVFS:     prev.prodVFS[:0],
 		cvScratch:   scrub(prev.cvScratch),
 		peerScratch: scrub(prev.peerScratch),
@@ -284,29 +282,15 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 			}
 
 			if input.isBuild() && e.codegen.lookup(input) != nil || template {
-				if e.d.scanCtx == nil {
-					e.d.scanCtx = newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, includeScannerBasePaths())
-				}
-
-				cl, cached := e.scanner.closure(input)
-
-				if !cached {
-					cl = e.scanner.walkClosure(input, e.d.scanCtx, scanDomainCC)
-				}
-
-				if cl.buckets != nil {
+				if cl := e.inputClosure(input); cl.buckets != nil {
 					extra = append(extra, cl)
 				}
 			}
 		}
 	}
 
-	if len(templates) > 0 {
-		templates = e.ctx.na.vfsList(templates...)
-
-		for _, output := range node.Outputs {
-			e.codegen.forwardTemplateInputs(output, templates)
-		}
+	if len(templates) > 0 && len(node.Outputs) == 1 {
+		e.codegen.forwardTemplateInputs(node.Outputs[0], e.ctx.na.vfsList(templates...))
 	}
 
 	if len(extra) == 0 {
@@ -343,6 +327,20 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 	})
 }
 
+func (e *EmitContext) inputClosure(input VFS) Closure {
+	if e.d.scanCtx == nil {
+		e.d.scanCtx = newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, includeScannerBasePaths())
+	}
+
+	cl, cached := e.scanner.closure(input)
+
+	if !cached {
+		cl = e.scanner.walkClosure(input, e.d.scanCtx, scanDomainCC)
+	}
+
+	return cl
+}
+
 func (e *EmitContext) resStr2(a, b string) string {
 	start := len(e.resStrBuf)
 
@@ -350,14 +348,6 @@ func (e *EmitContext) resStr2(a, b string) string {
 	e.resStrBuf = append(e.resStrBuf, b...)
 
 	return bytesString(e.resStrBuf[start:])
-}
-
-func (e *EmitContext) resVFS1(v VFS) []VFS {
-	e.resVFSBuf = append(e.resVFSBuf, v)
-
-	n := len(e.resVFSBuf)
-
-	return e.resVFSBuf[n-1 : n : n]
 }
 
 func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {

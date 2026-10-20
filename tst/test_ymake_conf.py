@@ -139,6 +139,7 @@ class ConfVariablesTest(unittest.TestCase):
             "m/ya.make": library("SRCS(a.cpp)\nCFLAGS(${CONF_FLAGS} ${CONF_TAIL})\n"),
             "m/a.cpp": "",
             "build/ymake_conf.py": lib.ymake_conf(extra=extra),
+            "build/conf/elsewhere.conf": "",
         })
         args = cc_args(tree.graph("m"), "$(B)/m/a.cpp.o")
         self.assertIn("-DA", args)

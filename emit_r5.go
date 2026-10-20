@@ -75,29 +75,18 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 		OnUse:         pending,
 	})
 
-	r5Parsed := e.scanner.parsedBucketForInput(rlSourceVFS, parsedIncludesCpp, nil)
-
 	e.register(GeneratedFileInfo{
-		OutputPath:     r5CppOut,
-		ProducerRef:    r5Ref,
-		GeneratorRefs:  e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: r5CppParsed(e.ctx.na, r5TmpOut, r5Parsed)},
-		OnUse:          pending,
+		OutputPath:      r5CppOut,
+		ProducerRef:     r5Ref,
+		ProducerMainOut: r5TmpOut,
+		GeneratorRefs:   e.ctx.na.refList(ragel5LDRef, rlgenCdLDRef),
+		ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: e.scanner.parsedBucketForInput(rlSourceVFS, parsedIncludesLocal, nil)},
+		OnUse:           pending,
 	})
 
 	meta.Source = r5CppOut.any()
 	meta.Compile.CFlags = cflagsWnoImplicitFallthrough(e.ctx.na, meta.Compile.CFlags)
 	e.enqueueSrc(meta)
-}
-
-func r5CppParsed(na *NodeArenas, r5TmpOut VFS, r5Parsed []IncludeDirective) []IncludeDirective {
-	out := na.dirs.alloc(1 + len(r5Parsed))[:0]
-
-	out = append(out, IncludeDirective{kind: includeQuoted, target: includeTarget(r5TmpOut.rel().any())})
-	out = append(out, r5Parsed...)
-	na.dirs.commit(len(out))
-
-	return out[:len(out):len(out)]
 }
 
 func cflagsWnoImplicitFallthrough(na *NodeArenas, psc []ANY) []ANY {

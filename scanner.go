@@ -91,11 +91,12 @@ type searchTierHotEntry struct {
 }
 
 type ScanCtx struct {
-	scanner *IncludeScanner
-	cfg     *ScanConfig
-	ccCfg   *ScanConfig
-	parser  IncludeDirectiveParser
-	tjc     *TarjanCtx
+	scanner   *IncludeScanner
+	cfg       *ScanConfig
+	ccCfg     *ScanConfig
+	parser    IncludeDirectiveParser
+	tjc       *TarjanCtx
+	tsImports bool
 }
 
 func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
@@ -232,6 +233,7 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 	sc.cfg = ctx.config(domain)
 	sc.ccCfg = nil
 	sc.parser = parser
+	sc.tsImports = domain == scanDomainAux
 
 	if domain == scanDomainSwig {
 		sc.ccCfg = ctx.config(scanDomainCC)
@@ -279,17 +281,8 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 		}
 
 		set := info.ParsedIncludes
-		parser := s.parsers.registry.registeredParserFor(vfsPath.relString())
 
-		if parser == nil {
-			parser = ctxParser
-		}
-
-		if parser == nil {
-			parser = s.parsers.registry.defaultParser
-		}
-
-		if _, ok := parser.(CIncludeDirectiveParser); ok {
+		if _, ok := s.parsers.registry.registeredParserFor(vfsPath.relString()).(CIncludeDirectiveParser); ok {
 			inducedBucket = parsedIncludesCpp
 
 			if isHeaderSource(vfsPath.relString()) {
@@ -390,10 +383,6 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 	}
 
 	out = append(out, info.ClosureLeaves...)
-
-	if main := info.ProducerMainOut; main != 0 && main != vfsPath && s.parsers.registry.scansIncludes(vfsPath.relString()) {
-		out = append(out, main)
-	}
 
 	if len(info.GeneratorRefs) == 0 || bucket == parsedIncludesLocal {
 		return out
@@ -514,9 +503,47 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		for _, bucket := range cl.bucketList() {
 			s.buckets.spliceBucket(&sc.tjc.closure, bucket)
 		}
+
+		if main := sc.opaqueMainOut(ch); main != 0 {
+			s.buckets.spliceOne(&sc.tjc.closure, main)
+		}
+	}
+
+	if main := sc.mainOut(abs); main != 0 {
+		s.buckets.spliceOne(&sc.tjc.closure, main)
 	}
 
 	s.putClosure(abs, s.buckets.storeScratch(abs))
+}
+
+func (sc *ScanCtx) opaqueMainOut(v VFS) VFS {
+	s := sc.scanner
+
+	if !v.isBuild() || s.parsers.registry.scansIncludes(v.relString()) {
+		return 0
+	}
+
+	if info := s.codegen.lookup(v); info != nil && info.ProducerMainOut != v {
+		return info.ProducerMainOut
+	}
+
+	return 0
+}
+
+func (sc *ScanCtx) mainOut(v VFS) VFS {
+	s := sc.scanner
+
+	if !v.isBuild() {
+		return 0
+	}
+
+	info := s.codegen.lookup(v)
+
+	if info == nil || info.ProducerMainOut == v || !s.parsers.registry.scansIncludes(v.relString()) {
+		return 0
+	}
+
+	return info.ProducerMainOut
 }
 
 func (sc *ScanCtx) ensureClosure(abs VFS) {
@@ -576,6 +603,10 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	}
 
 	if d.kind == includeTypeScript {
+		if !sc.tsImports {
+			return out
+		}
+
 		if file := s.parsers.resolveTSImport(incDir.relString(), d.target.string()); file != 0 {
 			return append(out, file)
 		}

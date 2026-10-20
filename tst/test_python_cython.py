@@ -61,6 +61,7 @@ def python_base():
     files["contrib/tools/cython/cython.py"] = ""
     for name in CYTHON_UTILITY:
         files[f"contrib/tools/cython/Cython/Utility/{name}"] = ""
+    files["contrib/tools/cython/Cython/Utility/MemoryView.pxd"] = ""
     for path in CYTHON_HEADERS:
         files[path] = ""
     files["app/ya.make"] = (
@@ -133,6 +134,10 @@ class CythonTest(unittest.TestCase):
         ])
         self.assertEqual(fast["inputs"][0], CYTHON)
         self.assertIn("$(S)/contrib/tools/cython/Cython/Utility/MemoryView.pyx", fast["inputs"])
+        # The embedded utility files are TEXT inputs (python.conf
+        # _UNWRAP_TEXT_INPUTS), never parsed: no sibling MemoryView.pxd, as
+        # in every CY node of the devtools_yamaker and devtools_ya_bin references.
+        self.assertNotIn("$(S)/contrib/tools/cython/Cython/Utility/MemoryView.pxd", fast["inputs"])
         self.assertIn("$(S)/lib/fast.pyx", fast["inputs"])
         fast_cc = lib.node_by_output(graph, "$(B)/lib/fast.pyx.py3.cpp.py3.o")
         self.assertIn("-Wno-implicit-fallthrough", args(fast_cc))
@@ -177,6 +182,30 @@ class CythonTest(unittest.TestCase):
             "$(B)/lib/plain.pyx.cpp.py3.o",
             "$(B)/lib/hdr_cpp.cpp.py3.o",
         ])
+
+    def test_py_srcs_cython_objects_follow_macro_generated_sources(self):
+        # PY_SRCS is a plugin (build/plugins/pybuild.py) run after the whole
+        # ya.make: middlesearch search/split_bert archives
+        # split_bert_versions_mapping.cpp.o, the GENERATE_ENUM_SERIALIZATION
+        # object declared after PY_SRCS, then bert_versions.pyx.cpp.o.
+        files = python_base()
+        files.update({
+            "lib/ya.make": (
+                "LIBRARY()\nUSE_PYTHON3()\nSRCS(m.cpp)\nPY_SRCS(b.pyx)\n"
+                "GENERATE_ENUM_SERIALIZATION(m.h)\nEND()\n"
+            ),
+            "lib/m.cpp": "",
+            "lib/m.h": "",
+            "lib/b.pyx": "",
+            "util/generic/serialized_enum.h": "",
+            "tools/enum_parser/enum_serialization_runtime/ya.make": STUB_LIBRARY,
+            "library/python/runtime_py3/ya.make": STUB_LIBRARY,
+        })
+        lib.tool_program(files, "tools/enum_parser/enum_parser", "enum_parser")
+        graph = lib.make(files, "lib")
+        archive = lib.node_by_output_prefix(graph, "$(B)/lib/liblib")
+        objects = [i.rsplit("/", 1)[1] for i in archive["inputs"] if i.endswith(".o")]
+        self.assertEqual(objects, ["m.cpp.o", "m.h_serialized.cpp.o", "b.pyx.cpp.o"])
 
     def test_cimport_forms_reach_cython_inputs(self):
         files = python_base()

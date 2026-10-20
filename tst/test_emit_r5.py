@@ -26,6 +26,23 @@ class EmitRagel5Test(unittest.TestCase):
                     "$(B)/kernel/urlnorm/urlhashval.rl5.cpp",
                 ])
 
+    def test_compile_takes_the_c_includes_and_the_main_output_not_the_source(self):
+        # devtools_ymake_bin/yabs references: urlhashval.rl5.cpp.o lists the
+        # main output urlhashval.rl.tmp and the C includes of the .rl, never
+        # the .rl itself.
+        files = {
+            "m/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(p.rl)\nEND()\n",
+            "m/p.rl": '#include "m/x.h"\nmain := \'a\';\n',
+            "m/x.h": "",
+        }
+        lib.tool_program(files, "contrib/tools/ragel5/ragel", "ragel5")
+        lib.tool_program(files, "contrib/tools/ragel5/rlgen-cd", "rlgen-cd")
+        graph = lib.make(files, "m")
+        self.assertEqual(
+            sorted(lib.node_by_output(graph, "$(B)/m/p.rl5.cpp.o")["inputs"]),
+            ["$(B)/m/p.rl.tmp", "$(B)/m/p.rl5.cpp", "$(S)/m/x.h"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

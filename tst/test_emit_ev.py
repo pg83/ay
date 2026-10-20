@@ -105,6 +105,29 @@ class EmitEventTest(unittest.TestCase):
         self.assertIn("--cpp_out=proto_h=true:$(B)/", args)
         self.assertNotIn("--cpp_out=:$(B)/", args)
 
+    def test_consumer_of_event_header_gets_the_producer_main_output(self):
+        # devtools_ymake_bin reference: every compile including
+        # devtools/ymake/diag/common_msg/msg.ev.pb.h also lists msg.ev.pb.cc,
+        # the first (main) output of the event PB node.
+        files = self.common_files()
+        files.update({
+            "consumer/ya.make": "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nSRCS(events.ev)\nEND()\n",
+            "consumer/events.ev": "message TEvent {\n}\n",
+            "user/ya.make": (
+                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(consumer)\n"
+                "SRCS(u.cpp)\nEND()\n"
+            ),
+            "user/u.cpp": '#include "consumer/events.ev.pb.h"\n',
+        })
+        graph = lib.make(files, "user")
+        inputs = lib.node_by_output(graph, "$(B)/user/u.cpp.o")["inputs"]
+        self.assertIn("$(B)/consumer/events.ev.pb.h", inputs)
+        self.assertIn("$(B)/consumer/events.ev.pb.cc", inputs)
+        # Only the path of the main output: its own includes stay out
+        # (export_json.cpp FillRegularInputs renders NodeDeps by path; 106 of
+        # the 107 msg.ev.pb.h compiles there lack google/protobuf/wire_format.h).
+        self.assertNotIn("$(S)/contrib/libs/protobuf/src/google/protobuf/wire_format.h", inputs)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

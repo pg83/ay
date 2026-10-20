@@ -52,7 +52,12 @@ def grpc_files(files):
 
 
 def yaff_files(files):
+    # library/cpp/yaff/tools/protoc_plugin/ya.make lists the runtime of the
+    # generated code as INDUCED_DEPS(h+cpp ...).
     lib.tool_program(files, "library/cpp/yaff/tools/protoc_plugin", "protoc_plugin")
+    files["library/cpp/yaff/tools/protoc_plugin/ya.make"] = files["library/cpp/yaff/tools/protoc_plugin/ya.make"].replace(
+        "END()", "INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/library/cpp/yaff/yaff.h ${ARCADIA_ROOT}/library/cpp/yaff/experiments/merge.h)\nEND()"
+    )
     for header in (
         "yaff.h", "struct.h", "protobuf.h", "reflect.h",
         "experiments/serializer.h", "experiments/column.h",
@@ -208,6 +213,9 @@ class ProtoCppTest(unittest.TestCase):
 
         grpc_object = lib.node_by_output(graph, "$(B)/p/a.grpc.pb.cc.o")
         self.assertIn("$(B)/p/a.pb.h", grpc_object["inputs"])
+        # The protoc command inputs stay on the PB node: none of the 406
+        # .grpc.pb.cc.o compiles in the yabs, devtools_ya_bin_2 and
+        # arc_server_bin references lists cpp_proto_wrapper.py.
         self.assertNotIn(WRAPPER, grpc_object["inputs"])
 
         consumer = lib.node_by_output(graph, "$(B)/c/c.cpp.o")
@@ -285,12 +293,16 @@ class ProtoCppTest(unittest.TestCase):
         self.assertIn("$(B)/p/b.pb.h", pb_object["inputs"])
         self.assertIn("$(S)/rt/two_runtime.h", pb_object["inputs"])
 
-        yaff_a = lib.node_by_output(graph, "$(B)/p/a.yaff.cpp.o")
-        for header in ("yaff.h", "experiments/merge.h"):
-            self.assertIn(f"$(S)/library/cpp/yaff/{header}", yaff_a["inputs"])
-        self.assertIn("$(B)/p/a.pb.h", yaff_a["inputs"])
-        yaff_b = lib.node_by_output(graph, "$(B)/p/b.yaff.cpp.o")
-        self.assertNotIn("$(S)/library/cpp/yaff/yaff.h", yaff_b["inputs"])
+        # FILES and EXPERIMENTAL only reach the plugin options: the outputs
+        # of b.proto (not in FILES) see the same runtime headers, as
+        # ads/profile/proto/profile_keyword_ids.yaff.cpp.o does in the
+        # yabs_server_daemons_bs_static reference.
+        for proto in ("a", "b"):
+            yaff = lib.node_by_output(graph, f"$(B)/p/{proto}.yaff.cpp.o")
+            for header in ("yaff.h", "experiments/merge.h"):
+                self.assertIn(f"$(S)/library/cpp/yaff/{header}", yaff["inputs"])
+            self.assertNotIn("$(S)/library/cpp/yaff/struct.h", yaff["inputs"])
+            self.assertIn(f"$(B)/p/{proto}.pb.h", yaff["inputs"])
 
         two = lib.node_by_output(graph, "$(B)/p/a.two.cpp.o")
         self.assertIn("$(S)/rt/two_runtime.h", two["inputs"])

@@ -14,6 +14,7 @@ AY = Path(os.environ["AY_TEST_BINARY"])
 FAKE_YMAKE_CONF = r'''
 import base64
 import json
+import os
 import sys
 
 COMPRESS_DEBUG = False
@@ -76,6 +77,8 @@ def main(argv):
     tc = params["params"]
 
     print('@import "${CONF_ROOT}/ymake.core.conf"')
+    if os.path.exists(os.path.join(args[0], "build/internal/conf/internal.conf")):
+        print('@import "${CONF_ROOT}/internal/conf/internal.conf"')
     emit("BUILD_TYPE", build_type.upper())
     emit("BT_" + build_type.upper().replace("-", "_"), "yes")
     emit("DISTBUILD", "yes")
@@ -269,15 +272,30 @@ when ($EXPORTS_FILE) {
 when ($NO_EXPORT_DYNAMIC_SYMBOLS == "yes") {
     EXPORTS_VALUE=
 }
+LINKER_SCRIPT_VALUE=${ext=.ld;pre=-T:SRCS_GLOBAL}
 _SONAME_FLAG=-Wl,$_SONAME_OPTION,$_SONAME
 _SHARED_FLAG=-shared
 _ROOT_FLAGS=--source-root $ARCADIA_ROOT --build-root $(BUILD_ROOT)
 '''
 
 
+# The sysincl configs the tests write, in the shape of build/conf/sysincl.conf.
+FAKE_SYSINCL_CONF = """SYSINCL=
+SYSINCL+=build/sysincl/macro.yml
+SYSINCL+=build/sysincl/windows.yml
+SYSINCL+=build/sysincl/misc.yml
+"""
+
+
 CONF_FILES = {
     "build/ymake_conf.py": FAKE_YMAKE_CONF,
     "build/ya.conf.json": ya_conf_json(),
+    "build/ymake.core.conf": '@import "${CONF_ROOT}/conf/sysincl.conf"\n',
+    "build/conf/sysincl.conf": FAKE_SYSINCL_CONF,
+    "build/sysincl/macro.yml": "- includes: []\n",
+    "build/sysincl/windows.yml": "- includes: []\n",
+    "build/sysincl/misc.yml": "- includes: []\n",
+    "build/conf/compilers/gnu_compiler.conf": "",
     "build/conf/linkers/ld.conf": FAKE_LD_CONF,
     "build/config/tests/py_style/default_configs.json": '{"py2_flake8":"build/config/tests/flake8/flake8.conf"}',
     "build/external_resources/flake8_py2/ya.make": (

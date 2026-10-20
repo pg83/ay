@@ -140,6 +140,27 @@ class LlvmBcTest(unittest.TestCase):
         self.assertEqual(args[args.index("--inputs") + 1], "$(B)/mod/foo_optimized.s1.bc")
         self.assertEqual(args[args.index("--keys") + 1], "L2xsdm1fYmMvZm9v")
 
+    def test_symbols_are_values_even_in_upper_case(self):
+        # yql/essentials/udfs/common/math lists the symbol EIR: build/plugins/
+        # llvm_bc.py takes every SYMBOLS value up to the next keyword.
+        graph = make(llvm_bc_files("LLVM_BC(a.cpp NAME foo SYMBOLS PiIR EIR)\n", {"mod/a.cpp": ""}))
+        optimize = lib.node_by_output(graph, "$(B)/mod/foo_optimized.bc")
+        self.assertIn("-internalize-public-api-list=PiIR#EIR", optimize["cmds"][0]["cmd_args"])
+
+    def test_bitcode_names_take_the_module_object_suffix(self):
+        # build/plugins/llvm_bc.py: obj_suf = SUFFIX or $OBJ_SUF; the ydb
+        # yql/essentials/udfs/common/math static UDF (OBJ_SUF=.udfs) makes
+        # Math_merged.udfs.bc and math_ir.cpp.udfs.bc.
+        files = llvm_bc_files("", {"mod/a.cpp": ""})
+        files["mod/ya.make"] = (
+            "YQL_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nUSE_LLVM_BC20()\n"
+            "LLVM_BC(a.cpp NAME foo)\nEND()\n"
+        )
+        files["p/ya.make"] = "PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nPEERDIR(mod)\nEND()\n"
+        graph = lib.make(files, "p", "--target-platform", "default-linux-x86_64")
+        for output in ("$(B)/mod/a.cpp.abi_stable.bc", "$(B)/mod/foo_merged.abi_stable.bc", "$(B)/mod/foo_optimized.abi_stable.bc"):
+            lib.node_by_output(graph, output)
+
     def test_copied_source_keeps_root_relative_bitcode_path(self):
         graph = make(llvm_bc_files(
             "COPY_FILE(tpl.txt gen.cpp)\nLLVM_BC(gen.cpp NAME bar)\n",

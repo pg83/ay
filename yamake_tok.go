@@ -27,6 +27,7 @@ var tokName = [...]STR{
 	tokUsrvStyleYAML:  internStr("USRV_STYLE_YAML_CURRENT_DIRECTORY"),
 	tokStyleJSON:      internStr("STYLE_JSON"),
 	tokStyleYAML:      internStr("STYLE_YAML"),
+	tokStyleYAMLConf:  internStr("STYLE_YAML_WITH_CONFIG"),
 	tokGenLibrary:     internStr("GEN_LIBRARY"),
 	tokUsrvBuild:      internStr("USRV_BUILD"),
 	tokUsrvAllSrcs:    internStr("USRV_ALL_SRCS"),
@@ -270,6 +271,8 @@ var tokName = [...]STR{
 	tokDockerImage:                     internStr("DOCKER_IMAGE"),
 	tokSdcUnion:                        internStr("SDC_UNION"),
 	tokSdcInstall:                      internStr("SDC_INSTALL"),
+	tokYaToolsConf:                     internStr("YA_TOOLS_CONF"),
+	tokLinkerScript:                    internStr("LINKER_SCRIPT"),
 	tokSdcResourceInfo:                 internStr("SDC_RESOURCE_INFO"),
 	tokSdcSbResourceInfo:               internStr("SDC_SB_RESOURCE_INFO"),
 	tokSdcRosnodeInfo:                  internStr("SDC_ROSNODE_INFO"),
@@ -616,6 +619,8 @@ const (
 	tokDockerImage
 	tokSdcUnion
 	tokSdcInstall
+	tokYaToolsConf
+	tokLinkerScript
 	tokSdcResourceInfo
 	tokSdcSbResourceInfo
 	tokSdcRosnodeInfo
@@ -759,6 +764,7 @@ const (
 	tokUsrvAllSrcs
 	tokStyleJSON
 	tokStyleYAML
+	tokStyleYAMLConf
 	tokUsrvStyleJSON
 	tokUsrvStyleYAML
 	tokCompileLua

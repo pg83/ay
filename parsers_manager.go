@@ -34,11 +34,13 @@ type ParsedSource struct {
 }
 
 type SharedParseCache struct {
-	notsJSON   DenseMap[STR, map[string]any]
-	notsYAML   DenseMap[STR, map[string]any]
-	notsLocks  DenseMap[STR, *NotsLockfile]
-	directives *BumpAllocator[IncludeDirective]
-	parsed     DenseMap[STR, ParsedSource]
+	notsJSON     DenseMap[STR, map[string]any]
+	notsYAML     DenseMap[STR, map[string]any]
+	notsLocks    DenseMap[STR, *NotsLockfile]
+	directives   *BumpAllocator[IncludeDirective]
+	parsed       DenseMap[STR, ParsedSource]
+	confFiles    DenseMap[STR, *ConfFile]
+	sysinclYAMLs DenseMap[STR, []SysIncl]
 }
 
 func newSharedParseCache() *SharedParseCache {

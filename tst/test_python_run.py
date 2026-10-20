@@ -175,7 +175,7 @@ class RunPython3Test(unittest.TestCase):
             "$(B)/lib/shard0.cpp", "$(B)/lib/shard1.cpp", "$(B)/lib/shard.h",
         ])
         self.assertIn("$(B)/lib/proto.cpp", run["inputs"])
-        self.assertIn("$(S)/lib/proto.in", run["inputs"])
+        self.assertNotIn("$(S)/lib/proto.in", run["inputs"])
         self.assertIn(codegen["uid"], run["deps"])
         first = lib.node_by_output(graph, "$(B)/lib/shard0.cpp.o")
         self.assertEqual(lib.bucketed(first["inputs"], 1), ['$(B)/lib/shard0.cpp', '$(S)/lib/induced.h'])
@@ -185,6 +185,26 @@ class RunPython3Test(unittest.TestCase):
             '$(B)/lib/shard0.cpp',
             '$(S)/lib/induced.h',
         ])
+
+    def test_split_outputs_take_output_includes(self):
+        # OUTPUT_INCLUDES reach every output (model/action_graph.cpp
+        # addOutputIncludes), shards included: ydb
+        # yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4 compiles
+        # SQLv1Antlr4Parser.pb.code0.cc and every includer of pb.main.h with
+        # SQLv1Antlr4Parser.pb.h and .pb.cc.
+        files = {
+            "lib/ya.make": (
+                LIBRARY_HEAD
+                + "RUN_PYTHON3(split.py OUT_NOAUTO s0.cc s1.cc main.h OUTPUT_INCLUDES lib/dep.h)\n"
+                "SRCS(s0.cc s1.cc use.cpp)\nEND()\n"
+            ),
+            "lib/split.py": "",
+            "lib/dep.h": "",
+            "lib/use.cpp": '#include "lib/main.h"\n',
+        }
+        graph = lib.make(files, "lib")
+        for output in ("$(B)/lib/s0.cc.o", "$(B)/lib/s1.cc.o", "$(B)/lib/use.cpp.o"):
+            self.assertIn("$(S)/lib/dep.h", lib.node_by_output(graph, output)["inputs"], output)
 
     def test_script_text_naming_own_output_is_not_an_include(self):
         files = {
@@ -243,6 +263,57 @@ class RunPython3Test(unittest.TestCase):
             self.assertIn(f"$(S)/lib/in.{ext}", run["inputs"])
         self.assertNotIn("$(S)/lib/dep.h", run["inputs"])
         self.assertNotIn("$(S)/lib/dep.h", compiled["inputs"])
+
+    def test_js_imports_are_processed_only_in_ts_modules(self):
+        # include_processors/ts_processor.cpp ProcessIncludes handles imports
+        # only for modules tagged TS; ydb html_log feeds graphlib.js, whose
+        # require('./lib') resolves nowhere, to RUN_PYTHON3 in a LIBRARY and the
+        # reference lists only the named .js inputs.
+        files = {
+            "lib/ya.make": (
+                LIBRARY_HEAD
+                + "RUN_PYTHON3(cat.py IN a.js b.ts STDOUT out.cpp)\n"
+                "END()\n"
+            ),
+            "lib/cat.py": "",
+            "lib/a.js": "var x = require('./lib');\nvar y = require('./dep');\n",
+            "lib/b.ts": "import { z } from './dep';\n",
+            "lib/dep.js": "",
+        }
+        graph = lib.make(files, "lib")
+        run = lib.node_by_output(graph, "$(B)/lib/out.cpp")
+        self.assertEqual(sorted({i for i in run["inputs"] if i.startswith("$(S)/lib/")}), [
+            "$(S)/lib/a.js", "$(S)/lib/b.ts", "$(S)/lib/cat.py",
+        ])
+
+    def test_in_noparse_files_are_text_inputs(self):
+        # build/ymake.core.conf passes IN_NOPARSE as ${hide;input=TEXT:...}:
+        # middlesearch yabs/models_services/feature_store/mappers/argus/py
+        # lists argus.h, whose include exists nowhere in the slice, alone.
+        for macro in ("RUN_PROGRAM(tool", "RUN_PYTHON3(gen.py"):
+            with self.subTest(macro=macro):
+                files = {
+                    "lib/ya.make": (
+                        LIBRARY_HEAD
+                        + "SET(HDRS lib/a.h lib/b.h)\n"
+                        + macro + " IN c.h IN_NOPARSE ${HDRS} IN_DEPS d.h OUT gen.cpp)\n"
+                        "END()\n"
+                    ),
+                    "lib/gen.py": "",
+                    "lib/a.h": '#include "nowhere/missing.h"\n',
+                    "lib/b.h": '#include "lib/dep.h"\n',
+                    "lib/c.h": '#include "lib/dep2.h"\n',
+                    "lib/d.h": "",
+                    "lib/dep.h": "",
+                    "lib/dep2.h": "",
+                }
+                lib.tool_program(files, "tool", "tool")
+                graph = lib.make(files, "lib", "-k")
+                run = lib.node_by_output(graph, "$(B)/lib/gen.cpp")
+                inputs = {i for i in run["inputs"] if i.startswith("$(S)/lib/")}
+                self.assertEqual(inputs - {"$(S)/lib/gen.py"}, {
+                    "$(S)/lib/a.h", "$(S)/lib/b.h", "$(S)/lib/c.h", "$(S)/lib/d.h", "$(S)/lib/dep2.h",
+                })
 
     def test_arcadia_root_left_by_expansion_limit_maps_to_source_root(self):
         # Each expansion pass consumes one "O1}" suffix, so the literal

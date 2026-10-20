@@ -48,6 +48,24 @@ class TestCodegenModules(unittest.TestCase):
             node = lib.node_by_output(graph, f"$(B)/a/test-results/{name}/meta.json")
             self.assertNotIn("$(S)/a/configs/sub/options.yml", node["inputs"])
 
+    def test_yaml_style_with_config_needs_collected_sources(self):
+        # STYLE_YAML_WITH_CONFIG lints $YAML_LINT_SRCS (set only by
+        # COLLECT_YAML_LINT_SRCS); _ADD_CUSTOM_EXPLICIT_LINTER_CHECK peers the
+        # yamlfmt resource regardless (build/plugins/ytest.py).
+        files = {
+            "a/ya.make": "LIBRARY()\n" + BARE + "SRCS(a.cpp)\nEND()\n",
+            "a/a.cpp": "", "a/service.yaml": "name: test",
+            "build/conf/autoincludes.json": '["a"]',
+            "a/linters.make.inc": "STYLE_YAML_WITH_CONFIG(CONFIG_TYPE .yamlfmt.yml)\n",
+            "build/external_resources/yamlfmt/ya.make": "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(YAMLFMT sbr:43)\nEND()\n",
+        }
+        graph = lib.make(files, "a", "-t")
+        self.assertFalse(any("/test-results/yamlfmt/" in o for n in graph["graph"] for o in n["outputs"]))
+        del files["build/external_resources/yamlfmt/ya.make"]
+        result = lib.make_process(files, "a", "-t")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("build/external_resources/yamlfmt", result.stderr)
+
     def test_generated_library_can_be_both_peer_and_recursed_root(self):
         files = {
             "a/ya.make": "LIBRARY()\n" + BARE + "SRCS(a.cpp)\nPEERDIR(gen)\nEND()\nRECURSE_FOR_TESTS(ut)\n",

@@ -13,33 +13,15 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 	outVFS := build(module, "/", srcRel, ".cpp")
 	ref := ctx.emit.reserve()
 	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
-	scanner := e.scanner
-	scanCtx := d.scanCtx
 
 	pe := func() {
-		cv := scanner.walkClosure(srcVFS, scanCtx, scanDomainCC)
-		block := na.vfs.alloc(1 + cv.len())
-		k := 0
-
-		block[k] = srcVFS
-		k++
-
-		cv.each(func(p VFS) {
-			if p.isSource() && p != srcVFS {
-				block[k] = p
-				k++
-			}
-		})
-
-		na.vfs.commit(k)
-
 		env := envVarsVCS
 
 		node := Node{
 			Platform:       instance.Platform,
 			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolBin.any(), srcVFS.any(), outVFS.any())), Env: env}),
 			Env:            env,
-			Inputs:         na.inputList(na.vfsList(toolBin), block[:k:k]),
+			Inputs:         na.inputList(na.vfsList(toolBin), na.vfsList(srcVFS)),
 			KV:             &htKV,
 			Outputs:        na.vfsList(outVFS),
 			ForeignDepRefs: na.refList(toolRef),

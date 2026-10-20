@@ -161,7 +161,7 @@ class InducedDepsTest(unittest.TestCase):
             "ind/nested.h": "",
         }
         graph = lib.make(files, "lib")
-        generated = {"$(B)/lib/base_gen.cpp", "$(S)/lib/base_gen.in"}
+        generated = {"$(B)/lib/base_gen.cpp"}
         both = {"$(S)/ind/both.h", "$(S)/ind/nested.h", "$(B)/ind/none.h"}
         self.assertEqual(
             generated | both | {"$(S)/ind/cpp_only.h"},
@@ -174,11 +174,47 @@ class InducedDepsTest(unittest.TestCase):
                 '$(B)/ind/none.h',
                 '$(S)/ind/h_only.h',
                 '$(S)/lib/use.cpp',
-                '$(S)/lib/base_gen.in',
                 '$(S)/ind/nested.h',
                 '$(B)/lib/base_gen.h',
+                # The main output by path only: its cpp-only induced deps stay out.
+                '$(B)/lib/base_gen.cpp',
             },
             inputs_of(graph, "$(B)/lib/use.cpp.o"),
+        )
+
+
+class TemplateInputTest(unittest.TestCase):
+    def test_template_reaches_consumers_only_of_a_single_output_command(self):
+        # json_visitor.cpp (YMAKE-2169) adds the IncludedInputs of a .in
+        # BuildFrom input to its build entry. A single-output command keeps its
+        # inputs on the output itself; with several outputs they hang on the
+        # $L/ACTION node (model/action_graph.cpp mainOutAsExtra) that the
+        # outputs only reach through OutTogether. ydb reference:
+        # runtime_feature_flags.h.in reaches the compiles including
+        # runtime_feature_flags.h, dispatch_op.h.in and operation_registry.h.in
+        # reach none of the compiles including both of their outputs.
+        files = {
+            "lib/ya.make": library(
+                "RUN_PROGRAM(tool one.h.in IN one.h.in OUT one.h)",
+                "RUN_PROGRAM(tool a.h.in b.h.in IN a.h.in b.h.in OUT a.h b.h)",
+                "SRCS(use_one.cpp use_b.cpp)",
+            ),
+            "lib/one.h.in": '#include "lib/dep.h"\n',
+            "lib/a.h.in": "",
+            "lib/b.h.in": "",
+            "lib/dep.h": "",
+            "lib/use_one.cpp": '#include "lib/one.h"\n',
+            "lib/use_b.cpp": '#include "lib/b.h"\n',
+        }
+        lib.tool_program(files, "tool", "tool")
+        graph = lib.make(files, "lib")
+        self.assertEqual(
+            {"$(S)/lib/use_one.cpp", "$(B)/lib/one.h", "$(S)/lib/one.h.in", "$(S)/lib/dep.h"},
+            inputs_of(graph, "$(B)/lib/use_one.cpp.o"),
+        )
+        self.assertEqual(
+            {"$(S)/lib/use_b.cpp", "$(B)/lib/b.h", "$(B)/lib/a.h"},
+            inputs_of(graph, "$(B)/lib/use_b.cpp.o"),
         )
 
 

@@ -26,7 +26,7 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	outVFS := flexGeneratedVFS(instance, srcRel)
 	na := ctx.na
 	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
-	parsed := na.dirs.alloc(2 + len(localBucket))[:0]
+	parsed := na.dirs.alloc(1 + len(localBucket))[:0]
 
 	parsed = append(parsed, flexOutputInclude)
 	parsed = append(parsed, localBucket...)
@@ -34,8 +34,6 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	var cflags []ANY
 
 	if extIsFlexL(srcRel) {
-		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
-
 		cf := na.anys.alloc(1)
 
 		cf[0] = argWnoUnusedVariable.any()
@@ -52,13 +50,8 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	meta.Compile.CFlags = concat(meta.Compile.CFlags, cflags)
 	e.enqueueSrc(meta)
 
-	scanner := e.scanner
-	scanCtx := d.scanCtx
-
 	pe := func() {
-		lxClosure := scanner.walkClosure(outVFS, scanCtx, scanDomainCC).collect(ctx.na, func(v VFS) bool { return v.isSource() })
-
-		e.emitFlexLX(flexRef, flexBin, srcVFS, outVFS, lxClosure, lxRef)
+		e.emitFlexLX(flexRef, flexBin, srcVFS, outVFS, lxRef)
 	}
 
 	pending := e.pendingEmit(pe)
@@ -72,7 +65,7 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	})
 }
 
-func (e *EmitContext) emitFlexLX(flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, closure []VFS, id NodeRef) {
+func (e *EmitContext) emitFlexLX(flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, id NodeRef) {
 	na := e.ctx.na
 
 	cmdArgs := na.chunkList(na.anyList(
@@ -87,7 +80,7 @@ func (e *EmitContext) emitFlexLX(flexRef NodeRef, flexBin VFS, srcVFS, outVFS VF
 		Platform:       e.instance.Platform,
 		Cmds:           na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 		Env:            env,
-		Inputs:         na.inputList(na.vfsList(flexBin), na.vfsList(srcVFS), closure),
+		Inputs:         na.inputList(na.vfsList(flexBin), na.vfsList(srcVFS)),
 		Outputs:        na.vfsList(outVFS),
 		KV:             &flexKV,
 		ForeignDepRefs: na.refList(flexRef),

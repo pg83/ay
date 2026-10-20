@@ -30,13 +30,18 @@ class EmitGperfTest(unittest.TestCase):
             generated["cmds"][0]["stdout"],
             "$(B)/gpmod/tags.gperf.cpp",
         )
-        for expected in (gperf, "$(S)/gpmod/tags.gperf", "$(S)/gpmod/tag.h"):
-            self.assertIn(expected, generated["inputs"])
+        # The includes of the .gperf are induced deps of its output: the yabs
+        # reference lists only gperf and the .gperf for library/cpp/html
+        # tag.gperf.cpp and tags.gperf.cpp, and their compiles take the
+        # includes but never the .gperf.
+        self.assertEqual(sorted(generated["inputs"]), [gperf, "$(S)/gpmod/tags.gperf"])
         tool = lib.node_by_output(graph, gperf)
         self.assertIn(tool["uid"], generated["deps"])
 
         compile_node = lib.node_by_output(graph, "$(B)/gpmod/tags.gperf.cpp.o")
         self.assertIn("$(B)/gpmod/tags.gperf.cpp", compile_node["inputs"])
+        self.assertIn("$(S)/gpmod/tag.h", compile_node["inputs"])
+        self.assertNotIn("$(S)/gpmod/tags.gperf", compile_node["inputs"])
         self.assertIn(generated["uid"], compile_node["deps"])
         archive = lib.node_by_output_prefix(graph, "$(B)/gpmod/lib")
         self.assertIn("$(B)/gpmod/tags.gperf.cpp.o", archive["inputs"])

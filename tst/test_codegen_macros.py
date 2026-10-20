@@ -192,6 +192,11 @@ class BuildInfoTest(unittest.TestCase):
         ])
         use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
         self.assertIn(node["uid"], use["deps"])
+        # The consumer sees the header, not the generator's scripts
+        # (library/cpp/build_info in the arc_server_bin reference).
+        self.assertIn("$(B)/mod/buildinfo_data.h", use["inputs"])
+        for script in ("yield_line.py", "xargs.py", "build_info_gen.py"):
+            self.assertNotIn(f"$(S)/build/scripts/{script}", use["inputs"])
 
 
 if __name__ == "__main__":

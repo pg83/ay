@@ -74,6 +74,10 @@ func (t *TarjanScratch) setOnStack(v VFS, b bool) {
 type ClosureSink interface {
 	forEachChild(v VFS, fn func(VFS))
 
+	mainOut(v VFS) VFS
+
+	opaqueMainOut(v VFS) VFS
+
 	cachedWindow(v VFS) (window Closure, cached bool)
 
 	emitClosure(members []VFS, fill func(block []VFS) int)
@@ -154,6 +158,10 @@ func (tc *TarjanCtx) spliceChild(ch VFS) {
 	cl, _ := tc.g.cachedWindow(ch)
 
 	tc.emitK = cl.spliceInto(&tc.closure, tc.emitBuf, tc.emitK)
+
+	if main := tc.g.opaqueMainOut(ch); main != 0 {
+		tc.emitK = tc.closure.spliceOne(main, tc.emitBuf, tc.emitK)
+	}
 }
 
 func (tc *TarjanCtx) emitMembers(block []VFS) int {
@@ -165,6 +173,12 @@ func (tc *TarjanCtx) emitMembers(block []VFS) int {
 			tc.closure.add(u)
 			block[k] = u
 			k++
+		}
+	}
+
+	for _, u := range members {
+		if main := tc.g.mainOut(u); main != 0 {
+			k = tc.closure.spliceOne(main, block, k)
 		}
 	}
 

@@ -95,6 +95,23 @@ def rescompiler_kvs(node):
 
 
 class PyProtoTest(unittest.TestCase):
+    def test_set_overrides_the_proto_namespace_variable(self):
+        # PROTO_NAMESPACE() is SET(PROTO_NAMESPACE ...) plus PROTO_ADDINCL
+        # (build/conf/proto.conf); --ns renders /$PROTO_NAMESPACE. middlesearch
+        # ads/caesar/libs/events/proto/apc_cpa_data: PROTO_NAMESPACE(GLOBAL .)
+        # then SET(PROTO_NAMESPACE "") gives --ns /.
+        files = python_base()
+        files.update({
+            "proto/ya.make": (
+                "PROTO_LIBRARY()\nSRCDIR(${ARCADIA_ROOT})\nPROTO_NAMESPACE(GLOBAL .)\n"
+                'SET(PROTO_NAMESPACE "")\nSRCS(proto/x.proto)\nEXCLUDE_TAGS(CPP_PROTO)\nEND()\n'
+            ),
+            "proto/x.proto": 'syntax = "proto3";\nmessage X {}\n',
+        })
+        graph = lib.make(files, "app")
+        command = args(lib.node_by_output(graph, "$(B)/proto/x__intpy3___pb2.py"))
+        self.assertEqual(command[command.index("--ns") + 1], "/")
+
     def test_proto_library_with_grpc_and_namespaces(self):
         files = python_base()
         files.update({
@@ -212,6 +229,30 @@ class PyProtoTest(unittest.TestCase):
         self.assertNotIn("$(S)/lib/x.proto", aux["inputs"])
         archive = lib.node_by_output(graph, "$(B)/lib/libpy3lib.global.a")
         self.assertIn(aux["outputs"][0], archive["inputs"])
+
+    def test_proto_library_packs_resources_per_srcs_statement(self):
+        # Every SRCS() of a python PROTO_LIBRARY is its own PY_SRCS plugin call
+        # with its own RESOURCE_FILES: middlesearch
+        # market/idx/datacamp/proto/specific packs the five protos of its first
+        # SRCS and the three of the ELSE() branch in two raw.auxcpp nodes.
+        files = python_base()
+        files.update({
+            "proto/ya.make": (
+                "PROTO_LIBRARY()\nNO_MYPY()\nSRCS(a.proto)\nSRCS(b.proto)\n"
+                "EXCLUDE_TAGS(CPP_PROTO)\nEND()\n"
+            ),
+            "proto/a.proto": 'syntax = "proto3";\nmessage A {}\n',
+            "proto/b.proto": 'syntax = "proto3";\nmessage B {}\n',
+        })
+        graph = lib.make(files, "app")
+        packs = sorted(
+            rescompiler_kvs(node) for node in graph["graph"]
+            if node["kv"].get("p") == "PR" and node["outputs"][0].startswith("$(B)/proto/")
+        )
+        self.assertEqual([[kv.split("=", 1)[0] for kv in pack] for pack in packs], [
+            ["resfs/src/resfs/file/py/proto/a_pb2.py", "resfs/src/resfs/file/py/proto/a_pb2.py.yapyc3"],
+            ["resfs/src/resfs/file/py/proto/b_pb2.py", "resfs/src/resfs/file/py/proto/b_pb2.py.yapyc3"],
+        ])
 
     def test_py23_library_proto_aux_uses_py3_suffix(self):
         files = python_base()

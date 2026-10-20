@@ -175,23 +175,7 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 		peers = append(peers, "library/cpp/sanitizer/include")
 	}
 
-	if !strings.HasPrefix(instance.Path.relString(), "build/platform/") {
-		if d.setVars[strNeedPlatformPeerdirs] == strNo {
-			peers = append(peers, "build/platform/python/ymake_python3")
-		} else {
-			peers = append(peers, "build/platform/clang")
-
-			if isLinkingModuleType(d.unit.Type) {
-				peers = append(peers, "build/platform/lld")
-			}
-
-			peers = append(peers, "build/platform/python/ymake_python3")
-
-			if instance.Platform.UsesSDKRoot {
-				peers = append(peers, "build/platform/linux_sdk")
-			}
-		}
-	}
+	peers = e.appendPlatformPeerdirs(peers, instance)
 
 	if isLinkingModuleType(d.moduleStmt.Name) && !isProgramModuleType(d.moduleStmt.Name) && !isDllModuleType(d.moduleStmt.Name) && !noPlatform {
 		peers = append(peers, e.defaultCommonLinkPeerdirs()...)
@@ -313,6 +297,32 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 		if env.bool(envARCH_X86_64) && !flags.NoUtil && allocatorName.string() != "FAKE" {
 			peers = append(peers, "library/cpp/cpuid_check")
 		}
+	}
+
+	return peers
+}
+
+func (e *EmitContext) appendPlatformPeerdirs(peers []string, instance ModuleInstance) []string {
+	d := e.d
+
+	if strings.HasPrefix(instance.Path.relString(), "build/platform/") {
+		return peers
+	}
+
+	if d.setVars[strNeedPlatformPeerdirs] == strNo {
+		return append(peers, "build/platform/python/ymake_python3")
+	}
+
+	peers = append(peers, "build/platform/clang")
+
+	if isLinkingModuleType(d.unit.Type) {
+		peers = append(peers, "build/platform/lld")
+	}
+
+	peers = append(peers, "build/platform/python/ymake_python3")
+
+	if instance.Platform.UsesSDKRoot {
+		peers = append(peers, "build/platform/linux_sdk")
 	}
 
 	return peers

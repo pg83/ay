@@ -145,11 +145,11 @@ class ResourceDeclsTest(unittest.TestCase):
         # Rows with equal node counts come in no particular order.
         self.assertEqual(
             lines[1],
-            "ownership        3 nodes        3 backings  Cmd.CmdArgs.chunk @ emit_context.go:177     e.g. $(B)/lib/a.cpp.bc",
+            "ownership        3 nodes        3 backings  Cmd.CmdArgs.chunk @ emit_context.go:175     e.g. $(B)/lib/a.cpp.bc",
         )
         self.assertCountEqual(lines[2:], [
-            "ownership        1 nodes        1 backings  DepRefs @ emit_context.go:177               e.g. $(B)/lib/kern_merged.bc",
-            "ownership        1 nodes        1 backings  Inputs.chunk @ emit_context.go:177          e.g. $(B)/lib/kern_merged.bc",
+            "ownership        1 nodes        1 backings  DepRefs @ emit_context.go:175               e.g. $(B)/lib/kern_merged.bc",
+            "ownership        1 nodes        1 backings  Inputs.chunk @ emit_context.go:175          e.g. $(B)/lib/kern_merged.bc",
         ])
 
     def test_host_bundle_json_path_follows_include_path_rules(self):
@@ -426,12 +426,13 @@ class PrebuiltProgramTest(unittest.TestCase):
             ),
         })
         graph = lib.make(files, "lib")
+        # The copy takes the components, not their generator script, as the
+        # prebuilt copies of the devtools_yamaker reference do.
         tool = lib.node_by_output(graph, "$(B)/build/prebuilt/tools/gen/gen")
         self.assertEqual(tool["inputs"], [
             "$(S)/build/scripts/fs_tools.py",
             "$(B)/build/platform/python/ymake_python3/toolchain.component.sbom",
             "$(B)/build/prebuilt/tools/gen/gen.AGNOSTIC.component.sbom",
-            "$(S)/build/internal/scripts/gen_sbom.py",
         ])
         for output in (
             "$(B)/resources/GEN",

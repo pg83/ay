@@ -141,6 +141,51 @@ class ResourceFilesTest(unittest.TestCase):
             [n["outputs"][0] for n in objcopy_nodes(graph)],
         )
 
+    def test_ya_tools_conf_lists_tool_configs_and_formulas(self):
+        # build/plugins/res.py _YA_TOOLS_CONF: ya.conf.json stripped of its
+        # dir, the tool and toolchain configs under PREFIX yatools, then one
+        # RESOURCE_FILES per formula found under build/ or the conf dir.
+        files = base_files("YA_TOOLS_CONF(conf)\n")
+        files.update({
+            "conf/ya.conf.json": (
+                '{"simple_tools": {"tool_a": {}, "tool_b": {"resource": "res_b"}},'
+                ' "bottles": {"bt": {"formula": "build/external_resources/bottle/resources.json"},'
+                ' "far": {"formula": "elsewhere/f.json"}, "gone": {"formula": "build/external_resources/gone/resources.json"}}}'
+            ),
+            "conf/tools/tools/x/t.tool.json": '{"tool": {"type": "simple", "definition": {}}}',
+            "conf/tools/tools/y.tool.json": '{"tool": {"type": "bundle"}}',
+            "conf/tools/toolchains/tc.toolchain.json": '{"bottles": {"b2": {"formula": "conf/f.json"}}}',
+            "conf/tools/internal/tiers.json": "{}",
+            "conf/f.json": "{}",
+            "elsewhere/f.json": "{}",
+        })
+        for name in ("tool_a", "res_b", "bottle", "x/t"):
+            files[f"build/external_resources/{name}/resources.json"] = "{}"
+        graph = lib.make(files, "lib")
+        formulas = [
+            "build/external_resources/bottle/resources.json",
+            "build/external_resources/res_b/resources.json",
+            "build/external_resources/tool_a/resources.json",
+            "build/external_resources/x/t/resources.json",
+            "conf/f.json",
+        ]
+        configs = [
+            "conf/tools/internal/tiers.json",
+            "conf/tools/toolchains/tc.toolchain.json",
+            "conf/tools/tools/x/t.tool.json",
+            "conf/tools/tools/y.tool.json",
+        ]
+        self.assertEqual(
+            [(inputs, keys) for inputs, keys, _ in payloads(graph)],
+            [
+                (["$(S)/conf/ya.conf.json"], ["resfs/file/ya.conf.json"]),
+                (
+                    [f"$(S)/{c}" for c in configs],
+                    ["resfs/file/yatools" + c[len("conf"):] for c in configs],
+                ),
+            ] + [([f"$(S)/{f}"], [f"resfs/file/{f}"]) for f in formulas],
+        )
+
     def test_trailing_keyword_without_value_is_rejected(self):
         for body, message in (
             ("RESOURCE_FILES(a.txt PREFIX)", "PREFIX is the last token"),

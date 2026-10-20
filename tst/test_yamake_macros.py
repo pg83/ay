@@ -213,8 +213,8 @@ class YaMakeMacrosTest(unittest.TestCase):
             )),
             "a/x.cpp": "", "a/data.txt": "", "a/inc.h": "", "a/dup.cpp": "",
             "a/gen/src.cpp": "", "a/gen/t.h": "", "a/gen/w.cpp": "",
-            "a/gen/src2.cpp": "", "a/gen/f1.cpp": "", "a/gen/f2.h": "",
-            "a/gen/plain.txt": "", "a/gen/dup.cpp": "",
+            "a/gen/src2.cpp": "", "a/gen/f1.cpp": '#include "f1dep.h"\n', "a/gen/f2.h": "",
+            "a/gen/plain.txt": "", "a/gen/dup.cpp": "", "a/gen/f1dep.h": "",
         })
         self.assertEqual(outputs_by_kind(graph, "CP"), [
             "$(B)/a/copied.cpp", "$(B)/a/dup.cpp", "$(B)/a/f1.cpp", "$(B)/vcs.json",
@@ -223,6 +223,13 @@ class YaMakeMacrosTest(unittest.TestCase):
             lib.node_by_output(graph, "$(B)/a/copied.cpp")["inputs"],
             ["$(S)/a/gen/src.cpp"],
         )
+        # COPY(WITH_CONTEXT ...) (build/plugins/cp.py) calls COPY_FILE, a TEXT
+        # input, with the source added to OUTPUT_INCLUDES: the ydb llvm16
+        # copies list fs_tools.py, process_command_files.py and the source,
+        # their compiles the source closure.
+        self.assertEqual(sorted(lib.node_by_output(graph, "$(B)/a/f1.cpp")["inputs"]), ["$(S)/a/gen/f1.cpp"])
+        for path in ("$(S)/a/gen/f1.cpp", "$(S)/a/gen/f1dep.h", "$(S)/a/inc.h"):
+            self.assertIn(path, lib.node_by_output(graph, "$(B)/a/f1.cpp.o")["inputs"])
         self.assertEqual(
             lib.node_by_output(graph, "$(B)/a/liba.a")["inputs"][:-1],
             ["$(B)/a/copied.cpp.o", "$(B)/a/f1.cpp.o", "$(B)/a/dup.cpp.o", "$(B)/a/x.cpp.o"],

@@ -135,6 +135,7 @@ type CythonStmt struct {
 	Header    bool
 	ApiHeader bool
 	Pxd       string
+	Seq       int
 }
 
 type CythonStmtPlan struct {
@@ -252,16 +253,6 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		p := &plans[i]
 
 		p.sourceInputs = e.scanner.cythonPyxLangClosure(p.srcVFS, d.scanCtx)
-
-		if !p.stmt.Header {
-			for _, input := range p.toolInputs[1 : len(p.toolInputs)-1] {
-				if isCythonLangFile(input.relString()) {
-					p.sourceInputs = append(p.sourceInputs, e.scanner.cythonPyxLangClosure(input, d.scanCtx)...)
-				}
-			}
-		}
-
-		p.sourceInputs = dedup(p.sourceInputs)
 	}
 
 	return plans
@@ -404,8 +395,14 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			info.OnUse = pending
 		}
 
+		seq := p.stmt.Seq
+
+		if seq == 0 {
+			seq = e.d.nextDeclSeq()
+		}
+
 		e.enqueueSrc(SrcMeta{
-			Source: generatedVFS.any(), Prio: stmtPrioDefault, Bucket: bkCython,
+			Source: generatedVFS.any(), Prio: stmtPrioDefault, Seq: seq, Bucket: bkCython,
 			Compile: CompileSpec{ObjSuf: objSuf, CFlags: ccCFlags},
 		})
 	}

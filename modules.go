@@ -74,37 +74,11 @@ type CppProtoPlugin struct {
 	OutputSuffixes    []string
 	Deps              []string
 	ExtraOutFlag      string
-	Experimental      []string
-	Files             []string
 	OutputsBeforeBase bool
 }
 
 func (p CppProtoPlugin) isYaff() bool {
 	return p.ToolPath == yaffPluginPath
-}
-
-func (p CppProtoPlugin) isExperimental(protoBaseName string) bool {
-	for _, e := range p.Experimental {
-		if e == protoBaseName {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (p CppProtoPlugin) processesFile(protoBaseName string) bool {
-	if len(p.Files) == 0 {
-		return true
-	}
-
-	for _, f := range p.Files {
-		if f == protoBaseName {
-			return true
-		}
-	}
-
-	return false
 }
 
 func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
@@ -234,6 +208,7 @@ type ModuleData struct {
 	cFlags                   []ANY
 	cFlagsGlobal             []ANY
 	cxxFlags                 []ANY
+	cxxFlagsVar              []ANY
 	cxxFlagsGlobal           []ANY
 	cOnlyFlags               []ANY
 	cOnlyFlagsGlobal         []ANY
@@ -282,6 +257,7 @@ type ModuleData struct {
 	onlyTags                 bool
 	dynamicLibraryFrom       []ANY
 	exportsScript            *ANY
+	linkerScripts            []ANY
 	ldPlugins                []ANY
 	arPlugin                 *ANY
 	hasFbs                   bool
@@ -351,6 +327,7 @@ type SrcMeta struct {
 	Source      ANY
 	Prio        int
 	Seq         int
+	Stmt        int
 	Global      bool
 	RosZeroCopy bool
 	Bucket      int
@@ -588,13 +565,17 @@ parsedFlags:
 
 	for _, file := range files {
 		src := filepath.ToSlash(filepath.Clean(fromDir + "/" + file))
+		includes := append([]string(nil), outputIncludes...)
+
+		if withContext {
+			includes = append(includes, src)
+		}
 
 		out = append(out, CopyFileEntry{
 			Src:            src,
 			Dst:            file,
 			Auto:           auto,
-			WithContext:    withContext,
-			OutputIncludes: append([]string(nil), outputIncludes...),
+			OutputIncludes: includes,
 		})
 	}
 
@@ -907,6 +888,24 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	return d
 }
 
+func applyResourceFiles(fs FS, modulePath string, args []string, line int, d *ModuleData) {
+	if isGoModuleType(d.unit.Type) {
+		applyGoResource(fs, modulePath, expandResourceFiles(d, nil, args), line, d)
+
+		return
+	}
+
+	d.resourcePeerDeferred = true
+
+	before := len(d.resources)
+
+	d.resources = expandResourceFiles(d, d.resources, args)
+
+	if len(d.resources) > before {
+		d.resources[len(d.resources)-1].EndsBatch = true
+	}
+}
+
 func ensureResourcePeer(modulePath string, d *ModuleData) {
 	const resourcePeer = "library/cpp/resource"
 
@@ -1200,6 +1199,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
 			globalNext := false
 			srcToks := expandStmtTokens(v.Sources, env)
+			stmt := d.nextDeclSeq()
 
 			if d.unit.SwigLang == strSwigLangJniCpp {
 				srcToks = jniCppSwigSrcs(srcToks)
@@ -1226,7 +1226,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 					prio, seq = stmtPrioSrcs, d.nextDeclSeq()
 				}
 
-				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Global: global})
+				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global})
 				globalNext = false
 
 				switch srcExtClassOf(srcTok) {
@@ -1286,6 +1286,14 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			if v.Name == "PROTOC_TRANSITIVE_HEADERS" {
 				recalcProtoOutputs(d)
+			}
+
+			if v.Name == "PROTO_NAMESPACE" {
+				d.protoNamespace = nil
+
+				if value != "" {
+					d.protoNamespace = ptr(internStr(value).any())
+				}
 			}
 
 			if v.Name == "RAGEL6_FLAGS" {
@@ -1421,7 +1429,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			expanded := *v
 
 			expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
-			expanded.INFiles = expandStmtTokens(v.INFiles, env)
+			expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env)
 			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
 			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
@@ -1476,7 +1484,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			expanded.ScriptPath = expandStmtTokenAny(v.ScriptPath, env)
 			expanded.Args = expandCommandTokens(v.Args, env)
-			expanded.INFiles = expandStmtTokens(v.INFiles, env)
+			expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env)
 			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
 			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
@@ -1529,23 +1537,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				})
 			}
 		case *ResourceFilesStmt:
-			if isGoModuleType(d.unit.Type) {
-				entries := expandResourceFiles(d, nil, expandResourceFileArgs(v.Args, env))
-
-				applyGoResource(fs, modulePath, entries, v.Line, d)
-
-				break
-			}
-
-			d.resourcePeerDeferred = true
-
-			before := len(d.resources)
-
-			d.resources = expandResourceFiles(d, d.resources, expandResourceFileArgs(v.Args, env))
-
-			if len(d.resources) > before {
-				d.resources[len(d.resources)-1].EndsBatch = true
-			}
+			applyResourceFiles(fs, modulePath, expandResourceFileArgs(v.Args, env), v.Line, d)
 		case *AllResourceFilesStmt:
 			if isGoModuleType(d.unit.Type) {
 				entries := expandAllResourceFiles(d, nil, fs, modulePath, env, v)
@@ -1635,7 +1627,9 @@ func jniCppSwigSrcs(srcs []ANY) []ANY {
 func resolveModuleUnit(name TOK, kind ModuleKind, language Language) ModuleUnit {
 	u := resolveModuleUnitBare(name, kind, language)
 
-	u.HashTag = u.Tag
+	if u.HashTag == 0 {
+		u.HashTag = u.Tag
+	}
 
 	return u
 }
@@ -1686,7 +1680,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	case tokPy23NativeLibrary:
 		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3Native, ObjSuf: tagPy3, ARPrefix: "libpy3c", GlobalARTag: tagPy3NativeGlobal, SbomLang: unitSbomCpp}
 	case tokYqlUdfYdb, tokYqlUdfContrib:
-		return ModuleUnit{Type: name, CCTag: tagYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
+		return ModuleUnit{Type: name, CCTag: tagYqlUdfStatic, HashTag: strYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
 	case tokFbsLibrary:
 		return ModuleUnit{Type: name, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokProtoLibrary:
@@ -1805,6 +1799,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokDeclareInDirs:
 		applyDeclareInDirs(fs, modulePath, v, env)
+	case tokYaToolsConf:
+		if len(v.Args) != 1 {
+			throwFmt("%s: YA_TOOLS_CONF expects one directory, got %d arguments", modulePath, len(v.Args))
+		}
+
+		for _, args := range yaToolsConfResourceFiles(fs, expandStmtTokenAny(v.Args[0], env).string()) {
+			applyResourceFiles(fs, modulePath, args, v.Line, d)
+		}
 	case tokAddInclSelf:
 
 		self := source(modulePath)
@@ -1951,6 +1953,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 				for i < len(v.Args) && !isLlvmBcKeyword(v.Args[i].string()) {
 					stmt.Symbols = append(stmt.Symbols, v.Args[i].string())
+					markUserArg(v.Args[i])
 					i++
 				}
 			case "GENERATE_MACHINE_CODE":
@@ -2159,6 +2162,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.cythonCpp = append(d.cythonCpp, &CythonStmt{
 			Src:     v.Args[0].string(),
 			Options: anyStrs(v.Args[1:]),
+			Seq:     d.nextDeclSeq(),
 		})
 
 		d.cythonNumpyBeforeInclude = true
@@ -2171,6 +2175,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			Src:     v.Args[0].string(),
 			Options: anyStrs(v.Args[1:]),
 			CMode:   true,
+			Seq:     d.nextDeclSeq(),
 		})
 
 		d.cythonNumpyBeforeInclude = true
@@ -2545,6 +2550,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.exportsScript = ptr(v.Args[0])
+	case tokLinkerScript:
+		if !isProgramModuleType(d.moduleStmt.Name) {
+			throwFmt("%s: LINKER_SCRIPT outside a PROGRAM is not modelled", modulePath)
+		}
+
+		for _, arg := range expandStmtTokens(v.Args, env) {
+			if !strings.HasSuffix(arg.string(), ".ld") {
+				throwFmt("%s: LINKER_SCRIPT %s: only .ld scripts are modelled", modulePath, arg.string())
+			}
+
+			d.linkerScripts = append(d.linkerScripts, arg)
+		}
 	case tokExtralibs:
 		libs := ""
 
@@ -2618,6 +2635,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.collectStyleCheck(fs, modulePath, v, env)
 	case tokStyleJSON, tokStyleYAML:
 		d.collectStyleCheck(fs, modulePath, v, env)
+	case tokStyleYAMLConf:
+		d.collectYAMLStyleWithConfig(modulePath, env)
 	case tokUsrvBuild:
 		d.collectUsrvFiles(anyStrs(v.Args))
 	case tokUsrvAllSrcs:
@@ -3389,8 +3408,6 @@ func parseYAFF(v UnknownStmt, defaultNamespace string) CppProtoPlugin {
 		ToolPath:       yaffPluginPath,
 		OutputSuffixes: []string{".yaff.h", ".yaff.cpp"},
 		ExtraOutFlag:   yaffExtraOutFlag("namespace="+s.namespace, s),
-		Experimental:   s.experimental,
-		Files:          s.files,
 	}
 }
 
@@ -3419,8 +3436,6 @@ func parseYAFFSchema(v UnknownStmt) CppProtoPlugin {
 		ToolPath:       yaffPluginPath,
 		OutputSuffixes: []string{"_" + schemaName + ".yaff.h", "_" + schemaName + ".yaff.cpp"},
 		ExtraOutFlag:   yaffExtraOutFlag(lead, s),
-		Experimental:   s.experimental,
-		Files:          s.files,
 	}
 }
 
@@ -3948,6 +3963,19 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 	}
 
 	return string(b)
+}
+
+func expandInFiles(files []ANY, noParse int, env Environment) ([]ANY, int) {
+	split := len(files) - noParse
+	parsed := expandStmtTokens(files[:split:split], env)
+
+	if noParse == 0 {
+		return parsed, 0
+	}
+
+	text := expandStmtTokens(files[split:], env)
+
+	return append(parsed[:len(parsed):len(parsed)], text...), len(text)
 }
 
 func expandStmtTokens(items []ANY, env Environment) []ANY {

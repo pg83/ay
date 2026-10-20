@@ -407,6 +407,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 	var cmdArgs ArgChunks
 	var nodeInputs InputChunks
 	var generatorRefs []NodeRef
+	var closure Closure
 
 	if ps.Kind == pySourceProto {
 		info := e.codegen.use(ps.Path)
@@ -451,11 +452,20 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 			na.anyList(internStr(moduleName).any(), srcAbs.any(), outputPath.any()))
 
 		if genInfo != nil {
-			nodeInputs = na.inputList(
-				tool.binaries,
-				na.vfsList(srcAbs),
-				ps.ExtraInputs,
-			)
+			closure = e.inputClosure(srcAbs)
+
+			buckets := closure.bucketList()
+			chunks := na.inputs.alloc(3 + len(buckets))[:0]
+
+			chunks = append(chunks, tool.binaries, na.vfsList(srcAbs))
+			chunks = append(chunks, buckets...)
+
+			if main := genInfo.ProducerMainOut; main != 0 && main != srcAbs {
+				chunks = append(chunks, na.vfsList(main))
+			}
+
+			na.inputs.commit(len(chunks))
+			nodeInputs = chunks[:len(chunks):len(chunks)]
 		} else {
 			nodeInputs = na.inputList(tool.binaries, na.srcChunk(srcAbs))
 		}
@@ -468,6 +478,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 		Cmds:           na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 		Env:            env,
 		Inputs:         nodeInputs,
+		InputClosure:   closure,
 		Outputs:        na.vfsList(outputPath),
 		KV:             &pyCodegenKV,
 		ForeignDepRefs: toolRefs,
@@ -561,18 +572,16 @@ func (e *EmitContext) collectPyProtoGroupResEntries(group int) []PyGenResEntry {
 	return entries
 }
 
-func (e *EmitContext) collectAllPyProtoResEntries() []PyGenResEntry {
-	entries := e.resEntries[:0]
+func (e *EmitContext) pyProtoGroups() []int {
+	var groups []int
 
 	for _, ps := range e.pySrcsReg {
-		if ps.Kind == pySourceProto {
-			entries = e.appendPyResEntries(entries, ps)
+		if ps.Kind == pySourceProto && !slices.Contains(groups, ps.Group) {
+			groups = append(groups, ps.Group)
 		}
 	}
 
-	e.resEntries = retainMaxLen(e.resEntries, entries)
-
-	return entries
+	return groups
 }
 
 func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef, []VFS) {
@@ -895,12 +904,11 @@ func pyInitDefineShortname(flag string) (string, bool) {
 }
 
 type PyGenResEntry struct {
-	token        string
-	key          STR
-	yapyc        bool
-	path         VFS
-	sourceInputs []VFS
-	buildInputs  []VFS
+	token       string
+	key         STR
+	yapyc       bool
+	path        VFS
+	buildInputs []VFS
 }
 
 func (e *EmitContext) pySrcResourceItems(entries []PyGenResEntry) []ResourceItem {
@@ -923,7 +931,7 @@ func (e *EmitContext) pySrcResourceItems(entries []PyGenResEntry) []ResourceItem
 		buf = append(buf, en.key.sharedString()...)
 
 		key := bytesString(buf[keyStart:])
-		fileItem := ResourceItem{Path: en.token, Key: key, ExtraSources: en.sourceInputs, ExtraBuilds: en.buildInputs}
+		fileItem := ResourceItem{Path: en.token, Key: key, ExtraBuilds: en.buildInputs}
 
 		fileItem.setInput(en.path)
 		items = append(items, fileItem)
@@ -952,7 +960,7 @@ func (e *EmitContext) pySrcResourceItems(entries []PyGenResEntry) []ResourceItem
 
 		buf = buf[:cmdStart]
 
-		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, ExtraSources: en.sourceInputs, ExtraBuilds: en.buildInputs}
+		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, ExtraBuilds: en.buildInputs}
 
 		kvItem.setInput(en.path)
 		items = append(items, kvItem)
@@ -1004,8 +1012,8 @@ func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem
 
 		buf = buf[:cmdStart]
 
-		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, ExtraSources: en.sourceInputs, ExtraBuilds: en.buildInputs}
-		fileItem := ResourceItem{Path: en.token, Key: key, ExtraSources: en.sourceInputs, ExtraBuilds: en.buildInputs}
+		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, ExtraBuilds: en.buildInputs}
+		fileItem := ResourceItem{Path: en.token, Key: key, ExtraBuilds: en.buildInputs}
 
 		kvItem.setInput(en.path)
 		fileItem.setInput(en.path)

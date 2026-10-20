@@ -298,14 +298,16 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 		}
 	})
 
-	pc := readPlatformConf(fs)
+	pc := readPlatformConf(fs, caches.parsers)
+	hostVars, hostRoot := hostRun.wait()
 
 	hostP = newPlatform(
 		hOS,
 		hISA,
 		mf.hostBuildType,
 		hostTC,
-		hostRun.wait(),
+		hostVars,
+		hostRoot,
 		pc,
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
@@ -313,14 +315,17 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 
 	targetCFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS"))
 	targetCXXFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS"))
+	targetVars, targetRoot := targetRun.wait()
 
-	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, targetRun.wait(), pc, targetCFlags, targetCXXFlags)
+	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, targetVars, targetRoot, pc, targetCFlags, targetCXXFlags)
 	targetP.picMake = func() *Platform {
 		if picRun == nil {
 			picRun = startPIC()
 		}
 
-		return newPlatform(tOS, tISA, mf.buildType, targetTC, picRun.wait(), pc, targetCFlags, targetCXXFlags)
+		picVars, picRoot := picRun.wait()
+
+		return newPlatform(tOS, tISA, mf.buildType, targetTC, picVars, picRoot, pc, targetCFlags, targetCXXFlags)
 	}
 
 	return hostP, targetP

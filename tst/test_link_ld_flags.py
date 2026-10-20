@@ -46,6 +46,24 @@ def trailer(args):
 
 
 class LinkFlagsTest(unittest.TestCase):
+    def test_linker_script_follows_the_exports(self):
+        # build/plugins/linker_script.py: LINKER_SCRIPT is GLOBAL_SRCS of .ld
+        # files; ld.conf puts LINKER_SCRIPT_VALUE=${ext=.ld;pre=-T:SRCS_GLOBAL}
+        # right after EXPORTS_VALUE in the executable flags.
+        files = fixture()
+        files["prog/ya.make"] = files["prog/ya.make"].replace(
+            "EXPORTS_SCRIPT(prog/prog.exports)\n", "EXPORTS_SCRIPT(prog/prog.exports)\nLINKER_SCRIPT(strip.ld)\n",
+        )
+        files["prog/strip.ld"] = "SECTIONS {}\n"
+        graph = lib.make(files, "prog", *X86_64)
+        node = lib.node_by_output(graph, "$(B)/prog/prog")
+        args = trailer(command_with(node, "link_exe.py"))
+        exports = args.index("-Wl,--version-script=$(S)/prog/prog.exports")
+        self.assertEqual(args[exports + 1], "-T$(S)/prog/strip.ld")
+        self.assertIn("$(S)/prog/strip.ld", node["inputs"])
+        plain = lib.node_by_output(lib.make(fixture(), "plain", *X86_64), "$(B)/plain/plain")
+        self.assertFalse(any(a.startswith("-T") for a in command_with(plain, "link_exe.py")))
+
     def test_resource_globals_in_link_flags_resolve_in_the_linking_program(self):
         # The flag names a resource its own module does not declare; the
         # program renders it with the resources of its closure, as ymake does.

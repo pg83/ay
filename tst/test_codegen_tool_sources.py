@@ -39,9 +39,11 @@ class ToolDrivenSourcesTest(unittest.TestCase):
         self.assertEqual(html["cmds"][0]["cmd_args"], [
             "$(B)/tools/html2cpp/html2cpp", "$(S)/mod/page.asp", "$(B)/mod/page.asp.cpp",
         ])
-        self.assertEqual(html["inputs"], [
-            "$(B)/tools/html2cpp/html2cpp", "$(S)/mod/page.asp", "$(S)/mod/inc.h",
-        ])
+        # The includes of the .asp/.sc reach the generated source, not the
+        # generator: the basesearch HT (search/report/cpp/outpages.asp.cpp)
+        # and SC (kernel/reqbundle/scheme/options.sc.h) nodes list the tool and
+        # the source only.
+        self.assertEqual(html["inputs"], ["$(B)/tools/html2cpp/html2cpp", "$(S)/mod/page.asp"])
         self.assertEqual(html["foreign_deps"], {"tool": [tool_uid("$(B)/tools/html2cpp/html2cpp")]})
         html_compile = lib.node_by_output(graph, "$(B)/mod/page.asp.cpp.o")
         self.assertEqual(sorted(html_compile["inputs"]), ['$(B)/mod/page.asp.cpp', '$(S)/mod/inc.h'])
@@ -53,12 +55,7 @@ class ToolDrivenSourcesTest(unittest.TestCase):
             "$(B)/tools/domschemec/domschemec",
             "--in", "$(S)/mod/scheme.sc", "--out", "$(B)/mod/scheme.sc.h",
         ])
-        self.assertEqual(scheme["inputs"], [
-            "$(B)/tools/domschemec/domschemec",
-            "$(S)/mod/scheme.sc",
-            "$(S)/library/cpp/domscheme/runtime.h",
-            "$(S)/library/cpp/domscheme/rt2.h",
-        ])
+        self.assertEqual(scheme["inputs"], ["$(B)/tools/domschemec/domschemec", "$(S)/mod/scheme.sc"])
 
         calc = lib.node_by_output(graph, "$(B)/mod/calc")
         self.assertEqual(calc["kv"], {"p": "SF", "pc": "yellow"})
@@ -92,7 +89,10 @@ class ToolDrivenSourcesTest(unittest.TestCase):
         ):
             self.assertIn(path, use["inputs"])
         self.assertNotIn('$(S)/mod/scheme.sc', use['inputs'])
-        self.assertNotIn('$(B)/mod/calc.sfdl.tmp', use['inputs'])
+        # calc.sfdl.tmp is the main output of the SF node, added by path for
+        # the included calc although it has no parser: basesearch
+        # kernel/relevstatic/calc_static.cpp.o lists static_factors.inc.sfdl.tmp.
+        self.assertIn('$(B)/mod/calc.sfdl.tmp', use['inputs'])
         self.assertNotIn('$(S)/mod/calc.sfdl', use['inputs'])
         self.assertNotIn('$(S)/mod/model.fml', use['inputs'])
         self.assertEqual(sorted(use["deps"]), sorted([scheme["uid"], calc["uid"], fml["uid"]]))

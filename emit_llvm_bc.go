@@ -55,6 +55,11 @@ func (e *EmitContext) emitLlvmCompile(stmt LlvmCompileStmt) {
 func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
+	suffix := stmt.Suffix
+
+	if suffix == "" && d.cc.ObjectSuffixStem != nil {
+		suffix = "." + *d.cc.ObjectSuffixStem
+	}
 
 	const (
 		optWrapper = "$(S)/build/scripts/llvm_opt_wrapper.py"
@@ -74,7 +79,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	linksCopy := false
 
 	for _, src := range stmt.Sources {
-		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
+		bcOut := build(e.llvmBcRootRelArcSrc(src), suffix, ".bc")
 		cxx := !strings.HasSuffix(src, ".c")
 		compiler := clangxx
 
@@ -101,7 +106,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		bcPaths = append(bcPaths, bcOut)
 	}
 
-	mergedOut := build(instance.Path.relString(), "/", stmt.Name, "_merged", stmt.Suffix, ".bc")
+	mergedOut := build(instance.Path.relString(), "/", stmt.Name, "_merged", suffix, ".bc")
 	ldArgs := []ANY{internStr(llvmLink).any()}
 
 	for _, p := range bcPaths {
@@ -134,7 +139,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	pendNodes = append(pendNodes, ldNode)
 	pendRefs = append(pendRefs, ldRef)
 
-	optOutName := stmt.Name + "_optimized" + stmt.Suffix + ".bc"
+	optOutName := stmt.Name + "_optimized" + suffix + ".bc"
 	optOut := build(instance.Path.relString(), "/", optOutName)
 	optArgs := []ANY{internStr(python).any(), internStr(optWrapper).any(), internStr(opt).any(), mergedOut.any(), argDashO.any(), optOut.any()}
 	passes := []string{"default<O2>", "globalopt", "globaldce"}
@@ -220,7 +225,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 
 	if cxx {
 		args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
-		args = appendAnyLists(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket))
+		args = appendAnyLists(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket), in.CXXFlagsVar)
 	}
 
 	args = append(args, platform.TargetArg.any())

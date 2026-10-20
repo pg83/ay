@@ -976,16 +976,6 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		na.noderefs.commit(merged)
 		na.vfs.commit(merged)
 
-		hasGoSbom := ownSbomPath != nil
-
-		for _, p := range mergedSbomPaths[:merged] {
-			if strings.HasSuffix(p.relString(), ".GO.component.sbom") {
-				hasGoSbom = true
-
-				break
-			}
-		}
-
 		deduper.reset()
 
 		for _, p := range ownInputs {
@@ -1006,10 +996,6 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			if deduper.add(p.strID()) {
 				extraSourceBlock = append(extraSourceBlock, p)
 			}
-		}
-
-		if hasGoSbom && deduper.add(source(sbomGenScriptRel).strID()) {
-			extraSourceBlock = append(extraSourceBlock, source(sbomGenScriptRel))
 		}
 
 		na.vfs.commit(len(extraSourceBlock))

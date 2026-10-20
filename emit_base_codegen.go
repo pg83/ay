@@ -64,19 +64,21 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
-		OutputPath:     prefixH,
-		ProducerRef:    bcRef,
-		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
+		OutputPath:      prefixH,
+		ProducerRef:     bcRef,
+		ProducerMainOut: prefixCpp,
+		GeneratorRefs:   e.ctx.na.refList(toolLDRef),
+		ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 
 		OnUse: pending,
 	})
 
 	e.register(GeneratedFileInfo{
-		OutputPath:     prefixCpp,
-		ProducerRef:    bcRef,
-		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
+		OutputPath:      prefixCpp,
+		ProducerRef:     bcRef,
+		ProducerMainOut: prefixCpp,
+		GeneratorRefs:   e.ctx.na.refList(toolLDRef),
+		ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: headerParsed},
 
 		OnUse: pending,
 	})

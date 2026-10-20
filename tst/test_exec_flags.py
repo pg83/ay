@@ -287,7 +287,7 @@ class MakeWarningsTest(unittest.TestCase):
         })
         _, quiet = tree.graph("w")
         self.assertNotIn("sysincl", quiet)
-        message = 'sysincl: macro.yml:1: unrecognised record key "odd_key"'
+        message = 'sysincl: build/sysincl/macro.yml:1: unrecognised record key "odd_key"'
         _, verbose = tree.graph("--verbose", "w")
         self.assertIn(message, plain(verbose))
         result = tree.ay(

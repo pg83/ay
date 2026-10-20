@@ -158,15 +158,33 @@ class YaMakeProtoTest(unittest.TestCase):
                 cc = lib.node_by_output(graph, "$(B)/a/x.pb.cc.o")["cmds"][0]["cmd_args"]
                 self.assertIn(cc_include, cc)
 
-    def test_yaff_file_filter_decides_generated_header_includes(self):
+    def test_yaff_runtime_headers_are_the_plugin_induced_deps(self):
+        # YAFF is CPP_PROTO_PLUGIN2 over library/cpp/yaff/tools/protoc_plugin
+        # (build/internal/conf/project_specific/yabs.conf); the runtime
+        # headers of its outputs are that tool's INDUCED_DEPS(h+cpp ...).
+        files = proto_tree("YAFF(NAMESPACE yns)\nSRCS(u.cpp)")
+        files["a/u.cpp"] = '#include "a/x.yaff.h"\n'
+        files["library/cpp/yaff/tools/protoc_plugin/ya.make"] = (
+            "PROGRAM(protoc_plugin)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\n"
+            "INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/library/cpp/yaff/yaff.h)\nEND()\n"
+        )
+        files["library/cpp/yaff/yaff.h"] = ""
+        files["library/cpp/yaff/struct.h"] = ""
+        code, graph, stderr = ay_make(files, "-k")
+        self.assertEqual(code, 0, stderr)
+        inputs = lib.node_by_output(graph, "$(B)/a/u.cpp.o")["inputs"]
+        self.assertIn("$(S)/library/cpp/yaff/yaff.h", inputs)
+        self.assertNotIn("$(S)/library/cpp/yaff/struct.h", inputs)
+
+    def test_yaff_file_filter_does_not_change_generated_header_includes(self):
+        # The yabs_server_daemons_bs_static reference: profile_keyword_ids.proto
+        # is not in YAFF(FILES ...) of ads/profile/proto, its .yaff.cpp.o
+        # still sees its .pb.h; FILES only reaches the plugin options.
+        expected = ["$(S)/a/u.cpp", "$(B)/a/x.yaff.h", "$(B)/a/x.pb.h"]
         cases = [
-            ("YAFF(NAMESPACE yns FILES x.proto EXPERIMENTAL x.proto)", [
-                "$(S)/a/u.cpp",
-                "$(B)/a/x.yaff.h",
-                "$(B)/a/x.pb.h",
-            ]),
-            ("YAFF(NAMESPACE yns FILES x.proto)", ["$(S)/a/u.cpp", "$(B)/a/x.yaff.h", "$(B)/a/x.pb.h"]),
-            ("YAFF(NAMESPACE yns FILES other.proto)", ["$(S)/a/u.cpp", "$(B)/a/x.yaff.h"]),
+            ("YAFF(NAMESPACE yns FILES x.proto EXPERIMENTAL x.proto)", expected),
+            ("YAFF(NAMESPACE yns FILES x.proto)", expected),
+            ("YAFF(NAMESPACE yns FILES other.proto)", expected),
         ]
         for body, expected in cases:
             with self.subTest(body=body):

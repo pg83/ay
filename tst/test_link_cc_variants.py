@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import json
 import os
 import tempfile
@@ -134,6 +136,21 @@ class CcVariantsTest(unittest.TestCase):
                 self.assertIn("-Wno-everything", args)
                 self.assertNotIn("-Wall", args)
                 self.assertNotIn("-Woverloaded-virtual", args)
+
+    def test_udf_static_resources_hash_with_the_module_tag(self):
+        # devtools/ymake/plugins/resource_handler/packer.h GetHashForOutput
+        # appends $MODULE_TAG; ydb yql/essentials/udfs/common/math (variant
+        # YQL_UDF_STATIC) names its LLVM_BC resource objcopy_24b63ab64276e42a5db29e7ee4.o.
+        files = fixture()
+        files["udf/ya.make"] = module("YQL_UDF_YDB(u)", "SRCS(u.cpp)\nRESOURCE(data.txt /k)\n")
+        files["udf/data.txt"] = ""
+        files["library/cpp/resource/ya.make"] = module("LIBRARY()", "")
+        lib.tool_program(files, "tools/rescompiler", "rescompiler")
+        lib.tool_program(files, "tools/rescompressor", "rescompressor")
+        graph = lib.make(files, "app")
+        objcopy = [out for node in graph["graph"] for out in node["outputs"] if out.startswith("$(B)/udf/objcopy_")]
+        seed = ",".join(sorted(["data.txt", base64.b64encode(b"/k").decode(), "$S/udf"])) + "YQL_UDF_STATIC"
+        self.assertEqual(objcopy, [f"$(B)/udf/objcopy_{hashlib.md5(seed.encode()).hexdigest()[:26]}.o"])
 
     def test_python_native_and_udf_object_suffixes(self):
         graph = lib.make(fixture(), "app")
