@@ -1242,6 +1242,14 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				recalcProtoOutputs(d)
 			}
 
+			if v.Name == "PROTO_NAMESPACE" {
+				d.protoNamespace = nil
+
+				if value != "" {
+					d.protoNamespace = ptr(internStr(value).any())
+				}
+			}
+
 			if v.Name == "RAGEL6_FLAGS" {
 				d.ragel6Flags = internAnys(strings.Fields(value))
 			}

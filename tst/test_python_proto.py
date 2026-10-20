@@ -95,6 +95,23 @@ def rescompiler_kvs(node):
 
 
 class PyProtoTest(unittest.TestCase):
+    def test_set_overrides_the_proto_namespace_variable(self):
+        # PROTO_NAMESPACE() is SET(PROTO_NAMESPACE ...) plus PROTO_ADDINCL
+        # (build/conf/proto.conf); --ns renders /$PROTO_NAMESPACE. middlesearch
+        # ads/caesar/libs/events/proto/apc_cpa_data: PROTO_NAMESPACE(GLOBAL .)
+        # then SET(PROTO_NAMESPACE "") gives --ns /.
+        files = python_base()
+        files.update({
+            "proto/ya.make": (
+                "PROTO_LIBRARY()\nSRCDIR(${ARCADIA_ROOT})\nPROTO_NAMESPACE(GLOBAL .)\n"
+                'SET(PROTO_NAMESPACE "")\nSRCS(proto/x.proto)\nEXCLUDE_TAGS(CPP_PROTO)\nEND()\n'
+            ),
+            "proto/x.proto": 'syntax = "proto3";\nmessage X {}\n',
+        })
+        graph = lib.make(files, "app")
+        command = args(lib.node_by_output(graph, "$(B)/proto/x__intpy3___pb2.py"))
+        self.assertEqual(command[command.index("--ns") + 1], "/")
+
     def test_proto_library_with_grpc_and_namespaces(self):
         files = python_base()
         files.update({
