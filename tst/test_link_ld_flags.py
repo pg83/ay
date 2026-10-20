@@ -70,6 +70,28 @@ class LinkFlagsTest(unittest.TestCase):
                 link = command_with(lib.node_by_output(graph, f"$(B)/{target}/{target}"), "link_exe.py")
                 self.assertEqual([arg for arg in link if arg.startswith("-L/")], expected)
 
+    def test_extralibs_merge_one_value_per_module(self):
+        # EXTRALIBS is PY_EXTRALIBS: a module keeps one OBJADDE_LIB_GLOBAL
+        # value, skipping libs it already contains; the program appends the
+        # peers' values unique as a whole.
+        files = {
+            "plain/ya.make": f"PROGRAM()\n{NO_PLATFORM}SRCS(m.cpp)\nPEERDIR(a b c)\nEND()\n",
+            "plain/m.cpp": "int main(){return 0;}\n",
+        }
+        for name, extralibs in (
+            ("a", "EXTRALIBS(-lutil)\nEXTRALIBS(-ldl -lutil)\nEXTRALIBS(crypt c)\n"),
+            ("b", "EXTRALIBS(-lutil -ldl)\n"),
+            ("c", "EXTRALIBS(-lutil -ldl)\n"),
+        ):
+            files[f"{name}/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(s.cpp)\n{extralibs}END()\n"
+            files[f"{name}/s.cpp"] = "int s;\n"
+        graph = lib.make(files, "plain", *X86_64)
+        link = command_with(lib.node_by_output(graph, "$(B)/plain/plain"), "link_exe.py")
+        self.assertEqual(
+            [arg for arg in trailer(link) if arg.startswith("-l")],
+            ["-ldl", "-lrt", "-lutil", "-ldl", "-lcrypt", "-lutil", "-ldl", "-lpthread", "-lc", "-lm"],
+        )
+
     def test_program_link_flags_exports_and_split_dwarf(self):
         graph = lib.make(fixture(), "prog", "-r", *X86_64)
         node = lib.node_by_output(graph, "$(B)/prog/prog")

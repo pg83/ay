@@ -2473,8 +2473,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.exportsScript = ptr(v.Args[0])
 	case tokExtralibs:
+		libs := ""
 
-		libs := make([]string, 0, len(v.Args))
+		if len(d.objAddLibsGlobal) > 0 {
+			libs = d.objAddLibsGlobal[0].string()
+		}
+
+		changed := false
 
 		for _, argTok := range v.Args {
 			lib := argTok.string()
@@ -2483,11 +2488,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				lib = "-l" + lib
 			}
 
-			libs = append(libs, lib)
+			if !strings.Contains(libs, lib) {
+				libs += " " + lib
+				changed = true
+			}
 		}
 
-		if len(libs) > 0 {
-			d.objAddLibsGlobal = append(d.objAddLibsGlobal, internArg(strings.Join(libs, " ")).any())
+		if changed {
+			d.objAddLibsGlobal = append(d.objAddLibsGlobal[:0], internArg(libs).any())
 		}
 	case tokUsePython3:
 
