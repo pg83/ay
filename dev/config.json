@@ -1266,7 +1266,7 @@
       "tools/py2cc",
       "yweb/crawlrank/scripts/netiface"
     ],
-    "xfail": true,
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14087935693",
     "slice_sha256": "6dc9cb0e7accb6ea89ffef2e8f3b39aabda2824d4ebe7c38e18051b1e4673bc1",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14087936181",
