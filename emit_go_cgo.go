@@ -519,11 +519,17 @@ func (e *EmitContext) flushGoCgo2() {
 	cflagsStr := goCgoCFlags(e.d)
 	linkOFlags := e.goCgoLinkOFlags()
 	linkOScripts := ctx.scripts[linkOScriptVFS.rel()]
-	inputs := na.vfs.alloc(len(linkOScripts) + 3 + ko)
+
+	closure := slices.DeleteFunc(slices.Clone(e.goCgoClosure(nil)), func(p VFS) bool {
+		return slices.ContainsFunc(d.cgoSrcs, func(f ANY) bool { return resolveSourceVFS(ctx, instance, f.string(), d.srcDirs) == p })
+	})
+
+	inputs := na.vfs.alloc(len(linkOScripts) + 3 + ko + len(closure))
 	ni := copy(inputs, linkOScripts)
 
 	ni += copy(inputs[ni:], []VFS{exportH, mainC, e.goCgoOut(d.cgoSrcs[0], ".cgo1.go")})
 	ni += copy(inputs[ni:], objOrder[:ko])
+	ni += copy(inputs[ni:], closure)
 	na.vfs.commit(ni)
 
 	objArgs := na.anys.alloc(1 + nObjs + len(d.cgoLdflags))

@@ -735,9 +735,12 @@ func (e *EmitContext) goToolCmdFlagsFor() []ANY {
 }
 
 func (e *EmitContext) goIncludedSrcs(goRes *GoSrcsResult) []VFS {
+	return e.goCgoClosure(goRes.AsmInclSrcs)
+}
+
+func (e *EmitContext) goCgoClosure(includedSrcs []VFS) []VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	includedSrcs := goRes.AsmInclSrcs
 
 	if len(d.cgoSrcs) > 0 {
 		cvs := e.cvScratch[:0]

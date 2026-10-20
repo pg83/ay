@@ -150,9 +150,11 @@ class GoCgoGraphTest(unittest.TestCase):
             CGO_TOOL, "-dynpackage", "zstd", "-dynimport", f"{b}/_cgo_.o",
             "-dynout", f"{b}/_cgo_import.go", "-dynlinker",
         ])
-        self.assertEqual(dynimport["inputs"], [
+        # _cgo_export.h carries the C includes of the CGO_SRCS preambles, not the sources themselves
+        self.assertEqual(lib.bucketed(dynimport["inputs"], 9), lib.bucketed([
             "$(S)/build/scripts/link_o.py", f"{b}/_cgo_export.h", f"{b}/_cgo_main.c", f"{b}/zstd.cgo1.go", *objects,
-        ])
+            f"{s}/helper.h", "$(S)/contrib/libs/zstd/include/zstd.h",
+        ], 9))
         by_output = {node["outputs"][0]: node["uid"] for node in graph["graph"]}
         self.assertEqual(dynimport["deps"][:len(objects)], [by_output[o] for o in objects])
 
@@ -387,7 +389,8 @@ const raw = `
         graph = lib.make(files, pkg)
         dynimport = lib.node_by_output(graph, f"$(B)/{pkg}/_cgo_import.go")
         self.assertEqual(dynimport["cmds"][2]["cmd_args"][1:3], ["-dynpackage", "authparser"])
-        self.assertNotIn(f"$(S)/{pkg}/extern_c.h", dynimport["inputs"])
+        self.assertIn(f"$(S)/{pkg}/extern_c.h", dynimport["inputs"])
+        self.assertNotIn(f"$(S)/{pkg}/decode.go", dynimport["inputs"])
         package = lib.node_by_output(graph, f"$(B)/{pkg}/authparser.a")
         args = package["cmds"][0]["cmd_args"]
         self.assertEqual(between(args, "++srcs", "++asm-flags")[-1], f"$(B)/{pkg}/_cgo_import.go")
