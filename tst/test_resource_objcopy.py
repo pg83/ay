@@ -136,18 +136,39 @@ class ResourceObjcopyTest(unittest.TestCase):
         )
         self.assertEqual(len(set(n["outputs"][0] for n in objcopy_nodes(graph))), 2)
 
-    def test_build_root_resource_needs_raw_compile(self):
+    def test_raw_resources_compile_on_arm(self):
         for body in (
-            "RESOURCE(${ARCADIA_BUILD_ROOT}/lib/x.txt key)\n",
+            "RUN_PROGRAM(tools/gen OUT_NOAUTO x.txt)\nRESOURCE(${ARCADIA_BUILD_ROOT}/lib/x.txt key)\n",
             "RESOURCE(conftest.py key)\n",
         ):
             with self.subTest(body=body):
                 files = base_files(body)
                 files["lib/conftest.py"] = ""
-                self.assertIn(
-                    "packResources: lib has raw-routed resource items but no RawCompile",
-                    make_error(files),
-                )
+                graph = lib.make(files, "lib")
+                raw = next(n for n in graph["graph"] if n["outputs"][0].endswith("_raw.auxcpp"))
+                compiled = next(n for n in graph["graph"] if n["kv"]["p"] == "CC"
+                                and raw["outputs"][0] in n["inputs"])
+                self.assertIn("-x", compiled["cmds"][0]["cmd_args"])
+                self.assertIn("c++", compiled["cmds"][0]["cmd_args"])
+                if "conftest" in body:
+                    self.assertIn("$(S)/lib/conftest.py", raw["inputs"])
+
+    def test_non_objcopy_resources_use_yasm_on_x86(self):
+        files = base_files("RESOURCE(templates/conftest.py.j2 /template)\n")
+        files["lib/templates/conftest.py.j2"] = ""
+        lib.tool_program(files, "tools/rorescompiler", "rorescompiler")
+        lib.tool_program(files, "contrib/tools/yasm", "yasm")
+        graph = lib.make(files, "lib", "--target-platform", "default-linux-x86_64")
+        compressed = next(n for n in graph["graph"] if n["outputs"][0].endswith(".yasm"))
+        self.assertEqual(len(compressed["outputs"]), 2)
+        self.assertTrue(compressed["outputs"][1].endswith(".rodata"))
+        self.assertIn("$(S)/lib/templates/conftest.py.j2", compressed["inputs"])
+        aux = next(n for n in graph["graph"] if n["outputs"][0].endswith(".auxcpp"))
+        self.assertEqual(aux["cmds"][0]["cmd_args"][0], "$(B)/tools/rorescompiler/rorescompiler")
+        self.assertTrue(aux["cmds"][0]["cmd_args"][-1].endswith("=/template"))
+        assembled = next(n for n in graph["graph"] if n["kv"]["p"] == "AS")
+        self.assertIn(compressed["uid"], assembled["deps"])
+        self.assertIn(compressed["outputs"][0], assembled["inputs"])
 
 
 if __name__ == "__main__":

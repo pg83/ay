@@ -201,9 +201,10 @@ func (it ResourceItem) input() VFS {
 }
 
 type ResourcePack struct {
-	Tag        STR
-	Items      []ResourceItem
-	RawCompile CompileSpec
+	Tag          STR
+	Items        []ResourceItem
+	RawCompile   CompileSpec
+	DontCompress bool
 }
 
 func (it *ResourceItem) setInput(v VFS) {
@@ -262,15 +263,26 @@ func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS)
 		}
 	}
 
-	if len(rawItems) > 0 {
-		r, o := e.packRawResourceChunks(rawItems, p)
+	if len(objItems) > 0 {
+		r, o := e.packObjcopyResourceChunks(objItems, p)
 
 		refs = append(refs, r...)
 		outs = append(outs, o...)
 	}
 
-	if len(objItems) > 0 {
-		r, o := e.packObjcopyResourceChunks(objItems, p)
+	if len(rawItems) > 0 {
+		var r []NodeRef
+		var o []VFS
+
+		if e.instance.Platform.ISA == ISAX8664 && !p.DontCompress && !p.RawCompile.ForceCxx {
+			r, o = e.packYasmResourceChunks(rawItems, p)
+		} else {
+			if !p.RawCompile.ForceCxx {
+				p.RawCompile = CompileSpec{ForceCxx: true, CFlags: e.ctx.na.anyList(argX.any(), argC.any())}
+			}
+
+			r, o = e.packRawResourceChunks(rawItems, p)
+		}
 
 		refs = append(refs, r...)
 		outs = append(outs, o...)
@@ -468,11 +480,6 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack) (refs []NodeRef, outs []VFS) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
-
-	if !p.RawCompile.ForceCxx {
-		throwFmt("packResources: %s has raw-routed resource items but no RawCompile", instance.Path.relString())
-	}
-
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
 	unitElem := "$S/" + instance.Path.relString()
 	dash := str2
@@ -502,7 +509,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		sourceBound, buildBound := 0, 0
 
 		for _, it := range chunk {
-			if it.BuildInput != 0 {
+			if it.input() != 0 {
 				buildBound++
 			}
 
@@ -544,8 +551,8 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			payloadBuilds = na.vfs.alloc(buildBound)[:0]
 
 			for _, it := range chunk {
-				if it.Path != "-" && it.BuildInput != 0 && deduper.add(it.BuildInput.strID()) {
-					payloadBuilds = append(payloadBuilds, it.BuildInput)
+				if input := it.input(); it.Path != "-" && input != 0 && deduper.add(input.strID()) {
+					payloadBuilds = append(payloadBuilds, input)
 				}
 			}
 
@@ -670,6 +677,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	batch := e.resItems[:0]
+	dontCompress := false
 
 	defer func() { e.resItems = retainMaxLen(e.resItems, batch) }()
 
@@ -678,7 +686,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			return
 		}
 
-		r, o := e.packResources(ResourcePack{Tag: moduleTag, Items: batch})
+		r, o := e.packResources(ResourcePack{Tag: moduleTag, Items: batch, DontCompress: dontCompress})
 
 		refs = append(refs, r...)
 		outs = append(outs, o...)
@@ -687,6 +695,8 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 	}
 
 	for _, entry := range entries {
+		dontCompress = entry.DontCompress
+
 		if entry.Path == "-" {
 			it := ResourceItem{Path: "-"}
 

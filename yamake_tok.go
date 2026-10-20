@@ -51,6 +51,11 @@ var tokName = [...]STR{
 	tokYqlCurrentAbiVersion: internStr("YQL_CURRENT_ABI_VERSION"),
 	tokYqlPrebuiltProgram:   internStr("YQL_PREBUILT_PROGRAM"),
 	tokYqlLibrary:           internStr("YQL_LIBRARY"),
+	tokUsrvGenProtoStructs:         internStr("USRV_GEN_PROTO_STRUCTS"),
+	tokUsrvGenGrpcServiceV2:        internStr("USRV_GEN_GRPC_SERVICE_V2"),
+	tokUsrvGenGrpcClientV2:         internStr("USRV_GEN_GRPC_CLIENT_V2"),
+	tokUsrvGenGrpcServiceV2Structs: internStr("USRV_GEN_GRPC_SERVICE_V2_STRUCTS"),
+	tokUsrvGenGrpcClientV2Structs:  internStr("USRV_GEN_GRPC_CLIENT_V2_STRUCTS"),
 
 	tokInvalid:                            0,
 	tokAddInclSelf:                        internStr("ADDINCLSELF"),
@@ -653,6 +658,11 @@ const (
 	tokAllGoSrcs
 	tokGoMockgenFrom
 	tokYtOrmProtoYson
+	tokUsrvGenProtoStructs
+	tokUsrvGenGrpcServiceV2
+	tokUsrvGenGrpcClientV2
+	tokUsrvGenGrpcServiceV2Structs
+	tokUsrvGenGrpcClientV2Structs
 	tokGoMockgenContribFrom
 	tokGoMockgenTypes
 	tokGoMockgenExcludeIfaces

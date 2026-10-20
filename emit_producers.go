@@ -38,6 +38,7 @@ const (
 	prodGoCodegen
 	prodLlvmCompile
 	prodLuaCompile
+	prodUserverProto
 )
 
 type ProducerPos struct {
@@ -214,7 +215,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
 		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens) + len(d.cgoSrcs) +
-		len(d.llvmCompile) + len(d.luaCompile)
+		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos)
 
 	if d.docs != nil {
 		n += len(d.docs.copies)
@@ -489,6 +490,28 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		}
 
 		positions = append(positions, ProducerPos{kind: prodGoCodegen, index: i, outs: e.prodVFSTake(outsMark)})
+	}
+
+	for i, batch := range d.userverProtos {
+		start := len(e.prodVFS)
+
+		for _, file := range batch.files {
+			e.prodVFS = append(e.prodVFS, batch.outputs(file.path)...)
+		}
+
+		outs := e.prodVFSTake(start)
+
+		start = len(e.prodVFS)
+
+		if batch.descriptor != "" {
+			e.prodVFS = append(e.prodVFS, copyFileOutputVFS(module, batch.descriptor))
+		}
+
+		for _, file := range batch.files {
+			e.prodVFS = append(e.prodVFS, build(file.path))
+		}
+
+		positions = append(positions, ProducerPos{kind: prodUserverProto, index: i, outs: outs, ins: e.prodVFSTake(start)})
 	}
 
 	for i, m := range srcs {
@@ -819,6 +842,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 			e.emitGoCgo1Stmt()
 		case prodGoCodegen:
 			e.emitGoCodegenStmt(e.d.goCodegens[pos.index])
+		case prodUserverProto:
+			e.emitUserverProtos(e.d.userverProtos[pos.index])
 		case prodEnum:
 			e.emitEnumSrcStmt(e.d.enumSrcs[pos.index])
 		case prodLj21:

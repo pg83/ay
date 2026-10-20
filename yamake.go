@@ -364,8 +364,9 @@ type ResourcePair struct {
 }
 
 type ResourceStmt struct {
-	Pairs []ResourcePair
-	Line  int
+	Pairs        []ResourcePair
+	Line         int
+	DontCompress bool
 }
 
 type ResourceFilesStmt struct {
@@ -1702,9 +1703,11 @@ func parseStructCodegen(prefix ANY, line int) *BaseCodegenStmt {
 
 func parseResource(args []ANY, nameTok Token) *ResourceStmt {
 	rest := args
+	dontCompress := false
 
 	for i := 0; i < 2 && len(rest) > 0; i++ {
 		if rest[0] == kwDONT_PARSE.any() || rest[0] == kwDONT_COMPRESS.any() {
+			dontCompress = dontCompress || rest[0] == kwDONT_COMPRESS.any()
 			rest = rest[1:]
 
 			continue
@@ -1723,7 +1726,7 @@ func parseResource(args []ANY, nameTok Token) *ResourceStmt {
 		pairs = append(pairs, ResourcePair{Path: rest[i].string(), Key: rest[i+1].string()})
 	}
 
-	return &ResourceStmt{Pairs: pairs, Line: nameTok.line}
+	return &ResourceStmt{Pairs: pairs, Line: nameTok.line, DontCompress: dontCompress}
 }
 
 func unescapeFlag(s string) string {

@@ -1045,6 +1045,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		throwFmt("gen: %s has no module declaration (PROGRAM/LIBRARY)", instance.Path.relString())
 	}
 
+	e.prepareUserverProtos()
+
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDescProto {
 		result := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name}
 

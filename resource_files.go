@@ -11,12 +11,14 @@ func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string) []Re
 	prefixToStrip := ""
 	dest := ""
 	i := 0
+	dontCompress := false
 
 	for i < len(args) {
 		tok := args[i]
 
 		switch tok {
 		case "DONT_COMPRESS":
+			dontCompress = true
 			i++
 		case "PREFIX":
 			if i+1 >= len(args) {
@@ -60,8 +62,8 @@ func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string) []Re
 				fileKey = d.resStr4("resfs/file/", prefix, keyTail, "")
 			}
 
-			out = append(out, ResourceEntry{Path: "-", Key: fileKey, SrcPath: path})
-			out = append(out, ResourceEntry{Path: path, Key: fileKey})
+			out = append(out, ResourceEntry{Path: "-", Key: fileKey, SrcPath: path, DontCompress: dontCompress})
+			out = append(out, ResourceEntry{Path: path, Key: fileKey, DontCompress: dontCompress})
 		}
 	}
 

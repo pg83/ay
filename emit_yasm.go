@@ -18,7 +18,7 @@ var yasmConstHead = []ANY{
 func (e *EmitContext) emitASYasm(srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef) (NodeRef, VFS) {
 	instance := e.instance
 	na := e.ctx.na
-	stem := strings.TrimSuffix(srcRel, ".asm")
+	stem := strings.TrimSuffix(strings.TrimSuffix(srcRel, ".yasm"), ".asm")
 	suffix := ".o"
 
 	if instance.Platform.PIC {

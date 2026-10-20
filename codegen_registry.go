@@ -1,9 +1,15 @@
 package main
 
+import (
+	"slices"
+	"strings"
+)
+
 type GeneratedFileInfo struct {
 	Nots            *NotsPrepared
 	OutputPath      VFS
 	SourcePath      VFS
+	PrimaryInput    VFS
 	OwnerModule     VFS
 	OwnerSerial     uint32
 	ProducerRef     NodeRef
@@ -226,4 +232,20 @@ func (r *CodegenRegistry) buildParsedFor(out VFS) ParsedIncludeSet {
 	}
 
 	return ParsedIncludeSet{}
+}
+
+func (r *CodegenRegistry) moduleSourceInputs(owner VFS, suffix string) []VFS {
+	var inputs []VFS
+
+	for _, info := range r.byRel.vals.s {
+		if info == nil || info.OwnerModule != owner || info.PrimaryInput == 0 {
+			continue
+		}
+
+		if strings.HasSuffix(info.PrimaryInput.relString(), suffix) && !slices.Contains(inputs, info.PrimaryInput) {
+			inputs = append(inputs, info.PrimaryInput)
+		}
+	}
+
+	return inputs
 }

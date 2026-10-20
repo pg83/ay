@@ -180,6 +180,7 @@ type ModuleData struct {
 	test                     TestMeta
 	mockgen                  GoMockgenVars
 	goCodegens               []GoCodegenStmt
+	userverProtos            []UserverProtoBatch
 	goEmbeds                 []GoEmbed
 	goCommonGoogleApis       []ANY
 	goPluginPeers            []ANY
@@ -376,10 +377,11 @@ type BundleEntry struct {
 }
 
 type ResourceEntry struct {
-	Path      string
-	Key       string
-	SrcPath   string
-	EndsBatch bool
+	Path         string
+	Key          string
+	SrcPath      string
+	EndsBatch    bool
+	DontCompress bool
 }
 
 func (d *ModuleData) resStr2(a, b string) string {
@@ -1457,9 +1459,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			for i, pair := range v.Pairs {
 				d.resources = append(d.resources, ResourceEntry{
-					Path:      pair.Path,
-					Key:       pair.Key,
-					EndsBatch: i == len(v.Pairs)-1,
+					Path:         pair.Path,
+					Key:          pair.Key,
+					EndsBatch:    i == len(v.Pairs)-1,
+					DontCompress: v.DontCompress,
 				})
 			}
 		case *ResourceFilesStmt:
@@ -1965,6 +1968,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.peerdirs = append(d.peerdirs, lists["DEPS"]...)
 	case tokYtOrmProtoYson:
 		applyYtOrmProtoYson(modulePath, v.Args, d, env)
+	case tokUsrvGenProtoStructs, tokUsrvGenGrpcServiceV2, tokUsrvGenGrpcClientV2,
+		tokUsrvGenGrpcServiceV2Structs, tokUsrvGenGrpcClientV2Structs:
+		applyUserverProto(v, d)
 	case tokGoGrpcGatewayV2OpenapiSrcs, tokGoGrpcGatewayV2Srcs, tokGoGrpcGatewaySrcs, tokGoGrpcGatewaySwagger:
 		applyGoGrpcGatewayStmt(v, d, env)
 	case tokGoMockgenFrom, tokGoMockgenContribFrom, tokGoMockgenTypes, tokGoMockgenExcludeIfaces, tokGoMockgenPackage,
