@@ -41,6 +41,51 @@ def desc_node(graph, output):
 
 
 class ProtoDescTest(unittest.TestCase):
+    def test_descriptor_final_targets_are_started_by_recurse_without_tests(self):
+        for module in ("PROTO_REGISTRY", "PROTO_DESCRIPTIONS"):
+            with self.subTest(module=module):
+                files = desc_files()
+                files.update({
+                    "root/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\nRECURSE(registry)\n",
+                    "root/registry/ya.make": f"{module}(catalog)\nEND()\n",
+                })
+                graph = lib.make(files, "root")
+                node = desc_node(graph, "$(B)/root/registry/catalog.protodesc")
+                self.assertIn(node["uid"], graph["result"])
+
+    def test_descriptor_module_tag_and_type_are_available_to_conditions(self):
+        for module in ("PROTO_REGISTRY", "PROTO_DESCRIPTIONS"):
+            with self.subTest(module=module):
+                files = desc_files()
+                files.update({
+                    "p/ya.make": "PROTO_LIBRARY()\nSRCS(p.proto)\nEND()\n",
+                    "p/p.proto": 'syntax = "proto3";\n',
+                    "registry/ya.make": (
+                        f'{module}(catalog)\nIF(MODULE_TAG == "{module}" AND MODULE_TYPE == "{module}")\n'
+                        "PEERDIR(p)\nENDIF()\nEND()\n"
+                    ),
+                })
+                graph = lib.make(files, "registry")
+                node = desc_node(graph, "$(B)/registry/catalog.protodesc")
+                self.assertIn("$(B)/p/p.self.protodesc", node["inputs"])
+
+    def test_proto_registry_inherits_descriptions_and_can_be_bundled(self):
+        for module in ("PROTO_REGISTRY", "PROTO_DESCRIPTIONS"):
+            with self.subTest(module=module):
+                files = desc_files()
+                files.update({
+                    "p/ya.make": "PROTO_LIBRARY()\nSRCS(p.proto)\nEND()\n",
+                    "p/p.proto": 'syntax = "proto3";\n',
+                    "registry/ya.make": f"{module}(catalog)\nPEERDIR(p)\nEND()\n",
+                    "app/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nBUNDLE(registry NAME catalog.desc)\nEND()\n",
+                })
+                graph = lib.make(files, "app")
+                bundle = lib.node_by_output(graph, "$(B)/app/catalog.desc")
+                registry = desc_node(graph, "$(B)/registry/catalog.protodesc")
+                self.assertIn(registry["outputs"][0], bundle["cmds"][0]["cmd_args"])
+                self.assertIn(registry["uid"], bundle["deps"])
+                self.assertIn("$(B)/p/p.self.protodesc", registry["inputs"])
+
     def test_explicit_names_and_selected_descriptor_variants(self):
         for tags, included in (("", True), ("ONLY_TAGS(CPP_PROTO)\n", False),
                                ("ONLY_TAGS(CPP_PROTO)\nINCLUDE_TAGS(DESC_PROTO)\n", True),

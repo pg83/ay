@@ -108,6 +108,7 @@ var (
 	envMODULE_LANG                  = internEnv("MODULE_LANG")
 	envMODULE_SUFFIX                = internEnv("MODULE_SUFFIX")
 	envMODULE_TAG                   = internEnv("MODULE_TAG")
+	envMODULE_TYPE                  = internEnv("MODULE_TYPE")
 	envMOST_USED_CUDA               = internEnv("MOST_USED_CUDA")
 	envMSAN_OPTIONS                 = internEnv("MSAN_OPTIONS")
 	envMSAN_SYMBOLIZER_PATH         = internEnv("MSAN_SYMBOLIZER_PATH")

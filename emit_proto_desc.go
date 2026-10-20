@@ -381,6 +381,8 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 	return &ModuleEmitResult{
 		ARRef:       mergeRef,
 		ARPath:      &primary,
+		LDRef:       mergeRef,
+		LDPath:      &primary,
 		DescClosure: closure,
 	}
 }
