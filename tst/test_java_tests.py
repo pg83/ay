@@ -2,6 +2,7 @@ import unittest
 
 import lib
 from lib import java_tree, resource_lib
+from test_go_tests import AUTOCHECK, go_module, go_world
 
 
 def test_nodes(graph):
@@ -71,7 +72,8 @@ class JavaStyleSuitesTest(unittest.TestCase):
         self.assertEqual(run_args(ktlint)[1], "run_ktlint_test")
 
         context = lib.node_by_output(graph, "$(B)/common_test.context")
-        self.assertEqual(context["requirements"], {"cpu": 1, "network": "restricted", "ram": 32})
+        # build_opts DefaultNodeRequirementsOptions: no ya.conf default_node_requirements
+        self.assertEqual(context["requirements"], {"network": "restricted"})
         for node in (style, ktlint):
             self.assertIn(context["uid"], node["deps"])
             self.assertIn(node["uid"], graph["result"])
@@ -252,6 +254,24 @@ class JavaFullPathNameTest(unittest.TestCase):
         graph = lib.make(files, deep)
         # dir and name fit in 98 chars: leading dirs are dropped (ShortenPath)
         lib.node_by_output(graph, f"$(B)/{deep}/dddddddddddddddd-src-test.test.cp.jar")
+
+
+class SharedTestContextTest(unittest.TestCase):
+    def test_java_and_go_suites_depend_on_one_context_node(self):
+        files = style_tree(**go_world(), **{
+            "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nLINT(base)\nJAVA_SRCS(SRCDIR src **/*)\nEND()\n",
+        })
+        go_module(files, "library/go/greet")
+        graph = lib.make(files, "app", "library/go/greet", *AUTOCHECK)
+        contexts = [n for n in graph["graph"] if "$(B)/common_test.context" in n.get("outputs", [])]
+        self.assertEqual(len(contexts), 1)
+        # TestFramer.inject_test_context_generator_node: ya.conf default_node_requirements + restricted network
+        self.assertEqual(contexts[0]["requirements"], {"cpu": 1, "network": "restricted", "ram": 32})
+        tests = test_nodes(graph)
+        self.assertIn("app/java_style", tests)
+        self.assertIn("library/go/greet/gofmt", tests)
+        for node in tests.values():
+            self.assertIn(contexts[0]["uid"], node["deps"])
 
 
 if __name__ == "__main__":

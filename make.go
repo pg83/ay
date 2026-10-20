@@ -56,6 +56,7 @@ type MakeFlags struct {
 	testSizes           []string
 	sandboxing          bool
 	dist                bool
+	cacheTests          bool
 	dumpIgnoredMacros   bool
 	clear               bool
 	cmdPrefixes         []CmdPrefix
@@ -140,12 +141,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 		p.AddInputs = mf.dist && mf.sandboxing
 	}
 
-	tests := newYaTestOpts(mf, readYaConfTop(fs, "ya.conf"), targetP.BuildType)
-
-	if tests != nil {
-		tests.goOpts = newTestOpts(mf, rootYaConf)
-	}
-
+	tests := newTestOpts(mf, rootYaConf)
 	events := newEventQueue()
 
 	defer events.close()
@@ -329,7 +325,7 @@ func yaToolchainFlags(flags map[string]string, tc *Toolchain, tcFlags map[string
 	flags["YA"] = "yes"
 }
 
-func genStream(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), tests *YaTestOpts, keepGoing bool) []NodeRef {
+func genStream(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), tests *TestOpts, keepGoing bool) []NodeRef {
 	emitter := newStreamingEmitter(onNode)
 
 	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, demandSelf)
@@ -434,8 +430,10 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.testSizes = append(mf.testSizes, strings.ToLower(opt.OptArg))
 		case opt.Name == "dist":
 			mf.dist = true
+		case opt.Name == "cache-tests":
+			mf.cacheTests = true
 		case opt.Char == 'x', opt.Name == "ignore-nodes-exit-code",
-			opt.Name == "warning-mode", opt.Name == "cache-tests", opt.Name == "output-only-tests",
+			opt.Name == "warning-mode", opt.Name == "output-only-tests",
 			opt.Name == "cache-namespace", opt.Name == "report-skipped-suites", opt.Name == "tests-retries",
 			opt.Name == "backup-test-results", opt.Name == "do-not-output-stderrs",
 			opt.Name == "no-src-links", opt.Name == "add-changed-ok-configures", opt.Name == "no-yt-store":
@@ -562,13 +560,14 @@ target flags:
 
 ya compatibility flags:
   -x                            Accepted from ya command lines, not modeled.
-  --test-size <size>            Accepted, not modeled.
+  --test-size <size>            Emit only test suites of these sizes
+                                (repeatable).
   --dist                        Configure for distbuild: ymake_conf.py runs
                                 without -l; with --sandboxing a node's inputs
                                 are its include closure (ymake --add-inputs).
   --ignore-nodes-exit-code      Accepted, not modeled.
   --warning-mode <modes>        Accepted, not modeled.
-  --cache-tests                 Accepted, not modeled.
+  --cache-tests                 Test outputs are tarred (no dir outputs).
   --output-only-tests           Accepted, not modeled.
   --cache-namespace <name>      Accepted, not modeled.
   --report-skipped-suites       Accepted, not modeled.

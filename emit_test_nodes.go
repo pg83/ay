@@ -6,9 +6,8 @@ import (
 )
 
 var (
-	testNodesKV             = KV{P: pkCP, PC: pcLightBlue}
-	testContextRequirements = Requirements{Network: nwRestricted}
-	testRunRequirements     = Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true}
+	testNodesKV         = KV{P: pkCP, PC: pcLightBlue}
+	testRunRequirements = Requirements{CPU: 1, Network: nwRestricted, RAM: 8, HasRAMDisk: true}
 )
 
 const (

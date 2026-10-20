@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"path"
 	"slices"
 	"strconv"
@@ -59,12 +60,12 @@ func (e *EmitContext) goTestSuites(goRef NodeRef, vetReport VFS, globals []Resou
 		}
 
 		for _, dir := range dirs {
-			suites = append(suites, goFmtSuite(project, byDir[dir], globals, e.d.test.env))
+			suites = append(suites, e.goFmtSuite(byDir[dir], globals))
 		}
 	}
 
 	if goNeedLint(instance.Path) {
-		suites = append(suites, goVetSuite(project, goRef, vetReport, globals, e.d.test.env))
+		suites = append(suites, e.goVetSuite(goRef, vetReport, globals))
 	}
 
 	if e.d.moduleStmt.Name == tokGoTest {
@@ -74,21 +75,36 @@ func (e *EmitContext) goTestSuites(goRef NodeRef, vetReport VFS, globals []Resou
 	return suites
 }
 
+func (e *EmitContext) goSuiteBase(name, testType, ciType string, globals []ResourceDecl) *TestSuite {
+	project := e.instance.Path.relString()
+
+	return &TestSuite{
+		p:                      e.ctx.target,
+		projectPath:            project,
+		name:                   name,
+		testType:               testType,
+		ciType:                 ciType,
+		size:                   "small",
+		timeout:                testSizeTimeouts["small"],
+		runInputs:              []VFS{source(project)},
+		globals:                globals,
+		env:                    e.d.test.env,
+		supportsTestParameters: true,
+	}
+}
+
 func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *TestSuite {
 	instance, d := e.instance, e.d
 	project := instance.Path.relString()
 	name := programBinaryName(instance, d.moduleStmt)
 	binary := build(project, "/", name)
-	size := d.test.size
+	s := e.goSuiteBase(name, "go_test", "test", globals)
 
-	if size == "" {
-		size = "small"
-	}
+	s.size = cmp.Or(d.test.size, "small")
+	s.timeout = d.test.timeout
 
-	timeout := d.test.timeout
-
-	if timeout == 0 {
-		timeout = testSizeTimeouts[size]
+	if s.timeout == 0 {
+		s.timeout = testSizeTimeouts[s.size]
 	}
 
 	data := slices.Clone(d.test.data)
@@ -99,60 +115,45 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 
 	slices.Sort(data)
 
-	var related []VFS
-
 	for _, entry := range slices.Compact(data) {
 		if rel, ok := strings.CutPrefix(entry, "arcadia/"); ok {
-			related = append(related, source(path.Clean(rel)))
+			s.relatedPaths = append(s.relatedPaths, source(path.Clean(rel)).string())
 		}
 	}
 
-	tags := slices.Clone(d.test.tags)
-
-	slices.Sort(tags)
-
-	return &TestSuite{
-		Project:       project,
-		Name:          name,
-		Type:          "go_test",
-		CIType:        "test",
-		Size:          size,
-		Timeout:       timeout,
-		Related:       related,
-		Inputs:        []VFS{source(project)},
-		Deps:          []NodeRef{binRef},
-		Globals:       globals,
-		Tags:          slices.Compact(tags),
-		Env:           d.test.env,
-		RunCwd:        d.test.cwd,
-		Canonization:  true,
-		TestParams:    true,
-		SmoothSignals: []string{"SIGUSR2"},
-		RunCmd: func(wd string) []ANY {
-			partition := d.test.partition
-
-			if partition == "" {
-				partition = "SEQUENTIAL"
-			}
-
-			return []ANY{
-				internStr(testToolHostPath).any(), strRunGoTest.any(),
-				strBinary.any(), binary.any(),
-				strTestWorkDir.any(), build(wd).any(),
-				strTracefile.any(), build(wd, "/ytest.report.trace").any(),
-				strModulo.any(), strOne.any(),
-				strModuloIndex.any(), strZero.any(),
-				strPartitionMode.any(), internStr(partition).any(),
-				strOutputDir.any(), build(wd, "/testing_out_stuff").any(),
-				strProjectPath.any(), internStr(project).any(),
-				strTimeout.any(), internStr(strconv.Itoa(timeout)).any(),
-				strVerbose.any(),
-			}
-		},
+	if d.test.cwd != "" {
+		s.runCwd = source(d.test.cwd).string()
 	}
+
+	s.deps = []NodeRef{binRef}
+	s.tags = sortedUnique(d.test.tags)
+	s.requirements = testRequirementsOf(d.test.requirements)
+	s.supportsCanonization = true
+	s.smoothShutdown = []string{"SIGUSR2"}
+
+	partition := cmp.Or(d.test.partition, "SEQUENTIAL")
+
+	s.runCmd = func(work string, _, _ int) []ANY {
+		return []ANY{
+			internStr(testToolHostPath).any(), strRunGoTest.any(),
+			strBinary.any(), binary.any(),
+			strTestWorkDir.any(), intern(work).any(),
+			strTracefile.any(), intern(work + "/ytest.report.trace").any(),
+			strModulo.any(), strOne.any(),
+			strModuloIndex.any(), strZero.any(),
+			strPartitionMode.any(), internStr(partition).any(),
+			strOutputDir.any(), intern(work + "/testing_out_stuff").any(),
+			strProjectPath.any(), internStr(project).any(),
+			strTimeout.any(), internStr(strconv.Itoa(s.timeout)).any(),
+			strVerbose.any(),
+		}
+	}
+
+	return s
 }
 
-func goFmtSuite(project string, files []VFS, globals []ResourceDecl, env []string) *TestSuite {
+func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite {
+	s := e.goSuiteBase("gofmt", "gofmt", "style", globals)
 	gofmt := strGoToolsResourceGlobalBinGofmt.any()
 
 	for _, g := range globals {
@@ -161,63 +162,49 @@ func goFmtSuite(project string, files []VFS, globals []ResourceDecl, env []strin
 		}
 	}
 
-	return &TestSuite{
-		Project:    project,
-		Name:       "gofmt",
-		Type:       "gofmt",
-		CIType:     "style",
-		Size:       "small",
-		Timeout:    testSizeTimeouts["small"],
-		Related:    files,
-		Inputs:     append([]VFS{source(project)}, files...),
-		Globals:    globals,
-		Env:        env,
-		TestParams: true,
-		RunCmd: func(wd string) []ANY {
-			out := []ANY{
-				internStr(testToolHostPath).any(), strRunGoFmt.any(),
-				strGofmt.any(), gofmt,
-				argSourceRoot.any(), strS.any(),
-				argTracePath.any(), build(wd, "/ytest.report.trace").any(),
-				argOutPath.any(), build(wd, "/testing_out_stuff").any(),
-			}
-
-			for _, f := range files {
-				out = append(out, f.any())
-			}
-
-			return out
-		},
+	for _, f := range files {
+		s.relatedPaths = append(s.relatedPaths, f.string())
 	}
+
+	s.runCmd = func(work string, _, _ int) []ANY {
+		out := []ANY{
+			internStr(testToolHostPath).any(), strRunGoFmt.any(),
+			strGofmt.any(), gofmt,
+			argSourceRoot.any(), strS.any(),
+			argTracePath.any(), intern(work + "/ytest.report.trace").any(),
+			argOutPath.any(), intern(work + "/testing_out_stuff").any(),
+		}
+
+		for _, f := range files {
+			out = append(out, f.any())
+		}
+
+		return out
+	}
+
+	return s
 }
 
-func goVetSuite(project string, goRef NodeRef, vetReport VFS, globals []ResourceDecl, env []string) *TestSuite {
-	return &TestSuite{
-		Project:    project,
-		Name:       "govet",
-		Type:       "govet",
-		CIType:     "style",
-		Size:       "small",
-		Timeout:    testSizeTimeouts["small"],
-		Inputs:     []VFS{source(project), vetReport},
-		Deps:       []NodeRef{goRef},
-		Globals:    globals,
-		Env:        env,
-		TestParams: true,
-		RunCmd: func(wd string) []ANY {
-			return []ANY{
-				internStr(testToolHostPath).any(), strRunCheck.any(),
-				argSourceRoot.any(), strS.any(),
-				strChecker.any(), strRunGoVet.any(),
-				strCheckName.any(), strGovet.any(),
-				argTracePath.any(), build(wd, "/ytest.report.trace").any(),
-				argOutPath.any(), build(wd, "/testing_out_stuff").any(),
-				argLogPath.any(), build(wd, "/testing_out_stuff/run_check.log").any(),
-				vetReport.any(),
-				strNoSnippetFromStdout.any(),
-			}
-		},
+func (e *EmitContext) goVetSuite(goRef NodeRef, vetReport VFS, globals []ResourceDecl) *TestSuite {
+	s := e.goSuiteBase("govet", "govet", "style", globals)
+
+	s.runInputs = append(s.runInputs, vetReport)
+	s.deps = []NodeRef{goRef}
+	s.runCmd = func(work string, _, _ int) []ANY {
+		return []ANY{
+			internStr(testToolHostPath).any(), strRunCheck.any(),
+			argSourceRoot.any(), strS.any(),
+			strChecker.any(), strRunGoVet.any(),
+			strCheckName.any(), strGovet.any(),
+			argTracePath.any(), intern(work + "/ytest.report.trace").any(),
+			argOutPath.any(), intern(work + "/testing_out_stuff").any(),
+			argLogPath.any(), intern(work + "/testing_out_stuff/run_check.log").any(),
+			vetReport.any(),
+			strNoSnippetFromStdout.any(),
+		}
 	}
+
+	return s
 }
 
 func goDirSources(fs FS, dir string) []string {

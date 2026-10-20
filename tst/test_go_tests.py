@@ -139,8 +139,8 @@ class GoStyleTestsTest(unittest.TestCase):
         self.assertEqual(context["requirements"], {"cpu": 1, "network": "restricted", "ram": 32})
 
         vet = test_node(graph, "library/go/greet/govet")
-        self.assertEqual(vet["deps"], [package["uid"], context["uid"]])
-        self.assertEqual(vet["inputs"], ["$(S)/library/go/greet", "$(B)/library/go/greet/greet.a.vet.txt"])
+        self.assertEqual(vet["deps"], [context["uid"], package["uid"]])
+        self.assertEqual(vet["inputs"], ["$(B)/library/go/greet/greet.a.vet.txt", "$(S)/library/go/greet"])
         args = vet["cmds"][0]["cmd_args"]
         self.assertEqual(args[:3], ["$(TEST_TOOL_HOST)/test_tool", "run_test", "--ya-start-command-file"])
         self.assertEqual(args[-1], "--ya-end-command-file")
@@ -212,7 +212,7 @@ class GoStyleTestsTest(unittest.TestCase):
             "app/extra/gofmt", "app/extra/govet", "app/gofmt", "app/govet", "app/lib/gofmt", "app/lib/govet",
         ])
         self.assertEqual(
-            test_node(graph, "app/govet")["inputs"], ["$(S)/app", "$(B)/app/app.vet.txt"],
+            test_node(graph, "app/govet")["inputs"], ["$(B)/app/app.vet.txt", "$(S)/app"],
         )
         graph = lib.make(files, "app")
         self.assertEqual(test_paths(graph), [])
@@ -287,7 +287,7 @@ class GoTestModuleTest(unittest.TestCase):
         run = test_node(graph, "lib/greet/tests/tests")
         self.assertEqual(run["kv"]["p"], "TM")
         context = lib.node_by_output(graph, "$(B)/common_test.context")
-        self.assertEqual(run["deps"], [binary["uid"], context["uid"]])
+        self.assertEqual(run["deps"], [context["uid"], binary["uid"]])
         self.assertEqual(run["inputs"], ["$(S)/lib/greet/tests"])
         args = run["cmds"][0]["cmd_args"]
         self.assertEqual(arg_after(args, "--test-type"), "go_test")
@@ -338,7 +338,7 @@ class GoTestModuleTest(unittest.TestCase):
         self.assertNotIn("lib/svc/svc.a", args)
         self.assertEqual(
             test_node(graph, "lib/svc/gotest/govet")["inputs"],
-            ["$(S)/lib/svc/gotest", "$(B)/lib/svc/gotest/svc.vet.txt"],
+            ["$(B)/lib/svc/gotest/svc.vet.txt", "$(S)/lib/svc/gotest"],
         )
 
     def test_autocheck_programs_link_libeatmydata_without_pie(self):

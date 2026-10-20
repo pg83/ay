@@ -374,7 +374,6 @@ var (
 	strTestMiner                                                                             = internStr("++test-miner")
 	strTestMsanOpt                                                                           = internStr("exitcode=100:report_umrs=1")
 	strTestPythonBin                                                                         = internStr("$(PYTHON)/python")
-	strTestRunCwd                                                                            = internStr("--test-run-cwd")
 	strTestSrcs                                                                              = internStr("++test_srcs")
 	strTestUbsanOpt                                                                          = internStr("exitcode=100:print_stacktrace=1,halt_on_error=1")
 	strTestWorkDir                                                                           = internStr("--test-work-dir")

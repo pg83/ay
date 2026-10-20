@@ -38,7 +38,7 @@ type javaCustomLint struct {
 }
 
 func (ctx *GenCtx) javaEmitTests(jm *JavaModule) []NodeRef {
-	var suites []*yaTestSuite
+	var suites []*TestSuite
 
 	switch jm.unit.kind {
 	case juJar:
@@ -59,7 +59,7 @@ func (ctx *GenCtx) javaEmitTests(jm *JavaModule) []NodeRef {
 
 	for _, s := range suites {
 		if s != nil {
-			refs = append(refs, ctx.emitYaTestSuite(s)...)
+			refs = append(refs, ctx.emitTestSuite(s)...)
 		}
 	}
 
@@ -95,8 +95,8 @@ func sortedUnique(in []string) []string {
 	return slices.Compact(out)
 }
 
-func (ctx *GenCtx) javaSuiteBase(jm *JavaModule, name, testType, ciType string) *yaTestSuite {
-	return &yaTestSuite{
+func (ctx *GenCtx) javaSuiteBase(jm *JavaModule, name, testType, ciType string) *TestSuite {
+	return &TestSuite{
 		p:           jm.instance.Platform,
 		projectPath: jm.dir,
 		name:        name,
@@ -104,7 +104,6 @@ func (ctx *GenCtx) javaSuiteBase(jm *JavaModule, name, testType, ciType string) 
 		ciType:      ciType,
 		size:        "small",
 		timeout:     60,
-		moduleLang:  "java",
 		globals:     ctx.javaResourceGlobals(jm),
 		runInputs:   []VFS{source(jm.dir)},
 	}
@@ -118,7 +117,7 @@ func (ctx *GenCtx) javaProducer(jm *JavaModule, out VFS) []NodeRef {
 	return nil
 }
 
-func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *yaTestSuite {
+func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
 	d := jm.data
 	dirs := jm.srcDirsTestData()
 
@@ -145,7 +144,7 @@ func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *yaTestSuite {
 	jdk := "JDK" + javaConfGlobals["JDK_LATEST_VERSION"]
 
 	s.runCmd = func(work string, _, _ int) []ANY {
-		strs := []string{yaTestTool, "run_javastyle", "--source-root", "$(S)", "--trace-path", work + "/ytest.report.trace",
+		strs := []string{testToolHostPath, "run_javastyle", "--source-root", "$(S)", "--trace-path", work + "/ytest.report.trace",
 			"--out-path", work + "/testing_out_stuff", "--java", globals[jdk].string() + "/bin/java",
 			"--runner-lib-path", javaStyleRunnerLib, "--config-xml", javaStyleConfigs[d.lintLevel], "--verbose",
 			"--modulo", "1", "--modulo-index", "0"}
@@ -156,13 +155,13 @@ func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *yaTestSuite {
 
 		strs = append(strs, "--jstyle-migrations", "$(S)/"+javaStyleMigrations, srclst.string()+"::$(S)")
 
-		return yaTestArgs(strs)
+		return testArgs(strs)
 	}
 
 	return s
 }
 
-func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *yaTestSuite {
+func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 	d := jm.data
 
 	if !d.withKotlin || d.noLint != "" {
@@ -188,7 +187,7 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *yaTestSuite {
 	s.env = slices.Clone(d.testEnv)
 
 	s.runCmd = func(work string, _, _ int) []ANY {
-		return yaTestArgs([]string{yaTestTool, "run_ktlint_test", "--srclist-path", srclist.string(), "--binary", binary,
+		return testArgs([]string{testToolHostPath, "run_ktlint_test", "--srclist-path", srclist.string(), "--binary", binary,
 			"--trace-path", work + "/ytest.report.trace", "--source-root", "$(S)", "--build-root", "$(B)",
 			"--project-path", jm.dir, "--output-dir", work + "/testing_out_stuff", "--editorconfig", editorconfig})
 	}
@@ -251,7 +250,7 @@ func (ctx *GenCtx) javaKotlinLintFiles(jm *JavaModule) []string {
 	return sortedUnique(files)
 }
 
-func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *yaTestSuite {
+func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *TestSuite {
 	files := ctx.javaKotlinLintFiles(jm)
 
 	if len(files) == 0 {
@@ -273,7 +272,7 @@ func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *yaTest
 	s.env = slices.Clone(jm.data.testEnv)
 
 	s.runCmd = func(work string, _, _ int) []ANY {
-		strs := []string{yaTestTool, "run_custom_lint", "--source-root", "$(S)", "--build-root", "$(B)",
+		strs := []string{testToolHostPath, "run_custom_lint", "--source-root", "$(S)", "--build-root", "$(B)",
 			"--project-path", "$(S)/" + jm.dir, "--trace-path", work + "/ytest.report.trace",
 			"--out-path", work + "/testing_out_stuff", "--lint-name", l.linter.name, "--wrapper-script", l.linter.wrapper,
 			"--depends", jm.dir}
@@ -286,13 +285,13 @@ func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *yaTest
 			strs = append(strs, "--global-resource", g.Token.string())
 		}
 
-		return yaTestArgs(append(strs, files...))
+		return testArgs(append(strs, files...))
 	}
 
 	return s
 }
 
-func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *yaTestSuite {
+func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	d := jm.data
 	t := d.test
 	comp := jm.selfPeers[0]
@@ -310,14 +309,14 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *yaTestSuite {
 	s := ctx.javaSuiteBase(jm, path.Base(path.Dir(jm.dir))+"-"+path.Base(jm.dir), "java", "test")
 
 	s.size = cmp.Or(t.size, "small")
-	s.timeout = yaTestSizeTimeouts[s.size]
+	s.timeout = testSizeTimeouts[s.size]
 
 	if t.timeout != "" {
 		s.timeout, _ = strconv.Atoi(t.timeout)
 	}
 
 	s.tags = sortedUnique(t.tags)
-	s.requirements = yaTestRequirementsOf(t.requirements)
+	s.requirements = testRequirementsOf(t.requirements)
 	s.env = slices.Clone(d.testEnv)
 	s.supportsCanonization = true
 	s.supportsTestParameters = true
@@ -367,7 +366,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *yaTestSuite {
 	s.prepare = [][]ANY{
 		{py, buildScriptsMkdirPy.any(), internStr(path.Dir(cpf.string())).any()},
 		append(append([]ANY{py, buildScriptsWriterPy.any(), strFile.any(), cpf.any(), strM.any(), strYaStartCommandFile.any()},
-			yaTestArgs(classpath)...), strYaEndCommandFile.any()),
+			testArgs(classpath)...), strYaEndCommandFile.any()),
 	}
 
 	for _, f := range []string{"mkdir.py", "run_junit.py", "writer.py", "process_command_files.py"} {
@@ -418,7 +417,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *yaTestSuite {
 
 		strs = append(strs, "--runner-log-path", work+"/testing_out_stuff/run.log", "--properties", props)
 
-		return yaTestArgs(strs)
+		return testArgs(strs)
 	}
 
 	return s
@@ -490,7 +489,7 @@ func (jm *JavaModule) checksClasspathClash() bool {
 	return false
 }
 
-func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *yaTestSuite {
+func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *TestSuite {
 	d := jm.data
 	name := strings.Trim(path.Base(path.Dir(jm.dir))+"-"+path.Base(jm.dir)+"-dependencies", "-")
 	s := ctx.javaSuiteBase(jm, name, "classpath.clash", "style")
@@ -513,12 +512,12 @@ func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *yaTestSuite {
 	}
 
 	s.runCmd = func(work string, _, _ int) []ANY {
-		strs := []string{yaTestTool, "run_check", "--source-root", "$(S)", "--checker", "run_classpath_clash", "--check-name", "classpath.clash",
+		strs := []string{testToolHostPath, "run_check", "--source-root", "$(S)", "--checker", "run_classpath_clash", "--check-name", "classpath.clash",
 			"--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff",
 			"--log-path", work + "/testing_out_stuff/run_check.log", "--no-snippet-from-stderr", "--batch", "--batch-name", name,
-			"$(B)", yaTestCmdFileStart}
+			"$(B)", testCmdFileStart}
 
-		strs = append(append(append(strs, paths...), yaTestCmdFileEnd), ignored...)
+		strs = append(append(append(strs, paths...), testCmdFileEnd), ignored...)
 
 		if ctx.tests.dist || d.checkJavaDeps == "strict" {
 			strs = append(strs, "--")
@@ -532,7 +531,7 @@ func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *yaTestSuite {
 			strs = append(strs, "--strict")
 		}
 
-		return yaTestArgs(strs)
+		return testArgs(strs)
 	}
 
 	return s

@@ -225,8 +225,7 @@ type GenCtx struct {
 	target           *Platform
 	vcsRef           NodeRef
 	testMode         bool
-	tests            *YaTestOpts
-	testOpts         *TestOpts
+	tests            *TestOpts
 	sbomEnabled      bool
 	autoincludeIdx   *AutoincludeIndex
 	parsedFiles      map[string]*MakeFile
@@ -253,7 +252,7 @@ func newModuleMemo() *moduleMemo {
 	return &moduleMemo{entries: newBumpAllocator[moduleMemoEntry]()}
 }
 
-func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *YaTestOpts, keepGoing bool, rootDemand ModuleDemand) {
+func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand) {
 	ctx := newGenCtx(fs, caches, hostP, targetP, emitter, onWarn, tests, keepGoing)
 	ordered := ctx.linkingTargetsFirst(targets)
 	recursed := make([][]string, len(ordered))
@@ -290,7 +289,7 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 	}
 }
 
-func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *YaTestOpts, keepGoing bool) *GenCtx {
+func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool) *GenCtx {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
 
@@ -336,10 +335,6 @@ func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *Stre
 
 		autoincludeIdx: loadAutoincludeIndex(fs),
 		parsedFiles:    caches.parsedFiles,
-	}
-
-	if tests != nil {
-		ctx.testOpts = tests.goOpts
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
@@ -459,7 +454,7 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 	}
 
 	if ctx.testMode && root.testSuiteInfo != nil {
-		for _, ref := range emitTestRunNodes(ctx.emit, ctx.target, *root.testSuiteInfo, root.LDRef, ctx.testContextRef(ctx.target), root.ResourceGlobalClosure) {
+		for _, ref := range emitTestRunNodes(ctx.emit, ctx.target, *root.testSuiteInfo, root.LDRef, ctx.testContext(), root.ResourceGlobalClosure) {
 			ctx.emit.result(ref)
 		}
 	}
@@ -596,7 +591,7 @@ func (ctx *GenCtx) emitModuleTests(r *ModuleEmitResult) {
 	r.testsEmitted = true
 
 	for _, s := range r.TestSuites {
-		if ref, ok := ctx.emitTestSuite(ctx.target, s); ok {
+		for _, ref := range ctx.emitTestSuite(s) {
 			ctx.emit.result(ref)
 		}
 	}
@@ -655,7 +650,7 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) []string {
 	return finals
 }
 
-func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *YaTestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults bool) *Graph {
+func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults bool) *Graph {
 	emitter := newStreamingEmitter(nil)
 
 	emitter.addModulesToResults = addModulesToResults

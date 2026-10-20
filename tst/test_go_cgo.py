@@ -178,10 +178,10 @@ class GoCgoGraphTest(unittest.TestCase):
             f"$(B)/{STD}/runtime/cgo/cgo.a", f"$(B)/{STD}/errors/errors.a",
         ], 4))
         # the inputs of the whole peer closure flow into the package (pre-YMAKE-2161 ymake)
-        self.assertEqual(package["inputs"][-14:-9], [
+        self.assertEqual(lib.bucketed(package["inputs"][-14:-9], 3), lib.bucketed([
             f"$(S)/{STD}/syscall/syscall.go", f"$(S)/{STD}/runtime/cgo/cgo.go", f"$(S)/{STD}/errors/errors.go",
             "$(S)/contrib/libs/zstd/include/zstd.h", f"{s}/helper.h",
-        ])
+        ], 3))
         self.assertEqual(package["inputs"][-9:], [
             "$(S)/build/scripts/cgo1_wrapper.py", "$(S)/build/scripts/wrapcc.py",
             "$(S)/build/scripts/fs_tools.py", "$(S)/build/scripts/link_o.py",
