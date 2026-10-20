@@ -269,6 +269,16 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		env.setString(envJdkRealVersion, "17")
 	}
 
+	if !env.bool(envArcadiaPythonUnicodeSize) {
+		width := "4"
+
+		if env.bool(envOS_WINDOWS) {
+			width = "2"
+		}
+
+		env.setString(envArcadiaPythonUnicodeSize, width)
+	}
+
 	for name, value := range javaConfGlobals {
 		if !env.hasBindingID(internEnv(name)) {
 			env.setString(internEnv(name), value)

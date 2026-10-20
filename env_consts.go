@@ -21,6 +21,7 @@ var (
 	envAVX2_CFLAGS                  = internEnv("AVX2_CFLAGS")
 	envAVX512_CFLAGS                = internEnv("AVX512_CFLAGS")
 	envAVX_CFLAGS                   = internEnv("AVX_CFLAGS")
+	envArcadiaPythonUnicodeSize     = internEnv("ARCADIA_PYTHON_UNICODE_SIZE")
 	envAutocheck                    = internEnv("AUTOCHECK")
 	envBINDIR                       = internEnv("BINDIR")
 	envBISON_PKGDATADIR             = internEnv("BISON_PKGDATADIR")

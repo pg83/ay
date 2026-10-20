@@ -33,6 +33,21 @@ class LuaCompileTest(unittest.TestCase):
                 lib.node_by_output(graph, f"$(B)/{peer}/runtime.c.o")
 
 class ConfigurationTest(unittest.TestCase):
+    def test_python_unicode_width_uses_platform_default_and_preserves_override(self):
+        for flags, width in (([], "4"), (["-DOS_WINDOWS=yes"], "2"),
+                             (["-DARCADIA_PYTHON_UNICODE_SIZE=8"], "8")):
+            with self.subTest(flags=flags):
+                graph = lib.make({
+                    "a/ya.make": (
+                        f"LIBRARY()\n{lib.BARE_MODULE}"
+                        "CFLAGS(-DARCADIA_PYTHON_UNICODE_SIZE=${ARCADIA_PYTHON_UNICODE_SIZE})\n"
+                        "SRCS(a.cpp)\nEND()\n"
+                    ),
+                    "a/a.cpp": "",
+                }, "a", *flags)
+                args = lib.node_by_output(graph, "$(B)/a/a.cpp.o")["cmds"][0]["cmd_args"]
+                self.assertIn(f"-DARCADIA_PYTHON_UNICODE_SIZE={width}", args)
+
     def test_build_root_addincl_preserves_root_type(self):
         graph = lib.make({
             "a/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}ADDINCL(GLOBAL ${{ARCADIA_BUILD_ROOT}})\nSRCS(a.cpp)\nEND()\n",
