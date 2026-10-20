@@ -95,6 +95,17 @@ def go_node(graph, path):
 
 
 class GoPackageGraphTest(unittest.TestCase):
+    def test_raw_string_imports_become_peers(self):
+        files = go_world()
+        go_module(files, f"{STD}/fmt")
+        go_module(files, "vendor/example.com/rt")
+        go_module(files, "library/go/raw", 'import (\n    `fmt`\n    rt `example.com/rt`\n)\n')
+        graph = lib.make(files, "library/go/raw")
+        raw = lib.node_by_output(graph, "$(B)/library/go/raw/raw.a")
+        self.assertEqual(between(go_tool_args(raw), "++peers", "--ya-end-command-file"), [
+            f"{STD}/fmt/fmt.a", "vendor/example.com/rt/rt.a",
+        ])
+
     def test_program_link_partitions_direct_transitive_and_cxx_archives(self):
         files = go_world()
         go_module(files, f"{STD}/fmt", 'import (\n\t"internal/fmtsort"\n\t"golang.org/x/text/width"\n)\n')

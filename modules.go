@@ -1939,7 +1939,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokGrpc:
 		d.grpc = true
-		d.peerdirs = append(d.peerdirs, strContribLibsGrpc.any())
+
+		if !isGoModuleType(d.unit.Type) {
+			d.peerdirs = append(d.peerdirs, strContribLibsGrpc.any())
+		}
 	case tokPyNamespace:
 		if len(v.Args) != 1 {
 			throwFmt("gen: PY_NAMESPACE expects exactly 1 argument, got %d", len(v.Args))

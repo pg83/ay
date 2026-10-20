@@ -63,15 +63,17 @@ func parseGoImports(data []byte) []STR {
 			skipSpace()
 		}
 
-		if i >= n || s[i] != '"' {
+		if i >= n || s[i] != '"' && s[i] != '`' {
 			return nil
 		}
+
+		quote := s[i]
 
 		i++
 
 		start := i
 
-		for i < n && s[i] != '"' {
+		for i < n && s[i] != quote {
 			i++
 		}
 

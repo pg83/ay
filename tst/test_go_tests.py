@@ -421,6 +421,22 @@ class GoCodegenTest(unittest.TestCase):
         self.assertIn("vendor/google.golang.org/protobuf/runtime/protoimpl/protoimpl.a", peers)
         self.assertNotIn("$(B)/contrib/libs/protobuf/libcontrib-libs-protobuf.a", package["inputs"])
 
+    def test_grpc_in_the_go_variant_peers_go_grpc_only(self):
+        files = go_proto_world()
+        for path in (f"{STD}/context", "vendor/google.golang.org/grpc", "vendor/google.golang.org/grpc/codes",
+                     "vendor/google.golang.org/grpc/grpclog", "vendor/google.golang.org/grpc/status"):
+            go_module(files, path)
+        files["contrib/libs/grpc/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(g.cpp)\nEND()\n"
+        files["contrib/libs/grpc/g.cpp"] = "int g;\n"
+        files["p/svc/ya.make"] = "PROTO_LIBRARY()\nGRPC()\nSRCS(svc.proto)\nEND()\n"
+        files["p/svc/svc.proto"] = 'syntax = "proto3";\n'
+        go_module(files, "g/user", macros="PEERDIR(p/svc)\n")
+        graph = lib.make(files, "g/user")
+        package = lib.node_by_output(graph, "$(B)/p/svc/svc.a")
+        peers = between(go_tool_args(package), "++peers", "--ya-end-command-file")
+        self.assertIn("vendor/google.golang.org/grpc/grpc.a", peers)
+        self.assertFalse([o for n in graph["graph"] for o in n["outputs"] if o.startswith("$(B)/contrib/libs/grpc/")])
+
     def test_go_protoc_lists_own_proto_includes_before_the_peer_ones(self):
         files = go_proto_world()
         files["p/base/ya.make"] = "PROTO_LIBRARY()\nPROTO_NAMESPACE(GLOBAL p/base)\nSRCS(base.proto)\nEND()\n"
