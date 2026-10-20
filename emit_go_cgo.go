@@ -95,12 +95,26 @@ func goModuleCgoSFiles(d *ModuleData) []ANY {
 	return out
 }
 
-func goModuleUsesCgoC(d *ModuleData) bool {
-	return len(d.cgoSrcs) > 0 || slices.ContainsFunc(d.srcs, func(m SrcMeta) bool {
-		ext := path.Ext(m.Source.string())
+func goModuleCSource(m SrcMeta) bool {
+	ext := path.Ext(m.Source.string())
 
-		return !m.Global && m.Compile.Variant == 0 && (ext == ".S" || slices.Contains(goCgoExportExts, ext))
-	})
+	return !m.Global && m.Compile.Variant == 0 && (ext == ".S" || slices.Contains(goCgoExportExts, ext))
+}
+
+func goModuleCSources(d *ModuleData) []ANY {
+	var out []ANY
+
+	for _, meta := range d.srcs {
+		if goModuleCSource(meta) {
+			out = append(out, meta.Source)
+		}
+	}
+
+	return out
+}
+
+func goModuleUsesCgoC(d *ModuleData) bool {
+	return len(d.cgoSrcs) > 0 || slices.ContainsFunc(d.srcs, goModuleCSource)
 }
 
 func goCgoCFlags(d *ModuleData) []ANY {
@@ -174,28 +188,50 @@ func (e *EmitContext) goCgoOut(f ANY, suffix string) VFS {
 }
 
 func (e *EmitContext) emitGoCgoCopyStmt(srcRel ANY) {
-	module := e.instance.Path.relString()
+	ctx, instance, d := e.ctx, e.instance, e.d
+	module := instance.Path.relString()
 	dstVFS := build(module, "/", srcRel.string())
 
-	if len(e.d.cgoSrcs) > 0 {
-		e.emitGoCopyWithContext(srcRel, dstVFS, scanDomainCC, build(module, "/_cgo_export.h"), e.goCgoOut(e.d.cgoSrcs[0], ".cgo1.go"))
-	} else {
-		e.emitGoCopyWithContext(srcRel, dstVFS, scanDomainCC)
+	if len(d.cgoSrcs) == 0 {
+		e.emitGoCopyWithContext(srcRel, dstVFS, scanDomainCC, nil)
+
+		return
 	}
+
+	n := len(d.cgoSrcs)
+	block := ctx.na.vfs.alloc(2 + 2*n)
+
+	block[0] = cgo1WrapperVFS
+
+	for i, f := range d.cgoSrcs {
+		block[1+i] = resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
+	}
+
+	block[1+n] = build(module, "/_cgo_export.h")
+
+	for i, f := range d.cgoSrcs {
+		block[2+n+i] = e.goCgoOut(f, ".cgo1.go")
+	}
+
+	ctx.na.vfs.commit(2 + 2*n)
+	e.emitGoCopyWithContext(srcRel, dstVFS, scanDomainCC, block[:1+n:1+n], block[1+n:2+2*n:2+2*n]...)
 }
 
-func (e *EmitContext) emitGoCopyWithContext(srcRel ANY, dstVFS VFS, domain ScanDomain, leaves ...VFS) {
+func (e *EmitContext) emitGoCopyWithContext(srcRel ANY, dstVFS VFS, domain ScanDomain, context []VFS, leaves ...VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	srcVFS := resolveSourceVFS(ctx, instance, srcRel.string(), d.srcDirs)
 	ref := ctx.emit.reserve()
 	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
 	scripts := ctx.scripts[copyFsToolsVFS.rel()]
-	leafBlock := na.vfs.alloc(1 + len(leaves))
+	leafBlock := na.vfs.alloc(1 + len(scripts) + len(context) + len(leaves))
 
 	leafBlock[0] = srcVFS
 
-	nl := 1 + copy(leafBlock[1:], leaves)
+	nl := 1 + copy(leafBlock[1:], scripts)
+
+	nl += copy(leafBlock[nl:], context)
+	nl += copy(leafBlock[nl:], leaves)
 
 	na.vfs.commit(nl)
 
@@ -204,13 +240,8 @@ func (e *EmitContext) emitGoCopyWithContext(srcRel ANY, dstVFS VFS, domain ScanD
 
 	pe := func() {
 		cv := scanner.walkClosure(srcVFS, scanCtx, domain)
-		block := na.vfs.alloc(len(scripts) + cv.len())
-		k := 0
-
-		for _, p := range scripts {
-			block[k] = p
-			k++
-		}
+		block := na.vfs.alloc(len(scripts) + cv.len() + len(context))
+		k := copy(block, scripts)
 
 		cv.each(func(p VFS) {
 			if p.isSource() {
@@ -219,6 +250,7 @@ func (e *EmitContext) emitGoCopyWithContext(srcRel ANY, dstVFS VFS, domain ScanD
 			}
 		})
 
+		k += copy(block[k:], context)
 		na.vfs.commit(k)
 
 		args := na.anyList(srcVFS.any(), dstVFS.any())
@@ -536,18 +568,108 @@ func (e *EmitContext) flushGoCgo2() {
 	cflagsStr := goCgoCFlags(e.d)
 	linkOFlags := e.goCgoLinkOFlags()
 	linkOScripts := ctx.scripts[linkOScriptVFS.rel()]
+	copyFsScripts := ctx.scripts[copyFsToolsVFS.rel()]
 
-	closure := slices.DeleteFunc(slices.Clone(e.goCgoClosure(nil)), func(p VFS) bool {
-		return slices.ContainsFunc(d.cgoSrcs, func(f ANY) bool { return resolveSourceVFS(ctx, instance, f.string(), d.srcDirs) == p })
+	if len(cFiles) == 0 {
+		copyFsScripts = nil
+	}
+
+	srcMark := len(e.prodVFS)
+	cvs := e.cvScratch[:0]
+
+	for _, f := range d.cgoSrcs {
+		src := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
+
+		e.prodVFS = append(e.prodVFS, src)
+		cvs = append(cvs, e.scanner.walkClosure(src, d.scanCtx, scanDomainCC))
+	}
+
+	for _, f := range append(cFiles, sFiles...) {
+		src := resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
+
+		e.prodVFS = append(e.prodVFS, src)
+		cvs = append(cvs, e.scanner.walkClosure(src, d.scanCtx, scanDomainCC))
+	}
+
+	e.cvScratch = retainMaxLen(e.cvScratch, cvs)
+
+	resolvedSrcs := e.prodVFSTake(srcMark)
+	sourceInputs := vfsScratches.get()
+	buildInputs := vfsScratches.get()
+
+	pushIn := func(v VFS) {
+		if v.isBuild() {
+			buildInputs = append(buildInputs, v)
+		} else {
+			sourceInputs = append(sourceInputs, v)
+		}
+	}
+
+	for _, s := range linkOScripts {
+		pushIn(s)
+	}
+
+	pushIn(cgo1WrapperVFS)
+	pushIn(wrapccPyVFS)
+
+	for _, s := range copyFsScripts {
+		pushIn(s)
+	}
+
+	pushIn(exportH)
+	pushIn(mainC)
+
+	dedupers.with(func(deduper *DeDuper) {
+		for _, v := range sourceInputs {
+			deduper.add(v.strID())
+		}
+
+		for _, v := range buildInputs {
+			deduper.add(v.strID())
+		}
+
+		var cgoClosureExtras []VFS
+
+		for i := range d.cgoSrcs {
+			if deduper.add(resolvedSrcs[i].strID()) {
+				pushIn(resolvedSrcs[i])
+			}
+
+			cvs[i].each(func(p VFS) {
+				if p.isSource() && deduper.add(p.strID()) {
+					cgoClosureExtras = append(cgoClosureExtras, p)
+				}
+			})
+		}
+
+		for _, v := range cgoClosureExtras {
+			pushIn(v)
+		}
+
+		pushIn(e.goCgoOut(d.cgoSrcs[0], ".cgo1.go"))
+
+		for i := len(d.cgoSrcs); i < len(resolvedSrcs); i++ {
+			if deduper.add(resolvedSrcs[i].strID()) {
+				pushIn(resolvedSrcs[i])
+			}
+
+			cvs[i].each(func(p VFS) {
+				if p.isSource() && deduper.add(p.strID()) {
+					pushIn(p)
+				}
+			})
+		}
+
+		for _, o := range objOrder[:ko] {
+			pushIn(o)
+		}
 	})
 
-	inputs := na.vfs.alloc(len(linkOScripts) + 3 + ko + len(closure))
-	ni := copy(inputs, linkOScripts)
+	sourceChunk := na.vfsList(sourceInputs...)
+	buildChunk := na.vfsList(buildInputs...)
 
-	ni += copy(inputs[ni:], []VFS{exportH, mainC, e.goCgoOut(d.cgoSrcs[0], ".cgo1.go")})
-	ni += copy(inputs[ni:], objOrder[:ko])
-	ni += copy(inputs[ni:], closure)
-	na.vfs.commit(ni)
+	vfsScratches.put(sourceInputs)
+	vfsScratches.put(buildInputs)
 
 	objArgs := na.anys.alloc(1 + nObjs + len(d.cgoLdflags))
 	kd := 0
@@ -608,7 +730,7 @@ func (e *EmitContext) flushGoCgo2() {
 			Cmd{CmdArgs: na.chunkList(cmd2Args), Env: goEnv},
 		),
 		Env:       goEnv,
-		Inputs:    na.inputList(inputs[:ni:ni]),
+		Inputs:    na.inputList(sourceChunk, buildChunk),
 		KV:        &goToolKV,
 		Outputs:   na.vfsList(mainO, cgoO, importGo),
 		DepRefs:   deps[:nd],

@@ -119,6 +119,7 @@ class GoCgoGraphTest(unittest.TestCase):
         self.assertEqual(lib.bucketed(copy["inputs"], 3), lib.bucketed([
             "$(S)/build/scripts/fs_tools.py", "$(S)/build/scripts/process_command_files.py",
             f"{s}/helper.c", f"{s}/helper.h", f"{s}/helper_impl.h",
+            "$(S)/build/scripts/cgo1_wrapper.py", f"{s}/zstd.go", f"{s}/errors.go",
         ], 3))
         helper_cc = lib.node_by_output(graph, f"{b}/helper.c.o")
         self.assertEqual(helper_cc["cmds"][0]["cmd_args"][-5:], [*cflags, f"{b}/helper.c"])
@@ -150,11 +151,13 @@ class GoCgoGraphTest(unittest.TestCase):
             CGO_TOOL, "-dynpackage", "zstd", "-dynimport", f"{b}/_cgo_.o",
             "-dynout", f"{b}/_cgo_import.go", "-dynlinker",
         ])
-        # _cgo_export.h carries the C includes of the CGO_SRCS preambles, not the sources themselves
-        self.assertEqual(lib.bucketed(dynimport["inputs"], 9), lib.bucketed([
-            "$(S)/build/scripts/link_o.py", f"{b}/_cgo_export.h", f"{b}/_cgo_main.c", f"{b}/zstd.cgo1.go", *objects,
-            f"{s}/helper.h", "$(S)/contrib/libs/zstd/include/zstd.h",
-        ], 9))
+        self.assertEqual(lib.bucketed(dynimport["inputs"], 7), lib.bucketed([
+            "$(S)/build/scripts/link_o.py", "$(S)/build/scripts/cgo1_wrapper.py", "$(S)/build/scripts/wrapcc.py",
+            "$(S)/build/scripts/fs_tools.py", "$(S)/build/scripts/process_command_files.py",
+            f"{s}/zstd.go", f"{s}/errors.go", f"{s}/helper.h", "$(S)/contrib/libs/zstd/include/zstd.h",
+            f"{s}/helper.c", f"{s}/helper_impl.h", f"{s}/trampoline.S",
+            f"{b}/_cgo_export.h", f"{b}/_cgo_main.c", f"{b}/zstd.cgo1.go", *objects,
+        ], 7))
         by_output = {node["outputs"][0]: node["uid"] for node in graph["graph"]}
         self.assertEqual(dynimport["deps"][:len(objects)], [by_output[o] for o in objects])
 
@@ -170,12 +173,20 @@ class GoCgoGraphTest(unittest.TestCase):
         self.assertEqual(between(args, "++peers", "--ya-end-command-file"), [
             f"{STD}/syscall/syscall.a", f"{STD}/runtime/cgo/cgo.a", f"{STD}/errors/errors.a",
         ])
-        self.assertEqual(lib.bucketed(package["inputs"][-7:-1], 4), lib.bucketed([
+        self.assertEqual(lib.bucketed(package["inputs"][-18:-14], 4), lib.bucketed([
             "$(B)/contrib/libs/zstd/libcontrib-libs-zstd.a", f"$(B)/{STD}/syscall/syscall.a",
             f"$(B)/{STD}/runtime/cgo/cgo.a", f"$(B)/{STD}/errors/errors.a",
-            f"{s}/helper.h", "$(S)/contrib/libs/zstd/include/zstd.h",
         ], 4))
-        self.assertEqual(package["inputs"][-1], f"{b}/_cgo_main.c.o")
+        # the inputs of the whole peer closure flow into the package (pre-YMAKE-2161 ymake)
+        self.assertEqual(package["inputs"][-14:-9], [
+            f"$(S)/{STD}/syscall/syscall.go", f"$(S)/{STD}/runtime/cgo/cgo.go", f"$(S)/{STD}/errors/errors.go",
+            "$(S)/contrib/libs/zstd/include/zstd.h", f"{s}/helper.h",
+        ])
+        self.assertEqual(package["inputs"][-9:], [
+            "$(S)/build/scripts/cgo1_wrapper.py", "$(S)/build/scripts/wrapcc.py",
+            "$(S)/build/scripts/fs_tools.py", "$(S)/build/scripts/link_o.py",
+            f"{s}/helper.c", f"{s}/helper_impl.h", f"{s}/bridge.cxx", f"{s}/trampoline.S", f"{b}/_cgo_main.c.o",
+        ])
 
         link = lib.node_by_output(graph, "$(B)/cmd/app/app")
         link_args = link["cmds"][-1]["cmd_args"]
@@ -224,7 +235,7 @@ class GoCgoGraphTest(unittest.TestCase):
         self.assertEqual([srcs[0], srcs[-1]], [f"$(B)/{cgo}/gen.symabis", f"$(S)/{cgo}/asm_amd64.s"])
         tool_inputs_end = package["inputs"].index("$(S)/build/rules/go/risky_imports.yaml") + 1
         self.assertEqual(package["inputs"][tool_inputs_end:tool_inputs_end + 3], [
-            f"$(B)/{STD}/syscall/syscall.a", f"$(S)/{STD}/runtime/textflag.h", f"$(S)/{cgo}/libcgo.h",
+            f"$(B)/{STD}/syscall/syscall.a", f"$(S)/{STD}/syscall/syscall.go", f"$(S)/{STD}/runtime/textflag.h",
         ])
         symabis = lib.node_by_output(graph, f"$(B)/{cgo}/gen.symabis")["cmds"][0]["cmd_args"]
         self.assertEqual(between(symabis, "-trimpath", "-D")[1:], [
@@ -406,7 +417,7 @@ const raw = `
         dynimport = lib.node_by_output(graph, f"$(B)/{pkg}/_cgo_import.go")
         self.assertEqual(dynimport["cmds"][2]["cmd_args"][1:3], ["-dynpackage", "authparser"])
         self.assertIn(f"$(S)/{pkg}/extern_c.h", dynimport["inputs"])
-        self.assertNotIn(f"$(S)/{pkg}/decode.go", dynimport["inputs"])
+        self.assertIn(f"$(S)/{pkg}/decode.go", dynimport["inputs"])
         package = lib.node_by_output(graph, f"$(B)/{pkg}/authparser.a")
         args = package["cmds"][0]["cmd_args"]
         self.assertEqual(between(args, "++srcs", "++asm-flags")[-1], f"$(B)/{pkg}/_cgo_import.go")
