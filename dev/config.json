@@ -1009,7 +1009,7 @@
       "travel/orders/app/src/integration-experience",
       "travel/orders/tools/db_migrator"
     ],
-    "xfail": true,
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14088890235",
     "slice_sha256": "f539aefca4b67550287610fb7e0b60a07a5b4f0a14e707f5ec40d617abd46378",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14088893695",

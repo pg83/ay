@@ -345,6 +345,16 @@ def swig_jni_tree(**extra):
 
 
 class JavaSwigTest(unittest.TestCase):
+    def test_header_includes_inherit_cpp_parser_for_ambiguous_extensions(self):
+        files = swig_jni_tree(**{
+            "jni/api.h": '#include "detail.i"\n',
+            "jni/detail.i": '#include "nested.h"\n',
+            "jni/nested.h": "",
+        })
+        graph = lib.make(files, "jni")
+        jsrc = lib.node_by_output(graph, "$(B)/jni/wrap.swg.jsrc")
+        self.assertIn("$(S)/jni/nested.h", jsrc["inputs"])
+
     def test_dll_java_wraps_a_swig_interface_for_jni_and_java(self):
         graph = lib.make(swig_jni_tree(), "jni")
         head = [
