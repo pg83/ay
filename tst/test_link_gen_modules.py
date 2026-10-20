@@ -144,6 +144,26 @@ class GenModulesTest(unittest.TestCase):
             result.stderr,
         )
 
+    def test_recurse_conditions_follow_statement_order_and_module_environment(self):
+        files = {
+            "top/ya.make": (
+                "SET(WITH_CHILD yes)\nSET(CHILD enabled)\n"
+                "IF (WITH_CHILD)\nRECURSE(${CHILD})\nENDIF()\n"
+                "DISABLE(WITH_CHILD)\nIF (WITH_CHILD)\nRECURSE(absent)\n"
+                "ELSE()\nRECURSE(disabled)\nENDIF()\n"
+                "ENABLE(WITH_CHILD)\nIF (WITH_CHILD)\nRECURSE(reenabled)\nENDIF()\n"
+                + library()
+                + 'IF (MODULE_LANG == "CPP")\nRECURSE(module_env)\nENDIF()\n'
+            ),
+        }
+        for child in ("enabled", "disabled", "reenabled", "module_env"):
+            files[f"top/{child}/ya.make"] = program(child)
+            files[f"top/{child}/m.cpp"] = "int main(){return 0;}\n"
+        graph = lib.make(files, "top")
+        outputs = {out for n in graph["graph"] for out in n["outputs"]}
+        for child in ("enabled", "disabled", "reenabled", "module_env"):
+            self.assertIn(f"$(B)/top/{child}/{child}", outputs)
+
     def test_recurse_discovers_final_targets(self):
         files = {
             "top/ya.make": library("SRCS(t.cpp)\n")

@@ -484,7 +484,13 @@ func (ctx *GenCtx) recurseClosure(root string) []string {
 }
 
 func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
-	env := buildIfEnvInto(&ctx.ifEnvScratch, ModuleInstance{Path: source(dir), Platform: ctx.target})
+	instance := ctx.rootInstance(dir, demandNone)
+	env := buildIfEnvInto(&ctx.ifEnvScratch, instance)
+	d := ModuleData{}
+
+	apply := func(stmt Stmt) {
+		collectStmts(ctx.fs, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, &d, ctx.onWarn)
+	}
 
 	var module TOK
 	var children []string
@@ -496,6 +502,9 @@ func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
 			switch v := st.(type) {
 			case *ModuleStmt:
 				module = v.Name
+				apply(st)
+			case *SetStmt, *DefaultVarStmt:
+				apply(st)
 			case *IfStmt:
 				if evalCond(v.Cond, env) {
 					scan(v.Then)
@@ -503,11 +512,17 @@ func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
 					scan(v.Else)
 				}
 			case *UnknownStmt:
+				switch v.Name {
+				case tokEnable, tokDisable, tokSetAppend, tokSetListPreSuf,
+					tokUsePython2, tokPython2Addincl, tokUsePython3, tokPython3Addincl:
+					apply(st)
+				}
+
 				if v.Name != tokRecurse && v.Name != tokRecurseRootRelative && (v.Name != tokRecurseForTests || !ctx.testMode) {
 					continue
 				}
 
-				for _, a := range v.Args {
+				for _, a := range expandStmtTokens(v.Args, env) {
 					child := a.string()
 
 					if v.Name != tokRecurseRootRelative {
