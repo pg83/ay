@@ -863,50 +863,26 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	includedSrcs := goRes.AsmInclSrcs
 
 	if len(d.cgoSrcs) > 0 {
-		cgoAux := append(goModuleCgoCFiles(d), goModuleCgoSFiles(d)...)
-		copyScripts := ctx.scripts[copyFsToolsVFS.rel()]
-		linkOScripts := ctx.scripts[linkOScriptVFS.rel()]
-		extrasCap := len(includedSrcs) + 2 + len(copyScripts) + len(linkOScripts)
-		auxSrcs := make([]VFS, len(cgoAux))
-
-		for i, f := range cgoAux {
-			auxSrcs[i] = resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
-			extrasCap += 1 + e.scanner.walkClosure(auxSrcs[i], d.scanCtx, scanDomainCC).len()
-		}
-
 		cvs := e.cvScratch[:0]
+		extrasCap := len(includedSrcs)
 
-		for _, src := range auxSrcs {
-			cvs = append(cvs, e.scanner.walkClosure(src, d.scanCtx, scanDomainCC))
+		for _, f := range d.cgoSrcs {
+			cv := e.scanner.walkClosure(resolveSourceVFS(ctx, instance, f.string(), d.srcDirs), d.scanCtx, scanDomainCC)
+
+			extrasCap += cv.len()
+			cvs = append(cvs, cv)
 		}
 
 		e.cvScratch = retainMaxLen(e.cvScratch, cvs)
 
 		block := na.vfs.alloc(extrasCap)
-		k := 0
-		push := func(p VFS) { block[k] = p; k++ }
+		k := copy(block, includedSrcs)
 
-		for _, p := range includedSrcs {
-			push(p)
-		}
-
-		push(cgo1WrapperVFS)
-		push(wrapccPyVFS)
-
-		for _, p := range copyScripts {
-			push(p)
-		}
-
-		for _, p := range linkOScripts {
-			push(p)
-		}
-
-		for i, src := range auxSrcs {
-			push(src)
-
-			cvs[i].each(func(p VFS) {
+		for _, cv := range cvs {
+			cv.each(func(p VFS) {
 				if p.isSource() {
-					push(p)
+					block[k] = p
+					k++
 				}
 			})
 		}

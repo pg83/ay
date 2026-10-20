@@ -460,7 +460,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	if goModule {
-		for i, srcTok := range goModuleCgoCFiles(d) {
+		for i, srcTok := range goModuleCgoExports(d) {
 			outsMark := len(e.prodVFS)
 
 			e.prodVFS = append(e.prodVFS, build(module, "/", srcTok.string()))
@@ -477,9 +477,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 			outsMark := len(e.prodVFS)
 
 			for _, f := range d.cgoSrcs {
-				base := strings.TrimSuffix(f.string(), ".go")
-
-				e.prodVFS = append(e.prodVFS, build(module, "/", base, ".cgo1.go"), build(module, "/", base, ".cgo2.c"))
+				e.prodVFS = append(e.prodVFS, e.goCgoOut(f, ".cgo1.go"), e.goCgoOut(f, ".cgo2.c"))
 			}
 
 			e.prodVFS = append(e.prodVFS,
@@ -753,7 +751,7 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		case prodSrc:
 			e.emitOneSource(srcs[pos.index])
 		case prodGoCgoCopy:
-			e.emitGoCgoCopyStmt(goModuleCgoCFiles(e.d)[pos.index])
+			e.emitGoCgoCopyStmt(goModuleCgoExports(e.d)[pos.index])
 		case prodGoCgo1:
 			e.emitGoCgo1Stmt()
 		case prodGoCodegen:
