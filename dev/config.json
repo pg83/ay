@@ -410,10 +410,10 @@
       "yweb/structhtml/microform/parser"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087229708",
-    "slice_sha256": "d6f9135a40bccf8ba0261e523d2cacd206434b6152edd405fc66f8c99e63ff50",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087240683",
-    "graph_sha256": "4b4ab6158ef06cb94cb31445011214fb839dbd954a3c42510c1e8089c42b1252"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088276548",
+    "slice_sha256": "845d9009fc75ad11de9d60c86f850a65e335b8d9d2c076e5e5ca7d125e787eba",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088282288",
+    "graph_sha256": "8cd6baa5e66a2cfc0e8cef42866a6b5e0a24bfbb305cef0d1a6116b7721153ab"
   },
   {
     "id": "p12_config",
@@ -572,10 +572,10 @@
       "yweb/robot/js/lib/http"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087283514",
-    "slice_sha256": "4df1c0ebeeffdb256f6a093a95303f19188546094295575de95a35633b20b5ef",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087296939",
-    "graph_sha256": "1b690d5b7864c250a1d2c4184c9073c03d7722f2eb6d32075280c91253bd09e6"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088295047",
+    "slice_sha256": "110d524e0ec2dd988932590ec972679a347a5d4a687d46fce7523e56dcae3bc0",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088299229",
+    "graph_sha256": "324a09d6741f40bfdd2afccdc5b437a8be7681cae5108300439f4be2eda87b4a"
   },
   {
     "id": "p12_cuda",
@@ -654,10 +654,10 @@
       "dict/mt/libs/nn/ynmt_backend/gpu/int4_fp8_gemm/codegen/hopper"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14086941252",
-    "slice_sha256": "e523930e5fffc2bf4a1589f84eb2489293fc95059b6f98af05189bd0fa8a33d8",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14086942150",
-    "graph_sha256": "5c061e7279dbc88402dd3598d8918b6d400e4f9205c623665cc9785ecc3d8251"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087942023",
+    "slice_sha256": "e9e856f1016dcfa09c1e5d1339cd1173a9c81a3c1cecb2af40df2c25149134cc",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087942701",
+    "graph_sha256": "1224308b3c815545aa733224a8d8aae61b49499221c420368f469df5777d8aaa"
   },
   {
     "id": "p12_docs",
@@ -734,10 +734,10 @@
       "maps/analytics/docs"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14086937487",
-    "slice_sha256": "3094e507473a24a1a9f76a4da0297d4b2996d115b7a7402480dd2904175688d2",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14086937954",
-    "graph_sha256": "4511339e23b7b2c30b4004b2e8e4f040fcb82bbd7bc03610e9b5b19ac7963c15"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087938491",
+    "slice_sha256": "6386b0ea3638218ad2dea942c2616c5ac8c3767d6ee5e2f3ee1b2c530ce8a28e",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087939087",
+    "graph_sha256": "1a043f87accf46369d606575cb610a1fe3adca43758a7f8fe1631909562bae0b"
   },
   {
     "id": "p12_go",
@@ -822,10 +822,10 @@
       "travel/orders/tools/backup/internal/backuptables/gotest"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14086991290",
-    "slice_sha256": "f20408377cd8485ab31fdc2fb82ff230e8d7b4fd79ea53bd77aac405e680847b",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14086995345",
-    "graph_sha256": "7a9e07a8e0bc31bbc50e9c3c5cf824de809572e16b9582f6e95fed8eef7b81a3"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087964049",
+    "slice_sha256": "e95477ef69350a7510cc48827fc21f1f7fbb86687dec9e095d533db422edac64",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087967387",
+    "graph_sha256": "98328c91a0eb56644c72d98c340b44d2a9c8d363929a70e81edb472639102fbf"
   },
   {
     "id": "p12_java",
@@ -944,10 +944,10 @@
       "travel/orders/tools/db_migrator"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087091515",
-    "slice_sha256": "cd95a7aff6986b659bce343c8afc79e039e3647e1cd4dcb622b4e63de77784ea",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087095260",
-    "graph_sha256": "f22de50055201160e6598e21ab336261e7273459d119e137f9cd40515eaaaa0f"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088006677",
+    "slice_sha256": "363dc016f5ad748b87597ad78549663e8838131bc71db07accc15883073eaf7e",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088009321",
+    "graph_sha256": "338f1481c10015145b8ab20ffe0d3b8fbba59c9ad6c4c1970f073df95272c0ab"
   },
   {
     "id": "p12_packaging",
@@ -1038,10 +1038,10 @@
       "sdg/sdc/third_party/ros/ros/core/roslib/sdc_install"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087050233",
-    "slice_sha256": "73ed4401307f686fa0eb5fe71e84a0ecd925db0c05dbc833a7f7d0fac66a5b50",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087057721",
-    "graph_sha256": "782febf3b0f8d9337c80effa8dd83b57b404fd896b9c8b14a9a05f25c58916e0"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087980742",
+    "slice_sha256": "5f7aa90bf347302299f215f6ef0c4e9a0fca1fac8ae1d1821057c8d82784b621",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087985486",
+    "graph_sha256": "8f095310756ef3596d33d0abca4135ae4e416bc4cdc4d95cfe40df3f2447bc45"
   },
   {
     "id": "p12_proto",
@@ -1122,10 +1122,10 @@
       "yp/go/yson/hq"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14086958074",
-    "slice_sha256": "a53daba2b4eb043b766c94abecbd6c1ecc38c046d1bca2c0b9853b9dfbc9a16d",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14086960053",
-    "graph_sha256": "c888e0728c1a85640620a039da92d397af75023a7d5a77d13816cf289deca0dd"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087952708",
+    "slice_sha256": "d8f4057a2b788662f80f527b65563ddefd20956368c2ef19d3ade1703eea1731",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087954527",
+    "graph_sha256": "21f8ebb93e836c7db3af755ff3f90339c11e876fe604fd547e2c5a1de5e451db"
   },
   {
     "id": "p12_py2",
@@ -1200,10 +1200,10 @@
       "yweb/crawlrank/scripts/netiface"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14086935045",
-    "slice_sha256": "e3c995ccd915035995a65f698d2078bb91fb00fd6ffcdf7f62e899bb92638dad",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14086935674",
-    "graph_sha256": "faffdb0364ec874739d083f1369d9c7444230c8258f669b64a648ad93f3f57a6"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087935693",
+    "slice_sha256": "6dc9cb0e7accb6ea89ffef2e8f3b39aabda2824d4ebe7c38e18051b1e4673bc1",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087936181",
+    "graph_sha256": "0cef3cc03a4185d62289196c76239b859dcb6b6448b56b4bf33a928fce3987fe"
   },
   {
     "id": "p12_tests",
@@ -1324,10 +1324,10 @@
       "yweb/news/rtmr/document_history/lib/util/ut"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087121367",
-    "slice_sha256": "c18c956ecfe17bbcf87dddb3a57af33a2e6199afb5592e5ac0e86ddcf079766f",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087125659",
-    "graph_sha256": "dea1365800b692d1bcb22f151a63e0cd13b9b487b465ddcabb6f92b1236aabf7"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14088033315",
+    "slice_sha256": "965f226e302db147ce37bf14fbfc777020f9da771c79b106b56ab6e882570e0e",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14088039024",
+    "graph_sha256": "58dae973819fb45913693388d0520f84384c072fc06c159309d2c7267a449ef8"
   },
   {
     "id": "p12_typescript",
@@ -1420,9 +1420,9 @@
       "yql/library/ide/docs/yfm/build"
     ],
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087063295",
-    "slice_sha256": "021044d1771cbaeb2a7ee18e1e39fa7d1d0add25e8d762d43d65184353658b96",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087065362",
-    "graph_sha256": "d056ecf45dc32a631355009a696ab10ad7deefcd5d7576d10bd6c985dbf117b0"
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14087988215",
+    "slice_sha256": "1403c3d78fab0e72fd22927a587b5d49f0201be5ae6853db87e7a4a31846102d",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14087989831",
+    "graph_sha256": "32b1687882dfdeec4d57d292dab806b7696e4da6891f7357d263c5d73d7feb6f"
   }
 ]
