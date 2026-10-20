@@ -28,7 +28,7 @@ def cfgproto_files():
         "library/cpp/proto_config/codegen/x.cpp": "int x(){return 0;}\n",
         "library/cpp/proto_config/codegen/codegen.h": "#pragma once\n",
         "library/cpp/proto_config/protos/ya.make": (
-            "PROTO_LIBRARY()\nSRCS(extensions.proto)\nEND()\n"
+            "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nSRCS(extensions.proto)\nEND()\n"
         ),
         "library/cpp/proto_config/protos/extensions.proto": 'syntax = "proto2";\n',
     }
@@ -123,7 +123,7 @@ class ProtoCfgprotoTest(unittest.TestCase):
         files = cfgproto_files()
         files.update({
             "c/ya.make": (
-                "PROTO_LIBRARY()\nSRCS(a.cfgproto b.proto)\nEND()\n"
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nSRCS(a.cfgproto b.proto)\nEND()\n"
             ),
             "c/a.cfgproto": 'import "c/b.proto";\nmessage A {}\n',
             "c/b.proto": 'syntax = "proto2";\nmessage B {}\n',

@@ -25,7 +25,7 @@ def family_files():
             "#pragma once\n"
         ),
         "library/cpp/proto_config/protos/ya.make": (
-            "PROTO_LIBRARY()\nSRCS(extensions.proto)\nEND()\n"
+            "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nSRCS(extensions.proto)\nEND()\n"
         ),
         "library/cpp/proto_config/protos/extensions.proto": 'syntax = "proto2";\n',
     }
@@ -57,7 +57,7 @@ class ProtoImportsTest(unittest.TestCase):
         files = family_files()
         files.update({
             "e/ya.make": (
-                "PROTO_LIBRARY()\nPROTO_NAMESPACE(e)\n"
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nPROTO_NAMESPACE(e)\n"
                 "SRCS(a.ev b.ev c.cfgproto d.proto)\nEND()\n"
             ),
             "e/a.ev": (

@@ -18,7 +18,7 @@ def gazetteer_files(converter_induced_deps):
         ),
         "contrib/libs/protobuf/protobuf.cpp": "int protobuf(){return 0;}\n",
         "kernel/gazetteer/proto/ya.make": (
-            "PROTO_LIBRARY()\nPROTO_NAMESPACE(kernel/gazetteer/proto)\n"
+            "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nPROTO_NAMESPACE(kernel/gazetteer/proto)\n"
             "SRCS(base.proto syn.proto)\nEND()\n"
         ),
         "kernel/gazetteer/proto/base.proto": (
@@ -53,7 +53,7 @@ class ProtoGztprotoTest(unittest.TestCase):
         )
         files.update({
             "g/ya.make": (
-                "PROTO_LIBRARY()\nPEERDIR(kernel/gazetteer/proto)\n"
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nPEERDIR(kernel/gazetteer/proto)\n"
                 "SRCS(a.gztproto b.gztproto)\nEND()\n"
             ),
             "g/a.gztproto": (
@@ -135,14 +135,14 @@ class ProtoGztprotoTest(unittest.TestCase):
     def test_generated_proto_import_and_root_proto_includes(self):
         files = gazetteer_files("${ARCADIA_ROOT}/kernel/gazetteer/rt.h")
         files["kernel/gazetteer/proto/ya.make"] = (
-            "PROTO_LIBRARY()\n"
+            "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\n"
             "ADDINCL(GLOBAL FOR proto ${ARCADIA_ROOT}/ "
             "GLOBAL FOR proto ${ARCADIA_BUILD_ROOT}/)\n"
             "SRCS(base.proto)\nEND()\n"
         )
         files.update({
             "g/ya.make": (
-                "PROTO_LIBRARY()\nPEERDIR(kernel/gazetteer/proto)\n"
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nPEERDIR(kernel/gazetteer/proto)\n"
                 "SRCS(b.gztproto a.gztproto)\nEND()\n"
             ),
             "g/a.gztproto": 'import "g/b.proto";\nmessage A {}\n',

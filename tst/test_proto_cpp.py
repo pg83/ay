@@ -102,7 +102,7 @@ class ProtoCppTest(unittest.TestCase):
         # closure of the generated .pb.cc, not the inputs of protoc.
         files = proto_files()
         files.update({
-            "p/ya.make": "PROTO_LIBRARY()\nSRCS(a.proto)\nEND()\n",
+            "p/ya.make": "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nSRCS(a.proto)\nEND()\n",
             "p/a.proto": 'syntax = "proto3";\nimport "google/protobuf/descriptor.proto";\nmessage A {}\n',
         })
         for args, local in (((), True), (("--dist",), False)):
@@ -119,7 +119,7 @@ class ProtoCppTest(unittest.TestCase):
         grpc_files(files)
         files.update({
             "p/ya.make": (
-                "PROTO_LIBRARY(named)\nGRPC()\n"
+                "PROTO_LIBRARY(named)\nONLY_TAGS(CPP_PROTO)\nGRPC()\n"
                 "SRCS(a.proto ./b.proto sub/../c.proto d.proto)\nEND()\n"
             ),
             "p/a.proto": (
@@ -215,7 +215,7 @@ class ProtoCppTest(unittest.TestCase):
         empty_library(files, "deps/d2")
         files.update({
             "p/ya.make": (
-                "PROTO_LIBRARY()\n"
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\n"
                 "SET(PROTOC_TRANSITIVE_HEADERS \"no\")\n"
                 "PROTO_NAMESPACE(p)\n"
                 "SET_APPEND(_PROTOC_FLAGS --fatal_warnings)\n"
@@ -288,7 +288,7 @@ class ProtoCppTest(unittest.TestCase):
         yaff_files(files)
         files.update({
             "p/ya.make": (
-                "PROTO_LIBRARY()\n"
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\n"
                 "YAFF(NAMESPACE my_ns)\n"
                 "SET(PROTOC_TRANSITIVE_HEADERS \"no\")\n"
                 "SRCS(a.proto)\nEND()\n"
@@ -363,7 +363,7 @@ class ProtoCppTest(unittest.TestCase):
         lib.tool_program(files, "tools/gen", "gen")
         files.update({
             "p/ya.make": (
-                "PROTO_LIBRARY()\n"
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\n"
                 "DEFAULT(PROTOC_TRANSITIVE_HEADERS no)\n"
                 "PROTO_NAMESPACE(.)\n"
                 "CPP_PROTO_PLUGIN2(rpc tools/gen .grpc.pb.h .grpc.pb.cc)\n"
@@ -395,7 +395,7 @@ class ProtoCppTest(unittest.TestCase):
         files = proto_files()
         names = [f"m{i:02d}.proto" for i in range(count)]
         files["p/ya.make"] = (
-            "PROTO_LIBRARY()\nSRCS(\n" + "\n".join(names) + "\n)\nEND()\n"
+            "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nSRCS(\n" + "\n".join(names) + "\n)\nEND()\n"
         )
         for name in names:
             files[f"p/{name}"] = 'syntax = "proto3";\n'

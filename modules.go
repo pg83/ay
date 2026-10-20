@@ -168,6 +168,8 @@ type ModuleData struct {
 	yqlCurrent               bool
 	yqlStableABI             bool
 	yqlPrebuiltResource      string
+	protoVariants            uint16
+	listProtos               []ListProtoStmt
 	nots                     *NotsModule
 	docs                     *DocsData
 	moduleStmt               *ModuleStmt
@@ -1089,6 +1091,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
 
+			if v.Name == tokProtoLibrary && !v.Schema {
+				d.protoVariants = defaultProtoVariants
+			}
+
 			if v.Name == tokDocs || v.Name == tokDocsLibrary {
 				d.docs = &DocsData{config: modulePath + "/.yfm"}
 			}
@@ -1108,6 +1114,8 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				} else if language == LangDescProto {
 					env.setString(envMODULE_TAG, "DESC_PROTO")
 					env.setBool(envDescProto, true)
+				} else if language == LangDocsProto {
+					env.setString(envDocsProto, "yes")
 				} else {
 					env.setStringID(envMODULE_TAG, strCPPProto)
 					env.setStringID(envCPP_PROTO, strCPPProto)
@@ -2227,7 +2235,22 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if len(v.Args) > 0 {
 			d.peerdirs = append(d.peerdirs, strMapsLibsSproto.any())
 		}
-	case tokExcludeTags, tokOnlyTags, tokIncludeTags:
+	case tokListProto:
+		stmt := ListProtoStmt{Output: strFilesProto.any()}
+
+		for i := 0; i < len(v.Args); i++ {
+			if v.Args[i].string() == "TO" && i+1 < len(v.Args) {
+				i++
+				stmt.Output = v.Args[i]
+			} else {
+				stmt.Files = append(stmt.Files, v.Args[i])
+			}
+		}
+
+		d.listProtos = append(d.listProtos, stmt)
+	case tokOnlyTags, tokIncludeTags, tokExcludeTags:
+
+		applyProtoVariantTags(v, d)
 
 		if d.excludeTags == nil {
 			d.excludeTags = make(map[STR]bool)

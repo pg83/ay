@@ -136,7 +136,9 @@ class EnumSerializationTest(unittest.TestCase):
             "contrib/libs/protobuf/ya.make": EMPTY_LIBRARY,
             "contrib/libs/python/ya.make": EMPTY_LIBRARY,
         })
-        cpp = lib.make(files, "pl")
+        cpp_files = dict(files)
+        cpp_files["pl/ya.make"] = files["pl/ya.make"].replace("PROTO_LIBRARY()", "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)")
+        cpp = lib.make(cpp_files, "pl")
         node = lib.node_by_output(cpp, "$(B)/pl/enums.h_serialized.cpp")
         self.assertEqual(node["inputs"], [ENUM_PARSER, "$(S)/pl/enums.h"])
         lib.node_by_output(cpp, "$(B)/pl/enums.h_serialized.cpp.o")

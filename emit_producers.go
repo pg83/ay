@@ -39,6 +39,7 @@ const (
 	prodLlvmCompile
 	prodLuaCompile
 	prodUserverProto
+	prodListProto
 )
 
 type ProducerPos struct {
@@ -215,7 +216,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
 		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens) + len(d.cgoSrcs) +
-		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos)
+		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos) + len(d.listProtos)
 
 	if d.docs != nil {
 		n += len(d.docs.copies)
@@ -426,6 +427,18 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 				backing = append(backing, buildClean(f.string()))
 			}
 		}
+	}
+
+	for i, lp := range d.listProtos {
+		start := len(backing)
+		out := buildJoinClean(module, lp.Output.string())
+
+		backing = append(backing, out, listProtoHeader(out))
+
+		outEnd := len(backing)
+
+		runIns(lp.Files)
+		push(prodListProto, i, start, outEnd)
 	}
 
 	for i, rp := range d.runPrograms {
@@ -842,6 +855,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 			e.emitGoCgo1Stmt()
 		case prodGoCodegen:
 			e.emitGoCodegenStmt(e.d.goCodegens[pos.index])
+		case prodListProto:
+			e.emitListProto(e.d.listProtos[pos.index])
 		case prodUserverProto:
 			e.emitUserverProtos(e.d.userverProtos[pos.index])
 		case prodEnum:

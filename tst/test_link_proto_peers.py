@@ -62,7 +62,7 @@ def fixture():
         "py3q/ya.make": f"PY3_PROGRAM()\n{NO_PLATFORM}PEERDIR(pyq)\nEND()\n",
         "d/ya.make": "PROTO_DESCRIPTIONS(descs)\nPEERDIR(p)\nEND()\n",
         "pl/ya.make": (
-            "PROTO_LIBRARY()\nSRCS(z.proto)\n"
+            "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nSRCS(z.proto)\n"
             "CPP_PROTO_PLUGIN0(sg2 contrib/tools/protoc/plugins/cpp_styleguide)\nEND()\n"
         ),
         "pl/z.proto": 'syntax = "proto3";\nmessage Z {}\n',

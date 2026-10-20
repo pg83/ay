@@ -95,7 +95,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"DISABLE_DATA_VALIDATION":         {},
 
 	"FROM_SANDBOX":      {},
-	"LIST_PROTO":        {},
 	"JAVA_PROTO_PLUGIN": {},
 
 	"SPLIT_CODEGEN":             {},
@@ -126,6 +125,7 @@ const (
 )
 
 type ModuleEmitResult struct {
+	ProtoVariants                   uint16
 	JavaClosure                     []VFS
 	DocsClosure                     []VFS
 	ARRef                           NodeRef
@@ -427,9 +427,9 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 		ctx.emit.result(*root.GlobalRef)
 	}
 
-	if ctx.testMode {
-		ctx.emitModuleTests(root)
-	}
+	ctx.genProtoTargets(targetDir, root.ProtoVariants, rootDemand)
+
+	ctx.emitModuleTests(root)
 
 	for _, dir := range recursed {
 		if name := ctx.moduleName(dir); isJavaModuleType(name) {
@@ -447,6 +447,8 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 		if sub.LDRef != 0 {
 			ctx.emit.result(sub.LDRef)
 		}
+
+		ctx.genProtoTargets(dir, sub.ProtoVariants, rootDemand)
 
 		ctx.emitModuleTests(sub)
 	}
@@ -549,13 +551,38 @@ func (e *EmitContext) moduleInputArg(arg *ANY) *ANY {
 }
 
 func stmtsModuleName(stmts []Stmt) TOK {
+	var name TOK
+
 	for _, st := range stmts {
-		if m, ok := st.(*ModuleStmt); ok {
-			return m.Name
+		var candidate TOK
+
+		switch v := st.(type) {
+		case *ModuleStmt:
+			return v.Name
+		case *IfStmt:
+			thenName, elseName := stmtsModuleName(v.Then), stmtsModuleName(v.Else)
+
+			if thenName != 0 && elseName != 0 && thenName != elseName {
+				return 0
+			}
+
+			candidate = thenName
+
+			if candidate == 0 {
+				candidate = elseName
+			}
+		}
+
+		if candidate != 0 {
+			if name != 0 && name != candidate {
+				return 0
+			}
+
+			name = candidate
 		}
 	}
 
-	return 0
+	return name
 }
 
 func isLinkingModuleType(name TOK) bool {
@@ -1047,12 +1074,28 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	e.prepareUserverProtos()
 
+	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangCPP && moduleExcludesTag(d, "CPP_PROTO") {
+		result := &ModuleEmitResult{ProtoVariants: d.protoVariants, ModuleStmtName: tokProtoLibrary}
+
+		ctx.memoPut(instance, result)
+
+		return result
+	}
+
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDescProto {
 		result := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name}
 
 		if !moduleExcludesTag(d, "DESC_PROTO") {
 			result = e.emitDescProtoSubmodule()
 		}
+
+		ctx.memoPut(instance, result)
+
+		return result
+	}
+
+	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDocsProto {
+		result := e.emitDocsProtoSubmodule()
 
 		ctx.memoPut(instance, result)
 
@@ -1921,6 +1964,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		*r = ModuleEmitResult{
 			TestSuites:                      e.styleSuites(resourceGlobalsClosure),
+			ProtoVariants:                   d.protoVariants,
 			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                d.addInclGlobal,

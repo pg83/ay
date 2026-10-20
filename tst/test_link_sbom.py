@@ -174,7 +174,7 @@ class SbomTest(unittest.TestCase):
     def test_proto_library_without_the_cpp_variant_is_no_component(self):
         files = fixture()
         files.update({
-            "pl/ya.make": "PROTO_LIBRARY()\nLICENSE(MIT)\nSRCS(p.proto)\nEXCLUDE_TAGS(CPP_PROTO)\nEND()\n",
+            "pl/ya.make": "PROTO_LIBRARY()\nLICENSE(MIT)\nSRCS(p.proto)\nONLY_TAGS(DESC_PROTO)\nEND()\n",
             "pl/p.proto": 'syntax = "proto3";\n',
             "build/scripts/cpp_proto_wrapper.py": "",
             "contrib/libs/protobuf/ya.make": library(
@@ -186,10 +186,12 @@ class SbomTest(unittest.TestCase):
         lib.tool_program(files, "contrib/tools/protoc/plugins/cpp_styleguide", "cpp_styleguide")
         graph = lib.make(files, "pl", *X86_64, "-r", "-k")
         self.assertEqual(
-            [(node["kv"]["p"], node["outputs"][0]) for node in graph["graph"]
-             if node["outputs"][0].startswith("$(B)/pl/")],
-            [("PB", "$(B)/pl/p.pb.h"), ("CC", "$(B)/pl/p.pb.cc.o"), ("AR", "$(B)/pl/libpl.a")],
+            [out for node in sbom_nodes(graph) for out in node["outputs"] if out.startswith("$(B)/pl/")],
+            [],
         )
+
+        lib.node_by_output(graph, "$(B)/pl/pl.self.protodesc")
+        self.assertFalse(any("$(B)/pl/p.pb.cc" in node["outputs"] for node in graph["graph"]))
 
     def test_release_program_over_a_proto_library(self):
         # A PROTO_LIBRARY keeps its peers' components in their own order.

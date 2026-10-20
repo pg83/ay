@@ -706,13 +706,17 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		javaProtoNamespace(d, "maps/doc/proto")
 	case "PROTOC_FATAL_WARNINGS":
 		d.protocFlags = append(d.protocFlags, "--fatal_warnings")
-	case "EXCLUDE_TAGS":
+	case "ONLY_TAGS", "INCLUDE_TAGS", "EXCLUDE_TAGS":
 		if d.excludeTags == nil {
 			d.excludeTags = map[string]bool{}
 		}
 
+		if name == "ONLY_TAGS" {
+			d.excludeTags["JAVA_PROTO"] = true
+		}
+
 		for _, a := range args {
-			d.excludeTags[a] = true
+			d.excludeTags[a] = name == "EXCLUDE_TAGS"
 		}
 	case "USE_COMMON_GOOGLE_APIS":
 		d.commonGoogleAPIs = true

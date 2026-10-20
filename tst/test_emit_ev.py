@@ -74,14 +74,14 @@ class EmitEventTest(unittest.TestCase):
         files = self.common_files()
         files.update({
             "leaf/ya.make": (
-                "PROTO_LIBRARY()\nPROTO_NAMESPACE(yt)\n"
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nPROTO_NAMESPACE(yt)\n"
                 "SRCS(leaf.proto)\nEND()\n"
             ),
             "leaf/leaf.proto": (
                 'syntax = "proto3";\npackage test;\nmessage Leaf {}\n'
             ),
             "consumer/ya.make": (
-                "PROTO_LIBRARY()\nPEERDIR(leaf)\nSRCS(events.ev)\nEND()\n"
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nPEERDIR(leaf)\nSRCS(events.ev)\nEND()\n"
             ),
             "consumer/events.ev": "message TEvent {\n}\n",
         })
@@ -96,7 +96,7 @@ class EmitEventTest(unittest.TestCase):
         files = self.common_files()
         files.update({
             "consumer/ya.make": (
-                "PROTO_LIBRARY()\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\n"
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nSET(PROTOC_TRANSITIVE_HEADERS \"no\")\n"
                 "SRCS(events.ev)\nEND()\n"
             ),
             "consumer/events.ev": "message TEvent {\n}\n",

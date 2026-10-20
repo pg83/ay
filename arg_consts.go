@@ -341,4 +341,5 @@ var (
 	cxxStandardFlag                              = internArg("-std=c++20")
 	wrapccArgEnd                                 = internArg("--wrapcc-end")
 	wrapccArgSrcFile                             = internArg("--source-file")
+	argVendorGithubComPseudomutoProtocGenDocCmdProtocGenDoc = internArg("vendor/github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc")
 )

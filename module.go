@@ -25,6 +25,7 @@ const (
 	LangDescProto
 	LangTSPrepare
 	LangTS
+	LangDocsProto
 )
 
 const (

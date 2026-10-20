@@ -63,6 +63,7 @@ var (
 	envDISABLE_INSTRUCTION_SETS     = internEnv("DISABLE_INSTRUCTION_SETS")
 	envDYLD_LIBRARY_PATH            = internEnv("DYLD_LIBRARY_PATH")
 	envDescProto                    = internEnv("DESC_PROTO")
+	envDocsProto                    = internEnv("DOCS_PROTO")
 	envErrorProneVersion            = internEnv("ERROR_PRONE_VERSION")
 	envGCC                          = internEnv("GCC")
 	envGEN_PROTO                    = internEnv("GEN_PROTO")

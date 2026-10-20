@@ -41,7 +41,7 @@ PROTO_TOOLS = [
 
 def proto_tree(body):
     files = {
-        "a/ya.make": "PROTO_LIBRARY()\n" + NO_PLATFORM + body + "\nSRCS(x.proto)\nEND()\n",
+        "a/ya.make": "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\n" + NO_PLATFORM + body + "\nSRCS(x.proto)\nEND()\n",
         "a/x.proto": 'syntax = "proto3";\n',
     }
     for path in PROTO_LIBRARIES:

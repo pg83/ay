@@ -97,7 +97,7 @@ class YaMakeModulesTest(unittest.TestCase):
             ("PY3_PROGRAM()", PYTHON_PROGRAM_PEERS, [("AR", "$(B)/a/libpy3a.a"), ("CC", "$(B)/a/x.cpp.o"), ("LD", "$(B)/a/a")]),
             ("YQL_UDF_YDB()", ["yql/essentials/public/udf", "yql/essentials/public/udf/support"], [("AR", "$(B)/a/liba.global.a"), ("CC", "$(B)/a/x.cpp.udfs.o")]),
             ("YQL_UDF_CONTRIB()", ["yql/essentials/public/udf", "yql/essentials/public/udf/support"], [("AR", "$(B)/a/liba.global.a"), ("CC", "$(B)/a/x.cpp.udfs.o")]),
-            ("PROTO_LIBRARY()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
+            ("PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("PROTO_SCHEMA()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("PROTO_DESCRIPTIONS()", [], [("PD", "$(B)/a/a.protodesc"), ("PD", "$(B)/a/a.tar")]),
             ("DLL()", [], [("CC", "$(B)/a/x.cpp.pic.o"), ("LD", "$(B)/a/liba.so")]),
@@ -188,7 +188,7 @@ class YaMakeModulesTest(unittest.TestCase):
         )
         cases = [
             ("LIBRARY()", ["-DLANG=CPP", "-DTAG=PY3"]),
-            ("PROTO_LIBRARY()", ["-DLANG=CPP", "-DTAG=CPP_PROTO", "-DGEN_PROTO"]),
+            ("PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)", ["-DLANG=CPP", "-DTAG=CPP_PROTO", "-DGEN_PROTO"]),
             ("PY23_NATIVE_LIBRARY()", ["-DLANG=CPP", "-DTAG=PY3"]),
         ]
         for declaration, expected in cases:
