@@ -205,6 +205,7 @@ var (
 	strCythonCApiH                                                                           = internStr("CYTHON_C_API_H")
 	strCythonCH                                                                              = internStr("CYTHON_C_H")
 	strCythonCppH                                                                            = internStr("CYTHON_CPP_H")
+	strCythonOptions                                                                         = internStr("CYTHON_OPTIONS")
 	strD                                                                                     = internStr("-d")
 	strD2                                                                                    = internStr("-D")
 	strDebianversionH                                                                        = internStr("DebianVersion.h")

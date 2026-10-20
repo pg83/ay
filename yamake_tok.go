@@ -1,6 +1,7 @@
 package main
 
 var tokName = [...]STR{
+	tokCythonFlags:               internStr("CYTHON_FLAGS"),
 	tokPackageFinal:              internStr("_PACKAGE_FINAL"),
 	tokMlaunchLibrary:            internStr("MLAUNCH_LIBRARY"),
 	tokMlaunchPipeline:           internStr("MLAUNCH_PIPELINE"),
@@ -783,6 +784,7 @@ const (
 	tokStyleCppUserSessions
 	tokTsProtoPackageName
 	tokDebVersion
+	tokCythonFlags
 )
 
 type TOK uint16

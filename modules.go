@@ -279,6 +279,7 @@ type ModuleData struct {
 	fromArchives             []FromArchiveEntry
 	sdcMetas                 []SdcMetaEntry
 	checkConfigHeaders       []ANY
+	cythonOptions            []ANY
 	cythonCpp                []*CythonStmt
 	cythonNumpyBeforeInclude bool
 	swigC                    []SwigSrc
@@ -718,6 +719,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	env.setVFS(envCURDIR, source(modulePath))
 	env.setVFS(envBINDIR, build(modulePath))
 	env.setVFS(envCmakeCurrentBinaryDir, build(modulePath))
+	env.setDefaultString(envCythonOptions, cythonDefaultOptions(instance.Platform.OS))
 
 	d.reset()
 
@@ -731,6 +733,10 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d, onWarn)
 	finishYqlModule(modulePath, env, d)
 	d.test.canonizeSubPath = env.string(envCanonizeSubPath)
+
+	if len(d.cythonCpp) > 0 {
+		d.cythonOptions = internAnys(strings.Fields(env.string(envCythonOptions)))
+	}
 
 	if d.nots != nil {
 		return d
@@ -2190,6 +2196,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		stmt.Opts = append([]ANY(nil), rest...)
 		d.decimalMD5 = append(d.decimalMD5, stmt)
+	case tokCythonFlags:
+		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokSetAppend, Args: append([]ANY{strCythonOptions.any()}, v.Args...)}, d, env, onWarn)
 	case tokBuildwithCythonCpp:
 		if len(v.Args) == 0 {
 			throwFmt("BUILDWITH_CYTHON_CPP expects at least 1 argument")
