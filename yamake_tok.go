@@ -219,6 +219,7 @@ var tokName = [...]STR{
 	tokPy3Program:                      kwPY3_PROGRAM,
 	tokPy3ProgramBin:                   kwPY3_PROGRAM_BIN,
 	tokPython3:                         internStr("PYTHON3"),
+	tokPython2Addincl:                  internStr("PYTHON2_ADDINCL"),
 	tokPython3Addincl:                  internStr("PYTHON3_ADDINCL"),
 	tokPyConstructor:                   internStr("PY_CONSTRUCTOR"),
 	tokPyMain:                          internStr("PY_MAIN"),
@@ -280,6 +281,7 @@ var tokName = [...]STR{
 	tokUseLlvmBc16:                     internStr("USE_LLVM_BC16"),
 	tokUseLlvmBc18:                     internStr("USE_LLVM_BC18"),
 	tokUseLlvmBc20:                     internStr("USE_LLVM_BC20"),
+	tokUsePython2:                      internStr("USE_PYTHON2"),
 	tokUsePython3:                      internStr("USE_PYTHON3"),
 	tokVersion:                         internStr("VERSION"),
 	tokWindowsLongPathManifest:         internStr("WINDOWS_LONG_PATH_MANIFEST"),
@@ -550,6 +552,7 @@ const (
 	tokPy3Program
 	tokPy3ProgramBin
 	tokPython3
+	tokPython2Addincl
 	tokPython3Addincl
 	tokPyConstructor
 	tokPyMain
@@ -630,6 +633,7 @@ const (
 	tokUseLlvmBc16
 	tokUseLlvmBc18
 	tokUseLlvmBc20
+	tokUsePython2
 	tokUsePython3
 	tokVersion
 	tokWindowsLongPathManifest

@@ -62,6 +62,7 @@ var (
 	flatcRuntimeVFS                     = source("contrib/libs/flatbuffers/include/flatbuffers/flatbuffers.h")
 	flatcWrapperVFS                     = source("build/scripts/cpp_flatc_wrapper.py")
 	genPy3RegScriptVFS                  = source("build/scripts/gen_py3_reg.py")
+	genPyRegScriptVFS                   = source("build/scripts/gen_py_reg.py")
 	goFakeIncludeVFS                    = source("build/scripts/go_fake_include")
 	goProtoWrapperVFS                   = source("build/scripts/go_proto_wrapper.py")
 	googleapisCommonProtosAddIncl       = build("contrib/libs/googleapis-common-protos")

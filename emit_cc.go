@@ -37,7 +37,7 @@ type ModuleCompileEnv struct {
 	DefaultVars          map[STR]STR
 	DefaultVarOrder      []STR
 	SetVars              map[STR]STR
-	Py3Suffix            bool
+	ObjSuf               STR
 	ObjectSuffixStem     *string
 	NoOptimize           bool
 	MainOutInducedInputs bool
@@ -58,7 +58,7 @@ type ModuleCCInputs struct {
 	CCBlocks        *CcModuleArgBlocks
 	FlatOutput      bool
 	ForceCxx        bool
-	Py3Suffix       bool
+	ObjSuf          STR
 	Variant         *string
 	IncludeInputs   []VFS
 	IncludeView     Closure
@@ -70,7 +70,7 @@ func newModuleCCInputs(env *ModuleCompileEnv) ModuleCCInputs {
 		AddIncl:          env.AddIncl,
 		CFlags:           env.CFlags,
 		CCBlocks:         &env.CCBlocks,
-		Py3Suffix:        env.Py3Suffix,
+		ObjSuf:           env.ObjSuf,
 	}
 }
 
@@ -82,8 +82,8 @@ func (e *EmitContext) ccInputsFor(compile CompileSpec) ModuleCCInputs {
 	in.FlatOutput = compile.FlatOutput
 	in.ForceCxx = compile.ForceCxx
 
-	if compile.Py3Suffix {
-		in.Py3Suffix = true
+	if compile.ObjSuf != 0 {
+		in.ObjSuf = compile.ObjSuf
 	}
 
 	if compile.Variant != 0 {
@@ -312,12 +312,8 @@ func ccObjectSuffix(instance ModuleInstance, in ModuleCCInputs) string {
 		} else {
 			suffix = "." + *in.ObjectSuffixStem + ".o"
 		}
-	} else if in.Py3Suffix {
-		if instance.Platform.PIC {
-			suffix = ".py3.pic.o"
-		} else {
-			suffix = ".py3.o"
-		}
+	} else if in.ObjSuf != 0 {
+		suffix = "." + in.ObjSuf.string() + suffix
 	}
 
 	if in.Variant != nil {
@@ -332,8 +328,8 @@ func (e *EmitContext) ccOutputFor(srcVFS VFS, compile CompileSpec) VFS {
 
 	in.FlatOutput = compile.FlatOutput
 
-	if compile.Py3Suffix {
-		in.Py3Suffix = true
+	if compile.ObjSuf != 0 {
+		in.ObjSuf = compile.ObjSuf
 	}
 
 	srcRel := trimModulePrefix(srcVFS.relString(), e.instance.Path.relString())

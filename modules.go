@@ -260,7 +260,9 @@ type ModuleData struct {
 	splitDwarf               bool
 	noPythonIncl             bool
 	noImportTracing          bool
+	usePython2               bool
 	usePython3               bool
+	useLightPy2cc            bool
 	useCommonGoogleAPIs      bool
 	moduleScopeCFlags        []ANY
 	pythonSQLite3            bool
@@ -339,7 +341,7 @@ type CompileSpec struct {
 	CFlags     []ANY
 	FlatOutput bool
 	Variant    STR
-	Py3Suffix  bool
+	ObjSuf     STR
 	ForceCxx   bool
 	EnvAddIncl []VFS
 	EnvCFlags  []ANY
@@ -789,7 +791,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 		d.usePython3 = true
 	}
 
-	applyPython3AddIncl(modulePath, d)
+	applyPythonAddIncl(modulePath, d, env)
 	applyBuildInfoAddIncl(modulePath, d)
 	applyArchiveAddIncl(modulePath, d)
 	applyCythonHeaderAddIncl(modulePath, d)
@@ -987,12 +989,20 @@ func shouldCheckSourceDir(path VFS) bool {
 	return true
 }
 
-func applyPython3AddIncl(modulePath string, d *ModuleData) {
+func usePython2(env Environment, d *ModuleData, moduleTag STR) {
+	d.usePython2 = true
+
+	env.setBool(envPYTHON2, true)
+	env.setBool(envPYTHON3, false)
+	env.setStringID(envMODULE_TAG, moduleTag)
+}
+
+func applyPythonAddIncl(modulePath string, d *ModuleData, env Environment) {
 	if d.moduleStmt == nil {
 		return
 	}
 
-	if !d.usePython3 && !pyModuleTypeUsesPython3(d.moduleStmt.Name) {
+	if !d.usePython2 && !d.usePython3 && !pyModuleTypeUsesPython3(d.moduleStmt.Name) {
 		return
 	}
 
@@ -1000,8 +1010,13 @@ func applyPython3AddIncl(modulePath string, d *ModuleData) {
 		return
 	}
 
-	d.usePython3 = true
-	d.moduleScopeCFlags = append(d.moduleScopeCFlags, argDusePython3.any())
+	if d.usePython2 {
+		d.moduleScopeCFlags = append(d.moduleScopeCFlags, internArg("-DARCADIA_PYTHON_UNICODE_SIZE="+env.string(envArcadiaPythonUnicodeSize)).any())
+	} else {
+		d.usePython3 = true
+		d.moduleScopeCFlags = append(d.moduleScopeCFlags, argDusePython3.any())
+	}
+
 	d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, pythonIncludeDir)
 	d.addIncl = append(d.addIncl, pythonIncludeDir)
@@ -1105,6 +1120,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				d.moduleVariants = defaultProtoVariants
 			}
 
+			if d.unit.Tag == unitTagPy2 || d.unit.Tag == unitTagPy2Native {
+				usePython2(env, d, d.unit.Tag)
+			}
+
 			if v.Name == tokDocs || v.Name == tokDocsLibrary {
 				d.docs = &DocsData{config: modulePath + "/.yfm"}
 			}
@@ -1141,6 +1160,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			if d.moduleStmt.Name == tokProtoLibrary && language == LangDescProto {
 				moduleLang = ""
+			}
+
+			if d.usePython2 {
+				moduleLang = moduleLangTokenPy2
 			}
 
 			env.setString(envMODULE_LANG, moduleLang)
@@ -1555,6 +1578,7 @@ type ModuleUnit struct {
 	Tag              STR
 	HashTag          STR
 	CCTag            STR
+	ObjSuf           STR
 	ARPrefix         string
 	GlobalARTag      STR
 	SbomLang         STR
@@ -1601,6 +1625,15 @@ func resolveModuleUnit(name TOK, kind ModuleKind, language Language) ModuleUnit 
 }
 
 func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleUnit {
+	if language == LangPy2 {
+		switch name {
+		case tokPy23Library:
+			return ModuleUnit{Type: tokPy2Library, Tag: unitTagPy2, CCTag: tagPy2, ObjSuf: tagPy2, ARPrefix: "libpy", GlobalARTag: tagPy2Global, SbomLang: unitSbomCpp}
+		case tokPy23NativeLibrary:
+			return ModuleUnit{Type: tokLibrary, Tag: unitTagPy2Native, CCTag: tagPy2Native, ObjSuf: tagPy2, ARPrefix: "lib", GlobalARTag: tagPy2NativeGlobal, SbomLang: unitSbomCpp}
+		}
+	}
+
 	if name == tokPy3Program && kind == KindLib {
 		name = tokPy3Library
 
@@ -1618,22 +1651,20 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy3Program:
 		return ModuleUnit{Type: name, Tag: unitTagPy3Bin, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
-	case tokPy2Program, tokPy3ProgramBin, tokPy3Test, tokPy2Test:
-		tag := STR(0)
-
-		if name == tokPy3ProgramBin || name == tokPy3Test {
-			tag = unitTagPy3
-		}
-
-		return ModuleUnit{Type: name, Tag: tag, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
+	case tokPy2Program:
+		return ModuleUnit{Type: name, Tag: unitTagPy2, ARPrefix: "libpy", GlobalARTag: tagGlobal, SbomLang: unitSbomPy2}
+	case tokPy2Test:
+		return ModuleUnit{Type: name, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
+	case tokPy3ProgramBin, tokPy3Test:
+		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
 	case tokPy3Library:
 		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy2Library:
-		return ModuleUnit{Type: name, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+		return ModuleUnit{Type: name, Tag: unitTagPy2, ARPrefix: "libpy", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy23Library:
-		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagPy3Global, SbomLang: unitSbomCpp}
+		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3, ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagPy3Global, SbomLang: unitSbomCpp}
 	case tokPy23NativeLibrary:
-		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3Native, ARPrefix: "libpy3c", GlobalARTag: tagPy3NativeGlobal, SbomLang: unitSbomCpp}
+		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3Native, ObjSuf: tagPy3, ARPrefix: "libpy3c", GlobalARTag: tagPy3NativeGlobal, SbomLang: unitSbomCpp}
 	case tokYqlUdfYdb, tokYqlUdfContrib:
 		return ModuleUnit{Type: name, CCTag: tagYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
 	case tokFbsLibrary:
@@ -2353,6 +2384,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				d.noMypy = false
 			case "PYTHON_SQLITE3":
 				d.pythonSQLite3 = true
+			case "USE_LIGHT_PY2CC":
+				d.useLightPy2cc = true
 			case "USE_ASMLIB":
 				d.useAsmlib = true
 			}
@@ -2372,6 +2405,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			if a == "PYTHON_SQLITE3" {
 				d.pythonSQLite3 = false
+			}
+
+			if a == "USE_LIGHT_PY2CC" {
+				d.useLightPy2cc = false
 			}
 
 			if a == "NEED_GOOGLE_PROTO_PEERDIRS" {
@@ -2497,6 +2534,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if changed {
 			d.objAddLibsGlobal = append(d.objAddLibsGlobal[:0], internArg(libs).any())
 		}
+	case tokUsePython2:
+		d.peerdirs = append(d.peerdirs, strContribLibsPython.any())
+
+		usePython2(env, d, unitTagPy2)
+	case tokPython2Addincl:
+		usePython2(env, d, unitTagPy2Native)
 	case tokUsePython3:
 
 		d.peerdirs = append(d.peerdirs,
@@ -3166,9 +3209,14 @@ func appendPyRegister(d *ModuleData, name string, explicit bool) {
 
 	shortname := name[dot+1:]
 	mangled := pythonInitSuffix(name)
+	initDefine := "-DPyInit_" + shortname + "=PyInit_" + mangled
+
+	if d.usePython2 {
+		initDefine = "-Dinit" + shortname + "=init" + mangled
+	}
 
 	d.cFlags = append(d.cFlags,
-		internArg("-DPyInit_"+shortname+"=PyInit_"+mangled).any(),
+		internArg(initDefine).any(),
 		internArg("-Dinit_module_"+shortname+"=init_module_"+mangled).any(),
 	)
 }
@@ -3624,6 +3672,15 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 func isProgramModuleType(name TOK) bool {
 	switch name {
 	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokPy3Test, tokPy2Test, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokGoProgram, tokGoTest, tokGoDll:
+		return true
+	}
+
+	return false
+}
+
+func isPyProgramType(name TOK) bool {
+	switch name {
+	case tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokPy3Test:
 		return true
 	}
 
@@ -4197,7 +4254,13 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 	}
 }
 
-func peerEntryLanguage(parent ModuleInstance, parentModuleName TOK) Language {
+func peerEntryLanguage(parent ModuleInstance, d *ModuleData) Language {
+	parentModuleName := d.moduleStmt.Name
+
+	if d.usePython2 {
+		return LangPy2
+	}
+
 	if isPythonModuleType(parentModuleName) {
 		return LangPy
 	}
@@ -4216,7 +4279,11 @@ func (e *EmitContext) derivePeerInstance(peerPath string) ModuleInstance {
 func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 	ctx, parent, d := e.ctx, e.instance, e.d
 	demand := e.peerDemand()
-	language := peerEntryLanguage(parent, d.moduleStmt.Name)
+	language := peerEntryLanguage(parent, d)
+
+	if language == LangPy2 && !(peerYaMakeExists(ctx.fs, peerVFS) && hasPy2Variant(ctx.moduleName(peerVFS.relString()))) {
+		language = LangCPP
+	}
 
 	if isGoModuleType(d.moduleStmt.Name) && peerYaMakeExists(ctx.fs, peerVFS) {
 		switch peerName := ctx.moduleName(peerVFS.relString()); {
@@ -4258,6 +4325,15 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 	}
 
 	return peer
+}
+
+func hasPy2Variant(name TOK) bool {
+	switch name {
+	case tokPy23Library, tokPy23NativeLibrary, tokProtoLibrary:
+		return true
+	}
+
+	return false
 }
 
 func moduleExcludesTag(d *ModuleData, tag string) bool {

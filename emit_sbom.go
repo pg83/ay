@@ -8,6 +8,7 @@ const (
 	clangToolchainInfoRel   = "build/internal/platform/clang_toolchain_info"
 	pythonToolchainInfoRel  = "build/platform/python/ymake_python3"
 	moduleLangTokenCpp      = "CPP"
+	moduleLangTokenPy2      = "PY2"
 	moduleLangTokenPy3      = "PY3"
 	moduleLangTokenAgnostic = "AGNOSTIC"
 )

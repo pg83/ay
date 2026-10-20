@@ -28,6 +28,7 @@ const (
 	LangDocsProto
 	LangRosBindings
 	LangPackage
+	LangPy2
 )
 
 const (

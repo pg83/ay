@@ -343,4 +343,5 @@ var (
 	cxxStandardFlag                                         = internArg("-std=c++20")
 	wrapccArgEnd                                            = internArg("--wrapcc-end")
 	wrapccArgSrcFile                                        = internArg("--source-file")
+	argToolsPy2ccStage0                                     = internArg("tools/py2cc/stage0pycc")
 )

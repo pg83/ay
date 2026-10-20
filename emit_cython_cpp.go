@@ -252,7 +252,12 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		na.dirs.commit(len(parsed))
 		parsed = parsed[:len(parsed):len(parsed)]
 
-		py3Suffix := !stmt.CMode && !generatedExplicit && py23Variant
+		objSuf := STR(0)
+
+		if !stmt.CMode && !generatedExplicit {
+			objSuf = d.unit.ObjSuf
+		}
+
 		ccCFlags := na.anys.alloc(1)[:0]
 
 		if cythonImplicitFallthrough(stmt, py23Variant) {
@@ -330,7 +335,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		e.enqueueSrc(SrcMeta{
 			Source: generatedVFS.any(), Prio: stmtPrioDefault, Bucket: bkCython,
-			Compile: CompileSpec{Py3Suffix: py3Suffix, CFlags: ccCFlags},
+			Compile: CompileSpec{ObjSuf: objSuf, CFlags: ccCFlags},
 		})
 	}
 }
@@ -503,7 +508,7 @@ func filterPyRegisterCFlags(cflags []ANY) []ANY {
 	for _, flag := range cflags {
 		s := flag.string()
 
-		if strings.HasPrefix(s, "-DPyInit_") || strings.HasPrefix(s, "-Dinit_module_") {
+		if _, ok := pyInitDefineShortname(s); ok {
 			continue
 		}
 

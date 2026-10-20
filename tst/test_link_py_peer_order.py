@@ -12,6 +12,9 @@ PEERS = [
     "library/python/testing/import_test",
     "contrib/tools/python3/Modules/_sqlite",
     "library/cpp/malloc/jemalloc",
+    "library/python/runtime/main",
+    "contrib/deprecated/python/subprocess32",
+    "contrib/tools/python/src/Modules/_sqlite",
     "userlib",
 ]
 
@@ -74,6 +77,9 @@ TRACING = (
 IMPORT_TEST = "library/python/testing/import_test/libpython-testing-import_test.a"
 SQLITE = "contrib/tools/python3/Modules/_sqlite/libpython3-Modules-_sqlite.a"
 JEMALLOC = "library/cpp/malloc/jemalloc/libcpp-malloc-jemalloc.a"
+PY2_MAIN = "library/python/runtime/main/libpython-runtime-main.a"
+SUBPROCESS32 = "contrib/deprecated/python/subprocess32/libdeprecated-python-subprocess32.a"
+PY2_SQLITE = "contrib/tools/python/src/Modules/_sqlite/libsrc-Modules-_sqlite.a"
 USERLIB = "userlib/libuserlib.a"
 
 
@@ -123,10 +129,13 @@ class PythonPeerOrderTest(unittest.TestCase):
         )
         self.assertNotIn("-Wl,--strip-all", args)
 
-    def test_py2_program_moves_python_runtime_to_tail(self):
+    def test_py2_program_peers_its_runtime_before_user_peers(self):
         graph = lib.make(fixture(), "py2")
         args = link_args(graph, "$(B)/py2/py2")
-        self.assertEqual(link_group(args), [USERLIB, TRACING, PYTHON, RUNTIME])
+        self.assertEqual(
+            link_group(args),
+            [JEMALLOC, PY2_MAIN, SUBPROCESS32, PY2_SQLITE, TRACING, USERLIB, IMPORT_TEST, PYTHON, RUNTIME],
+        )
         self.assertNotIn("-Wl,--strip-all", args)
 
     def test_python_libraries_peer_contrib_python_unless_disabled(self):

@@ -837,7 +837,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		}
 	}
 
-	if !d.hadAllocator && isPy3ProgramModule(d.moduleStmt.Name) {
+	if !d.hadAllocator && isPyProgramType(d.moduleStmt.Name) {
 		d.hadAllocator = true
 		d.allocatorName = strJ.any()
 	}
@@ -859,17 +859,29 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		}
 	}
 
-	if isPy3ProgramModule(d.moduleStmt.Name) {
+	if isPyProgramType(d.moduleStmt.Name) {
 		var earlyPeers []string
 
-		if d.pythonSQLite3 {
-			earlyPeers = append(earlyPeers, "contrib/tools/python3/Modules/_sqlite")
-		}
+		if d.moduleStmt.Name == tokPy2Program {
+			earlyPeers = append(earlyPeers, "library/python/runtime/main", "contrib/deprecated/python/subprocess32")
 
-		earlyPeers = append(earlyPeers, "library/python/runtime_py3/main")
+			if d.pythonSQLite3 {
+				earlyPeers = append(earlyPeers, "contrib/tools/python/src/Modules/_sqlite")
+			}
+		} else {
+			if d.pythonSQLite3 {
+				earlyPeers = append(earlyPeers, "contrib/tools/python3/Modules/_sqlite")
+			}
+
+			earlyPeers = append(earlyPeers, "library/python/runtime_py3/main")
+		}
 
 		if !d.noImportTracing && instance.Path.relString() != "library/python/import_tracing/constructor" {
 			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
+		}
+
+		if d.moduleStmt.Name == tokPy2Program && !instance.Platform.ifEnv.bool(envFAIL_PY2) && !instance.Platform.ifEnv.bool(envOPENSOURCE) {
+			earlyPeers = append(earlyPeers, "build/rules/py2_deprecation")
 		}
 
 		var latePeers []string
@@ -878,7 +890,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 			latePeers = append(latePeers, "library/python/testing/import_test")
 		}
 
-		if d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Test {
+		if d.moduleStmt.Name != tokPy3Program {
 			insertAt := 0
 
 			if len(d.peerdirs) > 0 && d.peerdirs[0].string() == "contrib/libs/python" {
@@ -915,7 +927,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		}
 	}
 
-	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !isPy3ProgramModule(d.moduleStmt.Name) && !d.noImportTracing && instance.Path.relString() != "library/python/import_tracing/constructor" {
+	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !isPyProgramType(d.moduleStmt.Name) && !d.noImportTracing && instance.Path.relString() != "library/python/import_tracing/constructor" {
 		d.peerdirs = append(d.peerdirs, strLibraryPythonImportTracingConstructor.any())
 	}
 
@@ -1090,6 +1102,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ctx.memoPut(instance, result)
 
 		return result
+	}
+
+	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy2 {
+		throwFmt("gen: %s: the Python 2 variant of PROTO_LIBRARY (PY_PROTO) is not modelled", instance.Path.relString())
 	}
 
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDescProto {
@@ -2063,10 +2079,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
 	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
 	dedupedAddIncl := dedup(d.addIncl, d.addInclGlobal)
-
-	isPy3NativeLib := d.moduleStmt.Name == tokPy23NativeLibrary ||
-		d.moduleStmt.Name == tokPy23Library
-
 	perModuleCCTag := d.unit.CCTag
 
 	var arNameFn func(string) string
@@ -2122,7 +2134,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		DefaultVars:          d.defaultVars,
 		DefaultVarOrder:      d.defaultVarOrder,
 		SetVars:              d.setVars,
-		Py3Suffix:            isPy3NativeLib,
+		ObjSuf:               d.unit.ObjSuf,
 		ObjectSuffixStem: func() *string {
 			if d.unit.ObjectSuffixStem != "" {
 				return &d.unit.ObjectSuffixStem
@@ -2256,10 +2268,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ownRPathFlags = append([]ANY(nil), peerRPathFlagsGlobal...)
 		}
 
-		py3Strip := isPy3ProgramModule(d.moduleStmt.Name) &&
+		pyStrip := isPyProgramType(d.moduleStmt.Name) &&
 			!instance.Platform.pythonNoStrip()
 
-		wantsStrip := (py3Strip || d.strip) && !d.noStrip
+		wantsStrip := (pyStrip || d.strip) && !d.noStrip
 
 		var programModuleTag STR
 

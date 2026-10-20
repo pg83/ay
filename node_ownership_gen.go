@@ -25,6 +25,7 @@ func registerKnownGlobalChunks() {
 	registerOwnedSlice(flatcIOLeadArgs)
 	registerOwnedSlice(fromSandboxScriptInputs)
 	registerOwnedSlice(genPy3RegScriptChunk)
+	registerOwnedSlice(genPyRegScriptChunk)
 	registerOwnedSlice(goCgo1Head)
 	registerOwnedSlice(goCgo1ToolChunk)
 	registerOwnedSlice(goCgoBaseCFlags)

@@ -436,9 +436,7 @@ func (e *EmitContext) emit() {
 	if !e.producersOnly() {
 		e.registerCollectPySrcs()
 
-		regCCPy3Suffix := d.moduleStmt.Name == tokPy23NativeLibrary || d.moduleStmt.Name == tokPy23Library
-
-		e.emitPyRegister(regCCPy3Suffix)
+		e.emitPyRegister()
 	}
 
 	finalized := e.producersOnly()
@@ -458,7 +456,7 @@ func (e *EmitContext) emit() {
 
 		finalized = true
 
-		if !isProgramModuleType(d.moduleStmt.Name) || pyModuleTypeUsesPython3(d.moduleStmt.Name) {
+		if !isProgramModuleType(d.moduleStmt.Name) || pyModuleTypeUsesPython3(d.moduleStmt.Name) || d.usePython2 {
 			e.emitPyBytecode(true)
 
 			genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()

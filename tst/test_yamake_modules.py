@@ -19,6 +19,15 @@ PYTHON_PROGRAM_PEERS = [
     "library/python/runtime_py3/main",
     "library/python/testing/import_test",
 ]
+PYTHON2_PROGRAM_PEERS = [
+    "contrib/deprecated/python/subprocess32",
+    "contrib/libs/python",
+    "contrib/tools/python/src/Modules/_sqlite",
+    "library/cpp/malloc/jemalloc",
+    "library/python/import_tracing/constructor",
+    "library/python/runtime/main",
+    "library/python/testing/import_test",
+]
 
 
 def ay_make(files, target="a", *args):
@@ -91,8 +100,8 @@ class YaMakeModulesTest(unittest.TestCase):
             ("PY23_NATIVE_LIBRARY()", [], [("AR", "$(B)/a/libpy3ca.a"), ("CC", "$(B)/a/x.cpp.py3.o")]),
             ("PY3_LIBRARY()", ["contrib/libs/python"], [("AR", "$(B)/a/libpy3a.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("PY23_LIBRARY()", ["contrib/libs/python"], [("AR", "$(B)/a/libpy3a.a"), ("CC", "$(B)/a/x.cpp.py3.o")]),
-            ("PY2_LIBRARY()", ["contrib/libs/python"], [("AR", "$(B)/a/libpy3a.a"), ("CC", "$(B)/a/x.cpp.o")]),
-            ("PY2_PROGRAM()", ["contrib/libs/python", "library/python/import_tracing/constructor"], [("CC", "$(B)/a/x.cpp.o"), ("LD", "$(B)/a/a")]),
+            ("PY2_LIBRARY()", ["contrib/libs/python"], [("AR", "$(B)/a/libpya.a"), ("CC", "$(B)/a/x.cpp.o")]),
+            ("PY2_PROGRAM()", PYTHON2_PROGRAM_PEERS, [("CC", "$(B)/a/x.cpp.o"), ("LD", "$(B)/a/a")]),
             ("PY3_PROGRAM_BIN()", PYTHON_PROGRAM_PEERS, [("CC", "$(B)/a/x.cpp.o"), ("LD", "$(B)/a/a")]),
             ("PY3_PROGRAM()", PYTHON_PROGRAM_PEERS, [("AR", "$(B)/a/libpy3a.a"), ("CC", "$(B)/a/x.cpp.o"), ("LD", "$(B)/a/a")]),
             ("YQL_UDF_YDB()", ["yql/essentials/public/udf", "yql/essentials/public/udf/support"], [("AR", "$(B)/a/liba.global.a"), ("CC", "$(B)/a/x.cpp.udfs.o")]),

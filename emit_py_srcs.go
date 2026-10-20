@@ -12,6 +12,7 @@ import (
 var (
 	genPy3RegScriptPath  = genPy3RegScriptVFS.string()
 	genPy3RegScriptChunk = []VFS{genPy3RegScriptVFS}
+	genPyRegScriptChunk  = []VFS{genPyRegScriptVFS}
 	pyCodegenKV          = KV{P: pkPY, PC: pcYellow}
 	yaConfFormulaRE      = regexp.MustCompile(`"formula"\s*:\s*"([^"]+\.json)"`)
 	yaConfResourceRE     = regexp.MustCompile(`"resource"\s*:\s*"([^"]+)"`)
@@ -128,6 +129,10 @@ func (e *EmitContext) registerCollectPySrcs() {
 		keyPrefix := pyResourceKeyPrefix(group.TopLevel, group.Namespace, module)
 
 		for _, src := range group.Srcs {
+			if d.usePython2 && extIsProto(src.relOrSelf().string()) {
+				throwFmt("PY_SRCS: %s: .proto sources of a Python 2 module are not modelled", module)
+			}
+
 			if extIsProto(src.relOrSelf().string()) {
 				e.enqueueSrc(SrcMeta{
 					Source: src, Prio: stmtPrioDefault,
@@ -154,10 +159,14 @@ func (e *EmitContext) registerCollectPySrcs() {
 				}
 			}
 
+			if d.usePython2 && kind == pySourceGenerated {
+				throwFmt("PY_SRCS: %s: build-root sources of a Python 2 module are not modelled", module)
+			}
+
 			e.enqueueSrc(SrcMeta{
 				Source: path.any(), Prio: stmtPrioDefault,
 				PyMeta: e.addPyMeta(PySourceMeta{
-					Module: internV(keyPrefix, token.string()),
+					Module: e.pyModuleKey(keyPrefix, token.string(), group),
 					Token:  token,
 					Group:  gi,
 					Kind:   kind,
@@ -165,6 +174,26 @@ func (e *EmitContext) registerCollectPySrcs() {
 			})
 		}
 	}
+}
+
+func (e *EmitContext) pyModuleKey(keyPrefix, src string, group PySrcGroup) STR {
+	if !e.d.usePython2 {
+		return internV(keyPrefix, src)
+	}
+
+	if isProgramModuleType(e.d.moduleStmt.Name) && (src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
+		return strMain
+	}
+
+	return internStr(pythonModuleName(e.instance.Path.relString(), src, group.TopLevel, group.Namespace))
+}
+
+func (e *EmitContext) pyYapycExt() string {
+	if e.d.usePython2 {
+		return ".yapyc"
+	}
+
+	return ".yapyc3"
 }
 
 func (e *EmitContext) collectPySource(path VFS, meta PySourceMeta) {
@@ -194,10 +223,10 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 	}
 
 	if strings.Contains(srcRel, "/") {
-		return build(module, "/", srcRel, ".", e.d.pyYapycSuffix, ".yapyc3")
+		return build(module, "/", srcRel, ".", e.d.pyYapycSuffix, e.pyYapycExt())
 	}
 
-	return build(module, "/", srcRel, ".yapyc3")
+	return build(module, "/", srcRel, e.pyYapycExt())
 }
 
 func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenResEntry {
@@ -244,10 +273,10 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 	}
 
 	srcRel := ps.Token.string()
-	suffix := ".yapyc3"
+	suffix := e.pyYapycExt()
 
 	if strings.Contains(srcRel, "/") {
-		suffix = "." + d.pyYapycSuffix + ".yapyc3"
+		suffix = "." + d.pyYapycSuffix + suffix
 	}
 
 	resolvedRel := resolvePySrcRel(e.ctx.fs, d.srcDirs, e.instance.Path, srcRel)
@@ -307,13 +336,12 @@ func (e *EmitContext) emitPyBytecode(moduleSources bool) {
 		return
 	}
 
-	py3ccLDRef, py3ccBinary := ctx.tool(argToolsPy3cc)
-	py3ccSlowLDRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
+	tool := e.pyccTool()
 
 	if hasProto {
 		for _, ps := range e.pySrcsReg {
 			if ps.Kind == pySourceProto {
-				e.emitPyYapyc(ps, py3ccLDRef, py3ccSlowLDRef, py3ccBinary, py3ccSlowBin)
+				e.emitPyYapyc(ps, tool)
 			}
 		}
 	}
@@ -331,15 +359,49 @@ func (e *EmitContext) emitPyBytecode(moduleSources bool) {
 			continue
 		}
 
-		e.emitPyYapyc(ps, py3ccLDRef, py3ccSlowLDRef, py3ccBinary, py3ccSlowBin)
+		e.emitPyYapyc(ps, tool)
 	}
 }
 
-func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, py3ccBinary, py3ccSlowBin VFS) {
+type PyccTool struct {
+	refs      []NodeRef
+	head      []ANY
+	binaries  []VFS
+	resources []STR
+}
+
+func (e *EmitContext) pyccTool() PyccTool {
+	ctx := e.ctx
+	na := ctx.na
+
+	if e.d.usePython2 {
+		path := argToolsPy2cc
+
+		if e.d.useLightPy2cc {
+			path = argToolsPy2ccStage0
+		}
+
+		ref, binary := ctx.tool(path)
+
+		return PyccTool{refs: na.refList(ref), head: na.anyList(binary.any()), binaries: na.vfsList(binary)}
+	}
+
+	py3ccLDRef, py3ccBinary := ctx.tool(argToolsPy3cc)
+	py3ccSlowLDRef, py3ccSlowBin := ctx.tool(argToolsPy3ccSlow)
+
+	return PyccTool{
+		refs:      na.refList(py3ccLDRef, py3ccSlowLDRef),
+		head:      ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
+		binaries:  na.vfsList(py3ccBinary, py3ccSlowBin),
+		resources: usesPython3,
+	}
+}
+
+func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	srcAbs := ps.Path
-	toolRefs := na.refList(py3ccLDRef, py3ccSlowLDRef)
+	toolRefs := tool.refs
 	env := envVarsVCSPyHash
 	outputPath := e.pyYapycOutFor(ps)
 
@@ -360,15 +422,13 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 
 		token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
 
-		cmdArgs = na.chunkList(ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
+		cmdArgs = na.chunkList(tool.head,
 			na.anyList(internV(token, "-").any(), ps.Path.any(), outputPath.any()))
 
-		inputsHead := na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path)
-
 		if len(ps.ExtraInputs) > 0 {
-			nodeInputs = na.inputList(inputsHead, ps.ExtraInputs)
+			nodeInputs = na.inputList(tool.binaries, na.vfsList(ps.Path), ps.ExtraInputs)
 		} else {
-			nodeInputs = na.inputList(inputsHead)
+			nodeInputs = na.inputList(tool.binaries, na.vfsList(ps.Path))
 		}
 	} else {
 		var genInfo *GeneratedFileInfo
@@ -392,17 +452,17 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 			}
 		}
 
-		cmdArgs = na.chunkList(ctx.py3ccHead(py3ccBinary, py3ccSlowBin),
+		cmdArgs = na.chunkList(tool.head,
 			na.anyList(internStr(moduleName).any(), srcAbs.any(), outputPath.any()))
 
 		if genInfo != nil {
 			nodeInputs = na.inputList(
-				na.vfsList(py3ccBinary, py3ccSlowBin),
+				tool.binaries,
 				na.vfsList(srcAbs),
 				ps.ExtraInputs,
 			)
 		} else {
-			nodeInputs = na.inputList(na.vfsList(py3ccBinary, py3ccSlowBin), na.srcChunk(srcAbs))
+			nodeInputs = na.inputList(tool.binaries, na.srcChunk(srcAbs))
 		}
 
 		generatorRefs = toolRefs
@@ -416,7 +476,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 		Outputs:        na.vfsList(outputPath),
 		KV:             &pyCodegenKV,
 		ForeignDepRefs: toolRefs,
-		Resources:      usesPython3,
+		Resources:      tool.resources,
 	}
 
 	pyRef := e.emitNode(node)
@@ -475,7 +535,7 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 		e.resEntries = retainMaxLen(e.resEntries, entries)
 
 		if len(entries) > 0 {
-			groupRefs, groupOuts := e.packResources(ResourcePack{DontCompress: true, Tag: d.unit.HashTag, Items: e.pyGenResourceItems(entries)})
+			groupRefs, groupOuts := e.packResources(ResourcePack{DontCompress: true, Tag: d.unit.HashTag, Items: e.pySrcResourceItems(entries)})
 
 			res.Refs = append(res.Refs, groupRefs...)
 			res.Outputs = append(res.Outputs, groupOuts...)
@@ -532,9 +592,9 @@ func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef,
 	return e.packResources(ResourcePack{DontCompress: true,
 		Tag: e.d.unit.HashTag, Items: e.pyGenResourceItems(entries),
 		RawCompile: CompileSpec{
-			ForceCxx:  true,
-			Py3Suffix: pyProtoAuxPy3Suffix(e.d),
-			CFlags:    e.ctx.na.anyList(argX.any(), argC.any()),
+			ForceCxx: true,
+			ObjSuf:   pyProtoAuxObjSuf(e.d),
+			CFlags:   e.ctx.na.anyList(argX.any(), argC.any()),
 		},
 	})
 }
@@ -737,11 +797,15 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 	return refs, outs
 }
 
-func pyProtoAuxPy3Suffix(d *ModuleData) bool {
-	return d.unit.Tag == unitTagPy3Proto || d.moduleStmt.Name == tokPy23Library || d.moduleStmt.Name == tokPy23NativeLibrary
+func pyProtoAuxObjSuf(d *ModuleData) STR {
+	if d.unit.Tag == unitTagPy3Proto {
+		return tagPy3
+	}
+
+	return d.unit.ObjSuf
 }
 
-func (e *EmitContext) emitPyRegister(py3Suffix bool) {
+func (e *EmitContext) emitPyRegister() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
@@ -764,12 +828,19 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 		}
 
 		regCpp := arg.string() + ".reg3.cpp"
+		script, scriptChunk := genPy3RegScriptVFS, genPy3RegScriptChunk
+
+		if d.usePython2 {
+			regCpp = arg.string() + ".reg.cpp"
+			script, scriptChunk = genPyRegScriptVFS, genPyRegScriptChunk
+		}
+
 		regCppVFS := build(instance.Path.relString(), "/", regCpp)
 		env := envVarsVCS
 
 		pyCmdArgs := na.anyList(
 			d.tc.Python3.any(),
-			genPy3RegScriptVFS.any(),
+			script.any(),
 			arg.any(),
 			regCppVFS.any(),
 		)
@@ -778,7 +849,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 			Platform:  ctx.target,
 			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
 			Env:       env,
-			Inputs:    na.inputList(genPy3RegScriptChunk),
+			Inputs:    na.inputList(scriptChunk),
 			Outputs:   na.vfsList(regCppVFS),
 			KV:        &pyCodegenKV,
 			Resources: usesPython3,
@@ -799,7 +870,7 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 
 		na.anys.commit(len(envCFlags))
 
-		spec := CompileSpec{Py3Suffix: py3Suffix, EnvCFlags: envCFlags[:len(envCFlags):len(envCFlags)]}
+		spec := CompileSpec{ObjSuf: d.unit.ObjSuf, EnvCFlags: envCFlags[:len(envCFlags):len(envCFlags)]}
 
 		if len(d.cythonCpp) > 0 {
 			spec.EnvAddIncl = appendCythonCCAddIncl(na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
@@ -830,6 +901,12 @@ func pyInitDefineShortname(flag string) (string, bool) {
 		}
 	}
 
+	if rest, ok := strings.CutPrefix(flag, "-Dinit"); ok {
+		if short, value, ok := strings.Cut(rest, "="); ok && strings.HasPrefix(value, "init") {
+			return short, true
+		}
+	}
+
 	return "", false
 }
 
@@ -840,6 +917,67 @@ type PyGenResEntry struct {
 	path         VFS
 	sourceInputs []VFS
 	buildInputs  []VFS
+}
+
+func (e *EmitContext) pySrcResourceItems(entries []PyGenResEntry) []ResourceItem {
+	if !e.d.usePython2 {
+		return e.pyGenResourceItems(entries)
+	}
+
+	items := e.resItems[:0]
+	buf := e.resStrBuf
+
+	for _, en := range entries {
+		keyStart := len(buf)
+
+		if en.yapyc {
+			buf = append(buf, "/py_code/"...)
+		} else {
+			buf = append(buf, "/py_modules/"...)
+		}
+
+		buf = append(buf, en.key.sharedString()...)
+
+		key := bytesString(buf[keyStart:])
+		fileItem := ResourceItem{Path: en.token, Key: key, ExtraSources: en.sourceInputs, ExtraBuilds: en.buildInputs}
+
+		fileItem.setInput(en.path)
+		items = append(items, fileItem)
+
+		if en.yapyc {
+			continue
+		}
+
+		hashStart := len(buf)
+
+		buf = append(buf, "resfs/src/"...)
+		buf = append(buf, key...)
+		buf = append(buf, "=${rootrel;context=TEXT;input=TEXT:\""...)
+		buf = append(buf, en.token...)
+		buf = append(buf, "\"}"...)
+
+		kvHash := bytesString(buf[hashStart:])
+		cmdStart := len(buf)
+
+		buf = append(buf, "resfs/src/"...)
+		buf = append(buf, key...)
+		buf = append(buf, '=')
+		buf = append(buf, en.path.relString()...)
+
+		cmd := internBytes(buf[cmdStart:])
+
+		buf = buf[:cmdStart]
+
+		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, ExtraSources: en.sourceInputs, ExtraBuilds: en.buildInputs}
+
+		kvItem.setInput(en.path)
+		items = append(items, kvItem)
+	}
+
+	e.resStrBuf = buf
+	e.resItems = retainMaxLen(e.resItems, items)
+
+	return items
 }
 
 func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem {

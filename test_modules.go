@@ -83,7 +83,3 @@ func fullPathTestName(dir string) string {
 func isPythonTestModule(name TOK) bool {
 	return name == tokPy3Test || name == tokPy2Test
 }
-
-func isPy3ProgramModule(name TOK) bool {
-	return name == tokPy3Program || name == tokPy3ProgramBin || name == tokPy3Test
-}
