@@ -119,6 +119,7 @@ var (
 	envMSAN_SYMBOLIZER_PATH         = internEnv("MSAN_SYMBOLIZER_PATH")
 	envMUSL                         = internEnv("MUSL")
 	envMUSL_LITE                    = internEnv("MUSL_LITE")
+	envModver                       = internEnv("MODVER")
 	envNO_DEBUGINFO                 = internEnv("NO_DEBUGINFO")
 	envNO_STRIP                     = internEnv("NO_STRIP")
 	envNoLinkerDce                  = internEnv("NO_LINKER_DCE")
