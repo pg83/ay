@@ -587,6 +587,10 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.test.systemProperties = append(d.test.systemProperties, args...)
 	case "TEST_JAVA_CLASSPATH_CMD_TYPE":
 		d.test.classpathCmdType = arg0
+	case "USE_RECIPE":
+		d.test.recipes = append(d.test.recipes, strings.Join(args, " "))
+	case "DEPENDS":
+		d.test.depends = append(d.test.depends, args...)
 	case "DATA":
 		d.test.data = append(d.test.data, args...)
 	case "DATA_FILES":

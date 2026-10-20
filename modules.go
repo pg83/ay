@@ -131,6 +131,13 @@ func protoCmdPeers(d *ModuleData) []ANY {
 }
 
 type TestMeta struct {
+	commands     string
+	testFiles    []string
+	depends      []string
+	recipes      []string
+	binaryArgs   []string
+	forkFiles    bool
+	explicitData bool
 	size         string
 	timeout      int
 	tags         []string
@@ -150,7 +157,6 @@ type ModuleData struct {
 
 	usrvFiles []UsrvFile
 
-	test                     *TestSuiteInfo
 	nots                     *NotsModule
 	docs                     *DocsData
 	moduleStmt               *ModuleStmt
@@ -1868,41 +1874,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokGoMockgenFrom, tokGoMockgenContribFrom, tokGoMockgenTypes, tokGoMockgenExcludeIfaces, tokGoMockgenPackage,
 		tokGoMockgenReflect, tokGoMockgenMocks, tokGoMockgenSource, tokGoOapiCodegen, tokGoOapiCodegenV2, tokGoOapiCodegenTaxi:
 		applyGoCodegenStmt(modulePath, v, d, env)
-	case tokSize:
-		if len(v.Args) > 0 {
-			d.test.size = testSizeNames[v.Args[0].string()]
-		}
-	case tokTimeout:
-		if len(v.Args) > 0 {
-			d.test.timeout, _ = strconv.Atoi(v.Args[0].string())
-		}
-	case tokTag:
-		d.test.tags = append(d.test.tags, anyStrings(v.Args)...)
-	case tokRequirements:
-		d.test.requirements = append(d.test.requirements, anyStrings(v.Args)...)
-	case tokEnv:
-		d.test.env = append(d.test.env, anyStrings(v.Args)...)
-	case tokData:
-		d.test.data = append(d.test.data, anyStrings(v.Args)...)
-	case tokTestCwd:
-		if len(v.Args) > 0 {
-			d.test.cwd = v.Args[0].string()
-		}
-	case tokForkTests, tokForkSubtests:
-		d.test.forkMode = "tests"
-
-		if v.Name == tokForkSubtests {
-			d.test.forkMode = "subtests"
-		}
-
-		if len(v.Args) > 0 {
-			d.test.partition = testPartitionModes[v.Args[0].string()]
-		}
-	case tokSplitFactor:
-		if len(v.Args) > 0 {
-			d.test.splitFactor, _ = strconv.Atoi(v.Args[0].string())
-		}
-
 	case tokCgoSrcs:
 
 		d.cgoSrcs = append(d.cgoSrcs, expandStmtTokens(v.Args, env)...)
@@ -2363,11 +2334,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokTestSrcs:
 		if d.moduleStmt != nil && isPythonTestModule(d.moduleStmt.Name) {
-			if d.test == nil {
-				d.test = &TestSuiteInfo{Size: "small", Requirements: testRunRequirements}
-			}
-
-			d.test.TestFiles = append(d.test.TestFiles, anyStrs(v.Args)...)
+			d.test.testFiles = append(d.test.testFiles, anyStrs(v.Args)...)
 
 			for _, a := range v.Args {
 				if a.string() == "NAMESPACE" || a.string() == "TOP_LEVEL" || a.string() == "__main__.py" {

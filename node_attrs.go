@@ -14,9 +14,8 @@ var (
 )
 
 var procKindStr = [...]string{
-	pkIL:      "IL",
-	pkTR: "TR", pkTM: "TM", pkTL: "TL", pkDL: "DL",
-	pkTA:      "TA",
+	pkIL: "IL",
+	pkTR: "TR", pkDL: "DL",
 	pkTSProto: "TS_PRO",
 	pkNone:    "", pkAS: "AS", pkAR: "AR", pkBI: "BI", pkBC: "BC", pkCC: "CC",
 	pkCF: "CF", pkCH: "CH", pkCP: "CP", pkCY: "CY", pkEN: "EN", pkEV: "EV",
@@ -202,8 +201,6 @@ type KV struct {
 	SpecialRunner    string
 	HasSpecialRunner bool
 	RunTestNode      bool
-	SplitIndex       int
-	HasSplitIndex    bool
 }
 
 type KVExt struct {

@@ -324,6 +324,8 @@ type JavaData struct {
 }
 
 type javaTestData struct {
+	recipes          []string
+	depends          []string
 	size             string
 	timeout          string
 	tags             []string

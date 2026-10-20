@@ -80,6 +80,10 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	srcVFS := copyFileInputVFS(ctx.fs, instance.Path, entry.Src)
 	dstVFS := copyFileOutputVFS(instance.Path.relString(), entry.Dst)
 
+	if existing := reg.lookup(dstVFS); existing != nil && existing.SourcePath == srcVFS {
+		return CopyEmitState{srcVFS: srcVFS, dstVFS: dstVFS, ref: existing.ProducerRef}, nil
+	}
+
 	if srcVFS != dstVFS {
 		e.requireProducedInput("COPY_FILE src", entry.Src, srcVFS)
 	}

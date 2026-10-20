@@ -31,7 +31,9 @@ const (
 )
 
 type MakeFlags struct {
-	testOptions TestRunOptions
+	testRetries   int
+	testTraceback string
+	testBuildType string
 
 	addModulesToResults bool
 	srcRoot             string
@@ -352,7 +354,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 
 	mf := &MakeFlags{
 		buildType:     "debug",
-		testOptions:   TestRunOptions{Traceback: "short"},
+		testTraceback: "short",
 		hostBuildType: "release",
 		dflags:        map[string]string{},
 		threads:       runtime.NumCPU(),
@@ -436,9 +438,9 @@ func parseMakeFlags(args []string) *MakeFlags {
 		case opt.Name == "cache-tests":
 			mf.cacheTests = true
 		case opt.Name == "tests-retries":
-			mf.testOptions.Retries = throw2(strconv.Atoi(opt.OptArg))
+			mf.testRetries = throw2(strconv.Atoi(opt.OptArg))
 		case opt.Name == "test-traceback":
-			mf.testOptions.Traceback = opt.OptArg
+			mf.testTraceback = opt.OptArg
 		case opt.Char == 'x', opt.Name == "ignore-nodes-exit-code",
 			opt.Name == "warning-mode", opt.Name == "output-only-tests",
 			opt.Name == "cache-namespace", opt.Name == "report-skipped-suites",
@@ -459,7 +461,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 		}
 	}
 
-	mf.testOptions.BuildType = mf.buildType
+	mf.testBuildType = mf.buildType
 
 	if targetBuildType != "" {
 		mf.buildType = targetBuildType

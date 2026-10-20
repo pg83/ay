@@ -301,7 +301,6 @@ var tokName = [...]STR{
 	tokGoTestFor:                      internStr("GO_TEST_FOR"),
 	tokGoDll:                          internStr("GO_DLL"),
 	tokAllGoSrcs:                      internStr("ALL_GO_SRCS"),
-	tokTestCwd:                        internStr("TEST_CWD"),
 	tokGoMockgenFrom:                  internStr("GO_MOCKGEN_FROM"),
 	tokGoMockgenContribFrom:           internStr("GO_MOCKGEN_CONTRIB_FROM"),
 	tokGoMockgenTypes:                 internStr("GO_MOCKGEN_TYPES"),
@@ -348,16 +347,6 @@ var tokBySTR = func() []TOK {
 
 	return out
 }()
-
-const (
-	tokGenLibrary    TOK = tokSrcResource + 1
-	tokUsrvBuild     TOK = tokSrcResource + 2
-	tokUsrvAllSrcs   TOK = tokSrcResource + 3
-	tokStyleJSON     TOK = tokUsrvAllSrcs + 1
-	tokStyleYAML     TOK = tokUsrvAllSrcs + 2
-	tokUsrvStyleJSON TOK = tokStyleYAML + 1
-	tokUsrvStyleYAML TOK = tokStyleYAML + 2
-)
 
 const (
 	tokInvalid TOK = iota
@@ -649,7 +638,6 @@ const (
 	tokGoTestFor
 	tokGoDll
 	tokAllGoSrcs
-	tokTestCwd
 	tokGoMockgenFrom
 	tokGoMockgenContribFrom
 	tokGoMockgenTypes
@@ -671,6 +659,13 @@ const (
 	tokGenerateTopology
 	tokCompileNlg
 	tokAllGoTestSrcs
+	tokGenLibrary
+	tokUsrvBuild
+	tokUsrvAllSrcs
+	tokStyleJSON
+	tokStyleYAML
+	tokUsrvStyleJSON
+	tokUsrvStyleYAML
 )
 
 type TOK uint16

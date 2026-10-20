@@ -101,39 +101,59 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 	d.peerdirs = append(d.peerdirs, internStr(peer).any())
 }
 
-func (ctx *GenCtx) emitModuleTests(dir string, result *ModuleEmitResult) {
-	if !ctx.testMode {
-		return
+func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
+	if !e.ctx.testMode {
+		return nil
 	}
 
-	if result.testSuiteInfo != nil && (len(ctx.testOptions.Sizes) == 0 || slices.Contains(ctx.testOptions.Sizes, result.testSuiteInfo.Size)) {
-		for _, ref := range ctx.emitTestRunNodes(*result.testSuiteInfo, result.LDRef, result.ResourceGlobalClosure) {
-			ctx.emit.result(ref)
-		}
-	}
+	var suites []*TestSuite
 
-	for _, check := range result.styleChecks {
-		config, ok := ctx.parsers.notsJSON(check.ConfigMap)[check.Name].(string)
+	for _, check := range e.d.styleChecks {
+		config, ok := e.ctx.parsers.notsJSON(check.ConfigMap)[check.Name].(string)
 
 		if !ok {
 			throwFmt("STYLE: missing %s config in %s", check.Name, check.ConfigMap)
 		}
 
 		check.Config = config
+		var resources []ResourceDecl
 
-		resource := ""
-
-		for _, r := range sortedResourceGlobals(result.ResourceGlobalClosure) {
+		for _, r := range globals {
 			if r.GlobalVar.string() == check.Resource {
-				resource = r.Token.string()
+				resources = append(resources, r)
 
 				break
 			}
 		}
 
-		node := buildStyleNode(ctx.na, ctx.target, TestSuiteInfo{ProjectPath: dir, Options: ctx.testOptions}, check, resource)
-
-		node.DepRefs = []NodeRef{ctx.emit.emit(buildTestCtxNode(ctx.na, ctx.target))}
-		ctx.emit.result(ctx.emit.emit(node))
+		suites = append(suites, e.styleSuite(check, resources))
 	}
+
+	return suites
+}
+
+func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *TestSuite {
+	project := e.instance.Path.relString()
+	s := &TestSuite{p: e.ctx.target, projectPath: project, name: check.Name, testType: check.Name, ciType: "style", size: "small", timeout: 60, supportsTestParameters: true, globals: resources, runInputs: []VFS{source(project)}}
+
+	for _, file := range check.Files {
+		s.relatedPaths = append(s.relatedPaths, source(file).string())
+	}
+
+	s.relatedPaths = append(s.relatedPaths, source(check.Config).string(), source(check.Wrapper).string())
+	s.runCmd = func(work string, _ TestChunk) []ANY {
+		args := []string{testToolHostPath, "run_custom_lint", "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--project-path", source(project).string(), "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--lint-name", check.Name, "--wrapper-script", check.Wrapper, "--depends", project, "--config", source(check.Config).string()}
+
+		for _, r := range sortedResourceGlobals(resources) {
+			args = append(args, "--global-resource", r.Token.string())
+		}
+
+		for _, f := range check.Files {
+			args = append(args, source(f).string())
+		}
+
+		return testArgs(args)
+	}
+
+	return s
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path"
@@ -14,8 +15,6 @@ var (
 	testDescriptorExtraFlags = []string{"MUSL", "ALLOCATOR", "FAKEID", "RACE"}
 	testDescriptorFlagTags   = map[string]string{"USE_LTO": "lto", "USE_THINLTO": "thinlto", "MUSL": "musl", "USE_AFL": "AFL", "RACE": "race"}
 	testSizeTimeouts         = map[string]int{"small": 60, "medium": 600, "large": 3600}
-	testSizeNames            = map[string]string{"SMALL": "small", "MEDIUM": "medium", "LARGE": "large"}
-	testPartitionModes       = map[string]string{"SEQUENTIAL": "SEQUENTIAL", "MODULO": "MODULO"}
 	testSizeKinds            = map[string]ProcKind{"small": pkTS, "medium": pkTM, "large": pkTL}
 	testCommonEnvSkip        = []string{"YA_CACHE_DIR", "YA_TIMEOUT", "YA_TOKEN", "YA_SOURCE_ROOT"}
 	testSanitizerOptVars     = []string{"LSAN_OPTIONS", "ASAN_OPTIONS", "UBSAN_OPTIONS", "MSAN_OPTIONS", "TSAN_OPTIONS"}
@@ -36,6 +35,10 @@ const (
 )
 
 type TestOpts struct {
+	retries      int
+	traceback    string
+	buildType    string
+	flags        []string
 	dist         bool
 	removeTos    bool
 	dirOutputs   bool
@@ -56,6 +59,10 @@ func newTestOpts(mf *MakeFlags, yaConf map[string]any) *TestOpts {
 	}
 
 	opts := &TestOpts{
+		retries:      max(mf.testRetries, 1),
+		traceback:    mf.testTraceback,
+		buildType:    mf.testBuildType,
+		flags:        testFlags(mf),
 		dist:         mf.dist,
 		removeTos:    yaConf["remove_tos"] == true || os.Getenv("YA_TEST_REMOVE_TOS") != "",
 		dirOutputs:   true,
@@ -272,6 +279,12 @@ func (o *TestOpts) sizeRequested(size string) bool {
 }
 
 type TestSuite struct {
+	depends                []string
+	data                   []string
+	recipes                string
+	files                  []string
+	pythonNoBytecode       bool
+	disableLeaks           bool
 	p                      *Platform
 	projectPath            string
 	name                   string
@@ -295,14 +308,27 @@ type TestSuite struct {
 	split                  int
 	prepare                [][]ANY
 	prepareInputs          []VFS
-	runCmd                 func(workDir string, split, index int) []ANY
+	runCmd                 func(workDir string, chunk TestChunk) []ANY
 }
 
-func (s *TestSuite) workDir(split, index int) string {
+type TestChunk struct {
+	split, index, retry int
+	file                string
+}
+
+func (s *TestSuite) workDir(chunk TestChunk) string {
 	dir := path.Join("$(B)", s.projectPath, "test-results", s.name)
 
-	if split > 1 {
-		dir += "/chunk" + strconv.Itoa(index)
+	if chunk.retry > 0 {
+		dir += "/run" + strconv.Itoa(chunk.retry)
+	}
+
+	if chunk.file != "" {
+		dir = path.Join(dir, strings.TrimSuffix(chunk.file, path.Ext(chunk.file)))
+	}
+
+	if chunk.split > 1 {
+		dir += "/chunk" + strconv.Itoa(chunk.index)
 	}
 
 	return dir
@@ -340,27 +366,81 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 		return nil
 	}
 
+	for _, dep := range s.depends {
+		res := genModule(ctx, ctx.rootInstance(dep, demandLinked))
+
+		if res.ARPath != nil {
+			ctx.scannerForPlatform(ctx.target).codegen.use(*res.ARPath)
+		}
+
+		if res.ARRef != 0 {
+			s.deps = append(s.deps, res.ARRef)
+		}
+	}
+
+	for _, data := range s.data {
+		if strings.HasPrefix(data, "sbr://") {
+			s.deps = append(s.deps, ctx.emitTestData(data))
+		}
+	}
+
 	split := max(s.split, 1)
+	retries := 1
 
-	if split == 1 {
-		return []NodeRef{ctx.emit.emit(ctx.testNode(s, 1, 0))}
+	if s.ciType == "test" && !slices.Contains(s.tags, "ya:noretries") {
+		retries = ctx.tests.retries
 	}
 
-	chunks := make([]*Node, split)
-	refs := make([]NodeRef, split)
+	files := s.files
 
-	for i := range chunks {
-		chunks[i] = ctx.testNode(s, split, i)
-		refs[i] = ctx.emit.emit(chunks[i])
+	if len(files) == 0 {
+		files = []string{""}
 	}
 
-	return []NodeRef{ctx.emit.emit(ctx.testAccumulator(s, chunks, refs))}
+	var runs []*Node
+	var runRefs []NodeRef
+
+	for r := 0; r < retries; r++ {
+		retry := 0
+
+		if retries > 1 {
+			retry = r + 1
+		}
+
+		var chunks []*Node
+		var refs []NodeRef
+
+		for _, file := range files {
+			for i := 0; i < split; i++ {
+				node := ctx.testNode(s, TestChunk{split: split, index: i, retry: retry, file: file})
+
+				chunks = append(chunks, node)
+				refs = append(refs, ctx.emit.emit(node))
+			}
+		}
+
+		node, ref := chunks[0], refs[0]
+
+		if split > 1 || len(s.files) > 0 {
+			node = ctx.testAccumulator(s, chunks, refs, retry)
+			ref = ctx.emit.emit(node)
+		}
+
+		runs = append(runs, node)
+		runRefs = append(runRefs, ref)
+	}
+
+	if retries > 1 {
+		return []NodeRef{ctx.emit.emit(ctx.testMerger(s, runs, runRefs))}
+	}
+
+	return runRefs
 }
 
-func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef) *Node {
+func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef, retry int) *Node {
 	o := ctx.tests
 	na := ctx.na
-	work := s.workDir(1, 0)
+	work := s.workDir(TestChunk{retry: retry})
 	log := work + "/results_accumulator.log"
 
 	strs := []string{testToolHostPath, "results_accumulator", "--accumulator-path", work, "--source-root", "$(S)", "--log-path", log,
@@ -377,7 +457,7 @@ func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef)
 	var inputs []VFS
 
 	for i := range chunks {
-		dir := s.workDir(len(chunks), i)
+		dir := path.Dir(chunks[i].Outputs[0].string())
 
 		strs = append(strs, "--output", dir)
 		inputs = append(inputs, chunks[i].Outputs...)
@@ -414,10 +494,10 @@ func (ctx *GenCtx) testAccumulator(s *TestSuite, chunks []*Node, refs []NodeRef)
 	}
 }
 
-func (ctx *GenCtx) testNode(s *TestSuite, split, index int) *Node {
+func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	o := ctx.tests
 	na := ctx.na
-	work := s.workDir(split, index)
+	work := s.workDir(chunk)
 	meta, trace, log := work+"/meta.json", work+"/ytest.report.trace", work+"/run_test.log"
 	tar := work + "/testing_out_stuff.tar.zstd"
 	outputs := []VFS{intern(meta), intern(trace), intern(log)}
@@ -454,6 +534,10 @@ func (ctx *GenCtx) testNode(s *TestSuite, split, index int) *Node {
 	}
 
 	strs = append(strs, "--verify-results", "--tests-limit-in-chunk", strconv.Itoa(testDefaultTestsLimit), "--output-style", o.outputStyle, "--python-bin", testPythonBin)
+
+	if chunk.retry > 0 {
+		strs = append(strs, "--retry", strconv.Itoa(chunk.retry))
+	}
 
 	if s.runCwd != "" {
 		strs = append(strs, "--test-run-cwd", s.runCwd)
@@ -503,8 +587,12 @@ func (ctx *GenCtx) testNode(s *TestSuite, split, index int) *Node {
 		strs = append(strs, "--smooth-shutdown-signals", sig)
 	}
 
-	if split > 1 {
-		strs = append(strs, "--split-count", strconv.Itoa(split), "--split-index", strconv.Itoa(index))
+	if chunk.split > 1 {
+		strs = append(strs, "--split-count", strconv.Itoa(chunk.split), "--split-index", strconv.Itoa(chunk.index))
+	}
+
+	if chunk.file != "" {
+		strs = append(strs, "--split-file", chunk.file)
 	}
 
 	strs = append(strs, "--compression-filter", "zstd", "--compression-level", "1")
@@ -517,6 +605,16 @@ func (ctx *GenCtx) testNode(s *TestSuite, split, index int) *Node {
 
 	if o.dist {
 		head = append(head, argNodeTimeout.any(), internStr(strconv.Itoa(s.timeout+testNodeFinishingTime)).any())
+	}
+
+	if s.recipes != "" {
+		head = append(head, strRecipes.any(), internStr(s.recipes).any())
+	}
+
+	for _, data := range s.data {
+		if uri, ok := strings.CutPrefix(data, "sbr://"); ok {
+			head = append(head, strSandboxResource.any(), internStr(uri).any())
+		}
 	}
 
 	req := testRequirements(s)
@@ -532,7 +630,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, split, index int) *Node {
 		outputs = append(outputs, intern(tar))
 	}
 
-	head = append(head, s.runCmd(work, split, index)...)
+	head = append(head, s.runCmd(work, chunk)...)
 
 	if o.commandFile {
 		head = append(head, internArg(testCmdFileEnd).any())
@@ -556,9 +654,11 @@ func (ctx *GenCtx) testNode(s *TestSuite, split, index int) *Node {
 
 	kv := &KV{P: testSizeKinds[s.size], Path: s.projectPath + "/" + s.name, PC: pcYellow, RunTestNode: true, ShowOutBool: true, HasSpecialRunner: true}
 
-	if split > 1 {
-		kv.SplitIndex, kv.HasSplitIndex = index, true
+	if chunk.split > 1 {
+		kv.SplitIndex, kv.HasSplitIndex = chunk.index, true
 	}
+
+	kv.SplitFile = chunk.file
 
 	deps := append([]NodeRef{ctx.testContext()}, s.deps...)
 
@@ -683,6 +783,17 @@ func (ctx *GenCtx) testEnv(s *TestSuite) EnvVars {
 		env["TESTING_SAVE_OUTPUT"] = "yes"
 	}
 
+	if s.pythonNoBytecode {
+		env["PYTHONDONTWRITEBYTECODE"] = "1"
+	}
+
+	if s.disableLeaks {
+		for _, name := range []string{"ASAN_OPTIONS", "LSAN_OPTIONS"} {
+			env[name+"_ORIGINAL"] = env[name]
+			env[name] += ":detect_leaks=0"
+		}
+	}
+
 	names := make([]string, 0, len(mandatory))
 
 	for name := range mandatory {
@@ -724,4 +835,88 @@ func testRequirementsOf(entries []string) map[string]string {
 	}
 
 	return out
+}
+
+func testRecipes(recipes []string) string {
+	if len(recipes) == 0 {
+		return ""
+	}
+
+	return base64.StdEncoding.EncodeToString([]byte(strings.Join(recipes, " \n ") + " \n"))
+}
+
+func testFlags(mf *MakeFlags) []string {
+	flags := map[string]string{}
+
+	copyStatsFlags(flags, mf.dflags)
+	copyStatsFlags(flags, mf.tflags)
+
+	if enabled, present := os.LookupEnv("YA_TEST_DISABLE_FLAKE8_MIGRATIONS"); !present || envEnabled(enabled) {
+		flags["DISABLE_FLAKE8_MIGRATIONS"] = "yes"
+	}
+
+	if mf.sandboxing {
+		flags["SANDBOXING"] = "yes"
+		flags["FAKEID"] += "sandboxing"
+	}
+
+	var result []string
+
+	for key, value := range flags {
+		switch key {
+		case "RECURSE_PARTITION_INDEX", "RECURSE_PARTITIONS_COUNT", "CONSISTENT_DEBUG":
+			continue
+		}
+
+		result = append(result, key+"="+value)
+	}
+
+	slices.Sort(result)
+
+	return result
+}
+
+func (ctx *GenCtx) testMerger(s *TestSuite, nodes []*Node, refs []NodeRef) *Node {
+	o, na := ctx.tests, ctx.na
+	work := s.workDir(TestChunk{})
+	log := work + "/results_merge.log"
+	outputs := []string{log}
+
+	var inputs []VFS
+
+	for _, node := range nodes {
+		inputs = append(inputs, node.Outputs...)
+
+		for _, out := range node.Outputs {
+			base := path.Base(out.string())
+
+			if base == "testing_out_stuff.tar.zstd" || base == "yt_run_test.tar" {
+				outputs = append(outputs, out.string())
+			} else {
+				outputs = append(outputs, work+"/"+base)
+			}
+		}
+	}
+
+	strs := []string{testToolHostPath, "results_merger", "--project-path", s.projectPath, "--suite-name", s.name, "--source-root", testSourceRoot, "--log-path", log}
+
+	if o.removeTos {
+		strs = append(strs, "--remove-tos")
+	}
+
+	strs = append(strs, "--target-platform-descriptor", o.descriptor)
+
+	for i := range nodes {
+		strs = append(strs, "--output", s.workDir(TestChunk{retry: i + 1}))
+	}
+
+	var outs []VFS
+
+	for _, out := range sortedUnique(outputs) {
+		outs = append(outs, intern(out))
+	}
+
+	slices.SortFunc(inputs, func(a, b VFS) int { return strings.Compare(a.string(), b.string()) })
+
+	return &Node{Platform: testNoPlatform, Env: sortedEnvVars(o.commonEnvMap()), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(testArgs(strs)), Cwd: bld}), Inputs: na.inputList(na.vfsList(slices.Compact(inputs)...)), Outputs: na.vfsList(outs...), DepRefs: na.refList(dedupRefs(refs)...), KV: &KV{P: pkTR, PC: pcLightCyan, ShowOutBool: true}}
 }

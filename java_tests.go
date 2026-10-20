@@ -143,7 +143,7 @@ func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
 	globals := ctx.javaGlobals(jm)
 	jdk := "JDK" + javaConfGlobals["JDK_LATEST_VERSION"]
 
-	s.runCmd = func(work string, _, _ int) []ANY {
+	s.runCmd = func(work string, _ TestChunk) []ANY {
 		strs := []string{testToolHostPath, "run_javastyle", "--source-root", "$(S)", "--trace-path", work + "/ytest.report.trace",
 			"--out-path", work + "/testing_out_stuff", "--java", globals[jdk].string() + "/bin/java",
 			"--runner-lib-path", javaStyleRunnerLib, "--config-xml", javaStyleConfigs[d.lintLevel], "--verbose",
@@ -186,7 +186,7 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 	s.deps = ctx.javaProducer(jm, srclist)
 	s.env = slices.Clone(d.testEnv)
 
-	s.runCmd = func(work string, _, _ int) []ANY {
+	s.runCmd = func(work string, _ TestChunk) []ANY {
 		return testArgs([]string{testToolHostPath, "run_ktlint_test", "--srclist-path", srclist.string(), "--binary", binary,
 			"--trace-path", work + "/ytest.report.trace", "--source-root", "$(S)", "--build-root", "$(B)",
 			"--project-path", jm.dir, "--output-dir", work + "/testing_out_stuff", "--editorconfig", editorconfig})
@@ -271,7 +271,7 @@ func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *TestSu
 	s.relatedPaths = append(append(slices.Clone(files), configs...), "$(S)/"+l.linter.wrapper)
 	s.env = slices.Clone(jm.data.testEnv)
 
-	s.runCmd = func(work string, _, _ int) []ANY {
+	s.runCmd = func(work string, _ TestChunk) []ANY {
 		strs := []string{testToolHostPath, "run_custom_lint", "--source-root", "$(S)", "--build-root", "$(B)",
 			"--project-path", "$(S)/" + jm.dir, "--trace-path", work + "/ytest.report.trace",
 			"--out-path", work + "/testing_out_stuff", "--lint-name", l.linter.name, "--wrapper-script", l.linter.wrapper,
@@ -315,6 +315,9 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 		s.timeout, _ = strconv.Atoi(t.timeout)
 	}
 
+	s.recipes = testRecipes(t.recipes)
+	s.depends = t.depends
+	s.data = sortedUnique(t.data)
 	s.tags = sortedUnique(t.tags)
 	s.requirements = testRequirementsOf(t.requirements)
 	s.env = slices.Clone(d.testEnv)
@@ -387,7 +390,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	props := javaTestProperties(t.systemProperties)
 	cpType := strings.ToLower(cmp.Or(t.classpathCmdType, "MANIFEST"))
 
-	s.runCmd = func(work string, split, index int) []ANY {
+	s.runCmd = func(work string, chunk TestChunk) []ANY {
 		strs := []string{testYMakePython3, "$(S)/build/scripts/run_junit.py", testYMakePython3, "$(S)/build/scripts/unpacking_jtest_runner.py",
 			"--classpath-option-type", cpType, "--trace-file", work + "/ytest.report.trace",
 			"--jar-binary", jdkForTests.string() + "/bin/jar", "--tests-jar-path", testJar.string(), jdkForTests.string() + "/bin/java",
@@ -402,7 +405,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 		strs = append(strs, jvm...)
 
 		strs = append(strs, "-classpath", "@"+cpf.string(), "ru.yandex.devtools.test.Runner", "--tests-jar", testJar.string(),
-			"--source-root", "$(S)", "--modulo", strconv.Itoa(split), "--modulo-index", strconv.Itoa(index))
+			"--source-root", "$(S)", "--modulo", strconv.Itoa(chunk.split), "--modulo-index", strconv.Itoa(chunk.index))
 
 		if t.experimentalFork {
 			strs = append(strs, "--experimental-fork")
@@ -511,7 +514,7 @@ func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *TestSuite {
 		ignored = append(ignored, "ignore_class:"+c)
 	}
 
-	s.runCmd = func(work string, _, _ int) []ANY {
+	s.runCmd = func(work string, _ TestChunk) []ANY {
 		strs := []string{testToolHostPath, "run_check", "--source-root", "$(S)", "--checker", "run_classpath_clash", "--check-name", "classpath.clash",
 			"--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff",
 			"--log-path", work + "/testing_out_stuff/run_check.log", "--no-snippet-from-stderr", "--batch", "--batch-name", name,

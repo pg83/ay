@@ -1,7 +1,5 @@
 package main
 
-import "slices"
-
 func (e *EmitContext) genGeneratedLibrary() *ModuleEmitResult {
 	var globals []ResourceDecl
 
@@ -15,7 +13,7 @@ func (e *EmitContext) genGeneratedLibrary() *ModuleEmitResult {
 	e.emitFromSandboxes()
 	e.emitDeclaredProducers(nil)
 
-	result := &ModuleEmitResult{styleChecks: slices.Clone(e.d.styleChecks), ModuleStmtName: tokGenLibrary, ResourceGlobalClosure: globals}
+	result := &ModuleEmitResult{TestSuites: e.styleSuites(globals), ModuleStmtName: tokGenLibrary, ResourceGlobalClosure: globals}
 
 	for _, kind := range []ModuleKind{KindLib, KindBin} {
 		for _, language := range []Language{LangNone, LangCPP} {

@@ -126,8 +126,6 @@ const (
 )
 
 type ModuleEmitResult struct {
-	styleChecks []StyleCheck
-
 	JavaClosure                     []VFS
 	DocsClosure                     []VFS
 	ARRef                           NodeRef
@@ -172,7 +170,6 @@ type ModuleEmitResult struct {
 	PeerSbomClosurePaths            []VFS
 	InducedDeps                     ParsedIncludeSet
 	ModuleStmtName                  TOK
-	testSuiteInfo                   *TestSuiteInfo
 	persisted                       bool
 	DescClosure                     []DescProtoPeer
 	ResourceGlobalClosure           []ResourceDecl
@@ -451,10 +448,8 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 			ctx.emit.result(sub.LDRef)
 		}
 
-		ctx.emitModuleTests(dir, sub)
+		ctx.emitModuleTests(sub)
 	}
-
-	ctx.emitModuleTests(targetDir, root)
 }
 
 func (ctx *GenCtx) recurseClosure(root string) []string {
@@ -542,7 +537,7 @@ func picTransition(name TOK) bool {
 }
 
 func isDllModuleType(name TOK) bool {
-	return name == tokDll || name == tokExectest || name == tokDllTool
+	return name == tokDll || name == tokDllTool
 }
 
 func (e *EmitContext) moduleInputArg(arg *ANY) *ANY {
@@ -581,7 +576,7 @@ func (e *EmitContext) peerDemand() ModuleDemand {
 }
 
 func (ctx *GenCtx) emitModuleTests(r *ModuleEmitResult) {
-	if r.testsEmitted {
+	if !ctx.testMode || r.testsEmitted {
 		return
 	}
 
@@ -1915,7 +1910,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		r := ctx.results.one()
 
 		*r = ModuleEmitResult{
-			styleChecks:                     slices.Clone(d.styleChecks),
+			TestSuites:                      e.styleSuites(resourceGlobalsClosure),
 			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                d.addInclGlobal,
@@ -2104,7 +2099,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		result.LDPath = ptr(goPath)
 		result.ARRef = goRef
 		result.ARPath = ptr(goPath)
-		result.TestSuites = e.goTestSuites(goRef, build(goPath.relString(), ".vet.txt"), resourceGlobalsClosure)
+		result.TestSuites = append(result.TestSuites, e.goTestSuites(goRef, build(goPath.relString(), ".vet.txt"), resourceGlobalsClosure)...)
 
 		ctx.memoPut(instance, result)
 
@@ -2229,13 +2224,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		)
 
 		ldPath := lDOutputPath(instance, binaryName)
-
-		var suiteInfo *TestSuiteInfo
-
-		if ctx.testMode && testSuiteName(d.moduleStmt.Name) != "" {
-			suiteInfo = buildTestSuiteInfo(instance, d, ldPath)
-		}
-
 		result := newResult()
 
 		if dyn == nil {
@@ -2249,7 +2237,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		result.SbomComponentRef = ownSbomRef
 		result.SbomComponentPath = ownSbomPath
 		result.ResourceGlobalClosure = resourceGlobalsClosure
-		result.testSuiteInfo = suiteInfo
+		result.TestSuites = append(result.TestSuites, e.testRunSuites(ldPath, ldRef, resourceGlobalsClosure)...)
 
 		ctx.memoPut(instance, result)
 
@@ -2343,7 +2331,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	result.GoSrcClosure = goSrcClosure
 
 	if isGoModuleType(d.moduleStmt.Name) {
-		result.TestSuites = e.goTestSuites(arRef, build(arPath.relString(), ".vet.txt"), resourceGlobalsClosure)
+		result.TestSuites = append(result.TestSuites, e.goTestSuites(arRef, build(arPath.relString(), ".vet.txt"), resourceGlobalsClosure)...)
 	}
 
 	if len(globalRefs) > 0 {

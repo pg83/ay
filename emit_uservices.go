@@ -87,7 +87,7 @@ func (e *EmitContext) emitUsrvFiles() {
 		}
 
 		n := Node{Platform: e.instance.Platform, KV: &KV{P: pkUT, PC: pcLightCyan, ShowOutBool: true}, Env: envVarsVCS,
-			Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolArgs[0], strSource.any(), src.any(), strTarget.any(), build(e.instance.Path.relString()).any(), out.any())), Env: envVarsVCS}),
+			Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolArgs[0], strSourceArg.any(), src.any(), strTarget2.any(), build(e.instance.Path.relString()).any(), out.any())), Env: envVarsVCS}),
 			Inputs: na.inputList(na.vfsList(src)), Outputs: na.vfsList(out)}
 
 		e.emitLazyModuleNode(n, nil)

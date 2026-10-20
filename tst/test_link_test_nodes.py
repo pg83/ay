@@ -44,6 +44,7 @@ def make_unsandboxed(files, target, *args):
 
 def fixture():
     return {
+        "ya.conf": 'use_command_file_in_testtool = true\n[flags]\nOPENSOURCE = "yes"\n[host_platform_flags]\nOPENSOURCE = "yes"\n',
         "lib/ya.make": library("SRCS(a.cpp)\n"),
         "lib/a.cpp": "int a(){return 1;}\n",
         "library/cpp/testing/unittest_main/ya.make": library("SRCS(m.cpp)\n"),
@@ -115,11 +116,10 @@ class TestNodesTest(unittest.TestCase):
         binary = lib.node_by_output(graph, "$(B)/lib/ut/lib-ut")
         run = lib.node_by_output(graph, suite_outputs("unittest")[0])
         self.assertEqual(run["outputs"], suite_outputs("unittest"))
-        self.assertEqual(run["deps"], [binary["uid"], context["uid"]])
+        self.assertCountEqual(run["deps"], [binary["uid"], context["uid"]])
         self.assertEqual(
             run["kv"],
             {
-                "disable_cache": "yes",
                 "p": "TS",
                 "path": "lib/ut/unittest",
                 "pc": "yellow",

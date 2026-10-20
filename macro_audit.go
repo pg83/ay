@@ -29,7 +29,7 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 
 	tokSetAppend:     {},
 	tokSetListPreSuf: {},
-	tokGoSkipTests: {},
+	tokGoSkipTests:   {},
 	tokNoBuildIf:     {}, tokBuildOnlyIf: {},
 }
 

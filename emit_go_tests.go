@@ -100,47 +100,21 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 	binary := build(project, "/", name)
 	s := e.goSuiteBase(name, "go_test", "test", globals)
 
-	s.size = cmp.Or(d.test.size, "small")
-	s.timeout = d.test.timeout
-
-	if s.timeout == 0 {
-		s.timeout = testSizeTimeouts[s.size]
-	}
-
-	data := slices.Clone(d.test.data)
-
-	if d.setVars[strADD_SRCDIR_TO_TEST_DATA] != strNo {
-		data = append(data, "arcadia/"+project)
-	}
-
-	slices.Sort(data)
-
-	for _, entry := range slices.Compact(data) {
-		if rel, ok := strings.CutPrefix(entry, "arcadia/"); ok {
-			s.relatedPaths = append(s.relatedPaths, source(path.Clean(rel)).string())
-		}
-	}
-
-	if d.test.cwd != "" {
-		s.runCwd = source(d.test.cwd).string()
-	}
-
+	s.applyTestMeta(d.test, d.setVars[strADD_SRCDIR_TO_TEST_DATA] != strNo)
 	s.deps = []NodeRef{binRef}
-	s.tags = sortedUnique(d.test.tags)
-	s.requirements = testRequirementsOf(d.test.requirements)
 	s.supportsCanonization = true
 	s.smoothShutdown = []string{"SIGUSR2"}
 
 	partition := cmp.Or(d.test.partition, "SEQUENTIAL")
 
-	s.runCmd = func(work string, _, _ int) []ANY {
+	s.runCmd = func(work string, chunk TestChunk) []ANY {
 		return []ANY{
 			internStr(testToolHostPath).any(), strRunGoTest.any(),
 			strBinary.any(), binary.any(),
 			strTestWorkDir.any(), intern(work).any(),
 			strTracefile.any(), intern(work + "/ytest.report.trace").any(),
-			strModulo.any(), strOne.any(),
-			strModuloIndex.any(), strZero.any(),
+			strModulo.any(), internStr(strconv.Itoa(chunk.split)).any(),
+			strModuloIndex.any(), internStr(strconv.Itoa(chunk.index)).any(),
 			strPartitionMode.any(), internStr(partition).any(),
 			strOutputDir.any(), intern(work + "/testing_out_stuff").any(),
 			strProjectPath.any(), internStr(project).any(),
@@ -166,7 +140,7 @@ func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite
 		s.relatedPaths = append(s.relatedPaths, f.string())
 	}
 
-	s.runCmd = func(work string, _, _ int) []ANY {
+	s.runCmd = func(work string, _ TestChunk) []ANY {
 		out := []ANY{
 			internStr(testToolHostPath).any(), strRunGoFmt.any(),
 			strGofmt.any(), gofmt,
@@ -190,7 +164,7 @@ func (e *EmitContext) goVetSuite(goRef NodeRef, vetReport VFS, globals []Resourc
 
 	s.runInputs = append(s.runInputs, vetReport)
 	s.deps = []NodeRef{goRef}
-	s.runCmd = func(work string, _, _ int) []ANY {
+	s.runCmd = func(work string, _ TestChunk) []ANY {
 		return []ANY{
 			internStr(testToolHostPath).any(), strRunCheck.any(),
 			argSourceRoot.any(), strS.any(),

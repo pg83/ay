@@ -1,7 +1,7 @@
 package main
 
 func (e *EmitContext) genExecTest() *ModuleEmitResult {
-	if e.d.test == nil || e.d.test.Commands == "" {
+	if e.d.test.commands == "" {
 		throwFmt("EXECTEST must have at least one RUN macro")
 	}
 
@@ -22,7 +22,7 @@ func (e *EmitContext) genExecTest() *ModuleEmitResult {
 	result := e.scriptModuleResult(ref, out, nil, globals)
 
 	if e.ctx.testMode {
-		result.testSuiteInfo = buildTestSuiteInfo(e.instance, e.d, out)
+		result.TestSuites = e.testRunSuites(out, ref, globals)
 	}
 
 	return result
