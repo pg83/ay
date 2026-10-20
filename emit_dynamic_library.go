@@ -51,7 +51,13 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		rpathHelperSet[p] = struct{}{}
 	}
 
-	peerPaths := make([]string, 0, 1+len(d.dynamicLibraryFrom))
+	peerPaths := make([]string, 0, 5+len(d.dynamicLibraryFrom))
+
+	for _, p := range e.appendPlatformPeerdirs(nil, instance) {
+		if peerYaMakeExists(ctx.fs, source(p)) {
+			peerPaths = append(peerPaths, p)
+		}
+	}
 
 	if !effectiveNoPlatform(d.flags) {
 		peerPaths = append(peerPaths, e.defaultCommonLinkPeerdirs()...)

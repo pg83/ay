@@ -386,6 +386,24 @@ class DynamicLibraryTest(unittest.TestCase):
         self.assertIn("$(B)/resources/CLANG20/bin/clang++", link)
         self.assertIn("--ld-path=$(B)/resources/LLD_ROOT/bin/ld.lld", link)
 
+    def test_platform_lld_peer_selects_the_linker_without_library_peers(self):
+        # DYNAMIC_LIBRARY is a linking module: build/platform/lld is one of its
+        # implicit peers, so LLD_ROOT reaches --ld-path even when no
+        # DYNAMIC_LIBRARY_FROM library peers it (devtools_ya_bin reference:
+        # contrib/libs/libiconv/dynamic links with $(LLD_ROOT)/bin/ld.lld).
+        files = base_files()
+        files["build/platform/lld/ya.make"] = (
+            "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(LLD_ROOT sbr:21)\nEND()\n"
+        )
+        files["dyn/ya.make"] = (
+            "DYNAMIC_LIBRARY(foo)\nNO_RUNTIME()\nEXPORTS_SCRIPT(foo.exports)\n"
+            "DYNAMIC_LIBRARY_FROM(lib)\nEND()\n"
+        )
+        files["dyn/foo.exports"] = "{};\n"
+        graph = lib.make(files, "dyn")
+        link = command_with(lib.node_by_output(graph, "$(B)/dyn/libfoo.so"), "link_dyn_lib.py")["cmd_args"]
+        self.assertIn("--ld-path=$(B)/resources/LLD_ROOT/bin/ld.lld", link)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
