@@ -2597,17 +2597,15 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.srcs = append(d.srcs, SrcMeta{Source: internStr(f).any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq()})
 		}
 	case tokTestSrcs:
-		if d.moduleStmt != nil && isPythonTestModule(d.moduleStmt.Name) {
-			d.test.testFiles = append(d.test.testFiles, anyStrs(v.Args)...)
+		d.test.testFiles = append(d.test.testFiles, anyStrs(v.Args)...)
 
-			for _, a := range v.Args {
-				if a.string() == "NAMESPACE" || a.string() == "TOP_LEVEL" || a.string() == "__main__.py" {
-					throwFmt("TEST_SRCS: %s is not allowed", a.string())
-				}
+		for _, a := range v.Args {
+			if a.string() == "NAMESPACE" || a.string() == "TOP_LEVEL" || a.string() == "__main__.py" {
+				throwFmt("TEST_SRCS: %s is not allowed", a.string())
 			}
-
-			applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPySrcs, Args: append([]ANY{kwNAMESPACE.any(), strTests.any()}, v.Args...)}, d, env, onWarn)
 		}
+
+		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPySrcs, Args: append([]ANY{kwNAMESPACE.any(), strTests.any()}, v.Args...)}, d, env, onWarn)
 	case tokPySrcs:
 		if env.bool(envGO_PROTO) {
 			break

@@ -205,6 +205,16 @@ class PySrcsTest(unittest.TestCase):
         )
         self.assertEqual(namespaces, ["lib=.:lib.:n."])
 
+    def test_library_test_srcs_are_sources_of_the_tests_namespace(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": "PY3_LIBRARY()\nTEST_SRCS(test.py)\nEND()\n",
+            "lib/test.py": "",
+        })
+        graph = lib.make(files, "lib")
+        lib.node_by_output(graph, "$(B)/lib/test.py.yapyc3")
+        objcopy_with_kv(graph, "lib", "resfs/src/resfs/file/py/__tests__/test.py=lib/test.py")
+
     def test_kv_only_resources(self):
         files = python_base()
         files.update({
