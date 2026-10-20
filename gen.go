@@ -342,13 +342,12 @@ func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *Stre
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
 	ctx.buckets = newBucketCache()
 
-	sysincl := loadSysInclSets(fs, onWarn, targetP, hostP)
-	targetScanner := newIncludeScannerWith(parsers, sysincl[0], onWarn, ctx.buckets)
+	targetScanner := newIncludeScannerWith(parsers, loadSysInclSet(parsers, targetP, onWarn), onWarn, ctx.buckets)
 
 	targetScanner.codegen = targetReg
 	targetScanner.moduleByRef = &ctx.moduleByRef
 
-	hostScanner := newIncludeScannerWith(parsers, sysincl[1], onWarn, ctx.buckets)
+	hostScanner := newIncludeScannerWith(parsers, loadSysInclSet(parsers, hostP, onWarn), onWarn, ctx.buckets)
 
 	hostScanner.codegen = hostReg
 	hostScanner.moduleByRef = &ctx.moduleByRef

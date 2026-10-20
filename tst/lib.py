@@ -291,6 +291,9 @@ CONF_FILES = {
     "build/ya.conf.json": ya_conf_json(),
     "build/ymake.core.conf": '@import "${CONF_ROOT}/conf/sysincl.conf"\n',
     "build/conf/sysincl.conf": FAKE_SYSINCL_CONF,
+    "build/sysincl/macro.yml": "- includes: []\n",
+    "build/sysincl/windows.yml": "- includes: []\n",
+    "build/sysincl/misc.yml": "- includes: []\n",
     "build/conf/compilers/gnu_compiler.conf": "",
     "build/conf/linkers/ld.conf": FAKE_LD_CONF,
 }

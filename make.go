@@ -274,7 +274,7 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 
 	caches.prewarm(fs, mf.targets)
 
-	pc := readPlatformConf(fs)
+	pc := readPlatformConf(fs, caches.parsers)
 	hostVars, hostImports := hostRun.wait()
 
 	hostP = newPlatform(

@@ -635,6 +635,45 @@ class SysinclConfTest(unittest.TestCase):
         windows = ("--target-platform", "default-windows-x86_64")
         self.assertEqual({"misc"}, claims(["misc", "picolibc"], files, *windows))
 
+    def test_entries_expand_platform_variables(self):
+        # conf.cpp LoadSystemHeaders takes SubstVarDeeply(SYSINCL): a -D
+        # variable names a file, an unset one expands to nothing.
+        files = {
+            **self.YML,
+            "build/conf/sysincl.conf": "SYSINCL=build/sysincl/misc.yml\nSYSINCL+=${EXTRA_SYSINCL}\n",
+        }
+        probes = ["misc", "picolibc"]
+        self.assertEqual({"misc"}, claims(probes, files))
+        extra = ("-DEXTRA_SYSINCL=build/sysincl/zephyr.yml",)
+        self.assertEqual({"misc", "picolibc"}, claims(probes, files, *extra))
+
+    def test_conditions_see_earlier_conditional_assignments(self):
+        # TCondition::RecalcAll applies the conditional assignments one by
+        # one, each condition evaluated against the variables as they are
+        # at that moment.
+        files = {
+            **self.YML,
+            "build/conf/sysincl.conf": (
+                "SYSINCL=\n"
+                'when ($OS_LINUX == "yes") {\n'
+                "    SYSINCL=build/sysincl/zephyr.yml\n"
+                "}\n"
+                'when ($SYSINCL == "build/sysincl/zephyr.yml") {\n'
+                "    SYSINCL+=build/sysincl/misc.yml\n"
+                "}\n"
+            ),
+        }
+        self.assertEqual({"misc", "picolibc"}, claims(["misc", "picolibc"], files))
+
+    def test_missing_sysincl_config_is_fatal(self):
+        result = make_process({
+            "m/ya.make": module("a.cpp"),
+            "m/a.cpp": "",
+            "build/conf/sysincl.conf": "SYSINCL=build/sysincl/absent.yml\n",
+        }, "m")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("sysincl: build/sysincl/absent.yml: no such file", result.stderr)
+
     def test_missing_import_is_fatal(self):
         result = make_process({
             "m/ya.make": module("a.cpp"),

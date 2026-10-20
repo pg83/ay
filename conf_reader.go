@@ -160,6 +160,30 @@ func parseConfCondition(rel, expr string) []CondNode {
 	return p.condScratch
 }
 
+func (c *ConfFile) holds(b int, env Environment) bool {
+	for b != 0 {
+		branch := &c.branches[b]
+
+		if !branch.condHolds(env) {
+			return false
+		}
+
+		for p := branch.previous; p != 0; p = c.branches[p].previous {
+			if c.branches[p].condHolds(env) {
+				return false
+			}
+		}
+
+		b = branch.parent
+	}
+
+	return true
+}
+
+func (b *ConfBranch) condHolds(env Environment) bool {
+	return len(b.cond) == 0 || evalCond(b.cond, env)
+}
+
 func (c *ConfFile) active(env Environment) []bool {
 	active := make([]bool, len(c.branches))
 	matched := make([]bool, len(c.branches))

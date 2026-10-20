@@ -7,7 +7,11 @@ import (
 	"strings"
 )
 
-var sysinclNames = map[string]bool{sysinclVar: true}
+var (
+	sysinclNames  = map[string]bool{sysinclVar: true}
+	envSYSINCL    = internEnv(sysinclVar)
+	unsetVarRefRe = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
+)
 
 const (
 	sysinclVar             = "SYSINCL"
@@ -41,62 +45,52 @@ func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 	}
 }
 
-type SysinclConf struct {
-	fs    FS
-	files map[string]*ConfFile
+type SysinclCondStmt struct {
+	file *ConfFile
+	stmt ConfStmt
 }
 
-func newSysinclConf(fs FS) *SysinclConf {
-	return &SysinclConf{fs: fs, files: map[string]*ConfFile{}}
-}
+func (pm *IncludeParserManager) sysinclConfFile(rel string) *ConfFile {
+	key := internStr(rel)
 
-func (c *SysinclConf) file(rel string) *ConfFile {
-	if f, ok := c.files[rel]; ok {
+	if f, ok := pm.cache.sysinclConfs.get(key); ok {
 		return f
 	}
 
-	if !c.fs.isFile(srcRootRel, rel) {
+	if !pm.fs.isFile(srcRootRel, rel) {
 		throwFmt("conf: @import %s: no such file", rel)
 	}
 
-	text := string(concatChunks(c.fs.read(rel)))
+	text := string(concatChunks(pm.fs.readPath(key)))
 	f := &ConfFile{branches: []ConfBranch{{}}}
 
 	if strings.Contains(text, sysinclVar) || strings.Contains(text, "@import") {
 		f = readConfFile(rel, text, sysinclNames)
 	}
 
-	c.files[rel] = f
+	pm.cache.sysinclConfs.put(key, f)
 
 	return f
 }
 
-func (c *SysinclConf) list(imports []string, env Environment) []string {
+func sysinclFiles(pm *IncludeParserManager, imports []string, platformEnv Environment) []string {
 	var (
-		value       []string
-		conditional []ConfStmt
+		value       string
+		conditional []SysinclCondStmt
 		walk        func(rel string)
 	)
 
 	walk = func(rel string) {
-		f := c.file(rel)
-
-		var active []bool
+		f := pm.sysinclConfFile(rel)
 
 		for _, s := range f.stmts {
 			switch {
 			case s.name == "":
 				walk(s.value)
 			case s.branch == 0:
-				value = applySysinclStmt(value, s)
+				value = applyConfAssignment(value, s)
 			default:
-				if active == nil {
-					active = f.active(env)
-				}
-
-				if active[s.branch] {
-					conditional = append(conditional, s)
-				}
+				conditional = append(conditional, SysinclCondStmt{file: f, stmt: s})
 			}
 		}
 	}
@@ -105,48 +99,62 @@ func (c *SysinclConf) list(imports []string, env Environment) []string {
 		walk(rel)
 	}
 
-	for _, s := range conditional {
-		value = applySysinclStmt(value, s)
-	}
+	env := platformEnv.clone()
 
-	return value
-}
+	env.setString(envSYSINCL, value)
 
-func applySysinclStmt(value []string, s ConfStmt) []string {
-	if strings.Contains(s.value, "$") {
-		throwFmt("conf: %s=%s: variable references in %s are not modelled", s.name, s.value, sysinclVar)
-	}
-
-	if !s.append {
-		value = nil
-	}
-
-	return append(value, strings.Fields(s.value)...)
-}
-
-func loadSysInclSets(fs FS, onWarn func(Warn), platforms ...*Platform) []SysInclSet {
-	parsed := map[string][]SysIncl{}
-	sets := make([]SysInclSet, len(platforms))
-
-	for i, p := range platforms {
-		for _, rel := range p.Sysincl {
-			records, ok := parsed[rel]
-
-			if !ok {
-				if fs.isFile(srcRootRel, rel) {
-					records = parseSysInclYAML(rel, concatChunks(fs.read(rel)), onWarn)
-				} else {
-					onWarn(Warn{Kind: WarnSysIncl, Message: fmt.Sprintf("%s: cannot read sysincl config", rel)})
-				}
-
-				parsed[rel] = records
-			}
-
-			sets[i] = append(sets[i], records...)
+	for _, c := range conditional {
+		if c.file.holds(c.stmt.branch, env) {
+			value = applyConfAssignment(value, c.stmt)
+			env.setString(envSYSINCL, value)
 		}
 	}
 
-	return sets
+	if strings.Contains(value, "$") {
+		value = unsetVarRefRe.ReplaceAllString(expandStmtToken(value, env), "")
+	}
+
+	return strings.Fields(value)
+}
+
+func applyConfAssignment(value string, s ConfStmt) string {
+	if !s.append || value == "" {
+		return s.value
+	}
+
+	if s.value == "" {
+		return value
+	}
+
+	return value + " " + s.value
+}
+
+func (pm *IncludeParserManager) sysinclRecords(rel string, onWarn func(Warn)) []SysIncl {
+	key := internStr(rel)
+
+	if records, ok := pm.cache.sysinclYAMLs.get(key); ok {
+		return records
+	}
+
+	if !pm.fs.isFile(srcRootRel, rel) {
+		throwFmt("sysincl: %s: no such file", rel)
+	}
+
+	records := parseSysInclYAML(rel, concatChunks(pm.fs.readPath(key)), onWarn)
+
+	pm.cache.sysinclYAMLs.put(key, records)
+
+	return records
+}
+
+func loadSysInclSet(pm *IncludeParserManager, p *Platform, onWarn func(Warn)) SysInclSet {
+	var set SysInclSet
+
+	for _, rel := range p.Sysincl {
+		set = append(set, pm.sysinclRecords(rel, onWarn)...)
+	}
+
+	return set
 }
 
 type SourceFilter struct {

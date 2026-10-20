@@ -34,6 +34,9 @@ type SharedParseCache struct {
 	ambiguous  map[uint64]ParsedIncludeSet
 	directives *BumpAllocator[IncludeDirective]
 	parsed     DenseMap[STR, ParsedIncludeSet]
+
+	sysinclConfs DenseMap[STR, *ConfFile]
+	sysinclYAMLs DenseMap[STR, []SysIncl]
 }
 
 func newSharedParseCache() *SharedParseCache {
