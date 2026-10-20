@@ -274,8 +274,8 @@ class DynamicLibraryTest(unittest.TestCase):
         ])
         text = " ".join(command_with(node, "link_dyn_lib.py")["cmd_args"])
         self.assertIn(
-            "-Wl,--no-whole-archive $(B)/dlltool/__vcs_version__.c.pic.o "
-            "$(B)/dlltool/t.cpp.pic.o -o $(B)/dlltool/mytool.so -shared "
+            "-Wl,--no-whole-archive $(B)/dlltool/__vcs_version__.c.o "
+            "$(B)/dlltool/t.cpp.o -o $(B)/dlltool/mytool.so -shared "
             "-Wl,-soname,mytool.so",
             text,
         )
@@ -285,7 +285,7 @@ class DynamicLibraryTest(unittest.TestCase):
             text,
         )
         self.assertIn("-Wl,--version-script=$(S)/dlltool/t.exports", text)
-        self.assertIn("$(B)/dlltool/t.cpp.pic.o", node["inputs"])
+        self.assertIn("$(B)/dlltool/t.cpp.o", node["inputs"])
         self.assertIn("$(S)/dlltool/t.exports", node["inputs"])
         self.assertEqual(
             [graph["graph"][ref]["outputs"][0] for ref in graph["result"]],

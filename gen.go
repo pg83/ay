@@ -504,8 +504,10 @@ func isFinalTargetModuleType(name TOK) bool {
 	return isProgramModuleType(name) || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib
 }
 
+// ya merges the pic and nopic graphs keeping the pic variant of shared
+// libraries only; DLL_TOOL renders as a program and keeps its nopic build.
 func picTransition(name TOK) bool {
-	return isDllModuleType(name) || name == tokDllJava
+	return name == tokDll || name == tokDllJava
 }
 
 func isDllModuleType(name TOK) bool {

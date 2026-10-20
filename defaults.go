@@ -296,7 +296,9 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 		peers = append(peers, "build/cow/on")
 		peers = appendImplicitPeers(peers, programAllocatorDefaults, rc)
 	} else {
-		peers = appendImplicitPeers(peers, programImplicitPeers, rc)
+		if !isDllModuleType(d.moduleStmt.Name) {
+			peers = appendImplicitPeers(peers, programImplicitPeers, rc)
+		}
 
 		if env.bool(envARCH_X86_64) && !flags.NoUtil && allocatorName.string() != "FAKE" {
 			peers = append(peers, "library/cpp/cpuid_check")
