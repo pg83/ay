@@ -60,6 +60,9 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	e.appendSdcMeta(&node, name)
 
 	ref := e.emitLazyModuleNode(node, peers, out)
+
+	e.codegen.mustInfo(out).LateOutputs = e.ctx.na.vfsList(generated...)
+
 	res := e.scriptModuleResult(ref, out, dedup(peers), globals)
 
 	res.GlobalSources = e.globalSources

@@ -1,6 +1,19 @@
 package main
 
 var tokName = [...]STR{
+	tokPackageFinal:              internStr("_PACKAGE_FINAL"),
+	tokMlaunchLibrary:            internStr("MLAUNCH_LIBRARY"),
+	tokMlaunchPipeline:           internStr("MLAUNCH_PIPELINE"),
+	tokGolaunchProgram:           internStr("GOLAUNCH_PROGRAM"),
+	tokGolaunchSrcs:              internStr("GOLAUNCH_SRCS"),
+	tokGolaunchSrcdir:            internStr("GOLAUNCH_SRCDIR"),
+	tokRuntimePeerdir:            internStr("RUNTIME_PEERDIR"),
+	tokResourcePeerdir:           internStr("RESOURCE_PEERDIR"),
+	tokGolaunchFunction:          internStr("GOLAUNCH_FUNCTION"),
+	tokGolaunchOverride:          internStr("GOLAUNCH_OVERRIDE"),
+	tokNoGolaunchSrcs:            internStr("NO_GOLAUNCH_SRCS"),
+	tokGenerateGolaunchCallbacks: internStr("GENERATE_GOLAUNCH_CALLBACKS"),
+
 	tokRosLibrary:        internStr("ROS_LIBRARY"),
 	tokRosDir:            internStr("ROS_DIR"),
 	tokRosPartial:        internStr("ROS_PARTIAL"),
@@ -385,6 +398,19 @@ var tokBySTR = func() []TOK {
 
 const (
 	tokInvalid TOK = iota
+	tokPackageFinal
+	tokMlaunchLibrary
+	tokMlaunchPipeline
+	tokGolaunchProgram
+	tokGolaunchSrcs
+	tokGolaunchSrcdir
+	tokRuntimePeerdir
+	tokResourcePeerdir
+	tokGolaunchFunction
+	tokGolaunchOverride
+	tokNoGolaunchSrcs
+	tokGenerateGolaunchCallbacks
+
 	tokRosLibrary
 	tokRosDir
 	tokRosPartial

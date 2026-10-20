@@ -26,6 +26,8 @@ const (
 	LangTSPrepare
 	LangTS
 	LangDocsProto
+	LangRosBindings
+	LangPackage
 )
 
 const (

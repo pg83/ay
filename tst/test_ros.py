@@ -36,6 +36,80 @@ def ros_files():
 
 
 class RosTests(unittest.TestCase):
+    def test_owned_and_propagated_include_directories_remain_separate(self):
+        files = ros_files()
+        files.update({
+            "dep/ya.make": f"ROS_LIBRARY(robot)\n{lib.BARE_MODULE}\nROS_DIR(shared)\nROS_SRCS(Child.msg)\nEND()\n",
+            "dep/Child.msg": "int32 value\n",
+            "msgs/ya.make": f"ROS_LIBRARY(robot)\n{lib.BARE_MODULE}\nONLY_TAGS(CPP_ROS)\nROS_DIR(shared)\nPEERDIR(dep)\nROS_SRCS(Parent.msg)\nEND()\n",
+            "msgs/Parent.msg": "int32 value\n",
+        })
+        graph = lib.make(files, "msgs")
+        generated = lib.node_by_output(graph, "$(B)/shared/Parent.h")
+        args = generated["cmds"][0]["cmd_args"]
+        self.assertEqual(args.count("-Irobot:shared"), 2)
+        self.assertEqual(args.count("-Irobot:shared/msg"), 2)
+        self.assertLess(args.index("-Irobot:msgs"), args.index("-Irobot:dep"))
+
+    def test_go_peer_selects_go_ros_and_emits_empty_package(self):
+        from test_link_go_modules import fixture
+        files = fixture(sbom=False)
+        files.update(ros_files())
+        files.update({
+            "msgs/ya.make": f"ROS_LIBRARY(robot)\n{lib.BARE_MODULE}\nROS_DIR(msgs)\nROS_SRCS(msg/Plain.msg srv/Query.srv)\nEND()\n",
+            "msgs/msg/Plain.msg": "int32 value\n",
+            "msgs/srv/Query.srv": "int32 value\n---\nint32 result\n",
+            "app/ya.make": f"GO_PROGRAM()\n{lib.BARE_MODULE}\nPEERDIR(msgs)\nEND()\n",
+            "build/scripts/writer.py": "",
+        })
+        graph = lib.make(files, "app")
+        generated = lib.node_by_output(graph, "$(B)/msgs/Plain.go")
+        self.assertEqual(generated["cmds"][0]["cmd_args"][2], "golang")
+        empty = lib.node_by_output(graph, "$(B)/msgs/empty.go")
+        self.assertEqual(empty["kv"]["p"], "RS")
+        package = lib.node_by_output(graph, "$(B)/msgs/robot.a")
+        self.assertIn(generated["uid"], package["deps"])
+        self.assertIn(empty["uid"], package["deps"])
+        self.assertFalse(any(o.endswith("Query.go") or o.endswith("Plain.cc") for n in graph["graph"] for o in n["outputs"]))
+
+    def test_python_ros_uses_binding_and_cpp_self_peers(self):
+        from test_proto_py_variant import py_proto_files
+        files = py_proto_files()
+        files.update(ros_files())
+        for peer in (
+            "contrib/python/numpy/py3",
+            "sdg/sdc/ros/misc/ros_msg_generator/yamakes/py_cpp_bindings_support_lib",
+            "sdg/sdc/ros/misc/python_utils/yamakes/ros_converters",
+            "sdg/sdc/third_party/ros/genpy/yamakes/pylib",
+            "library/python/runtime_py3",
+        ):
+            files[f"{peer}/ya.make"] = f"LIBRARY()\n{lib.BARE_MODULE}\nEND()\n"
+        for header in (
+            "sdg/sdc/ros/misc/python_utils/numpy_wrapper.h",
+            "sdg/sdc/ros/misc/python_utils/ros_converters.h",
+            "sdg/sdc/ros/misc/python_utils/stl_converters.h",
+            "sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/helpers.h",
+            "sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export.h",
+            "sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export_arrays.h",
+            "sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export_enum.h",
+        ):
+            files[header] = ""
+        for tool in ("generate_proxy_import_file", "generate_export_py_cpp_bindings"):
+            lib.tool_program(files, "sdg/tier0/tools/" + tool, tool)
+        files.update({
+            "msgs/ya.make": f"ROS_LIBRARY(robot)\n{lib.BARE_MODULE}\nROS_DIR(msgs)\nROS_PARTIAL(part)\nROS_SRCS(msg/Plain.msg PARTIAL extra)\nEND()\n",
+            "msgs/msg/Plain.msg": "int32 value\n",
+            "py/ya.make": f"PY3_PROGRAM()\n{lib.BARE_MODULE}\nPEERDIR(msgs)\nEND()\n",
+        })
+        graph = lib.make(files, "py")
+        binding = lib.node_by_output(graph, "$(B)/msgs/Plain.py.h")
+        self.assertEqual(binding["cmds"][0]["cmd_args"][2], "python_cpp_bindings")
+        lib.node_by_output(graph, "$(B)/msgs/Plain.h")
+        export = lib.node_by_output(graph, "$(B)/msgs/part_py_cpp_bindings.cpp")
+        self.assertIn("--partial-name=part", export["cmds"][0]["cmd_args"])
+        proxy = lib.node_by_output(graph, "$(B)/msgs/msg/__init__.py")
+        self.assertEqual(proxy["cmds"][0]["cmd_args"][1:], ["--from-import=..cpp_msg", "--from-import=extra.msg"])
+
     def test_cpp_messages_zero_copy_and_service_outputs(self):
         files = ros_files()
         files.update({

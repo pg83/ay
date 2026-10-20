@@ -125,7 +125,7 @@ const (
 )
 
 type ModuleEmitResult struct {
-	ProtoVariants                   uint16
+	ModuleVariants                  uint16
 	GlobalSources                   []VFS
 	JavaClosure                     []VFS
 	DocsClosure                     []VFS
@@ -144,6 +144,7 @@ type ModuleEmitResult struct {
 	OwnAddInclGlobal                []VFS
 	ProtoInclude                    []VFS
 	RosInclude                      []VFS
+	MlaunchDeps                     []string
 	SwigInclude                     []VFS
 	AddInclOneLevel                 []VFS
 	AddInclUserGlobal               []VFS
@@ -429,7 +430,7 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 		ctx.emit.result(*root.GlobalRef)
 	}
 
-	ctx.genProtoTargets(targetDir, root.ProtoVariants, rootDemand)
+	ctx.genMultimoduleTargets(targetDir, root.ModuleVariants, rootDemand)
 
 	ctx.emitModuleTests(root)
 
@@ -450,7 +451,7 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 			ctx.emit.result(sub.LDRef)
 		}
 
-		ctx.genProtoTargets(dir, sub.ProtoVariants, rootDemand)
+		ctx.genMultimoduleTargets(dir, sub.ModuleVariants, rootDemand)
 
 		ctx.emitModuleTests(sub)
 	}
@@ -1050,6 +1051,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		return result
 	}
 
+	if tag := multimoduleVariantTag(d.multimodule, instance.Language); tag != "" && moduleExcludesTag(d, tag) {
+		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants}
+
+		ctx.memoPut(instance, result)
+
+		return result
+	}
+
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary && d.multimodule != tokRosLibrary {
 		cpp := instance
 
@@ -1077,7 +1086,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	e.prepareUserverProtos()
 
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangCPP && moduleExcludesTag(d, "CPP_PROTO") {
-		result := &ModuleEmitResult{ProtoVariants: d.protoVariants, ModuleStmtName: tokProtoLibrary}
+		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, ModuleStmtName: tokProtoLibrary}
 
 		ctx.memoPut(instance, result)
 
@@ -1138,6 +1147,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	if d.moduleStmt.Name == tokExectest {
 		return e.genExecTest()
+	}
+
+	if d.moduleStmt.Name == tokPackageFinal {
+		return e.genPackageFinal()
 	}
 
 	if isUnionModule(d.moduleStmt.Name) {
@@ -1426,13 +1439,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	var rosInclude []VFS
-	rosInclude = append(rosInclude, d.rosInclude...)
 
 	for _, peer := range resolved {
 		rosInclude = append(rosInclude, peer.result.RosInclude...)
 	}
 
-	rosInclude = ctx.na.vfsList(dedup(rosInclude)...)
+	rosInclude = ctx.na.vfsList(concat(dedup(d.rosInclude), dedup(rosInclude))...)
+
+	rosGlobalInclude := ctx.na.vfsList(dedup(rosInclude)...)
 
 	var globalSources []VFS
 
@@ -1989,13 +2003,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		*r = ModuleEmitResult{
 			TestSuites:                      e.styleSuites(resourceGlobalsClosure),
-			ProtoVariants:                   d.protoVariants,
+			ModuleVariants:                  d.moduleVariants,
 			GlobalSources:                   e.globalSources,
+			MlaunchDeps:                     mlaunchDeps(d, resolved),
 			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                d.addInclGlobal,
 			ProtoInclude:                    effectiveProtoInclude,
-			RosInclude:                      rosInclude,
+			RosInclude:                      rosGlobalInclude,
 			SwigInclude:                     effectiveSwigInclude,
 			AddInclOneLevel:                 d.addInclOneLevel,
 			AddInclUserGlobal:               d.addInclUserGlobal,
@@ -2149,6 +2164,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	d.scanCtx = newModuleScanContext(ctx, instance, d, scanAddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
 	d.scanCtx.rosInclude = rosInclude
+	e.emitMlaunch(resolved, peerArchivePaths)
 	e.emit()
 
 	if instance.Demand == demandNone {

@@ -340,6 +340,10 @@ func (e *EmitContext) emit() {
 
 	cythonPlans := e.planCythonCpp()
 
+	if d.ros != nil && d.ros.Language == LangGo {
+		e.emitRosEmpty()
+	}
+
 	e.emitDeclaredProducers(cythonPlans)
 	e.emitUsrvFiles()
 

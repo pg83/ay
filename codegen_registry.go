@@ -18,6 +18,7 @@ type GeneratedFileInfo struct {
 	SourceInputs    []VFS
 	ProducerMainOut VFS
 	ClosureLeaves   []VFS
+	LateOutputs     []VFS
 	ParsedIncludes  ParsedIncludeSet
 }
 

@@ -11,7 +11,7 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 	ctx, d, instance := e.ctx, e.d, e.instance
 	na := ctx.na
 
-	if d.protoVariants&(1<<LangDocsProto) == 0 {
+	if d.moduleVariants&(1<<LangDocsProto) == 0 {
 		return &ModuleEmitResult{ModuleStmtName: tokProtoLibrary}
 	}
 

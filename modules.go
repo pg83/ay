@@ -161,6 +161,7 @@ type TestMeta struct {
 }
 
 type ModuleData struct {
+	mlaunch     *MlaunchModule
 	ros         *RosModule
 	multimodule TOK
 	selfPeers   []Language
@@ -175,7 +176,7 @@ type ModuleData struct {
 	yqlCurrent               bool
 	yqlStableABI             bool
 	yqlPrebuiltResource      string
-	protoVariants            uint16
+	moduleVariants           uint16
 	listProtos               []ListProtoStmt
 	nots                     *NotsModule
 	docs                     *DocsData
@@ -344,11 +345,11 @@ type CompileSpec struct {
 }
 
 type SrcMeta struct {
-	RosZeroCopy bool
 	Source      ANY
 	Prio        int
 	Seq         int
 	Global      bool
+	RosZeroCopy bool
 	Bucket      int
 	Compile     CompileSpec
 	CompileRef  NodeRef
@@ -1102,9 +1103,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit.Type)
 			setupRosModule(v, modulePath, language, env, d)
+			setupMlaunchModule(v, modulePath, language, env, d)
 
 			if v.Name == tokProtoLibrary && !v.Schema {
-				d.protoVariants = defaultProtoVariants
+				d.moduleVariants = defaultProtoVariants
 			}
 
 			if v.Name == tokDocs || v.Name == tokDocsLibrary {
@@ -1148,7 +1150,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			env.setString(envMODULE_LANG, moduleLang)
 
 		case *SrcsStmt:
-			if d.moduleStmt != nil && isUnionModule(d.moduleStmt.Name) {
+			if d.moduleStmt != nil && (isUnionModule(d.moduleStmt.Name) || d.moduleStmt.Name == tokPackageFinal) {
 				d.addFiles(expandStmtTokens(v.Sources, env))
 
 				continue
@@ -1612,6 +1614,8 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	switch name {
 	case tokRosLibrary:
 		return rosModuleUnit(language)
+	case tokMlaunchLibrary, tokMlaunchPipeline, tokGolaunchProgram:
+		return mlaunchModuleUnit(name, language)
 	case tokDllJava:
 		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp, SwigLang: strSwigLangJniCpp}
 	case tokGoLibrary, tokGoProgram, tokGoTest, tokGoDll:
@@ -1725,6 +1729,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}()
 
 	switch v.Name {
+	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks:
+		applyMlaunchStmt(modulePath, v, env, d)
 	case tokRosDir, tokRosPartial, tokRosSrcs, tokRosMsgCmd, tokRosZeroCopyMsgCmd, tokRosSrvCmd:
 		applyRosStmt(modulePath, v, env, d)
 	case tokSdcInstall:
@@ -2296,9 +2302,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.listProtos = append(d.listProtos, stmt)
 	case tokOnlyTags, tokIncludeTags, tokExcludeTags:
+		if d.multimodule != 0 {
+			applyMultimoduleVariantTags(v, d)
+		}
 
 		if d.moduleStmt != nil && (d.moduleStmt.Name == tokProtoLibrary || env.bool(envGO_PROTO)) {
-			applyProtoVariantTags(v, d)
+			applyMultimoduleVariantTags(v, d)
 		}
 
 		if d.excludeTags == nil {
@@ -4192,7 +4201,7 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 
 	if isGoModuleType(d.moduleStmt.Name) && peerYaMakeExists(ctx.fs, peerVFS) {
 		switch peerName := ctx.moduleName(peerVFS.relString()); {
-		case peerName == tokProtoLibrary:
+		case peerName == tokProtoLibrary || peerName == tokRosLibrary || peerName == tokMlaunchLibrary:
 			language = LangGo
 
 			fallthrough
@@ -4201,6 +4210,14 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 				demand = demandSelf
 			}
 		}
+	}
+
+	if d.ros != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokRosLibrary {
+		language = parent.Language
+	}
+
+	if d.multimodule == tokMlaunchLibrary && parent.Language == LangPackage && ctx.moduleName(peerVFS.relString()) == tokMlaunchLibrary {
+		language = LangPackage
 	}
 
 	peer := ModuleInstance{

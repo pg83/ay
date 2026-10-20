@@ -44,6 +44,15 @@ type RosModule struct {
 }
 
 func rosModuleUnit(language Language) ModuleUnit {
+	switch language {
+	case LangRosBindings:
+		return ModuleUnit{Type: tokLibrary, Tag: strPy3CppRos, CCTag: strPy3CppRos2, ARPrefix: "libpy3_cpp_", GlobalARTag: strPy3CppRosGlobal, SbomLang: unitSbomCpp}
+	case LangPy:
+		return ModuleUnit{Type: tokPy3Library, Tag: strPy3Ros, CCTag: strPy3Ros2, ARPrefix: "libpy3", GlobalARTag: strPy3RosGlobal, SbomLang: unitSbomCpp}
+	case LangGo:
+		return resolveModuleUnitBare(tokGoLibrary, KindLib, language)
+	}
+
 	return ModuleUnit{Type: tokLibrary, Tag: strCppRos, CCTag: strCppRos2, ARPrefix: "lib", GlobalARTag: strCppRosGlobal, SbomLang: unitSbomCpp}
 }
 
@@ -60,11 +69,38 @@ func setupRosModule(stmt *ModuleStmt, module string, language Language, env Envi
 
 	d.multimodule = stmt.Name
 	d.ros = &RosModule{Package: pkg, Dir: module, Language: language}
-	d.rosInclude = append(d.rosInclude, source(pkg, ":", module))
-	d.peerdirs = append(d.peerdirs, internAnys(rosCppDeps)...)
-	d.cFlags = append(d.cFlags, strDsdcAlwayslinkOptionIsSet.any())
-	env.setString(envMODULE_TAG, "CPP_ROS")
-	env.setBool(envCppRos, true)
+	d.moduleVariants = 1<<LangCPP | 1<<LangRosBindings | 1<<LangPy | 1<<LangGo
+
+	switch language {
+	case LangGo:
+		env.setBool(envGoRos, true)
+		env.setString(envMODULE_TAG, "GO")
+	case LangPy:
+		d.selfPeers = append(d.selfPeers, LangRosBindings)
+		d.peerdirs = append(d.peerdirs, strSdgSdcThirdPartyRosGenpyYamakesPylib.any())
+		d.usePython3 = true
+		env.setBool(envPy3Ros, true)
+	case LangRosBindings:
+		d.selfPeers = append(d.selfPeers, LangCPP)
+		applyUnknownStmt(nil, module, UnknownStmt{Name: tokUsePython3}, d, env, nil)
+
+		d.peerdirs = append(d.peerdirs, internAnys([]string{
+			"contrib/python/numpy/py3",
+			"sdg/sdc/ros/misc/ros_msg_generator/yamakes/py_cpp_bindings_support_lib",
+			"sdg/sdc/ros/misc/python_utils/yamakes/ros_converters",
+		})...)
+
+		env.setBool(envPy3CppRos, true)
+	default:
+		d.rosInclude = append(d.rosInclude, source(pkg, ":", module))
+		d.peerdirs = append(d.peerdirs, internAnys(rosCppDeps)...)
+		d.cFlags = append(d.cFlags, strDsdcAlwayslinkOptionIsSet.any())
+		env.setBool(envCppRos, true)
+	}
+
+	if language != LangGo {
+		env.setStringID(envMODULE_TAG, d.unit.Tag)
+	}
 }
 
 func applyRosStmt(module string, stmt UnknownStmt, env Environment, d *ModuleData) {
@@ -93,6 +129,8 @@ func applyRosStmt(module string, stmt UnknownStmt, env Environment, d *ModuleDat
 
 		d.ros.Partial = args[0]
 	default:
+		var msgs, srvs, partials []string
+
 		zero := stmt.Name == tokRosZeroCopyMsgCmd
 
 		for i := 0; i < len(args); i++ {
@@ -107,6 +145,12 @@ func applyRosStmt(module string, stmt UnknownStmt, env Environment, d *ModuleDat
 			if file == "PARTIAL" {
 				i++
 
+				if i >= len(args) {
+					throwFmt("Expected library name after PARTIAL")
+				}
+
+				partials = append(partials, args[i])
+
 				continue
 			}
 
@@ -118,8 +162,24 @@ func applyRosStmt(module string, stmt UnknownStmt, env Environment, d *ModuleDat
 				throwFmt("ZERO_COPY for .srv file is not allowed")
 			}
 
-			d.srcs = append(d.srcs, SrcMeta{Source: internStr(file).any(), Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), RosZeroCopy: zero})
+			isMsg := strings.HasSuffix(file, ".msg")
+			name := strings.TrimSuffix(path.Base(file), path.Ext(file))
+
+			if isMsg {
+				msgs = append(msgs, name)
+			} else {
+				srvs = append(srvs, name)
+			}
+
+			if d.ros.Language == LangPy || (isMsg || d.ros.Language != LangRosBindings) && (isMsg || d.ros.Language != LangGo) {
+				d.srcs = append(d.srcs, SrcMeta{Source: internStr(file).any(), Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), RosZeroCopy: zero})
+			}
+
 			zero = false
+		}
+
+		if stmt.Name == tokRosSrcs {
+			finishRosSources(module, d, env, msgs, srvs, partials)
 		}
 	}
 }
@@ -152,4 +212,71 @@ func resolveRosInclude(fs FS, includes []VFS, name string) VFS {
 	}
 
 	return 0
+}
+
+func finishRosSources(module string, d *ModuleData, env Environment, msgs, srvs, partials []string) {
+	namespace := d.ros.Partial
+
+	if namespace == "" {
+		namespace = d.ros.Package
+	}
+
+	if d.ros.Language == LangPy {
+		var pys []ANY
+
+		for _, kind := range []string{"msg", "srv"} {
+			out := internStr(kind + "/__init__.py").any()
+			args := []string{}
+			names := srvs
+
+			if kind == "msg" {
+				names = msgs
+
+				if !env.bool(envRosPurePy) {
+					args = append(args, "--from-import=..cpp_msg")
+					names = nil
+				}
+			}
+
+			for _, name := range names {
+				args = append(args, "--from-import=._"+name)
+			}
+
+			for _, partial := range partials {
+				args = append(args, "--from-import="+partial+"."+kind)
+			}
+
+			d.runPrograms = append(d.runPrograms, &RunProgramStmt{ToolPath: strSdgTier0ToolsGenerateProxyImportFile.any(), Args: internAnys(args), StdoutFile: ptr(out), StdoutNoAuto: true})
+			pys = append(pys, out)
+
+			for _, name := range names {
+				pys = append(pys, internStr(kind+"/_"+name+".py").any())
+			}
+		}
+
+		ns := internStr(namespace).any()
+
+		d.pyNamespace = &ns
+		d.pySrcs = append(d.pySrcs, pys...)
+		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{Srcs: pys, Namespace: &ns})
+	}
+
+	if d.ros.Language == LangRosBindings {
+		out := internStr(namespace + "_py_cpp_bindings.cpp").any()
+		args := []string{"--pkg-name=" + d.ros.Package, "--partial-name=" + namespace}
+		includes := []string{}
+
+		for _, msg := range msgs {
+			args = append(args, "--includes="+msg+".py.h")
+			includes = append(includes, msg+".py.h")
+		}
+
+		for _, msg := range msgs {
+			args = append(args, "--msg-names="+msg)
+		}
+
+		includes = append(includes, "sdg/sdc/ros/misc/python_utils/ros_converters.h", "sdg/sdc/ros/misc/python_utils/stl_converters.h", "sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/helpers.h")
+		d.runPrograms = append(d.runPrograms, &RunProgramStmt{ToolPath: strSdgTier0ToolsGenerateExportPyCppBindings.any(), Args: internAnys(args), StdoutFile: ptr(out), OutputIncludes: internAnys(includes)})
+		appendPyRegister(d, namespace+".cpp_msg", true)
+	}
 }
