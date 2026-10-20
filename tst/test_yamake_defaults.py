@@ -118,6 +118,15 @@ class YaMakeDefaultPeersTest(unittest.TestCase):
         self.assertEqual(code, 0, stderr)
         return linked_peers(graph)
 
+    def test_autocheck_program_links_eatmydata_on_linux(self):
+        peer = "contrib/libs/libeatmydata"
+        files = {
+            peer + "/ya.make": "LIBRARY()\nNO_RUNTIME()\nSRCS(stub.c)\nEND()\n",
+            peer + "/stub.c": "",
+        }
+        self.assertIn(peer, self.peers("", "-DAUTOCHECK=yes", files=files))
+        self.assertNotIn(peer, self.peers("", files=files))
+
     def test_program_defaults_depend_on_architecture(self):
         self.assertEqual(self.peers("", platform=AARCH64), LIBRARY_DEFAULTS + COW)
         self.assertEqual(self.peers(""), LIBRARY_DEFAULTS + COW + TCMALLOC + GLIBCASM + CPUID)

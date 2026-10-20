@@ -263,6 +263,14 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		}
 	}
 
+	for _, compiler := range []struct{ variable, binary string }{{"C_COMPILER", "clang"}, {"CXX_COMPILER", "clang++"}} {
+		variable := internEnv(compiler.variable)
+
+		if !env.hasBindingID(variable) {
+			env.setVFS(variable, build("resources/", resourcePatternClangTool, p.ClangVer, "/bin/", compiler.binary))
+		}
+	}
+
 	if !env.hasBindingID(envGOSTD_VERSION) {
 		env.setString(envGOSTD_VERSION, p.Go.Version)
 	}

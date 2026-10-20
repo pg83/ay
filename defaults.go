@@ -191,6 +191,10 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 		}
 	}
 
+	if isLinkingModuleType(d.moduleStmt.Name) && instance.Platform.OS == OSLinux && instance.Platform.ifEnv.bool(envAutocheck) {
+		peers = append(peers, "contrib/libs/libeatmydata")
+	}
+
 	return peers
 }
 

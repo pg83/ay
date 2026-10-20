@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -12,17 +13,17 @@ var (
 func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 	instance := e.instance
 
-	e.emitRunPython(rp)
+	rp.Args = expandResourceGlobalTokens(rp.Args, e.peers.ResourceGlobals)
 
-	outs := make([]string, 0, len(rp.OUTFiles)+1)
+	outs := e.emitRunPython(rp)
 
-	outs = append(outs, anyStrs(rp.OUTFiles)...)
+	for _, token := range outs {
+		if !slices.Contains(rp.OUTFiles, token) && (rp.StdoutFile == nil || rp.StdoutNoAuto || token != *rp.StdoutFile) {
+			continue
+		}
 
-	if rp.StdoutFile != nil && !rp.StdoutNoAuto {
-		outs = append(outs, rp.StdoutFile.string())
-	}
+		out := token.string()
 
-	for _, out := range outs {
 		switch {
 		case extIsArchiveMember(out):
 			if !e.producersOnly() {
@@ -38,7 +39,7 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 	}
 }
 
-func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
+func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath.string())
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
@@ -77,6 +78,47 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		stdoutVFS = &vfs
 		outVFSByToken[stmt.StdoutFile.string()] = vfs
 	}
+
+	outputTokens := make([]ANY, 0, len(outVFSByToken))
+
+	addOutput := func(token ANY) {
+		if !slices.Contains(outputTokens, token) {
+			outputTokens = append(outputTokens, token)
+		}
+	}
+
+	for _, arg := range stmt.Args {
+		if _, ok := outVFSByToken[arg.string()]; ok {
+			addOutput(arg)
+		}
+	}
+
+	for _, list := range [][]ANY{stmt.OUTFiles, stmt.OUTNoAutoFiles} {
+		for _, token := range list {
+			addOutput(token)
+		}
+	}
+
+	if stmt.StdoutFile != nil {
+		addOutput(*stmt.StdoutFile)
+	}
+
+	outputs := ctx.na.vfs.alloc(len(outputTokens))[:0]
+
+	if stdoutVFS != nil {
+		outputs = append(outputs, *stdoutVFS)
+	}
+
+	for _, token := range outputTokens {
+		out := outVFSByToken[token.string()]
+
+		if stdoutVFS == nil || out != *stdoutVFS {
+			outputs = append(outputs, out)
+		}
+	}
+
+	ctx.na.vfs.commit(len(outputs))
+	outputs = outputs[:len(outputs):len(outputs)]
 
 	hasCCShard, _ := splitCodegenDetect(stmt)
 
@@ -178,7 +220,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 	pe := func() {
 		inputClosure := pyInputClosure(snap, stmt)
 
-		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, directSources, directBuilds, inputClosure, pyRef, interp, toolRefs, kv, resources)
+		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, inputClosure, pyRef, interp, toolRefs, kv, resources)
 	}
 
 	pending := e.pendingEmit(pe)
@@ -206,7 +248,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) NodeRef {
 		registerPYOutput(*stdoutVFS, e.pyEmitsIncludes(stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard))
 	}
 
-	return pyRef
+	return outputTokens
 }
 
 type pyRunSnap struct {
@@ -424,6 +466,7 @@ func (e *EmitContext) emitPYRun(
 	inVFSByToken map[string]VFS,
 	outVFSByToken map[string]VFS,
 	stdoutVFS *VFS,
+	outputs []VFS,
 	directSources []VFS,
 	directBuilds []VFS,
 	inputClosure InputChunks,
@@ -516,26 +559,12 @@ func (e *EmitContext) emitPYRun(
 	na.inputs.commit(len(inputs))
 
 	inputChunks := InputChunks(inputs[:len(inputs):len(inputs)])
-	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
 
 	var stdoutPath VFS
 
 	if stdoutVFS != nil {
 		stdoutPath = *stdoutVFS
-		outputs = append(outputs, *stdoutVFS)
 	}
-
-	for _, f := range stmt.OUTFiles {
-		outputs = append(outputs, outVFSByToken[f.string()])
-	}
-
-	for _, f := range stmt.OUTNoAutoFiles {
-		outputs = append(outputs, outVFSByToken[f.string()])
-	}
-
-	na.vfs.commit(len(outputs))
-
-	outputs = outputs[:len(outputs):len(outputs)]
 
 	cmd := Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}
 

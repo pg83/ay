@@ -23,6 +23,37 @@ class RunPython3Test(unittest.TestCase):
         self.assertIn(generated["uid"], archive["deps"])
         self.assertNotIn("$(B)/lib/unused.o", archive["inputs"])
 
+    def test_outputs_follow_command_discovery_order(self):
+        files = {
+            "lib/ya.make": LIBRARY_HEAD + (
+                "RUN_PYTHON3(gen.py third.o first.o "
+                "OUT first.o second.o third.o)\nEND()\n"
+            ),
+            "lib/gen.py": "",
+        }
+        graph = lib.make(files, "lib")
+        run = lib.node_by_output(graph, "$(B)/lib/first.o")
+        expected = ["$(B)/lib/" + name for name in ("third.o", "first.o", "second.o")]
+        self.assertEqual(run["outputs"], expected)
+        archive = lib.node_by_output(graph, "$(B)/lib/liblib.a")
+        self.assertEqual(archive["cmds"][0]["cmd_args"][-3:], expected)
+
+    def test_compiler_and_resource_globals_in_arguments(self):
+        files = {
+            "lib/ya.make": LIBRARY_HEAD + (
+                "DECLARE_EXTERNAL_RESOURCE(SDK sbr:123)\n"
+                "RUN_PYTHON3(gen.py $CXX_COMPILER --sdk $SDK_RESOURCE_GLOBAL "
+                "OUT first.o)\nEND()\n"
+            ),
+            "lib/gen.py": "",
+        }
+        graph = lib.make(files, "lib")
+        run = lib.node_by_output(graph, "$(B)/lib/first.o")
+        self.assertEqual(cmd(run)["cmd_args"][2:], [
+            "$(B)/resources/CLANG20/bin/clang++", "--sdk", "$(B)/resources/SDK",
+        ])
+        lib.node_by_output(graph, "$(B)/resources/SDK")
+
     def test_sections_shape_command_env_and_outputs(self):
         files = {
             "lib/ya.make": (

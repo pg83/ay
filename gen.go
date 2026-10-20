@@ -1338,7 +1338,17 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		resolved = append(resolved, ResolvedPeer{path: peerPath, result: peerResult, kind: kind})
 	}
 
-	resGlobalsSum := 0
+	var ownResourceGlobals []ResourceDecl
+
+	for _, stmt := range d.resourceDeclStmts {
+		ownResourceGlobals = append(ownResourceGlobals, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt)...)
+	}
+
+	for _, decl := range ownResourceGlobals {
+		emitResourceFetch(ctx, decl)
+	}
+
+	resGlobalsSum := len(ownResourceGlobals)
 	archiveCap := 0
 	sbomCap := 0
 	globalCap := 0
@@ -1416,6 +1426,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		if resGlobalsSum != 0 {
 			declBlock := ctx.declSlices.alloc(resGlobalsSum)
+
+			for _, decl := range ownResourceGlobals {
+				if deduper.addStable(decl.GlobalVar.strID()) {
+					declBlock[k] = decl
+					k++
+				}
+			}
 
 			for _, rp := range resolved {
 				for _, decl := range rp.result.ResourceGlobalClosure {

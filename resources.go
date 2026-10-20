@@ -533,3 +533,25 @@ func readResourceBundleJSON(fs FS, rel string) map[string]string {
 
 	return out
 }
+
+func expandResourceGlobalTokens(args []ANY, globals []ResourceDecl) []ANY {
+	if len(globals) == 0 {
+		return args
+	}
+
+	for _, arg := range args {
+		if !strHasDollar(arg) {
+			continue
+		}
+
+		env := newEnvironment()
+
+		for _, decl := range globals {
+			env.setVFS(internEnvSTR(decl.GlobalVar), decl.Value)
+		}
+
+		return expandStmtTokens(args, env)
+	}
+
+	return args
+}
