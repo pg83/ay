@@ -287,13 +287,7 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 		suffix = "." + d.pyYapycSuffix + suffix
 	}
 
-	resolvedRel := resolvePySrcRel(e.ctx.fs, d.srcDirs, e.instance.Path, srcRel)
-	genInfo := e.codegen.useSplit(e.instance.Path, ps.Token)
-	pySource := resolvedRel.source()
-
-	if genInfo != nil {
-		pySource = build(module, "/", srcRel)
-	}
+	pySource := ps.Path
 
 	if !d.pyBuildNoPY {
 		out = append(out, PyGenResEntry{token: srcRel, key: ps.Module, path: pySource})
@@ -439,7 +433,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 
 			moduleName = e.resStr2(srcAbs.relString(), "-")
 		} else {
-			genInfo = e.codegen.useSplit(instance.Path, ps.Token)
+			genInfo = e.codegen.use(ps.Path)
 
 			if genInfo != nil {
 				moduleName = e.resStr2(ps.Token.string(), "-")
@@ -518,7 +512,7 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 
 	for gi, group := range d.pySrcGroups {
 		if namespaceEnabled {
-			nsRefs, nsOuts := e.emitPyNamespaceForGroup(group)
+			nsRefs, nsOuts := e.emitPyNamespaceForGroup(gi, group)
 
 			res.Refs = append(res.Refs, nsRefs...)
 			res.Outputs = append(res.Outputs, nsOuts...)
@@ -603,9 +597,8 @@ func (e *EmitContext) emitPyProtoGroupResources(group int) ([]NodeRef, []VFS) {
 	return e.packPyProtoResEntries(e.collectPyProtoGroupResEntries(group))
 }
 
-func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VFS) {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	reg := e.codegen
+func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) ([]NodeRef, []VFS) {
+	instance := e.instance
 	h := md5.New()
 	nsRoots := make(map[string][]string, len(group.Srcs))
 	hasPy := false
@@ -626,20 +619,26 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VF
 			nsPrefix = strings.TrimSuffix(scope.Namespace.string(), ".") + "."
 		}
 
-		nsValue := nsPrefix
-
 		if scope.TopLevel {
 			nsPrefix = ""
-			nsValue = "."
 		}
 
 		h.Write([]byte(nsPrefix + strings.ReplaceAll(strings.TrimSuffix(srcRel, ".py"), "/", ".")))
+	}
 
-		if reg.lookupSplit(instance.Path, src) != nil {
+	for _, ps := range e.pySrcsReg {
+		if ps.Group != groupIndex || ps.Kind != pySourcePlain || !ps.Path.isSource() || !extIsPy(ps.Token.string()) {
 			continue
 		}
 
-		resolvedRel := resolvePySrcRel(ctx.fs, d.srcDirs, instance.Path, srcRel).string()
+		srcRel := ps.Token.string()
+		nsValue := strings.ReplaceAll(strings.TrimSuffix(ps.Module.string(), srcRel), "/", ".")
+
+		if nsValue == "" {
+			nsValue = "."
+		}
+
+		resolvedRel := ps.Path.relString()
 		root := resolvedRel[:max(len(resolvedRel)-len(srcRel)-1, 0)]
 
 		if !slices.Contains(nsRoots[root], nsValue) {
@@ -675,7 +674,7 @@ func (e *EmitContext) emitPyNamespaceForGroup(group PySrcGroup) ([]NodeRef, []VF
 		kvsCmd = append(kvsCmd, internStr(key+"="+nsValue))
 	}
 
-	return e.emitKvOnlyResource(d.unit.Tag, kvsHash, kvsCmd)
+	return e.emitKvOnlyResource(e.d.unit.Tag, kvsHash, kvsCmd)
 }
 
 func (e *EmitContext) emitPyMainObjcopy() ([]NodeRef, []VFS) {

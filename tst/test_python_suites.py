@@ -154,6 +154,31 @@ class PythonSuitesTest(unittest.TestCase):
         graph = lib.make(files, "lib", "-t")
         self.assertEqual(lib.node_by_output(graph, "$(B)/lib/lib")["kv"].get("ld_test_node"), "1")
 
+    def test_python_test_resolves_usrv_generated_source_from_build_srcdir(self):
+        files = fixture(
+            "RUN_PROGRAM(tools/gen OUT_NOAUTO generated.tar)\n"
+            "USRV_BUILD(FROM ${BINDIR}/generated.tar lib/nested/test_generated.py)\n"
+            "SRCDIR(${CMAKE_CURRENT_BINARY_DIR}/lib/nested)\n"
+            "TEST_SRCS(test_generated.py)\n", macro="PY3TEST",
+        )
+        files["library/python/pytest/ya.make"] = f"LIBRARY()\n{BARE}END()\n"
+        files["taxi/uservices/arc-gen/unpack-tar/usrv-build-lib/ya.make"] = (
+            "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(USRV_UNPACK_TAR sbr:123)\nEND()\n"
+        )
+        lib.tool_program(files, "tools/gen", "gen")
+        for flags in ([], ["-DPYBUILD_NO_PYC=yes"]):
+            with self.subTest(flags=flags):
+                graph = lib.make(files, "lib", "-t", *flags)
+                generated = lib.node_by_output(graph, "$(B)/lib/lib/nested/test_generated.py")
+                self.assertEqual(args(generated)[-3:], ["--target", "$(B)/lib", "$(B)/lib/lib/nested/test_generated.py"])
+                if not flags:
+                    bytecode = lib.node_by_output(graph, "$(B)/lib/test_generated.py.yapyc3")
+                    self.assertEqual(args(bytecode)[-3:], ["test_generated.py-", "$(B)/lib/lib/nested/test_generated.py", "$(B)/lib/test_generated.py.yapyc3"])
+                    self.assertIn(generated["uid"], bytecode["deps"])
+                self.assertNotIn("$(S)/lib/test_generated.py", args(lint(graph, "flake8")))
+                namespaces = [a for node in graph["graph"] for command in node["cmds"] for a in command["cmd_args"] if a.startswith("py/namespace/")]
+                self.assertFalse(any("__tests__." in a for a in namespaces))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

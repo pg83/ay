@@ -1346,7 +1346,11 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			for _, dirTok := range expandStmtTokens(v.Dirs, env) {
 				dir := dirTok.string()
 
-				d.srcDirs = append(d.srcDirs, dirKey(dir).source())
+				if rooted, ok := moduleRootedVFS(modulePath, dir); ok {
+					d.srcDirs = append(d.srcDirs, rooted)
+				} else {
+					d.srcDirs = append(d.srcDirs, dirKey(dir).source())
+				}
 			}
 		case *GlobalSrcsStmt:
 			for _, src := range expandStmtTokens(v.Sources, env) {

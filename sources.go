@@ -19,6 +19,16 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	srcRelClean := srcRel != "" && pathIsClean(srcRel)
 
 	for i := len(srcDirs) - 1; i >= 1; i-- {
+		if srcDirs[i].isBuild() {
+			candidate := buildJoinClean(srcDirs[i].relString(), srcRel)
+
+			if ctx.scannerForPlatform(srcInstance.Platform).codegen.lookup(candidate) != nil {
+				return candidate
+			}
+
+			continue
+		}
+
 		var present bool
 
 		if srcRelClean {
