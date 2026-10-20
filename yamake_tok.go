@@ -38,6 +38,10 @@ var tokName = [...]STR{
 	tokDocsIncludeSources: internStr("DOCS_INCLUDE_SOURCES"),
 	tokDocsCopyFiles:      internStr("DOCS_COPY_FILES"),
 	tokUsePlantuml:        internStr("USE_PLANTUML"),
+	tokLlvmCompileCxx:      internStr("LLVM_COMPILE_CXX"),
+	tokCompileLuaOpenresty: internStr("COMPILE_LUA_OPENRESTY"),
+	tokCompileLua21:        internStr("COMPILE_LUA_21"),
+	tokCompileLua:          internStr("COMPILE_LUA"),
 
 	tokInvalid:                            0,
 	tokAddInclSelf:                        internStr("ADDINCLSELF"),
@@ -666,6 +670,10 @@ const (
 	tokStyleYAML
 	tokUsrvStyleJSON
 	tokUsrvStyleYAML
+	tokCompileLua
+	tokCompileLua21
+	tokCompileLuaOpenresty
+	tokLlvmCompileCxx
 )
 
 type TOK uint16

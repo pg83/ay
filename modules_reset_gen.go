@@ -24,6 +24,8 @@ func (x *ModuleData) reset() {
 		asmAddIncl:           x.asmAddIncl[:0],
 		protoAddInclGlobal:   x.protoAddInclGlobal[:0],
 		llvmBc:               scrub(x.llvmBc),
+		llvmCompile:          scrub(x.llvmCompile),
+		luaCompile:           scrub(x.luaCompile),
 		cFlags:               x.cFlags[:0],
 		cFlagsGlobal:         x.cFlagsGlobal[:0],
 		cxxFlags:             x.cxxFlags[:0],

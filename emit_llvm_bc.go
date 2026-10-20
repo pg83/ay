@@ -8,13 +8,56 @@ var (
 	llvmBcKV3 = KV{P: pkOP, PC: pcYellow}
 )
 
+type LlvmCompileStmt struct {
+	Source    string
+	Output    string
+	ClangRoot string
+	Options   []ANY
+}
+
+func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, opts []ANY) Node {
+	na, d := e.ctx.na, e.d
+	input := e.llvmBcSourceInfo(src)
+	wrapper := buildScriptsClangWrapperPy
+	args := composeBCCompileCmd(d.tc.Python3.string(), wrapper.string(), compiler, e.instance.Platform, newModuleCCInputs(&d.cc), input, out)
+	tail := len(args) - 5
+	llvmOpts := strings.Fields(d.setVars[strLlvmOpts].string())
+
+	if len(llvmOpts) > 0 {
+		args = append(append(append([]ANY(nil), args[:tail]...), internAnys(llvmOpts)...), args[tail:]...)
+	}
+
+	args = append(args, opts...)
+
+	closure := e.scanner.walkClosure(input, d.scanCtx, scanDomainCC)
+	inputs := na.dedupClosureChunks(closure)
+
+	inputs = na.inputList(na.vfsList(wrapper), inputs...)
+
+	return Node{
+		Platform: e.instance.Platform,
+		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS}),
+		Env:      envVarsVCS, Inputs: inputs, Outputs: na.vfsList(out),
+		KV: &llvmBcKV, Resources: usesPython3Clang16,
+	}
+}
+
+func (e *EmitContext) emitLlvmCompile(stmt LlvmCompileStmt) {
+	out := copyFileOutputVFS(e.instance.Path.relString(), stmt.Output)
+	compiler := resolveResourceGlobalRef(stmt.ClangRoot, e.peers.ResourceGlobals) + "/bin/clang++"
+	node := e.llvmCompileNode(stmt.Source, out, compiler, stmt.Options)
+	ref := e.ctx.emit.reserve()
+	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
+
+	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending})
+}
+
 func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
 	const (
-		clangWrapper = "$(S)/build/scripts/clang_wrapper.py"
-		optWrapper   = "$(S)/build/scripts/llvm_opt_wrapper.py"
+		optWrapper = "$(S)/build/scripts/llvm_opt_wrapper.py"
 	)
 
 	python := d.tc.Python3.string()
@@ -23,7 +66,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	clangxx := clangRoot + "/bin/clang++"
 	llvmLink := clangRoot + "/bin/llvm-link"
 	opt := clangRoot + "/bin/opt"
-	clangWrapperVFS := intern(clangWrapper)
 	optWrapperVFS := intern(optWrapper)
 
 	var bcSourceInputs []VFS
@@ -35,19 +77,9 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	linksCopy := false
 
 	for _, src := range stmt.Sources {
-		inputVFS := e.llvmBcSourceInfo(src)
-		in := newModuleCCInputs(&d.cc)
 		bcOut := build(e.llvmBcRootRelArcSrc(src), stmt.Suffix, ".bc")
-		bcArgs := composeBCCompileCmd(python, clangWrapper, clangxx, instance.Platform, in, inputVFS, bcOut)
-		cv := e.scanner.walkClosure(inputVFS, d.scanCtx, scanDomainCC)
-		closureInputs := na.dedupClosureChunks(cv)
-		inputChunks := na.inputs.alloc(1 + len(closureInputs))[:1+len(closureInputs)]
-
-		inputChunks[0] = na.vfsList(clangWrapperVFS)
-		copy(inputChunks[1:], closureInputs)
-		na.inputs.commit(len(inputChunks))
-
-		allInputs := InputChunks(inputChunks[:len(inputChunks):len(inputChunks)])
+		node := e.llvmCompileNode(src, bcOut, clangxx, nil)
+		allInputs := node.Inputs
 
 		for _, ch := range allInputs {
 			for _, v := range ch {
@@ -59,16 +91,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 					linksCopy = true
 				}
 			}
-		}
-
-		node := Node{
-			Platform:  instance.Platform,
-			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(bcArgs), Env: env}),
-			Env:       env,
-			Inputs:    allInputs,
-			Outputs:   na.vfsList(bcOut),
-			KV:        &llvmBcKV,
-			Resources: usesPython3Clang16,
 		}
 
 		ref := ctx.emit.reserve()

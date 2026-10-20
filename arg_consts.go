@@ -163,6 +163,7 @@ var (
 	argMsse41                                    = internArg("-msse4.1")
 	argMsse42                                    = internArg("-msse4.2")
 	argMssse3                                    = internArg("-mssse3")
+	argN                                         = internArg("-n")
 	argNDEBUG                                    = internArg("-DNDEBUG")
 	argNinja                                     = internArg("ninja")
 	argNo                                        = internArg("no")

@@ -205,6 +205,8 @@ type ModuleData struct {
 	swigAddIncl              []VFS
 	swigAddInclGlobal        []VFS
 	llvmBc                   []*LlvmBcStmt
+	llvmCompile              []LlvmCompileStmt
+	luaCompile               []LuaCompileStmt
 	cFlags                   []ANY
 	cFlagsGlobal             []ANY
 	cxxFlags                 []ANY
@@ -1716,6 +1718,38 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokUseLlvmBc20:
 		env.setString(envCLANG_BC_ROOT, "$"+envCLANG20_RESOURCE_GLOBAL.string())
 		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm20/tools/llc")
+	case tokLlvmCompileCxx:
+		if len(v.Args) < 2 || env.string(envCLANG_BC_ROOT) == "" {
+			throwFmt("LLVM_COMPILE_CXX requires input, output and USE_LLVM_BC16/18/20")
+		}
+
+		d.llvmCompile = append(d.llvmCompile, LlvmCompileStmt{
+			Source: v.Args[0].string(), Output: v.Args[1].string(),
+			ClangRoot: env.string(envCLANG_BC_ROOT), Options: v.Args[2:],
+		})
+
+		d.peerdirs = append(d.peerdirs, strBuildPlatformClang.any())
+	case tokCompileLua, tokCompileLua21, tokCompileLuaOpenresty:
+		if len(v.Args) != 1 && (len(v.Args) != 3 || v.Args[1].string() != "NAME") {
+			throwFmt("%s expects a source and optional NAME", v.Name.string())
+		}
+
+		runtime := "contrib/libs/luajit"
+
+		if v.Name == tokCompileLua21 {
+			runtime += "_21"
+		} else if v.Name == tokCompileLuaOpenresty {
+			runtime += "_openresty"
+		}
+
+		stmt := LuaCompileStmt{Source: v.Args[0].string(), Runtime: runtime}
+
+		if len(v.Args) == 3 {
+			stmt.Name = v.Args[2].string()
+		}
+
+		d.luaCompile = append(d.luaCompile, stmt)
+		d.peerdirs = append(d.peerdirs, internStr(runtime).any())
 	case tokSplitDwarf:
 		d.splitDwarf = true
 	case tokNoSplitDwarf:

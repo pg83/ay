@@ -35,6 +35,25 @@ def nodes_of_kind(graph, kind):
 
 
 class LlvmBcTest(unittest.TestCase):
+    def test_direct_compile_is_lazy_and_tracks_headers_and_options(self):
+        files = llvm_bc_files(
+            "SET(LLVM_OPTS -O1)\n"
+            "LLVM_COMPILE_CXX(a.cpp named.bc -DLOCAL)\n"
+            "LLVM_COMPILE_CXX(unused.cpp unused.bc)\n"
+            "RESOURCE(named.bc named)\nNO_COMPILER_WARNINGS()\n",
+            {"mod/a.cpp": '#include "a.h"\n', "mod/a.h": "", "mod/unused.cpp": ""},
+        )
+        files["library/cpp/resource/ya.make"] = f"LIBRARY()\n{lib.BARE_MODULE}END()\n"
+        graph = make(files)
+        node = lib.node_by_output(graph, "$(B)/mod/named.bc")
+        self.assertEqual(node["kv"], {"p": "BC", "pc": "light-green"})
+        self.assertEqual(node["cmds"][0]["cmd_args"][-8:], [
+            "-Wno-unknown-warning-option", "-O1", "-emit-llvm", "-c",
+            "$(S)/mod/a.cpp", "-o", "$(B)/mod/named.bc", "-DLOCAL",
+        ])
+        self.assertIn("$(S)/mod/a.h", node["inputs"])
+        self.assertFalse(any("$(B)/mod/unused.bc" in n["outputs"] for n in graph["graph"]))
+
     def test_sources_compile_link_optimize_and_embed_as_resource(self):
         graph = make(llvm_bc_files(
             "PEERDIR(contrib/libs/googleapis-common-protos)\n"

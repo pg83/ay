@@ -36,6 +36,8 @@ const (
 	prodGoCgo1
 	prodDocsCopy
 	prodGoCodegen
+	prodLlvmCompile
+	prodLuaCompile
 )
 
 type ProducerPos struct {
@@ -211,7 +213,8 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	n := len(d.cudaSrcs) + len(d.implibs) + len(d.copyFiles) + len(d.configureFiles) + len(d.antlrRuns) + len(d.antlr4Grammars) +
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
-		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens) + len(d.cgoSrcs)
+		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens) + len(d.cgoSrcs) +
+		len(d.llvmCompile) + len(d.luaCompile)
 
 	if d.docs != nil {
 		n += len(d.docs.copies)
@@ -551,6 +554,22 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		})
 	}
 
+	for i, stmt := range d.llvmCompile {
+		positions = append(positions, ProducerPos{
+			kind: prodLlvmCompile, index: i,
+			outs: []VFS{copyFileOutputVFS(module, stmt.Output)},
+			ins:  e.srcInsCandidate(internStr(stmt.Source).any()),
+		})
+	}
+
+	for i, stmt := range d.luaCompile {
+		positions = append(positions, ProducerPos{
+			kind: prodLuaCompile, index: i,
+			outs: []VFS{copyFileOutputVFS(module, stmt.Source+".o")},
+			ins:  e.srcInsCandidate(internStr(stmt.Source).any()),
+		})
+	}
+
 	if !isProgramModuleType(d.moduleStmt.Name) {
 		for i, stmt := range d.llvmBc {
 			outsMark := len(e.prodVFS)
@@ -818,6 +837,10 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 			e.emitYmapsSprotoStmt(e.d.ymapsSprotoSrcs[pos.index])
 		case prodLlvmBc:
 			e.emitLlvmBcStmt(e.d.llvmBc[pos.index])
+		case prodLlvmCompile:
+			e.emitLlvmCompile(e.d.llvmCompile[pos.index])
+		case prodLuaCompile:
+			e.emitLuaCompile(e.d.luaCompile[pos.index])
 		}
 	}
 }
