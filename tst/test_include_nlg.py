@@ -52,6 +52,24 @@ class NlgIncludesTest(unittest.TestCase):
                 compiled = lib.node_by_output(graph, "$(B)/m/use.cpp.o")
                 self.assertIn("$(B)/peer/data.nlg.h", compiled["inputs"])
 
+    def test_multiline_import_lists_use_native_whitespace(self):
+        files = self.files("{%\vext_import\n'peer/data.nlg' as data with context,\n"
+                           "\t\"peer/data.nlg\"\f%}\n")
+        graph = lib.make(files, "m")
+        generated = lib.node_by_output(graph, "$(B)/m/dummy.h")
+        self.assertIn("$(B)/peer/data.nlg.pb.txt", generated["inputs"])
+        self.assertEqual(1, generated["inputs"].count("$(B)/peer/data.nlg.pb.txt"))
+
+    def test_comments_and_invalid_tags_do_not_hide_later_imports(self):
+        files = self.files(
+            '# {% ext_import "missing/comment.nlg" %}\n'
+            '{% ext_import "missing/invalid-name.nlg" %}\n'
+            '{% invalid \n{% ext_import "peer/data.nlg" %}\n'
+        )
+        graph = lib.make(files, "m")
+        generated = lib.node_by_output(graph, "$(B)/m/dummy.h")
+        self.assertIn("$(B)/peer/data.nlg.pb.txt", generated["inputs"])
+
     def test_external_imports_are_transitive_between_data_outputs(self):
         files = self.files('{% ext_import "peer/data.nlg" %}\n')
         files["peer/data.nlg"] = '{% ext_from "leaf/data.nlg" import value %}\n'

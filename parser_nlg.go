@@ -6,15 +6,15 @@ import (
 )
 
 var (
-	nlgFromImport   = regexp.MustCompile(`^\s*(?:ext_)?from\s*` + nlgPathPattern + `\s*import\s+` + nlgTargetPattern + `(?:\s*,\s*` + nlgTargetPattern + `)*(?:\s+with\s+context)?\s*$`)
-	nlgSimpleImport = regexp.MustCompile(`^\s*(?:ext_)?(?:import|nlgimport)\s*` + nlgModulePattern + `(?:\s*,\s*` + nlgModulePattern + `)*\s*$`)
+	nlgFromImport   = regexp.MustCompile(`^[[:space:]]*(?:ext_)?from[[:space:]]*` + nlgPathPattern + `[[:space:]]*import[[:space:]]+` + nlgTargetPattern + `(?:[[:space:]]*,[[:space:]]*` + nlgTargetPattern + `)*(?:[[:space:]]+with[[:space:]]+context)?[[:space:]]*$`)
+	nlgSimpleImport = regexp.MustCompile(`^[[:space:]]*(?:ext_)?(?:import|nlgimport)[[:space:]]*` + nlgModulePattern + `(?:[[:space:]]*,[[:space:]]*` + nlgModulePattern + `)*[[:space:]]*$`)
 	nlgImportPath   = regexp.MustCompile(`["']([a-zA-Z0-9_/]+\.nlg)["']`)
 )
 
 const (
 	nlgPathPattern   = `(?:"[a-zA-Z0-9_/]+\.nlg"|'[a-zA-Z0-9_/]+\.nlg')`
 	nlgTargetPattern = `[a-zA-Z0-9_]+`
-	nlgModulePattern = nlgPathPattern + `(?:\s*as\s+` + nlgTargetPattern + `)?(?:\s+with\s+context)?`
+	nlgModulePattern = nlgPathPattern + `(?:[[:space:]]*as[[:space:]]+` + nlgTargetPattern + `)?(?:[[:space:]]+with[[:space:]]+context)?`
 )
 
 type NlgIncludeDirectiveParser struct{}
@@ -68,7 +68,7 @@ func (NlgIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator
 			break
 		}
 
-		command := strings.TrimSpace(text[2 : 2+end])
+		command := strings.Trim(text[2:2+end], " \t\v\f\r\n")
 
 		text = text[end+4:]
 
