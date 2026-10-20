@@ -366,7 +366,7 @@ func cythonInputKept(s, cmdText string) bool {
 		return true
 	}
 
-	if strings.HasPrefix(rel, "contrib/tools/cython/Cython/Utility/") {
+	if tool, _, ok := strings.Cut(rel, "/Cython/Utility/"); ok && (tool == "contrib/tools/cython" || tool == "contrib/tools/cython_py2") {
 		return true
 	}
 
