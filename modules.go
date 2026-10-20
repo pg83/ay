@@ -1793,7 +1793,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks, tokGolaunchCompositeComps:
 		applyMlaunchStmt(modulePath, v, env, d)
 	case tokSdcDiagsSplitGeneratorV4:
-		applySdcDiagsSplitGenerator(modulePath, v, env, d)
+		applySdcDiagsSplitGenerator(fs, modulePath, v, env, d)
 	case tokNodeBuilder:
 		if d.multimodule != tokMlaunchComponent || !isGoModuleType(d.unit.Type) {
 			handled = false
@@ -2065,6 +2065,16 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			d.goEmbeds = append(d.goEmbeds, newGoEmbed(fs, v.Name == tokGoXTestEmbedPattern, importPath, v.Args[0].string()))
+		}
+	case tokGoEmbedBindir, tokGoTestEmbedBindir, tokGoXtestEmbedBindir:
+		if v.Name == tokGoEmbedBindir || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
+			importPath := env.string(env_GO_IMPORT_PATH)
+
+			if importPath == "" {
+				importPath = modulePath
+			}
+
+			d.goEmbeds = append(d.goEmbeds, newGoEmbedBindir(v.Name == tokGoXtestEmbedBindir, importPath, v.Args))
 		}
 	case tokGoEmbedDir, tokGoEmbedTestDir, tokGoEmbedXtestDir:
 		if v.Name == tokGoEmbedDir || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {

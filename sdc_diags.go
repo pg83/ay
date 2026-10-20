@@ -51,11 +51,17 @@ func setupSdcDiagsModule(stmt *ModuleStmt, language Language, env Environment, d
 	d.peerdirs = append(d.peerdirs, internAnys([]string{"contrib/libs/protobuf", "sdg/sdc/myriapoda/yamakes/diagnostics/utils"})...)
 }
 
-func applySdcDiagsSplitGenerator(modulePath string, stmt UnknownStmt, env Environment, d *ModuleData) {
+func applySdcDiagsSplitGenerator(fs FS, modulePath string, stmt UnknownStmt, env Environment, d *ModuleData) {
 	files := anyStrs(stmt.Args)
 
 	if len(files) == 0 {
 		throwFmt("SDC_DIAGS_SPLIT_GENERATOR_V4: diagnostics file path is required")
+	}
+
+	for i, f := range files {
+		if resolved, ok := sourceInputVFS(fs, source(modulePath), f); ok {
+			files[i] = resolved.relString()
+		}
 	}
 
 	manifests := map[string]bool{}
@@ -82,7 +88,7 @@ func applySdcDiagsSplitGenerator(modulePath string, stmt UnknownStmt, env Enviro
 		var outs []string
 
 		for _, f := range files {
-			if name := path.Base(f); name != "_manifest_.yaml" {
+			if name := path.Base(f); !strings.HasSuffix(name, "_manifest_.yaml") {
 				outs = append(outs, strings.TrimSuffix(name, ".yaml")+".go")
 			}
 		}

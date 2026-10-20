@@ -315,6 +315,9 @@ var tokName = [...]STR{
 	tokGoXtestSrcs:                     internStr("GO_XTEST_SRCS"),
 	tokGoSkipTests:                     internStr("GO_SKIP_TESTS"),
 	tokGoEmbedPattern:                  internStr("GO_EMBED_PATTERN"),
+	tokGoEmbedBindir:                   internStr("GO_EMBED_BINDIR"),
+	tokGoTestEmbedBindir:               internStr("GO_TEST_EMBED_BINDIR"),
+	tokGoXtestEmbedBindir:              internStr("GO_XTEST_EMBED_BINDIR"),
 	tokGoEmbedDir:                      internStr("GO_EMBED_DIR"),
 	tokGoEmbedTestDir:                  internStr("GO_EMBED_TEST_DIR"),
 	tokGoEmbedXtestDir:                 internStr("GO_EMBED_XTEST_DIR"),
@@ -683,6 +686,9 @@ const (
 	tokGoXtestSrcs
 	tokGoSkipTests
 	tokGoEmbedPattern
+	tokGoEmbedBindir
+	tokGoTestEmbedBindir
+	tokGoXtestEmbedBindir
 	tokGoEmbedDir
 	tokGoEmbedTestDir
 	tokGoEmbedXtestDir

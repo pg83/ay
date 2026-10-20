@@ -150,6 +150,28 @@ class GoPackageGraphTest(unittest.TestCase):
                 self.assertCountEqual(args[start + 3:args.index("++peers")], inputs)
                 self.assertTrue(set(inputs).issubset(node["inputs"]))
 
+    def test_embed_bindir_tracks_generated_files_and_explicit_prefix(self):
+        files = go_world()
+        lib.tool_program(files, "tools/generate", "generate")
+        go_module(files, "embed/generated", macros=(
+            "RUN_PROGRAM(tools/generate OUT_NOAUTO catalog.pb ${ARCADIA_BUILD_ROOT}/shared/data/other.pb)\n"
+            "GO_EMBED_BINDIR(catalog.pb FILES catalog.pb)\n"
+            "GO_EMBED_BINDIR(PREFIX shared/data other FILES other.pb)\n"
+            "GO_TEST_EMBED_BINDIR(test FILES ignored.pb)\n"
+        ))
+        graph = lib.make(files, "embed/generated")
+        node = go_node(graph, "embed/generated")
+        args = go_tool_args(node)
+        start = args.index("++embed")
+        self.assertEqual(args[start:args.index("++peers")], [
+            "++embed", "$(B)/embed/generated", "catalog.pb", "$(B)/embed/generated/catalog.pb",
+            "++embed", "$(B)/shared/data", "other", "$(B)/shared/data/other.pb",
+        ])
+        generated = lib.node_by_output(graph, "$(B)/embed/generated/catalog.pb")
+        self.assertIn(generated["uid"], node["deps"])
+        self.assertIn("$(B)/embed/generated/catalog.pb", node["inputs"])
+        self.assertIn("$(B)/shared/data/other.pb", node["inputs"])
+
     def test_generated_go_sources_precede_epilogue_symabis_output(self):
         files = go_world()
         lib.tool_program(files, "tools/generate", "generate")

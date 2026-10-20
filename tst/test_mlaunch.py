@@ -193,6 +193,27 @@ END()
         link = next(c["cmd_args"] for c in lib.node_by_output(graph, "$(B)/app/app")["cmds"] if "++peers" in c["cmd_args"])
         self.assertIn(f"{mod}/Brakes.a", link[link.index("++peers") + 1:link.index("++non-local-peers")])
 
+    def test_diagnostics_resolve_module_and_root_relative_input_paths(self):
+        root = "sdg/sdc/ros/monitorings/diag_updater/etc/Descriptions"
+        mod = f"{root}/Endpoint"
+        for arg in ("State.yaml", "${CURDIR}/State.yaml", f"${{ARCADIA_ROOT}}/{mod}/State.yaml",
+                    f"${{ARCADIA_BUILD_ROOT}}/{mod}/State.yaml"):
+            with self.subTest(arg=arg):
+                sources = files()
+                for peer in ("contrib/go/_std_1.26/src/fmt",
+                             "sdg/sdc/ros/configuration/golaunch/common_node_parameters/common_node_proto",
+                             "sdg/sdc/ros/configuration/golaunch/node", "sdg/sdc/ros/configuration/proto"):
+                    sources[f"{peer}/ya.make"] = f"GO_LIBRARY()\n{lib.BARE_MODULE}\nEND()\n"
+                lib.tool_program(sources, "sdg/sdc/ros/monitorings/diag_updater/gen_utils/diags_go_gen", "diags_go_gen")
+                sources[f"{mod}/ya.make"] = f"SDC_DIAGS_LIBRARY()\nSDC_DIAGS_SPLIT_GENERATOR_V4({arg})\nEND()\n"
+                sources[f"{mod}/State.yaml"] = "state: 1\n"
+                sources[f"{mod}/_manifest_.yaml"] = "state: 1\n"
+                sources["app/ya.make"] = f"GO_PROGRAM()\n{lib.BARE_MODULE}\nPEERDIR({mod})\nEND()\n"
+                graph = lib.make(sources, "app")
+                gen = lib.node_by_output(graph, f"$(B)/{mod}/State.go")
+                self.assertIn(f"$(S)/{mod}/State.yaml", gen["inputs"])
+                self.assertEqual(gen["cmds"][0]["cmd_args"][2], f"$(S)/{mod}/State.yaml")
+
     def test_cpp_variant_of_sdc_diags_library_compiles_global_generated_sources(self):
         sources = files()
         for peer in ("contrib/libs/protobuf", "sdg/sdc/myriapoda/yamakes/diagnostics/utils"):
