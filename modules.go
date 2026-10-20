@@ -1814,6 +1814,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			d.goEmbeds = append(d.goEmbeds, newGoEmbed(fs, v.Name == tokGoXTestEmbedPattern, importPath, v.Args[0].string()))
 		}
+	case tokAllGoTestSrcs:
+		if d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
+			dir := modulePath
+
+			if imp := env.string(env_GO_IMPORT_PATH); imp != "" {
+				dir = imp
+			}
+
+			for _, name := range goDirFiles(fs, dir, true) {
+				d.goTestSrcs = append(d.goTestSrcs, source(dir+"/"+name).any())
+			}
+		}
 	case tokAllGoSrcs:
 		dir := modulePath
 

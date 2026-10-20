@@ -221,6 +221,10 @@ func goVetSuite(project string, goRef NodeRef, vetReport VFS, globals []Resource
 }
 
 func goDirSources(fs FS, dir string) []string {
+	return goDirFiles(fs, dir, false)
+}
+
+func goDirFiles(fs FS, dir string, tests bool) []string {
 	view := fs.listdir(dirKey(dir))
 	names := make([]string, 0, len(view.names))
 
@@ -231,7 +235,7 @@ func goDirSources(fs FS, dir string) []string {
 
 		name := STR(packed >> 1).string()
 
-		if strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") {
+		if strings.HasSuffix(name, ".go") && strings.HasSuffix(name, "_test.go") == tests {
 			names = append(names, name)
 		}
 	}

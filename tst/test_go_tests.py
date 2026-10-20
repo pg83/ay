@@ -353,6 +353,18 @@ class GoTestModuleTest(unittest.TestCase):
         self.assertIn("-fPIC", link)
         self.assertEqual(link[-1], "-Wl,-no-pie")
 
+    def test_all_go_test_srcs_globs_the_tested_package_tests(self):
+        files = go_test_world()
+        files["lib/svc/ya.make"] = "GO_LIBRARY(svc)\nALL_GO_SRCS()\nALL_GO_TEST_SRCS()\nEND()\nRECURSE_FOR_TESTS(gotest)\n"
+        for name in ("a.go", "b_test.go", "a_test.go"):
+            files[f"lib/svc/{name}"] = "package svc\n"
+        files["lib/svc/gotest/ya.make"] = "GO_TEST_FOR(lib/svc)\nEND()\n"
+        graph = lib.make(files, "lib/svc", *AUTOCHECK)
+        args = go_tool_args(lib.node_by_output(graph, "$(B)/lib/svc/gotest/svc"))
+        self.assertEqual(between(args, "++test_srcs", "++xtest_srcs"), ["$(S)/lib/svc/a_test.go", "$(S)/lib/svc/b_test.go"])
+        package = lib.node_by_output(graph, "$(B)/lib/svc/svc.a")
+        self.assertEqual(between(go_tool_args(package), "++srcs", "++asm-flags"), ["$(S)/lib/svc/a.go"])
+
     def test_style_cpp_brings_the_clang_format_resource(self):
         files = go_world()
         files["c/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(c.cpp)\nSTYLE_CPP()\nEND()\n"
