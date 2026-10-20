@@ -7,6 +7,7 @@ import (
 
 type GeneratedFileInfo struct {
 	InputsOnly      bool
+	ModuleType      TOK
 	Nots            *NotsPrepared
 	OutputPath      VFS
 	SourcePath      VFS

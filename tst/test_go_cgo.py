@@ -83,6 +83,62 @@ def between(args, start, end):
 
 
 class GoCgoGraphTest(unittest.TestCase):
+    def test_cgo_flags_apply_to_all_native_source_extensions(self):
+        files = cgo_world()
+        sources = ["native" + ext for ext in (".c", ".cc", ".cpp", ".cxx", ".C", ".S")]
+        files["lib/native/ya.make"] = (
+            "GO_LIBRARY()\nCGO_CFLAGS(-DNATIVE)\nSRCS(" + " ".join(sources) + ")\nEND()\n"
+        )
+        for name in sources:
+            files[f"lib/native/{name}"] = "int native;\n"
+        graph = lib.make(files, "lib/native")
+        for name in sources:
+            with self.subTest(source=name):
+                args = lib.node_by_output(graph, f"$(B)/lib/native/{name}.o")["cmds"][0]["cmd_args"]
+                for flag in ("-w", "-pthread", "-fpic", "-DNATIVE"):
+                    self.assertIn(flag, args)
+
+    def test_explicit_include_directories_precede_the_cgo_module_directory(self):
+        files = cgo_world()
+        files["lib/binding/ya.make"] = (
+            "GO_LIBRARY()\nADDINCL(lib/headers)\nCGO_SRCS(binding.go)\nEND()\n"
+        )
+        files["lib/binding/binding.go"] = 'package binding\nimport "C"\n'
+        files["lib/headers/binding.h"] = "int binding;\n"
+        graph = lib.make(files, "lib/binding")
+        for output in ("binding.cgo1.go", "_cgo_import.go"):
+            args = lib.node_by_output(graph, f"$(B)/lib/binding/{output}")["cmds"][0]["cmd_args"]
+            self.assertLess(args.index("-I$(S)/lib/headers"), args.index("-I$(S)/lib/binding"))
+
+    def test_generated_noauto_go_outputs_are_direct_module_inputs(self):
+        files = cgo_world()
+        lib.tool_program(files, "tools/generate", "generate")
+        files["lib/binding/ya.make"] = (
+            "GO_LIBRARY()\nSRCS(native.cpp)\nCGO_SRCS(${BINDIR}/binding.go)\n"
+            "RUN_PROGRAM(tools/generate OUT_NOAUTO binding.go extra.go)\nEND()\n"
+        )
+        files["lib/binding/native.cpp"] = "int native;\n"
+        graph = lib.make(files, "lib/binding")
+        args = lib.node_by_output(graph, "$(B)/lib/binding/binding.a")["cmds"][0]["cmd_args"]
+        self.assertEqual(between(args, "++srcs", "++asm-flags")[:2], [
+            "$(B)/lib/binding/binding.go", "$(B)/lib/binding/extra.go",
+        ])
+        self.assertEqual(between(args, "++cgo-srcs", "++peers"), ["$(B)/lib/binding/binding.go"])
+
+    def test_noauto_stdout_go_output_is_a_direct_module_input(self):
+        files = cgo_world()
+        lib.tool_program(files, "tools/generate", "generate")
+        files["lib/generated/ya.make"] = (
+            "GO_LIBRARY()\nSRCS(lib.go)\n"
+            "RUN_PROGRAM(tools/generate STDOUT_NOAUTO generated.go OUT_NOAUTO ignored.cpp)\nEND()\n"
+        )
+        files["lib/generated/lib.go"] = "package generated\n"
+        graph = lib.make(files, "lib/generated")
+        args = lib.node_by_output(graph, "$(B)/lib/generated/generated.a")["cmds"][0]["cmd_args"]
+        self.assertEqual(between(args, "++srcs", "++asm-flags"), [
+            "$(B)/lib/generated/generated.go", "$(S)/lib/generated/lib.go",
+        ])
+
     def test_cgo_binding_emits_cgo_pipeline_and_links_c_archives(self):
         files = cgo_world()
         zstd_binding(files)
