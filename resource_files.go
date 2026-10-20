@@ -22,7 +22,6 @@ func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string) []Re
 	dest := ""
 	dontCompress := false
 	i := 0
-	dontCompress := false
 
 	for i < len(args) {
 		tok := args[i]
