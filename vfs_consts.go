@@ -77,6 +77,7 @@ var (
 	srcRootDirVFS                       = source("")
 	srcRootVFS                          = source("")
 	stdout2stderrVFS                    = source("build/scripts/stdout2stderr.py")
+	swigJNIScriptVFS                    = source("build/scripts/jni_swig.py")
 	v                                   = source("")
 	wrapccPyVFS                         = source("build/scripts/wrapcc.py")
 	xargsPyVFS                          = source("build/scripts/xargs.py")

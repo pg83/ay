@@ -127,6 +127,7 @@ const (
 	peerKindProgramDefault = 1
 	peerKindUserPeer       = 2
 	peerKindUnitTestPeer   = 3
+	KindForeignDescent     = KindJavaTestable + 1
 )
 
 type ModuleEmitResult struct {
@@ -137,6 +138,7 @@ type ModuleEmitResult struct {
 	isPROGRAM                       bool
 	LDRef                           NodeRef
 	LDPath                          *VFS
+	ArchiveFile                     VFS
 	GlobalRef                       *NodeRef
 	GlobalPath                      *VFS
 	WholeArchiveRefs                []NodeRef
@@ -145,6 +147,7 @@ type ModuleEmitResult struct {
 	AddInclGlobal                   []VFS
 	OwnAddInclGlobal                []VFS
 	ProtoInclude                    []VFS
+	SwigInclude                     []VFS
 	AddInclOneLevel                 []VFS
 	AddInclUserGlobal               []VFS
 	CFlagsGlobal                    []ANY
@@ -230,6 +233,7 @@ type GenCtx struct {
 	parsedFiles     map[string]*MakeFile
 	prodOuts        IdValueMap
 	goEnvMemo       map[[2]STR]EnvVars
+	frameSerial      uint32
 	scannerTargetPIC *IncludeScanner
 }
 
@@ -314,12 +318,12 @@ func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *Stre
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
 	ctx.buckets = newBucketCache()
 
-	targetScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, string(targetP.ISA), targetP.Flags[envMUSL] == strYes, targetP.Flags[envOPENSOURCE] == strYes, targetP.OS, onWarn), onWarn, ctx.buckets)
+	targetScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, targetP, onWarn), onWarn, ctx.buckets)
 
 	targetScanner.codegen = targetReg
 	targetScanner.moduleByRef = &ctx.moduleByRef
 
-	hostScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, string(hostP.ISA), hostP.Flags[envMUSL] == strYes, hostP.Flags[envOPENSOURCE] == strYes, hostP.OS, onWarn), onWarn, ctx.buckets)
+	hostScanner := newIncludeScannerWith(parsers, loadSysInclSetForFS(fs, hostP, onWarn), onWarn, ctx.buckets)
 
 	hostScanner.codegen = hostReg
 	hostScanner.moduleByRef = &ctx.moduleByRef
@@ -495,7 +499,7 @@ func isFinalTargetModuleType(name TOK) bool {
 }
 
 func picTransition(name TOK) bool {
-	return isDllModuleType(name)
+	return isDllModuleType(name) || name == tokDllJava
 }
 
 func isDllModuleType(name TOK) bool {
@@ -808,6 +812,7 @@ func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, c
 	scanCtx.asmAddIncl = ctx.na.vfsList(d.asmAddIncl...)
 	scanCtx.cythonAddIncl = ctx.na.vfsList(d.cythonAddIncl...)
 	scanCtx.protoInclude = ctx.na.vfsList(protoInclude...)
+	scanCtx.swigInclude = ctx.na.vfsList(d.cc.SwigInclude...)
 	scanCtx.cythonPy23 = cythonUsesPy23Variant(d.moduleStmt.Name)
 	scanCtx.joinFrom = instance.Platform.ISA
 	scanCtx.joinTo = ctx.target.ISA
@@ -869,7 +874,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
 
-	if !instance.Platform.PIC && instance.Language == LangCPP && picTransition(stmtsModuleName(stmts)) {
+	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(stmtsModuleName(stmts)) {
+		descent := instance
+
+		descent.Kind = KindForeignDescent
+		descent.Demand = demandNone
+
+		genModule(ctx, descent)
+
 		pic := instance
 
 		pic.Platform = instance.Platform.pic()
@@ -1222,6 +1234,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	dynCap := 0
 	ldplugCap := 0
 	protoCap := 0
+	swigCap := 0
 	cflagsCap := 0
 	cxxflagsCap := 0
 	conlyflagsCap := 0
@@ -1240,6 +1253,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		dynCap += len(pr.PeerDynamicClosurePaths)
 		ldplugCap += len(pr.LDPluginPaths)
 		protoCap += len(pr.ProtoInclude)
+		swigCap += len(pr.SwigInclude)
 		cflagsCap += len(pr.CFlagsGlobal)
 		cxxflagsCap += len(pr.CXXFlagsGlobal)
 		conlyflagsCap += len(pr.COnlyFlagsGlobal)
@@ -1277,7 +1291,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		peerArchiveRefs, peerGlobalRefs, peerWholeArchiveRefs, peerDynamicRefs, peerSbomRefs, peerLDPluginRefs, mergedLDPluginRefs []NodeRef
 
-		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, peerLDPluginPaths, mergedLDPluginPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude []VFS
+		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, peerLDPluginPaths, mergedLDPluginPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude, effectiveSwigInclude, moduleSwigInclude []VFS
 
 		effectiveCFlagsGlobal, effectiveCXXFlagsGlobal, effectiveCOnlyFlagsGlobal, effectiveRPathFlagsGlobal []ANY
 
@@ -1678,6 +1692,24 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		}
 
 		effectiveProtoInclude = dedupSharedWith(deduper, ctx.vfsSlices, ownProtoInclude, peerProtoInclude)
+
+		if swigCap != 0 || len(d.swigAddIncl) != 0 {
+			var peerSwigInclude []VFS
+
+			deduper.reset()
+
+			for _, rp := range resolved {
+				for _, p := range rp.result.SwigInclude {
+					if deduper.addStable(p.strID()) {
+						peerSwigInclude = append(peerSwigInclude, p)
+					}
+				}
+			}
+
+			effectiveSwigInclude = dedupSharedWith(deduper, ctx.vfsSlices, d.swigAddInclGlobal, peerSwigInclude)
+			moduleSwigInclude = dedupSharedWith(deduper, ctx.vfsSlices, d.swigAddIncl, peerSwigInclude)
+		}
+
 		effectiveCFlagsGlobal = dedupSharedWith(deduper, ctx.argSlices, peerCFlagsGlobal, d.cFlagsGlobal)
 		effectiveCXXFlagsGlobal = concatShared(ctx.argSlices, peerCXXFlagsGlobal, d.cxxFlagsGlobal)
 		effectiveCOnlyFlagsGlobal = concatShared(ctx.argSlices, peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
@@ -1725,6 +1757,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                d.addInclGlobal,
 			ProtoInclude:                    effectiveProtoInclude,
+			SwigInclude:                     effectiveSwigInclude,
 			AddInclOneLevel:                 d.addInclOneLevel,
 			AddInclUserGlobal:               d.addInclUserGlobal,
 			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
@@ -1816,6 +1849,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		PeerAddInclGlobal:    selfPeerAddInclGlobal,
 		ProtoInclude:         effectiveProtoInclude,
 		ProtoIncludePeers:    peerProtoInclude,
+		SwigInclude:          moduleSwigInclude,
 		CFlags:               ownCFlags,
 		CXXFlags:             d.cxxFlags,
 		COnlyFlags:           d.cOnlyFlags,
@@ -2131,6 +2165,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	result.ARRef = arRef
 	result.ARPath = arPath
+	result.ArchiveFile = build(instance.Path.relString(), "/", arBaseName)
 	result.LDRef = arRef
 	result.LDPath = arPath
 	result.SbomComponentRef = ownSbomRef
@@ -2422,6 +2457,7 @@ func (ctx *GenCtx) py3ccHead(py3ccBinary, py3ccSlowBin VFS) []ANY {
 
 type ModuleFrame struct {
 	pending              int
+	serial               uint32
 	d                    ModuleData
 	emitCtx              EmitContext
 	peerCtx              PeerContext
@@ -2454,6 +2490,8 @@ func (ctx *GenCtx) pushFrame() *ModuleFrame {
 	}
 
 	ctx.frameDepth++
+	ctx.frameSerial++
+	f.serial = ctx.frameSerial
 
 	return f
 }

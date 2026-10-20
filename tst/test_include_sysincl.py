@@ -43,6 +43,7 @@ SOURCE_FILTERS = [
     ("alternative_with_regex", "^(contrib/libs/foo|u.il)", "AB"),
     ("lookahead_then_anchor", "^(?!contrib)^util", "B"),
     ("contains_regex", ".*lib./foo.*", "A"),
+    ("unanchored_regex", "[/]b[.]c(c|pp)$", "B"),
 ]
 
 # Filters the loader rejects: the record is disabled with a sysincl warning.
@@ -138,6 +139,25 @@ class SysinclSourceFilterTest(unittest.TestCase):
                     set(INCLUDERS.values()),
                     {path for path, header in missing if header == f"{name}.h"},
                 )
+
+
+class SysinclCythonTest(unittest.TestCase):
+    def test_cython_set_follows_use_python3_prev(self):
+        files = {
+            "m/ya.make": module("a.cpp"),
+            "m/a.cpp": "#include <Python.h>\n",
+            "build/sysincl/cython.yml": "- includes:\n  - Python.h: contrib/libs/python/Include/Python.h\n",
+            "build/sysincl/cython-prev.yml": "- includes:\n  - Python.h: contrib/libs/python/Include_prev/Python.h\n",
+            "contrib/libs/python/Include/Python.h": "",
+            "contrib/libs/python/Include_prev/Python.h": "",
+        }
+        for flags, header in (((), "Include"), (("-DUSE_PYTHON3_PREV=yes",), "Include_prev")):
+            with self.subTest(header=header):
+                graph, stderr = succeed(files, "m", *flags)
+                self.assertEqual(set(), unresolved(stderr))
+                inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
+                self.assertIn(f"$(S)/contrib/libs/python/{header}/Python.h", inputs)
+                self.assertEqual(1, sum(1 for i in inputs if i.endswith("/Python.h")))
 
 
 class SysinclMappingTest(unittest.TestCase):

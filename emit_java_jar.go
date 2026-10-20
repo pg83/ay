@@ -115,6 +115,12 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	prep = append(prep, strYaStartCommandFile.any())
 
+	for _, jsrc := range jm.jsrcs {
+		prep = append(prep, jsrc.any())
+		b.input(jsrc)
+		b.deps = append(b.deps, b.use(jsrc))
+	}
+
 	for _, gt := range jm.gentars {
 		prep = append(prep, gt.any())
 		b.input(gt)

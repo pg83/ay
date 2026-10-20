@@ -305,6 +305,92 @@ class JavaJniTest(unittest.TestCase):
         ])
 
 
+def swig_jni_tree(**extra):
+    bare = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+    swig_lib = "contrib/tools/swig/Lib"
+    files = java_tree(**{
+        f"{swig_lib}/java/ya.make": (
+            f"LIBRARY()\n{bare}ADDINCL(GLOBAL FOR swig {swig_lib}/java GLOBAL FOR swig {swig_lib})\nEND()\n"
+        ),
+        "contrib/libs/jdk/ya.make": f"LIBRARY()\n{bare}ADDINCL(GLOBAL contrib/libs/jdk/include)\nEND()\n",
+        f"{swig_lib}/java/java.swg": "",
+        f"{swig_lib}/swig.swg": "",
+        f"{swig_lib}/go.swg": "",
+        f"{swig_lib}/perl5.swg": "",
+        f"{swig_lib}/python.swg": "",
+        "jni/ya.make": (
+            f"DLL_JAVA(jni-lib)\n{bare}ADD_DLLS_TO_JAR()\nPEERDIR(dep)\n"
+            "SRCS(impl.cpp wrap.swg skipped.c)\nEND()\n"
+        ),
+        "jni/impl.cpp": "int impl;\n",
+        "jni/skipped.c": "int skipped;\n",
+        "jni/wrap.swg": '%include "api.i"\n',
+        "jni/api.i": '%{\n#include "jni/api.h"\n%}\n%include "jni/api.h"\n',
+        "jni/api.h": '#include "dep/gen.h"\n#include <jni.h>\n',
+        "contrib/libs/jdk/include/jni.h": "#include <jni_md>\n",
+        "contrib/libs/jdk/include/jni_md": "#include <jni_types.h>\n",
+        "contrib/libs/jdk/include/jni_types.h": "",
+        "dep/ya.make": f"LIBRARY()\n{bare}SRCS(gen.h.in d.cpp)\nEND()\n",
+        "dep/gen.h.in": "",
+        "dep/d.cpp": "int d;\n",
+        **extra,
+    })
+    lib.tool_program(files, "contrib/tools/swig", "swig")
+    return files
+
+
+class JavaSwigTest(unittest.TestCase):
+    def test_dll_java_wraps_a_swig_interface_for_jni_and_java(self):
+        graph = lib.make(swig_jni_tree(), "jni")
+        head = [
+            "$(B)/resources/YMAKE_PYTHON3/bin/python3", "$(S)/build/scripts/jni_swig.py",
+            "--swig", "$(B)/contrib/tools/swig/swig", "--default-module", "wrap", "--src", "$(S)/jni/wrap.swg",
+        ]
+        include = ["--", "-I$(B)", "-I$(S)", "-I$(S)/contrib/tools/swig/Lib/java", "-I$(S)/contrib/tools/swig/Lib"]
+        package = ["--package-by-file", "ru/yandex/jni/wrap.swg"]
+        cpp = lib.node_by_output(graph, "$(B)/jni/wrap_wrap.swg.h")
+        self.assertEqual(cpp["kv"], {"p": "SW", "pc": "yellow"})
+        self.assertEqual(cpp["outputs"], ["$(B)/jni/wrap_wrap.swg.h", "$(B)/jni/wrap_wrap.swg.cpp"])
+        self.assertEqual(cpp["cmds"][0]["cmd_args"][2:], head[2:] + ["--out-header", "$(B)/jni/wrap_wrap.swg.h"]
+                         + package + include + ["-o", "$(B)/jni/wrap_wrap.swg.cpp"])
+        for path in ("$(S)/jni/api.i", "$(S)/jni/api.h", "$(B)/dep/gen.h", "$(S)/contrib/tools/swig/Lib/java/java.swg",
+                     "$(S)/contrib/libs/jdk/include/jni.h", "$(S)/contrib/libs/jdk/include/jni_types.h"):
+            self.assertIn(path, cpp["inputs"])
+        compiled = lib.node_by_output(graph, "$(B)/jni/wrap_wrap.swg.cpp.pic.o")
+        for path in ("$(B)/jni/wrap_wrap.swg.cpp", "$(B)/jni/wrap_wrap.swg.h", "$(S)/jni/api.h", "$(B)/dep/gen.h"):
+            self.assertIn(path, compiled["inputs"])
+        so = lib.node_by_output(graph, "$(B)/jni/libjni-lib.so")
+        link = next(c["cmd_args"] for c in so["cmds"] if "$(S)/build/scripts/link_dyn_lib.py" in c["cmd_args"])
+        self.assertIn("$(B)/jni/impl.cpp.pic.o", link)
+        self.assertIn("$(B)/jni/wrap_wrap.swg.cpp.pic.o", link)
+        self.assertFalse([n for n in graph["graph"] if any("skipped" in o for o in n["outputs"])])
+
+        jsrc = lib.node_by_output(graph, "$(B)/jni/wrap.swg.jsrc")
+        self.assertEqual(jsrc["kv"], {"p": "SW", "pc": "yellow"})
+        self.assertEqual(jsrc["cmds"][0]["cmd_args"][2:], head[2:] + package
+                         + ["--jsrc", "$(B)/jni/wrap.swg.jsrc"] + include + ["-o", "$(B)/jni/unused.cpp"])
+        self.assertEqual(sorted(jsrc["inputs"]), sorted(cpp["inputs"]))
+        gen = [n for n in graph["graph"] if "$(B)/dep/gen.h" in n["outputs"]]
+        self.assertEqual(len(gen), 2)
+        self.assertEqual({n["uid"] for n in gen} & set(cpp["deps"]) & set(jsrc["deps"]), set())
+
+        jv = jv_node(graph, "$(B)/jni/jni-lib.jar")
+        prep = jv["cmds"][0]["cmd_args"]
+        self.assertEqual(prep[prep.index("--ya-start-command-file"):], [
+            "--ya-start-command-file", "$(B)/jni/wrap.swg.jsrc", "--ya-end-command-file",
+        ])
+        self.assertIn(jsrc["uid"], jv["deps"])
+        self.assertEqual(writer_args(jv, "bfg.txt"), [
+            "jni/libjni-lib.so",
+            "build/platform/java/jdk/platform-java-jdk.pkg.fake",
+            "build/platform/java/jdk/jdk17/java-jdk-jdk17.pkg.fake",
+            "build/platform/python/ymake_python3/platform-python-ymake_python3.pkg.fake",
+            "contrib/tools/swig/Lib/java/libswig-Lib-java.a",
+            "contrib/libs/jdk/libcontrib-libs-jdk.a",
+        ])
+        self.assertIn(so["uid"], jv["deps"])
+
+
 class JavaStartTargetsTest(unittest.TestCase):
     def test_recursed_tests_and_dlls_are_results(self):
         bare = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"

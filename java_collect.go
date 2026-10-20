@@ -246,9 +246,13 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 			collectJavaStmts(ctx, jm, d, taken, env)
 		case *SrcsStmt:
-			for _, src := range expandStmtTokens(v.Sources, env) {
-				ss := src.string()
+			srcs := anyStrs(expandStmtTokens(v.Sources, env))
 
+			if jm.unit.jni {
+				srcs = javaJNISwigSrcs(srcs)
+			}
+
+			for _, ss := range srcs {
 				if ss == "GLOBAL" {
 					continue
 				}
@@ -283,6 +287,32 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			applyJavaMacro(ctx, jm, d, v.Raw.string(), anyStrs(expandStmtTokens(v.Args, env)), anyStrs(v.Args), env)
 		}
 	}
+}
+
+func javaJNISwigSrcs(srcs []string) []string {
+	out := make([]string, 0, len(srcs))
+
+	for _, ext := range []string{".java", ".swg"} {
+		for _, src := range srcs {
+			if strings.HasSuffix(src, ext) {
+				out = append(out, src)
+			}
+		}
+	}
+
+	return out
+}
+
+func (d *JavaData) swigSrcs() []string {
+	var out []string
+
+	for _, src := range d.srcs {
+		if extIsSwg(src) {
+			out = append(out, src)
+		}
+	}
+
+	return out
 }
 
 func javaKotlinPluginOpts(plugin string, opts []string) []string {
@@ -703,6 +733,10 @@ func (jm *JavaModule) varPeers() []string {
 	jdkPeer := "build/platform/java/jdk/jdk" + d.jdkReal
 
 	var out []string
+
+	if u.jni {
+		out = append(out, "build/platform/java/jdk", jdkPeer)
+	}
 
 	if !d.noYmakePython3 {
 		out = append(out, "build/platform/python/ymake_python3")

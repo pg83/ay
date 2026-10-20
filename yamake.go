@@ -202,6 +202,8 @@ type AddInclStmt struct {
 	CythonPaths      []ANY
 	AsmPaths         []ANY
 	ProtoGlobalPaths []ANY
+	SwigPaths        []ANY
+	SwigGlobalPaths  []ANY
 	UserGlobalPaths  []ANY
 	AllPaths         []ANY
 	Line             int
@@ -1167,7 +1169,7 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		"FBS_LIBRARY",
 		"GO_LIBRARY", "GO_PROGRAM",
 		"UNITTEST_FOR",
-		"JAVA_LIBRARY", "JAVA_LIBRARY_SPLIT", "JAVA_LIBRARY_NON_SPLIT", "JAVA_PROGRAM", "JAVA_CONTRIB", "JAVA_CONTRIB_PROXY", "JAVA_CONTRIB_PROGRAM", "JAVA_CONTRIB_ANNOTATION_PROCESSOR", "JAVA_ANNOTATION_PROCESSOR", "JAVA_TEST_LIBRARY", "JUNIT5", "JUNIT6", "JTEST", "JTEST_FOR", "EXTERNAL_JAVA_LIBRARY", "JAR_LIBRARY":
+		"JAVA_LIBRARY", "JAVA_LIBRARY_SPLIT", "JAVA_LIBRARY_NON_SPLIT", "JAVA_PROGRAM", "JAVA_CONTRIB", "JAVA_CONTRIB_PROXY", "JAVA_CONTRIB_PROGRAM", "JAVA_CONTRIB_ANNOTATION_PROCESSOR", "JAVA_ANNOTATION_PROCESSOR", "JAVA_TEST_LIBRARY", "JUNIT5", "JUNIT6", "JTEST", "JTEST_FOR", "EXTERNAL_JAVA_LIBRARY", "JAR_LIBRARY", "DLL_JAVA":
 		return astOne(astModules, ModuleStmt{Name: internTokSTR(nameID), Args: args, Line: line})
 	case "PROTO_SCHEMA":
 
@@ -1203,9 +1205,11 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 
 		return &JoinSrcsStmt{OutputName: args[0].string(), Sources: sources, Line: line}
 	case "ADDINCL":
-		globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths := splitAddInclPaths(args)
+		stmt := splitAddInclPaths(args)
 
-		return &AddInclStmt{GlobalPaths: globalPaths, OneLevelPaths: oneLevelPaths, OwnPaths: ownPaths, CythonPaths: cythonPaths, AsmPaths: asmPaths, ProtoGlobalPaths: protoGlobalPaths, UserGlobalPaths: userGlobalPaths, AllPaths: allPaths, Line: line}
+		stmt.Line = line
+
+		return stmt
 	case "CFLAGS":
 		globalFlags, ownFlags := splitFlagsByGlobal(args)
 
@@ -1769,7 +1773,9 @@ func splitFlagsByGlobal(args []ANY) (globalFlags, ownFlags []ANY) {
 	return gw[:ng:ng], ow[:no:no]
 }
 
-func splitAddInclPaths(args []ANY) (globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, userGlobalPaths, allPaths []ANY) {
+func splitAddInclPaths(args []ANY) *AddInclStmt {
+	var globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, swigPaths, swigGlobalPaths, userGlobalPaths, allPaths []ANY
+
 	for i := 0; i < len(args); i++ {
 		if args[i] == kwONE_LEVEL.any() {
 			i++
@@ -1794,6 +1800,13 @@ func splitAddInclPaths(args []ANY) (globalPaths, oneLevelPaths, ownPaths, cython
 
 			if i+2 < len(args) && args[i+1].string() == "asm" {
 				asmPaths = append(asmPaths, args[i+2])
+				i += 2
+
+				continue
+			}
+
+			if i+2 < len(args) && args[i+1].string() == "swig" {
+				swigPaths = append(swigPaths, args[i+2])
 				i += 2
 
 				continue
@@ -1829,6 +1842,14 @@ func splitAddInclPaths(args []ANY) (globalPaths, oneLevelPaths, ownPaths, cython
 					continue
 				}
 
+				if i+2 < len(args) && args[i+1].string() == "swig" {
+					swigPaths = append(swigPaths, args[i+2])
+					swigGlobalPaths = append(swigGlobalPaths, args[i+2])
+					i += 2
+
+					continue
+				}
+
 				i++
 				i++
 			}
@@ -1844,8 +1865,18 @@ func splitAddInclPaths(args []ANY) (globalPaths, oneLevelPaths, ownPaths, cython
 		}
 	}
 
-	return astArgs.list(globalPaths...), astArgs.list(oneLevelPaths...), astArgs.list(ownPaths...), astArgs.list(cythonPaths...),
-		astArgs.list(asmPaths...), astArgs.list(protoGlobalPaths...), astArgs.list(userGlobalPaths...), astArgs.list(allPaths...)
+	return &AddInclStmt{
+		GlobalPaths:      astArgs.list(globalPaths...),
+		OneLevelPaths:    astArgs.list(oneLevelPaths...),
+		OwnPaths:         astArgs.list(ownPaths...),
+		CythonPaths:      astArgs.list(cythonPaths...),
+		AsmPaths:         astArgs.list(asmPaths...),
+		ProtoGlobalPaths: astArgs.list(protoGlobalPaths...),
+		SwigPaths:        astArgs.list(swigPaths...),
+		SwigGlobalPaths:  astArgs.list(swigGlobalPaths...),
+		UserGlobalPaths:  astArgs.list(userGlobalPaths...),
+		AllPaths:         astArgs.list(allPaths...),
+	}
 }
 
 func (p *Parser) parseIf(ifTok Token) *IfStmt {

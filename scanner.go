@@ -90,6 +90,7 @@ type searchTierHotEntry struct {
 type ScanCtx struct {
 	scanner *IncludeScanner
 	cfg     *ScanConfig
+	ccCfg   *ScanConfig
 	parser  IncludeDirectiveParser
 	tjc     *TarjanCtx
 }
@@ -146,6 +147,7 @@ type ScanContext struct {
 	asmAddIncl    []VFS
 	cythonAddIncl []VFS
 	protoInclude  []VFS
+	swigInclude   []VFS
 	protoOutRoot  VFS
 	cythonPy23    bool
 	joinFrom      ISA
@@ -189,7 +191,7 @@ func (ctx *ScanContext) modulePaths(domain ScanDomain) (own, peer []VFS) {
 	case scanDomainGoAsm:
 		return goAsmIncludeDirs, nil
 	case scanDomainSwig:
-		return swigAddIncls, nil
+		return ctx.swigInclude, nil
 	case scanDomainJoinTarget:
 		peer = ctx.ccPeer
 
@@ -221,7 +223,13 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 
 	sc.scanner = s
 	sc.cfg = ctx.config(domain)
+	sc.ccCfg = nil
 	sc.parser = parser
+
+	if domain == scanDomainSwig {
+		sc.ccCfg = ctx.config(scanDomainCC)
+	}
+
 	sc.tjc = tarjans.get()
 
 	return sc
@@ -277,7 +285,18 @@ func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIn
 
 func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	s := sc.scanner
-	own, compileExtra, info := s.parsedIncludes(vfsPath, sc.parser)
+	parser := sc.parser
+
+	if sc.ccCfg != nil && !extIsSwigInterface(vfsPath.relString()) {
+		cfg := sc.cfg
+
+		sc.cfg = sc.ccCfg
+		parser = cParser
+
+		defer func() { sc.cfg = cfg }()
+	}
+
+	own, compileExtra, info := s.parsedIncludes(vfsPath, parser)
 
 	if len(own) == 0 && len(compileExtra) == 0 && !vfsPath.isBuild() {
 		return out

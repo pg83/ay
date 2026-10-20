@@ -103,6 +103,8 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		e.emitLibraryGperfSource(meta)
 	case srcExtCfgProto:
 		e.emitLibraryCfgProtoSource(meta)
+	case srcExtSwg:
+		e.emitLibrarySwigSource(meta)
 	default:
 		if isGoModuleType(e.d.unit.Type) && src.string() == "CGO_EXPORT" {
 			return

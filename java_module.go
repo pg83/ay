@@ -18,6 +18,7 @@ var (
 	javaUnitIJar    = &javaUnit{kind: juIJar, sub: KindJavaIJar, tag: "IJAR", moduleType: "JAVA_LIBRARY", peerdirTags: javaTagsJarBase, suffix: "-interface.jar", transparent: true, ignorePeerdir: true, selfPeers: []ModuleKind{KindJavaFull}}
 	javaUnitExt     = &javaUnit{kind: juExternal, sub: KindJavaMain, tag: "JAVA", moduleType: "EXTERNAL_JAVA_LIBRARY", peerdirTags: []string{"JAVA", "JAVA_PROTO", "JAVA_PROTO_FROM_SCHEMA", "JAVA_FBS", "JAVA_IDL", "PACKAGE_UNION", "IJAR"}, dmTagsExclude: javaTagsFull, nameGen: javaNameThreeDirs, suffix: ".jar"}
 	javaUnitProto   = &javaUnit{kind: juExternal, sub: KindJavaMain, tag: "JAVA_PROTO", moduleType: "PROTO_LIBRARY", peerdirTags: []string{"JAVA", "IJAR", "JAVA_PROTO"}, dmTagsExclude: javaTagsFull, nameGen: javaNameThreeDirs, suffix: ".jar", proto: true}
+	javaUnitDllJar  = &javaUnit{kind: juJar, sub: KindJavaMain, tag: "JAR_COMPILATION", moduleType: "JAR_LIBRARY", peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar), dmTagsExclude: javaTagsFull, suffix: ".jar", compileView: true, jni: true}
 )
 
 var javaModuleUnits = map[TOK][]*javaUnit{
@@ -37,6 +38,7 @@ var javaModuleUnits = map[TOK][]*javaUnit{
 	tokJunit6:                         javaTestUnits("JUNIT6", "JUNIT6_JAR_COMPILATION", "junit6", []string{"JUNIT6_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
 	tokJtest:                          javaTestUnits("JTEST", "JTEST_JAR_COMPILATION", "junit4", []string{"JTEST_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
 	tokJtestFor:                       javaTestUnits("JTEST_FOR", "JTEST_FOR_JAR_COMPILATION", "junit4", []string{"JTEST_FOR_JAR_COMPILATION", "JTEST_JAR_COMPILATION", "JAVA_TEST_LIBRARY"}),
+	tokDllJava:                        {javaUnitDllJar},
 }
 
 const (
@@ -85,6 +87,7 @@ type javaUnit struct {
 	proto                bool
 	contribRunnable      bool
 	testRunner           string
+	jni                  bool
 }
 
 func javaTags(groups ...[]string) []string {
@@ -349,6 +352,7 @@ type JavaModule struct {
 	protoInclude   []VFS
 	toolRefs       []NodeRef
 	gentars        []VFS
+	jsrcs          []VFS
 	macroOuts      []VFS
 }
 
@@ -504,6 +508,12 @@ func javaOwnGlobals(peers []javaForeignPeer) []ResourceDecl {
 }
 
 func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
+	if jm.unit.jni {
+		dll := genModule(ctx, ModuleInstance{Path: jm.path, Kind: KindLib, Language: LangCPP, Platform: jm.instance.Platform, Demand: demandLinked})
+
+		jm.unmanageable = append(jm.unmanageable, javaForeignPeer{dir: jm.dir, res: dll})
+	}
+
 	for _, sub := range jm.unit.selfPeers {
 		self := jm.instance
 
@@ -551,8 +561,10 @@ func (ctx *GenCtx) javaResolvePeers(jm *JavaModule) {
 		return
 	}
 
-	for _, p := range jm.data.peerStmts {
-		add(p.dir, p.explicit)
+	if !jm.unit.jni {
+		for _, p := range jm.data.peerStmts {
+			add(p.dir, p.explicit)
+		}
 	}
 
 	for _, p := range jm.macroPeers() {
@@ -658,7 +670,7 @@ func javaForeignFileName(p javaForeignPeer) VFS {
 		return build(p.dir, "/", javaRealPrjName(p.dir, javaNameThreeDirs), ".pkg.fake")
 	}
 
-	return 0
+	return p.res.ArchiveFile
 }
 
 func (u *javaUnit) finalTarget() bool {
@@ -720,6 +732,14 @@ func (jm *JavaModule) macroPeers() []string {
 
 	if jm.unit.proto && len(d.protoSrcs) > 0 {
 		out = append(out, "build/platform/java/protoc")
+	}
+
+	if jm.unit.jni && len(d.swigSrcs()) > 0 {
+		out = append(out, strContribToolsSwigLibJava.string())
+
+		if !d.env.bool(envUSE_SYSTEM_JDK) && !d.env.bool(envOS_ANDROID) {
+			out = append(out, strContribLibsJdk.string())
+		}
 	}
 
 	return out

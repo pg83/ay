@@ -37,6 +37,8 @@ var sysInclYamlSequence = []SysInclEntry{
 	{file: "nvidia-cccl.yml"},
 	{file: "stl-to-libcxx.yml"},
 	{file: "libc-musl-libcxx.yml", predicate: muslOn},
+	{file: "cython.yml", predicate: notPython3Prev},
+	{file: "cython-prev.yml", predicate: python3Prev},
 	{file: "python-2-disable.yml"},
 	{file: "python-2-disable-numpy.yml"},
 }
@@ -75,10 +77,11 @@ func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 }
 
 type SysInclEnv struct {
-	arch       string
-	musl       bool
-	opensource bool
-	os         OS
+	arch        string
+	musl        bool
+	opensource  bool
+	os          OS
+	python3Prev bool
 }
 
 type SysInclEntry struct {
@@ -94,6 +97,14 @@ func notOpensource(e SysInclEnv) bool {
 	return !e.opensource
 }
 
+func python3Prev(e SysInclEnv) bool {
+	return e.python3Prev
+}
+
+func notPython3Prev(e SysInclEnv) bool {
+	return !e.python3Prev
+}
+
 func muslOn(e SysInclEnv) bool {
 	return e.musl
 }
@@ -102,12 +113,13 @@ func muslArchIs(want string) func(SysInclEnv) bool {
 	return func(e SysInclEnv) bool { return e.musl && e.arch == want }
 }
 
-func loadSysInclSetForFS(fs FS, arch string, musl, opensource bool, os OS, onWarn func(Warn)) SysInclSet {
+func loadSysInclSetForFS(fs FS, p *Platform, onWarn func(Warn)) SysInclSet {
 	if !fs.isDir(srcRootRel, baseSysInclDir) {
 		return nil
 	}
 
-	env := SysInclEnv{arch: arch, musl: musl, opensource: opensource, os: os}
+	opensource := p.Flags[envOPENSOURCE] == strYes
+	env := SysInclEnv{arch: string(p.ISA), musl: p.Flags[envMUSL] == strYes, opensource: opensource, os: p.OS, python3Prev: p.Flags[envUSE_PYTHON3_PREV] == strYes}
 
 	var set SysInclSet
 
@@ -361,7 +373,10 @@ func (alt *FilterAlt) setPositive(name string, lineno int, pat string) {
 	}
 
 	alt.re = re
-	alt.reGuard, _ = re.LiteralPrefix()
+
+	if strings.HasPrefix(pat, "^") {
+		alt.reGuard, _ = re.LiteralPrefix()
+	}
 }
 
 func compileSourceFilter(name string, lineno int, pat string, onWarn func(Warn)) *SourceFilter {

@@ -5,6 +5,7 @@ type GeneratedFileInfo struct {
 	OutputPath      VFS
 	SourcePath      VFS
 	OwnerModule     VFS
+	OwnerSerial     uint32
 	ProducerRef     NodeRef
 	OnUse           *PendingEmit
 	GeneratorRefs   []NodeRef
@@ -98,8 +99,16 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	}
 
 	if existing, ok := r.byRel.get(info.OutputPath.rel()); ok {
-		throwFmt("CodegenRegistry: duplicate producer for %q (existing ref=%d, new ref=%d)",
-			info.OutputPath.string(), existing.ProducerRef, info.ProducerRef)
+		if existing.OwnerModule != info.OwnerModule || existing.OwnerSerial == info.OwnerSerial {
+			throwFmt("CodegenRegistry: duplicate producer for %q (existing ref=%d, new ref=%d)",
+				info.OutputPath.string(), existing.ProducerRef, info.ProducerRef)
+		}
+
+		discarded := r.na.geninfos.one()
+
+		*discarded = info
+
+		return discarded
 	}
 
 	stored := r.na.geninfos.one()

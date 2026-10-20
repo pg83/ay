@@ -36,6 +36,10 @@ def python_base():
     for name in ("swig.swg", "go.swg", "java.swg", "perl5.swg"):
         files[f"{SWIG_LIB}/{name}"] = ""
     files[f"{SWIG_LIB}/python/python.swg"] = '%include "pyhead.swg"\n'
+    files[f"{SWIG_LIB}/python/ya.make"] = (
+        "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+        f"ADDINCL(GLOBAL FOR swig {SWIG_LIB}/python GLOBAL FOR swig {SWIG_LIB})\nEND()\n"
+    )
     files[f"{SWIG_LIB}/python/pyhead.swg"] = ""
     return files
 

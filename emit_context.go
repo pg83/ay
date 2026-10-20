@@ -300,6 +300,7 @@ func (e *EmitContext) producersOnly() bool {
 
 func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	info.OwnerModule = e.instance.Path
+	info.OwnerSerial = e.frame.serial
 
 	if e.d.docs != nil || e.d.moduleStmt.Name == tokUnion {
 		e.outs = append(e.outs, info.OutputPath)

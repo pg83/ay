@@ -45,6 +45,7 @@ const (
 	srcExtYasm
 	srcExtCuda
 	srcExtRodata
+	srcExtSwg
 )
 
 type ExtFlags uint8
@@ -80,7 +81,7 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 	set(extAsmSource, ".asm", ".s", ".S")
 	set(extHeader, ".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx", ".inl")
 	set(extCopyAuto, ".c", ".cpp", ".cc", ".cxx", ".proto", ".ev", ".g4", ".y", ".ypp", ".rl", ".rl6", ".h.in", ".c.in", ".cpp.in")
-	set(extCodegen, ".proto", ".gztproto", ".fbs64", ".fbs", ".ev", ".cfgproto", ".rl6", ".rl", ".rl5", ".y", ".ypp", ".cpp.in", ".c.in", ".sc", ".gperf", ".lpp", ".lex", ".l", ".fml", ".sfdl", ".asp")
+	set(extCodegen, ".proto", ".gztproto", ".fbs64", ".fbs", ".ev", ".cfgproto", ".rl6", ".rl", ".rl5", ".y", ".ypp", ".cpp.in", ".c.in", ".sc", ".gperf", ".lpp", ".lex", ".l", ".fml", ".sfdl", ".asp", ".swg")
 
 	for ext, cls := range map[string]SrcExtClass{
 		".gztproto": srcExtGztProto,
@@ -127,6 +128,7 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 		".asm":      srcExtYasm,
 		".cu":       srcExtCuda,
 		".rodata":   srcExtRodata,
+		".swg":      srcExtSwg,
 	} {
 		get(ext).srcExt = cls
 	}
@@ -246,6 +248,10 @@ func extIsSwg(p string) bool {
 	return strings.HasSuffix(p, ".swg")
 }
 
+func extIsSwigInterface(p string) bool {
+	return extIsSwg(p) || strings.HasSuffix(p, ".i")
+}
+
 func extIsLua(p string) bool {
 	return strings.HasSuffix(p, ".lua")
 }
@@ -315,7 +321,7 @@ func srcExtClassOf(id ANY) SrcExtClass {
 
 func isCodegenProducingSrcID(id ANY) bool {
 	switch srcExtClassOf(id) {
-	case srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex, srcExtFml, srcExtSfdl, srcExtAsp:
+	case srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex, srcExtFml, srcExtSfdl, srcExtAsp, srcExtSwg:
 		return true
 	}
 

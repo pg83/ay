@@ -431,6 +431,10 @@ class OtherGeneratorTest(unittest.TestCase):
             "contrib/libs/python/ya.make": LIBRARY_STUB,
             "contrib/tools/cython/Cython/ya.make": LIBRARY_STUB,
             "library/cpp/resource/ya.make": LIBRARY_STUB,
+            "contrib/tools/swig/Lib/python/ya.make": (
+                f"LIBRARY()\n{BARE}ADDINCL(GLOBAL FOR swig contrib/tools/swig/Lib/python"
+                " GLOBAL FOR swig contrib/tools/swig/Lib)\nEND()\n"
+            ),
         }
         for name in CYTHON_UTILITY:
             files[f"contrib/tools/cython/Cython/Utility/{name}"] = ""

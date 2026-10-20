@@ -157,6 +157,8 @@ type ModuleData struct {
 	cythonAddIncl            []VFS
 	asmAddIncl               []VFS
 	protoAddInclGlobal       []VFS
+	swigAddIncl              []VFS
+	swigAddInclGlobal        []VFS
 	llvmBc                   []*LlvmBcStmt
 	cFlags                   []ANY
 	cFlagsGlobal             []ANY
@@ -1059,8 +1061,16 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
 			globalNext := false
+			srcToks := expandStmtTokens(v.Sources, env)
 
-			for _, srcTok := range expandStmtTokens(v.Sources, env) {
+			if d.unit.SwigLang == strSwigLangJniCpp {
+				srcToks = jniCppSwigSrcs(srcToks)
+
+				d.peerdirs = append(d.peerdirs, swigJNIPeerdirs(srcToks, env)...)
+				d.peerdirs = append(d.peerdirs, strContribToolsSwigLibJava.any())
+			}
+
+			for _, srcTok := range srcToks {
 				if srcTok == kwGLOBAL.any() {
 					globalNext = true
 
@@ -1161,6 +1171,8 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
 			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
 			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
+			d.swigAddIncl = append(d.swigAddIncl, expandConfigVFSPaths(v.SwigPaths, env)...)
+			d.swigAddInclGlobal = append(d.swigAddInclGlobal, expandConfigVFSPaths(v.SwigGlobalPaths, env)...)
 		case *CFlagsStmt:
 
 			d.cFlagsGlobal = append(d.cFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
@@ -1410,6 +1422,37 @@ type ModuleUnit struct {
 	ARPrefix    string
 	GlobalARTag STR
 	SbomLang    STR
+	SwigLang    STR
+}
+
+func swigJNIPeerdirs(srcs []ANY, env Environment) []ANY {
+	for _, src := range srcs {
+		if !extIsSwg(src.string()) {
+			continue
+		}
+
+		if env.bool(envUSE_SYSTEM_JDK) || env.bool(envOS_ANDROID) {
+			return []ANY{strContribToolsSwigLibJava.any()}
+		}
+
+		return []ANY{strContribToolsSwigLibJava.any(), strContribLibsJdk.any()}
+	}
+
+	return nil
+}
+
+func jniCppSwigSrcs(srcs []ANY) []ANY {
+	out := make([]ANY, 0, len(srcs))
+
+	for _, ext := range []string{".cpp", ".swg"} {
+		for _, src := range srcs {
+			if strings.HasSuffix(src.string(), ext) {
+				out = append(out, src)
+			}
+		}
+	}
+
+	return out
 }
 
 func resolveModuleUnit(name TOK, kind ModuleKind, language Language) ModuleUnit {
@@ -1428,6 +1471,8 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	}
 
 	switch name {
+	case tokDllJava:
+		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp, SwigLang: strSwigLangJniCpp}
 	case tokGoLibrary, tokGoProgram:
 		return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy3Program:
@@ -1713,7 +1758,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.cgoCflags = append(d.cgoCflags, expanded...)
 		d.cFlags = append(d.cFlags, expanded...)
-	case tokMavenGroupId:
+	case tokMavenGroupId, tokAddDllsToJar:
 
 	case tokLicense:
 
@@ -2281,6 +2326,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 					appendPyRegister(d, modName+"_swg", false)
 				}
 
+				d.peerdirs = append(d.peerdirs, strContribToolsSwigLibPython.any())
 				mainNext = false
 
 				continue

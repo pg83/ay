@@ -261,6 +261,8 @@ var tokName = [...]STR{
 	tokJtestFor:                       internStr("JTEST_FOR"),
 	tokExternalJavaLibrary:            internStr("EXTERNAL_JAVA_LIBRARY"),
 	tokJarLibrary:                     internStr("JAR_LIBRARY"),
+	tokDllJava:                        internStr("DLL_JAVA"),
+	tokAddDllsToJar:                   internStr("ADD_DLLS_TO_JAR"),
 }
 
 var tokByName = func() map[string]TOK {
@@ -547,6 +549,8 @@ const (
 	tokJtestFor
 	tokExternalJavaLibrary
 	tokJarLibrary
+	tokDllJava
+	tokAddDllsToJar
 )
 
 type TOK uint16

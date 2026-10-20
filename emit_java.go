@@ -196,6 +196,7 @@ func (jm *JavaModule) outputs() []VFS {
 
 func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
 	if jm.unit.kind == juJar {
+		ctx.javaRegisterSwigJsrcs(jm)
 		ctx.javaRegisterRunPrograms(jm)
 	}
 
