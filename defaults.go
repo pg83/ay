@@ -297,13 +297,13 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 	var peers []string
 
 	if !postUser {
+		if instance.Platform.ifEnv.bool(envAutocheck) && instance.Platform.OS == OSLinux {
+			peers = append(peers, "contrib/libs/libeatmydata")
+		}
+
 		if d.useArcadiaLibm && instance.Path.relString() != "contrib/libs/libm" &&
 			!strings.HasPrefix(instance.Path.relString(), "contrib/libs/libm/") {
 			peers = append(peers, "contrib/libs/libm")
-		}
-
-		if env.bool(envAUTOCHECK) && env.bool(envOS_LINUX) {
-			peers = append(peers, "contrib/libs/libeatmydata")
 		}
 
 		peers = append(peers, "build/cow/on")

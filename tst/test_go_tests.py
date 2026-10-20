@@ -331,6 +331,18 @@ class GoTestModuleTest(unittest.TestCase):
             ["$(S)/lib/svc/gotest", "$(B)/lib/svc/gotest/svc.vet.txt"],
         )
 
+    def test_autocheck_programs_link_libeatmydata_without_pie(self):
+        files = go_test_world()
+        files["tools/gen/ya.make"] = "PROGRAM()\nSRCS(main.cpp)\nEND()\n"
+        files["tools/gen/main.cpp"] = "int main(){return 0;}\n"
+        files["lib/gen/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}RUN_PROGRAM(tools/gen out.cpp OUT out.cpp)\nEND()\n"
+        graph = lib.make(files, "lib/gen", "--host-platform-flag", "AUTOCHECK=yes", *AUTOCHECK)
+        tool = lib.node_by_output(graph, "$(B)/tools/gen/gen")
+        self.assertIn("$(B)/contrib/libs/libeatmydata/libcontrib-libs-libeatmydata.a", tool["inputs"])
+        link = next(cmd["cmd_args"] for cmd in tool["cmds"] if "-Wl,--gc-sections" in cmd["cmd_args"])
+        self.assertIn("-fPIC", link)
+        self.assertEqual(link[-1], "-Wl,-no-pie")
+
     def test_style_cpp_brings_the_clang_format_resource(self):
         files = go_world()
         files["c/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(c.cpp)\nSTYLE_CPP()\nEND()\n"

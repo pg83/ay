@@ -390,7 +390,7 @@ class OtherGeneratorTest(unittest.TestCase):
 
     def test_go_cgo_producers(self):
         files = {
-            "gol/ya.make": "GO_LIBRARY()\nSRCS(a.go b.c)\nCGO_SRCS(c.go)\nEND()\n",
+            "gol/ya.make": "GO_LIBRARY()\nSRCS(a.go CGO_EXPORT b.c)\nCGO_SRCS(c.go)\nEND()\n",
             "gol/a.go": "package gol\n",
             "gol/b.c": "int b(void){return 0;}\n",
             "gol/c.go": 'package gol\nimport "C"\n',
