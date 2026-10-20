@@ -241,7 +241,6 @@ class YaMakeMacrosTest(unittest.TestCase):
         body = (
             "LICENSE(MIT)\nVERSION(1 2 ${UNSET_PART})\nTOOLCHAIN(clang)\nTOOLCHAIN(a b)\n"
             "MAVEN_GROUP_ID(x)\n"
-            "STYLE_RUFF(CONFIG_TYPE x CHECK_FORMAT RUN_IN_SOURCE_ROOT)\n"
             "PRIMARY_OUTPUT(foo)\nPRIMARY_OUTPUT()\nSPLIT_DWARF()\nNO_SPLIT_DWARF()\n"
             "NO_PLATFORM_RESOURCES()\n"
             "GO_TEST_SRCS(a_test.go)\nGO_XTEST_SRCS(b_test.go)\n"

@@ -778,7 +778,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	}
 
 	applyPythonAddIncl(modulePath, d, env)
-	d.collectPy2StyleCheck(env)
+	d.collectPythonStyleChecks(env)
 	applyBuildInfoAddIncl(modulePath, d)
 	applyArchiveAddIncl(modulePath, d)
 	applyCythonHeaderAddIncl(modulePath, d)
@@ -1913,16 +1913,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.noImportTracing = true
 	case tokNoExtendedSourceSearch:
 		d.noExtendedPySearch = true
-	case tokStyleRuff:
-
-		for i := 0; i < len(v.Args); i++ {
-			switch v.Args[i].string() {
-			case "CONFIG_TYPE":
-				i++
-			case "CHECK_FORMAT":
-			case "RUN_IN_SOURCE_ROOT":
-			}
-		}
+	case tokStylePython, tokStyleRuff:
+		d.collectExplicitPythonStyle(v, env)
 	case tokLlvmBc:
 
 		if env.string(envCLANG_BC_ROOT) == "" || env.string(envLLVM_LLC_TOOL) == "" {

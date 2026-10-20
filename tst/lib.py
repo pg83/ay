@@ -297,11 +297,21 @@ CONF_FILES = {
     "build/sysincl/misc.yml": "- includes: []\n",
     "build/conf/compilers/gnu_compiler.conf": "",
     "build/conf/linkers/ld.conf": FAKE_LD_CONF,
-    "build/config/tests/py_style/default_configs.json": '{"py2_flake8":"build/config/tests/flake8/flake8.conf"}',
+    "build/config/tests/py_style/default_configs.json": json.dumps({
+        "py2_flake8": "build/config/tests/flake8/flake8.conf",
+        "flake8": "build/config/tests/flake8/flake8.conf",
+        "black": "build/config/tests/py_style/pyproject.toml",
+        "ruff": "build/config/tests/ruff/ruff.toml",
+    }),
     "build/external_resources/flake8_py2/ya.make": (
         "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(FLAKE8_PY2 sbr:123)\nEND()\n"
     ),
 }
+
+for _linter, _resource in (("flake8_py3", "FLAKE8_PY3"), ("black", "BLACK"), ("ruff", "RUFF")):
+    CONF_FILES[f"build/external_resources/{_linter}/ya.make"] = (
+        f"RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE({_resource} sbr:123)\nEND()\n"
+    )
 
 
 def seed_root(root):
