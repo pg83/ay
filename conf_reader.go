@@ -289,14 +289,20 @@ func applyConfStmt(env Environment, s ConfStmt, conditional bool) {
 			return
 		}
 
-		var kept []string
+		value := env.string(key)
 
-		for _, word := range strings.Fields(env.string(key)) {
-			if !strings.Contains(" "+s.value+" ", " "+word+" ") {
-				kept = append(kept, word)
+		if s.value != "" {
+			for {
+				pos := strings.Index(value, s.value)
+
+				if pos < 0 {
+					break
+				}
+
+				value = value[:pos] + value[pos+len(s.value):]
 			}
 		}
 
-		env.setString(key, strings.Join(kept, " "))
+		env.setString(key, value)
 	}
 }

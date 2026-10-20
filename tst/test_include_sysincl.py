@@ -719,7 +719,7 @@ class SysinclConfTest(unittest.TestCase):
         self.assertEqual({"picolibc"}, claims(probes, files, *extra))
 
     def test_define_and_exclude_operators(self):
-        # confreader.cpp AddAssignment: `-=` drops the words from the value,
+        # vars.h DelFromSingleVal: `-=` removes substrings from the value,
         # `:=` sets a variable only while it is undefined.
         files = {
             **self.YML,
@@ -732,6 +732,22 @@ class SysinclConfTest(unittest.TestCase):
             ),
         }
         self.assertEqual({"misc"}, claims(["misc", "picolibc"], files))
+
+    def test_exclude_removes_substrings_until_no_match_remains(self):
+        variants = (
+            "EXTRA_SYSINCL=build/sysincl/notfirst.yml\n"
+            "EXTRA_SYSINCL-=not\nSYSINCL=$EXTRA_SYSINCL\n",
+            "DROP=aabcbc\nDROP-=abc\n"
+            "SYSINCL=build/sysincl/${DROP}first.yml\n",
+        )
+        for conf in variants:
+            with self.subTest(conf=conf):
+                files = {
+                    **self.YML,
+                    "build/sysincl/first.yml": self.YML["build/sysincl/misc.yml"],
+                    "build/conf/sysincl.conf": conf,
+                }
+                self.assertEqual({"misc"}, claims(["misc", "picolibc"], files))
 
     def test_select_alternatives(self):
         files = {
