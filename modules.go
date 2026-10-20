@@ -2158,7 +2158,17 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.hasLicense = true
 	case tokVersion:
 
-		d.modver = strings.Join(anyStrs(expandStmtTokens(v.Args, env)), ".")
+		components := anyStrs(expandStmtTokens(v.Args, env))
+		value := strings.Join(components, " ")
+
+		env.setFromString(envModver, value)
+
+		if d.setVars == nil {
+			d.setVars = map[STR]STR{}
+		}
+
+		d.setVars[strModver] = internStr(value)
+		d.modver = strings.Join(components, ".")
 	case tokToolchain:
 
 		if len(v.Args) == 1 {

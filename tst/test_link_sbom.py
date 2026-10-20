@@ -85,6 +85,14 @@ class SbomTest(unittest.TestCase):
         program = lib.node_by_output(graph, "$(B)/prog/prog")
         self.assertNotIn("$(S)/build/internal/scripts/link_sbom.py", program["inputs"])
 
+    def test_version_keeps_arbitrary_text_in_component_metadata(self):
+        files = fixture()
+        files["lib/ya.make"] = files["lib/ya.make"].replace("VERSION(2 1)", "VERSION(NOT_SPECIFIED CUSTOM_LABEL)")
+        graph = lib.make(files, "prog", *X86_64, "-r")
+        args = lib.node_by_output(graph, component("lib/lib.CPP.component.sbom"))["cmds"][0]["cmd_args"]
+        self.assertEqual("NOT_SPECIFIED.CUSTOM_LABEL", args[args.index("--ver") + 1])
+        lib.node_by_output(graph, "$(B)/lib/liblib.a")
+
     def test_release_program_embeds_ordered_components(self):
         graph = lib.make(fixture(), "prog", *X86_64, "-r")
 

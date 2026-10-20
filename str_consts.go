@@ -333,6 +333,7 @@ var (
 	strModuleName                                                                            = internStr("-module-name")
 	strModulo                                                                                = internStr("--modulo")
 	strModuloIndex                                                                           = internStr("--modulo-index")
+	strModver                                                                                = internStr("MODVER")
 	strNeedPlatformPeerdirs                                                                  = internStr("NEED_PLATFORM_PEERDIRS")
 	strNo                                                                                    = internStr("no")
 	strNoSnippetFromStdout                                                                   = internStr("--no-snippet-from-stdout")

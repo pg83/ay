@@ -159,6 +159,13 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 	pe := func() {
 		inputClosure := prInputClosure(snap, stmt)
+		inputInduced := prInputInducedIncludes(ctx, e.codegen, snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse])
+
+		if len(inputInduced[parsedIncludesAll])+len(inputInduced[parsedIncludesHeader])+len(inputInduced[parsedIncludesCpp]) > 0 {
+			for _, output := range outVFSByToken {
+				e.codegen.inheritParsedIncludes(output, prRef, inputInduced)
+			}
+		}
 
 		e.emitPR(RunProgramNodeSpec{
 			stmt:          stmt,
@@ -278,6 +285,38 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 	}
 
 	return PrInputClosure{sources: s.ctx.na.dedupClosure(sources), builds: s.ctx.na.dedupClosure(builds)}
+}
+
+func prInputInducedIncludes(ctx *GenCtx, registry *CodegenRegistry, inputs []VFS) ParsedIncludeSet {
+	var induced ParsedIncludeSet
+
+	for _, input := range inputs {
+		var parsed ParsedIncludeSet
+
+		if input.isBuild() {
+			if info := registry.use(input); info != nil {
+				parsed = info.ParsedIncludes
+			}
+		} else {
+			if extIsProto(input.relString()) || !ctx.parsers.registry.scansIncludes(input.relString()) {
+				continue
+			}
+
+			parsed = ctx.parsers.sourceParsedBuckets(input, nil)
+		}
+
+		for _, bucket := range [...]ParsedIncludeBucket{parsedIncludesAll, parsedIncludesHeader, parsedIncludesCpp} {
+			induced[bucket] = append(induced[bucket], parsed[bucket]...)
+		}
+	}
+
+	for _, bucket := range [...]ParsedIncludeBucket{parsedIncludesAll, parsedIncludesHeader, parsedIncludesCpp} {
+		if len(induced[bucket]) > 0 {
+			induced[bucket] = ctx.na.dirList(induced[bucket]...)
+		}
+	}
+
+	return induced
 }
 
 func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, protoImportPbH []IncludeDirective) ParsedIncludeSet {

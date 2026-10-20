@@ -54,6 +54,7 @@ func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[Includ
 		{".bin", emptyParser},
 		{".stg", emptyParser},
 		{".swg", swigParser},
+		{".nlg", NlgIncludeDirectiveParser{}},
 		{".ypp", cParser},
 		{".rli", ragelParser},
 		{".rl5", ragelParser},

@@ -74,6 +74,13 @@ class YaMakeVariablesTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(stderr, expected)
 
+    def test_version_arguments_are_data_and_bind_modver(self):
+        for value in ("NOT_SPECIFIED", "UNDECLARED_VERSION_LABEL"):
+            with self.subTest(value=value):
+                self.assertEqual(self.user_cflags(library(
+                    f"VERSION({value})\nCFLAGS(-DVERSION_VALUE=${{MODVER}})"
+                )), [f"-DVERSION_VALUE={value}"])
+
     def test_expansion_forms(self):
         self.assertEqual(self.user_cflags(library(
             "SET(X foo)\n"

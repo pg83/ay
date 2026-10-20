@@ -62,7 +62,13 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 }
 
 func (scanner *IncludeScanner) walkClosure(vfsPath VFS, ctx *ScanContext, domain ScanDomain) Closure {
-	sc := scanner.getScanCtx(ctx, domain, scanner.parsers.registry.registeredParserFor(vfsPath.relString()))
+	parser := scanner.parsers.registry.registeredParserFor(vfsPath.relString())
+
+	if domain == scanDomainCC && parser == IncludeDirectiveParser(swigParser) {
+		domain = scanDomainSwig
+	}
+
+	sc := scanner.getScanCtx(ctx, domain, parser)
 
 	defer scanner.putScanCtx(sc)
 
