@@ -208,7 +208,7 @@ func parseDirectiveInline(data []byte, hashPos int) (IncludeDirective, bool, int
 				return IncludeDirective{kind: includeSystem, target: opensslUnistdTarget.any()}, true, nextLineStart(data, q)
 			}
 
-			return IncludeDirective{kind: includeQuoted, target: internBytes(data[start:q]).any()}, true, nextLineStart(data, q)
+			return IncludeDirective{kind: includeMacro, target: internBytes(data[start:q]).any()}, true, nextLineStart(data, q)
 		}
 
 		return IncludeDirective{}, false, nextLineStart(data, q)

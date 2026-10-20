@@ -59,6 +59,23 @@ class CudaTest(unittest.TestCase):
         self.assertFalse(any(x.endswith(".ptx") for x in fatbin["cmds"][0]["cmd_args"]))
         lib.node_by_output(graph, "$(B)/mod/sub/k.80.ptx")
 
+    def test_macro_header_alias_uses_system_include_resolution(self):
+        files = self.split_fixture()
+        files["mod/sub/k.h"] = "#include DEVICE_HEADER(tuple)\n"
+        files["build/sysincl/macro.yml"] = (
+            '- source_filter: "^mod/"\n  includes:\n'
+            '    - DEVICE_HEADER(tuple): $U/device/tuple\n'
+        )
+        files["build/sysincl/misc.yml"] = (
+            '- includes:\n    - device/tuple: sdk/tuple\n'
+        )
+        files["sdk/tuple"] = '#include "types.h"\n'
+        files["sdk/types.h"] = ""
+        graph = lib.make(files, "mod")
+        device = lib.node_by_output(graph, "$(B)/mod/sub/k.80.cubin")
+        self.assertIn("$(S)/sdk/tuple", device["inputs"])
+        self.assertIn("$(S)/sdk/types.h", device["inputs"])
+
     def test_device_link_is_part_of_archive_command(self):
         files = self.split_fixture()
         files["mod/ya.make"] = (

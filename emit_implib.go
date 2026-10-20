@@ -89,8 +89,14 @@ func (e *EmitContext) emitImplib(stmt ImplibStmt) {
 		}, ref)
 	})
 
-	for _, out := range outs {
-		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending})
+	for i, out := range outs {
+		var leaves []VFS
+
+		if i > 0 {
+			leaves = na.vfsList(outs[0])
+		}
+
+		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending, ProducerMainOut: outs[0], ClosureLeaves: leaves})
 		e.enqueueSrc(SrcMeta{Source: out.any(), Prio: stmtPrioDefault})
 	}
 }

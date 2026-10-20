@@ -11,6 +11,18 @@ def cmd(node):
 
 
 class RunPython3Test(unittest.TestCase):
+    def test_object_outputs_become_archive_members(self):
+        files = {
+            "lib/ya.make": LIBRARY_HEAD + "RUN_PYTHON3(gen.py OUT first.o second.o OUT_NOAUTO unused.o)\nEND()\n",
+            "lib/gen.py": "",
+        }
+        graph = lib.make(files, "lib")
+        generated = lib.node_by_output(graph, "$(B)/lib/first.o")
+        archive = lib.node_by_output(graph, "$(B)/lib/liblib.a")
+        self.assertEqual(archive["inputs"][:2], ["$(B)/lib/first.o", "$(B)/lib/second.o"])
+        self.assertIn(generated["uid"], archive["deps"])
+        self.assertNotIn("$(B)/lib/unused.o", archive["inputs"])
+
     def test_sections_shape_command_env_and_outputs(self):
         files = {
             "lib/ya.make": (

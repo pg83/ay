@@ -144,7 +144,8 @@ class CIncludeDirectiveParsingTest(unittest.TestCase):
             "kept.h", "bracket[1].h", "continued.h",
         ]
         included, warnings = compile_closure(source, headers)
-        self.assertEqual({"COMPUTED_H", "kept.h"}, included)
+        self.assertEqual({"kept.h"}, included)
+        self.assertIn('unresolved include "COMPUTED_H"', warnings)
         # OPENSSL_UNISTD maps to <unistd.h>; a line continuation yields the
         # computed include "\" exactly as the upstream ragel grammar does.
         self.assertIn('unresolved include <unistd.h>', warnings)
@@ -161,7 +162,7 @@ class CIncludeDirectiveParsingTest(unittest.TestCase):
             "#inc": set(),
             "#": set(),
             "#  /* open": set(),
-            "#include LAST_H": {"LAST_H"},
+            "#include LAST_H": set(),
             '/*\n#include "last.h"': set(),
         }
         for tail, expected in cases.items():

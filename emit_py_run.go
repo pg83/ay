@@ -24,6 +24,12 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 
 	for _, out := range outs {
 		switch {
+		case extIsArchiveMember(out):
+			if !e.producersOnly() {
+				path := copyFileOutputVFS(instance.Path.relString(), out)
+
+				e.collectObj(e.codegen.mustInfo(path).ProducerRef, path, SrcMeta{Prio: stmtPrioDefault, Bucket: bkRunPython})
+			}
 		case isCCSourceExt(out) || isAsmSourceExt(out):
 			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).any(), Prio: stmtPrioDefault, Bucket: bkRunPython})
 		case isCodegenProducingSrc(out):

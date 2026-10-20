@@ -26,6 +26,7 @@ const (
 
 	includeCythonSibling
 	includeTypeScript
+	includeMacro
 )
 
 const (
@@ -545,6 +546,28 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 		return append(out, v)
 	}
 
+	if d.kind == includeMacro {
+		aliases, _, claimed := s.sysincl.lookup(includerAbs.relString(), d.target.str())
+
+		aliases = append([]VFS(nil), aliases...)
+
+		for _, alias := range aliases {
+			rel := alias.relString()
+
+			if len(rel) > 2 && rel[0] == '$' && rel[2] == '/' {
+				rel = rel[3:]
+			}
+
+			out = sc.resolve(out, includerAbs, incDir, IncludeDirective{kind: includeSystem, target: internStr(rel).any()})
+		}
+
+		if len(out) == mark {
+			sc.warnUnresolved(includerAbs, d, claimed)
+		}
+
+		return out
+	}
+
 	out = sc.resolveSearchPath(out, includerAbs, incDir, d)
 
 	searchOut := out[mark:]
@@ -634,7 +657,7 @@ func (sc *ScanCtx) warnUnresolved(includerAbs VFS, d IncludeDirective, sysinclCl
 
 	open, close := `<`, `>`
 
-	if d.kind == includeQuoted {
+	if d.kind == includeQuoted || d.kind == includeMacro {
 		open, close = `"`, `"`
 	}
 
