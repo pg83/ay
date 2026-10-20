@@ -100,13 +100,8 @@ func (e *EmitContext) emitBuildInfoStmt() {
 	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
-		OutputPath:    build(outPrefix, d.createBuildInfoFor.string()),
-		ProducerRef:   biRef,
-		GeneratorRefs: nil,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(
-			IncludeDirective{kind: includeQuoted, target: includeTarget(buildInfoGenPyVFS.rel().any())},
-			IncludeDirective{kind: includeQuoted, target: includeTarget(xargsPyVFS.rel().any())},
-			IncludeDirective{kind: includeQuoted, target: includeTarget(yieldLinePyVFS.rel().any())})},
-		OnUse: pending,
+		OutputPath:  build(outPrefix, d.createBuildInfoFor.string()),
+		ProducerRef: biRef,
+		OnUse:       pending,
 	})
 }

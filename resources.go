@@ -462,7 +462,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 	}
 
 	if ownSbomRef != nil && instance.Platform.BuildRelease {
-		inputs = append(inputs, na.vfsList(*ownSbomPath), na.vfsList(source(sbomGenScriptRel)))
+		inputs = append(inputs, na.vfsList(*ownSbomPath))
 		depRefs = append(depRefs, *ownSbomRef)
 	}
 

@@ -426,12 +426,13 @@ class PrebuiltProgramTest(unittest.TestCase):
             ),
         })
         graph = lib.make(files, "lib")
+        # The copy takes the components, not their generator script, as the
+        # prebuilt copies of the devtools_yamaker reference do.
         tool = lib.node_by_output(graph, "$(B)/build/prebuilt/tools/gen/gen")
         self.assertEqual(tool["inputs"], [
             "$(S)/build/scripts/fs_tools.py",
             "$(B)/build/platform/python/ymake_python3/toolchain.component.sbom",
             "$(B)/build/prebuilt/tools/gen/gen.AGNOSTIC.component.sbom",
-            "$(S)/build/internal/scripts/gen_sbom.py",
         ])
         for output in (
             "$(B)/resources/GEN",

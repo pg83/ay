@@ -532,11 +532,15 @@ class GoPackageGraphTest(unittest.TestCase):
             "$(S)/build/internal/scripts/gen_sbom.py", "--output", errors_sbom,
             "--type", "library", "--path", "vendor/github.com/pkg/errors", "--ver", "v0.9.1", "--lang", "GO",
         ])
+        # The packages take the components, not the script that made them:
+        # no GO node of the devtools_yamaker reference lists gen_sbom.py.
         errors = go_node(graph, "vendor/github.com/pkg/errors")
-        self.assertEqual(errors["inputs"][-3:], ["$(S)/build/internal/scripts/gen_sbom.py", python_sbom, errors_sbom])
+        self.assertEqual(errors["inputs"][-2:], [python_sbom, errors_sbom])
+        self.assertNotIn("$(S)/build/internal/scripts/gen_sbom.py", errors["inputs"])
         self.assertIn(component["uid"], errors["deps"])
         wrap = go_node(graph, "library/go/wrap")
-        self.assertEqual(wrap["inputs"][-3:], ["$(S)/build/internal/scripts/gen_sbom.py", python_sbom, errors_sbom])
+        self.assertEqual(wrap["inputs"][-2:], [python_sbom, errors_sbom])
+        self.assertNotIn("$(S)/build/internal/scripts/gen_sbom.py", wrap["inputs"])
 
         link = lib.node_by_output(graph, "$(B)/cmd/app/app")
         self.assertEqual(len(link["cmds"]), 6)
