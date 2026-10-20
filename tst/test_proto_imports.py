@@ -88,11 +88,10 @@ class ProtoImportsTest(unittest.TestCase):
             "$(S)/e/config.inc", "$(S)/e/opts.inc",
         })
         event_object = lib.node_by_output(graph, "$(B)/e/a.ev.pb.cc.o")
-        for path in (
-            "$(B)/e/b.ev.pb.h", "$(B)/e/c.cfgproto.pb.h", "$(S)/e/opts.inc",
-            "$(S)/e/nested.inc",
-        ):
+        for path in ('$(B)/e/b.ev.pb.h', '$(B)/e/c.cfgproto.pb.h',):
             self.assertIn(path, event_object["inputs"])
+        self.assertNotIn('$(S)/e/opts.inc', event_object['inputs'])
+        self.assertNotIn('$(S)/e/nested.inc', event_object['inputs'])
 
         config = lib.node_by_output(graph, "$(B)/e/c.cfgproto.pb.h")
         self.assertEqual(config["inputs"][-3], "$(S)/e/c.cfgproto")
@@ -109,10 +108,7 @@ class ProtoImportsTest(unittest.TestCase):
         proto_object = lib.node_by_output(graph, "$(B)/e/d.pb.cc.o")
         self.assertEqual(
             {i for i in proto_object["inputs"] if "/e/" in i},
-            {
-                "$(B)/e/d.pb.cc", "$(B)/e/d.pb.h", "$(S)/e/nested.inc",
-                "$(S)/e/opts.inc", "$(S)/e/d.proto",
-            },
+            {'$(B)/e/d.pb.h', '$(B)/e/d.pb.cc'},
         )
 
         archive = lib.node_by_output(graph, "$(B)/e/libe.a")

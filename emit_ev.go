@@ -27,13 +27,10 @@ var evGenCCExtras = []IncludeDirective{
 }
 
 func evWitnessExtrasBound() int {
-	return 3 + len(pbDescriptorImporterDirectives) + len(evExtraProtobufDirectives) + len(evAbseilCleanupDirectives)
+	return len(pbDescriptorImporterDirectives) + len(evExtraProtobufDirectives) + len(evAbseilCleanupDirectives)
 }
 
 func appendEvWitnessExtras(dst []IncludeDirective, evRel STR) []IncludeDirective {
-	dst = append(dst, IncludeDirective{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())})
-	dst = append(dst, IncludeDirective{kind: includeQuoted, target: includeTarget(pbDescriptorVFS.rel().any())})
-	dst = append(dst, IncludeDirective{kind: includeQuoted, target: includeTarget(evRel.any())})
 	dst = append(dst, pbDescriptorImporterDirectives...)
 	dst = append(dst, evExtraProtobufDirectives...)
 	dst = append(dst, evAbseilCleanupDirectives...)
@@ -79,6 +76,5 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 		genRefs:     ctx.na.refList(event2cppLDRef),
 		genHParsed:  evHParsed,
 		genCCExtras: evGenCCExtras,
-		hLeaves:     ctx.na.vfsList(build(evRelPath, ".pb.cc")),
 	})
 }

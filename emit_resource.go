@@ -145,7 +145,6 @@ type ResolvedResource struct {
 	Input           VFS
 	ProducerRef     NodeRef
 	ProducerMainOut VFS
-	SourceInputs    []VFS
 }
 
 func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) ResolvedResource {
@@ -157,7 +156,6 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 			Input:           output,
 			ProducerRef:     info.ProducerRef,
 			ProducerMainOut: info.ProducerMainOut,
-			SourceInputs:    info.SourceInputs,
 		}
 	}
 
@@ -756,17 +754,6 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 			if r.ProducerRef != 0 {
 				cv := e.scanner.walkClosure(r.Input, d.scanCtx, scanDomainCC)
-				auxSources := na.vfs.alloc(len(r.SourceInputs))[:0]
-
-				for _, v := range r.SourceInputs {
-					if objcopySourceLeafKept(v.relString()) {
-						auxSources = append(auxSources, v)
-					}
-				}
-
-				na.vfs.commit(len(auxSources))
-				it.AuxSources = auxSources[:len(auxSources):len(auxSources)]
-
 				auxBuilds := na.vfs.alloc(cv.len() + 1)[:0]
 
 				for _, bucket := range cv.bucketList() {

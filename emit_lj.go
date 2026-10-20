@@ -22,7 +22,7 @@ func (e *EmitContext) emitLuaCompile(stmt LuaCompileStmt) {
 		e.emitLJReserved(src, out, compiler, compilerRef, source(stmt.Runtime), stmt.Name, ref)
 	})
 
-	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, SourceInputs: e.ctx.na.vfsList(src), OnUse: pending})
+	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending})
 
 	if !e.producersOnly() {
 		e.codegen.use(out)
@@ -75,10 +75,10 @@ func (e *EmitContext) emitLuaJit21() {
 		pending := e.pendingEmit(pe)
 
 		e.register(GeneratedFileInfo{
-			OutputPath:   rawOut,
-			ProducerRef:  ref,
-			SourceInputs: ctx.na.vfsList(luaSrc),
-			OnUse:        pending,
+			OutputPath:  rawOut,
+			ProducerRef: ref,
+
+			OnUse: pending,
 		})
 	}
 }

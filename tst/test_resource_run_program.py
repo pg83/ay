@@ -72,15 +72,14 @@ class RunProgramTest(unittest.TestCase):
         })
         self.assertNotIn("stdout", cmd)
         self.assertEqual(node["inputs"], [
-            "$(B)/tools/gen/gen",
-            "$(B)/tools/aux/aux",
-            "$(B)/tools/aux2/aux2",
-            "$(S)/lib/in.txt",
-            "$(S)/lib/abs.txt",
-            "$(S)/shared/root.txt",
-            "$(S)/lib/np.txt",
-            "$(B)/lib/stage.txt",
-            "$(S)/lib/seed.txt",
+            '$(B)/tools/gen/gen',
+            '$(B)/tools/aux/aux',
+            '$(B)/tools/aux2/aux2',
+            '$(S)/lib/in.txt',
+            '$(S)/lib/abs.txt',
+            '$(S)/shared/root.txt',
+            '$(S)/lib/np.txt',
+            '$(B)/lib/stage.txt',
         ])
         tools = {
             uid(graph, "$(B)/tools/gen/gen"),
@@ -114,7 +113,7 @@ class RunProgramTest(unittest.TestCase):
         compile_node = lib.node_by_output(graph, "$(B)/lib/c.cpp.o")
         self.assertEqual(compile_inputs(graph, "$(B)/lib/c.cpp.o"), [
             "$(B)/lib/c.cpp",
-            ["$(S)/lib/dep.h", "$(S)/lib/dep2.h", "$(S)/lib/spec.h"],
+            ["$(S)/lib/dep.h", "$(S)/lib/dep2.h"],
         ])
         self.assertIn(node["uid"], compile_node["deps"])
         archive = lib.node_by_output(graph, "$(B)/lib/liblib.a")
@@ -140,11 +139,7 @@ class RunProgramTest(unittest.TestCase):
         )
 
         stdout_node = lib.node_by_output(graph, "$(B)/lib/so.cpp")
-        self.assertEqual(stdout_node["inputs"], [
-            "$(B)/tools/gen/gen",
-            "$(S)/lib/dep.h",
-            "$(S)/lib/dep2.h",
-        ])
+        self.assertEqual(stdout_node["inputs"], ['$(B)/tools/gen/gen'])
         self.assertEqual(compile_inputs(graph, "$(B)/lib/so.cpp.o"), [
             "$(B)/lib/so.cpp",
             ["$(B)/lib/gen.h", "$(S)/lib/dep.h", "$(S)/lib/dep2.h"],
@@ -152,11 +147,7 @@ class RunProgramTest(unittest.TestCase):
 
         header = lib.node_by_output(graph, "$(B)/lib/hdr.h")
         self.assertEqual(header["outputs"], ["$(B)/lib/hdr.h", "$(B)/lib/notes.txt"])
-        self.assertEqual(lib.bucketed(header["inputs"], 1), lib.bucketed([
-            "$(B)/tools/gen/gen",
-            "$(S)/lib/dep.h",
-            "$(S)/lib/dep2.h",
-        ], 1))
+        self.assertEqual(lib.bucketed(header["inputs"], 1), ['$(B)/tools/gen/gen'])
         user = lib.node_by_output(graph, "$(B)/lib/user.cpp.o")
         self.assertEqual(compile_inputs(graph, "$(B)/lib/user.cpp.o"), [
             "$(S)/lib/user.cpp",
@@ -164,7 +155,7 @@ class RunProgramTest(unittest.TestCase):
         ])
         self.assertEqual(user["deps"], [header["uid"]])
 
-    def test_generated_inputs_bring_their_sources(self):
+    def test_generated_inputs_bring_their_include_closure(self):
         graph = lib.make(library(
             "RUN_PROGRAM(tools/gen IN seed.txt OUT_NOAUTO gen_in.h data.txt"
             " OUTPUT_INCLUDES lib/dep.h)\n"
@@ -177,15 +168,14 @@ class RunProgramTest(unittest.TestCase):
         ), "lib")
         producer = lib.node_by_output(graph, "$(B)/lib/gen_in.h")
         node = lib.node_by_output(graph, "$(B)/lib/a.cpp")
-        self.assertEqual(lib.bucketed(node["inputs"], 4), lib.bucketed([
-            "$(B)/tools/gen/gen",
-            "$(S)/lib/spec.h",
-            "$(B)/lib/gen_in.h",
-            "$(B)/lib/data.txt",
-            "$(S)/lib/seed.txt",
-            "$(S)/lib/dep2.h",
-            "$(S)/lib/dep.h",
-        ], 4))
+        self.assertEqual(lib.bucketed(node["inputs"], 4), [
+            '$(B)/tools/gen/gen',
+            '$(S)/lib/spec.h',
+            '$(B)/lib/gen_in.h',
+            '$(B)/lib/data.txt',
+            '$(S)/lib/dep.h',
+            '$(S)/lib/dep2.h',
+        ])
         self.assertIn(producer["uid"], node["deps"])
         self.assertEqual(compile_inputs(graph, "$(B)/lib/a.cpp.o"), [
             "$(B)/lib/a.cpp",
@@ -193,8 +183,6 @@ class RunProgramTest(unittest.TestCase):
                 "$(B)/lib/gen_in.h",
                 "$(S)/lib/dep.h",
                 "$(S)/lib/dep2.h",
-                "$(S)/lib/seed.txt",
-                "$(S)/lib/spec.h",
             ],
         ])
 
@@ -213,11 +201,10 @@ class RunProgramTest(unittest.TestCase):
         producer = lib.node_by_output(graph, "$(B)/lib/main.bin")
         node = lib.node_by_output(graph, "$(B)/lib/out.bin")
         self.assertEqual(sorted(set(node["inputs"])), [
-            "$(B)/lib/gen.py",
-            "$(B)/lib/main.bin",
-            "$(B)/tools/gen/gen",
-            "$(S)/lib/rule.txt",
-            "$(S)/lib/seed.txt",
+            '$(B)/lib/gen.py',
+            '$(B)/lib/main.bin',
+            '$(B)/tools/gen/gen',
+            '$(S)/lib/rule.txt',
         ])
         self.assertIn(producer["uid"], node["deps"])
 
@@ -244,34 +231,30 @@ class RunProgramTest(unittest.TestCase):
         graph = lib.make(files, "lib")
         pair = lib.node_by_output(graph, "$(B)/lib/out1.txt")
         self.assertEqual(pair["outputs"], ["$(B)/lib/out1.txt", "$(B)/lib/out2.txt"])
-        self.assertEqual(lib.bucketed(pair["inputs"], 3), lib.bucketed([
-            "$(B)/tools/gen/gen",
-            "$(S)/lib/x.txt",
-            "$(B)/lib/x.pb.h",
-            "$(S)/lib/other.proto",
-            "$(S)/lib/seed.txt",
-            "$(S)/lib/api.proto",
-            "$(S)/lib/other.pb.h",
-            "$(S)/lib/api.pb.h",
-            "$(B)/lib/g.h",
-        ], 3))
+        self.assertEqual(lib.bucketed(pair["inputs"], 3), [
+            '$(B)/tools/gen/gen',
+            '$(S)/lib/x.txt',
+            '$(B)/lib/x.pb.h',
+            '$(S)/lib/api.proto',
+            '$(S)/lib/other.proto',
+        ])
         self.assertIn(uid(graph, "$(B)/lib/g.h"), pair["deps"])
 
         proto_node = lib.node_by_output(graph, "$(B)/lib/p.h")
-        self.assertEqual(proto_node["inputs"], [
-            "$(B)/tools/gen/gen",
-            "$(S)/lib/api.proto",
-            "$(S)/lib/other.proto",
-            "$(S)/lib/api.pb.h",
-        ])
+        self.assertEqual(proto_node["inputs"], ['$(B)/tools/gen/gen', '$(S)/lib/api.proto', '$(S)/lib/other.proto'])
         objcopy = lib.node_by_output_prefix(graph, "$(B)/lib/objcopy_")
         self.assertEqual(objcopy["inputs"], [
-            "$(B)/tools/rescompiler/rescompiler",
-            "$(B)/tools/rescompressor/rescompressor",
-            "$(B)/lib/out1.txt",
-            "$(B)/lib/p.h",
-            "$(S)/build/scripts/objcopy.py",
-            "$(B)/lib/g.h",
+            '$(B)/tools/rescompiler/rescompiler',
+            '$(B)/tools/rescompressor/rescompressor',
+            '$(B)/lib/out1.txt',
+            '$(B)/lib/p.h',
+            '$(S)/build/scripts/objcopy.py',
+            '$(B)/lib/g.h',
+            '$(S)/lib/other.proto',
+            '$(S)/lib/api.proto',
+            '$(S)/lib/src_only.h',
+            '$(S)/lib/other.pb.h',
+            '$(S)/lib/api.pb.h',
         ])
 
     def test_module_dirs_render_in_the_module_that_first_uses_the_output(self):

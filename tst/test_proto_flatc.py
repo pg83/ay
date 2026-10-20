@@ -101,8 +101,8 @@ class ProtoFlatcTest(unittest.TestCase):
             "$(B)/f/a.fbs.cpp", "$(B)/f/a.fbs.h", "$(B)/f/b.fbs.h",
         ])
         self.assertEqual(set(compile_a["inputs"][3:]), {
-            "$(S)/f/common.inc.h", WRAPPER, "$(S)/f/a.fbs", "$(S)/f/b.fbs",
-            "$(S)/f/common.inc", "$(S)/f/leaf.fbs", RUNTIME,
+            RUNTIME,
+            '$(S)/f/common.inc.h',
         })
         use = lib.node_by_output(graph, "$(B)/f/use.cpp.o")
         for path in ("$(B)/f/a.fbs.h", "$(B)/f/c.fbs64.h", RUNTIME, RUNTIME64):
@@ -134,7 +134,12 @@ class ProtoFlatcTest(unittest.TestCase):
             "--filename-suffix", ".fbs",
             "-I", "$(B)", "-I", "$(S)", "-o", "$(B)/f/gen.fbs.h", "$(B)/f/gen.fbs",
         ])
-        self.assertEqual(fl["inputs"], [FLATC, WRAPPER, "$(B)/f/gen.fbs"])
+        self.assertEqual(fl["inputs"], [
+            FLATC,
+            WRAPPER,
+            '$(B)/f/gen.fbs',
+            '$(S)/f/schema.in',
+        ])
         copy = lib.node_by_output(graph, "$(B)/f/gen.fbs")
         self.assertIn(copy["uid"], fl["deps"])
         compile_node = lib.node_by_output(graph, "$(B)/f/gen.fbs.cpp.o")

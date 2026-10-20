@@ -73,7 +73,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 		OutputPath:    incVFS,
 		ProducerRef:   ref,
 		GeneratorRefs: e.ctx.na.refList(toolRef),
-		ClosureLeaves: e.ctx.na.vfsList(tmpVFS, srcVFS),
-		OnUse:         pending,
+
+		OnUse: pending,
 	})
 }

@@ -115,21 +115,10 @@ func (e *EmitContext) emitArchive(
 		Resources: instance.Platform.UsesPython3Clang,
 	}
 
-	arRef := emit.emitNode(n)
-
-	var leaves []VFS
-
-	for _, p := range pathPerFile {
-		if info := reg.use(p); info != nil && len(info.SourceInputs) > 0 {
-			leaves = append(leaves, info.SourceInputs...)
-		} else if a.PropagateSourceMembers && info == nil {
-			leaves = append(leaves, p)
-		}
-	}
+	arRef := e.emitNode(n)
 
 	e.register(GeneratedFileInfo{
-		OutputPath:    archiveVFS,
-		ProducerRef:   arRef,
-		ClosureLeaves: leaves,
+		OutputPath:  archiveVFS,
+		ProducerRef: arRef,
 	})
 }

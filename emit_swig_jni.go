@@ -96,15 +96,14 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 	}
 
 	pending := e.pendingEmit(pe)
-	leaves := append(append([]VFS{}, swigClosure...), srcVFS)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     hdr,
 		ProducerRef:    swRef,
 		GeneratorRefs:  na.refList(swigRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: induced},
-		ClosureLeaves:  leaves,
-		OnUse:          pending,
+
+		OnUse: pending,
 	})
 
 	cppParsed := make([]IncludeDirective, 0, 1+len(induced))
@@ -118,8 +117,8 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 		ProducerMainOut: hdr,
 		GeneratorRefs:   na.refList(swigRef),
 		ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: cppParsed},
-		ClosureLeaves:   leaves,
-		OnUse:           pending,
+
+		OnUse: pending,
 	})
 }
 

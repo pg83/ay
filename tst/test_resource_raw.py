@@ -77,11 +77,10 @@ class ResourceRawTest(unittest.TestCase):
         archive = lib.node_by_output(graph, "$(B)/lib/libpy3lib.global.a")
         self.assertIn(output + ".o", archive["inputs"])
         self.assertEqual(objcopy_inputs(graph)[0], [
-            "$(B)/tools/rescompiler/rescompiler",
-            "$(B)/tools/rescompressor/rescompressor",
-            "$(S)/lib/in.txt",
-            "$(B)/lib/gen.py",
-            "$(S)/build/scripts/objcopy.py",
+            '$(B)/tools/rescompiler/rescompiler',
+            '$(B)/tools/rescompressor/rescompressor',
+            '$(B)/lib/gen.py',
+            '$(S)/build/scripts/objcopy.py',
         ])
 
     def test_type_stubs_are_packed_with_objcopy(self):

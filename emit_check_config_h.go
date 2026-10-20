@@ -49,8 +49,8 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 		ProducerRef: chRef,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(
 			IncludeDirective{kind: includeQuoted, target: includeTarget(confVFS.rel().any())})},
-		ClosureLeaves: e.ctx.na.vfsList(buildScriptsCheckConfigHPy),
-		OnUse:         pending,
+
+		OnUse: pending,
 	})
 
 	e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Bucket: bkCheckConfig})

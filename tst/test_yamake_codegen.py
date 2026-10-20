@@ -110,7 +110,7 @@ class YaMakeCodegenStatementsTest(unittest.TestCase):
         self.assertEqual(cmd["stdout"], "$(B)/a/so.txt")
         self.assertEqual({k: cmd["env"][k] for k in ("A", "B")}, {"A": "1", "B": "2"})
         for source in ("in.txt", "np.txt", "dep.txt", "inc.h", "ind.h"):
-            self.assertIn(f"$(S)/a/{source}", node["inputs"])
+            self.assertEqual(f"$(S)/a/{source}" in node["inputs"], source in ("in.txt", "np.txt", "dep.txt"))
         self.assertIn("$(B)/tools/aux/aux", node["inputs"])
         py3 = lib.node_by_output(graph, "$(B)/a/py.cpp")
         self.assertEqual(py3["outputs"], ["$(B)/a/so2.cpp", "$(B)/a/py.cpp"])

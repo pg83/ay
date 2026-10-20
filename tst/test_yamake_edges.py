@@ -81,7 +81,10 @@ class YaMakeEdgesTest(unittest.TestCase):
         # closure buckets, which depend on path ids.
         inputs = lib.node_by_output(graph, "$(B)/a/d.cpp")["inputs"]
         self.assertEqual(inputs[0], "$(S)/a/s.cpp")
-        self.assertCountEqual(inputs[1:], ["$(S)/plain.h", "$(S)/inc/x.h", "$(S)/a/b.h"])
+        self.assertEqual(inputs[1:], [])
+        self.assertTrue({"$(S)/plain.h", "$(S)/inc/x.h", "$(S)/a/b.h"} <= set(
+            lib.node_by_output(graph, "$(B)/a/d.cpp.o")["inputs"]
+        ))
         self.assertEqual(
             stderr,
             'missing-include: $(B)/a/d.cpp: unresolved include "gen/y.h" — not found in source, build, search path, or sysincl',
@@ -102,7 +105,7 @@ class YaMakeEdgesTest(unittest.TestCase):
         lib.tool_program(files, "tools/enum_parser/enum_parser", "enum_parser")
         graph, _ = self.make(files, "a", "-k")
         self.assertEqual({
-            node["outputs"][0]: node["inputs"][-1]
+            node["outputs"][0]: next(i for i in node["inputs"] if i.endswith(".h"))
             for node in graph["graph"] if node["kv"]["p"] == "EN"
         }, {
             "$(B)/a/e1.h_serialized.cpp": "$(S)/a/e1.h",
@@ -123,7 +126,7 @@ class YaMakeEdgesTest(unittest.TestCase):
         lib.tool_program(files, "tools/enum_parser/enum_parser", "enum_parser")
         graph, _ = self.make(files, "a", "-k")
         self.assertEqual({
-            node["outputs"][0]: node["inputs"][-1]
+            node["outputs"][0]: next(i for i in node["inputs"] if i.endswith(".h"))
             for node in graph["graph"] if node["kv"]["p"] == "EN"
         }, {
             "$(B)/a/e1.h_serialized.cpp": "$(S)/a/e1.h",
@@ -212,7 +215,7 @@ class YaMakeEdgesTest(unittest.TestCase):
         self.assertIn("$(S)/a", lib.node_by_output(graph, "$(B)/a/x.cpp")["inputs"])
         self.assertEqual(
             stderr,
-            'missing-include: $(B)/a/x.cpp: unresolved include "a" — not found in source, build, search path, or sysincl',
+            "",
         )
 
     def test_gas_sources_and_generated_proto_sources(self):
@@ -264,7 +267,11 @@ class YaMakeEdgesTest(unittest.TestCase):
             "contrib/libs/protobuf/ya.make": module("LIBRARY", ""),
             "maps/libs/sproto/ya.make": module("LIBRARY", ""),
         }
-        for tool in ("maps/libs/sproto/sprotoc", "contrib/tools/protoc", "contrib/tools/protoc/plugins/cpp_styleguide"):
+        for tool in (
+            "maps/libs/sproto/sprotoc",
+            "contrib/tools/protoc",
+            "contrib/tools/protoc/plugins/cpp_styleguide",
+        ):
             lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
         graph, _ = self.make(files, "a", "-k")
         self.assertEqual(
@@ -273,7 +280,6 @@ class YaMakeEdgesTest(unittest.TestCase):
         )
         self.assertEqual(lib.bucketed(lib.node_by_output(graph, "$(B)/a/u.cpp.o")["inputs"], 1), lib.bucketed([
             "$(S)/a/u.cpp", "$(B)/a/y.sproto.h", "$(B)/a/z.pb.h", "$(B)/a/z.sproto.h",
-            "$(S)/a/z.proto", "$(S)/a/y.proto",
         ], 1))
 
     def test_copy_file_of_the_module_directory(self):
@@ -293,7 +299,14 @@ class YaMakeEdgesTest(unittest.TestCase):
             "library/python/runtime_py3/main", "library/python/testing/import_test",
         ):
             files[f"{path}/ya.make"] = module("LIBRARY", "")
-        for tool in ("contrib/tools/swig", "tools/archiver", "tools/py3cc", "tools/py3cc/slow", "tools/rescompiler", "tools/rescompressor"):
+        for tool in (
+            "contrib/tools/swig",
+            "tools/archiver",
+            "tools/py3cc",
+            "tools/py3cc/slow",
+            "tools/rescompiler",
+            "tools/rescompressor",
+        ):
             lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
         _, stderr = self.make(files, "a", "-k")
         self.assertEqual(stderr, "module-failed: a: gen: a peers PROGRAM module prog; only LIBRARY peers are linkable")

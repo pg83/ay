@@ -89,19 +89,20 @@ class ProtoGztprotoTest(unittest.TestCase):
         self.assertEqual(pb["cmds"][0]["cwd"], "$(B)")
         self.assertIn("g/a.proto", pb["cmds"][0]["cmd_args"])
         self.assertEqual(pb["inputs"][:5], [
-            "$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide",
-            PROTOC, WRAPPER, "$(B)/g/a.proto", "$(S)/g/a.gztproto",
+            '$(B)/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide',
+            PROTOC,
+            WRAPPER,
+            '$(B)/g/a.proto',
+            '$(B)/g/b.proto',
         ])
         self.assertIn("$(B)/g/b.proto", pb["inputs"])
         self.assertIn(converter["uid"], pb["deps"])
 
         compile_node = lib.node_by_output(graph, "$(B)/g/a.pb.cc.o")
-        for path in (
-            "$(B)/g/a.pb.cc", "$(B)/g/a.pb.h", "$(B)/g/b.pb.h",
-            "$(B)/kernel/gazetteer/proto/base.pb.h",
-            "$(S)/g/a.gztproto", "$(S)/g/b.gztproto",
-        ):
+        for path in ('$(B)/g/a.pb.cc', '$(B)/g/a.pb.h', '$(B)/g/b.pb.h', '$(B)/kernel/gazetteer/proto/base.pb.h',):
             self.assertIn(path, compile_node["inputs"])
+        self.assertNotIn('$(S)/g/a.gztproto', compile_node['inputs'])
+        self.assertNotIn('$(S)/g/b.gztproto', compile_node['inputs'])
 
         archive = lib.node_by_output(graph, "$(B)/g/libg.a")
         self.assertEqual(
@@ -156,13 +157,15 @@ class ProtoGztprotoTest(unittest.TestCase):
             "-I$(S)", "$(S)/g/a.gztproto", "$(B)/g/a.proto",
         ])
         self.assertEqual(converter["inputs"], [
-            CONVERTER, "$(S)/g/a.gztproto", "$(B)/g/b.proto", "$(S)/g/b.gztproto",
+            CONVERTER,
+            '$(S)/g/a.gztproto',
+            '$(B)/g/b.proto',
         ])
         producer = lib.node_by_output(graph, "$(B)/g/b.proto")
         self.assertIn(producer["uid"], converter["deps"])
 
         pb = lib.node_by_output(graph, "$(B)/g/a.pb.h")
-        self.assertIn("$(S)/g/a.gztproto", pb["inputs"])
+        self.assertNotIn("$(S)/g/a.gztproto", pb["inputs"])
         self.assertIn("$(B)/g/b.proto", pb["inputs"])
         compile_node = lib.node_by_output(graph, "$(B)/g/a.pb.cc.o")
         self.assertIn("$(B)/g/b.pb.h", compile_node["inputs"])

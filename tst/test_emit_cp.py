@@ -37,7 +37,7 @@ class EmitCopyFileTest(unittest.TestCase):
                 "COPY_FILE(src.h dst.h OUTPUT_INCLUDES gen.h)\n"
                 "SRCS(a.cpp)\nEND()\n"
             ),
-            "lib/src.h": '#include "gen.h"\n',
+            "lib/src.h": "",
             "lib/a.cpp": '#include "dst.h"\nint a(){return 0;}\n',
         }
         lib.tool_program(files, "tools/gen", "gen")

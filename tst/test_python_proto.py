@@ -149,7 +149,7 @@ class PyProtoTest(unittest.TestCase):
             "$(B)/proto/x__intpy3___pb2_grpc.py.sd3w.yapyc3",
         )
         self.assertIn(x_out, grpc_pyc["inputs"])
-        self.assertIn("$(S)/proto/sub/y.proto", grpc_pyc["inputs"])
+        self.assertNotIn("$(S)/proto/sub/y.proto", grpc_pyc["inputs"])
 
         packs = [
             node for node in graph["graph"]
@@ -209,7 +209,7 @@ class PyProtoTest(unittest.TestCase):
             "resfs/src/resfs/file/py/q/x_pb2.py.yapyc3=lib/x__intpy3___pb2.py.zsw2.yapyc3",
         ])
         aux = lib.node_by_output(graph, packs[0]["outputs"][0] + ".o")
-        self.assertIn("$(S)/lib/x.proto", aux["inputs"])
+        self.assertNotIn("$(S)/lib/x.proto", aux["inputs"])
         archive = lib.node_by_output(graph, "$(B)/lib/libpy3lib.global.a")
         self.assertIn(aux["outputs"][0], archive["inputs"])
 
@@ -264,9 +264,12 @@ class PyProtoTest(unittest.TestCase):
         })
         graph = lib.make(files, "app")
         self.assertEqual(lib.node_by_output(graph, "$(B)/proto/user__intpy3___pb2.py")["inputs"], [
-            PROTOC, MYPY, "$(S)/build/scripts/gen_py_protos.py",
-            "$(S)/proto/user.proto", "$(S)/proto/user.proto",
-            "$(B)/proto/gen.proto", "$(S)/proto/gen.py",
+            PROTOC,
+            MYPY,
+            WRAPPER,
+            '$(S)/proto/user.proto',
+            '$(S)/proto/user.proto',
+            '$(B)/proto/gen.proto',
         ])
 
     def test_generated_proto_made_by_the_protoc_wrapper(self):
@@ -280,8 +283,10 @@ class PyProtoTest(unittest.TestCase):
         })
         graph = lib.make(files, "app")
         self.assertEqual(lib.node_by_output(graph, "$(B)/proto/gen__intpy3___pb2.py")["inputs"], [
-            PROTOC, MYPY, "$(S)/build/scripts/gen_py_protos.py",
-            "$(S)/build/scripts/gen_py_protos.py", "$(B)/proto/gen.proto",
+            PROTOC,
+            MYPY,
+            WRAPPER,
+            '$(B)/proto/gen.proto',
         ])
 
     def test_generated_proto_runs_protoc_in_build_root(self):
@@ -301,7 +306,7 @@ class PyProtoTest(unittest.TestCase):
         pb = lib.node_by_output(graph, "$(B)/proto/gen__intpy3___pb2.py")
         self.assertEqual(pb["cmds"][0]["cwd"], "$(B)")
         self.assertIn("$(B)/proto/gen.proto", pb["inputs"])
-        self.assertIn("$(S)/proto/gen.py", pb["inputs"])
+        self.assertNotIn("$(S)/proto/gen.py", pb["inputs"])
         self.assertNotIn("$(S)/proto/gen.proto", pb["inputs"])
         self.assertIn(producer["uid"], pb["deps"])
 

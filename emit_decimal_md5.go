@@ -32,15 +32,6 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 	}
 
 	svRef := ctx.emit.reserve()
-	sourceInputs := na.vfs.alloc(len(optVFSs) + 1)
-	sn := copy(sourceInputs, optVFSs)
-
-	sourceInputs[sn] = decimalMD5PyVFS
-	sn++
-	na.vfs.commit(sn)
-
-	sourceInputs = sourceInputs[:sn:sn]
-
 	optArena := na.vfsList(optVFSs...)
 	python3 := d.tc.Python3
 
@@ -81,11 +72,9 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
-		OutputPath:    outVFS,
-		ProducerRef:   svRef,
-		SourceInputs:  sourceInputs,
-		ClosureLeaves: sourceInputs,
-		OnUse:         pending,
+		OutputPath:  outVFS,
+		ProducerRef: svRef,
+		OnUse:       pending,
 	})
 
 	return svRef

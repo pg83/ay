@@ -268,12 +268,16 @@ class CythonTest(unittest.TestCase):
             "-I$(S)/contrib/tools/cython/Cython/Includes",
             "$(S)/lib/wrap.pyx", "-o", "$(B)/lib/wrap.pyx.cpp",
         ])
-        self.assertIn("$(S)/lib/exported.pyx", wrap["inputs"])
-        self.assertIn("$(S)/lib/shared.pxd", wrap["inputs"])
+        self.assertNotIn("$(S)/lib/exported.pyx", wrap["inputs"])
+        self.assertNotIn("$(S)/lib/shared.pxd", wrap["inputs"])
         cwrap = lib.node_by_output(graph, "$(B)/lib/cwrap.pyx.c")
         self.assertNotIn("--cplus", args(cwrap))
 
-        wrap_cc = args(lib.node_by_output(graph, "$(B)/lib/wrap.pyx.cpp.o"))
+        compiled_wrap = lib.node_by_output(graph, "$(B)/lib/wrap.pyx.cpp.o")
+        self.assertNotIn("$(S)/lib/wrap.pyx", compiled_wrap["inputs"])
+        self.assertNotIn("$(S)/contrib/tools/cython/cython.py", compiled_wrap["inputs"])
+        self.assertIn("$(B)/lib/exported.h", compiled_wrap["inputs"])
+        wrap_cc = args(compiled_wrap)
         python_include = wrap_cc.index("-I$(S)/contrib/libs/python/Include")
         numpy_include = wrap_cc.index("-I$(S)/contrib/python/numpy/include/numpy/core/include")
         self.assertLess(numpy_include, python_include)
@@ -282,8 +286,8 @@ class CythonTest(unittest.TestCase):
         self.assertEqual(exported["outputs"], ["$(B)/lib/exported.cpp", "$(B)/lib/exported.h"])
         user = lib.node_by_output(graph, "$(B)/lib/user.cpp.o")
         self.assertIn("$(B)/lib/exported.h", user["inputs"])
-        self.assertIn("$(S)/lib/exported.pyx", user["inputs"])
-        self.assertIn("$(S)/lib/shared.pxd", user["inputs"])
+        self.assertNotIn("$(S)/lib/exported.pyx", user["inputs"])
+        self.assertNotIn("$(S)/lib/shared.pxd", user["inputs"])
         self.assertIn(exported["uid"], user["deps"])
 
     def test_buildwith_cython_without_cflags(self):

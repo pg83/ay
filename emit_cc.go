@@ -282,11 +282,12 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 			CmdArgs: cmdArgs,
 			Env:     env,
 		}),
-		Env:       env,
-		Inputs:    allInputs,
-		Outputs:   na.vfsList(outVFS),
-		KV:        &ccKV,
-		Resources: instance.Platform.CCUsesResources,
+		Env:          env,
+		Inputs:       allInputs,
+		InputClosure: in.IncludeView,
+		Outputs:      na.vfsList(outVFS),
+		KV:           &ccKV,
+		Resources:    instance.Platform.CCUsesResources,
 	}
 
 	if reserved != 0 {

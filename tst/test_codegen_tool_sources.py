@@ -44,9 +44,7 @@ class ToolDrivenSourcesTest(unittest.TestCase):
         ])
         self.assertEqual(html["foreign_deps"], {"tool": [tool_uid("$(B)/tools/html2cpp/html2cpp")]})
         html_compile = lib.node_by_output(graph, "$(B)/mod/page.asp.cpp.o")
-        self.assertEqual(sorted(html_compile["inputs"]), sorted([
-            "$(B)/mod/page.asp.cpp", "$(S)/mod/inc.h", "$(S)/mod/page.asp",
-        ]))
+        self.assertEqual(sorted(html_compile["inputs"]), ['$(B)/mod/page.asp.cpp', '$(S)/mod/inc.h'])
         self.assertEqual(html_compile["deps"], [html["uid"]])
 
         scheme = lib.node_by_output(graph, "$(B)/mod/scheme.sc.h")
@@ -87,12 +85,16 @@ class ToolDrivenSourcesTest(unittest.TestCase):
 
         use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
         for path in (
-            "$(B)/mod/scheme.sc.h", "$(S)/mod/scheme.sc",
-            "$(S)/library/cpp/domscheme/runtime.h",
-            "$(B)/mod/calc", "$(B)/mod/calc.sfdl.tmp", "$(S)/mod/calc.sfdl",
-            "$(B)/mod/model.fml.inc", "$(S)/mod/model.fml",
+            '$(B)/mod/scheme.sc.h',
+            '$(S)/library/cpp/domscheme/runtime.h',
+            '$(B)/mod/calc',
+            '$(B)/mod/model.fml.inc',
         ):
             self.assertIn(path, use["inputs"])
+        self.assertNotIn('$(S)/mod/scheme.sc', use['inputs'])
+        self.assertNotIn('$(B)/mod/calc.sfdl.tmp', use['inputs'])
+        self.assertNotIn('$(S)/mod/calc.sfdl', use['inputs'])
+        self.assertNotIn('$(S)/mod/model.fml', use['inputs'])
         self.assertEqual(sorted(use["deps"]), sorted([scheme["uid"], calc["uid"], fml["uid"]]))
 
 

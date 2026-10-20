@@ -154,12 +154,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		var infos []*GeneratedFileInfo
 
 		if stmt.Header {
-			headerInduced := make([]VFS, 0, len(emittedInputs)-1)
-
-			headerInduced = append(headerInduced, emittedInputs[0])
-			headerInduced = append(headerInduced, emittedInputs[2:]...)
-			headerInduced = dedup(headerInduced)
-
+			headerInduced := dedup(emittedInputs)
 			headerParsed := ctx.na.dirs.alloc(len(headerInduced))[:0]
 
 			for _, v := range headerInduced {
@@ -192,18 +187,6 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			emittedInputs:     emittedInputs,
 			infos:             infos,
 		})
-	}
-
-	for i := range plans {
-		p := &plans[i]
-
-		p.sourceInputs = e.scanner.cythonPyxLangClosure(p.srcVFS, d.scanCtx)
-
-		for _, info := range p.infos {
-			for _, input := range p.sourceInputs {
-				e.codegen.addClosureLeafNoSubsume(info.OutputPath, input)
-			}
-		}
 	}
 
 	for i := range plans {
@@ -246,14 +229,25 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		if pxdOK {
 			pxdInputs = e.scanner.cythonPyxLangClosure(pxdVFS, scanCtx)
-			emitsIncludes = dedup(emitsIncludes, []VFS{pxdVFS})
 		}
 
-		parsed := na.dirs.alloc(len(emitsIncludes))[:0]
+		var induced []IncludeDirective
+
+		for _, input := range p.sourceInputs {
+			induced = append(induced, ctx.parsers.sourceParsedBuckets(input, nil).bucket(parsedIncludesCpp)...)
+		}
+
+		for _, input := range pxdInputs {
+			induced = append(induced, ctx.parsers.sourceParsedBuckets(input, nil).bucket(parsedIncludesCpp)...)
+		}
+
+		parsed := na.dirs.alloc(len(emitsIncludes) + len(induced))[:0]
 
 		for _, include := range emitsIncludes {
 			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(include.rel().any())})
 		}
+
+		parsed = append(parsed, induced...)
 
 		na.dirs.commit(len(parsed))
 		parsed = parsed[:len(parsed):len(parsed)]
@@ -366,14 +360,6 @@ func (scanner *IncludeScanner) cythonPyxLangClosure(src VFS, cfg *ScanContext) [
 
 				continue
 			}
-
-			if ch.isBuild() {
-				for _, leaf := range scanner.codegen.closureLeaves(ch) {
-					if isCythonLangFile(leaf.relString()) {
-						visit(leaf)
-					}
-				}
-			}
 		}
 	}
 
@@ -388,7 +374,7 @@ func isCythonLangFile(rel string) bool {
 
 func cythonCppInducedInputs(src VFS, cMode bool) (toolInputs, emittedInputs []VFS) {
 	toolInputs = []VFS{contribToolsCythonCythonPy}
-	emittedInputs = []VFS{contribToolsCythonCythonPy, src}
+	emittedInputs = nil
 
 	for _, v := range py3CythonOutputIncludes {
 		if v.relString() == "contrib/tools/cython/generated_cpp_headers.h" && cMode {

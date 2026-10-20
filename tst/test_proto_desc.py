@@ -163,17 +163,16 @@ class ProtoDescTest(unittest.TestCase):
             f"mid/m.proto.{MID_HASH}.rawproto", f"mid/n.proto.{MID_HASH}.rawproto",
         ])
         self.assertEqual(mid_merge["inputs"][:6], [
-            "$(B)/mid/m.proto.desc", "$(B)/mid/n.proto.desc",
-            f"$(B)/mid/m.proto.{MID_HASH}.rawproto",
-            f"$(B)/mid/n.proto.{MID_HASH}.rawproto",
-            DESC_WRAPPER, "$(S)/mid/m.proto",
+            '$(B)/mid/m.proto.desc',
+            '$(B)/mid/n.proto.desc',
+            '$(B)/mid/m.proto.22384709d743fe3c6fb0a4b35b2e10a6.rawproto',
+            '$(B)/mid/n.proto.22384709d743fe3c6fb0a4b35b2e10a6.rawproto',
+            MERGE_FILES,
+            COLLECT_RAWPROTO,
         ])
-        self.assertEqual(set(mid_merge["inputs"][6:8]), {
-            "$(S)/leaf/leaf.proto",
-            "$(S)/contrib/libs/protobuf/src/google/protobuf/descriptor.proto",
-        })
+        self.assertEqual(set(mid_merge["inputs"][6:8]), set())
         self.assertEqual(
-            mid_merge["inputs"][8:], ["$(S)/mid/n.proto", MERGE_FILES, COLLECT_RAWPROTO]
+            mid_merge["inputs"][8:], []
         )
         self.assertFalse(
             [n for n in graph["graph"] if any("events" in o for o in n["outputs"])]

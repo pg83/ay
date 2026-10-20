@@ -84,7 +84,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 	r6Out := ragel6OutVFS(instance, srcRel)
 	r6Parsed := e.scanner.parsedBucketForInput(rl6SourceVFS, parsedIncludesCpp, nil)
 
-	if instance.Platform.AddInputs && len(r6Parsed) > 0 && r6Parsed[0].target == includeTarget(rl6SourceVFS.rel().any()) {
+	if len(r6Parsed) > 0 && r6Parsed[0].target == includeTarget(rl6SourceVFS.rel().any()) {
 		r6Parsed = r6Parsed[1:]
 	}
 
@@ -101,15 +101,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 	ragel6Flags := ctx.na.anyList(d.cc.Ragel6Flags...)
 
 	pe := func() {
-		var rl6Closure []VFS
-
-		if instance.Platform.AddInputs {
-			rl6Closure = scanner.walkClosure(rl6SourceVFS, scanCtx, scanDomainCC).collect(ctx.na, func(VFS) bool { return true })
-		} else {
-			rl6Closure = scanner.walkClosure(r6Out, scanCtx, scanDomainCC).collect(ctx.na, func(v VFS) bool {
-				return v.isSource() && !extIsEnumSerialized(v.relString())
-			})
-		}
+		rl6Closure := scanner.walkClosure(rl6SourceVFS, scanCtx, scanDomainCC).collect(ctx.na, func(VFS) bool { return true })
 
 		e.emitR6(srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, r6Ref)
 	}

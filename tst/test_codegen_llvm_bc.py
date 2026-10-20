@@ -130,8 +130,9 @@ class LlvmBcTest(unittest.TestCase):
         self.assertEqual(optimize["inputs"][:2], [
             "$(B)/mod/foo_merged.s1.bc", "$(S)/build/scripts/llvm_opt_wrapper.py",
         ])
-        for source in ("$(S)/mod/a.cpp", "$(S)/mod/a.h", "$(S)/mod/b.c"):
-            self.assertIn(source, optimize["inputs"])
+        self.assertNotIn('$(S)/mod/a.cpp', optimize['inputs'])
+        self.assertNotIn('$(S)/mod/a.h', optimize['inputs'])
+        self.assertNotIn('$(S)/mod/b.c', optimize['inputs'])
         self.assertIn(merge["uid"], optimize["deps"])
 
         objcopy = lib.node_by_output_prefix(graph, "$(B)/mod/objcopy_")

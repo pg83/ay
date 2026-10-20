@@ -15,6 +15,10 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 	block := a.alloc(directiveBlockHint)
 	k := 0
 
+	var cppScratch [8]IncludeDirective
+
+	cpp := cppScratch[:0]
+
 	add := func(d IncludeDirective) {
 		k = addDirective(block, k, d)
 	}
@@ -42,7 +46,7 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 			if rest, ok = cutParserKeyword(rest, "extern"); ok {
 				if rest, ok = cutParserKeyword(rest, "from"); ok {
 					if target, kind, ok := parseDelimitedIncludeTarget(rest); ok {
-						add(IncludeDirective{kind: kind, target: includeTarget(internBytes(target).any())})
+						cpp = append(cpp, IncludeDirective{kind: kind, target: includeTarget(internBytes(target).any())})
 					}
 				}
 			}
@@ -97,11 +101,21 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 
 	a.commit(k)
 
-	if k == 0 {
-		return ParsedIncludeSet{}
+	var set ParsedIncludeSet
+
+	if k > 0 {
+		set[parsedIncludesLocal] = block[:k:k]
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
+	if len(cpp) > 0 {
+		stored := a.alloc(len(cpp))
+
+		copy(stored, cpp)
+		a.commit(len(cpp))
+		set[parsedIncludesCpp] = stored[:len(cpp):len(cpp)]
+	}
+
+	return set
 }
 
 func isCythonModuleByte(b byte) bool {

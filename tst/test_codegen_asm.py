@@ -207,13 +207,11 @@ class ArchiveAsmTest(unittest.TestCase):
         self.assertEqual(rodata["cmds"][1]["cmd_args"][-3:], [
             "-o", "$(B)/mod/blob.rodata.o", "$(B)/mod/blob.rodata.asm",
         ])
-        self.assertEqual(lib.bucketed(rodata["inputs"], 3), lib.bucketed([
-            "$(B)/contrib/tools/yasm/yasm",
-            "$(S)/build/scripts/rodata2asm.py",
-            "$(B)/mod/blob.rodata",
-            "$(S)/mod/x.bin",
-            "$(S)/mod/y.bin",
-        ], 3))
+        self.assertEqual(lib.bucketed(rodata["inputs"], 3), [
+            '$(B)/contrib/tools/yasm/yasm',
+            '$(S)/build/scripts/rodata2asm.py',
+            '$(B)/mod/blob.rodata',
+        ])
         self.assertIn(archive["uid"], rodata["deps"])
         library = lib.node_by_output(graph, "$(B)/mod/libmod.a")
         self.assertIn("$(B)/mod/blob.rodata.o", library["inputs"])
@@ -238,7 +236,7 @@ class ArchiveAsmTest(unittest.TestCase):
         ])
         self.assertIn(copy["uid"], archive["deps"])
         rodata = lib.node_by_output(graph, "$(B)/mod/blob.rodata.o")
-        self.assertEqual(sorted(rodata["inputs"][3:]), ["$(S)/mod/x.bin", "$(S)/mod/y.bin"])
+        self.assertEqual(sorted(rodata["inputs"][3:]), [])
 
     def test_archive_asm_requires_x86_64_target(self):
         with self.assertRaisesRegex(

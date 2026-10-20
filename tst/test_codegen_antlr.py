@@ -60,9 +60,9 @@ class Antlr4CppTest(unittest.TestCase):
                 f"$(B)/mod/{base}.cpp", f"$(B)/mod/{base}.g4.cpp",
             ])
             self.assertEqual(copy["deps"], [java["uid"]])
-            for path in ("$(B)/mod/CalcLexer.cpp", f"$(B)/mod/{base}.cpp",
-                         "$(S)/mod/Calc.g4", "$(S)/mod/extra.h", RUNTIME_H):
+            for path in (f"$(B)/mod/{base}.cpp", "$(S)/mod/extra.h", RUNTIME_H):
                 self.assertIn(path, copy["inputs"])
+            self.assertNotIn("$(S)/mod/Calc.g4", copy["inputs"])
             compile_node = lib.node_by_output(graph, f"$(B)/mod/{base}.g4.cpp.o")
             self.assertIn("-Wno-unused-variable", compile_node["cmds"][0]["cmd_args"])
             self.assertIn(f"$(B)/mod/{base}.h", compile_node["inputs"])
@@ -97,7 +97,7 @@ class Antlr4CppTest(unittest.TestCase):
             "$(S)/build/scripts/stdout2stderr.py", ANTLR4_JAR,
         ])
         parser_copy = lib.node_by_output(graph, "$(B)/mod/CalcParser.g4.cpp")
-        self.assertIn("$(S)/mod/CalcLexer.g4", parser_copy["inputs"])
+        self.assertNotIn("$(S)/mod/CalcLexer.g4", parser_copy["inputs"])
         lib.node_by_output(graph, "$(B)/mod/CalcLexer.g4.cpp.o")
 
     def test_distbuild_copies_emit_the_generator(self):
@@ -147,25 +147,28 @@ class RunAntlrTest(unittest.TestCase):
         ])
         self.assertEqual(java["cmds"][0]["cwd"], "$(B)/mod")
         self.assertEqual(java["inputs"], [
-            "$(S)/mod/Calc.g", "$(S)/mod/tpl.g", "$(B)/mod/Gen.g",
-            "$(S)/build/scripts/stdout2stderr.py", ANTLR3_JAR,
+            '$(S)/mod/Calc.g',
+            '$(B)/mod/Gen.g',
+            '$(S)/build/scripts/stdout2stderr.py',
+            ANTLR3_JAR,
         ])
         self.assertIn(copy["uid"], java["deps"])
 
         lexer = lib.node_by_output(graph, "$(B)/mod/CalcLexer.cpp.o")
-        self.assertEqual(lexer["inputs"][:2], [
-            "$(B)/mod/CalcLexer.cpp", "$(B)/mod/CalcParser.cpp",
-        ])
-        for path in ("$(S)/mod/extra.h", "$(S)/mod/Calc.g", "$(S)/mod/tpl.g", ANTLR3_JAR):
+        self.assertIn("$(B)/mod/CalcLexer.cpp", lexer["inputs"])
+        for path in ('$(S)/mod/extra.h', '$(S)/mod/Calc.g',):
             self.assertIn(path, lexer["inputs"])
+        self.assertNotIn('$(S)/mod/tpl.g', lexer['inputs'])
+        self.assertNotIn(ANTLR3_JAR, lexer['inputs'])
         parser = lib.node_by_output(graph, "$(B)/mod/CalcParser.cpp.o")
         self.assertNotIn("$(B)/mod/CalcLexer.cpp", parser["inputs"])
         lib.node_by_output(graph, "$(B)/mod/Calc.cpp.o")
 
         use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
-        for path in ("$(B)/mod/CalcLexer.h", "$(B)/mod/CalcParser.cpp",
-                     "$(B)/mod/Calc.h", "$(B)/mod/Calc.cpp"):
+        for path in ('$(B)/mod/CalcLexer.h', '$(B)/mod/Calc.h',):
             self.assertIn(path, use["inputs"])
+        self.assertNotIn('$(B)/mod/CalcParser.cpp', use['inputs'])
+        self.assertNotIn('$(B)/mod/Calc.cpp', use['inputs'])
         self.assertIn(java["uid"], use["deps"])
 
     def test_run_without_cwd_and_empty_output_include(self):
@@ -178,10 +181,7 @@ class RunAntlrTest(unittest.TestCase):
         self.assertNotIn("cwd", java["cmds"][0])
         self.assertEqual(java["cmds"][0]["cmd_args"][1:], JAVA_HEAD + [ANTLR3_JAR, "$(S)/mod/Calc.g"])
         use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
-        self.assertEqual(sorted(use["inputs"]), sorted([
-            "$(S)/mod/use.cpp", "$(B)/mod/x.h", "$(S)/mod/Calc.g", "$(S)/mod/extra.h",
-            ANTLR3_JAR, "$(S)/build/scripts/stdout2stderr.py",
-        ]))
+        self.assertEqual(sorted(use["inputs"]), ['$(B)/mod/x.h', '$(S)/mod/extra.h', '$(S)/mod/use.cpp'])
 
     def test_compiled_output_outside_module_is_rejected(self):
         with self.assertRaisesRegex(

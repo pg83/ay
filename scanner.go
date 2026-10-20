@@ -366,6 +366,8 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 		fireGenerated(info)
 	}
 
+	out = append(out, info.ClosureLeaves...)
+
 	if len(info.GeneratorRefs) == 0 {
 		return out
 	}
@@ -378,6 +380,10 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 
 	for _, gref := range info.GeneratorRefs {
 		tool, _ := s.moduleByRef.get(gref)
+
+		if tool == nil {
+			continue
+		}
 
 		for _, entry := range tool.InducedDeps.bucket(bucket) {
 			out = sc.resolve(out, vfsPath, incDir, entry)
@@ -452,7 +458,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 			continue
 		}
 
-		if sc.tjc.closure.has(ch) && !s.codegen.isLeafEver(ch) {
+		if sc.tjc.closure.has(ch) {
 			continue
 		}
 
@@ -463,16 +469,6 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		for _, bucket := range cl.bucketList() {
 			s.buckets.spliceBucket(&sc.tjc.closure, bucket)
 		}
-	}
-
-	leafStart := len(s.buckets.buildScratch())
-
-	if abs.isBuild() {
-		s.buckets.spliceLeaves(&sc.tjc.closure, s.codegen.closureLeaves(abs))
-	}
-
-	for i := leafStart; i < len(s.buckets.buildScratch()); i++ {
-		s.buckets.spliceLeaves(&sc.tjc.closure, s.codegen.closureLeaves(s.buckets.buildScratch()[i]))
 	}
 
 	s.putClosure(abs, s.buckets.storeScratch(abs))
@@ -500,11 +496,7 @@ func (sc *ScanCtx) closureOf(abs VFS) Closure {
 }
 
 func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
-	if !sc.tjc.closure.has(ch) {
-		return false
-	}
-
-	return !sc.scanner.codegen.isLeafEver(ch)
+	return sc.tjc.closure.has(ch)
 }
 
 func (sc *ScanCtx) forEachChild(v VFS, fn func(VFS)) {
@@ -519,13 +511,6 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
 	s := sc.scanner
 	block := s.closureScratch
 	k := fill(block)
-
-	for i := 0; i < k; i++ {
-		if block[i].isBuild() {
-			k = sc.tjc.closure.spliceNew(s.codegen.closureLeaves(block[i]), block, k)
-		}
-	}
-
 	cl := s.buckets.storeBuckets(block[0], block[1:k])
 
 	for _, u := range members {

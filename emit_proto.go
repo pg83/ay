@@ -12,7 +12,6 @@ var (
 	pbRuntimeBaseVFS               = source(strings.TrimSuffix(pbRuntimeBase, "/"))
 	pbKV                           = KV{P: pkPB, PC: pcYellow}
 	cppProtoSpec                   = &ProtoSpec{kv: &pbKV, modulePlugins: true}
-	pbHEmitsIncludesExtrasChunk    = concat([]IncludeDirective{{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())}}, pbDescriptorImporterDirectives)
 )
 
 var yaffBaseRuntimeDirectives = quotedDirectives([]VFS{
@@ -140,10 +139,6 @@ func protoInducedPbH(pm *IncludeParserManager, local, dst []IncludeDirective) []
 	return dst
 }
 
-func pbHEmitsIncludesExtras() []IncludeDirective {
-	return pbHEmitsIncludesExtrasChunk
-}
-
 func protoOutputRel(outputRoot, rel string) string {
 	if pathIsClean(outputRoot) && pathIsClean(rel) {
 		return internV(outputRoot, "/", rel).string()
@@ -178,8 +173,6 @@ type ProtoSpec struct {
 	genRefs       []NodeRef
 	genHParsed    []IncludeDirective
 	genCCExtras   []IncludeDirective
-	hLeaves       []VFS
-	ccLeaves      []VFS
 }
 
 type ProtoPBConfig struct {
@@ -219,14 +212,13 @@ type protoPBCommon struct {
 }
 
 type protoPBPending struct {
-	common                    *protoPBCommon
-	imports                   Closure
-	protoRel                  STR
-	protoSrc                  VFS
-	protoProducerSourceInputs []VFS
-	outputs                   []VFS
-	spec                      *ProtoSpec
-	pbRef                     NodeRef
+	common   *protoPBCommon
+	imports  Closure
+	protoRel STR
+	protoSrc VFS
+	outputs  []VFS
+	spec     *ProtoSpec
+	pbRef    NodeRef
 }
 
 func (p *protoPBPending) emitPending() {
@@ -240,7 +232,7 @@ func (p *protoPBPending) emitPending() {
 		s.protoRel, s.protoSrc, c.cppStyleguideLDRef, c.protocLDRef,
 		c.grpcCppLDRef, c.cppStyleguideBinary, c.protocBinary, c.grpcCppBinary,
 		c.grpc, c.extraPlugins, s.imports,
-		s.protoProducerSourceInputs, c.blocks, s.spec, s.outputs, s.pbRef,
+		c.blocks, s.spec, s.outputs, s.pbRef,
 	)
 }
 
@@ -363,13 +355,11 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	scanCtx := d.scanCtx
 	generatedProto := false
 
-	var protoProducerSourceInputs []VFS
 	var genProtoParsed []IncludeDirective
 
 	if info := e.codegen.use(buildProto); info != nil {
 		generatedProto = true
 		protoVFS = buildProto
-		protoProducerSourceInputs = info.SourceInputs
 		genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
 	}
 
@@ -380,8 +370,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	*pending = protoPBPending{
 		common: pe.pendingCommon, imports: transitiveImports,
 		protoRel: protoRel, protoSrc: protoVFS,
-		protoProducerSourceInputs: protoProducerSourceInputs,
-		spec:                      spec, pbRef: pbRef,
+		spec: spec, pbRef: pbRef,
 	}
 
 	pbPE := e.pendingEmitter(pending)
@@ -429,7 +418,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			ProducerRef:    pbRef,
 			GeneratorRefs:  spec.genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: spec.genHParsed},
-			ClosureLeaves:  spec.hLeaves,
 			OnUse:          pbPE,
 		})
 
@@ -445,7 +433,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			ProducerRef:    pbRef,
 			GeneratorRefs:  spec.genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: ccParsed},
-			ClosureLeaves:  spec.ccLeaves,
 			OnUse:          pbPE,
 		})
 
@@ -462,32 +449,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		e.dirScratch = grown
 	}
 
-	extras := pbHEmitsIncludesExtras()
-	addInputs := e.instance.Platform.AddInputs
-
-	if addInputs {
-		extras = pbDescriptorImporterDirectives
-	}
-
-	pbHCompile := na.dirs.alloc(len(pbHImports) + len(extras) + transitiveImports.len())[:0]
-
-	pbHCompile = append(pbHCompile, pbHImports...)
-	pbHCompile = append(pbHCompile, extras...)
-
-	for _, bucket := range transitiveImports.bucketList() {
-		if bucket[0].isBuild() || addInputs {
-			continue
-		}
-
-		for _, ti := range bucket {
-			pbHCompile = append(pbHCompile, IncludeDirective{kind: includeQuoted, target: includeTarget(ti.rel().any())})
-		}
-	}
-
-	na.dirs.commit(len(pbHCompile))
-
-	pbHCompile = pbHCompile[:len(pbHCompile):len(pbHCompile)]
-
+	pbHCompile := na.dirList(append(append([]IncludeDirective{}, pbHImports...), pbDescriptorImporterDirectives...)...)
 	pbCCRefCount := len(pe.pbGenRefs)
 
 	for _, plugin := range pe.extraPlugins {
@@ -504,14 +466,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	pbGenRefs := pe.pbGenRefs
 	pbCCRefs := pe.pbGenRefs[:pbCCRefCount:pbCCRefCount]
-	pbHLeaves := na.vfsList(protoRel.source())
-
-	switch {
-	case addInputs:
-		pbHLeaves = nil
-	case generatedProto:
-		pbHLeaves = protoProducerSourceInputs
-	}
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     pbH,
@@ -519,7 +473,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbGenRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesCpp: pbHCompile},
-		ClosureLeaves:  pbHLeaves,
 		OnUse:          pbPE,
 	})
 
@@ -586,18 +539,13 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		})
 	}
 
-	pbCCParsed := pbHCompile
-
-	if addInputs {
-		pbCCParsed = na.dirList(append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(pbH.rel().any())}}, pbHCompile...)...)
-	}
+	pbCCParsed := na.dirList(append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(pbH.rel().any())}}, pbHCompile...)...)
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     pbCC,
 		ProducerRef:    pbRef,
 		GeneratorRefs:  pbCCRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbCCParsed},
-		ClosureLeaves:  na.vfsList(pbH),
 		OnUse:          pbPE,
 	})
 
@@ -805,7 +753,6 @@ func (e *EmitContext) emitPB(
 	grpc bool,
 	extraPlugins []ResolvedCPPProtoPlugin,
 	transitiveProtoImports Closure,
-	producerSourceInputs []VFS,
 	blocks PbArgBlocks,
 	spec *ProtoSpec,
 	outputs []VFS,
@@ -897,7 +844,6 @@ func (e *EmitContext) emitPB(
 		pbInputChunks = append(pbInputChunks, inputs[toolEnd:])
 	}
 
-	pbInputChunks = append(pbInputChunks, producerSourceInputs)
 	pbInputChunks = append(pbInputChunks, transitiveBuckets...)
 	na.inputs.commit(len(pbInputChunks))
 

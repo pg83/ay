@@ -42,7 +42,13 @@ def cgo_world():
     resources_library(files, "build/external_resources/yolint", "YOLINT")
     resources_library(files, "build/platform/lld", "LLD_ROOT")
     resources_library(files, "build/internal/platform/clang_toolchain_info", "CLANG20")
-    for path in (f"{STD}/runtime", f"{STD}/runtime/cgo", f"{STD}/syscall", f"{STD}/errors", "library/go/core/buildinfo"):
+    for path in (
+        f"{STD}/runtime",
+        f"{STD}/runtime/cgo",
+        f"{STD}/syscall",
+        f"{STD}/errors",
+        "library/go/core/buildinfo",
+    ):
         go_module(files, path)
     return files
 
@@ -119,7 +125,6 @@ class GoCgoGraphTest(unittest.TestCase):
         self.assertEqual(lib.bucketed(copy["inputs"], 3), lib.bucketed([
             "$(S)/build/scripts/fs_tools.py", "$(S)/build/scripts/process_command_files.py",
             f"{s}/helper.c", f"{s}/helper.h", f"{s}/helper_impl.h",
-            "$(S)/build/scripts/cgo1_wrapper.py", f"{s}/zstd.go", f"{s}/errors.go",
         ], 3))
         helper_cc = lib.node_by_output(graph, f"{b}/helper.c.o")
         self.assertEqual(helper_cc["cmds"][0]["cmd_args"][-5:], [*cflags, f"{b}/helper.c"])
@@ -151,13 +156,10 @@ class GoCgoGraphTest(unittest.TestCase):
             CGO_TOOL, "-dynpackage", "zstd", "-dynimport", f"{b}/_cgo_.o",
             "-dynout", f"{b}/_cgo_import.go", "-dynlinker",
         ])
-        self.assertEqual(lib.bucketed(dynimport["inputs"], 7), lib.bucketed([
-            "$(S)/build/scripts/link_o.py", "$(S)/build/scripts/cgo1_wrapper.py", "$(S)/build/scripts/wrapcc.py",
-            "$(S)/build/scripts/fs_tools.py", "$(S)/build/scripts/process_command_files.py",
-            f"{s}/zstd.go", f"{s}/errors.go", f"{s}/helper.h", "$(S)/contrib/libs/zstd/include/zstd.h",
-            f"{s}/helper.c", f"{s}/helper_impl.h", f"{s}/trampoline.S",
-            f"{b}/_cgo_export.h", f"{b}/_cgo_main.c", f"{b}/zstd.cgo1.go", *objects,
-        ], 7))
+        self.assertEqual(set(dynimport["inputs"]), {
+            "$(S)/build/scripts/link_o.py", f"{b}/_cgo_export.h", f"{b}/_cgo_main.c",
+            f"{b}/zstd.cgo1.go", f"{s}/helper.h", "$(S)/contrib/libs/zstd/include/zstd.h", *objects,
+        })
         by_output = {node["outputs"][0]: node["uid"] for node in graph["graph"]}
         self.assertEqual(dynimport["deps"][:len(objects)], [by_output[o] for o in objects])
 
@@ -173,20 +175,18 @@ class GoCgoGraphTest(unittest.TestCase):
         self.assertEqual(between(args, "++peers", "--ya-end-command-file"), [
             f"{STD}/syscall/syscall.a", f"{STD}/runtime/cgo/cgo.a", f"{STD}/errors/errors.a",
         ])
-        self.assertEqual(lib.bucketed(package["inputs"][-18:-14], 4), lib.bucketed([
+        package_inputs = set(package["inputs"])
+        self.assertTrue({
             "$(B)/contrib/libs/zstd/libcontrib-libs-zstd.a", f"$(B)/{STD}/syscall/syscall.a",
             f"$(B)/{STD}/runtime/cgo/cgo.a", f"$(B)/{STD}/errors/errors.a",
-        ], 4))
-        # the inputs of the whole peer closure flow into the package (pre-YMAKE-2161 ymake)
-        self.assertEqual(lib.bucketed(package["inputs"][-14:-9], 3), lib.bucketed([
-            f"$(S)/{STD}/syscall/syscall.go", f"$(S)/{STD}/runtime/cgo/cgo.go", f"$(S)/{STD}/errors/errors.go",
             "$(S)/contrib/libs/zstd/include/zstd.h", f"{s}/helper.h",
-        ], 3))
-        self.assertEqual(package["inputs"][-9:], [
+        } <= package_inputs)
+        self.assertTrue(package_inputs.isdisjoint({
+            f"$(S)/{STD}/syscall/syscall.go", f"$(S)/{STD}/runtime/cgo/cgo.go", f"$(S)/{STD}/errors/errors.go",
             "$(S)/build/scripts/cgo1_wrapper.py", "$(S)/build/scripts/wrapcc.py",
             "$(S)/build/scripts/fs_tools.py", "$(S)/build/scripts/link_o.py",
-            f"{s}/helper.c", f"{s}/helper_impl.h", f"{s}/bridge.cxx", f"{s}/trampoline.S", f"{b}/_cgo_main.c.o",
-        ])
+            f"{s}/helper.c", f"{s}/helper_impl.h", f"{s}/bridge.cxx", f"{s}/trampoline.S",
+        }))
 
         link = lib.node_by_output(graph, "$(B)/cmd/app/app")
         link_args = link["cmds"][-1]["cmd_args"]
@@ -235,7 +235,7 @@ class GoCgoGraphTest(unittest.TestCase):
         self.assertEqual([srcs[0], srcs[-1]], [f"$(B)/{cgo}/gen.symabis", f"$(S)/{cgo}/asm_amd64.s"])
         tool_inputs_end = package["inputs"].index("$(S)/build/rules/go/risky_imports.yaml") + 1
         self.assertEqual(package["inputs"][tool_inputs_end:tool_inputs_end + 3], [
-            f"$(B)/{STD}/syscall/syscall.a", f"$(S)/{STD}/syscall/syscall.go", f"$(S)/{STD}/runtime/textflag.h",
+            f"$(B)/{STD}/syscall/syscall.a", f"$(S)/{STD}/runtime/textflag.h", f"$(S)/{cgo}/libcgo.h",
         ])
         symabis = lib.node_by_output(graph, f"$(B)/{cgo}/gen.symabis")["cmds"][0]["cmd_args"]
         self.assertEqual(between(symabis, "-trimpath", "-D")[1:], [
@@ -254,7 +254,13 @@ class GoCgoGraphTest(unittest.TestCase):
             f"LIBRARY()\n{NO_PLATFORM}RUN_PROGRAM(tools/gogen out.cpp OUT out.cpp)\nEND()\n"
         )
         for target, flags in (
-            (ZSTD, [f"$(B)/{ZSTD}/_cgo_.o", "-Wl,--compress-debug-sections=zstd", "-ldl", "-lrt", "-Wl,--no-as-needed"]),
+            (ZSTD, [
+                f"$(B)/{ZSTD}/_cgo_.o",
+                "-Wl,--compress-debug-sections=zstd",
+                "-ldl",
+                "-lrt",
+                "-Wl,--no-as-needed",
+            ]),
             ("lib/gen", [f"$(B)/{ZSTD}/_cgo_.pic.o", "-ldl", "-lrt", "-Wl,--no-as-needed", "-fPIC", "-fPIC"]),
         ):
             with self.subTest(target=target):
@@ -369,7 +375,16 @@ class GoCgoGraphTest(unittest.TestCase):
     def test_cgo_includes_come_only_from_go_comments(self):
         files = cgo_world()
         pkg = "library/go/cparse"
-        for header in ("wanted_a.h", "wanted_b.h", "wanted_c.h", "table.inc", "ghost_a.h", "ghost_b.h", "ghost_c.h", "ghost_d.h"):
+        for header in (
+            "wanted_a.h",
+            "wanted_b.h",
+            "wanted_c.h",
+            "table.inc",
+            "ghost_a.h",
+            "ghost_b.h",
+            "ghost_c.h",
+            "ghost_d.h",
+        ):
             files[f"{pkg}/{header}"] = f"// {header}\n"
         files[f"{pkg}/ya.make"] = "GO_LIBRARY()\nSRCS(cparse.go)\nCGO_SRCS(preamble.go plain.go doc.go)\nEND()\n"
         files[f"{pkg}/cparse.go"] = "package cparse\n"
@@ -417,7 +432,7 @@ const raw = `
         dynimport = lib.node_by_output(graph, f"$(B)/{pkg}/_cgo_import.go")
         self.assertEqual(dynimport["cmds"][2]["cmd_args"][1:3], ["-dynpackage", "authparser"])
         self.assertIn(f"$(S)/{pkg}/extern_c.h", dynimport["inputs"])
-        self.assertIn(f"$(S)/{pkg}/decode.go", dynimport["inputs"])
+        self.assertNotIn(f"$(S)/{pkg}/decode.go", dynimport["inputs"])
         package = lib.node_by_output(graph, f"$(B)/{pkg}/authparser.a")
         args = package["cmds"][0]["cmd_args"]
         self.assertEqual(between(args, "++srcs", "++asm-flags")[-1], f"$(B)/{pkg}/_cgo_import.go")

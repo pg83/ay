@@ -52,15 +52,13 @@ class Ragel6Test(unittest.TestCase):
         ])
         self.assertEqual(scan["inputs"][0], RAGEL6)
         self.assertEqual(sorted(scan["inputs"][1:]), [
-            "$(S)/mod/commented.rl",
-            "$(S)/mod/common.rl",
-            "$(S)/mod/common2.rl",
-            "$(S)/mod/hdr.h",
-            "$(S)/mod/scan.rl6",
+            '$(S)/mod/common.rl',
+            '$(S)/mod/common2.rl',
+            '$(S)/mod/scan.rl6',
         ])
         scan_compile = lib.node_by_output(graph, "$(B)/mod/scan.rl6.cpp.o")
         self.assertIn("-Wno-implicit-fallthrough", scan_compile["cmds"][0]["cmd_args"])
-        self.assertIn("$(S)/mod/common2.rl", scan_compile["inputs"])
+        self.assertNotIn("$(S)/mod/common2.rl", scan_compile["inputs"])
 
         nested = lib.node_by_output(graph, "$(B)/mod/_/sub/other.rl6.cpp")
         self.assertEqual(nested["inputs"], [RAGEL6, "$(S)/mod/sub/other.rl6"])
@@ -112,7 +110,11 @@ class Ragel6Test(unittest.TestCase):
         lib.tool_program(files, "contrib/tools/ragel6", "ragel6")
         graph = lib.make(files, "mod", "--dist")
         scan = lib.node_by_output(graph, "$(B)/mod/scan.rl6.cpp")
-        self.assertEqual(sorted(scan["inputs"][1:]), ["$(S)/mod/common.rl", "$(S)/mod/common2.rl", "$(S)/mod/scan.rl6"])
+        self.assertEqual(sorted(scan["inputs"][1:]), [
+            "$(S)/mod/common.rl",
+            "$(S)/mod/common2.rl",
+            "$(S)/mod/scan.rl6",
+        ])
         compiled = lib.node_by_output(graph, "$(B)/mod/scan.rl6.cpp.o")
         self.assertIn("$(S)/mod/hdr.h", compiled["inputs"])
         self.assertNotIn("$(S)/mod/scan.rl6", compiled["inputs"])

@@ -105,22 +105,9 @@ func (e *EmitContext) emitArchiveAsmNode(
 
 	rodataRef := e.emitNode(n)
 
-	var leaves []VFS
-
-	for _, p := range pathPerFile {
-		if info := reg.use(p); info != nil && len(info.SourceInputs) > 0 {
-			leaves = append(leaves, info.SourceInputs...)
-		} else if info == nil {
-			leaves = append(leaves, p)
-		}
-	}
-
-	leaves = dedupInPlace(leaves)
-
 	e.register(GeneratedFileInfo{
-		OutputPath:    rodataVFS,
-		ProducerRef:   rodataRef,
-		ClosureLeaves: leaves,
+		OutputPath:  rodataVFS,
+		ProducerRef: rodataRef,
 	})
 
 	return rodataRef

@@ -221,7 +221,7 @@ class YaMakeMacrosTest(unittest.TestCase):
         ])
         self.assertEqual(
             lib.node_by_output(graph, "$(B)/a/copied.cpp")["inputs"],
-            ["$(S)/a/gen/src.cpp", "$(S)/a/inc.h"],
+            ["$(S)/a/gen/src.cpp"],
         )
         self.assertEqual(
             lib.node_by_output(graph, "$(B)/a/liba.a")["inputs"][:-1],

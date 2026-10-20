@@ -34,7 +34,6 @@ type Platform struct {
 	picVariant            *Platform
 	picOnce               sync.Once
 	picMake               func() *Platform
-	AddInputs             bool
 	OS                    OS
 	ISA                   ISA
 	Target                PlatformID
@@ -403,7 +402,6 @@ func (p *Platform) pic() *Platform {
 
 	p.picOnce.Do(func() {
 		p.picVariant = p.picMake()
-		p.picVariant.AddInputs = p.AddInputs
 	})
 
 	return p.picVariant

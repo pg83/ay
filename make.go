@@ -140,11 +140,6 @@ func cmdMake(g GlobalFlags, args []string) int {
 	caches := newGenCaches(fs)
 	rootYaConf := readYaConf(fs, "ya.conf")
 	hostP, targetP := makePlatforms(fs, mf, caches, rootYaConf)
-
-	for _, p := range []*Platform{hostP, targetP} {
-		p.AddInputs = mf.dist && mf.sandboxing
-	}
-
 	tests := newTestOpts(mf, rootYaConf)
 	events := newEventQueue()
 
@@ -574,8 +569,7 @@ ya compatibility flags:
   --test-size <size>            Emit only test suites of these sizes
                                 (repeatable).
   --dist                        Configure for distbuild: ymake_conf.py runs
-                                without -l; with --sandboxing a node's inputs
-                                are its include closure (ymake --add-inputs).
+                                without -l.
   --ignore-nodes-exit-code      Accepted, not modeled.
   --warning-mode <modes>        Accepted, not modeled.
   --cache-tests                 Test outputs are tarred (no dir outputs).

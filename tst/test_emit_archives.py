@@ -4,7 +4,7 @@ import lib
 
 
 class EmitArchivesTest(unittest.TestCase):
-    def test_plain_archive_propagates_source_members(self):
+    def test_plain_archive_keeps_members_on_producer(self):
         files = {
             "mod/ya.make": (
                 "LIBRARY()\n"
@@ -21,7 +21,8 @@ class EmitArchivesTest(unittest.TestCase):
         lib.tool_program(files, "tools/archiver", "archiver")
         graph = lib.make(files, "mod")
         use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
-        self.assertIn("$(S)/mod/payload.lst", use["inputs"])
+        self.assertIn("$(B)/mod/data.inc", use["inputs"])
+        self.assertNotIn("$(S)/mod/payload.lst", use["inputs"])
 
     def test_archive_by_keys_top_level(self):
         files = {
@@ -58,8 +59,8 @@ class EmitArchivesTest(unittest.TestCase):
 
         use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
         self.assertIn("-I$(B)/mod", use["cmds"][0]["cmd_args"])
-        self.assertIn("$(S)/mod/a.txt", use["inputs"])
-        self.assertIn("$(S)/mod/sub/b.txt", use["inputs"])
+        self.assertNotIn("$(S)/mod/a.txt", use["inputs"])
+        self.assertNotIn("$(S)/mod/sub/b.txt", use["inputs"])
 
 
 if __name__ == "__main__":

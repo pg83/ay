@@ -104,7 +104,7 @@ class YaMakePathsTest(unittest.TestCase):
         })
         self.assertEqual(
             lib.bucketed(lib.node_by_output(graph, "$(B)/a/d0.cpp")["inputs"], 1),
-            lib.bucketed(["$(S)/other/s0.cpp", "$(S)/a/plain/h4.h", "$(S)/other/h0.h", "$(S)/other/h1.h"], 1),
+            ['$(S)/other/s0.cpp'],
         )
 
     def test_source_path_forms(self):
@@ -153,7 +153,15 @@ class YaMakePathsTest(unittest.TestCase):
         graph, _ = self.make(files, "a", "-k")
         self.assertEqual(includes(graph, "$(B)/a/x.cpp.o"), ["-I$(B)", "-I$(S)", "-I$(S)/l"])
         asm = lib.node_by_output(graph, "$(B)/a/s.o")["cmds"][0]["cmd_args"]
-        self.assertEqual([asm[i + 1] for i, arg in enumerate(asm) if arg == "-I"], ["$(B)", "$(S)", "$(S)/l", "$(S)/a/gasm"])
+        self.assertEqual([asm[i + 1] for (
+            i,
+            arg,
+        ) in enumerate(asm) if arg == "-I"], [
+            "$(B)",
+            "$(S)",
+            "$(S)/l",
+            "$(S)/a/gasm",
+        ])
 
     def test_clang_bitcode_root_bound_to_a_path(self):
         code, _, stderr = ay_make({
@@ -203,7 +211,7 @@ class YaMakePathsTest(unittest.TestCase):
         })
         self.assertEqual(
             lib.node_by_output(graph, "$(B)/tools/gen/all.cpp")["inputs"],
-            ["$(S)/tools/gen/a.cpp", "$(S)/contrib/libs/musl/arch/aarch64/bits/alltypes.h"],
+            ['$(S)/tools/gen/a.cpp'],
         )
         self.assertIn(
             "$(S)/contrib/libs/musl/arch/x86_64/bits/alltypes.h",

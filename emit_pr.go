@@ -123,7 +123,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		mainOutputVFS = *stdoutVFS
 	}
 
-	prSourceInputs := prCollectSourceInputs(ctx.na, e.codegen, inVFSs)
 	protoImportPbH := prProtoImportPbH(ctx.parsers, inVFSs, e.dirScratch[:0])
 
 	e.dirScratch = protoImportPbH
@@ -142,9 +141,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 	snap := &prSnap{
 		ctx:       ctx,
-		instance:  instance,
 		scanner:   e.scanner,
-		codegen:   e.codegen,
 		scanCtx:   e.d.scanCtx,
 		inVFSs:    ctx.na.vfsList(inVFSs...),
 		inSources: ctx.na.vfsList(inSources...),
@@ -153,12 +150,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 	pe := func() {
 		inputClosure := prInputClosure(snap, stmt)
-
-		if len(inputClosure.sources) > 0 {
-			for out := range registeredPROut {
-				snap.codegen.addSourceInputs(ctx.na, out, inputClosure.sources)
-			}
-		}
 
 		e.emitPR(RunProgramNodeSpec{
 			stmt:          stmt,
@@ -177,98 +168,53 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 	pending := e.pendingEmit(pe)
 
-	registerOutput := func(out VFS, parsed ParsedIncludeSet, ridesHeaderViaParsed bool) {
+	registerOutput := func(out VFS, parsed ParsedIncludeSet) {
 		if registeredPROut[out] {
 			return
 		}
 
 		registeredPROut[out] = true
 
-		leaves := prSourceInputs.generated
-
-		if out != mainOutputVFS && !ridesHeaderViaParsed {
-			lv := ctx.na.vfs.alloc(1 + len(prSourceInputs.generated))
-
-			lv[0] = mainOutputVFS
-
-			ln := 1 + copy(lv[1:], prSourceInputs.generated)
-
-			ctx.na.vfs.commit(ln)
-			leaves = lv[:ln:ln]
-		}
-
 		e.register(GeneratedFileInfo{
 			OutputPath:     out,
 			ProducerRef:    prRef,
 			GeneratorRefs:  e.ctx.na.refList(res.LDRef),
 			ParsedIncludes: parsed,
-			SourceInputs:   prSourceInputs.all,
-			ClosureLeaves:  leaves,
 			OnUse:          pending,
 		})
 	}
 
-	parsedFor := func(f ANY, out VFS, auto bool) (ParsedIncludeSet, bool) {
-		parsed := prOutputParsedIncludes(ctx.na, f, stmt, inVFSs, protoImportPbH)
+	parsedFor := func(f ANY, out VFS, auto bool) ParsedIncludeSet {
+		parsed := prOutputParsedIncludes(ctx.na, f, stmt, protoImportPbH)
 
 		if auto && isCCSourceExt(f.string()) {
 			if inc, ok := mainHeaderInclude(out.relString()); ok {
-				return appendParsedDirectives(parsed, parsedIncludesCpp, inc), true
+				return appendParsedDirectives(parsed, parsedIncludesCpp, inc)
 			}
 		}
 
-		return parsed, false
+		return parsed
 	}
 
 	for _, f := range stmt.OUTFiles {
 		out := outVFSByToken[f]
-		parsed, rides := parsedFor(f, out, true)
+		parsed := parsedFor(f, out, true)
 
-		registerOutput(out, parsed, rides)
+		registerOutput(out, parsed)
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
 		out := outVFSByToken[f]
-		parsed, rides := parsedFor(f, out, false)
+		parsed := parsedFor(f, out, false)
 
-		registerOutput(out, parsed, rides)
+		registerOutput(out, parsed)
 	}
 
 	if stmt.StdoutFile != nil {
-		parsed, rides := parsedFor(*stmt.StdoutFile, *stdoutVFS, !stmt.StdoutNoAuto)
+		parsed := parsedFor(*stmt.StdoutFile, *stdoutVFS, !stmt.StdoutNoAuto)
 
-		registerOutput(*stdoutVFS, parsed, rides)
+		registerOutput(*stdoutVFS, parsed)
 	}
-}
-
-type PrSourceInputSet struct {
-	all       []VFS
-	generated []VFS
-}
-
-func prCollectSourceInputs(na *NodeArenas, reg *CodegenRegistry, inVFSs []VFS) PrSourceInputSet {
-	var direct []VFS
-	var generated []VFS
-
-	for _, v := range inVFSs {
-		if v.isSource() {
-			direct = append(direct, v)
-
-			continue
-		}
-
-		if info := reg.use(v); info != nil {
-			generated = append(generated, info.SourceInputs...)
-		}
-	}
-
-	all := na.vfs.alloc(len(direct) + len(generated))
-	an := copy(all, direct)
-
-	an += copy(all[an:], generated)
-	na.vfs.commit(an)
-
-	return PrSourceInputSet{all: all[:an:an], generated: generated}
 }
 
 func prProtoImportPbH(pm *IncludeParserManager, inVFSs []VFS, dst []IncludeDirective) []IncludeDirective {
@@ -295,9 +241,7 @@ func pbhBasenameSet(vs []VFS) map[string]bool {
 
 type prSnap struct {
 	ctx       *GenCtx
-	instance  ModuleInstance
 	scanner   *IncludeScanner
-	codegen   *CodegenRegistry
 	scanCtx   *ScanContext
 	inVFSs    []VFS
 	inSources []VFS
@@ -310,206 +254,28 @@ type PrInputClosure struct {
 }
 
 func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
-	ctx, instance := s.ctx, s.instance
-	outputCount := len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles)
-
-	if stmt.StdoutFile != nil {
-		outputCount++
-	}
-
-	outputIncludesRideProducer := outputCount == 1
-	hasAutoCCSourceOut := stmt.StdoutFile != nil && isCCSourceExt(stmt.StdoutFile.string())
-	generatesHeader := stmt.StdoutFile != nil && isHeaderSource(stmt.StdoutFile.string())
-
-	for _, f := range stmt.OUTFiles {
-		hasAutoCCSourceOut = hasAutoCCSourceOut || isCCSourceExt(f.string())
-		generatesHeader = generatesHeader || isHeaderSource(f.string())
-	}
-
-	mainRel := prMainOutputRel(stmt)
-	fullSourceClosure := len(stmt.INFiles) == 0 && (!hasAutoCCSourceOut || isCCSourceExt(mainRel))
-
-	if len(stmt.INFiles) == 0 && !fullSourceClosure {
-		return PrInputClosure{}
-	}
-
-	hasProtoIN := false
-	hasParsedIN := false
-
-	for _, f := range stmt.INFiles {
-		hasProtoIN = hasProtoIN || extIsProto(f.string())
-		hasParsedIN = hasParsedIN || ctx.parsers.registry.scansIncludes(f.string())
-	}
-
-	sourceScratch := vfsScratches.get()
-	buildScratch := vfsScratches.get()
-
-	defer func() {
-		vfsScratches.put(sourceScratch)
-		vfsScratches.put(buildScratch)
-	}()
-
-	sources := sourceScratch
-	builds := buildScratch
-
-	appendInput := func(v VFS) {
-		if v.isBuild() {
-			builds = append(builds, v)
-		} else {
-			sources = append(sources, v)
-		}
-	}
-
-	ridesMainHeader := func(ccRel string) bool {
-		return isHeaderSource(mainRel) && relStem(ccRel) == relStem(mainRel)
-	}
-
-	if len(stmt.INFiles) > 0 && (hasParsedIN || !generatesHeader) {
-		scanGeneratedCC := func(rel string) {
-			if !isCCSourceExt(rel) || ridesMainHeader(rel) {
-				return
-			}
-
-			cv := s.scanner.walkClosure(copyFileOutputVFS(instance.Path.relString(), rel), s.scanCtx, scanDomainCC)
-
-			for _, bucket := range cv.bucketList() {
-				if bucket[0].isBuild() {
-					builds = append(builds, bucket...)
-				} else {
-					sources = append(sources, bucket...)
-				}
-			}
-		}
-
-		for _, f := range stmt.OUTFiles {
-			scanGeneratedCC(f.string())
-		}
-
-		if stmt.StdoutFile != nil {
-			scanGeneratedCC(stmt.StdoutFile.string())
-		}
-	}
+	var sources, builds []VFS
 
 	for i, f := range stmt.INFiles {
-		rel := f.string()
-
-		if ctx.parsers.registry.scansIncludes(rel) {
-			cv := s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC)
-
-			appendInput(cv.self)
-
-			for _, bucket := range cv.bucketList() {
-				if bucket[0].isBuild() {
-					builds = append(builds, bucket...)
-				} else {
-					sources = append(sources, bucket...)
-				}
-			}
-
+		if s.inVFSs[i].isBuild() || !s.ctx.parsers.registry.scansIncludes(f.string()) {
 			continue
 		}
 
-		if info := s.codegen.use(s.inVFSs[i]); info != nil {
-			sources = append(sources, info.SourceInputs...)
-		}
-	}
+		cv := s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC)
 
-	if fullSourceClosure {
-		for _, f := range stmt.OUTFiles {
-			if !isHeaderSource(f.string()) {
-				continue
+		cv.each(func(v VFS) {
+			if v.isBuild() {
+				builds = append(builds, v)
+			} else {
+				sources = append(sources, v)
 			}
-
-			cv := s.scanner.walkClosure(copyFileOutputVFS(instance.Path.relString(), f.string()), s.scanCtx, scanDomainCC)
-
-			for _, bucket := range cv.bucketList() {
-				if bucket[0].isSource() {
-					sources = append(sources, bucket...)
-				}
-			}
-		}
+		})
 	}
 
-	keep := func(v VFS) bool {
-		if fullSourceClosure || outputIncludesRideProducer {
-			return v.isSource()
-		}
-
-		return extIsProto(v.relString())
-	}
-
-	pbhSeen := pbhBasenameSet(sources)
-
-	for name := range pbhBasenameSet(builds) {
-		pbhSeen[name] = true
-	}
-
-	for _, oi := range stmt.OutputIncludes {
-		target := oi.relOrSelf()
-
-		var sub Closure
-
-		selfIsInput := false
-
-		switch info := s.codegen.lookup(target.build()); {
-		case info != nil:
-			sub = s.scanner.walkClosure(info.OutputPath, s.scanCtx, scanDomainCC)
-		case (fullSourceClosure || outputIncludesRideProducer) && ctx.fs.isFile(srcRootRel, target.string()):
-			sub = s.scanner.walkClosure(target.source(), s.scanCtx, scanDomainCC)
-			selfIsInput = true
-		default:
-			continue
-		}
-
-		process := func(v VFS) {
-			if !keep(v) {
-				return
-			}
-
-			appendInput(v)
-
-			if extIsPbH(v.relString()) {
-				pbhSeen[filepath.Base(v.relString())] = true
-			}
-
-			if !fullSourceClosure && !hasProtoIN && v.isSource() && extIsProto(v.relString()) {
-				sibling := strings.TrimSuffix(v.relString(), ".proto") + ".pb.h"
-				sibDir, sibBase := splitDirName(sibling)
-
-				if ctx.fs.isFile(dirKey(sibDir), sibBase) && !pbhSeen[sibBase] {
-					sources = append(sources, source(sibling))
-					pbhSeen[sibBase] = true
-				}
-			}
-		}
-
-		if selfIsInput {
-			process(sub.self)
-		}
-
-		eachBucketVFS(sub.bucketList(), process)
-	}
-
-	sourceScratch = sources
-	buildScratch = builds
-
-	if len(sources) == 0 && len(builds) == 0 {
-		return PrInputClosure{}
-	}
-
-	return PrInputClosure{
-		sources: ctx.na.dedupClosure(sources),
-		builds:  ctx.na.dedupClosure(builds),
-	}
+	return PrInputClosure{sources: s.ctx.na.dedupClosure(sources), builds: s.ctx.na.dedupClosure(builds)}
 }
 
-func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, inVFSs []VFS, protoImportPbH []IncludeDirective) ParsedIncludeSet {
-	carries := generatedOutputCarriesIncludes(outFile.string())
-
-	if !carries && len(stmt.OutputIncludes) == 0 {
-		return ParsedIncludeSet{}
-	}
-
+func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, protoImportPbH []IncludeDirective) ParsedIncludeSet {
 	local := na.dirs.alloc(len(stmt.OutputIncludes))[:0]
 
 	for _, f := range stmt.OutputIncludes {
@@ -524,27 +290,7 @@ func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, i
 	local = local[:len(local):len(local)]
 
 	carryProtoImportPbH := isHeaderSource(outFile.string()) && !extIsPbH(outFile.string())
-	n := 0
-
-	if carries {
-		n += len(inVFSs)
-	}
-
-	if carryProtoImportPbH {
-		n += len(protoImportPbH)
-	}
-
-	compile := na.dirs.alloc(n)[:0]
-
-	if carries {
-		for _, v := range inVFSs {
-			if v.isBuild() {
-				continue
-			}
-
-			compile = append(compile, IncludeDirective{kind: includeQuoted, target: includeTarget(v.rel().any())})
-		}
-	}
+	compile := na.dirs.alloc(len(protoImportPbH))[:0]
 
 	if carryProtoImportPbH {
 		compile = append(compile, protoImportPbH...)

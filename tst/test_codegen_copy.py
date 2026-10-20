@@ -42,14 +42,14 @@ class CopyFileTest(unittest.TestCase):
         self.assertEqual(context["inputs"], ["$(S)/mod/ctx.h", "$(S)/mod/dep.h"])
 
         plain = lib.node_by_output(graph, "$(B)/mod/plain.h")
-        self.assertEqual(plain["inputs"], ["$(S)/mod/data.txt", "$(S)/mod/extra.h"])
+        self.assertEqual(plain["inputs"], ["$(S)/mod/data.txt"])
 
         second = lib.node_by_output(graph, "$(B)/mod/second.h")
         self.assertEqual(
             second["cmds"][0]["cmd_args"][1:],
             copy_args("$(B)/mod/plain.h", "$(B)/mod/second.h"),
         )
-        self.assertEqual(second["inputs"], ["$(B)/mod/plain.h", "$(S)/mod/data.txt"])
+        self.assertEqual(second["inputs"], ["$(B)/mod/plain.h", "$(S)/mod/extra.h"])
         self.assertEqual(second["deps"], [plain["uid"]])
 
         use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
@@ -115,7 +115,7 @@ class CopyFileTest(unittest.TestCase):
         self.assertEqual(bison["inputs"][2], "$(B)/mod/gram.y")
         self.assertIn(copy["uid"], bison["deps"])
         compile_node = lib.node_by_output(graph, "$(B)/mod/gram.y.cpp.o")
-        self.assertIn("$(S)/mod/gram.src", compile_node["inputs"])
+        self.assertNotIn("$(S)/mod/gram.src", compile_node["inputs"])
         own = lib.node_by_output(graph, "$(B)/mod/own.y.cpp")
         self.assertEqual(own["cmds"][0]["cmd_args"][-1], "$(S)/mod/own.y")
 

@@ -730,48 +730,6 @@ func (e *EmitContext) goToolchainSboms() ([]NodeRef, []VFS) {
 	return refs, paths
 }
 
-func goPeerSrcClosure(ctx *GenCtx, resolved []ResolvedPeer, own []VFS, extra []VFS) []VFS {
-	total := len(own) + len(extra) + 1
-
-	for _, rp := range resolved {
-		total += len(rp.result.GoSrcClosure)
-	}
-
-	var out []VFS
-
-	dedupers.with(func(deduper *DeDuper) {
-		block := ctx.vfsSlices.alloc(total)
-		k := 0
-
-		add := func(p VFS) {
-			if deduper.add(p.strID()) {
-				block[k] = p
-				k++
-			}
-		}
-
-		for _, rp := range resolved {
-			for _, p := range rp.result.GoSrcClosure {
-				add(p)
-			}
-		}
-
-		for _, p := range own {
-			if p.isSource() {
-				add(p)
-			}
-		}
-
-		for _, p := range extra {
-			add(p)
-		}
-
-		out = ctx.vfsSlices.intern(block[:k])
-	})
-
-	return out
-}
-
 func (e *EmitContext) goToolCmdFlagsFor() []ANY {
 	if e.instance.Platform.PIC {
 		return goToolCmdFlagsPic
@@ -948,7 +906,7 @@ func (e *EmitContext) goSrcList(goRes *GoSrcsResult, objOuts []VFS) (srcArgs, cg
 	return srcArgs, cgoSrcArgs, ownInputs, ownSources, ownBuilds
 }
 
-func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, ownSbomRef *NodeRef, ownSbomPath *VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS, []VFS) {
+func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, ownSbomRef *NodeRef, ownSbomPath *VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.relString()
@@ -982,63 +940,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 	na.anys.commit(nt)
 
-	srcClosureExtras := e.goIncludedSrcs(goRes)
-
-	if len(d.cgoSrcs) > 0 {
-		cgoAux := goModuleCSources(d)
-		copyScripts := ctx.scripts[copyFsToolsVFS.rel()]
-		linkOScripts := ctx.scripts[linkOScriptVFS.rel()]
-		extrasCap := len(srcClosureExtras) + 2 + len(copyScripts) + len(linkOScripts)
-		auxSrcs := make([]VFS, len(cgoAux))
-
-		for i, f := range cgoAux {
-			auxSrcs[i] = resolveSourceVFS(ctx, instance, f.string(), d.srcDirs)
-			extrasCap += 1 + e.scanner.walkClosure(auxSrcs[i], d.scanCtx, scanDomainCC).len()
-		}
-
-		cvs := e.cvScratch[:0]
-
-		for _, src := range auxSrcs {
-			cvs = append(cvs, e.scanner.walkClosure(src, d.scanCtx, scanDomainCC))
-		}
-
-		e.cvScratch = retainMaxLen(e.cvScratch, cvs)
-
-		block := na.vfs.alloc(extrasCap)
-		k := 0
-		push := func(p VFS) { block[k] = p; k++ }
-
-		for _, p := range srcClosureExtras {
-			push(p)
-		}
-
-		push(cgo1WrapperVFS)
-		push(wrapccPyVFS)
-
-		for _, p := range copyScripts {
-			push(p)
-		}
-
-		for _, p := range linkOScripts {
-			push(p)
-		}
-
-		for i, src := range auxSrcs {
-			push(src)
-
-			cvs[i].each(func(p VFS) {
-				if p.isSource() {
-					push(p)
-				}
-			})
-		}
-
-		na.vfs.commit(k)
-
-		srcClosureExtras = block[:k:k]
-	}
-
-	srcClosure := goPeerSrcClosure(ctx, resolved, ownInputs, srcClosureExtras)
+	includedSrcs := e.goIncludedSrcs(goRes)
 	ownSourceInputs := na.vfsList(ownSources...)
 	ownBuildInputs := na.vfsList(ownBuilds...)
 	sbomRefs, sbomPaths := e.goToolchainSboms()
@@ -1099,9 +1001,9 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			deduper.add(p.strID())
 		}
 
-		extraSourceBlock := na.vfs.alloc(len(srcClosure) + 1)[:0]
+		extraSourceBlock := na.vfs.alloc(len(includedSrcs) + 1)[:0]
 
-		for _, p := range srcClosure {
+		for _, p := range includedSrcs {
 			if deduper.add(p.strID()) {
 				extraSourceBlock = append(extraSourceBlock, p)
 			}
@@ -1175,7 +1077,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 	e.appendSdcMeta(&node, programBinaryName(instance, d.moduleStmt))
 
-	return e.emitNode(node), outPath, srcClosure
+	return e.emitNode(node), outPath
 }
 
 func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerLDFlagsGlobal, peerObjAddLibsGlobal []ANY, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
@@ -1320,7 +1222,6 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		dllInputs,
 		peerGlobalPaths,
 		ctx.scripts[ldVcsInfoVFS.rel()],
-		ctx.scripts[ldFsToolsVFS.rel()],
 		peerArchivePaths,
 		extraSources,
 		extraBuilds,

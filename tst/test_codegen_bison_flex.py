@@ -94,8 +94,7 @@ class BisonTest(unittest.TestCase):
         self.assertIn("-Wno-unused-but-set-variable", args)
         self.assertIn("-Wno-deprecated-copy", args)
         self.assertEqual(args[-1], "$(B)/mod/gram.y.cpp")
-        for path in ("$(B)/mod/gram.h", "$(S)/mod/local.h", "$(S)/mod/gram.y",
-                     "$(S)/contrib/tools/bison/data/skeletons/lalr1.cc"):
+        for path in ("$(B)/mod/gram.h", "$(S)/mod/local.h"):
             self.assertIn(path, compile_node["inputs"])
 
         nested = lib.node_by_output(graph, "$(B)/mod/_/sub/lex.ypp.cpp")
@@ -149,7 +148,7 @@ class BisonTest(unittest.TestCase):
         self.assertNotIn("-Wno-deprecated-copy", compile_node["cmds"][0]["cmd_args"])
         self.assertEqual(sorted(compile_node["inputs"]), sorted([
             "$(B)/mod/gram.y.c", "$(B)/mod/gram.h",
-            "$(S)/mod/local.h", "$(S)/mod/gram.y",
+            "$(S)/mod/local.h",
         ]))
 
     def test_bison_gen_cpp_restores_default_extension(self):

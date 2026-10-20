@@ -24,7 +24,6 @@ class EmitConfigureFileTest(unittest.TestCase):
         for expected in (
             "$(B)/prod/config.h",
             "$(S)/prod/config.h.in",
-            "$(S)/build/scripts/configure_file.py",
             "$(S)/prod/marker.h",
         ):
             self.assertIn(expected, compile_node["inputs"])

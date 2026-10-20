@@ -425,11 +425,10 @@ type PySrcGroup struct {
 }
 
 type ArchiveEntry struct {
-	Name                   string
-	DontCompress           bool
-	Files                  []string
-	Keys                   []string
-	PropagateSourceMembers bool
+	Name         string
+	DontCompress bool
+	Files        []string
+	Keys         []string
 }
 
 type ArchiveAsmEntry struct {
@@ -3451,8 +3450,6 @@ func applyArchiveStmt(v UnknownStmt, d *ModuleData) {
 		inNameSlot bool
 	)
 
-	entry.PropagateSourceMembers = true
-
 	for _, aTok := range v.Args {
 		a := aTok.string()
 
@@ -3494,7 +3491,6 @@ func applyArchiveByKeysStmt(v UnknownStmt, d *ModuleData) {
 	)
 
 	entry.Keys = []string{}
-	entry.PropagateSourceMembers = true
 
 	for _, aTok := range v.Args {
 		a := aTok.string()
@@ -3600,8 +3596,8 @@ func applyLj21ArchiveStmt(v UnknownStmt, d *ModuleData) {
 	}
 
 	d.archives = append(d.archives,
-		ArchiveEntry{Name: "LuaScripts.inc", DontCompress: true, Files: raws, Keys: luas, PropagateSourceMembers: true},
-		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: luas, PropagateSourceMembers: true},
+		ArchiveEntry{Name: "LuaScripts.inc", DontCompress: true, Files: raws, Keys: luas},
+		ArchiveEntry{Name: "LuaSources.inc", DontCompress: true, Files: append([]string(nil), luas...), Keys: luas},
 	)
 }
 

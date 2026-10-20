@@ -115,8 +115,9 @@ class SwigTest(unittest.TestCase):
         self.assertIn(swig_tool["uid"], swig["deps"])
 
         compiled = lib.node_by_output(graph, "$(B)/lib/wrap.swg.c.o")
-        for expected in ("$(B)/lib/wrap.swg.c", "$(S)/lib/impl.h", "$(S)/lib/impl2.h", "$(S)/lib/wrap.swg"):
+        for expected in ('$(B)/lib/wrap.swg.c', '$(S)/lib/impl.h', '$(S)/lib/impl2.h',):
             self.assertIn(expected, compiled["inputs"])
+        self.assertNotIn('$(S)/lib/wrap.swg', compiled['inputs'])
         self.assertIn(swig["uid"], compiled["deps"])
 
         other = lib.node_by_output(graph, "$(B)/lib/sub/other.swg.c")
@@ -135,7 +136,7 @@ class SwigTest(unittest.TestCase):
             "lib/wrap.py-", "$(B)/lib/wrap.py", "$(B)/lib/wrap.py.yapyc3",
         ])
         self.assertIn("$(B)/lib/wrap.swg.c", pyc["inputs"])
-        self.assertIn("$(S)/lib/common.i", pyc["inputs"])
+        self.assertNotIn("$(S)/lib/common.i", pyc["inputs"])
         packs = [
             node for node in graph["graph"]
             if node["kv"].get("p") == "PR" and "$(B)/lib/wrap.py" in node["inputs"]

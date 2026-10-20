@@ -160,8 +160,12 @@ class YaMakeProtoTest(unittest.TestCase):
 
     def test_yaff_file_filter_decides_generated_header_includes(self):
         cases = [
-            ("YAFF(NAMESPACE yns FILES x.proto EXPERIMENTAL x.proto)", ["$(S)/a/u.cpp", "$(B)/a/x.yaff.h", "$(B)/a/x.pb.h", "$(S)/a/x.proto"]),
-            ("YAFF(NAMESPACE yns FILES x.proto)", ["$(S)/a/u.cpp", "$(B)/a/x.yaff.h", "$(B)/a/x.pb.h", "$(S)/a/x.proto"]),
+            ("YAFF(NAMESPACE yns FILES x.proto EXPERIMENTAL x.proto)", [
+                "$(S)/a/u.cpp",
+                "$(B)/a/x.yaff.h",
+                "$(B)/a/x.pb.h",
+            ]),
+            ("YAFF(NAMESPACE yns FILES x.proto)", ["$(S)/a/u.cpp", "$(B)/a/x.yaff.h", "$(B)/a/x.pb.h"]),
             ("YAFF(NAMESPACE yns FILES other.proto)", ["$(S)/a/u.cpp", "$(B)/a/x.yaff.h"]),
         ]
         for body, expected in cases:

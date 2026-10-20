@@ -128,34 +128,8 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	var splitSrcs []VFS
 
 	if hasCCShard {
-		splitSrcs = e.splitCodegenSrcs(stmt, scriptVFS)
+		splitSrcs = e.splitCodegenSrcs(stmt)
 	}
-
-	var pyGeneratedFromSources []VFS
-
-	reg := e.codegen
-
-	for _, v := range inVFSs {
-		if v.isSource() {
-			continue
-		}
-
-		if info := reg.use(v); info != nil {
-			pyGeneratedFromSources = append(pyGeneratedFromSources, info.SourceInputs...)
-		}
-	}
-
-	pySourceInputs := ctx.na.vfs.alloc(1 + len(inSources) + len(pyGeneratedFromSources))[:0]
-
-	if scriptVFS.isSource() {
-		pySourceInputs = append(pySourceInputs, scriptVFS)
-	}
-
-	pySourceInputs = append(pySourceInputs, inSources...)
-	pySourceInputs = append(pySourceInputs, pyGeneratedFromSources...)
-	ctx.na.vfs.commit(len(pySourceInputs))
-
-	pySourceInputs = pySourceInputs[:len(pySourceInputs):len(pySourceInputs)]
 
 	pyRef := ctx.emit.reserve()
 	interp := d.cc.TC.Python3.any()
@@ -203,12 +177,6 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	ctx.na.vfs.commit(len(directBuilds))
 	directBuilds = directBuilds[:len(directBuilds):len(directBuilds)]
 
-	outIncludeVFSs := make([]VFS, 0, len(stmt.OutputIncludes))
-
-	for _, f := range stmt.OutputIncludes {
-		outIncludeVFSs = append(outIncludeVFSs, e.runProgramInputVFS(f.string()))
-	}
-
 	inSnapVFSs := make([]VFS, 0, len(stmt.INFiles))
 
 	for _, f := range stmt.INFiles {
@@ -216,12 +184,11 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	}
 
 	snap := &pyRunSnap{
-		ctx:            ctx,
-		instance:       instance,
-		scanner:        e.scanner,
-		scanCtx:        d.scanCtx,
-		inVFSs:         ctx.na.vfsList(inSnapVFSs...),
-		outIncludeVFSs: ctx.na.vfsList(outIncludeVFSs...),
+		ctx:      ctx,
+		instance: instance,
+		scanner:  e.scanner,
+		scanCtx:  d.scanCtx,
+		inVFSs:   ctx.na.vfsList(inSnapVFSs...),
 	}
 
 	pe := func() {
@@ -237,83 +204,45 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 			OutputPath:     out,
 			ProducerRef:    pyRef,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			SourceInputs:   pySourceInputs,
-			ClosureLeaves:  pyGeneratedFromSources,
 			OnUse:          pending,
 		})
 	}
 
 	for _, f := range stmt.OUTFiles {
-		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
+		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), splitSrcs, hasCCShard))
 	}
 
 	for _, f := range stmt.OUTNoAutoFiles {
-		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), scriptVFS, splitSrcs, hasCCShard))
+		registerPYOutput(outVFSByToken[f.string()], e.pyEmitsIncludes(stmt, f.string(), splitSrcs, hasCCShard))
 	}
 
 	if stmt.StdoutFile != nil {
-		registerPYOutput(*stdoutVFS, e.pyEmitsIncludes(stmt, stmt.StdoutFile.string(), scriptVFS, splitSrcs, hasCCShard))
+		registerPYOutput(*stdoutVFS, e.pyEmitsIncludes(stmt, stmt.StdoutFile.string(), splitSrcs, hasCCShard))
 	}
 
 	return outputTokens
 }
 
 type pyRunSnap struct {
-	ctx            *GenCtx
-	instance       ModuleInstance
-	scanner        *IncludeScanner
-	scanCtx        *ScanContext
-	inVFSs         []VFS
-	outIncludeVFSs []VFS
+	ctx      *GenCtx
+	instance ModuleInstance
+	scanner  *IncludeScanner
+	scanCtx  *ScanContext
+	inVFSs   []VFS
 }
 
 func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) InputChunks {
-	ctx, instance := s.ctx, s.instance
-	na := ctx.na
-
 	var closures []Closure
 
-	walkOne := func(rel string) {
-		buildRootPath := copyFileOutputVFS(instance.Path.relString(), rel)
-		cv := s.scanner.walkClosure(buildRootPath, s.scanCtx, scanDomainCC)
+	for i, f := range stmt.INFiles {
+		if s.inVFSs[i].isBuild() || !s.ctx.parsers.registry.scansIncludes(f.string()) {
+			continue
+		}
 
-		cv.self = 0
-		closures = append(closures, cv)
+		closures = append(closures, s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC))
 	}
 
-	hasCCShard, _ := splitCodegenDetect(stmt)
-
-	if hasCCShard {
-		for i := range stmt.INFiles {
-			cv := s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC)
-
-			closures = append(closures, cv)
-		}
-	} else {
-		for _, f := range stmt.OUTFiles {
-			if generatedOutputCarriesIncludes(f.string()) {
-				walkOne(f.string())
-			}
-		}
-
-		for _, f := range stmt.OUTNoAutoFiles {
-			if generatedOutputCarriesIncludes(f.string()) {
-				walkOne(f.string())
-			}
-		}
-
-		if stmt.StdoutFile != nil && generatedOutputCarriesIncludes(stmt.StdoutFile.string()) {
-			walkOne(stmt.StdoutFile.string())
-		}
-
-		for i := range stmt.OutputIncludes {
-			cv := s.scanner.walkClosure(s.outIncludeVFSs[i], s.scanCtx, scanDomainCC)
-
-			closures = append(closures, cv)
-		}
-	}
-
-	return na.dedupClosureChunks(closures...)
+	return s.ctx.na.dedupClosureChunks(closures...)
 }
 
 func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
@@ -330,7 +259,7 @@ func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
 	return
 }
 
-func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS {
+func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt) []VFS {
 	ctx, _, _ := e.ctx, e.instance, e.d
 	reg := e.codegen
 	seen := make(map[VFS]struct{}, 32)
@@ -358,16 +287,10 @@ func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS
 		}
 	}
 
-	addSource(scriptVFS)
-
 	for _, f := range stmt.INFiles {
 		vfs := e.runProgramInputVFS(f.string())
 
 		if info := reg.use(vfs); info != nil {
-			for _, si := range info.SourceInputs {
-				addSource(si)
-			}
-
 			for _, gref := range info.GeneratorRefs {
 				if tool, ok := ctx.moduleByRef.get(gref); ok {
 					addInducedSources(tool.InducedDeps.bucket(parsedIncludesCpp))
@@ -379,7 +302,7 @@ func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt, scriptVFS VFS) []VFS
 	return sources
 }
 
-func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scriptVFS VFS, splitSrcs []VFS, splitHasCCShard bool) []IncludeDirective {
+func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, splitSrcs []VFS, splitHasCCShard bool) []IncludeDirective {
 	_, instance, _ := e.ctx, e.instance, e.d
 	carries := generatedOutputCarriesIncludes(outFile) || isCodegenProducingSrc(outFile)
 
@@ -445,14 +368,6 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, scrip
 	}
 
 	includes := e.ctx.na.dirs.alloc(capacity)[:0]
-
-	if carries {
-		includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(scriptVFS.rel().any())})
-
-		for _, f := range stmt.INFiles {
-			includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(e.runProgramInputVFS(f.string()).rel().any())})
-		}
-	}
 
 	for _, f := range stmt.OutputIncludes {
 		if vfsHasPrefix(f.string()) {

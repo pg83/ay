@@ -348,16 +348,12 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	protoCwd := srcRootDirVFS
 	generatedProto := false
 
-	var producerSourceInputs []VFS
-
 	if info := e.codegen.use(build(protoRelPath)); info != nil {
 		protoSrcVFS = build(protoRelPath)
 		protoCwd = bldRootDirVFS
-		producerSourceInputs = info.SourceInputs
 		generatedProto = true
 	}
 
-	transitive := e.scanner.walkClosure(source(protoRelPath), scanCtx, scanDomainProto)
 	toolInputs := na.vfs.alloc(3)[:0]
 
 	toolInputs = append(toolInputs, protocBinary)
@@ -373,10 +369,9 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	na.vfs.commit(len(toolInputs))
 	toolInputs = toolInputs[:len(toolInputs):len(toolInputs)]
 
-	sourceInputsHead := na.vfs.alloc(2 + len(producerSourceInputs))[:0]
+	sourceInputsHead := na.vfs.alloc(2)[:0]
 
 	sourceInputsHead = append(sourceInputsHead, pbPyWrapperVFS)
-	sourceInputsHead = append(sourceInputsHead, producerSourceInputs...)
 
 	if !generatedProto {
 		sourceInputsHead = append(sourceInputsHead, protoSrcVFS)
@@ -421,16 +416,15 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	}
 
 	pyPBPE := e.pendingEmitter(pending)
-	sourceInputs := na.dedupSourceVFS(sourceInputsHead, transitive.bucketList())
 
-	e.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})
+	e.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, OnUse: pyPBPE})
 
 	if !d.noMypy {
-		e.register(GeneratedFileInfo{OutputPath: pyiOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})
+		e.register(GeneratedFileInfo{OutputPath: pyiOut, ProducerRef: pyPBRef, OnUse: pyPBPE})
 	}
 
 	if d.grpc {
-		e.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, SourceInputs: sourceInputs, OnUse: pyPBPE})
+		e.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, OnUse: pyPBPE})
 	}
 
 	e.enqueuePyProtoOutputs(src, srcGroup, pyOut, grpcPyOut, generatedProto)

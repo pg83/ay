@@ -103,11 +103,15 @@ class ProtoCfgprotoTest(unittest.TestCase):
 
         compile_node = lib.node_by_output(graph, "$(B)/c/a.cfgproto.pb.cc.o")
         for path in (
-            "$(B)/c/a.cfgproto.pb.cc", "$(B)/c/b.pb.h", "$(S)/c/extra.h",
-            "$(S)/library/cpp/proto_config/codegen/codegen.h",
-            f"{PB_RUNTIME}/descriptor.pb.h", "$(S)/c/a.cfgproto", WRAPPER,
+            '$(B)/c/a.cfgproto.pb.cc',
+            '$(B)/c/b.pb.h',
+            '$(S)/c/extra.h',
+            '$(S)/library/cpp/proto_config/codegen/codegen.h',
+            f'{PB_RUNTIME}/descriptor.pb.h',
         ):
             self.assertIn(path, compile_node["inputs"])
+        self.assertNotIn('$(S)/c/a.cfgproto', compile_node['inputs'])
+        self.assertNotIn(WRAPPER, compile_node['inputs'])
         use = lib.node_by_output(graph, "$(B)/c/use.cpp.o")
         self.assertIn("$(B)/c/a.cfgproto.pb.h", use["inputs"])
         self.assertIn("$(S)/c/extra.h", use["inputs"])
@@ -133,7 +137,7 @@ class ProtoCfgprotoTest(unittest.TestCase):
         self.assertIn("--cpp_out=:$(B)/", node["cmds"][0]["cmd_args"])
         compile_node = lib.node_by_output(graph, "$(B)/c/a.cfgproto.pb.cc.o")
         self.assertIn("$(B)/c/b.pb.h", compile_node["inputs"])
-        self.assertIn("$(S)/c/b.proto", compile_node["inputs"])
+        self.assertNotIn("$(S)/c/b.proto", compile_node["inputs"])
 
     def test_config_imports_and_opaque_files_parsed_as_cfgproto(self):
         files = cfgproto_files()
@@ -164,7 +168,7 @@ class ProtoCfgprotoTest(unittest.TestCase):
         })
         compile_node = lib.node_by_output(graph, "$(B)/c/a.cfgproto.pb.cc.o")
         self.assertIn("$(B)/c/base.cfgproto.pb.h", compile_node["inputs"])
-        self.assertIn("$(S)/c/defaults.inc", compile_node["inputs"])
+        self.assertNotIn("$(S)/c/defaults.inc", compile_node["inputs"])
         self.assertNotIn("$(S)/c/from_defaults.h", compile_node["inputs"])
 
 

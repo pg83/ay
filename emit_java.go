@@ -245,8 +245,8 @@ func (ctx *GenCtx) javaRegisterFromSandboxes(jm *JavaModule) {
 				OwnerModule:     jm.path,
 				ProducerRef:     ref,
 				ProducerMainOut: outs[0],
-				SourceInputs:    fromSandboxScriptInputs,
-				OnUse:           pending,
+
+				OnUse: pending,
 			})
 		}
 	}

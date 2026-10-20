@@ -67,9 +67,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	llvmLink := clangRoot + "/bin/llvm-link"
 	opt := clangRoot + "/bin/opt"
 	optWrapperVFS := intern(optWrapper)
-
-	var bcSourceInputs []VFS
-
 	pendNodes := make([]Node, 0, len(stmt.Sources)+2)
 	pendRefs := make([]NodeRef, 0, len(stmt.Sources)+2)
 	bcRefs := make([]NodeRef, 0, len(stmt.Sources))
@@ -90,10 +87,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 		for _, ch := range allInputs {
 			for _, v := range ch {
-				if v.isSource() && v.relString() != "" {
-					bcSourceInputs = append(bcSourceInputs, v)
-				}
-
 				if v == copyFsToolsVFS {
 					linksCopy = true
 				}
@@ -153,26 +146,11 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	optArgs = append(optArgs, internV(`-passes="`, strings.Join(passes, ","), `"`).any())
 
-	optSourceInputs := na.vfs.alloc(1 + len(bcSourceInputs))[:0]
-
-	optSourceInputs = append(optSourceInputs, optWrapperVFS)
-
-	for _, input := range bcSourceInputs {
-		if input.relString() != "" {
-			optSourceInputs = append(optSourceInputs, input)
-		}
-	}
-
-	na.vfs.commit(len(optSourceInputs))
-	optSourceInputs = optSourceInputs[:len(optSourceInputs):len(optSourceInputs)]
-
-	optChunks := na.inputList(na.vfsList(mergedOut), optSourceInputs)
-
 	optNode := Node{
 		Platform:  instance.Platform,
 		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
 		Env:       env,
-		Inputs:    optChunks,
+		Inputs:    na.inputList(na.vfsList(mergedOut), na.vfsList(optWrapperVFS)),
 		Outputs:   na.vfsList(optOut),
 		KV:        &llvmBcKV3,
 		DepRefs:   na.refList(ldRef),

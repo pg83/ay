@@ -68,8 +68,8 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		ProducerRef:    bcRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-		ClosureLeaves:  e.ctx.na.vfsList(prefixCpp, inputIn),
-		OnUse:          pending,
+
+		OnUse: pending,
 	})
 
 	e.register(GeneratedFileInfo{
@@ -77,7 +77,7 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 		ProducerRef:    bcRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-		ClosureLeaves:  e.ctx.na.vfsList(inputIn),
-		OnUse:          pending,
+
+		OnUse: pending,
 	})
 }

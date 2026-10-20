@@ -176,13 +176,12 @@ class IncludeResolutionOrderTest(unittest.TestCase):
         inputs, warnings = closure(files, "m", "$(B)/m/a.cpp.o")
         self.assertEqual(
             {
-                "$(S)/m/a.cpp",
-                "$(S)/inc/own.h",
-                "$(B)/m/gen/generated.h",
-                "$(S)/m/gen.h.in",
-                "$(S)/build/scripts/configure_file.py",
-                "$(S)/p/include/global.h",
-                "$(S)/contrib/libs/linux-headers/linux/base.h",
+                '$(S)/inc/own.h',
+                '$(S)/p/include/global.h',
+                '$(S)/contrib/libs/linux-headers/linux/base.h',
+                '$(S)/m/a.cpp',
+                '$(S)/m/gen.h.in',
+                '$(B)/m/gen/generated.h',
             },
             inputs,
         )
@@ -275,10 +274,7 @@ class IncludeResolutionOrderTest(unittest.TestCase):
         }
         inputs, warnings = closure(files, "m", "$(B)/m/a.cpp.o")
         self.assertEqual(
-            {
-                "$(S)/m/a.cpp", "$(B)/top.h", "$(B)/other.h", "$(S)/m/top.h.in",
-                "$(S)/m/other.h.in", "$(S)/build/scripts/configure_file.py",
-            },
+            {'$(B)/top.h', '$(S)/m/a.cpp', '$(B)/other.h', '$(S)/m/top.h.in', '$(S)/m/other.h.in'},
             inputs,
         )
         self.assertEqual("", warnings)

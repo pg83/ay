@@ -98,7 +98,7 @@ class PythonNativeCompileTest(unittest.TestCase):
         self.assertEqual(cython["kv"]["p"], "CY")
         compiled = lib.node_by_output(graph, "$(B)/c/x.pyx.cpp.o")
         self.assertEqual(compiled["deps"], [cython["uid"]])
-        self.assertIn("$(S)/c/x.pyx", compiled["inputs"])
+        self.assertNotIn("$(S)/c/x.pyx", compiled["inputs"])
         for output in ("$(B)/c/x.pyx.cpp.o", "$(B)/c/c.x.reg3.cpp.o"):
             with self.subTest(output=output):
                 self.assertIn(NUMPY_INCLUDE, cc_args(graph, output))

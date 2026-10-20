@@ -54,7 +54,7 @@ func (e *EmitContext) emitLibrarySCSource(src ANY) {
 		ProducerRef:    scRef,
 		GeneratorRefs:  e.ctx.na.refList(domLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: runtimeInclude},
-		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, domschemeRuntimeVFS),
-		OnUse:          pending,
+
+		OnUse: pending,
 	})
 }

@@ -92,8 +92,10 @@ class RunPython3Test(unittest.TestCase):
         self.assertEqual(cmd(run)["stdout"], "$(B)/lib/log.cpp")
         self.assertEqual(cmd(run)["env"], {"ARCADIA_ROOT_DISTBUILD": "$(S)", "A": "1", "B": ""})
         self.assertEqual(run["env"], cmd(run)["env"])
-        for expected in ("$(S)/lib/gen.py", "$(S)/lib/in.txt", "$(S)/lib/dep.h", "$(S)/lib/dep2.h"):
+        for expected in ('$(S)/lib/gen.py', '$(S)/lib/in.txt',):
             self.assertIn(expected, run["inputs"])
+        self.assertNotIn('$(S)/lib/dep.h', run['inputs'])
+        self.assertNotIn('$(S)/lib/dep2.h', run['inputs'])
 
         for output in ("gen.cpp", "log.cpp"):
             compiled = lib.node_by_output(graph, f"$(B)/lib/{output}.o")
@@ -101,8 +103,9 @@ class RunPython3Test(unittest.TestCase):
             self.assertIn("$(S)/lib/dep2.h", compiled["inputs"])
             self.assertIn(run["uid"], compiled["deps"])
         use = lib.node_by_output(graph, "$(B)/lib/use.cpp.o")
-        for expected in ("$(B)/lib/gen.h", "$(B)/lib/extra.h", "$(S)/lib/in.txt", "$(S)/lib/dep.h"):
+        for expected in ('$(B)/lib/gen.h', '$(B)/lib/extra.h', '$(S)/lib/dep.h',):
             self.assertIn(expected, use["inputs"])
+        self.assertNotIn('$(S)/lib/in.txt', use['inputs'])
         archive = lib.node_by_output(graph, "$(B)/lib/liblib.a")
         self.assertEqual(archive["inputs"][:3], [
             "$(B)/lib/use.cpp.o", "$(B)/lib/gen.cpp.o", "$(B)/lib/log.cpp.o",
@@ -162,13 +165,13 @@ class RunPython3Test(unittest.TestCase):
         self.assertIn("$(S)/lib/proto.in", run["inputs"])
         self.assertIn(codegen["uid"], run["deps"])
         first = lib.node_by_output(graph, "$(B)/lib/shard0.cpp.o")
-        self.assertEqual(lib.bucketed(first["inputs"], 1), lib.bucketed([
-            "$(B)/lib/shard0.cpp", "$(S)/lib/split.py", "$(S)/lib/induced.h",
-        ], 1))
+        self.assertEqual(lib.bucketed(first["inputs"], 1), ['$(B)/lib/shard0.cpp', '$(S)/lib/induced.h'])
         second = lib.node_by_output(graph, "$(B)/lib/shard1.cpp.o")
-        self.assertEqual(lib.bucketed(second["inputs"], 1), lib.bucketed([
-            "$(B)/lib/shard1.cpp", "$(B)/lib/shard0.cpp", "$(S)/lib/split.py", "$(S)/lib/induced.h",
-        ], 1))
+        self.assertEqual(lib.bucketed(second["inputs"], 1), [
+            '$(B)/lib/shard1.cpp',
+            '$(B)/lib/shard0.cpp',
+            '$(S)/lib/induced.h',
+        ])
 
     def test_script_text_naming_own_output_is_not_an_include(self):
         files = {
@@ -198,7 +201,9 @@ class RunPython3Test(unittest.TestCase):
         ])
         self.assertEqual(run["deps"], [])
         self.assertEqual(sorted(set(run["inputs"])), [
-            "$(S)/lib/conf/a.toml", "$(S)/lib/conf/b.toml", "$(S)/lib/dep.h", "$(S)/lib/gen.py",
+            '$(S)/lib/conf/a.toml',
+            '$(S)/lib/conf/b.toml',
+            '$(S)/lib/gen.py',
         ])
         compiled = lib.node_by_output(graph, "$(B)/lib/gen.cpp.o")
         self.assertEqual(compiled["deps"], [run["uid"]])

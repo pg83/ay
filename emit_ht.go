@@ -56,8 +56,8 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(toolRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-		ClosureLeaves:  e.ctx.na.vfsList(srcVFS),
-		OnUse:          pending,
+
+		OnUse: pending,
 	})
 
 	meta.Source = outVFS.any()

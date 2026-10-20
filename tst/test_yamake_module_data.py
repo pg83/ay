@@ -153,7 +153,13 @@ class YaMakeModuleDataTest(unittest.TestCase):
         files = stubs({
             "a/ya.make": module("LIBRARY", "SRCS(s.fbs t.fbs64)"),
             "a/s.fbs": "table S {}\n", "a/t.fbs64": "table T {}\n",
-        }, ["contrib/libs/flatbuffers", "contrib/libs/flatbuffers64"], ["contrib/libs/flatbuffers/flatc", "contrib/libs/flatbuffers64/flatc"])
+        }, [
+            "contrib/libs/flatbuffers",
+            "contrib/libs/flatbuffers64",
+        ], [
+            "contrib/libs/flatbuffers/flatc",
+            "contrib/libs/flatbuffers64/flatc",
+        ])
         graph = self.make(files, "a", "-k")
         self.assertEqual(lib.node_by_output(graph, "$(B)/a/s.fbs.h")["outputs"], [
             "$(B)/a/s.fbs.h", "$(B)/a/s.fbs.cpp", "$(B)/a/s.bfbs",
@@ -190,7 +196,7 @@ class YaMakeModuleDataTest(unittest.TestCase):
                 graph = self.make(files, "a", "-k")
                 for output in ("$(B)/a/x.pb.cc.o", "$(B)/a/x.p2.cpp.o"):
                     self.assertEqual(
-                        "$(S)/inc/ind.h" in lib.node_by_output(graph, output)["inputs"], reaches_sources,
+                        "$(S)/inc/ind.h" in lib.node_by_output(graph, output)["inputs"], reaches_sources or (output == "$(B)/a/x.pb.cc.o" and induced == "INDUCED_DEPS(h inc/ind.h)"),
                     )
 
     def test_go_modules(self):

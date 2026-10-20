@@ -23,13 +23,10 @@ var antlrJavaConstHead = []ANY{
 const jdkResourcePath = "$(B)/resources/JDK17/bin/java"
 
 func (e *EmitContext) emitJVDownstreamCPCC(
-	jvRef NodeRef,
-	jvPrimary VFS,
-	jvInputs []VFS,
 	cpccPairs []struct{ cpp, h VFS },
 	outputIncludes []string,
 ) {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	ctx, instance := e.ctx, e.instance
 
 	for _, pair := range cpccPairs {
 		srcCpp := pair.cpp
@@ -39,7 +36,7 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 		cpRef := ctx.emit.reserve()
 		emits := ctx.na.dirs.alloc(1 + len(outputIncludes))[:0]
 
-		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(antlr4RuntimeHeaderVFS.rel().any())})
+		emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(srcH.any())})
 
 		for _, h := range outputIncludes {
 			emits = append(emits, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(h).any())})
@@ -49,32 +46,8 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 
 		emits = emits[:len(emits):len(emits)]
 
-		fsTools := ctx.scripts[antlr4FsToolsVFS.rel()]
-		leaves := ctx.na.vfs.alloc(2 + len(fsTools) + len(jvInputs))[:0]
-
-		leaves = append(leaves, jvPrimary, srcH)
-		leaves = append(leaves, fsTools...)
-		leaves = append(leaves, jvInputs...)
-		ctx.na.vfs.commit(len(leaves))
-		leaves = leaves[:len(leaves):len(leaves)]
-
-		scanner := e.scanner
-		scanCtx := d.scanCtx
-		tc := d.cc.TC
-
 		pe := func() {
-			leafSet := make(map[VFS]bool, len(leaves))
-
-			for _, l := range leaves {
-				leafSet[l] = true
-			}
-
-			cpClosure := scanner.walkClosure(g4CppPath, scanCtx, scanDomainCC).collect(ctx.na, func(v VFS) bool {
-				return v != g4CppPath && !leafSet[v]
-			})
-
-			e.codegen.use(jvPrimary)
-			emitJVCPG4(instance, srcCpp, g4CppPath, jvRef, jvPrimary, jvInputs, cpClosure, cpRef, tc, ctx.scripts, ctx.emit)
+			e.emitCPWithInputs(srcCpp, g4CppPath, nil, cpRef, e.d.tc, ctx.scripts)
 		}
 
 		pending := e.pendingEmit(pe)
@@ -84,8 +57,8 @@ func (e *EmitContext) emitJVDownstreamCPCC(
 			ProducerRef:    cpRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: emits},
-			ClosureLeaves:  leaves,
-			OnUse:          pending,
+
+			OnUse: pending,
 		})
 
 		e.enqueueSrc(SrcMeta{

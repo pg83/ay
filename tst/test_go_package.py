@@ -219,10 +219,10 @@ class GoPackageGraphTest(unittest.TestCase):
         self.assertEqual(greet["kv"]["p"], "GO")
         self.assertEqual(greet["inputs"][:7], ["$(S)/library/go/greet/greet.go", *TOOL_SCRIPTS])
         self.assertEqual(greet["inputs"][-4:], [
-            f"$(S)/{STD}/internal/fmtsort/fmtsort.go",
-            f"$(S)/{STD}/vendor/golang.org/x/text/width/width.go",
-            f"$(S)/{STD}/fmt/fmt.go",
-            "$(S)/vendor/github.com/pkg/errors/errors.go",
+            f'$(B)/{STD}/internal/fmtsort/fmtsort.a',
+            f'$(B)/{STD}/vendor/golang.org/x/text/width/width.a',
+            f'$(B)/{STD}/fmt/fmt.a',
+            '$(B)/vendor/github.com/pkg/errors/errors.a',
         ])
         self.assertEqual(greet["env"]["GOOS"], "linux")
         self.assertEqual(greet["env"]["GOARCH"], "amd64")
@@ -547,7 +547,11 @@ class GoPackageGraphTest(unittest.TestCase):
             python_sbom, "$(B)/build/platform/lld/toolchain.component.sbom", errors_sbom,
         ])
         self.assertEqual(link["cmds"][3]["cwd"], "$(B)")
-        self.assertEqual(objcopy[1:], ["--add-section", ".rosbomdata=$(B)/cmd/app/__sbomdata.json", "$(B)/cmd/app/app"])
+        self.assertEqual(objcopy[1:], [
+            "--add-section",
+            ".rosbomdata=$(B)/cmd/app/__sbomdata.json",
+            "$(B)/cmd/app/app",
+        ])
         self.assertEqual(link["inputs"][-4:], [
             python_sbom, "$(B)/build/platform/lld/toolchain.component.sbom", errors_sbom,
             "$(S)/build/internal/scripts/link_sbom.py",

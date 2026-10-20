@@ -26,9 +26,7 @@ class JoinSrcsClosureTest(unittest.TestCase):
                 graph = self.graph(platform)
                 join = lib.node_by_output(graph, "$(B)/joinmod/all_my.cpp")
                 self.assertEqual(join["inputs"][0], "$(S)/build/scripts/gen_join_srcs.py")
-                self.assertEqual(join["inputs"][-2:], [
-                    "$(S)/joinmod/common.h", "$(S)/shared/far.h",
-                ])
+                self.assertEqual(join["inputs"][-2:], ['$(S)/joinmod/src2.cpp', '$(S)/shared/far.cpp'])
                 compile_node = lib.node_by_output(graph, "$(B)/joinmod/all_my.cpp.o")
                 self.assertEqual(compile_node["inputs"][0], "$(B)/joinmod/all_my.cpp")
                 for path in ("$(S)/joinmod/common.h", "$(S)/joinmod/src1.cpp",

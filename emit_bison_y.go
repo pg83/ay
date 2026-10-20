@@ -27,29 +27,6 @@ var bisonCppSkeletonInputs = []VFS{
 	source("contrib/tools/bison/data/skeletons/yacc.c"),
 }
 
-func appendBisonCppHeaderParsed(dst []IncludeDirective) []IncludeDirective {
-	dst = append(dst,
-		IncludeDirective{kind: includeQuoted, target: includeTarget(bisonPreprocessPyVFS.rel().any())},
-	)
-
-	return append(dst, bisonCppSkeletonDirectives...)
-}
-
-func (e *EmitContext) bisonGeneratedCPPParsed(srcVFS, headerVFS VFS) []IncludeDirective {
-	na := e.ctx.na
-	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
-	parsed := na.dirs.alloc(2 + len(localBucket))[:0]
-
-	parsed = append(parsed,
-		IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())},
-		IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
-
-	parsed = append(parsed, localBucket...)
-	na.dirs.commit(len(parsed))
-
-	return parsed[:len(parsed):len(parsed)]
-}
-
 func bisonGeneratedRel(srcRel, genExt string) string {
 	if strings.Contains(srcRel, "/") {
 		return "_/" + srcRel + genExt
@@ -73,22 +50,6 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
-	headerParsed := na.dirs.alloc(2 + len(bisonCppSkeletonDirectives) + len(localBucket))[:0]
-	addInputs := instance.Platform.AddInputs
-
-	if !addInputs {
-		headerParsed = append(headerParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(srcVFS.rel().any())})
-	}
-
-	if preprocessHeader && !addInputs {
-		headerParsed = appendBisonCppHeaderParsed(headerParsed)
-	} else {
-		headerParsed = append(headerParsed, localBucket...)
-	}
-
-	na.dirs.commit(len(headerParsed))
-	headerParsed = headerParsed[:len(headerParsed):len(headerParsed)]
-
 	ycRef := ctx.emit.reserve()
 	env := na.envList(EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, EnvVar{Name: envBISON_PKGDATADIR, Value: strBisonPkgData.any()}, EnvVar{Name: envM4, Value: m4Bin.any()})
 	preprocessEnv := envVarsVCS
@@ -190,21 +151,11 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 		OutputPath:     headerVFS,
 		ProducerRef:    ycRef,
 		GeneratorRefs:  e.ctx.na.refList(bisonRef, m4Ref),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: localBucket},
 		OnUse:          pending,
 	})
 
-	var generatedParsed []IncludeDirective
-
-	switch {
-	case addInputs:
-		generatedParsed = na.dirList(append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())}}, localBucket...)...)
-	case preprocessHeader:
-		generatedParsed = e.bisonGeneratedCPPParsed(srcVFS, headerVFS)
-	default:
-		generatedParsed = na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
-	}
-
+	generatedParsed := na.dirList(append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())}}, localBucket...)...)
 	cf := na.anys.alloc(2)[:0]
 
 	if preprocessHeader {

@@ -6,6 +6,7 @@ import (
 )
 
 type GeneratedFileInfo struct {
+	InputsOnly      bool
 	Nots            *NotsPrepared
 	OutputPath      VFS
 	SourcePath      VFS
@@ -15,7 +16,6 @@ type GeneratedFileInfo struct {
 	ProducerRef     NodeRef
 	OnUse           *PendingEmit
 	GeneratorRefs   []NodeRef
-	SourceInputs    []VFS
 	ProducerMainOut VFS
 	ClosureLeaves   []VFS
 	LateOutputs     []VFS
@@ -57,10 +57,8 @@ func (p *PendingEmit) fire() {
 type CodegenRegistry struct {
 	byRel           DenseMap[STR, *GeneratedFileInfo]
 	bySplit         *IntMap[splitLookup]
-	leafEver        BitSet
 	splitGeneration uint32
 	na              *NodeArenas
-	addInputs       bool
 }
 
 type splitLookup struct {
@@ -68,8 +66,8 @@ type splitLookup struct {
 	generation uint32
 }
 
-func newCodegenRegistry(na *NodeArenas, addInputs bool) *CodegenRegistry {
-	return &CodegenRegistry{na: na, addInputs: addInputs}
+func newCodegenRegistry(na *NodeArenas) *CodegenRegistry {
+	return &CodegenRegistry{na: na}
 }
 
 func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
@@ -106,6 +104,14 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	}
 
 	if existing, ok := r.byRel.get(info.OutputPath.rel()); ok {
+		if existing.InputsOnly {
+			info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{existing.ClosureLeaves})
+			*existing = info
+			r.splitGeneration++
+
+			return existing
+		}
+
 		if existing.OwnerModule != info.OwnerModule || existing.OwnerSerial == info.OwnerSerial {
 			throwFmt("CodegenRegistry: duplicate producer for %q (existing ref=%d, new ref=%d)",
 				info.OutputPath.string(), existing.ProducerRef, info.ProducerRef)
@@ -125,15 +131,19 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	r.byRel.put(stored.OutputPath.rel(), stored)
 	r.splitGeneration++
 
-	if r.addInputs {
-		return stored
-	}
-
-	for _, leaf := range stored.ClosureLeaves {
-		r.leafEver.add(uint32(leaf))
-	}
-
 	return stored
+}
+
+func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates []VFS) {
+	info, ok := r.byRel.get(output.rel())
+
+	if !ok {
+		info = r.na.geninfos.one()
+		*info = GeneratedFileInfo{OutputPath: output, InputsOnly: true}
+		r.byRel.put(output.rel(), info)
+	}
+
+	info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{templates})
 }
 
 func (r *CodegenRegistry) lookup(path VFS) *GeneratedFileInfo {
@@ -143,11 +153,19 @@ func (r *CodegenRegistry) lookup(path VFS) *GeneratedFileInfo {
 
 	info, _ := r.byRel.get(path.rel())
 
+	if info != nil && info.InputsOnly {
+		return nil
+	}
+
 	return info
 }
 
 func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
 	info, _ := r.byRel.get(id)
+
+	if info != nil && info.InputsOnly {
+		return nil
+	}
 
 	return info
 }
@@ -180,6 +198,10 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix ANY) *GeneratedFileInfo
 
 	if rel != 0 {
 		info, _ = r.byRel.get(rel)
+
+		if info != nil && info.InputsOnly {
+			info = nil
+		}
 	}
 
 	if r.bySplit == nil {
@@ -197,34 +219,6 @@ func (r *CodegenRegistry) mustInfo(path VFS) *GeneratedFileInfo {
 	assert(info != nil, "CodegenRegistry: unregistered path")
 
 	return info
-}
-
-func (r *CodegenRegistry) addClosureLeafNoSubsume(node, leaf VFS) {
-	info := r.mustInfo(node)
-
-	info.ClosureLeaves = arenaAppend(r.na.vfs, info.ClosureLeaves, leaf)
-}
-
-func (r *CodegenRegistry) isLeafEver(v VFS) bool {
-	return r.leafEver.has(uint32(v))
-}
-
-func (r *CodegenRegistry) closureLeaves(node VFS) []VFS {
-	if r.addInputs {
-		return nil
-	}
-
-	if info := r.lookup(node); info != nil {
-		return info.ClosureLeaves
-	}
-
-	return nil
-}
-
-func (r *CodegenRegistry) addSourceInputs(na *NodeArenas, path VFS, extra []VFS) {
-	info := r.mustInfo(path)
-
-	info.SourceInputs = na.dedupClosure(info.SourceInputs, [][]VFS{extra})
 }
 
 func (r *CodegenRegistry) buildParsedFor(out VFS) ParsedIncludeSet {

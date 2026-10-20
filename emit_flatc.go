@@ -182,24 +182,6 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 	}
 
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.na, ctx.parsers, srcVFS.relString())
-	headerLeaves := ctx.na.vfs.alloc(3 + transitiveImports.len())[:0]
-	transitiveBuckets := transitiveImports.bucketList()
-
-	headerLeaves = append(headerLeaves, flatcWrapperVFS)
-
-	if srcVFS.isSource() {
-		headerLeaves = append(headerLeaves, srcVFS)
-	}
-
-	headerLeaves = append(headerLeaves, v.runtimeVFS)
-
-	for _, bucket := range transitiveBuckets {
-		headerLeaves = append(headerLeaves, bucket...)
-	}
-
-	ctx.na.vfs.commit(len(headerLeaves))
-	headerLeaves = headerLeaves[:len(headerLeaves):len(headerLeaves)]
-
 	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
@@ -207,7 +189,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 		ProducerRef:    flRef,
 		GeneratorRefs:  e.ctx.na.refList(flatcLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerIncludes},
-		ClosureLeaves:  headerLeaves,
+		ClosureLeaves:  ctx.na.vfsList(v.runtimeVFS),
 		OnUse:          pending,
 	})
 

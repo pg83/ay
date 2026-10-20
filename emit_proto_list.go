@@ -47,7 +47,7 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 
 	e.register(GeneratedFileInfo{
 		OutputPath: output, ProducerRef: ref, OnUse: pending,
-		SourceInputs: sources, ClosureLeaves: sources,
+
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: na.dirs.list(parsed...)},
 	})
 
@@ -55,7 +55,7 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 		e.emitReservedNode(Node{
 			Platform: e.instance.Platform,
 			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), touchScript.any(), header.any())), Env: envVarsVCS}),
-			Env:      envVarsVCS, Inputs: na.inputList(na.vfsList(touchScript), na.vfsList(output), sources), Outputs: na.vfsList(header),
+			Env:      envVarsVCS, Inputs: na.inputList(na.vfsList(touchScript), na.vfsList(output)), Outputs: na.vfsList(header),
 			KV: &pbKV, Resources: usesPython3,
 		}, headerRef)
 	})
@@ -64,6 +64,6 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 
 	e.register(GeneratedFileInfo{
 		OutputPath: header, ProducerRef: headerRef, OnUse: touch,
-		ClosureLeaves: sources, ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: na.dirs.list(induced...)},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: na.dirs.list(induced...)},
 	})
 }

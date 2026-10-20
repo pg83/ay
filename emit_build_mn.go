@@ -53,8 +53,8 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 		ProducerRef:    ref,
 		GeneratorRefs:  e.ctx.na.refList(archiverRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.ctx.na.dirList(mnSSEInclude)},
-		ClosureLeaves:  e.ctx.na.vfsList(infoVFS, buildMnScriptVFS),
-		OnUse:          pending,
+
+		OnUse: pending,
 	})
 
 	e.register(GeneratedFileInfo{

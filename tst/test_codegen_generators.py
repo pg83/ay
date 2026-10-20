@@ -80,12 +80,18 @@ class GeneratorEdgeCasesTest(unittest.TestCase):
 
         use = lib.node_by_output(graph, "$(B)/lib/use.cpp.o")
         for path in (
-            "$(B)/lib/factors_gen.h", "$(S)/lib/extra.h", "$(S)/util/x.h",
-            "$(B)/lib/base_gen.h", "$(S)/other/base_gen.in",
-            "$(B)/lib/cfg.h", "$(S)/lib/cfg.h.in",
-            "$(B)/lib/data.inc", "$(B)/lib/hash.h", "$(S)/lib/a.txt",
+            '$(B)/lib/factors_gen.h',
+            '$(S)/lib/extra.h',
+            '$(S)/util/x.h',
+            '$(B)/lib/base_gen.h',
+            '$(S)/other/base_gen.in',
+            '$(B)/lib/cfg.h',
+            '$(S)/lib/cfg.h.in',
+            '$(B)/lib/data.inc',
+            '$(B)/lib/hash.h',
         ):
             self.assertIn(path, use["inputs"])
+        self.assertNotIn('$(S)/lib/a.txt', use['inputs'])
 
 
 if __name__ == "__main__":

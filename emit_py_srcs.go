@@ -223,8 +223,8 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 		}
 
 		return append(out,
-			PyGenResEntry{token: token, key: ps.Module, path: ps.Path, sourceInputs: info.SourceInputs, buildInputs: ps.ExtraInputs},
-			PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut, sourceInputs: info.SourceInputs})
+			PyGenResEntry{token: token, key: ps.Module, path: ps.Path, buildInputs: ps.ExtraInputs},
+			PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut})
 	case pySourceGenerated:
 		info := e.codegen.use(ps.Path)
 
@@ -232,12 +232,12 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 			throwFmt("appendPyResEntries: unregistered producer for %q", ps.Path.string())
 		}
 
-		out = append(out, PyGenResEntry{token: ps.Token.string(), key: ps.Module, path: ps.Path, sourceInputs: info.SourceInputs})
+		out = append(out, PyGenResEntry{token: ps.Token.string(), key: ps.Module, path: ps.Path})
 
 		if !d.pyBuildNoPYC {
 			yapycOut := e.pyYapycOutFor(ps)
 
-			out = append(out, PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut, sourceInputs: info.SourceInputs})
+			out = append(out, PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut})
 		}
 
 		return out
@@ -373,9 +373,9 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 		inputsHead := na.vfsList(py3ccBinary, py3ccSlowBin, ps.Path)
 
 		if len(ps.ExtraInputs) > 0 {
-			nodeInputs = na.inputList(inputsHead, info.SourceInputs, ps.ExtraInputs)
+			nodeInputs = na.inputList(inputsHead, ps.ExtraInputs)
 		} else {
-			nodeInputs = na.inputList(inputsHead, info.SourceInputs)
+			nodeInputs = na.inputList(inputsHead)
 		}
 	} else {
 		var genInfo *GeneratedFileInfo
@@ -406,7 +406,6 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 			nodeInputs = na.inputList(
 				na.vfsList(py3ccBinary, py3ccSlowBin),
 				na.vfsList(srcAbs),
-				genInfo.SourceInputs,
 				ps.ExtraInputs,
 			)
 		} else {
@@ -814,9 +813,8 @@ func (e *EmitContext) emitPyRegister(py3Suffix bool) {
 		}
 
 		e.register(GeneratedFileInfo{
-			OutputPath:    regCppVFS,
-			ProducerRef:   pyRef,
-			ClosureLeaves: e.ctx.na.vfsList(genPy3RegScriptVFS),
+			OutputPath:  regCppVFS,
+			ProducerRef: pyRef,
 		})
 
 		e.enqueueSrc(SrcMeta{

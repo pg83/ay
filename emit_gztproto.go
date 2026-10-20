@@ -59,31 +59,10 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 	}
 
 	pending := e.pendingEmit(pe)
-	sourceInputs := na.vfs.alloc(1 + imports.len())[:0]
-
-	sourceInputs = append(sourceInputs, gztSource)
-
-	for _, bucket := range importBuckets {
-		if bucket[0].isBuild() {
-			continue
-		}
-
-		for _, v := range bucket {
-			if extIsGztproto(v.relString()) {
-				sourceInputs = append(sourceInputs, v)
-			}
-		}
-	}
-
-	na.vfs.commit(len(sourceInputs))
-
-	sourceInputs = sourceInputs[:len(sourceInputs):len(sourceInputs)]
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     genProto,
 		ProducerRef:    gzRef,
-		SourceInputs:   sourceInputs,
-		ClosureLeaves:  sourceInputs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: gztGeneratedProtoParse(ctx, e.scanner, gztSource, inducedProtos)},
 		OnUse:          pending,
 	})

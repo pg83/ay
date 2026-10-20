@@ -91,12 +91,12 @@ class ResourceObjcopyTest(unittest.TestCase):
         first, second = objcopy_nodes(graph)
         producer = lib.node_by_output(graph, "$(B)/lib/gen.h")
         self.assertEqual(first["inputs"], [
-            "$(B)/tools/rescompiler/rescompiler",
-            "$(B)/tools/rescompressor/rescompressor",
-            "$(B)/lib/gen.h",
-            "$(S)/build/scripts/objcopy.py",
-            "$(S)/lib/in.cfg",
-            "$(B)/lib/gen_inc.h",
+            '$(B)/tools/rescompiler/rescompiler',
+            '$(B)/tools/rescompressor/rescompressor',
+            '$(B)/lib/gen.h',
+            '$(S)/build/scripts/objcopy.py',
+            '$(B)/lib/gen_inc.h',
+            '$(S)/lib/src.h',
         ])
         first_args = first["cmds"][0]["cmd_args"]
         self.assertEqual(section(first_args, "--inputs"), ["$(B)/lib/gen.h"])
@@ -105,12 +105,11 @@ class ResourceObjcopyTest(unittest.TestCase):
             ["genkey"],
         )
         self.assertEqual(second["inputs"], [
-            "$(B)/tools/rescompiler/rescompiler",
-            "$(B)/tools/rescompressor/rescompressor",
-            "$(B)/lib/gen_inc.h",
-            "$(S)/build/scripts/objcopy.py",
-            "$(S)/lib/in.cfg",
-            "$(B)/lib/gen.h",
+            '$(B)/tools/rescompiler/rescompiler',
+            '$(B)/tools/rescompressor/rescompressor',
+            '$(B)/lib/gen_inc.h',
+            '$(S)/build/scripts/objcopy.py',
+            '$(S)/lib/src.h',
         ])
         self.assertEqual(
             section(second["cmds"][0]["cmd_args"], "--kvs"),

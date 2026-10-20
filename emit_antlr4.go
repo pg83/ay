@@ -8,6 +8,13 @@ import (
 func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	outPrefix := instance.Path.relString() + "/"
+	includes := []VFS{antlr4RuntimeHeaderVFS}
+
+	for _, inc := range g.OutputIncludes {
+		includes = append(includes, source(inc))
+	}
+
+	parsed := antlrWitnessParsed(ctx.na, includes)
 
 	if g.IsSplit {
 		jvRef := ctx.emit.reserve()
@@ -20,35 +27,24 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		pending := e.pendingEmit(jvPE)
 		lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
 		parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
-		lexerG4 := source(instance.Path.relString(), "/", g.Lexer)
-		parserG4 := source(instance.Path.relString(), "/", g.Parser)
 		lexerCpp := build(outPrefix, lexerBase, ".cpp")
 		parserCpp := build(outPrefix, parserBase, ".cpp")
 
 		e.register(GeneratedFileInfo{
-			OutputPath:    lexerCpp,
-			ProducerRef:   jvRef,
-			GeneratorRefs: nil,
-			OnUse:         pending,
+			OutputPath:     lexerCpp,
+			ProducerRef:    jvRef,
+			GeneratorRefs:  nil,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+			OnUse:          pending,
 		})
 
 		e.register(GeneratedFileInfo{
-			OutputPath:    parserCpp,
-			ProducerRef:   jvRef,
-			GeneratorRefs: nil,
-			OnUse:         pending,
+			OutputPath:     parserCpp,
+			ProducerRef:    jvRef,
+			GeneratorRefs:  nil,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+			OnUse:          pending,
 		})
-
-		witnessIncludes := []VFS{
-			antlr4RuntimeHeaderVFS,
-			lexerCpp,
-			stdout2stderrVFS,
-			antlr4JarVFS,
-			lexerG4,
-			parserG4,
-		}
-
-		parsed := antlrWitnessParsed(e.ctx.na, witnessIncludes)
 
 		for _, suffix := range []string{
 			lexerBase + ".h",
@@ -65,21 +61,12 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			})
 		}
 
-		jvInputs := []VFS{
-			source(instance.Path.relString(), "/", g.Lexer),
-			source(instance.Path.relString(), "/", g.Parser),
-			stdout2stderrVFS,
-			antlr4JarVFS,
-		}
-
-		jvPrimary := build(outPrefix, lexerBase, ".cpp")
-
 		cpccPairs := []struct{ cpp, h VFS }{
 			{build(outPrefix, lexerBase, ".cpp"), build(outPrefix, lexerBase, ".h")},
 			{build(outPrefix, parserBase, ".cpp"), build(outPrefix, parserBase, ".h")},
 		}
 
-		e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
+		e.emitJVDownstreamCPCC(cpccPairs, g.OutputIncludes)
 	} else {
 		jvRef := ctx.emit.reserve()
 		tc := d.tc
@@ -90,33 +77,24 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 
 		pending := e.pendingEmit(jvPE)
 		base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
-		grammarG4 := source(instance.Path.relString(), "/", g.Grammar)
 		lexerCpp := build(outPrefix, base, "Lexer.cpp")
 		parserCpp := build(outPrefix, base, "Parser.cpp")
 
 		e.register(GeneratedFileInfo{
-			OutputPath:    lexerCpp,
-			ProducerRef:   jvRef,
-			GeneratorRefs: nil,
-			OnUse:         pending,
+			OutputPath:     lexerCpp,
+			ProducerRef:    jvRef,
+			GeneratorRefs:  nil,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+			OnUse:          pending,
 		})
 
 		e.register(GeneratedFileInfo{
-			OutputPath:    parserCpp,
-			ProducerRef:   jvRef,
-			GeneratorRefs: nil,
-			OnUse:         pending,
+			OutputPath:     parserCpp,
+			ProducerRef:    jvRef,
+			GeneratorRefs:  nil,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+			OnUse:          pending,
 		})
-
-		witnessIncludes := []VFS{
-			antlr4RuntimeHeaderVFS,
-			lexerCpp,
-			stdout2stderrVFS,
-			antlr4JarVFS,
-			grammarG4,
-		}
-
-		parsed := antlrWitnessParsed(e.ctx.na, witnessIncludes)
 
 		for _, suffix := range []string{
 			base + "Lexer.h",
@@ -133,20 +111,12 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			})
 		}
 
-		jvInputs := []VFS{
-			source(instance.Path.relString(), "/", g.Grammar),
-			stdout2stderrVFS,
-			antlr4JarVFS,
-		}
-
-		jvPrimary := build(outPrefix, base, "Lexer.cpp")
-
 		cpccPairs := []struct{ cpp, h VFS }{
 			{build(outPrefix, base, "Lexer.cpp"), build(outPrefix, base, "Lexer.h")},
 			{build(outPrefix, base, "Parser.cpp"), build(outPrefix, base, "Parser.h")},
 		}
 
-		e.emitJVDownstreamCPCC(jvRef, jvPrimary, jvInputs, cpccPairs, g.OutputIncludes)
+		e.emitJVDownstreamCPCC(cpccPairs, g.OutputIncludes)
 	}
 }
 

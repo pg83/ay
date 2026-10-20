@@ -48,7 +48,7 @@ func (e *EmitContext) emitPy2TestSources() *ObjcopyEmitResult {
 					Cmds:   ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(ctx.na.anyList(tool.any(), internStr(ps.Path.relString()+"-").any(), ps.Path.any(), out.any())), Env: envVarsVCSPyHash}),
 					Inputs: ctx.na.inputList(ctx.na.vfsList(tool, ps.Path)), Outputs: ctx.na.vfsList(out), DepRefs: depRefs(toolRef)})
 
-				e.register(GeneratedFileInfo{OutputPath: out, SourcePath: ps.Path, ProducerRef: ref, SourceInputs: ctx.na.vfsList(ps.Path)})
+				e.register(GeneratedFileInfo{OutputPath: out, SourcePath: ps.Path, ProducerRef: ref})
 				items = append(items, ResourceItem{Path: rel + ".yapyc", Key: "/py_code/" + name, BuildInput: out})
 			}
 		}

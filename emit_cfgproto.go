@@ -2,10 +2,6 @@ package main
 
 var cfgprotoKV = KV{P: pkPB, PC: pcYellow}
 
-var cfgprotoGenCCExtras = []IncludeDirective{
-	{kind: includeQuoted, target: includeTarget(pbWrapperVFS.rel().any())},
-}
-
 func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	src := meta.Source
 	ctx, d := e.ctx, e.d
@@ -15,24 +11,17 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 	cfgRel := e.protoSourceRel(e.moduleSourceName(src))
 	cfgRelPath := cfgRel.string()
 	cfgSource := cfgRel.source()
-	cfgImports := e.scanner.walkClosure(cfgSource, d.scanCtx, scanDomainProto)
 	directImports := protoDirectPbHIncludes(ctx.parsers, cfgRelPath, protoCPPOutRoot(d), e.dirScratch[:0])
 
 	e.dirScratch = directImports
 
 	configIncludes := ctx.parsers.sourceParsedBuckets(cfgSource, nil).bucket(parsedIncludesProtoConfig)
-	extras := pbHEmitsIncludesExtras()
-	cfgHParsed := ctx.na.dirs.alloc(len(directImports) + len(configIncludes) + len(extras) + cfgImports.len())[:0]
+	extras := pbDescriptorImporterDirectives
+	cfgHParsed := ctx.na.dirs.alloc(len(directImports) + len(configIncludes) + len(extras))[:0]
 
 	cfgHParsed = append(cfgHParsed, directImports...)
 	cfgHParsed = append(cfgHParsed, configIncludes...)
 	cfgHParsed = append(cfgHParsed, extras...)
-
-	for _, bucket := range cfgImports.bucketList() {
-		for _, ti := range bucket {
-			cfgHParsed = append(cfgHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(ti.rel().any())})
-		}
-	}
 
 	ctx.na.dirs.commit(len(cfgHParsed))
 	cfgHParsed = cfgHParsed[:len(cfgHParsed):len(cfgHParsed)]
@@ -44,12 +33,9 @@ func (e *EmitContext) emitLibraryCfgProtoSource(meta SrcMeta) {
 			internV("--plugin=protoc-gen-config=", configPluginBinary.prefix(), configPluginBinary.relString()).any(),
 			argConfigOutB.any(),
 		),
-		toolLDRef:   configPluginLDRef,
-		toolBinary:  configPluginBinary,
-		genRefs:     ctx.na.refList(protocLDRef, cppStyleguideLDRef, configPluginLDRef),
-		genHParsed:  cfgHParsed,
-		genCCExtras: cfgprotoGenCCExtras,
-		hLeaves:     ctx.na.vfsList(cfgSource, build(cfgRelPath, ".pb.cc")),
-		ccLeaves:    ctx.na.vfsList(cfgSource),
+		toolLDRef:  configPluginLDRef,
+		toolBinary: configPluginBinary,
+		genRefs:    ctx.na.refList(protocLDRef, cppStyleguideLDRef, configPluginLDRef),
+		genHParsed: cfgHParsed,
 	})
 }

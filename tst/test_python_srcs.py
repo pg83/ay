@@ -282,12 +282,13 @@ class PySrcsTest(unittest.TestCase):
             f"{PY3CC} gen_out.py- $(B)/lib/gen_out.py $(B)/lib/gen_out.py.yapyc3",
         )
         self.assertEqual(generated["inputs"], [
-            "$(B)/tools/py3cc/py3cc", "$(B)/tools/py3cc/slow/slow",
-            "$(B)/lib/gen_out.py", "$(S)/lib/gen.py",
+            '$(B)/tools/py3cc/py3cc',
+            '$(B)/tools/py3cc/slow/slow',
+            '$(B)/lib/gen_out.py',
         ])
         self.assertIn(producer["uid"], generated["deps"])
         copied = lib.node_by_output(graph, "$(B)/lib/copied.py.yapyc3")
-        self.assertIn("$(S)/lib/orig.py", copied["inputs"])
+        self.assertNotIn("$(S)/lib/orig.py", copied["inputs"])
         relocated = lib.node_by_output(graph, "$(B)/lib/sub/in_other.py.zsw2.yapyc3")
         self.assertEqual(
             cmd(relocated),
@@ -371,7 +372,7 @@ class PySrcsTest(unittest.TestCase):
             cmd(pyc),
             f"{PY3CC} lib/gen_out.py- $(B)/lib/gen_out.py $(B)/lib/gen_out.py.yapyc3",
         )
-        self.assertIn("$(S)/lib/gen.py", pyc["inputs"])
+        self.assertNotIn("$(S)/lib/gen.py", pyc["inputs"])
         packs = [
             node for node in graph["graph"]
             if node["kv"].get("p") == "PR" and node["outputs"][0].startswith("$(B)/lib/")
@@ -382,7 +383,7 @@ class PySrcsTest(unittest.TestCase):
             packs[0]["cmds"][0]["cmd_args"],
         )
         aux = lib.node_by_output(graph, packs[0]["outputs"][0] + ".o")
-        self.assertIn("$(S)/lib/gen.py", aux["inputs"])
+        self.assertNotIn("$(S)/lib/gen.py", aux["inputs"])
         source = objcopy_with_kv(
             graph, "lib", "resfs/src/resfs/file/py/lib/gen_out.py=lib/gen_out.py")
         self.assertIn("$(B)/lib/gen_out.py", source["inputs"])

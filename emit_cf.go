@@ -89,14 +89,14 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 	pending := e.pendingEmit(pe)
 
 	e.register(GeneratedFileInfo{
-		OutputPath:     outVFS,
-		SourcePath:     srcVFS,
-		ProducerRef:    cfRef,
-		GeneratorRefs:  nil,
-		SourceInputs:   na.vfsList(srcVFS, configureFilePyVFS),
+		OutputPath:    outVFS,
+		SourcePath:    srcVFS,
+		ProducerRef:   cfRef,
+		GeneratorRefs: nil,
+
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-		ClosureLeaves:  e.ctx.na.vfsList(srcVFS, configureFilePyVFS),
-		OnUse:          pending,
+
+		OnUse: pending,
 	})
 
 	return cfRef

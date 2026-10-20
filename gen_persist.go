@@ -62,5 +62,4 @@ func persistResult(ctx *GenCtx, r *ModuleEmitResult) {
 	r.InducedDeps = persistParsedIncludeSet(ctx, r.InducedDeps)
 	r.DescClosure = ctx.descSlices.internCopy(r.DescClosure)
 	r.ResourceGlobalClosure = ctx.declSlices.internCopy(r.ResourceGlobalClosure)
-	r.GoSrcClosure = ctx.vfsSlices.internCopy(r.GoSrcClosure)
 }

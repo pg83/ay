@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 type PeerContext struct {
 	GlobalSources     []VFS
 	SelfAddInclGlobal []VFS
@@ -176,6 +178,8 @@ func (e *EmitContext) emitReservedNode(node Node, ref NodeRef) {
 }
 
 func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
+	e.includeNodeInputs(node)
+
 	var refs []NodeRef
 
 	for _, chunk := range node.Inputs {
@@ -261,6 +265,82 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 
 	node.DepRefs = result
 	nodeRefScratches.put(refs)
+}
+
+func (e *EmitContext) includeNodeInputs(node *Node) {
+	if node.InputClosure.self != 0 || node.InputClosure.buckets != nil {
+		return
+	}
+
+	var extra []Closure
+	var templates []VFS
+
+	for _, chunk := range node.Inputs {
+		for _, input := range chunk {
+			template := strings.HasSuffix(input.relString(), ".in")
+
+			if template {
+				templates = append(templates, input)
+			}
+
+			if input.isBuild() && e.codegen.lookup(input) != nil || template {
+				if e.d.scanCtx == nil {
+					e.d.scanCtx = newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, includeScannerBasePaths())
+				}
+
+				cl, cached := e.scanner.closure(input)
+
+				if !cached {
+					cl = e.scanner.walkClosure(input, e.d.scanCtx, scanDomainCC)
+				}
+
+				if cl.buckets != nil {
+					extra = append(extra, cl)
+				}
+			}
+		}
+	}
+
+	if len(templates) > 0 {
+		templates = e.ctx.na.vfsList(templates...)
+
+		for _, output := range node.Outputs {
+			e.codegen.forwardTemplateInputs(output, templates)
+		}
+	}
+
+	if len(extra) == 0 {
+		return
+	}
+
+	dedupers.with(func(dd *DeDuper) {
+		bound := len(node.Inputs)
+
+		for _, cl := range extra {
+			bound += len(cl.bucketList())
+		}
+
+		chunks := e.ctx.na.inputs.alloc(bound)[:0]
+
+		for _, chunk := range node.Inputs {
+			chunks = append(chunks, chunk)
+
+			for _, input := range chunk {
+				dd.addStable(input.strID())
+			}
+		}
+
+		for _, cl := range extra {
+			for _, bucket := range cl.bucketList() {
+				if unseen := e.ctx.na.filterSeen(dd, bucket); len(unseen) > 0 {
+					chunks = append(chunks, unseen)
+				}
+			}
+		}
+
+		e.ctx.na.inputs.commit(len(chunks))
+		node.Inputs = chunks[:len(chunks):len(chunks)]
+	})
 }
 
 func (e *EmitContext) resStr2(a, b string) string {

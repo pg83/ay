@@ -55,8 +55,8 @@ func (e *EmitContext) emitYmapsSprotoStmt(srcTok ANY) {
 		ProducerRef:    sprotoRef,
 		GeneratorRefs:  e.ctx.na.refList(sprotocLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-		ClosureLeaves:  e.ctx.na.vfsList(protoRel.source()),
-		OnUse:          onUse,
+
+		OnUse: onUse,
 	})
 }
 
@@ -74,11 +74,7 @@ func (e *EmitContext) emitYmapsSprotoHeaderSnap(scanner *IncludeScanner, p Ymaps
 	))
 
 	env := envVarsVCS
-	sprotoCV := scanner.walkClosure(p.sprotoH, scanCtx, scanDomainAux)
-
-	closure := collectBucketVFS(na, sprotoCV.bucketList(), func(v VFS) bool {
-		return v.isSource() || !extIsProtoGeneratedHeader(v.relString())
-	})
+	closure := scanner.walkClosure(p.protoRel.source(), scanCtx, scanDomainProto).collect(na, func(VFS) bool { return true })
 
 	node := Node{
 		Platform: e.instance.Platform,

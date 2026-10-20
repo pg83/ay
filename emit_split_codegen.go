@@ -96,8 +96,8 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		ProducerRef:    scRef,
 		GeneratorRefs:  e.ctx.na.refList(toolLDRef),
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: headerParsed},
-		ClosureLeaves:  e.ctx.na.vfsList(part0, inputIn),
-		OnUse:          pending,
+
+		OnUse: pending,
 	})
 
 	e.register(GeneratedFileInfo{
@@ -118,7 +118,6 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		}
 
 		if i == 0 {
-			info.ClosureLeaves = ctx.na.vfsList(inputIn)
 		}
 
 		e.register(info)

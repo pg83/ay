@@ -1,13 +1,11 @@
 package main
 
 import (
-	"path/filepath"
 	"strings"
 )
 
 func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	reg := e.codegen
 	jarVFS := antlr4JarVFS
 
 	if run.Macro == "RUN_ANTLR" {
@@ -18,8 +16,6 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	inputs := make([]VFS, 0, len(run.INFiles))
 	inputSources := make([]VFS, 0, len(run.INFiles))
 	inputBuilds := make([]VFS, 0, len(run.INFiles))
-
-	var cfExtraInputs []VFS
 
 	for _, inTok := range run.INFiles {
 		vfs := e.requireProducedInput("IN", inTok.string(), copyFileInputVFS(ctx.fs, instance.Path, inTok.string()))
@@ -32,17 +28,7 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		} else {
 			inputSources = append(inputSources, vfs)
 		}
-
-		if info := reg.use(vfs); info != nil {
-			for _, v := range info.SourceInputs {
-				cfExtraInputs = append(cfExtraInputs, v)
-			}
-		}
 	}
-
-	cfExtraInputs = dedupInPlace(cfExtraInputs)
-	inputs = append(inputs, cfExtraInputs...)
-	inputSources = append(inputSources, cfExtraInputs...)
 
 	outVFSByToken := make(map[string]VFS, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
 	outputs := make([]VFS, 0, len(run.OUTFiles)+len(run.OUTNoAutoFiles))
@@ -79,25 +65,12 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	}
 
 	pending := e.pendingEmit(pe)
-	jvSourceInputs := ctx.na.vfs.alloc(len(inputs) + 2)[:0]
 
-	for _, v := range inputs {
-		if v.isSource() {
-			jvSourceInputs = append(jvSourceInputs, v)
-		}
-	}
-
-	jvSourceInputs = append(jvSourceInputs, stdout2stderrVFS, jarVFS)
-	ctx.na.vfs.commit(len(jvSourceInputs))
-
-	jvSourceInputs = jvSourceInputs[:len(jvSourceInputs):len(jvSourceInputs)]
-
-	for outTok, outVFS := range outVFSByToken {
+	for _, outVFS := range outVFSByToken {
 		e.register(GeneratedFileInfo{
 			OutputPath:     outVFS,
 			ProducerRef:    jvRef,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: antlrParsedIncludes(instance.Path.relString(), run, outTok, outVFSByToken, inputs, jarVFS)},
-			SourceInputs:   jvSourceInputs,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: antlrParsedIncludes(instance.Path.relString(), run)},
 			OnUse:          pending,
 		})
 	}
@@ -132,7 +105,7 @@ func antlrRunCmdArgs(instance ModuleInstance, run AntlrRunInfo, inVFSByToken, ou
 	return args
 }
 
-func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, outVFSByToken map[string]VFS, inputs []VFS, jarVFS VFS) []IncludeDirective {
+func antlrParsedIncludes(modulePath string, run AntlrRunInfo) []IncludeDirective {
 	var parsed []IncludeDirective
 
 	seen := map[string]struct{}{}
@@ -149,51 +122,6 @@ func antlrParsedIncludes(modulePath string, run AntlrRunInfo, outTok string, out
 		seen[target] = struct{}{}
 		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(target).any())})
 	}
-
-	if isCCSourceExt(outTok) {
-		base := strings.TrimSuffix(outTok, filepath.Ext(outTok))
-
-		if parserBase, isLexer := strings.CutSuffix(base, "Lexer"); isLexer {
-			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
-				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
-					appendUnique(parserVFS.relString())
-
-					break
-				}
-			}
-		}
-	} else if isHeaderSource(outTok) {
-		base := strings.TrimSuffix(outTok, filepath.Ext(outTok))
-
-		if parserBase, isLexerH := strings.CutSuffix(base, "Lexer"); isLexerH {
-			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
-				if parserVFS, ok := outVFSByToken[parserBase+"Parser"+ext]; ok {
-					appendUnique(parserVFS.relString())
-
-					break
-				}
-			}
-		} else {
-			for _, ext := range []string{".cpp", ".cc", ".cxx", ".c"} {
-				if cppVFS, ok := outVFSByToken[base+ext]; ok {
-					appendUnique(cppVFS.relString())
-
-					break
-				}
-			}
-		}
-	}
-
-	for _, input := range inputs {
-		if !input.isSource() {
-			continue
-		}
-
-		appendUnique(input.relString())
-	}
-
-	appendUnique(stdout2stderrVFS.relString())
-	appendUnique(jarVFS.relString())
 
 	for _, include := range run.OutputIncludes {
 		appendUnique(copyFileIncludeTarget(modulePath, include.string()))

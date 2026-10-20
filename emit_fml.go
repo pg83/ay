@@ -39,7 +39,7 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 		OutputPath:    outVFS,
 		ProducerRef:   ref,
 		GeneratorRefs: e.ctx.na.refList(toolRef),
-		ClosureLeaves: e.ctx.na.vfsList(srcVFS),
-		OnUse:         pending,
+
+		OnUse: pending,
 	})
 }

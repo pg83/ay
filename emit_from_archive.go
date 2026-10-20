@@ -15,13 +15,8 @@ func (e *EmitContext) emitFromArchive(stmt FromArchiveEntry) {
 
 	var refs []NodeRef
 
-	sources := []VFS{script, buildScriptsFetchFromPy}
-
 	if info := e.codegen.lookup(src); info != nil {
 		refs = append(refs, info.ProducerRef)
-		sources = append(sources, info.SourceInputs...)
-	} else if src.isSource() {
-		sources = append(sources, src)
 	}
 
 	args := []ANY{
@@ -64,13 +59,12 @@ func (e *EmitContext) emitFromArchive(stmt FromArchiveEntry) {
 	})
 
 	parsed := extractionOutputIncludes(na, stmt.OutputIncludes)
-	sourceInputs := na.vfsList(sources...)
 
 	for i, out := range outputs {
 		e.register(GeneratedFileInfo{
 			OutputPath: out, ProducerRef: ref, OnUse: pending,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			SourceInputs:   sourceInputs, ProducerMainOut: outputs[0],
+			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
+			ProducerMainOut: outputs[0],
 		})
 
 		if i < len(stmt.OUTFiles) {

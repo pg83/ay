@@ -84,9 +84,14 @@ class IncludeCycleTest(unittest.TestCase):
         inputs = set(lib.node_by_output(graph, "$(B)/m/c.cpp.o")["inputs"])
         self.assertEqual(
             {
-                "$(S)/m/c.cpp", "$(S)/m/u.h", "$(S)/m/v.h", "$(S)/m/w.h",
-                "$(S)/m/x.h", "$(S)/m/k.h", "$(S)/m/g.h.in", "$(B)/m/g.h",
-                "$(S)/build/scripts/configure_file.py",
+                '$(B)/m/g.h',
+                '$(S)/m/w.h',
+                '$(S)/m/g.h.in',
+                '$(S)/m/k.h',
+                '$(S)/m/v.h',
+                '$(S)/m/u.h',
+                '$(S)/m/x.h',
+                '$(S)/m/c.cpp',
             },
             inputs,
         )

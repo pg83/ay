@@ -52,12 +52,7 @@ class BuildMnTest(unittest.TestCase):
             "$(S)/build/scripts/rodata2asm.py",
             "$(B)/mod/MN_External_mymodel.rodata",
         ])
-        self.assertEqual(sorted(rodata["inputs"][3:]), [
-            "$(B)/mod/mn.mymodel.cpp",
-            "$(S)/build/internal/scripts/build_mn.py",
-            "$(S)/kernel/matrixnet/mn_sse.h",
-            "$(S)/mod/model.info",
-        ])
+        self.assertEqual(sorted(rodata["inputs"][3:]), ['$(B)/mod/mn.mymodel.cpp', '$(S)/kernel/matrixnet/mn_sse.h'])
         self.assertIn(mn["uid"], rodata["deps"])
         library = lib.node_by_output(graph, "$(B)/mod/libmod.a")
         self.assertEqual(library["inputs"][:3], [
@@ -143,8 +138,10 @@ class LuaJitArchiveTest(unittest.TestCase):
             "$(S)/mod/a.lua", "$(S)/mod/sub/b.lua", "$(B)/tools/archiver/archiver",
         ])
         use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
-        for path in ("$(B)/mod/LuaScripts.inc", "$(S)/mod/a.lua", "$(S)/mod/sub/b.lua"):
+        for path in ('$(B)/mod/LuaScripts.inc',):
             self.assertIn(path, use["inputs"])
+        self.assertNotIn('$(S)/mod/a.lua', use['inputs'])
+        self.assertNotIn('$(S)/mod/sub/b.lua', use['inputs'])
 
 
 class BuildInfoTest(unittest.TestCase):

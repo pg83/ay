@@ -46,13 +46,11 @@ class EmitDecimalMD5Test(unittest.TestCase):
 
         compile_node = lib.node_by_output(graph, "$(B)/mod/hash.auto.cpp.o")
         self.assertEqual(compile_node["kv"]["p"], "CC")
-        for expected in (
-            "$(B)/mod/hash.auto.cpp",
-            "$(S)/mod/data.txt",
-            "$(S)/mod/helper.hpp",
-            "$(S)/build/scripts/decimal_md5.py",
-        ):
+        for expected in ('$(B)/mod/hash.auto.cpp',):
             self.assertIn(expected, compile_node["inputs"])
+        self.assertNotIn('$(S)/mod/data.txt', compile_node['inputs'])
+        self.assertNotIn('$(S)/mod/helper.hpp', compile_node['inputs'])
+        self.assertNotIn('$(S)/build/scripts/decimal_md5.py', compile_node['inputs'])
         self.assertIn(producer["uid"], compile_node["deps"])
 
         archive = lib.node_by_output(graph, "$(B)/mod/libmod.a")

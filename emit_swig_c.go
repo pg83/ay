@@ -79,29 +79,13 @@ func (e *EmitContext) emitSwigC() {
 			ProducerRef:    swRef,
 			GeneratorRefs:  e.ctx.na.refList(swigRef),
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(e.scanner, srcVFS, swigClosure)},
-			ClosureLeaves:  append(append([]VFS{}, swigClosure...), srcVFS),
 			OnUse:          pending,
 		})
-
-		swigSourceInputs := na.vfs.alloc(1 + len(swigClosure))[:0]
-
-		swigSourceInputs = append(swigSourceInputs, srcVFS)
-
-		for _, bucket := range cvBuckets {
-			if bucket[0].isSource() {
-				swigSourceInputs = append(swigSourceInputs, bucket...)
-			}
-		}
-
-		na.vfs.commit(len(swigSourceInputs))
-
-		swigSourceInputs = swigSourceInputs[:len(swigSourceInputs):len(swigSourceInputs)]
 
 		e.register(GeneratedFileInfo{
 			OutputPath:    pyOutVFS,
 			ProducerRef:   swRef,
 			GeneratorRefs: e.ctx.na.refList(swigRef),
-			SourceInputs:  swigSourceInputs,
 			OnUse:         pending,
 		})
 

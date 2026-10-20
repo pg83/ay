@@ -45,10 +45,10 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	for _, out := range outVFSs {
 		e.register(GeneratedFileInfo{
-			OutputPath:      out,
-			ProducerRef:     ref,
-			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
-			SourceInputs:    fromSandboxScriptInputs,
+			OutputPath:     out,
+			ProducerRef:    ref,
+			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+
 			ProducerMainOut: outVFSs[0],
 			OnUse:           pending,
 		})
