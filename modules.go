@@ -1659,10 +1659,8 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy3Program:
 		return ModuleUnit{Type: name, Tag: unitTagPy3Bin, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
-	case tokPy2Program:
+	case tokPy2Program, tokPy2Test:
 		return ModuleUnit{Type: name, Tag: unitTagPy2, ARPrefix: "libpy", GlobalARTag: tagGlobal, SbomLang: unitSbomPy2}
-	case tokPy2Test:
-		return ModuleUnit{Type: name, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
 	case tokPy2Module:
 		return ModuleUnit{Type: name, Tag: unitTagPy2Native, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy3ProgramBin, tokPy3Test:
@@ -3693,7 +3691,7 @@ func isProgramModuleType(name TOK) bool {
 
 func isPyProgramType(name TOK) bool {
 	switch name {
-	case tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokPy3Test:
+	case tokPy2Program, tokPy2Test, tokPy3Program, tokPy3ProgramBin, tokPy3Test:
 		return true
 	}
 

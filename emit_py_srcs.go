@@ -497,10 +497,6 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 }
 
 func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
-	if e.d.moduleStmt.Name == tokPy2Test {
-		return e.emitPy2TestSources()
-	}
-
 	_, instance, d := e.ctx, e.instance, e.d
 
 	if len(d.pySrcs) == 0 {

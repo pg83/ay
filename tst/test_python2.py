@@ -394,6 +394,37 @@ class Python2Test(unittest.TestCase):
                 self.assertEqual(keys(main), ["/py_modules/__main__", "/py_code/__main__"])
                 self.assertEqual(args(lib.node_by_output(graph, "$(B)/prog/__main__.py.yapyc"))[0], STAGE0)
 
+    def test_py2test_is_a_python2_program_with_pytest_first(self):
+        # PY2TEST is PYTEST_BIN over _BASE_PYTEST over _BASE_PY_PROGRAM
+        # (build/conf/python.conf): a Python 2 program whose pytest peer
+        # precedes the _BASE_PY_PROGRAM runtime peers.
+        files = python2_base()
+        files.update({
+            "library/python/pytest/ya.make": STUB_LIBRARY,
+            "library/python/pytest/s.cpp": "int s;\n",
+            "p23/ya.make": "PY23_LIBRARY()\nNO_PYTHON_INCLUDES()\nPY_SRCS(m.py)\nEND()\n",
+            "p23/m.py": "",
+            "t/ya.make": "PY2TEST()\nNO_PYTHON_INCLUDES()\nTEST_SRCS(test_a.py)\nPEERDIR(p23)\nEND()\n",
+            "t/test_a.py": "",
+        })
+        graph = lib.make(files, "t", "-r", opensource=False)
+        link = lib.node_by_output(graph, "$(B)/t/t")
+        peers = [path.rsplit("/", 1)[0][len("$(B)/"):] for path in link["inputs"] if path.endswith(".a")]
+        expected = [
+            "library/python/pytest",
+            "library/python/runtime/main",
+            "contrib/deprecated/python/subprocess32",
+            "contrib/tools/python/src/Modules/_sqlite",
+            "library/python/import_tracing/constructor",
+            "build/rules/py2_deprecation",
+            "library/python/testing/import_test",
+        ]
+        self.assertEqual([peer for peer in peers if peer in expected], expected)
+        self.assertIn("$(B)/p23/libpyp23.global.a", link["inputs"])
+        lib.node_by_output(graph, "$(B)/p23/m.py.yapyc")
+        lib.node_by_output(graph, "$(B)/t/test_a.py.yapyc")
+        objcopy_with_kv(graph, "t", "resfs/src//py_modules/__tests__.test_a=t/test_a.py")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

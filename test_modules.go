@@ -24,13 +24,11 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 		peers = []string{"library/cpp/testing/unittest_main", "yt/cpp/mapreduce/tests/yt_initialize_hook"}
 	case tokGtest:
 		peers = []string{"library/cpp/testing/gtest", "library/cpp/testing/gtest_main"}
-	case tokPy3Test, tokPy2Test:
+	case tokPy3Test:
 		peers = []string{"library/python/pytest"}
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
-
-		if stmt.Name == tokPy2Test {
-			peers = append(peers, "library/python/runtime/main", "contrib/deprecated/python/subprocess32")
-		}
+	case tokPy2Test:
+		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
 	case tokGBenchmark:
 		peers = []string{"library/cpp/testing/gbenchmark"}
 	case tokFuzz:

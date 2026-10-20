@@ -466,7 +466,7 @@ func (e *EmitContext) emit() {
 			}
 		}
 
-		if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 || d.moduleStmt.Name == tokPy2Test {
+		if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 {
 			e.objcopyRes = e.emitResourceObjcopy()
 		}
 

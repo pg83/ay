@@ -866,7 +866,11 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	if isPyProgramType(d.moduleStmt.Name) {
 		var earlyPeers []string
 
-		if d.moduleStmt.Name == tokPy2Program {
+		if d.usePython2 {
+			if d.moduleStmt.Name == tokPy2Test {
+				earlyPeers = append(earlyPeers, "library/python/pytest")
+			}
+
 			earlyPeers = append(earlyPeers, "library/python/runtime/main", "contrib/deprecated/python/subprocess32")
 
 			if d.pythonSQLite3 {
@@ -884,7 +888,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
 		}
 
-		if d.moduleStmt.Name == tokPy2Program && !instance.Platform.ifEnv.bool(envFAIL_PY2) && !instance.Platform.ifEnv.bool(envOPENSOURCE) {
+		if d.usePython2 && !instance.Platform.ifEnv.bool(envFAIL_PY2) && !instance.Platform.ifEnv.bool(envOPENSOURCE) {
 			earlyPeers = append(earlyPeers, "build/rules/py2_deprecation")
 		}
 
@@ -929,10 +933,6 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 				d.peerdirs = append(d.peerdirs, internStr(peer).any())
 			}
 		}
-	}
-
-	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !isPyProgramType(d.moduleStmt.Name) && !d.noImportTracing && instance.Path.relString() != "library/python/import_tracing/constructor" {
-		d.peerdirs = append(d.peerdirs, strLibraryPythonImportTracingConstructor.any())
 	}
 
 	if d.hasFbs && instance.Path.relString() != "contrib/libs/flatbuffers" {
