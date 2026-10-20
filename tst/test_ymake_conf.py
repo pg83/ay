@@ -233,6 +233,39 @@ class ConfCommandLineTest(unittest.TestCase):
         del nopic["FORCE_NO_PIC"]
         self.assertEqual(dict(presets(tree.recorded("dist-debug.pic")["argv"])), nopic)
 
+    def test_definite_pic_root_starts_its_config_before_waiting_for_target(self):
+        barrier = (
+            "import time as _time\n"
+            "if 'FORCE_NO_PIC=yes' in _sys.argv:\n"
+            "    _marker = _os.path.join(_os.path.dirname(__file__), 'argv.' + _sys.argv[2] + '.pic.json')\n"
+            "    _deadline = _time.monotonic() + 5\n"
+            "    while not _os.path.exists(_marker):\n"
+            "        if _time.monotonic() > _deadline:\n"
+            "            raise RuntimeError('PIC configuration did not start while target configuration was pending')\n"
+            "        _time.sleep(0.01)\n"
+        )
+        tree = self.tree(**{
+            "d/ya.make": "DLL(d)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n",
+            "d/d.cpp": "",
+            "build/ymake_conf.py": RECORDER.replace("import base64", barrier + "import base64", 1),
+        })
+        tree.graph("--sandboxing", "d")
+        self.assertEqual(len(list((tree.src / "build").glob("argv.*.json"))), 3)
+        normal = dict(presets(tree.recorded("dist-debug")["argv"]))
+        del normal["FORCE_NO_PIC"]
+        self.assertEqual(dict(presets(tree.recorded("dist-debug.pic")["argv"])), normal)
+
+    def test_recurse_to_nonfinal_dll_does_not_start_unused_pic_config(self):
+        tree = self.tree(**{
+            "m/ya.make": library("") + "RECURSE(d)\n",
+            "m/d/ya.make": "DLL(d)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n",
+            "m/d/d.cpp": "",
+        })
+        graph = tree.graph("--sandboxing", "m")
+        self.assertFalse(any(out.startswith("$(B)/m/d/") for node in graph["graph"] for out in node["outputs"]))
+        self.assertEqual(len(list((tree.src / "build").glob("argv.*.json"))), 2)
+        self.assertFalse((tree.src / "build/argv.dist-debug.pic.json").exists())
+
     def test_distbuild_runs_the_script_without_local_distbuild(self):
         tree = self.tree()
         tree.graph("--dist", "m")

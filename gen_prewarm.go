@@ -8,6 +8,7 @@ import (
 const (
 	prewarmRecurse = 1 << iota
 	prewarmContent
+	prewarmRoot
 )
 
 const (
@@ -33,6 +34,7 @@ type GenPrewarm struct {
 	seenDirs  map[string]uint8
 	seenFiles BitSet
 	rooted    TwoBitSet
+	onPICRoot func()
 }
 
 func newGenCaches(fs FS) *GenCaches {
@@ -42,15 +44,16 @@ func newGenCaches(fs FS) *GenCaches {
 	}
 }
 
-func (c *GenCaches) prewarm(fs FS, targets []string) {
+func (c *GenCaches) prewarm(fs FS, targets []string, onPICRoot func()) {
 	w := &GenPrewarm{
-		fs:       fs,
-		caches:   c,
-		seenDirs: map[string]uint8{},
+		fs:        fs,
+		caches:    c,
+		seenDirs:  map[string]uint8{},
+		onPICRoot: onPICRoot,
 	}
 
 	for _, t := range targets {
-		w.pushDir(t, prewarmRecurse|prewarmContent)
+		w.pushDir(t, prewarmRecurse|prewarmContent|prewarmRoot)
 	}
 
 	for more := true; more; {
@@ -162,6 +165,11 @@ func (w *GenPrewarm) dir(d PrewarmDir) {
 				w.pushDir(child, prewarmRecurse)
 			}
 		}
+	}
+
+	if d.mode&prewarmRoot != 0 && picTransition(moduleName) && w.onPICRoot != nil {
+		w.onPICRoot()
+		w.onPICRoot = nil
 	}
 
 	if d.mode&prewarmContent == 0 && moduleName != 0 && isFinalTargetModuleType(moduleName) &&

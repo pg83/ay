@@ -282,7 +282,21 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 	hostRun := startYmakeConf(fs, srcRoot, mf.hostBuildType, !mf.dist, localFlags, hostFlags, hostTC)
 	targetRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, targetFlags, targetTC)
 
-	caches.prewarm(fs, mf.targets)
+	var picRun *YmakeConfRun
+
+	startPIC := func() *YmakeConfRun {
+		picFlags := maps.Clone(targetFlags)
+
+		delete(picFlags, "FORCE_NO_PIC")
+
+		return startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
+	}
+
+	caches.prewarm(fs, mf.targets, func() {
+		if targetFlags["FORCE_NO_PIC"] == "yes" {
+			picRun = startPIC()
+		}
+	})
 
 	pc := readPlatformConf(fs)
 
@@ -302,11 +316,9 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 
 	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, targetRun.wait(), pc, targetCFlags, targetCXXFlags)
 	targetP.picMake = func() *Platform {
-		picFlags := maps.Clone(targetFlags)
-
-		delete(picFlags, "FORCE_NO_PIC")
-
-		picRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
+		if picRun == nil {
+			picRun = startPIC()
+		}
 
 		return newPlatform(tOS, tISA, mf.buildType, targetTC, picRun.wait(), pc, targetCFlags, targetCXXFlags)
 	}
