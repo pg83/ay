@@ -178,6 +178,35 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 	vfsScratches.put(sources)
 }
 
+func (r *CodegenRegistry) inheritParsedIncludes(output VFS, producer NodeRef, inherited ParsedIncludeSet) {
+	info := r.lookup(output)
+
+	if info == nil || info.ProducerRef != producer {
+		return
+	}
+
+	for _, pair := range [...][2]ParsedIncludeBucket{
+		{parsedIncludesAll, parsedIncludesLocal},
+		{parsedIncludesAll, parsedIncludesAll},
+		{parsedIncludesHeader, parsedIncludesHeader},
+		{parsedIncludesCpp, parsedIncludesCpp},
+	} {
+		added := inherited[pair[0]]
+
+		if len(added) == 0 {
+			continue
+		}
+
+		previous := info.ParsedIncludes[pair[1]]
+		merged := r.na.dirs.alloc(len(previous) + len(added))
+		k := copy(merged, previous)
+
+		k += copy(merged[k:], added)
+		r.na.dirs.commit(k)
+		info.ParsedIncludes[pair[1]] = merged[:k:k]
+	}
+}
+
 func (r *CodegenRegistry) setMainOut(ref NodeRef, outputs []VFS) {
 	for _, out := range outputs {
 		if info := r.lookup(out); info != nil && info.ProducerRef == ref {

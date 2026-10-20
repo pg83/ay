@@ -52,6 +52,22 @@ class NlgIncludesTest(unittest.TestCase):
                 compiled = lib.node_by_output(graph, "$(B)/m/use.cpp.o")
                 self.assertIn("$(B)/peer/data.nlg.h", compiled["inputs"])
 
+    def test_generated_inputs_keep_induction_through_a_runner(self):
+        for keyword in ("IN", "IN_NOPARSE"):
+            with self.subTest(keyword=keyword):
+                files = self.files('{% ext_from "peer/data.nlg" import value %}\n')
+                files["m/ya.make"] = (
+                    f"LIBRARY()\n{lib.BARE_MODULE}PEERDIR(peer)\n"
+                    "RUN_PROGRAM(tools/gen IN main.nlg OUT stage.nlg)\n"
+                    f"RUN_PROGRAM(tools/gen {keyword} ${{BINDIR}}/stage.nlg OUT result.h)\n"
+                    "SRCS(use.cpp)\nEND()\n"
+                )
+                files["m/use.cpp"] = '#include "result.h"\n'
+                graph = lib.make(files, "m")
+                compiled = lib.node_by_output(graph, "$(B)/m/use.cpp.o")
+                self.assertEqual(keyword == "IN", "$(B)/peer/data.nlg.h" in compiled["inputs"])
+                self.assertEqual(keyword == "IN", "$(B)/peer/data.nlg.pb.txt" in compiled["inputs"])
+
     def test_multiline_import_lists_use_native_whitespace(self):
         files = self.files("{%\vext_import\n'peer/data.nlg' as data with context,\n"
                            "\t\"peer/data.nlg\"\f%}\n")
