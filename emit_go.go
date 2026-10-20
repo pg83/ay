@@ -815,12 +815,12 @@ func (e *EmitContext) goSrcList(goRes *GoSrcsResult, objOuts []VFS) (srcArgs, cg
 		}
 	}
 
-	if goRes.SymabisRef != 0 {
-		addSrc(goRes.SymabisOut)
-	}
-
 	for _, src := range goRes.AutoFiles {
 		addSrc(src)
+	}
+
+	if goRes.SymabisRef != 0 {
+		addSrc(goRes.SymabisOut)
 	}
 
 	if len(d.cgoSrcs) > 0 {

@@ -98,6 +98,20 @@ def go_node(graph, path):
 
 
 class GoPackageGraphTest(unittest.TestCase):
+    def test_generated_go_sources_precede_epilogue_symabis_output(self):
+        files = go_world()
+        lib.tool_program(files, "tools/generate", "generate")
+        go_module(files, "lib/assembly", srcs="assembly.go bits.s", macros=(
+            "RUN_PROGRAM(tools/generate OUT generated.go)\n"
+        ))
+        files["lib/assembly/bits.s"] = '#include "textflag.h"\n'
+        graph = lib.make(files, "lib/assembly")
+        args = go_tool_args(go_node(graph, "lib/assembly"))
+        self.assertEqual(between(args, "++srcs", "++asm-flags"), [
+            "$(B)/lib/assembly/generated.go", "$(B)/lib/assembly/gen.symabis",
+            "$(S)/lib/assembly/assembly.go", "$(S)/lib/assembly/bits.s",
+        ])
+
     def test_renamed_transitive_go_archives_keep_their_language(self):
         files = go_world()
         go_module(files, "lib/leaf")
