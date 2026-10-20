@@ -257,7 +257,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePath string, output VFS, outputName string, vcsO VFS, ownObjects, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript string, fixElf VFS) []ANY {
 	bound := 60 + len(pluginPaths) + 2*len(wholeArchivePeers) + len(ownObjects) +
-		len(p.SysrootArgs) + len(peerLibPaths) + len(p.LinkPreludeExtra) + len(p.SystemLibs)
+		len(p.SysrootArgs) + len(peerLibPaths) + len(p.LinkPreludeExtra) + p.Linker.ArgCount
 
 	cmdArgs := na.anys.alloc(bound)[:0]
 
@@ -279,44 +279,35 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 		cmdArgs = append(cmdArgs, argWholeArchivePeers.any(), internStr(peer).any())
 	}
 
+	cmdArgs = append(cmdArgs, p.Linker.Roots...)
+
 	cmdArgs = append(cmdArgs,
-		argSourceRoot.any(), argS.any(),
-		argBuildRoot.any(), argB.any(),
 		argArchLinux.any(),
 		argObjcopyExe.any(), tc.Objcopy.any(),
 		argFixElf.any(), fixElf.any(),
 		tc.CXX.any(),
-		argWlWholeArchive.any(),
-		argYaStartCommandFile.any(),
-		argYaEndCommandFile.any(),
-		argWlNoWholeArchive.any(),
-		vcsO.any(),
 	)
+
+	cmdArgs = appendLinkerGlobals(cmdArgs, p.Linker, nil, nil)
+	cmdArgs = append(cmdArgs, vcsO.any())
 
 	for _, o := range ownObjects {
 		cmdArgs = append(cmdArgs, o.any())
 	}
 
-	cmdArgs = append(cmdArgs,
-		argDashO.any(), output.any(),
-		argShared.any(),
-		internV("-Wl,-soname,", outputName).any(),
-		p.TargetArg.any(),
-	)
-
+	cmdArgs = append(cmdArgs, argDashO.any(), output.any())
+	cmdArgs = append(cmdArgs, p.Linker.Shared...)
+	cmdArgs = appendLinkerTemplate(cmdArgs, p.Linker.Soname, "$_SONAME", outputName)
+	cmdArgs = append(cmdArgs, p.TargetArg.any())
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
-	cmdArgs = append(cmdArgs, argWlStartGroup.any())
+	cmdArgs = appendAnyLists(cmdArgs, p.Linker.BeforePeers, p.Linker.StartGroup)
 
 	for _, p := range peerLibPaths {
 		cmdArgs = append(cmdArgs, p.rel().any())
 	}
 
-	cmdArgs = append(cmdArgs, argWlEndGroup.any())
-
-	cmdArgs = append(cmdArgs,
-		argRdynamic.any(),
-		internV("-Wl,--version-script=$(S)/", modulePath, "/", exportsScript).any(),
-	)
+	cmdArgs = appendAnyLists(cmdArgs, p.Linker.EndGroup, p.Linker.AfterPeers)
+	cmdArgs = appendLinkerTemplate(cmdArgs, p.Linker.Exports, "${input:EXPORTS_FILE}", "$(S)/"+modulePath+"/"+exportsScript)
 
 	if !p.PIC && p.CompressDebugSections {
 		cmdArgs = append(cmdArgs, argWlCompressDebugSectionsZstd.any())
@@ -345,9 +336,9 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 		argWlBuildIdSha1.any(),
 	)
 
-	cmdArgs = append(cmdArgs, p.SystemLibs...)
-	cmdArgs = append(cmdArgs, argLm.any(), argWlGcSections.any())
-	cmdArgs = appendInternAnys(cmdArgs, p.linkerSelectionNoPieFlags())
+	cmdArgs = appendAnyLists(cmdArgs, p.Linker.Intercept, p.Linker.SystemLibs)
+	cmdArgs = append(cmdArgs, argLm.any())
+	cmdArgs = appendAnyLists(cmdArgs, p.Linker.DCE, p.Linker.ICF, p.Linker.NoPie)
 	na.anys.commit(len(cmdArgs))
 
 	return cmdArgs[:len(cmdArgs):len(cmdArgs)]

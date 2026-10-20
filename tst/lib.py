@@ -103,6 +103,7 @@ def main(argv):
     emit("CLANG", "yes")
     emit("COMPILER_ID", tc["type"].upper())
     emit("COMPILER_VERSION", tc["version"].split(".")[0])
+    emit("_DEFAULT_LINKER_ID", "lld")
     debug_info = ["-g"]
     if COMPRESS_DEBUG and not release and target["linux"]:
         debug_info.append("-gz=zstd")
@@ -206,9 +207,78 @@ def ya_conf_json(version="20", formula=None):
     }, indent=1) + "\n"
 
 
+# The command parts consumed from ld.conf, with its Linux/Darwin conditions.
+FAKE_LD_CONF = r'''
+_START_GROUP=
+_END_GROUP=
+_SONAME_OPTION=
+LD_STRIP_FLAG=
+_LD_SRCS_GLOBALS=--start-wa ${rootrel;ext=.a:SRCS_GLOBAL} --end-wa ${rootrel;ext=.o:SRCS_GLOBAL} ${rootrel;ext=.supp:SRCS_GLOBAL}
+when ($OS_LINUX == "yes") {
+    _START_GROUP=-Wl,--start-group
+    _END_GROUP=-Wl,--end-group
+    _SONAME_OPTION=-soname
+    LD_STRIP_FLAG=-Wl,--strip-all
+    _LD_SRCS_GLOBALS=-Wl,--whole-archive --ya-start-command-file ${rootrel;ext=.a:SRCS_GLOBAL} --ya-end-command-file -Wl,--no-whole-archive ${rootrel;ext=.o:SRCS_GLOBAL} ${rootrel;ext=.supp:SRCS_GLOBAL}
+}
+when ($OS_DARWIN == "yes") {
+    _SONAME_OPTION=-install_name
+}
+_LD_DCE_FLAG_GC_SECTIONS=
+when ($OS_DARWIN == "yes") {
+    _LD_DCE_FLAG_GC_SECTIONS=-Wl,-dead_strip
+}
+elsewhen ($OS_LINUX == "yes") {
+    _LD_DCE_FLAG_GC_SECTIONS=-Wl,--gc-sections
+}
+LD_DCE_FLAG =
+LD_DCE_FLAG+=$_LD_DCE_FLAG_GC_SECTIONS
+_LD_ICF_FLAG=
+when ($_DEFAULT_LINKER_ID == "lld") {
+    _LD_ICF_FLAG=-Wl,--icf=safe
+}
+LD_ICF_FLAG=$_LD_ICF_FLAG
+_LD_NO_PIE_FLAG=
+when ($_LINKER_ID == "lld" && $PIE != "yes" && ($PIC != "yes" || $PIC_NO_PIE == "yes")) {
+    when ($OS_LINUX == "yes") {
+        _LD_NO_PIE_FLAG=-Wl,-no-pie
+    }
+}
+_LD_USE_STDLIB=
+when ($_BUILD_COVERAGE == "yes" || $GCOV_COVERAGE == "yes" || $_BUILD_SANITIZED == "yes") {
+    _LD_USE_STDLIB=
+}
+elsewhen ($OS_LINUX == "yes" || $OS_DARWIN == "yes") {
+    _LD_USE_STDLIB=-nodefaultlibs
+}
+when ($OS_LINUX == "yes" && $MUSL != "yes") {
+    _C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB -lpthread -lc
+}
+when ($MUSL == "yes") {
+    _C_SYSTEM_LIBRARIES=-nostdlib
+}
+C_SYSTEM_LIBRARIES=$_C_SYSTEM_LIBRARIES
+LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG=
+when ($OS_LINUX == "yes") {
+    LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG=-rdynamic
+}
+EXPORTS_VALUE=$LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG
+when ($EXPORTS_FILE) {
+    EXPORTS_VALUE=$LD_EXPORT_ALL_DYNAMIC_SYMBOLS_FLAG -Wl,--version-script=${input:EXPORTS_FILE}
+}
+when ($NO_EXPORT_DYNAMIC_SYMBOLS == "yes") {
+    EXPORTS_VALUE=
+}
+_SONAME_FLAG=-Wl,$_SONAME_OPTION,$_SONAME
+_SHARED_FLAG=-shared
+_ROOT_FLAGS=--source-root $ARCADIA_ROOT --build-root $(BUILD_ROOT)
+'''
+
+
 CONF_FILES = {
     "build/ymake_conf.py": FAKE_YMAKE_CONF,
     "build/ya.conf.json": ya_conf_json(),
+    "build/conf/linkers/ld.conf": FAKE_LD_CONF,
 }
 
 

@@ -13,33 +13,19 @@ var (
 
 type PlatformConf struct {
 	GoStdVersion        string
-	SystemLibs          []string
+	Linker              *LinkerConf
 	YqlStableABI        bool
 	ProtoHeaderEpilogue bool
 }
 
 func readPlatformConf(fs FS) PlatformConf {
-	return PlatformConf{GoStdVersion: confGoStdVersion(fs), SystemLibs: confLinuxSystemLibraries(fs), YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
+	return PlatformConf{GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(fs), YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
 }
 
 func confProtoHeaderEpilogue(fs FS) bool {
 	const conf = "build/conf/proto.conf"
 
 	return fs.isFile(srcRootRel, conf) && strings.Contains(string(concatChunks(fs.read(conf))), "SET(PROTOC_TRANSITIVE_HEADERS $_CPP_PROTO_HEADERS_TRANSITIVE)")
-}
-
-func confLinuxSystemLibraries(fs FS) []string {
-	const assignment = "_C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB "
-
-	if fs.isFile(srcRootRel, ldConfRel) {
-		for _, line := range strings.Split(string(concatChunks(fs.read(ldConfRel))), "\n") {
-			if libs, ok := strings.CutPrefix(strings.TrimSpace(line), assignment); ok && strings.Contains(libs, "-lpthread") {
-				return strings.Fields(libs)
-			}
-		}
-	}
-
-	return []string{"-lpthread", "-lc"}
 }
 
 type Platform struct {
@@ -70,7 +56,7 @@ type Platform struct {
 	CompileCFlags         []ANY
 	CompressDebugSections bool
 	BuildInfoKV           KV
-	SystemLibs            []ANY
+	Linker                LinkerFlags
 	LinkPreludeExtra      []ANY
 	ClangVer              string
 	ClangVerSTR           STR
@@ -140,13 +126,10 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		throwFmt("ymake conf: %s printed no COMPILER_VERSION", ymakeConfScript)
 	}
 
-	var systemLibs, linkPreludeExtra []string
+	var linkPreludeExtra []string
 
-	if flags["MUSL"] == "yes" {
-		systemLibs = []string{"-nostdlib"}
-	} else {
+	if flags["MUSL"] != "yes" {
 		linkPreludeExtra = []string{"-ldl", "-lrt"}
-		systemLibs = append([]string{"-nodefaultlibs"}, pc.SystemLibs...)
 	}
 
 	p := &Platform{
@@ -166,7 +149,6 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		March:                 marchFor(isa),
 		CFlags:                internAnys(splitShellWords(cflagsEnv)),
 		CXXFlags:              internAnys(splitShellWords(cxxflagsEnv)),
-		SystemLibs:            internAnys(systemLibs),
 		LinkPreludeExtra:      internAnys(linkPreludeExtra),
 		ClangVer:              clangVer,
 		ClangVerSTR:           internStr(clangVer),
@@ -227,6 +209,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 
 	p.Go = newGoStd(goStdVersion)
 	p.ifEnv = buildPlatformIfEnv(p)
+	p.Linker = pc.Linker.flags(p)
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
 	p.CompileCFlags = composeCompileCFlags(p.ifEnv, flags, p.DebugInfoFlags)
@@ -413,14 +396,6 @@ func (p *Platform) linkerSelectionTailFlags() []string {
 	return nil
 }
 
-func (p *Platform) linkerSelectionNoPieFlags() []string {
-	if p.OS != OSLinux || p.ifEnv.bool(envPie) || p.PIC && !p.ifEnv.bool(envPicNoPie) {
-		return nil
-	}
-
-	return []string{"-Wl,-no-pie"}
-}
-
 func (p *Platform) pic() *Platform {
 	if p.PIC {
 		return p
@@ -465,7 +440,7 @@ func registerPlatformOwned(p *Platform) {
 	registerOwnedSlice(p.CXXFlags)
 	registerOwnedSlice(p.DebugInfoFlags)
 	registerOwnedSlice(p.CompileCFlags)
-	registerOwnedSlice(p.SystemLibs)
+	p.Linker.registerOwned()
 	registerOwnedSlice(p.LinkPreludeExtra)
 	registerOwnedSlice(p.WrapccHead)
 	registerOwnedSlice(p.WrapccTail)

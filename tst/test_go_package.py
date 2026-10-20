@@ -354,7 +354,7 @@ class GoPackageGraphTest(unittest.TestCase):
                 "-Wl,--no-rosegment", "-Wl,--build-id=sha1", "-lpthread", "-ldl", "-lresolv",
                 "-nodefaultlibs", "-lpthread", "-lc", "-lm",
             ]),
-            ("ld-conf-system-libraries", {"build/conf/linkers/ld.conf": (
+            ("ld-conf-system-libraries", {"build/conf/linkers/ld.conf": lib.FAKE_LD_CONF + (
                 'when ($OS_LINUX == "yes" && $MUSL != "yes") {\n'
                 "    _C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB -Wl,-lpthread,-lc\n}\n"
                 'when ($OS_ANDROID == "yes") {\n    _C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB -Wl,-lc\n}\n'

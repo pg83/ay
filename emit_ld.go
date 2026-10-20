@@ -316,6 +316,7 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + 7 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths) + 2*len(wholeArchiveCmdPaths) + 2*len(wholeArchivePaths) + 2*len(linkExcludeLibraries)
+	argCap += p.Linker.ArgCount
 
 	cmdArgs := na.anys.alloc(argCap)[:0]
 
@@ -333,11 +334,9 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 
 	cmdArgs = append(cmdArgs, argEndPlugins.any())
 
-	roots := []ANY{argSourceRoot.any(), argS.any(), argBuildRoot.any(), argB.any()}
-
 	if dyn == nil {
 		cmdArgs = append(cmdArgs, argClangVer.any(), internStr(p.ClangVer).any())
-		cmdArgs = append(cmdArgs, roots...)
+		cmdArgs = append(cmdArgs, p.Linker.Roots...)
 	}
 
 	for _, p := range wholeArchiveCmdPaths {
@@ -349,7 +348,7 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 	}
 
 	if dyn != nil {
-		cmdArgs = append(cmdArgs, roots...)
+		cmdArgs = append(cmdArgs, p.Linker.Roots...)
 	}
 
 	cmdArgs = append(cmdArgs, argArchLinux.any(), argObjcopyExe.any(), tc.Objcopy.any())
@@ -362,25 +361,8 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 		cmdArgs = append(cmdArgs, strExcludeLibs.any(), lib)
 	}
 
-	cmdArgs = append(cmdArgs,
-		tc.CXX.any(),
-		argWlWholeArchive.any(),
-		argYaStartCommandFile.any(),
-	)
-
-	for _, p := range globalPaths {
-		cmdArgs = append(cmdArgs, p.rel().any())
-	}
-
-	cmdArgs = append(cmdArgs,
-		argYaEndCommandFile.any(),
-		argWlNoWholeArchive.any(),
-	)
-
-	for _, op := range objcopyPaths {
-		cmdArgs = append(cmdArgs, op.rel().any())
-	}
-
+	cmdArgs = append(cmdArgs, tc.CXX.any())
+	cmdArgs = appendLinkerGlobals(cmdArgs, p.Linker, globalPaths, objcopyPaths)
 	cmdArgs = append(cmdArgs, vcsO.any())
 
 	for _, cp := range ccPaths {
@@ -390,7 +372,8 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 	cmdArgs = append(cmdArgs, argDashO.any(), output.any())
 
 	if dyn != nil {
-		cmdArgs = append(cmdArgs, argShared.any(), internV("-Wl,-soname,", dyn.soname).any())
+		cmdArgs = append(cmdArgs, p.Linker.Shared...)
+		cmdArgs = appendLinkerTemplate(cmdArgs, p.Linker.Soname, "$_SONAME", dyn.soname)
 	}
 
 	bundle := compileFlagBundleFor(p)
@@ -398,13 +381,13 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 	cmdArgs = append(cmdArgs, p.TargetArg.any())
 	cmdArgs = appendAnyLists(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
-	cmdArgs = append(cmdArgs, argWlStartGroup.any())
+	cmdArgs = appendAnyLists(cmdArgs, p.Linker.BeforePeers, p.Linker.StartGroup)
 
 	for _, p := range peerLinkCmdPaths {
 		cmdArgs = append(cmdArgs, p.rel().any())
 	}
 
-	cmdArgs = append(cmdArgs, argWlEndGroup.any())
+	cmdArgs = appendAnyLists(cmdArgs, p.Linker.EndGroup, p.Linker.AfterPeers)
 	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm, dyn != nil)...)
 	na.anys.commit(len(cmdArgs))
 
@@ -415,11 +398,13 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	var trailer []ANY
 
 	if !noExportDynSymbols {
-		trailer = append(trailer, argRdynamic.any())
+		exports := ""
 
 		if exportsScript != nil {
-			trailer = append(trailer, internV("-Wl,--version-script=$(S)/", exportsScript.string()).any())
+			exports = "$(S)/" + exportsScript.string()
 		}
+
+		trailer = appendLinkerTemplate(trailer, p.Linker.Exports, "${input:EXPORTS_FILE}", exports)
 	}
 
 	if p != nil && !p.PIC && p.CompressDebugSections {
@@ -449,18 +434,17 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 	trailer = appendInternAnys(trailer, p.linkerSelectionTailFlags())
 	trailer = appendAnyLists(trailer, peerLDFlagsGlobal, ownLDFlags)
 	trailer = appendArgGroupStr(trailer, objAddLibsGlobal)
-	trailer = append(trailer, p.SystemLibs...)
+	trailer = appendAnyLists(trailer, p.Linker.Intercept, p.Linker.SystemLibs)
 
 	if !useArcadiaLibm {
 		trailer = append(trailer, argDashLm.any())
 	}
 
 	if wantsStrip {
-		trailer = append(trailer, argWlStripAll.any())
+		trailer = append(trailer, p.Linker.Strip...)
 	}
 
-	trailer = append(trailer, argWlGcSections.any())
-	trailer = appendInternAnys(trailer, p.linkerSelectionNoPieFlags())
+	trailer = appendAnyLists(trailer, p.Linker.DCE, p.Linker.ICF, p.Linker.NoPie)
 
 	return trailer
 }

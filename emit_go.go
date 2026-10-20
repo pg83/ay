@@ -628,7 +628,7 @@ func goClassifyClosure(na *NodeArenas, resolved []ResolvedPeer, closurePaths []V
 func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadiaLibm bool, soname string, globals []VFS, ldFlagsGlobal, objAddLibsGlobal []ANY) []ANY {
 	gdb := p.linkerSelectionGDBIndexFlags()
 	objAddLibs := appendArgGroupStr(nil, objAddLibsGlobal)
-	bound := len(objAddLibs) + 2 + len(p.SysrootArgs) + len(goExtldWholeArchive) + len(globals) + 1 + len(p.LinkPreludeExtra) + 1 + 2 + len(gdb) + len(ldFlagsGlobal) + len(goExtldLinkerTail) + len(p.SystemLibs) + 1
+	bound := len(objAddLibs) + 2 + len(p.SysrootArgs) + len(goExtldWholeArchive) + len(globals) + 1 + len(p.LinkPreludeExtra) + 1 + 2 + len(gdb) + len(ldFlagsGlobal) + len(goExtldLinkerTail) + len(p.Linker.SystemLibs) + 1
 	block := na.anys.alloc(bound)
 	k := 0
 	push := func(x ANY) { block[k] = x; k++ }
@@ -695,7 +695,7 @@ func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadi
 		push(x)
 	}
 
-	for _, x := range p.SystemLibs {
+	for _, x := range p.Linker.SystemLibs {
 		push(x)
 	}
 

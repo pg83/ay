@@ -159,7 +159,7 @@ class LinkFlagsTest(unittest.TestCase):
 
     def test_system_libraries_use_configured_linker_passthrough(self):
         files = fixture()
-        files["build/conf/linkers/ld.conf"] = "_C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB -Wl,-lpthread,-lc\n"
+        files["build/conf/linkers/ld.conf"] = lib.FAKE_LD_CONF.replace("-lpthread -lc", "-Wl,-lpthread,-lc")
         graph = lib.make(files, "plain", *X86_64)
         link = command_with(lib.node_by_output(graph, "$(B)/plain/plain"), "link_exe.py")
         self.assertIn("-Wl,-lpthread,-lc", link)
@@ -223,7 +223,7 @@ class AutocheckLinkTest(unittest.TestCase):
 
     def test_system_libraries_follow_ld_conf(self):
         files = fixture()
-        files["build/conf/linkers/ld.conf"] = "    _C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB -Wl,-lpthread,-lc\n"
+        files["build/conf/linkers/ld.conf"] = lib.FAKE_LD_CONF.replace("-lpthread -lc", "-Wl,-lpthread,-lc")
         graph = lib.make(files, "plain", *X86_64)
         link = trailer(command_with(lib.node_by_output(graph, "$(B)/plain/plain"), "link_exe.py"))
         self.assertEqual(link[link.index("-nodefaultlibs"):link.index("-lm")], ["-nodefaultlibs", "-Wl,-lpthread,-lc"])
