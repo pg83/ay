@@ -168,11 +168,12 @@ class GoCgoGraphTest(unittest.TestCase):
         self.assertEqual(between(args, "++peers", "--ya-end-command-file"), [
             f"{STD}/syscall/syscall.a", f"{STD}/runtime/cgo/cgo.a", f"{STD}/errors/errors.a",
         ])
-        self.assertEqual(package["inputs"][-7:], [
+        self.assertEqual(lib.bucketed(package["inputs"][-7:-1], 4), lib.bucketed([
             "$(B)/contrib/libs/zstd/libcontrib-libs-zstd.a", f"$(B)/{STD}/syscall/syscall.a",
             f"$(B)/{STD}/runtime/cgo/cgo.a", f"$(B)/{STD}/errors/errors.a",
-            f"{s}/helper.h", "$(S)/contrib/libs/zstd/include/zstd.h", f"{b}/_cgo_main.c.o",
-        ])
+            f"{s}/helper.h", "$(S)/contrib/libs/zstd/include/zstd.h",
+        ], 4))
+        self.assertEqual(package["inputs"][-1], f"{b}/_cgo_main.c.o")
 
         link = lib.node_by_output(graph, "$(B)/cmd/app/app")
         link_args = link["cmds"][-1]["cmd_args"]

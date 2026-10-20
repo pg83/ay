@@ -18,7 +18,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"ALICE_TYPED_CALLBACK":            {},
 	"SOURCE_GROUP":                    {},
 	"TS_PROTO_OPT":                    {},
-	"GO_PACKAGE_NAME":                 {},
 	"CUDA_NVCC_FLAGS":                 {},
 	"SET_APPEND_WITH_GLOBAL":          {},
 	"RECURSE":                         {},
@@ -2229,7 +2228,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ownSbomRef, ownSbomPath = e.emitSbomComponent(rel[strings.LastIndexByte(rel, '/')+1:])
 		}
 
-		goRef, goPath := e.emitGoPackage(resolved, local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerSbomRefs, peerSbomPaths, ownSbomRef, ownSbomPath, resourceGlobalsClosure)
+		goRef, goPath := e.emitGoPackage(resolved, local.refs, local.outs, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, ownSbomRef, ownSbomPath, resourceGlobalsClosure)
 
 		arRef = goRef
 		arPath = ptr(goPath)

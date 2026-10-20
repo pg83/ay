@@ -1390,6 +1390,12 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *ResourceStmt:
+			if isGoModuleType(d.unit.Type) {
+				applyGoResource(modulePath, v, d)
+
+				break
+			}
+
 			ensureResourcePeer(modulePath, d)
 
 			for i, pair := range v.Pairs {
@@ -2041,6 +2047,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyProtoNamespace(d, v.Args[len(v.Args)-1])
 	case tokProtoAddIncl:
 		applyProtoAddIncl(d, v.Args)
+	case tokGoPackageName:
+		if d.setVars == nil {
+			d.setVars = map[STR]STR{}
+		}
+
+		d.setVars[str_GO_PACKAGE_VALUE] = v.Args[0].str()
 	case tokExportYmapsProto:
 		applyProtoNamespace(d, mapsDocProtoNS.any())
 

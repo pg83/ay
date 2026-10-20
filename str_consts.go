@@ -422,4 +422,7 @@ var (
 	strMockgenSource                                                                         = internStr("-source")
 	strPackage                                                                               = internStr("--package")
 	strProto                                                                                 = internStr("--proto")
+	strLibraryGoCoreResource                                                                 = internStr("library/go/core/resource")
+	strLibraryGoCoreResourceCc                                                               = internStr("library/go/core/resource/cc")
+	str_GO_PACKAGE_VALUE                                                                     = internStr("_GO_PACKAGE_VALUE")
 )

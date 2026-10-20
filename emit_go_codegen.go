@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/md5"
+	"fmt"
 	"path"
 	"strings"
 )
@@ -366,4 +368,53 @@ func (st GoCodegenStmt) outputNames() []string {
 	}
 
 	return names
+}
+
+func goPackageName(modulePath string, d *ModuleData) string {
+	if name := d.setVars[str_GO_PACKAGE_VALUE]; name != 0 {
+		return name.string()
+	}
+
+	if imp := d.setVars[strGO_TEST_IMPORT_PATH]; imp != 0 {
+		return path.Base(path.Clean(imp.string()))
+	}
+
+	if isProgramModuleType(d.moduleStmt.Name) {
+		return "main"
+	}
+
+	if len(d.moduleStmt.Args) > 0 {
+		return d.moduleStmt.Args[0].string()
+	}
+
+	return path.Base(modulePath)
+}
+
+func applyGoResource(modulePath string, v *ResourceStmt, d *ModuleData) {
+	args := make([]string, 0, 2*len(v.Pairs))
+
+	for _, p := range v.Pairs {
+		args = append(args, p.Path, p.Key)
+	}
+
+	out := internStr(fmt.Sprintf("resource.%x.res.go", md5.Sum([]byte(strings.Join(args, "@"))))).any()
+
+	rp := &RunProgramStmt{
+		ToolPath: strLibraryGoCoreResourceCc.any(),
+		Args:     []ANY{strMockgenPkg.any(), internStr(goPackageName(modulePath, d)).any(), strO.any(), out},
+		OUTFiles: []ANY{out},
+		Line:     v.Line,
+		DeclSeq:  d.nextDeclSeq(),
+	}
+
+	for _, p := range v.Pairs {
+		rp.Args = append(rp.Args, internStr(p.Path).any(), internStr("notafile"+p.Key).any())
+
+		if p.Path != "-" {
+			rp.INFiles = append(rp.INFiles, internStr(p.Path).any())
+		}
+	}
+
+	d.runPrograms = append(d.runPrograms, rp)
+	d.peerdirs = append(d.peerdirs, strLibraryGoCoreResource.any())
 }

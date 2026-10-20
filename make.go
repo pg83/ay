@@ -279,24 +279,23 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 
 	caches.prewarm(fs, mf.targets)
 
-	wlSystemLibs := confSystemLibsViaWl(fs)
-	goStdVersion := confGoStdVersion(fs)
+	pc := readPlatformConf(fs)
 
 	hostP = newPlatform(
 		hOS,
 		hISA,
 		mf.hostBuildType,
 		hostTC,
-		withGoStdVersion(hostRun.wait(), goStdVersion),
+		hostRun.wait(),
+		pc,
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CFLAGS", ""),
 		compilerFlagsFromConfig(rootHostYaFlags, hostInternalYaFlags, "CXXFLAGS", ""),
-		wlSystemLibs,
 	)
 
 	targetCFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CFLAGS", os.Getenv("CFLAGS"))
 	targetCXXFlags := compilerFlagsFromConfig(rootTargetYaFlags, targetInternalYaFlags, "CXXFLAGS", os.Getenv("CXXFLAGS"))
 
-	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, withGoStdVersion(targetRun.wait(), goStdVersion), targetCFlags, targetCXXFlags, wlSystemLibs)
+	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, targetRun.wait(), pc, targetCFlags, targetCXXFlags)
 	targetP.picMake = func() *Platform {
 		picFlags := maps.Clone(targetFlags)
 
@@ -304,18 +303,10 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 
 		picRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
 
-		return newPlatform(tOS, tISA, mf.buildType, targetTC, withGoStdVersion(picRun.wait(), goStdVersion), targetCFlags, targetCXXFlags, wlSystemLibs)
+		return newPlatform(tOS, tISA, mf.buildType, targetTC, picRun.wait(), pc, targetCFlags, targetCXXFlags)
 	}
 
 	return hostP, targetP
-}
-
-func withGoStdVersion(conf map[string]string, confVersion string) map[string]string {
-	if _, ok := conf["GOSTD_VERSION"]; !ok {
-		conf["GOSTD_VERSION"] = confVersion
-	}
-
-	return conf
 }
 
 func yaToolchainFlags(flags map[string]string, tc *Toolchain, tcFlags map[string]string) {

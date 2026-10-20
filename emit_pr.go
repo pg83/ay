@@ -41,6 +41,15 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 	}
 
 	for _, out := range outs {
+		if isGoModuleType(e.d.unit.Type) && strings.HasSuffix(out, ".go") {
+			v := copyFileOutputVFS(e.instance.Path.relString(), out)
+
+			e.codegen.use(v)
+			e.collectGoAutoSource(v)
+
+			continue
+		}
+
 		if !generatedOutputAutoCompiles(out) {
 			continue
 		}

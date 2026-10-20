@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"slices"
 	"strings"
 	"sync"
@@ -12,17 +11,27 @@ var (
 	wrapccPyChunk    = []VFS{wrapccPyVFS}
 )
 
-const (
-	ldConfRel         = "build/conf/linkers/ld.conf"
-	ldSystemLibsViaWl = "_C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB -Wl,-lpthread,-lc"
-)
+type PlatformConf struct {
+	GoStdVersion string
+	SystemLibs   []string
+}
 
-func confSystemLibsViaWl(fs FS) bool {
-	if !fs.isFile(srcRootRel, ldConfRel) {
-		return false
+func readPlatformConf(fs FS) PlatformConf {
+	return PlatformConf{GoStdVersion: confGoStdVersion(fs), SystemLibs: confLinuxSystemLibraries(fs)}
+}
+
+func confLinuxSystemLibraries(fs FS) []string {
+	const assignment = "_C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB "
+
+	if fs.isFile(srcRootRel, ldConfRel) {
+		for _, line := range strings.Split(string(concatChunks(fs.read(ldConfRel))), "\n") {
+			if libs, ok := strings.CutPrefix(strings.TrimSpace(line), assignment); ok && strings.Contains(libs, "-lpthread") {
+				return strings.Fields(libs)
+			}
+		}
 	}
 
-	return bytes.Contains(concatChunks(fs.read(ldConfRel)), []byte(ldSystemLibsViaWl))
+	return []string{"-lpthread", "-lc"}
 }
 
 type Platform struct {
@@ -112,7 +121,7 @@ func internFlags(flags map[string]string) map[ENV]STR {
 	return out
 }
 
-func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[string]string, cflagsEnv, cxxflagsEnv string, wlSystemLibs bool) *Platform {
+func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[string]string, pc PlatformConf, cflagsEnv, cxxflagsEnv string) *Platform {
 	rebaseToolchainRoot(flags, tc)
 
 	clangVer := flags["COMPILER_VERSION"]
@@ -127,11 +136,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		systemLibs = []string{"-nostdlib"}
 	} else {
 		linkPreludeExtra = []string{"-ldl", "-lrt"}
-		systemLibs = []string{"-nodefaultlibs", "-lpthread", "-lc"}
-
-		if wlSystemLibs {
-			systemLibs = []string{"-nodefaultlibs", "-Wl,-lpthread,-lc"}
-		}
+		systemLibs = append([]string{"-nodefaultlibs"}, pc.SystemLibs...)
 	}
 
 	p := &Platform{
@@ -202,7 +207,13 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 		{Name: envSDKROOT, Value: strEmpty.any()},
 	}
 
-	p.Go = newGoStd(flags["GOSTD_VERSION"])
+	goStdVersion, ok := flags["GOSTD_VERSION"]
+
+	if !ok {
+		goStdVersion = pc.GoStdVersion
+	}
+
+	p.Go = newGoStd(goStdVersion)
 	p.ifEnv = buildPlatformIfEnv(p)
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
@@ -250,6 +261,10 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		if !env.hasBindingID(internEnv(name)) {
 			env.setString(internEnv(name), value)
 		}
+	}
+
+	if !env.hasBindingID(envGOSTD_VERSION) {
+		env.setString(envGOSTD_VERSION, p.Go.Version)
 	}
 
 	env.setString(envGOSTD, p.Go.Prefix)

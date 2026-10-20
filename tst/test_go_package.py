@@ -106,6 +106,25 @@ class GoPackageGraphTest(unittest.TestCase):
             f"{STD}/fmt/fmt.a", "vendor/example.com/rt/rt.a",
         ])
 
+    def test_resource_in_a_go_module_runs_the_resource_compiler(self):
+        files = go_world()
+        go_module(files, "library/go/core/resource")
+        go_module(files, "library/go/core/resource/cc", module="GO_PROGRAM")
+        files["certs/cacert.pem"] = "pem\n"
+        go_module(files, "library/go/certs", macros="RESOURCE(\n    certs/cacert.pem /certifi/common.pem\n)\n")
+        graph = lib.make(files, "library/go/certs")
+        out = "$(B)/library/go/certs/resource.5e5de0f6d001776f76a82744c889271f.res.go"
+        rc = lib.node_by_output(graph, out)
+        self.assertEqual(rc["kv"]["p"], "PR")
+        self.assertEqual(rc["cmds"][0]["cmd_args"], [
+            "$(B)/library/go/core/resource/cc/cc", "-package", "certs", "-o", out,
+            "$(S)/certs/cacert.pem", "notafile/certifi/common.pem",
+        ])
+        package = go_tool_args(go_node(graph, "library/go/certs"))
+        self.assertEqual(between(package, "++srcs", "++asm-flags"), [out, "$(S)/library/go/certs/certs.go"])
+        self.assertIn("library/go/core/resource/resource.a", between(package, "++peers", "--ya-end-command-file"))
+        self.assertFalse([o for n in graph["graph"] for o in n["outputs"] if o.endswith(".global.a")])
+
     def test_program_link_partitions_direct_transitive_and_cxx_archives(self):
         files = go_world()
         go_module(files, f"{STD}/fmt", 'import (\n\t"internal/fmtsort"\n\t"golang.org/x/text/width"\n)\n')
@@ -274,6 +293,18 @@ class GoPackageGraphTest(unittest.TestCase):
                 "-Wl,--gdb-index", "-fuse-ld=lld", "--ld-path=$(B)/resources/LLD_ROOT/bin/ld.lld",
                 "-Wl,--no-rosegment", "-Wl,--build-id=sha1", "-lpthread", "-ldl", "-lresolv",
                 "-nodefaultlibs", "-lpthread", "-lc", "-lm",
+            ]),
+            ("ld-conf-system-libraries", {"build/conf/linkers/ld.conf": (
+                'when ($OS_LINUX == "yes" && $MUSL != "yes") {\n'
+                "    _C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB -Wl,-lpthread,-lc\n}\n"
+                'when ($OS_ANDROID == "yes") {\n    _C_SYSTEM_LIBRARIES=$_LD_USE_STDLIB -Wl,-lc\n}\n'
+            )}, (), [
+                "--target=aarch64-linux-gnu", "-B/usr/bin",
+                "-Wl,--whole-archive", "-Wl,--no-whole-archive", "--cgo-peers",
+                "-ldl", "-lrt", "-Wl,--no-as-needed",
+                "-Wl,--gdb-index", "-fuse-ld=lld", "--ld-path=$(B)/resources/LLD_ROOT/bin/ld.lld",
+                "-Wl,--no-rosegment", "-Wl,--build-id=sha1", "-lpthread", "-ldl", "-lresolv",
+                "-nodefaultlibs", "-Wl,-lpthread,-lc", "-lm",
             ]),
             ("musl-arcadia-libm", {}, ("--musl", "-DUSE_ARCADIA_LIBM=yes"), [
                 "--target=aarch64-linux-gnu", "-B/usr/bin",
