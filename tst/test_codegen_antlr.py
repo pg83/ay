@@ -171,8 +171,11 @@ class RunAntlrTest(unittest.TestCase):
             self.assertIn(path, lexer["inputs"])
         self.assertNotIn('$(S)/mod/tpl.g', lexer['inputs'])
         self.assertNotIn(ANTLR3_JAR, lexer['inputs'])
+        # CalcLexer.cpp, the first output, is the main output of the JV node:
+        # ydb compiles of the yql proto_ast RUN_ANTLR4 outputs list
+        # SQLv1Antlr4Parser.cpp.
         parser = lib.node_by_output(graph, "$(B)/mod/CalcParser.cpp.o")
-        self.assertNotIn("$(B)/mod/CalcLexer.cpp", parser["inputs"])
+        self.assertIn("$(B)/mod/CalcLexer.cpp", parser["inputs"])
         lib.node_by_output(graph, "$(B)/mod/Calc.cpp.o")
 
         use = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")

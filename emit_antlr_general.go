@@ -68,10 +68,11 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 
 	for _, outVFS := range outVFSByToken {
 		e.register(GeneratedFileInfo{
-			OutputPath:     outVFS,
-			ProducerRef:    jvRef,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: antlrParsedIncludes(instance.Path.relString(), run)},
-			OnUse:          pending,
+			OutputPath:      outVFS,
+			ProducerRef:     jvRef,
+			ProducerMainOut: outputs[0],
+			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: antlrParsedIncludes(instance.Path.relString(), run)},
+			OnUse:           pending,
 		})
 	}
 
