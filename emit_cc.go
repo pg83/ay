@@ -168,6 +168,14 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	suffix := ccObjectSuffix(instance, in)
 	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, suffix)
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
+
+	var langFlags []ANY
+
+	if isCxx && strings.HasSuffix(strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".swg") &&
+		(instance.Platform.ifEnv.bool(envCLANG) || instance.Platform.ifEnv.bool(envCLANG_CL) || instance.Platform.ifEnv.bool(envGCC)) {
+		langFlags = na.anyList(argWnoDeprecatedDeclarations.any())
+	}
+
 	blocks := in.CCBlocks
 	tok := na.anyList(inVFS.any(), argDashC.any(), argDashO.any(), outVFS.any())
 	inChunk := tok[0:1]
@@ -191,6 +199,10 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	}
 
 	if len(in.PerSourceCFlags) > 0 {
+		total++
+	}
+
+	if len(langFlags) > 0 {
 		total++
 	}
 
@@ -226,6 +238,11 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 
 	if len(in.PerSourceCFlags) > 0 {
 		chunks[k] = na.anyConcat(in.PerSourceCFlags)
+		k++
+	}
+
+	if len(langFlags) > 0 {
+		chunks[k] = langFlags
 		k++
 	}
 
