@@ -38,21 +38,26 @@ func (e *EmitContext) emitSwigC() {
 		srcVFS := source(instance.Path.relString(), "/", stmt.Src)
 		cOutVFS := build(instance.Path.relString(), "/", cOutRel)
 		pyOutVFS := build(instance.Path.relString(), "/", pyOutRel)
-		cv := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainSwig)
-		cvBuckets := cv.bucketList()
-		inputs := na.inputs.alloc(2 + len(cvBuckets))[:2+len(cvBuckets)]
-
-		inputs[0] = na.vfsList(bldContribToolsSwigSwig)
-		inputs[1] = na.vfsList(srcVFS)
-		copy(inputs[2:], cvBuckets)
-		na.inputs.commit(len(inputs))
-
-		inputChunks := InputChunks(inputs[:len(inputs):len(inputs)])
-		swigClosure := collectBucketVFS(ctx.na, cvBuckets, func(VFS) bool { return true })
 		swRef := ctx.emit.reserve()
 		moduleName := swigModuleName(stmt.Module)
 
+		var outputInfo *GeneratedFileInfo
+
 		pe := func() {
+			cv := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainSwig)
+			cvBuckets := cv.bucketList()
+			inputs := na.inputs.alloc(2 + len(cvBuckets))[:2+len(cvBuckets)]
+
+			inputs[0] = na.vfsList(bldContribToolsSwigSwig)
+			inputs[1] = na.vfsList(srcVFS)
+			copy(inputs[2:], cvBuckets)
+			na.inputs.commit(len(inputs))
+
+			inputChunks := InputChunks(inputs[:len(inputs):len(inputs)])
+			swigClosure := collectBucketVFS(ctx.na, cvBuckets, func(VFS) bool { return true })
+
+			outputInfo.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(e.scanner, srcVFS, swigClosure)}
+
 			cmdArgs := na.chunkList(na.anyList(swigBin.any()), swigConstArgs, na.anyList(internStr(moduleName).any(),
 				argInterface.any(),
 				internV(moduleName, "_swg").any(),
@@ -74,12 +79,11 @@ func (e *EmitContext) emitSwigC() {
 
 		pending := e.pendingEmit(pe)
 
-		e.register(GeneratedFileInfo{
-			OutputPath:     cOutVFS,
-			ProducerRef:    swRef,
-			GeneratorRefs:  e.ctx.na.refList(swigRef),
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(e.scanner, srcVFS, swigClosure)},
-			OnUse:          pending,
+		outputInfo = e.register(GeneratedFileInfo{
+			OutputPath:    cOutVFS,
+			ProducerRef:   swRef,
+			GeneratorRefs: e.ctx.na.refList(swigRef),
+			OnUse:         pending,
 		})
 
 		e.register(GeneratedFileInfo{

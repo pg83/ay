@@ -424,14 +424,14 @@ func (e *EmitContext) emit() {
 		e.emitRosEmpty()
 	}
 
-	e.emitDeclaredProducers(cythonPlans)
-	e.emitUsrvFiles()
-
 	for _, meta := range d.srcs {
 		if !isCodegenProducingSrcID(meta.Source) {
 			e.enqueueSrc(meta)
 		}
 	}
+
+	e.emitDeclaredProducers(cythonPlans)
+	e.emitUsrvFiles()
 
 	if !e.producersOnly() {
 		e.registerCollectPySrcs()

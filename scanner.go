@@ -274,6 +274,10 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 			return nil, nil, nil, parsedIncludesLocal
 		}
 
+		if info.OnUse != nil {
+			fireGenerated(info)
+		}
+
 		set := info.ParsedIncludes
 		parser := s.parsers.registry.registeredParserFor(vfsPath.relString())
 
@@ -445,6 +449,8 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 
 		if parser := sc.scanner.parsers.registry.registeredParserFor(abs.relString()); parser != nil {
 			sc.parser = parser
+		} else if cached, ok := sc.scanner.parsers.cache.parsed.get(abs.rel()); ok {
+			sc.parser = cached.parser
 		}
 
 		defer func() { sc.parser = previous }()
@@ -463,6 +469,8 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 		if parser := s.parsers.registry.registeredParserFor(abs.relString()); parser != nil {
 			sc.parser = parser
+		} else if cached, ok := s.parsers.cache.parsed.get(abs.rel()); ok {
+			sc.parser = cached.parser
 		}
 
 		defer func() { sc.parser = previous }()

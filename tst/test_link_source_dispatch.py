@@ -120,7 +120,7 @@ class SourceDispatchTest(unittest.TestCase):
             for node in graph["graph"]
             if node["outputs"][0].startswith("$(B)/m/")
         ]
-        self.assertEqual(
+        self.assertCountEqual(
             module_nodes,
             [
                 ("GZ", ["$(B)/m/e.proto"]),

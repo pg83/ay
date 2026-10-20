@@ -345,6 +345,27 @@ def swig_jni_tree(**extra):
 
 
 class JavaSwigTest(unittest.TestCase):
+    def test_swig_ambiguous_includes_follow_first_processed_source(self):
+        for native_include, sources in ((False, "impl.cpp wrap.swg"), (True, "impl.cpp wrap.swg"), (True, "wrap.swg impl.cpp")):
+            for order in (("shared.i", "api.h"), ("api.h", "shared.i")):
+                with self.subTest(native_include=native_include, sources=sources, order=order):
+                    files = swig_jni_tree(**{
+                        "jni/ya.make": f"DLL_JAVA(probe)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS({sources})\nEND()\n",
+                        "jni/impl.cpp": ('#include "api.h"\n' if native_include else '') + "int impl;\n",
+                        "jni/wrap.swg": ''.join(f'%include "{name}"\n' for name in order),
+                        "jni/api.h": '#include "shared.i"\n',
+                        "jni/shared.i": '#include "nested.h"\n#ifdef SWIG\n%include "swigchild.swg"\n#endif\n',
+                        "jni/nested.h": "", "jni/swigchild.swg": "",
+                    })
+                    graph = lib.make(files, "jni")
+                    selected = "nested.h" if native_include or order[0] == "api.h" else "swigchild.swg"
+                    jsrc = lib.node_by_output(graph, "$(B)/jni/wrap.swg.jsrc")
+                    leaves = [p for p in jsrc["inputs"] if p in ("$(S)/jni/nested.h", "$(S)/jni/swigchild.swg")]
+                    self.assertEqual(leaves, [f"$(S)/jni/{selected}"])
+                    obj = lib.node_by_output(graph, "$(B)/jni/impl.cpp.pic.o")
+                    self.assertEqual("$(S)/jni/nested.h" in obj["inputs"], native_include)
+                    self.assertNotIn("$(S)/jni/swigchild.swg", obj["inputs"])
+
     def test_header_includes_inherit_cpp_parser_for_ambiguous_extensions(self):
         files = swig_jni_tree(**{
             "jni/api.h": '#include "detail.i"\n',
@@ -387,8 +408,8 @@ class JavaSwigTest(unittest.TestCase):
                          + ["--jsrc", "$(B)/jni/wrap.swg.jsrc"] + include + ["-o", "$(B)/jni/unused.cpp"])
         self.assertEqual(sorted(jsrc["inputs"]), sorted(cpp["inputs"]))
         gen = [n for n in graph["graph"] if "$(B)/dep/gen.h" in n["outputs"]]
-        self.assertEqual(len(gen), 2)
-        self.assertEqual({n["uid"] for n in gen} & set(cpp["deps"]) & set(jsrc["deps"]), set())
+        self.assertEqual(len(gen), 1)
+        self.assertEqual({n["uid"] for n in gen} & set(cpp["deps"]) & set(jsrc["deps"]), {gen[0]["uid"]})
 
         jv = jv_node(graph, "$(B)/jni/jni-lib.jar")
         prep = jv["cmds"][0]["cmd_args"]

@@ -27,18 +27,22 @@ func (set ParsedIncludeSet) bucket(bucket ParsedIncludeBucket) []IncludeDirectiv
 	return set[bucket]
 }
 
+type ParsedSource struct {
+	includes ParsedIncludeSet
+	parser   IncludeDirectiveParser
+	bucket   ParsedIncludeBucket
+}
+
 type SharedParseCache struct {
 	notsJSON   DenseMap[STR, map[string]any]
 	notsYAML   DenseMap[STR, map[string]any]
 	notsLocks  DenseMap[STR, *NotsLockfile]
-	ambiguous  map[uint64]ParsedIncludeSet
 	directives *BumpAllocator[IncludeDirective]
-	parsed     DenseMap[STR, ParsedIncludeSet]
+	parsed     DenseMap[STR, ParsedSource]
 }
 
 func newSharedParseCache() *SharedParseCache {
 	return &SharedParseCache{
-		ambiguous:  make(map[uint64]ParsedIncludeSet, 16),
 		directives: newBumpAllocator[IncludeDirective](),
 	}
 }
@@ -105,6 +109,11 @@ func (pm *IncludeParserManager) sourceParsedWalkable(vfsPath VFS, ctxParser Incl
 
 func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirectiveParser) (ParsedIncludeSet, ParsedIncludeBucket) {
 	key := vfsPath.rel()
+
+	if cached, ok := pm.cache.parsed.get(key); ok {
+		return cached.includes, cached.bucket
+	}
+
 	rel := key.string()
 	parser := pm.registry.registeredParserFor(rel)
 	bucket := parsedIncludesLocal
@@ -113,32 +122,18 @@ func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirec
 		bucket = parsedIncludesRagelNative
 	}
 
-	var ambKey uint64
-
 	if parser == nil {
 		parser = ctxParser
 
 		if parser == nil {
 			parser = pm.registry.defaultParser
 		}
-
-		ambKey = splitMix64(uint32(key), parser.id())
-
-		if cached, ok := pm.cache.ambiguous[ambKey]; ok {
-			return cached, bucket
-		}
-	} else if cached, ok := pm.cache.parsed.get(key); ok {
-		return cached, bucket
 	}
 
 	if !pm.fs.isFilePathClean(rel) {
 		var empty ParsedIncludeSet
 
-		if ambKey != 0 {
-			pm.cache.ambiguous[ambKey] = empty
-		} else {
-			pm.cache.parsed.put(key, empty)
-		}
+		pm.cache.parsed.put(key, ParsedSource{includes: empty, parser: parser, bucket: bucket})
 
 		return empty, bucket
 	}
@@ -151,11 +146,7 @@ func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirec
 
 	out := parser.parse(rel, data, pm.cache.directives)
 
-	if ambKey != 0 {
-		pm.cache.ambiguous[ambKey] = out
-	} else {
-		pm.cache.parsed.put(key, out)
-	}
+	pm.cache.parsed.put(key, ParsedSource{includes: out, parser: parser, bucket: bucket})
 
 	return out, bucket
 }

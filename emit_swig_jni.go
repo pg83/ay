@@ -60,17 +60,29 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 	hdr, cpp := swigWrapOutputs(instance.Path.relString(), srcRel)
 	swigRef, swigBin := ctx.tool(argContribToolsSwig)
 	swRef := ctx.emit.reserve()
-	cv := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainSwig)
-	cvBuckets := cv.bucketList()
-	swigClosure := collectBucketVFS(na, cvBuckets, func(VFS) bool { return true })
-	induced := collectSwigInducedIncludes(e.scanner, srcVFS, swigClosure)
 	include := d.cc.SwigInclude
 	python3 := d.tc.Python3
 
 	meta.Source = cpp.any()
 	e.enqueueSrc(meta)
 
+	var hdrInfo, cppInfo *GeneratedFileInfo
+
 	pe := func() {
+		cv := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainSwig)
+		cvBuckets := cv.bucketList()
+		swigClosure := collectBucketVFS(na, cvBuckets, func(VFS) bool { return true })
+		induced := collectSwigInducedIncludes(e.scanner, srcVFS, swigClosure)
+
+		hdrInfo.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: induced}
+
+		cppParsed := make([]IncludeDirective, 0, 1+len(induced))
+
+		cppParsed = append(cppParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(hdr.rel().any())})
+		cppParsed = append(cppParsed, induced...)
+
+		cppInfo.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: cppParsed}
+
 		args := swigJNIHead(python3, swigBin, srcVFS, srcRel)
 
 		args = append(args, argOutHeader.any(), hdr.any())
@@ -97,28 +109,19 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 
 	pending := e.pendingEmit(pe)
 
-	e.register(GeneratedFileInfo{
-		OutputPath:     hdr,
-		ProducerRef:    swRef,
-		GeneratorRefs:  na.refList(swigRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: induced},
-
-		OnUse: pending,
+	hdrInfo = e.register(GeneratedFileInfo{
+		OutputPath:    hdr,
+		ProducerRef:   swRef,
+		GeneratorRefs: na.refList(swigRef),
+		OnUse:         pending,
 	})
 
-	cppParsed := make([]IncludeDirective, 0, 1+len(induced))
-
-	cppParsed = append(cppParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(hdr.rel().any())})
-	cppParsed = append(cppParsed, induced...)
-
-	e.register(GeneratedFileInfo{
+	cppInfo = e.register(GeneratedFileInfo{
 		OutputPath:      cpp,
 		ProducerRef:     swRef,
 		ProducerMainOut: hdr,
 		GeneratorRefs:   na.refList(swigRef),
-		ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: cppParsed},
-
-		OnUse: pending,
+		OnUse:           pending,
 	})
 }
 
@@ -172,7 +175,17 @@ func (ctx *GenCtx) javaEmitSwigJsrc(jm *JavaModule, src string, srcVFS, jsrc VFS
 	b.input(swigBin, swigJNIScriptVFS, srcVFS)
 	b.deps = append(b.deps, swigRef)
 
-	for _, bucket := range ctx.scannerForPlatform(jm.instance.Platform).walkClosure(srcVFS, scanCtx, scanDomainSwig).bucketList() {
+	scanner := ctx.scannerForPlatform(jm.instance.Platform)
+
+	for _, peer := range jm.unmanageable {
+		if peer.dir == jm.dir {
+			if native := ctx.emit.nodes.s[peer.res.LDRef]; native != nil {
+				scanner = ctx.scannerForPlatform(native.Platform)
+			}
+		}
+	}
+
+	for _, bucket := range scanner.walkClosure(srcVFS, scanCtx, scanDomainSwig).bucketList() {
 		b.input(bucket...)
 
 		if !bucket[0].isBuild() {
@@ -180,8 +193,8 @@ func (ctx *GenCtx) javaEmitSwigJsrc(jm *JavaModule, src string, srcVFS, jsrc VFS
 		}
 
 		for _, v := range bucket {
-			if dep := b.use(v); dep != 0 {
-				b.deps = append(b.deps, dep)
+			if info := scanner.codegen.use(v); info != nil {
+				b.deps = append(b.deps, info.ProducerRef)
 			}
 		}
 	}
