@@ -469,7 +469,9 @@ def ya_upload(path, tar, owner, descr):
         cmd[3:3] = ["--tar", "--zstd"]
 
     print(f"[provision]   ya upload {os.path.basename(path)} ...", flush=True)
-    r = run(cmd, env=ya_env(), capture_output=True, text=True)
+    # The upload needs the user's own authorization, not the placeholder token.
+    env = {k: v for k, v in ya_env().items() if k != "YA_TOKEN"}
+    r = run(cmd, env=env, capture_output=True, text=True)
 
     if r.returncode != 0:
         raise SystemExit(f"provision: ya upload {path} failed:\n{(r.stderr or r.stdout)[-2000:]}")
