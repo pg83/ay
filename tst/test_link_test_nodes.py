@@ -217,6 +217,87 @@ class TestNodesTest(unittest.TestCase):
                 binary = next(n for n in graph["graph"] if n.get("kv", {}).get("p") == "LD" and n["outputs"][0].startswith("$(B)/tests/"))
                 self.assertNotIn(tool["uid"], binary["deps"])
 
+    def test_python_test_sources_use_tests_namespace_and_pytest_entrypoint(self):
+        for macro in ("PY3TEST", "PY2TEST"):
+            with self.subTest(macro=macro):
+                files = {
+                    "a/ut/ya.make": f"{macro}()\n{NO_PLATFORM}"
+                    "NO_CHECK_IMPORTS()\nNO_IMPORT_TRACING()\nNO_PYTHON_INCLUDES()\n"
+                    "DISABLE(PYTHON_SQLITE3)\nALLOCATOR(FAKE)\n"
+                    "TEST_SRCS(test_sample.py)\nEND()\n",
+                    "a/ut/test_sample.py": "def test_example(): pass\n",
+                }
+                for peer in ["library/python/pytest", "library/python/runtime_py3/main", "library/python/runtime/main", "contrib/deprecated/python/subprocess32", "library/cpp/resource"]:
+                    files[f"{peer}/ya.make"] = library()
+                for tool in ["tools/archiver", "tools/py3cc", "tools/py3cc/slow", "tools/rescompiler", "tools/rescompressor", "tools/py2cc"]:
+                    lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
+                graph = lib.make(files, "a/ut", "-t")
+                binary = lib.node_by_output(graph, "$(B)/a/ut/a-ut")
+                all_args = [arg for n in graph["graph"] for cmd in n["cmds"] for arg in cmd["cmd_args"]]
+                self.assertIn("__tests__/test_sample.py" if macro == "PY3TEST" else "/py_modules/__tests__.test_sample", " ".join(all_args))
+                self.assertIn("PY_MAIN=library.python.pytest.main:main", " ".join(all_args))
+                suite = "py3test" if macro == "PY3TEST" else "pytest"
+                run = lib.node_by_output(graph, f"$(B)/a/ut/test-results/{suite}/meta.json")
+                self.assertIn(binary["uid"], run["deps"])
+                args = run["cmds"][0]["cmd_args"]
+                self.assertIn("--doctest-modules", args)
+                self.assertEqual(args[args.index("--test-type") + 1], "py3test" if macro == "PY3TEST" else "pytest")
+                self.assertEqual(run["env"]["PYTHONDONTWRITEBYTECODE"], "1")
+
+    def test_split_cpp_suite_accumulates_all_chunks(self):
+        files = fixture()
+        files["lib/ut/ya.make"] = files["lib/ut/ya.make"].replace("END()", "FORK_SUBTESTS(MODULO)\nSPLIT_FACTOR(3)\nEND()")
+        graph = lib.make(files, "lib/ut", "-t")
+        chunks = []
+        for index in range(3):
+            output = f"$(B)/lib/ut/test-results/unittest/chunk{index}/meta.json"
+            node = lib.node_by_output(graph, output)
+            args = node["cmds"][0]["cmd_args"]
+            self.assertEqual(args[args.index("--modulo") + 1], "3")
+            self.assertEqual(args[args.index("--modulo-index") + 1], str(index))
+            self.assertIn("--split-by-tests", args)
+            chunks.append(node)
+        merged = lib.node_by_output(graph, "$(B)/lib/ut/test-results/unittest/meta.json")
+        self.assertEqual(merged["kv"]["p"], "TA")
+        self.assertEqual(set(merged["deps"]), {n["uid"] for n in chunks})
+        self.assertEqual(set(merged["inputs"]), {o for n in chunks for o in n["outputs"]})
+        self.assertIn(merged["uid"], graph["result"])
+
+    def test_fork_test_files_produces_separate_python_chunks(self):
+        files = {
+            "a/ya.make": f"PY3TEST()\n{NO_PLATFORM}"
+            "NO_CHECK_IMPORTS()\nNO_IMPORT_TRACING()\nNO_PYTHON_INCLUDES()\n"
+            "DISABLE(PYTHON_SQLITE3)\nALLOCATOR(FAKE)\n"
+            "TEST_SRCS(test_z.py test_a.py)\nFORK_TEST_FILES()\nEND()\n",
+            "a/test_z.py": "", "a/test_a.py": "",
+        }
+        for peer in ["library/python/pytest", "library/python/runtime_py3/main", "library/cpp/resource"]:
+            files[f"{peer}/ya.make"] = library()
+        for tool in ["tools/archiver", "tools/py3cc", "tools/py3cc/slow", "tools/rescompiler", "tools/rescompressor"]:
+            lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
+        graph = lib.make(files, "a", "-t")
+        for name in ["test_a", "test_z"]:
+            node = lib.node_by_output(graph, f"$(B)/a/test-results/py3test/{name}/meta.json")
+            args = node["cmds"][0]["cmd_args"]
+            self.assertEqual(args[args.index("--test-file-filter") + 1], name + ".py")
+        result = lib.node_by_output(graph, "$(B)/a/test-results/py3test/meta.json")
+        self.assertEqual(result["kv"]["p"], "TA")
+
+    def test_exectest_builds_runtime_dependencies_without_a_native_link(self):
+        graph = lib.make({
+            "exec/ya.make": "EXECTEST()\nRUN(tool --flag)\nDEPENDS(tool)\nUSE_RECIPE(tool/tool setup)\nEND()\n",
+            "tool/ya.make": f"PROGRAM()\n{NO_PLATFORM}SRCS(t.cpp)\nEND()\n",
+            "tool/t.cpp": "int main(){return 0;}\n",
+        }, "exec", "-t")
+        run = lib.node_by_output(graph, "$(B)/exec/test-results/exectest/meta.json")
+        tool = lib.node_by_output(graph, "$(B)/tool/tool")
+        self.assertIn(tool["uid"], run["deps"])
+        args = run["cmds"][0]["cmd_args"]
+        self.assertIn("run_exectest", args)
+        self.assertIn("--noconftest", args)
+        self.assertIn("--recipes", args)
+        self.assertFalse(any(n["kv"]["p"] == "LD" and n["outputs"][0].startswith("$(B)/exec/") for n in graph["graph"]))
+
     def test_unsandboxed_debug_descriptor(self):
         graph = make_unsandboxed(fixture(), "lib/ut", "-t")
         context = lib.node_by_output(graph, "$(B)/common_test.context")

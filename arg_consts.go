@@ -253,6 +253,7 @@ var (
 	argToolsGoTestMiner                          = internArg("tools/go_test_miner")
 	argToolsHtml2cpp                             = internArg("tools/html2cpp")
 	argToolsLua                                  = internArg("tools/lua")
+	argToolsPy2cc                                = internArg("tools/py2cc")
 	argToolsPy3cc                                = internArg("tools/py3cc")
 	argToolsPy3ccSlow                            = internArg("tools/py3cc/slow")
 	argToolsRelevFmlCodegen                      = internArg("tools/relev_fml_codegen")

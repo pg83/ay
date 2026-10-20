@@ -538,7 +538,7 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 }
 
 func isFinalTargetModuleType(name TOK) bool {
-	return isProgramModuleType(name) && name != tokGoTest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib
+	return isProgramModuleType(name) && name != tokGoTest || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib
 }
 
 func picTransition(name TOK) bool {
@@ -546,7 +546,7 @@ func picTransition(name TOK) bool {
 }
 
 func isDllModuleType(name TOK) bool {
-	return name == tokDll || name == tokDllTool
+	return name == tokDll || name == tokExectest || name == tokDllTool
 }
 
 func (e *EmitContext) moduleInputArg(arg *ANY) *ANY {
@@ -670,7 +670,7 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 		return moduleStmt.Args[0].string()
 	}
 
-	if moduleStmt != nil && isUnitTestModule(moduleStmt.Name) {
+	if moduleStmt != nil && (isUnitTestModule(moduleStmt.Name) || isPythonTestModule(moduleStmt.Name)) {
 		return fullPathTestName(instance.Path.relString())
 	}
 
@@ -817,7 +817,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		}
 	}
 
-	if !d.hadAllocator && (d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) {
+	if !d.hadAllocator && isPy3ProgramModule(d.moduleStmt.Name) {
 		d.hadAllocator = true
 		d.allocatorName = strJ.any()
 	}
@@ -839,7 +839,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		}
 	}
 
-	if d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin {
+	if isPy3ProgramModule(d.moduleStmt.Name) {
 		var earlyPeers []string
 
 		if d.pythonSQLite3 {
@@ -858,7 +858,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 			latePeers = append(latePeers, "library/python/testing/import_test")
 		}
 
-		if d.moduleStmt.Name == tokPy3ProgramBin {
+		if d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Test {
 			insertAt := 0
 
 			if len(d.peerdirs) > 0 && d.peerdirs[0].string() == "contrib/libs/python" {
@@ -895,7 +895,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		}
 	}
 
-	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && d.moduleStmt.Name != tokPy3Program && d.moduleStmt.Name != tokPy3ProgramBin && !d.noImportTracing && instance.Path.relString() != "library/python/import_tracing/constructor" {
+	if isProgramModuleType(d.moduleStmt.Name) && pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !isPy3ProgramModule(d.moduleStmt.Name) && !d.noImportTracing && instance.Path.relString() != "library/python/import_tracing/constructor" {
 		d.peerdirs = append(d.peerdirs, strLibraryPythonImportTracingConstructor.any())
 	}
 
@@ -1080,6 +1080,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ctx.memoPut(instance, result)
 
 		return result
+	}
+
+	if d.moduleStmt.Name == tokExectest {
+		return e.genExecTest()
 	}
 
 	if d.moduleStmt.Name == tokUnion {
@@ -2139,7 +2143,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ownRPathFlags = append([]ANY(nil), peerRPathFlagsGlobal...)
 		}
 
-		py3Strip := (d.moduleStmt.Name == tokPy3ProgramBin || d.moduleStmt.Name == tokPy3Program) &&
+		py3Strip := isPy3ProgramModule(d.moduleStmt.Name) &&
 			!instance.Platform.pythonNoStrip()
 
 		wantsStrip := (py3Strip || d.strip) && !d.noStrip

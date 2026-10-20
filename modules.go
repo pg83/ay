@@ -1008,7 +1008,7 @@ func applyBuildInfoAddIncl(modulePath string, d *ModuleData) {
 
 func pyModuleTypeUsesPython3(name TOK) bool {
 	switch name {
-	case tokPy3Library, tokPy3Program, tokPy3ProgramBin,
+	case tokPy3Library, tokPy3Program, tokPy3ProgramBin, tokPy3Test,
 		tokPy23Library, tokPy23NativeLibrary:
 		return true
 	}
@@ -1521,10 +1521,10 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return ModuleUnit{Type: name, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy3Program:
 		return ModuleUnit{Type: name, Tag: unitTagPy3Bin, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
-	case tokPy2Program, tokPy3ProgramBin:
+	case tokPy2Program, tokPy3ProgramBin, tokPy3Test, tokPy2Test:
 		tag := STR(0)
 
-		if name == tokPy3ProgramBin {
+		if name == tokPy3ProgramBin || name == tokPy3Test {
 			tag = unitTagPy3
 		}
 
@@ -2310,6 +2310,22 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		)
 
 		d.usePython3 = true
+	case tokTestSrcs:
+		if d.moduleStmt != nil && isPythonTestModule(d.moduleStmt.Name) {
+			if d.test == nil {
+				d.test = &TestSuiteInfo{Size: "small", Requirements: testRunRequirements}
+			}
+
+			d.test.TestFiles = append(d.test.TestFiles, anyStrs(v.Args)...)
+
+			for _, a := range v.Args {
+				if a.string() == "NAMESPACE" || a.string() == "TOP_LEVEL" || a.string() == "__main__.py" {
+					throwFmt("TEST_SRCS: %s is not allowed", a.string())
+				}
+			}
+
+			applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPySrcs, Args: append([]ANY{kwNAMESPACE.any(), strTests.any()}, v.Args...)}, d, env, onWarn)
+		}
 	case tokPySrcs:
 		if env.bool(envGO_PROTO) {
 			break
@@ -3352,7 +3368,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokGoProgram, tokGoTest, tokGoDll:
+	case tokProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokPy3Test, tokPy2Test, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokGoProgram, tokGoTest, tokGoDll:
 		return true
 	}
 
@@ -3378,7 +3394,7 @@ func yqlUdfImplicitPeers() []string {
 func isPyLibraryType(name TOK) bool {
 	switch name {
 	case tokPy23NativeLibrary, tokPy3Library, tokPy23Library, tokPy2Library,
-		tokPy2Program, tokPy3Program:
+		tokPy2Program, tokPy3Program, tokPy2Test, tokPy3Test:
 		return true
 	}
 
@@ -3388,7 +3404,7 @@ func isPyLibraryType(name TOK) bool {
 func pyLibraryAutoPythonPeer(name TOK) bool {
 	switch name {
 	case tokPy3Library, tokPy23Library, tokPy2Library, tokPy3ProgramBin,
-		tokPy2Program, tokPy3Program:
+		tokPy2Program, tokPy3Program, tokPy2Test, tokPy3Test:
 		return true
 	}
 
@@ -3396,7 +3412,7 @@ func pyLibraryAutoPythonPeer(name TOK) bool {
 }
 
 func isPythonModuleType(name TOK) bool {
-	return isPyLibraryType(name) || name == tokPy3ProgramBin
+	return isPyLibraryType(name) || name == tokPy3ProgramBin || isPythonTestModule(name)
 }
 
 func isSpecializedLibraryType(name TOK) bool {

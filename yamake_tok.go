@@ -1,6 +1,11 @@
 package main
 
 var tokName = [...]STR{
+	tokExectest: internStr("EXECTEST"),
+	tokRun:      internStr("RUN"),
+	tokPy3Test:  internStr("PY3TEST"),
+	tokPy2Test:  internStr("PY2TEST"),
+
 	tokDepends:       internStr("DEPENDS"),
 	tokTestCwd:       internStr("TEST_CWD"),
 	tokUseRecipe:     internStr("USE_RECIPE"),
@@ -526,6 +531,10 @@ const (
 	tokToolchain
 	tokUnion
 	tokUnittestFor
+	tokExectest
+	tokRun
+	tokPy3Test
+	tokPy2Test
 	tokUnittest
 	tokUnittestWithCustomEntryPoint
 	tokYtUnittest

@@ -33,6 +33,8 @@ const (
 )
 
 type TestSuiteInfo struct {
+	Commands     string
+	TestFiles    []string
 	Type         string
 	SplitIndex   int
 	SplitFile    string
@@ -63,7 +65,11 @@ func (ctx *GenCtx) emitTestRunNodes(info TestSuiteInfo, ldRef NodeRef, resourceG
 	deps := []NodeRef{ldRef}
 
 	for _, dep := range info.Depends {
-		res := genModule(ctx, ModuleInstance{Path: source(dep), Kind: KindBin, Platform: p, Demand: demandLinked})
+		res := genModule(ctx, ctx.rootInstance(dep, demandLinked))
+
+		if res.ARPath != nil {
+			ctx.scannerForPlatform(p).codegen.use(*res.ARPath)
+		}
 
 		if res.ARRef != 0 {
 			deps = append(deps, res.ARRef)
@@ -71,11 +77,57 @@ func (ctx *GenCtx) emitTestRunNodes(info TestSuiteInfo, ldRef NodeRef, resourceG
 	}
 
 	ctxRef := ctx.testContext()
-	unittest := buildUnittestNode(emit.nodeArenas(), p, info, resourceGlobals)
+	count := info.SplitFactor
 
-	unittest.DepRefs = append(deps, ctxRef)
+	if count == 0 {
+		count = 1
 
-	unittestRef := emit.emit(unittest)
+		if info.ForkMode != "" {
+			count = 10
+		}
+	}
+
+	if info.Type == "g_benchmark" {
+		count = 1
+	}
+
+	info.SplitFactor = count
+	var nodes []*Node
+	var refs []NodeRef
+
+	files := []string{""}
+
+	if info.ForkFiles && len(info.TestFiles) > 0 {
+		files = slices.Clone(info.TestFiles)
+		slices.Sort(files)
+		files = slices.Compact(files)
+	}
+
+	for _, file := range files {
+		for i := 0; i < count; i++ {
+			chunk := info
+
+			chunk.SplitIndex = i
+			chunk.SplitFile = file
+
+			n := buildUnittestNode(emit.nodeArenas(), p, chunk, resourceGlobals)
+
+			n.DepRefs = append(deps, ctxRef)
+			refs = append(refs, emit.emit(n))
+			nodes = append(nodes, n)
+		}
+	}
+
+	unittestRef := refs[0]
+
+	if count > 1 || info.ForkFiles {
+		unittestRef = emit.emit(buildTestAccumulator(emit.nodeArenas(), p, info, nodes, refs))
+	}
+
+	if isPythonSuite(info) {
+		return []NodeRef{unittestRef}
+	}
+
 	clangFormat := buildClangFormatNode(emit.nodeArenas(), p, info)
 
 	clangFormat.DepRefs = []NodeRef{ctxRef}
@@ -86,7 +138,7 @@ func (ctx *GenCtx) emitTestRunNodes(info TestSuiteInfo, ldRef NodeRef, resourceG
 }
 
 func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resourceGlobals []ResourceDecl) *Node {
-	resultsDir := path.Join(info.ProjectPath, "test-results", info.Name)
+	resultsDir := testResultsDir(info)
 
 	cmdArgs := []ANY{
 		internStr(testToolHostPath).any(),
@@ -141,15 +193,25 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 		cmdArgs = append(cmdArgs, strEnv.any(), internStr(env).any())
 	}
 
-	if info.Type == "unittest" || info.Type == "gtest" {
+	if info.Type == "unittest" || info.Type == "gtest" || isPythonSuite(info) {
 		cmdArgs = append(cmdArgs, argSupportsTestParameters.any())
 	}
 
-	if info.Type == "g_benchmark" {
+	if info.Type == "g_benchmark" || isPythonSuite(info) {
 		cmdArgs = append(cmdArgs, strSupportsCanonization.any())
 	}
 
-	cmdArgs = append(cmdArgs, argSmoothShutdownSignals.any(), argSigusr2.any(), argCompressionFilter.any(), argZstd.any(), argCompressionLevel.any(), arg1.any())
+	cmdArgs = append(cmdArgs, argSmoothShutdownSignals.any(), argSigusr2.any())
+
+	if info.SplitFactor > 1 {
+		cmdArgs = append(cmdArgs, strSplitCount.any(), internStr(strconv.Itoa(info.SplitFactor)).any(), strSplitIndex.any(), internStr(strconv.Itoa(info.SplitIndex)).any())
+	}
+
+	if info.SplitFile != "" {
+		cmdArgs = append(cmdArgs, strSplitFile.any(), internStr(info.SplitFile).any())
+	}
+
+	cmdArgs = append(cmdArgs, argCompressionFilter.any(), argZstd.any(), argCompressionLevel.any(), arg1.any())
 
 	for _, r := range sortedResourceGlobals(resourceGlobals) {
 		cmdArgs = append(cmdArgs, argGlobalResource.any(), r.Token.any())
@@ -162,14 +224,14 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 	}
 
 	cmdArgs = append(cmdArgs, argRamLimitGb.any(), internStr(strconv.FormatFloat(info.Requirements.RAM, 'f', -1, 64)).any(), argTar.any(), build(path.Join(resultsDir, "testing_out_stuff.tar.zstd")).any())
-	cmdArgs = append(cmdArgs, testInnerCommand(info, resultsDir)...)
+	cmdArgs = append(cmdArgs, testInnerCommand(info, resultsDir, p)...)
 	cmdArgs = append(cmdArgs, argYaEndCommandFile.any())
 
 	return &Node{
 		Platform: p,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: cwdVFS(testBuildRoot)}),
-		Env:    testEnv(p, info.Name),
+		Env:    suiteTestEnv(p, info),
 		Inputs: na.inputList(inputs),
 		KV: &KV{
 			P:                pkTS,
@@ -180,7 +242,7 @@ func buildUnittestNode(na *NodeArenas, p *Platform, info TestSuiteInfo, resource
 			HasSpecialRunner: true,
 			DisableCache:     true,
 		},
-		Outputs:      testOutputs(info.ProjectPath, info.Name),
+		Outputs:      testOutputsAt(resultsDir),
 		Requirements: &info.Requirements,
 	}
 }
@@ -379,12 +441,28 @@ func buildTestSuiteInfo(instance ModuleInstance, d *ModuleData, ldPath VFS) *Tes
 }
 
 func testOutputs(projectPath, suite string) []VFS {
-	resultsDir := path.Join(projectPath, "test-results", suite)
+	return testOutputsAt(path.Join(projectPath, "test-results", suite))
+}
 
+func testOutputsAt(resultsDir string) []VFS {
 	return []VFS{
 		build(path.Join(resultsDir, "meta.json")),
 		build(path.Join(resultsDir, "ytest.report.trace")),
 		build(path.Join(resultsDir, "run_test.log")),
 		build(path.Join(resultsDir, "testing_out_stuff.tar.zstd")),
 	}
+}
+
+func suiteTestEnv(p *Platform, info TestSuiteInfo) EnvVars {
+	vars := testEnv(p, info.Name)
+
+	if isPythonSuite(info) {
+		vars = append(vars, EnvVar{Name: envPythondontwritebytecode, Value: strOne.any()})
+	}
+
+	return vars
+}
+
+func isPythonSuite(info TestSuiteInfo) bool {
+	return info.Type == "pytest" || info.Type == "py3test" || info.Type == "exectest"
 }

@@ -437,6 +437,10 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, py3ccLDRef, py3ccSlowLDRef NodeRef, 
 }
 
 func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
+	if e.d.moduleStmt.Name == tokPy2Test {
+		return e.emitPy2TestSources()
+	}
+
 	_, instance, d := e.ctx, e.instance, e.d
 
 	if len(d.pySrcs) == 0 {
@@ -939,7 +943,7 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 
 func pyNamespaceUnitType(t TOK) bool {
 	switch t {
-	case tokPy3Library, tokPy3ProgramBin, tokPy23Library, tokPy23NativeLibrary:
+	case tokPy3Test, tokPy3Library, tokPy3ProgramBin, tokPy23Library, tokPy23NativeLibrary:
 		return true
 	}
 

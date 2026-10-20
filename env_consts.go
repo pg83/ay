@@ -124,6 +124,7 @@ var (
 	envPicNoPie                     = internEnv("PIC_NO_PIE")
 	envPie                          = internEnv("PIE")
 	envPlantumlPath                 = internEnv("PLANTUML_PATH")
+	envPythondontwritebytecode      = internEnv("PYTHONDONTWRITEBYTECODE")
 	envSANDBOXING                   = internEnv("SANDBOXING")
 	envSANITIZER_TYPE               = internEnv("SANITIZER_TYPE")
 	envSDKROOT                      = internEnv("SDKROOT")

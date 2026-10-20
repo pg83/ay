@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"path"
 	"strconv"
 	"strings"
@@ -16,6 +17,12 @@ func testSuiteName(name TOK) string {
 	}
 
 	switch name {
+	case tokExectest:
+		return "exectest"
+	case tokPy3Test:
+		return "py3test"
+	case tokPy2Test:
+		return "pytest"
 	case tokGBenchmark:
 		return "g_benchmark"
 	case tokFuzz:
@@ -27,7 +34,7 @@ func testSuiteName(name TOK) string {
 
 func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 	switch v.Name {
-	case tokSize, tokTimeout, tokTestCwd, tokData, tokDataFiles, tokExplicitData, tokDepends, tokUseRecipe, tokTag, tokEnv, tokRequirements, tokForkTests, tokForkSubtests, tokForkTestFiles, tokSplitFactor, tokBenchmarkOpts, tokFuzzOpts:
+	case tokRun, tokSize, tokTimeout, tokTestCwd, tokData, tokDataFiles, tokExplicitData, tokDepends, tokUseRecipe, tokTag, tokEnv, tokRequirements, tokForkTests, tokForkSubtests, tokForkTestFiles, tokSplitFactor, tokBenchmarkOpts, tokFuzzOpts:
 	default:
 		return false
 	}
@@ -41,6 +48,8 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 	value := strings.Join(args, " ")
 
 	switch v.Name {
+	case tokRun:
+		t.Commands += "\n" + strings.Join(args, " ")
 	case tokSize:
 		t.Size = strings.ToLower(value)
 	case tokTimeout:
@@ -105,12 +114,41 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 	return true
 }
 
-func testInnerCommand(info TestSuiteInfo, resultsDir string) []ANY {
+func testInnerCommand(info TestSuiteInfo, resultsDir string, p *Platform) []ANY {
 	trace := build(path.Join(resultsDir, "ytest.report.trace")).string()
 	out := build(path.Join(resultsDir, "testing_out_stuff")).string()
 	args := []string{testToolHostPath}
 
 	switch info.Type {
+	case "py3test", "pytest", "exectest":
+		command := []string{info.BinaryPath}
+
+		if info.Type == "exectest" {
+			command = []string{"--test-param", "commands=" + base64.StdEncoding.EncodeToString([]byte(info.Commands)), testToolHostPath, "run_exectest"}
+		}
+
+		command = append(command, "--basetemp", "$(B)/tmp", "--capture", "no", "-c", "pkg:library.python.pytest:pytest.yatest.ini", "-p", "no:factor", "--doctest-modules", "--ya-trace", trace, "--build-root", testBuildRoot, "--source-root", testSourceRoot, "--output-dir", out, "--durations", "0", "--project-path", info.ProjectPath, "--test-tool-bin", testToolHostPath, "--ya-version", "2", "--collect-cores", "--build-type", p.BuildType)
+
+		if info.SplitFactor > 1 {
+			command = append(command, "--modulo", strconv.Itoa(info.SplitFactor), "--modulo-index", strconv.Itoa(info.SplitIndex), "--partition-mode", testPartition(info))
+		}
+
+		if info.ForkMode == "subtests" {
+			command = append(command, "--split-by-tests")
+		}
+
+		command = append(command, "--dep-root", "$(B)/"+info.ProjectPath)
+
+		if info.SplitFile != "" {
+			command = append(command, "--test-file-filter", info.SplitFile)
+		}
+
+		if info.Type == "exectest" {
+			command = append(command, "--noconftest")
+		}
+
+		return testCommandArgs(command)
+
 	case "g_benchmark":
 		args = append(args, "run_g_benchmark", "--binary", info.BinaryPath, "--tracefile", trace, "--output-dir", out, "--project-path", info.ProjectPath, "--verbose", "--gdb-path", testGDBPath)
 
@@ -118,7 +156,7 @@ func testInnerCommand(info TestSuiteInfo, resultsDir string) []ANY {
 			args = append(args, "--test-binary-args="+a)
 		}
 	case "fuzz":
-		args = append(args, "run_fuzz", "--binary", info.BinaryPath, "--tracefile", trace, "--modulo", "1", "--modulo-index", "0", "--output-dir", out, "--project-path", info.ProjectPath, "--source-root", testSourceRoot, "--verbose", "--gdb-path", testGDBPath)
+		args = append(args, "run_fuzz", "--binary", info.BinaryPath, "--tracefile", trace, "--modulo", strconv.Itoa(max(info.SplitFactor, 1)), "--modulo-index", strconv.Itoa(info.SplitIndex), "--output-dir", out, "--project-path", info.ProjectPath, "--source-root", testSourceRoot, "--verbose", "--gdb-path", testGDBPath)
 
 		if len(info.BinaryArgs) > 0 {
 			args = append(args, "--fuzz-opts="+strings.Join(info.BinaryArgs, " "))
@@ -130,12 +168,30 @@ func testInnerCommand(info TestSuiteInfo, resultsDir string) []ANY {
 			partition = "SEQUENTIAL"
 		}
 
-		args = append(args, "run_ut", "--binary", info.BinaryPath, "--trace-path", trace, "--output-dir", out, "--modulo", "1", "--modulo-index", "0", "--partition-mode", partition, "--project-path", info.ProjectPath, "--list-timeout", strconv.Itoa(info.Timeout/2), "--verbose", "--gdb-path", testGDBPath)
+		args = append(args, "run_ut", "--binary", info.BinaryPath, "--trace-path", trace, "--output-dir", out, "--modulo", strconv.Itoa(max(info.SplitFactor, 1)), "--modulo-index", strconv.Itoa(info.SplitIndex), "--partition-mode", partition, "--project-path", info.ProjectPath, "--list-timeout", strconv.Itoa(info.Timeout/2), "--verbose", "--gdb-path", testGDBPath)
 
 		if info.ForkMode == "subtests" {
 			args = append(args, "--split-by-tests")
 		}
 	}
 
-	return internAnys(args)
+	return testCommandArgs(args)
+}
+
+func testCommandArgs(args []string) []ANY {
+	out := make([]ANY, len(args))
+
+	for i, arg := range args {
+		out[i] = internStr(arg).any()
+	}
+
+	return out
+}
+
+func testPartition(info TestSuiteInfo) string {
+	if info.Partition == "" {
+		return "SEQUENTIAL"
+	}
+
+	return info.Partition
 }
