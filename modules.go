@@ -325,6 +325,7 @@ type SrcMeta struct {
 	Source      ANY
 	Prio        int
 	Seq         int
+	Stmt        int
 	Global      bool
 	RosZeroCopy bool
 	Bucket      int
@@ -1159,6 +1160,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
 			globalNext := false
 			srcToks := expandStmtTokens(v.Sources, env)
+			stmt := d.nextDeclSeq()
 
 			if d.unit.SwigLang == strSwigLangJniCpp {
 				srcToks = jniCppSwigSrcs(srcToks)
@@ -1185,7 +1187,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 					prio, seq = stmtPrioSrcs, d.nextDeclSeq()
 				}
 
-				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Global: global})
+				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global})
 				globalNext = false
 
 				switch srcExtClassOf(srcTok) {

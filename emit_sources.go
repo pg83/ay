@@ -69,7 +69,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		if isGoModuleType(e.d.unit.Type) {
 			e.emitGoProtoSource(meta)
 		} else if e.d.unit.Tag == unitTagPy3Proto {
-			e.emitPyProtoSource(src, 0)
+			e.emitPyProtoSource(src, meta.Stmt)
 		} else {
 			e.emitCppProtoFamilySource(meta, cppProtoSpec)
 		}

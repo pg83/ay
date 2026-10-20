@@ -644,9 +644,18 @@ func (e *EmitContext) markProtoPendingAR() {
 
 func (e *EmitContext) emitPyProtoLibraryResult() *ProtoSrcsResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	entries := e.collectAllPyProtoResEntries()
 
-	if len(entries) == 0 {
+	var genRefs []NodeRef
+	var genOuts []VFS
+
+	for _, group := range e.pyProtoGroups() {
+		refs, outs := e.packPyProtoResEntries(e.collectPyProtoGroupResEntries(group))
+
+		genRefs = append(genRefs, refs...)
+		genOuts = append(genOuts, outs...)
+	}
+
+	if len(genRefs) == 0 {
 		return nil
 	}
 
@@ -663,8 +672,6 @@ func (e *EmitContext) emitPyProtoLibraryResult() *ProtoSrcsResult {
 
 		cppSibling = genModule(ctx, cppInstance)
 	}
-
-	genRefs, genOuts := e.packPyProtoResEntries(entries)
 
 	if e.objcopyRes != nil {
 		genRefs = concat(e.objcopyRes.Refs, genRefs)

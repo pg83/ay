@@ -5,6 +5,7 @@ import (
 	enc32 "encoding/base32"
 	enchex "encoding/hex"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -508,18 +509,16 @@ func (e *EmitContext) collectPyProtoGroupResEntries(group int) []PyGenResEntry {
 	return entries
 }
 
-func (e *EmitContext) collectAllPyProtoResEntries() []PyGenResEntry {
-	entries := e.resEntries[:0]
+func (e *EmitContext) pyProtoGroups() []int {
+	var groups []int
 
 	for _, ps := range e.pySrcsReg {
-		if ps.Kind == pySourceProto {
-			entries = e.appendPyResEntries(entries, ps)
+		if ps.Kind == pySourceProto && !slices.Contains(groups, ps.Group) {
+			groups = append(groups, ps.Group)
 		}
 	}
 
-	e.resEntries = retainMaxLen(e.resEntries, entries)
-
-	return entries
+	return groups
 }
 
 func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef, []VFS) {
