@@ -194,11 +194,13 @@ func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *Te
 		s.relatedPaths = append(s.relatedPaths, source(file).string())
 	}
 
-	s.relatedPaths = append(s.relatedPaths, source(check.Config).string(), source(check.Wrapper).string())
+	s.relatedPaths = append(s.relatedPaths, source(check.Config).string())
 
 	for _, config := range check.ExtraConfigs {
 		s.relatedPaths = append(s.relatedPaths, source(config).string())
 	}
+
+	s.relatedPaths = append(s.relatedPaths, source(check.Wrapper).string())
 
 	if check.FileProcessingTime > 0 {
 		s.split = max(1, int(math.Ceil(check.FileProcessingTime*float64(len(check.Files))/float64(s.timeout))))

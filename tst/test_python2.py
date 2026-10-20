@@ -183,6 +183,11 @@ class Python2Test(unittest.TestCase):
         lint_files = []
         for run in runs:
             command = args(run)
+            related = [command[i + 1] for i, arg in enumerate(command) if arg == "--test-related-path"]
+            self.assertEqual(related[-3:], [
+                "$(S)/lint/custom.conf", "$(S)/build/rules/flake8/migrations.yaml",
+                "$(S)/tools/flake8_linter/__main__.py",
+            ])
             self.assertIn("$(S)/lint/custom.conf", command)
             self.assertIn("$(S)/build/rules/flake8/migrations.yaml", command)
             self.assertNotIn("--extra-param", command)
