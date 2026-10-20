@@ -418,3 +418,56 @@ func applyGoResource(modulePath string, v *ResourceStmt, d *ModuleData) {
 	d.runPrograms = append(d.runPrograms, rp)
 	d.peerdirs = append(d.peerdirs, strLibraryGoCoreResource.any())
 }
+
+type GoEmbed struct {
+	xtest   bool
+	root    VFS
+	pattern string
+	files   []VFS
+}
+
+func newGoEmbed(fs FS, xtest bool, importPath, pattern string) GoEmbed {
+	base := importPath + "/" + pattern
+	em := GoEmbed{xtest: xtest, root: source(importPath), pattern: pattern}
+
+	for _, rel := range concat(ymakeGlob(fs, base+"/**/*", base+"/**/_*", base+"/**/.*"), ymakeGlob(fs, base)) {
+		em.files = append(em.files, source(rel))
+	}
+
+	return em
+}
+
+func goEmbedArgs(na *NodeArenas, embeds []GoEmbed) ([]ANY, []VFS) {
+	nargs, ninputs := 0, 0
+
+	for _, em := range embeds {
+		nargs += 3 + len(em.files)
+		ninputs += len(em.files)
+	}
+
+	args := na.anys.alloc(nargs)
+	inputs := na.vfs.alloc(ninputs)
+	ka, ki := 0, 0
+
+	for _, em := range embeds {
+		flag := "++embed"
+
+		if em.xtest {
+			flag = "++embed_xtest"
+		}
+
+		ka += copy(args[ka:], []ANY{internStr(flag).any(), em.root.any(), internStr(em.pattern).any()})
+
+		for _, f := range em.files {
+			args[ka] = f.any()
+			ka++
+		}
+
+		ki += copy(inputs[ki:], em.files)
+	}
+
+	na.anys.commit(ka)
+	na.vfs.commit(ki)
+
+	return args[:ka:ka], inputs[:ki:ki]
+}

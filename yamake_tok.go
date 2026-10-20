@@ -283,6 +283,8 @@ var tokName = [...]STR{
 	tokGoGrpcGatewaySrcs:              internStr("GO_GRPC_GATEWAY_SRCS"),
 	tokGoGrpcGatewaySwagger:           internStr("GO_GRPC_GATEWAY_SWAGGER_SRCS"),
 	tokProtoAddIncl:                   internStr("PROTO_ADDINCL"),
+	tokGoTestEmbedPattern:             internStr("GO_TEST_EMBED_PATTERN"),
+	tokGoXTestEmbedPattern:            internStr("GO_XTEST_EMBED_PATTERN"),
 }
 
 var tokByName = func() map[string]TOK {
@@ -591,6 +593,8 @@ const (
 	tokGoGrpcGatewaySrcs
 	tokGoGrpcGatewaySwagger
 	tokProtoAddIncl
+	tokGoTestEmbedPattern
+	tokGoXTestEmbedPattern
 )
 
 type TOK uint16

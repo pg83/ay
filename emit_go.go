@@ -61,6 +61,9 @@ var goExeCmdLinkFlags = []ANY{
 	strLinkFlags.any(),
 	strLinkmodeExternal.any(),
 	strCgoSrcs.any(),
+}
+
+var goExeCmdVcs = []ANY{
 	internStr("++ld_plugins").any(),
 	internStr("++vcs").any(),
 }
@@ -840,7 +843,8 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 
 	ownInputs := srcInputs[:nsrc:nsrc]
 	localARs, _, _ := goClassifyClosure(na, resolved, peerArchivePaths)
-	tail := na.anys.alloc(4 + len(cgoSrcArgs) + len(localARs))
+	embedArgs, embedInputs := goEmbedArgs(na, d.goEmbeds)
+	tail := na.anys.alloc(4 + len(cgoSrcArgs) + len(embedArgs) + len(localARs))
 	nt := 0
 	pushTail := func(x STR) { tail[nt] = x.any(); nt++ }
 
@@ -848,10 +852,8 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	pushTail(strLinkmodeExternal)
 	pushTail(strCgoSrcs)
 
-	for _, x := range cgoSrcArgs {
-		tail[nt] = x
-		nt++
-	}
+	nt += copy(tail[nt:], cgoSrcArgs)
+	nt += copy(tail[nt:], embedArgs)
 
 	pushTail(goToolCmdPeers[0])
 
@@ -982,7 +984,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		extraBuilds = extraBuildBlock[:len(extraBuildBlock):len(extraBuildBlock)]
 	})
 
-	inputs := na.inputList(ownSourceInputs, ownBuildInputs, goToolScriptInputsChunk, peerArchivePaths, peerGlobalPaths, extraSources, extraBuilds)
+	inputs := na.inputList(ownSourceInputs, ownBuildInputs, goToolScriptInputsChunk, embedInputs, peerArchivePaths, peerGlobalPaths, extraSources, extraBuilds)
 	depBlock := na.noderefs.alloc(1 + len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + merged)
 	ndep := 0
 
@@ -1158,9 +1160,12 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		dllInputs = ctx.scripts[copyFsToolsVFS.rel()]
 	}
 
+	embedArgs, embedInputs := goEmbedArgs(na, d.goEmbeds)
+
 	inputs := na.inputList(
 		na.vfsList(goFiles...),
 		testInputs,
+		embedInputs,
 		goToolScriptInputsChunk,
 		dllInputs,
 		peerGlobalPaths,
@@ -1201,6 +1206,8 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, peerArchiveRefs []NodeR
 		srcArgs,
 		e.goToolCmdFlagsFor(),
 		goExeCmdLinkFlags,
+		embedArgs,
+		goExeCmdVcs,
 		na.anyList(vcsGoPath.any()),
 		goExeCmdExtld,
 		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm, soname, peerGlobalPaths),

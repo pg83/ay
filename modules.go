@@ -148,6 +148,7 @@ type ModuleData struct {
 	test                     TestMeta
 	mockgen                  GoMockgenVars
 	goCodegens               []GoCodegenStmt
+	goEmbeds                 []GoEmbed
 	goProtoOpts              []GoProtoOpt
 	cgoSrcs                  []ANY
 	cgoLdflags               []ANY
@@ -1793,7 +1794,16 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokGoSkipTests:
 		d.goSkipTests = append(d.goSkipTests, v.Args...)
-	case tokGoEmbedPattern:
+	case tokGoEmbedPattern, tokGoTestEmbedPattern, tokGoXTestEmbedPattern:
+		if v.Name == tokGoEmbedPattern || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
+			importPath := modulePath
+
+			if imp := env.string(env_GO_IMPORT_PATH); imp != "" {
+				importPath = imp
+			}
+
+			d.goEmbeds = append(d.goEmbeds, newGoEmbed(fs, v.Name == tokGoXTestEmbedPattern, importPath, v.Args[0].string()))
+		}
 	case tokAllGoSrcs:
 		dir := modulePath
 

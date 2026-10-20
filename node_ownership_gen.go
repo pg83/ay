@@ -33,6 +33,7 @@ func registerKnownGlobalChunks() {
 	registerOwnedSlice(goCgoLinkOPostLd)
 	registerOwnedSlice(goExeCmdExtld)
 	registerOwnedSlice(goExeCmdLinkFlags)
+	registerOwnedSlice(goExeCmdVcs)
 	registerOwnedSlice(goExtldLinkerTail)
 	registerOwnedSlice(goExtldWholeArchive)
 	registerOwnedSlice(goProtoHead)

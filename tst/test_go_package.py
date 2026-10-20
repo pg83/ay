@@ -125,6 +125,27 @@ class GoPackageGraphTest(unittest.TestCase):
         self.assertIn("library/go/core/resource/resource.a", between(package, "++peers", "--ya-end-command-file"))
         self.assertFalse([o for n in graph["graph"] for o in n["outputs"] if o.endswith(".global.a")])
 
+    def test_embed_patterns_list_their_glob_matches(self):
+        files = go_world()
+        pkg = "library/go/embedded"
+        go_module(files, pkg, macros="GO_EMBED_PATTERN(templates)\nGO_EMBED_PATTERN(*.sql)\nGO_EMBED_PATTERN(one.txt)\n")
+        for name in ("templates/b.tmpl", "templates/a/z.tmpl", "templates/a/deep/y.tmpl", "templates/c/x.tmpl",
+                     "templates/_skip.tmpl", "templates/.hidden", "templates/_dir/w.tmpl",
+                     "2.sql", "1.sql", "one.txt"):
+            files[f"{pkg}/{name}"] = "x\n"
+        graph = lib.make(files, pkg)
+        package = go_node(graph, pkg)
+        args = go_tool_args(package)
+        s = f"$(S)/{pkg}"
+        self.assertEqual(between(args, "++cgo-srcs", "++peers"), [
+            "++embed", s, "templates",
+            f"{s}/templates/a/z.tmpl", f"{s}/templates/c/x.tmpl", f"{s}/templates/a/deep/y.tmpl", f"{s}/templates/b.tmpl",
+            "++embed", s, "*.sql", f"{s}/1.sql", f"{s}/2.sql",
+            "++embed", s, "one.txt", f"{s}/one.txt",
+        ])
+        self.assertIn(f"{s}/templates/a/deep/y.tmpl", package["inputs"])
+        self.assertIn(f"{s}/one.txt", package["inputs"])
+
     def test_program_link_partitions_direct_transitive_and_cxx_archives(self):
         files = go_world()
         go_module(files, f"{STD}/fmt", 'import (\n\t"internal/fmtsort"\n\t"golang.org/x/text/width"\n)\n')
