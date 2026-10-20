@@ -162,7 +162,7 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 	}
 
 	for _, out := range outs {
-		info := GeneratedFileInfo{OutputPath: out, ProducerRef: ref, GeneratorRefs: ctx.na.refList(toolRef), ClosureLeaves: ctx.na.vfsList(src), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed}, OnUse: pending}
+		info := GeneratedFileInfo{OutputPath: out, ProducerRef: ref, GeneratorRefs: ctx.na.refList(toolRef), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed}, OnUse: pending}
 
 		e.register(info)
 

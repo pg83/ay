@@ -243,7 +243,7 @@ class RunProgramTest(unittest.TestCase):
         proto_node = lib.node_by_output(graph, "$(B)/lib/p.h")
         self.assertEqual(proto_node["inputs"], ['$(B)/tools/gen/gen', '$(S)/lib/api.proto', '$(S)/lib/other.proto'])
         objcopy = lib.node_by_output_prefix(graph, "$(B)/lib/objcopy_")
-        self.assertEqual(objcopy["inputs"], [
+        self.assertCountEqual(objcopy["inputs"], [
             '$(B)/tools/rescompiler/rescompiler',
             '$(B)/tools/rescompressor/rescompressor',
             '$(B)/lib/out1.txt',

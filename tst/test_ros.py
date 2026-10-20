@@ -161,6 +161,8 @@ END()
         compiled = lib.node_by_output(graph, "$(B)/app/main.cpp.o")
         self.assertIn(parent["uid"], compiled["deps"])
         self.assertIn(child["uid"], compiled["deps"])
+        self.assertNotIn("$(S)/msgs/msg/Parent.msg", compiled["inputs"])
+        self.assertNotIn("$(S)/dep/msg/Child.msg", compiled["inputs"])
 
 
 if __name__ == "__main__":
