@@ -529,8 +529,11 @@ class GoCodegenTest(unittest.TestCase):
                      f"{gateway}/runtime", f"{gateway}/utilities", f"{gateway}/protoc-gen-swagger/options",
                      "vendor/google.golang.org/grpc/metadata", "vendor/google.golang.org/protobuf/proto"):
             go_module(files, path)
+        go_module(files, "library/go/core/resource")
+        go_module(files, "library/go/core/resource/cc", module="GO_PROGRAM")
         files["p/v2/ya.make"] = (
-            "PROTO_LIBRARY()\nSRCS(svc.proto)\nGO_GRPC_GATEWAY_V2_OPENAPI_SRCS(NO_JSON_NAMES_FOR_FIELDS svc.proto)\nEND()\n"
+            "PROTO_LIBRARY()\nSRCS(svc.proto)\nGO_GRPC_GATEWAY_V2_OPENAPI_SRCS(NO_JSON_NAMES_FOR_FIELDS svc.proto)\n"
+            "RESOURCE(p/v2/svc.proto svc)\nEND()\n"
         )
         files["p/v2/svc.proto"] = 'syntax = "proto3";\n'
         files["p/v1/ya.make"] = "PROTO_LIBRARY()\nSRCS(svc.proto)\nGO_GRPC_GATEWAY_SWAGGER_SRCS(svc.proto)\nEND()\n"
@@ -552,10 +555,13 @@ class GoCodegenTest(unittest.TestCase):
         self.assertEqual(v1["outputs"], ["$(B)/p/v1/svc.pb.gw.go", "$(B)/p/v1/svc.swagger.json"])
         self.assertIn("--swagger_opt=allow_repeated_fields_in_body=true", v1["cmds"][0]["cmd_args"])
         srcs = between(go_tool_args(lib.node_by_output(graph, "$(B)/p/v2/v2.a")), "++srcs", "++asm-flags")
-        self.assertEqual(srcs, ["$(B)/p/v2/svc.pb.gw.go", "$(B)/p/v2/svc.pb.go"])
+        self.assertEqual(srcs, [
+            "$(B)/p/v2/svc.pb.gw.go", "$(B)/p/v2/resource.e730f6b4e11e195b113be58f95596bb0.res.go", "$(B)/p/v2/svc.pb.go",
+        ])
         peers = between(go_tool_args(lib.node_by_output(graph, "$(B)/p/v2/v2.a")), "++peers", "--ya-end-command-file")
         self.assertIn(f"{gateway}/v2/runtime/runtime.a", peers)
         self.assertIn(f"{gateway}/v2/protoc-gen-openapiv2/options/options.a", peers)
+        self.assertEqual(peers[-1], "library/go/core/resource/resource.a")
 
     def test_mockgen_and_oapi_codegen_feed_the_package(self):
         files = go_world()

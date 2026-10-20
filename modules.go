@@ -150,6 +150,7 @@ type ModuleData struct {
 	goCodegens               []GoCodegenStmt
 	goEmbeds                 []GoEmbed
 	goCommonGoogleApis       []ANY
+	goPluginPeers            []ANY
 	goProtoOpts              []GoProtoOpt
 	cgoSrcs                  []ANY
 	cgoLdflags               []ANY

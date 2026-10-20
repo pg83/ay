@@ -285,6 +285,10 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		}
 	}
 
+	for _, p := range d.goPluginPeers {
+		addPeer(p.string())
+	}
+
 	if len(d.cgoSrcs) > 0 {
 		addPeer("build/internal/platform/clang_toolchain_info")
 		addPeer("build/platform/lld")
@@ -379,6 +383,7 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 
 type GoSrcsResult struct {
 	AutoFiles   []VFS
+	AutoSeqs    []int
 	GoFiles     []VFS
 	AsmFiles    []VFS
 	AsmInclSrcs []VFS
@@ -386,12 +391,20 @@ type GoSrcsResult struct {
 	SymabisOut  VFS
 }
 
-func (e *EmitContext) collectGoAutoSource(out VFS) {
+func (e *EmitContext) collectGoAutoSource(out VFS, seq int) {
 	if e.goRes == nil {
 		e.goRes = &GoSrcsResult{}
 	}
 
-	e.goRes.AutoFiles = append(e.goRes.AutoFiles, out)
+	r := e.goRes
+	i := len(r.AutoSeqs)
+
+	for i > 0 && r.AutoSeqs[i-1] > seq {
+		i--
+	}
+
+	r.AutoFiles = slices.Insert(r.AutoFiles, i, out)
+	r.AutoSeqs = slices.Insert(r.AutoSeqs, i, seq)
 }
 
 func (e *EmitContext) collectGoSource(meta SrcMeta, asm bool) {

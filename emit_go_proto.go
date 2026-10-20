@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"path"
 	"slices"
 	"strings"
@@ -78,7 +79,7 @@ func (e *EmitContext) goProtoNamespace() string {
 	return ""
 }
 
-func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []GoProtoOpt, outs []VFS) {
+func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []GoProtoOpt, outs []VFS, seq int) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	protocRef, protoc := ctx.tool(argContribToolsProtoc)
@@ -167,7 +168,7 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
 
 		if strings.HasSuffix(out.relString(), ".go") {
-			e.collectGoAutoSource(out)
+			e.collectGoAutoSource(out, seq)
 		}
 	}
 }
@@ -198,7 +199,7 @@ func (e *EmitContext) emitGoProtoSource(meta SrcMeta) {
 		}
 	}
 
-	e.emitGoProtoCmd(protoRel, &goOpts, d.goProtoOpts, outs)
+	e.emitGoProtoCmd(protoRel, &goOpts, d.goProtoOpts, outs, math.MaxInt)
 }
 
 type GoProtoOpt struct {

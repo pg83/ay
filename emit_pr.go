@@ -45,7 +45,7 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 			v := copyFileOutputVFS(e.instance.Path.relString(), out)
 
 			e.codegen.use(v)
-			e.collectGoAutoSource(v)
+			e.collectGoAutoSource(v, rp.DeclSeq)
 
 			continue
 		}

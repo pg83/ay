@@ -56,6 +56,7 @@ type GoMockgenVars struct {
 
 type GoCodegenStmt struct {
 	kind      int
+	seq       int
 	plugins   []GoProtoOpt
 	outs      []string
 	tool      string
@@ -112,13 +113,13 @@ func applyGoCodegenStmt(modulePath string, v UnknownStmt, d *ModuleData, env Env
 			d.peerdirs = append(d.peerdirs, internStr(p).any())
 		}
 
-		d.goCodegens = append(d.goCodegens, GoCodegenStmt{kind: goCodegenReflect, tool: goReflectorTool, out: "main.go"})
+		d.goCodegens = append(d.goCodegens, GoCodegenStmt{seq: d.nextDeclSeq(), kind: goCodegenReflect, tool: goReflectorTool, out: "main.go"})
 	case tokGoMockgenMocks:
 		for _, p := range []string{std + "/reflect", "vendor/go.uber.org/mock/gomock"} {
 			d.peerdirs = append(d.peerdirs, internStr(p).any())
 		}
 
-		d.goCodegens = append(d.goCodegens, GoCodegenStmt{kind: goCodegenMocks, tool: modulePath + "/gen", out: "main.go"})
+		d.goCodegens = append(d.goCodegens, GoCodegenStmt{seq: d.nextDeclSeq(), kind: goCodegenMocks, tool: modulePath + "/gen", out: "main.go"})
 	case tokGoMockgenSource:
 		positional, lists := goMacroLists(v.Args, "ARGS", "IN_NOPARSE")
 		file := positional[0].string()
@@ -127,7 +128,7 @@ func applyGoCodegenStmt(modulePath string, v UnknownStmt, d *ModuleData, env Env
 			d.peerdirs = append(d.peerdirs, internStr(p).any())
 		}
 
-		d.goCodegens = append(d.goCodegens, GoCodegenStmt{
+		d.goCodegens = append(d.goCodegens, GoCodegenStmt{seq: d.nextDeclSeq(),
 			kind: goCodegenSource, tool: goMockgenTool, file: m.from + "/" + file,
 			out: strings.TrimSuffix(file, path.Ext(file)) + ".source.gen.go", args: lists["ARGS"], inNoParse: lists["IN_NOPARSE"],
 		})
@@ -139,7 +140,7 @@ func applyGoCodegenStmt(modulePath string, v UnknownStmt, d *ModuleData, env Env
 			suffix = s[0].string()
 		}
 
-		d.goCodegens = append(d.goCodegens, GoCodegenStmt{
+		d.goCodegens = append(d.goCodegens, GoCodegenStmt{seq: d.nextDeclSeq(),
 			kind: goCodegenOapi, tool: goOapiCodegenTool[v.Name],
 			generate: positional[0].string(), pkg: positional[1].string(), in: positional[2].string(),
 			out: positional[0].string() + suffix + ".gen.go", args: positional[3:], inNoParse: lists["IN_NOPARSE"],
@@ -171,7 +172,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 			outs = append(outs, build(instance.Path.relString(), "/", name))
 		}
 
-		e.emitGoProtoCmd(protoRel, nil, st.plugins, outs)
+		e.emitGoProtoCmd(protoRel, nil, st.plugins, outs, st.seq)
 
 		return
 	}
@@ -266,7 +267,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 	})
 
 	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
-	e.collectGoAutoSource(out)
+	e.collectGoAutoSource(out, st.seq)
 }
 
 func applyGoGrpcGatewayStmt(v UnknownStmt, d *ModuleData, env Environment) {
@@ -328,7 +329,7 @@ func applyGoGrpcGatewayStmt(v UnknownStmt, d *ModuleData, env Environment) {
 
 	for _, f := range files {
 		if strings.HasSuffix(f.string(), ".proto") {
-			d.goCodegens = append(d.goCodegens, GoCodegenStmt{kind: goCodegenGateway, file: f.string(), plugins: plugins, outs: outs})
+			d.goCodegens = append(d.goCodegens, GoCodegenStmt{seq: d.nextDeclSeq(), kind: goCodegenGateway, file: f.string(), plugins: plugins, outs: outs})
 		}
 	}
 
@@ -416,7 +417,7 @@ func applyGoResource(modulePath string, v *ResourceStmt, d *ModuleData) {
 	}
 
 	d.runPrograms = append(d.runPrograms, rp)
-	d.peerdirs = append(d.peerdirs, strLibraryGoCoreResource.any())
+	d.goPluginPeers = append(d.goPluginPeers, strLibraryGoCoreResource.any())
 }
 
 type GoEmbed struct {
