@@ -15,6 +15,8 @@ PEERS = [
     "library/python/runtime/main",
     "contrib/deprecated/python/subprocess32",
     "contrib/tools/python/src/Modules/_sqlite",
+    "library/python/pytest",
+    "yql/essentials/tests/common/udf_test",
     "userlib",
 ]
 
@@ -40,6 +42,8 @@ def fixture():
         f"PY2_PROGRAM()\n{NO_PLATFORM}"
         "PEERDIR(userlib library/python/runtime_py3)\nEND()\n"
     )
+    for test in ("PY3TEST", "YQL_UDF_TEST"):
+        files[f"{test.lower()}/ya.make"] = f"{test}()\n{NO_PLATFORM}PEERDIR(userlib)\nEND()\n"
     files["pylib/ya.make"] = f"PY3_LIBRARY()\n{NO_PLATFORM}SRCS(l.cpp)\nEND()\n"
     files["pylib/l.cpp"] = "int l;\n"
     files["pylibnoincl/ya.make"] = (
@@ -81,6 +85,8 @@ PY2_MAIN = "library/python/runtime/main/libpython-runtime-main.a"
 SUBPROCESS32 = "contrib/deprecated/python/subprocess32/libdeprecated-python-subprocess32.a"
 PY2_SQLITE = "contrib/tools/python/src/Modules/_sqlite/libsrc-Modules-_sqlite.a"
 USERLIB = "userlib/libuserlib.a"
+PYTEST = "library/python/pytest/liblibrary-python-pytest.a"
+UDF_TEST = "yql/essentials/tests/common/udf_test/libtests-common-udf_test.a"
 
 
 class PythonPeerOrderTest(unittest.TestCase):
@@ -128,6 +134,18 @@ class PythonPeerOrderTest(unittest.TestCase):
             [JEMALLOC, SQLITE, MAIN, TRACING, USERLIB, IMPORT_TEST, PYTHON],
         )
         self.assertNotIn("-Wl,--strip-all", args)
+
+    def test_py3_test_peers_pytest_before_the_program_runtime(self):
+        for test, extra in (("py3test", []), ("yql_udf_test", [UDF_TEST])):
+            with self.subTest(test=test):
+                files = fixture()
+                for tool in ("tools/archiver", "tools/py3cc", "tools/py3cc/slow", "tools/rescompiler", "tools/rescompressor",
+                             "yql/essentials/tools/astdiff", "yql/tools/yqlrun", "yql/essentials/tools/udf_resolver"):
+                    lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
+                graph = lib.make(files, test, "-t")
+                peers = [path[len("$(B)/"):] for path in lib.node_by_output(graph, f"$(B)/{test}/{test}")["inputs"] if path.endswith(".a")]
+                expected = [PYTEST, SQLITE, MAIN, TRACING, *extra, USERLIB, IMPORT_TEST]
+                self.assertEqual([peer for peer in peers if peer in expected], expected)
 
     def test_py2_program_peers_its_runtime_before_user_peers(self):
         graph = lib.make(fixture(), "py2")

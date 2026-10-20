@@ -24,13 +24,10 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 		peers = []string{"library/cpp/testing/unittest_main", "yt/cpp/mapreduce/tests/yt_initialize_hook"}
 	case tokGtest:
 		peers = []string{"library/cpp/testing/gtest", "library/cpp/testing/gtest_main"}
-	case tokPy3Test:
-		peers = []string{"library/python/pytest"}
-		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
-	case tokPy2Test:
+	case tokPy3Test, tokPy2Test:
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
 	case tokYqlUdfTest:
-		peers = []string{"library/python/pytest", "yql/essentials/tests/common/udf_test"}
+		peers = []string{"yql/essentials/tests/common/udf_test"}
 
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
 		d.test.depends = append(d.test.depends, "yql/essentials/tools/astdiff", "yql/tools/yqlrun", "yql/essentials/tools/udf_resolver")

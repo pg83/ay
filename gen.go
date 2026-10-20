@@ -858,11 +858,11 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	if isPyProgramType(d.moduleStmt.Name) {
 		var earlyPeers []string
 
-		if d.usePython2 {
-			if d.moduleStmt.Name == tokPy2Test {
-				earlyPeers = append(earlyPeers, "library/python/pytest")
-			}
+		if isPythonTestModule(d.moduleStmt.Name) {
+			earlyPeers = append(earlyPeers, "library/python/pytest")
+		}
 
+		if d.usePython2 {
 			earlyPeers = append(earlyPeers, "library/python/runtime/main", "contrib/deprecated/python/subprocess32")
 
 			if d.pythonSQLite3 {
