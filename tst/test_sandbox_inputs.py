@@ -178,6 +178,28 @@ class SandboxInputsTest(unittest.TestCase):
                 }))
                 self.assertIn(producer["uid"], compiled["deps"])
 
+    def test_proto_does_not_consume_cpp_induced_dependencies(self):
+        files = proto_files()
+        files.update({
+            "p/ya.make": "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nRUN_PROGRAM(tool OUT generated.proto)\nSRCS(generated.proto)\nEND()\n",
+            "app/ya.make": LIBRARY + "PEERDIR(p)\nSRCS(use.cpp)\nEND()\n",
+            "app/use.cpp": '#include "p/generated.pb.h"\n#include "runtime/config.h"\n',
+            "runtime/config.h": '#include "config"\n',
+            "runtime/config": '#include "detail.h"\n',
+            "runtime/detail.h": "",
+        })
+        lib.tool_program(files, "tool", "tool")
+        files["tool/ya.make"] = files["tool/ya.make"].replace(
+            "END()", "INDUCED_DEPS(h+cpp runtime/config.h)\nEND()"
+        )
+        graph = lib.make(files, "app", "--dist")
+        proto = lib.node_by_output(graph, "$(B)/p/generated.pb.h")
+        self.assertNotIn("$(S)/runtime/config.h", proto["inputs"])
+        compiled = lib.node_by_output(graph, "$(B)/app/use.cpp.o")
+        self.assertTrue({
+            "$(S)/runtime/config.h", "$(S)/runtime/config", "$(S)/runtime/detail.h",
+        } <= set(compiled["inputs"]))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -266,20 +266,39 @@ func hashScanConfig(ownAddIncl, peerAddIncl, baseSearchPaths []VFS) uint64 {
 	return h
 }
 
-func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) (own, compileExtra []IncludeDirective, info *GeneratedFileInfo) {
+func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) (own, compileExtra []IncludeDirective, info *GeneratedFileInfo, inducedBucket ParsedIncludeBucket) {
 	if vfsPath.isBuild() {
 		info = s.codegen.lookup(vfsPath)
 
 		if info == nil {
-			return nil, nil, nil
+			return nil, nil, nil, parsedIncludesLocal
 		}
 
 		set := info.ParsedIncludes
+		parser := s.parsers.registry.registeredParserFor(vfsPath.relString())
 
-		return set.bucket(parsedIncludesLocal), set.bucket(parsedIncludesCpp), info
+		if parser == nil {
+			parser = ctxParser
+		}
+
+		if parser == nil {
+			parser = s.parsers.registry.defaultParser
+		}
+
+		if _, ok := parser.(CIncludeDirectiveParser); ok {
+			inducedBucket = parsedIncludesCpp
+
+			if isHeaderSource(vfsPath.relString()) {
+				inducedBucket = parsedIncludesHeader
+			}
+
+			compileExtra = set.bucket(parsedIncludesCpp)
+		}
+
+		return set.bucket(parsedIncludesLocal), compileExtra, info, inducedBucket
 	}
 
-	return s.parsers.sourceParsedWalkable(vfsPath, ctxParser), nil, nil
+	return s.parsers.sourceParsedWalkable(vfsPath, ctxParser), nil, nil, parsedIncludesLocal
 }
 
 func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIncludeBucket, ctxParser IncludeDirectiveParser) []IncludeDirective {
@@ -303,7 +322,7 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 		defer func() { sc.cfg = cfg }()
 	}
 
-	own, compileExtra, info := s.parsedIncludes(vfsPath, parser)
+	own, compileExtra, info, inducedBucket := s.parsedIncludes(vfsPath, parser)
 
 	if len(own) == 0 && len(compileExtra) == 0 && !vfsPath.isBuild() {
 		return out
@@ -348,10 +367,10 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 		entries = compileExtra
 	}
 
-	return sc.appendResolvedInducedDeps(out, vfsPath, incDir, info)
+	return sc.appendResolvedInducedDeps(out, vfsPath, incDir, info, inducedBucket)
 }
 
-func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS, info *GeneratedFileInfo) []VFS {
+func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS, info *GeneratedFileInfo, bucket ParsedIncludeBucket) []VFS {
 	s := sc.scanner
 
 	if !vfsPath.isBuild() {
@@ -368,14 +387,8 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 
 	out = append(out, info.ClosureLeaves...)
 
-	if len(info.GeneratorRefs) == 0 {
+	if len(info.GeneratorRefs) == 0 || bucket == parsedIncludesLocal {
 		return out
-	}
-
-	bucket := parsedIncludesCpp
-
-	if isHeaderSource(vfsPath.relString()) {
-		bucket = parsedIncludesHeader
 	}
 
 	for _, gref := range info.GeneratorRefs {
