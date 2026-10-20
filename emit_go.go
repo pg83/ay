@@ -758,14 +758,20 @@ func (e *EmitContext) goCgoClosure(includedSrcs []VFS) []VFS {
 		block := na.vfs.alloc(extrasCap)
 		k := copy(block, includedSrcs)
 
-		for _, cv := range cvs {
-			cv.each(func(p VFS) {
-				if p.isSource() {
-					block[k] = p
-					k++
-				}
-			})
-		}
+		dedupers.with(func(deduper *DeDuper) {
+			for _, p := range includedSrcs {
+				deduper.add(p.strID())
+			}
+
+			for _, cv := range cvs {
+				cv.each(func(p VFS) {
+					if p.isSource() && deduper.add(p.strID()) {
+						block[k] = p
+						k++
+					}
+				})
+			}
+		})
 
 		na.vfs.commit(k)
 
