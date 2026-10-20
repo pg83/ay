@@ -1991,7 +1991,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.cc = ModuleCompileEnv{
 		InclArgs:             ctx.inclArgs,
 		Flags:                d.flags,
-		CudaNvccFlags:        d.cudaNvccFlags,
 		AddIncl:              dedupedAddIncl,
 		PeerAddInclGlobal:    selfPeerAddInclGlobal,
 		ProtoInclude:         effectiveProtoInclude,

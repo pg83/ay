@@ -42,7 +42,6 @@ func (x *ModuleData) reset() {
 		nvccDeviceSrcs:       x.nvccDeviceSrcs[:0],
 		implibs:              scrub(x.implibs),
 		linkExcludeLibraries: x.linkExcludeLibraries[:0],
-		cudaNvccFlags:        x.cudaNvccFlags[:0],
 		moduleScopeCFlags:    x.moduleScopeCFlags[:0],
 		ymapsSprotoSrcs:      x.ymapsSprotoSrcs[:0],
 		cppProtoPlugins:      scrub(x.cppProtoPlugins),

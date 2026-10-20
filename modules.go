@@ -215,7 +215,6 @@ type ModuleData struct {
 	cuda                     CudaSettings
 	implibs                  []ImplibStmt
 	linkExcludeLibraries     []ANY
-	cudaNvccFlags            []ANY
 	muslEnabled              bool
 	useAsmlib                bool
 	useArcadiaLibm           bool
@@ -732,7 +731,6 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 		d.pyMain = nil
 	}
 
-	d.cuda = cudaSettings(env)
 	d.muslEnabled = env.bool(envMUSL)
 	d.useArcadiaLibm = env.bool(envUSE_ARCADIA_LIBM) && !env.bool(envOS_EMSCRIPTEN)
 	d.noStrip = env.bool(envNO_STRIP)
@@ -2789,7 +2787,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.peerdirs = append(d.peerdirs, strBuildInternalPlatformCuda.any())
 		}
 	case tokCudaNvccFlags:
-		d.cudaNvccFlags = append(d.cudaNvccFlags, v.Args...)
+		id := envCudaNvccFlags
+
+		env.setString(id, strings.TrimSpace(env.string(id)+" "+strings.Join(anyStrs(v.Args), " ")))
 	default:
 
 		handled = false

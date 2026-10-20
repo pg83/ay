@@ -445,4 +445,5 @@ var (
 	strW = internStr("-w")
 	strYSanitize = internStr("--y_sanitize")
 	strYSkipCompressedDebugInfo = internStr("--y_skip_compressed_debug_info")
+	strTarget2 = internStr("--target")
 )

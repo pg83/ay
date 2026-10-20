@@ -54,7 +54,7 @@ func (e *EmitContext) emitImplib(stmt ImplibStmt) {
 	na := e.ctx.na
 	toolRef, toolPath := e.ctx.tool(argContribToolsImplib)
 	outs := na.vfsList(implibOutputs(e.instance.Path.relString(), stmt.Path)...)
-	args := []ANY{toolPath.any(), internStr("--target").any(), internStr(string(e.instance.Platform.ISA)).any(), strDlopenCallback.any(), internStr(stmt.Callback).any(), strOutdir.any(), e.instance.Path.rel().build().any()}
+	args := []ANY{toolPath.any(), strTarget2.any(), internStr(string(e.instance.Platform.ISA)).any(), strDlopenCallback.any(), internStr(stmt.Callback).any(), strOutdir.any(), e.instance.Path.rel().build().any()}
 
 	if stmt.Soname != "" {
 		args = append(args, strLibraryLoadName.any(), internStr(stmt.Soname).any())
@@ -68,6 +68,8 @@ func (e *EmitContext) emitImplib(stmt ImplibStmt) {
 	} else {
 		args = append(args, internStr(stmt.Path).any())
 	}
+
+	args = resolveResourceGlobalArgs(args, e.peers.ResourceGlobals)
 
 	ref := e.ctx.emit.reserve()
 

@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	wrapccPython3STR       = internV("$(B)/resources/", resourcePatternYMakePython3, "/bin/python3")
-	wrapccPyChunk          = []VFS{wrapccPyVFS}
+	wrapccPython3STR = internV("$(B)/resources/", resourcePatternYMakePython3, "/bin/python3")
+	wrapccPyChunk    = []VFS{wrapccPyVFS}
 )
 
 type PlatformConf struct {

@@ -13,7 +13,9 @@ var (
 func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 	instance := e.instance
 
-	rp.Args = expandResourceGlobalTokens(rp.Args, e.peers.ResourceGlobals)
+	if e.peers != nil {
+		rp.Args = expandResourceGlobalTokens(rp.Args, e.peers.ResourceGlobals)
+	}
 
 	outs := e.emitRunPython(rp)
 

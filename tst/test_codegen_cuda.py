@@ -3,9 +3,25 @@ import unittest
 import lib
 
 
+def cuda_conf(extra=""):
+    return lib.ymake_conf(extra=(
+        "CUDA_ROOT=$(B)/resources/CUDA\n"
+        "CUDA_TARGET_ROOT=$CUDA_ROOT\n"
+        "CUDA_SANITIZE=no\n"
+        "CUDA_HOST_COMPILER=$(B)/resources/CUDA_HOST_TOOLCHAIN/bin/clang\n"
+        "CUDA_NVCC_FLAGS=\n"
+        "NVCC_STD_VER=20\n"
+        "NVCC_FLAGS=-Xfatbin=-compress-all --expt-extended-lambda --expt-relaxed-constexpr "
+        "--allow-unsupported-compiler --dont-use-profile --libdevice-directory=$CUDA_ROOT/nvvm/libdevice "
+        "--keep --keep-dir=${BINDIR} --compiler-bindir=$CUDA_HOST_COMPILER "
+        "-I$(B)/resources/OS_SDK_ROOT/usr/include/x86_64-linux-gnu $CUDA_NVCC_FLAGS\n"
+    ) + extra)
+
+
 class CudaTest(unittest.TestCase):
     def split_fixture(self, settings=""):
         files = {
+            "build/ymake_conf.py": cuda_conf(),
             "mod/ya.make": (
                 f"LIBRARY()\n{lib.BARE_MODULE}"
                 "SET(CUDA_ARCHITECTURES sm_80:sm_90a)\n"
@@ -55,12 +71,7 @@ class CudaTest(unittest.TestCase):
 
     def test_cuda_defaults_follow_the_source_configuration(self):
         files = self.split_fixture()
-        files["build/ymake_conf.py"] = (
-            "class Cuda:\n"
-            "    def auto_cuda_version(self):\n"
-            "        if self.use_arcadia_cuda.value:\n"
-            "            return '12.9'\n"
-        )
+        files["build/ymake_conf.py"] = cuda_conf("CUDA_VERSION=12.9\n")
         files["mod/ya.make"] = (
             f"LIBRARY()\n{lib.BARE_MODULE}"
             "CUDA_NVCC_FLAGS(-DVERSION=$CUDA_VERSION)\n"
@@ -72,6 +83,44 @@ class CudaTest(unittest.TestCase):
         graph = lib.make(files, "mod", "-DCUDA_VERSION=13.0")
         node = lib.node_by_output(graph, "$(B)/mod/_/sub/k.cu.o")
         self.assertIn("-DVERSION=13.0", node["cmds"][0]["cmd_args"])
+
+    def test_cuda_commands_expand_emitted_configuration_and_peer_resources(self):
+        files = self.split_fixture()
+        files["build/ymake_conf.py"] = cuda_conf(
+            "CUDA_ROOT=$DEVICE_SDK_RESOURCE_GLOBAL\n"
+            "CUDA_TARGET_ROOT=$CUDA_ROOT\n"
+            "CUDA_ARCHITECTURES=sm_86:sm_90\n"
+            "CUDA_VERSION=11.4\n"
+            "NVCC_STD_VER=17\n"
+            "CUDA_HOST_COMPILER_VERSION=14\n"
+            "CUDA_NVCC_FLAGS=-DFROM_CONF\n"
+            "NVCC_FLAGS=--compiler-bindir=$HOST_CC_RESOURCE_GLOBAL/bin/clang "
+            "--keep-dir=${BINDIR} $CUDA_NVCC_FLAGS\n"
+        )
+        files["sdk/ya.make"] = (
+            "RESOURCES_LIBRARY()\n"
+            "DECLARE_EXTERNAL_RESOURCE(DEVICE_SDK sbr:1 HOST_CC sbr:2)\nEND()\n"
+        )
+        files["mod/ya.make"] = (
+            f"LIBRARY()\n{lib.BARE_MODULE}PEERDIR(sdk)\n"
+            "CUDA_NVCC_FLAGS(-DFROM_MACRO)\nCUDA_SRCS(sub/k.cu)\nEND()\n"
+        )
+        graph = lib.make(files, "mod", "--sandboxing")
+        for arch in ("86", "90"):
+            node = lib.node_by_output(graph, f"$(B)/mod/sub/k.{arch}.cubin")
+            args = node["cmds"][0]["cmd_args"]
+            self.assertIn("$(B)/resources/DEVICE_SDK/bin/nvcc", args)
+            self.assertIn("--y_skip_compressed_debug_info", args)
+            self.assertIn("-std=c++17", args)
+            start = args.index("--compiler-bindir=$(B)/resources/HOST_CC/bin/clang")
+            self.assertEqual(args[start:start + 4], [
+                "--compiler-bindir=$(B)/resources/HOST_CC/bin/clang",
+                "--keep-dir=$(B)/mod", "-DFROM_CONF", "-DFROM_MACRO",
+            ])
+            self.assertNotIn("-Xfatbin=-compress-all", args)
+            self.assertFalse(any(arg.startswith("-Xcicc=--orig_src_path_name=") for arg in args))
+            self.assertEqual(node["env"]["PATH"],
+                             "$(B)/resources/DEVICE_SDK/nvvm/bin:$(B)/resources/DEVICE_SDK/bin")
 
     def test_no_embed_ptx_omits_only_fatbinary_images(self):
         graph = lib.make(self.split_fixture("SET(CUDA_NO_EMBED_PTX yes)"), "mod")
@@ -114,6 +163,7 @@ class CudaTest(unittest.TestCase):
 
     def test_cuda_source_compiles_through_nvcc_wrapper(self):
         files = {
+            "build/ymake_conf.py": cuda_conf(),
             "mod/ya.make": (
                 "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
                 "CUDA_NVCC_FLAGS(-DFOO --use_fast_math)\n"

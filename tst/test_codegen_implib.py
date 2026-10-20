@@ -15,6 +15,9 @@ class ImplibTest(unittest.TestCase):
 
     def test_toolkit_wrapper_compiles_both_generated_sources(self):
         files = self.fixture("GENERATE_IMPLIB(driver $CUDA_TARGET_ROOT/lib64/stubs/libdriver.so SONAME libdriver.so.7 DLOPEN_CALLBACK load_driver)")
+        files["build/ymake_conf.py"] = lib.ymake_conf(extra="CUDA_TARGET_ROOT=$CUDA_RESOURCE_GLOBAL\n")
+        files["mod/ya.make"] = files["mod/ya.make"].replace("END()", "PEERDIR(sdk)\nEND()")
+        files["sdk/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(CUDA sbr:1)\nEND()\n"
         graph = lib.make(files, "app", "--target-platform", "default-linux-x86_64")
         node = lib.only_node_by_kind(graph, "IL")
         self.assertEqual(node["cmds"][0]["cmd_args"], [

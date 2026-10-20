@@ -12,7 +12,6 @@ var (
 
 type ModuleCompileEnv struct {
 	Flags                FlagSet
-	CudaNvccFlags        []ANY
 	AddIncl              []VFS
 	InclArgs             InclArgMemo
 	CCBlocks             CcModuleArgBlocks

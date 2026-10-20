@@ -11,41 +11,18 @@ var (
 )
 
 func (e *EmitContext) cudaEnv() EnvVars {
-	return e.ctx.na.envList(EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, EnvVar{Name: cudaPathEnv, Value: internV(e.d.cuda.Root, "/nvvm/bin:", e.d.cuda.Root, "/bin").any()})
+	c := e.cudaSettings()
+
+	return e.ctx.na.envList(EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, EnvVar{Name: cudaPathEnv, Value: internV(c.Root, "/nvvm/bin:", c.Root, "/bin").any()})
 }
 
 func (e *EmitContext) nvccFlags() []ANY {
-	c := &e.d.cuda
-
-	if c.NvccFlags != nil {
-		return c.NvccFlags
-	}
-
-	args := internAnys([]string{
-		"-Xfatbin=-compress-all", "--expt-extended-lambda", "--expt-relaxed-constexpr",
-		"--allow-unsupported-compiler", "--dont-use-profile", "--libdevice-directory=" + c.Root + "/nvvm/libdevice",
-		"--keep", "--keep-dir=" + e.instance.Path.rel().build().string(),
-		"--compiler-bindir=$(B)/resources/CUDA_HOST_TOOLCHAIN/bin/clang",
-	})
-
-	if e.instance.Platform.ISA == ISAX8664 {
-		args = append(args, strIBResourcesOsSdkRootUsrIncludeX8664LinuxGnu.any())
-	}
-
-	args = append(args, e.d.cudaNvccFlags...)
-
-	if e.d.flags.NoCompilerWarnings {
-		args = append(args, strW.any())
-	}
-
-	c.NvccFlags = e.ctx.na.anyList(args...)
-
-	return c.NvccFlags
+	return e.cudaSettings().NvccFlags
 }
 
 func (e *EmitContext) cudaCompileArgs(in ModuleCCInputs, mtime, pid VFS, flags []ANY, split bool) ArgChunks {
 	na := e.ctx.na
-	c := e.d.cuda
+	c := e.cudaSettings()
 	head := na.anyList(wrapccPython3STR.any(), cudaCompileScriptVFS.any(), cudaMtimeFlagStr.any(), mtime.any(), cudaCustomPidFlagStr.any(), pid.any())
 
 	var wrapper []ANY
@@ -272,10 +249,11 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 
 func (e *EmitContext) emitCudaDeviceLink(archiveName string, local CollectedObjs, plugin *VFS) NodeRef {
 	na, d := e.ctx.na, e.d
+	c := e.cudaSettings()
 	archive := build(e.instance.Path.relString(), "/", archiveName)
 	devlink := build(e.instance.Path.relString(), "/devlink", e.instance.Platform.objectSuffix())
 	node := composeARNode(e.instance, archive, local.refs, local.outs, plugin, d.tc, e.ctx.host, na)
-	args := []ANY{internV(d.cuda.Root, "/bin/nvcc").any()}
+	args := []ANY{internV(c.Root, "/bin/nvcc").any()}
 
 	args = append(args, e.nvccFlags()...)
 	args = append(args, argDashO.any(), devlink.any(), strDlink.any())

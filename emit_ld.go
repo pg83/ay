@@ -405,13 +405,13 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 	}
 
 	cmdArgs = append(cmdArgs, argWlEndGroup.any())
-	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, linkExcludeLibraries, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm, dyn != nil)...)
+	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, exportsScript, noExportDynSymbols, wantsStrip, useArcadiaLibm, dyn != nil)...)
 	na.anys.commit(len(cmdArgs))
 
 	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
-func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, linkExcludeLibraries []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm, dynLib bool) []ANY {
+func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, noExportDynSymbols, wantsStrip, useArcadiaLibm, dynLib bool) []ANY {
 	var trailer []ANY
 
 	if !noExportDynSymbols {
