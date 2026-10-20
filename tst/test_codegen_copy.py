@@ -27,6 +27,27 @@ class CopyFileTest(unittest.TestCase):
                 compiled = lib.node_by_output(graph, "$(B)/mod/use.cpp.o")
                 self.assertNotIn("$(S)/mod/dep.h", compiled["inputs"])
 
+    def test_copies_in_an_include_loop_share_their_inputs(self):
+        # json_visitor.cpp keeps one input set per graph loop: ydb
+        # yql/essentials/minikql/invoke_builtins/llvm16 copies
+        # mkql_builtins_impl.h.txt and mkql_builtins_decimal.h.txt next to a
+        # copy of mkql_builtins.h, their OUTPUT_INCLUDES form a cycle, and all
+        # three CP nodes list the three sources.
+        graph = lib.make({
+            "mod/ya.make": (
+                LIBRARY_HEAD + "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
+                "COPY_FILE(TEXT a.h.txt ${BINDIR}/a.h OUTPUT_INCLUDES b.h)\n"
+                "COPY_FILE(TEXT b.h.txt ${BINDIR}/b.h OUTPUT_INCLUDES a.h)\n"
+                "COPY_FILE(TEXT c.h.txt ${BINDIR}/c.h OUTPUT_INCLUDES a.h)\n"
+                "SRCS(use.cpp)\nEND()\n"
+            ),
+            "mod/a.h.txt": "", "mod/b.h.txt": "", "mod/c.h.txt": "",
+            "mod/use.cpp": '#include "c.h"\n',
+        }, "mod", "--sandboxing")
+        for out, sources in (("a.h", ["a.h.txt", "b.h.txt"]), ("b.h", ["a.h.txt", "b.h.txt"]), ("c.h", ["c.h.txt"])):
+            inputs = lib.node_by_output(graph, f"$(B)/mod/{out}")["inputs"]
+            self.assertEqual(sorted(i for i in inputs if i.endswith(".txt")), [f"$(S)/mod/{s}" for s in sources], out)
+
     def test_context_output_includes_chained_and_object_copies(self):
         graph = lib.make({
             "mod/ya.make": (
