@@ -61,6 +61,7 @@ def python_base():
     files["contrib/tools/cython/cython.py"] = ""
     for name in CYTHON_UTILITY:
         files[f"contrib/tools/cython/Cython/Utility/{name}"] = ""
+    files["contrib/tools/cython/Cython/Utility/MemoryView.pxd"] = ""
     for path in CYTHON_HEADERS:
         files[path] = ""
     files["app/ya.make"] = (
@@ -133,6 +134,10 @@ class CythonTest(unittest.TestCase):
         ])
         self.assertEqual(fast["inputs"][0], CYTHON)
         self.assertIn("$(S)/contrib/tools/cython/Cython/Utility/MemoryView.pyx", fast["inputs"])
+        # The embedded utility files are TEXT inputs (python.conf
+        # _UNWRAP_TEXT_INPUTS), never parsed: no sibling MemoryView.pxd, as
+        # in every CY node of the devtools_yamaker and devtools_ya_bin references.
+        self.assertNotIn("$(S)/contrib/tools/cython/Cython/Utility/MemoryView.pxd", fast["inputs"])
         self.assertIn("$(S)/lib/fast.pyx", fast["inputs"])
         fast_cc = lib.node_by_output(graph, "$(B)/lib/fast.pyx.py3.cpp.py3.o")
         self.assertIn("-Wno-implicit-fallthrough", args(fast_cc))

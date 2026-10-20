@@ -193,16 +193,6 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		p := &plans[i]
 
 		p.sourceInputs = e.scanner.cythonPyxLangClosure(p.srcVFS, d.scanCtx)
-
-		if !p.stmt.Header {
-			for _, input := range p.toolInputs[1 : len(p.toolInputs)-1] {
-				if isCythonLangFile(input.relString()) {
-					p.sourceInputs = append(p.sourceInputs, e.scanner.cythonPyxLangClosure(input, d.scanCtx)...)
-				}
-			}
-		}
-
-		p.sourceInputs = dedup(p.sourceInputs)
 	}
 
 	return plans
