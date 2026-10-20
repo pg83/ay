@@ -71,7 +71,7 @@ class ProtoCppTest(unittest.TestCase):
     def test_root_namespace_uses_typed_build_root_and_no_source_root_include(self):
         files = proto_files()
         files.update({
-            "p/ya.make": "PROTO_LIBRARY()\nPROTO_NAMESPACE(WITH_GEN .)\nSRCS(a.proto)\nEND()\n",
+            "p/ya.make": "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nPROTO_NAMESPACE(WITH_GEN .)\nSRCS(a.proto)\nEND()\n",
             "p/a.proto": 'syntax = "proto3";\n',
         })
         graph = lib.make(files, "p")
@@ -91,7 +91,7 @@ class ProtoCppTest(unittest.TestCase):
                     f'macro YAFF(NAMESPACE="{default}", FILES[], EXPERIMENTAL[]) {{\n'
                     "    CPP_PROTO_PLUGIN2(yaff $YAFF_PLUGIN_PATH .yaff.h .yaff.cpp)\n}\n"
                 ),
-                "p/ya.make": "PROTO_LIBRARY()\nYAFF()\nSRCS(a.proto)\nEND()\n",
+                "p/ya.make": "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nYAFF()\nSRCS(a.proto)\nEND()\n",
                 "p/a.proto": 'syntax = "proto3";\n',
             })
             node = lib.node_by_output(lib.make(files, "p"), "$(B)/p/a.pb.h")
@@ -315,7 +315,7 @@ class ProtoCppTest(unittest.TestCase):
                     )
                 files.update({
                     "p/ya.make": (
-                        "PROTO_LIBRARY()\n"
+                        "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\n"
                         "CPP_PROTO_PLUGIN2(custom tools/plugin .custom.h .custom.cpp)\n"
                         + ("" if epilogue else "SET(PROTOC_TRANSITIVE_HEADERS yes)\n")
                         + "SRCS(a.proto)\nEND()\n"
@@ -343,7 +343,7 @@ class ProtoCppTest(unittest.TestCase):
                     macros.reverse()
                 files.update({
                     "p/ya.make": (
-                        "PROTO_LIBRARY()\n" + "\n".join(macros)
+                        "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\n" + "\n".join(macros)
                         + "\nSET(PROTOC_TRANSITIVE_HEADERS no)\nSRCS(a.proto)\nEND()\n"
                     ),
                     "p/a.proto": 'syntax = "proto3";\nmessage A {}\n',

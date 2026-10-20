@@ -11,7 +11,6 @@ const defaultProtoVariants = 1<<LangCPP | 1<<LangJava | 1<<LangPy | 1<<LangGo | 
 func applyProtoVariantTags(v UnknownStmt, d *ModuleData) {
 	if v.Name == tokOnlyTags {
 		d.protoVariants = 0
-
 	}
 
 	for _, arg := range v.Args {
