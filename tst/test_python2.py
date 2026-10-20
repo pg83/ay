@@ -45,6 +45,31 @@ CONTRIB_LIBS_PYTHON = (
 
 STAGE0 = "$(B)/tools/py2cc/stage0pycc/py2cc"
 
+CYTHON_UTILITY = (
+    "arrayarray.h", "AsyncGen.c", "Buffer.c", "Builtins.c", "CConvert.pyx", "CMath.c",
+    "CommonStructures.c", "CommonTypes.c", "Complex.c", "Coroutine.c", "CpdefEnums.pyx",
+    "CppConvert.pyx", "CppSupport.cpp", "CythonFunction.c", "Dataclasses.c", "Embed.c",
+    "Exceptions.c", "ExtensionTypes.c", "FunctionArguments.c", "ImportExport.c",
+    "MemoryView.pyx", "MemoryView_C.c", "ModuleSetupCode.c", "NumpyImportArray.c",
+    "ObjectHandling.c", "Optimize.c", "Overflow.c", "Printing.c", "Profile.c",
+    "StringTools.c", "TestCyUtilityLoader.pyx", "TestCythonScope.pyx",
+    "TestUtilityLoader.c", "UFuncs_C.c",
+)
+
+CYTHON_HEADERS = (
+    "contrib/tools/cython_py2/generated_c_headers.h",
+    "contrib/tools/cython_py2/generated_cpp_headers.h",
+    "contrib/libs/python/Include/compile.h",
+    "contrib/libs/python/Include/frameobject.h",
+    "contrib/libs/python/Include/longintrepr.h",
+    "contrib/libs/python/Include/pyconfig.h",
+    "contrib/libs/python/Include/Python.h",
+    "contrib/libs/python/Include/pythread.h",
+    "contrib/libs/python/Include/structmember.h",
+    "contrib/libs/python/Include/traceback.h",
+    "contrib/libs/cxxsupp/openmp/omp.h",
+)
+
 
 def python2_base():
     files = {f"{path}/ya.make": STUB_LIBRARY for path in PEER_STUBS}
@@ -157,6 +182,51 @@ class Python2Test(unittest.TestCase):
         self.assertIn("-I$(S)/contrib/libs/python/Include", compile_args)
         self.assertIn("-DUSE_PYTHON2", compile_args)
         self.assertNotIn("-DUSE_PYTHON3", compile_args)
+
+    def test_py_srcs_scope_directives_apply_to_the_following_sources(self):
+        files = python2_base()
+        files.update({
+            "lib/ya.make": "PY2_LIBRARY()\nPY_SRCS(a.py TOP_LEVEL b.py NAMESPACE n c.py)\nEND()\n",
+            "lib/a.py": "",
+            "lib/b.py": "",
+            "lib/c.py": "",
+            "prog/ya.make": f"PROGRAM()\n{NO_PLATFORM}SRCS(m.cpp)\nPEERDIR(lib)\nEND()\n",
+            "prog/m.cpp": "int main(){return 0;}\n",
+        })
+        graph = lib.make(files, "prog")
+        node = objcopy_with_kv(graph, "lib", "resfs/src//py_modules/lib.a=lib/a.py")
+        self.assertEqual(section(node, "--kvs"), [
+            "resfs/src//py_modules/lib.a=lib/a.py",
+            "resfs/src//py_modules/b=lib/b.py",
+            "resfs/src//py_modules/n.c=lib/c.py",
+        ])
+
+    def test_py2_cython_uses_the_py2_cython(self):
+        files = python2_base()
+        files.update({
+            "lib/ya.make": f"PY2_LIBRARY()\n{NO_PLATFORM}PY_SRCS(TOP_LEVEL m.pyx)\nEND()\n",
+            "lib/m.pyx": "",
+            "prog/ya.make": f"PROGRAM()\n{NO_PLATFORM}SRCS(main.cpp)\nPEERDIR(lib)\nEND()\n",
+            "prog/main.cpp": "int main(){return 0;}\n",
+        })
+        files["contrib/tools/cython_py2/cython.py"] = ""
+        for name in CYTHON_UTILITY:
+            files[f"contrib/tools/cython_py2/Cython/Utility/{name}"] = ""
+        for path in CYTHON_HEADERS:
+            files[path] = ""
+        graph = lib.make(files, "prog")
+        cy = lib.node_by_output(graph, "$(B)/lib/m.pyx.py2.cpp")
+        self.assertEqual(cy["kv"]["p"], "CY")
+        cy_args = args(cy)
+        self.assertEqual(cy_args[1], "$(S)/contrib/tools/cython_py2/cython.py")
+        self.assertIn("-I$(S)/contrib/tools/cython_py2/Cython/Includes", cy_args)
+        self.assertNotIn("-I$(S)/contrib/tools/cython/Cython/Includes", cy_args)
+        self.assertEqual(cy_args[-3:], ["$(S)/lib/m.pyx", "-o", "$(B)/lib/m.pyx.py2.cpp"])
+        self.assertIn("$(S)/contrib/tools/cython_py2/Cython/Utility/Buffer.c", cy["inputs"])
+        self.assertFalse([path for path in cy["inputs"] if "/contrib/tools/cython/" in path])
+        compile_node = lib.node_by_output(graph, "$(B)/lib/m.pyx.py2.cpp.o")
+        self.assertIn(cy["uid"], compile_node["deps"])
+        lib.node_by_output(graph, "$(B)/lib/m.reg.cpp")
 
     def test_py2_bytecode_tool_follows_use_light_py2cc(self):
         files = python2_base()

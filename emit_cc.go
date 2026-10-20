@@ -299,6 +299,14 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	return e.emitNode(node), outVFS, allInputs
 }
 
+func (env *ModuleCompileEnv) objSufDot() string {
+	if env.ObjSuf == 0 {
+		return ""
+	}
+
+	return "." + env.ObjSuf.string()
+}
+
 func ccObjectSuffix(instance ModuleInstance, in ModuleCCInputs) string {
 	suffix := ".o"
 

@@ -154,7 +154,7 @@ type ScanContext struct {
 	swigInclude   []VFS
 	protoOutRoot  VFS
 	goAsmIncl     []VFS
-	cythonPy23    bool
+	cythonSys     []VFS
 	joinFrom      ISA
 	joinTo        ISA
 }
@@ -186,7 +186,7 @@ func (ctx *ScanContext) modulePaths(domain ScanDomain) (own, peer []VFS) {
 
 		return own, ctx.ccPeer
 	case scanDomainCython:
-		return appendCythonScanAddIncl(ctx.ccOwn, ctx.cythonAddIncl, ctx.cythonPy23), ctx.ccPeer
+		return appendCythonScanAddIncl(ctx.ccOwn, ctx.cythonAddIncl, ctx.cythonSys), ctx.ccPeer
 	case scanDomainProto:
 		return ctx.parsers.protoScanOwnPaths(ctx.protoOutRoot, ctx.protoInclude), nil
 	case scanDomainAux:

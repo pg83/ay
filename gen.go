@@ -961,7 +961,7 @@ func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, c
 	scanCtx.cythonAddIncl = ctx.na.vfsList(d.cythonAddIncl...)
 	scanCtx.protoInclude = ctx.na.vfsList(protoInclude...)
 	scanCtx.swigInclude = ctx.na.vfsList(d.cc.SwigInclude...)
-	scanCtx.cythonPy23 = cythonUsesPy23Variant(d.moduleStmt.Name)
+	scanCtx.cythonSys = cythonSysIncludes(d)
 	scanCtx.goAsmIncl = instance.Platform.Go.AsmIncludeDirs
 	scanCtx.joinFrom = instance.Platform.ISA
 	scanCtx.joinTo = ctx.target.ISA

@@ -2,6 +2,13 @@ package main
 
 import "strings"
 
+var (
+	cythonCppKV           = KV{P: pkCY, PC: pcYellow}
+	cythonPy2SysIncludes  = []VFS{contribToolsCythonPy2CythonIncludes}
+	cythonPy23SysIncludes = []VFS{contribToolsCythonPy2CythonIncludes, contribToolsCythonCythonIncludes}
+	cythonPy3SysIncludes  = []VFS{contribToolsCythonCythonIncludes}
+)
+
 var cythonNumpyAddIncl = []VFS{
 	source("contrib/python/numpy/include/numpy/core/include"),
 	source("contrib/python/numpy/include/numpy/core/include/numpy"),
@@ -62,6 +69,48 @@ var py3CythonEmbeddedFiles = []string{
 	"contrib/tools/cython/Cython/Utility/arrayarray.h",
 }
 
+var py2CythonOutputIncludes = append([]VFS{
+	source("contrib/tools/cython_py2/generated_c_headers.h"),
+	source("contrib/tools/cython_py2/generated_cpp_headers.h"),
+}, py3CythonOutputIncludes[2:]...)
+
+var py2CythonEmbeddedFiles = []string{
+	"contrib/tools/cython_py2/Cython/Utility/arrayarray.h",
+	"contrib/tools/cython_py2/Cython/Utility/AsyncGen.c",
+	"contrib/tools/cython_py2/Cython/Utility/Buffer.c",
+	"contrib/tools/cython_py2/Cython/Utility/Builtins.c",
+	"contrib/tools/cython_py2/Cython/Utility/CConvert.pyx",
+	"contrib/tools/cython_py2/Cython/Utility/CMath.c",
+	"contrib/tools/cython_py2/Cython/Utility/CommonStructures.c",
+	"contrib/tools/cython_py2/Cython/Utility/CommonTypes.c",
+	"contrib/tools/cython_py2/Cython/Utility/Complex.c",
+	"contrib/tools/cython_py2/Cython/Utility/Coroutine.c",
+	"contrib/tools/cython_py2/Cython/Utility/CpdefEnums.pyx",
+	"contrib/tools/cython_py2/Cython/Utility/CppConvert.pyx",
+	"contrib/tools/cython_py2/Cython/Utility/CppSupport.cpp",
+	"contrib/tools/cython_py2/Cython/Utility/CythonFunction.c",
+	"contrib/tools/cython_py2/Cython/Utility/Dataclasses.c",
+	"contrib/tools/cython_py2/Cython/Utility/Embed.c",
+	"contrib/tools/cython_py2/Cython/Utility/Exceptions.c",
+	"contrib/tools/cython_py2/Cython/Utility/ExtensionTypes.c",
+	"contrib/tools/cython_py2/Cython/Utility/FunctionArguments.c",
+	"contrib/tools/cython_py2/Cython/Utility/ImportExport.c",
+	"contrib/tools/cython_py2/Cython/Utility/MemoryView.pyx",
+	"contrib/tools/cython_py2/Cython/Utility/MemoryView_C.c",
+	"contrib/tools/cython_py2/Cython/Utility/ModuleSetupCode.c",
+	"contrib/tools/cython_py2/Cython/Utility/NumpyImportArray.c",
+	"contrib/tools/cython_py2/Cython/Utility/ObjectHandling.c",
+	"contrib/tools/cython_py2/Cython/Utility/Optimize.c",
+	"contrib/tools/cython_py2/Cython/Utility/Overflow.c",
+	"contrib/tools/cython_py2/Cython/Utility/Printing.c",
+	"contrib/tools/cython_py2/Cython/Utility/Profile.c",
+	"contrib/tools/cython_py2/Cython/Utility/StringTools.c",
+	"contrib/tools/cython_py2/Cython/Utility/TestCythonScope.pyx",
+	"contrib/tools/cython_py2/Cython/Utility/TestCyUtilityLoader.pyx",
+	"contrib/tools/cython_py2/Cython/Utility/TestUtilityLoader.c",
+	"contrib/tools/cython_py2/Cython/Utility/UFuncs_C.c",
+}
+
 var cythonConstHead = []ANY{
 	argSContribToolsCythonCythonPy.any(),
 	argX2.any(),
@@ -70,7 +119,13 @@ var cythonConstHead = []ANY{
 	argUnameSysnameLinux.any(),
 }
 
-var cythonCppKV = KV{P: pkCY, PC: pcYellow}
+var py2CythonConstHead = []ANY{
+	argSContribToolsCythonPy2CythonPy.any(),
+	argX2.any(),
+	argLegacyImplicitNoexceptTrue.any(),
+	argE.any(),
+	argUnameSysnameLinux.any(),
+}
 
 type CythonStmt struct {
 	Src       string
@@ -119,6 +174,10 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			generated = stmt.Src + ".c"
 		}
 
+		if d.usePython2 {
+			generated = stmt.Src + d.cc.objSufDot() + ".py2" + cythonOutExt(stmt.CMode)
+		}
+
 		if stmt.Header {
 			ext := ".cpp"
 
@@ -148,7 +207,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		}
 
 		srcVFS := source(instance.Path.relString(), "/", stmt.Src)
-		toolInputs, emittedInputs := cythonCppInducedInputs(srcVFS, stmt.CMode)
+		toolInputs, emittedInputs := cythonCppInducedInputs(srcVFS, stmt.CMode, d.usePython2)
 		cyRef := ctx.emit.reserve()
 
 		var infos []*GeneratedFileInfo
@@ -271,7 +330,13 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		cmdArgs := na.anys.alloc(8 + len(cythonConstHead) + len(stmt.Options) + len(d.cythonAddIncl))[:0]
 
 		cmdArgs = append(cmdArgs, d.tc.Python3.any())
-		cmdArgs = append(cmdArgs, cythonConstHead...)
+
+		if d.usePython2 {
+			cmdArgs = append(cmdArgs, py2CythonConstHead...)
+		} else {
+			cmdArgs = append(cmdArgs, cythonConstHead...)
+		}
+
 		cmdArgs = appendInternAnys(cmdArgs, stmt.Options)
 
 		if !stmt.CMode {
@@ -285,8 +350,14 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		cmdArgs = appendCythonAddIncl(cmdArgs, d.cythonAddIncl, ctx.inclArgs)
 
+		cythonIncludes := argISContribToolsCythonCythonIncludes
+
+		if d.usePython2 {
+			cythonIncludes = argISContribToolsCythonPy2CythonIncludes
+		}
+
 		cmdArgs = append(cmdArgs,
-			argISContribToolsCythonCythonIncludes.any(),
+			cythonIncludes.any(),
 			srcVFS.any(),
 			argDashO.any(),
 			generatedVFS.any(),
@@ -377,19 +448,25 @@ func isCythonLangFile(rel string) bool {
 	return strings.HasSuffix(rel, ".pyx") || strings.HasSuffix(rel, ".pxd") || strings.HasSuffix(rel, ".pxi") || strings.HasSuffix(rel, ".py")
 }
 
-func cythonCppInducedInputs(src VFS, cMode bool) (toolInputs, emittedInputs []VFS) {
-	toolInputs = []VFS{contribToolsCythonCythonPy}
+func cythonCppInducedInputs(src VFS, cMode, py2 bool) (toolInputs, emittedInputs []VFS) {
+	script, outputIncludes, embedded := contribToolsCythonCythonPy, py3CythonOutputIncludes, py3CythonEmbeddedFiles
+
+	if py2 {
+		script, outputIncludes, embedded = contribToolsCythonPy2CythonPy, py2CythonOutputIncludes, py2CythonEmbeddedFiles
+	}
+
+	toolInputs = []VFS{script}
 	emittedInputs = nil
 
-	for _, v := range py3CythonOutputIncludes {
-		if v.relString() == "contrib/tools/cython/generated_cpp_headers.h" && cMode {
+	for i, v := range outputIncludes {
+		if i == 1 && cMode {
 			continue
 		}
 
 		emittedInputs = append(emittedInputs, v)
 	}
 
-	for _, rel := range py3CythonEmbeddedFiles {
+	for _, rel := range embedded {
 		v := source(rel)
 
 		toolInputs = append(toolInputs, v)
@@ -453,7 +530,26 @@ func (e *EmitContext) cythonAdjustModuleCCBlocks() []VFS {
 	d.cc.MainOutInducedInputs = true
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &cy)
 
-	return appendCythonScanAddIncl(cy.AddIncl, d.cythonAddIncl, cythonUsesPy23Variant(d.moduleStmt.Name))
+	return appendCythonScanAddIncl(cy.AddIncl, d.cythonAddIncl, cythonSysIncludes(d))
+}
+
+func cythonSysIncludes(d *ModuleData) []VFS {
+	switch {
+	case d.usePython2:
+		return cythonPy2SysIncludes
+	case cythonUsesPy23Variant(d.moduleStmt.Name):
+		return cythonPy23SysIncludes
+	}
+
+	return cythonPy3SysIncludes
+}
+
+func cythonOutExt(cMode bool) string {
+	if cMode {
+		return ".c"
+	}
+
+	return ".cpp"
 }
 
 func appendCythonCCAddIncl(na *NodeArenas, addIncl []VFS, numpyBeforeInclude bool) []VFS {
@@ -481,17 +577,12 @@ func appendCythonCCAddIncl(na *NodeArenas, addIncl []VFS, numpyBeforeInclude boo
 	return out[:len(out):len(out)]
 }
 
-func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, py23 bool) []VFS {
-	out := make([]VFS, 0, len(addIncl)+len(cythonAddIncl)+3+len(cythonNumpyAddIncl))
+func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, sysIncludes []VFS) []VFS {
+	out := make([]VFS, 0, len(addIncl)+len(cythonAddIncl)+len(sysIncludes)+1+len(cythonNumpyAddIncl))
 
 	out = append(out, addIncl...)
 	out = append(out, cythonAddIncl...)
-
-	if py23 {
-		out = append(out, contribToolsCythonPy2CythonIncludes)
-	}
-
-	out = append(out, contribToolsCythonCythonIncludes)
+	out = append(out, sysIncludes...)
 	out = append(out, contribLibsCxxsuppLibcxxInclude)
 	out = append(out, cythonNumpyAddIncl...)
 

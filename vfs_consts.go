@@ -51,6 +51,7 @@ var (
 	contribToolsCythonCythonIncludes    = source("contrib/tools/cython/Cython/Includes")
 	contribToolsCythonCythonPy          = source("contrib/tools/cython/cython.py")
 	contribToolsCythonPy2CythonIncludes = source("contrib/tools/cython_py2/Cython/Includes")
+	contribToolsCythonPy2CythonPy       = source("contrib/tools/cython_py2/cython.py")
 	copyFsToolsVFS                      = source("build/scripts/fs_tools.py")
 	cudaCompileScriptVFS                = source("build/scripts/compile_cuda.py")
 	cudaRuntimeIncludeVFS               = source("build/internal/platform/cuda/cuda_runtime_include.h")
