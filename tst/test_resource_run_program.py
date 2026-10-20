@@ -202,6 +202,30 @@ class RunProgramTest(unittest.TestCase):
         graph = lib.make(files, "lib")
         self.assertIn("$(S)/inc/runtime.h", lib.node_by_output(graph, "$(B)/lib/a.cpp.o")["inputs"])
 
+    def test_induced_deps_follow_the_output_extension(self):
+        # parser_manager.cpp IndDepsRuleByPath picks the induced deps rule of
+        # an output by its extension, without a default: basesearch
+        # contrib/libs/cel-cpp feeds the protoc-made empty_descriptor_set_embed.pb
+        # to cel_cc_embed, whose node lists the tool and the .pb only.
+        files = library(
+            "RUN_PROGRAM(tools/plugin IN seed.txt OUT_NOAUTO d.pb x.h)\n"
+            "RUN_PROGRAM(tools/gen IN ${BINDIR}/d.pb OUT_NOAUTO e.inc)\n"
+            "RUN_PROGRAM(tools/gen IN ${BINDIR}/e.inc OUT a.cpp)\n",
+            seed__txt="",
+            use__cpp='#include "lib/x.h"\n',
+        )
+        files["lib/ya.make"] = files["lib/ya.make"].replace("END()", "SRCS(use.cpp)\nEND()")
+        files["tools/plugin/ya.make"] = (
+            f"PROGRAM(plugin)\n{BARE}INDUCED_DEPS(h+cpp ${{ARCADIA_ROOT}}/inc/runtime.h)\nSRCS(main.cpp)\nEND()\n"
+        )
+        files["tools/plugin/main.cpp"] = "int main(){return 0;}\n"
+        files["inc/runtime.h"] = ""
+        graph = lib.make(files, "lib")
+        self.assertEqual(sorted(set(lib.node_by_output(graph, "$(B)/lib/e.inc")["inputs"])), [
+            "$(B)/lib/d.pb", "$(B)/tools/gen/gen",
+        ])
+        self.assertIn("$(S)/inc/runtime.h", lib.node_by_output(graph, "$(B)/lib/use.cpp.o")["inputs"])
+
     def test_generated_empty_parser_inputs_bring_their_sources(self):
         files = library(
             "RUN_PROGRAM(tools/gen IN seed.txt OUT_NOAUTO main.bin gen.py)\n"

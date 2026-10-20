@@ -277,17 +277,8 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 		}
 
 		set := info.ParsedIncludes
-		parser := s.parsers.registry.registeredParserFor(vfsPath.relString())
 
-		if parser == nil {
-			parser = ctxParser
-		}
-
-		if parser == nil {
-			parser = s.parsers.registry.defaultParser
-		}
-
-		if _, ok := parser.(CIncludeDirectiveParser); ok {
+		if _, ok := s.parsers.registry.registeredParserFor(vfsPath.relString()).(CIncludeDirectiveParser); ok {
 			inducedBucket = parsedIncludesCpp
 
 			if isHeaderSource(vfsPath.relString()) {
