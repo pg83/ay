@@ -2,6 +2,7 @@ package main
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -140,4 +141,35 @@ func TestJavaCompileClosureHidesTransitiveImplementation(t *testing.T) {
 	testEqual(t, javaPreorderSort(direct, resolutions, false), []*JavaModule{a, api, impl})
 	testEqual(t, a.isDirectPeer(impl), true)
 	testEqual(t, a.isDirectPeer(a), false)
+}
+
+func TestJavaStatementDefaultsAndSourceFlags(t *testing.T) {
+	env := newEnvironment()
+	jm := &JavaModule{unit: javaUnitJar}
+	d := &JavaData{}
+	name := internEnv("CUSTOM")
+	collectJavaStmts(nil, jm, d, []Stmt{
+		&DefaultVarStmt{VarName: "CUSTOM", NameEnv: name, Value: "first"},
+		&DefaultVarStmt{VarName: "CUSTOM", NameEnv: name, Value: "second"},
+		&PeerdirStmt{Paths: internAnys([]string{"ADDINCL", "GLOBAL", "dep"})},
+		&SrcsStmt{Sources: internAnys([]string{"GLOBAL", "src.java"})},
+		&AddInclStmt{ProtoGlobalPaths: internAnys([]string{"includes"})},
+	}, env)
+	testEqual(t, d.rawVars["CUSTOM"], "first")
+	testEqual(t, env.string(name), "first")
+	testEqual(t, d.peerStmts, []JavaPeerSpec{{dir: "dep", explicit: true}})
+	testEqual(t, d.srcs, []string{"src.java"})
+	testEqual(t, d.protoAddIncl, []javaAddIncl{{dir: source("includes"), global: true}})
+	jm.unit = &javaUnit{ignorePeerdir: true}
+	collectJavaStmts(nil, jm, d, []Stmt{&PeerdirStmt{Paths: internAnys([]string{"ignored"})}}, env)
+	testEqual(t, len(d.peerStmts), 1)
+}
+
+func TestJavaShortNamesAndMissingVariants(t *testing.T) {
+	single := strings.Repeat("a", 60)
+	testEqual(t, shortenFullPath(single), single)
+	testEqual(t, shortenFullPath("prefix/"+single), single)
+	testEqual(t, javaUnitFor(tokJavaLibrary, ModuleKind(255)), (*javaUnit)(nil))
+	jm := &JavaModule{dir: "app", data: &JavaData{javaSrcs: []JavaSrcsSpec{{srcDir: "$(B)/gen"}, {srcDir: "."}}}}
+	testEqual(t, jm.srcDirsTestData(), []string{"$(S)/app"})
 }

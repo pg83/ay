@@ -660,6 +660,32 @@ class GoCodegenTest(unittest.TestCase):
         ])
         self.assertIn("vendor/go.uber.org/mock/gomock/gomock.a", between(args, "++peers", "--ya-end-command-file"))
 
+    def test_reflection_mockgen_uses_declared_interfaces_and_package(self):
+        files = go_world()
+        for package in ("encoding/gob", "flag", "fmt", "os", "path", "reflect"):
+            go_module(files, f"{STD}/{package}")
+        for package in ("vendor/go.uber.org/mock/mockgen/model", "vendor/go.uber.org/mock/gomock", "vendor/api/iface"):
+            go_module(files, package)
+        for tool in ("library/go/mockgen/reflector", "vendor/go.uber.org/mock/mockgen"):
+            go_module(files, tool, module="GO_PROGRAM")
+        go_module(files, "g/mocks/gen", module="GO_PROGRAM", srcs="", macros=(
+            "GO_MOCKGEN_CONTRIB_FROM(api/iface)\nGO_MOCKGEN_TYPES(First Second)\nGO_MOCKGEN_REFLECT()\n"
+        ))
+        go_module(files, "g/mocks", srcs="", macros="GO_MOCKGEN_PACKAGE(custom)\nGO_MOCKGEN_MOCKS()\n")
+        graph = lib.make(files, "g/mocks")
+        reflection = lib.node_by_output(graph, "$(B)/g/mocks/gen/main.go")
+        self.assertEqual(reflection["cmds"][0]["cmd_args"], [
+            "$(B)/library/go/mockgen/reflector/reflector", "api/iface", "First,Second",
+        ])
+        mock = lib.node_by_output(graph, "$(B)/g/mocks/main.go")
+        self.assertEqual(mock["kv"]["p"], "GM")
+        self.assertEqual(mock["cmds"][0]["cmd_args"][0], "$(B)/g/mocks/gen/gen")
+        self.assertIn("custom", mock["cmds"][1]["cmd_args"])
+        self.assertEqual(mock["cmds"][1]["stdout"], "$(B)/g/mocks/main.go")
+        self.assertEqual(mock["cmds"][1]["env"]["GOROOT"], "$(B)/resources/GO_TOOLS")
+        for output in ("$(B)/g/mocks/gen/gen", "$(B)/vendor/go.uber.org/mock/mockgen/mockgen"):
+            self.assertIn(lib.node_by_output(graph, output)["uid"], mock["deps"])
+
     def test_go_dll_links_a_position_independent_shared_object(self):
         files = go_world()
         files["build/scripts/fs_tools.py"] = ""

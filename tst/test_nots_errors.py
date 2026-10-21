@@ -82,6 +82,53 @@ class NotsValidationTest(unittest.TestCase):
             "uri": "https://npm.yandex-team.ru/cache/dep/archive.tgz#integrity=sha1-YWJj",
         }])
 
+    def test_local_cli_configs_and_workspace_metadata(self):
+        files = project()
+        files["web/ya.make"] = """TS_TSC()
+TS_CONFIG(one.json two.json)
+TS_EXCLUDE_FILES_GLOB(skip?.js)
+DISABLE_HERMETIC_NODE_MODULES()
+END()
+"""
+        files["web/package.json"] = json.dumps({
+            "dependencies": {"dep": "1.2.3"},
+            "nots": {"commonConfigPath": "common.json"},
+            "pnpm": {"patchedDependencies": {"dep@1.2.3": "patches/dep.patch"}},
+        })
+        files.update({"web/common.json": "{}", "web/patches/dep.patch": "patch", "web/skip1.js": "skip", "web/keep.js": "keep"})
+        graph = lib.make(files, "web", "-DTS_LOCAL_CLI=yes")
+        prepare = lib.node_by_output(graph, "$(B)/web/package.json")
+        self.assertIn("$(S)/web/common.json", prepare["inputs"])
+        self.assertNotIn("$(S)/web/patches/dep.patch", prepare["inputs"])
+        bundle = lib.node_by_output(graph, "$(B)/web/output.tar")
+        args = bundle["cmds"][-1]["cmd_args"]
+        self.assertEqual(args[args.index("--local-cli") + 1], "yes")
+        self.assertIn("tsc --project one.json --incremental false --composite false --pretty && tsc --project two.json --incremental false --composite false --pretty", args)
+        self.assertIn("$(S)/web/keep.js", bundle["inputs"])
+        self.assertNotIn("$(S)/web/skip1.js", bundle["inputs"])
+        files["web/ya.make"] = files["web/ya.make"].replace("DISABLE_HERMETIC_NODE_MODULES()", "")
+        hermetic = lib.node_by_output(lib.make(files, "web", "-DAUTOCHECK=yes"), "$(B)/web/package.json")
+        self.assertIn("$(S)/web/patches/dep.patch", hermetic["inputs"])
+
+
+    def test_test_for_can_request_the_tested_build(self):
+        files = project()
+        files["web/ya.make"] = "TS_NEXT()\nEND()\n"
+        files["web/tests/ya.make"] = "TS_TEST_FOR(web)\nTS_TEST(test custom --flag TIMEOUT_MEDIUM)\nTS_TEST_DEPENDS_ON_BUILD()\nEND()\n"
+        graph = lib.make(files, "web/tests")
+        built = lib.node_by_output(graph, "$(B)/web/output.tar")
+        tested = lib.node_by_output(graph, "$(B)/web/tests/web-tests")
+        self.assertIn(built["uid"], tested["deps"])
+        self.assertIn("$(B)/web/output.tar", tested["inputs"])
+        self.assertIn("next build", built["cmds"][-1]["cmd_args"])
+
+    def test_test_for_requires_a_module_path(self):
+        for argument in ("", ".", "./", "RELATIVE ../web"):
+            with self.subTest(argument=argument):
+                files = project()
+                files["web/ya.make"] = f"TS_TEST_FOR({argument})\nEND()\n"
+                self.assert_error(files, "requires a tested module path")
+
     def test_node25_prebuilder_and_production_bundle(self):
         files = project()
         files["web/ya.make"] = """TS_VITE()

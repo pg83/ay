@@ -1,3 +1,5 @@
+import base64
+import json
 import unittest
 
 import lib
@@ -182,6 +184,23 @@ def junit_tree(test_body, **extra):
 
 
 class JavaJunitSuiteTest(unittest.TestCase):
+    def test_junit_generations_and_file_properties(self):
+        for header in ("JTEST()", "JUNIT6()", "JTEST_FOR(lib)"):
+            with self.subTest(header=header):
+                files = junit_tree(header + "\nTIMEOUT(120)\nFORK_SUBTESTS()\n"
+                                   "SYSTEM_PROPERTIES(FILE config.properties)\nEND()\n")
+                for runner in ("junit-runner", "junit6-runner", "jtest-annotations/junit4", "jtest-annotations/junit6"):
+                    files[f"devtools/{runner}/ya.make"] = "JAVA_LIBRARY_NON_SPLIT()\nEND()\n"
+                files["config.properties"] = "key=value\n"
+                nodes = test_nodes(lib.make(files, "proj/sub/ut", "--target-platform-tests"))
+                node = nodes["proj/sub/ut/sub-ut"]
+                self.assertEqual(option_values(head_args(node), "--timeout"), ["120"])
+                self.assertIn("--fork-subtests", run_args(node))
+                properties = option_values(run_args(node), "--properties")[0]
+                self.assertEqual(json.loads(base64.b64decode(properties)), [
+                    {"type": "file", "path": "${ARCADIA_ROOT}/config.properties"},
+                ])
+
     def test_external_library_sandbox_resource_is_validated(self):
         files = junit_tree("JUNIT5()\nEND()\n", **{
             "ext/ya.make": "EXTERNAL_JAVA_LIBRARY()\nFROM_SANDBOX(99 OUT a.txt)\nEND()\n",
