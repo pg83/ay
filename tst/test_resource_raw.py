@@ -99,6 +99,17 @@ class ResourceRawTest(unittest.TestCase):
             for output in node["outputs"]
         ))
 
+    def test_type_stub_calls_follow_explicit_resource_priority(self):
+        files = py3_library("PY_SRCS(first.pyi)\nRESOURCE(DONT_COMPRESS data.dat /data)\nPY_SRCS(last.pyi)\n")
+        for source in ("first.pyi", "data.dat", "last.pyi"):
+            files["lib/" + source] = ""
+        graph = lib.make(files, "lib")
+        archive = lib.node_by_output(graph, "$(B)/lib/libpy3lib.global.a")
+        objects = [path for path in archive["inputs"] if path.startswith("$(B)/lib/objcopy_")]
+        sources = [next(path for path in lib.node_by_output(graph, obj)["inputs"] if path.startswith("$(S)/lib/"))
+                   for obj in objects]
+        self.assertEqual(sources, ["$(S)/lib/data.dat", "$(S)/lib/first.pyi", "$(S)/lib/last.pyi"])
+
     def test_resource_py_sources_and_stubs_are_archived_in_order(self):
         files = py3_library(
             "RUN_PROGRAM(tools/gen IN in.txt OUT_NOAUTO gen.py)\n"

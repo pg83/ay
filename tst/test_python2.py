@@ -267,6 +267,68 @@ class Python2Test(unittest.TestCase):
         self.assertIn("-DUSE_PYTHON2", compile_args)
         self.assertNotIn("-DUSE_PYTHON3", compile_args)
 
+    def test_direct_python_sources_follow_explicit_resources(self):
+        for macro, output in (("PY2_PROGRAM", "prog"), ("PY2_LIBRARY", "libpyprog.global.a")):
+            with self.subTest(macro=macro):
+                files = python2_base()
+                files.update({
+                    "prog/ya.make": f"{macro}()\n{NO_PLATFORM}NO_PYTHON_INCLUDES()\nNO_CHECK_IMPORTS()\n"
+                        "RESOURCE(DONT_COMPRESS before.dat /before)\nPY_SRCS(TOP_LEVEL a.py)\n"
+                        "RESOURCE_FILES(DONT_COMPRESS between.dat)\nPY_SRCS(TOP_LEVEL b.py)\n"
+                        "RESOURCE(DONT_COMPRESS after.dat /after)\nEND()\n",
+                    "prog/before.dat": "", "prog/a.py": "", "prog/between.dat": "",
+                    "prog/b.py": "", "prog/after.dat": "",
+                })
+                graph = lib.make(files, "prog")
+                target = lib.node_by_output(graph, "$(B)/prog/" + output)
+                command = [arg.removeprefix("$(B)/") for cmd in target["cmds"] for arg in cmd["cmd_args"]]
+                positions = []
+                for source in ("before.dat", "between.dat", "after.dat", "a.py", "b.py"):
+                    resource = next(node for node in objcopy_nodes(graph, "prog")
+                                    if "--inputs" in args(node) and "$(S)/prog/" + source in section(node, "--inputs"))
+                    positions.append(command.index(resource["outputs"][0].removeprefix("$(B)/")))
+                self.assertEqual(positions, sorted(positions))
+
+    def test_test_sources_keep_declaration_order_with_explicit_resources(self):
+        files = python2_base()
+        files["library/python/pytest/ya.make"] = STUB_LIBRARY
+        files["library/python/pytest/s.cpp"] = ""
+        files.update({
+            "prog/ya.make": f"PY2TEST()\n{NO_PLATFORM}NO_PYTHON_INCLUDES()\nNO_CHECK_IMPORTS()\n"
+                "PY_SRCS(helper.pyi)\nRESOURCE(DONT_COMPRESS before.dat /before)\nTEST_SRCS(a.py a.pyi)\n"
+                "RESOURCE_FILES(DONT_COMPRESS between.dat)\nTEST_SRCS(b.py b.pyi)\n"
+                "RESOURCE(DONT_COMPRESS after.dat /after)\nEND()\n",
+            "prog/before.dat": "", "prog/a.py": "", "prog/between.dat": "",
+            "prog/b.py": "", "prog/after.dat": "", "prog/a.pyi": "", "prog/b.pyi": "", "prog/helper.pyi": "",
+        })
+        graph = lib.make(files, "prog")
+        target = lib.node_by_output(graph, "$(B)/prog/prog")
+        command = [arg.removeprefix("$(B)/") for cmd in target["cmds"] for arg in cmd["cmd_args"]]
+        positions = []
+        for source in ("before.dat", "a.py", "a.pyi", "between.dat", "b.py", "b.pyi", "after.dat", "helper.pyi"):
+            resource = next(node for node in objcopy_nodes(graph, "prog")
+                            if "--inputs" in args(node) and "$(S)/prog/" + source in section(node, "--inputs"))
+            positions.append(command.index(resource["outputs"][0].removeprefix("$(B)/")))
+        self.assertEqual(positions, sorted(positions))
+
+    def test_all_python_sources_expand_at_python_source_priority(self):
+        files = python2_base()
+        files.update({
+            "prog/ya.make": f"PY2_PROGRAM()\n{NO_PLATFORM}NO_PYTHON_INCLUDES()\nNO_CHECK_IMPORTS()\n"
+                "ALL_PY_SRCS(TOP_LEVEL sources)\nRESOURCE(DONT_COMPRESS data.dat /data)\n"
+                "PY_SRCS(TOP_LEVEL last.py)\nEND()\n",
+            "prog/sources/first.py": "", "prog/data.dat": "", "prog/last.py": "",
+        })
+        graph = lib.make(files, "prog")
+        target = lib.node_by_output(graph, "$(B)/prog/prog")
+        command = [arg.removeprefix("$(B)/") for cmd in target["cmds"] for arg in cmd["cmd_args"]]
+        positions = []
+        for source in ("data.dat", "sources/first.py", "last.py"):
+            resource = next(node for node in objcopy_nodes(graph, "prog")
+                            if "--inputs" in args(node) and "$(S)/prog/" + source in section(node, "--inputs"))
+            positions.append(command.index(resource["outputs"][0].removeprefix("$(B)/")))
+        self.assertEqual(positions, sorted(positions))
+
     def test_py2_resource_of_a_copied_source_takes_the_copy_only(self):
         files = python2_base()
         files.update({

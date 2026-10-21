@@ -1267,8 +1267,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 	}()
 
-	for _, stmt := range d.allPySrcs {
-		applyAllPySrcs(ctx.fs, instance.Path.relString(), stmt, d)
+	for i, group := range d.pySrcGroups {
+		if group.AllSrcs != nil {
+			applyAllPySrcs(ctx.fs, instance.Path.relString(), *group.AllSrcs, d, i)
+		}
 	}
 
 	if d.conflictMod != nil {

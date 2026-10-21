@@ -294,7 +294,6 @@ type ModuleData struct {
 	bisonGenExt              STR
 	grpc                     bool
 	yaConfJSON               []ANY
-	allPySrcs                []UnknownStmt
 	archives                 []ArchiveEntry
 	archiveAsm               []ArchiveAsmEntry
 	lj21                     *Lj21Archive
@@ -410,8 +409,13 @@ func (d *ModuleData) resStr4(a, b, c, e string) string {
 }
 
 type PySrcGroup struct {
-	Srcs   []ANY
-	Scopes []PyScope
+	Srcs           []ANY
+	Scopes         []PyScope
+	ResourceOffset int
+	Prio           int
+	PyiStart       int
+	PyiEnd         int
+	AllSrcs        *UnknownStmt
 }
 
 type PyScope struct {
@@ -2857,7 +2861,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 		}
 
+		before := len(d.pySrcGroups)
+
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPySrcs, Args: append([]ANY{kwNAMESPACE.any(), strTests.any()}, v.Args...)}, d, env, onWarn)
+
+		for i := before; i < len(d.pySrcGroups); i++ {
+			d.pySrcGroups[i].Prio = stmtPrioDefault
+		}
 	case tokPySrcs:
 		if env.bool(envGO_PROTO) {
 			break
@@ -2877,6 +2887,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		var groupScopes []PyScope
 
 		cythonStmtStart := len(d.cythonCpp)
+		pyiBefore := len(d.pyPyiResources)
 
 		var cythonDirectives []string
 
@@ -3127,14 +3138,15 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		reorderCythonVariantBuckets(d, cythonStmtStart, cythonRegIdx)
 
-		if len(groupSrcs) > 0 {
+		if len(groupSrcs) > 0 || len(d.pyPyiResources) > pyiBefore {
 			d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
-				Srcs:   internAnys(groupSrcs),
-				Scopes: groupScopes,
+				Srcs: internAnys(groupSrcs), Scopes: groupScopes, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs, PyiStart: pyiBefore, PyiEnd: len(d.pyPyiResources),
 			})
 		}
 	case tokAllPySrcs:
-		d.allPySrcs = append(d.allPySrcs, v)
+		stmt := v
+
+		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{AllSrcs: &stmt, Prio: stmtPrioSrcs})
 	case tokPyMain:
 
 		if len(v.Args) != 1 {
@@ -4399,7 +4411,7 @@ func expandScalarVarRef(s string, env Environment) string {
 	return expandStmtToken(s, env)
 }
 
-func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
+func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData, group int) {
 	dirs := []string{"."}
 	noTestFiles := false
 	recursive := false
@@ -4522,10 +4534,8 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData) {
 			scopes[i] = PyScope{TopLevel: d.pyTopLevel, Namespace: d.pyNamespace}
 		}
 
-		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
-			Srcs:   internAnys(files),
-			Scopes: scopes,
-		})
+		d.pySrcGroups[group].Srcs = internAnys(files)
+		d.pySrcGroups[group].Scopes = scopes
 	}
 }
 

@@ -68,7 +68,6 @@ func (x *ModuleData) reset() {
 		cythonCpp:            scrub(x.cythonCpp),
 		swigC:                scrub(x.swigC),
 		yaConfJSON:           x.yaConfJSON[:0],
-		allPySrcs:            scrub(x.allPySrcs),
 		archives:             scrub(x.archives),
 		archiveAsm:           scrub(x.archiveAsm),
 		copyFiles:            scrub(x.copyFiles),
