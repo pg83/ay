@@ -21,6 +21,7 @@ def antlr_files(body, sources):
         "contrib/libs/antlr4_cpp_runtime/ya.make": (
             "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nEND()\n"
         ),
+        "build/platform/java/jdk/ya.make": "RESOURCES_LIBRARY()\nEND()\n",
         "build/platform/java/jdk/jdk17/ya.make": (
             "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(JDK17 sbr:1)\nEND()\n"
         ),

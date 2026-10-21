@@ -975,7 +975,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	if len(d.antlr4Grammars) > 0 || len(d.antlrRuns) > 0 {
-		d.peerdirs = append(d.peerdirs, strBuildPlatformJavaJdkJdk17.any())
+		d.peerdirs = append(d.peerdirs, strBuildPlatformJavaJdk.any(), strBuildPlatformJavaJdkJdk17.any())
 	}
 
 	return d

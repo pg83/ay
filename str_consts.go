@@ -152,6 +152,7 @@ var (
 	strBuildPlatformClang                                                                    = internStr("build/platform/clang")
 	strBuildPlatformClangFormat                                                              = internStr("build/platform/clang/clang-format")
 	strBuildPlatformFlang                                                                    = internStr("build/platform/flang")
+	strBuildPlatformJavaJdk                                                                  = internStr("build/platform/java/jdk")
 	strBuildPlatformJavaJdkJdk17                                                             = internStr("build/platform/java/jdk/jdk17")
 	strBuildPlatformJavaKotlinGrpc                                                           = internStr("build/platform/java/kotlin_grpc")
 	strBuildPlatformPerl                                                                     = internStr("build/platform/perl")

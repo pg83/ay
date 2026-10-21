@@ -358,6 +358,7 @@ class OtherGeneratorTest(unittest.TestCase):
             "lib/user.cpp": '#include "lib/sp.sproto.h"\n',
             "lib/Expr.g4": "grammar Expr;\n",
             "lib/sp.proto": 'syntax = "proto3";\n',
+            "build/platform/java/jdk/ya.make": "RESOURCES_LIBRARY()\nEND()\n",
             "build/platform/java/jdk/jdk17/ya.make": (
                 "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(JDK17 sbr:1)\nEND()\n"
             ),

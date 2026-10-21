@@ -85,6 +85,7 @@ class EmitSplitCodegenTest(unittest.TestCase):
 
     def test_generated_proto_shards_keep_source_level_generator_chain(self):
         files = {
+            "build/platform/java/jdk/ya.make": "RESOURCES_LIBRARY()\nEND()\n",
             "build/platform/java/jdk/jdk17/ya.make": (
                 "RESOURCES_LIBRARY()\n"
                 "DECLARE_EXTERNAL_RESOURCE(JDK17 sbr:1)\n"
