@@ -1307,6 +1307,12 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		}
 
 		return astOne(astEnumSers, GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "plain", Line: line})
+	case "ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION":
+		if len(args) != 1 {
+			fail("ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION expects exactly 1 argument (header path), got %d", len(args))
+		}
+
+		return astOne(astEnumSers, GenerateEnumSerializationStmt{Header: args[0].string(), Variant: "noexcept_header", Line: line})
 	case "GENERATE_ENUM_SERIALIZATION_WITH_HEADER":
 		if len(args) != 1 {
 			fail("GENERATE_ENUM_SERIALIZATION_WITH_HEADER expects exactly 1 argument (header path), got %d", len(args))

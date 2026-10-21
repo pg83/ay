@@ -17,6 +17,68 @@ def enum_files(files):
 
 
 class EnumSerializationTest(unittest.TestCase):
+    def test_alice_noexcept_serialization_emits_only_a_header_and_induces_its_inputs(self):
+        tool = "yandex_io/tools/enum_serializer_generator"
+        runtime = tool + "/runtime/enum_runtime.h"
+        files = {
+            "m/ya.make": (
+                f"LIBRARY()\n{lib.BARE_MODULE}"
+                "ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION(types.h)\nSRCS(use.cpp)\nEND()\n"
+            ),
+            "m/types.h": '#include "nested.h"\nenum E {A};\n',
+            "m/nested.h": "",
+            "m/use.cpp": '#include "m/types.h_serialized.h"\n',
+            runtime: '#include "detail.h"\n',
+            tool + "/runtime/detail.h": "",
+        }
+        lib.tool_program(files, tool, "enum_serializer_generator")
+        files[tool + "/ya.make"] = files[tool + "/ya.make"].replace(
+            "END()", f"INDUCED_DEPS(h ${{ARCADIA_ROOT}}/{runtime})\nEND()")
+        graph = lib.make(files, "m")
+        output = "$(B)/m/types.h_serialized.h"
+        generated = lib.node_by_output(graph, output)
+        tool_output = f"$(B)/{tool}/enum_serializer_generator"
+        self.assertEqual(generated["outputs"], [output])
+        self.assertEqual(generated["kv"], {"p": "EN", "pc": "yellow"})
+        self.assertEqual(generated["cmds"][0]["cmd_args"], [
+            tool_output, "--input_path", "$(S)/m/types.h",
+            "--include_path", "m/types.h", "--output_path", output,
+        ])
+        self.assertEqual(generated["inputs"], [tool_output, "$(S)/m/types.h", "$(S)/m/nested.h"])
+        compiled = lib.node_by_output(graph, "$(B)/m/use.cpp.o")
+        for header in ("m/types.h", "m/nested.h", runtime, tool + "/runtime/detail.h"):
+            self.assertIn("$(S)/" + header, compiled["inputs"])
+        self.assertIn(output, compiled["inputs"])
+        self.assertIn(generated["uid"], compiled["deps"])
+        self.assertFalse(any(
+            "_serialized.cpp" in output
+            for node in graph["graph"] for output in node["outputs"]
+        ))
+
+    def test_alice_noexcept_serialization_uses_a_generated_header_producer(self):
+        files = {
+            "m/ya.make": (
+                f"LIBRARY()\n{lib.BARE_MODULE}"
+                "COPY_FILE_WITH_CONTEXT(template.h ${ARCADIA_BUILD_ROOT}/shared/types.h)\n"
+                "ALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION(shared/types.h)\n"
+                "SRCS(use.cpp)\nEND()\n"
+            ),
+            "m/template.h": '#include "m/nested.h"\n',
+            "m/nested.h": "",
+            "m/use.cpp": '#include "m/shared/types.h_serialized.h"\n',
+        }
+        lib.tool_program(files, "yandex_io/tools/enum_serializer_generator", "enum_serializer_generator")
+        graph = lib.make(files, "m")
+        copied = lib.node_by_output(graph, "$(B)/shared/types.h")
+        generated = lib.node_by_output(graph, "$(B)/m/shared/types.h_serialized.h")
+        self.assertIn("$(B)/shared/types.h", generated["inputs"])
+        for header in ("$(S)/m/template.h", "$(S)/m/nested.h"):
+            self.assertIn(header, generated["inputs"])
+        self.assertIn(copied["uid"], generated["deps"])
+        compiled = lib.node_by_output(graph, "$(B)/m/use.cpp.o")
+        self.assertIn("$(S)/m/template.h", compiled["inputs"])
+        self.assertIn("$(S)/m/nested.h", compiled["inputs"])
+
     def test_root_relative_generated_header_resolves_from_registry(self):
         graph = lib.make(enum_files({
             "p/ya.make": (

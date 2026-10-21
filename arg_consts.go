@@ -348,6 +348,7 @@ var (
 	argXclang                                               = internArg("-Xclang")
 	argYaEndCommandFile                                     = internArg("--ya-end-command-file")
 	argYaStartCommandFile                                   = internArg("--ya-start-command-file")
+	argYandexIoToolsEnumSerializerGenerator                 = internArg("yandex_io/tools/enum_serializer_generator")
 	argYqlUdfProbe                                          = internArg("yql/essentials/tools/udf_probe")
 	argZstd                                                 = internArg("zstd")
 	baseUnitCxxNostdinc                                     = internArg("-nostdinc++")
