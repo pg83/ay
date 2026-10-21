@@ -1173,13 +1173,17 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		testInputs = append(testInputs, minerPath)
 	}
 
-	sbomEmbed := !isTest && instance.Platform.BuildRelease && sbomActive(ctx, instance) && len(peerSbomPaths) > 0
+	hasSbom := sbomActive(ctx, instance) && len(peerSbomPaths) > 0
+	sbomEmbed := !isTest && instance.Platform.BuildRelease && hasSbom
 	extraSources := na.vfsList(ldSvnInterfaceVFS, ldSvnversionHVFS)
 
 	var extraBuilds, extraTailSources []VFS
 
-	if sbomEmbed {
+	if hasSbom {
 		extraBuilds = na.vfsList(peerSbomPaths...)
+	}
+
+	if sbomEmbed {
 		extraTailSources = na.vfsList(linkSbomScriptVFS)
 	}
 
@@ -1231,7 +1235,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 
 	k += copy(deps[k:], peerGlobalRefs)
 
-	if !isTest && instance.Platform.BuildRelease && sbomActive(ctx, instance) {
+	if hasSbom {
 		k += copy(deps[k:], peerSbomRefs)
 	}
 
