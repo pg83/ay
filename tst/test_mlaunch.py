@@ -154,6 +154,32 @@ END()
         self.assertIn("$(B)/pipeline/run.deploy.sdcmeta", package["outputs"])
         self.assertIn("$(B)/data/data.pkg.fake", package["inputs"])
 
+    def test_generated_launch_collects_peer_functions_before_own_functions(self):
+        sources = files()
+        sources.update({
+            "app/ya.make": f"GOLAUNCH_PROGRAM()\n{lib.BARE_MODULE}PEERDIR(component)\nEND()\n",
+            "component/ya.make": (
+                f"MLAUNCH_LIBRARY(part)\n{lib.BARE_MODULE}"
+                "NO_GOLAUNCH_SRCS()\nGOLAUNCH_FUNCTION(Extra)\nPEERDIR(first second)\nEND()\n"
+            ),
+        })
+        for name, peers in (("first", "PEERDIR(shared)\n"), ("second", "PEERDIR(shared)\n"), ("shared", "")):
+            sources[name + "/ya.make"] = (
+                f"MLAUNCH_LIBRARY({name})\n{lib.BARE_MODULE}"
+                f"GOLAUNCH_SRCS(a.go)\nGOLAUNCH_FUNCTION(Register{name})\n{peers}END()\n"
+            )
+            sources[name + "/a.go"] = "package component\n"
+        graph = lib.make(sources, "app", "--sandboxing")
+        expected = ["shared:Registershared", "first:Registerfirst", "second:Registersecond",
+                    "component:Launch", "component:Extra"]
+        for output in ("$(B)/component/launch.go", "$(B)/app/launch.go"):
+            generated = lib.node_by_output(graph, output)
+            args = generated["cmds"][0]["cmd_args"]
+            self.assertEqual(args[args.index("--deps") + 1:], expected)
+            self.assertEqual(generated["cmds"][0]["stdout"], output)
+            compiled = next(n for n in graph["graph"] if output in n["inputs"] and n["kv"].get("p") in ("GO", "LD"))
+            self.assertIn(generated["uid"], compiled["deps"])
+
     def test_generated_component_propagates_functions_overrides_and_callbacks(self):
         sources = files()
         sources.update({

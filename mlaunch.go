@@ -213,12 +213,12 @@ func ensureMlaunch(d *ModuleData) *MlaunchModule {
 func mlaunchDeps(d *ModuleData, resolved []ResolvedPeer) []string {
 	var result []string
 
-	if d.mlaunch != nil {
-		result = append(result, d.mlaunch.Functions...)
-	}
-
 	for _, peer := range resolved {
 		result = append(result, peer.result.MlaunchDeps...)
+	}
+
+	if d.mlaunch != nil {
+		result = append(result, d.mlaunch.Functions...)
 	}
 
 	return dedupKeepOrder(result)
