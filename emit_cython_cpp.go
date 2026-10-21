@@ -417,7 +417,11 @@ func (scanner *IncludeScanner) cythonPyxLangClosure(src VFS, cfg *ScanContext) [
 		seen[v] = struct{}{}
 		out = append(out, v)
 
-		for _, ch := range sc.resolvedChildren(v) {
+		children := sc.resolvedChildren(v)
+
+		scanner.reportDiagnostics(children.Diagnostics)
+
+		for _, ch := range children.Paths {
 			if isCythonLangFile(ch.relString()) {
 				visit(ch)
 

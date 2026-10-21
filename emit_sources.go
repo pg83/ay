@@ -41,7 +41,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		header := e.moduleSourceVFS(src)
 
 		if header.isSource() {
-			closure := e.inputClosure(header)
+			closure := e.includeClosure(header)
 
 			for _, bucket := range closure.bucketList() {
 				if len(bucket) > 0 && bucket[0].isBuild() {

@@ -14,18 +14,19 @@ type tarjanNode struct {
 }
 
 type TarjanCtx struct {
-	scratch  TarjanScratch
-	stack    []VFS
-	next     int32
-	closure  IdSet
-	g        ClosureSink
-	hits     uint64
-	visitV   VFS
-	emitK    int
-	emitBuf  []VFS
-	childFn  func(VFS)
-	spliceFn func(VFS)
-	emitFn   func([]VFS) int
+	scratch            TarjanScratch
+	stack              []VFS
+	next               int32
+	closure            IdSet
+	g                  ClosureSink
+	hits               uint64
+	visitV             VFS
+	emitK              int
+	emitHasDiagnostics bool
+	emitBuf            []VFS
+	childFn            func(VFS)
+	spliceFn           func(VFS)
+	emitFn             func([]VFS) (int, bool)
 }
 
 func (t *TarjanScratch) reset(uint32) {
@@ -80,7 +81,9 @@ type ClosureSink interface {
 
 	cachedWindow(v VFS) (window Closure, cached bool)
 
-	emitClosure(members []VFS, fill func(block []VFS) int)
+	emitClosure(members []VFS, fill func(block []VFS) (int, bool))
+
+	hasOwnDiagnostics(v VFS) bool
 
 	windowSubsumed(v VFS) bool
 }
@@ -157,6 +160,7 @@ func (tc *TarjanCtx) spliceChild(ch VFS) {
 
 	cl, _ := tc.g.cachedWindow(ch)
 
+	tc.emitHasDiagnostics = tc.emitHasDiagnostics || cl.hasDiagnostics
 	tc.emitK = cl.spliceInto(&tc.closure, tc.emitBuf, tc.emitK)
 
 	if main := tc.g.opaqueMainOut(ch); main != 0 {
@@ -164,11 +168,15 @@ func (tc *TarjanCtx) spliceChild(ch VFS) {
 	}
 }
 
-func (tc *TarjanCtx) emitMembers(block []VFS) int {
+func (tc *TarjanCtx) emitMembers(block []VFS) (int, bool) {
 	members := tc.emitMembersSlice()
 	k := 0
 
+	tc.emitHasDiagnostics = false
+
 	for _, u := range members {
+		tc.emitHasDiagnostics = tc.emitHasDiagnostics || tc.g.hasOwnDiagnostics(u)
+
 		if !tc.closure.has(u) {
 			tc.closure.add(u)
 			block[k] = u
@@ -191,7 +199,7 @@ func (tc *TarjanCtx) emitMembers(block []VFS) int {
 
 	tc.emitBuf = nil
 
-	return tc.emitK
+	return tc.emitK, tc.emitHasDiagnostics
 }
 
 func (tc *TarjanCtx) emitMembersSlice() []VFS {
