@@ -21,11 +21,20 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 	outs := e.emitRunPython(rp)
 
 	for _, token := range outs {
-		if !slices.Contains(rp.OUTFiles, token) && (rp.StdoutFile == nil || rp.StdoutNoAuto || token != *rp.StdoutFile) {
+		out := token.string()
+
+		if isGoModuleType(e.d.unit.Type) && strings.HasSuffix(out, ".go") {
+			file := copyFileOutputVFS(instance.Path.relString(), out)
+
+			e.codegen.use(file)
+			e.collectGoAutoSource(file, rp.DeclSeq)
+
 			continue
 		}
 
-		out := token.string()
+		if !slices.Contains(rp.OUTFiles, token) && (rp.StdoutFile == nil || rp.StdoutNoAuto || token != *rp.StdoutFile) {
+			continue
+		}
 
 		switch {
 		case extIsArchiveMember(out):

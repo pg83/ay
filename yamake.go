@@ -314,6 +314,7 @@ type ArchiveExtraction struct {
 }
 
 type RunPythonStmt struct {
+	DeclSeq        int
 	KV             *KV
 	Lua            bool
 	ScriptPath     ANY

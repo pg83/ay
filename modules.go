@@ -1679,6 +1679,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				expanded.CWD = &cwd
 			}
 
+			expanded.DeclSeq = d.nextDeclSeq()
 			d.runPython = append(d.runPython, &expanded)
 		case *FromSandboxStmt:
 			expanded := *v
