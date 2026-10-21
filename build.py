@@ -1,4 +1,6 @@
+import ast
 import base64
+import functools
 import hashlib
 import json
 import re
@@ -220,12 +222,36 @@ python_test = command(
 
 binary_tests = []
 coverage_archives = []
+python_sources = set(build.glob("$(S)/tst/*.py"))
+
+
+@functools.cache
+def python_imports(path):
+    syntax = ast.parse((ROOT / path.removeprefix("$(S)/")).read_text())
+    modules = []
+    for node in ast.walk(syntax):
+        if isinstance(node, ast.Import):
+            modules.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.append(node.module)
+    return {f"$(S)/tst/{module.split('.')[0]}.py" for module in modules} & python_sources
+
+
+def python_test_inputs(path):
+    pending = [path, "$(S)/tst/lib.py"]
+    seen = set()
+    while pending:
+        source = pending.pop()
+        if source not in seen:
+            seen.add(source)
+            pending.extend(python_imports(source))
+    return sorted(seen)
 
 for test_path in build.glob("$(S)/tst/test_*.py"):
     test_name = test_path.rsplit("/", 1)[-1][len("test_"):-len(".py")]
     test_slug = slug(test_name)
     test_stamp = f"$(B)/tests/{test_slug}.stamp"
-    test_inputs = [test_path, "$(S)/tst/lib.py"]
+    test_inputs = python_test_inputs(test_path)
     test_commands = [["python3", test_path], touch(test_stamp)]
     test_outputs = [test_stamp]
     test_env = {
