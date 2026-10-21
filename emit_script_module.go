@@ -105,8 +105,14 @@ func (e *EmitContext) scriptModuleResult(ref NodeRef, out VFS, peers []VFS, glob
 
 	res.JavaClosure = append(append([]VFS{}, peers...), out)
 
+	languages := []Language{e.instance.Language, LangNone, LangCPP}
+
+	if e.d.multimodule == tokPackage && e.instance.Language == LangPackage {
+		languages = languages[:1]
+	}
+
 	for _, kind := range []ModuleKind{KindLib, KindBin} {
-		for _, language := range []Language{e.instance.Language, LangNone, LangCPP} {
+		for _, language := range languages {
 			for _, demand := range []ModuleDemand{demandNone, demandSelf, demandLinked} {
 				alias := e.instance
 

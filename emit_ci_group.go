@@ -11,6 +11,10 @@ func (e *EmitContext) packagePeer(dir string) *ModuleEmitResult {
 
 	name := e.ctx.moduleName(instance.Path.relString())
 
+	if name == tokPackage {
+		instance.Language = LangCPP
+	}
+
 	if units := javaModuleUnits[name]; len(units) > 0 {
 		for _, unit := range units {
 			if unit.tag == "JAR_RUNNABLE" || unit.tag == "FULL_JAR_COMPILATION" || len(units) == 1 {

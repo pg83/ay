@@ -1,5 +1,7 @@
 package main
 
+import "slices"
+
 var (
 	fromSandboxKV           = KV{P: pkSB, PC: pcYellow, ShowOut: true}
 	fromSandboxRequirements = Requirements{CPU: 1, Network: nwFull, RAM: 32}
@@ -9,6 +11,40 @@ var fromSandboxScriptInputs = []VFS{
 	buildScriptsFetchFromSandboxPy,
 	buildScriptsProcessCommandFilesPy,
 	buildScriptsFetchFromPy,
+}
+
+type SandboxRecipe struct {
+	Stmt    *FromSandboxStmt
+	Outputs []VFS
+	Python3 VFS
+}
+
+func sameSandboxStmt(a, b *FromSandboxStmt) bool {
+	return a.ResourceId == b.ResourceId && a.File == b.File &&
+		a.Executable == b.Executable && a.Prefix == b.Prefix &&
+		slices.Equal(a.OUTFiles, b.OUTFiles) && slices.Equal(a.OUTNoAutoFiles, b.OUTNoAutoFiles) &&
+		slices.Equal(a.OutputIncludes, b.OutputIncludes) && slices.Equal(a.Renames, b.Renames)
+}
+
+func (e *EmitContext) existingSandbox(stmt *FromSandboxStmt) *GeneratedFileInfo {
+	outputs := stmt.OUTFiles
+
+	if len(outputs) == 0 {
+		outputs = stmt.OUTNoAutoFiles
+	}
+
+	if len(outputs) == 0 {
+		return nil
+	}
+
+	out := copyFileOutputVFS(e.instance.Path.relString(), outputs[0].string())
+	info := e.codegen.lookup(out)
+
+	if info == nil || info.OwnerModule != e.instance.Path || info.Sandbox == nil || info.Sandbox.Python3 != e.d.tc.Python3 || !sameSandboxStmt(info.Sandbox.Stmt, stmt) {
+		return nil
+	}
+
+	return info
 }
 
 func (e *EmitContext) emitFromSandboxes() (memberRefs []NodeRef, memberPaths []VFS) {
@@ -29,6 +65,19 @@ func fromSandboxAutoLinkMember(name string) bool {
 }
 
 func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
+	if info := e.existingSandbox(stmt); info != nil {
+		for i, out := range info.Sandbox.Outputs {
+			e.collectScriptOutput(out)
+
+			if i < len(stmt.OUTFiles) && fromSandboxAutoLinkMember(stmt.OUTFiles[i].string()) {
+				memberRefs = append(memberRefs, info.ProducerRef)
+				memberPaths = append(memberPaths, out)
+			}
+		}
+
+		return memberRefs, memberPaths
+	}
+
 	ctx := e.ctx
 	node, outVFSs := fromSandboxNode(ctx.emit.nodeArenas(), e.instance, e.d.tc.Python3.any(), stmt)
 	ref := ctx.emit.reserve()
@@ -42,10 +91,12 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	}
 
 	parsed := extractionOutputIncludes(ctx.na, stmt.OutputIncludes)
+	recipe := &SandboxRecipe{Stmt: stmt, Outputs: outVFSs, Python3: e.d.tc.Python3}
 
 	for _, out := range outVFSs {
 		e.register(GeneratedFileInfo{
 			OutputPath:     out,
+			Sandbox:        recipe,
 			ProducerRef:    ref,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 

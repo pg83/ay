@@ -10,6 +10,8 @@ func (e *EmitContext) emitBundles() {
 		dst := copyFileOutputVFS(instance.Path.relString(), b.Name)
 
 		if reg.lookup(dst) != nil {
+			e.collectScriptOutput(dst)
+
 			continue
 		}
 
@@ -45,6 +47,10 @@ func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
 	}
 
 	bundleInstance := e.derivePeerInstance(target)
+
+	if ctx.moduleName(target) == tokPackage {
+		bundleInstance.Language = LangCPP
+	}
 
 	if e.instance.Demand != demandNone {
 		bundleInstance.Demand = demandLinked

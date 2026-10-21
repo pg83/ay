@@ -76,6 +76,8 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	dstVFS := copyFileOutputVFS(instance.Path.relString(), entry.Dst)
 
 	if existing := reg.lookup(dstVFS); existing != nil && existing.SourcePath == srcVFS {
+		e.collectScriptOutput(dstVFS)
+
 		return CopyEmitState{srcVFS: srcVFS, dstVFS: dstVFS, ref: existing.ProducerRef}, nil
 	}
 

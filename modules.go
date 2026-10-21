@@ -1199,6 +1199,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			setupRosModule(v, modulePath, language, env, d)
 			setupMlaunchModule(v, modulePath, language, env, d)
+			setupPackageModule(v, language, d)
 			setupSdcDiagsModule(v, language, env, d)
 
 			if v.Name == tokFbsLibrary {
@@ -1738,6 +1739,7 @@ type ModuleUnit struct {
 	SwigLang         STR
 	ObjectSuffixStem string
 	TestLD           bool
+	NoStartTarget    bool
 }
 
 func swigJNIPeerdirs(srcs []ANY, env Environment) []ANY {
@@ -1809,6 +1811,8 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	}
 
 	switch name {
+	case tokPackage:
+		return packageModuleUnit(language)
 	case tokRosLibrary:
 		return rosModuleUnit(language)
 	case tokMlaunchLibrary, tokMlaunchComponent, tokMlaunchPipeline, tokGolaunchProgram, tokGolaunchComposite:
@@ -2038,7 +2042,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			StdoutFile: ptr(strDebianversionH.any()), KV: &debVersionKV,
 		})
 	case tokFiles:
-		if d.docs != nil || d.moduleStmt != nil && (isUnionModule(d.moduleStmt.Name) || d.moduleStmt.Name == tokCiGroup) {
+		if d.docs != nil || d.moduleStmt != nil && (isUnionModule(d.moduleStmt.Name) || d.moduleStmt.Name == tokCiGroup || d.moduleStmt.Name == tokPackageFinal) {
 			d.addFiles(v.Args)
 		} else {
 			handled = false
@@ -4690,6 +4694,10 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 	}
 
 	if d.multimodule == tokMlaunchLibrary && parent.Language == LangPackage && ctx.moduleName(peerVFS.relString()) == tokMlaunchLibrary {
+		language = LangPackage
+	}
+
+	if ctx.moduleName(peerVFS.relString()) == tokPackage {
 		language = LangPackage
 	}
 

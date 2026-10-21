@@ -22,6 +22,18 @@ def files():
 
 
 class MlaunchTests(unittest.TestCase):
+    def test_pipeline_package_keeps_own_copy_outputs_reused_from_sibling_variants(self):
+        sources = files()
+        sources["pipeline/ya.make"] = f"MLAUNCH_PIPELINE(run)\n{lib.BARE_MODULE}COPY_FILE(local.txt installed.txt)\nEND()\n"
+        sources["pipeline/local.txt"] = "local\n"
+        graph = lib.make(sources, "pipeline")
+        copied = lib.node_by_output(graph, "$(B)/pipeline/installed.txt")
+        package = lib.node_by_output(graph, "$(B)/pipeline/run.final.pkg.fake")
+        self.assertIn("$(B)/pipeline/installed.txt", package["inputs"])
+        self.assertIn("$(B)/pipeline/installed.txt", package["outputs"])
+        self.assertIn(copied["uid"], package["deps"])
+        self.assertEqual(len([node for node in graph["graph"] if node["kv"].get("p") == "CP" and "$(B)/pipeline/installed.txt" in node["outputs"]]), 1)
+
     def test_package_uses_peer_late_outputs_without_adding_them_as_inputs(self):
         sources = files()
         sources["pipeline/ya.make"] = f"MLAUNCH_PIPELINE(run)\n{lib.BARE_MODULE}END()\n"

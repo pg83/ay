@@ -10,6 +10,7 @@ type GeneratedFileInfo struct {
 	ModuleType       TOK
 	ModuleInputs     *ModuleInputInfo
 	Nots             *NotsPrepared
+	Sandbox          *SandboxRecipe
 	OutputPath       VFS
 	SourcePath       VFS
 	PrimaryInput     VFS

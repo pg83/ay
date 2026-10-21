@@ -131,7 +131,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	args = append(args, strYaEndCommandFile.any())
 
 	node := Node{Module: true, Platform: e.instance.Platform, KV: &packageFinalKV, KVExts: []KVExt{{Key: "package", Val: "PACKAGE"}}, Env: envVarsVCS, Resources: usesPython3,
-		Inputs: na.inputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(out), DepRefs: na.refList(dedupRefs(e.refs)...),
+		Inputs: na.inputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(append([]VFS{out}, e.outs...)...), DepRefs: na.refList(dedupRefs(e.refs)...),
 		Cmds: na.cmdList(e.pythonScriptCmd("touch.py", out.string()), Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS})}
 
 	for _, file := range concat(lateOuts, peers) {
@@ -148,7 +148,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 
 	e.appendSdcMeta(&node, name+suffix)
 
-	ref := e.emitLazyModuleNode(node, peers)
+	ref := e.emitLazyModuleNode(node, peers, out)
 
 	return e.scriptModuleResult(ref, out, dedup(peers), globals)
 }

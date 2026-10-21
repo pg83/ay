@@ -427,11 +427,15 @@ func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	info.OwnerModule = e.instance.Path
 	info.OwnerSerial = e.frame.serial
 
-	if e.d.docs != nil || (isUnionModule(e.d.moduleStmt.Name) || e.d.moduleStmt.Name == tokCiGroup || e.d.moduleStmt.Name == tokGenLibrary) {
-		e.outs = append(e.outs, info.OutputPath)
-	}
+	e.collectScriptOutput(info.OutputPath)
 
 	return e.codegen.register(info)
+}
+
+func (e *EmitContext) collectScriptOutput(output VFS) {
+	if e.d.docs != nil || isUnionModule(e.d.moduleStmt.Name) || e.d.moduleStmt.Name == tokPackageFinal || e.d.moduleStmt.Name == tokCiGroup || e.d.moduleStmt.Name == tokGenLibrary {
+		e.outs = append(e.outs, output)
+	}
 }
 
 func (e *EmitContext) appendModuleOutputs(node *Node) {
