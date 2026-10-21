@@ -557,7 +557,7 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 }
 
 func isFinalTargetModuleType(name TOK) bool {
-	return isProgramModuleType(name) && name != tokGoTest || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokYqlUdf || name == tokYqlPythonUdf || name == tokYqlPython3Udf
+	return isProgramModuleType(name) && name != tokGoTest || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokYqlUdf || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokYqlPrebuiltTool
 }
 
 func picTransition(name TOK) bool {
@@ -1270,6 +1270,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		if e.bindResourceGlobalVars(env) {
 			d = collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
+		}
+
+		if d.yqlPrebuiltTool {
+			return e.genYqlPrebuiltTool()
 		}
 
 		return e.genPrebuiltProgram()

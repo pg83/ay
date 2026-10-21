@@ -148,6 +148,7 @@ type ModuleData struct {
 
 	usrvFiles []UsrvFile
 
+	yqlPrebuiltTool          bool
 	yqlUdfProbe              bool
 	yqlUdfShared             bool
 	yqlPythonUdf             bool
@@ -1731,6 +1732,8 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3, ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagPy3Global, SbomLang: unitSbomCpp}
 	case tokPy23NativeLibrary:
 		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3Native, ObjSuf: tagPy3, ARPrefix: "libpy3c", GlobalARTag: tagPy3NativeGlobal, SbomLang: unitSbomCpp}
+	case tokYqlPrebuiltTool:
+		return ModuleUnit{Type: tokPrebuiltProgram, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokYqlPythonUdf:
 		return ModuleUnit{Type: tokDll, Tag: unitTagPy2, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomPy2}
 	case tokYqlPython3Udf:

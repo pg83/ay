@@ -1,6 +1,7 @@
 package main
 
 var tokName = [...]STR{
+	tokYqlPrebuiltTool:      internStr("YQL_PREBUILT_TOOL"),
 	tokYqlUdf:               internStr("YQL_UDF"),
 	tokYqlPythonUdf:         internStr("YQL_PYTHON_UDF"),
 	tokYqlPython3Udf:        internStr("YQL_PYTHON3_UDF"),
@@ -796,6 +797,7 @@ const (
 	tokYqlPython3Udf
 	tokRegisterYqlPythonUdf
 	tokUdfNoProbe
+	tokYqlPrebuiltTool
 )
 
 type TOK uint16

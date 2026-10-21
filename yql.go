@@ -12,6 +12,8 @@ func confYqlStableABI(fs FS) bool {
 }
 
 func setupYqlModule(d *ModuleData, name TOK, env Environment) {
+	d.yqlPrebuiltTool = name == tokYqlPrebuiltTool
+
 	setupYqlUdfModule(d, name, env)
 
 	if name != tokYqlLibrary && !isYqlUdfStaticModule(name) {
@@ -124,8 +126,7 @@ func finishYqlModule(modulePath string, env Environment, d *ModuleData) {
 }
 
 func (e *EmitContext) genYqlPrebuiltProgram() *ModuleEmitResult {
-	ctx, d, na := e.ctx, e.d, e.ctx.na
-	globals := e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
+	d := e.d
 	name := programBinaryName(e.instance, d.moduleStmt)
 	prebuilt := name + ".prebuilt"
 	src := build(e.instance.Path.relString(), "/", prebuilt)
@@ -139,14 +140,39 @@ func (e *EmitContext) genYqlPrebuiltProgram() *ModuleEmitResult {
 		},
 	})
 
-	info := e.codegen.use(src)
+	return e.genYqlPrebuiltCopy(src, out)
+}
+
+func (e *EmitContext) genYqlPrebuiltTool() *ModuleEmitResult {
+	if e.d.primaryOutput == "" || strings.Contains(e.d.primaryOutput, "${") {
+		throwFmt("gen: %s: YQL_PREBUILT_TOOL requires a resolved PRIMARY_OUTPUT", e.instance.Path.relString())
+	}
+
+	e.emitFromSandboxes()
+	e.emitDeclaredProducers(nil)
+
+	src := e.resolveModuleSourceVFS(internStr(e.d.primaryOutput).any(), e.d.srcDirs)
+	out := lDOutputPath(e.instance, programBinaryName(e.instance, e.d.moduleStmt))
+
+	return e.genYqlPrebuiltCopy(src, out)
+}
+
+func (e *EmitContext) genYqlPrebuiltCopy(src, out VFS) *ModuleEmitResult {
+	ctx, d, na := e.ctx, e.d, e.ctx.na
+	globals := e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
+
+	var refs []NodeRef
+
+	if info := e.codegen.use(src); info != nil {
+		refs = na.refList(info.ProducerRef)
+	}
 
 	node := Node{
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(e.pythonScriptCmd("fs_tools.py", "copy", src.string(), out.string())),
 		Env:      envVarsVCS, KV: &resourcesKV, Outputs: na.vfsList(out),
 		Inputs:  na.inputList(na.vfsList(src), ctx.scripts[copyFsToolsVFS.rel()]),
-		DepRefs: na.refList(info.ProducerRef), Resources: usesPython3,
+		DepRefs: refs, Resources: usesPython3,
 	}
 
 	ref := e.emitNode(node)

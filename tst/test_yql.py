@@ -29,6 +29,39 @@ def udf_fixture():
 
 
 class YqlAbiTest(unittest.TestCase):
+    def test_prebuilt_probe_tool_consumes_primary_output_and_is_a_tool(self):
+        files = udf_fixture()
+        files.update({
+            "app/ya.make": f"LIBRARY()\n{BARE}RUN_PROGRAM(tools/probe OUT_NOAUTO data.out)\nRESOURCE(${{BINDIR}}/data.out data)\nEND()\n",
+            "tools/probe/ya.make": "SET(SELECT_PREBUILT yes)\nIF (SELECT_PREBUILT)\nYQL_PREBUILT_TOOL()\n"
+                "FROM_SANDBOX(FILE 42 RENAME RESOURCE OUT_NOAUTO probe.prebuilt EXECUTABLE)\n"
+                "PRIMARY_OUTPUT(${BINDIR}/probe.prebuilt)\nEND()\nELSE()\n"
+                f"PROGRAM()\n{BARE}SRCS(main.cpp)\nEND()\nENDIF()\n",
+            "tools/probe/main.cpp": "",
+        })
+        graph = lib.make(files, "app")
+        fetch = lib.node_by_output(graph, "$(B)/tools/probe/probe.prebuilt")
+        tool = lib.node_by_output(graph, "$(B)/tools/probe/probe")
+        self.assertEqual(tool["cmds"][0]["cmd_args"][-3:], ["copy", "$(B)/tools/probe/probe.prebuilt", "$(B)/tools/probe/probe"])
+        self.assertIn("$(B)/tools/probe/probe.prebuilt", tool["inputs"])
+        self.assertIn(fetch["uid"], tool["deps"])
+        self.assertEqual(tool["kv"], {"p": "ld", "pc": "light-blue", "show_out": "yes"})
+        run = lib.node_by_output(graph, "$(B)/app/data.out")
+        self.assertIn(tool["uid"], run["deps"])
+        self.assertEqual(run["cmds"][0]["cmd_args"], ["$(B)/tools/probe/probe"])
+
+    def test_prebuilt_yql_tool_primary_output_uses_existing_declared_producers(self):
+        files = udf_fixture()
+        files.update({
+            "tool/ya.make": "YQL_PREBUILT_TOOL(named)\nCOPY_FILE(binary named.prebuilt)\nPRIMARY_OUTPUT(${BINDIR}/named.prebuilt)\nEND()\n",
+            "tool/binary": "",
+        })
+        graph = lib.make(files, "tool")
+        producer = lib.node_by_output(graph, "$(B)/tool/named.prebuilt")
+        tool = lib.node_by_output(graph, "$(B)/tool/named")
+        self.assertIn(producer["uid"], tool["deps"])
+        self.assertIn(producer["outputs"][0], tool["inputs"])
+
     def test_udf_peer_selects_static_global_sources_and_implicit_dependencies(self):
         files = udf_fixture()
         files.update({
