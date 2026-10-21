@@ -15,6 +15,47 @@ def files():
 
 
 class PackageModuleTest(unittest.TestCase):
+    def test_bundle_selects_the_final_package_after_a_union_peer(self):
+        sources = files()
+        sources["bundled/ya.make"] = "UNION()\nBUNDLE(pkg NAME package-result)\nEND()\n"
+        for targets in (("collector", "bundled"), ("bundled", "collector")):
+            with self.subTest(targets=targets):
+                graph = lib.make(sources, *targets)
+                package = lib.node_by_output(graph, "$(B)/pkg/bundle.final.pkg.fake")
+                bundle = lib.node_by_output(graph, "$(B)/bundled/package-result")
+                self.assertIn(package["outputs"][0], bundle["inputs"])
+                self.assertIn(package["uid"], bundle["deps"])
+                self.assertEqual(bundle["cmds"][0]["cmd_args"][-2:], [
+                    "$(B)/pkg/bundle.final.pkg.fake", "$(B)/bundled/package-result",
+                ])
+
+    def test_sandbox_archive_outputs_survive_reuse_between_package_variants(self):
+        sources = files()
+        sources["pkg/ya.make"] = "PACKAGE(bundle)\nFROM_SANDBOX(123 OUT libpart.a OUT_NOAUTO extra.dat)\nEND()\n"
+        graph = lib.make(sources, "pkg")
+        package = lib.node_by_output(graph, "$(B)/pkg/bundle.final.pkg.fake")
+        own_union = lib.node_by_output(graph, "$(B)/pkg/bundle.pkg.fake")
+        resources = [node for node in graph["graph"] if "$(B)/pkg/libpart.a" in node["outputs"] and node["kv"].get("p") == "SB"]
+        self.assertEqual(len(resources), 1)
+        resource = resources[0]
+        self.assertEqual(resource["outputs"], ["$(B)/pkg/libpart.a", "$(B)/pkg/extra.dat"])
+        for node in (package, own_union):
+            self.assertIn(resource["uid"], node["deps"])
+            for output in resource["outputs"]:
+                self.assertIn(output, node["inputs"])
+        self.assertIn("$(B)/pkg/pkg/libpart.a", package["outputs"])
+        self.assertIn("$(B)/pkg/pkg/extra.dat", package["outputs"])
+
+    def test_sandbox_declaration_without_outputs_has_no_producer(self):
+        sources = files()
+        sources["pkg/ya.make"] = "PACKAGE(bundle)\nFROM_SANDBOX(123)\nEND()\n"
+        graph = lib.make(sources, "pkg")
+        package = lib.node_by_output(graph, "$(B)/pkg/bundle.final.pkg.fake")
+        own_union = lib.node_by_output(graph, "$(B)/pkg/bundle.pkg.fake")
+        self.assertIn(own_union["uid"], package["deps"])
+        self.assertFalse(any(node["kv"].get("p") == "SB" for node in graph["graph"]))
+        self.assertEqual(package["outputs"], ["$(B)/pkg/bundle.final.pkg.fake"])
+
     def test_missing_peer_stays_inside_the_keep_going_module_boundary(self):
         sources = {
             "owner/ya.make": f"PROGRAM()\n{lib.BARE_MODULE}SRCS(main.cpp)\nPEERDIR(absent good)\nEND()\n",

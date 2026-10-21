@@ -70,6 +70,17 @@ class ProtoDescGeneratedTest(unittest.TestCase):
         self.assertNotIn("$(S)/types/dependency.proto", java["inputs"])
         self.assertEqual(java["cmds"][0]["cwd"], "$(S)")
 
+    def test_explicit_proto_roots_are_preserved(self):
+        for token, root in (("${ARCADIA_ROOT}/p/schema.proto", "$(S)"), ("${BINDIR}/schema.proto", "$(B)")):
+            with self.subTest(token=token):
+                sources = files(tags="CPP_PROTO JAVA_PROTO DESC_PROTO", shadow=True)
+                sources["p/ya.make"] = sources["p/ya.make"].replace("SRCS(schema.proto)", f"SRCS({token})")
+                graph = lib.make(sources, "p")
+                for output in ("$(B)/p/schema.proto.desc", "$(B)/p/schema.jsrc"):
+                    node = lib.node_by_output(graph, output)
+                    self.assertIn(root + "/p/schema.proto", node["inputs"])
+                    self.assertEqual(node["cmds"][0]["cwd"], root)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
