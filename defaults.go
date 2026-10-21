@@ -68,10 +68,6 @@ var programImplicitPeers = []ImplicitPeerRule{
 	},
 }
 
-var archDependentPeerAddInclPrefixes = []string{
-	"contrib/libs/musl/arch/",
-}
-
 var programAllocatorDefaults = []ImplicitPeerRule{
 	{
 		name: "tcmalloc (TCMALLOC_TC default)",
@@ -237,24 +233,6 @@ func appendImplicitPeers(dst []string, rules []ImplicitPeerRule, rc ImplicitPeer
 	}
 
 	return dst
-}
-
-func rebasePerArchPeerAddIncl(hostPeerAddIncl []VFS, from, to ISA) []VFS {
-	out := make([]VFS, len(hostPeerAddIncl))
-
-	for i, p := range hostPeerAddIncl {
-		out[i] = p
-
-		for _, prefix := range archDependentPeerAddInclPrefixes {
-			if p == source(prefix, string(from)) {
-				out[i] = source(prefix, string(to))
-
-				break
-			}
-		}
-	}
-
-	return out
 }
 
 func (e *EmitContext) defaultProgramPeerdirsForModule(postUser bool) []string {

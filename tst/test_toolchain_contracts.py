@@ -85,6 +85,14 @@ class ToolchainContractsTest(unittest.TestCase):
                 self.assertIn(message, result.stderr)
                 self.assertNotIn("panic:", result.stderr)
 
+    def test_non_string_json_keys_report_decoder_errors(self):
+        for config in ('{false: []}', '{"toolchain": {1: {}}}', '{"toolchain": {"first": {}, true: {}}}'):
+            with self.subTest(config=config):
+                result = Tree(self, {"app/ya.make": library(""), "build/ya.conf.json": config}).make("app")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("invalid character", result.stderr)
+                self.assertNotIn("panic:", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

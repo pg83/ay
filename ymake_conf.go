@@ -107,13 +107,7 @@ func expectJSONDelim(dec *json.Decoder, want json.Delim) {
 }
 
 func jsonKey(dec *json.Decoder) string {
-	key, ok := throw2(dec.Token()).(string)
-
-	if !ok {
-		throwFmt("ya.conf.json: object key is not a string")
-	}
-
-	return key
+	return throw2(dec.Token()).(string)
 }
 
 func toolchainPlatform(name string, spec any, fallback map[string]any) map[string]any {

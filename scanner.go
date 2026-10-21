@@ -40,7 +40,6 @@ const (
 	scanDomainRos
 	scanDomainGoAsm
 	scanDomainSwig
-	scanDomainJoinTarget
 	scanDomainCount
 )
 
@@ -216,8 +215,6 @@ type ScanContext struct {
 	protoOutRoot  VFS
 	goAsmIncl     []VFS
 	cythonSys     []VFS
-	joinFrom      ISA
-	joinTo        ISA
 }
 
 type ScanConfig struct {
@@ -264,14 +261,6 @@ func (ctx *ScanContext) modulePaths(domain ScanDomain) (own, peer []VFS) {
 		return ctx.goAsmIncl, nil
 	case scanDomainSwig:
 		return ctx.swigInclude, nil
-	case scanDomainJoinTarget:
-		peer = ctx.ccPeer
-
-		if ctx.joinFrom == ISAX8664 {
-			peer = rebasePerArchPeerAddIncl(peer, ctx.joinFrom, ctx.joinTo)
-		}
-
-		return ctx.ccOwn, peer
 	default:
 		return ctx.ccOwn, ctx.ccPeer
 	}

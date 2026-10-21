@@ -1130,8 +1130,6 @@ func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, c
 	scanCtx.swigInclude = ctx.na.vfsList(d.cc.SwigInclude...)
 	scanCtx.cythonSys = cythonSysIncludes(d)
 	scanCtx.goAsmIncl = instance.Platform.Go.AsmIncludeDirs
-	scanCtx.joinFrom = instance.Platform.ISA
-	scanCtx.joinTo = ctx.target.ISA
 
 	if root := protoCPPOutRoot(d); root != "" {
 		scanCtx.protoOutRoot = source(root)

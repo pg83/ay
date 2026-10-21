@@ -41,17 +41,13 @@ func parseSdcMeta(macro TOK, args []string) SdcMetaEntry {
 		}
 
 		return SdcMetaEntry{Name: "rosnode", Args: []string{"rosnode", "--node-path=" + args[0]}}
-	case tokSdcSolibInfo:
+	default:
 		if len(args) != 1 {
 			throwFmt("SDC_SOLIB_INFO expects one URL")
 		}
 
 		return SdcMetaEntry{Name: "solib", Args: []string{"dynamic-library", "--url=" + args[0]}}
 	}
-
-	throwFmt("unknown SDC metadata macro")
-
-	return SdcMetaEntry{}
 }
 
 func (e *EmitContext) emitSdcMetas() []VFS {
