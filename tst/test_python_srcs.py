@@ -179,6 +179,69 @@ class PySrcsTest(unittest.TestCase):
         for name, namespace in (("first", "public/api"), ("second", "private"), ("third", "public/api")):
             objcopy_with_kv(graph, "lib", f"resfs/src/resfs/file/py/{namespace}/{name}.py=lib/{name}.py")
 
+    def test_module_namespace_uses_the_final_value_for_default_scopes(self):
+        for initial in ("", "PY_NAMESPACE(previous)\n"):
+            for namespace in ("public.api", "."):
+                with self.subTest(initial=initial, namespace=namespace):
+                    files = python_base()
+                    files.update({
+                        "lib/ya.make": "PY3_LIBRARY()\n" + initial + "PY_SRCS(first.py)\n"
+                            "PY_SRCS(NAMESPACE private second.py TOP_LEVEL third.py)\n"
+                            f"PY_NAMESPACE({namespace})\nEND()\n",
+                        "lib/first.py": "", "lib/second.py": "", "lib/third.py": "",
+                    })
+                    graph = lib.make(files, "lib")
+                    prefix = "public/api/" if namespace != "." else ""
+                    for name, resource_prefix in (("first", prefix), ("second", "private/"), ("third", "")):
+                        objcopy_with_kv(graph, "lib", f"resfs/src/resfs/file/py/{resource_prefix}{name}.py=lib/{name}.py")
+
+    def test_late_namespace_applies_to_main_and_type_stubs(self):
+        files = python_base()
+        files.update({
+            "app/ya.make": "PY3_PROGRAM()\nPY_SRCS(MAIN app.py types.pyi)\nPY_NAMESPACE(public.api)\nEND()\n",
+            "app/app.py": "", "app/types.pyi": "",
+        })
+        graph = lib.make(files, "app")
+        objcopy_with_kv(graph, "app", "PY_MAIN=public.api.app:main")
+        objcopy_with_kv(graph, "app", "resfs/src/resfs/file/py/public/api/app.py=app/app.py")
+        objcopy_with_kv(graph, "app", "resfs/src/resfs/file/py/public/api/types.pyi=app/types.pyi")
+
+    def test_proto_namespace_generates_and_packs_import_wrappers(self):
+        tool = "sdg/tier0/tools/generate_proxy_import_file"
+        for option, prefix, generate_init in (("IN_MSG", "msg/", True), ("IN_PROTO", "proto/", False), ("", "", False)):
+            with self.subTest(option=option, generate_init=generate_init):
+                files = python_base()
+                flags = "IMPORT_ALL_IN_INIT " if generate_init else ""
+                files["lib/ya.make"] = "PY3_LIBRARY()\n" + f"PROTO_TO_NAMESPACE({flags}{option} alpha_pb2 beta_pb2)\n" + "PY_NAMESPACE(public.api)\nEND()\n"
+                lib.tool_program(files, tool, "generate_proxy_import_file")
+                graph = lib.make(files, "lib")
+                tool_node = lib.node_by_output(graph, "$(B)/" + tool + "/generate_proxy_import_file")
+                wrappers = [("alpha_pb2.py", ["--from-import=alpha_pb2"]), ("beta_pb2.py", ["--from-import=beta_pb2"])]
+                if generate_init:
+                    wrappers.append(("__init__.py", ["--from-import=alpha_pb2", "--from-import=beta_pb2"]))
+                for name, command_args in wrappers:
+                    output = "$(B)/lib/" + prefix + name
+                    producer = lib.node_by_output(graph, output)
+                    self.assertEqual(producer["cmds"][0]["cmd_args"], [tool_node["outputs"][0]] + command_args)
+                    self.assertEqual(producer["cmds"][0]["stdout"], output)
+                    self.assertIn(tool_node["uid"], producer["deps"])
+                    resource = objcopy_with_kv(graph, "lib", f"resfs/src/resfs/file/py/public/api/{prefix}{name}=lib/{prefix}{name}")
+                    self.assertIn(output, resource["inputs"])
+                    self.assertIn(producer["uid"], resource["deps"])
+                    self.assertFalse(any("$(S)/lib/" + prefix + name in n["inputs"] for n in graph["graph"]))
+                if not generate_init:
+                    self.assertFalse(any("$(B)/lib/" + prefix + "__init__.py" in n["outputs"] for n in graph["graph"]))
+
+    def test_proto_namespace_rejects_invalid_options(self):
+        for options, message in (("", "Not allowed empty"), ("IN_OTHER a_pb2", "IN_OTHER"), ("IN_MSG", "Not allowed empty value"), ("IN_MSG IN_PROTO a_pb2", "Not allowed multiple prefixes")):
+            with self.subTest(options=options):
+                files = python_base()
+                files["lib/ya.make"] = f"PY3_LIBRARY()\nPROTO_TO_NAMESPACE({options})\nEND()\n"
+                proc = make_failure(files, "lib")
+                self.assertNotEqual(proc.returncode, 0)
+                self.assertIn(message, proc.stderr)
+                self.assertIn("PROTO_TO_NAMESPACE", proc.stderr)
+
     def test_scope_directives_apply_to_the_following_sources(self):
         files = python_base()
         files.update({
