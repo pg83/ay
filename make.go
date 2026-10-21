@@ -58,6 +58,7 @@ type MakeFlags struct {
 	testLevel           int
 	runTests            int
 	testSizes           []string
+	testTags            []string
 	sandboxing          bool
 	dist                bool
 	cacheTests          bool
@@ -365,7 +366,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 	config := getopt.Config{
 		Opts: getopt.OptStr("GrdktThxD:j:B:o:I:C:"),
 		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stat,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,host-build-type:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:,jobs:,ninja,define:," +
-			"target:,build:,target-platform-build-type:,target-platform-flag:,target-platform-tests,test-size:,test-traceback:," +
+			"target:,build:,target-platform-build-type:,target-platform-flag:,target-platform-tests,test-size:,test-tag:,test-traceback:," +
 			"dist,ignore-nodes-exit-code,warning-mode:,cache-tests,output-only-tests,cache-namespace:,report-skipped-suites,tests-retries:," +
 			"backup-test-results,add-modules-to-results,do-not-output-stderrs,no-src-links,add-changed-ok-configures,no-yt-store"),
 		Mode: getopt.ModeInOrder,
@@ -455,6 +456,8 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.testLevel = max(mf.testLevel, 1)
 		case opt.Name == "test-size":
 			mf.testSizes = append(mf.testSizes, strings.ToLower(opt.OptArg))
+		case opt.Name == "test-tag":
+			mf.testTags = append(mf.testTags, opt.OptArg)
 		case opt.Name == "dist":
 			mf.dist = true
 		case opt.Name == "cache-tests":
@@ -594,6 +597,8 @@ target flags:
 ya compatibility flags:
   -x                            Accepted from ya command lines, not modeled.
   --test-size <size>            Emit only test suites of these sizes
+                                (repeatable).
+  --test-tag <tags>             Select test tags; prefix exclusions with -
                                 (repeatable).
   --dist                        Configure for distbuild: ymake_conf.py runs
                                 without -l.

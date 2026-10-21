@@ -125,7 +125,7 @@ class JavaDependencyContractsTest(unittest.TestCase):
             **contrib("testdata", jar=7), "fixtures/input.txt": "data\n",
         })
         lib.tool_program(files, "tool", "tool")
-        graph = lib.make(files, "proj/sub/ut", "--target-platform-tests")
+        graph = lib.make(files, "proj/sub/ut", "--target-platform-tests", "--test-tag", "ya:anytag")
         run = test_nodes(graph)["proj/sub/ut/sub-ut"]
         self.assertEqual(option_values(run_args(run), "--classpath-option-type"), ["command_file"])
         self.assertIn("$(S)/fixtures/input.txt", run["inputs"])

@@ -302,7 +302,7 @@ class GoTestModuleTest(unittest.TestCase):
         files["lib/greet/tests/greet_test.go"] = (
             'package greet_test\nimport (\n\t"testing"\n\t"a.yandex-team.ru/lib/greet"\n)\n'
         )
-        graph = lib.make(files, "lib/greet/tests", *AUTOCHECK)
+        graph = lib.make(files, "lib/greet/tests", *AUTOCHECK, "--test-tag", "ya:anytag")
         self.assertEqual(test_paths(graph), [
             "lib/greet/tests/gofmt", "lib/greet/tests/govet", "lib/greet/tests/tests",
         ])

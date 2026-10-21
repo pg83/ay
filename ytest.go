@@ -46,6 +46,7 @@ type TestOpts struct {
 	jstyleServer bool
 	outputStyle  string
 	sizes        []string
+	tagFilter    TestTagFilter
 	descriptor   string
 	context      []string
 	contextReqs  *Requirements
@@ -70,6 +71,7 @@ func newTestOpts(mf *MakeFlags, yaConf map[string]any) *TestOpts {
 		jstyleServer: yaConf["use_jstyle_server"] == true,
 		outputStyle:  testOutputStyleNinja,
 		sizes:        mf.testSizes,
+		tagFilter:    newTestTagFilter(mf),
 		descriptor:   testPlatformDescriptor(mf),
 		context:      testContextLines(mf),
 		contextReqs:  &Requirements{Network: nwRestricted},
@@ -357,7 +359,7 @@ func (ctx *GenCtx) testContext() NodeRef {
 }
 
 func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
-	if !ctx.tests.sizeRequested(s.size) {
+	if !ctx.tests.sizeRequested(s.size) || !ctx.tests.tagFilter.matches(s.tags) {
 		return nil
 	}
 
