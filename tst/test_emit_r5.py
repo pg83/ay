@@ -26,6 +26,35 @@ class EmitRagel5Test(unittest.TestCase):
                     "$(B)/kernel/urlnorm/urlhashval.rl5.cpp",
                 ])
 
+    def test_ragel_inputs_keep_recursive_native_includes(self):
+        for extension in ("rl", "rl5"):
+            with self.subTest(extension=extension):
+                source = "scan." + extension
+                files = {
+                    "mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(" + source + ")\nEND()\n",
+                    "mod/" + source: '#include "mod/main.h"\n%%{\n machine Scan;\n include Common "common.rli";\n}%%\n',
+                    "mod/common.rli": '#include "mod/native.h"\n%%{\n machine Common;\n include Deep "deep.rli";\n}%%\n',
+                    "mod/deep.rli": '%%{\n machine Deep;\n}%%\n',
+                    "mod/main.h": '#include "main_detail.h"\n',
+                    "mod/main_detail.h": "",
+                    "mod/native.h": "",
+                }
+                lib.tool_program(files, "contrib/tools/ragel5/ragel", "ragel5")
+                lib.tool_program(files, "contrib/tools/ragel5/rlgen-cd", "rlgen-cd")
+                graph = lib.make(files, "mod", "--dist")
+                generator = lib.node_by_output(graph, "$(B)/mod/scan.rl5.cpp")
+                self.assertEqual(sorted(generator["inputs"]), sorted([
+                    "$(B)/contrib/tools/ragel5/ragel/ragel5",
+                    "$(B)/contrib/tools/ragel5/rlgen-cd/rlgen-cd",
+                    "$(S)/mod/" + source, "$(S)/mod/common.rli", "$(S)/mod/deep.rli",
+                ]))
+                compiled = lib.node_by_output(graph, "$(B)/mod/scan.rl5.cpp.o")
+                self.assertIn(generator["uid"], compiled["deps"])
+                self.assertIn("$(S)/mod/main.h", compiled["inputs"])
+                self.assertIn("$(S)/mod/main_detail.h", compiled["inputs"])
+                for path in (source, "common.rli", "deep.rli", "native.h"):
+                    self.assertNotIn("$(S)/mod/" + path, compiled["inputs"])
+
     def test_compile_takes_the_c_includes_and_the_main_output_not_the_source(self):
         # devtools_ymake_bin/yabs references: urlhashval.rl5.cpp.o lists the
         # main output urlhashval.rl.tmp and the C includes of the .rl, never

@@ -14,6 +14,7 @@ func (e *EmitContext) emitR5Reserved(
 	rlgenCdLD NodeRef,
 	ragel5BinPath VFS,
 	rlgenCdBinPath VFS,
+	closure Closure,
 	id NodeRef,
 ) {
 	instance := e.instance
@@ -42,7 +43,7 @@ func (e *EmitContext) emitR5Reserved(
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(cmd0, cmd1),
 		Env:            env,
-		Inputs:         na.inputList(na.vfsList(ragel5BinPath, rlgenCdBinPath), na.vfsList(srcVFS)),
+		Inputs:         na.inputList(na.vfsList(ragel5BinPath, rlgenCdBinPath, srcVFS), closure.bucketList()...),
 		Outputs:        na.vfsList(tmpVFS, cppVFS),
 		KV:             &r5KV,
 		ForeignDepRefs: na.refList(ragel5LD, rlgenCdLD),
@@ -63,7 +64,7 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 	rlSourceVFS := e.resolveModuleSourceVFS(src, e.d.cc.SrcDirs)
 
 	pe := func() {
-		e.emitR5Reserved(srcRel, rlSourceVFS, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, r5Ref)
+		e.emitR5Reserved(srcRel, rlSourceVFS, ragel5LDRef, rlgenCdLDRef, ragel5BinVFS, rlgenCdBinVFS, e.scanner.walkClosure(rlSourceVFS, e.d.scanCtx, scanDomainCC), r5Ref)
 	}
 
 	pending := e.pendingEmit(pe)
