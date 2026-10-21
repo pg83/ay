@@ -90,6 +90,29 @@ def command_with(node, script):
 
 
 class DynamicLibraryTest(unittest.TestCase):
+    def test_nested_dll_prefix_places_vcs_files_beside_link_output(self):
+        for prefix, directory in (("lib", ""), ("auto/binding/lib", "auto/binding/"), ("plugins/", "plugins/")):
+            with self.subTest(prefix=prefix):
+                files = base_files()
+                files["binding/ya.make"] = (
+                    f"DLL(Binding PREFIX {prefix})\n{NO_PLATFORM}SRCS(binding.cpp)\nEND()\n"
+                )
+                files["binding/binding.cpp"] = "int binding;\n"
+                graph = lib.make(files, "binding")
+                output = f"$(B)/binding/{prefix}Binding.so"
+                linked = lib.node_by_output(graph, output)
+                source = f"$(B)/binding/{directory}__vcs_version__.c"
+                obj = source + ".pic.o"
+                vcs = command_with(linked, "vcs_info.py")["cmd_args"]
+                self.assertIn(source, vcs)
+                compile_args = next(c["cmd_args"] for c in linked["cmds"] if "-c" in c["cmd_args"])
+                self.assertIn(source, compile_args)
+                self.assertEqual(compile_args[compile_args.index("-o") + 1], obj)
+                link = command_with(linked, "link_dyn_lib.py")["cmd_args"]
+                self.assertIn(obj, link)
+                self.assertIn("$(B)/binding/binding.cpp.pic.o", link)
+                self.assertEqual(linked["outputs"], [output])
+
     def test_dynamic_library_copy_step_observes_so_outputs(self):
         for statement, copied in (
             ("", False),
