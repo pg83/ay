@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import unittest
 from unittest import mock
 
@@ -142,14 +143,25 @@ class ResourceDeclsTest(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout), lib.make(files, "lib"))
         lines = result.stderr.splitlines()
         self.assertEqual(lines[0], "ownership: 3 violating (field, site) pairs")
+        rows, sites = [], set()
+        for line in lines[1:]:
+            match = re.fullmatch(
+                r"ownership +(\d+) nodes +(\d+) backings  (\S+) @ emit_context\.go:([1-9]\d*) +e\.g\. (.+)",
+                line,
+            )
+            self.assertIsNotNone(match, line)
+            nodes, backings, field, site, example = match.groups()
+            sites.add(int(site))
+            rows.append((int(nodes), int(backings), field, example))
+        self.assertEqual(len(sites), 1)
         # Rows with equal node counts come in no particular order.
         self.assertEqual(
-            lines[1],
-            "ownership        3 nodes        3 backings  Cmd.CmdArgs.chunk @ emit_context.go:182     e.g. $(B)/lib/a.cpp.bc",
+            rows[0],
+            (3, 3, "Cmd.CmdArgs.chunk", "$(B)/lib/a.cpp.bc"),
         )
-        self.assertCountEqual(lines[2:], [
-            "ownership        1 nodes        1 backings  DepRefs @ emit_context.go:182               e.g. $(B)/lib/kern_merged.bc",
-            "ownership        1 nodes        1 backings  Inputs.chunk @ emit_context.go:182          e.g. $(B)/lib/kern_merged.bc",
+        self.assertCountEqual(rows[1:], [
+            (1, 1, "DepRefs", "$(B)/lib/kern_merged.bc"),
+            (1, 1, "Inputs.chunk", "$(B)/lib/kern_merged.bc"),
         ])
 
     def test_host_bundle_json_path_follows_include_path_rules(self):
