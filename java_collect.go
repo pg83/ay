@@ -290,7 +290,17 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				raw = v.LexicalArgs
 			}
 
-			applyJavaMacro(ctx, jm, d, v.Raw.string(), anyStrs(expandStmtTokens(v.Args, env)), anyStrs(raw), env)
+			rawArgs := anyStrs(raw)
+
+			var args []string
+
+			if v.Raw.string() == "RUN_JAVA_PROGRAM" {
+				args = splitShellWords(expandStmtToken(strings.Join(rawArgs, " "), env))
+			} else {
+				args = anyStrs(expandStmtTokens(v.Args, env))
+			}
+
+			applyJavaMacro(ctx, jm, d, v.Raw.string(), args, rawArgs, env)
 		}
 	}
 }
@@ -644,7 +654,15 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
 	case "RUN_JAVA_PROGRAM":
-		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: d.javaRawArgs(raw)})
+		hashArgs := append([]string(nil), raw...)
+
+		for i, arg := range hashArgs {
+			if len(arg) > 1 && (arg[0] == '\'' || arg[0] == '"') && arg[len(arg)-1] == arg[0] {
+				hashArgs[i] = strings.ReplaceAll(arg[1:len(arg)-1], "\\", "")
+			}
+		}
+
+		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: d.javaRawArgs(hashArgs)})
 	case "GENERATE_SCRIPT":
 		d.generateScripts = append(d.generateScripts, args)
 	case "WITH_JDK":

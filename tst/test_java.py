@@ -221,6 +221,22 @@ class JavaProgramTest(unittest.TestCase):
         archive = lib.node_by_output(graph, f"$(B)/gen/out.{salt}.gentar")
         self.assertEqual(archive["cmds"][1]["cmd_args"][-2:], ["Main", "--value=example"])
 
+    def test_run_java_preserves_quoted_variable_groups_in_arguments(self):
+        for left, right in (("", ""), ("first", "second third")):
+            with self.subTest(left=left, right=right):
+                files = self.tree()
+                files["gen/ya.make"] = (
+                    f"JAVA_LIBRARY_NON_SPLIT()\nSET(LEFT {left})\nSET(RIGHT {right})\n"
+                    'RUN_JAVA_PROGRAM(Main --known="${LEFT} ${RIGHT}" "${LEFT} ${RIGHT}" '
+                    '${RIGHT} OUT_DIR out CLASSPATH app)\nEND()\n'
+                )
+                graph = lib.make(files, "gen")
+                archive = next(node for node in graph["graph"] if node.get("kv", {}).get("p") == "RJ")
+                args = archive["cmds"][1]["cmd_args"]
+                self.assertEqual(args[args.index("Main"):], [
+                    "Main", f"--known={left} {right}", f"{left} {right}", *right.split(),
+                ])
+
     def test_run_java_input_directories_are_normalized_before_globbing(self):
         files = self.tree()
         files["gen/ya.make"] = (
