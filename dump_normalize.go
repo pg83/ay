@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"runtime"
 	"slices"
@@ -31,10 +32,11 @@ type NormalizeRoot struct {
 }
 
 type NormalizeEnumFilter struct {
-	uid     string
 	inputs  []string
 	removed []string
 	command string
+	header  string
+	content map[string]any
 }
 
 func cmdDumpNormalize(_ GlobalFlags, args []string) int {
@@ -90,8 +92,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	outputsByUID := map[string][]string{}
 	targetOut0 := map[string]string{}
 	arOut0 := map[string]string{}
-
-	var enumFilters []NormalizeEnumFilter
+	enumFilters := map[string]*NormalizeEnumFilter{}
 
 	type p1Result struct {
 		uid        string
@@ -137,18 +138,25 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				}
 
 				if len(removed) > 0 {
+					commands := canon["cmds"].([]any)
+					command := commands[0].(map[string]any)
+					args := command["cmd_args"].([]any)
+
 					r.enumFilter = &NormalizeEnumFilter{
-						uid:     uid,
 						inputs:  slices.Clone(inputs),
 						removed: removed,
 						command: nodeCmdText(node),
+						header:  args[1].(string),
+						content: canon,
 					}
 				}
 			} else {
 				canon = canonContent(node, refGraph)
 			}
 
-			r.content = sha256.Sum256(marshalCompact(canon))
+			if r.enumFilter == nil {
+				r.content = sha256.Sum256(marshalCompact(canon))
+			}
 
 			outs := node.Outputs
 			out0 := ""
@@ -200,7 +208,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			}
 
 			if r.enumFilter != nil {
-				enumFilters = append(enumFilters, *r.enumFilter)
+				enumFilters[r.uid] = r.enumFilter
 			}
 
 			if r.isFetch {
@@ -226,7 +234,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			}
 		})
 
-	for _, filter := range enumFilters {
+	for uid, filter := range enumFilters {
 		inputs := make(map[string]struct{}, len(filter.inputs))
 		removed := make(map[string]struct{}, len(filter.removed))
 
@@ -238,7 +246,26 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			removed[in] = struct{}{}
 		}
 
-		raw := deps[filter.uid]
+		raw := deps[uid]
+
+		for _, d := range raw {
+			outs := outputsByUID[d]
+
+			if len(outs) == 0 || !slices.Contains(outs, filter.header) {
+				continue
+			}
+
+			if _, ok := removed[outs[0]]; ok {
+				delete(removed, outs[0])
+				inputs[outs[0]] = struct{}{}
+				filter.inputs = append(filter.inputs, outs[0])
+			}
+		}
+
+		sort.Strings(filter.inputs)
+		filter.content["inputs"] = filter.inputs
+		contentHash[uid] = sha256.Sum256(marshalCompact(filter.content))
+
 		kept := raw[:0]
 
 		for _, d := range raw {
@@ -250,7 +277,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			}
 		}
 
-		deps[filter.uid] = kept
+		deps[uid] = kept
 	}
 
 	roots := []string{}
@@ -348,7 +375,13 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				return emitLine{}
 			}
 
-			canon := canonContent(node, refGraph)
+			var canon map[string]any
+
+			if filter := enumFilters[uid]; filter != nil {
+				canon = maps.Clone(filter.content)
+			} else {
+				canon = canonContent(node, refGraph)
+			}
 
 			canon["deps"] = rewriteDeps(deps[uid], closure, fetch, newUID)
 
