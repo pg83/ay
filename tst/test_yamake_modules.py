@@ -105,7 +105,11 @@ class YaMakeModulesTest(unittest.TestCase):
             ("PY3_PROGRAM_BIN()", PYTHON_PROGRAM_PEERS, [("CC", "$(B)/a/x.cpp.o"), ("LD", "$(B)/a/a")]),
             ("PY3_PROGRAM()", PYTHON_PROGRAM_PEERS, [("AR", "$(B)/a/libpy3a.a"), ("CC", "$(B)/a/x.cpp.o"), ("LD", "$(B)/a/a")]),
             ("YQL_UDF_YDB()", ["yql/essentials/public/udf", "yql/essentials/public/udf/support"], [("AR", "$(B)/a/liba.global.a"), ("CC", "$(B)/a/x.cpp.udfs.o")]),
-            ("YQL_UDF_CONTRIB()", ["yql/essentials/public/udf", "yql/essentials/public/udf/support"], [("AR", "$(B)/a/liba.global.a"), ("CC", "$(B)/a/x.cpp.udfs.o")]),
+            ("YQL_UDF_CONTRIB()\nUDF_NO_PROBE()", ["yql/essentials/public/udf", "yql/essentials/public/udf/support"], [
+                ("CC", "$(B)/a/x.cpp.pic.o"),
+                ("CP", "$(B)/a/yql/essentials/public/udf/service/drop_policy_globals.py.pyplugin"),
+                ("LD", "$(B)/a/liba.so"),
+            ]),
             ("PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("PROTO_SCHEMA()", [], [("PD", "$(B)/a/a.protodesc"), ("PD", "$(B)/a/a.protosrc"), ("PD", "$(B)/a/a.self.protodesc"), ("PD", "$(B)/a/a.tar")]),
             ("PROTO_DESCRIPTIONS()", [], [("PD", "$(B)/a/a.protodesc"), ("PD", "$(B)/a/a.tar")]),
@@ -125,6 +129,8 @@ class YaMakeModulesTest(unittest.TestCase):
                 files = stub_libraries({
                     "a/ya.make": declaration + "\n" + NO_PLATFORM + "SRCS(x.cpp)\nEND()\n",
                     "a/x.cpp": "int x;\n",
+                    "yql/essentials/public/udf/udfs_exports.exports": "C Register\n",
+                    "yql/essentials/public/udf/service/drop_policy_globals.py": "",
                 }, stubs)
                 self.assertEqual(module_outputs(self.make(files)), expected)
 

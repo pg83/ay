@@ -196,7 +196,7 @@ func (e *EmitContext) genYqlPrebuiltCopy(src, out VFS, globals []ResourceDecl) *
 func setupYqlUdfModule(d *ModuleData, name TOK, env Environment) {
 	python := name == tokYqlPythonUdf || name == tokYqlPython3Udf
 
-	if !python && !(name == tokYqlUdf && d.unit.Type == tokDll) {
+	if !python && !((name == tokYqlUdf || name == tokYqlUdfContrib) && d.unit.Type == tokDll) {
 		return
 	}
 

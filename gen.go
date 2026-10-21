@@ -422,7 +422,7 @@ func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, d
 		}
 	}
 
-	if name == tokPy3Program || name == tokYqlUdf || name == tokDocs || name == 0 {
+	if name == tokPy3Program || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokDocs || name == 0 {
 		kind = KindBin
 	}
 
@@ -607,11 +607,11 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 }
 
 func isFinalTargetModuleType(name TOK) bool {
-	return isProgramModuleType(name) && name != tokGoTest && name != tokBoosttest && name != tokBoosttestWithMain || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokYqlUdf || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokYqlPrebuiltTool
+	return isProgramModuleType(name) && name != tokGoTest && name != tokBoosttest && name != tokBoosttestWithMain || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokYqlPrebuiltTool
 }
 
 func picTransition(name TOK) bool {
-	return name == tokDll || name == tokDllJava || name == tokPy2Module || name == tokYqlUdf || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokDynamicLibrary
+	return name == tokDll || name == tokDllJava || name == tokPy2Module || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokDynamicLibrary
 }
 
 func isDllModuleType(name TOK) bool {
@@ -690,7 +690,7 @@ func inferModuleDeclaration(stmts []Stmt) (*ModuleStmt, bool) {
 
 func isLinkingModuleType(name TOK) bool {
 	switch name {
-	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary, tokPy2Module, tokYqlUdf, tokYqlPythonUdf, tokYqlPython3Udf:
+	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary, tokPy2Module, tokYqlUdf, tokYqlUdfContrib, tokYqlPythonUdf, tokYqlPython3Udf:
 		return true
 	}
 
@@ -1249,7 +1249,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 	}
 
-	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(moduleName) && (moduleName != tokYqlUdf || instance.Kind != KindLib) {
+	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(moduleName) && (moduleName != tokYqlUdf && moduleName != tokYqlUdfContrib || instance.Kind != KindLib) {
 		if moduleName != tokDynamicLibrary {
 			descent := instance
 
@@ -1292,7 +1292,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	tag := multimoduleVariantTag(d.multimodule, instance.Language)
 
-	if moduleName == tokYqlUdf {
+	if moduleName == tokYqlUdf || moduleName == tokYqlUdfContrib {
 		tag = d.unit.Tag.string()
 	}
 

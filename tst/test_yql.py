@@ -107,6 +107,47 @@ class YqlAbiTest(unittest.TestCase):
             lib.node_by_output(graph, "$(B)/udf/" + archive)
             self.assertNotIn("-DBUILD_UDF", obj["cmds"][0]["cmd_args"])
 
+    def test_contrib_udf_has_independent_shared_target_and_static_peer_contexts(self):
+        files = udf_fixture()
+        files.update({
+            "udf/ya.make": f'YQL_UDF_CONTRIB(named)\n{BARE}UDF_NO_PROBE()\n'
+                'COPY_FILE(template.cpp ${BINDIR}/${MODULE_TAG}.cpp)\n'
+                'SRCS(body.cpp ${BINDIR}/${MODULE_TAG}.cpp)\n'
+                'IF (MODULE_TAG == "YQL_UDF_SHARED")\nPEERDIR(shared_peer)\n'
+                'ELSE()\nPEERDIR(static_peer)\nENDIF()\nEND()\n',
+            "udf/body.cpp": "int body;\n",
+            "udf/template.cpp": "int generated;\n",
+            "app/ya.make": f"PROGRAM()\n{BARE}PEERDIR(udf)\nEND()\n",
+        })
+        for peer in ("shared_peer", "static_peer"):
+            files[f"{peer}/ya.make"] = f"LIBRARY()\n{BARE}SRCS(peer.cpp)\nEND()\n"
+            files[f"{peer}/peer.cpp"] = "int peer;\n"
+        for targets in (("udf", "app"), ("app", "udf")):
+            with self.subTest(targets=targets):
+                graph = lib.make(files, *targets, "--target-platform", "default-linux-x86_64")
+                shared = lib.node_by_output(graph, "$(B)/udf/libnamed.so")
+                static = lib.node_by_output(graph, "$(B)/udf/libnamed.global.a")
+                app = lib.node_by_output(graph, "$(B)/app/app")
+                self.assertIn(static["uid"], app["deps"])
+                self.assertNotIn(shared["uid"], app["deps"])
+                results = set(graph["result"])
+                self.assertIn(shared["uid"], results)
+                self.assertNotIn(static["uid"], results)
+                for tag, suffix, consumer, peer in (
+                    ("YQL_UDF_SHARED", ".pic.o", shared, "shared_peer"),
+                    ("YQL_UDF_STATIC", ".udfs.o", static, "static_peer"),
+                ):
+                    generated = lib.node_by_output(graph, f"$(B)/udf/{tag}.cpp")
+                    compiled = lib.node_by_output(graph, f"$(B)/udf/{tag}.cpp{suffix}")
+                    body = lib.node_by_output(graph, f"$(B)/udf/body.cpp{suffix}")
+                    self.assertIn(generated["outputs"][0], compiled["inputs"])
+                    self.assertIn(generated["uid"], compiled["deps"])
+                    self.assertIn(compiled["uid"], consumer["deps"])
+                    self.assertIn(body["uid"], consumer["deps"])
+                    self.assertEqual("-DBUILD_UDF" in body["cmds"][0]["cmd_args"], tag == "YQL_UDF_SHARED")
+                    archive = lib.node_by_output(graph, f"$(B)/{peer}/lib{peer}.a")
+                    self.assertIn(archive["uid"], shared["deps"] if tag == "YQL_UDF_SHARED" else app["deps"])
+
     def test_udf_peer_selects_static_global_sources_and_implicit_dependencies(self):
         files = udf_fixture()
         files.update({

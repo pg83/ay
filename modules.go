@@ -1954,13 +1954,13 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return ModuleUnit{Type: tokDll, Tag: unitTagPy2, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomPy2}
 	case tokYqlPython3Udf:
 		return ModuleUnit{Type: tokDll, Tag: unitTagPy3, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
-	case tokYqlUdf:
+	case tokYqlUdf, tokYqlUdfContrib:
 		if kind != KindLib {
 			return ModuleUnit{Type: tokDll, Tag: strYqlUdfShared, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 		}
 
 		fallthrough
-	case tokYqlUdfYdb, tokYqlUdfContrib:
+	case tokYqlUdfYdb:
 		return ModuleUnit{Type: name, Tag: strYqlUdfStatic, CCTag: tagYqlUdfStatic, HashTag: strYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
 	case tokFbsLibrary:
 		if language == LangGo {
