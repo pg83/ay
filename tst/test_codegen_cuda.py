@@ -69,6 +69,34 @@ class CudaTest(unittest.TestCase):
         self.assertIn(fatbin["uid"], cc["deps"])
         self.assertIn(host["uid"], cc["deps"])
 
+    def test_cuda_uses_cxxflags_without_clang_warning_command_slots(self):
+        for declaration in ("SRCS(sub/k.cu)", "CUDA_SRCS(sub/k.cu)"):
+            with self.subTest(declaration=declaration):
+                files = self.split_fixture()
+                files["mod/ya.make"] = (
+                    f"LIBRARY()\n{lib.BARE_MODULE}"
+                    "SET(CUDA_ARCHITECTURES sm_80:sm_90a)\n"
+                    "CLANG_WARNINGS(-Wcomment -Wunreachable-code)\n"
+                    "CFLAGS(-DCOMMON)\nCXXFLAGS(-DCXX)\n"
+                    f"SRCS(plain.c plain.cpp)\n{declaration}\nEND()\n"
+                )
+                files["mod/plain.c"] = ""
+                files["mod/plain.cpp"] = ""
+                graph = lib.make(files, "mod")
+                for source in ("plain.c", "plain.cpp"):
+                    args = lib.node_by_output(graph, f"$(B)/mod/{source}.o")["cmds"][0]["cmd_args"]
+                    self.assertIn("-Wcomment", args)
+                    self.assertIn("-Wunreachable-code", args)
+                cuda = [node for node in graph["graph"] if node["kv"].get("p") == "CU"
+                        and "--cflags" in node["cmds"][0]["cmd_args"]]
+                self.assertTrue(cuda)
+                for node in cuda:
+                    args = node["cmds"][0]["cmd_args"]
+                    self.assertIn("-DCOMMON", args)
+                    self.assertIn("-DCXX", args)
+                    self.assertNotIn("-Wcomment", args)
+                    self.assertNotIn("-Wunreachable-code", args)
+
     def test_cuda_defaults_follow_the_source_configuration(self):
         files = self.split_fixture()
         files["build/ymake_conf.py"] = cuda_conf("CUDA_VERSION=12.9\n")
