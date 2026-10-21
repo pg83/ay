@@ -205,7 +205,37 @@ func parseConfCondition(rel, expr string) []CondNode {
 		throwFmt("conf: %s: unsupported condition %s", rel, expr)
 	}
 
+	for i := range p.condScratch {
+		if p.condScratch[i].Kind == ckLt {
+			p.condScratch[i].Kind = ckConfLt
+		}
+	}
+
 	return p.condScratch
+}
+
+func evalConfLt(nodes []CondNode, n *CondNode, env Environment) bool {
+	l := evalAtomString(nodes, n.L, env, true)
+	r := evalAtomString(nodes, n.R, env, true)
+	left, right := &nodes[n.L], &nodes[n.R]
+
+	if left.Kind != ckInt && right.Kind != ckInt {
+		return l < r
+	}
+
+	return confOrderingInteger(left, l) < confOrderingInteger(right, r)
+}
+
+func confOrderingInteger(n *CondNode, value string) int {
+	if n.Kind == ckInt {
+		return n.Ival
+	}
+
+	if value != "" {
+		return 1
+	}
+
+	return 0
 }
 
 func (c *ConfFile) cond(b int) []CondNode {

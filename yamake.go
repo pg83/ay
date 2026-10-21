@@ -100,6 +100,7 @@ const (
 	ckVersionCmp
 	ckDefined
 	ckUnsupportedOp
+	ckConfLt
 )
 
 const (
