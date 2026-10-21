@@ -1,7 +1,9 @@
 package main
 
 var multimoduleTags = map[TOK]map[string]Language{
-	tokPackage: {"PACKAGE_FINAL": LangCPP, "PACKAGE_UNION": LangPackage},
+	tokPy23Library:       {"PY2": LangPy2, "PY3": LangCPP},
+	tokPy23NativeLibrary: {"PY2": LangPy2, "PY3": LangCPP},
+	tokPackage:           {"PACKAGE_FINAL": LangCPP, "PACKAGE_UNION": LangPackage},
 	tokProtoLibrary: {
 		"CPP_PROTO": LangCPP, "JAVA_PROTO": LangJava, "PY3_PROTO": LangPy, "GO_PROTO": LangGo,
 		"DESC_PROTO": LangDescProto, "DOCS_PROTO": LangDocsProto, "TS_PROTO": LangTS, "TS_PREPARE_DEPS": LangTSPrepare,

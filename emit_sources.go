@@ -5,6 +5,21 @@ import (
 	"strings"
 )
 
+func (e *EmitContext) deferNativeSource(meta SrcMeta) bool {
+	if meta.PyMeta != 0 {
+		return false
+	}
+
+	switch srcExtClassOf(meta.Source.relOrSelf().any()) {
+	case srcExtCSource, srcExtRodata, srcExtCuda, srcExtYasm, srcExtAsm, srcExtGo, srcExtFortran:
+		return true
+	case srcExtProto:
+		return e.d.unit.Tag == unitTagPy3Proto
+	}
+
+	return false
+}
+
 func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	src := e.cppStyleSource(meta.Source)
 
@@ -23,17 +38,6 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		}
 
 		return
-	}
-
-	if e.producersOnly() {
-		switch srcExtClassOf(src.relOrSelf().any()) {
-		case srcExtCSource, srcExtRodata, srcExtCuda, srcExtYasm, srcExtAsm, srcExtGo, srcExtFortran:
-			return
-		case srcExtProto:
-			if e.d.unit.Tag == unitTagPy3Proto {
-				return
-			}
-		}
 	}
 
 	switch srcExtClassOf(src.relOrSelf().any()) {

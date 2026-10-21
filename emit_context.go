@@ -477,7 +477,7 @@ func (e *EmitContext) pendingEmitter(emitter pendingEmitter) *PendingEmit {
 	return p
 }
 
-func (e *EmitContext) emit() {
+func (e *EmitContext) emit() func() {
 	d := e.d
 
 	e.globalSources = dedup(e.peers.GlobalSources, e.emitSdcMetas())
@@ -501,56 +501,84 @@ func (e *EmitContext) emit() {
 	e.emitDeclaredProducers(cythonPlans)
 	e.emitUsrvFiles()
 
-	if !e.producersOnly() {
+	finish := func() {
 		e.registerCollectPySrcs()
-
 		e.emitPyRegister()
+
+		finalized := false
+
+		for {
+			for e.srcHead < len(e.srcs) {
+				meta := e.srcs[e.srcHead]
+
+				e.srcs[e.srcHead] = SrcMeta{}
+				e.srcHead++
+				e.emitOneSource(meta)
+			}
+
+			if finalized {
+				break
+			}
+
+			finalized = true
+
+			if !isProgramModuleType(d.moduleStmt.Name) || pyModuleTypeUsesPython3(d.moduleStmt.Name) || d.usePython2 {
+				e.emitPyBytecode(true)
+
+				genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()
+
+				for i, ref := range genPyAuxRefs {
+					e.collectObj(ref, genPyAuxOuts[i], SrcMeta{Prio: stmtPrioDefault, Global: true})
+				}
+			}
+
+			if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 {
+				e.objcopyRes = e.emitResourceObjcopy()
+			}
+
+			if d.moduleStmt.Name == tokProtoLibrary {
+				if pyRes := e.emitPyProtoLibraryResult(); pyRes != nil {
+					e.protoRes = pyRes
+				}
+			}
+
+			for i, ref := range fsMemberRefs {
+				e.collectObj(ref, fsMemberPaths[i], SrcMeta{Prio: stmtPrioDefault})
+			}
+
+			e.flushGoCgo2()
+			e.flushGoSrcs()
+		}
+
+		e.srcsClosed = true
 	}
 
-	finalized := e.producersOnly()
+	if e.producersOnly() {
+		e.emitMetadataSources()
+	} else {
+		finish()
+	}
 
-	for {
-		for e.srcHead < len(e.srcs) {
-			meta := e.srcs[e.srcHead]
+	return finish
+}
 
-			e.srcs[e.srcHead] = SrcMeta{}
-			e.srcHead++
+func (e *EmitContext) emitMetadataSources() {
+	kept := 0
+
+	for e.srcHead < len(e.srcs) {
+		meta := e.srcs[e.srcHead]
+
+		e.srcHead++
+
+		if e.deferNativeSource(meta) {
+			e.srcs[kept] = meta
+			kept++
+		} else {
 			e.emitOneSource(meta)
 		}
-
-		if finalized {
-			break
-		}
-
-		finalized = true
-
-		if !isProgramModuleType(d.moduleStmt.Name) || pyModuleTypeUsesPython3(d.moduleStmt.Name) || d.usePython2 {
-			e.emitPyBytecode(true)
-
-			genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()
-
-			for i, ref := range genPyAuxRefs {
-				e.collectObj(ref, genPyAuxOuts[i], SrcMeta{Prio: stmtPrioDefault, Global: true})
-			}
-		}
-
-		if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 {
-			e.objcopyRes = e.emitResourceObjcopy()
-		}
-
-		if d.moduleStmt.Name == tokProtoLibrary {
-			if pyRes := e.emitPyProtoLibraryResult(); pyRes != nil {
-				e.protoRes = pyRes
-			}
-		}
-
-		for i, ref := range fsMemberRefs {
-			e.collectObj(ref, fsMemberPaths[i], SrcMeta{Prio: stmtPrioDefault})
-		}
-
-		e.flushGoCgo2()
-		e.flushGoSrcs()
 	}
 
-	e.srcsClosed = true
+	clear(e.srcs[kept:])
+	e.srcs = e.srcs[:kept]
+	e.srcHead = 0
 }

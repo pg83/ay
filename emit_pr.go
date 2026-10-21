@@ -82,8 +82,6 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 
 func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	ctx, instance := e.ctx, e.instance
-	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
-	auxTools := resolveRunProgramAuxTools(ctx, anyStrs(stmt.ToolPaths))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 	inSources := make([]VFS, 0, len(stmt.INFiles))
 	inBuilds := make([]VFS, 0, len(stmt.INFiles))
@@ -147,6 +145,22 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	pe := func() {
+		res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
+		auxTools := resolveRunProgramAuxTools(ctx, anyStrs(stmt.ToolPaths))
+		generatorRefs := []NodeRef{res.LDRef}
+
+		for _, tool := range auxTools {
+			generatorRefs = append(generatorRefs, tool.ref)
+		}
+
+		generatorRefs = ctx.na.refList(dedupRefs(generatorRefs)...)
+
+		for _, out := range outVFSByToken {
+			if info := e.codegen.lookup(out); info != nil && info.ProducerRef == prRef {
+				info.GeneratorRefs = generatorRefs
+			}
+		}
+
 		inputClosure := prInputClosure(snap, stmt)
 		inputInduced := prInputInducedIncludes(ctx, e.codegen, snap.scanner, snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse])
 
@@ -172,13 +186,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	pending := e.pendingEmit(pe)
-	generatorRefs := []NodeRef{res.LDRef}
-
-	for _, tool := range auxTools {
-		generatorRefs = append(generatorRefs, tool.ref)
-	}
-
-	generatorRefs = ctx.na.refList(dedupRefs(generatorRefs)...)
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet) {
 		if registeredPROut[out] {
@@ -191,7 +198,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			OutputPath:      out,
 			ProducerRef:     prRef,
 			ProducerMainOut: mainOutputVFS,
-			GeneratorRefs:   generatorRefs,
 			ParsedIncludes:  parsed,
 			OnUse:           pending,
 		})

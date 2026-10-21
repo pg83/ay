@@ -198,12 +198,16 @@ class SbomTest(unittest.TestCase):
         files = fixture()
         files["gen/ya.make"] = "PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n"
         files["gen/main.cpp"] = "int main() {}\n"
-        files["prog/ya.make"] = files["prog/ya.make"].replace("END()", "RUN_PROGRAM(gen OUT gen.h)\nEND()")
+        files["prog/ya.make"] = files["prog/ya.make"].replace("END()", "RUN_PROGRAM(gen OUT gen.cpp)\nEND()")
         for args in ((), ("-r",)):
             with self.subTest(args=args):
                 graph = lib.make(files, "prog", *X86_64, *args)
                 by_uid = {node["uid"]: node for node in graph["graph"]}
                 tool = lib.node_by_output(graph, "$(B)/gen/gen")
+                generated = lib.node_by_output(graph, "$(B)/prog/gen.cpp")
+                compiled = lib.node_by_output(graph, "$(B)/prog/gen.cpp.o")
+                self.assertIn(tool["uid"], generated["deps"])
+                self.assertIn(generated["uid"], compiled["deps"])
                 path = component("build/platform/python/ymake_python3/toolchain.component.sbom")
                 self.assertIn(path, tool["inputs"])
                 producers = [uid for uid in tool["deps"] if path in by_uid[uid]["outputs"]]

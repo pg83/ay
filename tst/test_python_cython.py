@@ -234,13 +234,13 @@ class CythonTest(unittest.TestCase):
         self.assertIn(fast["uid"], fast_cc["deps"])
         self.assertIn("$(S)/contrib/tools/cython/generated_cpp_headers.h", fast_cc["inputs"])
 
-        cmod = lib.node_by_output(graph, "$(B)/lib/cmod.pyx.c")
+        cmod = lib.node_by_output(graph, "$(B)/lib/cmod.pyx.py3.c")
         self.assertNotIn("--cplus", args(cmod))
-        cmod_cc = lib.node_by_output(graph, "$(B)/lib/cmod.pyx.c.py3.o")
+        cmod_cc = lib.node_by_output(graph, "$(B)/lib/cmod.pyx.py3.c.py3.o")
         self.assertNotIn("-Wno-implicit-fallthrough", args(cmod_cc))
         self.assertNotIn("$(S)/contrib/tools/cython/generated_cpp_headers.h", cmod_cc["inputs"])
 
-        lib.node_by_output(graph, "$(B)/lib/plain.pyx.cpp.py3.o")
+        lib.node_by_output(graph, "$(B)/lib/plain.pyx.py3.cpp.py3.o")
 
         hdr_cpp = lib.node_by_output(graph, "$(B)/lib/hdr_cpp.cpp")
         self.assertEqual(hdr_cpp["outputs"], ["$(B)/lib/hdr_cpp.cpp", "$(B)/lib/hdr_cpp.h"])
@@ -263,12 +263,12 @@ class CythonTest(unittest.TestCase):
 
         archive = lib.node_by_output(graph, "$(B)/lib/libpy3lib.a")
         self.assertEqual(archive["inputs"][:7], [
-            "$(B)/lib/cmod.pyx.c.py3.o",
+            "$(B)/lib/cmod.pyx.py3.c.py3.o",
             "$(B)/lib/hdr_c.c.py3.o",
             "$(B)/lib/api.c.py3.o",
             "$(B)/lib/cy.c.py3.o",
             "$(B)/lib/fast.pyx.py3.cpp.py3.o",
-            "$(B)/lib/plain.pyx.cpp.py3.o",
+            "$(B)/lib/plain.pyx.py3.cpp.py3.o",
             "$(B)/lib/hdr_cpp.cpp.py3.o",
         ])
 

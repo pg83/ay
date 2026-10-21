@@ -3,10 +3,9 @@ package main
 import "strings"
 
 var (
-	cythonCppKV           = KV{P: pkCY, PC: pcYellow}
-	cythonPy2SysIncludes  = []VFS{contribToolsCythonPy2CythonIncludes}
-	cythonPy23SysIncludes = []VFS{contribToolsCythonPy2CythonIncludes, contribToolsCythonCythonIncludes}
-	cythonPy3SysIncludes  = []VFS{contribToolsCythonCythonIncludes}
+	cythonCppKV          = KV{P: pkCY, PC: pcYellow}
+	cythonPy2SysIncludes = []VFS{contribToolsCythonPy2CythonIncludes}
+	cythonPy3SysIncludes = []VFS{contribToolsCythonCythonIncludes}
 )
 
 var cythonNumpyAddIncl = []VFS{
@@ -128,7 +127,7 @@ func cythonDefaultOptions(os OS) string {
 
 type CythonStmt struct {
 	Src       string
-	Generated *string
+	PlainCpp  bool
 	Options   []string
 	CMode     bool
 	Header    bool
@@ -140,7 +139,6 @@ type CythonStmt struct {
 type CythonStmtPlan struct {
 	stmt              *CythonStmt
 	generatedExplicit bool
-	py23Variant       bool
 	generated         string
 	generatedVFS      VFS
 	headerVFS         []VFS
@@ -162,34 +160,17 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 	plans := make([]CythonStmtPlan, 0, len(d.cythonCpp))
 
 	for _, stmt := range d.cythonCpp {
-		generatedExplicit := stmt.Generated != nil
-		py23Variant := cythonUsesPy23Variant(d.moduleStmt.Name)
-		generated := stmt.Src + ".cpp"
-
-		if py23Variant {
-			generated = stmt.Src + ".py3.cpp"
-		}
-
-		if stmt.CMode {
-			generated = stmt.Src + ".c"
-		}
+		generatedExplicit := stmt.PlainCpp
+		cythonSuffix := ""
 
 		if d.usePython2 {
-			generated = stmt.Src + d.cc.objSufDot() + ".py2" + cythonOutExt(stmt.CMode)
+			cythonSuffix = ".py2"
 		}
+
+		generated := stmt.Src + d.cc.objSufDot() + cythonSuffix + cythonOutExt(stmt.CMode)
 
 		if stmt.Header {
-			ext := ".cpp"
-
-			if stmt.CMode {
-				ext = ".c"
-			}
-
-			generated = relStem(stmt.Src) + ext
-		}
-
-		if generatedExplicit {
-			generated = *stmt.Generated
+			generated = relStem(stmt.Src) + cythonSuffix + cythonOutExt(stmt.CMode)
 		}
 
 		generatedVFS := build(instance.Path.relString(), "/", generated)
@@ -197,7 +178,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		var headerVFS []VFS
 
 		if stmt.Header {
-			base := instance.Path.relString() + "/" + relStem(stmt.Src)
+			base := instance.Path.relString() + "/" + relStem(stmt.Src) + cythonSuffix
 
 			headerVFS = append(headerVFS, build(base, ".h"))
 
@@ -236,7 +217,6 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		plans = append(plans, CythonStmtPlan{
 			stmt:              stmt,
 			generatedExplicit: generatedExplicit,
-			py23Variant:       py23Variant,
 			generated:         generated,
 			generatedVFS:      generatedVFS,
 			headerVFS:         headerVFS,
@@ -487,15 +467,6 @@ func resolveCythonPxd(ctx *GenCtx, instance ModuleInstance, pxdRel string) (VFS,
 	return 0, false
 }
 
-func cythonUsesPy23Variant(modName TOK) bool {
-	switch modName {
-	case tokPy23Library, tokPy23NativeLibrary:
-		return true
-	}
-
-	return false
-}
-
 func appendCythonAddIncl(cmdArgs []ANY, addIncl []VFS, memo InclArgMemo) []ANY {
 	for _, path := range addIncl {
 		cmdArgs = append(cmdArgs, memo.arg(path).any())
@@ -525,8 +496,6 @@ func cythonSysIncludes(d *ModuleData) []VFS {
 	switch {
 	case d.usePython2:
 		return cythonPy2SysIncludes
-	case cythonUsesPy23Variant(d.moduleStmt.Name):
-		return cythonPy23SysIncludes
 	}
 
 	return cythonPy3SysIncludes

@@ -44,7 +44,6 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 
 func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	auxTools := resolveRunProgramAuxTools(ctx, anyStrs(stmt.ToolPaths))
 	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath.string())
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
@@ -141,25 +140,6 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 		kv = stmt.KV
 	}
 
-	var interpInput *VFS
-	var toolRefs []NodeRef
-
-	if stmt.Lua {
-		luaLDRef, luaBinVFS := ctx.tool(argToolsLua)
-
-		interp = luaBinVFS.any()
-		interpInput = &luaBinVFS
-		toolRefs = depRefs(luaLDRef)
-		kv = &luaRunKV
-		resources = nil
-	}
-
-	for _, tool := range auxTools {
-		toolRefs = append(toolRefs, tool.ref)
-	}
-
-	toolRefs = ctx.na.refList(dedupRefs(toolRefs)...)
-
 	directSources := ctx.na.vfs.alloc(1 + len(inSources))[:0]
 
 	if scriptVFS.isSource() {
@@ -169,24 +149,6 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	directSources = append(directSources, inSources...)
 	ctx.na.vfs.commit(len(directSources))
 	directSources = directSources[:len(directSources):len(directSources)]
-
-	directBuilds := ctx.na.vfs.alloc(2 + len(inBuilds) + len(auxTools))[:0]
-
-	if interpInput != nil {
-		directBuilds = append(directBuilds, *interpInput)
-	}
-
-	for _, tool := range auxTools {
-		directBuilds = append(directBuilds, tool.bin)
-	}
-
-	if scriptVFS.isBuild() {
-		directBuilds = append(directBuilds, scriptVFS)
-	}
-
-	directBuilds = append(directBuilds, inBuilds...)
-	ctx.na.vfs.commit(len(directBuilds))
-	directBuilds = directBuilds[:len(directBuilds):len(directBuilds)]
 
 	inSnapVFSs := make([]VFS, 0, len(stmt.INFiles))
 
@@ -203,6 +165,51 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	}
 
 	pe := func() {
+		auxTools := resolveRunProgramAuxTools(ctx, anyStrs(stmt.ToolPaths))
+
+		var interpInput *VFS
+		var toolRefs []NodeRef
+
+		if stmt.Lua {
+			luaLDRef, luaBinVFS := ctx.tool(argToolsLua)
+
+			interp = luaBinVFS.any()
+			interpInput = &luaBinVFS
+			toolRefs = depRefs(luaLDRef)
+			kv = &luaRunKV
+			resources = nil
+		}
+
+		for _, tool := range auxTools {
+			toolRefs = append(toolRefs, tool.ref)
+		}
+
+		toolRefs = ctx.na.refList(dedupRefs(toolRefs)...)
+
+		directBuilds := ctx.na.vfs.alloc(2 + len(inBuilds) + len(auxTools))[:0]
+
+		if interpInput != nil {
+			directBuilds = append(directBuilds, *interpInput)
+		}
+
+		for _, tool := range auxTools {
+			directBuilds = append(directBuilds, tool.bin)
+		}
+
+		if scriptVFS.isBuild() {
+			directBuilds = append(directBuilds, scriptVFS)
+		}
+
+		directBuilds = append(directBuilds, inBuilds...)
+		ctx.na.vfs.commit(len(directBuilds))
+		directBuilds = directBuilds[:len(directBuilds):len(directBuilds)]
+
+		for _, out := range outVFSByToken {
+			if info := e.codegen.lookup(out); info != nil && info.ProducerRef == pyRef {
+				info.GeneratorRefs = toolRefs
+			}
+		}
+
 		inputClosure := pyInputClosure(snap, stmt)
 
 		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, inputClosure, pyRef, interp, toolRefs, auxTools, kv, resources)
@@ -215,7 +222,6 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 			OutputPath:      out,
 			ProducerRef:     pyRef,
 			ProducerMainOut: outputs[0],
-			GeneratorRefs:   toolRefs,
 			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
 			OnUse:           pending,
 		})
