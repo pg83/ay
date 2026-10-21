@@ -611,19 +611,21 @@ func (e *EmitContext) goClassifyClosure(resolved []ResolvedPeer, closurePaths []
 				return 0
 			case e.isGoArchive(p):
 				return 1
+			case e.codegen.moduleType(p) == tokGenLibrary:
+				return 3
 			default:
 				return 2
 			}
 		}
 
-		var counts [3]int
+		var counts [4]int
 
 		for _, p := range closurePaths {
 			counts[classify(p)]++
 		}
 
 		block := na.vfs.alloc(len(closurePaths))
-		starts := [3]int{0, counts[0], counts[0] + counts[1]}
+		starts := [4]int{0, counts[0], counts[0] + counts[1], counts[0] + counts[1] + counts[2]}
 		fill := starts
 
 		for _, p := range closurePaths {
