@@ -19,20 +19,20 @@ var rodataYasmConstArgs = []ANY{
 	argDashO.any(),
 }
 
-func composeRodataOutputs(instance ModuleInstance, srcRel string) (VFS, VFS) {
+func composeRodataOutputs(instance ModuleInstance, srcRel, objectSuffix string) (VFS, VFS) {
 	base := instance.Path.relString() + "/" + srcRel
 
 	if strings.Contains(srcRel, "/") {
 		base = instance.Path.relString() + "/_/" + srcRel
 	}
 
-	return build(base, ".asm"), build(base, instance.Platform.objectSuffix())
+	return build(base, ".asm"), build(base, objectSuffix)
 }
 
 func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs Closure, extraDepRefs []NodeRef, tc ModuleToolchain) (NodeRef, VFS, VFS) {
 	instance := e.instance
 	na := e.ctx.na
-	asmVFS, outVFS := composeRodataOutputs(instance, srcRel)
+	asmVFS, outVFS := composeRodataOutputs(instance, srcRel, ccObjectSuffix(instance, newModuleCCInputs(&e.d.cc)))
 	toolName := path.Base(strings.TrimSuffix(srcRel, ".rodata"))
 	pythonEnv := envVarsVCS
 	yasmEnv := envVarsVCSYasm

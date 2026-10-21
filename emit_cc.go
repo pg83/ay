@@ -341,6 +341,10 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 }
 
 func (env *ModuleCompileEnv) objSufDot() string {
+	if env.ObjectSuffixStem != nil {
+		return "." + *env.ObjectSuffixStem
+	}
+
 	if env.ObjSuf == 0 {
 		return ""
 	}

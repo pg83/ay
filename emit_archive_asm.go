@@ -8,23 +8,24 @@ func (e *EmitContext) emitArchiveAsmForAR() {
 	reg := e.codegen
 
 	for _, a := range d.archiveAsm {
-		rodataRef := e.emitArchiveAsmNode(a, toolBinPath, toolLDRef, reg)
-		rodataRel := a.Name + ".rodata"
-		rdRef, rdOut := e.emitArchiveAsmRodata(rodataRel, rodataRef)
+		rodataRel := a.Name + d.cc.objSufDot() + ".rodata"
+		rodataPath := build(e.instance.Path.relString(), "/", rodataRel)
+		rodataRef := e.emitArchiveAsmNode(a, rodataPath, toolBinPath, toolLDRef, reg)
+		rdRef, rdOut := e.emitArchiveAsmRodata(rodataRel, rodataPath, rodataRef)
 
-		e.collectObj(rdRef, rdOut, SrcMeta{Source: build(e.instance.Path.relString(), "/", rodataRel).any(), Prio: stmtPrioDefault, Bucket: bkArchiveAsm})
+		e.collectObj(rdRef, rdOut, SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault, Bucket: bkArchiveAsm})
 	}
 }
 
 func (e *EmitContext) emitArchiveAsmNode(
 	a ArchiveAsmEntry,
+	rodataVFS VFS,
 	toolBinPath VFS,
 	toolLDRef NodeRef,
 	reg *CodegenRegistry,
 ) NodeRef {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
-	rodataVFS := build(instance.Path.relString(), "/", a.Name, ".rodata")
 
 	if existing := reg.lookup(rodataVFS); existing != nil && existing.OwnerModule == instance.Path && existing.OwnerSerial != e.frame.serial {
 		return existing.ProducerRef
@@ -118,14 +119,13 @@ func (e *EmitContext) emitArchiveAsmNode(
 	return rodataRef
 }
 
-func (e *EmitContext) emitArchiveAsmRodata(rodataRel string, producerRef NodeRef) (NodeRef, VFS) {
+func (e *EmitContext) emitArchiveAsmRodata(rodataRel string, rodataPath VFS, producerRef NodeRef) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
 	if instance.Platform.ISA != ISAX8664 {
 		throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", instance.Platform.ISA, rodataRel)
 	}
 
-	rodataPath := build(instance.Path.relString(), "/", rodataRel)
 	leaves := e.scanner.walkClosure(rodataPath, d.scanCtx, scanDomainCC)
 	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
 	ref, _, outPath := e.emitRD(rodataRel, rodataPath, yasmLDRef, leaves, []NodeRef{producerRef}, d.cc.TC)
