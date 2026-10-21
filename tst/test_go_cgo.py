@@ -86,6 +86,44 @@ def between(args, start, end):
 
 
 class GoCgoGraphTest(unittest.TestCase):
+    def test_generated_go_keeps_native_sibling_includes_on_native_compile(self):
+        files = cgo_world()
+        lib.tool_program(files, "tools/wrappergen", "wrappergen")
+        files["tools/wrappergen/ya.make"] = files["tools/wrappergen/ya.make"].replace(
+            "END()", "INDUCED_DEPS(h+cpp runtime/native.h)\nEND()"
+        )
+        pkg = "library/go/wrapped"
+        files.update({
+            f"{pkg}/ya.make": (
+                "GO_LIBRARY()\nSRCS(wrap.swg.cxx)\nCGO_SRCS(${BINDIR}/internal.go)\n"
+                "RUN_PROGRAM(tools/wrappergen OUT_NOAUTO wrap.swg.cxx internal.go)\nEND()\n"
+            ),
+            "runtime/native.h": '#include "detail.h"\n',
+            "runtime/detail.h": "",
+        })
+        graph = lib.make(files, pkg)
+        archive = lib.node_by_output(graph, f"$(B)/{pkg}/wrapped.a")
+        native = lib.node_by_output(graph, f"$(B)/{pkg}/wrap.swg.cxx.o")
+        self.assertIn(f"$(B)/{pkg}/wrap.swg.cxx", archive["inputs"])
+        for header in ("$(S)/runtime/native.h", "$(S)/runtime/detail.h"):
+            self.assertIn(header, native["inputs"])
+            self.assertNotIn(header, archive["inputs"])
+
+    def test_cgo_export_copy_depends_on_generated_headers(self):
+        files = cgo_world()
+        zstd_binding(files)
+        lib.tool_program(files, "tools/headergen", "headergen")
+        files["contrib/libs/zstd/ya.make"] = files["contrib/libs/zstd/ya.make"].replace(
+            "END()", "RUN_PROGRAM(tools/headergen OUT_NOAUTO generated.h)\nEND()"
+        )
+        files[f"{ZSTD}/helper.c"] += '#include "contrib/libs/zstd/generated.h"\n'
+        graph = lib.make(files, ZSTD)
+        header = "$(B)/contrib/libs/zstd/generated.h"
+        producer = lib.node_by_output(graph, header)
+        copied = lib.node_by_output(graph, f"$(B)/{ZSTD}/helper.c")
+        self.assertIn(header, copied["inputs"])
+        self.assertIn(producer["uid"], copied["deps"])
+
     def test_cgo_dynimport_link_inherits_transitive_global_ldflags(self):
         files = cgo_world()
         zstd_binding(files)
