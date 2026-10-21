@@ -120,9 +120,9 @@ class DumpTest(unittest.TestCase):
         )
         return sorted_path.read_text()
 
-    def normalized_special_node(self, node):
+    def normalized_special_node(self, node, *, reference=True):
         if node["kv"]["p"] == "AR":
-            text = self.normalize([node], "pkg", reference=True)
+            text = self.normalize([node], "pkg", reference=reference)
         else:
             root = raw_node(
                 "root",
@@ -132,7 +132,7 @@ class DumpTest(unittest.TestCase):
                 inputs=node["outputs"],
                 cmds=[{"cmd_args": ["ld", *node["outputs"]]}],
             )
-            text = self.normalize([root, node], "pkg/app", reference=True)
+            text = self.normalize([root, node], "pkg/app", reference=reference)
         nodes = [json.loads(line) for line in text.splitlines()]
         return next(item for item in nodes if item["kv"].get("p") == node["kv"]["p"])
 
@@ -498,7 +498,7 @@ class DumpTest(unittest.TestCase):
         self.assertIn("ours: cc -c a b", output)
         self.assertIn("ref:  cc -c b a", output)
 
-    def test_canon_inputs_archive_by_keys_ignores_key_list_basename(self):
+    def test_canon_inputs_archive_by_keys_preserves_declared_inputs(self):
         node = raw_node(
             "archive",
             "AR",
@@ -518,13 +518,9 @@ class DumpTest(unittest.TestCase):
             ]}],
         )
         normalized = self.normalized_special_node(node)
-        self.assertEqual(normalized["inputs"], [
-            "$(B)/mod/a.raw",
-            "$(B)/mod/sub/b.raw",
-            "$(B)/tools/archiver/archiver",
-        ])
+        self.assertEqual(normalized["inputs"], sorted(node["inputs"]))
 
-    def test_canon_inputs_cython_drops_generated_c_include_closure(self):
+    def test_canon_inputs_cython_preserves_declared_inputs(self):
         node = raw_node(
             "cython",
             "CY",
@@ -550,17 +546,9 @@ class DumpTest(unittest.TestCase):
             ]}],
         )
         normalized = self.normalized_special_node(node)
-        self.assertEqual(normalized["inputs"], [
-            "$(B)/contrib/tools/python3/python3",
-            "$(S)/contrib/tools/cython/Cython/Utility/UFuncs_C.c",
-            "$(S)/contrib/tools/cython/cython.py",
-            "$(S)/pkg/dep.pxd",
-            "$(S)/pkg/helper.py",
-            "$(S)/pkg/inc.pxi",
-            "$(S)/pkg/mod.pyx",
-        ])
+        self.assertEqual(normalized["inputs"], sorted(node["inputs"]))
 
-    def test_canon_inputs_raw_aux_drops_compile_closure(self):
+    def test_canon_inputs_raw_aux_preserves_declared_inputs(self):
         node = raw_node(
             "raw-aux",
             "PR",
@@ -584,11 +572,56 @@ class DumpTest(unittest.TestCase):
             ]}],
         )
         normalized = self.normalized_special_node(node)
-        self.assertEqual(normalized["inputs"], [
-            "$(B)/pkg/mod.py",
-            "$(B)/tools/rescompiler/rescompiler",
-            "$(S)/pkg/payload.h",
-        ])
+        self.assertEqual(normalized["inputs"], sorted(node["inputs"]))
+
+    def test_identical_raw_action_inputs_normalize_equally(self):
+        for kind, output, args, inputs in (
+            ("AR", "libpkg.a", ["llvm-ar", "gnu", "$(S)/pkg/prebuilt.a"], [
+                "$(S)/pkg/prebuilt.a", "$(B)/pkg/data.rodata.asm", "$(B)/pkg/lib.component.sbom",
+            ]),
+            ("LD", "app", ["ld", "$(B)/pkg/main.o"], [
+                "$(B)/pkg/main.o", "$(B)/pkg/generated.pb.h", "$(S)/pkg/preamble.h",
+            ]),
+            ("CY", "mod.pyx.cpp", ["cython", "$(S)/pkg/mod.pyx"], [
+                "$(S)/pkg/mod.pyx", "$(S)/pkg/extern.h", "$(B)/pkg/generated.pxi",
+            ]),
+            ("PY", "resource.o", ["python3", "$(S)/build/scripts/objcopy.py"], [
+                "$(S)/build/scripts/objcopy.py", "$(S)/pkg/payload.h",
+                "$(S)/contrib/libs/data/payload.bin", "$(B)/pkg/generated.bin",
+            ]),
+            ("PR", "resource_raw.auxcpp", ["rescompiler", "$(B)/action/resource_raw.auxcpp",
+                "-", "resfs/src/resource=source"], [
+                "$(B)/pkg/metadata.yapyc3", "$(B)/pkg/wrapper.swg.c",
+                "$(B)/pkg/wrapper.swg.py", "$(B)/tools/rescompiler/rescompiler",
+            ]),
+        ):
+            with self.subTest(kind=kind):
+                action = raw_node("action", kind, "$(B)/action/" + output,
+                    inputs=inputs, cmds=[{"cmd_args": args}])
+                root = raw_node("root", "LD", "$(B)/pkg/app/app",
+                    deps=["action"], inputs=action["outputs"])
+                nodes = [root, action]
+                self.assertEqual(
+                    self.normalize(nodes, "pkg/app", reference=True, sort=True),
+                    self.normalize(nodes, "pkg/app", sort=True),
+                )
+
+    def test_canon_inputs_named_enum_generator_preserves_declared_inputs(self):
+        node = raw_node("enum", "EN", "$(B)/pkg/mode.h_serialized.h",
+            inputs=[
+                "$(B)/yandex_io/tools/enum_serializer_generator/enum_serializer_generator",
+                "$(S)/pkg/mode.h", "$(S)/pkg/dependency.h",
+            ],
+            cmds=[{"cmd_args": [
+                "$(B)/yandex_io/tools/enum_serializer_generator/enum_serializer_generator",
+                "--input_path", "$(S)/pkg/mode.h",
+                "--include_path", "pkg/mode.h",
+                "--output_path", "$(B)/pkg/mode.h_serialized.h",
+            ]}],
+        )
+        normalized = self.normalized_special_node(node)
+        self.assertEqual(normalized["inputs"], sorted(node["inputs"]))
+        self.assertEqual(normalized, self.normalized_special_node(node, reference=False))
 
     def test_canon_inputs_enum_parser_keeps_only_action_inputs(self):
         node = raw_node(
@@ -609,11 +642,15 @@ class DumpTest(unittest.TestCase):
                 "--output", "$(B)/pkg/mode.h_serialized.cpp",
             ]}],
         )
-        normalized = self.normalized_special_node(node)
-        self.assertEqual(normalized["inputs"], [
-            "$(B)/tools/enum_parser/enum_parser",
-            "$(S)/pkg/mode.h",
-        ])
+        args = node["cmds"][0]["cmd_args"]
+        for extra in ([], ["--header", "$(B)/pkg/mode.h_serialized.h"]):
+            with self.subTest(with_header=bool(extra)):
+                node["cmds"][0]["cmd_args"] = args + extra
+                normalized = self.normalized_special_node(node)
+                self.assertEqual(normalized["inputs"], [
+                    "$(B)/tools/enum_parser/enum_parser",
+                    "$(S)/pkg/mode.h",
+                ])
 
     def test_diff_pair_pic_and_non_pic_variants_do_not_mispair(self):
         left = [
