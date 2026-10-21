@@ -36,6 +36,59 @@ def ros_files():
 
 
 class RosTests(unittest.TestCase):
+    def test_python_binding_keeps_global_ros_includes_before_python_and_cpp_peer(self):
+        from test_python_srcs import STUB_LIBRARY, python_base
+
+        files = ros_files()
+        files.update(python_base())
+        for peer in (
+            "library/python/runtime_py3",
+            "contrib/python/numpy/py3",
+            "sdg/sdc/ros/misc/ros_msg_generator/yamakes/py_cpp_bindings_support_lib",
+            "sdg/sdc/ros/misc/python_utils/yamakes/ros_converters",
+        ):
+            files[f"{peer}/ya.make"] = STUB_LIBRARY
+        lib.tool_program(
+            files, "sdg/tier0/tools/generate_export_py_cpp_bindings",
+            "generate_export_py_cpp_bindings",
+        )
+        for header in (
+            "sdg/sdc/ros/misc/python_utils/ros_converters.h",
+            "sdg/sdc/ros/misc/python_utils/stl_converters.h",
+            "sdg/sdc/ros/misc/python_utils/numpy_wrapper.h",
+            "sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/helpers.h",
+            "sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export.h",
+            "sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export_arrays.h",
+            "sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/export_enum.h",
+        ):
+            files[header] = ""
+        files.update({
+            "msgs/ya.make": (
+                "ROS_LIBRARY(robot)\n" + lib.BARE_MODULE
+                + "ONLY_TAGS(CPP_ROS PY3_CPP_ROS)\n"
+                "ROS_DIR(generated/robot)\nROS_SRCS(Topic.msg)\nEND()\n"
+            ),
+            "msgs/Topic.msg": "int32 value\n",
+        })
+
+        graph = lib.make(files, "msgs", "--sandboxing")
+        cpp = lib.node_by_output(graph, "$(B)/generated/robot/Topic.cc")
+        python = lib.node_by_output(graph, "$(B)/generated/robot/Topic.py.cc")
+        compiled = lib.node_by_output(graph, "$(B)/msgs/__/generated/robot/Topic.py.cc.o")
+        self.assertNotEqual(cpp["uid"], python["uid"])
+        self.assertIn(python["uid"], compiled["deps"])
+        self.assertIn("$(B)/generated/robot/Topic.py.cc", compiled["inputs"])
+        includes = [arg for arg in compiled["cmds"][0]["cmd_args"] if arg.startswith("-I")]
+        self.assertEqual(includes[:7], [
+            "-I$(B)", "-I$(S)",
+            "-I$(B)/generated/robot", "-I$(B)/generated",
+            "-I$(S)/contrib/libs/python/Include",
+            "-I$(B)/generated/robot", "-I$(B)/generated",
+        ])
+        archive = next(node for node in graph["graph"] if
+                       node["kv"]["p"] == "AR" and compiled["outputs"][0] in node["inputs"])
+        self.assertIn(compiled["uid"], archive["deps"])
+
     def test_owned_and_propagated_include_directories_remain_separate(self):
         files = ros_files()
         files.update({

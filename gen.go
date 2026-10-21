@@ -2283,6 +2283,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	ownCXXFlagsGlobalSelf := ownCompilerFlagArgs(effectiveCXXFlagsGlobal, d.cxxFlagsGlobal)
 	ownCOnlyFlagsGlobalSelf := ownCompilerFlagArgs(effectiveCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
 	dedupedAddIncl := dedup(d.addIncl, d.addInclGlobal)
+	if d.multimodule == tokRosLibrary && instance.Language == LangRosBindings {
+		dedupedAddIncl = dedup(d.addInclGlobal, d.addIncl)
+	}
 	perModuleCCTag := d.unit.CCTag
 
 	var arNameFn func(string) string
@@ -2300,6 +2303,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	selfPeerAddInclGlobal := filterBuildRootSelfPaths(instance.Path.relString(), peerAddInclGlobal, dedupedAddIncl)
 
 	if d.moduleStmt.Name == tokProtoLibrary {
+		selfPeerAddInclGlobal = peerAddInclGlobal
+	} else if d.multimodule == tokRosLibrary && instance.Language == LangRosBindings {
 		selfPeerAddInclGlobal = peerAddInclGlobal
 	}
 
