@@ -374,9 +374,11 @@ class JavaSandboxedInputsTest(unittest.TestCase):
     def test_files_copies_are_interface_jar_inputs(self):
         files = java_tree(**{
             "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nPEERDIR(dep)\nEND()\n",
-            "dep/ya.make": "JAVA_LIBRARY()\nNO_LINT()\nFILES(README.md A.java ${ARCADIA_BUILD_ROOT}/dep/unused.md)\nEND()\n",
+            "dep/ya.make": "JAVA_LIBRARY()\nNO_LINT()\nFILES(README.md A.java source.jsrc generated.gentar ${ARCADIA_BUILD_ROOT}/dep/unused.md)\nEND()\n",
             "dep/README.md": "Documentation\n",
             "dep/A.java": "class A {}\n",
+            "dep/source.jsrc": "",
+            "dep/generated.gentar": "",
         })
         lib.tool_program(files, "contrib/tools/ijar", "ijar")
         graph = lib.make(files, "app")
@@ -391,7 +393,12 @@ class JavaSandboxedInputsTest(unittest.TestCase):
         compiled = jv_node(graph, "$(B)/dep/dep.jar")
         self.assertNotIn("$(B)/dep/README.md", compiled["inputs"])
         self.assertIn("$(B)/dep/A.java", compiled["inputs"])
-        self.assertIn("$(B)/dep/A.java", compiled["cmds"][0]["cmd_args"])
+        prepared = compiled["cmds"][0]["cmd_args"]
+        self.assertEqual(prepared.count("$(B)/dep/A.java"), 1)
+        self.assertIn("$(B)/dep/source.jsrc", prepared)
+        self.assertIn("$(B)/dep/generated.gentar", prepared)
+        self.assertLess(prepared.index("$(B)/dep/source.jsrc"), prepared.index("$(B)/dep/generated.gentar"))
+        self.assertLess(prepared.index("$(B)/dep/generated.gentar"), prepared.index("$(B)/dep/A.java"))
         self.assertFalse(any(p.endswith("unused.md") for n in graph["graph"] for p in n["inputs"] + n["outputs"]))
 
     def test_non_split_jar_ignores_files_outside_its_input_extensions(self):
