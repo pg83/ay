@@ -86,6 +86,21 @@ def between(args, start, end):
 
 
 class GoCgoGraphTest(unittest.TestCase):
+    def test_cgo_export_copy_depends_on_generated_headers(self):
+        files = cgo_world()
+        zstd_binding(files)
+        lib.tool_program(files, "tools/headergen", "headergen")
+        files["contrib/libs/zstd/ya.make"] = files["contrib/libs/zstd/ya.make"].replace(
+            "END()", "RUN_PROGRAM(tools/headergen OUT_NOAUTO generated.h)\nEND()"
+        )
+        files[f"{ZSTD}/helper.c"] += '#include "contrib/libs/zstd/generated.h"\n'
+        graph = lib.make(files, ZSTD)
+        header = "$(B)/contrib/libs/zstd/generated.h"
+        producer = lib.node_by_output(graph, header)
+        copied = lib.node_by_output(graph, f"$(B)/{ZSTD}/helper.c")
+        self.assertIn(header, copied["inputs"])
+        self.assertIn(producer["uid"], copied["deps"])
+
     def test_cgo_dynimport_link_inherits_transitive_global_ldflags(self):
         files = cgo_world()
         zstd_binding(files)

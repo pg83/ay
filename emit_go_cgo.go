@@ -211,10 +211,8 @@ func (e *EmitContext) emitGoCopyWithContext(srcRel ANY, dstVFS VFS, domain ScanD
 		}
 
 		cv.each(func(p VFS) {
-			if p.isSource() {
-				block[k] = p
-				k++
-			}
+			block[k] = p
+			k++
 		})
 
 		na.vfs.commit(k)
