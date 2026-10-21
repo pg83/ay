@@ -106,6 +106,28 @@ CPUID = "library/cpp/cpuid_check/liblibrary-cpp-cpuid_check.a"
 
 
 class PeerPropagationTest(unittest.TestCase):
+    def test_python_native_peers_do_not_select_excluded_cpp_protos_as_python(self):
+        from test_proto_py_variant import py_proto_files
+
+        for direct_python_peer in (False, True):
+            with self.subTest(direct_python_peer=direct_python_peer):
+                files = py_proto_files()
+                peers = "native p" if direct_python_peer else "native"
+                files.update({
+                    "top/ya.make": f"PY3_LIBRARY()\n{NO_PLATFORM}PEERDIR({peers})\nSRCS(top.cpp)\nEND()\n",
+                    "top/top.cpp": "",
+                    "native/ya.make": f"PY23_NATIVE_LIBRARY()\n{NO_PLATFORM}PEERDIR(p)\nEND()\n",
+                    "p/ya.make": (
+                        f"PROTO_LIBRARY()\n{NO_PLATFORM}EXCLUDE_TAGS(CPP_PROTO GO_PROTO)\n"
+                        "NO_MYPY()\nNO_OPTIMIZE_PY_PROTOS()\nDISABLE(NEED_GOOGLE_PROTO_PEERDIRS)\n"
+                        "PROTO_NAMESPACE(GLOBAL incl)\nSRCDIR(incl)\nSRCS(x.proto)\nEND()\n"
+                    ),
+                    "incl/x.proto": 'syntax = "proto3";\n',
+                })
+                graph = lib.make(files, "top", "--sandboxing")
+                actual = includes(graph, "$(B)/top/top.cpp.o")
+                self.assertEqual("-I$(B)/incl" in actual, direct_python_peer)
+
     def test_transitive_global_dynamic_plugin_and_include_closures(self):
         graph = lib.make(closure_fixture(), "p")
         args = link_args(graph, "$(B)/p/p")

@@ -1104,7 +1104,6 @@
       "sdg/sdc/ros/monitorings/pipeline_event/yamakes/pipeline_event_generate_py",
       "sdg/sdc/third_party/ros/ros/core/roslib/sdc_install"
     ],
-    "xfail": true,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14088904072",
     "slice_sha256": "d88dd29abd66964cca3317603165dcdf282153a4016900f314c18f069747cc18",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14088907121",

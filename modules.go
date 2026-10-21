@@ -4867,7 +4867,7 @@ func peerEntryLanguage(parent ModuleInstance, d *ModuleData) Language {
 		return LangPy2
 	}
 
-	if isPythonModuleType(parentModuleName) || d.yqlPythonUdf {
+	if isPythonModuleType(parentModuleName) && parentModuleName != tokPy23NativeLibrary || d.yqlPythonUdf {
 		return LangPy
 	}
 
