@@ -328,7 +328,7 @@ type ModuleData struct {
 
 type PyRegistration struct {
 	Name        STR
-	Explicit    bool
+	RenameInit  bool
 	CFlagsStart int
 }
 
@@ -3321,8 +3321,8 @@ func reorderCythonVariantBuckets(d *ModuleData, start int, regIdx []int) {
 	}
 }
 
-func appendPyRegister(d *ModuleData, name string, explicit bool) {
-	d.pyRegister = append(d.pyRegister, PyRegistration{Name: internStr(name), Explicit: explicit})
+func appendPyRegister(d *ModuleData, name string, renameInit bool) {
+	d.pyRegister = append(d.pyRegister, PyRegistration{Name: internStr(name), RenameInit: renameInit})
 }
 
 func finishPyRegisterCFlags(d *ModuleData) {
@@ -3338,7 +3338,7 @@ func finishPyRegisterCFlags(d *ModuleData) {
 		name := registration.Name.string()
 		dot := strings.LastIndexByte(name, '.')
 
-		if !registration.Explicit || dot < 0 {
+		if !registration.RenameInit || dot < 0 {
 			continue
 		}
 
@@ -3739,7 +3739,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 			if swigCMode {
 				d.swigC = append(d.swigC, SwigSrc{Src: src, Module: modName})
-				appendPyRegister(d, modName+"_swg", false)
+				appendPyRegister(d, modName+"_swg", true)
 			}
 
 			d.peerdirs = append(d.peerdirs, strContribToolsSwigLibPython.any())

@@ -49,6 +49,33 @@ def args(node):
 
 
 class SwigTest(unittest.TestCase):
+    def test_python_swig_registration_appends_native_init_flags(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": (
+                "PY3_LIBRARY()\nSRC(early.c)\nPY_SRCS(SWIG_C first.swg second.swg)\n"
+                "CFLAGS(-DKEEP=1)\nSRCS(native.c)\nEND()\n"
+            ),
+            "lib/early.c": "",
+            "lib/native.c": "",
+            "lib/first.swg": "%module first\n",
+            "lib/second.swg": "%module second\n",
+        })
+        graph = lib.make(files, "lib")
+        first = ["-DPyInit_first_swg=PyInit_3lib9first_swg", "-Dinit_module_first_swg=init_module_3lib9first_swg"]
+        second = ["-DPyInit_second_swg=PyInit_3lib10second_swg", "-Dinit_module_second_swg=init_module_3lib10second_swg"]
+        cases = {
+            "early.c.o": [], "native.c.o": first + second,
+            "first.swg.c.o": first + second, "second.swg.c.o": first + second,
+            "lib.first_swg.reg3.cpp.o": [], "lib.second_swg.reg3.cpp.o": first,
+        }
+        for output, expected in cases.items():
+            with self.subTest(output=output):
+                compiled = lib.node_by_output(graph, "$(B)/lib/" + output)
+                selected = [a for a in args(compiled) if a.startswith(("-DPyInit_", "-Dinit_module_"))]
+                self.assertEqual(selected, expected)
+                self.assertIn("-DKEEP=1", args(compiled))
+
     def test_generated_input_parser_initializes_swig_metadata(self):
         files = python_base()
         files.update({

@@ -110,6 +110,25 @@ class CythonTest(unittest.TestCase):
                 for path in paths:
                     self.assertEqual(args(compiled).count("-I$(S)/" + path), 1)
 
+    def test_implicit_cython_registration_preserves_native_flag_prefix(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": (
+                "PY3_LIBRARY()\nSRC(early.c)\nPY_SRCS(CYTHON_C mod.pyx)\n"
+                "CFLAGS(-DKEEP=1 -DPyInit_manual=PyInit_manual_renamed)\nEND()\n"
+            ),
+            "lib/early.c": "",
+            "lib/mod.pyx": "",
+        })
+        graph = lib.make(files, "app")
+        for output in ("early.c.o", "mod.pyx.c.o", "lib.mod.reg3.cpp.o"):
+            with self.subTest(output=output):
+                compiled = lib.node_by_output(graph, "$(B)/lib/" + output)
+                self.assertIn("-DKEEP=1", args(compiled))
+                self.assertEqual([a for a in args(compiled) if a.startswith("-DPyInit_")], [
+                    "-DPyInit_manual=PyInit_manual_renamed",
+                ])
+
     def test_cython_and_native_sources_share_explicit_registration_flags(self):
         files = python_base()
         files.update({
