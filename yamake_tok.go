@@ -313,6 +313,8 @@ var tokName = [...]STR{
 	tokUseLlvmBc16:                     internStr("USE_LLVM_BC16"),
 	tokUseLlvmBc18:                     internStr("USE_LLVM_BC18"),
 	tokUseLlvmBc20:                     internStr("USE_LLVM_BC20"),
+	tokSelectClangSAConfig:             internStr("SELECT_CLANG_SA_CONFIG"),
+	tokUseSAPlugins:                    internStr("USE_SA_PLUGINS"),
 	tokUseNasm:                         internStr("USE_NASM"),
 	tokUsePython2:                      internStr("USE_PYTHON2"),
 	tokUsePython3:                      internStr("USE_PYTHON3"),
@@ -697,6 +699,8 @@ const (
 	tokUseLlvmBc16
 	tokUseLlvmBc18
 	tokUseLlvmBc20
+	tokSelectClangSAConfig
+	tokUseSAPlugins
 	tokUseNasm
 	tokUsePython2
 	tokUsePython3

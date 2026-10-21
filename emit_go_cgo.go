@@ -21,7 +21,7 @@ var goCgo1Head = []ANY{
 	internStr("--build-prefix=/-B").any(),
 	internStr("--source-prefix=/-S").any(),
 	strBuildRoot2.any(), strB.any(),
-	internStr("--source-root").any(), strS.any(),
+	strSourceRoot2.any(), strS.any(),
 	internStr("--cgo1-files").any(),
 }
 

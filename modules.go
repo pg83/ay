@@ -205,6 +205,9 @@ type ModuleData struct {
 	cfAddInclGlobal          []VFS
 	cythonAddIncl            []VFS
 	useNasm                  bool
+	clangSAEnable            bool
+	clangSAConfig            string
+	clangSAPlugins           []ANY
 	nasmFlags                []ANY
 	asmAddIncl               []VFS
 	protoAddInclGlobal       []VFS
@@ -815,6 +818,14 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.muslEnabled = env.bool(envMUSL)
 	d.useArcadiaLibm = env.bool(envUSE_ARCADIA_LIBM) && !env.bool(envOS_EMSCRIPTEN)
+	d.clangSAEnable = env.bool(envClangSAEnable)
+	d.clangSAConfig = env.string(envClangSAConfig)
+	d.clangSAPlugins = internAnys(strings.Fields(env.string(envClangSAPlugins)))
+
+	if d.clangSAEnable && d.clangSAConfig != "" {
+		d.peerdirs = append(d.peerdirs, clangSAPeer.any())
+	}
+
 	d.noStrip = env.bool(envNO_STRIP)
 	d.useNasm = env.bool(envUseNasmAssembler)
 	d.nasmFlags = internAnys(strings.Fields(env.string(envNasmFlags)))
@@ -2941,6 +2952,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if changed {
 			d.objAddLibsGlobal = append(d.objAddLibsGlobal[:0], internArg(libs).any())
 		}
+	case tokSelectClangSAConfig:
+		if len(v.Args) != 1 {
+			throwFmt("SELECT_CLANG_SA_CONFIG expects one configuration file")
+		}
+
+		env.setString(envClangSAConfig, v.Args[0].string())
+	case tokUseSAPlugins:
+		applySAPlugins(v.Args, d, env)
 	case tokUseNasm:
 		env.setBool(envUseNasmAssembler, true)
 		d.peerdirs = append(d.peerdirs, strBuildExternalResourcesNasm.any())

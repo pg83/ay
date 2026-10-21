@@ -46,6 +46,7 @@ var (
 	buildScriptsTouchPy                      = source("build/scripts/touch.py")
 	buildScriptsWriterPy                     = source("build/scripts/writer.py")
 	cgo1WrapperVFS                           = source("build/scripts/cgo1_wrapper.py")
+	clangSAScript                            = source("build/scripts/clang_static_analyzer.py")
 	collectRawprotoVFS                       = source("build/scripts/collect_rawproto.py")
 	configureFilePyVFS                       = source("build/scripts/configure_file.py")
 	contribLibsCxxsuppLibcxxInclude          = source("contrib/libs/cxxsupp/libcxx/include")

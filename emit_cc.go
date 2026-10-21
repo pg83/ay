@@ -15,6 +15,7 @@ var (
 )
 
 type ModuleCompileEnv struct {
+	StaticAnalyzer       *CppStaticAnalyzer
 	FortranHead          []ANY
 	FortranResources     []STR
 	PchFlagsGlobal       []ANY
@@ -302,19 +303,31 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	na.inputs.commit(len(inputChunks))
 
 	allInputs := InputChunks(inputChunks[:len(inputChunks):len(inputChunks)])
+	compilerCmd := Cmd{CmdArgs: cmdArgs, Env: env}
+
+	var cmds []Cmd
+
+	resources := instance.Platform.CCUsesResources
+
+	if analyzer := in.StaticAnalyzer; isCxx && analyzer != nil {
+		analysisCmd := e.staticAnalyzerCmd(analyzer, in, inChunk, tok[1:4])
+
+		cmds = na.cmdList(analysisCmd, compilerCmd)
+		allInputs = appendInputChunks(na, allInputs, na.inputList(analyzer.inputs))
+		resources = analyzer.resources
+	} else {
+		cmds = na.cmdList(compilerCmd)
+	}
 
 	node := Node{
-		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{
-			CmdArgs: cmdArgs,
-			Env:     env,
-		}),
+		Platform:     instance.Platform,
+		Cmds:         cmds,
 		Env:          env,
 		Inputs:       allInputs,
 		InputClosure: in.IncludeView,
 		Outputs:      na.vfsList(outVFS),
 		KV:           &ccKV,
-		Resources:    instance.Platform.CCUsesResources,
+		Resources:    resources,
 	}
 
 	if reserved != 0 {

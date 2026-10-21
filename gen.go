@@ -2314,6 +2314,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	pchFlagsGlobal = ctx.argSlices.internCopy(dedup(pchFlagsGlobal))
 
 	d.cc = ModuleCompileEnv{
+		StaticAnalyzer:       e.cppStaticAnalyzer(resourceGlobalsClosure),
 		PchFlagsGlobal:       pchFlagsGlobal,
 		InclArgs:             ctx.inclArgs,
 		Flags:                d.flags,
