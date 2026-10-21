@@ -22,6 +22,16 @@ def files():
 
 
 class MlaunchTests(unittest.TestCase):
+    def test_pipeline_cpp_links_dynamic_cuda_with_loader_rpath(self):
+        sources = files()
+        sources["pipeline/ya.make"] = f"MLAUNCH_PIPELINE(run)\n{lib.BARE_MODULE}END()\n"
+        graph = lib.make(sources, "pipeline", "--sandboxing")
+        program = lib.node_by_output(graph, "$(B)/pipeline/run")
+        link = next(cmd["cmd_args"] for cmd in program["cmds"] if "$(S)/build/scripts/link_exe.py" in cmd["cmd_args"])
+        self.assertIn("--dynamic-cuda", link)
+        self.assertNotIn("--objcopy-exe", link)
+        self.assertIn("-Wl,-rpath,$ORIGIN", link)
+
     def test_deploy_metadata_precedes_inherited_package_outputs(self):
         sources = files()
         sources["pipeline/ya.make"] = f"MLAUNCH_PIPELINE(run)\n{lib.BARE_MODULE}END()\n"

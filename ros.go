@@ -283,7 +283,7 @@ func finishRosSources(module string, d *ModuleData, env Environment, msgs, srvs,
 		}
 
 		includes = append(includes, "sdg/sdc/ros/misc/python_utils/ros_converters.h", "sdg/sdc/ros/misc/python_utils/stl_converters.h", "sdg/sdc/ros/misc/ros_msg_generator/py_cpp/bindings_support_lib/helpers.h")
-		d.runPrograms = append(d.runPrograms, &RunProgramStmt{ToolPath: strSdgTier0ToolsGenerateExportPyCppBindings.any(), Args: internAnys(args), StdoutFile: ptr(out), OutputIncludes: internAnys(includes)})
+		d.runPrograms = append(d.runPrograms, &RunProgramStmt{ToolPath: strSdgTier0ToolsGenerateExportPyCppBindings.any(), Args: internAnys(args), StdoutFile: ptr(out), OutputIncludes: internAnys(includes), DeclSeq: d.nextDeclSeq()})
 		appendPyRegister(d, namespace+".cpp_msg", true)
 	}
 }

@@ -112,6 +112,7 @@ func setupMlaunchModule(stmt *ModuleStmt, module string, language Language, env 
 				d.strip = true
 			}
 
+			d.ldFlags = append(d.ldFlags, strWlRpathOrigin.any())
 			env.setBool(envUseDynamicCuda, true)
 		}
 	}

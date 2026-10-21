@@ -256,6 +256,7 @@ type ModuleData struct {
 	muslEnabled              bool
 	useAsmlib                bool
 	useArcadiaLibm           bool
+	useDynamicCuda           bool
 	splitDwarf               bool
 	noPythonIncl             bool
 	noImportTracing          bool
@@ -832,6 +833,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.pyMain = nil
 	}
 
+	d.useDynamicCuda = env.bool(envUseDynamicCuda)
 	d.muslEnabled = env.bool(envMUSL)
 	d.useArcadiaLibm = env.bool(envUSE_ARCADIA_LIBM) && !env.bool(envOS_EMSCRIPTEN)
 	d.clangSAEnable = env.bool(envClangSAEnable)

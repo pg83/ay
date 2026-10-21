@@ -107,6 +107,9 @@ class RosTests(unittest.TestCase):
         lib.node_by_output(graph, "$(B)/msgs/Plain.h")
         export = lib.node_by_output(graph, "$(B)/msgs/part_py_cpp_bindings.cpp")
         self.assertIn("--partial-name=part", export["cmds"][0]["cmd_args"])
+        archive = lib.node_by_output(graph, "$(B)/msgs/libpy3_cpp_robot.a")
+        objects = [arg for arg in archive["cmds"][0]["cmd_args"] if arg.endswith(".o")]
+        self.assertEqual(objects, ["$(B)/msgs/Plain.py.cc.o", "$(B)/msgs/part_py_cpp_bindings.cpp.o"])
         proxy = lib.node_by_output(graph, "$(B)/msgs/msg/__init__.py")
         self.assertEqual(proxy["cmds"][0]["cmd_args"][1:], ["--from-import=..cpp_msg", "--from-import=extra.msg"])
 
