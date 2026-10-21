@@ -548,11 +548,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 
 		d.excludes = append(d.excludes, args...)
 	case "JAVA_DEPENDENCIES_CONFIGURATION":
-		if u.kind == juRunnable || u.kind == juTest {
-			return
-		}
-
-		d.depsConfig = append(d.depsConfig, args...)
 	case "JAR_RESOURCE":
 		d.jarResource = arg0
 	case "SRC_RESOURCE":
@@ -585,10 +580,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: arg0})
 		}
 	case "AUTO_SERVICE":
-		d.useAnnotationProc = "contrib/java/com/google/auto/service/auto-service/" + arg0
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "contrib/java/com/google/auto/service/auto-service-annotations/" + arg0})
 	case "USE_ANNOTATION_PROCESSOR":
-		d.useAnnotationProc = arg0
 	case "ANNOTATION_PROCESSOR", "JAR_ANNOTATION_PROCESSOR":
 		d.annotationProcs = append(d.annotationProcs, args...)
 	case "JAR_MAIN_CLASS":
@@ -626,8 +619,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.test.data = append(d.test.data, "arcadia/"+a)
 		}
 	case "JAVA_SRCS", "FULL_JAVA_SRCS":
-		d.javaSrcsCalled = true
-
 		if u.kind == juJar && !u.proto {
 			spec := parseJavaSrcs(args)
 			rawSpec := parseJavaSrcs(d.javaRawArgs(raw))
@@ -638,8 +629,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
 	case "DEFAULT_JAVA_SRCS_LAYOUT", "DEFAULT_JUNIT_JAVA_SRCS_LAYOUT":
-		d.javaSrcsCalled = true
-
 		if u.kind != juJar || u.proto {
 			return
 		}
@@ -712,7 +701,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			javaEnableFlag(d, a, false)
 		}
 	case "GRPC":
-		d.grpc = true
 		d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{name: "grpc_java", tool: "build/platform/java/grpc"})
 		d.javaProtobufPeers = append(d.javaProtobufPeers, "contrib/java/io/grpc/grpc-stub/"+javaGrpcVersion, "contrib/java/io/grpc/grpc-protobuf/"+javaGrpcVersion)
 		d.expandJavaProtobufPeers()
@@ -907,10 +895,6 @@ type javaCondVar struct {
 }
 
 func (v *javaCondVar) appendStmt(items ...string) {
-	if v.cur == nil && v.base != nil {
-		v.cur = append([]string(nil), v.base...)
-	}
-
 	v.cur = append(v.cur, items...)
 	v.orig = append(v.orig, items...)
 }

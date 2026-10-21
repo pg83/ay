@@ -126,15 +126,6 @@ func (c *javaPeersClosure) contains(id *JavaModule) bool {
 type javaDMRules struct {
 	lib2Ver  map[string]string
 	excludes []string
-	flags    javaDMFlags
-}
-
-type javaDMFlags struct {
-	forbidDirectPeerdirs   bool
-	forbidConflict         bool
-	forbidConflictDM       bool
-	forbidConflictDMRecent bool
-	requireDM              bool
 }
 
 func javaPathIsPrefixOf(prefix, path string) bool {

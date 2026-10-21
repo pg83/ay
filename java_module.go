@@ -248,80 +248,74 @@ type JavaRunProgram struct {
 }
 
 type JavaData struct {
-	name                string
-	prefix              string
-	jdkReal             string
-	hasPerModuleJDK     bool
-	withKotlin          bool
-	withKapt            bool
-	kaptOpts            []string
-	kaptProcessors      []string
-	kaptAPClasspath     []string
-	kaptAPOptions       []string
-	allopen             bool
-	lombok              bool
-	noarg               bool
-	serialization       bool
-	detekt              bool
-	kotlincOpts         javaCondVar
-	javacOpts           javaCondVar
-	abiJar              bool
-	errorProne          bool
-	uberjar             bool
-	uberjarOpts         []string
-	javaSrcs            []JavaSrcsSpec
-	javaSrcsRaw         [][]string
-	javaSrcsCalled      bool
-	peerStmts           []JavaPeerSpec
-	dm                  []string
-	excludes            []string
-	depsConfig          []string
-	jarResource         string
-	srcResource         string
-	localJar            string
-	localSourcesJar     string
-	protoSrcs           []string
-	evSrcs              []string
-	fromSandboxes       []*FromSandboxStmt
-	files               []string
-	srcDirs             []VFS
-	srcs                []string
-	grpc                bool
-	kotlinProto         bool
-	kotlinGrpc          bool
-	javaProtobufPeers   []string
-	javaProtoArgs       []JavaProtoPlugin
-	protocFlags         []string
-	protoNamespace      string
-	protoAddIncl        []javaAddIncl
-	excludeTags         map[string]bool
-	commonGoogleAPIs    bool
-	lintLevel           string
-	noLint              string
-	rawVars             map[string]string
-	annotationProcs     []string
-	useAnnotationProc   string
-	jarMainClass        string
-	jvmArgs             []string
-	runJavaPrograms     []JavaRunProgram
-	generateScripts     [][]string
-	withJDK             bool
-	externalDeps        []string
-	addDLLs             bool
-	disableScriptgen    bool
-	enablePreview       bool
-	unittestDir         string
-	implPeers           []string
-	collectKotlinLint   []string
-	customLints         []javaCustomLint
-	ktlintOld           bool
-	checkJavaDeps       string
-	testEnv             []string
-	test                javaTestData
-	sourcesJar          bool
-	noYmakePython3      bool
-	javaDependencyNoDep bool
-	env                 Environment
+	name              string
+	prefix            string
+	jdkReal           string
+	hasPerModuleJDK   bool
+	withKotlin        bool
+	withKapt          bool
+	kaptOpts          []string
+	kaptProcessors    []string
+	kaptAPClasspath   []string
+	kaptAPOptions     []string
+	allopen           bool
+	lombok            bool
+	noarg             bool
+	serialization     bool
+	detekt            bool
+	kotlincOpts       javaCondVar
+	javacOpts         javaCondVar
+	abiJar            bool
+	errorProne        bool
+	uberjar           bool
+	uberjarOpts       []string
+	javaSrcs          []JavaSrcsSpec
+	peerStmts         []JavaPeerSpec
+	dm                []string
+	excludes          []string
+	jarResource       string
+	srcResource       string
+	localJar          string
+	localSourcesJar   string
+	protoSrcs         []string
+	evSrcs            []string
+	fromSandboxes     []*FromSandboxStmt
+	files             []string
+	srcDirs           []VFS
+	srcs              []string
+	kotlinProto       bool
+	kotlinGrpc        bool
+	javaProtobufPeers []string
+	javaProtoArgs     []JavaProtoPlugin
+	protocFlags       []string
+	protoNamespace    string
+	protoAddIncl      []javaAddIncl
+	excludeTags       map[string]bool
+	commonGoogleAPIs  bool
+	lintLevel         string
+	noLint            string
+	rawVars           map[string]string
+	annotationProcs   []string
+	jarMainClass      string
+	jvmArgs           []string
+	runJavaPrograms   []JavaRunProgram
+	generateScripts   [][]string
+	withJDK           bool
+	externalDeps      []string
+	addDLLs           bool
+	disableScriptgen  bool
+	enablePreview     bool
+	unittestDir       string
+	implPeers         []string
+	collectKotlinLint []string
+	customLints       []javaCustomLint
+	ktlintOld         bool
+	checkJavaDeps     string
+	testEnv           []string
+	test              javaTestData
+	sourcesJar        bool
+	noYmakePython3    bool
+	env               Environment
 }
 
 type javaTestData struct {
@@ -517,21 +511,6 @@ func (jm *JavaModule) dmRules() *javaDMRules {
 	}
 
 	r.excludes = append(r.excludes, jm.data.excludes...)
-
-	for _, f := range jm.data.depsConfig {
-		switch f {
-		case "FORBID_DIRECT_PEERDIRS":
-			r.flags.forbidDirectPeerdirs = true
-		case "FORBID_CONFLICT":
-			r.flags.forbidConflict = true
-		case "FORBID_CONFLICT_DM":
-			r.flags.forbidConflictDM = true
-		case "FORBID_CONFLICT_DM_RECENT":
-			r.flags.forbidConflictDMRecent = true
-		case "REQUIRE_DM":
-			r.flags.requireDM = true
-		}
-	}
 
 	return r
 }
