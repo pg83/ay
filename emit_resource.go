@@ -503,7 +503,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		for _, it := range chunk {
 			if it.input() != 0 {
-				buildBound++
+				buildBound += 2
 			}
 
 			buildBound += len(it.ExtraBuilds)
@@ -530,8 +530,18 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			payloadBuilds = na.vfs.alloc(buildBound)[:0]
 
 			for _, it := range chunk {
-				if input := it.input(); it.Path != "-" && input != 0 && deduper.add(input.strID()) {
-					payloadBuilds = append(payloadBuilds, input)
+				input := it.input()
+
+				if input == 0 || !deduper.add(input.strID()) {
+					continue
+				}
+
+				payloadBuilds = append(payloadBuilds, input)
+
+				if info := e.codegen.lookup(input); info != nil {
+					if main := info.ProducerMainOut; main != 0 && deduper.add(main.strID()) {
+						payloadBuilds = append(payloadBuilds, main)
+					}
 				}
 			}
 
@@ -603,13 +613,14 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		tail = tail[:len(tail):len(tail)]
 
 		e.emitReservedNode(Node{
-			Platform: instance.Platform,
-			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
-			Env:      env,
-			Inputs:   na.inputList(payloadBuilds, tail),
-			Outputs:  na.vfsList(aux),
-			KV:       &rawAuxKV,
-			DepRefs:  deps,
+			Platform:     instance.Platform,
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
+			Env:          env,
+			Inputs:       na.inputList(payloadBuilds, tail),
+			InputClosure: Closure{self: aux},
+			Outputs:      na.vfsList(aux),
+			KV:           &rawAuxKV,
+			DepRefs:      deps,
 		}, auxRef)
 
 		ccRef := ctx.emit.reserve()

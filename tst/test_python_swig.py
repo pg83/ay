@@ -181,6 +181,10 @@ class SwigTest(unittest.TestCase):
             if node["kv"].get("p") == "PR" and "$(B)/lib/wrap.py" in node["inputs"]
         ]
         self.assertEqual(len(packs), 1)
+        self.assertIn("$(B)/lib/wrap.swg.c", packs[0]["inputs"])
+        self.assertIn(swig["uid"], packs[0]["deps"])
+        self.assertNotIn("$(S)/lib/impl.h", packs[0]["inputs"])
+        self.assertNotIn("$(S)/lib/common.i", packs[0]["inputs"])
         self.assertIn("resfs/src/resfs/file/py/lib/wrap.py=lib/wrap.py", args(packs[0]))
         self.assertIn(
             "resfs/src/resfs/file/py/lib/wrap.py.yapyc3=lib/wrap.py.yapyc3", args(packs[0]))
