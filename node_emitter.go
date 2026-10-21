@@ -19,15 +19,17 @@ type Graph struct {
 }
 
 type StreamingEmitter struct {
-	addModulesToResults bool
-	nodes               Vec[*Node]
-	resolved            BitSet
-	pendingIdx          []NodeRef
-	pendingSet          map[NodeRef]bool
-	results             []NodeRef
-	onNode              func(*Node, *DenseMap[STR, NodeRef])
-	na                  *NodeArenas
-	fetchRefs           *DenseMap[STR, NodeRef]
+	addModulesToResults      bool
+	stripPackagesFromResults bool
+	nodes                    Vec[*Node]
+	resolved                 BitSet
+	pendingIdx               []NodeRef
+	pendingSet               map[NodeRef]bool
+	results                  []NodeRef
+	deferredNodes            []NodeRef
+	onNode                   func(*Node, *DenseMap[STR, NodeRef])
+	na                       *NodeArenas
+	fetchRefs                *DenseMap[STR, NodeRef]
 }
 
 func newStreamingEmitter(onNode func(*Node, *DenseMap[STR, NodeRef])) *StreamingEmitter {
@@ -105,10 +107,18 @@ func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
 		return
 	}
 
+	e.emitResolved(n, id)
+}
+
+func (e *StreamingEmitter) emitResolved(n *Node, id NodeRef) {
 	e.resolved.add(uint32(id))
 
 	if e.onNode != nil {
-		e.onNode(n, e.fetchRefs)
+		if e.stripPackagesFromResults {
+			e.deferredNodes = append(e.deferredNodes, id)
+		} else {
+			e.onNode(n, e.fetchRefs)
+		}
 	}
 }
 
@@ -141,11 +151,7 @@ func (e *StreamingEmitter) finish() []NodeRef {
 				continue
 			}
 
-			e.resolved.add(uint32(id))
-
-			if e.onNode != nil {
-				e.onNode(n, e.fetchRefs)
-			}
+			e.emitResolved(n, id)
 		}
 
 		if len(next) == len(pending) {
@@ -180,6 +186,10 @@ func (e *StreamingEmitter) finish() []NodeRef {
 		pending = next
 	}
 
+	if e.stripPackagesFromResults {
+		e.stripPackageResults()
+	}
+
 	if e.addModulesToResults {
 		for _, n := range e.nodes.s {
 			if n != nil && n.Module {
@@ -188,7 +198,53 @@ func (e *StreamingEmitter) finish() []NodeRef {
 		}
 	}
 
+	for _, id := range e.deferredNodes {
+		if node := e.nodes.s[id]; node != nil {
+			e.onNode(node, e.fetchRefs)
+		}
+	}
+
 	return dedupResultRefs(e.results)
+}
+
+func (e *StreamingEmitter) stripPackageResults() {
+	results := e.results[:0]
+
+	for _, ref := range e.results {
+		node := e.nodes.s[ref]
+
+		if node != nil && (node.KV == nil || node.KV.P != pkPK && node.KV.P != pkUN) {
+			results = append(results, ref)
+		}
+	}
+
+	e.results = results
+
+	stack := append([]NodeRef(nil), results...)
+
+	var live BitSet
+
+	for len(stack) > 0 {
+		ref := stack[len(stack)-1]
+
+		stack = stack[:len(stack)-1]
+
+		if live.has(uint32(ref)) {
+			continue
+		}
+
+		live.add(uint32(ref))
+
+		for dependency := range e.nodes.s[ref].buildDeps(e.fetchRefs) {
+			stack = append(stack, dependency)
+		}
+	}
+
+	for i := range e.nodes.s {
+		if !live.has(uint32(i)) {
+			e.nodes.s[i] = nil
+		}
+	}
 }
 
 func dedupResultRefs(results []NodeRef) []NodeRef {
