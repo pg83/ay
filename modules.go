@@ -2221,6 +2221,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.flags.NoRuntime = true
 		d.flags.NoUtil = true
 	case tokNoCompilerWarnings:
+		if !d.flags.NoCompilerWarnings {
+			id := envCudaNvccFlags
+
+			env.setString(id, env.string(id)+" -w")
+		}
+
 		d.flags.NoCompilerWarnings = true
 	case tokNoWshadow:
 		d.flags.NoWShadow = true

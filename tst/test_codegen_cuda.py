@@ -1,6 +1,8 @@
 import unittest
 
 import lib
+from test_python2 import CONTRIB_LIBS_PYTHON, python2_base
+from test_python_srcs import python_base as python3_base
 
 
 def cuda_conf(extra=""):
@@ -188,6 +190,60 @@ class CudaTest(unittest.TestCase):
         self.assertEqual(args[args.index("-dlink") + 1], "$(B)/mod/_/sub/k.cu.o")
         self.assertEqual(ar["cmds"][1]["cmd_args"][-1], "$(B)/mod/devlink.o")
         self.assertNotIn("$(B)/mod/devlink.o", ar["inputs"])
+
+    def test_cuda_warning_suppression_is_local_to_each_python_context(self):
+        sources = self.split_fixture()
+        sources.update(python2_base())
+        sources.update(python3_base())
+        sources["contrib/libs/python/ya.make"] = CONTRIB_LIBS_PYTHON
+        sources["build/ymake_conf.py"] = cuda_conf("CUDA_NVCC_FLAGS=-DFROM_CONF\n")
+        sources["lib/ya.make"] = (
+            f"PY23_LIBRARY()\n{lib.BARE_MODULE}"
+            "NO_COMPILER_WARNINGS()\nNO_COMPILER_WARNINGS()\n"
+            "CUDA_NVCC_FLAGS(-DCONTEXT)\nSRCS(k.cu)\nEND()\n"
+        )
+        sources["lib/k.cu"] = ""
+        for directory, module in (("two", "PY2_PROGRAM"), ("three", "PY3_PROGRAM")):
+            sources[directory + "/ya.make"] = (
+                f"{module}()\n{lib.BARE_MODULE}PY_SRCS(MAIN main.py)\nPEERDIR(lib)\nEND()\n"
+            )
+            sources[directory + "/main.py"] = ""
+        graph = lib.make(sources, "two", "three", "--sandboxing")
+        compiled = [n for n in graph["graph"] if n["kv"]["p"] == "CU"]
+        self.assertEqual(len(compiled), 2)
+        contexts = set()
+        for node in compiled:
+            args = node["cmds"][0]["cmd_args"]
+            contexts.update(flag for flag in args if flag in ("-DUSE_PYTHON2", "-DUSE_PYTHON3"))
+            self.assertEqual(args[args.index("-DFROM_CONF"):args.index("-c")],
+                             ["-DFROM_CONF", "-w", "-DCONTEXT"])
+            self.assertTrue(any(node["uid"] in n["deps"] for n in graph["graph"] if n["kv"]["p"] == "AR"))
+        self.assertEqual(contexts, {"-DUSE_PYTHON2", "-DUSE_PYTHON3"})
+
+    def test_cuda_warning_suppression_keeps_macro_execution_order(self):
+        for declarations, expected in (
+            ("NO_COMPILER_WARNINGS()\nINCLUDE(${ARCADIA_ROOT}/flags.inc)\n",
+             ["-w", "-DFIRST", "-DSECOND"]),
+            ("CUDA_NVCC_FLAGS(-DFIRST)\nNO_COMPILER_WARNINGS()\nCUDA_NVCC_FLAGS(-DSECOND)\n",
+             ["-DFIRST", "-w", "-DSECOND"]),
+            ("INCLUDE(${ARCADIA_ROOT}/flags.inc)\nNO_COMPILER_WARNINGS()\n",
+             ["-DFIRST", "-DSECOND", "-w"]),
+            ("NO_COMPILER_WARNINGS()\nNO_COMPILER_WARNINGS()\nINCLUDE(${ARCADIA_ROOT}/flags.inc)\n",
+             ["-w", "-DFIRST", "-DSECOND"]),
+        ):
+            with self.subTest(declarations=declarations):
+                sources = self.split_fixture()
+                sources["build/ymake_conf.py"] = cuda_conf("CUDA_NVCC_FLAGS=-DFROM_CONF\n")
+                sources["flags.inc"] = "CUDA_NVCC_FLAGS(-DFIRST -DSECOND)\n"
+                sources["mod/ya.make"] = (
+                    f"LIBRARY()\n{lib.BARE_MODULE}" + declarations + "SRCS(k.cu)\nEND()\n"
+                )
+                sources["mod/k.cu"] = ""
+                graph = lib.make(sources, "mod", "--sandboxing")
+                node = lib.node_by_output(graph, "$(B)/mod/k.cu.o")
+                args = node["cmds"][0]["cmd_args"]
+                self.assertEqual(args[args.index("-DFROM_CONF"):args.index("-c")],
+                                 ["-DFROM_CONF", *expected])
 
     def test_cuda_source_compiles_through_nvcc_wrapper(self):
         files = {

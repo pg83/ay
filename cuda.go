@@ -29,12 +29,6 @@ func (e *EmitContext) cudaSettings() *CudaSettings {
 
 	env := Environment{s: &e.frame.ifEnv}
 
-	if e.d.flags.NoCompilerWarnings {
-		id := envCudaNvccFlags
-
-		env.setString(id, env.string(id)+" -w")
-	}
-
 	roots := resolveResourceGlobalArgs(expandStmtTokens([]ANY{
 		internStr(env.string(envCUDA_ROOT)).any(),
 		internStr(env.string(envCUDA_TARGET_ROOT)).any(),
