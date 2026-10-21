@@ -30,7 +30,7 @@ def fixture():
         ),
         "fs/y.cpp": "int y;\n",
         "hdr/ya.make": (
-            f"LIBRARY()\n{NO_PLATFORM}"
+            f"LIBRARY()\n{NO_PLATFORM}ADDINCL(${{ARCADIA_BUILD_ROOT}}/hdr)\n"
             + "".join(f"COPY_FILE(h{i}.in h{i}.h)\n" for i in range(HEADERS))
             + "FROM_SANDBOX(7 OUT a.h b.h)\nSRCS(x.cpp)\nEND()\n"
         ),

@@ -57,7 +57,7 @@ class DeferredCodegenTest(unittest.TestCase):
 
     def test_one_fired_producer_does_not_release_another(self):
         files = project(
-            "ADDINCL(a/inc)\nCOPY_FILE_WITH_CONTEXT(x.h y.h)\n"
+            "ADDINCL(a/inc ${ARCADIA_BUILD_ROOT}/a)\nCOPY_FILE_WITH_CONTEXT(x.h y.h)\n"
             "RUN_PROGRAM(tools/gen OUT first.h second.h)",
             "#include <a/y.h>\n", "a c",
         )

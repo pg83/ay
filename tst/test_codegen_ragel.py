@@ -27,6 +27,7 @@ class Ragel6Test(unittest.TestCase):
         files = {
             "mod/ya.make": (
                 "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
                 "SET(RAGEL6_FLAGS -CG1 -L)\n"
                 "SRCS(scan.rl6 sub/other.rl6 gen.h.rl6 lex.cpp.rl6 use.cpp)\n"
                 "END()\n"

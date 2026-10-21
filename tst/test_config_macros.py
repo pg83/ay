@@ -59,7 +59,7 @@ class ConfigurationTest(unittest.TestCase):
 
     def test_debian_version_is_a_lazy_header_generator(self):
         graph = lib.make({
-            "a/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}DEB_VERSION(pkg/changelog)\nSRCS(a.cpp)\nEND()\n",
+            "a/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}ADDINCL(${{ARCADIA_BUILD_ROOT}}/a)\nDEB_VERSION(pkg/changelog)\nSRCS(a.cpp)\nEND()\n",
             "a/a.cpp": '#include "DebianVersion.h"\n',
             "pkg/changelog": "package (1.2) stable; urgency=low\n",
             "build/scripts/mkver.py": "",
@@ -76,7 +76,7 @@ class ConfigurationTest(unittest.TestCase):
     def test_custom_clang_tidy_declares_resource_peer_and_variables(self):
         graph = lib.make({
             "a/ya.make": (
-                f"LIBRARY()\n{lib.BARE_MODULE}SET_CUSTOM_CLANG_TIDY(tools/tidy CUSTOM)\n"
+                f"LIBRARY()\n{lib.BARE_MODULE}ADDINCL(${{ARCADIA_BUILD_ROOT}}/a)\nSET_CUSTOM_CLANG_TIDY(tools/tidy CUSTOM)\n"
                 "IF(CUSTOM_CLANG_TIDY)\nSRCS(a.cpp)\nENDIF()\n"
                 "RUN_PYTHON3(gen.py ${CLANG_TIDY_BIN} ${_YAML2JSON_BIN} OUT gen.h)\nEND()\n"
             ),

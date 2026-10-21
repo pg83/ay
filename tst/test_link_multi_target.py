@@ -8,7 +8,7 @@ def project():
     """Two programs and a library with a generated header, all sharing it."""
     files = {}
     files["shared/ya.make"] = (
-        f"LIBRARY()\n{lib.BARE_MODULE}"
+        f"LIBRARY()\n{lib.BARE_MODULE}ADDINCL(${{ARCADIA_BUILD_ROOT}}/shared)\n"
         "RUN_PROGRAM(tools/gen OUT shared_gen.h)\n"
         "SRCS(shared.cpp)\nEND()\n"
     )

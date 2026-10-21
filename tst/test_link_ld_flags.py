@@ -237,7 +237,7 @@ class AutocheckLinkTest(unittest.TestCase):
         files["build/cow/on/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(c.c)\nEND()\n"
         files["build/cow/on/c.c"] = "int c;\n"
         lib.tool_program(files, "tools/gen", "gen")
-        files["gen/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}RUN_PROGRAM(tools/gen OUT g.h)\nSRCS(g.cpp)\nEND()\n"
+        files["gen/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}ADDINCL(${{ARCADIA_BUILD_ROOT}}/gen)\nRUN_PROGRAM(tools/gen OUT g.h)\nSRCS(g.cpp)\nEND()\n"
         files["gen/g.cpp"] = '#include "g.h"\n'
         return files
 

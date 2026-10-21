@@ -13,7 +13,7 @@ class NlgIncludesTest(unittest.TestCase):
             ),
             "peer/data.nlg": "",
             "m/ya.make": (
-                f"LIBRARY()\n{lib.BARE_MODULE}PEERDIR(peer)\n"
+                f"LIBRARY()\n{lib.BARE_MODULE}PEERDIR(peer)\nADDINCL(${{ARCADIA_BUILD_ROOT}}/m)\n"
                 "RUN_PROGRAM(tools/gen IN main.nlg OUT dummy.h "
                 "OUT_NOAUTO main.nlg.h main.nlg.pb.txt)\n"
                 "SRCS(use.cpp)\nEND()\n"
@@ -86,7 +86,7 @@ class NlgIncludesTest(unittest.TestCase):
             with self.subTest(keyword=keyword):
                 files = self.files('{% ext_from "peer/data.nlg" import value %}\n')
                 files["m/ya.make"] = (
-                    f"LIBRARY()\n{lib.BARE_MODULE}PEERDIR(peer)\n"
+                    f"LIBRARY()\n{lib.BARE_MODULE}PEERDIR(peer)\nADDINCL(${{ARCADIA_BUILD_ROOT}}/m)\n"
                     "RUN_PROGRAM(tools/gen IN main.nlg OUT stage.nlg)\n"
                     f"RUN_PROGRAM(tools/gen {keyword} ${{BINDIR}}/stage.nlg OUT result.h)\n"
                     "SRCS(use.cpp)\nEND()\n"

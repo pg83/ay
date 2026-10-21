@@ -14,6 +14,7 @@ class NonCanonicalModulePathTest(unittest.TestCase):
                 "INCLUDE(sub/slash.inc/)\n"
                 "INCLUDE(${ARCADIA_ROOT}/root.inc)\n"
                 "SRCS(sub/../a.cpp sub//b.cpp sub/./c.cpp ./e.cpp)\n"
+                "ADDINCL(${ARCADIA_BUILD_ROOT}/m)\n"
                 "COPY_FILE(src.h out/../dst.h)\n"
                 "END()\n"
             ),

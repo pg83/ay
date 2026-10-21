@@ -12,6 +12,7 @@ class SandboxInputsTest(unittest.TestCase):
         files = {
             "mod/ya.make": (
                 LIBRARY
+                + "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
                 + "COPY_FILE(seed.txt first.h OUTPUT_INCLUDES mod/public.h)\n"
                 + "COPY_FILE(${BINDIR}/first.h second.h)\n"
                 + "SRCS(main.cpp sibling.cpp)\nEND()\n"
@@ -53,6 +54,7 @@ class SandboxInputsTest(unittest.TestCase):
         files = {
             "mod/ya.make": (
                 LIBRARY
+                + "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
                 + "COPY_FILE(seed.txt generated.h OUTPUT_INCLUDES mod/public.h)\n"
                 + "SRCS(main.cpp.in)\nEND()\n"
             ),
@@ -79,7 +81,10 @@ class SandboxInputsTest(unittest.TestCase):
 
     def test_text_copy_does_not_follow_source_includes(self):
         files = {
-            "mod/ya.make": LIBRARY + "COPY_FILE(seed.txt generated.h)\nCOPY_FILE(src.h copied.h)\nSRCS(use.cpp)\nEND()\n",
+            "mod/ya.make": (
+                LIBRARY + "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
+                "COPY_FILE(seed.txt generated.h)\nCOPY_FILE(src.h copied.h)\nSRCS(use.cpp)\nEND()\n"
+            ),
             "mod/seed.txt": "",
             "mod/src.h": '#include "generated.h"\n',
             "mod/use.cpp": '#include "copied.h"\n',
@@ -133,7 +138,10 @@ class SandboxInputsTest(unittest.TestCase):
 
     def test_template_forwarding_applies_to_an_arbitrary_generator(self):
         files = {
-            "mod/ya.make": (LIBRARY + "COPY_FILE(seed.txt generated.h)\nRUN_PYTHON3(gen.py IN main.cpp.in OUT generated.cpp)\nEND()\n"),
+            "mod/ya.make": (
+                LIBRARY + "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
+                "COPY_FILE(seed.txt generated.h)\nRUN_PYTHON3(gen.py IN main.cpp.in OUT generated.cpp)\nEND()\n"
+            ),
             "mod/gen.py": "",
             "mod/main.cpp.in": '#include "middle.h"\n',
             "mod/middle.h": '#include "generated.h"\n',

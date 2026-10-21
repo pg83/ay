@@ -394,3 +394,19 @@ func (r *CodegenRegistry) moduleSourceInputs(owner VFS, suffix string) []VFS {
 
 	return inputs
 }
+
+func (info *GeneratedFileInfo) providesOutputInclude(d IncludeDirective) bool {
+	if d.kind != includeQuoted || d.target.vfs() != 0 {
+		return false
+	}
+
+	rel := normalisePath(pathDir(info.OutputPath.relString()) + "/" + d.target.string())
+
+	for _, entry := range info.ParsedIncludes.bucket(parsedIncludesLocal) {
+		if v := entry.target.vfs(); v.isBuild() && v.relString() == rel {
+			return true
+		}
+	}
+
+	return false
+}

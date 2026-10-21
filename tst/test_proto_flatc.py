@@ -34,7 +34,7 @@ class ProtoFlatcTest(unittest.TestCase):
                 files.update({
                     "schemas/common/ya.make": bare + f"SRCS(common.{ext})\nEND()\n",
                     f"schemas/common/common.{ext}": "table Common {}\n",
-                    "schemas/user/ya.make": bare + f"PEERDIR(schemas/common)\nSRCS(packet.{ext} use.cpp)\nEND()\n",
+                    "schemas/user/ya.make": bare + f"ADDINCL(${{ARCADIA_BUILD_ROOT}}/schemas/user)\nPEERDIR(schemas/common)\nSRCS(packet.{ext} use.cpp)\nEND()\n",
                     f"schemas/user/packet.{ext}": f'include "../common/./common.{ext}";\ntable Packet {{}}\n',
                     "schemas/user/use.cpp": f'#include "packet.{ext}.h"\n',
                 })
@@ -51,6 +51,7 @@ class ProtoFlatcTest(unittest.TestCase):
         files.update({
             "f/ya.make": (
                 "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                "ADDINCL(${ARCADIA_BUILD_ROOT}/f)\n"
                 "FLATC_FLAGS(--scoped-enums --gen-name-strings)\n"
                 "SRCS(a.fbs b.fbs c.fbs64 use.cpp)\nEND()\n"
             ),
