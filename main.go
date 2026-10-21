@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"runtime"
@@ -293,8 +292,5 @@ func init() {
 }
 
 func writeGraph(g *Graph, dropSrcInputs bool) {
-	bw := bufio.NewWriterSize(os.Stdout, 1<<20)
-
-	writeGraphCompact(bw, g, dropSrcInputs)
-	throw(bw.Flush())
+	writeGraphCompact(os.Stdout, g, dropSrcInputs)
 }

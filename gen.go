@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 )
 
@@ -144,6 +145,7 @@ type ModuleEmitResult struct {
 	OwnAddInclGlobal                []VFS
 	ProtoInclude                    []VFS
 	RosInclude                      []VFS
+	FbsNamespaces                   []FbsNamespaceVar
 	MlaunchDeps                     []string
 	SwigInclude                     []VFS
 	AddInclOneLevel                 []VFS
@@ -257,33 +259,37 @@ func newModuleMemo() *moduleMemo {
 func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand) {
 	ctx := newGenCtx(fs, caches, hostP, targetP, emitter, onWarn, tests, keepGoing)
 	ordered := ctx.linkingTargetsFirst(targets)
-	recursed := make([][]string, len(ordered))
-	all := slices.Clone(ordered)
+	discovered := make([]DiscoveredTargets, len(ordered))
+	all := make([]DiscoveredModule, 0, len(ordered))
 
 	for i, t := range ordered {
-		recursed[i] = discoverRecursedTargets(ctx, filepath.Clean(t))
-		all = append(all, recursed[i]...)
+		discovered[i] = discoverRecursedTargets(ctx, filepath.Clean(t))
+		all = append(all, discovered[i].Root)
+	}
+
+	for _, targets := range discovered {
+		all = append(all, targets.Recursed...)
 	}
 
 	ctx.roots = make(map[ModuleInstance]bool, len(all))
 	ctx.rootDemand = rootDemand
 
-	for _, dir := range all {
-		ctx.roots[ctx.rootInstance(dir, demandNone)] = true
+	for _, target := range all {
+		ctx.roots[ctx.rootInstanceForDeclaration(target.Path, demandNone, target.Declaration)] = true
 	}
 
-	for _, dir := range ctx.linkingTargetsFirst(all) {
-		if !isJavaModuleType(ctx.moduleName(dir)) {
-			genModule(ctx, ctx.rootInstance(dir, rootDemand))
+	for _, target := range ctx.linkingModulesFirst(all) {
+		if target.Declaration == nil || !isJavaModuleType(target.Declaration.Name) {
+			genModule(ctx, ctx.rootInstanceForDeclaration(target.Path, rootDemand, target.Declaration))
 		}
 	}
 
-	for i, t := range ordered {
-		ctx.genTarget(t, recursed[i], rootDemand)
+	for _, targets := range discovered {
+		ctx.genTarget(targets, rootDemand)
 	}
 
-	for _, dir := range all {
-		ctx.emitConfiguredSubmoduleTests(dir)
+	for _, target := range all {
+		ctx.emitConfiguredSubmoduleTests(target.Path)
 	}
 
 	if ctx.buckets.h1Mismatches > 0 {
@@ -391,29 +397,53 @@ func (ctx *GenCtx) moduleName(dir string) TOK {
 }
 
 func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance {
-	kind := KindLib
+	decl, certain := inferModuleDeclaration(moduleStmts(ctx, filepath.Clean(dir)))
 
-	if name := ctx.moduleName(dir); name == tokPy3Program || name == tokDocs || name == 0 {
+	if !certain {
+		decl, _ = ctx.recurseScan(dir)
+	}
+
+	return ctx.rootInstanceForDeclaration(dir, demand, decl)
+}
+
+func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, decl *ModuleStmt) ModuleInstance {
+	kind := KindLib
+	language := LangCPP
+
+	var name TOK
+
+	if decl != nil {
+		name = decl.Name
+
+		if decl.Schema {
+			language = LangProtoDescriptions
+		}
+	}
+
+	if name == tokPy3Program || name == tokDocs || name == 0 {
 		kind = KindBin
 	}
 
 	platform := ctx.target
 
-	if ctx.moduleName(dir) == tokGoDll {
+	if name == tokGoDll {
 		platform = ctx.target.pic()
 	}
 
 	return ModuleInstance{
 		Path:     source(filepath.Clean(dir)),
 		Kind:     kind,
-		Language: LangCPP,
+		Language: language,
 		Platform: platform,
 		Demand:   demand,
 	}
 }
 
-func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand ModuleDemand) {
-	if name := ctx.moduleName(filepath.Clean(targetDir)); isJavaModuleType(name) {
+func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand) {
+	target := targets.Root
+	targetDir := target.Path
+
+	if target.Declaration != nil && isJavaModuleType(target.Declaration.Name) {
 		for _, dir := range ctx.recurseClosure(filepath.Clean(targetDir)) {
 			ctx.genStartTarget(dir)
 		}
@@ -421,7 +451,7 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 		return
 	}
 
-	root := genModule(ctx, ctx.rootInstance(targetDir, rootDemand))
+	root := genModule(ctx, ctx.rootInstanceForDeclaration(targetDir, rootDemand, target.Declaration))
 
 	if root.LDPath != nil {
 		ctx.scannerForPlatform(ctx.target).codegen.use(*root.LDPath)
@@ -433,16 +463,18 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 		ctx.emit.result(*root.GlobalRef)
 	}
 
-	ctx.emitModuleTests(append(ctx.genMultimoduleTargets(targetDir, root.ModuleVariants, rootDemand), root)...)
+	ctx.emitModuleTests(append(ctx.genMultimoduleTargets(target, root.ModuleVariants, rootDemand), root)...)
 
-	for _, dir := range recursed {
-		if name := ctx.moduleName(dir); isJavaModuleType(name) {
-			ctx.genJavaTarget(dir, name)
+	for _, target := range targets.Recursed {
+		dir := target.Path
+
+		if target.Declaration != nil && isJavaModuleType(target.Declaration.Name) {
+			ctx.genJavaTarget(dir, target.Declaration.Name)
 
 			continue
 		}
 
-		sub := genModule(ctx, ctx.rootInstance(dir, rootDemand))
+		sub := genModule(ctx, ctx.rootInstanceForDeclaration(dir, rootDemand, target.Declaration))
 
 		if sub.LDPath != nil {
 			ctx.scannerForPlatform(ctx.target).codegen.use(*sub.LDPath)
@@ -452,7 +484,7 @@ func (ctx *GenCtx) genTarget(targetDir string, recursed []string, rootDemand Mod
 			ctx.emit.result(sub.LDRef)
 		}
 
-		ctx.emitModuleTests(append(ctx.genMultimoduleTargets(dir, sub.ModuleVariants, rootDemand), sub)...)
+		ctx.emitModuleTests(append(ctx.genMultimoduleTargets(target, sub.ModuleVariants, rootDemand), sub)...)
 	}
 }
 
@@ -483,8 +515,8 @@ func (ctx *GenCtx) recurseClosure(root string) []string {
 	return out
 }
 
-func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
-	instance := ctx.rootInstance(dir, demandNone)
+func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
+	instance := ctx.rootInstanceForDeclaration(dir, demandNone, nil)
 	env := buildIfEnvInto(&ctx.ifEnvScratch, instance)
 	d := ModuleData{}
 
@@ -492,7 +524,7 @@ func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
 		collectStmts(ctx.fs, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, &d, ctx.onWarn)
 	}
 
-	var module TOK
+	var module *ModuleStmt
 	var children []string
 
 	var scan func(stmts []Stmt)
@@ -501,7 +533,8 @@ func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
 		for _, st := range stmts {
 			switch v := st.(type) {
 			case *ModuleStmt:
-				module = v.Name
+				module = v
+				instance = ctx.rootInstanceForDeclaration(dir, demandNone, v)
 				apply(st)
 			case *SetStmt, *DefaultVarStmt:
 				apply(st)
@@ -577,38 +610,61 @@ func (e *EmitContext) moduleInputArg(arg *ANY) *ANY {
 }
 
 func stmtsModuleName(stmts []Stmt) TOK {
-	var name TOK
+	if decl := stmtsModuleDeclaration(stmts); decl != nil {
+		return decl.Name
+	}
+
+	return 0
+}
+
+func stmtsModuleDeclaration(stmts []Stmt) *ModuleStmt {
+	decl, _ := inferModuleDeclaration(stmts)
+
+	return decl
+}
+
+func inferModuleDeclaration(stmts []Stmt) (*ModuleStmt, bool) {
+	var declaration *ModuleStmt
+
+	certain := true
 
 	for _, st := range stmts {
-		var candidate TOK
+		var candidate *ModuleStmt
 
 		switch v := st.(type) {
 		case *ModuleStmt:
-			return v.Name
+			return v, true
 		case *IfStmt:
-			thenName, elseName := stmtsModuleName(v.Then), stmtsModuleName(v.Else)
+			thenDecl, thenCertain := inferModuleDeclaration(v.Then)
+			elseDecl, elseCertain := inferModuleDeclaration(v.Else)
 
-			if thenName != 0 && elseName != 0 && thenName != elseName {
-				return 0
+			if thenDecl != nil && elseDecl != nil && thenDecl.Name != elseDecl.Name {
+				return nil, false
 			}
 
-			candidate = thenName
+			candidate = thenDecl
 
-			if candidate == 0 {
-				candidate = elseName
+			if candidate == nil {
+				candidate = elseDecl
+			}
+
+			certain = certain && thenCertain && elseCertain
+
+			if candidate != nil {
+				certain = certain && thenDecl != nil && elseDecl != nil && thenDecl.Schema == elseDecl.Schema
 			}
 		}
 
-		if candidate != 0 {
-			if name != 0 && name != candidate {
-				return 0
+		if candidate != nil {
+			if declaration != nil && declaration.Name != candidate.Name {
+				return nil, false
 			}
 
-			name = candidate
+			declaration = candidate
 		}
 	}
 
-	return name
+	return declaration, certain
 }
 
 func isLinkingModuleType(name TOK) bool {
@@ -698,10 +754,32 @@ func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
 	return false
 }
 
-func discoverRecursedTargets(ctx *GenCtx, targetDir string) []string {
+type DiscoveredModule struct {
+	Path        string
+	Declaration *ModuleStmt
+}
+
+type DiscoveredTargets struct {
+	Root     DiscoveredModule
+	Recursed []DiscoveredModule
+}
+
+func (ctx *GenCtx) linkingModulesFirst(targets []DiscoveredModule) []DiscoveredModule {
+	ordered := slices.Clone(targets)
+
+	sort.SliceStable(ordered, func(i, j int) bool {
+		a, b := ordered[i].Declaration, ordered[j].Declaration
+
+		return a != nil && isLinkingModuleType(a.Name) && (b == nil || !isLinkingModuleType(b.Name))
+	})
+
+	return ordered
+}
+
+func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 	seen := map[string]bool{targetDir: true}
 
-	var finals []string
+	var targets DiscoveredTargets
 
 	var walk func(dir string, root bool)
 
@@ -718,20 +796,24 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) []string {
 			}
 		}
 
-		moduleName, children := ctx.recurseScan(dir)
+		module, children := ctx.recurseScan(dir)
+
+		if root {
+			targets.Root = DiscoveredModule{Path: dir, Declaration: module}
+		}
 
 		for _, child := range children {
 			walk(child, false)
 		}
 
-		if !root && moduleName != 0 && (ctx.testMode || isFinalTargetModuleType(moduleName)) {
-			finals = append(finals, dir)
+		if !root && module != nil && (ctx.testMode || module.Schema || isFinalTargetModuleType(module.Name)) {
+			targets.Recursed = append(targets.Recursed, DiscoveredModule{Path: dir, Declaration: module})
 		}
 	}
 
 	walk(targetDir, true)
 
-	return finals
+	return targets
 }
 
 func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults bool) *Graph {
@@ -998,7 +1080,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		}
 	}
 
-	if d.hasFbs && instance.Path.relString() != "contrib/libs/flatbuffers" {
+	if d.hasFbs && !isGoModuleType(d.moduleStmt.Name) && instance.Path.relString() != "contrib/libs/flatbuffers" {
 		d.peerdirs = append(d.peerdirs, strContribLibsFlatbuffers.any())
 	}
 
@@ -1548,6 +1630,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	objAddLibsCap := 0
 	ldflagsCap := 0
 	rpathflagsCap := 0
+	fbsCap := 0
 
 	for _, rp := range resolved {
 		pr := rp.result
@@ -1568,6 +1651,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		objAddLibsCap += len(pr.ObjAddLibsGlobal)
 		ldflagsCap += len(pr.LDFlagsGlobal)
 		rpathflagsCap += len(pr.RPathFlagsGlobal)
+		fbsCap += len(pr.FbsNamespaces)
 
 		if pr.ARPath != nil {
 			archiveCap++
@@ -2080,7 +2164,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	linkExcludeLibraries = ctx.argSlices.internCopy(linkExcludeLibraries)
 
+	var effectiveFbsNamespaces []FbsNamespaceVar
+
+	if fbsCap != 0 || len(d.fbsNamespaces) != 0 {
+		effectiveFbsNamespaces = collectFbsNamespaceVars(ctx, d.fbsNamespaces, resolved)
+	}
+
 	effectiveMlaunchDeps := mlaunchDeps(d, resolved)
+	effectiveLDFlagsGlobal := concatShared(ctx.argSlices, peerLDFlagsGlobal, d.ldFlags)
 
 	newResult := func() *ModuleEmitResult {
 		r := ctx.results.one()
@@ -2090,6 +2181,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			ModuleVariants:                  d.moduleVariants,
 			GlobalSources:                   e.globalSources,
 			MlaunchDeps:                     effectiveMlaunchDeps,
+			FbsNamespaces:                   effectiveFbsNamespaces,
 			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
 			AddInclGlobal:                   effectiveAddInclGlobal,
 			OwnAddInclGlobal:                d.addInclGlobal,
@@ -2102,7 +2194,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			COnlyFlagsGlobal:                effectiveCOnlyFlagsGlobal,
 			LinkExcludeLibraries:            linkExcludeLibraries,
 			ObjAddLibsGlobal:                concatShared(ctx.argSlices, peerObjAddLibsGlobal, d.objAddLibsGlobal),
-			LDFlagsGlobal:                   concatShared(ctx.argSlices, peerLDFlagsGlobal, d.ldFlags),
+			LDFlagsGlobal:                   effectiveLDFlagsGlobal,
 			RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 			PeerArchiveClosureRefs:          peerArchiveRefs,
 			PeerArchiveClosurePaths:         peerArchivePaths,
@@ -2233,6 +2325,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ResourceGlobals:   resourceGlobalsClosure,
 		ProtoInclude:      peerProtoInclude,
 	}
+
+	if d.hasFbs && isGoModuleType(d.moduleStmt.Name) {
+		frame.peerCtx.FbsNamespaces = fbsNamespaceArgs(ctx.na, effectiveFbsNamespaces)
+	}
+
+	if isGoModuleType(d.moduleStmt.Name) {
+		frame.peerCtx.LDFlagsGlobal = resolveResourceGlobalArgs(effectiveLDFlagsGlobal, resourceGlobalsClosure)
+	}
+
 	e = newEmitContextIn(frame, ctx, instance, d, &frame.peerCtx)
 
 	scanAddIncl := e.cythonAdjustModuleCCBlocks()
@@ -2280,7 +2381,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	if isGoExeModuleType(d.moduleStmt.Name) {
-		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerLDFlagsGlobal, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
+		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, mergedLDPluginRefs, mergedLDPluginPaths, resourceGlobalsClosure)
 		result := newResult()
 
 		result.isPROGRAM = true

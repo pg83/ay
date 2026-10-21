@@ -93,6 +93,12 @@ class YaMakeSyntaxTest(unittest.TestCase):
             "-DT=a\"b", "`a`", "x&&y", "a;b", "c^d", "e|f",
         ])
 
+    def test_graph_json_escaping_across_ascii_block_boundaries(self):
+        suffixes = ('"', "\\", "\x00", "\x01", "\x1f", "\t", "é", "\u2028", "\u2029")
+        tokens = ["a" * size + suffix + "z" * 16 for size in range(16) for suffix in suffixes]
+        quoted = ['"' + token.replace('"', '\\"') + '"' for token in tokens]
+        self.assert_cflags(library("CFLAGS(" + " ".join(quoted) + ")"), tokens)
+
     def test_macro_argument_atoms_take_url_symbols(self):
         self.assert_cflags(library("CFLAGS(-DU=http://h/p?a=b;c=d&e)"), ["-DU=http://h/p?a=b;c=d&e"])
 

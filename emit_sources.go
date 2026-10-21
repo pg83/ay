@@ -76,7 +76,11 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtFbs64:
 		e.emitLibraryFlatcSource(meta, &flatcVariantFL64)
 	case srcExtFbs:
-		e.emitLibraryFlatcSource(meta, &flatcVariantFL)
+		if isGoModuleType(e.d.unit.Type) {
+			e.emitGoFlatcSource(meta)
+		} else {
+			e.emitLibraryFlatcSource(meta, &flatcVariantFL)
+		}
 	case srcExtGo:
 		if isGoModuleType(e.d.unit.Type) {
 			e.collectGoSource(meta, false)

@@ -215,6 +215,7 @@ type ModuleData struct {
 	cOnlyFlagsGlobal         []ANY
 	sFlags                   []ANY
 	protocFlags              []ANY
+	fbsNamespaces            []ANY
 	flatcFlags               []ANY
 	clangWarnings            []ANY
 	ldFlags                  []ANY
@@ -1133,13 +1134,25 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				env.setString(envCanonizeSubPath, subPath)
 			}
 
-			if v.Name == tokProtoDescriptions || v.Name == tokProtoRegistry {
-				env.setStringID(envMODULE_TAG, v.Name.str())
-				env.setStringID(envMODULE_TYPE, v.Name.str())
+			if isGoModuleType(d.unit.Type) {
+				d.flags.NoRuntime = true
+				d.flags.NoUtil = true
+			}
+
+			if d.moduleStmt.Name == tokProtoDescriptions || v.Name == tokProtoRegistry {
+				env.setStringID(envMODULE_TAG, d.moduleStmt.Name.str())
+				env.setStringID(envMODULE_TYPE, d.moduleStmt.Name.str())
 			}
 
 			setupRosModule(v, modulePath, language, env, d)
 			setupMlaunchModule(v, modulePath, language, env, d)
+			setupSdcDiagsModule(v, language, env, d)
+
+			if v.Name == tokFbsLibrary {
+				d.multimodule = v.Name
+				d.moduleVariants = 1<<LangCPP | 1<<LangGo
+				env.setStringID(envMODULE_TAG, d.unit.Tag)
+			}
 
 			if v.Name == tokProtoLibrary && !v.Schema {
 				d.moduleVariants = defaultProtoVariants
@@ -1446,37 +1459,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			d.antlrRuns = append(d.antlrRuns, expanded)
 		case *RunProgramStmt:
-			expanded := *v
-
-			expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
-			expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env)
-			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
-			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
-			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
-			expanded.ToolPaths = expandStmtTokens(v.ToolPaths, env)
-
-			if v.StdoutFile != nil {
-				stdout := expandStmtTokenAny((*v.StdoutFile), env)
-
-				expanded.StdoutFile = &stdout
-			}
-
-			bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
-
-			expanded.Args = expandCommandTokens(v.Args, env)
-			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
-
-			if v.CWD != nil {
-				cwd := expandStmtTokenAny(*v.CWD, env)
-
-				expanded.CWD = &cwd
-			}
-
-			env.rebind(envBINDIR, bindir)
-			env.rebind(envCURDIR, curdir)
-
-			expanded.DeclSeq = d.nextDeclSeq()
-			d.runPrograms = append(d.runPrograms, &expanded)
+			appendRunProgram(v, env, d)
 		case *SplitCodegenStmt:
 			expanded := *v
 
@@ -1692,8 +1675,10 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	switch name {
 	case tokRosLibrary:
 		return rosModuleUnit(language)
-	case tokMlaunchLibrary, tokMlaunchPipeline, tokGolaunchProgram:
+	case tokMlaunchLibrary, tokMlaunchComponent, tokMlaunchPipeline, tokGolaunchProgram, tokGolaunchComposite:
 		return mlaunchModuleUnit(name, language)
+	case tokSdcDiagsLibrary:
+		return sdcDiagsModuleUnit(language)
 	case tokDllJava:
 		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp, SwigLang: strSwigLangJniCpp}
 	case tokGoLibrary, tokGoProgram, tokGoTest, tokGoDll:
@@ -1721,8 +1706,16 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	case tokYqlUdfYdb, tokYqlUdfContrib:
 		return ModuleUnit{Type: name, CCTag: tagYqlUdfStatic, HashTag: strYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
 	case tokFbsLibrary:
+		if language == LangGo {
+			return ModuleUnit{Type: tokGoLibrary, Tag: strGoFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+		}
+
 		return ModuleUnit{Type: name, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokProtoLibrary:
+		if language == LangProtoDescriptions {
+			return resolveModuleUnitBare(tokProtoDescriptions, kind, language)
+		}
+
 		if language == LangGo {
 			return ModuleUnit{Type: tokGoLibrary, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 		}
@@ -1788,6 +1781,44 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 	addGeneratedHeaderInclude(modulePath, dst, d)
 }
 
+func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
+	expanded := *v
+
+	expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
+	expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env)
+	expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
+	expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
+	expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
+	expanded.ToolPaths = expandStmtTokens(v.ToolPaths, env)
+
+	if v.StdoutFile != nil {
+		stdout := expandStmtTokenAny((*v.StdoutFile), env)
+
+		expanded.StdoutFile = &stdout
+	}
+
+	bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
+
+	expanded.Args = expandCommandTokens(v.Args, env)
+	expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
+
+	if v.CWD != nil {
+		cwd := expandStmtTokenAny(*v.CWD, env)
+
+		expanded.CWD = &cwd
+	}
+
+	env.rebind(envBINDIR, bindir)
+	env.rebind(envCURDIR, curdir)
+
+	expanded.DeclSeq = d.nextDeclSeq()
+	d.runPrograms = append(d.runPrograms, &expanded)
+}
+
+func warnUnmodelledMacro(onWarn func(Warn), modulePath string, name TOK) {
+	onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf); skipped", modulePath, name.string())})
+}
+
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
 	if applyTestMacro(v, d) {
 		return
@@ -1818,8 +1849,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}()
 
 	switch v.Name {
-	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks:
+	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks, tokGolaunchCompositeComps:
 		applyMlaunchStmt(modulePath, v, env, d)
+	case tokSdcDiagsSplitGeneratorV4:
+		applySdcDiagsSplitGenerator(fs, modulePath, v, env, d)
+	case tokNodeBuilder:
+		if d.multimodule != tokMlaunchComponent || !isGoModuleType(d.unit.Type) {
+			handled = false
+
+			warnUnmodelledMacro(onWarn, modulePath, v.Name)
+		} else {
+			checkNodeBuilderOptions(v.Args)
+		}
 	case tokRosDir, tokRosPartial, tokRosSrcs, tokRosMsgCmd, tokRosZeroCopyMsgCmd, tokRosSrvCmd:
 		applyRosStmt(modulePath, v, env, d)
 	case tokSdcInstall:
@@ -1893,6 +1934,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.flags.NoUtil = true
 	case tokNoUtil:
 		d.flags.NoUtil = true
+	case tokUseCxx:
+		d.flags.NoRuntime = false
+	case tokUseUtil:
+		d.flags.NoRuntime = false
+		d.flags.NoUtil = false
 	case tokNoRuntime:
 
 		d.flags.NoRuntime = true
@@ -2070,6 +2116,37 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			d.goEmbeds = append(d.goEmbeds, newGoEmbed(fs, v.Name == tokGoXTestEmbedPattern, importPath, v.Args[0].string()))
+		}
+	case tokGoEmbedBindir, tokGoTestEmbedBindir, tokGoXtestEmbedBindir:
+		if v.Name == tokGoEmbedBindir || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
+			importPath := env.string(env_GO_IMPORT_PATH)
+
+			if importPath == "" {
+				importPath = modulePath
+			}
+
+			d.goEmbeds = append(d.goEmbeds, newGoEmbedBindir(v.Name == tokGoXtestEmbedBindir, importPath, v.Args))
+		}
+	case tokGoEmbedDir, tokGoEmbedTestDir, tokGoEmbedXtestDir:
+		if v.Name == tokGoEmbedDir || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
+			args := anyStrs(v.Args)
+			all := len(args) > 0 && args[0] == "ALL"
+
+			if all {
+				args = args[1:]
+			}
+
+			if len(args) != 1 {
+				throwFmt("%s expects a directory", v.Name)
+			}
+
+			importPath := modulePath
+
+			if imp := env.string(env_GO_IMPORT_PATH); imp != "" {
+				importPath = imp
+			}
+
+			d.goEmbeds = append(d.goEmbeds, newGoEmbedDir(fs, v.Name == tokGoEmbedXtestDir, importPath, args[0], all))
 		}
 	case tokAllGoTestSrcs:
 		if d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
@@ -2308,6 +2385,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.peerdirs = append([]ANY{internStr(googleapisPeer).any()}, d.peerdirs...)
 	case tokClangWarnings:
 		d.clangWarnings = append(d.clangWarnings, expandStmtTokens(v.Args, env)...)
+	case tokFbsNamespace:
+		if len(v.Args) == 0 {
+			throwFmt("FBS_NAMESPACE expects a namespace and optional path")
+		}
+
+		namespacePath := modulePath
+
+		if len(v.Args) >= 2 {
+			namespacePath = v.Args[1].string()
+		}
+
+		d.fbsNamespaces = append(d.fbsNamespaces, internV(v.Args[0].string(), "=", namespacePath).any())
 	case tokFlatcFlags:
 		d.flatcFlags = append(d.flatcFlags, v.Args...)
 	case tokCopyFile, tokCopyFileWithContext:
@@ -3204,7 +3293,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		handled = false
 
 		if !acknowledgedTokSet.has(uint32(v.Name)) {
-			onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf); skipped", modulePath, v.Name.string())})
+			warnUnmodelledMacro(onWarn, modulePath, v.Name)
 
 			return
 		}
@@ -4403,7 +4492,7 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 
 	if isGoModuleType(d.moduleStmt.Name) && peerYaMakeExists(ctx.fs, peerVFS) {
 		switch peerName := ctx.moduleName(peerVFS.relString()); {
-		case peerName == tokProtoLibrary || peerName == tokRosLibrary || peerName == tokMlaunchLibrary:
+		case peerName == tokProtoLibrary || peerName == tokFbsLibrary || peerName == tokRosLibrary || peerName == tokMlaunchLibrary || peerName == tokMlaunchComponent || peerName == tokSdcDiagsLibrary:
 			language = LangGo
 
 			fallthrough

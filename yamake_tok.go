@@ -13,6 +13,12 @@ var tokName = [...]STR{
 	tokGolaunchOverride:          internStr("GOLAUNCH_OVERRIDE"),
 	tokNoGolaunchSrcs:            internStr("NO_GOLAUNCH_SRCS"),
 	tokGenerateGolaunchCallbacks: internStr("GENERATE_GOLAUNCH_CALLBACKS"),
+	tokGolaunchComposite:         internStr("GOLAUNCH_COMPOSITE"),
+	tokGolaunchCompositeComps:    internStr("GOLAUNCH_COMPOSITE_COMPONENTS"),
+	tokMlaunchComponent:          internStr("MLAUNCH_COMPONENT"),
+	tokNodeBuilder:               internStr("NODE_BUILDER"),
+	tokSdcDiagsLibrary:           internStr("SDC_DIAGS_LIBRARY"),
+	tokSdcDiagsSplitGeneratorV4:  internStr("SDC_DIAGS_SPLIT_GENERATOR_V4"),
 
 	tokRosLibrary:        internStr("ROS_LIBRARY"),
 	tokRosDir:            internStr("ROS_DIR"),
@@ -136,6 +142,7 @@ var tokName = [...]STR{
 	tokExtralibs:                       internStr("EXTRALIBS"),
 	tokExtralibsStatic:                 internStr("EXTRALIBS_STATIC"),
 	tokFatal:                           internStr("FATAL"),
+	tokFbsNamespace:                    internStr("FBS_NAMESPACE"),
 	tokFbsLibrary:                      internStr("FBS_LIBRARY"),
 	tokFiles:                           kwFILES,
 	tokFlatcFlags:                      internStr("FLATC_FLAGS"),
@@ -283,6 +290,7 @@ var tokName = [...]STR{
 	tokUnittestFor:                     kwUNITTEST_FOR,
 	tokUseCommonGoogleApis:             internStr("USE_COMMON_GOOGLE_APIS"),
 	tokUseCxx:                          internStr("USE_CXX"),
+	tokUseUtil:                         internStr("USE_UTIL"),
 	tokUseLightPy2cc:                   internStr("USE_LIGHT_PY2CC"),
 	tokUseLlvmBc16:                     internStr("USE_LLVM_BC16"),
 	tokUseLlvmBc18:                     internStr("USE_LLVM_BC18"),
@@ -310,6 +318,12 @@ var tokName = [...]STR{
 	tokGoXtestSrcs:                     internStr("GO_XTEST_SRCS"),
 	tokGoSkipTests:                     internStr("GO_SKIP_TESTS"),
 	tokGoEmbedPattern:                  internStr("GO_EMBED_PATTERN"),
+	tokGoEmbedBindir:                   internStr("GO_EMBED_BINDIR"),
+	tokGoTestEmbedBindir:               internStr("GO_TEST_EMBED_BINDIR"),
+	tokGoXtestEmbedBindir:              internStr("GO_XTEST_EMBED_BINDIR"),
+	tokGoEmbedDir:                      internStr("GO_EMBED_DIR"),
+	tokGoEmbedTestDir:                  internStr("GO_EMBED_TEST_DIR"),
+	tokGoEmbedXtestDir:                 internStr("GO_EMBED_XTEST_DIR"),
 	tokCgoSrcs:                         internStr("CGO_SRCS"),
 	tokCgoLdflags:                      internStr("CGO_LDFLAGS"),
 	tokCgoCflags:                       internStr("CGO_CFLAGS"),
@@ -421,6 +435,12 @@ const (
 	tokGolaunchOverride
 	tokNoGolaunchSrcs
 	tokGenerateGolaunchCallbacks
+	tokGolaunchComposite
+	tokGolaunchCompositeComps
+	tokMlaunchComponent
+	tokNodeBuilder
+	tokSdcDiagsLibrary
+	tokSdcDiagsSplitGeneratorV4
 
 	tokRosLibrary
 	tokRosDir
@@ -475,6 +495,7 @@ const (
 	tokExtralibs
 	tokExtralibsStatic
 	tokFatal
+	tokFbsNamespace
 	tokFbsLibrary
 	tokFiles
 	tokFlatcFlags
@@ -643,6 +664,7 @@ const (
 	tokFuzz
 	tokUseCommonGoogleApis
 	tokUseCxx
+	tokUseUtil
 	tokUseLightPy2cc
 	tokUseLlvmBc16
 	tokUseLlvmBc18
@@ -670,6 +692,12 @@ const (
 	tokGoXtestSrcs
 	tokGoSkipTests
 	tokGoEmbedPattern
+	tokGoEmbedBindir
+	tokGoTestEmbedBindir
+	tokGoXtestEmbedBindir
+	tokGoEmbedDir
+	tokGoEmbedTestDir
+	tokGoEmbedXtestDir
 	tokCgoSrcs
 	tokCgoLdflags
 	tokCgoCflags

@@ -26,8 +26,6 @@ var goCgo1Head = []ANY{
 }
 
 var goCgoLinkOPostLd = []ANY{
-	internStr("-Wl,--no-rosegment").any(),
-	internStr("-Wl,--build-id=sha1").any(),
 	internStr("-Wl,--unresolved-symbols=ignore-all").any(),
 	internStr("-nodefaultlibs").any(),
 	internStr("-lc").any(),
@@ -445,9 +443,15 @@ func (e *EmitContext) goCgoImportPath() string {
 
 func (e *EmitContext) goCgoLinkOFlags() []ANY {
 	p := e.instance.Platform
-	tc := e.d.tc
 	na := e.ctx.na
-	block := na.anys.alloc(7 + len(p.LinkPreludeExtra))
+
+	var gdb []string
+
+	if isGoExeModuleType(e.d.moduleStmt.Name) {
+		gdb = p.linkerSelectionGDBIndexFlags()
+	}
+
+	block := na.anys.alloc(4 + len(p.LinkPreludeExtra) + len(gdb) + len(e.peers.LDFlagsGlobal))
 	k := 0
 	push := func(x ANY) { block[k] = x; k++ }
 
@@ -465,18 +469,17 @@ func (e *EmitContext) goCgoLinkOFlags() []ANY {
 		push(argFPIC.any())
 	}
 
-	if isGoExeModuleType(e.d.moduleStmt.Name) {
-		for _, f := range p.linkerSelectionGDBIndexFlags() {
-			push(internStr(f).any())
-		}
+	for _, f := range gdb {
+		push(internStr(f).any())
 	}
 
 	if p.PIC {
 		push(argFPIC.any())
 	}
 
-	push(argFuseLdLld.any())
-	push(internV("--ld-path=", tc.LLD.prefix(), tc.LLD.relString()).any())
+	for _, flag := range e.peers.LDFlagsGlobal {
+		push(flag)
+	}
 
 	na.anys.commit(k)
 

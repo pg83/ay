@@ -3,17 +3,18 @@ package main
 import "strings"
 
 type MlaunchModule struct {
-	Generate  string
-	Args      []string
-	Functions []string
-	Suffix    string
+	Generate   string
+	Args       []string
+	Functions  []string
+	Suffix     string
+	Components []ANY
 }
 
 func mlaunchModuleUnit(name TOK, language Language) ModuleUnit {
 	base := tokLibrary
 	tag := "CPP_MLAUNCH"
 
-	if name == tokGolaunchProgram {
+	if name == tokGolaunchProgram || name == tokGolaunchComposite {
 		base = tokGoProgram
 		tag = ""
 	}
@@ -31,7 +32,7 @@ func mlaunchModuleUnit(name TOK, language Language) ModuleUnit {
 			base = tokPackageFinal
 			tag = "DEPLOY"
 		}
-	} else if name == tokMlaunchLibrary {
+	} else if name == tokMlaunchLibrary || name == tokMlaunchComponent {
 		if language == LangGo {
 			base = tokGoLibrary
 			tag = "GO"
@@ -54,7 +55,7 @@ func mlaunchModuleUnit(name TOK, language Language) ModuleUnit {
 
 func setupMlaunchModule(stmt *ModuleStmt, module string, language Language, env Environment, d *ModuleData) {
 	switch stmt.Name {
-	case tokMlaunchLibrary, tokMlaunchPipeline, tokGolaunchProgram:
+	case tokMlaunchLibrary, tokMlaunchComponent, tokMlaunchPipeline, tokGolaunchProgram, tokGolaunchComposite:
 	default:
 		return
 	}
@@ -72,9 +73,19 @@ func setupMlaunchModule(stmt *ModuleStmt, module string, language Language, env 
 		if language == LangGo {
 			peer("sdg/sdc/ros/configuration/golaunch", "sdg/sdc/ros/configuration/golaunch/golaunch_context")
 		}
+	case tokMlaunchComponent:
+		if language == LangGo {
+			peer("sdg/sdc/ros/configuration/golaunch", "sdg/sdc/ros/configuration/golaunch/golaunch_context")
+		}
 	case tokGolaunchProgram:
 		d.mlaunch.Generate = "golaunch"
 		peer("sdg/sdc/ros/configuration/golaunch")
+	case tokGolaunchComposite:
+		d.mlaunch.Generate = "composite"
+
+		std := env.string(envGOSTD)
+
+		peer(std+"/fmt", std+"/sort", "sdg/sdc/ros/configuration/golaunch")
 	case tokMlaunchPipeline:
 		d.moduleVariants = 1<<LangCPP | 1<<LangGo | 1<<LangPackage
 		applyUnknownStmt(nil, module, UnknownStmt{Name: tokUseSdcMeta}, d, env, nil)
@@ -150,12 +161,43 @@ func applyMlaunchStmt(module string, stmt UnknownStmt, env Environment, d *Modul
 		}
 
 		ensureMlaunch(d).Args = append(ensureMlaunch(d).Args, "--deps-override", strings.Join(args, ":"))
+	case tokGolaunchCompositeComps:
+		ensureMlaunch(d).Components = append(ensureMlaunch(d).Components, stmt.Args...)
+		d.peerdirs = append(d.peerdirs, stmt.Args...)
 	case tokGenerateGolaunchCallbacks:
 		if len(args) != 1 {
 			throwFmt("GENERATE_GOLAUNCH_CALLBACKS expects one name")
 		}
 
 		ensureMlaunch(d).Args = append(ensureMlaunch(d).Args, "--gen-callbacks", args[0])
+	}
+}
+
+func checkNodeBuilderOptions(args []ANY) {
+	if len(args)%2 != 1 {
+		throwFmt("NODE_BUILDER expects a builder symbol and keyword/value pairs")
+	}
+
+	seen := map[string]bool{}
+
+	for i := 1; i < len(args); i += 2 {
+		key := args[i].string()
+
+		switch key {
+		case "NAME", "TARGET", "HEADER", "ROS_SPINNER_THREADS":
+		default:
+			throwFmt("Unknown NODE_BUILDER option: %s", key)
+		}
+
+		if seen[key] {
+			throwFmt("Repeated NODE_BUILDER option: %s", key)
+		}
+
+		seen[key] = true
+	}
+
+	if !seen["NAME"] || !seen["TARGET"] || !seen["HEADER"] {
+		throwFmt("NODE_BUILDER requires NAME, TARGET and HEADER")
 	}
 }
 

@@ -128,6 +128,14 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 			peers = append(peers, "contrib/libs/linux-headers")
 		}
 
+		if !flags.NoRuntime && !noPlatform {
+			peers = append(peers, "contrib/libs/cxxsupp")
+		}
+
+		if !flags.NoUtil && !noPlatform {
+			peers = append(peers, "util")
+		}
+
 		return append(peers, "build/platform/clang")
 	}
 

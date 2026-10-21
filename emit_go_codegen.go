@@ -468,6 +468,65 @@ func newGoEmbed(fs FS, xtest bool, importPath, pattern string) GoEmbed {
 	return em
 }
 
+func newGoEmbedBindir(xtest bool, importPath string, args []ANY) GoEmbed {
+	em := GoEmbed{xtest: xtest}
+
+	var files []ANY
+
+	for i := 0; i < len(args); i++ {
+		switch args[i].string() {
+		case "PREFIX":
+			i++
+
+			if i == len(args) {
+				throwFmt("GO_EMBED_BINDIR: PREFIX requires a path")
+			}
+
+			importPath = args[i].string()
+		case "FILES":
+			files = args[i+1:]
+			i = len(args)
+		default:
+			if em.pattern != "" {
+				throwFmt("GO_EMBED_BINDIR expects one pattern")
+			}
+
+			em.pattern = args[i].string()
+		}
+	}
+
+	if em.pattern == "" {
+		throwFmt("GO_EMBED_BINDIR expects a pattern")
+	}
+
+	em.root = build(importPath)
+
+	for _, file := range files {
+		em.files = append(em.files, build(importPath, "/", file.string()))
+	}
+
+	return em
+}
+
+func newGoEmbedDir(fs FS, xtest bool, importPath, dir string, all bool) GoEmbed {
+	base := importPath + "/" + dir
+	em := GoEmbed{xtest: xtest, root: source(importPath), pattern: dir}
+
+	var excludes []string
+
+	if all {
+		em.pattern = "all:" + dir
+	} else {
+		excludes = []string{base + "/**/_*", base + "/**/.*"}
+	}
+
+	for _, rel := range ymakeGlob(fs, base+"/**/*", excludes...) {
+		em.files = append(em.files, source(rel))
+	}
+
+	return em
+}
+
 func goEmbedArgs(na *NodeArenas, embeds []GoEmbed) ([]ANY, []VFS) {
 	nargs, ninputs := 0, 0
 

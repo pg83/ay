@@ -5,6 +5,7 @@ var multimoduleTags = map[TOK]map[string]Language{
 		"CPP_PROTO": LangCPP, "JAVA_PROTO": LangJava, "PY3_PROTO": LangPy, "GO_PROTO": LangGo,
 		"DESC_PROTO": LangDescProto, "DOCS_PROTO": LangDocsProto, "TS_PROTO": LangTS, "TS_PREPARE_DEPS": LangTSPrepare,
 	},
+	tokFbsLibrary:      {"CPP_FBS": LangCPP, "GO_FBS": LangGo},
 	tokRosLibrary:      {"CPP_ROS": LangCPP, "PY3_CPP_ROS": LangRosBindings, "PY3_ROS": LangPy, "GO_ROS": LangGo},
 	tokMlaunchLibrary:  {"CPP_MLAUNCH": LangCPP, "GO_MLAUNCH": LangGo, "UNION_MLAUNCH": LangPackage},
 	tokMlaunchPipeline: {"PIPELINE": LangCPP, "GOLAUNCH": LangGo, "DEPLOY": LangPackage},
@@ -46,7 +47,7 @@ func multimoduleVariantTag(name TOK, language Language) string {
 	return ""
 }
 
-func (ctx *GenCtx) genMultimoduleTargets(dir string, variants uint16, demand ModuleDemand) []*ModuleEmitResult {
+func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint16, demand ModuleDemand) []*ModuleEmitResult {
 	var results []*ModuleEmitResult
 
 	for _, language := range []Language{LangJava, LangPy, LangPy2, LangGo, LangDescProto, LangDocsProto, LangTSPrepare, LangTS, LangRosBindings, LangPackage} {
@@ -54,7 +55,7 @@ func (ctx *GenCtx) genMultimoduleTargets(dir string, variants uint16, demand Mod
 			continue
 		}
 
-		instance := ctx.rootInstance(dir, demand)
+		instance := ctx.rootInstanceForDeclaration(target.Path, demand, target.Declaration)
 
 		instance.Language = language
 

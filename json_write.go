@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"io"
 	"strconv"
 	"unicode/utf8"
@@ -83,7 +84,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 		first = false
 		buf = appendNode(buf, node, g.fetchRefs, dropSrcInputs)
 
-		if len(buf) >= 256<<10 {
+		if len(buf) >= 1<<20 {
 			throw2(w.Write(buf))
 			buf = buf[:0]
 		}
@@ -294,7 +295,13 @@ func appendVFS(buf []byte, v VFS) []byte {
 		if cached := vfsEscapedJSON[id]; cached != nil {
 			return append(buf, cached...)
 		}
-	} else {
+	}
+
+	return appendVFSUncached(buf, v, id)
+}
+
+func appendVFSUncached(buf []byte, v VFS, id uint32) []byte {
+	if int(id) >= len(vfsEscapedJSON) {
 		nc := make([][]byte, vfsBound())
 
 		copy(nc, vfsEscapedJSON)
@@ -331,6 +338,25 @@ func appendStringEscapedBody(buf []byte, s string) []byte {
 	start := 0
 
 	for i := 0; i < len(s); {
+		for len(s)-i >= 8 {
+			word := binary.LittleEndian.Uint64(strBytes(s[i : i+8]))
+			quote, slash := word^0x2222222222222222, word^0x5c5c5c5c5c5c5c5c
+			special := (word - 0x2020202020202020) | word
+
+			special |= (quote - 0x0101010101010101) &^ quote
+			special |= (slash - 0x0101010101010101) &^ slash
+
+			if special&0x8080808080808080 != 0 {
+				break
+			}
+
+			i += 8
+		}
+
+		if i == len(s) {
+			break
+		}
+
 		if b := s[i]; b < utf8.RuneSelf {
 			if htmlSafeNoEscape[b] {
 				i++

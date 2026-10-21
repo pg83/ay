@@ -29,6 +29,58 @@ def target_files():
 
 
 class ProtoTargetsTest(unittest.TestCase):
+    def test_schema_root_starts_its_descriptor_target_with_own_and_peer_sources(self):
+        files = target_files()
+        files["p/ya.make"] = "PROTO_SCHEMA(catalog)\nPEERDIR(dep)\nSRCS(a.proto)\nEND()\n"
+        files["dep/ya.make"] = "PROTO_LIBRARY()\nSRCS(dep.proto)\nEND()\n"
+        files["dep/dep.proto"] = 'syntax = "proto3";\n'
+        graph = lib.make(files, "p")
+        merged = lib.node_by_output(graph, "$(B)/p/catalog.protodesc")
+        self.assertIn(merged["uid"], graph["result"])
+        self.assertEqual(merged["outputs"], ["$(B)/p/catalog.protodesc", "$(B)/p/catalog.tar"])
+        self.assertIn("$(B)/p/catalog.self.protodesc", merged["inputs"])
+        self.assertIn("$(B)/dep/dep.self.protodesc", merged["inputs"])
+        outputs = {path for node in graph["graph"] for path in node["outputs"]}
+        self.assertNotIn("$(B)/p/a.pb.cc", outputs)
+        self.assertNotIn("$(B)/p/a.pb.go", outputs)
+
+    def test_schema_is_a_recursed_final_target_without_test_mode(self):
+        files = target_files()
+        files["p/ya.make"] = "PROTO_SCHEMA(catalog)\nSRCS(a.proto)\nEND()\n"
+        files["root/ya.make"] = "LIBRARY()\nNO_LIBC()\nEND()\nRECURSE(../p)\n"
+        graph = lib.make(files, "root")
+        merged = lib.node_by_output(graph, "$(B)/p/catalog.protodesc")
+        self.assertIn(merged["uid"], graph["result"])
+
+    def test_conditional_schema_declaration_selects_the_configured_default_target(self):
+        files = target_files()
+        files["p/ya.make"] = (
+            "IF(SCHEMA_DEFAULT)\nPROTO_SCHEMA()\nELSE()\nPROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nENDIF()\n"
+            "SRCS(a.proto)\nEND()\n"
+        )
+        for flag in ("yes", "no"):
+            with self.subTest(flag=flag):
+                graph = lib.make(files, "p", "-DSCHEMA_DEFAULT=" + flag)
+                outputs = {path for node in graph["graph"] for path in node["outputs"]}
+                self.assertEqual("$(B)/p/p.protodesc" in outputs, flag == "yes")
+                self.assertEqual("$(B)/p/libp.a" in outputs, flag == "no")
+
+    def test_conditional_schema_discovery_uses_the_selected_declaration(self):
+        files = target_files()
+        files["p/ya.make"] = (
+            "IF(SCHEMA_DEFAULT)\nPROTO_SCHEMA()\nELSE()\nPROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nENDIF()\n"
+            "SRCS(a.proto)\nEND()\nIF(MODULE_TAG == \"PROTO_DESCRIPTIONS\")\nRECURSE(child)\nENDIF()\n"
+        )
+        files["root/ya.make"] = f"LIBRARY()\n{lib.BARE_MODULE}\nEND()\nRECURSE(../p)\n"
+        files["p/child/ya.make"] = "PROTO_SCHEMA(child)\nEND()\n"
+        for flag in ("yes", "no"):
+            with self.subTest(flag=flag):
+                graph = lib.make(files, "root", "-DSCHEMA_DEFAULT=" + flag)
+                outputs = {path for node in graph["graph"] for path in node["outputs"]}
+                self.assertEqual("$(B)/p/p.protodesc" in outputs, flag == "yes")
+                self.assertNotIn("$(B)/p/libp.a", outputs)
+                self.assertEqual("$(B)/p/child/child.protodesc" in outputs, flag == "yes")
+
     def test_secondary_generated_proto_keeps_main_output_in_inputs(self):
         files = target_files()
         lib.tool_program(files, "gen", "gen")

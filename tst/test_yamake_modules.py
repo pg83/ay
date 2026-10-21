@@ -107,13 +107,13 @@ class YaMakeModulesTest(unittest.TestCase):
             ("YQL_UDF_YDB()", ["yql/essentials/public/udf", "yql/essentials/public/udf/support"], [("AR", "$(B)/a/liba.global.a"), ("CC", "$(B)/a/x.cpp.udfs.o")]),
             ("YQL_UDF_CONTRIB()", ["yql/essentials/public/udf", "yql/essentials/public/udf/support"], [("AR", "$(B)/a/liba.global.a"), ("CC", "$(B)/a/x.cpp.udfs.o")]),
             ("PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
-            ("PROTO_SCHEMA()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
+            ("PROTO_SCHEMA()", [], [("PD", "$(B)/a/a.protodesc"), ("PD", "$(B)/a/a.protosrc"), ("PD", "$(B)/a/a.self.protodesc"), ("PD", "$(B)/a/a.tar")]),
             ("PROTO_DESCRIPTIONS()", [], [("PD", "$(B)/a/a.protodesc"), ("PD", "$(B)/a/a.tar")]),
             ("DLL()", [], [("CC", "$(B)/a/x.cpp.pic.o"), ("LD", "$(B)/a/liba.so")]),
             ("SO_PROGRAM()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("PACKAGE()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("UNION()", [], [("CP", "$(B)/a/x.cpp"), ("UN", "$(B)/a/a.pkg.fake"), ("UN", "$(B)/a/x.cpp")]),
-            ("FBS_LIBRARY()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
+            ("FBS_LIBRARY()\nONLY_TAGS(CPP_FBS)", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("RESOURCES_LIBRARY()", [], []),
         ]
         for declaration, stubs, expected in cases:

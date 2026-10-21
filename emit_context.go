@@ -8,6 +8,8 @@ type PeerContext struct {
 	PeerAddInclGlobal []VFS
 	ResourceGlobals   []ResourceDecl
 	ProtoInclude      []VFS
+	FbsNamespaces     []ANY
+	LDFlagsGlobal     []ANY
 }
 
 type EmitContext struct {
