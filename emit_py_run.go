@@ -201,10 +201,11 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
 		e.register(GeneratedFileInfo{
-			OutputPath:     out,
-			ProducerRef:    pyRef,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
-			OnUse:          pending,
+			OutputPath:      out,
+			ProducerRef:     pyRef,
+			ProducerMainOut: outputs[0],
+			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
+			OnUse:           pending,
 		})
 	}
 

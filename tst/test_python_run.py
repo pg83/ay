@@ -11,6 +11,23 @@ def cmd(node):
 
 
 class RunPython3Test(unittest.TestCase):
+    def test_additional_cpp_output_keeps_the_discovered_main_header(self):
+        for out_order in ("generated.h generated.cpp", "generated.cpp generated.h"):
+            with self.subTest(out_order=out_order):
+                files = {
+                    "lib/ya.make": LIBRARY_HEAD + (
+                        f"RUN_PYTHON3(gen.py --header generated.h --cpp generated.cpp OUT {out_order})\n"
+                        "END()\n"
+                    ),
+                    "lib/gen.py": "",
+                }
+                graph = lib.make(files, "lib")
+                generated = lib.node_by_output(graph, "$(B)/lib/generated.cpp")
+                self.assertEqual("$(B)/lib/generated.h", generated["outputs"][0])
+                compiled = lib.node_by_output(graph, "$(B)/lib/generated.cpp.o")
+                self.assertIn("$(B)/lib/generated.h", compiled["inputs"])
+                self.assertIn(generated["uid"], compiled["deps"])
+
     def test_arguments_expand_quoted_configuration_values(self):
         files = {
             "build/ymake_conf.py": lib.ymake_conf(extra='SCRIPT_ARG="two words"\n'),
