@@ -53,6 +53,33 @@ class PireInlineTest(unittest.TestCase):
         compile_node = lib.node_by_output(graph, "$(B)/mod/__/shared/alpha.cpp.o")
         self.assertEqual(compile_node["inputs"], ["$(B)/mod/__/shared/alpha.cpp"])
 
+    def test_generated_input_uses_its_producer_in_both_declaration_orders(self):
+        statements = [
+            "RUN_PYTHON3(gen.py OUT_NOAUTO sub/stage.cpp OUTPUT_INCLUDES mod/input.h)",
+            "PIRE_INLINE(${ARCADIA_BUILD_ROOT}/mod/sub/stage.cpp)",
+        ]
+        for order in (statements, list(reversed(statements))):
+            with self.subTest(order=order):
+                files = {
+                    "mod/ya.make": "LIBRARY()\n" + BARE + "\n".join(order) + "\nEND()\n",
+                    "mod/gen.py": "",
+                    "mod/input.h": '#include "detail.h"\n',
+                    "mod/detail.h": "",
+                }
+                lib.tool_program(files, TOOL, "inline")
+                graph = lib.make(files, "mod")
+                first = lib.node_by_output(graph, "$(B)/mod/sub/stage.cpp")
+                inline = lib.node_by_output(graph, "$(B)/mod/_/sub/stage.cpp")
+                self.assertEqual(inline["cmds"][0]["cmd_args"][-1], "$(B)/mod/sub/stage.cpp")
+                self.assertIn(first["uid"], inline["deps"])
+                self.assertIn("$(B)/mod/sub/stage.cpp", inline["inputs"])
+                self.assertIn("$(S)/mod/input.h", inline["inputs"])
+                self.assertIn("$(S)/mod/detail.h", inline["inputs"])
+                compiled = lib.node_by_output(graph, "$(B)/mod/_/_/sub/stage.cpp.o")
+                self.assertEqual(compiled["inputs"], ["$(B)/mod/_/sub/stage.cpp"])
+                self.assertEqual(compiled["deps"], [inline["uid"]])
+                self.assertEqual(len([n for n in graph["graph"] if n.get("kv", {}).get("p") == "PY"]), 1)
+
     def test_empty_foreach_does_not_generate_a_tool(self):
         graph = lib.make({"mod/ya.make": "LIBRARY()\n" + BARE + "PIRE_INLINE()\nEND()\n"}, "mod")
         self.assertFalse(any(n.get("kv", {}).get("p") == "PI" for n in graph["graph"]))

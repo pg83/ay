@@ -66,6 +66,7 @@ func (x *ModuleData) reset() {
 		fromSandboxes:        scrub(x.fromSandboxes),
 		fromArchives:         scrub(x.fromArchives),
 		sdcMetas:             scrub(x.sdcMetas),
+		pireInline:           x.pireInline[:0],
 		checkConfigHeaders:   x.checkConfigHeaders[:0],
 		cythonCpp:            scrub(x.cythonCpp),
 		swigC:                scrub(x.swigC),
