@@ -188,19 +188,28 @@ func globMatch(fs FS, pattern string) []string {
 		for _, d := range dirs {
 			if seg == "**" {
 				if !last {
+					queue := []string{d}
+
+					for head := 0; head < len(queue); head++ {
+						current := queue[head]
+
+						for _, packed := range fs.listdir(dirKey(current)).names {
+							if packed&1 != 0 {
+								child := joinRel(current, STR(packed>>1).string())
+
+								next = append(next, child)
+								queue = append(queue, child)
+							}
+						}
+					}
+
 					next = append(next, d)
+
+					continue
 				}
 
 				fs.walk(d, func(rel string, isDir bool) bool {
-					if rel == d {
-						return true
-					}
-
-					if isDir {
-						if !last {
-							next = append(next, rel)
-						}
-					} else if last {
+					if !isDir {
 						matches = append(matches, rel)
 					}
 
@@ -230,13 +239,8 @@ func globMatch(fs FS, pattern string) []string {
 			}
 
 			view := fs.listdir(internStr(d))
-			entries := append([]uint32(nil), view.names...)
 
-			slices.SortFunc(entries, func(a, b uint32) int {
-				return strings.Compare(STR(a>>1).string(), STR(b>>1).string())
-			})
-
-			for _, packed := range entries {
+			for _, packed := range view.names {
 				name := STR(packed >> 1).string()
 
 				if !globSegMatch(seg, name) {

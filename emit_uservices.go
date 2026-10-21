@@ -143,13 +143,15 @@ func usrvAllSources(fs FS, module string, args []string) []string {
 		dirs = []string{"."}
 	}
 
+	dirs = dedupKeepOrder(dirs)
+
 	var files []string
 
 	for _, dir := range dirs {
 		pattern := path.Join(module, dir) + "/*"
 
 		if recursive {
-			pattern += "*"
+			pattern += "*/*"
 		}
 
 		for _, f := range globMatch(fs, pattern) {
@@ -185,9 +187,7 @@ func usrvAllSources(fs FS, module string, args []string) []string {
 		}
 	}
 
-	slices.Sort(files)
-
-	return slices.Compact(files)
+	return dedupKeepOrder(files)
 }
 
 func sourceGlobMatches(pattern, file string) bool {
