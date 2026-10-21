@@ -47,6 +47,27 @@ class SdcDiagsTest(unittest.TestCase):
             self.assertIn(f"{GENERATED}/diagnostics/v3/{name}/_group.h", compile_node["inputs"])
         self.assertIn(f"$(B)/{SEVERITY}", compile_node["inputs"])
 
+    def test_v3_group_directory_resolves_module_relative_and_rooted_paths(self):
+        module = f"{ROOT}/Hardware"
+        child = f"{module}/Hostname"
+        output = f"{GENERATED}/diagnostics/v3/Hardware/Hostname/_group.h"
+        for argument in ("Hostname", "${CURDIR}/Hostname", "${ARCADIA_ROOT}/" + child, child):
+            with self.subTest(argument=argument):
+                sources = files()
+                sources[f"{module}/ya.make"] = (
+                    f"LIBRARY()\n{lib.BARE_MODULE}\n"
+                    f"RUN_PROGRAM(tools/severity OUT_NOAUTO ${{ARCADIA_BUILD_ROOT}}/{SEVERITY})\n"
+                    f"SDC_DIAGS_SPLIT_GENERATOR_V3({module})\n"
+                    f"SDC_DIAGS_SPLIT_GENERATOR_V3({argument})\nEND()\n"
+                )
+                sources[f"{module}/_manifest_.yaml"] = "name: hardware\n"
+                sources[f"{child}/_manifest_.yaml"] = "name: hostname\n"
+                sources["app/ya.make"] = f"PROGRAM()\n{lib.BARE_MODULE}\nPEERDIR({module})\nSRCS(main.cpp)\nEND()\n"
+                sources["app/main.cpp"] = f'#include "{output.removeprefix("$(B)/")}"\nint main() {{ return 0; }}\n'
+                graph = lib.make(sources, "app")
+                generated = lib.node_by_output(graph, output)
+                self.assertIn(f"$(S)/{child}/_manifest_.yaml", generated["inputs"])
+
     def test_v3_leaf_resolves_curdir_and_places_group_option_before_file(self):
         sources = files()
         module = f"{ROOT}/Hardware"
