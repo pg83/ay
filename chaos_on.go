@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"os"
+	"os/user"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -33,6 +34,8 @@ var (
 	chaosLinkEXDEV     = newChaosFault("link-exdev")
 	chaosReadDirFail   = newChaosFault("readdir-fail")
 	chaosReadEIO       = newChaosFault("read-eio")
+	chaosReadFileEIO   = newChaosFault("readfile-eio")
+	chaosUserFail      = newChaosFault("user-current-fail")
 	chaosCPUAVX512     = newChaosNumber("cpu-avx512")
 	chaosHostGOOS      = newChaosText("host-os")
 	chaosHostGOARCH    = newChaosText("host-arch")
@@ -163,6 +166,22 @@ func chaosReadString(r *bufio.Reader) (string, error) {
 	}
 
 	return r.ReadString('\n')
+}
+
+func chaosReadFile(name string) ([]byte, error) {
+	if chaosReadFileEIO.fire() {
+		return nil, &os.PathError{Op: "read", Path: name, Err: syscall.EIO}
+	}
+
+	return os.ReadFile(name)
+}
+
+func chaosCurrentUser() (*user.User, error) {
+	if chaosUserFail.fire() {
+		return nil, user.UnknownUserIdError(os.Getuid())
+	}
+
+	return user.Current()
 }
 
 func chaosAVX512(has bool) bool {

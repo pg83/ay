@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/user"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +25,7 @@ func oauthLogin() string {
 		return u
 	}
 
-	if u, err := user.Current(); err == nil && u.Username != "" {
+	if u, err := chaosCurrentUser(); err == nil && u.Username != "" {
 		return u.Username
 	}
 

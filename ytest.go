@@ -213,7 +213,7 @@ func launchedByAgent() bool {
 	}
 
 	for pid := os.Getpid(); pid > 1; {
-		stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+		stat, err := chaosReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
 
 		if err != nil {
 			return false

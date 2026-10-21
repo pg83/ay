@@ -80,6 +80,17 @@ class GeneratorReachabilityContractsTest(unittest.TestCase):
         _, args = test_args(json.loads(result.stdout))
         self.assertEqual(args[args.index('--output-style') + 1], 'ninja')
 
+    def test_agent_detection_uses_default_style_when_proc_cannot_be_read(self):
+        tree = Tree(self, {'app/ya.make': 'EXECTEST()\nRUN(check)\nEND()\n'}, ya_conf='auto_detect_agent = true\n')
+        env = {k: v for k, v in os.environ.items() if k not in (*AGENT_ENV, *lib.TOOLCHAIN_ENV_VARS, 'YA_AUTO_DETECT_AGENT', 'YA_OUTPUT_STYLE')}
+        env['AY_CHAOS'] = 'readfile-eio=0'
+        result = subprocess.run([str(lib.AY), 'make', '-j0', '-G', '-t', '--source-root', str(tree.src),
+                                 '--host-platform', 'default-linux-x86_64', '--target-platform', 'default-linux-aarch64', 'app'],
+                                env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        _, args = test_args(json.loads(result.stdout))
+        self.assertEqual(args[args.index('--output-style') + 1], 'ninja')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

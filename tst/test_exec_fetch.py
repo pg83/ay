@@ -547,26 +547,25 @@ class FetchTokenFromSSHAgentTest(FetchCase):
         ))
 
     def test_unknown_user_without_login_name_yields_no_token(self):
-        # A uid without a passwd entry and an empty USER leave no login name.
-        unshare = ["unshare", "-U", "--map-user=3999999"]
-        probe = subprocess.run([*unshare, "true"], stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, check=False)
-        if probe.returncode != 0:
-            self.skipTest("unprivileged user namespaces are unavailable")
         agent = self.start_agent([("ssh-ed25519", "k", "sig")])
-        self.write("build/scripts/fetch_from_sandbox.py", (
-            "import sys\n"
-            "args = sys.argv[1:]\n"
-            "open(args[args.index('--copy-to') + 1], 'w').write('anonymous')\n"
+        self.assert_falls_back_to_script(self.env(
+            SSH_AUTH_SOCK=self.agent_sock, USER="", AY_CHAOS="user-current-fail=0",
         ))
-        result = subprocess.run(
-            [*unshare, str(lib.AY), "fetch", str(self.bld), str(self.src), "sbr:31"],
-            env=self.env(SSH_AUTH_SOCK=self.agent_sock, USER=""),
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30, check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual((self.bld / "resources" / "31" / "resource").read_text(), "anonymous")
         self.assertEqual(agent.signed, [])
+        self.assertEqual(self.oauth_forms(), [])
+
+    def test_unknown_system_user_uses_environment_login_for_oauth(self):
+        agent = self.start_agent([("ssh-ed25519", "k", "sig")])
+        self.resource_ready(21)
+        self.net.serve(OAUTH_HOST, "/token", '{"access_token": "fallback-login-token"}')
+        self.ay("fetch", self.bld, self.src, "sbr:21", env=self.env(
+            SSH_AUTH_SOCK=self.agent_sock, USER="environment-login", AY_CHAOS="user-current-fail=0",
+        ))
+        self.assertEqual((self.bld / "resources" / "21" / "ok.txt").read_text(), "ok\n")
+        self.assertEqual(self.oauth_forms()[0]["login"], ["environment-login"])
+        self.assertTrue(agent.signed[0][1].decode().endswith("environment-login"))
+        self.assertEqual(self.net.requests_to(SANDBOX_HOST)[0].headers["Authorization"],
+                         "OAuth fallback-login-token")
 
     def test_dead_agent_socket_yields_no_token(self):
         self.assert_falls_back_to_script(self.env(

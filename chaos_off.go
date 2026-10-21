@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"os"
+	"os/user"
 
 	"github.com/zeebo/xxh3"
 )
@@ -65,6 +66,14 @@ func chaosReadDir(dir string) ([]os.DirEntry, error) {
 
 func chaosReadString(r *bufio.Reader) (string, error) {
 	return r.ReadString('\n')
+}
+
+func chaosReadFile(name string) ([]byte, error) {
+	return os.ReadFile(name)
+}
+
+func chaosCurrentUser() (*user.User, error) {
+	return user.Current()
 }
 
 func chaosAVX512(has bool) bool {

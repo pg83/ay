@@ -54,7 +54,8 @@ def peak_kb(stderr):
 class MaxRSSTest(unittest.TestCase):
     def test_reports_subtree_peak_and_child_exit_code(self):
         script = f"{sys.executable} -c \"$0\" 7; exit $?"
-        result = run_ay("dev", "maxrss", "--hz", "50", "--", "sh", "-c", script, ALLOCATE)
+        result = run_ay("dev", "maxrss", "--hz", "50", "--", "sh", "-c", script, ALLOCATE,
+                        env={**os.environ, "AY_CHAOS": "readfile-eio=0"})
         self.assertEqual(result.returncode, 7, result.stderr)
         assert_allocation_peak(self, result.stderr)
 

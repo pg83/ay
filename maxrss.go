@@ -164,7 +164,7 @@ func subtreeRSSKB(root int) uint64 {
 }
 
 func readProcStat(pid int) (ppid int, rssKB uint64, ok bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	data, err := chaosReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
 
 	if err != nil {
 		return 0, 0, false
