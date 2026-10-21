@@ -160,6 +160,18 @@ func (e *EmitContext) collectModuleGlobalSource(src ANY) bool {
 	return true
 }
 
+func (e *EmitContext) moduleIsFake(result *ModuleEmitResult) bool {
+	if value, ok := e.d.setVars[strFakeModule]; ok && stringIsTruthy(value.string()) {
+		return true
+	}
+
+	if value, ok := e.d.setVars[strNeedAddFakeSrc]; ok && !stringIsTruthy(value.string()) {
+		return false
+	}
+
+	return result.ARRef == 0 && result.LDRef == 0
+}
+
 func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 	output := moduleOutputPath(result)
 
@@ -181,11 +193,33 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 
 	globals := e.moduleGlobals
 
-	if len(e.moduleIncludes) == 0 && len(peerInputs) == 0 && len(globals) == 0 {
+	if len(e.moduleIncludeRoots) == 0 && len(peerInputs) == 0 && len(globals) == 0 {
 		return
 	}
 
-	includes := e.ctx.na.dedupClosure(e.moduleIncludes, peerInputs)
+	var ownIncludes []VFS
+
+	fake := e.moduleIsFake(result)
+
+	for _, root := range e.moduleIncludeRoots {
+		if root.isBuild() {
+			ownIncludes = append(ownIncludes, root)
+		} else if !fake {
+			closure := e.includeClosure(root)
+
+			for _, bucket := range closure.bucketList() {
+				if len(bucket) > 0 && bucket[0].isBuild() {
+					ownIncludes = append(ownIncludes, bucket...)
+				}
+			}
+		}
+	}
+
+	if len(ownIncludes) == 0 && len(peerInputs) == 0 && len(globals) == 0 {
+		return
+	}
+
+	includes := e.ctx.na.dedupClosure(ownIncludes, peerInputs)
 
 	e.codegen.setModuleInputs(output, e.d.moduleStmt.Name, includes, globals, e.moduleGlobalInputs, passPeers)
 }
@@ -218,6 +252,6 @@ func (e *EmitContext) emitLDPlugins() {
 		e.register(GeneratedFileInfo{OutputPath: dst, PrimaryInput: src, ProducerRef: ref})
 		e.moduleGlobals = append(e.moduleGlobals, dst)
 		e.moduleGlobalInputs = append(e.moduleGlobalInputs, dst)
-		e.moduleIncludes = append(e.moduleIncludes, dst)
+		e.moduleIncludeRoots = append(e.moduleIncludeRoots, dst)
 	}
 }

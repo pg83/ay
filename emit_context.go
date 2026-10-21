@@ -15,7 +15,7 @@ type PeerContext struct {
 }
 
 type EmitContext struct {
-	moduleIncludes     []VFS
+	moduleIncludeRoots []VFS
 	moduleGlobals      []VFS
 	moduleGlobalInputs []VFS
 	globalSources      []VFS
