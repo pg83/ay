@@ -47,6 +47,7 @@ var (
 )
 
 const (
+	chaosVerifySlicePairs  = true
 	chaosInternWindow      = 1 << 12
 	chaosInternDefaultSeed = 0x9e3779b97f4a7c15
 )

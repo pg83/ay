@@ -11,6 +11,7 @@ import (
 )
 
 const chaosInternShuffle = false
+const chaosVerifySlicePairs = false
 
 func chaosInternID(seq uint32) uint32 {
 	return seq

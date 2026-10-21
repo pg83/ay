@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"unsafe"
 
 	"github.com/zeebo/xxh3"
@@ -55,13 +56,17 @@ func (c *SliceCache[T]) intern(block []T) []T {
 
 	if found {
 		if cell.verify == h2 {
+			if chaosVerifySlicePairs && !slices.Equal(cell.slice, block) {
+				throwFmt("SliceCache: hash pair collision (h1=%#x h2=%#x, %d elems)", h1, h2, len(block))
+			}
+
 			return cell.slice
 		}
 
 		cell2, found2 := c.overflow.cell(h2)
 
 		if found2 {
-			if cell2.verify != h1 {
+			if cell2.verify != h1 || chaosVerifySlicePairs && !slices.Equal(cell2.slice, block) {
 				throwFmt("SliceCache: hash pair collision (h1=%#x h2=%#x, %d elems)", h1, h2, len(block))
 			}
 
