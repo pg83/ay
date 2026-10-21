@@ -171,7 +171,28 @@ class SbomTest(unittest.TestCase):
         program = lib.node_by_output(graph, "$(B)/prog/prog")
         scripts = [arg for cmd in program["cmds"] for arg in cmd["cmd_args"]]
         self.assertNotIn("$(S)/build/internal/scripts/link_sbom.py", scripts)
+        self.assertNotIn("$(S)/build/internal/scripts/link_sbom.py", program["inputs"])
         self.assertEqual(len(program["cmds"]), 4)
+        components = [
+            *LINKED_COMPONENTS,
+            component("library/cpp/malloc/jemalloc/cpp-malloc-jemalloc.CPP.component.sbom"),
+            component("lib/lib.CPP.component.sbom"),
+            component("prog/prog.CPP.component.sbom"),
+        ]
+        self.assertCountEqual(
+            [path for path in program["inputs"] if path.endswith(".component.sbom")],
+            components,
+        )
+        for path in components:
+            self.assertIn(lib.node_by_output(graph, path)["uid"], program["deps"])
+
+    def test_debug_dll_keeps_components_without_embedding(self):
+        graph = lib.make(fixture(), "dlltool", *X86_64)
+        dll = lib.node_by_output(graph, "$(B)/dlltool/libt.so")
+        path = component("lib/lib.CPP.component.sbom")
+        self.assertIn(path, dll["inputs"])
+        self.assertIn(lib.node_by_output(graph, path)["uid"], dll["deps"])
+        self.assertNotIn("$(S)/build/internal/scripts/link_sbom.py", dll["inputs"])
 
     def test_non_x86_target_adds_cxxsupp_peer_without_components(self):
         graph = lib.make(fixture(), "prog", "-r")

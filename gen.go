@@ -2514,16 +2514,17 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			ownSbomRef, ownSbomPath = e.emitSbomComponent(sbomName)
 		}
 
-		var ldSbomRefs []NodeRef
-		var ldSbomPaths []VFS
+		ldSbomRefs := peerSbomRefs
+		ldSbomPaths := peerSbomPaths
 
-		if instance.Platform.BuildRelease {
-			ldSbomRefs = peerSbomRefs
-			ldSbomPaths = peerSbomPaths
+		if ownSbomRef != nil {
+			ldSbomRefs, ldSbomPaths = insertOwnSbomComponent(peerSbomRefs, peerSbomPaths, *ownSbomRef, *ownSbomPath, ownSbomInsertIdx)
+		}
 
-			if ownSbomRef != nil {
-				ldSbomRefs, ldSbomPaths = insertOwnSbomComponent(peerSbomRefs, peerSbomPaths, *ownSbomRef, *ownSbomPath, ownSbomInsertIdx)
-			}
+		if !instance.Platform.BuildRelease {
+			e.moduleGlobalInputs = append(e.moduleGlobalInputs, ldSbomPaths...)
+			ldSbomRefs = nil
+			ldSbomPaths = nil
 		}
 
 		ldRef := e.emitLD(
