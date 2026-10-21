@@ -166,8 +166,6 @@ type ModuleEmitResult struct {
 	PeerWholeArchiveClosureRefs     []NodeRef
 	PeerWholeArchiveClosurePaths    []VFS
 	PeerWholeArchiveCmdClosurePaths []VFS
-	LDPluginRefs                    []NodeRef
-	LDPluginPaths                   []VFS
 	PeerDynamicClosureRefs          []NodeRef
 	PeerDynamicClosurePaths         []VFS
 	SbomComponentRef                *NodeRef
@@ -1657,7 +1655,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	waCap := 0
 	waCmdCap := 0
 	dynCap := 0
-	ldplugCap := 0
 	protoCap := 0
 	swigCap := 0
 	cflagsCap := 0
@@ -1679,7 +1676,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		waCap += len(pr.PeerWholeArchiveClosurePaths) + len(pr.WholeArchivePaths)
 		waCmdCap += len(pr.PeerWholeArchiveCmdClosurePaths) + len(pr.WholeArchiveCmdPaths)
 		dynCap += len(pr.PeerDynamicClosurePaths)
-		ldplugCap += len(pr.LDPluginPaths)
 		protoCap += len(pr.ProtoInclude)
 		swigCap += len(pr.SwigInclude)
 		cflagsCap += len(pr.CFlagsGlobal)
@@ -1718,9 +1714,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	var (
 		resourceGlobalsClosure []ResourceDecl
 
-		peerArchiveRefs, peerGlobalRefs, peerWholeArchiveRefs, peerDynamicRefs, peerSbomRefs, peerLDPluginRefs, mergedLDPluginRefs []NodeRef
+		peerArchiveRefs, peerGlobalRefs, peerWholeArchiveRefs, peerDynamicRefs, peerSbomRefs []NodeRef
 
-		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, peerLDPluginPaths, mergedLDPluginPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude, effectiveSwigInclude, moduleSwigInclude []VFS
+		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude, effectiveSwigInclude, moduleSwigInclude []VFS
 
 		effectiveCFlagsGlobal, effectiveCXXFlagsGlobal, effectiveCOnlyFlagsGlobal, effectiveRPathFlagsGlobal []ANY
 
@@ -1753,28 +1749,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 
 		d.tc = resolveModuleToolchain(ctx, resourceGlobalsClosure, instance.Platform.ClangVer)
-
-		deduper.reset()
-
-		if ldplugCap != 0 {
-			ldplugBlockR := ctx.refSlices.alloc(ldplugCap)
-			ldplugBlockP := ctx.vfsSlices.alloc(ldplugCap)
-
-			k = 0
-
-			for _, rp := range resolved {
-				for i, p := range rp.result.LDPluginPaths {
-					if deduper.addStable(p.strID()) {
-						ldplugBlockR[k] = rp.result.LDPluginRefs[i]
-						ldplugBlockP[k] = p
-						k++
-					}
-				}
-			}
-
-			peerLDPluginRefs = ctx.refSlices.intern(ldplugBlockR[:k])
-			peerLDPluginPaths = ctx.vfsSlices.intern(ldplugBlockP[:k])
-		}
 
 		deduper.reset()
 
@@ -2148,39 +2122,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		effectiveRPathFlagsGlobal = concatShared(ctx.argSlices, peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 	})
 
-	ownLDPlugins := emitOwnLDPlugins(ctx, instance, d.ldPlugins, d.tc)
-
-	mergedLDPluginRefs = peerLDPluginRefs
-	mergedLDPluginPaths = peerLDPluginPaths
-
-	if ownLDPlugins != nil && len(ownLDPlugins.Paths) > 0 {
-		dedupers.with(func(deduper *DeDuper) {
-			total := len(ownLDPlugins.Paths) + len(peerLDPluginPaths)
-			mergeBlockR := ctx.refSlices.alloc(total)
-			mergeBlockP := ctx.vfsSlices.alloc(total)
-			k := 0
-
-			for i, p := range ownLDPlugins.Paths {
-				if deduper.addStable(p.strID()) {
-					mergeBlockR[k] = ownLDPlugins.Refs[i]
-					mergeBlockP[k] = p
-					k++
-				}
-			}
-
-			for i, p := range peerLDPluginPaths {
-				if deduper.addStable(p.strID()) {
-					mergeBlockR[k] = peerLDPluginRefs[i]
-					mergeBlockP[k] = p
-					k++
-				}
-			}
-
-			mergedLDPluginRefs = ctx.refSlices.intern(mergeBlockR[:k])
-			mergedLDPluginPaths = ctx.vfsSlices.intern(mergeBlockP[:k])
-		})
-	}
-
 	var linkExcludeLibraries []ANY
 
 	dedupers.with(func(deduper *DeDuper) {
@@ -2241,8 +2182,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			PeerWholeArchiveClosureRefs:     peerWholeArchiveRefs,
 			PeerWholeArchiveClosurePaths:    peerWholeArchivePaths,
 			PeerWholeArchiveCmdClosurePaths: peerWholeArchiveCmdPaths,
-			LDPluginRefs:                    mergedLDPluginRefs,
-			LDPluginPaths:                   mergedLDPluginPaths,
 			PeerDynamicClosureRefs:          peerDynamicRefs,
 			PeerDynamicClosurePaths:         peerDynamicPaths,
 			PeerSbomClosureRefs:             peerSbomRefs,
@@ -2368,19 +2307,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	var modulePeers []VFS
 
 	for _, peer := range resolved {
-		if output := moduleOutputPath(peer.result); output != 0 {
-			info := e.codegen.moduleInputs(output)
-
-			if info == nil || len(info.Includes) == 0 && len(info.Globals) == 0 {
-				continue
-			}
-
-			if modulePeers == nil {
-				modulePeers = ctx.na.vfs.alloc(len(resolved))[:0]
-			}
-
-			modulePeers = append(modulePeers, output)
-		}
+		modulePeers = e.appendModulePeer(modulePeers, peer.result, len(resolved))
 	}
 
 	if modulePeers != nil {
@@ -2418,7 +2345,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	d.scanCtx.rosInclude = rosInclude
 	e.emitMlaunch(resolved, peerArchivePaths, effectiveMlaunchDeps)
 	e.emit()
-	e.moduleGlobals = e.collectPeerModuleGlobals()
+	e.emitLDPlugins()
+	e.collectPeerModuleGlobals()
 
 	if instance.Demand == demandNone {
 		result := newResult()
@@ -2452,7 +2380,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	if isGoExeModuleType(d.moduleStmt.Name) {
-		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, mergedLDPluginRefs, mergedLDPluginPaths, resourceGlobalsClosure)
+		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
 		result := newResult()
 
 		result.isPROGRAM = true
@@ -2564,7 +2492,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			ldCCRefs, ldCCOutputs,
 			ldPeerArchiveRefs, ldPeerArchivePaths,
 			ldPeerLinkCmdPaths,
-			mergedLDPluginRefs, mergedLDPluginPaths,
 			peerGlobalRefs, peerGlobalPaths,
 			peerWholeArchiveRefs, peerWholeArchivePaths,
 			peerWholeArchiveCmdPaths,

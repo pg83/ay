@@ -131,7 +131,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	var resourceGlobals []ResourceDecl
 
 	var (
-		peerArchiveRefs, pluginRefs                                                      []NodeRef
+		peerArchiveRefs                                                                  []NodeRef
 		peerArchivePaths, peerAddInclGlobal, pluginPaths                                 []VFS
 		peerCFlagsGlobal, peerCXXFlagsGlobal, peerCOnlyFlagsGlobal, peerRPathFlagsGlobal []ANY
 	)
@@ -212,23 +212,24 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 				}
 			}
 		}
-
-		pluginRefs = []NodeRef{}
-		pluginPaths = []VFS{}
-
-		deduper.reset()
-
-		for _, pr := range resolved {
-			for i, pp := range pr.LDPluginPaths {
-				if deduper.add(pp.strID()) {
-					pluginRefs = append(pluginRefs, pr.LDPluginRefs[i])
-					pluginPaths = append(pluginPaths, pp)
-				}
-			}
-		}
 	})
 
 	d.tc = resolveModuleToolchain(ctx, resourceGlobals, instance.Platform.ClangVer)
+	var modulePeers []VFS
+
+	for _, peer := range resolved {
+		modulePeers = e.appendModulePeer(modulePeers, peer, len(resolved))
+	}
+
+	if modulePeers != nil {
+		na.vfs.commit(len(modulePeers))
+	}
+
+	e.frame.peerCtx = PeerContext{Modules: modulePeers}
+	e.peers = &e.frame.peerCtx
+	e.emitLDPlugins()
+	e.collectPeerModuleGlobals()
+	pluginPaths = e.globalPlugins()
 
 	fixElfRef, fixElfPath := ctx.tool(argToolsFixElf)
 	outputName := "lib" + d.moduleStmt.Args[0].string() + ".so"
@@ -242,10 +243,9 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	envVcsOnly := envVarsVCS
 	envFull := ctx.host.toolEnv()
 	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.relString(), d.exportsScript.string(), ctx.scripts)
-	deps := na.noderefs.alloc(len(peerArchiveRefs) + len(pluginRefs) + 1)[:0]
+	deps := na.noderefs.alloc(len(peerArchiveRefs) + 1)[:0]
 
 	deps = append(deps, peerArchiveRefs...)
-	deps = append(deps, pluginRefs...)
 	deps = append(deps, ctx.vcsRef)
 	na.noderefs.commit(len(deps))
 
@@ -263,6 +263,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	}
 
 	n.ForeignDepRefs = na.refList(fixElfRef)
+	n.Inputs = e.appendModuleInputs(n.Inputs, true)
 
 	ref := e.emitNode(n)
 	addInclGlobal := concat(d.addInclGlobal, peerAddInclGlobal)
@@ -288,8 +289,6 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		PeerGlobalClosurePaths:       nil,
 		PeerWholeArchiveClosureRefs:  nil,
 		PeerWholeArchiveClosurePaths: nil,
-		LDPluginRefs:                 pluginRefs,
-		LDPluginPaths:                pluginPaths,
 		InducedDeps:                  d.inducedDeps,
 		ModuleStmtName:               d.moduleStmt.Name,
 	}

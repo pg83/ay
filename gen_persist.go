@@ -54,8 +54,6 @@ func persistResult(ctx *GenCtx, r *ModuleEmitResult) {
 	r.PeerWholeArchiveClosureRefs = ctx.refSlices.internCopy(r.PeerWholeArchiveClosureRefs)
 	r.PeerWholeArchiveClosurePaths = ctx.vfsSlices.internCopy(r.PeerWholeArchiveClosurePaths)
 	r.PeerWholeArchiveCmdClosurePaths = ctx.vfsSlices.internCopy(r.PeerWholeArchiveCmdClosurePaths)
-	r.LDPluginRefs = ctx.refSlices.internCopy(r.LDPluginRefs)
-	r.LDPluginPaths = ctx.vfsSlices.internCopy(r.LDPluginPaths)
 	r.PeerDynamicClosureRefs = ctx.refSlices.internCopy(r.PeerDynamicClosureRefs)
 	r.PeerDynamicClosurePaths = ctx.vfsSlices.internCopy(r.PeerDynamicClosurePaths)
 	r.PeerSbomClosureRefs = ctx.refSlices.internCopy(r.PeerSbomClosureRefs)

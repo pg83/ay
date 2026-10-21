@@ -106,7 +106,7 @@ class GoPackageGraphTest(unittest.TestCase):
         files["app/own.py"] = "def plugin(): pass\n"
         graph = lib.make(files, "app")
         node = lib.node_by_output(graph, "$(B)/app/app")
-        plugins = ["$(B)/app/own.py.pyplugin", "$(B)/plugins/peer/peer.py.pyplugin"]
+        plugins = ["$(B)/plugins/peer/peer.py.pyplugin", "$(B)/app/own.py.pyplugin"]
         self.assertEqual(between(go_tool_args(node), "++ld_plugins", "++vcs"), plugins)
         for output in plugins:
             producer = lib.node_by_output(graph, output)

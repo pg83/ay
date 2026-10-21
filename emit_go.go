@@ -1076,7 +1076,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	return ref, outPath
 }
 
-func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerObjAddLibsGlobal []ANY, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, pluginRefs []NodeRef, pluginPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
+func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerObjAddLibsGlobal []ANY, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.relString()
@@ -1208,11 +1208,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		cgoBuilds = na.vfsList(build(dir, "/_cgo_main.c", instance.Platform.objectSuffix()))
 	}
 
-	pluginArgs := na.anys.alloc(len(pluginPaths) + len(e.moduleGlobals))[:0]
-
-	for _, path := range pluginPaths {
-		pluginArgs = append(pluginArgs, path.any())
-	}
+	pluginArgs := na.anys.alloc(len(e.moduleGlobals))[:0]
 
 	for _, input := range e.moduleGlobals {
 		if strings.HasSuffix(input.relString(), ".pyplugin") {
@@ -1232,7 +1228,6 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		goToolScriptInputsChunk,
 		dllInputs,
 		peerGlobalPaths,
-		pluginPaths,
 		ctx.scripts[ldVcsInfoVFS.rel()],
 		peerArchivePaths,
 		extraSources,
@@ -1242,13 +1237,12 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 
 	inputs = e.appendModuleInputs(inputs, true)
 
-	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + len(pluginRefs) + 2)
+	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + 2)
 	k := copy(deps, objRefs)
 
 	k += copy(deps[k:], peerArchiveRefs)
 
 	k += copy(deps[k:], peerGlobalRefs)
-	k += copy(deps[k:], pluginRefs)
 
 	if !isTest && instance.Platform.BuildRelease && sbomActive(ctx, instance) {
 		k += copy(deps[k:], peerSbomRefs)

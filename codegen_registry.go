@@ -26,9 +26,10 @@ type GeneratedFileInfo struct {
 }
 
 type ModuleInputInfo struct {
-	Includes  []VFS
-	Globals   []VFS
-	PassPeers bool
+	Includes     []VFS
+	Globals      []VFS
+	GlobalInputs []VFS
+	PassPeers    bool
 }
 
 type pendingEmitter interface {
@@ -260,7 +261,7 @@ func (r *CodegenRegistry) moduleInputs(path VFS) *ModuleInputInfo {
 	return info.ModuleInputs
 }
 
-func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, globals []VFS, passPeers bool) {
+func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, globals, globalInputs []VFS, passPeers bool) {
 	info, ok := r.byRel.get(output.rel())
 
 	if !ok {
@@ -273,7 +274,7 @@ func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, 
 		info.ModuleInputs = r.na.moduleInputs.one()
 	}
 
-	*info.ModuleInputs = ModuleInputInfo{Includes: includes, Globals: globals, PassPeers: passPeers}
+	*info.ModuleInputs = ModuleInputInfo{Includes: includes, Globals: globals, GlobalInputs: globalInputs, PassPeers: passPeers}
 }
 
 func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {

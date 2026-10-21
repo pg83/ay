@@ -64,8 +64,6 @@ func (e *EmitContext) emitLD(
 	peerLDRefs []NodeRef,
 	peerLibPaths []VFS,
 	peerLinkCmdPaths []VFS,
-	pluginRefs []NodeRef,
-	pluginPaths []VFS,
 	globalRefs []NodeRef,
 	globalPaths []VFS,
 	wholeArchiveRefs []NodeRef,
@@ -106,11 +104,10 @@ func (e *EmitContext) emitLD(
 ) NodeRef {
 	na := emit.nodeArenas()
 	globalInputs := e.moduleGlobals
+	pluginPaths := e.globalPlugins()
 
 	for _, input := range globalInputs {
 		switch path.Ext(input.relString()) {
-		case ".pyplugin":
-			pluginPaths = append(pluginPaths, input)
 		case ".a":
 			wholeArchivePaths = append(wholeArchivePaths, input)
 		case ".ld":
@@ -226,10 +223,9 @@ func (e *EmitContext) emitLD(
 	}
 
 	inputs := composeLDInputs(na, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles, extraChunks[:nExtra]...)
-	deps := na.noderefs.alloc(len(ccRefs) + len(pluginRefs) + len(globalRefs) + len(peerLDRefs) + len(dynamicRefs) + len(objcopyRefs) + len(sbomRefs) + 1)[:0]
+	deps := na.noderefs.alloc(len(ccRefs) + len(globalRefs) + len(peerLDRefs) + len(dynamicRefs) + len(objcopyRefs) + len(sbomRefs) + 1)[:0]
 
 	deps = append(deps, ccRefs...)
-	deps = append(deps, pluginRefs...)
 	deps = append(deps, globalRefs...)
 	deps = append(deps, peerLDRefs...)
 	deps = append(deps, dynamicRefs...)
@@ -648,35 +644,4 @@ func composeLDInputs(na *NodeArenas, ccPaths []VFS, peerLibPaths []VFS, pluginPa
 	na.inputs.commit(len(chunks))
 
 	return InputChunks(chunks[:len(chunks):len(chunks)])
-}
-
-type LdPluginsResult struct {
-	Refs  []NodeRef
-	Paths []VFS
-}
-
-func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []ANY, tc ModuleToolchain) *LdPluginsResult {
-	if len(plugins) == 0 {
-		return nil
-	}
-
-	res := &LdPluginsResult{
-		Refs:  make([]NodeRef, 0, len(plugins)),
-		Paths: make([]VFS, 0, len(plugins)),
-	}
-
-	cpInstance := instance
-
-	cpInstance.Platform = ctx.target
-
-	for _, name := range plugins {
-		src := resolveSourceVFS(ctx, instance, name.string(), []VFS{instance.Path})
-		dst := build(instance.Path.relString(), "/", name.string(), ".pyplugin")
-		ref := emitCP(cpInstance, src, dst, tc, ctx.scripts, ctx.emit)
-
-		res.Refs = append(res.Refs, ref)
-		res.Paths = append(res.Paths, dst)
-	}
-
-	return res
 }
