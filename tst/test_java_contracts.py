@@ -6,6 +6,49 @@ from test_java_features import command, tree
 
 
 class JavaContractsTest(unittest.TestCase):
+    def test_explicit_jar_name_and_prefix(self):
+        for args, output in (("custom PREFIX pre-", "pre-custom.jar"), ("custom PREFIX", "custom.jar")):
+            with self.subTest(args=args):
+                files = tree("JAVA_SRCS(src/Main.java)")
+                files["app/ya.make"] = f"JAVA_LIBRARY_NON_SPLIT({args})\nJAVA_SRCS(src/Main.java)\nEND()\n"
+                jar = lib.node_by_output(lib.make(files, "app"), "$(B)/app/" + output)
+                self.assertIn("$(S)/app/src/Main.java", jar["inputs"])
+
+    def test_split_library_exports_its_interface_and_transitive_peers(self):
+        files = tree("PEERDIR(dependency)\nJAVA_SRCS(src/Main.java)", **{
+            **contrib("dependency", jar=62),
+            "consumer/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nPEERDIR(app)\nEND()\n",
+        })
+        graph = lib.make(files, "consumer")
+        jar = lib.node_by_output(graph, "$(B)/app/app.jar")
+        self.assertEqual(writer_args(jar, "bfg.txt"), ["dependency/dependency.jar"])
+        interface = lib.node_by_output(graph, "$(B)/app/app-interface.jar")
+        self.assertIn(jar["uid"], interface["deps"])
+        consumer = lib.node_by_output(graph, "$(B)/consumer/consumer.jar")
+        self.assertEqual(writer_args(consumer, "bfg.txt"), ["app/app-interface.jar", "dependency/dependency.jar"])
+
+    def test_excluded_java_proto_has_no_java_output(self):
+        files = tree("PEERDIR(proto/api)", **{
+            "proto/api/ya.make": "PROTO_LIBRARY()\nEXCLUDE_TAGS(JAVA_PROTO)\nSRCS(api.proto)\nEND()\n",
+            "proto/api/api.proto": 'syntax = "proto3";\n',
+        })
+        graph = lib.make(files, "app")
+        jar = lib.node_by_output(graph, "$(B)/app/app.jar")
+        self.assertEqual(writer_args(jar, "bfg.txt"), [])
+        self.assertFalse(any(p.startswith("$(B)/proto/api/") for n in graph["graph"] for p in n["outputs"]))
+
+    def test_incompatible_java_peer_tags_are_reported(self):
+        for module in ("JAVA_TEST_LIBRARY", "JUNIT5"):
+            with self.subTest(module=module):
+                files = tree("PEERDIR(dependency)", module="EXTERNAL_JAVA_LIBRARY", **{
+                    "dependency/ya.make": f"{module}()\nEND()\n",
+                    "consumer/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nPEERDIR(app)\nEND()\n",
+                })
+                result = lib.make_process(files, "consumer")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("PEERDIR to dependency is prohibited by incompatible tags", result.stderr)
+                self.assertNotIn("panic:", result.stderr)
+
     def test_default_source_layouts_include_java_kotlin_and_resources(self):
         for macro, src, resources in (
             ("DEFAULT_JAVA_SRCS_LAYOUT", "src/main/java", "src/main/resources"),
@@ -94,6 +137,7 @@ WITH_JDK()
             "proto/api/ya.make": "PROTO_LIBRARY()\nWITH_KOTLIN_GRPC()\nUSE_COMMON_GOOGLE_APIS()\n"
                 "JAVA_PROTO_PLUGIN(custom tools/plugin DEPS custom/runtime)\n"
                 "SET_APPEND(_PROTOC_FLAGS --experimental_allow_proto3_optional)\n"
+                "ADDINCL(GLOBAL FOR proto imports)\n"
                 "PROTOC_FATAL_WARNINGS()\nEXPORT_YMAPS_PROTO()\nSRCS(GLOBAL api.proto)\nEND()\n",
             "proto/api/api.proto": 'syntax = "proto3";\n',
             "build/platform/java/kotlin_grpc/ya.make": lib.resource_lib("KOTLIN_GRPC", 51),
@@ -111,6 +155,7 @@ WITH_JDK()
                      "--custom_out=$(B)/java_out", "--fatal_warnings",
                      "--experimental_allow_proto3_optional", "-I=./maps/doc/proto"):
             self.assertIn(flag, args)
+        self.assertIn("-I=$(S)/imports", args)
         self.assertIn("$(B)/tools/plugin/plugin", proto["inputs"])
         self.assertEqual(proto["cmds"][0]["env"]["JAVA_HOME"], "$(B)/resources/JDK17")
         self.assertTrue(proto["cmds"][0]["env"]["KOTLIN_GRPC_JAR"].endswith("protoc-gen-grpc-kotlin-1.3.1.jar"))

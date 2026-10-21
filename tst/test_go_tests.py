@@ -252,6 +252,37 @@ def between(args, start, end):
 
 
 class GoTestModuleTest(unittest.TestCase):
+    def test_external_test_sources_and_embeds_use_the_tested_package_directory(self):
+        files = go_test_world()
+        lib.tool_program(files, "tools/generate", "generate")
+        files.update({
+            "lib/svc/ya.make": "GO_LIBRARY(svc)\nIF(OS_LINUX)\nALL_GO_SRCS()\n"
+                "ELSE()\nSRCS(unused.go)\nENDIF()\nGO_XTEST_SRCS(external_test.go)\n"
+                "GO_XTEST_EMBED_PATTERN(*.sql)\nGO_EMBED_XTEST_DIR(assets)\n"
+                "RUN_PROGRAM(tools/generate OUT_NOAUTO asset.bin)\n"
+                "GO_XTEST_EMBED_BINDIR(PREFIX lib/svc/gotest asset.bin FILES asset.bin)\nEND()\n",
+            "lib/svc/svc.go": "package svc\n",
+            "lib/svc/external_test.go": "package svc_test\n",
+            "lib/svc/query.sql": "select 1;\n",
+            "lib/svc/assets/data.txt": "data\n",
+            "lib/svc/gotest/ya.make": "GO_TEST_FOR(lib/svc)\nEND()\n",
+        })
+        graph = lib.make(files, "lib/svc/gotest", *AUTOCHECK)
+        binary = lib.node_by_output(graph, "$(B)/lib/svc/gotest/svc")
+        args = go_tool_args(binary)
+        self.assertEqual(between(args, "++srcs", "++asm-flags"), ["$(S)/lib/svc/svc.go"])
+        self.assertEqual(between(args, "++xtest_srcs", "++skip-tests"), ["$(S)/lib/svc/external_test.go"])
+        embeds = [args[i + 1:i + 4] for i, arg in enumerate(args) if arg == "++embed_xtest"]
+        self.assertEqual(embeds, [
+            ["$(S)/lib/svc", "*.sql", "$(S)/lib/svc/query.sql"],
+            ["$(S)/lib/svc", "assets", "$(S)/lib/svc/assets/data.txt"],
+            ["$(B)/lib/svc/gotest", "asset.bin", "$(B)/lib/svc/gotest/asset.bin"],
+        ])
+        for _, _, file in embeds:
+            self.assertIn(file, binary["inputs"])
+        generated = lib.node_by_output(graph, "$(B)/lib/svc/gotest/asset.bin")
+        self.assertIn(generated["uid"], binary["deps"])
+
     def test_go_test_does_not_run_the_executable_sdc_metadata_hook(self):
         files = go_test_world()
         files["build/internal/scripts/merge_sdcmeta.py"] = ""
@@ -632,22 +663,28 @@ class GoCodegenTest(unittest.TestCase):
         files["build/scripts/fs_tools.py"] = ""
         go_module(files, "lib/iface")
         files["lib/iface/mocks/ya.make"] = (
-            "GO_LIBRARY()\nGO_MOCKGEN_FROM(lib/iface)\nGO_MOCKGEN_SOURCE(iface.go)\n"
-            "GO_OAPI_CODEGEN_V2(types api spec.yaml)\nEND()\n"
+            "GO_LIBRARY()\nGO_MOCKGEN_FROM(lib/iface)\nGO_MOCKGEN_EXCLUDE_INTERFACES(Internal Private)\n"
+            "GO_MOCKGEN_SOURCE(iface.go IN_NOPARSE extra.txt)\n"
+            "GO_OAPI_CODEGEN_V2(types api spec.yaml OUT_SUFFIX _v2 IN_NOPARSE included.yaml)\nEND()\n"
         )
         files["lib/iface/mocks/spec.yaml"] = ""
+        files["lib/iface/mocks/extra.txt"] = "mock metadata\n"
+        files["lib/iface/mocks/included.yaml"] = "components: {}\n"
         graph = lib.make(files, "lib/iface/mocks")
         source = lib.node_by_output(graph, "$(B)/lib/iface/mocks/iface.source.gen.go")
         self.assertEqual(source["kv"], {"p": "GS", "pc": "blue"})
         mockgen = source["cmds"][-1]
         self.assertEqual(mockgen["cmd_args"], [
             "$(B)/vendor/go.uber.org/mock/mockgen/mockgen", "-package", "mocks", "-source", "lib/iface/iface.go",
+            "-exclude_interfaces=Internal,Private",
         ])
+        self.assertIn("$(S)/lib/iface/mocks/extra.txt", source["inputs"])
         self.assertEqual(mockgen["cwd"], "$(B)/lib/iface/mocks/.arcadia")
         self.assertEqual(mockgen["stdout"], "$(B)/lib/iface/mocks/iface.source.gen.go")
         self.assertEqual(mockgen["env"]["GOROOT"], "$(B)/resources/GO_TOOLS")
         self.assertEqual(source["cmds"][2]["cmd_args"][2:], ["copy", "$(S)/go.mod", "$(B)/lib/iface/mocks/.arcadia/go.mod"])
-        oapi = lib.node_by_output(graph, "$(B)/lib/iface/mocks/types.gen.go")
+        oapi = lib.node_by_output(graph, "$(B)/lib/iface/mocks/types_v2.gen.go")
+        self.assertIn("$(S)/lib/iface/mocks/included.yaml", oapi["inputs"])
         self.assertEqual(oapi["kv"], {"p": "GC", "pc": "blue"})
         self.assertEqual(oapi["cmds"][0]["cmd_args"], [
             "$(B)/vendor/github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen/oapi-codegen",
@@ -656,7 +693,7 @@ class GoCodegenTest(unittest.TestCase):
         package = lib.node_by_output(graph, "$(B)/lib/iface/mocks/mocks.a")
         args = go_tool_args(package)
         self.assertEqual(between(args, "++srcs", "++asm-flags"), [
-            "$(B)/lib/iface/mocks/iface.source.gen.go", "$(B)/lib/iface/mocks/types.gen.go",
+            "$(B)/lib/iface/mocks/iface.source.gen.go", "$(B)/lib/iface/mocks/types_v2.gen.go",
         ])
         self.assertIn("vendor/go.uber.org/mock/gomock/gomock.a", between(args, "++peers", "--ya-end-command-file"))
 

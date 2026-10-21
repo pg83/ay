@@ -660,10 +660,6 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool)
 
 		inst.Kind = units[0].sub
 	case name == tokProtoLibrary:
-		if !javaTagIn("JAVA_PROTO", tags) {
-			return nil
-		}
-
 		inst.Kind = KindJavaMain
 	default:
 		inst.Language = LangCPP

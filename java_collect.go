@@ -774,11 +774,9 @@ func javaMacroIsAlias(jm *JavaModule, name string) bool {
 	switch name {
 	case "JAVA_RUNTIME_PEERDIR", "JAVA_RUNTIME_EXCLUDE":
 		return jm.unit.kind == juRunnable
-	case "JAVA_TEST_PEERDIR", "JAVA_TEST_EXCLUDE":
+	default:
 		return jm.unit.kind == juTest
 	}
-
-	return true
 }
 
 func (jm *JavaModule) varPeers() []string {

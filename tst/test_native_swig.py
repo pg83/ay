@@ -35,6 +35,23 @@ def perl_tree(module, source="../api.swg"):
 
 
 class NativeSwigTest(unittest.TestCase):
+    def test_cyclic_swig_and_native_includes_preserve_transitive_inputs(self):
+        files = perl_tree("LIBRARY(Binding)")
+        files["bindings/detail.i"] = '%include "api.i"\n%include "tail.i"\n'
+        files["bindings/tail.i"] = ""
+        files["bindings/detail.h"] = '#include "api.h"\n#include "tail.h"\n'
+        files["bindings/tail.h"] = ""
+        graph = lib.make(files, "bindings/perl")
+        wrapper = "$(B)/bindings/perl/__/api_wrap.swg.cpp"
+        generated = lib.node_by_output(graph, wrapper)
+        compiled = lib.node_by_output(graph, wrapper + ".o")
+        for name in ("api.i", "detail.i", "tail.i"):
+            self.assertIn("$(S)/bindings/" + name, generated["inputs"])
+        for name in ("api.h", "detail.h", "tail.h"):
+            self.assertIn("$(S)/bindings/" + name, compiled["inputs"])
+        self.assertEqual(len(generated["inputs"]), len(set(generated["inputs"])))
+        self.assertEqual(len(compiled["inputs"]), len(set(compiled["inputs"])))
+
     def test_perl_wrapper_and_module_outputs(self):
         for module, output, suffix in (
             ("DLL(Binding PREFIX auto/Binding/lib)", "auto/Binding/libBinding.so", ".pic.o"),

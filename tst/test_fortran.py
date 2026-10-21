@@ -71,10 +71,14 @@ class FortranTest(unittest.TestCase):
         for declaration in (
             "RUN_PROGRAM(tools/generate OUT_NOAUTO generated.f)\nSRCS(generated.f)",
             "RUN_PROGRAM(tools/generate OUT generated.f)",
+            "RUN_PYTHON3(generate.py OUT generated.f)",
+            "FROM_ARCHIVE(sources.tar OUT generated.f)",
         ):
             with self.subTest(declaration=declaration):
                 files = world({
                     "mod/ya.make": "LIBRARY()\n" + BARE + declaration + "\nEND()\n",
+                    "mod/generate.py": "print('      end')\n",
+                    "mod/sources.tar": "",
                 })
                 lib.tool_program(files, "tools/generate", "generate")
                 graph = lib.make(files, "mod")
@@ -82,6 +86,30 @@ class FortranTest(unittest.TestCase):
                 compiled = lib.node_by_output(graph, "$(B)/mod/generated.f.o")
                 self.assertEqual(compiled["inputs"], ["$(B)/mod/generated.f"])
                 self.assertIn(produced["uid"], compiled["deps"])
+
+    def test_multiple_sources_share_the_compiler_resource(self):
+        files = world({
+            "mod/ya.make": "LIBRARY()\n" + BARE + "PEERDIR(extra)\nSRCS(first.f second.f)\nEND()\n",
+            "mod/first.f": "      include\n      end\n",
+            "mod/second.f": "      end\n",
+            "extra/ya.make": lib.resource_lib("EXTRA", 27),
+        })
+        graph = lib.make(files, "mod")
+        for name in ("first", "second"):
+            compiled = lib.node_by_output(graph, f"$(B)/mod/{name}.f.o")
+            self.assertEqual(compiled["cmds"][0]["cmd_args"][0], "$(B)/resources/FLANG/bin/flang-new")
+            self.assertEqual(compiled["inputs"], [f"$(S)/mod/{name}.f"])
+
+    def test_missing_compiler_resource_reports_an_error(self):
+        files = world({
+            "mod/ya.make": "LIBRARY()\n" + BARE + "SRCS(calc.f)\nEND()\n",
+            "mod/calc.f": "      end\n",
+            "build/platform/flang/ya.make": "RESOURCES_LIBRARY()\nEND()\n",
+        })
+        result = lib.make_process(files, "mod")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Fortran compiler resource missing", result.stderr)
+        self.assertNotIn("panic:", result.stderr)
 
     def test_resource_global_flags_and_host_resource_selection(self):
         files = world({

@@ -172,6 +172,21 @@ class GoPackageGraphTest(unittest.TestCase):
         self.assertIn("$(B)/embed/generated/catalog.pb", node["inputs"])
         self.assertIn("$(B)/shared/data/other.pb", node["inputs"])
 
+    def test_invalid_embed_arguments_report_errors(self):
+        for macro, message in (
+            ("GO_EMBED_BINDIR(PREFIX)", "PREFIX requires a path"),
+            ("GO_EMBED_BINDIR(first second)", "expects one pattern"),
+            ("GO_EMBED_BINDIR()", "expects a pattern"),
+            ("GO_EMBED_DIR()", "expects a directory"),
+        ):
+            with self.subTest(macro=macro):
+                files = go_world()
+                go_module(files, "lib/invalid", macros=macro + "\n")
+                result = lib.make_process(files, "lib/invalid")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertNotIn("panic:", result.stderr)
+
     def test_generated_go_sources_precede_epilogue_symabis_output(self):
         files = go_world()
         lib.tool_program(files, "tools/generate", "generate")
@@ -247,6 +262,20 @@ class GoPackageGraphTest(unittest.TestCase):
         self.assertIn("$(B)/lib/assets/schema.json", resource["cmds"][0]["cmd_args"])
         self.assertNotIn("$(S)/lib/assets/schema.json", resource["inputs"])
         self.assertIn(producer["uid"], resource["deps"])
+
+    def test_resource_package_name_uses_module_name_or_test_import_path(self):
+        for macro, package in (("", "custom"), ("SET(GO_TEST_IMPORT_PATH other/tested)", "tested")):
+            with self.subTest(macro=macro):
+                files = go_world()
+                go_module(files, "library/go/core/resource")
+                go_module(files, "library/go/core/resource/cc", module="GO_PROGRAM")
+                files["lib/assets/ya.make"] = f"GO_LIBRARY(custom)\n{macro}\nRESOURCE(data.txt key)\nEND()\n"
+                files["lib/assets/data.txt"] = "data\n"
+                graph = lib.make(files, "lib/assets")
+                resource = next(n for n in graph["graph"] if any(p.endswith(".res.go") for p in n["outputs"]))
+                args = resource["cmds"][0]["cmd_args"]
+                self.assertEqual(args[args.index("-package") + 1], package)
+                self.assertIn("$(S)/lib/assets/data.txt", resource["inputs"])
 
     def test_resource_files_dispatch_to_the_go_resource_compiler(self):
         for macro, filename in (

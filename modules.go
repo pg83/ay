@@ -4722,10 +4722,6 @@ func hasPy2Variant(name TOK) bool {
 }
 
 func moduleExcludesTag(d *ModuleData, tag string) bool {
-	if d == nil {
-		return false
-	}
-
 	excluded, specified := d.excludeTags[internStr(tag)]
 
 	return excluded || d.onlyTags && !specified
