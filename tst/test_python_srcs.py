@@ -321,6 +321,42 @@ class PySrcsTest(unittest.TestCase):
         self.assertEqual(sum("build/f.json" in kv for kv in all_kvs), 1)
         self.assertEqual(sum("R1/resources.json" in kv for kv in all_kvs), 1)
 
+    def test_explicit_sources_capture_prior_plugin_flags_and_final_native_flags(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": (
+                "PY3_LIBRARY()\n"
+                "CFLAGS(-DBEFORE=1 -DPyInit_manual=PyInit_manual_renamed)\n"
+                "SRCS(normal.c normal.cpp)\n"
+                "SRC(early.c)\nSRC_C_NO_LTO(nolto.c)\nSRC_C_AVX2(early_simd.c)\n"
+                "PY_REGISTER(pkg.before)\n"
+                "SRC(mid.c)\nSRC_C_AVX2(mid_simd.c)\n"
+                "PY_REGISTER(pkg.after)\nSRC_C_AVX2(late.c)\n"
+                "CFLAGS(-DAFTER=2)\nEND()\n"
+            ),
+            **{"lib/" + name: "" for name in (
+                "normal.c", "normal.cpp", "early.c", "nolto.c", "early_simd.c",
+                "mid.c", "mid_simd.c", "late.c",
+            )},
+        })
+        graph = lib.make(files, "lib")
+        native = ["-DBEFORE=1", "-DPyInit_manual=PyInit_manual_renamed", "-DAFTER=2"]
+        before = ["-DPyInit_before=PyInit_3pkg6before", "-Dinit_module_before=init_module_3pkg6before"]
+        after = ["-DPyInit_after=PyInit_3pkg5after", "-Dinit_module_after=init_module_3pkg5after"]
+        cases = {
+            "early.c.o": [], "nolto.c.o": [], "early_simd.c.avx2.o": [],
+            "mid.c.o": before, "mid_simd.c.avx2.o": before,
+            "late.c.avx2.o": before + after,
+            "normal.c.o": before + after, "normal.cpp.o": before + after,
+            "pkg.before.reg3.cpp.o": [], "pkg.after.reg3.cpp.o": before,
+        }
+        for output, flags in cases.items():
+            with self.subTest(output=output):
+                node = lib.node_by_output(graph, "$(B)/lib/" + output)
+                selected = [a for a in node["cmds"][0]["cmd_args"]
+                    if a in native + before + after]
+                self.assertEqual(selected, native + flags)
+
     def test_py_register_generates_and_compiles_registration(self):
         files = python_base()
         files.update({
@@ -344,8 +380,8 @@ class PySrcsTest(unittest.TestCase):
         self.assertIn(reg["uid"], compile_node["deps"])
         args = compile_node["cmds"][0]["cmd_args"]
         self.assertIn("-DKEEP", args)
-        self.assertNotIn("-DPyInit_foreign=PyInit_x", args)
-        self.assertNotIn("-DPyInit_bare", args)
+        self.assertIn("-DPyInit_foreign=PyInit_x", args)
+        self.assertIn("-DPyInit_bare", args)
         self.assertNotIn("-DPyInit_module=PyInit_2my6module", args)
 
         second = lib.node_by_output(graph, "$(B)/lib/other.reg3.cpp.o")

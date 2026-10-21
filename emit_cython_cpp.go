@@ -512,7 +512,6 @@ func (e *EmitContext) cythonAdjustModuleCCBlocks() []VFS {
 	cy := d.cc
 
 	cy.AddIncl = appendCythonCCAddIncl(ctx.na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
-	cy.CFlags = filterPyRegisterCFlags(d.cc.CFlags)
 
 	d.cc.MainOutInducedInputs = true
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &cy)
@@ -576,24 +575,4 @@ func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, sysIncludes []V
 	out = append(out, cythonNumpyAddIncl...)
 
 	return dedup(out)
-}
-
-func filterPyRegisterCFlags(cflags []ANY) []ANY {
-	if len(cflags) == 0 {
-		return cflags
-	}
-
-	out := make([]ANY, 0, len(cflags))
-
-	for _, flag := range cflags {
-		s := flag.string()
-
-		if _, ok := pyInitDefineShortname(s); ok {
-			continue
-		}
-
-		out = append(out, flag)
-	}
-
-	return out
 }

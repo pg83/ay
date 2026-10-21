@@ -110,6 +110,29 @@ class CythonTest(unittest.TestCase):
                 for path in paths:
                     self.assertEqual(args(compiled).count("-I$(S)/" + path), 1)
 
+    def test_cython_and_native_sources_share_explicit_registration_flags(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": (
+                "PY3_LIBRARY()\nBUILDWITH_CYTHON_C(early.pyx)\n"
+                "PY_REGISTER(pkg.before)\nBUILDWITH_CYTHON_C(mid.pyx)\n"
+                "PY_REGISTER(pkg.after)\nPY_SRCS(CYTHON_C late.pyx)\n"
+                "CFLAGS(-DPyInit_manual=PyInit_manual_renamed)\nSRCS(native.c)\nEND()\n"
+            ),
+            **{"lib/" + name: "" for name in ("early.pyx", "mid.pyx", "late.pyx", "native.c")},
+        })
+        graph = lib.make(files, "app")
+        flags = [
+            "-DPyInit_manual=PyInit_manual_renamed",
+            "-DPyInit_before=PyInit_3pkg6before", "-Dinit_module_before=init_module_3pkg6before",
+            "-DPyInit_after=PyInit_3pkg5after", "-Dinit_module_after=init_module_3pkg5after",
+        ]
+        for output in ("early.pyx.c.o", "mid.pyx.c.o", "late.pyx.c.o", "native.c.o"):
+            with self.subTest(output=output):
+                node = lib.node_by_output(graph, "$(B)/lib/" + output)
+                selected = [a for a in args(node) if a.startswith(("-DPyInit_", "-Dinit_module_"))]
+                self.assertEqual(selected, flags)
+
     def test_cython_flags_append_to_module_options_before_per_source_options(self):
         files = python_base()
         files.update({

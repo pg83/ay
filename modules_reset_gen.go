@@ -76,7 +76,6 @@ func (x *ModuleData) reset() {
 		bundles:              scrub(x.bundles),
 		noCheckImports:       x.noCheckImports[:0],
 		pyRegister:           x.pyRegister[:0],
-		pyRegisterExplicit:   x.pyRegisterExplicit[:0],
 		ragel6Flags:          x.ragel6Flags[:0],
 		bisonFlags:           x.bisonFlags[:0],
 		resourceDeclStmts:    scrub(x.resourceDeclStmts),

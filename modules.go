@@ -311,8 +311,7 @@ type ModuleData struct {
 	unit                     ModuleUnit
 	noCheckImports           []ANY
 	noCheckImportsDisabled   bool
-	pyRegister               []STR
-	pyRegisterExplicit       []bool
+	pyRegister               []PyRegistration
 	ragel6Flags              []ANY
 	bisonFlags               []ANY
 	conflictMod              *ModuleStmt
@@ -325,14 +324,21 @@ type ModuleData struct {
 	cc                       ModuleCompileEnv
 }
 
+type PyRegistration struct {
+	Name        STR
+	Explicit    bool
+	CFlagsStart int
+}
+
 type CompileSpec struct {
-	CFlags     []ANY
-	FlatOutput bool
-	Variant    STR
-	ObjSuf     STR
-	ForceCxx   bool
-	EnvAddIncl []VFS
-	EnvCFlags  []ANY
+	PyRegisterLimit int
+	CFlags          []ANY
+	FlatOutput      bool
+	Variant         STR
+	ObjSuf          STR
+	ForceCxx        bool
+	EnvAddIncl      []VFS
+	EnvCFlags       []ANY
 }
 
 type SrcMeta struct {
@@ -757,6 +763,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 			}
 		}
 	}
+
+	finishPyRegisterCFlags(d)
 
 	d.test.canonizeSubPath = env.string(envCanonizeSubPath)
 	d.test.validateData = resourceValidationEnabled(env)
@@ -2808,8 +2816,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{
-			CFlags:     extras,
-			FlatOutput: true,
+			CFlags:          extras,
+			FlatOutput:      true,
+			PyRegisterLimit: len(d.pyRegister) + 1,
 		}})
 	case tokSrcCNoLto:
 
@@ -2819,7 +2828,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		filename := v.Args[0]
 
-		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{FlatOutput: true}})
+		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{FlatOutput: true, PyRegisterLimit: len(d.pyRegister) + 1}})
 	case tokSrcCAvx, tokSrcCAvx2, tokSrcCAvx512, tokSrcCAmx, tokSrcCSse2, tokSrcCSse3, tokSrcCSsse3,
 		tokSrcCSse4, tokSrcCSse41, tokSrcCXop:
 
@@ -2833,9 +2842,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		flags := concat(variant.CFlags, v.Args[1:])
 
 		d.srcs = append(d.srcs, SrcMeta{Source: filename, Prio: stmtPrioDefault, Seq: d.nextDeclSeq(), Compile: CompileSpec{
-			CFlags:     flags,
-			FlatOutput: true,
-			Variant:    variant.Suffix,
+			CFlags:          flags,
+			FlatOutput:      true,
+			Variant:         variant.Suffix,
+			PyRegisterLimit: len(d.pyRegister) + 1,
 		}})
 	case tokBuildMn:
 
@@ -3293,42 +3303,68 @@ func reorderCythonVariantBuckets(d *ModuleData, start int, regIdx []int) {
 
 	copy(d.cythonCpp[start:], stmts)
 
-	names := make([]STR, n)
-	explicit := make([]bool, n)
+	registrations := make([]PyRegistration, n)
 
 	for i, p := range perm {
-		names[i] = d.pyRegister[regIdx[p]]
-		explicit[i] = d.pyRegisterExplicit[regIdx[p]]
+		registrations[i] = d.pyRegister[regIdx[p]]
 	}
 
 	for i, idx := range regIdx {
-		d.pyRegister[idx] = names[i]
-		d.pyRegisterExplicit[idx] = explicit[i]
+		d.pyRegister[idx] = registrations[i]
 	}
 }
 
 func appendPyRegister(d *ModuleData, name string, explicit bool) {
-	d.pyRegister = append(d.pyRegister, internStr(name))
-	d.pyRegisterExplicit = append(d.pyRegisterExplicit, explicit)
+	d.pyRegister = append(d.pyRegister, PyRegistration{Name: internStr(name), Explicit: explicit})
+}
 
-	dot := strings.LastIndexByte(name, '.')
-
-	if dot < 0 {
+func finishPyRegisterCFlags(d *ModuleData) {
+	if len(d.pyRegister) == 0 {
 		return
 	}
 
-	shortname := name[dot+1:]
-	mangled := pythonInitSuffix(name)
-	initDefine := "-DPyInit_" + shortname + "=PyInit_" + mangled
+	for i := range d.pyRegister {
+		registration := &d.pyRegister[i]
 
-	if d.usePython2 {
-		initDefine = "-Dinit" + shortname + "=init" + mangled
+		registration.CFlagsStart = len(d.cFlags)
+
+		name := registration.Name.string()
+		dot := strings.LastIndexByte(name, '.')
+
+		if !registration.Explicit || dot < 0 {
+			continue
+		}
+
+		shortname := name[dot+1:]
+		mangled := pythonInitSuffix(name)
+		initDefine := "-DPyInit_" + shortname + "=PyInit_" + mangled
+
+		if d.usePython2 {
+			initDefine = "-Dinit" + shortname + "=init" + mangled
+		}
+
+		d.cFlags = append(d.cFlags,
+			internArg(initDefine).any(),
+			internArg("-Dinit_module_"+shortname+"=init_module_"+mangled).any(),
+		)
 	}
 
-	d.cFlags = append(d.cFlags,
-		internArg(initDefine).any(),
-		internArg("-Dinit_module_"+shortname+"=init_module_"+mangled).any(),
-	)
+	for i := range d.srcs {
+		compile := &d.srcs[i].Compile
+		limit := compile.PyRegisterLimit - 1
+
+		if limit < 0 || limit >= len(d.pyRegister) {
+			continue
+		}
+
+		end := d.pyRegister[limit].CFlagsStart
+
+		if end == len(d.cFlags) {
+			continue
+		}
+
+		compile.EnvCFlags = d.cFlags[:end:end]
+	}
 }
 
 func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {

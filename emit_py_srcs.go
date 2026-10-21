@@ -777,20 +777,8 @@ func (e *EmitContext) emitPyRegister() {
 		return
 	}
 
-	for i, arg := range d.pyRegister {
-		priorShort := make(map[string]struct{}, i)
-
-		for j := 0; j < i; j++ {
-			if !d.pyRegisterExplicit[j] {
-				continue
-			}
-
-			prior := d.pyRegister[j]
-			priorStr := prior.string()
-
-			priorShort[priorStr[strings.LastIndexByte(priorStr, '.')+1:]] = struct{}{}
-		}
-
+	for _, registration := range d.pyRegister {
+		arg := registration.Name
 		regCpp := arg.string() + ".reg3.cpp"
 		script, scriptChunk := genPy3RegScriptVFS, genPy3RegScriptChunk
 
@@ -820,21 +808,8 @@ func (e *EmitContext) emitPyRegister() {
 		}
 
 		pyRef := e.emitNode(pyNode)
-		envCFlags := na.anys.alloc(len(d.cc.CFlags))[:0]
-
-		for _, f := range d.cc.CFlags {
-			if short, ok := pyInitDefineShortname(f.string()); ok {
-				if _, keep := priorShort[short]; !keep {
-					continue
-				}
-			}
-
-			envCFlags = append(envCFlags, f)
-		}
-
-		na.anys.commit(len(envCFlags))
-
-		spec := CompileSpec{ObjSuf: d.unit.ObjSuf, EnvCFlags: envCFlags[:len(envCFlags):len(envCFlags)]}
+		end := registration.CFlagsStart
+		spec := CompileSpec{ObjSuf: d.unit.ObjSuf, EnvCFlags: d.cc.CFlags[:end:end]}
 
 		if len(d.cythonCpp) > 0 {
 			spec.EnvAddIncl = appendCythonCCAddIncl(na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
@@ -850,28 +825,6 @@ func (e *EmitContext) emitPyRegister() {
 			Compile: spec,
 		})
 	}
-}
-
-func pyInitDefineShortname(flag string) (string, bool) {
-	for _, pfx := range []string{"-DPyInit_", "-Dinit_module_"} {
-		if strings.HasPrefix(flag, pfx) {
-			rest := flag[len(pfx):]
-
-			if eq := strings.IndexByte(rest, '='); eq >= 0 {
-				return rest[:eq], true
-			}
-
-			return rest, true
-		}
-	}
-
-	if rest, ok := strings.CutPrefix(flag, "-Dinit"); ok {
-		if short, value, ok := strings.Cut(rest, "="); ok && strings.HasPrefix(value, "init") {
-			return short, true
-		}
-	}
-
-	return "", false
 }
 
 type PyGenResEntry struct {
