@@ -1302,6 +1302,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			routeAllToGlobal := d.moduleStmt != nil && isYqlUdfStaticModule(d.moduleStmt.Name)
+			goSrcs := isGoModuleType(d.unit.Type)
 			globalNext := false
 			srcToks := expandStmtTokens(v.Sources, env)
 			stmt := d.nextDeclSeq()
@@ -1324,6 +1325,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			for _, srcTok := range srcToks {
+				if goSrcs && srcTok.string() != "CGO_EXPORT" && !goSrcsExtensionSupported(filepath.Ext(srcTok.string())) {
+					continue
+				}
+
 				if srcTok == kwGLOBAL.any() {
 					globalNext = true
 

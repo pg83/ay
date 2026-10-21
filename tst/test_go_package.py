@@ -609,8 +609,10 @@ class GoPackageGraphTest(unittest.TestCase):
             "$(S)/library/go/mixed/global.go",
         ])
         self.assertEqual(between(mixed, "++peers", "--ya-end-command-file"), [
-            f"{STD}/bufio/bufio.a", f"{STD}/hash/hash.a",
+            f"{STD}/bufio/bufio.a", f"{STD}/hash/hash.a", f"{STD}/context/context.a",
         ])
+        context = lib.node_by_output(graph, f"$(B)/{STD}/context/context.a")
+        self.assertIn(context["uid"], go_node(graph, "library/go/mixed")["deps"])
         simd = lib.node_by_output(graph, "$(B)/library/go/mixed/simd.c.avx2.o")
         self.assertEqual(simd["cmds"][0]["cmd_args"][-5:], [
             "-mavx2", "-mfma", "-mbmi", "-mbmi2", "$(S)/library/go/mixed/simd.c",

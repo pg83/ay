@@ -190,6 +190,15 @@ func isGoModuleType(name TOK) bool {
 	return name == tokGoLibrary || isGoExeModuleType(name)
 }
 
+func goSrcsExtensionSupported(ext string) bool {
+	switch ext {
+	case ".c", ".cc", ".cpp", ".cxx", ".C", ".S", ".ev", ".fbs", ".go", ".in", ".proto", ".s", ".syso":
+		return true
+	}
+
+	return false
+}
+
 func isGoExeModuleType(name TOK) bool {
 	return name == tokGoProgram || name == tokGoTest || name == tokGoDll
 }
