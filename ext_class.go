@@ -47,6 +47,7 @@ const (
 	srcExtCuda
 	srcExtRodata
 	srcExtSwg
+	srcExtSsqls
 )
 
 type ExtFlags uint8
@@ -83,6 +84,7 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 	set(extHeader, ".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx", ".inl")
 	set(extCopyAuto, ".c", ".cpp", ".cc", ".cxx", ".proto", ".ev", ".g4", ".y", ".ypp", ".rl", ".rl6", ".h.in", ".c.in", ".cpp.in")
 	set(extCodegen, ".msg", ".srv", ".proto", ".gztproto", ".fbs64", ".fbs", ".ev", ".cfgproto", ".rl6", ".rl", ".rl5", ".y", ".ypp", ".cpp.in", ".c.in", ".sc", ".gperf", ".lpp", ".lex", ".l", ".fml", ".sfdl", ".asp", ".swg")
+	set(extCodegen, ".ssqls")
 
 	for ext, cls := range map[string]SrcExtClass{
 		".msg":      srcExtRos,
@@ -133,6 +135,7 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 		".cu":       srcExtCuda,
 		".rodata":   srcExtRodata,
 		".swg":      srcExtSwg,
+		".ssqls":    srcExtSsqls,
 	} {
 		get(ext).srcExt = cls
 	}

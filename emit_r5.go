@@ -85,16 +85,5 @@ func (e *EmitContext) emitLibraryRagel5Source(meta SrcMeta) {
 	})
 
 	meta.Source = r5CppOut.any()
-	meta.Compile.CFlags = cflagsWnoImplicitFallthrough(e.ctx.na, meta.Compile.CFlags)
 	e.enqueueSrc(meta)
-}
-
-func cflagsWnoImplicitFallthrough(na *NodeArenas, psc []ANY) []ANY {
-	out := na.anys.alloc(len(psc) + 1)
-	n := copy(out, psc)
-
-	out[n] = argWnoImplicitFallthrough.any()
-	na.anys.commit(n + 1)
-
-	return out[: n+1 : n+1]
 }

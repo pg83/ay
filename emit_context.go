@@ -3,6 +3,7 @@ package main
 import "strings"
 
 type PeerContext struct {
+	Modules           []VFS
 	GlobalSources     []VFS
 	SelfAddInclGlobal []VFS
 	PeerAddInclGlobal []VFS
@@ -13,54 +14,56 @@ type PeerContext struct {
 }
 
 type EmitContext struct {
-	globalSources []VFS
-	ctx           *GenCtx
-	frame         *ModuleFrame
-	instance      ModuleInstance
-	d             *ModuleData
-	peers         *PeerContext
-	scanner       *IncludeScanner
-	codegen       *CodegenRegistry
-	srcs          []SrcMeta
-	srcHead       int
-	srcsClosed    bool
-	refs          []NodeRef
-	outs          []VFS
-	metas         []SrcMeta
-	objcopyRes    *ObjcopyEmitResult
-	protoRes      *ProtoSrcsResult
-	goRes         *GoSrcsResult
-	goInclJoined  []ANY
-	pyMetas       []PySourceMeta
-	pySrcsReg     []PySrc
-	resources     []ResourceEntry
-	localObjs     CollectedObjs
-	globalObjs    CollectedObjs
-	prodPos       []ProducerPos
-	prodBacking   []VFS
-	prodSrcs      []SrcMeta
-	objScratch    []ResourceItem
-	rawScratch    []ResourceItem
-	resItems      []ResourceItem
-	dirScratch    []IncludeDirective
-	resEntries    []PyGenResEntry
-	resStrBuf     []byte
-	prodVFS       []VFS
-	cvScratch     []Closure
-	peerScratch   []string
-	arMembers     []ARMember
-	sbomOrder     []ResolvedPeer
-	orderedCC     []VFS
-	prodOrder     []int
-	protoPaths    []protoPathEntry
-	protoPathPos  int
-	pbEmission    [2]PbModuleEmission
-	pbEmissionOk  [2]bool
-	pyPBEmission  PyPBModuleEmission
-	pyPBOk        bool
-	objcopyCtx    ObjcopyEmitCtx
-	objcopyOk     bool
-	protoResVal   ProtoSrcsResult
+	moduleIncludes []VFS
+	moduleGlobals  []VFS
+	globalSources  []VFS
+	ctx            *GenCtx
+	frame          *ModuleFrame
+	instance       ModuleInstance
+	d              *ModuleData
+	peers          *PeerContext
+	scanner        *IncludeScanner
+	codegen        *CodegenRegistry
+	srcs           []SrcMeta
+	srcHead        int
+	srcsClosed     bool
+	refs           []NodeRef
+	outs           []VFS
+	metas          []SrcMeta
+	objcopyRes     *ObjcopyEmitResult
+	protoRes       *ProtoSrcsResult
+	goRes          *GoSrcsResult
+	goInclJoined   []ANY
+	pyMetas        []PySourceMeta
+	pySrcsReg      []PySrc
+	resources      []ResourceEntry
+	localObjs      CollectedObjs
+	globalObjs     CollectedObjs
+	prodPos        []ProducerPos
+	prodBacking    []VFS
+	prodSrcs       []SrcMeta
+	objScratch     []ResourceItem
+	rawScratch     []ResourceItem
+	resItems       []ResourceItem
+	dirScratch     []IncludeDirective
+	resEntries     []PyGenResEntry
+	resStrBuf      []byte
+	prodVFS        []VFS
+	cvScratch      []Closure
+	peerScratch    []string
+	arMembers      []ARMember
+	sbomOrder      []ResolvedPeer
+	orderedCC      []VFS
+	prodOrder      []int
+	protoPaths     []protoPathEntry
+	protoPathPos   int
+	pbEmission     [2]PbModuleEmission
+	pbEmissionOk   [2]bool
+	pyPBEmission   PyPBModuleEmission
+	pyPBOk         bool
+	objcopyCtx     ObjcopyEmitCtx
+	objcopyOk      bool
+	protoResVal    ProtoSrcsResult
 }
 
 type CollectedObjs struct {

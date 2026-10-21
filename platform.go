@@ -63,6 +63,7 @@ type Platform struct {
 	ClangVerSTR           STR
 	BuildTypeUpperSTR     STR
 	WrapccHead            []ANY
+	WrapUnshare           bool
 	WrapccTail            []ANY
 	CCUsesResources       []STR
 	UsesPython3Clang      []STR
@@ -98,7 +99,7 @@ func sysrootArgsFor(os OS, flags map[string]string) []ANY {
 }
 
 func wrapccPrefixFor(flags map[string]string) (head, tail []ANY) {
-	if flags["OPENSOURCE"] == "yes" {
+	if flags["OPENSOURCE"] == "yes" || flags["RAW_COMPILE_CPP_CMD"] == "yes" || flags["CPP_ANALYSIS_ARGS"] != "" {
 		return nil, nil
 	}
 
@@ -165,6 +166,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.TargetArg = internV("--target=", p.Triple)
 	p.MultiarchLibPathSTR = internStr(p.multiarchLibPath(flags["OPENSOURCE"] == "yes"))
 	p.WrapccHead, p.WrapccTail = wrapccPrefixFor(flags)
+	p.WrapUnshare = len(p.WrapccHead) > 0 && (flags["ENABLE_UNSHARE_WRAPPER"] != "" && flags["ENABLE_UNSHARE_WRAPPER"] != "no" || flags["SDC_PLATFORM"] != "" && flags["SDC_PLATFORM"] != "no")
 
 	clangRes := internV(resourcePatternClangTool, p.ClangVer)
 
@@ -172,6 +174,10 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 
 	if len(p.WrapccHead) > 0 {
 		p.CCUsesResources = append(p.CCUsesResources, strYMakePython3Name)
+	}
+
+	if p.WrapUnshare {
+		p.CCUsesResources = append(p.CCUsesResources, strUnshareWrapper)
 	}
 
 	p.UsesPython3Clang = []STR{strYMakePython3Name, clangRes}
@@ -303,6 +309,7 @@ func buildPlatformIfEnv(p *Platform) Environment {
 
 	if env.bool(envOPENSOURCE) {
 		env.setBool(envCATBOOST_OPENSOURCE, true)
+		env.setBool(envValidateData, false)
 
 		env.setString(env_USE_AIO, "dynamic")
 		env.setString(env_USE_ICONV, "dynamic")

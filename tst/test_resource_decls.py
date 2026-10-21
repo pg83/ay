@@ -145,11 +145,11 @@ class ResourceDeclsTest(unittest.TestCase):
         # Rows with equal node counts come in no particular order.
         self.assertEqual(
             lines[1],
-            "ownership        3 nodes        3 backings  Cmd.CmdArgs.chunk @ emit_context.go:177     e.g. $(B)/lib/a.cpp.bc",
+            "ownership        3 nodes        3 backings  Cmd.CmdArgs.chunk @ emit_context.go:180     e.g. $(B)/lib/a.cpp.bc",
         )
         self.assertCountEqual(lines[2:], [
-            "ownership        1 nodes        1 backings  DepRefs @ emit_context.go:177               e.g. $(B)/lib/kern_merged.bc",
-            "ownership        1 nodes        1 backings  Inputs.chunk @ emit_context.go:177          e.g. $(B)/lib/kern_merged.bc",
+            "ownership        1 nodes        1 backings  DepRefs @ emit_context.go:180               e.g. $(B)/lib/kern_merged.bc",
+            "ownership        1 nodes        1 backings  Inputs.chunk @ emit_context.go:180          e.g. $(B)/lib/kern_merged.bc",
         ])
 
     def test_host_bundle_json_path_follows_include_path_rules(self):

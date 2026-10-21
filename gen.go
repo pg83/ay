@@ -128,6 +128,7 @@ const (
 type ModuleEmitResult struct {
 	ModuleVariants                  uint16
 	GlobalSources                   []VFS
+	PchFlagsGlobal                  []ANY
 	JavaClosure                     []VFS
 	DocsClosure                     []VFS
 	ARRef                           NodeRef
@@ -590,7 +591,7 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 }
 
 func isFinalTargetModuleType(name TOK) bool {
-	return isProgramModuleType(name) && name != tokGoTest || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry
+	return isProgramModuleType(name) && name != tokGoTest && name != tokBoosttest && name != tokBoosttestWithMain || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry
 }
 
 func picTransition(name TOK) bool {
@@ -1154,7 +1155,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	return r
 }
 
-func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
+func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResult) {
 	if existing := ctx.memoGet(instance); existing != nil {
 		return existing
 	}
@@ -1230,6 +1231,24 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		return result
 	}
+
+	defer func() {
+		if result != nil {
+			e.publishModuleIncludes(result)
+		}
+
+		if result == nil || !ctx.testMode || !d.test.validateData {
+			return
+		}
+
+		project := instance.Path.relString()
+
+		for _, suite := range []*TestSuite{ctx.dataValidationSuite(project, d.test.data, d.test.env, result.ResourceGlobalClosure), ctx.sandboxValidationSuite(project, d.fromSandboxes, d.test.env, result.ResourceGlobalClosure)} {
+			if suite != nil {
+				result.TestSuites = append(result.TestSuites, suite)
+			}
+		}
+	}()
 
 	for _, stmt := range d.allPySrcs {
 		applyAllPySrcs(ctx.fs, instance.Path.relString(), stmt, d)
@@ -1613,6 +1632,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	rosGlobalInclude := ctx.na.vfsList(dedup(rosInclude)...)
 
 	var globalSources []VFS
+	var pchFlagsGlobal []ANY
 
 	resGlobalsSum := len(ownResourceGlobals)
 	archiveCap := 0
@@ -1637,6 +1657,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 		resGlobalsSum += len(pr.ResourceGlobalClosure)
 		globalSources = append(globalSources, pr.GlobalSources...)
+		pchFlagsGlobal = append(pchFlagsGlobal, pr.PchFlagsGlobal...)
 		archiveCap += len(pr.PeerArchiveClosurePaths)
 		globalCap += len(pr.PeerGlobalClosurePaths)
 		waCap += len(pr.PeerWholeArchiveClosurePaths) + len(pr.WholeArchivePaths)
@@ -2180,6 +2201,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			TestSuites:                      e.styleSuites(resourceGlobalsClosure),
 			ModuleVariants:                  d.moduleVariants,
 			GlobalSources:                   e.globalSources,
+			PchFlagsGlobal:                  d.cc.PchFlagsGlobal,
 			MlaunchDeps:                     effectiveMlaunchDeps,
 			FbsNamespaces:                   effectiveFbsNamespaces,
 			isPyLibrary:                     isPyLibraryType(d.moduleStmt.Name),
@@ -2268,7 +2290,16 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		effectiveSrcDirs = concat(d.srcDirs, []VFS{dirKey(*pd).source()})
 	}
 
+	for _, stmt := range d.pchFiles {
+		out := copyFileOutputVFS(instance.Path.relString(), stmt.Output.string())
+
+		pchFlagsGlobal = append(pchFlagsGlobal, internV("--include-pch=", out.string()).any())
+	}
+
+	pchFlagsGlobal = ctx.argSlices.internCopy(dedup(pchFlagsGlobal))
+
 	d.cc = ModuleCompileEnv{
+		PchFlagsGlobal:       pchFlagsGlobal,
 		InclArgs:             ctx.inclArgs,
 		Flags:                d.flags,
 		AddIncl:              dedupedAddIncl,
@@ -2318,7 +2349,30 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 
+	var modulePeers []VFS
+
+	for _, peer := range resolved {
+		if output := moduleOutputPath(peer.result); output != 0 {
+			info := e.codegen.moduleInputs(output)
+
+			if info == nil || len(info.Includes) == 0 && len(info.Globals) == 0 {
+				continue
+			}
+
+			if modulePeers == nil {
+				modulePeers = ctx.na.vfs.alloc(len(resolved))[:0]
+			}
+
+			modulePeers = append(modulePeers, output)
+		}
+	}
+
+	if modulePeers != nil {
+		ctx.na.vfs.commit(len(modulePeers))
+	}
+
 	frame.peerCtx = PeerContext{
+		Modules:           modulePeers,
 		GlobalSources:     globalSources,
 		SelfAddInclGlobal: selfPeerAddInclGlobal,
 		PeerAddInclGlobal: fullPeerAddInclGlobal,
@@ -2348,6 +2402,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	d.scanCtx.rosInclude = rosInclude
 	e.emitMlaunch(resolved, peerArchivePaths, effectiveMlaunchDeps)
 	e.emit()
+	e.moduleGlobals = e.collectPeerModuleGlobals()
 
 	if instance.Demand == demandNone {
 		result := newResult()
@@ -2612,8 +2667,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 		ownSbomRef, ownSbomPath = e.emitSbomComponent(realPrjName)
 	}
 
-	result := newResult()
-
+	result = newResult()
 	result.ARRef = arRef
 	result.ARPath = arPath
 	result.ArchiveFile = build(instance.Path.relString(), "/", arBaseName)

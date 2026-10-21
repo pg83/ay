@@ -35,7 +35,7 @@ func bisonGeneratedRel(srcRel, genExt string) string {
 	return srcRel + genExt
 }
 
-func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
+func (e *EmitContext) emitBisonProducer(src ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	srcRel := e.moduleSourceRel(src)
@@ -156,13 +156,6 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 	})
 
 	generatedParsed := na.dirList(append([]IncludeDirective{{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())}}, localBucket...)...)
-	cf := na.anys.alloc(2)[:0]
-
-	if preprocessHeader {
-		cf = append(cf, argWnoUnusedButSetVariable.any(), argWnoDeprecatedCopy.any())
-	}
-
-	na.anys.commit(len(cf))
 
 	e.register(GeneratedFileInfo{
 		OutputPath:     generatedVFS,
@@ -171,19 +164,18 @@ func (e *EmitContext) emitBisonProducer(src ANY) []ANY {
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: generatedParsed},
 		OnUse:          pending,
 	})
-
-	return cf[:len(cf):len(cf)]
 }
 
 func (e *EmitContext) emitBisonY(meta SrcMeta) {
 	_, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
-	cflags := e.emitBisonProducer(src)
+
+	e.emitBisonProducer(src)
+
 	generatedRel := bisonGeneratedRel(e.moduleSourceRel(src), d.cc.BisonGenExt)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
 
 	meta.Source = generatedVFS.any()
-	meta.Compile.CFlags = concat(meta.Compile.CFlags, cflags)
 	e.enqueueSrc(meta)
 }
 

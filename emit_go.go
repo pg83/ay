@@ -1028,6 +1028,9 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	})
 
 	inputs := na.inputList(ownSourceInputs, ownBuildInputs, goToolScriptInputsChunk, embedInputs, peerArchivePaths, peerGlobalPaths, extraSources, extraBuilds)
+
+	inputs = e.appendModuleInputs(inputs, false)
+
 	depBlock := na.noderefs.alloc(1 + len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + merged)
 	ndep := 0
 
@@ -1205,14 +1208,20 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		cgoBuilds = na.vfsList(build(dir, "/_cgo_main.c", instance.Platform.objectSuffix()))
 	}
 
-	pluginArgs := na.anys.alloc(len(pluginPaths))
+	pluginArgs := na.anys.alloc(len(pluginPaths) + len(e.moduleGlobals))[:0]
 
-	for i, path := range pluginPaths {
-		pluginArgs[i] = path.any()
+	for _, path := range pluginPaths {
+		pluginArgs = append(pluginArgs, path.any())
 	}
 
-	na.anys.commit(len(pluginPaths))
-	pluginArgs = pluginArgs[:len(pluginPaths):len(pluginPaths)]
+	for _, input := range e.moduleGlobals {
+		if strings.HasSuffix(input.relString(), ".pyplugin") {
+			pluginArgs = append(pluginArgs, input.any())
+		}
+	}
+
+	na.anys.commit(len(pluginArgs))
+	pluginArgs = pluginArgs[:len(pluginArgs):len(pluginArgs)]
 
 	inputs := na.inputList(
 		ownInputs,
@@ -1230,6 +1239,8 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		extraBuilds,
 		extraTailSources,
 	)
+
+	inputs = e.appendModuleInputs(inputs, true)
 
 	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + len(pluginRefs) + 2)
 	k := copy(deps, objRefs)

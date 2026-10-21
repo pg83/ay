@@ -41,7 +41,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	project := e.instance.Path.relString()
 	name := testType
 
-	if testType == "g_benchmark" {
+	if testType == "g_benchmark" || testType == "boost_test" {
 		name = path.Base(binary.relString())
 	}
 
@@ -57,7 +57,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	s.supportsCanonization = python || testType == "g_benchmark"
 	s.supportsTestParameters = python || testType == "unittest" || testType == "gtest"
 
-	if testType == "g_benchmark" {
+	if testType == "g_benchmark" || testType == "boost_test" {
 		s.split = 1
 	}
 

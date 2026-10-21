@@ -9,6 +9,10 @@ import (
 
 var dataValidationResourceID = regexp.MustCompile(`^sbr:/?/?([0-9]+)=?.*`)
 
+func resourceValidationEnabled(env Environment) bool {
+	return env.string(envValidateData) != "no" && env.string(envCppAnalysisMode) != "yes"
+}
+
 func (ctx *GenCtx) dataValidationSuite(project string, data, env []string, globals []ResourceDecl) *TestSuite {
 	var ids []string
 
@@ -18,13 +22,27 @@ func (ctx *GenCtx) dataValidationSuite(project string, data, env []string, globa
 		}
 	}
 
+	return ctx.resourceValidationSuite(project, "validate_data_sbr", ids, env, globals)
+}
+
+func (ctx *GenCtx) sandboxValidationSuite(project string, fromSandboxes []*FromSandboxStmt, env []string, globals []ResourceDecl) *TestSuite {
+	ids := make([]string, len(fromSandboxes))
+
+	for i, stmt := range fromSandboxes {
+		ids[i] = stmt.ResourceId.string()
+	}
+
+	return ctx.resourceValidationSuite(project, "validate_resource", ids, env, globals)
+}
+
+func (ctx *GenCtx) resourceValidationSuite(project, name string, ids, env []string, globals []ResourceDecl) *TestSuite {
 	if len(ids) == 0 {
 		return nil
 	}
 
 	ids = sortedUnique(ids)
 
-	s := &TestSuite{p: ctx.target, projectPath: project, name: "validate_data_sbr", testType: "validate_data_sbr", ciType: "test", size: "small", timeout: 60, env: env, globals: globals, network: "full", setupPythonpathEnv: true, supportsTestParameters: true, clearEnvironment: true, noRetries: true, runInputs: []VFS{source(project)}, inputNames: ids}
+	s := &TestSuite{p: ctx.target, projectPath: project, name: name, testType: name, ciType: "test", size: "small", timeout: 60, env: env, globals: globals, network: "full", setupPythonpathEnv: true, supportsTestParameters: true, clearEnvironment: true, noRetries: true, runInputs: []VFS{source(project)}, inputNames: ids}
 
 	s.runCmd = func(work string, _ TestChunk) []ANY {
 		checker := "check_resource"

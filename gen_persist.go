@@ -40,6 +40,7 @@ func persistResult(ctx *GenCtx, r *ModuleEmitResult) {
 	r.AddInclOneLevel = ctx.vfsSlices.internCopy(r.AddInclOneLevel)
 	r.AddInclUserGlobal = ctx.vfsSlices.internCopy(r.AddInclUserGlobal)
 	r.CFlagsGlobal = ctx.argSlices.internCopy(r.CFlagsGlobal)
+	r.PchFlagsGlobal = ctx.argSlices.internCopy(r.PchFlagsGlobal)
 	r.CXXFlagsGlobal = ctx.argSlices.internCopy(r.CXXFlagsGlobal)
 	r.COnlyFlagsGlobal = ctx.argSlices.internCopy(r.COnlyFlagsGlobal)
 	r.LinkExcludeLibraries = ctx.argSlices.internCopy(r.LinkExcludeLibraries)

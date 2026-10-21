@@ -14,6 +14,8 @@ var (
 )
 
 var procKindStr = [...]string{
+	pkSS: "SS",
+	pkPC: "PC",
 	pkML: "ML",
 	pkGL: "GL",
 	pkPK: "PK",
@@ -39,6 +41,7 @@ var procKindStr = [...]string{
 }
 
 var pColorStr = [...]string{
+	pcRed:  "red",
 	pcCyan: "cyan",
 	pcNone: "", pcGreen: "green", pcLightBlue: "light-blue", pcLightCyan: "light-cyan",
 	pcLightGreen: "light-green", pcLightRed: "light-red", pcMagenta: "magenta", pcYellow: "yellow", pcBlue: "blue",
@@ -56,6 +59,8 @@ const (
 
 const (
 	pkNone ProcKind = iota
+	pkSS
+	pkPC
 	pkML
 	pkGL
 	pkPK
@@ -146,6 +151,7 @@ const (
 
 const (
 	pcNone PColor = iota
+	pcRed
 	pcCyan
 	pcGreen
 	pcLightBlue

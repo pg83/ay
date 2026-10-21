@@ -68,7 +68,8 @@ class Ragel6Test(unittest.TestCase):
         self.assertEqual(lexer["cmds"][0]["cmd_args"][-3:], [
             "-o", "$(B)/mod/lex.cpp", "$(S)/mod/lex.cpp.rl6",
         ])
-        lib.node_by_output(graph, "$(B)/mod/lex.cpp.o")
+        lexer_compile = lib.node_by_output(graph, "$(B)/mod/lex.cpp.o")
+        self.assertNotIn("-Wno-implicit-fallthrough", lexer_compile["cmds"][0]["cmd_args"])
 
         header = lib.node_by_output(graph, "$(B)/mod/gen.h")
         self.assertEqual(header["cmds"][0]["cmd_args"][-3:], [

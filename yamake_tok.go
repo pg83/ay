@@ -61,6 +61,8 @@ var tokName = [...]STR{
 	tokGtest:                        internStr("GTEST"),
 	tokGBenchmark:                   internStr("G_BENCHMARK"),
 	tokFuzz:                         internStr("FUZZ"),
+	tokBoosttest:                    internStr("BOOSTTEST"),
+	tokBoosttestWithMain:            internStr("BOOSTTEST_WITH_MAIN"),
 
 	tokDocs:                        internStr("DOCS"),
 	tokDocsLibrary:                 internStr("DOCS_LIBRARY"),
@@ -286,6 +288,7 @@ var tokName = [...]STR{
 	tokSdcResourceInfo:                 internStr("SDC_RESOURCE_INFO"),
 	tokSdcSbResourceInfo:               internStr("SDC_SB_RESOURCE_INFO"),
 	tokSdcRosnodeInfo:                  internStr("SDC_ROSNODE_INFO"),
+	tokGenPchFile:                      internStr("GEN_PCH_FILE"),
 	tokSdcSolibInfo:                    internStr("SDC_SOLIB_INFO"),
 	tokUnion:                           kwUNION,
 	tokUnittestFor:                     kwUNITTEST_FOR,
@@ -648,6 +651,7 @@ const (
 	tokSdcResourceInfo
 	tokSdcSbResourceInfo
 	tokSdcRosnodeInfo
+	tokGenPchFile
 	tokSdcSolibInfo
 	tokUnion
 	tokUnittestFor
@@ -663,6 +667,8 @@ const (
 	tokGtest
 	tokGBenchmark
 	tokFuzz
+	tokBoosttest
+	tokBoosttestWithMain
 	tokUseCommonGoogleApis
 	tokUseCxx
 	tokUseUtil
