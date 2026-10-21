@@ -3,6 +3,7 @@ import hashlib
 import unittest
 
 import lib
+from test_python_srcs import python_base as python3_base
 
 
 STUB_LIBRARY = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(s.cpp)\nEND()\n"
@@ -433,6 +434,44 @@ class Python2Test(unittest.TestCase):
             "resfs/src//py_modules/b=lib/b.py",
             "resfs/src//py_modules/n.c=lib/c.py",
         ])
+
+    def test_cython_cpp_preserves_each_python_context_output(self):
+        files = python2_base()
+        files.update(python3_base())
+        files["contrib/libs/python/ya.make"] = CONTRIB_LIBS_PYTHON
+        files["lib/ya.make"] = (
+            "PY23_LIBRARY()\n" + NO_PLATFORM
+            + "PY_SRCS(TOP_LEVEL CYTHON_CPP m.pyx)\nEND()\n"
+        )
+        files["lib/m.pyx"] = ""
+        for directory, module in (("two", "PY2_PROGRAM"), ("three", "PY3_PROGRAM")):
+            files[directory + "/ya.make"] = (
+                module + "()\n" + NO_PLATFORM
+                + "PY_SRCS(MAIN main.py)\nPEERDIR(lib)\nEND()\n"
+            )
+            files[directory + "/main.py"] = ""
+        for tool in ("cython_py2", "cython"):
+            files[f"contrib/tools/{tool}/cython.py"] = ""
+            for name in CYTHON_UTILITY:
+                files[f"contrib/tools/{tool}/Cython/Utility/{name}"] = ""
+        for path in CYTHON_HEADERS:
+            files[path] = ""
+            files[path.replace("/cython_py2/", "/cython/")] = ""
+
+        graph = lib.make(files, "two", "three", "--sandboxing")
+        for suffix, obj_suffix, tool in ((".py2.py2", ".py2", "cython_py2"), ("", ".py3", "cython")):
+            with self.subTest(tool=tool):
+                generated = f"$(B)/lib/m.pyx{suffix}.cpp"
+                producer = lib.node_by_output(graph, generated)
+                self.assertEqual(producer["outputs"], [generated])
+                self.assertEqual(args(producer)[1], f"$(S)/contrib/tools/{tool}/cython.py")
+                self.assertEqual(args(producer)[-3:], ["$(S)/lib/m.pyx", "-o", generated])
+                object_path = generated + obj_suffix + ".o"
+                compiled = lib.node_by_output(graph, object_path)
+                self.assertIn(producer["uid"], compiled["deps"])
+                self.assertIn(generated, compiled["inputs"])
+                self.assertTrue(any(object_path in n["inputs"] for n in graph["graph"]
+                                    if n["kv"]["p"] == "AR"))
 
     def test_py2_cython_uses_the_py2_cython(self):
         files = python2_base()

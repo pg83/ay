@@ -3802,7 +3802,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 				},
 			}
 
-			if cythonPlainCpp {
+			if cythonPlainCpp && !d.usePython2 {
 				stmt.Generated = ptr(src + ".cpp")
 			}
 
