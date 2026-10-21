@@ -5,6 +5,7 @@
 /vet
 /unit_*
 /python_test
+/go_unit
 /validate_*
 /validation_*
 /validate

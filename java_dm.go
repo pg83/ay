@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strconv"
 	"strings"
 )
 
@@ -192,33 +191,6 @@ func (r *javaDMRules) addDependencyManagement(libWithVer string) {
 	}
 
 	r.lib2Ver[javaPathParent(libWithVer)] = libWithVer
-}
-
-func javaVersionLess(l, r string) bool {
-	litems := strings.Split(l, ".")
-	ritems := strings.Split(r, ".")
-	i := 0
-
-	for ; i < len(litems) && i < len(ritems); i++ {
-		lval, lerr := strconv.Atoi(litems[i])
-		rval, rerr := strconv.Atoi(ritems[i])
-
-		if lerr == nil && rerr == nil {
-			if lval != rval {
-				return lval < rval
-			}
-		} else if litems[i] != ritems[i] {
-			return litems[i] < ritems[i]
-		}
-	}
-
-	for ; i < len(ritems); i++ {
-		if v, err := strconv.Atoi(ritems[i]); err != nil || v != 0 {
-			return true
-		}
-	}
-
-	return false
 }
 
 type javaResolutionInfo struct {

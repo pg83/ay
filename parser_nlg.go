@@ -19,10 +19,6 @@ const (
 
 type NlgIncludeDirectiveParser struct{}
 
-func (NlgIncludeDirectiveParser) id() uint32 {
-	return 13
-}
-
 func (NlgIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	text := bytesString(concatChunks(data))
 

@@ -753,16 +753,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	}
 }
 
-func javaArgsHas(args []string, want string) bool {
-	for _, a := range args {
-		if a == want {
-			return true
-		}
-	}
-
-	return false
-}
-
 func javaProtoPluginMacro(d *JavaData, args []string) {
 	if len(args) < 2 {
 		return

@@ -141,10 +141,6 @@ func isGoIdentStart(c byte) bool {
 
 type GoCgoIncludeDirectiveParser struct{}
 
-func (GoCgoIncludeDirectiveParser) id() uint32 {
-	return 10
-}
-
 func (GoCgoIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	comments := goCommentBodies(concatChunks(data))
 

@@ -80,17 +80,6 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 	}
 }
 
-func prMainOutputRel(stmt *RunProgramStmt) string {
-	switch {
-	case len(stmt.OUTFiles) > 0:
-		return stmt.OUTFiles[0].string()
-	case len(stmt.OUTNoAutoFiles) > 0:
-		return stmt.OUTNoAutoFiles[0].string()
-	}
-
-	return stmt.StdoutFile.string()
-}
-
 func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	ctx, instance := e.ctx, e.instance
 	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
@@ -237,18 +226,6 @@ func prProtoImportPbH(pm *IncludeParserManager, inVFSs []VFS, dst []IncludeDirec
 	}
 
 	return dst
-}
-
-func pbhBasenameSet(vs []VFS) map[string]bool {
-	m := map[string]bool{}
-
-	for _, v := range vs {
-		if extIsPbH(v.relString()) {
-			m[filepath.Base(v.relString())] = true
-		}
-	}
-
-	return m
 }
 
 type prSnap struct {

@@ -9,10 +9,6 @@ type ProtoIncludeDirectiveParser struct {
 	induced *IntMap[STR]
 }
 
-func (ProtoIncludeDirectiveParser) id() uint32 {
-	return 4
-}
-
 func (p ProtoIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	return p.parseDirectiveSet(data, a)
 }

@@ -60,8 +60,6 @@ func cutParserKeyword(b []byte, keyword string) ([]byte, bool) {
 
 type IncludeDirectiveParser interface {
 	parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet
-
-	id() uint32
 }
 
 type IncludeDirectiveParserRegistry struct {

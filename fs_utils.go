@@ -148,14 +148,6 @@ func pathDir(p string) string {
 	return p[:idx]
 }
 
-func fileExt(base string) string {
-	if i := strings.LastIndexByte(base, '.'); i >= 0 {
-		return base[i:]
-	}
-
-	return ""
-}
-
 func relStem(rel string) string {
 	return strings.TrimSuffix(rel, filepath.Ext(rel))
 }

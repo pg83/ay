@@ -2,14 +2,6 @@ package main
 
 var cpKV = KV{P: pkCP, PC: pcLightCyan}
 
-func emitCP(instance ModuleInstance, src VFS, dst VFS, tc ModuleToolchain, scripts ScriptDeps, emit *StreamingEmitter) NodeRef {
-	id := emit.reserve()
-
-	emit.emitReservedNode(composeCPNode(instance, src, dst, nil, tc, scripts, emit.nodeArenas()), id)
-
-	return id
-}
-
 func (e *EmitContext) emitCPWithInputs(src VFS, dst VFS, extraInputs []VFS, id NodeRef, tc ModuleToolchain, scripts ScriptDeps) {
 	node := composeCPNode(e.instance, src, dst, extraInputs, tc, scripts, e.ctx.na)
 

@@ -12,10 +12,6 @@ var (
 
 type RosIncludeDirectiveParser struct{}
 
-func (RosIncludeDirectiveParser) id() uint32 {
-	return 20
-}
-
 func (RosIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0

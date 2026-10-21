@@ -2,10 +2,6 @@ package main
 
 type YasmIncludeDirectiveParser struct{}
 
-func (YasmIncludeDirectiveParser) id() uint32 {
-	return 7
-}
-
 func (YasmIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := parseYasmIncludes(data, block, 0)

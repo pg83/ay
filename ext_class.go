@@ -179,10 +179,6 @@ func isCCSourceExt(p string) bool {
 	return extHas(p, extCCSource)
 }
 
-func isAsmSourceExt(p string) bool {
-	return extHas(p, extAsmSource)
-}
-
 func isNativeSourceExt(p string) bool {
 	return extHas(p, extCCSource|extAsmSource|extFortranSource)
 }
@@ -243,10 +239,6 @@ func extIsPbH(p string) bool {
 	return strings.HasSuffix(p, ".pb.h")
 }
 
-func extIsFlexL(p string) bool {
-	return strings.HasSuffix(p, ".l")
-}
-
 func extIsPy(p string) bool {
 	return strings.HasSuffix(p, ".py")
 }
@@ -261,10 +253,6 @@ func extIsPyx(p string) bool {
 
 func extIsSwg(p string) bool {
 	return strings.HasSuffix(p, ".swg")
-}
-
-func extIsSwigInterface(p string) bool {
-	return extIsSwg(p) || strings.HasSuffix(p, ".i")
 }
 
 func extIsLua(p string) bool {
@@ -288,14 +276,6 @@ func extIsCOrHeaderSource(p string) bool {
 		strings.HasSuffix(p, ".cxx") || strings.HasSuffix(p, ".c") ||
 		strings.HasSuffix(p, ".h") || strings.HasSuffix(p, ".hpp") ||
 		strings.HasSuffix(p, ".hxx")
-}
-
-func extIsEnumSerialized(p string) bool {
-	return strings.HasSuffix(p, "_serialized.cpp") || strings.HasSuffix(p, "_serialized.h")
-}
-
-func extIsProtoGeneratedHeader(p string) bool {
-	return extIsPbH(p) || strings.HasSuffix(p, ".sproto.h")
 }
 
 type SrcExtClass uint8

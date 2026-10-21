@@ -23,10 +23,6 @@ var tsImportDecl = func() *regexp.Regexp {
 
 type TSIncludeDirectiveParser struct{}
 
-func (TSIncludeDirectiveParser) id() uint32 {
-	return 12
-}
-
 func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	s := string(concatChunks(data))
 	block := a.alloc(directiveBlockHint)

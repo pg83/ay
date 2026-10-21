@@ -6,10 +6,6 @@ import (
 
 type CIncludeDirectiveParser struct{}
 
-func (CIncludeDirectiveParser) id() uint32 {
-	return 1
-}
-
 func (CIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0

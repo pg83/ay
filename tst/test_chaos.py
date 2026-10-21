@@ -31,6 +31,25 @@ class ChaosWordsTest(unittest.TestCase):
     def test_unarmed_points_change_nothing(self):
         self.assertEqual(lib.make(FILES, "lib", env={"AY_CHAOS": ""}), lib.make(FILES, "lib"))
 
+    def test_sequential_interning_preserves_graph_and_page_growth(self):
+        files = dict(FILES)
+        files["lib/ya.make"] = (
+            f"LIBRARY()\n{lib.BARE_MODULE}SRCS(" +
+            " ".join(f"src_{i}.cpp" for i in range(150)) + ")\nEND()\n"
+        )
+        files.update({f"lib/src_{i}.cpp": f"int value_{i};\n" for i in range(150)})
+        shuffled = lib.make(files, "lib")
+        sequential = lib.make(files, "lib", env={"AY_CHAOS": "intern-shuffle=0"})
+        # Interning order may reorder sets of inputs, but must preserve the
+        # commands, UIDs, outputs and every dependency in the graph.
+        for graph in (shuffled, sequential):
+            for node in graph["graph"]:
+                node["inputs"].sort()
+                node["deps"].sort()
+            graph["result"] = sorted(graph["graph"][i]["uid"] for i in graph["result"])
+            graph["graph"].sort(key=lambda node: node["uid"])
+        self.assertEqual(sequential, shuffled)
+
 
 class ChaosAssertTest(unittest.TestCase):
     def test_failed_assert_is_reported_as_an_error(self):

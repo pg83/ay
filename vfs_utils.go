@@ -1,31 +1,5 @@
 package main
 
-func filterSourceVFS(na *NodeArenas, vs []VFS) []VFS {
-	n := 0
-
-	for _, v := range vs {
-		if v.isSource() {
-			n++
-		}
-	}
-
-	if n == len(vs) {
-		return vs
-	}
-
-	out := na.vfs.alloc(n)[:0]
-
-	for _, v := range vs {
-		if v.isSource() {
-			out = append(out, v)
-		}
-	}
-
-	na.vfs.commit(len(out))
-
-	return out[:len(out):len(out)]
-}
-
 func eachBucketVFS(chunks [][]VFS, fn func(VFS)) {
 	for _, ch := range chunks {
 		for _, v := range ch {

@@ -11,10 +11,6 @@ var (
 
 type LexIncludeDirectiveParser struct{}
 
-func (LexIncludeDirectiveParser) id() uint32 {
-	return 11
-}
-
 func (LexIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0

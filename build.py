@@ -75,7 +75,8 @@ coverage_enabled = bool(build.flags.coverage)
 race_enabled = bool(build.flags.race)
 COVERAGE_MINIMUM = "95"
 
-GO_SOURCES = build.glob("$(S)/*.go")
+GO_TEST_SOURCES = build.glob("$(S)/*_test.go")
+GO_SOURCES = [path for path in build.glob("$(S)/*.go") if path not in GO_TEST_SOURCES]
 
 GENERATED_DENSE_MAPS = [
     "$(B)/generated/go/dense_map_2.go",
@@ -182,7 +183,7 @@ ay_test = go_binary("ay_test", "$(B)/bin/ay-test", ay_test_cmd)
 vet_stamp = "$(B)/tests/vet.stamp"
 vet = command(
     name="vet",
-    inputs=GO_INPUTS,
+    inputs=[*GO_INPUTS, *GO_TEST_SOURCES],
     outputs=[vet_stamp],
     deps=[dense_maps],
     cmd=[
@@ -220,6 +221,51 @@ python_test = command(
 
 binary_tests = []
 coverage_archives = []
+
+# Small algorithm contracts run in Go; graph and command contracts continue
+# to exercise the CLI. Both contribute counters from the same source files.
+go_unit_binary = "$(B)/bin/go-unit"
+go_unit_stamp = "$(B)/tests/go-unit.stamp"
+go_unit_outputs = [go_unit_stamp]
+go_unit_run = [go_unit_binary, "-test.v"]
+go_unit_build = [
+    "go", "test", "-c", *(["-race"] if race_enabled else []),
+    "-tags", ",".join(TEST_TAGS), "-trimpath", "-o", go_unit_binary,
+]
+if coverage_enabled:
+    go_unit_dir = "$(B)/go-unit-src"
+    go_unit_raw = "$(B)/coverage/raw/go-unit"
+    go_unit_archive = "$(B)/coverage/go-unit.tar"
+    go_unit_commands = [
+        mkdir(go_unit_dir),
+        ["cp", "--", *GO_MODULE_FILES, *GO_TEST_SOURCES, *GENERATED_DENSE_MAPS, go_unit_dir + "/"],
+        [*go_unit_build[:1], "-C", go_unit_dir, *go_unit_build[1:], "-cover", "-covermode=atomic", "."],
+        mkdir(go_unit_raw),
+        [*go_unit_run, "-test.gocoverdir=" + go_unit_raw],
+        ["python3", "$(S)/dev/coverage.py", "pack", "--dir", go_unit_raw, "--out", go_unit_archive],
+        touch(go_unit_stamp),
+    ]
+    go_unit_outputs.append(go_unit_archive)
+    coverage_archives.append(go_unit_archive)
+else:
+    go_unit_commands = [
+        GO_OVERLAY_CMD,
+        [*go_unit_build, "-overlay=" + GO_OVERLAY, "."],
+        go_unit_run,
+        touch(go_unit_stamp),
+    ]
+go_unit = command(
+    name="go_unit",
+    inputs=[*GO_INPUTS, *GO_TEST_SOURCES, "$(S)/dev/coverage.py"],
+    outputs=go_unit_outputs,
+    deps=[dense_maps],
+    cmd=go_unit_commands,
+    cwd="$(S)",
+    env=GO_ENV,
+    descr="GT",
+    color="green",
+)
+
 for test_path in build.glob("$(S)/tst/test_*.py"):
     test_name = test_path.rsplit("/", 1)[-1][len("test_"):-len(".py")]
     test_slug = slug(test_name)
@@ -259,7 +305,7 @@ for test_path in build.glob("$(S)/tst/test_*.py"):
         color="green",
     ))
 
-unit_members = [python_test, *binary_tests]
+unit_members = [python_test, go_unit, *binary_tests]
 if coverage_enabled:
     coverage_profile = "$(B)/coverage/cover.out"
     coverage_report = "$(B)/coverage/report.txt"
@@ -267,7 +313,7 @@ if coverage_enabled:
         name="coverage",
         inputs=["$(S)/dev/coverage.py", *coverage_archives],
         outputs=[coverage_profile, coverage_report],
-        deps=binary_tests,
+        deps=[go_unit, *binary_tests],
         cmd=[
             "python3", "$(S)/dev/coverage.py", "merge",
             "--out", coverage_profile, "--report", coverage_report,

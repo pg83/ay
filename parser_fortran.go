@@ -4,10 +4,6 @@ import "bytes"
 
 type FortranIncludeDirectiveParser struct{}
 
-func (FortranIncludeDirectiveParser) id() uint32 {
-	return 14
-}
-
 func (FortranIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0

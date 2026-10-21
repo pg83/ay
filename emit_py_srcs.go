@@ -69,10 +69,6 @@ type PySrc struct {
 	Kind        PySourceKind
 }
 
-func resolvePySrcRel(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string) STR {
-	return resolvePySrcRelKnown(fs, srcDirs, moduleVFS, srcRel, srcRel != "" && pathIsClean(srcRel))
-}
-
 func resolvePySrcRelKnown(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string, srcRelClean bool) STR {
 	if srcRelClean {
 		target := internStr(srcRel)

@@ -37,12 +37,13 @@ var (
 	chaosHostGOOS      = newChaosText("host-os")
 	chaosHostGOARCH    = newChaosText("host-arch")
 	chaosInternSeed    = newChaosNumber("intern-seed")
+	chaosInternOrder   = newChaosNumber("intern-shuffle")
+	chaosInternShuffle = chaosInternOrder.number(1) != 0
 	chaosPoints        = map[string]*ChaosState{}
 	chaosInternPerms   [][]uint32
 )
 
 const (
-	chaosInternShuffle     = true
 	chaosInternWindow      = 1 << 12
 	chaosInternDefaultSeed = 0x9e3779b97f4a7c15
 )
