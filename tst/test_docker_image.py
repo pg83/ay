@@ -33,6 +33,39 @@ class DockerImageTests(unittest.TestCase):
         }, "check")
         self.assertFalse(any(n["kv"]["p"] == "IM" for n in graph["graph"]))
 
+    def test_image_paths_match_upstream_cityhash_for_all_tag_lengths(self):
+        # Values come from util/digest/city.cpp at upstream d02375f8,
+        # independently evaluated on the same ASCII tags.
+        cases = (
+            (0, 11160318154034397263),
+            (1, 2603192927274642682),
+            (3, 4220206313085259313),
+            (4, 17823623939509273229),
+            (8, 4864636163090995991),
+            (9, 7406163328168016081),
+            (16, 13242281798114038465),
+            (17, 237482408704357350),
+            (32, 4401604186254454218),
+            (33, 6149775935917593809),
+            (64, 10870159159245104547),
+            (65, 13407693885279354766),
+            (127, 16519838804566824773),
+            (128, 13102153355302731846),
+            (129, 8716585674679283391),
+            (256, 14092306236991204336),
+        )
+        for length, upstream_hash in cases:
+            with self.subTest(length=length):
+                tag = "".join(chr(97 + i % 26) for i in range(length))
+                image = f"docker://registry.test/image@sha256:1234567890abcdef={tag}"
+                files = {"app/ya.make": f"EXECTEST()\nRUN(check)\nDOCKER_IMAGE({image})\nEND()\n"}
+                graph = lib.make(files, "app", "-t")
+                node = lib.node_by_output(graph, f"$(B)/images/{upstream_hash}/image.tar")
+                args = node["cmds"][0]["cmd_args"]
+                self.assertEqual(args[args.index("--tag") + 1], tag)
+                run = lib.node_by_output(graph, "$(B)/app/test-results/exectest/meta.json")
+                self.assertIn(node["uid"], run["deps"])
+
 
 if __name__ == "__main__":
     unittest.main()
