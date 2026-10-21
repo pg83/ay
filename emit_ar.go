@@ -7,7 +7,7 @@ const (
 	arFormatGNU = "gnu"
 )
 
-func emitARNamed(
+func (e *EmitContext) emitARNamed(
 	instance ModuleInstance,
 	archiveBaseName string,
 	objRefs []NodeRef,
@@ -18,11 +18,14 @@ func emitARNamed(
 	emit *StreamingEmitter,
 ) NodeRef {
 	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
+	node := composeARNode(instance, archivePath, objRefs, objPaths, arPluginPath, tc, hostP, emit.nodeArenas())
 
-	return emitARNode(instance, archivePath, 0, objRefs, objPaths, arPluginPath, tc, hostP, emit)
+	node.Outputs = e.appendModuleOutputs(node.Outputs)
+
+	return emit.emitNode(node)
 }
 
-func emitARNamedTagged(
+func (e *EmitContext) emitARNamedTagged(
 	instance ModuleInstance,
 	archiveBaseName string,
 	tag STR,
@@ -33,9 +36,7 @@ func emitARNamedTagged(
 	hostP *Platform,
 	emit *StreamingEmitter,
 ) NodeRef {
-	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
-
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, arPluginPath, tc, hostP, emit)
+	return e.emitARNamed(instance, archiveBaseName, objRefs, objPaths, arPluginPath, tc, hostP, emit)
 }
 
 func emitARGlobalNamedTagged(

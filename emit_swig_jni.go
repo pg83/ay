@@ -45,6 +45,12 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
 
+	if d.unit.SwigLang.string() == "perl" {
+		e.emitPerlSwigSource(meta)
+
+		return
+	}
+
 	if d.unit.SwigLang != strSwigLangJniCpp {
 		ctx.onWarn(Warn{
 			Kind:    WarnUnsupportedSource,

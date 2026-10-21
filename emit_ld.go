@@ -271,7 +271,7 @@ func (e *EmitContext) emitLD(
 		Cmds:      cmds,
 		Env:       envFull,
 		Inputs:    inputs,
-		Outputs:   outputs,
+		Outputs:   e.appendModuleOutputs(outputs),
 		KV:        kv,
 		DepRefs:   deps,
 		Resources: instance.Platform.UsesLinkResources,
