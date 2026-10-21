@@ -27,6 +27,7 @@ type GeneratedFileInfo struct {
 }
 
 type ModuleInputInfo struct {
+	IncludeRoots []VFS
 	Includes     []VFS
 	Globals      []VFS
 	GlobalInputs []VFS
@@ -248,7 +249,7 @@ func (r *CodegenRegistry) moduleInputs(path VFS) *ModuleInputInfo {
 	return info.ModuleInputs
 }
 
-func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, globals, globalInputs []VFS, passPeers bool) {
+func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, roots, globals, globalInputs []VFS, passPeers bool) {
 	info, ok := r.byRel.get(output.rel())
 
 	if !ok {
@@ -261,7 +262,7 @@ func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, 
 		info.ModuleInputs = r.na.moduleInputs.one()
 	}
 
-	*info.ModuleInputs = ModuleInputInfo{Includes: includes, Globals: globals, GlobalInputs: globalInputs, PassPeers: passPeers}
+	*info.ModuleInputs = ModuleInputInfo{Includes: includes, IncludeRoots: roots, Globals: globals, GlobalInputs: globalInputs, PassPeers: passPeers}
 }
 
 func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {

@@ -27,7 +27,7 @@ func (e *EmitContext) appendModulePeer(paths []VFS, result *ModuleEmitResult, ca
 
 	info := e.codegen.moduleInputs(output)
 
-	if info == nil || len(info.Includes) == 0 && len(info.Globals) == 0 {
+	if info == nil || len(info.Includes) == 0 && len(info.IncludeRoots) == 0 && len(info.Globals) == 0 {
 		return paths
 	}
 
@@ -46,8 +46,20 @@ func (e *EmitContext) modulePeerInputs() InputChunks {
 	var inputs InputChunks
 
 	for _, peer := range e.peers.Modules {
-		if info := e.codegen.moduleInputs(peer); info != nil && len(info.Includes) > 0 {
-			inputs = append(inputs, info.Includes)
+		if info := e.codegen.moduleInputs(peer); info != nil {
+			if len(info.Includes) > 0 {
+				inputs = append(inputs, info.Includes)
+			}
+
+			for _, root := range info.IncludeRoots {
+				closure := e.includeClosure(root)
+
+				for _, bucket := range closure.bucketList() {
+					if len(bucket) > 0 && bucket[0].isBuild() {
+						inputs = append(inputs, bucket)
+					}
+				}
+			}
 		}
 	}
 
@@ -179,7 +191,7 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 		return
 	}
 
-	var peerInputs InputChunks
+	var peerInputs, peerRoots InputChunks
 
 	passPeers := !isProgramModuleType(e.d.unit.Type) && !isDllModuleType(e.d.unit.Type) && e.d.unit.Type != tokDynamicLibrary
 
@@ -187,17 +199,22 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 		passPeers = stringIsTruthy(value.string())
 	}
 
-	if passPeers {
-		peerInputs = e.modulePeerInputs()
+	if passPeers && e.peers != nil {
+		for _, peer := range e.peers.Modules {
+			if info := e.codegen.moduleInputs(peer); info != nil {
+				peerInputs = append(peerInputs, info.Includes)
+				peerRoots = append(peerRoots, info.IncludeRoots)
+			}
+		}
 	}
 
 	globals := e.moduleGlobals
 
-	if len(e.moduleIncludeRoots) == 0 && len(peerInputs) == 0 && len(globals) == 0 {
+	if len(e.moduleIncludeRoots) == 0 && len(peerInputs) == 0 && len(peerRoots) == 0 && len(globals) == 0 {
 		return
 	}
 
-	var ownIncludes []VFS
+	var ownIncludes, ownRoots []VFS
 
 	fake := e.moduleIsFake(result)
 
@@ -205,23 +222,18 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 		if root.isBuild() {
 			ownIncludes = append(ownIncludes, root)
 		} else if !fake {
-			closure := e.includeClosure(root)
-
-			for _, bucket := range closure.bucketList() {
-				if len(bucket) > 0 && bucket[0].isBuild() {
-					ownIncludes = append(ownIncludes, bucket...)
-				}
-			}
+			ownRoots = append(ownRoots, root)
 		}
 	}
 
-	if len(ownIncludes) == 0 && len(peerInputs) == 0 && len(globals) == 0 {
+	if len(ownIncludes) == 0 && len(ownRoots) == 0 && len(peerInputs) == 0 && len(peerRoots) == 0 && len(globals) == 0 {
 		return
 	}
 
 	includes := e.ctx.na.dedupClosure(ownIncludes, peerInputs)
+	roots := e.ctx.na.dedupClosure(ownRoots, peerRoots)
 
-	e.codegen.setModuleInputs(output, e.d.moduleStmt.Name, includes, globals, e.moduleGlobalInputs, passPeers)
+	e.codegen.setModuleInputs(output, e.d.moduleStmt.Name, includes, roots, globals, e.moduleGlobalInputs, passPeers)
 }
 
 func (e *EmitContext) globalPlugins() []VFS {

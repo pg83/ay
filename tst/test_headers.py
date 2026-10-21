@@ -71,6 +71,24 @@ class HeadersTest(unittest.TestCase):
                 files["producer/ya.make"] = f"LIBRARY()\n{BARE}PEERDIR(proto)\nSRCS(local.cpp)\n{macro}\nEND()\n"
                 self.check_export(files, True)
 
+    def test_weak_headers_do_not_resolve_before_required_compilation(self):
+        for peers in ("weak producer", "producer weak"):
+            with self.subTest(peers=peers):
+                files = header_files()
+                files["proto/ya.make"] = files["proto/ya.make"].replace(
+                    "SRCS(a.proto)", "PROTO_NAMESPACE(GLOBAL proto)\nSRCS(a.proto)",
+                )
+                files.update({
+                    "producer/ya.make": f"LIBRARY()\n{BARE}PEERDIR(proto)\nSRCS(local.cpp)\nEND()\n",
+                    "producer/public.h": '#include <a.pb.h>\n',
+                    "weak/ya.make": f"LIBRARY()\n{BARE}SRCS(empty.cpp)\nHEADERS(.)\nEND()\n",
+                    "weak/empty.cpp": "",
+                    "weak/public.h": '#include <producer/public.h>\n',
+                    "consumer/ya.make": f"PROGRAM()\n{BARE}PEERDIR({peers})\nSRCS(main.cpp)\nEND()\n",
+                    "consumer/main.cpp": "int main() {}\n",
+                })
+                self.check_export(files, True)
+
     def test_automatic_cpp_linter_adds_module_headers(self):
         for macro in ("STYLE_CPP()", "STYLE_CPP_YT(CONFIG_TYPE .clang-format)"):
             with self.subTest(macro=macro):
