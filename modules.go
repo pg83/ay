@@ -1725,6 +1725,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			} else {
 				if v.Name == tokRun {
 					expanded.Args = expandTestRunArgs(v.Args, env)
+				} else if v.Name == tokSetListPreSuf {
+					expanded.Args = expandListPreSufArgs(v.Args, env)
 				} else {
 					expanded.Args = expandStmtTokens(v.Args, env)
 				}
@@ -4382,6 +4384,20 @@ func expandStmtTokens(items []ANY, env Environment) []ANY {
 
 func expandCommandTokens(items []ANY, env Environment) []ANY {
 	return expandTokens(items, env, true)
+}
+
+func expandListPreSufArgs(items []ANY, env Environment) []ANY {
+	if len(items) < 3 {
+		return expandStmtTokens(items, env)
+	}
+
+	out := make([]ANY, 3, len(items))
+
+	for i := range out {
+		out[i] = internStr(expandStmtToken(items[i].string(), env)).any()
+	}
+
+	return append(out, expandStmtTokens(items[3:], env)...)
 }
 
 func expandTokens(items []ANY, env Environment, command bool) []ANY {
