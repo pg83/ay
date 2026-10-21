@@ -61,7 +61,10 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 	d.peerdirs = append(d.peerdirs, internAnys(peers)...)
 
 	if stmt.Name == tokUnittestFor && len(stmt.Args) > 0 {
-		d.peerdirs = append(d.peerdirs, internStr(path.Clean(stmt.Args[0].string())).any())
+		peer := path.Clean(stmt.Args[0].string())
+
+		d.peerdirs = append(d.peerdirs, internStr(peer).any())
+		d.addLocalIncl(prioAddIncl, parseModulePathVFS(peer))
 	}
 
 	if isUnitTestModule(stmt.Name) {

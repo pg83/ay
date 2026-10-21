@@ -156,6 +156,7 @@ class PeerPropagationTest(unittest.TestCase):
                 self.assertEqual(
                     [arg for arg in test_object["cmds"][0]["cmd_args"] if arg.startswith("-I$(S)/")],
                     [
+                        f"-I$(S)/{peer}",
                         "-I$(S)/contrib/libs/cxxsupp/libcxx/include",
                         "-I$(S)/contrib/libs/cxxsupp/builtins/include",
                         "-I$(S)/build/cow/on/include",
