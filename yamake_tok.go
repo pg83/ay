@@ -52,6 +52,8 @@ var tokName = [...]STR{
 	tokGtest:                        internStr("GTEST"),
 	tokGBenchmark:                   internStr("G_BENCHMARK"),
 	tokFuzz:                         internStr("FUZZ"),
+	tokBoosttest:                    internStr("BOOSTTEST"),
+	tokBoosttestWithMain:            internStr("BOOSTTEST_WITH_MAIN"),
 
 	tokDocs:                        internStr("DOCS"),
 	tokDocsLibrary:                 internStr("DOCS_LIBRARY"),
@@ -637,6 +639,8 @@ const (
 	tokGtest
 	tokGBenchmark
 	tokFuzz
+	tokBoosttest
+	tokBoosttestWithMain
 	tokUseCommonGoogleApis
 	tokUseCxx
 	tokUseLightPy2cc

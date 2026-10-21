@@ -86,6 +86,54 @@ def suite_outputs(suite):
 
 
 class TestNodesTest(unittest.TestCase):
+    def test_recursed_boost_tests_are_not_final_targets_without_tests(self):
+        for macro in ("BOOSTTEST", "BOOSTTEST_WITH_MAIN"):
+            with self.subTest(macro=macro):
+                files = {
+                    "maps/sample/ya.make": library() + "RECURSE(ut)\n",
+                    "maps/sample/ut/ya.make": f"{macro}()\n{NO_PLATFORM}SRCS(test.cpp)\nEND()\n",
+                    "maps/sample/ut/test.cpp": "int test;\n",
+                    "library/cpp/testing/boost_test/ya.make": library(),
+                    "library/cpp/testing/boost_test_main/ya.make": library(),
+                }
+                output = "$(B)/maps/sample/ut/ut"
+                graph = lib.make(files, "maps/sample")
+                self.assertFalse(any(output in node["outputs"] for node in graph["graph"]))
+                direct = lib.make(files, "maps/sample/ut")
+                lib.node_by_output(direct, output)
+
+    def test_recursed_boost_tests_keep_native_dependencies_and_runner(self):
+        for macro in ("BOOSTTEST", "BOOSTTEST_WITH_MAIN"):
+            with self.subTest(macro=macro):
+                files = {
+                    "maps/sample/ya.make": library() + "RECURSE(ut)\n",
+                    "maps/sample/ut/ya.make": f"{macro}()\n{NO_PLATFORM}"
+                                             "PEERDIR(dep)\nSRCS(test.cpp)\nSPLIT_FACTOR(3)\nEND()\n",
+                    "maps/sample/ut/test.cpp": "int test;\n",
+                    "dep/ya.make": library("SRCS(native.cpp)\n"),
+                    "dep/native.cpp": "int native;\n",
+                    "library/cpp/testing/boost_test/ya.make": library("SRCS(support.cpp)\n"),
+                    "library/cpp/testing/boost_test/support.cpp": "int support;\n",
+                    "library/cpp/testing/boost_test_main/ya.make": library("SRCS(main.cpp)\n"),
+                    "library/cpp/testing/boost_test_main/main.cpp": "int main(){return 0;}\n",
+                }
+                graph = lib.make(files, "maps/sample", "-t")
+                binary = lib.node_by_output(graph, "$(B)/maps/sample/ut/ut")
+                self.assertIn("$(B)/dep/libdep.a", binary["inputs"])
+                self.assertIn("$(B)/library/cpp/testing/boost_test/libcpp-testing-boost_test.a", binary["inputs"])
+                self.assertEqual(macro == "BOOSTTEST_WITH_MAIN", any(
+                    "/boost_test_main/" in path for path in binary["inputs"]
+                ))
+                lib.node_by_output(graph, "$(B)/dep/native.cpp.o")
+                run = lib.node_by_output(graph, "$(B)/maps/sample/ut/test-results/ut/meta.json")
+                self.assertEqual("ut", run["env"]["TEST_NAME"])
+                args = run["cmds"][0]["cmd_args"]
+                self.assertEqual("boost_test", args[args.index("--test-type") + 1])
+                self.assertIn("run_boost_test", args)
+                self.assertNotIn("run_ut", args)
+                self.assertNotIn("--supports-test-parameters", args)
+                self.assertNotIn("--supports-canonization", args)
+
     def test_unittest_for_emits_context_run_and_style_nodes(self):
         graph = lib.make(fixture(), "lib/ut", "-t", "-r")
         self.assertEqual(

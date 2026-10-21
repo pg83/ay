@@ -24,6 +24,10 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 		peers = []string{"library/cpp/testing/unittest_main", "yt/cpp/mapreduce/tests/yt_initialize_hook"}
 	case tokGtest:
 		peers = []string{"library/cpp/testing/gtest", "library/cpp/testing/gtest_main"}
+	case tokBoosttest:
+		peers = []string{"library/cpp/testing/boost_test"}
+	case tokBoosttestWithMain:
+		peers = []string{"library/cpp/testing/boost_test", "library/cpp/testing/boost_test_main"}
 	case tokPy3Test, tokPy2Test:
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
 	case tokYqlUdfTest:

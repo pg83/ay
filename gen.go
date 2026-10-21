@@ -557,7 +557,7 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 }
 
 func isFinalTargetModuleType(name TOK) bool {
-	return isProgramModuleType(name) && name != tokGoTest || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry
+	return isProgramModuleType(name) && name != tokGoTest && name != tokBoosttest && name != tokBoosttestWithMain || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry
 }
 
 func picTransition(name TOK) bool {
