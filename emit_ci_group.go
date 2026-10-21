@@ -53,7 +53,7 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 		return out
 	}
 
-	if res.isPROGRAM && res.LDPath != nil {
+	if res.LDPath != nil && (res.isPROGRAM || isLinkingModuleType(res.ModuleStmtName)) {
 		e.refs = append(e.refs, res.LDRef)
 
 		return append(out, *res.LDPath)
