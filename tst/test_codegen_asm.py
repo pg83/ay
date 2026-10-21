@@ -215,6 +215,17 @@ class ArchiveAsmTest(unittest.TestCase):
         self.assertIn(archive["uid"], rodata["deps"])
         library = lib.node_by_output(graph, "$(B)/mod/libmod.a")
         self.assertIn("$(B)/mod/blob.rodata.o", library["inputs"])
+        self.assertIn("$(B)/mod/blob.rodata.asm", library["inputs"])
+        self.assertIn(rodata["uid"], library["deps"])
+
+    def test_global_rodata_archive_keeps_its_producer_main_output(self):
+        files = self.files("SRCS(GLOBAL data.rodata)\n")
+        files["mod/data.rodata"] = "binary"
+        graph = lib.make(files, "mod", *X86_64)
+        rodata = lib.node_by_output(graph, "$(B)/mod/data.rodata.o")
+        archive = lib.node_by_output(graph, "$(B)/mod/libmod.global.a")
+        self.assertIn("$(B)/mod/data.rodata.asm", archive["inputs"])
+        self.assertIn(rodata["uid"], archive["deps"])
 
     def test_archive_asm_compresses_by_default(self):
         graph = lib.make(self.files("ARCHIVE_ASM(NAME blob x.bin)\n"), "mod", *X86_64)

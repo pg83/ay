@@ -61,7 +61,17 @@ func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInp
 		node.DepRefs = na.noderefs.list(extraDepRefs...)
 	}
 
-	return e.emitNode(node), asmVFS, outVFS
+	ref := e.emitNode(node)
+
+	for _, output := range node.Outputs {
+		e.register(GeneratedFileInfo{
+			OutputPath:      output,
+			ProducerRef:     ref,
+			ProducerMainOut: asmVFS,
+		})
+	}
+
+	return ref, asmVFS, outVFS
 }
 
 func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta, in ModuleCCInputs) {

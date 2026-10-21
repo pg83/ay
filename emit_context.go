@@ -189,6 +189,7 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 
 func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
 	var refs []NodeRef
+	var mains []VFS
 
 	for _, chunk := range node.Inputs {
 		for _, input := range chunk {
@@ -211,7 +212,41 @@ func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
 			}
 
 			refs = append(refs, info.ProducerRef)
+
+			if main := info.ProducerMainOut; main != 0 && main != input {
+				if mains == nil {
+					mains = vfsScratches.get()
+				}
+
+				mains = append(mains, main)
+			}
 		}
+	}
+
+	if len(mains) > 0 {
+		dedupers.with(func(deduper *DeDuper) {
+			for _, chunk := range node.Inputs {
+				for _, input := range chunk {
+					deduper.addStable(input.strID())
+				}
+			}
+
+			extra := e.ctx.na.vfs.alloc(len(mains))[:0]
+
+			for _, main := range mains {
+				if deduper.addStable(main.strID()) {
+					extra = append(extra, main)
+				}
+			}
+
+			e.ctx.na.vfs.commit(len(extra))
+
+			if len(extra) > 0 {
+				node.Inputs = appendInputChunks(e.ctx.na, node.Inputs, e.ctx.na.inputList(extra))
+			}
+		})
+
+		vfsScratches.put(mains)
 	}
 
 	if len(refs) == 0 {

@@ -190,11 +190,7 @@ class EnumSerializationTest(unittest.TestCase):
             "$(S)/srcd/enums4.h", "--include-path", "srcd/enums4.h",
         ])
 
-    def test_generated_header_is_the_only_source_input(self):
-        # Every EN node in the devtools_ymake_bin, arc_server_bin and
-        # devtools_ya_bin_2 references lists the enum_parser and the header
-        # alone: neither the induced includes of a generated .pb.h nor, for
-        # middlesearch calcer_codegen.h, the BASE_CODEGEN main output.
+    def test_generated_header_keeps_main_output_without_induced_inputs(self):
         files = enum_files({
             "m/ya.make": (
                 "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
@@ -210,7 +206,11 @@ class EnumSerializationTest(unittest.TestCase):
             "END()", "INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/inc/ind.h)\nEND()")
         graph = lib.make(files, "m")
         node = lib.node_by_output(graph, "$(B)/m/base_gen.h_serialized.cpp")
-        self.assertEqual(node["inputs"], [ENUM_PARSER, "$(B)/m/base_gen.h"])
+        self.assertEqual(node["inputs"], [
+            ENUM_PARSER, "$(B)/m/base_gen.h", "$(B)/m/base_gen.cpp",
+        ])
+        producer = lib.node_by_output(graph, "$(B)/m/base_gen.h")
+        self.assertIn(producer["uid"], node["deps"])
 
     def test_proto_library_cpp_variant_serializes_and_python_variant_skips(self):
         files = enum_files({

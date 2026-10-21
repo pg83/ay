@@ -707,7 +707,7 @@ func (e *EmitContext) emitPyProtoLibraryResult() *ProtoSrcsResult {
 	}
 
 	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.relString(), d.unit.ARPrefix, protoLibName)
-	gRef := emitARGlobalNamedTagged(instance, globalBaseName, d.unit.GlobalARTag, genRefs, genOuts, d.tc, ctx.host, ctx.emit)
+	gRef := e.emitARGlobalNamedTagged(instance, globalBaseName, d.unit.GlobalARTag, genRefs, genOuts, d.tc, ctx.host, ctx.emit)
 	globalPath := build(instance.Path.relString(), "/", globalBaseName)
 	result := &ProtoSrcsResult{GlobalRef: &gRef, GlobalPath: &globalPath}
 
