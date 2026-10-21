@@ -68,6 +68,24 @@ class AsmIncludeTest(unittest.TestCase):
 
 
 class CythonIncludeTest(unittest.TestCase):
+    def test_cimport_uses_selected_roots_inside_another_cython_distribution(self):
+        cython3 = "contrib/tools/cython/Cython/Includes"
+        files = {
+            "m/ya.make": library("SET(PYTHON3 yes)", "BUILDWITH_CYTHON_CPP(a.pyx)"),
+            "m/a.pyx": "from contrib.tools.cython_py2.Cython.Includes.libcpp.bridge cimport X\n",
+            f"{CYTHON_PY2}/libcpp/bridge.pxd": "from libc.stdio cimport FILE\nfrom libc.string cimport memcpy\n",
+            "contrib/tools/cython/cython.py": "",
+        }
+        for name in ("stdio", "string"):
+            files[f"{CYTHON_PY2}/libc/{name}.pxd"] = ""
+            files[f"{cython3}/libc/{name}.pxd"] = ""
+        graph = lib.make(files, "m", "-k")
+        inputs = inputs_of(graph, "$(B)/m/a.pyx.cpp")
+        self.assertIn(f"$(S)/{CYTHON_PY2}/libcpp/bridge.pxd", inputs)
+        for name in ("stdio", "string"):
+            self.assertIn(f"$(S)/{cython3}/libc/{name}.pxd", inputs)
+            self.assertNotIn(f"$(S)/{CYTHON_PY2}/libc/{name}.pxd", inputs)
+
     def test_cimport_probes_and_py2_include_overrides(self):
         files = {
             "m/ya.make": library("BUILDWITH_CYTHON_CPP(a.pyx)"),
