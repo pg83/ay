@@ -64,7 +64,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	python := testType == "pytest" || testType == "py3test" || testType == "exectest"
 
 	s.canonicalData = python
-	s.projectBuildDeps = testType == "exectest"
+	s.projectBuildDeps = python
 	s.setupPythonpathEnv = python
 	s.pythonNoBytecode = python
 	s.disableLeaks = python

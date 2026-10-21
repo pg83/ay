@@ -76,6 +76,10 @@ class ResourceReadinessTest(unittest.TestCase):
         outputs = [out for uid in archive["deps"] for out in nodes[uid]["outputs"]]
         self.assertEqual(len(outputs), 3)
         self.assertEqual(len(set(outputs)), 3)
+        py2 = lib.node_by_output(graph, "$(B)/mod/test/py2_mod-test")
+        for suite in ("pytest", "py3test", "import_test"):
+            run = lib.node_by_output(graph, f"$(B)/mod/test/test-results/{suite}/meta.json")
+            self.assertTrue({py2["uid"], binary["uid"]}.issubset(run["deps"]))
 
     def test_first_and_later_contexts_use_actual_output_availability(self):
         files, targets = fixture()
