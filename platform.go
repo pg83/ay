@@ -256,6 +256,8 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		env.setFromStringID(k, v)
 	}
 
+	initializePerlEnv(env)
+
 	if !env.hasBindingID(envJdkRealVersion) {
 		env.setString(envJdkRealVersion, "17")
 	}

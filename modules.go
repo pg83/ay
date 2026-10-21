@@ -746,7 +746,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.yqlCurrent = instance.YqlCurrent
 	d.yqlStableABI = instance.Platform.YqlStableABI
 
-	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn)
+	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
 	finishYqlModule(modulePath, env, d)
 	d.test.canonizeSubPath = env.string(envCanonizeSubPath)
 	d.test.validateData = resourceValidationEnabled(env)
@@ -1107,7 +1107,7 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 	return false
 }
 
-func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn)) {
+func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	fs := ctx.fs
 
 	for _, s := range stmts {
@@ -1349,6 +1349,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		case *SetStmt:
 
 			value := expandScalarVarRef(v.Value, env)
+			perlMask := perlInputMask(v.NameEnv)
+			perlChanged := perlMask != 0 && env.string(v.NameEnv) != value
 
 			env.setFromString(v.NameEnv, value)
 
@@ -1357,6 +1359,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.setVars[internStr(v.Name)] = internStr(value)
+
+			if perlChanged {
+				recalcPerlEnv(env, platform, d.setVars, perlMask)
+			}
 
 			if v.Name == "SWIG_LANG" {
 				d.unit.SwigLang = internStr(value)
@@ -1445,17 +1451,34 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.peerdirs = append(d.peerdirs, internStr(enumSerPeer).any())
 			}
 		case *DefaultVarStmt:
+			value := expandScalarVarRef(v.Value, env)
+			bound := env.hasBindingID(v.NameEnv)
 
 			if d.defaultVars == nil {
 				d.defaultVars = map[STR]STR{}
 			}
 
 			if _, exists := d.defaultVars[internStr(v.VarName)]; !exists {
-				d.defaultVars[internStr(v.VarName)] = internStr(expandScalarVarRef(v.Value, env))
+				d.defaultVars[internStr(v.VarName)] = internStr(value)
 				d.defaultVarOrder = append(d.defaultVarOrder, internStr(v.VarName))
 			}
 
-			env.setDefaultString(v.NameEnv, expandScalarVarRef(v.Value, env))
+			perlMask := perlInputMask(v.NameEnv)
+			perlChanged := perlMask != 0 && !bound
+
+			env.setDefaultString(v.NameEnv, value)
+
+			if !bound && slices.Contains(perlConfigOutputs, v.NameEnv) {
+				if d.setVars == nil {
+					d.setVars = map[STR]STR{}
+				}
+
+				d.setVars[internStr(v.VarName)] = internStr(value)
+			}
+
+			if perlChanged {
+				recalcPerlEnv(env, platform, d.setVars, perlMask)
+			}
 		case *ConfigureFileStmt:
 			expanded := *v
 
@@ -1621,14 +1644,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				taken = v.Else
 			}
 
-			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn)
+			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn, platform)
 		case *UnknownStmt:
 
 			expanded := *v
 
 			if v.Name == tokDllFor {
 				withDllForStmts(ctx, modulePath, v, func(stmts []Stmt) {
-					collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn)
+					collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
 				})
 			} else {
 				if v.Name == tokRun {
@@ -1637,7 +1660,38 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					expanded.Args = expandStmtTokens(v.Args, env)
 				}
 
+				var perlMask uint16
+
+				if v.Name == tokEnable || v.Name == tokDisable || v.Name == tokSetAppend {
+					for i, arg := range expanded.Args {
+						if v.Name == tokSetAppend && i > 0 {
+							break
+						}
+
+						key := internEnv(arg.string())
+						mask := perlInputMask(key)
+
+						if mask == 0 {
+							continue
+						}
+
+						if v.Name == tokEnable && env.string(key) == "yes" || v.Name == tokDisable && env.string(key) == "no" {
+							continue
+						}
+
+						if v.Name == tokSetAppend && len(expanded.Args) < 2 {
+							continue
+						}
+
+						perlMask |= mask
+					}
+				}
+
 				applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
+
+				if perlMask != 0 {
+					recalcPerlEnv(env, platform, d.setVars, perlMask)
+				}
 			}
 		}
 	}

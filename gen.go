@@ -522,7 +522,7 @@ func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
 	d := ModuleData{}
 
 	apply := func(stmt Stmt) {
-		collectStmts(ctx, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, &d, ctx.onWarn)
+		collectStmts(ctx, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, &d, ctx.onWarn, instance.Platform)
 	}
 
 	var module *ModuleStmt
