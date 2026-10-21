@@ -67,6 +67,29 @@ SYSINCL=build/custom/second.yml
                 inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
                 self.assertEqual({"$(S)/m/a.cpp"} | {f"$(S)/m/{name}.h" for name in selected}, set(inputs))
 
+    def test_source_configuration_uses_field_calculator_ordering(self):
+        for condition, selected in (
+            ('$VALUE < "9"', "first"),
+            ('$VALUE >= "9"', "second"),
+            ('$VALUE <= "12"', "first"),
+            ('$VALUE > "9"', "second"),
+            ('$VALUE < 9', "first"),
+            ('$VALUE >= 9', "second"),
+            ('9 > $VALUE', "first"),
+            ('$EMPTY < 1', "first"),
+        ):
+            with self.subTest(condition=condition):
+                files = self.files(f'''VALUE=12
+EMPTY=
+SYSINCL=build/custom/second.yml
+when ({condition}) {{
+    SYSINCL=build/custom/first.yml
+}}
+''')
+                graph = lib.make(files, "m")
+                inputs = lib.node_by_output(graph, "$(B)/m/a.cpp.o")["inputs"]
+                self.assertEqual({"$(S)/m/a.cpp", f"$(S)/m/{selected}.h"}, set(inputs))
+
     def test_conditional_assignments_observe_prior_actions(self):
         set_second = '''when ($OS_LINUX == "yes") {
     SYSINCL=build/custom/second.yml

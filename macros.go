@@ -65,6 +65,8 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 		return evalEq(nodes, n, env)
 	case ckLt:
 		return evalLt(nodes, n, env)
+	case ckConfLt:
+		return evalConfLt(nodes, n, env)
 	case ckStartsWith:
 		return strings.HasPrefix(evalAtomString(nodes, n.L, env, true), evalAtomString(nodes, n.R, env, false))
 	case ckVersionCmp:
