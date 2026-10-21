@@ -11,6 +11,40 @@ def cmd(node):
 
 
 class RunPython3Test(unittest.TestCase):
+    def test_auxiliary_tools_use_host_producers_and_induce_native_dependencies(self):
+        files = {
+            "lib/ya.make": (
+                LIBRARY_HEAD + "SET(TOOLS tools/aux tools/aux)\n"
+                "RUN_PYTHON3(gen.py --tool tools/aux --embedded=tools/aux TOOL $TOOLS OUT generated.cpp)\n"
+                "END()\n"
+            ),
+            "lib/gen.py": "",
+            "auxlib/ya.make": LIBRARY_HEAD + "SRCS(helper.cpp)\nEND()\n",
+            "auxlib/helper.cpp": "",
+            "runtime/runtime.h": '#include "detail.h"\n',
+            "runtime/detail.h": "",
+        }
+        lib.tool_program(files, "tools/aux", "aux")
+        files["tools/aux/ya.make"] = files["tools/aux/ya.make"].replace(
+            "END()", "PEERDIR(auxlib)\nINDUCED_DEPS(cpp ${ARCADIA_ROOT}/runtime/runtime.h)\nEND()"
+        )
+        graph = lib.make(files, "lib")
+        generated = lib.node_by_output(graph, "$(B)/lib/generated.cpp")
+        tool = lib.node_by_output(graph, "$(B)/tools/aux/aux")
+        self.assertEqual(cmd(generated)["cmd_args"][1:], [
+            "$(S)/lib/gen.py", "--tool", "$(B)/tools/aux/aux", "--embedded=$(B)/tools/aux/aux",
+        ])
+        self.assertEqual(generated["inputs"].count("$(B)/tools/aux/aux"), 1)
+        self.assertEqual(generated["foreign_deps"], {"tool": [tool["uid"]]})
+        self.assertEqual(tool["platform"], "default-linux-x86_64")
+        helpers = [n for n in graph["graph"] if "$(B)/auxlib/helper.cpp.pic.o" in n["outputs"]]
+        self.assertEqual(len(helpers), 1)
+        compiled = lib.node_by_output(graph, "$(B)/lib/generated.cpp.o")
+        for header in ("runtime/runtime.h", "runtime/detail.h"):
+            self.assertIn("$(S)/" + header, compiled["inputs"])
+            self.assertNotIn("$(S)/" + header, generated["inputs"])
+        self.assertIn(generated["uid"], compiled["deps"])
+
     def test_generated_header_consumers_do_not_take_an_arbitrary_cpp_sibling(self):
         for outputs in ("main.h other.cpp public.h", "other.cpp main.h public.h"):
             with self.subTest(outputs=outputs):

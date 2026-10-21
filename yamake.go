@@ -324,6 +324,7 @@ type RunPythonStmt struct {
 	StdoutNoAuto   bool
 	EnvPairs       []ANY
 	CWD            *ANY
+	ToolPaths      []ANY
 	OutputIncludes []ANY
 	Line           int
 }
@@ -1698,7 +1699,9 @@ func parseRunPython(args []ANY, line int) *RunPythonStmt {
 			if stmt.CWD == nil {
 				stmt.CWD = &tok
 			}
-		case kwOUTPUT_INCLUDES.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
+		case kwTOOL.any():
+			stmt.ToolPaths = append(stmt.ToolPaths, tok)
+		case kwOUTPUT_INCLUDES.any(), kwINDUCED_DEPS.any():
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
 		}
 

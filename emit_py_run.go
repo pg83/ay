@@ -44,6 +44,7 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 
 func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	auxTools := resolveRunProgramAuxTools(ctx, anyStrs(stmt.ToolPaths))
 	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath.string())
 	inVFSByToken := make(map[string]VFS, len(stmt.INFiles))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
@@ -153,6 +154,12 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 		resources = nil
 	}
 
+	for _, tool := range auxTools {
+		toolRefs = append(toolRefs, tool.ref)
+	}
+
+	toolRefs = ctx.na.refList(dedupRefs(toolRefs)...)
+
 	directSources := ctx.na.vfs.alloc(1 + len(inSources))[:0]
 
 	if scriptVFS.isSource() {
@@ -163,10 +170,14 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	ctx.na.vfs.commit(len(directSources))
 	directSources = directSources[:len(directSources):len(directSources)]
 
-	directBuilds := ctx.na.vfs.alloc(2 + len(inBuilds))[:0]
+	directBuilds := ctx.na.vfs.alloc(2 + len(inBuilds) + len(auxTools))[:0]
 
 	if interpInput != nil {
 		directBuilds = append(directBuilds, *interpInput)
+	}
+
+	for _, tool := range auxTools {
+		directBuilds = append(directBuilds, tool.bin)
 	}
 
 	if scriptVFS.isBuild() {
@@ -194,7 +205,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	pe := func() {
 		inputClosure := pyInputClosure(snap, stmt)
 
-		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, inputClosure, pyRef, interp, toolRefs, kv, resources)
+		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, inputClosure, pyRef, interp, toolRefs, auxTools, kv, resources)
 	}
 
 	pending := e.pendingEmit(pe)
@@ -204,6 +215,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 			OutputPath:      out,
 			ProducerRef:     pyRef,
 			ProducerMainOut: outputs[0],
+			GeneratorRefs:   toolRefs,
 			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
 			OnUse:           pending,
 		})
@@ -363,6 +375,7 @@ func (e *EmitContext) emitPYRun(
 	id NodeRef,
 	interp ANY,
 	toolRefs []NodeRef,
+	auxTools []RunProgramAuxTool,
 	kv *KV,
 	resources []STR,
 ) NodeRef {
@@ -394,6 +407,12 @@ func (e *EmitContext) emitPYRun(
 	cmdArgs = append(cmdArgs, interp, scriptVFS.any())
 
 	for _, aTok := range stmt.Args {
+		if value, replaced := replaceAuxToolArg(aTok, auxTools); replaced {
+			cmdArgs = append(cmdArgs, value)
+
+			continue
+		}
+
 		a := aTok.string()
 
 		if a == "${ARCADIA_ROOT}" {
@@ -473,7 +492,7 @@ func (e *EmitContext) emitPYRun(
 		Inputs:         inputChunks,
 		KV:             kv,
 		Outputs:        outputs,
-		ForeignDepRefs: na.noderefs.list(toolRefs...),
+		ForeignDepRefs: toolRefs,
 		Resources:      resources,
 	}
 

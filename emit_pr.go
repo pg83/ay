@@ -391,6 +391,28 @@ func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxT
 	return out
 }
 
+func replaceAuxToolArg(arg ANY, tools []RunProgramAuxTool) (ANY, bool) {
+	if len(tools) == 0 {
+		return arg, false
+	}
+
+	value := arg.string()
+	replaced := false
+
+	for _, tool := range tools {
+		if !tool.rooted && strings.Contains(value, tool.token) {
+			value = strings.ReplaceAll(value, tool.token, tool.bin.string())
+			replaced = true
+		}
+	}
+
+	if replaced {
+		return internStr(value).any(), true
+	}
+
+	return arg, false
+}
+
 func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
 
@@ -454,20 +476,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 
 	for _, aTok := range args {
 		a := aTok.string()
-		key := aTok
-		toolReplaced := false
-
-		for _, tool := range spec.auxTools {
-			if tool.rooted {
-				continue
-			}
-
-			if strings.Contains(a, tool.token) {
-				a = strings.ReplaceAll(a, tool.token, tool.bin.string())
-				key = internStr(a).any()
-				toolReplaced = true
-			}
-		}
+		key, toolReplaced := replaceAuxToolArg(aTok, spec.auxTools)
 
 		if !toolReplaced {
 			if rooted, file, whole := rootBareFileArg(a, fileTokens); file != 0 {
