@@ -100,14 +100,14 @@ func containsRegexMeta(s string) bool {
 }
 
 func splitShellWords(s string) []string {
-	return splitQuotedWords(s, false)
+	return splitQuotedWords(s, 0)
 }
 
 func splitJavaCommandWords(s string) []string {
-	return splitQuotedWords(s, true)
+	return splitQuotedWords(s, 1)
 }
 
-func splitQuotedWords(s string, preserveQuotedEscapes bool) []string {
+func splitQuotedWords(s string, quotedEscapeSlashes int) []string {
 	if s == "" {
 		return nil
 	}
@@ -131,8 +131,10 @@ func splitQuotedWords(s string, preserveQuotedEscapes bool) []string {
 		ch := s[i]
 
 		if escaped {
-			if preserveQuotedEscapes && quote != 0 && ch != '\'' && ch != '"' && ch != '\\' && ch != '/' {
-				b.WriteByte('\\')
+			if quotedEscapeSlashes > 0 && quote != 0 && ch != '\'' && ch != '"' && ch != '\\' && ch != '/' {
+				for range quotedEscapeSlashes {
+					b.WriteByte('\\')
+				}
 			}
 
 			b.WriteByte(ch)

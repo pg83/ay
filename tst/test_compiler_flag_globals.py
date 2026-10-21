@@ -68,6 +68,25 @@ class CompilerFlagGlobalsTest(unittest.TestCase):
             self.assertEqual([a for a in args if a.startswith("-DQ=") or a in ("-DSAME", "b")],
                              ["-DQ=a", "-DSAME", "-DQ=a", "b", "-DSAME"])
 
+    def test_local_flags_keep_embedded_quotes_after_native_forwarding(self):
+        for macro in ("CFLAGS", "CXXFLAGS", "CONLYFLAGS"):
+            with self.subTest(macro=macro):
+                files = fixture(macro + '("-DOUTER=a b" -DINNER="c d" -DQUOTE\'e f\' -DRAW=a\\q -DESC="a\\q")\n')
+                graph = lib.make(files, "mod")
+                source = "plain.c" if macro == "CONLYFLAGS" else "main.cpp"
+                args = lib.node_by_output(graph, "$(B)/mod/" + source + ".o")["cmds"][0]["cmd_args"]
+                self.assertEqual([a for a in args if a.startswith(("-DOUTER", "-DINNER", "-DQUOTE", "-DRAW", "-DESC")) or a == "b"],
+                                 ["-DOUTER=a", "b", "-DINNER=c d", "-DQUOTEe f", "-DRAW=aq", "-DESC=a\\\\q"])
+
+    def test_export_identity_keeps_quotes_that_command_expansion_removes(self):
+        files = fixture("PEERDIR(a b)\n")
+        files["a/ya.make"] = library('CFLAGS(GLOBAL -DQ="a" GLOBAL -DSAME)\n')
+        files["b/ya.make"] = library('CFLAGS(GLOBAL -DQ=a GLOBAL -DSAME)\n')
+        graph = lib.make(files, "mod")
+        args = lib.node_by_output(graph, "$(B)/mod/main.cpp.o")["cmds"][0]["cmd_args"]
+        self.assertEqual([a for a in args if a.startswith("-DQ=") or a == "-DSAME"],
+                         ["-DQ=a", "-DSAME", "-DQ=a", "-DSAME"])
+
     def test_empty_forwarded_arguments_do_not_consume_global(self):
         files = fixture("PEERDIR(a)\n")
         files["a/ya.make"] = library('CFLAGS(GLOBAL "" -DSAME GLOBAL "  " -DA)\n')

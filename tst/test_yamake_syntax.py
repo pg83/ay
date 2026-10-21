@@ -87,16 +87,17 @@ class YaMakeSyntaxTest(unittest.TestCase):
             " -w@v'u' -DQ'x y' -DR\\\"z \"a\\\\b\" \"-DS=\\\"q\\\"\" éx"
             " -DT=\"a\\\"b\" `a` x&&y a;b c^d e|f)"
         ), [
-            "-DA", "-DB=c d", "-DE", "-DF=g h", "-DI=\"j\"", "X-Y", "12",
+            "-DA", "-DB=c", "d", "-DE", "-DF=g h", "-DI=\"j\"", "X-Y", "12",
             "12ab", "a@b", "-D#x", "-DZ", "FOObar", "FOO\"x\"", "FOO@yz",
-            "-w@vu", "-DQx y", "-DR\"z", "a\\\\b", "-DS=\"q\"", "éx",
+            "-w@vu", "-DQx y", "-DR\"z", "ab", "-DS=q", "éx",
             "-DT=a\"b", "`a`", "x&&y", "a;b", "c^d", "e|f",
         ])
 
     def test_graph_json_escaping_across_ascii_block_boundaries(self):
         suffixes = ('"', "\\", "\x00", "\x01", "\x1f", "\t", "é", "\u2028", "\u2029")
-        tokens = ["a" * size + suffix + "z" * 16 for size in range(16) for suffix in suffixes]
-        quoted = ['"' + token.replace('"', '\\"') + '"' for token in tokens]
+        values = ["a" * size + suffix + "z" * 16 for size in range(16) for suffix in suffixes]
+        tokens = ["-DJSON=" + value for value in values]
+        quoted = ['-DJSON="' + value.replace("\\", "\\\\").replace('"', '\\"') + '"' for value in values]
         self.assert_cflags(library("CFLAGS(" + " ".join(quoted) + ")"), tokens)
 
     def test_macro_argument_atoms_take_url_symbols(self):

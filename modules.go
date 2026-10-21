@@ -779,6 +779,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		}
 	}
 
+	d.cFlags = compilerCommandFlags(d.cFlags)
+	d.cxxFlags = compilerCommandFlags(d.cxxFlags)
+	d.cOnlyFlags = compilerCommandFlags(d.cOnlyFlags)
+
 	finishPyRegisterCFlags(d)
 
 	d.test.canonizeSubPath = env.string(envCanonizeSubPath)
@@ -5053,7 +5057,9 @@ func appendCompilerFlags(args []ANY, env Environment, global, own []ANY) ([]ANY,
 		nextGlobal = false
 	}
 
-	for _, arg := range expandStmtTokens(args, env) {
+	for _, arg := range args {
+		arg = expandStmtTokenAny(arg, env)
+
 		text := arg.string()
 
 		if text == "" {

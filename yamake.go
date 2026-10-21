@@ -1137,10 +1137,12 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 
 	defer func() { p.lex.inArgs = false }()
 
+	compiler := nameTok.id == kwCFLAGS || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS
+
 	for {
 		start := 0
 
-		if lexical != nil {
+		if lexical != nil || compiler {
 			p.lex.skipTrivia()
 			start = p.lex.pos
 		}
@@ -1157,19 +1159,25 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 		case tokEOF:
 			p.lex.throwParse(nameTok.line, nameTok.col, "unterminated macro call %q (missing ')')", nameTok.string())
 		case tokIdent, tokWord, tokString, tokInt:
-			scratch = append(scratch, tok.id.any())
+			value := tok.id
 
-			if lexical != nil {
-				value := tok.id
-
+			if lexical != nil || compiler {
 				if tok.kind == tokString {
 					if strings.ContainsRune(tok.string(), '\\') {
 						value = internStr(strings.ReplaceAll(tok.string(), "\\", ""))
 					}
-				} else {
+				} else if p.lex.pos-start != len(tok.string()) {
 					value = internBytes(p.lex.src[start:p.lex.pos])
 				}
+			}
 
+			if compiler {
+				scratch = append(scratch, value.any())
+			} else {
+				scratch = append(scratch, tok.id.any())
+			}
+
+			if lexical != nil {
 				*lexical = append(*lexical, value.any())
 			}
 		case tokLParen:
@@ -1280,11 +1288,11 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 
 		return stmt
 	case "CFLAGS":
-		return astOne(astCFlags, CFlagsStmt{Flags: compilerFlags(args), Line: line})
+		return astOne(astCFlags, CFlagsStmt{Flags: args, Line: line})
 	case "CXXFLAGS":
-		return astOne(astCXXFlags, CXXFlagsStmt{Flags: compilerFlags(args), Line: line})
+		return astOne(astCXXFlags, CXXFlagsStmt{Flags: args, Line: line})
 	case "CONLYFLAGS":
-		return &CONLYFlagsStmt{Flags: compilerFlags(args), Line: line}
+		return &CONLYFlagsStmt{Flags: args, Line: line}
 	case "LDFLAGS":
 		return &LDFlagsStmt{Flags: append([]ANY(nil), args...), Line: line}
 	case "SRCDIR":
@@ -1810,20 +1818,6 @@ func parseResource(args []ANY, nameTok Token) *ResourceStmt {
 	}
 
 	return &ResourceStmt{Pairs: pairs, Line: nameTok.line, DontCompress: dontCompress}
-}
-
-func unescapeFlag(s string) string {
-	return strings.ReplaceAll(s, `\"`, `"`)
-}
-
-func compilerFlags(args []ANY) []ANY {
-	out := astArgs.list(args...)
-
-	for i, arg := range out {
-		out[i] = internStr(unescapeFlag(arg.string())).any()
-	}
-
-	return out
 }
 
 func splitAddInclPaths(args []ANY) *AddInclStmt {

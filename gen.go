@@ -2236,9 +2236,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	ownCFlags := d.cFlags
-	ownCFlagsGlobalSelf := d.cFlagsGlobal
-	ownCXXFlagsGlobalSelf := d.cxxFlagsGlobal
-	ownCOnlyFlagsGlobalSelf := d.cOnlyFlagsGlobal
+	ownCFlagsGlobalSelf := ownCompilerFlagArgs(effectiveCFlagsGlobal, d.cFlagsGlobal)
+	ownCXXFlagsGlobalSelf := ownCompilerFlagArgs(effectiveCXXFlagsGlobal, d.cxxFlagsGlobal)
+	ownCOnlyFlagsGlobalSelf := ownCompilerFlagArgs(effectiveCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
 	dedupedAddIncl := dedup(d.addIncl, d.addInclGlobal)
 	perModuleCCTag := d.unit.CCTag
 

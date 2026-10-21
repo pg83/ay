@@ -54,9 +54,11 @@ func (ctx *GenCtx) compilerFlagExports(seen *DeDuper, peers []ResolvedPeer, kind
 }
 
 func (ctx *GenCtx) compilerFlagValue(args []ANY) CompilerFlagValue {
-	args = ctx.argSlices.internCopy(args)
+	name := internStr(strings.Join(anyStrs(args), " "))
 
-	return CompilerFlagValue{Name: internStr(strings.Join(anyStrs(args), " ")), Args: args}
+	args = ctx.argSlices.internCopy(compilerCommandFlags(args))
+
+	return CompilerFlagValue{Name: name, Args: args}
 }
 
 func (ctx *GenCtx) ownCompilerFlagValues(args []ANY) []CompilerFlagValue {
@@ -65,4 +67,22 @@ func (ctx *GenCtx) ownCompilerFlagValues(args []ANY) []CompilerFlagValue {
 	}
 
 	return ctx.na.compilerFlags.list(ctx.compilerFlagValue(args))
+}
+
+func compilerCommandFlags(args []ANY) []ANY {
+	for _, arg := range args {
+		if strings.ContainsAny(arg.string(), "\\\"' \t\n\r") {
+			return internAnys(splitQuotedWords(strings.Join(anyStrs(args), " "), 2))
+		}
+	}
+
+	return args
+}
+
+func ownCompilerFlagArgs(values []CompilerFlagValue, own []ANY) []ANY {
+	if len(own) == 0 {
+		return nil
+	}
+
+	return values[len(values)-1].Args
 }
