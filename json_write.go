@@ -211,50 +211,34 @@ func appendCmdSlice(buf []byte, cmds []Cmd) []byte {
 func appendStrChunks(buf []byte, chunks ArgChunks) []byte {
 	buf = append(buf, '[')
 
-	first := true
-
 	for _, ch := range chunks {
 		for _, a := range ch {
-			if !first {
-				buf = append(buf, ',')
-			}
-
-			first = false
-
 			if v := a.vfs(); v != 0 {
-				buf = appendVFS(buf, v)
+				buf = appendVFSComma(buf, v)
 			} else {
 				buf = appendString(buf, a.str().string())
+				buf = append(buf, ',')
 			}
 		}
 	}
 
-	return append(buf, ']')
+	return appendArrayEnd(buf)
 }
 
 func appendVFSChunks(buf []byte, chunks [][]VFS) []byte {
 	buf = append(buf, '[')
 
-	first := true
-
 	for _, ch := range chunks {
 		for _, v := range ch {
-			if !first {
-				buf = append(buf, ',')
-			}
-
-			first = false
-			buf = appendVFS(buf, v)
+			buf = appendVFSComma(buf, v)
 		}
 	}
 
-	return append(buf, ']')
+	return appendArrayEnd(buf)
 }
 
 func appendBuildOnlyVFSChunks(buf []byte, chunks [][]VFS) []byte {
 	buf = append(buf, '[')
-
-	first := true
 
 	for _, ch := range chunks {
 		for _, v := range ch {
@@ -262,33 +246,40 @@ func appendBuildOnlyVFSChunks(buf []byte, chunks [][]VFS) []byte {
 				continue
 			}
 
-			if !first {
-				buf = append(buf, ',')
-			}
-
-			first = false
-			buf = appendVFS(buf, v)
+			buf = appendVFSComma(buf, v)
 		}
 	}
 
-	return append(buf, ']')
+	return appendArrayEnd(buf)
 }
 
 func appendVFSSlice(buf []byte, vs []VFS) []byte {
 	buf = append(buf, '[')
 
-	for i, v := range vs {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
+	for _, v := range vs {
+		buf = appendVFSComma(buf, v)
+	}
 
-		buf = appendVFS(buf, v)
+	return appendArrayEnd(buf)
+}
+
+func appendArrayEnd(buf []byte) []byte {
+	if buf[len(buf)-1] == ',' {
+		buf[len(buf)-1] = ']'
+
+		return buf
 	}
 
 	return append(buf, ']')
 }
 
 func appendVFS(buf []byte, v VFS) []byte {
+	buf = appendVFSComma(buf, v)
+
+	return buf[:len(buf)-1]
+}
+
+func appendVFSComma(buf []byte, v VFS) []byte {
 	id := v.strID()
 
 	if int(id) < len(vfsEscapedJSON) {
@@ -309,7 +300,7 @@ func appendVFSUncached(buf []byte, v VFS, id uint32) []byte {
 	}
 
 	s := v.relString()
-	out := make([]byte, 0, len(s)+7)
+	out := make([]byte, 0, len(s)+8)
 
 	out = append(out, '"')
 
@@ -320,7 +311,7 @@ func appendVFSUncached(buf []byte, v VFS, id uint32) []byte {
 		out = appendStringEscapedBody(out, s)
 	}
 
-	out = append(out, '"')
+	out = append(out, '"', ',')
 	vfsEscapedJSON[id] = out
 
 	return append(buf, out...)
