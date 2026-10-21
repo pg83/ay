@@ -275,11 +275,6 @@ func extIsArchiveMember(p string) bool {
 	return strings.HasSuffix(p, ".a") || strings.HasSuffix(p, ".o")
 }
 
-func extIsRefOnlyArtifact(p string) bool {
-	return strings.HasSuffix(p, ".o") || strings.HasSuffix(p, ".a") ||
-		strings.HasSuffix(p, ".pyplugin") || strings.HasSuffix(p, ".exports")
-}
-
 func extIsCOrHeaderSource(p string) bool {
 	return strings.HasSuffix(p, ".cpp") || strings.HasSuffix(p, ".cc") ||
 		strings.HasSuffix(p, ".cxx") || strings.HasSuffix(p, ".c") ||

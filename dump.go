@@ -16,30 +16,11 @@ import (
 var (
 	versionedResourceRe = regexp.MustCompile(`\$\(([A-Z][A-Z0-9_]*)-(?:sbr:)?[0-9]+\)`)
 	resourceMountFoldRe = regexp.MustCompile(`\$\(B\)/resources/([A-Z_][A-Z0-9_]*)`)
-	cmdLiteralBasenames = map[string]bool{"gnu": true}
 )
-
-var ldOwnScriptRels = map[string]bool{
-	"build/scripts/link_dyn_lib.py":                 true,
-	"build/scripts/link_exe.py":                     true,
-	"build/scripts/process_command_files.py":        true,
-	"build/scripts/process_whole_archive_option.py": true,
-	"build/scripts/thinlto_cache.py":                true,
-	"build/scripts/fs_tools.py":                     true,
-	"build/scripts/vcs_info.py":                     true,
-	"build/scripts/c_templates/svn_interface.c":     true,
-	"build/scripts/c_templates/svnversion.h":        true,
-}
 
 var dumpContentFields = []string{
 	"cmds", "env", "inputs", "kv", "outputs",
 	"platform", "requirements",
-}
-
-var objcopyOverEmitExts = map[string]struct{}{
-	".h": {}, ".hpp": {}, ".hxx": {}, ".ipp": {}, ".inc": {}, ".def": {},
-	".proto": {}, ".cpp": {}, ".cc": {}, ".cxx": {}, ".c": {}, ".i": {}, ".td": {},
-	".txt": {},
 }
 
 func normPath(s string) string {
@@ -163,223 +144,36 @@ func nodeCmdText(node *RawNode) string {
 	return b.String()
 }
 
-func nodeCmdBasenames(node *RawNode) map[string]struct{} {
-	cmds, _ := node.Cmds.([]any)
-	set := map[string]struct{}{}
-
-	for _, c := range cmds {
-		m, _ := c.(map[string]any)
-		args := toStrings(m["cmd_args"])
-
-		for i, a := range args {
-			if i > 0 && args[i-1] == "-k" {
-				continue
-			}
-
-			b := strings.TrimRight(baseName(normPath(a)), ":")
-
-			set[b] = struct{}{}
-		}
-	}
-
-	return set
-}
-
-func arLDInputKept(s, kind string, cmdBases map[string]struct{}) bool {
-	if extIsRefOnlyArtifact(s) {
-		if rel, ok := strings.CutPrefix(s, "$(S)/"); ok && strings.HasSuffix(rel, ".a") {
-			return false
-		}
-
-		return true
-	}
-
-	if rel, ok := strings.CutPrefix(s, "$(S)/"); ok {
-		if kind == "AR" && rel == "build/scripts/link_lib.py" {
-			return true
-		}
-
-		if kind == "LD" && ldOwnScriptRels[rel] {
-			return true
-		}
-	}
-
-	b := baseName(s)
-
-	if cmdLiteralBasenames[b] {
-		return false
-	}
-
-	_, ok := cmdBases[b]
-
-	return ok
-}
-
-func filterARLDInputs(in []string, kind string, cmdBases map[string]struct{}) []string {
-	out := in[:0]
-
-	for _, s := range in {
-		if arLDInputKept(s, kind, cmdBases) {
-			out = append(out, s)
-		}
-	}
-
-	return out
-}
-
-func filterObjcopyInputs(in []string, cmdBases map[string]struct{}) []string {
-	out := in[:0]
-
-	for _, s := range in {
-		if objcopyInputKept(s, cmdBases) {
-			out = append(out, s)
-		}
-	}
-
-	return out
-}
-
-func objcopyInputKept(s string, cmdBases map[string]struct{}) bool {
-	b := baseName(s)
-
-	if _, named := cmdBases[b]; named && !cmdLiteralBasenames[b] {
-		return true
-	}
-
-	rel, isSrc := strings.CutPrefix(s, "$(S)/")
-
-	if !isSrc {
-		return true
-	}
-
-	return objcopySourceLeafKept(rel)
-}
-
-func objcopySourceLeafKept(rel string) bool {
-	b := baseName(rel)
-
-	if strings.HasPrefix(rel, "contrib/libs/") {
-		return false
-	}
-
-	if _, over := objcopyOverEmitExts[fileExt(b)]; over {
-		return false
-	}
-
-	if strings.HasPrefix(rel, "build/") && extIsPy(b) {
-		return false
-	}
-
-	return true
-}
-
-func filterCythonInputs(in []string, cmdText string) []string {
-	out := in[:0]
-
-	for _, s := range in {
-		if cythonInputKept(s, cmdText) {
-			out = append(out, s)
-		}
-	}
-
-	return out
-}
-
-func filterRawAuxInputs(in []string, node *RawNode) []string {
-	cmds, _ := node.Cmds.([]any)
-	keep := map[string]struct{}{}
-
-	for _, c := range cmds {
-		m, _ := c.(map[string]any)
-		args := toStrings(m["cmd_args"])
-
-		if len(args) == 0 {
-			continue
-		}
-
-		keep[normPath(args[0])] = struct{}{}
-
-		for i := 2; i < len(args); i += 2 {
-			if args[i] != "-" {
-				keep[normPath(args[i])] = struct{}{}
-			}
-		}
-	}
-
-	out := in[:0]
-
-	for _, s := range in {
-		if _, ok := keep[s]; ok {
-			out = append(out, s)
-		}
-	}
-
-	return out
-}
-
 func filterEnumParserInputs(in []string, node *RawNode) []string {
 	cmds, _ := node.Cmds.([]any)
-	keep := map[string]struct{}{}
 
-	for _, c := range cmds {
-		m, _ := c.(map[string]any)
-		args := toStrings(m["cmd_args"])
-
-		if len(args) > 0 {
-			keep[normPath(args[0])] = struct{}{}
-		}
-
-		if len(args) > 1 {
-			keep[normPath(args[1])] = struct{}{}
-		}
+	if len(cmds) != 1 {
+		return in
 	}
 
+	m, _ := cmds[0].(map[string]any)
+	args := toStrings(m["cmd_args"])
+
+	if len(args) != 6 && (len(args) != 8 || args[6] != "--header") {
+		return in
+	}
+
+	tool := normPath(args[0])
+
+	if !strings.HasSuffix(tool, "/tools/enum_parser/enum_parser") || args[2] != "--include-path" || args[4] != "--output" {
+		return in
+	}
+
+	header := normPath(args[1])
 	out := in[:0]
 
 	for _, s := range in {
-		if _, ok := keep[s]; ok {
+		if s == tool || s == header {
 			out = append(out, s)
 		}
 	}
 
 	return out
-}
-
-func isRawAuxNode(node *RawNode) bool {
-	for _, out := range node.Outputs {
-		if strings.HasSuffix(normPath(out), "_raw.auxcpp") {
-			return true
-		}
-	}
-
-	return false
-}
-
-func cythonInputKept(s, cmdText string) bool {
-	if strings.Contains(cmdText, s+"\x00") {
-		return true
-	}
-
-	rel, isSource := strings.CutPrefix(s, "$(S)/")
-
-	if !isSource {
-		return true
-	}
-
-	if tool, _, ok := strings.Cut(rel, "/Cython/Utility/"); ok && (tool == "contrib/tools/cython" || tool == "contrib/tools/cython_py2") {
-		return true
-	}
-
-	if strings.HasPrefix(rel, "build/scripts/") && fileExt(rel) == ".py" {
-		return false
-	}
-
-	switch fileExt(rel) {
-	case ".py", ".pyx", ".pxd", ".pxi":
-		return true
-	}
-
-	return false
 }
 
 func getString(node map[string]any, key string) string {
@@ -391,28 +185,8 @@ func getString(node map[string]any, key string) string {
 func canonInputs(node *RawNode, refGraph bool) []string {
 	inputs := normSortedStrings(node.Inputs)
 
-	if !refGraph {
-		return inputs
-	}
-
-	kind := nodeProgramKind(node)
-
-	switch {
-	case kind == "AR" || kind == "LD":
-		inputs = filterARLDInputs(inputs, kind, nodeCmdBasenames(node))
-	case kind == "CY":
-		inputs = filterCythonInputs(inputs, nodeCmdText(node))
-	case kind == "EN":
-		inputs = filterEnumParserInputs(inputs, node)
-	case kind == "PR" && isRawAuxNode(node):
-		inputs = filterRawAuxInputs(inputs, node)
-	case kind == "PY":
-
-		cmdBases := nodeCmdBasenames(node)
-
-		if _, ok := cmdBases["objcopy.py"]; ok {
-			inputs = filterObjcopyInputs(inputs, cmdBases)
-		}
+	if refGraph && nodeProgramKind(node) == "EN" {
+		return filterEnumParserInputs(inputs, node)
 	}
 
 	return inputs

@@ -412,7 +412,7 @@ class DumpNormalizeTest(DumpToolTest):
         self.assertEqual(len(normalized), 4)
         self.assertNotIn("$(B)/app/unused.o", [o for n in normalized for o in n["outputs"]])
 
-    def test_normalize_ref_graph_input_filters(self):
+    def test_normalize_preserves_declared_action_inputs(self):
         root = raw_node(
             "root", "LD", ["$(B)/app/app"],
             deps=["objcopy", "raw", "cy", "ar", "pr"],
@@ -470,26 +470,10 @@ class DumpNormalizeTest(DumpToolTest):
             [root, objcopy, raw, cython, archive, plain_pr], "app", "--ref-graph",
         )
         inputs = {node["outputs"][0]: node["inputs"] for node in normalized}
-        self.assertEqual(inputs["$(B)/app/app"], [
-            "$(B)/lib/liblib.a",
-            "$(S)/build/scripts/link_exe.py",
-            "$(S)/tools/named.txt",
-        ])
-        self.assertEqual(inputs["$(B)/app/objcopy.o"], [
-            "$(B)/app/generated.bin",
-            "$(S)/app/gnu",
-            "$(S)/app/payload.h",
-            "$(S)/app/resource.bin",
-            "$(S)/build/scripts/objcopy.py",
-        ])
-        self.assertEqual(inputs["$(B)/app/x_raw.auxcpp"], [
-            "$(B)/tools/rescompiler",
-            "$(S)/app/data.txt",
-        ])
-        self.assertEqual(inputs["$(B)/app/m.pyx.cpp"], [
-            "$(B)/app/generated.pxi",
-            "$(S)/app/m.pyx",
-        ])
+        self.assertEqual(inputs["$(B)/app/app"], sorted(root["inputs"]))
+        self.assertEqual(inputs["$(B)/app/objcopy.o"], sorted(objcopy["inputs"]))
+        self.assertEqual(inputs["$(B)/app/x_raw.auxcpp"], sorted(raw["inputs"]))
+        self.assertEqual(inputs["$(B)/app/m.pyx.cpp"], sorted(cython["inputs"]))
         self.assertEqual(inputs["$(B)/lib/liblib.a"], [
             "$(B)/lib/a.o",
             "$(S)/build/scripts/link_lib.py",
