@@ -52,6 +52,37 @@ class DataValidationTest(unittest.TestCase):
         files["mod/ya.make"] = files["mod/ya.make"].replace("END()", "DISABLE_DATA_VALIDATION()\nEND()")
         self.assertEqual(test_nodes(lib.make(files, "mod", "--target-platform-tests")), {})
 
+    def test_nested_unions_keep_resource_consumers_and_unique_test_bindings(self):
+        files = {
+            "build/platform/python/ymake_python3/ya.make": (
+                "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(YMAKE_PYTHON3 sbr:31)\nEND()\n"
+            ),
+            "child/ya.make": (
+                "UNION()\nSET(VALIDATE_DATA yes)\n"
+                "FROM_SANDBOX(FILE 7 OUT_NOAUTO child.txt)\nEND()\n"
+            ),
+            "parent/ya.make": (
+                "UNION()\nSET(VALIDATE_DATA yes)\nPEERDIR(child)\n"
+                "FROM_SANDBOX(FILE 8 OUT_NOAUTO parent.txt)\nEND()\n"
+            ),
+        }
+        graph = lib.make(files, "parent", "child", "--sandboxing",
+                         "--target-platform-tests", "--test-size", "small")
+        checks = test_nodes(graph)
+        self.assertEqual(set(checks), {"parent/validate_resource", "child/validate_resource"})
+        fetch = lib.node_by_output(graph, "$(B)/resources/YMAKE_PYTHON3")
+        self.assertIn("sbr:31", fetch["cmds"][0]["cmd_args"])
+        for project in ("child", "parent"):
+            with self.subTest(project=project):
+                args = checks[project + "/validate_resource"]["cmds"][0]["cmd_args"]
+                bindings = [args[i + 1] for i, arg in enumerate(args) if arg == "--global-resource"]
+                self.assertEqual(bindings, ["YMAKE_PYTHON3_RESOURCE_GLOBAL::$(B)/resources/YMAKE_PYTHON3"])
+                consumer = lib.node_by_output(graph, f"$(B)/{project}/{project}.pkg.fake")
+                self.assertIn(fetch["uid"], consumer["deps"])
+                generated = lib.node_by_output(graph, f"$(B)/{project}/{project}.txt")
+                self.assertIn(generated["uid"], consumer["deps"])
+                self.assertIn(generated["outputs"][0], consumer["inputs"])
+
     def test_script_modules_get_resource_checks(self):
         files = {"mod/ya.make": (
             "EXECTEST()\nRUN(tool)\nSET(VALIDATE_DATA yes)\nDATA(sbr://12)\n"

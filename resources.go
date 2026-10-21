@@ -173,7 +173,7 @@ func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
 		return strings.Compare(a.GlobalVar.string(), b.GlobalVar.string())
 	})
 
-	return out
+	return slices.Compact(out)
 }
 
 func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
