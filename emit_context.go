@@ -500,6 +500,7 @@ func (e *EmitContext) emit() {
 		}
 	}
 
+	e.emitPyFbsGroups()
 	e.emitDeclaredProducers(cythonPlans)
 	e.emitUsrvFiles()
 

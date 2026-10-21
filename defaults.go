@@ -98,7 +98,7 @@ func (e *EmitContext) defaultPeerdirsForModule() []string {
 		inst.Language = LangCPP
 	}
 
-	if instance.Language == LangPy2 {
+	if instance.Language == LangPy2 || instance.Language == LangPy && d.multimodule == tokFbsLibrary {
 		inst.Language = LangCPP
 	}
 

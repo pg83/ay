@@ -472,7 +472,7 @@
       "yweb/antispam/url_ndp",
       "yweb/structhtml/microform/parser"
     ],
-    "xfail": true,
+    "xfail": false,
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14088867440",
     "slice_sha256": "0083b9838b610320cfaf6ced14f78901da208a22a994367b4d0fce5c82ac0b9a",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14088873924",

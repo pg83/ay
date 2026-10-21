@@ -438,8 +438,14 @@ func (d *ModuleData) resStr4(a, b, c, e string) string {
 	return bytesString(d.resKeyBuf[start:])
 }
 
+type PyFbsSource struct {
+	Path   string
+	Module string
+}
+
 type PySrcGroup struct {
 	DeclSeq        int
+	Fbs            []PyFbsSource
 	Srcs           []ANY
 	Scopes         []PyScope
 	ResourceOffset int
@@ -1275,13 +1281,18 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if v.Name == tokFbsLibrary {
 				d.multimodule = v.Name
-				d.moduleVariants = 1<<LangCPP | 1<<LangGo | 1<<LangJava
+				d.moduleVariants = 1<<LangCPP | 1<<LangGo | 1<<LangJava | 1<<LangPy
 				env.setStringID(envMODULE_TAG, d.unit.Tag)
 				env.setBool(internEnv("CPP_FBS"), language == LangCPP)
 				env.setBool(internEnv("JAVA_FBS"), language == LangJava || language == LangFbsJavaNative)
 				if language == LangFbsJavaNative {
 					d.flags.NoUtil = true
 					d.flags.NoRuntime = true
+				}
+				if language == LangPy {
+					d.noLint = "none_internal"
+					env.setBool(internEnv("PY3_FBS"), true)
+					env.setString(internEnv("_NO_LINT_VALUE"), "none_internal")
 				}
 			}
 
@@ -1354,6 +1365,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			env.setString(envMODULE_LANG, moduleLang)
 
 		case *SrcsStmt:
+			if d.multimodule == tokFbsLibrary && language == LangPy {
+				stmt := UnknownStmt{Name: tokPySrcs, Args: expandStmtTokens(v.Sources, env)}
+				d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
+				continue
+			}
+
 			if d.moduleStmt != nil && (isUnionModule(d.moduleStmt.Name) || d.moduleStmt.Name == tokPackageFinal) {
 				d.addFiles(expandStmtTokens(v.Sources, env))
 
@@ -1558,6 +1575,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.srcs = append(d.srcs, SrcMeta{Source: src, Prio: stmtPrioDefault, Global: true})
 			}
 		case *GenerateEnumSerializationStmt:
+			if d.multimodule == tokFbsLibrary && language == LangPy && (v.Variant == "plain" || v.Variant == "with_header") {
+				continue
+			}
+
 			if env.bool(envGO_PROTO) {
 				continue
 			}
@@ -1964,6 +1985,10 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		if language == LangFbsJavaNative {
 			return ModuleUnit{Type: tokJarLibrary, Tag: internStr("JAVA_FBS"), CCTag: internStr("java_fbs"), NoStartTarget: true}
 		}
+		if language == LangPy {
+			return ModuleUnit{Type: tokPy3Library, Tag: internStr("py3_fbs"), ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+		}
+
 		if language == LangGo {
 			return ModuleUnit{Type: tokGoLibrary, Tag: strGoFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 		}
@@ -3805,6 +3830,16 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		if eq := strings.IndexByte(src, '='); eq >= 0 {
 			modNameOverride = src[eq+1:]
 			src = src[:eq]
+		}
+
+		if d.multimodule == tokFbsLibrary && strings.HasSuffix(src, ".fbs") {
+			modName := modNameOverride
+			if modName == "" {
+				modName = pythonModuleName(modulePath, strings.TrimSuffix(src, ".fbs"), topLevel, namespace)
+			}
+			d.pySrcGroups[group].Fbs = append(d.pySrcGroups[group].Fbs, PyFbsSource{Path: src, Module: modName})
+			d.peerdirs = append(d.peerdirs, internStr("contrib/python/flatbuffers").any())
+			continue
 		}
 
 		if extIsPyx(src) {
