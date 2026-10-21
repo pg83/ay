@@ -503,7 +503,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		for _, it := range chunk {
 			if it.input() != 0 {
-				buildBound += 2
+				buildBound++
 			}
 
 			buildBound += len(it.ExtraBuilds)
@@ -537,12 +537,6 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 				}
 
 				payloadBuilds = append(payloadBuilds, input)
-
-				if info := e.codegen.lookup(input); info != nil {
-					if main := info.ProducerMainOut; main != 0 && deduper.add(main.strID()) {
-						payloadBuilds = append(payloadBuilds, main)
-					}
-				}
 			}
 
 			na.vfs.commit(len(payloadBuilds))

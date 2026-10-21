@@ -92,7 +92,7 @@ class SandboxInputsTest(unittest.TestCase):
         self.assertFalse(any("$(B)/mod/generated.h" in n["outputs"] for n in graph["graph"]))
         self.assertIn(copy["uid"], compiled["deps"])
 
-    def test_secondary_opaque_input_does_not_expand_main_output(self):
+    def test_secondary_opaque_input_keeps_main_output(self):
         files = {
             "mod/ya.make": (LIBRARY + "RUN_PROGRAM(tool OUT_NOAUTO first.bin second.pyc)\n"
                             "ARCHIVE(NAME data.inc second.pyc)\nSRCS(use.cpp)\nEND()\n"),
@@ -102,8 +102,12 @@ class SandboxInputsTest(unittest.TestCase):
         lib.tool_program(files, "tools/archiver", "archiver")
         graph = lib.make(files, "mod", "--sandboxing")
         archived = lib.node_by_output(graph, "$(B)/mod/data.inc")
-        self.assertIn("$(B)/mod/second.pyc", archived["inputs"])
-        self.assertNotIn("$(B)/mod/first.bin", archived["inputs"])
+        self.assertCountEqual(archived["inputs"], [
+            "$(B)/mod/second.pyc", "$(B)/mod/first.bin", "$(B)/tools/archiver/archiver",
+        ])
+        producer = lib.node_by_output(graph, "$(B)/mod/second.pyc")
+        self.assertIn(producer["uid"], archived["deps"])
+        self.assertNotIn("$(B)/mod/first.bin", archived["cmds"][0]["cmd_args"])
 
     def test_runner_outputs_only_forward_declared_includes(self):
         for runner in ("RUN_PROGRAM(tool IN seed.txt OUT generated.cpp OUTPUT_INCLUDES mod/public.h)",

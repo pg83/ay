@@ -2680,7 +2680,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		globalRefs, globalOutputs = e.reorderARMembers(globalRefs, globalOutputs, globalMetas)
 
-		globalRef := emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
+		globalRef := e.emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 
 		result.GlobalRef = &globalRef
 		result.GlobalPath = ptr(build(instance.Path.relString(), "/", globalBaseName))

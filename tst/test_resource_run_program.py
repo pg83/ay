@@ -24,6 +24,23 @@ def compile_inputs(graph, output):
 
 
 class RunProgramTest(unittest.TestCase):
+    def test_archive_of_additional_output_keeps_opaque_main_output(self):
+        files = library(
+            "RUN_PROGRAM(tools/gen IN input.cpp OUT_NOAUTO main.cpp data.bin)\n"
+            "ARCHIVE(NAME data.inc DONTCOMPRESS data.bin data.bin)\n",
+            input__cpp='#include "private.h"\n', private__h="",
+        )
+        lib.tool_program(files, "tools/archiver", "archiver")
+        graph = lib.make(files, "lib")
+        archive = lib.node_by_output(graph, "$(B)/lib/data.inc")
+        self.assertCountEqual(archive["inputs"], [
+            "$(B)/lib/data.bin", "$(B)/lib/main.cpp",
+            "$(B)/tools/archiver/archiver",
+        ])
+        producer = lib.node_by_output(graph, "$(B)/lib/data.bin")
+        self.assertIn(producer["uid"], archive["deps"])
+        self.assertNotIn("$(B)/lib/main.cpp", archive["cmds"][0]["cmd_args"])
+
     def test_swig_flags_follow_cpp_source_name_for_any_generator(self):
         files = library("RUN_PROGRAM(tools/gen OUT api.swg.cxx api.swg.cpp api.swg.c ordinary.cpp)\n")
         graph = lib.make(files, "lib")

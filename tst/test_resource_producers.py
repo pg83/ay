@@ -153,8 +153,11 @@ class ProducerOrderTest(unittest.TestCase):
         producer = lib.node_by_output(graph, "$(B)/lib/opt.txt")
         configure = lib.node_by_output(graph, "$(B)/lib/cfg.h")
         self.assertEqual(configure["kv"]["p"], "CF")
-        self.assertEqual(configure["inputs"], ['$(S)/build/scripts/configure_file.py', '$(B)/lib/tpl.in'])
+        self.assertEqual(configure["inputs"], [
+            '$(S)/build/scripts/configure_file.py', '$(B)/lib/tpl.in', '$(B)/lib/opt.txt',
+        ])
         self.assertEqual(configure["deps"], [producer["uid"]])
+        self.assertNotIn("$(B)/lib/opt.txt", configure["cmds"][0]["cmd_args"])
         md5 = lib.node_by_output(graph, "$(B)/lib/md5.cpp")
         self.assertEqual(md5["inputs"], [
             "$(B)/lib/opt.txt",

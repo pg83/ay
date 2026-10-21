@@ -48,7 +48,7 @@ class ResourceRawTest(unittest.TestCase):
             node for node in graph["graph"]
             if node["outputs"][0].endswith("_raw.auxcpp")
         ]
-        self.assertEqual(packed["inputs"], [
+        self.assertCountEqual(packed["inputs"], [
             "$(B)/lib/data.txt",
             "$(B)/lib/main.cpp",
             "$(B)/tools/rescompiler/rescompiler",

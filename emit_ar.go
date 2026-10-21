@@ -21,6 +21,7 @@ func (e *EmitContext) emitARNamed(
 	node := composeARNode(instance, archivePath, objRefs, objPaths, arPluginPath, tc, hostP, emit.nodeArenas())
 
 	e.appendModuleOutputs(&node)
+	e.resolveNodeCodegenRefs(&node)
 
 	return emit.emitNode(node)
 }
@@ -39,7 +40,7 @@ func (e *EmitContext) emitARNamedTagged(
 	return e.emitARNamed(instance, archiveBaseName, objRefs, objPaths, arPluginPath, tc, hostP, emit)
 }
 
-func emitARGlobalNamedTagged(
+func (e *EmitContext) emitARGlobalNamedTagged(
 	instance ModuleInstance,
 	archiveBaseName string,
 	tag STR,
@@ -53,7 +54,7 @@ func emitARGlobalNamedTagged(
 
 	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 
-	return emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, tc, hostP, emit)
+	return e.emitARNode(instance, archivePath, tag, objRefs, objPaths, nil, tc, hostP, emit)
 }
 
 func archiveTailFor(moduleDir string) string {
@@ -149,7 +150,7 @@ func globalArchiveNameWithPrefixOrName(moduleDir, prefix, name string) string {
 	return base[:len(base)-2] + ".global.a"
 }
 
-func emitARNode(
+func (e *EmitContext) emitARNode(
 	instance ModuleInstance,
 	archivePath VFS,
 	tag STR,
@@ -160,7 +161,11 @@ func emitARNode(
 	hostP *Platform,
 	emit *StreamingEmitter,
 ) NodeRef {
-	return emit.emitNode(composeARNode(instance, archivePath, objRefs, objPaths, arPluginPath, tc, hostP, emit.nodeArenas()))
+	node := composeARNode(instance, archivePath, objRefs, objPaths, arPluginPath, tc, hostP, emit.nodeArenas())
+
+	e.resolveNodeCodegenRefs(&node)
+
+	return emit.emitNode(node)
 }
 
 func composeARNode(instance ModuleInstance, archivePath VFS, objRefs []NodeRef, objPaths []VFS, arPluginPath *VFS, tc ModuleToolchain, hostP *Platform, na *NodeArenas) Node {
