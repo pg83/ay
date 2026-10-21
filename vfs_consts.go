@@ -70,6 +70,7 @@ var (
 	flatcWrapperVFS                          = source("build/scripts/cpp_flatc_wrapper.py")
 	genPy3RegScriptVFS                       = source("build/scripts/gen_py3_reg.py")
 	genPyRegScriptVFS                        = source("build/scripts/gen_py_reg.py")
+	gettextScript                            = source("contrib/tools/python3/Tools/i18n/msgfmt.py")
 	goFakeIncludeVFS                         = source("build/scripts/go_fake_include")
 	goProtoWrapperVFS                        = source("build/scripts/go_proto_wrapper.py")
 	googleapisCommonProtosAddIncl            = build("contrib/libs/googleapis-common-protos")

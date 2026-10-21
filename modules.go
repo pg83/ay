@@ -167,6 +167,7 @@ type ModuleData struct {
 	goTestSrcs               []ANY
 	goXTestSrcs              []ANY
 	goSkipTests              []ANY
+	gettextKeepPath          bool
 	noLint                   string
 	test                     TestMeta
 	mockgen                  GoMockgenVars
@@ -827,6 +828,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	d.noStrip = env.bool(envNO_STRIP)
+	d.gettextKeepPath = env.string(envGettextKeepPath) == "yes"
 	d.useNasm = env.bool(envUseNasmAssembler)
 	d.nasmFlags = internAnys(strings.Fields(env.string(envNasmFlags)))
 

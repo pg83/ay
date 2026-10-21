@@ -59,6 +59,10 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		if meta.CompileRef == 0 {
 			e.collectObj(ref, out, meta)
 		}
+	case srcExtGettext:
+		input := e.moduleSourceVFS(src)
+
+		e.emitGettextSource(input, e.gettextOutput(input))
 	case srcExtFortran:
 		e.emitFortranSource(meta)
 	case srcExtRodata:

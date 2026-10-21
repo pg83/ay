@@ -89,6 +89,7 @@ var (
 	envGOSTD_VERSION                = internEnv("GOSTD_VERSION")
 	envGO_PROTO                     = internEnv("GO_PROTO")
 	envGO_TEST_IMPORT_PATH          = internEnv("GO_TEST_IMPORT_PATH")
+	envGettextKeepPath              = internEnv("GETTEXT_KEEP_PATH")
 	envGoRos                        = internEnv("GO_ROS")
 	envHAVE_CUDA                    = internEnv("HAVE_CUDA")
 	envHAVE_MKL                     = internEnv("HAVE_MKL")

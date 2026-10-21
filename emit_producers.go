@@ -97,6 +97,25 @@ func (e *EmitContext) prodVFSTake(mark int) []VFS {
 }
 
 func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
+	if srcExtClassOf(meta.Source) == srcExtGettext {
+		input := resolveSourceVFS(e.ctx, e.instance, meta.Source.string(), e.d.srcDirs)
+		mark := len(e.prodVFS)
+
+		e.prodVFS = append(e.prodVFS, e.gettextOutput(input))
+
+		outputs := e.prodVFSTake(mark)
+
+		mark = len(e.prodVFS)
+
+		if meta.Source.vfs() == 0 && input.isSource() && !e.ctx.fs.isFilePathClean(input.relString()) {
+			e.prodVFS = append(e.prodVFS, input.rel().build())
+		}
+
+		e.prodVFS = append(e.prodVFS, input)
+
+		return outputs, e.prodVFSTake(mark)
+	}
+
 	d := e.d
 	tok := meta.Source.str()
 	src := tok.string()
@@ -902,6 +921,20 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 
 			if srcExtClassOf(meta.Source) == srcExtRos {
 				e.emitRosSource(meta, pos.outs)
+			} else if srcExtClassOf(meta.Source) == srcExtGettext {
+				input := pos.ins[len(pos.ins)-1]
+
+				if len(pos.ins) > 1 {
+					info := e.codegen.lookup(pos.ins[0])
+
+					if info == nil {
+						throwFmt("gen: %s: no source or producer for %s", e.instance.Path.relString(), input.string())
+					}
+
+					input = info.OutputPath
+				}
+
+				e.emitGettextSource(input, pos.outs[0])
 			} else {
 				e.emitOneSource(meta)
 			}

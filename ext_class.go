@@ -50,6 +50,7 @@ const (
 	srcExtSwg
 	srcExtSsqls
 	srcExtFortran
+	srcExtGettext
 )
 
 type ExtFlags uint8
@@ -85,11 +86,12 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 	set(extFortranSource, ".f")
 	set(extAsmSource, ".yasm", ".asm", ".s", ".S")
 	set(extHeader, ".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx", ".inl")
-	set(extCopyAuto, ".f", ".c", ".cpp", ".cc", ".cxx", ".proto", ".ev", ".g4", ".y", ".ypp", ".rl", ".rl6", ".h.in", ".c.in", ".cpp.in")
+	set(extCopyAuto, ".po", ".f", ".c", ".cpp", ".cc", ".cxx", ".proto", ".ev", ".g4", ".y", ".ypp", ".rl", ".rl6", ".h.in", ".c.in", ".cpp.in")
 	set(extCodegen, ".msg", ".srv", ".proto", ".gztproto", ".fbs64", ".fbs", ".ev", ".cfgproto", ".rl6", ".rl", ".rl5", ".y", ".ypp", ".cpp.in", ".c.in", ".sc", ".gperf", ".lpp", ".lex", ".l", ".fml", ".sfdl", ".asp", ".swg")
-	set(extCodegen, ".ssqls")
+	set(extCodegen, ".ssqls", ".po")
 
 	for ext, cls := range map[string]SrcExtClass{
+		".po":       srcExtGettext,
 		".msg":      srcExtRos,
 		".srv":      srcExtRos,
 		".gztproto": srcExtGztProto,
@@ -192,7 +194,7 @@ func generatedOutputCarriesIncludes(p string) bool {
 }
 
 func generatedOutputAutoCompiles(p string) bool {
-	return isNativeSourceExt(p) || flatcVariantForExt(p) != nil
+	return isNativeSourceExt(p) || flatcVariantForExt(p) != nil || classifySrcExt(p) == srcExtGettext
 }
 
 func isCodegenProducingSrc(srcRel string) bool {
@@ -311,7 +313,7 @@ func srcExtClassOf(id ANY) SrcExtClass {
 
 func isCodegenProducingSrcID(id ANY) bool {
 	switch srcExtClassOf(id) {
-	case srcExtRos, srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex, srcExtFml, srcExtSfdl, srcExtAsp, srcExtSwg:
+	case srcExtGettext, srcExtRos, srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex, srcExtFml, srcExtSfdl, srcExtAsp, srcExtSwg:
 		return true
 	}
 
