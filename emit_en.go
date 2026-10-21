@@ -50,6 +50,12 @@ func (e *EmitContext) enumSerializedBaseParts(stmt *GenerateEnumSerializationStm
 }
 
 func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
+	if stmt.Variant == "noexcept_header" {
+		e.emitAliceEnumSrcStmt(stmt)
+
+		return
+	}
+
 	if e.d.unit.Tag == unitTagPy3Proto {
 		return
 	}
@@ -123,6 +129,47 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 			OnUse:          pe,
 		})
 	}
+}
+
+func (e *EmitContext) emitAliceEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
+	ctx := e.ctx
+	na := ctx.na
+	header := e.resolveEnumHeaderInput(stmt.Header, e.d.srcDirs)
+	dir, sep, base := e.enumSerializedBaseParts(stmt)
+	output := build(dir, sep, base, "_serialized.h")
+	ref := ctx.emit.reserve()
+
+	var info *GeneratedFileInfo
+
+	pending := e.pendingEmit(func() {
+		toolRef, toolBin := ctx.tool(argYandexIoToolsEnumSerializerGenerator)
+		closure := e.scanner.walkClosure(header, e.d.scanCtx, scanDomainCC)
+		inputs := appendInputChunks(na, na.inputList(na.vfsList(toolBin, header)), closure.bucketList())
+
+		args := na.anyList(toolBin.any(), strInputPath.any(), header.any(),
+			strIncludePath.any(), header.rel().any(), strOutputPath.any(), output.any())
+
+		info.GeneratorRefs = na.refList(toolRef)
+
+		e.emitReservedNode(Node{
+			Platform:       e.instance.Platform,
+			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS}),
+			Env:            envVarsVCS,
+			Inputs:         inputs,
+			InputClosure:   closure,
+			Outputs:        na.vfsList(output),
+			ForeignDepRefs: na.refList(toolRef),
+			KV:             &enKV,
+		}, ref)
+	})
+
+	info = e.register(GeneratedFileInfo{
+		OutputPath:     output,
+		SourcePath:     header,
+		ProducerRef:    ref,
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(header.any())})},
+		OnUse:          pending,
+	})
 }
 
 func (e *EmitContext) emitEN(

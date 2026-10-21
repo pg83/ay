@@ -670,9 +670,11 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		enDir, enSep, enBase := e.enumSerializedBaseParts(stmt)
 		outsMark := len(e.prodVFS)
 
-		e.prodVFS = append(e.prodVFS, build(enDir, enSep, enBase, "_serialized.cpp"))
+		if stmt.Variant != "noexcept_header" {
+			e.prodVFS = append(e.prodVFS, build(enDir, enSep, enBase, "_serialized.cpp"))
+		}
 
-		if stmt.Variant == "with_header" {
+		if stmt.Variant == "with_header" || stmt.Variant == "noexcept_header" {
 			e.prodVFS = append(e.prodVFS, build(enDir, enSep, enBase, "_serialized.h"))
 		}
 

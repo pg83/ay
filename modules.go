@@ -1425,7 +1425,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			const enumSerPeer = "tools/enum_parser/enum_serialization_runtime"
 
-			if modulePath != enumSerPeer {
+			if v.Variant != "noexcept_header" && modulePath != enumSerPeer {
 				d.peerdirs = append(d.peerdirs, internStr(enumSerPeer).any())
 			}
 		case *DefaultVarStmt:
