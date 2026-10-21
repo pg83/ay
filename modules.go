@@ -2719,6 +2719,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.arPlugin = ptr(internV(v.Args[0].string(), ".pyplugin").any())
+	case tokWithDynamicLibs:
+		env.setBool(envSoOutputs, true)
 	case tokDynamicLibraryFrom:
 		if len(v.Args) == 0 {
 			throwFmt("gen: DYNAMIC_LIBRARY_FROM expects at least 1 argument")
