@@ -29,6 +29,9 @@ class GoFlatbuffersTest(unittest.TestCase):
         ])
         self.assertIn("$(S)/schema/packet/packet.fbs", generated["inputs"])
         self.assertEqual(len(generated["cmds"]), 3)
+        self.assertEqual(generated["cmds"][0]["cwd"], "$(B)")
+        self.assertNotIn("cwd", generated["cmds"][1])
+        self.assertNotIn("cwd", generated["cmds"][2])
         self.assertEqual(generated["cmds"][2]["cmd_args"][2:], [
             "--flat", "--input", "$(B)/schema/packet/_generated", "--output", "$(B)/schema/packet/packet.fbs.gosrc", "--exts", ".go",
         ])
