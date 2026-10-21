@@ -72,6 +72,32 @@ class RosTests(unittest.TestCase):
         self.assertIn(empty["uid"], package["deps"])
         self.assertFalse(any(o.endswith("Query.go") or o.endswith("Plain.cc") for n in graph["graph"] for o in n["outputs"]))
 
+    def test_go_peer_cpp_source_consumes_cpp_ros_headers_too(self):
+        from test_link_go_modules import fixture
+        files = fixture(sbom=False)
+        files.update(ros_files())
+        files.update({
+            "msgs/ya.make": f"ROS_LIBRARY(robot)\n{lib.BARE_MODULE}ROS_DIR(msgs)\n"
+                            "ROS_SRCS(ZERO_COPY msg/Fast.msg)\nEND()\n",
+            "msgs/msg/Fast.msg": "int32 value\n",
+            "bridge/ya.make": f"GO_LIBRARY()\n{lib.BARE_MODULE}PEERDIR(msgs)\n"
+                              "SRCS(compat.cpp)\nUSE_CXX()\nEND()\n",
+            "bridge/compat.cpp": "#include <msgs/Fast_zero_copy.h>\nint compatible;\n",
+            "app/ya.make": f"GO_PROGRAM()\n{lib.BARE_MODULE}PEERDIR(bridge)\nEND()\n",
+            "build/scripts/writer.py": "",
+        })
+        graph = lib.make(files, "app", "--sandboxing")
+        go_generator = lib.node_by_output(graph, "$(B)/msgs/Fast.go")
+        cpp_generator = lib.node_by_output(graph, "$(B)/msgs/Fast_zero_copy.h")
+        compiled = lib.node_by_output(graph, "$(B)/bridge/compat.cpp.o")
+        go_archive = lib.node_by_output(graph, "$(B)/msgs/robot.a")
+        self.assertEqual(go_generator["cmds"][0]["cmd_args"][2], "golang")
+        self.assertEqual(cpp_generator["cmds"][0]["cmd_args"][2], "cpp")
+        self.assertIn(go_generator["uid"], go_archive["deps"])
+        self.assertIn(cpp_generator["uid"], compiled["deps"])
+        self.assertIn("$(B)/msgs/Fast.cc", compiled["inputs"])
+        self.assertIn("$(B)/msgs/Fast_zero_copy.h", compiled["inputs"])
+
     def test_python_ros_uses_binding_and_cpp_self_peers(self):
         from test_proto_py_variant import py_proto_files
         files = py_proto_files()
