@@ -168,7 +168,7 @@ func (e *EmitContext) emitLD(
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
 
 	if dyn != nil && dyn.probe != 0 {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(dyn.probe.any(), outputVFS.any())), Cwd: bldRootDirVFS, Env: envFull})
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(dyn.probe.any(), outputVFS.any())), Env: envVcsOnly})
 	}
 
 	if emitCopy {

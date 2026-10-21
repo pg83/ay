@@ -203,11 +203,6 @@ func setupYqlUdfModule(d *ModuleData, name TOK, env Environment) {
 	d.yqlUdfShared = true
 	d.yqlPythonUdf = python
 	d.usePython3 = name == tokYqlPython3Udf
-
-	if !env.bool(envOS_WINDOWS) && !env.bool(envOS_DARWIN) {
-		d.ldFlags = append(d.ldFlags, argWlBsymbolic.any())
-	}
-
 	d.cxxFlags = append(d.cxxFlags, argDbuildUdf.any())
 	d.ldPlugins = append(d.ldPlugins, strYqlEssentialsPublicUdfServiceDropPolicyGlobalsPy.any())
 	env.setDefaultString(envYqlUdfExport, "$(S)/yql/essentials/public/udf/udfs_exports.exports")

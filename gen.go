@@ -2486,7 +2486,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		if isDllModuleType(d.moduleStmt.Name) {
 			binaryName = dllOutputName(instance, d.moduleStmt)
-			dyn = &DynLibLink{soname: binaryName, symbolic: d.moduleStmt.Name == tokPy2Module && instance.Platform.OS != OSDarwin && instance.Platform.OS != OSWindows}
+			dyn = &DynLibLink{soname: binaryName, symbolic: (d.moduleStmt.Name == tokPy2Module || d.yqlUdfShared) && instance.Platform.OS != OSDarwin && instance.Platform.OS != OSWindows}
 
 			if version := dllModuleVersion(d.moduleStmt); version != "" {
 				dyn.soname += version

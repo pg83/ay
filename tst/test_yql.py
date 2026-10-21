@@ -240,6 +240,33 @@ class YqlAbiTest(unittest.TestCase):
                     self.assertIn(probe["uid"], link["deps"])
                     self.assertIn(probe["outputs"][0], link["inputs"])
 
+    def test_udf_symbol_binding_and_probe_use_their_own_command_context(self):
+        for declaration in ("YQL_UDF", "YQL_UDF_CONTRIB", "YQL_PYTHON3_UDF"):
+            with self.subTest(declaration=declaration):
+                files = udf_fixture()
+                files.update({
+                    "udf/ya.make": f"{declaration}(named)\n{BARE}DISABLE(PYTHON_SQLITE3)\n"
+                        "LDFLAGS(-Wl,--own-link-marker)\nPEERDIR(peer)\nSRCS(body.cpp)\nEND()\n",
+                    "udf/body.cpp": "int body;\n",
+                    "peer/ya.make": f"LIBRARY()\n{BARE}LDFLAGS(GLOBAL -Wl,--peer-link-marker)\nEND()\n",
+                })
+                graph = lib.make(files, "udf", "--target-platform", "default-linux-x86_64")
+                link = lib.node_by_output(graph, "$(B)/udf/libnamed.so")
+                command = next(c["cmd_args"] for c in link["cmds"] if "$(S)/build/scripts/link_dyn_lib.py" in c["cmd_args"])
+                with self.subTest(command="link"):
+                    index = command.index("-Wl,-Bsymbolic")
+                    self.assertEqual(command[index - 1:index + 2], ["-Wl,-z,notext", "-Wl,-Bsymbolic", "-fPIC"])
+                    self.assertEqual(command.count("-Wl,-Bsymbolic"), 1)
+                    self.assertLess(index, command.index("-Wl,--peer-link-marker"))
+                    self.assertLess(command.index("-Wl,--peer-link-marker"), command.index("-Wl,--own-link-marker"))
+                probe = lib.node_by_output(graph, "$(B)/yql/essentials/tools/udf_probe/udf_probe")
+                self.assertIn(probe["uid"], link["deps"])
+                self.assertIn(probe["outputs"][0], link["inputs"])
+                self.assertEqual(link["cmds"][-1], {
+                    "cmd_args": [probe["outputs"][0], "$(B)/udf/libnamed.so"],
+                    "env": {"ARCADIA_ROOT_DISTBUILD": "$(S)"},
+                })
+
     def test_python2_udf_uses_its_runtime_and_python2_headers(self):
         files = udf_fixture()
         files.update({
