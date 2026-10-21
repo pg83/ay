@@ -89,6 +89,16 @@ class JavaDependencyManagementTest(unittest.TestCase):
         classpath = self.library("PEERDIR(contrib/java/x/a)\nDEPENDENCY_MANAGEMENT(contrib/java/x/a/2.0)\n")
         self.assertEqual(classpath, ["contrib/java/x/a/2.0/a-2.0.jar", "contrib/java/x/b/1.0/b-1.0.jar"])
 
+    def test_dependency_versions_expand_braced_keys_with_punctuation(self):
+        for key in ("vendor.api-version", "vendor/api-version", "vendor:api-version"):
+            with self.subTest(key=key):
+                classpath = self.library(
+                    f"SET({key} 2.0)\nPEERDIR(contrib/java/x/a)\n"
+                    f"DEPENDENCY_MANAGEMENT(contrib/java/x/a/${{{key}}})\n")
+                self.assertEqual(classpath, [
+                    "contrib/java/x/a/2.0/a-2.0.jar", "contrib/java/x/b/1.0/b-1.0.jar",
+                ])
+
     def test_exclude_drops_transitive_peers(self):
         classpath = self.library(
             "PEERDIR(contrib/java/x/a)\nDEPENDENCY_MANAGEMENT(contrib/java/x/a/2.0)\nEXCLUDE(contrib/java/x/b)\n")
