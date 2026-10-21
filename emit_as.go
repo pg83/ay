@@ -84,14 +84,8 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {
 	}
 
 	asIn := in
-	scanIn := in
 
-	if len(d.asmAddIncl) > 0 {
-		scanIn.AddIncl = dedup(in.AddIncl, d.asmAddIncl)
-		asIn.AddIncl = scanIn.AddIncl
-	}
-
-	asIn.IncludeView = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainAsm)
+	asIn.IncludeView = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
 
 	ref, outPath := e.emitAS(srcVFS, asIn, ctx.host)
 

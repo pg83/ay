@@ -67,6 +67,30 @@ class YasmTest(unittest.TestCase):
         self.assertIn("$(B)/mod/a.o", archive["inputs"])
         self.assertIn("$(B)/mod/_/sub/b.o", archive["inputs"])
 
+    def test_c_and_yasm_include_directories_remain_separate(self):
+        graph = lib.make(with_yasm({
+            "mod/ya.make": (
+                LIBRARY_HEAD + "ADDINCL(c_include FOR asm asm_include)\n"
+                "SRCS(routine.asm routine.S)\nEND()\n"
+            ),
+            "mod/routine.asm": '%include "defs.inc"\n',
+            "mod/routine.S": '#include "defs.h"\n',
+            "c_include/defs.inc": "",
+            "c_include/defs.h": "",
+            "asm_include/defs.inc": "",
+            "asm_include/defs.h": "",
+        }), "mod", *X86_64)
+        yasm = lib.node_by_output(graph, "$(B)/mod/routine.o")
+        assembler = lib.node_by_output(graph, "$(B)/mod/routine.S.o")
+        self.assertIn("$(S)/asm_include", yasm["cmds"][0]["cmd_args"])
+        self.assertNotIn("$(S)/c_include", yasm["cmds"][0]["cmd_args"])
+        self.assertIn("-I$(S)/c_include", assembler["cmds"][0]["cmd_args"])
+        self.assertNotIn("-I$(S)/asm_include", assembler["cmds"][0]["cmd_args"])
+        self.assertIn("$(S)/asm_include/defs.inc", yasm["inputs"])
+        self.assertNotIn("$(S)/c_include/defs.inc", yasm["inputs"])
+        self.assertIn("$(S)/c_include/defs.h", assembler["inputs"])
+        self.assertNotIn("$(S)/asm_include/defs.h", assembler["inputs"])
+
     def test_asmlib_module_omits_debug_info(self):
         graph = lib.make(with_yasm({
             "contrib/libs/asmlib/ya.make": LIBRARY_HEAD + "SRCS(m.asm)\nEND()\n",
@@ -119,16 +143,18 @@ class AssemblerTest(unittest.TestCase):
         self.assertEqual(node["kv"], {"p": "AS", "pc": "light-green"})
         args = node["cmds"][0]["cmd_args"]
         self.assertEqual(args[1], "--target=x86_64-linux-gnu")
-        self.assertEqual(args[-7:], [
+        self.assertEqual(args[-6:], [
             "-c", "-o", "$(B)/mod/c.S.o", "$(S)/mod/c.S",
-            "-I$(B)", "-I$(S)", "-I$(S)/mod/inc",
+            "-I$(B)", "-I$(S)",
         ])
         self.assertIn("-DCATBOOST_OPENSOURCE=yes", args)
         self.assertEqual(node["cmds"][0]["cwd"], "$(B)")
         self.assertEqual(node["inputs"], ["$(S)/mod/c.S", "$(S)/mod/hdr.h"])
 
         nested = lib.node_by_output(graph, "$(B)/mod/_/sub/d.s.o")
-        self.assertEqual(nested["cmds"][0]["cmd_args"][-7:-3], [
+        nested_args = nested["cmds"][0]["cmd_args"]
+        start = nested_args.index("-c")
+        self.assertEqual(nested_args[start:start + 4], [
             "-c", "-o", "$(B)/mod/_/sub/d.s.o", "$(S)/mod/sub/d.s",
         ])
 

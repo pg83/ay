@@ -72,8 +72,13 @@ func (scanner *IncludeScanner) walkClosure(vfsPath VFS, ctx *ScanContext, domain
 func (scanner *IncludeScanner) scanClosure(vfsPath VFS, ctx *ScanContext, domain ScanDomain) Closure {
 	parser := scanner.parsers.registry.registeredParserFor(vfsPath.relString())
 
-	if domain == scanDomainCC && parser == IncludeDirectiveParser(swigParser) {
-		domain = scanDomainSwig
+	if domain == scanDomainCC {
+		switch parser {
+		case IncludeDirectiveParser(swigParser):
+			domain = scanDomainSwig
+		case IncludeDirectiveParser(yasmParser):
+			domain = scanDomainAsm
+		}
 	}
 
 	sc := scanner.getScanCtx(ctx, domain, parser)

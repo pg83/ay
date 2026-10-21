@@ -98,13 +98,8 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta, in ModuleCCInputs) {
 	}
 
 	asIn := in
-	scanIn := in
 
-	if len(d.asmAddIncl) > 0 {
-		scanIn.AddIncl = dedup(in.AddIncl, d.asmAddIncl)
-		asIn.AddIncl = scanIn.AddIncl
-	}
-
+	asIn.AddIncl = d.asmAddIncl
 	asIn.IncludeView = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainAsm)
 
 	yasmLD, _ := ctx.tool(argContribToolsYasm)

@@ -235,13 +235,7 @@ func newScanContext(na *NodeArenas, pm *IncludeParserManager, ccOwn, ccPeer, ful
 func (ctx *ScanContext) modulePaths(domain ScanDomain) (own, peer []VFS) {
 	switch domain {
 	case scanDomainAsm:
-		own = ctx.ccOwn
-
-		if len(ctx.asmAddIncl) != 0 {
-			own = dedup(own, ctx.asmAddIncl)
-		}
-
-		return own, ctx.ccPeer
+		return ctx.asmAddIncl, nil
 	case scanDomainCython:
 		return appendCythonScanAddIncl(ctx.ccOwn, ctx.cythonAddIncl, ctx.cythonSys), ctx.ccPeer
 	case scanDomainProto:
