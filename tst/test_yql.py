@@ -325,12 +325,13 @@ class YqlAbiTest(unittest.TestCase):
         lib.node_by_output(graph, "$(B)/dep/dep.cpp.o")
 
     def test_prebuilt_program_selects_sanitizer_resource_and_discards_source_peers(self):
-        for sanitizer, resource in (("", "42"), ("address", "43")):
+        for sanitizer, resource in (("", "42"), ("address", "43"), ("memory", "44"), ("thread", "45"), ("undefined", "46")):
             with self.subTest(sanitizer=sanitizer):
                 graph = lib.make({
                     "app/ya.make": (
                         "YQL_PREBUILT_PROGRAM(named)\n"
                         "SET(NAMED_RESOURCE_DEFAULT 42)\nSET(NAMED_RESOURCE_ASAN 43)\n"
+                        "SET(NAMED_RESOURCE_MSAN 44)\nSET(NAMED_RESOURCE_TSAN 45)\nSET(NAMED_RESOURCE_UBSAN 46)\n"
                         "SRCS(missing.cpp)\nPEERDIR(missing/peer)\nEND()\n"
                     ),
                 }, "app", f"-DSANITIZER_TYPE={sanitizer}", opensource=False)
@@ -345,6 +346,53 @@ class YqlAbiTest(unittest.TestCase):
                 self.assertEqual(program["cmds"][0]["cmd_args"][-3:], [
                     "copy", "$(B)/app/named.prebuilt", "$(B)/app/named",
                 ])
+
+    def test_prebuilt_program_falls_back_to_sources_without_a_matching_resource(self):
+        for resource, sanitizer in (("", ""), ("None", ""), ("42", "unsupported")):
+            with self.subTest(resource=resource, sanitizer=sanitizer):
+                files = udf_fixture()
+                files.update({
+                    "app/ya.make": f"YQL_PREBUILT_PROGRAM(named)\n{BARE}SET(NAMED_RESOURCE_DEFAULT {resource})\nSRCS(main.cpp)\nEND()\n",
+                    "app/main.cpp": "int main() { return 0; }\n",
+                })
+                graph = lib.make(files, "app", f"-DSANITIZER_TYPE={sanitizer}", opensource=False)
+                obj = lib.node_by_output(graph, "$(B)/app/main.cpp.o")
+                binary = lib.node_by_output(graph, "$(B)/app/named")
+                self.assertIn(obj["uid"], binary["deps"])
+                self.assertFalse(any("$(B)/app/named.prebuilt" in n["outputs"] for n in graph["graph"]))
+
+    def test_python_udfs_include_sqlite_runtime_by_default(self):
+        for module, sqlite, runtime in (
+            ("YQL_PYTHON_UDF", "contrib/tools/python/src/Modules/_sqlite", "library/python/runtime/main"),
+            ("YQL_PYTHON3_UDF", "contrib/tools/python3/Modules/_sqlite", "library/python/runtime_py3/main"),
+        ):
+            with self.subTest(module=module):
+                files = udf_fixture()
+                files["udf/ya.make"] = f"{module}(named)\n{BARE}UDF_NO_PROBE()\nSRCS(body.cpp)\nEND()\n"
+                files["udf/body.cpp"] = ""
+                for peer in (sqlite, runtime):
+                    files[f"{peer}/ya.make"] = f"LIBRARY()\n{BARE}SRCS(p.cpp)\nEND()\n"
+                    files[f"{peer}/p.cpp"] = ""
+                graph = lib.make(files, "udf")
+                lib.node_by_output(graph, f"$(B)/{sqlite}/p.cpp.pic.o")
+                link = lib.node_by_output(graph, "$(B)/udf/libnamed.so")
+                self.assertTrue(any(p.startswith(f"$(B)/{sqlite}/") for p in link["inputs"]))
+
+    def test_internal_libra_registration_adds_header_and_libraries(self):
+        files = udf_fixture()
+        files["app/ya.make"] = f"PROGRAM()\n{BARE}PEERDIR(udf)\nEND()\n"
+        files["udf/ya.make"] = f"LIBRARY()\n{BARE}REGISTER_YQL_PYTHON_UDF(NAME CustomPythonLibra ADD_LIBRA_MODULES yes)\nEND()\n"
+        for peer in ("quality/user_sessions/libra_arc/noyql", "yql/udfs/quality/libra/module"):
+            files[f"{peer}/ya.make"] = f"LIBRARY()\n{BARE}SRCS(p.cpp)\nEND()\n"
+            files[f"{peer}/p.cpp"] = ""
+        files["yql/udfs/quality/libra/module/module.h"] = ""
+        graph = lib.make(files, "app", opensource=False)
+        generated = lib.node_by_output(graph, "$(B)/udf/CustomPythonLibra.yql_python_udf.cpp")
+        self.assertEqual(generated["cmds"][0]["cmd_args"][-1], "1")
+        obj = lib.node_by_output(graph, "$(B)/udf/CustomPythonLibra.yql_python_udf.cpp.o")
+        self.assertIn("$(S)/yql/udfs/quality/libra/module/module.h", obj["inputs"])
+        for peer in ("quality/user_sessions/libra_arc/noyql", "yql/udfs/quality/libra/module"):
+            lib.node_by_output(graph, f"$(B)/{peer}/p.cpp.o")
 
     def test_stable_abi_macros_follow_source_configuration_revision(self):
         for modern in (False, True):

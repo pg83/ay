@@ -1,6 +1,7 @@
+import json
 import unittest
 
-from lib import make, node_by_output
+from lib import make, make_process, node_by_output
 
 
 S = "$(S)"
@@ -8,6 +9,42 @@ B = "$(B)"
 
 
 class DocsTests(unittest.TestCase):
+    def test_unicode_variables_and_recursive_exclusions(self):
+        variables = {"ascii": "<tag>&value", "title": "Привет", "emoji": "🚀"}
+        graph = make({
+            "guide/ya.make": "DOCS()\nDOCS_VARS(" + " ".join(f'"{k}={v}"' for k, v in variables.items()) + ")\n"
+                "SRCS(**/*.md EXCLUDE **/private/** **/draft.md)\n"
+                "DOCS_INCLUDE_SOURCES(${ARCADIA_ROOT}/code/example.cpp)\nEND()\n",
+            "guide/index.md": "# Index\n",
+            "guide/deep/page.md": "# Page\n",
+            "guide/private/secret.md": "# Secret\n",
+            "guide/deep/private/secret.md": "# Secret\n",
+            "guide/deep/draft.md": "# Draft\n",
+            "code/example.cpp": "",
+        }, "guide")
+        pre = node_by_output(graph, "$(B)/guide/_preprocessed.tar.gz")
+        args = pre["cmds"][1]["cmd_args"]
+        self.assertEqual(args[args.index("--vars") + 1], json.dumps(variables, sort_keys=True))
+        library = node_by_output(graph, "$(B)/guide/__docs_internal.docslib.fake")
+        self.assertIn("$(S)/guide/index.md", library["inputs"])
+        self.assertIn("$(S)/guide/deep/page.md", library["inputs"])
+        self.assertIn("$(S)/code/example.cpp", library["inputs"])
+        self.assertFalse(any("private/" in p or p.endswith("draft.md") for p in library["inputs"]))
+
+    def test_invalid_copy_sources_and_variables_are_diagnosed(self):
+        for body, error in (
+            ("DOCS_COPY_FILES(FROM)", "missing value for FROM"),
+            ("DOCS_COPY_FILES(NAMESPACE)", "missing value for NAMESPACE"),
+            ("SRCS(SRCDIR)", "missing SRCDIR"),
+            ("DOCS_VARS(title)", "expected name=value"),
+            ("DOCS_VARS(title=a=b)", "expected name=value"),
+        ):
+            with self.subTest(body=body):
+                result = make_process({"guide/ya.make": f"DOCS()\n{body}\nEND()\n"}, "guide")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(error, result.stderr)
+                self.assertNotIn("panic:", result.stderr)
+
     def test_book_generated_inputs_and_plantuml(self):
         graph = make({
             "guide/ya.make": """DOCS(handbook)
