@@ -22,6 +22,24 @@ def files():
 
 
 class MlaunchTests(unittest.TestCase):
+    def test_package_uses_peer_late_outputs_without_adding_them_as_inputs(self):
+        sources = files()
+        sources["pipeline/ya.make"] = f"MLAUNCH_PIPELINE(run)\n{lib.BARE_MODULE}END()\n"
+        sources["sdg/sdc/launcher/profiles/sdc_install/ya.make"] = "SDC_UNION(profiles)\nFILES(settings.txt)\nEND()\n"
+        sources["sdg/sdc/launcher/profiles/sdc_install/settings.txt"] = "settings\n"
+        graph = lib.make(sources, "pipeline")
+        asset = "$(B)/sdg/sdc/launcher/profiles/sdc_install/settings.txt"
+        peer = lib.node_by_output(graph, "$(B)/sdg/sdc/launcher/profiles/sdc_install/profiles.pkg.fake")
+        package = lib.node_by_output(graph, "$(B)/pipeline/run.final.pkg.fake")
+        copy_args = next(cmd["cmd_args"] for cmd in package["cmds"] if "$(S)/build/scripts/copy_to_dir.py" in cmd["cmd_args"])
+        self.assertIn(asset, copy_args)
+        self.assertNotIn(asset, package["inputs"])
+        self.assertIn(peer["outputs"][0], package["inputs"])
+        self.assertIn(peer["uid"], package["deps"])
+        self.assertIn("$(B)/pipeline/sdg/sdc/launcher/profiles/sdc_install/settings.txt", package["outputs"])
+        producer = lib.node_by_output(graph, asset)
+        self.assertIn(producer["uid"], peer["deps"])
+
     def test_govet_depends_on_every_selected_pipeline_variant(self):
         for only_go in (False, True):
             with self.subTest(only_go=only_go):
@@ -54,7 +72,7 @@ class MlaunchTests(unittest.TestCase):
         })
         graph = lib.make(sources, "pipeline")
         package = lib.node_by_output(graph, "$(B)/pipeline/run.final.pkg.fake")
-        self.assertIn("$(B)/data/asset.txt", package["inputs"])
+        self.assertIn("$(B)/data/data.pkg.fake", package["inputs"])
         self.assertIn("$(B)/pipeline/data/asset.txt", package["outputs"])
 
     def test_only_tags_selects_golaunch_variant(self):
@@ -100,7 +118,7 @@ END()
         self.assertIn(cpp["uid"], package["deps"])
         self.assertIn(go["uid"], package["deps"])
         self.assertIn("$(B)/pipeline/run.deploy.sdcmeta", package["outputs"])
-        self.assertIn("$(B)/data/data.txt", package["inputs"])
+        self.assertIn("$(B)/data/data.pkg.fake", package["inputs"])
 
     def test_generated_component_propagates_functions_overrides_and_callbacks(self):
         sources = files()

@@ -117,7 +117,6 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 
 	lateOuts = dedup(lateOuts)
 
-	inputs = append(inputs, lateOuts...)
 	inputs = append(inputs, peers...)
 	inputs = append(inputs, e.outs...)
 
