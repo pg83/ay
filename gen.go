@@ -421,7 +421,7 @@ func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, d
 		}
 	}
 
-	if name == tokPy3Program || name == tokDocs || name == 0 {
+	if name == tokPy3Program || name == tokYqlUdf || name == tokDocs || name == 0 {
 		kind = KindBin
 	}
 
@@ -591,11 +591,11 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 }
 
 func isFinalTargetModuleType(name TOK) bool {
-	return isProgramModuleType(name) && name != tokGoTest && name != tokBoosttest && name != tokBoosttestWithMain || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry
+	return isProgramModuleType(name) && name != tokGoTest && name != tokBoosttest && name != tokBoosttestWithMain || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokYqlUdf || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokYqlPrebuiltTool
 }
 
 func picTransition(name TOK) bool {
-	return name == tokDll || name == tokDllJava || name == tokPy2Module
+	return name == tokDll || name == tokDllJava || name == tokPy2Module || name == tokYqlUdf || name == tokYqlPythonUdf || name == tokYqlPython3Udf
 }
 
 func isDllModuleType(name TOK) bool {
@@ -670,7 +670,7 @@ func inferModuleDeclaration(stmts []Stmt) (*ModuleStmt, bool) {
 
 func isLinkingModuleType(name TOK) bool {
 	switch name {
-	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary, tokPy2Module:
+	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary, tokPy2Module, tokYqlUdf, tokYqlPythonUdf, tokYqlPython3Udf:
 		return true
 	}
 
@@ -1172,8 +1172,20 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	defer delete(ctx.walking, instance)
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
+	moduleName := stmtsModuleName(stmts)
 
-	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(stmtsModuleName(stmts)) {
+	if moduleName == tokYqlUdf && instance.Kind == KindBin && !instance.Platform.PIC {
+		library := instance
+
+		library.Kind = KindLib
+
+		for _, current := range []bool{false, true} {
+			library.YqlCurrent = current
+			genModule(ctx, library)
+		}
+	}
+
+	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(moduleName) && (moduleName != tokYqlUdf || instance.Kind != KindLib) {
 		descent := instance
 
 		descent.Kind = KindForeignDescent
@@ -1371,6 +1383,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		if e.bindResourceGlobalVars(env) {
 			d = collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
+		}
+
+		if d.yqlPrebuiltTool {
+			return e.genYqlPrebuiltTool()
 		}
 
 		return e.genPrebuiltProgram()
@@ -2466,8 +2482,17 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			binaryName = dllOutputName(instance, d.moduleStmt)
 			dyn = &DynLibLink{soname: binaryName, symbolic: d.moduleStmt.Name == tokPy2Module && instance.Platform.OS != OSDarwin && instance.Platform.OS != OSWindows}
 
+			if version := dllModuleVersion(d.moduleStmt); version != "" {
+				dyn.soname += version
+				dyn.alias = build(instance.Path.relString(), "/", dyn.soname)
+			}
+
 			if instance.Platform.OS == OSLinux && instance.Platform.ISA == ISAX8664 {
 				dyn.fixElfRef, dyn.fixElf = ctx.tool(argToolsFixElf)
+			}
+
+			if d.yqlUdfProbe {
+				dyn.probeRef, dyn.probe = ctx.tool(argYqlUdfProbe)
 			}
 		}
 

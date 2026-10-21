@@ -25,6 +25,11 @@ func (e *EmitContext) emitArchiveAsmNode(
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.emit.nodeArenas()
 	rodataVFS := build(instance.Path.relString(), "/", a.Name, ".rodata")
+
+	if existing := reg.lookup(rodataVFS); existing != nil && existing.OwnerModule == instance.Path && existing.OwnerSerial != e.frame.serial {
+		return existing.ProducerRef
+	}
+
 	producerRefs := []NodeRef{}
 	pathMark := len(e.prodVFS)
 

@@ -417,16 +417,18 @@ class Python2Test(unittest.TestCase):
         self.assertIn("-fPIC", args(lib.node_by_output(both, "$(B)/dep/d.c.pic.o")))
         self.assertNotIn("-fPIC", args(lib.node_by_output(both, "$(B)/dep/d.c.o")))
 
-    def test_py2module_versions_are_not_modelled(self):
+    def test_py2module_version_adds_a_soname_alias(self):
         files = python2_base()
         lib.tool_program(files, "tools/fix_elf", "fix_elf")
         files.update({
             "mod/ya.make": f"PY2MODULE(ext 1 2)\n{NO_PLATFORM}SRCS(ext.c)\nEND()\n",
             "mod/ext.c": "int ext;\n",
         })
-        result = lib.make_process(files, "mod")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("versions (1) are not modelled", result.stderr)
+        node = lib.node_by_output(lib.make(files, "mod"), "$(B)/mod/ext.so")
+        self.assertIn("$(B)/mod/ext.so.1", node["outputs"])
+        command = next(c["cmd_args"] for c in node["cmds"] if "$(S)/build/scripts/link_dyn_lib.py" in c["cmd_args"])
+        self.assertEqual(command[command.index("--soname") + 1], "$(B)/mod/ext.so.1")
+        self.assertIn("-Wl,-soname,ext.so.1", command)
 
     def test_py2_bytecode_tool_follows_use_light_py2cc(self):
         files = python2_base()
