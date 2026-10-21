@@ -46,7 +46,7 @@ class LinkPluginOrderTest(unittest.TestCase):
                         if mixed:
                             expected.append(f"$(S)/{name}/raw.pyplugin")
                         expected.append(f"$(B)/{name}/generated.py.pyplugin")
-                    if mixed:
+                    if mixed and not go:
                         expected.extend(("$(S)/app/first.pyplugin", "$(S)/app/second.pyplugin"))
                     expected.extend(("$(B)/app/early.py.pyplugin", "$(B)/app/late.py.pyplugin"))
                     self.assertEqual(actual, expected)
@@ -57,6 +57,20 @@ class LinkPluginOrderTest(unittest.TestCase):
                             producer = lib.node_by_output(graph, plugin)
                             self.assertIn(producer["uid"], link["deps"])
                             self.assertEqual(link["deps"].count(producer["uid"]), 1)
+
+    def test_go_srcs_ignores_direct_raw_plugins_but_keeps_peer_and_generated_plugins(self):
+        graph = lib.make(project(True, True), "app")
+        link = lib.node_by_output(graph, "$(B)/app/app")
+        args = next(cmd["cmd_args"] for cmd in link["cmds"] if "++ld_plugins" in cmd["cmd_args"])
+        plugins = args[args.index("++ld_plugins") + 1:args.index("++vcs")]
+        for name in ("first.pyplugin", "second.pyplugin"):
+            self.assertNotIn("$(S)/app/" + name, plugins)
+            self.assertNotIn("$(S)/app/" + name, link["inputs"])
+        for directory in ("common", "right", "left"):
+            self.assertIn(f"$(S)/{directory}/raw.pyplugin", plugins)
+            self.assertIn(f"$(B)/{directory}/generated.py.pyplugin", plugins)
+        for name in ("early.py", "late.py"):
+            self.assertIn(f"$(B)/app/{name}.pyplugin", plugins)
 
 
 if __name__ == "__main__":
