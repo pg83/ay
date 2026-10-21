@@ -866,7 +866,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	applyCythonHeaderAddIncl(modulePath, d)
 
 	musl := muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags))
-	sse := sseBaseCFlags(env.bool(envARCH_X86_64))
+	sse := sseBaseCFlags(env.bool(envARCH_X86_64) && instance.Language != LangFbsJavaNative)
 
 	if n := len(musl) + len(sse); n > 0 {
 		scope := d.moduleScopeCFlags
@@ -1275,8 +1275,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if v.Name == tokFbsLibrary {
 				d.multimodule = v.Name
-				d.moduleVariants = 1<<LangCPP | 1<<LangGo
+				d.moduleVariants = 1<<LangCPP | 1<<LangGo | 1<<LangJava
 				env.setStringID(envMODULE_TAG, d.unit.Tag)
+				env.setBool(internEnv("CPP_FBS"), language == LangCPP)
+				env.setBool(internEnv("JAVA_FBS"), language == LangJava || language == LangFbsJavaNative)
+				if language == LangFbsJavaNative {
+					d.flags.NoUtil = true
+					d.flags.NoRuntime = true
+				}
 			}
 
 			if v.Name == tokProtoLibrary && !v.Schema {
@@ -1955,6 +1961,9 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	case tokYqlUdfYdb:
 		return ModuleUnit{Type: name, Tag: strYqlUdfStatic, CCTag: tagYqlUdfStatic, HashTag: strYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
 	case tokFbsLibrary:
+		if language == LangFbsJavaNative {
+			return ModuleUnit{Type: tokJarLibrary, Tag: internStr("JAVA_FBS"), CCTag: internStr("java_fbs"), NoStartTarget: true}
+		}
 		if language == LangGo {
 			return ModuleUnit{Type: tokGoLibrary, Tag: strGoFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 		}

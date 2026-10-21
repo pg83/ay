@@ -90,6 +90,9 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtFbs64:
 		e.emitLibraryFlatcSource(meta, &flatcVariantFL64)
 	case srcExtFbs:
+		if e.instance.Language == LangFbsJavaNative {
+			return
+		}
 		if isGoModuleType(e.d.unit.Type) {
 			e.emitGoFlatcSource(meta)
 		} else {

@@ -438,7 +438,13 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	stmt := spec.stmt
 	na := e.ctx.na
 	env := envVarsVCS
-	dirs := e.ctx.renderModuleDirs()
+	dirs := Environment{s: &e.frame.ifEnv}
+	if e.ctx.frameDepth > 0 {
+		// A lazy command renders module directories in its first consumer.
+		// Final context binding has no ambient consumer frame; its saved
+		// declaring context remains valid until the pending emit completes.
+		dirs = Environment{s: &e.ctx.frames[e.ctx.frameDepth-1].ifEnv}
+	}
 	envPairs := expandTokens(stmt.EnvPairs, dirs, false, tokenExpandFinal)
 
 	if len(envPairs) > 0 {

@@ -57,6 +57,7 @@ type ModuleCompileEnv struct {
 	BisonGenExt          string
 	TC                   ModuleToolchain
 	ForceConsistentDebug bool
+	NoBaseUnit           bool
 }
 
 type ModuleCCInputs struct {
@@ -138,11 +139,18 @@ func (e *EmitContext) moduleSourceVFS(src ANY) VFS {
 
 func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS) {
 	ctx := e.ctx
+	if e.instance.Language == LangFbsJavaNative {
+		return e.bindFbsNativeSource(srcVFS, in, reserved)
+	}
 
 	in.IncludeView = e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
 
 	if in.MainOutInducedInputs {
 		in.IncludeInputs = e.mainOutInducedInputs(ctx.na, in.IncludeView)
+	}
+
+	if e.d.multimodule == tokFbsLibrary {
+		return e.bindFbsNativeSource(srcVFS, in, reserved)
 	}
 
 	ref, outPath, _ := e.composeCCNodeAt(srcVFS, in, ctx.host, reserved)
@@ -702,13 +710,18 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 
 	cxxBucket := composeOwnAndPeerGlobalBucket(in)
 
+	coreCxx := coreCxxFlags(p)
+	if in.NoBaseUnit {
+		coreCxx = nil
+	}
+
 	cxxTailParts := [7][]ANY{
 		cxxStandardFlagChunk,
 		cxxWarningChunk(in.Flags.NoCompilerWarnings),
 		na.anyConcat(cxxOwnExtras),
 		na.anyConcat(cxxBucket),
 		catboostStr,
-		coreCxxFlags(p),
+		coreCxx,
 		in.CXXFlagsVar,
 	}
 

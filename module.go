@@ -30,6 +30,7 @@ const (
 	LangPackage
 	LangPy2
 	LangProtoDescriptions
+	LangFbsJavaNative
 )
 
 const (

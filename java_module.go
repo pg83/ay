@@ -18,6 +18,7 @@ var (
 	javaUnitIJar    = &javaUnit{kind: juIJar, sub: KindJavaIJar, tag: "IJAR", moduleType: "JAVA_LIBRARY", peerdirTags: javaTagsJarBase, suffix: "-interface.jar", transparent: true, ignorePeerdir: true, selfPeers: []ModuleKind{KindJavaFull}}
 	javaUnitExt     = &javaUnit{kind: juExternal, sub: KindJavaMain, tag: "JAVA", moduleType: "EXTERNAL_JAVA_LIBRARY", peerdirTags: []string{"JAVA", "JAVA_PROTO", "JAVA_PROTO_FROM_SCHEMA", "JAVA_FBS", "JAVA_IDL", "PACKAGE_UNION", "IJAR"}, dmTagsExclude: javaTagsFull, nameGen: javaNameThreeDirs, suffix: ".jar"}
 	javaUnitProto   = &javaUnit{kind: juExternal, sub: KindJavaMain, tag: "JAVA_PROTO", moduleType: "PROTO_LIBRARY", peerdirTags: []string{"JAVA", "IJAR", "JAVA_PROTO"}, dmTagsExclude: javaTagsFull, nameGen: javaNameThreeDirs, suffix: ".jar", proto: true}
+	javaUnitFbs     = &javaUnit{kind: juJar, sub: KindJavaMain, tag: "JAVA_FBS", moduleType: "FBS_LIBRARY", peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar), dmTagsExclude: javaTagsFull, suffix: ".jar", fbs: true}
 	javaUnitDllJar  = &javaUnit{kind: juJar, sub: KindJavaMain, tag: "JAR_COMPILATION", moduleType: "JAR_LIBRARY", peerdirTags: javaTags(javaTagsJarBase, javaTagsIJar), dmTagsExclude: javaTagsFull, suffix: ".jar", compileView: true, jni: true}
 )
 
@@ -85,6 +86,7 @@ type javaUnit struct {
 	selfPeers            []ModuleKind
 	compileView          bool
 	proto                bool
+	fbs                  bool
 	contribRunnable      bool
 	testRunner           string
 	jni                  bool
@@ -150,6 +152,9 @@ func isJavaModuleType(name TOK) bool {
 func javaUnitFor(name TOK, sub ModuleKind) *javaUnit {
 	if name == tokProtoLibrary {
 		return javaUnitProto
+	}
+	if name == tokFbsLibrary {
+		return javaUnitFbs
 	}
 
 	for _, u := range javaModuleUnits[name] {
@@ -278,6 +283,7 @@ type JavaData struct {
 	localJar          string
 	localSourcesJar   string
 	protoSrcs         []string
+	flatcFlags        []ANY
 	evSrcs            []string
 	fromSandboxes     []*FromSandboxStmt
 	files             []string
@@ -443,6 +449,16 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 	}
 
 	jm.data = collectJavaData(ctx, jm, stmts, env)
+	if unit.fbs {
+		if jm.data.excludeTags["JAVA_FBS"] {
+			return &ModuleEmitResult{ModuleStmtName: moduleName}
+		}
+		native := instance
+		native.Language = LangFbsJavaNative
+		native.Kind = KindLib
+		native.Demand = demandSelf
+		genModule(ctx, native)
+	}
 
 	if unit.proto && jm.data.excludeTags["JAVA_PROTO"] {
 		r := &ModuleEmitResult{ModuleStmtName: moduleName}
@@ -659,7 +675,7 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool)
 		}
 
 		inst.Kind = units[0].sub
-	case name == tokProtoLibrary:
+	case name == tokProtoLibrary || name == tokFbsLibrary:
 		inst.Kind = KindJavaMain
 	default:
 		inst.Language = LangCPP

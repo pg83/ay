@@ -186,6 +186,7 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 }
 
 type GenCtx struct {
+	fbsBindings      fbsContextBindings
 	fs               FS
 	parsers          *IncludeParserManager
 	emit             *StreamingEmitter
@@ -293,6 +294,8 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 
 		ctx.emitConfiguredSubmoduleTests(target.Path)
 	}
+
+	ctx.flushFbsContextBindings()
 
 	if ctx.buckets.h1Mismatches > 0 {
 		onWarn(Warn{
@@ -1685,6 +1688,16 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			continue
 		}
 
+		if instance.Language == LangFbsJavaNative {
+			// Native commands are another rendering view of JAVA_FBS. Resolve
+			// its peers with the Java context's tags, rather than selecting CPP_FBS.
+			parent := JavaModule{dir: instance.Path.relString(), instance: instance, unit: javaUnitFbs, data: &JavaData{}}
+			if result := ctx.javaPeerResult(&parent, peerPath, kind == peerKindUserPeer); result != nil {
+				resolved = append(resolved, ResolvedPeer{path: peerPath, result: result, kind: kind})
+			}
+			continue
+		}
+
 		peerInstance := e.derivePeerInstanceVFS(peerVFS)
 
 		if isGoModuleType(d.moduleStmt.Name) && peerInstance.Language == LangGo && ctx.moduleName(peerPath) == tokRosLibrary {
@@ -2427,7 +2440,18 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	e.emitLDPlugins()
 	e.collectPeerModuleGlobals()
 
-	if instance.Demand == demandNone {
+	if instance.Language == LangCPP && d.multimodule == tokFbsLibrary && d.moduleVariants&(1<<LangJava) != 0 {
+		// Context discovery is independent of which module results the caller
+		// selects. JAVA_FBS instructions also bind shared native files when
+		// this FBS library is reached only through a C++ peer.
+		native := instance
+		native.Language = LangFbsJavaNative
+		native.Kind = KindLib
+		native.Demand = demandSelf
+		genModule(ctx, native)
+	}
+
+	if instance.Demand == demandNone || instance.Language == LangFbsJavaNative {
 		result := newResult()
 
 		if len(d.cythonAddInclGlobal) > 0 || len(frame.peerCtx.CythonInclude) > 0 {
@@ -3108,8 +3132,4 @@ func (ctx *GenCtx) pushFrame() *ModuleFrame {
 
 func (ctx *GenCtx) popFrame() {
 	ctx.frameDepth--
-}
-
-func (ctx *GenCtx) renderModuleDirs() Environment {
-	return Environment{s: &ctx.frames[ctx.frameDepth-1].ifEnv}
 }

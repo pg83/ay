@@ -118,6 +118,9 @@ func javaConfPrologue(jm *JavaModule, d *JavaData) {
 	if u.proto {
 		d.javaProtobufPeers = []string{"contrib/java/com/google/protobuf/protobuf-java/" + javaProtoRuntimeVersion, javaKotlinProtoPeersMarker}
 	}
+	if u.fbs {
+		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "contrib/java/com/google/flatbuffers/flatbuffers-java/" + javaFlatbuffersVersion})
+	}
 }
 
 func (d *JavaData) kotlinProtoPeers() []string {
@@ -156,6 +159,9 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	if jm.unit.proto {
 		env.setBool(envJavaProto, true)
 	}
+	if jm.unit.fbs {
+		env.setBool(internEnv("JAVA_FBS"), true)
+	}
 
 	for _, st := range stmts {
 		if m, ok := st.(*ModuleStmt); ok {
@@ -170,6 +176,9 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 
 	if jm.unit.proto {
 		d.expandJavaProtobufPeers()
+	}
+	if jm.unit.fbs {
+		d.env = env.cloneInto(new(EnvStore))
 	}
 
 	return d
@@ -282,6 +291,14 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 		case *AddInclStmt:
 			for _, dir := range expandConfigVFSPaths(v.ProtoGlobalPaths, env) {
 				d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir, global: true})
+			}
+			if jm.unit.fbs {
+				for _, dir := range expandConfigVFSPaths(v.FlatcGlobalPaths, env) {
+					d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir, global: true})
+				}
+				for _, dir := range expandConfigVFSPaths(v.FlatcPaths, env) {
+					d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir})
+				}
 			}
 		case *UnknownStmt:
 			raw := v.Args
@@ -415,6 +432,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	}
 
 	switch name {
+	case "FLATC_FLAGS":
+		d.flatcFlags = append(d.flatcFlags, internAnys(args)...)
 	case "SET_APPEND":
 		if len(args) == 0 {
 			return
@@ -735,6 +754,9 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 
 		if name == "ONLY_TAGS" {
 			d.excludeTags["JAVA_PROTO"] = true
+			if u.fbs {
+				d.excludeTags["JAVA_FBS"] = true
+			}
 		}
 
 		for _, a := range args {
