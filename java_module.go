@@ -283,6 +283,7 @@ type JavaData struct {
 	protoSrcs           []string
 	evSrcs              []string
 	fromSandboxes       []*FromSandboxStmt
+	files               []string
 	srcDirs             []VFS
 	srcs                []string
 	grpc                bool

@@ -201,6 +201,7 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
 	}
 
 	ctx.javaRegisterFromSandboxes(jm)
+	ctx.javaRegisterFiles(jm)
 
 	outs := jm.outputs()
 
@@ -219,6 +220,50 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
 			OwnerModule:     jm.path,
 			ProducerRef:     jm.outRef,
 			ProducerMainOut: outs[0],
+			OnUse:           pending,
+		})
+	}
+}
+
+func (ctx *GenCtx) javaRegisterFiles(jm *JavaModule) {
+	reg := ctx.javaReg(jm)
+
+	for _, file := range jm.data.files {
+		dst := copyFileOutputVFS(jm.dir, file)
+		ext := path.Ext(dst.relString())
+
+		switch jm.unit.kind {
+		case juJar:
+			if ext != ".jsrc" && ext != ".java" && ext != ".jar" && ext != ".mf" && ext != ".gentar" && ext != ".kt" {
+				continue
+			}
+		case juExternal:
+			if ext != ".jsrc" && ext != ".java" && ext != ".jar" && ext != ".mf" {
+				continue
+			}
+		}
+
+		jm.macroOuts = append(jm.macroOuts, dst)
+
+		if reg.lookup(dst) != nil {
+			continue
+		}
+
+		src := copyFileInputVFS(ctx.fs, jm.path, file)
+		ref := ctx.emit.reserve()
+
+		pending := ctx.javaPendingEmit(func() {
+			node := composeCPNode(jm.instance, src, dst, nil, ModuleToolchain{Python3: javaPython3}, ctx.scripts, ctx.na)
+
+			ctx.emit.emitReservedNodePtr(&node, ref)
+		})
+
+		reg.register(GeneratedFileInfo{
+			OutputPath:      dst,
+			SourcePath:      src,
+			OwnerModule:     jm.path,
+			ProducerRef:     ref,
+			ProducerMainOut: dst,
 			OnUse:           pending,
 		})
 	}
