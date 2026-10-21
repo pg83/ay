@@ -88,6 +88,29 @@ def module_options(name, src):
 
 
 class CythonTest(unittest.TestCase):
+    def test_cython_flags_append_to_module_options_before_per_source_options(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": "PY3_LIBRARY()\nBUILDWITH_CYTHON_CPP(a.pyx --module-name selected)\n"
+                "CYTHON_FLAGS(-E FEATURE=1)\nCYTHON_FLAGS(-X boundscheck=False)\nEND()\n",
+            "lib/a.pyx": "",
+        })
+        command = args(lib.node_by_output(lib.make(files, "app"), "$(B)/lib/a.pyx.cpp"))
+        self.assertEqual(command[1:command.index("--cplus")], [
+            *CYTHON_HEAD, "-E", "FEATURE=1", "-X", "boundscheck=False", "--module-name", "selected",
+        ])
+
+    def test_set_cython_options_replaces_configured_defaults(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": "PY3_LIBRARY()\nSET(CYTHON_OPTIONS -X embedsignature=True)\n"
+                "CYTHON_FLAGS(-E CUSTOM=1)\nBUILDWITH_CYTHON_C(a.pyx)\nEND()\n",
+            "lib/a.pyx": "",
+        })
+        command = args(lib.node_by_output(lib.make(files, "app"), "$(B)/lib/a.pyx.c"))
+        self.assertEqual(command[1:command.index("-I$(B)")], [CYTHON, "-X", "embedsignature=True", "-E", "CUSTOM=1"])
+        self.assertNotIn("legacy_implicit_noexcept=True", command)
+
     def test_py_srcs_cython_variants(self):
         files = python_base()
         files.update({

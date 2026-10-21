@@ -63,6 +63,7 @@ var (
 	envCppRos                       = internEnv("CPP_ROS")
 	envCudaNvccFlags                = internEnv("CUDA_NVCC_FLAGS")
 	envCustomClangTidy              = internEnv("CUSTOM_CLANG_TIDY")
+	envCythonOptions                = internEnv("CYTHON_OPTIONS")
 	envDEBUGINFO_LINES_ONLY         = internEnv("DEBUGINFO_LINES_ONLY")
 	envDISABLE_INSTRUCTION_SETS     = internEnv("DISABLE_INSTRUCTION_SETS")
 	envDYLD_LIBRARY_PATH            = internEnv("DYLD_LIBRARY_PATH")

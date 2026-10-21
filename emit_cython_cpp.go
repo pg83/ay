@@ -111,20 +111,19 @@ var py2CythonEmbeddedFiles = []string{
 	"contrib/tools/cython_py2/Cython/Utility/UFuncs_C.c",
 }
 
-var cythonConstHead = []ANY{
-	argSContribToolsCythonCythonPy.any(),
-	argX2.any(),
-	argLegacyImplicitNoexceptTrue.any(),
-	argE.any(),
-	argUnameSysnameLinux.any(),
-}
+func cythonDefaultOptions(os OS) string {
+	options := "-X legacy_implicit_noexcept=True"
 
-var py2CythonConstHead = []ANY{
-	argSContribToolsCythonPy2CythonPy.any(),
-	argX2.any(),
-	argLegacyImplicitNoexceptTrue.any(),
-	argE.any(),
-	argUnameSysnameLinux.any(),
+	switch os {
+	case OSLinux:
+		return options + " -E UNAME_SYSNAME=Linux"
+	case OSDarwin:
+		return options + " -E UNAME_SYSNAME=Darwin"
+	case OSWindows:
+		return options + " -E UNAME_SYSNAME=Windows"
+	}
+
+	return options
 }
 
 type CythonStmt struct {
@@ -318,16 +317,17 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		ccCFlags = ccCFlags[:len(ccCFlags):len(ccCFlags)]
 
 		env := envVarsVCS
-		cmdArgs := na.anys.alloc(8 + len(cythonConstHead) + len(stmt.Options) + len(d.cythonAddIncl))[:0]
+		cmdArgs := na.anys.alloc(9 + len(d.cythonOptions) + len(stmt.Options) + len(d.cythonAddIncl))[:0]
 
 		cmdArgs = append(cmdArgs, d.tc.Python3.any())
 
 		if d.usePython2 {
-			cmdArgs = append(cmdArgs, py2CythonConstHead...)
+			cmdArgs = append(cmdArgs, argSContribToolsCythonPy2CythonPy.any())
 		} else {
-			cmdArgs = append(cmdArgs, cythonConstHead...)
+			cmdArgs = append(cmdArgs, argSContribToolsCythonCythonPy.any())
 		}
 
+		cmdArgs = append(cmdArgs, d.cythonOptions...)
 		cmdArgs = appendInternAnys(cmdArgs, stmt.Options)
 
 		if !stmt.CMode {
