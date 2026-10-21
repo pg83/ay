@@ -30,6 +30,19 @@ class ModuleHeaderDependenciesTest(unittest.TestCase):
                 self.assertIn("missing-include", result.stderr)
                 self.assertIn('"missing.h"', result.stderr)
 
+    def test_header_diagnostics_survive_library_metadata_collection(self):
+        result = lib.make_process({
+            "producer/ya.make": f"LIBRARY()\n{BARE}SRCS(local.cpp public.h)\nEND()\n",
+            "producer/local.cpp": "int local;\n",
+            "producer/public.h": '#include "cycle.h"\n',
+            "producer/cycle.h": '#include "public.h"\n#include "missing.h"\n',
+            "consumer/ya.make": f"PROGRAM()\n{BARE}PEERDIR(producer)\nSRCS(main.cpp)\nEND()\n",
+            "consumer/main.cpp": '#include "producer/public.h"\nint main() {}\n',
+        }, "consumer")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing-include", result.stderr)
+        self.assertIn('"missing.h"', result.stderr)
+
     def test_unused_header_retains_generated_dependencies_without_reporting_missing_includes(self):
         files = {
             "producer/ya.make": (
@@ -50,6 +63,27 @@ class ModuleHeaderDependenciesTest(unittest.TestCase):
         self.assertIn("$(B)/producer/private.h.pch", link["inputs"])
         self.assertIn(pch["uid"], link["deps"])
 
+    def test_fake_libraries_do_not_export_their_listed_header_dependencies(self):
+        for srcs in ("public.h", "public.h GLOBAL registry.cpp"):
+            with self.subTest(srcs=srcs):
+                files = {
+                    "producer/ya.make": (
+                        f"LIBRARY()\n{BARE}"
+                        "GEN_PCH_FILE(producer/private.h ${ARCADIA_BUILD_ROOT}/producer/private.h.pch)\n"
+                        f"SRCS({srcs})\nEND()\n"
+                    ),
+                    "producer/registry.cpp": "int registry;\n",
+                    "producer/public.h": '#include "producer/private.h.pch"\n',
+                    "producer/private.h": "#pragma once\n",
+                    "consumer/ya.make": f"PROGRAM()\n{BARE}PEERDIR(producer)\nSRCS(main.cpp)\nEND()\n",
+                    "consumer/main.cpp": "int main() {}\n",
+                }
+                lib.tool_program(files, "sdg/tier0/tools/make_pch_wrapper", "make_pch_wrapper")
+                graph = lib.make(files, "consumer")
+                link = lib.node_by_output(graph, "$(B)/consumer/consumer")
+                self.assertNotIn("$(B)/producer/private.h.pch", link["inputs"])
+                self.assertFalse(any(node["kv"].get("p") == "PC" for node in graph["graph"]))
+
     def test_exported_generated_includes_do_not_expand_into_link_source_inputs(self):
         files = {
             "producer/ya.make": (
@@ -58,7 +92,7 @@ class ModuleHeaderDependenciesTest(unittest.TestCase):
                 "SRCS(local.cpp public.h)\nEND()\n"
             ),
             "producer/local.cpp": '#include "public.h"\nint local;\n',
-            "producer/public.h": '#include "generated.h"\n',
+            "producer/public.h": '#include "producer/generated.h"\n',
             "producer/src.h": "#pragma once\n",
             "producer/leaf.h": "#pragma once\n",
             "consumer/ya.make": f"PROGRAM()\n{BARE}PEERDIR(producer)\nSRCS(main.cpp)\nEND()\n",
