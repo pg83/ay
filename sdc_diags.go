@@ -3,6 +3,7 @@ package main
 import (
 	"maps"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -131,4 +132,85 @@ func applySdcDiagsSplitGenerator(fs FS, modulePath string, stmt UnknownStmt, env
 	}
 
 	d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any())
+}
+
+func sdcDiagV3Output(rel string) string {
+	base := "${ARCADIA_BUILD_ROOT}/" + sdcDiagUpdaterDir + "/gen_diags/diagnostics/v3/"
+
+	if strings.HasSuffix(rel, ".yaml") {
+		return base + strings.TrimSuffix(rel, ".yaml") + ".h"
+	}
+
+	return base + rel + "/_group.h"
+}
+
+func applySdcDiagsSplitGeneratorV3(fs FS, modulePath string, stmt UnknownStmt, env Environment, d *ModuleData) {
+	if len(stmt.Args) != 1 {
+		throwFmt("SDC_DIAGS_SPLIT_GENERATOR_V3: exactly one diagnostics file or group path is required")
+	}
+
+	file := stmt.Args[0].string()
+
+	if resolved, ok := sourceInputVFS(fs, source(modulePath), file); ok {
+		file = resolved.relString()
+	} else if fs.isDir(dirKey(modulePath), file) {
+		file = sourceJoinClean(modulePath, file).relString()
+	} else if fs.isDir(srcRootRel, file) {
+		file = sourceClean(file).relString()
+	}
+
+	if !strings.HasPrefix(file, sdcDiagDescriptionsRoot) || file == sdcDiagDescriptionsRoot {
+		throwFmt("SDC_DIAGS_SPLIT_GENERATOR_V3: %s must be inside %s", file, sdcDiagDescriptionsRoot)
+	}
+
+	group := !strings.HasSuffix(file, ".yaml")
+	parent := path.Dir(file)
+	hasParent := parent != sdcDiagDescriptionsRoot
+	rel := throw2(filepath.Rel(sdcDiagDescriptionsRoot, file))
+	output := sdcDiagV3Output(rel)
+	input := file
+
+	if group {
+		input += "/_manifest_.yaml"
+	}
+
+	var groupArgs []string
+
+	parentOutput := ""
+
+	if hasParent {
+		parentOutput = sdcDiagV3Output(path.Dir(rel))
+		groupArgs = []string{"--group-include-file", strings.TrimPrefix(parentOutput, "${ARCADIA_BUILD_ROOT}/"+sdcDiagUpdaterDir+"/gen_diags/")}
+	}
+
+	var args []string
+
+	if group {
+		args = []string{"--group-manifest", input}
+	} else {
+		args = append(args, groupArgs...)
+		args = append(args, "--diag-file", input)
+	}
+
+	namespace := strings.TrimSuffix(rel, path.Ext(rel))
+
+	args = append(args, "--cpp", output, "--cpp-namespace", "yandex::sdc::diagnostics::v3::"+strings.ReplaceAll(namespace, "/", "::"))
+
+	if group {
+		args = append(args, groupArgs...)
+	}
+
+	includes := []string{"${ARCADIA_BUILD_ROOT}/sdg/sdc/ros/misc/protocol/DiagSeverity.h"}
+
+	if hasParent {
+		includes = []string{parentOutput, sdcDiagUpdaterDir + "/include/diagnostics/group.h"}
+	}
+
+	includes = append(includes, sdcDiagUpdaterDir+"/include/diagnostics/diagnostic.h")
+
+	appendRunProgram(&RunProgramStmt{
+		ToolPath: internStr(sdcDiagUpdaterDir + "/utils/diags_split_generator").any(),
+		Args:     internAnys(args), INFiles: internAnys([]string{input}),
+		OUTFiles: internAnys([]string{output}), OutputIncludes: internAnys(includes), Line: stmt.Line,
+	}, env, d)
 }

@@ -1880,6 +1880,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	switch v.Name {
 	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks, tokGolaunchCompositeComps:
 		applyMlaunchStmt(modulePath, v, env, d)
+	case tokSdcDiagsSplitGeneratorV3:
+		applySdcDiagsSplitGeneratorV3(fs, modulePath, v, env, d)
 	case tokSdcDiagsSplitGeneratorV4:
 		applySdcDiagsSplitGenerator(fs, modulePath, v, env, d)
 	case tokNodeBuilder:
