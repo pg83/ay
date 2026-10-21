@@ -85,6 +85,7 @@ func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[Includ
 		{".tese", cParser},
 		{".frag", cParser},
 		{".vert", cParser},
+		{".ssqls", SsqlsIncludeDirectiveParser{}},
 		{".proto", proto},
 		{".fbs64", fbsParser},
 		{".gperf", lexParser},
