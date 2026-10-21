@@ -185,12 +185,13 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	tok := na.anyList(inVFS.any(), argDashC.any(), argDashO.any(), outVFS.any())
 	inChunk := tok[0:1]
 	wrapcc := len(blocks.wrapHead) > 0
-	compiler, tail := blocks.cHead, blocks.cxxTail
+	compiler := blocks.cHead
+
+	var tail []ANY
 
 	if isCxx {
 		compiler = blocks.cxxHead
-	} else {
-		tail = blocks.cTail
+		tail = blocks.cxxTail
 	}
 
 	total := 4 + 4
@@ -570,7 +571,6 @@ type CcModuleArgBlocks struct {
 	cxxHead  []ANY
 	includes []ANY
 	flags    []ANY
-	cTail    []ANY
 	cxxTail  []ANY
 	cPost    []ANY
 }
@@ -705,9 +705,8 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 		cxxHead:  na.anyList(in.TC.CXX.any()),
 		includes: includes,
 		flags:    na.anyConcat(flagParts...),
-		cTail:    na.anyConcat(in.PeerCOnlyFlagsGlobal),
 		cxxTail:  na.anyConcat(cxxTailParts[:]...),
-		cPost:    na.anyConcat(in.COnlyFlags),
+		cPost:    na.anyConcat(in.COnlyFlags, in.OwnCOnlyFlagsGlobal, in.PeerCOnlyFlagsGlobal),
 	}
 }
 

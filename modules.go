@@ -1405,16 +1405,13 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.swigAddInclGlobal = append(d.swigAddInclGlobal, expandConfigVFSPaths(v.SwigGlobalPaths, env)...)
 		case *CFlagsStmt:
 
-			d.cFlagsGlobal = append(d.cFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
-			d.cFlags = append(d.cFlags, expandStmtTokens(v.OwnFlags, env)...)
+			d.cFlagsGlobal, d.cFlags = appendCompilerFlags(v.Flags, env, d.cFlagsGlobal, d.cFlags)
 		case *CXXFlagsStmt:
 
-			d.cxxFlagsGlobal = append(d.cxxFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
-			d.cxxFlags = append(d.cxxFlags, expandStmtTokens(v.OwnFlags, env)...)
+			d.cxxFlagsGlobal, d.cxxFlags = appendCompilerFlags(v.Flags, env, d.cxxFlagsGlobal, d.cxxFlags)
 		case *CONLYFlagsStmt:
 
-			d.cOnlyFlagsGlobal = append(d.cOnlyFlagsGlobal, expandStmtTokens(v.GlobalFlags, env)...)
-			d.cOnlyFlags = append(d.cOnlyFlags, expandStmtTokens(v.OwnFlags, env)...)
+			d.cOnlyFlagsGlobal, d.cOnlyFlags = appendCompilerFlags(v.Flags, env, d.cOnlyFlagsGlobal, d.cOnlyFlags)
 		case *LDFlagsStmt:
 			d.ldFlags = append(d.ldFlags, expandStmtTokens(v.Flags, env)...)
 		case *SrcDirStmt:
@@ -4784,4 +4781,26 @@ func confProtoPlugin(fs FS, confRel, macro string) ConfProtoPlugin {
 	confPluginDepsCache.Store(key, conf)
 
 	return conf
+}
+
+func appendCompilerFlags(args []ANY, env Environment, global, own []ANY) ([]ANY, []ANY) {
+	nextGlobal := false
+
+	for _, arg := range expandStmtTokens(args, env) {
+		if arg == kwGLOBAL.any() {
+			nextGlobal = true
+
+			continue
+		}
+
+		if nextGlobal {
+			global = append(global, arg)
+		} else {
+			own = append(own, arg)
+		}
+
+		nextGlobal = false
+	}
+
+	return global, own
 }

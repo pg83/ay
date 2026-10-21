@@ -151,7 +151,7 @@ class YaMakeFlagsTest(unittest.TestCase):
             "-DLOWN", "-DLG", "-DLOWNCXX", "-DLGCXX", "-DLGCXX",
         ])
         self.assertEqual(user_defines(graph, "$(B)/l/l.c.o"), [
-            "-DLOWN", "-DLG", "-DLOWNC",
+            "-DLOWN", "-DLG", "-DLOWNC", "-DLGC",
         ])
         self.assertIn("-DLQ=\"q\"", args_of(graph, "$(B)/l/l.cpp.o"))
         self.assertIn("-DLQ=\"q\"", args_of(graph, "$(B)/p/main.cpp.o"))
@@ -159,7 +159,7 @@ class YaMakeFlagsTest(unittest.TestCase):
             "-DPROG", "-DLG", "-DPROGCXX", "-DLGCXX", "-DLGCXX",
         ])
         self.assertEqual(user_defines(graph, "$(B)/p/c.c.o"), [
-            "-DPROG", "-DLG", "-DLGC", "-DPROGC",
+            "-DPROG", "-DLG", "-DPROGC", "-DLGC",
         ])
         link = lib.node_by_output(graph, "$(B)/p/p")["cmds"][-2]["cmd_args"]
         self.assertEqual(link[link.index("-lfoo") + 1], "-Wl,--bar")
