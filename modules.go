@@ -4697,7 +4697,7 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		language = LangPackage
 	}
 
-	if ctx.moduleName(peerVFS.relString()) == tokPackage {
+	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokPackage {
 		language = LangPackage
 	}
 

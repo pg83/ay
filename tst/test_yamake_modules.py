@@ -111,7 +111,11 @@ class YaMakeModulesTest(unittest.TestCase):
             ("PROTO_DESCRIPTIONS()", [], [("PD", "$(B)/a/a.protodesc"), ("PD", "$(B)/a/a.tar")]),
             ("DLL()", [], [("CC", "$(B)/a/x.cpp.pic.o"), ("LD", "$(B)/a/liba.so")]),
             ("SO_PROGRAM()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
-            ("PACKAGE()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
+            ("PACKAGE()", [], [
+                ("CP", "$(B)/a/x.cpp"), ("PK", "$(B)/a/a.final.pkg.fake"),
+                ("PK", "$(B)/a/a/x.cpp"), ("PK", "$(B)/a/x.cpp"),
+                ("UN", "$(B)/a/a.pkg.fake"), ("UN", "$(B)/a/x.cpp"),
+            ]),
             ("UNION()", [], [("CP", "$(B)/a/x.cpp"), ("UN", "$(B)/a/a.pkg.fake"), ("UN", "$(B)/a/x.cpp")]),
             ("FBS_LIBRARY()\nONLY_TAGS(CPP_FBS)", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("RESOURCES_LIBRARY()", [], []),

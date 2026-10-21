@@ -15,6 +15,21 @@ def files():
 
 
 class PackageModuleTest(unittest.TestCase):
+    def test_missing_peer_stays_inside_the_keep_going_module_boundary(self):
+        sources = {
+            "owner/ya.make": f"PROGRAM()\n{lib.BARE_MODULE}SRCS(main.cpp)\nPEERDIR(absent good)\nEND()\n",
+            "owner/main.cpp": "int main_value;\n",
+            "good/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}SRCS(good.cpp)\nEND()\n",
+            "good/good.cpp": "int good_value;\n",
+        }
+        graph = lib.make(sources, "owner", "-k")
+        compiled = lib.node_by_output(graph, "$(B)/owner/main.cpp.o")
+        owner = lib.node_by_output(graph, "$(B)/owner/owner")
+        peer = lib.node_by_output(graph, "$(B)/good/libgood.a")
+        self.assertIn("$(S)/owner/main.cpp", compiled["inputs"])
+        self.assertIn(compiled["uid"], owner["deps"])
+        self.assertIn(peer["uid"], owner["deps"])
+
     def test_package_has_final_and_union_outputs_with_shared_copy_producers(self):
         graph = lib.make(files(), "pkg")
         package = lib.node_by_output(graph, "$(B)/pkg/bundle.final.pkg.fake")
