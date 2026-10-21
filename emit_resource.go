@@ -191,7 +191,6 @@ type ResourceItem struct {
 	SourceInput VFS
 	BuildInput  VFS
 	ExtraBuilds []VFS
-	AuxSources  []VFS
 	AuxBuilds   []VFS
 }
 
@@ -339,7 +338,6 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 				buildBound++
 			}
 
-			sourceBound += len(it.AuxSources)
 			buildBound += len(it.ExtraBuilds) + len(it.AuxBuilds)
 		}
 
@@ -396,7 +394,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		payload = payload[:len(payload):len(payload)]
 
-		var adjacentSources, adjacentBuilds, tailSources, tailBuilds []VFS
+		var adjacentSources, adjacentBuilds, tailBuilds []VFS
 
 		dedupers.with(func(deduper *DeDuper) {
 			adjacentSources = na.vfs.alloc(sourceBound)[:0]
@@ -430,18 +428,6 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 				deduper.add(v.strID())
 			}
 
-			tailSources = na.vfs.alloc(sourceBound)[:0]
-
-			for _, it := range chunk {
-				for _, v := range it.AuxSources {
-					if v != 0 && deduper.add(v.strID()) {
-						tailSources = append(tailSources, v)
-					}
-				}
-			}
-
-			na.vfs.commit(len(tailSources))
-			tailSources = tailSources[:len(tailSources):len(tailSources)]
 			tailBuilds = na.vfs.alloc(buildBound)[:0]
 
 			for _, it := range chunk {
@@ -456,7 +442,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 			tailBuilds = tailBuilds[:len(tailBuilds):len(tailBuilds)]
 		})
 
-		inputs := na.inputList(rescompilersChunk, adjacentSources, adjacentBuilds, objcopyScriptChunk, tailSources, tailBuilds)
+		inputs := na.inputList(rescompilersChunk, adjacentSources, adjacentBuilds, objcopyScriptChunk, tailBuilds)
 
 		hashScratch = append(hashScratch, unitElem)
 
