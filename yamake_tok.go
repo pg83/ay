@@ -1,6 +1,7 @@
 package main
 
 var tokName = [...]STR{
+	tokDllFor:                    internStr("DLL_FOR"),
 	tokPackageFinal:              internStr("_PACKAGE_FINAL"),
 	tokMlaunchLibrary:            internStr("MLAUNCH_LIBRARY"),
 	tokMlaunchPipeline:           internStr("MLAUNCH_PIPELINE"),
@@ -465,6 +466,7 @@ const (
 	tokDisable
 	tokDisableDataValidation
 	tokDll
+	tokDllFor
 	tokDynamicLibrary
 	tokDynamicLibraryFrom
 	tokEnable

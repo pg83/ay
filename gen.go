@@ -207,6 +207,7 @@ type GenCtx struct {
 	descSlices       *SliceCache[DescProtoPeer]
 	tcMemo           map[ToolchainKey]ModuleToolchain
 	moduleStmts      map[string][]Stmt
+	dllForStack      []string
 	ifEnvScratch     EnvStore
 	moduleDirsEnv    EnvStore
 	walking          map[ModuleInstance]bool
@@ -488,7 +489,7 @@ func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
 	d := ModuleData{}
 
 	apply := func(stmt Stmt) {
-		collectStmts(ctx.fs, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, &d, ctx.onWarn)
+		collectStmts(ctx, dir, instance.Kind, instance.Language, []Stmt{stmt}, env, &d, ctx.onWarn)
 	}
 
 	var module TOK
@@ -584,6 +585,10 @@ func stmtsModuleName(stmts []Stmt) TOK {
 		switch v := st.(type) {
 		case *ModuleStmt:
 			return v.Name
+		case *UnknownStmt:
+			if v.Name == tokDllFor {
+				candidate = tokDll
+			}
 		case *IfStmt:
 			thenName, elseName := stmtsModuleName(v.Then), stmtsModuleName(v.Else)
 
@@ -1061,7 +1066,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return genJavaModule(ctx, instance, ctx.moduleName(instance.Path.relString()), stmts, env)
 	}
 
-	d := collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
+	d := collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d)
 	e := newEmitContextIn(frame, ctx, instance, d, nil)
 
 	if d.discarded {
@@ -1218,7 +1223,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	if d.moduleStmt.Name == tokResourcesLibrary {
 		if e.bindResourceGlobalVars(env) {
-			d = collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
+			d = collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d)
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
 
@@ -1229,7 +1234,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		env.setString(envMODULE_SUFFIX, prebuiltModuleSuffix(instance.Platform))
 
 		if e.bindResourceGlobalVars(env) {
-			d = collectModuleInto(ctx.parsers, instance, stmts, env, ctx.onWarn, &frame.d)
+			d = collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d)
 			e = newEmitContextIn(frame, ctx, instance, d, nil)
 		}
 

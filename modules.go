@@ -710,8 +710,9 @@ func (d *ModuleData) materializeAddIncl() {
 	d.addInclP = nil
 }
 
-func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn), d *ModuleData) *ModuleData {
-	fs := pm.fs
+func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn), d *ModuleData) *ModuleData {
+	pm := ctx.parsers
+	fs := ctx.fs
 	modulePath := instance.Path.relString()
 	kind := instance.Kind
 
@@ -729,7 +730,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	d.yqlCurrent = instance.YqlCurrent
 	d.yqlStableABI = instance.Platform.YqlStableABI
 
-	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d, onWarn)
+	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn)
 	finishYqlModule(modulePath, env, d)
 	d.test.validateData = resourceValidationEnabled(env)
 
@@ -1084,7 +1085,9 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 	return false
 }
 
-func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn)) {
+func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn)) {
+	fs := ctx.fs
+
 	for _, s := range stmts {
 		if d.discarded {
 			return
@@ -1140,6 +1143,12 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			if isDllModuleType(v.Name) {
 				d.exportsScript = dllExportsArg(v)
+
+				if d.exportsScript == nil {
+					if exports, ok := env.lookup("EXPORTS_FILE"); ok && exports != "" {
+						d.exportsScript = ptr(internStr(exports).any())
+					}
+				}
 			}
 
 			if v.Name == tokDocs || v.Name == tokDocsLibrary {
@@ -1573,13 +1582,17 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				taken = v.Else
 			}
 
-			collectStmts(fs, modulePath, kind, language, taken, env, d, onWarn)
+			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn)
 		case *UnknownStmt:
 
 			expanded := *v
 
-			expanded.Args = expandStmtTokens(v.Args, env)
-			applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
+			if v.Name == tokDllFor {
+				collectDllFor(ctx, modulePath, kind, language, v, env, d, onWarn)
+			} else {
+				expanded.Args = expandStmtTokens(v.Args, env)
+				applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
+			}
 		}
 	}
 }
