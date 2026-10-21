@@ -2207,7 +2207,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		if output := moduleOutputPath(peer.result); output != 0 {
 			info := e.codegen.moduleInputs(output)
 
-			if info == nil || len(info.ModuleIncludes) == 0 && len(info.ModuleGlobals) == 0 {
+			if info == nil || len(info.Includes) == 0 && len(info.Globals) == 0 {
 				continue
 			}
 

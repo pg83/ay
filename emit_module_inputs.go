@@ -26,8 +26,8 @@ func (e *EmitContext) modulePeerInputs() InputChunks {
 	var inputs InputChunks
 
 	for _, peer := range e.peers.Modules {
-		if info := e.codegen.moduleInputs(peer); info != nil && len(info.ModuleIncludes) > 0 {
-			inputs = append(inputs, info.ModuleIncludes)
+		if info := e.codegen.moduleInputs(peer); info != nil && len(info.Includes) > 0 {
+			inputs = append(inputs, info.Includes)
 		}
 	}
 
@@ -65,8 +65,8 @@ func (e *EmitContext) collectPeerModuleGlobals() []VFS {
 
 	if e.peers != nil {
 		for _, peer := range e.peers.Modules {
-			if info := e.codegen.moduleInputs(peer); info != nil && info.ModulePassPeers && len(info.ModuleGlobals) > 0 {
-				peers = append(peers, info.ModuleGlobals)
+			if info := e.codegen.moduleInputs(peer); info != nil && info.PassPeers && len(info.Globals) > 0 {
+				peers = append(peers, info.Globals)
 			}
 		}
 	}

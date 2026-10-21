@@ -8,9 +8,7 @@ import (
 type GeneratedFileInfo struct {
 	InputsOnly       bool
 	ModuleType       TOK
-	ModuleIncludes   []VFS
-	ModuleGlobals    []VFS
-	ModulePassPeers  bool
+	ModuleInputs     *ModuleInputInfo
 	Nots             *NotsPrepared
 	OutputPath       VFS
 	SourcePath       VFS
@@ -25,6 +23,12 @@ type GeneratedFileInfo struct {
 	InputLoopSources []VFS
 	LateOutputs      []VFS
 	ParsedIncludes   ParsedIncludeSet
+}
+
+type ModuleInputInfo struct {
+	Includes  []VFS
+	Globals   []VFS
+	PassPeers bool
 }
 
 type pendingEmitter interface {
@@ -213,10 +217,14 @@ func (r *CodegenRegistry) moduleType(path VFS) TOK {
 	return info.ModuleType
 }
 
-func (r *CodegenRegistry) moduleInputs(path VFS) *GeneratedFileInfo {
+func (r *CodegenRegistry) moduleInputs(path VFS) *ModuleInputInfo {
 	info, _ := r.byRel.get(path.rel())
 
-	return info
+	if info == nil {
+		return nil
+	}
+
+	return info.ModuleInputs
 }
 
 func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, globals []VFS, passPeers bool) {
@@ -228,9 +236,11 @@ func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, 
 		r.byRel.put(output.rel(), info)
 	}
 
-	info.ModuleIncludes = includes
-	info.ModuleGlobals = globals
-	info.ModulePassPeers = passPeers
+	if info.ModuleInputs == nil {
+		info.ModuleInputs = r.na.moduleInputs.one()
+	}
+
+	*info.ModuleInputs = ModuleInputInfo{Includes: includes, Globals: globals, PassPeers: passPeers}
 }
 
 func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {

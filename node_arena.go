@@ -1,23 +1,24 @@
 package main
 
 type NodeArenas struct {
-	cmds     *BumpAllocator[Cmd]
-	envs     *BumpAllocator[EnvVar]
-	vfs      *BumpAllocator[VFS]
-	strs     *BumpAllocator[STR]
-	chunks   *BumpAllocator[[]ANY]
-	anys     *BumpAllocator[ANY]
-	inputs   *BumpAllocator[[]VFS]
-	noderefs *BumpAllocator[NodeRef]
-	nodes    *BumpAllocator[Node]
-	exts     *BumpAllocator[KVExt]
-	geninfos *BumpAllocator[GeneratedFileInfo]
-	pending  *BumpAllocator[PendingEmit]
-	protoPBC *BumpAllocator[protoPBCommon]
-	protoPB  *BumpAllocator[protoPBPending]
-	pyPB     *BumpAllocator[pyPBPending]
-	dirs     *BumpAllocator[IncludeDirective]
-	scanctxs *BumpAllocator[ScanContext]
+	cmds         *BumpAllocator[Cmd]
+	envs         *BumpAllocator[EnvVar]
+	vfs          *BumpAllocator[VFS]
+	strs         *BumpAllocator[STR]
+	chunks       *BumpAllocator[[]ANY]
+	anys         *BumpAllocator[ANY]
+	inputs       *BumpAllocator[[]VFS]
+	noderefs     *BumpAllocator[NodeRef]
+	nodes        *BumpAllocator[Node]
+	exts         *BumpAllocator[KVExt]
+	geninfos     *BumpAllocator[GeneratedFileInfo]
+	moduleInputs *BumpAllocator[ModuleInputInfo]
+	pending      *BumpAllocator[PendingEmit]
+	protoPBC     *BumpAllocator[protoPBCommon]
+	protoPB      *BumpAllocator[protoPBPending]
+	pyPB         *BumpAllocator[pyPBPending]
+	dirs         *BumpAllocator[IncludeDirective]
+	scanctxs     *BumpAllocator[ScanContext]
 }
 
 func (na *NodeArenas) resetWindows() {
@@ -32,6 +33,7 @@ func (na *NodeArenas) resetWindows() {
 	na.nodes.open = false
 	na.exts.open = false
 	na.geninfos.open = false
+	na.moduleInputs.open = false
 	na.pending.open = false
 	na.protoPBC.open = false
 	na.protoPB.open = false
@@ -52,6 +54,7 @@ func (na *NodeArenas) markStrict() {
 	na.nodes.markStrict()
 	na.exts.markStrict()
 	na.geninfos.markStrict()
+	na.moduleInputs.markStrict()
 	na.pending.markStrict()
 	na.protoPBC.markStrict()
 	na.protoPB.markStrict()
@@ -62,23 +65,24 @@ func (na *NodeArenas) markStrict() {
 
 func newNodeArenas() *NodeArenas {
 	return &NodeArenas{
-		cmds:     newBumpAllocator[Cmd](),
-		envs:     newBumpAllocator[EnvVar](),
-		vfs:      newBumpAllocator[VFS](),
-		strs:     newBumpAllocator[STR](),
-		chunks:   newBumpAllocator[[]ANY](),
-		anys:     newBumpAllocator[ANY](),
-		inputs:   newBumpAllocator[[]VFS](),
-		exts:     newBumpAllocator[KVExt](),
-		geninfos: newBumpAllocator[GeneratedFileInfo](),
-		pending:  newBumpAllocator[PendingEmit](),
-		protoPBC: newBumpAllocator[protoPBCommon](),
-		protoPB:  newBumpAllocator[protoPBPending](),
-		pyPB:     newBumpAllocator[pyPBPending](),
-		dirs:     newBumpAllocator[IncludeDirective](),
-		scanctxs: newBumpAllocator[ScanContext](),
-		noderefs: newBumpAllocator[NodeRef](),
-		nodes:    newBumpAllocator[Node](),
+		cmds:         newBumpAllocator[Cmd](),
+		envs:         newBumpAllocator[EnvVar](),
+		vfs:          newBumpAllocator[VFS](),
+		strs:         newBumpAllocator[STR](),
+		chunks:       newBumpAllocator[[]ANY](),
+		anys:         newBumpAllocator[ANY](),
+		inputs:       newBumpAllocator[[]VFS](),
+		exts:         newBumpAllocator[KVExt](),
+		geninfos:     newBumpAllocator[GeneratedFileInfo](),
+		moduleInputs: newBumpAllocator[ModuleInputInfo](),
+		pending:      newBumpAllocator[PendingEmit](),
+		protoPBC:     newBumpAllocator[protoPBCommon](),
+		protoPB:      newBumpAllocator[protoPBPending](),
+		pyPB:         newBumpAllocator[pyPBPending](),
+		dirs:         newBumpAllocator[IncludeDirective](),
+		scanctxs:     newBumpAllocator[ScanContext](),
+		noderefs:     newBumpAllocator[NodeRef](),
+		nodes:        newBumpAllocator[Node](),
 	}
 }
 
