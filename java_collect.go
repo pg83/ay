@@ -707,7 +707,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.javaProtobufPeers = append(d.javaProtobufPeers, "contrib/java/javax/annotation/javax.annotation-api/1.3.1")
 	case "WITH_KOTLIN_GRPC":
 		d.kotlinProto = true
-		d.kotlinGrpc = true
+		d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{kotlinGrpc: true})
 
 		env.setBool(envKotlinProto, true)
 

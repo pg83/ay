@@ -635,25 +635,27 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 	args = append(args, internAnys(d.protocFlags)...)
 	args = append(args, internStr(protoRel).any())
 
+	var extraEnv []EnvVar
+
 	for _, plugin := range d.javaProtoArgs {
+		if plugin.kotlinGrpc {
+			kgrpc := b.resourcePath(globals, "KOTLIN_GRPC", "/grpc_kotlin")
+
+			extraEnv = append(extraEnv,
+				EnvVar{Name: envJavaHome, Value: b.resourcePath(globals, javaJDKResource(d.jdkReal), "")},
+				EnvVar{Name: envKotlinGrpcJar, Value: internV(kgrpc.string(), "/protoc-gen-grpc-kotlin-", javaKotlinGrpcVersion, ".jar").any()},
+			)
+
+			args = append(args, internV("--plugin=protoc-gen-kotlin_grpc=", kgrpc.string(), "/grpc_kotlin").any(), strKotlinGrpcOutBJavaOut.any())
+
+			continue
+		}
+
 		ref, bin := ctx.tool(internArg(plugin.tool))
 
 		b.deps = append(b.deps, ref)
 		b.input(bin)
 		args = append(args, internV("--plugin=protoc-gen-", plugin.name, "=", bin.string()).any(), internV("--", plugin.name, "_out=$(B)/java_out").any())
-	}
-
-	var extraEnv []EnvVar
-
-	if d.kotlinGrpc {
-		kgrpc := b.resourcePath(globals, "KOTLIN_GRPC", "/grpc_kotlin")
-
-		extraEnv = append(extraEnv,
-			EnvVar{Name: envJavaHome, Value: b.resourcePath(globals, javaJDKResource(d.jdkReal), "")},
-			EnvVar{Name: envKotlinGrpcJar, Value: internV(kgrpc.string(), "/protoc-gen-grpc-kotlin-", javaKotlinGrpcVersion, ".jar").any()},
-		)
-
-		args = append(args, internV("--plugin=protoc-gen-kotlin_grpc=", kgrpc.string(), "/grpc_kotlin").any(), strKotlinGrpcOutBJavaOut.any())
 	}
 
 	if protoVFS.isBuild() {

@@ -284,7 +284,6 @@ type JavaData struct {
 	srcDirs           []VFS
 	srcs              []string
 	kotlinProto       bool
-	kotlinGrpc        bool
 	javaProtobufPeers []string
 	javaProtoArgs     []JavaProtoPlugin
 	protocFlags       []string
@@ -336,8 +335,9 @@ type javaTestData struct {
 }
 
 type JavaProtoPlugin struct {
-	name string
-	tool string
+	name       string
+	tool       string
+	kotlinGrpc bool
 }
 
 type JavaModule struct {

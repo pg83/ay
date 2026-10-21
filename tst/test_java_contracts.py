@@ -155,6 +155,18 @@ WITH_JDK()
                      "--custom_out=$(B)/java_out", "--fatal_warnings",
                      "--experimental_allow_proto3_optional", "-I=./maps/doc/proto"):
             self.assertIn(flag, args)
+        self.assertLess(args.index("--kotlin_grpc_out=$(B)/java_out"),
+                        args.index("--custom_out=$(B)/java_out"))
+
+        reversed_files = dict(files)
+        reversed_files["proto/api/ya.make"] = (files["proto/api/ya.make"]
+            .replace("WITH_KOTLIN_GRPC()\n", "")
+            .replace("JAVA_PROTO_PLUGIN(custom tools/plugin DEPS custom/runtime)\n",
+                     "JAVA_PROTO_PLUGIN(custom tools/plugin DEPS custom/runtime)\nWITH_KOTLIN_GRPC()\n"))
+        reversed_proto = lib.node_by_output(lib.make(reversed_files, "app"), "$(B)/proto/api/api.jsrc")
+        reversed_args = reversed_proto["cmds"][0]["cmd_args"]
+        self.assertLess(reversed_args.index("--custom_out=$(B)/java_out"),
+                        reversed_args.index("--kotlin_grpc_out=$(B)/java_out"))
         self.assertIn("-I=$(S)/imports", args)
         self.assertIn("$(B)/tools/plugin/plugin", proto["inputs"])
         self.assertEqual(proto["cmds"][0]["env"]["JAVA_HOME"], "$(B)/resources/JDK17")
