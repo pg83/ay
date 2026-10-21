@@ -7,6 +7,7 @@ import (
 
 type GeneratedFileInfo struct {
 	InputsOnly       bool
+	ResourceObjcopy  bool
 	ModuleType       TOK
 	ModuleInputs     *ModuleInputInfo
 	Nots             *NotsPrepared

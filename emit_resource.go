@@ -168,6 +168,10 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 }
 
 func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs InputChunks, deps []NodeRef) NodeRef {
+	if info := e.codegen.lookup(outputObj); info != nil && info.ResourceObjcopy && info.OwnerModule == e.instance.Path && info.OwnerSerial != e.frame.serial {
+		return info.ProducerRef
+	}
+
 	na := oc.na
 	env := envVarsVCS
 
@@ -184,7 +188,7 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 
 	ref := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{OutputPath: outputObj, ProducerRef: ref})
+	e.register(GeneratedFileInfo{OutputPath: outputObj, ProducerRef: ref, ResourceObjcopy: true})
 
 	return ref
 }

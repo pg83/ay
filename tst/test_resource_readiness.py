@@ -53,6 +53,30 @@ def resource_order(graph, py3):
 class ResourceReadinessTest(unittest.TestCase):
     # Upstream ModuleBuilder::RecursiveAddInputs requeues unresolved actions.
     # Availability is shared by distinct PY2/PY3 module contexts, not their AST.
+    def test_same_context_resource_output_collision_is_rejected(self):
+        files, _ = fixture("PY3", local=True)
+        files["mod/ya.make"] = files["mod/ya.make"].replace(
+            "RESOURCE(data.dat payload)", "RESOURCE(- shared=value)\nRESOURCE(- shared=value)",
+        )
+        result = lib.make_process(files, "mod", "--sandboxing")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("duplicate producer", result.stderr)
+
+    def test_promoted_context_uses_one_producer_per_resource_output(self):
+        files, _ = fixture()
+        files["mod/ya.make"] += "RECURSE_FOR_TESTS(test)\n"
+        files["mod/test/ya.make"] = "PY23_TEST()\n" + lib.BARE_MODULE + "NO_PYTHON_INCLUDES()\nTEST_SRCS(test_api.py)\nPEERDIR(mod)\nEND()\n"
+        files["mod/test/test_api.py"] = ""
+        files["library/python/pytest/ya.make"] = "LIBRARY()\n" + lib.BARE_MODULE + "END()\n"
+        graph = lib.make(files, "mod", "-t", "--sandboxing", opensource=False)
+        nodes = {node["uid"]: node for node in graph["graph"]}
+        binary = lib.node_by_output(graph, "$(B)/mod/test/mod-test")
+        archive = next(nodes[uid] for uid in binary["deps"]
+                       if "$(B)/mod/libpy3mod.global.a" in nodes[uid]["outputs"])
+        outputs = [out for uid in archive["deps"] for out in nodes[uid]["outputs"]]
+        self.assertEqual(len(outputs), 3)
+        self.assertEqual(len(set(outputs)), 3)
+
     def test_first_and_later_contexts_use_actual_output_availability(self):
         files, targets = fixture()
         graph = lib.make(files, *targets, "--sandboxing")
