@@ -136,6 +136,31 @@ class CythonIncludeTest(unittest.TestCase):
         self.assertIn("$(S)/own/root.pxd", cy["inputs"])
         self.assertIn("$(S)/shared/item.pxd", cy["inputs"])
 
+    def test_named_cython_metadata_peer_later_links_its_actual_archive(self):
+        files = {
+            "m/ya.make": library(
+                "SET(PYTHON3 yes)", "PEERDIR(mid)", "BUILDWITH_CYTHON_CPP(a.pyx)",
+            ) + "RECURSE(consumer)\n",
+            "m/a.pyx": "from shared cimport value\n",
+            "mid/ya.make": library("PEERDIR(exporter)").replace("LIBRARY()", "LIBRARY(relay)"),
+            "exporter/ya.make": library(
+                "ADDINCL(GLOBAL FOR cython exported)", "SRCS(impl.cpp)",
+            ).replace("LIBRARY()", "LIBRARY(custom)"),
+            "exporter/impl.cpp": "int value;\n",
+            "exported/shared.pxd": "",
+            "contrib/tools/cython/cython.py": "",
+        }
+        lib.tool_program(files, "m/consumer", "app")
+        files["m/consumer/ya.make"] = files["m/consumer/ya.make"].replace("SRCS(", "PEERDIR(mid)\nSRCS(")
+        graph = lib.make(files, "m", "-k")
+        cy = lib.node_by_output(graph, "$(B)/m/a.pyx.cpp")
+        archive = lib.node_by_output(graph, "$(B)/exporter/libcustom.a")
+        link = lib.node_by_output(graph, "$(B)/m/consumer/app")
+        self.assertIn("$(S)/exported/shared.pxd", cy["inputs"])
+        self.assertIn(archive["uid"], link["deps"])
+        for output in ("$(B)/exporter/libexporter.a", "$(B)/mid/libmid.a", "$(B)/mid/librelay.a"):
+            self.assertFalse(any(output in node["outputs"] for node in graph["graph"]))
+
     def test_cimport_uses_selected_roots_inside_another_cython_distribution(self):
         cython3 = "contrib/tools/cython/Cython/Includes"
         files = {

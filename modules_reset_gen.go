@@ -21,6 +21,7 @@ func (x *ModuleData) reset() {
 		cfAddIncl:            x.cfAddIncl[:0],
 		cfAddInclGlobal:      x.cfAddInclGlobal[:0],
 		cythonAddIncl:        x.cythonAddIncl[:0],
+		cythonAddInclGlobal:  x.cythonAddInclGlobal[:0],
 		clangSAPlugins:       x.clangSAPlugins[:0],
 		nasmFlags:            x.nasmFlags[:0],
 		asmAddIncl:           x.asmAddIncl[:0],
