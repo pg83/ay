@@ -8,7 +8,9 @@ var tokName = [...]STR{
 	tokRegisterYqlPythonUdf: internStr("REGISTER_YQL_PYTHON_UDF"),
 	tokUdfNoProbe:           internStr("UDF_NO_PROBE"),
 
-	tokCythonFlags:               internStr("CYTHON_FLAGS"),
+	tokCythonFlags: internStr("CYTHON_FLAGS"),
+	tokDllFor:      internStr("DLL_FOR"),
+
 	tokPackageFinal:              internStr("_PACKAGE_FINAL"),
 	tokMlaunchLibrary:            internStr("MLAUNCH_LIBRARY"),
 	tokMlaunchPipeline:           internStr("MLAUNCH_PIPELINE"),
@@ -501,6 +503,7 @@ const (
 	tokDisable
 	tokDisableDataValidation
 	tokDll
+	tokDllFor
 	tokDynamicLibrary
 	tokDynamicLibraryFrom
 	tokWithDynamicLibs
