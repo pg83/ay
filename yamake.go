@@ -298,6 +298,7 @@ type BaseCodegenStmt struct {
 }
 
 type FromSandboxStmt struct {
+	DeclSeq    int
 	ResourceId ANY
 	ArchiveExtraction
 	File bool

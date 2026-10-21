@@ -16,6 +16,8 @@ type PeerContext struct {
 }
 
 type EmitContext struct {
+	resourceDeclSeq    int
+	resourceSources    map[resourceInputKey]VFS
 	moduleIncludeRoots []VFS
 	moduleGlobals      []VFS
 	moduleGlobalInputs []VFS

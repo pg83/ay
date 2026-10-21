@@ -407,6 +407,7 @@ type BundleEntry struct {
 }
 
 type ResourceEntry struct {
+	DeclSeq      int
 	Path         string
 	Key          string
 	SrcPath      string
@@ -994,6 +995,12 @@ func applyResourceFiles(fs FS, modulePath string, args []string, line int, d *Mo
 	before := len(d.resources)
 
 	d.resources = expandResourceFiles(d, d.resources, args)
+
+	seq := d.nextDeclSeq()
+
+	for i := before; i < len(d.resources); i++ {
+		d.resources[i].DeclSeq = seq
+	}
 
 	if len(d.resources) > before {
 		d.resources[len(d.resources)-1].EndsBatch = true
@@ -1691,6 +1698,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
 			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
 			expanded.Renames = expandStmtTokens(v.Renames, env)
+			expanded.DeclSeq = d.nextDeclSeq()
 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *ResourceStmt:
@@ -1710,8 +1718,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			ensureResourcePeer(modulePath, d)
 
+			seq := d.nextDeclSeq()
+
 			for i, pair := range pairs {
 				d.resources = append(d.resources, ResourceEntry{
+					DeclSeq:      seq,
 					Path:         pair.Path,
 					Key:          pair.Key,
 					EndsBatch:    i == len(pairs)-1,

@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -150,6 +151,10 @@ type ResolvedResource struct {
 func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) ResolvedResource {
 	_, instance := e.ctx, e.instance
 	output := resourceOutputVFS(instance.Path.relString(), rawPath)
+
+	if src := e.resourceSources[resourceInputKey{rawPath, e.resourceDeclSeq}]; src != 0 {
+		return ResolvedResource{Input: src}
+	}
 
 	if info := e.codegen.use(output); info != nil {
 		return ResolvedResource{
@@ -630,6 +635,10 @@ func (e *EmitContext) emitKvOnlyResource(tag STR, kvsHash []string, kvsCmd []STR
 
 func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (refs []NodeRef, outs []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+	previousSeq := e.resourceDeclSeq
+
+	defer func() { e.resourceDeclSeq = previousSeq }()
+
 	na := ctx.na
 	batch := e.resItems[:0]
 	dontCompress := false
@@ -650,6 +659,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 	}
 
 	for _, entry := range entries {
+		e.resourceDeclSeq = entry.DeclSeq
 		dontCompress = entry.DontCompress
 
 		if entry.Path == "-" {
@@ -739,6 +749,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	_, _, d := e.ctx, e.instance, e.d
+	batchOrder := e.resourceActionOrder()
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || e.hasEnginePySrcs() || len(d.yaConfJSON) > 0
 
 	if len(e.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
@@ -766,6 +777,33 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	resourceOffset := 0
 	trailStart := -1
 
+	var pending []resourceQueueBatch
+
+	emitResources := func(entries []ResourceEntry) {
+		for len(entries) > 0 {
+			n := 1
+
+			for n < len(entries) && !entries[n-1].EndsBatch {
+				n++
+			}
+
+			batch := entries[:n]
+
+			entries = entries[n:]
+
+			if order, ok := batchOrder[batch[0].DeclSeq]; ok {
+				pending = append(pending, resourceQueueBatch{entries: batch, order: order})
+
+				continue
+			}
+
+			r, o := e.emitResourceFile(batch, moduleTag)
+
+			out.Refs = append(out.Refs, r...)
+			out.Outputs = append(out.Outputs, o...)
+		}
+	}
+
 	emitGroup := func(gi int, group PySrcGroup) {
 		before := len(out.Refs)
 
@@ -789,10 +827,7 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 		}
 
 		if !py3BinProgramSide {
-			r, o := e.emitResourceFile(e.resources[resourceOffset:group.ResourceOffset], moduleTag)
-
-			out.Refs = append(out.Refs, r...)
-			out.Outputs = append(out.Outputs, o...)
+			emitResources(e.resources[resourceOffset:group.ResourceOffset])
 
 			resourceOffset = group.ResourceOffset
 		}
@@ -801,16 +836,22 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	}
 
 	if !py3BinProgramSide {
-		r, o := e.emitResourceFile(e.resources[resourceOffset:], moduleTag)
-
-		out.Refs = append(out.Refs, r...)
-		out.Outputs = append(out.Outputs, o...)
+		emitResources(e.resources[resourceOffset:])
 	}
 
 	for gi, group := range d.pySrcGroups {
 		if group.Prio != stmtPrioDefault {
 			emitGroup(gi, group)
 		}
+	}
+
+	slices.SortFunc(pending, func(a, b resourceQueueBatch) int { return a.order - b.order })
+
+	for _, batch := range pending {
+		r, o := e.emitResourceFile(batch.entries, moduleTag)
+
+		out.Refs = append(out.Refs, r...)
+		out.Outputs = append(out.Outputs, o...)
 	}
 
 	if trailStart < 0 {

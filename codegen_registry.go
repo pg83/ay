@@ -28,10 +28,11 @@ type GeneratedFileInfo struct {
 }
 
 type SourceModuleInfo struct {
-	Instance       ModuleInstance
-	Next           *SourceModuleInfo
-	Includes       []VFS
-	CythonIncludes []VFS
+	ResourceActions *resourceActionState
+	Instance        ModuleInstance
+	Next            *SourceModuleInfo
+	Includes        []VFS
+	CythonIncludes  []VFS
 }
 
 type ModuleInputInfo struct {
@@ -76,6 +77,7 @@ func (p *PendingEmit) fire() {
 }
 
 type CodegenRegistry struct {
+	resourceReady   map[VFS]bool
 	byRel           DenseMap[STR, *GeneratedFileInfo]
 	bySplit         *IntMap[splitLookup]
 	sourceModules   DenseMap[STR, *SourceModuleInfo]
