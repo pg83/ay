@@ -472,6 +472,35 @@ class DumpNormalizeTest(DumpToolTest):
                 )),
             )
 
+    def test_enum_keeps_the_direct_input_producers_primary_output(self):
+        tool = "$(B)/tools/enum_parser/enum_parser/enum_parser"
+        header = "$(B)/app/generated.h"
+        for primary in ("$(B)/app/base_gen.cpp", "$(B)/app/opaque.primary"):
+            for induced in (False, True):
+                with self.subTest(primary=primary, induced=induced):
+                    raw_inputs = [tool, header, primary]
+                    if induced:
+                        raw_inputs += ["$(S)/inc/ind.h", "$(B)/app/unrelated.primary", "$(B)/app/unrelated.h"]
+                    nodes = [
+                        raw_node(
+                            "enum", "EN", ["$(B)/app/generated.h_serialized.cpp"],
+                            deps=["producer", "tool", "ordering", *(["unrelated"] if induced else [])],
+                            inputs=raw_inputs,
+                            args=[tool, header, "--include-path", "app/generated.h", "--output", "$(B)/app/generated.h_serialized.cpp"],
+                        ),
+                        raw_node("producer", "PR", [primary, header]),
+                        raw_node("tool", "LD", [tool]),
+                        raw_node("ordering", "PR", ["$(B)/app/order.stamp"]),
+                        raw_node("unrelated", "PR", ["$(B)/app/unrelated.primary", "$(B)/app/unrelated.h"]),
+                    ]
+                    expected_node = dict(nodes[0], inputs=[tool, header, primary], deps=["producer", "tool", "ordering"])
+                    expected = sorted(map(compact, self.normalize([expected_node, *nodes[1:]], "app", result=["enum"])))
+                    for flags in ((), ("--streaming",)):
+                        normalized = self.normalize(nodes, "app", "--ref-graph", *flags, result=["enum"])
+                        self.assertEqual(sorted(map(compact, normalized)), expected)
+                        generated = next(node for node in normalized if node["kv"]["p"] == "EN")
+                        self.assertEqual(generated["inputs"], sorted([tool, header, primary]))
+
     def test_normalize_preserves_declared_action_inputs(self):
         root = raw_node(
             "root", "LD", ["$(B)/app/app"],
