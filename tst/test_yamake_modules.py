@@ -151,7 +151,7 @@ class YaMakeModulesTest(unittest.TestCase):
         })
         self.assertEqual(
             [path for path in lib.node_by_output(graph, "$(B)/a/a")["inputs"] if path.endswith(".a")],
-            ["$(B)/u/libu.a", "$(B)/library/cpp/testing/unittest_main/libcpp-testing-unittest_main.a"],
+            ["$(B)/library/cpp/testing/unittest_main/libcpp-testing-unittest_main.a", "$(B)/u/libu.a"],
         )
 
     def test_cpp_test_modules_use_upstream_peers_and_names(self):

@@ -136,8 +136,8 @@ class PeerPropagationTest(unittest.TestCase):
     def test_default_peers_are_deduplicated_against_unittest_peer(self):
         cases = {
             "build/cow/on": [LIBCXX, COW, JEMALLOC, CPUID],
-            "library/cpp/malloc/jemalloc": [LIBCXX, JEMALLOC, COW, CPUID],
-            "library/cpp/cpuid_check": [LIBCXX, CPUID, COW, JEMALLOC],
+            "library/cpp/malloc/jemalloc": [LIBCXX, COW, JEMALLOC, CPUID],
+            "library/cpp/cpuid_check": [LIBCXX, COW, JEMALLOC, CPUID],
             "contrib/libs/cxxsupp/libcxx": [LIBCXX, COW, JEMALLOC, CPUID],
         }
         for peer, expected in cases.items():

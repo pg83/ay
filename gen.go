@@ -1559,13 +1559,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			peerKinds = append(peerKinds, peerKindLangDefault)
 		}
 
-		if unitTestPeer != "" {
-			if !peerSeen(unitTestPeer) {
-				allPeers = append(allPeers, unitTestPeer)
-				peerKinds = append(peerKinds, peerKindUnitTestPeer)
-			}
-		}
-
 		for _, p := range preUserProgDefaults {
 			if peerSeen(p) {
 				continue
@@ -1598,8 +1591,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 				return
 			}
 
-			allPeers = append(allPeers, p.string())
-			peerKinds = append(peerKinds, peerKindUserPeer)
+			peer := p.string()
+			kind := peerKindUserPeer
+
+			if peer == unitTestPeer {
+				kind = peerKindUnitTestPeer
+			}
+
+			allPeers = append(allPeers, peer)
+			peerKinds = append(peerKinds, kind)
 		}
 
 		for _, p := range d.peerdirs {
