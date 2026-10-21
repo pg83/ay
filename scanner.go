@@ -103,14 +103,13 @@ type ScannedChildren struct {
 }
 
 type ScanCtx struct {
-	recordDiagnostics bool
-	diagnostics       []IncludeDiagnostic
-	scanner           *IncludeScanner
-	cfg               *ScanConfig
-	ccCfg             *ScanConfig
-	parser            IncludeDirectiveParser
-	tjc               *TarjanCtx
-	tsImports         bool
+	diagnostics []IncludeDiagnostic
+	scanner     *IncludeScanner
+	cfg         *ScanConfig
+	ccCfg       *ScanConfig
+	parser      IncludeDirectiveParser
+	tjc         *TarjanCtx
+	tsImports   bool
 }
 
 func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
@@ -299,7 +298,6 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 
 func (s *IncludeScanner) putScanCtx(sc *ScanCtx) {
 	sc.diagnostics = nil
-	sc.recordDiagnostics = false
 	tarjans.put(sc.tjc)
 	sc.tjc = nil
 	s.scanCtxPool.Put(sc)
@@ -467,15 +465,12 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 
 	scratch := vfsScratches.get()
 
-	sc.recordDiagnostics = true
 	sc.diagnostics = nil
-
 	scratch = sc.appendResolvedChildren(scratch, abs)
 
 	diagnostics := sc.diagnostics
 
 	sc.diagnostics = nil
-	sc.recordDiagnostics = false
 
 	k := len(scratch)
 	block := s.childArena.alloc(k)
@@ -818,11 +813,7 @@ func (sc *ScanCtx) warnUnresolved(includerAbs VFS, d IncludeDirective, sysinclCl
 			includerAbs.string(), open, d.target.string(), close),
 	}
 
-	if sc.recordDiagnostics {
-		sc.diagnostics = append(sc.diagnostics, IncludeDiagnostic{Warning: warning, Directive: d})
-	} else {
-		sc.scanner.onWarn(warning)
-	}
+	sc.diagnostics = append(sc.diagnostics, IncludeDiagnostic{Warning: warning, Directive: d})
 }
 
 type CfgResolveIndex struct {

@@ -88,15 +88,19 @@ func includeScannerBasePaths() []VFS {
 }
 
 func (e *EmitContext) generatedModuleSourceVFS(srcRel string) *VFS {
-	_, instance := e.ctx, e.instance
 	reg := e.codegen
+	module := e.instance.Path.relString()
 
 	var id STR
 
 	if srcRel != "" && pathIsClean(srcRel) {
-		id = internedPrefixedJoined("", instance.Path.relString(), srcRel)
+		id = internedPrefixedJoined("", module, srcRel)
+
+		if module == "." && (id == 0 || reg.lookup(id.build()) == nil) {
+			id = internedPrefixedJoined("", "", srcRel)
+		}
 	} else {
-		id = internedPrefixed("", filepath.ToSlash(filepath.Clean(instance.Path.relString()+"/"+srcRel)))
+		id = internedPrefixed("", filepath.ToSlash(filepath.Clean(module+"/"+srcRel)))
 	}
 
 	if id == 0 {

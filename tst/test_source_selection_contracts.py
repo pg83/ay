@@ -36,7 +36,7 @@ class SourceSelectionContractsTest(unittest.TestCase):
         self.assertNotIn('$(B)/proto/a.pb.h', link['inputs'])
 
     def test_explicit_fake_module_flags_preserve_linker_plugin_export(self):
-        for setting in ('FAKE_MODULE yes', 'NEED_ADD_FAKE_SRC no'):
+        for setting in ('_FAKE_MODULE yes', 'NEED_ADD_FAKE_SRC no'):
             with self.subTest(setting=setting):
                 files = {'producer/ya.make': library(f'SRCS(local.cpp)\nSET({setting})\nLD_PLUGIN(plugin.py)'),
                          'producer/local.cpp': '', 'producer/plugin.py': 'def plugin(): pass\n',
