@@ -304,7 +304,6 @@ func (e *EmitContext) splitCodegenSrcs(stmt *RunPythonStmt) []VFS {
 }
 
 func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, splitSrcs []VFS, splitHasCCShard bool) []IncludeDirective {
-	_, instance, _ := e.ctx, e.instance, e.d
 	carries := generatedOutputCarriesIncludes(outFile) || isCodegenProducingSrc(outFile)
 
 	if !carries && len(stmt.OutputIncludes) == 0 {
@@ -312,24 +311,8 @@ func (e *EmitContext) pyEmitsIncludes(stmt *RunPythonStmt, outFile string, split
 	}
 
 	if splitHasCCShard {
-		var firstShardFile string
-		var firstShardVFS VFS
-
-		for _, f := range stmt.OUTNoAutoFiles {
-			if isCCSourceExt(f.string()) {
-				firstShardFile = f.string()
-				firstShardVFS = copyFileOutputVFS(instance.Path.relString(), f.string())
-
-				break
-			}
-		}
-
 		if isCCSourceExt(outFile) || isHeaderSource(outFile) {
-			includes := e.ctx.na.dirs.alloc(1 + len(splitSrcs) + len(stmt.OutputIncludes))[:0]
-
-			if outFile != firstShardFile {
-				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(firstShardVFS.rel().any())})
-			}
+			includes := e.ctx.na.dirs.alloc(len(splitSrcs) + len(stmt.OutputIncludes))[:0]
 
 			for _, src := range splitSrcs {
 				includes = append(includes, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel().any())})

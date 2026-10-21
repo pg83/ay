@@ -11,6 +11,31 @@ def cmd(node):
 
 
 class RunPython3Test(unittest.TestCase):
+    def test_generated_header_consumers_do_not_take_an_arbitrary_cpp_sibling(self):
+        for outputs in ("main.h other.cpp public.h", "other.cpp main.h public.h"):
+            with self.subTest(outputs=outputs):
+                files = {
+                    "lib/ya.make": LIBRARY_HEAD + (
+                        f"RUN_PYTHON3(gen.py --header main.h OUT_NOAUTO {outputs} "
+                        "OUTPUT_INCLUDES lib/public.h lib/dep.h)\n"
+                        "SRCS(other.cpp use.cpp)\nEND()\n"
+                    ),
+                    "lib/gen.py": "",
+                    "lib/use.cpp": '#include "lib/public.h"\n',
+                    "lib/dep.h": "",
+                }
+                graph = lib.make(files, "lib")
+                generated = lib.node_by_output(graph, "$(B)/lib/public.h")
+                self.assertEqual(generated["outputs"][0], "$(B)/lib/main.h")
+                use = lib.node_by_output(graph, "$(B)/lib/use.cpp.o")
+                self.assertEqual(set(use["inputs"]), {
+                    "$(S)/lib/use.cpp", "$(S)/lib/dep.h",
+                    "$(B)/lib/main.h", "$(B)/lib/public.h",
+                })
+                self.assertIn(generated["uid"], use["deps"])
+                other = lib.node_by_output(graph, "$(B)/lib/other.cpp.o")
+                self.assertIn("$(B)/lib/main.h", other["inputs"])
+
     def test_additional_cpp_output_keeps_the_discovered_main_header(self):
         for out_order in ("generated.h generated.cpp", "generated.cpp generated.h"):
             with self.subTest(out_order=out_order):
