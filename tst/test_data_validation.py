@@ -11,7 +11,7 @@ class DataValidationTest(unittest.TestCase):
     def test_data_and_build_resources_have_separate_validation_batches(self):
         files = {
             "mod/ya.make": (
-                f"LIBRARY()\n{BARE}SET(VALIDATE_DATA yes)\n"
+                f"PROGRAM()\n{BARE}SET(VALIDATE_DATA yes)\n"
                 "DATA(sbr://12=label sbr:/34suffix sbr://12 arcadia/mod/local)\n"
                 "FROM_SANDBOX(FILE 56 RENAME RESOURCE OUT_NOAUTO unused.bin)\n"
                 "FROM_SANDBOX(FILE 78 RENAME RESOURCE OUT_NOAUTO other.bin)\n"
@@ -35,7 +35,7 @@ class DataValidationTest(unittest.TestCase):
     def test_validation_switch_uses_the_final_module_value(self):
         files = {
             "mod/ya.make": (
-                f"LIBRARY()\n{BARE}SET(VALIDATE_DATA yes)\n"
+                f"PROGRAM()\n{BARE}SET(VALIDATE_DATA yes)\n"
                 "DATA(sbr://12)\n"
                 "DISABLE_DATA_VALIDATION()\n"
                 "DATA(sbr://34)\nFROM_SANDBOX(FILE 56 OUT_NOAUTO unused.bin)\n"

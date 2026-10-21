@@ -155,6 +155,7 @@ var (
 	argMapsLibsSprotoSprotoc                                = internArg("maps/libs/sproto/sprotoc")
 	argMcx16                                                = internArg("-mcx16")
 	argMeta                                                 = internArg("--meta")
+	argMetrikaCoreToolsSsqls                                = internArg("metrika/core/tools/ssqls")
 	argModule                                               = internArg("-module")
 	argModulo                                               = internArg("--modulo")
 	argModuloIndex                                          = internArg("--modulo-index")

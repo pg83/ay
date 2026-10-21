@@ -37,7 +37,7 @@ func (e *EmitContext) emitPchFile(stmt PchFileStmt) {
 		na.strs.commit(len(resources))
 
 		args := na.chunkList(na.anyList(tool.any(), llvmRoot, header.any(), out.any(), bldRootDirVFS.any(), srcRootDirVFS.any()),
-			e.instance.Platform.CCHead, blocks.includes, blocks.flags, blocks.cxxTail, builtinMacroDateTime, macroPrefixMapFlags)
+			e.instance.Platform.CCHead, blocks.includes, blocks.flags[len(d.cc.ClangWarnings):], blocks.cxxTail, builtinMacroDateTime, macroPrefixMapFlags)
 
 		inputs := na.inputList(na.vfsList(tool), na.dedupClosureChunks(closure)...)
 

@@ -1022,6 +1022,9 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	})
 
 	inputs := na.inputList(ownSourceInputs, ownBuildInputs, goToolScriptInputsChunk, embedInputs, peerArchivePaths, peerGlobalPaths, extraSources, extraBuilds)
+
+	inputs = e.appendModuleInputs(inputs, false)
+
 	depBlock := na.noderefs.alloc(1 + len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + merged)
 	ndep := 0
 
@@ -1217,6 +1220,8 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		extraTailSources,
 	)
 
+	inputs = e.appendModuleInputs(inputs, true)
+
 	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + 2)
 	k := copy(deps, objRefs)
 
@@ -1239,6 +1244,21 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	na.noderefs.commit(k)
 
 	env := goCmdEnv(ctx, instance.Platform, d.tc)
+	pluginArgs := goExeCmdVcs
+
+	if len(e.moduleGlobals) > 0 {
+		pluginArgs = na.anys.alloc(len(e.moduleGlobals) + 2)[:0]
+		pluginArgs = append(pluginArgs, goExeCmdVcs[0])
+
+		for _, input := range e.moduleGlobals {
+			if strings.HasSuffix(input.relString(), ".pyplugin") {
+				pluginArgs = append(pluginArgs, input.any())
+			}
+		}
+
+		pluginArgs = append(pluginArgs, goExeCmdVcs[1])
+		na.anys.commit(len(pluginArgs))
+	}
 
 	goCmd := Cmd{CmdArgs: na.chunkList(
 		head,
@@ -1251,7 +1271,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		goExeCmdLinkFlags,
 		cgoSrcArgs,
 		embedArgs,
-		goExeCmdVcs,
+		pluginArgs,
 		na.anyList(vcsGoPath.any()),
 		goExeCmdExtld,
 		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm, soname, peerGlobalPaths, peerLDFlagsGlobal, peerObjAddLibsGlobal),

@@ -182,6 +182,17 @@ def junit_tree(test_body, **extra):
 
 
 class JavaJunitSuiteTest(unittest.TestCase):
+    def test_external_library_sandbox_resource_is_validated(self):
+        files = junit_tree("JUNIT5()\nEND()\n", **{
+            "ext/ya.make": "EXTERNAL_JAVA_LIBRARY()\nFROM_SANDBOX(99 OUT a.txt)\nEND()\n",
+        })
+        graph = lib.make(files, "ext", "--target-platform-tests", opensource=False)
+        node = test_nodes(graph)["ext/validate_resource"]
+        self.assertEqual(node["inputs"], ["$(S)/ext", "99"])
+        args = run_args(node)
+        self.assertEqual(args[args.index("--check-name") + 1], "validate_resource")
+        self.assertEqual(args[-4:], ["99", "--batch", "--batch-name", "ext"])
+
     def test_data_checks_extract_resource_id_prefixes(self):
         files = junit_tree("JUNIT5()\nSET(VALIDATE_DATA yes)\nSIZE(LARGE)\nDATA(sbr:12=label sbr:/34suffix sbr://56/path sbr:///78)\nEND()\n")
         graph = lib.make(files, "proj/sub/ut", "--target-platform-tests", "--test-size", "small")

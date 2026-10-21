@@ -8,6 +8,9 @@ import (
 type GeneratedFileInfo struct {
 	InputsOnly       bool
 	ModuleType       TOK
+	ModuleIncludes   []VFS
+	ModuleGlobals    []VFS
+	ModulePassPeers  bool
 	Nots             *NotsPrepared
 	OutputPath       VFS
 	SourcePath       VFS
@@ -208,6 +211,26 @@ func (r *CodegenRegistry) moduleType(path VFS) TOK {
 	}
 
 	return info.ModuleType
+}
+
+func (r *CodegenRegistry) moduleInputs(path VFS) *GeneratedFileInfo {
+	info, _ := r.byRel.get(path.rel())
+
+	return info
+}
+
+func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, globals []VFS, passPeers bool) {
+	info, ok := r.byRel.get(output.rel())
+
+	if !ok {
+		info = r.na.geninfos.one()
+		*info = GeneratedFileInfo{OutputPath: output, InputsOnly: true, ModuleType: moduleType}
+		r.byRel.put(output.rel(), info)
+	}
+
+	info.ModuleIncludes = includes
+	info.ModuleGlobals = globals
+	info.ModulePassPeers = passPeers
 }
 
 func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {

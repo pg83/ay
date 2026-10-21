@@ -1,6 +1,9 @@
 package main
 
-import "encoding/base64"
+import (
+	"encoding/base64"
+	"path"
+)
 
 var (
 	ldVcsInfoPath      = ldVcsInfoVFS.string()
@@ -97,6 +100,20 @@ func (e *EmitContext) emitLD(
 	dyn *DynLibLink,
 ) NodeRef {
 	na := emit.nodeArenas()
+	globalInputs := e.moduleGlobals
+
+	for _, input := range globalInputs {
+		switch path.Ext(input.relString()) {
+		case ".pyplugin":
+			pluginPaths = append(pluginPaths, input)
+		case ".a":
+			wholeArchivePaths = append(wholeArchivePaths, input)
+		case ".ld":
+			linkerScripts = append(linkerScripts, input)
+		case ".supp":
+			globalPaths = append(globalPaths, input)
+		}
+	}
 
 	assert(len(objcopyRefs) == len(objcopyPaths), "emitLD: objcopyRefs/objcopyPaths length mismatch")
 
@@ -235,6 +252,7 @@ func (e *EmitContext) emitLD(
 	}
 
 	e.appendSdcMeta(&n, binaryName)
+	n.Inputs = e.appendModuleInputs(n.Inputs, true)
 
 	return e.emitNode(n)
 }

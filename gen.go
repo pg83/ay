@@ -1095,6 +1095,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	defer func() {
+		if result != nil {
+			e.publishModuleIncludes(result)
+		}
+
 		if result == nil || !ctx.testMode || !d.test.validateData {
 			return
 		}
@@ -2197,7 +2201,30 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &d.cc)
 
+	var modulePeers []VFS
+
+	for _, peer := range resolved {
+		if output := moduleOutputPath(peer.result); output != 0 {
+			info := e.codegen.moduleInputs(output)
+
+			if info == nil || len(info.ModuleIncludes) == 0 && len(info.ModuleGlobals) == 0 {
+				continue
+			}
+
+			if modulePeers == nil {
+				modulePeers = ctx.na.vfs.alloc(len(resolved))[:0]
+			}
+
+			modulePeers = append(modulePeers, output)
+		}
+	}
+
+	if modulePeers != nil {
+		ctx.na.vfs.commit(len(modulePeers))
+	}
+
 	frame.peerCtx = PeerContext{
+		Modules:           modulePeers,
 		GlobalSources:     globalSources,
 		SelfAddInclGlobal: selfPeerAddInclGlobal,
 		PeerAddInclGlobal: fullPeerAddInclGlobal,
@@ -2218,6 +2245,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	d.scanCtx.rosInclude = rosInclude
 	e.emitMlaunch(resolved, peerArchivePaths, effectiveMlaunchDeps)
 	e.emit()
+	e.moduleGlobals = e.collectPeerModuleGlobals()
 
 	if instance.Demand == demandNone {
 		result := newResult()
