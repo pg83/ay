@@ -36,6 +36,50 @@ def objcopy_inputs(graph):
 
 
 class ResourceRawTest(unittest.TestCase):
+    def test_raw_resource_keeps_main_output_without_native_closure(self):
+        files = py3_library(
+            "RUN_PROGRAM(tools/gen IN input.cpp OUT_NOAUTO main.cpp data.txt)\n"
+            "RESOURCE(DONT_COMPRESS ${ARCADIA_BUILD_ROOT}/lib/data.txt key)\n"
+        )
+        files["lib/input.cpp"] = '#include "private.h"\n'
+        files["lib/private.h"] = ""
+        graph = lib.make(files, "lib")
+        [packed] = [
+            node for node in graph["graph"]
+            if node["outputs"][0].endswith("_raw.auxcpp")
+        ]
+        self.assertEqual(packed["inputs"], [
+            "$(B)/lib/data.txt",
+            "$(B)/lib/main.cpp",
+            "$(B)/tools/rescompiler/rescompiler",
+        ])
+        producer = lib.node_by_output(graph, "$(B)/lib/main.cpp")
+        self.assertIn(producer["uid"], packed["deps"])
+        self.assertNotIn("$(B)/lib/main.cpp", packed["cmds"][0]["cmd_args"])
+
+    def test_raw_metadata_chunk_keeps_its_explicit_text_input(self):
+        namespace = "n" * (1 << 14)
+        files = py3_library(
+            "RUN_PROGRAM(tools/gen OUT_NOAUTO gen.py)\n"
+            f"PY_NAMESPACE({namespace})\n"
+            "PY_SRCS(${BINDIR}/gen.py)\n"
+        )
+        graph = lib.make(files, "lib")
+        metadata = [
+            node for node in graph["graph"]
+            if node["outputs"][0].endswith("_raw.auxcpp")
+            and len(node["cmds"][0]["cmd_args"]) == 4
+            and node["cmds"][0]["cmd_args"][2] == "-"
+        ]
+        self.assertTrue(metadata)
+        for node in metadata:
+            args = node["cmds"][0]["cmd_args"]
+            path = "$(B)/" + args[3].split("=", 1)[1]
+            self.assertIn(path, node["inputs"])
+            producer = lib.node_by_output(graph, path)
+            self.assertIn(producer["uid"], node["deps"])
+            self.assertNotIn(path, args)
+
     def test_generated_bytecode_is_packed_through_rescompiler(self):
         graph = lib.make(py3_library(
             "RUN_PROGRAM(tools/gen IN in.txt OUT gen.py)\n"
