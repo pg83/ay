@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -27,6 +28,13 @@ type NormalizeTarget struct {
 type NormalizeRoot struct {
 	target int
 	kind   byte
+}
+
+type NormalizeEnumFilter struct {
+	uid     string
+	inputs  []string
+	removed []string
+	command string
 }
 
 func cmdDumpNormalize(_ GlobalFlags, args []string) int {
@@ -83,6 +91,8 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	targetOut0 := map[string]string{}
 	arOut0 := map[string]string{}
 
+	var enumFilters []NormalizeEnumFilter
+
 	type p1Result struct {
 		uid        string
 		deps       []string
@@ -92,6 +102,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		targetOut0 string
 		arOut0     string
 		outputs    []string
+		enumFilter *NormalizeEnumFilter
 	}
 
 	result := fanoutNodes(src, workers,
@@ -103,9 +114,39 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			r := p1Result{
 				uid:     uid,
 				deps:    idStrs(node.Deps),
-				content: sha256.Sum256(marshalCompact(canonContent(node, refGraph))),
 				isFetch: p == "FT",
 			}
+
+			var canon map[string]any
+
+			if refGraph && p == "EN" {
+				canon = canonContent(node, false)
+
+				rawInputs := canon["inputs"].([]string)
+				inputs := filterEnumParserInputs(slices.Clone(rawInputs), node)
+
+				canon["inputs"] = inputs
+				var removed []string
+
+				for _, in := range rawInputs {
+					if !slices.Contains(inputs, in) {
+						removed = append(removed, in)
+					}
+				}
+
+				if len(removed) > 0 {
+					r.enumFilter = &NormalizeEnumFilter{
+						uid:     uid,
+						inputs:  slices.Clone(inputs),
+						removed: removed,
+						command: nodeCmdText(node),
+					}
+				}
+			} else {
+				canon = canonContent(node, refGraph)
+			}
+
+			r.content = sha256.Sum256(marshalCompact(canon))
 
 			outs := node.Outputs
 			out0 := ""
@@ -156,6 +197,10 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				outputsByUID[r.uid] = r.outputs
 			}
 
+			if r.enumFilter != nil {
+				enumFilters = append(enumFilters, *r.enumFilter)
+			}
+
 			if r.isFetch {
 				fetch[r.uid] = true
 			}
@@ -179,39 +224,31 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 			}
 		})
 
-	if refGraph {
-		type stripResult struct {
-			uid  string
-			deps []string
+	for _, filter := range enumFilters {
+		inputs := make(map[string]struct{}, len(filter.inputs))
+		removed := make(map[string]struct{}, len(filter.removed))
+
+		for _, in := range filter.inputs {
+			inputs[in] = struct{}{}
 		}
 
-		fanoutNodes(src, workers,
-			func(node *RawNode) stripResult {
-				uid := string(node.UID)
-				inputSet := make(map[string]struct{})
+		for _, in := range filter.removed {
+			removed[in] = struct{}{}
+		}
 
-				for _, in := range canonInputs(node, refGraph) {
-					inputSet[in] = struct{}{}
-				}
+		raw := deps[filter.uid]
+		kept := raw[:0]
 
-				cmdText := nodeCmdText(node)
-				raw := idStrs(node.Deps)
-				kept := make([]string, 0, len(raw))
+		for _, d := range raw {
+			outs := outputsByUID[d]
 
-				for _, d := range raw {
-					outs := outputsByUID[d]
+			if fetch[d] || !depOutputInInputs(outs, removed) ||
+				depOutputInInputs(outs, inputs) || depOutputInCmd(outs, filter.command) {
+				kept = append(kept, d)
+			}
+		}
 
-					if fetch[d] || len(outs) == 0 ||
-						depOutputInInputs(outs, inputSet) || depOutputInCmd(outs, cmdText) {
-						kept = append(kept, d)
-					}
-				}
-
-				return stripResult{uid: uid, deps: kept}
-			},
-			func(r stripResult) {
-				deps[r.uid] = r.deps
-			})
+		deps[filter.uid] = kept
 	}
 
 	roots := []string{}

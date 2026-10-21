@@ -385,17 +385,17 @@ class DumpNormalizeTest(DumpToolTest):
             self.assertEqual(result.stderr, warning)
             self.assertEqual([json.loads(line)["outputs"][0] for line in result.stdout.splitlines()], outputs)
 
-    def test_normalize_ref_graph_strips_unused_deps(self):
+    def test_normalize_ref_graph_preserves_ordering_deps(self):
         nodes = [
             raw_node(
                 "root", "LD", ["$(B)/app/app"],
-                deps=["in_inputs", "in_cmd", "unused", "no_outputs", "fetch"],
+                deps=["in_inputs", "in_cmd", "ordering", "no_outputs", "fetch"],
                 inputs=["$(B)/app/a.o"],
                 args=["ld", "--script=$(B)/app/script.ld"],
             ),
             raw_node("in_inputs", "CC", ["", "$(B)/app/a.o"]),
             raw_node("in_cmd", "PY", ["", "$(B)/app/script.ld"]),
-            raw_node("unused", "CC", ["$(B)/app/unused.o"]),
+            raw_node("ordering", "CC", ["$(B)/app/ordering.o"]),
             raw_node("no_outputs", "CC", []),
             raw_node("fetch", "FT", ["$(B)/fetched"]),
         ]
@@ -409,8 +409,68 @@ class DumpNormalizeTest(DumpToolTest):
             if node["uid"] != root["uid"]
         )
         self.assertEqual(root["deps"], kept)
-        self.assertEqual(len(normalized), 4)
-        self.assertNotIn("$(B)/app/unused.o", [o for n in normalized for o in n["outputs"]])
+        self.assertEqual(len(normalized), 5)
+        self.assertIn("$(B)/app/ordering.o", [o for n in normalized for o in n["outputs"]])
+        self.assertEqual(
+            sorted(map(compact, normalized)),
+            sorted(map(compact, self.normalize(nodes, "app"))),
+        )
+
+    def test_normalize_ref_graph_preserves_test_build_dependencies(self):
+        nodes = [
+            raw_node(
+                "suite", "TS", ["$(B)/app/test/meta.json"],
+                deps=["tool"], inputs=["$(S)/app/test"],
+                args=["test_tool", "--depends", "tools/formatter"],
+                kv={"p": "TS", "path": "app/test"},
+            ),
+            raw_node("tool", "LD", ["$(B)/tools/formatter", "$(B)/tools/formatter.license"]),
+        ]
+        expected = sorted(map(compact, self.normalize(nodes, "app")))
+        for flags in ((), ("--streaming",)):
+            normalized = self.normalize(nodes, "app", "--ref-graph", *flags)
+            self.assertEqual(sorted(map(compact, normalized)), expected)
+            self.assertEqual(len(normalized), 2)
+            by_output = {node["outputs"][0]: node for node in normalized}
+            self.assertEqual(
+                by_output["$(B)/app/test/meta.json"]["deps"],
+                [by_output["$(B)/tools/formatter"]["uid"]],
+            )
+
+    def test_normalize_enum_deps_only_follow_removed_input_outputs(self):
+        tool = "$(B)/tools/enum_parser/enum_parser/enum_parser"
+        header = "$(B)/app/types.h"
+        removed = "$(B)/app/indirect.pb.h"
+        extra_tool_header = "$(B)/tools/enum_parser/enum_parser/private.h"
+        nodes = [
+            raw_node(
+                "enum", "EN", ["$(B)/app/types.h_serialized.cpp"],
+                deps=["tool", "header", "indirect", "order", "extra"],
+                inputs=[tool, header, removed, extra_tool_header, "$(S)/app/transitive.h"],
+                args=[tool, header, "--include-path", "app/types.h", "--output", "$(B)/app/types.h_serialized.cpp"],
+            ),
+            raw_node("tool", "LD", [tool, extra_tool_header]),
+            raw_node("header", "CP", [header]),
+            raw_node("indirect", "PB", [removed, "$(B)/app/indirect.pb.cc"]),
+            raw_node("order", "PR", ["$(B)/app/ordering.stamp"]),
+            raw_node("extra", "PB", ["$(B)/app/not_a_raw_input.h"]),
+        ]
+        expected_enum = dict(nodes[0], inputs=[tool, header], deps=["tool", "header", "order", "extra"])
+        clean_nodes = [expected_enum, *nodes[1:]]
+        expected = sorted(map(compact, self.normalize(clean_nodes, "app", result=["enum"])))
+        for flags in ((), ("--streaming",)):
+            clean = self.normalize(clean_nodes, "app", "--ref-graph", *flags, result=["enum"])
+            self.assertEqual(sorted(map(compact, clean)), expected)
+            normalized = self.normalize(nodes, "app", "--ref-graph", *flags, result=["enum"])
+            self.assertEqual(sorted(map(compact, normalized)), expected)
+            by_output = {node["outputs"][0]: node for node in normalized}
+            self.assertNotIn(removed, by_output)
+            self.assertEqual(
+                by_output["$(B)/app/types.h_serialized.cpp"]["deps"],
+                sorted(by_output[path]["uid"] for path in (
+                    tool, header, "$(B)/app/ordering.stamp", "$(B)/app/not_a_raw_input.h",
+                )),
+            )
 
     def test_normalize_preserves_declared_action_inputs(self):
         root = raw_node(
