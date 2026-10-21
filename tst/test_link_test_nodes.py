@@ -134,14 +134,17 @@ class TestNodesTest(unittest.TestCase):
                 self.assertNotIn("--supports-test-parameters", args)
                 self.assertNotIn("--supports-canonization", args)
 
-    def test_unittest_for_emits_context_run_and_style_nodes(self):
-        graph = lib.make(fixture(), "lib/ut", "-t", "-r")
+    def test_unittest_for_emits_context_run_and_declared_style_nodes(self):
+        files = fixture()
+        files["lib/ut/ya.make"] = files["lib/ut/ya.make"].replace("END()", "STYLE_CPP()\nEND()")
+        files["build/platform/clang/clang-format/ya.make"] = "RESOURCES_LIBRARY()\nEND()\n"
+        graph = lib.make(files, "lib/ut", "-t", "-r")
         self.assertEqual(
             result_outputs(graph),
             [
                 "$(B)/lib/ut/lib-ut",
-                suite_outputs("unittest")[0],
                 suite_outputs("clang_format")[0],
+                suite_outputs("unittest")[0],
             ],
         )
 
@@ -211,24 +214,18 @@ class TestNodesTest(unittest.TestCase):
                 "$(S)/tools/cpp_style_checker/wrapper.py",
                 "$(S)/lib/ut",
                 "$(S)/lib/a_ut.cpp",
-                "$(S)/lib/x.c",
+                "$(S)/lib/g.cpp",
+                "$(S)/lib/h.h",
                 "$(S)/lib/sub/y.cc",
+                "$(S)/lib/v.cpp",
+                "$(S)/lib/x.c",
             ],
         )
-        style_text = " ".join(style["cmds"][0]["cmd_args"])
-        self.assertIn(
-            "--test-related-path $(S)/lib/a_ut.cpp "
-            "--test-related-path $(S)/lib/x.c "
-            "--test-related-path $(S)/lib/sub/y.cc",
-            style_text,
-        )
-        self.assertTrue(
-            style_text.endswith(
-                "$(S)/build/scripts/c_templates/svn_interface.c "
-                "$(S)/lib/a_ut.cpp $(S)/lib/x.c $(S)/lib/sub/y.cc "
-                "--ya-end-command-file"
-            )
-        )
+        command = style["cmds"][0]["cmd_args"]
+        lint_files = ["$(S)/build/scripts/c_templates/svn_interface.c", "$(S)/lib/a_ut.cpp", "$(S)/lib/g.cpp", "$(S)/lib/h.h", "$(S)/lib/sub/y.cc", "$(S)/lib/v.cpp", "$(S)/lib/x.c"]
+        self.assertEqual(command[-len(lint_files)-1:], lint_files + ["--ya-end-command-file"])
+        related_paths = [command[i + 1] for i, arg in enumerate(command) if arg == "--test-related-path"]
+        self.assertCountEqual(related_paths, lint_files + ["$(S)/build/config/tests/cpp_style/.clang-format", "$(S)/tools/cpp_style_checker/wrapper.py"])
 
     def test_cpp_suites_select_runners_and_metadata(self):
         for macro, name, runner, peers, test_ld in [

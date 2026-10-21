@@ -19,9 +19,6 @@ const (
 	testClangSymbolizerPath   = "$(CLANG)/bin/llvm-symbolizer"
 	testClangCCPath           = "$(CLANG)/bin/clang"
 	testClangCXXPath          = "$(CLANG)/bin/clang++"
-	testClangFormatResource   = "CLANG_FORMAT_RESOURCE_GLOBAL::$(CLANG_FORMAT)"
-	testSVNInterfaceRel       = "build/scripts/c_templates/svn_interface.c"
-	testClangFormatConfigRel  = "build/config/tests/cpp_style/.clang-format"
 	testClangFormatWrapperRel = "tools/cpp_style_checker/wrapper.py"
 	testAppendFileScriptRel   = "build/scripts/append_file.py"
 )
@@ -71,32 +68,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 		return testInnerCommand(s, meta, binary.string(), work, chunk, opts)
 	}
 
-	suites := []*TestSuite{s}
-
-	if !python && !slices.ContainsFunc(e.d.styleChecks, func(check StyleCheck) bool { return check.CPP && check.Name == "clang_format" }) {
-		srcBase := project
-
-		if e.d.moduleStmt.Name == tokUnittestFor && len(e.d.moduleStmt.Args) > 0 {
-			srcBase = path.Clean(e.d.moduleStmt.Args[0].string())
-		}
-
-		files := []string{testSVNInterfaceRel}
-
-		for _, src := range e.d.srcs {
-			if src.Global || src.Compile.Variant != 0 {
-				continue
-			}
-
-			switch strings.ToLower(path.Ext(src.Source.string())) {
-			case ".c", ".cc", ".cpp", ".cxx":
-				files = append(files, path.Clean(path.Join(srcBase, src.Source.string())))
-			}
-		}
-
-		suites = append(suites, e.styleSuite(StyleCheck{Name: "clang_format", Config: testClangFormatConfigRel, Wrapper: testClangFormatWrapperRel, Files: files}, []ResourceDecl{{Token: internStr(testClangFormatResource)}}))
-	}
-
-	return suites
+	return []*TestSuite{s}
 }
 
 func (e *EmitContext) importTestSuites(binary VFS, ref NodeRef, globals []ResourceDecl) []*TestSuite {

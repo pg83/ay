@@ -125,7 +125,25 @@ class CppStyleTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not allowed", result.stderr)
 
-    def test_explicit_cpp_style_and_unittest_default_share_one_suite(self):
+    def test_native_unittest_without_cpp_style_has_no_cpp_linter(self):
+        from test_link_test_nodes import fixture
+        graph = lib.make(fixture(), "lib/ut", "-t")
+        self.assertFalse(any("$(B)/lib/ut/test-results/clang_format/meta.json" in n["outputs"] for n in graph["graph"]))
+
+    def test_repeated_cpp_style_declarations_share_one_suite(self):
+        files = {
+            "build/conf/autoincludes.json": '["lib"]\n',
+            "lib/linters.make.inc": "STYLE_CPP()\n",
+            "lib/ya.make": "LIBRARY()\nNO_UTIL()\nNO_LIBC()\nNO_RUNTIME()\nSTYLE_CPP()\nSRCS(a.cpp)\nEND()\n",
+            "lib/a.cpp": "int a;\n",
+            "build/platform/clang/clang-format/ya.make": "RESOURCES_LIBRARY()\nEND()\n",
+        }
+        graph = lib.make(files, "lib", "-t")
+        checks = [n for n in graph["graph"] if "$(B)/lib/test-results/clang_format/meta.json" in n["outputs"]]
+        self.assertEqual(len(checks), 1)
+        self.assertEqual(checks[0]["cmds"][0]["cmd_args"].count("$(S)/lib/a.cpp"), 2)
+
+    def test_explicit_cpp_style_adds_one_suite_to_native_unittest(self):
         from test_link_test_nodes import fixture
         files = fixture()
         files["lib/ut/ya.make"] = files["lib/ut/ya.make"].replace("END()", "STYLE_CPP()\nEND()")

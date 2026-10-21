@@ -341,6 +341,10 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 			check.Config = config
 		}
 
+		if check.CPP && slices.ContainsFunc(suites, func(suite *TestSuite) bool { return suite.testType == check.Name }) {
+			continue
+		}
+
 		var resources []ResourceDecl
 
 		if check.Resource == "" {

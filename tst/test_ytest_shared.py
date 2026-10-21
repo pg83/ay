@@ -61,6 +61,8 @@ class SharedTestNodesTest(unittest.TestCase):
 
     def test_cpp_uses_shared_configuration_and_inherited_environment(self):
         files = fixture()
+        files["lib/ut/ya.make"] = files["lib/ut/ya.make"].replace("END()", "STYLE_CPP()\nEND()")
+        files["build/platform/clang/clang-format/ya.make"] = "RESOURCES_LIBRARY()\nEND()\n"
         files["ya.conf"] = 'use_command_file_in_testtool = false\noutput_style = "jsonl"\n'
         graph = lib.make(files, "lib/ut", "-t", env={"ASAN_OPTIONS": "custom=1"})
         for suite in ("unittest", "clang_format"):
