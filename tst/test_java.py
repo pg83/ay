@@ -109,6 +109,24 @@ class JavaDependencyManagementTest(unittest.TestCase):
 
 
 class JavaLibraryTest(unittest.TestCase):
+    def test_jdk_version_conditions_compare_quoted_and_unquoted_numbers(self):
+        for macro in ("JDK_VERSION", "DEFAULT_JDK_VERSION"):
+            for version in (8, 11):
+                for minimum in ("11", '"11"'):
+                    with self.subTest(macro=macro, version=version, minimum=minimum):
+                        files = java_tree(**{
+                            "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\n"
+                                           f"{macro}({version})\nIF(JDK_REAL_VERSION >= {minimum})\n"
+                                           "JAVA_SRCS(Modern.java)\nELSE()\nJAVA_SRCS(Legacy.java)\nENDIF()\nEND()\n",
+                            "app/Modern.java": "",
+                            "app/Legacy.java": "",
+                            f"build/platform/java/jdk/jdk{version}/ya.make": resource_lib(f"JDK{version}", version),
+                        })
+                        graph = lib.make(files, "app")
+                        jar = jv_node(graph, "$(B)/app/app.jar")
+                        self.assertEqual(version >= 11, "$(S)/app/Modern.java" in jar["inputs"])
+                        self.assertEqual(version < 11, "$(S)/app/Legacy.java" in jar["inputs"])
+
     def test_split_library_peers_interface_jar(self):
         files = java_tree(**{
             "app/ya.make": "JAVA_LIBRARY()\nPEERDIR(dep)\nJAVA_SRCS(SRCDIR src **/*)\nEND()\n",

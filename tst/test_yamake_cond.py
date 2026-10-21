@@ -154,6 +154,25 @@ class YaMakeConditionTest(unittest.TestCase):
         }
         self.assertEqual(self.evaluate(list(expected)), expected)
 
+    def test_ordering_converts_operand_values_to_integers(self):
+        expected = {
+            'SONE < 2': True,
+            'SONE >= "1"': True,
+            '"12" > "9"': True,
+            '"12" <= "9"': False,
+            '"12" <= 12': True,
+            'SONE <= "1"': True,
+            '"-2" < "-1"': True,
+            '"+12" >= 11': True,
+            'SV < 1': True,
+            'SV >= "0"': True,
+            'ANDROID_API < "x"': False,
+            'ANDROID_API <= "x"': True,
+            'SEMPTY >= 0': True,
+            '"999999999999999999999999999999" < 1': True,
+        }
+        self.assertEqual(self.evaluate(list(expected)), expected)
+
     def test_define_flag_binds_condition_variable(self):
         self.assertEqual(
             self.evaluate(["CUSTOM_SWITCH", "CUSTOM_VALUE == \"v1\""], "-DCUSTOM_SWITCH=yes", "-DCUSTOM_VALUE=v1"),
@@ -196,8 +215,6 @@ class YaMakeConditionTest(unittest.TestCase):
             ('SV MATCHES "("', "error parsing regexp: missing closing ): `(`"),
             ('SV VERSION_FOO "1"', 'macros: unknown version operator "VERSION_FOO"'),
             ('DEFINED "x"', "macros: DEFINED expects a variable name, got kind 1"),
-            ('ANDROID_API < "x"', "macros: < requires int operands, got left=int right=string"),
-            ("SV < 1", "macros: < requires int operands, got left=string right=int"),
             ("SONE GREATER 0", 'macros: unsupported IF operator "GREATER"'),
         ]
         for condition, expected in cases:
