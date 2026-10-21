@@ -656,9 +656,15 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	for i, stmt := range d.llvmCompile {
+		outputs := []VFS{copyFileOutputVFS(module, stmt.Output)}
+
+		if stmt.Kind == tokBpfStatic {
+			outputs = append(outputs, copyFileOutputVFS(module, stmt.Source+".bpf.o"))
+		}
+
 		positions = append(positions, ProducerPos{
 			kind: prodLlvmCompile, index: i,
-			outs: []VFS{copyFileOutputVFS(module, stmt.Output)},
+			outs: outputs,
 			ins:  e.srcInsCandidate(internStr(stmt.Source).any()),
 		})
 	}

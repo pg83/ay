@@ -9,6 +9,7 @@ var (
 )
 
 type LlvmCompileStmt struct {
+	Kind      TOK
 	Source    string
 	Output    string
 	ClangRoot string
@@ -44,12 +45,30 @@ func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx 
 
 func (e *EmitContext) emitLlvmCompile(stmt LlvmCompileStmt) {
 	out := copyFileOutputVFS(e.instance.Path.relString(), stmt.Output)
-	compiler := resolveResourceGlobalRef(stmt.ClangRoot, e.peers.ResourceGlobals) + "/bin/clang++"
-	node := e.llvmCompileNode(stmt.Source, out, compiler, true, stmt.Options)
+
+	var node Node
+
+	if stmt.Kind == tokBpf || stmt.Kind == tokBpfStatic {
+		node = e.bpfCompileNode(stmt, out)
+	} else {
+		compiler := resolveResourceGlobalRef(stmt.ClangRoot, e.peers.ResourceGlobals) + "/bin/clang++"
+
+		node = e.llvmCompileNode(stmt.Source, out, compiler, true, stmt.Options)
+	}
+
 	ref := e.ctx.emit.reserve()
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
-	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending})
+	for _, output := range node.Outputs {
+		e.register(GeneratedFileInfo{OutputPath: output, ProducerRef: ref, ProducerMainOut: out, OnUse: pending})
+	}
+
+	if stmt.Kind == tokBpfStatic && !e.producersOnly() {
+		object := node.Outputs[1]
+
+		e.codegen.use(object)
+		e.collectObj(ref, object, SrcMeta{Source: object.any(), Prio: stmtPrioDefault})
+	}
 }
 
 func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {

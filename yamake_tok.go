@@ -119,6 +119,8 @@ var tokName = [...]STR{
 	tokBaseCodegen:                        internStr("BASE_CODEGEN"),
 	tokBisonGenC:                          internStr("BISON_GEN_C"),
 	tokBisonGenCpp:                        internStr("BISON_GEN_CPP"),
+	tokBpf:                                internStr("BPF"),
+	tokBpfStatic:                          internStr("BPF_STATIC"),
 	tokBuildwithCythonC:                   internStr("BUILDWITH_CYTHON_C"),
 	tokBuildwithCythonCpp:                 internStr("BUILDWITH_CYTHON_CPP"),
 	tokBuildOnlyIf:                        internStr("BUILD_ONLY_IF"),
@@ -490,6 +492,8 @@ const (
 	tokBaseCodegen
 	tokBisonGenC
 	tokBisonGenCpp
+	tokBpf
+	tokBpfStatic
 	tokBuildwithCythonC
 	tokBuildwithCythonCpp
 	tokBuildOnlyIf

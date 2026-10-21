@@ -17,6 +17,7 @@ var procKindStr = [...]string{
 	pkPI:  "PI",
 	pkRC:  "RC",
 	pkTT:  "TT",
+	pkBP:  "BP",
 	pkPO:  "PO",
 	pkFBS: "FBS",
 	pkSS:  "SS",
@@ -82,6 +83,7 @@ const (
 	pkAR
 	pkBI
 	pkBC
+	pkBP
 	pkCC
 	pkCL
 	pkCF

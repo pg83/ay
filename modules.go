@@ -2219,6 +2219,19 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokUseLlvmBc20:
 		env.setString(envCLANG_BC_ROOT, "$"+envCLANG20_RESOURCE_GLOBAL.string())
 		env.setString(envLLVM_LLC_TOOL, "contrib/libs/llvm20/tools/llc")
+	case tokBpf, tokBpfStatic:
+		args := expandStmtTokens(v.Args, env)
+
+		if len(args) < 2 {
+			throwFmt("%s requires input and output", v.Name.string())
+		}
+
+		d.llvmCompile = append(d.llvmCompile, LlvmCompileStmt{Kind: v.Name, Source: args[0].string(), Output: args[1].string(), Options: args[2:]})
+		d.peerdirs = append(d.peerdirs, strBuildPlatformClang.any())
+
+		if v.Name == tokBpfStatic {
+			d.peerdirs = append(d.peerdirs, argBuildPlatformLld.any())
+		}
 	case tokLlvmCompileCxx:
 		if len(v.Args) < 2 || env.string(envCLANG_BC_ROOT) == "" {
 			throwFmt("LLVM_COMPILE_CXX requires input, output and USE_LLVM_BC16/18/20")
