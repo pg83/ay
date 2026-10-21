@@ -36,17 +36,21 @@ class AsmIncludeTest(unittest.TestCase):
             "m/z.cpp": "#include <a.inc>\n",
             "asmdir/a.inc": "",
             "asmdir/c.inc": "",
+            "inc/a.inc": "",
             "inc/b.h": "",
         }
         lib.tool_program(files, "contrib/tools/yasm", "yasm")
-        graph = lib.make(files, "m", "-k")
+        graph = lib.make(files, "m")
         self.assertEqual(
-            {"$(S)/m/x.S", "$(S)/asmdir/a.inc", "$(S)/inc/b.h"},
+            {"$(S)/m/x.S", "$(S)/inc/a.inc", "$(S)/inc/b.h"},
             inputs_of(graph, "$(B)/m/x.S.o"),
         )
         self.assertIn("$(S)/asmdir/c.inc", inputs_of(graph, "$(B)/m/y.o"))
-        # C++ sources do not see ADDINCL(FOR asm ...).
-        self.assertEqual({"$(S)/m/z.cpp"}, inputs_of(graph, "$(B)/m/z.cpp.o"))
+        self.assertEqual({"$(S)/m/z.cpp", "$(S)/inc/a.inc"}, inputs_of(graph, "$(B)/m/z.cpp.o"))
+        gnu = lib.node_by_output(graph, "$(B)/m/x.S.o")["cmds"][0]["cmd_args"]
+        yasm = lib.node_by_output(graph, "$(B)/m/y.o")["cmds"][0]["cmd_args"]
+        self.assertNotIn("-I$(S)/asmdir", gnu)
+        self.assertNotIn("$(S)/inc", yasm)
 
     def test_includes_addressed_by_root_prefix(self):
         files = {
