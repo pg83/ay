@@ -338,7 +338,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 				buildBound++
 			}
 
-			buildBound += len(it.ExtraBuilds) + len(it.AuxBuilds)
+			buildBound += len(it.AuxBuilds)
 		}
 
 		payloadCap := 0
@@ -412,12 +412,6 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 			for _, it := range chunk {
 				if it.BuildInput != 0 && deduper.add(it.BuildInput.strID()) {
 					adjacentBuilds = append(adjacentBuilds, it.BuildInput)
-				}
-
-				for _, v := range it.ExtraBuilds {
-					if v != 0 && deduper.add(v.strID()) {
-						adjacentBuilds = append(adjacentBuilds, v)
-					}
 				}
 			}
 
