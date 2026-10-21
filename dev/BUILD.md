@@ -31,6 +31,14 @@ job adds the per-platform profiles up with `dev/coverage.py combine`, checks the
 floor on the sum, and uploads it to Codecov. The validation cases need the
 internal Sandbox and run only locally.
 
+The required aggregate statement coverage is **100%: zero uncovered statements**
+across the supported CI platforms, without excluding production files or blocks.
+Cover reachable behavior through Python end-to-end tests that invoke the CLI;
+use the existing chaos build for deterministic failures at system boundaries.
+Do not add Go unit tests (`*_test.go`). Remove unreachable code only after
+establishing why no supported input can reach it. Per-platform floors may be
+lower because some behavior is specific to an operating system or architecture.
+
 Each entry in `dev/config.json` becomes an independent result node and a public
 `validate_<case-id>` gate target. A result node consumes the `ay` binary plus
 its immutable source-slice and reference-graph archives, executes the complete
