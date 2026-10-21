@@ -9,6 +9,7 @@ import lib
 import test_go_package
 import test_nots
 import test_proto_flatc
+import test_proto_cpp
 from test_source_selection_contracts import library
 from test_test_runner_contracts import AGENT_ENV, test_args
 from test_ymake_conf import Tree
@@ -32,13 +33,28 @@ class GeneratorReachabilityContractsTest(unittest.TestCase):
         self.assertNotIn('$(S)/embed/sample/assets/.hidden', node['inputs'])
 
     def test_archive_metadata_is_not_a_generated_header(self):
-        files = {'app/ya.make': f'PROGRAM()\n{lib.BARE_MODULE}PEERDIR(peer)\nADDINCL(${{ARCADIA_BUILD_ROOT}}/peer)\nSRCS(main.cpp)\nEND()\n',
-                 'app/main.cpp': '#include "libpeer.a"\n',
-                 'peer/ya.make': library('SRCS(peer.cpp)'), 'peer/peer.cpp': ''}
-        result = lib.make_process(files, 'app')
+        files = test_go_package.go_world()
+        test_go_package.go_module(files, 'peer')
+        files.update({'app/ya.make': library('ADDINCL(${ARCADIA_BUILD_ROOT}/peer)\nSRCS(main.cpp)'),
+                      'app/main.cpp': '#include "peer.a"\n'})
+        result = lib.make_process(files, 'app', 'peer')
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('unresolved include "libpeer.a"', result.stderr)
+        self.assertIn('unresolved include "peer.a"', result.stderr)
         self.assertNotIn('panic:', result.stderr)
+
+    def test_proto_generator_accepts_non_tool_dependencies_from_a_typescript_package(self):
+        files = {**test_nots.NotsTests().project(), **test_proto_cpp.proto_files()}
+        lib.tool_program(files, 'tools/gen', 'gen')
+        files['p/ya.make'] = ('PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nPEERDIR(web)\n'
+                              'RUN_PROGRAM(tools/gen OUT_NOAUTO a.proto OUTPUT_INCLUDES web/output.tar)\n'
+                              'SRCS(a.proto)\nEND()\n')
+        graph = lib.make(files, 'p')
+        package = lib.node_by_output(graph, '$(B)/web/output.tar')
+        proto = lib.node_by_output(graph, '$(B)/p/a.pb.h')
+        compiled = lib.node_by_output(graph, '$(B)/p/a.pb.cc.o')
+        self.assertIn('$(B)/web/output.tar', proto['inputs'])
+        self.assertIn(package['uid'], proto['deps'])
+        self.assertIn(proto['uid'], compiled['deps'])
 
     def test_generated_template_retains_missing_system_include_diagnostic(self):
         files = {'app/ya.make': library('SRCS(main.cpp.in)'),
@@ -73,7 +89,7 @@ class GeneratorReachabilityContractsTest(unittest.TestCase):
             probe = subprocess.run([*prefix, 'true'], capture_output=True, env=env, timeout=10)
             if probe.returncode:
                 self.skipTest('unprivileged PID namespaces are unavailable')
-        result = subprocess.run([*prefix, str(lib.AY), 'make', '-j0', '-G', '-t', '--source-root', str(tree.src),
+        result = subprocess.run([*prefix, str(lib.AY), 'make', '-j0', '-G', '-t', '--sandboxing', '--source-root', str(tree.src),
                                  '--host-platform', 'default-linux-x86_64', '--target-platform', 'default-linux-aarch64', 'app'],
                                 env=env, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -84,7 +100,7 @@ class GeneratorReachabilityContractsTest(unittest.TestCase):
         tree = Tree(self, {'app/ya.make': 'EXECTEST()\nRUN(check)\nEND()\n'}, ya_conf='auto_detect_agent = true\n')
         env = {k: v for k, v in os.environ.items() if k not in (*AGENT_ENV, *lib.TOOLCHAIN_ENV_VARS, 'YA_AUTO_DETECT_AGENT', 'YA_OUTPUT_STYLE')}
         env['AY_CHAOS'] = 'readfile-eio=0'
-        result = subprocess.run([str(lib.AY), 'make', '-j0', '-G', '-t', '--source-root', str(tree.src),
+        result = subprocess.run([str(lib.AY), 'make', '-j0', '-G', '-t', '--sandboxing', '--source-root', str(tree.src),
                                  '--host-platform', 'default-linux-x86_64', '--target-platform', 'default-linux-aarch64', 'app'],
                                 env=env, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
