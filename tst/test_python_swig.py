@@ -84,6 +84,31 @@ class SwigTest(unittest.TestCase):
         for header in ("custom/custom.i", "custom/nested.i"):
             self.assertIn(f"$(S)/{header}", generated["inputs"])
 
+    def test_generic_runner_passes_induced_includes_through_nested_swig_inputs(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": (
+                f"LIBRARY()\n{lib.BARE_MODULE}"
+                f"ADDINCL(FOR swig {SWIG_LIB}/python FOR swig {SWIG_LIB})\n"
+                "RUN_PROGRAM(contrib/tools/swig IN wrap.swg OUT wrapper.cpp)\nEND()\n"
+            ),
+            "lib/wrap.swg": '%include "lib/common.i"\n',
+            "lib/common.i": '%include "lib/nested.i"\n',
+            "lib/nested.i": '%header %{\n#include "lib/public.h"\n%}\n',
+            "lib/public.h": '#include "detail.h"\n',
+            "lib/detail.h": '#include "public.h"\n',
+        })
+        graph = lib.make(files, "lib")
+        generated = lib.node_by_output(graph, "$(B)/lib/wrapper.cpp")
+        compiled = lib.node_by_output(graph, "$(B)/lib/wrapper.cpp.o")
+        for name in ("common.i", "nested.i"):
+            self.assertIn(f"$(S)/lib/{name}", generated["inputs"])
+            self.assertNotIn(f"$(S)/lib/{name}", compiled["inputs"])
+        for name in ("public.h", "detail.h"):
+            self.assertNotIn(f"$(S)/lib/{name}", generated["inputs"])
+            self.assertIn(f"$(S)/lib/{name}", compiled["inputs"])
+        self.assertIn(generated["uid"], compiled["deps"])
+
     def test_swig_c_sources_generate_wrapper_and_python_module(self):
         files = python_base()
         files.update({

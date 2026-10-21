@@ -148,7 +148,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 	pe := func() {
 		inputClosure := prInputClosure(snap, stmt)
-		inputInduced := prInputInducedIncludes(ctx, e.codegen, snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse])
+		inputInduced := prInputInducedIncludes(ctx, e.codegen, snap.scanner, snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse])
 
 		if len(inputInduced[parsedIncludesAll])+len(inputInduced[parsedIncludesHeader])+len(inputInduced[parsedIncludesCpp]) > 0 {
 			for _, output := range outVFSByToken {
@@ -264,28 +264,56 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 	return PrInputClosure{sources: s.ctx.na.dedupClosure(sources), builds: s.ctx.na.dedupClosure(builds)}
 }
 
-func prInputInducedIncludes(ctx *GenCtx, registry *CodegenRegistry, inputs []VFS) ParsedIncludeSet {
+func prInputInducedIncludes(ctx *GenCtx, registry *CodegenRegistry, scanner *IncludeScanner, inputs []VFS) ParsedIncludeSet {
 	var induced ParsedIncludeSet
 
-	for _, input := range inputs {
-		var parsed ParsedIncludeSet
-
-		if input.isBuild() {
-			if info := registry.use(input); info != nil {
-				parsed = info.ParsedIncludes
-			}
-		} else {
-			if extIsProto(input.relString()) || !ctx.parsers.registry.scansIncludes(input.relString()) {
-				continue
+	dedupers.with(func(seen *DeDuper) {
+		var visit func(VFS)
+		visit = func(input VFS) {
+			if !seen.addStable(input.strID()) {
+				return
 			}
 
-			parsed = ctx.parsers.sourceParsedBuckets(input, nil)
+			var parsed ParsedIncludeSet
+
+			passIncludes := false
+
+			if input.isBuild() {
+				if info := registry.use(input); info != nil {
+					parsed = info.ParsedIncludes
+				}
+			} else {
+				if extIsProto(input.relString()) {
+					return
+				}
+
+				cached, ok := ctx.parsers.cache.parsed.get(input.rel())
+
+				if !ok {
+					return
+				}
+
+				parsed = cached.includes
+				_, passIncludes = cached.parser.(SwigIncludeDirectiveParser)
+			}
+
+			for _, bucket := range [...]ParsedIncludeBucket{parsedIncludesAll, parsedIncludesHeader, parsedIncludesCpp} {
+				induced[bucket] = append(induced[bucket], parsed[bucket]...)
+			}
+
+			if passIncludes {
+				if children, ok := scanner.cachedChildren(input); ok {
+					for _, child := range children {
+						visit(child)
+					}
+				}
+			}
 		}
 
-		for _, bucket := range [...]ParsedIncludeBucket{parsedIncludesAll, parsedIncludesHeader, parsedIncludesCpp} {
-			induced[bucket] = append(induced[bucket], parsed[bucket]...)
+		for _, input := range inputs {
+			visit(input)
 		}
-	}
+	})
 
 	for _, bucket := range [...]ParsedIncludeBucket{parsedIncludesAll, parsedIncludesHeader, parsedIncludesCpp} {
 		if len(induced[bucket]) > 0 {
