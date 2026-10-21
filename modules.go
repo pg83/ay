@@ -1626,7 +1626,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			expanded.ScriptPath = expandStmtTokenAny(v.ScriptPath, env)
 			expanded.Args = expandCommandTokens(v.Args, env)
-			expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env)
+			expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env, false)
 			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
 			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
@@ -1979,11 +1979,11 @@ func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
 	expanded := *v
 
 	expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
-	expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env)
-	expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
-	expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
-	expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
-	expanded.ToolPaths = expandStmtTokens(v.ToolPaths, env)
+	expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env, true)
+	expanded.OUTFiles = expandTokens(v.OUTFiles, env, false, true)
+	expanded.OUTNoAutoFiles = expandTokens(v.OUTNoAutoFiles, env, false, true)
+	expanded.OutputIncludes = expandTokens(v.OutputIncludes, env, false, true)
+	expanded.ToolPaths = expandTokens(v.ToolPaths, env, false, true)
 
 	if v.StdoutFile != nil {
 		stdout := expandStmtTokenAny((*v.StdoutFile), env)
@@ -1993,8 +1993,8 @@ func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
 
 	bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
 
-	expanded.Args = expandCommandTokens(v.Args, env)
-	expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
+	expanded.Args = expandTokens(v.Args, env, true, true)
+	expanded.EnvPairs = expandTokens(v.EnvPairs, env, false, true)
 
 	if v.CWD != nil {
 		cwd := expandStmtTokenAny(*v.CWD, env)
@@ -4242,6 +4242,19 @@ func parseModulePathVFS(path string) VFS {
 }
 
 func expandStmtToken(s string, env Environment) string {
+	return expandToken(s, env, false)
+}
+
+func keepDeferredVar(name string) bool {
+	switch name {
+	case envBINDIR.string(), envCURDIR.string(), "S", "B", "MANAGED_PEERS", "MANAGED_PEERS_CLOSURE", "APPLIED_EXCLUDES":
+		return true
+	}
+
+	return strings.HasSuffix(name, resourceGlobalSuffix) || strings.HasPrefix(name, "_") && strings.HasSuffix(name, "__INCLUDE")
+}
+
+func expandToken(s string, env Environment, evaluated bool) string {
 	if strings.Contains(s, "\\$") {
 		s = strings.ReplaceAll(s, "\\$", "$")
 	}
@@ -4261,14 +4274,14 @@ func expandStmtToken(s string, env Environment) string {
 			name := strings.TrimPrefix(s, "$")
 
 			if isExpandVarName(name) {
-				if val, ok := env.lookup(name); ok {
+				if val, ok := env.lookup(name); ok || evaluated && !keepDeferredVar(name) {
 					s = val
 				}
 			}
 		}
 
-		s = expandEmbeddedDollarVars(s, env)
-		s = expandBracedVars(s, env)
+		s = expandEmbeddedDollarVars(s, env, evaluated)
+		s = expandBracedVars(s, env, evaluated)
 
 		if s == prev {
 			break
@@ -4278,7 +4291,7 @@ func expandStmtToken(s string, env Environment) string {
 	return s
 }
 
-func expandBracedVars(s string, env Environment) string {
+func expandBracedVars(s string, env Environment, evaluated bool) string {
 	searchFrom := 0
 
 	for {
@@ -4301,6 +4314,10 @@ func expandBracedVars(s string, env Environment) string {
 		name := s[start+2 : end]
 		val, ok := env.lookup(name)
 
+		if !ok && evaluated && !keepDeferredVar(name) && name != "" && !strings.ContainsAny(name, " ${}\"';") {
+			ok = true
+		}
+
 		if name == "" || strings.ContainsAny(name, "${") || !ok {
 			searchFrom = end + 1
 
@@ -4312,7 +4329,7 @@ func expandBracedVars(s string, env Environment) string {
 	}
 }
 
-func expandEmbeddedDollarVars(s string, env Environment) string {
+func expandEmbeddedDollarVars(s string, env Environment, evaluated bool) string {
 	if !strings.Contains(s, "$") {
 		return s
 	}
@@ -4354,7 +4371,7 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 		name := s[i+1 : j]
 		val, ok := env.lookup(name)
 
-		if !ok {
+		if !ok && (!evaluated || keepDeferredVar(name)) {
 			b = append(b, s[i:j]...)
 			i = j
 
@@ -4373,25 +4390,25 @@ func expandEmbeddedDollarVars(s string, env Environment) string {
 	return string(b)
 }
 
-func expandInFiles(files []ANY, noParse int, env Environment) ([]ANY, int) {
+func expandInFiles(files []ANY, noParse int, env Environment, evaluated bool) ([]ANY, int) {
 	split := len(files) - noParse
-	parsed := expandStmtTokens(files[:split:split], env)
+	parsed := expandTokens(files[:split:split], env, false, evaluated)
 
 	if noParse == 0 {
 		return parsed, 0
 	}
 
-	text := expandStmtTokens(files[split:], env)
+	text := expandTokens(files[split:], env, false, evaluated)
 
 	return append(parsed[:len(parsed):len(parsed)], text...), len(text)
 }
 
 func expandStmtTokens(items []ANY, env Environment) []ANY {
-	return expandTokens(items, env, false)
+	return expandTokens(items, env, false, false)
 }
 
 func expandCommandTokens(items []ANY, env Environment) []ANY {
-	return expandTokens(items, env, true)
+	return expandTokens(items, env, true, false)
 }
 
 func expandListPreSufArgs(items []ANY, env Environment) []ANY {
@@ -4402,13 +4419,13 @@ func expandListPreSufArgs(items []ANY, env Environment) []ANY {
 	out := make([]ANY, 3, len(items))
 
 	for i := range out {
-		out[i] = internStr(expandStmtToken(items[i].string(), env)).any()
+		out[i] = internStr(expandToken(items[i].string(), env, true)).any()
 	}
 
-	return append(out, expandStmtTokens(items[3:], env)...)
+	return append(out, expandTokens(items[3:], env, false, true)...)
 }
 
-func expandTokens(items []ANY, env Environment, command bool) []ANY {
+func expandTokens(items []ANY, env Environment, command, evaluated bool) []ANY {
 	anyDollar := false
 
 	for _, item := range items {
@@ -4432,7 +4449,7 @@ func expandTokens(items []ANY, env Environment, command bool) []ANY {
 			continue
 		}
 
-		expanded := expandStmtToken(item.string(), env)
+		expanded := expandToken(item.string(), env, evaluated)
 
 		var words []string
 
