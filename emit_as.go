@@ -1,15 +1,11 @@
 package main
 
-import (
-	"strings"
-)
-
 var asKV = KV{P: pkAS, PC: pcLightGreen}
 
-func (e *EmitContext) emitAS(srcRel string, srcVFS VFS, in ModuleCCInputs, hostP *Platform) (NodeRef, VFS) {
+func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (NodeRef, VFS) {
 	instance := e.instance
 	na := e.ctx.na
-	outVFS, inVFS := composeASPaths(instance, srcRel, srcVFS, in)
+	outVFS, inVFS := composeASPaths(instance, srcVFS)
 	cmdArgs := composeASCmdArgs(na, instance, outVFS, inVFS, in)
 	env := hostP.toolEnv()
 
@@ -28,24 +24,10 @@ func (e *EmitContext) emitAS(srcRel string, srcVFS VFS, in ModuleCCInputs, hostP
 	return e.emitNode(node), outVFS
 }
 
-func composeASPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs) (out, input VFS) {
-	if srcVFS.isSource() && srcVFS.relString() != instance.Path.relString()+"/"+srcRel {
-		outputRel := composeSrcDirOutputRel(instance.Path.relString(), srcVFS.relString())
+func composeASPaths(instance ModuleInstance, srcVFS VFS) (out, input VFS) {
+	rel := composeSrcDirOutputRel(instance.Path.relString(), srcVFS.relString())
 
-		return build(instance.Path.relString(), "/", outputRel, ".o"), srcVFS
-	}
-
-	var outRel string
-
-	outName := srcRel + ".o"
-
-	if strings.Contains(srcRel, "/") {
-		outRel = instance.Path.relString() + "/_/" + outName
-	} else {
-		outRel = instance.Path.relString() + "/" + outName
-	}
-
-	return build(outRel), srcVFS
+	return build(instance.Path.relString(), "/", rel, ".o"), srcVFS
 }
 
 func composeASCmdArgs(na *NodeArenas, instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []ANY {
@@ -96,7 +78,6 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {
 	src := meta.Source
 	ctx, d := e.ctx, e.d
 	srcVFS := src.vfs()
-	srcRel := e.moduleSourceRel(src)
 
 	if srcVFS == 0 {
 		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
@@ -112,7 +93,7 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {
 
 	asIn.IncludeView = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainAsm)
 
-	ref, outPath := e.emitAS(srcRel, srcVFS, asIn, ctx.host)
+	ref, outPath := e.emitAS(srcVFS, asIn, ctx.host)
 
 	e.collectObj(ref, outPath, meta)
 }
