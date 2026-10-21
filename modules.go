@@ -2344,6 +2344,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyHeaders(fs, modulePath, v.Args, d)
 	case tokStyleCppUserSessions:
 		env.setBool(envUseAllSrcs, true)
+		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
 	case tokTsProtoPackageName:
 		if len(v.Args) != 1 {
 			throwFmt("TS_PROTO_PACKAGE_NAME expects one package name")
