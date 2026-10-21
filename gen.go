@@ -733,10 +733,6 @@ func (ctx *GenCtx) emitConfiguredSubmoduleTests(dir string, results ...*ModuleEm
 }
 
 func (ctx *GenCtx) emitModuleTests(results ...*ModuleEmitResult) {
-	if !ctx.testMode {
-		return
-	}
-
 	var suites []*TestSuite
 
 	for _, r := range results {
