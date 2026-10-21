@@ -729,7 +729,7 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 	ref := e.emitNotsTouch(output, na.refList(dedupRefs(refs)...), inputs, &KV{P: kind, PC: pcMagenta})
 	emitted := notsResult(output, ref, c, result.ResourceGlobalClosure)
 
-	emitted.TestSuites = e.notsForSuites(target, result.ResourceGlobalClosure)
+	emitted.TestSuites = e.notsForSuites(target, ref, result.ResourceGlobalClosure)
 
 	return emitted
 }

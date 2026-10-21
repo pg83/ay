@@ -73,6 +73,26 @@ func (e *EmitContext) notsSuite(name string, globals []ResourceDecl, addSource b
 	return s
 }
 
+func (e *EmitContext) notsSuiteDependencies(target string) []NodeRef {
+	prepare := e.codegen.use(build(target, "/package.json"))
+	refs := []NodeRef{prepare.ProducerRef}
+	pj := e.ctx.parsers.notsJSON(target + "/package.json")
+
+	for _, peer := range e.ctx.parsers.notsPeers(target, pj) {
+		info := e.codegen.use(build(peer, "/output.tar"))
+
+		refs = append(refs, info.ProducerRef)
+
+		for _, input := range info.ClosureLeaves {
+			if dep := e.codegen.lookup(input); dep != nil && dep.Nots != nil {
+				refs = append(refs, dep.ProducerRef)
+			}
+		}
+	}
+
+	return dedupRefs(refs)
+}
+
 func notsRecipeArgs(args []string, globals []ResourceDecl) string {
 	out := slices.Clone(args)
 
@@ -120,7 +140,7 @@ func (e *EmitContext) notsRecipes(target string, head []string, globals []Resour
 }
 
 func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, files []VFS, head []string, node ResourceDecl) []*TestSuite {
-	if !e.ctx.testMode || len(files) == 0 {
+	if !e.ctx.testMode || len(files) == 0 || len(e.d.nots.Checks) == 0 {
 		return nil
 	}
 
@@ -136,6 +156,8 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 
 	related = sortedUnique(append(related, source(target, "/package.json").string()))
 
+	deps := e.notsSuiteDependencies(target)
+
 	for _, check := range e.d.nots.Checks {
 		kind, ciType := "test", "test"
 
@@ -146,6 +168,7 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 		name := "ts_" + kind + "_" + notsScriptNameSeparator.ReplaceAllString(check.Script, "_")
 		s := e.notsSuite(name, globals, false)
 
+		s.deps = slices.Clone(deps)
 		s.ciType = ciType
 		s.noRetries = true
 
@@ -200,7 +223,7 @@ func (e *EmitContext) notsBuildSuites(dir string, state *NotsPrepared, files []V
 	return append(suites, e.notsLegacyStyles(dir, state, head, files)...)
 }
 
-func (e *EmitContext) notsForSuites(target string, globals []ResourceDecl) []*TestSuite {
+func (e *EmitContext) notsForSuites(target string, ref NodeRef, globals []ResourceDecl) []*TestSuite {
 	if !e.ctx.testMode {
 		return nil
 	}
@@ -229,6 +252,7 @@ func (e *EmitContext) notsForSuites(target string, globals []ResourceDecl) []*Te
 
 	s := e.notsSuite(name, globals, false)
 
+	s.deps = append(e.notsSuiteDependencies(target), ref)
 	s.runInputs = []VFS{e.instance.Path}
 	s.supportsCanonization = true
 	s.smoothShutdown = []string{"SIGUSR2"}
@@ -344,7 +368,7 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 		s.ciType = "style"
 		s.relatedPaths = sortedUnique(append(related, source(path.Join(dir, check.config)).string(), source(dir, "/package.json").string()))
 		s.runInputs = []VFS{build(dir, "/package.json")}
-		s.deps = []NodeRef{e.codegen.lookup(s.runInputs[0]).ProducerRef}
+		s.deps = e.notsSuiteDependencies(dir)
 		s.runCwd = build(dir).string()
 		s.recipes = e.notsRecipes(dir, head, state.Globals, false, check.name == "ts_biome")
 		s.runCmd = func(work string, _ TestChunk) []ANY {

@@ -1,4 +1,5 @@
 import base64
+import json
 import unittest
 
 from lib import make, node_by_output, resource_lib, tool_program
@@ -7,6 +8,65 @@ from test_java_tests import option_values, run_args
 
 
 class NotsSuitesTest(unittest.TestCase):
+    def workspace(self, macro):
+        files = test_nots.NotsTests().project(macro)
+        for name, peers in (('web', ['left', 'right']), ('left', ['leaf']), ('right', ['leaf']), ('leaf', [])):
+            if name != 'web':
+                files[f'{name}/ya.make'] = 'TS_PACKAGE()\nEND()\n'
+            files[f'{name}/package.json'] = json.dumps({
+                'dependencies': {peer: f'workspace:../{peer}' for peer in peers},
+            })
+            files[f'{name}/pnpm-lock.yaml'] = "lockfileVersion: '9.0'\npackages: {}\n"
+        return files
+
+    def assert_workspace_dependencies(self, graph, test):
+        self.assertIn(node_by_output(graph, '$(B)/web/package.json')['uid'], test['deps'])
+        for peer in ('left', 'right', 'leaf'):
+            for output in ('package.json', 'output.tar'):
+                producer = node_by_output(graph, f'$(B)/{peer}/{output}')
+                self.assertEqual(test['deps'].count(producer['uid']), 1, producer['outputs'])
+
+    def test_script_suites_depend_on_preparation_and_workspace_packages(self):
+        files = self.workspace('TS_LIBRARY()\nTS_BUILD_SCRIPT(build)\nTS_BUILD_OUTPUTS(build)\nTS_LINT(lint)')
+        files['web/ya.make'] += '\nRECURSE_FOR_TESTS(tests)\n'
+        files['web/tests/ya.make'] = 'TS_TEST_FOR(web)\nTS_TEST(test)\nEND()\n'
+        graph = make(files, 'web', '--target-platform-tests', '--output-only-tests', '-DAUTOCHECK=yes')
+        own_build = node_by_output(graph, '$(B)/web/output.tar')['uid']
+        for project, name in (('web', 'ts_lint_lint'), ('web/tests', 'ts_test_test')):
+            with self.subTest(name=name):
+                test = node_by_output(graph, f'$(B)/{project}/test-results/{name}/meta.json')
+                self.assert_workspace_dependencies(graph, test)
+                self.assertNotIn(own_build, test['deps'])
+                self.assertIn('$(S)/web/index.js', test['inputs'])
+                self.assertNotIn('$(B)/web/package.json', test['inputs'])
+
+    def test_legacy_suite_depends_on_test_module_and_workspace_packages(self):
+        files = self.workspace('TS_PACKAGE()')
+        files.update({
+            'web/tests/ya.make': 'TS_TEST_VITEST_FOR(web)\nTS_TEST_SRCS(../src)\nEND()\n',
+            'web/vitest.config.ts': 'export default {};\n',
+            'web/src/unit.test.ts': "import './value';\n",
+            'web/src/value.ts': 'export default 1;\n',
+        })
+        graph = make(files, 'web/tests', '--target-platform-tests', '--output-only-tests', '-DAUTOCHECK=yes')
+        test = node_by_output(graph, '$(B)/web/tests/test-results/vitest/meta.json')
+        self.assert_workspace_dependencies(graph, test)
+        module = node_by_output(graph, '$(B)/web/tests/web-tests.ts_test.fake')
+        self.assertIn(module['uid'], test['deps'])
+        self.assertIn('$(S)/web/src/value.ts', module['inputs'])
+        self.assertIn(node_by_output(graph, '$(B)/web/output.tar')['uid'], module['deps'])
+        self.assertEqual(test['inputs'], ['$(S)/web/tests', 'web/package.json'])
+
+    def test_legacy_styles_depend_on_workspace_packages(self):
+        files = self.workspace('TS_VITE()\nTS_TYPECHECK()')
+        files['web/tsconfig.json'] = '{}'
+        graph = make(files, 'web', '--target-platform-tests', '--output-only-tests', '-DAUTOCHECK=yes')
+        for name in ('eslint', 'tsc_typecheck'):
+            with self.subTest(name=name):
+                test = node_by_output(graph, f'$(B)/web/test-results/{name}/meta.json')
+                self.assert_workspace_dependencies(graph, test)
+                self.assertIn('$(B)/web/package.json', test['inputs'])
+
     def test_descriptor_resource_globals_reach_typescript_test_suites(self):
         files = test_nots.NotsTests().project('TS_LIBRARY()\nTS_BUILD_SCRIPT(build)\nTS_BUILD_OUTPUTS(build)\nTS_LINT(lint)')
         files.update({
@@ -23,6 +83,10 @@ class NotsSuitesTest(unittest.TestCase):
         files['web/tests/ya.make'] = 'TS_TEST_FOR(web)\nTS_TEST(test)\nEND()\n'
         graph = make(files, 'web', '--target-platform-tests')
         check = node_by_output(graph, '$(B)/web/test-results/ts_lint_lint/meta.json')
+        for output in ('$(B)/web/package.json', '$(B)/api/package.json', '$(B)/api/output.tar'):
+            self.assertIn(node_by_output(graph, output)['uid'], check['deps'])
+        descriptor = node_by_output(graph, '$(B)/raw/raw.self.protodesc')
+        self.assertNotIn(descriptor['uid'], check['deps'])
         globals = option_values(check['cmds'][-1]['cmd_args'], '--global-resource')
         for name in ('BLACK', 'CLANG_FORMAT', 'KOTLIN_GRPC'):
             self.assertIn(f'{name}_RESOURCE_GLOBAL::$(B)/resources/{name}', globals)
