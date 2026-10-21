@@ -411,6 +411,8 @@ type PySrcGroup struct {
 	Srcs           []ANY
 	Scopes         []PyScope
 	ResourceOffset int
+	Prio           int
+	PyiStart       int
 	PyiEnd         int
 	AllSrcs        *UnknownStmt
 }
@@ -2838,7 +2840,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 		}
 
+		before := len(d.pySrcGroups)
+
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPySrcs, Args: append([]ANY{kwNAMESPACE.any(), strTests.any()}, v.Args...)}, d, env, onWarn)
+
+		for i := before; i < len(d.pySrcGroups); i++ {
+			d.pySrcGroups[i].Prio = stmtPrioDefault
+		}
 	case tokPySrcs:
 		if env.bool(envGO_PROTO) {
 			break
@@ -3111,13 +3119,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		if len(groupSrcs) > 0 || len(d.pyPyiResources) > pyiBefore {
 			d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
-				Srcs: internAnys(groupSrcs), Scopes: groupScopes, ResourceOffset: len(d.resources), PyiEnd: len(d.pyPyiResources),
+				Srcs: internAnys(groupSrcs), Scopes: groupScopes, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs, PyiStart: pyiBefore, PyiEnd: len(d.pyPyiResources),
 			})
 		}
 	case tokAllPySrcs:
 		stmt := v
 
-		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{AllSrcs: &stmt, ResourceOffset: len(d.resources), PyiEnd: len(d.pyPyiResources)})
+		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{AllSrcs: &stmt, Prio: stmtPrioSrcs})
 	case tokPyMain:
 
 		if len(v.Args) != 1 {

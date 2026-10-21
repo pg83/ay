@@ -778,10 +778,30 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	moduleTag := d.unit.HashTag
 	py3BinProgramSide := d.unit.Tag == unitTagPy3Bin
 	resourceOffset := 0
-	pyiOffset := 0
 	trailStart := -1
 
+	emitGroup := func(gi int, group PySrcGroup) {
+		before := len(out.Refs)
+
+		e.emitPySrcGroupObjcopy(gi, group, out)
+
+		if !py3BinProgramSide {
+			r, o := e.emitResourceFile(d.pyPyiResources[group.PyiStart:group.PyiEnd], moduleTag)
+
+			out.Refs = append(out.Refs, r...)
+			out.Outputs = append(out.Outputs, o...)
+		}
+
+		if trailStart < 0 && len(out.Refs) > before {
+			trailStart = before
+		}
+	}
+
 	for gi, group := range d.pySrcGroups {
+		if group.Prio != stmtPrioDefault {
+			continue
+		}
+
 		if !py3BinProgramSide {
 			r, o := e.emitResourceFile(e.resources[resourceOffset:group.ResourceOffset], moduleTag)
 
@@ -791,22 +811,7 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 			resourceOffset = group.ResourceOffset
 		}
 
-		before := len(out.Refs)
-
-		e.emitPySrcGroupObjcopy(gi, group, out)
-
-		if !py3BinProgramSide {
-			r, o := e.emitResourceFile(d.pyPyiResources[pyiOffset:group.PyiEnd], moduleTag)
-
-			out.Refs = append(out.Refs, r...)
-			out.Outputs = append(out.Outputs, o...)
-
-			pyiOffset = group.PyiEnd
-		}
-
-		if trailStart < 0 && len(out.Refs) > before {
-			trailStart = before
-		}
+		emitGroup(gi, group)
 	}
 
 	if !py3BinProgramSide {
@@ -816,15 +821,14 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 		out.Outputs = append(out.Outputs, o...)
 	}
 
-	if trailStart < 0 {
-		trailStart = len(out.Refs)
+	for gi, group := range d.pySrcGroups {
+		if group.Prio != stmtPrioDefault {
+			emitGroup(gi, group)
+		}
 	}
 
-	if !py3BinProgramSide {
-		r, o := e.emitResourceFile(d.pyPyiResources[pyiOffset:], moduleTag)
-
-		out.Refs = append(out.Refs, r...)
-		out.Outputs = append(out.Outputs, o...)
+	if trailStart < 0 {
+		trailStart = len(out.Refs)
 	}
 
 	out.PySrcTrailCount = len(out.Refs) - trailStart
