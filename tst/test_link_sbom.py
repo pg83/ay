@@ -194,6 +194,21 @@ class SbomTest(unittest.TestCase):
         self.assertIn(lib.node_by_output(graph, path)["uid"], dll["deps"])
         self.assertNotIn("$(S)/build/internal/scripts/link_sbom.py", dll["inputs"])
 
+    def test_tool_component_is_shared_across_module_demand_variants(self):
+        files = fixture()
+        files["gen/ya.make"] = "PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n"
+        files["gen/main.cpp"] = "int main() {}\n"
+        files["prog/ya.make"] = files["prog/ya.make"].replace("END()", "RUN_PROGRAM(gen OUT gen.h)\nEND()")
+        for args in ((), ("-r",)):
+            with self.subTest(args=args):
+                graph = lib.make(files, "prog", *X86_64, *args)
+                by_uid = {node["uid"]: node for node in graph["graph"]}
+                tool = lib.node_by_output(graph, "$(B)/gen/gen")
+                path = component("build/platform/python/ymake_python3/toolchain.component.sbom")
+                self.assertIn(path, tool["inputs"])
+                producers = [uid for uid in tool["deps"] if path in by_uid[uid]["outputs"]]
+                self.assertEqual(len(producers), 1)
+
     def test_non_x86_target_adds_cxxsupp_peer_without_components(self):
         graph = lib.make(fixture(), "prog", "-r")
         self.assertEqual(sbom_nodes(graph), [])
