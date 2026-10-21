@@ -90,6 +90,8 @@ class ChaosHashesTest(unittest.TestCase):
              r"BucketCache: bucket hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ elems\)"),
             (bucket_files, "hash-list-h1=3 hash-list-h2=3",
              r"BucketCache: bucket-list hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ buckets\)"),
+            (wide, "xxh-slice-hi=0 xxh-slice-lo=0",
+             r"SliceCache: hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ elems\)"),
             (wide, "xxh-slice-hi=3 xxh-slice-lo=7",
              r"SliceCache: hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ elems\)"),
         ):
