@@ -18,6 +18,26 @@ func moduleOutputPath(result *ModuleEmitResult) VFS {
 	return 0
 }
 
+func (e *EmitContext) appendModulePeer(paths []VFS, result *ModuleEmitResult, capacity int) []VFS {
+	output := moduleOutputPath(result)
+
+	if output == 0 {
+		return paths
+	}
+
+	info := e.codegen.moduleInputs(output)
+
+	if info == nil || len(info.Includes) == 0 && len(info.Globals) == 0 {
+		return paths
+	}
+
+	if paths == nil {
+		paths = e.ctx.na.vfs.alloc(capacity)[:0]
+	}
+
+	return append(paths, output)
+}
+
 func (e *EmitContext) modulePeerInputs() InputChunks {
 	if e.peers == nil {
 		return nil
@@ -38,7 +58,7 @@ func (e *EmitContext) appendModuleInputs(inputs InputChunks, useGlobals bool) In
 	peers := e.modulePeerInputs()
 	count := len(inputs) + len(peers)
 
-	if useGlobals && len(e.moduleGlobals) > 0 {
+	if useGlobals && len(e.moduleGlobalInputs) > 0 {
 		count++
 	}
 
@@ -46,40 +66,65 @@ func (e *EmitContext) appendModuleInputs(inputs InputChunks, useGlobals bool) In
 		return inputs
 	}
 
-	out := e.ctx.na.inputs.alloc(count)
-	k := copy(out, inputs)
+	var result InputChunks
 
-	k += copy(out[k:], peers)
+	dedupers.with(func(dd *DeDuper) {
+		out := e.ctx.na.inputs.alloc(count)
+		k := copy(out, inputs)
 
-	if useGlobals && len(e.moduleGlobals) > 0 {
-		out[k] = e.moduleGlobals
-	}
+		for _, chunk := range inputs {
+			for _, input := range chunk {
+				dd.addStable(input.strID())
+			}
+		}
 
-	e.ctx.na.inputs.commit(count)
+		for _, chunk := range peers {
+			if unseen := e.ctx.na.filterSeen(dd, chunk); len(unseen) > 0 {
+				out[k] = unseen
+				k++
+			}
+		}
 
-	return out[:count:count]
+		if useGlobals {
+			if unseen := e.ctx.na.filterSeen(dd, e.moduleGlobalInputs); len(unseen) > 0 {
+				out[k] = unseen
+				k++
+			}
+		}
+
+		e.ctx.na.inputs.commit(k)
+		result = out[:k:k]
+	})
+
+	return result
 }
 
-func (e *EmitContext) collectPeerModuleGlobals() []VFS {
-	var peers [][]VFS
+func (e *EmitContext) collectPeerModuleGlobals() {
+	var peers, inputs [][]VFS
 
 	if e.peers != nil {
 		for _, peer := range e.peers.Modules {
 			if info := e.codegen.moduleInputs(peer); info != nil && info.PassPeers && len(info.Globals) > 0 {
 				peers = append(peers, info.Globals)
+				inputs = append(inputs, info.GlobalInputs)
 			}
 		}
 	}
 
 	if len(peers) == 0 {
-		return e.ctx.na.dedupClosure(e.moduleGlobals)
+		e.moduleGlobals = e.ctx.na.dedupClosure(e.moduleGlobals)
+		e.moduleGlobalInputs = e.ctx.na.dedupClosure(e.moduleGlobalInputs)
+
+		return
 	}
 
 	if len(e.moduleGlobals) > 0 {
 		peers = append(peers, e.moduleGlobals)
+		inputs = append(inputs, e.moduleGlobalInputs)
 	}
 
-	return e.ctx.na.dedupClosure(nil, peers)
+	e.moduleGlobals = e.ctx.na.dedupClosure(nil, peers)
+	e.moduleGlobalInputs = e.ctx.na.dedupClosure(nil, inputs)
 }
 
 func (e *EmitContext) collectModuleGlobalSource(src ANY) bool {
@@ -96,10 +141,11 @@ func (e *EmitContext) collectModuleGlobalSource(src ANY) bool {
 		closure := sc.closureOf(input)
 
 		e.scanner.putScanCtx(sc)
-		e.moduleGlobals = append(e.moduleGlobals, closure.self)
+		e.moduleGlobals = append(e.moduleGlobals, input)
+		e.moduleGlobalInputs = append(e.moduleGlobalInputs, closure.self)
 
 		for _, bucket := range closure.bucketList() {
-			e.moduleGlobals = append(e.moduleGlobals, bucket...)
+			e.moduleGlobalInputs = append(e.moduleGlobalInputs, bucket...)
 		}
 	}
 
@@ -115,7 +161,7 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 
 	var peerInputs InputChunks
 
-	passPeers := !isProgramModuleType(e.d.unit.Type) && !isDllModuleType(e.d.unit.Type)
+	passPeers := !isProgramModuleType(e.d.unit.Type) && !isDllModuleType(e.d.unit.Type) && e.d.unit.Type != tokDynamicLibrary
 
 	if value, ok := e.d.setVars[strPassPeers]; ok {
 		passPeers = stringIsTruthy(value.string())
@@ -133,5 +179,37 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 
 	includes := e.ctx.na.dedupClosure(e.moduleIncludes, peerInputs)
 
-	e.codegen.setModuleInputs(output, e.d.moduleStmt.Name, includes, globals, passPeers)
+	e.codegen.setModuleInputs(output, e.d.moduleStmt.Name, includes, globals, e.moduleGlobalInputs, passPeers)
+}
+
+func (e *EmitContext) globalPlugins() []VFS {
+	var plugins []VFS
+
+	for _, input := range e.moduleGlobals {
+		if path.Ext(input.relString()) == ".pyplugin" {
+			plugins = append(plugins, input)
+		}
+	}
+
+	return plugins
+}
+
+func (e *EmitContext) emitLDPlugins() {
+	for _, name := range e.d.ldPlugins {
+		src := e.moduleSourceVFS(name)
+		dst := build(e.instance.Path.relString(), "/", name.string(), ".pyplugin")
+		ref := e.ctx.emit.reserve()
+		instance := e.instance
+
+		instance.Platform = e.ctx.target
+
+		node := composeCPNode(instance, src, dst, nil, e.d.tc, e.ctx.scripts, e.ctx.na)
+
+		e.ctx.emit.emitReservedNode(node, ref)
+
+		e.register(GeneratedFileInfo{OutputPath: dst, PrimaryInput: src, ProducerRef: ref})
+		e.moduleGlobals = append(e.moduleGlobals, dst)
+		e.moduleGlobalInputs = append(e.moduleGlobalInputs, dst)
+		e.moduleIncludes = append(e.moduleIncludes, dst)
+	}
 }

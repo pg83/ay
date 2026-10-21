@@ -160,11 +160,7 @@ class DynamicLibraryTest(unittest.TestCase):
         self.assertEqual(program["outputs"], ["$(B)/p/prog", "$(B)/p/libfoo.so"])
         self.assertIn(dyn["uid"], program["deps"])
         program_link = " ".join(command_with(program, "link_exe.py")["cmd_args"])
-        self.assertIn(
-            "--start-plugins $(B)/lib/plug.py.pyplugin "
-            "$(B)/lib2/plug2.py.pyplugin --end-plugins",
-            program_link,
-        )
+        self.assertIn("--start-plugins --end-plugins", program_link)
         self.assertIn(
             "-Wl,--start-group build/cow/on/libbuild-cow-on.a dyn/libfoo.so "
             "-Wl,--end-group",

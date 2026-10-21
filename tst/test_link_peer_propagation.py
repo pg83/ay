@@ -111,7 +111,7 @@ class PeerPropagationTest(unittest.TestCase):
         args = link_args(graph, "$(B)/p/p")
         self.assertEqual(
             args[args.index("--start-plugins"):args.index("--end-plugins") + 1],
-            ["--start-plugins", "$(B)/p/pp.py.pyplugin", "$(B)/a/pa.py.pyplugin", "--end-plugins"],
+            ["--start-plugins", "$(B)/a/pa.py.pyplugin", "$(B)/p/pp.py.pyplugin", "--end-plugins"],
         )
         self.assertEqual(
             args[args.index("--ya-start-command-file") + 1:args.index("--ya-end-command-file")],
