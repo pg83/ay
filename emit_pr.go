@@ -267,6 +267,12 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 func prInputInducedIncludes(ctx *GenCtx, registry *CodegenRegistry, scanner *IncludeScanner, inputs []VFS) ParsedIncludeSet {
 	var induced ParsedIncludeSet
 
+	for _, input := range inputs {
+		if input.isBuild() {
+			registry.use(input)
+		}
+	}
+
 	dedupers.with(func(seen *DeDuper) {
 		var visit func(VFS)
 		visit = func(input VFS) {
@@ -279,7 +285,7 @@ func prInputInducedIncludes(ctx *GenCtx, registry *CodegenRegistry, scanner *Inc
 			passIncludes := false
 
 			if input.isBuild() {
-				if info := registry.use(input); info != nil {
+				if info := registry.lookup(input); info != nil {
 					parsed = info.ParsedIncludes
 				}
 			} else {
