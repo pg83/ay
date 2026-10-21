@@ -1028,9 +1028,6 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	})
 
 	inputs := na.inputList(ownSourceInputs, ownBuildInputs, goToolScriptInputsChunk, embedInputs, peerArchivePaths, peerGlobalPaths, extraSources, extraBuilds)
-
-	inputs = e.appendModuleInputs(inputs, false)
-
 	depBlock := na.noderefs.alloc(1 + len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + merged)
 	ndep := 0
 
@@ -1069,7 +1066,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		Resources: goToolResources(na, resourceGlobals),
 	}
 
-	ref := e.emitNode(node)
+	ref := e.emitModuleNode(node, false)
 
 	e.register(GeneratedFileInfo{OutputPath: outPath, InputsOnly: true, ModuleType: d.moduleStmt.Name})
 
@@ -1235,8 +1232,6 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		extraTailSources,
 	)
 
-	inputs = e.appendModuleInputs(inputs, true)
-
 	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + 2)
 	k := copy(deps, objRefs)
 
@@ -1336,7 +1331,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		e.appendSdcMeta(&node, programBinaryName(instance, d.moduleStmt))
 	}
 
-	return e.emitNode(node), outPath
+	return e.emitModuleNode(node, true), outPath
 }
 
 func (e *EmitContext) isGoArchive(p VFS) bool {

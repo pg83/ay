@@ -290,9 +290,8 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	}
 
 	n.ForeignDepRefs = na.refList(fixElfRef)
-	n.Inputs = e.appendModuleInputs(n.Inputs, true)
 
-	ref := e.emitNode(n)
+	ref := e.emitModuleNode(n, true)
 	addInclGlobal := concat(d.addInclGlobal, peerAddInclGlobal)
 	cFlagsGlobal := concat(d.cFlagsGlobal, peerCFlagsGlobal)
 	cxxFlagsGlobal := concat(d.cxxFlagsGlobal, peerCXXFlagsGlobal)
