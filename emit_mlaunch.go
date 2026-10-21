@@ -139,12 +139,6 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 		Inputs: na.inputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(append([]VFS{out}, e.outs...)...), DepRefs: na.refList(dedupRefs(e.refs)...),
 		Cmds: na.cmdList(e.pythonScriptCmd("touch.py", out.string()), Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS})}
 
-	for _, file := range concat(lateOuts, peers) {
-		if !strings.HasSuffix(file.relString(), ".pkg.fake") {
-			node.Outputs = append(node.Outputs, build(module, "/", file.relString()))
-		}
-	}
-
 	suffix := ""
 
 	if e.d.mlaunch != nil {
@@ -152,6 +146,12 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	}
 
 	e.appendSdcMeta(&node, name+suffix)
+
+	for _, file := range concat(lateOuts, peers) {
+		if !strings.HasSuffix(file.relString(), ".pkg.fake") {
+			node.Outputs = append(node.Outputs, build(module, "/", file.relString()))
+		}
+	}
 
 	ref := e.emitLazyModuleNode(node, peers, out)
 

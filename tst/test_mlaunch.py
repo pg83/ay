@@ -22,6 +22,18 @@ def files():
 
 
 class MlaunchTests(unittest.TestCase):
+    def test_deploy_metadata_precedes_inherited_package_outputs(self):
+        sources = files()
+        sources["pipeline/ya.make"] = f"MLAUNCH_PIPELINE(run)\n{lib.BARE_MODULE}END()\n"
+        sources["sdg/sdc/launcher/profiles/sdc_install/ya.make"] = "SDC_UNION(profiles)\nFILES(settings.txt)\nEND()\n"
+        sources["sdg/sdc/launcher/profiles/sdc_install/settings.txt"] = "settings\n"
+        graph = lib.make(sources, "pipeline", "--sandboxing")
+        outputs = lib.node_by_output(graph, "$(B)/pipeline/run.final.pkg.fake")["outputs"]
+        metadata = "$(B)/pipeline/run.deploy.sdcmeta"
+        inherited = "$(B)/pipeline/sdg/sdc/launcher/profiles/sdc_install/settings.txt"
+        self.assertEqual(outputs[0], "$(B)/pipeline/run.final.pkg.fake")
+        self.assertLess(outputs.index(metadata), outputs.index(inherited))
+
     def test_pipeline_package_keeps_own_copy_outputs_reused_from_sibling_variants(self):
         sources = files()
         sources["pipeline/ya.make"] = f"MLAUNCH_PIPELINE(run)\n{lib.BARE_MODULE}COPY_FILE(local.txt installed.txt)\nEND()\n"
