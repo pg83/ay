@@ -272,11 +272,13 @@ func (e *EmitContext) emitLD(
 		Cmds:      cmds,
 		Env:       envFull,
 		Inputs:    inputs,
-		Outputs:   e.appendModuleOutputs(outputs),
+		Outputs:   outputs,
 		KV:        kv,
 		DepRefs:   deps,
 		Resources: instance.Platform.UsesLinkResources,
 	}
+
+	e.appendModuleOutputs(&n)
 
 	if dyn != nil {
 		foreign := na.noderefs.alloc(2)[:0]

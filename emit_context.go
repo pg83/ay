@@ -399,16 +399,23 @@ func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	return e.codegen.register(info)
 }
 
-func (e *EmitContext) appendModuleOutputs(outputs []VFS) []VFS {
+func (e *EmitContext) appendModuleOutputs(node *Node) {
+	added := false
+
 	for _, meta := range e.metas {
 		if src := meta.Source.vfs(); src != 0 && src.isBuild() {
-			if info := e.codegen.lookup(src); info != nil && info.OwnerModule == e.instance.Path {
-				outputs = append(outputs, info.ModuleOutputs...)
+			if info := e.codegen.lookup(src); info != nil && info.OwnerModule == e.instance.Path && len(info.ModuleOutputs) > 0 {
+				node.Outputs = append(node.Outputs, info.ModuleOutputs...)
+				node.DepRefs = append(node.DepRefs, info.ProducerRef)
+
+				added = true
 			}
 		}
 	}
 
-	return outputs
+	if added {
+		node.DepRefs = e.ctx.na.uniqueRefs(node.DepRefs)
+	}
 }
 
 func (e *EmitContext) pendingEmit(fn func()) *PendingEmit {

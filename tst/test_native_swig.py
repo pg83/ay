@@ -64,6 +64,7 @@ class NativeSwigTest(unittest.TestCase):
                 self.assertIn(generated["uid"], compiled["deps"])
                 linked = lib.node_by_output(graph, "$(B)/bindings/perl/" + output)
                 self.assertEqual(linked["outputs"], ["$(B)/bindings/perl/" + output, perl])
+                self.assertIn(generated["uid"], linked["deps"])
 
     def test_wrapper_build_directory_tracks_resolved_source_directory(self):
         for source, relative in (
