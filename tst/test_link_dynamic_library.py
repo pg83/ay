@@ -90,6 +90,51 @@ def command_with(node, script):
 
 
 class DynamicLibraryTest(unittest.TestCase):
+    def test_dynamic_library_copy_step_observes_so_outputs(self):
+        for statement, copied in (
+            ("", False),
+            ("SET(SO_OUTPUTS no)", False),
+            ("DISABLE(SO_OUTPUTS)", False),
+            ("SET(SO_OUTPUTS yes)", True),
+            ("ENABLE(SO_OUTPUTS)", True),
+            ("WITH_DYNAMIC_LIBS()", True),
+        ):
+            with self.subTest(statement=statement):
+                files = base_files()
+                files["dyn/ya.make"] = (
+                    f"DYNAMIC_LIBRARY(foo)\n{NO_PLATFORM}{statement}\n"
+                    "EXPORTS_SCRIPT(foo.exports)\nDYNAMIC_LIBRARY_FROM(lib2)\nEND()\n"
+                )
+                files["dyn/foo.exports"] = "{};\n"
+                files["build/scripts/fs_tools.py"] = ""
+                graph = lib.make(files, "dyn")
+                dynamic = lib.node_by_output(graph, "$(B)/dyn/libfoo.so")
+                self.assertEqual(copied, any("link_or_copy_to_dir" in c["cmd_args"] for c in dynamic["cmds"]))
+                self.assertEqual(copied, "$(S)/build/scripts/fs_tools.py" in dynamic["inputs"])
+                if copied:
+                    link = command_with(dynamic, "link_dyn_lib.py")["cmd_args"]
+                    self.assertIn("-Wl,-rpath,/opt/lib", link)
+                    self.assertIn("-Wl,-rpath,$ORIGIN", link)
+
+    def test_target_dynamic_binary_uses_pic_without_implicit_copy_command(self):
+        files = base_files()
+        files["dyn/ya.make"] = (
+            f"DYNAMIC_LIBRARY(foo)\n{NO_PLATFORM}"
+            "EXPORTS_SCRIPT(foo.exports)\nDYNAMIC_LIBRARY_FROM(lib2)\nEND()\n"
+        )
+        files["dyn/foo.exports"] = "{};\n"
+        files["build/scripts/fs_tools.py"] = ""
+        graph = lib.make(files, "dyn")
+        dynamic = lib.node_by_output(graph, "$(B)/dyn/libfoo.so")
+        link = command_with(dynamic, "link_dyn_lib.py")["cmd_args"]
+        self.assertIn("-fPIC", link)
+        compile_vcs = next(c["cmd_args"] for c in dynamic["cmds"] if "-c" in c["cmd_args"])
+        self.assertIn("-fPIC", compile_vcs)
+        peer = lib.node_by_output(graph, "$(B)/lib2/b.cpp.pic.o")
+        self.assertIn("-fPIC", peer["cmds"][0]["cmd_args"])
+        self.assertFalse(any("link_or_copy_to_dir" in c["cmd_args"] for c in dynamic["cmds"]))
+        self.assertNotIn("$(S)/build/scripts/fs_tools.py", dynamic["inputs"])
+
     def test_dynamic_library_links_whole_peers_and_feeds_programs(self):
         files = base_files()
         files["dyn/ya.make"] = (
@@ -135,7 +180,7 @@ class DynamicLibraryTest(unittest.TestCase):
             text,
         )
         self.assertIn("-Wl,--version-script=$(S)/dyn/foo.exports", text)
-        self.assertEqual(args[-1], "-Wl,-no-pie")
+        self.assertNotIn("-Wl,-no-pie", args)
         self.assertEqual(
             dyn["inputs"],
             [
@@ -150,11 +195,7 @@ class DynamicLibraryTest(unittest.TestCase):
                 "$(S)/dyn/foo.exports",
             ],
         )
-        copy = command_with(dyn, "fs_tools.py")
-        self.assertEqual(
-            copy["cmd_args"][-3:],
-            ["link_or_copy_to_dir", "--no-check", "$(B)/dyn"],
-        )
+        self.assertFalse(any("link_or_copy_to_dir" in c["cmd_args"] for c in dyn["cmds"]))
 
         program = lib.node_by_output(graph, "$(B)/p/prog")
         self.assertEqual(program["outputs"], ["$(B)/p/prog", "$(B)/p/libfoo.so"])
@@ -230,7 +271,7 @@ class DynamicLibraryTest(unittest.TestCase):
         target = lib.node_by_output(graph, "$(B)/target/libbaz.so")
         target_args = command_with(target, "link_dyn_lib.py")["cmd_args"]
         self.assertIn("--target=aarch64-linux-gnu", target_args)
-        self.assertNotIn("-fPIC", target_args)
+        self.assertIn("-fPIC", target_args)
         self.assertIn("-Wl,--compress-debug-sections=zstd", target_args)
         archiver = lib.node_by_output(graph, "$(B)/tools/archiver/archiver")
         self.assertIn(host["uid"], archiver["deps"])

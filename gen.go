@@ -561,7 +561,7 @@ func isFinalTargetModuleType(name TOK) bool {
 }
 
 func picTransition(name TOK) bool {
-	return name == tokDll || name == tokDllJava || name == tokPy2Module
+	return name == tokDll || name == tokDllJava || name == tokPy2Module || name == tokDynamicLibrary
 }
 
 func isDllModuleType(name TOK) bool {
@@ -1034,13 +1034,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
 
-	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(stmtsModuleName(stmts)) {
-		descent := instance
+	if name := stmtsModuleName(stmts); !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(name) {
+		if name != tokDynamicLibrary {
+			descent := instance
 
-		descent.Kind = KindForeignDescent
-		descent.Demand = demandNone
+			descent.Kind = KindForeignDescent
+			descent.Demand = demandNone
 
-		genModule(ctx, descent)
+			genModule(ctx, descent)
+		}
 
 		pic := instance
 

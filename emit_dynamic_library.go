@@ -226,11 +226,38 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c.pic.o")
 	cmd0 := composeLDCmdVcsInfo(na, d.tc, vcsCVFS)
 	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
-	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, nil, peerArchivePaths, pluginPaths, anyStrs(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath)
-	cmd3 := composeLDCmdLinkOrCopy(na, d.tc, instance.Path.relString())
 	envVcsOnly := envVarsVCS
 	envFull := ctx.host.toolEnv()
-	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.relString(), d.exportsScript.string(), ctx.scripts)
+	moduleEnv := Environment{s: &e.frame.ifEnv}
+	soOutputs := envSoOutputs
+	copySO := moduleEnv.string(soOutputs) == "yes"
+
+	if !moduleEnv.hasBindingID(soOutputs) {
+		sanitizer := moduleEnv.string(envSANITIZER_TYPE)
+
+		copySO = instance.Platform.OS == OSDarwin && moduleEnv.bool(envCLANG) && sanitizer != "" && sanitizer != "no"
+	}
+
+	rpathGlobal := concat(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
+
+	var linkRpath []ANY
+
+	if copySO {
+		linkRpath = rpathGlobal
+	}
+
+	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, nil, peerArchivePaths, pluginPaths, anyStrs(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath, linkRpath)
+	cmds := na.cmds.alloc(4)[:0]
+
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
+
+	if copySO {
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkOrCopy(na, d.tc, instance.Path.relString())), Env: envVcsOnly})
+	}
+
+	na.cmds.commit(len(cmds))
+
+	inputs := composeDynLibInputs(na, peerArchivePaths, pluginPaths, fixElfPath, instance.Path.relString(), d.exportsScript.string(), ctx.scripts, copySO)
 	deps := na.noderefs.alloc(len(peerArchiveRefs) + len(pluginRefs) + 1)[:0]
 
 	deps = append(deps, peerArchiveRefs...)
@@ -242,7 +269,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	n := Node{
 		Platform:  instance.Platform,
-		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly}),
+		Cmds:      cmds[:len(cmds):len(cmds)],
 		Env:       envFull,
 		Inputs:    inputs,
 		Outputs:   na.vfsList(build(instance.Path.relString(), "/", outputName)),
@@ -269,7 +296,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		CFlagsGlobal:                 cFlagsGlobal,
 		CXXFlagsGlobal:               cxxFlagsGlobal,
 		COnlyFlagsGlobal:             cOnlyFlagsGlobal,
-		RPathFlagsGlobal:             concat(peerRPathFlagsGlobal, d.rpathFlagsGlobal),
+		RPathFlagsGlobal:             rpathGlobal,
 		PeerArchiveClosureRefs:       nil,
 		PeerArchiveClosurePaths:      nil,
 		isPyLibrary:                  false,
@@ -284,9 +311,9 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	}
 }
 
-func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePath string, output VFS, outputName string, vcsO VFS, ownObjects, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript string, fixElf VFS) []ANY {
+func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePath string, output VFS, outputName string, vcsO VFS, ownObjects, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript string, fixElf VFS, linkRpath []ANY) []ANY {
 	bound := 60 + len(pluginPaths) + 2*len(wholeArchivePeers) + len(ownObjects) +
-		len(p.SysrootArgs) + len(peerLibPaths) + len(p.LinkPreludeExtra) + p.Linker.ArgCount
+		len(p.SysrootArgs) + len(peerLibPaths) + len(p.LinkPreludeExtra) + p.Linker.ArgCount + len(linkRpath)
 
 	cmdArgs := na.anys.alloc(bound)[:0]
 
@@ -337,8 +364,9 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 
 	cmdArgs = appendAnyLists(cmdArgs, p.Linker.EndGroup, p.Linker.AfterPeers)
 	cmdArgs = appendLinkerTemplate(cmdArgs, p.Linker.Exports, "${input:EXPORTS_FILE}", "$(S)/"+modulePath+"/"+exportsScript)
+	cmdArgs = append(cmdArgs, linkRpath...)
 
-	if !p.PIC && p.CompressDebugSections {
+	if p.CompressDebugSections {
 		cmdArgs = append(cmdArgs, argWlCompressDebugSectionsZstd.any())
 	}
 
@@ -373,7 +401,7 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
-func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts ScriptDeps) InputChunks {
+func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElfPath VFS, modulePath, exportsScript string, scripts ScriptDeps, copySO bool) InputChunks {
 	peerChunk := na.vfsList(peerLibPaths...)
 	pluginChunk := na.vfsList(pluginPaths...)
 
@@ -387,8 +415,12 @@ func composeDynLibInputs(na *NodeArenas, peerLibPaths, pluginPaths []VFS, fixElf
 
 	chunks = append(chunks, peerChunk, pluginChunk, na.srcChunk(fixElfPath))
 
-	for _, w := range [3]VFS{ldVcsInfoVFS, ldLinkDynLibVFS, ldFsToolsVFS} {
+	for _, w := range [2]VFS{ldVcsInfoVFS, ldLinkDynLibVFS} {
 		chunks = append(chunks, scripts[w.rel()])
+	}
+
+	if copySO {
+		chunks = append(chunks, scripts[ldFsToolsVFS.rel()])
 	}
 
 	chunks = append(chunks, tailChunk)

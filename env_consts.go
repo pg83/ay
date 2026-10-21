@@ -162,6 +162,7 @@ var (
 	envSdcPackageName               = internEnv("SDC_PACKAGE_NAME")
 	envSdcPlatform                  = internEnv("SDC_PLATFORM")
 	envSdcUseSupernode              = internEnv("SDC_USE_SUPERNODE")
+	envSoOutputs                    = internEnv("SO_OUTPUTS")
 	envSoname                       = internEnv("_SONAME")
 	envTESTING_SAVE_OUTPUT          = internEnv("TESTING_SAVE_OUTPUT")
 	envTEST_NAME                    = internEnv("TEST_NAME")

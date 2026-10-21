@@ -129,6 +129,7 @@ var tokName = [...]STR{
 	tokDllTool:                         internStr("DLL_TOOL"),
 	tokDynamicLibrary:                  kwDYNAMIC_LIBRARY,
 	tokDynamicLibraryFrom:              internStr("DYNAMIC_LIBRARY_FROM"),
+	tokWithDynamicLibs:                 internStr("WITH_DYNAMIC_LIBS"),
 	tokEnable:                          internStr("ENABLE"),
 	tokEnv:                             kwENV,
 	tokExcludeTags:                     internStr("EXCLUDE_TAGS"),
@@ -468,6 +469,7 @@ const (
 	tokDll
 	tokDynamicLibrary
 	tokDynamicLibraryFrom
+	tokWithDynamicLibs
 	tokEnable
 	tokEnv
 	tokExcludeTags
