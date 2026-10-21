@@ -57,7 +57,7 @@ func (ctx *GenCtx) resourceValidationSuite(project, name string, ids, env []stri
 
 		args := []string{testToolHostPath, "run_check", "--source-root", testSourceRoot, "--checker", checker, "--check-name", s.testType, "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--log-path", work + "/testing_out_stuff/run_check.log"}
 
-		args = append(args, ids...)
+		args = append(args, s.inputNames...)
 		args = append(args, "--batch", "--batch-name", path.Base(project))
 
 		return testArgs(args)

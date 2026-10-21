@@ -465,7 +465,7 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 		ctx.emit.result(*root.GlobalRef)
 	}
 
-	ctx.emitModuleTests(append(ctx.genMultimoduleTargets(target, root.ModuleVariants, rootDemand), root)...)
+	ctx.emitConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, root.ModuleVariants, rootDemand), root)...)
 
 	for _, target := range targets.Recursed {
 		dir := target.Path
@@ -486,7 +486,7 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 			ctx.emit.result(sub.LDRef)
 		}
 
-		ctx.emitModuleTests(append(ctx.genMultimoduleTargets(target, sub.ModuleVariants, rootDemand), sub)...)
+		ctx.emitConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, sub.ModuleVariants, rootDemand), sub)...)
 	}
 }
 
@@ -696,25 +696,40 @@ func (e *EmitContext) peerDemand() ModuleDemand {
 	return demandNone
 }
 
-func (ctx *GenCtx) emitConfiguredSubmoduleTests(dir string) {
+func (ctx *GenCtx) emitConfiguredSubmoduleTests(dir string, results ...*ModuleEmitResult) {
 	if !ctx.testMode {
 		return
 	}
 
 	instance := ctx.rootInstance(dir, demandNone)
+	module := ctx.moduleName(dir)
 
-	switch ctx.moduleName(dir) {
-	case tokPy23Library:
-		instance.Language = LangPy2
-	case tokPy3Program:
-		instance.Kind = KindLib
+	switch module {
+	case tokPy23Library, tokPy3Program:
+		if len(results) > 0 {
+			return
+		}
+
+		if r := ctx.memoGet(instance); r != nil {
+			results = append(results, r)
+		}
+
+		if module == tokPy23Library {
+			instance.Language = LangPy2
+		} else {
+			instance.Kind = KindLib
+		}
 	default:
+		ctx.emitModuleTests(results...)
+
 		return
 	}
 
 	if r := ctx.memoGet(instance); r != nil {
-		ctx.emitModuleTests(r)
+		results = append([]*ModuleEmitResult{r}, results...)
 	}
+
+	ctx.emitModuleTests(results...)
 }
 
 func (ctx *GenCtx) emitModuleTests(results ...*ModuleEmitResult) {
@@ -768,11 +783,19 @@ func (ctx *GenCtx) emitModuleTests(results ...*ModuleEmitResult) {
 }
 
 func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
-	if len(s.checkFiles) == 0 {
+	validation := s.testType == "validate_resource" || s.testType == "validate_data_sbr"
+
+	if len(s.checkFiles) == 0 && !validation {
 		return false
 	}
 
 	for _, prev := range suites {
+		if validation && prev.testType == s.testType && prev.projectPath == s.projectPath && prev.name == s.name {
+			prev.inputNames = sortedUnique(append(prev.inputNames, s.inputNames...))
+
+			return true
+		}
+
 		if prev.testType == s.testType && prev.projectPath == s.projectPath && len(prev.checkFiles) > 0 {
 			prev.checkFiles = append(prev.checkFiles, s.checkFiles...)
 			prev.deps = append(prev.deps, s.deps...)
