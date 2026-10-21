@@ -294,6 +294,7 @@ type ModuleData struct {
 	fromSandboxes            []*FromSandboxStmt
 	fromArchives             []FromArchiveEntry
 	sdcMetas                 []SdcMetaEntry
+	pireInline               []ANY
 	pchFiles                 []PchFileStmt
 	checkConfigHeaders       []ANY
 	cythonOptions            []ANY
@@ -2045,6 +2046,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}()
 
 	switch v.Name {
+	case tokPireInline, tokPireInlineCmd:
+		if v.Name == tokPireInlineCmd && len(v.Args) != 1 {
+			throwFmt("PIRE_INLINE_CMD expects one source file")
+		}
+
+		d.pireInline = append(d.pireInline, v.Args...)
 	case tokGenerateYtRecord:
 		applyYtRecord(modulePath, v, d, env)
 	case tokYtRecordDisablePeerdir:

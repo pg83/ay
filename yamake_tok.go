@@ -1,6 +1,8 @@
 package main
 
 var tokName = [...]STR{
+	tokPireInline:             internStr("PIRE_INLINE"),
+	tokPireInlineCmd:          internStr("PIRE_INLINE_CMD"),
 	tokGenerateYtRecord:       internStr("GENERATE_YT_RECORD"),
 	tokYtRecordDisablePeerdir: internStr("YT_RECORD_DISABLE_PEERDIR"),
 	tokProtoToNamespace:       internStr("PROTO_TO_NAMESPACE"),
@@ -855,6 +857,8 @@ const (
 	tokYqlPrebuiltTool
 	tokGenerateYtRecord
 	tokYtRecordDisablePeerdir
+	tokPireInline
+	tokPireInlineCmd
 )
 
 type TOK uint16

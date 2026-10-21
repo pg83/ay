@@ -43,6 +43,7 @@ const (
 	prodFromArchive
 	prodPchFile
 	prodProto2Fbs
+	prodPireInline
 )
 
 type ProducerPos struct {
@@ -243,7 +244,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
 		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens) + len(d.cgoSrcs) +
-		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos) + len(d.listProtos) + len(d.fromArchives) + len(d.pchFiles) + len(d.proto2Fbs)
+		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos) + len(d.listProtos) + len(d.fromArchives) + len(d.pchFiles) + len(d.proto2Fbs) + len(d.pireInline)
 
 	if d.docs != nil {
 		n += len(d.docs.copies)
@@ -486,6 +487,15 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		output := copyFileOutputVFS(module, strings.TrimSuffix(stmt.Source.string(), filepath.Ext(stmt.Source.string()))+".fbs").rel().build()
 
 		positions = append(positions, ProducerPos{kind: prodProto2Fbs, index: i, outs: []VFS{output}, ins: e.srcInsCandidate(stmt.Source)})
+	}
+
+	for i, token := range d.pireInline {
+		input := e.moduleSourceVFS(token)
+		output, _ := composeCCPaths(e.instance, e.moduleSourceRel(token), input, ModuleCCInputs{}, "")
+		start := len(backing)
+
+		backing = append(backing, output, input)
+		push(prodPireInline, i, start, start+1)
 	}
 
 	for i, rp := range d.runPrograms {
@@ -882,6 +892,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		pos := positions[pi]
 
 		switch pos.kind {
+		case prodPireInline:
+			e.emitPireInline(pos.ins[0], pos.outs[0])
 		case prodProto2Fbs:
 			e.emitProto2Fbs(e.d.proto2Fbs[pos.index], pos.outs[0])
 		case prodFromArchive:

@@ -329,6 +329,7 @@ var (
 	strLibraryCppEventlog                                                                    = internStr("library/cpp/eventlog")
 	strLibraryCppProtoConfigCodegen                                                          = internStr("library/cpp/proto_config/codegen")
 	strLibraryCppProtoConfigProtos                                                           = internStr("library/cpp/proto_config/protos")
+	strLibraryCppRegexPireInline                                                             = internStr("library/cpp/regex/pire/inline")
 	strLibraryGoCoreResource                                                                 = internStr("library/go/core/resource")
 	strLibraryGoCoreResourceCc                                                               = internStr("library/go/core/resource/cc")
 	strLibraryLoadName                                                                       = internStr("--library-load-name")

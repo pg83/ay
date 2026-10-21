@@ -24,6 +24,28 @@ def compile_inputs(graph, output):
 
 
 class RunProgramTest(unittest.TestCase):
+    def test_output_include_roots_distinguish_overlapping_files(self):
+        files = library(
+            "RUN_PROGRAM(tools/gen OUT_NOAUTO overlay.h OUTPUT_INCLUDES lib/runtime.h)\n"
+            "RUN_PROGRAM(tools/gen OUT build.cpp OUTPUT_INCLUDES ${ARCADIA_BUILD_ROOT}/lib/overlay.h)\n"
+            "RUN_PROGRAM(tools/gen OUT source.cpp OUTPUT_INCLUDES ${ARCADIA_ROOT}/lib/overlay.h)\n",
+            overlay__h='#include "source_dep.h"\n', source_dep__h="", runtime__h="",
+        )
+        graph = lib.make(files, "lib")
+        built = lib.node_by_output(graph, "$(B)/lib/build.cpp.o")
+        self.assertIn("$(B)/lib/overlay.h", built["inputs"])
+        self.assertIn("$(S)/lib/runtime.h", built["inputs"])
+        self.assertNotIn("$(S)/lib/overlay.h", built["inputs"])
+        self.assertNotIn("$(S)/lib/source_dep.h", built["inputs"])
+        overlay = lib.node_by_output(graph, "$(B)/lib/overlay.h")
+        self.assertIn(overlay["uid"], built["deps"])
+        source = lib.node_by_output(graph, "$(B)/lib/source.cpp.o")
+        self.assertIn("$(S)/lib/overlay.h", source["inputs"])
+        self.assertIn("$(S)/lib/source_dep.h", source["inputs"])
+        self.assertNotIn("$(B)/lib/overlay.h", source["inputs"])
+        self.assertNotIn("$(S)/lib/runtime.h", source["inputs"])
+        self.assertNotIn(overlay["uid"], source["deps"])
+
     def test_assembly_inputs_use_the_assembler_include_namespace(self):
         files = library(
             "ADDINCL(native_inc FOR asm asm_inc)\n"
