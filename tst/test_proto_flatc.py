@@ -174,6 +174,29 @@ class ProtoFlatcTest(unittest.TestCase):
         archive = lib.node_by_output(graph, "$(B)/f/libf.a")
         self.assertIn(compiled["outputs"][0], archive["inputs"])
 
+    def test_proto2fbs_header_is_available_to_regular_cpp_sources(self):
+        files = flatc_files()
+        files.update({
+            "build/scripts/fs_tools.py": "",
+            "f/ya.make": (
+                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                "ADDINCL(${ARCADIA_BUILD_ROOT}/f)\n"
+                "PROTO2FBS(nested/schema.proto)\nSRCS(use.cpp)\nEND()\n"
+            ),
+            "f/nested/schema.proto": 'syntax = "proto3"; message S {}\n',
+            "f/use.cpp": '#include "nested/schema.fbs.h"\n',
+        })
+        graph = lib.make(files, "f")
+        converted = lib.node_by_output(graph, "$(B)/f/nested/schema.fbs")
+        generated = lib.node_by_output(graph, "$(B)/f/nested/schema.fbs.h")
+        compiled = lib.node_by_output(graph, "$(B)/f/use.cpp.o")
+        self.assertIn("$(S)/f/nested/schema.proto", converted["inputs"])
+        self.assertIn(converted["uid"], generated["deps"])
+        self.assertIn("$(B)/f/nested/schema.fbs", generated["inputs"])
+        self.assertIn("$(B)/f/nested/schema.fbs.h", compiled["inputs"])
+        self.assertIn(RUNTIME, compiled["inputs"])
+        self.assertIn(generated["uid"], compiled["deps"])
+
     def test_proto2fbs_generated_input_is_scheduled_before_conversion(self):
         files = flatc_files()
         lib.tool_program(files, "tools/proto", "proto")

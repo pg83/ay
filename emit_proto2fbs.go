@@ -54,5 +54,5 @@ func (e *EmitContext) emitProto2Fbs(stmt Proto2FbsStmt, output VFS) {
 		},
 	})
 
-	e.enqueueSrc(SrcMeta{Source: output.any(), Prio: stmtPrioDefault, Seq: stmt.Seq})
+	e.emitOneSource(SrcMeta{Source: output.any(), Prio: stmtPrioDefault, Seq: stmt.Seq})
 }
