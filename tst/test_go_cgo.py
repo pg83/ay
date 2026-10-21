@@ -86,6 +86,29 @@ def between(args, start, end):
 
 
 class GoCgoGraphTest(unittest.TestCase):
+    def test_generated_go_keeps_native_sibling_includes_on_native_compile(self):
+        files = cgo_world()
+        lib.tool_program(files, "tools/wrappergen", "wrappergen")
+        files["tools/wrappergen/ya.make"] = files["tools/wrappergen/ya.make"].replace(
+            "END()", "INDUCED_DEPS(h+cpp runtime/native.h)\nEND()"
+        )
+        pkg = "library/go/wrapped"
+        files.update({
+            f"{pkg}/ya.make": (
+                "GO_LIBRARY()\nSRCS(wrap.swg.cxx)\nCGO_SRCS(${BINDIR}/internal.go)\n"
+                "RUN_PROGRAM(tools/wrappergen OUT_NOAUTO wrap.swg.cxx internal.go)\nEND()\n"
+            ),
+            "runtime/native.h": '#include "detail.h"\n',
+            "runtime/detail.h": "",
+        })
+        graph = lib.make(files, pkg)
+        archive = lib.node_by_output(graph, f"$(B)/{pkg}/wrapped.a")
+        native = lib.node_by_output(graph, f"$(B)/{pkg}/wrap.swg.cxx.o")
+        self.assertIn(f"$(B)/{pkg}/wrap.swg.cxx", archive["inputs"])
+        for header in ("$(S)/runtime/native.h", "$(S)/runtime/detail.h"):
+            self.assertIn(header, native["inputs"])
+            self.assertNotIn(header, archive["inputs"])
+
     def test_cgo_export_copy_depends_on_generated_headers(self):
         files = cgo_world()
         zstd_binding(files)

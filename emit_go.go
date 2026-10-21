@@ -1058,12 +1058,13 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			tail[:nt:nt],
 			goToolCmdEnd,
 		), Env: env}),
-		Env:       env,
-		Inputs:    inputs,
-		KV:        &goKV,
-		Outputs:   na.vfsList(outPath, build(dir, "/", outName, ".a.vet.out"), build(dir, "/", outName, ".a.vet.txt")),
-		DepRefs:   depBlock[:ndep],
-		Resources: goToolResources(na, resourceGlobals),
+		Env:          env,
+		Inputs:       inputs,
+		InputClosure: Closure{self: outPath},
+		KV:           &goKV,
+		Outputs:      na.vfsList(outPath, build(dir, "/", outName, ".a.vet.out"), build(dir, "/", outName, ".a.vet.txt")),
+		DepRefs:      depBlock[:ndep],
+		Resources:    goToolResources(na, resourceGlobals),
 	}
 
 	ref := e.emitModuleNode(node, false)
@@ -1317,14 +1318,15 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	na.cmds.commit(kc)
 
 	node := Node{
-		Platform:  instance.Platform,
-		Cmds:      cmds[:kc:kc],
-		Env:       env,
-		Inputs:    inputs,
-		KV:        kv,
-		Outputs:   outputs,
-		DepRefs:   deps[:k:k],
-		Resources: goToolResources(na, resourceGlobals),
+		Platform:     instance.Platform,
+		Cmds:         cmds[:kc:kc],
+		Env:          env,
+		Inputs:       inputs,
+		InputClosure: Closure{self: outPath},
+		KV:           kv,
+		Outputs:      outputs,
+		DepRefs:      deps[:k:k],
+		Resources:    goToolResources(na, resourceGlobals),
 	}
 
 	if !isTest {
