@@ -20,8 +20,8 @@ func (e *EmitContext) emitARNamed(
 	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 	node := composeARNode(instance, archivePath, objRefs, objPaths, arPluginPath, tc, hostP, emit.nodeArenas())
 
-	e.appendModuleOutputs(&node)
 	e.includeNodeInputs(&node)
+	e.appendModuleOutputs(&node)
 	e.resolveNodeCodegenRefs(&node)
 
 	return emit.emitNode(node)

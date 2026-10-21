@@ -77,6 +77,7 @@ func (e *EmitContext) modulePeerInputs() InputChunks {
 func (e *EmitContext) emitModuleNode(node Node, useGlobals bool) NodeRef {
 	e.includeNodeInputs(&node)
 	node.Inputs = e.appendModuleInputs(node.Inputs, useGlobals)
+	e.appendModuleOutputs(&node)
 	e.resolveNodeCodegenRefs(&node)
 
 	return e.ctx.emit.emitNodePtr(&node)

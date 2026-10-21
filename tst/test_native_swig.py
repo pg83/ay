@@ -82,6 +82,10 @@ class NativeSwigTest(unittest.TestCase):
                 linked = lib.node_by_output(graph, "$(B)/bindings/perl/" + output)
                 self.assertEqual(linked["outputs"], ["$(B)/bindings/perl/" + output, perl])
                 self.assertIn(generated["uid"], linked["deps"])
+                self.assertIn(wrapper, linked["inputs"])
+                self.assertEqual(linked["inputs"].count(wrapper), 1)
+                for source in ("api.h", "detail.h"):
+                    self.assertNotIn(f"$(S)/bindings/{source}", linked["inputs"])
 
     def test_wrapper_build_directory_tracks_resolved_source_directory(self):
         for source, relative in (
