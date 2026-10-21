@@ -143,7 +143,7 @@ class AssemblerTest(unittest.TestCase):
         gnu = lib.node_by_output(graph, "$(B)/mod/__/other/dir/x.S.o")
         self.assertEqual(gnu["inputs"], ["$(S)/other/dir/x.S"])
         self.assertIn("$(S)/other/dir/x.S", gnu["cmds"][0]["cmd_args"])
-        yasm = lib.node_by_output(graph, "$(B)/mod/y.o")
+        yasm = lib.node_by_output(graph, "$(B)/mod/__/other/dir/y.o")
         self.assertEqual(yasm["cmds"][0]["cmd_args"][-1], "$(S)/other/dir/y.asm")
 
     def test_go_module_assembler_forces_consistent_debug_paths(self):

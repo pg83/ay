@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 )
 
@@ -15,24 +16,17 @@ var yasmConstHead = []ANY{
 	argReplaceToolRootT.any(),
 }
 
-func (e *EmitContext) emitASYasm(srcRel string, srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef) (NodeRef, VFS) {
+func (e *EmitContext) emitASYasm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef) (NodeRef, VFS) {
 	instance := e.instance
 	na := e.ctx.na
-	stem := strings.TrimSuffix(strings.TrimSuffix(srcRel, ".yasm"), ".asm")
 	suffix := ".o"
 
 	if instance.Platform.PIC {
 		suffix = ".pic.o"
 	}
 
-	var outVFS VFS
-
-	if strings.Contains(srcRel, "/") {
-		outVFS = build(instance.Path.relString(), "/_/", stem, suffix)
-	} else {
-		outVFS = build(instance.Path.relString(), "/", stem, suffix)
-	}
-
+	rel := composeSrcDirOutputRel(instance.Path.relString(), srcVFS.relString())
+	outVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(rel, filepath.Ext(rel)), suffix)
 	inVFS := srcVFS
 
 	var predefinedFlags []string
@@ -98,7 +92,6 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta, in ModuleCCInputs) {
 	src := meta.Source
 	ctx, d := e.ctx, e.d
 	srcVFS := src.vfs()
-	srcRel := e.moduleSourceRel(src)
 
 	if srcVFS == 0 {
 		srcVFS = e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
@@ -115,7 +108,7 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta, in ModuleCCInputs) {
 	asIn.IncludeView = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainAsm)
 
 	yasmLD, _ := ctx.tool(argContribToolsYasm)
-	ref, outPath := e.emitASYasm(srcRel, srcVFS, asIn, yasmLD)
+	ref, outPath := e.emitASYasm(srcVFS, asIn, yasmLD)
 
 	e.collectObj(ref, outPath, meta)
 }
