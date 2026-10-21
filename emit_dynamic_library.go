@@ -258,7 +258,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		linkRpath = rpathGlobal
 	}
 
-	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, nil, peerArchivePaths, pluginPaths, anyStrs(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath, linkRpath)
+	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, peerArchivePaths, pluginPaths, anyStrs(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath, linkRpath)
 	cmds := na.cmds.alloc(4)[:0]
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
@@ -320,8 +320,8 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	}
 }
 
-func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePath string, output VFS, outputName string, vcsO VFS, ownObjects, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript string, fixElf VFS, linkRpath []ANY) []ANY {
-	bound := 60 + len(pluginPaths) + 2*len(wholeArchivePeers) + len(ownObjects) +
+func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePath string, output VFS, outputName string, vcsO VFS, peerLibPaths, pluginPaths []VFS, wholeArchivePeers []string, exportsScript string, fixElf VFS, linkRpath []ANY) []ANY {
+	bound := 60 + len(pluginPaths) + 2*len(wholeArchivePeers) +
 		len(p.SysrootArgs) + len(peerLibPaths) + len(p.LinkPreludeExtra) + p.Linker.ArgCount + len(linkRpath)
 
 	cmdArgs := na.anys.alloc(bound)[:0]
@@ -355,11 +355,6 @@ func composeDynLibCmd(na *NodeArenas, p *Platform, tc ModuleToolchain, modulePat
 
 	cmdArgs = appendLinkerGlobals(cmdArgs, p.Linker, nil, nil)
 	cmdArgs = append(cmdArgs, vcsO.any())
-
-	for _, o := range ownObjects {
-		cmdArgs = append(cmdArgs, o.any())
-	}
-
 	cmdArgs = append(cmdArgs, argDashO.any(), output.any())
 	cmdArgs = append(cmdArgs, p.Linker.Shared...)
 	cmdArgs = appendLinkerTemplate(cmdArgs, p.Linker.Soname, "$_SONAME", outputName)
