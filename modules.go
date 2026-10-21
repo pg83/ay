@@ -275,6 +275,7 @@ type ModuleData struct {
 	buildMns                 []*BuildMnStmt
 	splitCodegens            []*SplitCodegenStmt
 	baseCodegens             []*BaseCodegenStmt
+	proto2Fbs                []Proto2FbsStmt
 	runPython                []*RunPythonStmt
 	fromSandboxes            []*FromSandboxStmt
 	fromArchives             []FromArchiveEntry
@@ -2407,6 +2408,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.fbsNamespaces = append(d.fbsNamespaces, internV(v.Args[0].string(), "=", namespacePath).any())
+	case tokProto2Fbs:
+		if len(v.Args) != 1 {
+			throwFmt("PROTO2FBS expects one proto input")
+		}
+
+		d.proto2Fbs = append(d.proto2Fbs, Proto2FbsStmt{Source: expandStmtTokenAny(v.Args[0], env), Seq: d.nextDeclSeq()})
+		d.hasFbs = true
 	case tokFlatcFlags:
 		d.flatcFlags = append(d.flatcFlags, v.Args...)
 	case tokCopyFile, tokCopyFileWithContext:

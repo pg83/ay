@@ -193,6 +193,13 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 		OnUse:          pending,
 	})
 
+	var inherited ParsedIncludeSet
+
+	if srcVFS.isBuild() {
+		inherited = e.codegen.buildParsedFor(srcVFS)
+		e.codegen.inheritParsedIncludes(headerVFS, flRef, inherited)
+	}
+
 	cppIncludes := ctx.na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(headerVFS.rel().any())})
 
 	e.register(GeneratedFileInfo{
@@ -203,6 +210,10 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppIncludes},
 		OnUse:          pending,
 	})
+
+	if srcVFS.isBuild() {
+		e.codegen.inheritParsedIncludes(cppVFS, flRef, inherited)
+	}
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    bfbsVFS,

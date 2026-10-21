@@ -147,6 +147,7 @@ var tokName = [...]STR{
 	tokFbsNamespace:                    internStr("FBS_NAMESPACE"),
 	tokFbsLibrary:                      internStr("FBS_LIBRARY"),
 	tokFiles:                           kwFILES,
+	tokProto2Fbs:                       internStr("PROTO2FBS"),
 	tokFlatcFlags:                      internStr("FLATC_FLAGS"),
 	tokForkSubtests:                    internStr("FORK_SUBTESTS"),
 	tokForkTests:                       internStr("FORK_TESTS"),
@@ -501,6 +502,7 @@ const (
 	tokFbsNamespace
 	tokFbsLibrary
 	tokFiles
+	tokProto2Fbs
 	tokFlatcFlags
 	tokForkSubtests
 	tokForkTests

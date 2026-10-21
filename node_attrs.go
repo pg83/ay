@@ -14,16 +14,17 @@ var (
 )
 
 var procKindStr = [...]string{
-	pkML: "ML",
-	pkGL: "GL",
-	pkPK: "PK",
-	pkRS: "RS",
-	pkIM: "IM",
-	pkSM: "SM",
-	pkCI: "CI",
-	pkFA: "FA",
-	pkIL: "IL",
-	pkTR: "TR", pkDL: "DL",
+	pkFBS: "FBS",
+	pkML:  "ML",
+	pkGL:  "GL",
+	pkPK:  "PK",
+	pkRS:  "RS",
+	pkIM:  "IM",
+	pkSM:  "SM",
+	pkCI:  "CI",
+	pkFA:  "FA",
+	pkIL:  "IL",
+	pkTR:  "TR", pkDL: "DL",
 	pkCL: "CL",
 	pkUG: "UG", pkRP: "RP",
 	pkTSProto: "TS_PRO",
@@ -139,6 +140,7 @@ const (
 	pkDL
 	pkTR
 	pkTL
+	pkFBS
 	pkIL
 	pkUG
 	pkRP
