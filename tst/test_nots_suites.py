@@ -5,6 +5,7 @@ import unittest
 from lib import make, node_by_output, resource_lib, tool_program
 import test_nots
 from test_java_tests import option_values, run_args
+from test_proto_desc import desc_files
 
 
 class NotsSuitesTest(unittest.TestCase):
@@ -20,6 +21,8 @@ class NotsSuitesTest(unittest.TestCase):
         return files
 
     def assert_workspace_dependencies(self, graph, test):
+        builder = node_by_output(graph, '$(B)/devtools/frontend_build_platform/nots/builder/builder')
+        self.assertIn(builder['uid'], test['deps'])
         self.assertIn(node_by_output(graph, '$(B)/web/package.json')['uid'], test['deps'])
         for peer in ('left', 'right', 'leaf'):
             for output in ('package.json', 'output.tar'):
@@ -66,6 +69,30 @@ class NotsSuitesTest(unittest.TestCase):
                 test = node_by_output(graph, f'$(B)/web/test-results/{name}/meta.json')
                 self.assert_workspace_dependencies(graph, test)
                 self.assertIn('$(B)/web/package.json', test['inputs'])
+
+    def test_schema_workspace_dependency_keeps_default_descriptions(self):
+        files = test_nots.NotsTests().project('TS_LIBRARY()\nTS_BUILD_SCRIPT(build)\nTS_BUILD_OUTPUTS(build)\nTS_LINT(lint)')
+        files.update(desc_files())
+        files.update({
+            'web/package.json': '{"dependencies":{"api":"workspace:../api"}}',
+            'web/tests/ya.make': 'TS_TEST_FOR(web)\nTS_TEST(test)\nEND()\n',
+            'web/ya.make': files['web/ya.make'] + '\nRECURSE_FOR_TESTS(tests)\n',
+            'api/ya.make': 'PROTO_SCHEMA()\nINCLUDE_TAGS(TS_PROTO_FROM_SCHEMA TS_PREPARE_DEPS)\nSRCS(api.proto)\nPEERDIR(raw)\nEND()\n',
+            'api/package.json': '{}',
+            'api/api.proto': 'syntax = "proto3";\nimport "raw/value.proto";\nmessage Api {}\n',
+            'raw/ya.make': 'PROTO_LIBRARY()\nSRCS(value.proto)\nEND()\n',
+            'raw/value.proto': 'syntax = "proto3";\nmessage Value {}\n',
+        })
+        graph = make(files, 'web', '--target-platform-tests', '--output-only-tests', '-DAUTOCHECK=yes')
+        descriptions = node_by_output(graph, '$(B)/api/api.protodesc')
+        raw = node_by_output(graph, '$(B)/raw/raw.self.protodesc')
+        for project, name in (('web', 'ts_lint_lint'), ('web/tests', 'ts_test_test')):
+            with self.subTest(name=name):
+                test = node_by_output(graph, f'$(B)/{project}/test-results/{name}/meta.json')
+                self.assertIn(descriptions['uid'], test['deps'])
+                self.assertNotIn(raw['uid'], test['deps'])
+                self.assertIn(node_by_output(graph, '$(B)/api/output.tar')['uid'], test['deps'])
+        self.assertIn(raw['outputs'][0], descriptions['inputs'])
 
     def test_descriptor_resource_globals_reach_typescript_test_suites(self):
         files = test_nots.NotsTests().project('TS_LIBRARY()\nTS_BUILD_SCRIPT(build)\nTS_BUILD_OUTPUTS(build)\nTS_LINT(lint)')

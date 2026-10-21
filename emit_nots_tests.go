@@ -75,7 +75,7 @@ func (e *EmitContext) notsSuite(name string, globals []ResourceDecl, addSource b
 
 func (e *EmitContext) notsSuiteDependencies(target string) []NodeRef {
 	prepare := e.codegen.use(build(target, "/package.json"))
-	refs := []NodeRef{prepare.ProducerRef}
+	refs := []NodeRef{prepare.ProducerRef, prepare.Nots.ToolRef}
 	pj := e.ctx.parsers.notsJSON(target + "/package.json")
 
 	for _, peer := range e.ctx.parsers.notsPeers(target, pj) {
@@ -86,6 +86,18 @@ func (e *EmitContext) notsSuiteDependencies(target string) []NodeRef {
 		for _, input := range info.ClosureLeaves {
 			if dep := e.codegen.lookup(input); dep != nil && dep.Nots != nil {
 				refs = append(refs, dep.ProducerRef)
+			}
+		}
+
+		if info.Nots.Schema {
+			instance := e.notsPeerInstance(peer)
+
+			instance.Language = LangProtoDescriptions
+
+			result := genModule(e.ctx, instance)
+
+			if result.ARPath != nil {
+				refs = append(refs, result.ARRef)
 			}
 		}
 	}

@@ -317,6 +317,7 @@ type NotsPrepared struct {
 	ToolRef         NodeRef
 	ToolPath        VFS
 	HasDependencies bool
+	Schema          bool
 	SourceFiles     []VFS
 	SourcesLoaded   bool
 }
@@ -502,7 +503,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 
 	globals = e.notsTestGlobals(globals)
 
-	state := &NotsPrepared{Head: head, Globals: globals, Nodejs: nodejs, ResourceNames: resourceNames, ToolRef: toolRef, ToolPath: toolPath, HasDependencies: hasDeps}
+	state := &NotsPrepared{Head: head, Globals: globals, Nodejs: nodejs, ResourceNames: resourceNames, ToolRef: toolRef, ToolPath: toolPath, HasDependencies: hasDeps, Schema: e.d.moduleStmt.Schema}
 	info := e.codegen.lookup(output)
 
 	info.Nots = state
