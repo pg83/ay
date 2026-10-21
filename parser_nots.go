@@ -33,20 +33,45 @@ type NotsLockfile struct {
 	Packages []NotsPackage
 }
 
-func (pm *IncludeParserManager) notsJSON(rel string) map[string]any {
+type ParsedJSON struct {
+	Value any
+	Error *Exception
+}
+
+func (pm *IncludeParserManager) parsedJSON(rel string) ParsedJSON {
 	key := internStr(rel)
 
 	if v, ok := pm.cache.notsJSON.get(key); ok {
 		return v
 	}
 
-	v := map[string]any{}
+	var v ParsedJSON
 
-	throw(json.Unmarshal(concatChunks(pm.fs.readPath(key)), &v))
+	v.Error = try(func() { throw(json.Unmarshal(concatChunks(pm.fs.readPath(key)), &v.Value)) })
 
 	pm.cache.notsJSON.put(key, v)
 
 	return v
+}
+
+func (pm *IncludeParserManager) notsJSON(rel string) map[string]any {
+	parsed := pm.parsedJSON(rel)
+
+	if parsed.Error != nil {
+		parsed.Error.throw()
+	}
+
+	if parsed.Value == nil {
+		return nil
+	}
+
+	object, ok := parsed.Value.(map[string]any)
+
+	if !ok {
+		throwFmt("expected JSON object in %s", rel)
+	}
+
+	return object
 }
 
 func (pm *IncludeParserManager) notsYAML(rel string) map[string]any {

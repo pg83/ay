@@ -35,7 +35,7 @@ type ParsedSource struct {
 }
 
 type SharedParseCache struct {
-	notsJSON     DenseMap[STR, map[string]any]
+	notsJSON     DenseMap[STR, ParsedJSON]
 	notsYAML     DenseMap[STR, map[string]any]
 	notsLocks    DenseMap[STR, *NotsLockfile]
 	directives   *BumpAllocator[IncludeDirective]

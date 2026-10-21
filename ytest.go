@@ -291,6 +291,7 @@ type TestSuite struct {
 	tags                   []string
 	runCwd                 string
 	canonizeSubPath        string
+	canonicalData          bool
 	execPath               string
 	setupPythonpathEnv     bool
 	supportsCanonization   bool
@@ -402,9 +403,15 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 		s.deps = append(s.deps, ctx.emitDockerImage(image))
 	}
 
-	for _, data := range s.data {
-		if strings.HasPrefix(data, "sbr://") {
-			s.deps = append(s.deps, ctx.emitTestData(data))
+	if s.canonicalData {
+		s.data = sortedUnique(append(slices.Clone(s.data), ctx.canonicalTestResources(s)...))
+	}
+
+	for _, entry := range s.data {
+		if strings.HasPrefix(entry, "sbr://") {
+			s.deps = append(s.deps, ctx.emitTestData(entry))
+		} else if resource, ok := strings.CutPrefix(entry, "mds:"); ok && s.supportsCanonization {
+			s.deps = append(s.deps, ctx.emitCanonicalTestData(resource))
 		}
 	}
 

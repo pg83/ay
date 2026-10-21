@@ -103,6 +103,7 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 	s.applyTestMeta(d.test, d.setVars[strADD_SRCDIR_TO_TEST_DATA] != strNo)
 	s.deps = []NodeRef{binRef}
 	s.supportsCanonization = true
+	s.canonicalData = true
 	s.smoothShutdown = []string{"SIGUSR2"}
 
 	partition := cmp.Or(d.test.partition, "SEQUENTIAL")

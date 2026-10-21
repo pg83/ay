@@ -344,6 +344,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	s.requirements = testRequirementsOf(t.requirements)
 	s.env = slices.Clone(d.testEnv)
 	s.supportsCanonization = true
+	s.canonicalData = true
 	s.supportsTestParameters = true
 	s.smoothShutdown = []string{"SIGUSR1"}
 	s.split = 1
