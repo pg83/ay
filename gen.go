@@ -735,8 +735,22 @@ func (ctx *GenCtx) emitModuleTests(results ...*ModuleEmitResult) {
 		for _, s := range r.TestSuites {
 			if s.projectBuildDeps {
 				for _, module := range results {
-					if module.LDRef != 0 {
-						s.deps = append(s.deps, module.LDRef)
+					ref := module.LDRef
+
+					if module.java != nil {
+						if info := ctx.javaReg(module.java).lookup(module.java.target); info != nil {
+							ref = info.ProducerRef
+						}
+					} else if ref == 0 {
+						ref = module.ARRef
+					}
+
+					if ref != 0 {
+						s.deps = append(s.deps, ref)
+					}
+
+					if module.GlobalRef != nil && *module.GlobalRef != 0 {
+						s.deps = append(s.deps, *module.GlobalRef)
 					}
 				}
 			}
