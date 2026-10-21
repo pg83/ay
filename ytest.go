@@ -52,6 +52,8 @@ type TestOpts struct {
 	contextReqs  *Requirements
 	commonEnv    [][2]string
 	contextRef   NodeRef
+
+	dirOutputsInNodes bool
 }
 
 func newTestOpts(mf *MakeFlags, yaConf map[string]any) *TestOpts {
@@ -77,6 +79,8 @@ func newTestOpts(mf *MakeFlags, yaConf map[string]any) *TestOpts {
 		contextReqs:  &Requirements{Network: nwRestricted},
 	}
 
+	opts.dirOutputsInNodes = yaConf["dir_outputs_in_nodes"] == true
+
 	if v, ok := yaConf["dir_outputs"].(bool); ok {
 		opts.dirOutputs = v
 	}
@@ -88,6 +92,10 @@ func newTestOpts(mf *MakeFlags, yaConf map[string]any) *TestOpts {
 	if opts.dirOutputs {
 		opts.removeTos = true
 		opts.dirOutputs = !mf.dist && !mf.sandboxing && !mf.cacheTests
+	}
+
+	if v, ok := os.LookupEnv("YA_DIR_OUTPUTS_IN_NODES"); ok {
+		opts.dirOutputsInNodes = envEnabled(v)
 	}
 
 	autoDetect := yaConf["auto_detect_agent"] == true

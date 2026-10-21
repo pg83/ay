@@ -78,15 +78,28 @@ func (ctx *GenCtx) emitTestData(uri string) NodeRef {
 
 	args := []string{testToolHostPath, "download", "--storage-root", testBuildRoot, "--id", id, "--log-path", build("res" + id + ".log").string(), "--rename-to", "resource", "--resource-file", "$(RESOURCE_ROOT)/sbr/" + id + "/resource"}
 
+	var outputs []VFS
+	if ctx.tests.dirOutputsInNodes {
+		tar := build(dir + "/dir_res.tar")
+		outputs = append(outputs, tar)
+		args = append(args, "--dir-output-tared-path", tar.string())
+	}
+
+	outputs = append(outputs, build(dir+"/resource_info.json"), out, build("res"+id+".log"))
+
 	if ctx.tests.dist {
 		args = append(args, "--for-dist-build", "--log-level", "DEBUG", "--timeout", "900")
+	}
+
+	if token := os.Getenv("YA_TOKEN"); token != "" {
+		args = append(args, "--token", token)
 	}
 
 	requirements := *ctx.tests.contextReqs
 
 	requirements.Network = nwFull
 
-	ref := ctx.emit.emit(&Node{Platform: testNoPlatform, Env: sortedEnvVars(ctx.tests.commonEnvMap()), Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args)), Cwd: cwdVFS(testBuildRoot)}), Outputs: ctx.na.vfsList(build(dir+"/resource_info.json"), build(dir+"/resource"), build("res"+id+".log")), ResourceURIs: []STR{internStr("sbr:" + id)}, KV: &KV{P: pkDL, PC: pcLightCyan, ShowOutBool: true}, Requirements: &requirements})
+	ref := ctx.emit.emit(&Node{Platform: testNoPlatform, Env: sortedEnvVars(ctx.tests.commonEnvMap()), Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args)), Cwd: cwdVFS(testBuildRoot)}), Outputs: ctx.na.vfsList(outputs...), ResourceURIs: []STR{internStr("sbr:" + id)}, KV: &KV{P: pkDL, PC: pcLightCyan, ShowOutBool: true}, Requirements: &requirements})
 
 	registry.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
 
