@@ -26,6 +26,26 @@ def flatc_files():
 
 
 class ProtoFlatcTest(unittest.TestCase):
+    def test_relative_imports_reach_generated_peer_headers(self):
+        for ext in ("fbs", "fbs64"):
+            with self.subTest(ext=ext):
+                files = flatc_files()
+                bare = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                files.update({
+                    "schemas/common/ya.make": bare + f"SRCS(common.{ext})\nEND()\n",
+                    f"schemas/common/common.{ext}": "table Common {}\n",
+                    "schemas/user/ya.make": bare + f"PEERDIR(schemas/common)\nSRCS(packet.{ext} use.cpp)\nEND()\n",
+                    f"schemas/user/packet.{ext}": f'include "../common/./common.{ext}";\ntable Packet {{}}\n',
+                    "schemas/user/use.cpp": f'#include "packet.{ext}.h"\n',
+                })
+                graph = lib.make(files, "schemas/user")
+                header = f"$(B)/schemas/common/common.{ext}.h"
+                producer = lib.node_by_output(graph, header)
+                for output in (f"$(B)/schemas/user/packet.{ext}.cpp.o", "$(B)/schemas/user/use.cpp.o"):
+                    node = lib.node_by_output(graph, output)
+                    self.assertIn(header, node["inputs"])
+                    self.assertIn(producer["uid"], node["deps"])
+
     def test_fbs_and_fbs64_producers_with_flags_and_includes(self):
         files = flatc_files()
         files.update({
