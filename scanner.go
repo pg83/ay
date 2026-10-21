@@ -941,7 +941,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 		if prefix == bldRootDirVFS {
 			info = s.codegen.lookupSTR(buildSuffix)
 		} else {
-			info = s.codegen.lookupSplit(prefix.rel().source(), buildSuffix.any())
+			info = s.codegen.lookupSplit(prefix.rel().source(), buildSuffix)
 		}
 
 		if info == nil {
@@ -1008,7 +1008,7 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 						continue
 					}
 
-					info := s.codegen.lookupSplit(b.prefixSrc, buildSuffix.any())
+					info := s.codegen.lookupSplit(b.prefixSrc, buildSuffix)
 
 					if info == nil {
 						continue
@@ -1111,7 +1111,7 @@ func (sc *ScanCtx) resolveSearchPath(out []VFS, includerAbs, incDir VFS, d Inclu
 			out = append(out, sv.source())
 			searchPathFound = true
 		} else if includerAbs.isBuild() {
-			if info := s.codegen.lookupSplit(incDir, targetID.any()); info != nil {
+			if info := s.codegen.lookupSplit(incDir, targetID); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)
 					searchPathFound = true

@@ -158,7 +158,7 @@ func (e *EmitContext) registerCollectPySrcs() {
 			} else {
 				path = build(module, "/", src.string())
 
-				if e.codegen.lookupSplit(instance.Path, src) == nil {
+				if e.codegen.lookupSplit(instance.Path, src.str()) == nil {
 					path = resolveSourceVFS(ctx, instance, src.string(), d.srcDirs)
 				}
 			}

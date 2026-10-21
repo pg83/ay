@@ -229,10 +229,6 @@ func (r *CodegenRegistry) lookup(path VFS) *GeneratedFileInfo {
 }
 
 func (r *CodegenRegistry) moduleType(path VFS) TOK {
-	if !path.isBuild() {
-		return 0
-	}
-
 	info, _ := r.byRel.get(path.rel())
 
 	if info == nil {
@@ -278,13 +274,7 @@ func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
 	return info
 }
 
-func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix ANY) *GeneratedFileInfo {
-	suffixID := suffix.str()
-
-	if suffixID == 0 {
-		return nil
-	}
-
+func (r *CodegenRegistry) lookupSplit(prefix VFS, suffixID STR) *GeneratedFileInfo {
 	key := splitMix64(uint32(prefix.rel()), uint32(suffixID))
 
 	if r.bySplit != nil {
