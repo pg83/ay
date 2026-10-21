@@ -15,7 +15,7 @@ class RemainingGraphContractsTest(unittest.TestCase):
     def test_typescript_root_and_package_reuse_the_same_outputs(self):
         files = test_nots.NotsTests().project()
         files['group/ya.make'] = 'CI_GROUP()\nPEERDIR(web)\nEND()\n'
-        graph = lib.make(files, 'web', 'group')
+        graph = lib.make(files, 'group', 'web')
         bundle = lib.node_by_output(graph, '$(B)/web/output.tar')
         package = lib.node_by_output(graph, '$(B)/group/group.ci.pkg.fake')
         self.assertIn(bundle['uid'], package['deps'])
