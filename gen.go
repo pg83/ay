@@ -457,9 +457,8 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 
 	if root.LDPath != nil {
 		ctx.scannerForPlatform(ctx.target).codegen.use(*root.LDPath)
+		ctx.emit.result(root.LDRef)
 	}
-
-	ctx.emit.result(root.LDRef)
 
 	if root.GlobalRef != nil {
 		ctx.emit.result(*root.GlobalRef)
@@ -482,8 +481,12 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 			ctx.scannerForPlatform(ctx.target).codegen.use(*sub.LDPath)
 		}
 
-		if sub.LDRef != 0 {
+		if sub.LDPath != nil {
 			ctx.emit.result(sub.LDRef)
+		}
+
+		if sub.GlobalRef != nil {
+			ctx.emit.result(*sub.GlobalRef)
 		}
 
 		ctx.emitConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, sub.ModuleVariants, rootDemand), sub)...)
@@ -591,9 +594,15 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 	default:
 		root := genModule(ctx, ctx.rootInstance(dir, demandSelf))
 
-		if root.LDRef != 0 {
+		if root.LDPath != nil {
 			ctx.emit.result(root.LDRef)
 		}
+
+		if root.GlobalRef != nil {
+			ctx.emit.result(*root.GlobalRef)
+		}
+
+		ctx.genMultimoduleTargets(DiscoveredModule{Path: dir, Declaration: &ModuleStmt{Name: name}}, root.ModuleVariants, demandSelf)
 	}
 }
 
@@ -869,10 +878,11 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 	return targets
 }
 
-func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults bool) *Graph {
+func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults, stripPackagesFromResults bool) *Graph {
 	emitter := newStreamingEmitter(nil)
 
 	emitter.addModulesToResults = addModulesToResults
+	emitter.stripPackagesFromResults = stripPackagesFromResults
 
 	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand)
 
@@ -1280,7 +1290,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return result
 	}
 
-	if tag := multimoduleVariantTag(d.multimodule, instance.Language); tag != "" && moduleExcludesTag(d, tag) {
+	tag := multimoduleVariantTag(d.multimodule, instance.Language)
+
+	if moduleName == tokYqlUdf {
+		tag = d.unit.Tag.string()
+	}
+
+	if tag != "" && moduleExcludesTag(d, tag) {
 		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants}
 
 		ctx.memoPut(instance, result)

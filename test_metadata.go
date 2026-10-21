@@ -164,7 +164,9 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary, work string, chunk Te
 			command = append(command, "--split-by-tests")
 		}
 
-		command = append(command, "--dep-root", s.projectPath)
+		for _, directory := range s.pytestOutputDirs {
+			command = append(command, "--dep-root", directory)
+		}
 
 		for _, flag := range opts.flags {
 			command = append(command, "--flags", flag)

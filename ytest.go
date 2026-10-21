@@ -295,6 +295,7 @@ type TestSuite struct {
 	canonizeSubPath        string
 	canonicalData          bool
 	execPath               string
+	pytestOutputDirs       []string
 	setupPythonpathEnv     bool
 	supportsCanonization   bool
 	supportsTestParameters bool
@@ -365,12 +366,24 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 
 	var execDirs []string
 
+	python := s.testType == "pytest" || s.testType == "py3test" || s.testType == "exectest"
+
+	if python {
+		s.pytestOutputDirs = append(s.pytestOutputDirs, s.projectPath)
+	}
+
 	if s.testType == "exectest" {
 		execDirs = append(execDirs, testExecDependencyDir(s.projectPath))
 	}
 
 	for i, dep := range s.depends {
-		res := genModule(ctx, ctx.rootInstance(dep, demandLinked))
+		instance := ctx.rootInstance(dep, demandLinked)
+		res := genModule(ctx, instance)
+		output, ref := res.ARPath, res.ARRef
+
+		if res.LDPath != nil {
+			output, ref = res.LDPath, res.LDRef
+		}
 
 		if s.testType == "exectest" {
 			output := dep
@@ -382,17 +395,26 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 			execDirs = append(execDirs, testExecDependencyDir(output))
 		}
 
-		if s.ciType == "style" && res.ARPath != nil {
-			s.depends[i] = res.ARPath.relString()
+		if s.ciType == "style" && output != nil {
+			s.depends[i] = output.relString()
 		}
 
-		if res.ARPath != nil {
-			ctx.scannerForPlatform(ctx.target).codegen.use(*res.ARPath)
+		if output != nil {
+			ctx.scannerFor(instance).codegen.use(*output)
+			s.deps = append(s.deps, ref)
 		}
 
-		if res.ARRef != 0 {
-			s.deps = append(s.deps, res.ARRef)
+		if res.GlobalRef != nil {
+			s.deps = append(s.deps, *res.GlobalRef)
 		}
+
+		if python && res.LDPath != nil && res.ARPath == nil && isLinkingModuleType(res.ModuleStmtName) && res.ModuleStmtName != tokDllTool {
+			s.pytestOutputDirs = append(s.pytestOutputDirs, path.Dir(res.LDPath.string()))
+		}
+	}
+
+	if python {
+		s.pytestOutputDirs = sortedUnique(s.pytestOutputDirs)
 	}
 
 	if s.testType == "exectest" {

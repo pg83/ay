@@ -54,6 +54,18 @@ func multimoduleVariantTag(name TOK, language Language) string {
 
 func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint16, demand ModuleDemand) []*ModuleEmitResult {
 	var results []*ModuleEmitResult
+	var instances []ModuleInstance
+
+	if target.Declaration != nil && target.Declaration.Name == tokYqlUdf {
+		instance := ctx.rootInstanceForDeclaration(target.Path, demand, target.Declaration)
+
+		instance.Kind = KindLib
+
+		for _, current := range []bool{false, true} {
+			instance.YqlCurrent = current
+			instances = append(instances, instance)
+		}
+	}
 
 	for _, language := range []Language{LangJava, LangPy, LangPy2, LangGo, LangDescProto, LangDocsProto, LangTSPrepare, LangTS, LangRosBindings, LangPackage} {
 		if variants&(1<<language) == 0 {
@@ -68,28 +80,26 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 			instance.Kind = KindJavaMain
 		}
 
-		ctx.roots[ModuleInstance{Path: instance.Path, Kind: instance.Kind, Language: language, Platform: instance.Platform}] = true
+		instances = append(instances, instance)
+	}
+
+	for _, instance := range instances {
+		ctx.roots[ModuleInstance{Path: instance.Path, Kind: instance.Kind, Language: instance.Language, Platform: instance.Platform, YqlCurrent: instance.YqlCurrent}] = true
 
 		result := genModule(ctx, instance)
 
 		if result.java != nil {
 			ctx.emit.result(ctx.javaBuilder(result.java).use(result.java.target))
-		} else if result.LDRef != 0 {
-			if result.LDPath != nil {
-				ctx.scannerForPlatform(instance.Platform).codegen.use(*result.LDPath)
-			}
-
+		} else if result.LDPath != nil {
+			ctx.scannerForPlatform(instance.Platform).codegen.use(*result.LDPath)
 			ctx.emit.result(result.LDRef)
-		} else {
-			if result.ARPath != nil {
-				ctx.scannerForPlatform(instance.Platform).codegen.use(*result.ARPath)
-			}
-
+		} else if result.ARPath != nil {
+			ctx.scannerForPlatform(instance.Platform).codegen.use(*result.ARPath)
 			ctx.emit.result(result.ARRef)
+		}
 
-			if result.GlobalRef != nil {
-				ctx.emit.result(*result.GlobalRef)
-			}
+		if result.GlobalRef != nil {
+			ctx.emit.result(*result.GlobalRef)
 		}
 
 		results = append(results, result)
