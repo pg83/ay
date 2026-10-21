@@ -114,10 +114,6 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	}
 
 	switch class {
-	case srcExtSsqls:
-		base := strings.TrimSuffix(e.moduleSourceRel(meta.Source), ".ssqls")
-
-		e.prodVFS = append(e.prodVFS, build(e.instance.Path.relString(), "/", base, ".cpp"), build(e.instance.Path.relString(), "/", base, ".h"))
 	case srcExtRos:
 		if d.ros != nil {
 			e.prodVFS = append(e.prodVFS, e.rosOutputPaths(src, meta.RosZeroCopy)...)

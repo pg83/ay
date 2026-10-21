@@ -522,7 +522,7 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
 	out := make([]JavaClosureEntry, 0, len(sorted))
 
 	for _, m := range sorted {
-		if javaTagIn(m.unit.tag, excludedTags) && !jm.isDirectPeer(m) {
+		if javaTagIn(m.unit.tag, excludedTags) {
 			continue
 		}
 
@@ -562,16 +562,6 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
 
 func (jm *JavaModule) consumesUnmanageable() bool {
 	return jm.unit.consumeNonManageable || jm.data.addDLLs
-}
-
-func (jm *JavaModule) isDirectPeer(m *JavaModule) bool {
-	for _, d := range jm.direct {
-		if d.m == m {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (jm *JavaModule) unmanageableClosure() []javaForeignPeer {
