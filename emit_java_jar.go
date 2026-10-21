@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -16,6 +17,7 @@ type javaSrcsGlob struct {
 	srcTxt  VFS
 	resTxt  VFS
 	genSrcs bool
+	binding int
 }
 
 func (ctx *GenCtx) javaSrcsGlobs(jm *JavaModule) []javaSrcsGlob {
@@ -26,11 +28,20 @@ func (ctx *GenCtx) javaSrcsGlobs(jm *JavaModule) []javaSrcsGlob {
 		name := fmt.Sprintf("uniq_%x", sum[:])
 
 		g := javaSrcsGlob{
-			spec:   spec,
-			name:   name,
-			srcDir: spec.srcDir,
-			srcTxt: build(jm.dir, "/misc/", name, ".src.txt"),
-			resTxt: build(jm.dir, "/misc/", name, ".res.txt"),
+			spec:    spec,
+			name:    name,
+			srcDir:  spec.srcDir,
+			srcTxt:  build(jm.dir, "/misc/", name, ".src.txt"),
+			resTxt:  build(jm.dir, "/misc/", name, ".res.txt"),
+			binding: len(out),
+		}
+
+		for i := range out {
+			if out[i].name == name {
+				g.binding = i
+
+				break
+			}
 		}
 
 		switch {
@@ -43,7 +54,9 @@ func (ctx *GenCtx) javaSrcsGlobs(jm *JavaModule) []javaSrcsGlob {
 			g.absDir = source(jm.dir, "/", spec.srcDir)
 		}
 
-		if !g.genSrcs {
+		if g.binding < len(out) {
+			g.files = out[g.binding].files
+		} else if !g.genSrcs {
 			ex := newJavaExcludeMatcher(jm.dir, spec.excludes)
 
 			for _, glob := range spec.globs {
@@ -60,6 +73,32 @@ func (ctx *GenCtx) javaSrcsGlobs(jm *JavaModule) []javaSrcsGlob {
 		}
 
 		out = append(out, g)
+	}
+
+	for i := range out {
+		if out[i].binding != i {
+			continue
+		}
+
+		count := 0
+
+		for j := i; j < len(out); j++ {
+			if out[j].binding == i {
+				count++
+			}
+		}
+
+		if count == 1 || len(out[i].files) == 0 {
+			continue
+		}
+
+		files := slices.Repeat(out[i].files, count)
+
+		for j := i; j < len(out); j++ {
+			if out[j].binding == i {
+				out[j].files = files
+			}
+		}
 	}
 
 	return out
