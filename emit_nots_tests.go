@@ -73,21 +73,6 @@ func (e *EmitContext) notsSuite(name string, globals []ResourceDecl, addSource b
 	return s
 }
 
-func notsNodejs(globals []ResourceDecl, pm *IncludeParserManager, pj map[string]any) ResourceDecl {
-	version := pm.notsVersion("nodejs", notsString(notsObject(pj["engines"])["node"]))
-	name := "NODEJS_" + strings.ReplaceAll(version, ".", "_")
-
-	for _, decl := range globals {
-		if decl.Name.string() == name {
-			return decl
-		}
-	}
-
-	throwFmt("nots: missing Node.js resource %s", name)
-
-	return ResourceDecl{}
-}
-
 func notsRecipeArgs(args []string, globals []ResourceDecl) string {
 	out := slices.Clone(args)
 
@@ -134,15 +119,12 @@ func (e *EmitContext) notsRecipes(target string, head []string, globals []Resour
 	return testRecipes(recipes)
 }
 
-func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, files []VFS, head []string) []*TestSuite {
+func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, files []VFS, head []string, node ResourceDecl) []*TestSuite {
 	if !e.ctx.testMode || len(files) == 0 {
 		return nil
 	}
 
 	var suites []*TestSuite
-
-	pj := e.ctx.parsers.notsJSON(target + "/package.json")
-	node := notsNodejs(globals, e.ctx.parsers, pj)
 
 	var names []string
 	var related []string
@@ -209,7 +191,7 @@ func (e *EmitContext) notsBuildSuites(dir string, state *NotsPrepared, files []V
 	}
 
 	head := state.Head[1:]
-	suites := e.notsCheckSuites(dir, state.Globals, files, head)
+	suites := e.notsCheckSuites(dir, state.Globals, files, head, state.Nodejs)
 
 	if kind := e.d.nots.Kind; kind != tokTsTsc && kind != tokTsVite && kind != tokTsNext {
 		return suites
@@ -231,12 +213,12 @@ func (e *EmitContext) notsForSuites(target string, globals []ResourceDecl) []*Te
 		config.Hermetic = false
 	}
 
-	head, ownGlobals := e.notsBaseArgsFor(pj, &config)
+	head, ownGlobals, node := e.notsBaseArgsFor(pj, &config)
 
 	globals = e.notsTestGlobals(append(slices.Clone(ownGlobals), globals...))
 
 	if c.Kind == tokTsTestFor {
-		return e.notsCheckSuites(target, globals, e.notsFiles(target, nil, c.Excludes), head)
+		return e.notsCheckSuites(target, globals, e.notsFiles(target, nil, c.Excludes), head, node)
 	}
 
 	name := "jest"
@@ -253,7 +235,6 @@ func (e *EmitContext) notsForSuites(target string, globals []ResourceDecl) []*Te
 	s.inputNames = []string{target + "/package.json"}
 	s.recipes = e.notsRecipes(target, head, globals, false, true)
 
-	node := notsNodejs(globals, e.ctx.parsers, pj)
 	testConfig := name + ".config.js"
 
 	if name == "vitest" {
@@ -332,7 +313,7 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 
 	var suites []*TestSuite
 
-	node := notsNodejs(state.Globals, e.ctx.parsers, e.ctx.parsers.notsJSON(dir+"/package.json"))
+	node := state.Nodejs
 
 	for _, check := range checks {
 		pattern := notsGlob(check.pattern)

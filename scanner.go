@@ -431,10 +431,6 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 		return out
 	}
 
-	if info.OnUse != nil {
-		fireGenerated(info)
-	}
-
 	out = append(out, info.ClosureLeaves...)
 
 	if len(info.GeneratorRefs) == 0 || bucket == parsedIncludesLocal {

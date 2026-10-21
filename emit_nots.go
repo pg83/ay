@@ -234,11 +234,11 @@ func (e *EmitContext) notsPeerInstance(dir string) ModuleInstance {
 	return instance
 }
 
-func (e *EmitContext) notsBaseArgs(pj map[string]any) ([]string, []ResourceDecl) {
+func (e *EmitContext) notsBaseArgs(pj map[string]any) ([]string, []ResourceDecl, ResourceDecl) {
 	return e.notsBaseArgsFor(pj, e.d.nots)
 }
 
-func (e *EmitContext) notsBaseArgsFor(pj map[string]any, c *NotsModule) ([]string, []ResourceDecl) {
+func (e *EmitContext) notsBaseArgsFor(pj map[string]any, c *NotsModule) ([]string, []ResourceDecl, ResourceDecl) {
 	pm := e.ctx.parsers
 	version := pm.notsVersion("nodejs", notsString(notsObject(pj["engines"])["node"]))
 	parts := notsVersionParts(version)
@@ -286,7 +286,7 @@ func (e *EmitContext) notsBaseArgsFor(pj map[string]any, c *NotsModule) ([]strin
 		args = append(args, "--yatool-prebuilder-path", prebuilder.Value.string()+"/node_modules/@yatool/prebuilder")
 	}
 
-	return args, globals
+	return args, globals, node
 }
 
 func (e *EmitContext) notsRequirements() *Requirements {
@@ -312,6 +312,7 @@ func (e *EmitContext) emitNotsNode(n Node) NodeRef {
 type NotsPrepared struct {
 	Head            []string
 	Globals         []ResourceDecl
+	Nodejs          ResourceDecl
 	ResourceNames   []STR
 	ToolRef         NodeRef
 	ToolPath        VFS
@@ -352,7 +353,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 		pj = pm.notsJSON(dir + "/package.json")
 	}
 
-	base, globals := e.notsBaseArgs(pj)
+	base, globals, nodejs := e.notsBaseArgs(pj)
 
 	var resourceNames []STR
 
@@ -501,7 +502,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 
 	globals = e.notsTestGlobals(globals)
 
-	state := &NotsPrepared{Head: head, Globals: globals, ResourceNames: resourceNames, ToolRef: toolRef, ToolPath: toolPath, HasDependencies: hasDeps}
+	state := &NotsPrepared{Head: head, Globals: globals, Nodejs: nodejs, ResourceNames: resourceNames, ToolRef: toolRef, ToolPath: toolPath, HasDependencies: hasDeps}
 	info := e.codegen.lookup(output)
 
 	info.Nots = state
