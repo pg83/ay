@@ -86,6 +86,7 @@ var (
 	mapsDocProtoBuild                        = build("maps/doc/proto")
 	mergeFilesVFS                            = source("build/scripts/merge_files.py")
 	mergeProtosrcVFS                         = source("build/scripts/merge_protosrc.py")
+	nasmBinaryVFS                            = build("resources/NASM/bin/nasm")
 	objcopyScriptVFS                         = source("build/scripts/objcopy.py")
 	pbDescriptorVFS                          = source("contrib/libs/protobuf/src/google/protobuf/descriptor.proto")
 	pbGrpcCppVFS                             = build("contrib/tools/protoc/plugins/grpc_cpp/grpc_cpp")

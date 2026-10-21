@@ -204,6 +204,8 @@ type ModuleData struct {
 	cfAddIncl                []VFS
 	cfAddInclGlobal          []VFS
 	cythonAddIncl            []VFS
+	useNasm                  bool
+	nasmFlags                []ANY
 	asmAddIncl               []VFS
 	protoAddInclGlobal       []VFS
 	protoAddIncl             []VFS
@@ -813,6 +815,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.muslEnabled = env.bool(envMUSL)
 	d.useArcadiaLibm = env.bool(envUSE_ARCADIA_LIBM) && !env.bool(envOS_EMSCRIPTEN)
 	d.noStrip = env.bool(envNO_STRIP)
+	d.useNasm = env.bool(envUseNasmAssembler)
+	d.nasmFlags = internAnys(strings.Fields(env.string(envNasmFlags)))
 
 	if d.muslLite {
 		d.flags.NoUtil = true
@@ -2920,6 +2924,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if changed {
 			d.objAddLibsGlobal = append(d.objAddLibsGlobal[:0], internArg(libs).any())
 		}
+	case tokUseNasm:
+		env.setBool(envUseNasmAssembler, true)
+		d.peerdirs = append(d.peerdirs, strBuildExternalResourcesNasm.any())
 	case tokUsePython2:
 		d.peerdirs = append(d.peerdirs, strContribLibsPython.any())
 

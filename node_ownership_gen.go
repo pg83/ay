@@ -77,6 +77,7 @@ func registerKnownGlobalChunks() {
 	registerOwnedSlice(structCodegenPeerdirs)
 	registerOwnedSlice(swigAddIncls)
 	registerOwnedSlice(swigConstArgs)
+	registerOwnedSlice(usesNasm)
 	registerOwnedSlice(usesPython3)
 	registerOwnedSlice(usesPython3Clang16)
 	registerOwnedSlice(usesPython3JDK17)

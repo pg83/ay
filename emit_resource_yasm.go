@@ -98,7 +98,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 	asmIn.IncludeView = e.scanner.walkClosure(asmPath, e.d.scanCtx, scanDomainAsm)
 
 	yasmRef, _ := e.ctx.tool(argContribToolsYasm)
-	asmRef, asmOut := e.emitASYasm(asmPath, asmIn, yasmRef)
+	asmRef, asmOut := e.emitASAsm(asmPath, asmIn, yasmRef, false)
 
 	e.collectObj(asmRef, asmOut, SrcMeta{Global: globalAsm})
 

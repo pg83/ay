@@ -18,6 +18,69 @@ def with_yasm(files):
 
 
 class YasmTest(unittest.TestCase):
+    def test_use_nasm_switches_only_asm_sources_and_uses_the_resource_tool(self):
+        for selection in ("USE_NASM()", "ENABLE(USE_NASM_ASSEMBLER)\nPEERDIR(build/external_resources/nasm)"):
+            with self.subTest(selection=selection):
+                files = with_yasm({
+                    "mod/ya.make": (
+                        LIBRARY_HEAD + selection + "\nPEERDIR(build/platform/clang)\nSET(NASM_FLAGS -D MODULE=1)\n"
+                        "ADDINCL(FOR asm mod/inc)\nSRC(a.asm -D SOURCE=1)\n"
+                        "SRCS(forced.yasm plain.S)\nEND()\n"
+                    ),
+                    "build/platform/clang/ya.make": (
+                        "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(CLANG20 sbr:987654321)\nEND()\n"
+                    ),
+                    "mod/a.asm": '%include "defs.inc"\n',
+                    "mod/inc/defs.inc": "",
+                    "mod/forced.yasm": "",
+                    "mod/plain.S": "",
+                    "build/external_resources/nasm/ya.make": (
+                        "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(NASM sbr:123456789)\nEND()\n"
+                    ),
+                })
+                graph = lib.make(files, "mod", *X86_64)
+                nasm = lib.node_by_output(graph, "$(B)/mod/a.o")
+                self.assertEqual(nasm["cmds"][0]["cmd_args"], [
+                    "$(B)/resources/NASM/bin/nasm", "-f", "elf64", "-D", "_x86_64_",
+                    "-D", "MODULE=1", "-I", "$(B)", "-I", "$(S)", "-I", "$(S)/mod/inc",
+                    "-D", "SOURCE=1", "-o", "$(B)/mod/a.o", "$(S)/mod/a.asm",
+                ])
+                self.assertEqual(nasm["cmds"][0]["env"], {"ARCADIA_ROOT_DISTBUILD": "$(S)"})
+                self.assertCountEqual(nasm["inputs"], ["$(S)/mod/a.asm", "$(S)/mod/inc/defs.inc"])
+                self.assertNotIn("foreign_deps", nasm)
+                fetched = lib.node_by_output(graph, "$(B)/resources/NASM")
+                self.assertIn(fetched["uid"], nasm["deps"])
+                yasm = lib.node_by_output(graph, "$(B)/mod/forced.o")
+                self.assertEqual(yasm["cmds"][0]["cmd_args"][:len(YASM_HEAD)], YASM_HEAD)
+                self.assertNotIn("MODULE=1", yasm["cmds"][0]["cmd_args"])
+                self.assertIn("$(B)/contrib/tools/yasm/yasm", yasm["inputs"])
+                plain = lib.node_by_output(graph, "$(B)/mod/plain.S.o")
+                self.assertTrue(any(arg.endswith("/bin/clang") for arg in plain["cmds"][0]["cmd_args"]))
+
+    def test_nasm_object_format_follows_the_target_platform(self):
+        files = {
+            "mod/ya.make": LIBRARY_HEAD + "USE_NASM()\nSRCS(a.asm)\nEND()\n",
+            "mod/a.asm": "",
+            "build/external_resources/nasm/ya.make": (
+                "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(NASM sbr:123456789)\nEND()\n"
+            ),
+        }
+        for platform, format_ in (("default-darwin-x86_64", "macho64"), ("default-windows-x86_64", "win64")):
+            with self.subTest(platform=platform):
+                node = lib.node_by_output(lib.make(files, "mod", "--target-platform", platform), "$(B)/mod/a.o")
+                self.assertEqual(node["cmds"][0]["cmd_args"][:5], [
+                    "$(B)/resources/NASM/bin/nasm", "-f", format_, "-D", "_x86_64_",
+                ])
+
+    def test_disabling_nasm_after_use_nasm_restores_yasm(self):
+        graph = lib.make(with_yasm({
+            "mod/ya.make": LIBRARY_HEAD + "USE_NASM()\nDISABLE(USE_NASM_ASSEMBLER)\nSRCS(a.asm)\nEND()\n",
+            "mod/a.asm": "",
+            "build/external_resources/nasm/ya.make": "RESOURCES_LIBRARY()\nEND()\n",
+        }), "mod", *X86_64)
+        node = lib.node_by_output(graph, "$(B)/mod/a.o")
+        self.assertEqual(node["cmds"][0]["cmd_args"][:len(YASM_HEAD)], YASM_HEAD)
+
     def test_yasm_sources_parse_includes_and_honour_asm_addincl(self):
         graph = lib.make(with_yasm({
             "mod/ya.make": (

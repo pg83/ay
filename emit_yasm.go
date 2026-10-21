@@ -5,7 +5,10 @@ import (
 	"strings"
 )
 
-var yasmBinaryPath = yasmBinaryVFS.string()
+var (
+	usesNasm       = []STR{internStr("NASM")}
+	yasmBinaryPath = yasmBinaryVFS.string()
+)
 
 var yasmConstHead = []ANY{
 	internStr(yasmBinaryPath).any(),
@@ -16,7 +19,7 @@ var yasmConstHead = []ANY{
 	argReplaceToolRootT.any(),
 }
 
-func (e *EmitContext) emitASYasm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef) (NodeRef, VFS) {
+func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, nasm bool) (NodeRef, VFS) {
 	instance := e.instance
 	na := e.ctx.na
 	suffix := ".o"
@@ -35,16 +38,32 @@ func (e *EmitContext) emitASYasm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef) 
 		predefinedFlags = []string{"-g", "dwarf2"}
 	}
 
-	cmdArgs := na.anys.alloc(len(yasmConstHead) + 10 + len(predefinedFlags) + 2*len(in.AddIncl))[:0]
+	cmdArgs := na.anys.alloc(len(yasmConstHead) + 10 + len(predefinedFlags) + 2*len(in.AddIncl) + len(e.d.nasmFlags) + len(in.PerSourceCFlags))[:0]
 
-	cmdArgs = append(cmdArgs, yasmConstHead...)
+	if nasm {
+		format := "elf64"
 
-	cmdArgs = append(cmdArgs,
-		argD.any(), internV("_", string(instance.Platform.ISA), "_").any(),
-		argDYasm.any(),
-	)
+		switch instance.Platform.OS {
+		case OSDarwin, "ios":
+			format = "macho64"
+		case OSWindows:
+			format = "win64"
+		}
 
-	cmdArgs = appendInternAnys(cmdArgs, predefinedFlags)
+		cmdArgs = append(cmdArgs, nasmBinaryVFS.any(), argF.any(), internStr(format).any(),
+			argD.any(), internV("_", string(instance.Platform.ISA), "_").any())
+
+		cmdArgs = append(cmdArgs, e.d.nasmFlags...)
+	} else {
+		cmdArgs = append(cmdArgs, yasmConstHead...)
+
+		cmdArgs = append(cmdArgs,
+			argD.any(), internV("_", string(instance.Platform.ISA), "_").any(),
+			argDYasm.any(),
+		)
+
+		cmdArgs = appendInternAnys(cmdArgs, predefinedFlags)
+	}
 
 	cmdArgs = append(cmdArgs,
 		argI.any(), argB.any(),
@@ -55,6 +74,8 @@ func (e *EmitContext) emitASYasm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef) 
 		cmdArgs = append(cmdArgs, argI.any(), p.any())
 	}
 
+	cmdArgs = append(cmdArgs, in.PerSourceCFlags...)
+
 	cmdArgs = append(cmdArgs,
 		argDashO.any(), outVFS.any(),
 		inVFS.any(),
@@ -64,11 +85,20 @@ func (e *EmitContext) emitASYasm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef) 
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
-	env := envVarsVCSYasm
+	env := envVarsVCS
+
+	if !nasm {
+		env = envVarsVCSYasm
+	}
+
 	includeBuckets := in.IncludeView.bucketList()
 	inputs := na.inputs.alloc(2 + len(includeBuckets))[:0]
 
-	inputs = append(inputs, na.vfsList(yasmBinaryVFS), na.vfsList(in.IncludeView.self))
+	if !nasm {
+		inputs = append(inputs, na.vfsList(yasmBinaryVFS))
+	}
+
+	inputs = append(inputs, na.vfsList(in.IncludeView.self))
 	inputs = append(inputs, includeBuckets...)
 	na.inputs.commit(len(inputs))
 	inputs = inputs[:len(inputs):len(inputs)]
@@ -83,7 +113,11 @@ func (e *EmitContext) emitASYasm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef) 
 		KV:      &asKV,
 	}
 
-	node.ForeignDepRefs = na.refList(yasmLD)
+	if nasm {
+		node.Resources = usesNasm
+	} else {
+		node.ForeignDepRefs = na.refList(yasmLD)
+	}
 
 	return e.emitNode(node), outVFS
 }
@@ -102,8 +136,15 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta, in ModuleCCInputs) {
 	asIn.AddIncl = d.asmAddIncl
 	asIn.IncludeView = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainAsm)
 
-	yasmLD, _ := ctx.tool(argContribToolsYasm)
-	ref, outPath := e.emitASYasm(srcVFS, asIn, yasmLD)
+	nasm := d.useNasm && filepath.Ext(srcVFS.relString()) == ".asm"
+
+	var yasmLD NodeRef
+
+	if !nasm {
+		yasmLD, _ = ctx.tool(argContribToolsYasm)
+	}
+
+	ref, outPath := e.emitASAsm(srcVFS, asIn, yasmLD, nasm)
 
 	e.collectObj(ref, outPath, meta)
 }
