@@ -59,6 +59,40 @@ class SharedTestNodesTest(unittest.TestCase):
                 self.assertIn(merger["uid"], graph["result"])
                 self.assertEqual(sum("$(B)/sandbox-storage/123/resource" in n["outputs"] for n in graph["graph"]), 1)
 
+    def test_detekt_resource_from_transitive_autoinclude(self):
+        files = fixture()
+        files["build/conf/autoincludes.json"] = '["peer"]\n'
+        files["peer/linters.make.inc"] = "STYLE_DETEKT()\n"
+        files["peer/ya.make"] = "LIBRARY()\n" + lib.BARE_MODULE + "END()\n"
+        files["lib/ya.make"] = files["lib/ya.make"].replace("END()", "PEERDIR(peer)\nEND()")
+        files["build/platform/java/detekt/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(DETEKT sbr:123)\nEND()\n"
+        graph = lib.make(files, "lib/ut", "-t")
+        node = lib.node_by_output(graph, "$(B)/lib/ut/test-results/unittest/meta.json")
+        args = node["cmds"][0]["cmd_args"]
+        self.assertEqual(sum(arg.startswith("DETEKT_RESOURCE_GLOBAL::") for arg in args), 1)
+
+    def test_detekt_resource_peer_without_kotlin_sources(self):
+        for setting, explicit_peer, expected in (
+            ("", False, False),
+            ("STYLE_DETEKT()\n", False, True),
+            ("STYLE_DETEKT()\n", True, True),
+            ("NO_LINT()\nSTYLE_DETEKT()\n", False, False),
+            ("NO_LINT(none_internal)\nSTYLE_DETEKT()\n", False, False),
+            ("SET(TIDY yes)\nSTYLE_DETEKT()\n", False, False),
+            ("SET(_NO_LINT_VALUE none)\nSTYLE_DETEKT()\n", False, False),
+            ("SET(_NO_LINT_VALUE none_internal)\nSTYLE_DETEKT()\n", False, False),
+            ("NO_LINT(ktlint)\nSTYLE_DETEKT()\n", False, True),
+        ):
+            with self.subTest(setting=setting, explicit_peer=explicit_peer):
+                files = fixture()
+                peer = "PEERDIR(build/platform/java/detekt)\n" if explicit_peer else ""
+                files["lib/ut/ya.make"] = files["lib/ut/ya.make"].replace("END()", setting + peer + "END()")
+                files["build/platform/java/detekt/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(DETEKT sbr:123)\nEND()\n"
+                graph = lib.make(files, "lib/ut", "-t")
+                node = lib.node_by_output(graph, "$(B)/lib/ut/test-results/unittest/meta.json")
+                args = node["cmds"][0]["cmd_args"]
+                self.assertEqual(sum(arg.startswith("DETEKT_RESOURCE_GLOBAL::") for arg in args), int(expected))
+
     def test_cpp_uses_shared_configuration_and_inherited_environment(self):
         files = fixture()
         files["lib/ut/ya.make"] = files["lib/ut/ya.make"].replace("END()", "STYLE_CPP()\nEND()")

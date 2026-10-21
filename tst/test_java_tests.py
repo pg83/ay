@@ -104,6 +104,15 @@ class JavaCustomLintTest(unittest.TestCase):
             "proj/lib/src/C.java": "class C {}\n",
         })
 
+    def test_detekt_explicit_peer_is_not_duplicated(self):
+        files = self.tree()
+        files["proj/app/ya.make"] = files["proj/app/ya.make"].replace(
+            "END()", "PEERDIR(build/platform/java/detekt)\nEND()"
+        )
+        graph = lib.make(files, "proj/app", "--target-platform-tests")
+        detekt = test_nodes(graph)["proj/app/detekt"]
+        self.assertEqual(global_names(head_args(detekt)), ["DETEKT_RESOURCE_GLOBAL"])
+
     def test_detekt_suite_from_linters_make(self):
         graph = lib.make(self.tree(), "proj/app", "--target-platform-tests")
         detekt = test_nodes(graph)["proj/app/detekt"]

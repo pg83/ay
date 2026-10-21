@@ -3101,6 +3101,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.collectStyleCheck(fs, modulePath, v, env)
 	case tokStyleJSON, tokStyleYAML:
 		d.collectStyleCheck(fs, modulePath, v, env)
+	case tokStyleDetekt:
+		noLint, _ := env.lookup("_NO_LINT_VALUE")
+		tidy, _ := env.lookup("TIDY")
+
+		if d.noLint != "none" && d.noLint != "none_internal" && noLint != "none" && noLint != "none_internal" && tidy != "yes" {
+			d.peerdirs = append(d.peerdirs, internStr(javaDetekt.resourcePeer).any())
+		}
 	case tokStyleYAMLConf:
 		d.collectYAMLStyleWithConfig(modulePath, env)
 	case tokUsrvBuild:
