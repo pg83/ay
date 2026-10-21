@@ -483,7 +483,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 		scanCtx.protoInclude = ctx.na.vfsList(jm.protoInclude...)
 
 		for _, src := range d.protoSrcs {
-			autoInputs = append(autoInputs, ctx.javaEmitProtoPB(jm, globals, scanCtx, resolveSourceVFS(ctx, jm.instance, src, d.srcDirs)))
+			autoInputs = append(autoInputs, ctx.javaEmitProtoPB(jm, globals, scanCtx, resolveSourceOrGeneratedVFS(ctx, jm.instance, src, d.srcDirs)))
 		}
 
 		for _, src := range d.evSrcs {
@@ -658,14 +658,18 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 
 	if protoVFS.isBuild() {
 		b.cmd(args, bldRootDirVFS, extraEnv...)
-		b.input(protoVFS)
-		b.deps = append(b.deps, b.use(protoVFS))
 	} else {
 		b.cmd(args, srcRootDirVFS, extraEnv...)
-		b.input(protoVFS)
+	}
 
-		for _, bucket := range ctx.scannerForPlatform(jm.instance.Platform).walkClosure(protoVFS, scanCtx, scanDomainProto).bucketList() {
-			b.input(bucket...)
+	b.input(protoVFS)
+	b.deps = append(b.deps, b.use(protoVFS))
+
+	for _, bucket := range ctx.scannerForPlatform(jm.instance.Platform).walkClosure(protoVFS, scanCtx, scanDomainProto).bucketList() {
+		b.input(bucket...)
+
+		for _, input := range bucket {
+			b.deps = append(b.deps, b.use(input))
 		}
 	}
 

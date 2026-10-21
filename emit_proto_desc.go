@@ -163,14 +163,13 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		}
 
 		srcRel := src.string()
-		protoRel := e.protoSourceRel(srcRel)
-		protoRelPath := protoRel.string()
-		protoVFS := protoRel.source()
+		protoVFS := resolveSourceOrGeneratedVFS(ctx, instance, srcRel, d.srcDirs)
+		protoRelPath := protoVFS.relString()
 		imports := e.scanner.walkClosure(protoVFS, d.scanCtx, scanDomainProto)
 		descOut := build(descProtoOutputRel(instance.Path.relString(), srcRel, protoRelPath))
 		rawprotoOut := build(protoRelPath, ".", hash, ".rawproto")
 
-		ref := e.emitProtoDescProducer(protoRelPath, descOut, rawprotoOut,
+		ref := e.emitProtoDescProducer(protoVFS, descOut, rawprotoOut,
 			protocLDRef, protocBinary, mid, imports)
 
 		producerRefs = append(producerRefs, ref)
@@ -223,7 +222,7 @@ func descProtocIncludes(na *NodeArenas, peerProtoAddIncl []VFS, cppOutRoot strin
 	return out[:len(out):len(out)]
 }
 
-func (e *EmitContext) emitProtoDescProducer(protoRelPath string,
+func (e *EmitContext) emitProtoDescProducer(protoVFS VFS,
 	descOut, rawprotoOut VFS, protocLDRef NodeRef, protocBinary VFS, mid []ANY, imports Closure) NodeRef {
 	na := e.ctx.na
 
@@ -235,7 +234,7 @@ func (e *EmitContext) emitProtoDescProducer(protoRelPath string,
 		strRawprotoOutput.any(),
 		rawprotoOut.any(),
 		strProtoFile.any(),
-		internStr(protoRelPath).any(),
+		protoVFS.rel().any(),
 		arg2.any(),
 		protocBinary.any(),
 	)
@@ -246,14 +245,20 @@ func (e *EmitContext) emitProtoDescProducer(protoRelPath string,
 	inputChunks := na.inputs.alloc(2 + len(importBuckets))[:2+len(importBuckets)]
 
 	inputChunks[0] = na.vfsList(protocBinary)
-	inputChunks[1] = na.vfsList(source(protoRelPath), descRawprotoWrapperVFS)
+	inputChunks[1] = na.vfsList(protoVFS, descRawprotoWrapperVFS)
 	copy(inputChunks[2:], importBuckets)
 	na.inputs.commit(len(inputChunks))
+
+	cwd := srcRootDirVFS
+
+	if protoVFS.isBuild() {
+		cwd = bldRootDirVFS
+	}
 
 	node := Node{
 		Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
-			Cwd: srcRootDirVFS,
+			Cwd: cwd,
 			Env: env}),
 		Env:            env,
 		Inputs:         InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]),

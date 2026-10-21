@@ -61,6 +61,20 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	return source(srcRelOnDisk)
 }
 
+func resolveSourceOrGeneratedVFS(ctx *GenCtx, instance ModuleInstance, src string, srcDirs []VFS) VFS {
+	vfs := resolveSourceVFS(ctx, instance, src, srcDirs)
+
+	if _, rooted := moduleRootedVFS(instance.Path.relString(), src); !rooted && vfs.isSource() {
+		candidate := vfs.rel().build()
+
+		if ctx.scannerForPlatform(instance.Platform).codegen.lookup(candidate) != nil && !ctx.fs.isFile(srcRootRel, vfs.relString()) {
+			return candidate
+		}
+	}
+
+	return vfs
+}
+
 func (scanner *IncludeScanner) walkClosure(vfsPath VFS, ctx *ScanContext, domain ScanDomain) Closure {
 	cl := scanner.scanClosure(vfsPath, ctx, domain)
 
