@@ -148,7 +148,7 @@ class YaMakeFlagsTest(unittest.TestCase):
             "l/l.cpp": "", "l/l.c": "",
         }, "p")
         self.assertEqual(user_defines(graph, "$(B)/l/l.cpp.o"), [
-            "-DLOWN", "-DLG", "-DLOWNCXX", "-DLGCXX", "-DLGCXX",
+            "-DLOWN", "-DLG", "-DLOWNCXX", "-DLGCXX",
         ])
         self.assertEqual(user_defines(graph, "$(B)/l/l.c.o"), [
             "-DLOWN", "-DLG", "-DLOWNC", "-DLGC",
@@ -156,7 +156,7 @@ class YaMakeFlagsTest(unittest.TestCase):
         self.assertIn("-DLQ=\"q\"", args_of(graph, "$(B)/l/l.cpp.o"))
         self.assertIn("-DLQ=\"q\"", args_of(graph, "$(B)/p/main.cpp.o"))
         self.assertEqual(user_defines(graph, "$(B)/p/main.cpp.o"), [
-            "-DPROG", "-DLG", "-DPROGCXX", "-DLGCXX", "-DLGCXX",
+            "-DPROG", "-DLG", "-DPROGCXX", "-DLGCXX",
         ])
         self.assertEqual(user_defines(graph, "$(B)/p/c.c.o"), [
             "-DPROG", "-DLG", "-DPROGC", "-DLGC",

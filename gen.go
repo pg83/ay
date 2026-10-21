@@ -150,9 +150,9 @@ type ModuleEmitResult struct {
 	FlatcInclude                    []VFS
 	AddInclOneLevel                 []VFS
 	AddInclUserGlobal               []VFS
-	CFlagsGlobal                    []ANY
-	CXXFlagsGlobal                  []ANY
-	COnlyFlagsGlobal                []ANY
+	CFlagsGlobal                    []CompilerFlagValue
+	CXXFlagsGlobal                  []CompilerFlagValue
+	COnlyFlagsGlobal                []CompilerFlagValue
 	LinkExcludeLibraries            []ANY
 	ObjAddLibsGlobal                []ANY
 	LDFlagsGlobal                   []ANY
@@ -1758,7 +1758,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude, effectiveSwigInclude, moduleSwigInclude, effectiveFlatcInclude, moduleFlatcInclude []VFS
 
-		effectiveCFlagsGlobal, effectiveCXXFlagsGlobal, effectiveCOnlyFlagsGlobal, effectiveRPathFlagsGlobal []ANY
+		effectiveCFlagsGlobal, effectiveCXXFlagsGlobal, effectiveCOnlyFlagsGlobal []CompilerFlagValue
+		effectiveRPathFlagsGlobal                                                 []ANY
 
 		ownSbomInsertIdx = -1
 	)
@@ -2030,41 +2031,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		cflagsAggOrder := resolved
 
-		deduper.reset()
-
-		if cflagsCap != 0 {
-			for _, rp := range cflagsAggOrder {
-				for _, a := range rp.result.CFlagsGlobal {
-					if deduper.addStable(a.strID()) {
-						peerCFlagsGlobal = append(peerCFlagsGlobal, a)
-					}
-				}
-			}
-		}
-
-		deduper.reset()
-
-		if cxxflagsCap != 0 {
-			for _, rp := range cflagsAggOrder {
-				for _, a := range rp.result.CXXFlagsGlobal {
-					if deduper.addStable(a.strID()) {
-						peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
-					}
-				}
-			}
-		}
-
-		deduper.reset()
-
-		if conlyflagsCap != 0 {
-			for _, rp := range cflagsAggOrder {
-				for _, a := range rp.result.COnlyFlagsGlobal {
-					if deduper.addStable(a.strID()) {
-						peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
-					}
-				}
-			}
-		}
+		effectiveCFlagsGlobal, peerCFlagsGlobal = ctx.compilerFlagExports(deduper, cflagsAggOrder, compilerFlagsCommon, cflagsCap, d.cFlagsGlobal, peerCFlagsGlobal)
+		effectiveCXXFlagsGlobal, peerCXXFlagsGlobal = ctx.compilerFlagExports(deduper, cflagsAggOrder, compilerFlagsCxx, cxxflagsCap, d.cxxFlagsGlobal, peerCXXFlagsGlobal)
+		effectiveCOnlyFlagsGlobal, peerCOnlyFlagsGlobal = ctx.compilerFlagExports(deduper, cflagsAggOrder, compilerFlagsCOnly, conlyflagsCap, d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
 		deduper.reset()
 
@@ -2175,9 +2144,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			moduleSwigInclude = dedupSharedWith(deduper, ctx.vfsSlices, d.swigAddIncl, peerSwigInclude)
 		}
 
-		effectiveCFlagsGlobal = dedupSharedWith(deduper, ctx.argSlices, peerCFlagsGlobal, d.cFlagsGlobal)
-		effectiveCXXFlagsGlobal = concatShared(ctx.argSlices, peerCXXFlagsGlobal, d.cxxFlagsGlobal)
-		effectiveCOnlyFlagsGlobal = concatShared(ctx.argSlices, peerCOnlyFlagsGlobal, d.cOnlyFlagsGlobal)
 		effectiveRPathFlagsGlobal = concatShared(ctx.argSlices, peerRPathFlagsGlobal, d.rpathFlagsGlobal)
 	})
 

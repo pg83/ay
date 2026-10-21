@@ -5019,11 +5019,11 @@ func confProtoPlugin(fs FS, confRel, macro string) ConfProtoPlugin {
 func appendCompilerFlags(args []ANY, env Environment, global, own []ANY) ([]ANY, []ANY) {
 	nextGlobal := false
 
-	for _, arg := range expandStmtTokens(args, env) {
+	appendArg := func(arg ANY) {
 		if arg == kwGLOBAL.any() {
 			nextGlobal = true
 
-			continue
+			return
 		}
 
 		if nextGlobal {
@@ -5033,6 +5033,26 @@ func appendCompilerFlags(args []ANY, env Environment, global, own []ANY) ([]ANY,
 		}
 
 		nextGlobal = false
+	}
+
+	for _, arg := range expandStmtTokens(args, env) {
+		text := arg.string()
+
+		if text == "" {
+			continue
+		}
+
+		if strings.IndexByte(text, ' ') < 0 {
+			appendArg(arg)
+
+			continue
+		}
+
+		for _, word := range strings.Split(text, " ") {
+			if word != "" {
+				appendArg(internStr(word).any())
+			}
+		}
 	}
 
 	return global, own

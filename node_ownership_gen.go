@@ -7,6 +7,7 @@ func registerKnownGlobalChunks() {
 	registerOwnedSlice(catboostOpenSourceDefine)
 	registerOwnedSlice(ccIncludesPrefix)
 	registerOwnedSlice(commonDefines)
+	registerOwnedSlice(coreCxxNostdinc)
 	registerOwnedSlice(cudaHostFlags)
 	registerOwnedSlice(cxxBisonFlags)
 	registerOwnedSlice(cxxLexerFlags)

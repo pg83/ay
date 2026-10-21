@@ -106,7 +106,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	}
 
 	seen := make(map[string]struct{}, len(peerPaths))
-	resolved := make([]*ModuleEmitResult, 0, len(peerPaths))
+	resolved := make([]ResolvedPeer, 0, len(peerPaths))
 
 	for _, p := range peerPaths {
 		if _, dup := seen[p]; dup {
@@ -117,7 +117,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 		peerInstance := e.derivePeerInstance(p)
 
-		resolved = append(resolved, genModule(ctx, peerInstance))
+		resolved = append(resolved, ResolvedPeer{path: p, result: genModule(ctx, peerInstance)})
 	}
 
 	rpathOnly := make([]*ModuleEmitResult, 0, len(dynLibRPathHelperPeers))
@@ -127,6 +127,10 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 		rpathOnly = append(rpathOnly, genModule(ctx, peerInstance))
 	}
+
+	var cFlagsGlobal, cxxFlagsGlobal, cOnlyFlagsGlobal []CompilerFlagValue
+
+	cflagsCap, cxxflagsCap, conlyflagsCap := 0, 0, 0
 
 	var resourceGlobals []ResourceDecl
 	var peerLinkRpath []ANY
@@ -138,7 +142,13 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	)
 
 	dedupers.with(func(deduper *DeDuper) {
-		for _, pr := range resolved {
+		for _, rp := range resolved {
+			pr := rp.result
+
+			cflagsCap += len(pr.CFlagsGlobal)
+			cxxflagsCap += len(pr.CXXFlagsGlobal)
+			conlyflagsCap += len(pr.COnlyFlagsGlobal)
+
 			for _, decl := range pr.ResourceGlobalClosure {
 				if deduper.add(decl.GlobalVar.strID()) {
 					resourceGlobals = append(resourceGlobals, decl)
@@ -149,7 +159,9 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		peerArchiveRefs = make([]NodeRef, 0, len(resolved))
 		peerArchivePaths = make([]VFS, 0, len(resolved))
 
-		for _, pr := range resolved {
+		for _, rp := range resolved {
+			pr := rp.result
+
 			if pr.ARPath != nil {
 				peerArchiveRefs = append(peerArchiveRefs, pr.ARRef)
 				peerArchivePaths = append(peerArchivePaths, *pr.ARPath)
@@ -158,7 +170,9 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 		deduper.reset()
 
-		for _, pr := range resolved {
+		for _, rp := range resolved {
+			pr := rp.result
+
 			for _, p := range pr.AddInclGlobal {
 				if deduper.add(p.strID()) {
 					peerAddInclGlobal = append(peerAddInclGlobal, p)
@@ -166,39 +180,15 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 			}
 		}
 
-		deduper.reset()
-
-		for _, pr := range resolved {
-			for _, a := range pr.CFlagsGlobal {
-				if deduper.add(a.strID()) {
-					peerCFlagsGlobal = append(peerCFlagsGlobal, a)
-				}
-			}
-		}
+		cFlagsGlobal, peerCFlagsGlobal = ctx.compilerFlagExports(deduper, resolved, compilerFlagsCommon, cflagsCap, d.cFlagsGlobal, peerCFlagsGlobal)
+		cxxFlagsGlobal, peerCXXFlagsGlobal = ctx.compilerFlagExports(deduper, resolved, compilerFlagsCxx, cxxflagsCap, d.cxxFlagsGlobal, peerCXXFlagsGlobal)
+		cOnlyFlagsGlobal, peerCOnlyFlagsGlobal = ctx.compilerFlagExports(deduper, resolved, compilerFlagsCOnly, conlyflagsCap, d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
 		deduper.reset()
 
-		for _, pr := range resolved {
-			for _, a := range pr.CXXFlagsGlobal {
-				if deduper.add(a.strID()) {
-					peerCXXFlagsGlobal = append(peerCXXFlagsGlobal, a)
-				}
-			}
-		}
+		for _, rp := range resolved {
+			pr := rp.result
 
-		deduper.reset()
-
-		for _, pr := range resolved {
-			for _, a := range pr.COnlyFlagsGlobal {
-				if deduper.add(a.strID()) {
-					peerCOnlyFlagsGlobal = append(peerCOnlyFlagsGlobal, a)
-				}
-			}
-		}
-
-		deduper.reset()
-
-		for _, pr := range resolved {
 			for _, a := range pr.RPathFlagsGlobal {
 				if deduper.add(a.strID()) {
 					peerRPathFlagsGlobal = append(peerRPathFlagsGlobal, a)
@@ -221,7 +211,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	var modulePeers []VFS
 
 	for _, peer := range resolved {
-		modulePeers = e.appendModulePeer(modulePeers, peer, len(resolved))
+		modulePeers = e.appendModulePeer(modulePeers, peer.result, len(resolved))
 	}
 
 	if modulePeers != nil {
@@ -296,9 +286,6 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 	ref := e.emitModuleNode(n, true)
 	addInclGlobal := concat(d.addInclGlobal, peerAddInclGlobal)
-	cFlagsGlobal := concat(d.cFlagsGlobal, peerCFlagsGlobal)
-	cxxFlagsGlobal := concat(d.cxxFlagsGlobal, peerCXXFlagsGlobal)
-	cOnlyFlagsGlobal := concat(d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
 	return &ModuleEmitResult{
 		ARPath:                       nil,

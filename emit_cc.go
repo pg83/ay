@@ -6,12 +6,13 @@ import (
 )
 
 var (
-	argDashBBin   = internV("-B", binPath)
-	ccKV          = KV{P: pkCC, PC: pcGreen}
-	cxxBisonFlags = []ANY{argWnoUnusedButSetVariable.any(), argWnoDeprecatedCopy.any()}
-	cxxRagelFlags = []ANY{argWnoImplicitFallthrough.any()}
-	cxxSwigFlags  = []ANY{argWnoDeprecatedDeclarations.any()}
-	cxxLexerFlags = []ANY{argWnoUnusedVariable.any()}
+	argDashBBin     = internV("-B", binPath)
+	ccKV            = KV{P: pkCC, PC: pcGreen}
+	cxxBisonFlags   = []ANY{argWnoUnusedButSetVariable.any(), argWnoDeprecatedCopy.any()}
+	cxxRagelFlags   = []ANY{argWnoImplicitFallthrough.any()}
+	cxxSwigFlags    = []ANY{argWnoDeprecatedDeclarations.any()}
+	cxxLexerFlags   = []ANY{argWnoUnusedVariable.any()}
+	coreCxxNostdinc = []ANY{baseUnitCxxNostdinc.any()}
 )
 
 type ModuleCompileEnv struct {
@@ -558,8 +559,8 @@ func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []ANY {
 func composeOwnAndPeerGlobalBucket(in *ModuleCompileEnv) []ANY {
 	out := make([]ANY, 0, len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal))
 
-	out = append(out, in.OwnCXXFlagsGlobal...)
 	out = append(out, in.PeerCXXFlagsGlobal...)
+	out = append(out, in.OwnCXXFlagsGlobal...)
 
 	if len(out) == 0 {
 		return nil
@@ -568,19 +569,12 @@ func composeOwnAndPeerGlobalBucket(in *ModuleCompileEnv) []ANY {
 	return out
 }
 
-func composePostCatboostBucket(preBucket []ANY) []ANY {
-	for _, x := range preBucket {
-		if x == baseUnitCxxNostdinc.any() {
-			return preBucket
-		}
+func coreCxxFlags(p *Platform) []ANY {
+	if p.ifEnv.bool(envMsvc) || p.ifEnv.bool(envUseStlSystem) {
+		return nil
 	}
 
-	out := make([]ANY, 0, len(preBucket)+1)
-
-	out = append(out, preBucket...)
-	out = append(out, baseUnitCxxNostdinc.any())
-
-	return out
+	return coreCxxNostdinc
 }
 
 func appendCompileFlagPipeline(cmdArgs []ANY, bundle CompileFlagBundle, warningBundle, defineBundle, preNoLibcExtras, moduleScopeCFlags, catboost []ANY) []ANY {
@@ -710,7 +704,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 		na.anyConcat(cxxOwnExtras),
 		na.anyConcat(cxxBucket),
 		catboostStr,
-		composePostCatboostBucket(cxxBucket),
+		coreCxxFlags(p),
 		in.CXXFlagsVar,
 	}
 
@@ -728,7 +722,7 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 		includes: includes,
 		flags:    na.anyConcat(flagParts...),
 		cxxTail:  na.anyConcat(cxxTailParts[:]...),
-		cPost:    na.anyConcat(in.COnlyFlags, in.OwnCOnlyFlagsGlobal, in.PeerCOnlyFlagsGlobal),
+		cPost:    na.anyConcat(in.COnlyFlags, in.PeerCOnlyFlagsGlobal, in.OwnCOnlyFlagsGlobal),
 	}
 }
 

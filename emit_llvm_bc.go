@@ -225,7 +225,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 
 	if cxx {
 		args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
-		args = appendAnyLists(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), composePostCatboostBucket(ownGlobalBucket), in.CXXFlagsVar)
+		args = appendAnyLists(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), coreCxxFlags(platform), in.CXXFlagsVar)
 	}
 
 	args = append(args, platform.TargetArg.any())
