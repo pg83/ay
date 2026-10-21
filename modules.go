@@ -418,7 +418,7 @@ type PySrcGroup struct {
 	Prio           int
 	PyiStart       int
 	PyiEnd         int
-	AllSrcs        *UnknownStmt
+	Statement      *UnknownStmt
 }
 
 type PyScope struct {
@@ -748,6 +748,16 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn)
 	finishYqlModule(modulePath, env, d)
+
+	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
+		for i, group := range d.pySrcGroups {
+			if group.Prio == priority && group.Statement != nil && group.Statement.Name == tokPySrcs {
+				collectPySrcGroup(fs, modulePath, *group.Statement, d, env, onWarn, i)
+				d.pySrcGroups[i].Statement = nil
+			}
+		}
+	}
+
 	d.test.canonizeSubPath = env.string(envCanonizeSubPath)
 	d.test.validateData = resourceValidationEnabled(env)
 
@@ -2409,6 +2419,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.pyNamespace = ptr(v.Args[0])
 		d.pyModuleNamespace = d.pyNamespace
+	case tokProtoToNamespace:
+		collectProtoToNamespace(fs, modulePath, v, d, env, onWarn)
 	case tokRegisterYqlPythonUdf:
 		registerYqlPythonUdf(fs, modulePath, v, d, env, onWarn)
 	case tokUdfNoProbe:
@@ -2879,292 +2891,15 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 		}
 
-		before := len(d.pySrcGroups)
-
-		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPySrcs, Args: append([]ANY{kwNAMESPACE.any(), strTests.any()}, v.Args...)}, d, env, onWarn)
-
-		for i := before; i < len(d.pySrcGroups); i++ {
-			d.pySrcGroups[i].Prio = stmtPrioDefault
-		}
+		applyInlinePySrcs(fs, modulePath, append([]ANY{kwNAMESPACE.any(), strTests.any()}, v.Args...), d, env, onWarn)
 	case tokPySrcs:
-		if env.bool(envGO_PROTO) {
-			break
-		}
+		stmt := v
 
-		topLevel := false
-		mainNext := false
-		cythonizePy := false
-		cythonPlainCpp := false
-		cythonCMode := false
-		cythonHeader := false
-		cythonApiHeader := false
-		swigCMode := false
-		namespace := d.pyModuleNamespace
-
-		var groupSrcs []string
-		var groupScopes []PyScope
-
-		cythonStmtStart := len(d.cythonCpp)
-		pyiBefore := len(d.pyPyiResources)
-
-		var cythonDirectives []string
-
-		var cythonRegIdx []int
-
-		for i := 0; i < len(v.Args); i++ {
-			a := v.Args[i]
-
-			switch a {
-			case kwTOP_LEVEL.any():
-				topLevel = true
-				namespace = nil
-				d.pyTopLevel = true
-
-				continue
-			case kwNAMESPACE.any():
-				i++
-
-				if i >= len(v.Args) {
-					throwFmt("PY_SRCS NAMESPACE expects a value")
-				}
-
-				namespace = ptr(v.Args[i])
-				topLevel = false
-				d.pyNamespace = namespace
-
-				continue
-			case kwCYTHONIZE_PY.any():
-				cythonizePy = true
-
-				continue
-			case kwCYTHON_CPP.any():
-				cythonPlainCpp = true
-				cythonCMode = false
-				cythonHeader = false
-				cythonApiHeader = false
-
-				continue
-			case kwCYTHON_C.any():
-				cythonCMode = true
-				cythonPlainCpp = false
-				cythonHeader = false
-				cythonApiHeader = false
-
-				continue
-			case strCythonCppH.any():
-
-				cythonCMode = false
-				cythonPlainCpp = false
-				cythonHeader = true
-				cythonApiHeader = false
-
-				continue
-			case strCythonCH.any():
-
-				cythonCMode = true
-				cythonPlainCpp = false
-				cythonHeader = true
-				cythonApiHeader = false
-
-				continue
-			case strCythonCApiH.any():
-
-				cythonCMode = true
-				cythonPlainCpp = false
-				cythonHeader = true
-				cythonApiHeader = true
-
-				continue
-			case kwCYTHON_DIRECTIVE.any():
-				i++
-
-				if i >= len(v.Args) {
-					throwFmt("PY_SRCS CYTHON_DIRECTIVE expects a value")
-				}
-
-				cythonDirectives = append(cythonDirectives, "-X", v.Args[i].string())
-
-				continue
-			case kwSWIG_C.any():
-				swigCMode = true
-
-				continue
-			case kwSWIG_CPP.any():
-				swigCMode = false
-
-				continue
-			case kwMAIN.any():
-				mainNext = true
-
-				continue
-			}
-
-			src := a.string()
-			modNameOverride := ""
-
-			if eq := strings.IndexByte(src, '='); eq >= 0 {
-				modNameOverride = src[eq+1:]
-				src = src[:eq]
-			}
-
-			if extIsPyx(src) {
-				modName := modNameOverride
-
-				if modName == "" {
-					modName = pythonModuleName(modulePath, src, topLevel, namespace)
-				}
-
-				stmt := &CythonStmt{
-					Src:       src,
-					CMode:     cythonCMode,
-					Header:    cythonHeader,
-					ApiHeader: cythonApiHeader,
-					Options: []string{
-						"--module-name", modName,
-						"--init-suffix", pythonInitSuffix(modName),
-						"--source-root", "$(S)",
-						"-X", "set_initial_path=" + modulePath + "/" + src,
-					},
-				}
-
-				if cythonPlainCpp {
-					stmt.Generated = ptr(src + ".cpp")
-				}
-
-				d.cythonCpp = append(d.cythonCpp, stmt)
-				appendPyRegister(d, modName, false)
-				cythonRegIdx = append(cythonRegIdx, len(d.pyRegister)-1)
-				mainNext = false
-
-				continue
-			}
-
-			if cythonizePy && extIsPy(src) {
-				modName := modNameOverride
-
-				if modName == "" {
-					modName = pythonModuleName(modulePath, src, topLevel, namespace)
-				}
-
-				d.cythonCpp = append(d.cythonCpp, &CythonStmt{
-					Src:       src,
-					CMode:     cythonCMode,
-					Header:    cythonHeader,
-					ApiHeader: cythonApiHeader,
-
-					Pxd: strings.ReplaceAll(modName, ".", "/") + ".pxd",
-					Options: []string{
-						"--module-name", modName,
-						"--init-suffix", pythonInitSuffix(modName),
-						"--source-root", "$(S)",
-						"-X", "set_initial_path=" + modulePath + "/" + src,
-					},
-				})
-
-				appendPyRegister(d, modName, false)
-				cythonRegIdx = append(cythonRegIdx, len(d.pyRegister)-1)
-				mainNext = false
-
-				continue
-			}
-
-			if extIsSwg(src) {
-				modName := modNameOverride
-
-				if modName == "" {
-					ns := strings.ReplaceAll(modulePath, "/", ".") + "."
-
-					if topLevel {
-						ns = ""
-					}
-
-					modName = ns + strings.ReplaceAll(strings.TrimSuffix(src, ".swg"), "/", ".")
-				}
-
-				if swigCMode {
-					d.swigC = append(d.swigC, SwigSrc{Src: src, Module: modName})
-					appendPyRegister(d, modName+"_swg", false)
-				}
-
-				d.peerdirs = append(d.peerdirs, strContribToolsSwigLibPython.any())
-				mainNext = false
-
-				continue
-			}
-
-			if extIsPyi(src) {
-				modName := modNameOverride
-
-				if modName == "" {
-					modName = pythonModuleName(modulePath, strings.TrimSuffix(src, ".pyi"), topLevel, namespace)
-				}
-
-				dest := "py/" + strings.ReplaceAll(modName, ".", "/") + ".pyi"
-
-				d.pyPyiResources = expandResourceFiles(d, d.pyPyiResources, []string{"DEST", dest, src})
-				mainNext = false
-
-				continue
-			}
-
-			if strings.Contains(a.string(), "=") && !extIsPy(src) {
-				continue
-			}
-
-			d.pySrcs = append(d.pySrcs, internStr(src).any())
-			groupSrcs = append(groupSrcs, src)
-			groupScopes = append(groupScopes, PyScope{TopLevel: topLevel, Namespace: namespace})
-
-			if mainNext {
-				ns := strings.ReplaceAll(modulePath, "/", ".") + "."
-
-				if topLevel {
-					ns = ""
-				}
-
-				modName := modNameOverride
-
-				if modName == "" {
-					modName = strings.TrimSuffix(src, ".py")
-					modName = strings.ReplaceAll(modName, "/", ".")
-					modName = ns + modName
-				}
-
-				d.pyMain = ptr(internV(modName, ":main").any())
-				mainNext = false
-			} else if d.pyMain == nil && d.moduleStmt != nil &&
-				(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) &&
-				(src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
-				ns := strings.ReplaceAll(modulePath, "/", ".") + "."
-
-				if topLevel {
-					ns = ""
-				}
-
-				modName := strings.TrimSuffix(src, ".py")
-
-				modName = strings.ReplaceAll(modName, "/", ".")
-				d.pyMain = ptr(internV(ns, modName).any())
-			}
-		}
-
-		if len(cythonDirectives) > 0 {
-			for j := cythonStmtStart; j < len(d.cythonCpp); j++ {
-				d.cythonCpp[j].Options = append(d.cythonCpp[j].Options, cythonDirectives...)
-			}
-		}
-
-		reorderCythonVariantBuckets(d, cythonStmtStart, cythonRegIdx)
-
-		if len(groupSrcs) > 0 || len(d.pyPyiResources) > pyiBefore {
-			d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{
-				Srcs: internAnys(groupSrcs), Scopes: groupScopes, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs, PyiStart: pyiBefore, PyiEnd: len(d.pyPyiResources),
-			})
-		}
+		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
 	case tokAllPySrcs:
 		stmt := v
 
-		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{AllSrcs: &stmt, Prio: stmtPrioSrcs})
+		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{Statement: &stmt, Prio: stmtPrioSrcs})
 	case tokPyMain:
 
 		if len(v.Args) != 1 {
@@ -3673,6 +3408,270 @@ func parseYAFFSchema(v UnknownStmt) CppProtoPlugin {
 		OutputSuffixes: []string{"_" + schemaName + ".yaff.h", "_" + schemaName + ".yaff.cpp"},
 		ExtraOutFlag:   yaffExtraOutFlag(lead, s),
 	}
+}
+
+func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn), group int) {
+	if env.bool(envGO_PROTO) {
+		return
+	}
+
+	topLevel := false
+	mainNext := false
+	cythonizePy := false
+	cythonPlainCpp := false
+	cythonCMode := false
+	cythonHeader := false
+	cythonApiHeader := false
+	swigCMode := false
+	namespace := d.pyModuleNamespace
+
+	if namespace != nil && namespace.string() == "." {
+		topLevel = true
+		namespace = nil
+	}
+
+	var groupSrcs []string
+	var groupScopes []PyScope
+
+	cythonStmtStart := len(d.cythonCpp)
+	pyiBefore := len(d.pyPyiResources)
+
+	var cythonDirectives []string
+
+	var cythonRegIdx []int
+
+	for i := 0; i < len(v.Args); i++ {
+		a := v.Args[i]
+
+		switch a {
+		case kwTOP_LEVEL.any():
+			topLevel = true
+			namespace = nil
+			d.pyTopLevel = true
+
+			continue
+		case kwNAMESPACE.any():
+			i++
+
+			if i >= len(v.Args) {
+				throwFmt("PY_SRCS NAMESPACE expects a value")
+			}
+
+			namespace = ptr(v.Args[i])
+			topLevel = false
+			d.pyNamespace = namespace
+
+			continue
+		case kwCYTHONIZE_PY.any():
+			cythonizePy = true
+
+			continue
+		case kwCYTHON_CPP.any():
+			cythonPlainCpp = true
+			cythonCMode = false
+			cythonHeader = false
+			cythonApiHeader = false
+
+			continue
+		case kwCYTHON_C.any():
+			cythonCMode = true
+			cythonPlainCpp = false
+			cythonHeader = false
+			cythonApiHeader = false
+
+			continue
+		case strCythonCppH.any():
+
+			cythonCMode = false
+			cythonPlainCpp = false
+			cythonHeader = true
+			cythonApiHeader = false
+
+			continue
+		case strCythonCH.any():
+
+			cythonCMode = true
+			cythonPlainCpp = false
+			cythonHeader = true
+			cythonApiHeader = false
+
+			continue
+		case strCythonCApiH.any():
+
+			cythonCMode = true
+			cythonPlainCpp = false
+			cythonHeader = true
+			cythonApiHeader = true
+
+			continue
+		case kwCYTHON_DIRECTIVE.any():
+			i++
+
+			if i >= len(v.Args) {
+				throwFmt("PY_SRCS CYTHON_DIRECTIVE expects a value")
+			}
+
+			cythonDirectives = append(cythonDirectives, "-X", v.Args[i].string())
+
+			continue
+		case kwSWIG_C.any():
+			swigCMode = true
+
+			continue
+		case kwSWIG_CPP.any():
+			swigCMode = false
+
+			continue
+		case kwMAIN.any():
+			mainNext = true
+
+			continue
+		}
+
+		src := a.string()
+		modNameOverride := ""
+
+		if eq := strings.IndexByte(src, '='); eq >= 0 {
+			modNameOverride = src[eq+1:]
+			src = src[:eq]
+		}
+
+		if extIsPyx(src) {
+			modName := modNameOverride
+
+			if modName == "" {
+				modName = pythonModuleName(modulePath, src, topLevel, namespace)
+			}
+
+			stmt := &CythonStmt{
+				Src:       src,
+				CMode:     cythonCMode,
+				Header:    cythonHeader,
+				ApiHeader: cythonApiHeader,
+				Options: []string{
+					"--module-name", modName,
+					"--init-suffix", pythonInitSuffix(modName),
+					"--source-root", "$(S)",
+					"-X", "set_initial_path=" + modulePath + "/" + src,
+				},
+			}
+
+			if cythonPlainCpp {
+				stmt.Generated = ptr(src + ".cpp")
+			}
+
+			d.cythonCpp = append(d.cythonCpp, stmt)
+			appendPyRegister(d, modName, false)
+			cythonRegIdx = append(cythonRegIdx, len(d.pyRegister)-1)
+			mainNext = false
+
+			continue
+		}
+
+		if cythonizePy && extIsPy(src) {
+			modName := modNameOverride
+
+			if modName == "" {
+				modName = pythonModuleName(modulePath, src, topLevel, namespace)
+			}
+
+			d.cythonCpp = append(d.cythonCpp, &CythonStmt{
+				Src:       src,
+				CMode:     cythonCMode,
+				Header:    cythonHeader,
+				ApiHeader: cythonApiHeader,
+
+				Pxd: strings.ReplaceAll(modName, ".", "/") + ".pxd",
+				Options: []string{
+					"--module-name", modName,
+					"--init-suffix", pythonInitSuffix(modName),
+					"--source-root", "$(S)",
+					"-X", "set_initial_path=" + modulePath + "/" + src,
+				},
+			})
+
+			appendPyRegister(d, modName, false)
+			cythonRegIdx = append(cythonRegIdx, len(d.pyRegister)-1)
+			mainNext = false
+
+			continue
+		}
+
+		if extIsSwg(src) {
+			modName := modNameOverride
+
+			if modName == "" {
+				ns := strings.ReplaceAll(modulePath, "/", ".") + "."
+
+				if topLevel {
+					ns = ""
+				}
+
+				modName = ns + strings.ReplaceAll(strings.TrimSuffix(src, ".swg"), "/", ".")
+			}
+
+			if swigCMode {
+				d.swigC = append(d.swigC, SwigSrc{Src: src, Module: modName})
+				appendPyRegister(d, modName+"_swg", false)
+			}
+
+			d.peerdirs = append(d.peerdirs, strContribToolsSwigLibPython.any())
+			mainNext = false
+
+			continue
+		}
+
+		if extIsPyi(src) {
+			modName := modNameOverride
+
+			if modName == "" {
+				modName = pythonModuleName(modulePath, strings.TrimSuffix(src, ".pyi"), topLevel, namespace)
+			}
+
+			dest := "py/" + strings.ReplaceAll(modName, ".", "/") + ".pyi"
+
+			d.pyPyiResources = expandResourceFiles(d, d.pyPyiResources, []string{"DEST", dest, src})
+			mainNext = false
+
+			continue
+		}
+
+		if strings.Contains(a.string(), "=") && !extIsPy(src) {
+			continue
+		}
+
+		d.pySrcs = append(d.pySrcs, internStr(src).any())
+		groupSrcs = append(groupSrcs, src)
+		groupScopes = append(groupScopes, PyScope{TopLevel: topLevel, Namespace: namespace})
+
+		if mainNext {
+			modName := modNameOverride
+
+			if modName == "" {
+				modName = pythonModuleName(modulePath, src, topLevel, namespace)
+			}
+
+			d.pyMain = ptr(internV(modName, ":main").any())
+			mainNext = false
+		} else if d.pyMain == nil && d.moduleStmt != nil &&
+			(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) &&
+			(src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
+			d.pyMain = ptr(internStr(pythonModuleName(modulePath, src, topLevel, namespace)).any())
+		}
+	}
+
+	if len(cythonDirectives) > 0 {
+		for j := cythonStmtStart; j < len(d.cythonCpp); j++ {
+			d.cythonCpp[j].Options = append(d.cythonCpp[j].Options, cythonDirectives...)
+		}
+	}
+
+	reorderCythonVariantBuckets(d, cythonStmtStart, cythonRegIdx)
+
+	d.pySrcGroups[group].Srcs = internAnys(groupSrcs)
+	d.pySrcGroups[group].Scopes = groupScopes
+	d.pySrcGroups[group].PyiStart = pyiBefore
+	d.pySrcGroups[group].PyiEnd = len(d.pyPyiResources)
 }
 
 func pythonModuleName(modulePath, src string, topLevel bool, namespace *ANY) string {

@@ -1,6 +1,7 @@
 package main
 
 var tokName = [...]STR{
+	tokProtoToNamespace:     internStr("PROTO_TO_NAMESPACE"),
 	tokYqlPrebuiltTool:      internStr("YQL_PREBUILT_TOOL"),
 	tokYqlUdf:               internStr("YQL_UDF"),
 	tokYqlPythonUdf:         internStr("YQL_PYTHON_UDF"),
@@ -610,6 +611,7 @@ const (
 	tokPyConstructor
 	tokPyMain
 	tokPyNamespace
+	tokProtoToNamespace
 	tokPyRegister
 	tokPySrcs
 	tokRecurse

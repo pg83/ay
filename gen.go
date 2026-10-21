@@ -1275,8 +1275,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}()
 
 	for i, group := range d.pySrcGroups {
-		if group.AllSrcs != nil {
-			applyAllPySrcs(ctx.fs, instance.Path.relString(), *group.AllSrcs, d, i)
+		if group.Statement != nil && group.Statement.Name == tokAllPySrcs {
+			applyAllPySrcs(ctx.fs, instance.Path.relString(), *group.Statement, d, i)
 		}
 	}
 
