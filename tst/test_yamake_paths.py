@@ -144,7 +144,8 @@ class YaMakePathsTest(unittest.TestCase):
         files = {
             "a/ya.make": module("LIBRARY", (
                 "SET(P ${ARCADIA_ROOT}/l)\nPEERDIR(ADDINCL ${P})\n"
-                "ADDINCL(GLOBAL FOR asm a/gasm)\nSRCS(x.cpp s.asm)"
+                "SET(A ${ARCADIA_ROOT}/a/gasm)\n"
+                "ADDINCL(GLOBAL FOR asm ${A})\nSRCS(x.cpp s.asm)"
             )),
             "a/x.cpp": "", "a/s.asm": "", "a/gasm/x.inc": "",
             "l/ya.make": module("LIBRARY", ""),
@@ -159,7 +160,6 @@ class YaMakePathsTest(unittest.TestCase):
         ) in enumerate(asm) if arg == "-I"], [
             "$(B)",
             "$(S)",
-            "$(S)/l",
             "$(S)/a/gasm",
         ])
 
