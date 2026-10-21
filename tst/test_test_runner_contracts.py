@@ -100,5 +100,38 @@ END()
         self.assertEqual(args[args.index("--output-style") + 1], "jsonl")
 
 
+    def test_test_requirements_derive_cpu_from_ram(self):
+        for ram, cpu in ((4, 2), (8, 3)):
+            with self.subTest(ram=ram):
+                graph = lib.make({'app/ya.make': f'EXECTEST()\nRUN(check)\nREQUIREMENTS(ram:{ram})\nEND()\n'}, 'app', '-t')
+                run, _ = test_args(graph)
+                self.assertEqual(run['requirements']['ram'], ram)
+                self.assertEqual(run['requirements']['cpu'], cpu)
+
+    def test_platform_descriptor_includes_enabled_flags(self):
+        files = {'app/ya.make': 'EXECTEST()\nRUN(check)\nEND()\n'}
+        for enabled in ('yes', 'no'):
+            with self.subTest(enabled=enabled):
+                graph = lib.make(files, 'app', '-t', '--target-platform-flag', 'RACE=' + enabled,
+                                 '--target-platform-flag', 'USE_LTO=' + enabled,
+                                 '--target-platform-flag', 'SANITIZER_TYPE=address',
+                                 '-DCONSISTENT_DEBUG=yes', '-DRECURSE_PARTITION_INDEX=0', '-DRECURSE_PARTITIONS_COUNT=1')
+                _, args = test_args(graph)
+                descriptor = args[args.index('--target-platform-descriptor') + 1]
+                self.assertIn('-asan', descriptor)
+                self.assertEqual('-lto' in descriptor, enabled == 'yes')
+                self.assertEqual('-race' in descriptor, enabled == 'yes')
+                for prefix in ('CONSISTENT_DEBUG=', 'RECURSE_PARTITION_INDEX=', 'RECURSE_PARTITIONS_COUNT='):
+                    self.assertFalse(any(a.startswith(prefix) for a in args))
+
+    def test_split_test_directory_outputs_are_skipped_by_accumulator(self):
+        fixture = Tree(self, {'app/ya.make': 'EXECTEST()\nRUN(check)\nSPLIT_FACTOR(2)\nEND()\n'}, ya_conf='dir_outputs = true\n')
+        graph = fixture.graph('app', '-t')
+        accumulator = next(n for n in graph['graph'] if any('results_accumulator' in c['cmd_args'] for c in n['cmds']))
+        args = accumulator['cmds'][0]['cmd_args']
+        self.assertEqual(args[args.index('--skip-dir') + 1], 'testing_out_stuff')
+        self.assertFalse(any(p.endswith('testing_out_stuff.tar.zstd') for p in accumulator['outputs']))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -7,6 +7,17 @@ from test_java_tests import junit_tree, option_values, run_args, test_nodes
 
 
 class JavaDependencyContractsTest(unittest.TestCase):
+    def test_cyclic_peers_keep_each_classpath_entry_once(self):
+        files = tree("PEERDIR(a)", **{
+            **contrib("a", "b", jar=1), **contrib("b", "a", jar=2),
+        })
+        graph = lib.make(files, "app")
+        jar = lib.node_by_output(graph, "$(B)/app/app.jar")
+        self.assertEqual(writer_args(jar, "bfg.txt"), ["a/a.jar", "b/b.jar"])
+        for output in ("$(B)/a/a.jar", "$(B)/b/b.jar"):
+            self.assertIn(lib.node_by_output(graph, output)["uid"], jar["deps"])
+            self.assertEqual(sum(output in n["outputs"] for n in graph["graph"]), 1)
+
     def test_exclusions_propagate_but_preserve_direct_dependencies(self):
         root, middle, leaf = (f"contrib/java/example/{p}/1" for p in ("root", "middle", "leaf"))
         for direct_leaf, exclusions in ((False, middle), (True, middle), (True, middle + " " + leaf)):
