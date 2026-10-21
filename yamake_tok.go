@@ -1,13 +1,15 @@
 package main
 
 var tokName = [...]STR{
-	tokProtoToNamespace:     internStr("PROTO_TO_NAMESPACE"),
-	tokYqlPrebuiltTool:      internStr("YQL_PREBUILT_TOOL"),
-	tokYqlUdf:               internStr("YQL_UDF"),
-	tokYqlPythonUdf:         internStr("YQL_PYTHON_UDF"),
-	tokYqlPython3Udf:        internStr("YQL_PYTHON3_UDF"),
-	tokRegisterYqlPythonUdf: internStr("REGISTER_YQL_PYTHON_UDF"),
-	tokUdfNoProbe:           internStr("UDF_NO_PROBE"),
+	tokGenerateYtRecord:       internStr("GENERATE_YT_RECORD"),
+	tokYtRecordDisablePeerdir: internStr("YT_RECORD_DISABLE_PEERDIR"),
+	tokProtoToNamespace:       internStr("PROTO_TO_NAMESPACE"),
+	tokYqlPrebuiltTool:        internStr("YQL_PREBUILT_TOOL"),
+	tokYqlUdf:                 internStr("YQL_UDF"),
+	tokYqlPythonUdf:           internStr("YQL_PYTHON_UDF"),
+	tokYqlPython3Udf:          internStr("YQL_PYTHON3_UDF"),
+	tokRegisterYqlPythonUdf:   internStr("REGISTER_YQL_PYTHON_UDF"),
+	tokUdfNoProbe:             internStr("UDF_NO_PROBE"),
 
 	tokCythonFlags: internStr("CYTHON_FLAGS"),
 	tokDllFor:      internStr("DLL_FOR"),
@@ -851,6 +853,8 @@ const (
 	tokRegisterYqlPythonUdf
 	tokUdfNoProbe
 	tokYqlPrebuiltTool
+	tokGenerateYtRecord
+	tokYtRecordDisablePeerdir
 )
 
 type TOK uint16

@@ -2043,6 +2043,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}()
 
 	switch v.Name {
+	case tokGenerateYtRecord:
+		applyYtRecord(modulePath, v, d, env)
+	case tokYtRecordDisablePeerdir:
+		if len(v.Args) != 0 {
+			throwFmt("YT_RECORD_DISABLE_PEERDIR expects no arguments")
+		}
+
+		env.setString(envYtRecordPeerdir, "")
 	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks, tokGolaunchCompositeComps:
 		applyMlaunchStmt(modulePath, v, env, d)
 	case tokSdcDiagsSplitGeneratorV3:

@@ -596,13 +596,19 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		cmd.Cwd = cwdVFS(expandStmtToken((*stmt.CWD).string(), dirs))
 	}
 
+	kv := stmt.KV
+
+	if kv == nil {
+		kv = &prKV
+	}
+
 	node := Node{
 		Platform:       instance.Platform,
 		Cmds:           na.cmdList(cmd),
 		Env:            env,
 		Inputs:         inputs,
 		Outputs:        outputs,
-		KV:             &prKV,
+		KV:             kv,
 		ForeignDepRefs: toolRefs,
 	}
 

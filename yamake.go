@@ -261,6 +261,7 @@ type DefaultVarStmt struct {
 }
 
 type RunProgramStmt struct {
+	KV             *KV
 	ToolPath       ANY
 	Args           []ANY
 	INFiles        []ANY
