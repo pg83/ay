@@ -131,6 +131,7 @@ func protoTransitiveHeadersEnabled(d *ModuleData) bool {
 type ProtoSpec struct {
 	kv            *KV
 	modulePlugins bool
+	eventPlugins  bool
 	ccFirstOuts   bool
 	optsTail      []ANY
 	toolLDRef     NodeRef
@@ -206,6 +207,8 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 
 	if spec.modulePlugins {
 		idx = 1
+	} else if spec.eventPlugins {
+		idx = 2
 	}
 
 	if e.pbEmissionOk[idx] {
@@ -231,10 +234,14 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 		pe.grpcCppLDRef, pe.grpcCppBinary = ctx.tool(argContribToolsProtocPluginsGrpcCpp)
 	}
 
-	if spec.modulePlugins {
+	if spec.modulePlugins || spec.eventPlugins {
 		pe.extraPlugins = make([]ResolvedCPPProtoPlugin, 0, len(d.cppProtoPlugins))
 
 		for _, plugin := range d.cppProtoPlugins {
+			if spec.eventPlugins && !plugin.ApplyToEvents {
+				continue
+			}
+
 			ldRef, binary := ctx.tool(internArg(plugin.ToolPath))
 
 			plugin.OutputsBeforeBase = plugin.OutputsBeforeBase || d.moduleStmt.Name == tokProtoLibrary && e.instance.Platform.ProtoHeaderEpilogue
@@ -378,10 +385,24 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	e.dirScratch = directImports
 
 	if spec.genHParsed != nil {
+		genRefs := spec.genRefs
+
+		if len(pe.extraPlugins) != 0 {
+			genRefs = na.noderefs.alloc(len(spec.genRefs) + len(pe.extraPlugins))[:0]
+			genRefs = append(genRefs, spec.genRefs...)
+
+			for _, plugin := range pe.extraPlugins {
+				genRefs = append(genRefs, plugin.LDRef)
+			}
+
+			na.noderefs.commit(len(genRefs))
+			genRefs = genRefs[:len(genRefs):len(genRefs)]
+		}
+
 		e.register(GeneratedFileInfo{
 			OutputPath:     pbH,
 			ProducerRef:    pbRef,
-			GeneratorRefs:  spec.genRefs,
+			GeneratorRefs:  genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: spec.genHParsed},
 			OnUse:          pbPE,
 		})
@@ -396,7 +417,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		e.register(GeneratedFileInfo{
 			OutputPath:     pbCC,
 			ProducerRef:    pbRef,
-			GeneratorRefs:  spec.genRefs,
+			GeneratorRefs:  genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: ccParsed},
 			OnUse:          pbPE,
 		})
@@ -731,12 +752,12 @@ func (e *EmitContext) emitPB(
 
 	chunks = append(chunks, blocks.head, outsChunk, blocks.mid, relChunk)
 
-	if len(blocks.tail) > 0 {
-		chunks = append(chunks, blocks.tail)
-	}
-
 	if len(spec.optsTail) > 0 {
 		chunks = append(chunks, spec.optsTail)
+	}
+
+	if len(blocks.tail) > 0 {
+		chunks = append(chunks, blocks.tail)
 	}
 
 	na.chunks.commit(len(chunks))
@@ -753,12 +774,12 @@ func (e *EmitContext) emitPB(
 
 	inputs = append(inputs, protocBinary)
 
-	for _, plugin := range extraPlugins {
-		inputs = append(inputs, plugin.Binary)
-	}
-
 	if spec.toolBinary != 0 {
 		inputs = append(inputs, spec.toolBinary)
+	}
+
+	for _, plugin := range extraPlugins {
+		inputs = append(inputs, plugin.Binary)
 	}
 
 	toolEnd := len(inputs)
@@ -777,14 +798,14 @@ func (e *EmitContext) emitPB(
 		}
 	}
 
+	if spec.toolLDRef != 0 {
+		foreignDepRefs = append(foreignDepRefs, spec.toolLDRef)
+	}
+
 	for _, plugin := range extraPlugins {
 		if plugin.LDRef != 0 {
 			foreignDepRefs = append(foreignDepRefs, plugin.LDRef)
 		}
-	}
-
-	if spec.toolLDRef != 0 {
-		foreignDepRefs = append(foreignDepRefs, spec.toolLDRef)
 	}
 
 	foreignDepRefs = dedupRefs(foreignDepRefs)

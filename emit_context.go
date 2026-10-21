@@ -59,8 +59,8 @@ type EmitContext struct {
 	prodOrder          []int
 	protoPaths         []protoPathEntry
 	protoPathPos       int
-	pbEmission         [2]PbModuleEmission
-	pbEmissionOk       [2]bool
+	pbEmission         [3]PbModuleEmission
+	pbEmissionOk       [3]bool
 	pyPBEmission       PyPBModuleEmission
 	pyPBOk             bool
 	objcopyCtx         ObjcopyEmitCtx

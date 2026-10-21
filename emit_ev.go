@@ -64,8 +64,9 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 	evHParsed = evHParsed[:len(evHParsed):len(evHParsed)]
 
 	e.emitCppProtoFamilySource(meta, &ProtoSpec{
-		kv:          &evKV,
-		ccFirstOuts: true,
+		kv:           &evKV,
+		ccFirstOuts:  true,
+		eventPlugins: true,
 		optsTail: ctx.na.anyList(
 			internV("--plugin=protoc-gen-event2cpp=", event2cppBinary.prefix(), event2cppBinary.relString()).any(),
 			argEvent2cppOutB.any(),

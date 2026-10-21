@@ -75,6 +75,7 @@ type CppProtoPlugin struct {
 	Deps              []string
 	ExtraOutFlag      string
 	OutputsBeforeBase bool
+	ApplyToEvents     bool
 }
 
 func (p CppProtoPlugin) isYaff() bool {
@@ -3202,7 +3203,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		} else {
 			d.noCheckImportsDisabled = true
 		}
-	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2:
+	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2, tokCppEvProtoPlugin:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
 	case tokWithKotlinGrpc:
 		d.peerdirs = append(d.peerdirs, strBuildPlatformJavaKotlinGrpc.any())
@@ -3519,7 +3520,7 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 	switch v.Name {
 	case tokCppProtoPlugin0:
 		requiredArgs = 2
-	case tokCppProtoPlugin:
+	case tokCppProtoPlugin, tokCppEvProtoPlugin:
 		requiredArgs = 3
 		outputSuffixes = 1
 	case tokCppProtoPlugin2:
@@ -3532,8 +3533,9 @@ func parseCPPProtoPlugin(v UnknownStmt) CppProtoPlugin {
 	}
 
 	plugin := CppProtoPlugin{
-		Name:     v.Args[0].string(),
-		ToolPath: v.Args[1].string(),
+		Name:          v.Args[0].string(),
+		ToolPath:      v.Args[1].string(),
+		ApplyToEvents: v.Name == tokCppEvProtoPlugin,
 	}
 
 	tail := 2

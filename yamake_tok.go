@@ -125,6 +125,7 @@ var tokName = [...]STR{
 	tokCopyFile:                           internStr("COPY_FILE"),
 	tokCopyFileWithContext:                internStr("COPY_FILE_WITH_CONTEXT"),
 	tokCppEvlog:                           internStr("CPP_EVLOG"),
+	tokCppEvProtoPlugin:                   internStr("CPP_EV_PROTO_PLUGIN"),
 	tokCppProtoPlugin:                     internStr("CPP_PROTO_PLUGIN"),
 	tokCppProtoPlugin0:                    internStr("CPP_PROTO_PLUGIN0"),
 	tokCppProtoPlugin2:                    internStr("CPP_PROTO_PLUGIN2"),
@@ -490,6 +491,7 @@ const (
 	tokCopyFile
 	tokCopyFileWithContext
 	tokCppEvlog
+	tokCppEvProtoPlugin
 	tokCppProtoPlugin
 	tokCppProtoPlugin0
 	tokCppProtoPlugin2

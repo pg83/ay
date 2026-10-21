@@ -70,6 +70,55 @@ class EmitEventTest(unittest.TestCase):
         self.assertIn("$(B)/consumer/events.ev.pb.h", node["outputs"])
         return node["cmds"][0]["cmd_args"]
 
+    def test_event_plugins_extend_proto_and_event_commands_with_distinct_outputs(self):
+        files = self.common_files()
+        lib.tool_program(files, "tools/check_event", "check_event")
+        lib.tool_program(files, "tools/proto_only", "proto_only")
+        for tool, header in (("check_event", "event.h"), ("proto_only", "ordinary.h")):
+            files[f"tools/{tool}/ya.make"] = files[f"tools/{tool}/ya.make"].replace(
+                "END()", f"INDUCED_DEPS(h+cpp runtime/{header})\nEND()"
+            )
+            files[f"runtime/{header}"] = "#pragma once\n"
+        files.update({
+            "consumer/ya.make": (
+                "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\n"
+                "CPP_EV_PROTO_PLUGIN(check tools/check_event .checked.h DEPS support EXTRA_OUT_FLAG strict)\n"
+                "CPP_PROTO_PLUGIN(proto_only tools/proto_only .extra.h)\n"
+                "SRCS(message.proto first.ev second.ev)\nEND()\n"
+            ),
+            "consumer/message.proto": 'syntax = "proto3";\nmessage Message {}\n',
+            "consumer/first.ev": "message First {}\n",
+            "consumer/second.ev": "message Second {}\n",
+            "support/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}CFLAGS(GLOBAL -DEVENT_SUPPORT)\nEND()\n",
+        })
+        graph = lib.make(files, "consumer")
+        check = "$(B)/tools/check_event/check_event"
+        plugin_arg = "--plugin=protoc-gen-check=" + check
+        ordinary_arg = "--plugin=protoc-gen-proto_only=$(B)/tools/proto_only/proto_only"
+        proto = lib.node_by_output(graph, "$(B)/consumer/message.pb.cc")
+        proto_args = proto["cmds"][0]["cmd_args"]
+        self.assertIn(plugin_arg, proto_args)
+        self.assertIn(ordinary_arg, proto_args)
+        self.assertIn("$(B)/consumer/message.checked.h", proto["outputs"])
+        self.assertIn("$(B)/consumer/message.extra.h", proto["outputs"])
+        plugin_uid = lib.node_by_output(graph, check)["uid"]
+        for source in ("first.ev", "second.ev"):
+            output = f"$(B)/consumer/{source}.pb.cc"
+            event = lib.node_by_output(graph, output)
+            args = event["cmds"][0]["cmd_args"]
+            self.assertEqual(event["outputs"], [output, f"$(B)/consumer/{source}.pb.h"])
+            self.assertEqual(args.count(plugin_arg), 1)
+            self.assertIn("--check_out=$(B)/", args)
+            self.assertIn("--check_opt=strict", args)
+            self.assertNotIn(ordinary_arg, args)
+            self.assertLess(args.index("-I=$(S)/library/cpp/eventlog"), args.index(plugin_arg))
+            self.assertIn(check, event["inputs"])
+            self.assertIn(plugin_uid, event["deps"])
+            compiled = lib.node_by_output(graph, output + ".o")
+            self.assertIn("-DEVENT_SUPPORT", compiled["cmds"][0]["cmd_args"])
+            self.assertIn("$(S)/runtime/event.h", compiled["inputs"])
+            self.assertNotIn("$(S)/runtime/ordinary.h", compiled["inputs"])
+
     def test_transitive_proto_namespace_reaches_event_command_once(self):
         files = self.common_files()
         files.update({
