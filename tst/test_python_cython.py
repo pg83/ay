@@ -88,6 +88,24 @@ def module_options(name, src):
 
 
 class CythonTest(unittest.TestCase):
+    def test_extern_headers_use_compiler_search_paths_before_source_local_files(self):
+        for mode, extension in (("CYTHON_C", "c"), ("CYTHON_CPP", "cpp")):
+            with self.subTest(mode=mode):
+                files = python_base()
+                files.update({
+                    "lib/ya.make": f"PY3_LIBRARY()\nADDINCL(headers)\nPY_SRCS({mode} wrap.pyx)\nEND()\n",
+                    "lib/wrap.pyx": 'cdef extern from "ext.h":\n    pass\n',
+                    "lib/ext.h": "",
+                    "headers/ext.h": "#include <lib/ext.h>\n",
+                })
+                graph = lib.make(files, "lib", "--sandboxing")
+                cc = lib.node_by_output(graph, f"$(B)/lib/wrap.pyx.{extension}.o")
+                self.assertIn("$(S)/headers/ext.h", cc["inputs"])
+                self.assertIn("$(S)/lib/ext.h", cc["inputs"])
+                cy = lib.node_by_output(graph, f"$(B)/lib/wrap.pyx.{extension}")
+                self.assertNotIn("$(S)/headers/ext.h", cy["inputs"])
+                self.assertNotIn("$(S)/lib/ext.h", cy["inputs"])
+
     def test_cython_system_addincl_reuses_existing_native_include_directories(self):
         paths = (
             "contrib/python/numpy/include/numpy/core/include",

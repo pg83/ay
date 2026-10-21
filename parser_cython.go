@@ -41,8 +41,8 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 		if rest, ok := cutParserKeyword(t, "cdef"); ok {
 			if rest, ok = cutParserKeyword(rest, "extern"); ok {
 				if rest, ok = cutParserKeyword(rest, "from"); ok {
-					if target, kind, ok := parseDelimitedIncludeTarget(rest); ok {
-						cpp = append(cpp, IncludeDirective{kind: kind, target: includeTarget(internBytes(target).any())})
+					if target, _, ok := parseDelimitedIncludeTarget(rest); ok {
+						cpp = append(cpp, IncludeDirective{kind: includeSystem, target: includeTarget(internBytes(target).any())})
 					}
 				}
 			}
