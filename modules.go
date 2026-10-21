@@ -3878,7 +3878,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokPy3Test, tokPy2Test, tokPytestBin, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokGoProgram, tokGoTest, tokGoDll:
+	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokPy3Test, tokPy2Test, tokPytestBin, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokBoosttest, tokBoosttestWithMain, tokGoProgram, tokGoTest, tokGoDll:
 		return true
 	}
 

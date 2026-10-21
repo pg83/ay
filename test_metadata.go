@@ -28,6 +28,8 @@ func testSuiteName(name TOK) string {
 		return "g_benchmark"
 	case tokFuzz:
 		return "fuzz"
+	case tokBoosttest, tokBoosttestWithMain:
+		return "boost_test"
 	}
 
 	return ""
@@ -196,6 +198,8 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary, work string, chunk Te
 		for _, a := range meta.binaryArgs {
 			args = append(args, "--test-binary-args="+a)
 		}
+	case "boost_test":
+		args = append(args, "run_boost_test", "--binary", binary, "--tracefile", trace, "--output-dir", out, "--project-path", s.projectPath, "--verbose", "--gdb-path", testGDBPath)
 	case "fuzz":
 		args = append(args, "run_fuzz", "--binary", binary, "--tracefile", trace, "--modulo", strconv.Itoa(max(chunk.split, 1)), "--modulo-index", strconv.Itoa(chunk.index), "--output-dir", out, "--project-path", s.projectPath, "--source-root", testSourceRoot, "--verbose", "--gdb-path", testGDBPath)
 
