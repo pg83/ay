@@ -47,7 +47,7 @@ func (e *EmitContext) emitProto2Fbs(stmt Proto2FbsStmt, output VFS) {
 
 	e.register(GeneratedFileInfo{
 		OutputPath: output, SourcePath: input, PrimaryInput: input, ProducerRef: ref,
-		GeneratorRefs: na.refList(toolRef), ClosureLeaves: na.vfsList(input), OnUse: pending,
+		GeneratorRefs: na.refList(toolRef), OnUse: pending,
 		ParsedIncludes: ParsedIncludeSet{
 			parsedIncludesHeader: parsed[parsedIncludesHeader],
 			parsedIncludesCpp:    parsed[parsedIncludesCpp],
