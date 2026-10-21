@@ -65,7 +65,7 @@ class HeadersTest(unittest.TestCase):
                 self.check_export(files, expected)
 
     def test_cpp_style_adds_headers_even_when_lint_is_disabled(self):
-        for macro in ("STYLE_CPP()", "NO_LINT()\nSTYLE_CPP()"):
+        for macro in ("STYLE_CPP()", "NO_LINT()\nSTYLE_CPP()", "STYLE_CPP_USER_SESSIONS()"):
             with self.subTest(macro=macro):
                 files = header_files()
                 files["producer/ya.make"] = f"LIBRARY()\n{BARE}PEERDIR(proto)\nSRCS(local.cpp)\n{macro}\nEND()\n"
