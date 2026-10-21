@@ -294,6 +294,8 @@ var tokName = [...]STR{
 	tokSuppressions:                    internStr("SUPPRESSIONS"),
 	tokTag:                             internStr("TAG"),
 	tokTasklet:                         internStr("TASKLET"),
+	tokTaskletReg:                      internStr("TASKLET_REG"),
+	tokTaskletRegExt:                   internStr("TASKLET_REG_EXT"),
 	tokTaskletsupport:                  internStr("TASKLETSUPPORT"),
 	tokTestSrcs:                        internStr("TEST_SRCS"),
 	tokTimeout:                         internStr("TIMEOUT"),
@@ -666,6 +668,8 @@ const (
 	tokSuppressions
 	tokTag
 	tokTasklet
+	tokTaskletReg
+	tokTaskletRegExt
 	tokTaskletsupport
 	tokTestSrcs
 	tokTimeout

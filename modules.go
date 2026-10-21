@@ -2109,6 +2109,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokRosDir, tokRosPartial, tokRosSrcs, tokRosMsgCmd, tokRosZeroCopyMsgCmd, tokRosSrvCmd:
 		applyRosStmt(modulePath, v, env, d)
+	case tokTaskletReg, tokTaskletRegExt:
+		applyTaskletRegistration(v, d, env)
 	case tokSdcInstall:
 		applySdcInstall(modulePath, v.Args, d, env)
 	case tokGenPchFile:
