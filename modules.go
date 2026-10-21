@@ -336,6 +336,7 @@ type CompileSpec struct {
 	PyRegisterLimit int
 	CFlags          []ANY
 	FlatOutput      bool
+	OutputStem      VFS
 	Variant         STR
 	ObjSuf          STR
 	ForceCxx        bool
@@ -1325,8 +1326,18 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			for _, srcTok := range srcToks {
-				if goSrcs && srcTok.string() != "CGO_EXPORT" && !goSrcsExtensionSupported(filepath.Ext(srcTok.string())) {
-					continue
+				compile := CompileSpec{}
+
+				if goSrcs {
+					ext := filepath.Ext(srcTok.string())
+
+					if srcTok.string() != "CGO_EXPORT" && !goSrcsExtensionSupported(ext) {
+						continue
+					}
+
+					if ext == ".S" || slices.Contains(goCgoExportExts, ext) {
+						compile.OutputStem = copyFileOutputVFS(modulePath, srcTok.string()).rel().build()
+					}
 				}
 
 				if srcTok == kwGLOBAL.any() {
@@ -1346,7 +1357,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					prio, seq = stmtPrioSrcs, d.nextDeclSeq()
 				}
 
-				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global})
+				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global, Compile: compile})
 				globalNext = false
 
 				switch srcExtClassOf(srcTok) {

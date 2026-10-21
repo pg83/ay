@@ -5,7 +5,14 @@ var asKV = KV{P: pkAS, PC: pcLightGreen}
 func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (NodeRef, VFS) {
 	instance := e.instance
 	na := e.ctx.na
-	outVFS, inVFS := composeASPaths(instance, srcVFS)
+	outVFS, inVFS := in.OutputStem, srcVFS
+
+	if in.OutputStem != 0 {
+		outVFS = build(in.OutputStem.relString(), ".o")
+	} else {
+		outVFS, inVFS = composeASPaths(instance, srcVFS)
+	}
+
 	cmdArgs := composeASCmdArgs(na, instance, outVFS, inVFS, in)
 	env := hostP.toolEnv()
 

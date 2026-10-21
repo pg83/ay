@@ -65,6 +65,7 @@ type ModuleCCInputs struct {
 	CFlags          []ANY
 	CCBlocks        *CcModuleArgBlocks
 	FlatOutput      bool
+	OutputStem      VFS
 	ForceCxx        bool
 	ObjSuf          STR
 	Variant         *string
@@ -88,6 +89,7 @@ func (e *EmitContext) ccInputsFor(compile CompileSpec) ModuleCCInputs {
 
 	in.PerSourceCFlags = compile.CFlags
 	in.FlatOutput = compile.FlatOutput
+	in.OutputStem = compile.OutputStem
 	in.ForceCxx = compile.ForceCxx
 
 	if compile.ObjSuf != 0 {
@@ -360,6 +362,7 @@ func (e *EmitContext) ccOutputFor(srcVFS VFS, compile CompileSpec) VFS {
 	in := newModuleCCInputs(&e.d.cc)
 
 	in.FlatOutput = compile.FlatOutput
+	in.OutputStem = compile.OutputStem
 
 	if compile.ObjSuf != 0 {
 		in.ObjSuf = compile.ObjSuf
@@ -373,6 +376,10 @@ func (e *EmitContext) ccOutputFor(srcVFS VFS, compile CompileSpec) VFS {
 
 func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in ModuleCCInputs, suffix string) (out, input VFS) {
 	input = srcVFS
+
+	if in.OutputStem != 0 {
+		return build(in.OutputStem.relString(), suffix), input
+	}
 
 	dir := instance.Path.relString()
 	rel := srcVFS.relString()
