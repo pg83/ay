@@ -14,6 +14,7 @@ var (
 )
 
 var procKindStr = [...]string{
+	pkUD: "UD",
 	pkML: "ML",
 	pkPK: "PK",
 	pkRS: "RS",
@@ -139,6 +140,7 @@ const (
 	pkIL
 	pkUG
 	pkRP
+	pkUD
 )
 
 const (

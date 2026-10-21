@@ -33,12 +33,23 @@ func dllOutputName(instance ModuleInstance, stmt *ModuleStmt) string {
 			i++
 		case "EXPORTS":
 			i++
-		default:
-			throwFmt("gen: %s: %s versions (%s) are not modelled", instance.Path.relString(), stmt.Name, stmt.Args[i].string())
 		}
 	}
 
 	return prefix + name + ".so"
+}
+
+func dllModuleVersion(stmt *ModuleStmt) string {
+	for i := 1; i < len(stmt.Args); i++ {
+		switch stmt.Args[i].string() {
+		case "PREFIX", "EXPORTS":
+			i++
+		default:
+			return "." + stmt.Args[i].string()
+		}
+	}
+
+	return ""
 }
 
 func dllExportsArg(stmt *ModuleStmt) *ANY {

@@ -12,6 +12,8 @@ func confYqlStableABI(fs FS) bool {
 }
 
 func setupYqlModule(d *ModuleData, name TOK, env Environment) {
+	setupYqlUdfModule(d, name, env)
+
 	if name != tokYqlLibrary && !isYqlUdfStaticModule(name) {
 		return
 	}
@@ -35,6 +37,8 @@ func setupYqlModule(d *ModuleData, name TOK, env Environment) {
 		d.cxxFlagsVar = append(d.cxxFlagsVar, internArg("-DUSE_"+strings.ToUpper(variant)+"_UDF_ABI_VERSION").any())
 		env.setString(envMODULE_TAG, tag)
 	} else if d.yqlCurrent {
+		d.unit.Tag = strYqlUdfStaticCurrent
+		d.unit.HashTag = d.unit.Tag
 		d.unit.ARPrefix = "yql-abi-current-"
 		d.unit.ObjectSuffixStem = "udfs.abi_current"
 		d.cxxFlagsVar = append(d.cxxFlagsVar, argDuseCurrentUdfAbiVersion.any())
@@ -70,6 +74,8 @@ func applyYqlABI(d *ModuleData, env Environment, current bool) {
 }
 
 func finishYqlModule(modulePath string, env Environment, d *ModuleData) {
+	finishYqlUdfModule(modulePath, d, env)
+
 	if d.moduleStmt == nil || d.moduleStmt.Name != tokYqlPrebuiltProgram {
 		return
 	}
@@ -153,4 +159,152 @@ func (e *EmitContext) genYqlPrebuiltProgram() *ModuleEmitResult {
 	ctx.memoPut(e.instance, result)
 
 	return result
+}
+
+func setupYqlUdfModule(d *ModuleData, name TOK, env Environment) {
+	python := name == tokYqlPythonUdf || name == tokYqlPython3Udf
+
+	if !python && !(name == tokYqlUdf && d.unit.Type == tokDll) {
+		return
+	}
+
+	d.yqlUdfShared = true
+	d.yqlPythonUdf = python
+	d.usePython3 = name == tokYqlPython3Udf
+
+	if !env.bool(envOS_WINDOWS) && !env.bool(envOS_DARWIN) {
+		d.ldFlags = append(d.ldFlags, argWlBsymbolic.any())
+	}
+
+	d.cxxFlags = append(d.cxxFlags, argDbuildUdf.any())
+	d.ldPlugins = append(d.ldPlugins, strYqlEssentialsPublicUdfServiceDropPolicyGlobalsPy.any())
+	env.setDefaultString(envYqlUdfExport, "$(S)/yql/essentials/public/udf/udfs_exports.exports")
+
+	if python {
+		env.setDefaultString(envYqlPythonUdfExport, "$(S)/yql/essentials/udfs/common/python/python_udf/python_udfs_exports.exports")
+	}
+}
+
+func finishYqlUdfModule(modulePath string, d *ModuleData, env Environment) {
+	if !d.yqlUdfShared {
+		return
+	}
+
+	d.yqlUdfProbe = !env.bool(envSANITIZER_TYPE) && env.bool(envUSE_ARCADIA_PYTHON) && !env.bool(envUdfNoProbe) && !env.bool(envMUSL) && !env.bool(envCppAnalysisMode)
+
+	if d.yqlPythonUdf {
+		peers := yqlUdfImplicitPeers()
+
+		if env.bool(envUSE_ARCADIA_PYTHON) {
+			if d.usePython2 {
+				peers = append(peers, "library/python/runtime/main")
+
+				if d.pythonSQLite3 {
+					peers = append(peers, "contrib/tools/python/src/Modules/_sqlite")
+				}
+			} else {
+				peers = append(peers, "library/python/runtime_py3/main")
+
+				if d.pythonSQLite3 {
+					peers = append(peers, "contrib/tools/python3/Modules/_sqlite")
+				}
+			}
+		}
+
+		peers = append(peers, "build/platform/python/ldflags", "library/python/type_info")
+		d.peerdirs = append(internAnys(peers), d.peerdirs...)
+	}
+
+	if d.exportsScript == nil && !env.bool(envOS_WINDOWS) {
+		id := envYqlUdfExport
+
+		if d.yqlPythonUdf {
+			id = envYqlPythonUdfExport
+		}
+
+		if exports := env.string(id); exports != "" {
+			if rooted, ok := moduleRootedVFS(modulePath, exports); ok {
+				exports = rooted.relString()
+			}
+
+			d.exportsScript = ptr(internStr(exports).any())
+		}
+	}
+}
+
+func registerYqlPythonUdf(fs FS, modulePath string, stmt UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
+	name, resource, libra := "CustomPython", "", "no"
+
+	for i := 0; i < len(stmt.Args); i += 2 {
+		if i+1 == len(stmt.Args) {
+			throwFmt("REGISTER_YQL_PYTHON_UDF: %s requires a value", stmt.Args[i].string())
+		}
+
+		value := stmt.Args[i+1].string()
+
+		switch key := stmt.Args[i].string(); key {
+		case "NAME":
+			name = value
+		case "RESOURCE_NAME":
+			resource = value
+		case "ADD_LIBRA_MODULES":
+			libra = value
+		default:
+			throwFmt("REGISTER_YQL_PYTHON_UDF: unknown option %s", key)
+		}
+	}
+
+	if name != "Python3" && name != "Python2" && name != "ArcPython2" && !strings.HasPrefix(name, "SystemPython") && !strings.Contains(name, "CustomPython") {
+		throwFmt("Invalid python UDF module name")
+	}
+
+	if resource == "" {
+		resource = name
+	}
+
+	addLibra := libra == "yes"
+
+	if addLibra && env.string(envOPENSOURCE) != "" {
+		throwFmt("Libra modules are not supported in opensource python UDFs")
+	}
+
+	applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokYqlAbiVersion, Args: internAnys([]string{"2", "45", "0"})}, d, env, onWarn)
+	d.peerdirs = append(d.peerdirs, internAnys([]string{"yql/essentials/udfs/common/python/python_udf", "yql/essentials/public/udf"})...)
+
+	includes := []string{"yql/essentials/udfs/common/python/python_udf/python_udf.h", "yql/essentials/public/udf/udf_registrator.h"}
+	flag := "0"
+
+	if addLibra {
+		flag = "1"
+		d.peerdirs = append(d.peerdirs, internAnys([]string{"quality/user_sessions/libra_arc/noyql", "yql/udfs/quality/libra/module"})...)
+		includes = append(includes, "yql/udfs/quality/libra/module/module.h")
+	}
+
+	flavor := "System"
+
+	if env.bool(envUSE_ARCADIA_PYTHON) {
+		flavor = "Arcadia"
+
+		dir := env.string(envYqlPythonDir)
+
+		if dir == "" {
+			dir = "yql/essentials/udfs/common/python"
+		}
+
+		peers := []string{"library/python/runtime", path.Join(dir, "main")}
+
+		if env.bool(envPYTHON3) {
+			peers = []string{"library/python/runtime_py3", "yql/essentials/udfs/common/python/main_py3"}
+		}
+
+		d.peerdirs = append(d.peerdirs, internAnys(peers)...)
+	}
+
+	output := name + ".yql_python_udf.cpp"
+
+	d.runPython = append(d.runPython, &RunPythonStmt{
+		ScriptPath: strBuildScriptsGenYqlPythonUdfPy.any(),
+		Args:       internAnys([]string{flavor, name, resource, output, flag}),
+		OUTFiles:   internAnys([]string{output}), OutputIncludes: internAnys(includes), Line: stmt.Line,
+	})
 }

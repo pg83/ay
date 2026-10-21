@@ -393,7 +393,7 @@ func (ctx *GenCtx) moduleName(dir string) TOK {
 func (ctx *GenCtx) rootInstance(dir string, demand ModuleDemand) ModuleInstance {
 	kind := KindLib
 
-	if name := ctx.moduleName(dir); name == tokPy3Program || name == tokDocs || name == 0 {
+	if name := ctx.moduleName(dir); name == tokPy3Program || name == tokYqlUdf || name == tokDocs || name == 0 {
 		kind = KindBin
 	}
 
@@ -557,11 +557,11 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 }
 
 func isFinalTargetModuleType(name TOK) bool {
-	return isProgramModuleType(name) && name != tokGoTest || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry
+	return isProgramModuleType(name) && name != tokGoTest || name == tokExectest || name == tokDllTool || name == tokDocs || name == tokJavaProgram || name == tokJavaContrib || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokYqlUdf || name == tokYqlPythonUdf || name == tokYqlPython3Udf
 }
 
 func picTransition(name TOK) bool {
-	return name == tokDll || name == tokDllJava || name == tokPy2Module
+	return name == tokDll || name == tokDllJava || name == tokPy2Module || name == tokYqlUdf || name == tokYqlPythonUdf || name == tokYqlPython3Udf
 }
 
 func isDllModuleType(name TOK) bool {
@@ -613,7 +613,7 @@ func stmtsModuleName(stmts []Stmt) TOK {
 
 func isLinkingModuleType(name TOK) bool {
 	switch name {
-	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary, tokPy2Module:
+	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary, tokPy2Module, tokYqlUdf, tokYqlPythonUdf, tokYqlPython3Udf:
 		return true
 	}
 
@@ -1090,7 +1090,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
 
-	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(stmtsModuleName(stmts)) {
+	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(stmtsModuleName(stmts)) && (stmtsModuleName(stmts) != tokYqlUdf || instance.Kind != KindLib) {
 		descent := instance
 
 		descent.Kind = KindForeignDescent
@@ -2310,8 +2310,17 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 			binaryName = dllOutputName(instance, d.moduleStmt)
 			dyn = &DynLibLink{soname: binaryName, symbolic: d.moduleStmt.Name == tokPy2Module && instance.Platform.OS != OSDarwin && instance.Platform.OS != OSWindows}
 
+			if version := dllModuleVersion(d.moduleStmt); version != "" {
+				dyn.soname += version
+				dyn.alias = build(instance.Path.relString(), "/", dyn.soname)
+			}
+
 			if instance.Platform.OS == OSLinux && instance.Platform.ISA == ISAX8664 {
 				dyn.fixElfRef, dyn.fixElf = ctx.tool(argToolsFixElf)
+			}
+
+			if d.yqlUdfProbe {
+				dyn.probeRef, dyn.probe = ctx.tool(argYqlUdfProbe)
 			}
 		}
 

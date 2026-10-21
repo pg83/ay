@@ -6,7 +6,164 @@ import lib
 BARE = lib.BARE_MODULE
 
 
+def udf_fixture():
+    files = {}
+    for peer in (
+        "yql/essentials/public/udf", "yql/essentials/public/udf/support",
+        "yql/essentials/udfs/common/python/python_udf", "yql/essentials/udfs/common/python/main_py3",
+        "library/python/runtime_py3", "library/python/runtime_py3/main", "library/python/type_info",
+        "build/platform/python/ldflags", "contrib/tools/python3/Modules/_sqlite", "library/cpp/resource",
+    ):
+        files[f"{peer}/ya.make"] = f"LIBRARY()\n{BARE}SRCS(p.cpp)\nEND()\n"
+        files[f"{peer}/p.cpp"] = ""
+    files["build/scripts/gen_yql_python_udf.py"] = ""
+    files["yql/essentials/public/udf/udfs_exports.exports"] = "C Register\n"
+    files["yql/essentials/udfs/common/python/python_udf/python_udfs_exports.exports"] = "C Register\n"
+    files["yql/essentials/public/udf/service/drop_policy_globals.py"] = ""
+    files["contrib/libs/python/Include/Python.h"] = ""
+    files["yql/essentials/udfs/common/python/python_udf/python_udf.h"] = ""
+    files["yql/essentials/public/udf/udf_registrator.h"] = ""
+    for tool in ("tools/fix_elf", "tools/archiver", "tools/rescompiler", "tools/rescompressor", "yql/essentials/tools/udf_probe"):
+        lib.tool_program(files, tool, tool.rsplit("/", 1)[-1])
+    return files
+
+
 class YqlAbiTest(unittest.TestCase):
+    def test_udf_peer_selects_static_global_sources_and_implicit_dependencies(self):
+        files = udf_fixture()
+        files.update({
+            "app/ya.make": f"PROGRAM()\n{BARE}PEERDIR(udf)\nEND()\n",
+            "udf/ya.make": f"YQL_UDF(named 1 0)\n{BARE}SRCS(body.cpp)\nEND()\n",
+            "udf/body.cpp": "",
+        })
+        graph = lib.make(files, "app")
+        obj = lib.node_by_output(graph, "$(B)/udf/body.cpp.udfs.o")
+        archive = lib.node_by_output(graph, "$(B)/udf/libnamed.global.a")
+        self.assertIn(obj["uid"], archive["deps"])
+        self.assertNotIn("-DBUILD_UDF", obj["cmds"][0]["cmd_args"])
+        self.assertFalse(any("$(B)/udf/libnamed.so" in n["outputs"] for n in graph["graph"]))
+        for peer in ("yql/essentials/public/udf", "yql/essentials/public/udf/support"):
+            lib.node_by_output(graph, f"$(B)/{peer}/p.cpp.o")
+
+    def test_udf_static_variants_expose_their_submodule_tags(self):
+        for current in (False, True):
+            with self.subTest(current=current):
+                files = udf_fixture()
+                abi = "YQL_CURRENT_ABI_VERSION()\n" if current else ""
+                files.update({
+                    "app/ya.make": f"PROGRAM()\n{BARE}{abi}PEERDIR(udf)\nEND()\n",
+                    "udf/ya.make": f'YQL_UDF(named)\n{BARE}SRCS(body.cpp)\n'
+                        'IF (MODULE_TAG == "YQL_UDF_STATIC_CURRENT")\nCXXFLAGS(-DTAG_CURRENT)\n'
+                        'ELSEIF (MODULE_TAG == "YQL_UDF_STATIC")\nCXXFLAGS(-DTAG_STABLE)\nENDIF()\nEND()\n',
+                    "udf/body.cpp": "",
+                })
+                suffix = ".udfs.abi_current.o" if current else ".udfs.o"
+                command = lib.node_by_output(lib.make(files, "app"), "$(B)/udf/body.cpp" + suffix)["cmds"][0]["cmd_args"]
+                self.assertIn("-DTAG_CURRENT" if current else "-DTAG_STABLE", command)
+
+    def test_udf_direct_target_selects_shared_module_without_probe_when_disabled(self):
+        files = udf_fixture()
+        files.update({
+            "udf/ya.make": f'YQL_UDF(named)\n{BARE}UDF_NO_PROBE()\nSRCS(body.cpp)\n'
+                'IF (MODULE_TAG == "YQL_UDF_SHARED")\nCXXFLAGS(-DTAG_SHARED)\nENDIF()\nEND()\n',
+            "udf/body.cpp": "",
+        })
+        graph = lib.make(files, "udf")
+        obj = lib.node_by_output(graph, "$(B)/udf/body.cpp.pic.o")
+        self.assertIn("-DBUILD_UDF", obj["cmds"][0]["cmd_args"])
+        self.assertIn("-DTAG_SHARED", obj["cmds"][0]["cmd_args"])
+        link = lib.node_by_output(graph, "$(B)/udf/libnamed.so")
+        self.assertIn("$(S)/yql/essentials/public/udf/udfs_exports.exports", link["inputs"])
+        plugin = next(n for n in graph["graph"] if n["kv"]["p"] == "CP" and
+            "$(S)/yql/essentials/public/udf/service/drop_policy_globals.py" in n["inputs"])
+        self.assertIn(plugin["outputs"][0], link["inputs"])
+        self.assertFalse(any("$(B)/yql/essentials/tools/udf_probe/udf_probe" in c["cmd_args"] for c in link["cmds"]))
+
+    def test_udf_dll_uses_first_version_argument_as_soname_alias(self):
+        files = udf_fixture()
+        files.update({"udf/ya.make": f"YQL_UDF(named 4 7)\n{BARE}UDF_NO_PROBE()\nSRCS(body.cpp)\nEND()\n", "udf/body.cpp": ""})
+        link = lib.node_by_output(lib.make(files, "udf"), "$(B)/udf/libnamed.so")
+        self.assertIn("$(B)/udf/libnamed.so.4", link["outputs"])
+        command = next(c["cmd_args"] for c in link["cmds"] if "$(S)/build/scripts/link_dyn_lib.py" in c["cmd_args"])
+        self.assertEqual(command[command.index("--soname") + 1], "$(B)/udf/libnamed.so.4")
+        self.assertIn("-Wl,-soname,libnamed.so.4", command)
+        self.assertNotIn("--objcopy-exe", command)
+        self.assertNotIn("$(B)/udf/libnamed.so.4.7", link["outputs"])
+
+    def test_python3_udf_is_a_pic_dll_with_python_runtime_and_custom_exports(self):
+        files = udf_fixture()
+        files.update({
+            "udf/ya.make": f"YQL_PYTHON3_UDF(named)\n{BARE}UDF_NO_PROBE()\nDISABLE(PYTHON_SQLITE3)\nSRCS(body.cpp)\nEND()\n",
+            "udf/body.cpp": "",
+        })
+        graph = lib.make(files, "udf")
+        obj = lib.node_by_output(graph, "$(B)/udf/body.cpp.pic.o")
+        self.assertIn("-DUSE_PYTHON3", obj["cmds"][0]["cmd_args"])
+        link = lib.node_by_output(graph, "$(B)/udf/libnamed.so")
+        self.assertIn("$(S)/yql/essentials/udfs/common/python/python_udf/python_udfs_exports.exports", link["inputs"])
+        self.assertTrue(any(o.startswith("$(B)/library/python/runtime_py3/main/") for n in graph["graph"] for o in n["outputs"]))
+        self.assertFalse(any("/Modules/_sqlite/" in o for n in graph["graph"] for o in n["outputs"]))
+
+    def test_shared_udf_probe_obeys_configuration_and_is_a_tool_dependency(self):
+        variants = [([], True), (["--target-platform", "default-linux-x86_64"], True), (["-DUDF_NO_PROBE=yes"], False), (["-DSANITIZER_TYPE=address"], False),
+            (["-DUSE_ARCADIA_PYTHON=no"], False), (["-DMUSL=yes"], False), (["-DCPP_ANALYSIS_MODE=yes"], False)]
+        for flags, enabled in variants:
+            with self.subTest(flags=flags):
+                files = udf_fixture()
+                files.update({"udf/ya.make": f"YQL_UDF(named)\n{BARE}SRCS(body.cpp)\nEND()\n", "udf/body.cpp": ""})
+                graph = lib.make(files, "udf", *flags)
+                link = lib.node_by_output(graph, "$(B)/udf/libnamed.so")
+                commands = [c["cmd_args"] for c in link["cmds"] if c["cmd_args"][0] == "$(B)/yql/essentials/tools/udf_probe/udf_probe"]
+                self.assertEqual(commands, [["$(B)/yql/essentials/tools/udf_probe/udf_probe", "$(B)/udf/libnamed.so"]] if enabled else [])
+                self.assertEqual(link["kv"]["p"], "UD" if enabled else "LD")
+                if enabled:
+                    probe = lib.node_by_output(graph, "$(B)/yql/essentials/tools/udf_probe/udf_probe")
+                    self.assertIn(probe["uid"], link["deps"])
+                    self.assertIn(probe["outputs"][0], link["inputs"])
+
+    def test_python2_udf_uses_its_runtime_and_python2_headers(self):
+        files = udf_fixture()
+        files.update({
+            "udf/ya.make": f"YQL_PYTHON_UDF(named)\n{BARE}UDF_NO_PROBE()\nDISABLE(PYTHON_SQLITE3)\nSRCS(body.cpp)\nEND()\n",
+            "udf/body.cpp": "",
+            "library/python/runtime/main/ya.make": f"LIBRARY()\n{BARE}SRCS(main.cpp)\nEND()\n",
+            "library/python/runtime/main/main.cpp": "",
+        })
+        graph = lib.make(files, "udf")
+        command = lib.node_by_output(graph, "$(B)/udf/body.cpp.pic.o")["cmds"][0]["cmd_args"]
+        self.assertIn("-DARCADIA_PYTHON_UNICODE_SIZE=4", command)
+        self.assertNotIn("-DUSE_PYTHON3", command)
+        self.assertTrue(any(o.startswith("$(B)/library/python/runtime/main/") for n in graph["graph"] for o in n["outputs"]))
+
+    def test_registration_defaults_and_system_flavor_follow_unit_configuration(self):
+        for body, flavor, name in (("REGISTER_YQL_PYTHON_UDF()", "Arcadia", "CustomPython"),
+            ("SET(USE_ARCADIA_PYTHON no)\nREGISTER_YQL_PYTHON_UDF(NAME SystemPython37)", "System", "SystemPython37")):
+            with self.subTest(body=body):
+                files = udf_fixture()
+                files["udf/ya.make"] = f"LIBRARY()\n{BARE}{body}\nEND()\n"
+                graph = lib.make(files, "udf")
+                command = lib.node_by_output(graph, f"$(B)/udf/{name}.yql_python_udf.cpp")["cmds"][0]["cmd_args"]
+                start = command.index("$(S)/build/scripts/gen_yql_python_udf.py")
+                self.assertEqual(command[start + 1:start + 4], [flavor, name, name])
+        files = udf_fixture()
+        files["udf/ya.make"] = f"LIBRARY()\n{BARE}REGISTER_YQL_PYTHON_UDF(NAME Invalid)\nEND()\n"
+        result = lib.make_process(files, "udf")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Invalid python UDF module name", result.stderr)
+
+    def test_registration_uses_run_python_producer_and_declared_output_includes(self):
+        files = udf_fixture()
+        files["udf/ya.make"] = f"LIBRARY()\n{BARE}REGISTER_YQL_PYTHON_UDF(NAME CustomPythonOne RESOURCE_NAME Package)\nEND()\n"
+        graph = lib.make(files, "udf")
+        node = lib.node_by_output(graph, "$(B)/udf/CustomPythonOne.yql_python_udf.cpp")
+        command = node["cmds"][0]["cmd_args"]
+        start = command.index("$(S)/build/scripts/gen_yql_python_udf.py")
+        self.assertEqual(command[start + 1:start + 4], ["Arcadia", "CustomPythonOne", "Package"])
+        self.assertEqual(command[-1], "0")
+        compiled = lib.node_by_output(graph, "$(B)/udf/CustomPythonOne.yql_python_udf.cpp.o")
+        self.assertIn(node["uid"], compiled["deps"])
+        self.assertIn("$(S)/yql/essentials/public/udf/udf_registrator.h", compiled["inputs"])
+
     def test_consumers_select_distinct_transitive_abi_variants(self):
         files = {
             "stable/ya.make": f"PROGRAM()\n{BARE}PEERDIR(a)\nEND()\n",

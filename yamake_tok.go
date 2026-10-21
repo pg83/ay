@@ -1,6 +1,12 @@
 package main
 
 var tokName = [...]STR{
+	tokYqlUdf:               internStr("YQL_UDF"),
+	tokYqlPythonUdf:         internStr("YQL_PYTHON_UDF"),
+	tokYqlPython3Udf:        internStr("YQL_PYTHON3_UDF"),
+	tokRegisterYqlPythonUdf: internStr("REGISTER_YQL_PYTHON_UDF"),
+	tokUdfNoProbe:           internStr("UDF_NO_PROBE"),
+
 	tokCythonFlags:               internStr("CYTHON_FLAGS"),
 	tokPackageFinal:              internStr("_PACKAGE_FINAL"),
 	tokMlaunchLibrary:            internStr("MLAUNCH_LIBRARY"),
@@ -785,6 +791,11 @@ const (
 	tokTsProtoPackageName
 	tokDebVersion
 	tokCythonFlags
+	tokYqlUdf
+	tokYqlPythonUdf
+	tokYqlPython3Udf
+	tokRegisterYqlPythonUdf
+	tokUdfNoProbe
 )
 
 type TOK uint16

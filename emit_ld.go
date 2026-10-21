@@ -3,6 +3,7 @@ package main
 import "encoding/base64"
 
 var (
+	yqlUdfProbeKV      = KV{P: pkUD, PC: pcLightBlue, ShowOut: true}
 	ldVcsInfoPath      = ldVcsInfoVFS.string()
 	ldSvnInterfacePath = ldSvnInterfaceVFS.string()
 	ldLinkExePath      = ldLinkExeVFS.string()
@@ -43,6 +44,9 @@ const vcsJSONContent = `{
 }`
 
 type DynLibLink struct {
+	alias     VFS
+	probe     VFS
+	probeRef  NodeRef
 	soname    string
 	fixElf    VFS
 	fixElfRef NodeRef
@@ -127,7 +131,13 @@ func (e *EmitContext) emitLD(
 		cmd3 = composeLDCmdLinkOrCopy(na, tc, binaryDir, dynamicPaths...)
 	}
 
-	cmds := na.cmds.alloc(5 + len(splitDwarfCmds))[:0]
+	cmdCap := 5 + len(splitDwarfCmds)
+
+	if dyn != nil && dyn.probe != 0 {
+		cmdCap++
+	}
+
+	cmds := na.cmds.alloc(cmdCap)[:0]
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
 
@@ -136,6 +146,10 @@ func (e *EmitContext) emitLD(
 	}
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
+
+	if dyn != nil && dyn.probe != 0 {
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(dyn.probe.any(), outputVFS.any())), Cwd: bldRootDirVFS, Env: envFull})
+	}
 
 	if emitCopy {
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly})
@@ -169,7 +183,7 @@ func (e *EmitContext) emitLD(
 
 	inputTail = inputTail[:len(inputTail):len(inputTail)]
 
-	extraChunks := [5][]VFS{inputTail}
+	extraChunks := [6][]VFS{inputTail}
 	nExtra := 1
 
 	if len(sbomPaths) > 0 {
@@ -185,6 +199,11 @@ func (e *EmitContext) emitLD(
 
 		if dyn.fixElf != 0 {
 			extraChunks[nExtra] = na.srcChunk(dyn.fixElf)
+			nExtra++
+		}
+
+		if dyn.probe != 0 {
+			extraChunks[nExtra] = na.srcChunk(dyn.probe)
 			nExtra++
 		}
 	}
@@ -204,9 +223,13 @@ func (e *EmitContext) emitLD(
 
 	deps = deps[:len(deps):len(deps)]
 
-	outputs := na.vfs.alloc(2 + len(dynamicPaths))[:0]
+	outputs := na.vfs.alloc(3 + len(dynamicPaths))[:0]
 
 	outputs = append(outputs, outputVFS)
+
+	if dyn != nil && dyn.alias != 0 {
+		outputs = append(outputs, dyn.alias)
+	}
 
 	for _, p := range dynamicPaths {
 		outputs = append(outputs, build(binaryDir, "/", baseName(p.relString())))
@@ -226,6 +249,10 @@ func (e *EmitContext) emitLD(
 		kv = &ldTestKV
 	}
 
+	if dyn != nil && dyn.probe != 0 {
+		kv = &yqlUdfProbeKV
+	}
+
 	n := Node{
 		Platform:  instance.Platform,
 		Cmds:      cmds,
@@ -237,8 +264,19 @@ func (e *EmitContext) emitLD(
 		Resources: instance.Platform.UsesLinkResources,
 	}
 
-	if dyn != nil && dyn.fixElfRef != 0 {
-		n.ForeignDepRefs = na.refList(dyn.fixElfRef)
+	if dyn != nil {
+		foreign := na.noderefs.alloc(2)[:0]
+
+		if dyn.fixElfRef != 0 {
+			foreign = append(foreign, dyn.fixElfRef)
+		}
+
+		if dyn.probeRef != 0 {
+			foreign = append(foreign, dyn.probeRef)
+		}
+
+		na.noderefs.commit(len(foreign))
+		n.ForeignDepRefs = foreign[:len(foreign):len(foreign)]
 	}
 
 	e.appendSdcMeta(&n, binaryName)
@@ -364,7 +402,13 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 		cmdArgs = append(cmdArgs, p.Linker.Roots...)
 	}
 
-	cmdArgs = append(cmdArgs, argArchLinux.any(), argObjcopyExe.any(), tc.Objcopy.any())
+	cmdArgs = append(cmdArgs, argArchLinux.any())
+
+	if dyn != nil && dyn.alias != 0 {
+		cmdArgs = append(cmdArgs, argSoname.any(), dyn.alias.any())
+	} else {
+		cmdArgs = append(cmdArgs, argObjcopyExe.any(), tc.Objcopy.any())
+	}
 
 	if dyn != nil && dyn.fixElf != 0 {
 		cmdArgs = append(cmdArgs, argFixElf.any(), dyn.fixElf.any())
@@ -608,7 +652,7 @@ func emitOwnLDPlugins(ctx *GenCtx, instance ModuleInstance, plugins []ANY, tc Mo
 	cpInstance.Platform = ctx.target
 
 	for _, name := range plugins {
-		src := source(instance.Path.relString(), "/", name.string())
+		src := resolveSourceVFS(ctx, instance, name.string(), []VFS{instance.Path})
 		dst := build(instance.Path.relString(), "/", name.string(), ".pyplugin")
 		ref := emitCP(cpInstance, src, dst, tc, ctx.scripts, ctx.emit)
 

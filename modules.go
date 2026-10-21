@@ -148,6 +148,9 @@ type ModuleData struct {
 
 	usrvFiles []UsrvFile
 
+	yqlUdfProbe              bool
+	yqlUdfShared             bool
+	yqlPythonUdf             bool
 	yqlCurrent               bool
 	yqlStableABI             bool
 	yqlPrebuiltResource      string
@@ -1157,7 +1160,7 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 				env.setStringID(envMODULE_TAG, d.unit.Tag)
 			}
 
-			if isDllModuleType(v.Name) {
+			if isDllModuleType(v.Name) || d.yqlUdfShared {
 				d.exportsScript = dllExportsArg(v)
 			}
 
@@ -1201,6 +1204,10 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 
 			if d.usePython2 {
 				moduleLang = moduleLangTokenPy2
+			}
+
+			if d.yqlPythonUdf && !d.usePython2 {
+				moduleLang = moduleLangTokenPy3
 			}
 
 			env.setString(envMODULE_LANG, moduleLang)
@@ -1724,8 +1731,18 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3, ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagPy3Global, SbomLang: unitSbomCpp}
 	case tokPy23NativeLibrary:
 		return ModuleUnit{Type: name, Tag: unitTagPy3, CCTag: tagPy3Native, ObjSuf: tagPy3, ARPrefix: "libpy3c", GlobalARTag: tagPy3NativeGlobal, SbomLang: unitSbomCpp}
+	case tokYqlPythonUdf:
+		return ModuleUnit{Type: tokDll, Tag: unitTagPy2, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomPy2}
+	case tokYqlPython3Udf:
+		return ModuleUnit{Type: tokDll, Tag: unitTagPy3, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
+	case tokYqlUdf:
+		if kind != KindLib {
+			return ModuleUnit{Type: tokDll, Tag: strYqlUdfShared, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+		}
+
+		fallthrough
 	case tokYqlUdfYdb, tokYqlUdfContrib:
-		return ModuleUnit{Type: name, CCTag: tagYqlUdfStatic, HashTag: strYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
+		return ModuleUnit{Type: name, Tag: strYqlUdfStatic, CCTag: tagYqlUdfStatic, HashTag: strYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
 	case tokFbsLibrary:
 		return ModuleUnit{Type: name, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokProtoLibrary:
@@ -2253,6 +2270,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.pyNamespace = ptr(v.Args[0])
 		d.pyModuleNamespace = d.pyNamespace
+	case tokRegisterYqlPythonUdf:
+		registerYqlPythonUdf(fs, modulePath, v, d, env, onWarn)
+	case tokUdfNoProbe:
+		env.setBool(envUdfNoProbe, true)
 	case tokYqlLastAbiVersion:
 		if len(v.Args) != 0 {
 			throwFmt("YQL_LAST_ABI_VERSION expects exactly 0 arguments, got %d", len(v.Args))
@@ -3785,7 +3806,7 @@ func isPyProgramType(name TOK) bool {
 
 func isYqlUdfStaticModule(name TOK) bool {
 	switch name {
-	case tokYqlUdfYdb, tokYqlUdfContrib:
+	case tokYqlUdf, tokYqlUdfYdb, tokYqlUdfContrib:
 		return true
 	}
 
@@ -4375,7 +4396,7 @@ func peerEntryLanguage(parent ModuleInstance, d *ModuleData) Language {
 		return LangPy2
 	}
 
-	if isPythonModuleType(parentModuleName) {
+	if isPythonModuleType(parentModuleName) || d.yqlPythonUdf {
 		return LangPy
 	}
 
