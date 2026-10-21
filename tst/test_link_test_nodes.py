@@ -401,18 +401,20 @@ class TestNodesTest(unittest.TestCase):
         command = run["cmds"][0]["cmd_args"]
         blob = next(arg[len("commands="):] for arg in command if arg.startswith("commands="))
         self.assertEqual(base64.b64decode(blob).decode(), "\ntool ${ARCADIA_ROOT}/input ENV OUTPUT=${TEST_OUT_ROOT}")
-        self.assertEqual(run["env"]["PATH"], "$(B)/")
+        self.assertEqual(run["env"]["PATH"], "$(B)/:$(B)/tool")
         self.assertEqual(run["env"]["ASAN_OPTIONS"], "exitcode=100:detect_leaks=0")
         self.assertEqual(run["env"]["LSAN_OPTIONS_ORIGINAL"], "exitcode=100")
 
-    def test_exectest_path_uses_project_and_declared_dependency_directories(self):
-        files = {
-            "suite/exec/ya.make": "EXECTEST()\nRUN(driver)\nDEPENDS(tools/driver)\nEND()\n",
-        }
-        lib.tool_program(files, "tools/driver", "renamed")
-        graph = lib.make(files, "suite/exec", "-t")
-        run = lib.node_by_output(graph, "$(B)/suite/exec/test-results/exectest/meta.json")
-        self.assertEqual(run["env"]["PATH"], "$(B)/suite:$(B)/tools")
+    def test_exectest_path_uses_project_and_resolved_dependency_output_directories(self):
+        for name, directory in (("renamed", "tools/driver"), ("bin/renamed", "tools/driver/bin")):
+            with self.subTest(name=name):
+                files = {
+                    "suite/exec/ya.make": "EXECTEST()\nRUN(driver)\nDEPENDS(tools/driver)\nEND()\n",
+                }
+                lib.tool_program(files, "tools/driver", name)
+                graph = lib.make(files, "suite/exec", "-t")
+                run = lib.node_by_output(graph, "$(B)/suite/exec/test-results/exectest/meta.json")
+                self.assertEqual(run["env"]["PATH"], "$(B)/suite:$(B)/" + directory)
 
     def test_recurse_for_tests_emits_child_suites_only_with_tests_enabled(self):
         files = fixture()

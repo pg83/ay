@@ -370,7 +370,15 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 		res := genModule(ctx, ctx.rootInstance(dep, demandLinked))
 
 		if s.testType == "exectest" {
-			execDirs = append(execDirs, testExecDependencyDir(dep))
+			output := dep
+
+			if res.LDPath != nil {
+				output = res.LDPath.relString()
+			} else if res.ARPath != nil {
+				output = res.ARPath.relString()
+			}
+
+			execDirs = append(execDirs, testExecDependencyDir(output))
 		}
 
 		if s.ciType == "style" && res.ARPath != nil {
