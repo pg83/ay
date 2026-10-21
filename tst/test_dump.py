@@ -629,14 +629,14 @@ class DumpTest(unittest.TestCase):
             "EN",
             "$(B)/pkg/mode.h_serialized.cpp",
             inputs=[
-                "$(B)/tools/enum_parser/enum_parser",
+                "$(B)/tools/enum_parser/enum_parser/enum_parser",
                 "$(S)/pkg/mode.h",
                 "$(S)/pkg/dep.h",
                 "$(S)/util/generic/serialized_enum.h",
                 "$(S)/contrib/libs/cxxsupp/libcxx/include/vector",
             ],
             cmds=[{"cmd_args": [
-                "$(B)/tools/enum_parser/enum_parser",
+                "$(B)/tools/enum_parser/enum_parser/enum_parser",
                 "$(S)/pkg/mode.h",
                 "--include-path", "pkg/mode.h",
                 "--output", "$(B)/pkg/mode.h_serialized.cpp",
@@ -648,7 +648,7 @@ class DumpTest(unittest.TestCase):
                 node["cmds"][0]["cmd_args"] = args + extra
                 normalized = self.normalized_special_node(node)
                 self.assertEqual(normalized["inputs"], [
-                    "$(B)/tools/enum_parser/enum_parser",
+                    "$(B)/tools/enum_parser/enum_parser/enum_parser",
                     "$(S)/pkg/mode.h",
                 ])
 

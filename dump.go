@@ -160,7 +160,7 @@ func filterEnumParserInputs(in []string, node *RawNode) []string {
 
 	tool := normPath(args[0])
 
-	if !strings.HasSuffix(tool, "/tools/enum_parser/enum_parser") || args[2] != "--include-path" || args[4] != "--output" {
+	if !strings.HasSuffix(tool, "/tools/enum_parser/enum_parser/enum_parser") || args[2] != "--include-path" || args[4] != "--output" {
 		return in
 	}
 
