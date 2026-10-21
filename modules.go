@@ -205,6 +205,7 @@ type ModuleData struct {
 	cfAddIncl                []VFS
 	cfAddInclGlobal          []VFS
 	cythonAddIncl            []VFS
+	cythonAddInclGlobal      []VFS
 	useNasm                  bool
 	clangSAEnable            bool
 	clangSAConfig            string
@@ -1007,6 +1008,25 @@ func filterInvalidAddIncl(fs FS, dd *DeDuper, d *ModuleData, modulePath string, 
 	d.addIncl = filterOwnAddIncl(fs, d.addIncl, modulePath, onWarn)
 	d.addInclGlobal = filterOwnAddIncl(fs, d.addInclGlobal, modulePath, onWarn)
 	d.cythonAddIncl = filterOwnAddIncl(fs, d.cythonAddIncl, modulePath, onWarn)
+
+	if len(d.cythonAddInclGlobal) > 0 {
+		dd.reset()
+
+		for _, p := range d.cythonAddIncl {
+			dd.add(p.strID())
+		}
+
+		out := d.cythonAddInclGlobal[:0]
+
+		for _, p := range d.cythonAddInclGlobal {
+			if dd.has(p.strID()) {
+				out = append(out, p)
+			}
+		}
+
+		d.cythonAddInclGlobal = out
+	}
+
 	d.asmAddIncl = filterOwnAddIncl(fs, d.asmAddIncl, modulePath, onWarn)
 
 	if len(d.addInclUserGlobal) > 0 {
@@ -1474,6 +1494,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
+			d.cythonAddInclGlobal = append(d.cythonAddInclGlobal, expandConfigVFSPaths(v.CythonGlobalPaths, env)...)
 			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
 			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
 			d.flatcAddIncl = append(d.flatcAddIncl, expandConfigVFSPaths(v.FlatcPaths, env)...)

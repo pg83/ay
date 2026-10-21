@@ -11,6 +11,7 @@ type PeerContext struct {
 	ProtoInclude      []VFS
 	FbsNamespaces     []ANY
 	FlatcIncludeArgs  []ANY
+	CythonInclude     []VFS
 	LDFlagsGlobal     []ANY
 }
 

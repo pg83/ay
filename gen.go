@@ -2385,6 +2385,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	frame.peerCtx.FlatcIncludeArgs = flatcIncludeArgs(ctx.na, moduleFlatcInclude)
+	frame.peerCtx.CythonInclude = e.moduleCythonIncludes(modulePeers)
 
 	if d.hasFbs && isGoModuleType(d.moduleStmt.Name) {
 		frame.peerCtx.FbsNamespaces = fbsNamespaceArgs(ctx.na, effectiveFbsNamespaces)
@@ -2407,6 +2408,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	d.scanCtx = newModuleScanContext(ctx, instance, d, scanAddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
 	d.scanCtx.rosInclude = rosInclude
 	d.scanCtx.flatcInclude = moduleFlatcInclude
+	d.scanCtx.cythonPeerIncl = frame.peerCtx.CythonInclude
 	e.emitMlaunch(resolved, peerArchivePaths, effectiveMlaunchDeps)
 	e.emit()
 	e.emitLDPlugins()
@@ -2414,6 +2416,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	if instance.Demand == demandNone {
 		result := newResult()
+
+		if len(d.cythonAddInclGlobal) > 0 || len(frame.peerCtx.CythonInclude) > 0 {
+			result.ArchiveFile = build(instance.Path.relString(), "/", arNameFn(instance.Path.relString()))
+		}
 
 		result.ResourceGlobalClosure = resourceGlobalsClosure
 

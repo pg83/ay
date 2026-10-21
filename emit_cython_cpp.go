@@ -337,8 +337,10 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			cythonIncludes = argISContribToolsCythonPy2CythonIncludes
 		}
 
+		cmdArgs = append(cmdArgs, cythonIncludes.any())
+		cmdArgs = appendCythonAddIncl(cmdArgs, e.peers.CythonInclude, ctx.inclArgs)
+
 		cmdArgs = append(cmdArgs,
-			cythonIncludes.any(),
 			srcVFS.any(),
 			argDashO.any(),
 			generatedVFS.any(),
@@ -516,7 +518,7 @@ func (e *EmitContext) cythonAdjustModuleCCBlocks() []VFS {
 	d.cc.MainOutInducedInputs = true
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &cy)
 
-	return appendCythonScanAddIncl(cy.AddIncl, d.cythonAddIncl, cythonSysIncludes(d))
+	return appendCythonScanAddIncl(cy.AddIncl, d.cythonAddIncl, cythonSysIncludes(d), nil)
 }
 
 func cythonSysIncludes(d *ModuleData) []VFS {
@@ -565,12 +567,13 @@ func appendCythonCCAddIncl(na *NodeArenas, addIncl []VFS, numpyBeforeInclude boo
 	return out[:len(out):len(out)]
 }
 
-func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, sysIncludes []VFS) []VFS {
-	out := make([]VFS, 0, len(addIncl)+len(cythonAddIncl)+len(sysIncludes)+1+len(cythonNumpyAddIncl))
+func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, sysIncludes, peerIncludes []VFS) []VFS {
+	out := make([]VFS, 0, len(addIncl)+len(cythonAddIncl)+len(sysIncludes)+len(peerIncludes)+1+len(cythonNumpyAddIncl))
 
 	out = append(out, addIncl...)
 	out = append(out, cythonAddIncl...)
 	out = append(out, sysIncludes...)
+	out = append(out, peerIncludes...)
 	out = append(out, contribLibsCxxsuppLibcxxInclude)
 	out = append(out, cythonNumpyAddIncl...)
 

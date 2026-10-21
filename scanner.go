@@ -205,15 +205,16 @@ type ScanContext struct {
 	fullPeer []VFS
 	parsers  *IncludeParserManager
 
-	asmAddIncl    []VFS
-	cythonAddIncl []VFS
-	protoInclude  []VFS
-	rosInclude    []VFS
-	swigInclude   []VFS
-	flatcInclude  []VFS
-	protoOutRoot  VFS
-	goAsmIncl     []VFS
-	cythonSys     []VFS
+	asmAddIncl     []VFS
+	cythonAddIncl  []VFS
+	cythonPeerIncl []VFS
+	protoInclude   []VFS
+	rosInclude     []VFS
+	swigInclude    []VFS
+	flatcInclude   []VFS
+	protoOutRoot   VFS
+	goAsmIncl      []VFS
+	cythonSys      []VFS
 }
 
 type ScanConfig struct {
@@ -237,7 +238,7 @@ func (ctx *ScanContext) modulePaths(domain ScanDomain) (own, peer []VFS) {
 	case scanDomainAsm:
 		return ctx.asmAddIncl, nil
 	case scanDomainCython:
-		return appendCythonScanAddIncl(ctx.ccOwn, ctx.cythonAddIncl, ctx.cythonSys), ctx.ccPeer
+		return appendCythonScanAddIncl(ctx.ccOwn, ctx.cythonAddIncl, ctx.cythonSys, ctx.cythonPeerIncl), ctx.ccPeer
 	case scanDomainProto:
 		return ctx.parsers.protoScanOwnPaths(ctx.protoOutRoot, ctx.protoInclude), nil
 	case scanDomainAux:

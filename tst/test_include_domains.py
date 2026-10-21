@@ -68,6 +68,74 @@ class AsmIncludeTest(unittest.TestCase):
 
 
 class CythonIncludeTest(unittest.TestCase):
+    def test_cython_global_directories_propagate_through_header_only_peers(self):
+        cython3 = "contrib/tools/cython/Cython/Includes"
+        for transitive in (False, True):
+            for exported in (False, True):
+                with self.subTest(transitive=transitive, exported=exported):
+                    files = {
+                        "m/ya.make": library(
+                            "SET(PYTHON3 yes)",
+                            "ADDINCL(FOR cython local)",
+                            f"PEERDIR({'mid' if transitive else 'exporter'})",
+                            "BUILDWITH_CYTHON_CPP(a.pyx)",
+                        ),
+                        "m/a.pyx": "from shared cimport value\nfrom more cimport extra\n",
+                        "mid/ya.make": library("PEERDIR(exporter)"),
+                        "exporter/ya.make": library(
+                            f"ADDINCL({'GLOBAL ' if exported else ''}FOR cython exported/one "
+                            f"{'GLOBAL ' if exported else ''}FOR cython exported/two "
+                            "FOR cython private GLOBAL FOR cython absent)",
+                        ),
+                        "exported/one/shared.pxd": "",
+                        "exported/two/more.pxd": "",
+                        "private/unused.pxd": "",
+                        "local/own.pxd": "",
+                        f"{cython3}/marker.pxd": "",
+                        "contrib/tools/cython/cython.py": "",
+                    }
+                    graph = lib.make(files, "m", "-k")
+                    cy = lib.node_by_output(graph, "$(B)/m/a.pyx.cpp")
+                    includes = [arg for arg in cy["cmds"][0]["cmd_args"] if arg.startswith("-I")]
+                    expected = ["-I$(B)", "-I$(S)", "-I$(S)/local", f"-I$(S)/{cython3}"]
+                    if exported:
+                        expected += ["-I$(S)/exported/one", "-I$(S)/exported/two"]
+                    self.assertEqual(expected, includes)
+                    for name in ("exported/one/shared.pxd", "exported/two/more.pxd"):
+                        self.assertEqual(exported, f"$(S)/{name}" in cy["inputs"])
+                    for output in ("$(B)/mid/libmid.a", "$(B)/exporter/libexporter.a"):
+                        self.assertFalse(any(output in node["outputs"] for node in graph["graph"]))
+                    cc = lib.node_by_output(graph, "$(B)/m/a.pyx.cpp.o")
+                    cc_args = cc["cmds"][0]["cmd_args"]
+                    for name in ("local", "exported/one", "exported/two", "private"):
+                        self.assertNotIn(f"-I$(S)/{name}", cc_args)
+
+    def test_cython_keeps_own_and_inherited_include_list_boundaries(self):
+        cython3 = "contrib/tools/cython/Cython/Includes"
+        files = {
+            "m/ya.make": library(
+                "SET(PYTHON3 yes)",
+                "ADDINCL(GLOBAL FOR cython own FOR cython shared)",
+                "PEERDIR(first second)",
+                "BUILDWITH_CYTHON_CPP(a.pyx)",
+            ),
+            "m/a.pyx": "from root cimport value\nfrom item cimport other\n",
+            "first/ya.make": library("ADDINCL(GLOBAL FOR cython shared)"),
+            "second/ya.make": library("ADDINCL(GLOBAL FOR cython shared)"),
+            "own/root.pxd": "",
+            "shared/item.pxd": "",
+            f"{cython3}/marker.pxd": "",
+            "contrib/tools/cython/cython.py": "",
+        }
+        graph = lib.make(files, "m", "-k")
+        cy = lib.node_by_output(graph, "$(B)/m/a.pyx.cpp")
+        self.assertEqual(
+            ["-I$(B)", "-I$(S)", "-I$(S)/own", "-I$(S)/shared", f"-I$(S)/{cython3}", "-I$(S)/shared"],
+            [arg for arg in cy["cmds"][0]["cmd_args"] if arg.startswith("-I")],
+        )
+        self.assertIn("$(S)/own/root.pxd", cy["inputs"])
+        self.assertIn("$(S)/shared/item.pxd", cy["inputs"])
+
     def test_cimport_uses_selected_roots_inside_another_cython_distribution(self):
         cython3 = "contrib/tools/cython/Cython/Includes"
         files = {

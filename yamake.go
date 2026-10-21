@@ -201,19 +201,20 @@ type JoinSrcsStmt struct {
 }
 
 type AddInclStmt struct {
-	GlobalPaths      []ANY
-	OneLevelPaths    []ANY
-	OwnPaths         []ANY
-	CythonPaths      []ANY
-	AsmPaths         []ANY
-	ProtoGlobalPaths []ANY
-	FlatcPaths       []ANY
-	FlatcGlobalPaths []ANY
-	SwigPaths        []ANY
-	SwigGlobalPaths  []ANY
-	UserGlobalPaths  []ANY
-	AllPaths         []ANY
-	Line             int
+	GlobalPaths       []ANY
+	OneLevelPaths     []ANY
+	OwnPaths          []ANY
+	CythonPaths       []ANY
+	CythonGlobalPaths []ANY
+	AsmPaths          []ANY
+	ProtoGlobalPaths  []ANY
+	FlatcPaths        []ANY
+	FlatcGlobalPaths  []ANY
+	SwigPaths         []ANY
+	SwigGlobalPaths   []ANY
+	UserGlobalPaths   []ANY
+	AllPaths          []ANY
+	Line              int
 }
 
 type CFlagsStmt struct {
@@ -1826,7 +1827,7 @@ func compilerFlags(args []ANY) []ANY {
 }
 
 func splitAddInclPaths(args []ANY) *AddInclStmt {
-	var globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, flatcPaths, flatcGlobalPaths, swigPaths, swigGlobalPaths, userGlobalPaths, allPaths []ANY
+	var globalPaths, oneLevelPaths, ownPaths, cythonPaths, cythonGlobalPaths, asmPaths, protoGlobalPaths, flatcPaths, flatcGlobalPaths, swigPaths, swigGlobalPaths, userGlobalPaths, allPaths []ANY
 
 	for i := 0; i < len(args); i++ {
 		if args[i] == kwONE_LEVEL.any() {
@@ -1896,6 +1897,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 
 				if i+2 < len(args) && args[i+1].string() == "cython" {
 					cythonPaths = append(cythonPaths, args[i+2])
+					cythonGlobalPaths = append(cythonGlobalPaths, args[i+2])
 					i += 2
 
 					continue
@@ -1945,18 +1947,19 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 	}
 
 	return &AddInclStmt{
-		GlobalPaths:      astArgs.list(globalPaths...),
-		OneLevelPaths:    astArgs.list(oneLevelPaths...),
-		OwnPaths:         astArgs.list(ownPaths...),
-		CythonPaths:      astArgs.list(cythonPaths...),
-		AsmPaths:         astArgs.list(asmPaths...),
-		ProtoGlobalPaths: astArgs.list(protoGlobalPaths...),
-		FlatcPaths:       astArgs.list(flatcPaths...),
-		FlatcGlobalPaths: astArgs.list(flatcGlobalPaths...),
-		SwigPaths:        astArgs.list(swigPaths...),
-		SwigGlobalPaths:  astArgs.list(swigGlobalPaths...),
-		UserGlobalPaths:  astArgs.list(userGlobalPaths...),
-		AllPaths:         astArgs.list(allPaths...),
+		GlobalPaths:       astArgs.list(globalPaths...),
+		OneLevelPaths:     astArgs.list(oneLevelPaths...),
+		OwnPaths:          astArgs.list(ownPaths...),
+		CythonPaths:       astArgs.list(cythonPaths...),
+		CythonGlobalPaths: astArgs.list(cythonGlobalPaths...),
+		AsmPaths:          astArgs.list(asmPaths...),
+		ProtoGlobalPaths:  astArgs.list(protoGlobalPaths...),
+		FlatcPaths:        astArgs.list(flatcPaths...),
+		FlatcGlobalPaths:  astArgs.list(flatcGlobalPaths...),
+		SwigPaths:         astArgs.list(swigPaths...),
+		SwigGlobalPaths:   astArgs.list(swigGlobalPaths...),
+		UserGlobalPaths:   astArgs.list(userGlobalPaths...),
+		AllPaths:          astArgs.list(allPaths...),
 	}
 }
 

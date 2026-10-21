@@ -27,7 +27,7 @@ func (e *EmitContext) appendModulePeer(paths []VFS, result *ModuleEmitResult, ca
 
 	info := e.codegen.moduleInputs(output)
 
-	if info == nil || len(info.Includes) == 0 && len(info.IncludeRoots) == 0 && len(info.Globals) == 0 {
+	if info == nil || len(info.Includes) == 0 && len(info.IncludeRoots) == 0 && len(info.Globals) == 0 && len(info.CythonGlobalIncludes) == 0 {
 		return paths
 	}
 
@@ -36,6 +36,18 @@ func (e *EmitContext) appendModulePeer(paths []VFS, result *ModuleEmitResult, ca
 	}
 
 	return append(paths, output)
+}
+
+func (e *EmitContext) moduleCythonIncludes(peers []VFS) []VFS {
+	var chunks [][]VFS
+
+	for _, peer := range peers {
+		if info := e.codegen.moduleInputs(peer); info != nil && len(info.CythonGlobalIncludes) > 0 {
+			chunks = append(chunks, info.CythonGlobalIncludes)
+		}
+	}
+
+	return e.ctx.na.dedupClosure(nil, chunks)
 }
 
 func (e *EmitContext) modulePeerInputs() InputChunks {
@@ -206,7 +218,15 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 
 	globals := e.moduleGlobals
 
-	if len(e.moduleIncludeRoots) == 0 && len(peerInputs) == 0 && len(peerRoots) == 0 && len(globals) == 0 {
+	var cythonPeers [][]VFS
+
+	if e.peers != nil && len(e.peers.CythonInclude) > 0 {
+		cythonPeers = append(cythonPeers, e.peers.CythonInclude)
+	}
+
+	cythonIncludes := e.ctx.na.dedupClosure(e.d.cythonAddInclGlobal, cythonPeers)
+
+	if len(e.moduleIncludeRoots) == 0 && len(peerInputs) == 0 && len(peerRoots) == 0 && len(globals) == 0 && len(cythonIncludes) == 0 {
 		return
 	}
 
@@ -222,14 +242,14 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 		}
 	}
 
-	if len(ownIncludes) == 0 && len(ownRoots) == 0 && len(peerInputs) == 0 && len(peerRoots) == 0 && len(globals) == 0 {
+	if len(ownIncludes) == 0 && len(ownRoots) == 0 && len(peerInputs) == 0 && len(peerRoots) == 0 && len(globals) == 0 && len(cythonIncludes) == 0 {
 		return
 	}
 
 	includes := e.ctx.na.dedupClosure(ownIncludes, peerInputs)
 	roots := e.ctx.na.dedupClosure(ownRoots, peerRoots)
 
-	e.codegen.setModuleInputs(output, e.d.moduleStmt.Name, includes, roots, globals, e.moduleGlobalInputs, passPeers)
+	e.codegen.setModuleInputs(output, e.d.moduleStmt.Name, includes, roots, globals, e.moduleGlobalInputs, cythonIncludes, passPeers)
 }
 
 func (e *EmitContext) globalPlugins() []VFS {
