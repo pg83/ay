@@ -137,6 +137,32 @@ class JavaLibraryTest(unittest.TestCase):
                         self.assertEqual(version >= 11, "$(S)/app/Modern.java" in jar["inputs"])
                         self.assertEqual(version < 11, "$(S)/app/Legacy.java" in jar["inputs"])
 
+    def test_repeated_source_calls_share_the_accumulated_late_glob_binding(self):
+        files = java_tree(**{
+            "app/ya.make": (
+                "JAVA_LIBRARY_NON_SPLIT()\n"
+                "JAVA_SRCS(SRCDIR src **/*.java)\n"
+                "JAVA_SRCS(SRCDIR src **/*.java)\n"
+                "JAVA_SRCS(RESOURCES SRCDIR src **/*.java)\nEND()\n"
+            ),
+            "app/src/A.java": "class A {}\n",
+            "app/src/sub/B.java": "class B {}\n",
+        })
+        jar = jv_node(lib.make(files, "app"), "$(B)/app/app.jar")
+        args = jar["cmds"][0]["cmd_args"]
+        blocks = []
+        for i, value in enumerate(args):
+            if value == "--srcdir":
+                paths = []
+                for path in args[i + 2:]:
+                    if path.startswith("--"):
+                        break
+                    paths.append(path)
+                blocks.append(paths)
+        matches = ["$(S)/app/src/A.java", "$(S)/app/src/sub/B.java"]
+        self.assertEqual(blocks, [matches * 2, matches * 2, matches])
+        self.assertEqual([p for p in jar["inputs"] if p.endswith(".java")], matches)
+
     def test_split_library_peers_interface_jar(self):
         files = java_tree(**{
             "app/ya.make": "JAVA_LIBRARY()\nPEERDIR(dep)\nJAVA_SRCS(SRCDIR src **/*)\nEND()\n",
