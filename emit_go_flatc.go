@@ -70,8 +70,8 @@ func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 		Platform: instance.Platform, Env: envVarsVCS,
 		Cmds: na.cmdList(
 			Cmd{CmdArgs: na.chunkList(head, d.flatcFlags, tail), Cwd: bldRootDirVFS, Env: envVarsVCS},
-			Cmd{CmdArgs: na.chunkList(post, e.peers.FbsNamespaces), Cwd: bldRootDirVFS, Env: envVarsVCS},
-			Cmd{CmdArgs: na.chunkList(tar), Cwd: bldRootDirVFS, Env: envVarsVCS},
+			Cmd{CmdArgs: na.chunkList(post, e.peers.FbsNamespaces), Env: envVarsVCS},
+			Cmd{CmdArgs: na.chunkList(tar), Env: envVarsVCS},
 		),
 		Inputs: na.inputList(na.vfsList(tool, src, postprocess, tarSources), ctx.scripts[postprocess.rel()], ctx.scripts[tarSources.rel()]),
 		KV:     &goFlatcKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}},
