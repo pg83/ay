@@ -15,6 +15,8 @@ var (
 )
 
 type ModuleCompileEnv struct {
+	FortranHead          []ANY
+	FortranResources     []STR
 	PchFlagsGlobal       []ANY
 	Flags                FlagSet
 	AddIncl              []VFS
