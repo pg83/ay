@@ -133,13 +133,17 @@ func (e *EmitContext) genYqlPrebuiltProgram() *ModuleEmitResult {
 	src := build(e.instance.Path.relString(), "/", prebuilt)
 	out := lDOutputPath(e.instance, name)
 
-	e.emitFromSandbox(&FromSandboxStmt{
+	stmt := &FromSandboxStmt{
 		ResourceId: internStr(d.yqlPrebuiltResource).any(), File: true,
 		ArchiveExtraction: ArchiveExtraction{
 			Executable: true, Prefix: ".",
 			Renames: []ANY{kwRESOURCE.any()}, OUTNoAutoFiles: []ANY{internStr(prebuilt).any()},
 		},
-	})
+	}
+
+	d.fromSandboxes = append(d.fromSandboxes, stmt)
+
+	e.emitFromSandbox(stmt)
 
 	return e.genYqlPrebuiltCopy(src, out, globals)
 }
