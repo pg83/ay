@@ -96,6 +96,13 @@ class YaMakeVariablesTest(unittest.TestCase):
             "foo}", "-Do=$-a", "${", "-D" + LONG_VALUE * 2,
         ])
 
+    def test_braced_variable_keys_include_punctuation(self):
+        for key in ("vendor.api-version", "vendor/api-version", "vendor:api-version"):
+            with self.subTest(key=key):
+                self.assertEqual(self.user_cflags(library(
+                    f"SET({key} 2.0)\nCFLAGS(-DVERSION=${{{key}}})"
+                )), ["-DVERSION=2.0"])
+
     def test_deferred_and_chained_references(self):
         self.assertEqual(self.user_cflags(library(
             "SET(lower low)\nSET(A ${B})\nSET(B final)\n"

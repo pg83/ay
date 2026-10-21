@@ -4193,7 +4193,7 @@ func expandBracedVars(s string, env Environment) string {
 		name := s[start+2 : end]
 		val, ok := env.lookup(name)
 
-		if !isExpandVarName(name) || !ok {
+		if name == "" || strings.ContainsAny(name, "${") || !ok {
 			searchFrom = end + 1
 
 			continue
