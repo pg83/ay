@@ -512,6 +512,12 @@ func (ctx *GenCtx) recurseScan(dir string) (TOK, []string) {
 					scan(v.Else)
 				}
 			case *UnknownStmt:
+				if v.Name == tokDllFor {
+					withDllForStmts(ctx, dir, v, scan)
+
+					continue
+				}
+
 				switch v.Name {
 				case tokEnable, tokDisable, tokSetAppend, tokSetListPreSuf,
 					tokUsePython2, tokPython2Addincl, tokUsePython3, tokPython3Addincl:

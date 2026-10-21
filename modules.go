@@ -1588,7 +1588,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded := *v
 
 			if v.Name == tokDllFor {
-				collectDllFor(ctx, modulePath, kind, language, v, env, d, onWarn)
+				withDllForStmts(ctx, modulePath, v, func(stmts []Stmt) {
+					collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn)
+				})
 			} else {
 				expanded.Args = expandStmtTokens(v.Args, env)
 				applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)

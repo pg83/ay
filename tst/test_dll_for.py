@@ -58,6 +58,28 @@ class DllForTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("$BASE/ya.make", result.stderr)
 
+    def test_recursed_dll_for_is_discovered_in_test_mode(self):
+        graph = lib.make({
+            "native/ya.make": f"LIBRARY()\n{BARE}SRCS(source.cpp)\nEND()\n",
+            "native/source.cpp": "int source;\n",
+            "app/ya.make": f"PROGRAM()\n{BARE}SRCS(main.cpp)\nEND()\nRECURSE(shared)\n",
+            "app/main.cpp": "int main() { return 0; }\n",
+            "app/shared/ya.make": "DLL_FOR(native wrapped)\n",
+        }, "app", "-t")
+        link = lib.node_by_output(graph, "$(B)/app/shared/libwrapped.so")
+        self.assertIn(link["uid"], graph["result"])
+
+    def test_inherited_recurse_is_relative_to_the_dll_directory(self):
+        graph = lib.make({
+            "native/ya.make": f"LIBRARY()\n{BARE}SRCS(source.cpp)\nEND()\nRECURSE(helper)\n",
+            "native/source.cpp": "int source;\n",
+            "shared/ya.make": "DLL_FOR(native wrapped)\n",
+            "shared/helper/ya.make": f"PROGRAM()\n{BARE}SRCS(main.cpp)\nEND()\n",
+            "shared/helper/main.cpp": "int main() { return 0; }\n",
+        }, "shared")
+        helper = lib.node_by_output(graph, "$(B)/shared/helper/helper")
+        self.assertIn(helper["uid"], graph["result"])
+
     def test_self_reference_is_rejected(self):
         result = lib.make_process({"shared/ya.make": "DLL_FOR(shared renamed)\n"}, "shared")
         self.assertNotEqual(result.returncode, 0)
