@@ -610,9 +610,5 @@ func (e *EmitContext) flushGoCgo2() {
 
 	e.register(GeneratedFileInfo{OutputPath: importGo, ProducerRef: ref})
 
-	if e.goRes == nil {
-		e.goRes = &GoSrcsResult{}
-	}
-
 	e.goRes.GoFiles = append(e.goRes.GoFiles, importGo)
 }

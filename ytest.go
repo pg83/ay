@@ -221,25 +221,9 @@ func launchedByAgent() bool {
 
 		s := string(stat)
 		open, closing := strings.IndexByte(s, '('), strings.LastIndexByte(s, ')')
-
-		if open < 0 || closing < open {
-			return false
-		}
-
 		fields := strings.Fields(s[closing+1:])
-
-		if len(fields) < 2 {
-			return false
-		}
-
 		name := strings.ToLower(s[open+1 : closing])
 		exe, _ := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
-
-		if cmdline, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline"); err == nil && len(name) >= 15 {
-			if full := strings.ToLower(path.Base(strings.SplitN(string(cmdline), "\x00", 2)[0])); strings.HasPrefix(full, name) {
-				name = full
-			}
-		}
 
 		if slices.Contains(testAgentProcessNames, path.Base(name)) || strings.Contains(strings.ToLower(exe), "/claude/") {
 			return true
