@@ -479,37 +479,6 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 
 	cmdArgs = cmdArgs[:len(cmdArgs):len(cmdArgs)]
 
-	var inputs InputChunks
-
-	dedupers.with(func(deduper *DeDuper) {
-		tools := na.vfs.alloc(1 + len(spec.auxTools))[:0]
-
-		appendUnique := func(p VFS) {
-			if !deduper.add(p.strID()) {
-				return
-			}
-
-			tools = append(tools, p)
-		}
-
-		appendUnique(spec.toolBinPath)
-
-		for _, tool := range spec.auxTools {
-			appendUnique(tool.bin)
-		}
-
-		na.vfs.commit(len(tools))
-
-		tools = tools[:len(tools):len(tools)]
-
-		sources := na.filterSeen(deduper, spec.inSources)
-		builds := na.filterSeen(deduper, spec.inBuilds)
-		closureSources := na.filterSeen(deduper, spec.closureSource)
-		closureBuilds := na.filterSeen(deduper, spec.closureBuild)
-
-		inputs = na.inputList(tools, sources, builds, closureSources, closureBuilds)
-	})
-
 	outputs := na.vfs.alloc(1 + len(stmt.OUTFiles) + len(stmt.OUTNoAutoFiles))[:0]
 
 	var stdoutPath VFS
@@ -547,6 +516,36 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	na.vfs.commit(len(outputs))
 
 	outputs = outputs[:len(outputs):len(outputs)]
+	e.codegen.setMainOut(id, outputs)
+
+	tools := na.vfs.alloc(1 + len(spec.auxTools))[:0]
+
+	tools = append(tools, spec.toolBinPath)
+
+	for _, tool := range spec.auxTools {
+		tools = append(tools, tool.bin)
+	}
+
+	na.vfs.commit(len(tools))
+	tools = tools[:len(tools):len(tools)]
+
+	inputNode := Node{Inputs: na.inputList(tools, spec.inSources, spec.inBuilds), Outputs: outputs}
+
+	e.includeNodeInputs(&inputNode)
+
+	var inputs InputChunks
+
+	dedupers.with(func(deduper *DeDuper) {
+		chunks := na.inputs.alloc(len(inputNode.Inputs) + 2)[:0]
+
+		for _, chunk := range inputNode.Inputs {
+			chunks = append(chunks, na.filterSeen(deduper, chunk))
+		}
+
+		chunks = append(chunks, na.filterSeen(deduper, spec.closureSource), na.filterSeen(deduper, spec.closureBuild))
+		na.inputs.commit(len(chunks))
+		inputs = chunks[:len(chunks):len(chunks)]
+	})
 
 	toolRefs := na.noderefs.alloc(len(spec.auxTools) + 1)[:0]
 
@@ -587,8 +586,8 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		ForeignDepRefs: toolRefs,
 	}
 
-	e.codegen.setMainOut(id, outputs)
-	e.emitReservedNode(node, id)
+	e.resolveNodeCodegenRefs(&node)
+	e.ctx.emit.emitReservedNodePtr(&node, id)
 }
 
 type PrFileToken struct {

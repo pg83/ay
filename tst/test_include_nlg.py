@@ -24,6 +24,35 @@ class NlgIncludesTest(unittest.TestCase):
         lib.tool_program(files, "tools/gen", "gen")
         return files
 
+    def test_external_data_dependencies_keep_cpp_runtime_on_compiled_consumers(self):
+        for direct_header in (False, True):
+            with self.subTest(direct_header=direct_header):
+                files = self.files('{% ext_import "peer/data.nlg" %}\n')
+                files["tools/gen/ya.make"] = files["tools/gen/ya.make"].replace(
+                    "END()", "INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/runtime/api.h)\nEND()"
+                )
+                files["runtime/api.h"] = '#include "nested.h"\n'
+                files["runtime/nested.h"] = ""
+                files["m/use.cpp"] = '#include "m/main.nlg.h"\n'
+                if direct_header:
+                    files["m/ya.make"] = (
+                        f"LIBRARY()\n{lib.BARE_MODULE}PEERDIR(peer)\n"
+                        "RUN_PROGRAM(tools/gen IN ${ARCADIA_BUILD_ROOT}/peer/data.nlg.h "
+                        "OUT main.nlg.h)\nSRCS(use.cpp)\nEND()\n"
+                    )
+                graph = lib.make(files, "m")
+                generated = lib.node_by_output(graph, "$(B)/m/main.nlg.h")
+                compiled = lib.node_by_output(graph, "$(B)/m/use.cpp.o")
+                peer = lib.node_by_output(graph, "$(B)/peer/dummy.h")
+                self.assertIn("$(B)/peer/dummy.h", generated["inputs"])
+                self.assertIn(peer["uid"], generated["deps"])
+                if not direct_header:
+                    self.assertIn("$(B)/peer/data.nlg.pb.txt", generated["inputs"])
+                for header in ("api.h", "nested.h"):
+                    path = "$(S)/runtime/" + header
+                    self.assertEqual(direct_header, path in generated["inputs"])
+                    self.assertIn(path, compiled["inputs"])
+
     def test_external_imports_consume_generated_data(self):
         for command in (
             'ext_from "peer/data.nlg" import render',
