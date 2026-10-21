@@ -194,9 +194,10 @@ class CythonIncludeTest(unittest.TestCase):
         self.assertIn(f"$(S)/{cython3}/libcpp/string.pxd", inputs)
         self.assertNotIn(f"$(S)/{CYTHON_PY2}/libcpp/string.pxd", inputs)
 
-    def test_cimport_probes_and_py2_include_overrides(self):
+    def test_cimport_probes_use_the_configured_builtin_roots(self):
+        cython3 = "contrib/tools/cython/Cython/Includes"
         files = {
-            "m/ya.make": library("BUILDWITH_CYTHON_CPP(a.pyx)"),
+            "m/ya.make": library("SET(PYTHON3 yes)", "BUILDWITH_CYTHON_CPP(a.pyx)"),
             "m/a.pyx": (
                 "from m.mod cimport foo\n"
                 "from m.pkg cimport sub, other\n"
@@ -231,6 +232,9 @@ class CythonIncludeTest(unittest.TestCase):
             f"{CYTHON_PY2}/libcpp/pair.pxd": "",
             f"{CYTHON_PY2}/libc/stdint.pxd": "",
             f"{CYTHON_PY2}/libc/stdio.pxd": "",
+            f"{cython3}/libcpp/string.pxd": "",
+            f"{cython3}/libcpp/pair.pxd": "",
+            f"{cython3}/libc/stdint.pxd": "",
             "contrib/tools/cython/cython.py": "",
             "sys.h": "",
         }
@@ -254,12 +258,14 @@ class CythonIncludeTest(unittest.TestCase):
                 "$(S)/util/generic/hash_set.pxd",
                 "$(S)/util/system/types.pxd",
                 f"$(S)/{CYTHON_PY2}/wrap.pxd",
-                f"$(S)/{CYTHON_PY2}/libcpp/string.pxd",
-                f"$(S)/{CYTHON_PY2}/libcpp/pair.pxd",
-                f"$(S)/{CYTHON_PY2}/libc/stdint.pxd",
+                f"$(S)/{cython3}/libcpp/string.pxd",
+                f"$(S)/{cython3}/libcpp/pair.pxd",
+                f"$(S)/{cython3}/libc/stdint.pxd",
                 f"$(S)/{CYTHON_PY2}/libc/stdio.pxd",
             } <= inputs_of(graph, "$(B)/m/a.pyx.cpp"),
         )
+        for builtin in ("libcpp/string", "libcpp/pair", "libc/stdint"):
+            self.assertNotIn(f"$(S)/{CYTHON_PY2}/{builtin}.pxd", inputs_of(graph, "$(B)/m/a.pyx.cpp"))
         self.assertNotIn("$(S)/sys.h", inputs_of(graph, "$(B)/m/a.pyx.cpp"))
         self.assertEqual(
             {"$(B)/m/a.pyx.cpp", "$(S)/sys.h"},
