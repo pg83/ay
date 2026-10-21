@@ -878,6 +878,14 @@ func scheduleProducers(dst []int, m *IdValueMap, positions []ProducerPos, module
 }
 
 func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
+	if e.peers != nil {
+		env := Environment{s: &e.frame.ifEnv}
+
+		for _, decl := range e.peers.ResourceGlobals {
+			env.setVFS(internEnvSTR(decl.GlobalVar), decl.Value)
+		}
+	}
+
 	positions, srcs := e.producerPositions(len(cythonPlans) > 0)
 
 	if len(positions) == 0 {

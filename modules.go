@@ -68,6 +68,12 @@ const (
 	bkDecimalMD5
 )
 
+const (
+	tokenExpandLazy TokenExpansion = iota
+	tokenExpandArguments
+	tokenExpandFinal
+)
+
 type CppProtoPlugin struct {
 	Name              string
 	ToolPath          string
@@ -2004,10 +2010,10 @@ func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
 
 	expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
 	expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env, true)
-	expanded.OUTFiles = expandTokens(v.OUTFiles, env, false, true)
-	expanded.OUTNoAutoFiles = expandTokens(v.OUTNoAutoFiles, env, false, true)
-	expanded.OutputIncludes = expandTokens(v.OutputIncludes, env, false, true)
-	expanded.ToolPaths = expandTokens(v.ToolPaths, env, false, true)
+	expanded.OUTFiles = expandTokens(v.OUTFiles, env, false, tokenExpandArguments)
+	expanded.OUTNoAutoFiles = expandTokens(v.OUTNoAutoFiles, env, false, tokenExpandArguments)
+	expanded.OutputIncludes = expandTokens(v.OutputIncludes, env, false, tokenExpandArguments)
+	expanded.ToolPaths = expandTokens(v.ToolPaths, env, false, tokenExpandArguments)
 
 	if v.StdoutFile != nil {
 		stdout := expandStmtTokenAny((*v.StdoutFile), env)
@@ -2017,8 +2023,8 @@ func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
 
 	bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
 
-	expanded.Args = expandTokens(v.Args, env, true, true)
-	expanded.EnvPairs = expandTokens(v.EnvPairs, env, false, true)
+	expanded.Args = expandTokens(v.Args, env, true, tokenExpandArguments)
+	expanded.EnvPairs = expandTokens(v.EnvPairs, env, false, tokenExpandArguments)
 
 	if v.CWD != nil {
 		cwd := expandStmtTokenAny(*v.CWD, env)
@@ -4272,7 +4278,13 @@ func parseModulePathVFS(path string) VFS {
 }
 
 func expandStmtToken(s string, env Environment) string {
-	return expandToken(s, env, false)
+	return expandToken(s, env, tokenExpandLazy)
+}
+
+type TokenExpansion uint8
+
+func (phase TokenExpansion) clearsUnbound(name string) bool {
+	return phase == tokenExpandFinal || phase == tokenExpandArguments && !keepDeferredVar(name)
 }
 
 func keepDeferredVar(name string) bool {
@@ -4284,7 +4296,7 @@ func keepDeferredVar(name string) bool {
 	return strings.HasSuffix(name, resourceGlobalSuffix) || strings.HasPrefix(name, "_") && strings.HasSuffix(name, "__INCLUDE")
 }
 
-func expandToken(s string, env Environment, evaluated bool) string {
+func expandToken(s string, env Environment, phase TokenExpansion) string {
 	if strings.Contains(s, "\\$") {
 		s = strings.ReplaceAll(s, "\\$", "$")
 	}
@@ -4304,14 +4316,14 @@ func expandToken(s string, env Environment, evaluated bool) string {
 			name := strings.TrimPrefix(s, "$")
 
 			if isExpandVarName(name) {
-				if val, ok := env.lookup(name); ok || evaluated && !keepDeferredVar(name) {
+				if val, ok := env.lookup(name); ok || phase.clearsUnbound(name) {
 					s = val
 				}
 			}
 		}
 
-		s = expandEmbeddedDollarVars(s, env, evaluated)
-		s = expandBracedVars(s, env, evaluated)
+		s = expandEmbeddedDollarVars(s, env, phase)
+		s = expandBracedVars(s, env, phase)
 
 		if s == prev {
 			break
@@ -4321,7 +4333,7 @@ func expandToken(s string, env Environment, evaluated bool) string {
 	return s
 }
 
-func expandBracedVars(s string, env Environment, evaluated bool) string {
+func expandBracedVars(s string, env Environment, phase TokenExpansion) string {
 	searchFrom := 0
 
 	for {
@@ -4344,7 +4356,7 @@ func expandBracedVars(s string, env Environment, evaluated bool) string {
 		name := s[start+2 : end]
 		val, ok := env.lookup(name)
 
-		if !ok && evaluated && !keepDeferredVar(name) && name != "" && !strings.ContainsAny(name, " ${}\"';") {
+		if !ok && phase.clearsUnbound(name) && name != "" && !strings.ContainsAny(name, " ${}\"';") {
 			ok = true
 		}
 
@@ -4359,7 +4371,7 @@ func expandBracedVars(s string, env Environment, evaluated bool) string {
 	}
 }
 
-func expandEmbeddedDollarVars(s string, env Environment, evaluated bool) string {
+func expandEmbeddedDollarVars(s string, env Environment, phase TokenExpansion) string {
 	if !strings.Contains(s, "$") {
 		return s
 	}
@@ -4401,7 +4413,7 @@ func expandEmbeddedDollarVars(s string, env Environment, evaluated bool) string 
 		name := s[i+1 : j]
 		val, ok := env.lookup(name)
 
-		if !ok && (!evaluated || keepDeferredVar(name)) {
+		if !ok && !phase.clearsUnbound(name) {
 			b = append(b, s[i:j]...)
 			i = j
 
@@ -4422,23 +4434,29 @@ func expandEmbeddedDollarVars(s string, env Environment, evaluated bool) string 
 
 func expandInFiles(files []ANY, noParse int, env Environment, evaluated bool) ([]ANY, int) {
 	split := len(files) - noParse
-	parsed := expandTokens(files[:split:split], env, false, evaluated)
+	phase := tokenExpandLazy
+
+	if evaluated {
+		phase = tokenExpandArguments
+	}
+
+	parsed := expandTokens(files[:split:split], env, false, phase)
 
 	if noParse == 0 {
 		return parsed, 0
 	}
 
-	text := expandTokens(files[split:], env, false, evaluated)
+	text := expandTokens(files[split:], env, false, phase)
 
 	return append(parsed[:len(parsed):len(parsed)], text...), len(text)
 }
 
 func expandStmtTokens(items []ANY, env Environment) []ANY {
-	return expandTokens(items, env, false, false)
+	return expandTokens(items, env, false, tokenExpandLazy)
 }
 
 func expandCommandTokens(items []ANY, env Environment) []ANY {
-	return expandTokens(items, env, true, false)
+	return expandTokens(items, env, true, tokenExpandLazy)
 }
 
 func expandListPreSufArgs(items []ANY, env Environment) []ANY {
@@ -4449,13 +4467,13 @@ func expandListPreSufArgs(items []ANY, env Environment) []ANY {
 	out := make([]ANY, 3, len(items))
 
 	for i := range out {
-		out[i] = internStr(expandToken(items[i].string(), env, true)).any()
+		out[i] = internStr(expandToken(items[i].string(), env, tokenExpandArguments)).any()
 	}
 
-	return append(out, expandTokens(items[3:], env, false, true)...)
+	return append(out, expandTokens(items[3:], env, false, tokenExpandArguments)...)
 }
 
-func expandTokens(items []ANY, env Environment, command, evaluated bool) []ANY {
+func expandTokens(items []ANY, env Environment, command bool, phase TokenExpansion) []ANY {
 	anyDollar := false
 
 	for _, item := range items {
@@ -4479,7 +4497,7 @@ func expandTokens(items []ANY, env Environment, command, evaluated bool) []ANY {
 			continue
 		}
 
-		expanded := expandToken(item.string(), env, evaluated)
+		expanded := expandToken(item.string(), env, phase)
 
 		var words []string
 

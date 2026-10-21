@@ -439,7 +439,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	na := e.ctx.na
 	env := envVarsVCS
 	dirs := e.ctx.renderModuleDirs()
-	envPairs := expandStmtTokens(stmt.EnvPairs, dirs)
+	envPairs := expandTokens(stmt.EnvPairs, dirs, false, tokenExpandFinal)
 
 	if len(envPairs) > 0 {
 		block := na.envs.alloc(1 + len(envPairs))[:0]
@@ -461,7 +461,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		env = EnvVars(block[:len(block):len(block)])
 	}
 
-	args := expandStmtTokens(stmt.Args, dirs)
+	args := expandTokens(stmt.Args, dirs, false, tokenExpandFinal)
 	cmdArgs := na.anys.alloc(1 + len(args))[:0]
 
 	cmdArgs = append(cmdArgs, spec.toolBinPath.any())
@@ -589,7 +589,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	}
 
 	if stmt.CWD != nil {
-		cmd.Cwd = cwdVFS(expandStmtToken((*stmt.CWD).string(), dirs))
+		cmd.Cwd = cwdVFS(expandToken((*stmt.CWD).string(), dirs, tokenExpandFinal))
 	}
 
 	kv := stmt.KV

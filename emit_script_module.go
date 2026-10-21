@@ -88,6 +88,8 @@ func (e *EmitContext) scriptModuleResources(globals []ResourceDecl, peers ...str
 		globals = append(globals, res.ResourceGlobalClosure...)
 	}
 
+	e.frame.peerCtx = PeerContext{ResourceGlobals: globals}
+	e.peers = &e.frame.peerCtx
 	e.d.tc = resolveModuleToolchain(e.ctx, globals, e.instance.Platform.ClangVer)
 
 	if e.d.tc.Python3 == 0 {
