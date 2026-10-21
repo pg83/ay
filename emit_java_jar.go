@@ -160,10 +160,22 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 		b.deps = append(b.deps, b.use(jsrc))
 	}
 
+	for _, out := range jm.macroOuts {
+		if strings.HasSuffix(out.relString(), ".jsrc") {
+			prep = append(prep, out.any())
+		}
+	}
+
 	for _, gt := range jm.gentars {
 		prep = append(prep, gt.any())
 		b.input(gt)
 		b.deps = append(b.deps, b.use(gt))
+	}
+
+	for _, out := range jm.macroOuts {
+		if strings.HasSuffix(out.relString(), ".gentar") {
+			prep = append(prep, out.any())
+		}
 	}
 
 	for _, g := range globs {
