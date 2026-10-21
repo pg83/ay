@@ -24,6 +24,20 @@ def compile_inputs(graph, output):
 
 
 class RunProgramTest(unittest.TestCase):
+    def test_assembly_inputs_use_the_assembler_include_namespace(self):
+        files = library(
+            "ADDINCL(native_inc FOR asm asm_inc)\n"
+            "RUN_PROGRAM(tools/gen IN instructions.asm OUT result.cpp)\n",
+            instructions__asm='%include "defs.inc"\n',
+        )
+        files["native_inc/defs.inc"] = ""
+        files["asm_inc/defs.inc"] = ""
+        graph = lib.make(files, "lib")
+        run = lib.node_by_output(graph, "$(B)/lib/result.cpp")
+        self.assertIn("$(S)/lib/instructions.asm", run["inputs"])
+        self.assertIn("$(S)/asm_inc/defs.inc", run["inputs"])
+        self.assertNotIn("$(S)/native_inc/defs.inc", run["inputs"])
+
     def test_archive_of_additional_output_keeps_opaque_main_output(self):
         files = library(
             "RUN_PROGRAM(tools/gen IN input.cpp OUT_NOAUTO main.cpp data.bin)\n"

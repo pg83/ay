@@ -39,10 +39,6 @@ func (e *EmitContext) appendModulePeer(paths []VFS, result *ModuleEmitResult, ca
 }
 
 func (e *EmitContext) modulePeerInputs() InputChunks {
-	if e.peers == nil {
-		return nil
-	}
-
 	var inputs InputChunks
 
 	for _, peer := range e.peers.Modules {
