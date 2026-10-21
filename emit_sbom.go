@@ -63,6 +63,22 @@ func sbomComponentLang(moduleName TOK) string {
 	}
 }
 
+func (e *EmitContext) registeredSbomComponent(output VFS) *GeneratedFileInfo {
+	info := e.codegen.lookup(output)
+
+	if info == nil || info.ProducerRef == 0 || info.OwnerModule != e.instance.Path {
+		return nil
+	}
+
+	producer := e.ctx.emit.nodes.s[info.ProducerRef]
+
+	if producer == nil || producer.KV != &sbomKV {
+		return nil
+	}
+
+	return info
+}
+
 func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
@@ -75,6 +91,11 @@ func (e *EmitContext) emitSbomComponent(realPrjName string) (*NodeRef, *VFS) {
 	}
 
 	out := build(moddir, "/", realPrjName, ".", lang, ".component.sbom")
+
+	if info := e.registeredSbomComponent(out); info != nil {
+		return &info.ProducerRef, &info.OutputPath
+	}
+
 	scriptVFS := source(sbomGenScriptRel)
 	env := envVarsVCS
 
@@ -112,6 +133,11 @@ func (e *EmitContext) emitSbomToolchainComponent(toolchainName, ver string) (*No
 	}
 
 	out := build(moddir, "/toolchain.component.sbom")
+
+	if info := e.registeredSbomComponent(out); info != nil {
+		return &info.ProducerRef, &info.OutputPath
+	}
+
 	scriptVFS := source(sbomGenScriptRel)
 	env := envVarsVCS
 
