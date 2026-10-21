@@ -217,21 +217,18 @@ type AddInclStmt struct {
 }
 
 type CFlagsStmt struct {
-	GlobalFlags []ANY
-	OwnFlags    []ANY
-	Line        int
+	Flags []ANY
+	Line  int
 }
 
 type CXXFlagsStmt struct {
-	GlobalFlags []ANY
-	OwnFlags    []ANY
-	Line        int
+	Flags []ANY
+	Line  int
 }
 
 type CONLYFlagsStmt struct {
-	GlobalFlags []ANY
-	OwnFlags    []ANY
-	Line        int
+	Flags []ANY
+	Line  int
 }
 
 type LDFlagsStmt struct {
@@ -1280,17 +1277,11 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 
 		return stmt
 	case "CFLAGS":
-		globalFlags, ownFlags := splitFlagsByGlobal(args)
-
-		return astOne(astCFlags, CFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: line})
+		return astOne(astCFlags, CFlagsStmt{Flags: compilerFlags(args), Line: line})
 	case "CXXFLAGS":
-		globalFlags, ownFlags := splitFlagsByGlobal(args)
-
-		return astOne(astCXXFlags, CXXFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: line})
+		return astOne(astCXXFlags, CXXFlagsStmt{Flags: compilerFlags(args), Line: line})
 	case "CONLYFLAGS":
-		globalFlags, ownFlags := splitFlagsByGlobal(args)
-
-		return &CONLYFlagsStmt{GlobalFlags: globalFlags, OwnFlags: ownFlags, Line: line}
+		return &CONLYFlagsStmt{Flags: compilerFlags(args), Line: line}
 	case "LDFLAGS":
 		return &LDFlagsStmt{Flags: append([]ANY(nil), args...), Line: line}
 	case "SRCDIR":
@@ -1820,48 +1811,14 @@ func unescapeFlag(s string) string {
 	return strings.ReplaceAll(s, `\"`, `"`)
 }
 
-func splitFlagsByGlobal(args []ANY) (globalFlags, ownFlags []ANY) {
-	ng, no := 0, 0
+func compilerFlags(args []ANY) []ANY {
+	out := astArgs.list(args...)
 
-	for i := 0; i < len(args); i++ {
-		if args[i] == kwGLOBAL.any() {
-			i++
-
-			if i < len(args) {
-				ng++
-			}
-		} else {
-			no++
-		}
+	for i, arg := range out {
+		out[i] = internStr(unescapeFlag(arg.string())).any()
 	}
 
-	gw := astArgs.alloc(ng)[:0]
-
-	for i := 0; i < len(args); i++ {
-		if args[i] == kwGLOBAL.any() {
-			i++
-
-			if i < len(args) {
-				gw = append(gw, internStr(unescapeFlag(args[i].string())).any())
-			}
-		}
-	}
-
-	astArgs.commit(ng)
-
-	ow := astArgs.alloc(no)[:0]
-
-	for i := 0; i < len(args); i++ {
-		if args[i] == kwGLOBAL.any() {
-			i++
-		} else {
-			ow = append(ow, internStr(unescapeFlag(args[i].string())).any())
-		}
-	}
-
-	astArgs.commit(no)
-
-	return gw[:ng:ng], ow[:no:no]
+	return out
 }
 
 func splitAddInclPaths(args []ANY) *AddInclStmt {

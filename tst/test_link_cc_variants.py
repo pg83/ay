@@ -91,6 +91,33 @@ def make_with_env(files, target, extra_env):
 
 
 class CcVariantsTest(unittest.TestCase):
+    def test_global_marker_routes_one_flag_after_variable_expansion(self):
+        for macro in ("CFLAGS", "CXXFLAGS", "CONLYFLAGS"):
+            for marker in ("GLOBAL", "$MARKER", "GLOBAL GLOBAL"):
+                with self.subTest(macro=macro, marker=marker):
+                    extension = "c" if macro == "CONLYFLAGS" else "cpp"
+                    files = {
+                        "dep/ya.make": module(
+                            "LIBRARY()", "SET(MARKER GLOBAL)\nSET(FLAGS -DFIRST -DSECOND)\n"
+                            f"{macro}({marker} $FLAGS)\nSRCS(dep.{extension})\n"),
+                        f"dep/dep.{extension}": "",
+                        "app/ya.make": module("PROGRAM(app)", f"PEERDIR(dep)\nSRCS(app.{extension})\n"),
+                        f"app/app.{extension}": "",
+                    }
+                    graph = lib.make(files, "app")
+                    dep = lib.node_by_output(graph, f"$(B)/dep/dep.{extension}.o")["cmds"][0]["cmd_args"]
+                    app = lib.node_by_output(graph, f"$(B)/app/app.{extension}.o")["cmds"][0]["cmd_args"]
+                    self.assertIn("-DFIRST", dep)
+                    self.assertIn("-DSECOND", dep)
+                    self.assertIn("-DFIRST", app)
+                    self.assertNotIn("-DSECOND", app)
+                    self.assertNotIn("GLOBAL", dep)
+                    self.assertNotIn("GLOBAL", app)
+                    self.assertLess(dep.index("-DSECOND"), dep.index("-DFIRST"))
+                    if macro == "CONLYFLAGS":
+                        self.assertLess(dep.index('-D__TIME__="00:00:00"'), dep.index("-DSECOND"))
+                        self.assertLess(app.index('-D__TIME__="00:00:00"'), app.index("-DFIRST"))
+
     def test_object_paths_for_nested_parent_srcdir_and_flat_sources(self):
         graph = lib.make(fixture(), "m")
         objects = [
