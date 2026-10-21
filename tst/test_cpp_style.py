@@ -79,6 +79,20 @@ class CppStyleTest(unittest.TestCase):
         self.assertEqual(command[-2:], ["--config", "$(S)/build/config/tests/cpp_style/.clang-format"])
         self.assertEqual(run["deps"], [lib.node_by_output(graph, "$(B)/common_test.context")["uid"]])
 
+    def test_empty_generated_library_has_no_cpp_style_suite(self):
+        files = {
+            "build/conf/autoincludes.json": '["gen"]\n',
+            "gen/linters.make.inc": "STYLE_CPP()\n",
+            "gen/module/ya.make": "GEN_LIBRARY()\nEND()\n",
+            "build/platform/clang/clang-format/ya.make": "RESOURCES_LIBRARY()\nEND()\n",
+        }
+        graph = lib.make(files, "gen/module", "-t", "--sandboxing")
+        lib.node_by_output(graph, "$(B)/gen/module/gen-module.pkg.fake")
+        self.assertFalse(any(
+            "$(B)/gen/module/test-results/clang_format/meta.json" in node["outputs"]
+            for node in graph["graph"]
+        ))
+
     def test_cpp_style_reads_the_declared_default_config_map(self):
         files = {
             "lib/ya.make": "LIBRARY()\nNO_UTIL()\nNO_LIBC()\nNO_RUNTIME()\nSET(CPP_LINTERS_DEFAULT_CONFIGS configs/cpp.json)\nSTYLE_CPP()\nEND()\n",
