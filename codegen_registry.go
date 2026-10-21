@@ -27,6 +27,13 @@ type GeneratedFileInfo struct {
 	ParsedIncludes   ParsedIncludeSet
 }
 
+type SourceModuleInfo struct {
+	Instance       ModuleInstance
+	Next           *SourceModuleInfo
+	Includes       []VFS
+	CythonIncludes []VFS
+}
+
 type ModuleInputInfo struct {
 	IncludeRoots         []VFS
 	Includes             []VFS
@@ -71,6 +78,7 @@ func (p *PendingEmit) fire() {
 type CodegenRegistry struct {
 	byRel           DenseMap[STR, *GeneratedFileInfo]
 	bySplit         *IntMap[splitLookup]
+	sourceModules   DenseMap[STR, *SourceModuleInfo]
 	splitGeneration uint32
 	na              *NodeArenas
 }
@@ -136,6 +144,23 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	r.splitGeneration++
 
 	return stored
+}
+
+func (r *CodegenRegistry) sourceModule(instance ModuleInstance) (*SourceModuleInfo, bool) {
+	makefile := source(instance.Path.relString(), "/ya.make")
+	head, _ := r.sourceModules.get(makefile.rel())
+
+	for module := head; module != nil; module = module.Next {
+		if module.Instance == instance {
+			return module, true
+		}
+	}
+
+	module := &SourceModuleInfo{Instance: instance, Next: head}
+
+	r.sourceModules.put(makefile.rel(), module)
+
+	return module, false
 }
 
 func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates []VFS) {

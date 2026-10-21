@@ -1224,6 +1224,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	stmts := moduleStmts(ctx, instance.Path.relString())
 	moduleName := stmtsModuleName(stmts)
 
+	if isPythonMultimodule(moduleName) {
+		configureCythonDirectory(ctx, instance)
+	}
+
 	if moduleName == tokYqlUdf && instance.Kind == KindBin && !instance.Platform.PIC {
 		library := instance
 
