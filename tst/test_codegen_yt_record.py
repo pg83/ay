@@ -74,6 +74,25 @@ class YtRecordCodegenTest(unittest.TestCase):
                 self.assertNotIn("-DRECORD_CLIENT", args)
                 self.assertEqual([a for a in args if a == "-DOTHER_CLIENT"], expected)
 
+    def test_rooted_and_source_directory_inputs_keep_output_binding(self):
+        for setup, yaml, prefix, object_path in (
+            ("", "${ARCADIA_ROOT}/schemas/query.yaml", "$(B)/schemas/query.record",
+             "$(B)/mod/__/schemas/query.record.cpp.o"),
+            ("SRCDIR(schemas)\n", "query.yaml", "$(B)/mod/query.record",
+             "$(B)/mod/query.record.cpp.o"),
+        ):
+            with self.subTest(yaml=yaml):
+                files = files_for(setup + "GENERATE_YT_RECORD(" + yaml + ")\n")
+                files["schemas/query.yaml"] = "namespace: NQuery\n"
+                graph = lib.make(files, "mod")
+                record = lib.node_by_output(graph, prefix + ".h")
+                args = record["cmds"][0]["cmd_args"]
+                self.assertEqual(args[args.index("--input") + 1], "$(S)/schemas/query.yaml")
+                self.assertEqual(args[args.index("--output-cpp") + 1], prefix + ".cpp")
+                compile_node = lib.node_by_output(graph, object_path)
+                self.assertIn(prefix + ".cpp", compile_node["inputs"])
+                self.assertIn(record["uid"], compile_node["deps"])
+
     def test_argument_validation(self):
         for call in ("GENERATE_YT_RECORD()", "GENERATE_YT_RECORD(a.yaml unexpected)",
                      "YT_RECORD_DISABLE_PEERDIR(unexpected)"):

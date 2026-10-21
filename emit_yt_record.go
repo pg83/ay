@@ -14,8 +14,8 @@ func applyYtRecord(modulePath string, v UnknownStmt, d *ModuleData, env Environm
 
 	input := v.Args[0]
 	base := strings.TrimSuffix(input.string(), filepath.Ext(input.string()))
-	cpp := copyFileOutputVFS(modulePath, base+".record.cpp").any()
-	header := copyFileOutputVFS(modulePath, base+".record.h").any()
+	cpp := copyFileOutputVFS(modulePath, base+".record.cpp").rel().build().any()
+	header := copyFileOutputVFS(modulePath, base+".record.h").rel().build().any()
 	args := []ANY{strInput.any(), input, strOutputRoot2.any(), argB.any(), strOutputCpp.any(), cpp}
 
 	var includes []ANY
