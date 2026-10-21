@@ -718,6 +718,10 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.expandJavaProtobufPeers()
 	case "JAVA_PROTO_PLUGIN":
 		javaProtoPluginMacro(d, args)
+	case "ALICE_CAPABILITY":
+		javaProtoPluginMacro(d, []string{"alice_capability_java", "alice/library/go/java_marker_interface_protoc_plugin", "DEPS", "alice/protos/endpoint/java_interface", "alice/megamind/protos/scenarios/java_interface"})
+	case "ALICE_TYPED_CALLBACK":
+		javaProtoPluginMacro(d, []string{"alice_typed_callback_java", "alice/library/go/java_marker_interface_protoc_plugin", "DEPS", "alice/protos/api/typed_callbacks/java_marker_interface"})
 	case "PROTO_NAMESPACE":
 		javaProtoNamespace(d, args[len(args)-1])
 	case "EXPORT_YMAPS_PROTO":
