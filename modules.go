@@ -850,6 +850,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	hasSc := false
 	hasCfgProto := false
 	hasPyGztProto := false
+	hasFortran := false
 
 	for i, meta := range d.srcs {
 		src := meta.Source
@@ -873,6 +874,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 			hasSc = true
 		case srcExtCfgProto:
 			hasCfgProto = true
+		case srcExtFortran:
+			hasFortran = true
 		}
 	}
 
@@ -898,6 +901,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 				}
 			}
 		}
+	}
+
+	if hasFortran || hasFortranGeneratedSource(d) {
+		d.peerdirs = append(d.peerdirs, strBuildPlatformFlang.any(), strContribLibsLlvmFlangRt.any())
 	}
 
 	if hasSc {

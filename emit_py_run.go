@@ -34,7 +34,7 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 
 				e.collectObj(e.codegen.mustInfo(path).ProducerRef, path, SrcMeta{Prio: stmtPrioDefault, Bucket: bkRunPython})
 			}
-		case isCCSourceExt(out) || isAsmSourceExt(out):
+		case isNativeSourceExt(out):
 			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).any(), Prio: stmtPrioDefault, Bucket: bkRunPython})
 		case isCodegenProducingSrc(out):
 			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).any(), Prio: stmtPrioDefault, Bucket: bkRunPython})

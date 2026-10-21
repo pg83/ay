@@ -15,6 +15,7 @@ const (
 	extCarriesIncl
 	extCodegen
 	extCopyAuto
+	extFortranSource
 )
 
 const (
@@ -48,6 +49,7 @@ const (
 	srcExtRodata
 	srcExtSwg
 	srcExtSsqls
+	srcExtFortran
 )
 
 type ExtFlags uint8
@@ -80,9 +82,10 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 
 	set(extCxxSource, ".cpp", ".cc", ".cxx", ".C")
 	set(extCCSource, ".cpp", ".cc", ".cxx", ".c")
+	set(extFortranSource, ".f")
 	set(extAsmSource, ".yasm", ".asm", ".s", ".S")
 	set(extHeader, ".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx", ".inl")
-	set(extCopyAuto, ".c", ".cpp", ".cc", ".cxx", ".proto", ".ev", ".g4", ".y", ".ypp", ".rl", ".rl6", ".h.in", ".c.in", ".cpp.in")
+	set(extCopyAuto, ".f", ".c", ".cpp", ".cc", ".cxx", ".proto", ".ev", ".g4", ".y", ".ypp", ".rl", ".rl6", ".h.in", ".c.in", ".cpp.in")
 	set(extCodegen, ".msg", ".srv", ".proto", ".gztproto", ".fbs64", ".fbs", ".ev", ".cfgproto", ".rl6", ".rl", ".rl5", ".y", ".ypp", ".cpp.in", ".c.in", ".sc", ".gperf", ".lpp", ".lex", ".l", ".fml", ".sfdl", ".asp", ".swg")
 	set(extCodegen, ".ssqls")
 
@@ -136,6 +139,7 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 		".rodata":   srcExtRodata,
 		".swg":      srcExtSwg,
 		".ssqls":    srcExtSsqls,
+		".f":        srcExtFortran,
 	} {
 		get(ext).srcExt = cls
 	}
@@ -151,7 +155,7 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 			c.flags |= extCopyAuto
 		}
 
-		if c.flags&(extCCSource|extHeader) != 0 || ext == ".inc" {
+		if c.flags&(extCCSource|extHeader|extFortranSource) != 0 || ext == ".inc" {
 			c.flags |= extCarriesIncl
 		}
 
@@ -179,6 +183,10 @@ func isAsmSourceExt(p string) bool {
 	return extHas(p, extAsmSource)
 }
 
+func isNativeSourceExt(p string) bool {
+	return extHas(p, extCCSource|extAsmSource|extFortranSource)
+}
+
 func isHeaderSource(srcRel string) bool {
 	return extHas(srcRel, extHeader)
 }
@@ -188,7 +196,7 @@ func generatedOutputCarriesIncludes(p string) bool {
 }
 
 func generatedOutputAutoCompiles(p string) bool {
-	return isCCSourceExt(p) || isAsmSourceExt(p) || flatcVariantForExt(p) != nil
+	return isNativeSourceExt(p) || flatcVariantForExt(p) != nil
 }
 
 func isCodegenProducingSrc(srcRel string) bool {

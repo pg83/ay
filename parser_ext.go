@@ -20,6 +20,7 @@ func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[Includ
 		{".y", lexParser},
 		{".l", lexParser},
 		{".a", emptyParser},
+		{".f", FortranIncludeDirectiveParser{}},
 		{".m", cParser},
 		{".C", cParser},
 		{".S", cParser},

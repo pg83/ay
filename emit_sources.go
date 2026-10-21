@@ -25,7 +25,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 
 	if e.producersOnly() {
 		switch srcExtClassOf(src.relOrSelf().any()) {
-		case srcExtCSource, srcExtRodata, srcExtCuda, srcExtYasm, srcExtAsm, srcExtGo:
+		case srcExtCSource, srcExtRodata, srcExtCuda, srcExtYasm, srcExtAsm, srcExtGo, srcExtFortran:
 			return
 		case srcExtProto:
 			if e.d.unit.Tag == unitTagPy3Proto {
@@ -57,6 +57,8 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		if meta.CompileRef == 0 {
 			e.collectObj(ref, out, meta)
 		}
+	case srcExtFortran:
+		e.emitFortranSource(meta)
 	case srcExtRodata:
 		e.emitLibraryRodataSource(meta, e.ccInputsFor(meta.Compile))
 	case srcExtAsm:

@@ -70,7 +70,7 @@ func (e *EmitContext) emitFromArchive(stmt FromArchiveEntry) {
 		if i < len(stmt.OUTFiles) {
 			if extIsArchiveMember(out.relString()) && !e.producersOnly() {
 				e.collectObj(ref, out, SrcMeta{Prio: stmtPrioDefault})
-			} else if isCCSourceExt(out.relString()) || isAsmSourceExt(out.relString()) || isCodegenProducingSrc(out.relString()) {
+			} else if isNativeSourceExt(out.relString()) || isCodegenProducingSrc(out.relString()) {
 				e.enqueueSrc(SrcMeta{Source: out.any(), Prio: stmtPrioDefault})
 			}
 		}
