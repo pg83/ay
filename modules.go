@@ -3813,7 +3813,7 @@ func applyProtoNamespace(d *ModuleData, namespace ANY, withGen bool) {
 		d.protoAddInclGlobal = append(d.protoAddInclGlobal, protoSourceRoot)
 	}
 
-	d.addIncl = append(d.addIncl, protoBuildRoot)
+	d.addLocalIncl(prioAddIncl, protoBuildRoot)
 	d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
 	d.addInclUserGlobal = append(d.addInclUserGlobal, protoBuildRoot)
 }

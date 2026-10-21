@@ -73,6 +73,30 @@ def pb_node(graph, pb_h):
 
 
 class ProtoCppTest(unittest.TestCase):
+    def test_proto_namespace_uses_the_addincl_declaration_order(self):
+        for namespace_first in (False, True):
+            with self.subTest(namespace_first=namespace_first):
+                files = proto_files()
+                statements = [
+                    "ADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/shared)",
+                    "PROTO_NAMESPACE(p)",
+                ]
+                if namespace_first:
+                    statements.reverse()
+                files.update({
+                    "p/ya.make": (
+                        f"PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\n{lib.BARE_MODULE}"
+                        + "\n".join(statements) + "\nSRCS(a.proto)\nEND()\n"
+                    ),
+                    "p/a.proto": 'syntax = "proto2";\nmessage A {}\n',
+                })
+                graph = lib.make(files, "p")
+                compiled = lib.node_by_output(graph, "$(B)/p/a.pb.cc.o")
+                args = compiled["cmds"][0]["cmd_args"]
+                namespace = args.index("-I$(B)/p")
+                shared = args.index("-I$(B)/shared")
+                self.assertEqual(namespace < shared, namespace_first)
+
     def test_generated_proto_passes_generator_induced_headers(self):
         files = proto_files()
         files.update({
