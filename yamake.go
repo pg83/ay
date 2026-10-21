@@ -112,6 +112,7 @@ const (
 	tokInt
 	tokEq
 	tokLt
+	tokLe
 	tokNotEq
 	tokGe
 	tokGt
@@ -616,8 +617,13 @@ func (l *Lexer) readToken() Token {
 	case b == '"' || b == '\'':
 		return l.readString(startLine, startCol, b)
 	case b == '<':
-
 		l.advance()
+
+		if l.pos < len(l.src) && l.src[l.pos] == '=' {
+			l.advance()
+
+			return Token{kind: tokLe, line: startLine, col: startCol}
+		}
 
 		return Token{kind: tokLt, line: startLine, col: startCol}
 	case b == '>':
@@ -2034,7 +2040,7 @@ func (p *Parser) readCondTokens(ifTok Token) []Token {
 			}
 
 			out = append(out, tok)
-		case tokIdent, tokWord, tokString, tokInt, tokEq, tokLt, tokNotEq, tokGe, tokGt:
+		case tokIdent, tokWord, tokString, tokInt, tokEq, tokLt, tokLe, tokNotEq, tokGe, tokGt:
 			out = append(out, tok)
 		}
 	}
@@ -2236,6 +2242,16 @@ func (c *CondParser) parseCmp() int32 {
 		c.rejectChainedCmp(t)
 
 		return c.emit(CondNode{Kind: ckLt, L: right, R: left})
+	case tokLe:
+		c.consume()
+
+		right := c.parseAtom()
+
+		c.rejectChainedCmp(t)
+
+		lt := c.emit(CondNode{Kind: ckLt, L: right, R: left})
+
+		return c.emit(CondNode{Kind: ckNot, L: lt})
 	case tokGe:
 
 		c.consume()
@@ -2259,7 +2275,7 @@ func (c *CondParser) rejectChainedCmp(prev Token) {
 		return
 	}
 
-	if t.kind == tokEq || t.kind == tokLt || t.kind == tokNotEq || t.kind == tokGe || t.kind == tokGt {
+	if t.kind == tokEq || t.kind == tokLt || t.kind == tokLe || t.kind == tokNotEq || t.kind == tokGe || t.kind == tokGt {
 		c.parent.lex.throwParse(t.line, t.col, "chained comparison %s after %s is not supported", describeToken(t), describeToken(prev))
 	}
 }
@@ -2403,6 +2419,8 @@ func describeToken(t Token) string {
 		return "'=='"
 	case tokLt:
 		return "'<'"
+	case tokLe:
+		return "'<='"
 	case tokNotEq:
 		return "'!='"
 	case tokGe:

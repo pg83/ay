@@ -217,11 +217,21 @@ func evalLt(nodes []CondNode, n *CondNode, env Environment) bool {
 	l := evalAtomNode(nodes, n.L, env, true)
 	r := evalAtomNode(nodes, n.R, env, false)
 
-	if !l.isNum || !r.isNum {
-		throwFmt("macros: < requires int operands, got left=%s right=%s", atomTypeName(l), atomTypeName(r))
+	return l.integer() < r.integer()
+}
+
+func (v AtomVal) integer() int {
+	if v.isNum {
+		return v.num
 	}
 
-	return l.num < r.num
+	n, err := strconv.Atoi(v.str)
+
+	if err != nil {
+		return 0
+	}
+
+	return n
 }
 
 func makeDefaultIfEnv() Environment {
