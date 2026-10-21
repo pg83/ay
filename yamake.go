@@ -207,6 +207,8 @@ type AddInclStmt struct {
 	CythonPaths      []ANY
 	AsmPaths         []ANY
 	ProtoGlobalPaths []ANY
+	FlatcPaths       []ANY
+	FlatcGlobalPaths []ANY
 	SwigPaths        []ANY
 	SwigGlobalPaths  []ANY
 	UserGlobalPaths  []ANY
@@ -1857,7 +1859,7 @@ func splitFlagsByGlobal(args []ANY) (globalFlags, ownFlags []ANY) {
 }
 
 func splitAddInclPaths(args []ANY) *AddInclStmt {
-	var globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, swigPaths, swigGlobalPaths, userGlobalPaths, allPaths []ANY
+	var globalPaths, oneLevelPaths, ownPaths, cythonPaths, asmPaths, protoGlobalPaths, flatcPaths, flatcGlobalPaths, swigPaths, swigGlobalPaths, userGlobalPaths, allPaths []ANY
 
 	for i := 0; i < len(args); i++ {
 		if args[i] == kwONE_LEVEL.any() {
@@ -1874,6 +1876,13 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 		}
 
 		if args[i] == kwFOR.any() {
+			if i+2 < len(args) && args[i+1].string() == "flatc" {
+				flatcPaths = append(flatcPaths, args[i+2])
+				i += 2
+
+				continue
+			}
+
 			if i+2 < len(args) && args[i+1].string() == "cython" {
 				cythonPaths = append(cythonPaths, args[i+2])
 				i += 2
@@ -1910,6 +1919,14 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 			i++
 
 			if i < len(args) && args[i] == kwFOR.any() {
+				if i+2 < len(args) && args[i+1].string() == "flatc" {
+					flatcPaths = append(flatcPaths, args[i+2])
+					flatcGlobalPaths = append(flatcGlobalPaths, args[i+2])
+					i += 2
+
+					continue
+				}
+
 				if i+2 < len(args) && args[i+1].string() == "cython" {
 					cythonPaths = append(cythonPaths, args[i+2])
 					i += 2
@@ -1967,6 +1984,8 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 		CythonPaths:      astArgs.list(cythonPaths...),
 		AsmPaths:         astArgs.list(asmPaths...),
 		ProtoGlobalPaths: astArgs.list(protoGlobalPaths...),
+		FlatcPaths:       astArgs.list(flatcPaths...),
+		FlatcGlobalPaths: astArgs.list(flatcGlobalPaths...),
 		SwigPaths:        astArgs.list(swigPaths...),
 		SwigGlobalPaths:  astArgs.list(swigGlobalPaths...),
 		UserGlobalPaths:  astArgs.list(userGlobalPaths...),

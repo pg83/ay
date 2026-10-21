@@ -62,14 +62,14 @@ func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 	postprocess := buildScriptsPostprocessGoFbsPy
 	tarSources := buildScriptsTarSourcesPy
 	head := na.anyList(tool.any(), strGo2.any(), argGenMutable.any(), strGoNamespace.any(), internStr(goPackageName(module, d)).any())
-	tail := na.anyList(argI.any(), argB.any(), argI.any(), argS.any(), argDashO.any(), generated.any(), src.any())
+	tail := na.anyList(argDashO.any(), generated.any(), src.any())
 	post := na.anyList(d.tc.Python3.any(), postprocess.any(), strArcadiaPrefix.any(), internStr(goArcPrefix).any(), strInputDir.any(), bindir.any(), strMap.any())
 	tar := na.anyList(d.tc.Python3.any(), tarSources.any(), strFlat.any(), strInput.any(), generated.any(), strOutput.any(), out.any(), strExts.any(), strGo3.any())
 
 	node := Node{
 		Platform: instance.Platform, Env: envVarsVCS,
 		Cmds: na.cmdList(
-			Cmd{CmdArgs: na.chunkList(head, d.flatcFlags, tail), Cwd: bldRootDirVFS, Env: envVarsVCS},
+			Cmd{CmdArgs: na.chunkList(head, d.flatcFlags, flatcIOLeadArgs[:len(flatcIOLeadArgs)-1], e.peers.FlatcIncludeArgs, tail), Cwd: bldRootDirVFS, Env: envVarsVCS},
 			Cmd{CmdArgs: na.chunkList(post, e.peers.FbsNamespaces), Env: envVarsVCS},
 			Cmd{CmdArgs: na.chunkList(tar), Env: envVarsVCS},
 		),

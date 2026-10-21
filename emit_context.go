@@ -10,6 +10,7 @@ type PeerContext struct {
 	ResourceGlobals   []ResourceDecl
 	ProtoInclude      []VFS
 	FbsNamespaces     []ANY
+	FlatcIncludeArgs  []ANY
 	LDFlagsGlobal     []ANY
 }
 
