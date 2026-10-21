@@ -29,9 +29,15 @@ class JavaDependencyContractsTest(unittest.TestCase):
         files = tree("WITH_KOTLIN()\nJAVA_SRCS(SRCDIR src **/*.kt)", **{
             "consumer/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nPEERDIR(app)\nEND()\n",
         })
-        graph = lib.make(files, "app", "consumer", "--target-platform-tests")
-        lint = test_nodes(graph)["app/ktlint"]
-        self.assertIn(lib.node_by_output(graph, "$(B)/app/app-interface.jar")["uid"], lint["deps"])
+        dependencies = []
+        for targets in (("app", "consumer"), ("consumer", "app")):
+            with self.subTest(targets=targets):
+                graph = lib.make(files, *targets, "--target-platform-tests")
+                lint = test_nodes(graph)["app/ktlint"]
+                by_uid = {n["uid"]: n["outputs"][0] for n in graph["graph"]}
+                dependencies.append(sorted(by_uid[uid] for uid in lint["deps"]))
+                self.assertIn(lib.node_by_output(graph, "$(B)/app/app-interface.jar")["uid"], lint["deps"])
+        self.assertEqual(dependencies[0], dependencies[1])
 
     def test_junit_native_dependencies_stop_at_consuming_peers(self):
         files = junit_tree("JUNIT5()\nPEERDIR(lib)\nEND()\n")

@@ -288,6 +288,10 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 	}
 
 	for _, target := range all {
+		if target.Declaration != nil && isJavaModuleType(target.Declaration.Name) {
+			ctx.genJavaTests(target.Path, target.Declaration.Name)
+		}
+
 		ctx.emitConfiguredSubmoduleTests(target.Path)
 	}
 

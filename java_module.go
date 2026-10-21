@@ -722,7 +722,9 @@ func (ctx *GenCtx) genJavaTarget(dir string, name TOK) {
 			ctx.emit.result(ref)
 		}
 	}
+}
 
+func (ctx *GenCtx) genJavaTests(dir string, name TOK) {
 	if !ctx.testMode {
 		return
 	}
@@ -730,9 +732,11 @@ func (ctx *GenCtx) genJavaTarget(dir string, name TOK) {
 	for _, u := range javaModuleUnits[name] {
 		res := genModule(ctx, ModuleInstance{Path: source(dir), Kind: u.sub, Language: LangJava, Platform: ctx.target, Demand: demandSelf})
 
-		if res.java == nil {
+		if res.java == nil || res.testsEmitted {
 			continue
 		}
+
+		res.testsEmitted = true
 
 		for _, ref := range ctx.javaEmitTests(res.java) {
 			ctx.emit.result(ref)
