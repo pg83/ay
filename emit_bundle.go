@@ -14,11 +14,6 @@ func (e *EmitContext) emitBundles() {
 		}
 
 		src, srcRef, resolved := e.resolveBundleSource(b.Target)
-
-		if resolved && b.Suffix != "" {
-			src = build(src.relString(), b.Suffix)
-		}
-
 		ref := ctx.emit.reserve()
 
 		if b.Output != "" {
@@ -27,7 +22,7 @@ func (e *EmitContext) emitBundles() {
 
 			e.emitReservedNode(Node{Platform: instance.Platform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(args), Env: envVarsVCS}), Env: envVarsVCS, Inputs: ctx.na.inputList(ctx.na.vfsList(src, script)), Outputs: ctx.na.vfsList(dst), DepRefs: ctx.na.refList(srcRef), KV: &bundleKV, Resources: usesPython3}, ref)
 		} else {
-			e.emitBundleNode(d.tc.Python3, src, dst, srcRef, resolved, ref)
+			e.emitBundleNode(d.tc.Python3, src, dst, b.Suffix, srcRef, resolved, ref)
 		}
 
 		e.register(GeneratedFileInfo{
@@ -78,7 +73,7 @@ func hasModuleOpener(stmts []Stmt) bool {
 	return false
 }
 
-func (e *EmitContext) emitBundleNode(python3 VFS, src, dst VFS, srcRef NodeRef, resolved bool, id NodeRef) {
+func (e *EmitContext) emitBundleNode(python3 VFS, src, dst VFS, suffix string, srcRef NodeRef, resolved bool, id NodeRef) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	fsTools := copyFsToolsVFS
@@ -87,7 +82,7 @@ func (e *EmitContext) emitBundleNode(python3 VFS, src, dst VFS, srcRef NodeRef, 
 	cmdArgs = append(cmdArgs, python3.any(), fsTools.any(), argRename.any())
 
 	if resolved {
-		cmdArgs = append(cmdArgs, src.any())
+		cmdArgs = append(cmdArgs, internV(src.prefix(), src.relString(), suffix).any())
 	}
 
 	cmdArgs = append(cmdArgs, dst.any())

@@ -52,6 +52,19 @@ class EmitBundleTest(unittest.TestCase):
         self.assertIn(bundle["uid"], extracted["deps"])
         self.assertIn("$(B)/cons/input.tar.gz", extracted["inputs"])
 
+    def test_suffix_changes_the_command_path_but_keeps_the_primary_result_input(self):
+        files = base_files()
+        files["app/ya.make"] = f"PROGRAM(app)\n{lib.BARE_MODULE}USE_SDC_META()\nEND()\n"
+        for suffix in ("", ".sdcmeta"):
+            with self.subTest(suffix=suffix):
+                files["pkg/ya.make"] = f"UNION()\nBUNDLE(app SUFFIX {suffix} NAME artifact)\nEND()\n" if suffix else "UNION()\nBUNDLE(app NAME artifact)\nEND()\n"
+                graph = lib.make(files, "pkg")
+                bundle = lib.node_by_output(graph, "$(B)/pkg/artifact")
+                producer = lib.node_by_output(graph, "$(B)/app/app")
+                self.assertEqual(bundle["cmds"][0]["cmd_args"][-2:], ["$(B)/app/app" + suffix, "$(B)/pkg/artifact"])
+                self.assertEqual([p for p in bundle["inputs"] if p.startswith("$(B)/")], ["$(B)/app/app"])
+                self.assertIn(producer["uid"], bundle["deps"])
+
     def test_generated_file_wires_producer_dependency(self):
         files = base_files()
         files.update({

@@ -123,7 +123,8 @@ END()
         meta = lib.only_node_by_kind(graph, "SM")
         self.assertIn(meta["uid"], linked["deps"])
         bundled = lib.node_by_output(graph, "$(B)/sdc_install/common_bin/runner.sdcmeta")
-        self.assertIn("$(B)/app/app.sdcmeta", bundled["inputs"])
+        self.assertIn("$(B)/app/app", bundled["inputs"])
+        self.assertEqual(bundled["cmds"][0]["cmd_args"][-2:], ["$(B)/app/app.sdcmeta", "$(B)/sdc_install/common_bin/runner.sdcmeta"])
         self.assertIn(linked["uid"], bundled["deps"])
 
 
