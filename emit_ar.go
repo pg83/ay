@@ -21,6 +21,7 @@ func (e *EmitContext) emitARNamed(
 	node := composeARNode(instance, archivePath, objRefs, objPaths, arPluginPath, tc, hostP, emit.nodeArenas())
 
 	e.appendModuleOutputs(&node)
+	e.includeNodeInputs(&node)
 	e.resolveNodeCodegenRefs(&node)
 
 	return emit.emitNode(node)
@@ -163,6 +164,7 @@ func (e *EmitContext) emitARNode(
 ) NodeRef {
 	node := composeARNode(instance, archivePath, objRefs, objPaths, arPluginPath, tc, hostP, emit.nodeArenas())
 
+	e.includeNodeInputs(&node)
 	e.resolveNodeCodegenRefs(&node)
 
 	return emit.emitNode(node)

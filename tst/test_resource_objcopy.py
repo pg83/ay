@@ -46,6 +46,16 @@ def make_error(files):
 
 
 class ResourceObjcopyTest(unittest.TestCase):
+    def test_archive_retains_template_resource_inputs(self):
+        for filename, expected in (("data.g.in", True), ("data.h.in", True), ("data.txt", False), ("data.h", False)):
+            with self.subTest(filename=filename):
+                files = base_files(f"SRCS(local.cpp)\nRESOURCE(DONT_PARSE {filename} payload)\n")
+                files["lib/local.cpp"] = "int local;\n"
+                files[f"lib/{filename}"] = "payload\n"
+                graph = lib.make(files, "lib")
+                archive = lib.node_by_output(graph, "$(B)/lib/liblib.global.a")
+                self.assertEqual(f"$(S)/lib/{filename}" in archive["inputs"], expected)
+
     def test_kv_entries_resolve_rootrel_inputs(self):
         files = base_files(
             "RUN_PROGRAM(tools/gen IN in.txt OUT_NOAUTO gen.bin)\n"
