@@ -98,14 +98,6 @@ type AtomVal struct {
 	isNum bool
 }
 
-func atomTypeName(v AtomVal) string {
-	if v.isNum {
-		return "int"
-	}
-
-	return "string"
-}
-
 func evalAtomNode(nodes []CondNode, i int32, env Environment, variable bool) AtomVal {
 	n := &nodes[i]
 
@@ -202,7 +194,7 @@ func evalEq(nodes []CondNode, n *CondNode, env Environment) bool {
 
 	if l.isNum {
 		if !r.isNum {
-			throwFmt("macros: == operand type mismatch: left is int %d, right is %s", l.num, atomTypeName(r))
+			throwFmt("macros: == operand type mismatch: left is int %d, right is string", l.num)
 		}
 
 		return l.num == r.num
