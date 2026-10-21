@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -518,6 +519,19 @@ class PySrcsTest(unittest.TestCase):
         graph = lib.make(files, "lib")
         all_kvs = [kv for node in objcopy_nodes(graph, "lib") for kv in kvs(node)]
         self.assertFalse([kv for kv in all_kvs if kv.startswith("py/namespace/")])
+
+    def test_all_python_sources_only_initialize_nested_bytecode_suffix(self):
+        files = python_base()
+        files.update({
+            "app/ya.make": "PY3_LIBRARY()\nALL_PY_SRCS(NAMESPACE custom sources)\nEND()\n",
+            "app/sources/a.py": "",
+        })
+        graph = lib.make(files, "app")
+        suffix = base64.b32encode(hashlib.md5(b"$S/app").digest()).decode().lower()[:4]
+        bytecode = lib.node_by_output(graph, f"$(B)/app/sources/a.py.{suffix}.yapyc3")
+        resource = objcopy_with_kv(graph, "app", "resfs/src/resfs/file/py/custom/sources/a.py=app/sources/a.py")
+        self.assertIn(bytecode["outputs"][0], resource["inputs"])
+        self.assertIn(bytecode["uid"], resource["deps"])
 
     def test_all_py_srcs_and_program_main(self):
         files = python_base()
