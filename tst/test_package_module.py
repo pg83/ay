@@ -1,6 +1,7 @@
 import unittest
 
 import lib
+from test_mlaunch import files as mlaunch_files
 
 
 def files():
@@ -15,6 +16,37 @@ def files():
 
 
 class PackageModuleTest(unittest.TestCase):
+    def test_default_package_name_uses_three_directory_components(self):
+        for directory, name in (("pkg", "pkg"), ("scope/pkg", "scope-pkg"), ("scope/group/deep/pkg", "group-deep-pkg")):
+            with self.subTest(directory=directory):
+                sources = {directory + "/ya.make": "PACKAGE()\nEND()\n"}
+                graph = lib.make(sources, directory)
+                final = lib.node_by_output(graph, f"$(B)/{directory}/{name}.final.pkg.fake")
+                union = lib.node_by_output(graph, f"$(B)/{directory}/{name}.pkg.fake")
+                self.assertIn(final["uid"], graph["result"])
+                self.assertNotIn(union["uid"], graph["result"])
+                self.assertIn(union["uid"], final["deps"])
+
+    def test_explicit_package_name_overrides_the_default(self):
+        directory = "scope/group/deep/pkg"
+        sources = {directory + "/ya.make": "PACKAGE(chosen)\nEND()\n"}
+        graph = lib.make(sources, directory)
+        final = lib.node_by_output(graph, f"$(B)/{directory}/chosen.final.pkg.fake")
+        union = lib.node_by_output(graph, f"$(B)/{directory}/chosen.pkg.fake")
+        self.assertIn(final["uid"], graph["result"])
+        self.assertIn(union["uid"], final["deps"])
+
+    def test_pipeline_deployment_inherits_the_package_default_name(self):
+        sources = mlaunch_files()
+        directory = "scope/group/deep/pipeline"
+        sources[directory + "/ya.make"] = f"MLAUNCH_PIPELINE()\n{lib.BARE_MODULE}END()\n"
+        graph = lib.make(sources, directory)
+        package = lib.node_by_output(graph, "$(B)/" + directory + "/group-deep-pipeline.final.pkg.fake")
+        pipeline = lib.node_by_output(graph, "$(B)/" + directory + "/pipeline")
+        golaunch = lib.node_by_output(graph, "$(B)/" + directory + "/pipeline.golaunch")
+        self.assertIn(pipeline["uid"], package["deps"])
+        self.assertIn(golaunch["uid"], package["deps"])
+
     def test_bundle_selects_the_final_package_after_a_union_peer(self):
         sources = files()
         sources["bundled/ya.make"] = "UNION()\nBUNDLE(pkg NAME package-result)\nEND()\n"

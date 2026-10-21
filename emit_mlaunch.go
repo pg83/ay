@@ -101,7 +101,12 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	e.emitDeclaredProducers(nil)
 
 	module := e.instance.Path.relString()
-	name := programBinaryName(e.instance, e.d.moduleStmt)
+	name := realPrjName(module)
+
+	if len(e.d.moduleStmt.Args) > 0 {
+		name = programBinaryName(e.instance, e.d.moduleStmt)
+	}
+
 	out := build(module, "/", name, ".final.pkg.fake")
 	na := e.ctx.na
 	copyScript := buildScriptsCopyToDirPy
