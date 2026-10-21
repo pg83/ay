@@ -72,6 +72,7 @@ const (
 	tokenExpandLazy TokenExpansion = iota
 	tokenExpandArguments
 	tokenExpandFinal
+	tokenExpandAssignment
 )
 
 type CppProtoPlugin struct {
@@ -1450,7 +1451,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 		case *SetStmt:
 
-			value := expandScalarVarRef(v.Value, env)
+			value := expandAssignedScalarVarRef(v.Value, env)
 			perlMask := perlInputMask(v.NameEnv)
 			perlChanged := perlMask != 0 && env.string(v.NameEnv) != value
 
@@ -1554,7 +1555,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.peerdirs = append(d.peerdirs, internStr(enumSerPeer).any())
 			}
 		case *DefaultVarStmt:
-			value := expandScalarVarRef(v.Value, env)
+			value := expandAssignedScalarVarRef(v.Value, env)
 			bound := env.hasBindingID(v.NameEnv)
 
 			if d.defaultVars == nil {
@@ -1693,10 +1694,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *ResourceStmt:
-			if isGoModuleType(d.unit.Type) {
-				entries := make([]ResourceEntry, len(v.Pairs))
+			pairs := expandResourcePairs(v.Pairs, env)
 
-				for i, pair := range v.Pairs {
+			if isGoModuleType(d.unit.Type) {
+				entries := make([]ResourceEntry, len(pairs))
+
+				for i, pair := range pairs {
 					entries[i] = ResourceEntry{Path: pair.Path, Key: pair.Key}
 				}
 
@@ -1707,11 +1710,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			ensureResourcePeer(modulePath, d)
 
-			for i, pair := range v.Pairs {
+			for i, pair := range pairs {
 				d.resources = append(d.resources, ResourceEntry{
 					Path:         pair.Path,
 					Key:          pair.Key,
-					EndsBatch:    i == len(v.Pairs)-1,
+					EndsBatch:    i == len(pairs)-1,
 					DontCompress: v.DontCompress,
 				})
 			}
@@ -4305,7 +4308,7 @@ func expandStmtToken(s string, env Environment) string {
 type TokenExpansion uint8
 
 func (phase TokenExpansion) clearsUnbound(name string) bool {
-	return phase == tokenExpandFinal || phase == tokenExpandArguments && !keepDeferredVar(name)
+	return phase == tokenExpandFinal || phase == tokenExpandArguments && !keepDeferredVar(name) || phase == tokenExpandAssignment && name != envBINDIR.string() && name != envCURDIR.string()
 }
 
 func keepDeferredVar(name string) bool {
@@ -4700,6 +4703,16 @@ func isExpandVarName(s string) bool {
 
 func expandScalarVarRef(s string, env Environment) string {
 	return expandStmtToken(s, env)
+}
+
+func expandAssignedScalarVarRef(s string, env Environment) string {
+	bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
+	value := expandToken(s, env, tokenExpandAssignment)
+
+	env.rebind(envBINDIR, bindir)
+	env.rebind(envCURDIR, curdir)
+
+	return value
 }
 
 func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData, group int) {

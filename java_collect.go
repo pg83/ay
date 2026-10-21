@@ -220,7 +220,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: ps, explicit: true})
 			}
 		case *SetStmt:
-			env.setFromString(v.NameEnv, expandScalarVarRef(v.Value, env))
+			env.setFromString(v.NameEnv, expandAssignedScalarVarRef(v.Value, env))
 
 			if d.rawVars == nil {
 				d.rawVars = map[string]string{}
@@ -228,7 +228,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 			d.rawVars[v.Name] = d.rawExpand(v.Value)
 		case *DefaultVarStmt:
-			env.setDefaultString(v.NameEnv, expandScalarVarRef(v.Value, env))
+			env.setDefaultString(v.NameEnv, expandAssignedScalarVarRef(v.Value, env))
 
 			if _, ok := d.rawVars[v.VarName]; !ok {
 				if d.rawVars == nil {

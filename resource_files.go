@@ -27,6 +27,28 @@ func expandResourceFileArgs(args []ANY, env Environment) []string {
 	return expanded
 }
 
+func expandResourcePairs(pairs []ResourcePair, env Environment) []ResourcePair {
+	bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
+
+	expand := func(value string) string {
+		value = expandStmtToken(value, env)
+		value = strings.ReplaceAll(value, "$(S)", "${ARCADIA_ROOT}")
+
+		return strings.ReplaceAll(value, "$(B)", "${ARCADIA_BUILD_ROOT}")
+	}
+
+	expanded := make([]ResourcePair, len(pairs))
+
+	for i, pair := range pairs {
+		expanded[i] = ResourcePair{Path: expand(pair.Path), Key: expand(pair.Key)}
+	}
+
+	env.rebind(envBINDIR, bindir)
+	env.rebind(envCURDIR, curdir)
+
+	return expanded
+}
+
 func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string) []ResourceEntry {
 	prefix := ""
 	prefixToStrip := ""

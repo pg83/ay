@@ -1090,11 +1090,11 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 	}
 
 	if set, ok := stmt.(*SetStmt); ok {
-		p.includes.env.setFromString(set.NameEnv, expandScalarVarRef(set.Value, p.includes.env))
+		p.includes.env.setFromString(set.NameEnv, expandAssignedScalarVarRef(set.Value, p.includes.env))
 	}
 
 	if def, ok := stmt.(*DefaultVarStmt); ok && !p.includes.env.hasBindingID(def.NameEnv) {
-		p.includes.env.setFromString(def.NameEnv, expandScalarVarRef(def.Value, p.includes.env))
+		p.includes.env.setFromString(def.NameEnv, expandAssignedScalarVarRef(def.Value, p.includes.env))
 	}
 
 	p.stmtScratch = append(p.stmtScratch, stmt)

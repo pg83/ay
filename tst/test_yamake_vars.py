@@ -103,12 +103,12 @@ class YaMakeVariablesTest(unittest.TestCase):
                     f"SET({key} 2.0)\nCFLAGS(-DVERSION=${{{key}}})"
                 )), ["-DVERSION=2.0"])
 
-    def test_deferred_and_chained_references(self):
+    def test_set_captures_values_before_later_assignments(self):
         self.assertEqual(self.user_cflags(library(
             "SET(lower low)\nSET(A ${B})\nSET(B final)\n"
             "SET(C1 ${C2})\nSET(C2 ${C3})\nSET(C3 end)\nSET(P ${C1})\n"
             "CFLAGS(${lower} ${A} $A ${P})"
-        )), ["low", "final", "final", "end"])
+        )), ["low"])
 
     def test_builtin_and_boolean_bindings(self):
         self.assertEqual(self.user_cflags(library(

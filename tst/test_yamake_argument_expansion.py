@@ -33,7 +33,7 @@ class ArgumentExpansionTest(unittest.TestCase):
             "--resource=$(B)/resources/Declared/bin/tool", "--unset=", "--value=pre.post",
         ])
 
-    def test_lazy_variable_chains_resolve_before_command_evaluation(self):
+    def test_assignment_does_not_resolve_a_later_variable_for_commands(self):
         sources = {
             "p/ya.make": "UNION()\nSET(ITEM ${LATER})\nSET(LATER payload/one)\n"
                 "SET_LIST_PRE_SUF(INPUTS ${ARCADIA_ROOT}/ /data.txt ${ITEM})\n"
@@ -43,8 +43,8 @@ class ArgumentExpansionTest(unittest.TestCase):
         lib.tool_program(sources, "tools/gen", "gen")
         graph = lib.make(sources, "p")
         node = lib.node_by_output(graph, "$(B)/p/main.bin")
-        self.assertEqual(node["cmds"][0]["cmd_args"], ["$(B)/tools/gen/gen", "payload/one"])
-        self.assertIn("$(S)/payload/one/data.txt", node["inputs"])
+        self.assertEqual(node["cmds"][0]["cmd_args"], ["$(B)/tools/gen/gen"])
+        self.assertNotIn("$(S)/payload/one/data.txt", node["inputs"])
 
     def test_unset_optional_lists_do_not_create_arguments_outputs_or_inputs(self):
         graph = lib.make(files(), "p")
