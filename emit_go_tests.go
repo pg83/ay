@@ -65,7 +65,7 @@ func (e *EmitContext) goTestSuites(goRef NodeRef, vetReport VFS, globals []Resou
 	}
 
 	if goNeedLint(instance.Path) {
-		suites = append(suites, e.goVetSuite(goRef, vetReport, globals))
+		suites = append(suites, e.goVetSuite(vetReport, globals))
 	}
 
 	if e.d.moduleStmt.Name == tokGoTest {
@@ -159,11 +159,11 @@ func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite
 	return s
 }
 
-func (e *EmitContext) goVetSuite(goRef NodeRef, vetReport VFS, globals []ResourceDecl) *TestSuite {
+func (e *EmitContext) goVetSuite(vetReport VFS, globals []ResourceDecl) *TestSuite {
 	s := e.goSuiteBase("govet", "govet", "style", globals)
 
 	s.runInputs = append(s.runInputs, vetReport)
-	s.deps = []NodeRef{goRef}
+	s.projectBuildDeps = true
 	s.runCmd = func(work string, _ TestChunk) []ANY {
 		return []ANY{
 			internStr(testToolHostPath).any(), strRunCheck.any(),

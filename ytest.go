@@ -302,6 +302,7 @@ type TestSuite struct {
 	clearEnvironment       bool
 	noRetries              bool
 	deps                   []NodeRef
+	projectBuildDeps       bool
 	env                    []string
 	tags                   []string
 	runCwd                 string
