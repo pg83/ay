@@ -965,7 +965,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.protoCmdPeers = protoCmdPeers(d)
 	}
 
-	if d.resourcePeerDeferred || len(d.pyPyiResources) > 0 || len(d.pySrcs) > 0 || len(d.pyRegister) > 0 {
+	if d.resourcePeerDeferred || len(d.pyPyiResources) > 0 || len(d.pySrcs) > 0 {
 		ensureResourcePeer(modulePath, d)
 	}
 

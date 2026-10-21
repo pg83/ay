@@ -74,11 +74,61 @@ def fixture():
     return files
 
 
+def registration_files(version, resources=False):
+    files = fixture()
+    python = "PYTHON2_ADDINCL()" if version == 2 else "USE_PYTHON3()"
+    resource = "RESOURCE(payload.txt payload)\n" if resources else ""
+    files.update({
+        "native/ya.make": (
+            f"LIBRARY()\n{NO_PLATFORM}{python}\n"
+            f"SRCS(plain.c)\nPY_REGISTER(native_module)\n{resource}END()\n"
+        ),
+        "native/plain.c": "",
+        "native/payload.txt": "payload\n",
+        "library/cpp/resource/ya.make": (
+            f"LIBRARY()\n{NO_PLATFORM}"
+            "ADDINCL(GLOBAL library/cpp/resource/include)\n"
+            "CXXFLAGS(GLOBAL -DRESOURCE_RUNTIME)\nSRCS(resource.cpp)\nEND()\n"
+        ),
+        "library/cpp/resource/resource.cpp": "",
+        "library/cpp/resource/include/marker.h": "",
+        "library/cpp/resource/registry.h": "",
+    })
+    return files
+
+
 def cc_args(graph, output):
     return lib.node_by_output(graph, output)["cmds"][0]["cmd_args"]
 
 
 class PythonNativeCompileTest(unittest.TestCase):
+    def test_registration_alone_does_not_add_resource_runtime(self):
+        for version in (2, 3):
+            with self.subTest(version=version):
+                graph = lib.make(registration_files(version), "native")
+                suffix = "" if version == 2 else "3"
+                output = f"$(B)/native/native_module.reg{suffix}.cpp"
+                producer = lib.node_by_output(graph, output)
+                compiled = lib.node_by_output(graph, output + ".o")
+                self.assertEqual(compiled["deps"], [producer["uid"]])
+                for source in ("plain.c", f"native_module.reg{suffix}.cpp"):
+                    args = cc_args(graph, f"$(B)/native/{source}.o")
+                    self.assertNotIn("-I$(S)/library/cpp/resource/include", args)
+                    self.assertNotIn("-DRESOURCE_RUNTIME", args)
+
+    def test_registered_module_with_resources_keeps_resource_runtime(self):
+        for version in (2, 3):
+            with self.subTest(version=version):
+                graph = lib.make(registration_files(version, resources=True), "native")
+                suffix = "" if version == 2 else "3"
+                args = cc_args(graph, f"$(B)/native/native_module.reg{suffix}.cpp.o")
+                self.assertIn("-I$(S)/library/cpp/resource/include", args)
+                self.assertIn("-DRESOURCE_RUNTIME", args)
+                self.assertTrue(any(
+                    "$(S)/native/payload.txt" in node["inputs"]
+                    for node in graph["graph"]
+                ))
+
     def test_py_register_source_compiles_with_module_cflags(self):
         graph = lib.make(fixture(), "pyr")
         generator = lib.node_by_output(graph, "$(B)/r/foo.reg3.cpp")
