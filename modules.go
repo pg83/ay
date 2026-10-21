@@ -360,17 +360,16 @@ type CompileSpec struct {
 }
 
 type SrcMeta struct {
-	Source         ANY
-	Prio           int
-	Seq            int
-	Stmt           int
-	Global         bool
-	RosZeroCopy    bool
-	Bucket         int
-	Compile        CompileSpec
-	CompileRef     NodeRef
-	PyMeta         uint32
-	SourceResolved bool
+	Source      ANY
+	Prio        int
+	Seq         int
+	Stmt        int
+	Global      bool
+	RosZeroCopy bool
+	Bucket      int
+	Compile     CompileSpec
+	CompileRef  NodeRef
+	PyMeta      uint32
 }
 
 func (m SrcMeta) sortKey(round uint64) uint64 {
@@ -1413,17 +1412,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					prio, seq = stmtPrioSrcs, d.nextDeclSeq()
 				}
 
-				resolved := false
-				if srcExtClassOf(srcTok.relOrSelf().any()) == srcExtCSource {
-					resolved = srcTok.vfs() != 0 || fs.isFile(internStr(modulePath), srcTok.string()) || fs.isFile(srcRootRel, srcTok.string())
-					for _, dir := range d.srcDirs {
-						if !resolved && dir.isSource() {
-							resolved = fs.isFile(dir.rel(), srcTok.string())
-						}
-					}
-				}
-
-				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global, Compile: compile, SourceResolved: resolved})
+				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global, Compile: compile})
 				globalNext = false
 
 				switch srcExtClassOf(srcTok) {
