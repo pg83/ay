@@ -88,6 +88,28 @@ def module_options(name, src):
 
 
 class CythonTest(unittest.TestCase):
+    def test_cython_system_addincl_reuses_existing_native_include_directories(self):
+        paths = (
+            "contrib/python/numpy/include/numpy/core/include",
+            "contrib/python/numpy/include/numpy/core/include/numpy",
+            "contrib/python/numpy/include/numpy/core/src/common",
+            "contrib/python/numpy/include/numpy/core/src/npymath",
+            "contrib/python/numpy/include/numpy/distutils/include",
+        )
+        for macro in ("BUILDWITH_CYTHON_C(fast.pyx)", "PY_SRCS(CYTHON_C fast.pyx)"):
+            with self.subTest(macro=macro):
+                files = python_base()
+                files.update({
+                    "lib/ya.make": "PY3_LIBRARY()\nADDINCL(" + " ".join(paths) + ")\n" + macro + "\nEND()\n",
+                    "lib/fast.pyx": "",
+                    **{path + "/.keep": "" for path in paths},
+                })
+                graph = lib.make(files, "app")
+                compiled = next(node for node in graph["graph"]
+                    if node["kv"].get("p") == "CC" and "$(B)/lib/fast.pyx.c" in node["inputs"])
+                for path in paths:
+                    self.assertEqual(args(compiled).count("-I$(S)/" + path), 1)
+
     def test_cython_flags_append_to_module_options_before_per_source_options(self):
         files = python_base()
         files.update({

@@ -552,6 +552,7 @@ func appendCythonCCAddIncl(na *NodeArenas, addIncl []VFS, numpyBeforeInclude boo
 				out = append(out, addIncl[:i]...)
 				out = append(out, cythonNumpyAddIncl...)
 				out = append(out, addIncl[i:]...)
+				out = dedupInPlace(out)
 
 				return out[:len(out):len(out)]
 			}
@@ -560,6 +561,7 @@ func appendCythonCCAddIncl(na *NodeArenas, addIncl []VFS, numpyBeforeInclude boo
 
 	out = append(out, addIncl...)
 	out = append(out, cythonNumpyAddIncl...)
+	out = dedupInPlace(out)
 
 	return out[:len(out):len(out)]
 }
