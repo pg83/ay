@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func collectDllFor(ctx *GenCtx, dir string, kind ModuleKind, language Language, stmt *UnknownStmt, env Environment, d *ModuleData, onWarn func(Warn)) {
+func withDllForStmts(ctx *GenCtx, dir string, stmt *UnknownStmt, visit func([]Stmt)) {
 	if len(stmt.Args) == 0 {
 		throwFmt("DLL_FOR expects a source directory")
 	}
@@ -65,7 +65,7 @@ func collectDllFor(ctx *GenCtx, dir string, kind ModuleKind, language Language, 
 	}
 
 	out = appendDllForModule(out, ctx.parseFileCached(internJoined(forDir, "ya.make").string()), args)
-	collectStmts(ctx, dir, kind, language, out, env, d, onWarn)
+	visit(out)
 }
 
 func appendDllForModule(out, stmts []Stmt, args []ANY) []Stmt {
