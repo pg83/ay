@@ -1,6 +1,7 @@
 import unittest
 
 import lib
+from test_python_srcs import python_base
 
 
 LIBRARY_HEAD = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
@@ -170,8 +171,8 @@ class RunPython3Test(unittest.TestCase):
         run = lib.node_by_output(graph, "$(B)/lib/gen.cpp")
         self.assertEqual(run["kv"]["p"], "PY")
         self.assertEqual(run["outputs"], [
-            "$(B)/lib/log.cpp", "$(B)/lib/gen.h", "$(B)/lib/gen.cpp",
-            "$(B)/lib/data.bin", "$(B)/lib/extra.h",
+            "$(B)/lib/gen.h", "$(B)/lib/gen.cpp", "$(B)/lib/data.bin",
+            "$(B)/lib/extra.h", "$(B)/lib/log.cpp",
         ])
         self.assertEqual(cmd(run)["cmd_args"][1:], [
             "$(S)/lib/gen.py", "$(S)", "--flag", "$(S)/lib/in.txt",
@@ -200,6 +201,46 @@ class RunPython3Test(unittest.TestCase):
             "$(B)/lib/use.cpp.o", "$(B)/lib/gen.cpp.o", "$(B)/lib/log.cpp.o",
         ])
 
+    def test_stdout_output_keeps_command_discovery_order(self):
+        for args, names in (
+            ("build.log generated.cpp", ("build.log", "generated.cpp")),
+            ("generated.cpp build.log", ("generated.cpp", "build.log")),
+        ):
+            with self.subTest(args=args):
+                files = {
+                    "lib/ya.make": (
+                        LIBRARY_HEAD + "RUN_PYTHON3(gen.py " + args
+                        + " STDOUT_NOAUTO build.log OUT generated.cpp)\nEND()\n"
+                    ),
+                    "lib/gen.py": "",
+                }
+                graph = lib.make(files, "lib", "--sandboxing")
+                run = lib.node_by_output(graph, "$(B)/lib/generated.cpp")
+                self.assertEqual(run["outputs"], ["$(B)/lib/" + name for name in names])
+                self.assertEqual(cmd(run)["cmd_args"][2:], run["outputs"])
+                self.assertEqual(cmd(run)["stdout"], "$(B)/lib/build.log")
+
+    def test_generated_python_uses_declared_output_before_stdout(self):
+        files = python_base()
+        files.update({
+            "lib/ya.make": (
+                "PY3_LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                "RUN_PYTHON3(gen.py STDOUT_NOAUTO build.log OUT_NOAUTO project.py)\n"
+                "PY_SRCS(project.py)\nEND()\n"
+            ),
+            "lib/gen.py": "",
+        })
+        graph = lib.make(files, "lib", "--sandboxing")
+        run = lib.node_by_output(graph, "$(B)/lib/project.py")
+        self.assertEqual(run["outputs"], ["$(B)/lib/project.py", "$(B)/lib/build.log"])
+        self.assertEqual(cmd(run)["stdout"], "$(B)/lib/build.log")
+        bytecode = lib.node_by_output(graph, "$(B)/lib/project.py.yapyc3")
+        resource = next(n for n in graph["graph"] if any("/objcopy_" in o for o in n["outputs"]))
+        for consumer in (bytecode, resource):
+            self.assertIn("$(B)/lib/project.py", consumer["inputs"])
+            self.assertNotIn("$(B)/lib/build.log", consumer["inputs"])
+            self.assertIn(run["uid"], consumer["deps"])
+
     def test_generated_script_and_stdout_noauto(self):
         files = {
             "lib/ya.make": (
@@ -214,7 +255,7 @@ class RunPython3Test(unittest.TestCase):
         copy = lib.node_by_output(graph, "$(B)/lib/script.py")
         run = lib.node_by_output(graph, "$(B)/lib/data.cpp")
         self.assertEqual(run["outputs"], [
-            "$(B)/lib/quiet.cpp", "$(B)/lib/data.cpp", "$(B)/lib/data.bin",
+            "$(B)/lib/data.cpp", "$(B)/lib/data.bin", "$(B)/lib/quiet.cpp",
         ])
         self.assertEqual(cmd(run)["cmd_args"][1:], ["$(B)/lib/script.py"])
         self.assertEqual(cmd(run)["stdout"], "$(B)/lib/quiet.cpp")

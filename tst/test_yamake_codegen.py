@@ -124,7 +124,7 @@ class YaMakeCodegenStatementsTest(unittest.TestCase):
             ["gen.py", "gen.lua", "in.txt", "inc.h"],
         )
         node = lib.node_by_output(graph, "$(B)/a/o.cpp")
-        self.assertEqual(node["outputs"], ["$(B)/a/s.txt", "$(B)/a/o.cpp", "$(B)/a/n.h"])
+        self.assertEqual(node["outputs"], ["$(B)/a/o.cpp", "$(B)/a/n.h", "$(B)/a/s.txt"])
         cmd = node["cmds"][0]
         self.assertEqual(cmd["cmd_args"][1:], ["$(S)/a/gen.py", "arg"])
         self.assertEqual((cmd["cwd"], cmd["stdout"], cmd["env"]["X"]), ("$(B)/a", "$(B)/a/s.txt", "1"))
