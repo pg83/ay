@@ -1560,27 +1560,21 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 
 		for _, p := range preUserProgDefaults {
-			if peerSeen(p) {
-				continue
-			}
+			peerSeen(p)
 
 			allPeers = append(allPeers, p)
 			peerKinds = append(peerKinds, peerKindProgramDefault)
 		}
 
 		for _, p := range allocatorExplicitPeers {
-			if peerSeen(p) {
-				continue
-			}
+			peerSeen(p)
 
 			allPeers = append(allPeers, p)
 			peerKinds = append(peerKinds, peerKindUserPeer)
 		}
 
 		for _, p := range postUserProgDefaults {
-			if peerSeen(p) {
-				continue
-			}
+			peerSeen(p)
 
 			allPeers = append(allPeers, p)
 			peerKinds = append(peerKinds, peerKindProgramDefault)
