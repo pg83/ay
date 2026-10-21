@@ -72,6 +72,19 @@ class ConfigurationContractsTest(unittest.TestCase):
         graph = lib.make(files, "app", "-t")
         self.assertFalse(any(n["kv"].get("run_test_node") for n in graph["graph"]))
 
+    def test_linter_config_map_requires_a_json_object(self):
+        for content, message in (("{broken", "invalid character"), ("null", "missing clang_format_json config"), ("[]", "expected JSON object")):
+            with self.subTest(content=content):
+                files = {
+                    "app/ya.make": library("SET(JSON_LINTER_DEFAULT_CONFIGS custom/maps.json)\nSTYLE_JSON(DIRS config)\n"),
+                    "app/config/settings.json": "{}", "custom/maps.json": content,
+                    "build/platform/clang/clang-format/ya.make": lib.resource_lib("CLANG_FORMAT", 21),
+                }
+                result = lib.make_process(files, "app", "-t")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertNotIn("panic:", result.stderr)
+
     def test_nested_modules_are_rejected_by_recursive_collectors(self):
         for macro in ("STYLE_JSON(DIRS_RECURSE .)", "USRV_ALL_SRCS(RECURSIVE)"):
             with self.subTest(macro=macro):

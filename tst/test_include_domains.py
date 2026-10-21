@@ -86,6 +86,21 @@ class CythonIncludeTest(unittest.TestCase):
             self.assertIn(f"$(S)/{cython3}/libc/{name}.pxd", inputs)
             self.assertNotIn(f"$(S)/{CYTHON_PY2}/libc/{name}.pxd", inputs)
 
+    def test_cimport_uses_selected_roots_when_a_compatibility_candidate_is_missing(self):
+        cython3 = "contrib/tools/cython/Cython/Includes"
+        files = {
+            "m/ya.make": library("SET(PYTHON3 yes)", "BUILDWITH_CYTHON_CPP(a.pyx)"),
+            "m/a.pyx": "from util.generic.string cimport TString\n",
+            "util/generic/string.pxd": "from libcpp.string cimport string\n",
+            f"{cython3}/libcpp/string.pxd": "",
+            "contrib/tools/cython/cython.py": "",
+        }
+        graph = lib.make(files, "m", "-k")
+        inputs = inputs_of(graph, "$(B)/m/a.pyx.cpp")
+        self.assertIn("$(S)/util/generic/string.pxd", inputs)
+        self.assertIn(f"$(S)/{cython3}/libcpp/string.pxd", inputs)
+        self.assertNotIn(f"$(S)/{CYTHON_PY2}/libcpp/string.pxd", inputs)
+
     def test_cimport_probes_and_py2_include_overrides(self):
         files = {
             "m/ya.make": library("BUILDWITH_CYTHON_CPP(a.pyx)"),

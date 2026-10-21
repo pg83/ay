@@ -390,6 +390,32 @@ class TestNodesTest(unittest.TestCase):
         self.assertIn("--recipes", args)
         self.assertFalse(any(n["kv"]["p"] == "LD" and n["outputs"][0].startswith("$(B)/exec/") for n in graph["graph"]))
 
+    def test_exectest_archive_dependency_uses_the_archive_output_directory(self):
+        files = {
+            "exec/ya.make": "EXECTEST()\nRUN(true)\nDEPENDS(tools/archive)\nEND()\n",
+            "tools/archive/ya.make": library("SRCS(source.cpp)\n"),
+            "tools/archive/source.cpp": "int value;\n",
+        }
+        graph = lib.make(files, "exec", "-t")
+        run = lib.node_by_output(graph, "$(B)/exec/test-results/exectest/meta.json")
+        archive = lib.node_by_output_prefix(graph, "$(B)/tools/archive/lib")
+        self.assertEqual(archive["kv"]["p"], "AR")
+        self.assertIn(archive["uid"], run["deps"])
+        self.assertEqual(run["env"]["PATH"], "$(B)/:$(B)/tools/archive")
+
+    def test_exectest_descriptor_dependency_uses_the_final_descriptor(self):
+        from test_proto_desc import desc_files
+        files = desc_files()
+        files.update({
+            "exec/ya.make": "EXECTEST()\nRUN(true)\nDEPENDS(tools/descriptors)\nEND()\n",
+            "tools/descriptors/ya.make": "PROTO_DESCRIPTIONS(catalog)\nEND()\n",
+        })
+        graph = lib.make(files, "exec", "-t")
+        run = lib.node_by_output(graph, "$(B)/exec/test-results/exectest/meta.json")
+        descriptor = lib.node_by_output(graph, "$(B)/tools/descriptors/catalog.protodesc")
+        self.assertIn(descriptor["uid"], run["deps"])
+        self.assertEqual(run["env"]["PATH"], "$(B)/:$(B)/tools/descriptors")
+
     def test_exectest_preserves_runtime_variables_and_sets_its_dependency_path(self):
         import base64
 

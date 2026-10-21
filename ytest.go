@@ -375,8 +375,6 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 
 			if res.LDPath != nil {
 				output = res.LDPath.relString()
-			} else if res.ARPath != nil {
-				output = res.ARPath.relString()
 			}
 
 			execDirs = append(execDirs, testExecDependencyDir(output))

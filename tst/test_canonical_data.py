@@ -100,6 +100,16 @@ class CanonicalDataTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertFalse(any(n.get("kv", {}).get("p") == "DL" for n in json.loads(result.stdout)["graph"]))
 
+    def test_unknown_canonical_uri_does_not_create_a_resource_dependency(self):
+        graph = lib.make(fixture({"uri": "https://example.org/unrelated", "checksum": "abc"}), "test", "-t")
+        baseline = lib.make(fixture(), "test", "-t")
+        def dependency_outputs(g):
+            index = {n["uid"]: n for n in g["graph"]}
+            test = lib.node_by_output(g, "$(B)/test/test-results/exectest/meta.json")
+            return sorted(tuple(index[uid]["outputs"]) for uid in test["deps"])
+        self.assertEqual(dependency_outputs(graph), dependency_outputs(baseline))
+        self.assertFalse(any(n.get("kv", {}).get("p") == "DL" for n in graph["graph"]))
+
     def test_canonical_resource_uri_requires_a_string(self):
         result = lib.make_process(fixture({"uri": 1, "checksum": "abc"}), "test", "-t")
         self.assertNotEqual(result.returncode, 0)
