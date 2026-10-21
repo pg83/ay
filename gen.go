@@ -730,6 +730,14 @@ func (ctx *GenCtx) emitModuleTests(results ...*ModuleEmitResult) {
 		r.testsEmitted = true
 
 		for _, s := range r.TestSuites {
+			if s.projectBuildDeps {
+				for _, module := range results {
+					if module.LDRef != 0 {
+						s.deps = append(s.deps, module.LDRef)
+					}
+				}
+			}
+
 			if merged := mergeCheckSuite(suites, s); !merged {
 				suites = append(suites, s)
 			}

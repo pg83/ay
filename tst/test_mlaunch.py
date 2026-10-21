@@ -22,6 +22,27 @@ def files():
 
 
 class MlaunchTests(unittest.TestCase):
+    def test_govet_depends_on_every_selected_pipeline_variant(self):
+        for only_go in (False, True):
+            with self.subTest(only_go=only_go):
+                sources = files()
+                tags = "ONLY_TAGS(GOLAUNCH)\n" if only_go else ""
+                sources["pipeline/ya.make"] = "MLAUNCH_PIPELINE(run)\n" + lib.BARE_MODULE + tags + "GOLAUNCH_SRCS(extra.go)\nEND()\n"
+                sources["pipeline/extra.go"] = "package main\n"
+                sources["build/scripts/append_file.py"] = ""
+                graph = lib.make(sources, "pipeline", "-t", "--target-platform", "default-linux-x86_64")
+                vet = next(node for node in graph["graph"] if node["kv"].get("path") == "pipeline/govet")
+                go = lib.node_by_output(graph, "$(B)/pipeline/run.golaunch")
+                context = lib.node_by_output(graph, "$(B)/common_test.context")
+                expected = {context["uid"], go["uid"]}
+                if not only_go:
+                    program = lib.node_by_output(graph, "$(B)/pipeline/run")
+                    deployment = lib.node_by_output(graph, "$(B)/pipeline/run.final.pkg.fake")
+                    expected.update((program["uid"], deployment["uid"]))
+                self.assertEqual(set(vet["deps"]), expected)
+                fmt = next(node for node in graph["graph"] if node["kv"].get("path") == "pipeline/gofmt")
+                self.assertEqual(fmt["deps"], [context["uid"]])
+
     def test_resource_peers_select_nested_union_variants(self):
         sources = files()
         sources.update({
