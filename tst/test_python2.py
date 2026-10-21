@@ -387,6 +387,7 @@ class Python2Test(unittest.TestCase):
         for suite, binary in (("pytest", py2), ("py3test", py3)):
             run = lib.node_by_output(graph, f"$(B)/both/test/test-results/{suite}/meta.json")
             self.assertIn(binary["uid"], run["deps"])
+            self.assertTrue({py2["uid"], py3["uid"]}.issubset(run["deps"]))
             command = args(run)
             self.assertEqual(command[command.index("--sub-path") + 1], "py2test" if suite == "pytest" else "py3test")
             self.assertLess(command.index("--sub-path"), command.index("--tar"))
