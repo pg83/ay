@@ -128,9 +128,11 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				canon["inputs"] = inputs
 				var removed []string
 
-				for _, in := range rawInputs {
-					if !slices.Contains(inputs, in) {
-						removed = append(removed, in)
+				if len(inputs) != len(rawInputs) {
+					for _, in := range rawInputs {
+						if !slices.Contains(inputs, in) {
+							removed = append(removed, in)
+						}
 					}
 				}
 
