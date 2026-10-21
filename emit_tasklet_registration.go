@@ -57,5 +57,5 @@ func applyTaskletRegistration(stmt UnknownStmt, d *ModuleData, env Environment) 
 		DeclSeq:        d.nextDeclSeq(),
 	})
 
-	d.srcs = append(d.srcs, SrcMeta{Source: output, Prio: stmtPrioDefault, Stmt: d.nextDeclSeq(), Global: true})
+	d.srcs = append(d.srcs, SrcMeta{Source: output, Prio: stmtPrioDefault, TaskletSeq: d.nextDeclSeq(), Global: true})
 }

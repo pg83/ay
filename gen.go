@@ -2664,6 +2664,58 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
 			globalMetas = append(globalMetas, objMetas...)
 		}
+
+		// TASKLET_REG expands to a global source at its declaration position.
+		// Move only registrations around Python groups; resource readiness has
+		// already established the order of all other objcopy objects.
+		var registrations []SrcMeta
+
+		for _, meta := range globalMetas {
+			if meta.TaskletSeq != 0 {
+				registrations = append(registrations, meta)
+			}
+		}
+
+		for _, meta := range registrations {
+			anchor, after := VFS(0), false
+
+			for i, seq := range objcopyRes.DeclSeqs {
+				if seq == 0 {
+					continue
+				}
+
+				anchor, after = objcopyRes.Outputs[i], seq < meta.TaskletSeq
+
+				if !after {
+					break
+				}
+			}
+
+			if anchor == 0 {
+				continue
+			}
+
+			from := slices.IndexFunc(globalMetas, func(m SrcMeta) bool { return m.TaskletSeq == meta.TaskletSeq })
+			ref, path := globalRefs[from], globalOutputs[from]
+
+			globalRefs = slices.Delete(globalRefs, from, from+1)
+			globalOutputs = slices.Delete(globalOutputs, from, from+1)
+			globalMetas = slices.Delete(globalMetas, from, from+1)
+
+			to := slices.Index(globalOutputs, anchor)
+
+			if after {
+				to++
+
+				for to < len(globalMetas) && globalMetas[to].TaskletSeq > 0 && globalMetas[to].TaskletSeq < meta.TaskletSeq {
+					to++
+				}
+			}
+
+			globalRefs = slices.Insert(globalRefs, to, ref)
+			globalOutputs = slices.Insert(globalOutputs, to, path)
+			globalMetas = slices.Insert(globalMetas, to, meta)
+		}
 	}
 
 	var arPath *VFS

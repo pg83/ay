@@ -622,6 +622,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 }
 
 type ObjcopyEmitResult struct {
+	DeclSeqs        []int
 	Refs            []NodeRef
 	Outputs         []VFS
 	PySrcTrailCount int
@@ -818,6 +819,14 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 
 			out.Refs = append(out.Refs, r...)
 			out.Outputs = append(out.Outputs, o...)
+		}
+
+		for len(out.DeclSeqs) < len(out.Refs) {
+			out.DeclSeqs = append(out.DeclSeqs, 0)
+		}
+
+		for i := before; i < len(out.Refs); i++ {
+			out.DeclSeqs[i] = group.DeclSeq
 		}
 
 		if trailStart < 0 && len(out.Refs) > before {

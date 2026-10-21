@@ -371,6 +371,7 @@ type SrcMeta struct {
 	CompileRef           NodeRef
 	PyMeta               uint32
 	ExplicitBuildCSource bool
+	TaskletSeq           int
 }
 
 func (m SrcMeta) sortKey(round uint64) uint64 {
@@ -438,6 +439,7 @@ func (d *ModuleData) resStr4(a, b, c, e string) string {
 }
 
 type PySrcGroup struct {
+	DeclSeq        int
 	Srcs           []ANY
 	Scopes         []PyScope
 	ResourceOffset int
@@ -3129,11 +3131,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokPySrcs:
 		stmt := v
 
-		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
+		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
 	case tokAllPySrcs:
 		stmt := v
 
-		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{Statement: &stmt, Prio: stmtPrioSrcs})
+		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, Prio: stmtPrioSrcs})
 	case tokPyMain:
 
 		if len(v.Args) != 1 {
