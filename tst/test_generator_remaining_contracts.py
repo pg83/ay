@@ -12,7 +12,7 @@ def library(body):
 
 class GeneratorRemainingContractsTest(unittest.TestCase):
     def test_ssqls_source_generates_compiled_cpp_and_header(self):
-        files = {'app/ya.make': library('SRCS(query.ssqls)'), 'app/query.ssqls': ''}
+        files = {'app/ya.make': library('SRCS(query.ssqls)'), 'app/query.ssqls': '<DbObject/>\n'}
         lib.tool_program(files, 'metrika/core/tools/ssqls', 'ssqls')
         graph = lib.make(files, 'app')
         producer = lib.node_by_output(graph, '$(B)/app/query.cpp')
