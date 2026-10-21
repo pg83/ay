@@ -65,20 +65,22 @@ class HeadersTest(unittest.TestCase):
                 self.check_export(files, expected)
 
     def test_cpp_style_adds_headers_even_when_lint_is_disabled(self):
-        for macro in ("STYLE_CPP()", "NO_LINT()\nSTYLE_CPP()", "STYLE_CPP_USER_SESSIONS()"):
+        for macro in ("STYLE_CPP()", "NO_LINT()\nSTYLE_CPP()", "STYLE_CPP_USER_SESSIONS()", "STYLE_CPP_YT(CONFIG_TYPE .clang-format)", "NO_LINT()\nSTYLE_CPP_YT()"):
             with self.subTest(macro=macro):
                 files = header_files()
                 files["producer/ya.make"] = f"LIBRARY()\n{BARE}PEERDIR(proto)\nSRCS(local.cpp)\n{macro}\nEND()\n"
                 self.check_export(files, True)
 
     def test_automatic_cpp_linter_adds_module_headers(self):
-        files = header_files()
-        files.update({
-            "build/conf/autoincludes.json": '["producer"]\n',
-            "producer/linters.make.inc": "STYLE_CPP()\n",
-            "producer/ya.make": f"LIBRARY()\n{BARE}PEERDIR(proto)\nSRCS(local.cpp)\nEND()\n",
-        })
-        self.check_export(files, True)
+        for macro in ("STYLE_CPP()", "STYLE_CPP_YT(CONFIG_TYPE .clang-format)"):
+            with self.subTest(macro=macro):
+                files = header_files()
+                files.update({
+                    "build/conf/autoincludes.json": '["producer"]\n',
+                    "producer/linters.make.inc": macro + "\n",
+                    "producer/ya.make": f"LIBRARY()\n{BARE}PEERDIR(proto)\nSRCS(local.cpp)\nEND()\n",
+                })
+                self.check_export(files, True)
 
 
 if __name__ == "__main__":

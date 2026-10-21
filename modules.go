@@ -2342,7 +2342,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokHeaders:
 		applyHeaders(fs, modulePath, v.Args, d)
-	case tokStyleCppUserSessions:
+	case tokStyleCppUserSessions, tokStyleCppYt:
 		env.setBool(envUseAllSrcs, true)
 		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
 	case tokTsProtoPackageName:
