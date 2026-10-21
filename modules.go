@@ -849,9 +849,16 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	hasProto := false
 	hasSc := false
 	hasCfgProto := false
+	hasPyGztProto := false
 
-	for _, meta := range d.srcs {
+	for i, meta := range d.srcs {
 		src := meta.Source
+
+		if d.unit.Tag == unitTagPy3Proto && extIsGztproto(src.string()) {
+			src = internV(strings.TrimSuffix(src.string(), ".gztproto"), ".proto").any()
+			d.srcs[i].Source = src
+			hasPyGztProto = true
+		}
 
 		switch srcExtClassOf(src) {
 		case srcExtProto:
@@ -907,6 +914,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		if isProtoLibrary && !d.optimizePyProtosSet {
 			d.optimizePyProtos = true
 		}
+	}
+
+	if hasPyGztProto && d.optimizePyProtos {
+		d.peerdirs = append(d.peerdirs, strKernelGazetteerProto.any())
 	}
 
 	if d.moduleStmt != nil && (d.moduleStmt.Name == tokProtoLibrary || hasProto) {

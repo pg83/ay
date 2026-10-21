@@ -154,7 +154,7 @@ class ProtoPyVariantTest(unittest.TestCase):
         py_pb = lib.node_by_output(graph, "$(B)/p/a__intpy3___pb2.py")
         self.assertEqual(py_pb["kv"]["p"], "PB")
 
-    def test_python_variant_skips_event_and_gazetteer_sources(self):
+    def test_python_variant_uses_gazetteer_generated_proto_and_skips_events(self):
         files = py_proto_files()
         files["py/ya.make"] = "PY3_PROGRAM()\nPEERDIR(p)\nPY_SRCS(m.py)\nEND()\n"
         files.update({
@@ -174,6 +174,7 @@ class ProtoPyVariantTest(unittest.TestCase):
         ]
         self.assertEqual(py_outputs, [
             "$(B)/p/a__intpy3___pb2.py", "$(B)/p/a__intpy3___pb2.pyi",
+            "$(B)/p/g__intpy3___pb2.py", "$(B)/p/g__intpy3___pb2.pyi",
         ])
         self.assertEqual(
             lib.node_by_output(graph, "$(B)/p/e.ev.pb.h")["kv"]["p"], "EV"
@@ -187,6 +188,27 @@ class ProtoPyVariantTest(unittest.TestCase):
         ])
         _, args = link_args(graph)
         self.assertEqual(whole_archive_libs(args), ["p/libp.a"])
+
+    def test_gazetteer_only_python_variant_reuses_the_cpp_converter(self):
+        files = py_proto_files()
+        files["py/ya.make"] = "PY3_PROGRAM()\nPEERDIR(p)\nPY_SRCS(m.py)\nEND()\n"
+        files["p/ya.make"] = "PROTO_LIBRARY()\nSRCS(g.gztproto)\nEND()\n"
+        files["p/g.gztproto"] = "message G {}\n"
+        graph = lib.make(files, "py")
+
+        converter = lib.node_by_output(graph, "$(B)/p/g.proto")
+        python = lib.node_by_output(graph, "$(B)/p/g__intpy3___pb2.py")
+        self.assertEqual(converter["kv"]["p"], "GZ")
+        self.assertEqual(python["kv"]["p"], "PB")
+        self.assertIn("$(B)/p/g.proto", python["inputs"])
+        self.assertNotIn("$(S)/p/g.proto", python["inputs"])
+        self.assertIn(converter["uid"], python["deps"])
+        self.assertEqual(python["cmds"][0]["cwd"], "$(B)")
+        self.assertEqual(sum("$(B)/p/g.proto" in node["outputs"] for node in graph["graph"]), 1)
+        bytecode = lib.node_by_output(graph, "$(B)/p/g__intpy3___pb2.py.yapyc3")
+        self.assertIn(python["uid"], bytecode["deps"])
+        resources = lib.node_by_output(graph, "$(B)/p/libpy3p.global.a")
+        self.assertTrue(any("$(B)/p/g__intpy3___pb2.py.yapyc3" in node["inputs"] and node["uid"] in resources["deps"] for node in graph["graph"]))
 
 
 if __name__ == "__main__":
