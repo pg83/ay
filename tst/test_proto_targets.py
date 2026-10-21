@@ -29,6 +29,26 @@ def target_files():
 
 
 class ProtoTargetsTest(unittest.TestCase):
+    def test_py3_proto_includes_stay_in_the_python_variant(self):
+        files = target_files()
+        files["p/ya.make"] = "PROTO_LIBRARY()\nENABLE(PY3_PROTO)\nSRCS(a.proto)\nEND()\n"
+        graph = lib.make(files, "p", "--sandboxing")
+        include = "-I$(S)/contrib/libs/python/Include"
+        cpp_objects = [
+            node for node in graph["graph"]
+            if "$(B)/p/a.pb.cc.o" in node["outputs"]
+        ]
+        self.assertTrue(cpp_objects)
+        for node in cpp_objects:
+            self.assertNotIn(include, node["cmds"][0]["cmd_args"])
+        python_objects = [
+            node for node in graph["graph"]
+            if any(output.startswith("$(B)/p/") and output.endswith("_raw.auxcpp.py3.o")
+                   for output in node["outputs"])
+        ]
+        self.assertEqual(len(python_objects), 1)
+        self.assertEqual(python_objects[0]["cmds"][0]["cmd_args"].count(include), 1)
+
     def test_schema_root_starts_its_descriptor_target_with_own_and_peer_sources(self):
         files = target_files()
         files["p/ya.make"] = "PROTO_SCHEMA(catalog)\nPEERDIR(dep)\nSRCS(a.proto)\nEND()\n"

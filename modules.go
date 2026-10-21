@@ -850,7 +850,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.flags.NoUtil = true
 	}
 
-	if env.bool(envPY3_PROTO) {
+	if env.bool(envPY3_PROTO) && instance.Language == LangPy {
 		d.usePython3 = true
 	}
 
