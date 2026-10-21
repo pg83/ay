@@ -144,6 +144,27 @@ END()
         self.assertEqual(len(query["outputs"]), 5)
         self.assertEqual(len([n for n in graph["graph"] if n.get("kv", {}).get("p") == "RS"]), 3)
 
+    def test_consumed_headers_retain_the_generator_main_output(self):
+        for source, options, header, main in (
+            ("Plain.msg", "", "Plain.h", "Plain.cc"),
+            ("Fast.msg", "ZERO_COPY", "Fast_zero_copy.h", "Fast.cc"),
+            ("Query.srv", "", "QueryResponse.h", "Query.h"),
+        ):
+            with self.subTest(header=header):
+                files = ros_files()
+                files.update({
+                    "msgs/ya.make": f"ROS_LIBRARY(robot)\n{lib.BARE_MODULE}ROS_DIR(msgs)\nROS_SRCS({options} {source})\nEND()\n",
+                    f"msgs/{source}": "int32 value\n" + ("---\nint32 result\n" if source.endswith(".srv") else ""),
+                    "app/ya.make": f"PROGRAM()\n{lib.BARE_MODULE}PEERDIR(msgs)\nSRCS(main.cpp)\nEND()\n",
+                    "app/main.cpp": f'#include <msgs/{header}>\nint main() {{}}\n',
+                })
+                graph = lib.make(files, "app")
+                generated = lib.node_by_output(graph, f"$(B)/msgs/{header}")
+                compiled = lib.node_by_output(graph, "$(B)/app/main.cpp.o")
+                self.assertEqual(generated["outputs"][0], f"$(B)/msgs/{main}")
+                self.assertIn(f"$(B)/msgs/{main}", compiled["inputs"])
+                self.assertIn(generated["uid"], compiled["deps"])
+
     def test_message_types_resolve_peers_and_induce_generated_headers(self):
         files = ros_files()
         files.update({
@@ -161,6 +182,8 @@ END()
         compiled = lib.node_by_output(graph, "$(B)/app/main.cpp.o")
         self.assertIn(parent["uid"], compiled["deps"])
         self.assertIn(child["uid"], compiled["deps"])
+        self.assertIn("$(B)/msgs/Parent.cc", compiled["inputs"])
+        self.assertIn("$(B)/dep/Child.cc", compiled["inputs"])
         self.assertNotIn("$(S)/msgs/msg/Parent.msg", compiled["inputs"])
         self.assertNotIn("$(S)/dep/msg/Child.msg", compiled["inputs"])
 
