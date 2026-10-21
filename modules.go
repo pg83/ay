@@ -4507,6 +4507,10 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData, grou
 	d.pySrcs = append(d.pySrcs, internAnys(files)...)
 
 	if len(files) > 0 {
+		if d.pyYapycSuffix == "" {
+			d.pyYapycSuffix = pySrcYapycSuffix(modulePath)
+		}
+
 		scopes := make([]PyScope, len(files))
 
 		for i := range scopes {

@@ -329,6 +329,21 @@ class Python2Test(unittest.TestCase):
             positions.append(command.index(resource["outputs"][0].removeprefix("$(B)/")))
         self.assertEqual(positions, sorted(positions))
 
+    def test_all_python_sources_only_initialize_nested_bytecode_suffix(self):
+        files = python2_base()
+        files.update({
+            "prog/ya.make": f"PY2_PROGRAM()\n{NO_PLATFORM}NO_PYTHON_INCLUDES()\nNO_CHECK_IMPORTS()\n"
+                "ALL_PY_SRCS(TOP_LEVEL sources)\nEND()\n",
+            "prog/sources/a.py": "",
+        })
+        graph = lib.make(files, "prog")
+        suffix = base64.b32encode(hashlib.md5(b"$S/prog").digest()).decode().lower()[:4]
+        bytecode = lib.node_by_output(graph, f"$(B)/prog/sources/a.py.{suffix}.yapyc")
+        self.assertEqual(args(bytecode)[1:3], ["prog/sources/a.py-", "$(S)/prog/sources/a.py"])
+        resource = objcopy_with_kv(graph, "prog", "resfs/src//py_modules/sources.a=prog/sources/a.py")
+        self.assertEqual(section(resource, "--inputs"), ["$(S)/prog/sources/a.py", bytecode["outputs"][0]])
+        self.assertIn(bytecode["uid"], resource["deps"])
+
     def test_py2_resource_of_a_copied_source_takes_the_copy_only(self):
         files = python2_base()
         files.update({
