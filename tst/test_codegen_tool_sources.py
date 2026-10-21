@@ -8,6 +8,7 @@ class ToolDrivenSourcesTest(unittest.TestCase):
         files = {
             "mod/ya.make": (
                 "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
                 "SRCS(page.asp scheme.sc calc.sfdl model.fml use.cpp)\nEND()\n"
             ),
             "mod/page.asp": '#include "inc.h"\n<html/>\n',

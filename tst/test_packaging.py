@@ -45,6 +45,7 @@ END()
         graph = lib.make({
             "mod/ya.make": f"""LIBRARY()
 {lib.BARE_MODULE}
+ADDINCL(${{ARCADIA_BUILD_ROOT}}/mod)
 FROM_ARCHIVE(data.tar OUT generated.h OUTPUT_INCLUDES dependency.h)
 SRCS(main.cpp)
 END()

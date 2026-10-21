@@ -8,7 +8,7 @@ PR_KV = {"p": "PR", "pc": "yellow", "show_out": "yes"}
 
 
 def library(body, **sources):
-    files = {"lib/ya.make": f"LIBRARY()\n{BARE}{body}END()\n"}
+    files = {"lib/ya.make": f"LIBRARY()\n{BARE}ADDINCL(${{ARCADIA_BUILD_ROOT}}/lib)\n{body}END()\n"}
     files.update({f"lib/{name.replace('__', '.')}": text for name, text in sources.items()})
     lib.tool_program(files, "tools/gen", "gen")
     return files

@@ -10,7 +10,7 @@ class ContextParserTest(unittest.TestCase):
     def test_unregistered_includes_use_root_parser(self):
         files = {
             "mod/ya.make": (
-                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
                 "RUN_PROGRAM(tools/gen x.rl y.l OUT out.h IN x.rl y.l)\n"
                 "SRCS(a.asm use.cpp)\nEND()\n"
             ),

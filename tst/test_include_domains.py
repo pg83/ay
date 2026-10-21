@@ -242,6 +242,7 @@ class GeneratedHeaderDomainTest(unittest.TestCase):
     def test_empty_parser_context_for_unregistered_extension(self):
         files = {
             "m/ya.make": library(
+                "ADDINCL(${ARCADIA_BUILD_ROOT}/m)",
                 "COPY_FILE(src.m4 dst.m4 OUTPUT_INCLUDES y.inc)", "SRCS(a.cpp)"
             ),
             "m/src.m4": "",

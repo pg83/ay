@@ -19,7 +19,7 @@ class FromSandboxTest(unittest.TestCase):
     def test_untar_with_renames_outputs_and_includes(self):
         graph = lib.make({
             "lib/ya.make": (
-                f"LIBRARY()\n{BARE}"
+                f"LIBRARY()\n{BARE}ADDINCL(${{ARCADIA_BUILD_ROOT}}/lib)\n"
                 "SRCS(user.cpp)\n"
                 "FROM_SANDBOX(\n"
                 "  123 AUTOUPDATED updater PREFIX pre\n"

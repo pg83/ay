@@ -16,7 +16,7 @@ class CopyFileTest(unittest.TestCase):
         for option in ("", " TEXT"):
             with self.subTest(option=option):
                 graph = lib.make({
-                    "mod/ya.make": (LIBRARY_HEAD + f"COPY_FILE(src.h dst.h{option})\n"
+                    "mod/ya.make": (LIBRARY_HEAD + "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n" + f"COPY_FILE(src.h dst.h{option})\n"
                                     "SRCS(use.cpp)\nEND()\n"),
                     "mod/src.h": '#include "dep.h"\n',
                     "mod/dep.h": "",
@@ -95,6 +95,7 @@ class CopyFileTest(unittest.TestCase):
         graph = lib.make({
             "mod/ya.make": (
                 LIBRARY_HEAD
+                + "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
                 + "COPY_FILE_WITH_CONTEXT(ctx.h ctx_copy.h)\n"
                 + "COPY_FILE(data.txt plain.h OUTPUT_INCLUDES extra.h)\n"
                 + "COPY_FILE(${BINDIR}/plain.h second.h)\n"
@@ -147,7 +148,7 @@ class CopyFileTest(unittest.TestCase):
     def test_second_copy_to_same_destination_keeps_first_producer(self):
         graph = lib.make({
             "mod/ya.make": (
-                LIBRARY_HEAD
+                LIBRARY_HEAD + "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
                 + "COPY_FILE(data.txt plain.h)\n"
                 + "COPY_FILE(other.txt plain.h)\n"
                 + "SRCS(use.cpp)\nEND()\n"

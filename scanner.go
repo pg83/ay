@@ -90,8 +90,13 @@ type searchTierHotEntry struct {
 	val VFS
 }
 
+type IncludeDiagnostic struct {
+	Warning   Warn
+	Directive IncludeDirective
+}
+
 type IncludeDiagnostics struct {
-	Entries []Warn
+	Entries []IncludeDiagnostic
 }
 
 type ScannedChildren struct {
@@ -101,7 +106,7 @@ type ScannedChildren struct {
 
 type ScanCtx struct {
 	recordDiagnostics bool
-	diagnostics       []Warn
+	diagnostics       []IncludeDiagnostic
 	scanner           *IncludeScanner
 	cfg               *ScanConfig
 	ccCfg             *ScanConfig
@@ -124,7 +129,7 @@ func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
 	return entry.Paths, ok
 }
 
-func (s *IncludeScanner) putChildren(v VFS, children []VFS, diagnostics []Warn) ScannedChildren {
+func (s *IncludeScanner) putChildren(v VFS, children []VFS, diagnostics []IncludeDiagnostic) ScannedChildren {
 	entry := ScannedChildren{Paths: children}
 
 	if len(diagnostics) > 0 {
@@ -142,26 +147,36 @@ func (s *IncludeScanner) hasOwnDiagnostics(v VFS) bool {
 	return entry.Diagnostics != nil
 }
 
-func (s *IncludeScanner) reportChildrenDiagnostics(v VFS) {
-	entry, _ := s.scanCache.get1(v)
-
-	s.reportDiagnostics(entry.Diagnostics)
-}
-
 func (s *IncludeScanner) reportDiagnostics(diagnostics *IncludeDiagnostics) {
 	if diagnostics != nil {
-		for _, warning := range diagnostics.Entries {
-			s.onWarn(warning)
+		for _, diagnostic := range diagnostics.Entries {
+			s.onWarn(diagnostic.Warning)
 		}
 	}
 }
 
-func (s *IncludeScanner) reportClosureDiagnostics(cl Closure) {
+func (s *IncludeScanner) reportClosureDiagnostics(input VFS, cl Closure) {
 	if !cl.hasDiagnostics {
 		return
 	}
 
-	cl.each(s.reportChildrenDiagnostics)
+	info := s.codegen.lookup(input)
+
+	cl.each(func(v VFS) {
+		entry, _ := s.scanCache.get1(v)
+
+		if entry.Diagnostics == nil {
+			return
+		}
+
+		for _, diagnostic := range entry.Diagnostics.Entries {
+			if info != nil && info.SourcePath == v && info.providesOutputInclude(diagnostic.Directive) {
+				continue
+			}
+
+			s.onWarn(diagnostic.Warning)
+		}
+	})
 }
 
 func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), buckets *BucketCache) *IncludeScanner {
@@ -313,7 +328,7 @@ func hashScanConfig(ownAddIncl, peerAddIncl, baseSearchPaths []VFS) uint64 {
 		h = mix64(h ^ uint64(len(ss)))
 
 		for _, v := range ss {
-			h = mix64(h ^ internLo(v.rel()) ^ uint64(uint32(v)&1))
+			h = mix64(h ^ uint64(v))
 		}
 	}
 
@@ -820,7 +835,7 @@ func (sc *ScanCtx) warnUnresolved(includerAbs VFS, d IncludeDirective, sysinclCl
 	}
 
 	if sc.recordDiagnostics {
-		sc.diagnostics = append(sc.diagnostics, warning)
+		sc.diagnostics = append(sc.diagnostics, IncludeDiagnostic{Warning: warning, Directive: d})
 	} else {
 		sc.scanner.onWarn(warning)
 	}
@@ -1120,7 +1135,7 @@ func (sc *ScanCtx) resolveSearchPath(out []VFS, includerAbs, incDir VFS, d Inclu
 		if sv != 0 {
 			out = append(out, sv.source())
 			searchPathFound = true
-		} else {
+		} else if includerAbs.isBuild() {
 			if info := s.codegen.lookupSplit(incDir, targetID.any()); info != nil {
 				if !outHas(info.OutputPath) {
 					out = append(out, info.OutputPath)

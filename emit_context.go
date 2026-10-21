@@ -375,7 +375,7 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 func (e *EmitContext) inputClosure(input VFS) Closure {
 	cl := e.includeClosure(input)
 
-	e.scanner.reportClosureDiagnostics(cl)
+	e.scanner.reportClosureDiagnostics(input, cl)
 
 	return cl
 }

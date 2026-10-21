@@ -13,7 +13,7 @@ RUNTIME_H = "$(S)/contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h"
 
 def antlr_files(body, sources):
     return {
-        "mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n" + body + "END()\n",
+        "mod/ya.make": "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n" + body + "END()\n",
         "mod/extra.h": "",
         "build/scripts/stdout2stderr.py": "",
         "contrib/java/antlr/antlr3/antlr.jar": "",

@@ -11,6 +11,7 @@ class EmitCopyFileTest(unittest.TestCase):
                 "NO_LIBC()\n"
                 "NO_RUNTIME()\n"
                 "NO_UTIL()\n"
+                "ADDINCL(${ARCADIA_BUILD_ROOT}/mod)\n"
                 "INCLUDE(${ARCADIA_ROOT}/shared/copy.ya.make.inc)\n"
                 "SRCS(use.cpp)\n"
                 "END()\n"
@@ -32,7 +33,7 @@ class EmitCopyFileTest(unittest.TestCase):
     def test_generated_output_includes_stay_out_of_the_copy_inputs(self):
         files = {
             "lib/ya.make": (
-                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
+                "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nADDINCL(${ARCADIA_BUILD_ROOT}/lib)\n"
                 "RUN_PROGRAM(tools/gen OUT gen.h)\n"
                 "COPY_FILE(src.h dst.h OUTPUT_INCLUDES gen.h)\n"
                 "SRCS(a.cpp)\nEND()\n"

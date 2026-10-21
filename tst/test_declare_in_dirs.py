@@ -8,6 +8,7 @@ class DeclareInDirsTests(unittest.TestCase):
         graph = lib.make({
             "mod/ya.make": f"""LIBRARY()
 {lib.BARE_MODULE}
+ADDINCL(${{ARCADIA_BUILD_ROOT}}/mod)
 DECLARE_IN_DIRS(HEADERS *.h|*.cpp DIRS . RECURSIVE SRCDIR ${{ARCADIA_ROOT}}/headers)
 RUN_PYTHON3(gen.py \\${{HEADERS_FILES}} IN ${{HEADERS_FILES}} OUT generated.h)
 SRCS(main.cpp)

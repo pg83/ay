@@ -450,13 +450,13 @@ def layered_project():
             files[f"{name}/{source}"] = f'{includes}#include "{headers[i]}"\nint {name}{i}(){{return 0;}}\n'
         peerdir = f"PEERDIR({peers})\n" if peers else ""
         files[f"{name}/ya.make"] = (
-            f"LIBRARY()\n{BARE_MODULE}{peerdir}"
+            f"LIBRARY()\n{BARE_MODULE}{peerdir}ADDINCL(${{ARCADIA_BUILD_ROOT}}/{name})\n"
             f"RUN_PROGRAM(tools/gen OUT {name}_gen.h)\n"
             f"SRCS({' '.join(sources)})\nEND()\n"
         )
         files[f"{name}/s0.cpp"] = f'#include "{name}_gen.h"\n' + files[f"{name}/s0.cpp"]
     files["app/ya.make"] = (
-        f"PROGRAM()\n{BARE_MODULE}PEERDIR(a b c)\n"
+        f"PROGRAM()\n{BARE_MODULE}PEERDIR(a b c)\nADDINCL(${{ARCADIA_BUILD_ROOT}}/app)\n"
         "RUN_PROGRAM(tools/gen OUT gen.h)\n"
         "SRCS(main.cpp)\nEND()\n"
     )
