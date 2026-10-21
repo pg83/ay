@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"os"
 	"path"
 	"slices"
 	"strings"
@@ -45,6 +46,20 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	s := &TestSuite{p: e.ctx.target, projectPath: project, name: name, testType: testType, ciType: "test", deps: depRefs(ref), globals: globals, smoothShutdown: []string{"SIGUSR2"}}
 
 	s.applyTestMeta(meta, e.d.setVars[strADD_SRCDIR_TO_TEST_DATA] != strNo)
+
+	if testType == "fuzz" {
+		corpus, ok := os.LookupEnv("YA_TEST_CORPUS_DATA_PATH")
+
+		if !ok {
+			corpus = path.Join("fuzzing", project, "corpus.json")
+		}
+
+		if !path.IsAbs(corpus) {
+			corpus = source(corpus).string()
+		}
+
+		s.relatedPaths = append([]string{corpus}, s.relatedPaths...)
+	}
 
 	python := testType == "pytest" || testType == "py3test" || testType == "exectest"
 

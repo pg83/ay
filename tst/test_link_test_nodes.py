@@ -257,7 +257,10 @@ class TestNodesTest(unittest.TestCase):
                 self.assertEqual(args[args.index("--test-size") + 1], "medium")
                 self.assertEqual(args[args.index("--test-run-cwd") + 1], "$(S)/data")
                 self.assertEqual(run["requirements"], {"cpu": 2, "ram": 4, "network": "full", "ram_disk": 0})
-                self.assertEqual(set(run["inputs"]), {"$(S)/data", "$(S)/tests"})
+                expected_inputs = {"$(S)/data", "$(S)/tests"}
+                if macro == "FUZZ":
+                    expected_inputs.add("$(S)/fuzzing/tests/corpus.json")
+                self.assertEqual(set(run["inputs"]), expected_inputs)
                 tool = lib.node_by_output(graph, "$(B)/tool/tool")
                 self.assertIn(tool["uid"], run["deps"])
                 binary = next(n for n in graph["graph"] if n.get("kv", {}).get("p") == "LD" and n["outputs"][0].startswith("$(B)/tests/"))

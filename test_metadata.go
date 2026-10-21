@@ -203,6 +203,10 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary, work string, chunk Te
 	case "fuzz":
 		args = append(args, "run_fuzz", "--binary", binary, "--tracefile", trace, "--modulo", strconv.Itoa(max(chunk.split, 1)), "--modulo-index", strconv.Itoa(chunk.index), "--output-dir", out, "--project-path", s.projectPath, "--source-root", testSourceRoot, "--verbose", "--gdb-path", testGDBPath)
 
+		if opts.dist {
+			args = append(args, "--truncate-logs")
+		}
+
 		if len(meta.binaryArgs) > 0 {
 			args = append(args, "--fuzz-opts="+strings.Join(meta.binaryArgs, " "))
 		}

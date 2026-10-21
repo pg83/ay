@@ -669,9 +669,14 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(head...)), Cwd: bld})
 
 	inputs := append(append(append([]VFS{}, s.runInputs...), s.checkFiles...), s.prepareInputs...)
+	inputNames := s.inputNames
 
 	for _, p := range related {
-		inputs = append(inputs, intern(p))
+		if path.IsAbs(p) {
+			inputNames = append(inputNames, p)
+		} else {
+			inputs = append(inputs, intern(p))
+		}
 	}
 
 	slices.SortFunc(inputs, func(a, b VFS) int { return strings.Compare(a.string(), b.string()) })
@@ -685,9 +690,9 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	kv.SplitFile = chunk.file
 
 	deps := append([]NodeRef{ctx.testContext()}, s.deps...)
-	names := na.strs.alloc(len(s.inputNames))[:len(s.inputNames):len(s.inputNames)]
+	names := na.strs.alloc(len(inputNames))[:len(inputNames):len(inputNames)]
 
-	for i, name := range s.inputNames {
+	for i, name := range inputNames {
 		names[i] = internStr(name)
 	}
 
