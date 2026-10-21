@@ -746,6 +746,8 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 		d.cythonOptions = internAnys(strings.Fields(env.string(envCythonOptions)))
 	}
 
+	d.collectPythonStyleChecks(env)
+
 	if d.nots != nil {
 		return d
 	}
@@ -794,7 +796,6 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	}
 
 	applyPythonAddIncl(modulePath, d, env)
-	d.collectPythonStyleChecks(env)
 	applyBuildInfoAddIncl(modulePath, d)
 	applyArchiveAddIncl(modulePath, d)
 	applyCythonHeaderAddIncl(modulePath, d)

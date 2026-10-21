@@ -20,8 +20,16 @@ class NotsSuitesTest(unittest.TestCase):
             'contrib/libs/protobuf/builtin_proto/protos_from_protoc/ya.make': 'PROTO_LIBRARY()\nEND()\n',
         })
         tool_program(files, 'contrib/tools/protoc', 'protoc')
+        files['web/tests/ya.make'] = 'TS_TEST_FOR(web)\nTS_TEST(test)\nEND()\n'
         graph = make(files, 'web', '--target-platform-tests')
         check = node_by_output(graph, '$(B)/web/test-results/ts_lint_lint/meta.json')
+        globals = option_values(check['cmds'][-1]['cmd_args'], '--global-resource')
+        for name in ('BLACK', 'CLANG_FORMAT', 'KOTLIN_GRPC'):
+            self.assertIn(f'{name}_RESOURCE_GLOBAL::$(B)/resources/{name}', globals)
+        files['raw/ya.make'] = files['raw/ya.make'].replace('STYLE_PYTHON()\n', '')
+        files['api/ya.make'] = files['api/ya.make'].replace('PEERDIR(raw)', 'STYLE_PYTHON()\nPEERDIR(raw)')
+        graph = make(files, 'web/tests', '--target-platform-tests')
+        check = node_by_output(graph, '$(B)/web/tests/test-results/ts_test_test/meta.json')
         globals = option_values(check['cmds'][-1]['cmd_args'], '--global-resource')
         for name in ('BLACK', 'CLANG_FORMAT', 'KOTLIN_GRPC'):
             self.assertIn(f'{name}_RESOURCE_GLOBAL::$(B)/resources/{name}', globals)
