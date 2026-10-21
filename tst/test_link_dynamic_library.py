@@ -115,7 +115,7 @@ class DynamicLibraryTest(unittest.TestCase):
 
     def test_dynamic_library_copy_step_observes_so_outputs(self):
         for statement, copied in (
-            ("", False),
+            ("", True),
             ("SET(SO_OUTPUTS no)", False),
             ("DISABLE(SO_OUTPUTS)", False),
             ("SET(SO_OUTPUTS yes)", True),
@@ -135,11 +135,13 @@ class DynamicLibraryTest(unittest.TestCase):
                 self.assertEqual(copied, any("link_or_copy_to_dir" in c["cmd_args"] for c in dynamic["cmds"]))
                 self.assertEqual(copied, "$(S)/build/scripts/fs_tools.py" in dynamic["inputs"])
                 if copied:
+                    copy = command_with(dynamic, "fs_tools.py")["cmd_args"]
+                    self.assertEqual(copy[-3:], ["link_or_copy_to_dir", "--no-check", "$(B)/dyn"])
                     link = command_with(dynamic, "link_dyn_lib.py")["cmd_args"]
                     self.assertIn("-Wl,-rpath,/opt/lib", link)
                     self.assertIn("-Wl,-rpath,$ORIGIN", link)
 
-    def test_target_dynamic_binary_uses_pic_without_implicit_copy_command(self):
+    def test_internal_dynamic_binary_uses_pic_without_implicit_copy_command(self):
         files = base_files()
         files["dyn/ya.make"] = (
             f"DYNAMIC_LIBRARY(foo)\n{NO_PLATFORM}"
@@ -147,7 +149,7 @@ class DynamicLibraryTest(unittest.TestCase):
         )
         files["dyn/foo.exports"] = "{};\n"
         files["build/scripts/fs_tools.py"] = ""
-        graph = lib.make(files, "dyn")
+        graph = lib.make(files, "dyn", opensource=False)
         dynamic = lib.node_by_output(graph, "$(B)/dyn/libfoo.so")
         link = command_with(dynamic, "link_dyn_lib.py")["cmd_args"]
         self.assertIn("-fPIC", link)
@@ -218,7 +220,10 @@ class DynamicLibraryTest(unittest.TestCase):
                 "$(S)/dyn/foo.exports",
             ],
         )
-        self.assertFalse(any("link_or_copy_to_dir" in c["cmd_args"] for c in dyn["cmds"]))
+        self.assertEqual(
+            command_with(dyn, "fs_tools.py")["cmd_args"][-3:],
+            ["link_or_copy_to_dir", "--no-check", "$(B)/dyn"],
+        )
 
         program = lib.node_by_output(graph, "$(B)/p/prog")
         self.assertEqual(program["outputs"], ["$(B)/p/prog", "$(B)/p/libfoo.so"])

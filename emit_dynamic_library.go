@@ -247,7 +247,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	if !moduleEnv.hasBindingID(soOutputs) {
 		sanitizer := moduleEnv.string(envSANITIZER_TYPE)
 
-		copySO = instance.Platform.OS == OSDarwin && moduleEnv.bool(envCLANG) && sanitizer != "" && sanitizer != "no"
+		copySO = moduleEnv.bool(envOPENSOURCE) || instance.Platform.OS == OSDarwin && moduleEnv.bool(envCLANG) && sanitizer != "" && sanitizer != "no"
 	}
 
 	rpathGlobal := concat(peerRPathFlagsGlobal, d.rpathFlagsGlobal)
