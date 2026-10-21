@@ -177,7 +177,11 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 		DepRefs:   deps,
 	}
 
-	return e.emitNode(node)
+	ref := e.emitNode(node)
+
+	e.register(GeneratedFileInfo{OutputPath: outputObj, ProducerRef: ref})
+
+	return ref
 }
 
 type ResourceItem struct {
