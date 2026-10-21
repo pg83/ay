@@ -100,6 +100,43 @@ class UserverProtoTest(unittest.TestCase):
         self.assertIn("$(S)/runtime/protoc.hpp", compiled["inputs"])
         self.assertIn("$(B)/model/a.structs.usrv.pb.hpp", compiled["inputs"])
 
+    def test_grpc_structs_clients_and_servers(self):
+        for side, macro in (("client", "USRV_GEN_GRPC_CLIENT_V2_STRUCTS"),
+                            ("service", "USRV_GEN_GRPC_SERVICE_V2_STRUCTS")):
+            with self.subTest(side=side):
+                files = userver_files()
+                tool = "taxi/uservices/userver-arc-utils/scripts/grpc/arc-generate-" + side
+                lib.tool_program(files, tool, "arc-generate-" + side)
+                empty_library(files, "taxi/uservices/userver/libraries/grpc-proto-structs")
+                files["framework/ya.make"] = (
+                    "LIBRARY()\nPROTO_NAMESPACE(model)\n"
+                    f"{macro}(FROM model model/a.proto)\n"
+                    "USRV_GEN_PROTO_STRUCTS(PROTODESC desc FILES model/a.proto model/b.proto)\nEND()\n")
+                header_side = "client" if side == "client" else "server"
+                for name in ("codegen_declarations.hpp", "codegen_definitions.hpp"):
+                    files[f"userver/grpc-proto-structs/{header_side}/impl/{name}"] = "#pragma once\n"
+                graph = lib.make(files, "framework")
+                src = f"$(B)/model/a_{side}.usrv.pb.cpp"
+                generated = lib.node_by_output(graph, src)
+                self.assertIn(f'--ugrpc-{side}_opt={{"structs": true}}',
+                              generated["cmds"][0]["cmd_args"])
+                self.assertIn("$(S)/model/a.proto", generated["inputs"])
+                compiled = next(n for n in graph["graph"]
+                                if n["kv"]["p"] == "CC" and src in n["inputs"])
+                self.assertIn(generated["uid"], compiled["deps"])
+
+    def test_structs_explicit_output_includes(self):
+        files = userver_files()
+        files["framework/ya.make"] = (
+            "LIBRARY()\nPROTO_NAMESPACE(model)\nPEERDIR(model)\n"
+            "USRV_GEN_PROTO_STRUCTS(PROTODESC desc FILE model/a.proto "
+            "OUTPUT_INCLUDES runtime/extra.hpp FILE model/b.proto)\nEND()\n")
+        files["runtime/extra.hpp"] = "#pragma once\n"
+        graph = lib.make(files, "framework")
+        compiled = next(n for n in graph["graph"] if n["kv"]["p"] == "CC"
+                        and "$(B)/model/a.structs.usrv.pb.cpp" in n["inputs"])
+        self.assertIn("$(S)/runtime/extra.hpp", compiled["inputs"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

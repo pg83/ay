@@ -212,8 +212,13 @@ func launchedByAgent() bool {
 		}
 	}
 
-	for pid := os.Getpid(); pid > 1; {
-		stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	return launchedByAgentInProc("/proc", os.Getpid())
+}
+
+func launchedByAgentInProc(root string, pid int) bool {
+	for pid > 1 {
+		dir := path.Join(root, strconv.Itoa(pid))
+		stat, err := os.ReadFile(dir + "/stat")
 
 		if err != nil {
 			return false
@@ -233,9 +238,9 @@ func launchedByAgent() bool {
 		}
 
 		name := strings.ToLower(s[open+1 : closing])
-		exe, _ := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
+		exe, _ := os.Readlink(dir + "/exe")
 
-		if cmdline, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline"); err == nil && len(name) >= 15 {
+		if cmdline, err := os.ReadFile(dir + "/cmdline"); err == nil && len(name) >= 15 {
 			if full := strings.ToLower(path.Base(strings.SplitN(string(cmdline), "\x00", 2)[0])); strings.HasPrefix(full, name) {
 				name = full
 			}

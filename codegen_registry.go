@@ -91,16 +91,6 @@ func (r *CodegenRegistry) use(path VFS) *GeneratedFileInfo {
 	return info
 }
 
-func (r *CodegenRegistry) useSplit(prefix VFS, suffix ANY) *GeneratedFileInfo {
-	info := r.lookupSplit(prefix, suffix)
-
-	if info != nil && info.OnUse != nil {
-		fireGenerated(info)
-	}
-
-	return info
-}
-
 //go:noinline
 func fireGenerated(info *GeneratedFileInfo) {
 	pending := info.OnUse

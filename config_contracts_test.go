@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"path"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -19,7 +20,39 @@ func (fs ContractFS) isFile(prefix STR, suffix string) bool {
 }
 
 func (fs ContractFS) exists(prefix STR, suffix string) (bool, bool) {
+	if fs.isDir(prefix, suffix) {
+		return true, true
+	}
+
 	return fs.isFile(prefix, suffix), false
+}
+
+func (fs ContractFS) isDir(prefix STR, suffix string) bool {
+	root := strings.TrimPrefix(path.Join(prefix.string(), suffix)+"/", "./")
+
+	for file := range fs.files {
+		if strings.HasPrefix(file, root) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (fs ContractFS) readPath(rel STR) [][]byte {
+	return fs.read(rel.string())
+}
+
+func (fs ContractFS) walk(rel string, visit func(string, bool) bool) {
+	isDir := fs.isDir(srcRootRel, rel)
+
+	if !visit(rel, isDir) || !isDir {
+		return
+	}
+
+	for _, entry := range fs.listdir(dirKey(rel)).names {
+		fs.walk(path.Join(rel, STR(entry>>1).string()), visit)
+	}
 }
 
 func (fs ContractFS) isFilePathClean(rel string) bool {
@@ -33,7 +66,40 @@ func (fs ContractFS) read(rel string) [][]byte {
 }
 
 func (fs ContractFS) listdir(dir STR) DirView {
-	return DirView{dir: dir, names: []uint32{}}
+	entries := map[string]bool{}
+	root := dir.string()
+
+	if root != "" {
+		root += "/"
+	}
+
+	for file := range fs.files {
+		if rel, ok := strings.CutPrefix(file, root); ok {
+			name, _, isDir := strings.Cut(rel, "/")
+			entries[name] = entries[name] || isDir
+		}
+	}
+
+	var names []string
+
+	for name := range entries {
+		names = append(names, name)
+	}
+
+	slices.Sort(names)
+	view := DirView{dir: dir, names: []uint32{}}
+
+	for _, name := range names {
+		packed := uint32(internStr(name)) << 1
+
+		if entries[name] {
+			packed |= 1
+		}
+
+		view.names = append(view.names, packed)
+	}
+
+	return view
 }
 
 func TestToolchainConfiguration(t *testing.T) {
@@ -158,4 +224,36 @@ func TestGoEmbedBindirValidation(t *testing.T) {
 	args, inputs := goEmbedArgs(newNodeArenas(), []GoEmbed{em})
 	testEqual(t, anyStrs(args), []string{"++embed_xtest", "$(B)/gen", "*.txt", "$(B)/gen/a.txt"})
 	testEqual(t, inputs, []VFS{build("gen/a.txt")})
+}
+
+func (fs ContractFS) resolveSourceUnder(prefix, target STR) STR {
+	rel := path.Join(prefix.string(), target.string())
+	if fs.isFilePathClean(rel) {
+		return internStr(rel)
+	}
+	return 0
+}
+
+func (fs ContractFS) resolveSourceUnderClean(prefix, target STR, _ bool) STR {
+	return fs.resolveSourceUnder(prefix, target)
+}
+
+func (fs ContractFS) isFileClean(prefix STR, suffix string) bool {
+	return fs.isFile(prefix, suffix)
+}
+
+func TestStyleFileSelection(t *testing.T) {
+	fs := ContractFS{files: map[string]string{"app/data/item.json": "{}", "app/data/item.yaml": "x: 1", "app/ya.make": ""}}
+	env := newEnvironment()
+	env.setString(internEnv("JSON_LINTER_DEFAULT_CONFIGS"), "custom.json")
+	d := &ModuleData{}
+	d.collectStyleCheck(fs, "app", UnknownStmt{Name: tokStyleJSON, Args: internAnys([]string{"DIRS", "data"})}, env)
+	testEqual(t, d.styleChecks[0].Files, []string{"app/data/item.json"})
+	testEqual(t, d.styleChecks[0].ConfigMap, "custom.json")
+	d.collectStyleCheck(fs, "empty", UnknownStmt{Name: tokStyleJSON}, env)
+	testEqual(t, len(d.styleChecks), 1)
+	fs.files["app/data/ya.make"] = ""
+	testThrows(t, "nested module", func() {
+		d.collectStyleCheck(fs, "app", UnknownStmt{Name: tokStyleJSON, Args: internAnys([]string{"DIRS_RECURSE", "data"})}, env)
+	})
 }

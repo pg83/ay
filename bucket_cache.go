@@ -281,16 +281,6 @@ func (c *BucketCache) spliceBucket(seen *IdSet, bucket []VFS) {
 	c.spliceBucketSlow(seen, bucket)
 }
 
-func (c *BucketCache) spliceLeaves(seen *IdSet, leaves []VFS) {
-	for _, v := range leaves {
-		c.spliceOne(seen, v)
-	}
-}
-
-func (c *BucketCache) buildScratch() []VFS {
-	return c.scratch[0]
-}
-
 func (c *BucketCache) storeScratch(self VFS) Closure {
 	buckets := c.chunks.alloc(closureBuckets)[:0]
 

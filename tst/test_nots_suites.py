@@ -79,6 +79,34 @@ class NotsSuitesTest(unittest.TestCase):
         self.assertIn('a.css', run_args(style))
         self.assertNotIn('a.ts', run_args(style))
 
+    def test_legacy_test_config_and_data_directories(self):
+        files = test_nots.NotsTests().project()
+        files.update({
+            'web/tests/ya.make': 'TS_TEST_JEST_FOR(web)\nTS_TEST_SRCS(../src)\n'
+                                 'TS_CONFIG(../tsconfig.test.json)\nTS_TEST_DATA(data/*.json)\nEND()\n',
+            'web/src/a.test.ts': 'it("works", () => {});',
+            'web/tsconfig.test.json': '{}',
+            'web/tests/data/a.json': '{}',
+            'web/tests/data/b.json': '{}',
+        })
+        graph = make(files, 'web/tests', '--target-platform-tests', '-DAUTOCHECK=yes')
+        test = node_by_output(graph, '$(B)/web/tests/test-results/jest/meta.json')
+        args = run_args(test)
+        self.assertEqual(option_values(args, '--ts-config-path'), ['tsconfig.test.json'])
+        self.assertEqual(option_values(args, '--test-data-dirs'), ['web/tests/data'])
+        self.assertEqual(args.count('web/tests/data'), 1)
+
+    def test_optional_typecheck_and_empty_style_inputs(self):
+        files = test_nots.NotsTests().project('TS_VITE()\nTS_TYPECHECK(tsconfig.check.json)\nTS_STYLELINT(style.json)')
+        files.update({'web/tsconfig.check.json': '{}', 'web/a.ts': ''})
+        graph = make(files, 'web', '--target-platform-tests', '-DAUTOCHECK=yes')
+        test = node_by_output(graph, '$(B)/web/test-results/tsc_typecheck/meta.json')
+        self.assertIn('tsconfig.check.json', run_args(test))
+        self.assertFalse(any('ts_stylelint/meta.json' in out for n in graph['graph'] for out in n['outputs']))
+        files['web/ya.make'] = files['web/ya.make'].replace('END()', 'NO_TS_TYPECHECK()\nEND()')
+        graph = make(files, 'web', '--target-platform-tests', '-DAUTOCHECK=yes')
+        self.assertFalse(any('tsc_typecheck/meta.json' in out for n in graph['graph'] for out in n['outputs']))
+
 
 if __name__ == '__main__':
     unittest.main()

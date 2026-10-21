@@ -78,7 +78,6 @@ type IncludeScanner struct {
 	searchTierHot  [searchTierHotMask + 1]searchTierHotEntry
 	childArena     *BumpAllocator[VFS]
 	dfsActive      BitSet
-	visitedIDPool  sync.Pool
 	scanCtxPool    sync.Pool
 	onWarn         func(Warn)
 	codegen        *CodegenRegistry
@@ -189,10 +188,6 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 		closureScratch: make([]VFS, closureAllocHint),
 		childArena:     newBumpAllocator[VFS](),
 		searchTierFlat: newIntMap[VFS](1 << 16),
-	}
-
-	s.visitedIDPool.New = func() any {
-		return &IdSet{}
 	}
 
 	s.scanCtxPool.New = func() any {
