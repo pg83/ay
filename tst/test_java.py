@@ -221,7 +221,7 @@ class JavaProgramTest(unittest.TestCase):
         archive = lib.node_by_output(graph, f"$(B)/gen/out.{salt}.gentar")
         self.assertEqual(archive["cmds"][1]["cmd_args"][-2:], ["Main", "--value=example"])
 
-    def test_run_java_preserves_quoted_variable_groups_in_arguments(self):
+    def test_run_java_preserves_embedded_quotes_during_variable_expansion(self):
         for left, right in (("", ""), ("first", "second third")):
             with self.subTest(left=left, right=right):
                 files = self.tree()
@@ -234,8 +234,25 @@ class JavaProgramTest(unittest.TestCase):
                 archive = next(node for node in graph["graph"] if node.get("kv", {}).get("p") == "RJ")
                 args = archive["cmds"][1]["cmd_args"]
                 self.assertEqual(args[args.index("Main"):], [
-                    "Main", f"--known={left} {right}", f"{left} {right}", *right.split(),
+                    "Main", f"--known={left} {right}", *left.split(), *right.split(), *right.split(),
                 ])
+
+    def test_run_java_uses_native_quoted_escape_rules(self):
+        files = self.tree()
+        files["gen/ya.make"] = r'''JAVA_LIBRARY_NON_SPLIT()
+RUN_JAVA_PROGRAM(Main --dn="a\nb" --dt="a\tb" --dr="a\rb" --dx="a\xb"
+    --sn='a\nb' --st='a\tb' unquoted\nline "quoted\rvalue" "whole\\value"
+    --double="a\\b" --slash="a\/b" --quote="a\"b" OUT_DIR out CLASSPATH app)
+END()
+'''
+        graph = lib.make(files, "gen")
+        archive = next(node for node in graph["graph"] if node.get("kv", {}).get("p") == "RJ")
+        args = archive["cmds"][1]["cmd_args"]
+        self.assertEqual(args[args.index("Main"):], [
+            "Main", r"--dn=a\nb", r"--dt=a\tb", r"--dr=a\rb", r"--dx=a\xb",
+            r"--sn=a\nb", r"--st=a\tb", "unquotednline", "quotedrvalue", "wholevalue",
+            r"--double=a\b", "--slash=a/b", '--quote=a"b',
+        ])
 
     def test_run_java_input_directories_are_normalized_before_globbing(self):
         files = self.tree()
