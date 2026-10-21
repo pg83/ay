@@ -180,6 +180,12 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 		b.input(g.files...)
 	}
 
+	for _, out := range jm.macroOuts {
+		if ext := path.Ext(out.relString()); ext == ".java" || ext == ".kt" {
+			prep = append(prep, out.any())
+		}
+	}
+
 	for _, kind := range []string{"JAR", "SRC_JAR"} {
 		for _, g := range globs {
 			if !g.genSrcs && !g.spec.varSrcDir || kind == "SRC_JAR" && !d.sourcesJar {
@@ -437,6 +443,7 @@ func (ctx *GenCtx) javaEmitIJar(jm *JavaModule) {
 	b.exts = []KVExt{{Key: "exclude_from_idea", Val: "yes"}}
 	b.outputs = []VFS{jm.target}
 	b.deps = append(b.deps, ref, b.use(full.target))
+	b.macroOuts(jm)
 	b.emitTo(jm.outRef)
 }
 

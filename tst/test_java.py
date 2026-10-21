@@ -371,6 +371,39 @@ class JavaSandboxedInputsTest(unittest.TestCase):
             "$(B)/contrib/tools/ijar/ijar", "$(B)/dep/dep.jar",
         ])
 
+    def test_files_copies_are_interface_jar_inputs(self):
+        files = java_tree(**{
+            "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nPEERDIR(dep)\nEND()\n",
+            "dep/ya.make": "JAVA_LIBRARY()\nNO_LINT()\nFILES(README.md A.java ${ARCADIA_BUILD_ROOT}/dep/unused.md)\nEND()\n",
+            "dep/README.md": "Documentation\n",
+            "dep/A.java": "class A {}\n",
+        })
+        lib.tool_program(files, "contrib/tools/ijar", "ijar")
+        graph = lib.make(files, "app")
+        interface = lib.node_by_output(graph, "$(B)/dep/dep-interface.jar")
+        self.assertIn("$(B)/dep/README.md", interface["inputs"])
+        copied = lib.node_by_output(graph, "$(B)/dep/README.md")
+        self.assertEqual(copied["kv"]["p"], "CP")
+        self.assertEqual(copied["cmds"][0]["cmd_args"][2:], [
+            "copy", "$(S)/dep/README.md", "$(B)/dep/README.md",
+        ])
+        self.assertIn(copied["uid"], interface["deps"])
+        compiled = jv_node(graph, "$(B)/dep/dep.jar")
+        self.assertNotIn("$(B)/dep/README.md", compiled["inputs"])
+        self.assertIn("$(B)/dep/A.java", compiled["inputs"])
+        self.assertIn("$(B)/dep/A.java", compiled["cmds"][0]["cmd_args"])
+        self.assertFalse(any(p.endswith("unused.md") for n in graph["graph"] for p in n["inputs"] + n["outputs"]))
+
+    def test_non_split_jar_ignores_files_outside_its_input_extensions(self):
+        files = java_tree(**{
+            "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nFILES(README.md)\nEND()\n",
+            "app/README.md": "Documentation\n",
+        })
+        graph = lib.make(files, "app")
+        jar = jv_node(graph, "$(B)/app/app.jar")
+        self.assertNotIn("$(B)/app/README.md", jar["inputs"])
+        self.assertFalse(any("$(B)/app/README.md" in n["outputs"] for n in graph["graph"]))
+
     def test_java_proto_takes_imports_and_plugins(self):
         files = java_tree(**{
             "proto/a/ya.make": "PROTO_LIBRARY()\nGRPC()\nSRCS(a.proto)\nPEERDIR(proto/b)\nEND()\n",

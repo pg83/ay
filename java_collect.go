@@ -396,6 +396,18 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	u := jm.unit
 	arg0 := ""
 
+	if name == "FILES" {
+		for _, file := range args {
+			if strings.HasPrefix(file, "${ARCADIA_BUILD_ROOT}") || strings.HasPrefix(file, "$(B)/") {
+				continue
+			}
+
+			d.files = append(d.files, file)
+		}
+
+		return
+	}
+
 	args = javaDropUnresolved(args)
 
 	if len(args) > 0 {
