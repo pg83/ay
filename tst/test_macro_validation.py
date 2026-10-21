@@ -3,9 +3,26 @@ import unittest
 
 import lib
 from test_mlaunch import files as mlaunch_files
+from test_ros import ros_files
 
 
 class MacroValidationTest(unittest.TestCase):
+    def test_invalid_ros_sources(self):
+        for body, message in (
+            ("ROS_DIR()", "expects one directory"),
+            ("ROS_PARTIAL()", "expects one name"),
+            ("ROS_SRCS(PARTIAL)", "Expected library name after PARTIAL"),
+            ("ROS_SRCS(invalid.txt)", "unsupported ROS file"),
+            ("ROS_SRCS(ZERO_COPY Query.srv)", "ZERO_COPY for .srv file is not allowed"),
+        ):
+            with self.subTest(body=body):
+                files = ros_files()
+                files["app/ya.make"] = f"ROS_LIBRARY(robot)\n{lib.BARE_MODULE}ONLY_TAGS(CPP_ROS)\n{body}\nEND()\n"
+                result = lib.make_process(files, "app")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertNotIn("panic:", result.stderr)
+
     def test_invalid_macro_arguments(self):
         cases = (
             ("GEN_PCH_FILE()", "expects an input header"),
