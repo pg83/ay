@@ -869,11 +869,10 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 	return targets
 }
 
-func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults, stripPackagesFromResults bool) *Graph {
+func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults bool) *Graph {
 	emitter := newStreamingEmitter(nil)
 
 	emitter.addModulesToResults = addModulesToResults
-	emitter.stripPackagesFromResults = stripPackagesFromResults
 
 	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand)
 

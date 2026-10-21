@@ -35,37 +35,36 @@ type MakeFlags struct {
 	testTraceback string
 	testBuildType string
 
-	addModulesToResults      bool
-	stripPackagesFromResults bool
-	srcRoot                  string
-	bldRoot                  string
-	outRoot                  string
-	installRoot              string
-	threads                  int
-	keepGoing                bool
-	dumpGraph                bool
-	stats                    bool
-	ninja                    bool
-	buildType                string
-	hostBuildType            string
-	targetPlat               string
-	hostPlat                 string
-	dflags                   map[string]string
-	tflags                   map[string]string
-	hflags                   map[string]string
-	platformFlags            map[string]string
-	targets                  []string
-	verbose                  bool
-	testLevel                int
-	runTests                 int
-	testSizes                []string
-	testTags                 []string
-	sandboxing               bool
-	dist                     bool
-	cacheTests               bool
-	dumpIgnoredMacros        bool
-	clear                    bool
-	cmdPrefixes              []CmdPrefix
+	addModulesToResults bool
+	srcRoot             string
+	bldRoot             string
+	outRoot             string
+	installRoot         string
+	threads             int
+	keepGoing           bool
+	dumpGraph           bool
+	stats               bool
+	ninja               bool
+	buildType           string
+	hostBuildType       string
+	targetPlat          string
+	hostPlat            string
+	dflags              map[string]string
+	tflags              map[string]string
+	hflags              map[string]string
+	platformFlags       map[string]string
+	targets             []string
+	verbose             bool
+	testLevel           int
+	runTests            int
+	testSizes           []string
+	testTags            []string
+	sandboxing          bool
+	dist                bool
+	cacheTests          bool
+	dumpIgnoredMacros   bool
+	clear               bool
+	cmdPrefixes         []CmdPrefix
 }
 
 func copyStatsFlags(dst, src map[string]string) {
@@ -155,11 +154,11 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	if mf.threads == 0 {
 		if mf.dumpGraph {
-			g := genDumpGraphWithResources(fs, caches, mf.targets, hostP, targetP, onWarn, tests, mf.keepGoing, demandSelf, mf.addModulesToResults, mf.stripPackagesFromResults)
+			g := genDumpGraphWithResources(fs, caches, mf.targets, hostP, targetP, onWarn, tests, mf.keepGoing, demandSelf, mf.addModulesToResults)
 
 			writeGraph(g, !mf.sandboxing)
 		} else {
-			genStream(fs, caches, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, tests, mf.keepGoing, mf.addModulesToResults, mf.stripPackagesFromResults)
+			genStream(fs, caches, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, tests, mf.keepGoing)
 		}
 
 		if mf.dumpIgnoredMacros {
@@ -173,7 +172,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	ex.startGarbageCollector()
 
-	results := genStream(fs, caches, mf.targets, hostP, targetP, ex.onNode, onWarn, tests, mf.keepGoing, mf.addModulesToResults, mf.stripPackagesFromResults)
+	results := genStream(fs, caches, mf.targets, hostP, targetP, ex.onNode, onWarn, tests, mf.keepGoing)
 
 	ex.run(results)
 
@@ -353,11 +352,8 @@ func yaToolchainFlags(flags map[string]string, tc *Toolchain, tcFlags map[string
 	flags["YA"] = "yes"
 }
 
-func genStream(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), tests *TestOpts, keepGoing, addModulesToResults, stripPackagesFromResults bool) []NodeRef {
+func genStream(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), tests *TestOpts, keepGoing bool) []NodeRef {
 	emitter := newStreamingEmitter(onNode)
-
-	emitter.addModulesToResults = addModulesToResults
-	emitter.stripPackagesFromResults = stripPackagesFromResults
 
 	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, demandSelf)
 
@@ -372,7 +368,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 		LongOpts: getopt.LongOptStr("musl,help,xbuild:,install:,output:,stat,build-dir:,source-root:,keep-going,dump-graph,release,debug,target-platform:,host-platform:,host-platform-flag:,host-build-type:,verbose,sandboxing,dump-ignored-macros,clear,cmd-prefix:,jobs:,ninja,define:," +
 			"target:,build:,target-platform-build-type:,target-platform-flag:,target-platform-tests,test-size:,test-tag:,test-traceback:," +
 			"dist,ignore-nodes-exit-code,warning-mode:,cache-tests,output-only-tests,cache-namespace:,report-skipped-suites,tests-retries:," +
-			"backup-test-results,add-modules-to-results,strip-packages-from-results,do-not-output-stderrs,no-src-links,add-changed-ok-configures,no-yt-store"),
+			"backup-test-results,add-modules-to-results,do-not-output-stderrs,no-src-links,add-changed-ok-configures,no-yt-store"),
 		Mode: getopt.ModeInOrder,
 		Func: getopt.FuncGetOptLong,
 	}
@@ -479,8 +475,6 @@ func parseMakeFlags(args []string) *MakeFlags {
 			mf.verbose = true
 		case opt.Name == "add-modules-to-results":
 			mf.addModulesToResults = true
-		case opt.Name == "strip-packages-from-results":
-			mf.stripPackagesFromResults = true
 		case opt.Name == "sandboxing":
 			mf.sandboxing = true
 		case opt.Name == "dump-ignored-macros":
@@ -520,10 +514,6 @@ func parseMakeFlags(args []string) *MakeFlags {
 		if rel, err := filepath.Rel(mf.srcRoot, cwd); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			mf.targets = []string{rel}
 		}
-	}
-
-	if _, present := os.LookupEnv("YA_STRIP_PACKAGES_FROM_RESULTS"); present {
-		mf.stripPackagesFromResults = true
 	}
 
 	return mf
@@ -580,7 +570,6 @@ execution flags:
   -t, -tt, -ttt                 Generate test nodes (small / +medium / +large).
   --stat                        Print the 10 longest tasks and per-kind totals after the build.
   -G, --dump-graph              With -j 0, write the generated graph as JSON to stdout.
-  --strip-packages-from-results  Remove package results and their unreachable dependencies from the dump.
   --dump-ignored-macros         With -j 0, print service-keyword macro args no handler models.
   --verbose                     Emit Gen-time diagnostics (unsupported sysincl records, …) to stderr.
   --sandboxing                  Set SANDBOXING=yes and run every node in an isolated
