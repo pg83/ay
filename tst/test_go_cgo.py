@@ -86,6 +86,31 @@ def between(args, start, end):
 
 
 class GoCgoGraphTest(unittest.TestCase):
+    def test_simd_sources_compile_separately_from_cgo_dynimport_sources(self):
+        files = cgo_world()
+        files.update({
+            "binding/ya.make": "GO_LIBRARY()\nSRCS(stub.go bridge.c trampoline.S)\n"
+                "CGO_SRCS(binding.go)\nSRC_C_AVX2(simd.c)\nEND()\n",
+            "binding/stub.go": "package binding\n",
+            "binding/binding.go": 'package binding\nimport "C"\n',
+            "binding/bridge.c": "int bridge_value;\n",
+            "binding/trampoline.S": ".text\n",
+            "binding/simd.c": "int simd_value;\n",
+        })
+        graph = lib.make(files, "binding", "--target-platform", "default-linux-x86_64")
+        simd = lib.node_by_output(graph, "$(B)/binding/simd.c.avx2.o")
+        archive = lib.node_by_output(graph, "$(B)/binding/binding.a")
+        dynimport = lib.node_by_output(graph, "$(B)/binding/_cgo_import.go")
+        self.assertIn("-mavx2", simd["cmds"][0]["cmd_args"])
+        self.assertIn("$(B)/binding/simd.c.avx2.o", archive["inputs"])
+        self.assertIn(simd["uid"], archive["deps"])
+        self.assertNotIn("$(B)/binding/simd.c.avx2.o", dynimport["inputs"])
+        self.assertNotIn(simd["uid"], dynimport["deps"])
+        for output in ("bridge.c.o", "trampoline.S.o"):
+            producer = lib.node_by_output(graph, "$(B)/binding/" + output)
+            self.assertIn("$(B)/binding/" + output, dynimport["inputs"])
+            self.assertIn(producer["uid"], dynimport["deps"])
+
     def test_generated_go_keeps_native_sibling_includes_on_native_compile(self):
         files = cgo_world()
         lib.tool_program(files, "tools/wrappergen", "wrappergen")
