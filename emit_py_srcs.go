@@ -31,11 +31,10 @@ const (
 type PySourceKind uint8
 
 type PySourceMeta struct {
-	Module      STR
-	Token       ANY
-	ExtraInputs []VFS
-	Group       int
-	Kind        PySourceKind
+	Module STR
+	Token  ANY
+	Group  int
+	Kind   PySourceKind
 }
 
 func (e *EmitContext) addPyMeta(meta PySourceMeta) uint32 {
@@ -61,12 +60,11 @@ func generatedPyResourceKey(modulePath string, d *ModuleData, srcRel string) str
 }
 
 type PySrc struct {
-	Path        VFS
-	Module      STR
-	Token       ANY
-	ExtraInputs []VFS
-	Group       int
-	Kind        PySourceKind
+	Path   VFS
+	Module STR
+	Token  ANY
+	Group  int
+	Kind   PySourceKind
 }
 
 func resolvePySrcRelKnown(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string, srcRelClean bool) STR {
@@ -203,7 +201,7 @@ func (e *EmitContext) pyYapycExt() string {
 func (e *EmitContext) collectPySource(path VFS, meta PySourceMeta) {
 	e.pySrcsReg = append(e.pySrcsReg, PySrc{
 		Path: path, Module: meta.Module, Token: meta.Token,
-		ExtraInputs: meta.ExtraInputs, Group: meta.Group, Kind: meta.Kind,
+		Group: meta.Group, Kind: meta.Kind,
 	})
 }
 
@@ -256,7 +254,7 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 		}
 
 		return append(out,
-			PyGenResEntry{token: token, key: ps.Module, path: ps.Path, buildInputs: ps.ExtraInputs},
+			PyGenResEntry{token: token, key: ps.Module, path: ps.Path},
 			PyGenResEntry{token: e.resStr2("${ARCADIA_BUILD_ROOT}/", yapycOut.relString()), key: ps.Module, yapyc: true, path: yapycOut})
 	case pySourceGenerated:
 		info := e.codegen.use(ps.Path)
@@ -411,11 +409,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 		cmdArgs = na.chunkList(tool.head,
 			na.anyList(internV(token, "-").any(), ps.Path.any(), outputPath.any()))
 
-		if len(ps.ExtraInputs) > 0 {
-			nodeInputs = na.inputList(tool.binaries, na.vfsList(ps.Path), ps.ExtraInputs)
-		} else {
-			nodeInputs = na.inputList(tool.binaries, na.vfsList(ps.Path))
-		}
+		nodeInputs = na.inputList(tool.binaries, na.vfsList(ps.Path))
 	} else {
 		var genInfo *GeneratedFileInfo
 		var moduleName string
@@ -881,11 +875,10 @@ func pyInitDefineShortname(flag string) (string, bool) {
 }
 
 type PyGenResEntry struct {
-	token       string
-	key         STR
-	yapyc       bool
-	path        VFS
-	buildInputs []VFS
+	token string
+	key   STR
+	yapyc bool
+	path  VFS
 }
 
 func (e *EmitContext) pySrcResourceItems(entries []PyGenResEntry) []ResourceItem {
@@ -908,7 +901,7 @@ func (e *EmitContext) pySrcResourceItems(entries []PyGenResEntry) []ResourceItem
 		buf = append(buf, en.key.sharedString()...)
 
 		key := bytesString(buf[keyStart:])
-		fileItem := ResourceItem{Path: en.token, Key: key, ExtraBuilds: en.buildInputs}
+		fileItem := ResourceItem{Path: en.token, Key: key}
 
 		fileItem.setInput(en.path)
 		items = append(items, fileItem)
@@ -937,7 +930,7 @@ func (e *EmitContext) pySrcResourceItems(entries []PyGenResEntry) []ResourceItem
 
 		buf = buf[:cmdStart]
 
-		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, ExtraBuilds: en.buildInputs}
+		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd}
 
 		kvItem.setInput(en.path)
 		items = append(items, kvItem)
@@ -989,8 +982,8 @@ func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem
 
 		buf = buf[:cmdStart]
 
-		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, ExtraBuilds: en.buildInputs}
-		fileItem := ResourceItem{Path: en.token, Key: key, ExtraBuilds: en.buildInputs}
+		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd}
+		fileItem := ResourceItem{Path: en.token, Key: key}
 
 		kvItem.setInput(en.path)
 		fileItem.setInput(en.path)

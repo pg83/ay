@@ -128,11 +128,10 @@ func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, pyOut, grp
 	e.enqueueSrc(SrcMeta{
 		Source: grpcPyOut.any(), Prio: stmtPrioDefault,
 		PyMeta: e.addPyMeta(PySourceMeta{
-			Module:      internV(keyDir, keySep, keyBase, "_pb2_grpc.py"),
-			Token:       pyProtoOutputToken(instance, grpcPyOut, generatedProto),
-			ExtraInputs: e.ctx.na.vfsList(pyOut),
-			Group:       srcGroup,
-			Kind:        pySourceProto,
+			Module: internV(keyDir, keySep, keyBase, "_pb2_grpc.py"),
+			Token:  pyProtoOutputToken(instance, grpcPyOut, generatedProto),
+			Group:  srcGroup,
+			Kind:   pySourceProto,
 		}),
 	})
 }
@@ -426,6 +425,8 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	if d.grpc {
 		e.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, OnUse: pyPBPE})
 	}
+
+	e.codegen.setMainOut(pyPBRef, outputs)
 
 	e.enqueuePyProtoOutputs(src, srcGroup, pyOut, grpcPyOut, generatedProto)
 }

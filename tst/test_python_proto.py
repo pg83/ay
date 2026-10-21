@@ -190,6 +190,54 @@ class PyProtoTest(unittest.TestCase):
         global_archive = lib.node_by_output(graph, "$(B)/proto/libpy3proto.global.a")
         self.assertEqual(global_archive["inputs"][0], aux["outputs"][0])
 
+    def test_secondary_outputs_keep_main_input_across_resource_chunks(self):
+        # proto.conf marks _pb2.py as main. ymake/json_visitor.cpp also
+        # lists that output when a command consumes a secondary output.
+        # Long resource keys split the main and gRPC files into separate
+        # chunks; the larger key also isolates the rootrel metadata pair.
+        for namespace_length in (1800, 9000):
+            with self.subTest(namespace_length=namespace_length):
+                files = python_base()
+                files.update({
+                    "proto/ya.make": (
+                        "PROTO_LIBRARY()\nGRPC()\nEXCLUDE_TAGS(CPP_PROTO)\n"
+                        f"PY_NAMESPACE({'n' * namespace_length})\n"
+                        "SRCS(x.proto)\n"
+                        "RESOURCE(DONT_COMPRESS "
+                        "${ARCADIA_BUILD_ROOT}/proto/x__intpy3___pb2.pyi types)\nEND()\n"
+                    ),
+                    "proto/x.proto": 'syntax = "proto3";\nmessage X {}\n',
+                })
+                graph = lib.make(files, "app")
+                main = "$(B)/proto/x__intpy3___pb2.py"
+                secondary = "$(B)/proto/x__intpy3___pb2_grpc.py"
+                stub = "$(B)/proto/x__intpy3___pb2.pyi"
+                producer = lib.node_by_output(graph, main)
+                self.assertEqual(producer["outputs"], [main, secondary, stub])
+                packs = [
+                    node for node in graph["graph"]
+                    if node["outputs"][0].endswith("_raw.auxcpp")
+                ]
+                grpc_packs = [node for node in packs if secondary in node["inputs"]]
+                self.assertTrue(grpc_packs)
+                self.assertTrue(all(main not in args(node) for node in grpc_packs))
+                if namespace_length == 9000:
+                    self.assertTrue(any(
+                        args(node)[2] == "-" and len(args(node)) == 4
+                        for node in grpc_packs
+                    ))
+                [stub_pack] = [node for node in packs if stub in args(node)]
+                for node in [*grpc_packs, stub_pack]:
+                    self.assertEqual(node["inputs"].count(main), 1)
+                    self.assertEqual(node["deps"].count(producer["uid"]), 1)
+                    self.assertNotIn("$(S)/proto/x.proto", node["inputs"])
+                self.assertNotIn(main, args(stub_pack))
+                bytecode = lib.node_by_output(
+                    graph, "$(B)/proto/x__intpy3___pb2_grpc.py.sd3w.yapyc3",
+                )
+                self.assertEqual(bytecode["inputs"].count(main), 1)
+                self.assertEqual(bytecode["deps"].count(producer["uid"]), 1)
+
     def test_proto_in_py_srcs_packs_group_resources(self):
         files = python_base()
         files.update({

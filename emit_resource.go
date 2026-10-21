@@ -190,7 +190,6 @@ type ResourceItem struct {
 	Cmd         STR
 	SourceInput VFS
 	BuildInput  VFS
-	ExtraBuilds []VFS
 	AuxBuilds   []VFS
 }
 
@@ -489,8 +488,6 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			if it.input() != 0 {
 				buildBound++
 			}
-
-			buildBound += len(it.ExtraBuilds)
 		}
 
 		var payloadBuilds []VFS
