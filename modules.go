@@ -2334,6 +2334,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.noLint = "ktlint"
 		}
 	case tokStyleCpp:
+		d.collectCPPStyle(v, env)
 		env.setBool(envUseAllSrcs, true)
 		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
 
@@ -2343,6 +2344,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokHeaders:
 		applyHeaders(fs, modulePath, v.Args, d)
 	case tokStyleCppUserSessions, tokStyleCppYt:
+		d.collectCPPStyle(v, env)
 		env.setBool(envUseAllSrcs, true)
 		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
 	case tokTsProtoPackageName:

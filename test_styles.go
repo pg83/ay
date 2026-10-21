@@ -23,6 +23,8 @@ type StyleCheck struct {
 	ExtraParams        []string
 	FileProcessingTime float64
 	Python             bool
+	CPP                bool
+	Depends            []string
 	Peer               string
 }
 
@@ -47,6 +49,10 @@ func (d *ModuleData) collectPythonStyleChecks(env Environment) {
 	checks := d.styleChecks[:0]
 
 	for _, check := range d.styleChecks {
+		if check.CPP && (d.noLint == "none" || d.noLint == "none_internal" || env.bool(envCppAnalysisMode)) {
+			continue
+		}
+
 		if check.Python {
 			if d.noLint == "none" || d.noLint == "none_internal" || env.bool(envCppAnalysisMode) {
 				continue
@@ -278,33 +284,19 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 	pythonFiles = sortedUnique(pythonFiles)
 
 	for _, check := range e.d.styleChecks {
+		if check.CPP {
+			check.Files = sortedUnique(check.Files)
+
+			if len(check.Depends) != 0 && !customClangFormatAllowed(e.instance.Path.relString()) {
+				throwFmt("STYLE: custom clang-format is not allowed in %s", e.instance.Path.relString())
+			}
+		}
+
 		if check.Python {
 			check.Files = pythonFiles
 
 			if len(check.Files) == 0 {
 				continue
-			}
-
-			if check.ConfigType != "" {
-				if check.ConfigType != "pyproject.toml" && (check.Name != "ruff" || check.ConfigType != "ruff.toml") {
-					throwFmt("STYLE: unknown %s config type %s", check.Name, check.ConfigType)
-				}
-
-				if check.ConfigDir == "" {
-					if inc, ok := e.ctx.autoincludeIdx.lintersMakeIncFor(e.instance.Path.relString()); ok {
-						check.ConfigDir = path.Dir(inc.relString())
-					}
-				}
-
-				if check.ConfigDir == "" {
-					throwFmt("STYLE: config type requires MODULE_COMMON_CONFIGS_DIR")
-				}
-
-				check.Config = path.Join(check.ConfigDir, check.ConfigType)
-
-				if !e.ctx.fs.isFilePathClean(check.Config) {
-					throwFmt("STYLE: missing config %s", check.Config)
-				}
 			}
 
 			if slices.Contains(check.ExtraParams, "run_in_source_root=yes") {
@@ -314,6 +306,28 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 				if !slices.ContainsFunc(allowed, func(prefix string) bool { return strings.HasPrefix(module, prefix) }) {
 					throwFmt("STYLE: running ruff in source root is not allowed in %s", module)
 				}
+			}
+		}
+
+		if check.ConfigType != "" {
+			if check.CPP && check.ConfigType != ".clang-format" || !check.CPP && check.ConfigType != "pyproject.toml" && (check.Name != "ruff" || check.ConfigType != "ruff.toml") {
+				throwFmt("STYLE: unknown %s config type %s", check.Name, check.ConfigType)
+			}
+
+			if check.ConfigDir == "" {
+				if inc, ok := e.ctx.autoincludeIdx.lintersMakeIncFor(e.instance.Path.relString()); ok {
+					check.ConfigDir = path.Dir(inc.relString())
+				}
+			}
+
+			if check.ConfigDir == "" {
+				throwFmt("STYLE: config type requires MODULE_COMMON_CONFIGS_DIR")
+			}
+
+			check.Config = path.Join(check.ConfigDir, check.ConfigType)
+
+			if !e.ctx.fs.isFilePathClean(check.Config) {
+				throwFmt("STYLE: missing config %s", check.Config)
 			}
 		}
 
@@ -329,11 +343,15 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 
 		var resources []ResourceDecl
 
-		for _, r := range globals {
-			if r.GlobalVar.string() == check.Resource {
-				resources = append(resources, r)
+		if check.Resource == "" {
+			resources = globals
+		} else {
+			for _, r := range globals {
+				if r.GlobalVar.string() == check.Resource {
+					resources = append(resources, r)
 
-				break
+					break
+				}
 			}
 		}
 
@@ -345,7 +363,7 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 
 func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *TestSuite {
 	project := e.instance.Path.relString()
-	s := &TestSuite{p: e.ctx.target, projectPath: project, name: check.Name, testType: check.Name, ciType: "style", size: "small", timeout: 60, supportsTestParameters: true, globals: resources, runInputs: []VFS{source(project)}}
+	s := &TestSuite{p: e.ctx.target, depends: slices.Clone(check.Depends), projectPath: project, name: check.Name, testType: check.Name, ciType: "style", size: "small", timeout: 60, supportsTestParameters: true, globals: resources, runInputs: []VFS{source(project)}}
 
 	for _, file := range check.Files {
 		s.relatedPaths = append(s.relatedPaths, source(file).string())
@@ -364,7 +382,13 @@ func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *Te
 	}
 
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
-		args := []string{testToolHostPath, "run_custom_lint", "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--project-path", source(project).string(), "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--lint-name", check.Name, "--wrapper-script", check.Wrapper, "--depends", project, "--config", source(check.Config).string()}
+		args := []string{testToolHostPath, "run_custom_lint", "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--project-path", source(project).string(), "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--lint-name", check.Name, "--wrapper-script", check.Wrapper}
+
+		for _, dependency := range sortedUnique(append(slices.Clone(s.depends), project)) {
+			args = append(args, "--depends", dependency)
+		}
+
+		args = append(args, "--config", source(check.Config).string())
 
 		for _, config := range check.ExtraConfigs {
 			args = append(args, "--config", source(config).string())

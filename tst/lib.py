@@ -297,6 +297,10 @@ CONF_FILES = {
     "build/sysincl/misc.yml": "- includes: []\n",
     "build/conf/compilers/gnu_compiler.conf": "",
     "build/conf/linkers/ld.conf": FAKE_LD_CONF,
+    "build/config/tests/cpp_style/default_configs.json": json.dumps({
+        "clang_format": "build/config/tests/cpp_style/.clang-format",
+    }),
+    "build/config/tests/cpp_style/.clang-format": "BasedOnStyle: LLVM\n",
     "build/config/tests/py_style/default_configs.json": json.dumps({
         "py2_flake8": "build/config/tests/flake8/flake8.conf",
         "flake8": "build/config/tests/flake8/flake8.conf",

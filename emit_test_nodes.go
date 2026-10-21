@@ -73,7 +73,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 
 	suites := []*TestSuite{s}
 
-	if !python {
+	if !python && !slices.ContainsFunc(e.d.styleChecks, func(check StyleCheck) bool { return check.CPP && check.Name == "clang_format" }) {
 		srcBase := project
 
 		if e.d.moduleStmt.Name == tokUnittestFor && len(e.d.moduleStmt.Args) > 0 {

@@ -103,6 +103,11 @@ func (e *EmitContext) emitLD(
 	dyn *DynLibLink,
 ) NodeRef {
 	na := emit.nodeArenas()
+
+	for _, input := range ldScriptInputs {
+		e.cppStyleSource(input.any())
+	}
+
 	globalInputs := e.moduleGlobals
 	pluginPaths := e.globalPlugins()
 
