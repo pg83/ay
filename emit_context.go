@@ -387,6 +387,18 @@ func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	return e.codegen.register(info)
 }
 
+func (e *EmitContext) appendModuleOutputs(outputs []VFS) []VFS {
+	for _, meta := range e.metas {
+		if src := meta.Source.vfs(); src != 0 && src.isBuild() {
+			if info := e.codegen.lookup(src); info != nil && info.OwnerModule == e.instance.Path {
+				outputs = append(outputs, info.ModuleOutputs...)
+			}
+		}
+	}
+
+	return outputs
+}
+
 func (e *EmitContext) pendingEmit(fn func()) *PendingEmit {
 	p := e.ctx.na.pending.one()
 

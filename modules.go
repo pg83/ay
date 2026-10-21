@@ -1269,6 +1269,16 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.peerdirs = append(d.peerdirs, strContribToolsSwigLibJava.any())
 			}
 
+			if d.unit.SwigLang.string() == "perl" {
+				for _, src := range srcToks {
+					if srcExtClassOf(src) == srcExtSwg {
+						d.peerdirs = append(d.peerdirs, strContribToolsSwigLibPerl5.any(), strBuildPlatformPerl.any())
+
+						break
+					}
+				}
+			}
+
 			for _, srcTok := range srcToks {
 				if srcTok == kwGLOBAL.any() {
 					globalNext = true
@@ -1344,6 +1354,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.setVars[internStr(v.Name)] = internStr(value)
+
+			if v.Name == "SWIG_LANG" {
+				d.unit.SwigLang = internStr(value)
+			}
 
 			if v.Name == "PROTOC_TRANSITIVE_HEADERS" {
 				recalcProtoOutputs(d)
