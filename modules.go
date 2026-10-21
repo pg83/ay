@@ -360,16 +360,17 @@ type CompileSpec struct {
 }
 
 type SrcMeta struct {
-	Source      ANY
-	Prio        int
-	Seq         int
-	Stmt        int
-	Global      bool
-	RosZeroCopy bool
-	Bucket      int
-	Compile     CompileSpec
-	CompileRef  NodeRef
-	PyMeta      uint32
+	Source               ANY
+	Prio                 int
+	Seq                  int
+	Stmt                 int
+	Global               bool
+	RosZeroCopy          bool
+	Bucket               int
+	Compile              CompileSpec
+	CompileRef           NodeRef
+	PyMeta               uint32
+	ExplicitBuildCSource bool
 }
 
 func (m SrcMeta) sortKey(round uint64) uint64 {
@@ -1412,7 +1413,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					prio, seq = stmtPrioSrcs, d.nextDeclSeq()
 				}
 
-				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global, Compile: compile})
+				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global, Compile: compile, ExplicitBuildCSource: srcTok.vfs().isBuild() && srcExtClassOf(srcTok.relOrSelf().any()) == srcExtCSource})
 				globalNext = false
 
 				switch srcExtClassOf(srcTok) {

@@ -311,7 +311,7 @@ class CcVariantsTest(unittest.TestCase):
         self.assertEqual(compile_node["inputs"], ['$(B)/other/gen.cpp', '$(S)/other/g.in'])
         self.assertEqual(compile_node["deps"], [copy["uid"]])
         archive = lib.node_by_output(graph, "$(B)/m/libm.a")
-        self.assertEqual(archive["inputs"][:2], ["$(B)/m/x.cpp.o", "$(B)/m/__/other/gen.cpp.o"])
+        self.assertEqual(archive["inputs"][:2], ["$(B)/m/__/other/gen.cpp.o", "$(B)/m/x.cpp.o"])
 
     def test_generated_source_at_an_ancestor_path_of_the_module(self):
         # In the build tree x/a.cpp is a generated file; in the source tree it

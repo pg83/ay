@@ -37,6 +37,15 @@ class CompileNlgTest(unittest.TestCase):
                     "dummy.cpp.o", "register.cpp.o"):
             lib.node_by_output(graph, f"{b}/{obj}")
         lib.node_by_output(graph, "$(B)/a/nlg/liba-nlg.global.a")
+        archive = lib.node_by_output(graph, "$(B)/a/nlg/liba-nlg.a")
+        objects = [arg for arg in archive["cmds"][0]["cmd_args"] if arg.endswith(".cpp.o")]
+        self.assertEqual(objects, [f"{b}/{name}.cpp.o" for name in (
+            "nlg_renderer_factory", "translations", "names.nlg", "_/v2/more.nlg", "dummy",
+        )])
+        for output in objects:
+            compiled = lib.node_by_output(graph, output)
+            self.assertIn(run["uid"], compiled["deps"])
+            self.assertIn(compiled["uid"], archive["deps"])
 
 
 class ConfDefinedProtoPluginTest(unittest.TestCase):

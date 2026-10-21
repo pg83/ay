@@ -2816,6 +2816,10 @@ func (e *EmitContext) queuedSourceInput(info *GeneratedFileInfo) VFS {
 }
 
 func (e *EmitContext) srcRound(m SrcMeta) uint64 {
+	if m.Prio == stmtPrioSrcs && m.ExplicitBuildCSource {
+		return 0
+	}
+
 	cur := m.Source.vfs()
 
 	if !cur.isBuild() {

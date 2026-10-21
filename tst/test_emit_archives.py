@@ -4,6 +4,37 @@ import lib
 
 
 class EmitArchivesTest(unittest.TestCase):
+    def test_direct_build_sources_keep_order_before_automatic_outputs(self):
+        for sources, shadow, expected in (
+            ("${BINDIR}/generated.cpp plain.cpp", False, ["generated", "plain", "dummy"]),
+            ("plain.cpp ${BINDIR}/generated.cpp", False, ["plain", "generated", "dummy"]),
+            ("generated.cpp plain.cpp", False, ["generated", "plain", "dummy"]),
+            ("generated.cpp plain.cpp", True, ["generated", "plain", "dummy"]),
+        ):
+            with self.subTest(sources=sources, shadow=shadow):
+                files = {
+                    "mod/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}"
+                        "RUN_PYTHON3(gen.py OUT dummy.cpp OUT_NOAUTO generated.cpp)\n"
+                        f"SRCS({sources})\nEND()\n",
+                    "mod/plain.cpp": "int plain;\n",
+                    "mod/gen.py": "",
+                }
+                if shadow:
+                    files["mod/generated.cpp"] = "int source;\n"
+                graph = lib.make(files, "mod")
+                producer = lib.node_by_output(graph, "$(B)/mod/dummy.cpp")
+                archive = lib.node_by_output(graph, "$(B)/mod/libmod.a")
+                arguments = archive["cmds"][0]["cmd_args"]
+                members = [arg for arg in arguments if arg.endswith(".cpp.o")]
+                self.assertEqual(members, [f"$(B)/mod/{name}.cpp.o" for name in expected])
+                for name in ("generated", "plain", "dummy"):
+                    compiled = lib.node_by_output(graph, f"$(B)/mod/{name}.cpp.o")
+                    self.assertIn(compiled["outputs"][0], archive["inputs"])
+                    self.assertIn(compiled["uid"], archive["deps"])
+                    if name == "dummy" or name == "generated" and not shadow:
+                        self.assertIn(f"$(B)/mod/{name}.cpp", compiled["inputs"])
+                        self.assertIn(producer["uid"], compiled["deps"])
+
     def test_plain_archive_keeps_members_on_producer(self):
         files = {
             "mod/ya.make": (
