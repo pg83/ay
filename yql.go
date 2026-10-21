@@ -126,6 +126,7 @@ func finishYqlModule(modulePath string, env Environment, d *ModuleData) {
 }
 
 func (e *EmitContext) genYqlPrebuiltProgram() *ModuleEmitResult {
+	globals := e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
 	d := e.d
 	name := programBinaryName(e.instance, d.moduleStmt)
 	prebuilt := name + ".prebuilt"
@@ -140,7 +141,7 @@ func (e *EmitContext) genYqlPrebuiltProgram() *ModuleEmitResult {
 		},
 	})
 
-	return e.genYqlPrebuiltCopy(src, out)
+	return e.genYqlPrebuiltCopy(src, out, globals)
 }
 
 func (e *EmitContext) genYqlPrebuiltTool() *ModuleEmitResult {
@@ -148,18 +149,19 @@ func (e *EmitContext) genYqlPrebuiltTool() *ModuleEmitResult {
 		throwFmt("gen: %s: YQL_PREBUILT_TOOL requires a resolved PRIMARY_OUTPUT", e.instance.Path.relString())
 	}
 
+	globals := e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
+
 	e.emitFromSandboxes()
 	e.emitDeclaredProducers(nil)
 
 	src := e.resolveModuleSourceVFS(internStr(e.d.primaryOutput).any(), e.d.srcDirs)
 	out := lDOutputPath(e.instance, programBinaryName(e.instance, e.d.moduleStmt))
 
-	return e.genYqlPrebuiltCopy(src, out)
+	return e.genYqlPrebuiltCopy(src, out, globals)
 }
 
-func (e *EmitContext) genYqlPrebuiltCopy(src, out VFS) *ModuleEmitResult {
+func (e *EmitContext) genYqlPrebuiltCopy(src, out VFS, globals []ResourceDecl) *ModuleEmitResult {
 	ctx, d, na := e.ctx, e.d, e.ctx.na
-	globals := e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
 
 	var refs []NodeRef
 
