@@ -682,6 +682,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			env.setBool(internEnv(a), true)
 			javaEnableFlag(d, a, true)
 		}
+	case "DISABLE_DATA_VALIDATION":
+		env.setBool(envValidateData, false)
 	case "DISABLE":
 		for _, a := range args {
 			env.setBool(internEnv(a), false)

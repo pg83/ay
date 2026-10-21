@@ -31,23 +31,12 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	parsed = append(parsed, flexOutputInclude)
 	parsed = append(parsed, localBucket...)
 
-	var cflags []ANY
-
-	if extIsFlexL(srcRel) {
-		cf := na.anys.alloc(1)
-
-		cf[0] = argWnoUnusedVariable.any()
-		na.anys.commit(1)
-		cflags = cf[:1:1]
-	}
-
 	na.dirs.commit(len(parsed))
 	parsed = parsed[:len(parsed):len(parsed)]
 
 	lxRef := ctx.emit.reserve()
 
 	meta.Source = outVFS.any()
-	meta.Compile.CFlags = concat(meta.Compile.CFlags, cflags)
 	e.enqueueSrc(meta)
 
 	pe := func() {

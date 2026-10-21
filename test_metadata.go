@@ -86,6 +86,7 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 	case tokExplicitData:
 		t.explicitData = true
 	case tokData:
+
 		for i := 0; i < len(args); i++ {
 			if args[i] == "AUTOUPDATED" {
 				i++

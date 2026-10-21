@@ -92,7 +92,6 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 
 	if isCxxSource(r6Out.relString()) {
 		meta.Source = r6Out.any()
-		meta.Compile.CFlags = cflagsWnoImplicitFallthrough(e.ctx.na, meta.Compile.CFlags)
 		e.enqueueSrc(meta)
 	}
 

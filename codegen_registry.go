@@ -8,6 +8,7 @@ import (
 type GeneratedFileInfo struct {
 	InputsOnly       bool
 	ModuleType       TOK
+	ModuleInputs     *ModuleInputInfo
 	Nots             *NotsPrepared
 	OutputPath       VFS
 	SourcePath       VFS
@@ -22,6 +23,12 @@ type GeneratedFileInfo struct {
 	InputLoopSources []VFS
 	LateOutputs      []VFS
 	ParsedIncludes   ParsedIncludeSet
+}
+
+type ModuleInputInfo struct {
+	Includes  []VFS
+	Globals   []VFS
+	PassPeers bool
 }
 
 type pendingEmitter interface {
@@ -241,6 +248,32 @@ func (r *CodegenRegistry) moduleType(path VFS) TOK {
 	}
 
 	return info.ModuleType
+}
+
+func (r *CodegenRegistry) moduleInputs(path VFS) *ModuleInputInfo {
+	info, _ := r.byRel.get(path.rel())
+
+	if info == nil {
+		return nil
+	}
+
+	return info.ModuleInputs
+}
+
+func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, globals []VFS, passPeers bool) {
+	info, ok := r.byRel.get(output.rel())
+
+	if !ok {
+		info = r.na.geninfos.one()
+		*info = GeneratedFileInfo{OutputPath: output, InputsOnly: true, ModuleType: moduleType}
+		r.byRel.put(output.rel(), info)
+	}
+
+	if info.ModuleInputs == nil {
+		info.ModuleInputs = r.na.moduleInputs.one()
+	}
+
+	*info.ModuleInputs = ModuleInputInfo{Includes: includes, Globals: globals, PassPeers: passPeers}
 }
 
 func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {

@@ -266,7 +266,6 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		p := &plans[i]
 		stmt := p.stmt
 		generatedExplicit := p.generatedExplicit
-		py23Variant := p.py23Variant
 		generatedVFS := p.generatedVFS
 		headerVFS := p.headerVFS
 		srcVFS := p.srcVFS
@@ -306,15 +305,6 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		if !stmt.CMode && !generatedExplicit {
 			objSuf = d.unit.ObjSuf
 		}
-
-		ccCFlags := na.anys.alloc(1)[:0]
-
-		if cythonImplicitFallthrough(stmt, py23Variant) {
-			ccCFlags = append(ccCFlags, argWnoImplicitFallthrough.any())
-		}
-
-		na.anys.commit(len(ccCFlags))
-		ccCFlags = ccCFlags[:len(ccCFlags):len(ccCFlags)]
 
 		env := envVarsVCS
 		cmdArgs := na.anys.alloc(9 + len(d.cythonOptions) + len(stmt.Options) + len(d.cythonAddIncl))[:0]
@@ -403,7 +393,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		e.enqueueSrc(SrcMeta{
 			Source: generatedVFS.any(), Prio: stmtPrioDefault, Seq: seq, Bucket: bkCython,
-			Compile: CompileSpec{ObjSuf: objSuf, CFlags: ccCFlags},
+			Compile: CompileSpec{ObjSuf: objSuf},
 		})
 	}
 }
@@ -498,10 +488,6 @@ func cythonUsesPy23Variant(modName TOK) bool {
 	}
 
 	return false
-}
-
-func cythonImplicitFallthrough(stmt *CythonStmt, py23Variant bool) bool {
-	return !stmt.CMode && (strings.HasSuffix(stmt.Src, ".pyx") || py23Variant)
 }
 
 func appendCythonAddIncl(cmdArgs []ANY, addIncl []VFS, memo InclArgMemo) []ANY {

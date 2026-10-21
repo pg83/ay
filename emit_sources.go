@@ -38,6 +38,18 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtRos:
 		e.emitRosSource(meta, nil)
 	case srcExtHeader:
+		header := e.moduleSourceVFS(src)
+
+		if header.isSource() {
+			closure := e.inputClosure(header)
+
+			for _, bucket := range closure.bucketList() {
+				if len(bucket) > 0 && bucket[0].isBuild() {
+					e.moduleIncludes = append(e.moduleIncludes, bucket...)
+				}
+			}
+		}
+
 		return
 	case srcExtCSource:
 		srcVFS := src.vfs()
@@ -117,7 +129,13 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		e.emitLibraryCfgProtoSource(meta)
 	case srcExtSwg:
 		e.emitLibrarySwigSource(meta)
+	case srcExtSsqls:
+		e.emitSsqlsSource(meta)
 	default:
+		if meta.Global && e.collectModuleGlobalSource(src) {
+			return
+		}
+
 		if isGoModuleType(e.d.unit.Type) && src.string() == "CGO_EXPORT" {
 			return
 		}

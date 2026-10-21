@@ -41,6 +41,7 @@ const (
 	prodUserverProto
 	prodListProto
 	prodFromArchive
+	prodPchFile
 )
 
 type ProducerPos struct {
@@ -112,6 +113,10 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	}
 
 	switch class {
+	case srcExtSsqls:
+		base := strings.TrimSuffix(e.moduleSourceRel(meta.Source), ".ssqls")
+
+		e.prodVFS = append(e.prodVFS, build(e.instance.Path.relString(), "/", base, ".cpp"), build(e.instance.Path.relString(), "/", base, ".h"))
 	case srcExtRos:
 		if d.ros != nil {
 			e.prodVFS = append(e.prodVFS, e.rosOutputPaths(src, meta.RosZeroCopy)...)
@@ -222,7 +227,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		len(d.decimalMD5) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
 		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens) + len(d.cgoSrcs) +
-		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos) + len(d.listProtos) + len(d.fromArchives)
+		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos) + len(d.listProtos) + len(d.fromArchives) + len(d.pchFiles)
 
 	if d.docs != nil {
 		n += len(d.docs.copies)
@@ -610,6 +615,14 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		})
 	}
 
+	for i, stmt := range d.pchFiles {
+		positions = append(positions, ProducerPos{
+			kind: prodPchFile, index: i,
+			outs: []VFS{copyFileOutputVFS(module, stmt.Output.string())},
+			ins:  e.srcInsCandidate(stmt.Header),
+		})
+	}
+
 	for i, stmt := range d.llvmCompile {
 		positions = append(positions, ProducerPos{
 			kind: prodLlvmCompile, index: i,
@@ -913,6 +926,9 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 			e.emitYmapsSprotoStmt(e.d.ymapsSprotoSrcs[pos.index])
 		case prodLlvmBc:
 			e.emitLlvmBcStmt(e.d.llvmBc[pos.index])
+		case prodPchFile:
+			e.emitPchFile(e.d.pchFiles[pos.index])
+
 		case prodLlvmCompile:
 			e.emitLlvmCompile(e.d.llvmCompile[pos.index])
 		case prodLuaCompile:

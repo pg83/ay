@@ -6,11 +6,16 @@ import (
 )
 
 var (
-	argDashBBin = internV("-B", binPath)
-	ccKV        = KV{P: pkCC, PC: pcGreen}
+	argDashBBin   = internV("-B", binPath)
+	ccKV          = KV{P: pkCC, PC: pcGreen}
+	cxxBisonFlags = []ANY{argWnoUnusedButSetVariable.any(), argWnoDeprecatedCopy.any()}
+	cxxRagelFlags = []ANY{argWnoImplicitFallthrough.any()}
+	cxxSwigFlags  = []ANY{argWnoDeprecatedDeclarations.any()}
+	cxxLexerFlags = []ANY{argWnoUnusedVariable.any()}
 )
 
 type ModuleCompileEnv struct {
+	PchFlagsGlobal       []ANY
 	Flags                FlagSet
 	AddIncl              []VFS
 	InclArgs             InclArgMemo
@@ -172,15 +177,14 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 
 	var langFlags []ANY
 
-	if isCxx && strings.HasSuffix(strings.TrimSuffix(srcRel, filepath.Ext(srcRel)), ".swg") &&
-		(instance.Platform.ifEnv.bool(envCLANG) || instance.Platform.ifEnv.bool(envCLANG_CL) || instance.Platform.ifEnv.bool(envGCC)) {
-		langFlags = na.anyList(argWnoDeprecatedDeclarations.any())
+	if isCxx && (instance.Platform.ifEnv.bool(envCLANG) || instance.Platform.ifEnv.bool(envCLANG_CL) || instance.Platform.ifEnv.bool(envGCC)) {
+		langFlags = cxxLanguageFlags(strings.TrimSuffix(srcRel, filepath.Ext(srcRel)))
 	}
 
 	blocks := in.CCBlocks
 	tok := na.anyList(inVFS.any(), argDashC.any(), argDashO.any(), outVFS.any())
 	inChunk := tok[0:1]
-	wrapcc := len(instance.Platform.WrapccHead) > 0
+	wrapcc := len(blocks.wrapHead) > 0
 	compiler, tail := blocks.cHead, blocks.cxxTail
 
 	if isCxx {
@@ -215,7 +219,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	k := 0
 
 	if wrapcc {
-		chunks[k] = instance.Platform.WrapccHead
+		chunks[k] = blocks.wrapHead
 		chunks[k+1] = inChunk
 		chunks[k+2] = instance.Platform.WrapccTail
 		k += 3
@@ -561,6 +565,7 @@ func appendCompileFlagPipeline(cmdArgs []ANY, bundle CompileFlagBundle, warningB
 }
 
 type CcModuleArgBlocks struct {
+	wrapHead []ANY
 	cHead    []ANY
 	cxxHead  []ANY
 	includes []ANY
@@ -687,7 +692,15 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 		in.CXXFlagsVar,
 	}
 
+	wrapHead := p.WrapccHead
+
+	if p.WrapUnshare {
+		wrapHead = na.anyConcat([]ANY{bldResourcesUnshareWrapperBinWrapUnshare.any()}, in.PchFlagsGlobal,
+			[]ANY{argSourceRoot.any(), strS.any(), argBuildRoot.any(), strB.any(), strWrapUnshareEnd.any()}, wrapHead)
+	}
+
 	return CcModuleArgBlocks{
+		wrapHead: wrapHead,
 		cHead:    na.anyList(in.TC.CC.any()),
 		cxxHead:  na.anyList(in.TC.CXX.any()),
 		includes: includes,
@@ -725,4 +738,21 @@ func (m InclArgMemo) arg(path VFS) STR {
 	m.m.put(path, a)
 
 	return a
+}
+
+func cxxLanguageFlags(stem string) []ANY {
+	switch {
+	case strings.HasSuffix(stem, ".y"), strings.HasSuffix(stem, ".ypp"):
+		return cxxBisonFlags
+	case strings.HasSuffix(stem, ".rl5"), strings.HasSuffix(stem, ".rl6"), strings.HasSuffix(stem, ".pyx"),
+		strings.HasSuffix(stem, ".py.py3"), strings.HasSuffix(stem, ".py.py2"),
+		strings.HasSuffix(stem, ".pyx.py3"), strings.HasSuffix(stem, ".pyx.py2"):
+		return cxxRagelFlags
+	case strings.HasSuffix(stem, ".swg"):
+		return cxxSwigFlags
+	case strings.HasSuffix(stem, ".l"), strings.HasSuffix(stem, ".g4"):
+		return cxxLexerFlags
+	}
+
+	return nil
 }

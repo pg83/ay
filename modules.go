@@ -133,6 +133,7 @@ type TestMeta struct {
 	forkMode        string
 	partition       string
 	splitFactor     int
+	validateData    bool
 }
 
 type ModuleData struct {
@@ -279,6 +280,7 @@ type ModuleData struct {
 	fromSandboxes            []*FromSandboxStmt
 	fromArchives             []FromArchiveEntry
 	sdcMetas                 []SdcMetaEntry
+	pchFiles                 []PchFileStmt
 	checkConfigHeaders       []ANY
 	cythonOptions            []ANY
 	cythonCpp                []*CythonStmt
@@ -734,6 +736,7 @@ func collectModuleInto(pm *IncludeParserManager, instance ModuleInstance, stmts 
 	collectStmts(fs, modulePath, kind, instance.Language, stmts, env, d, onWarn)
 	finishYqlModule(modulePath, env, d)
 	d.test.canonizeSubPath = env.string(envCanonizeSubPath)
+	d.test.validateData = resourceValidationEnabled(env)
 
 	if len(d.cythonCpp) > 0 {
 		d.cythonOptions = internAnys(strings.Fields(env.string(envCythonOptions)))
@@ -1871,6 +1874,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyRosStmt(modulePath, v, env, d)
 	case tokSdcInstall:
 		applySdcInstall(modulePath, v.Args, d, env)
+	case tokGenPchFile:
+		if len(v.Args) != 2 {
+			throwFmt("GEN_PCH_FILE expects an input header and output file")
+		}
+
+		d.pchFiles = append(d.pchFiles, PchFileStmt{Header: v.Args[0], Output: v.Args[1]})
+
 	case tokSdcResourceInfo, tokSdcSbResourceInfo, tokSdcRosnodeInfo, tokSdcSolibInfo:
 		d.sdcMetas = append(d.sdcMetas, parseSdcMeta(v.Name, anyStrs(v.Args)))
 	case tokFromArchive:
@@ -2550,6 +2560,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyArchiveAsmStmt(v, d)
 	case tokLj21Archive:
 		applyLj21ArchiveStmt(v, d)
+	case tokDisableDataValidation:
+		env.setBool(envValidateData, false)
 	case tokEnable:
 
 		for _, aTok := range v.Args {

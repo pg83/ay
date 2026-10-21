@@ -286,6 +286,7 @@ var tokName = [...]STR{
 	tokSdcResourceInfo:                 internStr("SDC_RESOURCE_INFO"),
 	tokSdcSbResourceInfo:               internStr("SDC_SB_RESOURCE_INFO"),
 	tokSdcRosnodeInfo:                  internStr("SDC_ROSNODE_INFO"),
+	tokGenPchFile:                      internStr("GEN_PCH_FILE"),
 	tokSdcSolibInfo:                    internStr("SDC_SOLIB_INFO"),
 	tokUnion:                           kwUNION,
 	tokUnittestFor:                     kwUNITTEST_FOR,
@@ -648,6 +649,7 @@ const (
 	tokSdcResourceInfo
 	tokSdcSbResourceInfo
 	tokSdcRosnodeInfo
+	tokGenPchFile
 	tokSdcSolibInfo
 	tokUnion
 	tokUnittestFor
