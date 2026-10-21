@@ -322,6 +322,18 @@ func (r *CodegenRegistry) lookupSplit(prefix VFS, suffix ANY) *GeneratedFileInfo
 		}
 	}
 
+	if info == nil && suffixID.string() != "" && !pathIsClean(suffixID.string()) {
+		joined := suffixID.string()
+
+		if prefixRel != "" {
+			joined = prefixRel + "/" + joined
+		}
+
+		if normalized := interned(cleanRel(joined)); normalized != 0 {
+			info = r.lookupSTR(normalized)
+		}
+	}
+
 	if r.bySplit == nil {
 		r.bySplit = newIntMap[splitLookup](1 << 15)
 	}
