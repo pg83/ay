@@ -153,6 +153,7 @@ type ScanContext struct {
 	protoInclude  []VFS
 	rosInclude    []VFS
 	swigInclude   []VFS
+	flatcInclude  []VFS
 	protoOutRoot  VFS
 	goAsmIncl     []VFS
 	cythonSys     []VFS
@@ -195,7 +196,11 @@ func (ctx *ScanContext) modulePaths(domain ScanDomain) (own, peer []VFS) {
 	case scanDomainRos:
 		return ctx.rosInclude, nil
 	case scanDomainFlatc:
-		return nil, nil
+		if len(ctx.flatcInclude) != 0 {
+			return dedup(ctx.flatcInclude, ctx.ccOwn), ctx.ccPeer
+		}
+
+		return ctx.ccOwn, ctx.ccPeer
 	case scanDomainGoAsm:
 		return ctx.goAsmIncl, nil
 	case scanDomainSwig:

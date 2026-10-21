@@ -111,6 +111,23 @@ func flatcDirectGeneratedHeaderIncludes(na *NodeArenas, pm *IncludeParserManager
 	return out[:len(out):len(out)]
 }
 
+func flatcIncludeArgs(na *NodeArenas, paths []VFS) []ANY {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	args := na.anys.alloc(2 * len(paths))[: 2*len(paths) : 2*len(paths)]
+
+	for i, path := range paths {
+		args[2*i] = argI.any()
+		args[2*i+1] = path.any()
+	}
+
+	na.anys.commit(len(args))
+
+	return args[:len(args):len(args)]
+}
+
 func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeRef, flatcBinary VFS, flatcFlags []ANY, transitiveImports Closure, moduleTag STR, tc ModuleToolchain, v *FlatcVariant, id NodeRef) {
 	instance := e.instance
 	na := e.ctx.na
@@ -125,7 +142,19 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 
 	headChunk := na.anyList(tc.Python3.any(), flatcWrapperVFS.any(), flatcBinary.any())
 	tailChunk := na.anyList(headerVFS.any(), srcVFS.any())
-	chunks := na.chunks.alloc(5)[:0]
+	includeArgs := e.peers.FlatcIncludeArgs
+
+	if v != &flatcVariantFL {
+		includeArgs = nil
+	}
+
+	chunkCap := 5
+
+	if len(includeArgs) != 0 {
+		chunkCap += 2
+	}
+
+	chunks := na.chunks.alloc(chunkCap)[:0]
 
 	chunks = append(chunks, headChunk, v.constFlags)
 
@@ -133,7 +162,13 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 		chunks = append(chunks, flatcFlagsChunk)
 	}
 
-	chunks = append(chunks, v.ioLeadArgs, tailChunk)
+	if len(includeArgs) == 0 {
+		chunks = append(chunks, v.ioLeadArgs)
+	} else {
+		chunks = append(chunks, v.ioLeadArgs[:len(v.ioLeadArgs)-1], includeArgs, v.ioLeadArgs[len(v.ioLeadArgs)-1:])
+	}
+
+	chunks = append(chunks, tailChunk)
 	na.chunks.commit(len(chunks))
 
 	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])

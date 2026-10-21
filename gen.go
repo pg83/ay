@@ -149,6 +149,7 @@ type ModuleEmitResult struct {
 	FbsNamespaces                   []FbsNamespaceVar
 	MlaunchDeps                     []string
 	SwigInclude                     []VFS
+	FlatcInclude                    []VFS
 	AddInclOneLevel                 []VFS
 	AddInclUserGlobal               []VFS
 	CFlagsGlobal                    []ANY
@@ -1665,6 +1666,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	waCmdCap := 0
 	dynCap := 0
 	protoCap := 0
+	flatcCap := 0
 	swigCap := 0
 	cflagsCap := 0
 	cxxflagsCap := 0
@@ -1686,6 +1688,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		waCmdCap += len(pr.PeerWholeArchiveCmdClosurePaths) + len(pr.WholeArchiveCmdPaths)
 		dynCap += len(pr.PeerDynamicClosurePaths)
 		protoCap += len(pr.ProtoInclude)
+		flatcCap += len(pr.FlatcInclude)
 		swigCap += len(pr.SwigInclude)
 		cflagsCap += len(pr.CFlagsGlobal)
 		cxxflagsCap += len(pr.CXXFlagsGlobal)
@@ -1725,7 +1728,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		peerArchiveRefs, peerGlobalRefs, peerWholeArchiveRefs, peerDynamicRefs, peerSbomRefs []NodeRef
 
-		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude, effectiveSwigInclude, moduleSwigInclude []VFS
+		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude, effectiveSwigInclude, moduleSwigInclude, effectiveFlatcInclude, moduleFlatcInclude []VFS
 
 		effectiveCFlagsGlobal, effectiveCXXFlagsGlobal, effectiveCOnlyFlagsGlobal, effectiveRPathFlagsGlobal []ANY
 
@@ -2108,6 +2111,25 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		effectiveProtoInclude = dedupSharedWith(deduper, ctx.vfsSlices, ownProtoInclude, peerProtoInclude)
 
+		if flatcCap != 0 || len(d.flatcAddIncl) != 0 {
+			var peerFlatcInclude []VFS
+
+			if flatcCap != 0 {
+				deduper.reset()
+
+				for _, rp := range resolved {
+					for _, p := range rp.result.FlatcInclude {
+						if deduper.addStable(p.strID()) {
+							peerFlatcInclude = append(peerFlatcInclude, p)
+						}
+					}
+				}
+			}
+
+			effectiveFlatcInclude = dedupSharedWith(deduper, ctx.vfsSlices, d.flatcAddInclGlobal, peerFlatcInclude)
+			moduleFlatcInclude = dedupSharedWith(deduper, ctx.vfsSlices, d.flatcAddIncl, peerFlatcInclude)
+		}
+
 		if swigCap != 0 || len(d.swigAddIncl) != 0 {
 			var peerSwigInclude []VFS
 
@@ -2176,6 +2198,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			ProtoInclude:                    effectiveProtoInclude,
 			RosInclude:                      rosGlobalInclude,
 			SwigInclude:                     effectiveSwigInclude,
+			FlatcInclude:                    effectiveFlatcInclude,
 			AddInclOneLevel:                 d.addInclOneLevel,
 			AddInclUserGlobal:               d.addInclUserGlobal,
 			CXXFlagsGlobal:                  effectiveCXXFlagsGlobal,
@@ -2332,6 +2355,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		ProtoInclude:      peerProtoInclude,
 	}
 
+	frame.peerCtx.FlatcIncludeArgs = flatcIncludeArgs(ctx.na, moduleFlatcInclude)
+
 	if d.hasFbs && isGoModuleType(d.moduleStmt.Name) {
 		frame.peerCtx.FbsNamespaces = fbsNamespaceArgs(ctx.na, effectiveFbsNamespaces)
 	}
@@ -2352,6 +2377,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	d.scanCtx = newModuleScanContext(ctx, instance, d, scanAddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
 	d.scanCtx.rosInclude = rosInclude
+	d.scanCtx.flatcInclude = moduleFlatcInclude
 	e.emitMlaunch(resolved, peerArchivePaths, effectiveMlaunchDeps)
 	e.emit()
 	e.emitLDPlugins()

@@ -222,6 +222,8 @@ type ModuleData struct {
 	protocFlags              []ANY
 	fbsNamespaces            []ANY
 	flatcFlags               []ANY
+	flatcAddIncl             []VFS
+	flatcAddInclGlobal       []VFS
 	clangWarnings            []ANY
 	ldFlags                  []ANY
 	rpathFlagsGlobal         []ANY
@@ -1396,6 +1398,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
 			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
 			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
+			d.flatcAddIncl = append(d.flatcAddIncl, expandConfigVFSPaths(v.FlatcPaths, env)...)
+			d.flatcAddInclGlobal = append(d.flatcAddInclGlobal, expandConfigVFSPaths(v.FlatcGlobalPaths, env)...)
 			d.swigAddIncl = append(d.swigAddIncl, expandConfigVFSPaths(v.SwigPaths, env)...)
 			d.swigAddInclGlobal = append(d.swigAddInclGlobal, expandConfigVFSPaths(v.SwigGlobalPaths, env)...)
 		case *CFlagsStmt:
