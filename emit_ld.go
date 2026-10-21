@@ -293,9 +293,8 @@ func (e *EmitContext) emitLD(
 	}
 
 	e.appendSdcMeta(&n, binaryName)
-	n.Inputs = e.appendModuleInputs(n.Inputs, true)
 
-	return e.emitNode(n)
+	return e.emitModuleNode(n, true)
 }
 
 func lDOutputPath(instance ModuleInstance, binaryName string) VFS {

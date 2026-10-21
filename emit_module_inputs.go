@@ -54,6 +54,14 @@ func (e *EmitContext) modulePeerInputs() InputChunks {
 	return inputs
 }
 
+func (e *EmitContext) emitModuleNode(node Node, useGlobals bool) NodeRef {
+	e.includeNodeInputs(&node)
+	node.Inputs = e.appendModuleInputs(node.Inputs, useGlobals)
+	e.resolveNodeCodegenRefs(&node)
+
+	return e.ctx.emit.emitNodePtr(&node)
+}
+
 func (e *EmitContext) appendModuleInputs(inputs InputChunks, useGlobals bool) InputChunks {
 	peers := e.modulePeerInputs()
 	count := len(inputs) + len(peers)

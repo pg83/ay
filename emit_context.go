@@ -184,7 +184,10 @@ func (e *EmitContext) emitReservedNode(node Node, ref NodeRef) {
 
 func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 	e.includeNodeInputs(node)
+	e.resolveNodeCodegenRefs(node)
+}
 
+func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
 	var refs []NodeRef
 
 	for _, chunk := range node.Inputs {
