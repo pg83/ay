@@ -139,7 +139,7 @@ class DynamicLibraryTest(unittest.TestCase):
                     self.assertEqual(copy[-3:], ["link_or_copy_to_dir", "--no-check", "$(B)/dyn"])
                     link = command_with(dynamic, "link_dyn_lib.py")["cmd_args"]
                     self.assertIn("-Wl,-rpath,/opt/lib", link)
-                    self.assertIn("-Wl,-rpath,$ORIGIN", link)
+                    self.assertNotIn("-Wl,-rpath,$ORIGIN", link)
 
     def test_internal_dynamic_binary_uses_pic_without_implicit_copy_command(self):
         files = base_files()

@@ -129,6 +129,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	}
 
 	var resourceGlobals []ResourceDecl
+	var peerLinkRpath []ANY
 
 	var (
 		peerArchiveRefs                                                                  []NodeRef
@@ -205,6 +206,8 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 			}
 		}
 
+		peerLinkRpath = peerRPathFlagsGlobal
+
 		for _, pr := range rpathOnly {
 			for _, a := range pr.RPathFlagsGlobal {
 				if deduper.add(a.strID()) {
@@ -255,7 +258,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	var linkRpath []ANY
 
 	if copySO {
-		linkRpath = rpathGlobal
+		linkRpath = concat(peerLinkRpath, d.rpathFlagsGlobal)
 	}
 
 	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, peerArchivePaths, pluginPaths, anyStrs(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath, linkRpath)
