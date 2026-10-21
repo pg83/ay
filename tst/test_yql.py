@@ -41,6 +41,7 @@ class YqlAbiTest(unittest.TestCase):
         })
         graph = lib.make(files, "app")
         fetch = lib.node_by_output(graph, "$(B)/tools/probe/probe.prebuilt")
+        self.assertEqual(fetch["cmds"][0]["cmd_args"][0], "$(B)/resources/YMAKE_PYTHON3/bin/python3")
         tool = lib.node_by_output(graph, "$(B)/tools/probe/probe")
         self.assertEqual(tool["cmds"][0]["cmd_args"][-3:], ["copy", "$(B)/tools/probe/probe.prebuilt", "$(B)/tools/probe/probe"])
         self.assertIn("$(B)/tools/probe/probe.prebuilt", tool["inputs"])
@@ -335,6 +336,7 @@ class YqlAbiTest(unittest.TestCase):
                 }, "app", f"-DSANITIZER_TYPE={sanitizer}", opensource=False)
                 fetch = lib.node_by_output(graph, "$(B)/app/named.prebuilt")
                 args = fetch["cmds"][0]["cmd_args"]
+                self.assertEqual(args[0], "$(B)/resources/YMAKE_PYTHON3/bin/python3")
                 self.assertEqual(args[args.index("--resource-id") + 1], resource)
                 self.assertIn("--executable", args)
                 program = lib.node_by_output(graph, "$(B)/app/named")
