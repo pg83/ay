@@ -301,6 +301,7 @@ type ModuleData struct {
 	fromSandboxes            []*FromSandboxStmt
 	fromArchives             []FromArchiveEntry
 	sdcMetas                 []SdcMetaEntry
+	sdcInstallOutputs        []VFS
 	pireInline               []ANY
 	pchFiles                 []PchFileStmt
 	checkConfigHeaders       []ANY

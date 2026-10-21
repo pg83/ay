@@ -210,8 +210,10 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 
 			if arg == "NODE" && supernode {
 				d.runPython = append(d.runPython, &RunPythonStmt{ScriptPath: strSdgTier0ToolsGenerateSupernodeLinkPy.any(), Args: internAnys([]string{name, out}), OUTNoAutoFiles: internAnys([]string{out})})
+				d.sdcInstallOutputs = append(d.sdcInstallOutputs, copyFileOutputVFS(module, out))
 			} else {
 				d.bundles = append(d.bundles, BundleEntry{Target: target, Name: out}, BundleEntry{Target: target, Name: out + ".sdcmeta", Suffix: ".sdcmeta"})
+				d.sdcInstallOutputs = append(d.sdcInstallOutputs, copyFileOutputVFS(module, out), copyFileOutputVFS(module, out+".sdcmeta"))
 			}
 		case "PROGRAM_STARTER":
 			src, name := take(), take()
@@ -220,10 +222,14 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 				out := sdcInstallLocation(packageName, kind, name)
 
 				d.runPrograms = append(d.runPrograms, &RunProgramStmt{ToolPath: strSdgDevtoolsPyMonobinaryBuilderGenerateProgramStarter.any(), Args: internAnys([]string{src, out}), OUTNoAutoFiles: internAnys([]string{out})})
+				d.sdcInstallOutputs = append(d.sdcInstallOutputs, copyFileOutputVFS(module, out))
 			}
 		default:
 			if enabled || arg == "package.xml" && slices.Contains(allowed, "SHARE") {
-				d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: arg, Dst: sdcInstallLocation(packageName, kind, arg)})
+				out := sdcInstallLocation(packageName, kind, arg)
+
+				d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: arg, Dst: out})
+				d.sdcInstallOutputs = append(d.sdcInstallOutputs, copyFileOutputVFS(module, out))
 			}
 		}
 	}

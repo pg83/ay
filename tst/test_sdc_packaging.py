@@ -4,6 +4,21 @@ import lib
 
 
 class SdcPackagingTests(unittest.TestCase):
+    def test_install_outputs_follow_macro_argument_order(self):
+        files = {
+            "pkg/ya.make": "SDC_UNION(profiles)\nSDC_INSTALL(LAUNCH qa_options.yaml TARGET app)\nEND()\n",
+            "pkg/qa_options.yaml": "enabled: true\n",
+            "app/ya.make": f"PROGRAM(app)\n{lib.BARE_MODULE}\nEND()\n",
+        }
+        graph = lib.make(files, "pkg", "--sandboxing")
+        package = lib.only_node_by_kind(graph, "UN")
+        self.assertEqual(package["outputs"], [
+            "$(B)/pkg/profiles.pkg.fake",
+            "$(B)/sdc_install/share/profiles/qa_options.yaml",
+            "$(B)/sdc_install/share/profiles/app",
+            "$(B)/sdc_install/share/profiles/app.sdcmeta",
+        ])
+
     def test_all_install_kinds_use_the_module_package_name(self):
         destinations = {
             "COMMON_LIB": "common_lib/item", "INSTALL_ROOT": "item",

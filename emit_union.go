@@ -43,6 +43,9 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	e.emitDeclaredProducers(nil)
 
 	generated := dedup(e.outs)
+
+	generated = orderSdcInstallOutputs(generated, e.d.sdcInstallOutputs)
+
 	module := e.instance.Path.relString()
 	name := realPrjName(module)
 
@@ -72,4 +75,35 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	res.GlobalSources = e.globalSources
 
 	return res
+}
+
+func orderSdcInstallOutputs(generated, declared []VFS) []VFS {
+	if len(declared) == 0 {
+		return generated
+	}
+
+	present := make(map[VFS]bool, len(generated))
+
+	for _, out := range generated {
+		present[out] = true
+	}
+
+	ordered := make([]VFS, 0, len(declared))
+	seen := make(map[VFS]bool, len(declared))
+
+	for _, out := range declared {
+		if present[out] && !seen[out] {
+			ordered = append(ordered, out)
+			seen[out] = true
+		}
+	}
+
+	for i, next := 0, 0; i < len(generated); i++ {
+		if seen[generated[i]] {
+			generated[i] = ordered[next]
+			next++
+		}
+	}
+
+	return generated
 }
