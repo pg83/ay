@@ -269,8 +269,14 @@ class JavaJunitSuiteTest(unittest.TestCase):
         # base64 of [{"key":"k","type":"inline","value":"v"}]
         self.assertEqual(option_values(run, "--properties"), ["W3sia2V5IjoiayIsInR5cGUiOiJpbmxpbmUiLCJ2YWx1ZSI6InYifV0="])
         deps = [n["outputs"][0] for n in graph["graph"] if n["uid"] in node["deps"]]
-        self.assertEqual(sorted(deps), ["$(B)/common_test.context", "$(B)/proj/sub/ut/proj-sub-ut.jar",
-                                        "$(B)/sandbox-storage/1/resource_info.json"])
+        self.assertEqual(sorted(deps), [
+            "$(B)/base/ut/base-ut.jar", "$(B)/common_test.context",
+            "$(B)/devtools/jtest-annotations/junit5/jtest-annotations-junit5.jar",
+            "$(B)/devtools/junit5-runner/devtools-junit5-runner.jar",
+            "$(B)/lib/jni/liblib_jni.so", "$(B)/lib/lib.jar",
+            "$(B)/proj/sub/ut/proj-sub-ut.jar", "$(B)/proj/sub/ut/proj-sub-ut.test.cp.jar",
+            "$(B)/sandbox-storage/1/resource_info.json",
+        ])
         self.assertIn(node["uid"], graph["result"])
 
     def test_forked_suite_chunks_and_accumulator(self):

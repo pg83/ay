@@ -7,6 +7,64 @@ from test_java_tests import junit_tree, option_values, run_args, test_nodes
 
 
 class JavaDependencyContractsTest(unittest.TestCase):
+    def test_ktlint_resolves_all_modules_in_its_project(self):
+        for module, other_target in (("JAVA_PROGRAM", "app.run.cp.jar"), ("JAVA_LIBRARY", None)):
+            with self.subTest(module=module):
+                files = tree("WITH_KOTLIN()\nJAVA_SRCS(SRCDIR src **/*.kt)\nFILES(config.yaml)",
+                             module=module, **{"app/config.yaml": "key: value\n"})
+                graph = lib.make(files, "app", "--target-platform-tests", "--output-only-tests")
+                lint = test_nodes(graph)["app/ktlint"]
+                outputs = ["$(B)/app/app.jar"] + (["$(B)/app/" + other_target] if other_target else [])
+                for output in outputs:
+                    self.assertIn(lib.node_by_output(graph, output)["uid"], lint["deps"])
+                if module == "JAVA_PROGRAM":
+                    run = lib.node_by_output(graph, "$(B)/app/" + other_target)
+                    config = lib.node_by_output(graph, "$(B)/app/config.yaml")
+                    self.assertIn(config["uid"], run["deps"])
+                    self.assertEqual(sum("$(B)/app/config.yaml" in n["outputs"] for n in graph["graph"]), 1)
+                else:
+                    self.assertFalse(any("$(B)/app/app-interface.jar" in n["outputs"] for n in graph["graph"]))
+
+    def test_ktlint_includes_an_interface_jar_used_by_a_consumer(self):
+        files = tree("WITH_KOTLIN()\nJAVA_SRCS(SRCDIR src **/*.kt)", **{
+            "consumer/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nPEERDIR(app)\nEND()\n",
+        })
+        graph = lib.make(files, "app", "consumer", "--target-platform-tests")
+        lint = test_nodes(graph)["app/ktlint"]
+        self.assertIn(lib.node_by_output(graph, "$(B)/app/app-interface.jar")["uid"], lint["deps"])
+
+    def test_junit_native_dependencies_stop_at_consuming_peers(self):
+        files = junit_tree("JUNIT5()\nPEERDIR(lib)\nEND()\n")
+        files["lib/ya.make"] = "JAVA_LIBRARY_NON_SPLIT()\nADD_DLLS_TO_JAR()\nPEERDIR(lib/jni)\nEND()\n"
+        graph = lib.make(files, "proj/sub/ut", "--target-platform-tests")
+        run = test_nodes(graph)["proj/sub/ut/sub-ut"]
+        native = lib.node_by_output(graph, "$(B)/lib/jni/liblib_jni.so")
+        jar = lib.node_by_output(graph, "$(B)/lib/lib.jar")
+        self.assertIn(native["uid"], jar["deps"])
+        self.assertIn(jar["uid"], run["deps"])
+        self.assertNotIn(native["uid"], run["deps"])
+
+    def test_classpath_check_depends_on_each_managed_jar_producer(self):
+        files = tree("PEERDIR(api)\nCHECK_JAVA_DEPS(yes)", module="JAVA_LIBRARY_NON_SPLIT", **{
+            **contrib("api", "runtime", jar=1), **contrib("runtime", jar=2),
+        })
+        graph = lib.make(files, "app", "--target-platform-tests", "--output-only-tests")
+        check = next(n for n in test_nodes(graph).values()
+                     if "--checker" in run_args(n) and "run_classpath_clash" in run_args(n))
+        for output in ("$(B)/app/app.jar", "$(B)/api/api.jar", "$(B)/runtime/runtime.jar"):
+            self.assertIn(lib.node_by_output(graph, output)["uid"], check["deps"])
+
+    def test_classpath_metadata_without_a_producer_stays_unresolved(self):
+        files = tree("")
+        files["app/ya.make"] = (
+            "JAVA_LIBRARY_NON_SPLIT(named PREFIX pre-)\nCHECK_JAVA_DEPS(yes)\nEND()\n"
+        )
+        graph = lib.make(files, "app", "--target-platform-tests")
+        check = next(n for n in test_nodes(graph).values() if "run_classpath_clash" in run_args(n))
+        self.assertIn("app/named.jar", run_args(check))
+        self.assertNotIn(lib.node_by_output(graph, "$(B)/app/pre-named.jar")["uid"], check["deps"])
+        self.assertEqual(check["deps"], [lib.node_by_output(graph, "$(B)/common_test.context")["uid"]])
+
     def test_cyclic_peers_keep_each_classpath_entry_once(self):
         files = tree("PEERDIR(a)", **{
             **contrib("a", "b", jar=1), **contrib("b", "a", jar=2),

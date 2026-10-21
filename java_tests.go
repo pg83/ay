@@ -115,12 +115,28 @@ func (ctx *GenCtx) javaSuiteBase(jm *JavaModule, name, testType, ciType string) 
 	}
 }
 
-func (ctx *GenCtx) javaProducer(jm *JavaModule, out VFS) []NodeRef {
-	if ref := ctx.javaBuilder(jm).use(out); ref != 0 {
-		return []NodeRef{ref}
+func (ctx *GenCtx) javaProducer(jm *JavaModule, out VFS) NodeRef {
+	return ctx.javaReg(jm).use(out).ProducerRef
+}
+
+func (ctx *GenCtx) javaProjectProducers(jm *JavaModule) []NodeRef {
+	var refs []NodeRef
+
+	for _, unit := range javaModuleUnits[jm.stmt] {
+		instance := jm.instance
+
+		instance.Kind = unit.sub
+
+		if res := genModule(ctx, instance); res.java != nil {
+			if unit.kind == juIJar && ctx.javaReg(res.java).lookup(res.java.target).OnUse != nil {
+				continue
+			}
+
+			refs = append(refs, ctx.javaProducer(res.java, res.java.target))
+		}
 	}
 
-	return nil
+	return refs
 }
 
 func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
@@ -139,7 +155,7 @@ func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
 	s.supportsTestParameters = true
 	s.relatedPaths = append([]string{"$(S)/" + javaStyleMigrations}, sortedUnique(dirs)...)
 	s.runInputs = append(s.runInputs, srclst)
-	s.deps = ctx.javaProducer(jm, srclst)
+	s.deps = []NodeRef{ctx.javaProducer(jm, srclst)}
 	s.env = append(slices.Clone(d.testEnv), javaStyleServerEnv)
 
 	if len(d.testEnv) != 0 {
@@ -189,7 +205,7 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 	s.requirements = map[string]string{"cpu": "2"}
 	s.relatedPaths = append([]string{"$(S)/" + jm.dir, "$(S)/.editorconfig"}, sortedUnique(append([]string{editorconfig}, jm.srcDirsTestData()...))...)
 	s.runInputs = append(s.runInputs, srclist)
-	s.deps = ctx.javaProducer(jm, srclist)
+	s.deps = append(ctx.javaProjectProducers(jm), ctx.javaProducer(jm, srclist))
 	s.env = slices.Clone(d.testEnv)
 
 	s.runCmd = func(work string, _ TestChunk) []ANY {
@@ -353,22 +369,35 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	}
 
 	var classpath []string
+	var testDeps []JavaClosureEntry
 
 	for _, e := range closure {
 		if rel := e.path.relString(); strings.HasSuffix(rel, ".jar") {
 			classpath = append(classpath, rel)
+			testDeps = append(testDeps, e)
 		}
 	}
 
 	var libpath []string
 
 	for _, p := range ctx.javaUnmanageablePeersClosure(jm) {
-		if f := javaForeignFileName(p); strings.HasSuffix(f.relString(), ".so") {
+		f := javaForeignFileName(p)
+
+		switch path.Ext(f.relString()) {
+		case ".so", ".dll", ".dylib":
+			testDeps = append(testDeps, JavaClosureEntry{path: f, foreign: p.res})
+		}
+
+		if strings.HasSuffix(f.relString(), ".so") {
 			libpath = append(libpath, "$(B)/"+path.Dir(f.relString()))
 		}
 	}
 
-	s.deps = ctx.javaProducer(comp, testJar)
+	deps := ctx.javaBuilder(jm)
+
+	deps.closure(testDeps)
+
+	s.deps = append(ctx.javaProjectProducers(jm), deps.deps...)
 
 	py := internStr(testYMakePython3).any()
 
@@ -511,6 +540,12 @@ func (ctx *GenCtx) javaClasspathClashSuite(jm *JavaModule) *TestSuite {
 	for _, e := range ctx.javaManagedPeersClosure(jm) {
 		if e.java != nil {
 			paths = append(paths, e.path.relString())
+		}
+	}
+
+	for _, p := range paths {
+		if info := ctx.javaReg(jm).use(build(p)); info != nil {
+			s.deps = append(s.deps, info.ProducerRef)
 		}
 	}
 
