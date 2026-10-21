@@ -210,6 +210,7 @@ class Workspace:
             "build/scripts/link_lib.py": LINK_LIB_PY,
             "build/scripts/link_exe.py": LINK_EXE_PY,
             "build/scripts/fs_tools.py": "",
+            "build/scripts/touch.py": "import pathlib\nimport sys\nfor path in sys.argv[1:]:\n    pathlib.Path(path).touch()\n",
             **files,
         }
         for relative, content in tree.items():
