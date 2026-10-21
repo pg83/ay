@@ -775,40 +775,53 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	out.Refs = append(out.Refs, yaConfRefs...)
 	out.Outputs = append(out.Outputs, yaConfOuts...)
 
-	if len(e.resources) == 0 && len(d.pyPyiResources) == 0 {
-		trailStart := len(out.Refs)
-		srcRes := e.emitPySrcObjcopy()
-
-		if srcRes != nil {
-			out.Refs = append(out.Refs, srcRes.Refs...)
-			out.Outputs = append(out.Outputs, srcRes.Outputs...)
-		}
-
-		out.PySrcTrailCount = len(out.Refs) - trailStart
-
-		return out
-	}
-
 	moduleTag := d.unit.HashTag
 	py3BinProgramSide := d.unit.Tag == unitTagPy3Bin
+	resourceOffset := 0
+	pyiOffset := 0
+	trailStart := -1
+
+	for gi, group := range d.pySrcGroups {
+		if !py3BinProgramSide {
+			r, o := e.emitResourceFile(e.resources[resourceOffset:group.ResourceOffset], moduleTag)
+
+			out.Refs = append(out.Refs, r...)
+			out.Outputs = append(out.Outputs, o...)
+
+			resourceOffset = group.ResourceOffset
+		}
+
+		before := len(out.Refs)
+
+		e.emitPySrcGroupObjcopy(gi, group, out)
+
+		if !py3BinProgramSide {
+			r, o := e.emitResourceFile(d.pyPyiResources[pyiOffset:group.PyiEnd], moduleTag)
+
+			out.Refs = append(out.Refs, r...)
+			out.Outputs = append(out.Outputs, o...)
+
+			pyiOffset = group.PyiEnd
+		}
+
+		if trailStart < 0 && len(out.Refs) > before {
+			trailStart = before
+		}
+	}
 
 	if !py3BinProgramSide {
-		r, o := e.emitResourceFile(e.resources, moduleTag)
+		r, o := e.emitResourceFile(e.resources[resourceOffset:], moduleTag)
 
 		out.Refs = append(out.Refs, r...)
 		out.Outputs = append(out.Outputs, o...)
 	}
 
-	trailStart := len(out.Refs)
-	srcRes := e.emitPySrcObjcopy()
-
-	if srcRes != nil {
-		out.Refs = append(out.Refs, srcRes.Refs...)
-		out.Outputs = append(out.Outputs, srcRes.Outputs...)
+	if trailStart < 0 {
+		trailStart = len(out.Refs)
 	}
 
 	if !py3BinProgramSide {
-		r, o := e.emitResourceFile(d.pyPyiResources, moduleTag)
+		r, o := e.emitResourceFile(d.pyPyiResources[pyiOffset:], moduleTag)
 
 		out.Refs = append(out.Refs, r...)
 		out.Outputs = append(out.Outputs, o...)

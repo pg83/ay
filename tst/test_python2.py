@@ -267,6 +267,46 @@ class Python2Test(unittest.TestCase):
         self.assertIn("-DUSE_PYTHON2", compile_args)
         self.assertNotIn("-DUSE_PYTHON3", compile_args)
 
+    def test_python_sources_and_explicit_resources_keep_declaration_order(self):
+        for macro, output in (("PY2_PROGRAM", "prog"), ("PY2_LIBRARY", "libpyprog.global.a")):
+            with self.subTest(macro=macro):
+                files = python2_base()
+                files.update({
+                    "prog/ya.make": f"{macro}()\n{NO_PLATFORM}NO_PYTHON_INCLUDES()\nNO_CHECK_IMPORTS()\n"
+                        "RESOURCE(DONT_COMPRESS before.dat /before)\nPY_SRCS(TOP_LEVEL a.py)\n"
+                        "RESOURCE_FILES(DONT_COMPRESS between.dat)\nPY_SRCS(TOP_LEVEL b.py)\n"
+                        "RESOURCE(DONT_COMPRESS after.dat /after)\nEND()\n",
+                    "prog/before.dat": "", "prog/a.py": "", "prog/between.dat": "",
+                    "prog/b.py": "", "prog/after.dat": "",
+                })
+                graph = lib.make(files, "prog")
+                target = lib.node_by_output(graph, "$(B)/prog/" + output)
+                command = [arg.removeprefix("$(B)/") for cmd in target["cmds"] for arg in cmd["cmd_args"]]
+                positions = []
+                for source in ("before.dat", "a.py", "between.dat", "b.py", "after.dat"):
+                    resource = next(node for node in objcopy_nodes(graph, "prog")
+                                    if "$(S)/prog/" + source in section(node, "--inputs"))
+                    positions.append(command.index(resource["outputs"][0].removeprefix("$(B)/")))
+                self.assertEqual(positions, sorted(positions))
+
+    def test_all_python_sources_keep_their_resource_declaration_position(self):
+        files = python2_base()
+        files.update({
+            "prog/ya.make": f"PY2_PROGRAM()\n{NO_PLATFORM}NO_PYTHON_INCLUDES()\nNO_CHECK_IMPORTS()\n"
+                "ALL_PY_SRCS(TOP_LEVEL sources)\nRESOURCE(DONT_COMPRESS data.dat /data)\n"
+                "PY_SRCS(TOP_LEVEL last.py)\nEND()\n",
+            "prog/sources/first.py": "", "prog/data.dat": "", "prog/last.py": "",
+        })
+        graph = lib.make(files, "prog")
+        target = lib.node_by_output(graph, "$(B)/prog/prog")
+        command = [arg.removeprefix("$(B)/") for cmd in target["cmds"] for arg in cmd["cmd_args"]]
+        positions = []
+        for source in ("sources/first.py", "data.dat", "last.py"):
+            resource = next(node for node in objcopy_nodes(graph, "prog")
+                            if "$(S)/prog/" + source in section(node, "--inputs"))
+            positions.append(command.index(resource["outputs"][0].removeprefix("$(B)/")))
+        self.assertEqual(positions, sorted(positions))
+
     def test_py2_resource_of_a_copied_source_takes_the_copy_only(self):
         files = python2_base()
         files.update({

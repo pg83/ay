@@ -488,19 +488,11 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 	})
 }
 
-func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
+func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *ObjcopyEmitResult) {
 	_, instance, d := e.ctx, e.instance, e.d
 
-	if len(d.pySrcs) == 0 {
-		return nil
-	}
-
-	if d.unit.Tag == 0 {
-		return nil
-	}
-
-	if d.unit.Tag == unitTagPy3Bin {
-		return nil
+	if len(d.pySrcs) == 0 || d.unit.Tag == 0 || d.unit.Tag == unitTagPy3Bin {
+		return
 	}
 
 	namespaceEnabled := !d.noExtendedPySearch &&
@@ -508,48 +500,38 @@ func (e *EmitContext) emitPySrcObjcopy() *ObjcopyEmitResult {
 		!strings.HasPrefix(instance.Path.relString(), "contrib/tools/python3") &&
 		pyNamespaceUnitType(d.unit.Type)
 
-	res := &ObjcopyEmitResult{}
+	if namespaceEnabled {
+		nsRefs, nsOuts := e.emitPyNamespaceForGroup(gi, group)
 
-	for gi, group := range d.pySrcGroups {
-		if namespaceEnabled {
-			nsRefs, nsOuts := e.emitPyNamespaceForGroup(gi, group)
-
-			res.Refs = append(res.Refs, nsRefs...)
-			res.Outputs = append(res.Outputs, nsOuts...)
-		}
-
-		entries := e.resEntries[:0]
-
-		for _, ps := range e.pySrcsReg {
-			if ps.Kind != pySourcePlain || ps.Group != gi {
-				continue
-			}
-
-			entries = e.appendPyResEntries(entries, ps)
-		}
-
-		e.resEntries = retainMaxLen(e.resEntries, entries)
-
-		if len(entries) > 0 {
-			groupRefs, groupOuts := e.packResources(ResourcePack{DontCompress: true, Tag: d.unit.HashTag, Items: e.pySrcResourceItems(entries)})
-
-			res.Refs = append(res.Refs, groupRefs...)
-			res.Outputs = append(res.Outputs, groupOuts...)
-		}
-
-		if d.moduleStmt.Name != tokProtoLibrary {
-			protoRefs, protoOuts := e.emitPyProtoGroupResources(gi)
-
-			res.Refs = append(res.Refs, protoRefs...)
-			res.Outputs = append(res.Outputs, protoOuts...)
-		}
+		res.Refs = append(res.Refs, nsRefs...)
+		res.Outputs = append(res.Outputs, nsOuts...)
 	}
 
-	if len(res.Refs) == 0 {
-		return nil
+	entries := e.resEntries[:0]
+
+	for _, ps := range e.pySrcsReg {
+		if ps.Kind != pySourcePlain || ps.Group != gi {
+			continue
+		}
+
+		entries = e.appendPyResEntries(entries, ps)
 	}
 
-	return res
+	e.resEntries = retainMaxLen(e.resEntries, entries)
+
+	if len(entries) > 0 {
+		groupRefs, groupOuts := e.packResources(ResourcePack{DontCompress: true, Tag: d.unit.HashTag, Items: e.pySrcResourceItems(entries)})
+
+		res.Refs = append(res.Refs, groupRefs...)
+		res.Outputs = append(res.Outputs, groupOuts...)
+	}
+
+	if d.moduleStmt.Name != tokProtoLibrary {
+		protoRefs, protoOuts := e.emitPyProtoGroupResources(gi)
+
+		res.Refs = append(res.Refs, protoRefs...)
+		res.Outputs = append(res.Outputs, protoOuts...)
+	}
 }
 
 func (e *EmitContext) collectPyProtoGroupResEntries(group int) []PyGenResEntry {

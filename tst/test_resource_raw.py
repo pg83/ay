@@ -99,6 +99,17 @@ class ResourceRawTest(unittest.TestCase):
             for output in node["outputs"]
         ))
 
+    def test_type_stub_calls_keep_their_position_around_explicit_resources(self):
+        files = py3_library("PY_SRCS(first.pyi)\nRESOURCE(DONT_COMPRESS data.dat /data)\nPY_SRCS(last.pyi)\n")
+        for source in ("first.pyi", "data.dat", "last.pyi"):
+            files["lib/" + source] = ""
+        graph = lib.make(files, "lib")
+        archive = lib.node_by_output(graph, "$(B)/lib/libpy3lib.global.a")
+        objects = [path for path in archive["inputs"] if path.startswith("$(B)/lib/objcopy_")]
+        sources = [next(path for path in lib.node_by_output(graph, obj)["inputs"] if path.startswith("$(S)/lib/"))
+                   for obj in objects]
+        self.assertEqual(sources, ["$(S)/lib/first.pyi", "$(S)/lib/data.dat", "$(S)/lib/last.pyi"])
+
     def test_resource_py_sources_and_stubs_are_archived_in_order(self):
         files = py3_library(
             "RUN_PROGRAM(tools/gen IN in.txt OUT_NOAUTO gen.py)\n"
@@ -122,11 +133,11 @@ class ResourceRawTest(unittest.TestCase):
             ][0]
             for path in objects
         ]
-        self.assertEqual(firsts[0], "$(S)/lib/data.txt")
-        self.assertTrue(firsts[1].startswith("py/namespace/"))
-        self.assertEqual(firsts[2], "resfs/src/resfs/file/py/lib/gen.py=lib/gen.py")
-        self.assertEqual(firsts[3], "resfs/src/resfs/file/py/lib/types.pyi=lib/types.pyi")
-        sources = lib.node_by_output(graph, objects[2])
+        self.assertTrue(firsts[0].startswith("py/namespace/"))
+        self.assertEqual(firsts[1], "resfs/src/resfs/file/py/lib/gen.py=lib/gen.py")
+        self.assertEqual(firsts[2], "resfs/src/resfs/file/py/lib/types.pyi=lib/types.pyi")
+        self.assertEqual(firsts[3], "$(S)/lib/data.txt")
+        sources = lib.node_by_output(graph, objects[1])
         self.assertEqual(sources["inputs"], [
             "$(B)/tools/rescompiler/rescompiler",
             "$(B)/tools/rescompressor/rescompressor",
