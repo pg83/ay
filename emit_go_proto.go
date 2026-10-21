@@ -9,7 +9,7 @@ import (
 
 var goProtoHead = []ANY{
 	goProtoWrapperVFS.any(),
-	internStr("--arcadia-prefix").any(), internStr(goArcPrefix).any(),
+	strArcadiaPrefix.any(), internStr(goArcPrefix).any(),
 	internStr("--contrib-prefix").any(), internStr(goVendorPrefix + "/").any(),
 	internStr("--namespace").any(),
 }

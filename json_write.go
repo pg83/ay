@@ -295,7 +295,13 @@ func appendVFS(buf []byte, v VFS) []byte {
 		if cached := vfsEscapedJSON[id]; cached != nil {
 			return append(buf, cached...)
 		}
-	} else {
+	}
+
+	return appendVFSUncached(buf, v, id)
+}
+
+func appendVFSUncached(buf []byte, v VFS, id uint32) []byte {
+	if int(id) >= len(vfsEscapedJSON) {
 		nc := make([][]byte, vfsBound())
 
 		copy(nc, vfsEscapedJSON)

@@ -214,6 +214,7 @@ type ModuleData struct {
 	cOnlyFlagsGlobal         []ANY
 	sFlags                   []ANY
 	protocFlags              []ANY
+	fbsNamespaces            []ANY
 	flatcFlags               []ANY
 	clangWarnings            []ANY
 	ldFlags                  []ANY
@@ -1133,6 +1134,12 @@ func collectStmts(fs FS, modulePath string, kind ModuleKind, language Language, 
 			setupMlaunchModule(v, modulePath, language, env, d)
 			setupSdcDiagsModule(v, language, env, d)
 
+			if v.Name == tokFbsLibrary {
+				d.multimodule = v.Name
+				d.moduleVariants = 1<<LangCPP | 1<<LangGo
+				env.setStringID(envMODULE_TAG, d.unit.Tag)
+			}
+
 			if v.Name == tokProtoLibrary && !v.Schema {
 				d.moduleVariants = defaultProtoVariants
 			}
@@ -1660,6 +1667,10 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	case tokYqlUdfYdb, tokYqlUdfContrib:
 		return ModuleUnit{Type: name, CCTag: tagYqlUdfStatic, HashTag: strYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
 	case tokFbsLibrary:
+		if language == LangGo {
+			return ModuleUnit{Type: tokGoLibrary, Tag: strGoFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+		}
+
 		return ModuleUnit{Type: name, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokProtoLibrary:
 		if language == LangProtoDescriptions {
@@ -2328,6 +2339,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.peerdirs = append([]ANY{internStr(googleapisPeer).any()}, d.peerdirs...)
 	case tokClangWarnings:
 		d.clangWarnings = append(d.clangWarnings, expandStmtTokens(v.Args, env)...)
+	case tokFbsNamespace:
+		if len(v.Args) == 0 {
+			throwFmt("FBS_NAMESPACE expects a namespace and optional path")
+		}
+
+		namespacePath := modulePath
+
+		if len(v.Args) >= 2 {
+			namespacePath = v.Args[1].string()
+		}
+
+		d.fbsNamespaces = append(d.fbsNamespaces, internV(v.Args[0].string(), "=", namespacePath).any())
 	case tokFlatcFlags:
 		d.flatcFlags = append(d.flatcFlags, v.Args...)
 	case tokCopyFile, tokCopyFileWithContext:
@@ -4423,7 +4446,7 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 
 	if isGoModuleType(d.moduleStmt.Name) && peerYaMakeExists(ctx.fs, peerVFS) {
 		switch peerName := ctx.moduleName(peerVFS.relString()); {
-		case peerName == tokProtoLibrary || peerName == tokRosLibrary || peerName == tokMlaunchLibrary || peerName == tokMlaunchComponent || peerName == tokSdcDiagsLibrary:
+		case peerName == tokProtoLibrary || peerName == tokFbsLibrary || peerName == tokRosLibrary || peerName == tokMlaunchLibrary || peerName == tokMlaunchComponent || peerName == tokSdcDiagsLibrary:
 			language = LangGo
 
 			fallthrough

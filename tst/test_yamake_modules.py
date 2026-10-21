@@ -113,7 +113,7 @@ class YaMakeModulesTest(unittest.TestCase):
             ("SO_PROGRAM()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("PACKAGE()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("UNION()", [], [("CP", "$(B)/a/x.cpp"), ("UN", "$(B)/a/a.pkg.fake"), ("UN", "$(B)/a/x.cpp")]),
-            ("FBS_LIBRARY()", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
+            ("FBS_LIBRARY()\nONLY_TAGS(CPP_FBS)", [], [("AR", "$(B)/a/liba.a"), ("CC", "$(B)/a/x.cpp.o")]),
             ("RESOURCES_LIBRARY()", [], []),
         ]
         for declaration, stubs, expected in cases:

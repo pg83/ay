@@ -252,6 +252,16 @@ def between(args, start, end):
 
 
 class GoTestModuleTest(unittest.TestCase):
+    def test_go_test_does_not_run_the_executable_sdc_metadata_hook(self):
+        files = go_test_world()
+        files["build/internal/scripts/merge_sdcmeta.py"] = ""
+        files["lib/tests/ya.make"] = "GO_TEST()\nUSE_SDC_META()\nGO_TEST_SRCS(check_test.go)\nEND()\n"
+        files["lib/tests/check_test.go"] = "package tests\n"
+        graph = lib.make(files, "lib/tests", *AUTOCHECK)
+        node = lib.node_by_output(graph, "$(B)/lib/tests/tests")
+        self.assertFalse(any(output.endswith(".sdcmeta") for output in node["outputs"]))
+        self.assertFalse(any("$(S)/build/internal/scripts/merge_sdcmeta.py" in cmd["cmd_args"] for cmd in node["cmds"]))
+
     def test_go_test_links_a_test_binary_and_runs_it(self):
         files = go_test_world()
         go_module(files, "lib/greet")

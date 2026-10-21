@@ -279,6 +279,12 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		}
 	}
 
+	if d.hasFbs {
+		addPeer(std.Prefix + "/bytes")
+		addPeer(std.Prefix + "/strconv")
+		addPeer("vendor/github.com/google/flatbuffers/go")
+	}
+
 	if goModuleHasProtos(d) {
 		for _, p := range goProtobufImports(std) {
 			addPeer(p)
@@ -1060,8 +1066,6 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		Resources: goToolResources(na, resourceGlobals),
 	}
 
-	e.appendSdcMeta(&node, programBinaryName(instance, d.moduleStmt))
-
 	ref := e.emitNode(node)
 
 	e.register(GeneratedFileInfo{OutputPath: outPath, InputsOnly: true, ModuleType: d.moduleStmt.Name})
@@ -1323,7 +1327,9 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		Resources: goToolResources(na, resourceGlobals),
 	}
 
-	e.appendSdcMeta(&node, programBinaryName(instance, d.moduleStmt))
+	if !isTest {
+		e.appendSdcMeta(&node, programBinaryName(instance, d.moduleStmt))
+	}
 
 	return e.emitNode(node), outPath
 }

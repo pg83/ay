@@ -140,6 +140,7 @@ var tokName = [...]STR{
 	tokExtralibs:                       internStr("EXTRALIBS"),
 	tokExtralibsStatic:                 internStr("EXTRALIBS_STATIC"),
 	tokFatal:                           internStr("FATAL"),
+	tokFbsNamespace:                    internStr("FBS_NAMESPACE"),
 	tokFbsLibrary:                      internStr("FBS_LIBRARY"),
 	tokFiles:                           kwFILES,
 	tokFlatcFlags:                      internStr("FLATC_FLAGS"),
@@ -492,6 +493,7 @@ const (
 	tokExtralibs
 	tokExtralibsStatic
 	tokFatal
+	tokFbsNamespace
 	tokFbsLibrary
 	tokFiles
 	tokFlatcFlags

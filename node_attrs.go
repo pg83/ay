@@ -29,7 +29,7 @@ var procKindStr = [...]string{
 	pkTSProto: "TS_PRO",
 	pkNone:    "", pkAS: "AS", pkAR: "AR", pkBI: "BI", pkBC: "BC", pkCC: "CC",
 	pkCF: "CF", pkCH: "CH", pkCP: "CP", pkCY: "CY", pkEN: "EN", pkEV: "EV",
-	pkFETCH: "FT", pkFL: "FL", pkFL64: "FL64", pkFM: "FM", pkGP: "GP", pkGZ: "GZ", pkHT: "HT", pkJS: "JS", pkJV: "JV", pkLD: "LD", pkGO: "GO", pkGoTool: "go", pkLX: "LX", pkLJ: "LJ", pkLU: "LU", pkMN: "MN", pkOP: "OP",
+	pkFETCH: "FT", pkFG: "FG", pkFL: "FL", pkFL64: "FL64", pkFM: "FM", pkGP: "GP", pkGZ: "GZ", pkHT: "HT", pkJS: "JS", pkJV: "JV", pkLD: "LD", pkGO: "GO", pkGoTool: "go", pkLX: "LX", pkLJ: "LJ", pkLU: "LU", pkMN: "MN", pkOP: "OP",
 	pkPB: "PB", pkPR: "PR", pkPY: "PY", pkR5: "R5", pkR6: "R6", pkRD: "RD",
 	pkSB:   "SB",
 	pkSF:   "SF",
@@ -77,6 +77,7 @@ const (
 	pkEN
 	pkEV
 	pkFETCH
+	pkFG
 	pkFL
 	pkFL64
 	pkFM

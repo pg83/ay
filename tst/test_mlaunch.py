@@ -119,6 +119,16 @@ END()
         for archive in (f"{std}/fmt/fmt.a", f"{std}/sort/sort.a", "sdg/sdc/ros/configuration/golaunch/golaunch.a", "first/first.a", "second/second.a"):
             self.assertIn(archive, peers)
 
+    def test_use_sdc_meta_does_not_extend_go_library_command(self):
+        sources = files()
+        sources["component/ya.make"] = f"MLAUNCH_LIBRARY(part)\n{lib.BARE_MODULE}\nGOLAUNCH_SRCS(part.go)\nUSE_SDC_META()\nEND()\n"
+        sources["component/part.go"] = "package part\n"
+        sources["app/ya.make"] = f"GOLAUNCH_PROGRAM()\n{lib.BARE_MODULE}\nPEERDIR(component)\nEND()\n"
+        graph = lib.make(sources, "app")
+        node = lib.node_by_output(graph, "$(B)/component/part.a")
+        self.assertFalse(any(output.endswith(".sdcmeta") for output in node["outputs"]))
+        self.assertEqual(len(node["cmds"]), 1)
+
     def test_empty_composite_still_generates_its_main_source(self):
         sources = files()
         std = "contrib/go/_std_1.26/src"
