@@ -2334,9 +2334,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.noLint = "ktlint"
 		}
 	case tokStyleCpp:
+		env.setBool(envUseAllSrcs, true)
+		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
+
 		if d.noLint != "none" && d.noLint != "none_internal" {
 			d.peerdirs = append(d.peerdirs, strBuildPlatformClangFormat.any())
 		}
+	case tokHeaders:
+		applyHeaders(fs, modulePath, v.Args, d)
 	case tokStyleCppUserSessions:
 		env.setBool(envUseAllSrcs, true)
 	case tokTsProtoPackageName:
