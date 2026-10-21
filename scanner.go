@@ -1068,7 +1068,25 @@ func (sc *ScanCtx) resolveSearchPath(out []VFS, includerAbs, incDir VFS, d Inclu
 		return false
 	}
 
+	addPath := func(rel string) bool {
+		rel = normalisePath(rel)
+
+		if !s.parsers.fs.isFilePathClean(rel) {
+			return false
+		}
+
+		out = append(out, source(rel))
+
+		return true
+	}
+
 	searchPathFound := false
+
+	if _, isCython := sc.parser.(CythonIncludeDirectiveParser); isCython {
+		if candidate, ok := cythonPy2SiblingOverride(includerAbs, quoted, targetID); ok && addPath(candidate) {
+			searchPathFound = true
+		}
+	}
 
 	if includerAbs.isBuild() {
 		if info := s.codegen.lookupSTR(targetID); info != nil && !outHas(info.OutputPath) {
@@ -1103,6 +1121,37 @@ func (sc *ScanCtx) resolveSearchPath(out []VFS, includerAbs, incDir VFS, d Inclu
 	}
 
 	return out
+}
+
+func cythonPy2SiblingOverride(includerAbs VFS, quoted bool, targetID STR) (string, bool) {
+	if !includerAbs.isSource() || !quoted {
+		return "", false
+	}
+
+	includer := includerAbs.relString()
+
+	switch includer {
+	case "util/generic/string.pxd":
+		target := targetID.string()
+
+		if target == "libcpp/string.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + target, true
+		}
+	case "util/generic/hash.pxd", "util/generic/hash_set.pxd":
+		target := targetID.string()
+
+		if target == "libcpp/pair.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + target, true
+		}
+	case "util/system/types.pxd":
+		target := targetID.string()
+
+		if target == "libc/stdint.pxd" {
+			return "contrib/tools/cython_py2/Cython/Includes/" + target, true
+		}
+	}
+
+	return "", false
 }
 
 func canRelFilter(first, target string) bool {

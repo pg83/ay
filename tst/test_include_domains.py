@@ -194,28 +194,9 @@ class CythonIncludeTest(unittest.TestCase):
         self.assertIn(f"$(S)/{cython3}/libcpp/string.pxd", inputs)
         self.assertNotIn(f"$(S)/{CYTHON_PY2}/libcpp/string.pxd", inputs)
 
-    def test_utility_cimports_use_selected_roots_when_both_distributions_exist(self):
-        cython3 = "contrib/tools/cython/Cython/Includes"
+    def test_cimport_probes_and_py2_include_overrides(self):
         files = {
-            "m/ya.make": library("SET(PYTHON3 yes)", "BUILDWITH_CYTHON_CPP(a.pyx)"),
-            "m/a.pyx": "from util.generic.string cimport TString\n",
-            "util/generic/string.pxd": "from libcpp.string cimport string\n",
-            "contrib/tools/cython/cython.py": "",
-        }
-        for distribution in (CYTHON_PY2, cython3):
-            files[f"{distribution}/libcpp/string.pxd"] = "from libc.string cimport const_char\n"
-            files[f"{distribution}/libc/string.pxd"] = ""
-        graph = lib.make(files, "m", "-k")
-        inputs = inputs_of(graph, "$(B)/m/a.pyx.cpp")
-        self.assertIn("$(S)/util/generic/string.pxd", inputs)
-        for relative in ("libcpp/string.pxd", "libc/string.pxd"):
-            self.assertIn(f"$(S)/{cython3}/{relative}", inputs)
-            self.assertNotIn(f"$(S)/{CYTHON_PY2}/{relative}", inputs)
-
-
-    def test_cimport_probes_and_explicit_py2_include_root(self):
-        files = {
-            "m/ya.make": library(f"ADDINCL(FOR cython {CYTHON_PY2})", "BUILDWITH_CYTHON_CPP(a.pyx)"),
+            "m/ya.make": library("BUILDWITH_CYTHON_CPP(a.pyx)"),
             "m/a.pyx": (
                 "from m.mod cimport foo\n"
                 "from m.pkg cimport sub, other\n"

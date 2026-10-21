@@ -955,8 +955,6 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 				}
 
 				e.emitGettextSource(input, pos.outs[0])
-			} else if e.producersOnly() && e.deferNativeSource(meta) {
-				e.enqueueSrc(meta)
 			} else {
 				e.emitOneSource(meta)
 			}

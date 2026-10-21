@@ -338,7 +338,7 @@ func (r *CodegenRegistry) generatorRefsFor(closure Closure) []NodeRef {
 	refs := nodeRefScratches.get()
 
 	closure.each(func(path VFS) {
-		if info := r.use(path); info != nil {
+		if info := r.lookup(path); info != nil {
 			refs = append(refs, info.GeneratorRefs...)
 		}
 	})

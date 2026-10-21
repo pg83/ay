@@ -276,7 +276,7 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 	}
 
 	for _, stmt := range e.d.cythonCpp {
-		if !stmt.PlainCpp && extIsPy(stmt.Src) {
+		if stmt.Generated == nil && extIsPy(stmt.Src) {
 			pythonFiles = append(pythonFiles, e.instance.Path.relString()+"/"+stmt.Src)
 		}
 	}

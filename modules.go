@@ -1259,10 +1259,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			setupPackageModule(v, language, d)
 			setupSdcDiagsModule(v, language, env, d)
 
-			if v.Name == tokPy23Library || v.Name == tokPy23NativeLibrary {
-				d.multimodule = v.Name
-			}
-
 			if v.Name == tokFbsLibrary {
 				d.multimodule = v.Name
 				d.moduleVariants = 1<<LangCPP | 1<<LangGo
@@ -3774,7 +3770,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			}
 
 			if cythonPlainCpp {
-				stmt.PlainCpp = true
+				stmt.Generated = ptr(src + ".cpp")
 			}
 
 			d.cythonCpp = append(d.cythonCpp, stmt)
