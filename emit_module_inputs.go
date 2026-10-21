@@ -3,12 +3,12 @@ package main
 import "path"
 
 func moduleOutputPath(result *ModuleEmitResult) VFS {
-	if result.ArchiveFile != 0 {
-		return result.ArchiveFile
-	}
-
 	if result.ARPath != nil {
 		return *result.ARPath
+	}
+
+	if result.ArchiveFile != 0 {
+		return result.ArchiveFile
 	}
 
 	if result.LDPath != nil {
