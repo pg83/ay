@@ -3,8 +3,9 @@ package main
 type BucketList [][]VFS
 
 type Closure struct {
-	self    VFS
-	buckets *BucketList
+	self           VFS
+	hasDiagnostics bool
+	buckets        *BucketList
 }
 
 func (cl Closure) bucketList() [][]VFS {

@@ -337,6 +337,14 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 }
 
 func (e *EmitContext) inputClosure(input VFS) Closure {
+	cl := e.includeClosure(input)
+
+	e.scanner.reportClosureDiagnostics(cl)
+
+	return cl
+}
+
+func (e *EmitContext) includeClosure(input VFS) Closure {
 	if e.d.scanCtx == nil {
 		e.d.scanCtx = newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, includeScannerBasePaths())
 	}
@@ -344,7 +352,7 @@ func (e *EmitContext) inputClosure(input VFS) Closure {
 	cl, cached := e.scanner.closure(input)
 
 	if !cached {
-		cl = e.scanner.walkClosure(input, e.d.scanCtx, scanDomainCC)
+		cl = e.scanner.scanClosure(input, e.d.scanCtx, scanDomainCC)
 	}
 
 	return cl

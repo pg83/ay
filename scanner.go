@@ -72,7 +72,7 @@ type IncludeScanner struct {
 	parsers        *IncludeParserManager
 	buckets        *BucketCache
 	closureScratch []VFS
-	scanCache      DenseMap2[VFS, []VFS, Closure]
+	scanCache      DenseMap2[VFS, ScannedChildren, Closure]
 	searchTierFlat *IntMap[VFS]
 	searchTierSeen BitSet
 	searchTierHot  [searchTierHotMask + 1]searchTierHotEntry
@@ -90,13 +90,24 @@ type searchTierHotEntry struct {
 	val VFS
 }
 
+type IncludeDiagnostics struct {
+	Entries []Warn
+}
+
+type ScannedChildren struct {
+	Paths       []VFS
+	Diagnostics *IncludeDiagnostics
+}
+
 type ScanCtx struct {
-	scanner   *IncludeScanner
-	cfg       *ScanConfig
-	ccCfg     *ScanConfig
-	parser    IncludeDirectiveParser
-	tjc       *TarjanCtx
-	tsImports bool
+	recordDiagnostics bool
+	diagnostics       []Warn
+	scanner           *IncludeScanner
+	cfg               *ScanConfig
+	ccCfg             *ScanConfig
+	parser            IncludeDirectiveParser
+	tjc               *TarjanCtx
+	tsImports         bool
 }
 
 func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
@@ -108,11 +119,49 @@ func (s *IncludeScanner) putClosure(v VFS, cl Closure) {
 }
 
 func (s *IncludeScanner) cachedChildren(v VFS) ([]VFS, bool) {
-	return s.scanCache.get1(v)
+	entry, ok := s.scanCache.get1(v)
+
+	return entry.Paths, ok
 }
 
-func (s *IncludeScanner) putChildren(v VFS, children []VFS) {
-	s.scanCache.put1(v, children)
+func (s *IncludeScanner) putChildren(v VFS, children []VFS, diagnostics []Warn) ScannedChildren {
+	entry := ScannedChildren{Paths: children}
+
+	if len(diagnostics) > 0 {
+		entry.Diagnostics = &IncludeDiagnostics{Entries: diagnostics}
+	}
+
+	s.scanCache.put1(v, entry)
+
+	return entry
+}
+
+func (s *IncludeScanner) hasOwnDiagnostics(v VFS) bool {
+	entry, _ := s.scanCache.get1(v)
+
+	return entry.Diagnostics != nil
+}
+
+func (s *IncludeScanner) reportChildrenDiagnostics(v VFS) {
+	entry, _ := s.scanCache.get1(v)
+
+	s.reportDiagnostics(entry.Diagnostics)
+}
+
+func (s *IncludeScanner) reportDiagnostics(diagnostics *IncludeDiagnostics) {
+	if diagnostics != nil {
+		for _, warning := range diagnostics.Entries {
+			s.onWarn(warning)
+		}
+	}
+}
+
+func (s *IncludeScanner) reportClosureDiagnostics(cl Closure) {
+	if !cl.hasDiagnostics {
+		return
+	}
+
+	cl.each(s.reportChildrenDiagnostics)
 }
 
 func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), buckets *BucketCache) *IncludeScanner {
@@ -245,6 +294,8 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 }
 
 func (s *IncludeScanner) putScanCtx(sc *ScanCtx) {
+	sc.diagnostics = nil
+	sc.recordDiagnostics = false
 	tarjans.put(sc.tjc)
 	sc.tjc = nil
 	s.scanCtxPool.Put(sc)
@@ -403,16 +454,24 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 	return out
 }
 
-func (sc *ScanCtx) resolvedChildren(abs VFS) []VFS {
+func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 	s := sc.scanner
 
-	if cached, ok := s.cachedChildren(abs); ok {
+	if cached, ok := s.scanCache.get1(abs); ok {
 		return cached
 	}
 
 	scratch := vfsScratches.get()
 
+	sc.recordDiagnostics = true
+	sc.diagnostics = nil
+
 	scratch = sc.appendResolvedChildren(scratch, abs)
+
+	diagnostics := sc.diagnostics
+
+	sc.diagnostics = nil
+	sc.recordDiagnostics = false
 
 	k := len(scratch)
 	block := s.childArena.alloc(k)
@@ -427,9 +486,7 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) []VFS {
 		children = block[:k]
 	}
 
-	s.putChildren(abs, children)
-
-	return children
+	return s.putChildren(abs, children, diagnostics)
 }
 
 func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
@@ -445,7 +502,7 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 		defer func() { sc.parser = previous }()
 	}
 
-	for _, id := range sc.resolvedChildren(abs) {
+	for _, id := range sc.resolvedChildren(abs).Paths {
 		fn(id)
 	}
 }
@@ -473,7 +530,9 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 	s.dfsActive.add(uint32(abs))
 
-	children := sc.resolvedChildren(abs)
+	resolved := sc.resolvedChildren(abs)
+	children := resolved.Paths
+	hasDiagnostics := resolved.Diagnostics != nil
 
 	for _, ch := range children {
 		if ch == abs {
@@ -498,6 +557,8 @@ func (sc *ScanCtx) dfs(abs VFS) {
 
 		cl, _ := s.closure(ch)
 
+		hasDiagnostics = hasDiagnostics || cl.hasDiagnostics
+
 		s.buckets.spliceOne(&sc.tjc.closure, cl.self)
 
 		for _, bucket := range cl.bucketList() {
@@ -513,7 +574,10 @@ func (sc *ScanCtx) dfs(abs VFS) {
 		s.buckets.spliceOne(&sc.tjc.closure, main)
 	}
 
-	s.putClosure(abs, s.buckets.storeScratch(abs))
+	cl := s.buckets.storeScratch(abs)
+
+	cl.hasDiagnostics = hasDiagnostics
+	s.putClosure(abs, cl)
 }
 
 func (sc *ScanCtx) opaqueMainOut(v VFS) VFS {
@@ -575,18 +639,24 @@ func (sc *ScanCtx) forEachChild(v VFS, fn func(VFS)) {
 	sc.forEachResolvedChildID(v, fn)
 }
 
+func (sc *ScanCtx) hasOwnDiagnostics(v VFS) bool {
+	return sc.scanner.hasOwnDiagnostics(v)
+}
+
 func (sc *ScanCtx) cachedWindow(v VFS) (Closure, bool) {
 	return sc.scanner.closure(v)
 }
 
-func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) int) {
+func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) (int, bool)) {
 	s := sc.scanner
 
 	s.codegen.shareInputLoop(members)
 
 	block := s.closureScratch
-	k := fill(block)
+	k, hasDiagnostics := fill(block)
 	cl := s.buckets.storeBuckets(block[0], block[1:k])
+
+	cl.hasDiagnostics = hasDiagnostics
 
 	for _, u := range members {
 		s.putClosure(u, cl)
@@ -738,11 +808,17 @@ func (sc *ScanCtx) warnUnresolved(includerAbs VFS, d IncludeDirective, sysinclCl
 		open, close = `"`, `"`
 	}
 
-	sc.scanner.onWarn(Warn{
+	warning := Warn{
 		Kind: WarnMissingInclude,
 		Message: fmt.Sprintf("%s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
 			includerAbs.string(), open, d.target.string(), close),
-	})
+	}
+
+	if sc.recordDiagnostics {
+		sc.diagnostics = append(sc.diagnostics, warning)
+	} else {
+		sc.scanner.onWarn(warning)
+	}
 }
 
 type CfgResolveIndex struct {

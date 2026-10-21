@@ -8,6 +8,48 @@ BARE = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
 
 
 class ModuleHeaderDependenciesTest(unittest.TestCase):
+    def test_unused_listed_header_is_not_a_compilation_input(self):
+        graph = lib.make({
+            "mod/ya.make": f"LIBRARY()\n{BARE}SRCS(local.cpp unused.h)\nEND()\n",
+            "mod/local.cpp": "int local;\n",
+            "mod/unused.h": '#include "missing.h"\n',
+        }, "mod")
+        archive = lib.node_by_output(graph, "$(B)/mod/libmod.a")
+        self.assertNotIn("$(S)/mod/unused.h", archive["inputs"])
+
+    def test_cached_header_diagnostics_are_reported_when_compilation_uses_it(self):
+        for order in ("public.h local.cpp", "local.cpp public.h"):
+            with self.subTest(order=order):
+                result = lib.make_process({
+                    "mod/ya.make": f"LIBRARY()\n{BARE}SRCS({order})\nEND()\n",
+                    "mod/local.cpp": '#include "public.h"\nint local;\n',
+                    "mod/public.h": '#include "cycle.h"\n',
+                    "mod/cycle.h": '#include "public.h"\n#include "missing.h"\n',
+                }, "mod")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("missing-include", result.stderr)
+                self.assertIn('"missing.h"', result.stderr)
+
+    def test_unused_header_retains_generated_dependencies_without_reporting_missing_includes(self):
+        files = {
+            "producer/ya.make": (
+                f"LIBRARY()\n{BARE}"
+                "GEN_PCH_FILE(producer/private.h ${ARCADIA_BUILD_ROOT}/producer/private.h.pch)\n"
+                "SRCS(public.h local.cpp)\nEND()\n"
+            ),
+            "producer/local.cpp": "int local;\n",
+            "producer/public.h": '#include "producer/private.h.pch"\n#include "missing.h"\n',
+            "producer/private.h": "#pragma once\n",
+            "consumer/ya.make": f"PROGRAM()\n{BARE}PEERDIR(producer)\nSRCS(main.cpp)\nEND()\n",
+            "consumer/main.cpp": "int main() {}\n",
+        }
+        lib.tool_program(files, "sdg/tier0/tools/make_pch_wrapper", "make_pch_wrapper")
+        graph = lib.make(files, "consumer")
+        pch = lib.node_by_output(graph, "$(B)/producer/private.h.pch")
+        link = lib.node_by_output(graph, "$(B)/consumer/consumer")
+        self.assertIn("$(B)/producer/private.h.pch", link["inputs"])
+        self.assertIn(pch["uid"], link["deps"])
+
     def test_exported_generated_includes_do_not_expand_into_link_source_inputs(self):
         files = {
             "producer/ya.make": (
