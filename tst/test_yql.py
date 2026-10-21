@@ -62,6 +62,50 @@ class YqlAbiTest(unittest.TestCase):
         self.assertIn(producer["uid"], tool["deps"])
         self.assertIn(producer["outputs"][0], tool["inputs"])
 
+    def test_python_and_cpp_consumers_reuse_single_module_codegen(self):
+        files = udf_fixture()
+        files.update({
+            "cpp/ya.make": f"PROGRAM()\n{BARE}PEERDIR(shared)\nEND()\n",
+            "py/ya.make": f"PY3_PROGRAM()\n{BARE}NO_PYTHON_INCLUDES()\nNO_IMPORT_TRACING()\nNO_CHECK_IMPORTS()\n"
+                "DISABLE(PYTHON_SQLITE3)\nALLOCATOR(FAKE)\nPEERDIR(shared)\nEND()\n",
+            "shared/ya.make": f"LIBRARY()\n{BARE}ARCHIVE_ASM(NAME Blob data.bin)\nEND()\n",
+            "shared/data.bin": "",
+        })
+        lib.tool_program(files, "contrib/tools/yasm", "yasm")
+        graph = lib.make(files, "cpp", "py", "--target-platform", "default-linux-x86_64")
+        producers = [n for n in graph["graph"] if "$(B)/shared/Blob.rodata" in n["outputs"]]
+        self.assertEqual(len(producers), 1)
+        for node in graph["graph"]:
+            if "$(B)/shared/Blob.rodata.o" in node["outputs"]:
+                self.assertEqual(len(node["deps"]), len(set(node["deps"])))
+
+    def test_weak_discovery_then_link_reuses_declared_codegen(self):
+        files = udf_fixture()
+        files.update({
+            "dll/ya.make": f"DLL(named)\n{BARE}PEERDIR(shared)\nEND()\n",
+            "cpp/ya.make": f"PROGRAM()\n{BARE}PEERDIR(shared)\nEND()\n",
+            "shared/ya.make": f"LIBRARY()\n{BARE}ARCHIVE_ASM(NAME Blob data.bin)\nEND()\n",
+            "shared/data.bin": "",
+        })
+        lib.tool_program(files, "contrib/tools/yasm", "yasm")
+        graph = lib.make(files, "cpp", "dll", "--target-platform", "default-linux-x86_64")
+        lib.node_by_output(graph, "$(B)/cpp/cpp")
+        nodes = {node["uid"]: node for node in graph["graph"]}
+        rodata = [node for node in graph["graph"] if "$(B)/shared/Blob.rodata.o" in node["outputs"]]
+        self.assertTrue(rodata)
+        for node in rodata:
+            producers = [ref for ref in node["deps"] if "$(B)/shared/Blob.rodata" in nodes[ref]["outputs"]]
+            self.assertEqual(len(producers), 1)
+
+    def test_direct_udf_configures_both_static_start_variants(self):
+        files = udf_fixture()
+        files.update({"udf/ya.make": f"YQL_UDF(named)\n{BARE}UDF_NO_PROBE()\nSRCS(body.cpp)\nEND()\n", "udf/body.cpp": ""})
+        graph = lib.make(files, "udf")
+        for suffix, archive in ((".udfs.o", "libnamed.global.a"), (".udfs.abi_current.o", "yql-abi-current-named.global.a")):
+            obj = lib.node_by_output(graph, "$(B)/udf/body.cpp" + suffix)
+            lib.node_by_output(graph, "$(B)/udf/" + archive)
+            self.assertNotIn("-DBUILD_UDF", obj["cmds"][0]["cmd_args"])
+
     def test_udf_peer_selects_static_global_sources_and_implicit_dependencies(self):
         files = udf_fixture()
         files.update({

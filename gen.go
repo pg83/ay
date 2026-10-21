@@ -1089,8 +1089,20 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	defer delete(ctx.walking, instance)
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
+	moduleName := stmtsModuleName(stmts)
 
-	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(stmtsModuleName(stmts)) && (stmtsModuleName(stmts) != tokYqlUdf || instance.Kind != KindLib) {
+	if moduleName == tokYqlUdf && instance.Kind == KindBin && !instance.Platform.PIC {
+		library := instance
+
+		library.Kind = KindLib
+
+		for _, current := range []bool{false, true} {
+			library.YqlCurrent = current
+			genModule(ctx, library)
+		}
+	}
+
+	if !instance.Platform.PIC && instance.Language == LangCPP && instance.Kind != KindForeignDescent && picTransition(moduleName) && (moduleName != tokYqlUdf || instance.Kind != KindLib) {
 		descent := instance
 
 		descent.Kind = KindForeignDescent
