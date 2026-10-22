@@ -67,6 +67,28 @@ class SchemaDependsTest(unittest.TestCase):
                 node = lib.node_by_output(graph, "$(B)/p/" + output)
                 self.assertIn(node["uid"], graph["result"])
 
+    def test_java_schema_body_uses_the_actual_context_tag(self):
+        files = workspace('ONLY_TAGS(JAVA_PROTO_FROM_SCHEMA)\nIF(JAVA_PROTO)\nJAVAC_FLAGS(-Dschema_tag=${MODULE_TAG})\nENDIF()\nIF(MODULE_TAG == "JAVA_PROTO_FROM_SCHEMA")\nSRCS(extra.proto)\nENDIF()\n')
+        files["p/extra.proto"] = 'syntax = "proto2";\nmessage Extra {}\n'
+        graph = lib.make(files, "tests", "-t", "--strip-packages-from-results")
+        jar = lib.node_by_output(graph, "$(B)/p/catalog.jar")
+        flags = [arg for cmd in jar["cmds"] for arg in cmd["cmd_args"] if arg.startswith("-Dschema_tag=")]
+        self.assertEqual(flags, ["-Dschema_tag=JAVA_PROTO_FROM_SCHEMA"])
+        extra = lib.node_by_output(graph, "$(B)/p/extra.jsrc")
+        self.assertIn(extra["uid"], jar["deps"])
+        self.assertIn(jar["uid"], graph["result"])
+
+    def test_java_peer_preserves_excluded_proto_contexts(self):
+        for macro, tag in (("PROTO_SCHEMA", "JAVA_PROTO_FROM_SCHEMA"),
+                           ("PROTO_LIBRARY", "JAVA_PROTO")):
+            with self.subTest(macro=macro):
+                files = workspace(f"EXCLUDE_TAGS({tag})\n")
+                files["p/ya.make"] = files["p/ya.make"].replace("PROTO_SCHEMA", macro)
+                files["java/ya.make"] = "JAVA_LIBRARY_NON_SPLIT()\nPEERDIR(p)\nEND()\n"
+                graph = lib.make(files, "java", "--strip-packages-from-results")
+                lib.node_by_output(graph, "$(B)/java/java.jar")
+                self.assertFalse(any("$(B)/p/catalog.jar" in n["outputs"] for n in graph["graph"]))
+
     def test_depends_first_schema_context_refines_selection_once(self):
         files = workspace('IF(MODULE_TAG == "CPP_PROTO_FROM_SCHEMA")\nEXCLUDE_TAGS(JAVA_PROTO_FROM_SCHEMA GO_PROTO_FROM_SCHEMA PY_PROTO_FROM_SCHEMA)\nENDIF()\n')
         graph = lib.make(files, "tests", "-t", "--strip-packages-from-results")

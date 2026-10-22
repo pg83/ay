@@ -464,7 +464,7 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 		genModule(ctx, native)
 	}
 
-	if unit.proto && jm.data.excludeTags["JAVA_PROTO"] {
+	if unit.proto && jm.data.excludeTags[env.string(envMODULE_TAG)] {
 		r := &ModuleEmitResult{ModuleStmtName: moduleName}
 
 		ctx.memoPut(instance, r)

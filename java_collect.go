@@ -166,6 +166,10 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 
 	for _, st := range stmts {
 		if m, ok := st.(*ModuleStmt); ok {
+			if m.Schema {
+				env.setString(envMODULE_TAG, protoModuleTag(LangJava, true))
+			}
+
 			javaModuleArgs(jm, d, expandStmtTokens(m.Args, env))
 
 			break
@@ -765,7 +769,13 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		if name == "ONLY_TAGS" {
 			clear(d.excludeTags)
 			d.onlyTags = true
-			d.excludeTags["JAVA_PROTO"] = true
+			tag := "JAVA_PROTO"
+
+			if u.proto {
+				tag = env.string(envMODULE_TAG)
+			}
+
+			d.excludeTags[tag] = true
 
 			if u.fbs {
 				d.excludeTags["JAVA_FBS"] = true
