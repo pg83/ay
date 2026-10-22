@@ -564,82 +564,6 @@ parsedFlags:
 	return entry
 }
 
-func parseCopyEntries(args []string, line int) []CopyFileEntry {
-	i := 0
-	auto := false
-	withContext := false
-
-	for i < len(args) {
-		switch args[i] {
-		case "AUTO":
-			auto = true
-			i++
-		case "WITH_CONTEXT":
-			withContext = true
-			i++
-		default:
-			goto parsedFlags
-		}
-	}
-
-parsedFlags:
-	if i >= len(args) || args[i] != "FROM" {
-		throwFmt("gen: COPY at line %d expects FROM <dir>", line)
-	}
-
-	i++
-
-	if i >= len(args) {
-		throwFmt("gen: COPY at line %d expects source directory after FROM", line)
-	}
-
-	fromDir := args[i]
-
-	i++
-
-	files := make([]string, 0, 8)
-	outputIncludes := make([]string, 0, 8)
-	section := "FILES"
-
-	for i < len(args) {
-		switch args[i] {
-		case "OUTPUT_INCLUDES", "INDUCED_DEPS":
-			section = args[i]
-			i++
-
-			continue
-		}
-
-		if section == "FILES" {
-			files = append(files, args[i])
-		} else {
-			outputIncludes = append(outputIncludes, args[i])
-		}
-
-		i++
-	}
-
-	out := make([]CopyFileEntry, 0, len(files))
-
-	for _, file := range files {
-		src := filepath.ToSlash(filepath.Clean(fromDir + "/" + file))
-		includes := append([]string(nil), outputIncludes...)
-
-		if withContext {
-			includes = append(includes, src)
-		}
-
-		out = append(out, CopyFileEntry{
-			Src:            src,
-			Dst:            file,
-			Auto:           auto,
-			OutputIncludes: includes,
-		})
-	}
-
-	return out
-}
-
 func sourceInputVFS(fs FS, moduleDir VFS, path string) (VFS, bool) {
 	modulePath := moduleDir.relString()
 
@@ -2856,7 +2780,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 		}
 	case tokCopy:
-		for _, entry := range parseCopyEntries(anyStrs(v.Args), v.Line) {
+		entries, result := parseCopyEntries(anyStrs(v.Args), v.Line)
+
+		for _, entry := range entries {
 			d.copyFiles = append(d.copyFiles, entry)
 
 			if entry.Auto {
@@ -2877,6 +2803,25 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 					d.copyFileAutoOutputs[internStr(dstRel)] = entry
 				}
 			}
+		}
+
+		if result != "" {
+			targets := make([]string, len(entries))
+
+			for i, entry := range entries {
+				targets[i] = entry.Dst
+			}
+
+			value := strings.Join(targets, " ")
+
+			markUserArg(internStr(result).any())
+			env.setFromString(internEnv(result), value)
+
+			if d.setVars == nil {
+				d.setVars = map[STR]STR{}
+			}
+
+			d.setVars[internStr(result)] = internStr(value)
 		}
 	case tokProtoNamespace:
 		if len(v.Args) == 0 {
