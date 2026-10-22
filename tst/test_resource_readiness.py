@@ -102,7 +102,7 @@ class ResourceReadinessTest(unittest.TestCase):
                     self.assertEqual(resource_order(graph, tag == "PY3"), expected)
 
     def test_resource_files_wait_but_text_rootrel_is_ready(self):
-        for resource in ("RESOURCE_FILES(data.dat)", """RESOURCE(- 'payload=${rootrel;context=TEXT;input=TEXT:"data.dat"}')"""):
+        for resource in ("RESOURCE_FILES(data.dat)", r'''RESOURCE(- payload=\${rootrel;context=TEXT;input=TEXT:"data.dat"})'''):
             with self.subTest(resource=resource):
                 files, targets = fixture("PY3")
                 files["mod/ya.make"] = files["mod/ya.make"].replace("RESOURCE(data.dat payload)", resource)

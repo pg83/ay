@@ -1746,7 +1746,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *ResourceStmt:
-			pairs := expandResourcePairs(v.Pairs, env)
+			pairs, dontCompress := expandResourcePairs(v.Args, v.Line, env)
 
 			if isGoModuleType(d.unit.Type) {
 				entries := make([]ResourceEntry, len(pairs))
@@ -1770,7 +1770,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					Path:         pair.Path,
 					Key:          pair.Key,
 					EndsBatch:    i == len(pairs)-1,
-					DontCompress: v.DontCompress,
+					DontCompress: dontCompress,
 				})
 			}
 		case *ResourceFilesStmt:

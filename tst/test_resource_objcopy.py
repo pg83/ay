@@ -60,8 +60,8 @@ class ResourceObjcopyTest(unittest.TestCase):
         files = base_files(
             "RUN_PROGRAM(tools/gen IN in.txt OUT_NOAUTO gen.bin)\n"
             "RESOURCE(\n"
-            f"  - 'resfs/src/k={ROOTREL}\"a.txt\"}}'\n"
-            f"  - 'resfs/src/g={ROOTREL}\"gen.bin\"}}'\n"
+            f"  - resfs/src/k=\\{ROOTREL}\"a.txt\"}}\n"
+            f"  - resfs/src/g=\\{ROOTREL}\"gen.bin\"}}\n"
             "  - x=${ARCADIA_ROOT}/y\n"
             f"  - 'open={ROOTREL}\"unterminated'\n"
             ")\n"

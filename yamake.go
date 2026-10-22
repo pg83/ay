@@ -384,9 +384,8 @@ type ResourcePair struct {
 }
 
 type ResourceStmt struct {
-	Pairs        []ResourcePair
-	Line         int
-	DontCompress bool
+	Args []ANY
+	Line int
 }
 
 type ResourceFilesStmt struct {
@@ -1144,12 +1143,12 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 
 	defer func() { p.lex.inArgs = false }()
 
-	compiler := nameTok.id == kwCFLAGS || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS
+	lexicalArgs := nameTok.id == kwCFLAGS || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS || nameTok.id == kwRESOURCE
 
 	for {
 		start := 0
 
-		if lexical != nil || compiler {
+		if lexical != nil || lexicalArgs {
 			p.lex.skipTrivia()
 			start = p.lex.pos
 		}
@@ -1168,7 +1167,7 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 		case tokIdent, tokWord, tokString, tokInt:
 			value := tok.id
 
-			if lexical != nil || compiler {
+			if lexical != nil || lexicalArgs {
 				if tok.kind == tokString {
 					if strings.ContainsRune(tok.string(), '\\') {
 						value = internStr(strings.ReplaceAll(tok.string(), "\\", ""))
@@ -1178,7 +1177,7 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 				}
 			}
 
-			if compiler {
+			if lexicalArgs {
 				scratch = append(scratch, value.any())
 			} else {
 				scratch = append(scratch, tok.id.any())
@@ -1431,8 +1430,7 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 
 		return parseFromSandbox(args, line)
 	case "RESOURCE":
-
-		return parseResource(args, Token{id: nameID, line: line})
+		return &ResourceStmt{Args: args, Line: line}
 	case "RESOURCE_FILES":
 		return &ResourceFilesStmt{Args: astArgs.list(args...), Line: line}
 	case "ALL_RESOURCE_FILES":
@@ -1797,34 +1795,6 @@ func parseStructCodegen(prefix ANY, line int) *BaseCodegenStmt {
 		Peerdirs:       structCodegenPeerdirs,
 		Line:           line,
 	}
-}
-
-func parseResource(args []ANY, nameTok Token) *ResourceStmt {
-	rest := args
-	dontCompress := false
-
-	for i := 0; i < 2 && len(rest) > 0; i++ {
-		if rest[0] == kwDONT_PARSE.any() || rest[0] == kwDONT_COMPRESS.any() {
-			dontCompress = dontCompress || rest[0] == kwDONT_COMPRESS.any()
-			rest = rest[1:]
-
-			continue
-		}
-
-		break
-	}
-
-	if len(rest)%2 != 0 {
-		throwFmt("RESOURCE at line %d: argument count after DONT_PARSE/DONT_COMPRESS strip must be even (got %d)", nameTok.line, len(rest))
-	}
-
-	pairs := make([]ResourcePair, 0, len(rest)/2)
-
-	for i := 0; i < len(rest); i += 2 {
-		pairs = append(pairs, ResourcePair{Path: rest[i].string(), Key: rest[i+1].string()})
-	}
-
-	return &ResourceStmt{Pairs: pairs, Line: nameTok.line, DontCompress: dontCompress}
 }
 
 func splitAddInclPaths(args []ANY) *AddInclStmt {
