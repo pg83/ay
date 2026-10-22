@@ -60,11 +60,13 @@ class YqlResultsTest(unittest.TestCase):
                 graph = lib.make(self.fixture(tags=tags + '\n'), 'udf', '--strip-packages-from-results', '--target-platform', 'default-linux-x86_64')
                 self.assertEqual(self.outputs(graph), {'$(B)/udf/' + name for name in expected})
 
-    def test_peer_shared_udf_does_not_register_static_start_results(self):
+    def test_depends_selects_each_udf_context_without_registering_extra_roots(self):
         graph = lib.make(self.fixture(), 'tests', '-t', '--strip-packages-from-results', '--target-platform', 'default-linux-x86_64')
         self.assertFalse(any(p.startswith('$(B)/udf/') for p in self.outputs(graph)))
-        lib.node_by_output(graph, '$(B)/udf/libnamed.so')
-        self.assertFalse(any('.udfs' in output for node in graph['graph'] for output in node['outputs']))
+        suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
+        for name in ('libnamed.so', 'libnamed.a', 'libnamed.global.a',
+                     'yql-abi-current-named.a', 'yql-abi-current-named.global.a'):
+            self.assertIn(lib.node_by_output(graph, '$(B)/udf/' + name)['uid'], suite['deps'])
 
 
 if __name__ == '__main__':

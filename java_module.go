@@ -296,6 +296,7 @@ type JavaData struct {
 	protoNamespace    string
 	protoAddIncl      []javaAddIncl
 	excludeTags       map[string]bool
+	onlyTags          bool
 	commonGoogleAPIs  bool
 	lintLevel         string
 	noLint            string

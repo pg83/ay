@@ -1276,7 +1276,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}()
 
 	if instance.Language == LangJava {
-		return genJavaModule(ctx, instance, ctx.moduleName(instance.Path.relString()), stmts, env)
+		name := ctx.moduleName(instance.Path.relString())
+
+		if name == 0 {
+			if declaration, _ := ctx.recurseScan(instance.Path.relString()); declaration != nil {
+				name = declaration.Name
+			}
+		}
+
+		return genJavaModule(ctx, instance, name, stmts, env)
 	}
 
 	d := collectModuleInto(ctx, instance, stmts, env, ctx.onWarn, &frame.d)

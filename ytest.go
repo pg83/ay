@@ -385,32 +385,33 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 	}
 
 	for i, dep := range s.depends {
-		instance := ctx.rootInstance(dep, demandLinked)
-		res := genModule(ctx, instance)
-		output := res.ARPath
-
-		if res.LDPath != nil {
-			output = res.LDPath
-		}
-
-		if s.testType == "exectest" {
-			output := dep
+		for _, dependency := range ctx.testBuildDependencies(dep) {
+			instance, res := dependency.instance, dependency.result
+			output := res.ARPath
 
 			if res.LDPath != nil {
-				output = res.LDPath.relString()
+				output = res.LDPath
 			}
 
-			execDirs = append(execDirs, testExecDependencyDir(output))
-		}
+			if s.testType == "exectest" {
+				output := dep
 
-		if s.ciType == "style" && output != nil {
-			s.depends[i] = output.relString()
-		}
+				if res.LDPath != nil {
+					output = res.LDPath.relString()
+				}
 
-		s.deps = append(s.deps, ctx.moduleResultRefs(instance, res)...)
+				execDirs = append(execDirs, testExecDependencyDir(output))
+			}
 
-		if python && res.LDPath != nil && res.ARPath == nil && isLinkingModuleType(res.ModuleStmtName) && res.ModuleStmtName != tokDllTool {
-			s.pytestOutputDirs = append(s.pytestOutputDirs, path.Dir(res.LDPath.string()))
+			if s.ciType == "style" && output != nil {
+				s.depends[i] = output.relString()
+			}
+
+			s.deps = append(s.deps, ctx.moduleResultRefs(instance, res)...)
+
+			if python && res.LDPath != nil && res.ARPath == nil && isLinkingModuleType(res.ModuleStmtName) && res.ModuleStmtName != tokDllTool {
+				s.pytestOutputDirs = append(s.pytestOutputDirs, path.Dir(res.LDPath.string()))
+			}
 		}
 	}
 

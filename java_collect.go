@@ -753,7 +753,10 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		}
 
 		if name == "ONLY_TAGS" {
+			clear(d.excludeTags)
+			d.onlyTags = true
 			d.excludeTags["JAVA_PROTO"] = true
+
 			if u.fbs {
 				d.excludeTags["JAVA_FBS"] = true
 			}

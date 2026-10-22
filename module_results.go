@@ -4,7 +4,9 @@ func (ctx *GenCtx) moduleResultRefs(instance ModuleInstance, result *ModuleEmitR
 	reg := ctx.scannerFor(instance).codegen
 	output, ref := result.ARPath, result.ARRef
 
-	if result.LDPath != nil {
+	if result.java != nil {
+		output, ref = &result.java.target, result.java.outRef
+	} else if result.LDPath != nil {
 		output, ref = result.LDPath, result.LDRef
 	}
 
@@ -19,7 +21,7 @@ func (ctx *GenCtx) moduleResultRefs(instance ModuleInstance, result *ModuleEmitR
 		refs = append(refs, *result.GlobalRef)
 	}
 
-	if result.isPROGRAM || isLinkingModuleType(result.ModuleStmtName) {
+	if result.isPROGRAM || isLinkingModuleType(result.ModuleStmtName) || result.java != nil {
 		return refs
 	}
 
