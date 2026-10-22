@@ -63,7 +63,7 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 			reg.use(input)
 		}
 
-		ctx.emit.emitReservedNode(node, ref)
+		e.emitReservedNode(node, ref)
 	})
 
 	if len(ownedOutputs) == 0 {

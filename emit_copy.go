@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 func copyFileAutoSourceVFS(modulePath string, d *ModuleData, src STR) *VFS {
 	if d.copyFileAutoOutputs == nil {
 		return nil
@@ -100,6 +102,12 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 			SourcePath:     srcVFS,
 			ProducerRef:    ref,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
+		}
+
+		// json_visitor.cpp forwards .in BuildFrom inputs, including TEXT
+		// inputs. Register that fact before copyLoopSources scans the output.
+		if strings.HasSuffix(srcVFS.relString(), ".in") {
+			info.ClosureLeaves = ctx.na.vfsList(srcVFS)
 		}
 
 		return CopyEmitState{srcVFS: srcVFS, dstVFS: dstVFS, ref: ref}, e.register(info)
