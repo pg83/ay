@@ -9,10 +9,12 @@ from test_java_tests import junit_tree
 
 class JavaRemainingContractsTest(unittest.TestCase):
     def test_failed_test_compilation_is_skipped_in_keep_going_mode(self):
-        files = junit_tree('JUNIT5()\nIF(MODULE_TAG == "JUNIT5_JAR_COMPILATION")\nIF(1 == "text")\nENDIF()\nENDIF()\nEND()\n')
+        # Equality compares strings upstream; an unsupported operator still
+        # fails only the active test-compilation submodule.
+        files = junit_tree('JUNIT5()\nIF(MODULE_TAG == "JUNIT5_JAR_COMPILATION")\nIF(MODULE_TAG GREATER 0)\nENDIF()\nENDIF()\nEND()\n')
         result = lib.make_process(files, 'proj/sub/ut', '-k', '-t')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('operand type mismatch', result.stderr)
+        self.assertIn('unsupported IF operator "GREATER"', result.stderr)
         self.assertIn('submodule', result.stderr)
         graph = json.loads(result.stdout)
         self.assertFalse(any(o.endswith('.test.cp.jar') for n in graph['graph'] for o in n['outputs']))
