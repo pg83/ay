@@ -48,17 +48,7 @@ func (ctx *GenCtx) publishModuleOutputs(instance ModuleInstance, result *ModuleE
 
 func (ctx *GenCtx) projectModuleIndex(suites []*TestSuite) map[VFS][]NodeRef {
 	emit := ctx.emit
-	stack := make([]NodeRef, 0, len(emit.results))
-
-	for _, ref := range emit.results {
-		node := emit.nodes.s[ref]
-
-		if emit.stripPackagesFromResults && node != nil && node.KV != nil && (node.KV.P == pkPK || node.KV.P == pkUN) {
-			continue
-		}
-
-		stack = append(stack, ref)
-	}
+	stack := append([]NodeRef(nil), emit.results...)
 
 	for _, suite := range suites {
 		if ctx.testSuiteSelected(suite) {

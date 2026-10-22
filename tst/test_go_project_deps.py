@@ -12,6 +12,35 @@ def vet(graph, project):
 
 
 class GoProjectDependenciesTest(unittest.TestCase):
+    def test_package_roots_are_indexed_before_result_stripping(self):
+        for declaration, tags, package, kind in (
+            ('MLAUNCH_PIPELINE', '', 'part.final.pkg.fake', 'PK'),
+            ('MLAUNCH_LIBRARY', 'ONLY_TAGS(GO_MLAUNCH UNION_MLAUNCH)\n', 'part.pkg.fake', 'UN'),
+        ):
+            for selected in (False, True):
+                with self.subTest(declaration=declaration, selected=selected):
+                    files = mlaunch_files()
+                    files['component/ya.make'] = (
+                        f'{declaration}(part)\n{lib.BARE_MODULE}{tags}'
+                        'GOLAUNCH_SRCS(extra.go)\nGOLAUNCH_FUNCTION(Start)\nFILES(payload.txt)\nEND()\n'
+                    )
+                    files['component/extra.go'] = 'package main\nfunc Start() {}\n'
+                    files['component/payload.txt'] = 'payload\n'
+                    files['build/scripts/append_file.py'] = ''
+                    graph = lib.make(files, 'component', *(['-t'] if selected else []),
+                                     '--strip-packages-from-results')
+                    output = '$(B)/component/' + package
+                    if selected:
+                        node = lib.node_by_output(graph, output)
+                        self.assertEqual(node['kv']['p'], kind)
+                        self.assertIn(node['uid'], vet(graph, 'component')['deps'])
+                        self.assertNotIn(node['uid'], graph['result'])
+                        self.assertIn('$(B)/component/payload.txt', node['inputs'])
+                        self.assertTrue(any('$(B)/component/payload.txt' in n['outputs'] and n['kv'].get('p') == 'CP'
+                                            for n in graph['graph']))
+                    else:
+                        self.assertFalse(any(output in node['outputs'] for node in graph['graph']))
+
     def test_project_query_keeps_dependencies_of_filtered_collected_suites(self):
         files = go_proto_world()
         files.update(desc_files())
