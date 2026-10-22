@@ -3429,6 +3429,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				}
 			case "SFLAGS":
 				d.sFlags = append(d.sFlags, v.Args[1:]...)
+			case "USER_CFLAGS":
+				// gnu_compiler.conf includes this local binding in CFLAGS;
+				// unlike CFLAGS(GLOBAL ...), SET_APPEND does not export it.
+				d.cFlags = append(d.cFlags, v.Args[1:]...)
 			case "_PROTOC_FLAGS":
 				d.protocFlags = append(d.protocFlags, v.Args[1:]...)
 			case "RPATH_GLOBAL":
