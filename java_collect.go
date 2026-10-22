@@ -596,6 +596,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "JUNIT_TESTS_JAR":
 		if u.kind == juTest && len(args) > 0 {
 			d.unittestDir = arg0
+			d.unittestMod = path.Join(args...)
 			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: arg0})
 		}
 	case "AUTO_SERVICE":
@@ -611,6 +612,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.test.size = strings.ToLower(arg0)
 	case "TIMEOUT":
 		d.test.timeout = arg0
+	case "TEST_CWD":
+		d.test.cwd = arg0
 	case "TAG":
 		d.test.tags = append(d.test.tags, args...)
 	case "REQUIREMENTS":

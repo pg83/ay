@@ -319,12 +319,27 @@ func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *TestSu
 	return s
 }
 
+func (jm *JavaModule) junitTestJar() VFS {
+	if jm.data.unittestDir == "" {
+		return build(jm.dir, "/", jm.name, ".jar")
+	}
+
+	testJar := build(jm.data.unittestMod)
+
+	for _, peer := range jm.managedPeers {
+		if peer.dir == jm.data.unittestDir {
+			testJar = peer.target
+		}
+	}
+
+	return testJar
+}
+
 func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	d := jm.data
 	t := d.test
-	comp := jm.selfPeers[0]
-	testJar := comp.target
-	cpf := build(jm.dir, "/", jm.name, ".test.cpf")
+	testJar := jm.junitTestJar()
+	cpf := build(strings.TrimSuffix(testJar.relString(), path.Ext(testJar.relString())), ".test.cpf")
 	closure := ctx.javaManagedPeersClosure(jm)
 	globals := ctx.javaGlobals(jm)
 	jdk := "JDK" + d.jdkReal
@@ -354,6 +369,10 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	s.supportsTestParameters = true
 	s.smoothShutdown = []string{"SIGUSR1"}
 	s.split = 1
+
+	if t.cwd != "" {
+		s.runCwd = source(t.cwd).string()
+	}
 
 	if t.forkMode != "" {
 		s.split = 10

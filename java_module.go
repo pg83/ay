@@ -312,6 +312,7 @@ type JavaData struct {
 	disableScriptgen  bool
 	enablePreview     bool
 	unittestDir       string
+	unittestMod       string
 	implPeers         []string
 	collectKotlinLint []string
 	customLints       []javaCustomLint
@@ -337,6 +338,7 @@ type javaTestData struct {
 	systemProperties []string
 	classpathCmdType string
 	data             []string
+	cwd              string
 
 	ignoreClasspathClash []string
 }
