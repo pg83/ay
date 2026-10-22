@@ -505,6 +505,20 @@ func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *Objco
 	}
 
 	entries := e.resEntries[:0]
+	rows := 0
+	flush := func() {
+		e.resEntries = retainMaxLen(e.resEntries, entries)
+
+		if len(entries) > 0 {
+			groupRefs, groupOuts := e.packResources(ResourcePack{DontCompress: true, Tag: d.unit.HashTag, Items: e.pySrcResourceItems(entries)})
+
+			res.Refs = append(res.Refs, groupRefs...)
+			res.Outputs = append(res.Outputs, groupOuts...)
+		}
+
+		entries = entries[:0]
+		rows = 0
+	}
 
 	for _, ps := range e.pySrcsReg {
 		if ps.Kind != pySourcePlain || ps.Group != gi {
@@ -512,16 +526,17 @@ func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *Objco
 		}
 
 		entries = e.appendPyResEntries(entries, ps)
+		rows++
+
+		// pybuild.py's _split_macro_call starts a fresh RESOURCE[_FILES]
+		// call after 1024 original source rows, before resource_handler's
+		// independent command-size partitioning. A row may carry PY and PYC.
+		if rows == 1024 {
+			flush()
+		}
 	}
 
-	e.resEntries = retainMaxLen(e.resEntries, entries)
-
-	if len(entries) > 0 {
-		groupRefs, groupOuts := e.packResources(ResourcePack{DontCompress: true, Tag: d.unit.HashTag, Items: e.pySrcResourceItems(entries)})
-
-		res.Refs = append(res.Refs, groupRefs...)
-		res.Outputs = append(res.Outputs, groupOuts...)
-	}
+	flush()
 
 	if d.moduleStmt.Name != tokProtoLibrary {
 		protoRefs, protoOuts := e.emitPyProtoGroupResources(gi)
