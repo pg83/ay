@@ -105,9 +105,10 @@ func (e *EmitContext) importTestSuites(binary VFS, ref NodeRef, globals []Resour
 
 	project := e.instance.Path.relString()
 
+	// CheckImports inherits AbstractTestSuite's project build-dependency query.
 	s := &TestSuite{p: e.ctx.target, projectPath: project, name: "import_test", testType: "import_test", ciType: "test", size: "small",
 		timeout: testSizeTimeouts["small"], runInputs: []VFS{source(project)}, checkFiles: []VFS{binary}, deps: depRefs(ref), globals: globals,
-		env: d.test.env, supportsTestParameters: true, smoothShutdown: []string{"SIGUSR2"}, importCheckEnv: true, noRetries: true}
+		env: d.test.env, supportsTestParameters: true, smoothShutdown: []string{"SIGUSR2"}, importCheckEnv: true, noRetries: true, projectBuildDeps: true}
 
 	// The suite renders after collection reuses ModuleData's scratch slices.
 	// Keep this module's NO-CHECK metadata independent of later contexts.
