@@ -234,6 +234,7 @@ type ModuleData struct {
 	asmAddIncl               []VFS
 	protoAddInclGlobal       []VFS
 	protoAddIncl             []VFS
+	protoIncludeLocal        []VFS
 	dontResolveIncludes      bool
 	swigAddIncl              []VFS
 	swigAddInclGlobal        []VFS
@@ -1600,6 +1601,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
 			d.protoAddIncl = append(d.protoAddIncl, expandConfigVFSPaths(v.ProtoPaths, env)...)
 			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
+			d.protoIncludeLocal = append(d.protoIncludeLocal, expandConfigVFSPaths(v.ProtoAllPaths, env)...)
 			d.flatcAddIncl = append(d.flatcAddIncl, expandConfigVFSPaths(v.FlatcPaths, env)...)
 			d.flatcAddInclGlobal = append(d.flatcAddInclGlobal, expandConfigVFSPaths(v.FlatcGlobalPaths, env)...)
 			d.swigAddIncl = append(d.swigAddIncl, expandConfigVFSPaths(v.SwigPaths, env)...)
@@ -2926,7 +2928,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		// build/conf/proto.conf: RESOLVE_PROTO is SET followed by ADDINCL FOR proto.
 		env.setStringID(envDontResolveIncludes, strNo)
-		d.protoAddIncl = append(d.protoAddIncl, expandConfigVFSPaths(anysOf("$PROTOBUF_INCLUDE_PATH"), env)...)
+		d.addProtoInclude(expandConfigVFSPaths(anysOf("$PROTOBUF_INCLUDE_PATH"), env), false)
 	case tokUseSdcMeta:
 		if d.setVars == nil {
 			d.setVars = map[STR]STR{}
@@ -4161,19 +4163,32 @@ func pythonInitSuffix(name string) string {
 	return string(mangled)
 }
 
+func (d *ModuleData) addProtoInclude(paths []VFS, global bool) {
+	d.protoIncludeLocal = append(d.protoIncludeLocal, paths...)
+
+	if global {
+		d.protoAddInclGlobal = append(d.protoAddInclGlobal, paths...)
+	} else {
+		d.protoAddIncl = append(d.protoAddIncl, paths...)
+	}
+}
+
 func applyProtoNamespace(d *ModuleData, namespace ANY, withGen bool) {
 	d.protoNamespace = ptr(namespace)
 
 	protoSourceRoot := protoIncludeDir(namespace.string())
 	protoBuildRoot := protoSourceRoot.rel().build()
+	var includes []VFS
 
 	if withGen {
-		d.protoAddInclGlobal = append(d.protoAddInclGlobal, protoBuildRoot)
+		includes = append(includes, protoBuildRoot)
 	}
 
 	if protoSourceRoot.relString() != "" {
-		d.protoAddInclGlobal = append(d.protoAddInclGlobal, protoSourceRoot)
+		includes = append(includes, protoSourceRoot)
 	}
+
+	d.addProtoInclude(includes, true)
 
 	d.addLocalIncl(prioAddIncl, protoBuildRoot)
 	d.addInclGlobal = append(d.addInclGlobal, protoBuildRoot)
@@ -4208,19 +4223,17 @@ func applyProtoAddIncl(d *ModuleData, args []ANY) {
 
 	src := protoIncludeDir(rel)
 	bld := src.rel().build()
-	protoIncludes := &d.protoAddIncl
-
-	if global {
-		protoIncludes = &d.protoAddInclGlobal
-	}
+	var includes []VFS
 
 	if withGen {
-		*protoIncludes = append(*protoIncludes, bld)
+		includes = append(includes, bld)
 	}
 
 	if src.relString() != "" {
-		*protoIncludes = append(*protoIncludes, src)
+		includes = append(includes, src)
 	}
+
+	d.addProtoInclude(includes, global)
 
 	d.addLocalIncl(prioAddIncl, bld)
 

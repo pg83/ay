@@ -417,6 +417,10 @@ class PyProtoTest(unittest.TestCase):
 
     def test_include_flags_from_peers_and_macros(self):
         files = python_base()
+        files["contrib/libs/googleapis-common-protos/ya.make"] = (
+            "PROTO_LIBRARY()\nPROTO_NAMESPACE(contrib/libs/googleapis-common-protos)\n"
+            "EXCLUDE_TAGS(CPP_PROTO)\nEND()\n"
+        )
         files.update({
             "proto/ya.make": (
                 "PROTO_LIBRARY()\n"
@@ -452,8 +456,8 @@ class PyProtoTest(unittest.TestCase):
         self.assertEqual(args(pb)[args(pb).index("--"):], [
             "--", PROTOC,
             "-I=./proto", "-I=$(S)/proto", "-I=$(B)", "-I=$(S)",
-            "-I=$(S)/contrib/libs/googleapis-common-protos",
-            "-I=$(S)/proto", "-I=$(S)/proto",
+            "-I=$(S)/proto",
+            "-I=$(S)/contrib/libs/googleapis-common-protos", "-I=$(S)/proto",
             "-I=$(S)/extra", "-I=$(S)/contrib/libs/protoc/src",
             "-I=$(B)", "-I=$(S)/contrib/libs/protobuf/src",
             "--python_out=$(B)/proto",

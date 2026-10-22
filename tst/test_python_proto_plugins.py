@@ -59,7 +59,7 @@ class PythonProtoPluginTest(unittest.TestCase):
                     WRAPPER, "--py_ver", version, "--suffixes", "_pb2.py", "_stub.py", "_pb2.pyi",
                     "--input", f"{TREE}/nested/packet.proto", "--ns", f"/{TREE}", "--", protoc,
                     f"-I=./{TREE}", f"-I=$(S)/{TREE}", "-I=$(B)", "-I=$(S)",
-                    f"-I=$(S)/{TREE}", f"-I=$(B)/{TREE}",
+                    f"-I=$(B)/{TREE}", f"-I=$(S)/{TREE}",
                     "-I=$(B)", "-I=$(S)/contrib/libs/protobuf/src", f"--python_out=$(B)/{TREE}",
                     f"{TREE}/nested/packet.proto", f"--plugin=protoc-gen-{plugin}={TOOL_BINARY}",
                     f"--{plugin}_out=$(B)/{TREE}",

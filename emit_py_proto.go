@@ -2,7 +2,6 @@ package main
 
 import (
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
@@ -135,7 +134,7 @@ type PyPBModuleEmission struct {
 	tail           []ANY
 }
 
-func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS, duplicateOutputRootInclude bool) *PyPBModuleEmission {
+func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS) *PyPBModuleEmission {
 	if e.pyPBOk {
 		return &e.pyPBEmission
 	}
@@ -144,6 +143,9 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 
 	ctx, _, d := e.ctx, e.instance, e.d
 	pe := &e.pyPBEmission
+	// TModuleIncDirs::Get concatenates locally declared includes and the
+	// separately unique propagated peer list. An overlap remains in both.
+	protoInclude := concat(dedup(d.protoIncludeLocal), e.peers.ProtoInclude)
 
 	*pe = PyPBModuleEmission{}
 
@@ -192,26 +194,8 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 		argIS3.any(),
 	)
 
-	if d.useCommonGoogleAPIs {
-		mid = append(mid, strISContribLibsGoogleapisCommonProtos.any())
-	}
-
-	if protoRoot != "" {
-		mid = append(mid, internV("-I=$(S)/", protoRoot).any())
-
-		if duplicateOutputRootInclude {
-			mid = append(mid, internV("-I=$(S)/", protoRoot).any())
-		}
-	}
-
 	for _, p := range protoInclude {
-		token := internV("-I=", p.prefix(), p.relString()).any()
-
-		if slices.Contains(mid, token) {
-			continue
-		}
-
-		mid = append(mid, token)
+		mid = append(mid, internV("-I=", p.string()).any())
 	}
 
 	mid = append(mid,
@@ -258,13 +242,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	}
 
 	protocLDRef, protocBinary := ctx.tool(protoc)
-	duplicateOutputRootInclude := false
-
-	if protoRoot := protoPythonOutputRoot(d); protoRoot != "" {
-		duplicateOutputRootInclude = slices.Contains(e.peers.PeerAddInclGlobal, build(protoRoot))
-	}
-
-	pe := e.newPyPBModuleEmission(protocBinary, d.cc.ProtoInclude, duplicateOutputRootInclude)
+	pe := e.newPyPBModuleEmission(protocBinary)
 	scanCtx := d.scanCtx
 	protoSrcVFS := resolveSourceOrGeneratedVFS(ctx, instance, srcTok.string(), d.srcDirs)
 	protoRel := e.protoSourceRel(protoSrcVFS.string())

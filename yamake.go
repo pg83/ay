@@ -212,6 +212,7 @@ type AddInclStmt struct {
 	AsmPaths          []ANY
 	ProtoPaths        []ANY
 	ProtoGlobalPaths  []ANY
+	ProtoAllPaths     []ANY
 	FlatcPaths        []ANY
 	FlatcGlobalPaths  []ANY
 	SwigPaths         []ANY
@@ -1799,7 +1800,7 @@ func parseStructCodegen(prefix ANY, line int) *BaseCodegenStmt {
 }
 
 func splitAddInclPaths(args []ANY) *AddInclStmt {
-	var globalPaths, oneLevelPaths, ownPaths, cythonPaths, cythonGlobalPaths, asmPaths, protoPaths, protoGlobalPaths, flatcPaths, flatcGlobalPaths, swigPaths, swigGlobalPaths, userGlobalPaths, allPaths []ANY
+	var globalPaths, oneLevelPaths, ownPaths, cythonPaths, cythonGlobalPaths, asmPaths, protoPaths, protoGlobalPaths, protoAllPaths, flatcPaths, flatcGlobalPaths, swigPaths, swigGlobalPaths, userGlobalPaths, allPaths []ANY
 
 	for i := 0; i < len(args); i++ {
 		if args[i] == kwONE_LEVEL.any() {
@@ -1818,6 +1819,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 		if args[i] == kwFOR.any() {
 			if i+2 < len(args) && args[i+1].string() == "proto" {
 				protoPaths = append(protoPaths, args[i+2])
+				protoAllPaths = append(protoAllPaths, args[i+2])
 				i += 2
 
 				continue
@@ -1891,6 +1893,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 
 				if i+2 < len(args) && args[i+1].string() == "proto" {
 					protoGlobalPaths = append(protoGlobalPaths, args[i+2])
+					protoAllPaths = append(protoAllPaths, args[i+2])
 					i += 2
 
 					continue
@@ -1934,6 +1937,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 		AsmPaths:          astArgs.list(asmPaths...),
 		ProtoPaths:        astArgs.list(protoPaths...),
 		ProtoGlobalPaths:  astArgs.list(protoGlobalPaths...),
+		ProtoAllPaths:     astArgs.list(protoAllPaths...),
 		FlatcPaths:        astArgs.list(flatcPaths...),
 		FlatcGlobalPaths:  astArgs.list(flatcGlobalPaths...),
 		SwigPaths:         astArgs.list(swigPaths...),
