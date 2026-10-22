@@ -24,7 +24,6 @@ type pyPBPending struct {
 	instance     ModuleInstance
 	scanner      *IncludeScanner
 	scanCtx      *ScanContext
-	protoRelPath string
 	cmdArgs      ArgChunks
 	protoCwd     VFS
 	toolInputs   []VFS
@@ -41,7 +40,7 @@ func (p *pyPBPending) emitPending() {
 
 	*p = pyPBPending{}
 
-	imports := s.scanner.walkClosure(source(s.protoRelPath), s.scanCtx, scanDomainProto)
+	imports := s.scanner.walkClosure(s.protoInput, s.scanCtx, scanDomainProto)
 	buckets := imports.bucketList()
 	na := s.ctx.na
 	inputChunks := na.inputs.alloc(3 + len(buckets))[:0]
@@ -379,7 +378,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	*pending = pyPBPending{
 		emit: e, ctx: ctx, instance: instance, scanner: e.scanner, scanCtx: scanCtx,
-		protoRelPath: protoRelPath, cmdArgs: cmdArgs, protoCwd: protoCwd,
+		cmdArgs: cmdArgs, protoCwd: protoCwd,
 		toolInputs: toolInputs, sourceInputs: sourceInputsHead, protoInput: protoSrcVFS,
 		outputs: outputs, extOut: extOut,
 		toolRefs: toolRefs, pyPBRef: pyPBRef,
