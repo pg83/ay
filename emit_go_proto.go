@@ -88,7 +88,7 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 	toolPaths := []VFS{protoc}
 	args := []ANY{internV("-I=./", ns).any(), internV("-I=$(S)/", ns).any(), argIB2.any(), argIS3.any()}
 
-	for _, p := range concat(dedup(d.protoAddInclGlobal, goProtobufInclude), e.peers.ProtoInclude) {
+	for _, p := range concat(dedup(d.protoAddInclGlobal, d.protoAddIncl, goProtobufInclude), e.peers.ProtoInclude) {
 		args = append(args, internV("-I=", p.prefix(), p.relString()).any())
 	}
 
