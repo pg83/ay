@@ -35,6 +35,7 @@ var (
 	kwELSEIF                                                                                 = internStr("ELSEIF")
 	kwEND                                                                                    = internStr("END")
 	kwENDIF                                                                                  = internStr("ENDIF")
+	kwENDS_WITH                                                                              = internStr("ENDS_WITH")
 	kwENV                                                                                    = internStr("ENV")
 	kwEXPERIMENTAL                                                                           = internStr("EXPERIMENTAL")
 	kwFILES                                                                                  = internStr("FILES")

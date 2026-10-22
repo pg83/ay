@@ -103,6 +103,7 @@ const (
 	ckConfLt
 	ckConfEq
 	ckGt
+	ckEndsWith
 )
 
 const (
@@ -2179,6 +2180,16 @@ func (c *CondParser) parseCmp() int32 {
 		c.rejectChainedCmp(t)
 
 		return c.emit(CondNode{Kind: ckMatches, L: left, R: right})
+	}
+
+	if t.kind == tokIdent && t.id == kwENDS_WITH {
+		c.consume()
+
+		right := c.parseAtom()
+
+		c.rejectChainedCmp(t)
+
+		return c.emit(CondNode{Kind: ckEndsWith, L: left, R: right})
 	}
 
 	if t.kind == tokIdent && strings.HasPrefix(t.string(), "VERSION_") {

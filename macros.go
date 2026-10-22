@@ -75,10 +75,14 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 		return evalConfLt(nodes, n, env)
 	case ckStartsWith:
 		return strings.HasPrefix(evalIfAtomString(nodes, n.L, env, true), evalIfAtomString(nodes, n.R, env, false))
+	case ckEndsWith:
+		return strings.HasSuffix(evalIfAtomString(nodes, n.L, env, true), evalIfAtomString(nodes, n.R, env, false))
 	case ckVersionCmp:
 		return evalVersionCmp(nodes, n, env)
 	case ckMatches:
-		return throw2(regexp.MatchString(evalIfAtomString(nodes, n.R, env, false), evalIfAtomString(nodes, n.L, env, true)))
+		// Upstream TCaseInsensitiveStringBuf::find uses std::string_view::find,
+		// which ignores the case-insensitive traits and compares literal bytes.
+		return strings.Contains(evalIfAtomString(nodes, n.L, env, true), evalIfAtomString(nodes, n.R, env, false))
 	case ckUnsupportedOp:
 		throwFmt("macros: unsupported IF operator %q", n.Name)
 	case ckDefined:
