@@ -54,7 +54,7 @@ class GztprotoContextsTest(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('duplicate producer', result.stderr)
 
-    def test_distinct_sources_with_the_same_basename_are_rejected(self):
+    def test_distinct_source_directories_keep_distinct_generated_outputs(self):
         for declarations in (
             'ONLY_TAGS(CPP_PROTO)\nSRCS(left/schema.gztproto right/schema.gztproto)\n',
             'ONLY_TAGS(CPP_PROTO JAVA_PROTO)\nIF(MODULE_TAG == "CPP_PROTO")\nSRCDIR(p/left)\n'
@@ -65,11 +65,18 @@ class GztprotoContextsTest(unittest.TestCase):
                 sources['p/ya.make'] = f'PROTO_LIBRARY()\n{declarations}END()\n'
                 for directory in ('left', 'right'):
                     sources[f'p/{directory}/schema.gztproto'] = 'message Different {}\n'
-                result = lib.make_process(sources, 'p')
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn('duplicate producer', result.stderr)
-                self.assertIn('left/schema.gztproto', result.stderr)
-                self.assertIn('right/schema.gztproto', result.stderr)
+                graph = lib.make(sources, 'p')
+                converters = {}
+                for directory in ('left', 'right'):
+                    converter = lib.node_by_output(graph, f'$(B)/p/{directory}/schema.proto')
+                    self.assertIn(f'$(S)/p/{directory}/schema.gztproto', converter['inputs'])
+                    converters[directory] = converter
+                self.assertNotEqual(converters['left']['uid'], converters['right']['uid'])
+                products = (('left', 'pb.h'), ('right', 'jsrc' if 'JAVA_PROTO' in declarations else 'pb.h'))
+                for directory, suffix in products:
+                    product = lib.node_by_output(graph, f'$(B)/p/{directory}/schema.{suffix}')
+                    self.assertIn(f'$(B)/p/{directory}/schema.proto', product['inputs'])
+                    self.assertIn(converters[directory]['uid'], product['deps'])
 
     def test_shared_gzt_output_retains_first_owner_includes_and_runs_each_context(self):
         for tags, owner in (('CPP_PROTO JAVA_PROTO', 'native_peer'), ('JAVA_PROTO', 'java_peer')):

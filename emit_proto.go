@@ -320,19 +320,18 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModuleEmission, spec *ProtoSpec) []VFS {
 	ctx, d := e.ctx, e.d
 	na := ctx.na
-	protoRel := e.protoSourceRel(srcRel)
+	protoVFS := resolveSourceOrGeneratedVFS(ctx, e.instance, srcRel, d.srcDirs)
+	protoRel := e.protoSourceRel(protoVFS.string())
 	protoRelPath := protoRel.string()
-	buildProto := protoRel.build()
-	protoVFS := protoRel.source()
 	scanCtx := d.scanCtx
-	generatedProto := false
+	generatedProto := protoVFS.isBuild()
 
 	var genProtoParsed []IncludeDirective
 
-	if info := e.codegen.use(buildProto); info != nil {
-		generatedProto = true
-		protoVFS = buildProto
-		genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
+	if generatedProto {
+		if info := e.codegen.use(protoVFS); info != nil {
+			genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
+		}
 	}
 
 	transitiveImports := e.scanner.walkClosure(protoVFS, scanCtx, scanDomainProto)
@@ -376,12 +375,13 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		pending.outputs = assembleProtoCmdOutputs(na, protoBase, pbH, pbCC, pbDepsH, grpcPbCC, grpcPbH, pe, cfg.grpc)
 	}
 
-	directImports := protoInducedPbH(ctx.parsers, ctx.parsers.sourceParsedBuckets(protoRel.source(), nil).bucket(parsedIncludesLocal), e.dirScratch[:0])
+	protoParsed := genProtoParsed
 
-	if generatedProto {
-		directImports = protoInducedPbH(ctx.parsers, genProtoParsed, directImports[:0])
+	if !generatedProto {
+		protoParsed = ctx.parsers.sourceParsedBuckets(protoVFS, nil).bucket(parsedIncludesLocal)
 	}
 
+	directImports := protoInducedPbH(ctx.parsers, protoParsed, e.dirScratch[:0])
 	e.dirScratch = directImports
 
 	if spec.genHParsed != nil {
@@ -635,7 +635,7 @@ func appendPbHCompanions(dst []IncludeDirective, pbhImports []IncludeDirective, 
 }
 
 func (e *EmitContext) emitCppProtoFamilySource(meta SrcMeta, spec *ProtoSpec) {
-	for _, cc := range e.cppProtoPB(e.moduleSourceName(meta.Source), spec) {
+	for _, cc := range e.cppProtoPB(meta.Source.string(), spec) {
 		child := meta
 
 		child.Source = cc.any()
@@ -917,6 +917,10 @@ type ProtoSrcsResult struct {
 }
 
 func protoSourceRel(fs FS, instance ModuleInstance, d *ModuleData, src string) STR {
+	if rooted, ok := moduleRootedVFS(instance.Path.relString(), src); ok {
+		return rooted.rel()
+	}
+
 	srcClean := src != "" && pathIsClean(src)
 	resolved := resolvePySrcRelKnown(fs, d.srcDirs, instance.Path, src, srcClean)
 

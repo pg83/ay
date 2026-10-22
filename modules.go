@@ -917,7 +917,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		src := meta.Source
 
 		if isPythonProtoModule(d) && extIsGztproto(src.string()) {
-			src = internV(strings.TrimSuffix(src.string(), ".gztproto"), ".proto").any()
+			src = gztProtoOutput(resolveSourceOrGeneratedVFS(ctx, instance, src.string(), d.srcDirs)).any()
 			d.srcs[i].Source = src
 			hasPyGztProto = true
 		}

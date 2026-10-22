@@ -266,7 +266,8 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	pe := e.newPyPBModuleEmission(protocBinary, d.cc.ProtoInclude, duplicateOutputRootInclude)
 	scanCtx := d.scanCtx
-	protoRel := e.protoSourceRel(src)
+	protoSrcVFS := resolveSourceOrGeneratedVFS(ctx, instance, srcTok.string(), d.srcDirs)
+	protoRel := e.protoSourceRel(protoSrcVFS.string())
 	protoRelPath := protoRel.string()
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	internal := "__int" + protoPythonVersion(d) + "__"
@@ -282,7 +283,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	outputs = outputs[:len(outputs):len(outputs)]
 
 	if e.codegen.lookup(pyOut) != nil {
-		e.enqueuePyProtoOutputs(src, srcGroup, outputs, e.codegen.lookup(protoRel.build()) != nil)
+		e.enqueuePyProtoOutputs(src, srcGroup, outputs, protoSrcVFS.isBuild())
 
 		return
 	}
@@ -315,14 +316,12 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	toolRefs = toolRefs[:len(toolRefs):len(toolRefs)]
 
-	protoSrcVFS := source(protoRelPath)
 	protoCwd := srcRootDirVFS
-	generatedProto := false
+	generatedProto := protoSrcVFS.isBuild()
 
-	if info := e.codegen.use(build(protoRelPath)); info != nil {
-		protoSrcVFS = build(protoRelPath)
+	if generatedProto {
+		e.codegen.use(protoSrcVFS)
 		protoCwd = bldRootDirVFS
-		generatedProto = true
 	}
 
 	toolInputs := na.vfs.alloc(1 + len(pe.pluginBinaries) + 1)[:0]

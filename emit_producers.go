@@ -119,14 +119,25 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	tok := meta.Source.str()
 	src := tok.string()
 	class := srcExtClassOf(tok.any())
+
+	if extIsProto(meta.Source.string()) {
+		src = meta.Source.string()
+		class = srcExtProto
+	}
+
 	outsMark := len(e.prodVFS)
 
 	var protoRelID STR
+	var protoInput VFS
 
 	protoRel := ""
 
 	switch class {
-	case srcExtProto, srcExtEv, srcExtCfgProto:
+	case srcExtProto:
+		protoInput = resolveSourceVFS(e.ctx, e.instance, src, d.srcDirs)
+		protoRelID = e.protoSourceRel(protoInput.string())
+		protoRel = protoRelID.string()
+	case srcExtEv, srcExtCfgProto:
 		protoRelID = e.protoSourceRel(src)
 		protoRel = protoRelID.string()
 	}
@@ -164,7 +175,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 		e.prodVFS = append(e.prodVFS, build(protoRel, ".pb.h"), build(protoRel, ".pb.cc"))
 	case srcExtGztProto:
 		if !isPythonProtoModule(d) {
-			e.prodVFS = append(e.prodVFS, build(e.instance.Path.relString(), "/", e.gztGenProtoName(src)))
+			e.prodVFS = append(e.prodVFS, e.gztGenProto(src))
 		}
 	}
 
@@ -172,13 +183,23 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	module := e.instance.Path.relString()
 	insMark := len(e.prodVFS)
 
-	if v := runInputBuildCandidate(module, src); v != 0 {
+	if class == srcExtProto {
+		if _, rooted := moduleRootedVFS(module, src); !rooted && protoInput.isSource() && !e.ctx.fs.isFile(srcRootRel, protoInput.relString()) {
+			protoInput = protoInput.rel().build()
+		}
+
+		e.prodVFS = append(e.prodVFS, protoInput)
+	} else if v := runInputBuildCandidate(module, src); v != 0 {
 		e.prodVFS = append(e.prodVFS, v)
 	}
 
 	switch class {
 	case srcExtProto, srcExtEv:
-		directives := e.ctx.parsers.sourceParsedBuckets(protoRelID.source(), nil).bucket(parsedIncludesLocal)
+		var directives []IncludeDirective
+
+		if class != srcExtProto || protoInput.isSource() {
+			directives = e.ctx.parsers.sourceParsedBuckets(protoRelID.source(), nil).bucket(parsedIncludesLocal)
+		}
 
 		if len(directives) > 0 {
 			outputRoot := protoCPPOutRoot(e.d)
@@ -562,7 +583,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		if srcExtClassOf(src) == srcExtGztProto && !isPythonProtoModule(d) {
 			childMeta := meta
 
-			childMeta.Source = internStr(e.gztGenProtoName(src.string())).any()
+			childMeta.Source = e.gztGenProto(src.string()).any()
 			srcs = append(srcs, childMeta)
 		}
 	}

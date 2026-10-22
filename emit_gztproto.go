@@ -13,7 +13,7 @@ type GztProtoProducer struct {
 }
 
 func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VFS) (NodeRef, string) {
-	gztSource := e.resolveModuleSourceVFS(internStr(srcRel).any(), e.d.srcDirs)
+	gztSource := resolveSourceOrGeneratedVFS(e.ctx, e.instance, srcRel, e.d.srcDirs)
 	genProto := e.ctx.gztProtoSource(e.instance, gztSource, e.d.scanCtx, protoInclude)
 
 	e.collectScriptOutput(genProto)
@@ -22,10 +22,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 }
 
 func (ctx *GenCtx) gztProtoSource(instance ModuleInstance, gztSource VFS, scanCtx *ScanContext, protoInclude []VFS) VFS {
-	moddir := instance.Path.relString()
-	base := strings.TrimSuffix(filepath.Base(gztSource.relString()), filepath.Ext(gztSource.relString()))
-	genProtoName := base + ".proto"
-	genProto := build(moddir, "/", genProtoName)
+	genProto := gztProtoOutput(gztSource)
 	scanner := ctx.scannerFor(instance)
 	reg := scanner.codegen
 
@@ -91,10 +88,15 @@ func (ctx *GenCtx) gztProtoSource(instance ModuleInstance, gztSource VFS, scanCt
 	return genProto
 }
 
-func (e *EmitContext) gztGenProtoName(srcRel string) string {
-	gztSource := e.resolveModuleSourceVFS(internStr(srcRel).any(), e.d.srcDirs)
+// norel anchors the nopath/noext basename in the resolved source directory.
+func gztProtoOutput(input VFS) VFS {
+	return build(strings.TrimSuffix(input.relString(), filepath.Ext(input.relString())), ".proto")
+}
 
-	return strings.TrimSuffix(filepath.Base(gztSource.relString()), filepath.Ext(gztSource.relString())) + ".proto"
+func (e *EmitContext) gztGenProto(srcRel string) VFS {
+	gztSource := resolveSourceOrGeneratedVFS(e.ctx, e.instance, srcRel, e.d.srcDirs)
+
+	return gztProtoOutput(gztSource)
 }
 
 func (e *EmitContext) emitLibraryGztProtoCompile(src ANY) {
