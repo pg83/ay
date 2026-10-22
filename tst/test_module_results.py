@@ -72,7 +72,9 @@ class ModuleResultsTest(unittest.TestCase):
                     self.assertFalse(peer_refs.intersection(graph['result']))
                 else:
                     suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
-                    self.assertIn(local['uid'], suite['deps'])
+                    self.assertIn(local['uid'], graph['result'])
+                    self.assertNotIn(local['uid'], suite['deps'])
+                    self.assertIn(lib.node_by_output(graph, '$(B)/root/libroot.a')['uid'], suite['deps'])
                     self.assertFalse(peer_refs.intersection(suite['deps']))
 
     def test_host_tool_global_archives_are_module_results(self):
