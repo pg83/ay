@@ -74,6 +74,21 @@ class ChaosHashesTest(unittest.TestCase):
             r"\(pair-collision headroom shrinking\)$",
         )
 
+    def test_slice_pair_collisions_are_rejected_across_interning_orders(self):
+        files = lib.wide_project(20)
+        for seed in range(8):
+            with self.subTest(seed=seed):
+                result = lib.make_process(
+                    files, "app",
+                    env={"AY_CHAOS": f"xxh-slice-hi=3 xxh-slice-lo=7 intern-seed={seed}"},
+                )
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertRegex(
+                    plain(result.stderr),
+                    r"\ASliceCache: hash pair collision \(h1=0x[0-9a-f]+ h2=0x[0-9a-f]+, \d+ elems\)\n\Z",
+                )
+
     def test_pairs_colliding_in_both_halves_are_rejected(self):
         wide = lib.wide_project(20)
         # Enough distinct closure buckets that a pair collision occurs under
