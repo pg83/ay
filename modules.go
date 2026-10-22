@@ -1355,6 +1355,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 			}
 
+			if v.Name == tokProtoLibrary {
+				env.setString(envMODULE_TAG, protoModuleTag(language, v.Schema))
+			}
+
 			moduleLang := sbomComponentLang(d.moduleStmt.Name)
 
 			if d.moduleStmt.Name == tokProtoLibrary && env.bool(envPY3_PROTO) {

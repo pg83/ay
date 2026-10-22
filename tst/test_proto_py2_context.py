@@ -103,8 +103,9 @@ class ProtoPython2ContextTest(unittest.TestCase):
         files['py/ya.make'] = files['py/ya.make'].replace('PEERDIR(p)', 'PEERDIR(p q)')
         files['shared/x.proto'] = 'syntax = "proto2";\nmessage X {}\n'
         for directory, macro in (('p', 'PROTO_SCHEMA'), ('q', 'PROTO_LIBRARY')):
+            cpp_tag = 'CPP_PROTO_FROM_SCHEMA' if macro == 'PROTO_SCHEMA' else 'CPP_PROTO'
             files[f'{directory}/ya.make'] = (
-                f'{macro}()\n{lib.BARE_MODULE}EXCLUDE_TAGS(CPP_PROTO)\n'
+                f'{macro}()\n{lib.BARE_MODULE}EXCLUDE_TAGS({cpp_tag})\n'
                 f'PY_NAMESPACE({directory}.messages)\nSRCDIR(shared)\nGRPC()\nNO_MYPY()\nSRCS(x.proto)\nEND()\n'
             )
         graph = lib.make(files, 'py')

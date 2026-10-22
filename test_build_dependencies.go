@@ -55,8 +55,50 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 		first.Language = LangPy2
 	}
 
+	if declaration.Schema {
+		first.Language = LangCPP
+	}
+
 	env := buildIfEnvInto(&frame.ifEnv, first)
 	d := collectModuleInto(ctx, first, moduleStmts(ctx, dir), env, ctx.onWarn, &frame.d)
+
+	if declaration.Schema {
+		var instances []ModuleInstance
+
+		for _, unit := range []struct {
+			language Language
+			included bool
+		}{
+			{LangCPP, true},
+			{LangJava, true},
+			{LangPy2, true},
+			{LangPy, true},
+			{LangGo, true},
+			{LangTS, false},
+			{LangTSPrepare, false},
+			{LangDescProto, true},
+			{LangProtoDescriptions, true},
+		} {
+			excluded, specified := d.excludeTags[internStr(protoModuleTag(unit.language, true))]
+
+			if excluded || d.onlyTags && !specified || !unit.included && !specified {
+				continue
+			}
+
+			peer := instance
+
+			peer.Language = unit.language
+
+			if unit.language == LangJava {
+				peer.Kind = KindJavaMain
+			}
+
+			instances = append(instances, peer)
+		}
+
+		return instances
+	}
+
 	instances := []ModuleInstance{instance}
 	variants := d.moduleVariants
 
@@ -113,8 +155,8 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 			tag = strYqlUdfStaticCurrent.string()
 		}
 
-		if name == tokProtoLibrary && peer.Language == LangPy2 {
-			tag = "PY_PROTO"
+		if name == tokProtoLibrary {
+			tag = protoModuleTag(peer.Language, false)
 		}
 
 		if (name == tokPy23Library || name == tokPy23NativeLibrary) && peer.Language == LangPy2 {

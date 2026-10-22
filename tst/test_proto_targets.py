@@ -89,7 +89,7 @@ class ProtoTargetsTest(unittest.TestCase):
         files = target_files()
         files["p/ya.make"] = (
             "IF(SCHEMA_DEFAULT)\nPROTO_SCHEMA()\nELSE()\nPROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nENDIF()\n"
-            "SRCS(a.proto)\nEND()\nIF(MODULE_TAG == \"PROTO_DESCRIPTIONS\")\nRECURSE(child)\nENDIF()\n"
+            "SRCS(a.proto)\nEND()\nIF(MODULE_TAG == \"PROTO_DESCRIPTIONS_\")\nRECURSE(child)\nENDIF()\n"
         )
         files["root/ya.make"] = f"LIBRARY()\n{lib.BARE_MODULE}\nEND()\nRECURSE(../p)\n"
         files["p/child/ya.make"] = "PROTO_SCHEMA(child)\nEND()\n"

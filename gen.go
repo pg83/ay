@@ -1038,7 +1038,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
 		d.peerdirs = append([]ANY{strContribLibsPython.any()}, d.peerdirs...)
 	} else if pythonProtoVariant && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
-		if moduleExcludesTag(d, "CPP_PROTO") {
+		if moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
 			d.peerdirs = append([]ANY{strContribLibsPython.any()}, d.peerdirs...)
 		} else {
 			d.peerdirs = append(d.peerdirs, strContribLibsPython.any())
@@ -1281,6 +1281,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	tag := multimoduleVariantTag(d.multimodule, instance.Language)
 
+	if d.moduleStmt != nil && d.moduleStmt.Schema {
+		tag = protoModuleTag(instance.Language, true)
+	}
+
 	if moduleName == tokYqlUdf || moduleName == tokYqlUdfContrib {
 		tag = d.unit.Tag.string()
 	}
@@ -1343,7 +1347,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	e.prepareUserverProtos()
 
-	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangCPP && moduleExcludesTag(d, "CPP_PROTO") {
+	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangCPP && moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
 		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, ModuleStmtName: tokProtoLibrary}
 
 		ctx.memoPut(instance, result)
@@ -1354,7 +1358,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDescProto {
 		result := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name}
 
-		if !moduleExcludesTag(d, "DESC_PROTO") {
+		if !moduleExcludesTag(d, protoModuleTag(LangDescProto, d.moduleStmt.Schema)) {
 			result = e.emitDescProtoSubmodule()
 		}
 
@@ -1373,15 +1377,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	if d.nots != nil {
 		if d.moduleStmt.Name == tokProtoLibrary {
-			tag := "TS_PROTO"
-
-			if d.moduleStmt.Schema {
-				tag = "TS_PROTO_FROM_SCHEMA"
-			}
-
-			if instance.Language == LangTSPrepare {
-				tag = "TS_PREPARE_DEPS"
-			}
+			tag := protoModuleTag(instance.Language, d.moduleStmt.Schema)
 
 			if !slices.Contains(d.nots.IncludeTags, tag) || moduleExcludesTag(d, tag) {
 				result := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name}
@@ -1546,7 +1542,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			return !deduper.add(internStr(p).any().strID())
 		}
 
-		if isPythonProtoModule(d) && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
+		if isPythonProtoModule(d) && d.optimizePyProtos && !moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
 			peerSeen(instance.Path.relString())
 
 			resolveCppSelf = true
