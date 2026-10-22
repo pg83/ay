@@ -20,6 +20,20 @@ class CppStyleProducerSourcesTest(unittest.TestCase):
         self.assertEqual([file for file in suite["inputs"] if file.endswith((".cpp", ".h"))], sorted(files))
         return suite
 
+    def test_cpp_and_json_checks_keep_separate_source_lists(self):
+        files = self.files("STYLE_JSON()\nSRCS(local.cpp)", **{
+            "m/local.cpp": "int local;\n",
+            "m/settings.json": "{}\n",
+            "build/config/tests/json_style/default_configs.json":
+                '{"clang_format_json":"configs/json.clang-format"}',
+            "configs/json.clang-format": "BasedOnStyle: LLVM\n",
+        })
+        graph = lib.make(files, "m", "-t")
+        self.assert_checked(graph, ["$(S)/m/local.cpp"])
+        json_suite = lib.node_by_output(graph, "$(B)/m/test-results/clang_format_json/meta.json")
+        self.assertIn("$(S)/m/settings.json", json_suite["inputs"])
+        self.assertNotIn("$(S)/m/local.cpp", json_suite["inputs"])
+
     def test_copy_with_context_checks_original_source_and_preserves_generated_compile_input(self):
         files = self.files("COPY_FILE_WITH_CONTEXT(AUTO ../shared/original.cpp copied.cpp)", **{
             "shared/original.cpp": '#include "included.h"\nint value;\n',
