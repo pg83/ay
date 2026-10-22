@@ -135,6 +135,9 @@ func descProtoOutputRel(instancePath, srcRel, resolvedRel string) string {
 
 func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
+	applyImplicitPeerdirs(ctx, instance, d)
+
 	span := descPeerClosure(e, d.peerdirs, d.needGoogleProtoPeerdirs, d.useCommonGoogleAPIs)
 	protoInclude := dedup(d.protoAddInclGlobal, span.includes)
 
@@ -153,7 +156,18 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	var protocLDRef NodeRef
 	var protocBinary VFS
 
+	srcs := slices.Clone(d.srcs)
+
 	for _, meta := range d.srcs {
+		if extIsGztproto(meta.Source.string()) {
+			source := e.resolveModuleSourceVFS(meta.Source, d.srcDirs)
+
+			meta.Source = ctx.gztProtoSource(instance, source, d.scanCtx, protoInclude).any()
+			srcs = append(srcs, meta)
+		}
+	}
+
+	for _, meta := range srcs {
 		src := meta.Source
 
 		if !extIsProto(src.string()) {

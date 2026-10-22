@@ -485,8 +485,24 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 
 		scanCtx.protoInclude = ctx.na.vfsList(jm.protoInclude...)
 
+		protoSources := make([]VFS, 0, len(d.protoSrcs))
+
+		var generated []VFS
+
 		for _, src := range d.protoSrcs {
-			autoInputs = append(autoInputs, ctx.javaEmitProtoPB(jm, globals, scanCtx, resolveSourceOrGeneratedVFS(ctx, jm.instance, src, d.srcDirs)))
+			input := resolveSourceOrGeneratedVFS(ctx, jm.instance, src, d.srcDirs)
+
+			if extIsGztproto(src) {
+				generated = append(generated, ctx.gztProtoSource(jm.instance, input, scanCtx, jm.protoInclude))
+			} else {
+				protoSources = append(protoSources, input)
+			}
+		}
+
+		protoSources = append(protoSources, generated...)
+
+		for _, input := range protoSources {
+			autoInputs = append(autoInputs, ctx.javaEmitProtoPB(jm, globals, scanCtx, input))
 		}
 
 		for _, src := range d.evSrcs {

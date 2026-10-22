@@ -267,7 +267,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				}
 
 				switch {
-				case jm.unit.proto && strings.HasSuffix(ss, ".proto"):
+				case jm.unit.proto && (extIsProto(ss) || extIsGztproto(ss)):
 					d.protoSrcs = append(d.protoSrcs, ss)
 				case jm.unit.proto && strings.HasSuffix(ss, ".ev"):
 					d.evSrcs = append(d.evSrcs, ss)

@@ -7,23 +7,48 @@ import (
 
 var gztprotoKV = KV{P: pkGZ, PC: pcYellow}
 
+type GztProtoProducer struct {
+	Instance     ModuleInstance
+	ProtoInclude []VFS
+}
+
 func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VFS) (NodeRef, string) {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	gztSource := e.resolveModuleSourceVFS(internStr(srcRel).any(), d.srcDirs)
+	gztSource := e.resolveModuleSourceVFS(internStr(srcRel).any(), e.d.srcDirs)
+	genProto := e.ctx.gztProtoSource(e.instance, gztSource, e.d.scanCtx, protoInclude)
+
+	e.collectScriptOutput(genProto)
+
+	return e.codegen.mustInfo(genProto).ProducerRef, filepath.Base(genProto.relString())
+}
+
+func (ctx *GenCtx) gztProtoSource(instance ModuleInstance, gztSource VFS, scanCtx *ScanContext, protoInclude []VFS) VFS {
 	moddir := instance.Path.relString()
 	base := strings.TrimSuffix(filepath.Base(gztSource.relString()), filepath.Ext(gztSource.relString()))
 	genProtoName := base + ".proto"
 	genProto := build(moddir, "/", genProtoName)
+	scanner := ctx.scannerFor(instance)
+	reg := scanner.codegen
+
+	if info := reg.lookup(genProto); info != nil {
+		if info.GztProto == nil || info.SourcePath != gztSource || info.OwnerModule != instance.Path || info.GztProto.Instance == instance {
+			throwFmt("CodegenRegistry: duplicate producer for %q (existing source=%q, new source=%q)",
+				genProto.string(), info.SourcePath.string(), gztSource.string())
+		}
+
+		return genProto
+	}
+
 	converterRef, converterBin := ctx.tool(argDictGazetteerConverter)
-	imports := e.scanner.walkClosure(gztSource, d.scanCtx, scanDomainProto)
-	importBuckets := imports.bucketList()
 	inducedProtos := gztConverterInducedProtos(ctx)
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
 	gzRef := ctx.emit.reserve()
 	protoIncludeSnap := na.vfsList(protoInclude...)
+	producer := &GztProtoProducer{Instance: instance, ProtoInclude: protoIncludeSnap}
 
 	pe := func() {
+		imports := scanner.walkClosure(gztSource, scanCtx, scanDomainProto)
+		importBuckets := imports.bucketList()
 		inputChunks := na.inputs.alloc(2 + len(importBuckets))[:0]
 
 		inputChunks = append(inputChunks, na.vfsList(converterBin), na.vfsList(gztSource))
@@ -33,7 +58,7 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 		node := Node{
 			Platform: instance.Platform,
 			Cmds: na.cmdList(Cmd{
-				CmdArgs: na.chunkList(gztCmdArgs(na, converterBin, protoIncludeSnap, gztSource, genProto)),
+				CmdArgs: na.chunkList(gztCmdArgs(na, converterBin, producer.ProtoInclude, gztSource, genProto)),
 				Env:     env,
 			}),
 			Env:            env,
@@ -43,19 +68,26 @@ func (e *EmitContext) emitLibraryGztProtoSource(srcRel string, protoInclude []VF
 			ForeignDepRefs: na.refList(converterRef),
 		}
 
-		e.emitReservedNode(node, gzRef)
+		resolver := EmitContext{ctx: ctx, instance: instance, scanner: scanner, codegen: reg, d: &ModuleData{scanCtx: scanCtx}}
+
+		resolver.emitReservedNode(node, gzRef)
 	}
 
-	pending := e.pendingEmit(pe)
+	pending := na.pending.one()
 
-	e.register(GeneratedFileInfo{
+	*pending = PendingEmit{fn: pe}
+
+	reg.register(GeneratedFileInfo{
 		OutputPath:     genProto,
+		GztProto:       producer,
+		SourcePath:     gztSource,
+		OwnerModule:    instance.Path,
 		ProducerRef:    gzRef,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: gztGeneratedProtoParse(ctx, e.scanner, gztSource, inducedProtos)},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: gztGeneratedProtoParse(ctx, scanner, gztSource, inducedProtos)},
 		OnUse:          pending,
 	})
 
-	return gzRef, genProtoName
+	return genProto
 }
 
 func (e *EmitContext) gztGenProtoName(srcRel string) string {

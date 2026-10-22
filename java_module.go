@@ -803,6 +803,14 @@ func (jm *JavaModule) macroPeers() []string {
 
 	if jm.unit.proto && len(d.protoSrcs) > 0 {
 		out = append(out, "build/platform/java/protoc")
+
+		for _, src := range d.protoSrcs {
+			if extIsGztproto(src) {
+				out = append(out, strKernelGazetteerProto.string())
+
+				break
+			}
+		}
 	}
 
 	for _, l := range d.customLints {

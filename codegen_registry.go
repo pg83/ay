@@ -8,6 +8,7 @@ import (
 type GeneratedFileInfo struct {
 	InputsOnly       bool
 	ResourceObjcopy  bool
+	GztProto         *GztProtoProducer
 	ModuleType       TOK
 	ModuleInputs     *ModuleInputInfo
 	Nots             *NotsPrepared
