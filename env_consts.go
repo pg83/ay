@@ -218,6 +218,7 @@ var (
 	envUSE_ARCADIA_COMPILER_RUNTIME = internEnv("USE_ARCADIA_COMPILER_RUNTIME")
 	envUSE_ARCADIA_LIBM             = internEnv("USE_ARCADIA_LIBM")
 	envUSE_ARCADIA_PYTHON           = internEnv("USE_ARCADIA_PYTHON")
+	envUSE_OPENMP                   = internEnv("USE_OPENMP")
 	envUSE_PREBUILT_TOOLS           = internEnv("USE_PREBUILT_TOOLS")
 	envUSE_PYTHON3_PREV             = internEnv("USE_PYTHON3_PREV")
 	envUSE_SSE4                     = internEnv("USE_SSE4")

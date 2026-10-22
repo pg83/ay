@@ -847,6 +847,12 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.peerdirs = append(d.peerdirs, clangSAPeer.any())
 	}
 
+	// ymake.core.conf's conditional PEERDIR variable is applied before
+	// explicit peer statements, using the final module variable values.
+	if expandConfScalar(env.string(envUSE_OPENMP), env) == "yes" {
+		d.peerdirs = append([]ANY{internStr("contrib/libs/openmp").any()}, d.peerdirs...)
+	}
+
 	d.noStrip = env.bool(envNO_STRIP)
 	d.gettextKeepPath = env.string(envGettextKeepPath) == "yes"
 	d.useNasm = env.bool(envUseNasmAssembler)
