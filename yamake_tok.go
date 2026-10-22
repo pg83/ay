@@ -115,6 +115,7 @@ var tokName = [...]STR{
 	tokApphost:                            internStr("APPHOST"),
 	tokArchive:                            internStr("ARCHIVE"),
 	tokArchiveAsm:                         internStr("ARCHIVE_ASM"),
+	tokAsmPreinclude:                      internStr("ASM_PREINCLUDE"),
 	tokArPlugin:                           internStr("AR_PLUGIN"),
 	tokBaseCodegen:                        internStr("BASE_CODEGEN"),
 	tokBisonGenC:                          internStr("BISON_GEN_C"),
@@ -489,6 +490,7 @@ const (
 	tokApphost
 	tokArchive
 	tokArchiveAsm
+	tokAsmPreinclude
 	tokArPlugin
 	tokBaseCodegen
 	tokBisonGenC

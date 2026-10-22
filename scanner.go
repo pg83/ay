@@ -83,6 +83,7 @@ type IncludeScanner struct {
 	moduleByRef    *DenseMap[NodeRef, *ModuleEmitResult]
 	noResolve      bool
 	unresolved     *IncludeScanner
+	asmContexts    map[uint32]*IncludeScanner
 }
 
 type searchTierHotEntry struct {
@@ -212,6 +213,31 @@ func (s *IncludeScanner) withoutIncludeResolution() *IncludeScanner {
 	}
 
 	return s.unresolved
+}
+
+// Assembler sources and preincludes resolve in the consuming module's asm
+// include domain. Lexical parses and registered producer facts stay shared.
+func (s *IncludeScanner) assemblerContext(ctx *ScanContext) *IncludeScanner {
+	key := ctx.config(scanDomainAsm).num
+
+	if scanner := s.asmContexts[key]; scanner != nil {
+		return scanner
+	}
+
+	scanner := newIncludeScannerWith(s.parsers, nil, s.onWarn, s.buckets)
+
+	scanner.sysincl = s.sysincl
+	scanner.codegen = s.codegen
+	scanner.moduleByRef = s.moduleByRef
+	scanner.noResolve = s.noResolve
+
+	if s.asmContexts == nil {
+		s.asmContexts = make(map[uint32]*IncludeScanner)
+	}
+
+	s.asmContexts[key] = scanner
+
+	return scanner
 }
 
 type ScanDomain uint8

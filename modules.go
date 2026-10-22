@@ -225,6 +225,10 @@ type ModuleData struct {
 	clangSAConfig            string
 	clangSAPlugins           []ANY
 	nasmFlags                []ANY
+	yasmFlags                []ANY
+	yasmPlatformFlags        []ANY
+	asmFormat                STR
+	asmPreincludes           []ANY
 	asmAddIncl               []VFS
 	protoAddInclGlobal       []VFS
 	protoAddIncl             []VFS
@@ -834,7 +838,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.noStrip = env.bool(envNO_STRIP)
 	d.gettextKeepPath = env.string(envGettextKeepPath) == "yes"
 	d.useNasm = env.bool(envUseNasmAssembler)
-	d.nasmFlags = internAnys(strings.Fields(env.string(envNasmFlags)))
+	d.collectAssemblerConfig(env)
 
 	if d.muslLite {
 		d.flags.NoUtil = true
@@ -3364,7 +3368,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.setVars[internStr(name)] = internStr(value)
-	case tokSetAppend:
+	case tokSetAppend, tokAsmPreinclude:
+		if v.Name == tokAsmPreinclude {
+			v.Args = append([]ANY{internStr("YASM_PREINCLUDES_VALUE").any()}, v.Args...)
+		}
 
 		if len(v.Args) >= 1 {
 			switch v.Args[0].string() {

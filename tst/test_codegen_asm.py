@@ -154,16 +154,16 @@ class YasmTest(unittest.TestCase):
         self.assertIn("$(S)/c_include/defs.h", assembler["inputs"])
         self.assertNotIn("$(S)/asm_include/defs.h", assembler["inputs"])
 
-    def test_asmlib_module_omits_debug_info(self):
+    def test_module_predefined_flag_override_omits_debug_info(self):
         graph = lib.make(with_yasm({
-            "contrib/libs/asmlib/ya.make": LIBRARY_HEAD + "SRCS(m.asm)\nEND()\n",
-            "contrib/libs/asmlib/m.asm": "",
-        }), "contrib/libs/asmlib", *X86_64)
-        node = lib.node_by_output(graph, "$(B)/contrib/libs/asmlib/m.o")
+            "renamed_vectors/ya.make": LIBRARY_HEAD + "SET(_YASM_PREDEFINED_FLAGS_VALUE)\nSRCS(m.asm)\nEND()\n",
+            "renamed_vectors/m.asm": "",
+        }), "renamed_vectors", *X86_64)
+        node = lib.node_by_output(graph, "$(B)/renamed_vectors/m.o")
         self.assertNotIn("dwarf2", node["cmds"][0]["cmd_args"])
         self.assertEqual(node["cmds"][0]["cmd_args"][-7:], [
             "-I", "$(B)", "-I", "$(S)",
-            "-o", "$(B)/contrib/libs/asmlib/m.o", "$(S)/contrib/libs/asmlib/m.asm",
+            "-o", "$(B)/renamed_vectors/m.o", "$(S)/renamed_vectors/m.asm",
         ])
 
     def test_host_tool_yasm_object_is_pic(self):

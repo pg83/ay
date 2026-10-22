@@ -11,10 +11,6 @@ import (
 	"strings"
 )
 
-var asmlibYasmModules = map[string]bool{
-	"contrib/libs/asmlib": true,
-}
-
 var acknowledgedMacros = map[string]struct{}{
 	"ALICE_TYPED_CALLBACK":            {},
 	"SOURCE_GROUP":                    {},
