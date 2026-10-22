@@ -196,6 +196,7 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 	}
 
 	seen[result] = true
+	result.testDependencyModule.peers = nil
 
 	for _, ref := range ctx.moduleResultRefs(instance, result) {
 		ctx.emit.result(ref)
@@ -204,8 +205,19 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 	if jm := result.java; jm != nil {
 		for _, peer := range ctx.javaManagedPeersClosure(jm) {
 			if peer.java != nil {
-				ctx.testDependencyClosure(TestBuildDependency{peer.java.instance, peer.java.result}, seen)
+				dependency := TestBuildDependency{peer.java.instance, peer.java.result}
+
+				result.testDependencyModule.peers = append(result.testDependencyModule.peers, dependency)
+				ctx.testDependencyClosure(dependency, seen)
+			} else if peer.foreign != nil {
+				result.testDependencyModule.peers = append(result.testDependencyModule.peers,
+					TestBuildDependency{peer.foreign.testDependencyModule.instance, peer.foreign})
 			}
+		}
+
+		for _, peer := range jm.unmanageable {
+			result.testDependencyModule.peers = append(result.testDependencyModule.peers,
+				TestBuildDependency{peer.res.testDependencyModule.instance, peer.res})
 		}
 
 		return
@@ -229,13 +241,21 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 		peer := instance
 
 		peer.Language = language
-		ctx.testDependencyClosure(TestBuildDependency{peer, genModule(ctx, peer)}, seen)
+
+		dependency := TestBuildDependency{peer, genModule(ctx, peer)}
+
+		result.testDependencyModule.peers = append(result.testDependencyModule.peers, dependency)
+		ctx.testDependencyClosure(dependency, seen)
 	}
 
 	for _, dir := range d.peerdirs {
 		peer := e.derivePeerInstance(dir.string())
 
 		peer.Demand = demandSelf
-		ctx.testDependencyClosure(TestBuildDependency{peer, genModule(ctx, peer)}, seen)
+
+		dependency := TestBuildDependency{peer, genModule(ctx, peer)}
+
+		result.testDependencyModule.peers = append(result.testDependencyModule.peers, dependency)
+		ctx.testDependencyClosure(dependency, seen)
 	}
 }

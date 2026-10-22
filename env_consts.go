@@ -79,6 +79,7 @@ var (
 	envErrorProneVersion            = internEnv("ERROR_PRONE_VERSION")
 	envExportsFile                  = internEnv("EXPORTS_FILE")
 	envFAIL_PY2                     = internEnv("FAIL_PY2")
+	envFakeModule                   = internEnv("_FAKE_MODULE")
 	envGCC                          = internEnv("GCC")
 	envGEN_PROTO                    = internEnv("GEN_PROTO")
 	envGOARCH                       = internEnv("GOARCH")

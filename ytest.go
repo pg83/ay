@@ -380,36 +380,32 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 		execDirs = append(execDirs, testExecDependencyDir(s.projectPath))
 	}
 
-	for i, dep := range s.depends {
-		for _, dependency := range ctx.testBuildDependencies(dep) {
-			instance, res := dependency.instance, dependency.result
-			output := res.ARPath
+	var rewritten []string
 
-			if res.LDPath != nil {
-				output = res.LDPath
-			}
+	for _, dep := range s.depends {
+		for _, dependency := range ctx.runtimeTestDependencies(dep) {
+			instance, res := dependency.instance, dependency.result
+			output := testDependencyOutput(res)
+			reg := ctx.scannerFor(instance).codegen
+
+			reg.use(output)
+
+			info, _ := reg.byRel.get(output.rel())
+
+			s.deps = append(s.deps, info.ProducerRef)
+			rewritten = append(rewritten, output.relString())
 
 			if s.testType == "exectest" {
-				output := dep
-
-				if res.LDPath != nil {
-					output = res.LDPath.relString()
-				}
-
-				execDirs = append(execDirs, testExecDependencyDir(output))
+				execDirs = append(execDirs, testExecDependencyDir(output.relString()))
 			}
 
-			if s.ciType == "style" && output != nil {
-				s.depends[i] = output.relString()
-			}
-
-			s.deps = append(s.deps, ctx.moduleResultRefs(instance, res)...)
-
-			if python && res.LDPath != nil && res.ARPath == nil && isLinkingModuleType(res.ModuleStmtName) && res.ModuleStmtName != tokDllTool {
-				s.pytestOutputDirs = append(s.pytestOutputDirs, path.Dir(res.LDPath.string()))
+			if python {
+				s.pytestOutputDirs = append(s.pytestOutputDirs, ctx.runtimeTestOutputDirs(dependency, map[*ModuleEmitResult]bool{})...)
 			}
 		}
 	}
+
+	s.depends = sortedUnique(rewritten)
 
 	if python {
 		s.pytestOutputDirs = sortedUnique(s.pytestOutputDirs)

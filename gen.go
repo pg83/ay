@@ -124,6 +124,7 @@ const (
 )
 
 type ModuleEmitResult struct {
+	testDependencyModule            TestDependencyModule
 	ModuleVariants                  uint16
 	GlobalSources                   []VFS
 	PchFlagsGlobal                  []ANY
@@ -1316,6 +1317,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	defer func() {
 		if result != nil {
 			e.publishModuleIncludes(result)
+			e.recordTestDependencyModule(result, moduleName, env)
 		}
 
 		if result == nil || !ctx.testMode || !d.test.validateData {

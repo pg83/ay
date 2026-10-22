@@ -55,7 +55,8 @@ class DependsSelectionTest(unittest.TestCase):
         suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
         for output in ('$(B)/p/p.jar', '$(B)/p/p.a'):
             with self.subTest(output=output):
-                self.assertIn(lib.node_by_output(graph, output)['uid'], suite['deps'])
+                self.assertIn(lib.node_by_output(graph, output)['uid'], graph['result'])
+                self.assertNotIn(lib.node_by_output(graph, output)['uid'], suite['deps'])
         self.assertFalse(any('$(B)/p/a.pb.cc' in node['outputs'] for node in graph['graph']))
 
     def test_java_dependency_keeps_managed_peer_selection(self):
@@ -72,7 +73,7 @@ class DependsSelectionTest(unittest.TestCase):
         peer = lib.node_by_output(graph, '$(B)/contrib/java/x/lib/2/lib-2.jar')
         self.assertIn(java['uid'], suite['deps'])
         self.assertIn(peer['uid'], java['deps'])
-        self.assertNotIn(peer['uid'], suite['deps'])
+        self.assertIn(peer['uid'], suite['deps'])
         self.assertFalse(any('$(B)/contrib/java/x/lib/1/lib-1.jar' in node['outputs'] for node in graph['graph']))
 
     def test_union_dependency_closes_bundle_peers_without_recursing_libraries(self):
@@ -104,7 +105,7 @@ class DependsSelectionTest(unittest.TestCase):
                 })
                 graph = lib.make(files, 'tests', '-t', '--strip-packages-from-results')
                 suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
-                actual = {output for node in graph['graph'] if node['uid'] in suite['deps'] for output in node['outputs'] if output.startswith('$(B)/native/')}
+                actual = {output for node in graph['graph'] if node['uid'] in graph['result'] for output in node['outputs'] if output.startswith('$(B)/native/')}
                 self.assertEqual(actual, {'$(B)/native/' + name for name in expected})
 
     def test_package_dependency_selects_final_and_union_contexts(self):
@@ -116,7 +117,8 @@ class DependsSelectionTest(unittest.TestCase):
         graph = lib.make(files, 'tests', '-t', '--strip-packages-from-results')
         suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
         for name in ('pkg.pkg.fake', 'pkg.final.pkg.fake'):
-            self.assertIn(lib.node_by_output(graph, '$(B)/pkg/' + name)['uid'], suite['deps'])
+            self.assertEqual(lib.node_by_output(graph, '$(B)/pkg/' + name)['uid'] in suite['deps'],
+                             name == 'pkg.final.pkg.fake')
 
     def test_split_java_dependency_exposes_each_created_jar(self):
         files = lib.java_tree(**{
@@ -127,7 +129,8 @@ class DependsSelectionTest(unittest.TestCase):
         graph = lib.make(files, 'tests', '-t', '--strip-packages-from-results')
         suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
         for name in ('java.jar', 'java-interface.jar'):
-            self.assertIn(lib.node_by_output(graph, '$(B)/java/' + name)['uid'], suite['deps'])
+            self.assertEqual(lib.node_by_output(graph, '$(B)/java/' + name)['uid'] in suite['deps'],
+                             name == 'java.jar')
 
     def test_java_unit_selectors_filter_direct_dependencies(self):
         for selector in ('ONLY_TAGS(FULL_JAR_COMPILATION)', 'EXCLUDE_TAGS(IJAR)'):
@@ -161,7 +164,7 @@ class DependsSelectionTest(unittest.TestCase):
         })
         graph = lib.make(files, 'tests', '-t', '--strip-packages-from-results')
         suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
-        self.assertIn(lib.node_by_output(graph, '$(B)/native/libpy3cnative.a')['uid'], suite['deps'])
+        self.assertIn(lib.node_by_output(graph, '$(B)/native/libpy3cnative.a')['uid'], graph['result'])
         self.assertFalse(any('$(B)/native/libnative.a' in node['outputs'] for node in graph['graph']))
 
     def test_excluded_java_first_unit_does_not_construct_its_producers(self):
@@ -184,8 +187,10 @@ class DependsSelectionTest(unittest.TestCase):
         suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
         java = lib.node_by_output(graph, '$(B)/p/p.jar')
         go = lib.node_by_output(graph, '$(B)/p/p.a')
-        self.assertIn(java['uid'], suite['deps'])
-        self.assertIn(go['uid'], suite['deps'])
+        self.assertIn(java['uid'], graph['result'])
+        self.assertIn(go['uid'], graph['result'])
+        self.assertNotIn(java['uid'], suite['deps'])
+        self.assertNotIn(go['uid'], suite['deps'])
         self.assertTrue(any('$(S)/p/java.proto' in node['inputs'] for node in graph['graph']))
         self.assertTrue(any('$(B)/p/go.pb.go' in node['outputs'] for node in graph['graph']))
         self.assertFalse(any('$(B)/p/java.pb.go' in node['outputs'] or '$(B)/p/go.jsrc' in node['outputs'] for node in graph['graph']))
@@ -198,7 +203,8 @@ class DependsSelectionTest(unittest.TestCase):
         binary = lib.node_by_output(graph, '$(B)/lib/lib')
         archive = lib.node_by_output(graph, '$(B)/lib/libpy3lib.global.a')
         self.assertIn(binary['uid'], suite['deps'])
-        self.assertIn(archive['uid'], suite['deps'])
+        self.assertIn(archive['uid'], graph['result'])
+        self.assertNotIn(archive['uid'], suite['deps'])
 
     def test_conditional_dependency_declaration_uses_its_selected_module(self):
         files = lib.java_tree(**{
@@ -224,7 +230,8 @@ class DependsSelectionTest(unittest.TestCase):
                 graph = lib.make(files, 'tests', '-t', '--strip-packages-from-results')
                 suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
                 archive = lib.node_by_output(graph, f'$(B)/p/{prefix}p.global.a')
-                self.assertIn(archive['uid'], suite['deps'])
+                self.assertIn(archive['uid'], graph['result'])
+                self.assertNotIn(archive['uid'], suite['deps'])
                 producer = lib.node_by_output(graph, f'$(B)/p/a__int{version}___pb2.py')
                 self.assertEqual(producer['cmds'][0]['cmd_args'][3], version)
                 opposite = 'py3' if version == 'py2' else 'py2'
@@ -233,7 +240,8 @@ class DependsSelectionTest(unittest.TestCase):
                 self.assertFalse(any('$(B)/p/a.pb.h' in n['outputs'] for n in graph['graph']))
                 if version == 'py2':
                     native = lib.node_by_output(graph, '$(B)/p/libpyp.a')
-                    self.assertIn(native['uid'], suite['deps'])
+                    self.assertIn(native['uid'], graph['result'])
+                    self.assertNotIn(native['uid'], suite['deps'])
 
     def test_dependency_without_a_module_is_a_cli_error(self):
         result = lib.make_process({'tests/ya.make': 'EXECTEST()\nRUN(true)\nDEPENDS(missing)\nEND()\n', 'missing/ya.make': ''}, 'tests', '-t')

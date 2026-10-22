@@ -25,7 +25,8 @@ class TestDependencyOutputsTest(unittest.TestCase):
                 self.assertIn(shared['uid'], run['deps'])
                 self.assertIn(archive['uid'], shared['deps'])
                 for name in ('libstatic.a', 'libstatic.global.a'):
-                    self.assertIn(lib.node_by_output(graph, '$(B)/static/' + name)['uid'], run['deps'])
+                    self.assertEqual(lib.node_by_output(graph, '$(B)/static/' + name)['uid'] in run['deps'],
+                                     name == 'libstatic.a')
                 command = run['cmds'][-1]['cmd_args']
                 directories = [command[i + 1] for i, word in enumerate(command) if word == '--dep-root']
                 self.assertEqual(directories, ['$(B)/shared', 'tests'])

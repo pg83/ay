@@ -69,7 +69,8 @@ class YqlResultsTest(unittest.TestCase):
         suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
         for name in ('libnamed.so', 'libnamed.a', 'libnamed.global.a',
                      'yql-abi-current-named.a', 'yql-abi-current-named.global.a'):
-            self.assertIn(lib.node_by_output(graph, '$(B)/udf/' + name)['uid'], suite['deps'])
+            self.assertEqual(lib.node_by_output(graph, '$(B)/udf/' + name)['uid'] in suite['deps'],
+                             name == 'libnamed.so')
 
 
 if __name__ == '__main__':
