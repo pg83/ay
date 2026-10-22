@@ -113,6 +113,7 @@ type ScanCtx struct {
 	scanner     *IncludeScanner
 	cfg         *ScanConfig
 	ccCfg       *ScanConfig
+	cythonCfg   *ScanConfig
 	protoCfg    *ScanConfig
 	parser      IncludeDirectiveParser
 	tjc         *TarjanCtx
@@ -290,7 +291,7 @@ func (ctx *ScanContext) modulePaths(domain ScanDomain) (own, peer []VFS) {
 	case scanDomainAsm:
 		return ctx.asmAddIncl, nil
 	case scanDomainCython:
-		return appendCythonScanAddIncl(ctx.ccOwn, ctx.cythonAddIncl, ctx.cythonSys, ctx.cythonPeerIncl), ctx.ccPeer
+		return dedup(ctx.cythonAddIncl, ctx.cythonSys), ctx.cythonPeerIncl
 	case scanDomainProto:
 		return ctx.parsers.protoScanOwnPaths(ctx.protoOutRoot, ctx.protoInclude), nil
 	case scanDomainAux:
@@ -331,6 +332,7 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 	sc.scanner = s
 	sc.cfg = ctx.config(domain)
 	sc.ccCfg = nil
+	sc.cythonCfg = ctx.config(scanDomainCython)
 	sc.protoCfg = nil
 	sc.parser = parser
 	sc.tsImports = domain == scanDomainAux
@@ -431,6 +433,16 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 
 		sc.cfg = sc.ccCfg
 		parser = cParser
+
+		defer func() { sc.cfg = cfg }()
+	}
+
+	// The registered processor selects the import language even when a
+	// generic generator input establishes the SourceFile's first owner.
+	if _, ok := s.parsers.registry.registeredParserFor(vfsPath.relString()).(CythonIncludeDirectiveParser); ok {
+		cfg := sc.cfg
+
+		sc.cfg = sc.cythonCfg
 
 		defer func() { sc.cfg = cfg }()
 	}
