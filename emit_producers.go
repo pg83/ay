@@ -71,6 +71,20 @@ func rootedBuildCandidate(modulePath, rel string) VFS {
 	return 0
 }
 
+// Plan source-resolved inputs before local producers have been registered.
+// A physical source (or an explicit root) keeps its namespace. Missing names
+// retain a build candidate for declaration ordering; emission still selects
+// generated files only from CodegenRegistry's registered producer facts.
+func (e *EmitContext) sourceInputForScheduling(name string) VFS {
+	input := resolveSourceVFS(e.ctx, e.instance, name, e.d.srcDirs)
+
+	if input.isSource() && !e.ctx.fs.isFile(srcRootRel, input.relString()) {
+		return moduleInputCandidateVFS(e.instance.Path.relString(), name)
+	}
+
+	return input
+}
+
 func relUnderDir(rel, dir string) bool {
 	return len(rel) > len(dir) && rel[len(dir)] == '/' && rel[:len(dir)] == dir
 }
@@ -371,9 +385,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 		outEnd := len(backing)
 
-		if v := rootedBuildCandidate(module, entry.Src); v != 0 {
-			backing = append(backing, v)
-		}
+		backing = append(backing, e.sourceInputForScheduling(entry.Src))
 
 		push(prodCopyFile, i, start, outEnd)
 	}
@@ -466,16 +478,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 		backing = append(backing, copyFileOutputVFS(module, filepath.Base(prefix)+".cpp"), copyFileOutputVFS(module, filepath.Base(prefix)+".h"))
 		outEnd := len(backing)
-		input := resolveSourceVFS(e.ctx, e.instance, prefix+".in", d.srcDirs)
-
-		// Readiness uses the same input namespace as resolution. A real
-		// source wins over an unrooted build candidate and must not add a
-		// dependency on a shadowing producer (which could create a cycle).
-		if input.isSource() && !e.ctx.fs.isFile(srcRootRel, input.relString()) {
-			input = moduleInputCandidateVFS(module, prefix+".in")
-		}
-
-		backing = append(backing, input)
+		backing = append(backing, e.sourceInputForScheduling(prefix+".in"))
 		push(prodSplitCodegen, i, start, outEnd)
 	}
 
