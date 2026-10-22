@@ -1864,7 +1864,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					continue
 				}
 
-				applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
+				if expanded.Name == tokLargeFiles {
+					applyLargeFiles(fs, ctx.scannerForPlatform(platform).codegen, modulePath, expanded, d, onWarn)
+					recordHandledMacro(expanded.Name, expanded.Args)
+				} else {
+					applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
+				}
 
 				if perlMask != 0 {
 					recalcPerlEnv(env, platform, d.setVars, perlMask)

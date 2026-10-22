@@ -30,6 +30,7 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 
 	tokDeclareInDirs: {},
 	tokCopy:          {},
+	tokLargeFiles:    {},
 
 	// ymake.core.conf: ARCHIVE_ASM(NAME="", DONTCOMPRESS?"-p":"", Files...)
 	// accepts arbitrary scalar NAME and positional Files values. Its handler

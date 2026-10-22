@@ -114,7 +114,7 @@ func warnHandler(keepGoing, verbose bool, emit func(line string)) func(Warn) {
 			throwFmt("%s: %s", w.Kind, w.Message)
 		}
 
-		if !(fatalable || w.Kind == WarnMissingAddincl || verbose) {
+		if !(fatalable || w.Kind == WarnMissingAddincl || w.Kind == WarnPlugin || verbose) {
 			return
 		}
 

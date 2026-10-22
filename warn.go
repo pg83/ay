@@ -10,6 +10,7 @@ var warnKindStr = [...]string{
 	WarnBadMacroArgs:      "bad-macro-args",
 	WarnMissingProducer:   "missing-producer",
 	WarnModuleFailed:      "module-failed",
+	WarnPlugin:            "plugin",
 }
 
 const (
@@ -30,6 +31,8 @@ const (
 	WarnMissingProducer
 
 	WarnModuleFailed
+
+	WarnPlugin
 )
 
 type Warn struct {

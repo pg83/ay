@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 )
 
 var emptyDirNames = []uint32{}
@@ -204,6 +206,20 @@ func (fs *OsFS) isFile(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
 
 	return p && !d
+}
+
+// TFileConf marks symlinks as missing; ResolveToArcPath also allows directories.
+func (fs *OsFS) sourcePathExists(rel string) bool {
+	info, err := os.Lstat(filepath.Join(fs.srcRoot, rel))
+
+	// TFileConf::CanTrustStatError treats these failures as absence. Other
+	// stat failures make resolution unreliable and must remain errors.
+	if err != nil && !errors.Is(err, syscall.ENOENT) && !errors.Is(err, syscall.ENOTDIR) &&
+		!errors.Is(err, syscall.ENAMETOOLONG) && !errors.Is(err, syscall.EACCES) && !errors.Is(err, syscall.EPERM) {
+		throw(err)
+	}
+
+	return err == nil && info.Mode()&os.ModeSymlink == 0
 }
 
 func (fs *OsFS) isFileClean(prefix STR, suffix string) bool {

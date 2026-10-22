@@ -11,6 +11,7 @@ type FS interface {
 	isFileClean(prefix STR, suffix string) bool
 	isFilePathClean(rel string) bool
 	isDir(prefix STR, suffix string) bool
+	sourcePathExists(rel string) bool
 
 	resolveSourceUnder(prefix, target STR) STR
 	resolveSourceUnderClean(prefix, target STR, targetClean bool) STR
