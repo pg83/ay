@@ -182,25 +182,32 @@ func (ctx *GenCtx) testBuildDependencies(dir string) []TestBuildDependency {
 		dependency := TestBuildDependency{instance, genModule(ctx, instance)}
 
 		dependencies = append(dependencies, dependency)
-		ctx.testDependencyClosure(dependency, seen)
+		ctx.testDependencyClosure(dependency, seen, true)
 	}
 
 	return dependencies
 }
 
-func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen map[*ModuleEmitResult]bool) {
+func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen map[*ModuleEmitResult]bool, root bool) {
 	instance, result := dependency.instance, dependency.result
 
 	if seen[result] {
 		return
 	}
 
-	seen[result] = true
 	result.testDependencyModule.peers = nil
 
 	for _, ref := range ctx.moduleResultRefs(instance, result) {
 		ctx.emit.result(ref)
 	}
+
+	module := ctx.runtimeTestDependencyModule(dependency)
+
+	if root && module.multimodule && module.bundle && !module.final {
+		return
+	}
+
+	seen[result] = true
 
 	if jm := result.java; jm != nil {
 		for _, peer := range ctx.javaManagedPeersClosure(jm) {
@@ -208,7 +215,7 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 				dependency := TestBuildDependency{peer.java.instance, peer.java.result}
 
 				result.testDependencyModule.peers = append(result.testDependencyModule.peers, dependency)
-				ctx.testDependencyClosure(dependency, seen)
+				ctx.testDependencyClosure(dependency, seen, false)
 			} else if peer.foreign != nil {
 				result.testDependencyModule.peers = append(result.testDependencyModule.peers,
 					TestBuildDependency{peer.foreign.testDependencyModule.instance, peer.foreign})
@@ -245,7 +252,7 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 		dependency := TestBuildDependency{peer, genModule(ctx, peer)}
 
 		result.testDependencyModule.peers = append(result.testDependencyModule.peers, dependency)
-		ctx.testDependencyClosure(dependency, seen)
+		ctx.testDependencyClosure(dependency, seen, false)
 	}
 
 	for _, dir := range d.peerdirs {
@@ -256,6 +263,6 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 		dependency := TestBuildDependency{peer, genModule(ctx, peer)}
 
 		result.testDependencyModule.peers = append(result.testDependencyModule.peers, dependency)
-		ctx.testDependencyClosure(dependency, seen)
+		ctx.testDependencyClosure(dependency, seen, false)
 	}
 }
