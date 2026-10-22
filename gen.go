@@ -86,7 +86,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"ONLY_TAGS":                       {},
 	"EXCLUDE_TAGS":                    {},
 	"CHECK_DEPENDENT_DIRS":            {},
-	"WINDOWS_LONG_PATH_MANIFEST":      {},
 	"DISABLE_DATA_VALIDATION":         {},
 
 	"FROM_SANDBOX":      {},
@@ -554,7 +553,8 @@ func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
 				switch v.Name {
 				case tokEnable, tokDisable, tokSetAppend, tokSetListPreSuf,
 					tokUsePython2, tokPython2Addincl, tokUsePython3, tokPython3Addincl,
-					tokValidateDataRestart, tokPack, tokSetCudaNodeRAMRequirement, tokNoCow, tokNoNeedCheck:
+					tokValidateDataRestart, tokPack, tokSetCudaNodeRAMRequirement, tokNoCow, tokNoNeedCheck,
+					tokWindowsManifest, tokWindowsLongPathManifest:
 					apply(st)
 				}
 

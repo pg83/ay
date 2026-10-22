@@ -23,6 +23,7 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokPack:                      {},
 	tokSetCudaNodeRAMRequirement: {},
 	tokNoNeedCheck:               {},
+	tokWindowsManifest:           {},
 
 	tokExcludeTags: {},
 	tokIncludeTags: {},

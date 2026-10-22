@@ -315,7 +315,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				}
 			}
 		case *UnknownStmt:
-			if assignment := declarativeMacroAssignment(v, false); assignment != nil {
+			if assignment := declarativeMacroAssignment(v, false, env); assignment != nil {
 				recordHandledMacro(v.Name, expandStmtTokens(v.Args, env))
 				collectJavaStmts(ctx, jm, d, []Stmt{assignment}, env)
 

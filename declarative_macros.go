@@ -11,7 +11,7 @@ var (
 
 // These upstream macros contain only SET/ENABLE. Lower them during collection,
 // so the lexical IR can be reused with each module's own environment.
-func declarativeMacroAssignment(v *UnknownStmt, packageModule bool) *SetStmt {
+func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environment) *SetStmt {
 	var name, value string
 
 	switch v.Name {
@@ -38,6 +38,40 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool) *SetStmt {
 		name, value = "USE_COW", "no"
 	case tokNoNeedCheck:
 		name, value = "UNUSED_MACRO", "yes"
+	case tokWindowsManifest, tokWindowsLongPathManifest:
+		// VarStatement dereferences arguments before signature binding, then
+		// PrepareMacroCall deeply substitutes the configuration SET body.
+		var args []string
+
+		for _, arg := range v.Args {
+			raw := arg.string()
+
+			if strings.ContainsRune(raw, '$') {
+				for _, word := range strings.Split(expandResourceArgument(raw, env), " ") {
+					if word != "" {
+						args = append(args, word)
+					}
+				}
+			} else {
+				args = append(args, raw)
+			}
+		}
+
+		name = "WINDOWS_MANIFEST"
+
+		if v.Name == tokWindowsManifest {
+			if len(args) != 1 {
+				throwFmt("WINDOWS_MANIFEST expects one argument")
+			}
+
+			value = expandToken(args[0], env, tokenExpandAssignment)
+		} else {
+			if len(args) != 0 {
+				throwFmt("WINDOWS_LONG_PATH_MANIFEST expects no arguments")
+			}
+
+			value = "build/long-path.manifest"
+		}
 	default:
 		return nil
 	}

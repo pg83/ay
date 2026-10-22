@@ -339,6 +339,7 @@ var tokName = [...]STR{
 	tokUsePython2:                      internStr("USE_PYTHON2"),
 	tokUsePython3:                      internStr("USE_PYTHON3"),
 	tokVersion:                         internStr("VERSION"),
+	tokWindowsManifest:                 internStr("WINDOWS_MANIFEST"),
 	tokWindowsLongPathManifest:         internStr("WINDOWS_LONG_PATH_MANIFEST"),
 	tokWithoutLicenseTexts:             internStr("WITHOUT_LICENSE_TEXTS"),
 	tokWithoutVersion:                  internStr("WITHOUT_VERSION"),
@@ -736,6 +737,7 @@ const (
 	tokUsePython2
 	tokUsePython3
 	tokVersion
+	tokWindowsManifest
 	tokWindowsLongPathManifest
 	tokWithoutLicenseTexts
 	tokWithoutVersion
