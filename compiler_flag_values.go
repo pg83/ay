@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 const (
 	compilerFlagsCommon CompilerFlagKind = iota
@@ -26,12 +29,12 @@ func (r *ModuleEmitResult) compilerFlagValues(kind CompilerFlagKind) []CompilerF
 	}
 }
 
-func (ctx *GenCtx) compilerFlagExports(seen *DeDuper, peers []ResolvedPeer, kind CompilerFlagKind, capacity int, own, flat []ANY) ([]CompilerFlagValue, []ANY) {
+func (e *EmitContext) compilerFlagExports(seen *DeDuper, peers []ResolvedPeer, kind CompilerFlagKind, capacity int, own, flat []ANY) ([]CompilerFlagValue, []ANY) {
 	if capacity == 0 && len(own) == 0 {
 		return nil, flat
 	}
 
-	values := ctx.na.compilerFlags.alloc(capacity + 1)[:0]
+	values := e.ctx.na.compilerFlags.alloc(capacity + 1)[:0]
 
 	seen.reset()
 
@@ -45,38 +48,37 @@ func (ctx *GenCtx) compilerFlagExports(seen *DeDuper, peers []ResolvedPeer, kind
 	}
 
 	if len(own) > 0 {
-		values = append(values, ctx.compilerFlagValue(own))
+		values = append(values, e.compilerFlagValue(own))
 	}
 
-	ctx.na.compilerFlags.commit(len(values))
+	e.ctx.na.compilerFlags.commit(len(values))
 
 	return values[:len(values):len(values)], flat
 }
 
-func (ctx *GenCtx) compilerFlagValue(args []ANY) CompilerFlagValue {
-	name := internStr(strings.Join(anyStrs(args), " "))
-
-	args = ctx.argSlices.internCopy(compilerCommandFlags(args))
-
-	return CompilerFlagValue{Name: name, Args: args}
+func (e *EmitContext) compilerFlagValue(args []ANY) CompilerFlagValue {
+	value := compilerCommandFlags(args, Environment{s: &e.frame.ifEnv})
+	value.Args = e.ctx.argSlices.internCopy(value.Args)
+	return value
 }
 
-func (ctx *GenCtx) ownCompilerFlagValues(args []ANY) []CompilerFlagValue {
+func (e *EmitContext) ownCompilerFlagValues(args []ANY) []CompilerFlagValue {
 	if len(args) == 0 {
 		return nil
 	}
 
-	return ctx.na.compilerFlags.list(ctx.compilerFlagValue(args))
+	return e.ctx.na.compilerFlags.list(e.compilerFlagValue(args))
 }
 
-func compilerCommandFlags(args []ANY) []ANY {
+func compilerCommandFlags(args []ANY, env Environment) CompilerFlagValue {
+	text := strings.Join(anyStrs(args), " ")
 	for _, arg := range args {
-		if strings.ContainsAny(arg.string(), "\\\"' \t\n\r") {
-			return internAnys(splitQuotedWords(strings.Join(anyStrs(args), " "), 2))
+		if strings.ContainsAny(arg.string(), "$\\\"'&") || strings.ContainsFunc(arg.string(), unicode.IsSpace) {
+			values, identity := compilerFlagExpression(text, env, nil)
+			return CompilerFlagValue{Name: internStr(identity), Args: internAnys(values)}
 		}
 	}
-
-	return args
+	return CompilerFlagValue{Name: internStr(text), Args: args}
 }
 
 func ownCompilerFlagArgs(values []CompilerFlagValue, own []ANY) []ANY {

@@ -16,7 +16,7 @@ func (e *EmitContext) emitPchFile(stmt PchFileStmt) {
 
 	pending := e.pendingEmit(func() {
 		closure := e.scanner.walkClosure(header, d.scanCtx, scanDomainCC)
-		blocks := d.cc.CCBlocks
+		blocks := compilerCommandBlocks(&d.cc.CCBlocks, true)
 		llvmRoot := e.pchLLVMRoot()
 		resources := na.strs.alloc(3)[:0]
 

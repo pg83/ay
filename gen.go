@@ -1855,6 +1855,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			resourceGlobalsClosure = e.scriptModuleResources(resourceGlobalsClosure, "build/platform/python/ymake_python3")
 		}
 
+		e.bindCompilerFlagResources(resourceGlobalsClosure)
+
 		deduper.reset()
 
 		if archiveCap != 0 {
@@ -2095,9 +2097,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		cflagsAggOrder := resolved
 
-		effectiveCFlagsGlobal, peerCFlagsGlobal = ctx.compilerFlagExports(deduper, cflagsAggOrder, compilerFlagsCommon, cflagsCap, d.cFlagsGlobal, peerCFlagsGlobal)
-		effectiveCXXFlagsGlobal, peerCXXFlagsGlobal = ctx.compilerFlagExports(deduper, cflagsAggOrder, compilerFlagsCxx, cxxflagsCap, d.cxxFlagsGlobal, peerCXXFlagsGlobal)
-		effectiveCOnlyFlagsGlobal, peerCOnlyFlagsGlobal = ctx.compilerFlagExports(deduper, cflagsAggOrder, compilerFlagsCOnly, conlyflagsCap, d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
+		effectiveCFlagsGlobal, peerCFlagsGlobal = e.compilerFlagExports(deduper, cflagsAggOrder, compilerFlagsCommon, cflagsCap, d.cFlagsGlobal, peerCFlagsGlobal)
+		effectiveCXXFlagsGlobal, peerCXXFlagsGlobal = e.compilerFlagExports(deduper, cflagsAggOrder, compilerFlagsCxx, cxxflagsCap, d.cxxFlagsGlobal, peerCXXFlagsGlobal)
+		effectiveCOnlyFlagsGlobal, peerCOnlyFlagsGlobal = e.compilerFlagExports(deduper, cflagsAggOrder, compilerFlagsCOnly, conlyflagsCap, d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
 		deduper.reset()
 
@@ -2357,6 +2359,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	pchFlagsGlobal = ctx.argSlices.internCopy(dedup(pchFlagsGlobal))
 
 	d.cc = ModuleCompileEnv{
+		CompilerEnv:          Environment{s: &frame.ifEnv},
 		StaticAnalyzer:       e.cppStaticAnalyzer(resourceGlobalsClosure),
 		PchFlagsGlobal:       pchFlagsGlobal,
 		InclArgs:             ctx.inclArgs,

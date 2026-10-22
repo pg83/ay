@@ -93,7 +93,7 @@ func (e *EmitContext) cppStaticAnalyzer(globals []ResourceDecl) *CppStaticAnalyz
 func (e *EmitContext) staticAnalyzerCmd(spec *CppStaticAnalyzer, in ModuleCCInputs, source []ANY, output []ANY) Cmd {
 	e.codegen.use(spec.config)
 
-	blocks := in.CCBlocks
+	blocks := compilerCommandBlocks(in.CCBlocks, true)
 	flags := blocks.flags[len(in.ClangWarnings):]
 
 	return Cmd{

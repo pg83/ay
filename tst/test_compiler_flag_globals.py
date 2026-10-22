@@ -69,6 +69,7 @@ class CompilerFlagGlobalsTest(unittest.TestCase):
                              ["-DQ=a", "-DSAME", "-DQ=a", "b", "-DSAME"])
 
     def test_local_flags_keep_embedded_quotes_after_native_forwarding(self):
+        # CmdParser::UnescapeQuoted retains one slash for an unknown escape.
         for macro in ("CFLAGS", "CXXFLAGS", "CONLYFLAGS"):
             with self.subTest(macro=macro):
                 files = fixture(macro + '("-DOUTER=a b" -DINNER="c d" -DQUOTE\'e f\' -DRAW=a\\q -DESC="a\\q")\n')
@@ -76,7 +77,7 @@ class CompilerFlagGlobalsTest(unittest.TestCase):
                 source = "plain.c" if macro == "CONLYFLAGS" else "main.cpp"
                 args = lib.node_by_output(graph, "$(B)/mod/" + source + ".o")["cmds"][0]["cmd_args"]
                 self.assertEqual([a for a in args if a.startswith(("-DOUTER", "-DINNER", "-DQUOTE", "-DRAW", "-DESC")) or a == "b"],
-                                 ["-DOUTER=a", "b", "-DINNER=c d", "-DQUOTEe f", "-DRAW=aq", "-DESC=a\\\\q"])
+                                 ["-DOUTER=a", "b", "-DINNER=c d", "-DQUOTEe f", "-DRAW=aq", "-DESC=a\\q"])
 
     def test_export_identity_keeps_quotes_that_command_expansion_removes(self):
         files = fixture("PEERDIR(a b)\n")

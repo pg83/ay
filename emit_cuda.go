@@ -36,10 +36,11 @@ func (e *EmitContext) cudaCompileArgs(in ModuleCCInputs, mtime, pid VFS, flags [
 		wrapper = append(wrapper, strYSanitize.any())
 	}
 
+	blocks := compilerCommandBlocks(in.CCBlocks, true)
 	nvcc := na.anyList(internV(c.Root, "/bin/nvcc").any(), internV("-std=c++", c.Std).any())
 
-	return na.chunkList(head, na.anyList(wrapper...), nvcc, e.nvccFlags(), flags, in.CCBlocks.includes,
-		na.anyList(cudaCflagsStr.any()), e.instance.Platform.CCHead, in.CCBlocks.flags[len(in.ClangWarnings):], in.CCBlocks.cxxTail,
+	return na.chunkList(head, na.anyList(wrapper...), nvcc, e.nvccFlags(), flags, blocks.includes,
+		na.anyList(cudaCflagsStr.any()), e.instance.Platform.CCHead, blocks.flags[len(in.ClangWarnings):], blocks.cxxTail,
 		na.anyList(internV("-std=c++", c.Std).any()), in.PerSourceCFlags)
 }
 

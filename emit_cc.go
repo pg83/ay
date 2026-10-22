@@ -16,6 +16,7 @@ var (
 )
 
 type ModuleCompileEnv struct {
+	CompilerEnv          Environment
 	StaticAnalyzer       *CppStaticAnalyzer
 	FortranHead          []ANY
 	FortranResources     []STR
@@ -195,7 +196,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 		langFlags = cxxLanguageFlags(strings.TrimSuffix(srcRel, filepath.Ext(srcRel)))
 	}
 
-	blocks := in.CCBlocks
+	blocks := compilerCommandBlocks(in.CCBlocks, isCxx)
 	tok := na.anyList(inVFS.any(), argDashC.any(), argDashO.any(), outVFS.any())
 	inChunk := tok[0:1]
 	wrapcc := len(blocks.wrapHead) > 0
@@ -594,13 +595,14 @@ func appendCompileFlagPipeline(cmdArgs []ANY, bundle CompileFlagBundle, warningB
 }
 
 type CcModuleArgBlocks struct {
-	wrapHead []ANY
-	cHead    []ANY
-	cxxHead  []ANY
-	includes []ANY
-	flags    []ANY
-	cxxTail  []ANY
-	cPost    []ANY
+	compilerFlags *compilerFlagBlocks
+	wrapHead      []ANY
+	cHead         []ANY
+	cxxHead       []ANY
+	includes      []ANY
+	flags         []ANY
+	cxxTail       []ANY
+	cPost         []ANY
 }
 
 func cWarningChunk(na *NodeArenas, noCompilerWarnings, noWShadow bool) []ANY {
@@ -732,14 +734,17 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 			[]ANY{argSourceRoot.any(), strS.any(), argBuildRoot.any(), strB.any(), strWrapUnshareEnd.any()}, wrapHead)
 	}
 
+	binding := &compilerFlagBlocks{arena: na, platform: p, input: *in}
+	binding.input.CCBlocks = CcModuleArgBlocks{}
 	return CcModuleArgBlocks{
-		wrapHead: wrapHead,
-		cHead:    na.anyList(in.TC.CC.any()),
-		cxxHead:  na.anyList(in.TC.CXX.any()),
-		includes: includes,
-		flags:    na.anyConcat(flagParts...),
-		cxxTail:  na.anyConcat(cxxTailParts[:]...),
-		cPost:    na.anyConcat(in.COnlyFlags, in.PeerCOnlyFlagsGlobal, in.OwnCOnlyFlagsGlobal),
+		compilerFlags: binding,
+		wrapHead:      wrapHead,
+		cHead:         na.anyList(in.TC.CC.any()),
+		cxxHead:       na.anyList(in.TC.CXX.any()),
+		includes:      includes,
+		flags:         na.anyConcat(flagParts...),
+		cxxTail:       na.anyConcat(cxxTailParts[:]...),
+		cPost:         na.anyConcat(in.COnlyFlags, in.PeerCOnlyFlagsGlobal, in.OwnCOnlyFlagsGlobal),
 	}
 }
 

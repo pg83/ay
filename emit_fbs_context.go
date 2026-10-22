@@ -58,6 +58,7 @@ func (e *EmitContext) bindFbsNativeSource(src VFS, in ModuleCCInputs, reserved N
 			if binding.local != binding.owner {
 				local := binding.local.d
 				env := *in.ModuleCompileEnv
+				env.CompilerEnv = local.cc.CompilerEnv
 				env.CFlags = local.cFlags
 				env.CXXFlags = local.cxxFlags
 				env.COnlyFlags = local.cOnlyFlags

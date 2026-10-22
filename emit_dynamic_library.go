@@ -180,9 +180,11 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 			}
 		}
 
-		cFlagsGlobal, peerCFlagsGlobal = ctx.compilerFlagExports(deduper, resolved, compilerFlagsCommon, cflagsCap, d.cFlagsGlobal, peerCFlagsGlobal)
-		cxxFlagsGlobal, peerCXXFlagsGlobal = ctx.compilerFlagExports(deduper, resolved, compilerFlagsCxx, cxxflagsCap, d.cxxFlagsGlobal, peerCXXFlagsGlobal)
-		cOnlyFlagsGlobal, peerCOnlyFlagsGlobal = ctx.compilerFlagExports(deduper, resolved, compilerFlagsCOnly, conlyflagsCap, d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
+		e.bindCompilerFlagResources(resourceGlobals)
+
+		cFlagsGlobal, peerCFlagsGlobal = e.compilerFlagExports(deduper, resolved, compilerFlagsCommon, cflagsCap, d.cFlagsGlobal, peerCFlagsGlobal)
+		cxxFlagsGlobal, peerCXXFlagsGlobal = e.compilerFlagExports(deduper, resolved, compilerFlagsCxx, cxxflagsCap, d.cxxFlagsGlobal, peerCXXFlagsGlobal)
+		cOnlyFlagsGlobal, peerCOnlyFlagsGlobal = e.compilerFlagExports(deduper, resolved, compilerFlagsCOnly, conlyflagsCap, d.cOnlyFlagsGlobal, peerCOnlyFlagsGlobal)
 
 		deduper.reset()
 
@@ -230,7 +232,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")
 	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c.pic.o")
 	cmd0 := composeLDCmdVcsInfo(na, d.tc, vcsCVFS)
-	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, d.tc, vcsCVFS, vcsOVFS, d.cFlags, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
+	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, d.tc, vcsCVFS, vcsOVFS, compilerCommandFlags(d.cFlags, Environment{s: &e.frame.ifEnv}).Args, nil, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize)
 	envVcsOnly := envVarsVCS
 	envFull := ctx.host.toolEnv()
 	moduleEnv := Environment{s: &e.frame.ifEnv}

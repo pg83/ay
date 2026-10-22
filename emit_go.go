@@ -1111,7 +1111,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	vcsOPath := build(dir, "/__vcs_version__.c", instance.Platform.objectSuffix())
 	vcsGoPath := build(dir, "/__vcs_version__.go")
 	cmd0 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsInfo(na, d.tc, vcsCPath)), Env: goVcsEnv}
-	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(na, instance.Platform, d.tc, vcsCPath, vcsOPath, d.cFlags, d.cc.PeerCFlagsGlobal, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars}
+	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(na, instance.Platform, d.tc, vcsCPath, vcsOPath, compilerCommandFlags(d.cFlags, Environment{s: &e.frame.ifEnv}).Args, d.cc.PeerCFlagsGlobal, d.moduleScopeCFlags, d.flags.NoCompilerWarnings, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars}
 
 	cmd2 := Cmd{CmdArgs: na.chunkList(na.anyList(
 		wrapccPython3STR.any(),

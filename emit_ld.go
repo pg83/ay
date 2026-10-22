@@ -131,7 +131,7 @@ func (e *EmitContext) emitLD(
 	vcsCVFS := build(linkDir, "/__vcs_version__.c")
 	vcsOVFS := build(linkDir, "/__vcs_version__.c", e.d.unit.objectSuffix(instance.Platform))
 	cmd0 := composeLDCmdVcsInfo(na, tc, vcsCVFS)
-	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, tc, vcsCVFS, vcsOVFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
+	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, tc, vcsCVFS, vcsOVFS, compilerCommandFlags(moduleCFlags, Environment{s: &e.frame.ifEnv}).Args, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
 	cmd2 := composeLDCmdLinkExe(na, instance.Platform, tc, outputVFS, vcsOVFS, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, linkExcludeLibraries, exportsScript, linkerScripts, noExportDynSymbols, wantsStrip, useArcadiaLibm, e.d.useDynamicCuda, dyn)
 	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputVFS, wantsSplitDwarf)
 	envVcsOnly := envVarsVCS

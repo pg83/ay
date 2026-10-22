@@ -811,10 +811,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		}
 	}
 
-	d.cFlags = compilerCommandFlags(d.cFlags)
-	d.cxxFlags = compilerCommandFlags(d.cxxFlags)
-	d.cOnlyFlags = compilerCommandFlags(d.cOnlyFlags)
-
 	finishPyRegisterCFlags(d)
 
 	d.test.canonizeSubPath = env.string(envCanonizeSubPath)

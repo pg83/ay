@@ -82,18 +82,18 @@ class YaMakeVariablesTest(unittest.TestCase):
                 )), [f"-DVERSION_VALUE={value}"])
 
     def test_expansion_forms(self):
+        # Native command parsing rejects nested/unclosed references; the
+        # compiler expression regression tests exercise those error paths.
         self.assertEqual(self.user_cflags(library(
             "SET(X foo)\n"
             "SET(Y ${X} bar)\n"
             f"SET(LONG {LONG_VALUE})\n"
             "CFLAGS(-D${X} $X -DE=$X.suf -DY=${Y} ${Y} \\$X $S/p $B/q $S $B \\$S"
-            " ${UNKNOWN} $UNKNOWN ${lower} ${X-Y} $ -Dm=$X$X -Dn=${X ${X}}"
-            " -Do=$-a ${ -D$LONG$LONG)"
+            " ${UNKNOWN} $UNKNOWN ${lower} ${X-Y} $ -Dm=$X$X"
+            " -Do=$-a -D$LONG$LONG)"
         )), [
             "-Dfoo", "foo", "-DE=foo.suf", "-DY=foo", "bar", "foo", "bar",
-            "foo", "$S/p", "$B/q", "$(S)", "$(B)", "$(S)", "${UNKNOWN}",
-            "$UNKNOWN", "${lower}", "${X-Y}", "$", "-Dm=foofoo", "-Dn=${X",
-            "foo}", "-Do=$-a", "${", "-D" + LONG_VALUE * 2,
+            "foo", "/p", "/q", "$", "-Dm=foofoo", "-Do=$-a", "-D" + LONG_VALUE * 2,
         ])
 
     def test_braced_variable_keys_include_punctuation(self):

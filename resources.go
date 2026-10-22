@@ -359,6 +359,8 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 		emitResourceFetch(ctx, decl)
 	}
 
+	e.bindCompilerFlagResources(globals)
+
 	var sbomRef *NodeRef
 	var sbomPath *VFS
 
@@ -375,9 +377,9 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 		ResourceGlobalClosure: globals,
 		RPathFlagsGlobal:      d.rpathFlagsGlobal,
 		LDFlagsGlobal:         d.ldFlags,
-		CFlagsGlobal:          ctx.ownCompilerFlagValues(d.cFlagsGlobal),
-		CXXFlagsGlobal:        ctx.ownCompilerFlagValues(d.cxxFlagsGlobal),
-		COnlyFlagsGlobal:      ctx.ownCompilerFlagValues(d.cOnlyFlagsGlobal),
+		CFlagsGlobal:          e.ownCompilerFlagValues(d.cFlagsGlobal),
+		CXXFlagsGlobal:        e.ownCompilerFlagValues(d.cxxFlagsGlobal),
+		COnlyFlagsGlobal:      e.ownCompilerFlagValues(d.cOnlyFlagsGlobal),
 		LinkExcludeLibraries:  d.linkExcludeLibraries,
 		ObjAddLibsGlobal:      d.objAddLibsGlobal,
 		AddInclGlobal:         d.addInclGlobal,
