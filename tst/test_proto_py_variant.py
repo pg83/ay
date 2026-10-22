@@ -132,7 +132,8 @@ class ProtoPyVariantTest(unittest.TestCase):
         graph = lib.make(files, "py")
 
         link, args = link_args(graph)
-        self.assertEqual(whole_archive_libs(args), ["q/libq.a", "p/libp.a"])
+        # Native global values follow PEERDIR order independently of producers.
+        self.assertEqual(whole_archive_libs(args), ["p/libp.a", "q/libq.a"])
         start = args.index("--ya-start-command-file")
         end = args.index("--ya-end-command-file")
         self.assertEqual(args[start + 1:end], [
