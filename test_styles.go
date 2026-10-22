@@ -371,7 +371,7 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 
 func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *TestSuite {
 	project := e.instance.Path.relString()
-	s := &TestSuite{p: e.ctx.target, depends: slices.Clone(check.Depends), projectPath: project, name: check.Name, testType: check.Name, ciType: "style", size: "small", timeout: 60, supportsTestParameters: true, globals: resources, runInputs: []VFS{source(project)}}
+	s := &TestSuite{p: e.ctx.target, depends: slices.Clone(check.Depends), projectPath: project, name: check.Name, testType: check.Name, ciType: "style", size: "small", timeout: 60, supportsTestParameters: true, globals: resources, env: e.d.test.env, runInputs: []VFS{source(project)}}
 
 	for _, file := range check.Files {
 		s.relatedPaths = append(s.relatedPaths, source(file).string())

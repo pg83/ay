@@ -109,7 +109,7 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 	case tokTag:
 		t.tags = append(t.tags, args...)
 	case tokEnv:
-		t.env = append(t.env, args...)
+		t.env = append(t.env, value)
 	case tokForkTests:
 		t.forkMode = "tests"
 		t.partition = strings.ToUpper(value)
@@ -127,6 +127,14 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 	}
 
 	return true
+}
+
+func (t *TestMeta) expandValues(env Environment) {
+	for _, values := range [][]string{t.env, t.recipes} {
+		for i, value := range values {
+			values[i] = expandStmtToken(value, env)
+		}
+	}
 }
 
 func testInnerCommand(s *TestSuite, meta TestMeta, binary, work string, chunk TestChunk, opts *TestOpts) []ANY {

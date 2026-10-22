@@ -782,6 +782,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
 	finishYqlModule(modulePath, env, d)
+	d.test.expandValues(env)
 
 	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
 		for i, group := range d.pySrcGroups {
@@ -1809,7 +1810,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					expanded.Args = expandTestRunArgs(v.Args, env)
 				} else if v.Name == tokSetListPreSuf {
 					expanded.Args = expandListPreSufArgs(v.Args, env)
-				} else {
+				} else if v.Name != tokEnv && v.Name != tokUseRecipe {
 					expanded.Args = expandStmtTokens(v.Args, env)
 				}
 

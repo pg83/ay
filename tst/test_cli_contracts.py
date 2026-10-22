@@ -19,7 +19,7 @@ class CliContractsTest(unittest.TestCase):
     def test_inherited_test_environment(self):
         files = fixture()
         files["lib/ut/ya.make"] = files["lib/ut/ya.make"].replace(
-            "END()", "ENV(AY_TEST_CONTRACT_VALUE AY_TEST_CONTRACT_MISSING_592)\nFORK_TESTS()\nEND()")
+            "END()", "ENV(AY_TEST_CONTRACT_VALUE)\nENV(AY_TEST_CONTRACT_MISSING_592)\nFORK_TESTS()\nEND()")
         graph = lib.make(files, "lib/ut", "-t", env={
             "AY_TEST_CONTRACT_VALUE": "forwarded", "YA_MANDATORY_ENV_VARS": "YA_TEST_TASK_HINT",
             "YA_TEST_TASK_HINT": "present", "YA_TEST_DISABLE_FLAKE8_MIGRATIONS": "no",
