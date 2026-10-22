@@ -11,6 +11,22 @@ from test_python2 import CYTHON_HEADERS, CYTHON_UTILITY, python2_base
 
 
 class PythonProducerContextsTest(unittest.TestCase):
+    def test_yql_source_fallback_lowers_native_sources_after_its_epilogue(self):
+        files = native_files()
+        files.update({
+            "apps/materializer/ya.make": (
+                f"YQL_PREBUILT_PROGRAM(materializer)\n{lib.BARE_MODULE}"
+                "SET(PYTHON3 yes)\nSRCS(logic.pyx)\nEND()\n"
+            ),
+            "apps/materializer/logic.pyx": "cdef int value\n",
+        })
+        graph = lib.make(files, "apps/materializer", "-DBUILD_YQL_FROM_SOURCES=yes", opensource=False)
+        generated = lib.node_by_output(graph, "$(B)/apps/materializer/logic.pyx.cpp")
+        compiled = lib.node_by_output(graph, "$(B)/apps/materializer/logic.pyx.cpp.o")
+        program = lib.node_by_output(graph, "$(B)/apps/materializer/materializer")
+        self.assertIn(generated["uid"], compiled["deps"])
+        self.assertIn(compiled["uid"], program["deps"])
+
     def test_native_cython_python_variable_selects_include_domains(self):
         for py3 in (False, True):
             with self.subTest(py3=py3):
