@@ -167,6 +167,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		generatedExplicit := stmt.Generated != nil
 		py23Variant := cythonUsesPy23Variant(d.moduleStmt.Name)
 		generated := stmt.Src + ".cpp"
+		cythonSuffix := ""
 
 		if py23Variant {
 			generated = stmt.Src + ".py3.cpp"
@@ -177,7 +178,8 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		}
 
 		if d.usePython2 {
-			generated = stmt.Src + d.cc.objSufDot() + ".py2" + cythonOutExt(stmt.CMode)
+			cythonSuffix = ".py2"
+			generated = stmt.Src + d.cc.objSufDot() + cythonSuffix + cythonOutExt(stmt.CMode)
 		}
 
 		if stmt.Native != nil {
@@ -195,7 +197,8 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 				ext = ".c"
 			}
 
-			generated = relStem(stmt.Src) + ext
+			// Public/API rules apply noext, then CYTHON_SUFFIX, without OBJ_SUF.
+			generated = relStem(stmt.Src) + cythonSuffix + ext
 		}
 
 		if generatedExplicit {
@@ -207,7 +210,7 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		var headerVFS []VFS
 
 		if stmt.Header {
-			base := instance.Path.relString() + "/" + relStem(stmt.Src)
+			base := instance.Path.relString() + "/" + relStem(stmt.Src) + cythonSuffix
 
 			headerVFS = append(headerVFS, build(base, ".h"))
 

@@ -223,6 +223,7 @@ var (
 	strCubin                                                                                 = internStr("--cubin")
 	strCythonCApiH                                                                           = internStr("CYTHON_C_API_H")
 	strCythonCH                                                                              = internStr("CYTHON_C_H")
+	strCythonCppApiH                                                                         = internStr("CYTHON_CPP_API_H")
 	strCythonCppH                                                                            = internStr("CYTHON_CPP_H")
 	strCythonOptions                                                                         = internStr("CYTHON_OPTIONS")
 	strD                                                                                     = internStr("-d")

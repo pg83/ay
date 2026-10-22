@@ -3590,6 +3590,8 @@ func cythonVariantBucket(s *CythonStmt) int {
 		return 2
 	case !s.CMode && !s.Header:
 		return 3
+	case s.ApiHeader:
+		return 5
 	default:
 		return 4
 	}
@@ -3947,9 +3949,9 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			cythonApiHeader = false
 
 			continue
-		case strCythonCApiH.any():
+		case strCythonCApiH.any(), strCythonCppApiH.any():
 
-			cythonCMode = true
+			cythonCMode = a == strCythonCApiH.any()
 			cythonPlainCpp = false
 			cythonHeader = true
 			cythonApiHeader = true
