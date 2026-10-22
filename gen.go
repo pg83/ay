@@ -2491,6 +2491,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		result.LDPath = ptr(goPath)
 		result.ARRef = goRef
 		result.ARPath = ptr(goPath)
+		result.ResourceGlobalClosure = resourceGlobalsClosure
 		result.TestSuites = append(result.TestSuites, e.goTestSuites(goRef, build(goPath.relString(), ".vet.txt"), resourceGlobalsClosure)...)
 
 		ctx.memoPut(instance, result)
