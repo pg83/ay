@@ -246,6 +246,20 @@ class SandboxPy23TaskTest(unittest.TestCase):
                          if value.startswith("py/no_check_imports/")]
                 self.assertEqual(masks, [prefix + "api.* kernel.* library.* sky*"])
 
+    def test_public_python2_program_keeps_its_deprecation_dependency(self):
+        files = python2_base()
+        files["ordinary/ya.make"] = (
+            f"PY2_PROGRAM()\n{lib.BARE_MODULE}NO_PYTHON_INCLUDES()\n"
+            "NO_CHECK_IMPORTS()\nPY_SRCS(main.py)\nEND()\n"
+        )
+        files["ordinary/main.py"] = ""
+        graph = lib.make(files, "ordinary", opensource=False)
+        deprecation = lib.node_by_output(
+            graph, "$(B)/build/rules/py2_deprecation/libbuild-rules-py2_deprecation.a")
+        binary = lib.node_by_output(graph, "$(B)/ordinary/ordinary")
+        self.assertIn(deprecation["outputs"][0], binary["inputs"])
+        self.assertIn(deprecation["uid"], binary["deps"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
