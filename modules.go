@@ -392,6 +392,9 @@ type SrcMeta struct {
 	PyMeta               uint32
 	InitialCompileSource bool
 	TaskletSeq           int
+	// One plus the FIFO wave of an initial SRCS action or its auto-sources.
+	// Zero means the initial wave was not recorded.
+	SourceQueueRank uint64
 }
 
 func (m SrcMeta) sortKey(round uint64) uint64 {

@@ -574,6 +574,10 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 			continue
 		}
 
+		if meta.Prio == stmtPrioSrcs {
+			meta.SourceQueueRank = 1
+		}
+
 		srcs = append(srcs, meta)
 	}
 
@@ -587,6 +591,9 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 			childMeta := meta
 
 			childMeta.Source = e.gztGenProto(src.string()).any()
+			if childMeta.SourceQueueRank != 0 {
+				childMeta.SourceQueueRank++
+			}
 			srcs = append(srcs, childMeta)
 		}
 	}

@@ -2939,6 +2939,10 @@ func (e *EmitContext) srcRound(m SrcMeta) uint64 {
 		return 0
 	}
 
+	if m.SourceQueueRank != 0 {
+		return m.SourceQueueRank - 1
+	}
+
 	cur := m.Source.vfs()
 
 	if !cur.isBuild() {

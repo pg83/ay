@@ -445,6 +445,10 @@ func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
 func (e *EmitContext) enqueueSrc(meta SrcMeta) {
 	assert(!e.srcsClosed, "enqueueSrc after source queue closed")
 
+	if meta.SourceQueueRank != 0 {
+		meta.SourceQueueRank++
+	}
+
 	if cap(e.srcs) == 0 {
 		e.srcs = make([]SrcMeta, 0, len(e.d.srcs)+8)
 	}
