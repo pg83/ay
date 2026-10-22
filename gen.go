@@ -2933,7 +2933,7 @@ func (e *EmitContext) queuedSourceInput(info *GeneratedFileInfo) VFS {
 }
 
 func (e *EmitContext) srcRound(m SrcMeta) uint64 {
-	if m.Prio == stmtPrioSrcs && m.ExplicitBuildCSource {
+	if m.InitialCompileSource {
 		return 0
 	}
 

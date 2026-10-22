@@ -390,7 +390,7 @@ type SrcMeta struct {
 	Compile              CompileSpec
 	CompileRef           NodeRef
 	PyMeta               uint32
-	ExplicitBuildCSource bool
+	InitialCompileSource bool
 	TaskletSeq           int
 }
 
@@ -500,6 +500,7 @@ type ArchiveAsmEntry struct {
 	Name         string
 	DontCompress bool
 	Files        []string
+	DeclSeq      int
 }
 
 type Lj21Archive struct {
@@ -1490,7 +1491,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					prio, seq = stmtPrioSrcs, d.nextDeclSeq()
 				}
 
-				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global, Compile: compile, ExplicitBuildCSource: srcTok.vfs().isBuild() && srcExtClassOf(srcTok.relOrSelf().any()) == srcExtCSource})
+				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global, Compile: compile})
 				globalNext = false
 
 				switch srcExtClassOf(srcTok) {
@@ -4380,6 +4381,7 @@ func applyArchiveAsmStmt(v UnknownStmt, d *ModuleData) {
 		}
 	}
 
+	entry.DeclSeq = d.nextDeclSeq()
 	d.archiveAsm = append(d.archiveAsm, entry)
 }
 

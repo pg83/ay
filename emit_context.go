@@ -505,6 +505,9 @@ func (e *EmitContext) emit() {
 
 	for _, meta := range d.srcs {
 		if !isCodegenProducingSrcID(meta.Source) {
+			// Priority-4 SRCS compile actions follow the declared producers and
+			// precede their auto-sources, including when an input resolves to BUILD.
+			meta.InitialCompileSource = meta.Prio == stmtPrioSrcs
 			e.enqueueSrc(meta)
 		}
 	}

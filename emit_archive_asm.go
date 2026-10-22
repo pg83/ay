@@ -13,7 +13,7 @@ func (e *EmitContext) emitArchiveAsmForAR() {
 		rodataRef := e.emitArchiveAsmNode(a, rodataPath, toolBinPath, toolLDRef, reg)
 		rdRef, rdOut := e.emitArchiveAsmRodata(rodataRel, rodataPath, rodataRef)
 
-		e.collectObj(rdRef, rdOut, SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault, Bucket: bkArchiveAsm})
+		e.collectObj(rdRef, rdOut, SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault, Seq: a.DeclSeq, Bucket: bkArchiveAsm})
 	}
 }
 
