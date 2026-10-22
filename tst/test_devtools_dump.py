@@ -339,6 +339,10 @@ class DumpNormalizeTest(DumpToolTest):
         self.assertEqual(sorted(map(compact, both)), sorted(set(map(compact, singles))))
         self.assertEqual(
             sorted(map(compact, both)),
+            sorted(map(compact, self.normalize(nodes, result=["ld", "ts", "ar"]))),
+        )
+        self.assertEqual(
+            sorted(map(compact, both)),
             sorted(map(compact, self.normalize(nodes, "--streaming", result=["ld", "ts"]))),
         )
 
