@@ -210,7 +210,8 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	pe := func() {
 		inputClosure, views := pyInputClosure(snap, stmt)
 
-		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, inputClosure, views, pyRef, interp, toolRefs, auxTools, kv, resources)
+		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, inputClosure, views,
+			e.textInputSources(snap.inVFSs, len(snap.inVFSs)-stmt.INNoParse), pyRef, interp, toolRefs, auxTools, kv, resources)
 	}
 
 	pending := e.pendingEmit(pe)
@@ -378,6 +379,7 @@ func (e *EmitContext) emitPYRun(
 	directBuilds []VFS,
 	inputClosure InputChunks,
 	views []Closure,
+	textInputs []VFS,
 	id NodeRef,
 	interp ANY,
 	toolRefs []NodeRef,
@@ -496,6 +498,7 @@ func (e *EmitContext) emitPYRun(
 		Cmds:           na.cmdList(cmd),
 		Env:            env,
 		Inputs:         inputChunks,
+		TextInputs:     textInputs,
 		InputClosures:  views,
 		KV:             kv,
 		Outputs:        outputs,

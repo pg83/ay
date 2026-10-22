@@ -25,6 +25,7 @@ type GeneratedFileInfo struct {
 	ProducerMainOut  VFS
 	ClosureLeaves    []VFS
 	InputLoopSources []VFS
+	InputLoopViews   []Closure
 	LateOutputs      []VFS
 	ModuleOutputs    []VFS
 	ParsedIncludes   ParsedIncludeSet
@@ -84,6 +85,7 @@ type CodegenRegistry struct {
 	resourceReady   map[VFS]bool
 	byRel           DenseMap[STR, *GeneratedFileInfo]
 	bySplit         *IntMap[splitLookup]
+	textTemplates   DenseMap[VFS, []VFS]
 	sourceModules   DenseMap[STR, *SourceModuleInfo]
 	splitGeneration uint32
 	na              *NodeArenas
@@ -166,7 +168,7 @@ func (r *CodegenRegistry) sourceModule(instance ModuleInstance) (*SourceModuleIn
 	return module, false
 }
 
-func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates []VFS) {
+func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates, textTemplates []VFS) {
 	info, ok := r.byRel.get(output.rel())
 
 	if !ok {
@@ -176,6 +178,18 @@ func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates []VFS) {
 	}
 
 	info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{templates})
+	r.forwardTextTemplates(output, textTemplates)
+}
+
+// TEXT links retain the physical source obligation without acquiring that
+// SourceFile's parsed edges, even when another owner has already parsed it.
+func (r *CodegenRegistry) forwardTextTemplates(output VFS, inputs []VFS) {
+	if len(inputs) == 0 {
+		return
+	}
+
+	previous, _ := r.textTemplates.get(output)
+	r.textTemplates.put(output, r.na.dedupClosure(previous, [][]VFS{inputs}))
 }
 
 func (r *CodegenRegistry) shareInputLoop(members []VFS) {
@@ -184,6 +198,7 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 	}
 
 	sources := vfsScratches.get()
+	var views []Closure
 
 	for _, member := range members {
 		if info := r.lookup(member); info != nil {
@@ -192,6 +207,11 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 			}
 
 			sources = append(sources, info.InputLoopSources...)
+			for _, view := range info.InputLoopViews {
+				if !slices.Contains(views, view) {
+					views = append(views, view)
+				}
+			}
 		}
 	}
 
@@ -201,6 +221,7 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 		for _, member := range members {
 			if info := r.lookup(member); info != nil {
 				info.InputLoopSources = shared
+				info.InputLoopViews = views
 			}
 		}
 	}

@@ -31,6 +31,7 @@ type Node struct {
 	Cmds                []Cmd         `json:"cmds"`
 	Env                 EnvVars       `json:"env"`
 	Inputs              InputChunks   `json:"inputs"`
+	TextInputs          []VFS         `json:"-"`
 	InputNames          []STR         `json:"-"`
 	InputClosure        Closure       `json:"-"`
 	InputClosures       []Closure     `json:"-"`

@@ -5,6 +5,9 @@ var cpKV = KV{P: pkCP, PC: pcLightCyan}
 func (e *EmitContext) emitCPWithInputs(src VFS, dst VFS, extraInputs []VFS, id NodeRef, tc ModuleToolchain, scripts ScriptDeps, views ...Closure) {
 	node := composeCPNode(e.instance, src, dst, extraInputs, tc, scripts, e.ctx.na)
 	node.InputClosures = views
+	if len(views) > 0 {
+		node.TextInputs = extraInputs
+	}
 
 	e.emitReservedNode(node, id)
 }
@@ -41,10 +44,11 @@ func composeCPNode(instance ModuleInstance, src VFS, dst VFS, extraInputs []VFS,
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:       env,
-		Inputs:    inputs,
-		KV:        &cpKV,
-		Outputs:   na.vfsList(dst),
-		Resources: usesPython3,
+		Env:        env,
+		Inputs:     inputs,
+		TextInputs: na.vfsList(append([]VFS{src}, ownInputs...)...),
+		KV:         &cpKV,
+		Outputs:    na.vfsList(dst),
+		Resources:  usesPython3,
 	}
 }

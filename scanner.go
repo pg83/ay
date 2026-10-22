@@ -641,6 +641,9 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	sc.tjc.closure.reset(vfsBound())
 	sc.tjc.closure.add(abs)
 	s.buckets.resetScratch(abs)
+	for _, input := range sc.opaqueInputs(abs) {
+		s.buckets.spliceOne(&sc.tjc.closure, input)
+	}
 
 	for _, ch := range children {
 		if ch == abs {
@@ -733,6 +736,11 @@ func (sc *ScanCtx) windowSubsumed(ch VFS) bool {
 
 func (sc *ScanCtx) forEachChild(v VFS, fn func(VFS)) {
 	sc.forEachResolvedChildID(v, fn)
+}
+
+func (sc *ScanCtx) opaqueInputs(v VFS) []VFS {
+	inputs, _ := sc.scanner.codegen.textTemplates.get(v)
+	return inputs
 }
 
 func (sc *ScanCtx) hasOwnDiagnostics(v VFS) bool {

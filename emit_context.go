@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 type PeerContext struct {
 	Modules           []VFS
@@ -326,17 +329,22 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 	}
 
 	var extra []Closure
-	var templates []VFS
+	var templates, textTemplates []VFS
 
 	for _, chunk := range node.Inputs {
 		for _, input := range chunk {
 			template := strings.HasSuffix(input.relString(), ".in")
+			text := input.isSource() && slices.Contains(node.TextInputs, input)
 
 			if template {
-				templates = append(templates, input)
+				if text {
+					textTemplates = append(textTemplates, input)
+				} else {
+					templates = append(templates, input)
+				}
 			}
 
-			if input.isBuild() && e.codegen.lookup(input) != nil || template {
+			if input.isBuild() && e.codegen.lookup(input) != nil || template && !text {
 				if cl := e.inputClosure(input); cl.buckets != nil {
 					extra = append(extra, cl)
 				}
@@ -344,8 +352,8 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 		}
 	}
 
-	if len(templates) > 0 && len(node.Outputs) == 1 {
-		e.codegen.forwardTemplateInputs(node.Outputs[0], e.ctx.na.vfsList(templates...))
+	if len(templates)+len(textTemplates) > 0 && len(node.Outputs) == 1 {
+		e.codegen.forwardTemplateInputs(node.Outputs[0], e.ctx.na.vfsList(templates...), e.ctx.na.vfsList(textTemplates...))
 	}
 
 	if len(extra) == 0 {
@@ -382,6 +390,19 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 		e.ctx.na.inputs.commit(len(chunks))
 		node.Inputs = chunks[:len(chunks):len(chunks)]
 	})
+}
+
+func (e *EmitContext) textInputSources(inputs []VFS, parsedCount int) []VFS {
+	text := e.ctx.na.vfs.alloc(len(inputs) - parsedCount)[:0]
+
+	for _, input := range inputs[parsedCount:] {
+		if input.isSource() && !slices.Contains(inputs[:parsedCount], input) {
+			text = append(text, input)
+		}
+	}
+
+	e.ctx.na.vfs.commit(len(text))
+	return text[:len(text):len(text)]
 }
 
 func (e *EmitContext) inputClosure(input VFS) Closure {

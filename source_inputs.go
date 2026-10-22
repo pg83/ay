@@ -43,16 +43,26 @@ func (ctx *GenCtx) finalizeSourceInputs() {
 				return
 			}
 
-			addRoot := func(parent VFS) {
+			// Follow established parsed edges, not the flattened input set:
+			// the latter also contains opaque TEXT template obligations.
+			seen := make(map[VFS]bool)
+			var addRoot func(VFS)
+			addRoot = func(parent VFS) {
+				if seen[parent] {
+					return
+				}
+				seen[parent] = true
 				if parent.isSource() {
 					closures = append(closures, view.scanner.sourceClosure(parent))
+					return
+				}
+				children, _ := view.scanner.cachedChildren(parent)
+				for _, child := range children {
+					addRoot(child)
 				}
 			}
-
-			if view.self != 0 && view.self.isSource() {
+			if view.self != 0 {
 				addRoot(view.self)
-			} else {
-				view.each(addRoot)
 			}
 		}
 
