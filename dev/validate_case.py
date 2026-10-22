@@ -201,7 +201,9 @@ class CaseRunner:
                     if rc != 0:
                         return self.phase_failure(phase, rc, generation_seconds=generation_seconds)
 
-                parity, sample = normalized_node_parity_counts(our_sorted, ref_sorted)
+                parity, sample = normalized_node_parity_counts(
+                    our_sorted, ref_sorted, diff_directory=self.output,
+                )
                 exact = parity["our_only"] == 0 and parity["ref_only"] == 0
                 xfail = self.spec.get("xfail", False)
                 status = "OK" if exact else ("XFAIL" if xfail in (True, "auto") else "FAIL")

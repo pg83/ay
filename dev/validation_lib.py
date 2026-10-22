@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from contextlib import ExitStack
 from pathlib import Path
 
 
@@ -50,16 +51,27 @@ def normalized_node_parity_counts(
     *,
     sample_limit: int = 40,
     sample_width: int = 1000,
+    diff_directory: str | os.PathLike[str] | None = None,
 ) -> tuple[dict[str, int], list[str]]:
-    """Merge two sorted JSONL streams, returning exact parity and a small diff."""
+    """Count sorted JSONL parity and optionally retain every differing node."""
     exact = left_only = right_only = left_total = right_total = 0
     sample: list[str] = []
+    differences = {}
 
     def record(prefix: str, line: str) -> None:
+        if differences:
+            differences[prefix].write(line)
         if len(sample) < sample_limit:
             sample.append(prefix + line.rstrip("\n")[:sample_width])
 
-    with open(left_path, encoding="utf-8") as left, open(right_path, encoding="utf-8") as right:
+    with ExitStack() as streams:
+        left = streams.enter_context(open(left_path, encoding="utf-8"))
+        right = streams.enter_context(open(right_path, encoding="utf-8"))
+        if diff_directory is not None:
+            for prefix, name in (("- ", "ours.only.jsonl"), ("+ ", "ref.only.jsonl")):
+                differences[prefix] = streams.enter_context(
+                    (Path(diff_directory) / name).open("w", encoding="utf-8")
+                )
         left_line = left.readline() or None
         right_line = right.readline() or None
         if left_line is not None:

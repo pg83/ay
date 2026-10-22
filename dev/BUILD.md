@@ -53,6 +53,11 @@ every XFAIL case, its matched/our-only/reference-only counts, and the final
 OK/XFAIL/FAIL totals; a successful gate therefore cannot hide accepted
 differences behind a bare green stamp.
 
+Each case also retains the complete differing normalized nodes in
+`ours.only.jsonl` and `ref.only.jsonl`, alongside the bounded `diff-sample.txt`.
+These files are streamed during the parity count, so diagnosing a mismatch
+does not require generating or normalizing the same graphs again.
+
 Sandbox archives are ordinary CAS outputs and do not depend on the candidate
 `ay` binary. New resources provisioned by `dev/provision.py` are uploaded as
 locally created archives and pinned by SHA-256. Older config entries rely on

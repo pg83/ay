@@ -116,6 +116,24 @@ class ValidationTest(unittest.TestCase):
         self.assertEqual(result["status"], "OK")
         self.assertTrue(result["exact"])
         self.assertTrue((output / "commands.txt").is_file())
+        self.assertEqual((output / "ours.only.jsonl").read_text(), "")
+        self.assertEqual((output / "ref.only.jsonl").read_text(), "")
+
+    def test_case_runner_retains_full_differences_beyond_the_sample(self):
+        nodes = [json.dumps({"node": index, "payload": "x" * 1500}) + "\n" for index in range(50)]
+        result, output = self.run_case("".join(nodes))
+        self.assertEqual(result["parity"], {
+            "matched": 0, "our_only": 1, "ref_only": 50, "our_total": 1, "ref_total": 50,
+        })
+        self.assertEqual((output / "ours.only.jsonl").read_text(), '{"node":1}\n')
+        self.assertEqual((output / "ref.only.jsonl").read_text(), "".join(sorted(nodes)))
+        sample = (output / "diff-sample.txt").read_text().splitlines()
+        self.assertEqual(len(sample), 40)
+        self.assertTrue(all(len(line) <= 1002 for line in sample))
+        calls = self.fake_ay_calls(output)
+        self.assertEqual(len(calls["make"]), 1)
+        self.assertEqual(len(calls["normalize"]), 2)
+        self.assertEqual(len(calls["sort"]), 2)
 
     def test_case_runner_passes_targets_to_generator_and_env(self):
         env = {"AUTOCHECK": "1", "YA_NO_GEN_RENAMED_RESULTS": "1"}
