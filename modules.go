@@ -779,6 +779,11 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.yqlStableABI = instance.Platform.YqlStableABI
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
+
+	if pd := programSourceDir(d.moduleStmt); pd != nil {
+		d.srcDirs = append(d.srcDirs, dirKey(*pd).source())
+	}
+
 	kindOfResolve, _ := env.s.lookup(envDontResolveIncludes)
 	d.dontResolveIncludes = kindOfResolve != envAbsent && env.string(envDontResolveIncludes) != "no"
 	finishYqlModule(ctx, instance, env, d, onWarn)

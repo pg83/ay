@@ -2347,11 +2347,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	selfPeerAddInclGlobal = ctx.na.vfsList(selfPeerAddInclGlobal...)
 
 	fullPeerAddInclGlobal := ctx.na.vfsList(peerAddInclGlobal...)
-	effectiveSrcDirs := d.srcDirs
-
-	if pd := programSourceDir(d.moduleStmt); pd != nil {
-		effectiveSrcDirs = concat(d.srcDirs, []VFS{dirKey(*pd).source()})
-	}
 
 	for _, stmt := range d.pchFiles {
 		out := copyFileOutputVFS(instance.Path.relString(), stmt.Output.string())
@@ -2384,7 +2379,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		PeerCOnlyFlagsGlobal: peerCOnlyFlagsGlobal,
 		ModuleScopeCFlags:    d.moduleScopeCFlags,
 		SFlags:               d.sFlags,
-		SrcDirs:              effectiveSrcDirs,
+		SrcDirs:              d.srcDirs,
 		FS:                   ctx.fs,
 		DefaultVars:          d.defaultVars,
 		DefaultVarOrder:      d.defaultVarOrder,
