@@ -1914,7 +1914,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		case tokPy23Library:
 			return ModuleUnit{Type: tokPy2Library, Tag: unitTagPy2, CCTag: tagPy2, ObjSuf: tagPy2, ARPrefix: "libpy", GlobalARTag: tagPy2Global, SbomLang: unitSbomCpp}
 		case tokPy23NativeLibrary:
-			return ModuleUnit{Type: tokLibrary, Tag: unitTagPy2Native, CCTag: tagPy2Native, ObjSuf: tagPy2, ARPrefix: "lib", GlobalARTag: tagPy2NativeGlobal, SbomLang: unitSbomCpp}
+			return ModuleUnit{Type: tokLibrary, Tag: unitTagPy2, HashTag: unitTagPy2Native, CCTag: tagPy2Native, ObjSuf: tagPy2, ARPrefix: "lib", GlobalARTag: tagPy2NativeGlobal, SbomLang: unitSbomCpp}
 		}
 	}
 

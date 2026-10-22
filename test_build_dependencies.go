@@ -18,11 +18,28 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 
 	instance := ctx.rootInstanceForDeclaration(dir, demandSelf, declaration)
 	name := declaration.Name
+	frame := ctx.pushFrame()
+
+	defer ctx.popFrame()
 
 	if units := javaModuleUnits[name]; len(units) > 0 {
 		var instances []ModuleInstance
 
+		first := instance
+
+		first.Kind, first.Language = units[0].sub, LangJava
+
+		env := buildIfEnvInto(&frame.ifEnv, first)
+		module := &JavaModule{dir: dir, path: first.Path, instance: first, unit: units[0], stmt: name}
+		selection := collectJavaData(ctx, module, moduleStmts(ctx, dir), env)
+
 		for _, unit := range units {
+			excluded, specified := selection.excludeTags[unit.tag]
+
+			if excluded || selection.onlyTags && !specified {
+				continue
+			}
+
 			peer := instance
 
 			peer.Kind, peer.Language = unit.sub, LangJava
@@ -32,12 +49,14 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 		return instances
 	}
 
-	frame := ctx.pushFrame()
+	first := instance
 
-	defer ctx.popFrame()
+	if name == tokPy23Library || name == tokPy23NativeLibrary || name == tokPy23Test {
+		first.Language = LangPy2
+	}
 
-	env := buildIfEnvInto(&frame.ifEnv, instance)
-	d := collectModuleInto(ctx, instance, moduleStmts(ctx, dir), env, ctx.onWarn, &frame.d)
+	env := buildIfEnvInto(&frame.ifEnv, first)
+	d := collectModuleInto(ctx, first, moduleStmts(ctx, dir), env, ctx.onWarn, &frame.d)
 	instances := []ModuleInstance{instance}
 	variants := d.moduleVariants
 
@@ -45,7 +64,7 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 		variants |= 1 << LangPy2
 	}
 
-	if name == tokPy23Library || name == tokPy23NativeLibrary {
+	if name == tokPy23Library || name == tokPy23NativeLibrary || name == tokPy23Test {
 		variants |= 1 << LangPy2
 	}
 
@@ -84,26 +103,26 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 	selected := instances[:0]
 
 	for _, peer := range instances {
-		if peer.Language != LangJava {
-			env := buildIfEnvInto(&frame.ifEnv, peer)
-			d := collectModuleInto(ctx, peer, moduleStmts(ctx, dir), env, ctx.onWarn, &frame.d)
-			tag := multimoduleVariantTag(name, peer.Language)
+		tag := multimoduleVariantTag(name, peer.Language)
 
-			if tag == "" {
-				tag = d.unit.Tag.string()
-			}
+		if tag == "" {
+			tag = resolveModuleUnit(name, peer.Kind, peer.Language).Tag.string()
+		}
 
-			if name == tokProtoLibrary && peer.Language == LangPy2 {
-				tag = "PY_PROTO"
-			}
+		if peer.YqlCurrent {
+			tag = strYqlUdfStaticCurrent.string()
+		}
 
-			if (name == tokPy23Library || name == tokPy23NativeLibrary) && peer.Language == LangPy2 {
-				tag = "PY2"
-			}
+		if name == tokProtoLibrary && peer.Language == LangPy2 {
+			tag = "PY_PROTO"
+		}
 
-			if tag != "" && moduleExcludesTag(d, tag) {
-				continue
-			}
+		if (name == tokPy23Library || name == tokPy23NativeLibrary) && peer.Language == LangPy2 {
+			tag = "PY2"
+		}
+
+		if tag != "" && moduleExcludesTag(d, tag) {
+			continue
 		}
 
 		selected = append(selected, peer)
@@ -119,14 +138,6 @@ func (ctx *GenCtx) testBuildDependencies(dir string) []TestBuildDependency {
 
 	for _, instance := range ctx.testDependencyInstances(dir) {
 		dependency := TestBuildDependency{instance, genModule(ctx, instance)}
-
-		if jm := dependency.result.java; jm != nil {
-			excluded, specified := jm.data.excludeTags[jm.unit.tag]
-
-			if excluded || jm.data.onlyTags && !specified {
-				continue
-			}
-		}
 
 		dependencies = append(dependencies, dependency)
 		ctx.testDependencyClosure(dependency, seen, false)

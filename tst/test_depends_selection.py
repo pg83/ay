@@ -102,6 +102,55 @@ class DependsSelectionTest(unittest.TestCase):
                 self.assertIn(lib.node_by_output(graph, '$(B)/java/java.jar')['uid'], suite['deps'])
                 self.assertFalse(any('$(B)/java/java-interface.jar' in node['outputs'] for node in graph['graph']))
 
+    def test_conditional_java_tags_refine_once_in_the_first_submodule(self):
+        files = lib.java_tree(**{
+            'tests/ya.make': 'EXECTEST()\nRUN(true)\nDEPENDS(java)\nEND()\n',
+            'java/ya.make': 'JAVA_LIBRARY()\nIF(MODULE_TAG == "FULL_JAR_COMPILATION")\nONLY_TAGS(FULL_JAR_COMPILATION)\nELSE()\nONLY_TAGS(IJAR)\nENDIF()\nEND()\n',
+        })
+        lib.tool_program(files, 'contrib/tools/ijar', 'ijar')
+        graph = lib.make(files, 'tests', '-t', '--strip-packages-from-results')
+        suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
+        self.assertIn(lib.node_by_output(graph, '$(B)/java/java.jar')['uid'], suite['deps'])
+        self.assertFalse(any('$(B)/java/java-interface.jar' in node['outputs'] for node in graph['graph']))
+
+    def test_python23_refines_tags_in_its_first_python2_context(self):
+        files = test_python2.python2_base()
+        files.update({
+            'tests/ya.make': 'EXECTEST()\nRUN(true)\nDEPENDS(native)\nEND()\n',
+            'native/ya.make': f'PY23_NATIVE_LIBRARY()\n{lib.BARE_MODULE}NO_PYTHON_INCLUDES()\nIF(MODULE_TAG == "PY2")\nONLY_TAGS(PY3)\nENDIF()\nSRCS(local.cpp)\nEND()\n',
+            'native/local.cpp': '',
+        })
+        graph = lib.make(files, 'tests', '-t', '--strip-packages-from-results')
+        suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
+        self.assertIn(lib.node_by_output(graph, '$(B)/native/libpy3cnative.a')['uid'], suite['deps'])
+        self.assertFalse(any('$(B)/native/libnative.a' in node['outputs'] for node in graph['graph']))
+
+    def test_excluded_java_first_unit_does_not_construct_its_producers(self):
+        files = lib.java_tree(**{
+            'tests/ya.make': 'EXECTEST()\nRUN(true)\nDEPENDS(java)\nEND()\n',
+            'java/ya.make': 'JAVA_LIBRARY()\nONLY_TAGS()\nRUN_JAVA_PROGRAM(missing/tool OUT generated.java)\nJAVA_SRCS(generated.java)\nEND()\n',
+        })
+        graph = lib.make(files, 'tests', '-t')
+        self.assertFalse(any(output.startswith('$(B)/java/') for node in graph['graph'] for output in node['outputs']))
+
+    def test_selected_proto_siblings_execute_their_own_source_bodies(self):
+        files = target_files()
+        files.update({
+            'tests/ya.make': 'EXECTEST()\nRUN(true)\nDEPENDS(p)\nEND()\n',
+            'p/ya.make': 'PROTO_LIBRARY()\nIF(MODULE_TAG == "CPP_PROTO")\nONLY_TAGS(JAVA_PROTO GO_PROTO)\nENDIF()\nIF(MODULE_TAG == "JAVA_PROTO")\nSRCS(java.proto)\nELSEIF(MODULE_TAG == "GO_PROTO")\nSRCS(go.proto)\nENDIF()\nEND()\n',
+            'p/java.proto': 'syntax = "proto3";\nmessage Java {}\n',
+            'p/go.proto': 'syntax = "proto3";\nmessage Go {}\n',
+        })
+        graph = lib.make(files, 'tests', '-t', '--strip-packages-from-results')
+        suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
+        java = lib.node_by_output(graph, '$(B)/p/p.jar')
+        go = lib.node_by_output(graph, '$(B)/p/p.a')
+        self.assertIn(java['uid'], suite['deps'])
+        self.assertIn(go['uid'], suite['deps'])
+        self.assertTrue(any('$(S)/p/java.proto' in node['inputs'] for node in graph['graph']))
+        self.assertTrue(any('$(B)/p/go.pb.go' in node['outputs'] for node in graph['graph']))
+        self.assertFalse(any('$(B)/p/java.pb.go' in node['outputs'] or '$(B)/p/go.jsrc' in node['outputs'] for node in graph['graph']))
+
     def test_python_program_depends_selects_binary_and_library_contexts(self):
         files = test_python_suites.fixture(macro='PY3_PROGRAM')
         files['tests/ya.make'] = 'EXECTEST()\nRUN(true)\nDEPENDS(lib)\nEND()\n'
