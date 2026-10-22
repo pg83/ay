@@ -72,22 +72,42 @@ func (ctx *GenCtx) javaTestSuites(jm *JavaModule) []*TestSuite {
 	return active
 }
 
-func (jm *JavaModule) srcDirsTestData() []string {
+func (ctx *GenCtx) javaCheckSourceDir(jm *JavaModule, dir string) VFS {
+	if dir == "." {
+		dir = jm.dir
+	}
+
+	if rooted, ok := moduleRootedVFS(jm.dir, dir); ok {
+		return rooted
+	}
+
+	dirs := append(slices.Clone(jm.data.srcDirs), v, build(jm.dir), bld)
+
+	for _, base := range dirs {
+		rel := path.Join(base.relString(), dir)
+
+		if base.isSource() {
+			if present, _ := ctx.fs.exists(srcRootRel, rel); present {
+				return source(rel)
+			}
+		} else if ctx.javaReg(jm).lookup(build(rel)) != nil {
+			return build(rel)
+		}
+	}
+
+	// java_srcdirs_to_data joins an unresolved empty path with MODDIR.
+	return jm.path
+}
+
+func (ctx *GenCtx) javaSrcDirsTestData(jm *JavaModule) []string {
 	var out []string
 
 	for _, spec := range jm.data.javaSrcs {
-		dir := spec.srcDir
+		dir := ctx.javaCheckSourceDir(jm, spec.srcDir)
 
-		switch {
-		case dir == ".":
-			dir = "$(S)/" + jm.dir
-		case strings.HasPrefix(dir, "$(B)/"):
-			continue
-		case !strings.HasPrefix(dir, "$(S)/"):
-			dir = "$(S)/" + path.Clean(jm.dir+"/"+dir)
+		if dir.isSource() {
+			out = append(out, dir.string())
 		}
-
-		out = append(out, dir)
 	}
 
 	return out
@@ -121,7 +141,7 @@ func (ctx *GenCtx) javaProducer(jm *JavaModule, out VFS) NodeRef {
 
 func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
 	d := jm.data
-	dirs := jm.srcDirsTestData()
+	dirs := ctx.javaSrcDirsTestData(jm)
 
 	if d.lintLevel == "none" || d.noLint == "none" || len(d.javaSrcs) == 0 {
 		return nil
@@ -180,10 +200,15 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 	binary := "$(" + strings.ToUpper(folder) + ")/run.bat"
 	srclist := build(jm.dir, "/all-kt-sources.txt")
 	s := ctx.javaSuiteBase(jm, "ktlint", "ktlint", "style")
+	dirs := []string{editorconfig}
+
+	if d.env.string(internEnv("_WITH_YA_1931")) != "yes" {
+		dirs = append(dirs, ctx.javaSrcDirsTestData(jm)...)
+	}
 
 	s.timeout = 120
 	s.requirements = map[string]string{"cpu": "2"}
-	s.relatedPaths = append([]string{"$(S)/" + jm.dir, "$(S)/.editorconfig"}, sortedUnique(append([]string{editorconfig}, jm.srcDirsTestData()...))...)
+	s.relatedPaths = append([]string{"$(S)/" + jm.dir, "$(S)/.editorconfig"}, sortedUnique(dirs)...)
 	s.runInputs = append(s.runInputs, srclist)
 	s.projectBuildDeps = true
 	s.deps = []NodeRef{ctx.javaProducer(jm, srclist)}

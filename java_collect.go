@@ -705,6 +705,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		}
 	case "USE_KTLINT_OLD":
 		d.ktlintOld = true
+	case "WITH_YA_1931":
+		env.setBool(internEnv("_WITH_YA_1931"), true)
 	case "NO_YMAKE_PYTHON3":
 		d.noYmakePython3 = true
 	case "ENABLE":
