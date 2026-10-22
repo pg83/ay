@@ -91,6 +91,24 @@ func protoPythonNamespaceArg(d *ModuleData) string {
 	return "/" + filepath.ToSlash(filepath.Clean(d.protoNamespace.string()))
 }
 
+func pyProtoLogicalModule(module, src string, scope PyScope) string {
+	if scope.ModuleName != nil {
+		return scope.ModuleName.string()
+	}
+
+	prefix := strings.ReplaceAll(module, "/", ".") + "."
+
+	if scope.Namespace != nil {
+		prefix = scope.Namespace.string() + "."
+	}
+
+	if scope.TopLevel {
+		prefix = ""
+	}
+
+	return prefix + strings.ReplaceAll(strings.TrimSuffix(src, ".proto"), "/", ".")
+}
+
 func pyProtoOutputToken(instance ModuleInstance, out VFS, generatedProto bool) ANY {
 	if generatedProto {
 		return internStr(trimModulePrefix(out.relString(), instance.Path.relString())).any()
@@ -99,15 +117,27 @@ func pyProtoOutputToken(instance ModuleInstance, out VFS, generatedProto bool) A
 	return internV("${ARCADIA_BUILD_ROOT}/", out.relString()).any()
 }
 
-func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, outputs []VFS, generatedProto bool) {
+func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, outputs []VFS, generatedProto bool, logicalModule STR) {
 	instance, d := e.instance, e.d
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
 
 	for i, suffix := range pyProtoSuffixes(d) {
-		key := strings.ReplaceAll(keyDir+keySep+keyBase+suffix, "-", "_")
+		key := keyDir + keySep + keyBase + suffix
 
-		if d.usePython2 {
-			key = strings.ReplaceAll(strings.TrimSuffix(key, ".py"), "/", ".")
+		if logicalModule != 0 {
+			// pb2_arg feeds each physical output back to PY_SRCS with an
+			// explicit alias formed from the original input's logical module.
+			key = logicalModule.string() + strings.TrimSuffix(suffix, filepath.Ext(suffix))
+
+			if !d.usePython2 {
+				key += ".py"
+			}
+		} else {
+			key = strings.ReplaceAll(key, "-", "_")
+
+			if d.usePython2 {
+				key = strings.ReplaceAll(strings.TrimSuffix(key, ".py"), "/", ".")
+			}
 		}
 
 		out := outputs[i]
@@ -235,7 +265,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS) *PyPBModuleEmissio
 	return pe
 }
 
-func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
+func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	src := e.moduleSourceName(srcTok)
@@ -265,7 +295,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	outputs = outputs[:len(outputs):len(outputs)]
 
 	if e.codegen.lookup(pyOut) != nil {
-		e.enqueuePyProtoOutputs(src, srcGroup, outputs, protoSrcVFS.isBuild())
+		e.enqueuePyProtoOutputs(src, srcGroup, outputs, protoSrcVFS.isBuild(), logicalModule)
 
 		return
 	}
@@ -373,7 +403,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	e.codegen.setMainOut(pyPBRef, outputs)
 
-	e.enqueuePyProtoOutputs(src, srcGroup, outputs, generatedProto)
+	e.enqueuePyProtoOutputs(src, srcGroup, outputs, generatedProto, logicalModule)
 }
 
 func protoPythonOutputRoot(d *ModuleData) string {

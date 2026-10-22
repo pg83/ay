@@ -4082,7 +4082,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			continue
 		}
 
-		if strings.Contains(a.string(), "=") && !extIsPy(src) {
+		if strings.Contains(a.string(), "=") && !extIsPy(src) && !extIsProto(src) {
 			continue
 		}
 

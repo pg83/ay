@@ -129,14 +129,16 @@ func (e *EmitContext) registerCollectPySrcs() {
 				keyPrefix = pyResourceKeyPrefix(scope.TopLevel, scope.Namespace, module)
 			}
 
-			if d.usePython2 && extIsProto(src.relOrSelf().string()) {
-				throwFmt("PY_SRCS: %s: .proto sources of a Python 2 module are not modelled", module)
-			}
-
 			if extIsProto(src.relOrSelf().string()) {
+				logical := pyProtoLogicalModule(module, src.relOrSelf().string(), scope)
+
+				if isPythonProtoModule(d) && scope.ModuleName == nil {
+					logical = strings.ReplaceAll(logical, "-", "_")
+				}
+
 				e.enqueueSrc(SrcMeta{
 					Source: src, Prio: stmtPrioDefault,
-					PyMeta: e.addPyMeta(PySourceMeta{Group: gi, Kind: pySourceProtoInput}),
+					PyMeta: e.addPyMeta(PySourceMeta{Module: internStr(logical), Group: gi, Kind: pySourceProtoInput}),
 				})
 
 				continue
