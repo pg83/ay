@@ -13,6 +13,7 @@ func confYqlStableABI(fs FS) bool {
 
 func setupYqlModule(d *ModuleData, name TOK, env Environment) {
 	d.yqlPrebuiltTool = name == tokYqlPrebuiltTool
+	d.yqlPrebuiltAliases = name == tokYqlPrebuiltProgram || name == tokYqlUdfContrib && d.unit.Type == tokDll
 
 	setupYqlUdfModule(d, name, env)
 
@@ -75,15 +76,56 @@ func applyYqlABI(d *ModuleData, env Environment, current bool) {
 	}
 }
 
-func finishYqlModule(modulePath string, env Environment, d *ModuleData) {
+// yql_udf.conf defers the aliased user SRCS and PEERDIR calls until the
+// epilogue; yql_prebuilt.py replays them only when no resource was selected.
+func finishYqlModule(ctx *GenCtx, instance ModuleInstance, env Environment, d *ModuleData, onWarn func(Warn)) {
+	modulePath := instance.Path.relString()
+
 	finishYqlUdfModule(modulePath, d, env)
 
-	if d.moduleStmt == nil || d.moduleStmt.Name != tokYqlPrebuiltProgram {
+	if !d.yqlPrebuiltAliases {
 		return
 	}
 
-	if env.bool(envOPENSOURCE) || env.bool(envBuildYqlFromSources) {
+	d.yqlPrebuiltAliases = false
+	d.yqlPrebuiltResource = selectYqlPrebuiltResource(modulePath, env, d)
+
+	if d.yqlPrebuiltResource == "" {
+		if d.yqlUdfShared {
+			d.peerdirs = append(d.peerdirs, internAnys(yqlUdfImplicitPeers())...)
+		}
+
+		collectStmts(ctx, modulePath, instance.Kind, instance.Language, []Stmt{
+			&SrcsStmt{Sources: d.yqlSourceSrcs}, &PeerdirStmt{Paths: d.yqlSourcePeers},
+		}, env, d, onWarn, instance.Platform)
+
 		return
+	}
+
+	d.flags.NoPlatform = true
+	d.flags.NoLibc = true
+	d.flags.NoRuntime = true
+	d.flags.NoUtil = true
+	d.hadAllocator = true
+	d.allocatorName = strFAKE.any()
+
+	collectStmts(ctx, modulePath, instance.Kind, instance.Language, []Stmt{
+		&SetStmt{Name: "NEED_PLATFORM_PEERDIRS", NameEnv: internEnv("NEED_PLATFORM_PEERDIRS"), Value: "no"},
+	}, env, d, onWarn, instance.Platform)
+
+	prebuilt := path.Base(yqlPrebuiltOutput(instance, d).relString()) + ".prebuilt"
+	d.fromSandboxes = append(d.fromSandboxes, &FromSandboxStmt{
+		ResourceId: internStr(d.yqlPrebuiltResource).any(), File: true,
+		ArchiveExtraction: ArchiveExtraction{
+			Executable: true, Prefix: ".",
+			Renames: []ANY{kwRESOURCE.any()}, OUTNoAutoFiles: []ANY{internStr(prebuilt).any()},
+		},
+	})
+}
+
+func selectYqlPrebuiltResource(modulePath string, env Environment, d *ModuleData) string {
+	if env.bool(envOPENSOURCE) || env.bool(envBuildYqlFromSources) {
+		return ""
 	}
 
 	variant := "DEFAULT"
@@ -99,10 +141,14 @@ func finishYqlModule(modulePath string, env Environment, d *ModuleData) {
 	case "undefined":
 		variant = "UBSAN"
 	default:
-		return
+		return ""
 	}
 
 	name := path.Base(modulePath)
+
+	if d.yqlUdfShared {
+		name = javaRealPrjName(modulePath, javaNameTwoDirs)
+	}
 
 	if len(d.moduleStmt.Args) > 0 {
 		name = d.moduleStmt.Args[0].string()
@@ -111,41 +157,20 @@ func finishYqlModule(modulePath string, env Environment, d *ModuleData) {
 	resource := env.string(internEnv(strings.ToUpper(name) + "_RESOURCE_" + variant))
 
 	if resource == "" || resource == "None" {
-		return
+		return ""
 	}
 
-	d.yqlPrebuiltResource = resource
-	d.srcs = nil
-	d.peerdirs = nil
-	d.flags.NoPlatform = true
-	d.flags.NoLibc = true
-	d.flags.NoRuntime = true
-	d.flags.NoUtil = true
-	d.hadAllocator = true
-	d.allocatorName = strFAKE.any()
+	return resource
 }
 
-func (e *EmitContext) genYqlPrebuiltProgram() *ModuleEmitResult {
-	globals := e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
-	d := e.d
-	name := programBinaryName(e.instance, d.moduleStmt)
-	prebuilt := name + ".prebuilt"
-	src := build(e.instance.Path.relString(), "/", prebuilt)
-	out := lDOutputPath(e.instance, name)
+func yqlPrebuiltOutput(instance ModuleInstance, d *ModuleData) VFS {
+	name := programBinaryName(instance, d.moduleStmt)
 
-	stmt := &FromSandboxStmt{
-		ResourceId: internStr(d.yqlPrebuiltResource).any(), File: true,
-		ArchiveExtraction: ArchiveExtraction{
-			Executable: true, Prefix: ".",
-			Renames: []ANY{kwRESOURCE.any()}, OUTNoAutoFiles: []ANY{internStr(prebuilt).any()},
-		},
+	if d.yqlUdfShared {
+		name = dllOutputName(instance, d.moduleStmt)
 	}
 
-	d.fromSandboxes = append(d.fromSandboxes, stmt)
-
-	e.emitFromSandbox(stmt)
-
-	return e.genYqlPrebuiltCopy(src, out, globals)
+	return lDOutputPath(instance, name)
 }
 
 func (e *EmitContext) genYqlPrebuiltTool() *ModuleEmitResult {
@@ -181,11 +206,15 @@ func (e *EmitContext) genYqlPrebuiltCopy(src, out VFS, globals []ResourceDecl) *
 		DepRefs: refs, Resources: usesPython3,
 	}
 
-	ref := e.emitNode(node)
+	ref := e.emitModuleNode(node, true)
 
 	result := &ModuleEmitResult{
-		ModuleStmtName: d.moduleStmt.Name, ARRef: ref, ARPath: ptr(out),
-		LDRef: ref, LDPath: ptr(out), isPROGRAM: true, ResourceGlobalClosure: globals,
+		ModuleStmtName: d.moduleStmt.Name, LDRef: ref, LDPath: ptr(out),
+		ResourceGlobalClosure: globals, TestSuites: e.styleSuites(globals),
+	}
+
+	if !d.yqlUdfShared {
+		result.ARRef, result.ARPath, result.isPROGRAM = ref, ptr(out), true
 	}
 
 	ctx.memoPut(e.instance, result)

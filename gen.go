@@ -764,11 +764,19 @@ func (ctx *GenCtx) moduleTestSuites(results ...*ModuleEmitResult) []*TestSuite {
 func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
 	validation := s.testType == "validate_resource" || s.testType == "validate_data_sbr"
 
-	if len(s.checkFiles) == 0 && !validation {
+	if len(s.checkFiles) == 0 && s.styleCheck == nil && !validation {
 		return false
 	}
 
 	for _, prev := range suites {
+		// dartfile.merge_darts unions TEST-FILES by script, project and name,
+		// including records whose file list is empty in one module context.
+		if s.styleCheck != nil && prev.styleCheck != nil && prev.testType == s.testType && prev.projectPath == s.projectPath && prev.name == s.name {
+			prev.mergeStyleFiles(s.styleCheck.Files)
+
+			return true
+		}
+
 		if validation && prev.testType == s.testType && prev.projectPath == s.projectPath && prev.name == s.name {
 			prev.inputNames = sortedUnique(append(prev.inputNames, s.inputNames...))
 
@@ -1453,10 +1461,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return e.genPrebuiltProgram()
 	}
 
-	if d.yqlPrebuiltResource != "" {
-		return e.genYqlPrebuiltProgram()
-	}
-
 	applyImplicitPeerdirs(ctx, instance, d)
 
 	if isGoModuleType(d.moduleStmt.Name) {
@@ -1829,6 +1833,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 
 		d.tc = resolveModuleToolchain(ctx, resourceGlobalsClosure, instance.Platform.ClangVer)
+
+		if d.yqlPrebuiltResource != "" && d.tc.Python3 == 0 {
+			resourceGlobalsClosure = e.scriptModuleResources(resourceGlobalsClosure, "build/platform/python/ymake_python3")
+		}
 
 		deduper.reset()
 
@@ -2488,6 +2496,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		ctx.memoPut(instance, result)
 
 		return result
+	}
+
+	if d.yqlPrebuiltResource != "" {
+		out := yqlPrebuiltOutput(instance, d)
+
+		return e.genYqlPrebuiltCopy(build(out.relString(), ".prebuilt"), out, resourceGlobalsClosure)
 	}
 
 	if isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name) {

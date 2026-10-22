@@ -379,25 +379,9 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 
 func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *TestSuite {
 	project := e.instance.Path.relString()
-	s := &TestSuite{p: e.ctx.target, depends: slices.Clone(check.Depends), projectPath: project, name: check.Name, testType: check.Name, ciType: "style", size: "small", timeout: 60, supportsTestParameters: true, globals: resources, env: e.d.test.env, runInputs: []VFS{source(project)}}
+	s := &TestSuite{p: e.ctx.target, depends: slices.Clone(check.Depends), projectPath: project, name: check.Name, testType: check.Name, ciType: "style", size: "small", timeout: 60, supportsTestParameters: true, globals: resources, env: e.d.test.env, runInputs: []VFS{source(project)}, styleCheck: &check}
 
-	for _, file := range check.Files {
-		s.relatedPaths = append(s.relatedPaths, source(file).string())
-	}
-
-	if check.Config != "" {
-		s.relatedPaths = append(s.relatedPaths, source(check.Config).string())
-	}
-
-	for _, config := range check.ExtraConfigs {
-		s.relatedPaths = append(s.relatedPaths, source(config).string())
-	}
-
-	s.relatedPaths = append(s.relatedPaths, source(check.Wrapper).string())
-
-	if check.FileProcessingTime > 0 {
-		s.split = max(1, int(math.Ceil(check.FileProcessingTime*float64(len(check.Files))/float64(s.timeout))))
-	}
+	s.mergeStyleFiles(nil)
 
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
 		args := []string{testToolHostPath, "run_custom_lint", "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--project-path", source(project).string(), "--trace-path", work + "/ytest.report.trace", "--out-path", work + "/testing_out_stuff", "--lint-name", check.Name, "--wrapper-script", check.Wrapper}
@@ -430,4 +414,28 @@ func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *Te
 	}
 
 	return s
+}
+
+func (s *TestSuite) mergeStyleFiles(files []string) {
+	check := s.styleCheck
+	check.Files = sortedUnique(append(check.Files, files...))
+	s.relatedPaths = nil
+
+	for _, file := range check.Files {
+		s.relatedPaths = append(s.relatedPaths, source(file).string())
+	}
+
+	if check.Config != "" {
+		s.relatedPaths = append(s.relatedPaths, source(check.Config).string())
+	}
+
+	for _, config := range check.ExtraConfigs {
+		s.relatedPaths = append(s.relatedPaths, source(config).string())
+	}
+
+	s.relatedPaths = append(s.relatedPaths, source(check.Wrapper).string())
+
+	if check.FileProcessingTime > 0 {
+		s.split = max(1, int(math.Ceil(check.FileProcessingTime*float64(len(check.Files))/float64(s.timeout))))
+	}
 }

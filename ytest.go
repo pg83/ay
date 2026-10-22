@@ -282,6 +282,7 @@ type TestSuite struct {
 	disableLeaks           bool
 	importCheckEnv         bool
 	checkFiles             []VFS
+	styleCheck             *StyleCheck
 	p                      *Platform
 	projectPath            string
 	name                   string

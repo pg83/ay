@@ -167,6 +167,9 @@ type ModuleData struct {
 	yqlCurrent               bool
 	yqlStableABI             bool
 	yqlPrebuiltResource      string
+	yqlPrebuiltAliases       bool
+	yqlSourceSrcs            []ANY
+	yqlSourcePeers           []ANY
 	moduleVariants           uint16
 	listProtos               []ListProtoStmt
 	nots                     *NotsModule
@@ -812,6 +815,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.yqlStableABI = instance.Platform.YqlStableABI
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
+	finishYqlModule(ctx, instance, env, d, onWarn)
 	// _SRC("pyx") in ymake.core.conf uses the native Cython rule, without
 	// PY_SRCS' module registration. Keep its source ordering and GLOBAL flag.
 	nativeSources := d.srcs[:0]
@@ -825,7 +829,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	d.srcs = nativeSources
-	finishYqlModule(modulePath, env, d)
 	d.test.expandValues(env)
 
 	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
@@ -1279,7 +1282,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			applyCppTestModule(v, d, env)
 
-			if isYqlUdfStaticModule(v.Name) {
+			if isYqlUdfStaticModule(v.Name) && (v.Name != tokYqlUdfContrib || kind == KindLib) {
 				d.peerdirs = append(d.peerdirs, internAnys(yqlUdfImplicitPeers())...)
 			}
 
@@ -1425,6 +1428,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			env.setString(envMODULE_LANG, moduleLang)
 
 		case *SrcsStmt:
+			if d.yqlPrebuiltAliases {
+				d.yqlSourceSrcs = append(d.yqlSourceSrcs, expandStmtTokens(v.Sources, env)...)
+
+				continue
+			}
+
 			if d.multimodule == tokFbsLibrary && language == LangPy {
 				stmt := UnknownStmt{Name: tokPySrcs, Args: expandStmtTokens(v.Sources, env)}
 				d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
@@ -1515,6 +1524,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 		case *PeerdirStmt:
+			if d.yqlPrebuiltAliases {
+				d.yqlSourcePeers = append(d.yqlSourcePeers, expandStmtTokens(v.Paths, env)...)
+
+				continue
+			}
 
 			addInclNext := false
 
