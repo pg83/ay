@@ -9,6 +9,8 @@ import (
 type TestDependencyModule struct {
 	instance     ModuleInstance
 	bundle       bool
+	sharedObject bool
+	unrollBundle bool
 	includePeers bool
 	final        bool
 	multimodule  bool
@@ -19,7 +21,8 @@ type TestDependencyModule struct {
 func (e *EmitContext) recordTestDependencyModule(result *ModuleEmitResult, declaration TOK, env Environment) {
 	d := e.d
 	name := d.unit.Type
-	bundle := isUnionModule(name) || name == tokPackageFinal || name == tokCiGroup || name == tokGenLibrary || name == tokGoLibrary || name == tokProtoDescriptions || name == tokProtoRegistry || e.instance.Language == LangDescProto || d.nots != nil
+	bundle := isUnionModule(name) || name == tokPackageFinal || name == tokCiGroup || name == tokGenLibrary || name == tokGoLibrary || e.instance.Language == LangDescProto || d.nots != nil
+	complete := isLinkingModuleType(name) || name == tokPrebuiltProgram || name == tokPackageFinal || name == tokCiGroup || name == tokGoLibrary || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokDocs || d.nots != nil
 	includePeers := isUnionModule(name) || name == tokGenLibrary || e.instance.Language == LangDescProto
 	multimodule := d.multimodule != 0 || declaration == tokProtoLibrary || declaration == tokPy3Program || declaration == tokPy3Test || declaration == tokPy23Test || isPythonMultimodule(declaration) || declaration == tokYqlUdf || declaration == tokYqlUdfContrib
 	final := (isLinkingModuleType(name) || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokDocs) && name != tokExectest && name != tokPy2Test && name != tokPytestBin
@@ -32,15 +35,37 @@ func (e *EmitContext) recordTestDependencyModule(result *ModuleEmitResult, decla
 		final = true
 	}
 
-	result.testDependencyModule = TestDependencyModule{instance: e.instance, bundle: bundle, includePeers: includePeers, final: final, multimodule: multimodule,
-		fake: !bundle && !isLinkingModuleType(name) && env.bool(envFakeModule)}
+	sharedObject, unrollBundle := testDependencySharedObject(name), false
+
+	if bundle {
+		moduleType := env.string(envMODULE_TYPE)
+
+		if !env.hasBindingID(envMODULE_TYPE) && (name == tokGoLibrary || d.nots != nil) {
+			moduleType = "LIBRARY"
+		}
+
+		sharedObject, unrollBundle = testDependencyBundleRendering(moduleType)
+	}
+
+	result.testDependencyModule = TestDependencyModule{instance: e.instance, bundle: bundle, sharedObject: sharedObject, unrollBundle: unrollBundle, includePeers: includePeers, final: final, multimodule: multimodule,
+		fake: !complete && env.bool(envFakeModule)}
+}
+
+func testDependencySharedObject(name TOK) bool {
+	return name == tokDll || name == tokSoProgram || name == tokDynamicLibrary || name == tokPy2Module || name == tokGoDll
+}
+
+func testDependencyBundleRendering(moduleType string) (bool, bool) {
+	return moduleType == "DLL", moduleType != "PROGRAM" && moduleType != "DLL" && moduleType != "LIBRARY"
 }
 
 func (ctx *GenCtx) runtimeTestDependencyModule(dependency TestBuildDependency) TestDependencyModule {
 	result := dependency.result
 
 	if jm := result.java; jm != nil {
-		return TestDependencyModule{bundle: true, includePeers: true, final: jm.unit.finalTarget(), multimodule: len(javaModuleUnits[jm.stmt]) > 1 || jm.unit.proto || jm.unit.fbs, peers: result.testDependencyModule.peers}
+		sharedObject, unrollBundle := testDependencyBundleRendering(jm.data.env.string(envMODULE_TYPE))
+
+		return TestDependencyModule{bundle: true, sharedObject: sharedObject, unrollBundle: unrollBundle, includePeers: true, final: jm.unit.finalTarget(), multimodule: len(javaModuleUnits[jm.stmt]) > 1 || jm.unit.proto || jm.unit.fbs, fake: jm.unit.kind == juContrib && jm.data.env.bool(envFakeModule), peers: result.testDependencyModule.peers}
 	}
 
 	return result.testDependencyModule
@@ -110,13 +135,15 @@ func (ctx *GenCtx) runtimeTestOutputDirs(dependency TestBuildDependency, seen ma
 
 	seen[result] = true
 
-	if result.LDPath != nil && result.ARPath == nil && isLinkingModuleType(result.ModuleStmtName) && result.ModuleStmtName != tokDllTool {
-		return []string{path.Dir(result.LDPath.string())}
+	module := ctx.runtimeTestDependencyModule(dependency)
+
+	if output := testDependencyOutput(result); output != 0 && module.sharedObject {
+		return []string{path.Dir(output.string())}
 	}
 
 	var dirs []string
 
-	if module := ctx.runtimeTestDependencyModule(dependency); module.bundle {
+	if module.unrollBundle {
 		for _, peer := range module.peers {
 			dirs = append(dirs, ctx.runtimeTestOutputDirs(peer, seen)...)
 		}
