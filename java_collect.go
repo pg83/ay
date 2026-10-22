@@ -756,6 +756,10 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.javaProtobufPeers = append(d.javaProtobufPeers, "contrib/java/io/grpc/grpc-stub/"+javaGrpcVersion, "contrib/java/io/grpc/grpc-protobuf/"+javaGrpcVersion)
 		d.expandJavaProtobufPeers()
 		d.javaProtobufPeers = append(d.javaProtobufPeers, "contrib/java/javax/annotation/javax.annotation-api/1.3.1")
+	case "GO_GRPC_GATEWAY_SWAGGER_SRCS":
+		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: goGatewayV1Options, explicit: true})
+	case "GO_GRPC_GATEWAY_V2_OPENAPI_SRCS":
+		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: goGatewayV2Options, explicit: true})
 	case "WITH_KOTLIN_GRPC":
 		d.kotlinProto = true
 		d.javaProtoArgs = append(d.javaProtoArgs, JavaProtoPlugin{kotlinGrpc: true})
