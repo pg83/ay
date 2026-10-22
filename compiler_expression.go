@@ -14,7 +14,7 @@ func compilerFlagExpression(text string, env Environment, expanding []string) (a
 	var word, key strings.Builder
 	var quote byte
 	var variable []string
-	hasTerm, standalone := false, false
+	hasTerm, standalone, started := false, false, false
 	flush := func() {
 		if standalone {
 			args = append(args, variable...)
@@ -34,6 +34,23 @@ func compilerFlagExpression(text string, env Environment, expanding []string) (a
 			i += width
 			continue
 		}
+		// CmdParser.main/scr allow empty leading/trailing && commands.
+		// A variable spliced into arguments must still contain at most one
+		// nonempty syntax command, even if its variables later expand to empty.
+		if quote == 0 && ch == '&' && i+1 < len(text) && text[i+1] == '&' {
+			if started {
+				if !commandSeparatorTail(text[i:]) {
+					throwFmt("could not parse compiler command: command separator in compiler arguments %q", text)
+				}
+				flush()
+				key.WriteString(text[i:])
+				return args, key.String()
+			}
+			key.WriteString(text[i : i+2])
+			i += 2
+			continue
+		}
+		started = true
 		if ch == '\\' {
 			end := min(i+2, len(text))
 			word.WriteString(compilerFlagLiteral(text[i:end], quote != 0))
@@ -64,9 +81,9 @@ func compilerFlagExpression(text string, env Environment, expanding []string) (a
 				name := text[nameStart:i]
 				if braced {
 					// Source EscapeArgs emits quo for whole && and ; arguments.
-					literal := strings.HasPrefix(text[i:], `:"`) && name == "quo" || name == "" && i < len(text) && text[i] == '"'
+					literal := strings.HasPrefix(text[i:], `:"`) && (name == "quo" || name == "comma") || name == "" && i < len(text) && text[i] == '"'
 					if literal {
-						if name == "quo" {
+						if name != "" {
 							i++
 						}
 						i++
@@ -81,7 +98,11 @@ func compilerFlagExpression(text string, env Environment, expanding []string) (a
 							throwFmt("could not parse compiler command: unclosed string in %q", text)
 						}
 						value := text[begin:i]
-						word.WriteString(compilerFlagLiteral(value, true))
+						if name == "comma" {
+							word.WriteByte(',')
+						} else {
+							word.WriteString(compilerFlagLiteral(value, true))
+						}
 						i++
 					} else if name == "" {
 						throwFmt("could not parse compiler command: expected identifier in %q", text)
@@ -129,6 +150,19 @@ func compilerFlagExpression(text string, env Environment, expanding []string) (a
 	}
 	flush()
 	return args, key.String()
+}
+
+func commandSeparatorTail(text string) bool {
+	for {
+		text = strings.TrimLeftFunc(text, unicode.IsSpace)
+		if text == "" {
+			return true
+		}
+		if !strings.HasPrefix(text, "&&") {
+			return false
+		}
+		text = text[2:]
+	}
 }
 
 // The command parser unescapes raw and quoted text differently. TEXT_NOP

@@ -98,7 +98,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 
 	walk(root)
 
-	needed := map[string]bool{sysinclVar: true}
+	needed := map[string]bool{sysinclVar: true, "__COMMA__": true}
 	used := make([]bool, len(stmts))
 	need := func(name string) { needed[name] = true }
 
@@ -134,7 +134,25 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 		}
 	}
 
+	// Keep the source-defined command constant as an expression. Its comma
+	// modifier runs after macro argument binding, rather than becoming a
+	// literal argument delimiter during source evaluation.
+	bindConfCommandVariable("__COMMA__", env, platformEnv, map[string]bool{})
+
 	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env)), macros
+}
+
+func bindConfCommandVariable(name string, values, target Environment, seen map[string]bool) {
+	if seen[name] {
+		return
+	}
+	seen[name] = true
+	key := internEnv(name)
+	if values.hasBindingID(key) {
+		value := values.string(key)
+		target.setString(key, value)
+		confValueVars(value, func(dependency string) { bindConfCommandVariable(dependency, values, target, seen) })
+	}
 }
 
 func (pm *IncludeParserManager) sysinclRecords(rel string, onWarn func(Warn)) []SysIncl {

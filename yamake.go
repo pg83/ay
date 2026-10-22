@@ -770,7 +770,7 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 	for pos < len(l.src) {
 		b := l.src[pos]
 
-		if (b == '\\' && pos+1 < len(l.src) && l.src[pos+1] == '"') || b == '"' || b == '\'' {
+		if (b == '\\' && pos+1 < len(l.src)) || b == '"' || b == '\'' {
 			complex = true
 
 			break
@@ -813,7 +813,7 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 	for l.pos < len(l.src) {
 		b := l.src[l.pos]
 
-		if b == '\\' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '"' {
+		if b == '\\' && l.pos+1 < len(l.src) {
 			pureIdent = false
 
 			buf = append(buf, l.advance())
@@ -865,7 +865,7 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 	for pos < len(l.src) {
 		b := l.src[pos]
 
-		if (b == '\\' && pos+1 < len(l.src) && l.src[pos+1] == '"') || (b == '"' || b == '\'') && pos > start {
+		if (b == '\\' && pos+1 < len(l.src)) || (b == '"' || b == '\'') && pos > start {
 			complex = true
 
 			break
@@ -891,7 +891,7 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 	for l.pos < len(l.src) {
 		b := l.src[l.pos]
 
-		if b == '\\' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '"' {
+		if b == '\\' && l.pos+1 < len(l.src) {
 			buf = append(buf, l.advance())
 			buf = append(buf, l.advance())
 
@@ -930,6 +930,9 @@ func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 		kind = tokWord
 
 		for pos < len(l.src) && l.isWordByte(l.src[pos]) {
+			if l.src[pos] == '\\' && pos+1 < len(l.src) {
+				return l.readWord(startLine, startCol)
+			}
 			pos++
 		}
 	}
@@ -1148,7 +1151,7 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 
 	defer func() { p.lex.inArgs = false }()
 
-	lexicalArgs := nameTok.id == kwCFLAGS || nameTok.id == tokGlobalCflags.str() || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS || nameTok.id == kwRESOURCE || nameTok.id == tokUseRecipe.str()
+	lexicalArgs := nameTok.id == kwCFLAGS || nameTok.id == tokGlobalCflags.str() || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS || nameTok.id == kwRESOURCE || nameTok.id == tokUseRecipe.str() || nameTok.string() == "RUN_PROGRAM" || nameTok.string() == "RUN_PY3_PROGRAM"
 
 	for {
 		start := 0

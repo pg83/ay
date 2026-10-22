@@ -455,7 +455,12 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		// declaring context remains valid until the pending emit completes.
 		dirs = Environment{s: &e.ctx.frames[e.ctx.frameDepth-1].ifEnv}
 	}
-	envPairs := expandTokens(stmt.EnvPairs, dirs, false, tokenExpandFinal)
+	envPairs := stmt.EnvPairs
+	if stmt.CallArgs != nil {
+		envPairs = compilerCommandFlags(stmt.EnvPairs, dirs).Args
+	} else {
+		envPairs = expandTokens(stmt.EnvPairs, dirs, false, tokenExpandFinal)
+	}
 
 	if len(envPairs) > 0 {
 		block := na.envs.alloc(1 + len(envPairs))[:0]
@@ -477,7 +482,12 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		env = EnvVars(block[:len(block):len(block)])
 	}
 
-	args := expandTokens(stmt.Args, dirs, false, tokenExpandFinal)
+	args := stmt.Args
+	if stmt.CallArgs != nil {
+		args = compilerCommandFlags(stmt.Args, dirs).Args
+	} else {
+		args = expandTokens(stmt.Args, dirs, false, tokenExpandFinal)
+	}
 	cmdArgs := na.anys.alloc(1 + len(args))[:0]
 
 	cmdArgs = append(cmdArgs, spec.toolBinPath.any())

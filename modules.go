@@ -806,6 +806,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	d.srcs = nativeSources
+	bindRunProgramCalls(d, env)
 	d.test.expandValues(env)
 
 	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
@@ -2148,19 +2149,25 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 
 func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
 	if v.CallArgs != nil {
-		bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
-		args := expandTokens(v.CallArgs, env, false, tokenExpandArguments)
-
-		env.rebind(envBINDIR, bindir)
-		env.rebind(envCURDIR, curdir)
+		args := runProgramSourceArguments(v.CallArgs, env)
 
 		if len(args) == 0 {
 			throwFmt("RUN_PROGRAM expects at least 1 argument (tool path)")
 		}
 
-		v = parseRunProgram(args, v.Line)
+		captured := *v
+		captured.CallArgs = args
+		captured.DeclSeq = d.nextDeclSeq()
+		d.runPrograms = append(d.runPrograms, &captured)
+		return
 	}
 
+	expanded := bindRunProgramFiles(v, env)
+	expanded.DeclSeq = d.nextDeclSeq()
+	d.runPrograms = append(d.runPrograms, expanded)
+}
+
+func bindRunProgramFiles(v *RunProgramStmt, env Environment) *RunProgramStmt {
 	expanded := *v
 
 	expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
@@ -2178,8 +2185,10 @@ func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
 
 	bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
 
-	expanded.Args = expandTokens(v.Args, env, true, tokenExpandArguments)
-	expanded.EnvPairs = expandTokens(v.EnvPairs, env, false, tokenExpandArguments)
+	if v.CallArgs == nil {
+		expanded.Args = expandTokens(v.Args, env, true, tokenExpandArguments)
+		expanded.EnvPairs = expandTokens(v.EnvPairs, env, false, tokenExpandArguments)
+	}
 
 	if v.CWD != nil {
 		cwd := expandStmtTokenAny(*v.CWD, env)
@@ -2190,8 +2199,7 @@ func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
 	env.rebind(envBINDIR, bindir)
 	env.rebind(envCURDIR, curdir)
 
-	expanded.DeclSeq = d.nextDeclSeq()
-	d.runPrograms = append(d.runPrograms, &expanded)
+	return &expanded
 }
 
 func warnUnmodelledMacro(onWarn func(Warn), modulePath string, name TOK) {
