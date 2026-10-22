@@ -286,6 +286,7 @@ type JavaData struct {
 	protoSrcs         []string
 	flatcFlags        []ANY
 	evSrcs            []string
+	runPython         []*RunPythonStmt
 	fromSandboxes     []*FromSandboxStmt
 	files             []string
 	srcDirs           []VFS
@@ -516,7 +517,7 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 
 	jm.setupIncDirs()
 
-	ctx.javaRegisterOutputs(jm)
+	ctx.javaRegisterOutputs(jm, ctx.frames[ctx.frameDepth-1])
 
 	if ctx.peerTests {
 		for _, peer := range jm.direct {

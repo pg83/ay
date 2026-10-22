@@ -194,7 +194,7 @@ func (jm *JavaModule) outputs() []VFS {
 	return nil
 }
 
-func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
+func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule, frame *ModuleFrame) {
 	if jm.unit.fbs {
 		ctx.javaRegisterFbsSources(jm)
 	}
@@ -203,7 +203,7 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
 		ctx.javaRegisterRunPrograms(jm)
 	}
 
-	ctx.javaRegisterFromSandboxes(jm)
+	ctx.javaRegisterProducers(jm, frame)
 	ctx.javaRegisterFiles(jm)
 
 	outs := jm.outputs()
@@ -228,22 +228,31 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule) {
 	}
 }
 
+func (jm *JavaModule) acceptsInput(out VFS) bool {
+	ext := path.Ext(out.relString())
+
+	switch jm.unit.kind {
+	case juJar:
+		if ext != ".jsrc" && ext != ".java" && ext != ".jar" && ext != ".mf" && ext != ".gentar" && ext != ".kt" {
+			return false
+		}
+	case juExternal:
+		if ext != ".jsrc" && ext != ".java" && ext != ".jar" && ext != ".mf" {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (ctx *GenCtx) javaRegisterFiles(jm *JavaModule) {
 	reg := ctx.javaReg(jm)
 
 	for _, file := range jm.data.files {
 		dst := copyFileOutputVFS(jm.dir, file)
-		ext := path.Ext(dst.relString())
 
-		switch jm.unit.kind {
-		case juJar:
-			if ext != ".jsrc" && ext != ".java" && ext != ".jar" && ext != ".mf" && ext != ".gentar" && ext != ".kt" {
-				continue
-			}
-		case juExternal:
-			if ext != ".jsrc" && ext != ".java" && ext != ".jar" && ext != ".mf" {
-				continue
-			}
+		if !jm.acceptsInput(dst) {
+			continue
 		}
 
 		jm.macroOuts = append(jm.macroOuts, dst)
@@ -272,30 +281,53 @@ func (ctx *GenCtx) javaRegisterFiles(jm *JavaModule) {
 	}
 }
 
-func (ctx *GenCtx) javaRegisterFromSandboxes(jm *JavaModule) {
-	reg := ctx.javaReg(jm)
+func (ctx *GenCtx) javaRegisterProducers(jm *JavaModule, frame *ModuleFrame) {
+	if len(jm.data.fromSandboxes) == 0 && len(jm.data.runPython) == 0 {
+		return
+	}
 
-	for _, stmt := range jm.data.fromSandboxes {
-		node, outs := fromSandboxNode(ctx.na, jm.instance, javaPython3.any(), stmt)
+	d := &frame.d
 
-		jm.macroOuts = append(jm.macroOuts, outs...)
+	d.reset()
 
-		if reg.lookup(outs[0]) != nil {
-			continue
+	d.moduleStmt = &ModuleStmt{Name: jm.stmt}
+	d.unit.Type = jm.stmt
+	d.fromSandboxes = jm.data.fromSandboxes
+	d.runPython = jm.data.runPython
+	d.srcDirs = jm.data.srcDirs
+	d.tc = ModuleToolchain{Python3: javaPython3}
+	d.cc.TC = d.tc
+	d.scanCtx = newModuleScanContext(ctx, jm.instance, d, nil, nil, nil, nil)
+
+	frame.peerCtx = PeerContext{ResourceGlobals: ctx.javaResourceGlobals(jm)}
+	e := newEmitContextIn(frame, ctx, jm.instance, d, &frame.peerCtx)
+
+	e.emitFromSandboxes()
+	e.emitDeclaredProducers(nil)
+
+	add := func(tokens []ANY) {
+		for _, token := range tokens {
+			out := copyFileOutputVFS(jm.dir, token.string())
+
+			if !jm.acceptsInput(out) {
+				continue
+			}
+
+			jm.macroOuts = javaPushUniq(jm.macroOuts, out)
 		}
+	}
 
-		ref := ctx.emit.reserve()
-		pending := ctx.javaPendingEmit(func() { ctx.emit.emitReservedNodePtr(&node, ref) })
+	for _, stmt := range d.fromSandboxes {
+		add(stmt.OUTFiles)
+		add(stmt.OUTNoAutoFiles)
+	}
 
-		for _, out := range outs {
-			reg.register(GeneratedFileInfo{
-				OutputPath:      out,
-				OwnerModule:     jm.path,
-				ProducerRef:     ref,
-				ProducerMainOut: outs[0],
+	for _, stmt := range d.runPython {
+		add(stmt.OUTFiles)
+		add(stmt.OUTNoAutoFiles)
 
-				OnUse: pending,
-			})
+		if stmt.StdoutFile != nil {
+			add([]ANY{*stmt.StdoutFile})
 		}
 	}
 }
@@ -478,7 +510,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 	srcJar := build(jm.dir, "/", jm.name, "-sources.jar")
 	b := ctx.javaBuilderReq(jm, &javaReqCPU4)
 
-	var autoInputs []VFS
+	autoInputs := append([]VFS{}, jm.macroOuts...)
 
 	if jm.unit.proto {
 		scanCtx := newScanContext(ctx.na, ctx.parsers, nil, nil, nil, includeScannerBasePaths())
@@ -555,7 +587,6 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 	b.setKV(pkJV, pcLightBlue, true)
 	b.outputs = []VFS{jm.target, srcJar}
 	b.closure(closure)
-	b.macroOuts(jm)
 
 	for _, in := range autoInputs {
 		b.deps = append(b.deps, b.use(in))

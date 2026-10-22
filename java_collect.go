@@ -280,6 +280,8 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 					d.srcs = append(d.srcs, ss)
 				}
 			}
+		case *RunPythonStmt:
+			d.runPython = append(d.runPython, expandRunPythonStmt(v, env))
 		case *FromSandboxStmt:
 			expanded := *v
 
@@ -287,6 +289,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
 			expanded.Renames = expandStmtTokens(v.Renames, env)
+			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *SrcDirStmt:

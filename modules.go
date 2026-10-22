@@ -763,6 +763,33 @@ func (d *ModuleData) materializeAddIncl() {
 	d.addInclP = nil
 }
 
+func expandRunPythonStmt(stmt *RunPythonStmt, env Environment) *RunPythonStmt {
+	expanded := *stmt
+
+	expanded.ScriptPath = expandStmtTokenAny(stmt.ScriptPath, env)
+	expanded.Args = expandCommandTokens(stmt.Args, env)
+	expanded.INFiles, expanded.INNoParse = expandInFiles(stmt.INFiles, stmt.INNoParse, env, false)
+	expanded.OUTFiles = expandStmtTokens(stmt.OUTFiles, env)
+	expanded.OUTNoAutoFiles = expandStmtTokens(stmt.OUTNoAutoFiles, env)
+	expanded.EnvPairs = expandStmtTokens(stmt.EnvPairs, env)
+	expanded.ToolPaths = expandStmtTokens(stmt.ToolPaths, env)
+	expanded.OutputIncludes = expandStmtTokens(stmt.OutputIncludes, env)
+
+	if stmt.StdoutFile != nil {
+		stdout := expandStmtTokenAny((*stmt.StdoutFile), env)
+
+		expanded.StdoutFile = &stdout
+	}
+
+	if stmt.CWD != nil {
+		cwd := expandStmtTokenAny(*stmt.CWD, env)
+
+		expanded.CWD = &cwd
+	}
+
+	return &expanded
+}
+
 func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env Environment, onWarn func(Warn), d *ModuleData) *ModuleData {
 	pm := ctx.parsers
 	fs := ctx.fs
@@ -1712,31 +1739,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.peerdirs = append(d.peerdirs, p)
 			}
 		case *RunPythonStmt:
-			expanded := *v
-
-			expanded.ScriptPath = expandStmtTokenAny(v.ScriptPath, env)
-			expanded.Args = expandCommandTokens(v.Args, env)
-			expanded.INFiles, expanded.INNoParse = expandInFiles(v.INFiles, v.INNoParse, env, false)
-			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
-			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
-			expanded.EnvPairs = expandStmtTokens(v.EnvPairs, env)
-			expanded.ToolPaths = expandStmtTokens(v.ToolPaths, env)
-			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
-
-			if v.StdoutFile != nil {
-				stdout := expandStmtTokenAny((*v.StdoutFile), env)
-
-				expanded.StdoutFile = &stdout
-			}
-
-			if v.CWD != nil {
-				cwd := expandStmtTokenAny(*v.CWD, env)
-
-				expanded.CWD = &cwd
-			}
+			expanded := expandRunPythonStmt(v, env)
 
 			expanded.DeclSeq = d.nextDeclSeq()
-			d.runPython = append(d.runPython, &expanded)
+			d.runPython = append(d.runPython, expanded)
 		case *FromSandboxStmt:
 			expanded := *v
 
