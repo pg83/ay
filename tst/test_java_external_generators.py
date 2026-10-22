@@ -118,6 +118,22 @@ RUN_PYTHON3(writer.py first.jsrc side.java ignored.txt OUT first.jsrc OUT_NOAUTO
         self.assertTrue(any("$(B)/resources/contents.dat" in command["cmd_args"]
                             for command in jar["cmds"]))
 
+    def test_deferred_suites_preserve_declarations_after_producer_frame_reuse(self):
+        files = lib.java_tree(**{
+            "generated/ya.make": "EXTERNAL_JAVA_LIBRARY(assembled)\nFROM_SANDBOX(53 OUT seed.dict)\nRUN_PYTHON3(writer.py staging.jar seed.dict IN seed.dict OUT staging.jar)\nEND()\n",
+            "generated/writer.py": "import sys\n",
+            "later/ya.make": "EXTERNAL_JAVA_LIBRARY(second)\nFROM_SANDBOX(FILE 59 OUT imported.jar)\nEND()\n",
+        })
+        graph = lib.make(files, "generated", "later", "--target-platform-tests", opensource=False)
+        sandbox = lib.node_by_output(graph, "$(B)/generated/seed.dict")
+        python = lib.node_by_output(graph, "$(B)/generated/staging.jar")
+        jar = lib.node_by_output(graph, "$(B)/generated/assembled.jar")
+        self.assertIn(sandbox["uid"], python["deps"])
+        self.assertIn(python["uid"], jar["deps"])
+        validation = next(node for node in graph["graph"]
+                          if node["kv"].get("path") == "generated/validate_resource")
+        self.assertTrue(any("53" in command["cmd_args"] for command in validation["cmds"]))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

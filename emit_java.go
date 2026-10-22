@@ -292,9 +292,9 @@ func (ctx *GenCtx) javaRegisterProducers(jm *JavaModule, frame *ModuleFrame) {
 
 	d.moduleStmt = &ModuleStmt{Name: jm.stmt}
 	d.unit.Type = jm.stmt
-	d.fromSandboxes = jm.data.fromSandboxes
-	d.runPython = jm.data.runPython
-	d.srcDirs = jm.data.srcDirs
+	d.fromSandboxes = append(d.fromSandboxes, jm.data.fromSandboxes...)
+	d.runPython = append(d.runPython, jm.data.runPython...)
+	d.srcDirs = append(d.srcDirs, jm.data.srcDirs...)
 	d.tc = ModuleToolchain{Python3: javaPython3}
 	d.cc.TC = d.tc
 	d.scanCtx = newModuleScanContext(ctx, jm.instance, d, nil, nil, nil, nil)
