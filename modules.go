@@ -633,7 +633,9 @@ func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 
 func copyFileOutputVFS(modulePath string, dst string) VFS {
 	if vfs, ok := moduleRootedVFS(modulePath, dst); ok {
-		return vfs
+		// TModuleResolver::FormatBuildPath replaces any known root with Build
+		// and reconstructs the path, independently of the noauto modifier.
+		return buildClean(vfs.relString())
 	}
 
 	return buildJoinClean(modulePath, dst)
