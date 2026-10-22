@@ -201,10 +201,14 @@ class YaMakePythonTest(unittest.TestCase):
         )
         self.assertEqual(registered, [
             "c3", "custom.name", "cy", "my.ns.c1", "my.ns.c2", "my.ns.c4", "plain",
-            "reg.mod", "s_swg",
+            "reg.mod", "s2_swg", "s_swg",
         ])
-        swig = lib.only_node_by_kind(graph, "SW")
+        swig = lib.node_by_output(graph, "$(B)/a/s.swg.c")
         self.assertEqual(swig["outputs"], ["$(B)/a/s.swg.c", "$(B)/a/s.py"])
+        self.assertNotIn("-c++", swig["cmds"][0]["cmd_args"])
+        cpp = lib.node_by_output(graph, "$(B)/a/s2.swg.cpp")
+        self.assertEqual(cpp["outputs"], ["$(B)/a/s2.swg.cpp", "$(B)/a/s2.py"])
+        self.assertIn("-c++", cpp["cmds"][0]["cmd_args"])
         self.assertIn("$(S)/a/stubs.pyi", {
             source for node in graph["graph"] for source in node["inputs"]
         })

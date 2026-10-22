@@ -97,16 +97,16 @@ class ResourceRawTest(unittest.TestCase):
             "$(B)/tools/rescompiler/rescompiler",
             output,
             "-",
-            "resfs/src/resfs/file/py/lib/gen.py.yapyc3=lib/gen.py.yapyc3",
-            "$(B)/lib/gen.py.yapyc3",
+            "resfs/src/resfs/file/py/lib/gen.py.yapyc3=lib/gen.py.zsw2.yapyc3",
+            "$(B)/lib/gen.py.zsw2.yapyc3",
             "-resfs/file/py/lib/gen.py.yapyc3",
         ])
         self.assertEqual(aux["inputs"], [
-            "$(B)/lib/gen.py.yapyc3",
+            "$(B)/lib/gen.py.zsw2.yapyc3",
             "$(B)/tools/rescompiler/rescompiler",
         ])
         rescompiler = lib.node_by_output(graph, "$(B)/tools/rescompiler/rescompiler")
-        bytecode = lib.node_by_output(graph, "$(B)/lib/gen.py.yapyc3")
+        bytecode = lib.node_by_output(graph, "$(B)/lib/gen.py.zsw2.yapyc3")
         self.assertEqual(
             sorted(aux["deps"]),
             sorted([rescompiler["uid"], bytecode["uid"]]),

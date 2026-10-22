@@ -72,7 +72,8 @@ class RunProgramCallArgumentsTest(unittest.TestCase):
         files = workspace("SET(CALL tools/missing --mode packed)\nRUN_PROGRAM(${CALL} OUT_NOAUTO records.bin)")
         result = lib.make_process(files, "catalog/packed")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("open tools/missing/ya.make: no such file or directory", result.stderr)
+        self.assertIn("tools/missing/ya.make: no such file or directory", result.stderr)
+        self.assertNotIn("$(S)/", result.stderr)
 
     def test_cached_lexical_call_keeps_each_modules_variable_context(self):
         files = workspace("")
@@ -117,7 +118,8 @@ class RunProgramCallArgumentsTest(unittest.TestCase):
         files = {"checks/ya.make": "EXECTEST()\nRUN(true)\nDEPENDS(${ARCADIA_ROOT}/missing/project)\nEND()\n"}
         result = lib.make_process(files, "checks", "-t")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("open missing/project/ya.make: no such file or directory", result.stderr)
+        self.assertIn("missing/project/ya.make: no such file or directory", result.stderr)
+        self.assertNotIn("$(S)/", result.stderr)
 
 
 if __name__ == "__main__":
