@@ -156,19 +156,28 @@ class CopyMacroTest(unittest.TestCase):
                                      f"$(B)/{name}/{name}_installed/nested/item.dat")
 
     def test_uppercase_source_and_option_values_remain_user_data(self):
-        graph = lib.make({
-            "parcel/ya.make": (
-                "UNION()\nCOPY(UPPER_PAYLOAD FROM UPPER_SOURCE DESTINATION UPPER_DEST "
-                "RESULT UPPER_RESULT OUTPUT_INCLUDES UPPER_CONTEXT)\n"
-                "COPY_FILE(${BINDIR}/${UPPER_RESULT} repeated.dat)\nEND()\n"
-            ),
-            "UPPER_SOURCE/UPPER_PAYLOAD": "payload\n",
-            "parcel/UPPER_DEST/UPPER_CONTEXT": "context\n",
-        }, "parcel")
-        copied = self.assert_copy(graph, "$(S)/UPPER_SOURCE/UPPER_PAYLOAD", "$(B)/parcel/UPPER_DEST/UPPER_PAYLOAD")
-        repeated = lib.node_by_output(graph, "$(B)/parcel/repeated.dat")
-        self.assertEqual(repeated["inputs"], ["$(B)/parcel/UPPER_DEST/UPPER_PAYLOAD", "$(S)/parcel/UPPER_DEST/UPPER_CONTEXT"])
-        self.assertIn(copied["uid"], repeated["deps"])
+        # ymake.core.conf defaults UNION to DONT_RESOLVE_INCLUDES=yes;
+        # module_resolver.cpp skips output-include resolution in that mode.
+        for resolve in (False, True):
+            with self.subTest(resolve=resolve):
+                mode = "SET(DONT_RESOLVE_INCLUDES no)\n" if resolve else ""
+                graph = lib.make({
+                    "parcel/ya.make": (
+                        "UNION()\n" + mode
+                        + "COPY(UPPER_PAYLOAD FROM UPPER_SOURCE DESTINATION UPPER_DEST "
+                        "RESULT UPPER_RESULT OUTPUT_INCLUDES UPPER_CONTEXT)\n"
+                        "COPY_FILE(${BINDIR}/${UPPER_RESULT} repeated.dat)\nEND()\n"
+                    ),
+                    "UPPER_SOURCE/UPPER_PAYLOAD": "payload\n",
+                    "parcel/UPPER_DEST/UPPER_CONTEXT": "context\n",
+                }, "parcel")
+                copied = self.assert_copy(graph, "$(S)/UPPER_SOURCE/UPPER_PAYLOAD", "$(B)/parcel/UPPER_DEST/UPPER_PAYLOAD")
+                repeated = lib.node_by_output(graph, "$(B)/parcel/repeated.dat")
+                expected = ["$(B)/parcel/UPPER_DEST/UPPER_PAYLOAD"]
+                if resolve:
+                    expected.append("$(S)/parcel/UPPER_DEST/UPPER_CONTEXT")
+                self.assertEqual(repeated["inputs"], expected)
+                self.assertIn(copied["uid"], repeated["deps"])
 
     def test_copy_values_do_not_exempt_other_macros_from_validation(self):
         for value in ("UPPER_PAYLOAD", "UPPER_SOURCE", "UPPER_DEST", "UPPER_RESULT"):
