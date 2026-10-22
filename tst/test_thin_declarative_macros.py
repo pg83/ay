@@ -143,11 +143,12 @@ class ThinDeclarativeMacrosTest(unittest.TestCase):
         self.assertEqual(checks(graph), checks(lib.make(sources, "renamed/jvm", "--target-platform-tests")))
 
     def test_pack_final_value_adds_archive_output_and_command_option(self):
-        for extension in ("tar", "tar.gz", "", "no"):
+        for extension in ("tar", "tar.gz", "", "no", "0", "off"):
             with self.subTest(extension=extension):
+                pack_arg = "$EXTENSION" if extension in ("tar", "tar.gz") else (extension or '""')
                 sources = {
                     "renamed/crate/ya.make": (
-                        f"PACKAGE(delivery)\nSET(EXTENSION {extension or 'tar'})\nPACK($EXTENSION)\n"
+                        f"PACKAGE(delivery)\nSET(EXTENSION {extension or 'tar'})\nPACK({pack_arg})\n"
                         + ("SET(PACKED_PACKAGE_EXT)\n" if not extension else "SET(EXTENSION later)\n") +
                         "FILES(payload.txt)\nEND()\n"
                     ),
@@ -161,7 +162,7 @@ class ThinDeclarativeMacrosTest(unittest.TestCase):
                 union = lib.node_by_output(graph, "$(B)/renamed/crate/delivery.pkg.fake")
                 cmd = next(cmd["cmd_args"] for cmd in final["cmds"]
                            if "$(S)/build/scripts/copy_to_dir.py" in cmd["cmd_args"])
-                if extension in ("tar", "tar.gz"):
+                if extension:
                     archive = f"$(B)/renamed/crate/delivery.{extension}"
                     self.assertIn(archive, final["outputs"])
                     self.assertEqual(cmd[cmd.index("--dest-arch"):cmd.index("--dest-arch") + 2],

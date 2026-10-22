@@ -128,7 +128,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	args := []ANY{e.d.tc.Python3.any(), copyScript.any(), strYaStartCommandFile.any(), strDestDir.any(), build(module).any(), strBuildRoot2.any(), bldRootDirVFS.any()}
 	outputs := []VFS{out}
 
-	if env := (Environment{s: &e.frame.ifEnv}); env.bool(envPackedPackageExt) {
+	if env := (Environment{s: &e.frame.ifEnv}); env.string(envPackedPackageExt) != "" {
 		archive := build(module, "/", name, ".", env.string(envPackedPackageExt))
 
 		args = append(args, internStr("--dest-arch").any(), archive.any())
