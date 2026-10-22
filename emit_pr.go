@@ -82,7 +82,7 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 
 func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	ctx, instance := e.ctx, e.instance
-	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.string())))
+	res := ctx.toolResult(internArg(filepath.Clean(stmt.ToolPath.relOrSelf().string())))
 	auxTools := resolveRunProgramAuxTools(ctx, anyStrs(stmt.ToolPaths))
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 	inSources := make([]VFS, 0, len(stmt.INFiles))

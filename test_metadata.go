@@ -103,7 +103,10 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 			t.data = append(t.data, "arcadia/"+strings.TrimPrefix(strings.TrimPrefix(a, "$(S)/"), "${ARCADIA_ROOT}/"))
 		}
 	case tokDepends:
-		t.depends = append(t.depends, args...)
+
+		for _, arg := range v.Args {
+			t.depends = append(t.depends, arg.relOrSelf().string())
+		}
 	case tokUseRecipe:
 		t.recipes = append(t.recipes, value)
 	case tokTag:

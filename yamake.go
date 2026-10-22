@@ -263,6 +263,7 @@ type DefaultVarStmt struct {
 
 type RunProgramStmt struct {
 	KV             *KV
+	CallArgs       []ANY
 	ToolPath       ANY
 	Args           []ANY
 	INFiles        []ANY
@@ -1619,7 +1620,7 @@ func parseFromSandbox(args []ANY, line int) *FromSandboxStmt {
 }
 
 func parseRunProgram(args []ANY, line int) *RunProgramStmt {
-	stmt := &RunProgramStmt{ToolPath: args[0], Line: line}
+	stmt := &RunProgramStmt{CallArgs: args, ToolPath: args[0], Line: line}
 	i := 1
 	currentSection := kwARGS.any()
 

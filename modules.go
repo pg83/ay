@@ -2101,6 +2101,20 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 }
 
 func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
+	if v.CallArgs != nil {
+		bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
+		args := expandTokens(v.CallArgs, env, false, tokenExpandArguments)
+
+		env.rebind(envBINDIR, bindir)
+		env.rebind(envCURDIR, curdir)
+
+		if len(args) == 0 {
+			throwFmt("RUN_PROGRAM expects at least 1 argument (tool path)")
+		}
+
+		v = parseRunProgram(args, v.Line)
+	}
+
 	expanded := *v
 
 	expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
