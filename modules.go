@@ -3320,6 +3320,19 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2, tokCppEvProtoPlugin:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
+	case tokTasklet:
+		if len(v.Args) != 0 {
+			throwFmt("TASKLET expects no arguments, got %d", len(v.Args))
+		}
+
+		d.peerdirs = append(d.peerdirs, internStr("tasklet/v1/api").any())
+		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokCppProtoPlugin, Args: internAnys([]string{
+			"tasklet_cpp", "tasklet/v1/gen/cpp", ".tasklet.h",
+		})}, d, env, onWarn)
+		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPyProtoPlugin2, Args: internAnys([]string{
+			"tasklet_py", "_tasklet.py", "_sbtask.py", "tasklet/v1/gen/python", "DEPS",
+			"tasklet/v1/domain/sandbox", "tasklet/v1/runtime", "sandbox/sdk2",
+		})}, d, env, onWarn)
 	case tokPyProtoPlugin, tokPyProtoPlugin2:
 		if isPythonProtoModule(d) || isPythonModuleType(d.unit.Type) {
 			d.pyProtoPlugins = append(d.pyProtoPlugins, parsePyProtoPlugin(v))

@@ -69,7 +69,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"DATA":                            {},
 	"TEST_SRCS":                       {},
 	"LINT":                            {},
-	"TASKLET":                         {},
 	"TASKLETSUPPORT":                  {},
 	"DEFAULT":                         {},
 	"USE_CXX":                         {},
