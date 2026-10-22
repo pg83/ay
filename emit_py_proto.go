@@ -124,11 +124,10 @@ func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, pyOut, grp
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
 
 	moduleKey := func(suffix string) STR {
-		key := keyDir + keySep + keyBase + suffix
+		key := strings.ReplaceAll(keyDir+keySep+keyBase+suffix, "-", "_")
 
 		if d.usePython2 {
 			key = strings.ReplaceAll(strings.TrimSuffix(key, ".py"), "/", ".")
-			key = strings.ReplaceAll(key, "-", "_")
 		}
 
 		return internStr(key)
