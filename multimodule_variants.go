@@ -90,12 +90,10 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 
 		if result.java != nil {
 			ctx.emit.result(ctx.javaBuilder(result.java).use(result.java.target))
-		} else if result.LDPath != nil {
-			ctx.scannerForPlatform(instance.Platform).codegen.use(*result.LDPath)
-			ctx.emit.result(result.LDRef)
-		} else if result.ARPath != nil {
-			ctx.scannerForPlatform(instance.Platform).codegen.use(*result.ARPath)
-			ctx.emit.result(result.ARRef)
+		} else {
+			for _, ref := range ctx.moduleResultRefs(instance, result) {
+				ctx.emit.result(ref)
+			}
 		}
 
 		if result.GlobalRef != nil {

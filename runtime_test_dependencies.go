@@ -9,6 +9,7 @@ import (
 type TestDependencyModule struct {
 	instance     ModuleInstance
 	bundle       bool
+	complete     bool
 	sharedObject bool
 	unrollBundle bool
 	includePeers bool
@@ -47,7 +48,7 @@ func (e *EmitContext) recordTestDependencyModule(result *ModuleEmitResult, decla
 		sharedObject, unrollBundle = testDependencyBundleRendering(moduleType)
 	}
 
-	result.testDependencyModule = TestDependencyModule{instance: e.instance, bundle: bundle, sharedObject: sharedObject, unrollBundle: unrollBundle, includePeers: includePeers, final: final, multimodule: multimodule,
+	result.testDependencyModule = TestDependencyModule{instance: e.instance, bundle: bundle, complete: complete, sharedObject: sharedObject, unrollBundle: unrollBundle, includePeers: includePeers, final: final, multimodule: multimodule,
 		fake: !complete && env.bool(envFakeModule)}
 }
 

@@ -2,6 +2,7 @@ import unittest
 
 import lib
 from test_proto_cpp import proto_files
+from test_yql import udf_fixture
 
 
 WRITER = "sdg/tier0/tools/bip/writer"
@@ -33,6 +34,47 @@ def closure(graph, node):
 
 
 class NativeGeneratedGlobalsTest(unittest.TestCase):
+    def test_yql_static_contexts_retain_own_nonparsed_global_results(self):
+        for dependency in (False, True):
+            for tag in ("YQL_UDF_STATIC", "YQL_UDF_STATIC_CURRENT"):
+                with self.subTest(dependency=dependency, tag=tag):
+                    files = udf_fixture()
+                    files["filters/ya.make"] = (
+                        f"YQL_UDF(filter)\n{lib.BARE_MODULE}UDF_NO_PROBE()\n"
+                        f"ONLY_TAGS({tag})\nPEERDIR(support)\n"
+                        "LD_PLUGIN(local.py)\nSRCS(body.cpp)\nEND()\n"
+                    )
+                    files["filters/body.cpp"] = "int body;\n"
+                    files["filters/local.py"] = ""
+                    files["support/ya.make"] = library("LD_PLUGIN(borrowed.py)\nSRCS(support.cpp)")
+                    files["support/borrowed.py"] = ""
+                    files["support/support.cpp"] = "int support;\n"
+                    files["checks/ya.make"] = "EXECTEST()\nRUN(true)\nDEPENDS(filters)\nEND()\n"
+                    targets = ("checks", "-t") if dependency else ("filters",)
+                    graph = lib.make(files, *targets, "--strip-packages-from-results")
+                    plugin = lib.node_by_output(graph, "$(B)/filters/local.py.pyplugin")
+                    self.assertIn(plugin["uid"], graph["result"])
+                    self.assertIn("$(S)/filters/local.py", plugin["inputs"])
+                    self.assertEqual(plugin["outputs"], ["$(B)/filters/local.py.pyplugin"])
+                    for node in graph["graph"]:
+                        if "$(B)/support/borrowed.py.pyplugin" in node["outputs"]:
+                            self.assertNotIn(node["uid"], graph["result"])
+
+    def test_yql_shared_context_uses_global_plugin_without_a_separate_result(self):
+        files = udf_fixture()
+        files["filters/ya.make"] = (
+            f"YQL_UDF(filter)\n{lib.BARE_MODULE}UDF_NO_PROBE()\n"
+            "ONLY_TAGS(YQL_UDF_SHARED)\nLD_PLUGIN(local.py)\nSRCS(body.cpp)\nEND()\n"
+        )
+        files["filters/body.cpp"] = "int body;\n"
+        files["filters/local.py"] = ""
+        graph = lib.make(files, "filters", "--strip-packages-from-results")
+        plugin = lib.node_by_output(graph, "$(B)/filters/local.py.pyplugin")
+        shared = lib.node_by_output(graph, "$(B)/filters/libfilter.so")
+        self.assertIn(plugin["uid"], shared["deps"])
+        self.assertNotIn(plugin["uid"], graph["result"])
+        self.assertIn(shared["uid"], graph["result"])
+
     def test_library_result_retains_generated_global_and_its_host_tool_closure(self):
         files = world()
         files["localizer/ya.make"] = library("SDC_ROSNODE_INFO(fleet/navigation/localizer)\nSRCS(GLOBAL entry.cpp)")
