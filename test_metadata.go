@@ -139,7 +139,7 @@ func (t *TestMeta) expandValues(env Environment) {
 		t.env[i] = expandStmtToken(value, env)
 	}
 	for i, value := range t.recipes {
-		t.recipes[i] = expandTestRecipeVariables(value, env)
+		t.recipes[i] = expandConfigMacroBody(value, env)
 	}
 }
 
@@ -163,7 +163,7 @@ func collectTestRecipe(args []ANY, env Environment) string {
 			values = append(values, word)
 		}
 	}
-	value := expandTestRecipeVariables(strings.Join(values, " "), env)
+	value := expandConfigMacroBody(strings.Join(values, " "), env)
 	words := strings.Split(value, " ")
 	value = strings.Join(slices.DeleteFunc(words, func(word string) bool { return word == "" }), " ")
 	return expandResourceArgument(value, env)
@@ -172,14 +172,14 @@ func collectTestRecipe(args []ANY, env Environment) string {
 // macro_parser.rl6 recognizes bare and braced identifiers, including hyphens.
 // Escapes and raw strings are retained in ECF_ExpandVars; unset variables are
 // left verbatim by SubstData. This is distinct from EvalExpr's braced lookup.
-var testRecipeVariable = regexp.MustCompile(`\\[\s\S]|\$\{"(?:[^"\\]|\\.)*"\}|\$\{[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*\}|\$[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*`)
+var configMacroVariable = regexp.MustCompile(`\\[\s\S]|\$\{"(?:[^"\\]|\\.)*"\}|\$\{[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*\}|\$[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*`)
 
-func expandTestRecipeVariables(value string, env Environment) string {
+func expandConfigMacroBody(value string, env Environment) string {
 	if !strings.ContainsRune(value, '$') {
 		return value
 	}
 	for iteration := 0; ; iteration++ {
-		expanded := testRecipeVariable.ReplaceAllStringFunc(value, func(reference string) string {
+		expanded := configMacroVariable.ReplaceAllStringFunc(value, func(reference string) string {
 			if reference[0] == '\\' || strings.HasPrefix(reference, `${"`) {
 				return reference
 			}

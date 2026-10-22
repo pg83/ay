@@ -1817,9 +1817,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn, platform)
 		case *UnknownStmt:
 			if assignment := declarativeMacroAssignment(v, d.multimodule == tokPackage, env); assignment != nil {
-				// PrepareMacroCall substitutes the configuration macro body
-				// deeply before its SET reaches EvalExpr.
-				assignment.Value = expandAssignedScalarVarRef(assignment.Value, env)
 				recordHandledMacro(v.Name, expandStmtTokens(v.Args, env))
 				collectStmts(ctx, modulePath, kind, language, []Stmt{assignment}, env, d, onWarn, platform)
 

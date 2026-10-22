@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 var (
 	envSbrUIDExt              = internEnv("SBR_UID_EXT")
@@ -12,7 +15,7 @@ var (
 // These upstream macros contain only SET/ENABLE. Lower them during collection,
 // so the lexical IR can be reused with each module's own environment.
 func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environment) *SetStmt {
-	var name, value string
+	var name, value, parameter string
 
 	switch v.Name {
 	case tokValidateDataRestart, tokPack, tokSetCudaNodeRAMRequirement:
@@ -21,6 +24,7 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 		}
 
 		value = v.Args[0].string()
+		parameter = "Ext"
 
 		switch v.Name {
 		case tokValidateDataRestart:
@@ -32,7 +36,7 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 
 			name = "PACKED_PACKAGE_EXT"
 		case tokSetCudaNodeRAMRequirement:
-			name, value = "_CU_NODE_MAX_RAM_REQUIREMENT", "ram:"+value
+			name, parameter = "_CU_NODE_MAX_RAM_REQUIREMENT", "X"
 		}
 	case tokNoCow:
 		name, value = "USE_COW", "no"
@@ -64,7 +68,7 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 				throwFmt("WINDOWS_MANIFEST expects one argument")
 			}
 
-			value = expandToken(args[0], env, tokenExpandAssignment)
+			value, parameter = args[0], "Manifest"
 		} else {
 			if len(args) != 0 {
 				throwFmt("WINDOWS_LONG_PATH_MANIFEST expects no arguments")
@@ -75,6 +79,25 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 	default:
 		return nil
 	}
+
+	// PrepareMacroBody binds arguments in a local scope. PrepareMacroCall then
+	// substitutes the entire SET body once, splits it, and passes it to EvalExpr.
+	locals := env.clone()
+	locals.unbind(envBINDIR)
+	locals.unbind(envCURDIR)
+
+	if parameter != "" {
+		locals.setString(internEnv(parameter), value)
+		value = "$" + parameter
+
+		if v.Name == tokSetCudaNodeRAMRequirement {
+			value = "ram:" + value
+		}
+	}
+
+	words := strings.Split(expandConfigMacroBody(name+" "+value, locals), " ")
+	words = slices.DeleteFunc(words, func(word string) bool { return word == "" })
+	value = strings.Join(words[1:], " ")
 
 	return &SetStmt{Name: name, NameEnv: internEnv(name), Value: value, Line: v.Line}
 }
