@@ -18,6 +18,12 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokEnable:  {},
 	tokDisable: {},
 
+	// The scalar values and deprecated flags are positional macro data.
+	tokValidateDataRestart:       {},
+	tokPack:                      {},
+	tokSetCudaNodeRAMRequirement: {},
+	tokNoNeedCheck:               {},
+
 	tokExcludeTags: {},
 	tokIncludeTags: {},
 	tokOnlyTags:    {},

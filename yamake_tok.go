@@ -1,6 +1,12 @@
 package main
 
 var tokName = [...]STR{
+	tokValidateDataRestart:       internStr("VALIDATE_DATA_RESTART"),
+	tokPack:                      internStr("PACK"),
+	tokSetCudaNodeRAMRequirement: internStr("SET_CUDA_NODE_RAM_REQUIEREMENT"),
+	tokNoCow:                     internStr("NO_COW"),
+	tokNoNeedCheck:               internStr("NO_NEED_CHECK"),
+
 	tokPireInline:             internStr("PIRE_INLINE"),
 	tokPireInlineCmd:          internStr("PIRE_INLINE_CMD"),
 	tokGenerateYtRecord:       internStr("GENERATE_YT_RECORD"),
@@ -871,6 +877,11 @@ const (
 	tokYtRecordDisablePeerdir
 	tokPireInline
 	tokPireInlineCmd
+	tokValidateDataRestart
+	tokPack
+	tokSetCudaNodeRAMRequirement
+	tokNoCow
+	tokNoNeedCheck
 )
 
 type TOK uint16

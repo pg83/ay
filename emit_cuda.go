@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -61,6 +62,13 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	node := Node{Platform: instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env}), Env: env,
 		Inputs: inputs, Outputs: na.vfsList(outVFS), KV: &cudaKV, Resources: instance.Platform.CCUsesResources,
 		DepRefs: na.refList(mtimeRef, pidRef)}
+
+	if env := (Environment{s: &e.frame.ifEnv}); env.bool(envCudaNodeRAMRequirement) {
+		ram := throw2(strconv.ParseFloat(strings.TrimPrefix(env.string(envCudaNodeRAMRequirement), "ram:"), 64))
+
+		node.Requirements = &Requirements{CPU: 1, Network: nwRestricted, RAM: ram}
+		node.KVExts = []KVExt{{Key: "local_ram_limiter", Val: "1"}}
+	}
 
 	ref := e.emitNode(node)
 

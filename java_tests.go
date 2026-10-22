@@ -50,7 +50,7 @@ func (ctx *GenCtx) javaTestSuites(jm *JavaModule) []*TestSuite {
 	if (jm.unit.kind == juJar || jm.unit.kind == juExternal) && resourceValidationEnabled(jm.data.env) {
 		globals := ctx.javaResourceGlobals(jm)
 
-		suites = append(suites, ctx.dataValidationSuite(jm.dir, jm.data.test.data, jm.data.testEnv, globals), ctx.sandboxValidationSuite(jm.dir, jm.data.fromSandboxes, jm.data.testEnv, globals))
+		suites = append(suites, ctx.dataValidationSuite(jm.dir, jm.data.test.data, jm.data.testEnv, globals, jm.data.env.string(envSbrUIDExt)), ctx.sandboxValidationSuite(jm.dir, jm.data.fromSandboxes, jm.data.testEnv, globals, jm.data.env.string(envSbrUIDExt)))
 	}
 
 	if jm.checksClasspathClash() {

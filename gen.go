@@ -553,7 +553,8 @@ func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
 
 				switch v.Name {
 				case tokEnable, tokDisable, tokSetAppend, tokSetListPreSuf,
-					tokUsePython2, tokPython2Addincl, tokUsePython3, tokPython3Addincl:
+					tokUsePython2, tokPython2Addincl, tokUsePython3, tokPython3Addincl,
+					tokValidateDataRestart, tokPack, tokSetCudaNodeRAMRequirement, tokNoCow, tokNoNeedCheck:
 					apply(st)
 				}
 
@@ -1330,7 +1331,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		project := instance.Path.relString()
 
-		for _, suite := range []*TestSuite{ctx.dataValidationSuite(project, d.test.data, d.test.env, result.ResourceGlobalClosure), ctx.sandboxValidationSuite(project, d.fromSandboxes, d.test.env, result.ResourceGlobalClosure)} {
+		for _, suite := range []*TestSuite{ctx.dataValidationSuite(project, d.test.data, d.test.env, result.ResourceGlobalClosure, env.string(envSbrUIDExt)), ctx.sandboxValidationSuite(project, d.fromSandboxes, d.test.env, result.ResourceGlobalClosure, env.string(envSbrUIDExt))} {
 			if suite != nil {
 				result.TestSuites = append(result.TestSuites, suite)
 			}

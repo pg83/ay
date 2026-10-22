@@ -249,10 +249,10 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 		}
 
 		if instance.Platform.ifEnv.bool(envAutocheck) && instance.Platform.OS == OSLinux {
-			return []string{"build/platform/lld", "contrib/libs/libeatmydata", "build/cow/on"}
+			return append([]string{"build/platform/lld", "contrib/libs/libeatmydata"}, e.cowPeerdirs()...)
 		}
 
-		return []string{"build/platform/lld", "build/cow/on"}
+		return append([]string{"build/platform/lld"}, e.cowPeerdirs()...)
 	}
 
 	flags := d.flags
@@ -336,7 +336,7 @@ func (e *EmitContext) defaultCommonLinkPeerdirs() []string {
 		peers = append(peers, "contrib/libs/libm")
 	}
 
-	return append(peers, "build/cow/on")
+	return append(peers, e.cowPeerdirs()...)
 }
 
 func effectiveNoPlatform(f FlagSet) bool {

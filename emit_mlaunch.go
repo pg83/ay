@@ -126,6 +126,14 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	inputs = append(inputs, e.outs...)
 
 	args := []ANY{e.d.tc.Python3.any(), copyScript.any(), strYaStartCommandFile.any(), strDestDir.any(), build(module).any(), strBuildRoot2.any(), bldRootDirVFS.any()}
+	outputs := []VFS{out}
+
+	if env := (Environment{s: &e.frame.ifEnv}); env.bool(envPackedPackageExt) {
+		archive := build(module, "/", name, ".", env.string(envPackedPackageExt))
+
+		args = append(args, internStr("--dest-arch").any(), archive.any())
+		outputs = append(outputs, archive)
+	}
 
 	for _, file := range concat(lateOuts, peers) {
 		if !strings.HasSuffix(file.relString(), ".pkg.fake") {
@@ -136,7 +144,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	args = append(args, strYaEndCommandFile.any())
 
 	node := Node{Module: true, Platform: e.instance.Platform, KV: &packageFinalKV, KVExts: []KVExt{{Key: "package", Val: "PACKAGE"}}, Env: envVarsVCS, Resources: usesPython3,
-		Inputs: na.inputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(append([]VFS{out}, e.outs...)...), DepRefs: na.refList(dedupRefs(e.refs)...),
+		Inputs: na.inputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(append(outputs, e.outs...)...), DepRefs: na.refList(dedupRefs(e.refs)...),
 		Cmds: na.cmdList(e.pythonScriptCmd("touch.py", out.string()), Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS})}
 
 	suffix := ""
@@ -153,7 +161,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 		}
 	}
 
-	ref := e.emitLazyModuleNode(node, peers, out)
+	ref := e.emitLazyModuleNode(node, peers, outputs...)
 
 	return e.scriptModuleResult(ref, out, dedup(peers), globals)
 }

@@ -214,6 +214,7 @@ func makeDefaultIfEnv() Environment {
 	for _, n := range []ENV{
 		envTRUE, envUSE_SSE4,
 		envUSE_ARCADIA_PYTHON, envPYTHON3,
+		envUseCow,
 
 		envUSE_PREBUILT_TOOLS, envCONSISTENT_DEBUG,
 		envTsUsePrebuiltNotsTool,
@@ -235,6 +236,7 @@ func makeDefaultIfEnv() Environment {
 	e.setString(envthread, "thread")
 	e.setString(envleak, "leak")
 	e.setString(envMODULE_TAG, "PY3")
+	e.setString(internEnv("_CPP_PROTO_COMPATIBLE_TAGS"), "CPP_PROTO CPP_PROTO_DIRECT_HEADERS CPP_PROTO_LEGACY_FOR_DIRECT_HEADERS")
 	e.setString(envALLOCATOR, "")
 	e.setString(envPY2, "PY2")
 	e.setString(envOS_SDK, "")

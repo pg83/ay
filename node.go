@@ -40,6 +40,7 @@ type Node struct {
 	Requirements   *Requirements `json:"requirements"`
 	Ref            NodeRef       `json:"-"`
 	PresetUID      *UID          `json:"-"`
+	UIDSalt        STR           `json:"-"`
 	DepRefs        []NodeRef     `json:"-"`
 	ForeignDepRefs []NodeRef     `json:"-"`
 	Resources      []STR         `json:"-"`

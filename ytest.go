@@ -293,6 +293,7 @@ type TestSuite struct {
 	relatedPaths           []string
 	runInputs              []VFS
 	inputNames             []string
+	uidSalt                string
 	noCleanEnvironment     bool
 	clearEnvironment       bool
 	noRetries              bool
@@ -741,6 +742,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 	na.strs.commit(len(names))
 
 	return &Node{
+		UIDSalt:      internStr(s.uidSalt),
 		Platform:     s.p,
 		Cmds:         na.cmdList(cmds...),
 		Env:          ctx.testEnv(s),

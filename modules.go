@@ -271,6 +271,7 @@ type ModuleData struct {
 	useDynamicCuda           bool
 	splitDwarf               bool
 	noPythonIncl             bool
+	python3NativeIncl        bool
 	noImportTracing          bool
 	usePython2               bool
 	usePython3               bool
@@ -1116,6 +1117,10 @@ func usePython2(env Environment, d *ModuleData, moduleTag STR) {
 }
 
 func applyPythonAddIncl(modulePath string, d *ModuleData, env Environment) {
+	if d.python3NativeIncl {
+		return
+	}
+
 	if d.moduleStmt == nil {
 		return
 	}
@@ -1791,6 +1796,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn, platform)
 		case *UnknownStmt:
+			if assignment := declarativeMacroAssignment(v, d.multimodule == tokPackage); assignment != nil {
+				recordHandledMacro(v.Name, expandStmtTokens(v.Args, env))
+				collectStmts(ctx, modulePath, kind, language, []Stmt{assignment}, env, d, onWarn, platform)
+
+				continue
+			}
 
 			expanded := *v
 
@@ -3147,6 +3158,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		usePython2(env, d, unitTagPy2)
 	case tokPython2Addincl:
 		usePython2(env, d, unitTagPy2Native)
+	case tokPython3Addincl:
+		applyPython3Addincl(d, env)
 	case tokUsePython3:
 
 		d.peerdirs = append(d.peerdirs,
