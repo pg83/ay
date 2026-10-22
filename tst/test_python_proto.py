@@ -114,6 +114,8 @@ class PyProtoTest(unittest.TestCase):
 
     def test_proto_library_with_grpc_and_namespaces(self):
         files = python_base()
+        files["contrib/python/protobuf/ya.make"] = STUB_LIBRARY.replace(
+            "END()", "ADDINCL(GLOBAL FOR proto contrib/libs/protoc/src)\nEND()")
         files.update({
             "proto/ya.make": (
                 "PROTO_LIBRARY()\n"

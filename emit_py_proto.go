@@ -249,10 +249,6 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 		mid = append(mid, token)
 	}
 
-	if d.needGoogleProtoPeerdirs && !slices.Contains(mid, argISContribLibsProtocSrc.any()) {
-		mid = append(mid, argISContribLibsProtocSrc.any())
-	}
-
 	mid = append(mid,
 		argIB2.any(),
 		argISContribLibsProtobufSrc.any(),
@@ -302,7 +298,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		duplicateOutputRootInclude = slices.Contains(e.peers.PeerAddInclGlobal, build(protoRoot))
 	}
 
-	pe := e.newPyPBModuleEmission(protocBinary, e.peers.ProtoInclude, duplicateOutputRootInclude)
+	pe := e.newPyPBModuleEmission(protocBinary, d.cc.ProtoInclude, duplicateOutputRootInclude)
 	scanCtx := d.scanCtx
 	protoRel := e.protoSourceRel(src)
 	protoRelPath := protoRel.string()

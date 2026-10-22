@@ -4103,13 +4103,18 @@ func applyProtoAddIncl(d *ModuleData, args []ANY) {
 
 	src := protoIncludeDir(rel)
 	bld := src.rel().build()
+	protoIncludes := &d.protoAddIncl
+
+	if global {
+		protoIncludes = &d.protoAddInclGlobal
+	}
 
 	if withGen {
-		d.protoAddInclGlobal = append(d.protoAddInclGlobal, bld)
+		*protoIncludes = append(*protoIncludes, bld)
 	}
 
 	if src.relString() != "" {
-		d.protoAddInclGlobal = append(d.protoAddInclGlobal, src)
+		*protoIncludes = append(*protoIncludes, src)
 	}
 
 	d.addLocalIncl(prioAddIncl, bld)
