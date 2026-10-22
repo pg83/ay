@@ -24,9 +24,10 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	toolRes := ctx.toolResult(internArg(filepath.Clean(sc.ToolPath.string())))
 	toolLDRef := toolRes.LDRef
 	toolBin := *toolRes.LDPath
-	inputIn := source(moduleDir, "/", prefix, ".in")
-	prefixCpp := build(moduleDir, "/", prefix, ".cpp")
-	prefixH := build(moduleDir, "/", prefix, ".h")
+	inputIn := e.requireProducedInput("SPLIT_CODEGEN input", prefix+".in",
+		resolveSourceOrGeneratedVFS(ctx, instance, prefix+".in", e.d.srcDirs))
+	prefixCpp := copyFileOutputVFS(moduleDir, filepath.Base(prefix)+".cpp")
+	prefixH := copyFileOutputVFS(moduleDir, filepath.Base(prefix)+".h")
 	partRels := make([]string, 0, sc.OutNum)
 	outputs := na.vfs.alloc(sc.OutNum + 2)[:0]
 
@@ -34,7 +35,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 		partRel := prefix + "." + strconv.Itoa(i) + ".cpp"
 
 		partRels = append(partRels, partRel)
-		outputs = append(outputs, build(moduleDir, "/", partRel))
+		outputs = append(outputs, copyFileOutputVFS(moduleDir, partRel))
 	}
 
 	outputs = append(outputs, prefixCpp, prefixH)
@@ -61,7 +62,7 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 
 	env := envVarsVCS
 	scRef := ctx.emit.reserve()
-	part0 := build(moduleDir, "/", partRels[0])
+	part0 := outputs[0]
 	headerParsed := ctx.na.dirs.alloc(len(sc.OutputIncludes))[:0]
 
 	for _, oi := range sc.OutputIncludes {

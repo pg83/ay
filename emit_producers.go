@@ -440,11 +440,22 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		prefix := sc.Prefix.string()
 
 		for part := 0; part < sc.OutNum; part++ {
-			backing = append(backing, build(module, "/", prefix, ".", strconv.Itoa(part), ".cpp"))
+			backing = append(backing, copyFileOutputVFS(module, prefix+"."+strconv.Itoa(part)+".cpp"))
 		}
 
-		backing = append(backing, build(module, "/", prefix, ".cpp"), build(module, "/", prefix, ".h"))
-		push(prodSplitCodegen, i, start, len(backing))
+		backing = append(backing, copyFileOutputVFS(module, filepath.Base(prefix)+".cpp"), copyFileOutputVFS(module, filepath.Base(prefix)+".h"))
+		outEnd := len(backing)
+		input := resolveSourceVFS(e.ctx, e.instance, prefix+".in", d.srcDirs)
+
+		// Readiness uses the same input namespace as resolution. A real
+		// source wins over an unrooted build candidate and must not add a
+		// dependency on a shadowing producer (which could create a cycle).
+		if input.isSource() && !e.ctx.fs.isFile(srcRootRel, input.relString()) {
+			input = moduleInputCandidateVFS(module, prefix+".in")
+		}
+
+		backing = append(backing, input)
+		push(prodSplitCodegen, i, start, outEnd)
 	}
 
 	for i, bc := range d.baseCodegens {
