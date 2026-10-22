@@ -47,12 +47,26 @@ func cppLinterSource(name string) bool {
 	return false
 }
 
+func (e *EmitContext) cppStyleOriginalSource(file VFS) VFS {
+	for file.isBuild() {
+		info := e.codegen.lookup(file)
+
+		if info == nil {
+			return 0
+		}
+
+		file = info.SourcePath
+	}
+
+	return file
+}
+
 func (e *EmitContext) cppStyleSource(src ANY) ANY {
 	if !e.ctx.testMode || !cppLinterSource(src.string()) {
 		return src
 	}
 
-	var resolved VFS
+	var resolved, original VFS
 
 	for i := range e.d.styleChecks {
 		check := &e.d.styleChecks[i]
@@ -63,10 +77,11 @@ func (e *EmitContext) cppStyleSource(src ANY) ANY {
 
 		if resolved == 0 {
 			resolved = e.moduleSourceVFS(src)
+			original = e.cppStyleOriginalSource(resolved)
 		}
 
-		if resolved.isSource() {
-			check.Files = append(check.Files, resolved.relString())
+		if original.isSource() && cppLinterSource(original.relString()) {
+			check.Files = append(check.Files, original.relString())
 		}
 	}
 
