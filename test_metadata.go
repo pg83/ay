@@ -178,12 +178,23 @@ func expandConfigMacroBody(value string, env Environment) string {
 	if !strings.ContainsRune(value, '$') {
 		return value
 	}
-	for iteration := 0; ; iteration++ {
+	return continueConfigMacroBody(value, env, 0, nil)
+}
+
+// A bound vararg body can have its first substitution performed per argument
+// (for example pre=GLOBAL :Flags). Keep that pass in the same 128-pass budget.
+func continueConfigMacroBody(value string, env Environment, iteration int, parameters map[string][]string) string {
+	for ; ; iteration++ {
 		expanded := configMacroVariable.ReplaceAllStringFunc(value, func(reference string) string {
 			if reference[0] == '\\' || strings.HasPrefix(reference, `${"`) {
 				return reference
 			}
 			name := strings.TrimSuffix(strings.TrimPrefix(reference[1:], "{"), "}")
+			if values, ok := parameters[name]; ok {
+				// Bound arguments are unprefixed TVarStr entries, unlike stored
+				// configuration values. Keep each entry's literal whitespace.
+				return strings.Join(values, " ")
+			}
 			if replacement, ok := env.lookup(name); ok {
 				// GetCmdValue removes one leading space from a stored binding.
 				return strings.TrimPrefix(replacement, " ")

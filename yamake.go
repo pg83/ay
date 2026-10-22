@@ -222,8 +222,9 @@ type AddInclStmt struct {
 }
 
 type CFlagsStmt struct {
-	Flags []ANY
-	Line  int
+	Flags  []ANY
+	Line   int
+	Global bool
 }
 
 type CXXFlagsStmt struct {
@@ -1143,7 +1144,7 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 
 	defer func() { p.lex.inArgs = false }()
 
-	lexicalArgs := nameTok.id == kwCFLAGS || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS || nameTok.id == kwRESOURCE || nameTok.id == tokUseRecipe.str()
+	lexicalArgs := nameTok.id == kwCFLAGS || nameTok.id == tokGlobalCflags.str() || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS || nameTok.id == kwRESOURCE || nameTok.id == tokUseRecipe.str()
 
 	for {
 		start := 0
@@ -1293,8 +1294,8 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		stmt.Line = line
 
 		return stmt
-	case "CFLAGS":
-		return astOne(astCFlags, CFlagsStmt{Flags: args, Line: line})
+	case "CFLAGS", "GLOBAL_CFLAGS":
+		return astOne(astCFlags, CFlagsStmt{Flags: args, Line: line, Global: name == "GLOBAL_CFLAGS"})
 	case "CXXFLAGS":
 		return astOne(astCXXFlags, CXXFlagsStmt{Flags: args, Line: line})
 	case "CONLYFLAGS":

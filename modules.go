@@ -1606,13 +1606,13 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.swigAddInclGlobal = append(d.swigAddInclGlobal, expandConfigVFSPaths(v.SwigGlobalPaths, env)...)
 		case *CFlagsStmt:
 
-			d.cFlagsGlobal, d.cFlags = appendCompilerFlags(v.Flags, env, d.cFlagsGlobal, d.cFlags)
+			d.cFlagsGlobal, d.cFlags = appendCompilerFlags(v.Flags, env, "USER_CFLAGS", v.Global, d.cFlagsGlobal, d.cFlags)
 		case *CXXFlagsStmt:
 
-			d.cxxFlagsGlobal, d.cxxFlags = appendCompilerFlags(v.Flags, env, d.cxxFlagsGlobal, d.cxxFlags)
+			d.cxxFlagsGlobal, d.cxxFlags = appendCompilerFlags(v.Flags, env, "USER_CXXFLAGS", false, d.cxxFlagsGlobal, d.cxxFlags)
 		case *CONLYFlagsStmt:
 
-			d.cOnlyFlagsGlobal, d.cOnlyFlags = appendCompilerFlags(v.Flags, env, d.cOnlyFlagsGlobal, d.cOnlyFlags)
+			d.cOnlyFlagsGlobal, d.cOnlyFlags = appendCompilerFlags(v.Flags, env, "USER_CONLYFLAGS", false, d.cOnlyFlagsGlobal, d.cOnlyFlags)
 		case *LDFlagsStmt:
 			d.ldFlags = append(d.ldFlags, expandStmtTokens(v.Flags, env)...)
 		case *SrcDirStmt:
@@ -5302,46 +5302,91 @@ func confProtoPlugin(fs FS, confRel, macro string) ConfProtoPlugin {
 	return conf
 }
 
-func appendCompilerFlags(args []ANY, env Environment, global, own []ANY) ([]ANY, []ANY) {
+func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal bool, global, own []ANY) ([]ANY, []ANY) {
+	// VarStatement: one EvalExpr per source argument, then Deref's space split.
+	// Reserved roots and resource globals belong to later command substitution.
+	var values []string
+
+	for _, arg := range args {
+		value := arg.string()
+
+		if strings.ContainsRune(value, '$') {
+			words := strings.Split(expandMakeExpression(value, env, func(key string) bool {
+				return keepDeferredVar(key) || key == "ARCADIA_ROOT" || key == "ARCADIA_BUILD_ROOT"
+			}), " ")
+			values = append(values, slices.DeleteFunc(words, func(word string) bool { return word == "" })...)
+		} else {
+			values = append(values, value)
+		}
+	}
+
+	for i, value := range values {
+		if value == "&&" || value == ";" {
+			values[i] = `${quo:"` + value + `"}`
+		}
+	}
+
+	// PrepareMacroBody binds Flags... in its own scope. Substitute its vector
+	// once, including GLOBAL_CFLAGS' per-argument prefix, then finish the same
+	// SubstMacroDeeply operation. SET_APPEND_WITH_GLOBAL does not call EvalExpr.
+	locals := env.clone()
+	for _, root := range []string{"ARCADIA_ROOT", "ARCADIA_BUILD_ROOT", "CURDIR", "BINDIR"} {
+		locals.unbind(internEnv(root))
+	}
+	bound := make([]string, len(values))
+	for i, value := range values {
+		bound[i] = value
+		if allGlobal {
+			bound[i] = "GLOBAL " + bound[i]
+		}
+	}
+	body := continueConfigMacroBody(name+" "+strings.Join(bound, " "), locals, 1, map[string][]string{"Flags": values})
+	words := strings.Split(body, " ")
+	var globalValues, ownValues []string
 	nextGlobal := false
 
-	appendArg := func(arg ANY) {
-		if arg == kwGLOBAL.any() {
+	for _, word := range words[1:] {
+		if word == "" {
+			continue
+		}
+		if word == "GLOBAL" {
 			nextGlobal = true
-
-			return
+			continue
 		}
 
+		arg := internStr(compilerFlagRootValue(word, env)).any()
 		if nextGlobal {
 			global = append(global, arg)
+			globalValues = append(globalValues, word)
 		} else {
 			own = append(own, arg)
+			ownValues = append(ownValues, word)
 		}
-
 		nextGlobal = false
 	}
 
-	for _, arg := range args {
-		arg = expandStmtTokenAny(arg, env)
-
-		text := arg.string()
-
-		if text == "" {
-			continue
-		}
-
-		if strings.IndexByte(text, ' ') < 0 {
-			appendArg(arg)
-
-			continue
-		}
-
-		for _, word := range strings.Split(text, " ") {
-			if word != "" {
-				appendArg(internStr(word).any())
-			}
-		}
+	if len(ownValues) > 0 {
+		appendMacroEnv(env, name, strings.Join(ownValues, " "))
+	}
+	if len(globalValues) > 0 {
+		appendMacroEnv(env, name+"_GLOBAL", strings.Join(globalValues, " "))
 	}
 
 	return global, own
+}
+
+// Lower reserved roots for compiler commands without evaluating other source
+// references again. Escaped roots stay literal through command unquoting.
+func compilerFlagRootValue(value string, env Environment) string {
+	return configMacroVariable.ReplaceAllStringFunc(value, func(reference string) string {
+		if reference[0] == '$' {
+			name := strings.TrimSuffix(strings.TrimPrefix(reference[1:], "{"), "}")
+			switch name {
+			case "ARCADIA_ROOT", "ARCADIA_BUILD_ROOT", "CURDIR", "BINDIR":
+				value, _ := env.lookup(name)
+				return value
+			}
+		}
+		return reference
+	})
 }
