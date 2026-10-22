@@ -19,6 +19,9 @@ type PeerContext struct {
 }
 
 type EmitContext struct {
+	sourceProducers    map[NodeRef]*GeneratedFileInfo
+	sourceRoots        map[int]SrcMeta
+	sourceRounds       map[int]uint64
 	resourceDeclSeq    int
 	resourceSources    map[resourceInputKey]VFS
 	moduleIncludeRoots []VFS
@@ -466,7 +469,15 @@ func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 
 	e.collectScriptOutput(info.OutputPath)
 
-	return e.codegen.register(info)
+	stored := e.codegen.register(info)
+	if stored.SourceAction != nil {
+		if e.sourceProducers == nil {
+			e.sourceProducers = make(map[NodeRef]*GeneratedFileInfo)
+		}
+		e.sourceProducers[stored.ProducerRef] = stored
+	}
+
+	return stored
 }
 
 func (e *EmitContext) collectScriptOutput(output VFS) {

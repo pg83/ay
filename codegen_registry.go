@@ -5,7 +5,15 @@ import (
 	"strings"
 )
 
+// SourceActionInfo records the declaration and direct inputs of one native
+// source action. Parsed/flattened input closures do not determine its readiness.
+type SourceActionInfo struct {
+	DeclSeq int
+	Inputs  []VFS
+}
+
 type GeneratedFileInfo struct {
+	SourceAction     *SourceActionInfo
 	InputsOnly       bool
 	ResourceObjcopy  bool
 	GztProto         *GztProtoProducer

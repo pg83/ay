@@ -81,6 +81,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	ctx := e.ctx
 	node, outVFSs := fromSandboxNode(ctx.emit.nodeArenas(), e.instance, e.d.tc.Python3.any(), stmt)
 	ref := ctx.emit.reserve()
+	sourceAction := &SourceActionInfo{DeclSeq: stmt.DeclSeq}
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
 	for i, f := range stmt.OUTFiles {
@@ -95,6 +96,7 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	for _, out := range outVFSs {
 		e.register(GeneratedFileInfo{
+			SourceAction:   sourceAction,
 			OutputPath:     out,
 			Sandbox:        recipe,
 			ProducerRef:    ref,

@@ -2939,7 +2939,11 @@ func (e *EmitContext) srcRound(m SrcMeta) uint64 {
 		return 0
 	}
 
-	if m.SourceQueueRank != 0 {
+	if m.Prio == stmtPrioDefault && m.Compile.FlatOutput && m.SourceQueueRank != 0 {
+		if round, known := e.sourceActionRound(m.Seq); known {
+			return round + m.SourceQueueRank - 1
+		}
+	} else if m.SourceQueueRank != 0 {
 		return m.SourceQueueRank - 1
 	}
 

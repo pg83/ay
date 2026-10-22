@@ -9,6 +9,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	src := e.cppStyleSource(meta.Source)
 
 	meta.Source = src
+	meta = e.sourceRootMeta(meta)
 
 	if meta.PyMeta != 0 {
 		i := meta.PyMeta - 1

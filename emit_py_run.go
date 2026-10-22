@@ -138,6 +138,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	}
 
 	pyRef := ctx.emit.reserve()
+	sourceAction := &SourceActionInfo{DeclSeq: stmt.DeclSeq, Inputs: concat([]VFS{scriptVFS}, inVFSs)}
 	interp := d.cc.TC.Python3.any()
 	kv := &pyRunKV
 	resources := usesPython3
@@ -218,6 +219,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
 		e.register(GeneratedFileInfo{
+			SourceAction:    sourceAction,
 			OutputPath:      out,
 			ProducerRef:     pyRef,
 			ProducerMainOut: outputs[0],

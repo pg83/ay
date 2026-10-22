@@ -138,6 +138,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	e.dirScratch = protoImportPbH
 
 	prRef := ctx.emit.reserve()
+	sourceAction := &SourceActionInfo{DeclSeq: stmt.DeclSeq, Inputs: inVFSs}
 	registeredPROut := map[VFS]bool{}
 
 	snap := &prSnap{
@@ -192,6 +193,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		registeredPROut[out] = true
 
 		e.register(GeneratedFileInfo{
+			SourceAction:    sourceAction,
 			OutputPath:      out,
 			BuildInputs:     snap.inVFSs,
 			ProducerRef:     prRef,
