@@ -23,6 +23,7 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokOnlyTags:    {},
 
 	tokDeclareInDirs: {},
+	tokCopy:          {},
 
 	// ymake.core.conf: TASKLET_REG(Name, Lang, Impl, Includes...) and
 	// TASKLET_REG_EXT(Name, Lang, Impl, Wrapper, Includes...) contain only

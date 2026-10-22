@@ -2814,7 +2814,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			value := strings.Join(targets, " ")
 
-			markUserArg(internStr(result).any())
 			env.setFromString(internEnv(result), value)
 
 			if d.setVars == nil {

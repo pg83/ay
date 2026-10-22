@@ -155,6 +155,34 @@ class CopyMacroTest(unittest.TestCase):
                     self.assert_copy(graph, f"$(S)/{name}/incoming/nested/item.dat",
                                      f"$(B)/{name}/{name}_installed/nested/item.dat")
 
+    def test_uppercase_source_and_option_values_remain_user_data(self):
+        graph = lib.make({
+            "parcel/ya.make": (
+                "UNION()\nCOPY(UPPER_PAYLOAD FROM UPPER_SOURCE DESTINATION UPPER_DEST "
+                "RESULT UPPER_RESULT OUTPUT_INCLUDES UPPER_CONTEXT)\n"
+                "COPY_FILE(${BINDIR}/${UPPER_RESULT} repeated.dat)\nEND()\n"
+            ),
+            "UPPER_SOURCE/UPPER_PAYLOAD": "payload\n",
+            "parcel/UPPER_DEST/UPPER_CONTEXT": "context\n",
+        }, "parcel")
+        copied = self.assert_copy(graph, "$(S)/UPPER_SOURCE/UPPER_PAYLOAD", "$(B)/parcel/UPPER_DEST/UPPER_PAYLOAD")
+        repeated = lib.node_by_output(graph, "$(B)/parcel/repeated.dat")
+        self.assertEqual(repeated["inputs"], ["$(B)/parcel/UPPER_DEST/UPPER_PAYLOAD", "$(S)/parcel/UPPER_DEST/UPPER_CONTEXT"])
+        self.assertIn(copied["uid"], repeated["deps"])
+
+    def test_copy_values_do_not_exempt_other_macros_from_validation(self):
+        for value in ("UPPER_PAYLOAD", "UPPER_SOURCE", "UPPER_DEST", "UPPER_RESULT"):
+            with self.subTest(value=value):
+                result = lib.make_process({
+                    "parcel/ya.make": (
+                        LIBRARY + "COPY(UPPER_PAYLOAD FROM UPPER_SOURCE DESTINATION UPPER_DEST RESULT UPPER_RESULT)\n"
+                        f"ALLOCATOR({value})\nEND()\n"
+                    ),
+                    "UPPER_SOURCE/UPPER_PAYLOAD": "payload\n",
+                }, "parcel")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f'macro ALLOCATOR received service-keyword "{value}"', result.stderr)
+
     def test_keyword_signature_rejects_missing_values_duplicates_and_array_mixing(self):
         cases = (
             ("FROM", "Missing value for scalar keyword 'FROM'."),
@@ -162,6 +190,8 @@ class CopyMacroTest(unittest.TestCase):
             ("RESULT", "Missing value for scalar keyword 'RESULT'."),
             ("FROM KEEP_DIR_STRUCT", "Missing value for scalar keyword 'FROM'."),
             ("FROM incoming FROM other", "Keyword 'FROM' appears more than once and is not an array."),
+            ("UPPER_PAYLOAD FROM UPPER_SOURCE DESTINATION", "Missing value for scalar keyword 'DESTINATION'."),
+            ("FROM UPPER_SOURCE FROM OTHER_SOURCE", "Keyword 'FROM' appears more than once and is not an array."),
             ("AUTO AUTO", "Keyword 'AUTO' appears more than once and is not an array."),
             ("OUTPUT_INCLUDES header.h AUTO item.dat", "Mixing positional arguments with named arrays"),
         )
