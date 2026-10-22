@@ -19,6 +19,39 @@ def files(native=False):
 
 
 class RunProgramFinalVariablesTest(unittest.TestCase):
+    def generated_program(self, options):
+        sources = {
+            "copper/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}"
+                f"RUN_PROGRAM(tools/gen {options} IN seed.txt OUT made.cpp)\nEND()\n",
+            "copper/seed.txt": "generated translation unit\n",
+        }
+        lib.tool_program(sources, "tools/gen", "renamed-generator")
+        graph = lib.make(sources, "copper")
+        generated = lib.node_by_output(graph, "$(B)/copper/made.cpp")
+        tool = lib.node_by_output(graph, "$(B)/tools/gen/renamed-generator")
+        self.assertIn("$(S)/copper/seed.txt", generated["inputs"])
+        self.assertIn(tool["outputs"][0], generated["inputs"])
+        self.assertIn(tool["uid"], generated["deps"])
+        compiled = lib.node_by_output(graph, "$(B)/copper/made.cpp.o")
+        self.assertIn(generated["outputs"][0], compiled["inputs"])
+        self.assertIn(generated["uid"], compiled["deps"])
+        archive = lib.node_by_output(graph, "$(B)/copper/libcopper.a")
+        self.assertIn(compiled["outputs"][0], archive["inputs"])
+        self.assertIn(compiled["uid"], archive["deps"])
+        return generated
+
+    def test_short_root_aliases_select_the_generator_working_directory(self):
+        for root, expected in (("$S", "$(S)"), ("$B", "$(B)")):
+            with self.subTest(root=root):
+                generated = self.generated_program("CWD " + root)
+                self.assertEqual(generated["cmds"][0]["cwd"], expected)
+
+    def test_literal_dollar_is_a_generator_argument(self):
+        generated = self.generated_program('"$"')
+        self.assertEqual(generated["cmds"][0]["cmd_args"], [
+            "$(B)/tools/gen/renamed-generator", "$",
+        ])
+
     def test_final_arguments_keep_peer_resources_and_resolve_missing_reserved_values(self):
         for native in (False, True):
             with self.subTest(native=native):
