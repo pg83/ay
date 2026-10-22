@@ -1770,6 +1770,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded := *v
 
 			expanded.ResourceId = expandStmtTokenAny(v.ResourceId, env)
+			expanded.Prefix = expandStmtToken(v.Prefix, env)
 			expanded.OUTFiles = expandStmtTokens(v.OUTFiles, env)
 			expanded.OUTNoAutoFiles = expandStmtTokens(v.OUTNoAutoFiles, env)
 			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
