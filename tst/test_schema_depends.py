@@ -18,12 +18,11 @@ def workspace(selector=""):
 class SchemaDependsTest(unittest.TestCase):
     def test_default_depends_includes_java_go_and_descriptor_modules(self):
         graph = lib.make(workspace(), "tests", "-t", "--strip-packages-from-results")
-        suite = lib.node_by_output(graph, "$(B)/tests/test-results/exectest/meta.json")
         for output in ("libcatalog.a", "catalog.jar", "libpycatalog.global.a", "libpy3catalog.global.a",
                        "catalog.a", "catalog.self.protodesc", "catalog.protodesc"):
             with self.subTest(output=output):
                 node = lib.node_by_output(graph, "$(B)/p/" + output)
-                self.assertIn(node["uid"], suite["deps"])
+                self.assertIn(node["uid"], graph["result"])
         self.assertFalse(any("$(B)/p/output.tar" in n["outputs"] for n in graph["graph"]))
 
     def test_typescript_schema_contexts_are_opt_in(self):
@@ -34,18 +33,16 @@ class SchemaDependsTest(unittest.TestCase):
         files[f"{deps}/package.json"] = '{}'
         files[f"{deps}/pnpm-lock.yaml"] = "lockfileVersion: '9.0'\npackages: {}\n"
         graph = lib.make(files, "tests", "-t", "-DAUTOCHECK=yes", "--strip-packages-from-results")
-        suite = lib.node_by_output(graph, "$(B)/tests/test-results/exectest/meta.json")
         for output in ("package.json", "output.tar"):
             node = lib.node_by_output(graph, "$(B)/p/" + output)
-            self.assertIn(node["uid"], suite["deps"])
+            self.assertIn(node["uid"], graph["result"])
 
     def test_depends_selects_schema_language_contexts_despite_start_target(self):
         files = workspace("EXCLUDE_TAGS(GO_PROTO_FROM_SCHEMA JAVA_PROTO_FROM_SCHEMA)\n")
         graph = lib.make(files, "tests", "-t", "--strip-packages-from-results")
-        suite = lib.node_by_output(graph, "$(B)/tests/test-results/exectest/meta.json")
         for name in ("libcatalog.a", "libpycatalog.global.a", "libpy3catalog.global.a", "catalog.protodesc"):
             node = lib.node_by_output(graph, "$(B)/p/" + name)
-            self.assertIn(node["uid"], suite["deps"])
+            self.assertIn(node["uid"], graph["result"])
         outputs = {out for node in graph["graph"] for out in node["outputs"]}
         self.assertFalse("$(B)/p/catalog.a" in outputs, "unexpected Go schema result")
         self.assertFalse("$(B)/p/catalog.jar" in outputs, "unexpected Java schema result")
@@ -68,8 +65,7 @@ class SchemaDependsTest(unittest.TestCase):
             with self.subTest(tag=tag):
                 graph = lib.make(workspace(f"ONLY_TAGS({tag})\n"), "tests", "-t", "--strip-packages-from-results")
                 node = lib.node_by_output(graph, "$(B)/p/" + output)
-                suite = lib.node_by_output(graph, "$(B)/tests/test-results/exectest/meta.json")
-                self.assertIn(node["uid"], suite["deps"])
+                self.assertIn(node["uid"], graph["result"])
 
     def test_depends_first_schema_context_refines_selection_once(self):
         files = workspace('IF(MODULE_TAG == "CPP_PROTO_FROM_SCHEMA")\nEXCLUDE_TAGS(JAVA_PROTO_FROM_SCHEMA GO_PROTO_FROM_SCHEMA PY_PROTO_FROM_SCHEMA)\nENDIF()\n')
