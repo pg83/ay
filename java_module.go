@@ -739,8 +739,10 @@ func (u *javaUnit) finalTarget() bool {
 }
 
 func (ctx *GenCtx) genJavaTarget(dir string, name TOK) {
-	for _, u := range javaModuleUnits[name] {
-		if !u.finalTarget() {
+	units := javaModuleUnits[name]
+
+	for _, u := range units {
+		if len(units) > 1 && !u.finalTarget() {
 			continue
 		}
 
