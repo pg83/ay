@@ -59,7 +59,7 @@ class Tree:
         env = {k: v for k, v in os.environ.items() if k not in lib.TOOLCHAIN_ENV_VARS}
         env["AY_CONF_TEST_MARKER"] = "leaks"
         return subprocess.run(
-            [str(lib.AY), "make", "-j0", "-G", "--source-root", str(self.src),
+            [str(lib.AY), "make", "-j0", "-G", "--sandboxing", "--source-root", str(self.src),
              "--host-platform", "default-linux-x86_64",
              "--target-platform", "default-linux-aarch64", *args],
             env=env,
@@ -189,7 +189,7 @@ class ConfCommandLineTest(unittest.TestCase):
 
     def test_runs_the_script_as_ya_does(self):
         tree = self.tree()
-        tree.graph("--sandboxing", "-DUSER_DEFINE=1", "--target-platform-flag", "TP_FLAG=x",
+        tree.graph("-DUSER_DEFINE=1", "--target-platform-flag", "TP_FLAG=x",
                    "--host-platform-flag", "HP_FLAG=y", "m")
         for build_type, platform in (("dist-debug", "AARCH64"), ("dist-release", "X86_64")):
             with self.subTest(build_type=build_type):
@@ -227,9 +227,9 @@ class ConfCommandLineTest(unittest.TestCase):
 
     def test_pic_variant_is_configured_only_for_a_pic_transition(self):
         tree = self.tree(**{"d/ya.make": "DLL(d)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n", "d/d.cpp": ""})
-        tree.graph("--sandboxing", "m")
+        tree.graph("m")
         self.assertFalse((tree.src / "build" / "argv.dist-debug.pic.json").exists())
-        tree.graph("--sandboxing", "d")
+        tree.graph("d")
         nopic = dict(presets(tree.recorded("dist-debug")["argv"]))
         del nopic["FORCE_NO_PIC"]
         self.assertEqual(dict(presets(tree.recorded("dist-debug.pic")["argv"])), nopic)
@@ -250,7 +250,7 @@ class ConfCommandLineTest(unittest.TestCase):
             "d/d.cpp": "",
             "build/ymake_conf.py": RECORDER.replace("import base64", barrier + "import base64", 1),
         })
-        tree.graph("--sandboxing", "d")
+        tree.graph("d")
         self.assertEqual(len(list((tree.src / "build").glob("argv.*.json"))), 3)
         normal = dict(presets(tree.recorded("dist-debug")["argv"]))
         del normal["FORCE_NO_PIC"]
@@ -262,7 +262,7 @@ class ConfCommandLineTest(unittest.TestCase):
             "m/d/ya.make": "DLL(d)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n",
             "m/d/d.cpp": "",
         })
-        graph = tree.graph("--sandboxing", "m")
+        graph = tree.graph("m")
         self.assertFalse(any(out.startswith("$(B)/m/d/") for node in graph["graph"] for out in node["outputs"]))
         self.assertEqual(len(list((tree.src / "build").glob("argv.*.json"))), 2)
         self.assertFalse((tree.src / "build/argv.dist-debug.pic.json").exists())
