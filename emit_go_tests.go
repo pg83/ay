@@ -20,21 +20,39 @@ func (e *EmitContext) goTestSuites(goRef NodeRef, vetReport VFS, globals []Resou
 	}
 
 	instance := e.instance
-	project := instance.Path.relString()
+	suites := e.goFmtSuites(globals)
+
+	if goNeedLint(instance.Path) {
+		suites = append(suites, e.goVetSuite(vetReport, globals))
+	}
+
+	if e.d.moduleStmt.Name == tokGoTest {
+		suites = append(suites, e.goTestRunSuite(goRef, globals))
+	}
+
+	return suites
+}
+
+func (e *EmitContext) goFmtSuites(globals []ResourceDecl) []*TestSuite {
+	if !e.ctx.testMode {
+		return nil
+	}
 
 	var suites []*TestSuite
 	var fmtFiles []VFS
 
 	isTestFor := e.d.moduleStmt.Name == tokGoTest && e.d.setVars[strGO_TEST_IMPORT_PATH] != 0
 
-	if e.goRes != nil && !isTestFor {
-		fmtFiles = e.goRes.GoFiles
+	if !isTestFor {
+		for _, meta := range e.d.srcs {
+			if !meta.Global && meta.Compile.Variant == 0 && strings.HasSuffix(meta.Source.string(), ".go") {
+				fmtFiles = append(fmtFiles, e.moduleSourceVFS(meta.Source))
+			}
+		}
 	}
 
-	for _, src := range concat(e.d.goTestSrcs, e.d.goXTestSrcs) {
-		if e.ctx.fs.isFile(instance.Path.rel(), src.string()) {
-			fmtFiles = append(fmtFiles, source(project, "/", src.string()))
-		}
+	for _, src := range concat(e.d.goFmtSrcs, e.d.goTestSrcs, e.d.goXTestSrcs) {
+		fmtFiles = append(fmtFiles, e.moduleSourceVFS(src))
 	}
 
 	{
@@ -62,14 +80,6 @@ func (e *EmitContext) goTestSuites(goRef NodeRef, vetReport VFS, globals []Resou
 		for _, dir := range dirs {
 			suites = append(suites, e.goFmtSuite(byDir[dir], globals))
 		}
-	}
-
-	if goNeedLint(instance.Path) {
-		suites = append(suites, e.goVetSuite(vetReport, globals))
-	}
-
-	if e.d.moduleStmt.Name == tokGoTest {
-		suites = append(suites, e.goTestRunSuite(goRef, globals))
 	}
 
 	return suites
@@ -128,7 +138,12 @@ func (e *EmitContext) goTestRunSuite(binRef NodeRef, globals []ResourceDecl) *Te
 }
 
 func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite {
+	slices.SortFunc(files, func(a, b VFS) int { return strings.Compare(a.string(), b.string()) })
+
 	s := e.goSuiteBase("gofmt", "gofmt", "style", globals)
+	s.projectPath = path.Dir(files[0].relString())
+	s.runInputs = []VFS{source(s.projectPath)}
+	s.checkFiles = files
 	gofmt := strGoToolsResourceGlobalBinGofmt.any()
 
 	for _, g := range globals {
@@ -150,7 +165,7 @@ func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite
 			argOutPath.any(), intern(work + "/testing_out_stuff").any(),
 		}
 
-		for _, f := range files {
+		for _, f := range s.checkFiles {
 			out = append(out, f.any())
 		}
 

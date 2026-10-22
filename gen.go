@@ -737,7 +737,7 @@ func (ctx *GenCtx) collectConfiguredSubmoduleTests(dir string, results ...*Modul
 	ctx.testRoots = append(ctx.testRoots, results...)
 }
 
-func (ctx *GenCtx) emitModuleTests(results ...*ModuleEmitResult) {
+func (ctx *GenCtx) moduleTestSuites(results ...*ModuleEmitResult) []*TestSuite {
 	var suites []*TestSuite
 
 	for _, r := range results {
@@ -776,11 +776,7 @@ func (ctx *GenCtx) emitModuleTests(results ...*ModuleEmitResult) {
 		}
 	}
 
-	for _, s := range suites {
-		for _, ref := range ctx.emitTestSuite(s) {
-			ctx.emit.result(ref)
-		}
-	}
+	return suites
 }
 
 func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
@@ -797,9 +793,10 @@ func mergeCheckSuite(suites []*TestSuite, s *TestSuite) bool {
 			return true
 		}
 
-		if prev.testType == s.testType && prev.projectPath == s.projectPath && len(prev.checkFiles) > 0 {
+		if prev.testType == s.testType && prev.projectPath == s.projectPath && prev.name == s.name && len(prev.checkFiles) > 0 {
 			prev.checkFiles = append(prev.checkFiles, s.checkFiles...)
 			prev.deps = append(prev.deps, s.deps...)
+			prev.relatedPaths = sortedUnique(append(prev.relatedPaths, s.relatedPaths...))
 
 			slices.SortFunc(prev.checkFiles, func(a, b VFS) int { return strings.Compare(a.string(), b.string()) })
 
@@ -2453,6 +2450,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	if instance.Demand == demandNone || instance.Language == LangFbsJavaNative {
 		result := newResult()
+
+		if isGoModuleType(d.moduleStmt.Name) {
+			result.TestSuites = append(result.TestSuites, e.goFmtSuites(resourceGlobalsClosure)...)
+		}
 
 		if len(d.cythonAddInclGlobal) > 0 || len(frame.peerCtx.CythonInclude) > 0 {
 			result.ArchiveFile = build(instance.Path.relString(), "/", arNameFn(instance.Path.relString()))

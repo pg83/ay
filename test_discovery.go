@@ -43,6 +43,8 @@ func (ctx *GenCtx) emitDiscoveredModuleTests() {
 		visit(result)
 	}
 
+	var suites []*TestSuite
+
 	for _, project := range projects {
 		results := groups[project]
 
@@ -56,6 +58,16 @@ func (ctx *GenCtx) emitDiscoveredModuleTests() {
 			}
 		}
 
-		ctx.emitModuleTests(results...)
+		for _, suite := range ctx.moduleTestSuites(results...) {
+			if !mergeCheckSuite(suites, suite) {
+				suites = append(suites, suite)
+			}
+		}
+	}
+
+	for _, suite := range suites {
+		for _, ref := range ctx.emitTestSuite(suite) {
+			ctx.emit.result(ref)
+		}
 	}
 }

@@ -173,6 +173,7 @@ type ModuleData struct {
 	hasLicense               bool
 	goTestSrcs               []ANY
 	goXTestSrcs              []ANY
+	goFmtSrcs                []ANY
 	goSkipTests              []ANY
 	gettextKeepPath          bool
 	noLint                   string
@@ -2477,15 +2478,21 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.goEmbeds = append(d.goEmbeds, newGoEmbedDir(fs, v.Name == tokGoEmbedXtestDir, importPath, args[0], all))
 		}
 	case tokAllGoTestSrcs:
-		if d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
-			dir := modulePath
+		dir := modulePath
 
-			if imp := env.string(env_GO_IMPORT_PATH); imp != "" {
-				dir = imp
-			}
+		if imp := env.string(env_GO_IMPORT_PATH); imp != "" {
+			dir = imp
+		}
 
-			for _, name := range goDirFiles(fs, dir, true) {
-				d.goTestSrcs = append(d.goTestSrcs, source(dir+"/"+name).any())
+		for _, name := range goDirFiles(fs, dir, true) {
+			src := source(dir + "/" + name).any()
+
+			// Macro bodies bypass the GO_TEST_SRCS alias for user statements.
+			// These files are checked even when library compilation ignores tests.
+			d.goFmtSrcs = append(d.goFmtSrcs, src)
+
+			if d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
+				d.goTestSrcs = append(d.goTestSrcs, src)
 			}
 		}
 	case tokAllGoSrcs:
