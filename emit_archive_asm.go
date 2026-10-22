@@ -35,10 +35,9 @@ func (e *EmitContext) emitArchiveAsmNode(
 	pathMark := len(e.prodVFS)
 
 	for _, f := range a.Files {
-		var memberVFS VFS
+		memberVFS := moduleInputCandidateVFS(instance.Path.relString(), f)
 
-		if info := reg.use(copyFileOutputVFS(instance.Path.relString(), f)); info != nil {
-			memberVFS = copyFileOutputVFS(instance.Path.relString(), f)
+		if info := reg.use(memberVFS); info != nil {
 			producerRefs = append(producerRefs, info.ProducerRef)
 		} else {
 			memberVFS = e.requireProducedInput("ARCHIVE_ASM member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))

@@ -618,6 +618,16 @@ func copyFileInputVFS(fs FS, moduleDir VFS, src string) VFS {
 	return sourceJoinClean(moduleDir.relString(), src)
 }
 
+func moduleInputCandidateVFS(modulePath string, path string) VFS {
+	// Known input roots retain their namespace; unresolved names may refer to
+	// a producer in the module build directory before source search.
+	if vfs, ok := moduleRootedVFS(modulePath, path); ok {
+		return vfs
+	}
+
+	return buildJoinClean(modulePath, path)
+}
+
 func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 	if vfsHasPrefix(path) {
 		return intern(path), true

@@ -54,15 +54,13 @@ type ProducerPos struct {
 }
 
 func runInputBuildCandidate(modulePath, rel string) VFS {
-	if v, ok := moduleRootedVFS(modulePath, rel); ok {
-		if v.isBuild() {
-			return v
-		}
+	v := moduleInputCandidateVFS(modulePath, rel)
 
-		return 0
+	if v.isBuild() {
+		return v
 	}
 
-	return buildJoinClean(modulePath, rel)
+	return 0
 }
 
 func rootedBuildCandidate(modulePath, rel string) VFS {
@@ -519,7 +517,15 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	if len(d.archiveAsm) > 0 {
-		push(prodArchiveAsm, 0, len(backing), len(backing))
+		start := len(backing)
+
+		for _, archive := range d.archiveAsm {
+			for _, file := range archive.Files {
+				backing = append(backing, moduleInputCandidateVFS(module, file))
+			}
+		}
+
+		push(prodArchiveAsm, 0, start, start)
 	}
 
 	srcs := e.prodSrcs[:0]
@@ -746,7 +752,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		insMark := len(e.prodVFS)
 
 		for _, f := range a.Files {
-			e.prodVFS = append(e.prodVFS, copyFileOutputVFS(module, f))
+			e.prodVFS = append(e.prodVFS, moduleInputCandidateVFS(module, f))
 		}
 
 		positions = append(positions, ProducerPos{

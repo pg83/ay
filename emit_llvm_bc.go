@@ -262,10 +262,10 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 func (e *EmitContext) llvmBcSourceInfo(src string) VFS {
 	ctx, instance := e.ctx, e.instance
 	reg := e.codegen
-	outVFS := copyFileOutputVFS(instance.Path.relString(), src)
+	inputVFS := moduleInputCandidateVFS(instance.Path.relString(), src)
 
-	if reg.use(outVFS) != nil {
-		return outVFS
+	if inputVFS.isSource() || reg.use(inputVFS) != nil {
+		return inputVFS
 	}
 
 	if buildVFS := e.generatedModuleSourceVFS(src); buildVFS != nil {
@@ -280,7 +280,11 @@ func (e *EmitContext) llvmBcSourceInfo(src string) VFS {
 func (e *EmitContext) llvmBcRootRelArcSrc(src string) string {
 	ctx, instance := e.ctx, e.instance
 
-	if reg := e.codegen; reg.lookup(copyFileOutputVFS(instance.Path.relString(), src)) != nil {
+	if vfs, rooted := moduleRootedVFS(instance.Path.relString(), src); rooted {
+		return vfs.relString()
+	}
+
+	if reg := e.codegen; reg.lookup(moduleInputCandidateVFS(instance.Path.relString(), src)) != nil {
 		return src
 	}
 
@@ -288,8 +292,8 @@ func (e *EmitContext) llvmBcRootRelArcSrc(src string) string {
 		return src
 	}
 
-	if _, ok := sourceInputVFS(ctx.fs, instance.Path, src); ok {
-		return instance.Path.relString() + "/" + src
+	if vfs, ok := sourceInputVFS(ctx.fs, instance.Path, src); ok {
+		return vfs.relString()
 	}
 
 	return src

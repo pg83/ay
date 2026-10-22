@@ -25,17 +25,10 @@ func (e *EmitContext) emitArchive(
 	pathMark := len(e.prodVFS)
 
 	for _, f := range a.Files {
-		isPRProduced := false
+		absVFS := moduleInputCandidateVFS(instance.Path.relString(), f)
 
-		if info := reg.use(copyFileOutputVFS(instance.Path.relString(), f)); info != nil {
-			isPRProduced = true
+		if info := reg.use(absVFS); info != nil {
 			producerRefs = append(producerRefs, info.ProducerRef)
-		}
-
-		var absVFS VFS
-
-		if isPRProduced {
-			absVFS = copyFileOutputVFS(instance.Path.relString(), f)
 		} else {
 			absVFS = e.requireProducedInput("ARCHIVE member", f, resolveSourceVFS(ctx, instance, f, d.srcDirs))
 		}
