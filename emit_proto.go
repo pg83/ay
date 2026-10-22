@@ -219,12 +219,15 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 
 	pe := &e.pbEmission[idx]
 	ctx, d := e.ctx, e.d
+	// Only CPP_PROTO attaches _CPP_PROTO_EPILOGUE; CPP_PROTO_FROM_SCHEMA
+	// inherits the same base module without the header-policy recalculation.
+	headerEpilogue := d.moduleStmt.Name == tokProtoLibrary && !d.moduleStmt.Schema && e.instance.Platform.ProtoHeaderEpilogue
 
 	*pe = PbModuleEmission{
 		liteHeaders:           !protoTransitiveHeadersEnabled(d),
 		grpcCppBinary:         pbGrpcCppVFS,
 		grpcOutputIndex:       d.grpcOutputIndex,
-		grpcOutputsBeforeBase: d.grpcOutputsBeforeBase || d.moduleStmt.Name == tokProtoLibrary && e.instance.Platform.ProtoHeaderEpilogue,
+		grpcOutputsBeforeBase: d.grpcOutputsBeforeBase || headerEpilogue,
 	}
 
 	pe.protocLDRef, pe.protocBinary = ctx.tool(argContribToolsProtoc)
@@ -244,7 +247,7 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 
 			ldRef, binary := ctx.tool(internArg(plugin.ToolPath))
 
-			plugin.OutputsBeforeBase = plugin.OutputsBeforeBase || d.moduleStmt.Name == tokProtoLibrary && e.instance.Platform.ProtoHeaderEpilogue
+			plugin.OutputsBeforeBase = plugin.OutputsBeforeBase || headerEpilogue
 
 			pe.extraPlugins = append(pe.extraPlugins, ResolvedCPPProtoPlugin{
 				Spec:   plugin,
