@@ -904,7 +904,10 @@ func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem
 		keyStart := len(buf)
 
 		buf = append(buf, "resfs/file/py/"...)
-		buf = append(buf, en.key.sharedString()...)
+		// pybuild.py forms the resource destination from the import module,
+		// so dots in its source stem and default namespace become separators.
+		buf = append(buf, strings.ReplaceAll(strings.TrimSuffix(en.key.sharedString(), ".py"), ".", "/")...)
+		buf = append(buf, ".py"...)
 
 		if en.yapyc {
 			buf = append(buf, ".yapyc3"...)

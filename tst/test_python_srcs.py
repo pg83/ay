@@ -105,6 +105,33 @@ def objcopy_with_kv(graph, module, kv):
 
 
 class PySrcsTest(unittest.TestCase):
+    def test_dotted_source_names_use_import_paths_for_resource_keys(self):
+        for setting, prefix in (("", "copper/pkg/library/"),
+                                ("TOP_LEVEL", ""),
+                                ("NAMESPACE public.api", "public/api/")):
+            with self.subTest(setting=setting):
+                files = python_base()
+                files.update({
+                    "copper.pkg/library/ya.make": (
+                        "PY3_LIBRARY()\n"
+                        f"PY_SRCS({setting} branch/moss.entry.py)\nEND()\n"
+                    ),
+                    "copper.pkg/library/branch/moss.entry.py": "",
+                })
+                graph = lib.make(files, "copper.pkg/library")
+                source = "copper.pkg/library/branch/moss.entry.py"
+                key = f"resfs/src/resfs/file/py/{prefix}branch/moss/entry.py"
+                packed = objcopy_with_kv(graph, "copper.pkg/library", f"{key}={source}")
+                self.assertEqual(keys(packed), [
+                    f"resfs/file/py/{prefix}branch/moss/entry.py",
+                    f"resfs/file/py/{prefix}branch/moss/entry.py.yapyc3",
+                ])
+                compiled = next(node for node in graph["graph"]
+                                if node.get("kv", {}).get("p") == "PY"
+                                and f"$(S)/{source}" in node["inputs"])
+                self.assertIn(compiled["outputs"][0], packed["inputs"])
+                self.assertIn(compiled["uid"], packed["deps"])
+
     def test_library_groups_key_resources_by_namespace(self):
         files = python_base()
         files.update({
