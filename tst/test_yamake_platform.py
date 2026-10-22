@@ -207,8 +207,8 @@ class YaMakePlatformTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="ay-dump-test-") as directory:
             raw = Path(directory, "raw.json")
             out = Path(directory, "normalized.jsonl")
-            raw.write_text(json.dumps({"conf": {}, "graph": [link, link, compile_node], "result": []}))
-            lib.run("dev", "dump", "normalize", "--in", raw, "--target", "pkg/app", "--out", out)
+            raw.write_text(json.dumps({"conf": {}, "graph": [link, link, compile_node], "result": ["u_ld", "u_ld"]}))
+            lib.run("dev", "dump", "normalize", "--in", raw, "--out", out)
             kinds = sorted(json.loads(line)["kv"]["p"] for line in out.read_text().splitlines())
         self.assertEqual(kinds, ["CC", "LD"])
 

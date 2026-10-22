@@ -80,11 +80,6 @@ def resolve_reference_graph(directory: Path) -> Path:
     return candidates[0]
 
 
-def spec_targets(spec: dict) -> list[str]:
-    target = spec["target"]
-    return [target] if isinstance(target, str) else list(target)
-
-
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -193,14 +188,12 @@ class CaseRunner:
                 if rc != 0:
                     return self.phase_failure("generate", rc, generation_seconds=generation_seconds)
 
-                targets = spec_targets(self.spec)
                 our_mode = streaming_mode(our_raw)
                 ref_mode = streaming_mode(reference_raw)
-                target_flags = [flag for target in targets for flag in ("--target", target)]
                 commands = (
-                    ("normalize-our", [str(self.ay), "dev", "dump", "normalize", "--in", str(our_raw), *target_flags, "--out", str(our_unsorted), *our_mode]),
+                    ("normalize-our", [str(self.ay), "dev", "dump", "normalize", "--in", str(our_raw), "--out", str(our_unsorted), *our_mode]),
                     ("sort-our", [str(self.ay), "dev", "dump", "sort", "--in", str(our_unsorted), "--out", str(our_sorted)]),
-                    ("normalize-reference", [str(self.ay), "dev", "dump", "normalize", "--in", str(reference_raw), *target_flags, "--out", str(ref_unsorted), "--ref-graph", *ref_mode]),
+                    ("normalize-reference", [str(self.ay), "dev", "dump", "normalize", "--in", str(reference_raw), "--out", str(ref_unsorted), "--ref-graph", *ref_mode]),
                     ("sort-reference", [str(self.ay), "dev", "dump", "sort", "--in", str(ref_unsorted), "--out", str(ref_sorted)]),
                 )
                 for phase, command in commands:

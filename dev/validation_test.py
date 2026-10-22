@@ -117,7 +117,7 @@ class ValidationTest(unittest.TestCase):
         self.assertTrue(result["exact"])
         self.assertTrue((output / "commands.txt").is_file())
 
-    def test_case_runner_passes_targets_and_env(self):
+    def test_case_runner_passes_targets_to_generator_and_env(self):
         env = {"AUTOCHECK": "1", "YA_NO_GEN_RENAMED_RESULTS": "1"}
         targets = ["pkg/app", "pkg/lib"]
         with mock.patch.dict(os.environ, {"CC": "gcc"}):
@@ -138,12 +138,7 @@ class ValidationTest(unittest.TestCase):
         self.assertEqual({name: make["env"].get(name) for name in env}, env)
         self.assertNotIn("CC", make["env"])
         for call in calls["normalize"]:
-            target_values = [
-                call["args"][index + 1]
-                for index, value in enumerate(call["args"])
-                if value == "--target"
-            ]
-            self.assertEqual(target_values, targets)
+            self.assertNotIn("--target", call["args"])
         for name in ("fetch", "normalize", "sort"):
             for call in calls[name]:
                 self.assertFalse(env.keys() & call["env"].keys(), call["args"])

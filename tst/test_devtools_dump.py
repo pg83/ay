@@ -9,7 +9,6 @@ import lib
 
 
 RED = "\x1b[31m"
-YELLOW = "\x1b[33m"
 RESET = "\x1b[0m"
 
 
@@ -237,7 +236,7 @@ class DumpGraphErrorsTest(DumpToolTest):
             path = self.write(name, content)
             self.fails(
                 f"dump: {path}: {message}",
-                "dev", "dump", "normalize", "--in", path, "--target", "t",
+                "dev", "dump", "normalize", "--in", path,
             )
             self.fails(
                 f"dump: {path}: {message}",
@@ -246,11 +245,9 @@ class DumpGraphErrorsTest(DumpToolTest):
 
 
 class DumpNormalizeTest(DumpToolTest):
-    def normalize(self, nodes, target, *args, result=()):
+    def normalize(self, nodes, *args, result):
         raw = self.write("raw.json", compact({"conf": {}, "graph": nodes, "result": list(result)}))
-        targets = [target] if isinstance(target, str) else target
-        flags = [flag for name in targets for flag in ("--target", name)]
-        normalized = self.ok("dev", "dump", "normalize", "--in", raw, *flags, *args)
+        normalized = self.ok("dev", "dump", "normalize", "--in", raw, *args)
         return [json.loads(line) for line in normalized.stdout.splitlines()]
 
     def test_normalize_closure_uids_fetch_and_streaming(self):
@@ -270,8 +267,8 @@ class DumpNormalizeTest(DumpToolTest):
             raw_node("outside", "CC", ["$(B)/other/o.o"]),
             {"uid": 17, "outputs": ["$(B)/numeric"], "deps": []},
         ]
-        normalized = self.normalize(nodes, "app")
-        streamed = self.normalize(nodes, "app", "--streaming")
+        normalized = self.normalize(nodes, result=["root"])
+        streamed = self.normalize(nodes, "--streaming", result=["root"])
         self.assertEqual(
             sorted(map(compact, normalized)),
             sorted(map(compact, streamed)),
@@ -301,33 +298,30 @@ class DumpNormalizeTest(DumpToolTest):
         )
         self.assertEqual(len({node["uid"] for node in normalized}), 4)
 
-    def test_normalize_roots_by_kind(self):
+    def test_normalize_uses_result_even_for_nonstandard_roots(self):
         archive = raw_node("ar", "AR", ["$(B)/lib/liblib.a"], deps=["cc"])
         compile_node = raw_node("cc", "CC", ["$(B)/lib/a.o"])
         test_node = raw_node("ts", "TS", ["$(B)/lib/test.out"], deps=["cc"], kv={"p": "TS", "path": "lib/ut"})
         other_test = raw_node("ts2", "TS", ["$(B)/x/test.out"], kv={"p": "TS", "path": "x/ut"})
-        normalized = self.normalize([archive, compile_node, test_node, other_test], "lib")
+        normalized = self.normalize([archive, compile_node, test_node, other_test], result=["ts"])
         self.assertEqual(
             sorted(node["outputs"][0] for node in normalized),
-            ["$(B)/lib/a.o", "$(B)/lib/liblib.a", "$(B)/lib/test.out"],
+            ["$(B)/lib/a.o", "$(B)/lib/test.out"],
         )
-        fetched_root = raw_node(
-            "tsvcs", "TS", ["$(BUILD_ROOT)/vcs.json"], kv={"p": "TS", "path": "lib/vcs"},
-        )
-        normalized = self.normalize([archive, compile_node, fetched_root], "lib")
+        normalized = self.normalize([archive, compile_node], result=["ar"])
         self.assertEqual(
             sorted(node["outputs"][0] for node in normalized),
             ["$(B)/lib/a.o", "$(B)/lib/liblib.a"],
         )
-        first = raw_node("ld1", "LD", ["$(B)/app/one"], deps=["ld2"])
-        second = raw_node("ld2", "LD", ["$(B)/app/two"])
-        normalized = self.normalize([first, second], "app")
+        first = raw_node("ld1", "LD", ["$(B)/app/one"])
+        second = raw_node("pkg", "UN", ["$(B)/elsewhere/package.pkg.fake"])
+        normalized = self.normalize([first, second], result=["pkg"])
         self.assertEqual(
             sorted(node["outputs"][0] for node in normalized),
-            ["$(B)/app/one", "$(B)/app/two"],
+            ["$(B)/elsewhere/package.pkg.fake"],
         )
 
-    def test_normalize_several_targets_unions_roots(self):
+    def test_normalize_multiple_results_and_streaming(self):
         nodes = [
             raw_node("ld", "LD", ["$(B)/app/app"], deps=["cc"]),
             raw_node("cc", "CC", ["$(B)/app/main.o"]),
@@ -336,19 +330,19 @@ class DumpNormalizeTest(DumpToolTest):
             raw_node("ts", "TS", ["$(B)/lib/ut/test.out"], deps=["ar"], kv={"p": "TS", "path": "lib/ut"}),
             raw_node("outside", "CC", ["$(B)/other/o.o"]),
         ]
-        both = self.normalize(nodes, ["app", "lib"])
+        both = self.normalize(nodes, result=["ld", "ts"])
         self.assertEqual(
             sorted(node["outputs"][0] for node in both),
             ["$(B)/app/app", "$(B)/app/main.o", "$(B)/lib/a.o", "$(B)/lib/liblib.a", "$(B)/lib/ut/test.out"],
         )
-        singles = self.normalize(nodes, "app") + self.normalize(nodes, "lib")
+        singles = self.normalize(nodes, result=["ld"]) + self.normalize(nodes, result=["ts"])
         self.assertEqual(sorted(map(compact, both)), sorted(set(map(compact, singles))))
         self.assertEqual(
             sorted(map(compact, both)),
-            sorted(map(compact, self.normalize(nodes, ["app", "lib"], "--streaming"))),
+            sorted(map(compact, self.normalize(nodes, "--streaming", result=["ld", "ts"]))),
         )
 
-    def test_normalize_result_roots_for_targets_without_ld_ar_ts(self):
+    def test_normalize_includes_all_results_regardless_of_path_or_kind(self):
         nodes = [
             raw_node(1, "LD", ["$(B)/app/app"]),
             raw_node(2, "PK", ["$(B)/pkg/pkg.tar"], deps=[3]),
@@ -359,31 +353,26 @@ class DumpNormalizeTest(DumpToolTest):
         ]
         result = [1, 2, 5, 6]
         for streaming in ((), ("--streaming",)):
-            normalized = self.normalize(nodes, ["pkg", "app"], *streaming, result=result)
+            normalized = self.normalize(nodes, *streaming, result=result)
             self.assertEqual(
                 sorted(node["outputs"][0] for node in normalized),
-                ["$(B)/app/app", "$(B)/pkg/data/file", "$(B)/pkg/pkg.tar"],
+                ["$(B)/app/app", "$(B)/app/extra", "$(B)/java/lib.jar", "$(B)/pkg/data/file", "$(B)/pkg/pkg.tar"],
             )
-        normalized = self.normalize(nodes, "java", result=result)
+        normalized = self.normalize(nodes, result=[5])
         self.assertEqual([node["outputs"][0] for node in normalized], ["$(B)/java/lib.jar"])
 
-    def test_normalize_target_without_roots(self):
+    def test_normalize_follows_result_not_output_prefix(self):
         raw = self.write("roots.json", compact({"graph": [
             raw_node("ld", "LD", ["$(B)/app/app"]),
             raw_node("cp", "CP", ["$(B)/pkg/file"]),
         ], "result": ["ld", "cp"]}))
-        warning = (
-            YELLOW + 'dump normalize: no LD/AR/TS root node found for target "missing"; '
-            "it contributes no nodes" + RESET + "\n"
-        )
-        for flags, outputs in (
-            (["--target", "app", "--target", "missing"], ["$(B)/app/app"]),
-            (["--target", "missing", "--target", "pkg", "--streaming"], ["$(B)/pkg/file"]),
-            (["--target", "app", "--target", "missing", "--ref-graph"], ["$(B)/app/app"]),
-        ):
+        for flags in ((), ("--streaming",), ("--ref-graph",)):
             result = self.ok("dev", "dump", "normalize", "--in", raw, *flags)
-            self.assertEqual(result.stderr, warning)
-            self.assertEqual([json.loads(line)["outputs"][0] for line in result.stdout.splitlines()], outputs)
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(
+                sorted(json.loads(line)["outputs"][0] for line in result.stdout.splitlines()),
+                ["$(B)/app/app", "$(B)/pkg/file"],
+            )
 
     def test_normalize_ref_graph_preserves_ordering_deps(self):
         nodes = [
@@ -399,7 +388,7 @@ class DumpNormalizeTest(DumpToolTest):
             raw_node("no_outputs", "CC", []),
             raw_node("fetch", "FT", ["$(B)/fetched"]),
         ]
-        normalized = self.normalize(nodes, "app", "--ref-graph")
+        normalized = self.normalize(nodes, "--ref-graph", result=["root"])
         by_kind = {}
         for node in normalized:
             by_kind.setdefault(node["kv"]["p"], []).append(node)
@@ -413,7 +402,7 @@ class DumpNormalizeTest(DumpToolTest):
         self.assertIn("$(B)/app/ordering.o", [o for n in normalized for o in n["outputs"]])
         self.assertEqual(
             sorted(map(compact, normalized)),
-            sorted(map(compact, self.normalize(nodes, "app"))),
+            sorted(map(compact, self.normalize(nodes, result=["root"]))),
         )
 
     def test_normalize_ref_graph_preserves_test_build_dependencies(self):
@@ -426,9 +415,9 @@ class DumpNormalizeTest(DumpToolTest):
             ),
             raw_node("tool", "LD", ["$(B)/tools/formatter", "$(B)/tools/formatter.license"]),
         ]
-        expected = sorted(map(compact, self.normalize(nodes, "app")))
+        expected = sorted(map(compact, self.normalize(nodes, result=["suite"])))
         for flags in ((), ("--streaming",)):
-            normalized = self.normalize(nodes, "app", "--ref-graph", *flags)
+            normalized = self.normalize(nodes, "--ref-graph", *flags, result=["suite"])
             self.assertEqual(sorted(map(compact, normalized)), expected)
             self.assertEqual(len(normalized), 2)
             by_output = {node["outputs"][0]: node for node in normalized}
@@ -457,11 +446,11 @@ class DumpNormalizeTest(DumpToolTest):
         ]
         expected_enum = dict(nodes[0], inputs=[tool, header], deps=["tool", "header", "order", "extra"])
         clean_nodes = [expected_enum, *nodes[1:]]
-        expected = sorted(map(compact, self.normalize(clean_nodes, "app", result=["enum"])))
+        expected = sorted(map(compact, self.normalize(clean_nodes, result=["enum"])))
         for flags in ((), ("--streaming",)):
-            clean = self.normalize(clean_nodes, "app", "--ref-graph", *flags, result=["enum"])
+            clean = self.normalize(clean_nodes, "--ref-graph", *flags, result=["enum"])
             self.assertEqual(sorted(map(compact, clean)), expected)
-            normalized = self.normalize(nodes, "app", "--ref-graph", *flags, result=["enum"])
+            normalized = self.normalize(nodes, "--ref-graph", *flags, result=["enum"])
             self.assertEqual(sorted(map(compact, normalized)), expected)
             by_output = {node["outputs"][0]: node for node in normalized}
             self.assertNotIn(removed, by_output)
@@ -494,9 +483,9 @@ class DumpNormalizeTest(DumpToolTest):
                         raw_node("unrelated", "PR", ["$(B)/app/unrelated.primary", "$(B)/app/unrelated.h"]),
                     ]
                     expected_node = dict(nodes[0], inputs=[tool, header, primary], deps=["producer", "tool", "ordering"])
-                    expected = sorted(map(compact, self.normalize([expected_node, *nodes[1:]], "app", result=["enum"])))
+                    expected = sorted(map(compact, self.normalize([expected_node, *nodes[1:]], result=["enum"])))
                     for flags in ((), ("--streaming",)):
-                        normalized = self.normalize(nodes, "app", "--ref-graph", *flags, result=["enum"])
+                        normalized = self.normalize(nodes, "--ref-graph", *flags, result=["enum"])
                         self.assertEqual(sorted(map(compact, normalized)), expected)
                         generated = next(node for node in normalized if node["kv"]["p"] == "EN")
                         self.assertEqual(generated["inputs"], sorted([tool, header, primary]))
@@ -556,7 +545,7 @@ class DumpNormalizeTest(DumpToolTest):
             args=["gen", "$(S)/app/plain.in"],
         )
         normalized = self.normalize(
-            [root, objcopy, raw, cython, archive, plain_pr], "app", "--ref-graph",
+            [root, objcopy, raw, cython, archive, plain_pr], "--ref-graph", result=["root"],
         )
         inputs = {node["outputs"][0]: node["inputs"] for node in normalized}
         self.assertEqual(inputs["$(B)/app/app"], sorted(root["inputs"]))
@@ -574,32 +563,26 @@ class DumpNormalizeTest(DumpToolTest):
 
     def test_normalize_errors(self):
         self.fails(
-            "dump normalize: --in and --target are required",
-            "dev", "dump", "normalize", "--target", "x",
+            "dump normalize: --in is required",
+            "dev", "dump", "normalize",
         )
         self.fails(
             'dump normalize: unknown argument "--bogus"',
             "dev", "dump", "normalize", "--bogus",
         )
         self.fails(
-            'dump: missing value for flag "--target"',
-            "dev", "dump", "normalize", "--in", "x", "--target",
+            'dump normalize: unknown argument "--target"',
+            "dev", "dump", "normalize", "--target",
         )
-        raw = self.write("two_ar.json", compact({"graph": [
-            raw_node("a1", "AR", ["$(B)/lib/one.a"]),
-            raw_node("a2", "AR", ["$(B)/lib/two.a"]),
-            raw_node("a3", "AR", ["$(B)/mirror/lib/three.a"]),
-            raw_node("x1", "AR", ["$(B)/m1/x/one.a"]),
-            raw_node("x2", "AR", ["$(B)/m2/x/two.a"]),
-        ]}))
-        result = self.ok("dev", "dump", "normalize", "--in", raw, "--target", "lib")
-        self.assertEqual(
-            sorted(json.loads(line)["outputs"][0] for line in result.stdout.splitlines()),
-            ["$(B)/lib/one.a", "$(B)/lib/two.a"],
-        )
+        raw = self.write("no_roots.json", compact({"graph": [], "result": []}))
         self.fails(
-            'dump normalize: 2 AR roots for target "x", none under $(B)/x/',
-            "dev", "dump", "normalize", "--in", raw, "--target", "x",
+            "dump normalize: graph has no result roots",
+            "dev", "dump", "normalize", "--in", raw,
+        )
+        raw = self.write("missing_root.json", compact({"graph": [], "result": ["missing"]}))
+        self.fails(
+            'dump normalize: result root "missing" is absent from graph',
+            "dev", "dump", "normalize", "--in", raw,
         )
 
 

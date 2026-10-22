@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"maps"
 	"os"
@@ -16,21 +15,6 @@ import (
 
 const dumpUIDLen = 22
 
-type NormalizeTarget struct {
-	name     string
-	ldPrefix string
-	arInfix  string
-	tsPrefix string
-	ld       []string
-	ar       []string
-	ts       []string
-}
-
-type NormalizeRoot struct {
-	target int
-	kind   byte
-}
-
 type NormalizeEnumFilter struct {
 	inputs  []string
 	removed []string
@@ -41,7 +25,6 @@ type NormalizeEnumFilter struct {
 
 func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	var inPath, outPath string
-	var targets []*NormalizeTarget
 	var refGraph, streaming bool
 
 	for i := 0; i < len(args); i++ {
@@ -49,17 +32,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		case "--in":
 			i++
 			inPath = arg(args, i)
-		case "--target":
-			i++
-
-			name := arg(args, i)
-
-			targets = append(targets, &NormalizeTarget{
-				name:     name,
-				ldPrefix: "$(B)/" + name + "/",
-				arInfix:  "/" + name + "/",
-				tsPrefix: name + "/",
-			})
 		case "--out":
 			i++
 			outPath = arg(args, i)
@@ -74,8 +46,8 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		}
 	}
 
-	if inPath == "" || len(targets) == 0 {
-		throwFmt("dump normalize: --in and --target are required")
+	if inPath == "" {
+		throwFmt("dump normalize: --in is required")
 	}
 
 	src := NodeSource{path: inPath}
@@ -90,8 +62,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 	deps := map[string][]string{}
 	fetch := map[string]bool{}
 	outputsByUID := map[string][]string{}
-	targetOut0 := map[string]string{}
-	arOut0 := map[string]string{}
 	enumFilters := map[string]*NormalizeEnumFilter{}
 
 	type p1Result struct {
@@ -99,9 +69,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		deps       []string
 		content    [32]byte
 		isFetch    bool
-		roots      []NormalizeRoot
-		targetOut0 string
-		arOut0     string
 		outputs    []string
 		enumFilter *NormalizeEnumFilter
 	}
@@ -177,26 +144,6 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				}
 			}
 
-			tsPath, _ := kv["path"].(string)
-
-			for t, target := range targets {
-				underTarget := strings.HasPrefix(out0, target.ldPrefix)
-
-				if underTarget {
-					r.targetOut0 = out0
-				}
-
-				switch {
-				case p == "LD" && underTarget:
-					r.roots = append(r.roots, NormalizeRoot{target: t, kind: 'L'})
-				case p == "AR" && strings.Contains(out0, target.arInfix):
-					r.roots = append(r.roots, NormalizeRoot{target: t, kind: 'A'})
-					r.arOut0 = out0
-				case p == "TS" && strings.HasPrefix(tsPath, target.tsPrefix):
-					r.roots = append(r.roots, NormalizeRoot{target: t, kind: 'T'})
-				}
-			}
-
 			return r
 		},
 		func(r p1Result) {
@@ -215,24 +162,10 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 				fetch[r.uid] = true
 			}
 
-			if r.targetOut0 != "" {
-				targetOut0[r.uid] = r.targetOut0
-			}
-
-			for _, root := range r.roots {
-				target := targets[root.target]
-
-				switch root.kind {
-				case 'L':
-					target.ld = append(target.ld, r.uid)
-				case 'A':
-					target.ar = append(target.ar, r.uid)
-					arOut0[r.uid] = r.arOut0
-				case 'T':
-					target.ts = append(target.ts, r.uid)
-				}
-			}
 		})
+	if len(result) == 0 {
+		throwFmt("dump normalize: graph has no result roots")
+	}
 
 	for uid, filter := range enumFilters {
 		inputs := make(map[string]struct{}, len(filter.inputs))
@@ -280,41 +213,13 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		deps[uid] = kept
 	}
 
-	roots := []string{}
-
-	for _, target := range targets {
-		n := len(roots)
-
-		switch {
-		case len(target.ld) > 0:
-			roots = append(roots, target.ld...)
-		case len(target.ar) == 1:
-			roots = append(roots, target.ar[0])
-		case len(target.ar) > 1:
-			for _, uid := range target.ar {
-				if strings.HasPrefix(arOut0[uid], target.ldPrefix) {
-					roots = append(roots, uid)
-				}
-			}
-
-			if len(roots) == n {
-				throwFmt("dump normalize: %d AR roots for target %q, none under %s", len(target.ar), target.name, target.ldPrefix)
-			}
+	roots := make([]string, 0, len(result))
+	for _, uid := range result {
+		root := string(uid)
+		if _, present := contentHash[root]; !present {
+			throwFmt("dump normalize: result root %q is absent from graph", root)
 		}
-
-		roots = append(roots, target.ts...)
-
-		if len(roots) == n {
-			for _, uid := range result {
-				if strings.HasPrefix(targetOut0[string(uid)], target.ldPrefix) {
-					roots = append(roots, string(uid))
-				}
-			}
-		}
-
-		if len(roots) == n {
-			fmt.Fprintf(os.Stderr, "\x1b[33mdump normalize: no LD/AR/TS root node found for target %q; it contributes no nodes\x1b[0m\n", target.name)
-		}
+		roots = append(roots, root)
 	}
 
 	roots = dedupKeepOrder(roots)

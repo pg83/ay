@@ -14,7 +14,7 @@ class DumpEdgeContractsTest(unittest.TestCase):
             path = Path(directory) / 'graph.json'
             path.write_text(graph if isinstance(graph, str) else json.dumps(graph))
             return subprocess.run([str(lib.AY), 'dev', 'dump', 'normalize', '--in', str(path),
-                                   '--target', 'app', '--ref-graph'],
+                                   '--ref-graph'],
                                   capture_output=True, text=True, timeout=10)
 
     def test_non_string_key_after_graph_is_diagnosed(self):

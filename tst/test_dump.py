@@ -98,13 +98,12 @@ class DumpTest(unittest.TestCase):
         )
         return output.read_text()
 
-    def normalize(self, nodes, target, *, reference=False, sort=False):
-        raw = self.write("raw.json", compact({"conf": {}, "graph": nodes, "result": []}))
+    def normalize(self, nodes, result, *, reference=False, sort=False):
+        raw = self.write("raw.json", compact({"conf": {}, "graph": nodes, "result": list(result)}))
         normalized = self.root / "normalized.jsonl"
         args = [
             "dev", "dump", "normalize",
             "--in", raw,
-            "--target", target,
             "--out", normalized,
         ]
         if reference:
@@ -122,7 +121,7 @@ class DumpTest(unittest.TestCase):
 
     def normalized_special_node(self, node, *, reference=True):
         if node["kv"]["p"] == "AR":
-            text = self.normalize([node], "pkg", reference=reference)
+            text = self.normalize([node], [node["uid"]], reference=reference)
         else:
             root = raw_node(
                 "root",
@@ -132,7 +131,7 @@ class DumpTest(unittest.TestCase):
                 inputs=node["outputs"],
                 cmds=[{"cmd_args": ["ld", *node["outputs"]]}],
             )
-            text = self.normalize([root, node], "pkg/app", reference=reference)
+            text = self.normalize([root, node], ["root"], reference=reference)
         nodes = [json.loads(line) for line in text.splitlines()]
         return next(item for item in nodes if item["kv"].get("p") == node["kv"]["p"])
 
@@ -149,7 +148,7 @@ class DumpTest(unittest.TestCase):
                 "/usr/bin/clang",
             ],
         )
-        node = json.loads(self.normalize([root], "pkg/app"))
+        node = json.loads(self.normalize([root], ["root"]))
         self.assertEqual(
             node["inputs"],
             [
@@ -173,7 +172,6 @@ class DumpTest(unittest.TestCase):
         self.assertEqual(output.read_text(), "apple\napple\nbanana\ncherry\ndate\n")
 
     def test_normalize_semantic_equivalence(self):
-        target = "pkg/app"
         a = [
             raw_node(
                 "u_ld", "LD", "$(B)/pkg/app/app",
@@ -208,9 +206,9 @@ class DumpTest(unittest.TestCase):
                 inputs=["$(S)/pkg/app/other.c"],
             ),
         ]
-        normalized_a = self.normalize(a, target, sort=True)
-        normalized_b = self.normalize(b, target, sort=True)
-        normalized_c = self.normalize(c, target, sort=True)
+        normalized_a = self.normalize(a, ["u_ld"], sort=True)
+        normalized_b = self.normalize(b, ["a1"], sort=True)
+        normalized_c = self.normalize(c, ["c_ld"], sort=True)
         self.assertEqual(normalized_a, normalized_b)
         self.assertNotEqual(normalized_a, normalized_c)
         self.assertEqual(normalized_a.count("\n"), 2)
@@ -602,8 +600,8 @@ class DumpTest(unittest.TestCase):
                     deps=["action"], inputs=action["outputs"])
                 nodes = [root, action]
                 self.assertEqual(
-                    self.normalize(nodes, "pkg/app", reference=True, sort=True),
-                    self.normalize(nodes, "pkg/app", sort=True),
+                    self.normalize(nodes, ["root"], reference=True, sort=True),
+                    self.normalize(nodes, ["root"], sort=True),
                 )
 
     def test_canon_inputs_named_enum_generator_preserves_declared_inputs(self):
