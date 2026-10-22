@@ -1247,6 +1247,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit)
+			setupSandboxPythonTask(v.Name, modulePath, kind, env, d)
 
 			if isUnionModule(v.Name) {
 				env.setStringID(envDontResolveIncludes, strYes)
@@ -1946,6 +1947,8 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	}
 
 	switch name {
+	case tokSandboxPy3Task:
+		return sandboxPythonTaskUnit(kind, language)
 	case tokPackage:
 		return packageModuleUnit(language)
 	case tokRosLibrary:
@@ -4330,7 +4333,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokPy3Test, tokPy2Test, tokPytestBin, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokBoosttest, tokBoosttestWithMain, tokGoProgram, tokGoTest, tokGoDll:
+	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokSandboxPy3Task, tokPy3Test, tokPy2Test, tokPytestBin, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokBoosttest, tokBoosttestWithMain, tokGoProgram, tokGoTest, tokGoDll:
 		return true
 	}
 

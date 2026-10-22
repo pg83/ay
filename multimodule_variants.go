@@ -56,6 +56,12 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 	var results []*ModuleEmitResult
 	var instances []ModuleInstance
 
+	if target.Declaration != nil && target.Declaration.Name == tokSandboxPy3Task {
+		instance := ctx.rootInstanceForDeclaration(target.Path, demand, target.Declaration)
+		instance.Kind = KindLib
+		instances = append(instances, instance)
+	}
+
 	if target.Declaration != nil && target.Declaration.Name == tokYqlUdf {
 		instance := ctx.rootInstanceForDeclaration(target.Path, demand, target.Declaration)
 

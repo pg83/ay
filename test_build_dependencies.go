@@ -128,7 +128,7 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 		}
 	}
 
-	if name == tokPy3Program {
+	if name == tokPy3Program || name == tokSandboxPy3Task {
 		instance.Kind = KindLib
 		instances = append(instances, instance)
 	}
@@ -146,6 +146,9 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 
 	for _, peer := range instances {
 		tag := multimoduleVariantTag(name, peer.Language)
+		if name == tokSandboxPy3Task {
+			tag = sandboxPythonTaskVariant(peer.Kind)
+		}
 
 		if tag == "" {
 			tag = resolveModuleUnit(name, peer.Kind, peer.Language).Tag.string()

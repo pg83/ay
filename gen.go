@@ -430,7 +430,7 @@ func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, d
 		}
 	}
 
-	if name == tokPy3Program || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokDocs || name == 0 {
+	if name == tokPy3Program || name == tokSandboxPy3Task || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokDocs || name == 0 {
 		kind = KindBin
 	}
 
@@ -1286,6 +1286,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	tag := multimoduleVariantTag(d.multimodule, instance.Language)
+	if moduleName == tokSandboxPy3Task {
+		tag = sandboxPythonTaskVariant(instance.Kind)
+	}
 
 	if d.moduleStmt != nil && d.moduleStmt.Schema {
 		tag = protoModuleTag(instance.Language, true)
