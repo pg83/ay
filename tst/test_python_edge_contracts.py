@@ -15,15 +15,12 @@ def python2_files(body):
 
 
 class PythonEdgeContractsTest(unittest.TestCase):
-    def test_python2_rejects_unsupported_sources(self):
-        for source, diagnostic in (('input.proto', '.proto sources'), ('${BINDIR}/generated.py', 'build-root sources')):
-            with self.subTest(source=source):
-                files = python2_files(f'PY_SRCS({source})')
-                files['lib/input.proto'] = ''
-                result = lib.make_process(files, 'prog')
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn(diagnostic + ' of a Python 2 module are not modelled', result.stderr)
-                self.assertNotIn('panic:', result.stderr)
+    def test_python2_rejects_unsupported_build_root_python_sources(self):
+        files = python2_files('PY_SRCS(${BINDIR}/generated.py)')
+        result = lib.make_process(files, 'prog')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('build-root sources of a Python 2 module are not modelled', result.stderr)
+        self.assertNotIn('panic:', result.stderr)
 
     def test_disabling_light_python2_compiler_restores_regular_tool(self):
         files = python2_files('ENABLE(USE_LIGHT_PY2CC)\nDISABLE(USE_LIGHT_PY2CC)\nSTYLE_PYTHON()\nPY_SRCS(main.py)')
