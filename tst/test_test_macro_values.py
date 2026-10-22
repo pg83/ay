@@ -30,7 +30,7 @@ class TestMacroValuesTest(unittest.TestCase):
                 self.assertEqual(option_values(run, "--env"), expected)
                 self.assertNotIn("TEST_PROGRAMS", run["env"])
 
-    def test_recipes_expand_configuration_after_the_include(self):
+    def test_only_unresolved_bare_recipe_configuration_expands_after_the_include(self):
         files = {
             "suite/ya.make": (
                 "EXECTEST()\nRUN(echo)\n"
@@ -47,9 +47,9 @@ class TestMacroValuesTest(unittest.TestCase):
         encoded, = option_values(run, "--recipes")
         self.assertEqual(base64.b64decode(encoded).decode(),
                          "recipe/run --config suite/compose.yml --unknown $UNBOUND --empty  \n "
-                         "recipe/check --config suite/compose.yml \n")
+                         "recipe/check --config \n")
 
-    def test_shared_statement_values_use_each_modules_final_configuration(self):
+    def test_shared_environment_is_final_while_defined_recipe_values_are_captured(self):
         files = {
             "common/values.inc": "ENV(CONFIG=$CONFIG trailing words)\nUSE_RECIPE(recipe/run $CONFIG)\n",
         }
@@ -64,7 +64,7 @@ class TestMacroValuesTest(unittest.TestCase):
                 run = lib.node_by_output(graph, f"$(B)/{project}/test-results/exectest/meta.json")
                 self.assertEqual(option_values(run, "--env"), [f"CONFIG={project}/final value trailing words"])
                 encoded, = option_values(run, "--recipes")
-                self.assertEqual(base64.b64decode(encoded), f"recipe/run {project}/final value \n".encode())
+                self.assertEqual(base64.b64decode(encoded), b"recipe/run initial \n")
 
 
 if __name__ == "__main__":

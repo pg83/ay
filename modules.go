@@ -1828,7 +1828,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					expanded.Args = expandTestRunArgs(v.Args, env)
 				} else if v.Name == tokSetListPreSuf {
 					expanded.Args = expandListPreSufArgs(v.Args, env)
-				} else if v.Name != tokEnv && v.Name != tokUseRecipe {
+				} else if v.Name == tokUseRecipe {
+					expanded.Args = []ANY{internStr(collectTestRecipe(v.Args, env)).any()}
+				} else if v.Name != tokEnv {
 					expanded.Args = expandStmtTokens(v.Args, env)
 				}
 

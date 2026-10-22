@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"encoding/base64"
 	"path"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -133,10 +135,68 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 }
 
 func (t *TestMeta) expandValues(env Environment) {
-	for _, values := range [][]string{t.env, t.recipes} {
-		for i, value := range values {
-			values[i] = expandStmtToken(value, env)
+	for i, value := range t.env {
+		t.env[i] = expandStmtToken(value, env)
+	}
+	for i, value := range t.recipes {
+		t.recipes[i] = expandTestRecipeVariables(value, env)
+	}
+}
+
+// USE_RECIPE's makelist arguments pass through TEvalContext::Deref. Its
+// SET_APPEND body then substitutes $Data deeply, splits on spaces, and calls
+// EvalExpr once more before storing TEST_RECIPES_VALUE. get_subst later uses
+// the final module environment for references left unresolved at collection.
+func collectTestRecipe(args []ANY, env Environment) string {
+	var values []string
+	for _, arg := range args {
+		words := []string{arg.string()}
+		if strings.ContainsRune(words[0], '$') {
+			words = strings.Split(expandResourceArgument(words[0], env), " ")
+			words = slices.DeleteFunc(words, func(word string) bool { return word == "" })
 		}
+		for _, word := range words {
+			// TEvalContext::EscapeArgs protects whole separator arguments.
+			if word == "&&" || word == ";" {
+				word = `${quo:"` + word + `"}`
+			}
+			values = append(values, word)
+		}
+	}
+	value := expandTestRecipeVariables(strings.Join(values, " "), env)
+	words := strings.Split(value, " ")
+	value = strings.Join(slices.DeleteFunc(words, func(word string) bool { return word == "" }), " ")
+	return expandResourceArgument(value, env)
+}
+
+// macro_parser.rl6 recognizes bare and braced identifiers, including hyphens.
+// Escapes and raw strings are retained in ECF_ExpandVars; unset variables are
+// left verbatim by SubstData. This is distinct from EvalExpr's braced lookup.
+var testRecipeVariable = regexp.MustCompile(`\\[\s\S]|\$\{"(?:[^"\\]|\\.)*"\}|\$\{[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*\}|\$[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*`)
+
+func expandTestRecipeVariables(value string, env Environment) string {
+	if !strings.ContainsRune(value, '$') {
+		return value
+	}
+	for iteration := 0; ; iteration++ {
+		expanded := testRecipeVariable.ReplaceAllStringFunc(value, func(reference string) string {
+			if reference[0] == '\\' || strings.HasPrefix(reference, `${"`) {
+				return reference
+			}
+			name := strings.TrimSuffix(strings.TrimPrefix(reference[1:], "{"), "}")
+			if replacement, ok := env.lookup(name); ok {
+				// GetCmdValue removes one leading space from a stored binding.
+				return strings.TrimPrefix(replacement, " ")
+			}
+			return reference
+		})
+		if iteration == 127 {
+			throwFmt("Macro subst exceeded the limit 128")
+		}
+		if expanded == value || expanded == "" {
+			return expanded
+		}
+		value = expanded
 	}
 }
 
