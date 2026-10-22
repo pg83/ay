@@ -181,7 +181,9 @@ type ModuleEmitResult struct {
 }
 
 func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
-	return slices.Clone(res.WholeArchiveCmdPaths)
+	// _WHOLE_ARCHIVE_LIBS_VALUE_GLOBAL is one ordered value stream. Producer
+	// availability determines link inputs, but does not partition these values.
+	return slices.Concat(res.WholeArchiveCmdPaths, res.WholeArchivePaths)
 }
 
 type GenCtx struct {
