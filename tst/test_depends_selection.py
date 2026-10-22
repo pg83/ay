@@ -1,6 +1,7 @@
 import unittest
 
 import lib
+import test_proto_py2_context
 import test_java
 import test_python2
 import test_python_suites
@@ -173,15 +174,28 @@ class DependsSelectionTest(unittest.TestCase):
                 suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
                 self.assertIn(lib.node_by_output(graph, '$(B)/choice/' + output)['uid'], suite['deps'])
 
-    def test_selected_python2_proto_reports_the_unfinished_producer(self):
-        files = {
-            'tests/ya.make': 'EXECTEST()\nRUN(true)\nDEPENDS(p)\nEND()\n',
-            'p/ya.make': f'PROTO_LIBRARY()\n{lib.BARE_MODULE}ONLY_TAGS(PY_PROTO)\nEND()\n',
-        }
-        result = lib.make_process(files, 'tests', '-t')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('Python 2 variant of PROTO_LIBRARY', result.stderr)
-        self.assertNotIn('panic:', result.stderr)
+    def test_proto_depends_builds_selected_python_context_even_without_start_target(self):
+        for tag, version, prefix in (('PY_PROTO', 'py2', 'libpy'), ('PY3_PROTO', 'py3', 'libpy3')):
+            with self.subTest(tag=tag):
+                files = test_proto_py2_context.proto_world()
+                files['tests/ya.make'] = 'EXECTEST()\nRUN(true)\nDEPENDS(p)\nEND()\n'
+                files['p/ya.make'] = files['p/ya.make'].replace('GRPC()', f'ONLY_TAGS({tag})\nGRPC()')
+                if version == 'py2':
+                    root = lib.make(files, 'p')
+                    self.assertFalse(any('__intpy2__' in out for n in root['graph'] for out in n['outputs']))
+                graph = lib.make(files, 'tests', '-t', '--strip-packages-from-results')
+                suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
+                archive = lib.node_by_output(graph, f'$(B)/p/{prefix}p.global.a')
+                self.assertIn(archive['uid'], suite['deps'])
+                producer = lib.node_by_output(graph, f'$(B)/p/a__int{version}___pb2.py')
+                self.assertEqual(producer['cmds'][0]['cmd_args'][3], version)
+                opposite = 'py3' if version == 'py2' else 'py2'
+                self.assertFalse(any(out.startswith('$(B)/p/a__int' + opposite + '__')
+                                     for n in graph['graph'] for out in n['outputs']))
+                self.assertFalse(any('$(B)/p/a.pb.h' in n['outputs'] for n in graph['graph']))
+                if version == 'py2':
+                    native = lib.node_by_output(graph, '$(B)/p/libpyp.a')
+                    self.assertIn(native['uid'], suite['deps'])
 
     def test_dependency_without_a_module_is_a_cli_error(self):
         result = lib.make_process({'tests/ya.make': 'EXECTEST()\nRUN(true)\nDEPENDS(missing)\nEND()\n', 'missing/ya.make': ''}, 'tests', '-t')
