@@ -198,7 +198,7 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 		}
 
 		if check.Lint {
-			s.env, s.tags, s.data = nil, nil, nil
+			s.env, s.tags, s.data, s.relatedPaths = nil, nil, nil, nil
 		}
 
 		for key, value := range map[string]string{"cpu": "4", "ram": "16", "ram_disk": "4"} {
@@ -207,7 +207,7 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 			}
 		}
 
-		s.relatedPaths = related
+		s.relatedPaths = append(slices.Clone(related), sortedUnique(s.relatedPaths)...)
 		s.recipes = e.notsRecipes(target, head, globals, e.d.nots.Hermetic, true)
 		s.runCmd = func(work string, _ TestChunk) []ANY {
 			args := []string{testToolHostPath, "run_ts_check", "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--output-dir", work + "/testing_out_stuff", "--tracefile", work + "/ytest.report.trace", "--log-path", work + "/testing_out_stuff/ts-check.log", "--target_path", target, "--nodejs", node.Value.string(), "--script-name", check.Script}
