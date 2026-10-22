@@ -190,7 +190,92 @@ class EnumSerializationTest(unittest.TestCase):
             "$(S)/srcd/enums4.h", "--include-path", "srcd/enums4.h",
         ])
 
-    def test_generated_header_keeps_main_output_without_induced_inputs(self):
+    def test_declared_source_header_closure_and_variant_output_includes(self):
+        files = enum_files({
+            "orchard/ya.make": (
+                f"LIBRARY()\n{lib.BARE_MODULE}"
+                "GENERATE_ENUM_SERIALIZATION(fruit.h)\n"
+                "END()\n"
+            ),
+            "orchard/fruit.h": '#include "branch.h"\nenum Fruit {Apple};\n',
+            "orchard/branch.h": '#include "leaf.h"\n',
+            "orchard/leaf.h": "",
+            "util/generic/runtime_leaf.h": "",
+        })
+        files["util/generic/serialized_enum.h"] = '#include "runtime_leaf.h"\n'
+        files["grove/ya.make"] = (
+            f"LIBRARY()\n{lib.BARE_MODULE}"
+            "GENERATE_ENUM_SERIALIZATION_WITH_HEADER(${ARCADIA_ROOT}/orchard/fruit.h)\n"
+            "SRCS(use.cpp)\nEND()\n")
+        files["grove/use.cpp"] = '#include "orchard/fruit.h_serialized.h"\n'
+        for target, with_header in (("orchard", False), ("grove", True)):
+            with self.subTest(with_header=with_header):
+                graph = lib.make(files, target)
+                generated = lib.node_by_output(graph, "$(B)/orchard/fruit.h_serialized.cpp")
+                headers = {"$(S)/orchard/" + name for name in ("fruit.h", "branch.h", "leaf.h")}
+                self.assertEqual(set(generated["inputs"]), {ENUM_PARSER, *headers})
+                expected_args = [ENUM_PARSER, "$(S)/orchard/fruit.h", "--include-path",
+                                 "orchard/fruit.h", "--output", "$(B)/orchard/fruit.h_serialized.cpp"]
+                if with_header:
+                    expected_args += ["--header", "$(B)/orchard/fruit.h_serialized.h"]
+                self.assertEqual(generated["cmds"][0]["cmd_args"], expected_args)
+                self.assertEqual(generated["deps"], [lib.node_by_output(graph, ENUM_PARSER)["uid"]])
+                compiled = next(n for n in graph["graph"] if n["kv"]["p"] == "CC"
+                                and any("fruit.h_serialized.cpp.o" in o for o in n["outputs"]))
+                self.assertTrue(headers <= set(compiled["inputs"]))
+                runtime = {"$(S)/util/generic/serialized_enum.h", "$(S)/util/generic/runtime_leaf.h"}
+                self.assertEqual(runtime & set(compiled["inputs"]), set() if with_header else runtime)
+                if with_header:
+                    consumer = lib.node_by_output(graph, "$(B)/grove/use.cpp.o")
+                    self.assertTrue(headers <= set(consumer["inputs"]))
+                    self.assertIn("$(B)/orchard/fruit.h_serialized.cpp", consumer["inputs"])
+                    self.assertIn(generated["uid"], consumer["deps"])
+                    self.assertFalse(runtime & set(consumer["inputs"]))
+
+    def test_generated_header_closure_preserves_primary_producer_and_induced_domains(self):
+        for with_header in (False, True):
+            with self.subTest(with_header=with_header):
+                macro = "GENERATE_ENUM_SERIALIZATION" + ("_WITH_HEADER" if with_header else "")
+                files = enum_files({
+                    "canopy/ya.make": (
+                        f"LIBRARY()\n{lib.BARE_MODULE}"
+                        "COPY_FILE(template.h opaque.h)\n"
+                        "COPY_FILE_WITH_CONTEXT(template.h contextual.h)\n"
+                        "RUN_PROGRAM(tools/foliage trunk.cpp crown.h seed.dat "
+                        "IN seed.dat OUT trunk.cpp OUT_NOAUTO crown.h)\n"
+                        f"{macro}(opaque.h)\n{macro}(contextual.h)\n{macro}(crown.h)\nEND()\n"
+                    ),
+                    "canopy/template.h": '#include "canopy/branch.h"\n',
+                    "canopy/branch.h": '#include "canopy/leaf.h"\n',
+                    "canopy/leaf.h": "",
+                    "canopy/seed.dat": "seed",
+                    "foliage/header.h": '#include "header_leaf.h"\n',
+                    "foliage/header_leaf.h": "",
+                    "foliage/compile.h": "",
+                    "foliage/shared.h": '#include "shared_leaf.h"\n',
+                    "foliage/shared_leaf.h": "",
+                })
+                lib.tool_program(files, "tools/foliage", "foliage")
+                files["tools/foliage/ya.make"] = files["tools/foliage/ya.make"].replace(
+                    "END()", "INDUCED_DEPS(h ${ARCADIA_ROOT}/foliage/header.h)\n"
+                    "INDUCED_DEPS(cpp ${ARCADIA_ROOT}/foliage/compile.h)\n"
+                    "INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/foliage/shared.h)\nEND()")
+                graph = lib.make(files, "canopy")
+                for header, extra in (
+                    ("opaque.h", set()),
+                    ("contextual.h", {"$(S)/canopy/" + name for name in ("template.h", "branch.h", "leaf.h")}),
+                    ("crown.h", {"$(B)/canopy/trunk.cpp", *(
+                        "$(S)/foliage/" + name for name in
+                        ("header.h", "header_leaf.h", "shared.h", "shared_leaf.h"))}),
+                ):
+                    generated = lib.node_by_output(graph, f"$(B)/canopy/{header}_serialized.cpp")
+                    self.assertEqual(set(generated["inputs"]), {ENUM_PARSER, f"$(B)/canopy/{header}", *extra})
+                    producer = lib.node_by_output(graph, f"$(B)/canopy/{header}")
+                    self.assertEqual(set(generated["deps"]), {
+                        producer["uid"], lib.node_by_output(graph, ENUM_PARSER)["uid"]})
+                    self.assertNotIn("$(S)/foliage/compile.h", generated["inputs"])
+
+    def test_base_codegen_header_keeps_primary_output_and_induced_inputs(self):
         files = enum_files({
             "m/ya.make": (
                 "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
@@ -206,9 +291,9 @@ class EnumSerializationTest(unittest.TestCase):
             "END()", "INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/inc/ind.h)\nEND()")
         graph = lib.make(files, "m")
         node = lib.node_by_output(graph, "$(B)/m/base_gen.h_serialized.cpp")
-        self.assertEqual(node["inputs"], [
-            ENUM_PARSER, "$(B)/m/base_gen.h", "$(B)/m/base_gen.cpp",
-        ])
+        self.assertEqual(set(node["inputs"]), {
+            ENUM_PARSER, "$(B)/m/base_gen.h", "$(B)/m/base_gen.cpp", "$(S)/inc/ind.h",
+        })
         producer = lib.node_by_output(graph, "$(B)/m/base_gen.h")
         self.assertIn(producer["uid"], node["deps"])
 

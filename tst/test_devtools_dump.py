@@ -430,7 +430,7 @@ class DumpNormalizeTest(DumpToolTest):
                 [by_output["$(B)/tools/formatter"]["uid"]],
             )
 
-    def test_normalize_enum_deps_only_follow_removed_input_outputs(self):
+    def test_normalize_enum_preserves_declared_inputs_producers_and_order_edges(self):
         tool = "$(B)/tools/enum_parser/enum_parser/enum_parser"
         header = "$(B)/app/types.h"
         removed = "$(B)/app/indirect.pb.h"
@@ -448,22 +448,17 @@ class DumpNormalizeTest(DumpToolTest):
             raw_node("order", "PR", ["$(B)/app/ordering.stamp"]),
             raw_node("extra", "PB", ["$(B)/app/not_a_raw_input.h"]),
         ]
-        expected_enum = dict(nodes[0], inputs=[tool, header], deps=["tool", "header", "order", "extra"])
-        clean_nodes = [expected_enum, *nodes[1:]]
-        expected = sorted(map(compact, self.normalize(clean_nodes, result=["enum"])))
+        expected = sorted(map(compact, self.normalize(nodes, result=["enum"])))
         for flags in ((), ("--streaming",)):
-            clean = self.normalize(clean_nodes, "--ref-graph", *flags, result=["enum"])
-            self.assertEqual(sorted(map(compact, clean)), expected)
-            normalized = self.normalize(nodes, "--ref-graph", *flags, result=["enum"])
-            self.assertEqual(sorted(map(compact, normalized)), expected)
-            by_output = {node["outputs"][0]: node for node in normalized}
-            self.assertNotIn(removed, by_output)
-            self.assertEqual(
-                by_output["$(B)/app/types.h_serialized.cpp"]["deps"],
-                sorted(by_output[path]["uid"] for path in (
-                    tool, header, "$(B)/app/ordering.stamp", "$(B)/app/not_a_raw_input.h",
-                )),
-            )
+            for reference in ((), ("--ref-graph",)):
+                normalized = self.normalize(nodes, *reference, *flags, result=["enum"])
+                self.assertEqual(sorted(map(compact, normalized)), expected)
+                by_output = {node["outputs"][0]: node for node in normalized}
+                generated = by_output["$(B)/app/types.h_serialized.cpp"]
+                self.assertEqual(generated["inputs"], sorted(nodes[0]["inputs"]))
+                self.assertEqual(generated["deps"], sorted(
+                    node["uid"] for node in normalized if node is not generated))
+                self.assertIn(removed, by_output)
 
     def test_enum_keeps_the_direct_input_producers_primary_output(self):
         tool = "$(B)/tools/enum_parser/enum_parser/enum_parser"
@@ -486,13 +481,13 @@ class DumpNormalizeTest(DumpToolTest):
                         raw_node("ordering", "PR", ["$(B)/app/order.stamp"]),
                         raw_node("unrelated", "PR", ["$(B)/app/unrelated.primary", "$(B)/app/unrelated.h"]),
                     ]
-                    expected_node = dict(nodes[0], inputs=[tool, header, primary], deps=["producer", "tool", "ordering"])
-                    expected = sorted(map(compact, self.normalize([expected_node, *nodes[1:]], result=["enum"])))
+                    expected = sorted(map(compact, self.normalize(nodes, result=["enum"])))
                     for flags in ((), ("--streaming",)):
-                        normalized = self.normalize(nodes, "--ref-graph", *flags, result=["enum"])
-                        self.assertEqual(sorted(map(compact, normalized)), expected)
-                        generated = next(node for node in normalized if node["kv"]["p"] == "EN")
-                        self.assertEqual(generated["inputs"], sorted([tool, header, primary]))
+                        for reference in ((), ("--ref-graph",)):
+                            normalized = self.normalize(nodes, *reference, *flags, result=["enum"])
+                            self.assertEqual(sorted(map(compact, normalized)), expected)
+                            generated = next(node for node in normalized if node["kv"]["p"] == "EN")
+                            self.assertEqual(generated["inputs"], sorted(raw_inputs))
 
     def test_normalize_preserves_declared_action_inputs(self):
         root = raw_node(

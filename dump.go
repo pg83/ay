@@ -120,80 +120,14 @@ func orVal(v, def any) any {
 	return v
 }
 
-func nodeProgramKind(node *RawNode) string {
-	kv, _ := node.Kv.(map[string]any)
-	p, _ := kv["p"].(string)
-
-	return p
-}
-
-func nodeCmdText(node *RawNode) string {
-	cmds, _ := node.Cmds.([]any)
-
-	var b strings.Builder
-
-	for _, c := range cmds {
-		m, _ := c.(map[string]any)
-
-		for _, a := range toStrings(m["cmd_args"]) {
-			b.WriteString(normPath(a))
-			b.WriteByte('\x00')
-		}
-	}
-
-	return b.String()
-}
-
-func filterEnumParserInputs(in []string, node *RawNode) []string {
-	cmds, _ := node.Cmds.([]any)
-
-	if len(cmds) != 1 {
-		return in
-	}
-
-	m, _ := cmds[0].(map[string]any)
-	args := toStrings(m["cmd_args"])
-
-	if len(args) != 6 && (len(args) != 8 || args[6] != "--header") {
-		return in
-	}
-
-	tool := normPath(args[0])
-
-	if !strings.HasSuffix(tool, "/tools/enum_parser/enum_parser/enum_parser") || args[2] != "--include-path" || args[4] != "--output" {
-		return in
-	}
-
-	header := normPath(args[1])
-	out := in[:0]
-
-	for _, s := range in {
-		if s == tool || s == header {
-			out = append(out, s)
-		}
-	}
-
-	return out
-}
-
 func getString(node map[string]any, key string) string {
 	s, _ := node[key].(string)
 
 	return s
 }
 
-func canonInputs(node *RawNode, refGraph bool) []string {
+func canonContent(node *RawNode) map[string]any {
 	inputs := normSortedStrings(node.Inputs)
-
-	if refGraph && nodeProgramKind(node) == "EN" {
-		return filterEnumParserInputs(inputs, node)
-	}
-
-	return inputs
-}
-
-func canonContent(node *RawNode, refGraph bool) map[string]any {
-	inputs := canonInputs(node, refGraph)
 
 	canon := map[string]any{
 		"cmds":         normRec(orVal(node.Cmds, []any{})),

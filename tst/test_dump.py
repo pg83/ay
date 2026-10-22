@@ -621,7 +621,7 @@ class DumpTest(unittest.TestCase):
         self.assertEqual(normalized["inputs"], sorted(node["inputs"]))
         self.assertEqual(normalized, self.normalized_special_node(node, reference=False))
 
-    def test_canon_inputs_enum_parser_keeps_only_action_inputs(self):
+    def test_canon_inputs_enum_parser_preserves_all_declared_inputs(self):
         node = raw_node(
             "enum",
             "EN",
@@ -645,10 +645,8 @@ class DumpTest(unittest.TestCase):
             with self.subTest(with_header=bool(extra)):
                 node["cmds"][0]["cmd_args"] = args + extra
                 normalized = self.normalized_special_node(node)
-                self.assertEqual(normalized["inputs"], [
-                    "$(B)/tools/enum_parser/enum_parser/enum_parser",
-                    "$(S)/pkg/mode.h",
-                ])
+                self.assertEqual(normalized["inputs"], sorted(node["inputs"]))
+                self.assertEqual(normalized, self.normalized_special_node(node, reference=False))
 
     def test_diff_pair_pic_and_non_pic_variants_do_not_mispair(self):
         left = [

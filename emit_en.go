@@ -75,10 +75,14 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	enRef := ctx.emit.reserve()
 
 	cppParsed := e.ctx.na.dirList(
-		IncludeDirective{kind: includeQuoted, target: includeTarget(headerInput.rel().any())},
-		IncludeDirective{kind: includeQuoted, target: includeTarget(strUtilGenericSerializedEnumH.any())})
+		IncludeDirective{kind: includeQuoted, target: includeTarget(headerInput.rel().any())})
 
-	slices.SortFunc(cppParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
+	if !withHeader {
+		cppParsed = e.ctx.na.dirList(cppParsed[0],
+			IncludeDirective{kind: includeQuoted, target: includeTarget(strUtilGenericSerializedEnumH.any())})
+
+		slices.SortFunc(cppParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
+	}
 
 	codegen := e.codegen
 
@@ -107,26 +111,22 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 	})
 
 	e.register(GeneratedFileInfo{
-		OutputPath:     serializedCPPPath,
-		SourcePath:     headerInput,
-		ProducerRef:    enRef,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: cppParsed},
-		OnUse:          pe,
+		OutputPath:      serializedCPPPath,
+		SourcePath:      headerInput,
+		ProducerRef:     enRef,
+		ProducerMainOut: serializedCPPPath,
+		ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: cppParsed},
+		OnUse:           pe,
 	})
 
 	if withHeader {
-		hParsed := e.ctx.na.dirList(
-			IncludeDirective{kind: includeQuoted, target: includeTarget(headerInput.rel().any())},
-			IncludeDirective{kind: includeQuoted, target: includeTarget(serializedCPPPath.rel().any())})
-
-		slices.SortFunc(hParsed, func(a, b IncludeDirective) int { return strings.Compare(a.target.string(), b.target.string()) })
-
 		e.register(GeneratedFileInfo{
-			OutputPath:     serializedHPath,
-			SourcePath:     headerInput,
-			ProducerRef:    enRef,
-			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: hParsed},
-			OnUse:          pe,
+			OutputPath:      serializedHPath,
+			SourcePath:      headerInput,
+			ProducerRef:     enRef,
+			ProducerMainOut: serializedCPPPath,
+			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: cppParsed},
+			OnUse:           pe,
 		})
 	}
 }
@@ -209,6 +209,7 @@ func (e *EmitContext) emitEN(
 		outputs = na.vfsList(serializedCPPVFS)
 	}
 
+	closure := e.inputClosure(headerInput)
 	env := envVarsVCS
 	foreignDepRefs := na.refList(enumParserLD)
 
@@ -217,8 +218,8 @@ func (e *EmitContext) emitEN(
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:            env,
-		Inputs:         na.inputList(na.vfsList(enumParserBin), na.vfsList(headerInput)),
-		InputClosure:   Closure{self: headerInput},
+		Inputs:         appendInputChunks(na, na.inputList(na.vfsList(enumParserBin, headerInput)), closure.bucketList()),
+		InputClosure:   closure,
 		KV:             &enKV,
 		Outputs:        outputs,
 		ForeignDepRefs: foreignDepRefs,

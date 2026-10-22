@@ -41,7 +41,7 @@ class DumpEdgeContractsTest(unittest.TestCase):
                 normalized = next(n for n in map(json.loads, result.stdout.splitlines()) if n['kv']['p'] == 'EN')
                 self.assertEqual(normalized['inputs'], enum['inputs'])
 
-    def test_enum_filter_keeps_command_dependencies_and_ignores_empty_outputs(self):
+    def test_enum_preserves_input_producers_with_empty_primary_outputs(self):
         tool = '$(B)/tools/enum_parser/enum_parser/enum_parser'
         header = '$(S)/app/a.h'
         enum = raw_node('enum', 'EN', '$(B)/app/enum.cpp',
@@ -56,7 +56,9 @@ class DumpEdgeContractsTest(unittest.TestCase):
         enum = next(n for n in normalized if n['kv']['p'] == 'EN')
         command = next(n for n in normalized if '$(B)/app/command.h' in n['outputs'])
         self.assertIn(command['uid'], enum['deps'])
-        self.assertFalse(any('$(B)/app/removed.h' in n['outputs'] for n in normalized))
+        removed = next(n for n in normalized if '$(B)/app/removed.h' in n['outputs'])
+        self.assertIn(removed['uid'], enum['deps'])
+        self.assertEqual(enum['inputs'], sorted(nodes[1]['inputs']))
 
 
 if __name__ == '__main__':
