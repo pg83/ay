@@ -21,7 +21,7 @@ func (ctx *GenCtx) moduleResultRefs(instance ModuleInstance, result *ModuleEmitR
 		refs = append(refs, *result.GlobalRef)
 	}
 
-	if result.isPROGRAM || isLinkingModuleType(result.ModuleStmtName) || result.java != nil {
+	if result.isPROGRAM || isLinkingModuleType(result.ModuleStmtName) || result.java != nil || result.testDependencyModule.bundle {
 		return refs
 	}
 

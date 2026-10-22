@@ -217,7 +217,7 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 		}
 	}
 
-	globals := e.moduleGlobals
+	globals := e.ctx.na.dedupClosure(e.moduleGlobals, [][]VFS{e.globalSources})
 
 	var cythonPeers [][]VFS
 
