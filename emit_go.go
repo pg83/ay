@@ -321,6 +321,12 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			return
 		}
 
+		// Upstream missing-file nodes carry no parsed imports. Keep the input
+		// for emission, where CodegenRegistry resolves declared producers.
+		if present, _ := ctx.fs.exists(srcRootRel, path.relString()); !present {
+			return
+		}
+
 		for _, imp := range parseGoImports(concatChunks(ctx.fs.read(path.relString()))) {
 			addPeer(goImportDir(ctx, std, dir, imp.string()))
 		}
