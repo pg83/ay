@@ -1,7 +1,9 @@
 package main
 
+import "strings"
+
 func isPythonMultimodule(name TOK) bool {
-	return name == tokPy23Library || name == tokPy23NativeLibrary
+	return name == tokPy23Library || name == tokPy23NativeLibrary || name == tokSandboxPy23Task
 }
 
 func configureCythonDirectory(ctx *GenCtx, instance ModuleInstance) *SourceModuleInfo {
@@ -18,6 +20,16 @@ func configureCythonDirectory(ctx *GenCtx, instance ModuleInstance) *SourceModul
 	}
 
 	var selected *SourceModuleInfo
+
+	if name == tokSandboxPy23Task {
+		for _, module := range sandboxPythonTaskInstances(instance, name) {
+			info := configureCythonModule(ctx, module, sandboxPythonTaskVariant(name, module.Kind, module.Language))
+			if module.Kind == instance.Kind && module.Language == instance.Language {
+				selected = info
+			}
+		}
+		return selected
+	}
 
 	for _, variant := range []struct {
 		language Language
@@ -52,7 +64,23 @@ func configureCythonModule(ctx *GenCtx, instance ModuleInstance, tag string) *So
 	env := buildIfEnvInto(&frame.ifEnv, instance)
 	d := collectModuleInto(ctx, instance, moduleStmts(ctx, instance.Path.relString()), env, ctx.onWarn, &frame.d)
 
-	if d.discarded || d.moduleStmt == nil || tag != "" && moduleExcludesTag(d, tag) {
+	// makefile_loader.cpp refines the configuration list in the first context
+	// only; later contexts still evaluate their own source bodies independently.
+	if d.multimodule == tokSandboxPy23Task && instance.Kind == KindBin {
+		info.ExcludedVariants = map[STR]bool{}
+		for _, sub := range sandboxPythonTaskInstances(instance, d.multimodule) {
+			variant := sandboxPythonTaskVariant(d.multimodule, sub.Kind, sub.Language)
+			info.ExcludedVariants[internStr(variant)] = moduleExcludesTag(d, variant)
+		}
+		for _, excluded := range strings.Fields(instance.Platform.ifEnv.string(internEnv("EXCLUDE_SUBMODULES"))) {
+			info.ExcludedVariants[internStr(excluded)] = true
+		}
+	}
+	excluded := moduleExcludesTag(d, tag)
+	if d.multimodule == tokSandboxPy23Task {
+		excluded = sandboxPythonTaskExcluded(ctx, instance, tag)
+	}
+	if d.discarded || d.moduleStmt == nil || tag != "" && excluded {
 		return info
 	}
 

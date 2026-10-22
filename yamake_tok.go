@@ -46,6 +46,7 @@ var tokName = [...]STR{
 
 	tokRosLibrary:        internStr("ROS_LIBRARY"),
 	tokSandboxPy3Task:    internStr("SANDBOX_PY3_TASK"),
+	tokSandboxPy23Task:   internStr("SANDBOX_PY23_TASK"),
 	tokRosDir:            internStr("ROS_DIR"),
 	tokRosPartial:        internStr("ROS_PARTIAL"),
 	tokRosSrcs:           internStr("ROS_SRCS"),
@@ -488,6 +489,7 @@ const (
 
 	tokRosLibrary
 	tokSandboxPy3Task
+	tokSandboxPy23Task
 	tokRosDir
 	tokRosPartial
 	tokRosSrcs

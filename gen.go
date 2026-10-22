@@ -430,7 +430,7 @@ func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, d
 		}
 	}
 
-	if name == tokPy3Program || name == tokSandboxPy3Task || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokDocs || name == 0 {
+	if name == tokPy3Program || isSandboxPythonTask(name) || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokDocs || name == 0 {
 		kind = KindBin
 	}
 
@@ -1087,7 +1087,7 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
 		}
 
-		if (d.moduleStmt.Name == tokPy2Program || d.moduleStmt.Name == tokPy2Test) && !instance.Platform.ifEnv.bool(envFAIL_PY2) && !instance.Platform.ifEnv.bool(envOPENSOURCE) {
+		if (d.moduleStmt.Name == tokPy2Program || d.moduleStmt.Name == tokPy2Test) && d.multimodule != tokSandboxPy23Task && !instance.Platform.ifEnv.bool(envFAIL_PY2) && !instance.Platform.ifEnv.bool(envOPENSOURCE) {
 			earlyPeers = append(earlyPeers, "build/rules/py2_deprecation")
 		}
 
@@ -1297,8 +1297,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	tag := multimoduleVariantTag(d.multimodule, instance.Language)
-	if moduleName == tokSandboxPy3Task {
-		tag = sandboxPythonTaskVariant(instance.Kind)
+	if isSandboxPythonTask(moduleName) {
+		tag = sandboxPythonTaskVariant(moduleName, instance.Kind, instance.Language)
 	}
 
 	if d.moduleStmt != nil && d.moduleStmt.Schema {
@@ -1309,7 +1309,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		tag = d.unit.Tag.string()
 	}
 
-	if tag != "" && moduleExcludesTag(d, tag) {
+	excluded := moduleExcludesTag(d, tag)
+	if moduleName == tokSandboxPy23Task {
+		excluded = sandboxPythonTaskExcluded(ctx, instance, tag)
+	}
+	if tag != "" && excluded {
 		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants}
 
 		ctx.memoPut(instance, result)

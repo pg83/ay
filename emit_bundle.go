@@ -48,6 +48,10 @@ func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
 
 	bundleInstance := e.derivePeerInstance(target)
 
+	if isSandboxPythonTask(ctx.moduleName(target)) {
+		bundleInstance.Kind, bundleInstance.Language = KindBin, LangCPP
+	}
+
 	if ctx.moduleName(target) == tokPackage {
 		bundleInstance.Language = LangCPP
 	}

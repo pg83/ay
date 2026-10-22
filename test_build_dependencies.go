@@ -18,6 +18,9 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 
 	instance := ctx.rootInstanceForDeclaration(dir, demandSelf, declaration)
 	name := declaration.Name
+	if name == tokSandboxPy23Task {
+		configureCythonDirectory(ctx, instance)
+	}
 	frame := ctx.pushFrame()
 
 	defer ctx.popFrame()
@@ -128,7 +131,7 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 		}
 	}
 
-	if name == tokPy3Program || name == tokSandboxPy3Task {
+	if name == tokPy3Program {
 		instance.Kind = KindLib
 		instances = append(instances, instance)
 	}
@@ -142,12 +145,16 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 		}
 	}
 
+	if isSandboxPythonTask(name) {
+		instances = sandboxPythonTaskInstances(instance, name)
+	}
+
 	selected := instances[:0]
 
 	for _, peer := range instances {
 		tag := multimoduleVariantTag(name, peer.Language)
-		if name == tokSandboxPy3Task {
-			tag = sandboxPythonTaskVariant(peer.Kind)
+		if isSandboxPythonTask(name) {
+			tag = sandboxPythonTaskVariant(name, peer.Kind, peer.Language)
 		}
 
 		if tag == "" {
@@ -166,7 +173,11 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 			tag = "PY2"
 		}
 
-		if tag != "" && moduleExcludesTag(d, tag) {
+		excluded := moduleExcludesTag(d, tag)
+		if name == tokSandboxPy23Task {
+			excluded = sandboxPythonTaskExcluded(ctx, peer, tag)
+		}
+		if tag != "" && excluded {
 			continue
 		}
 

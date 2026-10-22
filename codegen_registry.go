@@ -31,11 +31,12 @@ type GeneratedFileInfo struct {
 }
 
 type SourceModuleInfo struct {
-	ResourceActions *resourceActionState
-	Instance        ModuleInstance
-	Next            *SourceModuleInfo
-	Includes        []VFS
-	CythonIncludes  []VFS
+	ResourceActions  *resourceActionState
+	ExcludedVariants map[STR]bool
+	Instance         ModuleInstance
+	Next             *SourceModuleInfo
+	Includes         []VFS
+	CythonIncludes   []VFS
 }
 
 type ModuleInputInfo struct {
