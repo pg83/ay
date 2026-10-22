@@ -47,18 +47,41 @@ func cppLinterSource(name string) bool {
 	return false
 }
 
-func (e *EmitContext) cppStyleOriginalSource(file VFS) VFS {
-	for file.isBuild() {
-		info := e.codegen.lookup(file)
+func (e *EmitContext) cppStyleInputFiles(file VFS) []string {
+	seen := map[VFS]bool{}
 
-		if info == nil {
-			return 0
+	var files []string
+	var visit func(VFS)
+
+	visit = func(input VFS) {
+		if seen[input] {
+			return
 		}
 
-		file = info.SourcePath
+		seen[input] = true
+
+		if input.isSource() {
+			if cppLinterSource(input.relString()) {
+				files = append(files, input.relString())
+			}
+
+			return
+		}
+
+		if info := e.codegen.lookup(input); info != nil {
+			if info.SourcePath != 0 {
+				visit(info.SourcePath)
+			}
+
+			for _, dependency := range info.BuildInputs {
+				visit(dependency)
+			}
+		}
 	}
 
-	return file
+	visit(file)
+
+	return files
 }
 
 func (e *EmitContext) cppStyleSource(src ANY) ANY {
@@ -66,7 +89,8 @@ func (e *EmitContext) cppStyleSource(src ANY) ANY {
 		return src
 	}
 
-	var resolved, original VFS
+	var resolved VFS
+	var files []string
 
 	for i := range e.d.styleChecks {
 		check := &e.d.styleChecks[i]
@@ -77,12 +101,10 @@ func (e *EmitContext) cppStyleSource(src ANY) ANY {
 
 		if resolved == 0 {
 			resolved = e.moduleSourceVFS(src)
-			original = e.cppStyleOriginalSource(resolved)
+			files = e.cppStyleInputFiles(resolved)
 		}
 
-		if original.isSource() && cppLinterSource(original.relString()) {
-			check.Files = append(check.Files, original.relString())
-		}
+		check.Files = append(check.Files, files...)
 	}
 
 	if resolved != 0 {

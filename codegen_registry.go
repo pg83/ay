@@ -16,6 +16,7 @@ type GeneratedFileInfo struct {
 	OutputPath       VFS
 	SourcePath       VFS
 	PrimaryInput     VFS
+	BuildInputs      []VFS
 	OwnerModule      VFS
 	OwnerSerial      uint32
 	ProducerRef      NodeRef

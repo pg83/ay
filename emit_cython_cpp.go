@@ -353,20 +353,19 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		outputs := na.vfsList(append([]VFS{generatedVFS}, headerVFS...)...)
 		toolInputs := p.toolInputs
 		sourceInputs := p.sourceInputs
+		buildInputs := cythonToolInputs(na, toolInputs, sourceInputs)
+
+		if pxdOK {
+			buildInputs = na.dedupClosure(buildInputs, [][]VFS{pxdInputs})
+		}
 
 		pe := func() {
-			inputs := cythonToolInputs(na, toolInputs, sourceInputs)
-
-			if pxdOK {
-				inputs = na.dedupClosure(inputs, [][]VFS{pxdInputs})
-			}
-
 			e.emitReservedNode(Node{
 				Platform: instance.Platform,
 				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 					Env: env}),
 				Env:       env,
-				Inputs:    na.inputList(inputs),
+				Inputs:    na.inputList(buildInputs),
 				Outputs:   outputs,
 				KV:        &cythonCppKV,
 				Resources: usesPython3,
@@ -377,6 +376,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		e.register(GeneratedFileInfo{
 			OutputPath:     generatedVFS,
+			BuildInputs:    buildInputs,
 			ProducerRef:    cyRef,
 			GeneratorRefs:  nil,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
@@ -385,6 +385,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		for _, info := range p.infos {
 			info.OnUse = pending
+			info.BuildInputs = buildInputs
 		}
 
 		seq := p.stmt.Seq

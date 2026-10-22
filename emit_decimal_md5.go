@@ -73,6 +73,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 
 	e.register(GeneratedFileInfo{
 		OutputPath:  outVFS,
+		BuildInputs: optArena,
 		ProducerRef: svRef,
 		OnUse:       pending,
 	})

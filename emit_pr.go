@@ -189,6 +189,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 		e.register(GeneratedFileInfo{
 			OutputPath:      out,
+			BuildInputs:     snap.inVFSs,
 			ProducerRef:     prRef,
 			ProducerMainOut: mainOutputVFS,
 			GeneratorRefs:   generatorRefs,

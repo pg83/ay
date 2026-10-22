@@ -17,7 +17,7 @@ class CppStyleProducerSourcesTest(unittest.TestCase):
         args = suite["cmds"][0]["cmd_args"]
         config = args.index("--config")
         self.assertEqual(args[config + 2:], sorted(files))
-        self.assertEqual([file for file in suite["inputs"] if file.endswith((".cpp", ".h"))], sorted(files))
+        self.assertEqual([file for file in suite["inputs"] if file.endswith((".c", ".cpp", ".h"))], sorted(files))
         return suite
 
     def test_cpp_and_json_checks_keep_separate_source_lists(self):
@@ -73,6 +73,56 @@ class CppStyleProducerSourcesTest(unittest.TestCase):
         self.assert_checked(graph, [])
         compiled = lib.node_by_output(graph, "$(B)/m/external.cpp.o")
         self.assertIn("$(B)/m/external.cpp", compiled["inputs"])
+
+    def test_run_program_checks_declared_inputs_without_tool_sources_or_incidental_headers(self):
+        files = self.files("COPY_FILE(${ARCADIA_ROOT}/shared/template.cpp stage.cpp)\n"
+                           "RUN_PROGRAM(tools/generator IN ${BINDIR}/stage.cpp ${ARCADIA_ROOT}/shared/template.cpp "
+                           "${ARCADIA_ROOT}/shared/schema.h ${ARCADIA_ROOT}/shared/template.cpp "
+                           "${ARCADIA_ROOT}/shared/notes.txt OUT generated.cpp)", **{
+            "shared/template.cpp": '#include "incidental.h"\nint value;\n',
+            "shared/schema.h": "\n",
+            "shared/incidental.h": "\n",
+            "shared/notes.txt": "\n",
+        })
+        lib.tool_program(files, "tools/generator", "generator")
+        graph = lib.make(files, "m", "-t")
+        self.assert_checked(graph, ["$(S)/shared/schema.h", "$(S)/shared/template.cpp"])
+        generated = lib.node_by_output(graph, "$(B)/m/generated.cpp")
+        copied = lib.node_by_output(graph, "$(B)/m/stage.cpp")
+        self.assertIn(copied["uid"], generated["deps"])
+        self.assertIn("$(B)/m/stage.cpp", generated["inputs"])
+        for source in ("template.cpp", "schema.h", "incidental.h", "notes.txt"):
+            self.assertIn("$(S)/shared/" + source, generated["inputs"])
+        compiled = lib.node_by_output(graph, "$(B)/m/generated.cpp.o")
+        self.assertIn("$(B)/m/generated.cpp", compiled["inputs"])
+        self.assertIn(generated["uid"], compiled["deps"])
+
+    def test_decimal_hash_checks_all_explicit_inputs(self):
+        files = self.files("DECIMAL_MD5_LOWER_32_BITS(hash.cpp FUNCNAME hash "
+                           "../shared/first.cpp ../shared/second.h ../shared/notes.txt)", **{
+            "shared/first.cpp": "int first;\n",
+            "shared/second.h": "\n",
+            "shared/notes.txt": "\n",
+        })
+        graph = lib.make(files, "m", "-t")
+        self.assert_checked(graph, ["$(S)/shared/first.cpp", "$(S)/shared/second.h"])
+        generated = lib.node_by_output(graph, "$(B)/m/hash.cpp")
+        compiled = lib.node_by_output(graph, "$(B)/m/hash.cpp.o")
+        for source in ("first.cpp", "second.h", "notes.txt"):
+            self.assertIn("$(S)/shared/" + source, generated["inputs"])
+            self.assertNotIn("$(S)/shared/" + source, compiled["inputs"])
+        self.assertIn(generated["uid"], compiled["deps"])
+
+    def test_cython_checks_embedded_text_inputs_without_induced_compiler_headers(self):
+        from test_python_cython import CYTHON_HEADERS, CYTHON_UTILITY, python_base
+        files = python_base()
+        files.update(self.files("BUILDWITH_CYTHON_CPP(module.pyx)", **{"m/module.pyx": "pass\n"}))
+        graph = lib.make(files, "m", "-t")
+        expected = ["$(S)/contrib/tools/cython/Cython/Utility/" + name
+                    for name in CYTHON_UTILITY if name.endswith((".c", ".cpp", ".h"))]
+        suite = self.assert_checked(graph, expected)
+        for header in CYTHON_HEADERS:
+            self.assertNotIn("$(S)/" + header, suite["inputs"])
 
 
 if __name__ == "__main__":
