@@ -142,6 +142,8 @@ type ModuleEmitResult struct {
 	FbsNamespaces                   []FbsNamespaceVar
 	MlaunchDeps                     []string
 	SwigInclude                     []VFS
+	ScInclude                       []VFS
+	ScDirectInclude                 []VFS
 	FlatcInclude                    []VFS
 	AddInclOneLevel                 []VFS
 	AddInclUserGlobal               []VFS
@@ -1814,7 +1816,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		peerArchiveRefs, peerGlobalRefs, peerWholeArchiveRefs, peerDynamicRefs, peerSbomRefs []NodeRef
 
-		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude, effectiveSwigInclude, moduleSwigInclude, effectiveFlatcInclude, moduleFlatcInclude []VFS
+		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude, effectiveSwigInclude, moduleSwigInclude, effectiveFlatcInclude, moduleFlatcInclude, effectiveScInclude, effectiveScDirectInclude, moduleScInclude []VFS
 
 		effectiveCFlagsGlobal, effectiveCXXFlagsGlobal, effectiveCOnlyFlagsGlobal []CompilerFlagValue
 		effectiveRPathFlagsGlobal                                                 []ANY
@@ -2207,6 +2209,17 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 
 		effectiveRPathFlagsGlobal = concatShared(ctx.argSlices, peerRPathFlagsGlobal, d.rpathFlagsGlobal)
+
+		var peerScInclude, peerScGlobalInclude []VFS
+
+		for _, rp := range resolved {
+			peerScGlobalInclude = append(peerScGlobalInclude, rp.result.ScInclude...)
+			peerScInclude = append(peerScInclude, rp.result.ScDirectInclude...)
+		}
+
+		effectiveScInclude = dedupSharedWith(deduper, ctx.vfsSlices, d.scAddInclGlobal, peerScGlobalInclude)
+		effectiveScDirectInclude = dedupSharedWith(deduper, ctx.vfsSlices, d.scAddInclExport, peerScGlobalInclude)
+		moduleScInclude = dedupSharedWith(deduper, ctx.vfsSlices, d.scAddIncl, peerScInclude)
 	})
 
 	var linkExcludeLibraries []ANY
@@ -2254,6 +2267,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			ProtoInclude:                    effectiveProtoInclude,
 			RosInclude:                      rosGlobalInclude,
 			SwigInclude:                     effectiveSwigInclude,
+			ScInclude:                       effectiveScInclude,
+			ScDirectInclude:                 effectiveScDirectInclude,
 			FlatcInclude:                    effectiveFlatcInclude,
 			AddInclOneLevel:                 d.addInclOneLevel,
 			AddInclUserGlobal:               d.addInclUserGlobal,
@@ -2450,6 +2465,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	d.scanCtx.rosInclude = rosInclude
 	d.scanCtx.flatcInclude = moduleFlatcInclude
+	d.scanCtx.scInclude = moduleScInclude
 	d.scanCtx.cythonPeerIncl = frame.peerCtx.CythonInclude
 	e.emitMlaunch(resolved, peerArchivePaths, effectiveMlaunchDeps)
 	e.emit()

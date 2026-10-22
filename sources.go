@@ -92,6 +92,8 @@ func (scanner *IncludeScanner) scanClosure(vfsPath VFS, ctx *ScanContext, domain
 			domain = scanDomainSwig
 		case IncludeDirectiveParser(yasmParser):
 			domain = scanDomainAsm
+		case IncludeDirectiveParser(scParser):
+			domain = scanDomainSc
 		}
 	}
 

@@ -40,10 +40,9 @@ class ToolDrivenSourcesTest(unittest.TestCase):
         self.assertEqual(html["cmds"][0]["cmd_args"], [
             "$(B)/tools/html2cpp/html2cpp", "$(S)/mod/page.asp", "$(B)/mod/page.asp.cpp",
         ])
-        # The includes of the .asp/.sc reach the generated source, not the
-        # generator: the basesearch HT (search/report/cpp/outpages.asp.cpp)
-        # and SC (kernel/reqbundle/scheme/options.sc.h) nodes list the tool and
-        # the source only.
+        # ASP includes reach the generated source rather than the generator.
+        # This SC schema has no imports, so its generator takes only the tool
+        # and primary source; SC imports belong to the generator's input closure.
         self.assertEqual(html["inputs"], ["$(B)/tools/html2cpp/html2cpp", "$(S)/mod/page.asp"])
         self.assertEqual(html["foreign_deps"], {"tool": [tool_uid("$(B)/tools/html2cpp/html2cpp")]})
         html_compile = lib.node_by_output(graph, "$(B)/mod/page.asp.cpp.o")

@@ -238,6 +238,9 @@ type ModuleData struct {
 	dontResolveIncludes      bool
 	swigAddIncl              []VFS
 	swigAddInclGlobal        []VFS
+	scAddIncl                []VFS
+	scAddInclGlobal          []VFS
+	scAddInclExport          []VFS
 	llvmBc                   []*LlvmBcStmt
 	llvmCompile              []LlvmCompileStmt
 	luaCompile               []LuaCompileStmt
@@ -1606,6 +1609,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.flatcAddInclGlobal = append(d.flatcAddInclGlobal, expandConfigVFSPaths(v.FlatcGlobalPaths, env)...)
 			d.swigAddIncl = append(d.swigAddIncl, expandConfigVFSPaths(v.SwigPaths, env)...)
 			d.swigAddInclGlobal = append(d.swigAddInclGlobal, expandConfigVFSPaths(v.SwigGlobalPaths, env)...)
+			d.scAddIncl = append(d.scAddIncl, expandConfigVFSPaths(v.ScPaths, env)...)
+			d.scAddInclGlobal = append(d.scAddInclGlobal, expandConfigVFSPaths(v.ScGlobalPaths, env)...)
+			d.scAddInclExport = append(d.scAddInclExport, expandConfigVFSPaths(v.ScExportPaths, env)...)
 		case *CFlagsStmt:
 
 			d.cFlagsGlobal, d.cFlags = appendCompilerFlags(v.Flags, env, "USER_CFLAGS", v.Global, d.cFlagsGlobal, d.cFlags)

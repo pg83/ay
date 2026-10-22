@@ -9,6 +9,7 @@ var (
 	yasmParser   = YasmIncludeDirectiveParser{}
 	cythonParser = CythonIncludeDirectiveParser{}
 	swigParser   = SwigIncludeDirectiveParser{}
+	scParser     = ScIncludeDirectiveParser{}
 	lexParser    = LexIncludeDirectiveParser{}
 	tsParser     = TSIncludeDirectiveParser{}
 )
@@ -41,6 +42,7 @@ func buildParserExtMatcher(proto ProtoIncludeDirectiveParser) *ExtMatcher[Includ
 		{".sh", emptyParser},
 		{".rl", ragelParser},
 		{".cc", cParser},
+		{".sc", scParser},
 		{".m4", emptyParser},
 		{".cu", cParser},
 		{".ev", proto},

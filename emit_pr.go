@@ -101,6 +101,8 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		}
 	}
 
+	e.collectSCInputs(inVFSs[:len(inVFSs)-stmt.INNoParse])
+
 	outVFSByToken := make(map[ANY]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {

@@ -73,6 +73,8 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 		}
 	}
 
+	e.collectSCInputs(inVFSs[:len(inVFSs)-stmt.INNoParse])
+
 	outVFSByToken := make(map[string]VFS, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles)+1)
 
 	for _, f := range stmt.OUTFiles {

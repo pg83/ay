@@ -40,6 +40,7 @@ const (
 	scanDomainRos
 	scanDomainGoAsm
 	scanDomainSwig
+	scanDomainSc
 	scanDomainCount
 )
 
@@ -115,6 +116,7 @@ type ScanCtx struct {
 	ccCfg       *ScanConfig
 	cythonCfg   *ScanConfig
 	protoCfg    *ScanConfig
+	scCfg       *ScanConfig
 	parser      IncludeDirectiveParser
 	tjc         *TarjanCtx
 	tsImports   bool
@@ -264,6 +266,7 @@ type ScanContext struct {
 	protoInclude   []VFS
 	rosInclude     []VFS
 	swigInclude    []VFS
+	scInclude      []VFS
 	flatcInclude   []VFS
 	protoOutRoot   VFS
 	goAsmIncl      []VFS
@@ -308,6 +311,8 @@ func (ctx *ScanContext) modulePaths(domain ScanDomain) (own, peer []VFS) {
 		return ctx.goAsmIncl, nil
 	case scanDomainSwig:
 		return ctx.swigInclude, nil
+	case scanDomainSc:
+		return ctx.scInclude, nil
 	default:
 		return ctx.ccOwn, ctx.ccPeer
 	}
@@ -334,6 +339,7 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 	sc.ccCfg = nil
 	sc.cythonCfg = ctx.config(scanDomainCython)
 	sc.protoCfg = nil
+	sc.scCfg = ctx.config(scanDomainSc)
 	sc.parser = parser
 	sc.tsImports = domain == scanDomainAux
 
@@ -341,7 +347,7 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 		sc.protoCfg = ctx.parsers.resolveScanConfig(ctx.protoInclude, nil, ctx.base)
 	}
 
-	if domain == scanDomainSwig {
+	if domain == scanDomainSwig || domain == scanDomainSc {
 		sc.ccCfg = ctx.config(scanDomainCC)
 	}
 
@@ -444,6 +450,13 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 
 		sc.cfg = sc.cythonCfg
 
+		defer func() { sc.cfg = cfg }()
+	}
+
+	if sc.parser == IncludeDirectiveParser(scParser) {
+		cfg := sc.cfg
+		sc.cfg = sc.scCfg
+		parser = scParser
 		defer func() { sc.cfg = cfg }()
 	}
 
@@ -573,7 +586,7 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 }
 
 func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
-	if sc.ccCfg != nil {
+	if sc.ccCfg != nil || sc.parser == IncludeDirectiveParser(scParser) || sc.scanner.parsers.registry.registeredParserFor(abs.relString()) == IncludeDirectiveParser(scParser) {
 		previous := sc.parser
 
 		if parser := sc.scanner.parsers.registry.registeredParserFor(abs.relString()); parser != nil {
@@ -593,7 +606,7 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 func (sc *ScanCtx) dfs(abs VFS) {
 	s := sc.scanner
 
-	if sc.ccCfg != nil {
+	if sc.ccCfg != nil || sc.parser == IncludeDirectiveParser(scParser) || sc.scanner.parsers.registry.registeredParserFor(abs.relString()) == IncludeDirectiveParser(scParser) {
 		previous := sc.parser
 
 		if parser := s.parsers.registry.registeredParserFor(abs.relString()); parser != nil {

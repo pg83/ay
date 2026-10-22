@@ -217,6 +217,9 @@ type AddInclStmt struct {
 	FlatcGlobalPaths  []ANY
 	SwigPaths         []ANY
 	SwigGlobalPaths   []ANY
+	ScPaths           []ANY
+	ScGlobalPaths     []ANY
+	ScExportPaths     []ANY
 	UserGlobalPaths   []ANY
 	AllPaths          []ANY
 	Line              int
@@ -1799,10 +1802,48 @@ func parseStructCodegen(prefix ANY, line int) *BaseCodegenStmt {
 	}
 }
 
+// SC ADDINCL entries use the source argument state machine: scope flags may
+// precede or follow FOR sc, and reset after the directory. Other languages
+// continue through their existing lexical lowering below.
+func scAddInclArgument(args []ANY, start int) (path, scope ANY, end int, ok bool) {
+	sc := false
+	for i := start; i < len(args); i++ {
+		switch args[i].string() {
+		case "GLOBAL", "ONE_LEVEL":
+			scope = args[i]
+		case "LOCAL":
+		case "FOR":
+			if i+1 >= len(args) || args[i+1].string() != "sc" {
+				return 0, 0, start, false
+			}
+			sc = true
+			i++
+		default:
+			if sc {
+				return args[i], scope, i, true
+			}
+			return 0, 0, start, false
+		}
+	}
+	return 0, 0, start, false
+}
+
 func splitAddInclPaths(args []ANY) *AddInclStmt {
-	var globalPaths, oneLevelPaths, ownPaths, cythonPaths, cythonGlobalPaths, asmPaths, protoPaths, protoGlobalPaths, protoAllPaths, flatcPaths, flatcGlobalPaths, swigPaths, swigGlobalPaths, userGlobalPaths, allPaths []ANY
+	var globalPaths, oneLevelPaths, ownPaths, cythonPaths, cythonGlobalPaths, asmPaths, protoPaths, protoGlobalPaths, protoAllPaths, flatcPaths, flatcGlobalPaths, swigPaths, swigGlobalPaths, scPaths, scGlobalPaths, scExportPaths, userGlobalPaths, allPaths []ANY
 
 	for i := 0; i < len(args); i++ {
+		if path, scope, end, ok := scAddInclArgument(args, i); ok {
+			scPaths = append(scPaths, path)
+			switch scope {
+			case kwGLOBAL.any():
+				scGlobalPaths = append(scGlobalPaths, path)
+				scExportPaths = append(scExportPaths, path)
+			case kwONE_LEVEL.any():
+				scExportPaths = append(scExportPaths, path)
+			}
+			i = end
+			continue
+		}
 		if args[i] == kwONE_LEVEL.any() {
 			i++
 
@@ -1942,6 +1983,9 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 		FlatcGlobalPaths:  astArgs.list(flatcGlobalPaths...),
 		SwigPaths:         astArgs.list(swigPaths...),
 		SwigGlobalPaths:   astArgs.list(swigGlobalPaths...),
+		ScPaths:           astArgs.list(scPaths...),
+		ScGlobalPaths:     astArgs.list(scGlobalPaths...),
+		ScExportPaths:     astArgs.list(scExportPaths...),
 		UserGlobalPaths:   astArgs.list(userGlobalPaths...),
 		AllPaths:          astArgs.list(allPaths...),
 	}

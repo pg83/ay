@@ -47,6 +47,7 @@ type EmitContext struct {
 	prodPos            []ProducerPos
 	prodBacking        []VFS
 	prodSrcs           []SrcMeta
+	scInputs           []VFS
 	objScratch         []ResourceItem
 	rawScratch         []ResourceItem
 	resItems           []ResourceItem
@@ -160,6 +161,7 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		prodPos:     scrub(prev.prodPos),
 		prodBacking: prev.prodBacking[:0],
 		prodSrcs:    prev.prodSrcs[:0],
+		scInputs:    prev.scInputs[:0],
 		objScratch:  scrub(prev.objScratch),
 		rawScratch:  scrub(prev.rawScratch),
 		resItems:    scrub(prev.resItems),
@@ -509,6 +511,7 @@ func (e *EmitContext) emit() {
 
 	e.emitPyFbsGroups()
 	e.emitDeclaredProducers(cythonPlans)
+	e.registerSCInputs()
 	e.emitUsrvFiles()
 
 	if !e.producersOnly() || e.ctx.peerTests {
