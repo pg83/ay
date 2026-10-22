@@ -9,6 +9,44 @@ from test_proto_targets import target_files
 
 
 class DependsSelectionTest(unittest.TestCase):
+    def test_filtered_suite_still_configures_its_dependency_results(self):
+        files = {
+            'tests/ya.make': 'EXECTEST()\nRUN(true)\nSIZE(LARGE)\nTAG(expensive)\nDEPENDS(dep)\nEND()\n',
+            'dep/ya.make': f'PROGRAM()\n{lib.BARE_MODULE}PEERDIR(peer)\nSRCS(dep.cpp)\nEND()\nRECURSE(child)\n',
+            'dep/dep.cpp': '',
+            'dep/child/ya.make': f'PROGRAM()\n{lib.BARE_MODULE}END()\n',
+            'peer/ya.make': f'LIBRARY()\n{lib.BARE_MODULE}SRCS(local.cpp GLOBAL global.cpp)\nEND()\n',
+            'peer/local.cpp': '',
+            'peer/global.cpp': '',
+        }
+        for flags in (('--test-size', 'small'), ('--test-tag', '-expensive')):
+            for add_modules in (False, True):
+                for strip_packages in (False, True):
+                    with self.subTest(flags=flags, add_modules=add_modules, strip_packages=strip_packages):
+                        options = ['--add-modules-to-results'] if add_modules else []
+                        if strip_packages:
+                            options.append('--strip-packages-from-results')
+                        graph = lib.make(files, 'tests', '-t', *flags, *options)
+                        dependency = lib.node_by_output(graph, '$(B)/dep/dep')
+                        self.assertIn(dependency['uid'], graph['result'])
+                        for name in ('libpeer.a', 'libpeer.global.a'):
+                            peer = lib.node_by_output(graph, '$(B)/peer/' + name)
+                            self.assertEqual(peer['uid'] in graph['result'], add_modules)
+                        self.assertFalse(any('/tests/test-results/' in output or output.startswith('$(B)/dep/child/')
+                                             for node in graph['graph'] for output in node['outputs']))
+
+    def test_filtered_suite_reports_invalid_dependency_during_configuration(self):
+        files = {
+            'tests/ya.make': 'EXECTEST()\nRUN(true)\nSIZE(LARGE)\nTAG(expensive)\nDEPENDS(missing)\nEND()\n',
+            'missing/ya.make': '',
+        }
+        for flags in (('--test-size', 'small'), ('--test-tag', '-expensive')):
+            with self.subTest(flags=flags):
+                result = lib.make_process(files, 'tests', '-t', *flags)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('has no module declaration', result.stderr)
+                self.assertNotIn('panic:', result.stderr)
+
     def test_each_enabled_proto_context_is_a_dependency(self):
         files = target_files()
         files['tests/ya.make'] = 'EXECTEST()\nRUN(true)\nDEPENDS(p)\nEND()\n'

@@ -140,13 +140,13 @@ func (ctx *GenCtx) testBuildDependencies(dir string) []TestBuildDependency {
 		dependency := TestBuildDependency{instance, genModule(ctx, instance)}
 
 		dependencies = append(dependencies, dependency)
-		ctx.testDependencyClosure(dependency, seen, false)
+		ctx.testDependencyClosure(dependency, seen)
 	}
 
 	return dependencies
 }
 
-func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen map[*ModuleEmitResult]bool, retain bool) {
+func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen map[*ModuleEmitResult]bool) {
 	instance, result := dependency.instance, dependency.result
 
 	if seen[result] {
@@ -156,15 +156,13 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 	seen[result] = true
 
 	for _, ref := range ctx.moduleResultRefs(instance, result) {
-		if retain {
-			ctx.emit.result(ref)
-		}
+		ctx.emit.result(ref)
 	}
 
 	if jm := result.java; jm != nil {
 		for _, peer := range ctx.javaManagedPeersClosure(jm) {
 			if peer.java != nil {
-				ctx.testDependencyClosure(TestBuildDependency{peer.java.instance, peer.java.result}, seen, true)
+				ctx.testDependencyClosure(TestBuildDependency{peer.java.instance, peer.java.result}, seen)
 			}
 		}
 
@@ -189,13 +187,13 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 		peer := instance
 
 		peer.Language = language
-		ctx.testDependencyClosure(TestBuildDependency{peer, genModule(ctx, peer)}, seen, true)
+		ctx.testDependencyClosure(TestBuildDependency{peer, genModule(ctx, peer)}, seen)
 	}
 
 	for _, dir := range d.peerdirs {
 		peer := e.derivePeerInstance(dir.string())
 
 		peer.Demand = demandSelf
-		ctx.testDependencyClosure(TestBuildDependency{peer, genModule(ctx, peer)}, seen, true)
+		ctx.testDependencyClosure(TestBuildDependency{peer, genModule(ctx, peer)}, seen)
 	}
 }

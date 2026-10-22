@@ -60,9 +60,12 @@ class YqlResultsTest(unittest.TestCase):
                 graph = lib.make(self.fixture(tags=tags + '\n'), 'udf', '--strip-packages-from-results', '--target-platform', 'default-linux-x86_64')
                 self.assertEqual(self.outputs(graph), {'$(B)/udf/' + name for name in expected})
 
-    def test_depends_selects_each_udf_context_without_registering_extra_roots(self):
+    def test_depends_retains_each_selected_udf_context_as_a_result(self):
         graph = lib.make(self.fixture(), 'tests', '-t', '--strip-packages-from-results', '--target-platform', 'default-linux-x86_64')
-        self.assertFalse(any(p.startswith('$(B)/udf/') for p in self.outputs(graph)))
+        self.assertEqual({p for p in self.outputs(graph) if p.startswith('$(B)/udf/')}, {
+            '$(B)/udf/' + name for name in ('libnamed.so', 'libnamed.a', 'libnamed.global.a',
+                'yql-abi-current-named.a', 'yql-abi-current-named.global.a')
+        })
         suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
         for name in ('libnamed.so', 'libnamed.a', 'libnamed.global.a',
                      'yql-abi-current-named.a', 'yql-abi-current-named.global.a'):

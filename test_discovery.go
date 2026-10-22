@@ -70,9 +70,7 @@ func (ctx *GenCtx) emitDiscoveredModuleTests() {
 	}
 
 	for _, suite := range suites {
-		if ctx.testSuiteSelected(suite) {
-			ctx.prepareTestDependencies(suite)
-		}
+		ctx.prepareTestDependencies(suite)
 	}
 
 	outputs := ctx.projectModuleIndex(suites)

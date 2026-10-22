@@ -12,6 +12,23 @@ def vet(graph, project):
 
 
 class GoProjectDependenciesTest(unittest.TestCase):
+    def test_project_query_keeps_dependencies_of_filtered_collected_suites(self):
+        files = go_proto_world()
+        files.update(desc_files())
+        files['p/ya.make'] = 'PROTO_LIBRARY()\nONLY_TAGS(GO_PROTO DESC_PROTO)\nSRCS(p.proto)\nEND()\n'
+        files['p/p.proto'] = 'syntax = "proto3";\n'
+        files['catalog/ya.make'] = 'PROTO_DESCRIPTIONS()\nPEERDIR(p)\nEND()\n'
+        files['tests/ya.make'] = 'EXECTEST()\nRUN(true)\nSIZE(LARGE)\nTAG(expensive)\nDEPENDS(catalog)\nEND()\n'
+        go_module(files, 'root', macros='PEERDIR(p)\n')
+        for targets in (('root', 'tests'), ('tests', 'root')):
+            for flags in (('--test-size', 'small'), ('--test-tag', '-expensive')):
+                with self.subTest(targets=targets, flags=flags):
+                    graph = lib.make(files, *targets, '-t', *flags, '--target-platform-flag',
+                                     'ADD_PEERDIRS_GEN_TESTS=yes', '--strip-packages-from-results')
+                    descriptor = lib.node_by_output(graph, '$(B)/p/p.self.protodesc')
+                    self.assertIn(descriptor['uid'], vet(graph, 'p')['deps'])
+                    self.assertFalse(any('/tests/test-results/' in output for node in graph['graph'] for output in node['outputs']))
+
     def test_project_query_includes_depends_from_later_suites_in_either_target_order(self):
         files = go_proto_world()
         files.update(desc_files())
