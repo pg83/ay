@@ -28,12 +28,76 @@ def fixture(body):
 
 
 class TaskletRegistrationTest(unittest.TestCase):
+    def test_uppercase_values_preserve_the_registration_producer_contract(self):
+        # ymake.core.conf:5417-5436 has positional values and a variadic include
+        # list, with no service keywords in either registration macro.
+        for extended in (False, True):
+            for expanded in (False, True):
+                with self.subTest(extended=extended, expanded=expanded):
+                    macro = "TASKLET_REG_EXT" if extended else "TASKLET_REG"
+                    values = ["RENAMED_REGISTRATION", "java" if extended else "cpp", "RENAMED_IMPLEMENTATION"]
+                    if extended:
+                        values.append("RENAMED_WRAPPER")
+                    values += ["RENAMED_HEADER", "RENAMED_HEADER"]
+                    body = ""
+                    args = values
+                    if expanded:
+                        body = "".join(f"SET(ARG_{i} {value})\n" for i, value in enumerate(values))
+                        args = [f"${{ARG_{i}}}" for i in range(len(values))]
+                    files = fixture(body + f"{macro}({' '.join(args)})\n")
+                    files["RENAMED_HEADER"] = '#include "common/detail.hpp"\n'
+                    graph = lib.make(files, "mod")
+                    output = "$(B)/mod/RENAMED_REGISTRATION.task.cpp"
+                    producer = lib.node_by_output(graph, output)
+                    command = ["", "$(S)/build/scripts/gen_tasklet_reg.py", values[0], "-l", values[1], "-i", values[2]]
+                    if extended:
+                        command += ["-w", values[3]]
+                    self.assertEqual(producer["cmds"][0]["cmd_args"], command + [output, *values[-2:]])
+                    self.assertEqual(producer["outputs"], [output])
+                    self.assertEqual(producer["inputs"], ["$(S)/build/scripts/gen_tasklet_reg.py"])
+                    self.assertEqual(producer["kv"], {"p": "TT", "pc": "yellow"})
+                    compiled = lib.node_by_output(graph, output + ".o")
+                    self.assertEqual(set(compiled["inputs"]), {
+                        output, "$(S)/RENAMED_HEADER", "$(S)/common/detail.hpp",
+                        *("$(S)/" + header for header in RUNTIME_HEADERS),
+                    })
+                    self.assertIn(producer["uid"], compiled["deps"])
+                    archive = lib.node_by_output(graph, "$(B)/mod/libmod.global.a")
+                    self.assertIn(output + ".o", archive["inputs"])
+                    self.assertIn(compiled["uid"], archive["deps"])
+
+    def test_uppercase_generated_include_uses_its_registered_producer(self):
+        files = fixture(
+            "RUN_PYTHON3(build/scripts/render_contract.py OUT_NOAUTO RENAMED_CONTRACT "
+            "OUTPUT_INCLUDES common/detail.hpp)\n"
+            "TASKLET_REG(RENAMED_GENERATED cpp RENAMED_FACTORY mod/RENAMED_CONTRACT)\n")
+        files["build/scripts/render_contract.py"] = ""
+        graph = lib.make(files, "mod")
+        header = lib.node_by_output(graph, "$(B)/mod/RENAMED_CONTRACT")
+        producer = lib.node_by_output(graph, "$(B)/mod/RENAMED_GENERATED.task.cpp")
+        compiled = lib.node_by_output(graph, "$(B)/mod/RENAMED_GENERATED.task.cpp.o")
+        self.assertEqual(producer["inputs"], ["$(S)/build/scripts/gen_tasklet_reg.py"])
+        self.assertEqual(producer["cmds"][0]["cmd_args"][-1], "mod/RENAMED_CONTRACT")
+        self.assertIn(header["uid"], compiled["deps"])
+        self.assertIn(producer["uid"], compiled["deps"])
+        self.assertIn("$(B)/mod/RENAMED_CONTRACT", compiled["inputs"])
+        self.assertIn("$(S)/common/detail.hpp", compiled["inputs"])
+
+    def test_registration_values_do_not_disable_other_macro_validation(self):
+        for macro, wrapper in (("TASKLET_REG", ""), ("TASKLET_REG_EXT", " RenamedWrapper")):
+            with self.subTest(macro=macro):
+                result = lib.make_process(fixture(
+                    f"{macro}(RENAMED_UNKNOWN_OPTION cpp RenamedFactory{wrapper})\n"
+                    "ALLOCATOR(RENAMED_UNKNOWN_OPTION)\n"), "mod")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('macro ALLOCATOR received service-keyword "RENAMED_UNKNOWN_OPTION"', result.stderr)
+
     def test_python_library_registration_is_compiled_into_its_global_archive(self):
-        files = fixture("TASKLET_REG(Task py sample.module:Factory common/api.hpp)\n")
+        files = fixture("TASKLET_REG(RENAMED_PY_TASK py sample.module:Factory common/api.hpp)\n")
         files["mod/ya.make"] = files["mod/ya.make"].replace("LIBRARY()", "PY3_LIBRARY()", 1)
         graph = lib.make(files, "mod")
-        generated = lib.node_by_output(graph, "$(B)/mod/Task.task.cpp")
-        compiled = lib.node_by_output(graph, "$(B)/mod/Task.task.cpp.o")
+        generated = lib.node_by_output(graph, "$(B)/mod/RENAMED_PY_TASK.task.cpp")
+        compiled = lib.node_by_output(graph, "$(B)/mod/RENAMED_PY_TASK.task.cpp.o")
         archive = lib.node_by_output(graph, "$(B)/mod/libpy3mod.global.a")
         self.assertIn(generated["uid"], compiled["deps"])
         self.assertIn(compiled["uid"], archive["deps"])

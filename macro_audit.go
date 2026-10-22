@@ -24,6 +24,12 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 
 	tokDeclareInDirs: {},
 
+	// ymake.core.conf: TASKLET_REG(Name, Lang, Impl, Includes...) and
+	// TASKLET_REG_EXT(Name, Lang, Impl, Wrapper, Includes...) contain only
+	// positional values, including uppercase names, implementations and headers.
+	tokTaskletReg:    {},
+	tokTaskletRegExt: {},
+
 	tokSetResourceUriFromJson: {},
 	tokSetCustomClangTidy:     {},
 	tokToolchain:              {},
