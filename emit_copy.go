@@ -68,6 +68,10 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	if _, rooted := moduleRootedVFS(instance.Path.relString(), entry.Src); !rooted && srcVFS.isSource() {
 		candidate := srcVFS.rel().build()
 
+		if reg.lookup(candidate) == nil {
+			candidate = buildClean(entry.Src)
+		}
+
 		if reg.lookup(candidate) != nil && !ctx.fs.isFile(srcRootRel, srcVFS.relString()) {
 			srcVFS = candidate
 		}
