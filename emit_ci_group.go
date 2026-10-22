@@ -26,7 +26,7 @@ func (e *EmitContext) packagePeer(dir string) *ModuleEmitResult {
 		}
 	}
 
-	return genModule(e.ctx, instance)
+	return e.genPeerModule(instance)
 }
 
 func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen map[*ModuleEmitResult]bool) []VFS {

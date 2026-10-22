@@ -23,7 +23,7 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 			continue
 		}
 
-		res := genModule(ctx, ModuleInstance{Path: source(peer), Kind: KindLib, Language: instance.Language, Platform: instance.Platform})
+		res := e.genPeerModule(ModuleInstance{Path: source(peer), Kind: KindLib, Language: instance.Language, Platform: instance.Platform})
 
 		peers = append(peers, res.DocsClosure...)
 		globals = append(globals, res.ResourceGlobalClosure...)
@@ -210,7 +210,7 @@ func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
 		fontModule := "contrib/java/openjdk-fontconfig"
 
 		if peerYaMakeExists(e.ctx.fs, source(fontModule)) {
-			res := genModule(e.ctx, ModuleInstance{Path: source(fontModule), Kind: KindLib, Platform: e.instance.Platform})
+			res := e.genPeerModule(ModuleInstance{Path: source(fontModule), Kind: KindLib, Platform: e.instance.Platform})
 
 			if res.LDPath != nil {
 				peers = append(peers, *res.LDPath)

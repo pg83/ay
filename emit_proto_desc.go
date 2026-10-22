@@ -55,7 +55,9 @@ func isProtoLibraryPeer(ctx *GenCtx, peerPath string) bool {
 	return false
 }
 
-func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []ANY, injectBuiltins, commonGoogle bool) DescPeerSpan {
+func descPeerClosure(e *EmitContext, peerdirs []ANY, injectBuiltins, commonGoogle bool) DescPeerSpan {
+	ctx, instance := e.ctx, e.instance
+
 	var span DescPeerSpan
 
 	seen := make(map[VFS]struct{})
@@ -90,7 +92,7 @@ func descPeerClosure(ctx *GenCtx, instance ModuleInstance, peerdirs []ANY, injec
 			Platform: instance.Platform,
 		}
 
-		res := genModule(ctx, peerInstance)
+		res := e.genPeerModule(peerInstance)
 
 		span.globals = append(span.globals, res.ResourceGlobalClosure...)
 
@@ -133,7 +135,7 @@ func descProtoOutputRel(instancePath, srcRel, resolvedRel string) string {
 
 func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	span := descPeerClosure(ctx, instance, d.peerdirs, d.needGoogleProtoPeerdirs, d.useCommonGoogleAPIs)
+	span := descPeerClosure(e, d.peerdirs, d.needGoogleProtoPeerdirs, d.useCommonGoogleAPIs)
 	protoInclude := dedup(d.protoAddInclGlobal, span.includes)
 
 	d.scanCtx = newModuleScanContext(ctx, instance, d, dedup(d.addIncl, d.addInclGlobal), nil, nil, protoInclude)
@@ -333,7 +335,7 @@ func (e *EmitContext) emitProtoDescriptions() *ModuleEmitResult {
 		peerdirs = append(slices.Clip(peerdirs), instance.Path.rel().any())
 	}
 
-	closure := descPeerClosure(ctx, instance, peerdirs, false, false).peers
+	closure := descPeerClosure(e, peerdirs, false, false).peers
 	na := ctx.emit.nodeArenas()
 	env := envVarsVCS
 	prj := e.descriptorName()

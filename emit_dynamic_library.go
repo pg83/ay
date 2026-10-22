@@ -117,7 +117,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 
 		peerInstance := e.derivePeerInstance(p)
 
-		resolved = append(resolved, ResolvedPeer{path: p, result: genModule(ctx, peerInstance)})
+		resolved = append(resolved, ResolvedPeer{path: p, result: e.genPeerModule(peerInstance)})
 	}
 
 	rpathOnly := make([]*ModuleEmitResult, 0, len(dynLibRPathHelperPeers))
@@ -125,7 +125,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	for _, p := range dynLibRPathHelperPeers {
 		peerInstance := e.derivePeerInstance(p)
 
-		rpathOnly = append(rpathOnly, genModule(ctx, peerInstance))
+		rpathOnly = append(rpathOnly, e.genPeerModule(peerInstance))
 	}
 
 	var cFlagsGlobal, cxxFlagsGlobal, cOnlyFlagsGlobal []CompilerFlagValue

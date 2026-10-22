@@ -34,7 +34,7 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 			continue
 		}
 
-		res := genModule(ctx, ModuleInstance{Path: source(peer), Language: LangDocsProto, Kind: KindLib, Platform: instance.Platform})
+		res := e.genPeerModule(ModuleInstance{Path: source(peer), Language: LangDocsProto, Kind: KindLib, Platform: instance.Platform})
 
 		includes = append(includes, res.ProtoInclude...)
 		peers = append(peers, res.DocsClosure...)

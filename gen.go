@@ -178,6 +178,8 @@ type ModuleEmitResult struct {
 	ResourceGlobalClosure           []ResourceDecl
 	java                            *JavaModule
 	TestSuites                      []*TestSuite
+	testProject                     VFS
+	testPeers                       []*ModuleEmitResult
 	testsEmitted                    bool
 }
 
@@ -228,6 +230,8 @@ type GenCtx struct {
 	target           *Platform
 	vcsRef           NodeRef
 	testMode         bool
+	peerTests        bool
+	testRoots        []*ModuleEmitResult
 	tests            *TestOpts
 	sbomEnabled      bool
 	autoincludeIdx   *AutoincludeIndex
@@ -292,9 +296,10 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 			ctx.genJavaTests(target.Path, target.Declaration.Name)
 		}
 
-		ctx.emitConfiguredSubmoduleTests(target.Path)
+		ctx.collectConfiguredSubmoduleTests(target.Path)
 	}
 
+	ctx.emitDiscoveredModuleTests()
 	ctx.flushFbsContextBindings()
 
 	if ctx.buckets.h1Mismatches > 0 {
@@ -346,6 +351,7 @@ func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *Stre
 		fetchRefs: fetchRefs,
 		scripts:   scriptTbl,
 		testMode:  tests != nil,
+		peerTests: tests != nil && targetP.ifEnv.bool(envAddPeerdirsGenTests),
 		tests:     tests,
 
 		sbomEnabled: fs.isFile(srcRootRel, sbomConfRel),
@@ -467,7 +473,7 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 		ctx.emit.result(*root.GlobalRef)
 	}
 
-	ctx.emitConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, root.ModuleVariants, rootDemand), root)...)
+	ctx.collectConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, root.ModuleVariants, rootDemand), root)...)
 
 	for _, target := range targets.Recursed {
 		dir := target.Path
@@ -492,7 +498,7 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 			ctx.emit.result(*sub.GlobalRef)
 		}
 
-		ctx.emitConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, sub.ModuleVariants, rootDemand), sub)...)
+		ctx.collectConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, sub.ModuleVariants, rootDemand), sub)...)
 	}
 }
 
@@ -708,7 +714,7 @@ func (e *EmitContext) peerDemand() ModuleDemand {
 	return demandNone
 }
 
-func (ctx *GenCtx) emitConfiguredSubmoduleTests(dir string, results ...*ModuleEmitResult) {
+func (ctx *GenCtx) collectConfiguredSubmoduleTests(dir string, results ...*ModuleEmitResult) {
 	if !ctx.testMode {
 		return
 	}
@@ -732,7 +738,7 @@ func (ctx *GenCtx) emitConfiguredSubmoduleTests(dir string, results ...*ModuleEm
 			instance.Kind = KindLib
 		}
 	default:
-		ctx.emitModuleTests(results...)
+		ctx.testRoots = append(ctx.testRoots, results...)
 
 		return
 	}
@@ -741,7 +747,7 @@ func (ctx *GenCtx) emitConfiguredSubmoduleTests(dir string, results ...*ModuleEm
 		results = append([]*ModuleEmitResult{r}, results...)
 	}
 
-	ctx.emitModuleTests(results...)
+	ctx.testRoots = append(ctx.testRoots, results...)
 }
 
 func (ctx *GenCtx) emitModuleTests(results ...*ModuleEmitResult) {
@@ -1278,6 +1284,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	defer ctx.popFrame()
 
+	defer func() {
+		if result != nil {
+			result.testProject = instance.Path
+			result.testPeers = append(result.testPeers, frame.testPeers...)
+		}
+	}()
+
 	if instance.Language == LangJava {
 		return genJavaModule(ctx, instance, ctx.moduleName(instance.Path.relString()), stmts, env)
 	}
@@ -1633,18 +1646,18 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		self := instance
 
 		self.Language = language
-		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: genModule(ctx, self), kind: peerKindLangDefault})
+		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: e.genPeerModule(self), kind: peerKindLangDefault})
 	}
 
 	if resolveCppSelf {
 		cppSelf := instance
 
 		cppSelf.Language = LangCPP
-		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: genModule(ctx, cppSelf), kind: peerKindLangDefault})
+		preResolved = append(preResolved, ResolvedPeer{path: instance.Path.relString(), result: e.genPeerModule(cppSelf), kind: peerKindLangDefault})
 	}
 
 	if resolveGoogleapis {
-		preResolved = append(preResolved, ResolvedPeer{path: googleapisPeer, result: genModule(ctx, e.derivePeerInstance(googleapisPeer)), kind: peerKindLangDefault})
+		preResolved = append(preResolved, ResolvedPeer{path: googleapisPeer, result: e.genPeerModule(e.derivePeerInstance(googleapisPeer)), kind: peerKindLangDefault})
 	}
 
 	peerObjAddLibsGlobal := frame.peerObjAddLibsGlobal[:0]
@@ -1709,7 +1722,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			genModule(ctx, cppSources)
 		}
 
-		peerResult := genModule(ctx, peerInstance)
+		peerResult := e.genPeerModule(peerInstance)
 
 		if peerResult.isPROGRAM {
 			throwFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path.relString(), peerPath)
@@ -3090,6 +3103,7 @@ func (ctx *GenCtx) py3ccHead(py3ccBinary, py3ccSlowBin VFS) []ANY {
 }
 
 type ModuleFrame struct {
+	testPeers            []*ModuleEmitResult
 	pending              int
 	serial               uint32
 	d                    ModuleData
@@ -3126,6 +3140,7 @@ func (ctx *GenCtx) pushFrame() *ModuleFrame {
 	ctx.frameDepth++
 	ctx.frameSerial++
 	f.serial = ctx.frameSerial
+	f.testPeers = f.testPeers[:0]
 
 	return f
 }

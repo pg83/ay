@@ -383,7 +383,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	}
 
 	for _, peer := range pm.notsPeers(dir, pj) {
-		result := genModule(ctx, e.notsPeerInstance(peer))
+		result := e.genPeerModule(e.notsPeerInstance(peer))
 
 		addPeer(result)
 
@@ -403,7 +403,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	}
 
 	for _, peer := range explicitPeers {
-		result := genModule(ctx, e.notsPeerInstance(peer.string()))
+		result := e.genPeerModule(e.notsPeerInstance(peer.string()))
 
 		addPeer(result)
 	}

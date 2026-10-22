@@ -83,7 +83,7 @@ func (e *EmitContext) scriptModuleResources(globals []ResourceDecl, peers ...str
 			continue
 		}
 
-		res := genModule(e.ctx, ModuleInstance{Path: source(peer), Kind: KindLib, Platform: e.instance.Platform})
+		res := e.genPeerModule(ModuleInstance{Path: source(peer), Kind: KindLib, Platform: e.instance.Platform})
 
 		globals = append(globals, res.ResourceGlobalClosure...)
 	}

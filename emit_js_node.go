@@ -83,6 +83,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	includes := ctx.na.dirs.alloc(len(jsSources))
 
 	for i, s := range jsSources {
+		e.cppStyleSource(internStr(s).any())
 		includes[i] = IncludeDirective{kind: includeQuoted, target: includeTarget(resolveSourceVFS(ctx, instance, s, d.srcDirs).any())}
 	}
 

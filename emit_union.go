@@ -29,7 +29,7 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 
 		peer.Demand = demandNone
 
-		res := genModule(e.ctx, peer)
+		res := e.genPeerModule(peer)
 
 		peers = append(peers, res.JavaClosure...)
 		globals = append(globals, res.ResourceGlobalClosure...)

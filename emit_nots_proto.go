@@ -8,7 +8,7 @@ import (
 func (e *EmitContext) notsProtoInputs() (args []string, inputs []VFS, refs []NodeRef, leaves []VFS, toolRef NodeRef, globals []ResourceDecl) {
 	ctx, d, c := e.ctx, e.d, e.d.nots
 	dir := e.instance.Path.relString()
-	span := descPeerClosure(ctx, e.instance, d.peerdirs, false, false)
+	span := descPeerClosure(e, d.peerdirs, false, false)
 
 	globals = span.globals
 

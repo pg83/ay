@@ -512,6 +512,16 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 
 	ctx.javaRegisterOutputs(jm)
 
+	if ctx.peerTests {
+		for _, peer := range jm.direct {
+			result.testPeers = append(result.testPeers, peer.m.result)
+		}
+
+		for _, peer := range jm.unmanageable {
+			result.testPeers = append(result.testPeers, peer.res)
+		}
+	}
+
 	return result
 }
 
@@ -748,15 +758,11 @@ func (ctx *GenCtx) genJavaTests(dir string, name TOK) {
 	for _, u := range javaModuleUnits[name] {
 		res := genModule(ctx, ModuleInstance{Path: source(dir), Kind: u.sub, Language: LangJava, Platform: ctx.target, Demand: demandSelf})
 
-		if res.java == nil || res.testsEmitted {
+		if res.java == nil {
 			continue
 		}
 
-		res.testsEmitted = true
-
-		for _, ref := range ctx.javaEmitTests(res.java) {
-			ctx.emit.result(ref)
-		}
+		ctx.testRoots = append(ctx.testRoots, res)
 	}
 }
 

@@ -504,9 +504,11 @@ func (e *EmitContext) emit() {
 	e.emitDeclaredProducers(cythonPlans)
 	e.emitUsrvFiles()
 
-	if !e.producersOnly() {
+	if !e.producersOnly() || e.ctx.peerTests {
 		e.registerCollectPySrcs()
+	}
 
+	if !e.producersOnly() {
 		e.emitPyRegister()
 	}
 
