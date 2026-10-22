@@ -509,6 +509,10 @@ def java_tree(**extra):
         "build/platform/java/jdk/jdk17/ya.make": resource_lib("JDK17", 3),
         "build/platform/java/jdk/jdk26/ya.make": resource_lib("JDK26", 5),
         "build/platform/java/protoc/ya.make": resource_lib("JAVA_PROTOC", 4),
+        "contrib/java/org/sonarsource/scanner/cli/sonar-scanner-cli/2.8/ya.make": (
+            "JAVA_CONTRIB()\nLOCAL_JAR(sonar-scanner-cli-2.8.jar)\nEND()\n"
+        ),
+        "contrib/java/org/sonarsource/scanner/cli/sonar-scanner-cli/2.8/sonar-scanner-cli-2.8.jar": "",
     }
     files.update(extra)
     return files

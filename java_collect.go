@@ -112,6 +112,7 @@ func javaConfPrologue(jm *JavaModule, d *JavaData) {
 	case u.kind == juTest && jm.stmt == tokJunit6:
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "devtools/jtest-annotations/junit6"})
 	case u.kind == juJar && jm.stmt == tokJtestFor:
+		d.test.depends = append(d.test.depends, "contrib/java/org/sonarsource/scanner/cli/sonar-scanner-cli/2.8")
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "devtools/junit-runner"}, JavaPeerSpec{dir: "build/platform/java/jacoco-agent"}, JavaPeerSpec{dir: d.unittestDir})
 	}
 
