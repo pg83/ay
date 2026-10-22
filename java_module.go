@@ -253,6 +253,7 @@ type JavaRunProgram struct {
 }
 
 type JavaData struct {
+	recurses          []string
 	name              string
 	prefix            string
 	jdkReal           string
@@ -470,6 +471,8 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 
 		return r
 	}
+
+	ctx.recordConfiguration(instance, jm.data.recurses, jm.data.test.depends)
 
 	jm.name = jm.data.name
 

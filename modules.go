@@ -145,6 +145,7 @@ type TestMeta struct {
 }
 
 type ModuleData struct {
+	recurses    []string
 	mlaunch     *MlaunchModule
 	ros         *RosModule
 	multimodule TOK
@@ -1848,6 +1849,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					}
 				}
 
+				d.recurses = appendConfigurationRecurses(d.recurses, modulePath, expanded, platform)
 				applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
 
 				if perlMask != 0 {

@@ -382,7 +382,13 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 		peerInputs = append(peerInputs, *result.ARPath)
 	}
 
-	for _, peer := range pm.notsPeers(dir, pj) {
+	localPeers := pm.notsPeers(dir, pj)
+
+	if c.Hermetic {
+		ctx.recordConfiguration(e.instance, nil, localPeers)
+	}
+
+	for _, peer := range localPeers {
 		result := e.genPeerModule(e.notsPeerInstance(peer))
 
 		addPeer(result)

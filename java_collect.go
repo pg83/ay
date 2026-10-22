@@ -317,6 +317,10 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				args = anyStrs(expandStmtTokens(v.Args, env))
 			}
 
+			stmt := *v
+
+			stmt.Args = internAnys(args)
+			d.recurses = appendConfigurationRecurses(d.recurses, jm.dir, stmt, jm.instance.Platform)
 			applyJavaMacro(ctx, jm, d, v.Raw.string(), args, rawArgs, env)
 		}
 	}

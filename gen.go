@@ -188,6 +188,7 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 }
 
 type GenCtx struct {
+	configuration    ConfigurationDependencies
 	fbsBindings      fbsContextBindings
 	fs               FS
 	parsers          *IncludeParserManager
@@ -299,6 +300,7 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 		ctx.collectConfiguredSubmoduleTests(target.Path)
 	}
 
+	ctx.configureDependencies()
 	ctx.emitDiscoveredModuleTests()
 	ctx.flushFbsContextBindings()
 
@@ -576,6 +578,7 @@ func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
 	}
 
 	scan(moduleStmts(ctx, dir))
+	ctx.recordConfiguration(instance, children, nil)
 
 	return module, children
 }
@@ -1289,6 +1292,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		return result
 	}
+
+	ctx.recordConfiguration(instance, d.recurses, d.test.depends)
 
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary && d.multimodule != tokRosLibrary && d.multimodule != tokFbsLibrary {
 		cpp := instance

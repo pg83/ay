@@ -4,6 +4,7 @@ import unittest
 
 from lib import make, node_by_output, resource_lib, tool_program
 import test_nots
+import test_proto_py2_context
 from test_java_tests import option_values, run_args
 from test_proto_desc import desc_files
 
@@ -72,6 +73,7 @@ class NotsSuitesTest(unittest.TestCase):
 
     def test_schema_workspace_dependency_keeps_default_descriptions(self):
         files = test_nots.NotsTests().project('TS_LIBRARY()\nTS_BUILD_SCRIPT(build)\nTS_BUILD_OUTPUTS(build)\nTS_LINT(lint)')
+        files.update(test_proto_py2_context.proto_world())
         files.update(desc_files())
         files.update({
             'web/package.json': '{"dependencies":{"api":"workspace:../api"}}',
