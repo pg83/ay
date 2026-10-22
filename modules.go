@@ -1277,6 +1277,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if isGoModuleType(d.unit.Type) {
+				initGoModuleName(modulePath, env, d, onWarn)
 				d.flags.NoRuntime = true
 				d.flags.NoUtil = true
 			}
@@ -2911,6 +2912,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.setVars[str_GO_PACKAGE_VALUE] = v.Args[0].str()
+		env.setStringID(envGoPackageOverride, v.Args[0].str())
 	case tokExportYmapsProto:
 		applyProtoNamespace(d, mapsDocProtoNS.any(), false)
 

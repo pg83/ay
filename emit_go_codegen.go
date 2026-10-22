@@ -390,24 +390,71 @@ func (st GoCodegenStmt) outputNames() []string {
 	return names
 }
 
-func goPackageName(modulePath string, d *ModuleData) string {
-	if name := d.setVars[str_GO_PACKAGE_VALUE]; name != 0 {
-		return name.string()
+// module_confs.cpp: ParseModuleArgsBase followed by SetDirNameBasenameOrGoPackage,
+// before the source module body runs. Keep the filename's header snapshot separate
+// from REALPRJNAME, which SET may subsequently change for macros and generators.
+func initGoModuleName(modulePath string, env Environment, d *ModuleData, onWarn func(Warn)) {
+	stmt := *d.moduleStmt
+	args := expandStmtTokens(stmt.Args, env)
+	var tail []ANY
+
+	for i := 0; i < len(args); i++ {
+		if args[i] == kwPREFIX.any() {
+			if i+1 < len(args) {
+				env.setString(envMODULE_PREFIX, expandScalarVarRef(args[i+1].string(), env))
+				tail = append(tail, args[i:i+2]...)
+				i++
+			} else {
+				onWarn(Warn{Kind: WarnPlugin, Message: fmt.Sprintf("in %s/ya.make, prefix not specified after PREFIX keyword", modulePath)})
+			}
+
+			continue
+		}
+
+		if !env.hasBindingID(envREALPRJNAME) {
+			env.setStringID(envREALPRJNAME, args[i].str())
+		} else {
+			tail = append(tail, args[i])
+		}
 	}
 
-	if imp := d.setVars[strGO_TEST_IMPORT_PATH]; imp != 0 {
-		return path.Base(path.Clean(imp.string()))
+	if env.hasBindingID(envREALPRJNAME) {
+		env.setString(envGO_PACKAGE_VALUE, expandScalarVarRef(env.string(envREALPRJNAME), env))
+	} else {
+		env.setString(envREALPRJNAME, path.Base(modulePath))
+	}
+
+	if d.setVars == nil {
+		d.setVars = map[STR]STR{}
+	}
+
+	d.setVars[envREALPRJNAME.str()] = internStr(env.string(envREALPRJNAME))
+	d.setVars[envGO_PACKAGE_VALUE.str()] = internStr(env.string(envGO_PACKAGE_VALUE))
+	stmt.Args = append([]ANY{internStr(env.string(envREALPRJNAME)).any()}, tail...)
+	stmt.Prefix = env.string(envMODULE_PREFIX)
+	d.moduleStmt = &stmt
+}
+
+func goPackageName(_ string, d *ModuleData) string {
+	if name := d.setVars[str_GO_PACKAGE_VALUE].string(); name != "" {
+		return name
+	}
+
+	if d.moduleStmt.Name == tokGoTest {
+		if name := d.setVars[envGO_PACKAGE_VALUE.str()].string(); name != "" {
+			return name
+		}
+	}
+
+	if imp := d.setVars[strGO_TEST_IMPORT_PATH].string(); imp != "" {
+		return path.Base(path.Clean(imp))
 	}
 
 	if isProgramModuleType(d.moduleStmt.Name) {
 		return "main"
 	}
 
-	if len(d.moduleStmt.Args) > 0 {
-		return d.moduleStmt.Args[0].string()
-	}
-
-	return path.Base(modulePath)
+	return d.setVars[envREALPRJNAME.str()].string()
 }
 
 func applyGoResource(fs FS, modulePath string, entries []ResourceEntry, line int, d *ModuleData) {
