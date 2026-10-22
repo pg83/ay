@@ -13,6 +13,18 @@ var (
 	pyPBSuffixesGrpcMypy = []string{"_pb2.py", "_pb2_grpc.py", "_pb2.pyi"}
 )
 
+func isPythonProtoModule(d *ModuleData) bool {
+	return d.unit.Tag == unitTagPy3Proto || d.unit.Tag == strPyProto
+}
+
+func protoPythonVersion(d *ModuleData) string {
+	if d.usePython2 {
+		return "py2"
+	}
+
+	return "py3"
+}
+
 type pyPBPending struct {
 	emit         *EmitContext
 	ctx          *GenCtx
@@ -111,10 +123,21 @@ func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, pyOut, grp
 	instance, d := e.instance, e.d
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
 
+	moduleKey := func(suffix string) STR {
+		key := keyDir + keySep + keyBase + suffix
+
+		if d.usePython2 {
+			key = strings.ReplaceAll(strings.TrimSuffix(key, ".py"), "/", ".")
+			key = strings.ReplaceAll(key, "-", "_")
+		}
+
+		return internStr(key)
+	}
+
 	e.enqueueSrc(SrcMeta{
 		Source: pyOut.any(), Prio: stmtPrioDefault,
 		PyMeta: e.addPyMeta(PySourceMeta{
-			Module: internV(keyDir, keySep, keyBase, "_pb2.py"),
+			Module: moduleKey("_pb2.py"),
 			Token:  pyProtoOutputToken(instance, pyOut, generatedProto),
 			Group:  srcGroup,
 			Kind:   pySourceProto,
@@ -128,7 +151,7 @@ func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, pyOut, grp
 	e.enqueueSrc(SrcMeta{
 		Source: grpcPyOut.any(), Prio: stmtPrioDefault,
 		PyMeta: e.addPyMeta(PySourceMeta{
-			Module: internV(keyDir, keySep, keyBase, "_pb2_grpc.py"),
+			Module: moduleKey("_pb2_grpc.py"),
 			Token:  pyProtoOutputToken(instance, grpcPyOut, generatedProto),
 			Group:  srcGroup,
 			Kind:   pySourceProto,
@@ -183,7 +206,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 	head = append(head,
 		d.tc.Python3.any(),
 		pbPyWrapperVFS.any(),
-		argPyVer.any(), argPy3.any(),
+		argPyVer.any(), internStr(protoPythonVersion(d)).any(),
 		argSuffixes.any(),
 	)
 
@@ -266,7 +289,13 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	src := e.moduleSourceName(srcTok)
-	protocLDRef, protocBinary := ctx.tool(argContribToolsProtoc)
+	protoc := argContribToolsProtoc
+
+	if d.usePython2 {
+		protoc = argContribToolsProtocOld
+	}
+
+	protocLDRef, protocBinary := ctx.tool(protoc)
 	duplicateOutputRootInclude := false
 
 	if protoRoot := protoPythonOutputRoot(d); protoRoot != "" {
@@ -278,13 +307,14 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	protoRel := e.protoSourceRel(src)
 	protoRelPath := protoRel.string()
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
-	pyOut := build(protoBase, "__intpy3___pb2.py")
+	internal := "__int" + protoPythonVersion(d) + "__"
+	pyOut := build(protoBase, internal, "_pb2.py")
 
 	if e.codegen.lookup(pyOut) != nil {
 		var grpcPyOut VFS
 
 		if d.grpc {
-			grpcPyOut = build(protoBase, "__intpy3___pb2_grpc.py")
+			grpcPyOut = build(protoBase, internal, "_pb2_grpc.py")
 		}
 
 		e.enqueuePyProtoOutputs(src, srcGroup, pyOut, grpcPyOut, e.codegen.lookup(protoRel.build()) != nil)
@@ -292,7 +322,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		return
 	}
 
-	pyiOut := build(protoBase, "__intpy3___pb2.pyi")
+	pyiOut := build(protoBase, internal, "_pb2.pyi")
 
 	var grpcPyOut VFS
 
@@ -301,7 +331,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	outputs = append(outputs, pyOut)
 
 	if d.grpc {
-		grpcPyOut = build(protoBase, "__intpy3___pb2_grpc.py")
+		grpcPyOut = build(protoBase, internal, "_pb2_grpc.py")
 		outputs = append(outputs, grpcPyOut)
 	}
 

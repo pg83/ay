@@ -42,7 +42,7 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
 
-	if d.unit.Tag == unitTagPy3Proto {
+	if isPythonProtoModule(d) {
 		ctx.onWarn(Warn{Kind: WarnUnsupportedSource, Message: fmt.Sprintf("py-addressed PROTO_LIBRARY %s with .ev sources is not modelled; source skipped", instance.Path.relString())})
 
 		return

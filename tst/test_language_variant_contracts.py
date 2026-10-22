@@ -27,14 +27,13 @@ class LanguageVariantContractsTest(unittest.TestCase):
         self.assertIn('no Java submodule', result.stderr)
         self.assertNotIn('panic:', result.stderr)
 
-    def test_python2_proto_dependency_has_a_clear_error(self):
+    def test_empty_python2_proto_peer_is_valid(self):
         files = test_python2.python2_base()
         files.update({'app/ya.make': f'PY2_PROGRAM()\n{lib.BARE_MODULE}PEERDIR(p)\nEND()\n',
                       'p/ya.make': f'PROTO_LIBRARY()\n{lib.BARE_MODULE}END()\n'})
-        result = lib.make_process(files, 'app')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('Python 2 variant of PROTO_LIBRARY', result.stderr)
-        self.assertNotIn('panic:', result.stderr)
+        graph = lib.make(files, 'app')
+        lib.node_by_output(graph, '$(B)/app/app')
+        self.assertFalse(any('__intpy3__' in output for node in graph['graph'] for output in node['outputs']))
 
     def test_python3_program_checks_binary_and_library_variant_sources(self):
         files = test_python_suites.fixture(

@@ -40,6 +40,7 @@ var (
 	argContribToolsImplib                                   = internArg("contrib/tools/implib")
 	argContribToolsM4                                       = internArg("contrib/tools/m4")
 	argContribToolsProtoc                                   = internArg("contrib/tools/protoc")
+	argContribToolsProtocOld                                = internArg("contrib/tools/protoc_old")
 	argContribToolsProtocPluginsCppStyleguide               = internArg("contrib/tools/protoc/plugins/cpp_styleguide")
 	argContribToolsProtocPluginsGrpcCpp                     = internArg("contrib/tools/protoc/plugins/grpc_cpp")
 	argContribToolsProtocPluginsGrpcPython                  = internArg("contrib/tools/protoc/plugins/grpc_python")

@@ -909,7 +909,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	for i, meta := range d.srcs {
 		src := meta.Source
 
-		if d.unit.Tag == unitTagPy3Proto && extIsGztproto(src.string()) {
+		if isPythonProtoModule(d) && extIsGztproto(src.string()) {
 			src = internV(strings.TrimSuffix(src.string(), ".gztproto"), ".proto").any()
 			d.srcs[i].Source = src
 			hasPyGztProto = true
@@ -950,7 +950,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 				isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
 
-				if !isGoModuleType(d.unit.Type) && (!isProtoLibrary || !env.bool(envPY3_PROTO)) {
+				if !isGoModuleType(d.unit.Type) && (!isProtoLibrary || !env.bool(envPY3_PROTO) && !env.bool(envPyProto)) {
 					d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any())
 				}
 			}
@@ -1252,6 +1252,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.unit.HashTag = strPy3ProtoFromSchema
 			}
 
+			if v.Schema && d.unit.Tag == strPyProto {
+				d.unit.HashTag = strPyProtoFromSchema
+			}
+
 			d.moduleStmt = moduleStmtForKind(v, d.unit)
 
 			if v.Name == tokPy23Test {
@@ -1302,7 +1306,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.moduleVariants = defaultProtoVariants
 			}
 
-			if d.unit.Tag == unitTagPy2 || d.unit.Tag == unitTagPy2Native {
+			if d.unit.Tag == unitTagPy2 || d.unit.Tag == unitTagPy2Native || d.unit.Tag == strPyProto {
 				usePython2(env, d, d.unit.Tag)
 			} else if d.unit.Tag != 0 {
 				env.setStringID(envMODULE_TAG, d.unit.Tag)
@@ -1330,6 +1334,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			if d.moduleStmt.Name == tokProtoLibrary {
 				if language == LangPy {
 					env.setBool(envPY3_PROTO, true)
+				} else if language == LangPy2 {
+					env.setBool(envPyProto, true)
 				} else if language == LangTS {
 					env.setBool(envTsProto, true)
 				} else if language == LangTSPrepare {
@@ -2007,6 +2013,10 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 
 		if language == LangPy {
 			return ModuleUnit{Type: name, Tag: unitTagPy3Proto, ARPrefix: "libpy3", GlobalARTag: tagPy3ProtoGlobal, SbomLang: unitSbomCpp}
+		}
+
+		if language == LangPy2 {
+			return ModuleUnit{Type: name, Tag: strPyProto, ObjSuf: tagPy2, ARPrefix: "libpy", GlobalARTag: strPyProtoGlobal, SbomLang: unitSbomCpp, NoStartTarget: true}
 		}
 
 		return ModuleUnit{Type: name, Tag: strCPPProto, CCTag: tagCppProto, ARPrefix: "lib", GlobalARTag: tagCppProtoGlobal, SbomLang: unitSbomCpp}

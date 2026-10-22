@@ -99,7 +99,7 @@ func (e *EmitContext) gztGenProtoName(srcRel string) string {
 func (e *EmitContext) emitLibraryGztProtoCompile(src ANY) {
 	_, _, d := e.ctx, e.instance, e.d
 
-	if d.unit.Tag == unitTagPy3Proto {
+	if isPythonProtoModule(d) {
 		return
 	}
 

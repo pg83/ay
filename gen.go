@@ -1004,7 +1004,7 @@ func appendGoTestForModule(out, stmts []Stmt) []Stmt {
 }
 
 func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {
-	needProto := instance.Language == LangPy && d.moduleStmt.Name == tokProtoLibrary
+	needProto := isPythonProtoModule(d)
 	hasGztproto := false
 	hasProto := false
 
@@ -1052,11 +1052,11 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		d.peerdirs = append(d.peerdirs, strContribToolsPythonLib.any())
 	}
 
-	py3ProtoVariant := d.moduleStmt.Name == tokProtoLibrary && d.usePython3
+	pythonProtoVariant := isPythonProtoModule(d)
 
 	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
 		d.peerdirs = append([]ANY{strContribLibsPython.any()}, d.peerdirs...)
-	} else if py3ProtoVariant && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
+	} else if pythonProtoVariant && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
 		if moduleExcludesTag(d, "CPP_PROTO") {
 			d.peerdirs = append([]ANY{strContribLibsPython.any()}, d.peerdirs...)
 		} else {
@@ -1366,10 +1366,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return result
 	}
 
-	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy2 {
-		throwFmt("gen: %s: the Python 2 variant of PROTO_LIBRARY (PY_PROTO) is not modelled", instance.Path.relString())
-	}
-
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangDescProto {
 		result := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name}
 
@@ -1565,7 +1561,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			return !deduper.add(internStr(p).any().strID())
 		}
 
-		if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangPy && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
+		if isPythonProtoModule(d) && d.optimizePyProtos && !moduleExcludesTag(d, "CPP_PROTO") {
 			peerSeen(instance.Path.relString())
 
 			resolveCppSelf = true

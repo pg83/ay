@@ -170,6 +170,7 @@ var (
 	envPlantumlPath                 = internEnv("PLANTUML_PATH")
 	envPy3CppRos                    = internEnv("PY3_CPP_ROS")
 	envPy3Ros                       = internEnv("PY3_ROS")
+	envPyProto                      = internEnv("PY_PROTO")
 	envPythonBin                    = internEnv("PYTHON_BIN")
 	envRosPurePy                    = internEnv("ROS_PURE_PY")
 	envSANDBOXING                   = internEnv("SANDBOXING")

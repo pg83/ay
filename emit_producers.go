@@ -141,11 +141,11 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	case srcExtProto:
 		base := strings.TrimSuffix(protoRel, ".proto")
 
-		if d.unit.Tag == unitTagPy3Proto {
-			e.prodVFS = append(e.prodVFS, build(base, "__intpy3___pb2.py"))
+		if isPythonProtoModule(d) {
+			e.prodVFS = append(e.prodVFS, build(base, "__int", protoPythonVersion(d), "___pb2.py"))
 
 			if d.grpc {
-				e.prodVFS = append(e.prodVFS, build(base, "__intpy3___pb2_grpc.py"))
+				e.prodVFS = append(e.prodVFS, build(base, "__int", protoPythonVersion(d), "___pb2_grpc.py"))
 			}
 		} else {
 			e.prodVFS = append(e.prodVFS, build(base, ".pb.h"), build(base, ".pb.cc"))
@@ -167,7 +167,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	case srcExtEv, srcExtCfgProto:
 		e.prodVFS = append(e.prodVFS, build(protoRel, ".pb.h"), build(protoRel, ".pb.cc"))
 	case srcExtGztProto:
-		if d.unit.Tag != unitTagPy3Proto {
+		if !isPythonProtoModule(d) {
 			e.prodVFS = append(e.prodVFS, build(e.instance.Path.relString(), "/", e.gztGenProtoName(src)))
 		}
 	}
@@ -544,7 +544,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		meta := srcs[i]
 		src := meta.Source
 
-		if srcExtClassOf(src) == srcExtGztProto && d.unit.Tag != unitTagPy3Proto {
+		if srcExtClassOf(src) == srcExtGztProto && !isPythonProtoModule(d) {
 			childMeta := meta
 
 			childMeta.Source = internStr(e.gztGenProtoName(src.string())).any()

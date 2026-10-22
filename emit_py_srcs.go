@@ -211,10 +211,10 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 		token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
 
 		if strings.Contains(token, "/") {
-			return build(rel, ".", pySrcYapycSuffix(e.instance.Path.relString()), ".yapyc3")
+			return build(rel, ".", pySrcYapycSuffix(e.instance.Path.relString()), e.pyYapycExt())
 		}
 
-		return build(rel, ".yapyc3")
+		return build(rel, e.pyYapycExt())
 	}
 
 	module := e.instance.Path.relString()
@@ -556,7 +556,7 @@ func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef,
 	}
 
 	return e.packResources(ResourcePack{DontCompress: true,
-		Tag: e.d.unit.HashTag, Items: e.pyGenResourceItems(entries),
+		Tag: e.d.unit.HashTag, Items: e.pySrcResourceItems(entries),
 		RawCompile: CompileSpec{
 			ForceCxx: true,
 			ObjSuf:   pyProtoAuxObjSuf(e.d),

@@ -30,7 +30,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		case srcExtCSource, srcExtRodata, srcExtCuda, srcExtYasm, srcExtAsm, srcExtGo, srcExtFortran:
 			return
 		case srcExtProto:
-			if e.d.unit.Tag == unitTagPy3Proto {
+			if isPythonProtoModule(e.d) {
 				return
 			}
 		}
@@ -82,7 +82,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtProto:
 		if isGoModuleType(e.d.unit.Type) {
 			e.emitGoProtoSource(meta)
-		} else if e.d.unit.Tag == unitTagPy3Proto {
+		} else if isPythonProtoModule(e.d) {
 			e.emitPyProtoSource(src, meta.Stmt)
 		} else {
 			e.emitCppProtoFamilySource(meta, cppProtoSpec)

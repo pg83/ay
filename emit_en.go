@@ -56,7 +56,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		return
 	}
 
-	if e.d.unit.Tag == unitTagPy3Proto {
+	if isPythonProtoModule(e.d) {
 		return
 	}
 
