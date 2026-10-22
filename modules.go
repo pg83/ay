@@ -51,6 +51,8 @@ const (
 	stmtPrioSrcs        = 4
 	prioAddIncl         = 0
 	prioAddInclSelf     = 1
+	prioRuleAddIncl     = 2
+	prioOutputAddIncl   = 3
 	yaffPluginPath      = "library/cpp/yaff/tools/protoc_plugin"
 	yabsConfRel         = "build/internal/conf/project_specific/yabs.conf"
 )
@@ -713,6 +715,11 @@ func (d *ModuleData) materializeAddIncl() {
 
 	for _, p := range d.addInclP {
 		d.addIncl = append(d.addIncl, p.vfs)
+
+		if p.prio == prioOutputAddIncl {
+			d.addInclGlobal = append(d.addInclGlobal, p.vfs)
+			d.addInclUserGlobal = append(d.addInclUserGlobal, p.vfs)
+		}
 	}
 
 	d.addInclP = nil
@@ -1490,7 +1497,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					addGeneratedOwnHeaderInclude(modulePath, strings.TrimSuffix(src, filepath.Ext(src))+".h", d)
 				case srcExtFlex:
 
-					d.addLocalIncl(prioAddIncl, argContribToolsFlexOld.str().source())
+					d.addLocalIncl(prioRuleAddIncl, argContribToolsFlexOld.str().source())
 				}
 			}
 
@@ -2114,7 +2121,10 @@ func addGeneratedHeaderIncludeCF(modulePath, dst string, d *ModuleData) {
 }
 
 func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
-	addGeneratedHeaderInclude(modulePath, dst, d)
+	include := build(generatedIncludeDir(modulePath, dst))
+
+	// Output addincl is committed after the rule's local include properties.
+	d.addLocalIncl(prioOutputAddIncl, include)
 }
 
 func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
