@@ -128,6 +128,8 @@ func cythonDefaultOptions(os OS) string {
 
 type CythonStmt struct {
 	Src       string
+	Native    *SrcMeta
+	Python3   bool
 	Generated *string
 	Options   []string
 	CMode     bool
@@ -178,6 +180,14 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			generated = stmt.Src + d.cc.objSufDot() + ".py2" + cythonOutExt(stmt.CMode)
 		}
 
+		if stmt.Native != nil {
+			generated = e.moduleSourceRel(stmt.Native.Source) + d.cc.objSufDot() + ".cpp"
+
+			if !d.usePython3 && !stmt.Python3 {
+				generated = e.moduleSourceRel(stmt.Native.Source) + d.cc.objSufDot() + ".py2.cpp"
+			}
+		}
+
 		if stmt.Header {
 			ext := ".cpp"
 
@@ -206,8 +216,9 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			}
 		}
 
-		srcVFS := source(instance.Path.relString(), "/", stmt.Src)
-		toolInputs, emittedInputs := cythonCppInducedInputs(srcVFS, stmt.CMode, d.usePython2)
+		srcVFS := resolveSourceVFS(ctx, instance, stmt.Src, d.srcDirs)
+		usePy2 := d.usePython2 || stmt.Native != nil && !d.usePython3 && !stmt.Python3
+		toolInputs, emittedInputs := cythonCppInducedInputs(srcVFS, stmt.CMode, usePy2)
 		cyRef := ctx.emit.reserve()
 
 		var infos []*GeneratedFileInfo
@@ -307,11 +318,17 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		}
 
 		env := envVarsVCS
-		cmdArgs := na.anys.alloc(9 + len(d.cythonOptions) + len(stmt.Options) + len(d.cythonAddIncl))[:0]
+		var sourceFlags []ANY
+
+		if stmt.Native != nil {
+			sourceFlags = stmt.Native.Compile.CFlags
+		}
+
+		cmdArgs := na.anys.alloc(9 + len(d.cythonOptions) + len(stmt.Options) + len(d.cythonAddIncl) + len(sourceFlags))[:0]
 
 		cmdArgs = append(cmdArgs, d.tc.Python3.any())
 
-		if d.usePython2 {
+		if d.usePython2 || stmt.Native != nil && !d.usePython3 && !stmt.Python3 {
 			cmdArgs = append(cmdArgs, argSContribToolsCythonPy2CythonPy.any())
 		} else {
 			cmdArgs = append(cmdArgs, argSContribToolsCythonCythonPy.any())
@@ -333,7 +350,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		cythonIncludes := argISContribToolsCythonCythonIncludes
 
-		if d.usePython2 {
+		if d.usePython2 || stmt.Native != nil && !d.usePython3 && !stmt.Python3 {
 			cythonIncludes = argISContribToolsCythonPy2CythonIncludes
 		}
 
@@ -345,6 +362,8 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			argDashO.any(),
 			generatedVFS.any(),
 		)
+
+		cmdArgs = append(cmdArgs, sourceFlags...)
 
 		na.anys.commit(len(cmdArgs))
 
@@ -394,10 +413,16 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			seq = e.d.nextDeclSeq()
 		}
 
-		e.enqueueSrc(SrcMeta{
-			Source: generatedVFS.any(), Prio: stmtPrioDefault, Seq: seq, Bucket: bkCython,
-			Compile: CompileSpec{ObjSuf: objSuf},
-		})
+		meta := SrcMeta{Prio: stmtPrioDefault, Seq: seq}
+
+		if stmt.Native != nil {
+			meta = *stmt.Native
+		}
+
+		meta.Source = generatedVFS.any()
+		meta.Bucket = bkCython
+		meta.Compile = CompileSpec{ObjSuf: objSuf}
+		e.enqueueSrc(meta)
 	}
 }
 
@@ -523,6 +548,12 @@ func (e *EmitContext) cythonAdjustModuleCCBlocks() []VFS {
 }
 
 func cythonSysIncludes(d *ModuleData) []VFS {
+	for _, stmt := range d.cythonCpp {
+		if stmt.Native != nil && !d.usePython3 && !stmt.Python3 {
+			return cythonPy2SysIncludes
+		}
+	}
+
 	switch {
 	case d.usePython2:
 		return cythonPy2SysIncludes

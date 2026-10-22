@@ -141,7 +141,7 @@ class SwigTest(unittest.TestCase):
         files.update({
             "lib/ya.make": (
                 "PY3_LIBRARY()\n"
-                "PY_SRCS(SWIG_C wrap.swg sub/other.swg SWIG_CPP skipped.swg a.py)\n"
+                "PY_SRCS(SWIG_C wrap.swg sub/other.swg SWIG_CPP cpp_wrap.swg a.py)\n"
                 "END()\n"
             ),
             "lib/a.py": "",
@@ -165,7 +165,7 @@ class SwigTest(unittest.TestCase):
                 "%include <std_string.i>\n"
             ),
             "lib/sub/other.swg": "",
-            "lib/skipped.swg": "",
+            "lib/cpp_wrap.swg": "",
             "lib/common.i": '%include "lib/nested.i"\n',
             "lib/nested.i": "",
             "lib/types.i": "",
@@ -213,14 +213,13 @@ class SwigTest(unittest.TestCase):
             "-o", "$(B)/lib/sub/other.swg.c",
         ])
         lib.node_by_output(graph, "$(B)/lib/_/sub/other.swg.c.o")
-        self.assertFalse([
-            node for node in graph["graph"]
-            if any("skipped" in output for output in node["outputs"])
-        ])
+        cpp = lib.node_by_output(graph, "$(B)/lib/cpp_wrap.swg.cpp")
+        self.assertIn("-c++", args(cpp))
+        self.assertIn(cpp["uid"], lib.node_by_output(graph, "$(B)/lib/cpp_wrap.swg.cpp.o")["deps"])
 
-        pyc = lib.node_by_output(graph, "$(B)/lib/wrap.py.yapyc3")
+        pyc = lib.node_by_output(graph, "$(B)/lib/wrap.py.zsw2.yapyc3")
         self.assertEqual(args(pyc)[-3:], [
-            "lib/wrap.py-", "$(B)/lib/wrap.py", "$(B)/lib/wrap.py.yapyc3",
+            "lib/wrap.py-", "$(B)/lib/wrap.py", "$(B)/lib/wrap.py.zsw2.yapyc3",
         ])
         self.assertIn("$(B)/lib/wrap.swg.c", pyc["inputs"])
         self.assertNotIn("$(S)/lib/common.i", pyc["inputs"])
@@ -239,7 +238,7 @@ class SwigTest(unittest.TestCase):
         self.assertNotIn("$(S)/lib/common.i", packs[0]["inputs"])
         self.assertIn("resfs/src/resfs/file/py/lib/wrap.py=lib/wrap.py", args(packs[0]))
         self.assertIn(
-            "resfs/src/resfs/file/py/lib/wrap.py.yapyc3=lib/wrap.py.yapyc3", args(packs[0]))
+            "resfs/src/resfs/file/py/lib/wrap.py.yapyc3=lib/wrap.py.zsw2.yapyc3", args(packs[0]))
 
         reg = lib.node_by_output(graph, "$(B)/lib/lib.wrap_swg.reg3.cpp")
         self.assertEqual(args(reg)[-2:], ["lib.wrap_swg", "$(B)/lib/lib.wrap_swg.reg3.cpp"])

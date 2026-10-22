@@ -812,6 +812,19 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.yqlStableABI = instance.Platform.YqlStableABI
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
+	// _SRC("pyx") in ymake.core.conf uses the native Cython rule, without
+	// PY_SRCS' module registration. Keep its source ordering and GLOBAL flag.
+	nativeSources := d.srcs[:0]
+
+	for _, meta := range d.srcs {
+		if extIsPyx(meta.Source.relOrSelf().string()) {
+			d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: meta.Source.string(), Seq: meta.Seq, Native: &meta, Python3: env.bool(envPYTHON3)})
+		} else {
+			nativeSources = append(nativeSources, meta)
+		}
+	}
+
+	d.srcs = nativeSources
 	finishYqlModule(modulePath, env, d)
 	d.test.expandValues(env)
 
@@ -843,7 +856,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		return d
 	}
 
-	if len(d.pySrcs) > 0 {
+	if len(d.pySrcs) > 0 || len(d.swigC) > 0 {
 		d.pyYapycSuffix = pySrcYapycSuffix(modulePath)
 	}
 
@@ -3888,7 +3901,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			src = src[:eq]
 		}
 
-		if d.multimodule == tokFbsLibrary && strings.HasSuffix(src, ".fbs") {
+		if strings.HasSuffix(src, ".fbs") {
 			modName := modNameOverride
 			if modName == "" {
 				modName = pythonModuleName(modulePath, strings.TrimSuffix(src, ".fbs"), topLevel, namespace)
@@ -3963,19 +3976,11 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			modName := modNameOverride
 
 			if modName == "" {
-				ns := strings.ReplaceAll(modulePath, "/", ".") + "."
-
-				if topLevel {
-					ns = ""
-				}
-
-				modName = ns + strings.ReplaceAll(strings.TrimSuffix(src, ".swg"), "/", ".")
+				modName = pythonModuleName(modulePath, strings.TrimSuffix(src, ".swg"), topLevel, namespace)
 			}
 
-			if swigCMode {
-				d.swigC = append(d.swigC, SwigSrc{Src: src, Module: modName})
-				appendPyRegister(d, modName+"_swg", true)
-			}
+			d.swigC = append(d.swigC, SwigSrc{Src: src, Module: modName, CMode: swigCMode})
+			appendPyRegister(d, modName+"_swg", true)
 
 			d.peerdirs = append(d.peerdirs, strContribToolsSwigLibPython.any())
 			mainNext = false

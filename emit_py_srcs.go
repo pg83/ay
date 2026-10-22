@@ -55,10 +55,6 @@ func pyResourceKeyPrefix(topLevel bool, namespace *ANY, modulePath string) strin
 	return modulePath + "/"
 }
 
-func generatedPyResourceKey(modulePath string, d *ModuleData, srcRel string) string {
-	return pyResourceKeyPrefix(d.pyTopLevel, nil, modulePath) + srcRel
-}
-
 type PySrc struct {
 	Path   VFS
 	Module STR
@@ -224,7 +220,7 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 		srcRel = strings.TrimPrefix(ps.Path.relString(), module+"/")
 	}
 
-	if strings.Contains(srcRel, "/") {
+	if ps.Kind == pySourceGenerated || strings.Contains(srcRel, "/") {
 		return build(module, "/", srcRel, ".", e.d.pyYapycSuffix, e.pyYapycExt())
 	}
 
@@ -747,7 +743,7 @@ func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
 		}
 
 		r, o := e.packResources(ResourcePack{DontCompress: true,
-			Tag: d.unit.HashTag, Items: e.pyGenResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)),
+			Tag: d.unit.HashTag, Items: e.pySrcResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)),
 			RawCompile: CompileSpec{
 				ForceCxx: true,
 				CFlags:   e.ctx.na.anyList(argX.any(), argC.any()),

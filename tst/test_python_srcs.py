@@ -527,10 +527,10 @@ class PySrcsTest(unittest.TestCase):
             "lib/a.py": "",
         })
         graph = lib.make(files, "lib")
-        pyc = lib.node_by_output(graph, "$(B)/lib/gen_out.py.yapyc3")
+        pyc = lib.node_by_output(graph, "$(B)/lib/gen_out.py.zsw2.yapyc3")
         self.assertEqual(
             cmd(pyc),
-            f"{PY3CC} lib/gen_out.py- $(B)/lib/gen_out.py $(B)/lib/gen_out.py.yapyc3",
+            f"{PY3CC} lib/gen_out.py- $(B)/lib/gen_out.py $(B)/lib/gen_out.py.zsw2.yapyc3",
         )
         self.assertNotIn("$(S)/lib/gen.py", pyc["inputs"])
         packs = [
@@ -539,7 +539,7 @@ class PySrcsTest(unittest.TestCase):
         ]
         self.assertEqual(len(packs), 1)
         self.assertIn(
-            "resfs/src/resfs/file/py/lib/gen_out.py.yapyc3=lib/gen_out.py.yapyc3",
+            "resfs/src/resfs/file/py/lib/gen_out.py.yapyc3=lib/gen_out.py.zsw2.yapyc3",
             packs[0]["cmds"][0]["cmd_args"],
         )
         aux = lib.node_by_output(graph, packs[0]["outputs"][0] + ".o")

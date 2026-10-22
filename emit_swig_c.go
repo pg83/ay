@@ -15,8 +15,6 @@ var swigConstArgs = []ANY{
 	argIS.any(),
 	argISContribToolsSwigLibPython.any(),
 	argISContribToolsSwigLib.any(),
-	argPython.any(),
-	argModule.any(),
 }
 
 const swigLibRoot = "contrib/tools/swig/Lib"
@@ -24,6 +22,7 @@ const swigLibRoot = "contrib/tools/swig/Lib"
 type SwigSrc struct {
 	Src    string
 	Module string
+	CMode  bool
 }
 
 func (e *EmitContext) emitSwigC() {
@@ -33,9 +32,9 @@ func (e *EmitContext) emitSwigC() {
 
 	for _, stmt := range d.swigC {
 		prefix := swigOutputPrefix(stmt.Src, stmt.Module)
-		cOutRel := prefix + ".swg.c"
+		cOutRel := prefix + ".swg" + cythonOutExt(stmt.CMode)
 		pyOutRel := prefix + ".py"
-		srcVFS := source(instance.Path.relString(), "/", stmt.Src)
+		srcVFS := resolveSourceVFS(ctx, instance, stmt.Src, d.srcDirs)
 		cOutVFS := build(instance.Path.relString(), "/", cOutRel)
 		pyOutVFS := build(instance.Path.relString(), "/", pyOutRel)
 		swRef := ctx.emit.reserve()
@@ -58,7 +57,13 @@ func (e *EmitContext) emitSwigC() {
 
 			outputInfo.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: collectSwigInducedIncludes(e.scanner, srcVFS, swigClosure)}
 
-			cmdArgs := na.chunkList(na.anyList(swigBin.any()), swigConstArgs, na.anyList(internStr(moduleName).any(),
+			var cppArgs []ANY
+
+			if !stmt.CMode {
+				cppArgs = na.anyList(internStr("-c++").any())
+			}
+
+			cmdArgs := na.chunkList(na.anyList(swigBin.any()), swigConstArgs, cppArgs, na.anyList(argPython.any(), argModule.any(), internStr(moduleName).any(),
 				argInterface.any(),
 				internV(moduleName, "_swg").any(),
 				argDashO.any(),
@@ -94,10 +99,16 @@ func (e *EmitContext) emitSwigC() {
 			OnUse:           pending,
 		})
 
+		key := stmt.Module
+
+		if !d.usePython2 {
+			key = strings.ReplaceAll(key, ".", "/") + ".py"
+		}
+
 		e.enqueueSrc(SrcMeta{
 			Source: pyOutVFS.any(), Prio: stmtPrioDefault,
 			PyMeta: e.addPyMeta(PySourceMeta{
-				Module: internStr(generatedPyResourceKey(instance.Path.relString(), d, pyOutRel)),
+				Module: internStr(key),
 				Token:  internV("${ARCADIA_BUILD_ROOT}/", pyOutVFS.relString()).any(),
 				Kind:   pySourceGenerated,
 			}),

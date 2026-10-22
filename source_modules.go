@@ -93,7 +93,7 @@ func configureCythonModule(ctx *GenCtx, instance ModuleInstance, tag string) *So
 	}
 
 	for _, stmt := range d.cythonCpp {
-		visit(source(instance.Path.relString(), "/", stmt.Src))
+		visit(resolveSourceVFS(ctx, instance, stmt.Src, d.srcDirs))
 
 		if pxd, ok := resolveCythonPxd(ctx, instance, stmt.Pxd); ok {
 			visit(pxd)

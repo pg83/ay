@@ -781,7 +781,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		for _, stmt := range d.swigC {
 			prefix := swigOutputPrefix(stmt.Src, stmt.Module)
 
-			e.prodVFS = append(e.prodVFS, build(module, "/", prefix, ".swg.c"), build(module, "/", prefix, ".py"))
+			e.prodVFS = append(e.prodVFS, build(module, "/", prefix, ".swg", cythonOutExt(stmt.CMode)), build(module, "/", prefix, ".py"))
 		}
 
 		positions = append(positions, ProducerPos{kind: prodSwigAll, outs: e.prodVFSTake(outsMark)})

@@ -9,6 +9,7 @@ import (
 
 var pyFbsKV = KV{P: pkFP, PC: pcLightGreen}
 var pyPysrcKV = KV{P: pkP3, PC: pcLightGreen}
+var py2PysrcKV = KV{P: pkP2, PC: pcLightGreen}
 
 func pyFbsListID(files []PyFbsSource) string {
 	items := slices.Clone(files)
@@ -48,14 +49,26 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	dir := instance.Path.relString()
-	name := pyFbsListID(files) + ".py3.fbs"
+	version, toolPath, kv := tagPy3, argContribLibsFlatbuffersFlatc, &pyPysrcKV
+
+	if d.usePython2 {
+		version, toolPath, kv = tagPy2, internArg("contrib/deprecated/flatc"), &py2PysrcKV
+	}
+
+	name := pyFbsListID(files) + "." + version.string() + ".fbs"
 	out := build(dir, "/", name, ".pysrc")
 	if e.codegen.lookup(out) != nil {
 		return
 	}
-	toolRef, tool := ctx.tool(argContribLibsFlatbuffersFlatc)
+	toolRef, tool := ctx.tool(toolPath)
 	tar := source("build/scripts/tar_sources.py")
-	args := na.anyList(tool.any(), internStr("--python").any(), internStr("--no-warnings").any(), internStr("--python-typing").any(), internStr("--gen-mutable").any())
+	args := []ANY{tool.any(), internStr("--python").any()}
+
+	if !d.usePython2 {
+		args = append(args, internStr("--no-warnings").any(), internStr("--python-typing").any())
+	}
+
+	args = na.anyList(append(args, internStr("--gen-mutable").any())...)
 	tail := na.anyList(argDashO.any(), build(dir).any())
 	inputs := []VFS{tool, tar}
 	var imports [][]VFS
@@ -76,16 +89,22 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 	node.Inputs = append(node.Inputs, imports...)
 	fp := e.emitNode(node)
 	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: fp})
-	cc := build(dir, "/", name, ".py3_raw.cpp")
+	cc := build(dir, "/", name, ".", version.string(), "_raw.cpp")
 	script := source("build/scripts/compile_pysrc.py")
 	resRef, res := ctx.tool(argToolsRescompiler)
-	pyRef, py := ctx.tool(argToolsPy3cc)
-	slowRef, slow := ctx.tool(argToolsPy3ccSlow)
+	pycc := e.pyccTool()
+	compileArgs := []ANY{d.tc.Python3.any(), script.any(), strInput.any(), out.any(), strOutput.any(), cc.any(), internStr("--rescompiler").any(), res.any(), version.any(), internStr("--pycc").any(), pycc.binaries[0].any()}
+
+	if !d.usePython2 {
+		compileArgs = append(compileArgs, internStr("--slow-pycc").any(), pycc.binaries[1].any())
+	}
+
+	toolRefs := na.refList(append([]NodeRef{resRef}, pycc.refs...)...)
 	p3 := e.emitNode(Node{
 		Platform: instance.Platform, Env: envVarsVCS,
-		Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), script.any(), strInput.any(), out.any(), strOutput.any(), cc.any(), internStr("--rescompiler").any(), res.any(), tagPy3.any(), internStr("--pycc").any(), py.any(), internStr("--slow-pycc").any(), slow.any())), Cwd: build(dir), Env: envVarsVCS}),
-		Inputs: na.inputList(na.vfsList(script, out, res, py, slow), ctx.scripts[script.rel()]), Outputs: na.vfsList(cc), DepRefs: na.refList(fp), ForeignDepRefs: na.refList(resRef, pyRef, slowRef), KV: &pyPysrcKV, Resources: usesPython3,
+		Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(compileArgs...)), Cwd: build(dir), Env: envVarsVCS}),
+		Inputs: na.inputList(na.vfsList(script, out, res), pycc.binaries, ctx.scripts[script.rel()]), Outputs: na.vfsList(cc), DepRefs: na.refList(fp), ForeignDepRefs: toolRefs, KV: kv, Resources: usesPython3,
 	})
-	e.register(GeneratedFileInfo{OutputPath: cc, ProducerRef: p3, GeneratorRefs: na.refList(resRef, pyRef, slowRef)})
+	e.register(GeneratedFileInfo{OutputPath: cc, ProducerRef: p3, GeneratorRefs: toolRefs})
 	e.enqueueSrc(SrcMeta{Source: cc.any(), Prio: stmtPrioDefault, Global: true})
 }
