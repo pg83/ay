@@ -73,7 +73,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 		self.Language = language
 		self.Demand = max(e.instance.Demand, demandSelf)
 
-		result := genModule(e.ctx, self)
+		result := e.genPeerModule(self)
 
 		peers = e.appendPackagePeer(peers, result, seen)
 		globals = append(globals, result.ResourceGlobalClosure...)
@@ -88,7 +88,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 			peer.Language = LangPackage
 		}
 
-		result := genModule(e.ctx, peer)
+		result := e.genPeerModule(peer)
 
 		peers = e.appendPackagePeer(peers, result, seen)
 		e.globalSources = append(e.globalSources, result.GlobalSources...)
