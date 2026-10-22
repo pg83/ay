@@ -5158,6 +5158,14 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		Demand:   demand,
 	}
 
+	// These collection modules accept PY3_BIN, rather than the
+	// PY3_BIN_LIB tag selected by ordinary Python library peers.
+	if isUnionModule(d.moduleStmt.Name) || d.moduleStmt.Name == tokPackageFinal || d.moduleStmt.Name == tokCiGroup {
+		if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokPy3Program {
+			peer.Kind = KindBin
+		}
+	}
+
 	if d.yqlCurrent && peerYaMakeExists(ctx.fs, peerVFS) {
 		name := ctx.moduleName(peerVFS.relString())
 
