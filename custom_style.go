@@ -238,5 +238,6 @@ func (d *ModuleData) collectCustomStyle(module string, args []ANY, env Environme
 		check.FileProcessingTime = throw2(strconv.ParseFloat(values[0], 64))
 	}
 
+	d.configurationDepends = append(d.configurationDepends, check.Depends...)
 	d.styleChecks = append(d.styleChecks, check)
 }

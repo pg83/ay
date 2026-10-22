@@ -152,6 +152,8 @@ type ModuleData struct {
 	selfPeers   []Language
 	rosInclude  []VFS
 
+	configurationDepends []string
+
 	discarded bool
 
 	styleChecks []StyleCheck

@@ -1293,7 +1293,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return result
 	}
 
-	ctx.recordConfiguration(instance, d.recurses, d.test.depends)
+	configurationDepends := append(slices.Clone(d.test.depends), d.configurationDepends...)
+
+	ctx.recordConfiguration(instance, d.recurses, configurationDepends)
 
 	if instance.Language == LangPy && d.moduleStmt != nil && d.moduleStmt.Name != tokProtoLibrary && d.multimodule != tokRosLibrary && d.multimodule != tokFbsLibrary {
 		cpp := instance
