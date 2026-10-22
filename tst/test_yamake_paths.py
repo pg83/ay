@@ -140,6 +140,28 @@ class YaMakePathsTest(unittest.TestCase):
             "BUILD_TYPE=DEBUG", "Q1=quoted", "Q2=plain", "Q3=bare", "Q4=dflt",
         ])
 
+    def test_configure_file_strips_escaped_quotes_captured_from_configuration(self):
+        graph, _ = self.make({
+            "build/ymake_conf.py": lib.ymake_conf(extra=(
+                r'ESCAPED_SET=\"captured\"' "\n"
+                r'ESCAPED_DEFAULT=\"fallback\"' "\n"
+            )),
+            "a/ya.make": module("LIBRARY", (
+                "SET(CAPTURED ${ESCAPED_SET})\n"
+                "DEFAULT(FALLBACK ${ESCAPED_DEFAULT})\n"
+                "CONFIGURE_FILE(settings.h.in settings.h)\nSRCS(use.cpp)"
+            )),
+            "a/settings.h.in": "@CAPTURED@\n#cmakedefine FALLBACK\n",
+            "a/use.cpp": '#include "settings.h"\n',
+        })
+        configured = lib.node_by_output(graph, "$(B)/a/settings.h")
+        self.assertEqual(configured["cmds"][0]["cmd_args"][4:], [
+            "CAPTURED=captured", "FALLBACK=fallback",
+        ])
+        compiled = lib.node_by_output(graph, "$(B)/a/use.cpp.o")
+        self.assertIn(configured["uid"], compiled["deps"])
+        self.assertIn("$(B)/a/settings.h", compiled["inputs"])
+
     def test_include_dirs_from_variables(self):
         files = {
             "a/ya.make": module("LIBRARY", (
