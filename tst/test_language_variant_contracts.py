@@ -44,10 +44,9 @@ class LanguageVariantContractsTest(unittest.TestCase):
         lib.node_by_output(graph, '$(B)/lib/lib')
         checks = [n for n in graph['graph']
                   if '$(B)/lib/test-results/flake8/meta.json' in n['outputs']]
-        self.assertEqual(len(checks), 2)
-        self.assertEqual(sorted(test_python_suites.args(n)[-2:] for n in checks), [
-            ['$(S)/lib/a.py', '$(S)/lib/binary.py'],
-            ['$(S)/lib/a.py', '$(S)/lib/library.py'],
+        self.assertEqual(len(checks), 1)
+        self.assertEqual(test_python_suites.args(checks[0])[-3:], [
+            '$(S)/lib/a.py', '$(S)/lib/binary.py', '$(S)/lib/library.py',
         ])
         test_python_suites.lint(graph, 'import_test')
 
