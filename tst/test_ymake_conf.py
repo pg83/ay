@@ -59,7 +59,7 @@ class Tree:
         env = {k: v for k, v in os.environ.items() if k not in lib.TOOLCHAIN_ENV_VARS}
         env["AY_CONF_TEST_MARKER"] = "leaks"
         return subprocess.run(
-            [str(lib.AY), "make", "-j0", "-G", "--sandboxing", "--source-root", str(self.src),
+            [str(lib.AY), "make", "-j0", "-G", "--source-root", str(self.src),
              "--host-platform", "default-linux-x86_64",
              "--target-platform", "default-linux-aarch64", *args],
             env=env,
@@ -110,12 +110,12 @@ class ConfVariablesTest(unittest.TestCase):
             ),
             "m/on.cpp": "", "m/off.cpp": "", "m/arm.cpp": "",
         }
-        graph = Tree(self, files).graph("m")
+        graph = Tree(self, files).graph("--sandboxing", "m")
         self.assertEqual(compiled(graph), ["arm.cpp.o", "off.cpp.o"])
         tree = Tree(self, {**files, "build/ymake_conf.py": lib.ymake_conf(
             extra="CONF_SWITCH=yes\nCONF_DEFINE=-DFROM_CONF\nARCH_AARCH64=no\n",
         )})
-        graph = tree.graph("m")
+        graph = tree.graph("--sandboxing", "m")
         self.assertEqual(compiled(graph), ["on.cpp.o"])
         self.assertIn("-DFROM_CONF", cc_args(graph, "$(B)/m/on.cpp.o"))
 
@@ -141,7 +141,7 @@ class ConfVariablesTest(unittest.TestCase):
             "build/ymake_conf.py": lib.ymake_conf(extra=extra),
             "build/conf/elsewhere.conf": "",
         })
-        args = cc_args(tree.graph("m"), "$(B)/m/a.cpp.o")
+        args = cc_args(tree.graph("--sandboxing", "m"), "$(B)/m/a.cpp.o")
         self.assertIn("-DA", args)
         self.assertEqual(args[args.index("-DA"):args.index("-DA") + 3], ["-DA", "-DB", "-DTAIL"])
         for absent in ("-DCOMMENTED", "-DIN_WHEN", "-DIN_MACRO"):
@@ -155,7 +155,7 @@ class ConfVariablesTest(unittest.TestCase):
             "build/ya.conf.json": lib.ya_conf_json(formula="build/platform/clang/clang20.json"),
             "build/platform/clang/clang20.json": json.dumps(CLANG20_FORMULA),
         })
-        args = cc_args(tree.graph("m"), "$(B)/m/a.cpp.o")
+        args = cc_args(tree.graph("--sandboxing", "m"), "$(B)/m/a.cpp.o")
         self.assertIn("-DOBJCOPY=$(B)/resources/CLANG20/bin/llvm-objcopy", args)
         self.assertIn("-DCXX=$(CLANG-1907384126)/bin/clang++", args)
 
@@ -170,7 +170,7 @@ class ConfVariablesTest(unittest.TestCase):
         })
         for args, cached in (((), False), (("--dist",), True)):
             with self.subTest(args=args):
-                info = lib.node_by_output(tree.graph(*args, "m"), "$(B)/m/buildinfo_data.h")
+                info = lib.node_by_output(tree.graph("--sandboxing", *args, "m"), "$(B)/m/buildinfo_data.h")
                 self.assertEqual(info["kv"]["p"], "BI")
                 self.assertEqual("disable_cache" in info["kv"], not cached)
                 self.assertEqual(info.get("cache", True), cached)
@@ -189,7 +189,7 @@ class ConfCommandLineTest(unittest.TestCase):
 
     def test_runs_the_script_as_ya_does(self):
         tree = self.tree()
-        tree.graph("-DUSER_DEFINE=1", "--target-platform-flag", "TP_FLAG=x",
+        tree.graph("--sandboxing", "-DUSER_DEFINE=1", "--target-platform-flag", "TP_FLAG=x",
                    "--host-platform-flag", "HP_FLAG=y", "m")
         for build_type, platform in (("dist-debug", "AARCH64"), ("dist-release", "X86_64")):
             with self.subTest(build_type=build_type):
@@ -227,9 +227,9 @@ class ConfCommandLineTest(unittest.TestCase):
 
     def test_pic_variant_is_configured_only_for_a_pic_transition(self):
         tree = self.tree(**{"d/ya.make": "DLL(d)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n", "d/d.cpp": ""})
-        tree.graph("m")
+        tree.graph("--sandboxing", "m")
         self.assertFalse((tree.src / "build" / "argv.dist-debug.pic.json").exists())
-        tree.graph("d")
+        tree.graph("--sandboxing", "d")
         nopic = dict(presets(tree.recorded("dist-debug")["argv"]))
         del nopic["FORCE_NO_PIC"]
         self.assertEqual(dict(presets(tree.recorded("dist-debug.pic")["argv"])), nopic)
@@ -250,7 +250,7 @@ class ConfCommandLineTest(unittest.TestCase):
             "d/d.cpp": "",
             "build/ymake_conf.py": RECORDER.replace("import base64", barrier + "import base64", 1),
         })
-        tree.graph("d")
+        tree.graph("--sandboxing", "d")
         self.assertEqual(len(list((tree.src / "build").glob("argv.*.json"))), 3)
         normal = dict(presets(tree.recorded("dist-debug")["argv"]))
         del normal["FORCE_NO_PIC"]
@@ -262,14 +262,14 @@ class ConfCommandLineTest(unittest.TestCase):
             "m/d/ya.make": "DLL(d)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n",
             "m/d/d.cpp": "",
         })
-        graph = tree.graph("m")
+        graph = tree.graph("--sandboxing", "m")
         self.assertFalse(any(out.startswith("$(B)/m/d/") for node in graph["graph"] for out in node["outputs"]))
         self.assertEqual(len(list((tree.src / "build").glob("argv.*.json"))), 2)
         self.assertFalse((tree.src / "build/argv.dist-debug.pic.json").exists())
 
     def test_distbuild_runs_the_script_without_local_distbuild(self):
         tree = self.tree()
-        tree.graph("--dist", "m")
+        tree.graph("--sandboxing", "--dist", "m")
         for build_type in ("dist-debug", "dist-release"):
             with self.subTest(build_type=build_type):
                 argv = tree.recorded(build_type)["argv"]
@@ -278,7 +278,7 @@ class ConfCommandLineTest(unittest.TestCase):
 
     def test_tests_and_build_types_reach_the_command_line(self):
         tree = self.tree()
-        tree.graph("-t", "--build", "profile", "--host-build-type", "debug", "m")
+        tree.graph("--sandboxing", "-t", "--build", "profile", "--host-build-type", "debug", "m")
         target = dict(presets(tree.recorded("dist-profile")["argv"]))
         for key in ("TESTS_REQUESTED", "TRAVERSE_RECURSE_FOR_TESTS", "TRAVERSE_DEPENDS"):
             self.assertEqual(target[key], "yes", key)
@@ -288,7 +288,7 @@ class ConfCommandLineTest(unittest.TestCase):
 
     def test_local_ymake_presets_come_first(self):
         tree = self.tree(**{"local.ymake": "# comment\nLOCAL_B = 2\nSANITIZER_TYPE=address\nLOCAL_A=1\nnot a pair\n"})
-        tree.graph("m")
+        tree.graph("--sandboxing", "m")
         argv = tree.recorded("dist-debug")["argv"]
         self.assertEqual(presets(argv)[:2], [("LOCAL_A", "1"), ("LOCAL_B", "2")])
         self.assertNotIn("SANITIZER_TYPE", dict(presets(argv)))
@@ -298,7 +298,7 @@ class ConfCommandLineTest(unittest.TestCase):
             "build/ya.conf.json": None,
             "devtools/ya/opensource/ya.conf.json": lib.ya_conf_json(version="18"),
         })
-        tree.graph("m")
+        tree.graph("--sandboxing", "m")
         params = json.loads(base64.b64decode(tree.recorded("dist-debug")["argv"][5]))
         self.assertEqual(params["name"], "clang18")
 
@@ -318,7 +318,7 @@ class PrewarmTest(unittest.TestCase):
         for unreadable in ("m/win.cpp", "winlib/ya.make"):
             (tree.src / unreadable).chmod(0)
             self.addCleanup((tree.src / unreadable).chmod, 0o644)
-        self.assertEqual(compiled(tree.graph("m")), ["a.cpp.o"])
+        self.assertEqual(compiled(tree.graph("--sandboxing", "m")), ["a.cpp.o"])
 
     def test_graph_is_the_same_from_run_to_run(self):
         files = {
@@ -332,15 +332,15 @@ class PrewarmTest(unittest.TestCase):
             "p/z.h": "",
         }
         tree = Tree(self, files)
-        first = tree.make("m")
+        first = tree.make("--sandboxing", "m")
         self.assertEqual(first.returncode, 0, first.stderr)
         for _ in range(3):
-            self.assertEqual(tree.make("m").stdout, first.stdout)
+            self.assertEqual(tree.make("--sandboxing", "m").stdout, first.stdout)
 
 
 class ConfFailuresTest(unittest.TestCase):
     def failure(self, files, *args):
-        result = Tree(self, {"m/ya.make": library("SRCS(a.cpp)\n"), "m/a.cpp": "", **files}).make(*args, "m")
+        result = Tree(self, {"m/ya.make": library("SRCS(a.cpp)\n"), "m/a.cpp": "", **files}).make("--sandboxing", *args, "m")
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, "")
         return ANSI.sub("", result.stderr)
