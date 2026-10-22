@@ -517,19 +517,22 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	ctx, dir, c := e.ctx, e.instance.Path.relString(), e.d.nots
 	na := ctx.na
 	output := build(dir, "/output.tar")
-
-	if info := e.codegen.use(output); info != nil {
-		return notsResult(output, info.ProducerRef, c, info.Nots.Globals)
-	}
-
 	instance := e.instance
 
 	instance.Language = LangTSPrepare
 
-	prepare := genModule(ctx, instance)
+	prepare := e.genPeerModule(instance)
 
 	if prepare.ARPath == nil {
 		throwFmt("nots: %s requires the TS_PREPARE_DEPS variant", dir)
+	}
+
+	if info := e.codegen.use(output); info != nil {
+		result := notsResult(output, info.ProducerRef, c, info.Nots.Globals)
+
+		result.TestSuites = e.notsBuildSuites(dir, info.Nots, e.notsFiles(dir, c.Outputs, c.Excludes))
+
+		return result
 	}
 
 	prepRef := prepare.ARRef
@@ -685,7 +688,7 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 		instance.Language = LangTSPrepare
 	}
 
-	result := genModule(e.ctx, instance)
+	result := e.genPeerModule(instance)
 	refs := []NodeRef{result.ARRef}
 
 	var inputs []VFS
