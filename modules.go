@@ -1479,6 +1479,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					continue
 				}
 
+				pTok = peerdirModulePath(pTok).any()
+
 				if addInclNext {
 					d.addLocalIncl(prioAddIncl, parseModulePathVFS(pTok.string()))
 					addInclNext = false
@@ -4414,6 +4416,17 @@ func parseModulePathVFS(path string) VFS {
 	}
 
 	return source(path)
+}
+
+// ConstructYDir anchors PEERDIR at the source root. Expanded source VFS
+// paths become module-relative identifiers here; graph commands retain
+// their rooted paths. Use the same mapping in every language context.
+func peerdirModulePath(path ANY) STR {
+	if peer := path.vfs(); peer != 0 && peer.isSource() {
+		path = peer.rel().any()
+	}
+
+	return internStr(cleanRel(strings.Trim(path.string(), "/")))
 }
 
 func expandStmtToken(s string, env Environment) string {

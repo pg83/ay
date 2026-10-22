@@ -237,7 +237,7 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 					continue
 				}
 
-				d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: ps, explicit: true})
+				d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: peerdirModulePath(p).string(), explicit: true})
 			}
 		case *SetStmt:
 			env.setFromString(v.NameEnv, expandAssignedScalarVarRef(v.Value, env))
