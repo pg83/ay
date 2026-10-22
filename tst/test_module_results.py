@@ -35,6 +35,28 @@ class ModuleResultsTest(unittest.TestCase):
         self.assertIn(lib.node_by_output(graph, '$(B)/root/libroot.a')['uid'], graph['result'])
         self.assertFalse(any(output.startswith('$(B)/peer/') for node in graph['graph'] for output in node['outputs']))
 
+    def test_requested_library_exposes_own_global_nonparsed_producers(self):
+        files = {
+            'root/ya.make': f'LIBRARY()\n{lib.BARE_MODULE}PEERDIR(peer)\nLD_PLUGIN(local.py)\nSRCS(local.cpp)\nEND()\n',
+            'root/local.py': '',
+            'root/local.cpp': 'int local;\n',
+            'peer/ya.make': f'LIBRARY()\n{lib.BARE_MODULE}LD_PLUGIN(peer.py)\nEND()\n',
+            'peer/peer.py': '',
+            'tests/ya.make': 'EXECTEST()\nRUN(true)\nDEPENDS(root)\nEND()\n',
+        }
+        for target, options in (('root', []), ('tests', ['-t'])):
+            with self.subTest(target=target):
+                graph = lib.make(files, target, '--strip-packages-from-results', *options)
+                local = lib.node_by_output(graph, '$(B)/root/local.py.pyplugin')
+                peer_refs = {node['uid'] for node in graph['graph'] if '$(B)/peer/peer.py.pyplugin' in node['outputs']}
+                if target == 'root':
+                    self.assertIn(local['uid'], graph['result'])
+                    self.assertFalse(peer_refs.intersection(graph['result']))
+                else:
+                    suite = lib.node_by_output(graph, '$(B)/tests/test-results/exectest/meta.json')
+                    self.assertIn(local['uid'], suite['deps'])
+                    self.assertFalse(peer_refs.intersection(suite['deps']))
+
     def test_host_tool_global_archives_are_module_results(self):
         files = {
             'root/ya.make': f'LIBRARY()\n{lib.BARE_MODULE}RUN_PROGRAM(tools/gen OUT generated.cpp)\nEND()\n',

@@ -387,10 +387,10 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 	for i, dep := range s.depends {
 		instance := ctx.rootInstance(dep, demandLinked)
 		res := genModule(ctx, instance)
-		output, ref := res.ARPath, res.ARRef
+		output := res.ARPath
 
 		if res.LDPath != nil {
-			output, ref = res.LDPath, res.LDRef
+			output = res.LDPath
 		}
 
 		if s.testType == "exectest" {
@@ -407,14 +407,7 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 			s.depends[i] = output.relString()
 		}
 
-		if output != nil {
-			ctx.scannerFor(instance).codegen.use(*output)
-			s.deps = append(s.deps, ref)
-		}
-
-		if res.GlobalRef != nil {
-			s.deps = append(s.deps, *res.GlobalRef)
-		}
+		s.deps = append(s.deps, ctx.moduleResultRefs(instance, res)...)
 
 		if python && res.LDPath != nil && res.ARPath == nil && isLinkingModuleType(res.ModuleStmtName) && res.ModuleStmtName != tokDllTool {
 			s.pytestOutputDirs = append(s.pytestOutputDirs, path.Dir(res.LDPath.string()))

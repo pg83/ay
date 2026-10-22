@@ -464,13 +464,8 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 
 	root := genModule(ctx, ctx.rootInstanceForDeclaration(targetDir, rootDemand, target.Declaration))
 
-	if root.LDPath != nil {
-		ctx.scannerForPlatform(ctx.target).codegen.use(*root.LDPath)
-		ctx.emit.result(root.LDRef)
-	}
-
-	if root.GlobalRef != nil {
-		ctx.emit.result(*root.GlobalRef)
+	for _, ref := range ctx.moduleResultRefs(ctx.rootInstanceForDeclaration(targetDir, rootDemand, target.Declaration), root) {
+		ctx.emit.result(ref)
 	}
 
 	ctx.collectConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, root.ModuleVariants, rootDemand), root)...)
@@ -486,16 +481,8 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 
 		sub := genModule(ctx, ctx.rootInstanceForDeclaration(dir, rootDemand, target.Declaration))
 
-		if sub.LDPath != nil {
-			ctx.scannerForPlatform(ctx.target).codegen.use(*sub.LDPath)
-		}
-
-		if sub.LDPath != nil {
-			ctx.emit.result(sub.LDRef)
-		}
-
-		if sub.GlobalRef != nil {
-			ctx.emit.result(*sub.GlobalRef)
+		for _, ref := range ctx.moduleResultRefs(ctx.rootInstanceForDeclaration(dir, rootDemand, target.Declaration), sub) {
+			ctx.emit.result(ref)
 		}
 
 		ctx.collectConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, sub.ModuleVariants, rootDemand), sub)...)
