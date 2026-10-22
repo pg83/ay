@@ -29,16 +29,6 @@ const (
 	envVFS
 )
 
-func evalAtomString(nodes []CondNode, i int32, env Environment, variable bool) string {
-	v := evalAtomNode(nodes, i, env, variable)
-
-	if v.isNum {
-		return strconv.Itoa(v.num)
-	}
-
-	return v.str
-}
-
 func evalCond(nodes []CondNode, env Environment) bool {
 	return evalCondAt(nodes, int32(len(nodes)-1), env)
 }
@@ -68,7 +58,7 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	case ckEq:
 		return evalIfAtomString(nodes, n.L, env, true) == evalIfAtomString(nodes, n.R, env, false)
 	case ckConfEq:
-		return evalEq(nodes, n, env)
+		return evalConfEq(nodes, n, env)
 	case ckLt, ckGt:
 		return evalLt(nodes, n, env)
 	case ckConfLt:
@@ -100,12 +90,6 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	throwFmt("macros: bare integer %d cannot be evaluated as a boolean condition", n.Ival)
 
 	return false
-}
-
-type AtomVal struct {
-	num   int
-	str   string
-	isNum bool
 }
 
 func evalIfAtomString(nodes []CondNode, i int32, env Environment, variable bool) string {
@@ -155,48 +139,6 @@ func evalIfExpr(value string, env Environment) string {
 	})
 }
 
-func evalAtomNode(nodes []CondNode, i int32, env Environment, variable bool) AtomVal {
-	n := &nodes[i]
-
-	switch n.Kind {
-	case ckIdent:
-		if n.Name == "yes" || n.Name == "no" {
-			return AtomVal{str: n.Name}
-		}
-
-		switch k, v := env.s.lookup(n.Env); k {
-		case envStr:
-			return AtomVal{str: v.string()}
-		case envVFS:
-			return AtomVal{str: VFS(uint32(v)).string()}
-		case envInt:
-			x, _ := strconv.Atoi(v.string())
-
-			return AtomVal{num: x, isNum: true}
-		}
-
-		if variable {
-			return AtomVal{}
-		}
-
-		if isImplicitBuildVar(n.Name) {
-			return AtomVal{str: n.Name}
-		}
-
-		throwFmt("macros: unknown IF identifier %q", n.Name)
-
-		return AtomVal{}
-	case ckString:
-		return AtomVal{str: n.Name}
-	case ckInt:
-		return AtomVal{num: n.Ival, isNum: true}
-	}
-
-	throwFmt("macros: unexpected cond kind %d in comparator operand position", n.Kind)
-
-	return AtomVal{}
-}
-
 func evalVersionCmp(nodes []CondNode, n *CondNode, env Environment) bool {
 	cmp := compareVersions(evalIfAtomString(nodes, n.L, env, true), evalIfAtomString(nodes, n.R, env, false))
 
@@ -243,25 +185,6 @@ func compareVersions(a, b string) int {
 	}
 
 	return 0
-}
-
-func evalEq(nodes []CondNode, n *CondNode, env Environment) bool {
-	l := evalAtomNode(nodes, n.L, env, true)
-	r := evalAtomNode(nodes, n.R, env, false)
-
-	if l.isNum {
-		if !r.isNum {
-			throwFmt("macros: == operand type mismatch: left is int %d, right is string", l.num)
-		}
-
-		return l.num == r.num
-	}
-
-	if r.isNum {
-		return l.str == strconv.Itoa(r.num)
-	}
-
-	return l.str == r.str
 }
 
 func evalLt(nodes []CondNode, n *CondNode, env Environment) bool {

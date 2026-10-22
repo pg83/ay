@@ -55,25 +55,6 @@ func (s *EnvStore) lookup(e ENV) (EnvKind, STR) {
 	return envAbsent, 0
 }
 
-func isImplicitBuildVar(name string) bool {
-	hasUpper := false
-
-	for i := 0; i < len(name); i++ {
-		b := name[i]
-
-		switch {
-		case b >= 'A' && b <= 'Z':
-			hasUpper = true
-		case b >= '0' && b <= '9':
-		case b == '_':
-		default:
-			return false
-		}
-	}
-
-	return hasUpper
-}
-
 func (e Environment) bool(id ENV) bool {
 	return e.boolID(id, "")
 }

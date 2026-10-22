@@ -2,6 +2,7 @@ package main
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -236,9 +237,45 @@ func parseConfCondition(rel, expr string) []CondNode {
 	return p.condScratch
 }
 
+// Config conditions resolve variables to strings through TVars::EvalValue.
+// Fieldcalc compares two strings directly; with a numeric constant it coerces
+// the string operand to its nonempty/empty value, independent of EnvKind.
+func evalConfAtomString(nodes []CondNode, i int32, env Environment) string {
+	n := &nodes[i]
+
+	switch n.Kind {
+	case ckIdent:
+		if n.Name == "yes" || n.Name == "no" {
+			return n.Name
+		}
+
+		return env.string(n.Env)
+	case ckString:
+		return n.Name
+	case ckInt:
+		return strconv.Itoa(n.Ival)
+	}
+
+	throwFmt("macros: unexpected cond kind %d in comparator operand position", n.Kind)
+
+	return ""
+}
+
+func evalConfEq(nodes []CondNode, n *CondNode, env Environment) bool {
+	l := evalConfAtomString(nodes, n.L, env)
+	r := evalConfAtomString(nodes, n.R, env)
+	left, right := &nodes[n.L], &nodes[n.R]
+
+	if left.Kind != ckInt && right.Kind != ckInt {
+		return l == r
+	}
+
+	return confOrderingInteger(left, l) == confOrderingInteger(right, r)
+}
+
 func evalConfLt(nodes []CondNode, n *CondNode, env Environment) bool {
-	l := evalAtomString(nodes, n.L, env, true)
-	r := evalAtomString(nodes, n.R, env, true)
+	l := evalConfAtomString(nodes, n.L, env)
+	r := evalConfAtomString(nodes, n.R, env)
 	left, right := &nodes[n.L], &nodes[n.R]
 
 	if left.Kind != ckInt && right.Kind != ckInt {
