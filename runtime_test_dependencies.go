@@ -22,7 +22,7 @@ func (e *EmitContext) recordTestDependencyModule(result *ModuleEmitResult, decla
 	d := e.d
 	name := d.unit.Type
 	bundle := isUnionModule(name) || name == tokPackageFinal || name == tokCiGroup || name == tokGenLibrary || name == tokGoLibrary || e.instance.Language == LangDescProto || d.nots != nil
-	complete := isLinkingModuleType(name) || name == tokPrebuiltProgram || name == tokPackageFinal || name == tokCiGroup || name == tokGoLibrary || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokDocs || d.nots != nil
+	complete := isProgramModuleType(name) || testDependencySharedObject(name) || name == tokDllTool || name == tokPrebuiltProgram || name == tokPackageFinal || name == tokCiGroup || name == tokGoLibrary || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokDocs || d.nots != nil
 	includePeers := isUnionModule(name) || name == tokGenLibrary || e.instance.Language == LangDescProto
 	multimodule := d.multimodule != 0 || declaration == tokProtoLibrary || declaration == tokPy3Program || declaration == tokPy3Test || declaration == tokPy23Test || isPythonMultimodule(declaration) || declaration == tokYqlUdf || declaration == tokYqlUdfContrib
 	final := (isLinkingModuleType(name) || name == tokProtoDescriptions || name == tokProtoRegistry || name == tokDocs) && name != tokExectest && name != tokPy2Test && name != tokPytestBin
