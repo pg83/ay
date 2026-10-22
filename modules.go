@@ -4222,38 +4222,39 @@ func applyArchiveByKeysStmt(v UnknownStmt, d *ModuleData) {
 
 func applyArchiveAsmStmt(v UnknownStmt, d *ModuleData) {
 	var (
-		entry      ArchiveAsmEntry
-		seenName   bool
-		inNameSlot bool
+		entry    ArchiveAsmEntry
+		seenName bool
 	)
 
-	for _, aTok := range v.Args {
-		a := aTok.string()
+	// TParsedCallArgs (ymake/lang/call_args_parser.cpp) permits keywords
+	// between variadic values, rejects repeated scalars/flags, and does not
+	// consume another declared keyword as a scalar value. NAME defaults to
+	// empty and Files... can be empty (args2locals.cpp).
+	for i := 0; i < len(v.Args); i++ {
+		a := v.Args[i].string()
 
-		switch {
-		case inNameSlot:
-			entry.Name = a
-			inNameSlot = false
+		switch a {
+		case "NAME":
+			if seenName {
+				throwFmt("gen: ARCHIVE_ASM at line %d: Keyword 'NAME' appears more than once and is not an array.", v.Line)
+			}
+
+			if i+1 >= len(v.Args) || v.Args[i+1].string() == "NAME" || v.Args[i+1].string() == "DONTCOMPRESS" {
+				throwFmt("gen: ARCHIVE_ASM(NAME ...) missing value after NAME (line %d)", v.Line)
+			}
+
+			i++
+			entry.Name = v.Args[i].string()
 			seenName = true
-		case a == "NAME":
-			inNameSlot = true
-		case a == "DONTCOMPRESS":
+		case "DONTCOMPRESS":
+			if entry.DontCompress {
+				throwFmt("gen: ARCHIVE_ASM at line %d: Keyword 'DONTCOMPRESS' appears more than once and is not an array.", v.Line)
+			}
+
 			entry.DontCompress = true
 		default:
 			entry.Files = append(entry.Files, a)
 		}
-	}
-
-	if inNameSlot {
-		throwFmt("gen: ARCHIVE_ASM(NAME ...) missing value after NAME (line %d)", v.Line)
-	}
-
-	if !seenName || entry.Name == "" {
-		throwFmt("gen: ARCHIVE_ASM expects `NAME <output>` (line %d)", v.Line)
-	}
-
-	if len(entry.Files) == 0 {
-		throwFmt("gen: ARCHIVE_ASM(NAME %s) has no input files (line %d)", entry.Name, v.Line)
 	}
 
 	d.archiveAsm = append(d.archiveAsm, entry)

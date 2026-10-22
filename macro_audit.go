@@ -25,6 +25,11 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokDeclareInDirs: {},
 	tokCopy:          {},
 
+	// ymake.core.conf: ARCHIVE_ASM(NAME="", DONTCOMPRESS?"-p":"", Files...)
+	// accepts arbitrary scalar NAME and positional Files values. Its handler
+	// validates the declared keywords without classifying uppercase data.
+	tokArchiveAsm: {},
+
 	// ymake.core.conf: TASKLET_REG(Name, Lang, Impl, Includes...) and
 	// TASKLET_REG_EXT(Name, Lang, Impl, Wrapper, Includes...) contain only
 	// positional values, including uppercase names, implementations and headers.
