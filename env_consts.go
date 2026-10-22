@@ -98,6 +98,7 @@ var (
 	envHOME                         = internEnv("HOME")
 	envIS_CROSS_TOOLS               = internEnv("IS_CROSS_TOOLS")
 	envJavaHome                     = internEnv("JAVA_HOME")
+	envJavaIgnoreClasspathClash     = internEnv("JAVA_IGNORE_CLASSPATH_CLASH_VALUE")
 	envJavaOptions                  = internEnv("_JAVA_OPTIONS")
 	envJavaPath                     = internEnv("JAVA_PATH")
 	envJavaProto                    = internEnv("JAVA_PROTO")

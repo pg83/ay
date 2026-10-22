@@ -315,7 +315,7 @@ class JavaJunitSuiteTest(unittest.TestCase):
             self.assertNotIn(n["uid"], graph["result"])
 
     def test_classpath_clash_check(self):
-        files = junit_tree("JUNIT5()\nPEERDIR(lib)\nCHECK_JAVA_DEPS(strict)\nIGNORE_CLASSPATH_CLASH(b.C a.B)\nEND()\n")
+        files = junit_tree("JUNIT5()\nPEERDIR(lib)\nCHECK_JAVA_DEPS(strict)\nJAVA_IGNORE_CLASSPATH_CLASH_FOR(b.C a.B)\nEND()\n")
         node = test_nodes(lib.make(files, "proj/sub/ut", "--target-platform-tests"))["proj/sub/ut/sub-ut-dependencies"]
         self.assertEqual(option_values(head_args(node), "--test-type"), ["classpath.clash"])
         run = run_args(node)

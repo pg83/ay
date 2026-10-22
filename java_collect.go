@@ -179,6 +179,12 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	javaConfPrologue(jm, d)
 	collectJavaStmts(ctx, jm, d, stmts, env)
 
+	for _, value := range strings.Fields(expandStmtToken(env.string(envJavaIgnoreClasspathClash), env)) {
+		if value != `""` && value != "''" {
+			d.test.ignoreClasspathClash = append(d.test.ignoreClasspathClash, strings.ReplaceAll(value, `${"$"}`, "$"))
+		}
+	}
+
 	if jm.unit.proto {
 		d.expandJavaProtobufPeers()
 	}
@@ -700,8 +706,10 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.addDLLs = true
 	case "CHECK_JAVA_DEPS":
 		d.checkJavaDeps = strings.ToLower(arg0)
-	case "IGNORE_CLASSPATH_CLASH":
-		d.test.ignoreClasspathClash = append(d.test.ignoreClasspathClash, args...)
+	case "JAVA_IGNORE_CLASSPATH_CLASH_FOR":
+		property := []string{envJavaIgnoreClasspathClash.string()}
+
+		applyJavaMacro(ctx, jm, d, "SET_APPEND", append(property, args...), append([]string{envJavaIgnoreClasspathClash.string()}, raw...), env)
 	case "ENV":
 		d.testEnv = append(d.testEnv, splitShellWords(`"`+strings.Join(raw, " ")+`"`)...)
 	case "LINT":
