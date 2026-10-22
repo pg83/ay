@@ -257,7 +257,7 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 
 	hostFlags := map[string]string{}
 
-	if mf.testLevel > 0 {
+	if mf.runTests > 0 {
 		hostFlags["TESTS_REQUESTED"] = "yes"
 		targetOptFlags["TESTS_REQUESTED"] = "yes"
 	}
