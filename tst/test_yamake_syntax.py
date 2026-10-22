@@ -74,6 +74,11 @@ class YaMakeSyntaxTest(unittest.TestCase):
         code, graph, stderr = ay_make(files)
         self.assertEqual(code, 0, stderr)
         self.assertEqual(user_cflags(graph), expected)
+        compiled = lib.node_by_output(graph, "$(B)/a/x.cpp.o")
+        self.assertIn("$(S)/a/x.cpp", compiled["inputs"])
+        archive = lib.node_by_output(graph, "$(B)/a/liba.a")
+        self.assertIn(compiled["uid"], archive["deps"])
+        self.assertIn(compiled["outputs"][0], archive["inputs"])
 
     def assert_parse_error(self, text, expected):
         code, _, stderr = ay_make({"a/ya.make": text, "a/x.cpp": ""})
@@ -81,11 +86,13 @@ class YaMakeSyntaxTest(unittest.TestCase):
         self.assertEqual(stderr, expected)
 
     def test_macro_argument_tokens(self):
+        # Keep # out of source comments and && out of command separators.
+        # All logical atoms are checked against the pinned native command.
         self.assert_cflags(library(
             "CFLAGS(-DA \"-DB=c d\" '-DE' -DF=\"g h\" -DI=\\\"j\\\" X-Y 12 12ab"
-            " a@b -D#x #comment\n -DZ FOO\"bar\" FOO\\\"x\\\" FOO@y\"z\""
+            " a@b \"-D#x\" #comment\n -DZ FOO\"bar\" FOO\\\"x\\\" FOO@y\"z\""
             " -w@v'u' -DQ'x y' -DR\\\"z \"a\\\\b\" \"-DS=\\\"q\\\"\" éx"
-            " -DT=\"a\\\"b\" `a` x&&y a;b c^d e|f)"
+            " -DT=\"a\\\"b\" `a` x\"&&\"y a;b c^d e|f)"
         ), [
             "-DA", "-DB=c", "d", "-DE", "-DF=g h", "-DI=\"j\"", "X-Y", "12",
             "12ab", "a@b", "-D#x", "-DZ", "FOObar", "FOO\"x\"", "FOO@yz",
@@ -101,7 +108,7 @@ class YaMakeSyntaxTest(unittest.TestCase):
         self.assert_cflags(library("CFLAGS(" + " ".join(quoted) + ")"), tokens)
 
     def test_macro_argument_atoms_take_url_symbols(self):
-        self.assert_cflags(library("CFLAGS(-DU=http://h/p?a=b;c=d&e)"), ["-DU=http://h/p?a=b;c=d&e"])
+        self.assert_cflags(library('CFLAGS(-DU="http://h/p?a=b;c=d&e")'), ["-DU=http://h/p?a=b;c=d&e"])
 
     def test_macro_argument_atoms_take_pattern_alternation(self):
         self.assert_cflags(library("CFLAGS(-DPATTERN=*.h|*.cpp)"), ["-DPATTERN=*.h|*.cpp"])

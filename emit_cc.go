@@ -566,7 +566,7 @@ func appendCxxStdAndOwn(cmdArgs []ANY, isCxx bool, noCompilerWarnings bool, inje
 }
 
 func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []ANY {
-	return concat(p.CFlags, in.CFlags, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal)
+	return concat(p.CFlags, compilerCommandFlags(in.CFlags, in.CompilerEnv).Args, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal)
 }
 
 func composeOwnAndPeerGlobalBucket(in *ModuleCompileEnv) []ANY {

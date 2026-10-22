@@ -217,15 +217,9 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, platform)
 	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in.ModuleCompileEnv)
-	ownExtras := in.CXXFlags
-
-	if len(platform.CXXFlags) > 0 {
-		ownExtras = concat(ownExtras, platform.CXXFlags)
-	}
-
 	args := make([]ANY, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+
 		len(bundle.Defines)+len(ownCFlags)+2*len(bundle.NoLibcBlock)+
-		len(in.ModuleScopeCFlags)+len(ownExtras)+len(ownGlobalBucket)+
+		len(in.ModuleScopeCFlags)+len(in.CXXFlags)+len(platform.CXXFlags)+len(ownGlobalBucket)+
 		len(bundle.ArchArgs)+len(bundle.CFlags)+len(warningBundle))
 
 	args = append(args, internStr(python).any(), internStr(clangWrapper).any(), argNo.any(), internStr(clangBC).any())
@@ -243,6 +237,10 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(platform))
 
 	if cxx {
+		ownExtras := compilerCommandFlags(in.CXXFlags, in.CompilerEnv).Args
+		if len(platform.CXXFlags) > 0 {
+			ownExtras = concat(ownExtras, platform.CXXFlags)
+		}
 		args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
 		args = appendAnyLists(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), coreCxxFlags(platform), in.CXXFlagsVar)
 	}
