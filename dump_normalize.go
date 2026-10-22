@@ -357,7 +357,7 @@ func rewriteDeps(raw []string, closure, fetch map[string]bool, newUID map[string
 
 	sort.Strings(out)
 
-	return out
+	return slices.Compact(out)
 }
 
 func reuidClosure(
@@ -409,6 +409,7 @@ func reuidClosure(
 		}
 
 		sort.Strings(tokens)
+		tokens = slices.Compact(tokens)
 
 		h := sha256.New()
 		ch := contentHash[uid]
