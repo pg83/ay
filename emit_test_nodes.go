@@ -109,7 +109,9 @@ func (e *EmitContext) importTestSuites(binary VFS, ref NodeRef, globals []Resour
 		timeout: testSizeTimeouts["small"], runInputs: []VFS{source(project)}, checkFiles: []VFS{binary}, deps: depRefs(ref), globals: globals,
 		env: d.test.env, supportsTestParameters: true, smoothShutdown: []string{"SIGUSR2"}, importCheckEnv: true, noRetries: true}
 
-	skips := d.noCheckImports
+	// The suite renders after collection reuses ModuleData's scratch slices.
+	// Keep this module's NO-CHECK metadata independent of later contexts.
+	skips := slices.Clone(d.noCheckImports)
 
 	s.runCmd = func(work string, _ TestChunk) []ANY {
 		out := work + "/testing_out_stuff"
