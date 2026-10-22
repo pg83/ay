@@ -44,6 +44,7 @@ func (ctx *GenCtx) emitDiscoveredModuleTests() {
 	}
 
 	var suites []*TestSuite
+	var javaSuites []*TestSuite
 
 	for _, project := range projects {
 		results := groups[project]
@@ -51,10 +52,7 @@ func (ctx *GenCtx) emitDiscoveredModuleTests() {
 		for _, result := range results {
 			if result.java != nil {
 				result.testsEmitted = true
-
-				for _, ref := range ctx.javaEmitTests(result.java) {
-					ctx.emit.result(ref)
-				}
+				javaSuites = append(javaSuites, ctx.javaTestSuites(result.java)...)
 			}
 		}
 
@@ -65,7 +63,25 @@ func (ctx *GenCtx) emitDiscoveredModuleTests() {
 		}
 	}
 
+	suites = append(javaSuites, suites...)
+
+	if len(suites) == 0 {
+		return
+	}
+
 	for _, suite := range suites {
+		if ctx.testSuiteSelected(suite) {
+			ctx.prepareTestDependencies(suite)
+		}
+	}
+
+	outputs := ctx.projectModuleIndex(suites)
+
+	for _, suite := range suites {
+		if suite.projectBuildDeps {
+			suite.deps = append(suite.deps, outputs[source(suite.projectPath)]...)
+		}
+
 		for _, ref := range ctx.emitTestSuite(suite) {
 			ctx.emit.result(ref)
 		}

@@ -367,11 +367,7 @@ func (ctx *GenCtx) testContext() NodeRef {
 	return o.contextRef
 }
 
-func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
-	if !ctx.tests.sizeRequested(s.size) || !ctx.tests.tagFilter.matches(s.tags) {
-		return nil
-	}
-
+func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 	var execDirs []string
 
 	python := s.testType == "pytest" || s.testType == "py3test" || s.testType == "exectest"
@@ -421,6 +417,16 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 
 	if s.testType == "exectest" {
 		s.execPath = strings.Join(sortedUnique(execDirs), ":")
+	}
+}
+
+func (ctx *GenCtx) testSuiteSelected(s *TestSuite) bool {
+	return ctx.tests.sizeRequested(s.size) && ctx.tests.tagFilter.matches(s.tags)
+}
+
+func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
+	if !ctx.testSuiteSelected(s) {
+		return nil
 	}
 
 	for _, image := range s.dockerImages {

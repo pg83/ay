@@ -37,7 +37,7 @@ type javaCustomLint struct {
 	configTypes []string
 }
 
-func (ctx *GenCtx) javaEmitTests(jm *JavaModule) []NodeRef {
+func (ctx *GenCtx) javaTestSuites(jm *JavaModule) []*TestSuite {
 	var suites []*TestSuite
 
 	switch jm.unit.kind {
@@ -61,15 +61,15 @@ func (ctx *GenCtx) javaEmitTests(jm *JavaModule) []NodeRef {
 		suites = append(suites, ctx.javaCustomLintSuite(jm, l))
 	}
 
-	var refs []NodeRef
+	active := suites[:0]
 
 	for _, s := range suites {
 		if s != nil {
-			refs = append(refs, ctx.emitTestSuite(s)...)
+			active = append(active, s)
 		}
 	}
 
-	return refs
+	return active
 }
 
 func (jm *JavaModule) srcDirsTestData() []string {
@@ -117,26 +117,6 @@ func (ctx *GenCtx) javaSuiteBase(jm *JavaModule, name, testType, ciType string) 
 
 func (ctx *GenCtx) javaProducer(jm *JavaModule, out VFS) NodeRef {
 	return ctx.javaReg(jm).use(out).ProducerRef
-}
-
-func (ctx *GenCtx) javaProjectProducers(jm *JavaModule) []NodeRef {
-	var refs []NodeRef
-
-	for _, unit := range javaModuleUnits[jm.stmt] {
-		instance := jm.instance
-
-		instance.Kind = unit.sub
-
-		if res := genModule(ctx, instance); res.java != nil {
-			if unit.kind == juIJar && ctx.javaReg(res.java).lookup(res.java.target).OnUse != nil {
-				continue
-			}
-
-			refs = append(refs, ctx.javaProducer(res.java, res.java.target))
-		}
-	}
-
-	return refs
 }
 
 func (ctx *GenCtx) javaStyleSuite(jm *JavaModule) *TestSuite {
@@ -205,7 +185,8 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 	s.requirements = map[string]string{"cpu": "2"}
 	s.relatedPaths = append([]string{"$(S)/" + jm.dir, "$(S)/.editorconfig"}, sortedUnique(append([]string{editorconfig}, jm.srcDirsTestData()...))...)
 	s.runInputs = append(s.runInputs, srclist)
-	s.deps = append(ctx.javaProjectProducers(jm), ctx.javaProducer(jm, srclist))
+	s.projectBuildDeps = true
+	s.deps = []NodeRef{ctx.javaProducer(jm, srclist)}
 	s.env = slices.Clone(d.testEnv)
 
 	s.runCmd = func(work string, _ TestChunk) []ANY {
@@ -398,7 +379,8 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 
 	deps.closure(testDeps)
 
-	s.deps = append(ctx.javaProjectProducers(jm), deps.deps...)
+	s.projectBuildDeps = true
+	s.deps = deps.deps
 
 	py := internStr(testYMakePython3).any()
 

@@ -748,28 +748,6 @@ func (ctx *GenCtx) moduleTestSuites(results ...*ModuleEmitResult) []*TestSuite {
 		r.testsEmitted = true
 
 		for _, s := range r.TestSuites {
-			if s.projectBuildDeps {
-				for _, module := range results {
-					ref := module.LDRef
-
-					if module.java != nil {
-						if info := ctx.javaReg(module.java).lookup(module.java.target); info != nil {
-							ref = info.ProducerRef
-						}
-					} else if ref == 0 {
-						ref = module.ARRef
-					}
-
-					if ref != 0 {
-						s.deps = append(s.deps, ref)
-					}
-
-					if module.GlobalRef != nil && *module.GlobalRef != 0 {
-						s.deps = append(s.deps, *module.GlobalRef)
-					}
-				}
-			}
-
 			if merged := mergeCheckSuite(suites, s); !merged {
 				suites = append(suites, s)
 			}
@@ -1180,7 +1158,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	if !ctx.keepGoing {
 		r := genModuleImpl(ctx, instance)
 
-		persistResult(ctx, r)
+		persistResult(ctx, instance, r)
 
 		return r
 	}
@@ -1190,7 +1168,7 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	exc := try(func() {
 		r = genModuleImpl(ctx, instance)
 
-		persistResult(ctx, r)
+		persistResult(ctx, instance, r)
 	})
 
 	if exc != nil {

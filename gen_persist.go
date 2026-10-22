@@ -10,7 +10,8 @@ func persistParsedIncludeSet(ctx *GenCtx, set ParsedIncludeSet) ParsedIncludeSet
 	return out
 }
 
-func persistResult(ctx *GenCtx, r *ModuleEmitResult) {
+func persistResult(ctx *GenCtx, instance ModuleInstance, r *ModuleEmitResult) {
+	ctx.publishModuleOutputs(instance, r)
 	r.GlobalSources = ctx.vfsSlices.internCopy(r.GlobalSources)
 
 	if r.persisted {
@@ -18,25 +19,6 @@ func persistResult(ctx *GenCtx, r *ModuleEmitResult) {
 	}
 
 	r.persisted = true
-
-	if ctx.emit.addModulesToResults {
-		refs := []NodeRef{r.ARRef, r.LDRef}
-
-		if r.GlobalRef != nil {
-			refs = append(refs, *r.GlobalRef)
-		}
-
-		if r.java != nil {
-			refs = append(refs, r.java.outRef)
-		}
-
-		for _, ref := range refs {
-			if ref != 0 {
-				ctx.emit.modules.add(uint32(ref))
-			}
-		}
-	}
-
 	r.JavaClosure = ctx.vfsSlices.internCopy(r.JavaClosure)
 	r.DocsClosure = ctx.vfsSlices.internCopy(r.DocsClosure)
 	r.WholeArchiveRefs = ctx.refSlices.internCopy(r.WholeArchiveRefs)
