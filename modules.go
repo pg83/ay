@@ -3976,7 +3976,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 			dest := "py/" + strings.ReplaceAll(modName, ".", "/") + ".pyi"
 
-			d.pyPyiResources = expandResourceFiles(d, d.pyPyiResources, []string{"DEST", dest, src})
+			d.pyPyiResources = expandResourceFiles(d, d.pyPyiResources, []string{"DONT_COMPRESS", "DEST", dest, src})
 			mainNext = false
 
 			continue
