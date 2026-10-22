@@ -566,6 +566,7 @@ var (
 	unitTagPy3                                                                               = internStr("PY3")
 	unitTagPy3Bin                                                                            = internStr("PY3_BIN")
 	unitTagPy3BinLib                                                                         = internStr("PY3_BIN_LIB")
+	unitTagPy3Native                                                                         = internStr("PY3_NATIVE")
 	unitTagPy3Proto                                                                          = internStr("PY3_PROTO")
 	unitTagPy3TestProgram                                                                    = internStr("PY3TEST_PROGRAM")
 )

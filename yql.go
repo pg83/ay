@@ -222,6 +222,8 @@ func finishYqlUdfModule(modulePath string, d *ModuleData, env Environment) {
 	if d.yqlPythonUdf {
 		peers := yqlUdfImplicitPeers()
 
+		peers = append(peers, "build/platform/python/ldflags", "library/python/type_info")
+
 		if env.bool(envUSE_ARCADIA_PYTHON) {
 			if d.usePython2 {
 				peers = append(peers, "library/python/runtime/main")
@@ -238,7 +240,6 @@ func finishYqlUdfModule(modulePath string, d *ModuleData, env Environment) {
 			}
 		}
 
-		peers = append(peers, "build/platform/python/ldflags", "library/python/type_info")
 		d.peerdirs = append(internAnys(peers), d.peerdirs...)
 	}
 

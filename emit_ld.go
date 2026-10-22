@@ -167,10 +167,6 @@ func (e *EmitContext) emitLD(
 
 	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
 
-	if dyn != nil && dyn.probe != 0 {
-		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(dyn.probe.any(), outputVFS.any())), Env: envVcsOnly})
-	}
-
 	if emitCopy {
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly})
 	}
@@ -183,6 +179,10 @@ func (e *EmitContext) emitLD(
 
 	if sbomEmbed {
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmdObjcopy), Env: envVcsOnly})
+	}
+
+	if dyn != nil && dyn.probe != 0 {
+		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(dyn.probe.any(), outputVFS.any())), Env: envVcsOnly})
 	}
 
 	na.cmds.commit(len(cmds))
