@@ -111,6 +111,7 @@ func finishYqlModule(ctx *GenCtx, instance ModuleInstance, env Environment, d *M
 
 	collectStmts(ctx, modulePath, instance.Kind, instance.Language, []Stmt{
 		&SetStmt{Name: "NEED_PLATFORM_PEERDIRS", NameEnv: internEnv("NEED_PLATFORM_PEERDIRS"), Value: "no"},
+		&UnknownStmt{Name: tokDisable, Args: []ANY{internStr("COMMON_LINK_SETTINGS").any()}},
 	}, env, d, onWarn, instance.Platform)
 
 	prebuilt := path.Base(yqlPrebuiltOutput(instance, d).relString()) + ".prebuilt"

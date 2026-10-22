@@ -110,7 +110,8 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 	flags := d.flags
 	noPlatform := effectiveNoPlatform(flags)
 
-	addLinuxHeaders := instance.Path.relString() != "contrib/libs/linux-headers" &&
+	addLinuxHeaders := d.setVars[strNeedPlatformPeerdirs] != strNo &&
+		instance.Path.relString() != "contrib/libs/linux-headers" &&
 		!strings.HasPrefix(instance.Path.relString(), "contrib/libs/linux-headers/")
 
 	if d.moduleStmt != nil && isGoModuleType(d.moduleStmt.Name) {
@@ -320,6 +321,10 @@ func (e *EmitContext) appendPlatformPeerdirs(peers []string, instance ModuleInst
 
 func (e *EmitContext) defaultCommonLinkPeerdirs() []string {
 	instance, d := e.instance, e.d
+
+	if d.setVars[internStr("COMMON_LINK_SETTINGS")] == strNo {
+		return nil
+	}
 
 	var peers []string
 
