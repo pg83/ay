@@ -1275,6 +1275,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.nots.AutoProto = v.Name == tokProtoLibrary && !fs.isFilePathClean(modulePath+"/package.json")
 			}
 
+			if v.Name == tokProtoLibrary && language == LangTS {
+				d.noLint = "none"
+				env.setString(internEnv("_NO_LINT_VALUE"), "none")
+			}
+
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 			setupYqlModule(d, v.Name, env)
 

@@ -327,16 +327,22 @@ func notsResult(output VFS, ref NodeRef, c *NotsModule, globals []ResourceDecl) 
 }
 
 func (e *EmitContext) emitNotsModule() *ModuleEmitResult {
+	var result *ModuleEmitResult
+
 	switch e.d.nots.Kind {
 	case tokTsTestFor, tokTsTestJestFor, tokTsTestVitestFor:
-		return e.emitNotsTest()
+		result = e.emitNotsTest()
+	default:
+		if e.instance.Language == LangTSPrepare {
+			result = e.emitNotsPrepare()
+		} else {
+			result = e.emitNotsBuild()
+		}
 	}
 
-	if e.instance.Language == LangTSPrepare {
-		return e.emitNotsPrepare()
-	}
+	result.TestSuites = append(result.TestSuites, e.styleSuites(result.ResourceGlobalClosure)...)
 
-	return e.emitNotsBuild()
+	return result
 }
 
 func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {

@@ -6,7 +6,7 @@ import (
 )
 
 func (d *ModuleData) collectCPPStyle(stmt UnknownStmt, env Environment) {
-	check := StyleCheck{Name: "clang_format", CPP: true, ConfigMap: "build/config/tests/cpp_style/default_configs.json", Wrapper: testClangFormatWrapperRel, Resource: "CLANG_FORMAT_RESOURCE_GLOBAL"}
+	check := StyleCheck{Name: "clang_format", CPP: true, ConfigMap: "build/config/tests/cpp_style/default_configs.json", Wrapper: testClangFormatWrapperRel, Resource: "CLANG_FORMAT_RESOURCE_GLOBAL", Peer: strBuildPlatformClangFormat.string()}
 
 	switch stmt.Name {
 	case tokStyleCppUserSessions:
@@ -21,6 +21,7 @@ func (d *ModuleData) collectCPPStyle(stmt UnknownStmt, env Environment) {
 
 	if len(check.Depends) != 0 {
 		check.Resource = ""
+		check.Peer = ""
 	}
 
 	if value, ok := env.lookup("CPP_LINTERS_DEFAULT_CONFIGS"); ok && value != "" {

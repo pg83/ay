@@ -11,6 +11,13 @@ import (
 var notsScriptNameSeparator = regexp.MustCompile(`[^\p{L}\p{N}]+`)
 
 func (e *EmitContext) notsTestGlobals(globals []ResourceDecl) []ResourceDecl {
+	for _, check := range e.d.styleChecks {
+		if check.Peer != "" {
+			peer := e.genPeerModule(e.derivePeerInstance(check.Peer))
+			globals = append(globals, peer.ResourceGlobalClosure...)
+		}
+	}
+
 	if peerYaMakeExists(e.ctx.fs, buildPlatformPythonYmakePython3) {
 		res := genModule(e.ctx, e.derivePeerInstance("build/platform/python/ymake_python3"))
 
