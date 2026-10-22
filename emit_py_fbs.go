@@ -72,11 +72,14 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 	tail := na.anyList(argDashO.any(), build(dir).any())
 	inputs := []VFS{tool, tar}
 	var imports [][]VFS
+	var views []Closure
 	for _, f := range files {
 		src := resolveSourceVFS(ctx, instance, f.Path, d.srcDirs)
 		tail = append(tail, src.any())
 		inputs = append(inputs, src)
-		imports = append(imports, e.scanner.walkClosure(src, d.scanCtx, scanDomainFlatc).bucketList()...)
+		view := e.scanner.walkClosure(src, d.scanCtx, scanDomainFlatc)
+		views = append(views, view)
+		imports = append(imports, view.bucketList()...)
 	}
 	node := Node{
 		Platform: instance.Platform, Env: envVarsVCS,
@@ -85,6 +88,7 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 			Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), tar.any(), strExts.any(), internStr(".py").any(), strInput.any(), build(dir).any(), strOutput.any(), out.any())), Env: envVarsVCS},
 		),
 		Inputs: na.inputList(inputs, ctx.scripts[tar.rel()]), Outputs: na.vfsList(out), ForeignDepRefs: na.refList(toolRef), KV: &pyFbsKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}}, Resources: usesPython3,
+		InputClosures: views,
 	}
 	node.Inputs = append(node.Inputs, imports...)
 	fp := e.emitNode(node)

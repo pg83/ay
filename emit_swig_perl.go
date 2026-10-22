@@ -57,6 +57,7 @@ func (e *EmitContext) emitPerlSwigSource(meta SrcMeta) {
 			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
 			Env:            envVarsVCS,
 			Inputs:         inputs,
+			InputClosures:  []Closure{cv},
 			Outputs:        na.vfsList(cpp, perl),
 			KV:             &swigJNIKV,
 			ForeignDepRefs: na.refList(swigRef),

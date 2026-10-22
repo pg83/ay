@@ -73,6 +73,7 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 
 	pe := func() {
 		inputs := na.inputs.alloc(3 + len(bisonCppSkeletonInputs)*closureBuckets)[:0]
+		var views []Closure
 
 		dedupers.with(func(deduper *DeDuper) {
 			tools := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4)
@@ -104,6 +105,7 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 
 			for _, sk := range bisonCppSkeletonInputs {
 				skCV := scanner.walkClosure(sk, scanCtx, scanDomainCC)
+				views = append(views, skCV)
 
 				for _, bucket := range skCV.bucketList() {
 					if filtered := na.filterSeen(deduper, bucket); len(filtered) > 0 {
@@ -134,14 +136,15 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 		cmds = cmds[:len(cmds):len(cmds)]
 
 		e.emitReservedNode(Node{
-			Platform:  instance.Platform,
-			Cmds:      cmds,
-			DepRefs:   na.refList(bisonRef, m4Ref),
-			Env:       env,
-			Inputs:    inputs,
-			Outputs:   na.vfsList(headerVFS, generatedVFS),
-			KV:        &bisonYKV,
-			Resources: usesPython3,
+			Platform:      instance.Platform,
+			Cmds:          cmds,
+			DepRefs:       na.refList(bisonRef, m4Ref),
+			Env:           env,
+			Inputs:        inputs,
+			InputClosures: views,
+			Outputs:       na.vfsList(headerVFS, generatedVFS),
+			KV:            &bisonYKV,
+			Resources:     usesPython3,
 		}, ycRef)
 	}
 

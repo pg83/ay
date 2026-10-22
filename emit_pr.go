@@ -27,6 +27,7 @@ type RunProgramNodeSpec struct {
 	stdoutVFS     *VFS
 	closureSource []VFS
 	closureBuild  []VFS
+	inputClosures []Closure
 }
 
 func (spec *RunProgramNodeSpec) isOutput(v VFS) bool {
@@ -168,6 +169,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			stdoutVFS:     stdoutVFS,
 			closureSource: inputClosure.sources,
 			closureBuild:  inputClosure.builds,
+			inputClosures: inputClosure.views,
 		}, prRef)
 	}
 
@@ -241,10 +243,12 @@ type prSnap struct {
 type PrInputClosure struct {
 	sources []VFS
 	builds  []VFS
+	views   []Closure
 }
 
 func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 	var sources, builds []VFS
+	var views []Closure
 
 	for i, f := range stmt.INFiles[:len(stmt.INFiles)-stmt.INNoParse] {
 		if s.inVFSs[i].isBuild() || !s.ctx.parsers.registry.scansIncludes(f.string()) {
@@ -252,6 +256,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 		}
 
 		cv := s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC)
+		views = append(views, cv)
 
 		cv.each(func(v VFS) {
 			if v.isBuild() {
@@ -262,7 +267,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 		})
 	}
 
-	return PrInputClosure{sources: s.ctx.na.dedupClosure(sources), builds: s.ctx.na.dedupClosure(builds)}
+	return PrInputClosure{sources: s.ctx.na.dedupClosure(sources), builds: s.ctx.na.dedupClosure(builds), views: views}
 }
 
 func prInputInducedIncludes(ctx *GenCtx, registry *CodegenRegistry, scanner *IncludeScanner, inputs []VFS) ParsedIncludeSet {
@@ -610,6 +615,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		Cmds:           na.cmdList(cmd),
 		Env:            env,
 		Inputs:         inputs,
+		InputClosures:  spec.inputClosures,
 		Outputs:        outputs,
 		KV:             kv,
 		ForeignDepRefs: toolRefs,

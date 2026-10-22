@@ -21,11 +21,12 @@ func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (No
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Cwd: bldRootDirVFS,
 			Env: env}),
-		Env:       env,
-		Inputs:    na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.bucketList()...),
-		Outputs:   na.vfsList(outVFS),
-		KV:        &asKV,
-		Resources: instance.Platform.UsesClangOnly,
+		Env:           env,
+		Inputs:        na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.bucketList()...),
+		InputClosures: []Closure{in.IncludeView},
+		Outputs:       na.vfsList(outVFS),
+		KV:            &asKV,
+		Resources:     instance.Platform.UsesClangOnly,
 	}
 
 	return e.emitNode(node), outVFS

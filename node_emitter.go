@@ -100,8 +100,9 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 
 func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
 	assert(len(n.Outputs) > 0, "emitter: node without outputs")
+	n.sourceInputsPending = n.InputClosure.scanner != nil || len(n.InputClosures) > 0
 
-	if e.hasUnresolvedDeps(n) {
+	if n.sourceInputsPending || e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
 		e.pendingIdx = append(e.pendingIdx, id)
 

@@ -602,9 +602,11 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	outputs = append(outputs, build(dir, "/output.tar.uuid"))
 
 	foreignRefs := []NodeRef{toolRef}
+	var views []Closure
 
 	if c.Kind == tokProtoLibrary {
-		protoArgs, protoInputs, protoRefs, protoLeaves, protocRef, protoGlobals := e.notsProtoInputs()
+		protoArgs, protoInputs, protoRefs, protoLeaves, protocRef, protoGlobals, protoViews := e.notsProtoInputs()
+		views = protoViews
 		builtState := *state
 
 		globals = e.notsTestGlobals(append(slices.Clone(globals), protoGlobals...))
@@ -658,6 +660,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	}
 
 	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(foreignRefs...), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
+	n.InputClosures = views
 	ref := e.emitNotsNode(n)
 	info := e.codegen.lookup(output)
 
@@ -674,6 +677,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 	dir, c, na := e.instance.Path.relString(), e.d.nots, e.ctx.na
+	var views []Closure
 	args := e.d.moduleStmt.Args
 	relative := false
 	target := ""
@@ -738,11 +742,13 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 		}
 	} else {
 		name += ".ts_test.fake"
-		inputs = append(inputs, e.notsTestInputs(target)...)
+		testInputs, testViews := e.notsTestInputs(target)
+		inputs = append(inputs, testInputs...)
+		views = testViews
 	}
 
 	output := build(dir, "/", name)
-	ref := e.emitNotsTouch(output, na.refList(dedupRefs(refs)...), inputs, &KV{P: kind, PC: pcMagenta})
+	ref := e.emitNotsTouch(output, na.refList(dedupRefs(refs)...), inputs, &KV{P: kind, PC: pcMagenta}, views...)
 	emitted := notsResult(output, ref, c, result.ResourceGlobalClosure)
 
 	emitted.TestSuites = e.notsForSuites(target, ref, result.ResourceGlobalClosure)
@@ -750,7 +756,7 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 	return emitted
 }
 
-func (e *EmitContext) notsTestInputs(target string) []VFS {
+func (e *EmitContext) notsTestInputs(target string) ([]VFS, []Closure) {
 	c, dir := e.d.nots, e.instance.Path.relString()
 
 	var files []VFS
@@ -798,19 +804,23 @@ func (e *EmitContext) notsTestInputs(target string) []VFS {
 	ctx := newScanContext(e.ctx.na, e.ctx.parsers, nil, nil, nil, nil)
 
 	var inputs []VFS
+	var views []Closure
 
 	for _, file := range dedup(files) {
 		inputs = append(inputs, file)
 
-		for _, bucket := range e.scanner.walkClosure(file, ctx, scanDomainAux).bucketList() {
+		view := e.scanner.walkClosure(file, ctx, scanDomainAux)
+		views = append(views, view)
+
+		for _, bucket := range view.bucketList() {
 			inputs = append(inputs, bucket...)
 		}
 	}
 
-	return dedup(inputs)
+	return dedup(inputs), views
 }
 
-func (e *EmitContext) emitNotsTouch(output VFS, refs []NodeRef, inputs []VFS, kv *KV) NodeRef {
+func (e *EmitContext) emitNotsTouch(output VFS, refs []NodeRef, inputs []VFS, kv *KV, views ...Closure) NodeRef {
 	na := e.ctx.na
 	script := buildScriptsTouchPy
 
@@ -818,7 +828,8 @@ func (e *EmitContext) emitNotsTouch(output VFS, refs []NodeRef, inputs []VFS, kv
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), script.any(), output.any())), Env: envVarsVCS}),
 		Env:      envVarsVCS, Inputs: na.inputList(na.vfsList(script), na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(output), KV: kv,
-		DepRefs: na.refList(dedupRefs(refs)...), Resources: usesPython3,
+		InputClosures: views,
+		DepRefs:       na.refList(dedupRefs(refs)...), Resources: usesPython3,
 		Requirements: &Requirements{CPU: 1, RAM: 32, Network: nwRestricted},
 	})
 }

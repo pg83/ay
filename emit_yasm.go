@@ -158,11 +158,12 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:          env,
-		Inputs:       inputs,
-		InputClosure: in.IncludeView,
-		Outputs:      na.vfsList(outVFS),
-		KV:           &asKV,
+		Env:           env,
+		Inputs:        inputs,
+		InputClosure:  in.IncludeView,
+		InputClosures: closures[1:],
+		Outputs:       na.vfsList(outVFS),
+		KV:            &asKV,
 	}
 
 	if nasm {

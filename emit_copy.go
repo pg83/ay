@@ -108,14 +108,17 @@ func (e *EmitContext) emitCopyFileNodeSnap(entry CopyFileEntry, st CopyEmitState
 	ctx := e.ctx
 
 	var closure []VFS
+	var views []Closure
 
 	if entry.WithContext {
-		closure = e.scanner.walkClosure(st.srcVFS, e.d.scanCtx, scanDomainCC).collect(ctx.na, func(VFS) bool { return true })
+		view := e.scanner.walkClosure(st.srcVFS, e.d.scanCtx, scanDomainCC)
+		views = append(views, view)
+		closure = view.collect(ctx.na, func(VFS) bool { return true })
 	}
 
 	closure = append(closure, e.copyLoopSources(st.dstVFS)...)
 
-	e.emitCPWithInputs(st.srcVFS, st.dstVFS, closure, st.ref, e.d.tc, ctx.scripts)
+	e.emitCPWithInputs(st.srcVFS, st.dstVFS, closure, st.ref, e.d.tc, ctx.scripts, views...)
 }
 
 func (e *EmitContext) copyLoopSources(dst VFS) []VFS {

@@ -74,7 +74,8 @@ func (e *EmitContext) emitYmapsSprotoHeaderSnap(scanner *IncludeScanner, p Ymaps
 	))
 
 	env := envVarsVCS
-	closure := scanner.walkClosure(p.protoRel.source(), scanCtx, scanDomainProto).collect(na, func(VFS) bool { return true })
+	view := scanner.walkClosure(p.protoRel.source(), scanCtx, scanDomainProto)
+	closure := view.collect(na, func(VFS) bool { return true })
 
 	node := Node{
 		Platform: e.instance.Platform,
@@ -83,6 +84,7 @@ func (e *EmitContext) emitYmapsSprotoHeaderSnap(scanner *IncludeScanner, p Ymaps
 			Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(na.vfsList(sprotocBinary), closure),
+		InputClosures:  []Closure{view},
 		Outputs:        na.vfsList(p.sprotoH),
 		KV:             &ymapsSprotoKV,
 		ForeignDepRefs: na.refList(sprotocLDRef),

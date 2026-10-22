@@ -76,13 +76,14 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 		na.inputs.commit(len(inputs))
 
 		e.emitReservedNode(Node{
-			Platform:  instance.Platform,
-			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-			Env:       env,
-			Inputs:    InputChunks(inputs[:len(inputs):len(inputs)]),
-			KV:        &cfKV,
-			Outputs:   na.vfsList(outVFS),
-			Resources: usesPython3,
+			Platform:      instance.Platform,
+			Cmds:          na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+			Env:           env,
+			Inputs:        InputChunks(inputs[:len(inputs):len(inputs)]),
+			InputClosures: []Closure{cv},
+			KV:            &cfKV,
+			Outputs:       na.vfsList(outVFS),
+			Resources:     usesPython3,
 		}, cfRef)
 	}
 

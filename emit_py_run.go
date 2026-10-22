@@ -206,9 +206,9 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	}
 
 	pe := func() {
-		inputClosure := pyInputClosure(snap, stmt)
+		inputClosure, views := pyInputClosure(snap, stmt)
 
-		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, inputClosure, pyRef, interp, toolRefs, auxTools, kv, resources)
+		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, inputClosure, views, pyRef, interp, toolRefs, auxTools, kv, resources)
 	}
 
 	pending := e.pendingEmit(pe)
@@ -247,7 +247,7 @@ type pyRunSnap struct {
 	inVFSs   []VFS
 }
 
-func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) InputChunks {
+func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) (InputChunks, []Closure) {
 	var closures []Closure
 
 	for i, f := range stmt.INFiles[:len(stmt.INFiles)-stmt.INNoParse] {
@@ -258,7 +258,7 @@ func pyInputClosure(s *pyRunSnap, stmt *RunPythonStmt) InputChunks {
 		closures = append(closures, s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC))
 	}
 
-	return s.ctx.na.dedupClosureChunks(closures...)
+	return s.ctx.na.dedupClosureChunks(closures...), closures
 }
 
 func splitCodegenDetect(stmt *RunPythonStmt) (hasCCShard bool, hasHeader bool) {
@@ -375,6 +375,7 @@ func (e *EmitContext) emitPYRun(
 	directSources []VFS,
 	directBuilds []VFS,
 	inputClosure InputChunks,
+	views []Closure,
 	id NodeRef,
 	interp ANY,
 	toolRefs []NodeRef,
@@ -493,6 +494,7 @@ func (e *EmitContext) emitPYRun(
 		Cmds:           na.cmdList(cmd),
 		Env:            env,
 		Inputs:         inputChunks,
+		InputClosures:  views,
 		KV:             kv,
 		Outputs:        outputs,
 		ForeignDepRefs: toolRefs,

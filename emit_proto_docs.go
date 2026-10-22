@@ -82,13 +82,14 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 		args = append(args, d.protocFlags...)
 		args = append(args, internV("--plugin=protoc-gen-doc=", docTool.string()).any(), internStr(rel).any())
 
-		inputs := e.scanner.walkClosure(src, d.scanCtx, scanDomainProto).bucketList()
+		view := e.scanner.walkClosure(src, d.scanCtx, scanDomainProto)
+		inputs := view.bucketList()
 
 		ref := e.emitNode(Node{
 			Platform: instance.Platform,
 			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Cwd: srcRootDirVFS, Env: envVarsVCS}),
 			Env:      envVarsVCS, Inputs: na.inputList(na.vfsList(src, wrapper, template, protoc, docTool), inputs...),
-			Outputs: na.vfsList(out), KV: &protoDocsKV, ForeignDepRefs: na.refList(protocRef, docRef), Resources: usesPython3,
+			InputClosures: []Closure{view}, Outputs: na.vfsList(out), KV: &protoDocsKV, ForeignDepRefs: na.refList(protocRef, docRef), Resources: usesPython3,
 		})
 
 		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})

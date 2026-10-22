@@ -53,6 +53,7 @@ func (e *EmitContext) emitYtOrmProtoYson(st GoCodegenStmt) {
 	args = append(args, d.protocFlags...)
 
 	inputs := [][]VFS{na.vfsList(protoc, plugin)}
+	var views []Closure
 	outs := make([]VFS, 0, len(st.files))
 	names := st.outputNames()
 
@@ -62,7 +63,9 @@ func (e *EmitContext) emitYtOrmProtoYson(st GoCodegenStmt) {
 		args = append(args, src.any())
 
 		inputs = append(inputs, na.vfsList(src))
-		inputs = append(inputs, e.scanner.walkClosure(src, d.scanCtx, scanDomainProto).bucketList()...)
+		view := e.scanner.walkClosure(src, d.scanCtx, scanDomainProto)
+		views = append(views, view)
+		inputs = append(inputs, view.bucketList()...)
 
 		out := build(e.instance.Path.relString(), "/", names[i])
 
@@ -74,7 +77,8 @@ func (e *EmitContext) emitYtOrmProtoYson(st GoCodegenStmt) {
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)),
 			Cwd: build(e.instance.Path.relString()), Env: envVarsVCS}),
 		Env: envVarsVCS, Inputs: na.inputList(inputs[0], inputs[1:]...), Outputs: na.vfsList(outs...),
-		KV: &pbKV, ForeignDepRefs: na.refList(protocRef, pluginRef),
+		InputClosures: views,
+		KV:            &pbKV, ForeignDepRefs: na.refList(protocRef, pluginRef),
 	})
 
 	for _, out := range outs {

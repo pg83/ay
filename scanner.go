@@ -84,6 +84,9 @@ type IncludeScanner struct {
 	noResolve      bool
 	unresolved     *IncludeScanner
 	asmContexts    map[uint32]*IncludeScanner
+
+	sourceFiles     *SourceFileGraph
+	sourceFactsOnly bool
 }
 
 type searchTierHotEntry struct {
@@ -121,6 +124,7 @@ func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
 }
 
 func (s *IncludeScanner) putClosure(v VFS, cl Closure) {
+	cl.scanner = s
 	s.scanCache.put2(v, cl)
 }
 
@@ -182,9 +186,10 @@ func (s *IncludeScanner) reportClosureDiagnostics(input VFS, cl Closure) {
 
 func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), buckets *BucketCache) *IncludeScanner {
 	s := &IncludeScanner{
-		sysincl: newSysinclCtx(sysincl),
-		parsers: parsers,
-		onWarn:  onWarn,
+		sysincl:     newSysinclCtx(sysincl),
+		parsers:     parsers,
+		sourceFiles: &SourceFileGraph{},
+		onWarn:      onWarn,
 
 		buckets:        buckets,
 		closureScratch: make([]VFS, closureAllocHint),
@@ -201,6 +206,7 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 
 // Unresolved module contexts share lexical parses and producer facts, but must
 // not publish suppressed include closures into the resolving scanner's cache.
+// Established ordinary source-file edges remain shared graph facts.
 func (s *IncludeScanner) withoutIncludeResolution() *IncludeScanner {
 	if s.unresolved == nil {
 		u := newIncludeScannerWith(s.parsers, nil, s.onWarn, s.buckets)
@@ -208,6 +214,7 @@ func (s *IncludeScanner) withoutIncludeResolution() *IncludeScanner {
 		u.sysincl = s.sysincl
 		u.codegen = s.codegen
 		u.moduleByRef = s.moduleByRef
+		u.sourceFiles = s.sourceFiles
 		u.noResolve = true
 		s.unresolved = u
 	}
@@ -511,6 +518,12 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 	s := sc.scanner
 
+	if s.sourceFactsOnly {
+		children, _ := s.sourceFiles.children.get(abs)
+
+		return ScannedChildren{Paths: children}
+	}
+
 	if cached, ok := s.scanCache.get1(abs); ok {
 		return cached
 	}
@@ -535,6 +548,13 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 
 	if k > 0 {
 		children = block[:k]
+	}
+
+	// Ordinary SourceFile edges belong to the configuration's file graph.
+	// Suppressed lexical resolution never establishes an empty owner there.
+	if abs.isSource() && !s.noResolve {
+		assert(s.sourceFiles.final == nil, "source file edges established after finalization")
+		s.sourceFiles.children.put(abs, children)
 	}
 
 	return s.putChildren(abs, children, diagnostics)

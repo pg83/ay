@@ -186,7 +186,7 @@ class ResolveProtoTest(unittest.TestCase):
         self.assertIn("$(S)/parcel/imported.gzt", consumer["inputs"])
         self.assertIn(f"$(S)/{STOCK}/google/protobuf/leaf.proto", consumer["inputs"])
 
-    def test_disabled_and_enabled_modules_share_lexical_source_without_cache_poisoning(self):
+    def test_disabled_context_observes_shared_edges_without_poisoning_enabled_resolution(self):
         # Both UNION roots retain CLI order; both consume parcel/catalog.gzt.
         for order in (("muted", "parcel"), ("parcel", "muted")):
             with self.subTest(order=order):
@@ -200,7 +200,7 @@ class ResolveProtoTest(unittest.TestCase):
                 disabled = lib.node_by_output(graph, "$(B)/muted/muted.bin")
                 leaf = f"$(S)/{STOCK}/google/protobuf/leaf.proto"
                 self.assertIn(leaf, enabled["inputs"])
-                self.assertNotIn(leaf, disabled["inputs"])
+                self.assertIn(leaf, disabled["inputs"])
 
     def test_disabled_resolution_preserves_explicit_generated_input_edges(self):
         files = fixture("")

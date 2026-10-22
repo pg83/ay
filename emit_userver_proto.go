@@ -261,7 +261,8 @@ func (e *EmitContext) emitUserverProtoNode(batch UserverProtoBatch, file Userver
 	args := []ANY{protoc.any()}
 	inputs := [][]VFS{na.vfsList(protoc, tool, src)}
 
-	inputs = append(inputs, e.scanner.walkClosure(src, e.d.scanCtx, scanDomainProto).bucketList()...)
+	view := e.scanner.walkClosure(src, e.d.scanCtx, scanDomainProto)
+	inputs = append(inputs, view.bucketList()...)
 
 	kv := &userverGrpcKV
 	cwd := bldRootDirVFS
@@ -308,6 +309,6 @@ func (e *EmitContext) emitUserverProtoNode(batch UserverProtoBatch, file Userver
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Cwd: cwd, Env: envVarsVCS}),
 		Env:      envVarsVCS, Inputs: na.inputList(inputs[0], inputs[1:]...),
-		Outputs: outputs, KV: kv, ForeignDepRefs: na.refList(protocRef, toolRef),
+		InputClosures: []Closure{view}, Outputs: outputs, KV: kv, ForeignDepRefs: na.refList(protocRef, toolRef),
 	}, ref)
 }

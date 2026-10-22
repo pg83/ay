@@ -145,7 +145,8 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 		cwd = bldRootDirVFS
 	}
 
-	closure := e.scanner.walkClosure(protoSrc, d.scanCtx, scanDomainProto).bucketList()
+	view := e.scanner.walkClosure(protoSrc, d.scanCtx, scanDomainProto)
+	closure := view.bucketList()
 	inputs := na.inputs.alloc(2 + len(closure))[:0]
 
 	inputs = append(inputs, na.vfsList(toolPaths...), na.vfsList(goProtoWrapperVFS, protoSrc))
@@ -157,6 +158,7 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 		Cmds:           na.cmdList(Cmd{CmdArgs: cmd, Cwd: cwd, Env: envVarsVCS}),
 		Env:            envVarsVCS,
 		Inputs:         InputChunks(inputs[:len(inputs):len(inputs)]),
+		InputClosures:  []Closure{view},
 		Outputs:        na.vfsList(outs...),
 		KV:             &pbKV,
 		ForeignDepRefs: na.noderefs.list(tools...),

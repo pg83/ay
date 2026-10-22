@@ -221,13 +221,14 @@ func (e *EmitContext) emitGoCopyWithContext(srcRel ANY, dstVFS VFS, domain ScanD
 		args := na.anyList(srcVFS.any(), dstVFS.any())
 
 		node := Node{
-			Platform:  instance.Platform,
-			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(goCgoCopyCmdHead, args), Env: goVcsEnv}),
-			Env:       goVcsEnv,
-			Inputs:    na.inputList(block[:k:k]),
-			KV:        &cpKV,
-			Outputs:   na.vfsList(dstVFS),
-			Resources: usesPython3,
+			Platform:      instance.Platform,
+			Cmds:          na.cmdList(Cmd{CmdArgs: na.chunkList(goCgoCopyCmdHead, args), Env: goVcsEnv}),
+			Env:           goVcsEnv,
+			Inputs:        na.inputList(block[:k:k]),
+			InputClosures: []Closure{cv},
+			KV:            &cpKV,
+			Outputs:       na.vfsList(dstVFS),
+			Resources:     usesPython3,
 		}
 
 		e.emitReservedNode(node, ref)
@@ -373,11 +374,12 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 			cflagsStr,
 			srcsBlock,
 		), Env: env, Cwd: srcRootDirVFS}),
-		Env:       env,
-		Inputs:    na.inputList(inputs[:ni:ni]),
-		KV:        &goToolKV,
-		Outputs:   outputs[:no:no],
-		Resources: goToolResources(na, e.peers.ResourceGlobals),
+		Env:           env,
+		Inputs:        na.inputList(inputs[:ni:ni]),
+		InputClosures: append([]Closure(nil), cvs...),
+		KV:            &goToolKV,
+		Outputs:       outputs[:no:no],
+		Resources:     goToolResources(na, e.peers.ResourceGlobals),
 	}
 
 	ref := e.emitNode(node)

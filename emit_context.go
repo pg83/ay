@@ -350,6 +350,8 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 		return
 	}
 
+	node.InputClosures = append(node.InputClosures, extra...)
+
 	dedupers.with(func(dd *DeDuper) {
 		bound := len(node.Inputs)
 

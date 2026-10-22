@@ -35,7 +35,7 @@ func ragel6OutName(base string) string {
 	return stem + ragel6DefaultOutExt
 }
 
-func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ANY, closure []VFS, id NodeRef) {
+func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ANY, closure []VFS, view Closure, id NodeRef) {
 	instance := e.instance
 	na := e.ctx.na
 	outVFS := ragel6OutVFS(instance, srcRel)
@@ -67,6 +67,7 @@ func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6B
 			Env: env}),
 		Env:            env,
 		Inputs:         na.inputList(head2, na.vfsList(closure...)),
+		InputClosures:  []Closure{view},
 		Outputs:        na.vfsList(outVFS),
 		KV:             &r6KV,
 		ForeignDepRefs: na.refList(ragel6LD),
@@ -100,9 +101,10 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 	ragel6Flags := ctx.na.anyList(d.cc.Ragel6Flags...)
 
 	pe := func() {
-		rl6Closure := scanner.walkClosure(rl6SourceVFS, scanCtx, scanDomainCC).collect(ctx.na, func(VFS) bool { return true })
+		view := scanner.walkClosure(rl6SourceVFS, scanCtx, scanDomainCC)
+		rl6Closure := view.collect(ctx.na, func(VFS) bool { return true })
 
-		e.emitR6(srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, r6Ref)
+		e.emitR6(srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, view, r6Ref)
 	}
 
 	pending := e.pendingEmit(pe)

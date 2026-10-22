@@ -106,6 +106,7 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
 			Env:            envVarsVCS,
 			Inputs:         inputs,
+			InputClosures:  []Closure{cv},
 			Outputs:        na.vfsList(hdr, cpp),
 			KV:             &swigJNIKV,
 			ForeignDepRefs: na.refList(swigRef),
@@ -191,7 +192,10 @@ func (ctx *GenCtx) javaEmitSwigJsrc(jm *JavaModule, src string, srcVFS, jsrc VFS
 		}
 	}
 
-	for _, bucket := range scanner.walkClosure(srcVFS, scanCtx, scanDomainSwig).bucketList() {
+	view := scanner.walkClosure(srcVFS, scanCtx, scanDomainSwig)
+	b.views = append(b.views, view)
+
+	for _, bucket := range view.bucketList() {
 		b.input(bucket...)
 
 		if !bucket[0].isBuild() {

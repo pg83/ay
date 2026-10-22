@@ -299,6 +299,7 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 	ctx.configureDependencies()
 	ctx.emitDiscoveredModuleTests()
 	ctx.flushFbsContextBindings()
+	ctx.finalizeSourceInputs()
 
 	if ctx.buckets.h1Mismatches > 0 {
 		onWarn(Warn{

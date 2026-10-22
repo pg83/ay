@@ -2,8 +2,9 @@ package main
 
 var cpKV = KV{P: pkCP, PC: pcLightCyan}
 
-func (e *EmitContext) emitCPWithInputs(src VFS, dst VFS, extraInputs []VFS, id NodeRef, tc ModuleToolchain, scripts ScriptDeps) {
+func (e *EmitContext) emitCPWithInputs(src VFS, dst VFS, extraInputs []VFS, id NodeRef, tc ModuleToolchain, scripts ScriptDeps, views ...Closure) {
 	node := composeCPNode(e.instance, src, dst, extraInputs, tc, scripts, e.ctx.na)
+	node.InputClosures = views
 
 	e.emitReservedNode(node, id)
 }

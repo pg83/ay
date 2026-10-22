@@ -190,6 +190,7 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 		Env:            env,
 		ForeignDepRefs: na.refList(flatcLDRef),
 		Inputs:         InputChunks(inputs[:len(inputs):len(inputs)]),
+		InputClosures:  []Closure{transitiveImports},
 		KV:             v.kv,
 		Outputs:        na.vfsList(headerVFS, cppVFS, bfbsVFS),
 		Resources:      usesPython3,
