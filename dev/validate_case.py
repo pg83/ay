@@ -146,6 +146,7 @@ class CaseRunner:
             "target": self.spec["target"],
             "status": "XFAIL" if allow_failure else "FAIL",
             "exact": False,
+            "xfail": self.spec.get("xfail", False),
             "phase": phase,
             "detail": f"{phase} exited {returncode}",
             "returncode": returncode,

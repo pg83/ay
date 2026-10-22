@@ -168,6 +168,21 @@ class ValidationTest(unittest.TestCase):
         self.assertEqual(result["parity"]["matched"], 0)
         self.assertTrue((output / "diff-sample.txt").is_file())
 
+    def test_generation_failure_retains_xfail_policy(self):
+        for policy, expected in ((False, "FAIL"), ("auto", "FAIL"), (True, "XFAIL")):
+            with self.subTest(policy=policy):
+                result, output = self.run_case(
+                    '{"node":1}\n', xfail=policy,
+                    command=["ya", "invalid-validation-command"],
+                )
+                self.assertEqual(result["status"], expected)
+                self.assertEqual(result["phase"], "generate")
+                self.assertEqual(result["xfail"], policy)
+                self.assertFalse(result["exact"])
+                self.assertNotEqual(result["returncode"], 0)
+                self.assertNotIn("parity", result)
+                self.assertNotIn("normalize", self.fake_ay_calls(output))
+
     def test_resource_download_checks_content_hash(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
