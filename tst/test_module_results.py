@@ -5,6 +5,24 @@ from test_proto_targets import target_files
 
 
 class ModuleResultsTest(unittest.TestCase):
+    def test_conditional_module_declaration_keeps_the_selected_result_in_test_mode(self):
+        files = {
+            'mod/ya.make': (
+                'IF(SELECT_EXECUTABLE)\nPROGRAM(selected)\nELSE()\nLIBRARY(selected)\nENDIF()\n'
+                f'{lib.BARE_MODULE}SRCS(local.cpp)\nEND()\n'
+            ),
+            'mod/local.cpp': 'int selected;\n',
+        }
+        for flag, output in (('yes', 'selected'), ('no', 'libselected.a')):
+            with self.subTest(flag=flag):
+                graph = lib.make(files, 'mod', '-t', '-DSELECT_EXECUTABLE=' + flag,
+                                 '--strip-packages-from-results')
+                selected = lib.node_by_output(graph, '$(B)/mod/' + output)
+                self.assertIn(selected['uid'], graph['result'])
+                other = 'libselected.a' if flag == 'yes' else 'selected'
+                self.assertFalse(any('$(B)/mod/' + other in node['outputs']
+                                     for node in graph['graph']))
+
     def test_recursed_libraries_expose_local_and_global_archives(self):
         files = {
             'root/ya.make': f'LIBRARY()\n{lib.BARE_MODULE}END()\nRECURSE(child)\n',
