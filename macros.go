@@ -1,12 +1,16 @@
 package main
 
 import (
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 )
 
-var DefaultIfEnv = makeDefaultIfEnv()
+var (
+	DefaultIfEnv = makeDefaultIfEnv()
+	ifExprRe     = regexp.MustCompile(`\\(?s:.)|\$([[:alnum:]]*)\{([^${}]+)\}`)
+)
 
 var intSTR = func() [1024]STR {
 	var a [1024]STR
@@ -62,17 +66,19 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	case ckString:
 		throwFmt("macros: bare string %q cannot be evaluated as a boolean condition", n.Name)
 	case ckEq:
+		return evalIfAtomString(nodes, n.L, env, true) == evalIfAtomString(nodes, n.R, env, false)
+	case ckConfEq:
 		return evalEq(nodes, n, env)
-	case ckLt:
+	case ckLt, ckGt:
 		return evalLt(nodes, n, env)
 	case ckConfLt:
 		return evalConfLt(nodes, n, env)
 	case ckStartsWith:
-		return strings.HasPrefix(evalAtomString(nodes, n.L, env, true), evalAtomString(nodes, n.R, env, false))
+		return strings.HasPrefix(evalIfAtomString(nodes, n.L, env, true), evalIfAtomString(nodes, n.R, env, false))
 	case ckVersionCmp:
 		return evalVersionCmp(nodes, n, env)
 	case ckMatches:
-		return throw2(regexp.MatchString(evalAtomString(nodes, n.R, env, false), evalAtomString(nodes, n.L, env, true)))
+		return throw2(regexp.MatchString(evalIfAtomString(nodes, n.R, env, false), evalIfAtomString(nodes, n.L, env, true)))
 	case ckUnsupportedOp:
 		throwFmt("macros: unsupported IF operator %q", n.Name)
 	case ckDefined:
@@ -96,6 +102,53 @@ type AtomVal struct {
 	num   int
 	str   string
 	isNum bool
+}
+
+func evalIfAtomString(nodes []CondNode, i int32, env Environment, variable bool) string {
+	n := &nodes[i]
+
+	switch n.Kind {
+	case ckIdent:
+		if variable && n.Name != "yes" && n.Name != "no" {
+			return env.string(n.Env)
+		}
+
+		return n.Name
+	case ckString:
+		return evalIfExpr(n.Name, env)
+	case ckInt:
+		return n.Name
+	}
+
+	throwFmt("macros: unexpected cond kind %d in comparator operand position", n.Kind)
+
+	return ""
+}
+
+func evalIfExpr(value string, env Environment) string {
+	return ifExprRe.ReplaceAllStringFunc(value, func(expr string) string {
+		if expr[0] == '\\' {
+			return expr[1:]
+		}
+
+		parts := ifExprRe.FindStringSubmatch(expr)
+		macro, key := parts[1], parts[2]
+
+		switch macro {
+		case "":
+			if strings.HasSuffix(key, resourceGlobalSuffix) {
+				return expr
+			}
+
+			value, _ := env.lookup(key)
+
+			return value
+		case "ENV":
+			return os.Getenv(key)
+		}
+
+		return expr
+	})
 }
 
 func evalAtomNode(nodes []CondNode, i int32, env Environment, variable bool) AtomVal {
@@ -141,7 +194,7 @@ func evalAtomNode(nodes []CondNode, i int32, env Environment, variable bool) Ato
 }
 
 func evalVersionCmp(nodes []CondNode, n *CondNode, env Environment) bool {
-	cmp := compareVersions(evalAtomString(nodes, n.L, env, true), evalAtomString(nodes, n.R, env, false))
+	cmp := compareVersions(evalIfAtomString(nodes, n.L, env, true), evalIfAtomString(nodes, n.R, env, false))
 
 	switch n.Name {
 	case "VERSION_LT":
@@ -208,18 +261,18 @@ func evalEq(nodes []CondNode, n *CondNode, env Environment) bool {
 }
 
 func evalLt(nodes []CondNode, n *CondNode, env Environment) bool {
-	l := evalAtomNode(nodes, n.L, env, true)
-	r := evalAtomNode(nodes, n.R, env, false)
+	l := ifInteger(evalIfAtomString(nodes, n.L, env, true))
+	r := ifInteger(evalIfAtomString(nodes, n.R, env, false))
 
-	return l.integer() < r.integer()
-}
-
-func (v AtomVal) integer() int {
-	if v.isNum {
-		return v.num
+	if n.Kind == ckGt {
+		return l > r
 	}
 
-	n, err := strconv.Atoi(v.str)
+	return l < r
+}
+
+func ifInteger(value string) int {
+	n, err := strconv.Atoi(value)
 
 	if err != nil {
 		return 0

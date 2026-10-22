@@ -221,7 +221,14 @@ func parseConfCondition(rel, expr string) []CondNode {
 	}
 
 	for i := range p.condScratch {
-		if p.condScratch[i].Kind == ckLt {
+		switch p.condScratch[i].Kind {
+		case ckEq:
+			p.condScratch[i].Kind = ckConfEq
+		case ckGt:
+			p.condScratch[i].L, p.condScratch[i].R = p.condScratch[i].R, p.condScratch[i].L
+
+			fallthrough
+		case ckLt:
 			p.condScratch[i].Kind = ckConfLt
 		}
 	}

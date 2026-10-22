@@ -101,6 +101,8 @@ const (
 	ckDefined
 	ckUnsupportedOp
 	ckConfLt
+	ckConfEq
+	ckGt
 )
 
 const (
@@ -2237,7 +2239,7 @@ func (c *CondParser) parseCmp() int32 {
 
 		c.rejectChainedCmp(t)
 
-		return c.emit(CondNode{Kind: ckLt, L: right, R: left})
+		return c.emit(CondNode{Kind: ckGt, L: left, R: right})
 	case tokLe:
 		c.consume()
 
@@ -2245,7 +2247,7 @@ func (c *CondParser) parseCmp() int32 {
 
 		c.rejectChainedCmp(t)
 
-		lt := c.emit(CondNode{Kind: ckLt, L: right, R: left})
+		lt := c.emit(CondNode{Kind: ckGt, L: left, R: right})
 
 		return c.emit(CondNode{Kind: ckNot, L: lt})
 	case tokGe:
@@ -2314,7 +2316,7 @@ func (c *CondParser) parseAtom() int32 {
 			n = n*10 + int(value[i]-'0')
 		}
 
-		return c.emit(CondNode{Kind: ckInt, Ival: n})
+		return c.emit(CondNode{Kind: ckInt, Name: value, Ival: n})
 	}
 
 	value := t.string()
