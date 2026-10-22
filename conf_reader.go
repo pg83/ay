@@ -39,9 +39,10 @@ type ConfStmt struct {
 }
 
 type ConfFile struct {
-	rel      string
-	branches []ConfBranch
-	stmts    []ConfStmt
+	rel         string
+	branches    []ConfBranch
+	stmts       []ConfStmt
+	styleMacros map[string]*ConfStyleMacro
 }
 
 func readConfFile(rel, text string) *ConfFile {
@@ -51,8 +52,11 @@ func readConfFile(rel, text string) *ConfFile {
 	skipped := []bool{false}
 	previous := 0
 	pending := ""
+	lines := strings.Split(text, "\n")
+	macroStarts := map[int]int{}
+	macroHeaders := map[int]string{}
 
-	for _, raw := range strings.Split(text, "\n") {
+	for lineNo, raw := range lines {
 		line := strings.TrimSpace(raw)
 
 		if pending != "" {
@@ -74,6 +78,11 @@ func readConfFile(rel, text string) *ConfFile {
 			}
 
 			previous = stack[len(stack)-1]
+
+			if start, ok := macroStarts[previous]; ok {
+				conf.addStyleMacro(macroHeaders[previous], lines[start:lineNo])
+			}
+
 			stack = stack[:len(stack)-1]
 			line = strings.TrimSpace(line[1:])
 		}
@@ -133,6 +142,12 @@ func readConfFile(rel, text string) *ConfFile {
 		skipped = append(skipped, skip)
 		selects = append(selects, selectVar)
 		stack = append(stack, len(conf.branches)-1)
+
+		if strings.HasPrefix(header, "macro ") {
+			macroStarts[len(conf.branches)-1] = lineNo + 1
+			macroHeaders[len(conf.branches)-1] = header
+		}
+
 		previous = 0
 	}
 

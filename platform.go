@@ -58,6 +58,7 @@ type Platform struct {
 	BuildInfoKV           KV
 	Linker                LinkerFlags
 	Sysincl               []string
+	customStyleMacros     map[string]*ConfStyleMacro
 	LinkPreludeExtra      []ANY
 	ClangVer              string
 	ClangVerSTR           STR
@@ -217,7 +218,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.Go = newGoStd(goStdVersion)
 	p.ifEnv = buildPlatformIfEnv(p)
 	p.Linker = pc.Linker.flags(p)
-	p.Sysincl = sysinclFiles(pc.Parsers, root, p.ifEnv)
+	p.Sysincl, p.customStyleMacros = sysinclFiles(pc.Parsers, root, p.ifEnv)
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
 	p.CompileCFlags = composeCompileCFlags(p.ifEnv, flags, p.DebugInfoFlags)

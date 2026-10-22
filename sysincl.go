@@ -65,7 +65,9 @@ func (pm *IncludeParserManager) confFile(rel string) *ConfFile {
 	return f
 }
 
-func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environment) []string {
+func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environment) ([]string, map[string]*ConfStyleMacro) {
+	macros := map[string]*ConfStyleMacro{}
+
 	var (
 		stmts   []ConfStmtRef
 		walking []string
@@ -73,6 +75,10 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 	)
 
 	walk = func(f *ConfFile) {
+		for name, macro := range f.styleMacros {
+			macros[name] = macro
+		}
+
 		for _, s := range f.stmts {
 			if s.name != "" {
 				stmts = append(stmts, ConfStmtRef{file: f, stmt: s})
@@ -128,7 +134,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 		}
 	}
 
-	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env))
+	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env)), macros
 }
 
 func (pm *IncludeParserManager) sysinclRecords(rel string, onWarn func(Warn)) []SysIncl {

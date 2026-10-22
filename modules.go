@@ -1850,6 +1850,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 
 				d.recurses = appendConfigurationRecurses(d.recurses, modulePath, expanded, platform)
+
+				if applyCustomStyle(fs, modulePath, expanded, d, env, platform) {
+					continue
+				}
+
 				applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
 
 				if perlMask != 0 {

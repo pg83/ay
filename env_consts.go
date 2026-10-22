@@ -195,6 +195,7 @@ var (
 	envTestOutRoot                  = internEnv("TEST_OUT_ROOT")
 	envTestSourceRoot               = internEnv("TEST_SOURCE_ROOT")
 	envTestWorkRoot                 = internEnv("TEST_WORK_ROOT")
+	envTidy                         = internEnv("TIDY")
 	envTraverseDepends              = internEnv("TRAVERSE_DEPENDS")
 	envTraverseRecurse              = internEnv("TRAVERSE_RECURSE")
 	envTraverseRecurseForTests      = internEnv("TRAVERSE_RECURSE_FOR_TESTS")

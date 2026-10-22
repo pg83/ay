@@ -331,7 +331,7 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 			}
 		}
 
-		if check.Config == "" {
+		if check.Config == "" && check.ConfigMap != "" {
 			config, ok := e.ctx.parsers.notsJSON(check.ConfigMap)[check.Name].(string)
 
 			if !ok {
@@ -377,7 +377,9 @@ func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *Te
 		s.relatedPaths = append(s.relatedPaths, source(file).string())
 	}
 
-	s.relatedPaths = append(s.relatedPaths, source(check.Config).string())
+	if check.Config != "" {
+		s.relatedPaths = append(s.relatedPaths, source(check.Config).string())
+	}
 
 	for _, config := range check.ExtraConfigs {
 		s.relatedPaths = append(s.relatedPaths, source(config).string())
@@ -396,7 +398,9 @@ func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *Te
 			args = append(args, "--depends", dependency)
 		}
 
-		args = append(args, "--config", source(check.Config).string())
+		if check.Config != "" {
+			args = append(args, "--config", source(check.Config).string())
+		}
 
 		for _, config := range check.ExtraConfigs {
 			args = append(args, "--config", source(config).string())
