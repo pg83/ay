@@ -83,6 +83,10 @@ func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair,
 // Backslash escapes one character; only $name{key} references are recognized.
 // Reserved variables and resource globals remain for the command renderer.
 func expandResourceArgument(value string, env Environment) string {
+	return expandMakeExpression(value, env, keepDeferredVar)
+}
+
+func expandMakeExpression(value string, env Environment, reserved func(string) bool) string {
 	var out strings.Builder
 	for i := 0; i < len(value); {
 		if value[i] == '\\' && i+1 < len(value) {
@@ -101,7 +105,7 @@ func expandResourceArgument(value string, env Environment) string {
 					end += j + 1
 					macro, key := value[i+1:j], value[j+1:end]
 					replacement, _ := env.lookup(key)
-					expand := macro == "" && !keepDeferredVar(key)
+					expand := macro == "" && !reserved(key)
 					if macro == "ENV" {
 						replacement, expand = os.Getenv(key), true
 					}

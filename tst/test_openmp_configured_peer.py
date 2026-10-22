@@ -96,14 +96,26 @@ class OpenMPConfiguredPeerTest(unittest.TestCase):
                 self.assertFalse(any(f"$(B)/{ENGINE}/libparallel-kite.a" in n["outputs"]
                                      for n in graph["graph"]))
 
-    def test_emitted_configuration_expands_nonliteral_switch(self):
-        for value, enabled in (("yes", True), ("no", False)):
-            with self.subTest(value=value):
-                files = fixture("SET(USE_OPENMP ${PARALLEL_CHOICE})\n")
+    def test_source_set_substitutes_once_before_the_raw_when_comparison(self):
+        # Pinned TEvalContext::SetStatement calls EvalExpr once. The when
+        # calculator then reads Eval1, even if get_subst would produce yes.
+        for choice, body, enabled in (
+            ("yes", "SET(USE_OPENMP ${PARALLEL_CHOICE})\n", True),
+            ("no", "SET(USE_OPENMP ${PARALLEL_CHOICE})\n", False),
+            ("$PARALLEL_DEFAULT", "SET(USE_OPENMP ${PARALLEL_CHOICE})\n", False),
+            ("${PARALLEL_DEFAULT}", "SET(USE_OPENMP ${PARALLEL_CHOICE})\n", False),
+            ("yes", "SET(USE_OPENMP $PARALLEL_CHOICE)\n", False),
+            ("yes", "SET(USE_OPENMP ${PARALLEL_CHOICE})\nSET(PARALLEL_CHOICE no)\n", True),
+            ("$PARALLEL_DEFAULT", "SET(CAPTURED ${PARALLEL_CHOICE})\nSET(USE_OPENMP ${CAPTURED})\n", False),
+            ("$PARALLEL_DEFAULT", "SET(USE_OPENMP yes)\nSET(USE_OPENMP ${PARALLEL_CHOICE})\n", False),
+            ("no", "SET(USE_OPENMP ${UNBOUND})\nSET(UNBOUND yes)\n", False),
+        ):
+            with self.subTest(choice=choice, body=body):
+                files = fixture(body)
                 files["build/ymake_conf.py"] = lib.ymake_conf(
-                    extra="PARALLEL_CHOICE=$PARALLEL_DEFAULT\nPARALLEL_DEFAULT=yes\n"
+                    extra=f"PARALLEL_CHOICE={choice}\nPARALLEL_DEFAULT=yes\n"
                 )
-                graph = lib.make(files, "worker", f"-DPARALLEL_DEFAULT={value}")
+                graph = lib.make(files, "worker")
                 self.assertEqual(all(flag in args(graph) for flag in OPENMP_FLAGS), enabled)
 
     def test_configured_switch_and_local_override(self):
@@ -120,7 +132,8 @@ class OpenMPConfiguredPeerTest(unittest.TestCase):
                             "LIBRARY()\n", "LIBRARY()\nSET(USE_OPENMP no)\n", 1
                         )
                     graph = lib.make(files, "worker", f"-D{option}={value}")
-                    self.assertEqual(all(flag in args(graph) for flag in OPENMP_FLAGS), value == "yes")
+                    self.assertEqual(all(flag in args(graph) for flag in OPENMP_FLAGS),
+                                     option == "USE_OPENMP" and value == "yes")
                     files["worker/ya.make"] = library("SET(USE_OPENMP no)\nSRCS(plain.cpp)\n")
                     graph = lib.make(files, "worker", f"-D{option}={value}")
                     self.assertFalse(any(flag in args(graph) for flag in OPENMP_FLAGS))

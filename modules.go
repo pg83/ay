@@ -849,7 +849,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	// ymake.core.conf's conditional PEERDIR variable is applied before
 	// explicit peer statements, using the final module variable values.
-	if expandConfScalar(env.string(envUSE_OPENMP), env) == "yes" {
+	if env.string(envUSE_OPENMP) == "yes" {
 		d.peerdirs = append([]ANY{internStr("contrib/libs/openmp").any()}, d.peerdirs...)
 	}
 
@@ -1524,7 +1524,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 		case *SetStmt:
 
-			value := expandAssignedScalarVarRef(v.Value, env)
+			value := expandSourceScalarVarRef(v.Value, env)
 			perlMask := perlInputMask(v.NameEnv)
 			perlChanged := perlMask != 0 && env.string(v.NameEnv) != value
 
@@ -1634,7 +1634,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.peerdirs = append(d.peerdirs, internStr(enumSerPeer).any())
 			}
 		case *DefaultVarStmt:
-			value := expandAssignedScalarVarRef(v.Value, env)
+			value := expandSourceScalarVarRef(v.Value, env)
 			bound := env.hasBindingID(v.NameEnv)
 
 			if d.defaultVars == nil {
@@ -1817,6 +1817,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn, platform)
 		case *UnknownStmt:
 			if assignment := declarativeMacroAssignment(v, d.multimodule == tokPackage); assignment != nil {
+				// PrepareMacroCall substitutes the configuration macro body
+				// deeply before its SET reaches EvalExpr.
+				assignment.Value = expandAssignedScalarVarRef(assignment.Value, env)
 				recordHandledMacro(v.Name, expandStmtTokens(v.Args, env))
 				collectStmts(ctx, modulePath, kind, language, []Stmt{assignment}, env, d, onWarn, platform)
 
@@ -4908,6 +4911,14 @@ func expandAssignedScalarVarRef(s string, env Environment) string {
 	env.rebind(envCURDIR, curdir)
 
 	return value
+}
+
+// Direct SET/DEFAULT use EvalExpr once. Configuration macro bodies instead
+// pass through SubstMacroDeeply before their assignments are evaluated.
+func expandSourceScalarVarRef(s string, env Environment) string {
+	return expandMakeExpression(s, env, func(name string) bool {
+		return !tokenExpandAssignment.clearsUnbound(name) || strings.HasSuffix(name, resourceGlobalSuffix)
+	})
 }
 
 func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData, group int) {
