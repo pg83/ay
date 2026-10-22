@@ -73,6 +73,27 @@ class GoModuleNamesTest(unittest.TestCase):
             producer = self.probe(graph, directory, name, header)
             self.consumer(graph, directory, name + ".a", producer)
 
+    def test_inherited_configuration_name_does_not_define_the_module_name(self):
+        for inherited in ("", "ForeignName"):
+            for header, before, name, header_name in (
+                ("GO_LIBRARY()", "", "sage", ""),
+                ("GO_LIBRARY(Thyme)", "", "Thyme", "Thyme"),
+                ("GO_LIBRARY(Ignored)", "SET(REALPRJNAME Rosemary)\n", "Rosemary", "Rosemary"),
+            ):
+                with self.subTest(inherited=inherited, header=header, before=before):
+                    files = world()
+                    go_module(files, "library/go/core/resource/cc", module="GO_PROGRAM")
+                    module(files, "garden/sage", header, before, "RESOURCE(payload.txt first)\n")
+                    graph = lib.make(files, "garden/sage", "-DREALPRJNAME=" + inherited)
+                    producer = self.probe(graph, "garden/sage", name, header_name)
+                    self.consumer(graph, "garden/sage", name + ".a", producer)
+                    self.assertEqual(self.resource_packages(graph, "garden/sage"), [name])
+                    tool = lib.node_by_output(graph, "$(B)/library/go/core/resource/cc/cc")
+                    resource = next(node for node in graph["graph"]
+                                    if node["outputs"][0].startswith("$(B)/garden/sage/resource."))
+                    self.assertEqual(resource["cmds"][0]["cmd_args"][0], tool["outputs"][0])
+                    self.assertIn(tool["uid"], resource["deps"])
+
     def test_prefix_is_separate_and_first_name_wins(self):
         files = world()
         module(files, "grove/elm", "GO_LIBRARY(PREFIX first_ Canopy ignored PREFIX ${STEM})", "SET(STEM last_)\n")

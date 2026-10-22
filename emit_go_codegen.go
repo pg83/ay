@@ -397,6 +397,9 @@ func initGoModuleName(modulePath string, env Environment, d *ModuleData, onWarn 
 	stmt := *d.moduleStmt
 	args := expandStmtTokens(stmt.Args, env)
 	var tail []ANY
+	// TVars::Contains deliberately checks the module map without consulting
+	// the configuration base. Configuration may declare REALPRJNAME as empty.
+	_, hasLocalName := d.setVars[envREALPRJNAME.str()]
 
 	for i := 0; i < len(args); i++ {
 		if args[i] == kwPREFIX.any() {
@@ -411,14 +414,15 @@ func initGoModuleName(modulePath string, env Environment, d *ModuleData, onWarn 
 			continue
 		}
 
-		if !env.hasBindingID(envREALPRJNAME) {
+		if !hasLocalName {
 			env.setStringID(envREALPRJNAME, args[i].str())
+			hasLocalName = true
 		} else {
 			tail = append(tail, args[i])
 		}
 	}
 
-	if env.hasBindingID(envREALPRJNAME) {
+	if hasLocalName {
 		env.setString(envGO_PACKAGE_VALUE, expandScalarVarRef(env.string(envREALPRJNAME), env))
 	} else {
 		env.setString(envREALPRJNAME, path.Base(modulePath))
