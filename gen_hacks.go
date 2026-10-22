@@ -112,7 +112,7 @@ func insertOwnSbomComponent(refs []NodeRef, paths []VFS, ownRef NodeRef, ownPath
 
 func applyDeferredPeerOrder(name TOK, allPeers []string, peerKinds []int, allocatorExplicitPeers []string) ([]string, []int) {
 	switch name {
-	case tokPy2Program, tokPy3ProgramBin:
+	case tokPy3ProgramBin:
 		headP := make([]string, 0, len(allPeers))
 		headK := make([]int, 0, len(peerKinds))
 		tailP := make([]string, 0, 2)

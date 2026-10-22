@@ -147,14 +147,51 @@ class PythonPeerOrderTest(unittest.TestCase):
                 expected = [PYTEST, SQLITE, MAIN, TRACING, *extra, USERLIB, IMPORT_TEST]
                 self.assertEqual([peer for peer in peers if peer in expected], expected)
 
-    def test_py2_program_peers_its_runtime_before_user_peers(self):
+    def test_py2_program_keeps_interpreter_before_runtime_and_user_peers(self):
         graph = lib.make(fixture(), "py2")
         args = link_args(graph, "$(B)/py2/py2")
         self.assertEqual(
             link_group(args),
-            [JEMALLOC, PY2_MAIN, SUBPROCESS32, PY2_SQLITE, TRACING, USERLIB, IMPORT_TEST, PYTHON, RUNTIME],
+            [JEMALLOC, PYTHON, PY2_MAIN, SUBPROCESS32, PY2_SQLITE, TRACING, USERLIB, RUNTIME, IMPORT_TEST],
         )
         self.assertNotIn("-Wl,--strip-all", args)
+
+    def test_py2_interpreter_closure_precedes_shared_runtime_dependencies_in_each_context(self):
+        files = fixture()
+        graph_peers = {
+            "symbolic/shared": [],
+            "symbolic/symbols": ["symbolic/shared"],
+            "symbolic/base": [],
+            "symbolic/interpreter": ["symbolic/base"],
+            "symbolic/python3": [],
+        }
+        for directory, peers in graph_peers.items():
+            files[directory + "/ya.make"] = f"LIBRARY()\n{NO_PLATFORM}SRCS(source.cpp)\nPEERDIR({' '.join(peers)})\nEND()\n"
+            files[directory + "/source.cpp"] = "int value;\n"
+        files["contrib/libs/python/ya.make"] = (
+            f"PY23_LIBRARY()\n{NO_PLATFORM}NO_PYTHON_INCLUDES()\nSRCS(source.cpp)\n"
+            "IF(MODULE_TAG == \"PY2\")\nPEERDIR(symbolic/symbols symbolic/interpreter)\n"
+            "ELSE()\nPEERDIR(symbolic/python3)\nENDIF()\nEND()\n"
+        )
+        files["contrib/libs/python/source.cpp"] = "int python;\n"
+        files["library/python/runtime/main/ya.make"] = (
+            f"LIBRARY()\n{NO_PLATFORM}SRCS(main.cpp)\nPEERDIR(symbolic/interpreter)\nEND()\n"
+        )
+        files["library/python/runtime/main/main.cpp"] = "int runtime;\n"
+        files["native/ya.make"] = f"PROGRAM()\n{NO_PLATFORM}SRCS(main.cpp)\nPEERDIR(contrib/libs/python)\nEND()\n"
+        files["native/main.cpp"] = "int main(){return 0;}\n"
+        for targets in (("py2", "native"), ("native", "py2")):
+            with self.subTest(targets=targets):
+                graph = lib.make(files, *targets)
+                directories = [path.rsplit("/", 1)[0] for path in link_group(link_args(graph, "$(B)/py2/py2"))]
+                expected = ["symbolic/shared", "symbolic/symbols", "symbolic/base", "symbolic/interpreter",
+                            "contrib/libs/python", "library/python/runtime/main"]
+                self.assertEqual([directory for directory in directories if directory in expected], expected)
+                self.assertEqual(len(directories), len(set(directories)))
+                self.assertNotIn("symbolic/python3", directories)
+                native = link_group(link_args(graph, "$(B)/native/native"))
+                self.assertTrue(any(path.startswith("symbolic/python3/") for path in native))
+                self.assertFalse(any(path.startswith("symbolic/interpreter/") for path in native))
 
     def test_python_libraries_peer_contrib_python_unless_disabled(self):
         graph = lib.make(fixture(), "app")
