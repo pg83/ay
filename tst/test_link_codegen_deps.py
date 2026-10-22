@@ -145,13 +145,19 @@ class CodegenDepsTest(unittest.TestCase):
             with self.subTest(header=header):
                 self.assertIn(header, compile_node["inputs"])
 
-    def test_copy_into_source_root_is_rejected(self):
-        result = make_raw(fixture(), "srcdst")
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(
-            'CodegenRegistry: register of a source path "$(S)/srcdst/b.txt"',
-            result.stderr,
+    def test_source_root_destination_registers_a_build_output(self):
+        files = fixture()
+        files["srcdst/ya.make"] = files["srcdst/ya.make"].replace(
+            "SRCS(x.cpp)", "ADDINCL(${ARCADIA_BUILD_ROOT}/srcdst)\nSRCS(x.cpp)"
         )
+        files["srcdst/x.cpp"] = '#include "b.txt"\nint x;\n'
+        graph = lib.make(files, "srcdst")
+        copied = lib.node_by_output(graph, "$(B)/srcdst/b.txt")
+        compiled = lib.node_by_output(graph, "$(B)/srcdst/x.cpp.o")
+        self.assertIn("$(S)/srcdst/a.txt", copied["inputs"])
+        self.assertIn(copied["uid"], compiled["deps"])
+        self.assertIn("$(B)/srcdst/b.txt", compiled["inputs"])
+        self.assertFalse(any("$(S)/srcdst/b.txt" in n["outputs"] for n in graph["graph"]))
 
     def test_unproduced_build_source_compiles_without_producer_dep(self):
         graph = lib.make(fixture(), "unproduced")

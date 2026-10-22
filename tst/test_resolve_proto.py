@@ -100,6 +100,11 @@ class ResolveProtoTest(unittest.TestCase):
             "SET(DONT_RESOLVE_INCLUDES no)\n"
             f"ADDINCL(FOR proto ${{ARCADIA_ROOT}}/{STOCK})\n"
         ), "parcel")
+        # Include closure entries follow interning buckets, whose order can
+        # differ between CLI processes. Keep every input, including duplicates.
+        for graph in (macro, expanded):
+            for node in graph["graph"]:
+                node["inputs"] = sorted(node["inputs"])
         self.assertEqual(macro, expanded)
 
     def test_proto_paths_are_local_and_do_not_become_c_include_paths(self):
