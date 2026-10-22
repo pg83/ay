@@ -3,36 +3,40 @@ package main
 var bundleKV = KV{P: pkBN, PC: pcLightCyan}
 
 func (e *EmitContext) emitBundles() {
+	for _, b := range e.d.bundles {
+		e.emitBundle(b)
+	}
+}
+
+func (e *EmitContext) emitBundle(b BundleEntry) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	reg := e.codegen
 
-	for _, b := range d.bundles {
-		dst := copyFileOutputVFS(instance.Path.relString(), b.Name)
+	dst := copyFileOutputVFS(instance.Path.relString(), b.Name)
 
-		if reg.lookup(dst) != nil {
-			e.collectScriptOutput(dst)
+	if reg.lookup(dst) != nil {
+		e.collectScriptOutput(dst)
 
-			continue
-		}
-
-		src, srcRef, resolved := e.resolveBundleSource(b.Target)
-		ref := ctx.emit.reserve()
-
-		if b.Output != "" {
-			script := buildScriptsBundleOutputPy
-			args := ctx.na.anyList(d.tc.Python3.any(), script.any(), argResult.any(), src.any(), argName.any(), internStr(b.Output).any(), strOutput.any(), dst.any())
-
-			e.emitReservedNode(Node{Platform: instance.Platform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(args), Env: envVarsVCS}), Env: envVarsVCS, Inputs: ctx.na.inputList(ctx.na.vfsList(src, script)), Outputs: ctx.na.vfsList(dst), DepRefs: ctx.na.refList(srcRef), KV: &bundleKV, Resources: usesPython3}, ref)
-		} else {
-			e.emitBundleNode(d.tc.Python3, src, dst, b.Suffix, srcRef, resolved, ref)
-		}
-
-		e.register(GeneratedFileInfo{
-			OutputPath:    dst,
-			ProducerRef:   ref,
-			GeneratorRefs: nil,
-		})
+		return
 	}
+
+	src, srcRef, resolved := e.resolveBundleSource(b.Target)
+	ref := ctx.emit.reserve()
+
+	if b.Output != "" {
+		script := buildScriptsBundleOutputPy
+		args := ctx.na.anyList(d.tc.Python3.any(), script.any(), argResult.any(), src.any(), argName.any(), internStr(b.Output).any(), strOutput.any(), dst.any())
+
+		e.emitReservedNode(Node{Platform: instance.Platform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(args), Env: envVarsVCS}), Env: envVarsVCS, Inputs: ctx.na.inputList(ctx.na.vfsList(src, script)), Outputs: ctx.na.vfsList(dst), DepRefs: ctx.na.refList(srcRef), KV: &bundleKV, Resources: usesPython3}, ref)
+	} else {
+		e.emitBundleNode(d.tc.Python3, src, dst, b.Suffix, srcRef, resolved, ref)
+	}
+
+	e.register(GeneratedFileInfo{
+		OutputPath:    dst,
+		ProducerRef:   ref,
+		GeneratorRefs: nil,
+	})
 }
 
 func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {

@@ -340,6 +340,8 @@ type ModuleData struct {
 	copyFiles                []CopyFileEntry
 	copyFileAutoOutputs      map[STR]CopyFileEntry
 	declSeq                  int
+	collectionDeclarations   []producerDeclaration
+	collectionProducerCounts [prodKindCount]int
 	resources                []ResourceEntry
 	bundles                  []BundleEntry
 	pyMain                   *ANY
@@ -1243,8 +1245,11 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 
 func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	fs := ctx.fs
+	defer d.recordCollectionDeclarations()
 
 	for _, s := range stmts {
+		d.recordCollectionDeclarations()
+
 		if d.discarded {
 			return
 		}

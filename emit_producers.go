@@ -44,6 +44,9 @@ const (
 	prodPchFile
 	prodProto2Fbs
 	prodPireInline
+	prodFromSandbox
+	prodBundle
+	prodKindCount
 )
 
 type ProducerPos struct {
@@ -939,12 +942,23 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 	}
 
 	positions, srcs := e.producerPositions(len(cythonPlans) > 0)
+	collection := isUnionModule(e.d.moduleStmt.Name) || e.d.moduleStmt.Name == tokPackageFinal
+
+	if collection {
+		positions = e.collectionProducerPositions(positions)
+	}
 
 	if len(positions) == 0 {
 		return
 	}
 
-	order := scheduleProducers(e.prodOrder[:0], &e.ctx.prodOuts, positions, e.instance.Path.relString())
+	var order []int
+
+	if collection {
+		order = e.scheduleCollectionProducers(positions)
+	} else {
+		order = scheduleProducers(e.prodOrder[:0], &e.ctx.prodOuts, positions, e.instance.Path.relString())
+	}
 
 	e.prodOrder = order[:0]
 
@@ -952,6 +966,10 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		pos := positions[pi]
 
 		switch pos.kind {
+		case prodFromSandbox:
+			e.emitFromSandbox(e.d.fromSandboxes[pos.index])
+		case prodBundle:
+			e.emitBundle(e.d.bundles[pos.index])
 		case prodPireInline:
 			e.emitPireInline(pos.ins[0], pos.outs[0])
 		case prodProto2Fbs:

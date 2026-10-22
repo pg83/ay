@@ -74,6 +74,8 @@ func resolveLargeFileSource(fs FS, codegen *CodegenRegistry, modulePath, name st
 }
 
 func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt UnknownStmt, d *ModuleData, onWarn func(Warn)) {
+	defer d.recordCollectionDeclarations()
+
 	args := stmt.Args
 
 	if len(args) > 0 && args[0].string() == "AUTOUPDATED" {
@@ -81,6 +83,8 @@ func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt Un
 	}
 
 	for _, value := range args {
+		d.recordCollectionDeclarations()
+
 		arg := value.string()
 
 		if arg == "AUTOUPDATED" {

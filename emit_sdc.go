@@ -148,6 +148,8 @@ func sdcInstallLocation(packageName, kind, file string) string {
 }
 
 func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment) {
+	defer d.recordCollectionDeclarations()
+
 	packageName := env.string(envSdcPackageName)
 
 	if packageName == "" {
@@ -176,6 +178,8 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 	}
 
 	for len(args) > 0 {
+		d.recordCollectionDeclarations()
+
 		arg := take()
 
 		if sdcInstallLocation(packageName, arg, "file") != "" {
