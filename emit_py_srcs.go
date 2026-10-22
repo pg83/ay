@@ -32,6 +32,7 @@ type PySourceKind uint8
 
 type PySourceMeta struct {
 	Module STR
+	Scope  PyScope
 	Token  ANY
 	Group  int
 	Kind   PySourceKind
@@ -58,6 +59,7 @@ func pyResourceKeyPrefix(topLevel bool, namespace *ANY, modulePath string) strin
 type PySrc struct {
 	Path   VFS
 	Module STR
+	Scope  PyScope
 	Token  ANY
 	Group  int
 	Kind   PySourceKind
@@ -165,6 +167,7 @@ func (e *EmitContext) registerCollectPySrcs() {
 				Source: path.any(), Prio: stmtPrioDefault,
 				PyMeta: e.addPyMeta(PySourceMeta{
 					Module: e.pyModuleKey(keyPrefix, scope, token.string()),
+					Scope:  scope,
 					Token:  token,
 					Group:  gi,
 					Kind:   kind,
@@ -175,6 +178,14 @@ func (e *EmitContext) registerCollectPySrcs() {
 }
 
 func (e *EmitContext) pyModuleKey(keyPrefix string, scope PyScope, src string) STR {
+	if scope.ModuleName != nil {
+		if e.d.usePython2 {
+			return scope.ModuleName.str()
+		}
+
+		return internV(scope.ModuleName.string(), ".py")
+	}
+
 	if !e.d.usePython2 {
 		return internV(keyPrefix, src)
 	}
@@ -196,7 +207,7 @@ func (e *EmitContext) pyYapycExt() string {
 
 func (e *EmitContext) collectPySource(path VFS, meta PySourceMeta) {
 	e.pySrcsReg = append(e.pySrcsReg, PySrc{
-		Path: path, Module: meta.Module, Token: meta.Token,
+		Path: path, Module: meta.Module, Scope: meta.Scope, Token: meta.Token,
 		Group: meta.Group, Kind: meta.Kind,
 	})
 }
@@ -580,27 +591,16 @@ func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) 
 
 		hasPy = true
 
-		scope := group.Scopes[si]
-		nsPrefix := strings.ReplaceAll(instance.Path.relString(), "/", ".") + "."
-
-		if scope.Namespace != nil {
-			nsPrefix = strings.TrimSuffix(scope.Namespace.string(), ".") + "."
-		}
-
-		if scope.TopLevel {
-			nsPrefix = ""
-		}
-
-		h.Write([]byte(nsPrefix + strings.ReplaceAll(strings.TrimSuffix(srcRel, ".py"), "/", ".")))
+		h.Write([]byte(group.Scopes[si].moduleName(instance.Path.relString(), srcRel)))
 	}
 
 	for _, ps := range e.pySrcsReg {
-		if ps.Group != groupIndex || ps.Kind != pySourcePlain || !ps.Path.isSource() || !extIsPy(ps.Token.string()) {
+		if ps.Group != groupIndex || ps.Kind != pySourcePlain || !ps.Path.isSource() || !extIsPy(ps.Token.string()) || ps.Scope.ModuleName != nil {
 			continue
 		}
 
 		srcRel := ps.Token.string()
-		nsValue := strings.ReplaceAll(strings.TrimSuffix(ps.Module.string(), srcRel), "/", ".")
+		nsValue := pythonModuleName(instance.Path.relString(), "", ps.Scope.TopLevel, ps.Scope.Namespace)
 
 		if nsValue == "" {
 			nsValue = "."

@@ -470,8 +470,17 @@ type PySrcGroup struct {
 }
 
 type PyScope struct {
-	TopLevel  bool
-	Namespace *ANY
+	TopLevel   bool
+	Namespace  *ANY
+	ModuleName *ANY
+}
+
+func (s PyScope) moduleName(modulePath, src string) string {
+	if s.ModuleName != nil {
+		return s.ModuleName.string()
+	}
+
+	return pythonModuleName(modulePath, src, s.TopLevel, s.Namespace)
 }
 
 type ArchiveEntry struct {
@@ -3937,13 +3946,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			continue
 		}
 
-		src := a.string()
-		modNameOverride := ""
-
-		if eq := strings.IndexByte(src, '='); eq >= 0 {
-			modNameOverride = src[eq+1:]
-			src = src[:eq]
-		}
+		src, modNameOverride, explicitModule := strings.Cut(a.string(), "=")
 
 		if strings.HasSuffix(src, ".fbs") {
 			modName := modNameOverride
@@ -4051,20 +4054,25 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			continue
 		}
 
+		scope := PyScope{TopLevel: topLevel, Namespace: namespace}
+
+		if explicitModule {
+			scope.ModuleName = ptr(internStr(modNameOverride).any())
+		}
+
+		if !d.usePython2 && scope.moduleName(modulePath, src) == "__main__" {
+			throwFmt("TOP_LEVEL __main__.py is not allowed in PY3_PROGRAM")
+		}
+
 		d.pySrcs = append(d.pySrcs, internStr(src).any())
 		groupSrcs = append(groupSrcs, src)
-		groupScopes = append(groupScopes, PyScope{TopLevel: topLevel, Namespace: namespace})
+		groupScopes = append(groupScopes, scope)
 
 		if mainNext {
-			modName := modNameOverride
-
-			if modName == "" {
-				modName = pythonModuleName(modulePath, src, topLevel, namespace)
-			}
-
+			modName := scope.moduleName(modulePath, src)
 			d.pyMain = ptr(internV(modName, ":main").any())
 			mainNext = false
-		} else if d.pyMain == nil && d.moduleStmt != nil &&
+		} else if !explicitModule && d.pyMain == nil && d.moduleStmt != nil &&
 			(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) &&
 			(src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
 			d.pyMain = ptr(internStr(pythonModuleName(modulePath, src, topLevel, namespace)).any())
