@@ -60,7 +60,8 @@ does not require generating or normalizing the same graphs again.
 
 Sandbox archives are ordinary CAS outputs and do not depend on the candidate
 `ay` binary. New resources provisioned by `dev/provision.py` are uploaded as
-locally created archives and pinned by SHA-256. Older config entries rely on
+locally created `tar.zst` archives (`zstd -3 -T2`, streaming) and pinned by SHA-256.
+Provisioning requires the `zstd` executable on `PATH`. Older config entries rely on
 the immutability of their Sandbox resource IDs until they are reprovisioned.
 
 Use separate materialized build roots with a common cache when multiple

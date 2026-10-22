@@ -516,9 +516,16 @@ def sha256_file(path):
 
 
 def pack_validation_archive(source, destination):
-    """Create the exact upload bytes locally so config can pin SHA-256."""
-    with tarfile.open(destination, "w:gz") as archive:
-        archive.add(source, arcname=os.path.basename(source.rstrip(os.sep)))
+    """Create tar.zst upload bytes using level 3 and two compression workers."""
+    with open(destination, "wb") as output:
+        with subprocess.Popen(
+            ["zstd", "-q", "-3", "-T2", "-c"],
+            stdin=subprocess.PIPE, stdout=output,
+        ) as compressor:
+            with compressor.stdin, tarfile.open(fileobj=compressor.stdin, mode="w|") as archive:
+                archive.add(source, arcname=os.path.basename(source.rstrip(os.sep)))
+            if compressor.wait() != 0:
+                raise subprocess.CalledProcessError(compressor.returncode, compressor.args)
     return destination
 
 
@@ -736,13 +743,13 @@ def main():
             entry["slice_sha256"] = reuse_entry["slice_sha256"]
     else:
         slice_upload = (
-            pack_validation_archive(slice_artifact, os.path.join(ws, "slice.tar.gz"))
+            pack_validation_archive(slice_artifact, os.path.join(ws, "slice.tar.zst"))
             if slice_tar else slice_artifact
         )
         entry["slice_url"] = ya_upload(slice_upload, False, owner, f"ay acceptance slice {case_id} @ {sha}")
         entry["slice_sha256"] = sha256_file(slice_upload)
 
-    graph_upload = pack_validation_archive(graph_fuse, os.path.join(ws, "graph.tar.gz"))
+    graph_upload = pack_validation_archive(graph_fuse, os.path.join(ws, "graph.tar.zst"))
     entry["graph_url"] = ya_upload(graph_upload, False, owner, f"ay acceptance ref graph {case_id} @ {sha}")
     entry["graph_sha256"] = sha256_file(graph_upload)
     append_config(args.config, entry)
