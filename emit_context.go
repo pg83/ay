@@ -137,6 +137,11 @@ func (e *EmitContext) partitionCollected() (local, global CollectedObjs) {
 
 func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, d *ModuleData, peers *PeerContext) *EmitContext {
 	scanner := ctx.scannerFor(instance)
+
+	if d.dontResolveIncludes {
+		scanner = scanner.withoutIncludeResolution()
+	}
+
 	k := len(d.resources)
 	prev := &frame.emitCtx
 

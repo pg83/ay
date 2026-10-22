@@ -81,6 +81,8 @@ type IncludeScanner struct {
 	onWarn         func(Warn)
 	codegen        *CodegenRegistry
 	moduleByRef    *DenseMap[NodeRef, *ModuleEmitResult]
+	noResolve      bool
+	unresolved     *IncludeScanner
 }
 
 type searchTierHotEntry struct {
@@ -107,6 +109,7 @@ type ScanCtx struct {
 	scanner     *IncludeScanner
 	cfg         *ScanConfig
 	ccCfg       *ScanConfig
+	protoCfg    *ScanConfig
 	parser      IncludeDirectiveParser
 	tjc         *TarjanCtx
 	tsImports   bool
@@ -195,6 +198,22 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 	return s
 }
 
+// Unresolved module contexts share lexical parses and producer facts, but must
+// not publish suppressed include closures into the resolving scanner's cache.
+func (s *IncludeScanner) withoutIncludeResolution() *IncludeScanner {
+	if s.unresolved == nil {
+		u := newIncludeScannerWith(s.parsers, nil, s.onWarn, s.buckets)
+
+		u.sysincl = s.sysincl
+		u.codegen = s.codegen
+		u.moduleByRef = s.moduleByRef
+		u.noResolve = true
+		s.unresolved = u
+	}
+
+	return s.unresolved
+}
+
 type ScanDomain uint8
 
 type ScanContext struct {
@@ -279,8 +298,13 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 	sc.scanner = s
 	sc.cfg = ctx.config(domain)
 	sc.ccCfg = nil
+	sc.protoCfg = nil
 	sc.parser = parser
 	sc.tsImports = domain == scanDomainAux
+
+	if domain == scanDomainCC {
+		sc.protoCfg = ctx.parsers.resolveScanConfig(ctx.protoInclude, nil, ctx.base)
+	}
 
 	if domain == scanDomainSwig {
 		sc.ccCfg = ctx.config(scanDomainCC)
@@ -357,6 +381,17 @@ func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIn
 func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	s := sc.scanner
 	parser := sc.parser
+
+	if sc.protoCfg != nil {
+		switch s.parsers.registry.registeredParserFor(vfsPath.relString()).(type) {
+		case ProtoIncludeDirectiveParser, CfgProtoIncludeDirectiveParser:
+			cfg := sc.cfg
+
+			sc.cfg = sc.protoCfg
+
+			defer func() { sc.cfg = cfg }()
+		}
+	}
 
 	if sc.ccCfg != nil && sc.parser != IncludeDirectiveParser(swigParser) {
 		cfg := sc.cfg
@@ -656,6 +691,12 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) (int, bool)
 func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirective) []VFS {
 	s := sc.scanner
 	mark := len(out)
+
+	// Source directives are lexical, including those spelling a rooted path.
+	// Concrete dependencies registered on generated files remain producer facts.
+	if s.noResolve && (includerAbs.isSource() || d.target.vfs() == 0) {
+		return out
+	}
 
 	if d.kind == includeRos {
 		if resolved := resolveRosInclude(s.parsers.fs, sc.cfg.ownAddIncl, d.target.string()); resolved != 0 {

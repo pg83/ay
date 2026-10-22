@@ -97,7 +97,9 @@ func (e *EmitContext) scriptModuleResources(globals []ResourceDecl, peers ...str
 	}
 
 	e.d.cc.TC = e.d.tc
-	e.d.scanCtx = newModuleScanContext(e.ctx, e.instance, e.d, nil, nil, nil, nil)
+	e.d.scanCtx = newModuleScanContext(e.ctx, e.instance, e.d,
+		e.ctx.na.vfsList(dedup(e.d.addIncl, e.d.addInclGlobal)...), nil, nil,
+		e.ctx.na.vfsList(dedup(e.d.protoAddInclGlobal, e.d.protoAddIncl)...))
 
 	return globals
 }

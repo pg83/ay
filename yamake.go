@@ -207,6 +207,7 @@ type AddInclStmt struct {
 	CythonPaths       []ANY
 	CythonGlobalPaths []ANY
 	AsmPaths          []ANY
+	ProtoPaths        []ANY
 	ProtoGlobalPaths  []ANY
 	FlatcPaths        []ANY
 	FlatcGlobalPaths  []ANY
@@ -1824,7 +1825,7 @@ func parseResource(args []ANY, nameTok Token) *ResourceStmt {
 }
 
 func splitAddInclPaths(args []ANY) *AddInclStmt {
-	var globalPaths, oneLevelPaths, ownPaths, cythonPaths, cythonGlobalPaths, asmPaths, protoGlobalPaths, flatcPaths, flatcGlobalPaths, swigPaths, swigGlobalPaths, userGlobalPaths, allPaths []ANY
+	var globalPaths, oneLevelPaths, ownPaths, cythonPaths, cythonGlobalPaths, asmPaths, protoPaths, protoGlobalPaths, flatcPaths, flatcGlobalPaths, swigPaths, swigGlobalPaths, userGlobalPaths, allPaths []ANY
 
 	for i := 0; i < len(args); i++ {
 		if args[i] == kwONE_LEVEL.any() {
@@ -1841,6 +1842,13 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 		}
 
 		if args[i] == kwFOR.any() {
+			if i+2 < len(args) && args[i+1].string() == "proto" {
+				protoPaths = append(protoPaths, args[i+2])
+				i += 2
+
+				continue
+			}
+
 			if i+2 < len(args) && args[i+1].string() == "flatc" {
 				flatcPaths = append(flatcPaths, args[i+2])
 				i += 2
@@ -1950,6 +1958,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 		CythonPaths:       astArgs.list(cythonPaths...),
 		CythonGlobalPaths: astArgs.list(cythonGlobalPaths...),
 		AsmPaths:          astArgs.list(asmPaths...),
+		ProtoPaths:        astArgs.list(protoPaths...),
 		ProtoGlobalPaths:  astArgs.list(protoGlobalPaths...),
 		FlatcPaths:        astArgs.list(flatcPaths...),
 		FlatcGlobalPaths:  astArgs.list(flatcGlobalPaths...),

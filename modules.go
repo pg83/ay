@@ -228,6 +228,7 @@ type ModuleData struct {
 	asmAddIncl               []VFS
 	protoAddInclGlobal       []VFS
 	protoAddIncl             []VFS
+	dontResolveIncludes      bool
 	swigAddIncl              []VFS
 	swigAddInclGlobal        []VFS
 	llvmBc                   []*LlvmBcStmt
@@ -728,6 +729,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	env.setVFS(envBINDIR, build(modulePath))
 	env.setVFS(envCmakeCurrentBinaryDir, build(modulePath))
 	env.setDefaultString(envCythonOptions, cythonDefaultOptions(instance.Platform.OS))
+	env.setDefaultString(envProtobufIncludePath, pbRuntimeBaseVFS.string())
 
 	d.reset()
 
@@ -739,6 +741,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.yqlStableABI = instance.Platform.YqlStableABI
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
+	kindOfResolve, _ := env.s.lookup(envDontResolveIncludes)
+	d.dontResolveIncludes = kindOfResolve != envAbsent && env.string(envDontResolveIncludes) != "no"
 	finishYqlModule(ctx, instance, env, d, onWarn)
 	// _SRC("pyx") in ymake.core.conf uses the native Cython rule, without
 	// PY_SRCS' module registration. Keep its source ordering and GLOBAL flag.
@@ -1233,6 +1237,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit)
 
+			if isUnionModule(v.Name) {
+				env.setStringID(envDontResolveIncludes, strYes)
+			}
+
 			if v.Name == tokPy23Test {
 				subPath := "py3test"
 
@@ -1541,6 +1549,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.cythonAddIncl = append(d.cythonAddIncl, expandConfigVFSPaths(v.CythonPaths, env)...)
 			d.cythonAddInclGlobal = append(d.cythonAddInclGlobal, expandConfigVFSPaths(v.CythonGlobalPaths, env)...)
 			d.asmAddIncl = append(d.asmAddIncl, expandConfigVFSPaths(v.AsmPaths, env)...)
+			d.protoAddIncl = append(d.protoAddIncl, expandConfigVFSPaths(v.ProtoPaths, env)...)
 			d.protoAddInclGlobal = append(d.protoAddInclGlobal, expandConfigVFSPaths(v.ProtoGlobalPaths, env)...)
 			d.flatcAddIncl = append(d.flatcAddIncl, expandConfigVFSPaths(v.FlatcPaths, env)...)
 			d.flatcAddInclGlobal = append(d.flatcAddInclGlobal, expandConfigVFSPaths(v.FlatcGlobalPaths, env)...)
@@ -2836,6 +2845,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		applyProtoNamespace(d, v.Args[len(v.Args)-1], withGen)
 	case tokProtoAddIncl:
 		applyProtoAddIncl(d, v.Args)
+	case tokResolveProto:
+		if len(v.Args) != 0 {
+			throwFmt("gen: RESOLVE_PROTO expects no arguments")
+		}
+
+		// build/conf/proto.conf: RESOLVE_PROTO is SET followed by ADDINCL FOR proto.
+		env.setStringID(envDontResolveIncludes, strNo)
+		d.protoAddIncl = append(d.protoAddIncl, expandConfigVFSPaths(anysOf("$PROTOBUF_INCLUDE_PATH"), env)...)
 	case tokUseSdcMeta:
 		if d.setVars == nil {
 			d.setVars = map[STR]STR{}

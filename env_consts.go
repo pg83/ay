@@ -1,6 +1,8 @@
 package main
 
 var (
+	envDontResolveIncludes          = internEnv("DONT_RESOLVE_INCLUDES")
+	envProtobufIncludePath          = internEnv("PROTOBUF_INCLUDE_PATH")
 	cudaPathEnv                     = internEnv("PATH")
 	envALLOCATOR                    = internEnv("ALLOCATOR")
 	envAMX_CFLAGS                   = internEnv("AMX_CFLAGS")

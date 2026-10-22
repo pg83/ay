@@ -418,6 +418,7 @@ var tokName = [...]STR{
 	tokGoGrpcGatewaySrcs:              internStr("GO_GRPC_GATEWAY_SRCS"),
 	tokGoGrpcGatewaySwagger:           internStr("GO_GRPC_GATEWAY_SWAGGER_SRCS"),
 	tokProtoAddIncl:                   internStr("PROTO_ADDINCL"),
+	tokResolveProto:                   internStr("RESOLVE_PROTO"),
 	tokGoTestEmbedPattern:             internStr("GO_TEST_EMBED_PATTERN"),
 	tokGoXTestEmbedPattern:            internStr("GO_XTEST_EMBED_PATTERN"),
 	tokUseSdcMeta:                     strUSE_SDC_META,
@@ -830,6 +831,7 @@ const (
 	tokGoGrpcGatewaySrcs
 	tokGoGrpcGatewaySwagger
 	tokProtoAddIncl
+	tokResolveProto
 	tokGoTestEmbedPattern
 	tokGoXTestEmbedPattern
 	tokUseSdcMeta
