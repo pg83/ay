@@ -257,6 +257,14 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 		return
 	}
 
+	for i := range d.styleChecks {
+		if previous := &d.styleChecks[i]; previous.Name == check.Name {
+			previous.Files = sortedUnique(append(previous.Files, check.Files...))
+
+			return
+		}
+	}
+
 	d.styleChecks = append(d.styleChecks, check)
 	d.peerdirs = append(d.peerdirs, internStr(peer).any())
 }
