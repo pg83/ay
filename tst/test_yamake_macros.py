@@ -190,11 +190,11 @@ class YaMakeMacrosTest(unittest.TestCase):
             "a/only_windows.json": json.dumps({"by_platform": {"win32": {"uri": "sbr:444"}}}),
         }
         self.assertEqual(user_cflags(args_of(self.make(files), "$(B)/a/x.cpp.o")), [
-            "-DLOCAL=sbr:111", "-DROOTED=sbr:111", "-DABSENT=${ABSENT}",
+            "-DLOCAL=sbr:111", "-DROOTED=sbr:111", "-DABSENT=",
         ])
         host = self.make(files, platform="default-linux-x86_64")
-        self.assertEqual(user_cflags(args_of(host, "$(B)/a/x.cpp.o"))[:2], [
-            "-DLOCAL=sbr:222", "-DROOTED=sbr:222",
+        self.assertEqual(user_cflags(args_of(host, "$(B)/a/x.cpp.o")), [
+            "-DLOCAL=sbr:222", "-DROOTED=sbr:222", "-DABSENT=",
         ])
 
     def test_copy_file_variants(self):
