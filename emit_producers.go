@@ -473,7 +473,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 	for i, lp := range d.listProtos {
 		start := len(backing)
-		out := buildJoinClean(module, lp.Output.string())
+		out := copyFileOutputVFS(module, lp.Output.string())
 
 		backing = append(backing, out, listProtoHeader(out))
 
@@ -742,7 +742,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	for i, a := range d.archives {
 		outsMark := len(e.prodVFS)
 
-		e.prodVFS = append(e.prodVFS, build(module, "/", a.Name))
+		e.prodVFS = append(e.prodVFS, copyFileOutputVFS(module, a.Name))
 
 		outs := e.prodVFSTake(outsMark)
 		insMark := len(e.prodVFS)
@@ -790,7 +790,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	for i, js := range d.joinSrcs {
 		outsMark := len(e.prodVFS)
 
-		e.prodVFS = append(e.prodVFS, build(module, "/", js.OutputName))
+		e.prodVFS = append(e.prodVFS, copyFileOutputVFS(module, js.OutputName))
 
 		outs := e.prodVFSTake(outsMark)
 		insMark := len(e.prodVFS)

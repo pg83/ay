@@ -20,7 +20,7 @@ func (e *EmitContext) emitArchive(
 ) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := emit.nodeArenas()
-	archiveVFS := build(instance.Path.relString(), "/", a.Name)
+	archiveVFS := copyFileOutputVFS(instance.Path.relString(), a.Name)
 	producerRefs := []NodeRef{}
 	pathMark := len(e.prodVFS)
 

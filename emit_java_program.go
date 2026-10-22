@@ -366,11 +366,7 @@ func parseJavaRunProgram(jm *JavaModule, rp JavaRunProgram) javaRunProgram {
 }
 
 func javaOutDirVFS(jm *JavaModule, p string) VFS {
-	if rel, ok := strings.CutPrefix(p, "$(B)/"); ok {
-		return build(path.Clean(rel))
-	}
-
-	return build(path.Clean(jm.dir + "/" + p))
+	return copyFileOutputVFS(jm.dir, p)
 }
 
 func javaArgVFS(jm *JavaModule, p string) VFS {

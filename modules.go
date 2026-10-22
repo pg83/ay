@@ -1546,6 +1546,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		case *JoinSrcsStmt:
 			expanded := *v
 
+			expanded.OutputName = expandStmtToken(v.OutputName, env)
 			expanded.Sources = expandStmtTokens(v.Sources, env)
 			expanded.Seq = d.nextDeclSeq()
 

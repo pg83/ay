@@ -13,7 +13,7 @@ func listProtoHeader(output VFS) VFS {
 
 func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 	na := e.ctx.na
-	output := buildJoinClean(e.instance.Path.relString(), stmt.Output.string())
+	output := copyFileOutputVFS(e.instance.Path.relString(), stmt.Output.string())
 	header := listProtoHeader(output)
 
 	var sources []VFS

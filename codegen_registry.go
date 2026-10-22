@@ -116,10 +116,7 @@ func fireGenerated(info *GeneratedFileInfo) {
 }
 
 func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
-	if !info.OutputPath.isBuild() {
-		throwFmt("CodegenRegistry: register of a source path %q", info.OutputPath.string())
-	}
-
+	// All producer constructors supply BUILD paths before registration.
 	if existing, ok := r.byRel.get(info.OutputPath.rel()); ok {
 		if existing.InputsOnly {
 			info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{existing.ClosureLeaves})

@@ -6,7 +6,7 @@ func (e *EmitContext) emitJSReserved(allName string, sources []string, closure [
 	instance := e.instance
 	na := e.ctx.na
 	joinSrcs := buildScriptsGenJoinSrcsPy
-	outVFS := build(instance.Path.relString(), "/", allName)
+	outVFS := copyFileOutputVFS(instance.Path.relString(), allName)
 	statsPlatform := instance.Platform
 
 	if p != nil {
@@ -72,7 +72,7 @@ func (e *EmitContext) emitJoinSrcsStmt(js *JoinSrcsStmt) {
 	}
 
 	pending := e.pendingEmit(pe)
-	joinOutVFS := build(instance.Path.relString(), "/", js.OutputName)
+	joinOutVFS := copyFileOutputVFS(instance.Path.relString(), js.OutputName)
 
 	info := GeneratedFileInfo{
 		OutputPath:  joinOutVFS,
