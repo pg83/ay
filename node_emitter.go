@@ -22,6 +22,7 @@ type StreamingEmitter struct {
 	addModulesToResults      bool
 	stripPackagesFromResults bool
 	nodes                    Vec[*Node]
+	modules                  BitSet
 	resolved                 BitSet
 	pendingIdx               []NodeRef
 	pendingSet               map[NodeRef]bool
@@ -192,7 +193,7 @@ func (e *StreamingEmitter) finish() []NodeRef {
 
 	if e.addModulesToResults {
 		for _, n := range e.nodes.s {
-			if n != nil && n.Module {
+			if n != nil && (n.Module || e.modules.has(uint32(n.Ref))) {
 				e.result(n.Ref)
 			}
 		}

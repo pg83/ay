@@ -20,11 +20,19 @@ func persistResult(ctx *GenCtx, r *ModuleEmitResult) {
 	r.persisted = true
 
 	if ctx.emit.addModulesToResults {
-		for _, ref := range []NodeRef{r.ARRef, r.LDRef} {
+		refs := []NodeRef{r.ARRef, r.LDRef}
+
+		if r.GlobalRef != nil {
+			refs = append(refs, *r.GlobalRef)
+		}
+
+		if r.java != nil {
+			refs = append(refs, r.java.outRef)
+		}
+
+		for _, ref := range refs {
 			if ref != 0 {
-				if n := ctx.emit.nodes.s[ref]; n != nil {
-					n.Module = true
-				}
+				ctx.emit.modules.add(uint32(ref))
 			}
 		}
 	}
