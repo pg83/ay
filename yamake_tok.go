@@ -12,6 +12,8 @@ var tokName = [...]STR{
 	tokGenerateYtRecord:       internStr("GENERATE_YT_RECORD"),
 	tokYtRecordDisablePeerdir: internStr("YT_RECORD_DISABLE_PEERDIR"),
 	tokProtoToNamespace:       internStr("PROTO_TO_NAMESPACE"),
+	tokPyProtoPlugin:          internStr("PY_PROTO_PLUGIN"),
+	tokPyProtoPlugin2:         internStr("PY_PROTO_PLUGIN2"),
 	tokYqlPrebuiltTool:        internStr("YQL_PREBUILT_TOOL"),
 	tokYqlUdf:                 internStr("YQL_UDF"),
 	tokYqlPythonUdf:           internStr("YQL_PYTHON_UDF"),
@@ -461,6 +463,8 @@ var tokBySTR = func() []TOK {
 
 const (
 	tokInvalid TOK = iota
+	tokPyProtoPlugin
+	tokPyProtoPlugin2
 	tokPackageFinal
 	tokMlaunchLibrary
 	tokMlaunchPipeline

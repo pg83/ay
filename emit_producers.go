@@ -142,10 +142,8 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 		base := strings.TrimSuffix(protoRel, ".proto")
 
 		if isPythonProtoModule(d) {
-			e.prodVFS = append(e.prodVFS, build(base, "__int", protoPythonVersion(d), "___pb2.py"))
-
-			if d.grpc {
-				e.prodVFS = append(e.prodVFS, build(base, "__int", protoPythonVersion(d), "___pb2_grpc.py"))
+			for _, suffix := range pyProtoSuffixes(d) {
+				e.prodVFS = append(e.prodVFS, build(base, "__int", protoPythonVersion(d), "__", suffix))
 			}
 		} else {
 			e.prodVFS = append(e.prodVFS, build(base, ".pb.h"), build(base, ".pb.cc"))

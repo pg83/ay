@@ -6,13 +6,6 @@ import (
 	"strings"
 )
 
-var (
-	pyPBSuffixesBase     = []string{"_pb2.py"}
-	pyPBSuffixesGrpc     = []string{"_pb2.py", "_pb2_grpc.py"}
-	pyPBSuffixesMypy     = []string{"_pb2.py", "_pb2.pyi"}
-	pyPBSuffixesGrpcMypy = []string{"_pb2.py", "_pb2_grpc.py", "_pb2.pyi"}
-)
-
 func isPythonProtoModule(d *ModuleData) bool {
 	return d.unit.Tag == unitTagPy3Proto || d.unit.Tag == strPyProto
 }
@@ -74,19 +67,6 @@ func (p *pyPBPending) emitPending() {
 	s.emit.emitReservedNode(node, s.pyPBRef)
 }
 
-func pyPBSuffixesFor(grpc, mypy bool) []string {
-	switch {
-	case grpc && mypy:
-		return pyPBSuffixesGrpcMypy
-	case grpc:
-		return pyPBSuffixesGrpc
-	case mypy:
-		return pyPBSuffixesMypy
-	default:
-		return pyPBSuffixesBase
-	}
-}
-
 func protoPythonResourceKeyParts(instance ModuleInstance, d *ModuleData, src string) (dir, sep, base string) {
 	base = strings.TrimSuffix(src, ".proto")
 
@@ -119,53 +99,39 @@ func pyProtoOutputToken(instance ModuleInstance, out VFS, generatedProto bool) A
 	return internV("${ARCADIA_BUILD_ROOT}/", out.relString()).any()
 }
 
-func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, pyOut, grpcPyOut VFS, generatedProto bool) {
+func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, outputs []VFS, generatedProto bool) {
 	instance, d := e.instance, e.d
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
 
-	moduleKey := func(suffix string) STR {
+	for i, suffix := range pyProtoSuffixes(d) {
 		key := strings.ReplaceAll(keyDir+keySep+keyBase+suffix, "-", "_")
 
 		if d.usePython2 {
 			key = strings.ReplaceAll(strings.TrimSuffix(key, ".py"), "/", ".")
 		}
 
-		return internStr(key)
+		out := outputs[i]
+		e.enqueueSrc(SrcMeta{
+			Source: out.any(), Prio: stmtPrioDefault,
+			PyMeta: e.addPyMeta(PySourceMeta{
+				Module: internStr(key),
+				Token:  pyProtoOutputToken(instance, out, generatedProto),
+				Group:  srcGroup,
+				Kind:   pySourceProto,
+			}),
+		})
 	}
-
-	e.enqueueSrc(SrcMeta{
-		Source: pyOut.any(), Prio: stmtPrioDefault,
-		PyMeta: e.addPyMeta(PySourceMeta{
-			Module: moduleKey("_pb2.py"),
-			Token:  pyProtoOutputToken(instance, pyOut, generatedProto),
-			Group:  srcGroup,
-			Kind:   pySourceProto,
-		}),
-	})
-
-	if grpcPyOut == 0 {
-		return
-	}
-
-	e.enqueueSrc(SrcMeta{
-		Source: grpcPyOut.any(), Prio: stmtPrioDefault,
-		PyMeta: e.addPyMeta(PySourceMeta{
-			Module: moduleKey("_pb2_grpc.py"),
-			Token:  pyProtoOutputToken(instance, grpcPyOut, generatedProto),
-			Group:  srcGroup,
-			Kind:   pySourceProto,
-		}),
-	})
 }
 
 type PyPBModuleEmission struct {
-	grpcPyRef    NodeRef
-	mypyRef      NodeRef
-	grpcPyBinary VFS
-	mypyBinary   VFS
-	head         []ANY
-	mid          []ANY
-	tail         []ANY
+	mypyRef        NodeRef
+	mypyBinary     VFS
+	pluginRefs     []NodeRef
+	pluginBinaries []VFS
+	suffixes       []string
+	head           []ANY
+	mid            []ANY
+	tail           []ANY
 }
 
 func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS, duplicateOutputRootInclude bool) *PyPBModuleEmission {
@@ -180,24 +146,23 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 
 	*pe = PyPBModuleEmission{}
 
-	if d.grpc {
-		pe.grpcPyRef, pe.grpcPyBinary = ctx.tool(argContribToolsProtocPluginsGrpcPython)
+	for _, plugin := range d.pyProtoPlugins {
+		ref, binary := ctx.tool(internArg(plugin.ToolPath))
+		pe.pluginRefs = append(pe.pluginRefs, ref)
+		pe.pluginBinaries = append(pe.pluginBinaries, binary)
 	}
 
 	if !d.noMypy {
 		pe.mypyRef, pe.mypyBinary = ctx.tool(argContribPythonMypyProtobufBinProtocGenMypy)
 	}
 
-	suffixes := []string{"_pb2.py"}
-
-	if d.grpc {
-		suffixes = append(suffixes, "_pb2_grpc.py")
-	}
+	suffixes := pyProtoSuffixes(d)
 
 	if !d.noMypy {
 		suffixes = append(suffixes, "_pb2.pyi")
 	}
 
+	pe.suffixes = suffixes
 	protoRoot := protoPythonOutputRoot(d)
 	na := ctx.na
 	head := na.anys.alloc(6 + len(suffixes))[:0]
@@ -258,12 +223,13 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, protoInclude []VFS
 	na.anys.commit(len(mid))
 	pe.mid = mid[:len(mid):len(mid)]
 
-	tail := na.anys.alloc(4)[:0]
+	tail := na.anys.alloc(2 * (len(d.pyProtoPlugins) + 1))[:0]
 
-	if d.grpc {
+	for i, plugin := range d.pyProtoPlugins {
+		binary := pe.pluginBinaries[i]
 		tail = append(tail,
-			internV("--plugin=protoc-gen-grpc_py=", pe.grpcPyBinary.prefix(), pe.grpcPyBinary.relString()).any(),
-			internV("--grpc_py_out=$(B)/", protoRoot).any(),
+			internV("--plugin=protoc-gen-", plugin.Name, "=", binary.prefix(), binary.relString()).any(),
+			internV("--", plugin.Name, "_out=$(B)/", protoRoot).any(),
 		)
 	}
 
@@ -305,40 +271,20 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	internal := "__int" + protoPythonVersion(d) + "__"
 	pyOut := build(protoBase, internal, "_pb2.py")
 
+	outputs := na.vfs.alloc(len(pe.suffixes))[:0]
+
+	for _, suffix := range pe.suffixes {
+		outputs = append(outputs, build(protoBase, internal, suffix))
+	}
+
+	na.vfs.commit(len(outputs))
+	outputs = outputs[:len(outputs):len(outputs)]
+
 	if e.codegen.lookup(pyOut) != nil {
-		var grpcPyOut VFS
-
-		if d.grpc {
-			grpcPyOut = build(protoBase, internal, "_pb2_grpc.py")
-		}
-
-		e.enqueuePyProtoOutputs(src, srcGroup, pyOut, grpcPyOut, e.codegen.lookup(protoRel.build()) != nil)
+		e.enqueuePyProtoOutputs(src, srcGroup, outputs, e.codegen.lookup(protoRel.build()) != nil)
 
 		return
 	}
-
-	pyiOut := build(protoBase, internal, "_pb2.pyi")
-
-	var grpcPyOut VFS
-
-	outputs := na.vfs.alloc(3)[:0]
-
-	outputs = append(outputs, pyOut)
-
-	if d.grpc {
-		grpcPyOut = build(protoBase, internal, "_pb2_grpc.py")
-		outputs = append(outputs, grpcPyOut)
-	}
-
-	if !d.noMypy {
-		outputs = append(outputs, pyiOut)
-	}
-
-	suffixes := pyPBSuffixesFor(d.grpc, !d.noMypy)
-
-	na.vfs.commit(len(outputs))
-
-	outputs = outputs[:len(outputs):len(outputs)]
 
 	relChunk := na.anyList(protoRel.any())
 	chunks := na.chunks.alloc(5)[:0]
@@ -352,9 +298,9 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 	na.chunks.commit(len(chunks))
 
 	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])
-	toolRefs := na.noderefs.alloc(3)[:0]
+	toolRefs := na.noderefs.alloc(1 + len(pe.pluginRefs) + 1)[:0]
 
-	for _, r := range [2]NodeRef{protocLDRef, pe.grpcPyRef} {
+	for _, r := range append([]NodeRef{protocLDRef}, pe.pluginRefs...) {
 		if r != 0 {
 			toolRefs = append(toolRefs, r)
 		}
@@ -378,13 +324,11 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		generatedProto = true
 	}
 
-	toolInputs := na.vfs.alloc(3)[:0]
+	toolInputs := na.vfs.alloc(1 + len(pe.pluginBinaries) + 1)[:0]
 
 	toolInputs = append(toolInputs, protocBinary)
 
-	if d.grpc {
-		toolInputs = append(toolInputs, pe.grpcPyBinary)
-	}
+	toolInputs = append(toolInputs, pe.pluginBinaries...)
 
 	if !d.noMypy {
 		toolInputs = append(toolInputs, pe.mypyBinary)
@@ -417,7 +361,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 		valStart := len(e.resStrBuf)
 
 		e.resStrBuf = append(e.resStrBuf, protoBaseName...)
-		e.resStrBuf = append(e.resStrBuf, suffixes[i]...)
+		e.resStrBuf = append(e.resStrBuf, pe.suffixes[i]...)
 
 		val := internBytes(e.resStrBuf[valStart:])
 
@@ -441,19 +385,13 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int) {
 
 	pyPBPE := e.pendingEmitter(pending)
 
-	e.register(GeneratedFileInfo{OutputPath: pyOut, ProducerRef: pyPBRef, OnUse: pyPBPE})
-
-	if !d.noMypy {
-		e.register(GeneratedFileInfo{OutputPath: pyiOut, ProducerRef: pyPBRef, OnUse: pyPBPE})
-	}
-
-	if d.grpc {
-		e.register(GeneratedFileInfo{OutputPath: grpcPyOut, ProducerRef: pyPBRef, OnUse: pyPBPE})
+	for _, out := range outputs {
+		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: pyPBRef, OnUse: pyPBPE})
 	}
 
 	e.codegen.setMainOut(pyPBRef, outputs)
 
-	e.enqueuePyProtoOutputs(src, srcGroup, pyOut, grpcPyOut, generatedProto)
+	e.enqueuePyProtoOutputs(src, srcGroup, outputs, generatedProto)
 }
 
 func protoPythonOutputRoot(d *ModuleData) string {

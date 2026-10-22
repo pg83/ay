@@ -53,6 +53,7 @@ func (x *ModuleData) reset() {
 		moduleScopeCFlags:    x.moduleScopeCFlags[:0],
 		ymapsSprotoSrcs:      x.ymapsSprotoSrcs[:0],
 		cppProtoPlugins:      scrub(x.cppProtoPlugins),
+		pyProtoPlugins:       scrub(x.pyProtoPlugins),
 		excludeTags:          clearedMap(x.excludeTags),
 		dynamicLibraryFrom:   x.dynamicLibraryFrom[:0],
 		ldPlugins:            x.ldPlugins[:0],

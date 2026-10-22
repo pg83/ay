@@ -289,6 +289,7 @@ type ModuleData struct {
 	optimizePyProtosSet      bool
 	needGoogleProtoPeerdirs  bool
 	cppProtoPlugins          []CppProtoPlugin
+	pyProtoPlugins           []PyProtoPlugin
 	grpcOutputIndex          int
 	grpcOutputsBeforeBase    bool
 	excludeTags              map[STR]bool
@@ -2693,6 +2694,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.grpc = true
+		if isPythonProtoModule(d) || isPythonModuleType(d.unit.Type) {
+			d.pyProtoPlugins = append(d.pyProtoPlugins, PyProtoPlugin{
+				Name: "grpc_py", ToolPath: argContribToolsProtocPluginsGrpcPython.string(),
+				OutputSuffixes: []string{"_pb2_grpc.py"},
+				Deps:           []ANY{strContribPythonGrpcio.any()},
+			})
+		}
 
 		if isGoModuleType(d.unit.Type) {
 			for _, p := range goGrpcImports(env.string(envGOSTD)) {
@@ -3278,6 +3286,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2, tokCppEvProtoPlugin:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
+	case tokPyProtoPlugin, tokPyProtoPlugin2:
+		if isPythonProtoModule(d) || isPythonModuleType(d.unit.Type) {
+			d.pyProtoPlugins = append(d.pyProtoPlugins, parsePyProtoPlugin(v))
+		}
 	case tokWithKotlinGrpc:
 		d.peerdirs = append(d.peerdirs, strBuildPlatformJavaKotlinGrpc.any())
 	case tokCompileNlg:

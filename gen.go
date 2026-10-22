@@ -1019,9 +1019,20 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 			!strings.HasPrefix(modulePath, "contrib/python/protobuf") {
 			d.peerdirs = append(d.peerdirs, strContribPythonProtobuf.any())
 		}
+	}
 
-		if hasProto && d.grpc {
-			d.peerdirs = append(d.peerdirs, strContribPythonGrpcio.any())
+	if len(d.pyProtoPlugins) > 0 {
+		for _, src := range d.pySrcs {
+			if extIsProto(src.relOrSelf().string()) {
+				hasProto = true
+				break
+			}
+		}
+
+		if hasProto {
+			for _, plugin := range d.pyProtoPlugins {
+				d.peerdirs = append(d.peerdirs, plugin.Deps...)
+			}
 		}
 	}
 
