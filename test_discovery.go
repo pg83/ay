@@ -24,18 +24,18 @@ func (ctx *GenCtx) emitDiscoveredModuleTests() {
 
 		seen[result] = true
 
+		if ctx.peerTests {
+			for _, peer := range result.testPeers {
+				visit(peer)
+			}
+		}
+
 		if project := result.testProject; project != 0 {
 			if _, ok := groups[project]; !ok {
 				projects = append(projects, project)
 			}
 
 			groups[project] = append(groups[project], result)
-		}
-
-		if ctx.peerTests {
-			for _, peer := range result.testPeers {
-				visit(peer)
-			}
 		}
 	}
 

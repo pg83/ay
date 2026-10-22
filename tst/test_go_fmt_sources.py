@@ -4,11 +4,15 @@ import lib
 from test_go_cgo import cgo_world
 from test_go_tests import (
     AUTOCHECK, args_after, between, go_module, go_test_world,
-    go_tool_args, go_world,
+    go_tool_args, go_world, resources_library, test_node,
 )
 
 
 PEER_TESTS = ("--target-platform-flag", "ADD_PEERDIRS_GEN_TESTS=yes")
+
+
+def suite_resources(graph, project):
+    return args_after(test_node(graph, project)["cmds"][0]["cmd_args"], "--global-resource")
 
 
 def fmt_files(graph, project):
@@ -27,6 +31,82 @@ def fmt_files(graph, project):
 
 
 class GoFmtSourcesTest(unittest.TestCase):
+    def test_shared_source_directory_keeps_the_first_peer_dart_resources(self):
+        files = go_world()
+        resources_library(files, "resources/crown", "CROWN_PAYLOAD")
+        resources_library(files, "resources/roots", "ROOT_PAYLOAD")
+        go_module(files, "entry", macros="PEERDIR(crown)\n")
+        files["crown/ya.make"] = (
+            "GO_LIBRARY()\nSRCDIR(foliage)\nSRCS(upper.go)\n"
+            "PEERDIR(roots resources/crown)\nEND()\n")
+        files["roots/ya.make"] = (
+            "GO_LIBRARY()\nSRCDIR(foliage)\nSRCS(lower.go)\n"
+            "PEERDIR(resources/roots)\nEND()\n")
+        files["foliage/upper.go"] = files["foliage/lower.go"] = "package foliage\n"
+        for targets in (("entry",), ("crown",), ("crown", "roots"), ("roots", "crown")):
+            with self.subTest(targets=targets):
+                graph = lib.make(files, *targets, *AUTOCHECK, *PEER_TESTS)
+                self.assertEqual(fmt_files(graph, "foliage"), ["$(S)/foliage/lower.go", "$(S)/foliage/upper.go"])
+                self.assertEqual(suite_resources(graph, "foliage/gofmt"), suite_resources(graph, "roots/govet"))
+                root_payload = "ROOT_PAYLOAD_RESOURCE_GLOBAL::$(B)/resources/ROOT_PAYLOAD"
+                crown_payload = "CROWN_PAYLOAD_RESOURCE_GLOBAL::$(B)/resources/CROWN_PAYLOAD"
+                self.assertIn(root_payload, suite_resources(graph, "foliage/gofmt"))
+                self.assertNotIn(crown_payload, suite_resources(graph, "foliage/gofmt"))
+                for required in (root_payload, crown_payload,
+                                 "GO_TOOLS_RESOURCE_GLOBAL::$(B)/resources/GO_TOOLS"):
+                    self.assertIn(required, suite_resources(graph, "crown/govet"))
+        graph = lib.make(files, "crown", *AUTOCHECK)
+        self.assertEqual(fmt_files(graph, "foliage"), ["$(S)/foliage/upper.go"])
+        self.assertIn(crown_payload, args_after(
+            test_node(graph, "foliage/gofmt")["cmds"][0]["cmd_args"], "--global-resource"))
+
+    def test_ros_contexts_preserve_go_and_native_resources_before_check_merging(self):
+        from test_ros import ros_files
+        files = go_world()
+        files.update(ros_files())
+        resources_library(files, "build/platform/clang", "CLANG20")
+        files["build/conf/autoincludes.json"] = '["orchard"]\n'
+        files["orchard/linters.make.inc"] = (
+            "IF(MODULE_LANG == CPP)\nSTYLE_CPP()\n"
+            "SET_CUSTOM_CLANG_TIDY(resources/analyzer ORCHARD_ANALYZER)\nENDIF()\n")
+        resources_library(files, "resources/analyzer", "ORCHARD_ANALYZER")
+        resources_library(files, "resources/go", "GO_PAYLOAD")
+        resources_library(files, "resources/common", "COMMON_PAYLOAD")
+        resources_library(files, "resources/crown", "CROWN_PAYLOAD")
+        files["orchard/messages/ya.make"] = (
+            f"ROS_LIBRARY(fruit)\n{lib.BARE_MODULE}PEERDIR(resources/common)\n"
+            "IF(GO_ROS)\nSRCDIR(orchard/foliage)\nSRCS(lower.go)\nPEERDIR(resources/go)\n"
+            "ELSEIF(CPP_ROS)\nSRCS(native.cpp)\nENDIF()\nEND()\n")
+        files["orchard/messages/native.cpp"] = "int native;\n"
+        files["orchard/crown/ya.make"] = (
+            "GO_LIBRARY()\nSRCDIR(orchard/foliage)\nSRCS(upper.go)\n"
+            "PEERDIR(orchard/messages resources/crown)\nEND()\n")
+        files["orchard/foliage/upper.go"] = files["orchard/foliage/lower.go"] = "package foliage\n"
+        files["orchard/native/ya.make"] = (
+            f"PROGRAM()\n{lib.BARE_MODULE}ALLOCATOR(FAKE)\nPEERDIR(orchard/messages)\nSRCS(entry.cpp)\nEND()\n")
+        files["orchard/native/entry.cpp"] = "int entry;\n"
+        for targets in (("orchard/native", "orchard/crown"), ("orchard/crown", "orchard/native")):
+            with self.subTest(targets=targets):
+                graph = lib.make(files, *targets, *AUTOCHECK, *PEER_TESTS)
+                self.assertEqual(fmt_files(graph, "orchard/foliage"), [
+                    "$(S)/orchard/foliage/lower.go", "$(S)/orchard/foliage/upper.go"])
+                checking = suite_resources(graph, "orchard/foliage/gofmt")
+                self.assertEqual(checking, suite_resources(graph, "orchard/messages/govet"))
+                for name in ("GO_PAYLOAD", "COMMON_PAYLOAD", "GO_TOOLS", "CLANG20"):
+                    self.assertIn(f"{name}_RESOURCE_GLOBAL::$(B)/resources/{name}", checking)
+                self.assertNotIn("CROWN_PAYLOAD_RESOURCE_GLOBAL::$(B)/resources/CROWN_PAYLOAD", checking)
+                self.assertIn("CROWN_PAYLOAD_RESOURCE_GLOBAL::$(B)/resources/CROWN_PAYLOAD",
+                              suite_resources(graph, "orchard/crown/govet"))
+                for project in ("orchard/native", "orchard/messages"):
+                    self.assertIn("CLANG_FORMAT_RESOURCE_GLOBAL::$(B)/resources/CLANG_FORMAT",
+                                  suite_resources(graph, project + "/clang_format"))
+                compiled = next(node for node in graph["graph"] if node["kv"]["p"] == "CC"
+                                and "$(S)/orchard/messages/native.cpp" in node["inputs"])
+                command = compiled["cmds"][0]["cmd_args"]
+                self.assertIn("$(B)/resources/CLANG20/bin/clang++", command)
+                lib.node_by_output(graph, "$(B)/resources/ORCHARD_ANALYZER")
+                self.assertNotIn("ORCHARD_ANALYZER_RESOURCE_GLOBAL::$(B)/resources/ORCHARD_ANALYZER", checking)
+
     def test_raw_declared_sources_are_sorted_deduplicated_and_grouped_by_directory(self):
         files = go_world()
         files["pkg/ya.make"] = (
