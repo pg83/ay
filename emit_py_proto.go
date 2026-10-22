@@ -134,6 +134,12 @@ type PyPBModuleEmission struct {
 	tail           []ANY
 }
 
+func (e *EmitContext) pyProtoIncludePlan() []VFS {
+	// TModuleIncDirs::Get concatenates locally declared includes and the
+	// separately unique propagated peer list. An overlap remains in both.
+	return concat(dedup(e.d.protoIncludeLocal), e.peers.ProtoInclude)
+}
+
 func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS) *PyPBModuleEmission {
 	if e.pyPBOk {
 		return &e.pyPBEmission
@@ -143,9 +149,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS) *PyPBModuleEmissio
 
 	ctx, _, d := e.ctx, e.instance, e.d
 	pe := &e.pyPBEmission
-	// TModuleIncDirs::Get concatenates locally declared includes and the
-	// separately unique propagated peer list. An overlap remains in both.
-	protoInclude := concat(dedup(d.protoIncludeLocal), e.peers.ProtoInclude)
+	protoInclude := e.pyProtoIncludePlan()
 
 	*pe = PyPBModuleEmission{}
 

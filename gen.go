@@ -2439,6 +2439,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	d.scanCtx = newModuleScanContext(ctx, instance, d, scanAddIncl, d.cc.PeerAddInclGlobal, fullPeerAddInclGlobal, d.cc.ProtoInclude)
+	if isPythonProtoModule(d) || isPythonModuleType(d.unit.Type) {
+		// Proto imports resolve through TModuleIncDirs, in the same order
+		// used by _PROTO__INCLUDE. Output namespaces and runtime directories
+		// enter this plan only when actually declared as includes.
+		d.scanCtx.protoInclude = ctx.na.vfsList(e.pyProtoIncludePlan()...)
+		d.scanCtx.protoOutRoot = 0
+		d.scanCtx.configs[scanDomainProto] = ctx.parsers.resolveScanConfig(d.scanCtx.protoInclude, nil, d.scanCtx.base)
+	}
+
 	d.scanCtx.rosInclude = rosInclude
 	d.scanCtx.flatcInclude = moduleFlatcInclude
 	d.scanCtx.cythonPeerIncl = frame.peerCtx.CythonInclude
