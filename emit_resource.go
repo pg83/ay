@@ -185,7 +185,7 @@ func (e *EmitContext) resourceSourceAction(items []ResourceItem) *SourceActionIn
 	return info
 }
 
-func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs InputChunks, deps []NodeRef, action *SourceActionInfo) NodeRef {
+func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs, buildFrom InputChunks, deps []NodeRef, action *SourceActionInfo) NodeRef {
 	if info := e.codegen.lookup(outputObj); info != nil && info.ResourceObjcopy && info.OwnerModule == e.instance.Path && info.OwnerSerial != e.frame.serial {
 		return info.ProducerRef
 	}
@@ -194,14 +194,15 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 	env := envVarsVCS
 
 	node := Node{
-		Platform:  e.instance.Platform,
-		Cmds:      na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Env: env}),
-		Env:       env,
-		Inputs:    inputs,
-		Outputs:   na.vfsList(outputObj),
-		KV:        kv,
-		Resources: e.instance.Platform.UsesPython3Clang,
-		DepRefs:   deps,
+		Platform:        e.instance.Platform,
+		Cmds:            na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Env: env}),
+		Env:             env,
+		Inputs:          inputs,
+		BuildFromInputs: buildFrom,
+		Outputs:         na.vfsList(outputObj),
+		KV:              kv,
+		Resources:       e.instance.Platform.UsesPython3Clang,
+		DepRefs:         deps,
 	}
 
 	ref := e.emitNode(node)
@@ -473,6 +474,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		})
 
 		inputs := na.inputList(rescompilersChunk, adjacentSources, adjacentBuilds, objcopyScriptChunk, tailBuilds)
+		buildFrom := na.inputList(rescompilersChunk, adjacentSources, adjacentBuilds, objcopyScriptChunk)
 
 		hashScratch = append(hashScratch, unitElem)
 
@@ -484,7 +486,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
 		action := e.resourceSourceAction(chunk)
 
-		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, inputs, deps, action))
+		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, inputs, buildFrom, deps, action))
 
 		if e.codegen.lookup(outputObj).SourceAction != action {
 			e.numberSourceAction(action)
