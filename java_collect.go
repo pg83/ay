@@ -156,6 +156,7 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	d.javacOpts.cur = d.javacOpts.base
 
 	javaSetJDK(d, env, d.jdkReal)
+	jm.instance.Platform.updateJdkConfig(env, envJdkRealVersion, nil)
 	env.setString(envMODULE_TAG, jm.unit.tag)
 
 	if jm.unit.proto {
@@ -494,6 +495,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		}
 	case "JDK_VERSION", "DEFAULT_JDK_VERSION":
 		javaSetJDK(d, env, arg0)
+		jm.instance.Platform.updateJdkConfig(env, envJdkRealVersion, nil)
 
 		d.hasPerModuleJDK = true
 		d.recalcJavacOpts(jm)

@@ -1612,6 +1612,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.setVars[internStr(v.Name)] = internStr(value)
+			platform.updateJdkConfig(env, v.NameEnv, d.setVars)
 
 			if perlChanged {
 				recalcPerlEnv(env, platform, d.setVars, perlMask)
@@ -1746,6 +1747,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if !bound {
 				d.captureResourcePeerPolicy(v.VarName, env)
+				platform.updateJdkConfig(env, v.NameEnv, d.setVars)
 			}
 
 			if !bound && slices.Contains(perlConfigOutputs, v.NameEnv) {
@@ -1921,6 +1923,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn, platform)
 		case *UnknownStmt:
+			if assignment := jdkVersionMacroAssignment(v, env); assignment != nil {
+				recordHandledMacro(v.Name, expandStmtTokens(v.Args, env))
+				collectStmts(ctx, modulePath, kind, language, []Stmt{assignment}, env, d, onWarn, platform)
+				env.setBool(envHasPerModuleJdkVersion, true)
+
+				continue
+			}
+
 			if assignment := declarativeMacroAssignment(v, d.multimodule == tokPackage, env); assignment != nil {
 				recordHandledMacro(v.Name, expandStmtTokens(v.Args, env))
 				collectStmts(ctx, modulePath, kind, language, []Stmt{assignment}, env, d, onWarn, platform)
@@ -1987,6 +1997,16 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					recordHandledMacro(expanded.Name, expanded.Args)
 				} else {
 					applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
+				}
+
+				if expanded.Name == tokEnable || expanded.Name == tokDisable || expanded.Name == tokSetAppend {
+					for i, arg := range expanded.Args {
+						if expanded.Name == tokSetAppend && i > 0 {
+							break
+						}
+
+						platform.updateJdkConfig(env, internEnv(arg.string()), d.setVars)
+					}
 				}
 
 				if perlMask != 0 {

@@ -33,6 +33,22 @@ class ConfComparisonValuesTest(unittest.TestCase):
                 graph = lib.make(tree(conf), "app")
                 self.assertEqual("-lselected_branch" in link(graph, "$(B)/app/app"), expected)
 
+    def test_boolean_identifiers_use_nonempty_strings_in_compound_conditions(self):
+        conf = lib.FAKE_LD_CONF + (
+            '\nwhen (($BRANCH_PROBE && !$ABSENT_PROBE) || $OTHER_PROBE) {\n'
+            'BEFORE_PEERS+=-lselected_branch\n}\n'
+        )
+        for value in ("no", "false", "0", "", "yes"):
+            with self.subTest(value=value):
+                graph = lib.make(tree(conf), "app", "-DBRANCH_PROBE=" + value)
+                self.assertEqual("-lselected_branch" in link(graph, "$(B)/app/app"), value != "")
+
+    def test_dollar_yes_and_no_are_variables_in_boolean_and_comparison_positions(self):
+        for condition in ('$yes', '$no', '$yes == "no"', '$no == "false"'):
+            conf = lib.FAKE_LD_CONF + f'\nwhen ({condition}) {{\nBEFORE_PEERS+=-lselected_branch\n}}\n'
+            graph = lib.make(tree(conf), "app", "-Dyes=no", "-Dno=false")
+            self.assertIn("-lselected_branch", link(graph, "$(B)/app/app"))
+
     def test_typed_platform_values_remain_strings_in_ordering(self):
         for condition, expected in (
             ('$ANDROID_API < "1"', True),

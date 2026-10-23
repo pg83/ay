@@ -209,11 +209,19 @@ func confStmtAssignment(line string) (name, value string, op ConfOp, ok bool) {
 }
 
 func parseConfCondition(rel, expr string) []CondNode {
-	expr = strings.NewReplacer("$", "", "&&", " AND ", "||", " OR ", "!=", "!=", "!", " NOT ").Replace(expr)
+	expr = strings.NewReplacer("&&", " AND ", "||", " OR ", "!=", "!=", "!", " NOT ").Replace(expr)
 
 	p := &Parser{lex: &Lexer{name: rel, src: []byte(expr), line: 1, col: 1}}
 	tok := Token{line: 1, col: 1}
-	cp := CondParser{parent: p, ifTok: tok, toks: p.readCondTokens(tok)}
+	tokens := p.readCondTokens(tok)
+
+	for i := range tokens {
+		if name, reference := strings.CutPrefix(tokens[i].string(), "$"); reference && isIdentShapedName(name) {
+			tokens[i].kind = tokIdent
+		}
+	}
+
+	cp := CondParser{parent: p, ifTok: tok, toks: tokens}
 
 	cp.parseOr()
 
@@ -223,6 +231,12 @@ func parseConfCondition(rel, expr string) []CondNode {
 
 	for i := range p.condScratch {
 		switch p.condScratch[i].Kind {
+		case ckIdent:
+			if name, reference := strings.CutPrefix(p.condScratch[i].Name, "$"); reference {
+				p.condScratch[i].Kind = ckConfIdent
+				p.condScratch[i].Name = name
+				p.condScratch[i].Env = internEnv(name)
+			}
 		case ckEq:
 			p.condScratch[i].Kind = ckConfEq
 		case ckGt:
@@ -241,6 +255,8 @@ func evalConfAtomString(nodes []CondNode, i int32, env Environment) string {
 	n := &nodes[i]
 
 	switch n.Kind {
+	case ckConfIdent:
+		return env.string(n.Env)
 	case ckIdent:
 		if n.Name == "yes" || n.Name == "no" {
 			return n.Name
@@ -332,7 +348,7 @@ func (c *ConfFile) condVars(b int, add func(string)) {
 	for b != 0 {
 		for p := b; p != 0; p = c.branches[p].previous {
 			for _, n := range c.cond(p) {
-				if n.Kind == ckIdent && n.Name != "yes" && n.Name != "no" {
+				if n.Kind == ckConfIdent || n.Kind == ckIdent && n.Name != "yes" && n.Name != "no" {
 					add(n.Name)
 				}
 			}

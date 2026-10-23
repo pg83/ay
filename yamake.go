@@ -102,6 +102,7 @@ const (
 	ckUnsupportedOp
 	ckConfLt
 	ckConfEq
+	ckConfIdent
 	ckGt
 	ckEndsWith
 )

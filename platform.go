@@ -12,6 +12,7 @@ var (
 )
 
 type PlatformConf struct {
+	jdkConfig           *ConfFile
 	GoStdVersion        string
 	Linker              *LinkerConf
 	Parsers             *IncludeParserManager
@@ -20,7 +21,7 @@ type PlatformConf struct {
 }
 
 func readPlatformConf(fs FS, parsers *IncludeParserManager) PlatformConf {
-	return PlatformConf{GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(parsers), Parsers: parsers, YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
+	return PlatformConf{jdkConfig: readJdkConfig(parsers), GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(parsers), Parsers: parsers, YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
 }
 
 func confProtoHeaderEpilogue(fs FS) bool {
@@ -30,6 +31,7 @@ func confProtoHeaderEpilogue(fs FS) bool {
 }
 
 type Platform struct {
+	jdkConfig             *ConfFile
 	YqlStableABI          bool
 	ProtoHeaderEpilogue   bool
 	picVariant            *Platform
@@ -136,6 +138,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	}
 
 	p := &Platform{
+		jdkConfig:             pc.jdkConfig,
 		YqlStableABI:          pc.YqlStableABI,
 		ProtoHeaderEpilogue:   pc.ProtoHeaderEpilogue,
 		OS:                    os,
@@ -217,6 +220,8 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 
 	p.Go = newGoStd(goStdVersion)
 	p.ifEnv = buildPlatformIfEnv(p)
+	p.updateJdkConfig(p.ifEnv, envJdkVersion, nil)
+	p.updateJdkConfig(p.ifEnv, envJdkRealVersion, nil)
 	p.Linker = pc.Linker.flags(p)
 	p.Sysincl, p.customStyleMacros = sysinclFiles(pc.Parsers, root, p.ifEnv)
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))

@@ -379,6 +379,7 @@ var tokName = [...]STR{
 	tokCppEnumsSerialization:          internStr("CPP_ENUMS_SERIALIZATION"),
 	tokDecimalMd5Lower32Bits:          internStr("DECIMAL_MD5_LOWER_32_BITS"),
 	tokDefaultJdkVersion:              internStr("DEFAULT_JDK_VERSION"),
+	tokJdkVersion:                     internStr("JDK_VERSION"),
 	tokExportYmapsProto:               internStr("EXPORT_YMAPS_PROTO"),
 	tokLj21Archive:                    internStr("LJ_21_ARCHIVE"),
 	tokProtoDescriptions:              internStr("PROTO_DESCRIPTIONS"),
@@ -778,6 +779,7 @@ const (
 	tokCppEnumsSerialization
 	tokDecimalMd5Lower32Bits
 	tokDefaultJdkVersion
+	tokJdkVersion
 	tokExportYmapsProto
 	tokLj21Archive
 	tokProtoDescriptions
