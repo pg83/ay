@@ -66,8 +66,14 @@ func fromSandboxAutoLinkMember(name string) bool {
 
 func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
 	if info := e.existingSandbox(stmt); info != nil {
+		sourceAction := &SourceActionInfo{DeclSeq: stmt.DeclSeq}
+
 		for i, out := range info.Sandbox.Outputs {
-			e.collectScriptOutput(out)
+			local := *info
+
+			local.OutputPath, local.SourceAction = out, sourceAction
+
+			e.register(local)
 
 			if i < len(stmt.OUTFiles) && fromSandboxAutoLinkMember(stmt.OUTFiles[i].string()) {
 				memberRefs = append(memberRefs, info.ProducerRef)

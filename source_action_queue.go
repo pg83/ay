@@ -68,6 +68,14 @@ func (e *EmitContext) sourceRootInput(meta SrcMeta) VFS {
 	return e.moduleSourceVFS(meta.Source)
 }
 
+func sourceActionOutput(info *GeneratedFileInfo) VFS {
+	if info.ProducerMainOut != 0 {
+		return info.ProducerMainOut
+	}
+
+	return info.OutputPath
+}
+
 func (e *EmitContext) scheduleSourceActions() {
 	assert(e.srcsClosed, "source action positions before source queue closed")
 
@@ -77,6 +85,7 @@ func (e *EmitContext) scheduleSourceActions() {
 
 		queue := make([]*sourceQueueAction, 0, len(e.sourceProducers)+len(e.sourceRoots))
 		byProducer := make(map[NodeRef]*sourceQueueAction, len(e.sourceProducers))
+		byOutput := make(map[VFS]*sourceQueueAction, len(e.sourceProducers))
 
 		for ref, info := range e.sourceProducers {
 			priority := info.SourceAction.Priority
@@ -89,6 +98,7 @@ func (e *EmitContext) scheduleSourceActions() {
 
 			queue = append(queue, a)
 			byProducer[ref] = a
+			byOutput[sourceActionOutput(info)] = a
 		}
 
 		for seq, meta := range e.sourceRoots {
@@ -140,11 +150,19 @@ func (e *EmitContext) scheduleSourceActions() {
 						continue
 					}
 
-					if info.OwnerModule != e.instance.Path || info.OwnerSerial != 0 && info.OwnerSerial != e.frame.serial {
+					if info.OwnerModule != e.instance.Path {
 						continue
 					}
 
 					producer := byProducer[info.ProducerRef]
+
+					if producer == nil {
+						producer = byOutput[sourceActionOutput(info)]
+					}
+
+					if producer == nil && info.OwnerSerial != 0 && info.OwnerSerial != e.frame.serial {
+						continue
+					}
 
 					if producer == nil || producer == a || producer.seq == 0 && producer.info.Priority == 0 || producer.done && !producer.known {
 						known = false
