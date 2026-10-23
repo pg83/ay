@@ -140,9 +140,17 @@ class ResourceDeclsTest(unittest.TestCase):
         lib.tool_program(files, "tools/rescompressor", "rescompressor")
         result = lib.make_process(files, "lib", env={"AY_DEBUG_OWNERSHIP": "1"})
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout), lib.make(files, "lib"))
+        graph = json.loads(result.stdout)
+        self.assertEqual(graph, lib.make(files, "lib"))
+        compiled = lib.node_by_output(graph, "$(B)/lib/a.cpp.bc")
+        merged = lib.node_by_output(graph, "$(B)/lib/kern_merged.bc")
+        optimized = lib.node_by_output(graph, "$(B)/lib/kern_optimized.bc")
+        self.assertEqual(merged["deps"], [compiled["uid"]])
+        self.assertEqual(optimized["deps"], [merged["uid"]])
+        self.assertIn(compiled["outputs"][0], merged["inputs"])
+        self.assertIn(merged["outputs"][0], optimized["inputs"])
         lines = result.stderr.splitlines()
-        self.assertEqual(lines[0], "ownership: 3 violating (field, site) pairs")
+        self.assertEqual(lines[0], "ownership: 2 violating (field, site) pairs")
         rows, sites = [], set()
         for line in lines[1:]:
             match = re.fullmatch(
@@ -160,7 +168,6 @@ class ResourceDeclsTest(unittest.TestCase):
             (3, 3, "Cmd.CmdArgs.chunk", "$(B)/lib/a.cpp.bc"),
         )
         self.assertCountEqual(rows[1:], [
-            (1, 1, "DepRefs", "$(B)/lib/kern_merged.bc"),
             (1, 1, "Inputs.chunk", "$(B)/lib/kern_merged.bc"),
         ])
 
