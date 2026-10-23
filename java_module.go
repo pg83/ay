@@ -552,20 +552,12 @@ func (jm *JavaModule) dmRules() *javaDMRules {
 	return r
 }
 
-func passesPeerGlobals(r *ModuleEmitResult) bool {
-	return !isLinkingModuleType(r.ModuleStmtName) && r.ModuleStmtName != tokDllJava
-}
-
 func javaOwnGlobals(peers []javaForeignPeer) []ResourceDecl {
 	var out []ResourceDecl
 
 	seen := map[STR]bool{}
 
 	for _, p := range peers {
-		if !passesPeerGlobals(p.res) {
-			continue
-		}
-
 		for _, decl := range p.res.ResourceGlobalClosure {
 			if !seen[decl.GlobalVar] {
 				seen[decl.GlobalVar] = true

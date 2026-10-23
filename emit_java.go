@@ -411,7 +411,7 @@ func (ctx *GenCtx) javaResourceGlobals(jm *JavaModule) []ResourceDecl {
 		if e.java != nil {
 			add(e.java.globals)
 		} else {
-			add(e.foreign.ResourceGlobalClosure)
+			add(e.foreign.privateResourceGlobals)
 		}
 	}
 

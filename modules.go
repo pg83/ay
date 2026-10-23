@@ -282,6 +282,10 @@ type ModuleData struct {
 	python3NativeIncl        bool
 	pythonPeerTags           []string
 	pythonHeaderEnv          Environment
+	resourcePeerOverride     STR
+	resourcePeerExplicit     bool
+	resourcePeerClosed       bool
+	resourcePassPeers        bool
 	noImportTracing          bool
 	usePython2               bool
 	usePython3               bool
@@ -789,6 +793,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	initPythonImportMask(env, d)
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
+	d.finishResourcePeerPolicy()
 
 	if pd := programSourceDir(d.moduleStmt); pd != nil {
 		d.srcDirs = append(d.srcDirs, dirKey(*pd).source())
@@ -1590,6 +1595,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			perlChanged := perlMask != 0 && env.string(v.NameEnv) != value
 
 			env.setFromString(v.NameEnv, value)
+			d.captureResourcePeerPolicy(v.Name, env)
 
 			if v.Name == importMaskVariable {
 				setPythonImportMask(value, d)
@@ -1629,8 +1635,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.ragel6Flags = internAnys(strings.Fields(value))
 			}
 		case *EndStmt:
-
 			d.pythonLint.bind(env)
+			d.finishResourcePeerPolicy()
+
 			d.unit.HashTag = internStr(env.string(envMODULE_TAG))
 			d.pyNamespacePython2 = env.string(envPYTHON2) == "yes"
 
@@ -1734,6 +1741,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			perlChanged := perlMask != 0 && !bound
 
 			env.setDefaultString(v.NameEnv, value)
+
+			if !bound {
+				d.captureResourcePeerPolicy(v.VarName, env)
+			}
 
 			if !bound && slices.Contains(perlConfigOutputs, v.NameEnv) {
 				if d.setVars == nil {
@@ -3109,6 +3120,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			a := aTok.string()
 
 			env.setBool(internEnv(a), true)
+			d.captureResourcePeerPolicy(a, env)
 
 			switch a {
 			case "SANITIZER_TYPE":
@@ -3135,6 +3147,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			a := aTok.string()
 
 			env.setBool(internEnv(a), false)
+			d.captureResourcePeerPolicy(a, env)
 
 			if a == "SANITIZER_TYPE" {
 				setupPythonImportMask(env, d)
@@ -3596,6 +3609,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			env.setFromString(internEnv(name), value)
+			d.captureResourcePeerPolicy(name, env)
 
 			if name == "SANITIZER_TYPE" {
 				setupPythonImportMask(env, d)

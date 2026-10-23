@@ -174,6 +174,7 @@ type ModuleEmitResult struct {
 	persisted                       bool
 	DescClosure                     []DescProtoPeer
 	ResourceGlobalClosure           []ResourceDecl
+	privateResourceGlobals          []ResourceDecl
 	java                            *JavaModule
 	TestSuites                      []*TestSuite
 	testProject                     VFS
@@ -1341,6 +1342,16 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		return result
 	}
+
+	defer func() {
+		if result != nil {
+			result.privateResourceGlobals = result.ResourceGlobalClosure
+
+			if !d.resourcePassPeers {
+				result.ResourceGlobalClosure = nil
+			}
+		}
+	}()
 
 	defer func() {
 		if result != nil {
