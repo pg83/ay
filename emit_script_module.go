@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 func (e *EmitContext) pythonScriptCmd(script string, args ...string) Cmd {
 	na := e.ctx.na
 	head := []ANY{e.d.tc.Python3.any(), source("build/scripts/", script).any()}
@@ -70,8 +72,21 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 		ownedOutputs = node.Outputs
 	}
 
+	// json_visitor.cpp propagates generated .in BuildFrom dependencies through
+	// the command's included-dependency set. Publish this separate producer
+	// obligation before a closure scan can visit the lazy module output.
+	var templates []VFS
+	for _, chunk := range node.Inputs {
+		for _, input := range chunk {
+			if input.isBuild() && strings.HasSuffix(input.relString(), ".in") && reg.lookup(input) != nil {
+				templates = append(templates, input)
+			}
+		}
+	}
+	templates = na.dedupClosure(templates)
+
 	for _, out := range ownedOutputs {
-		reg.register(GeneratedFileInfo{OutputPath: out, OwnerModule: e.instance.Path, ProducerRef: ref, OnUse: pending})
+		reg.register(GeneratedFileInfo{OutputPath: out, OwnerModule: e.instance.Path, ProducerRef: ref, OnUse: pending, IncludedBuildInputs: templates})
 	}
 
 	return ref

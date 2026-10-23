@@ -332,10 +332,15 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 	}
 
 	var extra []Closure
+	var included InputChunks
 	var templates, textTemplates []VFS
 
 	for _, chunk := range node.Inputs {
 		for _, input := range chunk {
+			if info := e.codegen.lookup(input); info != nil && len(info.IncludedBuildInputs) > 0 {
+				included = append(included, info.IncludedBuildInputs)
+			}
+
 			template := strings.HasSuffix(input.relString(), ".in")
 			text := input.isSource() && slices.Contains(node.TextInputs, input)
 
@@ -359,14 +364,14 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 		e.codegen.forwardTemplateInputs(node.Outputs[0], e.ctx.na.vfsList(templates...), e.ctx.na.vfsList(textTemplates...))
 	}
 
-	if len(extra) == 0 {
+	if len(extra)+len(included) == 0 {
 		return
 	}
 
 	node.InputClosures = append(node.InputClosures, extra...)
 
 	dedupers.with(func(dd *DeDuper) {
-		bound := len(node.Inputs)
+		bound := len(node.Inputs) + len(included)
 
 		for _, cl := range extra {
 			bound += len(cl.bucketList())
@@ -379,6 +384,12 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 
 			for _, input := range chunk {
 				dd.addStable(input.strID())
+			}
+		}
+
+		for _, bucket := range included {
+			if unseen := e.ctx.na.filterSeen(dd, bucket); len(unseen) > 0 {
+				chunks = append(chunks, unseen)
 			}
 		}
 

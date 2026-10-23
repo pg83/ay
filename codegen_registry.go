@@ -37,6 +37,9 @@ type GeneratedFileInfo struct {
 	LateOutputs      []VFS
 	ModuleOutputs    []VFS
 	ParsedIncludes   ParsedIncludeSet
+
+	// Generated .in BuildFrom producers propagated as included dependencies.
+	IncludedBuildInputs []VFS
 }
 
 type SourceModuleInfo struct {
