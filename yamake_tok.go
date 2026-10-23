@@ -118,6 +118,7 @@ var tokName = [...]STR{
 	tokInvalid:                            0,
 	tokAddInclSelf:                        internStr("ADDINCLSELF"),
 	tokAliceCapability:                    internStr("ALICE_CAPABILITY"),
+	tokAliceGenerateFunctionSpecs:         internStr("ALICE_GENERATE_FUNCTION_SPECS"),
 	tokAliceGenerateProtoIncludes:         internStr("ALICE_GENERATE_PROTO_INCLUDES"),
 	tokAliceGenerateFunctionProtoIncludes: internStr("ALICE_GENERATE_FUNCTION_PROTO_INCLUDES"),
 	tokAliceTypedCallback:                 internStr("ALICE_TYPED_CALLBACK"),
@@ -503,6 +504,7 @@ const (
 	tokRosSrvCmd
 	tokAddInclSelf
 	tokAliceCapability
+	tokAliceGenerateFunctionSpecs
 	tokAliceGenerateProtoIncludes
 	tokAliceGenerateFunctionProtoIncludes
 	tokAliceTypedCallback
