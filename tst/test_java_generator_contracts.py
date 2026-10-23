@@ -24,11 +24,12 @@ class JavaGeneratorContractsTest(unittest.TestCase):
         self.assertIn("$(S)/gen/in.txt", generated["inputs"])
         self.assertIn("$(B)/app/app.jar", generated["inputs"])
 
-    def test_generator_without_output_directory_does_not_emit_an_archive(self):
-        files = tree("RUN_JAVA_PROGRAM(Main)")
-        graph = lib.make(files, "app")
-        lib.node_by_output(graph, "$(B)/app/app.jar")
-        self.assertFalse(any(n["kv"]["p"] == "RJ" for n in graph["graph"]))
+    def test_generator_without_outputs_is_rejected(self):
+        files = test_java.JavaProgramTest().tree()
+        files["gen/ya.make"] = "JAVA_LIBRARY_NON_SPLIT()\nRUN_JAVA_PROGRAM(Main CLASSPATH app)\nEND()\n"
+        result = lib.make_process(files, "gen")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("RUN_JAVA_PROGRAM requires at least one output", result.stderr)
 
     def test_native_generator_rejects_java_library_as_an_executable(self):
         files = tree("")

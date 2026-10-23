@@ -21,6 +21,7 @@ const (
 	prodBaseCodegen
 	prodRunProgram
 	prodRunPython
+	prodRunJava
 	prodArchiveAsm
 	prodSrc
 	prodEnum
@@ -285,7 +286,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	module := e.instance.Path.relString()
 
 	n := len(d.cudaSrcs) + len(d.implibs) + len(d.copyFiles) + len(d.configureFiles) + len(d.antlrRuns) + len(d.antlr4Grammars) +
-		len(d.decimalMD5) + len(d.buildMns) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) +
+		len(d.decimalMD5) + len(d.buildMns) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) + len(d.runJavaPrograms) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
 		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens) + len(d.cgoSrcs) +
 		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos) + len(d.listProtos) + len(d.fromArchives) + len(d.pchFiles) + len(d.proto2Fbs) + len(d.pireInline)
@@ -555,6 +556,18 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 		runIns(rp.INFiles)
 		push(prodRunProgram, i, start, outEnd)
+	}
+
+	for i, rp := range d.runJavaPrograms {
+		r := parseJavaRunProgram(module, rp.Call)
+		start := len(backing)
+
+		backing = append(backing, javaRunProgramOutputs(module, r)...)
+
+		outEnd := len(backing)
+
+		runIns(internAnys(r.in))
+		push(prodRunJava, i, start, outEnd)
 	}
 
 	for i, rp := range d.runPython {
@@ -1018,6 +1031,8 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 			e.emitBaseCodegen(e.d.baseCodegens[pos.index])
 		case prodRunProgram:
 			e.emitRunProgramStmt(e.d.runPrograms[pos.index])
+		case prodRunJava:
+			e.emitNativeJavaProgram(e.d.runJavaPrograms[pos.index])
 		case prodRunPython:
 			e.emitRunPythonStmt(e.d.runPython[pos.index])
 		case prodArchiveAsm:

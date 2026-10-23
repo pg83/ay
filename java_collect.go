@@ -745,7 +745,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
 	case "RUN_JAVA_PROGRAM":
-		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: d.javaRunProgramRawArgs(raw, env)})
+		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: javaRunProgramRawArgs(raw, env, d.rawVars)})
 	case "GENERATE_SCRIPT":
 		d.generateScripts = append(d.generateScripts, args)
 	case "WITH_JDK":
@@ -1161,7 +1161,7 @@ func (d *JavaData) javaRawArgs(raw []string) []string {
 	return out
 }
 
-func (d *JavaData) javaRunProgramRawArgs(raw []string, env Environment) []string {
+func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[string]string) []string {
 	active := map[string]bool{}
 
 	var expand func(string) string
@@ -1178,7 +1178,7 @@ func (d *JavaData) javaRunProgramRawArgs(raw []string, env Environment) []string
 				throwFmt("RUN_JAVA_PROGRAM: recursive variable expansion for %s", name)
 			}
 
-			value, ok := d.rawVars[name]
+			value, ok := rawVars[name]
 
 			if !ok {
 				value, ok = javaConfGlobals[name]

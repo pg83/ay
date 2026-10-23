@@ -337,6 +337,8 @@ type ModuleData struct {
 	antlr4Grammars           []Antlr4GrammarInfo
 	antlrRuns                []AntlrRunInfo
 	runPrograms              []*RunProgramStmt
+	runJavaPrograms          []NativeJavaProgram
+	runJavaJdk               string
 	decimalMD5               []*DecimalMD5Lower32BitsStmt
 	buildMns                 []*BuildMnStmt
 	splitCodegens            []*SplitCodegenStmt
@@ -844,6 +846,16 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.srcs = nativeSources
 	finishPythonImportMask(env, d)
 	bindRunProgramCalls(d, env)
+
+	if len(d.runJavaPrograms) > 0 {
+		d.runJavaJdk = env.string(envJdkRealVersion)
+		d.peerdirs = append(d.peerdirs, strBuildPlatformJavaJdk.any())
+
+		for _, peer := range strings.Fields(env.string(envJdkResourcePeerdir)) {
+			d.peerdirs = append(d.peerdirs, internStr(peer).any())
+		}
+	}
+
 	d.test.expandValues(env)
 
 	if !d.pythonLint.bound {
@@ -1986,6 +1998,21 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn, platform)
 		case *UnknownStmt:
+			if v.Raw.string() == "RUN_JAVA_PROGRAM" {
+				raw := v.Args
+
+				if v.LexicalArgs != nil {
+					raw = v.LexicalArgs
+				}
+
+				args := splitJavaCommandWords(expandStmtToken(strings.Join(anyStrs(raw), " "), env))
+
+				d.runJavaPrograms = append(d.runJavaPrograms, NativeJavaProgram{Call: JavaRunProgram{args: args, raw: javaRunProgramRawArgs(anyStrs(raw), env, nil)}, DeclSeq: d.nextDeclSeq()})
+				recordHandledMacro(v.Name, internAnys(args))
+
+				continue
+			}
+
 			if v.Name == tokAliceGenerateFunctionSpecs {
 				collectStmts(ctx, modulePath, kind, language, aliceFunctionSpecStmts(expandStmtTokens(v.Args, env), v.Line), env, d, onWarn, platform)
 

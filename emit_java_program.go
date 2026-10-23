@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -314,6 +315,8 @@ func javaEntryPaths(closure []JavaClosureEntry) []VFS {
 type javaRunProgram struct {
 	args   []string
 	in     []string
+	out    []string
+	noauto []string
 	inDirs []string
 	outDir string
 	cwd    string
@@ -322,7 +325,7 @@ type javaRunProgram struct {
 	gentar VFS
 }
 
-func parseJavaRunProgram(jm *JavaModule, rp JavaRunProgram) javaRunProgram {
+func parseJavaRunProgram(dir string, rp JavaRunProgram) javaRunProgram {
 	r := javaRunProgram{}
 	mode := ""
 
@@ -341,6 +344,10 @@ func parseJavaRunProgram(jm *JavaModule, rp JavaRunProgram) javaRunProgram {
 		switch mode {
 		case "IN", "IN_NOPARSE":
 			r.in = append(r.in, a)
+		case "OUT":
+			r.out = append(r.out, a)
+		case "OUT_NOAUTO":
+			r.noauto = append(r.noauto, a)
 		case "IN_DIR":
 			r.inDirs = append(r.inDirs, a)
 		case "OUT_DIR":
@@ -359,7 +366,7 @@ func parseJavaRunProgram(jm *JavaModule, rp JavaRunProgram) javaRunProgram {
 	r.hash = fmt.Sprintf("%x", sum[:])
 
 	if r.outDir != "" {
-		r.gentar = javaOutDirVFS(jm, r.outDir+"."+r.hash+".gentar")
+		r.gentar = copyFileOutputVFS(dir, r.outDir+"."+r.hash+".gentar")
 	}
 
 	return r
@@ -370,6 +377,10 @@ func javaOutDirVFS(jm *JavaModule, p string) VFS {
 }
 
 func javaArgVFS(jm *JavaModule, p string) VFS {
+	return javaProgramArgVFS(jm.dir, p)
+}
+
+func javaProgramArgVFS(dir, p string) VFS {
 	switch {
 	case strings.HasPrefix(p, "$(B)/"):
 		return build(path.Clean(strings.TrimPrefix(p, "$(B)/")))
@@ -377,7 +388,7 @@ func javaArgVFS(jm *JavaModule, p string) VFS {
 		return source(path.Clean(strings.TrimPrefix(p, "$(S)/")))
 	}
 
-	return source(path.Clean(jm.dir + "/" + p))
+	return source(path.Clean(dir + "/" + p))
 }
 
 func (ctx *GenCtx) javaTool(dir string) *JavaModule {
@@ -412,42 +423,58 @@ func (ctx *GenCtx) javaToolResult(dir string) *ModuleEmitResult {
 
 func (ctx *GenCtx) javaRegisterRunPrograms(jm *JavaModule) {
 	for _, rp := range jm.data.runJavaPrograms {
-		r := parseJavaRunProgram(jm, rp)
+		r := parseJavaRunProgram(jm.dir, rp)
+		outputs := javaRunProgramOutputs(jm.dir, r)
 
-		if r.gentar == 0 {
-			continue
+		if len(outputs) == 0 {
+			throwFmt("RUN_JAVA_PROGRAM requires at least one output")
 		}
 
 		ref := ctx.emit.reserve()
 		pending := ctx.javaPendingEmit(func() { ctx.javaEmitRunProgram(jm, r, ref) })
 
-		ctx.javaReg(jm).register(GeneratedFileInfo{
-			OutputPath:      r.gentar,
-			OwnerModule:     jm.path,
-			ProducerRef:     ref,
-			ProducerMainOut: r.gentar,
-			OnUse:           pending,
-		})
+		for _, output := range outputs {
+			ctx.javaReg(jm).register(GeneratedFileInfo{
+				OutputPath:      output,
+				OwnerModule:     jm.path,
+				ProducerRef:     ref,
+				ProducerMainOut: outputs[0],
+				OnUse:           pending,
+			})
 
-		jm.gentars = append(jm.gentars, r.gentar)
+			if output != r.gentar && jm.acceptsInput(output) {
+				jm.macroOuts = javaPushUniq(jm.macroOuts, output)
+			}
+		}
+
+		if r.gentar != 0 {
+			jm.gentars = append(jm.gentars, r.gentar)
+		}
 	}
 }
 
 func (ctx *GenCtx) javaEmitRunProgram(jm *JavaModule, r javaRunProgram, ref NodeRef) {
-	d := jm.data
-	globals := ctx.javaGlobals(jm)
-	b := ctx.javaBuilder(jm)
-	bindir := build(jm.dir)
-	outDir := r.outDir
+	ctx.emitJavaRunProgram(jm.dir, jm.instance.Platform, jm.data.jdkReal, ctx.javaGlobals(jm), r, ref, func(name string) VFS { return javaArgVFS(jm, name) })
+}
 
-	b.cmd(append(b.python("build/scripts/mkdir.py"), internStr(outDir).any()), bindir)
+func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string, globals map[string]VFS, r javaRunProgram, ref NodeRef, input func(string) VFS) {
+	b := &javaNodeBuilder{ctx: ctx, p: platform}
+	bindir := build(dir)
+	outDir := r.outDir
+	mkdir := b.python("build/scripts/mkdir.py")
+
+	if outDir != "" {
+		mkdir = append(mkdir, internStr(outDir).any())
+	}
+
+	b.cmd(mkdir, bindir)
 
 	run := b.python("build/scripts/setup_java_tmpdir.py")
 
 	run = append(run, b.python("build/scripts/stdout2stderr.py")...)
 	run = append(run, b.python("build/scripts/fix_java_command_file_cp.py")...)
 
-	run = append(run, strBuildRoot2.any(), strB.any(), b.resourcePath(globals, javaJDKResource(d.jdkReal), "/bin/java"),
+	run = append(run, strBuildRoot2.any(), strB.any(), b.resourcePath(globals, javaJDKResource(jdk), "/bin/java"),
 		strDfileEncodingUtf8.any(), strClasspath.any())
 
 	if tool := ctx.javaTool(r.tool); tool != nil {
@@ -468,8 +495,10 @@ func (ctx *GenCtx) javaEmitRunProgram(jm *JavaModule, r javaRunProgram, ref Node
 	}
 
 	for _, a := range r.args {
-		if ins[a] {
-			run = append(run, javaArgVFS(jm, a).any())
+		if slices.Contains(r.out, a) || slices.Contains(r.noauto, a) {
+			run = append(run, copyFileOutputVFS(dir, a).any())
+		} else if ins[a] {
+			run = append(run, input(a).any())
 		} else {
 			run = append(run, internStr(a).any())
 		}
@@ -478,34 +507,68 @@ func (ctx *GenCtx) javaEmitRunProgram(jm *JavaModule, r javaRunProgram, ref Node
 	cwd := bldRootDirVFS
 
 	if r.cwd != "" {
-		cwd = javaArgVFS(jm, r.cwd)
+		cwd = javaProgramArgVFS(dir, r.cwd)
 	}
 
 	b.cmd(run, cwd)
 
 	tar := b.python("build/scripts/autotar_gendirs.py")
 
-	b.cmd(append(tar, strPack.any(), internStr(outDir).any(), strOuts.any(), r.gentar.any()), bindir)
+	tar = append(tar, strPack.any())
 
-	for _, in := range r.in {
-		b.input(javaArgVFS(jm, in))
+	if outDir != "" {
+		tar = append(tar, internStr(outDir).any())
 	}
 
-	for _, dir := range r.inDirs {
-		pattern := dir + "/**/*"
+	tar = append(tar, strOuts.any())
 
-		if !strings.HasPrefix(dir, "$(") {
-			pattern = jm.dir + "/" + pattern
+	if r.gentar != 0 {
+		tar = append(tar, r.gentar.any())
+	}
+
+	b.cmd(tar, bindir)
+
+	for _, in := range r.in {
+		file := input(in)
+
+		b.input(file)
+
+		if dep := b.use(file); dep != 0 {
+			b.deps = append(b.deps, dep)
+		}
+	}
+
+	for _, inDir := range r.inDirs {
+		pattern := inDir + "/**/*"
+
+		if !strings.HasPrefix(inDir, "$(") {
+			pattern = dir + "/" + pattern
 			pattern = "$(S)/" + strings.TrimPrefix(pattern, "/")
 		}
 
-		for _, f := range ctx.javaGlob(jm.dir, pattern, newJavaExcludeMatcher(jm.dir, nil)) {
+		for _, f := range ctx.javaGlob(dir, pattern, newJavaExcludeMatcher(dir, nil)) {
 			b.input(source(f))
 		}
 	}
 
 	b.setKV(pkRJ, pcBlue, false)
 	b.exts = []KVExt{{Key: "tared_kind", Val: "nodir"}}
-	b.outputs = []VFS{r.gentar}
+	b.outputs = javaRunProgramOutputs(dir, r)
 	b.emitTo(ref)
+}
+
+func javaRunProgramOutputs(dir string, r javaRunProgram) []VFS {
+	var outputs []VFS
+
+	for _, name := range concat(r.args, r.noauto, r.out) {
+		if slices.Contains(r.out, name) || slices.Contains(r.noauto, name) {
+			outputs = append(outputs, copyFileOutputVFS(dir, name))
+		}
+	}
+
+	if r.gentar != 0 {
+		outputs = append(outputs, r.gentar)
+	}
+
+	return dedupVFSKeepOrder(outputs)
 }

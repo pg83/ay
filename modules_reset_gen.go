@@ -63,6 +63,7 @@ func (x *ModuleData) reset() {
 		antlr4Grammars:       scrub(x.antlr4Grammars),
 		antlrRuns:            scrub(x.antlrRuns),
 		runPrograms:          scrub(x.runPrograms),
+		runJavaPrograms:      scrub(x.runJavaPrograms),
 		decimalMD5:           scrub(x.decimalMD5),
 		buildMns:             scrub(x.buildMns),
 		splitCodegens:        scrub(x.splitCodegens),
