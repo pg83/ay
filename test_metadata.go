@@ -67,9 +67,9 @@ func expandTestRunArgs(args []ANY, env Environment) []ANY {
 	return expandStmtTokens(args, env)
 }
 
-func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
+func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 	switch v.Name {
-	case tokDockerImage, tokRun, tokSize, tokTimeout, tokTestCwd, tokData, tokDataFiles, tokExplicitData, tokDepends, tokUseRecipe, tokTag, tokEnv, tokRequirements, tokForkTests, tokForkSubtests, tokForkTestFiles, tokSplitFactor, tokBenchmarkOpts, tokFuzzOpts:
+	case tokDockerImage, tokRun, tokSize, tokTimeout, tokTestCwd, tokData, tokDataFiles, tokExplicitData, tokDepends, tokUseRecipe, tokTag, tokEnv, tokConftestLoadPolicyLocal, tokConftestLoadPolicyLegacyGlobal, tokRequirements, tokForkTests, tokForkSubtests, tokForkTestFiles, tokSplitFactor, tokBenchmarkOpts, tokFuzzOpts:
 	default:
 		return false
 	}
@@ -115,8 +115,19 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 		t.recipes = append(t.recipes, value)
 	case tokTag:
 		t.tags = append(t.tags, args...)
-	case tokEnv:
-		t.env = append(t.env, value)
+	case tokEnv, tokConftestLoadPolicyLocal, tokConftestLoadPolicyLegacyGlobal:
+		if v.Name == tokEnv {
+			value = expandToken(value, env, tokenExpandArguments)
+		} else if v.Name == tokConftestLoadPolicyLocal {
+			value = "CONFTEST_LOAD_POLICY=LOCAL"
+		} else {
+			value = "CONFTEST_LOAD_POLICY=LEGACY_GLOBAL"
+		}
+
+		quoted := `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value) + `"`
+
+		appendMacroEnv(env, "TEST_ENV_VALUE", quoted)
+		appendMacroEnv(env, "_TEST_ENV_SEM", "&& test_env "+value)
 	case tokForkTests:
 		t.forkMode = "tests"
 		t.partition = strings.ToUpper(value)
@@ -137,9 +148,7 @@ func applyTestMacro(v UnknownStmt, d *ModuleData) bool {
 }
 
 func (t *TestMeta) expandValues(env Environment) {
-	for i, value := range t.env {
-		t.env[i] = expandStmtToken(value, env)
-	}
+	t.env = append(t.env, splitShellWords(expandToken(env.string(envTestEnvValue), env, tokenExpandFinal))...)
 
 	for i, value := range t.recipes {
 		t.recipes[i] = expandConfigMacroBody(value, env)

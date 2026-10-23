@@ -22,7 +22,7 @@ class TestMacroValuesTest(unittest.TestCase):
         graph = lib.make(files, "lib", "-t", env={"INHERITED": "from parent with spaces"})
         expected = [
             "TEST_PROGRAMS=programs/first: programs/second: programs/third",
-            "MESSAGE=first second ending", "EMPTY=", "INHERITED=from parent with spaces",
+            "MESSAGE= ending", "EMPTY=", "INHERITED=from parent with spaces",
         ]
         for name in ("py3test", "flake8", "ruff"):
             with self.subTest(suite=name):
@@ -49,7 +49,7 @@ class TestMacroValuesTest(unittest.TestCase):
                          "recipe/run --config suite/compose.yml --unknown $UNBOUND --empty  \n "
                          "recipe/check --config \n")
 
-    def test_shared_environment_is_final_while_defined_recipe_values_are_captured(self):
+    def test_shared_environment_and_defined_recipe_values_are_captured(self):
         files = {
             "common/values.inc": "ENV(CONFIG=$CONFIG trailing words)\nUSE_RECIPE(recipe/run $CONFIG)\n",
         }
@@ -62,7 +62,7 @@ class TestMacroValuesTest(unittest.TestCase):
         for project in ("one", "two"):
             with self.subTest(project=project):
                 run = lib.node_by_output(graph, f"$(B)/{project}/test-results/exectest/meta.json")
-                self.assertEqual(option_values(run, "--env"), [f"CONFIG={project}/final value trailing words"])
+                self.assertEqual(option_values(run, "--env"), ["CONFIG=initial trailing words"])
                 encoded, = option_values(run, "--recipes")
                 self.assertEqual(base64.b64decode(encoded), b"recipe/run initial \n")
 

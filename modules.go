@@ -1973,7 +1973,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					expanded.Args = expandListPreSufArgs(v.Args, env)
 				} else if v.Name == tokUseRecipe {
 					expanded.Args = []ANY{internStr(collectTestRecipe(v.Args, env)).any()}
-				} else if v.Name != tokEnv {
+				} else if v.Name != tokEnv && !(v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].string() == "TEST_ENV_VALUE") {
 					expanded.Args = expandStmtTokens(v.Args, env)
 				}
 
@@ -2322,7 +2322,7 @@ func warnUnmodelledMacro(onWarn func(Warn), modulePath string, name TOK) {
 }
 
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
-	if applyTestMacro(v, d) {
+	if applyTestMacro(v, d, env) {
 		return
 	}
 

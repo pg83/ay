@@ -226,6 +226,7 @@ var (
 	envTRUE                         = internEnv("TRUE")
 	envTSAN_SYMBOLIZER_PATH         = internEnv("TSAN_SYMBOLIZER_PATH")
 	envTestCaseRoot                 = internEnv("TEST_CASE_ROOT")
+	envTestEnvValue                 = internEnv("TEST_ENV_VALUE")
 	envTestOutRoot                  = internEnv("TEST_OUT_ROOT")
 	envTestSourceRoot               = internEnv("TEST_SOURCE_ROOT")
 	envTestWorkRoot                 = internEnv("TEST_WORK_ROOT")

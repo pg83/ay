@@ -175,6 +175,8 @@ var tokName = [...]STR{
 	tokWithDynamicLibs:                 internStr("WITH_DYNAMIC_LIBS"),
 	tokEnable:                          internStr("ENABLE"),
 	tokEnv:                             kwENV,
+	tokConftestLoadPolicyLocal:         internStr("CONFTEST_LOAD_POLICY_LOCAL"),
+	tokConftestLoadPolicyLegacyGlobal:  internStr("CONFTEST_LOAD_POLICY_LEGACY_GLOBAL"),
 	tokExcludeTags:                     internStr("EXCLUDE_TAGS"),
 	tokExportsScript:                   internStr("EXPORTS_SCRIPT"),
 	tokExtralibs:                       internStr("EXTRALIBS"),
@@ -555,6 +557,8 @@ const (
 	tokWithDynamicLibs
 	tokEnable
 	tokEnv
+	tokConftestLoadPolicyLocal
+	tokConftestLoadPolicyLegacyGlobal
 	tokExcludeTags
 	tokExportsScript
 	tokExtralibs
