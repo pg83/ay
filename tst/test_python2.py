@@ -155,14 +155,15 @@ class Python2Test(unittest.TestCase):
         self.assertEqual(run["deps"], [context["uid"]])
 
     def test_py2_lint_obeys_disable_flags(self):
+        module = "contrib/lint_fixture"
         for body, flags in (("NO_LINT()\n", []), ("", ["-DDISABLE_FLAKE8=yes"]), ("", ["-DCPP_ANALYSIS_MODE=yes"])):
             with self.subTest(body=body, flags=flags):
                 files = python2_base()
                 files.update({
-                    "lib/ya.make": f"PY2_LIBRARY()\n{NO_PLATFORM}{body}PY_SRCS(a.py)\nEND()\n",
-                    "lib/a.py": "",
+                    module + "/ya.make": f"PY2_LIBRARY()\n{NO_PLATFORM}{body}PY_SRCS(a.py)\nEND()\n",
+                    module + "/a.py": "",
                 })
-                graph = lib.make(files, "lib", "-t", *flags)
+                graph = lib.make(files, module, "-t", *flags)
                 self.assertFalse(any("py2_flake8" in out for n in graph["graph"] for out in n["outputs"]))
 
     def test_py2_lint_config_and_processing_time_control_chunks(self):
