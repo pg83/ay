@@ -780,6 +780,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.expandJavaProtobufPeers()
 	case "JAVA_PROTO_PLUGIN":
 		javaProtoPluginMacro(d, args)
+	case "APPHOST", "APPHOST_JAVA":
+		javaProtoPluginMacro(d, []string{"java_plugin", "apphost/tools/stub_generator/java_plugin", "DEPS", "apphost/api/service/java/apphost/api"})
 	case "ALICE_CAPABILITY":
 		javaProtoPluginMacro(d, []string{"alice_capability_java", "alice/library/go/java_marker_interface_protoc_plugin", "DEPS", "alice/protos/endpoint/java_interface", "alice/megamind/protos/scenarios/java_interface"})
 	case "ALICE_TYPED_CALLBACK":
