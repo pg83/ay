@@ -91,7 +91,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 func (e *EmitContext) importTestSuites(binary VFS, ref NodeRef, globals []ResourceDecl) []*TestSuite {
 	d := e.d
 
-	if !e.ctx.testMode || !isPyProgramType(d.moduleStmt.Name) || d.noCheckImportsDisabled {
+	if !e.ctx.testMode || !isPyProgramType(d.moduleStmt.Name) && !d.pythonSourceProgram || d.noCheckImportsDisabled {
 		return nil
 	}
 

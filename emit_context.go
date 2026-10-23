@@ -609,7 +609,7 @@ func (e *EmitContext) emit() {
 
 		finalized = true
 
-		if !isProgramModuleType(d.moduleStmt.Name) || pyModuleTypeUsesPython3(d.moduleStmt.Name) || d.usePython2 {
+		if !isProgramModuleType(d.moduleStmt.Name) || pyModuleTypeUsesPython3(d.moduleStmt.Name) || d.usePython2 || d.pythonSourceCallback {
 			e.emitPyBytecode(true)
 
 			genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()
@@ -619,7 +619,7 @@ func (e *EmitContext) emit() {
 			}
 		}
 
-		if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 {
+		if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 || d.pythonSourceCallback {
 			e.objcopyRes = e.emitResourceObjcopy()
 		}
 

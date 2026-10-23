@@ -298,6 +298,9 @@ type ModuleData struct {
 	noImportTracing          bool
 	usePython2               bool
 	usePython3               bool
+	pythonSourceCallback     bool
+	pythonSourceEntry        bool
+	pythonSourceProgram      bool
 	useLightPy2cc            bool
 	useCommonGoogleAPIs      bool
 	moduleScopeCFlags        []ANY
@@ -4129,10 +4132,65 @@ func parseYAFFSchema(v UnknownStmt) CppProtoPlugin {
 	}
 }
 
+func pythonSourceModuleType(name TOK) string {
+	if name == tokGoDll || isDllModuleType(name) || name == tokDynamicLibrary {
+		return "DLL"
+	}
+
+	if isProgramModuleType(name) || name == tokSoProgram {
+		return "PROGRAM"
+	}
+
+	return ""
+}
+
+func collectPythonSourceEntry(d *ModuleData, env Environment) {
+	d.pythonSourceCallback = true
+
+	moduleType := env.string(envMODULE_TYPE)
+
+	if moduleType == "" {
+		moduleType = pythonSourceModuleType(d.unit.Type)
+	}
+
+	if isPyProgramType(d.moduleStmt.Name) || moduleType != "PROGRAM" && moduleType != "DLL" {
+		return
+	}
+
+	d.pythonSourceEntry = true
+	d.pythonSourceProgram = moduleType == "PROGRAM"
+
+	if env.string(envUSE_ARCADIA_PYTHON) == "yes" {
+		mainPeer := "library/python/runtime_py3/main"
+		sqlitePeer := "contrib/tools/python3"
+
+		if d.usePython2 {
+			mainPeer = "library/python/runtime/main"
+			sqlitePeer = "contrib/tools/python/src"
+		} else if value, ok := env.lookup("PYTHON3_TOOL_PEERDIR"); ok {
+			sqlitePeer = value
+		} else if env.string(envUSE_PYTHON3_PREV) == "yes" {
+			sqlitePeer = "contrib/tools/python3_prev"
+		}
+
+		d.peerdirs = append(d.peerdirs, internStr(mainPeer).any())
+
+		if d.pythonSQLite3 {
+			d.peerdirs = append(d.peerdirs, internV(sqlitePeer, "/Modules/_sqlite").any())
+		}
+	}
+
+	if d.pythonSourceProgram && !d.noCheckImportsDisabled && !env.bool(envCppAnalysisMode) {
+		d.peerdirs = append(d.peerdirs, strLibraryPythonTestingImportTest.any())
+	}
+}
+
 func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn), group int) {
 	if env.bool(envGO_PROTO) {
 		return
 	}
+
+	collectPythonSourceEntry(d, env)
 
 	topLevel := false
 	mainNext := false
@@ -4381,7 +4439,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			d.pyMain = ptr(internV(modName, ":main").any())
 			mainNext = false
 		} else if !explicitModule && d.pyMain == nil && d.moduleStmt != nil &&
-			(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin) &&
+			(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin || d.pythonSourceEntry && !d.usePython2) &&
 			(src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
 			d.pyMain = ptr(internStr(pythonModuleName(modulePath, src, topLevel, namespace)).any())
 		}

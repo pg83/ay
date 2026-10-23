@@ -357,6 +357,7 @@ var (
 	strLibraryPythonImportTracingConstructor                                                 = internStr("library/python/import_tracing/constructor")
 	strLibraryPythonPytestMainMain                                                           = internStr("library.python.pytest.main:main")
 	strLibraryPythonRuntimePy3                                                               = internStr("library/python/runtime_py3")
+	strLibraryPythonTestingImportTest                                                        = internStr("library/python/testing/import_test")
 	strLinkFlags                                                                             = internStr("++link-flags")
 	strLinkOrCopy                                                                            = internStr("link_or_copy")
 	strLinkOrCopyAllFiles                                                                    = internStr("link_or_copy_all_files")
