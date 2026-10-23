@@ -54,11 +54,13 @@ func (d *ModuleData) collectPythonStyleChecks(env Environment) {
 		}
 
 		if check.Python {
-			if d.noLint == "none" || d.noLint == "none_internal" || env.bool(envCppAnalysisMode) {
+			if d.pythonLint.analysis {
 				continue
 			}
 
-			if (check.Name == "flake8" || check.Name == "py2_flake8") && env.bool(envDisableFlake8) {
+			raw := d.pythonLint.value()
+
+			if raw == "none" || raw == "none_internal" {
 				continue
 			}
 
@@ -270,26 +272,13 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 }
 
 func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
+	pythonFiles := e.pythonLinterFiles()
+
 	if !e.ctx.testMode {
 		return nil
 	}
 
 	var suites []*TestSuite
-	var pythonFiles []string
-
-	for _, ps := range e.pySrcsReg {
-		if ps.Kind == pySourcePlain && ps.Path.isSource() {
-			pythonFiles = append(pythonFiles, ps.Path.relString())
-		}
-	}
-
-	for _, stmt := range e.d.cythonCpp {
-		if stmt.Generated == nil && extIsPy(stmt.Src) {
-			pythonFiles = append(pythonFiles, e.instance.Path.relString()+"/"+stmt.Src)
-		}
-	}
-
-	pythonFiles = sortedUnique(pythonFiles)
 
 	for _, check := range e.d.styleChecks {
 		if check.CPP {
@@ -347,6 +336,10 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 			}
 
 			check.Config = config
+		}
+
+		if check.Python && (check.Name == "flake8" || check.Name == "py2_flake8") && e.d.pythonLint.disableF8 {
+			continue
 		}
 
 		if check.CPP && len(check.Files) == 0 && e.d.moduleStmt.Name == tokGenLibrary {

@@ -69,7 +69,7 @@ class PythonSuitesTest(unittest.TestCase):
         self.assertFalse(any("test-results/flake8/" in out for n in graph["graph"] for out in n["outputs"]))
 
     def test_python_lints_obey_analysis_and_no_lint_after_macros(self):
-        for body, flags in (("NO_LINT()\n", []), ("", ["-DCPP_ANALYSIS_MODE=yes"])):
+        for body, flags in (("SET(_NO_LINT_VALUE none_internal)\n", []), ("", ["-DCPP_ANALYSIS_MODE=yes"])):
             with self.subTest(body=body, flags=flags):
                 graph = lib.make(fixture("STYLE_PYTHON()\nSTYLE_RUFF()\n" + body), "lib", "-t", *flags)
                 self.assertFalse(any(n["kv"].get("run_test_node") for n in graph["graph"]))

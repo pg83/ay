@@ -185,6 +185,7 @@ type ModuleData struct {
 	goSkipTests              []ANY
 	gettextKeepPath          bool
 	noLint                   string
+	pythonLint               pythonLintState
 	test                     TestMeta
 	mockgen                  GoMockgenVars
 	goCodegens               []GoCodegenStmt
@@ -472,6 +473,7 @@ type PyFbsSource struct {
 }
 
 type PySrcGroup struct {
+	Lint           bool
 	DeclSeq        int
 	Fbs            []PyFbsSource
 	Srcs           []ANY
@@ -809,6 +811,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	finishPythonImportMask(env, d)
 	bindRunProgramCalls(d, env)
 	d.test.expandValues(env)
+
+	if !d.pythonLint.bound {
+		d.pythonLint.bind(env)
+	}
 
 	pythonHeaderEnv := env
 
@@ -1627,6 +1633,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 		case *EndStmt:
 
+			d.pythonLint.bind(env)
 			d.unit.HashTag = internStr(env.string(envMODULE_TAG))
 
 			if d.python2Headers || d.python3NativeIncl {
@@ -2663,6 +2670,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if len(v.Args) > 0 && v.Args[0].string() == "ktlint" {
 			d.noLint = "ktlint"
 		}
+
+		env.setString(envNoLintValue, d.noLint)
 	case tokStyleCpp:
 		d.collectCPPStyle(v, env)
 		env.setBool(envUseAllSrcs, true)
@@ -3374,6 +3383,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		applyInlinePySrcs(fs, modulePath, append([]ANY{kwNAMESPACE.any(), strTests.any()}, v.Args...), d, env, onWarn)
+	case tokPyExtraLintFiles:
+		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokSetAppend, Args: append([]ANY{strPyExtraLintFilesValue.any()}, v.Args...)}, d, env, onWarn)
 	case tokPySrcs:
 
 		env.setDefaultString(envMODULE_TAG, "PY3")
@@ -3978,6 +3989,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 	var groupSrcs []string
 	var groupScopes []PyScope
 
+	lintPy := false
 	cythonStmtStart := len(d.cythonCpp)
 	pyiBefore := len(d.pyPyiResources)
 
@@ -4074,6 +4086,8 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		}
 
 		src, modNameOverride, explicitModule := strings.Cut(a.string(), "=")
+
+		lintPy = lintPy || extIsPy(src)
 
 		if strings.HasSuffix(src, ".fbs") {
 			modName := modNameOverride
@@ -4222,6 +4236,14 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 	d.pySrcGroups[group].Scopes = groupScopes
 	d.pySrcGroups[group].PyiStart = pyiBefore
 	d.pySrcGroups[group].PyiEnd = len(d.pyPyiResources)
+
+	if (lintPy || cythonizePy && len(d.cythonCpp) > cythonStmtStart) && d.unit.Tag != unitTagPy3Bin {
+		d.collectPythonLintFiles(modulePath, group)
+
+		for _, stmt := range d.cythonCpp[cythonStmtStart:] {
+			stmt.Lint = d.pySrcGroups[group].Lint
+		}
+	}
 }
 
 func pythonModuleName(modulePath, src string, topLevel bool, namespace *ANY) string {

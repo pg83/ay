@@ -268,6 +268,7 @@ var tokName = [...]STR{
 	tokPython2Addincl:                  internStr("PYTHON2_ADDINCL"),
 	tokPython3Addincl:                  internStr("PYTHON3_ADDINCL"),
 	tokPyConstructor:                   internStr("PY_CONSTRUCTOR"),
+	tokPyExtraLintFiles:                internStr("PY_EXTRA_LINT_FILES"),
 	tokPyMain:                          internStr("PY_MAIN"),
 	tokPyNamespace:                     internStr("PY_NAMESPACE"),
 	tokPyRegister:                      internStr("PY_REGISTER"),
@@ -642,6 +643,7 @@ const (
 	tokPython2Addincl
 	tokPython3Addincl
 	tokPyConstructor
+	tokPyExtraLintFiles
 	tokPyMain
 	tokPyNamespace
 	tokProtoToNamespace

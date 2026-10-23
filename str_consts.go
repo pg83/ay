@@ -437,6 +437,7 @@ var (
 	strPy3Ros                                                                                = internStr("PY3_ROS")
 	strPy3Ros2                                                                               = internStr("py3_ros")
 	strPy3RosGlobal                                                                          = internStr("py3_ros_global")
+	strPyExtraLintFilesValue                                                                 = internStr("_PY_EXTRA_LINT_FILES_VALUE")
 	strPyProto                                                                               = internStr("PY_PROTO")
 	strPyProtoFromSchema                                                                     = internStr("PY_PROTO_FROM_SCHEMA")
 	strPyProtoGlobal                                                                         = internStr("py_proto_global")

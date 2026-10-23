@@ -127,6 +127,7 @@ func cythonDefaultOptions(os OS) string {
 }
 
 type CythonStmt struct {
+	Lint      bool
 	Src       string
 	Native    *SrcMeta
 	Python3   bool
