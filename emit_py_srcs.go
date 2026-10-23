@@ -64,6 +64,16 @@ type PySrc struct {
 	Kind   PySourceKind
 }
 
+func (e *EmitContext) resolvePythonSourceVFS(src string) VFS {
+	for _, dir := range e.d.srcDirs {
+		if dir.isSource() && e.ctx.fs.isFile(dir.rel(), src) {
+			return sourceJoinClean(dir.relString(), src)
+		}
+	}
+
+	return resolveSourceVFS(e.ctx, e.instance, src, e.d.srcDirs)
+}
+
 func resolvePySrcRelKnown(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string, srcRelClean bool) STR {
 	if srcRelClean {
 		target := internStr(srcRel)
@@ -114,7 +124,7 @@ func pySrcYapycSuffix(modulePath string) string {
 }
 
 func (e *EmitContext) registerCollectPySrcs() {
-	ctx, instance, d := e.ctx, e.instance, e.d
+	instance, d := e.instance, e.d
 	module := instance.Path.relString()
 
 	for gi, group := range d.pySrcGroups {
@@ -158,7 +168,7 @@ func (e *EmitContext) registerCollectPySrcs() {
 				path = build(module, "/", src.string())
 
 				if e.codegen.lookupSplit(instance.Path, src.str()) == nil {
-					path = resolveSourceVFS(ctx, instance, src.string(), d.srcDirs)
+					path = e.resolvePythonSourceVFS(src.string())
 				}
 			}
 

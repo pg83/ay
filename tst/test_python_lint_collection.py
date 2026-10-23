@@ -132,7 +132,7 @@ class PythonLintCollectionTest(unittest.TestCase):
         files.update({"shared/b.py": "", "shared/rooted.py": "", MODULE + "/stub.pyi": ""})
         graph = lib.make(files, MODULE, "-t")
         run, = lints(graph)
-        expected = [f"$(S)/{MODULE}/a.py", f"$(S)/{MODULE}/extra.py", "$(S)/shared/b.py", "$(S)/shared/rooted.py"]
+        expected = [f"$(S)/{MODULE}/a.py", f"$(S)/{MODULE}/b.py", f"$(S)/{MODULE}/extra.py", "$(S)/shared/rooted.py"]
         self.assertEqual(lint_files(run), expected)
         for source in expected:
             self.assertIn(source, run["inputs"])
