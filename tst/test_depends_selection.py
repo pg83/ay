@@ -159,7 +159,7 @@ class DependsSelectionTest(unittest.TestCase):
         files = test_python2.python2_base()
         files.update({
             'tests/ya.make': 'EXECTEST()\nRUN(true)\nDEPENDS(native)\nEND()\n',
-            'native/ya.make': f'PY23_NATIVE_LIBRARY()\n{lib.BARE_MODULE}NO_PYTHON_INCLUDES()\nIF(MODULE_TAG == "PY2")\nONLY_TAGS(PY3)\nENDIF()\nSRCS(local.cpp)\nEND()\n',
+            'native/ya.make': f'PY23_NATIVE_LIBRARY()\n{lib.BARE_MODULE}NO_PYTHON_INCLUDES()\nIF(MODULE_TAG == "PY2_NATIVE")\nONLY_TAGS(PY3)\nENDIF()\nSRCS(local.cpp)\nEND()\n',
             'native/local.cpp': '',
         })
         graph = lib.make(files, 'tests', '-t', '--strip-packages-from-results')
