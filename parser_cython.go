@@ -41,7 +41,7 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 		if rest, ok := cutParserKeyword(t, "cdef"); ok {
 			if rest, ok = cutParserKeyword(rest, "extern"); ok {
 				if rest, ok = cutParserKeyword(rest, "from"); ok {
-					if target, _, ok := parseDelimitedIncludeTarget(rest); ok {
+					if target, ok := parseCythonCdefTarget(rest); ok {
 						cpp = append(cpp, IncludeDirective{kind: includeSystem, target: includeTarget(internBytes(target).any())})
 					}
 				}
@@ -112,6 +112,42 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 	}
 
 	return set
+}
+
+func parseCythonCdefTarget(b []byte) ([]byte, bool) {
+	if len(b) > 0 && b[0] == 'r' {
+		b = b[1:]
+	}
+
+	if len(b) == 0 || b[0] != '"' && b[0] != '\'' {
+		return nil, false
+	}
+
+	quote := b[0]
+	b = b[1:]
+	end := 0
+
+	if len(b) > 0 && b[0] == '<' {
+		b = b[1:]
+
+		for end < len(b) && b[end] != '<' && b[end] != '>' {
+			end++
+		}
+
+		if end == len(b) || b[end] != '>' || end+1 == len(b) || b[end+1] != quote {
+			return nil, false
+		}
+	} else {
+		for end < len(b) && b[end] != quote && b[end] != '<' && b[end] != '>' {
+			end++
+		}
+
+		if end == len(b) || b[end] != quote {
+			return nil, false
+		}
+	}
+
+	return b[:end], end > 0
 }
 
 func isCythonModuleByte(b byte) bool {
