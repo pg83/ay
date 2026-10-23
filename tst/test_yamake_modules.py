@@ -206,9 +206,9 @@ class YaMakeModulesTest(unittest.TestCase):
             "SRCS(x.cpp)\nEND()\n"
         )
         cases = [
-            ("LIBRARY()", ["-DLANG=CPP", "-DTAG=PY3"]),
+            ("LIBRARY()", ["-DLANG=CPP", "-DTAG="]),
             ("PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)", ["-DLANG=CPP", "-DTAG=CPP_PROTO", "-DGEN_PROTO"]),
-            ("PY23_NATIVE_LIBRARY()", ["-DLANG=CPP", "-DTAG=PY3"]),
+            ("PY23_NATIVE_LIBRARY()", ["-DLANG=CPP", "-DTAG=PY3_NATIVE"]),
         ]
         for declaration, expected in cases:
             with self.subTest(declaration=declaration):
