@@ -154,11 +154,15 @@ func (s *TestSuite) applyTestMeta(meta TestMeta, addSource bool) {
 	slices.Sort(s.data)
 	s.data = slices.Compact(s.data)
 
+	var dataPaths []string
+
 	for _, entry := range s.data {
 		if rel, ok := strings.CutPrefix(entry, "arcadia/"); ok {
-			s.relatedPaths = append(s.relatedPaths, source(path.Clean(rel)).string())
+			dataPaths = append(dataPaths, source(path.Clean(rel)).string())
 		}
 	}
+
+	s.relatedPaths = append(s.relatedPaths, sortedUnique(dataPaths)...)
 
 	if meta.cwd != "" {
 		s.runCwd = source(meta.cwd).string()
