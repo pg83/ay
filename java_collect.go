@@ -926,6 +926,15 @@ func (jm *JavaModule) varPeers() []string {
 			out = append(out, "build/platform/java/jacoco-agent")
 		}
 
+		switch jm.stmt {
+		case tokJunit5:
+			out = append(out, "devtools/jtest-annotations/junit5")
+		case tokJunit6:
+			out = append(out, "devtools/jtest-annotations/junit6")
+		case tokJtest:
+			out = append(out, "devtools/jtest-annotations/junit4")
+		}
+
 		if d.withKotlin {
 			out = append(out, "build/platform/java/kotlin", "contrib/java/org/jetbrains/kotlin/kotlin-stdlib-jdk8")
 		}
@@ -938,14 +947,6 @@ func (jm *JavaModule) varPeers() []string {
 			out = append(out, javaErrorProne(d.jdkReal).peerdir)
 		}
 
-		switch jm.stmt {
-		case tokJunit5:
-			out = append(out, "devtools/jtest-annotations/junit5")
-		case tokJunit6:
-			out = append(out, "devtools/jtest-annotations/junit6")
-		case tokJtest:
-			out = append(out, "devtools/jtest-annotations/junit4")
-		}
 	case juRunnable:
 		if !u.contribRunnable && !d.disableScriptgen {
 			out = append(out, "build/platform/java/scriptgen")
