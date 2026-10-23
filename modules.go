@@ -1681,11 +1681,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				sourceValue = v.LexicalValue
 			}
 
-			value := expandSourceScalarVarRef(sourceValue, env)
+			value, textInputs := expandSourceScalarInputValue(sourceValue, env)
 			perlMask := perlInputMask(v.NameEnv)
 			perlChanged := perlMask != 0 && env.string(v.NameEnv) != value
 
 			env.setFromString(v.NameEnv, value)
+			env.setTextInputs(v.NameEnv, textInputs)
 			d.captureCpuCheckVariable(v.NameEnv, env)
 			d.captureResourcePeerPolicy(v.Name, env)
 
@@ -2053,6 +2054,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			expanded := *v
+			textAppend := captureSourceTextAppend(v, env)
 
 			if v.Name == tokDllFor {
 				withDllForStmts(ctx, modulePath, v, func(stmts []Stmt) {
@@ -2111,6 +2113,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					recordHandledMacro(expanded.Name, expanded.Args)
 				} else {
 					applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
+
+					if textAppend != nil {
+						env.setTextInputs(textAppend.id, textAppend.ranges)
+					}
+
 					d.captureCpuCheckMacro(expanded, env)
 				}
 
@@ -2379,7 +2386,7 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 
 func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
 	if v.CallArgs != nil {
-		args := runProgramSourceArguments(v.CallArgs, env)
+		args := runProgramSourceInputArguments(v.CallArgs, env)
 
 		if len(args) == 0 {
 			throwFmt("RUN_PROGRAM expects at least 1 argument (tool path)")
@@ -4972,6 +4979,10 @@ func keepDeferredVar(name string) bool {
 }
 
 func expandToken(s string, env Environment, phase TokenExpansion) string {
+	return expandTokenTracked(s, env, phase, nil)
+}
+
+func expandTokenTracked(s string, env Environment, phase TokenExpansion, track *SourceTextTracker) string {
 	if strings.Contains(s, "\\$") {
 		s = strings.ReplaceAll(s, "\\$", "$")
 	}
@@ -4992,13 +5003,17 @@ func expandToken(s string, env Environment, phase TokenExpansion) string {
 
 			if isExpandVarName(name) {
 				if val, ok := env.lookup(name); ok || phase.clearsUnbound(name) {
+					if track != nil {
+						track.replace(0, len(s), len(val), env.s.textInputs[internedEnv(name)])
+					}
+
 					s = val
 				}
 			}
 		}
 
-		s = expandEmbeddedDollarVars(s, env, phase)
-		s = expandBracedVars(s, env, phase)
+		s = expandEmbeddedDollarVars(s, env, phase, track)
+		s = expandBracedVars(s, env, phase, track)
 
 		if s == prev {
 			break
@@ -5008,7 +5023,7 @@ func expandToken(s string, env Environment, phase TokenExpansion) string {
 	return s
 }
 
-func expandBracedVars(s string, env Environment, phase TokenExpansion) string {
+func expandBracedVars(s string, env Environment, phase TokenExpansion, track *SourceTextTracker) string {
 	searchFrom := 0
 
 	for {
@@ -5041,12 +5056,16 @@ func expandBracedVars(s string, env Environment, phase TokenExpansion) string {
 			continue
 		}
 
+		if track != nil {
+			track.replace(start, end+1, len(val), env.s.textInputs[internedEnv(name)])
+		}
+
 		s = s[:start] + val + s[end+1:]
 		searchFrom = start + len(val)
 	}
 }
 
-func expandEmbeddedDollarVars(s string, env Environment, phase TokenExpansion) string {
+func expandEmbeddedDollarVars(s string, env Environment, phase TokenExpansion, track *SourceTextTracker) string {
 	if !strings.Contains(s, "$") {
 		return s
 	}
@@ -5095,6 +5114,10 @@ func expandEmbeddedDollarVars(s string, env Environment, phase TokenExpansion) s
 			continue
 		}
 
+		if track != nil {
+			track.replace(len(b), len(b)+j-i, len(val), env.s.textInputs[internedEnv(name)])
+		}
+
 		b = append(b, val...)
 		i = j
 		changed = true
@@ -5115,13 +5138,8 @@ func expandInFiles(files []ANY, noParse int, env Environment, evaluated bool) ([
 		phase = tokenExpandArguments
 	}
 
-	parsed := expandTokens(files[:split:split], env, false, phase)
-
-	if noParse == 0 {
-		return parsed, 0
-	}
-
-	text := expandTokens(files[split:], env, false, phase)
+	parsed, lateText := expandSourceInputTokens(files[:split:split], env, phase)
+	text := append(lateText, expandTokens(files[split:], env, false, phase)...)
 
 	return append(parsed[:len(parsed):len(parsed)], text...), len(text)
 }
@@ -5299,7 +5317,15 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 		})
 	}
 
-	env.setFromString(internEnv(prefix+"_FILES"), strings.Join(files, " "))
+	value := strings.Join(files, " ")
+	id := internEnv(prefix + "_FILES")
+
+	env.setFromString(id, value)
+
+	if value != "" {
+		env.setTextInputs(id, []SourceTextRange{{0, len(value)}})
+	}
+
 	env.setFromString(internEnv(prefix+"_SRCDIR"), srcdir)
 }
 

@@ -90,10 +90,21 @@ func expandResourceArgument(value string, env Environment) string {
 }
 
 func expandMakeExpression(value string, env Environment, reserved func(string) bool) string {
+	return expandMakeExpressionTracked(value, env, reserved, nil)
+}
+
+func expandMakeExpressionTracked(value string, env Environment, reserved func(string) bool, track *SourceTextTracker) string {
 	var out strings.Builder
+
+	delta := 0
 
 	for i := 0; i < len(value); {
 		if value[i] == '\\' && i+1 < len(value) {
+			if track != nil {
+				track.replace(i+delta, i+delta+1, 0, nil)
+				delta--
+			}
+
 			out.WriteByte(value[i+1])
 			i += 2
 
@@ -122,6 +133,17 @@ func expandMakeExpression(value string, env Environment, reserved func(string) b
 					}
 
 					if expand {
+						if track != nil {
+							var ranges []SourceTextRange
+
+							if macro == "" {
+								ranges = env.s.textInputs[internedEnv(key)]
+							}
+
+							track.replace(i+delta, end+1+delta, len(replacement), ranges)
+							delta += len(replacement) - (end + 1 - i)
+						}
+
 						out.WriteString(replacement)
 					} else {
 						out.WriteString(value[i : end+1])

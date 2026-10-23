@@ -198,8 +198,18 @@ func expandConfigMacroBody(value string, env Environment) string {
 }
 
 func continueConfigMacroBody(value string, env Environment, iteration int, parameters map[string][]string) string {
+	return continueConfigMacroBodyTracked(value, env, iteration, parameters, nil)
+}
+
+func continueConfigMacroBodyTracked(value string, env Environment, iteration int, parameters map[string][]string, track *SourceTextTracker) string {
 	for ; ; iteration++ {
+		cursor, delta := 0, 0
+
 		expanded := configMacroVariable.ReplaceAllStringFunc(value, func(reference string) string {
+			start := cursor + strings.Index(value[cursor:], reference)
+
+			cursor = start + len(reference)
+
 			if reference[0] == '\\' || strings.HasPrefix(reference, `${"`) {
 				return reference
 			}
@@ -211,7 +221,18 @@ func continueConfigMacroBody(value string, env Environment, iteration int, param
 			}
 
 			if replacement, ok := env.lookup(name); ok {
-				return strings.TrimPrefix(replacement, " ")
+				originalSize := len(replacement)
+
+				replacement = strings.TrimPrefix(replacement, " ")
+
+				if track != nil {
+					ranges := sliceSourceTextRanges(env.s.textInputs[internedEnv(name)], originalSize-len(replacement), originalSize)
+
+					track.replace(start+delta, cursor+delta, len(replacement), ranges)
+					delta += len(replacement) - len(reference)
+				}
+
+				return replacement
 			}
 
 			return reference

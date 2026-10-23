@@ -3,20 +3,38 @@ package main
 import "strings"
 
 func runProgramSourceArguments(args []ANY, env Environment) []ANY {
-	var values []string
+	values, _ := runProgramSourceArgumentValues(args, env, false)
+
+	return values
+}
+
+func runProgramSourceArgumentValues(args []ANY, env Environment, withText bool) ([]ANY, []bool) {
+	var values []ANY
+	var text []bool
 
 	for _, arg := range args {
 		value := arg.string()
-		words := []string{value}
+
+		var track SourceTextTracker
+
+		spans := []SourceTextRange{{0, len(value)}}
 
 		if strings.ContainsRune(value, '$') {
-			value = expandMakeExpression(value, env, runProgramReservedVariable)
-			words = strings.Split(value, " ")
+			if withText {
+				value = expandMakeExpressionTracked(value, env, runProgramReservedVariable, &track)
+			} else {
+				value = expandMakeExpression(value, env, runProgramReservedVariable)
+			}
+
+			spans = sourceWordSpans(value, func(r rune) bool { return r == ' ' })
 		} else if value == "" {
-			words[0] = `""`
+			value = `""`
+			spans[0].End = len(value)
 		}
 
-		for _, word := range words {
+		for _, span := range spans {
+			word := value[span.Start:span.End]
+
 			if word == "" {
 				continue
 			}
@@ -25,11 +43,15 @@ func runProgramSourceArguments(args []ANY, env Environment) []ANY {
 				word = `${quo:"` + word + `"}`
 			}
 
-			values = append(values, word)
+			values = append(values, internAny(word))
+
+			if withText {
+				text = append(text, track.contains(span.Start, span.End))
+			}
 		}
 	}
 
-	return internAnys(values)
+	return values, text
 }
 
 func runProgramReservedVariable(name string) bool {
@@ -64,8 +86,8 @@ func bindRunProgramCalls(d *ModuleData, env Environment) {
 		bound.ToolPath, bound.Args = args[0], args[1:]
 
 		split := len(bound.INFiles) - bound.INNoParse
-		parsed := prepareRunProgramArguments(bound.INFiles[:split], locals)
-		opaque := prepareRunProgramArguments(bound.INFiles[split:], locals)
+		parsed, lateText := prepareRunProgramInputArguments(bound.INFiles[:split], locals)
+		opaque := append(lateText, prepareRunProgramArguments(bound.INFiles[split:], locals)...)
 
 		bound.INFiles, bound.INNoParse = append(parsed, opaque...), len(opaque)
 		bound.OUTFiles = prepareRunProgramArguments(bound.OUTFiles, locals)
