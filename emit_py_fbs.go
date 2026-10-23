@@ -113,6 +113,7 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 	}
 
 	node.Inputs = append(node.Inputs, imports...)
+	node.BuildFromInputs = na.inputList(node.Inputs[0][1:], node.Inputs[1:]...)
 
 	fp := e.emitNode(node)
 
@@ -133,7 +134,7 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 	p3 := e.emitNode(Node{
 		Platform: instance.Platform, Env: envVarsVCS,
 		Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(compileArgs...)), Cwd: build(dir), Env: envVarsVCS}),
-		Inputs: na.inputList(na.vfsList(script, out, res), pycc.binaries, ctx.scripts[script.rel()]), Outputs: na.vfsList(cc), DepRefs: na.refList(fp), ForeignDepRefs: toolRefs, KV: kv, Resources: usesPython3,
+		Inputs: na.inputList(na.vfsList(script, out, res), pycc.binaries, ctx.scripts[script.rel()]), BuildFromInputs: na.inputList(na.vfsList(script, out), ctx.scripts[script.rel()]), Outputs: na.vfsList(cc), DepRefs: na.refList(fp), ForeignDepRefs: toolRefs, KV: kv, Resources: usesPython3,
 	})
 
 	e.register(GeneratedFileInfo{OutputPath: cc, ProducerRef: p3, GeneratorRefs: toolRefs})

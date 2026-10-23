@@ -61,7 +61,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	inputs = appendInputChunks(na, inputs, closure)
 
 	node := Node{Platform: instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env}), Env: env,
-		Inputs: inputs, Outputs: na.vfsList(outVFS), KV: &cudaKV, Resources: instance.Platform.CCUsesResources,
+		Inputs: inputs, BuildFromInputs: appendInputChunks(na, inputs[:1], inputs[2:]), Outputs: na.vfsList(outVFS), KV: &cudaKV, Resources: instance.Platform.CCUsesResources,
 		InputClosures: []Closure{srcCV, runtimeCV},
 		DepRefs:       na.refList(mtimeRef, pidRef)}
 
@@ -181,8 +181,9 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 			inputs = appendInputChunks(na, inputs, compileClosure)
 
 			e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: env, Inputs: inputs,
-				InputClosures: compileViews,
-				Outputs:       outs, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, ref)
+				InputClosures:   compileViews,
+				BuildFromInputs: appendInputChunks(na, inputs[:2], inputs[3:]),
+				Outputs:         outs, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, ref)
 		})
 
 		for i, out := range outs {
@@ -259,8 +260,9 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 		inputs = appendInputChunks(na, inputs, compileClosure)
 
 		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env}, Cmd{CmdArgs: na.chunkList(na.anyList(frontend...)), Env: envVarsVCS}), Env: env,
-			InputClosures: sourceViews,
-			Inputs:        inputs, Outputs: hostOuts, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, hostRef)
+			InputClosures:   sourceViews,
+			BuildFromInputs: appendInputChunks(na, inputs[:1], inputs[2:]),
+			Inputs:          inputs, Outputs: hostOuts, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, hostRef)
 	})
 
 	e.register(GeneratedFileInfo{SourceAction: hostAction, OutputPath: hostOuts[0], ProducerRef: hostRef, OnUse: hostPending})

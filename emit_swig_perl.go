@@ -53,14 +53,15 @@ func (e *EmitContext) emitPerlSwigSource(meta SrcMeta) {
 		inputs = append(inputs, buckets...)
 
 		e.emitReservedNode(Node{
-			Platform:       instance.Platform,
-			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
-			Env:            envVarsVCS,
-			Inputs:         inputs,
-			InputClosures:  []Closure{cv},
-			Outputs:        na.vfsList(cpp, perl),
-			KV:             &swigJNIKV,
-			ForeignDepRefs: na.refList(swigRef),
+			Platform:        instance.Platform,
+			Cmds:            na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
+			Env:             envVarsVCS,
+			Inputs:          inputs,
+			BuildFromInputs: na.inputList(inputs[0][1:], inputs[1:]...),
+			InputClosures:   []Closure{cv},
+			Outputs:         na.vfsList(cpp, perl),
+			KV:              &swigJNIKV,
+			ForeignDepRefs:  na.refList(swigRef),
 		}, ref)
 	})
 

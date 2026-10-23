@@ -35,12 +35,13 @@ func (e *EmitContext) emitBuildMnStmt(stmt *BuildMnStmt) {
 				strRankingSuffix.any(),
 				cppVFS.any(),
 			)), Env: env}),
-			Env:            env,
-			Inputs:         na.inputList(na.vfsList(archiverBin), na.vfsList(buildMnScriptVFS), na.vfsList(infoVFS)),
-			KV:             &mnKV,
-			Outputs:        na.vfsList(cppVFS, rodataVFS),
-			ForeignDepRefs: na.refList(archiverRef),
-			Resources:      usesPython3,
+			Env:             env,
+			Inputs:          na.inputList(na.vfsList(archiverBin), na.vfsList(buildMnScriptVFS), na.vfsList(infoVFS)),
+			BuildFromInputs: na.inputList(na.vfsList(buildMnScriptVFS), na.vfsList(infoVFS)),
+			KV:              &mnKV,
+			Outputs:         na.vfsList(cppVFS, rodataVFS),
+			ForeignDepRefs:  na.refList(archiverRef),
+			Resources:       usesPython3,
 		}
 
 		e.emitReservedNode(node, ref)

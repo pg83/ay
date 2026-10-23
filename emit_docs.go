@@ -99,12 +99,12 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 	return res
 }
 
-func (e *EmitContext) docsNode(cmds []Cmd, inputs, outputs, needs []VFS, render, module bool, env EnvVars, resources []STR, foreign ...NodeRef) NodeRef {
+func (e *EmitContext) docsNode(cmds []Cmd, inputs, buildFrom, outputs, needs []VFS, render, module bool, env EnvVars, resources []STR, foreign ...NodeRef) NodeRef {
 	na := e.ctx.na
 
 	node := Node{
 		Module: module, Cmds: na.cmdList(cmds...),
-		Inputs: na.inputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(outputs...),
+		Inputs: na.inputList(na.vfsList(dedup(inputs)...)), BuildFromInputs: na.inputList(na.vfsList(dedup(buildFrom)...)), Outputs: na.vfsList(outputs...),
 		KV: &docsKV, Env: env, Platform: e.instance.Platform,
 		Resources: na.strs.list(resources...), ForeignDepRefs: na.refList(foreign...),
 	}
@@ -132,7 +132,7 @@ func (e *EmitContext) emitDocsCopy(c DocsCopy) {
 		outputs = append(outputs, buildJoinClean(dst.relString(), file))
 	}
 
-	e.docsNode([]Cmd{e.pythonScriptCmd("copy_docs_files.py", args...)}, inputs, outputs, nil, false, false, envVarsVCS, usesPython3)
+	e.docsNode([]Cmd{e.pythonScriptCmd("copy_docs_files.py", args...)}, inputs, inputs, outputs, nil, false, false, envVarsVCS, usesPython3)
 	e.outs = append(e.outs, outputs...)
 }
 
@@ -190,7 +190,7 @@ func (e *EmitContext) docsLibrary(out VFS, generated []VFS, internal bool) NodeR
 	inputs = append(inputs, docs.includes...)
 	inputs = append(inputs, buildScriptsTarSourcesPy)
 
-	return e.docsNode(cmds, inputs, []VFS{out}, generated, false, true, envVarsVCS, usesPython3)
+	return e.docsNode(cmds, inputs, inputs, []VFS{out}, generated, false, true, envVarsVCS, usesPython3)
 }
 
 func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
@@ -275,6 +275,8 @@ func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
 	inputs = append(inputs, config, buildScriptsTarSourcesPy)
 	inputs = append(inputs, peers...)
 
+	buildFrom := append([]VFS(nil), inputs...)
+
 	if toolPath != 0 {
 		inputs = append(inputs, toolPath)
 	}
@@ -289,6 +291,7 @@ func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
 		link.Cwd = build(module)
 		cmds = append(cmds, link, e.pythonScriptCmd("docs_manifest.py", "--output", manifest.string(), "html="+baseName(out.relString()), "preprocessed=preprocessed.tar.gz"))
 		inputs = append(inputs, scriptInputs("fs_tools.py", "docs_manifest.py")...)
+		buildFrom = append(buildFrom, scriptInputs("fs_tools.py", "docs_manifest.py")...)
 		outputs = append(outputs, pre, manifest)
 	}
 
@@ -298,5 +301,5 @@ func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
 		foreign = append(foreign, toolRef)
 	}
 
-	return e.docsNode(cmds, inputs, outputs, peers, true, true, env, resources, foreign...)
+	return e.docsNode(cmds, inputs, buildFrom, outputs, peers, true, true, env, resources, foreign...)
 }

@@ -474,7 +474,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		})
 
 		inputs := na.inputList(rescompilersChunk, adjacentSources, adjacentBuilds, objcopyScriptChunk, tailBuilds)
-		buildFrom := na.inputList(rescompilersChunk, adjacentSources, adjacentBuilds, objcopyScriptChunk)
+		buildFrom := na.inputList(adjacentSources, adjacentBuilds, objcopyScriptChunk)
 
 		hashScratch = append(hashScratch, unitElem)
 

@@ -112,7 +112,7 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 	}
 
 	ref := ctx.emit.reserve()
-	node := Node{Platform: e.instance.Platform, Cmds: cmds, Env: envVarsVCS, Inputs: append(ctx.na.inputList(ctx.na.vfsList(tool, src)), closure.bucketList()...), InputClosures: []Closure{closure}, Outputs: outs, KV: &rosKV, ForeignDepRefs: ctx.na.refList(toolRef)}
+	node := Node{Platform: e.instance.Platform, Cmds: cmds, Env: envVarsVCS, Inputs: append(ctx.na.inputList(ctx.na.vfsList(tool, src)), closure.bucketList()...), BuildFromInputs: ctx.na.inputList(ctx.na.vfsList(src), closure.bucketList()...), InputClosures: []Closure{closure}, Outputs: outs, KV: &rosKV, ForeignDepRefs: ctx.na.refList(toolRef)}
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
 	var includes []string

@@ -184,6 +184,8 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 		directBuilds = append(directBuilds, tool.bin)
 	}
 
+	toolEnd := len(directBuilds)
+
 	if scriptVFS.isBuild() {
 		directBuilds = append(directBuilds, scriptVFS)
 	}
@@ -209,7 +211,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	pe := func() {
 		inputClosure, views := pyInputClosure(snap, stmt)
 
-		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, inputClosure, views,
+		e.emitPYRun(stmt, scriptVFS, inVFSByToken, outVFSByToken, stdoutVFS, outputs, directSources, directBuilds, directBuilds[toolEnd:], inputClosure, views,
 			e.textInputSources(snap.inVFSs, len(snap.inVFSs)-stmt.INNoParse), pyRef, interp, toolRefs, auxTools, kv, resources)
 	}
 
@@ -377,6 +379,7 @@ func (e *EmitContext) emitPYRun(
 	outputs []VFS,
 	directSources []VFS,
 	directBuilds []VFS,
+	dataBuilds []VFS,
 	inputClosure InputChunks,
 	views []Closure,
 	textInputs []VFS,
@@ -494,16 +497,17 @@ func (e *EmitContext) emitPYRun(
 	}
 
 	node := Node{
-		Platform:       e.instance.Platform,
-		Cmds:           na.cmdList(cmd),
-		Env:            env,
-		Inputs:         inputChunks,
-		TextInputs:     textInputs,
-		InputClosures:  views,
-		KV:             kv,
-		Outputs:        outputs,
-		ForeignDepRefs: toolRefs,
-		Resources:      resources,
+		Platform:        e.instance.Platform,
+		Cmds:            na.cmdList(cmd),
+		Env:             env,
+		Inputs:          inputChunks,
+		BuildFromInputs: appendInputChunks(na, na.inputList(directSources, dataBuilds), inputClosure),
+		TextInputs:      textInputs,
+		InputClosures:   views,
+		KV:              kv,
+		Outputs:         outputs,
+		ForeignDepRefs:  toolRefs,
+		Resources:       resources,
 	}
 
 	e.emitReservedNode(node, id)

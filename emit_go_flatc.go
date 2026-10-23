@@ -80,6 +80,7 @@ func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 	}
 
 	node.Inputs = append(node.Inputs, imports.bucketList()...)
+	node.BuildFromInputs = na.inputList(node.Inputs[0][1:], node.Inputs[1:]...)
 
 	ref := e.emitNode(node)
 

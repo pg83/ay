@@ -78,7 +78,7 @@ func (e *EmitContext) emitSdcMetas() []VFS {
 		ref := e.ctx.emit.reserve()
 
 		node := Node{Platform: e.instance.Platform, Cmds: cmds, Env: envVarsVCS,
-			Inputs: na.inputList(na.vfsList(tool), scripts), Outputs: outputs,
+			Inputs: na.inputList(na.vfsList(tool), scripts), BuildFromInputs: na.inputList(scripts), Outputs: outputs,
 			KV: &sdcMetaKV, Resources: usesPython3, DepRefs: na.refList(toolRef)}
 
 		pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })

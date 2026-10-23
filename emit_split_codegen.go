@@ -77,13 +77,14 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 
 	pe := func() {
 		node := Node{
-			Platform:       instance.Platform,
-			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
-			Env:            env,
-			Inputs:         na.inputList(na.vfsList(toolBin), na.vfsList(inputIn)),
-			Outputs:        outputs,
-			KV:             &splitCodegenKV,
-			ForeignDepRefs: na.refList(toolLDRef),
+			Platform:        instance.Platform,
+			Cmds:            na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
+			Env:             env,
+			Inputs:          na.inputList(na.vfsList(toolBin), na.vfsList(inputIn)),
+			BuildFromInputs: na.inputList(na.vfsList(inputIn)),
+			Outputs:         outputs,
+			KV:              &splitCodegenKV,
+			ForeignDepRefs:  na.refList(toolLDRef),
 		}
 
 		e.emitReservedNode(node, scRef)

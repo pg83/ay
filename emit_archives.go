@@ -100,12 +100,13 @@ func (e *EmitContext) emitArchive(
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:       env,
-		Inputs:    na.inputList(inputs, na.srcChunk(toolBinPath)),
-		KV:        &archivesKV,
-		Outputs:   na.vfsList(archiveVFS),
-		DepRefs:   deps,
-		Resources: instance.Platform.UsesPython3Clang,
+		Env:             env,
+		Inputs:          na.inputList(inputs, na.srcChunk(toolBinPath)),
+		BuildFromInputs: na.inputList(inputs),
+		KV:              &archivesKV,
+		Outputs:         na.vfsList(archiveVFS),
+		DepRefs:         deps,
+		Resources:       instance.Platform.UsesPython3Clang,
 	}
 
 	arRef := e.emitNode(n)

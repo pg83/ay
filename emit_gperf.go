@@ -37,13 +37,14 @@ func (e *EmitContext) emitGP(srcRel string, srcVFS, genVFS, gperfBin VFS, gperfL
 	head = head[:len(head):len(head)]
 
 	node := Node{
-		Platform:       e.instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env, Stdout: genVFS}),
-		Env:            env,
-		Inputs:         na.inputList(na.vfsList(gperfBin), srcInputs),
-		Outputs:        na.vfsList(genVFS),
-		KV:             &gperfKV,
-		ForeignDepRefs: na.refList(gperfLD),
+		Platform:        e.instance.Platform,
+		Cmds:            na.cmdList(Cmd{CmdArgs: na.chunkList(head), Env: env, Stdout: genVFS}),
+		Env:             env,
+		Inputs:          na.inputList(na.vfsList(gperfBin), srcInputs),
+		BuildFromInputs: na.inputList(srcInputs),
+		Outputs:         na.vfsList(genVFS),
+		KV:              &gperfKV,
+		ForeignDepRefs:  na.refList(gperfLD),
 	}
 
 	e.emitReservedNode(node, ref)

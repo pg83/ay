@@ -424,6 +424,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 	peerInputs = dedup(peerInputs)
 
 	toolRef, toolPath := ctx.tool(internArg(notsBuilderDir))
+	prepToolIndex := len(prepInputs)
 
 	prepInputs = append(prepInputs, toolPath)
 
@@ -501,7 +502,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 		prepOutputs = append(prepOutputs, build(dir, "/__tarballs__/", tarball))
 	}
 
-	prep := Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(appendInternAnys(nil, prepArgs)...)), Env: envVarsVCS}), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(prepInputs...)), Outputs: na.vfsList(prepOutputs...), KV: &KV{P: pkTSDep, PC: pcMagenta}, KVExts: []KVExt{{Key: "text", Val: dir}}, ForeignDepRefs: na.refList(toolRef), Requirements: e.notsRequirements(), Resources: resourceNames, ResourceURIs: make([]STR, len(uris))}
+	prep := Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(appendInternAnys(nil, prepArgs)...)), Env: envVarsVCS}), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(prepInputs...)), BuildFromInputs: na.inputList(prepInputs[:prepToolIndex], prepInputs[prepToolIndex+1:]), Outputs: na.vfsList(prepOutputs...), KV: &KV{P: pkTSDep, PC: pcMagenta}, KVExts: []KVExt{{Key: "text", Val: dir}}, ForeignDepRefs: na.refList(toolRef), Requirements: e.notsRequirements(), Resources: resourceNames, ResourceURIs: make([]STR, len(uris))}
 
 	for i, uri := range uris {
 		prep.ResourceURIs[i] = internStr(uri)
@@ -556,6 +557,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 	inputs = append(inputs, e.codegen.lookup(*prepare.ARPath).NotsInputs...)
 
+	buildFrom := append([]VFS{autotar}, inputs[2:]...)
 	buildLeaves := append(slices.Clone(e.codegen.lookup(*prepare.ARPath).NotsInputs), *prepare.ARPath)
 	outputs := []VFS{output}
 
@@ -565,6 +567,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), vcs.any(), strOutputJson.any(), strVcsVcsJson.any(), vcsOut.any())), Env: envVarsVCS})
 		inputs = append(inputs, vcs)
+		buildFrom = append(buildFrom, vcs)
 		outputs = append(outputs, vcsOut)
 	}
 
@@ -618,8 +621,10 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 		foreignRefs = append(foreignRefs, protocRef)
 		args = append(args, protoArgs...)
 		inputs = append(inputs, protoInputs...)
+		buildFrom = append(buildFrom, protoInputs[1:]...)
 		peerRefs = append(slices.Clone(peerRefs), protoRefs...)
 		inputs = append(inputs, protoLeaves...)
+		buildFrom = append(buildFrom, protoLeaves...)
 		buildLeaves = append(buildLeaves, protoLeaves...)
 	} else {
 		if len(c.Outputs) > 0 {
@@ -643,9 +648,11 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	sourceFiles := e.notsFiles(dir, c.Outputs, c.Excludes)
 
 	inputs = append(inputs, sourceFiles...)
+	buildFrom = append(buildFrom, sourceFiles...)
 
 	if c.Kind != tokProtoLibrary {
 		inputs = append(inputs, source(dir, "/ya.make"), source(dir, "/package.json"))
+		buildFrom = append(buildFrom, source(dir, "/ya.make"), source(dir, "/package.json"))
 	}
 
 	inputs = dedup(inputs)
@@ -662,7 +669,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 		refs = append(refs, ctx.vcsRef)
 	}
 
-	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(foreignRefs...), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
+	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(inputs...)), BuildFromInputs: na.inputList(na.vfsList(dedup(buildFrom)...)), Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(foreignRefs...), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
 
 	n.InputClosures = views
 

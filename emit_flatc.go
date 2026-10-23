@@ -187,13 +187,14 @@ func (e *EmitContext) emitFLReserved(srcRel string, srcVFS VFS, flatcLDRef NodeR
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: bldRootDirVFS,
 			Env: env}),
-		Env:            env,
-		ForeignDepRefs: na.refList(flatcLDRef),
-		Inputs:         InputChunks(inputs[:len(inputs):len(inputs)]),
-		InputClosures:  []Closure{transitiveImports},
-		KV:             v.kv,
-		Outputs:        na.vfsList(headerVFS, cppVFS, bfbsVFS),
-		Resources:      usesPython3,
+		Env:             env,
+		ForeignDepRefs:  na.refList(flatcLDRef),
+		Inputs:          InputChunks(inputs[:len(inputs):len(inputs)]),
+		BuildFromInputs: InputChunks(inputs[1:len(inputs):len(inputs)]),
+		InputClosures:   []Closure{transitiveImports},
+		KV:              v.kv,
+		Outputs:         na.vfsList(headerVFS, cppVFS, bfbsVFS),
+		Resources:       usesPython3,
 	}
 
 	e.emitReservedNode(node, id)

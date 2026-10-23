@@ -49,13 +49,14 @@ func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInp
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Python3.any()), rodataConstArgs, na.anyList(internStr(toolName).any(), srcVFS.any(), asmVFS.any())),
 			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.anyList(argD.any(), internV("_", string(instance.Platform.ISA), "_").any()), rodataYasmConstArgs, na.anyList(outVFS.any(), asmVFS.any())),
 			Env: yasmEnv}),
-		Env:            yasmEnv,
-		Inputs:         inputs,
-		InputClosures:  []Closure{extraInputs},
-		KV:             &rodataKV,
-		Outputs:        na.vfsList(asmVFS, outVFS),
-		ForeignDepRefs: na.refList(yasmLD),
-		Resources:      usesPython3,
+		Env:             yasmEnv,
+		Inputs:          inputs,
+		BuildFromInputs: inputs[1:],
+		InputClosures:   []Closure{extraInputs},
+		KV:              &rodataKV,
+		Outputs:         na.vfsList(asmVFS, outVFS),
+		ForeignDepRefs:  na.refList(yasmLD),
+		Resources:       usesPython3,
 	}
 
 	if len(extraDepRefs) > 0 {

@@ -102,15 +102,16 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 		inputs = append(inputs, cvBuckets...)
 
 		e.emitReservedNode(Node{
-			Platform:       instance.Platform,
-			Cmds:           na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
-			Env:            envVarsVCS,
-			Inputs:         inputs,
-			InputClosures:  []Closure{cv},
-			Outputs:        na.vfsList(hdr, cpp),
-			KV:             &swigJNIKV,
-			ForeignDepRefs: na.refList(swigRef),
-			Resources:      usesPython3,
+			Platform:        instance.Platform,
+			Cmds:            na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
+			Env:             envVarsVCS,
+			Inputs:          inputs,
+			BuildFromInputs: na.inputList(inputs[0][1:], inputs[1:]...),
+			InputClosures:   []Closure{cv},
+			Outputs:         na.vfsList(hdr, cpp),
+			KV:              &swigJNIKV,
+			ForeignDepRefs:  na.refList(swigRef),
+			Resources:       usesPython3,
 		}, swRef)
 	}
 

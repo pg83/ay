@@ -32,6 +32,7 @@ func (e *EmitContext) emitProto2Fbs(stmt Proto2FbsStmt, output VFS) {
 	}
 
 	node.Inputs = append(node.Inputs, imports.bucketList()...)
+	node.BuildFromInputs = na.inputList(node.Inputs[0][1:], node.Inputs[1:]...)
 
 	var parsed ParsedIncludeSet
 

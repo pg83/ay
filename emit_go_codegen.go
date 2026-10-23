@@ -192,6 +192,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 	out := build(dir, "/", st.out)
 	toolRef, tool := ctx.tool(internArg(st.tool))
 	inputs := []VFS{tool}
+	toolEnd := len(inputs)
 	toolRefs := []NodeRef{toolRef}
 	pkg := d.mockgen.pkg
 
@@ -211,6 +212,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 
 		env = e.goToolEnv()
 		inputs = append(inputs, mockgen)
+		toolEnd = len(inputs)
 		toolRefs = append(toolRefs, mockgenRef)
 		cmds = []Cmd{
 			{CmdArgs: na.chunkList(na.anyList(tool.any(), strMockgenOutput.any(), strMockgenGob.any())), Cwd: bindir, Env: envVarsVCS},
@@ -265,14 +267,15 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 	}
 
 	ref := e.emitNode(Node{
-		Platform:       instance.Platform,
-		Cmds:           na.cmdList(cmds...),
-		Env:            env,
-		Inputs:         na.inputList(inputs),
-		KV:             &goCodegenKVs[st.kind],
-		Outputs:        na.vfsList(out),
-		ForeignDepRefs: toolRefs,
-		Resources:      usesPython3,
+		Platform:        instance.Platform,
+		Cmds:            na.cmdList(cmds...),
+		Env:             env,
+		Inputs:          na.inputList(inputs),
+		BuildFromInputs: na.inputList(inputs[toolEnd:]),
+		KV:              &goCodegenKVs[st.kind],
+		Outputs:         na.vfsList(out),
+		ForeignDepRefs:  toolRefs,
+		Resources:       usesPython3,
 	})
 
 	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})

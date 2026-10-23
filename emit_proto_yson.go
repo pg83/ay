@@ -79,7 +79,7 @@ func (e *EmitContext) emitYtOrmProtoYson(st GoCodegenStmt) {
 		Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)),
 			Cwd: build(e.instance.Path.relString()), Env: envVarsVCS}),
-		Env: envVarsVCS, Inputs: na.inputList(inputs[0], inputs[1:]...), Outputs: na.vfsList(outs...),
+		Env: envVarsVCS, Inputs: na.inputList(inputs[0], inputs[1:]...), BuildFromInputs: InputChunks(inputs[1:]), Outputs: na.vfsList(outs...),
 		InputClosures: views,
 		KV:            &pbKV, ForeignDepRefs: na.refList(protocRef, pluginRef),
 	})
