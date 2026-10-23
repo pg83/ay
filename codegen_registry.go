@@ -21,6 +21,7 @@ type GeneratedFileInfo struct {
 	ModuleType         TOK
 	ModuleIncludedDeps *ModuleIncludedDeps
 	ModuleInputs       *ModuleInputInfo
+	CollectionPeers    *CollectionPeerInfo
 	Nots               *NotsPrepared
 	NotsInputs         []VFS
 	Sandbox            *SandboxRecipe
@@ -43,6 +44,11 @@ type GeneratedFileInfo struct {
 
 	IncludedBuildInputs []VFS
 	IncludedInputs      *IncludedInputPlan
+}
+
+type CollectionPeerInfo struct {
+	Modules   []ModuleInstance
+	PassPeers bool
 }
 
 type IncludedInputPlan struct {

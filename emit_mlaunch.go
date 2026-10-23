@@ -63,7 +63,7 @@ func (e *EmitContext) emitGolaunchSource(kv *KV, script VFS, args []ANY, out VFS
 
 func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	var peers []VFS
-	var directPeers []VFS
+	var directPeers, construction []VFS
 	var globals []ResourceDecl
 
 	seen := map[*ModuleEmitResult]bool{}
@@ -74,7 +74,9 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 		self.Language = language
 		self.Demand = max(e.instance.Demand, demandSelf)
 
-		result := e.genPeerModule(self)
+		result, built := e.completePackagePeer(self)
+
+		construction = append(construction, built...)
 
 		if out := moduleOutputPath(result); out != 0 {
 			directPeers = append(directPeers, out)
@@ -93,7 +95,9 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 			peer.Language = LangPackage
 		}
 
-		result := e.genPeerModule(peer)
+		result, built := e.completePackagePeer(peer)
+
+		construction = append(construction, built...)
 
 		if out := moduleOutputPath(result); out != 0 {
 			directPeers = append(directPeers, out)
@@ -131,6 +135,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	lateOuts = dedup(lateOuts)
 
 	inputs = append(inputs, peers...)
+	inputs = append(inputs, construction...)
 	inputs = append(inputs, e.outs...)
 
 	args := []ANY{e.d.tc.Python3.any(), copyScript.any(), strYaStartCommandFile.any(), strDestDir.any(), build(module).any(), strBuildRoot2.any(), bldRootDirVFS.any()}

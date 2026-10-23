@@ -4,7 +4,7 @@ import "strings"
 
 var ciGroupKV = KV{P: pkCI, PC: pcLightRed}
 
-func (e *EmitContext) packagePeer(dir string) *ModuleEmitResult {
+func (e *EmitContext) packagePeer(dir string) (*ModuleEmitResult, []VFS) {
 	instance := e.derivePeerInstance(strings.TrimPrefix(dir, "/"))
 
 	instance.Demand = demandLinked
@@ -26,7 +26,58 @@ func (e *EmitContext) packagePeer(dir string) *ModuleEmitResult {
 		}
 	}
 
-	return e.genPeerModule(instance)
+	return e.completePackagePeer(instance)
+}
+
+func (e *EmitContext) completePackagePeer(instance ModuleInstance) (*ModuleEmitResult, []VFS) {
+	if isLinkingModuleType(e.ctx.moduleName(instance.Path.relString())) {
+		instance.Demand = demandSelf
+	}
+
+	result := e.genPeerModule(instance)
+
+	var inputs []VFS
+
+	seen := map[*ModuleEmitResult]bool{}
+
+	var visit func(*ModuleEmitResult)
+
+	visit = func(res *ModuleEmitResult) {
+		if seen[res] {
+			return
+		}
+
+		seen[res] = true
+
+		if res.IncludedDeps != nil {
+			inputs = append(inputs, res.IncludedDeps.Inputs...)
+			e.refs = append(e.refs, res.IncludedDeps.Refs...)
+		}
+
+		if res.ARPath != nil {
+			inputs = append(inputs, *res.ARPath)
+			e.refs = append(e.refs, res.ARRef)
+		} else if res.LDPath != nil {
+			inputs = append(inputs, *res.LDPath)
+			e.refs = append(e.refs, res.LDRef)
+		}
+
+		if info := e.codegen.lookup(moduleOutputPath(res)); info != nil && info.CollectionPeers != nil {
+			for _, peer := range info.CollectionPeers.Modules {
+				peer.Demand = demandLinked
+
+				if isLinkingModuleType(e.ctx.moduleName(peer.Path.relString())) {
+					peer.Demand = demandSelf
+				}
+
+				visit(e.genPeerModule(peer))
+			}
+		}
+	}
+
+	visit(result)
+
+	return result, inputs
 }
 
 func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen map[*ModuleEmitResult]bool) []VFS {
@@ -35,6 +86,19 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 	}
 
 	seen[res] = true
+
+	if info := e.codegen.lookup(moduleOutputPath(res)); info != nil && info.CollectionPeers != nil && info.CollectionPeers.PassPeers {
+		for _, peer := range info.CollectionPeers.Modules {
+			peer.Demand = demandLinked
+
+			if isLinkingModuleType(e.ctx.moduleName(peer.Path.relString())) {
+				peer.Demand = demandSelf
+			}
+
+			out = e.appendPackagePeer(out, e.genPeerModule(peer), seen)
+		}
+	}
+
 	out = append(out, res.JavaClosure...)
 
 	if jm := res.java; jm != nil {
@@ -82,14 +146,15 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 }
 
 func (e *EmitContext) genCiGroup() *ModuleEmitResult {
-	var peers []VFS
+	var peers, construction []VFS
 	var globals []ResourceDecl
 
 	seen := map[*ModuleEmitResult]bool{}
 
 	for _, dir := range e.d.peerdirs {
-		res := e.packagePeer(dir.string())
+		res, built := e.packagePeer(dir.string())
 
+		construction = append(construction, built...)
 		peers = e.appendPackagePeer(peers, res, seen)
 		globals = append(globals, res.ResourceGlobalClosure...)
 	}
@@ -108,6 +173,7 @@ func (e *EmitContext) genCiGroup() *ModuleEmitResult {
 	out := build(module, "/", name, ".ci.pkg.fake")
 	inputs := append([]VFS{buildScriptsTouchPy}, peers...)
 
+	inputs = append(inputs, construction...)
 	inputs = append(inputs, e.outs...)
 
 	na := e.ctx.na

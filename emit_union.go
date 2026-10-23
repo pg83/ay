@@ -24,11 +24,13 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	var peers []VFS
 	var globals []ResourceDecl
 	var peerIncludes, peerProtoIncludes []VFS
+	var peerContexts []ModuleInstance
 
 	for _, p := range e.d.peerdirs {
 		peer := e.derivePeerInstance(p.string())
 
 		peer.Demand = demandNone
+		peerContexts = append(peerContexts, peer)
 
 		res := e.genPeerModule(peer)
 
@@ -73,6 +75,14 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	ref := e.emitLazyModuleNode(node, peers, out)
 
 	e.codegen.mustInfo(out).LateOutputs = e.ctx.na.vfsList(generated...)
+
+	passPeers := e.d.resourcePassPeers
+
+	e.codegen.mustInfo(out).CollectionPeers = &CollectionPeerInfo{Modules: peerContexts, PassPeers: passPeers}
+
+	if !passPeers {
+		peers = nil
+	}
 
 	res := e.scriptModuleResult(ref, out, dedup(peers), globals)
 
