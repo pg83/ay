@@ -313,7 +313,7 @@ func srcExtClassOf(id ANY) SrcExtClass {
 
 func isCodegenProducingSrcID(id ANY) bool {
 	switch srcExtClassOf(id) {
-	case srcExtGettext, srcExtRos, srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex, srcExtFml, srcExtSfdl, srcExtAsp, srcExtSwg:
+	case srcExtGettext, srcExtRos, srcExtProto, srcExtGztProto, srcExtFbs, srcExtFbs64, srcExtEv, srcExtCfgProto, srcExtRl6, srcExtRl, srcExtY, srcExtCppIn, srcExtCIn, srcExtSc, srcExtGperf, srcExtFlex, srcExtFml, srcExtSfdl, srcExtAsp, srcExtSwg, srcExtSsqls:
 		return true
 	}
 
