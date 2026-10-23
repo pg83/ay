@@ -1330,6 +1330,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit)
+
+			if hasCppDefaultAllocator(d.unit.Type) {
+				env.setDefaultString(envALLOCATOR, expandConfScalar("$DEFAULT_ALLOCATOR", env))
+			}
+
 			setupPythonImportMask(env, d)
 			setupSandboxPythonTask(v.Name, modulePath, kind, language, env, d)
 
@@ -3146,7 +3151,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.yaConfJSON = append(d.yaConfJSON, v.Args[0])
 	case tokAllocator:
-		applyAllocatorStmt(v, d)
+		applyAllocatorStmt(v, d, env)
 	case tokArchive:
 
 		applyArchiveStmt(v, d)
@@ -4621,7 +4626,7 @@ func applyLj21ArchiveStmt(v UnknownStmt, d *ModuleData) {
 	)
 }
 
-func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
+func applyAllocatorStmt(v UnknownStmt, d *ModuleData, env Environment) {
 	if len(v.Args) != 1 {
 		throwFmt("gen: ALLOCATOR expects exactly 1 argument, got %d (line %d)", len(v.Args), v.Line)
 	}
@@ -4634,6 +4639,17 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData) {
 
 	d.hadAllocator = true
 	d.allocatorName = name
+	env.setStringID(envALLOCATOR, name.str())
+}
+
+func hasCppDefaultAllocator(name TOK) bool {
+	switch name {
+	case tokProgram, tokYqlPrebuiltProgram, tokUnittest, tokUnittestFor, tokUnittestWithCustomEntryPoint,
+		tokGtest, tokGBenchmark, tokFuzz, tokBoosttest, tokBoosttestWithMain:
+		return true
+	}
+
+	return false
 }
 
 func isProgramModuleType(name TOK) bool {
