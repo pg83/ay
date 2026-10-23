@@ -99,10 +99,6 @@ func (e *EmitContext) importTestSuites(binary VFS, ref NodeRef, globals []Resour
 		return nil
 	}
 
-	if sanitizer, _ := e.instance.Platform.ifEnv.lookup("SANITIZER_TYPE"); sanitizer != "" && sanitizer != "no" {
-		return nil
-	}
-
 	project := e.instance.Path.relString()
 
 	// CheckImports inherits AbstractTestSuite's project build-dependency query.

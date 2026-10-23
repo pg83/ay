@@ -77,19 +77,11 @@ func setupSandboxPythonTask(name TOK, modulePath string, kind ModuleKind, langua
 	if kind == KindBin {
 		d.pyMain = ptr(internStr("sandbox.taskbox.binary:main").any())
 		d.peerdirs = append(d.peerdirs, internAnys([]string{"sandbox/bin", "sandbox/sdk2", "sandbox/taskbox/worker"})...)
-		// The inherited variable starts at None. Both Python program bases clear it
-		// for sanitizers before sandbox.conf appends its four masks.
-		key := internEnv("NO_CHECK_IMPORTS_FOR_VALUE")
-		env.setDefaultString(key, "None")
-		prefix := env.string(key)
-		if env.bool(envSANITIZER_TYPE) && env.string(envSANITIZER_TYPE) != "no" {
-			prefix = ""
+		// sandbox.conf appends after the inherited program sanitizer reset.
+		for _, mask := range []string{"api.*", "kernel.*", "library.*", "sky*"} {
+			value := appendPythonImportMask(mask, env, d)
+			env.setString(internEnv(importMaskVariable), value)
 		}
-		if prefix != "" {
-			d.noCheckImports = append(d.noCheckImports, internStr(prefix).any())
-		}
-		d.noCheckImports = append(d.noCheckImports, anysOf("api.*", "kernel.*", "library.*", "sky*")...)
-		env.setString(key, strings.Join(anyStrs(d.noCheckImports), " "))
 	} else {
 		d.peerdirs = append(d.peerdirs, internStr("sandbox/sdk2").any())
 	}

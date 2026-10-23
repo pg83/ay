@@ -348,6 +348,7 @@ type ModuleData struct {
 	noStrip                  bool
 	strip                    bool
 	unit                     ModuleUnit
+	importMask               pythonImportMask
 	noCheckImports           []ANY
 	noCheckImportsDisabled   bool
 	pyRegister               []PyRegistration
@@ -783,6 +784,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.needGoogleProtoPeerdirs = true
 	d.yqlCurrent = instance.YqlCurrent
 	d.yqlStableABI = instance.Platform.YqlStableABI
+	initPythonImportMask(env, d)
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
 
@@ -806,6 +808,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	d.srcs = nativeSources
+	finishPythonImportMask(env, d)
 	bindRunProgramCalls(d, env)
 	d.test.expandValues(env)
 
@@ -1295,6 +1298,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit)
+			setupPythonImportMask(env, d)
 			setupSandboxPythonTask(v.Name, modulePath, kind, language, env, d)
 
 			if isUnionModule(v.Name) {
@@ -1555,11 +1559,21 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 		case *SetStmt:
 
-			value := expandSourceScalarVarRef(v.Value, env)
+			sourceValue := v.Value
+			if v.Name == importMaskVariable && v.LexicalValue != "" {
+				sourceValue = v.LexicalValue
+			}
+			value := expandSourceScalarVarRef(sourceValue, env)
 			perlMask := perlInputMask(v.NameEnv)
 			perlChanged := perlMask != 0 && env.string(v.NameEnv) != value
 
 			env.setFromString(v.NameEnv, value)
+			if v.Name == importMaskVariable {
+				setPythonImportMask(value, d)
+			}
+			if v.NameEnv == envSANITIZER_TYPE {
+				setupPythonImportMask(env, d)
+			}
 
 			if d.setVars == nil {
 				d.setVars = map[STR]STR{}
@@ -1866,7 +1880,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
 				})
 			} else {
-				if v.Name == tokRun {
+				if v.Name == tokNoCheckImports {
+					expanded.Args = prepareRunProgramArguments(runProgramSourceArguments(v.LexicalArgs, env), pythonImportMaskSourceEnv(env))
+				} else if v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].string() == importMaskVariable {
+					expanded.Args = runProgramSourceArguments(v.LexicalArgs, env)
+				} else if v.Name == tokRun {
 					expanded.Args = expandTestRunArgs(v.Args, env)
 				} else if v.Name == tokSetListPreSuf {
 					expanded.Args = expandListPreSufArgs(v.Args, env)
@@ -3054,6 +3072,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			env.setBool(internEnv(a), true)
 
 			switch a {
+			case "SANITIZER_TYPE":
+				setupPythonImportMask(env, d)
 			case "MUSL_LITE":
 				d.muslLite = true
 			case "PYBUILD_NO_PYC":
@@ -3076,6 +3096,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			a := aTok.string()
 
 			env.setBool(internEnv(a), false)
+			if a == "SANITIZER_TYPE" {
+				setupPythonImportMask(env, d)
+			}
 
 			if d.setVars == nil {
 				d.setVars = map[STR]STR{}
@@ -3356,11 +3379,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.resources = append(d.resources, ResourceEntry{Path: "-", Key: "py/constructors/" + arg})
 	case tokNoCheckImports:
 
-		if len(v.Args) > 0 {
-			d.noCheckImports = append(d.noCheckImports, v.Args...)
-		} else {
-			d.noCheckImportsDisabled = true
-		}
+		value := strings.Join(anyStrs(v.Args), " ")
+		env.setString(internEnv(importMaskVariable), value)
+		setPythonImportMask(value, d)
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2, tokCppEvProtoPlugin:
 		addCPPProtoPlugin(d, parseCPPProtoPlugin(v))
 	case tokTasklet:
@@ -3518,11 +3539,16 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			name := v.Args[0].string()
 			value := strings.Join(anyStrs(v.Args[1:]), " ")
 
-			if prev, ok := env.lookup(name); ok && prev != "" {
+			if name == importMaskVariable {
+				value = appendPythonImportMask(value, env, d)
+			} else if prev, ok := env.lookup(name); ok && prev != "" {
 				value = prev + " " + value
 			}
 
 			env.setFromString(internEnv(name), value)
+			if name == "SANITIZER_TYPE" {
+				setupPythonImportMask(env, d)
+			}
 
 			if d.setVars == nil {
 				d.setVars = map[STR]STR{}

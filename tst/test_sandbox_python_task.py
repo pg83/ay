@@ -55,7 +55,7 @@ class SandboxPythonTaskTest(unittest.TestCase):
                         'SANDBOX_TASK_REGISTRY.work.jobs.InspectDelta=work.jobs.InspectDelta' in kvs(n))
         main = next(n for n in resources if 'PY_MAIN=sandbox.taskbox.binary:main' in kvs(n))
         exclusions = next(n for n in resources if any(
-            value.startswith('py/no_check_imports/') and value.endswith('=None api.* kernel.* library.* sky*')
+            value.startswith('py/no_check_imports/') and value.endswith('=Noneapi.*kernel.*library.*sky*api.*kernel.*library.*sky* api.* kernel.* library.* sky*')
             for value in kvs(n)))
         self.assertIn(registry['uid'], library['deps'])
         for node in (registry, main, exclusions):
@@ -64,15 +64,20 @@ class SandboxPythonTaskTest(unittest.TestCase):
         self.assertNotIn(exclusions['uid'], library['deps'])
 
     def test_binary_appends_masks_to_inherited_value_after_sanitizer_reset(self):
-        for flags, prefix in ((['-DNO_CHECK_IMPORTS_FOR_VALUE=custom.*'], 'custom.* '),
-                              (['-DSANITIZER_TYPE=address'], ''),
+        for flags, prefix in ((['-DNO_CHECK_IMPORTS_FOR_VALUE=custom.*'], 'custom.*'),
+                              (['-DSANITIZER_TYPE=address'], 'None'),
                               (['-DNO_CHECK_IMPORTS_FOR_VALUE='], '')):
             with self.subTest(flags=flags):
                 graph = lib.make(fixture(), 'work/jobs/InspectDelta', *flags)
+                binary = lib.node_by_output(graph, '$(B)/work/jobs/InspectDelta/InspectDelta')
                 masks = [value.split('=', 1)[1]
-                         for node in objcopy_nodes(graph, 'work/jobs/InspectDelta') for value in kvs(node)
+                         for node in objcopy_nodes(graph, 'work/jobs/InspectDelta') if node['uid'] in binary['deps'] for value in kvs(node)
                          if value.startswith('py/no_check_imports/')]
-                self.assertEqual(masks, [prefix + 'api.* kernel.* library.* sky*'])
+                self.assertEqual(masks, [prefix + 'api.*kernel.*library.*sky*api.*kernel.*library.*sky* api.* kernel.* library.* sky*'])
+                library = lib.node_by_output(graph, '$(B)/work/jobs/InspectDelta/libpy3work-jobs-InspectDelta.global.a')
+                own = [value.split('=', 1)[1] for node in objcopy_nodes(graph, 'work/jobs/InspectDelta')
+                       if node['uid'] in library['deps'] for value in kvs(node) if value.startswith('py/no_check_imports/')]
+                self.assertEqual(own, ['custom.*'] if prefix == 'custom.*' else [])
 
     def test_python_peer_selects_library_and_sdk_without_task_binary(self):
         files = fixture()

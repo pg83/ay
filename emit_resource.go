@@ -197,9 +197,17 @@ type ResourceItem struct {
 	Path        string
 	Key         string
 	Cmd         STR
+	ExpandedCmd []ANY
 	SourceInput VFS
 	BuildInput  VFS
 	AuxBuilds   []VFS
+}
+
+func (it ResourceItem) commandArgs() []ANY {
+	if it.ExpandedCmd != nil {
+		return it.ExpandedCmd
+	}
+	return []ANY{it.Cmd.any()}
 }
 
 func (it ResourceItem) input() VFS {
@@ -329,11 +337,12 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		lo = hi
 
-		nPaths, nKvs, sourceBound, buildBound := 0, 0, 0, 0
+		nPaths, nKvs, nKvArgs, sourceBound, buildBound := 0, 0, 0, 0, 0
 
 		for _, it := range chunk {
 			if it.Path == "-" {
 				nKvs++
+				nKvArgs += len(it.commandArgs())
 			} else {
 				nPaths++
 			}
@@ -356,7 +365,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		}
 
 		if nKvs > 0 {
-			payloadCap += 1 + nKvs
+			payloadCap += 1 + nKvArgs
 		}
 
 		payload := na.anys.alloc(payloadCap)[:0]
@@ -392,7 +401,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 			for _, it := range chunk {
 				if it.Path == "-" {
-					payload = append(payload, it.Cmd.any())
+					payload = append(payload, it.commandArgs()...)
 					hashScratch = append(hashScratch, it.Key)
 				}
 			}
@@ -491,9 +500,10 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		lo = hi
 
-		buildBound := 0
+		buildBound, commandWords := 0, 2
 
 		for _, it := range chunk {
+			commandWords += 1 + len(it.commandArgs())
 			if it.input() != 0 {
 				buildBound++
 			}
@@ -548,13 +558,14 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 			GeneratorRefs: na.refList(rescompilerRef),
 		})
 
-		nodeCmd := na.anys.alloc(2 + 2*len(chunk))[:0]
+		nodeCmd := na.anys.alloc(commandWords)[:0]
 
 		nodeCmd = append(nodeCmd, rescompilerBinVFS.any(), aux.any())
 
 		for _, it := range chunk {
 			if it.Path == "-" {
-				nodeCmd = append(nodeCmd, dash.any(), it.Cmd.any())
+				nodeCmd = append(nodeCmd, dash.any())
+				nodeCmd = append(nodeCmd, it.commandArgs()...)
 			} else {
 				nodeCmd = append(nodeCmd, it.input().any(), internV("-", it.Key).any())
 			}

@@ -98,7 +98,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 
 	walk(root)
 
-	needed := map[string]bool{sysinclVar: true, "__COMMA__": true}
+	needed := map[string]bool{sysinclVar: true, "__COMMA__": true, importMaskVariable: true}
 	used := make([]bool, len(stmts))
 	need := func(name string) { needed[name] = true }
 
@@ -138,6 +138,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 	// modifier runs after macro argument binding, rather than becoming a
 	// literal argument delimiter during source evaluation.
 	bindConfCommandVariable("__COMMA__", env, platformEnv, map[string]bool{})
+	bindConfCommandVariable(importMaskVariable, env, platformEnv, map[string]bool{})
 
 	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env)), macros
 }

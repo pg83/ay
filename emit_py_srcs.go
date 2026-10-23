@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/md5"
-	enc32 "encoding/base32"
 	enchex "encoding/hex"
 	"regexp"
 	"slices"
@@ -677,21 +676,15 @@ func (e *EmitContext) emitPyMainObjcopy() ([]NodeRef, []VFS) {
 func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 	_, _, d := e.ctx, e.instance, e.d
 
-	if len(d.noCheckImports) == 0 {
+	if d.importMask.resource == nil {
 		return nil, nil
 	}
 
-	value := strings.Join(anyStrs(d.noCheckImports), " ")
-	sum := md5.Sum([]byte(value))
-	b32 := strings.ToLower(enc32.StdEncoding.EncodeToString(sum[:]))
-
-	b32 = strings.TrimRight(b32, "=")
-
-	key := "py/no_check_imports/" + b32
-	kvHash := key + "=\"" + value + "\""
-	kvCmd := key + "=" + value
-
-	return e.emitKvOnlyResource(d.unit.Tag, []string{kvHash}, []STR{internStr(kvCmd)})
+	item := *d.importMask.resource
+	env := Environment{s: &e.frame.ifEnv}
+	raw := env.string(internEnv(importMaskVariable))
+	item.ExpandedCmd = internAnys(legacyConfigurationCommand(item.Key, env, importMaskVariable, raw, d.importMask.base))
+	return e.packResources(ResourcePack{Tag: d.unit.Tag, DontCompress: true, Items: []ResourceItem{item}})
 }
 
 func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {

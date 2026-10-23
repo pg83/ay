@@ -31,7 +31,7 @@ ELSE()
     ENDIF()
 ENDIF()
 SET(STAMP ${MODULE_KIND}_${EDITION})
-IF(NO_CHECK_IMPORTS_FOR_VALUE == "None api.* kernel.* library.* sky*")
+IF(NO_CHECK_IMPORTS_FOR_VALUE == "$NO_CHECK_IMPORTS_FOR_VALUE api.* kernel.* library.* sky*")
     PY_SRCS(defaults_seen.py)
 ENDIF()
 PY_SRCS(${MODULE_KIND}.py common.py)
@@ -112,7 +112,7 @@ class SandboxPy23TaskTest(unittest.TestCase):
         mains = [value for node in nodes for value in kvs(node) if value.startswith("PY_MAIN=")]
         if variant == "SB_TASK_BIN":
             self.assertEqual(mains, ["PY_MAIN=sandbox.taskbox.binary:main"])
-            self.assertEqual([value.split("=", 1)[1] for value in masks], ["None api.* kernel.* library.* sky*"])
+            self.assertEqual([value.split("=", 1)[1] for value in masks], ["Noneapi.*kernel.*library.*sky*api.*kernel.*library.*sky* api.* kernel.* library.* sky*"])
         else:
             self.assertEqual(mains, [])
             self.assertEqual(masks, [])
@@ -235,16 +235,16 @@ class SandboxPy23TaskTest(unittest.TestCase):
             self.assertIn(lib.node_by_output(graph, BUILD + "/" + output)["uid"], graph["result"])
 
     def test_binary_defaults_obey_flags_without_public_py2_deprecation(self):
-        for flags, prefix in ((["-DNO_CHECK_IMPORTS_FOR_VALUE=custom.*"], "custom.* "),
-                              (["-DSANITIZER_TYPE=address"], ""),
+        for flags, prefix in ((["-DNO_CHECK_IMPORTS_FOR_VALUE=custom.*"], "custom.*"),
+                              (["-DSANITIZER_TYPE=address"], "None"),
                               (["-DNO_CHECK_IMPORTS_FOR_VALUE="], ""),
-                              (["-DFAIL_PY2=yes"], "None ")):
+                              (["-DFAIL_PY2=yes"], "None")):
             with self.subTest(flags=flags):
                 graph = lib.make(fixture("ONLY_TAGS(SB_TASK_BIN)"), TASK, *flags, opensource=False)
                 binary = task_output(graph, "SB_TASK_BIN")
                 masks = [value.split("=", 1)[1] for node in resources(graph, binary) for value in kvs(node)
                          if value.startswith("py/no_check_imports/")]
-                self.assertEqual(masks, [prefix + "api.* kernel.* library.* sky*"])
+                self.assertEqual(masks, [prefix + "api.*kernel.*library.*sky*api.*kernel.*library.*sky* api.* kernel.* library.* sky*"])
 
     def test_public_python2_program_keeps_its_deprecation_dependency(self):
         files = python2_base()

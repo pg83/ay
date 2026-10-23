@@ -10,7 +10,19 @@ import (
 // CmdLexer/CmdParser distinguish a standalone variable (argument splicing)
 // from a variable inside a term (concatenation). Parse before unescaping so a
 // protected dollar cannot turn back into an expression during substitution.
-func compilerFlagExpression(text string, env Environment, expanding []string) (args []string, identity string) {
+func compilerFlagExpression(text string, env Environment, expanding []string) ([]string, string) {
+	return commandArgumentExpression(text, func(name string, _ bool) ([]string, string) {
+		if slices.Contains(expanding, name) {
+			throwFmt("self-contradictory variable definition (%s)", name)
+		}
+		value, _ := env.lookup(name)
+		return compilerFlagExpression(value, env, append(expanding, name))
+	})
+}
+
+// The same command grammar is used for configuration-bound resource strings.
+// Scalar terms concatenate variables; standalone references splice arguments.
+func commandArgumentExpression(text string, resolve func(string, bool) ([]string, string)) (args []string, identity string) {
 	var word, key strings.Builder
 	var quote byte
 	var variable []string
@@ -118,11 +130,12 @@ func compilerFlagExpression(text string, env Environment, expanding []string) (a
 					}
 				}
 				if name != "" {
-					if slices.Contains(expanding, name) {
-						throwFmt("self-contradictory variable definition (%s)", name)
+					atEnd := i == len(text) || strings.HasPrefix(text[i:], "&&")
+					if !atEnd {
+						next, _ := utf8.DecodeRuneInString(text[i:])
+						atEnd = unicode.IsSpace(next)
 					}
-					value, _ := env.lookup(name)
-					values, expanded := compilerFlagExpression(value, env, append(expanding, name))
+					values, expanded := resolve(name, hasTerm || quote != 0 || !atEnd)
 					standalone = !hasTerm && quote == 0
 					variable = values
 					word.WriteString(strings.Join(values, ""))

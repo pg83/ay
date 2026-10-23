@@ -171,10 +171,11 @@ type SrcsStmt struct {
 }
 
 type SetStmt struct {
-	Name    string
-	NameEnv ENV
-	Value   string
-	Line    int
+	Name         string
+	NameEnv      ENV
+	Value        string
+	LexicalValue string
+	Line         int
 }
 
 type EndStmt struct {
@@ -1076,7 +1077,7 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 	var lexical []ANY
 	var capture *[]ANY
 
-	if nameTok.string() == "RUN_JAVA_PROGRAM" {
+	if nameTok.string() == "RUN_JAVA_PROGRAM" || nameTok.id == kwSET || nameTok.id == tokSetAppend.str() || nameTok.id == tokNoCheckImports.str() {
 		capture = &lexical
 	}
 
@@ -1099,7 +1100,11 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 	stmt := p.buildStmt(nameTok, args)
 
 	if len(lexical) != 0 {
-		stmt.(*UnknownStmt).LexicalArgs = lexical
+		if set, ok := stmt.(*SetStmt); ok {
+			set.LexicalValue = strings.Join(anyStrs(lexical[1:]), " ")
+		} else {
+			stmt.(*UnknownStmt).LexicalArgs = lexical
+		}
 	}
 
 	if set, ok := stmt.(*SetStmt); ok {
