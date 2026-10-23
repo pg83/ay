@@ -146,7 +146,7 @@ UBERJAR_SERVICES_RESOURCE_TRANSFORMER()
         shade = command(jar, "ru.yandex.devtools.emigrante.Main")
         for value in ("--shade-prefix", "shaded", "--shade-exclude", "public.**", "--shade-include", "internal.**",
                       "--uber-exclude", "META-INF/old", "--manifest-main", "example.Main", "--manifest-attribute",
-                      "Implementation-Title:'Example App'", "--append-transformer", "reference.conf", "--service-transformer"):
+                      "Implementation-Title:Example App", "--append-transformer", "reference.conf", "--service-transformer"):
             self.assertIn(value, shade)
         run = lib.node_by_output(graph, "$(B)/app/app.run.cp.jar")
         for output in ("$(B)/app/launch.sh", "$(B)/app/second.sh", "$(B)/app/jdk.tar", "$(B)/app/app.tar"):

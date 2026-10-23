@@ -50,6 +50,17 @@ var javaPathVars = map[string]bool{
 	"BINDIR": true, "CURDIR": true, "ARCADIA_ROOT": true, "ARCADIA_BUILD_ROOT": true, "MODDIR": true,
 }
 
+var javaUberjarFlagVars = []string{
+	"UBERJAR_PREFIX_FLAG",
+	"UBERJAR_HIDE_EXCLUDE_FLAGS",
+	"UBERJAR_HIDE_INCLUDE_FLAGS",
+	"UBERJAR_PATH_EXCLUDES",
+	"UBERJAR_MANIFEST_TRANSFORMER_MAIN_FLAG",
+	"UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE_FLAGS",
+	"UBERJAR_APPENDING_TRANSFORMER_FLAGS",
+	"UBERJAR_SERVICES_RESOURCE_TRANSFORMER_FLAG",
+}
+
 const (
 	javaKotlinVersion          = "2.3.10"
 	javaProtoRuntimeVersion    = "4.33.0"
@@ -172,6 +183,12 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 
 	collectJavaStmts(ctx, jm, d, stmts, env)
 	collectJavaAutoinclude(ctx, jm, d, env)
+
+	for _, name := range javaUberjarFlagVars {
+		value, _ := env.lookup(name)
+
+		d.uberjarOpts = append(d.uberjarOpts, splitJavaCommandWords(expandStmtToken(value, env))...)
+	}
 
 	for _, image := range strings.Fields(expandStmtToken(env.string(envDockerImagesValue), env)) {
 		if image == `""` || image == "''" {
@@ -599,31 +616,31 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.uberjar = true
 		d.recalcKotlincOpts(jm)
 	case "UBERJAR_HIDING_PREFIX":
-		d.uberjarOpts = append(d.uberjarOpts, "--shade-prefix", arg0)
+		env.setString(envUberjarPrefixFlag, "--shade-prefix "+arg0)
 	case "UBERJAR_HIDE_EXCLUDE_PATTERN":
 		for _, a := range args {
-			d.uberjarOpts = append(d.uberjarOpts, "--shade-exclude", a)
+			appendMacroEnv(env, "UBERJAR_HIDE_EXCLUDE_FLAGS", "--shade-exclude "+a)
 		}
 	case "UBERJAR_HIDE_INCLUDE_PATTERN":
 		for _, a := range args {
-			d.uberjarOpts = append(d.uberjarOpts, "--shade-include", a)
+			appendMacroEnv(env, "UBERJAR_HIDE_INCLUDE_FLAGS", "--shade-include "+a)
 		}
 	case "UBERJAR_PATH_EXCLUDE_PREFIX":
 		for _, a := range args {
-			d.uberjarOpts = append(d.uberjarOpts, "--uber-exclude", a)
+			appendMacroEnv(env, "UBERJAR_PATH_EXCLUDES", "--uber-exclude "+a)
 		}
 	case "UBERJAR_MANIFEST_TRANSFORMER_MAIN":
-		d.uberjarOpts = append(d.uberjarOpts, "--manifest-main", arg0)
+		env.setString(envUberjarManifestTransformerMainFlag, "--manifest-main "+arg0)
 	case "UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE":
-		if len(args) > 1 {
-			d.uberjarOpts = append(d.uberjarOpts, "--manifest-attribute", arg0+":'"+strings.Join(args[1:], " ")+"'")
+		if len(args) > 0 {
+			appendMacroEnv(env, "UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE_FLAGS", "--manifest-attribute "+arg0+":'"+strings.Join(args[1:], " ")+"'")
 		}
 	case "UBERJAR_APPENDING_TRANSFORMER":
 		for _, a := range args {
-			d.uberjarOpts = append(d.uberjarOpts, "--append-transformer", a)
+			appendMacroEnv(env, "UBERJAR_APPENDING_TRANSFORMER_FLAGS", "--append-transformer "+a)
 		}
 	case "UBERJAR_SERVICES_RESOURCE_TRANSFORMER":
-		d.uberjarOpts = append(d.uberjarOpts, "--service-transformer")
+		env.setString(envUberjarServicesResourceTransformerFlag, "--service-transformer")
 	case "DEPENDENCY_MANAGEMENT":
 		d.dm = append(d.dm, args...)
 	case "EXCLUDE", "JAVA_RUNTIME_EXCLUDE", "JAVA_TEST_EXCLUDE":
