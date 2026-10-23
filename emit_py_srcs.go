@@ -659,7 +659,7 @@ func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) 
 		kvsCmd = append(kvsCmd, internStr(key+"="+nsValue))
 	}
 
-	return e.emitKvOnlyResource(e.d.unit.Tag, kvsHash, kvsCmd)
+	return e.emitKvOnlyResource(e.d.unit.HashTag, kvsHash, kvsCmd)
 }
 
 func (e *EmitContext) emitPyMainObjcopy() ([]NodeRef, []VFS) {
@@ -671,7 +671,7 @@ func (e *EmitContext) emitPyMainObjcopy() ([]NodeRef, []VFS) {
 
 	kv := "PY_MAIN=" + d.pyMain.string()
 
-	return e.emitKvOnlyResource(d.unit.Tag, []string{kv}, []STR{internStr(kv)})
+	return e.emitKvOnlyResource(d.unit.HashTag, []string{kv}, []STR{internStr(kv)})
 }
 
 func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
@@ -691,7 +691,7 @@ func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 	kvHash := key + "=\"" + value + "\""
 	kvCmd := key + "=" + value
 
-	return e.emitKvOnlyResource(d.unit.Tag, []string{kvHash}, []STR{internStr(kvCmd)})
+	return e.emitKvOnlyResource(d.unit.HashTag, []string{kvHash}, []STR{internStr(kvCmd)})
 }
 
 func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {

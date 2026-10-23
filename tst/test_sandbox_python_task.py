@@ -51,13 +51,18 @@ class SandboxPythonTaskTest(unittest.TestCase):
         check = lib.node_by_output(graph, '$(B)/work/jobs/InspectDelta/test-results/import_test/meta.json')
         self.assertIn(task['uid'], check['deps'])
         resources = objcopy_nodes(graph, 'work/jobs/InspectDelta')
-        registry = next(n for n in resources if
-                        'SANDBOX_TASK_REGISTRY.work.jobs.InspectDelta=work.jobs.InspectDelta' in kvs(n))
+        registries = [n for n in resources if
+                      'SANDBOX_TASK_REGISTRY.work.jobs.InspectDelta=work.jobs.InspectDelta' in kvs(n)]
+        self.assertEqual(len(registries), 2)
+        registry = next(n for n in registries if n['uid'] in task['deps'])
+        library_registry = next(n for n in registries if n['uid'] in library['deps'])
+        self.assertNotEqual(registry['uid'], library_registry['uid'])
         main = next(n for n in resources if 'PY_MAIN=sandbox.taskbox.binary:main' in kvs(n))
         exclusions = next(n for n in resources if any(
             value.startswith('py/no_check_imports/') and value.endswith('=None api.* kernel.* library.* sky*')
             for value in kvs(n)))
-        self.assertIn(registry['uid'], library['deps'])
+        self.assertNotIn(registry['uid'], library['deps'])
+        self.assertNotIn(library_registry['uid'], task['deps'])
         for node in (registry, main, exclusions):
             self.assertIn(node['uid'], task['deps'])
         self.assertNotIn(main['uid'], library['deps'])
@@ -109,15 +114,15 @@ class SandboxPythonTaskTest(unittest.TestCase):
                         self.assertIn(selected[0]['uid'], graph['result'])
                         self.assertEqual(selected[0]['uid'] in suite['deps'], output == 'InspectDelta')
 
-    def test_direct_contexts_keep_configuration_kind_and_python_tag_separate(self):
+    def test_direct_contexts_keep_configuration_tag_and_python_language_separate(self):
         for selection, binary, library in (('', True, True), ('ONLY_TAGS(SB_TASK_BIN)', True, False),
                                             ('EXCLUDE_TAGS(SB_TASK_BIN)', False, True)):
             with self.subTest(selection=selection):
                 files = fixture()
                 files['work/jobs/InspectDelta/ya.make'] = (
                     f'SANDBOX_PY3_TASK(named)\n{lib.BARE_MODULE}{selection}\n'
-                    'IF(MODULE_TAG == "PY3")\n'
-                    'IF(MODULE_KIND == "SB_TASK_BIN")\nPY_SRCS(binary.py)\n'
+                    'IF(PYTHON3)\n'
+                    'IF(MODULE_TAG == "SB_TASK_BIN")\nPY_SRCS(binary.py)\n'
                     'ELSE()\nPY_SRCS(library.py)\nENDIF()\nENDIF()\nEND()\n'
                 )
                 files['work/jobs/InspectDelta/binary.py'] = ''
