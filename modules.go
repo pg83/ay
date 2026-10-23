@@ -1302,6 +1302,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				return
 			}
 
+			expanded := *v
+
+			expanded.Args = expandModuleArguments(v.Args, env)
+			v = &expanded
+
 			if v.Name == tokPy3Program && kind == KindBin {
 				d.peerdirs = append([]ANY{internStr(modulePath).any()}, d.peerdirs...)
 			}
@@ -2217,6 +2222,26 @@ func (u ModuleUnit) objectSuffix(p *Platform) string {
 	}
 
 	return "." + u.ObjSuf.string() + p.objectSuffix()
+}
+
+func expandModuleArguments(args []ANY, env Environment) []ANY {
+	var out []ANY
+
+	for _, arg := range args {
+		if !strings.ContainsRune(arg.string(), '$') {
+			out = append(out, arg)
+
+			continue
+		}
+
+		for _, word := range strings.Split(expandSourceScalarVarRef(arg.string(), env), " ") {
+			if word != "" {
+				out = append(out, internAny(word))
+			}
+		}
+	}
+
+	return out
 }
 
 func moduleStmtForKind(stmt *ModuleStmt, unit ModuleUnit) *ModuleStmt {
