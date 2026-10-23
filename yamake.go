@@ -1389,6 +1389,12 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		}
 
 		return parseRunAntlr4CppSplit(args, line)
+	case "RUN_ANTLR4_PYTHON2", "RUN_ANTLR4_PYTHON3":
+		if len(args) == 0 {
+			fail("%s expects a grammar", name)
+		}
+
+		return &RunAntlr4PythonStmt{Args: args, Version: strings.TrimPrefix(name, "RUN_ANTLR4_PYTHON"), Line: line}
 	case "RUN_ANTLR", "RUN_ANTLR4":
 		if len(args) == 0 {
 			fail("%s expects at least 1 argument", name)

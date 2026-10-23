@@ -210,6 +210,7 @@ func (e *EmitContext) emitJVGeneralReserved(
 	args []string,
 	inputSources []VFS,
 	inputBuilds []VFS,
+	hiddenInputs []VFS,
 	outputs []VFS,
 	cwd string,
 	tc ModuleToolchain,
@@ -228,7 +229,7 @@ func (e *EmitContext) emitJVGeneralReserved(
 
 	cmdArgs = appendInternAnys(cmdArgs, args)
 
-	jvInputs := na.inputList(inputSources, inputBuilds, na.vfsList(stdout2stderrVFS, jarVFS))
+	jvInputs := na.inputList(inputSources, inputBuilds, na.vfsList(stdout2stderrVFS, jarVFS), hiddenInputs)
 
 	e.emitJVNodeReserved(cmdArgs, jvInputs, outputs, cwd, id)
 }

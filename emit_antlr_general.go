@@ -12,18 +12,29 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 		jarVFS = antlr3JarVFS
 	}
 
+	if run.Jar != 0 {
+		jarVFS = e.requireProducedInput("ANTLR jar", run.Jar.string(), copyFileInputVFS(ctx.fs, instance.Path, run.Jar.string()))
+	}
+
 	inVFSByToken := make(map[string]VFS, len(run.INFiles))
 	inputs := make([]VFS, 0, len(run.INFiles))
 	inputSources := make([]VFS, 0, len(run.INFiles))
 	inputBuilds := make([]VFS, 0, len(run.INFiles))
+	hiddenInputs := make([]VFS, 0, len(run.INFiles))
 
 	for _, inTok := range run.INFiles {
 		vfs := e.requireProducedInput("IN", inTok.string(), copyFileInputVFS(ctx.fs, instance.Path, inTok.string()))
 
+		if run.DeclSeq != 0 {
+			vfs = e.runProgramInputVFS(inTok.string())
+		}
+
 		inVFSByToken[inTok.string()] = vfs
 		inputs = append(inputs, vfs)
 
-		if vfs.isBuild() {
+		if run.DeclSeq != 0 && inTok != run.Args[0] {
+			hiddenInputs = append(hiddenInputs, vfs)
+		} else if vfs.isBuild() {
 			inputBuilds = append(inputBuilds, vfs)
 		} else {
 			inputSources = append(inputSources, vfs)
@@ -59,15 +70,23 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 	inputSourcesSnap := ctx.na.vfsList(inputSources...)
 	inputBuildsSnap := ctx.na.vfsList(inputBuilds...)
 	outputsSnap := ctx.na.vfsList(outputs...)
+	hiddenSnap := ctx.na.vfsList(hiddenInputs...)
 
 	pe := func() {
-		e.emitJVGeneralReserved(jarVFS, args, inputSourcesSnap, inputBuildsSnap, outputsSnap, cwd, tc, jvRef)
+		e.emitJVGeneralReserved(jarVFS, args, inputSourcesSnap, inputBuildsSnap, hiddenSnap, outputsSnap, cwd, tc, jvRef)
 	}
 
 	pending := e.pendingEmit(pe)
 
+	var action *SourceActionInfo
+
+	if run.DeclSeq != 0 {
+		action = &SourceActionInfo{DeclSeq: run.DeclSeq, Inputs: ctx.na.vfsList(append(append([]VFS(nil), inputs...), jarVFS, stdout2stderrVFS)...)}
+	}
+
 	for _, outVFS := range outVFSByToken {
 		e.register(GeneratedFileInfo{
+			SourceAction:    action,
 			OutputPath:      outVFS,
 			ProducerRef:     jvRef,
 			ProducerMainOut: outputs[0],

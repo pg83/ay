@@ -556,6 +556,8 @@ type Antlr4GrammarInfo struct {
 }
 
 type AntlrRunInfo struct {
+	DeclSeq        int
+	Jar            ANY
 	Macro          string
 	Args           []ANY
 	INFiles        []ANY
@@ -1837,6 +1839,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				Listener:       v.Listener,
 				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
 			})
+		case *RunAntlr4PythonStmt:
+			collectAntlrPython(ctx.parsers, modulePath, v, env, d)
 		case *RunAntlrStmt:
 			expanded := AntlrRunInfo{
 				Macro:          v.Macro,

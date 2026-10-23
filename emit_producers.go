@@ -439,7 +439,9 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		outEnd := len(backing)
 
 		for _, f := range run.INFiles {
-			if v := rootedBuildCandidate(module, f.string()); v != 0 {
+			if run.DeclSeq != 0 {
+				backing = append(backing, e.sourceInputForScheduling(f.string()))
+			} else if v := rootedBuildCandidate(module, f.string()); v != 0 {
 				backing = append(backing, v)
 			}
 		}
