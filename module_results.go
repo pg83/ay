@@ -1,6 +1,10 @@
 package main
 
-func (ctx *GenCtx) moduleResultRefs(instance ModuleInstance, result *ModuleEmitResult) []NodeRef {
+func (ctx *GenCtx) moduleResultRefs(instance ModuleInstance, result *ModuleEmitResult) (refs []NodeRef) {
+	defer func() {
+		ctx.foreignTools.startRefs = append(ctx.foreignTools.startRefs, refs...)
+	}()
+
 	reg := ctx.scannerFor(instance).codegen
 	output, ref := result.ARPath, result.ARRef
 
@@ -9,8 +13,6 @@ func (ctx *GenCtx) moduleResultRefs(instance ModuleInstance, result *ModuleEmitR
 	} else if result.LDPath != nil {
 		output, ref = result.LDPath, result.LDRef
 	}
-
-	var refs []NodeRef
 
 	if output != nil && ref != 0 {
 		reg.use(*output)

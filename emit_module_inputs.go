@@ -75,12 +75,18 @@ func (e *EmitContext) modulePeerInputs() InputChunks {
 }
 
 func (e *EmitContext) emitModuleNode(node Node, useGlobals bool) NodeRef {
+	buildDeps := e.ctx.na.refList(node.DepRefs...)
+
 	e.includeNodeInputs(&node)
 	node.Inputs = e.appendModuleInputs(node.Inputs, useGlobals)
 	e.appendModuleOutputs(&node)
 	e.resolveNodeCodegenRefs(&node)
 
-	return e.ctx.emit.emitNodePtr(&node)
+	ref := e.ctx.emit.emitNodePtr(&node)
+
+	e.codegen.moduleBuildDeps.put(ref, buildDeps)
+
+	return ref
 }
 
 func (e *EmitContext) appendModuleInputs(inputs InputChunks, useGlobals bool) InputChunks {

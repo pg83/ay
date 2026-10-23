@@ -95,7 +95,10 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 		result := genModule(ctx, instance)
 
 		if result.java != nil {
-			ctx.emit.result(ctx.javaBuilder(result.java).use(result.java.target))
+			ref := ctx.javaBuilder(result.java).use(result.java.target)
+
+			ctx.foreignTools.startRefs = append(ctx.foreignTools.startRefs, ref)
+			ctx.emit.result(ref)
 		} else {
 			for _, ref := range ctx.moduleResultRefs(instance, result) {
 				ctx.emit.result(ref)
@@ -103,6 +106,7 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 		}
 
 		if result.GlobalRef != nil {
+			ctx.foreignTools.startRefs = append(ctx.foreignTools.startRefs, *result.GlobalRef)
 			ctx.emit.result(*result.GlobalRef)
 		}
 

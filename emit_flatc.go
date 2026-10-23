@@ -239,7 +239,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 
 	if binding != nil {
 		if binding.emit == nil {
-			binding.emit = pe
+			binding.emit = ctx.javaPendingEmit(pe)
 			ctx.fbsBindings.pins = append(ctx.fbsBindings.pins, e.pendingEmit(func() {}))
 		}
 

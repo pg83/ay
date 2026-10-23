@@ -145,6 +145,7 @@ var (
 	strBJavaOut                                                                              = internStr("$(B)/java_out")
 	strBResourcesJdk21BinJava                                                                = internStr("$(B)/resources/JDK21/bin/java")
 	strBase64                                                                                = internStr("base64")
+	strBinMv                                                                                 = internStr("/bin/mv")
 	strBinary                                                                                = internStr("--binary")
 	strBindir                                                                                = internStr("--bindir")
 	strBisonPkgData                                                                          = internStr("$(S)/contrib/tools/bison/data")

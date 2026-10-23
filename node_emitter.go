@@ -28,6 +28,7 @@ type StreamingEmitter struct {
 	pendingSet               map[NodeRef]bool
 	results                  []NodeRef
 	deferredNodes            []NodeRef
+	deferPublication         int
 	onNode                   func(*Node, *DenseMap[STR, NodeRef])
 	na                       *NodeArenas
 	fetchRefs                *DenseMap[STR, NodeRef]
@@ -101,6 +102,7 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
 	assert(len(n.Outputs) > 0, "emitter: node without outputs")
 	n.sourceInputsPending = n.InputClosure.scanner != nil || len(n.InputClosures) > 0
+	n.deferPublication = e.deferPublication > 0
 
 	if n.sourceInputsPending || e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
@@ -116,7 +118,7 @@ func (e *StreamingEmitter) emitResolved(n *Node, id NodeRef) {
 	e.resolved.add(uint32(id))
 
 	if e.onNode != nil {
-		if e.stripPackagesFromResults {
+		if e.stripPackagesFromResults || n.deferPublication {
 			e.deferredNodes = append(e.deferredNodes, id)
 		} else {
 			e.onNode(n, e.fetchRefs)
@@ -125,6 +127,10 @@ func (e *StreamingEmitter) emitResolved(n *Node, id NodeRef) {
 }
 
 func (e *StreamingEmitter) hasUnresolvedDeps(n *Node) bool {
+	if n.foreignToolsPending {
+		return true
+	}
+
 	for r := range n.buildDeps(e.fetchRefs) {
 		if !e.resolved.has(uint32(r)) {
 			return true
@@ -146,6 +152,10 @@ func (e *StreamingEmitter) finish() []NodeRef {
 
 		for _, id := range pending {
 			n := e.nodes.s[id]
+
+			if n == nil {
+				continue
+			}
 
 			if e.hasUnresolvedDeps(n) {
 				next = append(next, id)

@@ -49,6 +49,8 @@ type Node struct {
 	ForeignDepRefs      []NodeRef     `json:"-"`
 	Resources           []STR         `json:"-"`
 	sourceInputsPending bool
+	foreignToolsPending bool
+	deferPublication    bool
 }
 
 func (n *Node) buildFromInputs() InputChunks {

@@ -11,7 +11,7 @@ type fbsNativeBinding struct {
 type fbsFlatcBinding struct {
 	ref   NodeRef
 	flags []ANY
-	emit  func()
+	emit  *PendingEmit
 	used  bool
 }
 
@@ -112,18 +112,30 @@ func (ctx *GenCtx) fbsFlatcBinding(platform *Platform, out VFS) *fbsFlatcBinding
 	return binding
 }
 
-func (ctx *GenCtx) flushFbsContextBindings() {
+func (ctx *GenCtx) flushFbsContextBindings() bool {
+	emitted := false
+
 	for _, binding := range ctx.fbsBindings.nativeOrder {
+		if pending := binding.emit; pending != nil && (pending.fn != nil || pending.emitter != nil) {
+			emitted = true
+		}
+
 		binding.emit.fire()
 	}
 
 	for _, binding := range ctx.fbsBindings.flatcOrder {
 		if binding.used {
-			binding.emit()
+			if pending := binding.emit; pending != nil && (pending.fn != nil || pending.emitter != nil) {
+				emitted = true
+			}
+
+			binding.emit.fire()
 		}
 	}
 
 	for _, pin := range ctx.fbsBindings.pins {
 		pin.fire()
 	}
+
+	return emitted
 }

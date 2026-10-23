@@ -6,10 +6,11 @@ import (
 )
 
 type SourceActionInfo struct {
-	Priority int
-	order    int
-	DeclSeq  int
-	Inputs   []VFS
+	Priority     int
+	order        int
+	DeclSeq      int
+	Inputs       []VFS
+	ForeignTools []*foreignToolCandidate
 }
 
 type GeneratedFileInfo struct {
@@ -113,6 +114,7 @@ func (p *PendingEmit) fire() {
 
 type CodegenRegistry struct {
 	resourceReady   map[VFS]bool
+	moduleBuildDeps DenseMap[NodeRef, []NodeRef]
 	byRel           DenseMap[STR, *GeneratedFileInfo]
 	bySplit         *IntMap[splitLookup]
 	textTemplates   DenseMap[VFS, []VFS]

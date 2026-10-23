@@ -753,6 +753,7 @@ func (ctx *GenCtx) genJavaTarget(dir string, name TOK) {
 		}
 
 		if ref := ctx.javaBuilder(res.java).use(res.java.target); ref != 0 {
+			ctx.foreignTools.startRefs = append(ctx.foreignTools.startRefs, ref)
 			ctx.emit.result(ref)
 		}
 	}

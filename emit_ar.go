@@ -19,12 +19,17 @@ func (e *EmitContext) emitARNamed(
 ) NodeRef {
 	archivePath := buildJoined(instance.Path.relString(), archiveBaseName)
 	node := composeARNode(instance, archivePath, objRefs, objPaths, arPluginPath, tc, hostP, emit.nodeArenas())
+	buildDeps := e.ctx.na.refList(node.DepRefs...)
 
 	e.includeNodeInputs(&node)
 	e.appendModuleOutputs(&node)
 	e.resolveNodeCodegenRefs(&node)
 
-	return emit.emitNode(node)
+	ref := emit.emitNode(node)
+
+	e.codegen.moduleBuildDeps.put(ref, buildDeps)
+
+	return ref
 }
 
 func (e *EmitContext) emitARNamedTagged(
@@ -163,11 +168,16 @@ func (e *EmitContext) emitARNode(
 	emit *StreamingEmitter,
 ) NodeRef {
 	node := composeARNode(instance, archivePath, objRefs, objPaths, arPluginPath, tc, hostP, emit.nodeArenas())
+	buildDeps := e.ctx.na.refList(node.DepRefs...)
 
 	e.includeNodeInputs(&node)
 	e.resolveNodeCodegenRefs(&node)
 
-	return emit.emitNode(node)
+	ref := emit.emitNode(node)
+
+	e.codegen.moduleBuildDeps.put(ref, buildDeps)
+
+	return ref
 }
 
 func composeARNode(instance ModuleInstance, archivePath VFS, objRefs []NodeRef, objPaths []VFS, arPluginPath *VFS, tc ModuleToolchain, hostP *Platform, na *NodeArenas) Node {

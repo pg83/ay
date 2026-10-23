@@ -189,6 +189,7 @@ func protoResultWholeArchiveCmdPaths(res *ProtoSrcsResult) []VFS {
 type GenCtx struct {
 	configuration    ConfigurationDependencies
 	fbsBindings      fbsContextBindings
+	foreignTools     foreignToolBindings
 	fs               FS
 	parsers          *IncludeParserManager
 	emit             *StreamingEmitter
@@ -302,7 +303,9 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 	ctx.configureDependencies()
 	ctx.emitDiscoveredModuleTests()
 	ctx.flushFbsContextBindings()
+	ctx.bindForeignTools()
 	ctx.finalizeSourceInputs()
+	ctx.stripForeignToolCandidates()
 
 	if ctx.buckets.h1Mismatches > 0 {
 		onWarn(Warn{
@@ -596,10 +599,12 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 		root := genModule(ctx, ctx.rootInstance(dir, demandSelf))
 
 		if root.LDPath != nil {
+			ctx.foreignTools.startRefs = append(ctx.foreignTools.startRefs, root.LDRef)
 			ctx.emit.result(root.LDRef)
 		}
 
 		if root.GlobalRef != nil {
+			ctx.foreignTools.startRefs = append(ctx.foreignTools.startRefs, *root.GlobalRef)
 			ctx.emit.result(*root.GlobalRef)
 		}
 
@@ -3000,6 +3005,7 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 
 	if res.LDRef != NodeRef(0) {
 		ctx.tools.put(modulePath, res)
+		ctx.foreignTools.hostPaths.put(res.LDRef, modulePath)
 		ctx.moduleByRef.put(res.LDRef, res)
 	}
 
