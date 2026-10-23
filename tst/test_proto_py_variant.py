@@ -133,7 +133,7 @@ class ProtoPyVariantTest(unittest.TestCase):
 
         link, args = link_args(graph)
         # Native global values follow PEERDIR order independently of producers.
-        self.assertEqual(whole_archive_libs(args), ["p/libp.a", "q/libq.a"])
+        self.assertEqual(whole_archive_libs(args), ["p/libp.a", "q/libqname.a"])
         start = args.index("--ya-start-command-file")
         end = args.index("--ya-end-command-file")
         self.assertEqual(args[start + 1:end], [
@@ -142,7 +142,7 @@ class ProtoPyVariantTest(unittest.TestCase):
         self.assertIn("$(B)/p/libp.a", link["inputs"])
         self.assertIn("$(B)/p/libpy3p.global.a", link["inputs"])
         self.assertIn("$(B)/q/libpy3qname.global.a", link["inputs"])
-        self.assertNotIn("$(B)/q/libq.a", link["inputs"])
+        self.assertNotIn("$(B)/q/libqname.a", link["inputs"])
         self.assertFalse(
             [n for n in graph["graph"] if "$(B)/q/q.pb.h" in n["outputs"]]
         )
