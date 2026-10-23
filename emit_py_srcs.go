@@ -247,11 +247,8 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 	switch ps.Kind {
 	case pySourceProto:
 		rel := ps.Path.relString()
-		info := e.codegen.use(ps.Path)
 
-		if info == nil {
-			throwFmt("appendPyResEntries: unregistered proto producer for %q", ps.Path.string())
-		}
+		e.codegen.use(ps.Path)
 
 		token := ps.Token.string()
 		yapycOut := e.pyYapycOutFor(ps)
