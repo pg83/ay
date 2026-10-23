@@ -165,8 +165,6 @@ func (ctx *GenCtx) javaListAll(dir string) []javaDirEntry {
 		out = append(out, javaDirEntry{path: p, isDir: packed&1 != 0})
 	}
 
-	sort.Slice(out, func(i, j int) bool { return out[i].path < out[j].path })
-
 	return out
 }
 

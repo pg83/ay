@@ -117,16 +117,6 @@ func globExcluded(excludes []*regexp.Regexp, rel string, isDir bool) bool {
 	})
 }
 
-func globSortedChildren(fs FS, dir string) []uint32 {
-	entries := slices.Clone(fs.listdir(internStr(dir)).names)
-
-	slices.SortFunc(entries, func(a, b uint32) int {
-		return strings.Compare(STR(a>>1).string(), STR(b>>1).string())
-	})
-
-	return entries
-}
-
 func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 	excludes := make([]*regexp.Regexp, len(excludePatterns))
 
@@ -158,7 +148,7 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 					matches = append(matches, rel)
 				}
 			case globPattern, globAnything:
-				for _, packed := range globSortedChildren(fs, dir) {
+				for _, packed := range fs.listdir(internStr(dir)).names {
 					name, isDir := STR(packed>>1).string(), packed&1 != 0
 
 					if !isDir && !last || part.kind == globPattern && !part.re.MatchString(name) {
@@ -175,7 +165,7 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 				}
 			case globRecursive:
 				for queue := []string{dir}; len(queue) > 0; queue = queue[1:] {
-					for _, packed := range globSortedChildren(fs, queue[0]) {
+					for _, packed := range fs.listdir(internStr(queue[0])).names {
 						if packed&1 == 0 {
 							continue
 						}
