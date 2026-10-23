@@ -1287,6 +1287,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
+			env.setStringID(internEnv("MODULE_KIND"), v.Name.str())
 			setupYqlModule(d, v.Name, env)
 
 			if v.Schema && d.unit.Tag == unitTagPy3Proto {
@@ -1355,9 +1356,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if d.unit.Tag == unitTagPy2 || d.unit.Tag == unitTagPy2Native || d.unit.Tag == strPyProto {
-				usePython2(env, d, d.unit.Tag)
+				usePython2(env, d, d.unit.HashTag)
 			} else if d.unit.Tag != 0 {
-				env.setStringID(envMODULE_TAG, d.unit.Tag)
+				env.setStringID(envMODULE_TAG, d.unit.HashTag)
 			}
 
 			if isDllModuleType(v.Name) || d.yqlUdfShared {
@@ -1605,6 +1606,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.ragel6Flags = internAnys(strings.Fields(value))
 			}
 		case *EndStmt:
+			// Resource handlers read the raw owner value after its source body.
+			// Assignments after END belong to the enclosing directory namespace.
+			d.unit.HashTag = internStr(env.string(envMODULE_TAG))
 
 		case *JoinSrcsStmt:
 			expanded := *v
@@ -3340,6 +3344,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		applyInlinePySrcs(fs, modulePath, append([]ANY{kwNAMESPACE.any(), strTests.any()}, v.Args...), d, env, onWarn)
 	case tokPySrcs:
+		// python.conf supplies this default in the PY_SRCS macro body, not
+		// in the global configuration or ordinary C++ module initialization.
+		// Explicit empty assignments still count as native variable bindings.
+		env.setDefaultString(envMODULE_TAG, "PY3")
 		stmt := v
 
 		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})

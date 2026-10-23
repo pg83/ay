@@ -6,7 +6,7 @@ func isSandboxPythonTask(name TOK) bool {
 	return name == tokSandboxPy3Task || name == tokSandboxPy23Task
 }
 
-// Configuration names are distinct from the inherited Python MODULE_TAG.
+// Configuration names are distinct from the inherited Python classification.
 func sandboxPythonTaskVariant(name TOK, kind ModuleKind, language Language) string {
 	if kind == KindBin {
 		return "SB_TASK_BIN"
@@ -63,7 +63,8 @@ func setupSandboxPythonTask(name TOK, modulePath string, kind ModuleKind, langua
 	}
 
 	d.multimodule = name
-	env.setString(internEnv("MODULE_KIND"), sandboxPythonTaskVariant(name, kind, language))
+	// confreader inserts the child tag after inherited initialization.
+	d.unit.HashTag = internStr(sandboxPythonTaskVariant(name, kind, language))
 	python2 := d.unit.Tag == unitTagPy2
 	env.setBool(envPYTHON2, python2)
 	env.setBool(envPYTHON3, !python2)

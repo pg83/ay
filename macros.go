@@ -235,7 +235,6 @@ func makeDefaultIfEnv() Environment {
 	e.setString(envaddress, "address")
 	e.setString(envthread, "thread")
 	e.setString(envleak, "leak")
-	e.setString(envMODULE_TAG, "PY3")
 	e.setString(internEnv("_CPP_PROTO_COMPATIBLE_TAGS"), "CPP_PROTO CPP_PROTO_DIRECT_HEADERS CPP_PROTO_LEGACY_FOR_DIRECT_HEADERS")
 	e.setString(envALLOCATOR, "")
 	e.setString(envPY2, "PY2")

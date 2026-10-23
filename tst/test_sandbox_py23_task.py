@@ -30,14 +30,14 @@ ELSE()
         SET(EDITION uninitialized)
     ENDIF()
 ENDIF()
-SET(STAMP ${MODULE_KIND}_${EDITION})
+SET(STAMP ${MODULE_TAG}_${EDITION})
 IF(NO_CHECK_IMPORTS_FOR_VALUE == "$NO_CHECK_IMPORTS_FOR_VALUE api.* kernel.* library.* sky*")
     PY_SRCS(defaults_seen.py)
 ENDIF()
-PY_SRCS(${MODULE_KIND}.py common.py)
-RESOURCE(${MODULE_KIND}.dat ${STAMP})
+PY_SRCS(${MODULE_TAG}.py common.py)
+RESOURCE(${MODULE_TAG}.dat ${STAMP})
 RUN_PROGRAM(tools/engrave ${MODULE_KIND} ${MODULE_TAG} ${STAMP} ${_PYTHON_VER} ${PYTHON_TYPE_FOR_CYTHON}
-    IN seed.txt OUT_NOAUTO ${MODULE_KIND}.dat)
+    IN seed.txt OUT_NOAUTO ${MODULE_TAG}.dat)
 SRCS(native.cpp)
 """
     files[f"{TASK}/ya.make"] = (
@@ -78,10 +78,11 @@ class SandboxPy23TaskTest(unittest.TestCase):
     def assert_context(self, graph, variant):
         output = task_output(graph, variant)
         edition = "current" if variant == "PY3" else "legacy"
-        tag = "PY3" if variant == "PY3" else "PY2"
+        tag = variant
+        version = "py3" if variant == "PY3" else "py2"
         generated = lib.node_by_output(graph, f"{BUILD}/{variant}.dat")
         self.assertEqual(generated["cmds"][0]["cmd_args"], [
-            "$(B)/tools/engrave/engraver", variant, tag, f"{variant}_{edition}", tag.lower(), tag,
+            "$(B)/tools/engrave/engraver", "SANDBOX_PY23_TASK", tag, f"{variant}_{edition}", version, version.upper(),
         ])
         self.assertIn(SOURCE + "/seed.txt", generated["inputs"])
         tool = lib.node_by_output(graph, "$(B)/tools/engrave/engraver")
@@ -194,7 +195,7 @@ class SandboxPy23TaskTest(unittest.TestCase):
         self.assertIn(BUILD + "/mint", bundle["inputs"])
 
     def test_first_context_selects_variants_for_root_and_depends(self):
-        selection = 'IF(MODULE_KIND == "SB_TASK_BIN")\nONLY_TAGS(PY3)\nENDIF()'
+        selection = 'IF(MODULE_TAG == "SB_TASK_BIN")\nONLY_TAGS(PY3)\nENDIF()'
         for depends in (False, True):
             with self.subTest(depends=depends):
                 files = fixture(selection)
