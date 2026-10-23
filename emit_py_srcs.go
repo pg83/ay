@@ -235,15 +235,14 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 	}
 
 	if ps.Kind == pySourceGenerated || strings.Contains(srcRel, "/") {
-		return build(module, "/", srcRel, ".", e.d.pyYapycSuffix, e.pyYapycExt())
+		return buildJoinClean(module, srcRel+"."+e.d.pyYapycSuffix+e.pyYapycExt())
 	}
 
-	return build(module, "/", srcRel, e.pyYapycExt())
+	return buildJoinClean(module, srcRel+e.pyYapycExt())
 }
 
 func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenResEntry {
 	d := e.d
-	module := e.instance.Path.relString()
 
 	switch ps.Kind {
 	case pySourceProto:
@@ -298,7 +297,7 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 	}
 
 	if !d.pyBuildNoPYC {
-		entry := PyGenResEntry{token: e.resStr2(srcRel, suffix), key: ps.Module, yapyc: true, path: build(module, "/", srcRel, suffix)}
+		entry := PyGenResEntry{token: e.resStr2(srcRel, suffix), key: ps.Module, yapyc: true, path: e.pyYapycOutFor(ps)}
 
 		out = append(out, entry)
 	}
