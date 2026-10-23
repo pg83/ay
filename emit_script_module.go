@@ -41,9 +41,14 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 
 	refs := append([]NodeRef{}, node.DepRefs...)
 
-	for _, input := range needs {
-		if info := reg.lookup(input); info != nil {
-			refs = append(refs, info.ProducerRef)
+	// Include peers must be materialized, but only actual inputs contribute
+	// direct command dependencies. Native keeps their IncludedDeps separate
+	// from the NodeDeps of this build entry.
+	for _, chunk := range node.Inputs {
+		for _, input := range chunk {
+			if info := reg.lookup(input); info != nil {
+				refs = append(refs, info.ProducerRef)
+			}
 		}
 	}
 
