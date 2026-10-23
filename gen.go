@@ -2239,6 +2239,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	effectiveMlaunchDeps := mlaunchDeps(d, resolved)
+	ownLDFlags := ownCompilerFlagArgs(effectiveLDFlagsGlobal, d.ldFlags)
 
 	newResult := func() *ModuleEmitResult {
 		r := ctx.results.one()
@@ -2425,7 +2426,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	if isGoModuleType(d.moduleStmt.Name) {
-		frame.peerCtx.LDFlagsGlobal = resolveResourceGlobalArgs(concatShared(ctx.argSlices, peerLDFlagsGlobal, d.ldFlags), resourceGlobalsClosure)
+		frame.peerCtx.LDFlagsGlobal = resolveResourceGlobalArgs(concatShared(ctx.argSlices, peerLDFlagsGlobal, ownLDFlags), resourceGlobalsClosure)
 	}
 
 	e = newEmitContextIn(frame, ctx, instance, d, &frame.peerCtx)
@@ -2638,7 +2639,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			peerCFlagsGlobal,
 			d.moduleScopeCFlags,
 			resolveResourceGlobalArgs(peerLDFlagsGlobal, resourceGlobalsClosure),
-			resolveResourceGlobalArgs(d.ldFlags, resourceGlobalsClosure),
+			resolveResourceGlobalArgs(ownLDFlags, resourceGlobalsClosure),
 			ownRPathFlags,
 			peerRPathFlagsGlobal,
 			peerObjAddLibsGlobal,

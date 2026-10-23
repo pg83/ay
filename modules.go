@@ -1671,7 +1671,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.cOnlyFlagsGlobal, d.cOnlyFlags = appendCompilerFlags(v.Flags, env, "USER_CONLYFLAGS", false, d.cOnlyFlagsGlobal, d.cOnlyFlags)
 		case *LDFlagsStmt:
-			d.ldFlags = append(d.ldFlags, expandStmtTokens(v.Flags, env)...)
+			// LDFLAGS is SET_APPEND of a scalar, rather than an argv macro.
+			value := strings.Join(anyStrs(expandStmtTokens(v.Flags, env)), " ")
+			d.ldFlags = append(d.ldFlags, internAny(expandSourceScalarVarRef(value, env)))
 		case *SrcDirStmt:
 
 			for _, dirTok := range expandStmtTokens(v.Dirs, env) {

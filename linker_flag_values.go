@@ -3,11 +3,12 @@ package main
 import "strings"
 
 // Global linker variables use the same whole-command-value representation as
-// compiler globals, but retain their already expanded arguments (resource roots
-// are resolved by the consuming linker). Argument boundaries are part of the key.
+// compiler globals. LDFLAGS first binds a scalar; command parsing supplies the
+// argument boundaries afterwards. Resource roots resolve in the consuming linker.
 type LinkerFlagValue = CompilerFlagValue
 
 func (e *EmitContext) linkerFlagValue(args []ANY) LinkerFlagValue {
+	args = internAnys(splitQuotedWords(strings.Join(anyStrs(args), " "), 1))
 	return LinkerFlagValue{
 		Name: internStr(strings.Join(anyStrs(args), "\x00")),
 		Args: e.ctx.argSlices.internCopy(args),

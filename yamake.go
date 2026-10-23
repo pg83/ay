@@ -1156,7 +1156,7 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 
 	defer func() { p.lex.inArgs = false }()
 
-	lexicalArgs := nameTok.id == kwCFLAGS || nameTok.id == tokGlobalCflags.str() || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS || nameTok.id == kwRESOURCE || nameTok.id == tokUseRecipe.str() || nameTok.string() == "RUN_PROGRAM" || nameTok.string() == "RUN_PY3_PROGRAM"
+	lexicalArgs := nameTok.id == kwCFLAGS || nameTok.id == tokGlobalCflags.str() || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS || nameTok.id == kwLDFLAGS || nameTok.id == kwRESOURCE || nameTok.id == tokUseRecipe.str() || nameTok.string() == "RUN_PROGRAM" || nameTok.string() == "RUN_PY3_PROGRAM"
 
 	for {
 		start := 0
