@@ -207,7 +207,7 @@ class CythonIncludeTest(unittest.TestCase):
                 "from util.generic.hash_set cimport THashSet\n"
                 "from util.system.types cimport ui8\n"
                 "from contrib.tools.cython_py2.Cython.Includes.wrap cimport w\n"
-                "cdef extern from <sys.h>:\n"
+                'cdef extern from "<sys.h>":\n'
                 "    pass\n"
             ),
             "m/a.pxd": "",
