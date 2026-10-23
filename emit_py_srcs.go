@@ -559,11 +559,17 @@ func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *Objco
 	}
 }
 
-func (e *EmitContext) collectPyProtoGroupResEntries(group int) []PyGenResEntry {
+func (e *EmitContext) collectPyProtoGroupResEntries(group int, event bool) []PyGenResEntry {
 	entries := e.resEntries[:0]
 
 	for _, ps := range e.pySrcsReg {
 		if ps.Kind == pySourceProto && ps.Group == group {
+			producer := e.codegen.mustInfo(ps.Path).SourceAction
+
+			if extIsEv(producer.Inputs[0].relString()) != event {
+				continue
+			}
+
 			entries = e.appendPyResEntries(entries, ps)
 		}
 	}
@@ -585,7 +591,7 @@ func (e *EmitContext) pyProtoGroups() []int {
 	return groups
 }
 
-func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef, []VFS) {
+func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry, seq int) ([]NodeRef, []VFS) {
 	if len(entries) == 0 {
 		return nil, nil
 	}
@@ -593,7 +599,7 @@ func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef,
 	producer := e.codegen.mustInfo(entries[len(entries)-1].path).SourceAction
 	previousSeq, previousPriority := e.resourceDeclSeq, e.resourcePriority
 
-	e.resourceDeclSeq, e.resourcePriority = producer.DeclSeq, producer.Priority
+	e.resourceDeclSeq, e.resourcePriority = seq, producer.Priority
 
 	defer func() { e.resourceDeclSeq, e.resourcePriority = previousSeq, previousPriority }()
 
@@ -608,7 +614,31 @@ func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef,
 }
 
 func (e *EmitContext) emitPyProtoGroupResources(group int) ([]NodeRef, []VFS) {
-	return e.packPyProtoResEntries(e.collectPyProtoGroupResEntries(group))
+	var refs []NodeRef
+	var outputs []VFS
+
+	seq := 0
+
+	for _, ps := range e.pySrcsReg {
+		if ps.Kind == pySourceProto && ps.Group == group {
+			info := e.codegen.use(ps.Path)
+
+			if info == nil {
+				throwFmt("appendPyResEntries: unregistered proto producer for %q", ps.Path.string())
+			}
+
+			seq = info.SourceAction.DeclSeq
+		}
+	}
+
+	for _, event := range []bool{false, true} {
+		groupRefs, groupOutputs := e.packPyProtoResEntries(e.collectPyProtoGroupResEntries(group, event), seq)
+
+		refs = append(refs, groupRefs...)
+		outputs = append(outputs, groupOutputs...)
+	}
+
+	return refs, outputs
 }
 
 func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) ([]NodeRef, []VFS) {

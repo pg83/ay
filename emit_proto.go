@@ -684,7 +684,7 @@ func (e *EmitContext) preparePyProtoLibraryResources() *ObjcopyEmitResult {
 	start := len(e.resourceMetas)
 
 	for _, group := range e.pyProtoGroups() {
-		refs, outs := e.packPyProtoResEntries(e.collectPyProtoGroupResEntries(group))
+		refs, outs := e.emitPyProtoGroupResources(group)
 
 		resources.Refs = append(resources.Refs, refs...)
 		resources.Outputs = append(resources.Outputs, outs...)
