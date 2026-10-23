@@ -104,6 +104,19 @@ func protoInducedPbH(pm *IncludeParserManager, local, dst []IncludeDirective) []
 	return dst
 }
 
+// proto_processor publishes imported headers as h+cpp. Only the native
+// CHeader/CLike output processors consume that property (parser_manager.cpp);
+// the plain Cpp processor and unregistered output types do not.
+func protoPluginImportedIncludes(na *NodeArenas, out VFS, imports []IncludeDirective) ParsedIncludeSet {
+	switch filepath.Ext(out.relString()) {
+	case ".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx",
+		".cpp", ".cc", ".cxx", ".c", ".C", ".auxcpp":
+		return ParsedIncludeSet{parsedIncludesLocal: na.dirList(imports...)}
+	}
+
+	return ParsedIncludeSet{}
+}
+
 func protoOutputRel(outputRoot, rel string) string {
 	if pathIsClean(outputRoot) && pathIsClean(rel) {
 		return internV(outputRoot, "/", rel).string()
@@ -558,7 +571,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		for _, suffix := range plugin.Spec.OutputSuffixes {
 			out := build(protoBase, suffix)
 
-			var parsed ParsedIncludeSet
+			parsed := protoPluginImportedIncludes(na, out, directImports)
 
 			switch out {
 			case grpcPbCC:
