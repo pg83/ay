@@ -265,7 +265,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS) *PyPBModuleEmissio
 	return pe
 }
 
-func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule STR) {
+func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule STR, priority, seq int) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	src := e.moduleSourceName(srcTok)
@@ -394,9 +394,10 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule 
 	}
 
 	pyPBPE := e.pendingEmitter(pending)
+	action := &SourceActionInfo{Priority: priority, DeclSeq: seq, Inputs: na.vfsList(protoSrcVFS)}
 
 	for _, out := range outputs {
-		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: pyPBRef, OnUse: pyPBPE})
+		e.register(GeneratedFileInfo{SourceAction: action, OutputPath: out, ProducerRef: pyPBRef, OnUse: pyPBPE})
 	}
 
 	e.codegen.setMainOut(pyPBRef, outputs)

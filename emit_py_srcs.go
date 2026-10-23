@@ -485,6 +485,10 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 		group := e.d.pySrcGroups[ps.Group]
 
 		action = &SourceActionInfo{Priority: group.Prio, DeclSeq: group.DeclSeq, Inputs: na.vfsList(srcAbs)}
+	} else {
+		producer := e.codegen.mustInfo(ps.Path).SourceAction
+
+		action = &SourceActionInfo{Priority: producer.Priority, DeclSeq: producer.DeclSeq, Inputs: na.vfsList(srcAbs)}
 	}
 
 	e.register(GeneratedFileInfo{
@@ -583,6 +587,13 @@ func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef,
 	if len(entries) == 0 {
 		return nil, nil
 	}
+
+	producer := e.codegen.mustInfo(entries[0].path).SourceAction
+	previousSeq, previousPriority := e.resourceDeclSeq, e.resourcePriority
+
+	e.resourceDeclSeq, e.resourcePriority = producer.DeclSeq, producer.Priority
+
+	defer func() { e.resourceDeclSeq, e.resourcePriority = previousSeq, previousPriority }()
 
 	return e.packResources(ResourcePack{DontCompress: true,
 		Tag: e.d.unit.HashTag, Items: e.pySrcResourceItems(entries),

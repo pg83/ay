@@ -18,7 +18,9 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		e.pyMetas[i] = PySourceMeta{}
 
 		if py.Kind == pySourceProtoInput {
-			e.emitPyProtoSource(src, py.Group, py.Module)
+			group := e.d.pySrcGroups[py.Group]
+
+			e.emitPyProtoSource(src, py.Group, py.Module, group.Prio, group.DeclSeq)
 		} else {
 			e.collectPySource(src.vfs(), py)
 		}
@@ -84,7 +86,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		if isGoModuleType(e.d.unit.Type) {
 			e.emitGoProtoSource(meta)
 		} else if isPythonProtoModule(e.d) {
-			e.emitPyProtoSource(src, meta.Stmt, 0)
+			e.emitPyProtoSource(src, meta.Stmt, 0, meta.Prio, meta.Seq)
 		} else {
 			e.emitCppProtoFamilySource(meta, cppProtoSpec)
 		}

@@ -590,6 +590,8 @@ func (e *EmitContext) emit() {
 		e.emitPyRegister()
 	}
 
+	var pyProtoResources *ObjcopyEmitResult
+
 	finalized := e.producersOnly()
 
 	for {
@@ -622,9 +624,7 @@ func (e *EmitContext) emit() {
 		}
 
 		if d.moduleStmt.Name == tokProtoLibrary {
-			if pyRes := e.emitPyProtoLibraryResult(); pyRes != nil {
-				e.protoRes = pyRes
-			}
+			pyProtoResources = e.preparePyProtoLibraryResources()
 		}
 
 		for i, ref := range fsMemberRefs {
@@ -636,4 +636,8 @@ func (e *EmitContext) emit() {
 	}
 
 	e.srcsClosed = true
+
+	if pyProtoResources != nil {
+		e.protoRes = e.emitPyProtoLibraryResult(pyProtoResources)
+	}
 }

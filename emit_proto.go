@@ -674,22 +674,37 @@ func (e *EmitContext) markProtoPendingAR() {
 	e.protoRes = &e.protoResVal
 }
 
-func (e *EmitContext) emitPyProtoLibraryResult() *ProtoSrcsResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
-
-	var genRefs []NodeRef
-	var genOuts []VFS
+func (e *EmitContext) preparePyProtoLibraryResources() *ObjcopyEmitResult {
+	resources := &ObjcopyEmitResult{}
+	start := len(e.resourceMetas)
 
 	for _, group := range e.pyProtoGroups() {
 		refs, outs := e.packPyProtoResEntries(e.collectPyProtoGroupResEntries(group))
 
-		genRefs = append(genRefs, refs...)
-		genOuts = append(genOuts, outs...)
+		resources.Refs = append(resources.Refs, refs...)
+		resources.Outputs = append(resources.Outputs, outs...)
 	}
 
-	if len(genRefs) == 0 {
+	if len(resources.Refs) == 0 {
 		return nil
 	}
+
+	resources.Metas = append(resources.Metas, e.resourceMetas[start:]...)
+
+	if e.objcopyRes != nil {
+		resources.Refs = concat(e.objcopyRes.Refs, resources.Refs)
+		resources.Outputs = concat(e.objcopyRes.Outputs, resources.Outputs)
+		resources.Metas = concat(e.objcopyRes.Metas, resources.Metas)
+
+		e.objcopyRes = nil
+	}
+
+	return resources
+}
+
+func (e *EmitContext) emitPyProtoLibraryResult(resources *ObjcopyEmitResult) *ProtoSrcsResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	genRefs, genOuts := e.reorderARMembers(resources.Refs, resources.Outputs, resources.Metas)
 
 	var cppSibling *ModuleEmitResult
 
@@ -703,12 +718,6 @@ func (e *EmitContext) emitPyProtoLibraryResult() *ProtoSrcsResult {
 		}
 
 		cppSibling = genModule(ctx, cppInstance)
-	}
-
-	if e.objcopyRes != nil {
-		genRefs = concat(e.objcopyRes.Refs, genRefs)
-		genOuts = concat(e.objcopyRes.Outputs, genOuts)
-		e.objcopyRes = nil
 	}
 
 	protoLibName := ""
