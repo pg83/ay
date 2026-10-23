@@ -834,6 +834,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 			if rel, rooted := strings.CutPrefix(meta.Source.string(), "$S/"); rooted {
 				meta.Source = sourceClean(rel).any()
 			}
+
+			if meta.Compile.FlatOutput && meta.Compile.OutputStem == 0 {
+				meta.Compile.OutputStem = copyFileOutputVFS(modulePath, meta.Source.string())
+			}
 		}
 
 		if extIsPyx(meta.Source.relOrSelf().string()) {
