@@ -4,11 +4,30 @@ import "slices"
 
 type sourceQueueAction struct {
 	seq      int
+	priority int
+	order    int
+	info     *SourceActionInfo
 	inputs   []VFS
 	producer NodeRef
 	round    uint64
 	done     bool
 	known    bool
+}
+
+func (e *EmitContext) numberSourceAction(info *SourceActionInfo) {
+	if info.order == 0 {
+		e.sourceActionOrder++
+		info.order = e.sourceActionOrder
+	}
+}
+
+func (e *EmitContext) sourceCompileAction(priority, seq int, input VFS) *SourceActionInfo {
+	info := &SourceActionInfo{Priority: priority, DeclSeq: seq, Inputs: []VFS{input}}
+
+	e.numberSourceAction(info)
+	e.sourceInlineActions = append(e.sourceInlineActions, info)
+
+	return info
 }
 
 func (e *EmitContext) sourceRootMeta(meta SrcMeta) SrcMeta {
@@ -49,25 +68,48 @@ func (e *EmitContext) sourceRootInput(meta SrcMeta) VFS {
 	return e.moduleSourceVFS(meta.Source)
 }
 
-func (e *EmitContext) sourceActionRound(seq int) (uint64, bool) {
+func (e *EmitContext) scheduleSourceActions() {
+	assert(e.srcsClosed, "source action positions before source queue closed")
+
 	if e.sourceRounds == nil {
 		e.sourceRounds = make(map[int]uint64)
+		e.sourcePositions = make(map[*SourceActionInfo]uint64)
 
 		queue := make([]*sourceQueueAction, 0, len(e.sourceProducers)+len(e.sourceRoots))
 		byProducer := make(map[NodeRef]*sourceQueueAction, len(e.sourceProducers))
 
 		for ref, info := range e.sourceProducers {
-			a := &sourceQueueAction{seq: info.SourceAction.DeclSeq, inputs: info.SourceAction.Inputs, producer: ref}
+			priority := info.SourceAction.Priority
+
+			if priority == 0 {
+				priority = stmtPrioDefault
+			}
+
+			a := &sourceQueueAction{seq: info.SourceAction.DeclSeq, priority: priority, order: info.SourceAction.order, info: info.SourceAction, inputs: info.SourceAction.Inputs, producer: ref}
 
 			queue = append(queue, a)
 			byProducer[ref] = a
 		}
 
 		for seq, meta := range e.sourceRoots {
-			queue = append(queue, &sourceQueueAction{seq: seq, inputs: []VFS{e.sourceRootInput(meta)}})
+			queue = append(queue, &sourceQueueAction{seq: seq, priority: stmtPrioDefault, inputs: []VFS{e.sourceRootInput(meta)}})
 		}
 
-		slices.SortFunc(queue, func(a, b *sourceQueueAction) int { return a.seq - b.seq })
+		for _, info := range e.sourceInlineActions {
+			queue = append(queue, &sourceQueueAction{seq: info.DeclSeq, priority: info.Priority, order: info.order, info: info, inputs: info.Inputs})
+		}
+
+		slices.SortFunc(queue, func(a, b *sourceQueueAction) int {
+			if a.priority != b.priority {
+				return a.priority - b.priority
+			}
+
+			if a.seq != b.seq {
+				return a.seq - b.seq
+			}
+
+			return a.order - b.order
+		})
 
 		for pending, progress := queue, true; len(pending) > 0 && progress; {
 			wave := pending
@@ -100,7 +142,7 @@ func (e *EmitContext) sourceActionRound(seq int) (uint64, bool) {
 
 					producer := byProducer[info.ProducerRef]
 
-					if producer == nil || producer == a || producer.seq == 0 || producer.done && !producer.known {
+					if producer == nil || producer == a || producer.seq == 0 && producer.info.Priority == 0 || producer.done && !producer.known {
 						known = false
 
 						continue
@@ -119,14 +161,30 @@ func (e *EmitContext) sourceActionRound(seq int) (uint64, bool) {
 				progress = true
 				a.done, a.known = true, known
 
-				if known && a.producer == 0 {
-					e.sourceRounds[a.seq] = a.round
+				if known {
+					if a.info != nil {
+						e.sourcePositions[a.info] = a.round
+					} else {
+						e.sourceRounds[a.seq] = a.round
+					}
 				}
 			}
 		}
 	}
+}
+
+func (e *EmitContext) sourceActionRound(seq int) (uint64, bool) {
+	e.scheduleSourceActions()
 
 	round, ok := e.sourceRounds[seq]
+
+	return round, ok
+}
+
+func (e *EmitContext) sourcePosition(info *SourceActionInfo) (uint64, bool) {
+	e.scheduleSourceActions()
+
+	round, ok := e.sourcePositions[info]
 
 	return round, ok
 }

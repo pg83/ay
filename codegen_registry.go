@@ -6,8 +6,10 @@ import (
 )
 
 type SourceActionInfo struct {
-	DeclSeq int
-	Inputs  []VFS
+	Priority int
+	order    int
+	DeclSeq  int
+	Inputs   []VFS
 }
 
 type GeneratedFileInfo struct {

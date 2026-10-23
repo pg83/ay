@@ -291,6 +291,7 @@ type ModuleData struct {
 	pythonSQLite3            bool
 	pyNamespace              *ANY
 	pyModuleNamespace        *ANY
+	pyNamespacePython2       bool
 	protoNamespace           *ANY
 	ymapsSprotoSrcs          []ANY
 	noMypy                   bool
@@ -349,6 +350,7 @@ type ModuleData struct {
 	resources                []ResourceEntry
 	bundles                  []BundleEntry
 	pyMain                   *ANY
+	pyMainDeclSeq            int
 	noStrip                  bool
 	strip                    bool
 	unit                     ModuleUnit
@@ -387,6 +389,7 @@ type CompileSpec struct {
 }
 
 type SrcMeta struct {
+	NativeAction         *SourceActionInfo
 	Source               ANY
 	Prio                 int
 	Seq                  int
@@ -398,7 +401,6 @@ type SrcMeta struct {
 	CompileRef           NodeRef
 	PyMeta               uint32
 	InitialCompileSource bool
-	TaskletSeq           int
 
 	SourceQueueRank uint64
 }
@@ -1521,13 +1523,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 
 				global := routeAllToGlobal || globalNext
-				prio, seq := stmtPrioDefault, 0
 
-				if !global {
-					prio, seq = stmtPrioSrcs, d.nextDeclSeq()
-				}
-
-				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global, Compile: compile})
+				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), Stmt: stmt, Global: global, Compile: compile})
 				globalNext = false
 
 				switch srcExtClassOf(srcTok) {
@@ -1635,6 +1632,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.pythonLint.bind(env)
 			d.unit.HashTag = internStr(env.string(envMODULE_TAG))
+			d.pyNamespacePython2 = env.string(envPYTHON2) == "yes"
 
 			if d.python2Headers || d.python3NativeIncl {
 				d.pythonHeaderEnv = env.clone()
@@ -1698,7 +1696,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 		case *GlobalSrcsStmt:
 			for _, src := range expandStmtTokens(v.Sources, env) {
-				d.srcs = append(d.srcs, SrcMeta{Source: src, Prio: stmtPrioDefault, Global: true})
+				d.srcs = append(d.srcs, SrcMeta{Source: src, Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), Global: true})
 			}
 		case *GenerateEnumSerializationStmt:
 			if d.multimodule == tokFbsLibrary && language == LangPy && (v.Variant == "plain" || v.Variant == "with_header") {
@@ -1803,6 +1801,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		case *SplitCodegenStmt:
 			expanded := *v
 
+			expanded.DeclSeq = d.nextDeclSeq()
 			expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
 			expanded.Prefix = expandStmtTokenAny(v.Prefix, env)
 			expanded.Opts = expandStmtTokens(v.Opts, env)
@@ -3408,6 +3407,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.pyMain = ptr(internStr(arg).any())
+		d.pyMainDeclSeq = d.nextDeclSeq()
 	case tokPyConstructor:
 
 		ensureResourcePeer(modulePath, d)

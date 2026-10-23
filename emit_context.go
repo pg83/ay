@@ -19,6 +19,12 @@ type PeerContext struct {
 }
 
 type EmitContext struct {
+	sourcePositions     map[*SourceActionInfo]uint64
+	sourceInlineActions []*SourceActionInfo
+	sourceActionOrder   int
+	resourcePriority    int
+	resourceMetas       []SrcMeta
+
 	sourceProducers    map[NodeRef]*GeneratedFileInfo
 	sourceRoots        map[int]SrcMeta
 	sourceRounds       map[int]uint64
@@ -492,6 +498,8 @@ func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	stored := e.codegen.register(info)
 
 	if stored.SourceAction != nil {
+		e.numberSourceAction(stored.SourceAction)
+
 		if e.sourceProducers == nil {
 			e.sourceProducers = make(map[NodeRef]*GeneratedFileInfo)
 		}

@@ -167,7 +167,25 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 	return ResolvedResource{Input: fallback}
 }
 
-func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs InputChunks, deps []NodeRef) NodeRef {
+func (e *EmitContext) resourceSourceAction(items []ResourceItem) *SourceActionInfo {
+	priority := e.resourcePriority
+
+	if priority == 0 {
+		priority = stmtPrioDefault
+	}
+
+	info := &SourceActionInfo{Priority: priority, DeclSeq: e.resourceDeclSeq}
+
+	for _, item := range items {
+		if input := item.input(); input != 0 {
+			info.Inputs = append(info.Inputs, input)
+		}
+	}
+
+	return info
+}
+
+func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs InputChunks, deps []NodeRef, action *SourceActionInfo) NodeRef {
 	if info := e.codegen.lookup(outputObj); info != nil && info.ResourceObjcopy && info.OwnerModule == e.instance.Path && info.OwnerSerial != e.frame.serial {
 		return info.ProducerRef
 	}
@@ -188,7 +206,7 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 
 	ref := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{OutputPath: outputObj, ProducerRef: ref, ResourceObjcopy: true})
+	e.register(GeneratedFileInfo{SourceAction: action, OutputPath: outputObj, ProducerRef: ref, ResourceObjcopy: true})
 
 	return ref
 }
@@ -464,8 +482,16 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		outputObj := build(instance.Path.relString(), "/objcopy_", hash, ".o")
 		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
+		action := e.resourceSourceAction(chunk)
 
-		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, inputs, deps))
+		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, inputs, deps, action))
+
+		if e.codegen.lookup(outputObj).SourceAction != action {
+			e.numberSourceAction(action)
+			e.sourceInlineActions = append(e.sourceInlineActions, action)
+		}
+
+		e.resourceMetas = append(e.resourceMetas, SrcMeta{Source: outputObj.any(), Global: true, Prio: action.Priority, Seq: action.DeclSeq, NativeAction: action})
 		outs = append(outs, outputObj)
 	}
 
@@ -553,8 +579,10 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		aux := build(instance.Path.relString(), "/", hash, "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
+		action := e.resourceSourceAction(chunk)
 
 		e.register(GeneratedFileInfo{
+			SourceAction:  action,
 			OutputPath:    aux,
 			ProducerRef:   auxRef,
 			GeneratorRefs: na.refList(rescompilerRef),
@@ -621,12 +649,14 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		}, auxRef)
 
 		ccRef := ctx.emit.reserve()
+		compile := e.sourceCompileAction(action.Priority, action.DeclSeq, aux)
 
-		e.enqueueSrc(SrcMeta{
-			Source: aux.any(), Prio: stmtPrioDefault,
-			Compile: p.RawCompile, CompileRef: ccRef,
-		})
+		meta := SrcMeta{Source: aux.any(), Prio: action.Priority, Seq: action.DeclSeq,
+			Global: true, NativeAction: compile,
+			Compile: p.RawCompile, CompileRef: ccRef}
 
+		e.enqueueSrc(meta)
+		e.resourceMetas = append(e.resourceMetas, meta)
 		refs = append(refs, ccRef)
 		outs = append(outs, e.ccOutputFor(aux, p.RawCompile))
 	}
@@ -635,7 +665,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 }
 
 type ObjcopyEmitResult struct {
-	DeclSeqs        []int
+	Metas           []SrcMeta
 	Refs            []NodeRef
 	Outputs         []VFS
 	PySrcTrailCount int
@@ -775,15 +805,22 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	}
 
 	out := &ObjcopyEmitResult{}
-	pyMainRefs, pyMainOuts := e.emitPyMainObjcopy()
 
-	out.Refs = append(out.Refs, pyMainRefs...)
-	out.Outputs = append(out.Outputs, pyMainOuts...)
+	e.resourceMetas = e.resourceMetas[:0]
 
 	noCheckRefs, noCheckOuts := e.emitNoCheckImportsObjcopy()
 
 	out.Refs = append(out.Refs, noCheckRefs...)
 	out.Outputs = append(out.Outputs, noCheckOuts...)
+
+	e.resourceDeclSeq = d.pyMainDeclSeq
+
+	pyMainRefs, pyMainOuts := e.emitPyMainObjcopy()
+
+	out.Refs = append(out.Refs, pyMainRefs...)
+	out.Outputs = append(out.Outputs, pyMainOuts...)
+
+	e.resourceDeclSeq = 0
 
 	yaConfRefs, yaConfOuts := e.emitYaConfJSONObjcopy()
 
@@ -823,6 +860,12 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	}
 
 	emitGroup := func(gi int, group PySrcGroup) {
+		previousSeq, previousPriority := e.resourceDeclSeq, e.resourcePriority
+
+		e.resourceDeclSeq, e.resourcePriority = group.DeclSeq, group.Prio
+
+		defer func() { e.resourceDeclSeq, e.resourcePriority = previousSeq, previousPriority }()
+
 		before := len(out.Refs)
 
 		e.emitPySrcGroupObjcopy(gi, group, out)
@@ -832,14 +875,6 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 
 			out.Refs = append(out.Refs, r...)
 			out.Outputs = append(out.Outputs, o...)
-		}
-
-		for len(out.DeclSeqs) < len(out.Refs) {
-			out.DeclSeqs = append(out.DeclSeqs, 0)
-		}
-
-		for i := before; i < len(out.Refs); i++ {
-			out.DeclSeqs[i] = group.DeclSeq
 		}
 
 		if trailStart < 0 && len(out.Refs) > before {
@@ -885,6 +920,7 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	}
 
 	out.PySrcTrailCount = len(out.Refs) - trailStart
+	out.Metas = e.resourceMetas
 
 	return out
 }

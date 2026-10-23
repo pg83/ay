@@ -108,6 +108,8 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 
 	e.enqueueSrc(SrcMeta{Source: cppPath.any(), Compile: spec, CompileRef: ccRef})
 
+	e.resourceMetas = append(e.resourceMetas, SrcMeta{Prio: stmtPrioDefault})
+
 	return na.refList(ccRef), na.vfsList(e.ccOutputFor(cppPath, spec))
 }
 

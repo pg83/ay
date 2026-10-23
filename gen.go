@@ -2498,6 +2498,23 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	globalOutputs := global.outs
 	globalMetas := global.metas
 
+	if objcopyRes := e.objcopyRes; objcopyRes != nil {
+		lead := len(objcopyRes.Refs) - objcopyRes.PySrcTrailCount
+		objMetas := objcopyRes.Metas
+
+		if len(e.resources) > 0 && lead > 0 {
+			globalRefs = concat(objcopyRes.Refs[:lead], globalRefs, objcopyRes.Refs[lead:])
+			globalOutputs = concat(objcopyRes.Outputs[:lead], globalOutputs, objcopyRes.Outputs[lead:])
+			globalMetas = concat(objMetas[:lead], globalMetas, objMetas[lead:])
+		} else {
+			globalRefs = append(globalRefs, objcopyRes.Refs...)
+			globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
+			globalMetas = append(globalMetas, objMetas...)
+		}
+	}
+
+	globalRefs, globalOutputs = e.reorderARMembers(globalRefs, globalOutputs, globalMetas)
+
 	if sbomActive(ctx, instance) && env.bool(envCLANG) && len(local.refs) > 0 {
 		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !slices.Contains(peerSbomPaths, *p) {
 			peerSbomRefs = append(peerSbomRefs, *r)
@@ -2566,16 +2583,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		ldCCRefs, ldCCOutputs = e.reorderARMembers(ldCCRefs, ldCCOutputs, local.metas)
 
-		var ldObjcopyRefs []NodeRef
-		var ldObjcopyPaths []VFS
-
-		if e.objcopyRes != nil && len(e.objcopyRes.Refs) > 0 {
-			ldObjcopyRefs = e.objcopyRes.Refs
-			ldObjcopyPaths = e.objcopyRes.Outputs
-		}
-
-		ldObjcopyRefs = append(globalRefs, ldObjcopyRefs...)
-		ldObjcopyPaths = append(globalOutputs, ldObjcopyPaths...)
+		ldObjcopyRefs, ldObjcopyPaths := globalRefs, globalOutputs
 
 		var ownRPathFlags []ANY
 
@@ -2697,74 +2705,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		arPluginVFS = &v
 	}
 
-	if objcopyRes := e.objcopyRes; objcopyRes != nil {
-		lead := len(objcopyRes.Refs) - objcopyRes.PySrcTrailCount
-		objMetas := make([]SrcMeta, len(objcopyRes.Refs))
-
-		for i := range objMetas {
-			objMetas[i] = SrcMeta{Prio: stmtPrioDefault}
-		}
-
-		if len(e.resources) > 0 && lead > 0 {
-			globalRefs = concat(objcopyRes.Refs[:lead], globalRefs, objcopyRes.Refs[lead:])
-			globalOutputs = concat(objcopyRes.Outputs[:lead], globalOutputs, objcopyRes.Outputs[lead:])
-			globalMetas = concat(objMetas[:lead], globalMetas, objMetas[lead:])
-		} else {
-			globalRefs = append(globalRefs, objcopyRes.Refs...)
-			globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
-			globalMetas = append(globalMetas, objMetas...)
-		}
-
-		var registrations []SrcMeta
-
-		for _, meta := range globalMetas {
-			if meta.TaskletSeq != 0 {
-				registrations = append(registrations, meta)
-			}
-		}
-
-		for _, meta := range registrations {
-			anchor, after := VFS(0), false
-
-			for i, seq := range objcopyRes.DeclSeqs {
-				if seq == 0 {
-					continue
-				}
-
-				anchor, after = objcopyRes.Outputs[i], seq < meta.TaskletSeq
-
-				if !after {
-					break
-				}
-			}
-
-			if anchor == 0 {
-				continue
-			}
-
-			from := slices.IndexFunc(globalMetas, func(m SrcMeta) bool { return m.TaskletSeq == meta.TaskletSeq })
-			ref, path := globalRefs[from], globalOutputs[from]
-
-			globalRefs = slices.Delete(globalRefs, from, from+1)
-			globalOutputs = slices.Delete(globalOutputs, from, from+1)
-			globalMetas = slices.Delete(globalMetas, from, from+1)
-
-			to := slices.Index(globalOutputs, anchor)
-
-			if after {
-				to++
-
-				for to < len(globalMetas) && globalMetas[to].TaskletSeq > 0 && globalMetas[to].TaskletSeq < meta.TaskletSeq {
-					to++
-				}
-			}
-
-			globalRefs = slices.Insert(globalRefs, to, ref)
-			globalOutputs = slices.Insert(globalOutputs, to, path)
-			globalMetas = slices.Insert(globalMetas, to, meta)
-		}
-	}
-
 	var arPath *VFS
 
 	var ownSbomRef *NodeRef
@@ -2819,9 +2759,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	if len(globalRefs) > 0 {
 		globalBaseName := globalArNameFn(instance.Path.relString())
 		globalTag := d.unit.GlobalARTag
-
-		globalRefs, globalOutputs = e.reorderARMembers(globalRefs, globalOutputs, globalMetas)
-
 		globalRef := e.emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 
 		result.GlobalRef = &globalRef
@@ -2915,6 +2852,12 @@ func (e *EmitContext) queuedSourceInput(info *GeneratedFileInfo) VFS {
 }
 
 func (e *EmitContext) srcRound(m SrcMeta) uint64 {
+	if m.NativeAction != nil {
+		if round, known := e.sourcePosition(m.NativeAction); known {
+			return round
+		}
+	}
+
 	if m.InitialCompileSource {
 		return 0
 	}
@@ -2925,6 +2868,14 @@ func (e *EmitContext) srcRound(m SrcMeta) uint64 {
 		}
 	} else if m.SourceQueueRank != 0 {
 		return m.SourceQueueRank - 1
+	}
+
+	if m.Prio == stmtPrioDefault && m.Seq != 0 {
+		if info := e.codegen.lookup(m.Source.vfs()); info != nil && info.OwnerModule == e.instance.Path && (info.OwnerSerial == 0 || info.OwnerSerial == e.frame.serial) && info.SourceAction != nil && info.SourceAction.DeclSeq == m.Seq {
+			if round, known := e.sourcePosition(info.SourceAction); known {
+				return round + 1
+			}
+		}
 	}
 
 	cur := m.Source.vfs()

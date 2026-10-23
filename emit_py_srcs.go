@@ -479,7 +479,16 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 
 	pyRef := e.emitNode(node)
 
+	var action *SourceActionInfo
+
+	if ps.Kind == pySourcePlain || ps.Kind == pySourceGenerated {
+		group := e.d.pySrcGroups[ps.Group]
+
+		action = &SourceActionInfo{Priority: group.Prio, DeclSeq: group.DeclSeq, Inputs: na.vfsList(srcAbs)}
+	}
+
 	e.register(GeneratedFileInfo{
+		SourceAction:  action,
 		OutputPath:    outputPath,
 		ProducerRef:   pyRef,
 		GeneratorRefs: generatorRefs,
@@ -489,14 +498,13 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *ObjcopyEmitResult) {
 	_, instance, d := e.ctx, e.instance, e.d
 
-	if len(d.pySrcs) == 0 || d.unit.Tag == 0 || d.unit.Tag == unitTagPy3Bin {
+	if len(d.pySrcs) == 0 || d.unit.Tag == unitTagPy3Bin {
 		return
 	}
 
-	namespaceEnabled := !d.noExtendedPySearch &&
+	namespaceEnabled := !d.pyNamespacePython2 && !d.noExtendedPySearch &&
 		!strings.HasPrefix(instance.Path.relString(), "contrib/python") &&
-		!strings.HasPrefix(instance.Path.relString(), "contrib/tools/python3") &&
-		pyNamespaceUnitType(d.unit.Type)
+		!strings.HasPrefix(instance.Path.relString(), "contrib/tools/python3")
 
 	if namespaceEnabled {
 		nsRefs, nsOuts := e.emitPyNamespaceForGroup(gi, group)
@@ -990,13 +998,4 @@ func yaConfFormulaResources(fs FS, confPath string) []string {
 	}
 
 	return out
-}
-
-func pyNamespaceUnitType(t TOK) bool {
-	switch t {
-	case tokPy3Test, tokPy3Library, tokPy3ProgramBin, tokPy23Library, tokPy23NativeLibrary:
-		return true
-	}
-
-	return false
 }

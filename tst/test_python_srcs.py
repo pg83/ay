@@ -601,7 +601,7 @@ class PySrcsTest(unittest.TestCase):
         self.assertIn("$(B)/nopy/a.py.yapyc3", res["inputs"])
         self.assertNotIn("$(S)/nopy/a.py", res["inputs"])
 
-    def test_contrib_python_and_disabled_outputs_emit_no_source_objects(self):
+    def test_contrib_disabled_sources_and_cpp_resource_registration(self):
         files = python_base()
         files.update({
             "contrib/python/pkg/ya.make": (
@@ -610,7 +610,7 @@ class PySrcsTest(unittest.TestCase):
             "contrib/python/pkg/a.py": "",
             "contrib/python/other/ya.make": "PY3_LIBRARY()\nPY_SRCS(b.py)\nEND()\n",
             "contrib/python/other/b.py": "",
-            "plain/ya.make": "LIBRARY()\nPY_SRCS(c.py)\nEND()\n",
+            "plain/ya.make": "LIBRARY()\nSET(PYTHON3 yes)\nSET(_PYTHON_VER py3)\nPY_SRCS(c.py)\nEND()\n",
             "plain/c.py": "",
         })
         graph = lib.make(files, "contrib/python/pkg")
@@ -626,7 +626,41 @@ class PySrcsTest(unittest.TestCase):
 
         graph = lib.make(files, "plain")
         lib.node_by_output(graph, "$(B)/plain/c.py.yapyc3")
-        self.assertEqual(objcopy_nodes(graph, "plain"), [])
+        resources = objcopy_nodes(graph, "plain")
+        self.assertEqual(len(resources), 2)
+        values = [value for node in resources for value in kvs(node)]
+        self.assertIn("resfs/src/resfs/file/py/plain/c.py=plain/c.py", values)
+        self.assertIn("resfs/src/resfs/file/py/plain/c.py.yapyc3=plain/c.py.yapyc3", values)
+        self.assertEqual(len([v for v in values if v.startswith("py/namespace/") and v.endswith("/plain=plain.")]), 1)
+
+    def test_namespace_uses_raw_python2_owner_value_at_source_binding(self):
+        for macro in ("LIBRARY", "PY3_LIBRARY", "PY2_LIBRARY"):
+            for raw in ("yes", "no", "", "true"):
+                for phase in ("before", "after-source", "after-end"):
+                    with self.subTest(macro=macro, raw=raw, phase=phase):
+                        initial = "no" if raw == "yes" else "yes"
+                        setter = lambda value: f"SET(PYTHON2 {value})\n"
+                        body = setter(raw if phase == "before" else initial)
+                        body += "SET(PYTHON3 yes)\nSET(_PYTHON_VER py3)\nPY_SRCS(note.py)\n"
+                        if phase == "after-source":
+                            body += setter(raw)
+                        body += "END()\n"
+                        if phase == "after-end":
+                            body += setter(raw)
+                        files = python_base()
+                        lib.tool_program(files, "tools/py2cc", "py2cc")
+                        files.update({
+                            "orchard/leaf/ya.make": f"{macro}(leaf)\n{body}",
+                            "orchard/leaf/note.py": "value = 1\n",
+                        })
+                        graph = lib.make(files, "orchard/leaf")
+                        values = [value for node in objcopy_nodes(graph, "orchard/leaf") for value in kvs(node)]
+                        namespaces = [value for value in values if value.startswith("py/namespace/")]
+                        bound = initial if phase == "after-end" else raw
+                        self.assertEqual(len(namespaces), int(bound != "yes"))
+                        self.assertTrue(any("$(S)/orchard/leaf/note.py" in node["inputs"] for node in objcopy_nodes(graph, "orchard/leaf")))
+                        suffix = "yapyc" if macro == "PY2_LIBRARY" else "yapyc3"
+                        lib.node_by_output(graph, f"$(B)/orchard/leaf/note.py.{suffix}")
 
     def test_no_extended_source_search_skips_namespace(self):
         files = python_base()

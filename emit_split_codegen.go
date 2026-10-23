@@ -12,7 +12,7 @@ func (e *EmitContext) emitSplitCodegenStmt(sc *SplitCodegenStmt) {
 	_, parts := e.emitSplitCodegen(sc)
 
 	for _, partRel := range parts {
-		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), partRel).any(), Prio: stmtPrioDefault, Bucket: bkSplitCodegen})
+		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), partRel).any(), Prio: stmtPrioDefault, Seq: sc.DeclSeq, Bucket: bkSplitCodegen})
 	}
 }
 
@@ -90,9 +90,11 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	}
 
 	pending := e.pendingEmit(pe)
+	sourceAction := &SourceActionInfo{DeclSeq: sc.DeclSeq, Inputs: na.vfsList(inputIn)}
 
 	for _, out := range outputs {
 		info := GeneratedFileInfo{
+			SourceAction:    sourceAction,
 			OutputPath:      out,
 			ProducerRef:     scRef,
 			ProducerMainOut: part0,
