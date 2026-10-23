@@ -160,11 +160,11 @@ class YaMakeSyntaxTest(unittest.TestCase):
             ("LIBRARY()\nSRCS", 'a/ya.make:2:5: expected \'(\' after macro name "SRCS", got end of file'),
             ("LIBRARY()\nSRCS(x.cpp\n", 'a/ya.make:2:1: unterminated macro call "SRCS" (missing \')\')'),
             ("LIBRARY()\nSRCS(x.cpp (y))\n", 'a/ya.make:2:12: unexpected \'(\' inside macro call "SRCS"'),
-            ("LIBRARY()\nSRCS(x.cpp == y)\n", 'a/ya.make:2:12: unexpected \'==\' inside macro call "SRCS"'),
-            ("LIBRARY()\nSRCS(a < b)\n", 'a/ya.make:2:8: unexpected \'<\' inside macro call "SRCS"'),
-            ("LIBRARY()\nSRCS(>)\n", 'a/ya.make:2:6: unexpected \'>\' inside macro call "SRCS"'),
-            ("LIBRARY()\nSRCS(!=)\n", 'a/ya.make:2:6: unexpected \'!=\' inside macro call "SRCS"'),
-            ("LIBRARY()\nSRCS(>=)\n", 'a/ya.make:2:6: unexpected \'>=\' inside macro call "SRCS"'),
+            ("LIBRARY()\n<=\n", "a/ya.make:2:1: expected macro name, got '<='"),
+            ("LIBRARY()\n<\n", "a/ya.make:2:1: expected macro name, got '<'"),
+            ("LIBRARY()\n>\n", "a/ya.make:2:1: expected macro name, got '>'"),
+            ("LIBRARY()\n!=\n", "a/ya.make:2:1: expected macro name, got '!='"),
+            ("LIBRARY()\n>=\n", "a/ya.make:2:1: expected macro name, got '>='"),
         ]
         for text, expected in cases:
             with self.subTest(text=text):

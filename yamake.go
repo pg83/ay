@@ -551,7 +551,7 @@ func (l *Lexer) isWordByte(b byte) bool {
 	}
 
 	switch b {
-	case ';', '&', '`', '^', '|':
+	case ';', '&', '`', '^', '|', '<', '>':
 		return true
 	}
 
@@ -633,7 +633,7 @@ func (l *Lexer) readToken() Token {
 		return Token{kind: tokRParen, line: startLine, col: startCol}
 	case b == '"' || b == '\'':
 		return l.readString(startLine, startCol, b)
-	case b == '<':
+	case b == '<' && !l.inArgs:
 		l.advance()
 
 		if l.pos < len(l.src) && l.src[l.pos] == '=' {
@@ -643,7 +643,7 @@ func (l *Lexer) readToken() Token {
 		}
 
 		return Token{kind: tokLt, line: startLine, col: startCol}
-	case b == '>':
+	case b == '>' && !l.inArgs:
 
 		l.advance()
 
@@ -654,13 +654,13 @@ func (l *Lexer) readToken() Token {
 		}
 
 		return Token{kind: tokGt, line: startLine, col: startCol}
-	case b == '=' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
+	case b == '=' && !l.inArgs && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
 
 		l.advance()
 		l.advance()
 
 		return Token{kind: tokEq, line: startLine, col: startCol}
-	case b == '!' && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
+	case b == '!' && !l.inArgs && l.pos+1 < len(l.src) && l.src[l.pos+1] == '=':
 
 		l.advance()
 		l.advance()
