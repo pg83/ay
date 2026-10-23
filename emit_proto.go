@@ -735,7 +735,6 @@ func (e *EmitContext) emitPyProtoLibraryResult(resources *ObjcopyEmitResult) *Pr
 		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
 		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
 	} else {
-		// Python proto globals name the C++ archive even without a normal archive producer.
 		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, build(instance.Path.relString(), "/", e.arName(instance.Path.relString(), "lib", protoLibName)))
 	}
 
