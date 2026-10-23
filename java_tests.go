@@ -81,10 +81,22 @@ func (ctx *GenCtx) javaCheckSourceDir(jm *JavaModule, dir string) VFS {
 		return rooted
 	}
 
+	spelling := dir
+
+	if strings.HasPrefix(spelling, "./") && len(spelling) > 2 {
+		spelling = strings.TrimPrefix(spelling[2:], "/")
+	}
+
+	spelling = strings.ReplaceAll(spelling, "\\", "/")
+
+	if strings.HasSuffix(spelling, "/") && !strings.Contains(spelling, "..") && !strings.Contains(spelling, "/./") && !strings.Contains(spelling, "//") {
+		return jm.path
+	}
+
 	dirs := append(slices.Clone(jm.data.srcDirs), v, build(jm.dir), bld)
 
 	for _, base := range dirs {
-		rel := path.Join(base.relString(), dir)
+		rel := path.Join(base.relString(), spelling)
 
 		if base.isSource() {
 			if present, _ := ctx.fs.exists(srcRootRel, rel); present {
@@ -105,7 +117,7 @@ func (ctx *GenCtx) javaSrcDirsTestData(jm *JavaModule) []string {
 		dir := ctx.javaCheckSourceDir(jm, spec.srcDir)
 
 		if dir.isSource() {
-			out = append(out, dir.string())
+			out = append(out, sourceClean(dir.relString()).string())
 		}
 	}
 
