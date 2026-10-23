@@ -1587,7 +1587,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			resolveCppSelf = true
 		}
 
-		if d.moduleStmt.Name == tokProtoLibrary && d.useCommonGoogleAPIs && instance.Language == LangCPP {
+		if d.moduleStmt.Name == tokProtoLibrary && d.useCommonGoogleAPIs && (instance.Language == LangCPP || isPythonProtoModule(d)) {
 			resolveGoogleapis = !peerSeen(googleapisPeer)
 		}
 

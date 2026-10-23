@@ -94,7 +94,7 @@ func (p CppProtoPlugin) isYaff() bool {
 func addCPPProtoPlugin(d *ModuleData, plugin CppProtoPlugin) {
 	d.cppProtoPlugins = append(d.cppProtoPlugins, plugin)
 
-	if !isGoModuleType(d.unit.Type) {
+	if !isGoModuleType(d.unit.Type) && !pythonProtoPeerContext(d) {
 		d.peerdirs = append(d.peerdirs, internAnys(plugin.Deps)...)
 	}
 }
@@ -107,7 +107,15 @@ func recalcProtoOutputs(d *ModuleData) {
 	}
 }
 
+func pythonProtoPeerContext(d *ModuleData) bool {
+	return isPythonProtoModule(d) || isPythonModuleType(d.unit.Type)
+}
+
 func protoCmdPeers(d *ModuleData) []ANY {
+	if pythonProtoPeerContext(d) {
+		return nil
+	}
+
 	front := make([]ANY, 0, len(d.cppProtoPlugins))
 
 	if d.grpc {
@@ -2930,7 +2938,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			for _, p := range goGrpcImports(env.string(envGOSTD)) {
 				d.peerdirs = append(d.peerdirs, internStr(p).any())
 			}
-		} else {
+		} else if !pythonProtoPeerContext(d) {
 			d.peerdirs = append(d.peerdirs, strContribLibsGrpc.any())
 		}
 	case tokPyNamespace:
