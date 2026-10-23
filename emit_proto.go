@@ -108,10 +108,22 @@ func protoInducedPbH(pm *IncludeParserManager, local, dst []IncludeDirective) []
 	return dst
 }
 
-func protoPluginImportedIncludes(na *NodeArenas, out VFS, imports []IncludeDirective) ParsedIncludeSet {
+func protoPluginHeaderOutput(out VFS) bool {
 	switch filepath.Ext(out.relString()) {
-	case ".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx",
-		".cpp", ".cc", ".cxx", ".c", ".C", ".auxcpp":
+	case ".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx":
+		return true
+	}
+
+	return false
+}
+
+func protoPluginImportedIncludes(na *NodeArenas, out VFS, imports []IncludeDirective) ParsedIncludeSet {
+	if protoPluginHeaderOutput(out) {
+		return ParsedIncludeSet{parsedIncludesLocal: na.dirList(imports...)}
+	}
+
+	switch filepath.Ext(out.relString()) {
+	case ".cpp", ".cc", ".cxx", ".c", ".C", ".auxcpp":
 		return ParsedIncludeSet{parsedIncludesLocal: na.dirList(imports...)}
 	}
 
@@ -570,11 +582,16 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		for _, suffix := range plugin.Spec.OutputSuffixes {
 			out := build(protoBase, suffix)
 			parsed := protoPluginImportedIncludes(na, out, directImports)
+			outputRefs := pluginRefs
+
+			if protoPluginHeaderOutput(out) {
+				outputRefs = pbGenRefs
+			}
 
 			switch out {
 			case grpcPbCC:
 				parsed = ParsedIncludeSet{parsedIncludesLocal: grpcCCParsed}
-				pluginRefs = pbCCRefs
+				outputRefs = pbCCRefs
 			case grpcPbH:
 				parsed = ParsedIncludeSet{parsedIncludesLocal: grpcHParsed}
 			}
@@ -582,7 +599,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			e.register(GeneratedFileInfo{
 				OutputPath:     out,
 				ProducerRef:    pbRef,
-				GeneratorRefs:  pluginRefs,
+				GeneratorRefs:  outputRefs,
 				ParsedIncludes: parsed,
 				OnUse:          pbPE,
 			})
