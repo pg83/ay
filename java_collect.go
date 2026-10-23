@@ -181,6 +181,7 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 
 	javaConfPrologue(jm, d)
 	collectJavaStmts(ctx, jm, d, stmts, env)
+	collectJavaAutoinclude(ctx, jm, d, env)
 
 	for _, image := range strings.Fields(expandStmtToken(env.string(envDockerImagesValue), env)) {
 		if image == `""` || image == "''" {
@@ -240,9 +241,20 @@ func javaModuleArgs(jm *JavaModule, d *JavaData, args []ANY) {
 	}
 }
 
+func collectJavaAutoinclude(ctx *GenCtx, jm *JavaModule, d *JavaData, env Environment) {
+	if d.autoincluded {
+		return
+	}
+
+	d.autoincluded = true
+	collectJavaStmts(ctx, jm, d, ctx.autoincludeStmts(jm.dir), env)
+}
+
 func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, env Environment) {
 	for _, s := range stmts {
 		switch v := s.(type) {
+		case *EndStmt:
+			collectJavaAutoinclude(ctx, jm, d, env)
 		case *PeerdirStmt:
 			if jm.unit.ignorePeerdir {
 				continue

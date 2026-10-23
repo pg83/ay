@@ -185,6 +185,7 @@ type ModuleData struct {
 	nots                     *NotsModule
 	docs                     *DocsData
 	moduleStmt               *ModuleStmt
+	autoincluded             bool
 	modver                   string
 	hasLicense               bool
 	goTestSrcs               []ANY
@@ -805,6 +806,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	initPythonImportMask(env, d)
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
+	collectModuleAutoinclude(ctx, modulePath, kind, instance.Language, env, d, onWarn, instance.Platform)
 	d.finishResourcePeerPolicy()
 
 	if pd := programSourceDir(d.moduleStmt); pd != nil {
@@ -1290,6 +1292,15 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 	return false
 }
 
+func collectModuleAutoinclude(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
+	if d.autoincluded || d.moduleStmt == nil {
+		return
+	}
+
+	d.autoincluded = true
+	collectStmts(ctx, modulePath, kind, language, ctx.autoincludeStmts(modulePath), env, d, onWarn, platform)
+}
+
 func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	fs := ctx.fs
 
@@ -1669,6 +1680,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.ragel6Flags = internAnys(strings.Fields(value))
 			}
 		case *EndStmt:
+			collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
 			d.pythonLint.bind(env)
 			d.finishResourcePeerPolicy()
 

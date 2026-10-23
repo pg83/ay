@@ -254,6 +254,7 @@ type JavaRunProgram struct {
 }
 
 type JavaData struct {
+	autoincluded      bool
 	recurses          []string
 	name              string
 	prefix            string

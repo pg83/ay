@@ -926,15 +926,17 @@ func moduleStmts(ctx *GenCtx, dir string) []Stmt {
 
 	stmts := expandGoTestFor(ctx, ctx.parseFileCached(internJoined(dir, "ya.make").string()))
 
-	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootRel, inc.relString()) {
-		incStmts := ctx.parseFileCached(inc.relString())
-
-		stmts = astStmts.list(concat(stmts, incStmts)...)
-	}
-
 	ctx.moduleStmts[dir] = stmts
 
 	return stmts
+}
+
+func (ctx *GenCtx) autoincludeStmts(dir string) []Stmt {
+	if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(dir); ok && ctx.fs.isFile(srcRootRel, inc.relString()) {
+		return ctx.parseFileCached(inc.relString())
+	}
+
+	return nil
 }
 
 func expandGoTestFor(ctx *GenCtx, stmts []Stmt) []Stmt {
