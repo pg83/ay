@@ -69,7 +69,7 @@ func expandTestRunArgs(args []ANY, env Environment) []ANY {
 
 func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 	switch v.Name {
-	case tokDockerImage, tokRun, tokSize, tokTimeout, tokTestCwd, tokData, tokDataFiles, tokExplicitData, tokDepends, tokUseRecipe, tokTag, tokEnv, tokConftestLoadPolicyLocal, tokConftestLoadPolicyLegacyGlobal, tokRequirements, tokForkTests, tokForkSubtests, tokForkTestFiles, tokSplitFactor, tokBenchmarkOpts, tokFuzzOpts:
+	case tokDockerImage, tokRun, tokSize, tokTimeout, tokTestCwd, tokData, tokDataFiles, tokExplicitData, tokDepends, tokUseRecipe, tokTag, tokEnv, tokNoDoctests, tokConftestLoadPolicyLocal, tokConftestLoadPolicyLegacyGlobal, tokRequirements, tokForkTests, tokForkSubtests, tokForkTestFiles, tokSplitFactor, tokBenchmarkOpts, tokFuzzOpts:
 	default:
 		return false
 	}
@@ -115,9 +115,11 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 		t.recipes = append(t.recipes, value)
 	case tokTag:
 		t.tags = append(t.tags, args...)
-	case tokEnv, tokConftestLoadPolicyLocal, tokConftestLoadPolicyLegacyGlobal:
+	case tokEnv, tokNoDoctests, tokConftestLoadPolicyLocal, tokConftestLoadPolicyLegacyGlobal:
 		if v.Name == tokEnv {
 			value = expandConfigMacroBody(strings.Join(anyStrs(expandSourceArguments(v.Args, env)), " "), env)
+		} else if v.Name == tokNoDoctests {
+			value = "YA_PYTEST_DISABLE_DOCTEST=yes"
 		} else if v.Name == tokConftestLoadPolicyLocal {
 			value = "CONFTEST_LOAD_POLICY=LOCAL"
 		} else {
