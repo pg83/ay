@@ -150,7 +150,11 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 }
 
 func (t *TestMeta) expandValues(env Environment) {
-	t.env = append(t.env, splitShellWords(expandConfigMacroBody(env.string(envTestEnvValue), env))...)
+	words := splitShellWords(expandConfigMacroBody(env.string(envTestEnvValue), env))
+
+	if len(words) > 0 {
+		t.env = append(t.env, strings.Split(strings.Trim(strings.Join(words, ";"), `"`), ";")...)
+	}
 
 	for i, value := range t.recipes {
 		t.recipes[i] = expandConfigMacroBody(value, env)
