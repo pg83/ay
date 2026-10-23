@@ -1304,7 +1304,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			expanded := *v
 
-			expanded.Args = expandModuleArguments(v.Args, env)
+			expanded.Args = expandSourceArguments(v.Args, env)
 			v = &expanded
 
 			if v.Name == tokPy3Program && kind == KindBin {
@@ -2224,7 +2224,7 @@ func (u ModuleUnit) objectSuffix(p *Platform) string {
 	return "." + u.ObjSuf.string() + p.objectSuffix()
 }
 
-func expandModuleArguments(args []ANY, env Environment) []ANY {
+func expandSourceArguments(args []ANY, env Environment) []ANY {
 	var out []ANY
 
 	for _, arg := range args {
@@ -3716,6 +3716,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			name := v.Args[0].string()
 			value := strings.Join(anyStrs(v.Args[1:]), " ")
+
+			if name == "TEST_ENV_VALUE" {
+				value = expandSourceScalarVarRef(value, env)
+			}
 
 			if name == importMaskVariable {
 				value = appendPythonImportMask(value, env, d)

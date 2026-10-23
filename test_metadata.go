@@ -117,7 +117,7 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 		t.tags = append(t.tags, args...)
 	case tokEnv, tokConftestLoadPolicyLocal, tokConftestLoadPolicyLegacyGlobal:
 		if v.Name == tokEnv {
-			value = expandToken(value, env, tokenExpandArguments)
+			value = expandConfigMacroBody(strings.Join(anyStrs(expandSourceArguments(v.Args, env)), " "), env)
 		} else if v.Name == tokConftestLoadPolicyLocal {
 			value = "CONFTEST_LOAD_POLICY=LOCAL"
 		} else {
@@ -126,8 +126,8 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 
 		quoted := `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value) + `"`
 
-		appendMacroEnv(env, "TEST_ENV_VALUE", quoted)
-		appendMacroEnv(env, "_TEST_ENV_SEM", "&& test_env "+value)
+		appendMacroEnv(env, "TEST_ENV_VALUE", expandSourceScalarVarRef(quoted, env))
+		appendMacroEnv(env, "_TEST_ENV_SEM", expandSourceScalarVarRef("&& test_env "+value, env))
 	case tokForkTests:
 		t.forkMode = "tests"
 		t.partition = strings.ToUpper(value)
@@ -148,7 +148,7 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 }
 
 func (t *TestMeta) expandValues(env Environment) {
-	t.env = append(t.env, splitShellWords(expandToken(env.string(envTestEnvValue), env, tokenExpandFinal))...)
+	t.env = append(t.env, splitShellWords(expandConfigMacroBody(env.string(envTestEnvValue), env))...)
 
 	for i, value := range t.recipes {
 		t.recipes[i] = expandConfigMacroBody(value, env)
