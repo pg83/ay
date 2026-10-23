@@ -126,7 +126,7 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 			value = "CONFTEST_LOAD_POLICY=LEGACY_GLOBAL"
 		}
 
-		quoted := `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value) + `"`
+		quoted := `"` + value + `"`
 
 		appendMacroEnv(env, "TEST_ENV_VALUE", expandSourceScalarVarRef(quoted, env))
 		appendMacroEnv(env, "_TEST_ENV_SEM", expandSourceScalarVarRef("&& test_env "+value, env))
