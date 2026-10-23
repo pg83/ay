@@ -73,3 +73,7 @@ class EnvLiteralQuotesTest(unittest.TestCase):
         self.assertTrue(runs)
         for run in runs:
             self.assertEqual(option_values(run, "--env"), EXPECTED["quotes"])
+
+
+if __name__ == '__main__':
+    unittest.main()

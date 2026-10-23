@@ -96,3 +96,7 @@ class ResourceBuildFromInputsTest(unittest.TestCase):
             resource["outputs"][0], PREFIX + "stone.cpp.o",
             "$(S)/grove/ledger/seed.in", "$(S)/build/scripts/link_lib.py",
         })
+
+
+if __name__ == '__main__':
+    unittest.main()
