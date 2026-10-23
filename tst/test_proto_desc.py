@@ -200,30 +200,30 @@ class ProtoDescTest(unittest.TestCase):
         self.assertNotIn("cwd", merge_cmd)
         self.assertEqual(merge_cmd["cmd_args"], [
             PYTHON, MERGE_FILES, "$(B)/mid/mid.self.protodesc",
-            "$(B)/mid/m.proto.desc", "$(B)/mid/n.proto.desc",
+            "$(B)/mid/m.proto.desc", "$(B)/mid/events.ev.desc", "$(B)/mid/n.proto.desc",
         ])
         self.assertEqual(collect_cmd["cwd"], "$(B)")
         self.assertEqual(collect_cmd["cmd_args"], [
             PYTHON, COLLECT_RAWPROTO, "--output", "$(B)/mid/mid.protosrc",
-            f"mid/m.proto.{MID_HASH}.rawproto", f"mid/n.proto.{MID_HASH}.rawproto",
+            f"mid/m.proto.{MID_HASH}.rawproto", f"mid/events.ev.{MID_HASH}.rawproto", f"mid/n.proto.{MID_HASH}.rawproto",
         ])
-        self.assertEqual(mid_merge["inputs"][:6], [
+        self.assertEqual(mid_merge["inputs"][:8], [
             '$(B)/mid/m.proto.desc',
+            '$(B)/mid/events.ev.desc',
             '$(B)/mid/n.proto.desc',
             '$(B)/mid/m.proto.22384709d743fe3c6fb0a4b35b2e10a6.rawproto',
+            '$(B)/mid/events.ev.22384709d743fe3c6fb0a4b35b2e10a6.rawproto',
             '$(B)/mid/n.proto.22384709d743fe3c6fb0a4b35b2e10a6.rawproto',
             MERGE_FILES,
             COLLECT_RAWPROTO,
         ])
-        self.assertEqual(set(mid_merge["inputs"][6:8]), set())
+        self.assertEqual(set(mid_merge["inputs"][8:]), set())
         self.assertEqual(
             mid_merge["inputs"][8:], []
         )
-        self.assertFalse(
-            [n for n in graph["graph"] if any("events" in o for o in n["outputs"])]
-        )
+        self.assertIn("$(S)/mid/events.ev", desc_node(graph, "$(B)/mid/events.ev.desc")["inputs"])
         self.assertEqual(sorted(mid_merge["deps"]), sorted([
-            m_desc["uid"], desc_node(graph, "$(B)/mid/n.proto.desc")["uid"],
+            m_desc["uid"], desc_node(graph, "$(B)/mid/events.ev.desc")["uid"], desc_node(graph, "$(B)/mid/n.proto.desc")["uid"],
         ]))
 
         builtin_desc = desc_node(

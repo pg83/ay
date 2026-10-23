@@ -157,6 +157,11 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	var protocBinary VFS
 
 	srcs := slices.Clone(d.srcs)
+	eventSources := e.codegen.moduleSourceInputs(instance.Path, ".ev")
+
+	for _, event := range eventSources {
+		srcs = append(srcs, SrcMeta{Source: event.any()})
+	}
 
 	for _, meta := range d.srcs {
 		if extIsGztproto(meta.Source.string()) {
@@ -167,10 +172,12 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		}
 	}
 
+	seen := make(map[VFS]bool)
+
 	for _, meta := range srcs {
 		src := meta.Source
 
-		if !extIsProto(src.string()) {
+		if !extIsProto(src.string()) && !extIsEv(src.string()) {
 			continue
 		}
 
@@ -180,6 +187,13 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 
 		srcRel := src.string()
 		protoVFS := resolveSourceOrGeneratedVFS(ctx, instance, srcRel, d.srcDirs)
+
+		if seen[protoVFS] {
+			continue
+		}
+
+		seen[protoVFS] = true
+
 		protoRelPath := protoVFS.relString()
 		imports := e.scanner.walkClosure(protoVFS, d.scanCtx, scanDomainProto)
 		descOut := build(descProtoOutputRel(instance.Path.relString(), srcRel, protoRelPath))

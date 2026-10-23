@@ -417,6 +417,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 		e.register(GeneratedFileInfo{
 			OutputPath:     pbH,
+			PrimaryInput:   protoVFS,
 			ProducerRef:    pbRef,
 			GeneratorRefs:  genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: spec.genHParsed},
