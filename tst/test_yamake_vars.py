@@ -96,6 +96,20 @@ class YaMakeVariablesTest(unittest.TestCase):
             "foo", "/p", "/q", "$", "-Dm=foofoo", "-Do=$-a", "-D" + LONG_VALUE * 2,
         ])
 
+    def test_lone_dollar_peer_path_is_literal_and_keeps_its_build_dependency(self):
+        files = {
+            "a/ya.make": f"PROGRAM(app)\n{lib.BARE_MODULE}PEERDIR($)\nSRCS(main.cpp)\nEND()\n",
+            "a/main.cpp": "int main(){return 0;}\n",
+            "$/ya.make": f"LIBRARY(symbol)\n{lib.BARE_MODULE}SRCS(leaf.cpp)\nEND()\n",
+            "$/leaf.cpp": "int leaf;\n",
+        }
+        code, graph, stderr = ay_make(files)
+        self.assertEqual(code, 0, stderr)
+        link = lib.node_by_output(graph, "$(B)/a/app")
+        peer = lib.node_by_output(graph, "$(B)/$/libsymbol.a")
+        self.assertIn(peer["outputs"][0], link["inputs"])
+        self.assertIn(peer["uid"], link["deps"])
+
     def test_braced_variable_keys_include_punctuation(self):
         for key in ("vendor.api-version", "vendor/api-version", "vendor:api-version"):
             with self.subTest(key=key):
