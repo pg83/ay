@@ -389,6 +389,10 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 			fireGenerated(info)
 		}
 
+		if _, empty := s.parsers.registry.registeredParserFor(vfsPath.relString()).(EmptyIncludeDirectiveParser); empty {
+			return nil, nil, info, parsedIncludesLocal
+		}
+
 		set := info.ParsedIncludes
 
 		if _, ok := s.parsers.registry.registeredParserFor(vfsPath.relString()).(CIncludeDirectiveParser); ok {
