@@ -709,7 +709,10 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 	}
 
 	for _, entry := range entries {
-		e.resourceDeclSeq = entry.DeclSeq
+		if entry.DeclSeq != 0 {
+			e.resourceDeclSeq = entry.DeclSeq
+		}
+
 		dontCompress = entry.DontCompress
 
 		if entry.Path == "-" {

@@ -37,6 +37,39 @@ def make(case):
 
 
 class ResourceSourceOrderTest(unittest.TestCase):
+    def test_python_callback_source_results_match_native_order(self):
+        from python_callback_source_cases import CASES as CALLBACK_CASES
+        from test_python2 import python2_base
+
+        for case in CALLBACK_CASES:
+            with self.subTest(case=case["name"]):
+                is_test = case["module"] == "PY2TEST"
+                files = python2_base() if is_test else python_base()
+                lib.tool_program(files, "tools/py2cc", "py2cc")
+                files["library/python/pytest/ya.make"] = "LIBRARY()\n" + lib.BARE_MODULE + "END()\n"
+                files.update(case["files"])
+                lines = files[MODULE + "/ya.make"].splitlines(True)
+                lines.insert(1, lib.BARE_MODULE)
+                files[MODULE + "/ya.make"] = "".join(lines)
+                graph = lib.make(files, MODULE, "--target-platform", "default-linux-x86_64")
+                target = next(n for n in graph["graph"] if n["outputs"][0].startswith(B)
+                              and n["kv"]["p"] == ("LD" if is_test else "AR")
+                              and (is_test or n["outputs"][0].endswith(".global.a")))
+                expected = case["members"]
+                members = [a if a.startswith("$(B)/") else "$(B)/" + a
+                           for c in target["cmds"] for a in c["cmd_args"] if a.endswith(".o")]
+                if is_test:
+                    # Native compiler/runtime scaffolding differs; compare all eight
+                    # original source callback results, with no change to their order.
+                    members = [a for a in members if a in expected]
+                self.assertEqual(members, expected)
+                for output in expected:
+                    node = lib.node_by_output(graph, output)
+                    self.assertIn(output, target["inputs"])
+                    self.assertIn(node["uid"], target["deps"])
+                    for dependency in node["deps"]:
+                        self.assertTrue(any(n["uid"] == dependency for n in graph["graph"]))
+
     def assert_case(self, case):
         graph = make(case)
         byout = {o: n for n in graph['graph'] for o in n['outputs']}

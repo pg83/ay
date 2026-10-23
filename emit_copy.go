@@ -98,6 +98,7 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 		existing.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: parsed}
 	} else {
 		info := GeneratedFileInfo{
+			SourceAction:   &SourceActionInfo{DeclSeq: entry.DeclSeq, Inputs: ctx.na.vfsList(srcVFS)},
 			OutputPath:     dstVFS,
 			SourcePath:     srcVFS,
 			ProducerRef:    ref,

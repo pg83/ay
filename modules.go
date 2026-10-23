@@ -524,6 +524,7 @@ type Lj21Archive struct {
 }
 
 type CopyFileEntry struct {
+	DeclSeq        int
 	Src            string
 	Dst            string
 	Auto           bool
@@ -2944,6 +2945,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokCopyFile, tokCopyFileWithContext:
 		entry := parseCopyFileEntry(anyStrs(v.Args), v.Name == tokCopyFileWithContext, v.Line)
 
+		entry.DeclSeq = d.nextDeclSeq()
 		d.copyFiles = append(d.copyFiles, entry)
 
 		if entry.Auto {
@@ -2968,6 +2970,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		entries, result := parseCopyEntries(anyStrs(v.Args), v.Line)
 
 		for _, entry := range entries {
+			entry.DeclSeq = d.nextDeclSeq()
 			d.copyFiles = append(d.copyFiles, entry)
 
 			if entry.Auto {
