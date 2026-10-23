@@ -49,6 +49,27 @@ class ConfComparisonValuesTest(unittest.TestCase):
             graph = lib.make(tree(conf), "app", "-Dyes=no", "-Dno=false")
             self.assertIn("-lselected_branch", link(graph, "$(B)/app/app"))
 
+    def test_quoted_variable_names_remain_literal_comparison_operands(self):
+        for condition, expected in (
+            ('$BRANCH_PROBE == "$BRANCH_PROBE"', False),
+            ('"$BRANCH_PROBE" == $BRANCH_PROBE', False),
+            ('$BRANCH_PROBE == "text"', True),
+        ):
+            with self.subTest(condition=condition):
+                conf = lib.FAKE_LD_CONF + (
+                    f'\nwhen ({condition}) {{\nBEFORE_PEERS+=-lselected_branch\n}}\n'
+                )
+                graph = lib.make(tree(conf), "app", "-DBRANCH_PROBE=text")
+                self.assertEqual("-lselected_branch" in link(graph, "$(B)/app/app"), expected)
+
+    def test_bare_configuration_variable_is_rejected(self):
+        conf = lib.FAKE_LD_CONF + (
+            '\nwhen (BRANCH_PROBE == "text") {\nBEFORE_PEERS+=-lselected_branch\n}\n'
+        )
+        result = lib.make_process(tree(conf), "app", "-DBRANCH_PROBE=text")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('bare configuration variable "BRANCH_PROBE" needs $', result.stderr)
+
     def test_typed_platform_values_remain_strings_in_ordering(self):
         for condition, expected in (
             ('$ANDROID_API < "1"', True),

@@ -216,6 +216,10 @@ func parseConfCondition(rel, expr string) []CondNode {
 	tokens := p.readCondTokens(tok)
 
 	for i := range tokens {
+		if tokens[i].kind == tokString {
+			continue
+		}
+
 		if name, reference := strings.CutPrefix(tokens[i].string(), "$"); reference && isIdentShapedName(name) {
 			tokens[i].kind = tokIdent
 		}
@@ -236,6 +240,8 @@ func parseConfCondition(rel, expr string) []CondNode {
 				p.condScratch[i].Kind = ckConfIdent
 				p.condScratch[i].Name = name
 				p.condScratch[i].Env = internEnv(name)
+			} else if p.condScratch[i].Name != "yes" && p.condScratch[i].Name != "no" {
+				throwFmt("conf: %s: bare configuration variable %q needs $", rel, p.condScratch[i].Name)
 			}
 		case ckEq:
 			p.condScratch[i].Kind = ckConfEq
@@ -257,13 +263,7 @@ func evalConfAtomString(nodes []CondNode, i int32, env Environment) string {
 	switch n.Kind {
 	case ckConfIdent:
 		return env.string(n.Env)
-	case ckIdent:
-		if n.Name == "yes" || n.Name == "no" {
-			return n.Name
-		}
-
-		return env.string(n.Env)
-	case ckString:
+	case ckIdent, ckString:
 		return n.Name
 	case ckInt:
 		return strconv.Itoa(n.Ival)
@@ -348,7 +348,7 @@ func (c *ConfFile) condVars(b int, add func(string)) {
 	for b != 0 {
 		for p := b; p != 0; p = c.branches[p].previous {
 			for _, n := range c.cond(p) {
-				if n.Kind == ckConfIdent || n.Kind == ckIdent && n.Name != "yes" && n.Name != "no" {
+				if n.Kind == ckConfIdent {
 					add(n.Name)
 				}
 			}
