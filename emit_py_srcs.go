@@ -147,7 +147,9 @@ func (e *EmitContext) registerCollectPySrcs() {
 			path := src.vfs()
 			kind := pySourcePlain
 
-			if path != 0 {
+			if group.SourceRoot {
+				path = source(module, "/", src.string())
+			} else if path != 0 {
 				if path.isBuild() {
 					kind = pySourceGenerated
 					token = internStr(trimModulePrefix(path.relString(), module)).any()

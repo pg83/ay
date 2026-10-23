@@ -387,6 +387,7 @@ var (
 	strModulo                                                                                = internStr("--modulo")
 	strModuloIndex                                                                           = internStr("--modulo-index")
 	strModver                                                                                = internStr("MODVER")
+	strMr                                                                                    = internStr("_MR")
 	strNeedAddFakeSrc                                                                        = internStr("NEED_ADD_FAKE_SRC")
 	strNeedPlatformPeerdirs                                                                  = internStr("NEED_PLATFORM_PEERDIRS")
 	strNo                                                                                    = internStr("no")

@@ -125,6 +125,7 @@ var tokName = [...]STR{
 	tokAllocator:                          internStr("ALLOCATOR"),
 	tokAllocatorImpl:                      internStr("ALLOCATOR_IMPL"),
 	tokAllPySrcs:                          internStr("ALL_PY_SRCS"),
+	tokAllPytestSrcs:                      internStr("ALL_PYTEST_SRCS"),
 	tokApphost:                            internStr("APPHOST"),
 	tokArchive:                            internStr("ARCHIVE"),
 	tokArchiveAsm:                         internStr("ARCHIVE_ASM"),
@@ -511,6 +512,7 @@ const (
 	tokAllocator
 	tokAllocatorImpl
 	tokAllPySrcs
+	tokAllPytestSrcs
 	tokApphost
 	tokArchive
 	tokArchiveAsm

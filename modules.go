@@ -481,6 +481,7 @@ type PyFbsSource struct {
 
 type PySrcGroup struct {
 	Lint           bool
+	SourceRoot     bool
 	DeclSeq        int
 	Fbs            []PyFbsSource
 	Srcs           []ANY
@@ -3429,15 +3430,44 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.srcs = append(d.srcs, SrcMeta{Source: internStr(f).any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq()})
 		}
 	case tokTestSrcs:
-		d.test.testFiles = append(d.test.testFiles, anyStrs(v.Args)...)
+		args := v.Args
+		moduleRelative := len(args) > 0 && args[0].string() == "_MR"
 
-		for _, a := range v.Args {
+		if moduleRelative {
+			args = args[1:]
+		}
+
+		for _, a := range args {
 			if a.string() == "NAMESPACE" || a.string() == "TOP_LEVEL" || a.string() == "__main__.py" {
 				throwFmt("TEST_SRCS: %s is not allowed", a.string())
 			}
 		}
 
-		applyInlinePySrcs(fs, modulePath, append([]ANY{kwNAMESPACE.any(), strTests.any()}, v.Args...), d, env, onWarn)
+		if moduleRelative {
+			relative := make([]ANY, len(args))
+
+			for i, arg := range args {
+				if file, rooted := moduleRootedVFS(modulePath, arg.string()); rooted {
+					arg = internStr(trimModulePrefix(file.relString(), modulePath)).any()
+				}
+
+				relative[i] = arg
+			}
+
+			args = relative
+		}
+
+		d.test.testFiles = append(d.test.testFiles, anyStrs(args)...)
+
+		before := len(d.pySrcGroups)
+
+		applyInlinePySrcs(fs, modulePath, append([]ANY{kwNAMESPACE.any(), strTests.any()}, args...), d, env, onWarn)
+
+		if moduleRelative {
+			for i := before; i < len(d.pySrcGroups); i++ {
+				d.pySrcGroups[i].SourceRoot = true
+			}
+		}
 	case tokPyExtraLintFiles:
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokSetAppend, Args: append([]ANY{strPyExtraLintFilesValue.any()}, v.Args...)}, d, env, onWarn)
 	case tokPySrcs:
@@ -3447,6 +3477,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		stmt := v
 
 		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
+	case tokAllPytestSrcs:
+
+		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokTestSrcs, Args: allPytestSrcArgs(fs, modulePath, v)}, d, env, onWarn)
 	case tokAllPySrcs:
 
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPySrcs, Args: allPySrcArgs(fs, modulePath, v)}, d, env, onWarn)
