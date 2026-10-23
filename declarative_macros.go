@@ -110,6 +110,23 @@ func appendMacroEnv(env Environment, name, value string) {
 	env.setString(internEnv(name), value)
 }
 
+// PYTHON2_ADDINCL and USE_PYTHON2 share _PYTHON_ADDINCL, but install
+// different compatibility tags. Only USE_PYTHON2 adds the runtime peer.
+func applyPython2Addincl(d *ModuleData, env Environment, native bool) {
+	d.python2Headers = true
+	usePython2(env, d, unitTagPy2)
+	d.usePython3 = false
+	env.setString(internEnv("_PYTHON_VER"), "py2")
+	env.setString(internEnv("PYTHON_TYPE_FOR_CYTHON"), "PY2")
+
+	tags := "PY2 PY2_NATIVE $_CPP_PROTO_COMPATIBLE_TAGS CPP_PROTO_FROM_SCHEMA CPP_FBS CPP_ROS $YQL_UDF_STATIC_PEERDIR_TAG $YQL_ABI_PEERDIR_TAG __EMPTY__ RESOURCE_LIB DLL_LIB"
+	if native {
+		env.setStringID(envMODULE_TAG, unitTagPy2Native)
+		tags = "$_CPP_PROTO_COMPATIBLE_TAGS CPP_PROTO_FROM_SCHEMA CPP_FBS CPP_ROS PY2_NATIVE $YQL_UDF_STATIC_PEERDIR_TAG $YQL_ABI_PEERDIR_TAG __EMPTY__ RESOURCE_LIB DLL_LIB"
+	}
+	env.setString(internEnv("PEERDIR_TAGS"), expandAssignedScalarVarRef(tags, env))
+}
+
 // python.conf: PYTHON3_ADDINCL -> _PYTHON3_ADDINCL. This selects headers
 // without adding USE_PYTHON3's runtime peers.
 func applyPython3Addincl(d *ModuleData, env Environment) {
@@ -120,41 +137,65 @@ func applyPython3Addincl(d *ModuleData, env Environment) {
 	env.setString(internEnv("_PYTHON_VER"), "py3")
 	env.setString(internEnv("PYTHON_TYPE_FOR_CYTHON"), "PY3")
 
-	if env.string(envUSE_ARCADIA_PYTHON) == "yes" {
-		flags := []ANY{argDusePython3.any()}
-		include, _ := env.lookup("PY3_BASE_INCLUDE_DIR")
-
-		if include == "" {
-			include = "contrib/libs/python/Include"
-
-			if env.string(internEnv("USE_PYTHON3_PREV")) == "yes" {
-				include = "contrib/libs/python/Include_prev"
-			}
-		}
-
-		if env.string(internEnv("USE_PYTHON3_PREV")) == "yes" {
-			flags = append(flags, internStr("-DUSE_PYTHON3_PREV").any())
-		}
-
-		appendMacroEnv(env, "CFLAGS", strings.Join(anyStrs(flags), " "))
-		appendMacroEnv(env, "ADDINCL", "GLOBAL "+include)
-		d.moduleScopeCFlags = append(d.moduleScopeCFlags, flags...)
-		paths := expandConfigVFSPaths(internAnys(strings.Fields(include)), env)
-		d.addIncl = append(d.addIncl, paths...)
-		d.addInclGlobal = append(d.addInclGlobal, paths...)
-		d.addInclUserGlobal = append(d.addInclUserGlobal, paths...)
-	} else if env.bool(internEnv("USE_SYSTEM_PYTHON")) {
-		appendMacroEnv(env, "PEERDIR", "build/platform/python")
-		d.peerdirs = append(d.peerdirs, internStr("build/platform/python").any())
-	} else {
-		flags := expandStmtToken(env.string(internEnv("PYTHON_INCLUDE")), env)
-
-		appendMacroEnv(env, "CFLAGS", flags)
-		d.moduleScopeCFlags = append(d.moduleScopeCFlags, internAnys(splitShellWords(flags))...)
-	}
-
 	env.setString(envMODULE_TAG, "PY3_NATIVE")
 	env.setString(internEnv("PEERDIR_TAGS"), expandAssignedScalarVarRef("$_CPP_PROTO_COMPATIBLE_TAGS CPP_PROTO_FROM_SCHEMA CPP_FBS CPP_ROS PY3_NATIVE $YQL_UDF_STATIC_PEERDIR_TAG $YQL_ABI_PEERDIR_TAG __EMPTY__ RESOURCE_LIB DLL_LIB", env))
+}
+
+// Conditional fields belong to the module configuration. Activate each header
+// macro once and evaluate its fields with the final module variables.
+func finishPythonHeaderConfig(d *ModuleData, env Environment) {
+	if d.python2Headers {
+		if env.string(envUSE_ARCADIA_PYTHON) == "yes" {
+			flag := internArg("-DARCADIA_PYTHON_UNICODE_SIZE=" + env.string(envArcadiaPythonUnicodeSize)).any()
+			appendMacroEnv(env, "CFLAGS", flag.string())
+			appendMacroEnv(env, "ADDINCL", "GLOBAL contrib/libs/python/Include")
+			d.moduleScopeCFlags = append(d.moduleScopeCFlags, flag)
+			d.addIncl = append(d.addIncl, pythonIncludeDir)
+			d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
+			d.addInclUserGlobal = append(d.addInclUserGlobal, pythonIncludeDir)
+		} else if env.string(internEnv("USE_SYSTEM_PYTHON")) != "" {
+			appendMacroEnv(env, "PEERDIR", "build/platform/python")
+			d.peerdirs = append(d.peerdirs, internStr("build/platform/python").any())
+		} else {
+			flags := expandStmtToken(env.string(internEnv("PYTHON_INCLUDE")), env)
+			appendMacroEnv(env, "CFLAGS", flags)
+			d.moduleScopeCFlags = append(d.moduleScopeCFlags, internAnys(splitShellWords(flags))...)
+		}
+	}
+	if d.python3NativeIncl {
+		if env.string(envUSE_ARCADIA_PYTHON) == "yes" {
+			flags := []ANY{argDusePython3.any()}
+			include, _ := env.lookup("PY3_BASE_INCLUDE_DIR")
+
+			if include == "" {
+				include = "contrib/libs/python/Include"
+
+				if env.string(internEnv("USE_PYTHON3_PREV")) == "yes" {
+					include = "contrib/libs/python/Include_prev"
+				}
+			}
+
+			if env.string(internEnv("USE_PYTHON3_PREV")) == "yes" {
+				flags = append(flags, internStr("-DUSE_PYTHON3_PREV").any())
+			}
+
+			appendMacroEnv(env, "CFLAGS", strings.Join(anyStrs(flags), " "))
+			appendMacroEnv(env, "ADDINCL", "GLOBAL "+include)
+			d.moduleScopeCFlags = append(d.moduleScopeCFlags, flags...)
+			paths := expandConfigVFSPaths(internAnys(strings.Fields(include)), env)
+			d.addIncl = append(d.addIncl, paths...)
+			d.addInclGlobal = append(d.addInclGlobal, paths...)
+			d.addInclUserGlobal = append(d.addInclUserGlobal, paths...)
+		} else if env.string(internEnv("USE_SYSTEM_PYTHON")) != "" {
+			appendMacroEnv(env, "PEERDIR", "build/platform/python")
+			d.peerdirs = append(d.peerdirs, internStr("build/platform/python").any())
+		} else {
+			flags := expandStmtToken(env.string(internEnv("PYTHON_INCLUDE")), env)
+
+			appendMacroEnv(env, "CFLAGS", flags)
+			d.moduleScopeCFlags = append(d.moduleScopeCFlags, internAnys(splitShellWords(flags))...)
+		}
+	}
 }
 
 func (e *EmitContext) cowPeerdirs() []string {

@@ -277,7 +277,9 @@ type ModuleData struct {
 	useDynamicCuda           bool
 	splitDwarf               bool
 	noPythonIncl             bool
+	python2Headers           bool
 	python3NativeIncl        bool
+	pythonPeerTags           []string
 	noImportTracing          bool
 	usePython2               bool
 	usePython3               bool
@@ -811,6 +813,9 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	finishPythonImportMask(env, d)
 	bindRunProgramCalls(d, env)
 	d.test.expandValues(env)
+	if d.python2Headers || d.python3NativeIncl {
+		d.pythonPeerTags = strings.Fields(env.string(internEnv("PEERDIR_TAGS")))
+	}
 
 	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
 		for i, group := range d.pySrcGroups {
@@ -858,6 +863,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
 	d.cfAddIncl = nil
 	d.cfAddInclGlobal = nil
+	finishPythonHeaderConfig(d, env)
 
 	dedupers.with(func(deduper *DeDuper) {
 		filterInvalidAddIncl(fs, deduper, d, modulePath, onWarn)
@@ -1165,7 +1171,7 @@ func usePython2(env Environment, d *ModuleData, moduleTag STR) {
 }
 
 func applyPythonAddIncl(modulePath string, d *ModuleData, env Environment) {
-	if d.python3NativeIncl {
+	if d.python2Headers || d.python3NativeIncl {
 		return
 	}
 
@@ -1355,7 +1361,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.moduleVariants = defaultProtoVariants
 			}
 
-			if d.unit.Tag == unitTagPy2 || d.unit.Tag == unitTagPy2Native || d.unit.Tag == strPyProto {
+			if d.unit.HashTag == unitTagPy2Native {
+				applyPython2Addincl(d, env, true)
+			} else if d.unit.HashTag == unitTagPy3Native {
+				applyPython3Addincl(d, env)
+			} else if d.unit.Tag == unitTagPy2 || d.unit.Tag == unitTagPy2Native || d.unit.Tag == strPyProto {
 				usePython2(env, d, d.unit.HashTag)
 			} else if d.unit.Tag != 0 {
 				env.setStringID(envMODULE_TAG, d.unit.HashTag)
@@ -3269,11 +3279,15 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		env.setBool(envUseNasmAssembler, true)
 		d.peerdirs = append(d.peerdirs, strBuildExternalResourcesNasm.any())
 	case tokUsePython2:
+		applyPython2Addincl(d, env, false)
 		d.peerdirs = append(d.peerdirs, strContribLibsPython.any())
-
-		usePython2(env, d, unitTagPy2)
 	case tokPython2Addincl:
-		usePython2(env, d, unitTagPy2Native)
+		if d.moduleStmt != nil && d.moduleStmt.Name == tokPy23NativeLibrary && d.unit.HashTag == unitTagPy3Native {
+			// PY23_NATIVE_LIBRARY's PY3 context aliases this macro.
+			applyPython3Addincl(d, env)
+		} else {
+			applyPython2Addincl(d, env, true)
+		}
 	case tokPython3Addincl:
 		applyPython3Addincl(d, env)
 	case tokUsePython3:
@@ -5240,6 +5254,30 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		name := ctx.moduleName(peerVFS.relString())
 
 		peer.YqlCurrent = name == tokYqlLibrary || isYqlUdfStaticModule(name)
+	}
+
+	if d.pythonPeerTags != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokProtoLibrary {
+		declaration := stmtsModuleDeclaration(moduleStmts(ctx, peerVFS.relString()))
+		matched := false
+		// OrderSubModules traverses its tag-keyed TMap, visiting self peers
+		// first. Both Python proto contexts have the C++ context as a self peer.
+		for _, candidateLanguage := range []Language{LangCPP, LangPy, LangPy2} {
+			if slices.Contains(d.pythonPeerTags, protoModuleTag(candidateLanguage, declaration.Schema)) {
+				candidate := peer
+				candidate.Language = candidateLanguage
+				if demand == demandNone && ctx.roots[candidate] {
+					candidate.Demand = ctx.rootDemand
+				}
+				if genModule(ctx, candidate).protoExcluded {
+					continue
+				}
+				peer, matched = candidate, true
+				break
+			}
+		}
+		if !matched {
+			throwFmt("gen: %s: no compatible Python header peer in %s", parent.Path.relString(), peerVFS.relString())
+		}
 	}
 
 	if demand == demandNone && ctx.roots[peer] {

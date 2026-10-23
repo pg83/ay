@@ -353,7 +353,7 @@ class ThinDeclarativeMacrosTest(unittest.TestCase):
     def test_python3_addincl_expands_configured_header_paths_and_peer_tags(self):
         sources = {
             "renamed/custom/ya.make": native(
-                "SET(HEADER_DIR renamed/sdk)\nSET(PY3_BASE_INCLUDE_DIR $HEADER_DIR)\n"
+                "SET(HEADER_DIR renamed/sdk)\nSET(PY3_BASE_INCLUDE_DIR ${HEADER_DIR})\n"
                 "SET(_CPP_PROTO_COMPATIBLE_TAGS CPP_PROTO_DIRECT_HEADERS)\n"
                 "SET(YQL_UDF_STATIC_PEERDIR_TAG STATIC_VARIANT)\nSET(YQL_ABI_PEERDIR_TAG ABI_VARIANT)\n"
                 "PYTHON3_ADDINCL()\nSET(HEADER_DIR later)\n"

@@ -118,6 +118,7 @@ const (
 )
 
 type ModuleEmitResult struct {
+	protoExcluded                   bool
 	testDependencyModule            TestDependencyModule
 	ModuleVariants                  uint16
 	GlobalSources                   []VFS
@@ -1305,8 +1306,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		tag = sandboxPythonTaskVariant(moduleName, instance.Kind, instance.Language)
 	}
 
-	if d.moduleStmt != nil && d.moduleStmt.Schema {
-		tag = protoModuleTag(instance.Language, true)
+	if d.moduleStmt != nil && (d.moduleStmt.Schema || d.moduleStmt.Name == tokProtoLibrary && (instance.Language == LangPy || instance.Language == LangPy2)) {
+		tag = protoModuleTag(instance.Language, d.moduleStmt.Schema)
 	}
 
 	if moduleName == tokYqlUdf || moduleName == tokYqlUdfContrib {
@@ -1318,7 +1319,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		excluded = sandboxPythonTaskExcluded(ctx, instance, tag)
 	}
 	if tag != "" && excluded {
-		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants}
+		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, protoExcluded: moduleName == tokProtoLibrary}
 
 		ctx.memoPut(instance, result)
 
@@ -1371,7 +1372,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	e.prepareUserverProtos()
 
 	if d.moduleStmt.Name == tokProtoLibrary && instance.Language == LangCPP && moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
-		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, ModuleStmtName: tokProtoLibrary}
+		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, ModuleStmtName: tokProtoLibrary, protoExcluded: true}
 
 		ctx.memoPut(instance, result)
 
