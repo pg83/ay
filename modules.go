@@ -5255,6 +5255,7 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 
 	var files []string
 
+	seen := make(map[string]bool)
 	moduleRootRel := modulePath
 
 	appendPyFile := func(rel string) {
@@ -5268,7 +5269,12 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 			return
 		}
 
-		files = append(files, strings.TrimPrefix(rel, moduleRootRel+"/"))
+		file := strings.TrimPrefix(rel, moduleRootRel+"/")
+
+		if !seen[file] {
+			seen[file] = true
+			files = append(files, file)
+		}
 	}
 
 	for _, dir := range dirs {
