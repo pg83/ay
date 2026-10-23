@@ -811,6 +811,12 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	nativeSources := d.srcs[:0]
 
 	for _, meta := range d.srcs {
+		if srcExtClassOf(meta.Source) == srcExtCSource {
+			if rel, rooted := strings.CutPrefix(meta.Source.string(), "$S/"); rooted {
+				meta.Source = sourceClean(rel).any()
+			}
+		}
+
 		if extIsPyx(meta.Source.relOrSelf().string()) {
 			d.cythonCpp = append(d.cythonCpp, &CythonStmt{Src: meta.Source.string(), Seq: meta.Seq, Native: &meta, Python3: env.bool(envPYTHON3)})
 		} else {
