@@ -39,20 +39,20 @@ func (e *EmitContext) goFmtSuites(globals []ResourceDecl) []*TestSuite {
 	}
 
 	var suites []*TestSuite
-	var fmtFiles []VFS
+	var fmtFiles []ANY
 
 	isTestFor := e.d.moduleStmt.Name == tokGoTest && e.d.setVars[strGO_TEST_IMPORT_PATH] != 0
 
 	if !isTestFor {
 		for _, meta := range e.d.srcs {
 			if !meta.Global && meta.Compile.Variant == 0 && strings.HasSuffix(meta.Source.string(), ".go") {
-				fmtFiles = append(fmtFiles, e.moduleSourceVFS(meta.Source))
+				fmtFiles = append(fmtFiles, meta.Source)
 			}
 		}
 	}
 
 	for _, src := range concat(e.d.goFmtSrcs, e.d.goTestSrcs, e.d.goXTestSrcs) {
-		fmtFiles = append(fmtFiles, e.moduleSourceVFS(src))
+		fmtFiles = append(fmtFiles, src)
 	}
 
 	{
@@ -61,7 +61,14 @@ func (e *EmitContext) goFmtSuites(globals []ResourceDecl) []*TestSuite {
 		byDir := map[string][]VFS{}
 		seen := map[VFS]bool{}
 
-		for _, f := range fmtFiles {
+		for _, src := range fmtFiles {
+			f := e.moduleSourceVFS(src)
+			_, rooted := moduleRootedVFS(e.instance.Path.relString(), src.string())
+
+			if !rooted && f.isSource() && !e.ctx.fs.isFile(srcRootRel, f.relString()) {
+				continue
+			}
+
 			if !goNeedLint(f) || seen[f] {
 				continue
 			}
