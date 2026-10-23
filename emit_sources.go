@@ -113,6 +113,8 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtEv:
 		if isGoModuleType(e.d.unit.Type) {
 			e.emitGoEvSource(meta)
+		} else if isPythonProtoModule(e.d) {
+			e.emitPyProtoSource(src, meta.Stmt, 0, meta.Prio, meta.Seq)
 		} else {
 			e.emitLibraryEvSource(meta)
 		}

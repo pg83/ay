@@ -25,7 +25,11 @@ func parsePyProtoPlugin(stmt UnknownStmt) PyProtoPlugin {
 	}
 }
 
-func pyProtoSuffixes(d *ModuleData) []string {
+func pyProtoSuffixes(d *ModuleData, event bool) []string {
+	if event {
+		return []string{"_ev_pb2.py"}
+	}
+
 	suffixes := []string{"_pb2.py"}
 
 	for _, plugin := range d.pyProtoPlugins {

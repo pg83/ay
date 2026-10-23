@@ -1023,6 +1023,14 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		}
 	}
 
+	for _, src := range d.pySrcs {
+		if extIsEv(src.relOrSelf().string()) {
+			d.peerdirs = append(d.peerdirs, strContribLibsProtobuf.any(), strLibraryCppEventlogProto.any())
+
+			break
+		}
+	}
+
 	if len(d.pyProtoPlugins) > 0 {
 		for _, src := range d.pySrcs {
 			if extIsProto(src.relOrSelf().string()) {

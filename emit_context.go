@@ -78,8 +78,8 @@ type EmitContext struct {
 	protoPathPos       int
 	pbEmission         [3]PbModuleEmission
 	pbEmissionOk       [3]bool
-	pyPBEmission       PyPBModuleEmission
-	pyPBOk             bool
+	pyPBEmission       [2]PyPBModuleEmission
+	pyPBOk             [2]bool
 	objcopyCtx         ObjcopyEmitCtx
 	objcopyOk          bool
 	protoResVal        ProtoSrcsResult

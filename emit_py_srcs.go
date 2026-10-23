@@ -128,7 +128,7 @@ func (e *EmitContext) registerCollectPySrcs() {
 				keyPrefix = pyResourceKeyPrefix(scope.TopLevel, scope.Namespace, module)
 			}
 
-			if extIsProto(src.relOrSelf().string()) {
+			if extIsProto(src.relOrSelf().string()) || extIsEv(src.relOrSelf().string()) {
 				logical := pyProtoLogicalModule(module, src.relOrSelf().string(), scope)
 
 				if isPythonProtoModule(d) && scope.ModuleName == nil {

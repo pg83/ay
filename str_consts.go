@@ -344,6 +344,7 @@ var (
 	strLibrary                                                                               = internStr("library")
 	strLibraryCppDomscheme                                                                   = internStr("library/cpp/domscheme")
 	strLibraryCppEventlog                                                                    = internStr("library/cpp/eventlog")
+	strLibraryCppEventlogProto                                                               = internStr("library/cpp/eventlog/proto")
 	strLibraryCppProtoConfigCodegen                                                          = internStr("library/cpp/proto_config/codegen")
 	strLibraryCppProtoConfigProtos                                                           = internStr("library/cpp/proto_config/protos")
 	strLibraryCppRegexPireInline                                                             = internStr("library/cpp/regex/pire/inline")

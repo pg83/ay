@@ -68,7 +68,7 @@ func (p *pyPBPending) emitPending() {
 }
 
 func protoPythonResourceKeyParts(instance ModuleInstance, d *ModuleData, src string) (dir, sep, base string) {
-	base = strings.TrimSuffix(src, ".proto")
+	base = strings.TrimSuffix(src, filepath.Ext(src))
 
 	if d.pyNamespace == nil {
 		return instance.Path.relString(), "/", base
@@ -106,7 +106,7 @@ func pyProtoLogicalModule(module, src string, scope PyScope) string {
 		prefix = ""
 	}
 
-	return prefix + strings.ReplaceAll(strings.TrimSuffix(src, ".proto"), "/", ".")
+	return prefix + strings.ReplaceAll(strings.TrimSuffix(src, filepath.Ext(src)), "/", ".")
 }
 
 func pyProtoOutputToken(instance ModuleInstance, out VFS, generatedProto bool) ANY {
@@ -121,7 +121,7 @@ func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, outputs []
 	instance, d := e.instance, e.d
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
 
-	for i, suffix := range pyProtoSuffixes(d) {
+	for i, suffix := range pyProtoSuffixes(d, extIsEv(src)) {
 		key := keyDir + keySep + keyBase + suffix
 
 		if logicalModule != 0 {
@@ -167,33 +167,46 @@ func (e *EmitContext) pyProtoIncludePlan() []VFS {
 	return concat(dedup(e.d.protoIncludeLocal), e.peers.ProtoInclude)
 }
 
-func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS) *PyPBModuleEmission {
-	if e.pyPBOk {
-		return &e.pyPBEmission
+func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, event bool) *PyPBModuleEmission {
+	mode := 0
+
+	if event {
+		mode = 1
 	}
 
-	e.pyPBOk = true
+	if e.pyPBOk[mode] {
+		return &e.pyPBEmission[mode]
+	}
+
+	e.pyPBOk[mode] = true
 
 	ctx, _, d := e.ctx, e.instance, e.d
-	pe := &e.pyPBEmission
+	pe := &e.pyPBEmission[mode]
 	protoInclude := e.pyProtoIncludePlan()
 
 	*pe = PyPBModuleEmission{}
 
-	for _, plugin := range d.pyProtoPlugins {
+	plugins := d.pyProtoPlugins
+	mypy := !d.noMypy && !event
+
+	if event {
+		plugins = nil
+	}
+
+	for _, plugin := range plugins {
 		ref, binary := ctx.tool(internArg(plugin.ToolPath))
 
 		pe.pluginRefs = append(pe.pluginRefs, ref)
 		pe.pluginBinaries = append(pe.pluginBinaries, binary)
 	}
 
-	if !d.noMypy {
+	if mypy {
 		pe.mypyRef, pe.mypyBinary = ctx.tool(argContribPythonMypyProtobufBinProtocGenMypy)
 	}
 
-	suffixes := pyProtoSuffixes(d)
+	suffixes := pyProtoSuffixes(d, event)
 
-	if !d.noMypy {
+	if mypy {
 		suffixes = append(suffixes, "_pb2.pyi")
 	}
 
@@ -241,9 +254,9 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS) *PyPBModuleEmissio
 	na.anys.commit(len(mid))
 	pe.mid = mid[:len(mid):len(mid)]
 
-	tail := na.anys.alloc(2 * (len(d.pyProtoPlugins) + 1))[:0]
+	tail := na.anys.alloc(2 * (len(plugins) + 1))[:0]
 
-	for i, plugin := range d.pyProtoPlugins {
+	for i, plugin := range plugins {
 		binary := pe.pluginBinaries[i]
 
 		tail = append(tail,
@@ -252,7 +265,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS) *PyPBModuleEmissio
 		)
 	}
 
-	if !d.noMypy {
+	if mypy {
 		tail = append(tail,
 			internV("--plugin=protoc-gen-mypy=", pe.mypyBinary.prefix(), pe.mypyBinary.relString()).any(),
 			internV("--mypy_out=$(B)/", protoRoot).any(),
@@ -276,14 +289,20 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule 
 	}
 
 	protocLDRef, protocBinary := ctx.tool(protoc)
-	pe := e.newPyPBModuleEmission(protocBinary)
+	event := extIsEv(src)
+
+	if event {
+		src = srcTok.string()
+	}
+
+	pe := e.newPyPBModuleEmission(protocBinary, event)
 	scanCtx := d.scanCtx
 	protoSrcVFS := resolveSourceOrGeneratedVFS(ctx, instance, srcTok.string(), d.srcDirs)
 	protoRel := e.protoSourceRel(protoSrcVFS.string())
 	protoRelPath := protoRel.string()
-	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
+	protoBase := strings.TrimSuffix(protoRelPath, filepath.Ext(protoRelPath))
 	internal := "__int" + protoPythonVersion(d) + "__"
-	pyOut := build(protoBase, internal, "_pb2.py")
+	pyOut := build(protoBase, internal, pe.suffixes[0])
 	outputs := na.vfs.alloc(len(pe.suffixes))[:0]
 
 	for _, suffix := range pe.suffixes {
@@ -319,7 +338,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule 
 		}
 	}
 
-	if !d.noMypy && pe.mypyRef != 0 {
+	if pe.mypyBinary != 0 && pe.mypyRef != 0 {
 		toolRefs = append(toolRefs, pe.mypyRef)
 	}
 
@@ -340,7 +359,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule 
 	toolInputs = append(toolInputs, protocBinary)
 	toolInputs = append(toolInputs, pe.pluginBinaries...)
 
-	if !d.noMypy {
+	if pe.mypyBinary != 0 {
 		toolInputs = append(toolInputs, pe.mypyBinary)
 	}
 

@@ -151,7 +151,13 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 		protoRelID = e.protoSourceRel(protoInput.string())
 		protoRel = protoRelID.string()
 	case srcExtEv, srcExtCfgProto:
-		protoRelID = e.protoSourceRel(src)
+		if class == srcExtEv && isPythonProtoModule(d) {
+			protoInput = resolveSourceVFS(e.ctx, e.instance, src, d.srcDirs)
+			protoRelID = e.protoSourceRel(protoInput.string())
+		} else {
+			protoRelID = e.protoSourceRel(src)
+		}
+
 		protoRel = protoRelID.string()
 	}
 
@@ -164,7 +170,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 		base := strings.TrimSuffix(protoRel, ".proto")
 
 		if isPythonProtoModule(d) {
-			for _, suffix := range pyProtoSuffixes(d) {
+			for _, suffix := range pyProtoSuffixes(d, false) {
 				e.prodVFS = append(e.prodVFS, build(base, "__int", protoPythonVersion(d), "__", suffix))
 			}
 		} else {
@@ -184,7 +190,15 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 				}
 			}
 		}
-	case srcExtEv, srcExtCfgProto:
+	case srcExtEv:
+		if isPythonProtoModule(d) {
+			base := strings.TrimSuffix(protoRel, ".ev")
+
+			e.prodVFS = append(e.prodVFS, build(base, "__int", protoPythonVersion(d), "___ev_pb2.py"))
+		} else {
+			e.prodVFS = append(e.prodVFS, build(protoRel, ".pb.h"), build(protoRel, ".pb.cc"))
+		}
+	case srcExtCfgProto:
 		e.prodVFS = append(e.prodVFS, build(protoRel, ".pb.h"), build(protoRel, ".pb.cc"))
 	case srcExtGztProto:
 		if !isPythonProtoModule(d) {
@@ -196,7 +210,7 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	module := e.instance.Path.relString()
 	insMark := len(e.prodVFS)
 
-	if class == srcExtProto {
+	if class == srcExtProto || class == srcExtEv && isPythonProtoModule(d) {
 		if _, rooted := moduleRootedVFS(module, src); !rooted && protoInput.isSource() && !e.ctx.fs.isFile(srcRootRel, protoInput.relString()) {
 			protoInput = protoInput.rel().build()
 		}

@@ -993,7 +993,14 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		case srcExtEv:
 			if !evInduced && !isGoModuleType(d.unit.Type) {
 				evInduced = true
-				d.peerdirs = append(d.peerdirs, strLibraryCppEventlog.any(), strContribLibsProtobuf.any())
+
+				eventPeer := strLibraryCppEventlog
+
+				if isPythonProtoModule(d) {
+					eventPeer = strLibraryCppEventlogProto
+				}
+
+				d.peerdirs = append(d.peerdirs, eventPeer.any(), strContribLibsProtobuf.any())
 			}
 		case srcExtProto:
 			if !protoInduced {

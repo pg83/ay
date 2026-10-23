@@ -9,11 +9,6 @@ import lib
 
 
 EMPTY_LIBRARY = "LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(x.cpp)\nEND()\n"
-EV_WARNING = (
-    "unsupported-source: py-addressed PROTO_LIBRARY p with .ev sources is "
-    "not modelled; source skipped"
-)
-
 
 def py_proto_files():
     files = {
@@ -50,7 +45,7 @@ def py_proto_files():
     for path in (
         "contrib/libs/python", "contrib/python/protobuf",
         "contrib/tools/python3/Modules/_sqlite", "kernel/gazetteer/proto",
-        "library/cpp/eventlog", "library/cpp/malloc/jemalloc",
+        "library/cpp/eventlog", "library/cpp/eventlog/proto", "library/cpp/malloc/jemalloc",
         "library/cpp/resource", "library/python/import_tracing/constructor",
         "library/python/runtime_py3/main", "library/python/testing/import_test",
     ):
@@ -155,7 +150,7 @@ class ProtoPyVariantTest(unittest.TestCase):
         py_pb = lib.node_by_output(graph, "$(B)/p/a__intpy3___pb2.py")
         self.assertEqual(py_pb["kv"]["p"], "PB")
 
-    def test_python_variant_uses_gazetteer_generated_proto_and_skips_events(self):
+    def test_python_variant_uses_gazetteer_and_event_python_producers(self):
         files = py_proto_files()
         files["py/ya.make"] = "PY3_PROGRAM()\nPEERDIR(p)\nPY_SRCS(m.py)\nEND()\n"
         files.update({
@@ -166,7 +161,8 @@ class ProtoPyVariantTest(unittest.TestCase):
         })
         graph, stderr = make_keep_going(files, "py")
 
-        self.assertEqual(stderr, f"\x1b[33m{EV_WARNING}\x1b[0m\n")
+        self.assertEqual(stderr, "")
+        self.assertEqual(lib.node_by_output(graph, "$(B)/p/e__intpy3___ev_pb2.py")["kv"]["p"], "PB")
         py_outputs = [
             output
             for node in graph["graph"]

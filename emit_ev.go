@@ -1,7 +1,5 @@
 package main
 
-import "fmt"
-
 var (
 	evEventlogIncludePath     = evEventlogIncludeVFS.string()
 	evExtraProtobufDirectives = quotedDirectives(evExtraProtobufHeaders)
@@ -41,13 +39,6 @@ func appendEvWitnessExtras(dst []IncludeDirective, evRel STR) []IncludeDirective
 func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 	src := meta.Source
 	ctx, instance, d := e.ctx, e.instance, e.d
-
-	if isPythonProtoModule(d) {
-		ctx.onWarn(Warn{Kind: WarnUnsupportedSource, Message: fmt.Sprintf("py-addressed PROTO_LIBRARY %s with .ev sources is not modelled; source skipped", instance.Path.relString())})
-
-		return
-	}
-
 	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
 	evRel := e.protoSourceRel(e.moduleSourceName(src))
 	evRelPath := evRel.string()
