@@ -3352,9 +3352,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
 	case tokAllPySrcs:
-		stmt := v
-
-		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, Prio: stmtPrioSrcs})
+		// python.conf forwards _GLOB's root-relative results through PY_SRCS(_MR).
+		// allPySrcArgs returns the equivalent module-relative source arguments;
+		// interpret the same PY_SRCS call, including its source-time bindings.
+		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPySrcs, Args: allPySrcArgs(fs, modulePath, v)}, d, env, onWarn)
 	case tokPyMain:
 
 		if len(v.Args) != 1 {
@@ -5034,17 +5035,19 @@ func expandSourceScalarVarRef(s string, env Environment) string {
 	})
 }
 
-func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData, group int) {
+func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 	dirs := []string{"."}
 	noTestFiles := false
 	recursive := false
+	topLevel := false
+	var namespace ANY
 
 	for i := 0; i < len(v.Args); i++ {
 		a := v.Args[i]
 
 		switch a.string() {
 		case "TOP_LEVEL":
-			d.pyTopLevel = true
+			topLevel = true
 		case "NAMESPACE":
 			i++
 
@@ -5052,7 +5055,7 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData, grou
 				throwFmt("ALL_PY_SRCS NAMESPACE expects a value")
 			}
 
-			d.pyNamespace = ptr(v.Args[i])
+			namespace = v.Args[i]
 		case "RECURSIVE":
 			recursive = true
 		case "NO_TEST_FILES":
@@ -5148,22 +5151,17 @@ func applyAllPySrcs(fs FS, modulePath string, v UnknownStmt, d *ModuleData, grou
 		}
 	}
 
-	d.pySrcs = append(d.pySrcs, internAnys(files)...)
+	var args []ANY
 
-	if len(files) > 0 {
-		if d.pyYapycSuffix == "" {
-			d.pyYapycSuffix = pySrcYapycSuffix(modulePath)
-		}
-
-		scopes := make([]PyScope, len(files))
-
-		for i := range scopes {
-			scopes[i] = PyScope{TopLevel: d.pyTopLevel, Namespace: d.pyNamespace}
-		}
-
-		d.pySrcGroups[group].Srcs = internAnys(files)
-		d.pySrcGroups[group].Scopes = scopes
+	if namespace != 0 && namespace.string() != "" {
+		args = append(args, kwNAMESPACE.any(), namespace)
 	}
+
+	if topLevel {
+		args = append(args, kwTOP_LEVEL.any())
+	}
+
+	return append(args, internAnys(files)...)
 }
 
 func peerEntryLanguage(parent ModuleInstance, d *ModuleData) Language {

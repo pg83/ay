@@ -1360,12 +1360,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 	}()
 
-	for i, group := range d.pySrcGroups {
-		if group.Statement != nil && group.Statement.Name == tokAllPySrcs {
-			applyAllPySrcs(ctx.fs, instance.Path.relString(), *group.Statement, d, i)
-		}
-	}
-
 	if d.conflictMod != nil {
 		throwFmt("gen: %s declares multiple modules (%s and %s); only one is allowed", instance.Path.relString(), d.moduleStmt.Name, d.conflictMod.Name)
 	}
