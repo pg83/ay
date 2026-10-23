@@ -216,11 +216,12 @@ func (m NetworkMode) string() string {
 }
 
 type Requirements struct {
-	CPU        float64
-	RAM        float64
-	Network    NetworkMode
-	RAMDisk    float64
-	HasRAMDisk bool
+	CPU             float64
+	RAM             float64
+	Network         NetworkMode
+	RAMDisk         float64
+	HasRAMDisk      bool
+	TestOutputLimit uint64
 }
 
 type ProcKind uint8
@@ -333,6 +334,10 @@ func appendRequirements(buf []byte, r *Requirements) []byte {
 
 	if r.HasRAMDisk {
 		o.num("ram_disk", r.RAMDisk)
+	}
+
+	if r.TestOutputLimit != 0 {
+		o.num("test_output_limit", float64(r.TestOutputLimit))
 	}
 
 	return append(o.buf, '}')

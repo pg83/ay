@@ -798,6 +798,10 @@ func testRequirements(s *TestSuite) *Requirements {
 		r.RAMDisk = float64(n)
 	}
 
+	if slices.Contains(s.tags, "ya:huge_logs") {
+		r.TestOutputLimit = 1024 * 1024 * 1024
+	}
+
 	r.CPU, r.RAM = float64(cpu), float64(ram)
 
 	return r
