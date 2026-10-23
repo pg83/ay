@@ -27,9 +27,22 @@ func (fs *OsFS) platformInit() {
 		}
 
 		fs.rootFD = fd
+		fs.fileCloseQueue = make(chan int, 256)
+
+		go fs.closeFiles()
 
 		return
 	}
+}
+
+func (fs *OsFS) closeFiles() {
+	for fd := range fs.fileCloseQueue {
+		syscall.Close(fd)
+	}
+}
+
+func (fs *OsFS) closeFile(fd int) {
+	fs.fileCloseQueue <- fd
 }
 
 func (fs *OsFS) openatRel(dirFD int, rel string, flags int) (int, syscall.Errno) {
@@ -87,7 +100,7 @@ func (fs *OsFS) readFileRel(rel string) [][]byte {
 		throwFmt("open %s: %v", rel, errno)
 	}
 
-	defer syscall.Close(fd)
+	defer fs.closeFile(fd)
 
 	n := readEINTR(fd, fs.readBuf)
 

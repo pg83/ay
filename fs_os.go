@@ -75,6 +75,7 @@ type OsFS struct {
 	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
 	readBuf        []byte
 	readResult     [2][]byte
+	fileCloseQueue chan int
 	direntBuf      []byte
 	mmapCur        []byte
 	rootFD         int
