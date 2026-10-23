@@ -172,7 +172,6 @@ type PbModuleEmission struct {
 	grpcOutputsBeforeBase bool
 	extraPlugins          []ResolvedCPPProtoPlugin
 	pbGenRefs             []NodeRef
-	grpcCCRefs            []NodeRef
 	grpcHRefs             []NodeRef
 	blocks                PbArgBlocks
 	pendingCommon         *protoPBCommon
@@ -312,7 +311,6 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 	pe.pbGenRefs = refs[:len(refs):len(refs)]
 
 	if cfg.grpc {
-		pe.grpcCCRefs = na.refList(pe.protocLDRef, pe.grpcCppLDRef)
 		pe.grpcHRefs = na.refList(pe.grpcCppLDRef)
 	}
 
@@ -548,7 +546,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	var grpcCCParsed, grpcHParsed []IncludeDirective
 
 	if needsGRPCParsed {
-		grpcCCParsed = na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(pbH.rel().any())})
+		grpcCCParsed = pbCCParsed
 
 		grpcHParsed = na.dirs.alloc(2 + len(directImports))[:0]
 		grpcHParsed = append(grpcHParsed, IncludeDirective{kind: includeQuoted, target: includeTarget(pbH.rel().any())})
@@ -576,6 +574,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			switch out {
 			case grpcPbCC:
 				parsed = ParsedIncludeSet{parsedIncludesLocal: grpcCCParsed}
+				pluginRefs = pbCCRefs
 			case grpcPbH:
 				parsed = ParsedIncludeSet{parsedIncludesLocal: grpcHParsed}
 			}
@@ -594,7 +593,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		e.register(GeneratedFileInfo{
 			OutputPath:     grpcPbCC,
 			ProducerRef:    pbRef,
-			GeneratorRefs:  pe.grpcCCRefs,
+			GeneratorRefs:  pbCCRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: grpcCCParsed},
 			OnUse:          pbPE,
 		})
