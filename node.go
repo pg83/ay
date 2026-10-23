@@ -31,6 +31,7 @@ type Node struct {
 	Cmds                []Cmd         `json:"cmds"`
 	Env                 EnvVars       `json:"env"`
 	Inputs              InputChunks   `json:"inputs"`
+	BuildFromInputs     InputChunks   `json:"-"`
 	TextInputs          []VFS         `json:"-"`
 	InputNames          []STR         `json:"-"`
 	InputClosure        Closure       `json:"-"`
@@ -47,6 +48,16 @@ type Node struct {
 	ForeignDepRefs      []NodeRef     `json:"-"`
 	Resources           []STR         `json:"-"`
 	sourceInputsPending bool
+}
+
+// buildFromInputs excludes flattened IncludedDeps from physical-source forwarding.
+// Nodes without a separate structural input plan use their ordinary inputs.
+func (n *Node) buildFromInputs() InputChunks {
+	if n.BuildFromInputs != nil {
+		return n.BuildFromInputs
+	}
+
+	return n.Inputs
 }
 
 func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) bool) {

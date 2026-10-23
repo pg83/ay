@@ -340,6 +340,14 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 			if info := e.codegen.lookup(input); info != nil && len(info.IncludedBuildInputs) > 0 {
 				included = append(included, info.IncludedBuildInputs)
 			}
+		}
+	}
+
+	for _, chunk := range node.buildFromInputs() {
+		for _, input := range chunk {
+			if info := e.codegen.lookup(input); info != nil && info.IncludedInputs != nil {
+				included = append(included, info.IncludedInputs.sourceInputs(e.ctx.na))
+			}
 
 			template := strings.HasSuffix(input.relString(), ".in")
 			text := input.isSource() && slices.Contains(node.TextInputs, input)

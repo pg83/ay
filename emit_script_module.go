@@ -76,7 +76,7 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 	// the command's included-dependency set. Publish this separate producer
 	// obligation before a closure scan can visit the lazy module output.
 	var templates []VFS
-	for _, chunk := range node.Inputs {
+	for _, chunk := range node.buildFromInputs() {
 		for _, input := range chunk {
 			if input.isBuild() && strings.HasSuffix(input.relString(), ".in") && reg.lookup(input) != nil {
 				templates = append(templates, input)
@@ -85,8 +85,16 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 	}
 	templates = na.dedupClosure(templates)
 
+	var includedInputs *IncludedInputPlan
+	if len(templates) > 0 {
+		includedInputs = &IncludedInputPlan{Roots: templates, Scanner: e.scanner, Context: e.d.scanCtx}
+	}
+
 	for _, out := range ownedOutputs {
-		reg.register(GeneratedFileInfo{OutputPath: out, OwnerModule: e.instance.Path, ProducerRef: ref, OnUse: pending, IncludedBuildInputs: templates})
+		// The same .in BuildFrom edges forward IncludedInputs, independently
+		// of IncludedDeps. Register the source traversal plan on the actual
+		// owned output, before its first scan, never on visible late aliases.
+		reg.register(GeneratedFileInfo{OutputPath: out, OwnerModule: e.instance.Path, ProducerRef: ref, OnUse: pending, IncludedBuildInputs: templates, IncludedInputs: includedInputs})
 	}
 
 	return ref

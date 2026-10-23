@@ -40,6 +40,27 @@ type GeneratedFileInfo struct {
 
 	// Generated .in BuildFrom producers propagated as included dependencies.
 	IncludedBuildInputs []VFS
+	IncludedInputs      *IncludedInputPlan
+}
+
+// Physical IncludedInputs retain the producing module's include-resolution
+// context. Module Include peers carry IncludedDeps, not this source view.
+type IncludedInputPlan struct {
+	Roots   []VFS
+	Scanner *IncludeScanner
+	Context *ScanContext
+}
+
+func (p *IncludedInputPlan) sourceInputs(na *NodeArenas) []VFS {
+	var sources []VFS
+
+	for _, root := range p.Roots {
+		cl := p.Scanner.walkClosure(root, p.Context, scanDomainCC)
+
+		sources = append(sources, cl.collect(na, VFS.isSource)...)
+	}
+
+	return na.dedupClosure(sources)
 }
 
 type SourceModuleInfo struct {

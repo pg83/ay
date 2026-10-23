@@ -63,6 +63,7 @@ func (e *EmitContext) emitGolaunchSource(kv *KV, script VFS, args []ANY, out VFS
 
 func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	var peers []VFS
+	var directPeers []VFS
 	var globals []ResourceDecl
 
 	seen := map[*ModuleEmitResult]bool{}
@@ -74,6 +75,10 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 		self.Demand = max(e.instance.Demand, demandSelf)
 
 		result := e.genPeerModule(self)
+
+		if out := moduleOutputPath(result); out != 0 {
+			directPeers = append(directPeers, out)
+		}
 
 		peers = e.appendPackagePeer(peers, result, seen)
 		globals = append(globals, result.ResourceGlobalClosure...)
@@ -89,6 +94,10 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 		}
 
 		result := e.genPeerModule(peer)
+
+		if out := moduleOutputPath(result); out != 0 {
+			directPeers = append(directPeers, out)
+		}
 
 		peers = e.appendPackagePeer(peers, result, seen)
 		e.globalSources = append(e.globalSources, result.GlobalSources...)
@@ -109,6 +118,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	na := e.ctx.na
 	copyScript := buildScriptsCopyToDirPy
 	inputs := []VFS{buildScriptsTouchPy, copyScript, buildScriptsProcessCommandFilesPy}
+	buildFrom := na.inputList(na.vfsList(inputs...), na.vfsList(directPeers...), na.vfsList(e.outs...))
 
 	var lateOuts []VFS
 
@@ -142,7 +152,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	args = append(args, strYaEndCommandFile.any())
 
 	node := Node{Module: true, Platform: e.instance.Platform, KV: &packageFinalKV, KVExts: []KVExt{{Key: "package", Val: "PACKAGE"}}, Env: envVarsVCS, Resources: usesPython3,
-		Inputs: na.inputList(na.vfsList(dedup(inputs)...)), Outputs: na.vfsList(append(outputs, e.outs...)...), DepRefs: na.refList(dedupRefs(e.refs)...),
+		Inputs: na.inputList(na.vfsList(dedup(inputs)...)), BuildFromInputs: buildFrom, Outputs: na.vfsList(append(outputs, e.outs...)...), DepRefs: na.refList(dedupRefs(e.refs)...),
 		Cmds: na.cmdList(e.pythonScriptCmd("touch.py", out.string()), Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS})}
 
 	suffix := ""
