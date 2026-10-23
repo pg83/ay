@@ -238,20 +238,19 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []st
 					}
 				}
 			case javaGlobRecursive:
-				queue := []string{dir}
-
-				for len(queue) > 0 {
-					d := queue[0]
-
-					queue = queue[1:]
-
-					for _, e := range ctx.javaListAll(d) {
-						if e.isDir && !ex.excluded(e.path, true) {
-							next = append(next, e.path)
-							queue = append(queue, e.path)
-						}
+				ctx.fs.walk(dir, func(rel string, isDir bool) bool {
+					if rel == dir {
+						return true
 					}
-				}
+
+					if !isDir || ex.excluded(rel, true) {
+						return false
+					}
+
+					next = append(next, rel)
+
+					return true
+				})
 
 				next = append(next, dir)
 			}

@@ -5,6 +5,22 @@ from test_java_features import tree
 
 
 class JavaSourceContractsTest(unittest.TestCase):
+    def test_recursive_sources_are_sorted_and_prune_excluded_directories(self):
+        files = tree('JAVA_SRCS(SRCDIR src **/*.java EXCLUDE src/skip src/Skip.java)', **{
+            'app/src/z/Z.java': 'class Z {}\n',
+            'app/src/a/deep/Deep.java': 'class Deep {}\n',
+            'app/src/a/A.java': 'class A {}\n',
+            'app/src/skip/deep/Hidden.java': 'class Hidden {}\n',
+        })
+        jar = lib.node_by_output(lib.make(files, 'app'), '$(B)/app/app.jar')
+        sources = [p for p in jar['inputs'] if p.endswith('.java')]
+        self.assertEqual(sources, [
+            '$(S)/app/src/Main.java',
+            '$(S)/app/src/a/A.java',
+            '$(S)/app/src/a/deep/Deep.java',
+            '$(S)/app/src/z/Z.java',
+        ])
+
     def test_java_wildcards_exclusions_and_repeated_separators(self):
         files = tree('JAVA_SRCS(SRCDIR src //*/M?in.java EXCLUDE ${ARCADIA_ROOT}/app/src//skip/M*.java)', **{
             'app/src/keep/Main.java': 'class Main {}\n',
