@@ -280,6 +280,7 @@ type ModuleData struct {
 	python2Headers           bool
 	python3NativeIncl        bool
 	pythonPeerTags           []string
+	pythonHeaderEnv          Environment
 	noImportTracing          bool
 	usePython2               bool
 	usePython3               bool
@@ -813,8 +814,14 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	finishPythonImportMask(env, d)
 	bindRunProgramCalls(d, env)
 	d.test.expandValues(env)
+	// CheckModuleEnd also closes an unfinished owner at EOF. An explicit END
+	// preserves its namespace before later directory statements are collected.
+	pythonHeaderEnv := env
+	if d.pythonHeaderEnv.s != nil {
+		pythonHeaderEnv = d.pythonHeaderEnv
+	}
 	if d.python2Headers || d.python3NativeIncl {
-		d.pythonPeerTags = strings.Fields(env.string(internEnv("PEERDIR_TAGS")))
+		d.pythonPeerTags = strings.Fields(pythonHeaderEnv.string(internEnv("PEERDIR_TAGS")))
 	}
 
 	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
@@ -863,7 +870,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
 	d.cfAddIncl = nil
 	d.cfAddInclGlobal = nil
-	finishPythonHeaderConfig(d, env)
+	finishPythonHeaderConfig(d, pythonHeaderEnv)
 
 	dedupers.with(func(deduper *DeDuper) {
 		filterInvalidAddIncl(fs, deduper, d, modulePath, onWarn)
@@ -1619,6 +1626,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			// Resource handlers read the raw owner value after its source body.
 			// Assignments after END belong to the enclosing directory namespace.
 			d.unit.HashTag = internStr(env.string(envMODULE_TAG))
+			if d.python2Headers || d.python3NativeIncl {
+				d.pythonHeaderEnv = env.clone()
+			}
 
 		case *JoinSrcsStmt:
 			expanded := *v
