@@ -1,6 +1,7 @@
 package main
 
 var tokName = [...]STR{
+	tokCompileCAsCxx:             internStr("COMPILE_C_AS_CXX"),
 	tokValidateDataRestart:       internStr("VALIDATE_DATA_RESTART"),
 	tokPack:                      internStr("PACK"),
 	tokSetCudaNodeRAMRequirement: internStr("SET_CUDA_NODE_RAM_REQUIEREMENT"),
@@ -600,6 +601,7 @@ const (
 	tokNoClangCoverage
 	tokNoClangMcdcCoverage
 	tokNoClangTidy
+	tokCompileCAsCxx
 	tokNoCompilerWarnings
 	tokNoExportDynamicSymbols
 	tokNoExtendedSourceSearch

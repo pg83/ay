@@ -85,6 +85,7 @@ var (
 	envErrorProneVersion            = internEnv("ERROR_PRONE_VERSION")
 	envExcludeSubmodules            = internEnv("EXCLUDE_SUBMODULES")
 	envExportsFile                  = internEnv("EXPORTS_FILE")
+	envExtraCFlags                  = internEnv("EXTRA_C_FLAGS")
 	envFAIL_PY2                     = internEnv("FAIL_PY2")
 	envFakeModule                   = internEnv("_FAKE_MODULE")
 	envGCC                          = internEnv("GCC")

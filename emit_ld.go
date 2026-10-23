@@ -132,7 +132,7 @@ func (e *EmitContext) emitLD(
 	vcsCVFS := build(linkDir, "/__vcs_version__.c")
 	vcsOVFS := build(linkDir, "/__vcs_version__.c", e.d.unit.objectSuffix(instance.Platform))
 	cmd0 := composeLDCmdVcsInfo(na, tc, vcsCVFS)
-	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, tc, vcsCVFS, vcsOVFS, compilerCommandFlags(moduleCFlags, Environment{s: &e.frame.ifEnv}).Args, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize)
+	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, tc, vcsCVFS, vcsOVFS, compilerCommandFlags(moduleCFlags, Environment{s: &e.frame.ifEnv}).Args, peerCFlagsGlobal, moduleScopeCFlags, Environment{s: &e.frame.ifEnv}, noCompilerWarnings, noOptimize)
 	cmd2 := composeLDCmdLinkExe(na, instance.Platform, tc, outputVFS, vcsOVFS, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths[peerWholeArchiveCount:], wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, linkExcludeLibraries, exportsScript, linkerScripts, noExportDynSymbols, wantsStrip, useArcadiaLibm, e.d.useDynamicCuda, dyn)
 	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputVFS, wantsSplitDwarf)
 	envVcsOnly := envVarsVCS
@@ -339,18 +339,19 @@ func composeLDCmdVcsInfo(na *NodeArenas, tc ModuleToolchain, vcsC VFS) []ANY {
 	)
 }
 
-func composeLDCmdVcsCompile(na *NodeArenas, p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ANY, noCompilerWarnings, noOptimize bool) []ANY {
-	return composeLDCmdVcsCompileForced(na, p, tc, vcsC, vcsO, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, noCompilerWarnings, noOptimize, false)
+func composeLDCmdVcsCompile(na *NodeArenas, p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ANY, env Environment, noCompilerWarnings, noOptimize bool) []ANY {
+	return composeLDCmdVcsCompileForced(na, p, tc, vcsC, vcsO, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags, env, noCompilerWarnings, noOptimize, false)
 }
 
-func composeLDCmdVcsCompileForced(na *NodeArenas, p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ANY, noCompilerWarnings, noOptimize, forceConsistentDebug bool) []ANY {
+func composeLDCmdVcsCompileForced(na *NodeArenas, p *Platform, tc ModuleToolchain, vcsC, vcsO VFS, moduleCFlags, peerCFlagsGlobal, moduleScopeCFlags []ANY, env Environment, noCompilerWarnings, noOptimize, forceConsistentDebug bool) []ANY {
 	bundle := compileFlagBundleFor(p)
+	extraCFlags := compilerExtraCFlags(env)
 
 	if noOptimize {
 		bundle.CFlags = suppressOptimize(bundle.CFlags)
 	}
 
-	bound := 16 + 2*(len(debugPrefixMapFlags)+len(xclangDebugCompilationDir)) +
+	bound := len(extraCFlags) + 16 + 2*(len(debugPrefixMapFlags)+len(xclangDebugCompilationDir)) +
 		len(bundle.ArchArgs) + len(p.SysrootArgs) + len(bundle.CFlags) +
 		len(warningFlags) + 1 + len(bundle.Defines) +
 		len(p.CFlags) + len(moduleCFlags) + len(peerCFlagsGlobal) +
@@ -361,6 +362,7 @@ func composeLDCmdVcsCompileForced(na *NodeArenas, p *Platform, tc ModuleToolchai
 	cmdArgs = append(cmdArgs, tc.CC.any(), p.TargetArg.any())
 	cmdArgs = appendAnyLists(cmdArgs, bundle.ArchArgs)
 	cmdArgs = append(cmdArgs, p.SysrootArgs...)
+	cmdArgs = append(cmdArgs, extraCFlags...)
 
 	cmdArgs = append(cmdArgs,
 		argDashC.any(),

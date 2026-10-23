@@ -285,7 +285,14 @@ func compilerCommandBlocks(raw *CcModuleArgBlocks, cxx bool) *CcModuleArgBlocks 
 
 	blocks := composeCCModuleArgBlocks(binding.arena, binding.platform, &in)
 
+	blocks.extraCFlags = compilerExtraCFlags(in.CompilerEnv)
 	binding.resolved[language] = &blocks
 
 	return &blocks
+}
+
+func compilerExtraCFlags(env Environment) []ANY {
+	flags, _ := compilerFlagExpression("$EXTRA_C_FLAGS", env, nil)
+
+	return internAnys(flags)
 }

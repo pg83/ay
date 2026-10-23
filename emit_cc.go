@@ -210,7 +210,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 		tail = blocks.cxxTail
 	}
 
-	total := 4 + 4
+	total := 4 + 5
 
 	if wrapcc {
 		total += 3
@@ -244,10 +244,11 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 
 	chunks[k] = compiler
 	chunks[k+1] = instance.Platform.CCHead
-	chunks[k+2] = tok[1:4]
-	chunks[k+3] = blocks.includes
-	chunks[k+4] = blocks.flags
-	k += 5
+	chunks[k+2] = blocks.extraCFlags
+	chunks[k+3] = tok[1:4]
+	chunks[k+4] = blocks.includes
+	chunks[k+5] = blocks.flags
+	k += 6
 
 	if len(tail) > 0 {
 		chunks[k] = tail
@@ -597,6 +598,7 @@ func appendCompileFlagPipeline(cmdArgs []ANY, bundle CompileFlagBundle, warningB
 
 type CcModuleArgBlocks struct {
 	compilerFlags *compilerFlagBlocks
+	extraCFlags   []ANY
 	wrapHead      []ANY
 	cHead         []ANY
 	cxxHead       []ANY

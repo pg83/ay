@@ -2477,6 +2477,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.flags.NoLibc = true
 		d.flags.NoRuntime = true
 		d.flags.NoUtil = true
+	case tokCompileCAsCxx:
+		env.setString(envExtraCFlags, expandConfScalar("$C_AS_CXX_FLAGS", env))
 	case tokNoCompilerWarnings:
 		if !d.flags.NoCompilerWarnings {
 			id := envCudaNvccFlags
