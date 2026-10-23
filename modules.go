@@ -1498,13 +1498,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 
 				global := routeAllToGlobal || globalNext
-				prio, seq := stmtPrioDefault, 0
-
-				if !global {
-					prio, seq = stmtPrioSrcs, d.nextDeclSeq()
-				}
-
-				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: prio, Seq: seq, Stmt: stmt, Global: global, Compile: compile})
+				// GLOBAL selects the module archive; it does not change the
+				// priority or declaration position of the SRCS instruction.
+				d.srcs = append(d.srcs, SrcMeta{Source: srcTok, Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), Stmt: stmt, Global: global, Compile: compile})
 				globalNext = false
 
 				switch srcExtClassOf(srcTok) {
@@ -1660,8 +1656,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 			}
 		case *GlobalSrcsStmt:
+			// GLOBAL_SRCS expands to SRCS with GLOBAL before each input.
 			for _, src := range expandStmtTokens(v.Sources, env) {
-				d.srcs = append(d.srcs, SrcMeta{Source: src, Prio: stmtPrioDefault, Global: true})
+				d.srcs = append(d.srcs, SrcMeta{Source: src, Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), Global: true})
 			}
 		case *GenerateEnumSerializationStmt:
 			if d.multimodule == tokFbsLibrary && language == LangPy && (v.Variant == "plain" || v.Variant == "with_header") {
@@ -1765,6 +1762,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			appendRunProgram(v, env, d)
 		case *SplitCodegenStmt:
 			expanded := *v
+			expanded.DeclSeq = d.nextDeclSeq()
 
 			expanded.ToolPath = expandStmtTokenAny(v.ToolPath, env)
 			expanded.Prefix = expandStmtTokenAny(v.Prefix, env)

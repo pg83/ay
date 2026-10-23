@@ -2947,6 +2947,17 @@ func (e *EmitContext) srcRound(m SrcMeta) uint64 {
 		return m.SourceQueueRank - 1
 	}
 
+	// A directly generated automatic source runs one FIFO step after its
+	// registered source action. Its declaration may precede a still-pending
+	// input producer; parsed include closures do not determine this position.
+	if m.Prio == stmtPrioDefault && m.Seq != 0 {
+		if info := e.codegen.lookup(m.Source.vfs()); info != nil && info.OwnerModule == e.instance.Path && (info.OwnerSerial == 0 || info.OwnerSerial == e.frame.serial) && info.SourceAction != nil && info.SourceAction.DeclSeq == m.Seq {
+			if round, known := e.sourceActionRound(m.Seq); known {
+				return round + 1
+			}
+		}
+	}
+
 	cur := m.Source.vfs()
 
 	if !cur.isBuild() {

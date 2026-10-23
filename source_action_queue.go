@@ -106,7 +106,7 @@ func (e *EmitContext) sourceActionRound(seq int) (uint64, bool) {
 				}
 				progress = true
 				a.done, a.known = true, known
-				if known && a.producer == 0 {
+				if known {
 					e.sourceRounds[a.seq] = a.round
 				}
 			}

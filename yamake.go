@@ -291,6 +291,7 @@ type RunProgramStmt struct {
 }
 
 type SplitCodegenStmt struct {
+	DeclSeq        int
 	ToolPath       ANY
 	Prefix         ANY
 	Opts           []ANY
