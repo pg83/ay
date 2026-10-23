@@ -1,5 +1,10 @@
 package main
 
+import (
+	"fmt"
+	"strings"
+)
+
 func (e *EmitContext) genPeerModule(instance ModuleInstance) *ModuleEmitResult {
 	result := genModule(e.ctx, instance)
 
@@ -69,9 +74,21 @@ func (ctx *GenCtx) emitDiscoveredModuleTests() {
 		return
 	}
 
+	prepared := suites[:0]
+
 	for _, suite := range suites {
 		ctx.prepareTestDependencies(suite)
+
+		if err := ctx.testDataReadError(suite); err != nil {
+			ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("suite configuration failed for %s: %s", suite.projectPath, err)})
+
+			continue
+		}
+
+		prepared = append(prepared, suite)
 	}
+
+	suites = prepared
 
 	outputs := ctx.projectModuleIndex(suites)
 
@@ -84,4 +101,18 @@ func (ctx *GenCtx) emitDiscoveredModuleTests() {
 			ctx.emit.result(ref)
 		}
 	}
+}
+
+func (ctx *GenCtx) testDataReadError(suite *TestSuite) error {
+	if ctx.tests.cacheTests && ctx.testSuiteSelected(suite) {
+		for _, entry := range suite.data {
+			if rel, ok := strings.CutPrefix(entry, "arcadia/"); ok {
+				if err := ctx.fs.testPathReadError(rel); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }

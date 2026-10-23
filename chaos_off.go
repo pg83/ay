@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"os"
 	"os/user"
+	"syscall"
 
 	"github.com/zeebo/xxh3"
 )
@@ -69,6 +70,10 @@ func chaosReadDir(dir string) ([]os.DirEntry, error) {
 
 func chaosReadString(r *bufio.Reader) (string, error) {
 	return r.ReadString('\n')
+}
+
+func chaosTestDataRead(fd int, p []byte) (int, error) {
+	return syscall.Read(fd, p)
 }
 
 func chaosReadFile(name string) ([]byte, error) {

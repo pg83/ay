@@ -71,6 +71,7 @@ type OsFS struct {
 	dirNames       *BumpAllocator[uint32]
 	dirEntries     *IntSet
 	contentHashes  ContentHashes
+	testReadErrors map[string]error
 	sourceUnder    *IntMap[STR]
 	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
 	readBuf        []byte
@@ -89,19 +90,33 @@ type OsFS struct {
 
 func newFS(srcRoot string) FS {
 	fs := &OsFS{
-		srcRoot:     srcRoot,
-		rootSlash:   srcRoot + "/",
-		readBuf:     make([]byte, readChunkSize),
-		dirNames:    newBumpAllocator[uint32](),
-		dirEntries:  newIntSet(1 << 17),
-		sourceUnder: newIntMap[STR](1 << 18),
-		dirFD:       -1,
-		dirFDs:      make(map[string]int, dirFDCacheSize),
+		srcRoot:        srcRoot,
+		rootSlash:      srcRoot + "/",
+		readBuf:        make([]byte, readChunkSize),
+		dirNames:       newBumpAllocator[uint32](),
+		dirEntries:     newIntSet(1 << 17),
+		sourceUnder:    newIntMap[STR](1 << 18),
+		testReadErrors: map[string]error{},
+		fileCloseQueue: make(chan int, 256),
+		dirFD:          -1,
+		dirFDs:         make(map[string]int, dirFDCacheSize),
 	}
 
 	fs.platformInit()
 
+	go fs.closeFiles()
+
 	return fs
+}
+
+func (fs *OsFS) closeFiles() {
+	for fd := range fs.fileCloseQueue {
+		syscall.Close(fd)
+	}
+}
+
+func (fs *OsFS) closeFile(fd int) {
+	fs.fileCloseQueue <- fd
 }
 
 func (fs *OsFS) listdir(dir STR) DirView {

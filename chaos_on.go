@@ -34,6 +34,8 @@ var (
 	chaosLinkEXDEV     = newChaosFault("link-exdev")
 	chaosReadDirFail   = newChaosFault("readdir-fail")
 	chaosReadEIO       = newChaosFault("read-eio")
+	chaosTestReadEINTR = newChaosFault("eintr-test-data")
+	chaosTestReadEIO   = newChaosFault("test-data-read-eio")
 	chaosReadFileEIO   = newChaosFault("readfile-eio")
 	chaosUserFail      = newChaosFault("user-current-fail")
 	chaosCPUAVX512     = newChaosNumber("cpu-avx512")
@@ -167,6 +169,18 @@ func chaosReadString(r *bufio.Reader) (string, error) {
 	}
 
 	return r.ReadString('\n')
+}
+
+func chaosTestDataRead(fd int, p []byte) (int, error) {
+	if chaosTestReadEINTR.fire() {
+		return 0, syscall.EINTR
+	}
+
+	if chaosTestReadEIO.fire() {
+		return 0, syscall.EIO
+	}
+
+	return syscall.Read(fd, p)
 }
 
 func chaosReadFile(name string) ([]byte, error) {

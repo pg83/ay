@@ -40,6 +40,7 @@ type TestOpts struct {
 	buildType    string
 	flags        []string
 	dist         bool
+	cacheTests   bool
 	removeTos    bool
 	dirOutputs   bool
 	commandFile  bool
@@ -67,6 +68,7 @@ func newTestOpts(mf *MakeFlags, yaConf map[string]any) *TestOpts {
 		buildType:    mf.testBuildType,
 		flags:        testFlags(mf),
 		dist:         mf.dist,
+		cacheTests:   mf.cacheTests,
 		removeTos:    yaConf["remove_tos"] == true || os.Getenv("YA_TEST_REMOVE_TOS") != "",
 		dirOutputs:   true,
 		commandFile:  yaConf["use_command_file_in_testtool"] == true,

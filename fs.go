@@ -20,6 +20,7 @@ type FS interface {
 	readPath(rel STR) [][]byte
 
 	walk(rel string, visit func(rel string, isDir bool) bool)
+	testPathReadError(rel string) error
 }
 
 func concatChunks(chunks [][]byte) []byte {
