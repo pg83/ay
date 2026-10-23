@@ -127,17 +127,19 @@ func cythonDefaultOptions(os OS) string {
 }
 
 type CythonStmt struct {
-	Lint      bool
-	Src       string
-	Native    *SrcMeta
-	Python3   bool
-	Generated *string
-	Options   []string
-	CMode     bool
-	Header    bool
-	ApiHeader bool
-	Pxd       string
-	Seq       int
+	Lint        bool
+	Src         string
+	Native      *SrcMeta
+	Python3     bool
+	Generated   *string
+	Options     []string
+	InitialPath bool
+	Directives  []string
+	CMode       bool
+	Header      bool
+	ApiHeader   bool
+	Pxd         string
+	Seq         int
 }
 
 type CythonStmtPlan struct {
@@ -328,7 +330,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			sourceFlags = stmt.Native.Compile.CFlags
 		}
 
-		cmdArgs := na.anys.alloc(9 + len(d.cythonOptions) + len(stmt.Options) + len(d.cythonAddIncl) + len(sourceFlags))[:0]
+		cmdArgs := na.anys.alloc(11 + len(d.cythonOptions) + len(stmt.Options) + len(stmt.Directives) + len(d.cythonAddIncl) + len(sourceFlags))[:0]
 
 		cmdArgs = append(cmdArgs, d.tc.Python3.any())
 
@@ -340,6 +342,12 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		cmdArgs = append(cmdArgs, d.cythonOptions...)
 		cmdArgs = appendInternAnys(cmdArgs, stmt.Options)
+
+		if stmt.InitialPath {
+			cmdArgs = appendInternAnys(cmdArgs, []string{"-X", "set_initial_path=" + e.cythonRootRelArcSrc(stmt.Src)})
+		}
+
+		cmdArgs = appendInternAnys(cmdArgs, stmt.Directives)
 
 		if !stmt.CMode {
 			cmdArgs = append(cmdArgs, argCplus.any())
@@ -612,4 +620,22 @@ func appendCythonScanAddIncl(addIncl []VFS, cythonAddIncl []VFS, sysIncludes, pe
 	out = append(out, cythonNumpyAddIncl...)
 
 	return dedup(out)
+}
+
+func (e *EmitContext) cythonRootRelArcSrc(src string) string {
+	if rooted, ok := moduleRootedVFS(e.instance.Path.relString(), src); ok {
+		return rooted.relString()
+	}
+
+	for _, dir := range e.d.srcDirs {
+		if dir.isSource() && e.ctx.fs.isFile(dir.rel(), src) {
+			return sourceJoinClean(dir.relString(), src).relString()
+		}
+	}
+
+	if e.ctx.fs.isFile(srcRootRel, src) {
+		return sourceClean(src).relString()
+	}
+
+	return src
 }

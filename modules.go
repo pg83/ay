@@ -4268,15 +4268,15 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			}
 
 			stmt := &CythonStmt{
-				Src:       src,
-				CMode:     cythonCMode,
-				Header:    cythonHeader,
-				ApiHeader: cythonApiHeader,
+				InitialPath: true,
+				Src:         src,
+				CMode:       cythonCMode,
+				Header:      cythonHeader,
+				ApiHeader:   cythonApiHeader,
 				Options: []string{
 					"--module-name", modName,
 					"--init-suffix", pythonInitSuffix(modName),
 					"--source-root", "$(S)",
-					"-X", "set_initial_path=" + modulePath + "/" + src,
 				},
 			}
 
@@ -4300,17 +4300,17 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			}
 
 			d.cythonCpp = append(d.cythonCpp, &CythonStmt{
-				Src:       src,
-				CMode:     cythonCMode,
-				Header:    cythonHeader,
-				ApiHeader: cythonApiHeader,
+				InitialPath: true,
+				Src:         src,
+				CMode:       cythonCMode,
+				Header:      cythonHeader,
+				ApiHeader:   cythonApiHeader,
 
 				Pxd: strings.ReplaceAll(modName, ".", "/") + ".pxd",
 				Options: []string{
 					"--module-name", modName,
 					"--init-suffix", pythonInitSuffix(modName),
 					"--source-root", "$(S)",
-					"-X", "set_initial_path=" + modulePath + "/" + src,
 				},
 			})
 
@@ -4384,7 +4384,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 	if len(cythonDirectives) > 0 {
 		for j := cythonStmtStart; j < len(d.cythonCpp); j++ {
-			d.cythonCpp[j].Options = append(d.cythonCpp[j].Options, cythonDirectives...)
+			d.cythonCpp[j].Directives = append(d.cythonCpp[j].Directives, cythonDirectives...)
 		}
 	}
 
