@@ -72,9 +72,15 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 	head = head[:len(head):len(head)]
 
 	pe := func() {
-		inputs := na.inputs.alloc(3 + len(bisonCppSkeletonInputs)*closureBuckets)[:0]
-
 		var views []Closure
+
+		if preprocessHeader {
+			for _, sk := range bisonCppSkeletonInputs {
+				views = append(views, scanner.walkClosure(sk, scanCtx, scanDomainCC))
+			}
+		}
+
+		inputs := na.inputs.alloc(3 + len(bisonCppSkeletonInputs)*closureBuckets)[:0]
 
 		dedupers.with(func(deduper *DeDuper) {
 			tools := na.vfsList(bldContribToolsBisonBison, bldContribToolsM4M4)
@@ -104,11 +110,7 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 
 			inputs = append(inputs, scripts)
 
-			for _, sk := range bisonCppSkeletonInputs {
-				skCV := scanner.walkClosure(sk, scanCtx, scanDomainCC)
-
-				views = append(views, skCV)
-
+			for _, skCV := range views {
 				for _, bucket := range skCV.bucketList() {
 					if filtered := na.filterSeen(deduper, bucket); len(filtered) > 0 {
 						inputs = append(inputs, filtered)
