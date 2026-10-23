@@ -153,7 +153,7 @@ type ModuleEmitResult struct {
 	COnlyFlagsGlobal                []CompilerFlagValue
 	LinkExcludeLibraries            []ANY
 	ObjAddLibsGlobal                []ANY
-	LDFlagsGlobal                   []ANY
+	LDFlagsGlobal                   []LinkerFlagValue
 	RPathFlagsGlobal                []ANY
 	PeerArchiveClosureRefs          []NodeRef
 	PeerArchiveClosurePaths         []VFS
@@ -1816,6 +1816,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		peerArchivePaths, peerGlobalPaths, peerWholeArchivePaths, peerWholeArchiveCmdPaths, peerDynamicPaths, peerSbomPaths, effectiveAddInclGlobal, effectiveProtoInclude, peerProtoInclude, effectiveSwigInclude, moduleSwigInclude, effectiveFlatcInclude, moduleFlatcInclude, effectiveScInclude, effectiveScDirectInclude, moduleScInclude []VFS
 
 		effectiveCFlagsGlobal, effectiveCXXFlagsGlobal, effectiveCOnlyFlagsGlobal []CompilerFlagValue
+		effectiveLDFlagsGlobal                                                    []LinkerFlagValue
 		effectiveRPathFlagsGlobal                                                 []ANY
 
 		ownSbomInsertIdx = -1
@@ -2110,17 +2111,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			}
 		}
 
-		deduper.reset()
-
-		if ldflagsCap != 0 {
-			for _, rp := range cflagsAggOrder {
-				for _, a := range rp.result.LDFlagsGlobal {
-					if deduper.addStable(a.strID()) {
-						peerLDFlagsGlobal = append(peerLDFlagsGlobal, a)
-					}
-				}
-			}
-		}
+		effectiveLDFlagsGlobal, peerLDFlagsGlobal = e.linkerFlagExports(deduper, resolved, ldflagsCap, d.ldFlags, peerLDFlagsGlobal)
 
 		deduper.reset()
 
@@ -2248,7 +2239,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	effectiveMlaunchDeps := mlaunchDeps(d, resolved)
-	effectiveLDFlagsGlobal := concatShared(ctx.argSlices, peerLDFlagsGlobal, d.ldFlags)
 
 	newResult := func() *ModuleEmitResult {
 		r := ctx.results.one()
@@ -2435,7 +2425,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	if isGoModuleType(d.moduleStmt.Name) {
-		frame.peerCtx.LDFlagsGlobal = resolveResourceGlobalArgs(effectiveLDFlagsGlobal, resourceGlobalsClosure)
+		frame.peerCtx.LDFlagsGlobal = resolveResourceGlobalArgs(concatShared(ctx.argSlices, peerLDFlagsGlobal, d.ldFlags), resourceGlobalsClosure)
 	}
 
 	e = newEmitContextIn(frame, ctx, instance, d, &frame.peerCtx)

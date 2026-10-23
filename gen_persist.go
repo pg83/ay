@@ -32,7 +32,6 @@ func persistResult(ctx *GenCtx, instance ModuleInstance, r *ModuleEmitResult) {
 	r.PchFlagsGlobal = ctx.argSlices.internCopy(r.PchFlagsGlobal)
 	r.LinkExcludeLibraries = ctx.argSlices.internCopy(r.LinkExcludeLibraries)
 	r.ObjAddLibsGlobal = ctx.argSlices.internCopy(r.ObjAddLibsGlobal)
-	r.LDFlagsGlobal = ctx.argSlices.internCopy(r.LDFlagsGlobal)
 	r.RPathFlagsGlobal = ctx.argSlices.internCopy(r.RPathFlagsGlobal)
 	r.PeerArchiveClosureRefs = ctx.refSlices.internCopy(r.PeerArchiveClosureRefs)
 	r.PeerArchiveClosurePaths = ctx.vfsSlices.internCopy(r.PeerArchiveClosurePaths)
