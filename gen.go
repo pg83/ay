@@ -2793,6 +2793,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			result.GlobalRef = protoResult.GlobalRef
 			result.GlobalPath = protoResult.GlobalPath
 		}
+	} else if isPythonProtoModule(d) {
+		result.WholeArchiveCmdPaths = []VFS{build(instance.Path.relString(), "/", e.arName(instance.Path.relString(), "lib", archiveName))}
 	}
 
 	ctx.memoPut(instance, result)
