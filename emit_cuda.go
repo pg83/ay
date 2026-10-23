@@ -100,12 +100,12 @@ func (e *EmitContext) emitCudaSrcs(stmt CudaSrcsStmt) {
 		architectures[i] = arch
 	}
 
-	for _, src := range stmt.Sources {
-		e.emitSplitCudaSource(src, architectures, stmt.EmbedPTX)
+	for i, src := range stmt.Sources {
+		e.emitSplitCudaSource(src, architectures, stmt.EmbedPTX, stmt.DeclSeq+i*(len(architectures)+3))
 	}
 }
 
-func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX bool) {
+func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX bool, seq int) {
 	na, d := e.ctx.na, e.d
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	base := build(e.instance.Path.relString(), "/", cudaSourceBase(e.moduleSourceRel(src))).string()
@@ -146,6 +146,8 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 	for _, arch := range arches {
 		outs := na.vfsList(output("."+arch+".cubin"), output("."+arch+".ptx"), output("."+arch+".cudafe1.stub.c"), output("."+arch+".module_id"))
 		ref := e.ctx.emit.reserve()
+		sourceAction := &SourceActionInfo{DeclSeq: seq, Inputs: na.vfsList(srcVFS, cudaCompileScriptVFS, cudaRuntimeIncludeVFS)}
+		seq++
 
 		pending := e.pendingEmit(func() {
 			getClosures()
@@ -189,7 +191,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 				leaves = na.vfsList(outs[0])
 			}
 
-			e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending, ProducerMainOut: outs[0], ClosureLeaves: leaves})
+			e.register(GeneratedFileInfo{SourceAction: sourceAction, OutputPath: out, ProducerRef: ref, OnUse: pending, ProducerMainOut: outs[0], ClosureLeaves: leaves})
 		}
 
 		if embedPTX {
@@ -201,6 +203,8 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 
 	fatbin := output(".fatbin.c")
 	fatRef := e.ctx.emit.reserve()
+	fatAction := &SourceActionInfo{DeclSeq: seq, Inputs: na.vfsList(append([]VFS{srcVFS, buildScriptsFatbinaryWrapperPy}, images...)...)}
+	seq++
 
 	fatPending := e.pendingEmit(func() {
 		getClosures()
@@ -220,12 +224,14 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 			Inputs: inputs, InputClosures: sourceViews, Outputs: na.vfsList(fatbin), KV: &cudaKV, Resources: usesPython3}, fatRef)
 	})
 
-	e.register(GeneratedFileInfo{OutputPath: fatbin, ProducerRef: fatRef, OnUse: fatPending})
+	e.register(GeneratedFileInfo{SourceAction: fatAction, OutputPath: fatbin, ProducerRef: fatRef, OnUse: fatPending})
 
 	hostOuts := na.vfsList(output(".ii"), output(".cudafe1.cpp"))
 	hostRef := e.ctx.emit.reserve()
 	moduleID := output("." + stubArch + ".module_id")
 	stub := output("." + stubArch + ".cudafe1.stub.c")
+	hostAction := &SourceActionInfo{DeclSeq: seq, Inputs: na.vfsList(srcVFS, cudaCompileScriptVFS, cudaRuntimeIncludeVFS, moduleID)}
+	seq++
 
 	hostPending := e.pendingEmit(func() {
 		getClosures()
@@ -254,12 +260,12 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 			Inputs:        inputs, Outputs: hostOuts, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, hostRef)
 	})
 
-	e.register(GeneratedFileInfo{OutputPath: hostOuts[0], ProducerRef: hostRef, OnUse: hostPending})
+	e.register(GeneratedFileInfo{SourceAction: hostAction, OutputPath: hostOuts[0], ProducerRef: hostRef, OnUse: hostPending})
 
 	parsed := na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(stub.rel().any())}, IncludeDirective{kind: includeQuoted, target: includeTarget(fatbin.rel().any())})
 
-	e.register(GeneratedFileInfo{OutputPath: hostOuts[1], ProducerRef: hostRef, OnUse: hostPending, ProducerMainOut: hostOuts[0], ClosureLeaves: na.vfsList(hostOuts[0]), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed}})
-	e.enqueueSrc(SrcMeta{Source: hostOuts[1].any(), Prio: stmtPrioDefault, Compile: CompileSpec{CFlags: cudaHostFlags, FlatOutput: true}})
+	e.register(GeneratedFileInfo{SourceAction: hostAction, OutputPath: hostOuts[1], ProducerRef: hostRef, OnUse: hostPending, ProducerMainOut: hostOuts[0], ClosureLeaves: na.vfsList(hostOuts[0]), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed}})
+	e.enqueueSrc(SrcMeta{Source: hostOuts[1].any(), Prio: stmtPrioDefault, Seq: seq, Compile: CompileSpec{CFlags: cudaHostFlags, FlatOutput: true}})
 }
 
 func (e *EmitContext) emitCudaDeviceLink(archiveName string, local CollectedObjs, plugin *VFS) NodeRef {

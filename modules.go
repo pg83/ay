@@ -3554,7 +3554,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			arches = "sm_50"
 		}
 
-		d.cudaSrcs = append(d.cudaSrcs, CudaSrcsStmt{Sources: v.Args, Architectures: arches, EmbedPTX: !env.bool(envCUDA_NO_EMBED_PTX)})
+		// Each plugin source declares its device actions, fatbin, host action,
+		// then an explicit SRC, all at the plugin's priority-2 position.
+		seq := d.declSeq + 1
+		d.declSeq += len(v.Args) * (len(strings.Split(arches, ":")) + 3)
+		d.cudaSrcs = append(d.cudaSrcs, CudaSrcsStmt{DeclSeq: seq, Sources: v.Args, Architectures: arches, EmbedPTX: !env.bool(envCUDA_NO_EMBED_PTX)})
 	case tokNvccDeviceLink:
 		d.nvccDeviceSrcs = append(d.nvccDeviceSrcs, v.Args...)
 

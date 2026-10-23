@@ -3,6 +3,7 @@ package main
 import "strings"
 
 type CudaSrcsStmt struct {
+	DeclSeq       int
 	Sources       []ANY
 	Architectures string
 	EmbedPTX      bool
