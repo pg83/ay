@@ -106,7 +106,7 @@ CPUID = "library/cpp/cpuid_check/liblibrary-cpp-cpuid_check.a"
 
 
 class PeerPropagationTest(unittest.TestCase):
-    def test_python_native_peers_do_not_select_excluded_cpp_protos_as_python(self):
+    def test_python_native_peers_reject_excluded_compatible_cpp_protos(self):
         from test_proto_py_variant import py_proto_files
 
         for direct_python_peer in (False, True):
@@ -124,9 +124,9 @@ class PeerPropagationTest(unittest.TestCase):
                     ),
                     "incl/x.proto": 'syntax = "proto3";\n',
                 })
-                graph = lib.make(files, "top", "--sandboxing")
-                actual = includes(graph, "$(B)/top/top.cpp.o")
-                self.assertEqual("-I$(B)/incl" in actual, direct_python_peer)
+                result = lib.make_process(files, "top")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("native: no compatible Python header peer in p", result.stderr)
 
     def test_transitive_global_dynamic_plugin_and_include_closures(self):
         graph = lib.make(closure_fixture(), "p")
