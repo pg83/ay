@@ -275,9 +275,11 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 			d.rawVars[v.Name] = d.rawExpand(v.Value)
 		case *DefaultVarStmt:
+			bound := env.hasBindingID(v.NameEnv)
+
 			env.setDefaultString(v.NameEnv, expandSourceScalarVarRef(v.Value, env))
 
-			if _, ok := d.rawVars[v.VarName]; !ok {
+			if !bound {
 				if d.rawVars == nil {
 					d.rawVars = map[string]string{}
 				}
@@ -743,7 +745,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			d.javaSrcs = append(d.javaSrcs, spec)
 		}
 	case "RUN_JAVA_PROGRAM":
-		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: d.javaRawArgs(raw)})
+		d.runJavaPrograms = append(d.runJavaPrograms, JavaRunProgram{args: args, raw: d.javaRunProgramRawArgs(raw, env)})
 	case "GENERATE_SCRIPT":
 		d.generateScripts = append(d.generateScripts, args)
 	case "WITH_JDK":
@@ -1154,6 +1156,58 @@ func (d *JavaData) javaRawArgs(raw []string) []string {
 
 	for _, r := range raw {
 		out = append(out, strings.Fields(d.rawExpand(r))...)
+	}
+
+	return out
+}
+
+func (d *JavaData) javaRunProgramRawArgs(raw []string, env Environment) []string {
+	active := map[string]bool{}
+
+	var expand func(string) string
+
+	expand = func(value string) string {
+		return confScalarRefRe.ReplaceAllStringFunc(value, func(reference string) string {
+			name := strings.Trim(reference, "${}")
+
+			if javaPathVars[name] {
+				return reference
+			}
+
+			if active[name] {
+				throwFmt("RUN_JAVA_PROGRAM: recursive variable expansion for %s", name)
+			}
+
+			value, ok := d.rawVars[name]
+
+			if !ok {
+				value, ok = javaConfGlobals[name]
+
+				if !ok {
+					value, ok = env.lookup(name)
+
+					if !ok {
+						if strings.HasPrefix(reference, "${") {
+							return ""
+						}
+
+						return reference
+					}
+				}
+			}
+
+			active[name] = true
+			value = expand(value)
+			delete(active, name)
+
+			return value
+		})
+	}
+
+	var out []string
+
+	for _, arg := range raw {
+		out = append(out, strings.Fields(expand(arg))...)
 	}
 
 	return out
