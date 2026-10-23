@@ -485,7 +485,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		return
 	}
 
-	args = javaDropUnresolved(args)
+	args = javaDropUnresolved(args, name == "GENERATE_SCRIPT")
 
 	if len(args) > 0 {
 		arg0 = args[0]
@@ -1156,11 +1156,11 @@ func (d *JavaData) javaRawArgs(raw []string) []string {
 	return out
 }
 
-func javaDropUnresolved(args []string) []string {
+func javaDropUnresolved(args []string, preserveEmpty bool) []string {
 	out := args[:0:0]
 
-	for _, a := range args {
-		a = strings.ReplaceAll(a, "${$}", "$")
+	for _, arg := range args {
+		a := strings.ReplaceAll(arg, "${$}", "$")
 
 		for {
 			start := strings.Index(a, "${")
@@ -1178,7 +1178,7 @@ func javaDropUnresolved(args []string) []string {
 			a = a[:start] + a[start+end+1:]
 		}
 
-		if a != "" {
+		if a != "" || preserveEmpty && arg == "" {
 			out = append(out, a)
 		}
 	}
