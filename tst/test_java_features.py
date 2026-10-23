@@ -76,7 +76,7 @@ JAVA_SRCS(SRCDIR src **/*.kt **/*.java EXCLUDE src/Skip.java)
         files = tree("""
 WITH_KOTLIN()
 ENABLE(SOURCES_JAR)
-JAVA_SRCS(RESOURCES SRCDIR src PACKAGE_PREFIX example.api FILES Main.java)
+JAVA_SRCS(RESOURCES SRCDIR src PACKAGE_PREFIX example.api FILES src/Main.java)
 JAVA_SRCS(SKIP_CHECK_SRCDIR SRCDIR ${ARCADIA_BUILD_ROOT}/app/gen **/*.java EXCLUDE **/Skip.java)
 JAVA_EXTERNAL_DEPENDENCIES(data.txt ${ARCADIA_ROOT}/external.txt)
 ANNOTATION_PROCESSOR(example.First example.Second)

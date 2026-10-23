@@ -288,6 +288,7 @@ type JavaData struct {
 	protoSrcs         []string
 	flatcFlags        []ANY
 	evSrcs            []string
+	copyFiles         []CopyFileEntry
 	runPython         []*RunPythonStmt
 	fromSandboxes     []*FromSandboxStmt
 	files             []string

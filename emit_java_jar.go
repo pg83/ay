@@ -104,14 +104,6 @@ func (ctx *GenCtx) javaSrcsGlobs(jm *JavaModule) []javaSrcsGlob {
 	return out
 }
 
-func javaJoin(dir VFS, rel string) VFS {
-	if dir.isBuild() {
-		return build(dir.relString(), "/", rel)
-	}
-
-	return source(dir.relString(), "/", rel)
-}
-
 func javaClassesDir(base VFS, pkg string) VFS {
 	if pkg == "" {
 		return base
@@ -186,7 +178,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 		}
 
 		for _, f := range g.spec.files {
-			input := javaJoin(g.absDir, f)
+			input := resolveSourceOrGeneratedVFS(ctx, jm.instance, f, d.srcDirs)
 
 			prep = append(prep, input.any())
 			b.input(input)

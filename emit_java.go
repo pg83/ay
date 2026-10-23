@@ -285,7 +285,7 @@ func (ctx *GenCtx) javaRegisterFiles(jm *JavaModule) {
 }
 
 func (ctx *GenCtx) javaRegisterProducers(jm *JavaModule, frame *ModuleFrame) {
-	if len(jm.data.fromSandboxes) == 0 && len(jm.data.runPython) == 0 {
+	if len(jm.data.fromSandboxes) == 0 && len(jm.data.runPython) == 0 && len(jm.data.copyFiles) == 0 {
 		return
 	}
 
@@ -297,6 +297,7 @@ func (ctx *GenCtx) javaRegisterProducers(jm *JavaModule, frame *ModuleFrame) {
 	d.unit.Type = jm.stmt
 	d.fromSandboxes = append(d.fromSandboxes, jm.data.fromSandboxes...)
 	d.runPython = append(d.runPython, jm.data.runPython...)
+	d.copyFiles = append(d.copyFiles, jm.data.copyFiles...)
 	d.srcDirs = append(d.srcDirs, jm.data.srcDirs...)
 	d.tc = ModuleToolchain{Python3: javaPython3}
 	d.cc.TC = d.tc
@@ -319,6 +320,10 @@ func (ctx *GenCtx) javaRegisterProducers(jm *JavaModule, frame *ModuleFrame) {
 
 			jm.macroOuts = javaPushUniq(jm.macroOuts, out)
 		}
+	}
+
+	for _, entry := range d.copyFiles {
+		add([]ANY{internAny(entry.Dst)})
 	}
 
 	for _, stmt := range d.fromSandboxes {

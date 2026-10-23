@@ -48,7 +48,7 @@ class JavaStyleSourceDirectoriesTest(unittest.TestCase):
             "app/ya.make": "JAVA_LIBRARY_NON_SPLIT()\nWITH_KOTLIN()\n"
                 "JAVA_SRCS(RESOURCES SRCDIR assets **/* EXCLUDE assets/**)\n"
                 "JAVA_SRCS(SRCDIR unmatched **/*.java)\n"
-                "JAVA_SRCS(SRCDIR explicit PACKAGE_PREFIX example.api FILES Item.java)\n"
+                "JAVA_SRCS(SRCDIR explicit PACKAGE_PREFIX example.api FILES explicit/Item.java)\n"
                 "JAVA_SRCS(SRCDIR kotlin **/*.kt)\nEND()\n",
             "app/assets/config.txt": "resource\n",
             "app/unmatched/README.txt": "not a Java source\n",
