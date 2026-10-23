@@ -47,6 +47,10 @@ const (
 func protoPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string, bucket ParsedIncludeBucket, dst []IncludeDirective) []IncludeDirective {
 	hcpp := pm.sourceParsedBuckets(source(srcRel), nil).bucket(bucket)
 
+	return protoMappedPbHIncludes(hcpp, outputRoot, dst)
+}
+
+func protoMappedPbHIncludes(hcpp []IncludeDirective, outputRoot string, dst []IncludeDirective) []IncludeDirective {
 	if len(hcpp) == 0 {
 		return dst
 	}

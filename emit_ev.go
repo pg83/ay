@@ -51,7 +51,18 @@ func (e *EmitContext) emitLibraryEvSource(meta SrcMeta) {
 	event2cppLDRef, event2cppBinary := ctx.tool(argToolsEvent2cpp)
 	evRel := e.protoSourceRel(e.moduleSourceName(src))
 	evRelPath := evRel.string()
-	directImports := protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d), e.dirScratch[:0])
+	evSource := resolveSourceOrGeneratedVFS(ctx, instance, src.string(), d.srcDirs)
+
+	var directImports []IncludeDirective
+
+	if evSource.isBuild() {
+		parsed := e.codegen.buildParsedFor(evSource)
+		imports := protoInducedPbH(ctx.parsers, parsed.bucket(parsedIncludesLocal), e.dirScratch[:0])
+
+		directImports = protoMappedPbHIncludes(imports, protoCPPOutRoot(d), imports[:0])
+	} else {
+		directImports = protoDirectPbHIncludes(ctx.parsers, evRelPath, protoCPPOutRoot(d), e.dirScratch[:0])
+	}
 
 	e.dirScratch = directImports
 
