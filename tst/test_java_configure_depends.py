@@ -23,8 +23,8 @@ class JavaConfigureDependsTest(unittest.TestCase):
             f'{SCANNER}/{JAR}': '',
         })
 
-    def test_compilation_context_configures_builtin_depends_without_a_suite(self):
-        graph = lib.make(self.tree(), 'root', '-t', *PEER_TESTS, '--add-modules-to-results')
+    def assert_compilation_context_configures_builtin_depends_without_a_suite(self, declaration, tag):
+        graph = lib.make(self.tree(declaration, tag), 'root', '-t', *PEER_TESTS, '--add-modules-to-results')
         scanner = lib.node_by_output(graph, f'$(B)/{SCANNER}/{JAR}')
         self.assertIn(scanner['uid'], graph['result'])
         self.assertEqual(scanner['inputs'], [
@@ -36,9 +36,14 @@ class JavaConfigureDependsTest(unittest.TestCase):
         compilation = lib.node_by_output(graph, '$(B)/tests/tests.jar')
         self.assertNotIn(scanner['uid'], compilation['deps'])
 
-    def test_default_belongs_only_to_jtest_for_compilation_and_requires_depends_traversal(self):
+    def test_compilation_context_configures_builtin_depends_without_a_suite(self):
+        for declaration, tag in (('JTEST()', 'JTEST_JAR_COMPILATION'),
+                                 ('JTEST_FOR(library)', 'JTEST_FOR_JAR_COMPILATION')):
+            with self.subTest(declaration=declaration):
+                self.assert_compilation_context_configures_builtin_depends_without_a_suite(declaration, tag)
+
+    def test_default_requires_jtest_compilation_and_depends_traversal(self):
         for declaration, tag, flags in (
-            ('JTEST()', 'JTEST_JAR_COMPILATION', ('-t', *PEER_TESTS)),
             ('JUNIT5()', 'JUNIT5_JAR_COMPILATION', ('-t', *PEER_TESTS)),
             ('JTEST_FOR(library)', 'JTEST_FOR_JAR_COMPILATION', ()),
             ('JTEST_FOR(library)', 'JTEST_FOR_JAR_COMPILATION', ('-t',)),
