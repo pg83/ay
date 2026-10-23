@@ -474,15 +474,16 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 	}
 
 	node := Node{
-		Platform:       instance.Platform,
-		Cmds:           na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
-		Env:            env,
-		Inputs:         nodeInputs,
-		InputClosure:   closure,
-		Outputs:        na.vfsList(outputPath),
-		KV:             &pyCodegenKV,
-		ForeignDepRefs: toolRefs,
-		Resources:      tool.resources,
+		Platform:        instance.Platform,
+		Cmds:            na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
+		Env:             env,
+		Inputs:          nodeInputs,
+		BuildFromInputs: nodeInputs[1:],
+		InputClosure:    closure,
+		Outputs:         na.vfsList(outputPath),
+		KV:              &pyCodegenKV,
+		ForeignDepRefs:  toolRefs,
+		Resources:       tool.resources,
 	}
 
 	pyRef := e.emitNode(node)

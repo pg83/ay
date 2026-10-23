@@ -881,12 +881,13 @@ func (e *EmitContext) emitPB(
 			Env: env}),
 		Env: env,
 
-		Inputs:         pbInputChunks,
-		InputClosures:  []Closure{transitiveProtoImports},
-		Outputs:        outputs,
-		KV:             spec.kv,
-		ForeignDepRefs: foreignDepRefs,
-		Resources:      usesPython3,
+		Inputs:          pbInputChunks,
+		BuildFromInputs: pbInputChunks[1:],
+		InputClosures:   []Closure{transitiveProtoImports},
+		Outputs:         outputs,
+		KV:              spec.kv,
+		ForeignDepRefs:  foreignDepRefs,
+		Resources:       usesPython3,
 	}
 
 	e.emitReservedNode(node, id)

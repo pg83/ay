@@ -49,15 +49,16 @@ func (p *pyPBPending) emitPending() {
 	na.inputs.commit(len(inputChunks))
 
 	node := Node{
-		Platform:      s.instance.Platform,
-		Cmds:          na.cmdList(Cmd{CmdArgs: s.cmdArgs, Cwd: s.protoCwd, Env: envVarsVCS}),
-		Env:           envVarsVCS,
-		Inputs:        InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]),
-		InputClosures: []Closure{imports},
-		Outputs:       s.outputs,
-		KV:            &pbKV,
-		KVExts:        s.extOut,
-		Resources:     usesPython3,
+		Platform:        s.instance.Platform,
+		Cmds:            na.cmdList(Cmd{CmdArgs: s.cmdArgs, Cwd: s.protoCwd, Env: envVarsVCS}),
+		Env:             envVarsVCS,
+		Inputs:          InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]),
+		BuildFromInputs: InputChunks(inputChunks[1:len(inputChunks):len(inputChunks)]),
+		InputClosures:   []Closure{imports},
+		Outputs:         s.outputs,
+		KV:              &pbKV,
+		KVExts:          s.extOut,
+		Resources:       usesPython3,
 	}
 
 	if len(s.toolRefs) > 0 {
