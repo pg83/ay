@@ -1378,6 +1378,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 
 			if isDllModuleType(d.unit.Type) {
+				env.setString(envMODULE_TAG, "DLL")
 				bindDllModulePrefix(v, env)
 			}
 
