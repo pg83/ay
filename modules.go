@@ -3504,6 +3504,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokWithKotlinGrpc:
 		d.peerdirs = append(d.peerdirs, strBuildPlatformJavaKotlinGrpc.any())
+	case tokAliceGenerateProtoIncludes, tokAliceGenerateFunctionProtoIncludes:
+		applyAliceProtoIncludes(fs, modulePath, v, d)
 	case tokCompileNlg:
 		applyCompileNlg(modulePath, v, d)
 	case tokGenerateTopology:
