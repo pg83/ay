@@ -267,6 +267,7 @@ var (
 	strExcludePatterns                                                                       = internStr("--exclude-patterns")
 	strExecutable                                                                            = internStr("--executable")
 	strExt                                                                                   = internStr("--ext")
+	strExternalLocalFile                                                                     = internStr("--external-local-file")
 	strExts                                                                                  = internStr("--exts")
 	strFAKE                                                                                  = internStr("FAKE")
 	strFakeModule                                                                            = internStr("_FAKE_MODULE")

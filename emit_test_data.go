@@ -111,3 +111,20 @@ func (ctx *GenCtx) emitTestData(uri string) NodeRef {
 
 	return ref
 }
+
+func (ctx *GenCtx) emitExternalLocalTestData(rel string) NodeRef {
+	out := build("external_local/" + rel)
+	registry := ctx.scannerForPlatform(ctx.target).codegen
+
+	if info := registry.use(out); info != nil {
+		return info.ProducerRef
+	}
+
+	src := source(rel)
+	args := []string{testYMakePython3, "$(S)/build/scripts/fs_tools.py", "copy", src.string(), out.string()}
+	ref := ctx.emit.emit(&Node{DisableCache: true, Platform: testNoPlatform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args))}), Inputs: ctx.na.inputList(ctx.na.vfsList(src)), Outputs: ctx.na.vfsList(out), KV: &testNodesKV})
+
+	registry.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
+
+	return ref
+}

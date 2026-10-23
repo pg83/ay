@@ -278,6 +278,7 @@ type TestSuite struct {
 	dockerImages           []string
 	depends                []string
 	data                   []string
+	externalLocalFiles     []string
 	recipes                string
 	files                  []string
 	pythonNoBytecode       bool
@@ -442,6 +443,13 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 			s.deps = append(s.deps, ctx.emitTestData(entry))
 		} else if resource, ok := strings.CutPrefix(entry, "mds:"); ok && s.supportsCanonization {
 			s.deps = append(s.deps, ctx.emitCanonicalTestData(resource))
+		} else if file, ok := strings.CutPrefix(entry, "ext:"); ok {
+			rel := path.Join(s.projectPath, strings.TrimSuffix(file, ".external"))
+
+			if present, isDir := ctx.fs.exists(srcRootRel, rel); present && !isDir {
+				s.externalLocalFiles = append(s.externalLocalFiles, rel)
+				s.deps = append(s.deps, ctx.emitExternalLocalTestData(rel))
+			}
 		}
 	}
 
@@ -680,6 +688,10 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		if uri, ok := strings.CutPrefix(data, "sbr://"); ok {
 			head = append(head, strSandboxResource.any(), internStr(uri).any())
 		}
+	}
+
+	for _, file := range s.externalLocalFiles {
+		head = append(head, strExternalLocalFile.any(), internStr(file).any())
 	}
 
 	req := testRequirements(s)

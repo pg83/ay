@@ -100,7 +100,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 func appendNode(buf []byte, n *Node, fetchRefs *DenseMap[STR, NodeRef], dropSrcInputs bool) []byte {
 	buf = append(buf, '{')
 
-	if n.KV.DisableCache {
+	if n.DisableCache || n.KV.DisableCache {
 		buf = append(buf, `"cache":false,`...)
 	}
 

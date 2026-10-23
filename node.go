@@ -26,6 +26,7 @@ type Cmd struct {
 }
 
 type Node struct {
+	DisableCache        bool          `json:"-"`
 	ResourceURIs        []STR         `json:"-"`
 	Module              bool          `json:"-"`
 	Cmds                []Cmd         `json:"cmds"`
