@@ -209,15 +209,19 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 	cppVFS := build(srcRel, ".cpp")
 	bfbsVFS := build(strings.TrimSuffix(srcRel, v.srcExt), v.bfbsExt)
 	flatcFlags := ctx.na.anyList(d.flatcFlags...)
+
 	var binding *fbsFlatcBinding
 	var flRef NodeRef
+
 	if v == &flatcVariantFL64 && d.multimodule == tokFbsLibrary {
 		binding = ctx.fbsFlatcBinding(e.instance.Platform, headerVFS)
 		binding.flags = flatcFlags
+
 		flRef = binding.ref
 	} else {
 		flRef = ctx.emit.reserve()
 	}
+
 	ccTag := d.unit.CCTag
 	tc := d.tc
 
@@ -225,17 +229,22 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 		if binding != nil {
 			flatcFlags = binding.flags
 		}
+
 		e.emitFLReserved(srcRel, srcVFS, flatcLDRef, flatcBinary, flatcFlags, transitiveImports, ccTag, tc, v, flRef)
 	}
 
 	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.na, ctx.parsers, srcVFS.relString())
+
 	var pending *PendingEmit
+
 	if binding != nil {
 		if binding.emit == nil {
 			binding.emit = pe
 			ctx.fbsBindings.pins = append(ctx.fbsBindings.pins, e.pendingEmit(func() {}))
 		}
+
 		pending = ctx.javaPendingEmit(func() { binding.used = true })
+
 		if e.codegen.lookup(headerVFS) != nil {
 			return
 		}

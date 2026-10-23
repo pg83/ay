@@ -197,7 +197,6 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 				ext = ".c"
 			}
 
-			// Public/API rules apply noext, then CYTHON_SUFFIX, without OBJ_SUF.
 			generated = relStem(stmt.Src) + cythonSuffix + ext
 		}
 
@@ -321,6 +320,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		}
 
 		env := envVarsVCS
+
 		var sourceFlags []ANY
 
 		if stmt.Native != nil {

@@ -33,7 +33,7 @@ func (d *ModuleData) collectAssemblerConfig(env Environment) {
 	format, platformFlags, predefined := "elf", "-D UNIX", "-g dwarf2"
 
 	switch {
-	case env.bool(envOS_DARWIN) || env.bool(internEnv("OS_IOS")):
+	case env.bool(envOS_DARWIN) || env.bool(envOsIos):
 		format, platformFlags, predefined = "macho", "-D DARWIN -D UNIX", ""
 	case env.bool(envOS_WINDOWS) && env.bool(envARCH_X86_64):
 		format, platformFlags, predefined = "win", "-D WIN64", ""
@@ -43,7 +43,7 @@ func (d *ModuleData) collectAssemblerConfig(env Environment) {
 
 	prefix := ""
 
-	if value := env.string(internEnv("ASM_PREFIX")); value != "" {
+	if value := env.string(envAsmPrefix); value != "" {
 		prefix = "--prefix=" + value
 	}
 
@@ -133,7 +133,7 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 	cmdArgs = append(cmdArgs, argDashO.any(), outVFS.any())
 
 	for _, preinclude := range preincludes {
-		cmdArgs = append(cmdArgs, internStr("-P").any(), preinclude)
+		cmdArgs = append(cmdArgs, strP.any(), preinclude)
 	}
 
 	cmdArgs = append(cmdArgs, inVFS.any())

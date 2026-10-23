@@ -207,6 +207,7 @@ func (it ResourceItem) commandArgs() []ANY {
 	if it.ExpandedCmd != nil {
 		return it.ExpandedCmd
 	}
+
 	return []ANY{it.Cmd.any()}
 }
 
@@ -504,6 +505,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		for _, it := range chunk {
 			commandWords += 1 + len(it.commandArgs())
+
 			if it.input() != 0 {
 				buildBound++
 			}

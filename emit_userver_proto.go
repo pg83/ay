@@ -260,8 +260,8 @@ func (e *EmitContext) emitUserverProtoNode(batch UserverProtoBatch, file Userver
 	na := e.ctx.na
 	args := []ANY{protoc.any()}
 	inputs := [][]VFS{na.vfsList(protoc, tool, src)}
-
 	view := e.scanner.walkClosure(src, e.d.scanCtx, scanDomainProto)
+
 	inputs = append(inputs, view.bucketList()...)
 
 	kv := &userverGrpcKV

@@ -104,9 +104,6 @@ func protoInducedPbH(pm *IncludeParserManager, local, dst []IncludeDirective) []
 	return dst
 }
 
-// proto_processor publishes imported headers as h+cpp. Only the native
-// CHeader/CLike output processors consume that property (parser_manager.cpp);
-// the plain Cpp processor and unregistered output types do not.
 func protoPluginImportedIncludes(na *NodeArenas, out VFS, imports []IncludeDirective) ParsedIncludeSet {
 	switch filepath.Ext(out.relString()) {
 	case ".h", ".hh", ".hpp", ".cuh", ".H", ".hxx", ".xh", ".ipp", ".ixx",
@@ -232,8 +229,6 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 
 	pe := &e.pbEmission[idx]
 	ctx, d := e.ctx, e.d
-	// Only CPP_PROTO attaches _CPP_PROTO_EPILOGUE; CPP_PROTO_FROM_SCHEMA
-	// inherits the same base module without the header-policy recalculation.
 	headerEpilogue := d.moduleStmt.Name == tokProtoLibrary && !d.moduleStmt.Schema && e.instance.Platform.ProtoHeaderEpilogue
 
 	*pe = PbModuleEmission{
@@ -398,6 +393,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	directImports := protoInducedPbH(ctx.parsers, protoParsed, e.dirScratch[:0])
+
 	e.dirScratch = directImports
 
 	if spec.genHParsed != nil {
@@ -570,7 +566,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 		for _, suffix := range plugin.Spec.OutputSuffixes {
 			out := build(protoBase, suffix)
-
 			parsed := protoPluginImportedIncludes(na, out, directImports)
 
 			switch out {

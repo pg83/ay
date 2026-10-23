@@ -5,8 +5,6 @@ type SourceFileGraph struct {
 	final    *IncludeScanner
 }
 
-// Freeze only established parent edges. This scanner cannot parse or resolve a
-// new directive; its normal SCC/bucket cache shares the final file closures.
 func (s *IncludeScanner) sourceClosure(root VFS) Closure {
 	graph := s.sourceFiles
 
@@ -16,6 +14,7 @@ func (s *IncludeScanner) sourceClosure(root VFS) Closure {
 		final.sourceFiles = graph
 		final.sourceFactsOnly = true
 		final.codegen = s.codegen
+
 		graph.final = final
 	}
 
@@ -26,8 +25,6 @@ func (s *IncludeScanner) sourceClosure(root VFS) Closure {
 	return sc.closureOf(root)
 }
 
-// Retained parsed views carry their scanner/configuration identity even when a
-// command flattened the original inputs. TEXT inputs have no parsed view.
 func (ctx *GenCtx) finalizeSourceInputs() {
 	for _, node := range ctx.emit.nodes.s {
 		if node == nil || !node.sourceInputsPending {
@@ -43,24 +40,29 @@ func (ctx *GenCtx) finalizeSourceInputs() {
 				return
 			}
 
-			// Follow established parsed edges, not the flattened input set:
-			// the latter also contains opaque TEXT template obligations.
 			seen := make(map[VFS]bool)
+
 			var addRoot func(VFS)
 			addRoot = func(parent VFS) {
 				if seen[parent] {
 					return
 				}
+
 				seen[parent] = true
+
 				if parent.isSource() {
 					closures = append(closures, view.scanner.sourceClosure(parent))
+
 					return
 				}
+
 				children, _ := view.scanner.cachedChildren(parent)
+
 				for _, child := range children {
 					addRoot(child)
 				}
 			}
+
 			if view.self != 0 {
 				addRoot(view.self)
 			}

@@ -260,6 +260,7 @@ func prInputClosure(s *prSnap, stmt *RunProgramStmt) PrInputClosure {
 		}
 
 		cv := s.scanner.walkClosure(s.inVFSs[i], s.scanCtx, scanDomainCC)
+
 		views = append(views, cv)
 
 		cv.each(func(v VFS) {
@@ -449,13 +450,13 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	na := e.ctx.na
 	env := envVarsVCS
 	dirs := Environment{s: &e.frame.ifEnv}
+
 	if e.ctx.frameDepth > 0 {
-		// A lazy command renders module directories in its first consumer.
-		// Final context binding has no ambient consumer frame; its saved
-		// declaring context remains valid until the pending emit completes.
 		dirs = Environment{s: &e.ctx.frames[e.ctx.frameDepth-1].ifEnv}
 	}
+
 	envPairs := stmt.EnvPairs
+
 	if stmt.CallArgs != nil {
 		envPairs = compilerCommandFlags(stmt.EnvPairs, dirs).Args
 	} else {
@@ -483,11 +484,13 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	}
 
 	args := stmt.Args
+
 	if stmt.CallArgs != nil {
 		args = compilerCommandFlags(stmt.Args, dirs).Args
 	} else {
 		args = expandTokens(stmt.Args, dirs, false, tokenExpandFinal)
 	}
+
 	cmdArgs := na.anys.alloc(1 + len(args))[:0]
 
 	cmdArgs = append(cmdArgs, spec.toolBinPath.any())

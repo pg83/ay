@@ -217,6 +217,7 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, platform)
 	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in.ModuleCompileEnv)
+
 	args := make([]ANY, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+
 		len(bundle.Defines)+len(ownCFlags)+2*len(bundle.NoLibcBlock)+
 		len(in.ModuleScopeCFlags)+len(in.CXXFlags)+len(platform.CXXFlags)+len(ownGlobalBucket)+
@@ -238,9 +239,11 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 
 	if cxx {
 		ownExtras := compilerCommandFlags(in.CXXFlags, in.CompilerEnv).Args
+
 		if len(platform.CXXFlags) > 0 {
 			ownExtras = concat(ownExtras, platform.CXXFlags)
 		}
+
 		args = appendCxxStdAndOwn(args, true, in.Flags.NoCompilerWarnings, true, ownExtras)
 		args = appendAnyLists(args, ownGlobalBucket, catboostOpenSourceDefineFor(platform), coreCxxFlags(platform), in.CXXFlagsVar)
 	}

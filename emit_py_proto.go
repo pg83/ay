@@ -125,8 +125,6 @@ func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, outputs []
 		key := keyDir + keySep + keyBase + suffix
 
 		if logicalModule != 0 {
-			// pb2_arg feeds each physical output back to PY_SRCS with an
-			// explicit alias formed from the original input's logical module.
 			key = logicalModule.string() + strings.TrimSuffix(suffix, filepath.Ext(suffix))
 
 			if !d.usePython2 {
@@ -141,6 +139,7 @@ func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, outputs []
 		}
 
 		out := outputs[i]
+
 		e.enqueueSrc(SrcMeta{
 			Source: out.any(), Prio: stmtPrioDefault,
 			PyMeta: e.addPyMeta(PySourceMeta{
@@ -165,8 +164,6 @@ type PyPBModuleEmission struct {
 }
 
 func (e *EmitContext) pyProtoIncludePlan() []VFS {
-	// TModuleIncDirs::Get concatenates locally declared includes and the
-	// separately unique propagated peer list. An overlap remains in both.
 	return concat(dedup(e.d.protoIncludeLocal), e.peers.ProtoInclude)
 }
 
@@ -185,6 +182,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS) *PyPBModuleEmissio
 
 	for _, plugin := range d.pyProtoPlugins {
 		ref, binary := ctx.tool(internArg(plugin.ToolPath))
+
 		pe.pluginRefs = append(pe.pluginRefs, ref)
 		pe.pluginBinaries = append(pe.pluginBinaries, binary)
 	}
@@ -200,6 +198,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS) *PyPBModuleEmissio
 	}
 
 	pe.suffixes = suffixes
+
 	protoRoot := protoPythonOutputRoot(d)
 	na := ctx.na
 	head := na.anys.alloc(6 + len(suffixes))[:0]
@@ -246,6 +245,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS) *PyPBModuleEmissio
 
 	for i, plugin := range d.pyProtoPlugins {
 		binary := pe.pluginBinaries[i]
+
 		tail = append(tail,
 			internV("--plugin=protoc-gen-", plugin.Name, "=", binary.prefix(), binary.relString()).any(),
 			internV("--", plugin.Name, "_out=$(B)/", protoRoot).any(),
@@ -284,7 +284,6 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule 
 	protoBase := strings.TrimSuffix(protoRelPath, ".proto")
 	internal := "__int" + protoPythonVersion(d) + "__"
 	pyOut := build(protoBase, internal, "_pb2.py")
-
 	outputs := na.vfs.alloc(len(pe.suffixes))[:0]
 
 	for _, suffix := range pe.suffixes {
@@ -339,7 +338,6 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule 
 	toolInputs := na.vfs.alloc(1 + len(pe.pluginBinaries) + 1)[:0]
 
 	toolInputs = append(toolInputs, protocBinary)
-
 	toolInputs = append(toolInputs, pe.pluginBinaries...)
 
 	if !d.noMypy {

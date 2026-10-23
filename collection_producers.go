@@ -10,9 +10,6 @@ type producerDeclaration struct {
 	index int
 }
 
-// TModuleDef's MakeFileMap preserves same-priority generating macro calls.
-// Capture their runtime declarations between statements, including recursively
-// expanded statements, rather than reconstructing order from producer families.
 func (d *ModuleData) recordCollectionDeclarations() {
 	if d.moduleStmt == nil || !isUnionModule(d.moduleStmt.Name) && d.moduleStmt.Name != tokPackageFinal {
 		return
@@ -58,9 +55,6 @@ func (e *EmitContext) collectionProducerPositions(positions []ProducerPos) []Pro
 		positions = append(positions, ProducerPos{kind: prodBundle, index: i, outs: []VFS{copyFileOutputVFS(module, bundle.Name)}})
 	}
 
-	// Automatic extension processing follows the initial macro queue. Only this
-	// declaration queue is ordered here; output lists come from registration of
-	// each ready producer, with its actual main and secondary output identities.
 	ranks := make(map[producerDeclaration]int, len(positions))
 
 	for i, pos := range positions {
@@ -78,11 +72,9 @@ func (e *EmitContext) collectionProducerPositions(positions []ProducerPos) []Pro
 	return positions
 }
 
-// RecursiveAddInputs pops the front command and pushes a pending command back.
-// A ready command registers its complete output group before the next command.
-// A rotating cursor over the surviving declarations represents that same queue.
 func (e *EmitContext) scheduleCollectionProducers(positions []ProducerPos) []int {
 	m := &e.ctx.prodOuts
+
 	m.reset(vfsBound())
 
 	for i, pos := range positions {
@@ -97,6 +89,7 @@ func (e *EmitContext) scheduleCollectionProducers(positions []ProducerPos) []int
 
 	for len(order) < len(positions) {
 		i := cursor
+
 		cursor = (cursor + 1) % len(positions)
 
 		if done[i] {
@@ -106,8 +99,6 @@ func (e *EmitContext) scheduleCollectionProducers(positions []ProducerPos) []int
 		ready := true
 
 		for _, input := range positions[i].ins {
-			// Another module context may have registered the genuine producer
-			// already. Do not defer an input which the resolver can now find.
 			if e.codegen.lookup(input) != nil {
 				continue
 			}

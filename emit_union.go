@@ -40,6 +40,7 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	}
 
 	globals = e.scriptModuleResources(globals, "build/platform/python/ymake_python3")
+
 	e.d.scanCtx.ccPeer = e.ctx.na.vfsList(dedup(peerIncludes)...)
 	e.d.scanCtx.protoInclude = e.ctx.na.vfsList(dedup(e.d.scanCtx.protoInclude, peerProtoIncludes)...)
 	e.globalSources = dedup(e.globalSources, e.emitSdcMetas())

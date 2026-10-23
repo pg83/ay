@@ -140,6 +140,7 @@ func (e *EmitContext) moduleSourceVFS(src ANY) VFS {
 
 func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS) {
 	ctx := e.ctx
+
 	if e.instance.Language == LangFbsJavaNative {
 		return e.bindFbsNativeSource(srcVFS, in, reserved)
 	}
@@ -711,8 +712,8 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 	}
 
 	cxxBucket := composeOwnAndPeerGlobalBucket(in)
-
 	coreCxx := coreCxxFlags(p)
+
 	if in.NoBaseUnit {
 		coreCxx = nil
 	}
@@ -735,7 +736,9 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 	}
 
 	binding := &compilerFlagBlocks{arena: na, platform: p, input: *in}
+
 	binding.input.CCBlocks = CcModuleArgBlocks{}
+
 	return CcModuleArgBlocks{
 		compilerFlags: binding,
 		wrapHead:      wrapHead,

@@ -322,7 +322,7 @@ func (e *EmitContext) appendPlatformPeerdirs(peers []string, instance ModuleInst
 func (e *EmitContext) defaultCommonLinkPeerdirs() []string {
 	instance, d := e.instance, e.d
 
-	if d.setVars[internStr("COMMON_LINK_SETTINGS")] == strNo {
+	if d.setVars[strCommonLinkSettings] == strNo {
 		return nil
 	}
 

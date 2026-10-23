@@ -134,9 +134,9 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 
 		srcCV := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
 		runtimeCV := e.scanner.walkClosure(cudaRuntimeIncludeVFS, d.scanCtx, scanDomainCC)
+
 		sourceViews = []Closure{srcCV}
 		compileViews = []Closure{srcCV, runtimeCV}
-
 		sourceClosure = na.dedupClosureChunks(srcCV)
 		compileClosure = na.dedupClosureChunks(srcCV, runtimeCV)
 	}
@@ -147,6 +147,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 		outs := na.vfsList(output("."+arch+".cubin"), output("."+arch+".ptx"), output("."+arch+".cudafe1.stub.c"), output("."+arch+".module_id"))
 		ref := e.ctx.emit.reserve()
 		sourceAction := &SourceActionInfo{DeclSeq: seq, Inputs: na.vfsList(srcVFS, cudaCompileScriptVFS, cudaRuntimeIncludeVFS)}
+
 		seq++
 
 		pending := e.pendingEmit(func() {
@@ -204,6 +205,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 	fatbin := output(".fatbin.c")
 	fatRef := e.ctx.emit.reserve()
 	fatAction := &SourceActionInfo{DeclSeq: seq, Inputs: na.vfsList(append([]VFS{srcVFS, buildScriptsFatbinaryWrapperPy}, images...)...)}
+
 	seq++
 
 	fatPending := e.pendingEmit(func() {
@@ -231,6 +233,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 	moduleID := output("." + stubArch + ".module_id")
 	stub := output("." + stubArch + ".cudafe1.stub.c")
 	hostAction := &SourceActionInfo{DeclSeq: seq, Inputs: na.vfsList(srcVFS, cudaCompileScriptVFS, cudaRuntimeIncludeVFS, moduleID)}
+
 	seq++
 
 	hostPending := e.pendingEmit(func() {

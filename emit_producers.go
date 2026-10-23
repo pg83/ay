@@ -74,10 +74,6 @@ func rootedBuildCandidate(modulePath, rel string) VFS {
 	return 0
 }
 
-// Plan source-resolved inputs before local producers have been registered.
-// A physical source (or an explicit root) keeps its namespace. Missing names
-// retain a build candidate for declaration ordering; emission still selects
-// generated files only from CodegenRegistry's registered producer facts.
 func (e *EmitContext) sourceInputForScheduling(name string) VFS {
 	input := resolveSourceVFS(e.ctx, e.instance, name, e.d.srcDirs)
 
@@ -480,7 +476,9 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		}
 
 		backing = append(backing, copyFileOutputVFS(module, filepath.Base(prefix)+".cpp"), copyFileOutputVFS(module, filepath.Base(prefix)+".h"))
+
 		outEnd := len(backing)
+
 		backing = append(backing, e.sourceInputForScheduling(prefix+".in"))
 		push(prodSplitCodegen, i, start, outEnd)
 	}
@@ -594,9 +592,11 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 			childMeta := meta
 
 			childMeta.Source = e.gztGenProto(src.string()).any()
+
 			if childMeta.SourceQueueRank != 0 {
 				childMeta.SourceQueueRank++
 			}
+
 			srcs = append(srcs, childMeta)
 		}
 	}

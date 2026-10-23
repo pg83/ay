@@ -28,16 +28,15 @@ func expandResourceFileArgs(args []ANY, env Environment) []string {
 	return expanded
 }
 
-// TEvalContext::Deref expands each lexical argument once, then splits only
-// arguments containing '$' on spaces. Quoting has already been removed by
-// makefile_lang.rl6; quotes in an expanded value do not group its words.
 func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair, bool) {
 	var expanded []string
 
 	for _, arg := range args {
 		value := arg.string()
+
 		if strings.ContainsRune(value, '$') {
 			value = expandResourceArgument(value, env)
+
 			for _, word := range strings.Split(value, " ") {
 				if word != "" {
 					expanded = append(expanded, word)
@@ -48,80 +47,97 @@ func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair,
 		}
 	}
 
-	// TPluginResourceHandler searches the first two arguments for each flag
-	// and advances by the number of distinct flags found, regardless of order.
 	dontParse, dontCompress := false, false
+
 	for _, arg := range expanded[:min(2, len(expanded))] {
 		dontParse = dontParse || arg == "DONT_PARSE"
 		dontCompress = dontCompress || arg == "DONT_COMPRESS"
 	}
+
 	start := 0
+
 	if dontParse {
 		start++
 	}
+
 	if dontCompress {
 		start++
 	}
+
 	rest := expanded[start:]
+
 	if len(rest)%2 != 0 {
 		throwFmt("RESOURCE at line %d: argument count after DONT_PARSE/DONT_COMPRESS strip must be even (got %d)", line, len(rest))
 	}
 
 	pairs := make([]ResourcePair, 0, len(rest)/2)
+
 	for i := 0; i < len(rest); i += 2 {
 		path := strings.ReplaceAll(rest[i], "$(S)", "${ARCADIA_ROOT}")
 		key := strings.ReplaceAll(rest[i+1], "$(S)", "${ARCADIA_ROOT}")
+
 		pairs = append(pairs, ResourcePair{
 			Path: strings.ReplaceAll(path, "$(B)", "${ARCADIA_BUILD_ROOT}"),
 			Key:  strings.ReplaceAll(key, "$(B)", "${ARCADIA_BUILD_ROOT}"),
 		})
 	}
+
 	return pairs, dontCompress
 }
 
-// lang/expansion.rl6 and TVarsLookup in lang/eval.cpp implement EvalExpr.
-// Backslash escapes one character; only $name{key} references are recognized.
-// Reserved variables and resource globals remain for the command renderer.
 func expandResourceArgument(value string, env Environment) string {
 	return expandMakeExpression(value, env, keepDeferredVar)
 }
 
 func expandMakeExpression(value string, env Environment, reserved func(string) bool) string {
 	var out strings.Builder
+
 	for i := 0; i < len(value); {
 		if value[i] == '\\' && i+1 < len(value) {
 			out.WriteByte(value[i+1])
 			i += 2
+
 			continue
 		}
+
 		if value[i] == '$' {
 			j := i + 1
+
 			for j < len(value) && (value[j] >= 'a' && value[j] <= 'z' || value[j] >= 'A' && value[j] <= 'Z' || value[j] >= '0' && value[j] <= '9') {
 				j++
 			}
+
 			if j < len(value) && value[j] == '{' {
 				end := strings.IndexAny(value[j+1:], "${}")
+
 				if end > 0 && value[j+1+end] == '}' {
 					end += j + 1
+
 					macro, key := value[i+1:j], value[j+1:end]
 					replacement, _ := env.lookup(key)
 					expand := macro == "" && !reserved(key)
+
 					if macro == "ENV" {
 						replacement, expand = os.Getenv(key), true
 					}
+
 					if expand {
 						out.WriteString(replacement)
 					} else {
 						out.WriteString(value[i : end+1])
 					}
+
 					i = end + 1
+
 					continue
 				}
 			}
 		}
+
 		out.WriteByte(value[i])
 		i++
 	}
+
 	return out.String()
 }
 
@@ -286,20 +302,15 @@ func globMatch(fs FS, pattern string) []string {
 		for _, d := range dirs {
 			if seg == "**" {
 				if !last {
-					queue := []string{d}
+					root := cleanRel(d)
 
-					for head := 0; head < len(queue); head++ {
-						current := queue[head]
-
-						for _, packed := range fs.listdir(dirKey(current)).names {
-							if packed&1 != 0 {
-								child := joinRel(current, STR(packed>>1).string())
-
-								next = append(next, child)
-								queue = append(queue, child)
-							}
+					fs.walk(root, func(rel string, isDir bool) bool {
+						if isDir && rel != root {
+							next = append(next, rel)
 						}
-					}
+
+						return true
+					})
 
 					next = append(next, d)
 

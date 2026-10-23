@@ -119,6 +119,7 @@ func javaConfPrologue(jm *JavaModule, d *JavaData) {
 	if u.proto {
 		d.javaProtobufPeers = []string{"contrib/java/com/google/protobuf/protobuf-java/" + javaProtoRuntimeVersion, javaKotlinProtoPeersMarker}
 	}
+
 	if u.fbs {
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "contrib/java/com/google/flatbuffers/flatbuffers-java/" + javaFlatbuffersVersion})
 	}
@@ -160,8 +161,9 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	if jm.unit.proto {
 		env.setBool(envJavaProto, true)
 	}
+
 	if jm.unit.fbs {
-		env.setBool(internEnv("JAVA_FBS"), true)
+		env.setBool(envJavaFbs, true)
 	}
 
 	for _, st := range stmts {
@@ -188,6 +190,7 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	if jm.unit.proto {
 		d.expandJavaProtobufPeers()
 	}
+
 	if jm.unit.fbs {
 		d.env = env.cloneInto(new(EnvStore))
 	}
@@ -306,10 +309,12 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			for _, dir := range expandConfigVFSPaths(v.ProtoGlobalPaths, env) {
 				d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir, global: true})
 			}
+
 			if jm.unit.fbs {
 				for _, dir := range expandConfigVFSPaths(v.FlatcGlobalPaths, env) {
 					d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir, global: true})
 				}
+
 				for _, dir := range expandConfigVFSPaths(v.FlatcPaths, env) {
 					d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir})
 				}
@@ -736,7 +741,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "USE_KTLINT_OLD":
 		d.ktlintOld = true
 	case "WITH_YA_1931":
-		env.setBool(internEnv("_WITH_YA_1931"), true)
+		env.setBool(envWithYa1931, true)
 	case "NO_YMAKE_PYTHON3":
 		d.noYmakePython3 = true
 	case "ENABLE":
@@ -791,6 +796,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		if name == "ONLY_TAGS" {
 			clear(d.excludeTags)
 			d.onlyTags = true
+
 			tag := "JAVA_PROTO"
 
 			if u.proto {

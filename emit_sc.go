@@ -12,9 +12,6 @@ func (e *EmitContext) collectSCInputs(inputs []VFS) {
 	}
 }
 
-// SourceFile include facts belong to the first module that registers a parsed
-// input, even when that input's action is never used. Register after local
-// producers so resolving a generated import still uses complete producer facts.
 func (e *EmitContext) registerSCInputs() {
 	visit := func(input VFS) {
 		if !input.isSource() {

@@ -124,7 +124,9 @@ func parseCythonCdefTarget(b []byte) ([]byte, bool) {
 	}
 
 	quote := b[0]
+
 	b = b[1:]
+
 	end := 0
 
 	if len(b) > 0 && b[0] == '<' {

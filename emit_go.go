@@ -321,8 +321,6 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 			return
 		}
 
-		// Upstream missing-file nodes carry no parsed imports. Keep the input
-		// for emission, where CodegenRegistry resolves declared producers.
 		if present, _ := ctx.fs.exists(srcRootRel, path.relString()); !present {
 			return
 		}
@@ -521,8 +519,8 @@ func (e *EmitContext) goAsmIncludeSrcs() []VFS {
 
 	for _, src := range e.goRes.AsmFiles {
 		cv := e.scanner.walkClosure(src, e.d.scanCtx, scanDomainGoAsm)
-		e.goRes.views = append(e.goRes.views, cv)
 
+		e.goRes.views = append(e.goRes.views, cv)
 		cvs = append(cvs, cv)
 		bound += cv.len()
 	}
@@ -772,6 +770,7 @@ func (e *EmitContext) goCgoClosure(goRes *GoSrcsResult, includedSrcs []VFS) []VF
 
 		for _, f := range d.cgoSrcs {
 			cv := e.scanner.walkClosure(resolveSourceVFS(ctx, instance, f.string(), d.srcDirs), d.scanCtx, scanDomainCC)
+
 			goRes.views = append(goRes.views, cv)
 
 			extrasCap += cv.len()

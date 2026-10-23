@@ -104,8 +104,6 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 		}
 
-		// json_visitor.cpp forwards .in BuildFrom inputs, including TEXT
-		// inputs. Register that fact before copyLoopSources scans the output.
 		if strings.HasSuffix(srcVFS.relString(), ".in") {
 			if srcVFS.isSource() && !entry.WithContext {
 				reg.forwardTextTemplates(dstVFS, ctx.na.vfsList(srcVFS))
@@ -124,15 +122,19 @@ func (e *EmitContext) emitCopyFileNodeSnap(entry CopyFileEntry, st CopyEmitState
 	ctx := e.ctx
 
 	var closure []VFS
+
 	if entry.WithContext {
 		view := e.scanner.walkClosure(st.srcVFS, e.d.scanCtx, scanDomainCC)
+
 		e.codegen.mustInfo(st.dstVFS).InputLoopViews = []Closure{view}
 	}
 
 	sources, views := e.copyLoopSources(st.dstVFS)
+
 	for _, view := range views {
 		closure = append(closure, view.collect(ctx.na, func(VFS) bool { return true })...)
 	}
+
 	closure = append(closure, sources...)
 
 	e.emitCPWithInputs(st.srcVFS, st.dstVFS, closure, st.ref, e.d.tc, ctx.scripts, views...)
@@ -142,5 +144,6 @@ func (e *EmitContext) copyLoopSources(dst VFS) ([]VFS, []Closure) {
 	e.inputClosure(dst)
 
 	info := e.codegen.mustInfo(dst)
+
 	return info.InputLoopSources, info.InputLoopViews
 }

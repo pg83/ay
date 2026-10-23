@@ -150,6 +150,18 @@ class GoPackageGraphTest(unittest.TestCase):
                 self.assertCountEqual(args[start + 3:args.index("++peers")], inputs)
                 self.assertTrue(set(inputs).issubset(node["inputs"]))
 
+    def test_embed_directory_preserves_declared_parent_path(self):
+        files = go_world()
+        go_module(files, "embed/sample", macros="GO_EMBED_DIR(../assets)\n")
+        files["embed/assets/a/deep/x.txt"] = "x"
+        files["embed/assets/b/y.txt"] = "y"
+        args = go_tool_args(go_node(lib.make(files, "embed/sample"), "embed/sample"))
+        self.assertEqual(args[args.index("++embed"):args.index("++peers")], [
+            "++embed", "$(S)/embed/sample", "../assets",
+            "$(S)/embed/sample/../assets/b/y.txt",
+            "$(S)/embed/sample/../assets/a/deep/x.txt",
+        ])
+
     def test_embed_bindir_tracks_generated_files_and_explicit_prefix(self):
         files = go_world()
         lib.tool_program(files, "tools/generate", "generate")

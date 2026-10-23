@@ -5,15 +5,6 @@ import (
 	"strings"
 )
 
-var (
-	envSbrUIDExt              = internEnv("SBR_UID_EXT")
-	envPackedPackageExt       = internEnv("PACKED_PACKAGE_EXT")
-	envCudaNodeRAMRequirement = internEnv("_CU_NODE_MAX_RAM_REQUIREMENT")
-	envUseCow                 = internEnv("USE_COW")
-)
-
-// These upstream macros contain only SET/ENABLE. Lower them during collection,
-// so the lexical IR can be reused with each module's own environment.
 func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environment) *SetStmt {
 	var name, value, parameter string
 
@@ -43,8 +34,7 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 	case tokNoNeedCheck:
 		name, value = "UNUSED_MACRO", "yes"
 	case tokWindowsManifest, tokWindowsLongPathManifest:
-		// VarStatement dereferences arguments before signature binding, then
-		// PrepareMacroCall deeply substitutes the configuration SET body.
+
 		var args []string
 
 		for _, arg := range v.Args {
@@ -80,9 +70,8 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 		return nil
 	}
 
-	// PrepareMacroBody binds arguments in a local scope. PrepareMacroCall then
-	// substitutes the entire SET body once, splits it, and passes it to EvalExpr.
 	locals := env.clone()
+
 	locals.unbind(envBINDIR)
 	locals.unbind(envCURDIR)
 
@@ -96,6 +85,7 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 	}
 
 	words := strings.Split(expandConfigMacroBody(name+" "+value, locals), " ")
+
 	words = slices.DeleteFunc(words, func(word string) bool { return word == "" })
 	value = strings.Join(words[1:], " ")
 
@@ -110,58 +100,57 @@ func appendMacroEnv(env Environment, name, value string) {
 	env.setString(internEnv(name), value)
 }
 
-// PYTHON2_ADDINCL and USE_PYTHON2 share _PYTHON_ADDINCL, but install
-// different compatibility tags. Only USE_PYTHON2 adds the runtime peer.
 func applyPython2Addincl(d *ModuleData, env Environment, native bool) {
 	d.python2Headers = true
 	usePython2(env, d, unitTagPy2)
 	d.usePython3 = false
-	env.setString(internEnv("_PYTHON_VER"), "py2")
-	env.setString(internEnv("PYTHON_TYPE_FOR_CYTHON"), "PY2")
+	env.setString(envPythonVer, "py2")
+	env.setString(envPythonTypeForCython, "PY2")
 
 	tags := "PY2 PY2_NATIVE $_CPP_PROTO_COMPATIBLE_TAGS CPP_PROTO_FROM_SCHEMA CPP_FBS CPP_ROS $YQL_UDF_STATIC_PEERDIR_TAG $YQL_ABI_PEERDIR_TAG __EMPTY__ RESOURCE_LIB DLL_LIB"
+
 	if native {
 		env.setStringID(envMODULE_TAG, unitTagPy2Native)
 		tags = "$_CPP_PROTO_COMPATIBLE_TAGS CPP_PROTO_FROM_SCHEMA CPP_FBS CPP_ROS PY2_NATIVE $YQL_UDF_STATIC_PEERDIR_TAG $YQL_ABI_PEERDIR_TAG __EMPTY__ RESOURCE_LIB DLL_LIB"
 	}
-	env.setString(internEnv("PEERDIR_TAGS"), expandAssignedScalarVarRef(tags, env))
+
+	env.setString(envPeerdirTags, expandAssignedScalarVarRef(tags, env))
 }
 
-// python.conf: PYTHON3_ADDINCL -> _PYTHON3_ADDINCL. This selects headers
-// without adding USE_PYTHON3's runtime peers.
 func applyPython3Addincl(d *ModuleData, env Environment) {
 	d.python3NativeIncl = true
 	d.usePython2, d.usePython3 = false, true
 	env.setBool(envPYTHON3, true)
 	env.setBool(envPYTHON2, false)
-	env.setString(internEnv("_PYTHON_VER"), "py3")
-	env.setString(internEnv("PYTHON_TYPE_FOR_CYTHON"), "PY3")
+	env.setString(envPythonVer, "py3")
+	env.setString(envPythonTypeForCython, "PY3")
 
 	env.setString(envMODULE_TAG, "PY3_NATIVE")
-	env.setString(internEnv("PEERDIR_TAGS"), expandAssignedScalarVarRef("$_CPP_PROTO_COMPATIBLE_TAGS CPP_PROTO_FROM_SCHEMA CPP_FBS CPP_ROS PY3_NATIVE $YQL_UDF_STATIC_PEERDIR_TAG $YQL_ABI_PEERDIR_TAG __EMPTY__ RESOURCE_LIB DLL_LIB", env))
+	env.setString(envPeerdirTags, expandAssignedScalarVarRef("$_CPP_PROTO_COMPATIBLE_TAGS CPP_PROTO_FROM_SCHEMA CPP_FBS CPP_ROS PY3_NATIVE $YQL_UDF_STATIC_PEERDIR_TAG $YQL_ABI_PEERDIR_TAG __EMPTY__ RESOURCE_LIB DLL_LIB", env))
 }
 
-// Conditional fields belong to the module configuration. Activate each header
-// macro once and evaluate its fields with the final module variables.
 func finishPythonHeaderConfig(d *ModuleData, env Environment) {
 	if d.python2Headers {
 		if env.string(envUSE_ARCADIA_PYTHON) == "yes" {
 			flag := internArg("-DARCADIA_PYTHON_UNICODE_SIZE=" + env.string(envArcadiaPythonUnicodeSize)).any()
+
 			appendMacroEnv(env, "CFLAGS", flag.string())
 			appendMacroEnv(env, "ADDINCL", "GLOBAL contrib/libs/python/Include")
 			d.moduleScopeCFlags = append(d.moduleScopeCFlags, flag)
 			d.addIncl = append(d.addIncl, pythonIncludeDir)
 			d.addInclGlobal = append(d.addInclGlobal, pythonIncludeDir)
 			d.addInclUserGlobal = append(d.addInclUserGlobal, pythonIncludeDir)
-		} else if env.string(internEnv("USE_SYSTEM_PYTHON")) != "" {
+		} else if env.string(envUseSystemPython) != "" {
 			appendMacroEnv(env, "PEERDIR", "build/platform/python")
-			d.peerdirs = append(d.peerdirs, internStr("build/platform/python").any())
+			d.peerdirs = append(d.peerdirs, strBuildPlatformPython.any())
 		} else {
-			flags := expandStmtToken(env.string(internEnv("PYTHON_INCLUDE")), env)
+			flags := expandStmtToken(env.string(envPythonInclude), env)
+
 			appendMacroEnv(env, "CFLAGS", flags)
 			d.moduleScopeCFlags = append(d.moduleScopeCFlags, internAnys(splitShellWords(flags))...)
 		}
 	}
+
 	if d.python3NativeIncl {
 		if env.string(envUSE_ARCADIA_PYTHON) == "yes" {
 			flags := []ANY{argDusePython3.any()}
@@ -170,27 +159,29 @@ func finishPythonHeaderConfig(d *ModuleData, env Environment) {
 			if include == "" {
 				include = "contrib/libs/python/Include"
 
-				if env.string(internEnv("USE_PYTHON3_PREV")) == "yes" {
+				if env.string(envUSE_PYTHON3_PREV) == "yes" {
 					include = "contrib/libs/python/Include_prev"
 				}
 			}
 
-			if env.string(internEnv("USE_PYTHON3_PREV")) == "yes" {
-				flags = append(flags, internStr("-DUSE_PYTHON3_PREV").any())
+			if env.string(envUSE_PYTHON3_PREV) == "yes" {
+				flags = append(flags, strDusePython3Prev.any())
 			}
 
 			appendMacroEnv(env, "CFLAGS", strings.Join(anyStrs(flags), " "))
 			appendMacroEnv(env, "ADDINCL", "GLOBAL "+include)
 			d.moduleScopeCFlags = append(d.moduleScopeCFlags, flags...)
+
 			paths := expandConfigVFSPaths(internAnys(strings.Fields(include)), env)
+
 			d.addIncl = append(d.addIncl, paths...)
 			d.addInclGlobal = append(d.addInclGlobal, paths...)
 			d.addInclUserGlobal = append(d.addInclUserGlobal, paths...)
-		} else if env.string(internEnv("USE_SYSTEM_PYTHON")) != "" {
+		} else if env.string(envUseSystemPython) != "" {
 			appendMacroEnv(env, "PEERDIR", "build/platform/python")
-			d.peerdirs = append(d.peerdirs, internStr("build/platform/python").any())
+			d.peerdirs = append(d.peerdirs, strBuildPlatformPython.any())
 		} else {
-			flags := expandStmtToken(env.string(internEnv("PYTHON_INCLUDE")), env)
+			flags := expandStmtToken(env.string(envPythonInclude), env)
 
 			appendMacroEnv(env, "CFLAGS", flags)
 			d.moduleScopeCFlags = append(d.moduleScopeCFlags, internAnys(splitShellWords(flags))...)

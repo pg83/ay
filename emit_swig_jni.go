@@ -193,6 +193,7 @@ func (ctx *GenCtx) javaEmitSwigJsrc(jm *JavaModule, src string, srcVFS, jsrc VFS
 	}
 
 	view := scanner.walkClosure(srcVFS, scanCtx, scanDomainSwig)
+
 	b.views = append(b.views, view)
 
 	for _, bucket := range view.bucketList() {

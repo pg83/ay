@@ -60,7 +60,7 @@ func (e *EmitContext) emitSwigC() {
 			var cppArgs []ANY
 
 			if !stmt.CMode {
-				cppArgs = na.anyList(internStr("-c++").any())
+				cppArgs = na.anyList(strC5.any())
 			}
 
 			cmdArgs := na.chunkList(na.anyList(swigBin.any()), swigConstArgs, cppArgs, na.anyList(argPython.any(), argModule.any(), internStr(moduleName).any(),

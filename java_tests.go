@@ -95,7 +95,6 @@ func (ctx *GenCtx) javaCheckSourceDir(jm *JavaModule, dir string) VFS {
 		}
 	}
 
-	// java_srcdirs_to_data joins an unresolved empty path with MODDIR.
 	return jm.path
 }
 
@@ -202,7 +201,7 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 	s := ctx.javaSuiteBase(jm, "ktlint", "ktlint", "style")
 	dirs := []string{editorconfig}
 
-	if d.env.string(internEnv("_WITH_YA_1931")) != "yes" {
+	if d.env.string(envWithYa1931) != "yes" {
 		dirs = append(dirs, ctx.javaSrcDirsTestData(jm)...)
 	}
 

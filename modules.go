@@ -398,8 +398,7 @@ type SrcMeta struct {
 	PyMeta               uint32
 	InitialCompileSource bool
 	TaskletSeq           int
-	// One plus the FIFO wave of an initial SRCS action or its auto-sources.
-	// Zero means the initial wave was not recorded.
+
 	SourceQueueRank uint64
 }
 
@@ -644,8 +643,6 @@ func copyFileInputVFS(fs FS, moduleDir VFS, src string) VFS {
 }
 
 func moduleInputCandidateVFS(modulePath string, path string) VFS {
-	// Known input roots retain their namespace; unresolved names may refer to
-	// a producer in the module build directory before source search.
 	if vfs, ok := moduleRootedVFS(modulePath, path); ok {
 		return vfs
 	}
@@ -674,8 +671,6 @@ func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 
 func copyFileOutputVFS(modulePath string, dst string) VFS {
 	if vfs, ok := moduleRootedVFS(modulePath, dst); ok {
-		// TModuleResolver::FormatBuildPath replaces any known root with Build
-		// and reconstructs the path, independently of the noauto modifier.
 		return buildClean(vfs.relString())
 	}
 
@@ -796,10 +791,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	kindOfResolve, _ := env.s.lookup(envDontResolveIncludes)
+
 	d.dontResolveIncludes = kindOfResolve != envAbsent && env.string(envDontResolveIncludes) != "no"
 	finishYqlModule(ctx, instance, env, d, onWarn)
-	// _SRC("pyx") in ymake.core.conf uses the native Cython rule, without
-	// PY_SRCS' module registration. Keep its source ordering and GLOBAL flag.
+
 	nativeSources := d.srcs[:0]
 
 	for _, meta := range d.srcs {
@@ -814,14 +809,15 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	finishPythonImportMask(env, d)
 	bindRunProgramCalls(d, env)
 	d.test.expandValues(env)
-	// CheckModuleEnd also closes an unfinished owner at EOF. An explicit END
-	// preserves its namespace before later directory statements are collected.
+
 	pythonHeaderEnv := env
+
 	if d.pythonHeaderEnv.s != nil {
 		pythonHeaderEnv = d.pythonHeaderEnv
 	}
+
 	if d.python2Headers || d.python3NativeIncl {
-		d.pythonPeerTags = strings.Fields(pythonHeaderEnv.string(internEnv("PEERDIR_TAGS")))
+		d.pythonPeerTags = strings.Fields(pythonHeaderEnv.string(envPeerdirTags))
 	}
 
 	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
@@ -891,10 +887,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.peerdirs = append(d.peerdirs, clangSAPeer.any())
 	}
 
-	// ymake.core.conf's conditional PEERDIR variable is applied before
-	// explicit peer statements, using the final module variable values.
 	if env.string(envUSE_OPENMP) == "yes" {
-		d.peerdirs = append([]ANY{internStr("contrib/libs/openmp").any()}, d.peerdirs...)
+		d.peerdirs = append([]ANY{strContribLibsOpenmp.any()}, d.peerdirs...)
 	}
 
 	d.noStrip = env.bool(envNO_STRIP)
@@ -1262,6 +1256,7 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 
 func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	fs := ctx.fs
+
 	defer d.recordCollectionDeclarations()
 
 	for _, s := range stmts {
@@ -1296,11 +1291,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if v.Name == tokProtoLibrary && language == LangTS {
 				d.noLint = "none"
-				env.setString(internEnv("_NO_LINT_VALUE"), "none")
+				env.setString(envNoLintValue, "none")
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
-			env.setStringID(internEnv("MODULE_KIND"), v.Name.str())
+			env.setStringID(envModuleKind, v.Name.str())
 			setupYqlModule(d, v.Name, env)
 
 			if v.Schema && d.unit.Tag == unitTagPy3Proto {
@@ -1351,16 +1346,18 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.multimodule = v.Name
 				d.moduleVariants = 1<<LangCPP | 1<<LangGo | 1<<LangJava | 1<<LangPy
 				env.setStringID(envMODULE_TAG, d.unit.Tag)
-				env.setBool(internEnv("CPP_FBS"), language == LangCPP)
-				env.setBool(internEnv("JAVA_FBS"), language == LangJava || language == LangFbsJavaNative)
+				env.setBool(envCppFbs, language == LangCPP)
+				env.setBool(envJavaFbs, language == LangJava || language == LangFbsJavaNative)
+
 				if language == LangFbsJavaNative {
 					d.flags.NoUtil = true
 					d.flags.NoRuntime = true
 				}
+
 				if language == LangPy {
 					d.noLint = "none_internal"
-					env.setBool(internEnv("PY3_FBS"), true)
-					env.setString(internEnv("_NO_LINT_VALUE"), "none_internal")
+					env.setBool(envPy3Fbs, true)
+					env.setString(envNoLintValue, "none_internal")
 				}
 			}
 
@@ -1451,7 +1448,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if d.multimodule == tokFbsLibrary && language == LangPy {
 				stmt := UnknownStmt{Name: tokPySrcs, Args: expandStmtTokens(v.Sources, env)}
+
 				d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
+
 				continue
 			}
 
@@ -1578,17 +1577,21 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		case *SetStmt:
 
 			sourceValue := v.Value
+
 			if v.Name == importMaskVariable && v.LexicalValue != "" {
 				sourceValue = v.LexicalValue
 			}
+
 			value := expandSourceScalarVarRef(sourceValue, env)
 			perlMask := perlInputMask(v.NameEnv)
 			perlChanged := perlMask != 0 && env.string(v.NameEnv) != value
 
 			env.setFromString(v.NameEnv, value)
+
 			if v.Name == importMaskVariable {
 				setPythonImportMask(value, d)
 			}
+
 			if v.NameEnv == envSANITIZER_TYPE {
 				setupPythonImportMask(env, d)
 			}
@@ -1623,9 +1626,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.ragel6Flags = internAnys(strings.Fields(value))
 			}
 		case *EndStmt:
-			// Resource handlers read the raw owner value after its source body.
-			// Assignments after END belong to the enclosing directory namespace.
+
 			d.unit.HashTag = internStr(env.string(envMODULE_TAG))
+
 			if d.python2Headers || d.python3NativeIncl {
 				d.pythonHeaderEnv = env.clone()
 			}
@@ -1671,8 +1674,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.cOnlyFlagsGlobal, d.cOnlyFlags = appendCompilerFlags(v.Flags, env, "USER_CONLYFLAGS", false, d.cOnlyFlagsGlobal, d.cOnlyFlags)
 		case *LDFlagsStmt:
-			// LDFLAGS is SET_APPEND of a scalar, rather than an argv macro.
+
 			value := strings.Join(anyStrs(expandStmtTokens(v.Flags, env)), " ")
+
 			d.ldFlags = append(d.ldFlags, internAny(expandSourceScalarVarRef(value, env)))
 		case *SrcDirStmt:
 
@@ -2103,10 +2107,11 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return ModuleUnit{Type: name, Tag: strYqlUdfStatic, CCTag: tagYqlUdfStatic, HashTag: strYqlUdfStatic, ARPrefix: "lib", GlobalARTag: tagYqlUdfStaticGlobal, SbomLang: unitSbomCpp}
 	case tokFbsLibrary:
 		if language == LangFbsJavaNative {
-			return ModuleUnit{Type: tokJarLibrary, Tag: internStr("JAVA_FBS"), CCTag: internStr("java_fbs"), NoStartTarget: true}
+			return ModuleUnit{Type: tokJarLibrary, Tag: strJavaFbs, CCTag: strJavaFbs2, NoStartTarget: true}
 		}
+
 		if language == LangPy {
-			return ModuleUnit{Type: tokPy3Library, Tag: internStr("py3_fbs"), ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+			return ModuleUnit{Type: tokPy3Library, Tag: strPy3Fbs, ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 		}
 
 		if language == LangGo {
@@ -2187,7 +2192,6 @@ func addGeneratedHeaderIncludeCF(modulePath, dst string, d *ModuleData) {
 func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 	include := build(generatedIncludeDir(modulePath, dst))
 
-	// Output addincl is committed after the rule's local include properties.
 	d.addLocalIncl(prioOutputAddIncl, include)
 }
 
@@ -2200,13 +2204,17 @@ func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
 		}
 
 		captured := *v
+
 		captured.CallArgs = args
 		captured.DeclSeq = d.nextDeclSeq()
+
 		d.runPrograms = append(d.runPrograms, &captured)
+
 		return
 	}
 
 	expanded := bindRunProgramFiles(v, env)
+
 	expanded.DeclSeq = d.nextDeclSeq()
 	d.runPrograms = append(d.runPrograms, expanded)
 }
@@ -2633,8 +2641,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		for _, name := range goDirFiles(fs, dir, true) {
 			src := source(dir + "/" + name).any()
 
-			// Macro bodies bypass the GO_TEST_SRCS alias for user statements.
-			// These files are checked even when library compilation ignores tests.
 			d.goFmtSrcs = append(d.goFmtSrcs, src)
 
 			if d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
@@ -2690,8 +2696,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		env.setString(envClangTidyBin, root+"clang-tidy")
 		env.setString(envYaml2jsonBin, root+"yaml2json")
 	case tokGoProtoPlugin:
-		// _BARE_UNIT ignores this macro; only _GO_BASE_UNIT allows it.
-		// Skip the entire call, including its DEPS, in other module contexts.
+
 		if !isGoModuleType(d.unit.Type) {
 			break
 		}
@@ -2814,6 +2819,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.grpc = true
+
 		if isPythonProtoModule(d) || isPythonModuleType(d.unit.Type) {
 			d.pyProtoPlugins = append(d.pyProtoPlugins, PyProtoPlugin{
 				Name: "grpc_py", ToolPath: argContribToolsProtocPluginsGrpcPython.string(),
@@ -3001,7 +3007,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("gen: RESOLVE_PROTO expects no arguments")
 		}
 
-		// build/conf/proto.conf: RESOLVE_PROTO is SET followed by ADDINCL FOR proto.
 		env.setStringID(envDontResolveIncludes, strNo)
 		d.addProtoInclude(expandConfigVFSPaths(anysOf("$PROTOBUF_INCLUDE_PATH"), env), false)
 	case tokUseSdcMeta:
@@ -3122,6 +3127,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			a := aTok.string()
 
 			env.setBool(internEnv(a), false)
+
 			if a == "SANITIZER_TYPE" {
 				setupPythonImportMask(env, d)
 			}
@@ -3295,7 +3301,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.peerdirs = append(d.peerdirs, strContribLibsPython.any())
 	case tokPython2Addincl:
 		if d.moduleStmt != nil && d.moduleStmt.Name == tokPy23NativeLibrary && d.unit.HashTag == unitTagPy3Native {
-			// PY23_NATIVE_LIBRARY's PY3 context aliases this macro.
 			applyPython3Addincl(d, env)
 		} else {
 			applyPython2Addincl(d, env, true)
@@ -3370,17 +3375,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		applyInlinePySrcs(fs, modulePath, append([]ANY{kwNAMESPACE.any(), strTests.any()}, v.Args...), d, env, onWarn)
 	case tokPySrcs:
-		// python.conf supplies this default in the PY_SRCS macro body, not
-		// in the global configuration or ordinary C++ module initialization.
-		// Explicit empty assignments still count as native variable bindings.
+
 		env.setDefaultString(envMODULE_TAG, "PY3")
+
 		stmt := v
 
 		d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
 	case tokAllPySrcs:
-		// python.conf forwards _GLOB's root-relative results through PY_SRCS(_MR).
-		// allPySrcArgs returns the equivalent module-relative source arguments;
-		// interpret the same PY_SRCS call, including its source-time bindings.
+
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPySrcs, Args: allPySrcArgs(fs, modulePath, v)}, d, env, onWarn)
 	case tokPyMain:
 
@@ -3415,6 +3417,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokNoCheckImports:
 
 		value := strings.Join(anyStrs(v.Args), " ")
+
 		env.setString(internEnv(importMaskVariable), value)
 		setPythonImportMask(value, d)
 	case tokCppProtoPlugin0, tokCppProtoPlugin, tokCppProtoPlugin2, tokCppEvProtoPlugin:
@@ -3424,10 +3427,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("TASKLET expects no arguments, got %d", len(v.Args))
 		}
 
-		d.peerdirs = append(d.peerdirs, internStr("tasklet/v1/api").any())
+		d.peerdirs = append(d.peerdirs, strTaskletV1Api.any())
+
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokCppProtoPlugin, Args: internAnys([]string{
 			"tasklet_cpp", "tasklet/v1/gen/cpp", ".tasklet.h",
 		})}, d, env, onWarn)
+
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokPyProtoPlugin2, Args: internAnys([]string{
 			"tasklet_py", "_tasklet.py", "_sbtask.py", "tasklet/v1/gen/python", "DEPS",
 			"tasklet/v1/domain/sandbox", "tasklet/v1/runtime", "sandbox/sdk2",
@@ -3545,7 +3550,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.setVars[internStr(name)] = internStr(value)
 	case tokSetAppend, tokAsmPreinclude:
 		if v.Name == tokAsmPreinclude {
-			v.Args = append([]ANY{internStr("YASM_PREINCLUDES_VALUE").any()}, v.Args...)
+			v.Args = append([]ANY{strYasmPreincludesValue.any()}, v.Args...)
 		}
 
 		if len(v.Args) >= 1 {
@@ -3557,8 +3562,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			case "SFLAGS":
 				d.sFlags = append(d.sFlags, v.Args[1:]...)
 			case "USER_CFLAGS":
-				// gnu_compiler.conf includes this local binding in CFLAGS;
-				// unlike CFLAGS(GLOBAL ...), SET_APPEND does not export it.
+
 				d.cFlags = append(d.cFlags, v.Args[1:]...)
 			case "_PROTOC_FLAGS":
 				d.protocFlags = append(d.protocFlags, v.Args[1:]...)
@@ -3581,6 +3585,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 
 			env.setFromString(internEnv(name), value)
+
 			if name == "SANITIZER_TYPE" {
 				setupPythonImportMask(env, d)
 			}
@@ -3621,9 +3626,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			arches = "sm_50"
 		}
 
-		// Each plugin source declares its device actions, fatbin, host action,
-		// then an explicit SRC, all at the plugin's priority-2 position.
 		seq := d.declSeq + 1
+
 		d.declSeq += len(v.Args) * (len(strings.Split(arches, ":")) + 3)
 		d.cudaSrcs = append(d.cudaSrcs, CudaSrcsStmt{DeclSeq: seq, Sources: v.Args, Architectures: arches, EmbedPTX: !env.bool(envCUDA_NO_EMBED_PTX)})
 	case tokNvccDeviceLink:
@@ -4073,11 +4077,14 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 		if strings.HasSuffix(src, ".fbs") {
 			modName := modNameOverride
+
 			if modName == "" {
 				modName = pythonModuleName(modulePath, strings.TrimSuffix(src, ".fbs"), topLevel, namespace)
 			}
+
 			d.pySrcGroups[group].Fbs = append(d.pySrcGroups[group].Fbs, PyFbsSource{Path: src, Module: modName})
-			d.peerdirs = append(d.peerdirs, internStr("contrib/python/flatbuffers").any())
+			d.peerdirs = append(d.peerdirs, strContribPythonFlatbuffers.any())
+
 			continue
 		}
 
@@ -4193,6 +4200,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 
 		if mainNext {
 			modName := scope.moduleName(modulePath, src)
+
 			d.pyMain = ptr(internV(modName, ":main").any())
 			mainNext = false
 		} else if !explicitModule && d.pyMain == nil && d.moduleStmt != nil &&
@@ -4276,6 +4284,7 @@ func applyProtoNamespace(d *ModuleData, namespace ANY, withGen bool) {
 
 	protoSourceRoot := protoIncludeDir(namespace.string())
 	protoBuildRoot := protoSourceRoot.rel().build()
+
 	var includes []VFS
 
 	if withGen {
@@ -4321,6 +4330,7 @@ func applyProtoAddIncl(d *ModuleData, args []ANY) {
 
 	src := protoIncludeDir(rel)
 	bld := src.rel().build()
+
 	var includes []VFS
 
 	if withGen {
@@ -4437,10 +4447,6 @@ func applyArchiveAsmStmt(v UnknownStmt, d *ModuleData) {
 		seenName bool
 	)
 
-	// TParsedCallArgs (ymake/lang/call_args_parser.cpp) permits keywords
-	// between variadic values, rejects repeated scalars/flags, and does not
-	// consume another declared keyword as a scalar value. NAME defaults to
-	// empty and Files... can be empty (args2locals.cpp).
 	for i := 0; i < len(v.Args); i++ {
 		a := v.Args[i].string()
 
@@ -4628,9 +4634,6 @@ func parseModulePathVFS(path string) VFS {
 	return source(path)
 }
 
-// ConstructYDir anchors PEERDIR at the source root. Expanded source VFS
-// paths become module-relative identifiers here; graph commands retain
-// their rooted paths. Use the same mapping in every language context.
 func peerdirModulePath(path ANY) STR {
 	if peer := path.vfs(); peer != 0 && peer.isSource() {
 		path = peer.rel().any()
@@ -4959,62 +4962,31 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 
 	var files []string
 
-	matchDir := func(dirRel string) {
-		view := fs.listdir(dirKey(dirRel))
-		names := make([]string, 0, len(view.names))
-
-		for _, packed := range view.names {
-			if packed&1 != 0 {
-				continue
-			}
-
-			name := STR(packed >> 1).string()
-
-			if !matcher.MatchString(name) || name == "ya.make" || name == "a.yaml" || excluded(dirRel, name) {
-				continue
-			}
-
-			names = append(names, name)
-		}
-
-		sort.Strings(names)
-
-		for _, name := range names {
-			files = append(files, filePrefix(dirRel)+name)
-		}
-	}
-
-	subDirsSorted := func(dirRel string) []string {
-		view := fs.listdir(dirKey(dirRel))
-
-		var subs []string
-
-		for _, packed := range view.names {
-			if packed&1 == 0 {
-				continue
-			}
-
-			subs = append(subs, dirRel+"/"+STR(packed>>1).string())
-		}
-
-		sort.Strings(subs)
-
-		return subs
-	}
-
 	for _, dir := range dirs {
-		root := rootRel(dir)
+		base := rootRel(dir)
+		root := cleanRel(base)
 
-		if !recursive {
-			matchDir(root)
+		fs.walk(root, func(rel string, isDir bool) bool {
+			if rel == root {
+				return isDir
+			}
 
-			continue
-		}
+			if isDir {
+				return recursive
+			}
 
-		for queue := []string{root}; len(queue) > 0; queue = queue[1:] {
-			matchDir(queue[0])
-			queue = append(queue, subDirsSorted(queue[0])...)
-		}
+			if root != base {
+				rel = joinRel(base, strings.TrimPrefix(rel, root+"/"))
+			}
+
+			dirRel, name := splitDirName(rel)
+
+			if matcher.MatchString(name) && name != "ya.make" && name != "a.yaml" && !excluded(dirRel, name) {
+				files = append(files, filePrefix(dirRel)+name)
+			}
+
+			return false
+		})
 	}
 
 	env.setFromString(internEnv(prefix+"_FILES"), strings.Join(files, " "))
@@ -5053,8 +5025,6 @@ func expandAssignedScalarVarRef(s string, env Environment) string {
 	return value
 }
 
-// Direct SET/DEFAULT use EvalExpr once. Configuration macro bodies instead
-// pass through SubstMacroDeeply before their assignments are evaluated.
 func expandSourceScalarVarRef(s string, env Environment) string {
 	return expandMakeExpression(s, env, func(name string) bool {
 		return !tokenExpandAssignment.clearsUnbound(name) || strings.HasSuffix(name, resourceGlobalSuffix)
@@ -5066,6 +5036,7 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 	noTestFiles := false
 	recursive := false
 	topLevel := false
+
 	var namespace ANY
 
 	for i := 0; i < len(v.Args); i++ {
@@ -5099,81 +5070,45 @@ func allPySrcArgs(fs FS, modulePath string, v UnknownStmt) []ANY {
 
 	moduleRootRel := modulePath
 
-	appendDirPyFiles := func(dirRel string) {
-		view := fs.listdir(dirKey(dirRel))
-		names := make([]string, 0, len(view.names))
+	appendPyFile := func(rel string) {
+		name := baseName(rel)
 
-		for _, packed := range view.names {
-			if packed&1 != 0 {
-				continue
-			}
-
-			name := STR(packed >> 1).string()
-
-			if filepath.Ext(name) != ".py" {
-				continue
-			}
-
-			if noTestFiles && (strings.HasPrefix(name, "test_") || strings.HasSuffix(name, "_test.py")) {
-				continue
-			}
-
-			names = append(names, name)
+		if filepath.Ext(name) != ".py" {
+			return
 		}
 
-		sort.Strings(names)
-
-		for _, name := range names {
-			files = append(files, strings.TrimPrefix(dirRel+"/"+name, moduleRootRel+"/"))
-		}
-	}
-
-	subDirsSorted := func(dirRel string) []string {
-		view := fs.listdir(dirKey(dirRel))
-
-		var subs []string
-
-		for _, packed := range view.names {
-			if packed&1 == 0 {
-				continue
-			}
-
-			child := dirRel + "/" + STR(packed>>1).string()
-
-			if fs.isFile(dirKey(child), "ya.make") {
-				continue
-			}
-
-			subs = append(subs, child)
+		if noTestFiles && (strings.HasPrefix(name, "test_") || strings.HasSuffix(name, "_test.py")) {
+			return
 		}
 
-		sort.Strings(subs)
-
-		return subs
+		files = append(files, strings.TrimPrefix(rel, moduleRootRel+"/"))
 	}
 
 	for _, dir := range dirs {
-		walkRoot := filepath.ToSlash(filepath.Join(moduleRootRel, dir))
+		walkRoot := cleanRel(filepath.ToSlash(filepath.Join(moduleRootRel, dir)))
 
-		if !recursive {
-			appendDirPyFiles(walkRoot)
+		if recursive {
+			fs.walk(walkRoot, func(rel string, isDir bool) bool {
+				if rel == walkRoot {
+					return true
+				}
 
-			continue
+				if isDir {
+					return !fs.isFile(dirKey(rel), "ya.make")
+				}
+
+				if pathDir(rel) != walkRoot {
+					appendPyFile(rel)
+				}
+
+				return false
+			})
 		}
 
-		order := make([]string, 0, 16)
-
-		for queue := []string{walkRoot}; len(queue) > 0; queue = queue[1:] {
-			subs := subDirsSorted(queue[0])
-
-			order = append(order, subs...)
-			queue = append(queue, subs...)
-		}
-
-		order = append(order, walkRoot)
-
-		for _, dirRel := range order {
-			appendDirPyFiles(dirRel)
+		for _, packed := range fs.listdir(dirKey(walkRoot)).names {
+			if packed&1 == 0 {
+				appendPyFile(joinRel(walkRoot, STR(packed>>1).string()))
+			}
 		}
 	}
 
@@ -5254,8 +5189,6 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		Demand:   demand,
 	}
 
-	// These collection modules accept PY3_BIN, rather than the
-	// PY3_BIN_LIB tag selected by ordinary Python library peers.
 	if isUnionModule(d.moduleStmt.Name) || d.moduleStmt.Name == tokPackageFinal || d.moduleStmt.Name == tokCiGroup {
 		if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokPy3Program {
 			peer.Kind = KindBin
@@ -5271,22 +5204,27 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 	if d.pythonPeerTags != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokProtoLibrary {
 		declaration := stmtsModuleDeclaration(moduleStmts(ctx, peerVFS.relString()))
 		matched := false
-		// OrderSubModules traverses its tag-keyed TMap, visiting self peers
-		// first. Both Python proto contexts have the C++ context as a self peer.
+
 		for _, candidateLanguage := range []Language{LangCPP, LangPy, LangPy2} {
 			if slices.Contains(d.pythonPeerTags, protoModuleTag(candidateLanguage, declaration.Schema)) {
 				candidate := peer
+
 				candidate.Language = candidateLanguage
+
 				if demand == demandNone && ctx.roots[candidate] {
 					candidate.Demand = ctx.rootDemand
 				}
+
 				if genModule(ctx, candidate).protoExcluded {
 					continue
 				}
+
 				peer, matched = candidate, true
+
 				break
 			}
 		}
+
 		if !matched {
 			throwFmt("gen: %s: no compatible Python header peer in %s", parent.Path.relString(), peerVFS.relString())
 		}
@@ -5444,8 +5382,6 @@ func confProtoPlugin(fs FS, confRel, macro string) ConfProtoPlugin {
 }
 
 func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal bool, global, own []ANY) ([]ANY, []ANY) {
-	// VarStatement: one EvalExpr per source argument, then Deref's space split.
-	// Reserved roots and resource globals belong to later command substitution.
 	var values []string
 
 	for _, arg := range args {
@@ -5455,6 +5391,7 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 			words := strings.Split(expandMakeExpression(value, env, func(key string) bool {
 				return keepDeferredVar(key) || key == "ARCADIA_ROOT" || key == "ARCADIA_BUILD_ROOT"
 			}), " ")
+
 			values = append(values, slices.DeleteFunc(words, func(word string) bool { return word == "" })...)
 		} else {
 			values = append(values, value)
@@ -5467,35 +5404,42 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 		}
 	}
 
-	// PrepareMacroBody binds Flags... in its own scope. Substitute its vector
-	// once, including GLOBAL_CFLAGS' per-argument prefix, then finish the same
-	// SubstMacroDeeply operation. SET_APPEND_WITH_GLOBAL does not call EvalExpr.
 	locals := env.clone()
+
 	for _, root := range []string{"ARCADIA_ROOT", "ARCADIA_BUILD_ROOT", "CURDIR", "BINDIR"} {
 		locals.unbind(internEnv(root))
 	}
+
 	bound := make([]string, len(values))
+
 	for i, value := range values {
 		bound[i] = value
+
 		if allGlobal {
 			bound[i] = "GLOBAL " + bound[i]
 		}
 	}
+
 	body := continueConfigMacroBody(name+" "+strings.Join(bound, " "), locals, 1, map[string][]string{"Flags": values})
 	words := strings.Split(body, " ")
+
 	var globalValues, ownValues []string
+
 	nextGlobal := false
 
 	for _, word := range words[1:] {
 		if word == "" {
 			continue
 		}
+
 		if word == "GLOBAL" {
 			nextGlobal = true
+
 			continue
 		}
 
 		arg := internStr(compilerFlagRootValue(word, env)).any()
+
 		if nextGlobal {
 			global = append(global, arg)
 			globalValues = append(globalValues, word)
@@ -5503,12 +5447,14 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 			own = append(own, arg)
 			ownValues = append(ownValues, word)
 		}
+
 		nextGlobal = false
 	}
 
 	if len(ownValues) > 0 {
 		appendMacroEnv(env, name, strings.Join(ownValues, " "))
 	}
+
 	if len(globalValues) > 0 {
 		appendMacroEnv(env, name+"_GLOBAL", strings.Join(globalValues, " "))
 	}
@@ -5516,18 +5462,19 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 	return global, own
 }
 
-// Lower reserved roots for compiler commands without evaluating other source
-// references again. Escaped roots stay literal through command unquoting.
 func compilerFlagRootValue(value string, env Environment) string {
 	return configMacroVariable.ReplaceAllStringFunc(value, func(reference string) string {
 		if reference[0] == '$' {
 			name := strings.TrimSuffix(strings.TrimPrefix(reference[1:], "{"), "}")
+
 			switch name {
 			case "ARCADIA_ROOT", "ARCADIA_BUILD_ROOT", "CURDIR", "BINDIR":
 				value, _ := env.lookup(name)
+
 				return value
 			}
 		}
+
 		return reference
 	})
 }

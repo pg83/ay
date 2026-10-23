@@ -70,8 +70,7 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	case ckVersionCmp:
 		return evalVersionCmp(nodes, n, env)
 	case ckMatches:
-		// Upstream TCaseInsensitiveStringBuf::find uses std::string_view::find,
-		// which ignores the case-insensitive traits and compares literal bytes.
+
 		return strings.Contains(evalIfAtomString(nodes, n.L, env, true), evalIfAtomString(nodes, n.R, env, false))
 	case ckUnsupportedOp:
 		throwFmt("macros: unsupported IF operator %q", n.Name)
@@ -235,7 +234,7 @@ func makeDefaultIfEnv() Environment {
 	e.setString(envaddress, "address")
 	e.setString(envthread, "thread")
 	e.setString(envleak, "leak")
-	e.setString(internEnv("_CPP_PROTO_COMPATIBLE_TAGS"), "CPP_PROTO CPP_PROTO_DIRECT_HEADERS CPP_PROTO_LEGACY_FOR_DIRECT_HEADERS")
+	e.setString(envCppProtoCompatibleTags, "CPP_PROTO CPP_PROTO_DIRECT_HEADERS CPP_PROTO_LEGACY_FOR_DIRECT_HEADERS")
 	e.setString(envALLOCATOR, "")
 	e.setString(envPY2, "PY2")
 	e.setString(envOS_SDK, "")

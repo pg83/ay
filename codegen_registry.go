@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// SourceActionInfo records the declaration and direct inputs of one native
-// source action. Parsed/flattened input closures do not determine its readiness.
 type SourceActionInfo struct {
 	DeclSeq int
 	Inputs  []VFS
@@ -38,13 +36,10 @@ type GeneratedFileInfo struct {
 	ModuleOutputs    []VFS
 	ParsedIncludes   ParsedIncludeSet
 
-	// Generated .in BuildFrom producers propagated as included dependencies.
 	IncludedBuildInputs []VFS
 	IncludedInputs      *IncludedInputPlan
 }
 
-// Physical IncludedInputs retain the producing module's include-resolution
-// context. Module Include peers carry IncludedDeps, not this source view.
 type IncludedInputPlan struct {
 	Roots   []VFS
 	Scanner *IncludeScanner
@@ -151,7 +146,6 @@ func fireGenerated(info *GeneratedFileInfo) {
 }
 
 func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
-	// All producer constructors supply BUILD paths before registration.
 	if existing, ok := r.byRel.get(info.OutputPath.rel()); ok {
 		if existing.InputsOnly {
 			info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{existing.ClosureLeaves})
@@ -213,14 +207,13 @@ func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates, textTempl
 	r.forwardTextTemplates(output, textTemplates)
 }
 
-// TEXT links retain the physical source obligation without acquiring that
-// SourceFile's parsed edges, even when another owner has already parsed it.
 func (r *CodegenRegistry) forwardTextTemplates(output VFS, inputs []VFS) {
 	if len(inputs) == 0 {
 		return
 	}
 
 	previous, _ := r.textTemplates.get(output)
+
 	r.textTemplates.put(output, r.na.dedupClosure(previous, [][]VFS{inputs}))
 }
 
@@ -230,6 +223,7 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 	}
 
 	sources := vfsScratches.get()
+
 	var views []Closure
 
 	for _, member := range members {
@@ -239,6 +233,7 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 			}
 
 			sources = append(sources, info.InputLoopSources...)
+
 			for _, view := range info.InputLoopViews {
 				if !slices.Contains(views, view) {
 					views = append(views, view)

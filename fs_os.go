@@ -209,12 +209,9 @@ func (fs *OsFS) isFile(prefix STR, suffix string) bool {
 	return p && !d
 }
 
-// TFileConf marks symlinks as missing; ResolveToArcPath also allows directories.
 func (fs *OsFS) sourcePathExists(rel string) bool {
 	info, err := os.Lstat(filepath.Join(fs.srcRoot, rel))
 
-	// TFileConf::CanTrustStatError treats these failures as absence. Other
-	// stat failures make resolution unreliable and must remain errors.
 	if err != nil && !errors.Is(err, syscall.ENOENT) && !errors.Is(err, syscall.ENOTDIR) &&
 		!errors.Is(err, syscall.ENAMETOOLONG) && !errors.Is(err, syscall.EACCES) && !errors.Is(err, syscall.EPERM) {
 		throw(err)
@@ -371,15 +368,16 @@ func (fs *OsFS) walk(rel string, visit func(rel string, isDir bool) bool) {
 		return
 	}
 
-	for _, packed := range fs.listdirRel(rel).names {
-		child := internJoined(rel, STR(packed>>1).string()).string()
+	queue := []string{rel}
 
-		if packed&1 != 0 {
-			fs.walk(child, visit)
+	for head := 0; head < len(queue); head++ {
+		for _, packed := range fs.listdirRel(queue[head]).names {
+			child := internJoined(queue[head], STR(packed>>1).string()).string()
+			isDir := packed&1 != 0
 
-			continue
+			if visit(child, isDir) && isDir {
+				queue = append(queue, child)
+			}
 		}
-
-		visit(child, false)
 	}
 }

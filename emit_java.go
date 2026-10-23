@@ -200,6 +200,7 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule, frame *ModuleFrame) {
 	if jm.unit.fbs {
 		ctx.javaRegisterFbsSources(jm)
 	}
+
 	if jm.unit.kind == juJar {
 		ctx.javaRegisterSwigJsrcs(jm)
 		ctx.javaRegisterRunPrograms(jm)
@@ -302,6 +303,7 @@ func (ctx *GenCtx) javaRegisterProducers(jm *JavaModule, frame *ModuleFrame) {
 	d.scanCtx = newModuleScanContext(ctx, jm.instance, d, nil, nil, nil, nil)
 
 	frame.peerCtx = PeerContext{ResourceGlobals: ctx.javaResourceGlobals(jm)}
+
 	e := newEmitContextIn(frame, ctx, jm.instance, d, &frame.peerCtx)
 
 	e.emitFromSandboxes()
@@ -511,7 +513,6 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 	closure := ctx.javaManagedPeersClosure(jm)
 	srcJar := build(jm.dir, "/", jm.name, "-sources.jar")
 	b := ctx.javaBuilderReq(jm, &javaReqCPU4)
-
 	autoInputs := append([]VFS{}, jm.macroOuts...)
 
 	if jm.unit.proto {
@@ -639,6 +640,7 @@ func (ctx *GenCtx) javaEmitEvProto(jm *JavaModule, scanCtx *ScanContext, ev VFS)
 	b.input(ev)
 
 	view := ctx.scannerForPlatform(jm.instance.Platform).walkClosure(ev, scanCtx, scanDomainProto)
+
 	b.views = append(b.views, view)
 
 	for _, bucket := range view.bucketList() {
@@ -723,6 +725,7 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 	b.deps = append(b.deps, b.use(protoVFS))
 
 	view := ctx.scannerForPlatform(jm.instance.Platform).walkClosure(protoVFS, scanCtx, scanDomainProto)
+
 	b.views = append(b.views, view)
 
 	for _, bucket := range view.bucketList() {

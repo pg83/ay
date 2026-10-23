@@ -30,6 +30,7 @@ var (
 	argConfig                                               = internArg("--config")
 	argConfigOutB                                           = internArg("--config_out=$(B)/")
 	argContextFilename                                      = internArg("--context-filename")
+	argContribDeprecatedFlatc                               = internArg("contrib/deprecated/flatc")
 	argContribLibsFlatbuffers64Flatc                        = internArg("contrib/libs/flatbuffers64/flatc")
 	argContribLibsFlatbuffersFlatc                          = internArg("contrib/libs/flatbuffers/flatc")
 	argContribPythonMypyProtobufBinProtocGenMypy            = internArg("contrib/python/mypy-protobuf/bin/protoc-gen-mypy")

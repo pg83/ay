@@ -21,6 +21,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 
 	pe := func() {
 		blocks := compilerCommandBlocks(&d.cc.CCBlocks, true)
+
 		cmd0 := Cmd{CmdArgs: na.chunkList(
 			blocks.cxxHead,
 			instance.Platform.CCHead,

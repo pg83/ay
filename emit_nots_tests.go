@@ -14,6 +14,7 @@ func (e *EmitContext) notsTestGlobals(globals []ResourceDecl) []ResourceDecl {
 	for _, check := range e.d.styleChecks {
 		if check.Peer != "" {
 			peer := e.genPeerModule(e.derivePeerInstance(check.Peer))
+
 			globals = append(globals, peer.ResourceGlobalClosure...)
 		}
 	}
@@ -188,11 +189,11 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 		s := e.notsSuite(name, globals, false)
 
 		s.deps = slices.Clone(deps)
-		// _DEPENDS_ON_MOD records DEPENDS in the check's custom metadata.
-		// The test backend resolves that module, independently of dummy inputs.
+
 		if e.d.nots.Kind == tokTsTestFor && e.d.nots.DependsOnBuild {
 			s.depends = append(slices.Clone(s.depends), target)
 		}
+
 		s.ciType = ciType
 		s.noRetries = true
 

@@ -58,7 +58,9 @@ func (e *EmitContext) compilerFlagExports(seen *DeDuper, peers []ResolvedPeer, k
 
 func (e *EmitContext) compilerFlagValue(args []ANY) CompilerFlagValue {
 	value := compilerCommandFlags(args, Environment{s: &e.frame.ifEnv})
+
 	value.Args = e.ctx.argSlices.internCopy(value.Args)
+
 	return value
 }
 
@@ -72,12 +74,15 @@ func (e *EmitContext) ownCompilerFlagValues(args []ANY) []CompilerFlagValue {
 
 func compilerCommandFlags(args []ANY, env Environment) CompilerFlagValue {
 	text := strings.Join(anyStrs(args), " ")
+
 	for _, arg := range args {
 		if strings.ContainsAny(arg.string(), "$\\\"'&") || strings.ContainsFunc(arg.string(), unicode.IsSpace) {
 			values, identity := compilerFlagExpression(text, env, nil)
+
 			return CompilerFlagValue{Name: internStr(identity), Args: internAnys(values)}
 		}
 	}
+
 	return CompilerFlagValue{Name: internStr(text), Args: args}
 }
 

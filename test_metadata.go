@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+var configMacroVariable = regexp.MustCompile(`\\[\s\S]|\$\{"(?:[^"\\]|\\.)*"\}|\$\{[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*\}|\$[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*`)
+
 func testSuiteName(name TOK) string {
 	if isUnitTestModule(name) {
 		if name == tokGtest {
@@ -138,75 +140,76 @@ func (t *TestMeta) expandValues(env Environment) {
 	for i, value := range t.env {
 		t.env[i] = expandStmtToken(value, env)
 	}
+
 	for i, value := range t.recipes {
 		t.recipes[i] = expandConfigMacroBody(value, env)
 	}
 }
 
-// USE_RECIPE's makelist arguments pass through TEvalContext::Deref. Its
-// SET_APPEND body then substitutes $Data deeply, splits on spaces, and calls
-// EvalExpr once more before storing TEST_RECIPES_VALUE. get_subst later uses
-// the final module environment for references left unresolved at collection.
 func collectTestRecipe(args []ANY, env Environment) string {
 	var values []string
+
 	for _, arg := range args {
 		words := []string{arg.string()}
+
 		if strings.ContainsRune(words[0], '$') {
 			words = strings.Split(expandResourceArgument(words[0], env), " ")
 			words = slices.DeleteFunc(words, func(word string) bool { return word == "" })
 		}
+
 		for _, word := range words {
-			// TEvalContext::EscapeArgs protects whole separator arguments.
 			if word == "&&" || word == ";" {
 				word = `${quo:"` + word + `"}`
 			}
+
 			values = append(values, word)
 		}
 	}
+
 	value := expandConfigMacroBody(strings.Join(values, " "), env)
 	words := strings.Split(value, " ")
+
 	value = strings.Join(slices.DeleteFunc(words, func(word string) bool { return word == "" }), " ")
+
 	return expandResourceArgument(value, env)
 }
-
-// macro_parser.rl6 recognizes bare and braced identifiers, including hyphens.
-// Escapes and raw strings are retained in ECF_ExpandVars; unset variables are
-// left verbatim by SubstData. This is distinct from EvalExpr's braced lookup.
-var configMacroVariable = regexp.MustCompile(`\\[\s\S]|\$\{"(?:[^"\\]|\\.)*"\}|\$\{[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*\}|\$[A-Za-z_][A-Za-z_0-9]*(?:-+[A-Za-z_0-9]+)*`)
 
 func expandConfigMacroBody(value string, env Environment) string {
 	if !strings.ContainsRune(value, '$') {
 		return value
 	}
+
 	return continueConfigMacroBody(value, env, 0, nil)
 }
 
-// A bound vararg body can have its first substitution performed per argument
-// (for example pre=GLOBAL :Flags). Keep that pass in the same 128-pass budget.
 func continueConfigMacroBody(value string, env Environment, iteration int, parameters map[string][]string) string {
 	for ; ; iteration++ {
 		expanded := configMacroVariable.ReplaceAllStringFunc(value, func(reference string) string {
 			if reference[0] == '\\' || strings.HasPrefix(reference, `${"`) {
 				return reference
 			}
+
 			name := strings.TrimSuffix(strings.TrimPrefix(reference[1:], "{"), "}")
+
 			if values, ok := parameters[name]; ok {
-				// Bound arguments are unprefixed TVarStr entries, unlike stored
-				// configuration values. Keep each entry's literal whitespace.
 				return strings.Join(values, " ")
 			}
+
 			if replacement, ok := env.lookup(name); ok {
-				// GetCmdValue removes one leading space from a stored binding.
 				return strings.TrimPrefix(replacement, " ")
 			}
+
 			return reference
 		})
+
 		if iteration == 127 {
 			throwFmt("Macro subst exceeded the limit 128")
 		}
+
 		if expanded == value || expanded == "" {
 			return expanded
 		}
+
 		value = expanded
 	}
 }

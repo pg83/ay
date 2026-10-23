@@ -27,6 +27,7 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel().any())})
 
 		view := e.scanner.walkClosure(src, e.d.scanCtx, scanDomainProto)
+
 		views = append(views, view)
 
 		for _, bucket := range view.bucketList() {

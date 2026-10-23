@@ -141,9 +141,11 @@ func (e *EmitContext) goFmtSuite(files []VFS, globals []ResourceDecl) *TestSuite
 	slices.SortFunc(files, func(a, b VFS) int { return strings.Compare(a.string(), b.string()) })
 
 	s := e.goSuiteBase("gofmt", "gofmt", "style", globals)
+
 	s.projectPath = path.Dir(files[0].relString())
 	s.runInputs = []VFS{source(s.projectPath)}
 	s.checkFiles = files
+
 	gofmt := strGoToolsResourceGlobalBinGofmt.any()
 
 	for _, g := range globals {

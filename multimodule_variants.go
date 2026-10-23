@@ -58,6 +58,7 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 
 	if target.Declaration != nil && isSandboxPythonTask(target.Declaration.Name) {
 		instance := ctx.rootInstanceForDeclaration(target.Path, demand, target.Declaration)
+
 		instances = append(instances, sandboxPythonTaskInstances(instance, target.Declaration.Name)[1:]...)
 	}
 

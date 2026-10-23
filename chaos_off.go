@@ -10,8 +10,10 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-const chaosInternShuffle = false
-const chaosVerifySlicePairs = false
+const (
+	chaosInternShuffle    = false
+	chaosVerifySlicePairs = false
+)
 
 func chaosInternID(seq uint32) uint32 {
 	return seq

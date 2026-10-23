@@ -18,9 +18,11 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 
 	instance := ctx.rootInstanceForDeclaration(dir, demandSelf, declaration)
 	name := declaration.Name
+
 	if name == tokSandboxPy23Task {
 		configureCythonDirectory(ctx, instance)
 	}
+
 	frame := ctx.pushFrame()
 
 	defer ctx.popFrame()
@@ -153,6 +155,7 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 
 	for _, peer := range instances {
 		tag := multimoduleVariantTag(name, peer.Language)
+
 		if isSandboxPythonTask(name) {
 			tag = sandboxPythonTaskVariant(name, peer.Kind, peer.Language)
 		}
@@ -174,9 +177,11 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 		}
 
 		excluded := moduleExcludesTag(d, tag)
+
 		if name == tokSandboxPy23Task {
 			excluded = sandboxPythonTaskExcluded(ctx, peer, tag)
 		}
+
 		if tag != "" && excluded {
 			continue
 		}

@@ -164,20 +164,25 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 					}
 				}
 			case globRecursive:
-				for queue := []string{dir}; len(queue) > 0; queue = queue[1:] {
-					for _, packed := range fs.listdir(internStr(queue[0])).names {
-						if packed&1 == 0 {
-							continue
-						}
+				root := cleanRel(dir)
 
-						rel := joinRel(queue[0], STR(packed>>1).string())
-
-						if !globExcluded(excludes, rel, true) {
-							next = append(next, rel)
-							queue = append(queue, rel)
-						}
+				fs.walk(root, func(rel string, isDir bool) bool {
+					if rel == root {
+						return true
 					}
-				}
+
+					if root != dir {
+						rel = joinRel(dir, strings.TrimPrefix(rel, root+"/"))
+					}
+
+					if !isDir || globExcluded(excludes, rel, true) {
+						return false
+					}
+
+					next = append(next, rel)
+
+					return true
+				})
 
 				next = append(next, dir)
 			}

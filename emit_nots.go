@@ -602,11 +602,14 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	outputs = append(outputs, build(dir, "/output.tar.uuid"))
 
 	foreignRefs := []NodeRef{toolRef}
+
 	var views []Closure
 
 	if c.Kind == tokProtoLibrary {
 		protoArgs, protoInputs, protoRefs, protoLeaves, protocRef, protoGlobals, protoViews := e.notsProtoInputs()
+
 		views = protoViews
+
 		builtState := *state
 
 		globals = e.notsTestGlobals(append(slices.Clone(globals), protoGlobals...))
@@ -660,7 +663,9 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	}
 
 	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(foreignRefs...), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
+
 	n.InputClosures = views
+
 	ref := e.emitNotsNode(n)
 	info := e.codegen.lookup(output)
 
@@ -677,7 +682,9 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 	dir, c, na := e.instance.Path.relString(), e.d.nots, e.ctx.na
+
 	var views []Closure
+
 	args := e.d.moduleStmt.Args
 	relative := false
 	target := ""
@@ -730,7 +737,9 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 		kind = pkTSTest
 	} else {
 		name += ".ts_test.fake"
+
 		testInputs, testViews := e.notsTestInputs(target)
+
 		inputs = append(inputs, testInputs...)
 		views = testViews
 	}
@@ -798,6 +807,7 @@ func (e *EmitContext) notsTestInputs(target string) ([]VFS, []Closure) {
 		inputs = append(inputs, file)
 
 		view := e.scanner.walkClosure(file, ctx, scanDomainAux)
+
 		views = append(views, view)
 
 		for _, bucket := range view.bucketList() {

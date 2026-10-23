@@ -88,7 +88,6 @@ func (ctx *GenCtx) gztProtoSource(instance ModuleInstance, gztSource VFS, scanCt
 	return genProto
 }
 
-// norel anchors the nopath/noext basename in the resolved source directory.
 func gztProtoOutput(input VFS) VFS {
 	return build(strings.TrimSuffix(input.relString(), filepath.Ext(input.relString())), ".proto")
 }

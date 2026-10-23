@@ -93,8 +93,6 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {
 
 	asIn := in
 
-	// SRC is a macro action: its output uses the original token and module
-	// build directory, independently of where the input resolves.
 	if asIn.FlatOutput && asIn.OutputStem == 0 {
 		asIn.OutputStem = copyFileOutputVFS(e.instance.Path.relString(), src.string())
 	}

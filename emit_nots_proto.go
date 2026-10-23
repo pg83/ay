@@ -57,6 +57,7 @@ func (e *EmitContext) notsProtoInputs() (args []string, inputs []VFS, refs []Nod
 		inputs = append(inputs, file)
 
 		closure := e.scanner.walkClosure(file, d.scanCtx, scanDomainProto)
+
 		views = append(views, closure)
 
 		for _, bucket := range closure.bucketList() {

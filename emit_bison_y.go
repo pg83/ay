@@ -73,6 +73,7 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 
 	pe := func() {
 		inputs := na.inputs.alloc(3 + len(bisonCppSkeletonInputs)*closureBuckets)[:0]
+
 		var views []Closure
 
 		dedupers.with(func(deduper *DeDuper) {
@@ -105,6 +106,7 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 
 			for _, sk := range bisonCppSkeletonInputs {
 				skCV := scanner.walkClosure(sk, scanCtx, scanDomainCC)
+
 				views = append(views, skCV)
 
 				for _, bucket := range skCV.bucketList() {

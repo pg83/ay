@@ -53,7 +53,9 @@ func (e *EmitContext) emitYtOrmProtoYson(st GoCodegenStmt) {
 	args = append(args, d.protocFlags...)
 
 	inputs := [][]VFS{na.vfsList(protoc, plugin)}
+
 	var views []Closure
+
 	outs := make([]VFS, 0, len(st.files))
 	names := st.outputNames()
 
@@ -61,9 +63,10 @@ func (e *EmitContext) emitYtOrmProtoYson(st GoCodegenStmt) {
 		src := e.resolveModuleSourceVFS(file, d.srcDirs)
 
 		args = append(args, src.any())
-
 		inputs = append(inputs, na.vfsList(src))
+
 		view := e.scanner.walkClosure(src, d.scanCtx, scanDomainProto)
+
 		views = append(views, view)
 		inputs = append(inputs, view.bucketList()...)
 

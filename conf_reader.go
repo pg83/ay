@@ -237,9 +237,6 @@ func parseConfCondition(rel, expr string) []CondNode {
 	return p.condScratch
 }
 
-// Config conditions resolve variables to strings through TVars::EvalValue.
-// Fieldcalc compares two strings directly; with a numeric constant it coerces
-// the string operand to its nonempty/empty value, independent of EnvKind.
 func evalConfAtomString(nodes []CondNode, i int32, env Environment) string {
 	n := &nodes[i]
 

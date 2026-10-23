@@ -110,7 +110,6 @@ func (e *EmitContext) emitLD(
 
 	globalInputs := e.moduleGlobals
 	pluginPaths := e.globalPlugins()
-	// Peer flag values are already ordered independently of their producer inputs.
 	peerWholeArchiveCount := len(wholeArchivePaths)
 
 	for _, input := range globalInputs {

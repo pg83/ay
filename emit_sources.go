@@ -94,6 +94,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		if e.instance.Language == LangFbsJavaNative {
 			return
 		}
+
 		if isGoModuleType(e.d.unit.Type) {
 			e.emitGoFlatcSource(meta)
 		} else {

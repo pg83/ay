@@ -120,8 +120,6 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 
 	outputs := ctx.na.vfs.alloc(len(outputTokens))[:0]
 
-	// RUN_PYTHON3 declares OUT and OUT_NOAUTO before its stdout output.
-	// The first declaration is also the producer's main output.
 	for _, token := range outputTokens {
 		outputs = append(outputs, outVFSByToken[token.string()])
 	}

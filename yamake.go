@@ -934,6 +934,7 @@ func (l *Lexer) readNumberOrWord(startLine, startCol int) Token {
 			if l.src[pos] == '\\' && pos+1 < len(l.src) {
 				return l.readWord(startLine, startCol)
 			}
+
 			pos++
 		}
 	}
@@ -1810,11 +1811,9 @@ func parseStructCodegen(prefix ANY, line int) *BaseCodegenStmt {
 	}
 }
 
-// SC ADDINCL entries use the source argument state machine: scope flags may
-// precede or follow FOR sc, and reset after the directory. Other languages
-// continue through their existing lexical lowering below.
 func scAddInclArgument(args []ANY, start int) (path, scope ANY, end int, ok bool) {
 	sc := false
+
 	for i := start; i < len(args); i++ {
 		switch args[i].string() {
 		case "GLOBAL", "ONE_LEVEL":
@@ -1824,15 +1823,18 @@ func scAddInclArgument(args []ANY, start int) (path, scope ANY, end int, ok bool
 			if i+1 >= len(args) || args[i+1].string() != "sc" {
 				return 0, 0, start, false
 			}
+
 			sc = true
 			i++
 		default:
 			if sc {
 				return args[i], scope, i, true
 			}
+
 			return 0, 0, start, false
 		}
 	}
+
 	return 0, 0, start, false
 }
 
@@ -1842,6 +1844,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 	for i := 0; i < len(args); i++ {
 		if path, scope, end, ok := scAddInclArgument(args, i); ok {
 			scPaths = append(scPaths, path)
+
 			switch scope {
 			case kwGLOBAL.any():
 				scGlobalPaths = append(scGlobalPaths, path)
@@ -1849,9 +1852,12 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 			case kwONE_LEVEL.any():
 				scExportPaths = append(scExportPaths, path)
 			}
+
 			i = end
+
 			continue
 		}
+
 		if args[i] == kwONE_LEVEL.any() {
 			i++
 

@@ -8,10 +8,6 @@ import (
 	"strings"
 )
 
-// build/plugins/large_files.py uses Python's JSON types and str conversion,
-// without a descriptor schema (resource_id may be a string or a JSON number).
-// Keep those semantics, including KeyError/AttributeError and arbitrary-sized
-// integers, rather than impose Go JSON field types or float64 rounding.
 const largeFileDescriptor = `import json, sys
 res_desc = json.load(sys.stdin)
 storage = res_desc["storage"]
@@ -26,6 +22,7 @@ func readLargeFileDescriptor(fs FS, placeholder VFS, external string) (string, s
 		cmd := exec.Command("python3", "-c", largeFileDescriptor)
 
 		cmd.Stdin = bytes.NewReader(concatChunks(fs.read(placeholder.relString())))
+
 		data, err := cmd.CombinedOutput()
 
 		if err != nil {
@@ -40,17 +37,14 @@ func readLargeFileDescriptor(fs FS, placeholder VFS, external string) (string, s
 	return values[0], values[1]
 }
 
-// TModuleWrapper::ResolveToArcPath returns typed paths immediately. Untyped
-// source names search the module directory, SRCDIRs, then the source root.
-// A known build SRCDIR output stops the search before later source directories;
-// only CodegenRegistry can establish that such an output exists.
 func resolveLargeFileSource(fs FS, codegen *CodegenRegistry, modulePath, name string, srcDirs []VFS) VFS {
 	if rooted, ok := moduleRootedVFS(modulePath, name); ok {
 		return rooted
 	}
 
 	dirs := append([]VFS{source(modulePath)}, srcDirs...)
-	dirs = append(dirs, source(""))
+
+	dirs = append(dirs, srcRootDirVFS)
 
 	for _, dir := range dirs {
 		if dir.isBuild() {
@@ -95,8 +89,7 @@ func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt Un
 
 		if src := resolveLargeFileSource(fs, codegen, modulePath, arg, d.srcDirs); src != 0 && src.isSource() {
 			onWarn(Warn{Kind: WarnPlugin, Message: "Used local large file " + src.string() + ". Don't forget to run 'ya upload --update-external' and commit " + src.string() + ".external"})
-			// COPY_FILE(arg, arg) resolves its input through the same source
-			// resolver. Retain that resolved source when lowering the copy.
+
 			d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: src.string(), Dst: arg})
 
 			continue

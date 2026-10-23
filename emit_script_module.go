@@ -41,9 +41,6 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 
 	refs := append([]NodeRef{}, node.DepRefs...)
 
-	// Include peers must be materialized, but only actual inputs contribute
-	// direct command dependencies. Native keeps their IncludedDeps separate
-	// from the NodeDeps of this build entry.
 	for _, chunk := range node.Inputs {
 		for _, input := range chunk {
 			if info := reg.lookup(input); info != nil {
@@ -77,10 +74,8 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 		ownedOutputs = node.Outputs
 	}
 
-	// json_visitor.cpp propagates generated .in BuildFrom dependencies through
-	// the command's included-dependency set. Publish this separate producer
-	// obligation before a closure scan can visit the lazy module output.
 	var templates []VFS
+
 	for _, chunk := range node.buildFromInputs() {
 		for _, input := range chunk {
 			if input.isBuild() && strings.HasSuffix(input.relString(), ".in") && reg.lookup(input) != nil {
@@ -88,17 +83,16 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 			}
 		}
 	}
+
 	templates = na.dedupClosure(templates)
 
 	var includedInputs *IncludedInputPlan
+
 	if len(templates) > 0 {
 		includedInputs = &IncludedInputPlan{Roots: templates, Scanner: e.scanner, Context: e.d.scanCtx}
 	}
 
 	for _, out := range ownedOutputs {
-		// The same .in BuildFrom edges forward IncludedInputs, independently
-		// of IncludedDeps. Register the source traversal plan on the actual
-		// owned output, before its first scan, never on visible late aliases.
 		reg.register(GeneratedFileInfo{OutputPath: out, OwnerModule: e.instance.Path, ProducerRef: ref, OnUse: pending, IncludedBuildInputs: templates, IncludedInputs: includedInputs})
 	}
 
@@ -125,6 +119,7 @@ func (e *EmitContext) scriptModuleResources(globals []ResourceDecl, peers ...str
 	}
 
 	e.d.cc.TC = e.d.tc
+
 	e.d.scanCtx = newModuleScanContext(e.ctx, e.instance, e.d,
 		e.ctx.na.vfsList(dedup(e.d.addIncl, e.d.addInclGlobal)...), nil, nil,
 		e.ctx.na.vfsList(dedup(e.d.protoAddInclGlobal, e.d.protoAddIncl)...))

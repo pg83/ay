@@ -83,8 +83,10 @@ func (ctx *GenCtx) emitTestData(uri string) NodeRef {
 	args := []string{testToolHostPath, "download", "--storage-root", testBuildRoot, "--id", id, "--log-path", build("res" + id + ".log").string(), "--rename-to", "resource", "--resource-file", "$(RESOURCE_ROOT)/sbr/" + id + "/resource"}
 
 	var outputs []VFS
+
 	if ctx.tests.dirOutputsInNodes {
 		tar := build(dir + "/dir_res.tar")
+
 		outputs = append(outputs, tar)
 		args = append(args, "--dir-output-tared-path", tar.string())
 	}

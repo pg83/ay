@@ -18,7 +18,6 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokEnable:  {},
 	tokDisable: {},
 
-	// The scalar values and deprecated flags are positional macro data.
 	tokValidateDataRestart:       {},
 	tokPack:                      {},
 	tokSetCudaNodeRAMRequirement: {},
@@ -33,14 +32,8 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokCopy:          {},
 	tokLargeFiles:    {},
 
-	// ymake.core.conf: ARCHIVE_ASM(NAME="", DONTCOMPRESS?"-p":"", Files...)
-	// accepts arbitrary scalar NAME and positional Files values. Its handler
-	// validates the declared keywords without classifying uppercase data.
 	tokArchiveAsm: {},
 
-	// ymake.core.conf: TASKLET_REG(Name, Lang, Impl, Includes...) and
-	// TASKLET_REG_EXT(Name, Lang, Impl, Wrapper, Includes...) contain only
-	// positional values, including uppercase names, implementations and headers.
 	tokTaskletReg:    {},
 	tokTaskletRegExt: {},
 

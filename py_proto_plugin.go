@@ -7,8 +7,6 @@ type PyProtoPlugin struct {
 	Deps           []ANY
 }
 
-// proto.conf: PY_PROTO_PLUGIN2 calls PY_PROTO_PLUGIN, then _ADD_PY_PROTO_OUT.
-// Arguments have already been expanded in this module's environment.
 func parsePyProtoPlugin(stmt UnknownStmt) PyProtoPlugin {
 	positional, lists := goMacroLists(stmt.Args, "DEPS")
 	suffixCount := 1

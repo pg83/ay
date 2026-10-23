@@ -939,8 +939,8 @@ func testRecipes(recipes []string) string {
 		return ""
 	}
 
-	// get_subst strips the stored value before format_recipes replaces delimiters.
 	value := strings.TrimSpace(strings.Join(recipes, ` "USE_RECIPE_DELIM" `) + ` "USE_RECIPE_DELIM"`)
+
 	return base64.StdEncoding.EncodeToString([]byte(strings.ReplaceAll(value, `"USE_RECIPE_DELIM"`, "\n")))
 }
 

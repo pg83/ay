@@ -76,8 +76,6 @@ func applyYqlABI(d *ModuleData, env Environment, current bool) {
 	}
 }
 
-// yql_udf.conf defers the aliased user SRCS and PEERDIR calls until the
-// epilogue; yql_prebuilt.py replays them only when no resource was selected.
 func finishYqlModule(ctx *GenCtx, instance ModuleInstance, env Environment, d *ModuleData, onWarn func(Warn)) {
 	modulePath := instance.Path.relString()
 
@@ -110,11 +108,12 @@ func finishYqlModule(ctx *GenCtx, instance ModuleInstance, env Environment, d *M
 	d.allocatorName = strFAKE.any()
 
 	collectStmts(ctx, modulePath, instance.Kind, instance.Language, []Stmt{
-		&SetStmt{Name: "NEED_PLATFORM_PEERDIRS", NameEnv: internEnv("NEED_PLATFORM_PEERDIRS"), Value: "no"},
-		&UnknownStmt{Name: tokDisable, Args: []ANY{internStr("COMMON_LINK_SETTINGS").any()}},
+		&SetStmt{Name: "NEED_PLATFORM_PEERDIRS", NameEnv: envNeedPlatformPeerdirs, Value: "no"},
+		&UnknownStmt{Name: tokDisable, Args: []ANY{strCommonLinkSettings.any()}},
 	}, env, d, onWarn, instance.Platform)
 
 	prebuilt := path.Base(yqlPrebuiltOutput(instance, d).relString()) + ".prebuilt"
+
 	d.fromSandboxes = append(d.fromSandboxes, &FromSandboxStmt{
 		ResourceId: internStr(d.yqlPrebuiltResource).any(), File: true,
 		ArchiveExtraction: ArchiveExtraction{

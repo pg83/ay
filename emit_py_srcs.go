@@ -507,6 +507,7 @@ func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *Objco
 
 	entries := e.resEntries[:0]
 	rows := 0
+
 	flush := func() {
 		e.resEntries = retainMaxLen(e.resEntries, entries)
 
@@ -529,9 +530,6 @@ func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *Objco
 		entries = e.appendPyResEntries(entries, ps)
 		rows++
 
-		// pybuild.py's _split_macro_call starts a fresh RESOURCE[_FILES]
-		// call after 1024 original source rows, before resource_handler's
-		// independent command-size partitioning. A row may carry PY and PYC.
 		if rows == 1024 {
 			flush()
 		}
@@ -683,7 +681,9 @@ func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 	item := *d.importMask.resource
 	env := Environment{s: &e.frame.ifEnv}
 	raw := env.string(internEnv(importMaskVariable))
+
 	item.ExpandedCmd = internAnys(legacyConfigurationCommand(item.Key, env, importMaskVariable, raw, d.importMask.base))
+
 	return e.packResources(ResourcePack{Tag: d.unit.HashTag, DontCompress: true, Items: []ResourceItem{item}})
 }
 
@@ -914,8 +914,6 @@ func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem
 		keyStart := len(buf)
 
 		buf = append(buf, "resfs/file/py/"...)
-		// pybuild.py forms the resource destination from the import module,
-		// so dots in its source stem and default namespace become separators.
 		buf = append(buf, strings.ReplaceAll(strings.TrimSuffix(en.key.sharedString(), ".py"), ".", "/")...)
 		buf = append(buf, ".py"...)
 

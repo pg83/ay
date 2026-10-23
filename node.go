@@ -50,8 +50,6 @@ type Node struct {
 	sourceInputsPending bool
 }
 
-// buildFromInputs excludes flattened IncludedDeps from physical-source forwarding.
-// Nodes without a separate structural input plan use their ordinary inputs.
 func (n *Node) buildFromInputs() InputChunks {
 	if n.BuildFromInputs != nil {
 		return n.BuildFromInputs

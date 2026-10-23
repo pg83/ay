@@ -207,9 +207,6 @@ func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, on
 	return s
 }
 
-// Unresolved module contexts share lexical parses and producer facts, but must
-// not publish suppressed include closures into the resolving scanner's cache.
-// Established ordinary source-file edges remain shared graph facts.
 func (s *IncludeScanner) withoutIncludeResolution() *IncludeScanner {
 	if s.unresolved == nil {
 		u := newIncludeScannerWith(s.parsers, nil, s.onWarn, s.buckets)
@@ -219,14 +216,13 @@ func (s *IncludeScanner) withoutIncludeResolution() *IncludeScanner {
 		u.moduleByRef = s.moduleByRef
 		u.sourceFiles = s.sourceFiles
 		u.noResolve = true
+
 		s.unresolved = u
 	}
 
 	return s.unresolved
 }
 
-// Assembler sources and preincludes resolve in the consuming module's asm
-// include domain. Lexical parses and registered producer facts stay shared.
 func (s *IncludeScanner) assemblerContext(ctx *ScanContext) *IncludeScanner {
 	key := ctx.config(scanDomainAsm).num
 
@@ -443,8 +439,6 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 		defer func() { sc.cfg = cfg }()
 	}
 
-	// The registered processor selects the import language even when a
-	// generic generator input establishes the SourceFile's first owner.
 	if _, ok := s.parsers.registry.registeredParserFor(vfsPath.relString()).(CythonIncludeDirectiveParser); ok {
 		cfg := sc.cfg
 
@@ -455,8 +449,10 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 
 	if sc.parser == IncludeDirectiveParser(scParser) {
 		cfg := sc.cfg
+
 		sc.cfg = sc.scCfg
 		parser = scParser
+
 		defer func() { sc.cfg = cfg }()
 	}
 
@@ -575,8 +571,6 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 		children = block[:k]
 	}
 
-	// Ordinary SourceFile edges belong to the configuration's file graph.
-	// Suppressed lexical resolution never establishes an empty owner there.
 	if abs.isSource() && !s.noResolve {
 		assert(s.sourceFiles.final == nil, "source file edges established after finalization")
 		s.sourceFiles.children.put(abs, children)
@@ -641,6 +635,7 @@ func (sc *ScanCtx) dfs(abs VFS) {
 	sc.tjc.closure.reset(vfsBound())
 	sc.tjc.closure.add(abs)
 	s.buckets.resetScratch(abs)
+
 	for _, input := range sc.opaqueInputs(abs) {
 		s.buckets.spliceOne(&sc.tjc.closure, input)
 	}
@@ -740,6 +735,7 @@ func (sc *ScanCtx) forEachChild(v VFS, fn func(VFS)) {
 
 func (sc *ScanCtx) opaqueInputs(v VFS) []VFS {
 	inputs, _ := sc.scanner.codegen.textTemplates.get(v)
+
 	return inputs
 }
 
@@ -771,8 +767,6 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	s := sc.scanner
 	mark := len(out)
 
-	// Source directives are lexical, including those spelling a rooted path.
-	// Concrete dependencies registered on generated files remain producer facts.
 	if s.noResolve && (includerAbs.isSource() || d.target.vfs() == 0) {
 		return out
 	}

@@ -134,9 +134,6 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 		}
 	}
 
-	// Keep the source-defined command constant as an expression. Its comma
-	// modifier runs after macro argument binding, rather than becoming a
-	// literal argument delimiter during source evaluation.
 	bindConfCommandVariable("__COMMA__", env, platformEnv, map[string]bool{})
 	bindConfCommandVariable(importMaskVariable, env, platformEnv, map[string]bool{})
 
@@ -147,10 +144,14 @@ func bindConfCommandVariable(name string, values, target Environment, seen map[s
 	if seen[name] {
 		return
 	}
+
 	seen[name] = true
+
 	key := internEnv(name)
+
 	if values.hasBindingID(key) {
 		value := values.string(key)
+
 		target.setString(key, value)
 		confValueVars(value, func(dependency string) { bindConfCommandVariable(dependency, values, target, seen) })
 	}

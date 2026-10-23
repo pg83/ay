@@ -390,15 +390,12 @@ func (st GoCodegenStmt) outputNames() []string {
 	return names
 }
 
-// module_confs.cpp: ParseModuleArgsBase followed by SetDirNameBasenameOrGoPackage,
-// before the source module body runs. Keep the filename's header snapshot separate
-// from REALPRJNAME, which SET may subsequently change for macros and generators.
 func initGoModuleName(modulePath string, env Environment, d *ModuleData, onWarn func(Warn)) {
 	stmt := *d.moduleStmt
 	args := expandStmtTokens(stmt.Args, env)
+
 	var tail []ANY
-	// TVars::Contains deliberately checks the module map without consulting
-	// the configuration base. Configuration may declare REALPRJNAME as empty.
+
 	_, hasLocalName := d.setVars[envREALPRJNAME.str()]
 
 	for i := 0; i < len(args); i++ {
@@ -434,8 +431,10 @@ func initGoModuleName(modulePath string, env Environment, d *ModuleData, onWarn 
 
 	d.setVars[envREALPRJNAME.str()] = internStr(env.string(envREALPRJNAME))
 	d.setVars[envGO_PACKAGE_VALUE.str()] = internStr(env.string(envGO_PACKAGE_VALUE))
+
 	stmt.Args = append([]ANY{internStr(env.string(envREALPRJNAME)).any()}, tail...)
 	stmt.Prefix = env.string(envMODULE_PREFIX)
+
 	d.moduleStmt = &stmt
 }
 

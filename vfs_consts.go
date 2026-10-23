@@ -27,6 +27,7 @@ var (
 	buildScriptsBundleOutputPy               = source("build/scripts/bundle_output.py")
 	buildScriptsCheckConfigHPy               = source("build/scripts/check_config_h.py")
 	buildScriptsClangWrapperPy               = source("build/scripts/clang_wrapper.py")
+	buildScriptsCompilePysrcPy               = source("build/scripts/compile_pysrc.py")
 	buildScriptsCopyToDirPy                  = source("build/scripts/copy_to_dir.py")
 	buildScriptsDocsProtoMarkdownTmpl        = source("build/scripts/docs_proto_markdown.tmpl")
 	buildScriptsDocsProtoWrapperPy           = source("build/scripts/docs_proto_wrapper.py")

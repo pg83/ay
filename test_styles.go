@@ -418,6 +418,7 @@ func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *Te
 
 func (s *TestSuite) mergeStyleFiles(files []string) {
 	check := s.styleCheck
+
 	check.Files = sortedUnique(append(check.Files, files...))
 	s.relatedPaths = nil
 

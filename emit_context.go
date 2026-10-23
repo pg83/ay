@@ -424,6 +424,7 @@ func (e *EmitContext) textInputSources(inputs []VFS, parsedCount int) []VFS {
 	}
 
 	e.ctx.na.vfs.commit(len(text))
+
 	return text[:len(text):len(text)]
 }
 
@@ -489,10 +490,12 @@ func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	e.collectScriptOutput(info.OutputPath)
 
 	stored := e.codegen.register(info)
+
 	if stored.SourceAction != nil {
 		if e.sourceProducers == nil {
 			e.sourceProducers = make(map[NodeRef]*GeneratedFileInfo)
 		}
+
 		e.sourceProducers[stored.ProducerRef] = stored
 	}
 
@@ -560,8 +563,6 @@ func (e *EmitContext) emit() {
 
 	for _, meta := range d.srcs {
 		if !isCodegenProducingSrcID(meta.Source) {
-			// Priority-4 SRCS compile actions follow the declared producers and
-			// precede their auto-sources, including when an input resolves to BUILD.
 			meta.InitialCompileSource = meta.Prio == stmtPrioSrcs
 			e.enqueueSrc(meta)
 		}

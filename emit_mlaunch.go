@@ -139,7 +139,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	if env := (Environment{s: &e.frame.ifEnv}); env.string(envPackedPackageExt) != "" {
 		archive := build(module, "/", name, ".", env.string(envPackedPackageExt))
 
-		args = append(args, internStr("--dest-arch").any(), archive.any())
+		args = append(args, strDestArch.any(), archive.any())
 		outputs = append(outputs, archive)
 	}
 

@@ -153,6 +153,7 @@ func javaUnitFor(name TOK, sub ModuleKind) *javaUnit {
 	if name == tokProtoLibrary {
 		return javaUnitProto
 	}
+
 	if name == tokFbsLibrary {
 		return javaUnitFbs
 	}
@@ -454,11 +455,14 @@ func genJavaModule(ctx *GenCtx, instance ModuleInstance, moduleName TOK, stmts [
 	}
 
 	jm.data = collectJavaData(ctx, jm, stmts, env)
+
 	if unit.fbs {
 		if jm.data.excludeTags["JAVA_FBS"] {
 			return &ModuleEmitResult{ModuleStmtName: moduleName}
 		}
+
 		native := instance
+
 		native.Language = LangFbsJavaNative
 		native.Kind = KindLib
 		native.Demand = demandSelf

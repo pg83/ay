@@ -11,7 +11,6 @@ func (e *EmitContext) emitBundles() {
 func (e *EmitContext) emitBundle(b BundleEntry) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	reg := e.codegen
-
 	dst := copyFileOutputVFS(instance.Path.relString(), b.Name)
 
 	if reg.lookup(dst) != nil {

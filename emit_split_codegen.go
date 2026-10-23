@@ -24,8 +24,10 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	toolRes := ctx.toolResult(internArg(filepath.Clean(sc.ToolPath.string())))
 	toolLDRef := toolRes.LDRef
 	toolBin := *toolRes.LDPath
+
 	inputIn := e.requireProducedInput("SPLIT_CODEGEN input", prefix+".in",
 		resolveSourceOrGeneratedVFS(ctx, instance, prefix+".in", e.d.srcDirs))
+
 	prefixCpp := copyFileOutputVFS(moduleDir, filepath.Base(prefix)+".cpp")
 	prefixH := copyFileOutputVFS(moduleDir, filepath.Base(prefix)+".h")
 	partRels := make([]string, 0, sc.OutNum)

@@ -187,6 +187,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 		for _, f := range g.spec.files {
 			input := javaJoin(g.absDir, f)
+
 			prep = append(prep, input.any())
 			b.input(input)
 			b.deps = append(b.deps, b.use(input))
