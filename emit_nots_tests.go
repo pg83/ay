@@ -91,7 +91,7 @@ func (e *EmitContext) notsSuiteDependencies(target string) []NodeRef {
 
 		refs = append(refs, info.ProducerRef)
 
-		for _, input := range info.ClosureLeaves {
+		for _, input := range info.NotsInputs {
 			if dep := e.codegen.lookup(input); dep != nil && dep.Nots != nil {
 				refs = append(refs, dep.ProducerRef)
 			}

@@ -381,7 +381,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 
 		if info := e.codegen.lookup(*result.ARPath); info != nil {
 			peerRefs = append(peerRefs, info.GeneratorRefs...)
-			peerInputs = append(peerInputs, info.ClosureLeaves...)
+			peerInputs = append(peerInputs, info.NotsInputs...)
 		}
 
 		peerRefs = append(peerRefs, result.ARRef)
@@ -520,7 +520,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 
 	info.Nots = state
 	info.GeneratorRefs = peerRefs
-	info.ClosureLeaves = peerInputs
+	info.NotsInputs = peerInputs
 
 	return notsResult(output, prepRef, c, globals)
 }
@@ -554,9 +554,9 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	cmds := []Cmd{{CmdArgs: na.chunkList(na.anyList(wrapccPython3STR.any(), autotar.any(), strUnpack.any(), strExt.any(), strGentar.any())), Env: envVarsVCS, Cwd: build(dir)}}
 	inputs := []VFS{autotar, state.ToolPath, *prepare.ARPath}
 
-	inputs = append(inputs, e.codegen.lookup(*prepare.ARPath).ClosureLeaves...)
+	inputs = append(inputs, e.codegen.lookup(*prepare.ARPath).NotsInputs...)
 
-	buildLeaves := append(slices.Clone(e.codegen.lookup(*prepare.ARPath).ClosureLeaves), *prepare.ARPath)
+	buildLeaves := append(slices.Clone(e.codegen.lookup(*prepare.ARPath).NotsInputs), *prepare.ARPath)
 	outputs := []VFS{output}
 
 	if c.VCSInfo != "" && c.Kind != tokTsPackage {
@@ -671,7 +671,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 
 	info.Nots = state
 	info.GeneratorRefs = dedupRefs(append(slices.Clone(peerRefs), prepRef))
-	info.ClosureLeaves = dedup(buildLeaves)
+	info.NotsInputs = dedup(buildLeaves)
 
 	result := notsResult(output, ref, c, globals)
 
@@ -721,7 +721,7 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 
 		if info := e.codegen.lookup(*result.ARPath); info != nil {
 			refs = append(refs, info.GeneratorRefs...)
-			inputs = append(inputs, info.ClosureLeaves...)
+			inputs = append(inputs, info.NotsInputs...)
 		}
 	}
 
