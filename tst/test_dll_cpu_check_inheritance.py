@@ -2,6 +2,7 @@ import lib
 from test_yamake_defaults import DEFAULT_PEERS
 
 CASES = {
+    "program-source-default-fake": ("SET(DEFAULT_ALLOCATOR FAKE)\nPROGRAM", "", []),
     "program-default": ("PROGRAM", "", []),
     "program-system": ("PROGRAM", "ALLOCATOR(SYSTEM)\n", []),
     "program-lf": ("PROGRAM", "ALLOCATOR(LF)\n", []),

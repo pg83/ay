@@ -1395,15 +1395,15 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit)
 
+			if hasCppDefaultAllocator(d.unit.Type) {
+				env.setDefaultString(envALLOCATOR, expandConfScalar("$DEFAULT_ALLOCATOR", env))
+			}
+
 			if isProgramModuleType(d.unit.Type) && !isGoModuleType(d.unit.Type) {
 				env.setDefaultString(envCpuCheck, "yes")
 				d.cpuCheckBound = true
 				d.cpuCheckBase = internStr(env.string(envCpuCheck))
 				d.recalcCpuCheck(env)
-			}
-
-			if hasCppDefaultAllocator(d.unit.Type) {
-				env.setDefaultString(envALLOCATOR, expandConfScalar("$DEFAULT_ALLOCATOR", env))
 			}
 
 			setupPythonImportMask(env, d)
