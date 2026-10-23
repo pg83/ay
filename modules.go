@@ -274,6 +274,10 @@ type ModuleData struct {
 	objAddLibsGlobal         []ANY
 	srcDirs                  []VFS
 	flags                    FlagSet
+	useSSE4                  bool
+	cpuCheck                 bool
+	cpuCheckBound            bool
+	cpuCheckBase             STR
 	hadAllocator             bool
 	allocatorName            ANY
 	muslLite                 bool
@@ -826,6 +830,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.dontResolveIncludes = kindOfResolve != envAbsent && env.string(envDontResolveIncludes) != "no"
 	finishYqlModule(ctx, instance, env, d, onWarn)
 	d.udfBaseSymbolic = d.udfBaseSymbolic && env.string(envMsvc) != "yes" && env.string(envDarwin) != "yes"
+	d.cpuCheck = env.string(envCpuCheck) == "yes"
+	d.useSSE4 = env.string(envUSE_SSE4) == "yes"
 
 	nativeSources := d.srcs[:0]
 
@@ -1389,6 +1395,13 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.moduleStmt = moduleStmtForKind(v, d.unit)
 
+			if isProgramModuleType(d.unit.Type) && !isGoModuleType(d.unit.Type) {
+				env.setDefaultString(envCpuCheck, "yes")
+				d.cpuCheckBound = true
+				d.cpuCheckBase = internStr(env.string(envCpuCheck))
+				d.recalcCpuCheck(env)
+			}
+
 			if hasCppDefaultAllocator(d.unit.Type) {
 				env.setDefaultString(envALLOCATOR, expandConfScalar("$DEFAULT_ALLOCATOR", env))
 			}
@@ -1673,6 +1686,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			perlChanged := perlMask != 0 && env.string(v.NameEnv) != value
 
 			env.setFromString(v.NameEnv, value)
+			d.captureCpuCheckVariable(v.NameEnv, env)
 			d.captureResourcePeerPolicy(v.Name, env)
 
 			if v.Name == importMaskVariable {
@@ -2097,6 +2111,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					recordHandledMacro(expanded.Name, expanded.Args)
 				} else {
 					applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
+					d.captureCpuCheckMacro(expanded, env)
 				}
 
 				if expanded.Name == tokEnable || expanded.Name == tokDisable || expanded.Name == tokSetAppend {

@@ -154,11 +154,11 @@ class YaMakeDefaultPeersTest(unittest.TestCase):
             ("NO_LIBC()", (), TOOLCHAIN + HEADERS + LINKER + COW + TCMALLOC),
             ("DISABLE(USE_ASMLIB)", (), LIBRARY_DEFAULTS + LINKER + COW + TCMALLOC + CPUID),
             ("", ("-DSANITIZER_TYPE=address",), LIBRARY_DEFAULTS + LINKER + COW + TCMALLOC + ASMLIB + CPUID),
-            ("", ("-DUSE_SSE4=no",), LIBRARY_DEFAULTS + LINKER + COW + TCMALLOC + ASMLIB + CPUID),
+            ("", ("-DUSE_SSE4=no",), LIBRARY_DEFAULTS + LINKER + COW + TCMALLOC + ASMLIB),
             ("", ("-DUSE_ARCADIA_COMPILER_RUNTIME=no",), TOOLCHAIN + HEADERS + RUNTIME + ["util"] + LINKER + COW + TCMALLOC + GLIBCASM + CPUID),
             ("", ("-DUSE_ARCADIA_LIBM=yes",), LIBRARY_DEFAULTS + LINKER + ["contrib/libs/libm"] + COW + TCMALLOC + GLIBCASM + CPUID),
             ("", ("--musl",), TOOLCHAIN + HEADERS + RUNTIME + ["util", "contrib/libs/musl/include"] + SANITIZER + LINKER + COW + TCMALLOC + ASMLIB + ["contrib/libs/musl/full"] + CPUID),
-            ("ENABLE(MUSL_LITE)", ("--musl",), TOOLCHAIN + HEADERS + RUNTIME + ["contrib/libs/musl/include"] + SANITIZER + LINKER + COW + TCMALLOC + ASMLIB + ["contrib/libs/musl"]),
+            ("ENABLE(MUSL_LITE)", ("--musl",), TOOLCHAIN + HEADERS + RUNTIME + ["contrib/libs/musl/include"] + SANITIZER + LINKER + COW + TCMALLOC + ASMLIB + ["contrib/libs/musl"] + CPUID),
             ("", ("-DMUSL_LITE=yes", "--musl"), TOOLCHAIN + HEADERS + RUNTIME + ["util", "contrib/libs/musl/include"] + SANITIZER + LINKER + COW + TCMALLOC + ASMLIB + ["contrib/libs/musl"] + CPUID),
         ]
         for body, args, expected in cases:

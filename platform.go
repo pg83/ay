@@ -361,6 +361,15 @@ func buildPlatformIfEnv(p *Platform) Environment {
 		env.setStringID(envAMX_CFLAGS, strAMXCFlags)
 	}
 
+	if (!env.bool(envARCH_X86_64) && !env.bool(envARCH_I386)) || env.string(envDISABLE_INSTRUCTION_SETS) == "yes" {
+		env.setStringID(envUSE_SSE4, strNo)
+		env.setStringID(envCpuCheck, strNo)
+	}
+
+	if env.bool(envARCH_I386) && env.bool(envOS_ANDROID) || env.string(envNosse) == "yes" {
+		env.setStringID(envUSE_SSE4, strNo)
+	}
+
 	return env
 }
 

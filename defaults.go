@@ -269,7 +269,7 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 		archX8664:     env.bool(envARCH_X86_64),
 		pic:           instance.Platform.PIC,
 		sanitizer:     instance.Platform.BuildSanitized,
-		useSSE4:       env.bool(envUSE_SSE4),
+		useSSE4:       d.useSSE4,
 		useAsmlib:     d.useAsmlib,
 		hadAllocator:  d.hadAllocator,
 		allocatorName: allocatorName.string(),
@@ -283,10 +283,10 @@ func (e *EmitContext) defaultProgramPeerdirsForWithState(postUser bool) []string
 	} else {
 		if !isDllModuleType(d.moduleStmt.Name) {
 			peers = appendImplicitPeers(peers, programImplicitPeers, rc)
-		}
 
-		if env.bool(envARCH_X86_64) && !flags.NoUtil && allocatorName.string() != "FAKE" {
-			peers = append(peers, "library/cpp/cpuid_check")
+			if d.cpuCheck {
+				peers = append(peers, "library/cpp/cpuid_check")
+			}
 		}
 	}
 
