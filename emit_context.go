@@ -30,6 +30,7 @@ type EmitContext struct {
 	sourceRounds       map[int]uint64
 	resourceDeclSeq    int
 	resourceSources    map[resourceInputKey]VFS
+	resourceAvailable  map[VFS]bool
 	moduleIncludeRoots []VFS
 	moduleGlobals      []VFS
 	moduleGlobalInputs []VFS

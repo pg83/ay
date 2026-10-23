@@ -531,7 +531,7 @@ class PyProtoTest(unittest.TestCase):
             result.stderr,
         )
 
-    def test_py_srcs_in_proto_library_skip_namespace_resources(self):
+    def test_ordinary_py_srcs_in_proto_library_keep_namespace_resources(self):
         files = python_base()
         files.update({
             "proto/ya.make": (
@@ -546,12 +546,21 @@ class PyProtoTest(unittest.TestCase):
         self.assertEqual(args(pyc)[-3:], [
             "proto/extra.py-", "$(S)/proto/extra.py", "$(B)/proto/extra.py.yapyc3",
         ])
-        objcopy = lib.node_by_output_prefix(graph, "$(B)/proto/objcopy_")
+        objects = [node for node in graph["graph"]
+                   if node["outputs"][0].startswith("$(B)/proto/objcopy_")]
+        self.assertEqual(len(objects), 2)
+        namespace, objcopy = objects
+        self.assertEqual(args(namespace)[args(namespace).index("--kvs") + 1:], [
+            "py/namespace/b163d903cb7f8b1eb5eea6f05b4b81f6/proto=proto.",
+        ])
         kvs = args(objcopy)[args(objcopy).index("--kvs") + 1:]
         self.assertEqual(kvs, [
             "resfs/src/resfs/file/py/proto/extra.py=proto/extra.py",
             "resfs/src/resfs/file/py/proto/extra.py.yapyc3=proto/extra.py.yapyc3",
         ])
+        self.assertIn("$(S)/proto/extra.py", objcopy["inputs"])
+        self.assertIn(pyc["outputs"][0], objcopy["inputs"])
+        self.assertIn(pyc["uid"], objcopy["deps"])
 
 
 if __name__ == "__main__":

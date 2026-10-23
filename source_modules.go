@@ -153,7 +153,7 @@ func configureCythonModule(ctx *GenCtx, instance ModuleInstance, tag string) *So
 	if tag != "" {
 		order := e.scheduleResourceActions()
 
-		info.ResourceActions = &resourceActionState{order: order, sources: e.resourceSources}
+		info.ResourceActions = &resourceActionState{order: order, sources: e.resourceSources, available: e.resourceAvailable}
 	}
 
 	return info

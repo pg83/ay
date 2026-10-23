@@ -16,8 +16,9 @@ type resourceQueueBatch struct {
 }
 
 type resourceActionState struct {
-	order   map[int]int
-	sources map[resourceInputKey]VFS
+	available map[VFS]bool
+	order     map[int]int
+	sources   map[resourceInputKey]VFS
 }
 
 type resourceQueueAction struct {
@@ -39,6 +40,7 @@ func (e *EmitContext) resourceActionOrder() map[int]int {
 	for ; info != nil; info = info.Next {
 		if info.Instance == instance && info.ResourceActions != nil {
 			e.resourceSources = info.ResourceActions.sources
+			e.resourceAvailable = info.ResourceActions.available
 
 			return info.ResourceActions.order
 		}
@@ -48,7 +50,7 @@ func (e *EmitContext) resourceActionOrder() map[int]int {
 }
 
 func (e *EmitContext) scheduleResourceActions() map[int]int {
-	if len(e.d.fromSandboxes)+len(e.d.runPrograms)+len(e.d.runPython) == 0 {
+	if len(e.d.fromSandboxes)+len(e.d.runPrograms)+len(e.d.runPython)+len(e.d.copyFiles) == 0 {
 		return nil
 	}
 
@@ -102,6 +104,10 @@ func (e *EmitContext) scheduleResourceActions() map[int]int {
 		addProducer(stmt.DeclSeq, ins, stmt.OUTFiles, stmt.OUTNoAutoFiles, stmt.StdoutFile)
 	}
 
+	for _, entry := range e.d.copyFiles {
+		addProducer(entry.DeclSeq, []ANY{internStr(entry.Src).any()}, []ANY{internStr(entry.Dst).any()}, nil, nil)
+	}
+
 	for entries := e.resources; len(entries) > 0; {
 		n := 1
 
@@ -122,6 +128,16 @@ func (e *EmitContext) scheduleResourceActions() map[int]int {
 	}
 
 	ready := e.codegen.resourceReady
+
+	for output := range outputs {
+		if ready[output] {
+			if e.resourceAvailable == nil {
+				e.resourceAvailable = make(map[VFS]bool)
+			}
+
+			e.resourceAvailable[output] = true
+		}
+	}
 
 	inputReady := func(path string, seq int, remember bool) bool {
 		key := resourceInputKey{path, seq}

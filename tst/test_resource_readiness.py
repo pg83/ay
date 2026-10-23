@@ -51,6 +51,22 @@ def resource_order(graph, py3):
 
 
 class ResourceReadinessTest(unittest.TestCase):
+    def test_resources_keep_native_call_phase_and_prior_availability(self):
+        from resource_phase_cases import CASES
+
+        for case in CASES:
+            with self.subTest(case=case["name"]):
+                files, _ = fixture("PY3")
+                files.update(case["files"])
+                graph = lib.make(files, "mod", "--target-platform", "default-linux-x86_64")
+                archive = lib.node_by_output(graph, case["output"])
+                members = [arg for arg in archive["cmds"][0]["cmd_args"] if arg.endswith(".o")]
+                self.assertEqual(members, case["members"])
+                for output in case["members"]:
+                    producer = lib.node_by_output(graph, output)
+                    self.assertIn(output, archive["inputs"])
+                    self.assertIn(producer["uid"], archive["deps"])
+
     # Upstream ModuleBuilder::RecursiveAddInputs requeues unresolved actions.
     # Availability is shared by distinct PY2/PY3 module contexts, not their AST.
     def test_same_context_resource_output_collision_is_rejected(self):
@@ -101,13 +117,13 @@ class ResourceReadinessTest(unittest.TestCase):
                     expected = ["payload", "namespace", "python"] if tag == "PY3" else ["payload", "python"]
                     self.assertEqual(resource_order(graph, tag == "PY3"), expected)
 
-    def test_resource_files_wait_but_text_rootrel_is_ready(self):
+    def test_resource_files_and_text_rootrel_wait_for_later_producers(self):
         for resource in ("RESOURCE_FILES(data.dat)", r'''RESOURCE(- payload=\${rootrel;context=TEXT;input=TEXT:"data.dat"})'''):
             with self.subTest(resource=resource):
                 files, targets = fixture("PY3")
                 files["mod/ya.make"] = files["mod/ya.make"].replace("RESOURCE(data.dat payload)", resource)
                 graph = lib.make(files, *targets, "--sandboxing")
-                expected = ["namespace", "python", "payload"] if resource.startswith("RESOURCE_FILES") else ["payload", "namespace", "python"]
+                expected = ["namespace", "python", "payload"]
                 self.assertEqual(resource_order(graph, True), expected)
 
     def test_unavailable_batch_requeues_behind_other_ready_batches(self):

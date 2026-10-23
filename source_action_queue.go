@@ -128,6 +128,10 @@ func (e *EmitContext) scheduleSourceActions() {
 						continue
 					}
 
+					if e.resourceAvailable[input] {
+						continue
+					}
+
 					info := e.codegen.lookup(input)
 
 					if info == nil {

@@ -1895,6 +1895,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.resources = expandAllResourceFiles(d, d.resources, fs, modulePath, env, v)
 
+			seq := d.nextDeclSeq()
+
+			for i := before; i < len(d.resources); i++ {
+				d.resources[i].DeclSeq = seq
+			}
+
 			if len(d.resources) > before {
 				d.resources[len(d.resources)-1].EndsBatch = true
 			}
