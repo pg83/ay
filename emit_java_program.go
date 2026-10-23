@@ -498,7 +498,13 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 		if slices.Contains(r.out, a) || slices.Contains(r.noauto, a) {
 			run = append(run, copyFileOutputVFS(dir, a).any())
 		} else if ins[a] {
-			run = append(run, input(a).any())
+			argument := input(a).any()
+
+			if strings.HasPrefix(a, "$(S)/") || strings.HasPrefix(a, "$(B)/") {
+				argument = intern(a).any()
+			}
+
+			run = append(run, argument)
 		} else {
 			run = append(run, internStr(a).any())
 		}
