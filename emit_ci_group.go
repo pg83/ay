@@ -54,6 +54,7 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 	}
 
 	if res.LDPath != nil && (res.isPROGRAM || isLinkingModuleType(res.ModuleStmtName)) {
+		e.codegen.forwardModuleIncludedDeps(*res.LDPath, res.IncludedDeps)
 		e.refs = append(e.refs, res.LDRef)
 
 		return append(out, *res.LDPath)

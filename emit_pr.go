@@ -602,7 +602,8 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	tools = tools[:len(tools):len(tools)]
 
 	inputNode := Node{Inputs: na.inputList(tools, spec.inSources, spec.inBuilds), Outputs: outputs,
-		TextInputs: e.textInputSources(spec.inVFSs, len(spec.inVFSs)-stmt.INNoParse)}
+		BuildFromInputs: na.inputList(spec.inVFSs),
+		TextInputs:      e.textInputSources(spec.inVFSs, len(spec.inVFSs)-stmt.INNoParse)}
 
 	e.includeNodeInputs(&inputNode)
 
@@ -664,6 +665,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		Outputs:        outputs,
 		KV:             kv,
 		ForeignDepRefs: toolRefs,
+		DepRefs:        inputNode.DepRefs,
 	}
 
 	e.resolveNodeCodegenRefs(&node)

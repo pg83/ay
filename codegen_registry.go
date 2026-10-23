@@ -14,31 +14,32 @@ type SourceActionInfo struct {
 }
 
 type GeneratedFileInfo struct {
-	SourceAction     *SourceActionInfo
-	InputsOnly       bool
-	ResourceObjcopy  bool
-	GztProto         *GztProtoProducer
-	ModuleType       TOK
-	ModuleInputs     *ModuleInputInfo
-	Nots             *NotsPrepared
-	NotsInputs       []VFS
-	Sandbox          *SandboxRecipe
-	OutputPath       VFS
-	SourcePath       VFS
-	PrimaryInput     VFS
-	BuildInputs      []VFS
-	OwnerModule      VFS
-	OwnerSerial      uint32
-	ProducerRef      NodeRef
-	OnUse            *PendingEmit
-	GeneratorRefs    []NodeRef
-	ProducerMainOut  VFS
-	ClosureLeaves    []VFS
-	InputLoopSources []VFS
-	InputLoopViews   []Closure
-	LateOutputs      []VFS
-	ModuleOutputs    []VFS
-	ParsedIncludes   ParsedIncludeSet
+	SourceAction       *SourceActionInfo
+	InputsOnly         bool
+	ResourceObjcopy    bool
+	GztProto           *GztProtoProducer
+	ModuleType         TOK
+	ModuleIncludedDeps *ModuleIncludedDeps
+	ModuleInputs       *ModuleInputInfo
+	Nots               *NotsPrepared
+	NotsInputs         []VFS
+	Sandbox            *SandboxRecipe
+	OutputPath         VFS
+	SourcePath         VFS
+	PrimaryInput       VFS
+	BuildInputs        []VFS
+	OwnerModule        VFS
+	OwnerSerial        uint32
+	ProducerRef        NodeRef
+	OnUse              *PendingEmit
+	GeneratorRefs      []NodeRef
+	ProducerMainOut    VFS
+	ClosureLeaves      []VFS
+	InputLoopSources   []VFS
+	InputLoopViews     []Closure
+	LateOutputs        []VFS
+	ModuleOutputs      []VFS
+	ParsedIncludes     ParsedIncludeSet
 
 	IncludedBuildInputs []VFS
 	IncludedInputs      *IncludedInputPlan
@@ -69,6 +70,11 @@ type SourceModuleInfo struct {
 	Next             *SourceModuleInfo
 	Includes         []VFS
 	CythonIncludes   []VFS
+}
+
+type ModuleIncludedDeps struct {
+	Inputs []VFS
+	Refs   []NodeRef
 }
 
 type ModuleInputInfo struct {
@@ -210,6 +216,34 @@ func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates, textTempl
 
 	info.ClosureLeaves = r.na.dedupClosure(info.ClosureLeaves, [][]VFS{templates})
 	r.forwardTextTemplates(output, textTemplates)
+}
+
+func (r *CodegenRegistry) forwardModuleIncludedDeps(output VFS, deps *ModuleIncludedDeps) {
+	if deps == nil {
+		return
+	}
+
+	info, ok := r.byRel.get(output.rel())
+
+	if !ok {
+		info = r.na.geninfos.one()
+		*info = GeneratedFileInfo{OutputPath: output, InputsOnly: true}
+		r.byRel.put(output.rel(), info)
+	}
+
+	info.ModuleIncludedDeps = deps
+}
+
+func (r *CodegenRegistry) moduleIncludedDeps(input VFS) *ModuleIncludedDeps {
+	if !input.isBuild() {
+		return nil
+	}
+
+	if info, ok := r.byRel.get(input.rel()); ok {
+		return info.ModuleIncludedDeps
+	}
+
+	return nil
 }
 
 func (r *CodegenRegistry) forwardTextTemplates(output VFS, inputs []VFS) {

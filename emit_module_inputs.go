@@ -290,3 +290,42 @@ func (e *EmitContext) emitLDPlugins() {
 		e.moduleIncludeRoots = append(e.moduleIncludeRoots, dst)
 	}
 }
+
+func (e *EmitContext) publishOwnModuleIncludedDeps() *ModuleIncludedDeps {
+	stmt := e.d.moduleStmt
+
+	if !isProgramModuleType(stmt.Name) && !isDllModuleType(stmt.Name) {
+		return nil
+	}
+
+	name := programBinaryName(e.instance, stmt)
+
+	if isDllModuleType(stmt.Name) {
+		name = dllOutputName(e.instance, stmt)
+	}
+
+	var inputs []VFS
+	var refs []NodeRef
+
+	for i, meta := range e.metas {
+		if meta.Global {
+			inputs = append(inputs, e.outs[i])
+			refs = append(refs, e.refs[i])
+		}
+	}
+
+	if objects := e.objcopyRes; objects != nil {
+		inputs = append(inputs, objects.Outputs...)
+		refs = append(refs, objects.Refs...)
+	}
+
+	if len(inputs) == 0 {
+		return nil
+	}
+
+	deps := &ModuleIncludedDeps{Inputs: e.ctx.na.vfsList(inputs...), Refs: e.ctx.na.refList(refs...)}
+
+	e.codegen.forwardModuleIncludedDeps(lDOutputPath(e.instance, name), deps)
+
+	return deps
+}

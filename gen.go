@@ -121,6 +121,7 @@ type ModuleEmitResult struct {
 	protoExcluded                   bool
 	testDependencyModule            TestDependencyModule
 	ModuleVariants                  uint16
+	IncludedDeps                    *ModuleIncludedDeps
 	GlobalSources                   []VFS
 	PchFlagsGlobal                  []ANY
 	JavaClosure                     []VFS
@@ -2266,12 +2267,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	effectiveMlaunchDeps := mlaunchDeps(d, resolved)
 	ownLDFlags := ownCompilerFlagArgs(effectiveLDFlagsGlobal, d.ldFlags)
 
+	var ownIncludedDeps *ModuleIncludedDeps
+
 	newResult := func() *ModuleEmitResult {
 		r := ctx.results.one()
 
 		*r = ModuleEmitResult{
 			TestSuites:                      e.styleSuites(resourceGlobalsClosure),
 			ModuleVariants:                  d.moduleVariants,
+			IncludedDeps:                    ownIncludedDeps,
 			GlobalSources:                   e.globalSources,
 			PchFlagsGlobal:                  d.cc.PchFlagsGlobal,
 			MlaunchDeps:                     effectiveMlaunchDeps,
@@ -2480,6 +2484,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	d.scanCtx.cythonPeerIncl = frame.peerCtx.CythonInclude
 	e.emitMlaunch(resolved, peerArchivePaths, effectiveMlaunchDeps)
 	e.emit()
+	ownIncludedDeps = e.publishOwnModuleIncludedDeps()
 	e.emitLDPlugins()
 	e.collectPeerModuleGlobals()
 

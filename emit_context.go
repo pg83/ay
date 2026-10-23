@@ -352,6 +352,11 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 
 	for _, chunk := range node.buildFromInputs() {
 		for _, input := range chunk {
+			if deps := e.codegen.moduleIncludedDeps(input); deps != nil {
+				included = append(included, deps.Inputs)
+				node.DepRefs = concat(node.DepRefs, deps.Refs)
+			}
+
 			if info := e.codegen.lookup(input); info != nil && info.IncludedInputs != nil {
 				included = append(included, info.IncludedInputs.sourceInputs(e.ctx.na))
 			}
