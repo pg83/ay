@@ -58,9 +58,16 @@ class JavaRemainingContractsTest(unittest.TestCase):
         jar = lib.node_by_output(lib.make(files, 'app'), '$(B)/app/app.jar')
         self.assertIn('-Dunfinished=${UNFINISHED', command(jar, 'run_javac.py'))
 
-    def test_repeated_sandbox_output_has_a_single_producer(self):
+    def test_repeated_sandbox_output_is_rejected(self):
         files = tree('FROM_SANDBOX(FILE 42 OUT_NOAUTO bundle.jsrc)\nFROM_SANDBOX(FILE 42 OUT_NOAUTO bundle.jsrc)\nJAVA_SRCS(bundle.jsrc)')
-        graph = lib.make(files, 'app')
+        result = lib.make_process(files, 'app', '--sandboxing')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('duplicate producer', result.stderr)
+        self.assertIn('bundle.jsrc', result.stderr)
+
+    def test_single_sandbox_output_has_a_single_producer_and_jar_dependency(self):
+        files = tree('FROM_SANDBOX(FILE 42 OUT_NOAUTO bundle.jsrc)\nJAVA_SRCS(bundle.jsrc)')
+        graph = lib.make(files, 'app', '--sandboxing')
         self.assertEqual(sum('$(B)/app/bundle.jsrc' in n['outputs'] for n in graph['graph']), 1)
         jar = lib.node_by_output(graph, '$(B)/app/app.jar')
         producer = lib.node_by_output(graph, '$(B)/app/bundle.jsrc')
