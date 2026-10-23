@@ -115,13 +115,11 @@ func (d *DocsData) addSources(fs FS, module string, args []string) {
 		rel, ok := allResourceDir(module, path.Join(srcdir, pattern))
 
 		if ok {
-			matches = append(matches, globMatch(fs, rel)...)
+			matches = append(matches, ymakeGlob(fs, rel)...)
 		}
 	}
 
-	slices.Sort(matches)
-
-	for _, match := range slices.Compact(matches) {
+	for _, match := range dedupKeepOrder(matches) {
 		excluded := false
 
 		for _, pattern := range excludes {
