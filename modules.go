@@ -2602,7 +2602,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			throwFmt("LLVM_BC requires USE_LLVM_BC16/18/20 before invocation")
 		}
 
-		stmt := &LlvmBcStmt{ClangBCRoot: env.string(envCLANG_BC_ROOT)}
+		stmt := &LlvmBcStmt{ClangBCRoot: env.string(envCLANG_BC_ROOT), DeclSeq: d.nextDeclSeq()}
 		i := 0
 
 		for i < len(v.Args) {
@@ -3807,6 +3807,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 }
 
 type LlvmBcStmt struct {
+	DeclSeq             int
 	Sources             []string
 	Name                string
 	Suffix              string
