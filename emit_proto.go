@@ -713,7 +713,7 @@ func (e *EmitContext) emitPyProtoLibraryResult(resources *ObjcopyEmitResult) *Pr
 
 	var cppSibling *ModuleEmitResult
 
-	if !moduleExcludesTag(d, "CPP_PROTO") && d.optimizePyProtos {
+	if !moduleExcludesTag(d, "CPP_PROTO") && d.optimizePyProtos && !d.ignoreCppProtoSelfPeers {
 		cppInstance := instance
 
 		cppInstance.Language = LangCPP

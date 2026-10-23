@@ -302,6 +302,7 @@ type ModuleData struct {
 	noOptimize               bool
 	optimizePyProtos         bool
 	optimizePyProtosSet      bool
+	ignoreCppProtoSelfPeers  bool
 	needGoogleProtoPeerdirs  bool
 	cppProtoPlugins          []CppProtoPlugin
 	pyProtoPlugins           []PyProtoPlugin
@@ -1028,13 +1029,11 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.peerdirs = append(d.peerdirs, strLibraryCppProtoConfigCodegen.any(), strLibraryCppProtoConfigProtos.any(), strContribLibsProtobuf.any())
 	}
 
-	if hasProto {
-		isProtoLibrary := d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary
-
-		if isProtoLibrary && !d.optimizePyProtosSet {
-			d.optimizePyProtos = true
-		}
+	if d.moduleStmt != nil && d.moduleStmt.Name == tokProtoLibrary && !d.optimizePyProtosSet {
+		d.optimizePyProtos = true
 	}
+
+	d.ignoreCppProtoSelfPeers = env.string(envIgnoreCppProtoSelfPeers) == "yes"
 
 	if hasPyGztProto && d.optimizePyProtos {
 		d.peerdirs = append(d.peerdirs, strKernelGazetteerProto.any())

@@ -1581,7 +1581,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			return !deduper.add(internStr(p).any().strID())
 		}
 
-		if isPythonProtoModule(d) && d.optimizePyProtos && !moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
+		if isPythonProtoModule(d) && d.optimizePyProtos && !d.ignoreCppProtoSelfPeers && !moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
 			peerSeen(instance.Path.relString())
 
 			resolveCppSelf = true
