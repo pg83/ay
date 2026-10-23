@@ -555,8 +555,12 @@ func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *Objco
 	}
 }
 
-func (e *EmitContext) collectPyProtoGroupResEntries(group int, event bool) []PyGenResEntry {
+func (e *EmitContext) collectPyProtoGroupResEntries(group int, event bool) ([]PyGenResEntry, []int) {
 	entries := e.resEntries[:0]
+
+	var ends []int
+
+	rows := 0
 
 	for _, ps := range e.pySrcsReg {
 		if ps.Kind == pySourceProto && ps.Group == group {
@@ -567,12 +571,22 @@ func (e *EmitContext) collectPyProtoGroupResEntries(group int, event bool) []PyG
 			}
 
 			entries = e.appendPyResEntries(entries, ps)
+			rows++
+
+			if rows == 1024 {
+				ends = append(ends, len(entries))
+				rows = 0
+			}
 		}
+	}
+
+	if rows > 0 || len(ends) == 0 {
+		ends = append(ends, len(entries))
 	}
 
 	e.resEntries = retainMaxLen(e.resEntries, entries)
 
-	return entries
+	return entries, ends
 }
 
 func (e *EmitContext) pyProtoGroups() []int {
@@ -628,10 +642,16 @@ func (e *EmitContext) emitPyProtoGroupResources(group int) ([]NodeRef, []VFS) {
 	}
 
 	for _, event := range []bool{false, true} {
-		groupRefs, groupOutputs := e.packPyProtoResEntries(e.collectPyProtoGroupResEntries(group, event), seq)
+		entries, ends := e.collectPyProtoGroupResEntries(group, event)
+		lo := 0
 
-		refs = append(refs, groupRefs...)
-		outputs = append(outputs, groupOutputs...)
+		for _, hi := range ends {
+			groupRefs, groupOutputs := e.packPyProtoResEntries(entries[lo:hi], seq)
+
+			refs = append(refs, groupRefs...)
+			outputs = append(outputs, groupOutputs...)
+			lo = hi
+		}
 	}
 
 	return refs, outputs
