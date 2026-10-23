@@ -2646,6 +2646,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		env.setString(envClangTidyBin, root+"clang-tidy")
 		env.setString(envYaml2jsonBin, root+"yaml2json")
 	case tokGoProtoPlugin:
+		// _BARE_UNIT ignores this macro; only _GO_BASE_UNIT allows it.
+		// Skip the entire call, including its DEPS, in other module contexts.
+		if !isGoModuleType(d.unit.Type) {
+			break
+		}
+
 		positional, lists := goMacroLists(v.Args, "DEPS")
 
 		d.goProtoOpts = append(d.goProtoOpts, GoProtoOpt{plugin: positional[0].string(), ext: positional[1].string(), tool: positional[2].string()})
