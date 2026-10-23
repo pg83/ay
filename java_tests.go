@@ -360,6 +360,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	s.recipes = testRecipes(t.recipes)
 	s.depends = t.depends
 	s.data = sortedUnique(t.data)
+	s.dockerImages = sortedUnique(t.dockerImages)
 	s.tags = sortedUnique(t.tags)
 	s.requirements = testRequirementsOf(t.requirements)
 	s.env = slices.Clone(d.testEnv)

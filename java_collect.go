@@ -182,6 +182,20 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	javaConfPrologue(jm, d)
 	collectJavaStmts(ctx, jm, d, stmts, env)
 
+	for _, image := range strings.Fields(expandStmtToken(env.string(envDockerImagesValue), env)) {
+		if image == `""` || image == "''" {
+			continue
+		}
+
+		if !strings.HasPrefix(image, "docker://") {
+			tag, link, _ := strings.Cut(image, "=")
+
+			image = link + "=" + tag
+		}
+
+		d.test.dockerImages = append(d.test.dockerImages, image)
+	}
+
 	for _, value := range strings.Fields(expandStmtToken(env.string(envJavaIgnoreClasspathClash), env)) {
 		if value != `""` && value != "''" {
 			d.test.ignoreClasspathClash = append(d.test.ignoreClasspathClash, strings.ReplaceAll(value, `${"$"}`, "$"))
@@ -666,6 +680,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.test.recipes = append(d.test.recipes, strings.Join(args, " "))
 	case "DEPENDS":
 		d.test.depends = append(d.test.depends, args...)
+	case "DOCKER_IMAGE":
+		applyJavaMacro(ctx, jm, d, "SET_APPEND", append([]string{envDockerImagesValue.string()}, args...), append([]string{envDockerImagesValue.string()}, raw...), env)
 	case "DATA":
 		d.test.data = append(d.test.data, args...)
 	case "DATA_FILES":

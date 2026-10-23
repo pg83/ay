@@ -80,6 +80,7 @@ var (
 	envDescProto                    = internEnv("DESC_PROTO")
 	envDisableFlake8                = internEnv("DISABLE_FLAKE8")
 	envDisableFlake8Migrations      = internEnv("DISABLE_FLAKE8_MIGRATIONS")
+	envDockerImagesValue            = internEnv("DOCKER_IMAGES_VALUE")
 	envDocsProto                    = internEnv("DOCS_PROTO")
 	envDontResolveIncludes          = internEnv("DONT_RESOLVE_INCLUDES")
 	envErrorProneVersion            = internEnv("ERROR_PRONE_VERSION")

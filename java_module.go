@@ -329,6 +329,7 @@ type JavaData struct {
 }
 
 type javaTestData struct {
+	dockerImages     []string
 	recipes          []string
 	depends          []string
 	size             string
