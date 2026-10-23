@@ -172,6 +172,7 @@ type ModuleData struct {
 
 	yqlPrebuiltTool          bool
 	yqlUdfProbe              bool
+	udfBaseSymbolic          bool
 	yqlUdfShared             bool
 	yqlPythonUdf             bool
 	yqlCurrent               bool
@@ -822,6 +823,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.dontResolveIncludes = kindOfResolve != envAbsent && env.string(envDontResolveIncludes) != "no"
 	finishYqlModule(ctx, instance, env, d, onWarn)
+	d.udfBaseSymbolic = d.udfBaseSymbolic && env.string(envMsvc) != "yes" && env.string(envDarwin) != "yes"
 
 	nativeSources := d.srcs[:0]
 
@@ -1352,8 +1354,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
+
+			if isDllModuleType(d.unit.Type) {
+				bindDllModulePrefix(v, env)
+			}
+
 			env.setStringID(envModuleKind, v.Name.str())
 			setupYqlModule(d, v.Name, env)
+			setupUdfBaseModule(v, d, env)
 
 			if v.Schema && d.unit.Tag == unitTagPy3Proto {
 				d.unit.HashTag = strPy3ProtoFromSchema
@@ -1437,7 +1445,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				env.setStringID(envMODULE_TAG, d.unit.HashTag)
 			}
 
-			if isDllModuleType(v.Name) || d.yqlUdfShared {
+			if isDllModuleType(v.Name) || v.Name == tokUdfBase || d.yqlUdfShared {
 				d.exportsScript = dllExportsArg(v)
 
 				if d.exportsScript == nil {
@@ -2173,6 +2181,8 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return mlaunchModuleUnit(name, language)
 	case tokSdcDiagsLibrary:
 		return sdcDiagsModuleUnit(language)
+	case tokUdfBase:
+		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokDllJava:
 		return ModuleUnit{Type: tokDll, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp, SwigLang: strSwigLangJniCpp}
 	case tokGoLibrary, tokGoProgram, tokGoTest, tokGoDll:

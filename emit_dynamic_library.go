@@ -9,57 +9,92 @@ var (
 	dynamicLibraryKV = KV{P: pkLD, PC: pcLightBlue, ShowOut: true}
 )
 
+type DllModuleArgs struct {
+	name              ANY
+	prefix            *ANY
+	version           string
+	exports           *ANY
+	hasName           bool
+	deprecatedExports bool
+}
+
+func parseDllModuleArgs(args []ANY) DllModuleArgs {
+	var out DllModuleArgs
+
+	for i := 0; i < len(args); i++ {
+		switch args[i].string() {
+		case "PREFIX", "EXPORTS":
+			keyword := args[i].string()
+
+			if keyword == "EXPORTS" {
+				out.deprecatedExports = true
+			}
+
+			if i+1 < len(args) {
+				i++
+
+				if keyword == "PREFIX" {
+					out.prefix = &args[i]
+				} else {
+					out.exports = &args[i]
+				}
+			}
+		default:
+			if !out.hasName {
+				out.name = args[i]
+				out.hasName = true
+			} else if out.version == "" {
+				out.version = "." + args[i].string()
+			}
+		}
+	}
+
+	return out
+}
+
+func bindDllModulePrefix(stmt *ModuleStmt, env Environment) {
+	args := parseDllModuleArgs(stmt.Args)
+
+	if args.prefix != nil {
+		bound := append([]ANY(nil), stmt.Args...)
+
+		for i := range stmt.Args {
+			if args.prefix == &stmt.Args[i] {
+				bound[i] = expandStmtTokenAny(*args.prefix, env)
+			}
+		}
+
+		stmt.Args = bound
+	}
+}
+
 func dllOutputName(instance ModuleInstance, stmt *ModuleStmt) string {
+	args := parseDllModuleArgs(stmt.Args)
 	prefix := "lib"
-	name := ""
 
 	if stmt.Name == tokPy2Module {
 		prefix = ""
 	}
 
-	if len(stmt.Args) > 0 {
-		name = stmt.Args[0].string()
-	} else {
-		name = javaRealPrjName(instance.Path.relString(), javaNameTwoDirs)
+	if args.prefix != nil {
+		prefix = args.prefix.string()
 	}
 
-	for i := 1; i < len(stmt.Args); i++ {
-		switch stmt.Args[i].string() {
-		case "PREFIX":
-			if i+1 < len(stmt.Args) {
-				prefix = stmt.Args[i+1].string()
-			}
+	name := javaRealPrjName(instance.Path.relString(), javaNameTwoDirs)
 
-			i++
-		case "EXPORTS":
-			i++
-		}
+	if args.hasName {
+		name = args.name.string()
 	}
 
 	return prefix + name + ".so"
 }
 
 func dllModuleVersion(stmt *ModuleStmt) string {
-	for i := 1; i < len(stmt.Args); i++ {
-		switch stmt.Args[i].string() {
-		case "PREFIX", "EXPORTS":
-			i++
-		default:
-			return "." + stmt.Args[i].string()
-		}
-	}
-
-	return ""
+	return parseDllModuleArgs(stmt.Args).version
 }
 
 func dllExportsArg(stmt *ModuleStmt) *ANY {
-	for i := 1; i+1 < len(stmt.Args); i++ {
-		if stmt.Args[i].string() == "EXPORTS" {
-			return &stmt.Args[i+1]
-		}
-	}
-
-	return nil
+	return parseDllModuleArgs(stmt.Args).exports
 }
 
 func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {

@@ -612,7 +612,7 @@ func isFinalTargetModuleType(name TOK) bool {
 }
 
 func picTransition(name TOK) bool {
-	return name == tokDll || name == tokDllJava || name == tokPy2Module || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokDynamicLibrary
+	return name == tokDll || name == tokUdfBase || name == tokDllJava || name == tokPy2Module || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokDynamicLibrary
 }
 
 func isDllModuleType(name TOK) bool {
@@ -2579,7 +2579,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		if isDllModuleType(d.moduleStmt.Name) {
 			binaryName = dllOutputName(instance, d.moduleStmt)
-			dyn = &DynLibLink{soname: binaryName, symbolic: (d.moduleStmt.Name == tokPy2Module || d.yqlUdfShared) && instance.Platform.OS != OSDarwin && instance.Platform.OS != OSWindows}
+			dyn = &DynLibLink{soname: binaryName, symbolic: (d.moduleStmt.Name == tokPy2Module || d.yqlUdfShared) && instance.Platform.OS != OSDarwin && instance.Platform.OS != OSWindows || d.udfBaseSymbolic}
 
 			if version := dllModuleVersion(d.moduleStmt); version != "" {
 				dyn.soname += version

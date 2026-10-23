@@ -17,6 +17,7 @@ var tokName = [...]STR{
 	tokPyProtoPlugin2:         internStr("PY_PROTO_PLUGIN2"),
 	tokYqlPrebuiltTool:        internStr("YQL_PREBUILT_TOOL"),
 	tokYqlUdf:                 internStr("YQL_UDF"),
+	tokUdfBase:                internStr("UDF_BASE"),
 	tokYqlPythonUdf:           internStr("YQL_PYTHON_UDF"),
 	tokYqlPython3Udf:          internStr("YQL_PYTHON3_UDF"),
 	tokRegisterYqlPythonUdf:   internStr("REGISTER_YQL_PYTHON_UDF"),
@@ -900,6 +901,7 @@ const (
 	tokDebVersion
 	tokCythonFlags
 	tokYqlUdf
+	tokUdfBase
 	tokYqlPythonUdf
 	tokYqlPython3Udf
 	tokRegisterYqlPythonUdf
