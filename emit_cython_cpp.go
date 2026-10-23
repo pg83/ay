@@ -350,15 +350,13 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			argIS.any(),
 		)
 
-		cmdArgs = appendCythonAddIncl(cmdArgs, d.cythonAddIncl, ctx.inclArgs)
-
-		cythonIncludes := argISContribToolsCythonCythonIncludes
+		cythonIncludes := contribToolsCythonCythonIncludes
 
 		if d.usePython2 || stmt.Native != nil && !d.usePython3 && !stmt.Python3 {
-			cythonIncludes = argISContribToolsCythonPy2CythonIncludes
+			cythonIncludes = contribToolsCythonPy2CythonIncludes
 		}
 
-		cmdArgs = append(cmdArgs, cythonIncludes.any())
+		cmdArgs = appendCythonAddIncl(cmdArgs, dedup(d.cythonAddIncl, []VFS{cythonIncludes}), ctx.inclArgs)
 		cmdArgs = appendCythonAddIncl(cmdArgs, e.peers.CythonInclude, ctx.inclArgs)
 
 		cmdArgs = append(cmdArgs,
