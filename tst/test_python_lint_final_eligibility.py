@@ -180,8 +180,8 @@ class PythonLintFinalEligibilityTest(unittest.TestCase):
                 else:
                     native = lib.node_by_output(graph, "$(B)/grove/shared/native.cpp.o")
                     self.assertEqual(native["cmds"][0]["cmd_args"].count("-DAUTO_CPP_PROTO"), 1)
-                    ruff = lib.node_by_output(graph, "$(B)/grove/shared/test-results/ruff/meta.json")
-                    self.assertIn("$(S)/grove/shared/sentinel.py", ruff["inputs"])
+                    self.assertFalse(any("/grove/shared/test-results/ruff/" in output
+                                         for node in graph["graph"] for output in node["outputs"]))
                     lib.node_by_output(graph, "$(B)/grove/shared/item__intpy3___pb2.py")
 
     def test_discarded_module_preserves_other_root_and_source_producers(self):

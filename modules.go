@@ -1454,6 +1454,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if d.moduleStmt.Name == tokProtoLibrary {
+				if language == LangPy || language == LangPy2 {
+					d.noLint = "none_internal"
+					env.setString(envNoLintValue, "none_internal")
+				}
+
 				if language == LangPy {
 					env.setBool(envPY3_PROTO, true)
 				} else if language == LangPy2 {
