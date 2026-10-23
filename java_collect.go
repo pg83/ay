@@ -167,19 +167,6 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 		env.setBool(envJavaFbs, true)
 	}
 
-	for _, st := range stmts {
-		if m, ok := st.(*ModuleStmt); ok {
-			if m.Schema {
-				env.setString(envMODULE_TAG, protoModuleTag(LangJava, true))
-			}
-
-			javaModuleArgs(jm, d, expandStmtTokens(m.Args, env))
-
-			break
-		}
-	}
-
-	javaConfPrologue(jm, d)
 	collectJavaStmts(ctx, jm, d, stmts, env)
 	collectJavaAutoinclude(ctx, jm, d, env)
 
@@ -253,6 +240,13 @@ func collectJavaAutoinclude(ctx *GenCtx, jm *JavaModule, d *JavaData, env Enviro
 func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, env Environment) {
 	for _, s := range stmts {
 		switch v := s.(type) {
+		case *ModuleStmt:
+			if v.Schema {
+				env.setString(envMODULE_TAG, protoModuleTag(LangJava, true))
+			}
+
+			javaModuleArgs(jm, d, expandSourceArguments(v.Args, env))
+			javaConfPrologue(jm, d)
 		case *EndStmt:
 			collectJavaAutoinclude(ctx, jm, d, env)
 		case *PeerdirStmt:
