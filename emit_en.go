@@ -110,10 +110,7 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 		)
 	})
 
-	sourceAction := &SourceActionInfo{DeclSeq: stmt.DeclSeq, Inputs: ctx.na.vfsList(headerInput)}
-
 	e.register(GeneratedFileInfo{
-		SourceAction:    sourceAction,
 		OutputPath:      serializedCPPPath,
 		SourcePath:      headerInput,
 		ProducerRef:     enRef,
@@ -124,7 +121,6 @@ func (e *EmitContext) emitEnumSrcStmt(stmt *GenerateEnumSerializationStmt) {
 
 	if withHeader {
 		e.register(GeneratedFileInfo{
-			SourceAction:    sourceAction,
 			OutputPath:      serializedHPath,
 			SourcePath:      headerInput,
 			ProducerRef:     enRef,
