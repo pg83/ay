@@ -41,13 +41,31 @@ class LanguageVariantContractsTest(unittest.TestCase):
             'ELSE()\nPY_SRCS(binary.py)\nENDIF()\n', macro='PY3_PROGRAM')
         files.update({'lib/library.py': '', 'lib/binary.py': ''})
         graph = lib.make(files, 'lib', '-t')
-        lib.node_by_output(graph, '$(B)/lib/lib')
+        binary = lib.node_by_output(graph, '$(B)/lib/lib')
+        library = lib.node_by_output(graph, '$(B)/lib/libpy3lib.global.a')
+        self.assertIn(library['uid'], binary['deps'])
+        # Keep source producers in both selected contexts independently of lint.
+        for source in ('a.py', 'binary.py', 'library.py'):
+            compiled = lib.node_by_output(graph, f'$(B)/lib/{source}.yapyc3')
+            self.assertIn(f'$(S)/lib/{source}', compiled['inputs'])
+            self.assertIn('$(B)/tools/py3cc/py3cc', compiled['inputs'])
+        packed = [n for n in graph['graph'] if n['uid'] in library['deps']]
+        for source in ('a.py', 'library.py'):
+            self.assertTrue(any(f'$(B)/lib/{source}.yapyc3' in n['inputs'] for n in packed))
+        self.assertFalse(any('$(B)/lib/binary.py.yapyc3' in n['inputs'] for n in packed))
         checks = [n for n in graph['graph']
                   if '$(B)/lib/test-results/flake8/meta.json' in n['outputs']]
         self.assertEqual(len(checks), 1)
-        self.assertEqual(test_python_suites.args(checks[0])[-3:], [
-            '$(S)/lib/a.py', '$(S)/lib/binary.py', '$(S)/lib/library.py',
+        # Native PROCESS_PY_MAIN_ONLY skips ordinary sources in PY3_BIN;
+        # only the PY3_BIN_LIB callback collects files for this suite.
+        self.assertEqual(test_python_suites.args(checks[0])[-2:], [
+            '$(S)/lib/a.py', '$(S)/lib/library.py',
         ])
+        self.assertEqual(test_python_suites.values(checks[0], '--test-related-path'), [
+            '$(S)/lib/a.py', '$(S)/lib/library.py', '$(S)/lint/flake8.conf',
+            '$(S)/tools/flake8_linter/__main__.py',
+        ])
+        self.assertNotIn('$(S)/lib/binary.py', checks[0]['inputs'])
         test_python_suites.lint(graph, 'import_test')
 
     def test_python2_extension_used_as_host_tool_receives_python_headers(self):
