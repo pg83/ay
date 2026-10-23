@@ -37,7 +37,7 @@ func (jm *JavaModule) runnableOutputs() []VFS {
 			outs = append(outs, build(jm.dir, "/jdk.tar"))
 		}
 
-		return outs
+		return dedupVFSKeepOrder(outs)
 	}
 
 	outs := []VFS{jm.target}
@@ -58,7 +58,7 @@ func (jm *JavaModule) runnableOutputs() []VFS {
 		outs = append(outs, build(jm.dir, "/jdk.tar"))
 	}
 
-	return outs
+	return dedupVFSKeepOrder(outs)
 }
 
 type javaGenScript struct {
