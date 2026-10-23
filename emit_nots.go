@@ -728,18 +728,6 @@ func (e *EmitContext) emitNotsTest() *ModuleEmitResult {
 		refs = append(refs, ref)
 		inputs = append(inputs, bridge)
 		kind = pkTSTest
-
-		if c.DependsOnBuild {
-			instance.Language = LangCPP
-
-			built := genModule(e.ctx, instance)
-
-			refs = append(refs, built.ARRef)
-
-			if built.ARPath != nil {
-				inputs = append(inputs, *built.ARPath)
-			}
-		}
 	} else {
 		name += ".ts_test.fake"
 		testInputs, testViews := e.notsTestInputs(target)

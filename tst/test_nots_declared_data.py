@@ -86,14 +86,16 @@ class NotsDeclaredDataTest(unittest.TestCase):
         builder = lib.node_by_output(graph, "$(B)/devtools/frontend_build_platform/nots/builder/builder")
         built = lib.node_by_output(graph, "$(B)/cedar/output.tar")
         module = lib.node_by_output(graph, "$(B)/checks/alpha/checks-alpha")
-        self.assertIn(built["uid"], module["deps"])
-        self.assertIn(built["outputs"][0], module["inputs"])
+        self.assertNotIn(built["uid"], module["deps"])
+        self.assertNotIn(built["outputs"][0], module["inputs"])
         self.assertIn(builder["uid"], prepare["deps"])
         for label in ("first", "second"):
             node = suite(graph, "checks/alpha", f"ts_test_{label}_check")
             self.assert_test_data(graph, node, "alpha")
             self.assertIn(prepare["uid"], node["deps"])
             self.assertIn(builder["uid"], node["deps"])
+            self.assertEqual(node["deps"].count(built["uid"]), 1)
+            self.assertNotIn(built["outputs"][0], node["inputs"])
             self.assertEqual(option_values(node["cmds"][-1]["cmd_args"], "--script-name"), [label + ":check"])
 
     def test_shared_build_checks_keep_data_but_lint_omits_test_metadata(self):

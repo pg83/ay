@@ -114,12 +114,16 @@ END()
     def test_test_for_can_request_the_tested_build(self):
         files = project()
         files["web/ya.make"] = "TS_NEXT()\nEND()\n"
+        files["web/index.js"] = "module.exports = 1;\n"
         files["web/tests/ya.make"] = "TS_TEST_FOR(web)\nTS_TEST(test custom --flag TIMEOUT_MEDIUM)\nTS_TEST_DEPENDS_ON_BUILD()\nEND()\n"
-        graph = lib.make(files, "web/tests")
+        graph = lib.make(files, "web/tests", "--target-platform-tests")
         built = lib.node_by_output(graph, "$(B)/web/output.tar")
         tested = lib.node_by_output(graph, "$(B)/web/tests/web-tests")
-        self.assertIn(built["uid"], tested["deps"])
-        self.assertIn("$(B)/web/output.tar", tested["inputs"])
+        self.assertNotIn(built["uid"], tested["deps"])
+        self.assertNotIn("$(B)/web/output.tar", tested["inputs"])
+        execution = lib.node_by_output(graph, "$(B)/web/tests/test-results/ts_test_test/meta.json")
+        self.assertIn(built["uid"], execution["deps"])
+        self.assertNotIn("$(B)/web/output.tar", execution["inputs"])
         self.assertIn("next build", built["cmds"][-1]["cmd_args"])
 
     def test_test_for_requires_a_module_path(self):
