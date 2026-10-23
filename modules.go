@@ -438,10 +438,11 @@ func muslCFlags(on bool) []ANY {
 }
 
 type BundleEntry struct {
-	Target string
-	Name   string
-	Suffix string
-	Output string
+	DeclSeq int
+	Target  string
+	Name    string
+	Suffix  string
+	Output  string
 }
 
 type ResourceEntry struct {
@@ -2577,7 +2578,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			name = v.Args[3].string()
 		}
 
-		d.bundles = append(d.bundles, BundleEntry{Target: v.Args[0].string(), Name: name, Output: v.Args[1].string()})
+		d.bundles = append(d.bundles, BundleEntry{DeclSeq: d.nextDeclSeq(), Target: v.Args[0].string(), Name: name, Output: v.Args[1].string()})
 	case tokBundle:
 
 		i := 0
@@ -2601,7 +2602,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				i += 2
 			}
 
-			d.bundles = append(d.bundles, BundleEntry{Target: target, Name: name, Suffix: suffix})
+			d.bundles = append(d.bundles, BundleEntry{DeclSeq: d.nextDeclSeq(), Target: target, Name: name, Suffix: suffix})
 		}
 
 	case tokGoTestSrcs:

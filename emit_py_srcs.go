@@ -588,7 +588,7 @@ func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef,
 		return nil, nil
 	}
 
-	producer := e.codegen.mustInfo(entries[0].path).SourceAction
+	producer := e.codegen.mustInfo(entries[len(entries)-1].path).SourceAction
 	previousSeq, previousPriority := e.resourceDeclSeq, e.resourcePriority
 
 	e.resourceDeclSeq, e.resourcePriority = producer.DeclSeq, producer.Priority

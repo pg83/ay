@@ -60,6 +60,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 		compressArgs = append(compressArgs, args...)
 
 		e.emitRunProgram(&RunProgramStmt{
+			DeclSeq:  e.resourceDeclSeq,
 			ToolPath: strToolsRescompressor.any(), Args: compressArgs, INFiles: inputs,
 			OUTNoAutoFiles: append([]ANY{internStr(asm).any()}, outputs...),
 			EnvPairs:       []ANY{strYasmTestSuite1.any()},
@@ -72,6 +73,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 		}
 
 		e.emitRunProgram(&RunProgramStmt{
+			DeclSeq:  e.resourceDeclSeq,
 			ToolPath: strToolsRorescompiler.any(), Args: srcgen,
 			OUTNoAutoFiles: []ANY{internStr(cpp).any()},
 		})
@@ -83,9 +85,11 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 	asmName, cppName := asmFiles[0], cppFiles[0]
 	globalAsm := len(asmFiles) > 1
 
+	var asmAction, compile *SourceActionInfo
+
 	if globalAsm {
-		asmName = e.emitResourceJoin(asmFiles, ".yasm", p.Tag, true)
-		cppName = e.emitResourceJoin(cppFiles, ".auxcpp", p.Tag, false)
+		cppName, compile = e.emitResourceJoin(cppFiles, ".auxcpp", p.Tag, false)
+		asmName, asmAction = e.emitResourceJoin(asmFiles, ".yasm", p.Tag, true)
 	}
 
 	asmPath := build(module, "/", asmName)
@@ -99,21 +103,42 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 
 	yasmRef, _ := e.ctx.tool(argContribToolsYasm)
 	asmRef, asmOut := e.emitASAsm(asmPath, asmIn, yasmRef, false)
+	priority := stmtPrioDefault
 
-	e.collectObj(asmRef, asmOut, SrcMeta{Global: globalAsm})
+	if asmAction == nil {
+		asmAction = e.sourceCompileAction(priority, e.resourceDeclSeq, asmPath)
+	}
+
+	asmMeta := SrcMeta{Global: globalAsm, Prio: priority, Seq: e.resourceDeclSeq, NativeAction: asmAction}
+
+	if !globalAsm {
+		e.collectObj(asmRef, asmOut, asmMeta)
+	}
 
 	cppPath := build(module, "/", cppName)
 	ccRef := e.ctx.emit.reserve()
 	spec := CompileSpec{ForceCxx: true, CFlags: na.anyList(argX.any(), argC.any())}
 
-	e.enqueueSrc(SrcMeta{Source: cppPath.any(), Compile: spec, CompileRef: ccRef})
+	if compile == nil {
+		compile = e.sourceCompileAction(priority, e.resourceDeclSeq, cppPath)
+	}
 
-	e.resourceMetas = append(e.resourceMetas, SrcMeta{Prio: stmtPrioDefault})
+	meta := SrcMeta{Source: cppPath.any(), Prio: priority, Seq: e.resourceDeclSeq, NativeAction: compile, Compile: spec, CompileRef: ccRef}
+
+	e.enqueueSrc(meta)
+
+	e.resourceMetas = append(e.resourceMetas, meta)
+
+	if globalAsm {
+		e.resourceMetas = append(e.resourceMetas, asmMeta)
+
+		return na.refList(ccRef, asmRef), na.vfsList(e.ccOutputFor(cppPath, spec), asmOut)
+	}
 
 	return na.refList(ccRef), na.vfsList(e.ccOutputFor(cppPath, spec))
 }
 
-func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, flat bool) string {
+func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, flat bool) (string, *SourceActionInfo) {
 	na := e.ctx.na
 	name := "join_" + e.resourceHash(files, tag) + suffix
 	out := build(e.instance.Path.relString(), "/", name)
@@ -144,6 +169,8 @@ func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, f
 
 	args = append(args, argYaEndCommandFile.any())
 
+	compile := e.sourceCompileAction(stmtPrioDefault, e.resourceDeclSeq, out)
+
 	ref := e.emitNode(Node{
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
@@ -151,8 +178,8 @@ func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, f
 		Outputs: na.vfsList(out), KV: &jsNodeKV, Resources: usesPython3,
 	})
 
-	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref,
+	e.register(GeneratedFileInfo{SourceAction: &SourceActionInfo{DeclSeq: e.resourceDeclSeq, Inputs: inputs}, OutputPath: out, ProducerRef: ref,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: na.dirList(includes...)}})
 
-	return name
+	return name, compile
 }
