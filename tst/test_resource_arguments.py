@@ -97,7 +97,7 @@ class ResourceArgumentsTest(unittest.TestCase):
         files = base_files(
             'RESOURCE(- alias=${ALIAS} - escaped=\\${VALUE} - bare=$VALUE '
             '- other=$OTHER{key} - broken=${} - open=${unfinished '
-            '- nested=${outer${VALUE}} - trailing=$VALUE\\ '
+            '- nested=${outer${VALUE}} - trailing=$VALUE\\\\ '
             '- underscore=$MACRO_NAME{key} - env=$ENV{RESOURCE_ARGUMENT_VALUE})\n'
         )
         graph = lib.make(files, 'lib', '-DALIAS=${VALUE}', '-DVALUE=one',
@@ -108,6 +108,12 @@ class ResourceArgumentsTest(unittest.TestCase):
             'broken=${}', 'open=${unfinished', 'nested=${outerone}', 'trailing=$VALUE\\',
             'underscore=$MACRO_NAME{key}', 'env=environment',
         ])
+
+    def test_unquoted_backslash_escapes_separator_before_resource_pairing(self):
+        files = base_files('RESOURCE(- trailing=$VALUE\\ - stable=anchor)\n')
+        [packed] = objcopy_nodes(lib.make(files, 'lib', '-DVALUE=one'))
+        self.assertEqual(section(packed['cmds'][0]['cmd_args'], '--kvs'),
+                         ['trailing=$VALUE', 'stable=anchor'])
 
     def test_only_effective_malformed_pairs_fail_and_flags_follow_first_two_positions(self):
         for body, flags, count in (
