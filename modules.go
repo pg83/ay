@@ -808,8 +808,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.srcs = nativeSources
 	bindRunProgramCalls(d, env)
 	d.test.expandValues(env)
-	// Resource plugins read the final raw MODULE_TAG, including source SETs.
-	d.unit.HashTag = internStr(env.string(envMODULE_TAG))
 
 	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
 		for i, group := range d.pySrcGroups {
@@ -1353,9 +1351,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if d.unit.Tag == unitTagPy2 || d.unit.Tag == unitTagPy2Native || d.unit.Tag == strPyProto {
-				usePython2(env, d, d.unit.HashTag)
+				usePython2(env, d, d.unit.Tag)
 			} else if d.unit.Tag != 0 {
-				env.setStringID(envMODULE_TAG, d.unit.HashTag)
+				env.setStringID(envMODULE_TAG, d.unit.Tag)
 			}
 
 			if isDllModuleType(v.Name) || d.yqlUdfShared {
