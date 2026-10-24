@@ -3583,7 +3583,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.collectUsrvFiles(anyStrs(v.Args))
 	case tokUsrvAllSrcs:
 		for _, f := range usrvAllSources(fs, modulePath, anyStrs(v.Args)) {
-			d.srcs = append(d.srcs, SrcMeta{Source: internStr(f).any(), Prio: stmtPrioDefault, Seq: d.nextDeclSeq()})
+			d.srcs = append(d.srcs, SrcMeta{Source: internStr(f).any(), Prio: stmtPrioSrcs, Seq: d.nextDeclSeq()})
 		}
 	case tokTestSrcs:
 		args := v.Args
