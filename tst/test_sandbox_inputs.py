@@ -205,7 +205,7 @@ class SandboxInputsTest(unittest.TestCase):
     def test_proto_does_not_consume_cpp_induced_dependencies(self):
         files = proto_files()
         files.update({
-            "p/ya.make": "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nRUN_PROGRAM(tool OUT generated.proto)\nSRCS(generated.proto)\nEND()\n",
+            "p/ya.make": "PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\nRUN_PROGRAM(tool OUT_NOAUTO generated.proto)\nSRCS(generated.proto)\nEND()\n",
             "app/ya.make": LIBRARY + "PEERDIR(p)\nSRCS(use.cpp)\nEND()\n",
             "app/use.cpp": '#include "p/generated.pb.h"\n#include "runtime/config.h"\n',
             "runtime/config.h": '#include "config"\n',
@@ -214,7 +214,7 @@ class SandboxInputsTest(unittest.TestCase):
         })
         lib.tool_program(files, "tool", "tool")
         files["tool/ya.make"] = files["tool/ya.make"].replace(
-            "END()", "INDUCED_DEPS(h+cpp runtime/config.h)\nEND()"
+            "END()", "INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/runtime/config.h)\nEND()"
         )
         graph = lib.make(files, "app", "--dist")
         proto = lib.node_by_output(graph, "$(B)/p/generated.pb.h")
@@ -223,6 +223,23 @@ class SandboxInputsTest(unittest.TestCase):
         self.assertTrue({
             "$(S)/runtime/config.h", "$(S)/runtime/config", "$(S)/runtime/detail.h",
         } <= set(compiled["inputs"]))
+
+
+    def test_proto_auto_explicit_and_conflicting_producers_are_rejected(self):
+        cases = (
+            ("RUN_PROGRAM(tool OUT generated.proto)\nSRCS(generated.proto)\n", "generated.pb."),
+            ("RUN_PROGRAM(tool OUT generated.proto)\nRUN_PROGRAM(other OUT generated.proto)\n", "generated.proto"),
+        )
+        for declarations, output in cases:
+            with self.subTest(output=output):
+                files = proto_files()
+                files["p/ya.make"] = ("PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO)\n" + declarations + "END()\n")
+                lib.tool_program(files, "tool", "tool")
+                lib.tool_program(files, "other", "other")
+                result = lib.make_process(files, "p", "--dist", "--sandboxing")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("duplicate producer", result.stderr)
+                self.assertIn(output, result.stderr)
 
 
 if __name__ == "__main__":
