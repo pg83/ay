@@ -302,9 +302,12 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 	}
 
 	ctx.configureDependencies()
-	ctx.emitDiscoveredModuleTests()
+
+	suites := ctx.prepareDiscoveredModuleTests()
+
 	ctx.flushFbsContextBindings()
 	ctx.bindForeignTools()
+	ctx.emitDiscoveredModuleTests(suites)
 	ctx.finalizeSourceInputs()
 	ctx.stripForeignToolCandidates()
 

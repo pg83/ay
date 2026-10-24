@@ -15,7 +15,7 @@ func (e *EmitContext) genPeerModule(instance ModuleInstance) *ModuleEmitResult {
 	return result
 }
 
-func (ctx *GenCtx) emitDiscoveredModuleTests() {
+func (ctx *GenCtx) prepareDiscoveredModuleTests() []*TestSuite {
 	seen := map[*ModuleEmitResult]bool{}
 	groups := map[VFS][]*ModuleEmitResult{}
 
@@ -71,7 +71,7 @@ func (ctx *GenCtx) emitDiscoveredModuleTests() {
 	suites = append(javaSuites, suites...)
 
 	if len(suites) == 0 {
-		return
+		return nil
 	}
 
 	prepared := suites[:0]
@@ -88,7 +88,13 @@ func (ctx *GenCtx) emitDiscoveredModuleTests() {
 		prepared = append(prepared, suite)
 	}
 
-	suites = prepared
+	return prepared
+}
+
+func (ctx *GenCtx) emitDiscoveredModuleTests(suites []*TestSuite) {
+	if len(suites) == 0 {
+		return
+	}
 
 	outputs := ctx.projectModuleIndex(suites)
 
