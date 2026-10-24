@@ -187,6 +187,9 @@ func (e *EmitContext) genCiGroup() *ModuleEmitResult {
 	}
 
 	ref := e.emitLazyModuleNode(node, nil)
+	result := e.scriptModuleResult(ref, out, dedup(peers), globals)
 
-	return e.scriptModuleResult(ref, out, dedup(peers), globals)
+	result.TestSuites = e.styleSuites(globals)
+
+	return result
 }

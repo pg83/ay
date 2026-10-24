@@ -87,6 +87,7 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	res := e.scriptModuleResult(ref, out, dedup(peers), globals)
 
 	res.GlobalSources = e.globalSources
+	res.TestSuites = e.styleSuites(globals)
 
 	return res
 }

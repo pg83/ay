@@ -118,9 +118,13 @@ func pythonStyleCheck(name string, env Environment) StyleCheck {
 
 func (d *ModuleData) collectExplicitPythonStyle(stmt UnknownStmt, env Environment) {
 	if stmt.Name == tokStylePython && d.moduleStmt != nil {
-		switch d.moduleStmt.Name {
-		case tokPy2Program, tokPy2Test, tokPy2Library:
-			return
+		internalTaskBinary := d.moduleStmt.Name == tokPy2Program && isSandboxPython2Task(d.multimodule)
+
+		if !internalTaskBinary {
+			switch d.moduleStmt.Name {
+			case tokPy2Program, tokPy2Test, tokPy2Library:
+				return
+			}
 		}
 	}
 
@@ -162,7 +166,7 @@ func (d *ModuleData) collectExplicitPythonStyle(stmt UnknownStmt, env Environmen
 }
 
 func (d *ModuleData) collectYAMLStyleWithConfig(module string, env Environment) {
-	if value, _ := env.lookup("NO_LINT"); value == "none" || value == "none_internal" {
+	if value := env.string(envNoLintValue); value == "none" || value == "none_internal" {
 		return
 	}
 
@@ -178,7 +182,7 @@ func (d *ModuleData) collectYAMLStyleWithConfig(module string, env Environment) 
 }
 
 func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, env Environment) {
-	if value, _ := env.lookup("NO_LINT"); value == "none" || value == "none_internal" {
+	if value := env.string(envNoLintValue); value == "none" || value == "none_internal" {
 		return
 	}
 
@@ -254,6 +258,7 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 
 	slices.Sort(check.Files)
 	check.Files = slices.Compact(check.Files)
+	d.peerdirs = append(d.peerdirs, internStr(peer).any())
 
 	if len(check.Files) == 0 {
 		return
@@ -268,7 +273,6 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 	}
 
 	d.styleChecks = append(d.styleChecks, check)
-	d.peerdirs = append(d.peerdirs, internStr(peer).any())
 }
 
 func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
