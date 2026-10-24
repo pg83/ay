@@ -108,10 +108,6 @@ func setupMlaunchModule(stmt *ModuleStmt, module string, language Language, env 
 		default:
 			peer("sdg/sdc/launcher/myriapodalaunch/yamakes/myriapodalaunch_main")
 
-			if !env.bool(envSdcPlatform) {
-				d.strip = true
-			}
-
 			d.ldFlags = append(d.ldFlags, strWlRpathOrigin.any())
 			env.setBool(envUseDynamicCuda, true)
 		}

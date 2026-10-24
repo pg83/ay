@@ -959,6 +959,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.peerdirs = append([]ANY{strContribLibsOpenmp.any()}, d.peerdirs...)
 	}
 
+	if d.multimodule == tokMlaunchPipeline && d.unit.Type == tokProgram && env.string(envSdcPlatform) == "" {
+		env.setBool(envSTRIP, true)
+	}
+
 	d.strip = env.string(envSTRIP) == "yes"
 	d.noStrip = env.string(envNO_STRIP) == "yes"
 	d.gettextKeepPath = env.string(envGettextKeepPath) == "yes"
