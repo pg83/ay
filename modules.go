@@ -5575,6 +5575,10 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		Demand:   demand,
 	}
 
+	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokGoDll {
+		peer.Platform = peer.Platform.pic()
+	}
+
 	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokSandboxPy233Task {
 		peer = e.sandboxMixedTaskPeer(peer)
 	}

@@ -277,6 +277,7 @@ func (o *TestOpts) sizeRequested(size string) bool {
 type TestSuite struct {
 	dockerImages           []string
 	depends                []string
+	dependencyProjects     []VFS
 	data                   []string
 	externalLocalFiles     []string
 	recipes                string
@@ -388,6 +389,8 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 	var rewritten []string
 
 	for _, dep := range s.depends {
+		s.dependencyProjects = append(s.dependencyProjects, source(dep))
+
 		for _, dependency := range ctx.runtimeTestDependencies(dep) {
 			instance, res := dependency.instance, dependency.result
 			output := testDependencyOutput(res)

@@ -96,9 +96,13 @@ func (ctx *GenCtx) emitDiscoveredModuleTests(suites []*TestSuite) {
 		return
 	}
 
-	outputs := ctx.projectModuleIndex(suites)
+	outputs, mainOutputs := ctx.projectModuleIndex(suites)
 
 	for _, suite := range suites {
+		for _, project := range suite.dependencyProjects {
+			suite.deps = append(suite.deps, mainOutputs[project]...)
+		}
+
 		if suite.projectBuildDeps {
 			suite.deps = append(suite.deps, outputs[source(suite.projectPath)]...)
 		}

@@ -152,3 +152,26 @@ func (ctx *GenCtx) runtimeTestOutputDirs(dependency TestBuildDependency, seen ma
 
 	return dirs
 }
+
+func (ctx *GenCtx) testDependencyMainRefs(project VFS) map[NodeRef]bool {
+	refs := map[NodeRef]bool{}
+
+	for entry := ctx.memo.heads.getSafe(uint32(project.rel())); entry != nil; entry = entry.next {
+		result := entry.result
+		module := ctx.runtimeTestDependencyModule(TestBuildDependency{result: result})
+
+		if module.fake || module.multimodule && !module.final || testDependencyOutput(result) == 0 {
+			continue
+		}
+
+		ref := result.LDRef
+
+		if result.java != nil {
+			ref = result.java.outRef
+		}
+
+		refs[ref] = true
+	}
+
+	return refs
+}
