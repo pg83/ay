@@ -76,7 +76,11 @@ func resolveSourceOrGeneratedVFS(ctx *GenCtx, instance ModuleInstance, src strin
 }
 
 func (scanner *IncludeScanner) walkClosure(vfsPath VFS, ctx *ScanContext, domain ScanDomain) Closure {
-	cl := scanner.scanClosure(vfsPath, ctx, domain)
+	return scanner.walkClosureWithDefaultParser(vfsPath, ctx, domain, nil)
+}
+
+func (scanner *IncludeScanner) walkClosureWithDefaultParser(vfsPath VFS, ctx *ScanContext, domain ScanDomain, defaultParser IncludeDirectiveParser) Closure {
+	cl := scanner.scanClosureWithDefaultParser(vfsPath, ctx, domain, defaultParser)
 
 	scanner.reportClosureDiagnostics(vfsPath, cl)
 
@@ -84,7 +88,15 @@ func (scanner *IncludeScanner) walkClosure(vfsPath VFS, ctx *ScanContext, domain
 }
 
 func (scanner *IncludeScanner) scanClosure(vfsPath VFS, ctx *ScanContext, domain ScanDomain) Closure {
+	return scanner.scanClosureWithDefaultParser(vfsPath, ctx, domain, nil)
+}
+
+func (scanner *IncludeScanner) scanClosureWithDefaultParser(vfsPath VFS, ctx *ScanContext, domain ScanDomain, defaultParser IncludeDirectiveParser) Closure {
 	parser := scanner.parsers.registry.registeredParserFor(vfsPath.relString())
+
+	if parser == nil {
+		parser = defaultParser
+	}
 
 	if domain == scanDomainCC {
 		switch parser {

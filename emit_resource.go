@@ -787,7 +787,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			it.setInput(r.Input)
 
 			if r.Input.isSource() && !entry.DontParse {
-				it.SourceClosure = e.scanner.walkClosure(r.Input, d.scanCtx, scanDomainCC)
+				it.SourceClosure = e.scanner.walkClosureWithDefaultParser(r.Input, d.scanCtx, scanDomainCC, emptyParser)
 			}
 
 			if r.ProducerRef != 0 {
