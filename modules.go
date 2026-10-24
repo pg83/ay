@@ -1561,7 +1561,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				moduleLang = moduleLangTokenPy3
 			}
 
-			if d.moduleStmt.Name != tokUnion && d.moduleStmt.Name != tokCiGroup && d.moduleStmt.Name != tokGenLibrary {
+			if !isUnionModule(d.moduleStmt.Name) && d.moduleStmt.Name != tokCiGroup && d.moduleStmt.Name != tokGenLibrary {
 				env.setString(envMODULE_LANG, moduleLang)
 			}
 

@@ -56,6 +56,32 @@ class ModuleLanguageConfigurationTest(unittest.TestCase):
                 self.assert_cpp_suite(make(fixture(kind)), False)
         self.assert_cpp_suite(make(fixture(header=True)), False)
 
+    def test_sdc_union_does_not_invent_a_cpp_language(self):
+        files = fixture('SDC_UNION(cedar)', body='FILES(payload.txt)')
+        files['orchard/payload.txt'] = 'payload\n'
+        files['consumer/ya.make'] = 'PROGRAM(reader)\n' + lib.BARE_MODULE + 'ALLOCATOR(FAKE)\nSRCS(main.cpp)\nDEPENDS(orchard)\nEND()\n'
+        files['consumer/main.cpp'] = 'int main(){return 0;}\n'
+        graph = lib.make(files, 'consumer', 'orchard', '-t', '--sandboxing')
+        self.assert_cpp_suite(graph, False)
+        self.assertTrue(graph['result'])
+        lib.node_by_output(graph, '$(B)/consumer/reader')
+        self.assertTrue(any('$(S)/consumer/main.cpp' in node['inputs'] for node in graph['graph']))
+
+    def test_sdc_union_preserves_explicit_language_and_style(self):
+        for body, before, flags, conditional in (
+            ('SET(MODULE_LANG CPP)', '', (), True),
+            ('', 'SET(MODULE_LANG CPP)\n', (), True),
+            ('', '', ('-DMODULE_LANG=CPP',), True),
+            ('', '', (), False),
+        ):
+            with self.subTest(body=body, before=before, flags=flags, conditional=conditional):
+                self.assert_cpp_suite(make(fixture(
+                    'SDC_UNION(cedar)', body=body, before=before, conditional=conditional,
+                ), *flags), True)
+        self.assert_cpp_suite(make(fixture('SDC_UNION(cedar)'), '-DMODULE_LANG=CEDAR'), False)
+        self.assert_cpp_suite(make(fixture('SDC_UNION(cedar)', body='SET(MODULE_LANG)'), '-DMODULE_LANG=CPP'), False)
+        self.assert_cpp_suite(make(fixture('SDC_UNION(cedar)', body='SET(MODULE_LANG CPP)\nNO_LINT()')), False)
+
     def test_ordinary_cpp_headers_assign_their_language(self):
         for kind in ('LIBRARY()', 'PROGRAM(cedar)'):
             with self.subTest(kind=kind):
