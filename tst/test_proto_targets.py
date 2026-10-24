@@ -168,6 +168,28 @@ class ProtoTargetsTest(unittest.TestCase):
         self.assertEqual(doc["kv"], {"p": "PD", "pc": "yellow"})
         self.assertIn("-I=$(S)/q", doc["cmds"][0]["cmd_args"])
         self.assertIn(doc["uid"], lib.node_by_output(graph, "$(B)/p/p.docslib")["deps"])
+        selected = dict(files)
+        selected["q/ya.make"] = files["q/ya.make"].replace("INCLUDE_TAGS(DOCS_PROTO)", "ONLY_TAGS(DOCS_PROTO)")
+        selected_graph = lib.make(selected, "q")
+        peer_docs = [lib.node_by_output(selected_graph, "$(B)/q/" + directory + "/same.md")
+                     for directory in ("a", "b")]
+        self.assertNotIn("$(B)/q/same.md", {output for n in selected_graph["graph"] for output in n["outputs"]})
+        peer_archive = lib.node_by_output(selected_graph, "$(B)/q/q.docslib")
+        for directory, peer_doc in zip(("a", "b"), peer_docs):
+            self.assertEqual(peer_doc["outputs"], ["$(B)/q/" + directory + "/same.md"])
+            self.assertCountEqual(peer_doc["inputs"], [
+                "$(S)/q/" + directory + "/same.proto", "$(S)/build/scripts/docs_proto_wrapper.py",
+                "$(S)/build/scripts/docs_proto_markdown.tmpl", "$(B)/contrib/tools/protoc/protoc",
+                "$(B)/vendor/github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc/protoc-gen-doc",
+            ])
+            for tool in ("contrib/tools/protoc/protoc",
+                         "vendor/github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc/protoc-gen-doc"):
+                producer = lib.node_by_output(selected_graph, "$(B)/" + tool)
+                self.assertIn(producer["uid"], peer_doc["deps"])
+            self.assertIn(peer_archive["uid"], selected_graph["result"])
+            self.assertEqual(peer_doc["cmds"][0]["cmd_args"][3], peer_doc["outputs"][0])
+            self.assertEqual(peer_doc["cmds"][0]["cmd_args"][-1], "q/" + directory + "/same.proto")
+            self.assertIn(peer_doc["uid"], peer_archive["deps"])
         self.assertFalse(any("$(B)/p/a.pb.cc" in n["outputs"] for n in graph["graph"]))
 
 

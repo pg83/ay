@@ -1,9 +1,6 @@
 package main
 
-import (
-	"path"
-	"strings"
-)
+import "strings"
 
 var protoDocsKV = KV{P: pkPD, PC: pcYellow}
 
@@ -66,7 +63,7 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 
 		rel := e.protoSourceRel(meta.Source.string()).string()
 		src := source(rel)
-		out := build(instance.Path.relString(), "/", strings.TrimSuffix(path.Base(rel), ".proto"), ".md")
+		out := build(strings.TrimSuffix(rel, ".proto"), ".md")
 
 		args := []ANY{
 			d.tc.Python3.any(), wrapper.any(), strDocsOutput.any(), out.any(),

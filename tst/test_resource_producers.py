@@ -147,6 +147,7 @@ class ProducerOrderTest(unittest.TestCase):
         }, "tools/gen", "tools/archiver", "contrib/tools/yasm",
             "contrib/libs/luajit_21/compiler", "tools/enum_parser/enum_parser",
             "tools/enum_parser/enum_serialization_runtime")
+        files["tools/enum_parser/enum_serialization_runtime/ya.make"] = LIBRARY_STUB
         graph = lib.make(
             files, "lib", "--target-platform", "default-linux-x86_64",
         )

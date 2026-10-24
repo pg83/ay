@@ -1,5 +1,7 @@
 """Test selection and the global source-visible test request are separate."""
 import unittest
+import json
+from collections import Counter
 
 import lib
 from test_go_tests import between, go_module, go_test_world, go_tool_args
@@ -42,11 +44,27 @@ def output(graph, path):
     return lib.node_by_output(graph, "$(B)/" + path)
 
 
-def context_nodes(graph):
-    return {path: output(graph, path) for path in (
-        "grove/grove.a", "canopy/canopy.a", "grove/check/check",
-        "tools/go_test_miner/renamed-miner", SCOPE, TEST_ONLY,
-    )}
+def graph_contents(graph):
+    # Graph-dump IDs are allocation indices, including self_uid. Compare all
+    # fields after relocating those indices to unique output/context identities.
+    identities = {n["uid"]: (tuple(n["outputs"]), n["platform"]) for n in graph["graph"]}
+    assert len(identities) == len(graph["graph"])
+    assert len(set(identities.values())) == len(graph["graph"])
+    assert all(ref in identities for ref in graph["result"])
+    contents = []
+    for node in graph["graph"]:
+        assert node["self_uid"] in identities
+        assert all(ref in identities for ref in node["deps"])
+        relocated = dict(node)
+        relocated["uid"] = identities[node["uid"]]
+        relocated["self_uid"] = identities[node["self_uid"]]
+        relocated["deps"] = sorted(identities[ref] for ref in node["deps"])
+        if "foreign_deps" in node:
+            assert all(ref in identities for refs in node["foreign_deps"].values() for ref in refs)
+            relocated["foreign_deps"] = {role: sorted(identities[ref] for ref in refs)
+                                         for role, refs in node["foreign_deps"].items()}
+        contents.append(json.dumps(relocated, sort_keys=True))
+    return dict(graph, graph=Counter(contents), result=Counter(identities[ref] for ref in graph["result"]))
 
 
 class GoTestRequestContextTest(unittest.TestCase):
@@ -96,7 +114,7 @@ class GoTestRequestContextTest(unittest.TestCase):
         for roots in (("canopy", "grove/check"), ("grove/check", "canopy")):
             with self.subTest(roots=roots):
                 graph = make(fixture(), roots, "--target-platform-tests")
-                nodes.append(context_nodes(graph))
+                nodes.append(graph_contents(graph))
                 self.assert_contexts(graph, target_requested=False, host_requested=False)
         self.assertEqual(nodes[0], nodes[1])
 
@@ -105,7 +123,7 @@ class GoTestRequestContextTest(unittest.TestCase):
         for roots in (("canopy", "grove/check"), ("grove/check", "canopy")):
             with self.subTest(roots=roots):
                 graph = make(fixture(), roots, "-t")
-                nodes.append(context_nodes(graph))
+                nodes.append(graph_contents(graph))
                 self.assert_contexts(graph, target_requested=True, host_requested=True)
         self.assertEqual(nodes[0], nodes[1])
 

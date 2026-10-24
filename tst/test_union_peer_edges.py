@@ -89,14 +89,14 @@ class UnionPeerEdgesTest(unittest.TestCase):
     def test_secondary_template_retains_actual_main_output_and_generator(self):
         self.check_base(self.make(fixture(consumer=True, secondary=True), 'parcel'), consumer=True, secondary=True)
 
-    def test_standalone_include_peer_is_constructed_without_a_direct_uid(self):
+    def test_standalone_include_peer_is_not_a_construction_dependency(self):
         graph = self.make(fixture(), 'relay')
         relay = node(graph, '$(B)/relay/relay.pkg.fake', 'UN')
         self.assertEqual(dependencies(graph, relay), set())
         self.assertEqual(relay['inputs'], [])
         self.assertEqual(relay['outputs'], ['$(B)/relay/relay.pkg.fake'])
-        self.assertEqual(node(graph, B + 'pattern.in', 'CP')['inputs'], [S + 'pattern.in'])
-        self.assertEqual(node(graph, B + 'weight.dat', 'SB')['outputs'], [B + 'weight.dat'])
+        self.assertFalse(any(output.startswith(B) for n in graph['graph'] for output in n['outputs']))
+        self.assertIn(relay['uid'], graph['result'])
 
     def test_transitive_diamond_peers_do_not_become_direct_edges(self):
         files = fixture()
@@ -108,11 +108,14 @@ class UnionPeerEdgesTest(unittest.TestCase):
             with self.subTest(roots=roots):
                 graph = self.make(files, *roots)
                 for module in ('left', 'right'):
-                    self.assertEqual(dependencies(graph, node(graph, f'$(B)/{module}/{module}.pkg.fake', 'UN')), set())
+                    self.assertFalse(any(f'$(B)/{module}/{module}.pkg.fake' in n['outputs'] for n in graph['graph']))
                 relay = node(graph, '$(B)/relay/relay.pkg.fake', 'UN')
                 self.assertEqual(dependencies(graph, relay), {'$(B)/relay/local.txt'})
                 self.assertEqual(relay['inputs'], ['$(B)/relay/local.txt'])
                 self.assertEqual(node(graph, '$(B)/relay/local.txt', 'CP')['inputs'], ['$(S)/relay/local.txt'])
+                self.assertEqual(dependencies(graph, node(graph, B + 'mint.pkg.fake', 'UN')), {B + 'pattern.in', B + 'weight.dat'})
+                self.assertEqual(node(graph, B + 'pattern.in', 'CP')['inputs'], [S + 'pattern.in'])
+                self.assertIn(relay['uid'], graph['result'])
 
     def test_independent_aliases_and_local_producers_keep_their_own_edges(self):
         files = fixture()

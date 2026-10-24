@@ -83,14 +83,19 @@ class RemainingGraphContractsTest(unittest.TestCase):
         compiled = lib.node_by_output(graph, '$(B)/app/main.cpp.o')
         self.assertIn('$(S)/app/nested.h', compiled['inputs'])
 
-    def test_go_peer_of_a_native_library_keeps_its_go_dependencies(self):
+    def test_go_library_peer_keeps_its_go_dependencies(self):
         files = test_go_package.go_world()
         test_go_package.go_module(files, 'go_parent', macros='PEERDIR(go_leaf)\n')
         test_go_package.go_module(files, 'go_leaf')
-        files['app/ya.make'] = library('PEERDIR(go_parent)\nSRCS(main.cpp)')
-        files['app/main.cpp'] = ''
+        test_go_package.go_module(files, 'app', macros='PEERDIR(go_parent)\n')
         graph = lib.make(files, 'app')
-        self.assertTrue(any('go_leaf/' in p for n in graph['graph'] for p in n['outputs']))
+        app = lib.node_by_output(graph, '$(B)/app/app.a')
+        parent = lib.node_by_output(graph, '$(B)/go_parent/go_parent.a')
+        leaf = lib.node_by_output(graph, '$(B)/go_leaf/go_leaf.a')
+        for consumer, peer in ((app, parent), (parent, leaf)):
+            self.assertIn(peer['outputs'][0], consumer['inputs'])
+            self.assertIn(peer['uid'], consumer['deps'])
+        self.assertIn(app['uid'], graph['result'])
 
     def test_userver_uses_a_generated_proto(self):
         files = test_userver_proto.userver_files()

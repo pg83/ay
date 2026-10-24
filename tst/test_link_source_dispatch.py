@@ -23,7 +23,6 @@ TOOLS = [
     "contrib/tools/protoc/plugins/cpp_styleguide",
     "contrib/tools/yasm",
     "dict/gazetteer/converter",
-    "library/cpp/proto_config/codegen",
     "library/cpp/proto_config/plugin",
     "tools/calcstaticopt",
     "tools/custom_pid",
@@ -33,6 +32,7 @@ TOOLS = [
     "tools/relev_fml_codegen",
 ]
 LIBRARIES = [
+    "library/cpp/proto_config/codegen",
     "build/induced/by_bison",
     "contrib/libs/flatbuffers",
     "contrib/libs/flatbuffers64",
