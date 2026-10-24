@@ -1357,7 +1357,7 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 		}
 
 		if len(args) >= 2 {
-			value = args[1].string()
+			value = strings.Join(anyStrs(args[1:]), " ")
 		}
 
 		return &DefaultVarStmt{VarName: varName, NameEnv: internEnv(varName), Value: value, Line: line}
