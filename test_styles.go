@@ -288,7 +288,9 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 		if check.CPP {
 			for _, info := range e.sourceProducers {
 				for _, input := range info.SourceAction.Inputs {
-					check.Files = append(check.Files, e.cppStyleInputFiles(input)...)
+					if input.isSource() && cppLinterSource(input.relString()) {
+						check.Files = append(check.Files, input.relString())
+					}
 				}
 			}
 
