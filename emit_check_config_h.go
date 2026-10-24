@@ -53,5 +53,5 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 		OnUse: pending,
 	})
 
-	e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault, Bucket: bkCheckConfig})
+	e.enqueueSrc(SrcMeta{Source: generatedVFS.any(), Prio: stmtPrioDefault})
 }

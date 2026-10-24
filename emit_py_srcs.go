@@ -36,8 +36,6 @@ type PySourceMeta struct {
 	Token  ANY
 	Group  int
 	Kind   PySourceKind
-	Prio   int
-	Seq    int
 	Event  bool
 }
 
@@ -265,7 +263,9 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 	case pySourceProto:
 		rel := ps.Path.relString()
 
-		e.codegen.use(ps.Path)
+		if e.codegen.use(ps.Path) == nil {
+			throwFmt("appendPyResEntries: unregistered proto producer for %q", ps.Path.string())
+		}
 
 		token := ps.Token.string()
 		yapycOut := e.pyYapycOutFor(ps)
@@ -588,16 +588,10 @@ func (e *EmitContext) pyProtoGroups() []int {
 	return groups
 }
 
-func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry, priority, seq int) ([]NodeRef, []VFS) {
+func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef, []VFS) {
 	if len(entries) == 0 {
 		return nil, nil
 	}
-
-	previousSeq, previousPriority := e.resourceDeclSeq, e.resourcePriority
-
-	e.resourceDeclSeq, e.resourcePriority = seq, priority
-
-	defer func() { e.resourceDeclSeq, e.resourcePriority = previousSeq, previousPriority }()
 
 	return e.packResources(ResourcePack{DontCompress: true,
 		Tag: e.d.unit.HashTag, Items: e.pySrcResourceItems(entries),
@@ -613,27 +607,12 @@ func (e *EmitContext) emitPyProtoGroupResources(group int) ([]NodeRef, []VFS) {
 	var refs []NodeRef
 	var outputs []VFS
 
-	seq := 0
-	priority := stmtPrioDefault
-
-	for _, ps := range e.pySrcsReg {
-		if ps.Kind == pySourceProto && ps.Group == group {
-			info := e.codegen.use(ps.Path)
-
-			if info == nil {
-				throwFmt("appendPyResEntries: unregistered proto producer for %q", ps.Path.string())
-			}
-
-			seq, priority = ps.Seq, ps.Prio
-		}
-	}
-
 	for _, event := range []bool{false, true} {
 		entries, ends := e.collectPyProtoGroupResEntries(group, event)
 		lo := 0
 
 		for _, hi := range ends {
-			groupRefs, groupOutputs := e.packPyProtoResEntries(entries[lo:hi], priority, seq)
+			groupRefs, groupOutputs := e.packPyProtoResEntries(entries[lo:hi])
 
 			refs = append(refs, groupRefs...)
 			outputs = append(outputs, groupOutputs...)

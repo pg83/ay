@@ -48,12 +48,12 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 			if !e.producersOnly() {
 				path := copyFileOutputVFS(instance.Path.relString(), out)
 
-				e.collectObj(e.codegen.mustInfo(path).ProducerRef, path, SrcMeta{Prio: stmtPrioDefault, Seq: rp.DeclSeq, Bucket: bkRunPython})
+				e.collectObj(e.codegen.mustInfo(path).ProducerRef, path, SrcMeta{Prio: stmtPrioDefault, Seq: rp.DeclSeq})
 			}
 		case isNativeSourceExt(out):
-			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).any(), Prio: stmtPrioDefault, Bucket: bkRunPython})
+			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).any(), Prio: stmtPrioDefault})
 		case isCodegenProducingSrc(out):
-			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).any(), Prio: stmtPrioDefault, Bucket: bkRunPython})
+			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(instance.Path.relString(), out).any(), Prio: stmtPrioDefault})
 		}
 	}
 }

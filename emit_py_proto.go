@@ -117,7 +117,7 @@ func pyProtoOutputToken(instance ModuleInstance, out VFS, generatedProto bool) A
 	return internV("${ARCADIA_BUILD_ROOT}/", out.relString()).any()
 }
 
-func (e *EmitContext) emitPyProtoOutputs(src string, srcGroup int, outputs []VFS, generatedProto bool, logicalModule STR, priority, seq int) {
+func (e *EmitContext) emitPyProtoOutputs(src string, srcGroup int, outputs []VFS, generatedProto bool, logicalModule STR) {
 	instance, d := e.instance, e.d
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
 
@@ -147,8 +147,6 @@ func (e *EmitContext) emitPyProtoOutputs(src string, srcGroup int, outputs []VFS
 				Token:  pyProtoOutputToken(instance, out, generatedProto),
 				Group:  srcGroup,
 				Kind:   pySourceProto,
-				Prio:   priority,
-				Seq:    seq,
 				Event:  extIsEv(src),
 			}),
 		})
@@ -281,7 +279,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, event bool) *PyPBM
 	return pe
 }
 
-func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule STR, priority, seq int) {
+func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule STR) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	src := e.moduleSourceName(srcTok)
@@ -316,7 +314,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule 
 	outputs = outputs[:len(outputs):len(outputs)]
 
 	if e.codegen.lookup(pyOut) != nil {
-		e.emitPyProtoOutputs(src, srcGroup, outputs, protoSrcVFS.isBuild(), logicalModule, priority, seq)
+		e.emitPyProtoOutputs(src, srcGroup, outputs, protoSrcVFS.isBuild(), logicalModule)
 
 		return
 	}
@@ -423,7 +421,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule 
 
 	e.codegen.setMainOut(pyPBRef, outputs)
 
-	e.emitPyProtoOutputs(src, srcGroup, outputs, generatedProto, logicalModule, priority, seq)
+	e.emitPyProtoOutputs(src, srcGroup, outputs, generatedProto, logicalModule)
 }
 
 func protoPythonOutputRoot(d *ModuleData) string {

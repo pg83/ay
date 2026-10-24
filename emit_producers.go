@@ -935,9 +935,7 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 		case prodPyNoCheck:
 			e.emitNoCheckImportsObjcopy()
 		case prodPyMain:
-			e.resourceDeclSeq = e.d.pyMainDeclSeq
 			e.emitPyMainObjcopy()
-			e.resourceDeclSeq = 0
 		case prodYaConf:
 			e.emitYaConfJSONObjcopy()
 		case prodQueuedSrc:

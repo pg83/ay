@@ -115,7 +115,7 @@ func (e *EmitContext) emitSwigC() {
 			}),
 		})
 
-		e.enqueueSrc(SrcMeta{Source: cOutVFS.any(), Prio: stmtPrioDefault, Bucket: bkSwig})
+		e.enqueueSrc(SrcMeta{Source: cOutVFS.any(), Prio: stmtPrioDefault})
 	}
 }
 

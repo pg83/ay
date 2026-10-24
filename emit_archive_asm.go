@@ -17,7 +17,7 @@ func (e *EmitContext) emitArchiveAsmForAR() {
 			throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", e.instance.Platform.ISA, rodataRel)
 		}
 
-		e.enqueueSrc(SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault, Seq: a.DeclSeq, Bucket: bkArchiveAsm})
+		e.enqueueSrc(SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault, Seq: a.DeclSeq})
 	}
 }
 

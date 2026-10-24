@@ -60,7 +60,6 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 		compressArgs = append(compressArgs, args...)
 
 		e.emitRunProgram(&RunProgramStmt{
-			DeclSeq:  e.resourceDeclSeq,
 			ToolPath: strToolsRescompressor.any(), Args: compressArgs, INFiles: inputs,
 			OUTNoAutoFiles: append([]ANY{internStr(asm).any()}, outputs...),
 			EnvPairs:       []ANY{strYasmTestSuite1.any()},
@@ -73,7 +72,6 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 		}
 
 		e.emitRunProgram(&RunProgramStmt{
-			DeclSeq:  e.resourceDeclSeq,
 			ToolPath: strToolsRorescompiler.any(), Args: srcgen,
 			OUTNoAutoFiles: []ANY{internStr(cpp).any()},
 		})
@@ -101,8 +99,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 
 	yasmRef, _ := e.ctx.tool(argContribToolsYasm)
 	asmRef, asmOut := e.emitASAsm(asmPath, asmIn, yasmRef, false)
-	priority := stmtPrioDefault
-	asmMeta := SrcMeta{Global: globalAsm, Prio: priority, Seq: e.resourceDeclSeq}
+	asmMeta := SrcMeta{Global: globalAsm}
 
 	if !globalAsm {
 		e.collectObj(asmRef, asmOut, asmMeta)
@@ -111,7 +108,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 	cppPath := build(module, "/", cppName)
 	ccRef := e.ctx.emit.reserve()
 	spec := CompileSpec{ForceCxx: true, CFlags: na.anyList(argX.any(), argC.any())}
-	meta := SrcMeta{Source: cppPath.any(), Global: true, Prio: priority, Seq: e.resourceDeclSeq, Compile: spec, CompileRef: ccRef}
+	meta := SrcMeta{Source: cppPath.any(), Global: true, Compile: spec, CompileRef: ccRef}
 
 	e.emitOneSource(meta)
 

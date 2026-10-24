@@ -430,7 +430,6 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		}
 
 		meta.Source = generatedVFS.any()
-		meta.Bucket = bkCython
 		meta.Compile = CompileSpec{ObjSuf: objSuf}
 		e.enqueueSrc(meta)
 	}

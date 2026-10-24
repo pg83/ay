@@ -20,9 +20,6 @@ type PeerContext struct {
 }
 
 type EmitContext struct {
-	resourcePriority int
-
-	resourceDeclSeq    int
 	moduleIncludeRoots []VFS
 	moduleGlobals      []VFS
 	moduleGlobalInputs []VFS

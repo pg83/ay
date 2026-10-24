@@ -58,19 +58,6 @@ const (
 )
 
 const (
-	bkDefault = iota
-	bkCheckConfig
-	bkCython
-	bkSwig
-	bkAntlr
-	bkJV
-	bkSplitCodegen
-	bkRunPython
-	bkArchiveAsm
-	bkDecimalMD5
-)
-
-const (
 	tokenExpandLazy TokenExpansion = iota
 	tokenExpandArguments
 	tokenExpandFinal
@@ -426,7 +413,6 @@ type SrcMeta struct {
 	Stmt        int
 	Global      bool
 	RosZeroCopy bool
-	Bucket      int
 	Compile     CompileSpec
 	CompileRef  NodeRef
 	PyMeta      uint32

@@ -163,19 +163,13 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 }
 
 func (e *EmitContext) resourceSourceMeta(items []ResourceItem, output VFS) SrcMeta {
-	priority := e.resourcePriority
-
-	if priority == 0 {
-		priority = stmtPrioDefault
-	}
-
 	if e.ctx.testMode {
 		for _, item := range items {
 			e.collectCPPStyleInputs(item.input())
 		}
 	}
 
-	return SrcMeta{Source: output.any(), Global: true, Prio: priority, Seq: e.resourceDeclSeq}
+	return SrcMeta{Source: output.any(), Global: true}
 }
 
 func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, resources []STR, inputs, buildFrom InputChunks, deps []NodeRef) NodeRef {
@@ -693,10 +687,6 @@ func (e *EmitContext) emitKvOnlyResource(tag STR, kvsHash []string, kvsCmd []STR
 
 func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (refs []NodeRef, outs []VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	previousSeq := e.resourceDeclSeq
-
-	defer func() { e.resourceDeclSeq = previousSeq }()
-
 	na := ctx.na
 	batch := e.resItems[:0]
 	dontCompress := false
@@ -717,10 +707,6 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 	}
 
 	for _, entry := range entries {
-		if entry.DeclSeq != 0 {
-			e.resourceDeclSeq = entry.DeclSeq
-		}
-
 		dontCompress = entry.DontCompress
 
 		if entry.Path == "-" {
@@ -816,12 +802,6 @@ func (e *EmitContext) emitPySourceGroup(gi int) {
 	if e.producersOnly() {
 		return
 	}
-
-	previousSeq, previousPriority := e.resourceDeclSeq, e.resourcePriority
-
-	e.resourceDeclSeq, e.resourcePriority = group.DeclSeq, group.Prio
-
-	defer func() { e.resourceDeclSeq, e.resourcePriority = previousSeq, previousPriority }()
 
 	if isProgramModuleType(e.d.moduleStmt.Name) && e.d.unit.Tag == 0 && len(e.resources) == 0 && !e.d.pythonSourceCallback {
 		return
