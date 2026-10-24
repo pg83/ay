@@ -2079,7 +2079,11 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				} else if v.Name == tokUseRecipe {
 					expanded.Args = []ANY{internStr(collectTestRecipe(v.Args, env)).any()}
 				} else if v.Name != tokEnv && !(v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].string() == "TEST_ENV_VALUE") {
-					expanded.Args = expandStmtTokens(v.Args, env)
+					if v.Name == tokSetAppend {
+						expanded.Args = expandRootDeferredTokens(v.Args, env)
+					} else {
+						expanded.Args = expandStmtTokens(v.Args, env)
+					}
 				}
 
 				var perlMask uint16
@@ -4971,7 +4975,7 @@ func expandStmtToken(s string, env Environment) string {
 type TokenExpansion uint8
 
 func (phase TokenExpansion) clearsUnbound(name string) bool {
-	return phase == tokenExpandFinal || phase == tokenExpandArguments && !keepDeferredVar(name) || phase == tokenExpandAssignment && name != envBINDIR.string() && name != envCURDIR.string()
+	return phase == tokenExpandFinal || phase == tokenExpandArguments && !keepDeferredVar(name) || phase == tokenExpandAssignment && name != envBINDIR.string() && name != envCURDIR.string() && name != envARCADIA_ROOT.string() && name != envARCADIA_BUILD_ROOT.string()
 }
 
 func keepDeferredVar(name string) bool {

@@ -94,6 +94,97 @@ class ResourceFilesTest(unittest.TestCase):
                 self.assertEqual(payload(node), ([resolved + "/a.txt"], [key],
                                                ["resfs/src/" + key + "=lib/a.txt"]))
 
+    def test_source_root_keys_and_digest_bind_after_plugin_expansion(self):
+        for form in ("literal", "strip", "scalar", "recursive", "append", "default", "last", "include"):
+            with self.subTest(form=form):
+                raw = "${ARCADIA_ROOT}/lib/data.txt"
+                key = "resfs/file/" + raw
+                body = "RESOURCE_FILES(" + raw + ")\n"
+                if form == "strip":
+                    key = "resfs/file/assets/data.txt"
+                    body = "RESOURCE_FILES(STRIP ${ARCADIA_ROOT}/lib/ PREFIX assets/ " + raw + ")\n"
+                elif form in ("scalar", "recursive", "append", "default", "last", "include"):
+                    key = "resfs/file/final.txt"
+                    body = "SET(FILE " + raw + ")\n"
+                    if form == "recursive":
+                        body = "SET(BASE ${ARCADIA_ROOT}/lib)\nSET(FILE ${BASE}/data.txt)\n"
+                    if form == "append":
+                        body = "SET(FILE)\nSET_APPEND(FILE " + raw + ")\n"
+                    elif form == "default":
+                        body = "DEFAULT(FILE " + raw + ")\n"
+                    elif form == "last":
+                        body = "SET(FILE missing.txt)\n" + body + "DEFAULT(FILE other.txt)\n"
+                    elif form == "include":
+                        body = "INCLUDE(roots.inc)\n"
+                    body += "RESOURCE_FILES(DEST final.txt ${FILE})\n"
+                files = base_files(body)
+                files["lib/data.txt"] = "payload\n"
+                files["lib/roots.inc"] = "SET(BASE ${ARCADIA_ROOT}/lib)\nSET(FILE ${BASE}/data.txt)\n"
+                graph = lib.make(files, "lib", "--sandboxing")
+                seed = [raw, base64.b64encode(key.encode()).decode(),
+                        'resfs/src/' + key + '=${rootrel;context=TEXT;input=TEXT:"' + raw + '"}',
+                        "$S/lib"]
+                digest = hashlib.md5(",".join(sorted(seed)).encode()).hexdigest()[:26]
+                node = lib.node_by_output(graph, f"$(B)/lib/objcopy_{digest}.o")
+                runtime_key = key.replace("${ARCADIA_ROOT}", "$(S)")
+                self.assertEqual(payload(node), (["$(S)/lib/data.txt"], [key],
+                                               ["resfs/src/" + runtime_key + "=lib/data.txt"]))
+                self.assertCountEqual(node["inputs"], [
+                    "$(B)/tools/rescompiler/rescompiler", "$(B)/tools/rescompressor/rescompressor",
+                    "$(S)/lib/data.txt", "$(S)/build/scripts/objcopy.py",
+                ])
+                archive = lib.node_by_output(graph, "$(B)/lib/liblib.global.a")
+                self.assertIn(node["uid"], archive["deps"])
+                self.assertIn(node["outputs"][0], archive["inputs"])
+
+    def test_appended_root_words_keep_keys_and_physical_consumer_bindings(self):
+        files = base_files(
+            "SET(FILES ${ARCADIA_ROOT}/lib/a.txt)\n"
+            "SET_APPEND(FILES ${ARCADIA_ROOT}/lib/b.txt)\n"
+            "RESOURCE_FILES(STRIP ${ARCADIA_ROOT}/lib/ PREFIX assets/ ${FILES})\n"
+        )
+        files.update({"lib/a.txt": "a", "lib/b.txt": "b"})
+        graph = lib.make(files, "lib", "--sandboxing")
+        [node] = objcopy_nodes(graph)
+        self.assertEqual(payload(node), (
+            ["$(S)/lib/a.txt", "$(S)/lib/b.txt"],
+            ["resfs/file/assets/a.txt", "resfs/file/assets/b.txt"],
+            ["resfs/src/resfs/file/assets/a.txt=lib/a.txt",
+             "resfs/src/resfs/file/assets/b.txt=lib/b.txt"],
+        ))
+        self.assertIn("$(S)/lib/a.txt", node["inputs"])
+        self.assertIn("$(S)/lib/b.txt", node["inputs"])
+
+    def test_build_root_uses_late_generated_input_and_raw_resource_action(self):
+        raw = "${ARCADIA_BUILD_ROOT}/lib/copy.txt"
+        key = "resfs/file/copy.txt"
+        files = base_files(
+            "COPY_FILE(lib/data.txt copy.txt)\n"
+            "RESOURCE_FILES(STRIP ${ARCADIA_BUILD_ROOT}/lib/ " + raw + ")\n"
+        )
+        for tool in ("contrib/tools/yasm", "tools/rorescompiler"):
+            lib.tool_program(files, tool, tool.rsplit("/", 1)[1])
+        files["lib/data.txt"] = "payload\n"
+        graph = lib.make(files, "lib", "--sandboxing",
+                         "--target-platform", "default-linux-x86_64")
+        self.assertEqual(objcopy_nodes(graph), [])
+        def digest(values):
+            return hashlib.md5(",".join(sorted(values + ["$S/lib"])).encode()).hexdigest()[:26]
+        kv = 'resfs/src/' + key + '=${rootrel;context=TEXT;input=TEXT:"' + raw + '"}'
+        path_label = "ro_" + digest([raw, key])
+        kv_label = "ro_" + digest(["-", kv])
+        asm = digest(["-", kv.split("=", 1)[1], kv_label + ".rodata", raw, path_label + ".rodata"])
+        cpp = digest([kv_label + "=resfs/src/" + key, path_label + "=" + key])
+        compressed = lib.node_by_output(graph, "$(B)/lib/" + asm + ".yasm")
+        generated = lib.node_by_output(graph, "$(B)/lib/copy.txt")
+        command = compressed["cmds"][0]["cmd_args"]
+        self.assertIn("$(B)/lib/copy.txt", command)
+        self.assertIn("$(B)/lib/copy.txt", compressed["inputs"])
+        self.assertIn(generated["uid"], compressed["deps"])
+        source = lib.node_by_output(graph, "$(B)/lib/" + cpp + ".auxcpp")
+        self.assertEqual(source["cmds"][0]["cmd_args"][-2:],
+                         [kv_label + "=resfs/src/" + key, path_label + "=" + key])
+
     def test_prefix_dest_and_strip_forms(self):
         files = base_files(
             "RESOURCE_FILES(PREFIX pfx/ data/a.txt data/b.txt)\n"
