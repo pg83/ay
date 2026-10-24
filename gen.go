@@ -2467,10 +2467,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	if instance.Kind == KindForeignDescent && instance.Demand == demandNone || instance.Language == LangFbsJavaNative {
 		result := newResult()
 
-		if isGoModuleType(d.moduleStmt.Name) {
-			result.TestSuites = append(result.TestSuites, e.goFmtSuites(resourceGlobalsClosure)...)
-		}
-
 		if len(d.cythonAddInclGlobal) > 0 || len(frame.peerCtx.CythonInclude) > 0 {
 			result.ArchiveFile = build(instance.Path.relString(), "/", arNameFn(instance.Path.relString()))
 		}
