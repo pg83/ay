@@ -3,6 +3,8 @@
 DONT_RESOLVE prevents new resolution; it does not hide already established
 parent-file edges. Native final export observes these edges in either root order.
 """
+import base64
+import collections
 import itertools
 import json
 import unittest
@@ -152,11 +154,12 @@ class SharedSourceEdgesTest(unittest.TestCase):
                     '$(B)/tools/reader/reader', *EXPLICIT,
                 ])
 
-    def test_literal_resource_does_not_inherit_shared_file_edges(self):
+    def check_resource_source_identity(self, dont_parse):
         files = fixture()
+        flags = 'DONT_PARSE DONT_COMPRESS' if dont_parse else 'DONT_COMPRESS'
         files['payload/ya.make'] = (
             f'LIBRARY()\n{lib.BARE_MODULE}'
-            'RESOURCE(DONT_COMPRESS ${ARCADIA_ROOT}/grove/article.gztproto /payload)\nEND()\n'
+            f'RESOURCE({flags} ${{ARCADIA_ROOT}}/grove/article.gztproto /payload)\nEND()\n'
         )
         files['library/cpp/resource/ya.make'] = f'LIBRARY()\n{lib.BARE_MODULE}END()\n'
         lib.tool_program(files, 'tools/rescompiler', 'rescompiler')
@@ -166,9 +169,35 @@ class SharedSourceEdgesTest(unittest.TestCase):
                 g = graph(files, order)
                 packed = [n for n in g['graph'] if EXPLICIT[1] in n['inputs']
                           and any(o.startswith('$(B)/payload/') for o in n['outputs'])]
-                self.assertTrue(packed)
-                for node in packed:
+                self.assertEqual(len(packed), 1)
+                node = packed[0]
+                expected = ['$(B)/tools/rescompiler/rescompiler', '$(B)/tools/rescompressor/rescompressor',
+                            '$(S)/build/scripts/objcopy.py', EXPLICIT[1]]
+                if dont_parse:
                     self.assertFalse(TRANSITIVE & set(node['inputs']))
+                else:
+                    expected += sorted(TRANSITIVE)
+                self.assertEqual(collections.Counter(node['inputs']), collections.Counter(expected))
+                args = node['cmds'][0]['cmd_args']
+                self.assertEqual(args[args.index('--inputs') + 1:args.index('--keys')], [EXPLICIT[1]])
+                self.assertEqual(base64.b64decode(args[args.index('--keys') + 1]), b'/payload')
+                tools = [lib.node_by_output(g, path) for path in expected[:2]]
+                self.assertEqual(collections.Counter(node['deps']),
+                                 collections.Counter(tool['uid'] for tool in tools))
+                archive = lib.node_by_output(g, '$(B)/payload/libpayload.global.a')
+                self.assertIn(node['outputs'][0], archive['inputs'])
+                self.assertIn(node['uid'], archive['deps'])
+                self.assertIn(archive['uid'], g['result'])
+                ids = {producer['uid'] for producer in g['graph']}
+                self.assertTrue(g['result'])
+                self.assertLessEqual(set(g['result']), ids)
+                self.assertTrue(all(set(producer['deps']) <= ids for producer in g['graph']))
+
+    def test_literal_resource_does_not_inherit_shared_file_edges(self):
+        self.check_resource_source_identity(dont_parse=True)
+
+    def test_parsed_resource_inherits_shared_file_edges(self):
+        self.check_resource_source_identity(dont_parse=False)
 
     def test_shared_native_source_cycle_is_finalized_once(self):
         files = fixture()
