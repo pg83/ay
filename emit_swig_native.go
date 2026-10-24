@@ -59,7 +59,6 @@ func (e *EmitContext) emitNativeSwigSource(meta SrcMeta, python bool) {
 			Env:             envVarsVCS,
 			Inputs:          inputs,
 			BuildFromInputs: na.inputList(inputs[0][1:], inputs[1:]...),
-			InputClosures:   []Closure{cv},
 			Outputs:         na.vfsList(cpp, moduleOutput),
 			KV:              &swigJNIKV,
 			ForeignDepRefs:  na.refList(swigRef),

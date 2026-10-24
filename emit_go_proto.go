@@ -159,7 +159,6 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 		Env:             envVarsVCS,
 		Inputs:          InputChunks(inputs[:len(inputs):len(inputs)]),
 		BuildFromInputs: InputChunks(inputs[1:len(inputs):len(inputs)]),
-		InputClosures:   []Closure{view},
 		Outputs:         na.vfsList(outs...),
 		KV:              &pbKV,
 		ForeignDepRefs:  na.noderefs.list(tools...),

@@ -18,11 +18,6 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 
 	instance := ctx.rootInstanceForDeclaration(dir, demandSelf, declaration)
 	name := declaration.Name
-
-	if hasSandboxPython2Library(name) {
-		configureCythonDirectory(ctx, instance)
-	}
-
 	frame := ctx.pushFrame()
 
 	defer ctx.popFrame()
@@ -177,10 +172,6 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 		}
 
 		excluded := moduleExcludesTag(d, tag)
-
-		if hasSandboxPython2Library(name) {
-			excluded = sandboxPythonTaskExcluded(ctx, peer, tag)
-		}
 
 		if tag != "" && excluded {
 			continue

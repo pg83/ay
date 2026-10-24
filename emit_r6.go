@@ -68,7 +68,6 @@ func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6B
 		Env:             env,
 		Inputs:          na.inputList(head2, na.vfsList(closure...)),
 		BuildFromInputs: na.inputList(head2[1:], na.vfsList(closure...)),
-		InputClosures:   []Closure{view},
 		Outputs:         na.vfsList(outVFS),
 		KV:              &r6KV,
 		ForeignDepRefs:  na.refList(ragel6LD),

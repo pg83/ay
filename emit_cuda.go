@@ -62,8 +62,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 
 	node := Node{Platform: instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}), Env: env,
 		Inputs: inputs, BuildFromInputs: appendInputChunks(na, inputs[:1], inputs[2:]), Outputs: na.vfsList(outVFS), KV: &cudaKV, Resources: instance.Platform.CCUsesResources,
-		InputClosures: []Closure{srcCV, runtimeCV},
-		DepRefs:       na.refList(mtimeRef, pidRef)}
+		DepRefs: na.refList(mtimeRef, pidRef)}
 
 	if env := (Environment{s: &e.frame.ifEnv}); env.bool(envCudaNodeRAMRequirement) {
 		ram := throw2(strconv.ParseFloat(strings.TrimPrefix(env.string(envCudaNodeRAMRequirement), "ram:"), 64))
@@ -125,7 +124,6 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 	env := e.cudaEnv()
 
 	var sourceClosure, compileClosure InputChunks
-	var sourceViews, compileViews []Closure
 
 	getClosures := func() {
 		if sourceClosure != nil {
@@ -135,8 +133,6 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 		srcCV := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
 		runtimeCV := e.scanner.walkClosure(cudaRuntimeIncludeVFS, d.scanCtx, scanDomainCC)
 
-		sourceViews = []Closure{srcCV}
-		compileViews = []Closure{srcCV, runtimeCV}
 		sourceClosure = na.dedupClosureChunks(srcCV)
 		compileClosure = na.dedupClosureChunks(srcCV, runtimeCV)
 	}
@@ -181,7 +177,6 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 			inputs = appendInputChunks(na, inputs, compileClosure)
 
 			e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: env, Inputs: inputs,
-				InputClosures:   compileViews,
 				BuildFromInputs: appendInputChunks(na, inputs[:2], inputs[3:]),
 				Outputs:         outs, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, ref)
 		})
@@ -224,7 +219,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 		inputs := appendInputChunks(na, na.inputList(na.vfsList(images...), na.vfsList(script)), sourceClosure)
 
 		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS, Resources: e.cudaSettings().RootResources}), Env: envVarsVCS,
-			Inputs: inputs, InputClosures: sourceViews, Outputs: na.vfsList(fatbin), KV: &cudaKV, Resources: usesPython3}, fatRef)
+			Inputs: inputs, Outputs: na.vfsList(fatbin), KV: &cudaKV, Resources: usesPython3}, fatRef)
 	})
 
 	e.register(GeneratedFileInfo{SourceAction: fatAction, OutputPath: fatbin, ProducerRef: fatRef, OnUse: fatPending})
@@ -260,7 +255,6 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 		inputs = appendInputChunks(na, inputs, compileClosure)
 
 		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}, Cmd{CmdArgs: na.chunkList(na.anyList(frontend...)), Env: envVarsVCS}), Env: env,
-			InputClosures:   sourceViews,
 			BuildFromInputs: appendInputChunks(na, inputs[:1], inputs[2:]),
 			Inputs:          inputs, Outputs: hostOuts, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, hostRef)
 	})

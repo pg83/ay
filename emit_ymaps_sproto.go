@@ -85,7 +85,6 @@ func (e *EmitContext) emitYmapsSprotoHeaderSnap(scanner *IncludeScanner, p Ymaps
 		Env:             env,
 		Inputs:          na.inputList(na.vfsList(sprotocBinary), closure),
 		BuildFromInputs: na.inputList(closure),
-		InputClosures:   []Closure{view},
 		Outputs:         na.vfsList(p.sprotoH),
 		KV:              &ymapsSprotoKV,
 		ForeignDepRefs:  na.refList(sprotocLDRef),

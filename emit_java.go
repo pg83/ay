@@ -15,7 +15,6 @@ type javaNodeBuilder struct {
 	p         *Platform
 	cmds      []Cmd
 	inputs    []VFS
-	views     []Closure
 	outputs   []VFS
 	deps      []NodeRef
 	resources []STR
@@ -131,17 +130,16 @@ func (b *javaNodeBuilder) emitTo(ref NodeRef) {
 	*kv = b.kv
 
 	node := Node{
-		Platform:      platform,
-		Cmds:          na.cmdList(b.cmds...),
-		Env:           env,
-		Inputs:        na.inputList(dedupVFSKeepOrder(b.inputs)),
-		InputClosures: b.views,
-		KV:            kv,
-		KVExts:        b.exts,
-		Outputs:       na.vfsList(b.outputs...),
-		Requirements:  b.req,
-		DepRefs:       na.refList(dedupRefs(b.deps)...),
-		Resources:     b.resources,
+		Platform:     platform,
+		Cmds:         na.cmdList(b.cmds...),
+		Env:          env,
+		Inputs:       na.inputList(dedupVFSKeepOrder(b.inputs)),
+		KV:           kv,
+		KVExts:       b.exts,
+		Outputs:      na.vfsList(b.outputs...),
+		Requirements: b.req,
+		DepRefs:      na.refList(dedupRefs(b.deps)...),
+		Resources:    b.resources,
 	}
 
 	b.ctx.emit.emitReservedNodePtr(&node, ref)
@@ -646,8 +644,6 @@ func (ctx *GenCtx) javaEmitEvProto(jm *JavaModule, scanCtx *ScanContext, ev VFS)
 
 	view := ctx.scannerForPlatform(jm.instance.Platform).walkClosure(ev, scanCtx, scanDomainProto)
 
-	b.views = append(b.views, view)
-
 	for _, bucket := range view.bucketList() {
 		b.input(bucket...)
 	}
@@ -730,8 +726,6 @@ func (ctx *GenCtx) javaEmitProtoPB(jm *JavaModule, globals map[string]VFS, scanC
 	b.deps = append(b.deps, b.use(protoVFS))
 
 	view := ctx.scannerForPlatform(jm.instance.Platform).walkClosure(protoVFS, scanCtx, scanDomainProto)
-
-	b.views = append(b.views, view)
 
 	for _, bucket := range view.bucketList() {
 		b.input(bucket...)

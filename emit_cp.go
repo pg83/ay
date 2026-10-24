@@ -2,14 +2,8 @@ package main
 
 var cpKV = KV{P: pkCP, PC: pcLightCyan}
 
-func (e *EmitContext) emitCPWithInputs(src VFS, dst VFS, extraInputs []VFS, id NodeRef, tc ModuleToolchain, scripts ScriptDeps, views ...Closure) {
+func (e *EmitContext) emitCPWithInputs(src VFS, dst VFS, extraInputs []VFS, id NodeRef, tc ModuleToolchain, scripts ScriptDeps) {
 	node := composeCPNode(e.instance, src, dst, extraInputs, tc, scripts, e.ctx.na)
-
-	node.InputClosures = views
-
-	if len(views) > 0 {
-		node.TextInputs = extraInputs
-	}
 
 	e.emitReservedNode(node, id)
 }

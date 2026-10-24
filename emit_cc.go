@@ -150,7 +150,7 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef
 		return e.bindFbsNativeSource(srcVFS, in, reserved)
 	}
 
-	in.IncludeView = e.scanner.scanClosure(srcVFS, e.d.scanCtx, scanDomainCC)
+	in.IncludeView = e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
 
 	if in.MainOutInducedInputs {
 		in.IncludeInputs = e.mainOutInducedInputs(ctx.na, in.IncludeView)
@@ -161,11 +161,6 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef
 	}
 
 	ref, outPath, _ := e.composeCCNodeAt(srcVFS, in, ctx.host, reserved)
-
-	if in.IncludeView.hasDiagnostics && !e.scanner.noResolve {
-		ctx.emit.nodes.s[ref].CppIncludeContext = e.d.scanCtx
-		ctx.fixCppIncludes = true
-	}
 
 	return ref, outPath
 }

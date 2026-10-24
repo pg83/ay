@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
-	"slices"
 	"sort"
 	"strings"
 )
@@ -152,10 +151,6 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 	_, instance := e.ctx, e.instance
 	output := resourceOutputVFS(instance.Path.relString(), rawPath)
 
-	if src := e.resourceSources[resourceInputKey{rawPath, e.resourceDeclSeq}]; src != 0 {
-		return ResolvedResource{Input: src}
-	}
-
 	if info := e.codegen.use(output); info != nil {
 		return ResolvedResource{
 			Input:           output,
@@ -185,7 +180,7 @@ func (e *EmitContext) resourceSourceAction(items []ResourceItem) *SourceActionIn
 	return info
 }
 
-func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, resources []STR, inputs, buildFrom InputChunks, deps []NodeRef, views []Closure, action *SourceActionInfo) NodeRef {
+func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, resources []STR, inputs, buildFrom InputChunks, deps []NodeRef, action *SourceActionInfo) NodeRef {
 	if info := e.codegen.lookup(outputObj); info != nil && info.ResourceObjcopy && info.OwnerModule == e.instance.Path && info.OwnerSerial != e.frame.serial {
 		return info.ProducerRef
 	}
@@ -199,7 +194,6 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 		Env:             env,
 		Inputs:          inputs,
 		BuildFromInputs: buildFrom,
-		InputClosures:   views,
 		Outputs:         na.vfsList(outputObj),
 		KV:              kv,
 		Resources:       e.instance.Platform.UsesPython3Clang,
@@ -214,14 +208,13 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 }
 
 type ResourceItem struct {
-	Path          string
-	Key           string
-	Cmd           STR
-	ExpandedCmd   CompilerFlagValue
-	SourceInput   VFS
-	BuildInput    VFS
-	AuxBuilds     []VFS
-	SourceClosure Closure
+	Path        string
+	Key         string
+	Cmd         STR
+	ExpandedCmd CompilerFlagValue
+	SourceInput VFS
+	BuildInput  VFS
+	AuxBuilds   []VFS
 }
 
 func (it ResourceItem) commandArgs() []ANY {
@@ -436,14 +429,6 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		payload = payload[:len(payload):len(payload)]
 
-		var views []Closure
-
-		for _, it := range chunk {
-			if it.SourceClosure.scanner != nil {
-				views = append(views, it.SourceClosure)
-			}
-		}
-
 		var adjacentSources, adjacentBuilds, tailBuilds []VFS
 
 		dedupers.with(func(deduper *DeDuper) {
@@ -499,7 +484,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
 		action := e.resourceSourceAction(chunk)
 
-		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, deps, views, action))
+		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, deps, action))
 
 		if e.codegen.lookup(outputObj).SourceAction != action {
 			e.numberSourceAction(action)
@@ -792,10 +777,6 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 			it.setInput(r.Input)
 
-			if r.Input.isSource() && !entry.DontParse {
-				it.SourceClosure = e.scanner.walkClosureWithDefaultParser(r.Input, d.scanCtx, scanDomainCC, emptyParser)
-			}
-
 			if r.ProducerRef != 0 {
 				cv := e.scanner.walkClosure(r.Input, d.scanCtx, scanDomainCC)
 				auxBuilds := na.vfs.alloc(cv.len() + 1)[:0]
@@ -828,7 +809,6 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	_, _, d := e.ctx, e.instance, e.d
-	batchOrder := e.resourceActionOrder()
 	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || e.hasEnginePySrcs() || len(d.yaConfJSON) > 0
 
 	if len(e.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
@@ -863,31 +843,11 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 	resourceOffset := 0
 	trailStart := -1
 
-	var pending []resourceQueueBatch
-
 	emitResources := func(entries []ResourceEntry) {
-		for len(entries) > 0 {
-			n := 1
+		r, o := e.emitResourceFile(entries, moduleTag)
 
-			for n < len(entries) && !entries[n-1].EndsBatch {
-				n++
-			}
-
-			batch := entries[:n]
-
-			entries = entries[n:]
-
-			if order, ok := batchOrder[batch[0].DeclSeq]; ok {
-				pending = append(pending, resourceQueueBatch{entries: batch, order: order})
-
-				continue
-			}
-
-			r, o := e.emitResourceFile(batch, moduleTag)
-
-			out.Refs = append(out.Refs, r...)
-			out.Outputs = append(out.Outputs, o...)
-		}
+		out.Refs = append(out.Refs, r...)
+		out.Outputs = append(out.Outputs, o...)
 	}
 
 	emitGroup := func(gi int, group PySrcGroup) {
@@ -935,15 +895,6 @@ func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
 		if group.Prio != stmtPrioDefault {
 			emitGroup(gi, group)
 		}
-	}
-
-	slices.SortFunc(pending, func(a, b resourceQueueBatch) int { return a.order - b.order })
-
-	for _, batch := range pending {
-		r, o := e.emitResourceFile(batch.entries, moduleTag)
-
-		out.Refs = append(out.Refs, r...)
-		out.Outputs = append(out.Outputs, o...)
 	}
 
 	if trailStart < 0 {

@@ -37,8 +37,6 @@ type Node struct {
 	TextInputs          []VFS          `json:"-"`
 	InputNames          []STR          `json:"-"`
 	InputClosure        Closure        `json:"-"`
-	CppIncludeContext   *ScanContext   `json:"-"`
-	InputClosures       []Closure      `json:"-"`
 	KV                  *KV            `json:"kv"`
 	KVExts              []KVExt        `json:"-"`
 	Outputs             []VFS          `json:"outputs"`
@@ -51,7 +49,6 @@ type Node struct {
 	ForeignDepRefs      []NodeRef      `json:"-"`
 	Resources           []STR          `json:"-"`
 	ResourceGlobals     []ResourceDecl `json:"-"`
-	sourceInputsPending bool
 	foreignToolsPending bool
 	deferPublication    bool
 }

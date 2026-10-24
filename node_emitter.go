@@ -109,10 +109,9 @@ func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
 		e.publicationRoots = append(e.publicationRoots, id)
 	}
 
-	n.sourceInputsPending = n.InputClosure.scanner != nil || len(n.InputClosures) > 0
 	n.deferPublication = e.deferPublication > 0
 
-	if n.sourceInputsPending || e.hasUnresolvedDeps(n) {
+	if e.hasUnresolvedDeps(n) {
 		e.pendingSet[id] = true
 		e.pendingIdx = append(e.pendingIdx, id)
 

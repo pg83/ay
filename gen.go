@@ -194,7 +194,6 @@ type GenCtx struct {
 	parsers          *IncludeParserManager
 	emit             *StreamingEmitter
 	onWarn           func(Warn)
-	fixCppIncludes   bool
 	keepGoing        bool
 	na               *NodeArenas
 	inclArgValues    DenseMap[VFS, STR]
@@ -301,7 +300,6 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 	ctx.flushFbsContextBindings()
 	ctx.bindForeignTools()
 	ctx.emitDiscoveredModuleTests(suites)
-	ctx.finalizeSourceInputs()
 
 	if ctx.buckets.h1Mismatches > 0 {
 		onWarn(Warn{
@@ -1242,10 +1240,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	stmts := moduleStmts(ctx, instance.Path.relString())
 	moduleName := stmtsModuleName(stmts)
 
-	if isPythonMultimodule(moduleName) {
-		configureCythonDirectory(ctx, instance)
-	}
-
 	if moduleName == tokYqlUdf && instance.Kind == KindBin && !instance.Platform.PIC {
 		library := instance
 
@@ -1328,10 +1322,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	excluded := moduleExcludesTag(d, tag)
-
-	if hasSandboxPython2Library(moduleName) {
-		excluded = sandboxPythonTaskExcluded(ctx, instance, tag)
-	}
 
 	if tag != "" && excluded {
 		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, protoExcluded: moduleName == tokProtoLibrary}
@@ -2484,7 +2474,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	d.scanCtx.flatcInclude = moduleFlatcInclude
 	d.scanCtx.scInclude = moduleScInclude
 	d.scanCtx.cythonPeerIncl = frame.peerCtx.CythonInclude
-	primeCythonModuleSources(ctx, instance, d, e.scanner, d.scanCtx)
 	e.emitMlaunch(resolved, peerArchivePaths, effectiveMlaunchDeps)
 	e.emit()
 	ownIncludedDeps = e.publishOwnModuleIncludedDeps()

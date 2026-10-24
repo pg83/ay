@@ -30,8 +30,6 @@ type EmitContext struct {
 	sourceRoots        map[int]SrcMeta
 	sourceRounds       map[int]uint64
 	resourceDeclSeq    int
-	resourceSources    map[resourceInputKey]VFS
-	resourceAvailable  map[VFS]bool
 	moduleIncludeRoots []VFS
 	moduleGlobals      []VFS
 	moduleGlobalInputs []VFS
@@ -392,8 +390,6 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 	if len(extra)+len(included) == 0 {
 		return
 	}
-
-	node.InputClosures = append(node.InputClosures, extra...)
 
 	dedupers.with(func(dd *DeDuper) {
 		bound := len(node.Inputs) + len(included)

@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (e *EmitContext) notsProtoInputs() (args []string, inputs []VFS, refs []NodeRef, leaves []VFS, toolRef NodeRef, globals []ResourceDecl, views []Closure) {
+func (e *EmitContext) notsProtoInputs() (args []string, inputs []VFS, refs []NodeRef, leaves []VFS, toolRef NodeRef, globals []ResourceDecl) {
 	ctx, d, c := e.ctx, e.d, e.d.nots
 	dir := e.instance.Path.relString()
 	span := descPeerClosure(e, d.peerdirs, false, false)
@@ -57,8 +57,6 @@ func (e *EmitContext) notsProtoInputs() (args []string, inputs []VFS, refs []Nod
 		inputs = append(inputs, file)
 
 		closure := e.scanner.walkClosure(file, d.scanCtx, scanDomainProto)
-
-		views = append(views, closure)
 
 		for _, bucket := range closure.bucketList() {
 			inputs = append(inputs, bucket...)

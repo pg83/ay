@@ -83,7 +83,7 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Cwd: srcRootDirVFS, Env: envVarsVCS}),
 			Env:      envVarsVCS, Inputs: na.inputList(na.vfsList(src, wrapper, template, protoc, docTool), inputs...),
 			BuildFromInputs: na.inputList(na.vfsList(src, wrapper, template), inputs...),
-			InputClosures:   []Closure{view}, Outputs: na.vfsList(out), KV: &protoDocsKV, ForeignDepRefs: na.refList(protocRef, docRef), Resources: usesPython3,
+			Outputs:         na.vfsList(out), KV: &protoDocsKV, ForeignDepRefs: na.refList(protocRef, docRef), Resources: usesPython3,
 		})
 
 		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})

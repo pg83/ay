@@ -406,7 +406,6 @@ type GoSrcsResult struct {
 	GoFiles     []VFS
 	AsmFiles    []VFS
 	AsmInclSrcs []VFS
-	views       []Closure
 	SymabisRef  NodeRef
 	SymabisOut  VFS
 }
@@ -494,14 +493,13 @@ func (e *EmitContext) flushGoSrcs() {
 	e.goRes.AsmInclSrcs = e.goAsmIncludeSrcs()
 
 	node := Node{
-		Platform:      instance.Platform,
-		Cmds:          na.cmdList(Cmd{CmdArgs: na.chunkList(goSymabisHead, e.goInclSplitArgs(), goSymabisDefs, tail[:nt:nt]), Env: goVcsEnv}),
-		Env:           goVcsEnv,
-		Inputs:        na.inputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs),
-		InputClosures: e.goRes.views,
-		KV:            &goToolKV,
-		Outputs:       na.vfsList(out),
-		Resources:     goToolResources(na, e.peers.ResourceGlobals),
+		Platform:  instance.Platform,
+		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(goSymabisHead, e.goInclSplitArgs(), goSymabisDefs, tail[:nt:nt]), Env: goVcsEnv}),
+		Env:       goVcsEnv,
+		Inputs:    na.inputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs),
+		KV:        &goToolKV,
+		Outputs:   na.vfsList(out),
+		Resources: goToolResources(na, e.peers.ResourceGlobals),
 	}
 
 	e.goRes.SymabisRef = e.emitNode(node)
@@ -520,7 +518,6 @@ func (e *EmitContext) goAsmIncludeSrcs() []VFS {
 	for _, src := range e.goRes.AsmFiles {
 		cv := e.scanner.walkClosure(src, e.d.scanCtx, scanDomainGoAsm)
 
-		e.goRes.views = append(e.goRes.views, cv)
 		cvs = append(cvs, cv)
 		bound += cv.len()
 	}
@@ -757,10 +754,10 @@ func (e *EmitContext) goToolCmdFlagsFor() []ANY {
 }
 
 func (e *EmitContext) goIncludedSrcs(goRes *GoSrcsResult) []VFS {
-	return e.goCgoClosure(goRes, goRes.AsmInclSrcs)
+	return e.goCgoClosure(goRes.AsmInclSrcs)
 }
 
-func (e *EmitContext) goCgoClosure(goRes *GoSrcsResult, includedSrcs []VFS) []VFS {
+func (e *EmitContext) goCgoClosure(includedSrcs []VFS) []VFS {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 
@@ -770,8 +767,6 @@ func (e *EmitContext) goCgoClosure(goRes *GoSrcsResult, includedSrcs []VFS) []VF
 
 		for _, f := range d.cgoSrcs {
 			cv := e.scanner.walkClosure(resolveSourceVFS(ctx, instance, f.string(), d.srcDirs), d.scanCtx, scanDomainCC)
-
-			goRes.views = append(goRes.views, cv)
 
 			extrasCap += cv.len()
 			cvs = append(cvs, cv)
@@ -1076,14 +1071,13 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			tail[:nt:nt],
 			goToolCmdEnd,
 		), Env: env}),
-		Env:           env,
-		Inputs:        inputs,
-		InputClosure:  Closure{self: outPath},
-		InputClosures: goRes.views,
-		KV:            &goKV,
-		Outputs:       na.vfsList(outPath, build(dir, "/", outName, ".a.vet.out"), build(dir, "/", outName, ".a.vet.txt")),
-		DepRefs:       depBlock[:ndep],
-		Resources:     goToolResources(na, resourceGlobals),
+		Env:          env,
+		Inputs:       inputs,
+		InputClosure: Closure{self: outPath},
+		KV:           &goKV,
+		Outputs:      na.vfsList(outPath, build(dir, "/", outName, ".a.vet.out"), build(dir, "/", outName, ".a.vet.txt")),
+		DepRefs:      depBlock[:ndep],
+		Resources:    goToolResources(na, resourceGlobals),
 	}
 
 	e.resolveGoBuildFromDeps(&node, na.inputList(ownBuildInputs, embedInputs))
@@ -1347,16 +1341,15 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	na.cmds.commit(kc)
 
 	node := Node{
-		Platform:      instance.Platform,
-		Cmds:          cmds[:kc:kc],
-		Env:           env,
-		Inputs:        inputs,
-		InputClosure:  Closure{self: outPath},
-		InputClosures: goRes.views,
-		KV:            kv,
-		Outputs:       outputs,
-		DepRefs:       deps[:k:k],
-		Resources:     goToolResources(na, resourceGlobals),
+		Platform:     instance.Platform,
+		Cmds:         cmds[:kc:kc],
+		Env:          env,
+		Inputs:       inputs,
+		InputClosure: Closure{self: outPath},
+		KV:           kv,
+		Outputs:      outputs,
+		DepRefs:      deps[:k:k],
+		Resources:    goToolResources(na, resourceGlobals),
 	}
 
 	if !isTest {

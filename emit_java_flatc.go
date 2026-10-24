@@ -45,8 +45,6 @@ func (ctx *GenCtx) javaRegisterFbsSources(jm *JavaModule) {
 
 			view := ctx.scannerForPlatform(jm.instance.Platform).walkClosure(source, scan, scanDomainFlatc)
 
-			b.views = append(b.views, view)
-
 			for _, bucket := range view.bucketList() {
 				for _, input := range bucket {
 					b.inputs = append(b.inputs, input)

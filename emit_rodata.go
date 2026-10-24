@@ -52,7 +52,6 @@ func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInp
 		Env:             yasmEnv,
 		Inputs:          inputs,
 		BuildFromInputs: inputs[1:],
-		InputClosures:   []Closure{extraInputs},
 		KV:              &rodataKV,
 		Outputs:         na.vfsList(asmVFS, outVFS),
 		ForeignDepRefs:  na.refList(yasmLD),

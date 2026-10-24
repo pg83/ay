@@ -39,7 +39,7 @@ func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx 
 	return Node{
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS, Resources: value.Resources}),
-		Env:      envVarsVCS, Inputs: inputs, InputClosures: []Closure{closure}, Outputs: na.vfsList(out),
+		Env:      envVarsVCS, Inputs: inputs, Outputs: na.vfsList(out),
 		KV: &llvmBcKV, Resources: usesPython3Clang16,
 	}
 }

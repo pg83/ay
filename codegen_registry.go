@@ -37,7 +37,6 @@ type GeneratedFileInfo struct {
 	ProducerMainOut    VFS
 	ClosureLeaves      []VFS
 	InputLoopSources   []VFS
-	InputLoopViews     []Closure
 	LateOutputs        []VFS
 	ModuleOutputs      []VFS
 	ParsedIncludes     ParsedIncludeSet
@@ -67,15 +66,6 @@ func (p *IncludedInputPlan) sourceInputs(na *NodeArenas) []VFS {
 	}
 
 	return na.dedupClosure(sources)
-}
-
-type SourceModuleInfo struct {
-	ResourceActions  *resourceActionState
-	ExcludedVariants map[STR]bool
-	Instance         ModuleInstance
-	Next             *SourceModuleInfo
-	Includes         []VFS
-	CythonIncludes   []VFS
 }
 
 type ModuleIncludedDeps struct {
@@ -133,12 +123,10 @@ func (p *PendingEmit) fire() {
 }
 
 type CodegenRegistry struct {
-	resourceReady   map[VFS]bool
 	moduleBuildDeps DenseMap[NodeRef, []NodeRef]
 	byRel           DenseMap[STR, *GeneratedFileInfo]
 	bySplit         *IntMap[splitLookup]
 	textTemplates   DenseMap[VFS, []VFS]
-	sourceModules   DenseMap[STR, *SourceModuleInfo]
 	splitGeneration uint32
 	na              *NodeArenas
 }
@@ -202,23 +190,6 @@ func (r *CodegenRegistry) register(info GeneratedFileInfo) *GeneratedFileInfo {
 	return stored
 }
 
-func (r *CodegenRegistry) sourceModule(instance ModuleInstance) (*SourceModuleInfo, bool) {
-	makefile := source(instance.Path.relString(), "/ya.make")
-	head, _ := r.sourceModules.get(makefile.rel())
-
-	for module := head; module != nil; module = module.Next {
-		if module.Instance == instance {
-			return module, true
-		}
-	}
-
-	module := &SourceModuleInfo{Instance: instance, Next: head}
-
-	r.sourceModules.put(makefile.rel(), module)
-
-	return module, false
-}
-
 func (r *CodegenRegistry) forwardTemplateInputs(output VFS, templates, textTemplates []VFS) {
 	info, ok := r.byRel.get(output.rel())
 
@@ -277,8 +248,6 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 
 	sources := vfsScratches.get()
 
-	var views []Closure
-
 	for _, member := range members {
 		if info := r.lookup(member); info != nil {
 			if info.SourcePath != 0 {
@@ -286,12 +255,6 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 			}
 
 			sources = append(sources, info.InputLoopSources...)
-
-			for _, view := range info.InputLoopViews {
-				if !slices.Contains(views, view) {
-					views = append(views, view)
-				}
-			}
 		}
 	}
 
@@ -301,7 +264,6 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 		for _, member := range members {
 			if info := r.lookup(member); info != nil {
 				info.InputLoopSources = shared
-				info.InputLoopViews = views
 			}
 		}
 	}

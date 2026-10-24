@@ -146,7 +146,6 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 			Env:             env,
 			Inputs:          inputs,
 			BuildFromInputs: inputs[1:],
-			InputClosures:   views,
 			Outputs:         na.vfsList(headerVFS, generatedVFS),
 			KV:              &bisonYKV,
 			Resources:       usesPython3,

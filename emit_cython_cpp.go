@@ -389,28 +389,15 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		}
 
 		pe := func() {
-			var views []Closure
-
-			if !e.scanner.noResolve {
-				e.scanner.sourceFiles.cythonUses = append(e.scanner.sourceFiles.cythonUses, cythonSourceUse{root: srcVFS, context: scanCtx, consumer: cyRef})
-				views = append(views, Closure{self: srcVFS, scanner: e.scanner})
-
-				if pxdOK {
-					e.scanner.sourceFiles.cythonUses = append(e.scanner.sourceFiles.cythonUses, cythonSourceUse{root: pxdVFS, context: scanCtx, consumer: cyRef})
-					views = append(views, Closure{self: pxdVFS, scanner: e.scanner})
-				}
-			}
-
 			e.emitReservedNode(Node{
 				Platform: instance.Platform,
 				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 					Env: env}),
-				Env:           env,
-				Inputs:        na.inputList(buildInputs),
-				InputClosures: views,
-				Outputs:       outputs,
-				KV:            &cythonCppKV,
-				Resources:     usesPython3,
+				Env:       env,
+				Inputs:    na.inputList(buildInputs),
+				Outputs:   outputs,
+				KV:        &cythonCppKV,
+				Resources: usesPython3,
 			}, cyRef)
 		}
 

@@ -163,7 +163,6 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 		Inputs:          inputs,
 		BuildFromInputs: buildFrom,
 		InputClosure:    in.IncludeView,
-		InputClosures:   closures[1:],
 		Outputs:         na.vfsList(outVFS),
 		KV:              &asKV,
 	}

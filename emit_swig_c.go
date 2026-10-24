@@ -78,7 +78,6 @@ func (e *EmitContext) emitSwigC() {
 				Env:             envVarsVCS,
 				Inputs:          inputChunks,
 				BuildFromInputs: inputChunks[1:],
-				InputClosures:   []Closure{cv},
 				Outputs:         na.vfsList(cOutVFS, pyOutVFS),
 				KV:              &swigCKV,
 			}, swRef)

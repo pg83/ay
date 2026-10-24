@@ -54,7 +54,6 @@ func (p *pyPBPending) emitPending() {
 		Env:             envVarsVCS,
 		Inputs:          InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]),
 		BuildFromInputs: InputChunks(inputChunks[1:len(inputChunks):len(inputChunks)]),
-		InputClosures:   []Closure{imports},
 		Outputs:         s.outputs,
 		KV:              &pbKV,
 		KVExts:          s.extOut,

@@ -6,7 +6,6 @@ type Closure struct {
 	self           VFS
 	hasDiagnostics bool
 	buckets        *BucketList
-	scanner        *IncludeScanner
 }
 
 func (cl Closure) bucketList() [][]VFS {

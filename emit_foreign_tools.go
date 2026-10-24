@@ -1,7 +1,5 @@
 package main
 
-import "slices"
-
 type foreignToolCandidate struct {
 	path     ARG
 	instance ModuleInstance
@@ -65,22 +63,16 @@ func (ctx *GenCtx) moduleBuildDeps(ref NodeRef) ([]NodeRef, bool) {
 func (ctx *GenCtx) bindForeignTools() {
 	bindings := &ctx.foreignTools
 
-	ctx.resolveCythonSourceUses()
-
-	if len(bindings.order) == 0 && !ctx.fixCppIncludes {
+	if len(bindings.order) == 0 {
 		return
 	}
 
 	for {
-		ctx.resolveCythonSourceUses()
-
 		possible := len(bindings.order)
 
 		var visited BitSet
 
 		stack := append([]NodeRef(nil), bindings.startRefs...)
-
-		slices.Reverse(stack)
 
 		for len(stack) > 0 {
 			ref := stack[len(stack)-1]
@@ -119,19 +111,10 @@ func (ctx *GenCtx) bindForeignTools() {
 				}
 			}
 
-			if node.CppIncludeContext != nil {
-				ctx.repairCppSourceInputs(node)
-			}
-
 			deps, module := ctx.moduleBuildDeps(ref)
 
 			if !module {
 				deps = node.DepRefs
-			}
-
-			if ctx.fixCppIncludes {
-				deps = append([]NodeRef(nil), deps...)
-				slices.Reverse(deps)
 			}
 
 			stack = append(stack, deps...)
@@ -145,9 +128,7 @@ func (ctx *GenCtx) bindForeignTools() {
 			}
 		}
 
-		sourcesChanged := ctx.resolveCythonSourceUses()
-
-		if !ctx.flushFbsContextBindings() && !sourcesChanged && possible == len(bindings.order) {
+		if !ctx.flushFbsContextBindings() && possible == len(bindings.order) {
 			break
 		}
 	}

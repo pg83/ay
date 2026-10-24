@@ -29,13 +29,9 @@ def fixture():
             '- includes:\n    - common/schema.proto:\n'
             + ''.join(f'      - vendor/{v}/common/schema.proto\n' for v in ('oak', 'elm', 'ash'))
         ),
-        'grove/ambiguous.proto': 'import "choice.proto";\n',
     }
     for v in ('oak', 'elm', 'ash'):
         files[f'vendor/{v}/common/schema.proto'] = 'syntax = "proto2";\n'
-    for color in ('blue', 'green'):
-        files[f'choices/{color}/choice.proto'] = f'import "choices/{color}/leaf.proto";\n'
-        files[f'choices/{color}/leaf.proto'] = 'syntax = "proto2";\n'
     lib.tool_program(files, 'tools/reader', 'reader')
     for name, inputs, enabled, include, opaque in (
         ('muted', 'grove/entries.gzt grove/article.gztproto', False, '', False),
@@ -44,9 +40,6 @@ def fixture():
         ('base_owner', 'grove/base.proto', True, '', False),
         ('entries_owner', 'grove/entries.gzt', True, '', False),
         ('opaque', 'grove/article.gztproto', False, '', True),
-        ('muted_choice', 'grove/ambiguous.proto', False, '', False),
-        ('blue', 'grove/ambiguous.proto', True, 'choices/blue', False),
-        ('green', 'grove/ambiguous.proto', True, 'choices/green', False),
     ):
         inputs = ' '.join('${ARCADIA_ROOT}/'+path for path in inputs.split())
         files[name+'/ya.make'] = (
@@ -127,18 +120,6 @@ class SharedSourceEdgesTest(unittest.TestCase):
                 self.assertEqual(set(consumer['inputs']), {
                     '$(B)/tools/reader/reader', *EXPLICIT, *TRANSITIVE,
                 })
-
-    def test_first_resolving_owner_wins_without_merging_addincl_choices(self):
-        for order in itertools.permutations(('muted_choice', 'blue', 'green')):
-            with self.subTest(roots=order):
-                g = graph(fixture(), order)
-                winner = next(name for name in order if name in ('blue', 'green'))
-                expected = {
-                    '$(B)/tools/reader/reader', '$(S)/grove/ambiguous.proto',
-                    f'$(S)/choices/{winner}/choice.proto', f'$(S)/choices/{winner}/leaf.proto',
-                }
-                for name in order:
-                    self.assertEqual(set(output(g, name)['inputs']), expected)
 
     def test_text_remains_opaque_and_mixed_inputs_keep_their_modes(self):
         for order in (('opaque', 'schema_owner'), ('schema_owner', 'opaque')):

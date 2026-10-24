@@ -17,7 +17,6 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 	header := listProtoHeader(output)
 
 	var sources []VFS
-	var views []Closure
 	var parsed []IncludeDirective
 
 	for _, file := range stmt.Files {
@@ -27,8 +26,6 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(src.rel().any())})
 
 		view := e.scanner.walkClosure(src, e.d.scanCtx, scanDomainProto)
-
-		views = append(views, view)
 
 		for _, bucket := range view.bucketList() {
 			sources = append(sources, bucket...)
@@ -46,8 +43,7 @@ func (e *EmitContext) emitListProto(stmt ListProtoStmt) {
 			Platform: e.instance.Platform,
 			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args), Stdout: output, Env: envVarsVCS}),
 			Env:      envVarsVCS, Inputs: na.inputList(na.vfsList(listScript), sources), Outputs: na.vfsList(output),
-			InputClosures: views,
-			KV:            &pbKV, Resources: usesPython3,
+			KV: &pbKV, Resources: usesPython3,
 		}, ref)
 	})
 

@@ -88,7 +88,6 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 	inputs := []VFS{tool, tar}
 
 	var imports [][]VFS
-	var views []Closure
 
 	for _, f := range files {
 		src := resolveSourceVFS(ctx, instance, f.Path, d.srcDirs)
@@ -98,7 +97,6 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 
 		view := e.scanner.walkClosure(src, d.scanCtx, scanDomainFlatc)
 
-		views = append(views, view)
 		imports = append(imports, view.bucketList()...)
 	}
 
@@ -109,7 +107,6 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 			Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), tar.any(), strExts.any(), strPy.any(), strInput.any(), build(dir).any(), strOutput.any(), out.any())), Env: envVarsVCS},
 		),
 		Inputs: na.inputList(inputs, ctx.scripts[tar.rel()]), Outputs: na.vfsList(out), ForeignDepRefs: na.refList(toolRef), KV: &pyFbsKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}}, Resources: usesPython3,
-		InputClosures: views,
 	}
 
 	node.Inputs = append(node.Inputs, imports...)

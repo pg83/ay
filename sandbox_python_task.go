@@ -59,15 +59,6 @@ func sandboxPythonTaskInstances(instance ModuleInstance, name TOK) []ModuleInsta
 	return instances
 }
 
-func sandboxPythonTaskExcluded(ctx *GenCtx, instance ModuleInstance, tag string) bool {
-	instance = sandboxPythonTaskInstances(instance, ctx.moduleName(instance.Path.relString()))[0]
-	instance.Demand = demandNone
-
-	first, _ := ctx.scannerFor(instance).codegen.sourceModule(instance)
-
-	return first.ExcludedVariants[internStr(tag)]
-}
-
 func sandboxPythonTaskUnit(name TOK, kind ModuleKind, language Language) ModuleUnit {
 	if name == tokSandboxTask {
 		if kind == KindBin {
@@ -187,11 +178,9 @@ func (e *EmitContext) sandboxMixedTaskPeer(peer ModuleInstance) ModuleInstance {
 		py2, py3 = slices.Contains(allowed, "PY2"), slices.Contains(allowed, "PY3")
 	}
 
-	configureCythonDirectory(e.ctx, peer)
-
-	if py2 && !sandboxPythonTaskExcluded(e.ctx, peer, "PY2") {
+	if py2 {
 		peer.Language = LangPy2
-	} else if py3 && !sandboxPythonTaskExcluded(e.ctx, peer, "PY3") {
+	} else if py3 {
 		peer.Language = LangCPP
 	} else {
 		throwFmt("gen: %s: PEERDIR to %s is prohibited by incompatible tags", e.instance.Path.relString(), peer.Path.relString())

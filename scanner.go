@@ -85,9 +85,6 @@ type IncludeScanner struct {
 	noResolve      bool
 	unresolved     *IncludeScanner
 	asmContexts    map[uint32]*IncludeScanner
-
-	sourceFiles     *SourceFileGraph
-	sourceFactsOnly bool
 }
 
 type searchTierHotEntry struct {
@@ -110,18 +107,16 @@ type ScannedChildren struct {
 }
 
 type ScanCtx struct {
-	diagnostics   []IncludeDiagnostic
-	cythonMissing []IncludeDirective
-	scanner       *IncludeScanner
-	cfg           *ScanConfig
-	ccCfg         *ScanConfig
-	cythonCfg     *ScanConfig
-	protoCfg      *ScanConfig
-	scCfg         *ScanConfig
-	parser        IncludeDirectiveParser
-	tjc           *TarjanCtx
-	tsImports     bool
-	retryMissing  bool
+	diagnostics []IncludeDiagnostic
+	scanner     *IncludeScanner
+	cfg         *ScanConfig
+	ccCfg       *ScanConfig
+	cythonCfg   *ScanConfig
+	protoCfg    *ScanConfig
+	scCfg       *ScanConfig
+	parser      IncludeDirectiveParser
+	tjc         *TarjanCtx
+	tsImports   bool
 }
 
 func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
@@ -129,7 +124,6 @@ func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
 }
 
 func (s *IncludeScanner) putClosure(v VFS, cl Closure) {
-	cl.scanner = s
 	s.scanCache.put2(v, cl)
 }
 
@@ -191,10 +185,9 @@ func (s *IncludeScanner) reportClosureDiagnostics(input VFS, cl Closure) {
 
 func newIncludeScannerWith(parsers *IncludeParserManager, sysincl SysInclSet, onWarn func(Warn), buckets *BucketCache) *IncludeScanner {
 	s := &IncludeScanner{
-		sysincl:     newSysinclCtx(sysincl),
-		parsers:     parsers,
-		sourceFiles: &SourceFileGraph{},
-		onWarn:      onWarn,
+		sysincl: newSysinclCtx(sysincl),
+		parsers: parsers,
+		onWarn:  onWarn,
 
 		buckets:        buckets,
 		closureScratch: make([]VFS, closureAllocHint),
@@ -216,7 +209,6 @@ func (s *IncludeScanner) withoutIncludeResolution() *IncludeScanner {
 		u.sysincl = s.sysincl
 		u.codegen = s.codegen
 		u.moduleByRef = s.moduleByRef
-		u.sourceFiles = s.sourceFiles
 		u.noResolve = true
 
 		s.unresolved = u
@@ -340,7 +332,6 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 	sc.scCfg = ctx.config(scanDomainSc)
 	sc.parser = parser
 	sc.tsImports = domain == scanDomainAux
-	sc.retryMissing = false
 
 	if domain == scanDomainCC {
 		sc.protoCfg = ctx.parsers.resolveScanConfig(ctx.protoInclude, nil, ctx.base)
@@ -357,7 +348,6 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 
 func (s *IncludeScanner) putScanCtx(sc *ScanCtx) {
 	sc.diagnostics = nil
-	sc.cythonMissing = nil
 	tarjans.put(sc.tjc)
 	sc.tjc = nil
 	s.scanCtxPool.Put(sc)
@@ -466,11 +456,6 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 
 	own, compileExtra, info, inducedBucket := s.parsedIncludes(vfsPath, parser)
 
-	if sc.retryMissing {
-		compileExtra = nil
-		inducedBucket = parsedIncludesLocal
-	}
-
 	if len(own) == 0 && len(compileExtra) == 0 && !vfsPath.isBuild() {
 		return out
 	}
@@ -478,31 +463,10 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	incDir := internStr(pathDir(vfsPath.relString())).source()
 	suppressCimportNames := false
 	prevProbeMissed := false
-	groupTarget := IncludeDirective{}
-	groupStart := len(out)
-
-	flushCimport := func() {
-		if groupTarget.target != 0 && len(out) == groupStart {
-			sc.cythonMissing = append(sc.cythonMissing, groupTarget)
-		}
-
-		groupTarget = IncludeDirective{}
-	}
-
 	entries := own
 
 	for pass := 0; pass < 2; pass++ {
 		for _, entry := range entries {
-			if entry.kind == includeCythonOptional {
-				flushCimport()
-				groupStart = len(out)
-				groupTarget = entry
-			} else if entry.kind == includeCythonModule {
-				groupTarget = entry
-			} else if entry.kind != includeCythonName && entry.kind != includeCythonFallback {
-				flushCimport()
-			}
-
 			if entry.kind == includeCythonSibling {
 				out = sc.resolve(out, vfsPath, incDir, entry)
 
@@ -532,7 +496,6 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 			}
 		}
 
-		flushCimport()
 		entries = compileExtra
 	}
 
@@ -574,12 +537,6 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 	s := sc.scanner
 
-	if s.sourceFactsOnly {
-		children, _ := s.sourceFiles.children.get(abs)
-
-		return ScannedChildren{Paths: children}
-	}
-
 	if cached, ok := s.scanCache.get1(abs); ok {
 		return cached
 	}
@@ -587,8 +544,6 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 	scratch := vfsScratches.get()
 
 	sc.diagnostics = nil
-	sc.cythonMissing = nil
-
 	scratch = sc.appendResolvedChildren(scratch, abs)
 
 	diagnostics := sc.diagnostics
@@ -606,15 +561,6 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 
 	if k > 0 {
 		children = block[:k]
-	}
-
-	if abs.isSource() && !s.noResolve {
-		assert(s.sourceFiles.final == nil, "source file edges established after finalization")
-		s.sourceFiles.children.put(abs, children)
-
-		if len(sc.cythonMissing) > 0 {
-			s.sourceFiles.cythonMissing.put(abs, append([]IncludeDirective(nil), sc.cythonMissing...))
-		}
 	}
 
 	return s.putChildren(abs, children, diagnostics)
@@ -1039,12 +985,12 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	key := splitMix64(sc.cfg.num, uint32(targetID))
 	hot := &s.searchTierHot[key&searchTierHotMask]
 
-	if hot.key == key && (hot.val != 0 || !sc.retryMissing) {
+	if hot.key == key {
 		return hot.val
 	}
 
 	if s.searchTierSeen.has(uint32(targetID)) {
-		if cached := s.searchTierFlat.get(key); cached != nil && (*cached != 0 || !sc.retryMissing) {
+		if cached := s.searchTierFlat.get(key); cached != nil {
 			hot.key = key
 			hot.val = *cached
 

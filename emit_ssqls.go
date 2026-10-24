@@ -34,7 +34,7 @@ func (e *EmitContext) emitSsqlsSource(meta SrcMeta) {
 			Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tool.any(), src.any(), strS3.any(), srcRootDirVFS.any(), strB3.any(), bldRootDirVFS.any()), meta.Compile.CFlags), Env: envVarsVCS}),
 			Inputs: na.inputList(na.vfsList(tool, src), closure.bucketList()...), Outputs: na.vfsList(cpp, header),
 			BuildFromInputs: na.inputList(na.vfsList(src), closure.bucketList()...),
-			InputClosures:   []Closure{closure}, ForeignDepRefs: na.refList(toolRef), KV: &ssqlsKV}, ref)
+			ForeignDepRefs:  na.refList(toolRef), KV: &ssqlsKV}, ref)
 	})
 
 	for _, output := range []VFS{cpp, header} {

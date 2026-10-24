@@ -883,7 +883,6 @@ func (e *EmitContext) emitPB(
 
 		Inputs:          pbInputChunks,
 		BuildFromInputs: pbInputChunks[1:],
-		InputClosures:   []Closure{transitiveProtoImports},
 		Outputs:         outputs,
 		KV:              spec.kv,
 		ForeignDepRefs:  foreignDepRefs,

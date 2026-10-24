@@ -310,6 +310,6 @@ func (e *EmitContext) emitUserverProtoNode(batch UserverProtoBatch, file Userver
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Cwd: cwd, Env: envVarsVCS}),
 		Env:      envVarsVCS, Inputs: na.inputList(inputs[0], inputs[1:]...),
 		BuildFromInputs: na.inputList(inputs[0][2:], inputs[1:]...),
-		InputClosures:   []Closure{view}, Outputs: outputs, KV: kv, ForeignDepRefs: na.refList(protocRef, toolRef),
+		Outputs:         outputs, KV: kv, ForeignDepRefs: na.refList(protocRef, toolRef),
 	}, ref)
 }

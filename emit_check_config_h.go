@@ -34,12 +34,11 @@ func (e *EmitContext) emitCheckConfigHStmt(conf ANY) {
 				confVFS.rel().any(),
 				generatedVFS.any())),
 				Env: env}),
-			Env:           env,
-			Inputs:        na.inputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.bucketList()...),
-			InputClosures: []Closure{cv},
-			Outputs:       na.vfsList(generatedVFS),
-			KV:            &checkConfigHKV,
-			Resources:     usesPython3,
+			Env:       env,
+			Inputs:    na.inputList(na.vfsList(buildScriptsCheckConfigHPy, cv.self), cv.bucketList()...),
+			Outputs:   na.vfsList(generatedVFS),
+			KV:        &checkConfigHKV,
+			Resources: usesPython3,
 		}, chRef)
 	}
 
