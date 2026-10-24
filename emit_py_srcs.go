@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/md5"
 	enchex "encoding/hex"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -71,7 +72,7 @@ func (e *EmitContext) resolvePythonSourceVFS(src string) VFS {
 		}
 	}
 
-	return resolveSourceVFS(e.ctx, e.instance, src, e.d.srcDirs)
+	return resolveSourceVFS(e.ctx, e.instance, path.Clean(src), e.d.srcDirs)
 }
 
 func resolvePySrcRelKnown(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string, srcRelClean bool) STR {
