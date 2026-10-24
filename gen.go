@@ -1068,6 +1068,8 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 		d.allocatorName = strFAKE.any()
 	}
 
+	d.peerdirs = append(d.peerdirs, d.nativeSwigPeerdirs()...)
+
 	if d.moduleStmt.Name == tokPy2Module && instance.Platform.ifEnv.bool(envIS_CROSS_TOOLS) {
 		d.peerdirs = append(d.peerdirs, strContribToolsPythonLib.any())
 	}

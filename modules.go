@@ -958,6 +958,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.strip = env.string(envSTRIP) == "yes"
 	d.noStrip = env.string(envNO_STRIP) == "yes"
 	d.gettextKeepPath = env.string(envGettextKeepPath) == "yes"
+	d.finishNativeSwigConfig(env)
 	d.useNasm = env.bool(envUseNasmAssembler)
 	d.collectAssemblerConfig(env)
 
@@ -1595,16 +1596,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 				d.peerdirs = append(d.peerdirs, swigJNIPeerdirs(srcToks, env)...)
 				d.peerdirs = append(d.peerdirs, strContribToolsSwigLibJava.any())
-			}
-
-			if d.unit.SwigLang.string() == "perl" {
-				for _, src := range srcToks {
-					if srcExtClassOf(src) == srcExtSwg {
-						d.peerdirs = append(d.peerdirs, strContribToolsSwigLibPerl5.any(), strBuildPlatformPerl.any())
-
-						break
-					}
-				}
 			}
 
 			for _, srcTok := range srcToks {

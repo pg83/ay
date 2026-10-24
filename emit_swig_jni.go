@@ -46,7 +46,13 @@ func (e *EmitContext) emitLibrarySwigSource(meta SrcMeta) {
 	src := meta.Source
 
 	if d.unit.SwigLang.string() == "perl" {
-		e.emitPerlSwigSource(meta)
+		e.emitNativeSwigSource(meta, false)
+
+		return
+	}
+
+	if d.unit.SwigLang.string() == "python" {
+		e.emitNativeSwigSource(meta, true)
 
 		return
 	}
