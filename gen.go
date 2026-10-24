@@ -118,6 +118,7 @@ const (
 
 type ModuleEmitResult struct {
 	protoExcluded                   bool
+	deferredWarnings                *moduleWarnings
 	testDependencyModule            TestDependencyModule
 	ModuleVariants                  uint16
 	IncludedDeps                    *ModuleIncludedDeps
@@ -194,6 +195,7 @@ type GenCtx struct {
 	parsers          *IncludeParserManager
 	emit             *StreamingEmitter
 	onWarn           func(Warn)
+	warningSink      *moduleWarnings
 	keepGoing        bool
 	na               *NodeArenas
 	inclArgValues    DenseMap[VFS, STR]
@@ -360,13 +362,20 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
 	ctx.buckets = newBucketCache()
+	ctx.onWarn = func(w Warn) {
+		if ctx.warningSink != nil {
+			ctx.warningSink.own = append(ctx.warningSink.own, w)
+		} else {
+			onWarn(w)
+		}
+	}
 
-	targetScanner := newIncludeScannerWith(parsers, loadSysInclSet(parsers, targetP, onWarn), onWarn, ctx.buckets)
+	targetScanner := newIncludeScannerWith(parsers, loadSysInclSet(parsers, targetP, onWarn), ctx.onWarn, ctx.buckets)
 
 	targetScanner.codegen = targetReg
 	targetScanner.moduleByRef = &ctx.moduleByRef
 
-	hostScanner := newIncludeScannerWith(parsers, loadSysInclSet(parsers, hostP, onWarn), onWarn, ctx.buckets)
+	hostScanner := newIncludeScannerWith(parsers, loadSysInclSet(parsers, hostP, onWarn), ctx.onWarn, ctx.buckets)
 
 	hostScanner.codegen = hostReg
 	hostScanner.moduleByRef = &ctx.moduleByRef
@@ -1180,14 +1189,57 @@ func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, c
 }
 
 func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
-	if !ctx.keepGoing {
-		r := genModuleImpl(ctx, instance)
+	if instance.Demand == demandNone || ctx.emit.deferPublication > 0 {
+		parent := ctx.warningSink
 
-		persistResult(ctx, instance, r)
+		var warnings moduleWarnings
+
+		ctx.warningSink = &warnings
+
+		defer func() { ctx.warningSink = parent }()
+
+		r := genModuleRecover(ctx, instance)
+
+		if len(warnings.own) != 0 || len(warnings.dependencies) != 0 {
+			if r.deferredWarnings != nil {
+				warnings.dependencies = append(warnings.dependencies, r.deferredWarnings)
+			}
+
+			r.deferredWarnings = &warnings
+		}
+
+		if parent != nil && r.deferredWarnings != nil {
+			parent.dependencies = append(parent.dependencies, r.deferredWarnings)
+		}
 
 		return r
 	}
 
+	var r *ModuleEmitResult
+
+	if ctx.keepGoing {
+		r = genModuleRecover(ctx, instance)
+	} else {
+		r = genModuleImpl(ctx, instance)
+		persistResult(ctx, instance, r)
+	}
+
+	ctx.consumeModuleWarnings(r)
+
+	return r
+}
+
+func (ctx *GenCtx) consumeModuleWarnings(result *ModuleEmitResult) {
+	if ctx.warningSink != nil {
+		if result.deferredWarnings != nil {
+			ctx.warningSink.dependencies = append(ctx.warningSink.dependencies, result.deferredWarnings)
+		}
+	} else if ctx.emit.deferPublication == 0 {
+		result.deferredWarnings.report(ctx.onWarn)
+	}
+}
+
+func genModuleRecover(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	var r *ModuleEmitResult
 
 	exc := try(func() {
@@ -1209,6 +1261,17 @@ func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	}
 
 	return r
+}
+
+func genSiblingModule(ctx *GenCtx, instance ModuleInstance) {
+	parent := ctx.warningSink
+
+	ctx.warningSink = nil
+
+	defer func() { ctx.warningSink = parent }()
+
+	instance.Demand = demandNone
+	genModule(ctx, instance)
 }
 
 func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResult) {
@@ -1239,6 +1302,34 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
 	moduleName := stmtsModuleName(stmts)
+
+	if moduleName == tokPy23Library || moduleName == tokPy23NativeLibrary {
+		if instance.Language == LangPy2 {
+			defer func() {
+				if result == nil {
+					return
+				}
+
+				py3 := instance
+
+				py3.Language = LangCPP
+
+				identity := py3
+
+				identity.Demand = demandNone
+
+				if !ctx.walking[identity] {
+					persistResult(ctx, instance, result)
+					genSiblingModule(ctx, py3)
+				}
+			}()
+		} else {
+			py2 := instance
+
+			py2.Language = LangPy2
+			genSiblingModule(ctx, py2)
+		}
+	}
 
 	if moduleName == tokYqlUdf && instance.Kind == KindBin && !instance.Platform.PIC {
 		library := instance
@@ -1308,6 +1399,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	tag := multimoduleVariantTag(d.multimodule, instance.Language)
+
+	if moduleName == tokPy23Library || moduleName == tokPy23NativeLibrary {
+		tag = d.unit.Tag.string()
+	}
 
 	if isSandboxPythonTask(moduleName) {
 		tag = sandboxPythonTaskVariant(moduleName, instance.Kind, instance.Language)
@@ -2983,6 +3078,8 @@ func (ctx *GenCtx) tool(modulePath ARG) (NodeRef, VFS) {
 
 func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 	if res, ok := ctx.tools.get(modulePath); ok {
+		ctx.consumeModuleWarnings(res)
+
 		return res
 	}
 

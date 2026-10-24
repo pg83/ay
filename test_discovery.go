@@ -22,6 +22,7 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 
 	seen := map[*ModuleEmitResult]bool{}
 	groups := map[VFS][]*ModuleEmitResult{}
+	live := ctx.emit.reachableNodes(ctx.emit.publicationFrontier())
 
 	var projects []VFS
 	var visit func(*ModuleEmitResult)
@@ -48,6 +49,15 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 		}
 	}
 
+	visitRoot := func(result *ModuleEmitResult) {
+		if result.ModuleStmtName == tokPy2Library && ctx.moduleName(result.testProject.relString()) == tokPy23Library &&
+			(result.ARRef == 0 || !live.has(uint32(result.ARRef))) && (result.GlobalRef == nil || !live.has(uint32(*result.GlobalRef))) {
+			return
+		}
+
+		visit(result)
+	}
+
 	if ctx.testMode {
 		rootProjects := map[VFS][]*ModuleEmitResult{}
 
@@ -60,7 +70,7 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 				project := source(dir)
 
 				for _, result := range rootProjects[project] {
-					visit(result)
+					visitRoot(result)
 				}
 
 				delete(rootProjects, project)
@@ -69,7 +79,7 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 	}
 
 	for _, result := range ctx.testRoots {
-		visit(result)
+		visitRoot(result)
 	}
 
 	var suites []*TestSuite

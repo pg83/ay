@@ -84,6 +84,20 @@ def build_fixture(host_cython=False):
 
 
 class CythonSdkScopeTest(unittest.TestCase):
+    def test_excluded_py2_variant_does_not_configure_its_peers(self):
+        for selector in ['EXCLUDE_TAGS(PY2)', 'ONLY_TAGS(PY3)']:
+            with self.subTest(selector=selector):
+                files = fixture('old-cython')
+                files['proxy/ya.make'] = ('PY23_LIBRARY()\n' + lib.BARE_MODULE + selector
+                                        + '\nIF (MODULE_TAG == PY2)\nPEERDIR(grove)\nENDIF()\nEND()\n')
+                files['maple/ya.make'] = files['maple/ya.make'].replace('PEERDIR(grove)', 'PEERDIR(proxy)')
+                graph = lib.make(files, 'maple', '--sandboxing', '--add-modules-to-results',
+                                 '--target-platform', 'default-linux-x86_64')
+                generated = lib.node_by_output(graph, '$(B)/maple/main.pyx.cpp')
+                actual = [p for p in generated['inputs'] if '/Includes/libcpp/' in p]
+                self.assertCountEqual(actual, ['$(S)/contrib/tools/cython/Cython/Includes/libcpp/' + name
+                                              for name in ['pair.pxd', 'utility.pxd']])
+
     def check_context(self, case, selected):
         graph = lib.make(fixture(case), 'maple', '--sandboxing', '--add-modules-to-results',
                          '--target-platform', 'default-linux-x86_64')

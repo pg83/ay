@@ -43,6 +43,28 @@ type Warn struct {
 	Message string
 }
 
+type moduleWarnings struct {
+	own          []Warn
+	dependencies []*moduleWarnings
+	reported     bool
+}
+
+func (w *moduleWarnings) report(emit func(Warn)) {
+	if w == nil || w.reported {
+		return
+	}
+
+	w.reported = true
+
+	for _, warning := range w.own {
+		emit(warning)
+	}
+
+	for _, dependency := range w.dependencies {
+		dependency.report(emit)
+	}
+}
+
 type WarnKind int
 
 func (k WarnKind) string() string {

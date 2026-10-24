@@ -1,4 +1,5 @@
 import collections
+import json
 import unittest
 
 import lib
@@ -13,6 +14,52 @@ def check_graph(test, graph):
 
 
 class ModuleConfigurationOrderTest(unittest.TestCase):
+    def test_unused_python_variant_does_not_publish_commands_or_errors(self):
+        for selected in ("PY3", "PY2"):
+            for error in ("missing-peer", "missing-include"):
+                with self.subTest(selected=selected, error=error):
+                    files, marker = python_variant_error_fixture(selected, error)
+                    process = lib.make_process(files, "maple", "--add-modules-to-results")
+                    self.assertEqual(process.returncode, 0, process.stderr)
+                    self.assertNotIn(marker, process.stderr)
+                    graph = json.loads(process.stdout)
+                    check_graph(self, graph)
+                    self.assertFalse(any(
+                        "/unused/" in output or "unselected.cpp" in output
+                        for node in graph["graph"] for output in node["outputs"]
+                    ))
+
+    def test_later_python_consumer_reports_errors_from_the_configured_variant(self):
+        for selected in ("PY3", "PY2"):
+            for error in ("missing-peer", "missing-include"):
+                with self.subTest(selected=selected, error=error):
+                    files, marker = python_variant_error_fixture(selected, error)
+                    process = lib.make_process(files, "birch", "maple")
+                    self.assertNotEqual(process.returncode, 0)
+                    self.assertIn(marker, process.stderr)
+                    kept = lib.make_process(files, "birch", "maple", "-k")
+                    self.assertEqual(kept.returncode, 0, kept.stderr)
+                    self.assertIn(marker, kept.stderr)
+
+    def test_later_consumer_reports_errors_from_a_cached_generator_tool(self):
+        files, _ = python_variant_error_fixture("PY3", "missing-peer")
+        files["unused/ya.make"] = (
+            "LIBRARY()\n" + lib.BARE_MODULE
+            + "RUN_PROGRAM(tools/probe OUT unused.cpp)\nEND()\n"
+        )
+        lib.tool_program(files, "tools/probe", "probe")
+        files["tools/probe/main.cpp"] = '#include "missing_generator_header.h"\n'
+        first = lib.make_process(files, "maple")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertNotIn("missing_generator_header.h", first.stderr)
+        files["canopy/ya.make"] = (
+            "PROGRAM(canopy)\n" + lib.BARE_MODULE
+            + "RUN_PROGRAM(tools/probe OUT result.cpp)\nEND()\n"
+        )
+        selected = lib.make_process(files, "canopy", "maple")
+        self.assertNotEqual(selected.returncode, 0)
+        self.assertIn("missing_generator_header.h", selected.stderr)
+
     def test_dll_keeps_typed_cython_inputs_through_native_descent(self):
         files = fixture("consumer-only")
         files["birch/ya.make"] = (
@@ -124,6 +171,28 @@ class ModuleConfigurationOrderTest(unittest.TestCase):
                     peer = lib.node_by_output(graph, output)
                     self.assertIn(output, program["inputs"])
                     self.assertIn(peer["uid"], program["deps"])
+
+
+def python_variant_error_fixture(selected, error):
+    files = fixture("consumer-only")
+    unused = "PY2" if selected == "PY3" else "PY3"
+    for target, language in (("maple", selected), ("birch", unused)):
+        files[f"{target}/ya.make"] = (
+            f"PROGRAM({target})\n" + lib.BARE_MODULE
+            + f"USE_PYTHON{language[-1]}()\nNO_PYTHON_INCLUDES()\n"
+            + "PEERDIR(proxy)\nSRCS(main.cpp)\nEND()\n"
+        )
+        files[f"{target}/main.cpp"] = "int main() { return 0; }\n"
+    files["proxy/ya.make"] = (
+        "PY23_LIBRARY()\n" + lib.BARE_MODULE + "NO_PYTHON_INCLUDES()\n"
+        + f"IF (MODULE_TAG == {unused})\n"
+        + "PEERDIR(unused)\nSRCS(unselected.cpp)\nENDIF()\nEND()\n"
+    )
+    files["proxy/unselected.cpp"] = "int unselected;\n"
+    body = "PEERDIR(missing_python_peer)\n" if error == "missing-peer" else "SRCS(broken.cpp)\n"
+    files["unused/ya.make"] = "LIBRARY()\n" + lib.BARE_MODULE + body + "END()\n"
+    files["unused/broken.cpp"] = '#include "missing_python_header.h"\n'
+    return files, "missing_python_peer" if error == "missing-peer" else "missing_python_header.h"
 
 
 if __name__ == "__main__":
