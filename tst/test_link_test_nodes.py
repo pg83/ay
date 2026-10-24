@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 import lib
+from resource_dependencies import global_resource_dependencies
 
 
 NO_PLATFORM = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
@@ -168,7 +169,8 @@ class TestNodesTest(unittest.TestCase):
         self.assertEqual(binary["kv"]["ld_test_node"], "1")
         run = lib.node_by_output(graph, suite_outputs("unittest")[0])
         self.assertEqual(run["outputs"], suite_outputs("unittest"))
-        self.assertCountEqual(run["deps"], [binary["uid"], context["uid"]])
+        self.assertCountEqual(run["deps"], [binary["uid"], context["uid"], *global_resource_dependencies(
+            self, graph, run, [("ATOOL", "sbr:11"), ("ZTOOL", "sbr:22")])])
         self.assertEqual(
             run["kv"],
             {

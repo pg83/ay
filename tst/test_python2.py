@@ -3,6 +3,7 @@ import hashlib
 import unittest
 
 import lib
+from resource_dependencies import global_resource_dependencies
 from test_python_srcs import python_base as python3_base
 
 
@@ -152,7 +153,8 @@ class Python2Test(unittest.TestCase):
             "$(S)/prog", "$(S)/prog/a.py", "$(S)/tools/flake8_linter/__main__.py",
         ])
         context = lib.node_by_output(graph, "$(B)/common_test.context")
-        self.assertEqual(run["deps"], [context["uid"]])
+        self.assertEqual(run["deps"], [context["uid"], *global_resource_dependencies(
+            self, graph, run, [("FLAKE8_PY2", "sbr:123")])])
 
     def test_py2_lint_obeys_disable_flags(self):
         module = "contrib/lint_fixture"

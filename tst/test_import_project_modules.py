@@ -1,6 +1,7 @@
 import unittest
 
 import lib
+from resource_dependencies import global_resource_dependencies
 from test_python2 import python2_base
 from test_python_srcs import python_base
 
@@ -33,11 +34,12 @@ class ImportProjectModulesTest(unittest.TestCase):
         return {next(n["uid"] for n in graph["graph"] if output in n["outputs"] and n["platform"] == platform)
                 for output in outputs}
 
-    def assert_import(self, graph, module=APP, archives=(".global.a",), masks=(), platform="default-linux-aarch64"):
+    def assert_import(self, graph, module=APP, archives=(".global.a",), masks=(), platform="default-linux-aarch64", linter="FLAKE8_PY3"):
         prefix = "$(B)/" + module + "/"
         work = prefix + "test-results/import_test"
         suite = lib.node_by_output(graph, work + "/meta.json")
-        self.assertEqual(set(suite["deps"]), self.own_dependencies(graph, module, archives, platform))
+        resources = global_resource_dependencies(self, graph, suite, [(linter, "sbr:123")])
+        self.assertEqual(set(suite["deps"]), self.own_dependencies(graph, module, archives, platform) | set(resources))
         self.assertEqual(len(suite["deps"]), len(set(suite["deps"])))
         self.assertEqual(suite["inputs"], [prefix + "traveler", "$(S)/" + module])
         self.assertEqual(suite["outputs"], [work + p for p in ("/meta.json", "/ytest.report.trace", "/run_test.log", "/testing_out_stuff.tar.zstd")])
@@ -98,7 +100,7 @@ class ImportProjectModulesTest(unittest.TestCase):
         for macro in ("PY2_PROGRAM", "PY3_PROGRAM_BIN"):
             with self.subTest(macro=macro):
                 graph = self.make(fixture(macro=macro, legacy=macro == "PY2_PROGRAM"))
-                self.assert_import(graph, archives=())
+                self.assert_import(graph, archives=(), linter="FLAKE8_PY2" if macro == "PY2_PROGRAM" else "FLAKE8_PY3")
                 self.assertFalse(any(n["kv"].get("p") == "AR" and any(o.startswith("$(B)/" + APP + "/") for o in n["outputs"])
                                      for n in graph["graph"]))
 

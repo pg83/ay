@@ -2,7 +2,7 @@ import collections
 import unittest
 
 import lib
-from test_go_tests import go_module, go_proto_world
+from test_go_tests import go_module, go_proto_world, go_suite_resources
 from test_proto_cpp import proto_files
 from test_python_proto import python_base
 
@@ -51,15 +51,17 @@ class GovetForeignContextTest(unittest.TestCase):
         self.assertTrue(all(set(node['deps']) <= index.keys() for node in graph['graph']))
         suite = next(node for node in graph['graph'] if node['kv'].get('path') == 'wire/parcel/govet')
         self.assertEqual(len(suite['deps']), len(set(suite['deps'])))
-        outputs = collections.Counter(index[ref]['outputs'][0] for ref in suite['deps'])
-        return graph, outputs
+        resources = go_suite_resources(self, graph, suite, fixture())
+        outputs = collections.Counter(index[ref]["outputs"][0] for ref in suite["deps"])
+        runtime_outputs = [index[ref]["outputs"][0] for ref in resources]
+        return graph, outputs, runtime_outputs
 
     def test_required_host_tool_keeps_its_proto_modules_out_of_target_project_query(self):
         for roots in (('grove/goapp', 'grove/native'), ('grove/native', 'grove/goapp')):
             with self.subTest(roots=roots):
-                graph, outputs = self.make(roots)
+                graph, outputs, runtime_outputs = self.make(roots)
                 self.assertEqual(outputs, collections.Counter([
-                    '$(B)/common_test.context', '$(B)/wire/parcel/parcel.a']))
+                    '$(B)/common_test.context', '$(B)/wire/parcel/parcel.a', *runtime_outputs]))
                 # These real host producers still belong to the selected generator.
                 generator = lib.node_by_output(graph, '$(B)/grove/generator/generator')
                 proto = lib.node_by_output(graph, '$(B)/wire/parcel/libpy3wire-parcel.global.a')
@@ -70,11 +72,11 @@ class GovetForeignContextTest(unittest.TestCase):
         for roots in (('grove/goapp', 'grove/native', 'grove/data'),
                       ('grove/data', 'grove/native', 'grove/goapp')):
             with self.subTest(roots=roots):
-                graph, outputs = self.make(roots)
+                graph, outputs, runtime_outputs = self.make(roots)
                 self.assertEqual(outputs, collections.Counter([
                     '$(B)/common_test.context', '$(B)/wire/parcel/parcel.a',
                     '$(B)/wire/parcel/libwire-parcel.a',
-                    '$(B)/wire/parcel/libpy3wire-parcel.global.a']))
+                    '$(B)/wire/parcel/libpy3wire-parcel.global.a', *runtime_outputs]))
                 binary = lib.node_by_output(graph, '$(B)/grove/data/data')
                 own = lib.node_by_output(graph, '$(B)/grove/data/libpy3data.global.a')
                 suite = next(node for node in graph['graph'] if node['kv'].get('path') == 'grove/data/import_test')

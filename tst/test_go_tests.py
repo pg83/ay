@@ -2,6 +2,7 @@ import json
 import unittest
 
 import lib
+from resource_dependencies import global_resource_dependencies
 
 
 STD = "contrib/go/_std_1.27/src"
@@ -56,6 +57,19 @@ def go_world():
         go_module(files, path)
     return files
 
+
+
+def go_suite_resources(case, graph, consumer, files, *, link=False, python_uri=None):
+    names = [("YMAKE_PYTHON3", "build/platform/python/ymake_python3"),
+             ("CLANG", "build/platform/clang")]
+    if link:
+        names.append(("LLD_ROOT", "build/platform/lld"))
+    names.extend((("GO_TOOLS", "build/external_resources/go_tools"),
+                  ("YOLINT", "build/external_resources/yolint")))
+    declarations = [(name, python_uri if name == "YMAKE_PYTHON3" and python_uri is not None else
+                     json.loads(files[path + "/" + name.lower() + ".json"])["by_platform"]["linux"]["uri"])
+                    for name, path in names]
+    return global_resource_dependencies(case, graph, consumer, declarations)
 
 def go_tool_args(node):
     for cmd in node["cmds"]:
@@ -139,7 +153,8 @@ class GoStyleTestsTest(unittest.TestCase):
         self.assertEqual(context["requirements"], {"cpu": 1, "network": "restricted", "ram": 32})
 
         vet = test_node(graph, "library/go/greet/govet")
-        self.assertEqual(vet["deps"], [context["uid"], package["uid"]])
+        self.assertEqual(vet["deps"], [context["uid"], package["uid"],
+                                       *go_suite_resources(self, graph, vet, files)])
         self.assertEqual(vet["inputs"], ["$(B)/library/go/greet/greet.a.vet.txt", "$(S)/library/go/greet"])
         args = vet["cmds"][0]["cmd_args"]
         self.assertEqual(args[:3], ["$(TEST_TOOL_HOST)/test_tool", "run_test", "--ya-start-command-file"])
@@ -166,7 +181,7 @@ class GoStyleTestsTest(unittest.TestCase):
         self.assertNotIn("TESTING_SAVE_OUTPUT", vet["env"])
 
         fmt = test_node(graph, "library/go/greet/gofmt")
-        self.assertEqual(fmt["deps"], [context["uid"]])
+        self.assertEqual(fmt["deps"], [context["uid"], *go_suite_resources(self, graph, fmt, files)])
         sources = ["$(S)/library/go/greet/greet.go", "$(S)/library/go/greet/util.go"]
         self.assertEqual(fmt["inputs"], ["$(S)/library/go/greet", *sources])
         args = fmt["cmds"][0]["cmd_args"]
@@ -337,7 +352,8 @@ class GoTestModuleTest(unittest.TestCase):
         run = test_node(graph, "lib/greet/tests/tests")
         self.assertEqual(run["kv"]["p"], "TM")
         context = lib.node_by_output(graph, "$(B)/common_test.context")
-        self.assertEqual(run["deps"], [context["uid"], binary["uid"]])
+        self.assertEqual(run["deps"], [context["uid"], binary["uid"],
+                                       *go_suite_resources(self, graph, run, files, link=True)])
         self.assertEqual(run["inputs"], ["$(S)/lib/greet/tests"])
         args = run["cmds"][0]["cmd_args"]
         self.assertEqual(arg_after(args, "--test-type"), "go_test")

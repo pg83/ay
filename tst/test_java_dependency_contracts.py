@@ -1,6 +1,7 @@
 import unittest
 
 import lib
+from resource_dependencies import global_resource_dependencies
 from test_java import contrib, proxy, writer_args
 from test_java_features import tree
 from test_java_tests import junit_tree, option_values, run_args, test_nodes
@@ -69,7 +70,9 @@ class JavaDependencyContractsTest(unittest.TestCase):
         check = next(n for n in test_nodes(graph).values() if "run_classpath_clash" in run_args(n))
         self.assertIn("app/named.jar", run_args(check))
         self.assertNotIn(lib.node_by_output(graph, "$(B)/app/pre-named.jar")["uid"], check["deps"])
-        self.assertEqual(check["deps"], [lib.node_by_output(graph, "$(B)/common_test.context")["uid"]])
+        self.assertEqual(check["deps"], [lib.node_by_output(graph, "$(B)/common_test.context")["uid"],
+                                       *global_resource_dependencies(self, graph, check, [
+                                           ("YMAKE_PYTHON3", "sbr:1"), ("JDK17", "sbr:3"), ("JDK_DEFAULT", "sbr:2")])])
 
     def test_cyclic_peers_keep_each_classpath_entry_once(self):
         files = tree("PEERDIR(a)", **{

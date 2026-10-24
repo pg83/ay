@@ -1,6 +1,7 @@
 import unittest
 
 import lib
+from resource_dependencies import global_resource_dependencies
 from test_java_tests import style_tree, test_nodes
 
 
@@ -25,6 +26,9 @@ class JavaProjectDependenciesTest(unittest.TestCase):
                     expected.add(lib.node_by_output(graph, '$(B)/program/program.run.cp.jar')['uid'])
                 else:
                     self.assertFalse(any('$(B)/program/program.run.cp.jar' in node['outputs'] for node in graph['graph']))
+                expected.update(global_resource_dependencies(self, graph, suite, [
+                    ("YMAKE_PYTHON3", "sbr:1"), ("JDK17", "sbr:3"), ("JDK_DEFAULT", "sbr:2"),
+                    ("JDK26", "sbr:5"), ("KOTLIN_COMPILER", "sbr:7")]))
                 self.assertEqual(set(suite['deps']), expected)
 
 

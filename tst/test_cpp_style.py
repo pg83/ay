@@ -1,5 +1,6 @@
 import unittest
 import lib
+from resource_dependencies import global_resource_dependencies
 
 class CppStyleTest(unittest.TestCase):
     def test_custom_cpp_linters_use_declared_formatter_dependencies(self):
@@ -56,7 +57,8 @@ class CppStyleTest(unittest.TestCase):
         ] * 2)
         self.assertEqual([command[i + 1] for i, arg in enumerate(command) if arg == "--config"], ["$(S)/proj/.clang-format"])
         context = lib.node_by_output(graph, "$(B)/common_test.context")
-        self.assertEqual(run["deps"], [context["uid"]])
+        self.assertEqual(run["deps"], [context["uid"], *global_resource_dependencies(
+            self, graph, run, [("CLANG_FORMAT", "sbr:123")])])
         self.assertFalse(any("generated.cpp" in i for i in run["inputs"]))
 
     def test_cpp_style_includes_native_link_command_sources(self):

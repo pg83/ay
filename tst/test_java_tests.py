@@ -3,6 +3,7 @@ import json
 import unittest
 
 import lib
+from resource_dependencies import global_resource_dependencies
 from lib import java_tree, resource_lib
 from test_go_tests import AUTOCHECK, go_module, go_world
 
@@ -278,14 +279,18 @@ class JavaJunitSuiteTest(unittest.TestCase):
         # base64 of [{"key":"k","type":"inline","value":"v"}]
         self.assertEqual(option_values(run, "--properties"), ["W3sia2V5IjoiayIsInR5cGUiOiJpbmxpbmUiLCJ2YWx1ZSI6InYifV0="])
         deps = [n["outputs"][0] for n in graph["graph"] if n["uid"] in node["deps"]]
-        self.assertEqual(sorted(deps), [
+        resources = global_resource_dependencies(self, graph, node, [
+            ("YMAKE_PYTHON3", "sbr:1"), ("JDK17", "sbr:3"), ("JDK_DEFAULT", "sbr:2"),
+            ("JDK21", "sbr:7"), ("JACOCO_AGENT", "sbr:6")])
+        resource_outputs = [n["outputs"][0] for n in graph["graph"] if n["uid"] in resources]
+        self.assertEqual(sorted(deps), sorted([
             "$(B)/base/ut/base-ut.jar", "$(B)/common_test.context",
             "$(B)/devtools/jtest-annotations/junit5/jtest-annotations-junit5.jar",
             "$(B)/devtools/junit5-runner/devtools-junit5-runner.jar",
             "$(B)/lib/jni/liblib_jni.so", "$(B)/lib/lib.jar",
             "$(B)/proj/sub/ut/proj-sub-ut.jar", "$(B)/proj/sub/ut/proj-sub-ut.test.cp.jar",
-            "$(B)/sandbox-storage/1/resource_info.json",
-        ])
+            "$(B)/sandbox-storage/1/resource_info.json", *resource_outputs,
+        ]))
         self.assertIn(node["uid"], graph["result"])
 
     def test_forked_suite_chunks_and_accumulator(self):

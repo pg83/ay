@@ -2,6 +2,7 @@ import json
 import unittest
 
 import lib
+from resource_dependencies import global_resource_dependencies
 import test_nots
 
 
@@ -44,7 +45,8 @@ class NotsCppStyleTest(unittest.TestCase):
         self.assertCountEqual(run["inputs"], [
             "$(S)/services/.clang-format", "$(S)/services/wire", "$(S)/tools/cpp_style_checker/wrapper.py",
         ])
-        self.assertEqual(run["deps"], [lib.node_by_output(graph, "$(B)/common_test.context")["uid"]])
+        self.assertEqual(run["deps"], [lib.node_by_output(graph, "$(B)/common_test.context")["uid"],
+                                     *global_resource_dependencies(self, graph, run, [("CLANG_FORMAT", "sbr:1")])])
         command = run["cmds"][0]["cmd_args"]
         self.assertEqual(command[-4:], ["--config", "$(S)/services/.clang-format", "--global-resource",
                                        "CLANG_FORMAT_RESOURCE_GLOBAL::$(B)/resources/CLANG_FORMAT"])

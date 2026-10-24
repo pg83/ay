@@ -1,7 +1,7 @@
 import unittest
 
 import lib
-from test_go_tests import go_module, go_proto_world
+from test_go_tests import go_module, go_proto_world, go_suite_resources
 from test_java import contrib
 from test_mlaunch import files as mlaunch_files
 from test_proto_desc import desc_files
@@ -93,7 +93,8 @@ class GoProjectDependenciesTest(unittest.TestCase):
                     expected.add(lib.node_by_output(graph, '$(B)/dep/dep.self.protodesc')['uid'])
                 else:
                     self.assertFalse(any('$(B)/dep/dep.self.protodesc' in node['outputs'] for node in graph['graph']))
-                self.assertEqual(set(suite['deps']), expected)
+                expected.update(go_suite_resources(self, graph, suite, files))
+                self.assertEqual(set(suite["deps"]), expected)
 
     def test_project_query_uses_materialized_contexts_outside_suite_discovery(self):
         files = go_proto_world()
@@ -114,7 +115,8 @@ class GoProjectDependenciesTest(unittest.TestCase):
                     expected.add(lib.node_by_output(graph, '$(B)/p/p.self.protodesc')['uid'])
                 else:
                     self.assertFalse(any('$(B)/p/p.self.protodesc' in node['outputs'] for node in graph['graph']))
-                self.assertEqual(set(suite['deps']), expected)
+                expected.update(go_suite_resources(self, graph, suite, files, python_uri="sbr:1"))
+                self.assertEqual(set(suite["deps"]), expected)
 
     def test_descriptor_module_is_a_govet_project_dependency(self):
         for descriptor in (False, True):
@@ -132,6 +134,7 @@ class GoProjectDependenciesTest(unittest.TestCase):
                 if descriptor:
                     desc = lib.node_by_output(graph, "$(B)/p/p.self.protodesc")
                     expected.add(desc["uid"])
+                expected.update(go_suite_resources(self, graph, suite, files))
                 self.assertEqual(set(suite["deps"]), expected)
 
     def test_java_module_is_a_govet_project_dependency(self):
@@ -151,6 +154,7 @@ class GoProjectDependenciesTest(unittest.TestCase):
                 if java:
                     jar = lib.node_by_output(graph, "$(B)/p/p.jar")
                     expected.add(jar["uid"])
+                expected.update(go_suite_resources(self, graph, suite, files, python_uri="sbr:1"))
                 self.assertEqual(set(suite["deps"]), expected)
 
     def test_global_archive_is_a_govet_project_dependency(self):

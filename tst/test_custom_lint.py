@@ -1,7 +1,7 @@
 import unittest
 
 import lib
-from test_go_tests import go_world, go_module, test_node, test_paths, args_after
+from test_go_tests import go_world, go_module, test_node, test_paths, args_after, go_suite_resources
 
 
 MACRO = """
@@ -50,7 +50,8 @@ class CustomLintTest(unittest.TestCase):
         sources = ["$(S)/project/first/a_test.go", "$(S)/project/first/z_test.go"]
         self.assertEqual(args[-3:-1], sources)
         self.assertEqual(args_after(args, "--test-related-path"), [*sources, "$(S)/tools/policy/check.py"])
-        self.assertEqual(node["deps"], [lib.node_by_output(graph, "$(B)/common_test.context")["uid"]])
+        self.assertEqual(node["deps"], [lib.node_by_output(graph, "$(B)/common_test.context")["uid"],
+                                      *go_suite_resources(self, graph, node, world())])
 
     def test_same_macro_runs_in_each_module_without_leaking_globs(self):
         files = world()
