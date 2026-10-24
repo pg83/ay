@@ -2631,10 +2631,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			ownRPathFlags = append([]ANY(nil), peerRPathFlagsGlobal...)
 		}
 
-		pyStrip := isPyProgramType(d.moduleStmt.Name) &&
-			!instance.Platform.pythonNoStrip()
-
-		wantsStrip := (pyStrip || d.strip) && !d.noStrip
+		wantsStrip := d.strip && !d.noStrip
 
 		var programModuleTag STR
 

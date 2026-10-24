@@ -384,9 +384,9 @@ func debugInfoFlags(env Environment, flags map[string]string) []ANY {
 	return internAnys(splitShellWords(flags["_DEBUG_INFO_FLAGS"]))
 }
 
-func (p *Platform) pythonNoStrip() bool {
-	buildType := p.ifEnv.string(envBUILD_TYPE)
-	sanitizer := p.ifEnv.string(envSANITIZER_TYPE)
+func pythonNoStrip(env Environment) bool {
+	buildType := env.string(envBUILD_TYPE)
+	sanitizer := env.string(envSANITIZER_TYPE)
 
 	return buildType == "DEBUG" || buildType == "FASTDEBUG" || sanitizer != "" && sanitizer != "no"
 }

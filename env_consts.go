@@ -222,6 +222,7 @@ var (
 	envSSE42_CFLAGS                           = internEnv("SSE42_CFLAGS")
 	envSSE4_CFLAGS                            = internEnv("SSE4_CFLAGS")
 	envSSE_CFLAGS                             = internEnv("SSE_CFLAGS")
+	envSTRIP                                  = internEnv("STRIP")
 	envSbrUIDExt                              = internEnv("SBR_UID_EXT")
 	envSdcInstallKinds                        = internEnv("SDC_INSTALL_KINDS")
 	envSdcPackageName                         = internEnv("SDC_PACKAGE_NAME")

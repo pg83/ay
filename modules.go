@@ -959,7 +959,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.peerdirs = append([]ANY{strContribLibsOpenmp.any()}, d.peerdirs...)
 	}
 
-	d.noStrip = env.bool(envNO_STRIP)
+	d.strip = env.string(envSTRIP) == "yes"
+	d.noStrip = env.string(envNO_STRIP) == "yes"
 	d.gettextKeepPath = env.string(envGettextKeepPath) == "yes"
 	d.useNasm = env.bool(envUseNasmAssembler)
 	d.collectAssemblerConfig(env)
@@ -1415,6 +1416,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			setupPythonImportMask(env, d)
 			setupSandboxPythonTask(v.Name, modulePath, kind, language, env, d)
+
+			if isPyProgramType(d.unit.Type) {
+				env.setBool(envSTRIP, true)
+
+				if pythonNoStrip(env) {
+					env.setBool(envNO_STRIP, true)
+				}
+			}
 
 			if isUnionModule(v.Name) {
 				env.setStringID(envDontResolveIncludes, strYes)
@@ -3367,7 +3376,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokNoOptimize:
 		d.noOptimize = true
 	case tokStrip:
-		d.strip = true
+		env.setBool(envSTRIP, true)
 	case tokNoOptimizePyProtos:
 		d.optimizePyProtos = false
 		d.optimizePyProtosSet = true
