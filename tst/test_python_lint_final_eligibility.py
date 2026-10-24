@@ -139,7 +139,8 @@ class PythonLintFinalEligibilityTest(unittest.TestCase):
                 self.assertTrue(graph["result"])
                 lib.node_by_output(graph, "$(B)/grove/leaf/libpy3grove-leaf.global.a")
                 lib.node_by_output(graph, "$(B)/grove/leaf/a.py.yapyc3")
-                lib.node_by_output(graph, "$(B)/resources/FLAKE8_PY3")
+                self.assertEqual(any("$(B)/resources/FLAKE8_PY3" in node["outputs"]
+                                     for node in graph["graph"]), enabled)
 
     def test_peer_lint_eligibility_uses_its_own_final_module_environment(self):
         for mode, enabled in (("peer", False), ("peer-ordinary", True)):

@@ -118,11 +118,11 @@ class PythonSuitesTest(unittest.TestCase):
         graph = lib.make(files, "lib", "-t")
         self.assertFalse(any(n["kv"].get("run_test_node") for n in graph["graph"]))
 
-    def test_empty_python_lint_keeps_resource_peer_without_validating_config(self):
+    def test_empty_python_lint_does_not_fetch_resource_or_validate_config(self):
         files = fixture()
         files["lib/ya.make"] = f"LIBRARY()\n{BARE}STYLE_RUFF(CONFIG_TYPE unknown CHECK_FORMAT RUN_IN_SOURCE_ROOT)\nEND()\n"
         graph = lib.make(files, "lib", "-t")
-        lib.node_by_output(graph, "$(B)/resources/RUFF")
+        self.assertFalse(any("$(B)/resources/RUFF" in n["outputs"] for n in graph["graph"]))
         self.assertFalse(any(n["kv"].get("run_test_node") for n in graph["graph"]))
 
     def test_python_program_import_suite_uses_binary_masks_and_own_environment(self):

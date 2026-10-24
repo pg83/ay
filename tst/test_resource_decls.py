@@ -89,15 +89,17 @@ class ResourceDeclsTest(unittest.TestCase):
             "res/ya.make": resources_library("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(PNPM resource.json)\n"),
             "res/resource.json": bundle_json({"any": "sbr:123"}),
         }
-        self.assertEqual(fetched_uri(lib.make(files, "res"), "PNPM"), "sbr:123")
+        files.update({"consumer/ya.make": f"LIBRARY()\n{BARE}PEERDIR(res)\nCFLAGS(-DPROBE=${{PNPM_RESOURCE_GLOBAL}})\nSRCS(main.cpp)\nEND()\n",
+                      "consumer/main.cpp": "int value;\n"})
+        self.assertEqual(fetched_uri(lib.make(files, "consumer"), "PNPM"), "sbr:123")
 
     def test_toolchain_resources_select_host_entries(self):
         graph = lib.make(toolchain_files(), "prog")
         self.assertEqual(fetched_uri(graph, "CLANG20"), "sbr:1")
         self.assertEqual(fetched_uri(graph, "LLD_ROOT"), "sbr:21")
         self.assertEqual(fetched_uri(graph, "YMAKE_PYTHON3"), "sbr:31")
-        self.assertEqual(fetched_uri(graph, "EXTRA_TOOL"), "sbr:32")
-        self.assertEqual(len(fetches(graph)), 4)
+        self.assertNotIn("$(B)/resources/EXTRA_TOOL", fetches(graph))
+        self.assertEqual(len(fetches(graph)), 3)
         for node in graph["graph"]:
             if node["kv"]["p"] == "FT":
                 self.assertEqual(node["platform"], "default-linux-x86_64")
@@ -190,6 +192,10 @@ class ResourceDeclsTest(unittest.TestCase):
             files[f"res/{name}/ya.make"] = resources_library(
                 f"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(B_{name.upper()} {json_path})\n"
             )
+        files["lib/ya.make"] = files["lib/ya.make"].replace("END()",
+            "CFLAGS(" + " ".join(f"-D{name}=${{B_{name.upper()}_RESOURCE_GLOBAL}}" for name in modules)
+            + ")\nSRCS(main.cpp)\nEND()")
+        files["lib/main.cpp"] = "int value;\n"
         graph = lib.make(files, "lib")
         self.assertEqual(
             {name: fetched_uri(graph, f"B_{name.upper()}") for name in modules},
@@ -239,6 +245,10 @@ class ResourceDeclsTest(unittest.TestCase):
                 + f"SET_RESOURCE_URI_FROM_JSON(URI {json_path})\n"
                 + f"DECLARE_EXTERNAL_RESOURCE(R_{name.upper()} ${{URI}})\n"
             )
+        files["lib/ya.make"] = files["lib/ya.make"].replace("END()",
+            "CFLAGS(" + " ".join(f"-D{name}=${{R_{name.upper()}_RESOURCE_GLOBAL}}" for name in modules)
+            + ")\nSRCS(main.cpp)\nEND()")
+        files["lib/main.cpp"] = "int value;\n"
         graph = lib.make(files, "lib")
         self.assertEqual(
             {name: fetched_uri(graph, f"R_{name.upper()}") for name in modules},
@@ -304,6 +314,8 @@ class ResourceDeclsTest(unittest.TestCase):
             ),
             "lib/ya.make": f"LIBRARY()\n{BARE}PEERDIR(res)\nEND()\n",
         }
+        files["lib/ya.make"] = files["lib/ya.make"].replace("END()", "CFLAGS(-DPROBE=${T_RESOURCE_GLOBAL})\nSRCS(main.cpp)\nEND()")
+        files["lib/main.cpp"] = "int value;\n"
         graph = lib.make(files, "lib", "--host-platform", "default-linux-aarch64")
         self.assertEqual(fetched_uri(graph, "T"), "sbr:2")
         fetch = lib.node_by_output(graph, "$(B)/resources/T")

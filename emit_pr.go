@@ -518,10 +518,16 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		dirs = Environment{s: &e.ctx.frames[e.ctx.frameDepth-1].ifEnv}
 	}
 
+	var resourceUses []STR
+	dirs.resourceUses = &resourceUses
+
 	envPairs := stmt.EnvPairs
 
 	if stmt.CallArgs != nil {
-		envPairs = compilerCommandFlags(stmt.EnvPairs, dirs).Args
+		value := compilerCommandFlags(stmt.EnvPairs, dirs)
+
+		envPairs = value.Args
+		resourceUses = resourceKeyUnion(resourceUses, value.Resources)
 	} else {
 		envPairs = expandTokens(stmt.EnvPairs, dirs, false, tokenExpandFinal)
 	}
@@ -549,7 +555,10 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	args := stmt.Args
 
 	if stmt.CallArgs != nil {
-		args = compilerCommandFlags(stmt.Args, dirs).Args
+		value := compilerCommandFlags(stmt.Args, dirs)
+
+		args = value.Args
+		resourceUses = resourceKeyUnion(resourceUses, value.Resources)
 	} else {
 		args = expandTokens(stmt.Args, dirs, false, tokenExpandFinal)
 	}
@@ -676,7 +685,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 
 	cmd := Cmd{
 		CmdArgs: na.chunkList(cmdArgs),
-		Env:     env,
+		Env:     env, Resources: resourceUses,
 	}
 
 	if stdoutPath != 0 {

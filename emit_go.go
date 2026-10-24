@@ -1119,7 +1119,11 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	vcsOPath := build(dir, "/__vcs_version__.c", instance.Platform.objectSuffix())
 	vcsGoPath := build(dir, "/__vcs_version__.go")
 	cmd0 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsInfo(na, d.tc, vcsCPath)), Env: goVcsEnv}
-	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(na, instance.Platform, d.tc, vcsCPath, vcsOPath, compilerCommandFlags(d.cFlags, Environment{s: &e.frame.ifEnv}).Args, d.cc.PeerCFlagsGlobal, d.moduleScopeCFlags, Environment{s: &e.frame.ifEnv}, d.flags.NoCompilerWarnings, d.flags.NoWShadow, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars}
+
+	var vcsResources []STR
+
+	commandEnv := Environment{s: &e.frame.ifEnv, resourceUses: &vcsResources}
+	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(na, instance.Platform, d.tc, vcsCPath, vcsOPath, compilerCommandFlags(d.cFlags, commandEnv).Args, d.cc.PeerCFlagsGlobal, d.moduleScopeCFlags, commandEnv, d.flags.NoCompilerWarnings, d.flags.NoWShadow, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars, Resources: resourceKeyUnion(vcsResources, peerCompilerResourceKeys(d.cc.CFlagValues, len(d.cFlagsGlobal) > 0))}
 
 	cmd2 := Cmd{CmdArgs: na.chunkList(na.anyList(
 		wrapccPython3STR.any(),
@@ -1302,7 +1306,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		tail[:nt:nt],
 		testTail,
 		goToolCmdEnd,
-	), Env: env}
+	), Env: env, Resources: e.peers.LDResources}
 
 	sbomJSON := build(dir, "/__sbomdata.json")
 

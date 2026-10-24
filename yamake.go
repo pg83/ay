@@ -1011,6 +1011,7 @@ func acquireIncludeState() *IncludeState {
 	st.once.reset()
 	st.env.s.val = st.env.s.val[:0]
 	st.env.s.kind = st.env.s.kind[:0]
+	clear(st.env.s.resourceBindings)
 
 	for _, g := range javaConfGlobalEnv {
 		st.env.setStringID(g.name, g.value)

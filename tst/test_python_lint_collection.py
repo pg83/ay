@@ -91,17 +91,17 @@ class PythonLintCollectionTest(unittest.TestCase):
         self.assertEqual(lints(lib.make(files, MODULE, "-t")), [])
 
     def test_owner_lint_fields_are_not_rebound_by_directory_setters(self):
-        for inside, outside, enabled, peer in (
-            ("", "SET(CPP_ANALYSIS_MODE yes)\nSET(_PY_EXTRA_LINT_FILES_VALUE extra.py)\nSET(PY_LINTER_FILES broken)\n", True, True),
-            ("SET(CPP_ANALYSIS_MODE yes)\n", "SET(CPP_ANALYSIS_MODE)\n", False, False),
-            ("SET(DISABLE_FLAKE8 yes)\n", "SET(DISABLE_FLAKE8)\n", False, True),
+        for inside, outside, enabled in (
+            ("", "SET(CPP_ANALYSIS_MODE yes)\nSET(_PY_EXTRA_LINT_FILES_VALUE extra.py)\nSET(PY_LINTER_FILES broken)\n", True),
+            ("SET(CPP_ANALYSIS_MODE yes)\n", "SET(CPP_ANALYSIS_MODE)\n", False),
+            ("SET(DISABLE_FLAKE8 yes)\n", "SET(DISABLE_FLAKE8)\n", False),
         ):
             with self.subTest(inside=inside):
                 files = sources(inside + "PY_SRCS(a.py)\n")
                 files[MODULE + "/ya.make"] += outside
                 graph = lib.make(files, MODULE, "-t")
                 self.assertEqual(len(lints(graph)), int(enabled))
-                self.assertEqual(has_resource(graph, "FLAKE8_PY3"), peer)
+                self.assertEqual(has_resource(graph, "FLAKE8_PY3"), enabled)
                 if enabled:
                     self.assertEqual(lint_files(lints(graph)[0]), [f"$(S)/{MODULE}/a.py"])
 
@@ -169,15 +169,15 @@ class PythonLintCollectionTest(unittest.TestCase):
             files["build/ymake_conf.py"] = lib.ymake_conf(extra="\nPY_LINTER_FILES=broken\n")
             self.assertEqual(lints(lib.make(files, MODULE, "-t", *flags)), [])
 
-    def test_disabled_flake8_keeps_collected_file_validation_and_resource_peer(self):
+    def test_disabled_flake8_keeps_file_validation_without_fetching_unused_resource(self):
         graph = lib.make(sources("PY_SRCS(a.py)\n"), MODULE, "-t", "-DDISABLE_FLAKE8=yes")
         self.assertEqual(lints(graph), [])
-        self.assertTrue(has_resource(graph, "FLAKE8_PY3"))
+        self.assertFalse(has_resource(graph, "FLAKE8_PY3"))
         files = sources("")
         files["build/ymake_conf.py"] = lib.ymake_conf(extra='\nPY_LINTER_FILES=["$B/only.py"]\n')
         graph = lib.make(files, MODULE, "-t", "-DDISABLE_FLAKE8=yes")
         self.assertEqual(lints(graph), [])
-        self.assertTrue(has_resource(graph, "FLAKE8_PY3"))
+        self.assertFalse(has_resource(graph, "FLAKE8_PY3"))
         graph = lib.make(sources("PY_SRCS(a.py)\n"), MODULE, "-t", "-DDISABLE_FLAKE8=true")
         self.assertEqual(len(lints(graph)), 1)
         files = sources("PY_SRCS(a.py)\n")

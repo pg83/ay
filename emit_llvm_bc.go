@@ -20,7 +20,8 @@ func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx 
 	na, d := e.ctx.na, e.d
 	input := e.llvmBcSourceInfo(src)
 	wrapper := buildScriptsClangWrapperPy
-	args := composeBCCompileCmd(d.tc.Python3.string(), wrapper.string(), compiler, e.instance.Platform, newModuleCCInputs(&d.cc), input, out, cxx)
+	value := composeBCCompileCmd(d.tc.Python3.string(), wrapper.string(), compiler, e.instance.Platform, newModuleCCInputs(&d.cc), input, out, cxx)
+	args := value.Args
 	tail := len(args) - 5
 	llvmOpts := strings.Fields(d.setVars[strLlvmOpts].string())
 
@@ -37,7 +38,7 @@ func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx 
 
 	return Node{
 		Platform: e.instance.Platform,
-		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS}),
+		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS, Resources: value.Resources}),
 		Env:      envVarsVCS, Inputs: inputs, InputClosures: []Closure{closure}, Outputs: na.vfsList(out),
 		KV: &llvmBcKV, Resources: usesPython3Clang16,
 	}
@@ -227,10 +228,11 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	})
 }
 
-func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS, cxx bool) []ANY {
+func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS, cxx bool) CompilerFlagValue {
 	bundle := compileFlagBundleFor(platform)
 	warningBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, platform)
+	value := commonCompilerFlagValue(in, platform)
+	ownCFlags := value.Args
 	ownGlobalBucket := composeOwnAndPeerGlobalBucket(in.ModuleCompileEnv)
 
 	args := make([]ANY, 0, 200+len(in.AddIncl)+len(in.PeerAddInclGlobal)+
@@ -253,7 +255,11 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	args = appendCompileFlagPipeline(args, bundle, warningBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(platform))
 
 	if cxx {
-		ownExtras := compilerCommandFlags(in.CXXFlags, in.CompilerEnv).Args
+		extras := compilerCommandFlags(in.CXXFlags, in.CompilerEnv)
+
+		value.Resources = resourceKeyUnion(value.Resources, extras.Resources, compilerValueResourceKeys(in.CXXFlagValues))
+
+		ownExtras := extras.Args
 
 		if len(platform.CXXFlags) > 0 {
 			ownExtras = concat(ownExtras, platform.CXXFlags)
@@ -271,8 +277,9 @@ func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platfor
 	}
 
 	args = append(args, argEmitLlvm.any(), argDashC.any(), inVFS.any(), argDashO.any(), outVFS.any())
+	value.Args = args
 
-	return args
+	return value
 }
 
 func (e *EmitContext) llvmBcSourceInfo(src string) VFS {

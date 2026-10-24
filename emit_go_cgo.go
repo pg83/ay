@@ -597,7 +597,7 @@ func (e *EmitContext) flushGoCgo2() {
 				linkOFlags,
 				goCgoLinkOPostLd,
 				objArgs[:kd:kd],
-			), Env: goVcsEnv},
+			), Env: goVcsEnv, Resources: e.peers.LDResources},
 			Cmd{CmdArgs: na.chunkList(cmd2Args), Env: goEnv},
 		),
 		Env:       goEnv,

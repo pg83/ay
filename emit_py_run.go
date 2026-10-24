@@ -14,11 +14,18 @@ var (
 func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 	instance := e.instance
 
+	var resourceUses []STR
+
 	if e.peers != nil {
-		rp.Args = expandResourceGlobalTokens(rp.Args, e.peers.ResourceGlobals)
+		value := resourceGlobalTokenValue(rp.Args, e.peers.ResourceGlobals)
+
+		rp.Args, resourceUses = value.Args, value.Resources
+		value = resourceGlobalTokenValue(rp.EnvPairs, e.peers.ResourceGlobals)
+		rp.EnvPairs = value.Args
+		resourceUses = resourceKeyUnion(resourceUses, value.Resources)
 	}
 
-	outs := e.emitRunPython(rp)
+	outs := e.emitRunPython(rp, resourceUses)
 
 	for _, token := range outs {
 		out := token.string()
@@ -51,7 +58,7 @@ func (e *EmitContext) emitRunPythonStmt(rp *RunPythonStmt) {
 	}
 }
 
-func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
+func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []ANY {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	auxTools := resolveRunProgramAuxTools(ctx, anyStrs(stmt.ToolPaths))
 	scriptVFS := copyFileInputVFS(ctx.fs, instance.Path, stmt.ScriptPath.string())
@@ -139,7 +146,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 	sourceAction := &SourceActionInfo{DeclSeq: stmt.DeclSeq, Inputs: concat([]VFS{scriptVFS}, inVFSs)}
 	interp := d.cc.TC.Python3.any()
 	kv := &pyRunKV
-	resources := usesPython3
+	resources := resourceKeyUnion(usesPython3, resourceUses)
 
 	if stmt.KV != nil {
 		kv = stmt.KV
@@ -155,7 +162,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt) []ANY {
 		interpInput = &luaBinVFS
 		toolRefs = depRefs(luaLDRef)
 		kv = &luaRunKV
-		resources = nil
+		resources = resourceUses
 	}
 
 	for _, tool := range auxTools {

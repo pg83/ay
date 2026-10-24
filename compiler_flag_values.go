@@ -12,8 +12,9 @@ const (
 )
 
 type CompilerFlagValue struct {
-	Name STR
-	Args []ANY
+	Resources []STR
+	Name      STR
+	Args      []ANY
 }
 
 type CompilerFlagKind uint8
@@ -73,13 +74,23 @@ func (e *EmitContext) ownCompilerFlagValues(args []ANY) []CompilerFlagValue {
 }
 
 func compilerCommandFlags(args []ANY, env Environment) CompilerFlagValue {
+	var resources []STR
+
+	parentUses := env.resourceUses
+
+	env.resourceUses = &resources
+
 	text := strings.Join(anyStrs(args), " ")
 
 	for _, arg := range args {
 		if strings.ContainsAny(arg.string(), "$\\\"'&") || strings.ContainsFunc(arg.string(), unicode.IsSpace) {
 			values, identity := compilerFlagExpression(text, env, nil)
 
-			return CompilerFlagValue{Name: internStr(identity), Args: internAnys(values)}
+			if parentUses != nil {
+				*parentUses = resourceKeyUnion(*parentUses, resources)
+			}
+
+			return CompilerFlagValue{Name: internStr(identity), Args: internAnys(values), Resources: resources}
 		}
 	}
 

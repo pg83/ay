@@ -2344,7 +2344,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	pchFlagsGlobal = ctx.argSlices.internCopy(dedup(pchFlagsGlobal))
 
 	d.cc = ModuleCompileEnv{
-		CompilerEnv:          Environment{s: &frame.ifEnv},
+		CompilerEnv: Environment{s: &frame.ifEnv},
+		CFlagValues: effectiveCFlagsGlobal, CXXFlagValues: effectiveCXXFlagsGlobal, COnlyFlagValues: effectiveCOnlyFlagsGlobal,
 		StaticAnalyzer:       e.cppStaticAnalyzer(resourceGlobalsClosure),
 		PchFlagsGlobal:       pchFlagsGlobal,
 		InclArgs:             ctx.inclArgs,
@@ -2423,7 +2424,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	if isGoModuleType(d.moduleStmt.Name) {
-		frame.peerCtx.LDFlagsGlobal = resolveResourceGlobalArgs(concatShared(ctx.argSlices, peerLDFlagsGlobal, ownLDFlags), resourceGlobalsClosure)
+		value := resourceGlobalArgumentValue(concatShared(ctx.argSlices, peerLDFlagsGlobal, ownLDFlags), resourceGlobalsClosure)
+
+		frame.peerCtx.LDFlagsGlobal, frame.peerCtx.LDResources = value.Args, value.Resources
 	}
 
 	e = newEmitContextIn(frame, ctx, instance, d, &frame.peerCtx)
@@ -2635,8 +2638,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			ownCFlags,
 			peerCFlagsGlobal,
 			d.moduleScopeCFlags,
-			resolveResourceGlobalArgs(peerLDFlagsGlobal, resourceGlobalsClosure),
-			resolveResourceGlobalArgs(ownLDFlags, resourceGlobalsClosure),
+			resourceGlobalArgumentValue(peerLDFlagsGlobal, resourceGlobalsClosure),
+			resourceGlobalArgumentValue(ownLDFlags, resourceGlobalsClosure),
 			ownRPathFlags,
 			peerRPathFlagsGlobal,
 			peerObjAddLibsGlobal,

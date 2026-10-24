@@ -60,7 +60,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 
 	inputs = appendInputChunks(na, inputs, closure)
 
-	node := Node{Platform: instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env}), Env: env,
+	node := Node{Platform: instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}), Env: env,
 		Inputs: inputs, BuildFromInputs: appendInputChunks(na, inputs[:1], inputs[2:]), Outputs: na.vfsList(outVFS), KV: &cudaKV, Resources: instance.Platform.CCUsesResources,
 		InputClosures: []Closure{srcCV, runtimeCV},
 		DepRefs:       na.refList(mtimeRef, pidRef)}
@@ -168,7 +168,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 
 			args = na.chunkList(append(args, na.anyList(strUCudaArchList.any(), internV("-D__CUDA_ARCH_LIST__=", archList).any()))...)
 
-			cmds := []Cmd{{CmdArgs: args, Env: env}}
+			cmds := []Cmd{{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}}
 
 			for i, suffix := range []string{".ptx", ".cudafe1.stub.c", ".module_id"} {
 				copyArgs := na.anyList(wrapccPython3STR.any(), copyFsToolsVFS.any(), argCopy.any(), internV(filepath.Base(base), suffix).any(), outs[i+1].any())
@@ -223,7 +223,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 
 		inputs := appendInputChunks(na, na.inputList(na.vfsList(images...), na.vfsList(script)), sourceClosure)
 
-		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}), Env: envVarsVCS,
+		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS, Resources: e.cudaSettings().RootResources}), Env: envVarsVCS,
 			Inputs: inputs, InputClosures: sourceViews, Outputs: na.vfsList(fatbin), KV: &cudaKV, Resources: usesPython3}, fatRef)
 	})
 
@@ -259,7 +259,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 
 		inputs = appendInputChunks(na, inputs, compileClosure)
 
-		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env}, Cmd{CmdArgs: na.chunkList(na.anyList(frontend...)), Env: envVarsVCS}), Env: env,
+		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: env, Resources: resourceKeyUnion(e.cudaSettings().Resources, compilerCommandBlocks(in.CCBlocks, true).resources)}, Cmd{CmdArgs: na.chunkList(na.anyList(frontend...)), Env: envVarsVCS}), Env: env,
 			InputClosures:   sourceViews,
 			BuildFromInputs: appendInputChunks(na, inputs[:1], inputs[2:]),
 			Inputs:          inputs, Outputs: hostOuts, KV: &cudaKV, DepRefs: na.refList(mtimeRef, pidRef), Resources: e.instance.Platform.CCUsesResources}, hostRef)
@@ -301,7 +301,7 @@ func (e *EmitContext) emitCudaDeviceLink(archiveName string, local CollectedObjs
 
 	env := e.cudaEnv()
 
-	node.Cmds = na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: env}, arCmd)
+	node.Cmds = na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: env, Resources: resourceKeyUnion(c.Resources, c.TargetResources)}, arCmd)
 	node.Env = na.envList(append(append(EnvVars(nil), node.Env...), env[1])...)
 	node.Outputs = na.vfsList(archive, devlink)
 	node.Inputs = appendInputChunks(na, node.Inputs, na.inputList(na.vfsList(inputs...)))

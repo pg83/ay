@@ -41,7 +41,7 @@ func (e *EmitContext) emitPchFile(stmt PchFileStmt) {
 
 		inputs := na.inputList(na.vfsList(tool), na.dedupClosureChunks(closure)...)
 
-		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{CmdArgs: args, Env: envVarsVCS}),
+		e.emitReservedNode(Node{Platform: e.instance.Platform, Cmds: na.cmdList(Cmd{Resources: blocks.resources, CmdArgs: args, Env: envVarsVCS}),
 			Env: envVarsVCS, Inputs: inputs, BuildFromInputs: inputs[1:], InputClosure: closure, Outputs: na.vfsList(out),
 			DepRefs: na.refList(toolRef), Resources: resources, KV: &pchKV}, ref)
 	})

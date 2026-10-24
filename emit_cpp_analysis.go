@@ -57,15 +57,10 @@ func (e *EmitContext) cppStaticAnalyzer(globals []ResourceDecl) *CppStaticAnalyz
 		}
 	}
 
-	plugins := resolveResourceGlobalArgs(d.clangSAPlugins, globals)
+	pluginValue := resourceGlobalArgumentValue(d.clangSAPlugins, globals)
+	plugins := pluginValue.Args
 
-	for _, plugin := range plugins {
-		for _, decl := range globals {
-			if strings.HasPrefix(plugin.string(), decl.Value.string()+"/") {
-				resources = append(resources, decl.Name)
-			}
-		}
-	}
+	resources = resourceKeyUnion(resources, pluginValue.Resources)
 
 	config := copyFileInputVFS(e.ctx.fs, e.instance.Path, d.clangSAConfig)
 	afterSource := na.anys.alloc(9 + len(plugins))[:0]
@@ -100,6 +95,6 @@ func (e *EmitContext) staticAnalyzerCmd(spec *CppStaticAnalyzer, in ModuleCCInpu
 		CmdArgs: e.ctx.na.chunkList(spec.beforeSource, source, spec.afterSource,
 			e.instance.Platform.CCHead, output, blocks.includes, flags, blocks.cxxTail,
 			in.PerSourceCFlags),
-		Env: envVarsVCS,
+		Env: envVarsVCS, Resources: blocks.resources,
 	}
 }

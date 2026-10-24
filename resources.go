@@ -199,6 +199,11 @@ func resolveResourceGlobalRef(s string, globals []ResourceDecl) string {
 }
 
 func resolveResourceGlobalArgs(args []ANY, globals []ResourceDecl) []ANY {
+	return resourceGlobalArgumentValue(args, globals).Args
+}
+
+func resourceGlobalArgumentValue(args []ANY, globals []ResourceDecl) CompilerFlagValue {
+	var uses []STR
 	var env Environment
 	var out []ANY
 
@@ -215,9 +220,10 @@ func resolveResourceGlobalArgs(args []ANY, globals []ResourceDecl) []ANY {
 
 		if env.s == nil {
 			env = newEnvironment()
+			env.resourceUses = &uses
 
 			for _, d := range globals {
-				env.setVFS(internEnvSTR(d.GlobalVar), d.Value)
+				env.setResource(d)
 			}
 		}
 
@@ -229,10 +235,10 @@ func resolveResourceGlobalArgs(args []ANY, globals []ResourceDecl) []ANY {
 	}
 
 	if out == nil {
-		return args
+		return CompilerFlagValue{Args: args}
 	}
 
-	return out
+	return CompilerFlagValue{Args: out, Resources: uses}
 }
 
 func (e *EmitContext) bindResourceGlobalVars(env Environment) bool {
@@ -241,7 +247,7 @@ func (e *EmitContext) bindResourceGlobalVars(env Environment) bool {
 
 	for _, stmt := range d.resourceDeclStmts {
 		for _, decl := range resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt) {
-			env.setVFS(internEnvSTR(decl.GlobalVar), decl.Value)
+			env.setResource(decl)
 			bound = true
 		}
 	}
@@ -545,9 +551,9 @@ func readResourceBundleJSON(fs FS, rel string) map[string]string {
 	return out
 }
 
-func expandResourceGlobalTokens(args []ANY, globals []ResourceDecl) []ANY {
+func resourceGlobalTokenValue(args []ANY, globals []ResourceDecl) CompilerFlagValue {
 	if len(globals) == 0 {
-		return args
+		return CompilerFlagValue{Args: args}
 	}
 
 	for _, arg := range args {
@@ -557,12 +563,15 @@ func expandResourceGlobalTokens(args []ANY, globals []ResourceDecl) []ANY {
 
 		env := newEnvironment()
 
+		var uses []STR
+		env.resourceUses = &uses
+
 		for _, decl := range globals {
-			env.setVFS(internEnvSTR(decl.GlobalVar), decl.Value)
+			env.setResource(decl)
 		}
 
-		return expandStmtTokens(args, env)
+		return CompilerFlagValue{Args: expandStmtTokens(args, env), Resources: uses}
 	}
 
-	return args
+	return CompilerFlagValue{Args: args}
 }

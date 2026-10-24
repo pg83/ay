@@ -203,7 +203,7 @@ class TestResourceGlobalsTest(unittest.TestCase):
         runtime = lib.node_by_output(graph, "$(B)/stage/runtime/runtime")
         self.assertIn(runtime["uid"], suite(graph, "py3test")["deps"])
         for resource in ("TOOL_PAINT", "RUNTIME_PAINT"):
-            self.assertIsNotNone(lib.node_by_output(graph, "$(B)/resources/" + resource))
+            self.assertFalse(any("$(B)/resources/" + resource in node["outputs"] for node in graph["graph"]))
 
 
 if __name__ == "__main__":

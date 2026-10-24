@@ -267,7 +267,11 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")
 	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c.pic.o")
 	cmd0 := composeLDCmdVcsInfo(na, d.tc, vcsCVFS)
-	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, d.tc, vcsCVFS, vcsOVFS, compilerCommandFlags(d.cFlags, Environment{s: &e.frame.ifEnv}).Args, nil, d.moduleScopeCFlags, Environment{s: &e.frame.ifEnv}, d.flags.NoCompilerWarnings, d.flags.NoWShadow, d.noOptimize)
+
+	var vcsResources []STR
+
+	commandEnv := Environment{s: &e.frame.ifEnv, resourceUses: &vcsResources}
+	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, d.tc, vcsCVFS, vcsOVFS, compilerCommandFlags(d.cFlags, commandEnv).Args, nil, d.moduleScopeCFlags, commandEnv, d.flags.NoCompilerWarnings, d.flags.NoWShadow, d.noOptimize)
 	envVcsOnly := envVarsVCS
 	envFull := ctx.host.toolEnv()
 	moduleEnv := Environment{s: &e.frame.ifEnv}
@@ -291,7 +295,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	cmd2 := composeDynLibCmd(na, instance.Platform, d.tc, instance.Path.relString(), outputVFS, outputName, vcsOVFS, peerArchivePaths, pluginPaths, anyStrs(d.dynamicLibraryFrom), d.exportsScript.string(), fixElfPath, linkRpath)
 	cmds := na.cmds.alloc(4)[:0]
 
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull, Resources: vcsResources}, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
 
 	if copySO {
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(composeLDCmdLinkOrCopy(na, d.tc, instance.Path.relString())), Env: envVcsOnly})

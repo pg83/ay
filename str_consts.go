@@ -269,6 +269,7 @@ var (
 	strExecutable                                                                            = internStr("--executable")
 	strExt                                                                                   = internStr("--ext")
 	strExternalLocalFile                                                                     = internStr("--external-local-file")
+	strExtraCFlags                                                                           = internStr("$EXTRA_C_FLAGS")
 	strExts                                                                                  = internStr("--exts")
 	strFAKE                                                                                  = internStr("FAKE")
 	strFakeModule                                                                            = internStr("_FAKE_MODULE")

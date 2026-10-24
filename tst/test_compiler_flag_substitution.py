@@ -119,15 +119,18 @@ class CompilerFlagSubstitutionTest(unittest.TestCase):
     def test_resource_global_is_deferred_in_the_source_binding(self):
         graph = lib.make({
             "resource/ya.make": (
-                "RESOURCES_LIBRARY()\n"
+                "LIBRARY()\n" + lib.BARE_MODULE +
                 "CFLAGS(-DPROBE_RESOURCE=${MINT_RESOURCE_GLOBAL}/include -DPROBE_TAIL)\n"
                 'IF(USER_CFLAGS MATCHES "MINT_RESOURCE_GLOBAL")\n'
-                "DECLARE_EXTERNAL_RESOURCE(MINT sbr:735)\nENDIF()\nEND()\n"
+                "DECLARE_EXTERNAL_RESOURCE(MINT sbr:735)\nENDIF()\nSRCS(main.cpp)\nEND()\n"
             ),
+            "resource/main.cpp": "int value;\n",
         }, "resource")
         resource = lib.node_by_output(graph, "$(B)/resources/MINT")
         self.assertIn("sbr:735", resource["cmds"][0]["cmd_args"])
-        self.assertFalse(any(node["kv"].get("p") == "CC" for node in graph["graph"]))
+        compiled = lib.node_by_output(graph, "$(B)/resource/main.cpp.o")
+        self.assertIn(resource["uid"], compiled["deps"])
+        self.assertIn("-DPROBE_RESOURCE=$(B)/resources/MINT/include", compiled["cmds"][0]["cmd_args"])
 
     def test_append_bindings_are_visible_to_later_source_conditions(self):
         graph = lib.make(fixture(

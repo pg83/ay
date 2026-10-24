@@ -78,8 +78,8 @@ func (e *EmitContext) emitLD(
 	moduleCFlags []ANY,
 	peerCFlagsGlobal []ANY,
 	moduleScopeCFlags []ANY,
-	peerLDFlagsGlobal []ANY,
-	ownLDFlags []ANY,
+	peerLDValue CompilerFlagValue,
+	ownLDValue CompilerFlagValue,
 	ownRPathFlags []ANY,
 	peerRPathFlagsGlobal []ANY,
 	objAddLibsGlobal []ANY,
@@ -102,6 +102,7 @@ func (e *EmitContext) emitLD(
 	vcsRef NodeRef,
 	dyn *DynLibLink,
 ) NodeRef {
+	peerLDFlagsGlobal, ownLDFlags := peerLDValue.Args, ownLDValue.Args
 	na := emit.nodeArenas()
 
 	for _, input := range ldScriptInputs {
@@ -132,7 +133,11 @@ func (e *EmitContext) emitLD(
 	vcsCVFS := build(linkDir, "/__vcs_version__.c")
 	vcsOVFS := build(linkDir, "/__vcs_version__.c", e.d.unit.objectSuffix(instance.Platform))
 	cmd0 := composeLDCmdVcsInfo(na, tc, vcsCVFS)
-	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, tc, vcsCVFS, vcsOVFS, compilerCommandFlags(moduleCFlags, Environment{s: &e.frame.ifEnv}).Args, peerCFlagsGlobal, moduleScopeCFlags, Environment{s: &e.frame.ifEnv}, noCompilerWarnings, e.d.flags.NoWShadow, noOptimize)
+
+	var vcsResources []STR
+
+	commandEnv := Environment{s: &e.frame.ifEnv, resourceUses: &vcsResources}
+	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, tc, vcsCVFS, vcsOVFS, compilerCommandFlags(moduleCFlags, commandEnv).Args, peerCFlagsGlobal, moduleScopeCFlags, commandEnv, noCompilerWarnings, e.d.flags.NoWShadow, noOptimize)
 	cmd2 := composeLDCmdLinkExe(na, instance.Platform, tc, outputVFS, vcsOVFS, ccPaths, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths[peerWholeArchiveCount:], wholeArchiveCmdPaths, objcopyPaths, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, linkExcludeLibraries, exportsScript, linkerScripts, noExportDynSymbols, wantsStrip, useArcadiaLibm, e.d.useDynamicCuda, dyn)
 	splitDwarfCmds := composeLDSplitDwarfCmds(na, tc, outputVFS, wantsSplitDwarf)
 	envVcsOnly := envVarsVCS
@@ -160,13 +165,13 @@ func (e *EmitContext) emitLD(
 
 	cmds := na.cmds.alloc(cmdCap)[:0]
 
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull})
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd0), Env: envVcsOnly}, Cmd{CmdArgs: na.chunkList(cmd1), Env: envFull, Resources: resourceKeyUnion(vcsResources, peerCompilerResourceKeys(e.d.cc.CFlagValues, len(e.d.cFlagsGlobal) > 0))})
 
 	if sbomEmbed {
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmdLinkSbom), Cwd: bldRootDirVFS, Env: envVcsOnly})
 	}
 
-	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull})
+	cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd2), Cwd: bldRootDirVFS, Env: envFull, Resources: resourceKeyUnion(peerLDValue.Resources, ownLDValue.Resources)})
 
 	if emitCopy {
 		cmds = append(cmds, Cmd{CmdArgs: na.chunkList(cmd3), Env: envVcsOnly})

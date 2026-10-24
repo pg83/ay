@@ -65,7 +65,8 @@ func (e *EmitContext) emitUsrvFiles() {
 	}
 
 	na := e.ctx.na
-	toolArgs := resolveResourceGlobalArgs([]ANY{strUsrvUnpackTarResourceGlobalUnpackTar.any()}, e.peers.ResourceGlobals)
+	toolValue := resourceGlobalArgumentValue([]ANY{strUsrvUnpackTarResourceGlobalUnpackTar.any()}, e.peers.ResourceGlobals)
+	toolArgs := toolValue.Args
 
 	for _, file := range e.d.usrvFiles {
 		src := e.runProgramInputVFS(file.Tar)
@@ -94,7 +95,7 @@ func (e *EmitContext) emitUsrvFiles() {
 		}
 
 		n := Node{Platform: e.instance.Platform, KV: &KV{P: pkUT, PC: pcLightCyan, ShowOut: true}, Env: envVarsVCS,
-			Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolArgs[0], strSourceArg.any(), src.any(), strTarget2.any(), build(e.instance.Path.relString()).any(), out.any())), Env: envVarsVCS}),
+			Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolArgs[0], strSourceArg.any(), src.any(), strTarget2.any(), build(e.instance.Path.relString()).any(), out.any())), Env: envVarsVCS, Resources: toolValue.Resources}),
 			Inputs: na.inputList(inputs), Outputs: na.vfsList(out)}
 
 		e.emitLazyModuleNodeAction(n, nil, &SourceActionInfo{DeclSeq: file.DeclSeq, Inputs: na.vfsList(src)})

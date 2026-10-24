@@ -966,7 +966,7 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		env := Environment{s: &e.frame.ifEnv}
 
 		for _, decl := range e.peers.ResourceGlobals {
-			env.setVFS(internEnvSTR(decl.GlobalVar), decl.Value)
+			env.setResource(decl)
 		}
 	}
 

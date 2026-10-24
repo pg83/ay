@@ -11,6 +11,9 @@ type CudaSrcsStmt struct {
 
 type CudaSettings struct {
 	Ready               bool
+	Resources           []STR
+	RootResources       []STR
+	TargetResources     []STR
 	NvccFlags           []ANY
 	Root                string
 	TargetRoot          string
@@ -29,19 +32,27 @@ func (e *EmitContext) cudaSettings() *CudaSettings {
 	}
 
 	env := Environment{s: &e.frame.ifEnv}
+	root := commandTokenValue([]ANY{internStr(env.string(envCUDA_ROOT)).any()}, env)
+	rootBound := resourceGlobalArgumentValue(root.Args, e.peers.ResourceGlobals)
+	target := commandTokenValue([]ANY{internStr(env.string(envCUDA_TARGET_ROOT)).any()}, env)
+	targetBound := resourceGlobalArgumentValue(target.Args, e.peers.ResourceGlobals)
 
-	roots := resolveResourceGlobalArgs(expandStmtTokens([]ANY{
-		internStr(env.string(envCUDA_ROOT)).any(),
-		internStr(env.string(envCUDA_TARGET_ROOT)).any(),
-	}, env), e.peers.ResourceGlobals)
+	var flagUses []STR
+	env.resourceUses = &flagUses
 
 	flags := internAnys(splitShellWords(expandStmtToken(env.string(envNvccFlags), env)))
+	flagsValue := resourceGlobalArgumentValue(flags, e.peers.ResourceGlobals)
 
-	flags = resolveResourceGlobalArgs(flags, e.peers.ResourceGlobals)
+	flags = flagsValue.Args
+
+	rootUses := resourceKeyUnion(root.Resources, rootBound.Resources)
+	targetUses := resourceKeyUnion(target.Resources, targetBound.Resources)
 
 	*c = CudaSettings{
-		Ready: true, NvccFlags: e.ctx.na.anyList(flags...),
-		Root: roots[0].string(), TargetRoot: roots[1].string(),
+		Resources: resourceKeyUnion(rootUses, flagUses, flagsValue.Resources),
+		Ready:     true, NvccFlags: e.ctx.na.anyList(flags...),
+		Root: rootBound.Args[0].string(), TargetRoot: targetBound.Args[0].string(),
+		RootResources: rootUses, TargetResources: targetUses,
 		Version: env.string(envCUDA_VERSION), Std: env.string(envNvccStdVer),
 		SkipCompressedDebug: env.string(envCUDA_HOST_COMPILER_VERSION) == "14",
 		Sanitize:            env.bool(envCUDA_SANITIZE), SplitSanitize: env.string(envCUDA_SANITIZE) != "",

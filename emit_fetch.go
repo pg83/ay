@@ -30,7 +30,11 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 
 	node.PresetUID = resourceFetchUID(decl.URI.string(), output.string())
 
+	ctx.emit.deferPublication++
+
 	ref := ctx.emit.emitNode(node)
+
+	ctx.emit.deferPublication--
 
 	ctx.fetchRefs.put(decl.FetchKey, ref)
 

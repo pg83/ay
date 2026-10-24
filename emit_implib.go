@@ -69,7 +69,9 @@ func (e *EmitContext) emitImplib(stmt ImplibStmt) {
 		args = append(args, internStr(stmt.Path).any())
 	}
 
-	args = resolveResourceGlobalArgs(args, e.peers.ResourceGlobals)
+	value := resourceGlobalArgumentValue(args, e.peers.ResourceGlobals)
+
+	args = value.Args
 
 	ref := e.ctx.emit.reserve()
 
@@ -82,7 +84,7 @@ func (e *EmitContext) emitImplib(stmt ImplibStmt) {
 
 		e.emitReservedNode(Node{
 			Platform:        e.instance.Platform,
-			Cmds:            na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
+			Cmds:            na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS, Resources: value.Resources}),
 			Env:             envVarsVCS,
 			Inputs:          inputs,
 			BuildFromInputs: inputs[1:],

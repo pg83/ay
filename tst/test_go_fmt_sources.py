@@ -104,7 +104,8 @@ class GoFmtSourcesTest(unittest.TestCase):
                                 and "$(S)/orchard/messages/native.cpp" in node["inputs"])
                 command = compiled["cmds"][0]["cmd_args"]
                 self.assertIn("$(B)/resources/CLANG20/bin/clang++", command)
-                lib.node_by_output(graph, "$(B)/resources/ORCHARD_ANALYZER")
+                self.assertFalse(any("$(B)/resources/ORCHARD_ANALYZER" in node["outputs"]
+                                     for node in graph["graph"]))
                 self.assertNotIn("ORCHARD_ANALYZER_RESOURCE_GLOBAL::$(B)/resources/ORCHARD_ANALYZER", checking)
 
     def test_raw_declared_sources_are_sorted_deduplicated_and_grouped_by_directory(self):

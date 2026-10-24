@@ -17,9 +17,13 @@ var (
 
 type ModuleCompileEnv struct {
 	CompilerEnv          Environment
+	CFlagValues          []CompilerFlagValue
+	CXXFlagValues        []CompilerFlagValue
+	COnlyFlagValues      []CompilerFlagValue
 	StaticAnalyzer       *CppStaticAnalyzer
 	FortranHead          []ANY
 	FortranResources     []STR
+	FortranResourceUses  []STR
 	PchFlagsGlobal       []ANY
 	Flags                FlagSet
 	AddIncl              []VFS
@@ -320,7 +324,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	na.inputs.commit(len(inputChunks))
 
 	allInputs := InputChunks(inputChunks[:len(inputChunks):len(inputChunks)])
-	compilerCmd := Cmd{CmdArgs: cmdArgs, Env: env}
+	compilerCmd := Cmd{CmdArgs: cmdArgs, Env: env, Resources: blocks.resources}
 
 	var cmds []Cmd
 
@@ -572,10 +576,6 @@ func appendCxxStdAndOwn(cmdArgs []ANY, isCxx bool, noCompilerWarnings bool, inje
 	return cmdArgs
 }
 
-func composeOwnAndPeerCFlagsAtOwnSlot(in ModuleCCInputs, p *Platform) []ANY {
-	return concat(p.CFlags, compilerCommandFlags(in.CFlags, in.CompilerEnv).Args, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal)
-}
-
 func composeOwnAndPeerGlobalBucket(in *ModuleCompileEnv) []ANY {
 	out := make([]ANY, 0, len(in.OwnCXXFlagsGlobal)+len(in.PeerCXXFlagsGlobal))
 
@@ -603,6 +603,7 @@ func appendCompileFlagPipeline(cmdArgs []ANY, bundle CompileFlagBundle, warningB
 
 type CcModuleArgBlocks struct {
 	compilerFlags *compilerFlagBlocks
+	resources     []STR
 	extraCFlags   []ANY
 	wrapHead      []ANY
 	cHead         []ANY

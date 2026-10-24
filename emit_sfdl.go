@@ -22,7 +22,7 @@ func (e *EmitContext) emitLibrarySfdlSource(src ANY) {
 	pe := func() {
 		blocks := compilerCommandBlocks(&d.cc.CCBlocks, true)
 
-		cmd0 := Cmd{CmdArgs: na.chunkList(
+		cmd0 := Cmd{Resources: blocks.resources, CmdArgs: na.chunkList(
 			blocks.cxxHead,
 			instance.Platform.CCHead,
 			blocks.flags,

@@ -47,8 +47,9 @@ func (e *EmitContext) prepareFortran() {
 		}
 
 		flags := expandCommandTokens(e.ctx.na.anyList(strCFlagsPlatform.any()), e.instance.Platform.ifEnv)
+		value := resourceGlobalArgumentValue(flags, e.peers.ResourceGlobals)
 
-		flags = resolveResourceGlobalArgs(flags, e.peers.ResourceGlobals)
+		flags = value.Args
 
 		n := 1 + len(flags)
 
@@ -58,6 +59,7 @@ func (e *EmitContext) prepareFortran() {
 		e.ctx.na.anys.commit(len(cc.FortranHead))
 		cc.FortranResources = e.ctx.na.strs.alloc(2)[:0]
 		cc.FortranResources = append(cc.FortranResources, resource.Name)
+		cc.FortranResourceUses = value.Resources
 
 		if e.instance.Platform.UsesSDKRoot {
 			cc.FortranResources = append(cc.FortranResources, internStr(resourcePatternOSSDKRoot))
@@ -81,7 +83,7 @@ func (e *EmitContext) emitFortranSource(meta SrcMeta) {
 	args := na.chunkList(e.d.cc.FortranHead, na.anyList(argDashC.any(), src.any(), argDashO.any(), out.any()))
 
 	ref := e.emitNode(Node{Platform: e.instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: args, Env: envVarsVCS}), Env: envVarsVCS,
+		Cmds: na.cmdList(Cmd{CmdArgs: args, Env: envVarsVCS, Resources: e.d.cc.FortranResourceUses}), Env: envVarsVCS,
 		Inputs: na.dedupClosureChunks(closure), InputClosure: closure, Outputs: na.vfsList(out),
 		KV: &fortranKV, Resources: e.d.cc.FortranResources})
 

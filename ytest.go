@@ -758,6 +758,10 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 
 	na.strs.commit(len(names))
 
+	for _, decl := range s.globals {
+		cmds[len(cmds)-1].Resources = append(cmds[len(cmds)-1].Resources, decl.FetchKey)
+	}
+
 	return &Node{
 		UIDSalt:      internStr(s.uidSalt),
 		Platform:     s.p,

@@ -13,13 +13,14 @@ func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (No
 		outVFS, inVFS = composeASPaths(instance, srcVFS)
 	}
 
-	cmdArgs := composeASCmdArgs(na, instance, outVFS, inVFS, in)
+	flags := commonCompilerFlagValue(in, instance.Platform)
+	cmdArgs := composeASCmdArgs(na, instance, outVFS, inVFS, in, flags.Args)
 	env := hostP.toolEnv()
 
 	node := Node{
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
-			Cwd: bldRootDirVFS,
+			Cwd: bldRootDirVFS, Resources: flags.Resources,
 			Env: env}),
 		Env:           env,
 		Inputs:        na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.bucketList()...),
@@ -38,11 +39,10 @@ func composeASPaths(instance ModuleInstance, srcVFS VFS) (out, input VFS) {
 	return build(instance.Path.relString(), "/", rel, ".o"), srcVFS
 }
 
-func composeASCmdArgs(na *NodeArenas, instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs) []ANY {
+func composeASCmdArgs(na *NodeArenas, instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs, ownCFlags []ANY) []ANY {
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 2 + len(bundle.ArchArgs) + len(instance.Platform.SysrootArgs)
 	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	ownCFlags := composeOwnAndPeerCFlagsAtOwnSlot(in, instance.Platform)
 	includes := composeASIncludes(in)
 	betweenBlocks := len(catboostOpenSourceDefine)
 

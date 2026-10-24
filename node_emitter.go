@@ -103,6 +103,7 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 
 func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
 	assert(len(n.Outputs) > 0, "emitter: node without outputs")
+	e.commandResources(n)
 
 	if e.deferPublication == 0 {
 		e.publicationRoots = append(e.publicationRoots, id)

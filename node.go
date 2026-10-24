@@ -19,10 +19,11 @@ func (c ArgChunks) flat() []ANY {
 }
 
 type Cmd struct {
-	CmdArgs ArgChunks `json:"cmd_args"`
-	Cwd     VFS       `json:"cwd,omitempty"`
-	Env     EnvVars   `json:"env,omitempty"`
-	Stdout  VFS       `json:"stdout,omitempty"`
+	Resources []STR     `json:"-"`
+	CmdArgs   ArgChunks `json:"cmd_args"`
+	Cwd       VFS       `json:"cwd,omitempty"`
+	Env       EnvVars   `json:"env,omitempty"`
+	Stdout    VFS       `json:"stdout,omitempty"`
 }
 
 type Node struct {

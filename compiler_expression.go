@@ -248,7 +248,7 @@ func (e *EmitContext) bindCompilerFlagResources(globals []ResourceDecl) {
 	env := Environment{s: &e.frame.ifEnv}
 
 	for _, decl := range globals {
-		env.setVFS(internEnvSTR(decl.GlobalVar), decl.Value)
+		env.setResource(decl)
 	}
 }
 
@@ -272,27 +272,42 @@ func compilerCommandBlocks(raw *CcModuleArgBlocks, cxx bool) *CcModuleArgBlocks 
 	}
 
 	in := binding.input
+	common := compilerCommandFlags(in.CFlags, in.CompilerEnv)
+	resources := resourceKeyUnion(common.Resources, compilerValueResourceKeys(in.CFlagValues))
 
-	in.CFlags = compilerCommandFlags(in.CFlags, in.CompilerEnv).Args
+	in.CFlags = common.Args
 
 	if cxx {
-		in.CXXFlags = compilerCommandFlags(in.CXXFlags, in.CompilerEnv).Args
+		private := compilerCommandFlags(in.CXXFlags, in.CompilerEnv)
+
+		resources = resourceKeyUnion(resources, private.Resources, compilerValueResourceKeys(in.CXXFlagValues))
+
+		in.CXXFlags = private.Args
 		in.COnlyFlags = nil
 	} else {
-		in.COnlyFlags = compilerCommandFlags(in.COnlyFlags, in.CompilerEnv).Args
+		private := compilerCommandFlags(in.COnlyFlags, in.CompilerEnv)
+
+		resources = resourceKeyUnion(resources, private.Resources, compilerValueResourceKeys(in.COnlyFlagValues))
+
+		in.COnlyFlags = private.Args
 		in.CXXFlags = nil
 	}
 
 	blocks := composeCCModuleArgBlocks(binding.arena, binding.platform, &in)
+	extra := compilerExtraCFlagsValue(in.CompilerEnv)
 
-	blocks.extraCFlags = compilerExtraCFlags(in.CompilerEnv)
+	blocks.extraCFlags = extra.Args
+	blocks.resources = resourceKeyUnion(resources, extra.Resources)
+
 	binding.resolved[language] = &blocks
 
 	return &blocks
 }
 
 func compilerExtraCFlags(env Environment) []ANY {
-	flags, _ := compilerFlagExpression("$EXTRA_C_FLAGS", env, nil)
+	return compilerExtraCFlagsValue(env).Args
+}
 
-	return internAnys(flags)
+func compilerExtraCFlagsValue(env Environment) CompilerFlagValue {
+	return compilerCommandFlags([]ANY{strExtraCFlags.any()}, env)
 }
