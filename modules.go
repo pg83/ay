@@ -182,6 +182,7 @@ type ModuleData struct {
 	yqlPrebuiltAliases       bool
 	yqlSourceSrcs            []ANY
 	yqlSourcePeers           []ANY
+	pluginPeerdirs           []ANY
 	moduleVariants           uint16
 	listProtos               []ListProtoStmt
 	nots                     *NotsModule
@@ -826,6 +827,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.dontResolveIncludes = kindOfResolve != envAbsent && env.string(envDontResolveIncludes) != "no"
 	finishYqlModule(ctx, instance, env, d, onWarn)
+	d.peerdirs = append(d.peerdirs, d.pluginPeerdirs...)
 	d.udfBaseSymbolic = d.udfBaseSymbolic && env.string(envMsvc) != "yes" && env.string(envDarwin) != "yes"
 	d.pyProtoMypy = env.string(envPyProtoMypyEnabled) == "yes" &&
 		(isPythonProtoModule(d) || d.unit.Type == tokPy2Library || d.unit.Type == tokPy3Library || d.unit.Type == tokPy23Library)

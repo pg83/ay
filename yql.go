@@ -251,6 +251,8 @@ func finishYqlUdfModule(modulePath string, d *ModuleData, env Environment) {
 		peers := yqlUdfImplicitPeers()
 
 		peers = append(peers, "build/platform/python/ldflags", "library/python/type_info")
+		d.peerdirs = append(internAnys(peers), d.peerdirs...)
+		peers = nil
 
 		if env.bool(envUSE_ARCADIA_PYTHON) {
 			if d.usePython2 {
@@ -268,7 +270,7 @@ func finishYqlUdfModule(modulePath string, d *ModuleData, env Environment) {
 			}
 		}
 
-		d.peerdirs = append(internAnys(peers), d.peerdirs...)
+		d.peerdirs = append(d.peerdirs, internAnys(peers)...)
 	}
 
 	if d.exportsScript == nil && !env.bool(envOS_WINDOWS) {
@@ -325,14 +327,14 @@ func registerYqlPythonUdf(fs FS, modulePath string, stmt UnknownStmt, d *ModuleD
 	}
 
 	applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokYqlAbiVersion, Args: internAnys([]string{"2", "45", "0"})}, d, env, onWarn)
-	d.peerdirs = append(d.peerdirs, internAnys([]string{"yql/essentials/udfs/common/python/python_udf", "yql/essentials/public/udf"})...)
+	d.pluginPeerdirs = append(d.pluginPeerdirs, internAnys([]string{"yql/essentials/udfs/common/python/python_udf", "yql/essentials/public/udf"})...)
 
 	includes := []string{"yql/essentials/udfs/common/python/python_udf/python_udf.h", "yql/essentials/public/udf/udf_registrator.h"}
 	flag := "0"
 
 	if addLibra {
 		flag = "1"
-		d.peerdirs = append(d.peerdirs, internAnys([]string{"quality/user_sessions/libra_arc/noyql", "yql/udfs/quality/libra/module"})...)
+		d.pluginPeerdirs = append(d.pluginPeerdirs, internAnys([]string{"quality/user_sessions/libra_arc/noyql", "yql/udfs/quality/libra/module"})...)
 		includes = append(includes, "yql/udfs/quality/libra/module/module.h")
 	}
 
@@ -353,7 +355,7 @@ func registerYqlPythonUdf(fs FS, modulePath string, stmt UnknownStmt, d *ModuleD
 			peers = []string{"library/python/runtime_py3", "yql/essentials/udfs/common/python/main_py3"}
 		}
 
-		d.peerdirs = append(d.peerdirs, internAnys(peers)...)
+		d.pluginPeerdirs = append(d.pluginPeerdirs, internAnys(peers)...)
 	}
 
 	output := name + ".yql_python_udf.cpp"
