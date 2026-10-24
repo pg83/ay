@@ -788,40 +788,32 @@ type DiscoveredTargets struct {
 
 func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 	seen := map[string]bool{targetDir: true}
+	queue := []string{targetDir}
 
 	var targets DiscoveredTargets
 
-	var walk func(dir string, root bool)
+	for at := 0; at < len(queue); at++ {
+		dir := queue[at]
 
-	walk = func(dir string, root bool) {
-		if !root {
-			if seen[dir] {
-				return
-			}
-
-			seen[dir] = true
-
-			if !ctx.fs.isFile(internStr(dir), "ya.make") {
-				return
-			}
+		if at != 0 && !ctx.fs.isFile(internStr(dir), "ya.make") {
+			continue
 		}
 
 		module, children := ctx.recurseScan(dir)
 
-		if root {
+		if at == 0 {
 			targets.Root = DiscoveredModule{Path: dir, Declaration: module}
+		} else if module != nil && (ctx.testMode || module.Schema || isFinalTargetModuleType(module.Name)) {
+			targets.Recursed = append(targets.Recursed, DiscoveredModule{Path: dir, Declaration: module})
 		}
 
 		for _, child := range children {
-			walk(child, false)
-		}
-
-		if !root && module != nil && (ctx.testMode || module.Schema || isFinalTargetModuleType(module.Name)) {
-			targets.Recursed = append(targets.Recursed, DiscoveredModule{Path: dir, Declaration: module})
+			if !seen[child] {
+				seen[child] = true
+				queue = append(queue, child)
+			}
 		}
 	}
-
-	walk(targetDir, true)
 
 	return targets
 }
