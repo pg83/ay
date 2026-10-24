@@ -453,26 +453,34 @@ func collectRunProgramAuxTools(toolPaths []string, resolve func(ARG) *ModuleEmit
 	return out
 }
 
-func replaceAuxToolArg(arg ANY, tools []RunProgramAuxTool) (ANY, bool) {
-	if len(tools) == 0 {
-		return arg, false
-	}
-
-	value := arg.string()
-	replaced := false
+func prAuxToolTokens(tools []RunProgramAuxTool) []PrFileToken {
+	toks := make([]PrFileToken, 0, len(tools))
 
 	for _, tool := range tools {
-		if !tool.rooted && strings.Contains(value, tool.token) {
-			value = strings.ReplaceAll(value, tool.token, tool.bin.string())
-			replaced = true
+		if !tool.rooted {
+			toks = append(toks, PrFileToken{token: tool.token, rooted: tool.bin.string(), vfs: tool.bin})
 		}
 	}
 
-	if replaced {
-		return internStr(value).any(), true
+	sort.SliceStable(toks, func(i, j int) bool {
+		return len(toks[i].token) > len(toks[j].token)
+	})
+
+	return toks
+}
+
+func replaceAuxToolArg(arg ANY, tools []PrFileToken) (ANY, bool) {
+	rooted, file, whole := rootBareFileArg(arg.string(), tools)
+
+	if file == 0 {
+		return arg, false
 	}
 
-	return arg, false
+	if whole {
+		return file.any(), true
+	}
+
+	return internStr(rooted).any(), true
 }
 
 func (e *EmitContext) runProgramInputVFS(rel string) VFS {
@@ -551,12 +559,13 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	cmdArgs = append(cmdArgs, spec.toolBinPath.any())
 
 	fileTokens := prBareFileTokens(stmt, spec.inVFSs, spec.outVFSByToken)
+	auxToolTokens := prAuxToolTokens(spec.auxTools)
 
 	var argFiles []VFS
 
 	for _, aTok := range args {
 		a := aTok.string()
-		key, toolReplaced := replaceAuxToolArg(aTok, spec.auxTools)
+		key, toolReplaced := replaceAuxToolArg(aTok, auxToolTokens)
 
 		if !toolReplaced {
 			if rooted, file, whole := rootBareFileArg(a, fileTokens); file != 0 {

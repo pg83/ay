@@ -417,8 +417,10 @@ func (e *EmitContext) emitPYRun(
 
 	cmdArgs = append(cmdArgs, interp, scriptVFS.any())
 
+	auxToolTokens := prAuxToolTokens(auxTools)
+
 	for _, aTok := range stmt.Args {
-		if value, replaced := replaceAuxToolArg(aTok, auxTools); replaced {
+		if value, replaced := replaceAuxToolArg(aTok, auxToolTokens); replaced {
 			cmdArgs = append(cmdArgs, value)
 
 			continue
