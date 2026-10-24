@@ -495,6 +495,10 @@ func (r *CodegenRegistry) moduleSourceInputs(owner VFS, suffix string) []VFS {
 	return inputs
 }
 
+func (info *GeneratedFileInfo) providesSourceInclude(source VFS, d IncludeDirective) bool {
+	return info != nil && info.SourcePath == source && info.providesOutputInclude(d)
+}
+
 func (info *GeneratedFileInfo) providesOutputInclude(d IncludeDirective) bool {
 	if d.kind != includeQuoted || d.target.vfs() != 0 {
 		return false

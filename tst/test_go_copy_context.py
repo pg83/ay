@@ -2,7 +2,7 @@ import json
 import unittest
 
 import lib
-from test_go_cgo import cgo_world, NO_PLATFORM
+from test_go_cgo import cgo_world, go_module, NO_PLATFORM
 
 
 PACKAGE = "lib/binding"
@@ -45,6 +45,26 @@ class GoCopyContextTest(unittest.TestCase):
         for node in (copied(graph), compiled(graph)):
             self.assertIn(header, node["inputs"])
             self.assertIn(producer["uid"], node["deps"])
+
+    def test_resource_consumes_the_generated_copy_context(self):
+        files = binding('#include "_cgo_export.h"\n',
+                        "RESOURCE(${BINDIR}/bridge.c bridge)\n")
+        go_module(files, "library/go/core/resource")
+        lib.tool_program(files, "library/go/core/resource/cc", "cc")
+        graph = lib.make(files, PACKAGE)
+        resource = next(node for node in graph["graph"]
+                        if node["kv"].get("p") == "PR" and BUILD + "/bridge.c" in node["inputs"])
+        header = BUILD + "/_cgo_export.h"
+        producer = lib.node_by_output(graph, header)
+        self.assertIn(BUILD + "/bridge.c", resource["inputs"])
+        self.assertIn(SOURCE + "/bridge.c", resource["inputs"])
+        self.assertIn(copied(graph)["uid"], resource["deps"])
+        self.assertIn(header, resource["inputs"])
+        tool = lib.node_by_output(graph, "$(B)/library/go/core/resource/cc/cc")
+        self.assertIn(tool["uid"], resource["deps"])
+        self.assertIn(producer["uid"], compiled(graph)["deps"])
+        self.assertNotIn(header, copied(graph)["inputs"])
+        self.assertNotIn(producer["uid"], copied(graph)["deps"])
 
     def test_explicit_build_search_and_configure_addincl_preserve_generated_inputs(self):
         for extra in (

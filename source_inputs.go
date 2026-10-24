@@ -213,6 +213,7 @@ func (ctx *GenCtx) resolveCythonScannerUses(s *IncludeScanner) bool {
 func (ctx *GenCtx) repairCppSourceInputs(node *Node) {
 	view := node.InputClosure
 	s := view.scanner
+	owner := s.codegen.lookup(view.self)
 	sc := s.getScanCtx(node.CppIncludeContext, scanDomainCC, nil)
 
 	defer s.putScanCtx(sc)
@@ -250,6 +251,12 @@ func (ctx *GenCtx) repairCppSourceInputs(node *Node) {
 			var remaining []IncludeDiagnostic
 
 			for _, diagnostic := range entry.Diagnostics.Entries {
+				if owner.providesSourceInclude(input, diagnostic.Directive) {
+					remaining = append(remaining, diagnostic)
+
+					continue
+				}
+
 				include := diagnostic.Directive
 
 				include.kind = includeSystem
@@ -267,7 +274,14 @@ func (ctx *GenCtx) repairCppSourceInputs(node *Node) {
 		}
 
 		s.sourceFiles.children.put(input, entry.Paths)
-		s.reportDiagnostics(entry.Diagnostics)
+
+		if entry.Diagnostics != nil {
+			for _, diagnostic := range entry.Diagnostics.Entries {
+				if !owner.providesSourceInclude(input, diagnostic.Directive) {
+					s.onWarn(diagnostic.Warning)
+				}
+			}
+		}
 
 		for _, child := range entry.Paths {
 			visit(child)

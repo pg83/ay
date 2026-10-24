@@ -180,7 +180,7 @@ func (s *IncludeScanner) reportClosureDiagnostics(input VFS, cl Closure) {
 		}
 
 		for _, diagnostic := range entry.Diagnostics.Entries {
-			if info != nil && info.SourcePath == v && info.providesOutputInclude(diagnostic.Directive) {
+			if info.providesSourceInclude(v, diagnostic.Directive) {
 				continue
 			}
 
