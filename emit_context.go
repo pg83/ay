@@ -507,17 +507,21 @@ func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 
 	stored := e.codegen.register(info)
 
-	if stored.SourceAction != nil {
-		e.numberSourceAction(stored.SourceAction)
+	e.registerSourceProducer(stored)
+
+	return stored
+}
+
+func (e *EmitContext) registerSourceProducer(info *GeneratedFileInfo) {
+	if info.SourceAction != nil {
+		e.numberSourceAction(info.SourceAction)
 
 		if e.sourceProducers == nil {
 			e.sourceProducers = make(map[NodeRef]*GeneratedFileInfo)
 		}
 
-		e.sourceProducers[stored.ProducerRef] = stored
+		e.sourceProducers[info.ProducerRef] = info
 	}
-
-	return stored
 }
 
 func (e *EmitContext) collectScriptOutput(output VFS) {

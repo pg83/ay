@@ -7,6 +7,7 @@ import (
 )
 
 type UsrvFile struct {
+	DeclSeq  int
 	Tar      string
 	File     string
 	DepsFile string
@@ -48,11 +49,11 @@ func (d *ModuleData) collectUsrvFiles(args []string) {
 	}
 
 	for _, f := range files {
-		d.usrvFiles = append(d.usrvFiles, UsrvFile{Tar: tar, File: f, DepsFile: deps, Auto: deps != "NO_DEPS" || strings.HasSuffix(f, ".cpp")})
+		d.usrvFiles = append(d.usrvFiles, UsrvFile{DeclSeq: d.nextDeclSeq(), Tar: tar, File: f, DepsFile: deps, Auto: deps != "NO_DEPS" || strings.HasSuffix(f, ".cpp")})
 	}
 
 	for _, f := range noauto {
-		d.usrvFiles = append(d.usrvFiles, UsrvFile{Tar: tar, File: f, DepsFile: deps})
+		d.usrvFiles = append(d.usrvFiles, UsrvFile{DeclSeq: d.nextDeclSeq(), Tar: tar, File: f, DepsFile: deps})
 	}
 
 	d.peerdirs = append(d.peerdirs, strTaxiUservicesArcGenUnpackTarUsrvBuildLib.any())
@@ -96,7 +97,7 @@ func (e *EmitContext) emitUsrvFiles() {
 			Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolArgs[0], strSourceArg.any(), src.any(), strTarget2.any(), build(e.instance.Path.relString()).any(), out.any())), Env: envVarsVCS}),
 			Inputs: na.inputList(inputs), Outputs: na.vfsList(out)}
 
-		e.emitLazyModuleNode(n, nil)
+		e.emitLazyModuleNodeAction(n, nil, &SourceActionInfo{DeclSeq: file.DeclSeq, Inputs: na.vfsList(src)})
 
 		info := e.codegen.mustInfo(out)
 
