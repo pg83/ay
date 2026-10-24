@@ -286,6 +286,12 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 
 	for _, check := range e.d.styleChecks {
 		if check.CPP {
+			for _, info := range e.sourceProducers {
+				for _, input := range info.SourceAction.Inputs {
+					check.Files = append(check.Files, e.cppStyleInputFiles(input)...)
+				}
+			}
+
 			check.Files = sortedUnique(check.Files)
 
 			if len(check.Depends) != 0 && !customClangFormatAllowed(e.instance.Path.relString()) {
