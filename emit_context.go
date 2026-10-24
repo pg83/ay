@@ -580,13 +580,6 @@ func (e *EmitContext) emit() {
 		e.emitRosEmpty()
 	}
 
-	for _, meta := range d.srcs {
-		if !isCodegenProducingSrcID(meta.Source) {
-			meta.InitialCompileSource = meta.Prio == stmtPrioSrcs
-			e.enqueueSrc(meta)
-		}
-	}
-
 	e.emitPyFbsGroups()
 	e.emitDeclaredProducers(cythonPlans)
 	e.collectRunProgramObjects()
@@ -599,6 +592,13 @@ func (e *EmitContext) emit() {
 
 	if !e.producersOnly() {
 		e.emitPyRegister()
+	}
+
+	for _, meta := range d.srcs {
+		if !isCodegenProducingSrcID(meta.Source) {
+			meta.InitialCompileSource = meta.Prio == stmtPrioSrcs
+			e.enqueueSrc(meta)
+		}
 	}
 
 	var pyProtoResources *ObjcopyEmitResult
