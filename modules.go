@@ -293,6 +293,8 @@ type ModuleData struct {
 	useDynamicCuda           bool
 	splitDwarf               bool
 	noPythonIncl             bool
+	pythonModule2            bool
+	pythonModule3            bool
 	python2Headers           bool
 	python3NativeIncl        bool
 	pythonPeerTags           []string
@@ -926,6 +928,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.addInclUserGlobal = append(d.addInclUserGlobal, d.cfAddInclGlobal...)
 	d.cfAddIncl = nil
 	d.cfAddInclGlobal = nil
+	finishPythonDllConfig(d, pythonHeaderEnv)
 	finishPythonHeaderConfig(d, pythonHeaderEnv)
 
 	dedupers.with(func(deduper *DeDuper) {
@@ -1389,6 +1392,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			env.setStringID(envModuleKind, v.Name.str())
 			setupYqlModule(d, v.Name, env)
 			setupUdfBaseModule(v, d, env)
+			setupPythonDllModule(v, env)
 
 			if v.Schema && d.unit.Tag == unitTagPy3Proto {
 				d.unit.HashTag = strPy3ProtoFromSchema
@@ -1477,7 +1481,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.moduleVariants = defaultProtoVariants
 			}
 
-			if d.unit.HashTag == unitTagPy2Native {
+			if v.Name == tokPy2Module {
+				applyPythonModuleSelector(d, env, false)
+			} else if d.unit.HashTag == unitTagPy2Native {
 				applyPython2Addincl(d, env, true)
 			} else if d.unit.HashTag == unitTagPy3Native {
 				applyPython3Addincl(d, env)
@@ -1741,7 +1747,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.unit.HashTag = internStr(env.string(envMODULE_TAG))
 			d.pyNamespacePython2 = env.string(envPYTHON2) == "yes"
 
-			if d.python2Headers || d.python3NativeIncl {
+			if d.python2Headers || d.python3NativeIncl || d.moduleStmt.Name == tokPyAnyModule {
 				d.pythonHeaderEnv = env.clone()
 			}
 
@@ -2459,6 +2465,13 @@ func warnUnmodelledMacro(onWarn func(Warn), modulePath string, name TOK) {
 }
 
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
+	if d.moduleStmt != nil {
+		if d.moduleStmt.Name == tokPyAnyModule && (v.Name == tokUsePython2 || v.Name == tokUsePython3 || v.Name == tokPySrcs || v.Name == tokPyMain) ||
+			d.moduleStmt.Name == tokPy2Module && (v.Name == tokPython3Module || v.Name == tokPython3Addincl) {
+			throwFmt("gen: %s is restricted in %s", v.Name.string(), d.moduleStmt.Name.string())
+		}
+	}
+
 	if applyTestMacro(v, d, env) {
 		return
 	}
@@ -3511,6 +3524,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		} else {
 			applyPython2Addincl(d, env, true)
 		}
+	case tokPython2Module, tokPython3Module:
+		applyPythonModuleSelector(d, env, v.Name == tokPython3Module)
 	case tokPython3Addincl:
 		applyPython3Addincl(d, env)
 	case tokUsePython3:
@@ -5562,6 +5577,17 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		name := ctx.moduleName(peerVFS.relString())
 
 		peer.YqlCurrent = name == tokYqlLibrary || isYqlUdfStaticModule(name)
+	}
+
+	if d.pythonPeerTags != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokPy23NativeLibrary {
+		switch {
+		case slices.Contains(d.pythonPeerTags, "PY2_NATIVE"):
+			peer.Language = LangPy2
+		case slices.Contains(d.pythonPeerTags, "PY3_NATIVE"):
+			peer.Language = LangCPP
+		default:
+			throwFmt("gen: %s: no compatible Python header peer in %s", parent.Path.relString(), peerVFS.relString())
+		}
 	}
 
 	if d.pythonPeerTags != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokProtoLibrary {

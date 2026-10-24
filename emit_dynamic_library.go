@@ -72,7 +72,7 @@ func dllOutputName(instance ModuleInstance, stmt *ModuleStmt) string {
 	args := parseDllModuleArgs(stmt.Args)
 	prefix := "lib"
 
-	if stmt.Name == tokPy2Module {
+	if isPythonDllModule(stmt.Name) {
 		prefix = ""
 	}
 

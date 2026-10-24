@@ -621,11 +621,11 @@ func isFinalTargetModuleType(name TOK) bool {
 }
 
 func picTransition(name TOK) bool {
-	return name == tokDll || name == tokUdfBase || name == tokDllJava || name == tokPy2Module || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokDynamicLibrary
+	return name == tokDll || name == tokUdfBase || name == tokDllJava || isPythonDllModule(name) || name == tokYqlUdf || name == tokYqlUdfContrib || name == tokYqlPythonUdf || name == tokYqlPython3Udf || name == tokDynamicLibrary
 }
 
 func isDllModuleType(name TOK) bool {
-	return name == tokDll || name == tokDllTool || name == tokPy2Module
+	return name == tokDll || name == tokDllTool || isPythonDllModule(name)
 }
 
 func (e *EmitContext) moduleInputArg(arg *ANY) *ANY {
@@ -700,7 +700,7 @@ func inferModuleDeclaration(stmts []Stmt) (*ModuleStmt, bool) {
 
 func isLinkingModuleType(name TOK) bool {
 	switch name {
-	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary, tokPy2Module, tokYqlUdf, tokYqlUdfContrib, tokYqlPythonUdf, tokYqlPython3Udf:
+	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary, tokPy2Module, tokPyAnyModule, tokYqlUdf, tokYqlUdfContrib, tokYqlPythonUdf, tokYqlPython3Udf:
 		return true
 	}
 
@@ -1069,10 +1069,6 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	}
 
 	d.peerdirs = append(d.peerdirs, d.nativeSwigPeerdirs()...)
-
-	if d.moduleStmt.Name == tokPy2Module && instance.Platform.ifEnv.bool(envIS_CROSS_TOOLS) {
-		d.peerdirs = append(d.peerdirs, strContribToolsPythonLib.any())
-	}
 
 	pythonProtoVariant := isPythonProtoModule(d)
 
@@ -2600,7 +2596,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		if isDllModuleType(d.moduleStmt.Name) {
 			binaryName = dllOutputName(instance, d.moduleStmt)
-			dyn = &DynLibLink{soname: binaryName, symbolic: (d.moduleStmt.Name == tokPy2Module || d.yqlUdfShared) && instance.Platform.OS != OSDarwin && instance.Platform.OS != OSWindows || d.udfBaseSymbolic}
+			dyn = &DynLibLink{soname: binaryName, symbolic: (isPythonDllModule(d.moduleStmt.Name) || d.yqlUdfShared) && instance.Platform.OS != OSDarwin && instance.Platform.OS != OSWindows || d.udfBaseSymbolic}
 
 			if version := dllModuleVersion(d.moduleStmt); version != "" {
 				dyn.soname += version
