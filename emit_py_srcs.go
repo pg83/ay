@@ -886,7 +886,7 @@ func (e *EmitContext) pySrcResourceItems(entries []PyGenResEntry) []ResourceItem
 
 		buf = buf[:cmdStart]
 
-		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd}
+		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, DontParse: true}
 
 		kvItem.setInput(en.path)
 		items = append(items, kvItem)
@@ -939,8 +939,8 @@ func (e *EmitContext) pyGenResourceItems(entries []PyGenResEntry) []ResourceItem
 
 		buf = buf[:cmdStart]
 
-		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd}
-		fileItem := ResourceItem{Path: en.token, Key: key}
+		kvItem := ResourceItem{Path: "-", Key: kvHash, Cmd: cmd, DontParse: true}
+		fileItem := ResourceItem{Path: en.token, Key: key, DontParse: true}
 
 		kvItem.setInput(en.path)
 		fileItem.setInput(en.path)

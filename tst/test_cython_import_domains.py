@@ -97,6 +97,17 @@ class CythonImportDomainsTest(unittest.TestCase):
             self.assertNotIn("$(S)/native/" + name, node["inputs"])
             self.assertIn("$(S)/native/" + name, cc["inputs"])
 
+    def test_embedded_utility_is_text_for_cython_and_parsed_for_compilation(self):
+        files = fixture('', mode='CYTHON_CPP')
+        utility = 'contrib/tools/cython/Cython/Utility/'
+        files[utility + 'CppSupport.cpp'] = '#include "utility_detail.h"\n'
+        files[utility + 'utility_detail.h'] = '#pragma once\n'
+        graph, node = self.generated(files, 'cpp')
+        self.assert_cython_inputs(node, {'$(S)/lib/readers/packet.pyx', '$(S)/lib/readers/stream.pxd'})
+        cc = next(n for n in graph['graph'] if n['kv'].get('p') == 'CC'
+                  and node['outputs'][0] in n['inputs'])
+        self.assertIn('$(S)/' + utility + 'utility_detail.h', cc['inputs'])
+
     def test_generic_generator_input_uses_the_registered_cython_language(self):
         files = fixture("ADDINCL(native/decoy FOR cython typed)\n"
             "RUN_PROGRAM(tools/consume IN readers/packet.pyx OUT consumed.cpp)\n"

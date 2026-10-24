@@ -4,8 +4,8 @@ import lib
 
 
 class ContextParserTest(unittest.TestCase):
-    """Files without a registered parser are parsed with the parser of the
-    closure root: ragel, lex and yasm roots here."""
+    """Unregistered files inherit the root parser; Lex includes are induced
+    on generated C/C++ files instead of becoming generator inputs."""
 
     def test_unregistered_includes_use_root_parser(self):
         files = {
@@ -33,9 +33,7 @@ class ContextParserTest(unittest.TestCase):
         self.assertEqual(run["inputs"][:3], [
             "$(B)/tools/gen/gen", "$(S)/mod/x.rl", "$(S)/mod/y.l",
         ])
-        self.assertEqual(sorted(run["inputs"][3:]), [
-            "$(S)/mod/l2.h", "$(S)/mod/ldefs.inc", "$(S)/mod/rdefs.inc",
-        ])
+        self.assertEqual(run["inputs"][3:], ["$(S)/mod/rdefs.inc"])
 
         yasm = lib.node_by_output(graph, "$(B)/mod/a.o")
         self.assertEqual(yasm["inputs"][:2], [

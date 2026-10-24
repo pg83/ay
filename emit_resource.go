@@ -172,7 +172,7 @@ func (e *EmitContext) resourceSourceMeta(items []ResourceItem, output VFS) SrcMe
 	return SrcMeta{Source: output.any(), Global: true}
 }
 
-func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, resources []STR, inputs, buildFrom InputChunks, deps []NodeRef) NodeRef {
+func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, resources []STR, inputs, buildFrom InputChunks, textInputs []VFS, deps []NodeRef) NodeRef {
 	if info := e.codegen.lookup(outputObj); info != nil && info.ResourceObjcopy && info.OwnerModule == e.instance.Path && info.OwnerSerial != e.frame.serial {
 		return info.ProducerRef
 	}
@@ -186,6 +186,7 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 		Env:             env,
 		Inputs:          inputs,
 		BuildFromInputs: buildFrom,
+		TextInputs:      textInputs,
 		Outputs:         na.vfsList(outputObj),
 		KV:              kv,
 		Resources:       e.instance.Platform.UsesPython3Clang,
@@ -200,6 +201,7 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 }
 
 type ResourceItem struct {
+	DontParse   bool
 	Path        string
 	Key         string
 	Cmd         STR
@@ -238,6 +240,28 @@ func (it *ResourceItem) setInput(v VFS) {
 	} else {
 		it.SourceInput = v
 	}
+}
+
+func (e *EmitContext) resourceTextInputs(items []ResourceItem) []VFS {
+	var inputs []VFS
+
+	dedupers.with(func(dd *DeDuper) {
+		for _, item := range items {
+			if !item.DontParse {
+				dd.addStable(item.input().strID())
+			}
+		}
+
+		for _, item := range items {
+			input := item.input()
+
+			if item.DontParse && input != 0 && input.isSource() && dd.addStable(input.strID()) {
+				inputs = append(inputs, input)
+			}
+		}
+	})
+
+	return e.ctx.na.vfsList(inputs...)
 }
 
 func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
@@ -475,7 +499,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		outputObj := build(instance.Path.relString(), "/objcopy_", hash, ".o")
 		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
 
-		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, deps))
+		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, e.resourceTextInputs(chunk), deps))
 
 		meta := e.resourceSourceMeta(chunk, outputObj)
 
@@ -635,14 +659,15 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		tail = tail[:len(tail):len(tail)]
 
 		e.emitReservedNode(Node{
-			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Resources: resourceUses, Env: env}),
-			Env:          env,
-			Inputs:       na.inputList(payloadBuilds, tail),
-			InputClosure: Closure{self: aux},
-			Outputs:      na.vfsList(aux),
-			KV:           &rawAuxKV,
-			DepRefs:      deps,
+			Platform:        instance.Platform,
+			Cmds:            na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Resources: resourceUses, Env: env}),
+			Env:             env,
+			Inputs:          na.inputList(payloadBuilds, tail),
+			BuildFromInputs: na.inputList(payloadBuilds),
+			TextInputs:      e.resourceTextInputs(chunk),
+			Outputs:         na.vfsList(aux),
+			KV:              &rawAuxKV,
+			DepRefs:         deps,
 		}, auxRef)
 
 		ccRef := ctx.emit.reserve()
@@ -697,7 +722,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 		dontCompress = entry.DontCompress
 
 		if entry.Path == "-" {
-			it := ResourceItem{Path: "-"}
+			it := ResourceItem{Path: "-", DontParse: true}
 
 			if entry.SrcPath != "" {
 				hashStart := len(e.resStrBuf)
@@ -747,7 +772,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 		} else {
 			fallback := e.resolveModuleSourceVFS(internStr(entry.Path).any(), d.srcDirs)
 			r := e.resolveResourceInput(entry.Path, fallback)
-			it := ResourceItem{Path: entry.Path, Key: entry.Key}
+			it := ResourceItem{Path: entry.Path, Key: entry.Key, DontParse: entry.DontParse}
 
 			it.setInput(r.Input)
 

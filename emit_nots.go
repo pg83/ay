@@ -715,7 +715,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 		refs = append(refs, ctx.vcsRef)
 	}
 
-	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(inputs...)), BuildFromInputs: na.inputList(na.vfsList(dedup(buildFrom)...)), Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(foreignRefs...), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
+	n := Node{Platform: e.instance.Platform, Cmds: na.cmdList(cmds...), Env: envVarsVCS, Inputs: na.inputList(na.vfsList(inputs...)), BuildFromInputs: na.inputList(na.vfsList(dedup(buildFrom)...)), TextInputs: na.vfsList(sourceFiles...), Outputs: na.vfsList(outputs...), KV: &KV{P: kind, PC: pcMagenta}, ForeignDepRefs: na.refList(foreignRefs...), DepRefs: na.refList(dedupRefs(refs)...), Requirements: e.notsRequirements(), Resources: append(resourceNames, usesPython3...)}
 	ref := e.emitNotsNode(n)
 	info := e.codegen.lookup(output)
 

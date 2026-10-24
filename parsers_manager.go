@@ -133,7 +133,7 @@ func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirec
 		}
 	}
 
-	if !pm.fs.isFilePathClean(rel) {
+	if parser == IncludeDirectiveParser(emptyParser) || !pm.fs.isFilePathClean(rel) {
 		var empty ParsedIncludeSet
 
 		pm.cache.parsed.put(key, ParsedSource{includes: empty, parser: parser, bucket: bucket})

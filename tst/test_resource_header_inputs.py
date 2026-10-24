@@ -101,6 +101,26 @@ class ResourceHeaderInputsTest(unittest.TestCase):
             with self.subTest(case=case):
                 self.check_generated(case)
 
+    def test_raw_and_yasm_packers_keep_parsed_and_text_source_edges(self):
+        for suffix, flags in (('_raw.auxcpp', 'DONT_COMPRESS '), ('.yasm', '')):
+            for opaque in (False, True):
+                with self.subTest(suffix=suffix, opaque=opaque):
+                    files = fixture('text' if opaque else 'parsed')
+                    files['petal/ya.make'] = files['petal/ya.make'].replace(
+                        'RESOURCE(', 'RESOURCE(' + flags).replace(' payload)', ' conftest.py/payload)')
+                    for tool in ('tools/rorescompiler', 'contrib/tools/yasm'):
+                        lib.tool_program(files, tool, tool.rsplit('/', 1)[-1])
+                    graph = lib.make(files, 'petal', '--target-platform', 'default-linux-x86_64')
+                    resource = next(n for n in graph['graph']
+                                    if n['outputs'][0].startswith('$(B)/petal/')
+                                    and n['outputs'][0].endswith(suffix))
+                    headers = {p for p in resource['inputs'] if p.startswith('$(S)/petal/')}
+                    expected = {'$(S)/petal/inputs/source.h'}
+                    if not opaque:
+                        expected.update({'$(S)/petal/inputs/leaf.h', '$(S)/petal/typed/choice.h',
+                                         '$(S)/petal/typed/deeper.h'})
+                    self.assertEqual(headers, expected)
+
     def check_generated(self, case):
         graph, resource = self.check(case, 'petal')
         producer = lib.node_by_output(graph, '$(B)/petal/generated.h')

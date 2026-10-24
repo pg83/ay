@@ -388,16 +388,19 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 			buildInputs = na.dedupClosure(buildInputs, [][]VFS{pxdInputs})
 		}
 
+		textInputs := e.textInputSources(concat(sourceInputs, pxdInputs, toolInputs), len(sourceInputs)+len(pxdInputs))
+
 		pe := func() {
 			e.emitReservedNode(Node{
 				Platform: instance.Platform,
 				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 					Env: env}),
-				Env:       env,
-				Inputs:    na.inputList(buildInputs),
-				Outputs:   outputs,
-				KV:        &cythonCppKV,
-				Resources: usesPython3,
+				Env:        env,
+				Inputs:     na.inputList(buildInputs),
+				TextInputs: textInputs,
+				Outputs:    outputs,
+				KV:         &cythonCppKV,
+				Resources:  usesPython3,
 			}, cyRef)
 		}
 

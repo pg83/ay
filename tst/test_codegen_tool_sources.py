@@ -70,7 +70,7 @@ class ToolDrivenSourcesTest(unittest.TestCase):
         ])
         self.assertEqual(calc["cmds"][1]["stdout"], "$(B)/mod/calc")
         self.assertEqual(calc["inputs"], [
-            "$(B)/tools/calcstaticopt/calcstaticopt", "$(S)/mod/calc.sfdl",
+            "$(B)/tools/calcstaticopt/calcstaticopt", "$(S)/mod/calc.sfdl", "$(S)/mod/sfinc.h",
         ])
 
         fml = lib.node_by_output(graph, "$(B)/mod/model.fml.inc")

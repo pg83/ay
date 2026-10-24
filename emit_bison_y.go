@@ -49,7 +49,7 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 	headerVFS := build(instance.Path.relString(), "/", headerRel)
 	generatedVFS := build(instance.Path.relString(), "/", generatedRel)
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
-	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
+	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesHeader, nil)
 	ycRef := ctx.emit.reserve()
 	env := na.envList(EnvVar{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()}, EnvVar{Name: envBISON_PKGDATADIR, Value: strBisonPkgData.any()}, EnvVar{Name: envM4, Value: m4Bin.any()})
 	preprocessEnv := envVarsVCS

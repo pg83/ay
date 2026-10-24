@@ -25,7 +25,7 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	outVFS := flexGeneratedVFS(instance, srcRel)
 	na := ctx.na
-	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
+	localBucket := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesCpp, nil)
 	parsed := na.dirs.alloc(1 + len(localBucket))[:0]
 
 	parsed = append(parsed, flexOutputInclude)

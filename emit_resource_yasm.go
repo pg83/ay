@@ -23,10 +23,15 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 
 	for _, hi := range resourceChunkEnds(items, false) {
 		var compressed []string
-		var args, inputs, outputs, srcgen []ANY
+		var args, outputs, srcgen []ANY
 		var srcHash []string
 
-		for _, item := range items[lo:hi] {
+		chunk := items[lo:hi]
+		textInputs := e.resourceTextInputs(chunk)
+
+		var inputs, opaque []ANY
+
+		for _, item := range chunk {
 			label := "ro_" + e.resourceHash([]string{item.Path, item.Key}, p.Tag)
 			output := label + ".rodata"
 
@@ -40,7 +45,13 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 			} else {
 				compressed = append(compressed, item.Path, output)
 				args = append(args, item.input().any(), internStr(output).any())
-				inputs = append(inputs, item.input().any())
+
+				if slices.Contains(textInputs, item.input()) {
+					opaque = append(opaque, item.input().any())
+				} else {
+					inputs = append(inputs, item.input().any())
+				}
+
 				outputs = append(outputs, internStr(output).any())
 				srcHash = append(srcHash, label+"="+item.Key)
 			}
@@ -60,7 +71,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 		compressArgs = append(compressArgs, args...)
 
 		e.emitRunProgram(&RunProgramStmt{
-			ToolPath: strToolsRescompressor.any(), Args: compressArgs, INFiles: inputs,
+			ToolPath: strToolsRescompressor.any(), Args: compressArgs, INFiles: append(inputs, opaque...), INNoParse: len(opaque),
 			OUTNoAutoFiles: append([]ANY{internStr(asm).any()}, outputs...),
 			EnvPairs:       []ANY{strYasmTestSuite1.any()},
 		})

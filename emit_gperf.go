@@ -72,7 +72,7 @@ func (e *EmitContext) emitLibraryGperfSource(meta SrcMeta) {
 		OutputPath:     genVFS,
 		ProducerRef:    gpRef,
 		GeneratorRefs:  e.ctx.na.refList(gperfLDRef),
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)},
+		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: e.scanner.parsedBucketForInput(srcVFS, parsedIncludesCpp, nil)},
 		OnUse:          pending,
 	})
 }

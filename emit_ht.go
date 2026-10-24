@@ -12,7 +12,7 @@ func (e *EmitContext) emitLibraryAspSource(meta SrcMeta) {
 	srcVFS := e.resolveModuleSourceVFS(src, d.srcDirs)
 	outVFS := build(module, "/", srcRel, ".cpp")
 	ref := ctx.emit.reserve()
-	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesLocal, nil)
+	parsed := e.scanner.parsedBucketForInput(srcVFS, parsedIncludesCpp, nil)
 
 	pe := func() {
 		env := envVarsVCS

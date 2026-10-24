@@ -370,7 +370,7 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 				}
 			}
 
-			if input.isBuild() && e.codegen.lookup(input) != nil || template && !text {
+			if input.isBuild() && e.codegen.lookup(input) != nil || input.isSource() && !text {
 				if cl := e.inputClosure(input); cl.buckets != nil {
 					extra = append(extra, cl)
 				}
@@ -452,7 +452,7 @@ func (e *EmitContext) includeClosure(input VFS) Closure {
 	cl, cached := e.scanner.closure(input)
 
 	if !cached {
-		cl = e.scanner.scanClosure(input, e.d.scanCtx, scanDomainCC)
+		cl = e.scanner.scanClosureWithDefaultParser(input, e.d.scanCtx, scanDomainCC, emptyParser)
 	}
 
 	return cl

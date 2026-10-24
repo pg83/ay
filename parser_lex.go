@@ -70,7 +70,7 @@ func (LexIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocat
 		return ParsedIncludeSet{}
 	}
 
-	return ParsedIncludeSet{parsedIncludesLocal: block[:k]}
+	return ParsedIncludeSet{parsedIncludesHeader: block[:k], parsedIncludesCpp: block[:k]}
 }
 
 func lexValidInclude(cands [][]byte) []byte {

@@ -456,6 +456,7 @@ type ResourceEntry struct {
 	Key          string
 	SrcPath      string
 	EndsBatch    bool
+	DontParse    bool
 	DontCompress bool
 }
 
@@ -1946,7 +1947,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *ResourceStmt:
-			pairs, dontCompress := expandResourcePairs(v.Args, v.Line, env)
+			pairs, dontParse, dontCompress := expandResourcePairs(v.Args, v.Line, env)
 
 			if isGoModuleType(d.unit.Type) {
 				entries := make([]ResourceEntry, len(pairs))
@@ -1970,6 +1971,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					Path:         pair.Path,
 					Key:          pair.Key,
 					EndsBatch:    i == len(pairs)-1,
+					DontParse:    dontParse,
 					DontCompress: dontCompress,
 				})
 			}
