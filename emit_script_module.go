@@ -93,7 +93,7 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 	}
 
 	for _, out := range ownedOutputs {
-		reg.register(GeneratedFileInfo{OutputPath: out, OwnerModule: e.instance.Path, ProducerRef: ref, OnUse: pending, IncludedBuildInputs: templates, IncludedInputs: includedInputs})
+		reg.register(GeneratedFileInfo{OutputPath: out, OwnerModule: e.instance.Path, OwnerSerial: e.frame.serial, ProducerRef: ref, OnUse: pending, IncludedBuildInputs: templates, IncludedInputs: includedInputs})
 	}
 
 	return ref
