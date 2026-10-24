@@ -139,9 +139,9 @@ func cmdMake(g GlobalFlags, args []string) int {
 	}
 
 	fs := newFS(mf.srcRoot)
-	caches := newGenCaches(fs)
+	parsers := newIncludeParserManagerFS(fs, newSharedParseCache())
 	rootYaConf := readYaConf(fs, "ya.conf")
-	hostP, targetP := makePlatforms(fs, mf, caches, rootYaConf)
+	hostP, targetP := makePlatforms(fs, mf, parsers, rootYaConf)
 	tests := newTestOpts(mf, rootYaConf)
 	events := newEventQueue()
 
@@ -155,11 +155,11 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	if mf.threads == 0 {
 		if mf.dumpGraph {
-			g := genDumpGraphWithResources(fs, caches, mf.targets, hostP, targetP, onWarn, tests, mf.keepGoing, demandSelf, mf.addModulesToResults, mf.stripPackagesFromResults)
+			g := genDumpGraphWithResources(fs, parsers, mf.targets, hostP, targetP, onWarn, tests, mf.keepGoing, demandSelf, mf.addModulesToResults, mf.stripPackagesFromResults)
 
 			writeGraph(g, !mf.sandboxing)
 		} else {
-			genStream(fs, caches, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, tests, mf.keepGoing, mf.addModulesToResults, mf.stripPackagesFromResults)
+			genStream(fs, parsers, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, tests, mf.keepGoing, mf.addModulesToResults, mf.stripPackagesFromResults)
 		}
 
 		if mf.dumpIgnoredMacros {
@@ -173,7 +173,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 	ex.startGarbageCollector()
 
-	results := genStream(fs, caches, mf.targets, hostP, targetP, ex.onNode, onWarn, tests, mf.keepGoing, mf.addModulesToResults, mf.stripPackagesFromResults)
+	results := genStream(fs, parsers, mf.targets, hostP, targetP, ex.onNode, onWarn, tests, mf.keepGoing, mf.addModulesToResults, mf.stripPackagesFromResults)
 
 	ex.run(results)
 
@@ -204,7 +204,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 	return 0
 }
 
-func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[string]any) (hostP, targetP *Platform) {
+func makePlatforms(fs FS, mf *MakeFlags, parsers *IncludeParserManager, rootYaConf map[string]any) (hostP, targetP *Platform) {
 	rootHostYaFlags := yaConfStringTable(rootYaConf["host_platform_flags"])
 	rootTargetYaFlags := yaConfStringTable(rootYaConf["flags"])
 	hostInternalYaFlags := readOptionalYaConfSection(fs, "build/internal/ya.conf", "host_platform_flags")
@@ -283,24 +283,12 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 	localFlags := readLocalYmake(fs)
 	hostRun := startYmakeConf(fs, srcRoot, mf.hostBuildType, !mf.dist, localFlags, hostFlags, hostTC)
 	targetRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, targetFlags, targetTC)
+	picFlags := maps.Clone(targetFlags)
 
-	var picRun *YmakeConfRun
+	delete(picFlags, "FORCE_NO_PIC")
 
-	startPIC := func() *YmakeConfRun {
-		picFlags := maps.Clone(targetFlags)
-
-		delete(picFlags, "FORCE_NO_PIC")
-
-		return startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
-	}
-
-	caches.prewarm(fs, mf.targets, func() {
-		if targetFlags["FORCE_NO_PIC"] == "yes" {
-			picRun = startPIC()
-		}
-	})
-
-	pc := readPlatformConf(fs, caches.parsers)
+	picRun := startYmakeConf(fs, srcRoot, mf.buildType, !mf.dist, localFlags, picFlags, targetTC)
+	pc := readPlatformConf(fs, parsers)
 	hostVars, hostRoot := hostRun.wait()
 
 	hostP = newPlatform(
@@ -321,10 +309,6 @@ func makePlatforms(fs FS, mf *MakeFlags, caches *GenCaches, rootYaConf map[strin
 
 	targetP = newPlatform(tOS, tISA, mf.buildType, targetTC, targetVars, targetRoot, pc, targetCFlags, targetCXXFlags)
 	targetP.picMake = func() *Platform {
-		if picRun == nil {
-			picRun = startPIC()
-		}
-
 		picVars, picRoot := picRun.wait()
 
 		return newPlatform(tOS, tISA, mf.buildType, targetTC, picVars, picRoot, pc, targetCFlags, targetCXXFlags)
@@ -353,13 +337,13 @@ func yaToolchainFlags(flags map[string]string, tc *Toolchain, tcFlags map[string
 	flags["YA"] = "yes"
 }
 
-func genStream(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), tests *TestOpts, keepGoing, addModulesToResults, stripPackagesFromResults bool) []NodeRef {
+func genStream(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), tests *TestOpts, keepGoing, addModulesToResults, stripPackagesFromResults bool) []NodeRef {
 	emitter := newStreamingEmitter(onNode)
 
 	emitter.addModulesToResults = addModulesToResults
 	emitter.stripPackagesFromResults = stripPackagesFromResults
 
-	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, demandSelf)
+	runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, demandSelf)
 
 	return emitter.finish()
 }

@@ -40,10 +40,11 @@ type Toolchain struct {
 }
 
 type YmakeConfRun struct {
-	cmd    *exec.Cmd
 	script string
 	stdout bytes.Buffer
 	stderr bytes.Buffer
+	done   chan struct{}
+	err    error
 }
 
 type YaConfToolchains struct {
@@ -430,13 +431,18 @@ func startYmakeConf(fs FS, srcRoot, buildType string, localDistbuild bool, local
 		args = append(args, "-D", k+"="+flags[k])
 	}
 
-	run := &YmakeConfRun{cmd: exec.Command("python3", args...), script: script}
+	run := &YmakeConfRun{script: script, done: make(chan struct{})}
+	cmd := exec.Command("python3", args...)
 
-	run.cmd.Env = ymakeConfEnv()
-	run.cmd.Stdout = &run.stdout
-	run.cmd.Stderr = &run.stderr
+	cmd.Env = ymakeConfEnv()
+	cmd.Stdout = &run.stdout
+	cmd.Stderr = &run.stderr
 
-	throw(run.cmd.Start())
+	go func() {
+		run.err = cmd.Run()
+
+		close(run.done)
+	}()
 
 	return run
 }
@@ -454,8 +460,10 @@ func ymakeConfEnv() []string {
 }
 
 func (r *YmakeConfRun) wait() (map[string]string, *ConfFile) {
-	if err := r.cmd.Wait(); err != nil {
-		throwFmt("Config was not generated due to errors in %s (%v)\n%s", r.script, err, r.stderr.String())
+	<-r.done
+
+	if r.err != nil {
+		throwFmt("Config was not generated due to errors in %s (%v)\n%s", r.script, r.err, r.stderr.String())
 	}
 
 	if r.stderr.Len() > 0 {

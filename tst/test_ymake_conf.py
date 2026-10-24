@@ -55,7 +55,7 @@ class Tree:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
 
-    def make(self, *args):
+    def make(self, *args, timeout=60):
         env = {k: v for k, v in os.environ.items() if k not in lib.TOOLCHAIN_ENV_VARS}
         env["AY_CONF_TEST_MARKER"] = "leaks"
         return subprocess.run(
@@ -66,7 +66,7 @@ class Tree:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=60,
+            timeout=timeout,
             check=False,
         )
 
@@ -225,47 +225,60 @@ class ConfCommandLineTest(unittest.TestCase):
             "TRAVERSE_RECURSE": "no", "YA": "yes",
         })
 
-    def test_pic_variant_is_configured_only_for_a_pic_transition(self):
+    def test_pic_variant_uses_target_flags_without_force_no_pic(self):
         tree = self.tree(**{"d/ya.make": "DLL(d)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n", "d/d.cpp": ""})
-        tree.graph("--sandboxing", "m")
-        self.assertFalse((tree.src / "build" / "argv.dist-debug.pic.json").exists())
         tree.graph("--sandboxing", "d")
         nopic = dict(presets(tree.recorded("dist-debug")["argv"]))
         del nopic["FORCE_NO_PIC"]
         self.assertEqual(dict(presets(tree.recorded("dist-debug.pic")["argv"])), nopic)
 
-    def test_definite_pic_root_starts_its_config_before_waiting_for_target(self):
+    def test_all_configurations_start_before_any_is_awaited(self):
         barrier = (
             "import time as _time\n"
-            "if 'FORCE_NO_PIC=yes' in _sys.argv:\n"
-            "    _marker = _os.path.join(_os.path.dirname(__file__), 'argv.' + _sys.argv[2] + '.pic.json')\n"
-            "    _deadline = _time.monotonic() + 5\n"
-            "    while not _os.path.exists(_marker):\n"
-            "        if _time.monotonic() > _deadline:\n"
-            "            raise RuntimeError('PIC configuration did not start while target configuration was pending')\n"
-            "        _time.sleep(0.01)\n"
+            "_markers = [_os.path.join(_os.path.dirname(__file__), 'argv.' + _name + '.json')\n"
+            "            for _name in ('dist-release', 'dist-debug', 'dist-debug.pic')]\n"
+            "_deadline = _time.monotonic() + 5\n"
+            "while not all(_os.path.exists(_marker) for _marker in _markers):\n"
+            "    if _time.monotonic() > _deadline:\n"
+            "        raise RuntimeError('host, target and PIC configurations did not start concurrently')\n"
+            "    _time.sleep(0.01)\n"
         )
         tree = self.tree(**{
-            "d/ya.make": "DLL(d)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n",
-            "d/d.cpp": "",
             "build/ymake_conf.py": RECORDER.replace("import base64", barrier + "import base64", 1),
         })
-        tree.graph("--sandboxing", "d")
+        self.assertEqual(compiled(tree.graph("--sandboxing", "m")), ["a.cpp.o"])
         self.assertEqual(len(list((tree.src / "build").glob("argv.*.json"))), 3)
         normal = dict(presets(tree.recorded("dist-debug")["argv"]))
         del normal["FORCE_NO_PIC"]
         self.assertEqual(dict(presets(tree.recorded("dist-debug.pic")["argv"])), normal)
 
-    def test_recurse_to_nonfinal_dll_does_not_start_unused_pic_config(self):
+    def test_unused_pic_failure_does_not_change_recurse_selection(self):
         tree = self.tree(**{
             "m/ya.make": library("") + "RECURSE(d)\n",
             "m/d/ya.make": "DLL(d)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n",
             "m/d/d.cpp": "",
+            "build/ymake_conf.py": RECORDER.replace(
+                "import base64",
+                "if _pic:\n    _sys.stderr.write('unused PIC failure\\n')\n    _sys.exit(3)\nimport base64",
+                1,
+            ),
         })
         graph = tree.graph("--sandboxing", "m")
         self.assertFalse(any(out.startswith("$(B)/m/d/") for node in graph["graph"] for out in node["outputs"]))
-        self.assertEqual(len(list((tree.src / "build").glob("argv.*.json"))), 2)
-        self.assertFalse((tree.src / "build/argv.dist-debug.pic.json").exists())
+
+    def test_consumed_pic_failure_is_reported(self):
+        tree = self.tree(**{
+            "d/ya.make": "DLL(d)\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(d.cpp)\nEND()\n",
+            "d/d.cpp": "",
+            "build/ymake_conf.py": RECORDER.replace(
+                "import base64",
+                "if _pic:\n    _sys.stderr.write('required PIC failure\\n')\n    _sys.exit(3)\nimport base64",
+                1,
+            ),
+        })
+        result = tree.make("--sandboxing", "d")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("required PIC failure", result.stderr)
 
     def test_distbuild_runs_the_script_without_local_distbuild(self):
         tree = self.tree()
@@ -303,8 +316,8 @@ class ConfCommandLineTest(unittest.TestCase):
         self.assertEqual(params["name"], "clang18")
 
 
-class PrewarmTest(unittest.TestCase):
-    def test_unreadable_file_outside_the_graph_is_skipped(self):
+class SourceDiscoveryTest(unittest.TestCase):
+    def test_inactive_sources_and_peer_makefiles_are_not_opened(self):
         tree = Tree(self, {
             "m/ya.make": library(
                 "SRCS(a.cpp)\nIF (OS_WINDOWS)\n    SRCS(win.cpp)\nENDIF()\n"
@@ -315,10 +328,13 @@ class PrewarmTest(unittest.TestCase):
             "winlib/ya.make": library("SRCS(w.cpp)\n"),
             "winlib/w.cpp": "",
         })
-        for unreadable in ("m/win.cpp", "winlib/ya.make"):
-            (tree.src / unreadable).chmod(0)
-            self.addCleanup((tree.src / unreadable).chmod, 0o644)
-        self.assertEqual(compiled(tree.graph("--sandboxing", "m")), ["a.cpp.o"])
+        for inactive in ("m/win.cpp", "winlib/ya.make"):
+            path = tree.src / inactive
+            path.unlink()
+            os.mkfifo(path)
+        result = tree.make("--sandboxing", "m", timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(compiled(json.loads(result.stdout)), ["a.cpp.o"])
 
     def test_graph_is_the_same_from_run_to_run(self):
         files = {

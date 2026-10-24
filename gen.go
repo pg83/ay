@@ -261,8 +261,8 @@ func newModuleMemo() *moduleMemo {
 	return &moduleMemo{entries: newBumpAllocator[moduleMemoEntry]()}
 }
 
-func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand) {
-	ctx := newGenCtx(fs, caches, hostP, targetP, emitter, onWarn, tests, keepGoing)
+func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand) {
+	ctx := newGenCtx(fs, parsers, hostP, targetP, emitter, onWarn, tests, keepGoing)
 	discovered := make([]DiscoveredTargets, len(targets))
 	all := make([]DiscoveredModule, 0, len(targets))
 
@@ -312,7 +312,7 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 	}
 }
 
-func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool) *GenCtx {
+func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool) *GenCtx {
 	plainEmit := emitter
 	scriptTbl := buildScriptTable(fs)
 
@@ -323,7 +323,6 @@ func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *Stre
 	}
 
 	fetchRefs := emitter.fetchRefs
-	parsers := caches.parsers
 	targetReg := newCodegenRegistry(plainEmit.nodeArenas())
 	hostReg := newCodegenRegistry(plainEmit.nodeArenas())
 
@@ -358,7 +357,7 @@ func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *Stre
 		sbomEnabled: fs.isFile(srcRootRel, sbomConfRel),
 
 		autoincludeIdx: loadAutoincludeIndex(fs),
-		parsedFiles:    caches.parsedFiles,
+		parsedFiles:    map[string]*MakeFile{},
 	}
 
 	ctx.inclArgs = InclArgMemo{m: &ctx.inclArgValues}
@@ -851,13 +850,13 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 	return targets
 }
 
-func genDumpGraphWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults, stripPackagesFromResults bool) *Graph {
+func genDumpGraphWithResources(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand, addModulesToResults, stripPackagesFromResults bool) *Graph {
 	emitter := newStreamingEmitter(nil)
 
 	emitter.addModulesToResults = addModulesToResults
 	emitter.stripPackagesFromResults = stripPackagesFromResults
 
-	runGenIntoWithResources(fs, caches, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand)
+	runGenIntoWithResources(fs, parsers, targets, hostP, targetP, emitter, onWarn, tests, keepGoing, rootDemand)
 
 	return finalize(emitter)
 }
