@@ -35,10 +35,6 @@ func runProgramSourceArgumentValues(args []ANY, env Environment, withText bool) 
 		for _, span := range spans {
 			word := value[span.Start:span.End]
 
-			if word == "" {
-				continue
-			}
-
 			if word == "&&" || word == ";" {
 				word = `${quo:"` + word + `"}`
 			}
