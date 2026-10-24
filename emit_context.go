@@ -584,6 +584,7 @@ func (e *EmitContext) emit() {
 
 	e.emitPyFbsGroups()
 	e.emitDeclaredProducers(cythonPlans)
+	e.collectRunProgramObjects()
 	e.registerSCInputs()
 	e.emitUsrvFiles()
 

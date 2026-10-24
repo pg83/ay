@@ -82,6 +82,34 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 	}
 }
 
+func (e *EmitContext) collectRunProgramObjects() {
+	for _, rp := range e.d.runPrograms {
+		collect := func(out ANY) {
+			ext := filepath.Ext(out.string())
+
+			if ext != ".o" && ext != ".obj" && ext != ".a" && (ext != ".lib" || isGoModuleType(e.d.unit.Type)) {
+				return
+			}
+
+			path := copyFileOutputVFS(e.instance.Path.relString(), out.string())
+
+			e.collectObj(e.codegen.mustInfo(path).ProducerRef, path, SrcMeta{Prio: stmtPrioDefault, Seq: rp.DeclSeq})
+		}
+
+		for _, out := range rp.OUTFiles {
+			collect(out)
+		}
+
+		for _, out := range rp.OUTNoAutoFiles {
+			collect(out)
+		}
+
+		if rp.StdoutFile != nil {
+			collect(*rp.StdoutFile)
+		}
+	}
+}
+
 func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	ctx, instance := e.ctx, e.instance
 	res, mainTool := e.foreignToolResult(internArg(filepath.Clean(stmt.ToolPath.relOrSelf().string())))
