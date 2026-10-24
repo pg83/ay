@@ -188,7 +188,7 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, event bool) *PyPBM
 	*pe = PyPBModuleEmission{}
 
 	plugins := d.pyProtoPlugins
-	mypy := !d.noMypy && !event
+	mypy := d.pyProtoMypy && !event
 
 	if event {
 		plugins = nil

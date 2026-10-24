@@ -207,6 +207,7 @@ var (
 	envPyExtraLintFilesValue                  = internEnv("_PY_EXTRA_LINT_FILES_VALUE")
 	envPyLinterFiles                          = internEnv("PY_LINTER_FILES")
 	envPyProto                                = internEnv("PY_PROTO")
+	envPyProtoMypyEnabled                     = internEnv("PY_PROTO_MYPY_ENABLED")
 	envPythonBin                              = internEnv("PYTHON_BIN")
 	envPythonInclude                          = internEnv("PYTHON_INCLUDE")
 	envPythonTypeForCython                    = internEnv("PYTHON_TYPE_FOR_CYTHON")

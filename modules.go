@@ -316,7 +316,7 @@ type ModuleData struct {
 	pyNamespacePython2       bool
 	protoNamespace           *ANY
 	ymapsSprotoSrcs          []ANY
-	noMypy                   bool
+	pyProtoMypy              bool
 	noOptimize               bool
 	optimizePyProtos         bool
 	optimizePyProtosSet      bool
@@ -807,6 +807,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	env.setVFS(envCmakeCurrentBinaryDir, build(modulePath))
 	env.setDefaultString(envCythonOptions, cythonDefaultOptions(instance.Platform.OS))
 	env.setDefaultString(envProtobufIncludePath, pbRuntimeBaseVFS.string())
+	env.setDefaultString(envPyProtoMypyEnabled, "yes")
 
 	d.reset()
 
@@ -831,6 +832,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.dontResolveIncludes = kindOfResolve != envAbsent && env.string(envDontResolveIncludes) != "no"
 	finishYqlModule(ctx, instance, env, d, onWarn)
 	d.udfBaseSymbolic = d.udfBaseSymbolic && env.string(envMsvc) != "yes" && env.string(envDarwin) != "yes"
+	d.pyProtoMypy = env.string(envPyProtoMypyEnabled) == "yes" &&
+		(isPythonProtoModule(d) || d.unit.Type == tokPy2Library || d.unit.Type == tokPy3Library || d.unit.Type == tokPy23Library)
 	d.cpuCheck = env.string(envCpuCheck) == "yes"
 	d.useSSE4 = env.string(envUSE_SSE4) == "yes"
 
@@ -3311,8 +3314,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				d.pyBuildNoPYC = true
 			case "PYBUILD_NO_PY":
 				d.pyBuildNoPY = true
-			case "PY_PROTO_MYPY_ENABLED":
-				d.noMypy = false
 			case "PYTHON_SQLITE3":
 				d.pythonSQLite3 = true
 			case "USE_LIGHT_PY2CC":
@@ -3356,7 +3357,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 		}
 	case tokNoMypy:
-		d.noMypy = true
+		env.setBool(envPyProtoMypyEnabled, false)
 	case tokNoOptimize:
 		d.noOptimize = true
 	case tokStrip:
