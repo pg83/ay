@@ -232,7 +232,7 @@ class YaMakeMacrosTest(unittest.TestCase):
             self.assertIn(path, lib.node_by_output(graph, "$(B)/a/f1.cpp.o")["inputs"])
         self.assertEqual(
             lib.node_by_output(graph, "$(B)/a/liba.a")["inputs"][:-1],
-            ["$(B)/a/copied.cpp.o", "$(B)/a/f1.cpp.o", "$(B)/a/dup.cpp.o", "$(B)/a/x.cpp.o"],
+            ["$(B)/a/dup.cpp.o", "$(B)/a/x.cpp.o", "$(B)/a/copied.cpp.o", "$(B)/a/f1.cpp.o"],
         )
 
     def test_data_only_macros_leave_a_cpp_graph_unchanged(self):

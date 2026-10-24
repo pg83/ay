@@ -17,7 +17,7 @@ def proto_world():
         'p/ya.make': (
             f'PROTO_LIBRARY()\n{lib.BARE_MODULE}GRPC()\nPY_NAMESPACE(api.messages)\n'
             'PROTO_NAMESPACE(p)\nPEERDIR(q)\nSRCS(a.proto)\n'
-            'IF (PY_PROTO AND PYTHON2 AND MODULE_LANG == "PY2")\nSRCS(native.cpp)\nENDIF()\nEND()\n'
+            'IF (PY_PROTO AND PYTHON2 AND MODULE_LANG == "PY2")\nSRC(native.cpp)\nENDIF()\nEND()\n'
         ),
         'p/a.proto': 'syntax = "proto2";\nimport "q/b.proto";\nmessage A {}\n',
         'p/native.cpp': '#include <Python.h>\nint value;\n',

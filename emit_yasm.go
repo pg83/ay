@@ -57,17 +57,18 @@ func (d *ModuleData) collectAssemblerConfig(env Environment) {
 	d.asmPreincludes = internAnys(strings.Fields(assemblerConfigValue(env, "YASM_PREINCLUDES_VALUE", "")))
 }
 
-func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, nasm bool) (NodeRef, VFS) {
+func (e *EmitContext) asmOutputFor(srcVFS VFS) VFS {
+	instance := e.instance
+	suffix := ccObjectSuffix(instance, newModuleCCInputs(&e.d.cc))
+	rel := composeSrcDirOutputRel(instance.Path.relString(), srcVFS.relString())
+
+	return build(instance.Path.relString(), "/", strings.TrimSuffix(rel, filepath.Ext(rel)), suffix)
+}
+
+func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, nasm bool, reserved NodeRef) (NodeRef, VFS) {
 	instance := e.instance
 	na := e.ctx.na
-	suffix := ".o"
-
-	if instance.Platform.PIC {
-		suffix = ".pic.o"
-	}
-
-	rel := composeSrcDirOutputRel(instance.Path.relString(), srcVFS.relString())
-	outVFS := build(instance.Path.relString(), "/", strings.TrimSuffix(rel, filepath.Ext(rel)), suffix)
+	outVFS := e.asmOutputFor(srcVFS)
 	inVFS := srcVFS
 	preincludes := e.d.asmPreincludes
 	sourceFlags := in.PerSourceCFlags
@@ -173,6 +174,12 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 		node.ForeignDepRefs = na.refList(yasmLD)
 	}
 
+	if reserved != 0 {
+		e.emitReservedNode(node, reserved)
+
+		return reserved, outVFS
+	}
+
 	return e.emitNode(node), outVFS
 }
 
@@ -198,7 +205,7 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta, in ModuleCCInputs) {
 		yasmLD, _ = ctx.tool(argContribToolsYasm)
 	}
 
-	ref, outPath := e.emitASAsm(srcVFS, asIn, yasmLD, nasm)
+	ref, outPath := e.emitASAsm(srcVFS, asIn, yasmLD, nasm, meta.CompileRef)
 
 	e.collectObj(ref, outPath, meta)
 }

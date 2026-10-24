@@ -2,23 +2,20 @@ package main
 
 var archiveAsmKV = KV{P: pkAR, PC: pcLightCyan}
 
-func (e *EmitContext) emitArchiveAsmForAR() {
+func (e *EmitContext) emitArchiveAsmForAR(a ArchiveAsmEntry) {
 	ctx, _, d := e.ctx, e.instance, e.d
 	toolLDRef, toolBinPath := ctx.tool(argToolsArchiver)
 	reg := e.codegen
+	rodataRel := a.Name + d.cc.objSufDot() + ".rodata"
+	rodataPath := build(e.instance.Path.relString(), "/", rodataRel)
 
-	for _, a := range d.archiveAsm {
-		rodataRel := a.Name + d.cc.objSufDot() + ".rodata"
-		rodataPath := build(e.instance.Path.relString(), "/", rodataRel)
+	e.emitArchiveAsmNode(a, rodataPath, toolBinPath, toolLDRef, reg)
 
-		e.emitArchiveAsmNode(a, rodataPath, toolBinPath, toolLDRef, reg)
-
-		if e.instance.Platform.ISA != ISAX8664 {
-			throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", e.instance.Platform.ISA, rodataRel)
-		}
-
-		e.enqueueSrc(SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault, Seq: a.DeclSeq})
+	if e.instance.Platform.ISA != ISAX8664 {
+		throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", e.instance.Platform.ISA, rodataRel)
 	}
+
+	e.enqueueSrc(SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault, Seq: a.DeclSeq})
 }
 
 func (e *EmitContext) emitArchiveAsmNode(

@@ -75,13 +75,14 @@ class RemainingGraphContractsTest(unittest.TestCase):
         self.assertIn('$(B)/app/external.cpp', compiled['inputs'])
         self.assertFalse(any('$(B)/app/external.cpp' in n['outputs'] for n in graph['graph']))
 
-    def test_global_linker_source_preserves_previously_scanned_dependencies(self):
+    def test_global_linker_source_uses_its_opaque_parser(self):
         files = {'app/ya.make': library('SRCS(main.cpp GLOBAL options.ld)'),
                  'app/main.cpp': '#include "options.ld"\n',
                  'app/options.ld': '#include "nested.h"\n', 'app/nested.h': ''}
         graph = lib.make(files, 'app')
         compiled = lib.node_by_output(graph, '$(B)/app/main.cpp.o')
-        self.assertIn('$(S)/app/nested.h', compiled['inputs'])
+        self.assertIn('$(S)/app/options.ld', compiled['inputs'])
+        self.assertNotIn('$(S)/app/nested.h', compiled['inputs'])
 
     def test_go_library_peer_keeps_its_go_dependencies(self):
         files = test_go_package.go_world()

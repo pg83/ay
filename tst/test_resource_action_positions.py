@@ -53,7 +53,7 @@ def labels(graph):
     for output in outputs:
         node = lib.node_by_output(graph, output)
         words = node['cmds'][0]['cmd_args']
-        if output.endswith('.auxcpp.o'):
+        if '.auxcpp.' in output and '_raw.auxcpp' not in output:
             result.append('aux')
         elif any(i.endswith('.yasm') for i in node['inputs']):
             result.append('asm')
@@ -131,6 +131,16 @@ class ResourceActionPositionsTest(unittest.TestCase):
                 if count > 1:
                     self.assertTrue(source['outputs'][0].startswith(PREFIX + 'join_'))
                     self.assertGreater(len([i for i in source['inputs'] if i.endswith('.auxcpp')]), 1)
+
+    def test_proto_library_collects_joined_objects_when_their_commands_run(self):
+        files = fixture('compressed', 80)
+        files['schema/ya.make'] = files['schema/ya.make'].replace(
+            'PY3_LIBRARY()', 'PROTO_LIBRARY()\nEXCLUDE_TAGS(CPP_PROTO)')
+        graph = lib.make(files, 'app', '--target-platform', 'default-linux-x86_64')
+        self.check_graph(graph)
+        self.assertEqual(labels(graph), ['resource'] * 3 + ['namespace', 'python', 'aux', 'asm'])
+        for output in archive_members(graph)[1][-2:]:
+            self.assertTrue(output.endswith('.py3.o'), output)
 
 
 if __name__ == '__main__':

@@ -1554,7 +1554,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				continue
 			}
 
-			if d.multimodule == tokFbsLibrary && language == LangPy {
+			if isPythonProtoModule(d) || d.multimodule == tokFbsLibrary && language == LangPy {
 				stmt := UnknownStmt{Name: tokPySrcs, Args: expandStmtTokens(v.Sources, env)}
 
 				d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
@@ -2304,7 +2304,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		}
 
 		if language == LangPy {
-			return ModuleUnit{Type: name, Tag: unitTagPy3Proto, ARPrefix: "libpy3", GlobalARTag: tagPy3ProtoGlobal, SbomLang: unitSbomCpp}
+			return ModuleUnit{Type: name, Tag: unitTagPy3Proto, ObjSuf: tagPy3, ARPrefix: "libpy3", GlobalARTag: tagPy3ProtoGlobal, SbomLang: unitSbomCpp}
 		}
 
 		if language == LangPy2 {
@@ -4298,6 +4298,8 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		a := v.Args[i]
 
 		switch a {
+		case kwGLOBAL.any():
+			continue
 		case kwTOP_LEVEL.any():
 			topLevel = true
 			namespace = nil
@@ -4383,6 +4385,20 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		}
 
 		src, modNameOverride, explicitModule := strings.Cut(a.string(), "=")
+
+		if extIsGztproto(src) {
+			if d.moduleStmt.Name != tokProtoLibrary {
+				continue
+			}
+
+			if !explicitModule {
+				src = strings.TrimSuffix(src, ".gztproto") + ".proto"
+
+				if !d.optimizePyProtosSet || d.optimizePyProtos {
+					d.peerdirs = append(d.peerdirs, strKernelGazetteerProto.any())
+				}
+			}
+		}
 
 		lintPy = lintPy || extIsPy(src)
 

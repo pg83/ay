@@ -545,16 +545,18 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		push(prodRunPython, i, start, outEnd)
 	}
 
-	if len(d.archiveAsm) > 0 {
+	for i, archive := range d.archiveAsm {
 		start := len(backing)
 
-		for _, archive := range d.archiveAsm {
-			for _, file := range archive.Files {
-				backing = append(backing, moduleInputCandidateVFS(module, file))
-			}
+		backing = append(backing, build(module, "/", archive.Name, d.cc.objSufDot(), ".rodata"))
+
+		outEnd := len(backing)
+
+		for _, file := range archive.Files {
+			backing = append(backing, moduleInputCandidateVFS(module, file))
 		}
 
-		push(prodArchiveAsm, 0, start, start)
+		push(prodArchiveAsm, i, start, outEnd)
 	}
 
 	srcs := e.prodSrcs[:0]
@@ -600,6 +602,11 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	for i, m := range srcs {
+		if isPythonProtoModule(d) {
+			m.Stmt = -i - 1
+			srcs[i] = m
+		}
+
 		var outs, ins []VFS
 
 		if isCodegenProducingSrcID(m.Source) {
@@ -880,10 +887,37 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 
 func (e *EmitContext) queueSource(index int) {
 	meta := e.srcs[index]
-	pos := ProducerPos{kind: prodQueuedSrc, index: index, ins: []VFS{e.sourceInputForScheduling(meta.Source.string())}}
+	outs, ins := e.srcPosition(meta)
+	pos := ProducerPos{kind: prodQueuedSrc, index: index, outs: outs, ins: ins}
+
+	for _, output := range outs {
+		e.producerOutputs[output] = len(e.prodPos)
+	}
 
 	e.prodOrder = append(e.prodOrder, len(e.prodPos))
 	e.prodPos = append(e.prodPos, pos)
+}
+
+func (e *EmitContext) bindDeclaredProgramInputs(inputs []VFS, tokens []ANY) {
+	for i, token := range tokens {
+		if !inputs[i].isBuild() {
+			continue
+		}
+
+		if _, declared := e.producerOutputs[inputs[i]]; declared {
+			continue
+		}
+
+		if _, rooted := moduleRootedVFS(e.instance.Path.relString(), token.string()); rooted {
+			continue
+		}
+
+		root := buildClean(token.string())
+
+		if _, declared := e.producerOutputs[root]; declared {
+			inputs[i] = root
+		}
+	}
 }
 
 func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta) {
@@ -894,6 +928,17 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 		pos := e.prodPos[pi]
 
 		e.commandHead++
+
+		switch pos.kind {
+		case prodRunProgram:
+			e.bindDeclaredProgramInputs(pos.ins, e.d.runPrograms[pos.index].INFiles)
+		case prodRunPython:
+			e.bindDeclaredProgramInputs(pos.ins, e.d.runPython[pos.index].INFiles)
+		case prodRunJava:
+			call := parseJavaRunProgram(e.instance.Path.relString(), e.d.runJavaPrograms[pos.index].Call)
+
+			e.bindDeclaredProgramInputs(pos.ins, internAnys(call.in))
+		}
 
 		ready := true
 
@@ -988,7 +1033,7 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 		case prodRunPython:
 			e.emitRunPythonStmt(e.d.runPython[pos.index])
 		case prodArchiveAsm:
-			e.emitArchiveAsmForAR()
+			e.emitArchiveAsmForAR(e.d.archiveAsm[pos.index])
 		case prodSrc:
 			meta := srcs[pos.index]
 

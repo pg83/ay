@@ -536,12 +536,10 @@ func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *Objco
 
 	flush()
 
-	if d.moduleStmt.Name != tokProtoLibrary {
-		protoRefs, protoOuts := e.emitPyProtoGroupResources(gi)
+	protoRefs, protoOuts := e.emitPyProtoGroupResources(gi)
 
-		res.Refs = append(res.Refs, protoRefs...)
-		res.Outputs = append(res.Outputs, protoOuts...)
-	}
+	res.Refs = append(res.Refs, protoRefs...)
+	res.Outputs = append(res.Outputs, protoOuts...)
 }
 
 func (e *EmitContext) collectPyProtoGroupResEntries(group int, event bool) ([]PyGenResEntry, []int) {
@@ -574,18 +572,6 @@ func (e *EmitContext) collectPyProtoGroupResEntries(group int, event bool) ([]Py
 	e.resEntries = retainMaxLen(e.resEntries, entries)
 
 	return entries, ends
-}
-
-func (e *EmitContext) pyProtoGroups() []int {
-	var groups []int
-
-	for _, ps := range e.pySrcsReg {
-		if ps.Kind == pySourceProto && !slices.Contains(groups, ps.Group) {
-			groups = append(groups, ps.Group)
-		}
-	}
-
-	return groups
 }
 
 func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef, []VFS) {

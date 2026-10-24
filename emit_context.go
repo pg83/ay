@@ -468,6 +468,17 @@ func (e *EmitContext) resStr2(a, b string) string {
 }
 
 func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
+	if isPythonProtoModule(e.d) && meta.Global {
+		if e.objcopyRes == nil {
+			e.objcopyRes = &ObjcopyEmitResult{}
+		}
+
+		e.objcopyRes.Refs = append(e.objcopyRes.Refs, ref)
+		e.objcopyRes.Outputs = append(e.objcopyRes.Outputs, out)
+
+		return
+	}
+
 	e.refs = append(e.refs, ref)
 	e.outs = append(e.outs, out)
 	e.metas = append(e.metas, meta)
@@ -475,6 +486,10 @@ func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
 
 func (e *EmitContext) enqueueSrc(meta SrcMeta) {
 	assert(!e.srcsClosed, "enqueueSrc after source queue closed")
+
+	if isPythonProtoModule(e.d) {
+		meta.Stmt = -len(e.d.srcs) - len(e.srcs) - 1
+	}
 
 	if cap(e.srcs) == 0 {
 		e.srcs = make([]SrcMeta, 0, len(e.d.srcs)+8)

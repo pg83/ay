@@ -82,10 +82,21 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 
 	asmName, cppName := asmFiles[0], cppFiles[0]
 	globalAsm := len(asmFiles) > 1
+	spec := CompileSpec{ForceCxx: true, CFlags: na.anyList(argX.any(), argC.any())}
+	ccRef := e.ctx.emit.reserve()
 
 	if globalAsm {
 		cppName = e.emitResourceJoin(cppFiles, ".auxcpp", p.Tag, false)
 		asmName = e.emitResourceJoin(asmFiles, ".yasm", p.Tag, true)
+
+		cppPath := build(module, "/", cppName)
+		asmPath := build(module, "/", asmName)
+		asmRef := e.ctx.emit.reserve()
+
+		e.enqueueSrc(SrcMeta{Source: cppPath.any(), Global: true, Compile: spec, CompileRef: ccRef})
+		e.enqueueSrc(SrcMeta{Source: asmPath.any(), Global: true, CompileRef: asmRef})
+
+		return na.refList(ccRef, asmRef), na.vfsList(e.ccOutputFor(cppPath, spec), e.asmOutputFor(asmPath))
 	}
 
 	asmPath := build(module, "/", asmName)
@@ -98,23 +109,14 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 	asmIn.IncludeView = e.scanner.walkClosure(asmPath, e.d.scanCtx, scanDomainAsm)
 
 	yasmRef, _ := e.ctx.tool(argContribToolsYasm)
-	asmRef, asmOut := e.emitASAsm(asmPath, asmIn, yasmRef, false)
-	asmMeta := SrcMeta{Global: globalAsm}
+	asmRef, asmOut := e.emitASAsm(asmPath, asmIn, yasmRef, false, 0)
 
-	if !globalAsm {
-		e.collectObj(asmRef, asmOut, asmMeta)
-	}
+	e.collectObj(asmRef, asmOut, SrcMeta{})
 
 	cppPath := build(module, "/", cppName)
-	ccRef := e.ctx.emit.reserve()
-	spec := CompileSpec{ForceCxx: true, CFlags: na.anyList(argX.any(), argC.any())}
 	meta := SrcMeta{Source: cppPath.any(), Global: true, Compile: spec, CompileRef: ccRef}
 
 	e.emitOneSource(meta)
-
-	if globalAsm {
-		return na.refList(ccRef, asmRef), na.vfsList(e.ccOutputFor(cppPath, spec), asmOut)
-	}
 
 	return na.refList(ccRef), na.vfsList(e.ccOutputFor(cppPath, spec))
 }

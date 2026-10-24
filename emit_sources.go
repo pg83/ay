@@ -65,9 +65,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 
 		ref, out := e.emitCCWith(srcVFS, e.ccInputsFor(meta.Compile), meta.CompileRef)
 
-		if meta.CompileRef == 0 || !isPythonProtoModule(e.d) {
-			e.collectObj(ref, out, meta)
-		}
+		e.collectObj(ref, out, meta)
 	case srcExtGettext:
 		input := e.moduleSourceVFS(src)
 
@@ -99,6 +97,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			e.emitGoProtoSource(meta)
 		} else if isPythonProtoModule(e.d) {
 			e.emitPyProtoSource(src, meta.Stmt, 0)
+			e.emitPyProtoGroupResources(meta.Stmt)
 		} else {
 			e.emitCppProtoFamilySource(meta, cppProtoSpec)
 		}
@@ -127,6 +126,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			e.emitGoEvSource(meta)
 		} else if isPythonProtoModule(e.d) {
 			e.emitPyProtoSource(src, meta.Stmt, 0)
+			e.emitPyProtoGroupResources(meta.Stmt)
 		} else {
 			e.emitLibraryEvSource(meta)
 		}

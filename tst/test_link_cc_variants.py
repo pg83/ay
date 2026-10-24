@@ -125,7 +125,7 @@ class CcVariantsTest(unittest.TestCase):
             for node in graph["graph"]
             if node["kv"]["p"] == "CC"
         ]
-        self.assertEqual(
+        self.assertCountEqual(
             objects,
             [
                 "$(B)/m/_/sub/f.cpp.o",

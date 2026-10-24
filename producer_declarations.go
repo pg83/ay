@@ -23,7 +23,7 @@ func (d *ModuleData) recordProducerDeclarations() {
 		prodConfigureFile: len(d.configureFiles), prodAntlrRun: len(d.antlrRuns), prodAntlr4Grammar: len(d.antlr4Grammars),
 		prodDecimalMD5: len(d.decimalMD5), prodBuildMn: len(d.buildMns), prodSplitCodegen: len(d.splitCodegens),
 		prodBaseCodegen: len(d.baseCodegens), prodRunProgram: len(d.runPrograms), prodRunPython: len(d.runPython),
-		prodArchiveAsm: min(len(d.archiveAsm), 1), prodEnum: len(d.enumSrcs), prodArchive: len(d.archives),
+		prodArchiveAsm: len(d.archiveAsm), prodEnum: len(d.enumSrcs), prodArchive: len(d.archives),
 		prodCheckConfigH: len(d.checkConfigHeaders), prodCythonAll: min(len(d.cythonCpp), 1), prodSwigAll: min(len(d.swigC), 1),
 		prodJoinSrcs: len(d.joinSrcs), prodSproto: len(d.ymapsSprotoSrcs), prodLlvmBc: len(d.llvmBc),
 		prodGoCodegen: len(d.goCodegens), prodLlvmCompile: len(d.llvmCompile), prodLuaCompile: len(d.luaCompile),
@@ -152,28 +152,37 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 			positions = append(positions, ProducerPos{kind: prodPyRegister, index: i})
 		}
 
-		if len(e.d.noCheckImports) > 0 {
-			positions = append(positions, ProducerPos{kind: prodPyNoCheck})
-		}
+		if !isProgramModuleType(e.d.moduleStmt.Name) || e.d.unit.Tag != 0 || len(e.resources) > 0 || e.d.pythonSourceCallback {
+			if len(e.d.noCheckImports) > 0 {
+				positions = append(positions, ProducerPos{kind: prodPyNoCheck})
+			}
 
-		if e.d.pyMain != nil {
-			positions = append(positions, ProducerPos{kind: prodPyMain})
-		}
+			if e.d.pyMain != nil {
+				positions = append(positions, ProducerPos{kind: prodPyMain})
+			}
 
-		if len(e.d.yaConfJSON) > 0 {
-			positions = append(positions, ProducerPos{kind: prodYaConf})
+			if len(e.d.yaConfJSON) > 0 {
+				positions = append(positions, ProducerPos{kind: prodYaConf})
+			}
 		}
 	}
 
 	if e.deferCC && (!e.producersOnly() || e.ctx.peerTests) {
 		for gi, group := range e.d.pySrcGroups {
-			var inputs []VFS
+			var outputs, inputs []VFS
 
 			for _, src := range group.Srcs {
-				inputs = append(inputs, e.sourceInputForScheduling(src.string()))
+				if extIsProto(src.relOrSelf().string()) || extIsEv(src.relOrSelf().string()) {
+					outs, ins := e.srcPosition(SrcMeta{Source: src})
+
+					outputs = append(outputs, outs...)
+					inputs = append(inputs, ins...)
+				} else {
+					inputs = append(inputs, e.sourceInputForScheduling(src.string()))
+				}
 			}
 
-			positions = append(positions, ProducerPos{kind: prodPyGroup, index: gi, ins: inputs})
+			positions = append(positions, ProducerPos{kind: prodPyGroup, index: gi, outs: outputs, ins: inputs})
 		}
 	}
 

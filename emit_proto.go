@@ -719,10 +719,6 @@ func (e *EmitContext) markProtoPendingAR() {
 }
 
 func (e *EmitContext) preparePyProtoLibraryResources() *ObjcopyEmitResult {
-	for _, group := range e.pyProtoGroups() {
-		e.emitPyProtoGroupResources(group)
-	}
-
 	resources := e.objcopyRes
 
 	e.objcopyRes = nil

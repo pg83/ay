@@ -272,17 +272,6 @@ func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
 }
 
 func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS) {
-	if isPythonProtoModule(e.d) {
-		defer func() {
-			if e.objcopyRes == nil {
-				e.objcopyRes = &ObjcopyEmitResult{}
-			}
-
-			e.objcopyRes.Refs = append(e.objcopyRes.Refs, refs...)
-			e.objcopyRes.Outputs = append(e.objcopyRes.Outputs, outs...)
-		}()
-	}
-
 	objItems := e.objScratch[:0]
 	rawItems := e.rawScratch[:0]
 
@@ -490,9 +479,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		meta := e.resourceSourceMeta(chunk, outputObj)
 
-		if !isPythonProtoModule(e.d) {
-			e.collectObj(refs[len(refs)-1], outputObj, meta)
-		}
+		e.collectObj(refs[len(refs)-1], outputObj, meta)
 
 		outs = append(outs, outputObj)
 	}
