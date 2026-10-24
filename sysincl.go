@@ -98,7 +98,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 
 	walk(root)
 
-	needed := map[string]bool{sysinclVar: true, "__COMMA__": true, importMaskVariable: true, "DEFAULT_ALLOCATOR": true, "C_AS_CXX_FLAGS": true}
+	needed := map[string]bool{sysinclVar: true, "__COMMA__": true, importMaskVariable: true, "DEFAULT_ALLOCATOR": true, "C_AS_CXX_FLAGS": true, "YQL_PYTHON_DIR": true}
 	used := make([]bool, len(stmts))
 	need := func(name string) { needed[name] = true }
 
@@ -138,6 +138,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 	bindConfCommandVariable(importMaskVariable, env, platformEnv, map[string]bool{})
 	bindConfCommandVariable("DEFAULT_ALLOCATOR", env, platformEnv, map[string]bool{})
 	bindConfCommandVariable("C_AS_CXX_FLAGS", env, platformEnv, map[string]bool{})
+	bindConfCommandVariable("YQL_PYTHON_DIR", env, platformEnv, map[string]bool{})
 
 	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env)), macros
 }
