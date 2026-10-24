@@ -118,6 +118,12 @@ func (e *StreamingEmitter) emitResolved(n *Node, id NodeRef) {
 	e.resolved.add(uint32(id))
 
 	if e.onNode != nil {
+		for dependency := range n.buildDeps(e.fetchRefs) {
+			if e.nodes.s[dependency].deferPublication {
+				n.deferPublication = true
+			}
+		}
+
 		if e.stripPackagesFromResults || n.deferPublication {
 			e.deferredNodes = append(e.deferredNodes, id)
 		} else {
