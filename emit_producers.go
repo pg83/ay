@@ -54,6 +54,7 @@ const (
 	prodPyNoCheck
 	prodPyMain
 	prodYaConf
+	prodUsrvFile
 	prodKindCount
 )
 
@@ -182,6 +183,10 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 		if isPythonProtoModule(d) {
 			for _, suffix := range pyProtoSuffixes(d, false) {
 				e.prodVFS = append(e.prodVFS, build(base, "__int", protoPythonVersion(d), "__", suffix))
+			}
+
+			if d.pyProtoMypy {
+				e.prodVFS = append(e.prodVFS, build(base, "__int", protoPythonVersion(d), "___pb2.pyi"))
 			}
 		} else {
 			e.prodVFS = append(e.prodVFS, build(base, ".pb.h"), build(base, ".pb.cc"))
@@ -919,6 +924,8 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 		e.prodPos[pi].done = true
 
 		switch pos.kind {
+		case prodUsrvFile:
+			e.emitUsrvFile(e.d.usrvFiles[pos.index])
 		case prodResource:
 			e.emitResourceFile(e.resources[pos.index:pos.end], e.d.unit.HashTag)
 		case prodPyGroup:

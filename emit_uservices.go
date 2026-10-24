@@ -59,61 +59,52 @@ func (d *ModuleData) collectUsrvFiles(args []string) {
 	d.peerdirs = append(d.peerdirs, strTaxiUservicesArcGenUnpackTarUsrvBuildLib.any())
 }
 
-func (e *EmitContext) emitUsrvFiles() {
-	if len(e.d.usrvFiles) == 0 {
-		return
-	}
-
+func (e *EmitContext) emitUsrvFile(file UsrvFile) {
 	na := e.ctx.na
 	toolValue := resourceGlobalArgumentValue([]ANY{strUsrvUnpackTarResourceGlobalUnpackTar.any()}, e.peers.ResourceGlobals)
 	toolArgs := toolValue.Args
+	src := e.runProgramInputVFS(file.Tar)
+	out := copyFileOutputVFS(e.instance.Path.relString(), file.File)
 
-	for _, file := range e.d.usrvFiles {
-		src := e.runProgramInputVFS(file.Tar)
-		out := copyFileOutputVFS(e.instance.Path.relString(), file.File)
+	var parsed []IncludeDirective
 
-		var parsed []IncludeDirective
+	if file.DepsFile != "NO_DEPS" {
+		depFile := copyFileInputVFS(e.ctx.fs, e.instance.Path, file.DepsFile)
+		object := e.ctx.parsers.notsJSON(depFile.relString())
+		deps, ok := object[file.File].([]any)
 
-		if file.DepsFile != "NO_DEPS" {
-			depFile := copyFileInputVFS(e.ctx.fs, e.instance.Path, file.DepsFile)
-			object := e.ctx.parsers.notsJSON(depFile.relString())
-			deps, ok := object[file.File].([]any)
-
-			if !ok {
-				throwFmt("USRV_BUILD: dependencies for %s missing in %s", file.File, file.DepsFile)
-			}
-
-			for _, dep := range deps {
-				parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(dep.(string)).any())})
-			}
+		if !ok {
+			throwFmt("USRV_BUILD: dependencies for %s missing in %s", file.File, file.DepsFile)
 		}
 
-		inputs := na.vfsList(src)
-
-		if producer := e.codegen.lookup(src); producer != nil && producer.ProducerMainOut != 0 && producer.ProducerMainOut != src {
-			inputs = na.vfsList(src, producer.ProducerMainOut)
-		}
-
-		n := Node{Platform: e.instance.Platform, KV: &KV{P: pkUT, PC: pcLightCyan, ShowOut: true}, Env: envVarsVCS,
-			Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolArgs[0], strSourceArg.any(), src.any(), strTarget2.any(), build(e.instance.Path.relString()).any(), out.any())), Env: envVarsVCS, Resources: toolValue.Resources}),
-			Inputs: na.inputList(inputs), Outputs: na.vfsList(out)}
-
-		e.collectCPPStyleInputs(src)
-		e.emitLazyModuleNode(n, nil)
-
-		info := e.codegen.mustInfo(out)
-
-		if strings.HasSuffix(file.File, ".proto") || strings.HasSuffix(file.File, ".fbs") {
-			info.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: parsed}
-		} else {
-			info.ParsedIncludes = ParsedIncludeSet{parsedIncludesCpp: parsed, parsedIncludesHeader: parsed}
+		for _, dep := range deps {
+			parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(internStr(dep.(string)).any())})
 		}
 	}
 
-	for _, file := range e.d.usrvFiles {
-		if file.Auto {
-			e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(e.instance.Path.relString(), file.File).any(), Prio: stmtPrioDefault})
-		}
+	inputs := na.vfsList(src)
+
+	if producer := e.codegen.lookup(src); producer != nil && producer.ProducerMainOut != 0 && producer.ProducerMainOut != src {
+		inputs = na.vfsList(src, producer.ProducerMainOut)
+	}
+
+	n := Node{Platform: e.instance.Platform, KV: &KV{P: pkUT, PC: pcLightCyan, ShowOut: true}, Env: envVarsVCS,
+		Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolArgs[0], strSourceArg.any(), src.any(), strTarget2.any(), build(e.instance.Path.relString()).any(), out.any())), Env: envVarsVCS, Resources: toolValue.Resources}),
+		Inputs: na.inputList(inputs), Outputs: na.vfsList(out)}
+
+	e.collectCPPStyleInputs(src)
+	e.emitLazyModuleNode(n, nil)
+
+	info := e.codegen.mustInfo(out)
+
+	if strings.HasSuffix(file.File, ".proto") || strings.HasSuffix(file.File, ".fbs") {
+		info.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: parsed}
+	} else {
+		info.ParsedIncludes = ParsedIncludeSet{parsedIncludesCpp: parsed, parsedIncludesHeader: parsed}
+	}
+
+	if file.Auto {
+		e.enqueueSrc(SrcMeta{Source: copyFileOutputVFS(e.instance.Path.relString(), file.File).any(), Prio: stmtPrioDefault})
 	}
 }
 

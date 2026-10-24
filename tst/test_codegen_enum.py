@@ -17,6 +17,21 @@ def enum_files(files):
 
 
 class EnumSerializationTest(unittest.TestCase):
+    def test_cyclic_header_inputs_survive_another_first_scanner_entry(self):
+        files = enum_files({
+            "m/ya.make": "LIBRARY()\n" + lib.BARE_MODULE
+                         + "SRCS(first.cpp)\nGENERATE_ENUM_SERIALIZATION_WITH_HEADER(enums.h)\nEND()\n",
+            "m/first.cpp": '#include "other.h"\n',
+            "m/other.h": '#include "enums.h"\n',
+            "m/enums.h": '#include "other.h"\nenum E { A };\n',
+        })
+        graph = lib.make(files, "m")
+        generated = lib.node_by_output(graph, "$(B)/m/enums.h_serialized.cpp")
+        self.assertCountEqual(generated["inputs"],
+                              [ENUM_PARSER, "$(S)/m/enums.h", "$(S)/m/other.h"])
+        compiled = lib.node_by_output(graph, "$(B)/m/enums.h_serialized.cpp.o")
+        self.assertIn(generated["uid"], compiled["deps"])
+
     def test_alice_noexcept_serialization_emits_only_a_header_and_induces_its_inputs(self):
         tool = "yandex_io/tools/enum_serializer_generator"
         runtime = tool + "/runtime/enum_runtime.h"

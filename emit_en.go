@@ -215,7 +215,7 @@ func (e *EmitContext) emitEN(
 	closure := e.inputClosure(headerInput)
 	env := envVarsVCS
 	foreignDepRefs := na.refList(enumParserLD)
-	inputs := appendInputChunks(na, na.inputList(na.vfsList(enumParserBin, headerInput)), closure.bucketList())
+	inputs := appendInputChunks(na, na.inputList(na.vfsList(enumParserBin)), na.dedupClosureChunks(closure))
 
 	node := Node{
 		Platform: e.instance.Platform,

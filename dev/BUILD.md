@@ -32,7 +32,9 @@ Use the existing producer dependency scheduler for command construction.
 Order initial commands by source priority and declaration order. Postpone a
 command with an unavailable direct input to the queue tail and append commands
 for automatic outputs there. Append archive and link members when their commands
-are constructed; do not sort the members afterward.
+are constructed; do not sort the members afterward. Explicit SRC, SRCS and
+PY_SRCS calls inside a macro belong to that declaration; they are not automatic
+processing of its outputs. Preserve that distinction when expanding macros.
 Do not add a second simulation of command readiness, virtual queue rounds, or
 reconstructed producer-chain depth to reorder objects after graph construction.
 

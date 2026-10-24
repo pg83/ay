@@ -16,7 +16,7 @@ func (d *ModuleData) recordProducerDeclarations() {
 	}
 
 	counts := [prodKindCount]int{
-		prodResource: len(d.resources), prodPyGroup: len(d.pySrcGroups), prodPyRegister: len(d.pyRegister),
+		prodUsrvFile: len(d.usrvFiles), prodResource: len(d.resources), prodPyGroup: len(d.pySrcGroups), prodPyRegister: len(d.pyRegister),
 		prodPyNoCheck: 1, prodYaConf: min(len(d.yaConfJSON), 1),
 		prodSrc: len(d.srcs), prodRunJava: len(d.runJavaPrograms),
 		prodCuda: len(d.cudaSrcs), prodImplib: len(d.implibs), prodCopyFile: len(d.copyFiles),
@@ -55,6 +55,8 @@ func (d *ModuleData) producerDeclarationSequence(decl producerDeclaration) int {
 	switch decl.kind {
 	case prodPyNoCheck:
 		return -1
+	case prodUsrvFile:
+		return d.usrvFiles[decl.index].DeclSeq
 	case prodSrc:
 		return d.srcs[decl.index].Seq
 	case prodResource:
@@ -94,6 +96,13 @@ func (d *ModuleData) producerDeclarationSequence(decl producerDeclaration) int {
 
 func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []ProducerPos {
 	module := e.instance.Path.relString()
+
+	for i, file := range e.d.usrvFiles {
+		positions = append(positions, ProducerPos{kind: prodUsrvFile, index: i,
+			outs: []VFS{copyFileOutputVFS(module, file.File)},
+			ins:  []VFS{e.sourceInputForScheduling(file.Tar)},
+		})
+	}
 
 	for i, stmt := range e.d.fromSandboxes {
 		outputs := make([]VFS, 0, len(stmt.OUTFiles)+len(stmt.OUTNoAutoFiles))

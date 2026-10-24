@@ -563,7 +563,6 @@ func (e *EmitContext) emit() {
 
 	e.emitDeclaredProducers(cythonPlans)
 	e.registerSCInputs()
-	e.emitUsrvFiles()
 
 	var pyProtoResources *ObjcopyEmitResult
 
@@ -577,12 +576,6 @@ func (e *EmitContext) emit() {
 		}
 
 		finalized = true
-
-		if d.moduleStmt.Name != tokProtoLibrary {
-			for _, gi := range e.pyProtoGroups() {
-				e.emitPyProtoGroupResources(gi)
-			}
-		}
 
 		if d.moduleStmt.Name == tokProtoLibrary {
 			pyProtoResources = e.preparePyProtoLibraryResources()
