@@ -58,6 +58,29 @@ Each case also retains the complete differing normalized nodes in
 These files are streamed during the parity count, so diagnosing a mismatch
 does not require generating or normalizing the same graphs again.
 
+Small source-feature cases provide a quicker loop for Cython inputs, resource
+ordering, and late source-file edges. Run all four with:
+
+```sh
+./build -j1 -k validate_source_features
+```
+
+Each case also has its own `validate_<case-id>` target. The reference closures
+use real targets from the pinned Arcadia revision, with independent source
+slices verified by running upstream `ya` on them:
+
+| Case ID | Target | Reference nodes |
+|---|---|---:|
+| `feature_cython_py3_inputs` | `search/split_bert` | 645 |
+| `feature_cpp_generated_header` | `extsearch/geo/saas/common/ut` | 2,926 |
+| `feature_cython_py2_inputs` | `contrib/python/scipy/py2` | 7,206 |
+| `feature_resource_order` | `irt/bmgen/synonyms` | 8,491 |
+
+The generated-header case also reproduces the lost-input regression from
+reusing a closure after its file edges have changed. All four cases use
+`xfail: false`; differences fail their gates normally. These focused cases
+supplement the larger corpus cases.
+
 Sandbox archives are ordinary CAS outputs and do not depend on the candidate
 `ay` binary. New resources provisioned by `dev/provision.py` are uploaded as
 locally created `tar.zst` archives (`zstd -3 -T2`, streaming) and pinned by SHA-256.

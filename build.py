@@ -470,5 +470,12 @@ group("validation_results", validation_summary)
 group("validation_report", validation_summary)
 group("validation_cases", *validation_gates)
 group("validation_shard", *selected_validation_gates)
+group(
+    "validate_source_features",
+    validation_gate_by_id["feature_resource_order"],
+    validation_gate_by_id["feature_cython_py3_inputs"],
+    validation_gate_by_id["feature_cpp_generated_header"],
+    validation_gate_by_id["feature_cython_py2_inputs"],
+)
 group("validate", validation_summary, validation_gate)
 group("test", *unit_members, validation_summary, validation_gate)
