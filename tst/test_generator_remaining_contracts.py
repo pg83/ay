@@ -4,6 +4,7 @@ import unittest
 import lib
 import test_proto_targets
 import test_resource_files
+from test_native_python_swig import fixture as native_swig_fixture
 
 
 def library(body):
@@ -48,11 +49,31 @@ class GeneratorRemainingContractsTest(unittest.TestCase):
         self.assertIn('-I=$(S)/common', doc['cmds'][0]['cmd_args'])
         self.assertFalse(any(o.endswith('ignored.cpp.o') for n in graph['graph'] for o in n['outputs']))
 
-    def test_swig_source_in_plain_library_reports_unsupported_extension(self):
-        result = lib.make_process({'app/ya.make': library('SRCS(api.swg)'), 'app/api.swg': ''}, 'app')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('unsupported source extension', result.stderr)
-        self.assertIn('api.swg', result.stderr)
+    def test_swig_source_in_plain_library_emits_native_python_outputs(self):
+        graph = lib.make(native_swig_fixture('library-default'), 'bindings/python', '--sandboxing')
+        wrapper = '$(B)/bindings/python/__/api_wrap.swg.cpp'
+        sidecar = '$(B)/bindings/python/Cedar.py'
+        producer = lib.node_by_output(graph, wrapper)
+        self.assertEqual(producer['outputs'], [wrapper, sidecar])
+        self.assertIn('-python', producer['cmds'][0]['cmd_args'])
+        tool = lib.node_by_output(graph, '$(B)/contrib/tools/swig/swig')
+        self.assertIn(tool['outputs'][0], producer['inputs'])
+        self.assertIn(tool['uid'], producer['deps'])
+        self.assertIn('$(S)/bindings/api.swg', producer['inputs'])
+        compiled = lib.node_by_output(graph, wrapper + '.o')
+        self.assertIn(wrapper, compiled['inputs'])
+        self.assertIn(producer['uid'], compiled['deps'])
+        for header in ['$(S)/bindings/api.h', '$(S)/bindings/detail.h']:
+            self.assertNotIn(header, producer['inputs'])
+            self.assertIn(header, compiled['inputs'])
+        library = lib.node_by_output(graph, '$(B)/bindings/python/libCedar.a')
+        self.assertEqual(library['outputs'], ['$(B)/bindings/python/libCedar.a', sidecar])
+        self.assertIn(compiled['uid'], library['deps'])
+        self.assertIn(producer['uid'], library['deps'])
+        self.assertTrue(graph['result'])
+        ids = {node['uid'] for node in graph['graph']}
+        self.assertLessEqual(set(graph['result']), ids)
+        self.assertTrue(all(set(node['deps']) <= ids for node in graph['graph']))
 
     def test_union_skips_build_root_files_without_producers(self):
         graph = lib.make({'pkg/ya.make': 'UNION()\nFILES(plain.txt ${ARCADIA_BUILD_ROOT}/pkg/missing.txt)\nEND()\n',
