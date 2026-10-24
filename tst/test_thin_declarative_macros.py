@@ -323,7 +323,8 @@ class ThinDeclarativeMacrosTest(unittest.TestCase):
                 else:
                     sources["renamed/headers/probe.cpp"] = "int value;\n"
                 if system:
-                    sources["build/platform/python/ya.make"] = "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(SYSTEM_PYTHON sbr:910)\nEND()\n"
+                    sources["build/platform/python/ya.make"] = ("RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(SYSTEM_PYTHON sbr:910)\n"
+                        "CFLAGS(GLOBAL -isystem${SYSTEM_PYTHON_RESOURCE_GLOBAL}/python/include/python3.12)\nEND()\n")
                 graph = lib.make(sources, "renamed/consumer")
                 own = lib.node_by_output(graph, "$(B)/renamed/headers/probe.cpp.o")
                 args = own["cmds"][0]["cmd_args"]
@@ -340,7 +341,11 @@ class ThinDeclarativeMacrosTest(unittest.TestCase):
                     self.assertNotIn("-DUSE_PYTHON3", args)
                 self.assertFalse(any("runtime_py3" in out for node in graph["graph"] for out in node["outputs"]))
                 if system:
-                    self.assertIn("sbr:910", lib.node_by_output(graph, "$(B)/resources/SYSTEM_PYTHON")["cmds"][0]["cmd_args"])
+                    resource = lib.node_by_output(graph, "$(B)/resources/SYSTEM_PYTHON")
+                    self.assertIn("sbr:910", resource["cmds"][0]["cmd_args"])
+                    for compiled in (own, peer):
+                        self.assertIn("-isystem$(B)/resources/SYSTEM_PYTHON/python/include/python3.12", compiled["cmds"][0]["cmd_args"])
+                        self.assertIn(resource["uid"], compiled["deps"])
 
     def test_acknowledgement_has_only_its_upstream_environment_effect(self):
         sources = {"renamed/policy/ya.make": native(""), "renamed/policy/probe.cpp": "int value;\n"}

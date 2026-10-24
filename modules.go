@@ -259,6 +259,7 @@ type ModuleData struct {
 	luaCompile               []LuaCompileStmt
 	cFlags                   []ANY
 	cFlagsGlobal             []ANY
+	compilerFlagUses         [3]CompilerFlagResourceUses
 	cxxFlags                 []ANY
 	cxxFlagsVar              []ANY
 	cxxFlagsGlobal           []ANY
@@ -1793,13 +1794,13 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.scAddInclExport = append(d.scAddInclExport, expandConfigVFSPaths(v.ScExportPaths, env)...)
 		case *CFlagsStmt:
 
-			d.cFlagsGlobal, d.cFlags = appendCompilerFlags(v.Flags, env, "USER_CFLAGS", v.Global, d.cFlagsGlobal, d.cFlags)
+			d.cFlagsGlobal, d.cFlags = appendCompilerFlags(v.Flags, env, "USER_CFLAGS", v.Global, d.cFlagsGlobal, d.cFlags, &d.compilerFlagUses[compilerFlagsCommon])
 		case *CXXFlagsStmt:
 
-			d.cxxFlagsGlobal, d.cxxFlags = appendCompilerFlags(v.Flags, env, "USER_CXXFLAGS", false, d.cxxFlagsGlobal, d.cxxFlags)
+			d.cxxFlagsGlobal, d.cxxFlags = appendCompilerFlags(v.Flags, env, "USER_CXXFLAGS", false, d.cxxFlagsGlobal, d.cxxFlags, &d.compilerFlagUses[compilerFlagsCxx])
 		case *CONLYFlagsStmt:
 
-			d.cOnlyFlagsGlobal, d.cOnlyFlags = appendCompilerFlags(v.Flags, env, "USER_CONLYFLAGS", false, d.cOnlyFlagsGlobal, d.cOnlyFlags)
+			d.cOnlyFlagsGlobal, d.cOnlyFlags = appendCompilerFlags(v.Flags, env, "USER_CONLYFLAGS", false, d.cOnlyFlagsGlobal, d.cOnlyFlags, &d.compilerFlagUses[compilerFlagsCOnly])
 		case *LDFlagsStmt:
 
 			value := strings.Join(anyStrs(expandStmtTokens(v.Flags, env)), " ")
@@ -5790,7 +5791,7 @@ func confProtoPlugin(fs FS, confRel, macro string) ConfProtoPlugin {
 	return conf
 }
 
-func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal bool, global, own []ANY) ([]ANY, []ANY) {
+func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal bool, global, own []ANY, uses *CompilerFlagResourceUses) ([]ANY, []ANY) {
 	var values []string
 
 	for _, arg := range args {
@@ -5829,17 +5830,15 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 		}
 	}
 
-	body := continueConfigMacroBody(name+" "+strings.Join(bound, " "), locals, 1, map[string][]string{"Flags": values})
-	words := strings.Split(body, " ")
+	body, origins := compilerFlagForwarding(name+" "+strings.Join(bound, " "), locals, map[string][]string{"Flags": values})
+	words := sourceWordSpans(body, func(r rune) bool { return r == ' ' })
 
 	var globalValues, ownValues []string
 
 	nextGlobal := false
 
-	for _, word := range words[1:] {
-		if word == "" {
-			continue
-		}
+	for _, span := range words[1:] {
+		word := body[span.Start:span.End]
 
 		if word == "GLOBAL" {
 			nextGlobal = true
@@ -5852,9 +5851,11 @@ func appendCompilerFlags(args []ANY, env Environment, name string, allGlobal boo
 		if nextGlobal {
 			global = append(global, arg)
 			globalValues = append(globalValues, word)
+			uses.Global = resourceKeyUnion(uses.Global, compilerFlagWordResources(origins, span))
 		} else {
 			own = append(own, arg)
 			ownValues = append(ownValues, word)
+			uses.Private = resourceKeyUnion(uses.Private, compilerFlagWordResources(origins, span))
 		}
 
 		nextGlobal = false

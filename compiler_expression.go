@@ -273,21 +273,21 @@ func compilerCommandBlocks(raw *CcModuleArgBlocks, cxx bool) *CcModuleArgBlocks 
 
 	in := binding.input
 	common := compilerCommandFlags(in.CFlags, in.CompilerEnv)
-	resources := resourceKeyUnion(common.Resources, compilerValueResourceKeys(in.CFlagValues))
+	resources := resourceKeyUnion(common.Resources, in.FlagResourceUses[compilerFlagsCommon], compilerValueResourceKeys(in.CFlagValues))
 
 	in.CFlags = common.Args
 
 	if cxx {
 		private := compilerCommandFlags(in.CXXFlags, in.CompilerEnv)
 
-		resources = resourceKeyUnion(resources, private.Resources, compilerValueResourceKeys(in.CXXFlagValues))
+		resources = resourceKeyUnion(resources, private.Resources, in.FlagResourceUses[compilerFlagsCxx], compilerValueResourceKeys(in.CXXFlagValues))
 
 		in.CXXFlags = private.Args
 		in.COnlyFlags = nil
 	} else {
 		private := compilerCommandFlags(in.COnlyFlags, in.CompilerEnv)
 
-		resources = resourceKeyUnion(resources, private.Resources, compilerValueResourceKeys(in.COnlyFlagValues))
+		resources = resourceKeyUnion(resources, private.Resources, in.FlagResourceUses[compilerFlagsCOnly], compilerValueResourceKeys(in.COnlyFlagValues))
 
 		in.COnlyFlags = private.Args
 		in.CXXFlags = nil

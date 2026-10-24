@@ -2379,6 +2379,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	d.cc = ModuleCompileEnv{
 		CompilerEnv: Environment{s: &frame.ifEnv},
 		CFlagValues: effectiveCFlagsGlobal, CXXFlagValues: effectiveCXXFlagsGlobal, COnlyFlagValues: effectiveCOnlyFlagsGlobal,
+		FlagResourceUses:     [3][]STR{d.compilerFlagUses[compilerFlagsCommon].Private, d.compilerFlagUses[compilerFlagsCxx].Private, d.compilerFlagUses[compilerFlagsCOnly].Private},
 		StaticAnalyzer:       e.cppStaticAnalyzer(resourceGlobalsClosure),
 		PchFlagsGlobal:       pchFlagsGlobal,
 		InclArgs:             ctx.inclArgs,

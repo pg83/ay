@@ -79,7 +79,7 @@ func commonCompilerFlagValue(in ModuleCCInputs, p *Platform) CompilerFlagValue {
 	value := compilerCommandFlags(in.CFlags, in.CompilerEnv)
 
 	value.Args = concat(p.CFlags, value.Args, in.PeerCFlagsGlobal, in.OwnCFlagsGlobal)
-	value.Resources = resourceKeyUnion(value.Resources, compilerValueResourceKeys(in.CFlagValues))
+	value.Resources = resourceKeyUnion(value.Resources, in.FlagResourceUses[compilerFlagsCommon], compilerValueResourceKeys(in.CFlagValues))
 
 	return value
 }

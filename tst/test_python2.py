@@ -210,10 +210,14 @@ class Python2Test(unittest.TestCase):
                     "prog/ya.make": f"PROGRAM()\n{NO_PLATFORM}USE_PYTHON2()\nPEERDIR(lib)\nSRCS(m.cpp)\nEND()\n",
                     "prog/m.cpp": "int main(){return 0;}\n",
                 })
-                graph = lib.make(files, "prog", "-t")
-                outputs = {out for n in graph["graph"] for out in n["outputs"]}
-                self.assertEqual("$(B)/resources/FLAKE8_PY2" in outputs, has_linter)
-                self.assertNotIn("$(B)/lib/test-results/py2_flake8/meta.json", outputs)
+                for requested in (False, True):
+                    with self.subTest(requested=requested):
+                        flags = ["-DADD_PEERDIRS_GEN_TESTS=yes"] if requested else []
+                        graph = lib.make(files, "prog", "-t", *flags)
+                        outputs = {out for n in graph["graph"] for out in n["outputs"]}
+                        enabled = requested and has_linter
+                        self.assertEqual("$(B)/resources/FLAKE8_PY2" in outputs, enabled)
+                        self.assertEqual("$(B)/lib/test-results/py2_flake8/meta.json" in outputs, enabled)
 
     def test_py2_library_compiles_sources_with_py2cc_into_resources(self):
         files = python2_base()

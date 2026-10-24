@@ -134,6 +134,8 @@ class PlatformVariantsTest(unittest.TestCase):
 class ScriptDependenciesTest(unittest.TestCase):
     def test_import_forms_and_transitive_closure(self):
         tree = Tree(self, {
+            "consumer/ya.make": library(["probe.cpp"], "PEERDIR(build/platform/res)\nCFLAGS(-DRES=${RES_RESOURCE_GLOBAL})\n"),
+            "consumer/probe.cpp": "int value;\n",
             "build/platform/res/ya.make": (
                 "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(RES sbr:1)\nEND()\n"
             ),
@@ -155,7 +157,7 @@ class ScriptDependenciesTest(unittest.TestCase):
             "build/scripts/zeta.py": "",
             "build/scripts/lib/nested.py": "",
         })
-        graph, _ = tree.graph("--sandboxing", "build/platform/res")
+        graph, _ = tree.graph("--sandboxing", "consumer")
         fetch = lib.node_by_output(graph, "$(B)/resources/RES")
         self.assertEqual(fetch["inputs"], [
             "$(S)/build/mapping.conf.json",

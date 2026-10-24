@@ -807,7 +807,7 @@ func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 	env := Environment{s: &e.frame.ifEnv}
 	raw := env.string(internEnv(importMaskVariable))
 
-	item.ExpandedCmd = internAnys(legacyConfigurationCommand(item.Key, env, importMaskVariable, raw, d.importMask.base))
+	item.ExpandedCmd = legacyConfigurationCommand(item.Key, env, importMaskVariable, raw, d.importMask.base)
 
 	return e.packResources(ResourcePack{Tag: d.unit.HashTag, DontCompress: true, Items: []ResourceItem{item}})
 }

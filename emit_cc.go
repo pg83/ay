@@ -17,6 +17,7 @@ var (
 
 type ModuleCompileEnv struct {
 	CompilerEnv          Environment
+	FlagResourceUses     [3][]STR
 	CFlagValues          []CompilerFlagValue
 	CXXFlagValues        []CompilerFlagValue
 	COnlyFlagValues      []CompilerFlagValue

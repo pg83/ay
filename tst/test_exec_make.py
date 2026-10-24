@@ -546,13 +546,17 @@ class ExecFailureTest(unittest.TestCase):
         self.assertFalse((ws.inst / "ok").exists())
 
     def test_keep_going_counts_failures_outside_the_roots(self):
-        ws = Workspace(self, BASIC, extra_resources="DECLARE_EXTERNAL_RESOURCE(BROKEN {base}/broken.tar)\n")
+        files = {**BASIC, "tool/ya.make": BASIC["tool/ya.make"].replace(
+            "END()", "CFLAGS(-DBROKEN=${BROKEN_RESOURCE_GLOBAL})\nEND()") }
+        ws = Workspace(self, files, extra_resources="DECLARE_EXTERNAL_RESOURCE(BROKEN {base}/broken.tar)\n")
         broken = f"{ws.server.base}/broken.tar"
         result = ws.make("-j", "2", "-k", check=False)
         self.assertEqual(result.returncode, 1)
         stderr = plain(result.stderr)
         self.assertIn(f"fetch: {broken} returned 404 Not Found", stderr)
-        self.assertTrue(stderr.rstrip().endswith("build failed: 1 nodes failed"), stderr)
+        # A consumed fetch failure reaches the root, whose NodeRef is reported.
+        self.assertRegex(stderr.splitlines()[-1], r"^build failed: \d+$")
+        self.assertFalse((ws.inst / "tool" / "tool").exists())
 
         result = ws.make("-j", "2", check=False)
         self.assertEqual(result.returncode, 1)

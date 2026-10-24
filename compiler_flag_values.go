@@ -49,7 +49,7 @@ func (e *EmitContext) compilerFlagExports(seen *DeDuper, peers []ResolvedPeer, k
 	}
 
 	if len(own) > 0 {
-		values = append(values, e.compilerFlagValue(own))
+		values = append(values, e.compilerFlagValue(own, kind))
 	}
 
 	e.ctx.na.compilerFlags.commit(len(values))
@@ -57,20 +57,21 @@ func (e *EmitContext) compilerFlagExports(seen *DeDuper, peers []ResolvedPeer, k
 	return values[:len(values):len(values)], flat
 }
 
-func (e *EmitContext) compilerFlagValue(args []ANY) CompilerFlagValue {
+func (e *EmitContext) compilerFlagValue(args []ANY, kind CompilerFlagKind) CompilerFlagValue {
 	value := compilerCommandFlags(args, Environment{s: &e.frame.ifEnv})
 
 	value.Args = e.ctx.argSlices.internCopy(value.Args)
+	value.Resources = resourceKeyUnion(value.Resources, e.d.compilerFlagUses[kind].Global)
 
 	return value
 }
 
-func (e *EmitContext) ownCompilerFlagValues(args []ANY) []CompilerFlagValue {
+func (e *EmitContext) ownCompilerFlagValues(args []ANY, kind CompilerFlagKind) []CompilerFlagValue {
 	if len(args) == 0 {
 		return nil
 	}
 
-	return e.ctx.na.compilerFlags.list(e.compilerFlagValue(args))
+	return e.ctx.na.compilerFlags.list(e.compilerFlagValue(args, kind))
 }
 
 func compilerCommandFlags(args []ANY, env Environment) CompilerFlagValue {
@@ -103,4 +104,54 @@ func ownCompilerFlagArgs(values []CompilerFlagValue, own []ANY) []ANY {
 	}
 
 	return values[len(values)-1].Args
+}
+
+type CompilerFlagResourceUses struct {
+	Global  []STR
+	Private []STR
+}
+
+type compilerFlagResourceOrigin struct {
+	key   STR
+	track SourceTextTracker
+}
+
+func compilerFlagForwarding(value string, env Environment, parameters map[string][]string) (string, []compilerFlagResourceOrigin) {
+	var keys []STR
+	env.resourceUses = &keys
+
+	body := continueConfigMacroBody(value, env, 1, parameters)
+
+	var origins []compilerFlagResourceOrigin
+
+	for _, key := range keys {
+		store := *env.s
+
+		store.textInputs = make(map[ENV][]SourceTextRange)
+
+		for id, bound := range store.resourceBindings {
+			if bound == key {
+				store.textInputs[id] = []SourceTextRange{{0, len(env.string(id))}}
+			}
+		}
+
+		origin := compilerFlagResourceOrigin{key: key}
+
+		continueConfigMacroBodyTracked(value, Environment{s: &store}, 1, parameters, &origin.track)
+		origins = append(origins, origin)
+	}
+
+	return body, origins
+}
+
+func compilerFlagWordResources(origins []compilerFlagResourceOrigin, span SourceTextRange) []STR {
+	var keys []STR
+
+	for _, origin := range origins {
+		if origin.track.contains(span.Start, span.End) {
+			keys = append(keys, origin.key)
+		}
+	}
+
+	return keys
 }

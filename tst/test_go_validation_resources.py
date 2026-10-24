@@ -56,11 +56,12 @@ class GoValidationResourcesTest(unittest.TestCase):
                     graph = lib.make(files, project, resources + "/outside", "--target-platform-tests", "--dist")
                     expected = bindings(BASE_RESOURCES | {names[part] for part in ("ALPHA", "ZETA", "TARGET")})
                     context = lib.node_by_output(graph, "$(B)/common_test.context")
-                    # Both an unrelated root and a real host tool have resources
-                    # in this graph. Neither belongs to the target module's DART.
-                    for part, uri in (("ALPHA", "sbr:71"), ("HOST", "sbr:82"), ("OUTSIDE", "sbr:91")):
-                        fetch = lib.node_by_output(graph, "$(B)/resources/" + names[part])
-                        self.assertIn(uri, fetch["cmds"][0]["cmd_args"])
+                    # The target DART consumes ALPHA; the unrelated root and
+                    # the host tool only declare their private resource names.
+                    fetch = lib.node_by_output(graph, "$(B)/resources/" + names["ALPHA"])
+                    self.assertIn("sbr:71", fetch["cmds"][0]["cmd_args"])
+                    for part in ("HOST", "OUTSIDE"):
+                        self.assertFalse(any("$(B)/resources/" + names[part] in n["outputs"] for n in graph["graph"]))
                     generated = lib.node_by_output(graph, f"$(B)/{project}/generated.go")
                     host = lib.node_by_output(graph, f"$(B)/{tool}/emitter")
                     self.assertEqual(host["platform"], "default-linux-x86_64")
@@ -82,7 +83,9 @@ class GoValidationResourcesTest(unittest.TestCase):
                         end = args.index("--node-timeout")
                         self.assertEqual(args[start:end], [arg for value in expected for arg in ("--global-resource", value)])
                         self.assertEqual(node["inputs"], ["$(S)/" + project, resource_id])
-                        self.assertEqual(node["deps"], [context["uid"]])
+                        consumed = BASE_RESOURCES | {names[part] for part in ("ALPHA", "ZETA", "TARGET")}
+                        expected_deps = [context["uid"], *(lib.node_by_output(graph, "$(B)/resources/" + name)["uid"] for name in consumed)]
+                        self.assertCountEqual(node["deps"], expected_deps)
                         self.assertEqual(args_after(args, "--env"), ["SUITE_LABEL=" + label])
                         self.assertEqual(node["requirements"]["network"], "full")
                     # Existing suite metadata and resource bindings stay intact.

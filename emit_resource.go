@@ -185,7 +185,7 @@ func (e *EmitContext) resourceSourceAction(items []ResourceItem) *SourceActionIn
 	return info
 }
 
-func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs, buildFrom InputChunks, deps []NodeRef, views []Closure, action *SourceActionInfo) NodeRef {
+func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, resources []STR, inputs, buildFrom InputChunks, deps []NodeRef, views []Closure, action *SourceActionInfo) NodeRef {
 	if info := e.codegen.lookup(outputObj); info != nil && info.ResourceObjcopy && info.OwnerModule == e.instance.Path && info.OwnerSerial != e.frame.serial {
 		return info.ProducerRef
 	}
@@ -195,7 +195,7 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 
 	node := Node{
 		Platform:        e.instance.Platform,
-		Cmds:            na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Env: env}),
+		Cmds:            na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Resources: resources, Env: env}),
 		Env:             env,
 		Inputs:          inputs,
 		BuildFromInputs: buildFrom,
@@ -217,7 +217,7 @@ type ResourceItem struct {
 	Path          string
 	Key           string
 	Cmd           STR
-	ExpandedCmd   []ANY
+	ExpandedCmd   CompilerFlagValue
 	SourceInput   VFS
 	BuildInput    VFS
 	AuxBuilds     []VFS
@@ -225,8 +225,8 @@ type ResourceItem struct {
 }
 
 func (it ResourceItem) commandArgs() []ANY {
-	if it.ExpandedCmd != nil {
-		return it.ExpandedCmd
+	if it.ExpandedCmd.Args != nil {
+		return it.ExpandedCmd.Args
 	}
 
 	return []ANY{it.Cmd.any()}
@@ -392,6 +392,8 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		payload := na.anys.alloc(payloadCap)[:0]
 
+		var resourceUses []STR
+
 		hashScratch = hashScratch[:0]
 
 		if nPaths > 0 {
@@ -424,6 +426,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 			for _, it := range chunk {
 				if it.Path == "-" {
 					payload = append(payload, it.commandArgs()...)
+					resourceUses = resourceKeyUnion(resourceUses, it.ExpandedCmd.Resources)
 					hashScratch = append(hashScratch, it.Key)
 				}
 			}
@@ -496,7 +499,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
 		action := e.resourceSourceAction(chunk)
 
-		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, inputs, buildFrom, deps, views, action))
+		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, deps, views, action))
 
 		if e.codegen.lookup(outputObj).SourceAction != action {
 			e.numberSourceAction(action)
@@ -603,11 +606,14 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		nodeCmd := na.anys.alloc(commandWords)[:0]
 
 		nodeCmd = append(nodeCmd, rescompilerBinVFS.any(), aux.any())
+		var resourceUses []STR
 
 		for _, it := range chunk {
 			if it.Path == "-" {
 				nodeCmd = append(nodeCmd, dash.any())
 				nodeCmd = append(nodeCmd, it.commandArgs()...)
+
+				resourceUses = resourceKeyUnion(resourceUses, it.ExpandedCmd.Resources)
 			} else {
 				key := it.Key
 
@@ -657,7 +663,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		e.emitReservedNode(Node{
 			Platform:     instance.Platform,
-			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Env: env}),
+			Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Resources: resourceUses, Env: env}),
 			Env:          env,
 			Inputs:       na.inputList(payloadBuilds, tail),
 			InputClosure: Closure{self: aux},

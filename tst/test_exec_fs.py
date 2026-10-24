@@ -181,6 +181,8 @@ class LargeFileTest(unittest.TestCase):
         exact += "#" * (MIB - len(exact) - 1) + "\n"
         self.assertEqual(len(exact), MIB)
         tree = Tree(self, {
+            "consumer/ya.make": library(["probe.cpp"], "PEERDIR(build/platform/res)\nCFLAGS(-DRES=${RES_RESOURCE_GLOBAL})\n"),
+            "consumer/probe.cpp": "int value;\n",
             "build/platform/res/ya.make": (
                 "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(RES sbr:1)\nEND()\n"
             ),
@@ -191,7 +193,7 @@ class LargeFileTest(unittest.TestCase):
             "build/scripts/exact.py": exact,
             "build/scripts/helper.py": "",
         })
-        graph, _ = tree.graph("build/platform/res")
+        graph, _ = tree.graph("consumer")
         fetch = lib.node_by_output(graph, "$(B)/resources/RES")
         self.assertEqual(fetch["inputs"], [
             "$(S)/build/mapping.conf.json",

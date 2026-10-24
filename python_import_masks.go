@@ -111,7 +111,10 @@ func finishPythonImportMask(env Environment, d *ModuleData) {
 	d.importMask.resource = &ResourceItem{Path: "-", Key: kv}
 }
 
-func legacyConfigurationCommand(text string, env Environment, variable, value, base string) []string {
+func legacyConfigurationCommand(text string, env Environment, variable, value, base string) CompilerFlagValue {
+	var resources []STR
+	env.resourceUses = &resources
+
 	depths := map[string]int{}
 
 	var compile func(string, bool, int) []string
@@ -167,5 +170,7 @@ func legacyConfigurationCommand(text string, env Environment, variable, value, b
 		return args
 	}
 
-	return compile(text, false, 0)
+	args := internAnys(compile(text, false, 0))
+
+	return CompilerFlagValue{Args: args, Resources: resources}
 }

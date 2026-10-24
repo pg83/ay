@@ -16,7 +16,8 @@ def fixture():
         "library/cpp/cpuid_check/ya.make": (
             f"LIBRARY()\n{lib.BARE_MODULE}PEERDIR(cpu_marker)\nEND()\n"
         ),
-        "cpu_marker/ya.make": lib.resource_lib("CPU_SENTINEL", 51),
+        "cpu_marker/ya.make": lib.resource_lib("CPU_SENTINEL", 51).replace("END()",
+            "CFLAGS(GLOBAL -DCPU_RESOURCE=${CPU_SENTINEL_RESOURCE_GLOBAL})\nEND()"),
     })
     return files
 
@@ -36,7 +37,9 @@ class YqlPrebuiltCpuScopeTest(unittest.TestCase):
         self.assertFalse(any("starlight.prebuilt" in output for node in graph["graph"] for output in node["outputs"]))
         cpu = lib.node_by_output(graph, "$(B)/resources/CPU_SENTINEL")
         self.assertTrue(cpu["outputs"])
-        lib.node_by_output(graph, "$(B)/app/main.cpp.o")
+        compiled = lib.node_by_output(graph, "$(B)/app/main.cpp.o")
+        self.assertIn("-DCPU_RESOURCE=$(B)/resources/CPU_SENTINEL", compiled["cmds"][0]["cmd_args"])
+        self.assertIn(cpu["uid"], compiled["deps"])
 
 
 if __name__ == "__main__":
