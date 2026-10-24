@@ -1,8 +1,10 @@
 package main
 
 type SourceFileGraph struct {
-	children DenseMap[VFS, []VFS]
-	final    *IncludeScanner
+	children      DenseMap[VFS, []VFS]
+	final         *IncludeScanner
+	cythonMissing DenseMap[VFS, []IncludeDirective]
+	cythonUses    []cythonSourceUse
 }
 
 func (s *IncludeScanner) sourceClosure(root VFS) Closure {
@@ -116,4 +118,94 @@ func (ctx *GenCtx) finalizeSourceInputs() {
 		node.InputClosure.scanner = nil
 		node.sourceInputsPending = false
 	}
+}
+
+type cythonSourceUse struct {
+	root     VFS
+	context  *ScanContext
+	consumer NodeRef
+}
+
+func (ctx *GenCtx) resolveCythonSourceUses() bool {
+	changed := ctx.resolveCythonScannerUses(ctx.scannerTarget)
+
+	changed = ctx.resolveCythonScannerUses(ctx.scannerHost) || changed
+
+	if ctx.scannerTargetPIC != nil {
+		changed = ctx.resolveCythonScannerUses(ctx.scannerTargetPIC) || changed
+	}
+
+	return changed
+}
+
+func (ctx *GenCtx) resolveCythonScannerUses(s *IncludeScanner) bool {
+	graph := s.sourceFiles
+	changed := len(graph.cythonUses) > 0
+
+	for i := 0; i < len(graph.cythonUses); i++ {
+		use := graph.cythonUses[i]
+		sc := s.getScanCtx(use.context, scanDomainCython, nil)
+		seen := make(map[VFS]bool)
+
+		var refs []NodeRef
+
+		var visit func(VFS)
+		visit = func(input VFS) {
+			if seen[input] {
+				return
+			}
+
+			seen[input] = true
+
+			if input.isBuild() {
+				if info := s.codegen.lookup(input); info != nil {
+					refs = append(refs, info.ProducerRef)
+				}
+			}
+
+			entry := sc.resolvedChildren(input)
+
+			graph.children.put(input, entry.Paths)
+
+			missing, _ := graph.cythonMissing.get(input)
+
+			if len(missing) > 0 {
+				var unresolved []IncludeDirective
+
+				children := append([]VFS(nil), entry.Paths...)
+
+				for _, include := range missing {
+					mark := len(children)
+
+					include.kind = includeSystem
+					children = sc.resolve(children, input, 0, include)
+
+					if len(children) == mark {
+						unresolved = append(unresolved, include)
+					}
+				}
+
+				graph.cythonMissing.put(input, unresolved)
+				graph.children.put(input, children)
+				entry.Paths = children
+				s.scanCache.put1(input, entry)
+			}
+
+			for _, child := range entry.Paths {
+				if isCythonLangFile(child.relString()) {
+					visit(child)
+				}
+			}
+		}
+		visit(use.root)
+
+		node := ctx.emit.nodes.s[use.consumer]
+
+		node.DepRefs = ctx.na.uniqueRefs(node.DepRefs, refs)
+		s.putScanCtx(sc)
+	}
+
+	graph.cythonUses = nil
+
+	return changed
 }

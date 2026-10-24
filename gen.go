@@ -2489,6 +2489,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	d.scanCtx.flatcInclude = moduleFlatcInclude
 	d.scanCtx.scInclude = moduleScInclude
 	d.scanCtx.cythonPeerIncl = frame.peerCtx.CythonInclude
+	primeCythonModuleSources(ctx, instance, d, e.scanner, d.scanCtx)
 	e.emitMlaunch(resolved, peerArchivePaths, effectiveMlaunchDeps)
 	e.emit()
 	ownIncludedDeps = e.publishOwnModuleIncludedDeps()

@@ -124,6 +124,18 @@ func configureCythonModule(ctx *GenCtx, instance ModuleInstance, tag string) *So
 
 	scan.cythonPeerIncl = peerCythonIncludes
 
+	primeCythonModuleSources(ctx, instance, d, scanner, scan)
+
+	if tag != "" {
+		order := e.scheduleResourceActions()
+
+		info.ResourceActions = &resourceActionState{order: order, sources: e.resourceSources, available: e.resourceAvailable}
+	}
+
+	return info
+}
+
+func primeCythonModuleSources(ctx *GenCtx, instance ModuleInstance, d *ModuleData, scanner *IncludeScanner, scan *ScanContext) {
 	visit := func(input VFS) {
 		if input.isSource() && isCythonLangFile(input.relString()) && ctx.fs.isFile(srcRootRel, input.relString()) {
 			scanner.cythonPyxLangClosure(input, scan)
@@ -153,12 +165,4 @@ func configureCythonModule(ctx *GenCtx, instance ModuleInstance, tag string) *So
 			visit(copyFileInputVFS(ctx.fs, instance.Path, input.string()))
 		}
 	}
-
-	if tag != "" {
-		order := e.scheduleResourceActions()
-
-		info.ResourceActions = &resourceActionState{order: order, sources: e.resourceSources, available: e.resourceAvailable}
-	}
-
-	return info
 }

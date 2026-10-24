@@ -63,11 +63,15 @@ func (ctx *GenCtx) moduleBuildDeps(ref NodeRef) ([]NodeRef, bool) {
 func (ctx *GenCtx) bindForeignTools() {
 	bindings := &ctx.foreignTools
 
+	ctx.resolveCythonSourceUses()
+
 	if len(bindings.order) == 0 {
 		return
 	}
 
 	for {
+		ctx.resolveCythonSourceUses()
+
 		possible := len(bindings.order)
 
 		var visited BitSet
@@ -128,7 +132,9 @@ func (ctx *GenCtx) bindForeignTools() {
 			}
 		}
 
-		if !ctx.flushFbsContextBindings() && possible == len(bindings.order) {
+		sourcesChanged := ctx.resolveCythonSourceUses()
+
+		if !ctx.flushFbsContextBindings() && !sourcesChanged && possible == len(bindings.order) {
 			break
 		}
 	}

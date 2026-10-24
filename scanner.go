@@ -110,16 +110,17 @@ type ScannedChildren struct {
 }
 
 type ScanCtx struct {
-	diagnostics []IncludeDiagnostic
-	scanner     *IncludeScanner
-	cfg         *ScanConfig
-	ccCfg       *ScanConfig
-	cythonCfg   *ScanConfig
-	protoCfg    *ScanConfig
-	scCfg       *ScanConfig
-	parser      IncludeDirectiveParser
-	tjc         *TarjanCtx
-	tsImports   bool
+	diagnostics   []IncludeDiagnostic
+	cythonMissing []IncludeDirective
+	scanner       *IncludeScanner
+	cfg           *ScanConfig
+	ccCfg         *ScanConfig
+	cythonCfg     *ScanConfig
+	protoCfg      *ScanConfig
+	scCfg         *ScanConfig
+	parser        IncludeDirectiveParser
+	tjc           *TarjanCtx
+	tsImports     bool
 }
 
 func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
@@ -354,6 +355,7 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 
 func (s *IncludeScanner) putScanCtx(sc *ScanCtx) {
 	sc.diagnostics = nil
+	sc.cythonMissing = nil
 	tarjans.put(sc.tjc)
 	sc.tjc = nil
 	s.scanCtxPool.Put(sc)
@@ -469,10 +471,31 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	incDir := internStr(pathDir(vfsPath.relString())).source()
 	suppressCimportNames := false
 	prevProbeMissed := false
+	groupTarget := IncludeDirective{}
+	groupStart := len(out)
+
+	flushCimport := func() {
+		if groupTarget.target != 0 && len(out) == groupStart {
+			sc.cythonMissing = append(sc.cythonMissing, groupTarget)
+		}
+
+		groupTarget = IncludeDirective{}
+	}
+
 	entries := own
 
 	for pass := 0; pass < 2; pass++ {
 		for _, entry := range entries {
+			if entry.kind == includeCythonOptional {
+				flushCimport()
+				groupStart = len(out)
+				groupTarget = entry
+			} else if entry.kind == includeCythonModule {
+				groupTarget = entry
+			} else if entry.kind != includeCythonName && entry.kind != includeCythonFallback {
+				flushCimport()
+			}
+
 			if entry.kind == includeCythonSibling {
 				out = sc.resolve(out, vfsPath, incDir, entry)
 
@@ -502,6 +525,7 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 			}
 		}
 
+		flushCimport()
 		entries = compileExtra
 	}
 
@@ -556,6 +580,8 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 	scratch := vfsScratches.get()
 
 	sc.diagnostics = nil
+	sc.cythonMissing = nil
+
 	scratch = sc.appendResolvedChildren(scratch, abs)
 
 	diagnostics := sc.diagnostics
@@ -578,6 +604,10 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 	if abs.isSource() && !s.noResolve {
 		assert(s.sourceFiles.final == nil, "source file edges established after finalization")
 		s.sourceFiles.children.put(abs, children)
+
+		if len(sc.cythonMissing) > 0 {
+			s.sourceFiles.cythonMissing.put(abs, append([]IncludeDirective(nil), sc.cythonMissing...))
+		}
 	}
 
 	return s.putChildren(abs, children, diagnostics)
