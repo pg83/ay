@@ -175,10 +175,6 @@ func (e *StreamingEmitter) finish() []NodeRef {
 		for _, id := range pending {
 			n := e.nodes.s[id]
 
-			if n == nil {
-				continue
-			}
-
 			if e.hasUnresolvedDeps(n) {
 				next = append(next, id)
 

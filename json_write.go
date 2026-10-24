@@ -73,10 +73,6 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	first := true
 
 	for _, node := range g.Graph {
-		if node == nil {
-			continue
-		}
-
 		if !first {
 			buf = append(buf, ',')
 		}
