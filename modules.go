@@ -1548,7 +1548,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				moduleLang = moduleLangTokenPy3
 			}
 
-			env.setString(envMODULE_LANG, moduleLang)
+			if d.moduleStmt.Name != tokUnion && d.moduleStmt.Name != tokCiGroup && d.moduleStmt.Name != tokGenLibrary {
+				env.setString(envMODULE_LANG, moduleLang)
+			}
 
 		case *SrcsStmt:
 			if d.yqlPrebuiltAliases {
