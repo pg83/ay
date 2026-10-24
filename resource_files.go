@@ -19,13 +19,13 @@ const (
 )
 
 func expandResourceFileArgs(args []ANY, env Environment) []string {
-	return anyStrs(expandRootDeferredTokens(args, env))
+	return anyStrs(expandRootDeferredTokens(args, env, tokenExpandLazy))
 }
 
-func expandRootDeferredTokens(args []ANY, env Environment) []ANY {
+func expandRootDeferredTokens(args []ANY, env Environment, phase TokenExpansion) []ANY {
 	bindir, curdir := env.unbind(envBINDIR), env.unbind(envCURDIR)
 	arcadia, build := env.unbind(envARCADIA_ROOT), env.unbind(envARCADIA_BUILD_ROOT)
-	expanded := expandStmtTokens(args, env)
+	expanded := expandTokens(args, env, false, phase)
 
 	env.rebind(envBINDIR, bindir)
 	env.rebind(envCURDIR, curdir)

@@ -75,6 +75,7 @@ const (
 	tokenExpandArguments
 	tokenExpandFinal
 	tokenExpandAssignment
+	tokenExpandPathArguments
 )
 
 type CppProtoPlugin struct {
@@ -690,14 +691,14 @@ func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 	}
 
 	switch {
-	case strings.HasPrefix(path, "${ARCADIA_ROOT}/"):
-		return sourceClean(strings.TrimPrefix(path, "${ARCADIA_ROOT}/")), true
-	case strings.HasPrefix(path, "${CURDIR}/"):
-		return sourceJoinClean(modulePath, strings.TrimPrefix(path, "${CURDIR}/")), true
-	case strings.HasPrefix(path, "${ARCADIA_BUILD_ROOT}/"):
-		return buildClean(strings.TrimPrefix(path, "${ARCADIA_BUILD_ROOT}/")), true
-	case strings.HasPrefix(path, "${BINDIR}/"):
-		return buildJoinClean(modulePath, strings.TrimPrefix(path, "${BINDIR}/")), true
+	case strings.HasPrefix(path, "${ARCADIA_ROOT}"):
+		return sourceClean(strings.TrimLeft(strings.TrimPrefix(path, "${ARCADIA_ROOT}"), "/")), true
+	case strings.HasPrefix(path, "${CURDIR}"):
+		return sourceJoinClean(modulePath, strings.TrimLeft(strings.TrimPrefix(path, "${CURDIR}"), "/")), true
+	case strings.HasPrefix(path, "${ARCADIA_BUILD_ROOT}"):
+		return buildClean(strings.TrimLeft(strings.TrimPrefix(path, "${ARCADIA_BUILD_ROOT}"), "/")), true
+	case strings.HasPrefix(path, "${BINDIR}"):
+		return buildJoinClean(modulePath, strings.TrimLeft(strings.TrimPrefix(path, "${BINDIR}"), "/")), true
 	default:
 		return 0, false
 	}
@@ -726,20 +727,11 @@ func resourceOutputVFS(modulePath string, path string) VFS {
 }
 
 func copyFileIncludeTarget(modulePath string, target string) string {
-	if vfsHasPrefix(target) {
-		return intern(target).relString()
+	if path, ok := moduleRootedVFS(modulePath, target); ok {
+		return path.relString()
 	}
 
-	switch {
-	case strings.HasPrefix(target, "${ARCADIA_ROOT}/"):
-		return filepath.ToSlash(filepath.Clean(strings.TrimPrefix(target, "${ARCADIA_ROOT}/")))
-	case strings.HasPrefix(target, "${ARCADIA_BUILD_ROOT}/"):
-		return filepath.ToSlash(filepath.Clean(strings.TrimPrefix(target, "${ARCADIA_BUILD_ROOT}/")))
-	case strings.HasPrefix(target, "${BINDIR}/"):
-		return filepath.ToSlash(filepath.Clean(modulePath + "/" + strings.TrimPrefix(target, "${BINDIR}/")))
-	default:
-		return target
-	}
+	return target
 }
 
 type PrioVFS struct {
@@ -2094,8 +2086,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				} else if v.Name == tokUseRecipe {
 					expanded.Args = []ANY{internStr(collectTestRecipe(v.Args, env)).any()}
 				} else if v.Name != tokEnv && !(v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].string() == "TEST_ENV_VALUE") {
-					if v.Name == tokSetAppend {
-						expanded.Args = expandRootDeferredTokens(v.Args, env)
+					if v.Name == tokCopyFile || v.Name == tokCopyFileWithContext {
+						expanded.Args = expandRootDeferredTokens(v.Args, env, tokenExpandPathArguments)
+					} else if v.Name == tokSetAppend {
+						expanded.Args = expandRootDeferredTokens(v.Args, env, tokenExpandLazy)
 					} else {
 						expanded.Args = expandStmtTokens(v.Args, env)
 					}
@@ -4990,6 +4984,10 @@ func expandStmtToken(s string, env Environment) string {
 type TokenExpansion uint8
 
 func (phase TokenExpansion) clearsUnbound(name string) bool {
+	if phase == tokenExpandPathArguments {
+		return tokenExpandAssignment.clearsUnbound(name) && !strings.HasSuffix(name, resourceGlobalSuffix)
+	}
+
 	return phase == tokenExpandFinal || phase == tokenExpandArguments && !keepDeferredVar(name) || phase == tokenExpandAssignment && name != envBINDIR.string() && name != envCURDIR.string() && name != envARCADIA_ROOT.string() && name != envARCADIA_BUILD_ROOT.string()
 }
 
