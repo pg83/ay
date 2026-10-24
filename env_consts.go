@@ -160,6 +160,7 @@ var (
 	envNO_STRIP                               = internEnv("NO_STRIP")
 	envNasmFlags                              = internEnv("NASM_FLAGS")
 	envNeedPlatformPeerdirs                   = internEnv("NEED_PLATFORM_PEERDIRS")
+	envNoFixElf                               = internEnv("_NO_FIX_ELF")
 	envNoLinkerDce                            = internEnv("NO_LINKER_DCE")
 	envNoLintValue                            = internEnv("_NO_LINT_VALUE")
 	envNoplatformResources                    = internEnv("NOPLATFORM_RESOURCES")

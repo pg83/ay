@@ -379,6 +379,7 @@ type ModuleData struct {
 	bundles                  []BundleEntry
 	pyMain                   *ANY
 	pyMainDeclSeq            int
+	noFixElf                 bool
 	noStrip                  bool
 	strip                    bool
 	unit                     ModuleUnit
@@ -960,6 +961,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.strip = env.string(envSTRIP) == "yes"
 	d.noStrip = env.string(envNO_STRIP) == "yes"
+	d.noFixElf = env.string(envNoFixElf) == "yes"
 	d.gettextKeepPath = env.string(envGettextKeepPath) == "yes"
 	d.finishNativeSwigConfig(env)
 	d.useNasm = env.bool(envUseNasmAssembler)

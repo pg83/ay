@@ -2603,7 +2603,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 				dyn.alias = build(instance.Path.relString(), "/", dyn.soname)
 			}
 
-			if instance.Platform.OS == OSLinux && instance.Platform.ISA == ISAX8664 {
+			if instance.Platform.OS == OSLinux && instance.Platform.ISA == ISAX8664 && !d.noFixElf &&
+				(!isPythonDllModule(d.moduleStmt.Name) || dllModuleVersion(d.moduleStmt) == "") {
 				dyn.fixElfRef, dyn.fixElf = ctx.tool(argToolsFixElf)
 			}
 
