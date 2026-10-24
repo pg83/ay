@@ -267,7 +267,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 	vcsCVFS := build(instance.Path.relString(), "/__vcs_version__.c")
 	vcsOVFS := build(instance.Path.relString(), "/__vcs_version__.c.pic.o")
 	cmd0 := composeLDCmdVcsInfo(na, d.tc, vcsCVFS)
-	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, d.tc, vcsCVFS, vcsOVFS, compilerCommandFlags(d.cFlags, Environment{s: &e.frame.ifEnv}).Args, nil, d.moduleScopeCFlags, Environment{s: &e.frame.ifEnv}, d.flags.NoCompilerWarnings, d.noOptimize)
+	cmd1 := composeLDCmdVcsCompile(na, instance.Platform, d.tc, vcsCVFS, vcsOVFS, compilerCommandFlags(d.cFlags, Environment{s: &e.frame.ifEnv}).Args, nil, d.moduleScopeCFlags, Environment{s: &e.frame.ifEnv}, d.flags.NoCompilerWarnings, d.flags.NoWShadow, d.noOptimize)
 	envVcsOnly := envVarsVCS
 	envFull := ctx.host.toolEnv()
 	moduleEnv := Environment{s: &e.frame.ifEnv}
