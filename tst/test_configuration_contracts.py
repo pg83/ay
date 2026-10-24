@@ -62,7 +62,7 @@ class ConfigurationContractsTest(unittest.TestCase):
         for setting in ("SET(NO_LINT none)", "SET(NO_LINT none_internal)"):
             with self.subTest(setting=setting):
                 files = {
-                    "app/ya.make": library(setting + "\nSTYLE_JSON()\nSTYLE_YAML()\n"),
+                    "app/ya.make": library(setting + "\nSTYLE_JSON()\nSTYLE_YAML()\nSTYLE_YAML_WITH_CONFIG()\n"),
                     "app/settings.json": "{}", "app/settings.yaml": "key: value",
                     "build/config/tests/json_style/default_configs.json": '{"clang_format_json":"lint/json.conf"}',
                     "build/config/tests/yaml_style/default_configs.json": '{"yamlfmt":"lint/yaml.conf"}',
