@@ -186,14 +186,66 @@ class YaMakePathsTest(unittest.TestCase):
         ])
 
     def test_clang_bitcode_root_bound_to_a_path(self):
+        from test_codegen_llvm_bc import llvm_bc_files
+
+        for token, root in (
+            ("${ARCADIA_ROOT}/myclang", "$(S)/myclang"),
+            ("${ARCADIA_BUILD_ROOT}/myclang", "$(B)/myclang"),
+            ("${CURDIR}/myclang", "$(S)/mod/myclang"),
+            ("${BINDIR}/myclang", "$(B)/mod/myclang"),
+        ):
+            with self.subTest(token=token):
+                files = llvm_bc_files(
+                    f"SET(CLANG_BC_ROOT {token})\nLLVM_BC(leaf.cpp NAME leaf)\n",
+                    {"mod/leaf.cpp": "int leaf(){return 1;}\n"},
+                )
+                graph, _ = self.make(files, "mod")
+                compiled = lib.node_by_output(graph, "$(B)/mod/leaf.cpp.bc")
+                self.assertIn(root + "/bin/clang++", compiled["cmds"][0]["cmd_args"])
+                self.assertCountEqual(compiled["inputs"], [
+                    "$(S)/build/scripts/clang_wrapper.py", "$(S)/mod/leaf.cpp",
+                ])
+                link = lib.node_by_output(graph, "$(B)/mod/leaf_merged.bc")
+                self.assertEqual(link["cmds"][0]["cmd_args"], [
+                    root + "/bin/llvm-link", "$(B)/mod/leaf.cpp.bc", "-o", "$(B)/mod/leaf_merged.bc",
+                ])
+                self.assertIn(compiled["uid"], link["deps"])
+                opt = lib.node_by_output(graph, "$(B)/mod/leaf_optimized.bc")
+                self.assertIn(root + "/bin/opt", opt["cmds"][0]["cmd_args"])
+                self.assertIn(link["uid"], opt["deps"])
+
+    def test_direct_bitcode_compile_binds_root_and_keeps_unused_action_lazy(self):
+        from test_codegen_llvm_bc import llvm_bc_files
+
+        files = llvm_bc_files(
+            "SET(CLANG_BC_ROOT ${ARCADIA_ROOT}/myclang)\n"
+            "LLVM_COMPILE_CXX(leaf.cpp consumed.bc -DROOTED)\n"
+            "LLVM_COMPILE_CXX(unused.cpp unused.bc)\n"
+            "RESOURCE(consumed.bc direct)\n",
+            {"mod/leaf.cpp": '#include "leaf.h"\n', "mod/leaf.h": "", "mod/unused.cpp": ""},
+        )
+        files["library/cpp/resource/ya.make"] = module("LIBRARY", "")
+        graph, _ = self.make(files, "mod")
+        compiled = lib.node_by_output(graph, "$(B)/mod/consumed.bc")
+        self.assertIn("$(S)/myclang/bin/clang++", compiled["cmds"][0]["cmd_args"])
+        self.assertIn("-DROOTED", compiled["cmds"][0]["cmd_args"])
+        self.assertCountEqual(compiled["inputs"], [
+            "$(S)/build/scripts/clang_wrapper.py", "$(S)/mod/leaf.cpp", "$(S)/mod/leaf.h",
+        ])
+        consumers = [node for node in graph["graph"] if compiled["uid"] in node["deps"]]
+        self.assertTrue(consumers)
+        self.assertFalse(any("$(B)/mod/unused.bc" in node["outputs"] for node in graph["graph"]))
+
+    def test_clang_bitcode_unknown_resource_is_rejected(self):
         code, _, stderr = ay_make({
             "a/ya.make": module("LIBRARY", (
-                "SET(CLANG_BC_ROOT ${ARCADIA_ROOT}/myclang)\nSET(LLVM_LLC_TOOL tools/llc)\nLLVM_BC(x.cpp NAME n)"
+                "SET(CLANG_BC_ROOT $MISSING_RESOURCE_GLOBAL)\n"
+                "SET(LLVM_LLC_TOOL tools/llc)\nLLVM_BC(x.cpp NAME n)"
             )),
             "a/x.cpp": "",
         }, "a")
         self.assertEqual(code, 1)
-        self.assertEqual(stderr, 'resources: "$(S)/myclang" references resource global not in the PEERDIR closure')
+        self.assertEqual(stderr, 'resources: "$MISSING_RESOURCE_GLOBAL" references resource global not in the PEERDIR closure')
 
     def test_modules_that_are_their_own_implicit_peers(self):
         files = {

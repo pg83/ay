@@ -43,6 +43,14 @@ func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx 
 	}
 }
 
+func (e *EmitContext) llvmClangRoot(root string) string {
+	if path, ok := moduleRootedVFS(e.instance.Path.relString(), root); ok {
+		return path.string()
+	}
+
+	return resolveResourceGlobalRef(root, e.peers.ResourceGlobals)
+}
+
 func (e *EmitContext) emitLlvmCompile(stmt LlvmCompileStmt) {
 	out := copyFileOutputVFS(e.instance.Path.relString(), stmt.Output)
 
@@ -51,7 +59,7 @@ func (e *EmitContext) emitLlvmCompile(stmt LlvmCompileStmt) {
 	if stmt.Kind == tokBpf || stmt.Kind == tokBpfStatic {
 		node = e.bpfCompileNode(stmt, out)
 	} else {
-		compiler := resolveResourceGlobalRef(stmt.ClangRoot, e.peers.ResourceGlobals) + "/bin/clang++"
+		compiler := e.llvmClangRoot(stmt.ClangRoot) + "/bin/clang++"
 
 		node = e.llvmCompileNode(stmt.Source, out, compiler, true, stmt.Options)
 	}
@@ -86,7 +94,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	python := d.tc.Python3.string()
 	env := envVarsVCS
-	clangRoot := resolveResourceGlobalRef(stmt.ClangBCRoot, e.peers.ResourceGlobals)
+	clangRoot := e.llvmClangRoot(stmt.ClangBCRoot)
 	clangxx := clangRoot + "/bin/clang++"
 	llvmLink := clangRoot + "/bin/llvm-link"
 	opt := clangRoot + "/bin/opt"
