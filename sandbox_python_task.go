@@ -1,9 +1,16 @@
 package main
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 func isSandboxPythonTask(name TOK) bool {
-	return name == tokSandboxPy3Task || name == tokSandboxPy23Task
+	return name == tokSandboxPy3Task || isSandboxPython2Task(name)
+}
+
+func isSandboxPython2Task(name TOK) bool {
+	return name == tokSandboxTask || name == tokSandboxPy23Task
 }
 
 func sandboxPythonTaskVariant(name TOK, kind ModuleKind, language Language) string {
@@ -11,7 +18,7 @@ func sandboxPythonTaskVariant(name TOK, kind ModuleKind, language Language) stri
 		return "SB_TASK_BIN"
 	}
 
-	if name == tokSandboxPy23Task && language == LangPy2 {
+	if name == tokSandboxTask || name == tokSandboxPy23Task && language == LangPy2 {
 		return "PY2"
 	}
 
@@ -25,9 +32,14 @@ func sandboxPythonTaskInstances(instance ModuleInstance, name TOK) []ModuleInsta
 
 	instance.Kind = KindLib
 
-	if name == tokSandboxPy23Task {
+	if isSandboxPython2Task(name) {
 		instance.Language = LangPy2
 		instances = append(instances, instance)
+
+		if name == tokSandboxTask {
+			return instances
+		}
+
 		instance.Language = LangCPP
 	}
 
@@ -43,6 +55,14 @@ func sandboxPythonTaskExcluded(ctx *GenCtx, instance ModuleInstance, tag string)
 }
 
 func sandboxPythonTaskUnit(name TOK, kind ModuleKind, language Language) ModuleUnit {
+	if name == tokSandboxTask {
+		if kind == KindBin {
+			return resolveModuleUnitBare(tokPy2Program, kind, language)
+		}
+
+		return resolveModuleUnitBare(tokPy2Library, kind, language)
+	}
+
 	if name == tokSandboxPy23Task {
 		if kind == KindBin {
 			return resolveModuleUnitBare(tokPy2Program, kind, language)
@@ -107,4 +127,18 @@ func setupSandboxPythonTask(name TOK, modulePath string, kind ModuleKind, langua
 		DeclSeq: d.nextDeclSeq(), Path: "-", EndsBatch: true,
 		Key: "SANDBOX_TASK_REGISTRY." + module + "=" + module,
 	})
+}
+
+func (e *EmitContext) sandboxTaskPeerLanguage(peer VFS, language Language) Language {
+	allowed := language == LangPy2 || e.d.multimodule == tokPackage || e.d.unit.Type == tokPackageFinal
+
+	if tags, bound := (Environment{s: &e.frame.ifEnv}).lookup("PEERDIR_TAGS"); bound {
+		allowed = slices.Contains(strings.Fields(tags), "PY2")
+	}
+
+	if !allowed {
+		throwFmt("gen: %s: PEERDIR to %s is prohibited by incompatible tags", e.instance.Path.relString(), peer.relString())
+	}
+
+	return LangPy2
 }

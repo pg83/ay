@@ -301,6 +301,7 @@ type ModuleData struct {
 	resourcePeerClosed       bool
 	resourcePassPeers        bool
 	noImportTracing          bool
+	sandboxTaskDeprecation   bool
 	usePython2               bool
 	usePython3               bool
 	pythonSourceCallback     bool
@@ -855,6 +856,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.srcs = nativeSources
 	finishPythonImportMask(env, d)
+	d.sandboxTaskDeprecation = d.multimodule == tokSandboxTask && env.string(envFAIL_PY2) != "yes" && env.string(envOPENSOURCE) != "yes"
 	bindRunProgramCalls(d, env)
 
 	if len(d.runJavaPrograms) > 0 {
@@ -2225,7 +2227,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 	}
 
 	switch name {
-	case tokSandboxPy3Task, tokSandboxPy23Task:
+	case tokSandboxTask, tokSandboxPy3Task, tokSandboxPy23Task:
 		return sandboxPythonTaskUnit(name, kind, language)
 	case tokPackage:
 		return packageModuleUnit(language)
@@ -4842,7 +4844,7 @@ func hasCppDefaultAllocator(name TOK) bool {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokSandboxPy3Task, tokSandboxPy23Task, tokPy3Test, tokPy2Test, tokPytestBin, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokBoosttest, tokBoosttestWithMain, tokGoProgram, tokGoTest, tokGoDll:
+	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokSandboxTask, tokSandboxPy3Task, tokSandboxPy23Task, tokPy3Test, tokPy2Test, tokPytestBin, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokBoosttest, tokBoosttestWithMain, tokGoProgram, tokGoTest, tokGoDll:
 		return true
 	}
 
@@ -5495,6 +5497,10 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 	demand := e.peerDemand()
 	language := peerEntryLanguage(parent, d)
 
+	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokSandboxTask {
+		language = e.sandboxTaskPeerLanguage(peerVFS, language)
+	}
+
 	if language == LangPy2 && !(peerYaMakeExists(ctx.fs, peerVFS) && hasPy2Variant(ctx.moduleName(peerVFS.relString()))) {
 		language = LangCPP
 	}
@@ -5582,7 +5588,7 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 
 func hasPy2Variant(name TOK) bool {
 	switch name {
-	case tokPy23Library, tokPy23NativeLibrary, tokSandboxPy23Task, tokProtoLibrary:
+	case tokPy23Library, tokPy23NativeLibrary, tokSandboxTask, tokSandboxPy23Task, tokProtoLibrary:
 		return true
 	}
 

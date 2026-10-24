@@ -3,7 +3,7 @@ package main
 import "strings"
 
 func isPythonMultimodule(name TOK) bool {
-	return name == tokPy23Library || name == tokPy23NativeLibrary || name == tokSandboxPy23Task
+	return name == tokPy23Library || name == tokPy23NativeLibrary || isSandboxPython2Task(name)
 }
 
 func configureCythonDirectory(ctx *GenCtx, instance ModuleInstance) *SourceModuleInfo {
@@ -21,7 +21,7 @@ func configureCythonDirectory(ctx *GenCtx, instance ModuleInstance) *SourceModul
 
 	var selected *SourceModuleInfo
 
-	if name == tokSandboxPy23Task {
+	if isSandboxPython2Task(name) {
 		for _, module := range sandboxPythonTaskInstances(instance, name) {
 			info := configureCythonModule(ctx, module, sandboxPythonTaskVariant(name, module.Kind, module.Language))
 
@@ -66,7 +66,7 @@ func configureCythonModule(ctx *GenCtx, instance ModuleInstance, tag string) *So
 	env := buildIfEnvInto(&frame.ifEnv, instance)
 	d := collectModuleInto(ctx, instance, moduleStmts(ctx, instance.Path.relString()), env, ctx.onWarn, &frame.d)
 
-	if d.multimodule == tokSandboxPy23Task && instance.Kind == KindBin {
+	if isSandboxPython2Task(d.multimodule) && instance.Kind == KindBin {
 		info.ExcludedVariants = map[STR]bool{}
 
 		for _, sub := range sandboxPythonTaskInstances(instance, d.multimodule) {
@@ -82,7 +82,7 @@ func configureCythonModule(ctx *GenCtx, instance ModuleInstance, tag string) *So
 
 	excluded := moduleExcludesTag(d, tag)
 
-	if d.multimodule == tokSandboxPy23Task {
+	if isSandboxPython2Task(d.multimodule) {
 		excluded = sandboxPythonTaskExcluded(ctx, instance, tag)
 	}
 

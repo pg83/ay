@@ -19,7 +19,7 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 	instance := ctx.rootInstanceForDeclaration(dir, demandSelf, declaration)
 	name := declaration.Name
 
-	if name == tokSandboxPy23Task {
+	if isSandboxPython2Task(name) {
 		configureCythonDirectory(ctx, instance)
 	}
 
@@ -178,7 +178,7 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 
 		excluded := moduleExcludesTag(d, tag)
 
-		if name == tokSandboxPy23Task {
+		if isSandboxPython2Task(name) {
 			excluded = sandboxPythonTaskExcluded(ctx, peer, tag)
 		}
 

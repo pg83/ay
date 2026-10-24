@@ -1109,7 +1109,13 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 			earlyPeers = append(earlyPeers, "library/python/import_tracing/constructor")
 		}
 
-		if (d.moduleStmt.Name == tokPy2Program || d.moduleStmt.Name == tokPy2Test) && d.multimodule != tokSandboxPy23Task && !instance.Platform.ifEnv.bool(envFAIL_PY2) && !instance.Platform.ifEnv.bool(envOPENSOURCE) {
+		deprecated := (d.moduleStmt.Name == tokPy2Program || d.moduleStmt.Name == tokPy2Test) && d.multimodule != tokSandboxPy23Task && !instance.Platform.ifEnv.bool(envFAIL_PY2) && !instance.Platform.ifEnv.bool(envOPENSOURCE)
+
+		if d.multimodule == tokSandboxTask {
+			deprecated = d.sandboxTaskDeprecation
+		}
+
+		if deprecated {
 			earlyPeers = append(earlyPeers, "build/rules/py2_deprecation")
 		}
 
@@ -1334,7 +1340,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	excluded := moduleExcludesTag(d, tag)
 
-	if moduleName == tokSandboxPy23Task {
+	if isSandboxPython2Task(moduleName) {
 		excluded = sandboxPythonTaskExcluded(ctx, instance, tag)
 	}
 
@@ -1344,6 +1350,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		ctx.memoPut(instance, result)
 
 		return result
+	}
+
+	if moduleName == tokSandboxTask && instance.Kind == KindBin && env.string(envFAIL_PY2) == "yes" {
+		throwFmt("gen: %s: You are using deprecated Python2-only code (SANDBOX_TASK). Please consider rewriting to 2/3-compatible code.", instance.Path.relString())
 	}
 
 	configurationDepends := append(slices.Clone(d.test.depends), d.configurationDepends...)

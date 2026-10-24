@@ -47,6 +47,7 @@ var tokName = [...]STR{
 	tokSdcDiagsSplitGeneratorV4:  internStr("SDC_DIAGS_SPLIT_GENERATOR_V4"),
 
 	tokRosLibrary:        internStr("ROS_LIBRARY"),
+	tokSandboxTask:       internStr("SANDBOX_TASK"),
 	tokSandboxPy3Task:    internStr("SANDBOX_PY3_TASK"),
 	tokSandboxPy23Task:   internStr("SANDBOX_PY23_TASK"),
 	tokRosDir:            internStr("ROS_DIR"),
@@ -500,6 +501,7 @@ const (
 	tokSdcDiagsSplitGeneratorV4
 
 	tokRosLibrary
+	tokSandboxTask
 	tokSandboxPy3Task
 	tokSandboxPy23Task
 	tokRosDir
