@@ -198,12 +198,18 @@ class SbomTest(unittest.TestCase):
         files = fixture()
         files["gen/ya.make"] = "PROGRAM()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(main.cpp)\nEND()\n"
         files["gen/main.cpp"] = "int main() {}\n"
-        files["prog/ya.make"] = files["prog/ya.make"].replace("END()", "RUN_PROGRAM(gen OUT gen.h)\nEND()")
+        files["prog/ya.make"] = files["prog/ya.make"].replace("END()", "ADDINCL(${ARCADIA_BUILD_ROOT}/prog)\nRUN_PROGRAM(gen OUT gen.h)\nEND()")
+        files["prog/m.cpp"] = '#include "gen.h"\n' + files["prog/m.cpp"]
         for args in ((), ("-r",)):
             with self.subTest(args=args):
                 graph = lib.make(files, "prog", *X86_64, *args)
                 by_uid = {node["uid"]: node for node in graph["graph"]}
                 tool = lib.node_by_output(graph, "$(B)/gen/gen")
+                consumer = lib.node_by_output(graph, "$(B)/prog/m.cpp.o")
+                self.assertCountEqual(["$(S)/prog/m.cpp", "$(B)/prog/gen.h"], consumer["inputs"])
+                producer = lib.node_by_output(graph, "$(B)/prog/gen.h")
+                self.assertIn(producer["uid"], consumer["deps"])
+                self.assertIn(tool["uid"], producer["deps"])
                 path = component("build/platform/python/ymake_python3/toolchain.component.sbom")
                 self.assertIn(path, tool["inputs"])
                 producers = [uid for uid in tool["deps"] if path in by_uid[uid]["outputs"]]

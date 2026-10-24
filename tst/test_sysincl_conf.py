@@ -277,11 +277,24 @@ when ($ARCH_AARCH64 == "yes") {
         lib.tool_program(files, "tools/gen", "gen")
         files["tools/gen/main.cpp"] = "#include <selected.h>\n"
         files["m/ya.make"] = files["m/ya.make"].replace(
-            "END()", "RUN_PROGRAM(tools/gen OUT generated.h)\nEND()")
-        graph = lib.make(files, "m")
-        for source, suffix, selected in (("m/a.cpp", ".o", "second"), ("tools/gen/main.cpp", ".pic.o", "first")):
-            inputs = lib.node_by_output(graph, f"$(B)/{source}{suffix}")["inputs"]
-            self.assertEqual({f"$(S)/{source}", f"$(S)/m/{selected}.h"}, set(inputs))
+            "END()", "ADDINCL(${ARCADIA_BUILD_ROOT}/m)\nRUN_PROGRAM(tools/gen OUT generated.h)\nEND()")
+        for consumed in (False, True):
+            with self.subTest(consumed=consumed):
+                files["m/a.cpp"] = '#include <selected.h>\n' + ('#include "generated.h"\n' if consumed else '')
+                graph = lib.make(files, "m")
+                target = lib.node_by_output(graph, "$(B)/m/a.cpp.o")
+                expected = ["$(S)/m/a.cpp", "$(S)/m/second.h"]
+                if consumed:
+                    expected.append("$(B)/m/generated.h")
+                self.assertCountEqual(expected, target["inputs"])
+                if not consumed:
+                    self.assertFalse(any("$(B)/tools/gen/gen" in node["outputs"] for node in graph["graph"]))
+                    continue
+                host = lib.node_by_output(graph, "$(B)/tools/gen/main.cpp.pic.o")
+                self.assertCountEqual(["$(S)/tools/gen/main.cpp", "$(S)/m/first.h"], host["inputs"])
+                producer = lib.node_by_output(graph, "$(B)/m/generated.h")
+                self.assertIn(producer["uid"], target["deps"])
+                self.assertIn(lib.node_by_output(graph, "$(B)/tools/gen/gen")["uid"], producer["deps"])
 
 
 if __name__ == "__main__":

@@ -112,7 +112,8 @@ class NativeAssemblerPathsTest(unittest.TestCase):
 
     def test_host_gnu_assembly_uses_o_while_yasm_keeps_pic_suffix(self):
         files = {
-            "caller/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}RUN_PROGRAM(tools/packer OUT_NOAUTO packed.bin)\nEND()\n",
+            "caller/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}ADDINCL(${{ARCADIA_BUILD_ROOT}}/caller)\nSRCS(main.cpp)\nRUN_PROGRAM(tools/packer OUT_NOAUTO packed.bin)\nEND()\n",
+            "caller/main.cpp": '#include "packed.bin"\nint consumer;\n',
             "tools/packer/ya.make": f"PROGRAM(packer)\n{lib.BARE_MODULE}SRC(nested/driver.S -mavx)\nSRCS(nested/ordinary.s nested/encoded.asm)\nEND()\n",
             "tools/packer/nested/driver.S": "",
             "tools/packer/nested/ordinary.s": "",
@@ -124,6 +125,11 @@ class NativeAssemblerPathsTest(unittest.TestCase):
         srcs = assembler(graph, "tools/packer/_/nested/ordinary.s.o")
         yasm = lib.node_by_output(graph, "$(B)/tools/packer/_/nested/encoded.pic.o")
         tool = lib.node_by_output(graph, "$(B)/tools/packer/packer")
+        consumer = lib.node_by_output(graph, "$(B)/caller/main.cpp.o")
+        self.assertCountEqual(["$(S)/caller/main.cpp", "$(B)/caller/packed.bin"], consumer["inputs"])
+        producer = lib.node_by_output(graph, "$(B)/caller/packed.bin")
+        self.assertIn(producer["uid"], consumer["deps"])
+        self.assertIn(tool["uid"], producer["deps"])
         for node in (src, srcs, yasm):
             self.assertIn(node["outputs"][0], tool["inputs"])
             self.assertIn(node["uid"], tool["deps"])

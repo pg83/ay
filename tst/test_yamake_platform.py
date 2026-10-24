@@ -144,7 +144,9 @@ class YaMakePlatformTest(unittest.TestCase):
 
     def test_target_platform_flags_select_the_target_debug_info(self):
         files = library()
-        files["a/ya.make"] = "LIBRARY()\n" + NO_PLATFORM + "RUN_PROGRAM(tools/gen OUT gen.h)\nSRCS(x.cpp y.c)\nEND()\n"
+        files["a/ya.make"] = "LIBRARY()\n" + NO_PLATFORM + "ADDINCL(${ARCADIA_BUILD_ROOT}/a)\nRUN_PROGRAM(tools/gen OUT gen.h)\nSRCS(x.cpp y.c)\nEND()\n"
+        for source in ("a/x.cpp", "a/y.c"):
+            files[source] = '#include "gen.h"\n' + files[source]
         lib.tool_program(files, "tools/gen", "gen")
         lines_only = ("--target-platform-flag", "DEBUGINFO_LINES_ONLY=yes")
         for flags, debug_info in (
@@ -158,7 +160,12 @@ class YaMakePlatformTest(unittest.TestCase):
                     platform="default-linux-x86_64",
                 )
                 self.assertEqual(code, 0, stderr)
+                producer = lib.node_by_output(graph, "$(B)/a/gen.h")
+                self.assertIn(lib.node_by_output(graph, "$(B)/tools/gen/gen")["uid"], producer["deps"])
                 for source in ("$(B)/a/x.cpp.o", "$(B)/a/y.c.o"):
+                    consumer = lib.node_by_output(graph, source)
+                    self.assertCountEqual([source.replace("$(B)", "$(S)")[:-2], "$(B)/a/gen.h"], consumer["inputs"])
+                    self.assertIn(producer["uid"], consumer["deps"])
                     self.assertEqual(
                         after_compilation_dir(compile_args(graph, source), 5 + len(debug_info)),
                         ["-pipe", "-m64", "-O3", *debug_info, "-fno-common", "-ffunction-sections"],

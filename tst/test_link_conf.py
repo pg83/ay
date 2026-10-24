@@ -93,11 +93,17 @@ class LinkerConfTest(unittest.TestCase):
         conf = lib.FAKE_LD_CONF.replace("-Wl,-no-pie", "-no-pie")
         files = tree(conf)
         files["app/ya.make"] = files["app/ya.make"].replace(
-            "END()", "RUN_PROGRAM(tools/gen OUT generated.h)\nEND()")
+            "END()", "ADDINCL(${ARCADIA_BUILD_ROOT}/app)\nRUN_PROGRAM(tools/gen OUT generated.h)\nEND()")
+        files["app/main.cpp"] = '#include "generated.h"\n' + files["app/main.cpp"]
         lib.tool_program(files, "tools/gen", "gen")
         for flags, expected in (((), False), (("--host-platform-flag", "PIC_NO_PIE=yes"), True)):
             with self.subTest(flags=flags):
                 graph = lib.make(files, "app", *flags)
+                target = lib.node_by_output(graph, "$(B)/app/main.cpp.o")
+                self.assertCountEqual(["$(S)/app/main.cpp", "$(B)/app/generated.h"], target["inputs"])
+                producer = lib.node_by_output(graph, "$(B)/app/generated.h")
+                self.assertIn(producer["uid"], target["deps"])
+                self.assertIn(lib.node_by_output(graph, "$(B)/tools/gen/gen")["uid"], producer["deps"])
                 self.assertIn("-no-pie", link(graph, "$(B)/app/app"))
                 self.assertEqual("-no-pie" in link(graph, "$(B)/tools/gen/gen"), expected)
 
