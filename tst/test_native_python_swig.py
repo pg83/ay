@@ -1,5 +1,6 @@
 """Ordinary SRCS SWIG uses the native module recipe and final language."""
 import collections
+import json
 import unittest
 
 import lib
@@ -142,6 +143,42 @@ class NativePythonSwigTest(unittest.TestCase):
                 result = lib.make_process(fixture(case), 'bindings/python', *flags(case))
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('SWIG_LANG', result.stderr)
+
+    def test_unknown_language_reports_an_error_and_keeps_independent_targets(self):
+        for binding in ['source', 'command-line']:
+            with self.subTest(binding=binding):
+                files = fixture('library-default')
+                extra = []
+                if binding == 'source':
+                    files['bindings/python/ya.make'] = files['bindings/python/ya.make'].replace(
+                        'SRCS(', 'SET(SWIG_LANG not_a_swig_language)\nSRCS(')
+                else:
+                    extra = ['-DSWIG_LANG=not_a_swig_language']
+                files.update({
+                    'healthy/ya.make': 'LIBRARY(Healthy)\n' + lib.BARE_MODULE + 'SRCS(alive.cpp)\nEND()\n',
+                    'healthy/alive.cpp': '#include "alive.h"\n',
+                    'healthy/alive.h': 'int alive;\n',
+                })
+                healthy = lib.make(files, 'healthy', *extra)
+                lib.node_by_output(healthy, '$(B)/healthy/libHealthy.a')
+                result = lib.make_process(files, 'bindings/python', 'healthy', *extra)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('unsupported-source:', result.stderr)
+                self.assertIn('api.swg', result.stderr)
+                result = lib.make_process(files, 'bindings/python', 'healthy', '-k', *extra)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('unsupported-source:', result.stderr)
+                self.assertIn('api.swg', result.stderr)
+                graph = json.loads(result.stdout)
+                compiled = lib.node_by_output(graph, '$(B)/healthy/alive.cpp.o')
+                self.assertIn('$(S)/healthy/alive.cpp', compiled['inputs'])
+                self.assertIn('$(S)/healthy/alive.h', compiled['inputs'])
+                archive = lib.node_by_output(graph, '$(B)/healthy/libHealthy.a')
+                self.assertIn(compiled['uid'], archive['deps'])
+                self.assertIn(archive['uid'], graph['result'])
+                ids = {node['uid'] for node in graph['graph']}
+                self.assertLessEqual(set(graph['result']), ids)
+                self.assertTrue(all(set(node['deps']) <= ids for node in graph['graph']))
 
 
 if __name__ == '__main__':
