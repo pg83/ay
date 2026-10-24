@@ -4993,11 +4993,15 @@ func expandStmtToken(s string, env Environment) string {
 
 type TokenExpansion uint8
 
-func (phase TokenExpansion) clearsUnbound(name string) bool {
+func (phase TokenExpansion) clearsBracedUnbound(name string) bool {
 	if phase == tokenExpandPathArguments {
 		return tokenExpandAssignment.clearsUnbound(name) && !strings.HasSuffix(name, resourceGlobalSuffix)
 	}
 
+	return phase.clearsUnbound(name)
+}
+
+func (phase TokenExpansion) clearsUnbound(name string) bool {
 	return phase == tokenExpandFinal || phase == tokenExpandArguments && !keepDeferredVar(name) || phase == tokenExpandAssignment && name != envBINDIR.string() && name != envCURDIR.string() && name != envARCADIA_ROOT.string() && name != envARCADIA_BUILD_ROOT.string()
 }
 
@@ -5078,7 +5082,7 @@ func expandBracedVars(s string, env Environment, phase TokenExpansion, track *So
 		name := s[start+2 : end]
 		val, ok := env.lookup(name)
 
-		if !ok && phase.clearsUnbound(name) && name != "" && !strings.ContainsAny(name, " ${}\"';") {
+		if !ok && phase.clearsBracedUnbound(name) && name != "" && !strings.ContainsAny(name, " ${}\"';") {
 			ok = true
 		}
 
