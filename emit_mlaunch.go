@@ -63,7 +63,7 @@ func (e *EmitContext) emitGolaunchSource(kv *KV, script VFS, args []ANY, out VFS
 
 func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	var peers []VFS
-	var directPeers, construction []VFS
+	var directPeers, construction, globalOuts []VFS
 	var globals []ResourceDecl
 
 	seen := map[*ModuleEmitResult]bool{}
@@ -82,7 +82,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 			directPeers = append(directPeers, out)
 		}
 
-		peers = e.appendPackagePeer(peers, result, seen)
+		peers = e.appendPackagePeer(peers, result, seen, &globalOuts)
 		globals = append(globals, result.ResourceGlobalClosure...)
 	}
 
@@ -103,7 +103,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 			directPeers = append(directPeers, out)
 		}
 
-		peers = e.appendPackagePeer(peers, result, seen)
+		peers = e.appendPackagePeer(peers, result, seen, &globalOuts)
 		e.globalSources = append(e.globalSources, result.GlobalSources...)
 		globals = append(globals, result.ResourceGlobalClosure...)
 	}
@@ -133,6 +133,23 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	}
 
 	lateOuts = dedup(lateOuts)
+	globalOuts = dedup(globalOuts)
+
+	globalSet := make(map[VFS]bool, len(globalOuts))
+	copyFiles := make([]VFS, 0, len(globalOuts)+len(lateOuts)+len(peers))
+
+	for _, file := range globalOuts {
+		globalSet[file] = true
+		copyFiles = append(copyFiles, file)
+	}
+
+	copyFiles = append(copyFiles, lateOuts...)
+
+	for _, file := range peers {
+		if !globalSet[file] {
+			copyFiles = append(copyFiles, file)
+		}
+	}
 
 	inputs = append(inputs, peers...)
 	inputs = append(inputs, construction...)
@@ -148,7 +165,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 		outputs = append(outputs, archive)
 	}
 
-	for _, file := range concat(lateOuts, peers) {
+	for _, file := range copyFiles {
 		if !strings.HasSuffix(file.relString(), ".pkg.fake") {
 			args = append(args, file.any())
 		}
@@ -168,7 +185,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 
 	e.appendSdcMeta(&node, name+suffix)
 
-	for _, file := range concat(lateOuts, peers) {
+	for _, file := range copyFiles {
 		if !strings.HasSuffix(file.relString(), ".pkg.fake") {
 			node.Outputs = append(node.Outputs, build(module, "/", file.relString()))
 		}

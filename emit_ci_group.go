@@ -80,7 +80,7 @@ func (e *EmitContext) completePackagePeer(instance ModuleInstance) (*ModuleEmitR
 	return result, inputs
 }
 
-func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen map[*ModuleEmitResult]bool) []VFS {
+func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen map[*ModuleEmitResult]bool, globalOuts *[]VFS) []VFS {
 	if seen[res] {
 		return out
 	}
@@ -95,7 +95,7 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 				peer.Demand = demandSelf
 			}
 
-			out = e.appendPackagePeer(out, e.genPeerModule(peer), seen)
+			out = e.appendPackagePeer(out, e.genPeerModule(peer), seen, globalOuts)
 		}
 	}
 
@@ -104,9 +104,9 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 	if jm := res.java; jm != nil {
 		for _, peer := range e.ctx.javaManagedPeersClosure(jm) {
 			if peer.java != nil {
-				out = e.appendPackagePeer(out, peer.java.result, seen)
+				out = e.appendPackagePeer(out, peer.java.result, seen, globalOuts)
 			} else if peer.foreign != nil {
-				out = e.appendPackagePeer(out, peer.foreign, seen)
+				out = e.appendPackagePeer(out, peer.foreign, seen, globalOuts)
 			}
 		}
 
@@ -130,6 +130,11 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 
 	out = append(out, res.PeerArchiveClosurePaths...)
 	out = append(out, res.PeerGlobalClosurePaths...)
+
+	if globalOuts != nil {
+		*globalOuts = append(*globalOuts, res.PeerGlobalClosurePaths...)
+	}
+
 	out = append(out, res.PeerDynamicClosurePaths...)
 
 	if res.ARPath != nil {
@@ -140,6 +145,10 @@ func (e *EmitContext) appendPackagePeer(out []VFS, res *ModuleEmitResult, seen m
 	if res.GlobalPath != nil {
 		e.refs = append(e.refs, *res.GlobalRef)
 		out = append(out, *res.GlobalPath)
+
+		if globalOuts != nil {
+			*globalOuts = append(*globalOuts, *res.GlobalPath)
+		}
 	}
 
 	return out
@@ -155,7 +164,7 @@ func (e *EmitContext) genCiGroup() *ModuleEmitResult {
 		res, built := e.packagePeer(dir.string())
 
 		construction = append(construction, built...)
-		peers = e.appendPackagePeer(peers, res, seen)
+		peers = e.appendPackagePeer(peers, res, seen, nil)
 		globals = append(globals, res.ResourceGlobalClosure...)
 	}
 
