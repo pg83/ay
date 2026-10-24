@@ -149,6 +149,16 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 	return true
 }
 
+func normalizedTestData(data []string) []string {
+	values := slices.Clone(data)
+
+	for i, value := range values {
+		values[i] = strings.TrimRight(value, `/\`)
+	}
+
+	return values
+}
+
 func (t *TestMeta) expandValues(env Environment) {
 	words := splitShellWords(expandConfigMacroBody(env.string(envTestEnvValue), env))
 

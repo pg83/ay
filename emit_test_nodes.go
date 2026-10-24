@@ -145,7 +145,7 @@ func (s *TestSuite) applyTestMeta(meta TestMeta, addSource bool) {
 	s.depends = meta.depends
 	s.dockerImages = sortedUnique(meta.dockerImages)
 	s.recipes = testRecipes(meta.recipes)
-	s.data = slices.Clone(meta.data)
+	s.data = normalizedTestData(meta.data)
 
 	if addSource && !meta.explicitData {
 		s.data = append(s.data, "arcadia/"+s.projectPath)
