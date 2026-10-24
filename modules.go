@@ -1373,7 +1373,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if isNotsModule(v.Name) || v.Name == tokProtoLibrary && (language == LangTS || language == LangTSPrepare) {
-				d.nots = newNotsModule(v.Name, env)
+				d.nots = newNotsModule(v.Name, language, env)
 				d.nots.AutoProto = v.Name == tokProtoLibrary && !fs.isFilePathClean(modulePath+"/package.json")
 			}
 
@@ -1743,6 +1743,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
 			d.pythonLint.bind(env)
 			d.finishResourcePeerPolicy()
+
+			if d.nots != nil {
+				d.nots.finish(env)
+			}
 
 			d.unit.HashTag = internStr(env.string(envMODULE_TAG))
 			d.pyNamespacePython2 = env.string(envPYTHON2) == "yes"
@@ -2476,7 +2480,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		return
 	}
 
-	if d.nots != nil && applyNotsStmt(v, d.nots) {
+	if d.nots != nil && applyNotsStmt(v, d.nots, env) {
 		return
 	}
 

@@ -17,6 +17,8 @@ type NotsModule struct {
 	TestConfig        string
 	DependsOnBuild    bool
 	Kind              TOK
+	Prepare           bool
+	AfterBuildCommand string
 	Hermetic          bool
 	LocalCLI          bool
 	Bundle            bool
@@ -61,8 +63,8 @@ func isNotsModule(name TOK) bool {
 	return false
 }
 
-func newNotsModule(kind TOK, env Environment) *NotsModule {
-	c := &NotsModule{Kind: kind, Configs: []string{"tsconfig.json"}, LocalCLI: env.bool(envTsLocalCli)}
+func newNotsModule(kind TOK, language Language, env Environment) *NotsModule {
+	c := &NotsModule{Kind: kind, Configs: []string{"tsconfig.json"}, LocalCLI: env.bool(envTsLocalCli), Prepare: language == LangTSPrepare}
 
 	c.Hermetic = env.bool(envAutocheck) && !env.bool(envTsDisableHermeticNodeModules) && !c.LocalCLI
 
@@ -71,7 +73,6 @@ func newNotsModule(kind TOK, env Environment) *NotsModule {
 		c.ProtoPackage, c.ProtoDeps = "@yandex-proto/*", "library/typescript/ts-proto-deps"
 	case tokTsTsc:
 		c.BuildScript = "nots:build"
-		c.setTSCCommand()
 	case tokTsNext:
 		c.BuildScript, c.BuildCommand, c.Outputs = "nots:build", "next build", []string{".next"}
 	case tokTsVite:
@@ -91,7 +92,7 @@ func (c *NotsModule) setTSCCommand() {
 	c.BuildCommand = strings.Join(commands, " && ")
 }
 
-func applyNotsStmt(v UnknownStmt, c *NotsModule) bool {
+func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
 	name := v.Raw.string()
 
 	if v.Name != tokInvalid {
@@ -105,6 +106,45 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule) bool {
 	}
 
 	switch name {
+	case "RUN_JAVASCRIPT_AFTER_BUILD":
+		if c.Prepare {
+			return true
+		}
+
+		switch c.Kind {
+		case tokTsPackage, tokTsLibrary:
+			throwFmt("%s does not support RUN_JAVASCRIPT_AFTER_BUILD", c.Kind.string())
+		case tokTsTsc, tokTsNext, tokTsVite:
+		default:
+			return false
+		}
+
+		if len(args) == 0 {
+			throwFmt("RUN_JAVASCRIPT_AFTER_BUILD requires a script")
+		}
+
+		command := []string{"node", args[0]}
+		input := false
+
+		for i := 1; i < len(args); i++ {
+			switch args[i] {
+			case "IN":
+				input = true
+			case "OUTDIR":
+				input = false
+
+				if i+1 < len(args) {
+					i++
+					c.Outputs = append(c.Outputs, args[i])
+				}
+			default:
+				if !input {
+					command = append(command, args[i])
+				}
+			}
+		}
+
+		env.setString(envTsAfterBuildCommand, strings.Join(command, " "))
 	case "TS_TEST_SRCS":
 		c.TestDirs = args
 	case "TS_TEST_CONFIG":
@@ -182,9 +222,6 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule) bool {
 		c.Configs = args
 		c.ConfigChanged = true
 
-		if c.Kind == tokTsTsc {
-			c.setTSCCommand()
-		}
 	case "TS_VITE_CONFIG":
 		var commands []string
 
@@ -210,6 +247,14 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule) bool {
 	}
 
 	return true
+}
+
+func (c *NotsModule) finish(env Environment) {
+	if c.Kind == tokTsTsc {
+		c.setTSCCommand()
+	}
+
+	c.AfterBuildCommand = env.string(envTsAfterBuildCommand)
 }
 
 func (e *EmitContext) notsResource(dir, name string) ResourceDecl {
@@ -639,8 +684,14 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 		if c.Kind != tokTsPackage {
 			args = append(args, "--build-script", c.BuildScript)
 
-			if c.BuildCommand != "" {
-				args = append(args, "--build-command", c.BuildCommand)
+			command := c.BuildCommand
+
+			if c.AfterBuildCommand != "" {
+				command += " && " + c.AfterBuildCommand
+			}
+
+			if command != "" {
+				args = append(args, "--build-command", command)
 			}
 		}
 	}

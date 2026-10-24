@@ -244,6 +244,7 @@ var (
 	envTraverseDepends                        = internEnv("TRAVERSE_DEPENDS")
 	envTraverseRecurse                        = internEnv("TRAVERSE_RECURSE")
 	envTraverseRecurseForTests                = internEnv("TRAVERSE_RECURSE_FOR_TESTS")
+	envTsAfterBuildCommand                    = internEnv("_TS_AFTER_BUILD_COMMAND")
 	envTsDisableHermeticNodeModules           = internEnv("TS_DISABLE_HERMETIC_NODE_MODULES")
 	envTsLocalCli                             = internEnv("TS_LOCAL_CLI")
 	envTsProto                                = internEnv("TS_PROTO")
