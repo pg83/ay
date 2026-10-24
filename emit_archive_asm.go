@@ -10,10 +10,14 @@ func (e *EmitContext) emitArchiveAsmForAR() {
 	for _, a := range d.archiveAsm {
 		rodataRel := a.Name + d.cc.objSufDot() + ".rodata"
 		rodataPath := build(e.instance.Path.relString(), "/", rodataRel)
-		rodataRef := e.emitArchiveAsmNode(a, rodataPath, toolBinPath, toolLDRef, reg)
-		rdRef, rdOut := e.emitArchiveAsmRodata(rodataRel, rodataPath, rodataRef)
 
-		e.collectObj(rdRef, rdOut, SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault, Seq: a.DeclSeq, Bucket: bkArchiveAsm})
+		e.emitArchiveAsmNode(a, rodataPath, toolBinPath, toolLDRef, reg)
+
+		if e.instance.Platform.ISA != ISAX8664 {
+			throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", e.instance.Platform.ISA, rodataRel)
+		}
+
+		e.enqueueSrc(SrcMeta{Source: rodataPath.any(), Prio: stmtPrioDefault, Seq: a.DeclSeq, Bucket: bkArchiveAsm})
 	}
 }
 
@@ -117,18 +121,4 @@ func (e *EmitContext) emitArchiveAsmNode(
 	})
 
 	return rodataRef
-}
-
-func (e *EmitContext) emitArchiveAsmRodata(rodataRel string, rodataPath VFS, producerRef NodeRef) (NodeRef, VFS) {
-	ctx, instance, d := e.ctx, e.instance, e.d
-
-	if instance.Platform.ISA != ISAX8664 {
-		throwFmt("gen: unsupported .rodata platform %s for ARCHIVE_ASM %q", instance.Platform.ISA, rodataRel)
-	}
-
-	leaves := e.scanner.walkClosure(rodataPath, d.scanCtx, scanDomainCC)
-	yasmLDRef, _ := ctx.tool(argContribToolsYasm)
-	ref, _, outPath := e.emitRD(rodataRel, rodataPath, yasmLDRef, leaves, []NodeRef{producerRef}, d.cc.TC)
-
-	return ref, outPath
 }

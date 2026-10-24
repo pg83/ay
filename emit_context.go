@@ -485,7 +485,7 @@ func (e *EmitContext) enqueueSrc(meta SrcMeta) {
 
 	e.srcs = append(e.srcs, meta)
 
-	if e.commandQueueActive {
+	if e.commandQueueActive && e.deferCC {
 		e.queueSource(len(e.srcs) - 1)
 	}
 }

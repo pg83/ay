@@ -217,8 +217,7 @@ class ReadySrcQueueTest(unittest.TestCase):
             with self.subTest(python=python):
                 result = lib.make_process(files, "ochre")
                 self.assertNotEqual(result.returncode, 0)
-                diagnostic = ("resource action inputs never become ready" if python
-                              else "dependency cycle among generating macros")
+                diagnostic = "dependency cycle among generating macros"
                 self.assertIn(diagnostic, result.stderr)
 
     def test_host_and_target_source_queues_are_independent(self):

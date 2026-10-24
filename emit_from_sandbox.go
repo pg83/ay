@@ -47,19 +47,6 @@ func (e *EmitContext) existingSandbox(stmt *FromSandboxStmt) *GeneratedFileInfo 
 	return info
 }
 
-func (e *EmitContext) emitFromSandboxes() (memberRefs []NodeRef, memberPaths []VFS) {
-	_, _, d := e.ctx, e.instance, e.d
-
-	for _, fs := range d.fromSandboxes {
-		refs, paths := e.emitFromSandbox(fs)
-
-		memberRefs = append(memberRefs, refs...)
-		memberPaths = append(memberPaths, paths...)
-	}
-
-	return memberRefs, memberPaths
-}
-
 func fromSandboxAutoLinkMember(name string) bool {
 	return extIsArchiveMember(name)
 }

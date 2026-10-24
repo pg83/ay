@@ -552,7 +552,13 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		push(prodArchiveAsm, 0, start, start)
 	}
 
-	srcs := append(e.prodSrcs[:0], d.srcs...)
+	srcs := e.prodSrcs[:0]
+
+	for _, meta := range d.srcs {
+		if e.deferCC || isCodegenProducingSrcID(meta.Source) {
+			srcs = append(srcs, meta)
+		}
+	}
 
 	defer func() { e.prodSrcs = srcs }()
 
@@ -595,6 +601,12 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 			outs, ins = e.srcPosition(m)
 		} else {
 			ins = []VFS{e.sourceInputForScheduling(m.Source.string())}
+
+			if m.Prio == stmtPrioSrcs && srcExtClassOf(m.Source) == srcExtCSource {
+				if _, known := moduleRootedVFS(module, m.Source.string()); known {
+					ins = nil
+				}
+			}
 		}
 
 		positions = append(positions, ProducerPos{
@@ -731,6 +743,10 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 		e.prodVFS = append(e.prodVFS, build(e.enumHeaderSourceInput(stmt.Header, d.srcDirs).relString()))
 
+		if _, rooted := moduleRootedVFS(module, stmt.Header); !rooted {
+			e.prodVFS = append(e.prodVFS, buildClean(stmt.Header))
+		}
+
 		positions = append(positions, ProducerPos{
 			kind:  prodEnum,
 			index: i,
@@ -847,8 +863,10 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		}
 	}
 
-	for i := range e.srcs {
-		e.queueSource(i)
+	if e.deferCC {
+		for i := range e.srcs {
+			e.queueSource(i)
+		}
 	}
 
 	e.commandQueueActive = true

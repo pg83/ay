@@ -25,7 +25,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 
 			e.collectPySource(ps.Path, py)
 
-			if py.Kind == pySourceProto || !e.d.pyBuildNoPYC {
+			if (!isProgramModuleType(e.d.moduleStmt.Name) || pyModuleTypeUsesPython3(e.d.moduleStmt.Name) || e.d.usePython2 || e.d.pythonSourceCallback) && (py.Kind == pySourceProto || !e.d.pyBuildNoPYC) {
 				e.emitPyYapyc(ps, e.pyccTool())
 			}
 

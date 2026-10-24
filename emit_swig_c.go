@@ -106,7 +106,7 @@ func (e *EmitContext) emitSwigC() {
 			key = strings.ReplaceAll(key, ".", "/") + ".py"
 		}
 
-		e.enqueueSrc(SrcMeta{
+		e.emitOneSource(SrcMeta{
 			Source: pyOutVFS.any(), Prio: stmtPrioDefault,
 			PyMeta: e.addPyMeta(PySourceMeta{
 				Module: internStr(key),

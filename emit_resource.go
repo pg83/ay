@@ -823,6 +823,10 @@ func (e *EmitContext) emitPySourceGroup(gi int) {
 
 	defer func() { e.resourceDeclSeq, e.resourcePriority = previousSeq, previousPriority }()
 
+	if isProgramModuleType(e.d.moduleStmt.Name) && e.d.unit.Tag == 0 && len(e.resources) == 0 && !e.d.pythonSourceCallback {
+		return
+	}
+
 	e.emitPySrcGroupObjcopy(gi, group, &ObjcopyEmitResult{})
 
 	if e.d.unit.Tag != unitTagPy3Bin {

@@ -36,13 +36,60 @@ func (d *ModuleData) recordProducerDeclarations() {
 		counts[prodPyMain] = 1
 	}
 
+	start := len(d.producerDeclarations)
+
 	for kind, count := range counts {
 		for index := d.producerCounts[kind]; index < count; index++ {
 			d.producerDeclarations = append(d.producerDeclarations, producerDeclaration{kind, index})
 		}
 	}
 
+	slices.SortStableFunc(d.producerDeclarations[start:], func(a, b producerDeclaration) int {
+		return cmp.Compare(d.producerDeclarationSequence(a), d.producerDeclarationSequence(b))
+	})
+
 	d.producerCounts = counts
+}
+
+func (d *ModuleData) producerDeclarationSequence(decl producerDeclaration) int {
+	switch decl.kind {
+	case prodPyNoCheck:
+		return -1
+	case prodSrc:
+		return d.srcs[decl.index].Seq
+	case prodResource:
+		return d.resources[decl.index].DeclSeq
+	case prodPyGroup:
+		return d.pySrcGroups[decl.index].DeclSeq
+	case prodRunProgram:
+		return d.runPrograms[decl.index].DeclSeq
+	case prodRunPython:
+		return d.runPython[decl.index].DeclSeq
+	case prodRunJava:
+		return d.runJavaPrograms[decl.index].DeclSeq
+	case prodFromSandbox:
+		return d.fromSandboxes[decl.index].DeclSeq
+	case prodBundle:
+		return d.bundles[decl.index].DeclSeq
+	case prodCopyFile:
+		return d.copyFiles[decl.index].DeclSeq
+	case prodJoinSrcs:
+		return d.joinSrcs[decl.index].Seq
+	case prodArchiveAsm:
+		return d.archiveAsm[decl.index].DeclSeq
+	case prodEnum:
+		return d.enumSrcs[decl.index].DeclSeq
+	case prodCuda:
+		return d.cudaSrcs[decl.index].DeclSeq
+	case prodSplitCodegen:
+		return d.splitCodegens[decl.index].DeclSeq
+	case prodLlvmBc:
+		return d.llvmBc[decl.index].DeclSeq
+	case prodPyMain:
+		return d.pyMainDeclSeq
+	}
+
+	return d.declSeq + 1
 }
 
 func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []ProducerPos {
@@ -62,8 +109,8 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 		positions = append(positions, ProducerPos{kind: prodBundle, index: i, outs: []VFS{copyFileOutputVFS(module, bundle.Name)}})
 	}
 
-	if !e.producersOnly() {
-		for lo := 0; lo < len(e.resources); {
+	if e.deferCC && !e.producersOnly() {
+		for lo := 0; e.d.unit.Tag != unitTagPy3Bin && lo < len(e.resources); {
 			hi := lo + 1
 
 			for hi < len(e.resources) && !e.resources[hi-1].EndsBatch {
@@ -109,7 +156,7 @@ func (e *EmitContext) orderedProducerPositions(positions []ProducerPos) []Produc
 		}
 	}
 
-	if !e.producersOnly() || e.ctx.peerTests {
+	if e.deferCC && (!e.producersOnly() || e.ctx.peerTests) {
 		for gi, group := range e.d.pySrcGroups {
 			var inputs []VFS
 

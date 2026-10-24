@@ -305,7 +305,6 @@ func (ctx *GenCtx) javaRegisterProducers(jm *JavaModule, frame *ModuleFrame) {
 
 	e := newEmitContextIn(frame, ctx, jm.instance, d, &frame.peerCtx)
 
-	e.emitFromSandboxes()
 	e.emitDeclaredProducers(nil)
 
 	add := func(tokens []ANY) {

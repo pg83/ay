@@ -34,7 +34,6 @@ func (e *EmitContext) genGeneratedLibrary() *ModuleEmitResult {
 	})
 
 	globals = e.scriptModuleResources(globals, "build/platform/python/ymake_python3")
-	e.emitFromSandboxes()
 	e.emitDeclaredProducers(nil)
 
 	module := e.instance.Path.relString()

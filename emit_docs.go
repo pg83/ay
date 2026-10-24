@@ -41,8 +41,6 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 
 	globals = e.scriptModuleResources(globals, resourcePeers...)
 
-	e.emitFromSandboxes()
-
 	e.emitDeclaredProducers(nil)
 
 	generated := dedup(e.outs)

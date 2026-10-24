@@ -19,6 +19,10 @@ class CommandConstructionQueueTest(unittest.TestCase):
              ["plain.cpp.o", "joined.cpp.o"]),
             ([producer, "SRCS(${BINDIR}/generated.cpp plain.cpp)"],
              ["generated.cpp.o", "plain.cpp.o"]),
+            (["RUN_PYTHON3(gen.py IN ${BINDIR}/seed.dat OUT_NOAUTO generated.cpp)",
+              "RUN_PYTHON3(gen.py OUT_NOAUTO seed.dat)",
+              "SRCS(${BINDIR}/generated.cpp plain.cpp)"],
+             ["generated.cpp.o", "plain.cpp.o"]),
         ]
         for body, expected in cases:
             with self.subTest(body=body):
@@ -43,6 +47,31 @@ class CommandConstructionQueueTest(unittest.TestCase):
                 source = lib.node_by_output(graph, "$(B)/probe/" + generated_name)
                 compile_node = lib.node_by_output(graph, "$(B)/probe/" + generated_name + ".o")
                 self.assertIn(source["uid"], compile_node["deps"])
+
+    def test_proto_conversion_appends_each_generated_source_to_the_queue(self):
+        from test_proto_flatc import flatc_files
+
+        files = flatc_files()
+        files.update({
+            "probe/ya.make": "LIBRARY()\n" + lib.BARE_MODULE
+                             + "PROTO2FBS(created.proto)\nSRCS(simple.fbs direct.cpp)\nEND()\n",
+            "probe/created.proto": 'syntax = "proto3";\nmessage Created {}\n',
+            "probe/simple.fbs": "table Simple {}\n",
+            "probe/direct.cpp": "int direct;\n",
+        })
+        graph = lib.make(files, "probe")
+        archive = lib.node_by_output(graph, "$(B)/probe/libprobe.a")
+        members = [arg for cmd in archive["cmds"] for arg in cmd["cmd_args"]
+                   if arg.endswith(".o")]
+        self.assertEqual(members, ["$(B)/probe/" + name for name in
+                                  ("direct.cpp.o", "simple.fbs.cpp.o", "created.fbs.cpp.o")])
+        converted = lib.node_by_output(graph, "$(B)/probe/created.fbs")
+        flatc = lib.node_by_output(graph, "$(B)/probe/created.fbs.h")
+        compiled = lib.node_by_output(graph, "$(B)/probe/created.fbs.cpp.o")
+        self.assertIn("$(S)/probe/created.proto", converted["inputs"])
+        self.assertIn(converted["uid"], flatc["deps"])
+        self.assertIn(flatc["uid"], compiled["deps"])
+        self.assertIn(compiled["uid"], archive["deps"])
 
     def test_header_declared_after_its_consumer_keeps_template_inputs(self):
         files = {

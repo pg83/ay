@@ -179,7 +179,6 @@ func (e *EmitContext) genYqlPrebuiltTool() *ModuleEmitResult {
 
 	globals := e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
 
-	e.emitFromSandboxes()
 	e.emitDeclaredProducers(nil)
 
 	src := e.resolveModuleSourceVFS(internStr(e.d.primaryOutput).any(), e.d.srcDirs)

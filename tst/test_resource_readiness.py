@@ -168,7 +168,7 @@ class ResourceReadinessTest(unittest.TestCase):
         )
         result = lib.make_process(files, targets[0], "--sandboxing", timeout=3)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("resource action inputs never become ready", result.stderr)
+        self.assertIn("dependency cycle among generating macros", result.stderr)
 
     def test_prior_language_context_output_remains_ready_without_redeclaration(self):
         files, targets = fixture()
