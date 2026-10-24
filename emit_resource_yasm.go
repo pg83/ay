@@ -85,11 +85,9 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 	asmName, cppName := asmFiles[0], cppFiles[0]
 	globalAsm := len(asmFiles) > 1
 
-	var asmAction, compile *SourceActionInfo
-
 	if globalAsm {
-		cppName, compile = e.emitResourceJoin(cppFiles, ".auxcpp", p.Tag, false)
-		asmName, asmAction = e.emitResourceJoin(asmFiles, ".yasm", p.Tag, true)
+		cppName = e.emitResourceJoin(cppFiles, ".auxcpp", p.Tag, false)
+		asmName = e.emitResourceJoin(asmFiles, ".yasm", p.Tag, true)
 	}
 
 	asmPath := build(module, "/", asmName)
@@ -104,12 +102,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 	yasmRef, _ := e.ctx.tool(argContribToolsYasm)
 	asmRef, asmOut := e.emitASAsm(asmPath, asmIn, yasmRef, false)
 	priority := stmtPrioDefault
-
-	if asmAction == nil {
-		asmAction = e.sourceCompileAction(priority, e.resourceDeclSeq, asmPath)
-	}
-
-	asmMeta := SrcMeta{Global: globalAsm, Prio: priority, Seq: e.resourceDeclSeq, NativeAction: asmAction}
+	asmMeta := SrcMeta{Global: globalAsm, Prio: priority, Seq: e.resourceDeclSeq}
 
 	if !globalAsm {
 		e.collectObj(asmRef, asmOut, asmMeta)
@@ -118,12 +111,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 	cppPath := build(module, "/", cppName)
 	ccRef := e.ctx.emit.reserve()
 	spec := CompileSpec{ForceCxx: true, CFlags: na.anyList(argX.any(), argC.any())}
-
-	if compile == nil {
-		compile = e.sourceCompileAction(priority, e.resourceDeclSeq, cppPath)
-	}
-
-	meta := SrcMeta{Source: cppPath.any(), Prio: priority, Seq: e.resourceDeclSeq, NativeAction: compile, Compile: spec, CompileRef: ccRef}
+	meta := SrcMeta{Source: cppPath.any(), Prio: priority, Seq: e.resourceDeclSeq, Compile: spec, CompileRef: ccRef}
 
 	e.enqueueSrc(meta)
 
@@ -138,7 +126,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 	return na.refList(ccRef), na.vfsList(e.ccOutputFor(cppPath, spec))
 }
 
-func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, flat bool) (string, *SourceActionInfo) {
+func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, flat bool) string {
 	na := e.ctx.na
 	name := "join_" + e.resourceHash(files, tag) + suffix
 	out := build(e.instance.Path.relString(), "/", name)
@@ -169,8 +157,6 @@ func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, f
 
 	args = append(args, argYaEndCommandFile.any())
 
-	compile := e.sourceCompileAction(stmtPrioDefault, e.resourceDeclSeq, out)
-
 	ref := e.emitNode(Node{
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
@@ -178,8 +164,8 @@ func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, f
 		Outputs: na.vfsList(out), KV: &jsNodeKV, Resources: usesPython3,
 	})
 
-	e.register(GeneratedFileInfo{SourceAction: &SourceActionInfo{DeclSeq: e.resourceDeclSeq, Inputs: inputs}, OutputPath: out, ProducerRef: ref,
+	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: na.dirList(includes...)}})
 
-	return name, compile
+	return name
 }

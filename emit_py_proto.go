@@ -117,7 +117,7 @@ func pyProtoOutputToken(instance ModuleInstance, out VFS, generatedProto bool) A
 	return internV("${ARCADIA_BUILD_ROOT}/", out.relString()).any()
 }
 
-func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, outputs []VFS, generatedProto bool, logicalModule STR) {
+func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, outputs []VFS, generatedProto bool, logicalModule STR, priority, seq int) {
 	instance, d := e.instance, e.d
 	keyDir, keySep, keyBase := protoPythonResourceKeyParts(instance, d, src)
 
@@ -147,6 +147,9 @@ func (e *EmitContext) enqueuePyProtoOutputs(src string, srcGroup int, outputs []
 				Token:  pyProtoOutputToken(instance, out, generatedProto),
 				Group:  srcGroup,
 				Kind:   pySourceProto,
+				Prio:   priority,
+				Seq:    seq,
+				Event:  extIsEv(src),
 			}),
 		})
 	}
@@ -313,7 +316,7 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule 
 	outputs = outputs[:len(outputs):len(outputs)]
 
 	if e.codegen.lookup(pyOut) != nil {
-		e.enqueuePyProtoOutputs(src, srcGroup, outputs, protoSrcVFS.isBuild(), logicalModule)
+		e.enqueuePyProtoOutputs(src, srcGroup, outputs, protoSrcVFS.isBuild(), logicalModule, priority, seq)
 
 		return
 	}
@@ -413,15 +416,14 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, srcGroup int, logicalModule 
 	}
 
 	pyPBPE := e.pendingEmitter(pending)
-	action := &SourceActionInfo{Priority: priority, DeclSeq: seq, Inputs: na.vfsList(protoSrcVFS)}
 
 	for _, out := range outputs {
-		e.register(GeneratedFileInfo{SourceAction: action, OutputPath: out, ProducerRef: pyPBRef, OnUse: pyPBPE})
+		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: pyPBRef, OnUse: pyPBPE})
 	}
 
 	e.codegen.setMainOut(pyPBRef, outputs)
 
-	e.enqueuePyProtoOutputs(src, srcGroup, outputs, generatedProto, logicalModule)
+	e.enqueuePyProtoOutputs(src, srcGroup, outputs, generatedProto, logicalModule, priority, seq)
 }
 
 func protoPythonOutputRoot(d *ModuleData) string {

@@ -48,6 +48,26 @@ func cppLinterSource(name string) bool {
 	return false
 }
 
+func (e *EmitContext) collectCPPStyleInputs(inputs ...VFS) {
+	if !e.ctx.testMode {
+		return
+	}
+
+	for i := range e.d.styleChecks {
+		check := &e.d.styleChecks[i]
+
+		if !check.CPP {
+			continue
+		}
+
+		for _, input := range inputs {
+			if input != 0 && input.isSource() && cppLinterSource(input.relString()) {
+				check.Files = append(check.Files, input.relString())
+			}
+		}
+	}
+}
+
 func (e *EmitContext) cppStyleInputFiles(file VFS) []string {
 	seen := map[VFS]bool{}
 

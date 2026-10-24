@@ -24,10 +24,6 @@ func scriptInputs(scripts ...string) []VFS {
 }
 
 func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ...VFS) NodeRef {
-	return e.emitLazyModuleNodeAction(node, needs, nil, ownedOutputs...)
-}
-
-func (e *EmitContext) emitLazyModuleNodeAction(node Node, needs []VFS, action *SourceActionInfo, ownedOutputs ...VFS) NodeRef {
 	ctx, reg, na := e.ctx, e.codegen, e.ctx.na
 	ref := ctx.emit.reserve()
 
@@ -97,9 +93,7 @@ func (e *EmitContext) emitLazyModuleNodeAction(node Node, needs []VFS, action *S
 	}
 
 	for _, out := range ownedOutputs {
-		stored := reg.register(GeneratedFileInfo{SourceAction: action, OutputPath: out, OwnerModule: e.instance.Path, OwnerSerial: e.frame.serial, ProducerRef: ref, OnUse: pending, IncludedBuildInputs: templates, IncludedInputs: includedInputs})
-
-		e.registerSourceProducer(stored)
+		reg.register(GeneratedFileInfo{OutputPath: out, OwnerModule: e.instance.Path, OwnerSerial: e.frame.serial, ProducerRef: ref, OnUse: pending, IncludedBuildInputs: templates, IncludedInputs: includedInputs})
 	}
 
 	return ref

@@ -143,7 +143,10 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 	}
 
 	pyRef := ctx.emit.reserve()
-	sourceAction := &SourceActionInfo{DeclSeq: stmt.DeclSeq, Inputs: concat([]VFS{scriptVFS}, inVFSs)}
+
+	e.collectCPPStyleInputs(scriptVFS)
+	e.collectCPPStyleInputs(inVFSs...)
+
 	interp := d.cc.TC.Python3.any()
 	kv := &pyRunKV
 	resources := resourceKeyUnion(usesPython3, resourceUses)
@@ -226,7 +229,6 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 
 	registerPYOutput := func(out VFS, parsed []IncludeDirective) {
 		e.register(GeneratedFileInfo{
-			SourceAction:    sourceAction,
 			OutputPath:      out,
 			ProducerRef:     pyRef,
 			ProducerMainOut: outputs[0],

@@ -162,25 +162,23 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 	return ResolvedResource{Input: fallback}
 }
 
-func (e *EmitContext) resourceSourceAction(items []ResourceItem) *SourceActionInfo {
+func (e *EmitContext) resourceSourceMeta(items []ResourceItem, output VFS) SrcMeta {
 	priority := e.resourcePriority
 
 	if priority == 0 {
 		priority = stmtPrioDefault
 	}
 
-	info := &SourceActionInfo{Priority: priority, DeclSeq: e.resourceDeclSeq}
-
-	for _, item := range items {
-		if input := item.input(); input != 0 {
-			info.Inputs = append(info.Inputs, input)
+	if e.ctx.testMode {
+		for _, item := range items {
+			e.collectCPPStyleInputs(item.input())
 		}
 	}
 
-	return info
+	return SrcMeta{Source: output.any(), Global: true, Prio: priority, Seq: e.resourceDeclSeq}
 }
 
-func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, resources []STR, inputs, buildFrom InputChunks, deps []NodeRef, action *SourceActionInfo) NodeRef {
+func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, resources []STR, inputs, buildFrom InputChunks, deps []NodeRef) NodeRef {
 	if info := e.codegen.lookup(outputObj); info != nil && info.ResourceObjcopy && info.OwnerModule == e.instance.Path && info.OwnerSerial != e.frame.serial {
 		return info.ProducerRef
 	}
@@ -202,7 +200,7 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 
 	ref := e.emitNode(node)
 
-	e.register(GeneratedFileInfo{SourceAction: action, OutputPath: outputObj, ProducerRef: ref, ResourceObjcopy: true})
+	e.register(GeneratedFileInfo{OutputPath: outputObj, ProducerRef: ref, ResourceObjcopy: true})
 
 	return ref
 }
@@ -482,16 +480,9 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		outputObj := build(instance.Path.relString(), "/objcopy_", hash, ".o")
 		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
-		action := e.resourceSourceAction(chunk)
 
-		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, deps, action))
-
-		if e.codegen.lookup(outputObj).SourceAction != action {
-			e.numberSourceAction(action)
-			e.sourceInlineActions = append(e.sourceInlineActions, action)
-		}
-
-		e.resourceMetas = append(e.resourceMetas, SrcMeta{Source: outputObj.any(), Global: true, Prio: action.Priority, Seq: action.DeclSeq, NativeAction: action})
+		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, deps))
+		e.resourceMetas = append(e.resourceMetas, e.resourceSourceMeta(chunk, outputObj))
 		outs = append(outs, outputObj)
 	}
 
@@ -579,10 +570,9 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		aux := build(instance.Path.relString(), "/", hash, "_raw.auxcpp")
 		auxRef := ctx.emit.reserve()
-		action := e.resourceSourceAction(chunk)
+		meta := e.resourceSourceMeta(chunk, aux)
 
 		e.register(GeneratedFileInfo{
-			SourceAction:  action,
 			OutputPath:    aux,
 			ProducerRef:   auxRef,
 			GeneratorRefs: na.refList(rescompilerRef),
@@ -658,11 +648,8 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		}, auxRef)
 
 		ccRef := ctx.emit.reserve()
-		compile := e.sourceCompileAction(action.Priority, action.DeclSeq, aux)
 
-		meta := SrcMeta{Source: aux.any(), Prio: action.Priority, Seq: action.DeclSeq,
-			Global: true, NativeAction: compile,
-			Compile: p.RawCompile, CompileRef: ccRef}
+		meta.Compile, meta.CompileRef = p.RawCompile, ccRef
 
 		e.enqueueSrc(meta)
 		e.resourceMetas = append(e.resourceMetas, meta)

@@ -420,24 +420,20 @@ type CompileSpec struct {
 }
 
 type SrcMeta struct {
-	NativeAction         *SourceActionInfo
-	Source               ANY
-	Prio                 int
-	Seq                  int
-	Stmt                 int
-	Global               bool
-	RosZeroCopy          bool
-	Bucket               int
-	Compile              CompileSpec
-	CompileRef           NodeRef
-	PyMeta               uint32
-	InitialCompileSource bool
-
-	SourceQueueRank uint64
+	Source      ANY
+	Prio        int
+	Seq         int
+	Stmt        int
+	Global      bool
+	RosZeroCopy bool
+	Bucket      int
+	Compile     CompileSpec
+	CompileRef  NodeRef
+	PyMeta      uint32
 }
 
-func (m SrcMeta) sortKey(round uint64) uint64 {
-	return round<<48 | uint64(m.Prio)<<40 | uint64(uint32(m.Seq))<<8 | uint64(uint8(m.Bucket))
+func (m SrcMeta) sortKey() uint64 {
+	return uint64(m.Prio)<<40 | uint64(uint32(m.Seq))<<8 | uint64(uint8(m.Bucket))
 }
 
 func (d *ModuleData) nextDeclSeq() int {

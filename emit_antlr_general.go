@@ -78,15 +78,12 @@ func (e *EmitContext) emitAntlrRunStmt(run AntlrRunInfo) {
 
 	pending := e.pendingEmit(pe)
 
-	var action *SourceActionInfo
-
 	if run.DeclSeq != 0 {
-		action = &SourceActionInfo{DeclSeq: run.DeclSeq, Inputs: ctx.na.vfsList(append(append([]VFS(nil), inputs...), jarVFS, stdout2stderrVFS)...)}
+		e.collectCPPStyleInputs(inputs...)
 	}
 
 	for _, outVFS := range outVFSByToken {
 		e.register(GeneratedFileInfo{
-			SourceAction:    action,
 			OutputPath:      outVFS,
 			ProducerRef:     jvRef,
 			ProducerMainOut: outputs[0],

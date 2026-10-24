@@ -66,12 +66,10 @@ func fromSandboxAutoLinkMember(name string) bool {
 
 func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
 	if info := e.existingSandbox(stmt); info != nil {
-		sourceAction := &SourceActionInfo{DeclSeq: stmt.DeclSeq}
-
 		for i, out := range info.Sandbox.Outputs {
 			local := *info
 
-			local.OutputPath, local.SourceAction = out, sourceAction
+			local.OutputPath = out
 
 			e.register(local)
 
@@ -87,7 +85,6 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 	ctx := e.ctx
 	node, outVFSs := fromSandboxNode(ctx.emit.nodeArenas(), e.instance, e.d.tc.Python3.any(), stmt)
 	ref := ctx.emit.reserve()
-	sourceAction := &SourceActionInfo{DeclSeq: stmt.DeclSeq}
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
 	for i, f := range stmt.OUTFiles {
@@ -102,7 +99,6 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 
 	for _, out := range outVFSs {
 		e.register(GeneratedFileInfo{
-			SourceAction:   sourceAction,
 			OutputPath:     out,
 			Sandbox:        recipe,
 			ProducerRef:    ref,

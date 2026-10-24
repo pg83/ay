@@ -36,6 +36,9 @@ type PySourceMeta struct {
 	Token  ANY
 	Group  int
 	Kind   PySourceKind
+	Prio   int
+	Seq    int
+	Event  bool
 }
 
 func (e *EmitContext) addPyMeta(meta PySourceMeta) uint32 {
@@ -57,12 +60,8 @@ func pyResourceKeyPrefix(topLevel bool, namespace *ANY, modulePath string) strin
 }
 
 type PySrc struct {
-	Path   VFS
-	Module STR
-	Scope  PyScope
-	Token  ANY
-	Group  int
-	Kind   PySourceKind
+	Path VFS
+	PySourceMeta
 }
 
 func (e *EmitContext) resolvePythonSourceVFS(src string) VFS {
@@ -220,10 +219,7 @@ func (e *EmitContext) pyYapycExt() string {
 }
 
 func (e *EmitContext) collectPySource(path VFS, meta PySourceMeta) {
-	e.pySrcsReg = append(e.pySrcsReg, PySrc{
-		Path: path, Module: meta.Module, Scope: meta.Scope, Token: meta.Token,
-		Group: meta.Group, Kind: meta.Kind,
-	})
+	e.pySrcsReg = append(e.pySrcsReg, PySrc{Path: path, PySourceMeta: meta})
 }
 
 func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
@@ -535,20 +531,7 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 
 	pyRef := e.emitNode(node)
 
-	var action *SourceActionInfo
-
-	if ps.Kind == pySourcePlain || ps.Kind == pySourceGenerated {
-		group := e.d.pySrcGroups[ps.Group]
-
-		action = &SourceActionInfo{Priority: group.Prio, DeclSeq: group.DeclSeq, Inputs: na.vfsList(srcAbs)}
-	} else {
-		producer := e.codegen.mustInfo(ps.Path).SourceAction
-
-		action = &SourceActionInfo{Priority: producer.Priority, DeclSeq: producer.DeclSeq, Inputs: na.vfsList(srcAbs)}
-	}
-
 	e.register(GeneratedFileInfo{
-		SourceAction:  action,
 		OutputPath:    outputPath,
 		ProducerRef:   pyRef,
 		GeneratorRefs: generatorRefs,
@@ -622,9 +605,7 @@ func (e *EmitContext) collectPyProtoGroupResEntries(group int, event bool) ([]Py
 
 	for _, ps := range e.pySrcsReg {
 		if ps.Kind == pySourceProto && ps.Group == group {
-			producer := e.codegen.mustInfo(ps.Path).SourceAction
-
-			if extIsEv(producer.Inputs[0].relString()) != event {
+			if ps.Event != event {
 				continue
 			}
 
@@ -659,15 +640,14 @@ func (e *EmitContext) pyProtoGroups() []int {
 	return groups
 }
 
-func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry, seq int) ([]NodeRef, []VFS) {
+func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry, priority, seq int) ([]NodeRef, []VFS) {
 	if len(entries) == 0 {
 		return nil, nil
 	}
 
-	producer := e.codegen.mustInfo(entries[len(entries)-1].path).SourceAction
 	previousSeq, previousPriority := e.resourceDeclSeq, e.resourcePriority
 
-	e.resourceDeclSeq, e.resourcePriority = seq, producer.Priority
+	e.resourceDeclSeq, e.resourcePriority = seq, priority
 
 	defer func() { e.resourceDeclSeq, e.resourcePriority = previousSeq, previousPriority }()
 
@@ -686,6 +666,7 @@ func (e *EmitContext) emitPyProtoGroupResources(group int) ([]NodeRef, []VFS) {
 	var outputs []VFS
 
 	seq := 0
+	priority := stmtPrioDefault
 
 	for _, ps := range e.pySrcsReg {
 		if ps.Kind == pySourceProto && ps.Group == group {
@@ -695,7 +676,7 @@ func (e *EmitContext) emitPyProtoGroupResources(group int) ([]NodeRef, []VFS) {
 				throwFmt("appendPyResEntries: unregistered proto producer for %q", ps.Path.string())
 			}
 
-			seq = info.SourceAction.DeclSeq
+			seq, priority = ps.Seq, ps.Prio
 		}
 	}
 
@@ -704,7 +685,7 @@ func (e *EmitContext) emitPyProtoGroupResources(group int) ([]NodeRef, []VFS) {
 		lo := 0
 
 		for _, hi := range ends {
-			groupRefs, groupOutputs := e.packPyProtoResEntries(entries[lo:hi], seq)
+			groupRefs, groupOutputs := e.packPyProtoResEntries(entries[lo:hi], priority, seq)
 
 			refs = append(refs, groupRefs...)
 			outputs = append(outputs, groupOutputs...)

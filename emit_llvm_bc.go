@@ -104,7 +104,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	pendRefs := make([]NodeRef, 0, len(stmt.Sources)+2)
 	bcRefs := make([]NodeRef, 0, len(stmt.Sources))
 	bcPaths := make([]VFS, 0, len(stmt.Sources))
-	actions := make([]*SourceActionInfo, 0, len(stmt.Sources)+2)
 	linksCopy := false
 
 	for _, src := range stmt.Sources {
@@ -133,7 +132,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		pendRefs = append(pendRefs, ref)
 		bcRefs = append(bcRefs, ref)
 		bcPaths = append(bcPaths, bcOut)
-		actions = append(actions, &SourceActionInfo{DeclSeq: stmt.DeclSeq, Inputs: na.vfsList(e.llvmBcSourceInfo(src))})
 	}
 
 	mergedOut := build(instance.Path.relString(), "/", stmt.Name, "_merged", suffix, ".bc")
@@ -168,7 +166,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	pendNodes = append(pendNodes, ldNode)
 	pendRefs = append(pendRefs, ldRef)
-	actions = append(actions, &SourceActionInfo{DeclSeq: stmt.DeclSeq, Inputs: bcPaths})
 
 	optOutName := stmt.Name + "_optimized" + suffix + ".bc"
 	optOut := build(instance.Path.relString(), "/", optOutName)
@@ -197,7 +194,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	pendNodes = append(pendNodes, optNode)
 	pendRefs = append(pendRefs, opRef)
-	actions = append(actions, &SourceActionInfo{DeclSeq: stmt.DeclSeq, Inputs: na.vfsList(mergedOut)})
 
 	pe := func() {
 		for i := range pendNodes {
@@ -211,12 +207,15 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		return
 	}
 
+	for _, src := range stmt.Sources {
+		e.collectCPPStyleInputs(e.llvmBcSourceInfo(src))
+	}
+
 	for i, node := range pendNodes {
 		e.register(GeneratedFileInfo{
-			SourceAction: actions[i],
-			OutputPath:   node.Outputs[0],
-			ProducerRef:  pendRefs[i],
-			OnUse:        pending,
+			OutputPath:  node.Outputs[0],
+			ProducerRef: pendRefs[i],
+			OnUse:       pending,
 		})
 	}
 

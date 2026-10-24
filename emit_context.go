@@ -20,15 +20,9 @@ type PeerContext struct {
 }
 
 type EmitContext struct {
-	sourcePositions     map[*SourceActionInfo]uint64
-	sourceInlineActions []*SourceActionInfo
-	sourceActionOrder   int
-	resourcePriority    int
-	resourceMetas       []SrcMeta
+	resourcePriority int
+	resourceMetas    []SrcMeta
 
-	sourceProducers    map[NodeRef]*GeneratedFileInfo
-	sourceRoots        map[int]SrcMeta
-	sourceRounds       map[int]uint64
 	resourceDeclSeq    int
 	moduleIncludeRoots []VFS
 	moduleGlobals      []VFS
@@ -481,10 +475,6 @@ func (e *EmitContext) collectObj(ref NodeRef, out VFS, meta SrcMeta) {
 func (e *EmitContext) enqueueSrc(meta SrcMeta) {
 	assert(!e.srcsClosed, "enqueueSrc after source queue closed")
 
-	if meta.SourceQueueRank != 0 {
-		meta.SourceQueueRank++
-	}
-
 	if cap(e.srcs) == 0 {
 		e.srcs = make([]SrcMeta, 0, len(e.d.srcs)+8)
 	}
@@ -502,23 +492,7 @@ func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
 
 	e.collectScriptOutput(info.OutputPath)
 
-	stored := e.codegen.register(info)
-
-	e.registerSourceProducer(stored)
-
-	return stored
-}
-
-func (e *EmitContext) registerSourceProducer(info *GeneratedFileInfo) {
-	if info.SourceAction != nil {
-		e.numberSourceAction(info.SourceAction)
-
-		if e.sourceProducers == nil {
-			e.sourceProducers = make(map[NodeRef]*GeneratedFileInfo)
-		}
-
-		e.sourceProducers[info.ProducerRef] = info
-	}
+	return e.codegen.register(info)
 }
 
 func (e *EmitContext) collectScriptOutput(output VFS) {
@@ -596,7 +570,6 @@ func (e *EmitContext) emit() {
 
 	for _, meta := range d.srcs {
 		if !isCodegenProducingSrcID(meta.Source) {
-			meta.InitialCompileSource = meta.Prio == stmtPrioSrcs
 			e.enqueueSrc(meta)
 		}
 	}

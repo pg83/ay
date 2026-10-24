@@ -98,7 +98,8 @@ func (e *EmitContext) emitUsrvFiles() {
 			Cmds:   na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolArgs[0], strSourceArg.any(), src.any(), strTarget2.any(), build(e.instance.Path.relString()).any(), out.any())), Env: envVarsVCS, Resources: toolValue.Resources}),
 			Inputs: na.inputList(inputs), Outputs: na.vfsList(out)}
 
-		e.emitLazyModuleNodeAction(n, nil, &SourceActionInfo{DeclSeq: file.DeclSeq, Inputs: na.vfsList(src)})
+		e.collectCPPStyleInputs(src)
+		e.emitLazyModuleNode(n, nil)
 
 		info := e.codegen.mustInfo(out)
 

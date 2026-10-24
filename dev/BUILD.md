@@ -28,6 +28,11 @@ references or normalization to satisfy a fast test. Report graph-gate results
 separately from fast-test failures, including when running the combined `test`
 target.
 
+Use the existing producer dependency scheduler for command construction.
+Archive and link member ordering uses source priorities and declaration order.
+Do not add a second simulation of command readiness, virtual queue rounds, or
+reconstructed producer-chain depth to reorder objects after graph construction.
+
 With `-Dcoverage`, every binary test packs its `GOCOVERDIR` counters into
 `$(B)/coverage/<test>.tar`, and the `coverage` node merges them into the
 textfmt profile `$(B)/coverage/cover.out`. It prints a per-file statement table,

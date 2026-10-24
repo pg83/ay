@@ -16,18 +16,18 @@ type RunProgramAuxTool struct {
 }
 
 type RunProgramNodeSpec struct {
-	stmt          *RunProgramStmt
-	toolBinPath   VFS
-	toolLDRef     NodeRef
-	auxTools      []RunProgramAuxTool
-	sourceAction  *SourceActionInfo
-	inVFSs        []VFS
-	inSources     []VFS
-	inBuilds      []VFS
-	outVFSByToken map[ANY]VFS
-	stdoutVFS     *VFS
-	closureSource []VFS
-	closureBuild  []VFS
+	stmt                *RunProgramStmt
+	toolBinPath         VFS
+	toolLDRef           NodeRef
+	auxTools            []RunProgramAuxTool
+	foreignToolsPending bool
+	inVFSs              []VFS
+	inSources           []VFS
+	inBuilds            []VFS
+	outVFSByToken       map[ANY]VFS
+	stdoutVFS           *VFS
+	closureSource       []VFS
+	closureBuild        []VFS
 }
 
 func (spec *RunProgramNodeSpec) isOutput(v VFS) bool {
@@ -171,7 +171,9 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	e.dirScratch = protoImportPbH
 
 	prRef := ctx.emit.reserve()
-	sourceAction := &SourceActionInfo{DeclSeq: stmt.DeclSeq, Inputs: inVFSs, ForeignTools: foreignTools}
+
+	e.collectCPPStyleInputs(inVFSs...)
+
 	registeredPROut := map[VFS]bool{}
 
 	snap := &prSnap{
@@ -194,18 +196,18 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		}
 
 		e.emitPR(RunProgramNodeSpec{
-			stmt:          stmt,
-			toolBinPath:   *res.LDPath,
-			toolLDRef:     res.LDRef,
-			auxTools:      auxTools,
-			sourceAction:  sourceAction,
-			inVFSs:        snap.inVFSs,
-			inSources:     snap.inSources,
-			inBuilds:      snap.inBuilds,
-			outVFSByToken: outVFSByToken,
-			stdoutVFS:     stdoutVFS,
-			closureSource: inputClosure.sources,
-			closureBuild:  inputClosure.builds,
+			stmt:                stmt,
+			toolBinPath:         *res.LDPath,
+			toolLDRef:           res.LDRef,
+			auxTools:            auxTools,
+			foreignToolsPending: len(foreignTools) > 0,
+			inVFSs:              snap.inVFSs,
+			inSources:           snap.inSources,
+			inBuilds:            snap.inBuilds,
+			outVFSByToken:       outVFSByToken,
+			stdoutVFS:           stdoutVFS,
+			closureSource:       inputClosure.sources,
+			closureBuild:        inputClosure.builds,
 		}, prRef)
 	}
 
@@ -226,7 +228,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		registeredPROut[out] = true
 
 		e.register(GeneratedFileInfo{
-			SourceAction:    sourceAction,
 			OutputPath:      out,
 			BuildInputs:     snap.inVFSs,
 			ProducerRef:     prRef,
@@ -709,9 +710,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 
 	e.resolveNodeCodegenRefs(&node)
 
-	if len(spec.sourceAction.ForeignTools) > 0 {
-		node.foreignToolsPending = true
-	}
+	node.foreignToolsPending = spec.foreignToolsPending
 
 	e.ctx.emit.emitReservedNodePtr(&node, id)
 }

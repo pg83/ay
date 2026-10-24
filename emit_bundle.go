@@ -32,7 +32,6 @@ func (e *EmitContext) emitBundle(b BundleEntry) {
 	}
 
 	e.register(GeneratedFileInfo{
-		SourceAction:  &SourceActionInfo{DeclSeq: b.DeclSeq},
 		OutputPath:    dst,
 		ProducerRef:   ref,
 		GeneratorRefs: nil,

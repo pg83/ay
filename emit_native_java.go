@@ -28,10 +28,8 @@ func (e *EmitContext) emitNativeJavaProgram(program NativeJavaProgram) {
 		e.ctx.emitJavaRunProgram(dir, e.instance.Platform, e.d.runJavaJdk, globals, r, ref, e.runProgramInputVFS)
 	})
 
-	action := &SourceActionInfo{DeclSeq: program.DeclSeq}
-
 	for _, output := range outputs {
-		e.register(GeneratedFileInfo{SourceAction: action, OutputPath: output, ProducerRef: ref, ProducerMainOut: outputs[0], OnUse: pending})
+		e.register(GeneratedFileInfo{OutputPath: output, ProducerRef: ref, ProducerMainOut: outputs[0], OnUse: pending})
 	}
 
 	for _, name := range r.out {

@@ -97,8 +97,9 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 	if existing := reg.lookup(dstVFS); existing != nil {
 		existing.ParsedIncludes = ParsedIncludeSet{parsedIncludesLocal: parsed}
 	} else {
+		e.collectCPPStyleInputs(srcVFS)
+
 		info := GeneratedFileInfo{
-			SourceAction:   &SourceActionInfo{DeclSeq: entry.DeclSeq, Inputs: ctx.na.vfsList(srcVFS)},
 			OutputPath:     dstVFS,
 			SourcePath:     srcVFS,
 			ProducerRef:    ref,

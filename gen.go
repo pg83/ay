@@ -2937,96 +2937,6 @@ type ARMember struct {
 	key  uint64
 }
 
-func (e *EmitContext) emittedProducer(ref NodeRef) *Node {
-	return e.ctx.emit.nodes.s[ref]
-}
-
-func (e *EmitContext) queuedSourceInput(info *GeneratedFileInfo) VFS {
-	if info.SourcePath != 0 {
-		return info.SourcePath
-	}
-
-	producer := e.emittedProducer(info.ProducerRef)
-
-	if producer == nil || producer.KV == nil || producer.KV.P != pkPB && producer.KV.P != pkR6 {
-		return 0
-	}
-
-	for _, chunk := range producer.Inputs {
-		for _, input := range chunk {
-			next := e.codegen.lookup(input)
-
-			if next != nil && next.OwnerModule == e.instance.Path && next.ProducerRef != info.ProducerRef {
-				return input
-			}
-		}
-	}
-
-	return 0
-}
-
-func (e *EmitContext) srcRound(m SrcMeta) uint64 {
-	if m.NativeAction != nil {
-		if round, known := e.sourcePosition(m.NativeAction); known {
-			return round
-		}
-	}
-
-	if m.InitialCompileSource {
-		return 0
-	}
-
-	if m.Prio == stmtPrioDefault && m.Compile.FlatOutput && m.SourceQueueRank != 0 {
-		if round, known := e.sourceActionRound(m.Seq); known {
-			return round + m.SourceQueueRank - 1
-		}
-	} else if m.SourceQueueRank != 0 {
-		return m.SourceQueueRank - 1
-	}
-
-	if m.Prio == stmtPrioDefault && m.Seq != 0 {
-		if info := e.codegen.lookup(m.Source.vfs()); info != nil && info.OwnerModule == e.instance.Path && (info.OwnerSerial == 0 || info.OwnerSerial == e.frame.serial) && info.SourceAction != nil && info.SourceAction.DeclSeq == m.Seq {
-			if round, known := e.sourcePosition(info.SourceAction); known {
-				return round + 1
-			}
-		}
-	}
-
-	cur := m.Source.vfs()
-
-	if !cur.isBuild() {
-		return 0
-	}
-
-	round := uint64(1)
-
-	for {
-		info := e.codegen.lookup(cur)
-		nextPath := VFS(0)
-
-		if info != nil {
-			nextPath = e.queuedSourceInput(info)
-		}
-
-		if nextPath == 0 {
-			return round
-		}
-
-		next := e.codegen.lookup(nextPath)
-
-		if next == nil || next.OwnerModule != e.instance.Path {
-			return round
-		}
-
-		if producer := e.emittedProducer(next.ProducerRef); producer != nil && producer.KV == &baseCodegenKV {
-			return round
-		}
-
-		round++
-		cur = nextPath
-	}
-}
-
 func (e *EmitContext) reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcMeta) ([]NodeRef, []VFS) {
 	if len(paths) == 0 {
 		return refs, paths
@@ -3038,7 +2948,7 @@ func (e *EmitContext) reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcM
 	var previous uint64
 
 	for i := range paths {
-		key := metas[i].sortKey(e.srcRound(metas[i]))
+		key := metas[i].sortKey()
 
 		if i > 0 && key < previous {
 			ordered = false

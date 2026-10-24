@@ -5,16 +5,7 @@ import (
 	"strings"
 )
 
-type SourceActionInfo struct {
-	Priority     int
-	order        int
-	DeclSeq      int
-	Inputs       []VFS
-	ForeignTools []*foreignToolCandidate
-}
-
 type GeneratedFileInfo struct {
-	SourceAction       *SourceActionInfo
 	InputsOnly         bool
 	ResourceObjcopy    bool
 	GztProto           *GztProtoProducer

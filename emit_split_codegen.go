@@ -91,11 +91,11 @@ func (e *EmitContext) emitSplitCodegen(sc *SplitCodegenStmt) (NodeRef, []string)
 	}
 
 	pending := e.pendingEmit(pe)
-	sourceAction := &SourceActionInfo{DeclSeq: sc.DeclSeq, Inputs: na.vfsList(inputIn)}
+
+	e.collectCPPStyleInputs(inputIn)
 
 	for _, out := range outputs {
 		info := GeneratedFileInfo{
-			SourceAction:    sourceAction,
 			OutputPath:      out,
 			ProducerRef:     scRef,
 			ProducerMainOut: part0,
