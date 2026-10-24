@@ -104,12 +104,11 @@ func finishYqlModule(ctx *GenCtx, instance ModuleInstance, env Environment, d *M
 	d.flags.NoLibc = true
 	d.flags.NoRuntime = true
 	d.flags.NoUtil = true
-	d.hadAllocator = true
-	d.allocatorName = strFAKE.any()
 
 	collectStmts(ctx, modulePath, instance.Kind, instance.Language, []Stmt{
 		&SetStmt{Name: "NEED_PLATFORM_PEERDIRS", NameEnv: envNeedPlatformPeerdirs, Value: "no"},
 		&UnknownStmt{Name: tokDisable, Args: []ANY{strCommonLinkSettings.any()}},
+		&UnknownStmt{Name: tokAllocator, Args: []ANY{strFAKE.any()}},
 	}, env, d, onWarn, instance.Platform)
 
 	prebuilt := path.Base(yqlPrebuiltOutput(instance, d).relString()) + ".prebuilt"
