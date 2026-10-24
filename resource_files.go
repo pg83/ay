@@ -35,7 +35,7 @@ func expandRootDeferredTokens(args []ANY, env Environment, phase TokenExpansion)
 	return expanded
 }
 
-func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair, bool) {
+func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair, bool, bool) {
 	var expanded []string
 
 	for _, arg := range args {
@@ -89,7 +89,7 @@ func expandResourcePairs(args []ANY, line int, env Environment) ([]ResourcePair,
 		})
 	}
 
-	return pairs, dontCompress
+	return pairs, dontCompress, dontParse
 }
 
 func expandResourceArgument(value string, env Environment) string {
@@ -226,8 +226,8 @@ func expandResourceFiles(d *ModuleData, out []ResourceEntry, args []string) []Re
 				fileKey = d.resStr4("resfs/file/", prefix, keyTail, "")
 			}
 
-			out = append(out, ResourceEntry{Path: "-", Key: fileKey, SrcPath: path, DontCompress: dontCompress})
-			out = append(out, ResourceEntry{Path: path, Key: fileKey, DontCompress: dontCompress})
+			out = append(out, ResourceEntry{Path: "-", Key: fileKey, SrcPath: path, DontCompress: dontCompress, DontParse: true})
+			out = append(out, ResourceEntry{Path: path, Key: fileKey, DontCompress: dontCompress, DontParse: true})
 		}
 	}
 

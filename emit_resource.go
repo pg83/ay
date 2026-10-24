@@ -185,7 +185,7 @@ func (e *EmitContext) resourceSourceAction(items []ResourceItem) *SourceActionIn
 	return info
 }
 
-func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs, buildFrom InputChunks, deps []NodeRef, action *SourceActionInfo) NodeRef {
+func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS, payload []ANY, inputs, buildFrom InputChunks, deps []NodeRef, views []Closure, action *SourceActionInfo) NodeRef {
 	if info := e.codegen.lookup(outputObj); info != nil && info.ResourceObjcopy && info.OwnerModule == e.instance.Path && info.OwnerSerial != e.frame.serial {
 		return info.ProducerRef
 	}
@@ -199,6 +199,7 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 		Env:             env,
 		Inputs:          inputs,
 		BuildFromInputs: buildFrom,
+		InputClosures:   views,
 		Outputs:         na.vfsList(outputObj),
 		KV:              kv,
 		Resources:       e.instance.Platform.UsesPython3Clang,
@@ -213,13 +214,14 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 }
 
 type ResourceItem struct {
-	Path        string
-	Key         string
-	Cmd         STR
-	ExpandedCmd []ANY
-	SourceInput VFS
-	BuildInput  VFS
-	AuxBuilds   []VFS
+	Path          string
+	Key           string
+	Cmd           STR
+	ExpandedCmd   []ANY
+	SourceInput   VFS
+	BuildInput    VFS
+	AuxBuilds     []VFS
+	SourceClosure Closure
 }
 
 func (it ResourceItem) commandArgs() []ANY {
@@ -431,6 +433,14 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		payload = payload[:len(payload):len(payload)]
 
+		var views []Closure
+
+		for _, it := range chunk {
+			if it.SourceClosure.scanner != nil {
+				views = append(views, it.SourceClosure)
+			}
+		}
+
 		var adjacentSources, adjacentBuilds, tailBuilds []VFS
 
 		dedupers.with(func(deduper *DeDuper) {
@@ -486,7 +496,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
 		action := e.resourceSourceAction(chunk)
 
-		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, inputs, buildFrom, deps, action))
+		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, inputs, buildFrom, deps, views, action))
 
 		if e.codegen.lookup(outputObj).SourceAction != action {
 			e.numberSourceAction(action)
@@ -769,6 +779,10 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 			it := ResourceItem{Path: entry.Path, Key: entry.Key}
 
 			it.setInput(r.Input)
+
+			if r.Input.isSource() && !entry.DontParse {
+				it.SourceClosure = e.scanner.walkClosure(r.Input, d.scanCtx, scanDomainCC)
+			}
 
 			if r.ProducerRef != 0 {
 				cv := e.scanner.walkClosure(r.Input, d.scanCtx, scanDomainCC)
