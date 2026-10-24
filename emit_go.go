@@ -922,6 +922,13 @@ func (e *EmitContext) goSrcList(goRes *GoSrcsResult, objOuts []VFS) (srcArgs, cg
 	return srcArgs, cgoSrcArgs, ownInputs, ownSources, ownBuilds
 }
 
+func (e *EmitContext) resolveGoBuildFromDeps(node *Node, inputs InputChunks) {
+	sources := Node{Inputs: inputs, DepRefs: node.DepRefs}
+
+	e.resolveNodeCodegenRefs(&sources)
+	node.DepRefs = sources.DepRefs
+}
+
 func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, objOuts []VFS, peerArchiveRefs []NodeRef, peerArchivePaths []VFS, peerGlobalRefs []NodeRef, peerGlobalPaths []VFS, peerSbomRefs []NodeRef, peerSbomPaths []VFS, ownSbomRef *NodeRef, ownSbomPath *VFS, resourceGlobals []ResourceDecl) (NodeRef, VFS) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
@@ -1079,6 +1086,8 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		Resources:     goToolResources(na, resourceGlobals),
 	}
 
+	e.resolveGoBuildFromDeps(&node, na.inputList(ownBuildInputs, embedInputs))
+
 	ref := e.emitModuleNode(node, false)
 
 	e.register(GeneratedFileInfo{OutputPath: outPath, InputsOnly: true, ModuleType: d.moduleStmt.Name})
@@ -1121,7 +1130,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		internStr(goArcPrefix).any(),
 	)), Env: goVcsEnv}
 
-	srcArgs, cgoSrcArgs, ownInputs, _, _ := e.goSrcList(goRes, objOuts)
+	srcArgs, cgoSrcArgs, ownInputs, _, ownBuilds := e.goSrcList(goRes, objOuts)
 	localARs, nonLocalARs, cgoARs := e.goClassifyClosure(resolved, peerArchivePaths)
 	tail := na.anys.alloc(4 + len(localARs) + len(nonLocalARs) + len(cgoARs))
 	nt := 0
@@ -1349,6 +1358,8 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	if !isTest {
 		e.appendSdcMeta(&node, programBinaryName(instance, d.moduleStmt))
 	}
+
+	e.resolveGoBuildFromDeps(&node, na.inputList(ownBuilds, embedInputs))
 
 	return e.emitModuleNode(node, true), outPath
 }
