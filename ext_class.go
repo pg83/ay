@@ -194,7 +194,7 @@ func generatedOutputCarriesIncludes(p string) bool {
 }
 
 func generatedOutputAutoCompiles(p string) bool {
-	return isNativeSourceExt(p) || flatcVariantForExt(p) != nil || classifySrcExt(p) == srcExtGettext
+	return isNativeSourceExt(p) || flatcVariantForExt(p) != nil || classifySrcExt(p) == srcExtGettext || extIsProto(p)
 }
 
 func isCodegenProducingSrc(srcRel string) bool {
