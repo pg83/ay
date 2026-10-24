@@ -32,10 +32,6 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		switch srcExtClassOf(src.relOrSelf().any()) {
 		case srcExtCSource, srcExtRodata, srcExtCuda, srcExtYasm, srcExtAsm, srcExtGo, srcExtFortran:
 			return
-		case srcExtProto:
-			if isPythonProtoModule(e.d) {
-				return
-			}
 		}
 	}
 

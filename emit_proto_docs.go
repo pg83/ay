@@ -41,10 +41,6 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 
 	protoIncludes := dedup(d.protoAddInclGlobal, includes)
 
-	if e.producersOnly() {
-		return &ModuleEmitResult{ProtoInclude: protoIncludes, ModuleStmtName: tokProtoLibrary}
-	}
-
 	e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
 	d.scanCtx = newModuleScanContext(ctx, instance, d, nil, nil, nil, protoIncludes)
 

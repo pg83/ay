@@ -34,10 +34,6 @@ func (e *EmitContext) goTestSuites(goRef NodeRef, vetReport VFS, globals []Resou
 }
 
 func (e *EmitContext) goFmtSuites(globals []ResourceDecl) []*TestSuite {
-	if !e.ctx.testMode {
-		return nil
-	}
-
 	var suites []*TestSuite
 	var fmtFiles []ANY
 
