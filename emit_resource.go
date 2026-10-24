@@ -609,7 +609,13 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 				nodeCmd = append(nodeCmd, dash.any())
 				nodeCmd = append(nodeCmd, it.commandArgs()...)
 			} else {
-				nodeCmd = append(nodeCmd, it.input().any(), internV("-", it.Key).any())
+				key := it.Key
+
+				if it.Cmd != 0 {
+					key = it.Cmd.string()
+				}
+
+				nodeCmd = append(nodeCmd, it.input().any(), internV("-", key).any())
 			}
 		}
 

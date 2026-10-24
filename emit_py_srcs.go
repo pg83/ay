@@ -158,10 +158,14 @@ func (e *EmitContext) registerCollectPySrcs() {
 			path := src.vfs()
 			kind := pySourcePlain
 
+			if d.usePython2 && path == 0 {
+				path, _ = moduleRootedVFS(module, src.string())
+			}
+
 			if group.SourceRoot {
 				path = source(module, "/", src.string())
 			} else if path != 0 {
-				if path.isBuild() {
+				if path.isBuild() && !d.usePython2 {
 					kind = pySourceGenerated
 					token = internStr(trimModulePrefix(path.relString(), module)).any()
 				}
@@ -171,10 +175,6 @@ func (e *EmitContext) registerCollectPySrcs() {
 				if e.codegen.lookupSplit(instance.Path, src.str()) == nil {
 					path = e.resolvePythonSourceVFS(src.string())
 				}
-			}
-
-			if d.usePython2 && kind == pySourceGenerated {
-				throwFmt("PY_SRCS: %s: build-root sources of a Python 2 module are not modelled", module)
 			}
 
 			e.enqueueSrc(SrcMeta{
@@ -241,6 +241,18 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 	module := e.instance.Path.relString()
 	srcRel := ps.Token.string()
 
+	if e.d.usePython2 {
+		if rooted, ok := moduleRootedVFS(module, srcRel); ok {
+			suffix := e.pyYapycExt()
+
+			if strings.Contains(srcRel, "/") {
+				suffix = "." + e.d.pyYapycSuffix + suffix
+			}
+
+			return build(rooted.relString(), suffix)
+		}
+	}
+
 	if ps.Kind == pySourceGenerated {
 		srcRel = strings.TrimPrefix(ps.Path.relString(), module+"/")
 	}
@@ -293,6 +305,10 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 
 	srcRel := ps.Token.string()
 	suffix := e.pyYapycExt()
+
+	if d.usePython2 && ps.Path.isBuild() && (!d.pyBuildNoPY || !d.pyBuildNoPYC) {
+		e.pySourceProducer(ps)
+	}
 
 	if strings.Contains(srcRel, "/") {
 		suffix = "." + d.pyYapycSuffix + suffix
@@ -397,6 +413,34 @@ func (e *EmitContext) pyccTool() PyccTool {
 	}
 }
 
+func (e *EmitContext) pySourceProducer(ps PySrc) *GeneratedFileInfo {
+	info := e.codegen.use(ps.Path)
+
+	if e.d.usePython2 && ps.Path.isBuild() && info == nil {
+		throwFmt("PY_SRCS: cannot find source file: %s", ps.Path.string())
+	}
+
+	return info
+}
+
+func (e *EmitContext) py2BytecodeSourceName(ps PySrc) string {
+	token := ps.Token.string()
+
+	if strings.HasPrefix(token, "${BINDIR}/") {
+		return renderResourceKvCmd(token, e.instance.Path.relString())
+	}
+
+	if ps.Path.isSource() {
+		return ps.Path.relString()
+	}
+
+	if rooted, ok := moduleRootedVFS(e.instance.Path.relString(), token); ok {
+		return rooted.relString()
+	}
+
+	return token
+}
+
 func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
@@ -440,9 +484,11 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 
 			moduleName = e.resStr2(srcAbs.relString(), "-")
 		} else {
-			genInfo = e.codegen.use(ps.Path)
+			genInfo = e.pySourceProducer(ps)
 
-			if genInfo != nil {
+			if e.d.usePython2 {
+				moduleName = e.resStr2(e.py2BytecodeSourceName(ps), "-")
+			} else if genInfo != nil {
 				moduleName = e.resStr2(ps.Token.string(), "-")
 			} else {
 				moduleName = e.resStr2(srcAbs.relString(), "-")
@@ -919,6 +965,14 @@ type PyGenResEntry struct {
 	path  VFS
 }
 
+func (e *EmitContext) pyResourceCommand(value string) STR {
+	value = renderResourceKvCmd(value, e.instance.Path.relString())
+	value = strings.ReplaceAll(value, "${ARCADIA_ROOT}", "$(S)")
+	value = strings.ReplaceAll(value, "${ARCADIA_BUILD_ROOT}", "$(B)")
+
+	return internStr(value)
+}
+
 func (e *EmitContext) pySrcResourceItems(entries []PyGenResEntry) []ResourceItem {
 	if !e.d.usePython2 {
 		return e.pyGenResourceItems(entries)
@@ -939,7 +993,7 @@ func (e *EmitContext) pySrcResourceItems(entries []PyGenResEntry) []ResourceItem
 		buf = append(buf, en.key.sharedString()...)
 
 		key := bytesString(buf[keyStart:])
-		fileItem := ResourceItem{Path: en.token, Key: key}
+		fileItem := ResourceItem{Path: en.token, Key: key, Cmd: e.pyResourceCommand(key)}
 
 		fileItem.setInput(en.path)
 		items = append(items, fileItem)
@@ -964,7 +1018,7 @@ func (e *EmitContext) pySrcResourceItems(entries []PyGenResEntry) []ResourceItem
 		buf = append(buf, '=')
 		buf = append(buf, en.path.relString()...)
 
-		cmd := internBytes(buf[cmdStart:])
+		cmd := e.pyResourceCommand(string(buf[cmdStart:]))
 
 		buf = buf[:cmdStart]
 

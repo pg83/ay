@@ -15,11 +15,12 @@ def python2_files(body):
 
 
 class PythonEdgeContractsTest(unittest.TestCase):
-    def test_python2_rejects_unsupported_build_root_python_sources(self):
+    def test_python2_rejects_build_root_python_sources_without_a_producer(self):
         files = python2_files('PY_SRCS(${BINDIR}/generated.py)')
         result = lib.make_process(files, 'prog')
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('build-root sources of a Python 2 module are not modelled', result.stderr)
+        self.assertIn('cannot find source file', result.stderr)
+        self.assertIn('lib/generated.py', result.stderr)
         self.assertNotIn('panic:', result.stderr)
 
     def test_disabling_light_python2_compiler_restores_regular_tool(self):

@@ -2093,7 +2093,9 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				} else if v.Name == tokUseRecipe {
 					expanded.Args = []ANY{internStr(collectTestRecipe(v.Args, env)).any()}
 				} else if v.Name != tokEnv && !(v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].string() == "TEST_ENV_VALUE") {
-					if v.Name == tokCopyFile || v.Name == tokCopyFileWithContext {
+					if v.Name == tokPySrcs && d.usePython2 {
+						expanded.Args = expandRootDeferredTokens(v.Args, env, tokenExpandLazy)
+					} else if v.Name == tokCopyFile || v.Name == tokCopyFileWithContext {
 						expanded.Args = expandRootDeferredTokens(v.Args, env, tokenExpandPathArguments)
 					} else if v.Name == tokSetAppend {
 						expanded.Args = expandRootDeferredTokens(v.Args, env, tokenExpandLazy)
