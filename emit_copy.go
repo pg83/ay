@@ -43,7 +43,7 @@ type CopyEmitState struct {
 
 func (e *EmitContext) emitCopyFileStmt(entry CopyFileEntry) {
 	st, info := e.registerCopyFile(entry)
-	demanded := e.instance.Demand != demandNone
+	demanded := !e.producersOnly()
 
 	if demanded && extIsArchiveMember(entry.Dst) {
 		e.collectObj(st.ref, st.dstVFS, SrcMeta{Prio: stmtPrioDefault})

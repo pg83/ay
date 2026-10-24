@@ -592,10 +592,10 @@ class JavaStartTargetsTest(unittest.TestCase):
             "build/platform/java/jacoco-agent/ya.make": resource_lib("JACOCO_AGENT", 6),
         })
         graph = lib.make(files, "app")
-        results = [graph["graph"][ref]["outputs"][0] for ref in graph["result"]]
+        results = [node["outputs"][0] for node in lib.result_nodes(graph)]
         self.assertEqual(results, ["$(B)/app/app.jar", "$(B)/app/jni/libapp_jni.so"])
         graph = lib.make(files, "app", "--target-platform-tests")
-        results = [graph["graph"][ref]["outputs"][0] for ref in graph["result"]]
+        results = [node["outputs"][0] for node in lib.result_nodes(graph)]
         self.assertEqual(results, ["$(B)/app/app.jar", "$(B)/app/jni/libapp_jni.so", "$(B)/app/ut/app-ut.test.cp.jar",
                                    "$(B)/app/ut/test-results/app-ut/meta.json"])
         jt = lib.node_by_output(graph, "$(B)/app/ut/app-ut.test.cp.jar")

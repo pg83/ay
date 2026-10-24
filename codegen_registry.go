@@ -97,9 +97,10 @@ type pendingEmitter interface {
 }
 
 type PendingEmit struct {
-	fn      func()
-	emitter pendingEmitter
-	frame   *ModuleFrame
+	fn          func()
+	emitter     pendingEmitter
+	frame       *ModuleFrame
+	publication *StreamingEmitter
 }
 
 func (p *PendingEmit) fire() {
@@ -107,11 +108,18 @@ func (p *PendingEmit) fire() {
 		return
 	}
 
-	fn, emitter, frame := p.fn, p.emitter, p.frame
+	fn, emitter, frame, publication := p.fn, p.emitter, p.frame, p.publication
 
 	p.fn = nil
 	p.emitter = nil
 	p.frame = nil
+	p.publication = nil
+
+	if publication != nil {
+		publication.deferPublication++
+
+		defer func() { publication.deferPublication-- }()
+	}
 
 	if frame != nil {
 		defer func() { frame.pending-- }()

@@ -372,7 +372,7 @@ class DynamicLibraryTest(unittest.TestCase):
         self.assertIn("$(B)/dlltool/t.cpp.o", node["inputs"])
         self.assertIn("$(S)/dlltool/t.exports", node["inputs"])
         self.assertEqual(
-            [graph["graph"][ref]["outputs"][0] for ref in graph["result"]],
+            [node["outputs"][0] for node in lib.result_nodes(graph)],
             ["$(B)/dlltool/mytool.so"],
         )
 
@@ -382,7 +382,7 @@ class DynamicLibraryTest(unittest.TestCase):
         files["dll/d.cpp"] = "int d;\n"
         graph = lib.make(files, "dll")
         node = lib.node_by_output(graph, "$(B)/dll/libd.so")
-        self.assertEqual([graph["graph"][ref]["outputs"][0] for ref in graph["result"]], ["$(B)/dll/libd.so"])
+        self.assertEqual([node["outputs"][0] for node in lib.result_nodes(graph)], ["$(B)/dll/libd.so"])
         text = " ".join(command_with(node, "link_dyn_lib.py")["cmd_args"])
         self.assertIn("$(B)/dll/d.cpp.pic.o -o $(B)/dll/libd.so -shared -Wl,-soname,libd.so", text)
         self.assertNotIn("--version-script", text)
@@ -407,7 +407,7 @@ class DynamicLibraryTest(unittest.TestCase):
         files["top/top.cpp"] = "int top;\n"
         graph = lib.make(files, "top")
         self.assertEqual(
-            [graph["graph"][ref]["outputs"][0] for ref in graph["result"]],
+            [node["outputs"][0] for node in lib.result_nodes(graph)],
             ["$(B)/top/libtop.a", "$(B)/dlltool/libtool.so"],
         )
 
@@ -417,7 +417,7 @@ class DynamicLibraryTest(unittest.TestCase):
                 node = lib.node_by_output(graph, archive)
                 self.assertEqual(node["kv"]["p"], "AR")
                 self.assertEqual(
-                    [graph["graph"][ref]["outputs"][0] for ref in graph["result"]],
+                    [node["outputs"][0] for node in lib.result_nodes(graph)],
                     [archive],
                 )
                 self.assertIn(

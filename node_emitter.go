@@ -29,6 +29,8 @@ type StreamingEmitter struct {
 	results                  []NodeRef
 	deferredNodes            []NodeRef
 	deferPublication         int
+	publicationRoots         []NodeRef
+	exportEligible           BitSet
 	onNode                   func(*Node, *DenseMap[STR, NodeRef])
 	na                       *NodeArenas
 	fetchRefs                *DenseMap[STR, NodeRef]
@@ -101,6 +103,11 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 
 func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
 	assert(len(n.Outputs) > 0, "emitter: node without outputs")
+
+	if e.deferPublication == 0 {
+		e.publicationRoots = append(e.publicationRoots, id)
+	}
+
 	n.sourceInputsPending = n.InputClosure.scanner != nil || len(n.InputClosures) > 0
 	n.deferPublication = e.deferPublication > 0
 
@@ -151,7 +158,15 @@ func (e *StreamingEmitter) result(r NodeRef) {
 }
 
 func (e *StreamingEmitter) finish() []NodeRef {
-	pending := e.pendingIdx
+	e.exportEligible = e.reachableNodes(e.publicationFrontier())
+
+	pending := make([]NodeRef, 0, len(e.pendingIdx))
+
+	for _, ref := range e.pendingIdx {
+		if e.exportEligible.has(uint32(ref)) {
+			pending = append(pending, ref)
+		}
+	}
 
 	for len(pending) > 0 {
 		next := pending[:0]
@@ -208,16 +223,18 @@ func (e *StreamingEmitter) finish() []NodeRef {
 		e.stripPackageResults()
 	}
 
+	e.exportEligible = e.reachableNodes(e.publicationFrontier())
+
 	if e.addModulesToResults {
 		for _, n := range e.nodes.s {
-			if n != nil && (n.Module || e.modules.has(uint32(n.Ref))) {
+			if n != nil && e.exportEligible.has(uint32(n.Ref)) && (n.Module || e.modules.has(uint32(n.Ref))) {
 				e.result(n.Ref)
 			}
 		}
 	}
 
 	for _, id := range e.deferredNodes {
-		if node := e.nodes.s[id]; node != nil {
+		if node := e.nodes.s[id]; node != nil && e.exportEligible.has(uint32(id)) {
 			e.onNode(node, e.fetchRefs)
 		}
 	}
@@ -281,10 +298,32 @@ func dedupResultRefs(results []NodeRef) []NodeRef {
 	return out
 }
 
+func (e *StreamingEmitter) pendingPublication() *StreamingEmitter {
+	if e.deferPublication > 0 {
+		return e
+	}
+
+	return nil
+}
+
+func (e *StreamingEmitter) publicationFrontier() []NodeRef {
+	roots := append([]NodeRef(nil), e.publicationRoots...)
+
+	return append(roots, e.results...)
+}
+
 func graphFromEmitter(e *StreamingEmitter) *Graph {
+	nodes := make([]*Node, 0, e.nodes.len())
+
+	for _, node := range e.nodes.s {
+		if node != nil && e.exportEligible.has(uint32(node.Ref)) {
+			nodes = append(nodes, node)
+		}
+	}
+
 	return &Graph{
 		Inputs:    map[string]interface{}{},
-		Graph:     e.nodes.s,
+		Graph:     nodes,
 		Result:    dedupResultRefs(e.results),
 		fetchRefs: e.fetchRefs,
 	}

@@ -180,35 +180,6 @@ func (ctx *GenCtx) bindForeignTools() {
 	}
 }
 
-func (ctx *GenCtx) stripForeignToolCandidates() {
-	if len(ctx.foreignTools.order) == 0 {
-		return
-	}
-
-	var candidateRoots []NodeRef
-
-	for _, tool := range ctx.foreignTools.order {
-		candidateRoots = append(candidateRoots, tool.target.LDRef)
-	}
-
-	candidateClosure := ctx.emit.reachableNodes(candidateRoots)
-	roots := append([]NodeRef(nil), ctx.emit.results...)
-
-	for _, node := range ctx.emit.nodes.s {
-		if node != nil && !candidateClosure.has(uint32(node.Ref)) {
-			roots = append(roots, node.Ref)
-		}
-	}
-
-	live := ctx.emit.reachableNodes(roots)
-
-	for _, node := range ctx.emit.nodes.s {
-		if node != nil && candidateClosure.has(uint32(node.Ref)) && !live.has(uint32(node.Ref)) {
-			ctx.emit.nodes.s[node.Ref] = nil
-		}
-	}
-}
-
 func (e *StreamingEmitter) reachableNodes(roots []NodeRef) BitSet {
 	var visited BitSet
 

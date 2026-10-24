@@ -46,7 +46,7 @@ class ChaosWordsTest(unittest.TestCase):
             for node in graph["graph"]:
                 node["inputs"].sort()
                 node["deps"].sort()
-            graph["result"] = sorted(graph["graph"][i]["uid"] for i in graph["result"])
+            graph["result"] = sorted(graph["result"])
             graph["graph"].sort(key=lambda node: node["uid"])
         self.assertEqual(sequential, shuffled)
 

@@ -496,7 +496,7 @@ func (e *EmitContext) enqueueSrc(meta SrcMeta) {
 }
 
 func (e *EmitContext) producersOnly() bool {
-	return e.instance.Demand == demandNone
+	return e.instance.Demand == demandNone && (e.instance.Kind == KindForeignDescent || e.instance.Language == LangFbsJavaNative)
 }
 
 func (e *EmitContext) register(info GeneratedFileInfo) *GeneratedFileInfo {
@@ -553,7 +553,7 @@ func (e *EmitContext) appendModuleOutputs(node *Node) {
 func (e *EmitContext) pendingEmit(fn func()) *PendingEmit {
 	p := e.ctx.na.pending.one()
 
-	*p = PendingEmit{fn: fn, frame: e.frame}
+	*p = PendingEmit{fn: fn, frame: e.frame, publication: e.ctx.emit.pendingPublication()}
 	e.frame.pending++
 
 	return p
@@ -562,7 +562,7 @@ func (e *EmitContext) pendingEmit(fn func()) *PendingEmit {
 func (e *EmitContext) pendingEmitter(emitter pendingEmitter) *PendingEmit {
 	p := e.ctx.na.pending.one()
 
-	*p = PendingEmit{emitter: emitter, frame: e.frame}
+	*p = PendingEmit{emitter: emitter, frame: e.frame, publication: e.ctx.emit.pendingPublication()}
 	e.frame.pending++
 
 	return p

@@ -351,7 +351,7 @@ func (b *javaNodeBuilder) macroOuts(jm *JavaModule) {
 func (ctx *GenCtx) javaPendingEmit(fn func()) *PendingEmit {
 	p := ctx.na.pending.one()
 
-	*p = PendingEmit{fn: fn}
+	*p = PendingEmit{fn: fn, publication: ctx.emit.pendingPublication()}
 
 	return p
 }

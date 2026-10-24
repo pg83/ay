@@ -402,6 +402,11 @@ def make(files, target, *args, opensource=True, env=None, timeout=10):
     return json.loads(result.stdout)
 
 
+def result_nodes(graph):
+    nodes = {node["uid"]: node for node in graph["graph"]}
+    return [nodes[ref] for ref in graph["result"]]
+
+
 def node_by_output(graph, output):
     for node in graph["graph"]:
         if output in node.get("outputs", []):

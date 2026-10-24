@@ -7,7 +7,6 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -264,11 +263,10 @@ func newModuleMemo() *moduleMemo {
 
 func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, targetP *Platform, emitter *StreamingEmitter, onWarn func(Warn), tests *TestOpts, keepGoing bool, rootDemand ModuleDemand) {
 	ctx := newGenCtx(fs, caches, hostP, targetP, emitter, onWarn, tests, keepGoing)
-	ordered := ctx.linkingTargetsFirst(targets)
-	discovered := make([]DiscoveredTargets, len(ordered))
-	all := make([]DiscoveredModule, 0, len(ordered))
+	discovered := make([]DiscoveredTargets, len(targets))
+	all := make([]DiscoveredModule, 0, len(targets))
 
-	for i, t := range ordered {
+	for i, t := range targets {
 		discovered[i] = discoverRecursedTargets(ctx, filepath.Clean(t))
 		all = append(all, discovered[i].Root)
 	}
@@ -282,12 +280,6 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 
 	for _, target := range all {
 		ctx.roots[ctx.rootInstanceForDeclaration(target.Path, demandNone, target.Declaration)] = true
-	}
-
-	for _, target := range ctx.linkingModulesFirst(all) {
-		if target.Declaration == nil || !isJavaModuleType(target.Declaration.Name) {
-			genModule(ctx, ctx.rootInstanceForDeclaration(target.Path, rootDemand, target.Declaration))
-		}
 	}
 
 	for _, targets := range discovered {
@@ -310,7 +302,6 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 	ctx.bindForeignTools()
 	ctx.emitDiscoveredModuleTests(suites)
 	ctx.finalizeSourceInputs()
-	ctx.stripForeignToolCandidates()
 
 	if ctx.buckets.h1Mismatches > 0 {
 		onWarn(Warn{
@@ -388,29 +379,6 @@ func newGenCtx(fs FS, caches *GenCaches, hostP, targetP *Platform, emitter *Stre
 	ctx.vcsRef = emitVCSNode(ctx.emit, ctx.host)
 
 	return ctx
-}
-
-func (ctx *GenCtx) linkingTargetsFirst(targets []string) []string {
-	if len(targets) < 2 {
-		return targets
-	}
-
-	out := slices.Clone(targets)
-
-	slices.SortStableFunc(out, func(a, b string) int {
-		la, lb := isLinkingModuleType(ctx.moduleName(a)), isLinkingModuleType(ctx.moduleName(b))
-
-		switch {
-		case la == lb:
-			return 0
-		case la:
-			return -1
-		default:
-			return 1
-		}
-	})
-
-	return out
 }
 
 func (ctx *GenCtx) moduleName(dir string) TOK {
@@ -816,18 +784,6 @@ type DiscoveredModule struct {
 type DiscoveredTargets struct {
 	Root     DiscoveredModule
 	Recursed []DiscoveredModule
-}
-
-func (ctx *GenCtx) linkingModulesFirst(targets []DiscoveredModule) []DiscoveredModule {
-	ordered := slices.Clone(targets)
-
-	sort.SliceStable(ordered, func(i, j int) bool {
-		a, b := ordered[i].Declaration, ordered[j].Declaration
-
-		return a != nil && isLinkingModuleType(a.Name) && (b == nil || !isLinkingModuleType(b.Name))
-	})
-
-	return ordered
 }
 
 func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
@@ -1238,16 +1194,26 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return existing
 	}
 
-	if ctx.walking[instance] {
+	identity := instance
+
+	identity.Demand = demandNone
+
+	if ctx.walking[identity] {
 		ctx.cyclesTolerated++
 		fmt.Fprintf(os.Stderr, "gen: PEERDIR cycle tolerated at %s\n", instance.Path.relString())
 
 		return &ModuleEmitResult{}
 	}
 
-	ctx.walking[instance] = true
+	ctx.walking[identity] = true
 
-	defer delete(ctx.walking, instance)
+	defer delete(ctx.walking, identity)
+
+	if instance.Demand == demandNone {
+		ctx.emit.deferPublication++
+
+		defer func() { ctx.emit.deferPublication-- }()
+	}
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
 	moduleName := stmtsModuleName(stmts)
@@ -2506,7 +2472,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		genModule(ctx, native)
 	}
 
-	if instance.Demand == demandNone || instance.Language == LangFbsJavaNative {
+	if instance.Kind == KindForeignDescent && instance.Demand == demandNone || instance.Language == LangFbsJavaNative {
 		result := newResult()
 
 		if isGoModuleType(d.moduleStmt.Name) {
@@ -3047,22 +3013,15 @@ func (ctx *GenCtx) instanceVariant(in ModuleInstance) uint16 {
 }
 
 func (ctx *GenCtx) memoGet(in ModuleInstance) *ModuleEmitResult {
-	variant := ctx.instanceVariant(in)
-	other := variant &^ variantDemandMask
-
-	var stronger *ModuleEmitResult
+	other := ctx.instanceVariant(in) &^ variantDemandMask
 
 	for entry := ctx.memo.heads.getSafe(uint32(in.Path.rel())); entry != nil; entry = entry.next {
-		if entry.variant == variant {
+		if entry.variant&^variantDemandMask == other {
 			return entry.result
-		}
-
-		if entry.variant&^variantDemandMask == other && entry.variant&variantDemandMask > variant&variantDemandMask {
-			stronger = entry.result
 		}
 	}
 
-	return stronger
+	return nil
 }
 
 func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) {

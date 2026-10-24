@@ -74,7 +74,7 @@ func (ctx *GenCtx) gztProtoSource(instance ModuleInstance, gztSource VFS, scanCt
 
 	pending := na.pending.one()
 
-	*pending = PendingEmit{fn: pe}
+	*pending = PendingEmit{fn: pe, publication: ctx.emit.pendingPublication()}
 
 	reg.register(GeneratedFileInfo{
 		OutputPath:     genProto,
