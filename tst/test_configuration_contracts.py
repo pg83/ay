@@ -50,12 +50,46 @@ class ConfigurationContractsTest(unittest.TestCase):
                 self.assertNotIn("panic:", result.stderr)
 
     def test_lint_disabled_by_configuration_does_not_resolve_resources(self):
-        for setting in ("SET(NO_LINT none)", "SET(NO_LINT none_internal)", "SET(TIDY yes)"):
+        for setting in ("NO_LINT()", "SET(_NO_LINT_VALUE none)",
+                        "SET(_NO_LINT_VALUE none_internal)", "SET(TIDY yes)"):
             with self.subTest(setting=setting):
                 files = {"app/ya.make": library(setting + "\nSTYLE_JSON()\nSTYLE_YAML()\nSTYLE_YAML_WITH_CONFIG()\n"),
                          "app/settings.json": "{}", "app/settings.yaml": "key: value"}
                 graph = lib.make(files, "app", "-t")
                 self.assertFalse(any(n["kv"].get("run_test_node") for n in graph["graph"]))
+
+    def test_plain_no_lint_scalar_keeps_style_suites_and_real_resource_dependencies(self):
+        for setting in ("SET(NO_LINT none)", "SET(NO_LINT none_internal)"):
+            with self.subTest(setting=setting):
+                files = {
+                    "app/ya.make": library(setting + "\nSTYLE_JSON()\nSTYLE_YAML()\n"),
+                    "app/settings.json": "{}", "app/settings.yaml": "key: value",
+                    "build/config/tests/json_style/default_configs.json": '{"clang_format_json":"lint/json.conf"}',
+                    "build/config/tests/yaml_style/default_configs.json": '{"yamlfmt":"lint/yaml.conf"}',
+                    "lint/json.conf": "{}", "lint/yaml.conf": "{}",
+                    "tools/clang_format_json_linter/wrapper.py": "",
+                    "tools/yamlfmt_linter/wrapper.py": "",
+                    "build/platform/clang/clang-format/ya.make": lib.resource_lib("CLANG_FORMAT", 21),
+                    "build/external_resources/yamlfmt/ya.make": lib.resource_lib("YAMLFMT", 22),
+                }
+                graph = lib.make(files, "app", "-t")
+                for suite, source, config, wrapper, resource, uri in (
+                    ("clang_format_json", "settings.json", "json", "clang_format_json", "CLANG_FORMAT", "sbr:21"),
+                    ("yamlfmt", "settings.yaml", "yaml", "yamlfmt", "YAMLFMT", "sbr:22"),
+                ):
+                    run = lib.node_by_output(graph, f"$(B)/app/test-results/{suite}/meta.json")
+                    args = run["cmds"][0]["cmd_args"]
+                    for path in (f"$(S)/app/{source}", f"$(S)/lint/{config}.conf",
+                                 f"$(S)/tools/{wrapper}_linter/wrapper.py"):
+                        self.assertIn(path, run["inputs"])
+                        self.assertIn(path, args)
+                    fetch = lib.node_by_output(graph, "$(B)/resources/" + resource)
+                    self.assertIn(uri, fetch["cmds"][0]["cmd_args"])
+                    self.assertIn(resource + "_RESOURCE_GLOBAL::" + fetch["outputs"][0], args)
+                ids = {node["uid"] for node in graph["graph"]}
+                self.assertTrue(graph["result"])
+                self.assertTrue(set(graph["result"]) <= ids)
+                self.assertTrue(all(set(node["deps"]) <= ids for node in graph["graph"]))
 
     def test_json_style_config_override_and_empty_directory(self):
         files = {
