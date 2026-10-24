@@ -188,9 +188,9 @@ class GenModulesTest(unittest.TestCase):
             outputs_of(graph, graph["result"]),
             [
                 "$(B)/top/libtop.a",
-                "$(B)/top/lib/deep/deep",
                 "$(B)/top/app/app",
                 "$(B)/other/ut/other-ut",
+                "$(B)/top/lib/deep/deep",
             ],
         )
         unittest_cc = lib.node_by_output(graph, "$(B)/other/ut/__/__/top/lib/l.cpp.o")
