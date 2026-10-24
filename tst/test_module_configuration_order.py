@@ -13,6 +13,33 @@ def check_graph(test, graph):
 
 
 class ModuleConfigurationOrderTest(unittest.TestCase):
+    def test_dll_keeps_typed_cython_inputs_through_native_descent(self):
+        files = fixture("consumer-only")
+        files["birch/ya.make"] = (
+            "DLL(Birch)\n" + lib.BARE_MODULE
+            + "USE_PYTHON2()\nADDINCL(GLOBAL FOR cython typed)\n"
+            + "BUILDWITH_CYTHON_CPP(early.pyx)\nEND()\n"
+        )
+        files["birch/early.pyx"] = "from api cimport value\n"
+        files["typed/api.pxd"] = "cdef int value\n"
+        lib.tool_program(files, "tools/fix_elf", "fix_elf")
+        graph = lib.make(files, "birch", "--sandboxing",
+                         "--target-platform", "default-linux-x86_64")
+        check_graph(self, graph)
+        generated = lib.node_by_output(graph, "$(B)/birch/early.pyx.py2.cpp")
+        self.assertIn("-I$(S)/typed", generated["cmds"][0]["cmd_args"])
+        self.assertIn("$(S)/typed/api.pxd", generated["inputs"])
+        compiled = lib.node_by_output(graph, "$(B)/birch/early.pyx.py2.cpp.pic.o")
+        self.assertIn(generated["outputs"][0], compiled["inputs"])
+        self.assertIn(generated["uid"], compiled["deps"])
+        linked = lib.node_by_output(graph, "$(B)/birch/libBirch.so")
+        self.assertIn(compiled["outputs"][0], linked["inputs"])
+        self.assertIn(compiled["uid"], linked["deps"])
+        self.assertIn(linked["uid"], graph["result"])
+        counts = collections.Counter(output for node in graph["graph"] for output in node["outputs"])
+        self.assertEqual(counts[generated["outputs"][0]], 1)
+        self.assertEqual(counts[compiled["outputs"][0]], 1)
+
     def test_first_configured_source_owner_follows_root_order(self):
         files = fixture("consumer-only")
         files["maple/ya.make"] = files["maple/ya.make"].replace("PEERDIR(grove)\n", "")
