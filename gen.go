@@ -296,7 +296,7 @@ func runGenIntoWithResources(fs FS, caches *GenCaches, targets []string, hostP, 
 
 	ctx.configureDependencies()
 
-	suites := ctx.prepareDiscoveredModuleTests()
+	suites := ctx.prepareDiscoveredModuleTests(discovered)
 
 	ctx.flushFbsContextBindings()
 	ctx.bindForeignTools()
@@ -782,13 +782,20 @@ type DiscoveredModule struct {
 }
 
 type DiscoveredTargets struct {
-	Root     DiscoveredModule
-	Recursed []DiscoveredModule
+	Root      DiscoveredModule
+	Recursed  []DiscoveredModule
+	TestOrder []string
 }
 
 func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 	seen := map[string]bool{targetDir: true}
 	queue := []string{targetDir}
+
+	var recurses map[string][]string
+
+	if ctx.testMode {
+		recurses = map[string][]string{}
+	}
 
 	var targets DiscoveredTargets
 
@@ -800,6 +807,10 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 		}
 
 		module, children := ctx.recurseScan(dir)
+
+		if ctx.testMode {
+			recurses[dir] = children
+		}
 
 		if at == 0 {
 			targets.Root = DiscoveredModule{Path: dir, Declaration: module}
@@ -813,6 +824,28 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 				queue = append(queue, child)
 			}
 		}
+	}
+
+	if ctx.testMode {
+		visited := map[string]bool{}
+
+		var visit func(string)
+
+		visit = func(dir string) {
+			if visited[dir] {
+				return
+			}
+
+			visited[dir] = true
+
+			for _, child := range recurses[dir] {
+				visit(child)
+			}
+
+			targets.TestOrder = append(targets.TestOrder, dir)
+		}
+
+		visit(targetDir)
 	}
 
 	return targets

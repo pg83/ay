@@ -15,7 +15,11 @@ func (e *EmitContext) genPeerModule(instance ModuleInstance) *ModuleEmitResult {
 	return result
 }
 
-func (ctx *GenCtx) prepareDiscoveredModuleTests() []*TestSuite {
+func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) []*TestSuite {
+	if len(ctx.testRoots) == 0 {
+		return nil
+	}
+
 	seen := map[*ModuleEmitResult]bool{}
 	groups := map[VFS][]*ModuleEmitResult{}
 
@@ -41,6 +45,26 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests() []*TestSuite {
 			}
 
 			groups[project] = append(groups[project], result)
+		}
+	}
+
+	if ctx.testMode {
+		rootProjects := map[VFS][]*ModuleEmitResult{}
+
+		for _, result := range ctx.testRoots {
+			rootProjects[result.testProject] = append(rootProjects[result.testProject], result)
+		}
+
+		for _, targets := range discovered {
+			for _, dir := range targets.TestOrder {
+				project := source(dir)
+
+				for _, result := range rootProjects[project] {
+					visit(result)
+				}
+
+				delete(rootProjects, project)
+			}
 		}
 	}
 
