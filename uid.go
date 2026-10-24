@@ -116,7 +116,7 @@ func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 	count := len(n.DepRefs)
 
 	for _, pat := range n.Resources {
-		if _, ok := c.fetchRefs.get(pat); ok {
+		if _, ok := n.resourceRef(pat, c.fetchRefs); ok {
 			count++
 		}
 	}
@@ -131,7 +131,7 @@ func (c *CanonBuf) writeDepRefUIDs(n *Node) {
 	}
 
 	for _, pat := range n.Resources {
-		if ref, ok := c.fetchRefs.get(pat); ok {
+		if ref, ok := n.resourceRef(pat, c.fetchRefs); ok {
 			u := c.futs.get(uint32(ref)).uid
 
 			c.writeUint64(u.Hi)

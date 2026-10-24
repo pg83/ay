@@ -211,6 +211,10 @@ func (e *EmitContext) resolveNodeCodegenDeps(node *Node) {
 }
 
 func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
+	if len(node.Resources) > 0 && e.peers != nil {
+		node.ResourceGlobals = e.ctx.declSlices.internCopy(e.peers.ResourceGlobals)
+	}
+
 	var refs []NodeRef
 	var mains []VFS
 

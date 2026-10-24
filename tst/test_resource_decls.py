@@ -383,7 +383,6 @@ class PrebuiltProgramTest(unittest.TestCase):
             'IF (SANDBOX_RESOURCE_URI != "")\n'
             "    PREBUILT_PROGRAM()\n"
             "    DECLARE_EXTERNAL_RESOURCE(GEN ${SANDBOX_RESOURCE_URI})\n"
-            "    DECLARE_EXTERNAL_RESOURCE(GEN sbr:999)\n"
             "    PRIMARY_OUTPUT(${GEN_RESOURCE_GLOBAL}/gen${MODULE_SUFFIX})\n"
             "    END()\n"
             "ENDIF()\n"

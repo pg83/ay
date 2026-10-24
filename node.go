@@ -26,28 +26,29 @@ type Cmd struct {
 }
 
 type Node struct {
-	DisableCache        bool          `json:"-"`
-	ResourceURIs        []STR         `json:"-"`
-	Module              bool          `json:"-"`
-	Cmds                []Cmd         `json:"cmds"`
-	Env                 EnvVars       `json:"env"`
-	Inputs              InputChunks   `json:"inputs"`
-	BuildFromInputs     InputChunks   `json:"-"`
-	TextInputs          []VFS         `json:"-"`
-	InputNames          []STR         `json:"-"`
-	InputClosure        Closure       `json:"-"`
-	InputClosures       []Closure     `json:"-"`
-	KV                  *KV           `json:"kv"`
-	KVExts              []KVExt       `json:"-"`
-	Outputs             []VFS         `json:"outputs"`
-	Platform            *Platform     `json:"platform"`
-	Requirements        *Requirements `json:"requirements"`
-	Ref                 NodeRef       `json:"-"`
-	PresetUID           *UID          `json:"-"`
-	UIDSalt             STR           `json:"-"`
-	DepRefs             []NodeRef     `json:"-"`
-	ForeignDepRefs      []NodeRef     `json:"-"`
-	Resources           []STR         `json:"-"`
+	DisableCache        bool           `json:"-"`
+	ResourceURIs        []STR          `json:"-"`
+	Module              bool           `json:"-"`
+	Cmds                []Cmd          `json:"cmds"`
+	Env                 EnvVars        `json:"env"`
+	Inputs              InputChunks    `json:"inputs"`
+	BuildFromInputs     InputChunks    `json:"-"`
+	TextInputs          []VFS          `json:"-"`
+	InputNames          []STR          `json:"-"`
+	InputClosure        Closure        `json:"-"`
+	InputClosures       []Closure      `json:"-"`
+	KV                  *KV            `json:"kv"`
+	KVExts              []KVExt        `json:"-"`
+	Outputs             []VFS          `json:"outputs"`
+	Platform            *Platform      `json:"platform"`
+	Requirements        *Requirements  `json:"requirements"`
+	Ref                 NodeRef        `json:"-"`
+	PresetUID           *UID           `json:"-"`
+	UIDSalt             STR            `json:"-"`
+	DepRefs             []NodeRef      `json:"-"`
+	ForeignDepRefs      []NodeRef      `json:"-"`
+	Resources           []STR          `json:"-"`
+	ResourceGlobals     []ResourceDecl `json:"-"`
 	sourceInputsPending bool
 	foreignToolsPending bool
 	deferPublication    bool
@@ -76,11 +77,21 @@ func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) b
 		}
 
 		for _, pat := range n.Resources {
-			if ref, ok := fetchRefs.get(pat); ok {
+			if ref, ok := n.resourceRef(pat, fetchRefs); ok {
 				yield(ref)
 			}
 		}
 	}
+}
+
+func (n *Node) resourceRef(name STR, fetchRefs *DenseMap[STR, NodeRef]) (NodeRef, bool) {
+	for _, decl := range n.ResourceGlobals {
+		if decl.Name == name {
+			return fetchRefs.get(decl.FetchKey)
+		}
+	}
+
+	return fetchRefs.get(name)
 }
 
 func depRefs(refs ...NodeRef) []NodeRef {

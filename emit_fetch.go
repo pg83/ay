@@ -8,7 +8,7 @@ var (
 func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 	na := ctx.na
 
-	if ref, ok := ctx.fetchRefs.get(decl.Name); ok {
+	if ref, ok := ctx.fetchRefs.get(decl.FetchKey); ok {
 		return ref
 	}
 
@@ -32,7 +32,11 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 
 	ref := ctx.emit.emitNode(node)
 
-	ctx.fetchRefs.put(decl.Name, ref)
+	ctx.fetchRefs.put(decl.FetchKey, ref)
+
+	if _, exists := ctx.fetchRefs.get(decl.Name); !exists {
+		ctx.fetchRefs.put(decl.Name, ref)
+	}
 
 	return ref
 }

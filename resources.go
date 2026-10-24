@@ -24,6 +24,7 @@ const (
 type ResourceDecl struct {
 	Name      STR
 	URI       STR
+	FetchKey  STR
 	GlobalVar STR
 	Value     VFS
 	Token     STR
@@ -36,6 +37,7 @@ func makeResourceDecl(name, uri string) ResourceDecl {
 	return ResourceDecl{
 		Name:      internStr(name),
 		URI:       internStr(uri),
+		FetchKey:  internV(name, "\x00", uri),
 		GlobalVar: internStr(globalVar),
 		Value:     build("resources/", name),
 		Token:     internV(globalVar, "::", value),
@@ -337,23 +339,34 @@ func resolveModuleToolchain(ctx *GenCtx, globals []ResourceDecl, clangVer string
 	return tc
 }
 
-func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
-	ctx, instance, d := e.ctx, e.instance, e.d
+func (e *EmitContext) resourceDeclarations() []ResourceDecl {
+	var declarations []ResourceDecl
 
-	var globals []ResourceDecl
-	var decls []ResourceDecl
+	positions := make(map[STR]int)
 
-	for _, stmt := range d.resourceDeclStmts {
-		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt)...)
-	}
+	for _, bundles := range []bool{false, true} {
+		for _, stmt := range e.d.resourceDeclStmts {
+			if (stmt.Macro != tokDeclareExternalResource) != bundles {
+				continue
+			}
 
-	dedupers.with(func(deduper *DeDuper) {
-		for _, decl := range decls {
-			if deduper.add(decl.GlobalVar.strID()) {
-				globals = append(globals, decl)
+			for _, decl := range resolveResourceDecls(e.ctx.fs, e.ctx.host, e.instance.Path.relString(), stmt) {
+				if position, exists := positions[decl.Name]; exists {
+					declarations[position] = decl
+				} else {
+					positions[decl.Name] = len(declarations)
+					declarations = append(declarations, decl)
+				}
 			}
 		}
-	})
+	}
+
+	return declarations
+}
+
+func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
+	ctx, instance, d := e.ctx, e.instance, e.d
+	globals := e.resourceDeclarations()
 
 	for _, decl := range globals {
 		emitResourceFetch(ctx, decl)
@@ -408,23 +421,19 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 	na := ctx.na
 
 	var fetchRef NodeRef
-	var globals []ResourceDecl
-	var decls []ResourceDecl
 
-	for _, stmt := range d.resourceDeclStmts {
-		decls = append(decls, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt)...)
-	}
-
-	dedupers.with(func(deduper *DeDuper) {
-		for _, decl := range decls {
-			if deduper.add(decl.Name.strID()) {
-				globals = append(globals, decl)
-			}
-		}
-	})
+	globals := e.resourceDeclarations()
 
 	for _, decl := range globals {
 		fetchRef = emitResourceFetch(ctx, decl)
+	}
+
+	for _, decl := range globals {
+		if strings.HasPrefix(d.primaryOutput, decl.Value.string()+"/") {
+			fetchRef = emitResourceFetch(ctx, decl)
+
+			break
+		}
 	}
 
 	if d.primaryOutput == "" || len(globals) == 0 {

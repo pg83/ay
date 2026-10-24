@@ -268,7 +268,7 @@ class SharedSourceEdgesTest(unittest.TestCase):
                 })
                 self.assertEqual(consumer['deps'].count(producer['uid']), 1)
 
-    def test_host_tool_source_edges_do_not_enter_target_context(self):
+    def test_possible_target_tool_source_edges_survive_host_binding(self):
         files = fixture()
         files['grove/shared.h'] = '#include "grove/deep.h"\n'
         files['grove/deep.h'] = '#pragma once\n'
@@ -280,9 +280,11 @@ class SharedSourceEdgesTest(unittest.TestCase):
         g = graph(files, ('muted',))
         compiled = lib.node_by_output_prefix(g, '$(B)/tools/reader/main.cpp.')
         self.assertIn('$(S)/grove/deep.h', compiled['inputs'])
-        self.assertEqual(output(g, 'muted')['inputs'], [
-            '$(B)/tools/reader/reader', '$(S)/grove/shared.h',
-        ])
+        self.assertEqual(compiled['platform'], 'default-linux-x86_64')
+        self.assertIn('main.cpp.pic.o', compiled['outputs'][0])
+        self.assertEqual(set(output(g, 'muted')['inputs']), {
+            '$(B)/tools/reader/reader', '$(S)/grove/shared.h', '$(S)/grove/deep.h',
+        })
 
     def test_pic_source_edges_do_not_enter_plain_target_context(self):
         files = fixture()

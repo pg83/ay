@@ -1749,11 +1749,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		resolved = append(resolved, ResolvedPeer{path: peerPath, result: peerResult, kind: kind})
 	}
 
-	var ownResourceGlobals []ResourceDecl
-
-	for _, stmt := range d.resourceDeclStmts {
-		ownResourceGlobals = append(ownResourceGlobals, resolveResourceDecls(ctx.fs, ctx.host, instance.Path.relString(), stmt)...)
-	}
+	ownResourceGlobals := e.resourceDeclarations()
 
 	for _, decl := range ownResourceGlobals {
 		emitResourceFetch(ctx, decl)
