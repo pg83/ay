@@ -148,7 +148,7 @@ func sdcInstallLocation(packageName, kind, file string) string {
 }
 
 func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment) {
-	defer d.recordCollectionDeclarations()
+	defer d.recordProducerDeclarations()
 
 	packageName := env.string(envSdcPackageName)
 
@@ -178,7 +178,7 @@ func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment
 	}
 
 	for len(args) > 0 {
-		d.recordCollectionDeclarations()
+		d.recordProducerDeclarations()
 
 		arg := take()
 

@@ -42,6 +42,7 @@ func (spec *RunProgramNodeSpec) isOutput(v VFS) bool {
 
 func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 	e.emitRunProgram(rp)
+	e.collectRunProgramObjects(rp)
 
 	outs := make([]string, 0, len(rp.OUTFiles)+1)
 
@@ -81,31 +82,29 @@ func (e *EmitContext) emitRunProgramStmt(rp *RunProgramStmt) {
 	}
 }
 
-func (e *EmitContext) collectRunProgramObjects() {
-	for _, rp := range e.d.runPrograms {
-		collect := func(out ANY) {
-			ext := filepath.Ext(out.string())
+func (e *EmitContext) collectRunProgramObjects(rp *RunProgramStmt) {
+	collect := func(out ANY) {
+		ext := filepath.Ext(out.string())
 
-			if ext != ".o" && ext != ".obj" && ext != ".a" && (ext != ".lib" || isGoModuleType(e.d.unit.Type)) {
-				return
-			}
-
-			path := copyFileOutputVFS(e.instance.Path.relString(), out.string())
-
-			e.collectObj(e.codegen.mustInfo(path).ProducerRef, path, SrcMeta{Prio: stmtPrioDefault, Seq: rp.DeclSeq})
+		if ext != ".o" && ext != ".obj" && ext != ".a" && (ext != ".lib" || isGoModuleType(e.d.unit.Type)) {
+			return
 		}
 
-		for _, out := range rp.OUTFiles {
-			collect(out)
-		}
+		path := copyFileOutputVFS(e.instance.Path.relString(), out.string())
 
-		for _, out := range rp.OUTNoAutoFiles {
-			collect(out)
-		}
+		e.collectObj(e.codegen.mustInfo(path).ProducerRef, path, SrcMeta{Prio: stmtPrioDefault, Seq: rp.DeclSeq})
+	}
 
-		if rp.StdoutFile != nil {
-			collect(*rp.StdoutFile)
-		}
+	for _, out := range rp.OUTFiles {
+		collect(out)
+	}
+
+	for _, out := range rp.OUTNoAutoFiles {
+		collect(out)
+	}
+
+	if rp.StdoutFile != nil {
+		collect(*rp.StdoutFile)
 	}
 }
 

@@ -278,6 +278,17 @@ func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
 }
 
 func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS) {
+	if isPythonProtoModule(e.d) {
+		defer func() {
+			if e.objcopyRes == nil {
+				e.objcopyRes = &ObjcopyEmitResult{}
+			}
+
+			e.objcopyRes.Refs = append(e.objcopyRes.Refs, refs...)
+			e.objcopyRes.Outputs = append(e.objcopyRes.Outputs, outs...)
+		}()
+	}
+
 	objItems := e.objScratch[:0]
 	rawItems := e.rawScratch[:0]
 
@@ -482,7 +493,13 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
 
 		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, deps))
-		e.resourceMetas = append(e.resourceMetas, e.resourceSourceMeta(chunk, outputObj))
+
+		meta := e.resourceSourceMeta(chunk, outputObj)
+
+		if !isPythonProtoModule(e.d) {
+			e.collectObj(refs[len(refs)-1], outputObj, meta)
+		}
+
 		outs = append(outs, outputObj)
 	}
 
@@ -651,8 +668,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 
 		meta.Compile, meta.CompileRef = p.RawCompile, ccRef
 
-		e.enqueueSrc(meta)
-		e.resourceMetas = append(e.resourceMetas, meta)
+		e.emitOneSource(meta)
 		refs = append(refs, ccRef)
 		outs = append(outs, e.ccOutputFor(aux, p.RawCompile))
 	}
@@ -661,10 +677,8 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 }
 
 type ObjcopyEmitResult struct {
-	Metas           []SrcMeta
-	Refs            []NodeRef
-	Outputs         []VFS
-	PySrcTrailCount int
+	Refs    []NodeRef
+	Outputs []VFS
 }
 
 func (e *EmitContext) emitKvOnlyResource(tag STR, kvsHash []string, kvsCmd []STR) ([]NodeRef, []VFS) {
@@ -794,102 +808,24 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 	return refs, outs
 }
 
-func (e *EmitContext) emitResourceObjcopy() *ObjcopyEmitResult {
-	_, _, d := e.ctx, e.instance, e.d
-	hasKvOnly := d.pyMain != nil || len(d.noCheckImports) > 0 || e.hasEnginePySrcs() || len(d.yaConfJSON) > 0
+func (e *EmitContext) emitPySourceGroup(gi int) {
+	group := e.d.pySrcGroups[gi]
 
-	if len(e.resources) == 0 && len(d.pyPyiResources) == 0 && !hasKvOnly {
-		return nil
+	e.collectPySrcGroup(gi, group)
+
+	if e.producersOnly() {
+		return
 	}
 
-	out := &ObjcopyEmitResult{}
+	previousSeq, previousPriority := e.resourceDeclSeq, e.resourcePriority
 
-	e.resourceMetas = e.resourceMetas[:0]
+	e.resourceDeclSeq, e.resourcePriority = group.DeclSeq, group.Prio
 
-	noCheckRefs, noCheckOuts := e.emitNoCheckImportsObjcopy()
+	defer func() { e.resourceDeclSeq, e.resourcePriority = previousSeq, previousPriority }()
 
-	out.Refs = append(out.Refs, noCheckRefs...)
-	out.Outputs = append(out.Outputs, noCheckOuts...)
+	e.emitPySrcGroupObjcopy(gi, group, &ObjcopyEmitResult{})
 
-	e.resourceDeclSeq = d.pyMainDeclSeq
-
-	pyMainRefs, pyMainOuts := e.emitPyMainObjcopy()
-
-	out.Refs = append(out.Refs, pyMainRefs...)
-	out.Outputs = append(out.Outputs, pyMainOuts...)
-
-	e.resourceDeclSeq = 0
-
-	yaConfRefs, yaConfOuts := e.emitYaConfJSONObjcopy()
-
-	out.Refs = append(out.Refs, yaConfRefs...)
-	out.Outputs = append(out.Outputs, yaConfOuts...)
-
-	moduleTag := d.unit.HashTag
-	py3BinProgramSide := d.unit.Tag == unitTagPy3Bin
-	resourceOffset := 0
-	trailStart := -1
-
-	emitResources := func(entries []ResourceEntry) {
-		r, o := e.emitResourceFile(entries, moduleTag)
-
-		out.Refs = append(out.Refs, r...)
-		out.Outputs = append(out.Outputs, o...)
+	if e.d.unit.Tag != unitTagPy3Bin {
+		e.emitResourceFile(e.d.pyPyiResources[group.PyiStart:group.PyiEnd], e.d.unit.HashTag)
 	}
-
-	emitGroup := func(gi int, group PySrcGroup) {
-		previousSeq, previousPriority := e.resourceDeclSeq, e.resourcePriority
-
-		e.resourceDeclSeq, e.resourcePriority = group.DeclSeq, group.Prio
-
-		defer func() { e.resourceDeclSeq, e.resourcePriority = previousSeq, previousPriority }()
-
-		before := len(out.Refs)
-
-		e.emitPySrcGroupObjcopy(gi, group, out)
-
-		if !py3BinProgramSide {
-			r, o := e.emitResourceFile(d.pyPyiResources[group.PyiStart:group.PyiEnd], moduleTag)
-
-			out.Refs = append(out.Refs, r...)
-			out.Outputs = append(out.Outputs, o...)
-		}
-
-		if trailStart < 0 && len(out.Refs) > before {
-			trailStart = before
-		}
-	}
-
-	for gi, group := range d.pySrcGroups {
-		if group.Prio != stmtPrioDefault {
-			continue
-		}
-
-		if !py3BinProgramSide {
-			emitResources(e.resources[resourceOffset:group.ResourceOffset])
-
-			resourceOffset = group.ResourceOffset
-		}
-
-		emitGroup(gi, group)
-	}
-
-	if !py3BinProgramSide {
-		emitResources(e.resources[resourceOffset:])
-	}
-
-	for gi, group := range d.pySrcGroups {
-		if group.Prio != stmtPrioDefault {
-			emitGroup(gi, group)
-		}
-	}
-
-	if trailStart < 0 {
-		trailStart = len(out.Refs)
-	}
-
-	out.PySrcTrailCount = len(out.Refs) - trailStart
-	out.Metas = e.resourceMetas
-
-	return out
 }

@@ -2,12 +2,6 @@ package main
 
 var bundleKV = KV{P: pkBN, PC: pcLightCyan}
 
-func (e *EmitContext) emitBundles() {
-	for _, b := range e.d.bundles {
-		e.emitBundle(b)
-	}
-}
-
 func (e *EmitContext) emitBundle(b BundleEntry) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	reg := e.codegen

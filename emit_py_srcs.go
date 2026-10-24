@@ -123,70 +123,68 @@ func pySrcYapycSuffix(modulePath string) string {
 	return internBytes(out[:]).string()
 }
 
-func (e *EmitContext) registerCollectPySrcs() {
+func (e *EmitContext) collectPySrcGroup(gi int, group PySrcGroup) {
 	instance, d := e.instance, e.d
 	module := instance.Path.relString()
 
-	for gi, group := range d.pySrcGroups {
-		var scope PyScope
+	var scope PyScope
 
-		keyPrefix := ""
+	keyPrefix := ""
 
-		for si, src := range group.Srcs {
-			if si == 0 || group.Scopes[si] != scope {
-				scope = group.Scopes[si]
-				keyPrefix = pyResourceKeyPrefix(scope.TopLevel, scope.Namespace, module)
-			}
-
-			if extIsProto(src.relOrSelf().string()) || extIsEv(src.relOrSelf().string()) {
-				logical := pyProtoLogicalModule(module, src.relOrSelf().string(), scope)
-
-				if isPythonProtoModule(d) && scope.ModuleName == nil {
-					logical = strings.ReplaceAll(logical, "-", "_")
-				}
-
-				e.enqueueSrc(SrcMeta{
-					Source: src, Prio: stmtPrioDefault,
-					PyMeta: e.addPyMeta(PySourceMeta{Module: internStr(logical), Group: gi, Kind: pySourceProtoInput}),
-				})
-
-				continue
-			}
-
-			token := src
-			path := src.vfs()
-			kind := pySourcePlain
-
-			if d.usePython2 && path == 0 {
-				path, _ = moduleRootedVFS(module, src.string())
-			}
-
-			if group.SourceRoot {
-				path = source(module, "/", src.string())
-			} else if path != 0 {
-				if path.isBuild() && !d.usePython2 {
-					kind = pySourceGenerated
-					token = internStr(trimModulePrefix(path.relString(), module)).any()
-				}
-			} else {
-				path = build(module, "/", src.string())
-
-				if e.codegen.lookupSplit(instance.Path, src.str()) == nil {
-					path = e.resolvePythonSourceVFS(src.string())
-				}
-			}
-
-			e.enqueueSrc(SrcMeta{
-				Source: path.any(), Prio: stmtPrioDefault,
-				PyMeta: e.addPyMeta(PySourceMeta{
-					Module: e.pyModuleKey(keyPrefix, scope, token.string()),
-					Scope:  scope,
-					Token:  token,
-					Group:  gi,
-					Kind:   kind,
-				}),
-			})
+	for si, src := range group.Srcs {
+		if si == 0 || group.Scopes[si] != scope {
+			scope = group.Scopes[si]
+			keyPrefix = pyResourceKeyPrefix(scope.TopLevel, scope.Namespace, module)
 		}
+
+		if extIsProto(src.relOrSelf().string()) || extIsEv(src.relOrSelf().string()) {
+			logical := pyProtoLogicalModule(module, src.relOrSelf().string(), scope)
+
+			if isPythonProtoModule(d) && scope.ModuleName == nil {
+				logical = strings.ReplaceAll(logical, "-", "_")
+			}
+
+			e.emitOneSource(SrcMeta{
+				Source: src, Prio: stmtPrioDefault,
+				PyMeta: e.addPyMeta(PySourceMeta{Module: internStr(logical), Group: gi, Kind: pySourceProtoInput}),
+			})
+
+			continue
+		}
+
+		token := src
+		path := src.vfs()
+		kind := pySourcePlain
+
+		if d.usePython2 && path == 0 {
+			path, _ = moduleRootedVFS(module, src.string())
+		}
+
+		if group.SourceRoot {
+			path = source(module, "/", src.string())
+		} else if path != 0 {
+			if path.isBuild() && !d.usePython2 {
+				kind = pySourceGenerated
+				token = internStr(trimModulePrefix(path.relString(), module)).any()
+			}
+		} else {
+			path = build(module, "/", src.string())
+
+			if e.codegen.lookupSplit(instance.Path, src.str()) == nil {
+				path = e.resolvePythonSourceVFS(src.string())
+			}
+		}
+
+		e.emitOneSource(SrcMeta{
+			Source: path.any(), Prio: stmtPrioDefault,
+			PyMeta: e.addPyMeta(PySourceMeta{
+				Module: e.pyModuleKey(keyPrefix, scope, token.string()),
+				Scope:  scope,
+				Token:  token,
+				Group:  gi,
+				Kind:   kind,
+			}),
+		})
 	}
 }
 
@@ -323,56 +321,6 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 	}
 
 	return out
-}
-
-func (e *EmitContext) hasPySrcKind(kind PySourceKind) bool {
-	for _, ps := range e.pySrcsReg {
-		if ps.Kind == kind {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (e *EmitContext) hasEnginePySrcs() bool {
-	return e.hasPySrcKind(pySourcePlain) || e.hasPySrcKind(pySourceGenerated)
-}
-
-func (e *EmitContext) emitPyBytecode(moduleSources bool) {
-	ctx, _, d := e.ctx, e.instance, e.d
-	hasProto := e.hasPySrcKind(pySourceProto)
-	hasEngine := moduleSources && !d.pyBuildNoPYC && e.hasEnginePySrcs()
-
-	if !hasProto && !hasEngine {
-		return
-	}
-
-	tool := e.pyccTool()
-
-	if hasProto {
-		for _, ps := range e.pySrcsReg {
-			if ps.Kind == pySourceProto {
-				e.emitPyYapyc(ps, tool)
-			}
-		}
-	}
-
-	if !hasEngine {
-		return
-	}
-
-	ctx.tool(argToolsRescompiler)
-	ctx.tool(argToolsRescompressor)
-	ctx.tool(argToolsArchiver)
-
-	for _, ps := range e.pySrcsReg {
-		if ps.Kind == pySourceProto {
-			continue
-		}
-
-		e.emitPyYapyc(ps, tool)
-	}
 }
 
 type PyccTool struct {
@@ -850,29 +798,6 @@ func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
 	return outRefs, outPaths
 }
 
-func (e *EmitContext) emitGeneratedPyAuxChunks() (refs []NodeRef, outs []VFS) {
-	d := e.d
-
-	for _, ps := range e.pySrcsReg {
-		if ps.Kind != pySourceGenerated {
-			continue
-		}
-
-		r, o := e.packResources(ResourcePack{DontCompress: true,
-			Tag: d.unit.HashTag, Items: e.pySrcResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)),
-			RawCompile: CompileSpec{
-				ForceCxx: true,
-				CFlags:   e.ctx.na.anyList(argX.any(), argC.any()),
-			},
-		})
-
-		refs = append(refs, r...)
-		outs = append(outs, o...)
-	}
-
-	return refs, outs
-}
-
 func pyProtoAuxObjSuf(d *ModuleData) STR {
 	if d.unit.Tag == unitTagPy3Proto {
 		return tagPy3
@@ -881,62 +806,55 @@ func pyProtoAuxObjSuf(d *ModuleData) STR {
 	return d.unit.ObjSuf
 }
 
-func (e *EmitContext) emitPyRegister() {
+func (e *EmitContext) emitPyRegistration(registration PyRegistration) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
+	arg := registration.Name
+	regCpp := arg.string() + ".reg3.cpp"
+	script, scriptChunk := genPy3RegScriptVFS, genPy3RegScriptChunk
 
-	if len(d.pyRegister) == 0 {
-		return
+	if d.usePython2 {
+		regCpp = arg.string() + ".reg.cpp"
+		script, scriptChunk = genPyRegScriptVFS, genPyRegScriptChunk
 	}
 
-	for _, registration := range d.pyRegister {
-		arg := registration.Name
-		regCpp := arg.string() + ".reg3.cpp"
-		script, scriptChunk := genPy3RegScriptVFS, genPy3RegScriptChunk
+	regCppVFS := build(instance.Path.relString(), "/", regCpp)
+	env := envVarsVCS
 
-		if d.usePython2 {
-			regCpp = arg.string() + ".reg.cpp"
-			script, scriptChunk = genPyRegScriptVFS, genPyRegScriptChunk
-		}
+	pyCmdArgs := na.anyList(
+		d.tc.Python3.any(),
+		script.any(),
+		arg.any(),
+		regCppVFS.any(),
+	)
 
-		regCppVFS := build(instance.Path.relString(), "/", regCpp)
-		env := envVarsVCS
-
-		pyCmdArgs := na.anyList(
-			d.tc.Python3.any(),
-			script.any(),
-			arg.any(),
-			regCppVFS.any(),
-		)
-
-		pyNode := Node{
-			Platform:  ctx.target,
-			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
-			Env:       env,
-			Inputs:    na.inputList(scriptChunk),
-			Outputs:   na.vfsList(regCppVFS),
-			KV:        &pyCodegenKV,
-			Resources: usesPython3,
-		}
-
-		pyRef := e.emitNode(pyNode)
-		end := registration.CFlagsStart
-		spec := CompileSpec{ObjSuf: d.unit.ObjSuf, EnvCFlags: d.cc.CFlags[:end:end]}
-
-		if len(d.cythonCpp) > 0 {
-			spec.EnvAddIncl = appendCythonCCAddIncl(na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
-		}
-
-		e.register(GeneratedFileInfo{
-			OutputPath:  regCppVFS,
-			ProducerRef: pyRef,
-		})
-
-		e.enqueueSrc(SrcMeta{
-			Source: regCppVFS.any(), Prio: stmtPrioDefault, Global: true,
-			Compile: spec,
-		})
+	pyNode := Node{
+		Platform:  ctx.target,
+		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
+		Env:       env,
+		Inputs:    na.inputList(scriptChunk),
+		Outputs:   na.vfsList(regCppVFS),
+		KV:        &pyCodegenKV,
+		Resources: usesPython3,
 	}
+
+	pyRef := e.emitNode(pyNode)
+	end := registration.CFlagsStart
+	spec := CompileSpec{ObjSuf: d.unit.ObjSuf, EnvCFlags: d.cc.CFlags[:end:end]}
+
+	if len(d.cythonCpp) > 0 {
+		spec.EnvAddIncl = appendCythonCCAddIncl(na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
+	}
+
+	e.register(GeneratedFileInfo{
+		OutputPath:  regCppVFS,
+		ProducerRef: pyRef,
+	})
+
+	e.enqueueSrc(SrcMeta{
+		Source: regCppVFS.any(), Prio: stmtPrioDefault, Global: true,
+		Compile: spec,
+	})
 }
 
 type PyGenResEntry struct {

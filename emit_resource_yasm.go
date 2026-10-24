@@ -111,15 +111,11 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 	cppPath := build(module, "/", cppName)
 	ccRef := e.ctx.emit.reserve()
 	spec := CompileSpec{ForceCxx: true, CFlags: na.anyList(argX.any(), argC.any())}
-	meta := SrcMeta{Source: cppPath.any(), Prio: priority, Seq: e.resourceDeclSeq, Compile: spec, CompileRef: ccRef}
+	meta := SrcMeta{Source: cppPath.any(), Global: true, Prio: priority, Seq: e.resourceDeclSeq, Compile: spec, CompileRef: ccRef}
 
-	e.enqueueSrc(meta)
-
-	e.resourceMetas = append(e.resourceMetas, meta)
+	e.emitOneSource(meta)
 
 	if globalAsm {
-		e.resourceMetas = append(e.resourceMetas, asmMeta)
-
 		return na.refList(ccRef, asmRef), na.vfsList(e.ccOutputFor(cppPath, spec), asmOut)
 	}
 

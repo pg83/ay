@@ -375,8 +375,8 @@ type ModuleData struct {
 	copyFiles                []CopyFileEntry
 	copyFileAutoOutputs      map[STR]CopyFileEntry
 	declSeq                  int
-	collectionDeclarations   []producerDeclaration
-	collectionProducerCounts [prodKindCount]int
+	producerDeclarations     []producerDeclaration
+	producerCounts           [prodKindCount]int
 	resources                []ResourceEntry
 	bundles                  []BundleEntry
 	pyMain                   *ANY
@@ -430,10 +430,6 @@ type SrcMeta struct {
 	Compile     CompileSpec
 	CompileRef  NodeRef
 	PyMeta      uint32
-}
-
-func (m SrcMeta) sortKey() uint64 {
-	return uint64(m.Prio)<<40 | uint64(uint32(m.Seq))<<8 | uint64(uint8(m.Bucket))
 }
 
 func (d *ModuleData) nextDeclSeq() int {
@@ -1341,10 +1337,10 @@ func collectModuleAutoinclude(ctx *GenCtx, modulePath string, kind ModuleKind, l
 func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	fs := ctx.fs
 
-	defer d.recordCollectionDeclarations()
+	defer d.recordProducerDeclarations()
 
 	for _, s := range stmts {
-		d.recordCollectionDeclarations()
+		d.recordProducerDeclarations()
 
 		if d.discarded {
 			return

@@ -68,7 +68,7 @@ func resolveLargeFileSource(fs FS, codegen *CodegenRegistry, modulePath, name st
 }
 
 func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt UnknownStmt, d *ModuleData, onWarn func(Warn)) {
-	defer d.recordCollectionDeclarations()
+	defer d.recordProducerDeclarations()
 
 	args := stmt.Args
 
@@ -77,7 +77,7 @@ func applyLargeFiles(fs FS, codegen *CodegenRegistry, modulePath string, stmt Un
 	}
 
 	for _, value := range args {
-		d.recordCollectionDeclarations()
+		d.recordProducerDeclarations()
 
 		arg := value.string()
 

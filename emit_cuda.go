@@ -256,7 +256,7 @@ func (e *EmitContext) emitSplitCudaSource(src ANY, arches []string, embedPTX boo
 	parsed := na.dirList(IncludeDirective{kind: includeQuoted, target: includeTarget(stub.rel().any())}, IncludeDirective{kind: includeQuoted, target: includeTarget(fatbin.rel().any())})
 
 	e.register(GeneratedFileInfo{OutputPath: hostOuts[1], ProducerRef: hostRef, OnUse: hostPending, ProducerMainOut: hostOuts[0], ClosureLeaves: na.vfsList(hostOuts[0]), ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed}})
-	e.enqueueSrc(SrcMeta{Source: hostOuts[1].any(), Prio: stmtPrioDefault, Seq: seq + len(arches) + 2, Compile: CompileSpec{CFlags: cudaHostFlags, FlatOutput: true}})
+	e.emitOneSource(SrcMeta{Source: hostOuts[1].any(), Prio: stmtPrioDefault, Seq: seq + len(arches) + 2, Compile: CompileSpec{CFlags: cudaHostFlags, FlatOutput: true}})
 }
 
 func (e *EmitContext) emitCudaDeviceLink(archiveName string, local CollectedObjs, plugin *VFS) NodeRef {

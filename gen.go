@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cmp"
 	"fmt"
 	"os"
 	"path"
@@ -239,7 +238,6 @@ type GenCtx struct {
 	sbomEnabled      bool
 	autoincludeIdx   *AutoincludeIndex
 	parsedFiles      map[string]*MakeFile
-	prodOuts         IdValueMap
 	goEnvMemo        map[[2]STR]EnvVars
 	frameSerial      uint32
 	scannerTargetPIC *IncludeScanner
@@ -2610,24 +2608,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	globalRefs := global.refs
 	globalOutputs := global.outs
-	globalMetas := global.metas
-
-	if objcopyRes := e.objcopyRes; objcopyRes != nil {
-		lead := len(objcopyRes.Refs) - objcopyRes.PySrcTrailCount
-		objMetas := objcopyRes.Metas
-
-		if len(e.resources) > 0 && lead > 0 {
-			globalRefs = concat(objcopyRes.Refs[:lead], globalRefs, objcopyRes.Refs[lead:])
-			globalOutputs = concat(objcopyRes.Outputs[:lead], globalOutputs, objcopyRes.Outputs[lead:])
-			globalMetas = concat(objMetas[:lead], globalMetas, objMetas[lead:])
-		} else {
-			globalRefs = append(globalRefs, objcopyRes.Refs...)
-			globalOutputs = append(globalOutputs, objcopyRes.Outputs...)
-			globalMetas = append(globalMetas, objMetas...)
-		}
-	}
-
-	globalRefs, globalOutputs = e.reorderARMembers(globalRefs, globalOutputs, globalMetas)
 
 	if sbomActive(ctx, instance) && env.bool(envCLANG) && len(local.refs) > 0 {
 		if r, p := clangToolchainSbomComponent(ctx, instance.Platform); r != nil && !slices.Contains(peerSbomPaths, *p) {
@@ -2695,9 +2675,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		ldInstance := instance
 		ldCCRefs := local.refs
 		ldCCOutputs := local.outs
-
-		ldCCRefs, ldCCOutputs = e.reorderARMembers(ldCCRefs, ldCCOutputs, local.metas)
-
 		ldObjcopyRefs, ldObjcopyPaths := globalRefs, globalOutputs
 
 		var ownRPathFlags []ANY
@@ -2801,8 +2778,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		return result
 	}
-
-	local.refs, local.outs = e.reorderARMembers(local.refs, local.outs, local.metas)
 
 	var arRef NodeRef
 
@@ -2929,51 +2904,6 @@ func filterBuildRootSelfPaths(instancePath string, peer, own []VFS) []VFS {
 	})
 
 	return out
-}
-
-type ARMember struct {
-	ref  NodeRef
-	path VFS
-	key  uint64
-}
-
-func (e *EmitContext) reorderARMembers(refs []NodeRef, paths []VFS, metas []SrcMeta) ([]NodeRef, []VFS) {
-	if len(paths) == 0 {
-		return refs, paths
-	}
-
-	members := e.arMembers[:0]
-	ordered := true
-
-	var previous uint64
-
-	for i := range paths {
-		key := metas[i].sortKey()
-
-		if i > 0 && key < previous {
-			ordered = false
-		}
-
-		members = append(members, ARMember{refs[i], paths[i], key})
-		previous = key
-	}
-
-	e.arMembers = members[:0]
-
-	if ordered {
-		return refs, paths
-	}
-
-	slices.SortStableFunc(members, func(a, b ARMember) int {
-		return cmp.Compare(a.key, b.key)
-	})
-
-	for i, m := range members {
-		refs[i] = m.ref
-		paths[i] = m.path
-	}
-
-	return refs, paths
 }
 
 func (ctx *GenCtx) tool(modulePath ARG) (NodeRef, VFS) {

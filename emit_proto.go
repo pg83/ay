@@ -204,7 +204,6 @@ type protoPBCommon struct {
 
 type protoPBPending struct {
 	common   *protoPBCommon
-	imports  Closure
 	protoRel STR
 	protoSrc VFS
 	outputs  []VFS
@@ -222,7 +221,7 @@ func (p *protoPBPending) emitPending() {
 	c.emit.emitPB(
 		s.protoRel, s.protoSrc, c.cppStyleguideLDRef, c.protocLDRef,
 		c.grpcCppLDRef, c.cppStyleguideBinary, c.protocBinary, c.grpcCppBinary,
-		c.grpc, c.extraPlugins, s.imports,
+		c.grpc, c.extraPlugins, c.emit.scanner.walkClosure(s.protoSrc, c.emit.d.scanCtx, scanDomainProto),
 		c.blocks, s.spec, s.outputs, s.pbRef,
 	)
 }
@@ -359,12 +358,17 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		}
 	}
 
-	transitiveImports := e.scanner.walkClosure(protoVFS, scanCtx, scanDomainProto)
+	var transitiveImports Closure
+
+	if !e.deferCC {
+		transitiveImports = e.scanner.walkClosure(protoVFS, scanCtx, scanDomainProto)
+	}
+
 	pbRef := ctx.emit.reserve()
 	pending := na.protoPB.one()
 
 	*pending = protoPBPending{
-		common: pe.pendingCommon, imports: transitiveImports,
+		common:   pe.pendingCommon,
 		protoRel: protoRel, protoSrc: protoVFS,
 		spec: spec, pbRef: pbRef,
 	}
@@ -450,6 +454,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		})
 
 		e.codegen.setMainOut(pbRef, pending.outputs)
+		e.completeProtoFileInputs(protoVFS, pending.outputs)
 
 		return e.protoCCOutputs(pending.outputs)
 	}
@@ -625,8 +630,26 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	e.codegen.setMainOut(pbRef, pending.outputs)
+	e.completeProtoFileInputs(protoVFS, pending.outputs)
 
 	return e.protoCCOutputs(pending.outputs)
+}
+
+func (e *EmitContext) completeProtoFileInputs(input VFS, outputs []VFS) {
+	if !e.deferCC {
+		return
+	}
+
+	e.filePending = append(e.filePending, func() {
+		imports := e.scanner.walkClosure(input, e.d.scanCtx, scanDomainProto)
+		inherited := e.codegen.generatorRefsFor(imports)
+
+		for _, output := range outputs {
+			if info := e.codegen.lookup(output); info != nil {
+				info.GeneratorRefs = e.ctx.na.uniqueRefs(info.GeneratorRefs, inherited)
+			}
+		}
+	})
 }
 
 func (e *EmitContext) protoCCOutputs(outputs []VFS) []VFS {
@@ -696,28 +719,16 @@ func (e *EmitContext) markProtoPendingAR() {
 }
 
 func (e *EmitContext) preparePyProtoLibraryResources() *ObjcopyEmitResult {
-	resources := &ObjcopyEmitResult{}
-	start := len(e.resourceMetas)
-
 	for _, group := range e.pyProtoGroups() {
-		refs, outs := e.emitPyProtoGroupResources(group)
-
-		resources.Refs = append(resources.Refs, refs...)
-		resources.Outputs = append(resources.Outputs, outs...)
+		e.emitPyProtoGroupResources(group)
 	}
 
-	if len(resources.Refs) == 0 {
+	resources := e.objcopyRes
+
+	e.objcopyRes = nil
+
+	if resources == nil || len(resources.Refs) == 0 {
 		return nil
-	}
-
-	resources.Metas = append(resources.Metas, e.resourceMetas[start:]...)
-
-	if e.objcopyRes != nil {
-		resources.Refs = concat(e.objcopyRes.Refs, resources.Refs)
-		resources.Outputs = concat(e.objcopyRes.Outputs, resources.Outputs)
-		resources.Metas = concat(e.objcopyRes.Metas, resources.Metas)
-
-		e.objcopyRes = nil
 	}
 
 	return resources
@@ -725,7 +736,7 @@ func (e *EmitContext) preparePyProtoLibraryResources() *ObjcopyEmitResult {
 
 func (e *EmitContext) emitPyProtoLibraryResult(resources *ObjcopyEmitResult) *ProtoSrcsResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
-	genRefs, genOuts := e.reorderARMembers(resources.Refs, resources.Outputs, resources.Metas)
+	genRefs, genOuts := resources.Refs, resources.Outputs
 
 	var cppSibling *ModuleEmitResult
 

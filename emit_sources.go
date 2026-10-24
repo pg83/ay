@@ -21,7 +21,20 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 
 			e.emitPyProtoSource(src, py.Group, py.Module, group.Prio, group.DeclSeq)
 		} else {
-			e.collectPySource(src.vfs(), py)
+			ps := PySrc{Path: src.vfs(), PySourceMeta: py}
+
+			e.collectPySource(ps.Path, py)
+
+			if py.Kind == pySourceProto || !e.d.pyBuildNoPYC {
+				e.emitPyYapyc(ps, e.pyccTool())
+			}
+
+			if py.Kind == pySourceGenerated && !e.producersOnly() {
+				e.packResources(ResourcePack{DontCompress: true,
+					Tag: e.d.unit.HashTag, Items: e.pySrcResourceItems(e.appendPyResEntries(e.resEntries[:0], ps)),
+					RawCompile: CompileSpec{ForceCxx: true, CFlags: e.ctx.na.anyList(argX.any(), argC.any())},
+				})
+			}
 		}
 
 		return
@@ -54,7 +67,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 
 		ref, out := e.emitCCWith(srcVFS, e.ccInputsFor(meta.Compile), meta.CompileRef)
 
-		if meta.CompileRef == 0 {
+		if meta.CompileRef == 0 || !isPythonProtoModule(e.d) {
 			e.collectObj(ref, out, meta)
 		}
 	case srcExtGettext:
@@ -77,6 +90,12 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 		e.emitLibraryCudaSource(meta, e.ccInputsFor(meta.Compile))
 	case srcExtGztProto:
 		e.emitLibraryGztProtoCompile(src)
+
+		if !isPythonProtoModule(e.d) {
+			meta.Source = e.gztGenProto(src.string()).any()
+
+			e.enqueueSrc(meta)
+		}
 	case srcExtProto:
 		if isGoModuleType(e.d.unit.Type) {
 			e.emitGoProtoSource(meta)

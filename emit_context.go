@@ -21,7 +21,6 @@ type PeerContext struct {
 
 type EmitContext struct {
 	resourcePriority int
-	resourceMetas    []SrcMeta
 
 	resourceDeclSeq    int
 	moduleIncludeRoots []VFS
@@ -36,7 +35,12 @@ type EmitContext struct {
 	scanner            *IncludeScanner
 	codegen            *CodegenRegistry
 	srcs               []SrcMeta
-	srcHead            int
+	commandHead        int
+	commandQueueActive bool
+	producerOutputs    map[VFS]int
+	deferCC            bool
+	ccPending          []CCPending
+	filePending        []func()
 	srcsClosed         bool
 	refs               []NodeRef
 	outs               []VFS
@@ -63,7 +67,6 @@ type EmitContext struct {
 	prodVFS            []VFS
 	cvScratch          []Closure
 	peerScratch        []string
-	arMembers          []ARMember
 	sbomOrder          []ResolvedPeer
 	orderedCC          []VFS
 	prodOrder          []int
@@ -156,6 +159,8 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		ctx: ctx, frame: frame, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen,
 		resources: d.resources[:k:k],
 
+		ccPending:   scrub(prev.ccPending),
+		filePending: scrub(prev.filePending),
 		srcs:        prev.srcs[:0],
 		refs:        prev.refs[:0],
 		outs:        prev.outs[:0],
@@ -177,7 +182,6 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 		prodVFS:     prev.prodVFS[:0],
 		cvScratch:   scrub(prev.cvScratch),
 		peerScratch: scrub(prev.peerScratch),
-		arMembers:   prev.arMembers[:0],
 		sbomOrder:   scrub(prev.sbomOrder),
 		orderedCC:   prev.orderedCC[:0],
 		prodOrder:   prev.prodOrder[:0],
@@ -480,6 +484,10 @@ func (e *EmitContext) enqueueSrc(meta SrcMeta) {
 	}
 
 	e.srcs = append(e.srcs, meta)
+
+	if e.commandQueueActive {
+		e.queueSource(len(e.srcs) - 1)
+	}
 }
 
 func (e *EmitContext) producersOnly() bool {
@@ -543,10 +551,7 @@ func (e *EmitContext) emit() {
 	d := e.d
 
 	e.globalSources = dedup(e.peers.GlobalSources, e.emitSdcMetas())
-
-	fsMemberRefs, fsMemberPaths := e.emitFromSandboxes()
-
-	e.emitBundles()
+	e.deferCC = true
 
 	cythonPlans := e.planCythonCpp()
 
@@ -555,37 +560,17 @@ func (e *EmitContext) emit() {
 	}
 
 	e.emitPyFbsGroups()
+
 	e.emitDeclaredProducers(cythonPlans)
-	e.collectRunProgramObjects()
 	e.registerSCInputs()
 	e.emitUsrvFiles()
-
-	if !e.producersOnly() || e.ctx.peerTests {
-		e.registerCollectPySrcs()
-	}
-
-	if !e.producersOnly() {
-		e.emitPyRegister()
-	}
-
-	for _, meta := range d.srcs {
-		if !isCodegenProducingSrcID(meta.Source) {
-			e.enqueueSrc(meta)
-		}
-	}
 
 	var pyProtoResources *ObjcopyEmitResult
 
 	finalized := e.producersOnly()
 
 	for {
-		for e.srcHead < len(e.srcs) {
-			meta := e.srcs[e.srcHead]
-
-			e.srcs[e.srcHead] = SrcMeta{}
-			e.srcHead++
-			e.emitOneSource(meta)
-		}
+		e.drainCommands(cythonPlans, e.prodSrcs)
 
 		if finalized {
 			break
@@ -593,26 +578,14 @@ func (e *EmitContext) emit() {
 
 		finalized = true
 
-		if !isProgramModuleType(d.moduleStmt.Name) || pyModuleTypeUsesPython3(d.moduleStmt.Name) || d.usePython2 || d.pythonSourceCallback {
-			e.emitPyBytecode(true)
-
-			genPyAuxRefs, genPyAuxOuts := e.emitGeneratedPyAuxChunks()
-
-			for i, ref := range genPyAuxRefs {
-				e.collectObj(ref, genPyAuxOuts[i], SrcMeta{Prio: stmtPrioDefault, Global: true})
+		if d.moduleStmt.Name != tokProtoLibrary {
+			for _, gi := range e.pyProtoGroups() {
+				e.emitPyProtoGroupResources(gi)
 			}
-		}
-
-		if !isProgramModuleType(d.moduleStmt.Name) || d.unit.Tag != 0 || len(e.resources) > 0 || d.pythonSourceCallback {
-			e.objcopyRes = e.emitResourceObjcopy()
 		}
 
 		if d.moduleStmt.Name == tokProtoLibrary {
 			pyProtoResources = e.preparePyProtoLibraryResources()
-		}
-
-		for i, ref := range fsMemberRefs {
-			e.collectObj(ref, fsMemberPaths[i], SrcMeta{Prio: stmtPrioDefault})
 		}
 
 		e.flushGoCgo2()
@@ -620,6 +593,20 @@ func (e *EmitContext) emit() {
 	}
 
 	e.srcsClosed = true
+	e.commandQueueActive = false
+	e.deferCC = false
+
+	for _, complete := range e.filePending {
+		complete()
+	}
+
+	e.filePending = scrub(e.filePending)
+
+	for _, cc := range e.ccPending {
+		e.emitCCWith(cc.src, cc.inputs, cc.ref)
+	}
+
+	e.ccPending = scrub(e.ccPending)
 
 	if pyProtoResources != nil {
 		e.protoRes = e.emitPyProtoLibraryResult(pyProtoResources)

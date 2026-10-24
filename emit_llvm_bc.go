@@ -219,12 +219,12 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		})
 	}
 
-	e.resources = append(e.resources, ResourceEntry{
+	e.emitResourceFile([]ResourceEntry{{
 		DeclSeq:   stmt.DeclSeq,
 		Path:      optOutName,
 		Key:       "/llvm_bc/" + stmt.Name,
 		EndsBatch: true,
-	})
+	}}, e.d.unit.HashTag)
 }
 
 func composeBCCompileCmd(python, clangWrapper, clangBC string, platform *Platform, in ModuleCCInputs, inVFS, outVFS VFS, cxx bool) CompilerFlagValue {

@@ -143,8 +143,27 @@ func (e *EmitContext) moduleSourceVFS(src ANY) VFS {
 	return e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 }
 
+type CCPending struct {
+	src    VFS
+	inputs ModuleCCInputs
+	ref    NodeRef
+}
+
 func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS) {
 	ctx := e.ctx
+
+	if e.deferCC {
+		if reserved == 0 {
+			reserved = ctx.emit.reserve()
+		}
+
+		srcRel := trimModulePrefix(srcVFS.relString(), e.instance.Path.relString())
+		out, _ := composeCCPaths(e.instance, srcRel, srcVFS, in, ccObjectSuffix(e.instance, in))
+
+		e.ccPending = append(e.ccPending, CCPending{src: srcVFS, inputs: in, ref: reserved})
+
+		return reserved, out
+	}
 
 	if e.instance.Language == LangFbsJavaNative {
 		return e.bindFbsNativeSource(srcVFS, in, reserved)

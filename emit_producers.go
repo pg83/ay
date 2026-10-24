@@ -47,6 +47,13 @@ const (
 	prodPireInline
 	prodFromSandbox
 	prodBundle
+	prodQueuedSrc
+	prodResource
+	prodPyGroup
+	prodPyRegister
+	prodPyNoCheck
+	prodPyMain
+	prodYaConf
 	prodKindCount
 )
 
@@ -55,6 +62,8 @@ type ProducerPos struct {
 	index int
 	outs  []VFS
 	ins   []VFS
+	done  bool
+	end   int
 }
 
 func runInputBuildCandidate(modulePath, rel string) VFS {
@@ -219,51 +228,6 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 		e.prodVFS = append(e.prodVFS, protoInput)
 	} else if v := runInputBuildCandidate(module, src); v != 0 {
 		e.prodVFS = append(e.prodVFS, v)
-	}
-
-	switch class {
-	case srcExtProto, srcExtEv:
-		var directives []IncludeDirective
-
-		if class != srcExtProto || protoInput.isSource() {
-			directives = e.ctx.parsers.sourceParsedBuckets(protoRelID.source(), nil).bucket(parsedIncludesLocal)
-		}
-
-		if len(directives) > 0 {
-			outputRoot := protoCPPOutRoot(e.d)
-			outputRootClean := outputRoot != "" && pathIsClean(outputRoot)
-
-			for _, directive := range directives {
-				nameID := directive.target.str()
-				name := ""
-
-				if nameID != 0 {
-					name = nameID.string()
-				} else {
-					name = directive.target.string()
-				}
-
-				if nameID != 0 && name != "" && pathIsClean(name) {
-					e.prodVFS = append(e.prodVFS, nameID.build())
-
-					if outputRootClean {
-						e.prodVFS = append(e.prodVFS, internV(outputRoot, "/", name).build())
-					} else if outputRoot != "" {
-						e.prodVFS = append(e.prodVFS, build(protoOutputRel(outputRoot, name)))
-					}
-
-					continue
-				}
-
-				clean := filepath.ToSlash(filepath.Clean(name))
-
-				e.prodVFS = append(e.prodVFS, build(clean))
-
-				if outputRoot != "" {
-					e.prodVFS = append(e.prodVFS, build(protoOutputRel(outputRoot, clean)))
-				}
-			}
-		}
 	}
 
 	return outs, e.prodVFSTake(insMark)
@@ -510,13 +474,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 
 	runIns := func(inFiles []ANY) {
 		for _, f := range inFiles {
-			if v := runInputBuildCandidate(module, f.string()); v != 0 {
-				backing = append(backing, v)
-			}
-
-			if !vfsHasPrefix(f.string()) {
-				backing = append(backing, buildClean(f.string()))
-			}
+			backing = append(backing, e.sourceInputForScheduling(f.string()))
 		}
 	}
 
@@ -578,6 +536,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		outEnd := len(backing)
 
 		runIns(rp.INFiles)
+		backing = append(backing, e.sourceInputForScheduling(rp.ScriptPath.string()))
 		push(prodRunPython, i, start, outEnd)
 	}
 
@@ -593,33 +552,9 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		push(prodArchiveAsm, 0, start, start)
 	}
 
-	srcs := e.prodSrcs[:0]
+	srcs := append(e.prodSrcs[:0], d.srcs...)
 
 	defer func() { e.prodSrcs = srcs }()
-
-	for _, meta := range d.srcs {
-		src := meta.Source
-
-		if !isCodegenProducingSrcID(src) {
-			continue
-		}
-
-		srcs = append(srcs, meta)
-	}
-
-	srcCount := len(srcs)
-
-	for i := 0; i < srcCount; i++ {
-		meta := srcs[i]
-		src := meta.Source
-
-		if srcExtClassOf(src) == srcExtGztProto && !isPythonProtoModule(d) {
-			childMeta := meta
-
-			childMeta.Source = e.gztGenProto(src.string()).any()
-			srcs = append(srcs, childMeta)
-		}
-	}
 
 	for i, st := range d.goCodegens {
 		outsMark := len(e.prodVFS)
@@ -654,7 +589,13 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	for i, m := range srcs {
-		outs, ins := e.srcPosition(m)
+		var outs, ins []VFS
+
+		if isCodegenProducingSrcID(m.Source) {
+			outs, ins = e.srcPosition(m)
+		} else {
+			ins = []VFS{e.sourceInputForScheduling(m.Source.string())}
+		}
 
 		positions = append(positions, ProducerPos{
 			kind:  prodSrc,
@@ -881,77 +822,6 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	return positions, srcs
 }
 
-func scheduleProducers(dst []int, m *IdValueMap, positions []ProducerPos, modulePath string) []int {
-	m.reset(vfsBound())
-
-	for i, p := range positions {
-		for _, out := range p.outs {
-			m.put(out, int32(i))
-		}
-	}
-
-	type edge struct {
-		from int32
-		to   int32
-	}
-
-	var edges []edge
-
-	indeg := make([]int32, len(positions))
-
-	for i, p := range positions {
-		for _, in := range p.ins {
-			from, ok := m.get(in)
-
-			if !ok || from == int32(i) {
-				continue
-			}
-
-			edges = append(edges, edge{from: from, to: int32(i)})
-			indeg[i]++
-		}
-	}
-
-	order := dst[:0]
-
-	if len(edges) == 0 {
-		for i := range positions {
-			order = append(order, i)
-		}
-
-		return order
-	}
-
-	done := make([]bool, len(positions))
-
-	for len(order) < len(positions) {
-		picked := -1
-
-		for i := range positions {
-			if !done[i] && indeg[i] == 0 {
-				picked = i
-
-				break
-			}
-		}
-
-		if picked < 0 {
-			throwFmt("gen: %s declares a dependency cycle among generating macros", modulePath)
-		}
-
-		done[picked] = true
-		order = append(order, picked)
-
-		for _, ed := range edges {
-			if ed.from == int32(picked) {
-				indeg[ed.to]--
-			}
-		}
-	}
-
-	return order
-}
-
 func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 	if e.peers != nil {
 		env := Environment{s: &e.frame.ifEnv}
@@ -962,32 +832,100 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 	}
 
 	positions, srcs := e.producerPositions(len(cythonPlans) > 0)
-	collection := isUnionModule(e.d.moduleStmt.Name) || e.d.moduleStmt.Name == tokPackageFinal
 
-	if collection {
-		positions = e.collectionProducerPositions(positions)
+	positions = e.orderedProducerPositions(positions)
+
+	e.prodPos = positions
+	e.producerOutputs = make(map[VFS]int, len(positions))
+	e.prodOrder = e.prodOrder[:0]
+
+	for i, pos := range positions {
+		e.prodOrder = append(e.prodOrder, i)
+
+		for _, output := range pos.outs {
+			e.producerOutputs[output] = i
+		}
 	}
 
-	if len(positions) == 0 {
-		return
+	for i := range e.srcs {
+		e.queueSource(i)
 	}
 
-	var order []int
+	e.commandQueueActive = true
+	e.drainCommands(cythonPlans, srcs)
+}
 
-	if collection {
-		order = e.scheduleCollectionProducers(positions)
-	} else {
-		order = scheduleProducers(e.prodOrder[:0], &e.ctx.prodOuts, positions, e.instance.Path.relString())
-	}
+func (e *EmitContext) queueSource(index int) {
+	meta := e.srcs[index]
+	pos := ProducerPos{kind: prodQueuedSrc, index: index, ins: []VFS{e.sourceInputForScheduling(meta.Source.string())}}
 
-	e.prodOrder = order[:0]
+	e.prodOrder = append(e.prodOrder, len(e.prodPos))
+	e.prodPos = append(e.prodPos, pos)
+}
 
-	for _, pi := range order {
-		pos := positions[pi]
+func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta) {
+	blocked := 0
+
+	for e.commandHead < len(e.prodOrder) {
+		pi := e.prodOrder[e.commandHead]
+		pos := e.prodPos[pi]
+
+		e.commandHead++
+
+		ready := true
+
+		for _, input := range pos.ins {
+			if e.codegen.lookup(input) != nil {
+				continue
+			}
+
+			if from, declared := e.producerOutputs[input]; declared && from != pi && !e.prodPos[from].done {
+				ready = false
+
+				break
+			}
+		}
+
+		if !ready {
+			e.prodOrder = append(e.prodOrder, pi)
+			blocked++
+
+			if blocked == len(e.prodOrder)-e.commandHead {
+				throwFmt("gen: %s declares a dependency cycle among generating macros", e.instance.Path.relString())
+			}
+
+			continue
+		}
+
+		blocked = 0
+		e.prodPos[pi].done = true
 
 		switch pos.kind {
+		case prodResource:
+			e.emitResourceFile(e.resources[pos.index:pos.end], e.d.unit.HashTag)
+		case prodPyGroup:
+			e.emitPySourceGroup(pos.index)
+		case prodPyRegister:
+			e.emitPyRegistration(e.d.pyRegister[pos.index])
+		case prodPyNoCheck:
+			e.emitNoCheckImportsObjcopy()
+		case prodPyMain:
+			e.resourceDeclSeq = e.d.pyMainDeclSeq
+			e.emitPyMainObjcopy()
+			e.resourceDeclSeq = 0
+		case prodYaConf:
+			e.emitYaConfJSONObjcopy()
+		case prodQueuedSrc:
+			meta := e.srcs[pos.index]
+
+			e.srcs[pos.index] = SrcMeta{}
+			e.emitOneSource(meta)
 		case prodFromSandbox:
-			e.emitFromSandbox(e.d.fromSandboxes[pos.index])
+			refs, paths := e.emitFromSandbox(e.d.fromSandboxes[pos.index])
+
+			for i, ref := range refs {
+				e.collectObj(ref, paths[i], SrcMeta{Prio: stmtPrioDefault})
+			}
 		case prodBundle:
 			e.emitBundle(e.d.bundles[pos.index])
 		case prodPireInline:
