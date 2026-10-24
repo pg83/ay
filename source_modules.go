@@ -3,7 +3,7 @@ package main
 import "strings"
 
 func isPythonMultimodule(name TOK) bool {
-	return name == tokPy23Library || name == tokPy23NativeLibrary || isSandboxPython2Task(name)
+	return name == tokPy23Library || name == tokPy23NativeLibrary || hasSandboxPython2Library(name)
 }
 
 func configureCythonDirectory(ctx *GenCtx, instance ModuleInstance) *SourceModuleInfo {
@@ -21,7 +21,7 @@ func configureCythonDirectory(ctx *GenCtx, instance ModuleInstance) *SourceModul
 
 	var selected *SourceModuleInfo
 
-	if isSandboxPython2Task(name) {
+	if hasSandboxPython2Library(name) {
 		for _, module := range sandboxPythonTaskInstances(instance, name) {
 			info := configureCythonModule(ctx, module, sandboxPythonTaskVariant(name, module.Kind, module.Language))
 
@@ -66,23 +66,27 @@ func configureCythonModule(ctx *GenCtx, instance ModuleInstance, tag string) *So
 	env := buildIfEnvInto(&frame.ifEnv, instance)
 	d := collectModuleInto(ctx, instance, moduleStmts(ctx, instance.Path.relString()), env, ctx.onWarn, &frame.d)
 
-	if isSandboxPython2Task(d.multimodule) && instance.Kind == KindBin {
-		info.ExcludedVariants = map[STR]bool{}
+	if hasSandboxPython2Library(d.multimodule) {
+		first := sandboxPythonTaskInstances(instance, d.multimodule)[0]
 
-		for _, sub := range sandboxPythonTaskInstances(instance, d.multimodule) {
-			variant := sandboxPythonTaskVariant(d.multimodule, sub.Kind, sub.Language)
+		if first.Kind == instance.Kind && first.Language == instance.Language {
+			info.ExcludedVariants = map[STR]bool{}
 
-			info.ExcludedVariants[internStr(variant)] = moduleExcludesTag(d, variant)
-		}
+			for _, sub := range sandboxPythonTaskInstances(instance, d.multimodule) {
+				variant := sandboxPythonTaskVariant(d.multimodule, sub.Kind, sub.Language)
 
-		for _, excluded := range strings.Fields(instance.Platform.ifEnv.string(envExcludeSubmodules)) {
-			info.ExcludedVariants[internStr(excluded)] = true
+				info.ExcludedVariants[internStr(variant)] = moduleExcludesTag(d, variant)
+			}
+
+			for _, excluded := range strings.Fields(instance.Platform.ifEnv.string(envExcludeSubmodules)) {
+				info.ExcludedVariants[internStr(excluded)] = true
+			}
 		}
 	}
 
 	excluded := moduleExcludesTag(d, tag)
 
-	if isSandboxPython2Task(d.multimodule) {
+	if hasSandboxPython2Library(d.multimodule) {
 		excluded = sandboxPythonTaskExcluded(ctx, instance, tag)
 	}
 

@@ -1340,7 +1340,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	excluded := moduleExcludesTag(d, tag)
 
-	if isSandboxPython2Task(moduleName) {
+	if hasSandboxPython2Library(moduleName) {
 		excluded = sandboxPythonTaskExcluded(ctx, instance, tag)
 	}
 

@@ -19,7 +19,7 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 	instance := ctx.rootInstanceForDeclaration(dir, demandSelf, declaration)
 	name := declaration.Name
 
-	if isSandboxPython2Task(name) {
+	if hasSandboxPython2Library(name) {
 		configureCythonDirectory(ctx, instance)
 	}
 
@@ -178,7 +178,7 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 
 		excluded := moduleExcludesTag(d, tag)
 
-		if isSandboxPython2Task(name) {
+		if hasSandboxPython2Library(name) {
 			excluded = sandboxPythonTaskExcluded(ctx, peer, tag)
 		}
 
@@ -261,7 +261,7 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 
 	env := buildIfEnvInto(&frame.ifEnv, instance)
 	d := collectModuleInto(ctx, instance, moduleStmts(ctx, instance.Path.relString()), env, ctx.onWarn, &frame.d)
-	e := &EmitContext{ctx: ctx, instance: instance, d: d}
+	e := &EmitContext{ctx: ctx, frame: frame, instance: instance, d: d}
 
 	for _, language := range d.selfPeers {
 		peer := instance

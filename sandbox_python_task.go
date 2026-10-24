@@ -6,11 +6,15 @@ import (
 )
 
 func isSandboxPythonTask(name TOK) bool {
-	return name == tokSandboxPy3Task || isSandboxPython2Task(name)
+	return name == tokSandboxPy3Task || hasSandboxPython2Library(name)
 }
 
 func isSandboxPython2Task(name TOK) bool {
 	return name == tokSandboxTask || name == tokSandboxPy23Task
+}
+
+func hasSandboxPython2Library(name TOK) bool {
+	return isSandboxPython2Task(name) || name == tokSandboxPy233Task
 }
 
 func sandboxPythonTaskVariant(name TOK, kind ModuleKind, language Language) string {
@@ -18,7 +22,7 @@ func sandboxPythonTaskVariant(name TOK, kind ModuleKind, language Language) stri
 		return "SB_TASK_BIN"
 	}
 
-	if name == tokSandboxTask || name == tokSandboxPy23Task && language == LangPy2 {
+	if name == tokSandboxTask || hasSandboxPython2Library(name) && language == LangPy2 {
 		return "PY2"
 	}
 
@@ -32,7 +36,7 @@ func sandboxPythonTaskInstances(instance ModuleInstance, name TOK) []ModuleInsta
 
 	instance.Kind = KindLib
 
-	if isSandboxPython2Task(name) {
+	if hasSandboxPython2Library(name) {
 		instance.Language = LangPy2
 		instances = append(instances, instance)
 
@@ -43,11 +47,21 @@ func sandboxPythonTaskInstances(instance ModuleInstance, name TOK) []ModuleInsta
 		instance.Language = LangCPP
 	}
 
-	return append(instances, instance)
+	instances = append(instances, instance)
+
+	if name == tokSandboxPy233Task {
+		binary := instances[0]
+
+		copy(instances, instances[1:])
+		instances[len(instances)-1] = binary
+	}
+
+	return instances
 }
 
 func sandboxPythonTaskExcluded(ctx *GenCtx, instance ModuleInstance, tag string) bool {
-	instance.Kind, instance.Language, instance.Demand = KindBin, LangCPP, demandNone
+	instance = sandboxPythonTaskInstances(instance, ctx.moduleName(instance.Path.relString()))[0]
+	instance.Demand = demandNone
 
 	first, _ := ctx.scannerFor(instance).codegen.sourceModule(instance)
 
@@ -63,9 +77,15 @@ func sandboxPythonTaskUnit(name TOK, kind ModuleKind, language Language) ModuleU
 		return resolveModuleUnitBare(tokPy2Library, kind, language)
 	}
 
-	if name == tokSandboxPy23Task {
+	if name == tokSandboxPy23Task || name == tokSandboxPy233Task {
 		if kind == KindBin {
-			return resolveModuleUnitBare(tokPy2Program, kind, language)
+			program := tokPy2Program
+
+			if !isSandboxPython2Task(name) {
+				program = tokPy3ProgramBin
+			}
+
+			return resolveModuleUnitBare(program, kind, language)
 		}
 
 		unit := resolveModuleUnitBare(tokPy23Library, kind, language)
@@ -91,6 +111,17 @@ func setupSandboxPythonTask(name TOK, modulePath string, kind ModuleKind, langua
 
 	d.multimodule = name
 	d.unit.HashTag = internStr(sandboxPythonTaskVariant(name, kind, language))
+
+	if name == tokSandboxPy233Task && kind == KindLib && language != LangPy2 {
+		prefix := "libpy3"
+
+		if env.string(envMsvc) == "yes" || env.string(envCygwin) == "yes" {
+			prefix = "py3"
+		}
+
+		d.unit.ARPrefix = prefix
+		env.setString(envMODULE_PREFIX, prefix)
+	}
 
 	python2 := d.unit.Tag == unitTagPy2
 
@@ -141,4 +172,30 @@ func (e *EmitContext) sandboxTaskPeerLanguage(peer VFS, language Language) Langu
 	}
 
 	return LangPy2
+}
+
+func (e *EmitContext) sandboxMixedTaskPeer(peer ModuleInstance) ModuleInstance {
+	packagePeer := e.d.multimodule == tokPackage || e.d.unit.Type == tokPackageFinal
+	py2 := peer.Language == LangPy2 || packagePeer
+
+	py3 := packagePeer || !isGoModuleType(e.d.unit.Type) && e.d.nots == nil && e.d.docs == nil &&
+		e.d.moduleStmt.Name != tokGenLibrary && e.d.moduleStmt.Name != tokResourcesLibrary && peer.Language != LangPy2
+
+	if tags, bound := (Environment{s: &e.frame.ifEnv}).lookup("PEERDIR_TAGS"); bound {
+		allowed := strings.Fields(tags)
+
+		py2, py3 = slices.Contains(allowed, "PY2"), slices.Contains(allowed, "PY3")
+	}
+
+	configureCythonDirectory(e.ctx, peer)
+
+	if py2 && !sandboxPythonTaskExcluded(e.ctx, peer, "PY2") {
+		peer.Language = LangPy2
+	} else if py3 && !sandboxPythonTaskExcluded(e.ctx, peer, "PY3") {
+		peer.Language = LangCPP
+	} else {
+		throwFmt("gen: %s: PEERDIR to %s is prohibited by incompatible tags", e.instance.Path.relString(), peer.Path.relString())
+	}
+
+	return peer
 }
