@@ -123,6 +123,12 @@ func (ctx *GenCtx) emitDiscoveredModuleTests(suites []*TestSuite) {
 	outputs, mainOutputs := ctx.projectModuleIndex(suites)
 
 	for _, suite := range suites {
+		if suite.importCheckEnv && ctx.testSuiteSelected(suite) && len(outputs[source(suite.projectPath)]) == 0 {
+			ctx.onWarn(Warn{Kind: WarnTestDependency, Message: fmt.Sprintf("cannot resolve project dependency %s for import_test", suite.projectPath)})
+
+			continue
+		}
+
 		for _, project := range suite.dependencyProjects {
 			suite.deps = append(suite.deps, mainOutputs[project]...)
 		}

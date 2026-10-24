@@ -2712,7 +2712,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		result.SbomComponentPath = ownSbomPath
 		result.ResourceGlobalClosure = resourceGlobalsClosure
 		result.TestSuites = append(result.TestSuites, e.testRunSuites(ldPath, ldRef, resourceGlobalsClosure)...)
-		result.TestSuites = append(result.TestSuites, e.importTestSuites(ldPath, ldRef, resourceGlobalsClosure)...)
+		result.TestSuites = append(result.TestSuites, e.importTestSuites(ldPath, resourceGlobalsClosure)...)
 
 		ctx.memoPut(instance, result)
 

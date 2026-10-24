@@ -88,7 +88,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	return []*TestSuite{s}
 }
 
-func (e *EmitContext) importTestSuites(binary VFS, ref NodeRef, globals []ResourceDecl) []*TestSuite {
+func (e *EmitContext) importTestSuites(binary VFS, globals []ResourceDecl) []*TestSuite {
 	d := e.d
 
 	if !e.ctx.testMode || !isPyProgramType(d.moduleStmt.Name) && !d.pythonSourceProgram || d.noCheckImportsDisabled {
@@ -102,7 +102,7 @@ func (e *EmitContext) importTestSuites(binary VFS, ref NodeRef, globals []Resour
 	project := e.instance.Path.relString()
 
 	s := &TestSuite{p: e.ctx.target, projectPath: project, name: "import_test", testType: "import_test", ciType: "test", size: "small",
-		timeout: testSizeTimeouts["small"], runInputs: []VFS{source(project)}, checkFiles: []VFS{binary}, deps: depRefs(ref), globals: globals,
+		timeout: testSizeTimeouts["small"], runInputs: []VFS{source(project)}, checkFiles: []VFS{binary}, globals: globals,
 		env: d.test.env, supportsTestParameters: true, smoothShutdown: []string{"SIGUSR2"}, importCheckEnv: true, noRetries: true, projectBuildDeps: true}
 
 	skips := slices.Clone(d.noCheckImports)
