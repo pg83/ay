@@ -195,6 +195,7 @@ type GenCtx struct {
 	parsers          *IncludeParserManager
 	emit             *StreamingEmitter
 	onWarn           func(Warn)
+	fixCppIncludes   bool
 	keepGoing        bool
 	na               *NodeArenas
 	inclArgValues    DenseMap[VFS, STR]

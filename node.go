@@ -36,6 +36,7 @@ type Node struct {
 	TextInputs          []VFS          `json:"-"`
 	InputNames          []STR          `json:"-"`
 	InputClosure        Closure        `json:"-"`
+	CppIncludeContext   *ScanContext   `json:"-"`
 	InputClosures       []Closure      `json:"-"`
 	KV                  *KV            `json:"kv"`
 	KVExts              []KVExt        `json:"-"`

@@ -1,5 +1,7 @@
 package main
 
+import "slices"
+
 type foreignToolCandidate struct {
 	path     ARG
 	instance ModuleInstance
@@ -65,7 +67,7 @@ func (ctx *GenCtx) bindForeignTools() {
 
 	ctx.resolveCythonSourceUses()
 
-	if len(bindings.order) == 0 {
+	if len(bindings.order) == 0 && !ctx.fixCppIncludes {
 		return
 	}
 
@@ -77,6 +79,8 @@ func (ctx *GenCtx) bindForeignTools() {
 		var visited BitSet
 
 		stack := append([]NodeRef(nil), bindings.startRefs...)
+
+		slices.Reverse(stack)
 
 		for len(stack) > 0 {
 			ref := stack[len(stack)-1]
@@ -115,10 +119,19 @@ func (ctx *GenCtx) bindForeignTools() {
 				}
 			}
 
+			if node.CppIncludeContext != nil {
+				ctx.repairCppSourceInputs(node)
+			}
+
 			deps, module := ctx.moduleBuildDeps(ref)
 
 			if !module {
 				deps = node.DepRefs
+			}
+
+			if ctx.fixCppIncludes {
+				deps = append([]NodeRef(nil), deps...)
+				slices.Reverse(deps)
 			}
 
 			stack = append(stack, deps...)

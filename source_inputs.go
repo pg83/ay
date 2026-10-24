@@ -209,3 +209,71 @@ func (ctx *GenCtx) resolveCythonScannerUses(s *IncludeScanner) bool {
 
 	return changed
 }
+
+func (ctx *GenCtx) repairCppSourceInputs(node *Node) {
+	view := node.InputClosure
+	s := view.scanner
+	sc := s.getScanCtx(node.CppIncludeContext, scanDomainCC, nil)
+
+	defer s.putScanCtx(sc)
+
+	sc.retryMissing = true
+
+	seen := make(map[VFS]bool)
+
+	var refs []NodeRef
+
+	var visit func(VFS)
+	visit = func(input VFS) {
+		if seen[input] {
+			return
+		}
+
+		seen[input] = true
+
+		if input.isBuild() {
+			if info := s.codegen.lookup(input); info != nil {
+				refs = append(refs, info.ProducerRef)
+			}
+		}
+
+		entry := sc.resolvedChildren(input)
+		parser := s.parsers.registry.registeredParserFor(input.relString())
+
+		if parsed, ok := s.parsers.cache.parsed.get(input.rel()); ok {
+			parser = parsed.parser
+		}
+
+		if _, cpp := parser.(CIncludeDirectiveParser); cpp && input.isSource() && entry.Diagnostics != nil {
+			children := append([]VFS(nil), entry.Paths...)
+
+			var remaining []IncludeDiagnostic
+
+			for _, diagnostic := range entry.Diagnostics.Entries {
+				include := diagnostic.Directive
+
+				include.kind = includeSystem
+				sc.diagnostics = nil
+				children = sc.resolve(children, input, 0, include)
+
+				if len(sc.diagnostics) > 0 {
+					remaining = append(remaining, diagnostic)
+				}
+
+				sc.diagnostics = nil
+			}
+
+			entry = s.putChildren(input, children, remaining)
+		}
+
+		s.sourceFiles.children.put(input, entry.Paths)
+		s.reportDiagnostics(entry.Diagnostics)
+
+		for _, child := range entry.Paths {
+			visit(child)
+		}
+	}
+
+	visit(view.self)
+	node.DepRefs = ctx.na.uniqueRefs(node.DepRefs, refs)
+}

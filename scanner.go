@@ -121,6 +121,7 @@ type ScanCtx struct {
 	parser        IncludeDirectiveParser
 	tjc           *TarjanCtx
 	tsImports     bool
+	retryMissing  bool
 }
 
 func (s *IncludeScanner) closure(v VFS) (Closure, bool) {
@@ -339,6 +340,7 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 	sc.scCfg = ctx.config(scanDomainSc)
 	sc.parser = parser
 	sc.tsImports = domain == scanDomainAux
+	sc.retryMissing = false
 
 	if domain == scanDomainCC {
 		sc.protoCfg = ctx.parsers.resolveScanConfig(ctx.protoInclude, nil, ctx.base)
@@ -463,6 +465,11 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	}
 
 	own, compileExtra, info, inducedBucket := s.parsedIncludes(vfsPath, parser)
+
+	if sc.retryMissing {
+		compileExtra = nil
+		inducedBucket = parsedIncludesLocal
+	}
 
 	if len(own) == 0 && len(compileExtra) == 0 && !vfsPath.isBuild() {
 		return out
@@ -1032,12 +1039,12 @@ func (sc *ScanCtx) resolveContextSearchTier(targetID STR) VFS {
 	key := splitMix64(sc.cfg.num, uint32(targetID))
 	hot := &s.searchTierHot[key&searchTierHotMask]
 
-	if hot.key == key {
+	if hot.key == key && (hot.val != 0 || !sc.retryMissing) {
 		return hot.val
 	}
 
 	if s.searchTierSeen.has(uint32(targetID)) {
-		if cached := s.searchTierFlat.get(key); cached != nil {
+		if cached := s.searchTierFlat.get(key); cached != nil && (*cached != 0 || !sc.retryMissing) {
 			hot.key = key
 			hot.val = *cached
 
