@@ -121,16 +121,16 @@ func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirec
 	parser := pm.registry.registeredParserFor(rel)
 	bucket := parsedIncludesLocal
 
-	if _, ok := parser.(RagelIncludeDirectiveParser); ok {
-		bucket = parsedIncludesRagelNative
-	}
-
 	if parser == nil {
 		parser = ctxParser
 
 		if parser == nil {
 			parser = pm.registry.defaultParser
 		}
+	}
+
+	if _, ok := parser.(RagelIncludeDirectiveParser); ok {
+		bucket = parsedIncludesRagelNative
 	}
 
 	if parser == IncludeDirectiveParser(emptyParser) || !pm.fs.isFilePathClean(rel) {

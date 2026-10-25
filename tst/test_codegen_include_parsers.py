@@ -33,7 +33,7 @@ class ContextParserTest(unittest.TestCase):
         self.assertEqual(run["inputs"][:3], [
             "$(B)/tools/gen/gen", "$(S)/mod/x.rl", "$(S)/mod/y.l",
         ])
-        self.assertEqual(run["inputs"][3:], ["$(S)/mod/rdefs.inc"])
+        self.assertEqual(run["inputs"][3:], ["$(S)/mod/rdefs.inc", "$(S)/mod/r2.rl"])
 
         yasm = lib.node_by_output(graph, "$(B)/mod/a.o")
         self.assertEqual(yasm["inputs"][:2], [

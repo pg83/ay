@@ -22,7 +22,49 @@ SCANNER = (
 )
 
 
+def inherited_files(extension='asset'):
+    files = {
+        'mod/ya.make': 'LIBRARY()\nNO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\nSRCS(scan.rl6)\nEND()\n',
+        'mod/scan.rl6': f'%%{{\n  machine root;\n  include "mid.{extension}";\n}}%%\n',
+        f'mod/mid.{extension}': '#include "cpp.h"\n%%{\n  machine mid;\n  include "leaf.rli";\n}%%\n',
+        'mod/leaf.rli': '%%{\n  machine leaf;\n}%%\n',
+        'mod/cpp.h': '',
+    }
+    lib.tool_program(files, 'contrib/tools/ragel6', 'ragel6')
+    return files
+
+
 class Ragel6Test(unittest.TestCase):
+    def test_inherited_parser_keeps_native_and_induced_include_buckets(self):
+        for extension in ('rli', 'asset'):
+            with self.subTest(extension=extension):
+                graph = lib.make(inherited_files(extension), 'mod', '--sandboxing',
+                                 '--target-platform', 'default-linux-x86_64')
+                generated = lib.node_by_output(graph, '$(B)/mod/scan.rl6.cpp')
+                self.assertCountEqual(generated['inputs'], [
+                    RAGEL6, '$(S)/mod/scan.rl6',
+                    f'$(S)/mod/mid.{extension}', '$(S)/mod/leaf.rli',
+                ])
+                tool = lib.node_by_output(graph, RAGEL6)
+                self.assertEqual(generated['deps'], [tool['uid']])
+                compiled = lib.node_by_output(graph, '$(B)/mod/scan.rl6.cpp.o')
+                self.assertEqual(compiled['inputs'], ['$(B)/mod/scan.rl6.cpp'])
+                self.assertEqual(compiled['deps'], [generated['uid']])
+                archive = lib.node_by_output(graph, '$(B)/mod/libmod.a')
+                self.assertCountEqual(archive['inputs'], [
+                    '$(B)/mod/scan.rl6.cpp.o', '$(S)/build/scripts/link_lib.py',
+                ])
+                self.assertEqual(archive['deps'], [compiled['uid']])
+
+    def test_inherited_parser_reports_missing_native_include(self):
+        files = inherited_files()
+        del files['mod/leaf.rli']
+        result = lib.make_process(files, 'mod', '--sandboxing',
+                                  '--target-platform', 'default-linux-x86_64')
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn('leaf.rli', result.stderr)
+        self.assertIn('mid.asset', result.stderr)
+
     def test_ragel6_sources_native_includes_and_output_names(self):
         files = {
             "mod/ya.make": (
