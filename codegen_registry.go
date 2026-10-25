@@ -225,6 +225,7 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 	}
 
 	sources := vfsScratches.get()
+	roots := vfsScratches.get()
 
 	for _, member := range members {
 		if info := r.lookup(member); info != nil {
@@ -233,20 +234,33 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 			}
 
 			sources = append(sources, info.InputLoopSources...)
+
+			// Only parsed command bindings contribute included inputs to loop commands.
+			if info.IncludedInputs != nil {
+				roots = append(roots, info.IncludedInputs.Roots...)
+			}
 		}
 	}
 
-	if len(sources) > 0 {
+	if len(sources)+len(roots) > 0 {
 		shared := r.na.dedupClosure(sources)
+
+		var included *IncludedInputPlan
+
+		if len(roots) > 0 {
+			included = &IncludedInputPlan{Roots: r.na.dedupClosure(roots)}
+		}
 
 		for _, member := range members {
 			if info := r.lookup(member); info != nil {
 				info.InputLoopSources = shared
+				info.IncludedInputs = included
 			}
 		}
 	}
 
 	vfsScratches.put(sources)
+	vfsScratches.put(roots)
 }
 
 func (r *CodegenRegistry) inheritParsedIncludes(output VFS, producer NodeRef, inherited ParsedIncludeSet) {

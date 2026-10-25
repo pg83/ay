@@ -87,6 +87,15 @@ func (p *NodeInputs) evaluate() InputChunks {
 	for _, root := range p.sourceRoots {
 		if info := p.scanner.codegen.lookup(root); info != nil {
 			includedSources = append(includedSources, info.InputLoopSources)
+
+			// Native loop inputs share physical included files, not sibling BuildFrom producers.
+			if info.IncludedInputs != nil {
+				for _, parsed := range info.IncludedInputs.Roots {
+					closure := p.scanner.establishedClosure(parsed)
+
+					includedSources = append(includedSources, closure.collect(p.na, VFS.isSource))
+				}
+			}
 		}
 	}
 

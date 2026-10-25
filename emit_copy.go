@@ -106,6 +106,10 @@ func (e *EmitContext) registerCopyFile(entry CopyFileEntry) (CopyEmitState, *Gen
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 		}
 
+		if entry.WithContext {
+			info.IncludedInputs = &IncludedInputPlan{Roots: ctx.na.vfsList(srcVFS)}
+		}
+
 		if strings.HasSuffix(srcVFS.relString(), ".in") {
 			if srcVFS.isSource() && !entry.WithContext {
 				reg.forwardTextTemplates(dstVFS, ctx.na.vfsList(srcVFS))

@@ -207,6 +207,55 @@ class TemplateTextEdgesTest(unittest.TestCase):
             [TOOL, BUILD + "copied.h.in", BUILD + "other_copy.h.in", *originals, LEFT, DETAIL],
             [tool["uid"], *[cp["uid"] for cp in copies]])
 
+    def test_mixed_loop_shares_parsed_sources_but_keeps_generated_input_on_its_command(self):
+        files = workspace("ADDINCL(${BINDIR})\nADDINCL(${ARCADIA_BUILD_ROOT}/vellum)\n"
+            + "RUN_PROGRAM(tools/reader IN seed.dat OUT_NOAUTO generated.h)\n"
+            + copied().replace("copied.h.in)", "copied.h.in OUTPUT_INCLUDES other_copy.h.in)")
+            + "COPY_FILE_WITH_CONTEXT(other.h.in other_copy.h.in OUTPUT_INCLUDES copied.h.in)\n" + consumer())
+        files["shared/pattern.h.in"] = '#include "opaque-only.h"\n'
+        files["includes/left/opaque-only.h"] = "// real but opaque\n"
+        files["vellum/other.h.in"] = '#include "choice.h"\n#include "generated.h"\n'
+        files["vellum/seed.dat"] = "real generator input\n"
+        graph = self.make(files)
+        tool = lib.node_by_output(graph, TOOL)
+        generated = lib.node_by_output(graph, BUILD + "generated.h")
+        self.assertEqual(generated["outputs"], [BUILD + "generated.h"])
+        self.assertEqual(set(generated["inputs"]), {TOOL, "$(S)/vellum/seed.dat"})
+        self.assertEqual(generated["deps"], [tool["uid"]])
+        sources = [SOURCE, "$(S)/vellum/other.h.in", LEFT, DETAIL]
+        opaque = self.assert_copy(graph, BUILD + "copied.h.in", SOURCE, sources, [])
+        parsed = self.assert_copy(graph, BUILD + "other_copy.h.in", "$(S)/vellum/other.h.in",
+            [*sources, BUILD + "generated.h"], [generated["uid"]])
+        self.assert_run(graph, BUILD + "result.model", BUILD + "copied.h.in",
+            [TOOL, BUILD + "copied.h.in", BUILD + "other_copy.h.in", BUILD + "generated.h", *sources],
+            [tool["uid"], opaque["uid"], parsed["uid"], generated["uid"]])
+
+    def test_mixed_loop_build_context_shares_included_sources_without_generator_inputs(self):
+        files = workspace("ADDINCL(${BINDIR})\nADDINCL(${ARCADIA_BUILD_ROOT}/vellum)\n"
+            "RUN_PROGRAM(tools/reader IN seed.dat OUT_NOAUTO generated.h "
+            "OUTPUT_INCLUDES ${ARCADIA_ROOT}/shared/generated-context.h)\n"
+            "COPY_FILE_WITH_CONTEXT(${ARCADIA_BUILD_ROOT}/vellum/generated.h copied.h.in "
+            "OUTPUT_INCLUDES other_copy.h.in)\n"
+            "COPY_FILE(other.h.in other_copy.h.in OUTPUT_INCLUDES copied.h.in)\n" + consumer())
+        files["shared/pattern.h.in"] = '#include "opaque-only.h"\n'
+        files["includes/left/opaque-only.h"] = "// real but opaque\n"
+        files["vellum/other.h.in"] = '#include "choice.h"\n'
+        files["shared/generated-context.h"] = '#include "choice.h"\n'
+        files["vellum/seed.dat"] = "real generator input\n"
+        graph = self.make(files)
+        tool = lib.node_by_output(graph, TOOL)
+        generated = lib.node_by_output(graph, BUILD + "generated.h")
+        self.assertEqual(generated["outputs"], [BUILD + "generated.h"])
+        self.assertEqual(set(generated["inputs"]), {TOOL, "$(S)/vellum/seed.dat"})
+        self.assertEqual(generated["deps"], [tool["uid"]])
+        sources = ["$(S)/shared/generated-context.h", LEFT, DETAIL, "$(S)/vellum/other.h.in"]
+        parsed = self.assert_copy(graph, BUILD + "copied.h.in", BUILD + "generated.h",
+            [BUILD + "generated.h", *sources], [generated["uid"]])
+        opaque = self.assert_copy(graph, BUILD + "other_copy.h.in", "$(S)/vellum/other.h.in", sources, [])
+        self.assert_run(graph, BUILD + "result.model", BUILD + "copied.h.in",
+            [TOOL, BUILD + "copied.h.in", BUILD + "other_copy.h.in", BUILD + "generated.h", *sources],
+            [tool["uid"], opaque["uid"], parsed["uid"], generated["uid"]])
+
     def test_python_runner_uses_the_same_source_text_boundary(self):
         for kind, parsed in (("IN", [LEFT, DETAIL]), ("IN_NOPARSE", [])):
             with self.subTest(kind=kind):
