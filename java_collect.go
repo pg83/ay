@@ -165,6 +165,23 @@ func (d *JavaData) expandJavaProtobufPeers() {
 
 func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment) *JavaData {
 	d := &JavaData{jdkReal: ctx.javaDefaultJDK(), env: env, lintLevel: "extended", abiJar: true, srcDirs: []VFS{jm.path}}
+	sourcesJar := env.string(envBUILD_TYPE) == "DEBUG" && env.string(envNO_DEBUGINFO) != "yes"
+	sbom := sbomActive(ctx, jm.instance)
+
+	d.embedSbom = sbom || ctx.sbomEnabled && env.bool(envEmbedSbom)
+
+	for _, flag := range []struct {
+		name  ENV
+		value bool
+	}{
+		{envSourcesJar, sourcesJar},
+		{envEmbedSbom, sbom},
+		{envNeedSbomInfo, sbom},
+	} {
+		if !env.hasBindingID(flag.name) {
+			env.setBool(flag.name, flag.value)
+		}
+	}
 
 	d.javacOpts.base = []string{"-J-XX:ActiveProcessorCount=4"}
 	d.javacOpts.cur = d.javacOpts.base
@@ -183,6 +200,11 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 
 	collectJavaStmts(ctx, jm, d, stmts, env)
 	collectJavaAutoinclude(ctx, jm, d, env)
+
+	d.sourcesJar = env.bool(envSourcesJar)
+	d.embedSbom = d.embedSbom || ctx.sbomEnabled && env.bool(envEmbedSbom)
+	d.needSbomInfo = env.bool(envNeedSbomInfo)
+	d.modver = strings.Join(strings.Fields(env.string(envModver)), ".")
 
 	for _, name := range javaUberjarFlagVars {
 		value, _ := env.lookup(name)
@@ -514,6 +536,12 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	}
 
 	switch name {
+	case "VERSION":
+		env.setString(envModver, strings.Join(args, " "))
+	case "LICENSE":
+		if ctx.sbomEnabled && env.bool(envNeedSbomInfo) {
+			d.sbomComponent = true
+		}
 	case "FLATC_FLAGS":
 		d.flatcFlags = append(d.flatcFlags, internAnys(args)...)
 	case "SET_APPEND":
@@ -895,8 +923,6 @@ func javaProtoPluginMacro(d *JavaData, args []string) {
 
 func javaEnableFlag(d *JavaData, name string, on bool) {
 	switch name {
-	case "SOURCES_JAR":
-		d.sourcesJar = on
 	case "KOTLIN_PROTO":
 		d.kotlinProto = on
 	case "DISABLE_SCRIPTGEN":

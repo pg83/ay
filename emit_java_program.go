@@ -233,7 +233,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 		b.setKV(pkUJ, pcNone, false)
 		b.closure(closure)
 		b.macroOuts(jm)
-		b.emitTo(jm.outRef)
+		b.emitModule(jm)
 
 		return
 	}
@@ -299,7 +299,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 	b.closure(closure)
 	b.macroOuts(jm)
 	b.setKV(pkJP, pcLightBlue, true)
-	b.emitTo(jm.outRef)
+	b.emitModule(jm)
 }
 
 func javaEntryPaths(closure []JavaClosureEntry) []VFS {

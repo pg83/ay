@@ -36,7 +36,8 @@ func pythonToolchainSbomComponent(ctx *GenCtx, platform *Platform) (*NodeRef, *V
 }
 
 func sbomActive(ctx *GenCtx, instance ModuleInstance) bool {
-	return ctx.sbomEnabled && instance.Platform.OS == OSLinux && instance.Platform.ISA == ISAX8664 && !instance.Platform.ifEnv.bool(envAutocheck)
+	return ctx.sbomEnabled && instance.Platform.OS == OSLinux && instance.Platform.ISA == ISAX8664 &&
+		!instance.Platform.ifEnv.bool(envAutocheck) && instance.Platform.ifEnv.string(envSbomGenerationAllowed) != "no"
 }
 
 func sbomQualifies(d *ModuleData) bool {

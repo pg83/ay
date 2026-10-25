@@ -326,6 +326,10 @@ type JavaData struct {
 	testEnv           []string
 	test              javaTestData
 	sourcesJar        bool
+	embedSbom         bool
+	needSbomInfo      bool
+	sbomComponent     bool
+	modver            string
 	noYmakePython3    bool
 	env               Environment
 }

@@ -314,6 +314,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 
 	w = append(w, strYaEndCommandFile.any())
 	b.cmd(w, 0)
+	b.javaSbom(jm, closure)
 	b.cmd(append(b.python("build/scripts/make_manifest_from_bf.py"), bfg.any(), bldBfgJar.any()), 0)
 
 	javac := b.python("build/scripts/run_javac.py")
@@ -425,7 +426,7 @@ func (ctx *GenCtx) javaEmitJar(jm *JavaModule) {
 	b.setKV(pkJV, pcLightBlue, true)
 	b.closure(closure)
 	b.macroOuts(jm)
-	b.emitTo(jm.outRef)
+	b.emitModule(jm)
 }
 
 func (ctx *GenCtx) javaEmitIJar(jm *JavaModule) {
@@ -452,7 +453,7 @@ func (ctx *GenCtx) javaEmitIJar(jm *JavaModule) {
 	b.outputs = []VFS{jm.target}
 	b.deps = append(b.deps, ref, b.use(full.target))
 	b.macroOuts(jm)
-	b.emitTo(jm.outRef)
+	b.emitModule(jm)
 }
 
 func (ctx *GenCtx) javaKaptCmds(jm *JavaModule, b *javaNodeBuilder, compileKt []ANY) {

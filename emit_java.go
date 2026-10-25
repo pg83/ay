@@ -164,7 +164,13 @@ func (jm *JavaModule) outputs() []VFS {
 
 	switch jm.unit.kind {
 	case juContrib, juExternal:
-		return []VFS{jm.target, build(jm.dir, "/", jm.name, "-sources.jar")}
+		outs := []VFS{jm.target, build(jm.dir, "/", jm.name, "-sources.jar")}
+
+		if jm.unit.kind == juContrib && d.sbomComponent {
+			outs = append(outs, build(jm.dir, "/", jm.name, ".component.sbom"))
+		}
+
+		return outs
 	case juIJar, juTest:
 		return []VFS{jm.target}
 	case juRunnable:
@@ -390,7 +396,7 @@ func (ctx *GenCtx) javaEmitTest(jm *JavaModule) {
 	b.macroOuts(jm)
 	b.setKV(pkJT, pcNone, false)
 	b.outputs = []VFS{jm.target}
-	b.emitTo(jm.outRef)
+	b.emitModule(jm)
 }
 
 func (ctx *GenCtx) javaResourceGlobals(jm *JavaModule) []ResourceDecl {
@@ -454,7 +460,7 @@ func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 	globals := ctx.javaGlobals(jm)
 	jdk := javaJDKResource(d.jdkReal)
 
-	b.outputs = []VFS{jm.target, srcJar}
+	b.outputs = jm.outputs()
 
 	fetch := func(id string, out VFS) {
 		args := b.python("build/scripts/fetch_from_sandbox.py")
@@ -506,7 +512,21 @@ func (ctx *GenCtx) javaEmitContrib(jm *JavaModule) {
 		b.setKV(pkFS, pcYellow, false)
 	}
 
-	b.emitTo(jm.outRef)
+	if d.sbomComponent {
+		version := d.modver
+
+		if version == "" {
+			version = "unknown"
+		}
+
+		args := append(b.python(sbomGenScriptRel), strOutput.any(), build(jm.dir, "/", jm.name, ".component.sbom").any(),
+			strType.any(), strLibrary.any(), strPath.any(), internStr(jm.dir).any(),
+			strVer.any(), internStr(version).any(), strLang.any(), strJava4.any())
+
+		b.cmd(args, 0)
+	}
+
+	b.emitModule(jm)
 }
 
 func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
@@ -597,7 +617,7 @@ func (ctx *GenCtx) javaEmitExternal(jm *JavaModule) {
 		b.deps = append(b.deps, b.use(in))
 	}
 
-	b.emitTo(jm.outRef)
+	b.emitModule(jm)
 }
 
 func javaKotlinJVMTarget(jdk string) string {
