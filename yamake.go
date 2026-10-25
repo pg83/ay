@@ -2015,11 +2015,6 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 
 func (p *Parser) parseIf(ifTok Token) *IfStmt {
 	condToks := p.readCondTokens(ifTok)
-
-	if len(condToks) == 0 {
-		p.lex.throwParse(ifTok.line, ifTok.col, "IF requires a condition expression")
-	}
-
 	cond := parseCondExpr(p, ifTok, condToks)
 	thenBody, endTok := p.parseStmts(termIfBody)
 	node := astOne(astIfs, IfStmt{Cond: cond, Then: thenBody, Line: ifTok.line})

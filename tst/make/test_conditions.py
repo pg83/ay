@@ -2,6 +2,16 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ConditionsTest(MakeTest):
+    def test_empty_conditions_choose_else(self):
+        self.write("ya.make", "LIBRARY()\nIF()\nSRCS(first.cpp)\nELSEIF()\nSRCS(second.cpp)\nELSE()\nSRCS(answer.cpp)\nENDIF()\nEND()\n")
+        for name in ("first", "second", "answer"):
+            self.write(name + ".cpp", f"int {name}() {{ return 42; }}\n")
+        graph = self.graph()
+        self.node(graph, "answer.cpp.o")
+        outputs = [path for node in graph["graph"] for path in node["outputs"]]
+        for name in ("first", "second"):
+            self.assertNotIn(f"$(B)/{PROJECT}/{name}.cpp.o", outputs)
+
     def test_compound_conditions(self):
         expressions = (
             'DEFINED VALUE AND NOT DISABLED',
