@@ -21,6 +21,9 @@ class TestDependenciesTest(MakeTest):
                 result = self.make("-t")
                 self.assertNotEqual(result.returncode, 0, "DEPENDS must reject a multimodule without final targets")
 
+        self.write("python/ya.make", "PY23_LIBRARY()\nONLY_TAGS(PY3)\nPY_SRCS(answer.py)\nEND()\n")
+        self.graph("-t")
+
     def test_union_dependencies(self):
         self.write("ya.make", f"EXECTEST()\nDEPENDS({PROJECT}/bundle)\nRUN(${{ARCADIA_BUILD_ROOT}}/{PROJECT}/tool/answer)\nEND()\n")
         self.write("bundle/ya.make", f"UNION()\nPEERDIR({PROJECT}/tool {PROJECT}/library)\nFILES(value.txt)\nEND()\n")

@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 type TestBuildDependency struct {
 	instance ModuleInstance
 	result   *ModuleEmitResult
@@ -193,12 +195,24 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 func (ctx *GenCtx) testBuildDependencies(dir string) []TestBuildDependency {
 	var dependencies []TestBuildDependency
 
-	seen := map[*ModuleEmitResult]bool{}
+	final := false
 
 	for _, instance := range ctx.testDependencyInstances(dir) {
 		dependency := TestBuildDependency{instance, genModule(ctx, instance)}
 
 		dependencies = append(dependencies, dependency)
+		final = final || ctx.runtimeTestDependencyModule(dependency).final
+	}
+
+	if len(dependencies) == 0 || len(dependencies) > 1 && !final {
+		ctx.onWarn(Warn{Kind: WarnBadMacroArgs, Message: fmt.Sprintf("DEPENDS(%s): directory has no selected module or multiple modules without a final target", dir)})
+
+		return nil
+	}
+
+	seen := map[*ModuleEmitResult]bool{}
+
+	for _, dependency := range dependencies {
 		ctx.testDependencyClosure(dependency, seen, true)
 	}
 
