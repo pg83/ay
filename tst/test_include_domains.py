@@ -67,6 +67,133 @@ class AsmIncludeTest(unittest.TestCase):
         )
 
 
+def mixed_parser_files():
+    return {
+        "mod/ya.make": library("SRCS(main.cpp)"),
+        "mod/main.cpp": '#include "bridge.asm"\nint x;\n',
+        "mod/bridge.asm": '%include "tail.asset"\n',
+        "mod/tail.asset": '%include "leaf.inc"\n// #include "wrong.h"\n',
+        "mod/leaf.inc": "",
+        "mod/wrong.h": "",
+    }
+
+
+def parser_realm_files(extension="asset"):
+    return {
+        "mod/ya.make": library("ADDINCL(FOR asm asmdir)", "ADDINCL(ccdir)", "SRCS(main.cpp)"),
+        "mod/main.cpp": '#include "bridge.asm"\nint x;\n',
+        "mod/bridge.asm": f'%include "tail.{extension}"\n',
+        f"mod/tail.{extension}": '%include "choice.inc"\n',
+        "asmdir/choice.inc": "",
+        "asmdir/marker.inc": "",
+        "ccdir/choice.inc": "",
+    }
+
+
+def mixed_ragel_files():
+    return {
+        "mod/ya.make": library("ADDINCL(ccdir)", "SRCS(main.cpp)"),
+        "mod/main.cpp": '#include "bridge.rli"\nint x;\n',
+        "mod/bridge.rli": '%%{\n  machine bridge;\n  include "tail.asset";\n}%%\n',
+        "mod/tail.asset": '%%{\n  machine tail;\n  include "choice.rl";\n}%%\n',
+        "ccdir/choice.rl": "",
+    }
+
+
+class MixedParserIncludesTest(unittest.TestCase):
+    def check_archive(self, graph, producer):
+        archive = lib.node_by_output(graph, "$(B)/mod/libmod.a")
+        self.assertCountEqual(archive["inputs"], [
+            producer["outputs"][0], "$(S)/build/scripts/link_lib.py",
+        ])
+        self.assertEqual(archive["deps"], [producer["uid"]])
+
+    def check_cc(self, files, inputs):
+        graph = lib.make(files, "mod", "--sandboxing",
+                         "--target-platform", "default-linux-x86_64")
+        compiled = lib.node_by_output(graph, "$(B)/mod/main.cpp.o")
+        self.assertCountEqual(compiled["inputs"], inputs)
+        self.assertEqual(compiled["deps"], [])
+        self.check_archive(graph, compiled)
+        return compiled
+
+    def check_missing(self, files, target, includer):
+        result = lib.make_process(files, "mod", "--sandboxing",
+                                  "--target-platform", "default-linux-x86_64")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(target, result.stderr)
+        self.assertIn(includer, result.stderr)
+
+    def test_known_parser_changes_unknown_child_grammar(self):
+        self.check_cc(mixed_parser_files(), [
+            "$(S)/mod/main.cpp", "$(S)/mod/bridge.asm",
+            "$(S)/mod/tail.asset", "$(S)/mod/leaf.inc",
+        ])
+
+    def test_unknown_child_reports_missing_include(self):
+        files = mixed_parser_files()
+        del files["mod/leaf.inc"]
+        self.check_missing(files, "leaf.inc", "/mod/tail.asset")
+
+    def test_registered_and_inherited_asm_use_asm_search_paths(self):
+        for extension in ("asm", "asset"):
+            with self.subTest(extension=extension):
+                compiled = self.check_cc(parser_realm_files(extension), [
+                    "$(S)/mod/main.cpp", "$(S)/mod/bridge.asm",
+                    f"$(S)/mod/tail.{extension}", "$(S)/asmdir/choice.inc",
+                ])
+                args = compiled["cmds"][0]["cmd_args"]
+                self.assertTrue(any("$(S)/ccdir" in arg for arg in args))
+                self.assertFalse(any("$(S)/asmdir" in arg for arg in args))
+
+    def test_missing_asm_include_does_not_fall_back_to_cpp_paths(self):
+        files = parser_realm_files("asm")
+        del files["asmdir/choice.inc"]
+        self.check_missing(files, "choice.inc", "/mod/tail.asm")
+
+    def test_registered_cpp_child_restores_cpp_grammar_and_paths(self):
+        files = {
+            "mod/ya.make": library("ADDINCL(FOR asm asmdir)", "ADDINCL(ccdir)", "SRCS(main.cpp)"),
+            "mod/main.cpp": '#include "bridge.asm"\nint x;\n',
+            "mod/bridge.asm": '%include "tail.h"\n',
+            "mod/tail.h": '#include "fragment.asset"\n',
+            "mod/fragment.asset": '#include "choice.h"\n',
+            "asmdir/choice.h": "",
+            "ccdir/choice.h": "",
+        }
+        self.check_cc(files, [
+            "$(S)/mod/main.cpp", "$(S)/mod/bridge.asm", "$(S)/mod/tail.h",
+            "$(S)/mod/fragment.asset", "$(S)/ccdir/choice.h",
+        ])
+
+    def test_ordinary_asm_root_keeps_its_search_paths(self):
+        files = parser_realm_files()
+        files["mod/ya.make"] = files["mod/ya.make"].replace("SRCS(main.cpp)", "SRCS(bridge.asm)")
+        del files["mod/main.cpp"]
+        lib.tool_program(files, "contrib/tools/yasm", "yasm")
+        graph = lib.make(files, "mod", "--sandboxing",
+                         "--target-platform", "default-linux-x86_64")
+        node = lib.node_by_output(graph, "$(B)/mod/bridge.o")
+        tool = lib.node_by_output(graph, "$(B)/contrib/tools/yasm/yasm")
+        self.assertCountEqual(node["inputs"], [
+            "$(B)/contrib/tools/yasm/yasm", "$(S)/mod/bridge.asm",
+            "$(S)/mod/tail.asset", "$(S)/asmdir/choice.inc",
+        ])
+        self.assertEqual(node["deps"], [tool["uid"]])
+        self.check_archive(graph, node)
+
+    def test_ragel_language_does_not_use_cpp_search_paths(self):
+        self.check_missing(mixed_ragel_files(), "choice.rl", "/mod/tail.asset")
+
+    def test_ragel_language_keeps_local_quoted_include_priority(self):
+        files = mixed_ragel_files()
+        files["mod/choice.rl"] = ""
+        self.check_cc(files, [
+            "$(S)/mod/main.cpp", "$(S)/mod/bridge.rli",
+            "$(S)/mod/tail.asset", "$(S)/mod/choice.rl",
+        ])
+
+
 class CythonIncludeTest(unittest.TestCase):
     def test_cython_global_directories_propagate_through_header_only_peers(self):
         cython3 = "contrib/tools/cython/Cython/Includes"

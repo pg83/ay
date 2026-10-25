@@ -108,12 +108,10 @@ type ScanCtx struct {
 	diagnostics []IncludeDiagnostic
 	scanner     *IncludeScanner
 	cfg         *ScanConfig
-	ccCfg       *ScanConfig
-	cythonCfg   *ScanConfig
-	protoCfg    *ScanConfig
-	scCfg       *ScanConfig
+	context     *ScanContext
 	parser      IncludeDirectiveParser
 	tjc         *TarjanCtx
+	domain      ScanDomain
 	tsImports   bool
 	noResolve   bool
 	initialOnly bool
@@ -366,20 +364,10 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 	sc.initialOnly = false
 	sc.readOnly = false
 	sc.cfg = ctx.config(domain)
-	sc.ccCfg = nil
-	sc.cythonCfg = ctx.config(scanDomainCython)
-	sc.protoCfg = nil
-	sc.scCfg = ctx.config(scanDomainSc)
+	sc.context = ctx
+	sc.domain = domain
 	sc.parser = parser
 	sc.tsImports = domain == scanDomainAux
-
-	if domain == scanDomainCC {
-		sc.protoCfg = ctx.parsers.resolveScanConfig(ctx.protoInclude, nil, ctx.base)
-	}
-
-	if domain == scanDomainSwig || domain == scanDomainSc {
-		sc.ccCfg = ctx.config(scanDomainCC)
-	}
 
 	sc.tjc = tarjans.get()
 
@@ -409,6 +397,63 @@ func hashScanConfig(ownAddIncl, peerAddIncl, baseSearchPaths []VFS) uint64 {
 	mixSlice(baseSearchPaths)
 
 	return h
+}
+
+func (sc *ScanCtx) setFileParser(file VFS) {
+	if sc.context == nil {
+		return
+	}
+
+	if parser := sc.scanner.parsers.registry.registeredParserFor(file.relString()); parser != nil {
+		sc.parser = parser
+	} else if file.isSource() {
+		if cached, ok := sc.scanner.parsers.cache.parsed.get(file.rel()); ok {
+			sc.parser = cached.parser
+		}
+	}
+
+	sc.cfg = sc.parserConfig()
+}
+
+func (sc *ScanCtx) parserConfig() *ScanConfig {
+	ctx := sc.context
+
+	switch sc.parser.(type) {
+	case YasmIncludeDirectiveParser:
+		return ctx.config(scanDomainAsm)
+	case CythonIncludeDirectiveParser:
+		return ctx.config(scanDomainCython)
+	case SwigIncludeDirectiveParser:
+		return ctx.config(scanDomainSwig)
+	case ScIncludeDirectiveParser:
+		return ctx.config(scanDomainSc)
+	case FlatbuffersIncludeDirectiveParser:
+		return ctx.config(scanDomainFlatc)
+	case RosIncludeDirectiveParser:
+		return ctx.config(scanDomainRos)
+	case ProtoIncludeDirectiveParser, CfgProtoIncludeDirectiveParser:
+		if sc.domain != scanDomainProto {
+			return ctx.parsers.resolveScanConfig(ctx.protoInclude, nil, ctx.base)
+		}
+
+		return ctx.config(scanDomainProto)
+	case CIncludeDirectiveParser, GoCgoIncludeDirectiveParser, FortranIncludeDirectiveParser, LexIncludeDirectiveParser, SsqlsIncludeDirectiveParser:
+		if sc.domain == scanDomainGoAsm || sc.domain == scanDomainAux {
+			return ctx.config(sc.domain)
+		}
+
+		return ctx.config(scanDomainCC)
+	case TSIncludeDirectiveParser:
+		if sc.domain == scanDomainAux {
+			return ctx.config(scanDomainAux)
+		}
+
+		return ctx.parsers.resolveScanConfig(nil, nil, ctx.base)
+	case RagelIncludeDirectiveParser, NlgIncludeDirectiveParser:
+		return ctx.parsers.resolveScanConfig(nil, nil, ctx.base)
+	default:
+		return sc.cfg
+	}
 }
 
 func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveParser) (own, compileExtra []IncludeDirective, info *GeneratedFileInfo, inducedBucket ParsedIncludeBucket) {
@@ -451,50 +496,12 @@ func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIn
 
 func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 	s := sc.scanner
-	parser := sc.parser
-
-	if sc.protoCfg != nil {
-		switch s.parsers.registry.registeredParserFor(vfsPath.relString()).(type) {
-		case ProtoIncludeDirectiveParser, CfgProtoIncludeDirectiveParser:
-			cfg := sc.cfg
-
-			sc.cfg = sc.protoCfg
-
-			defer func() { sc.cfg = cfg }()
-		}
-	}
-
-	if sc.ccCfg != nil && sc.parser != IncludeDirectiveParser(swigParser) {
-		cfg := sc.cfg
-
-		sc.cfg = sc.ccCfg
-		parser = cParser
-
-		defer func() { sc.cfg = cfg }()
-	}
-
-	if _, ok := s.parsers.registry.registeredParserFor(vfsPath.relString()).(CythonIncludeDirectiveParser); ok {
-		cfg := sc.cfg
-
-		sc.cfg = sc.cythonCfg
-
-		defer func() { sc.cfg = cfg }()
-	}
-
-	if sc.parser == IncludeDirectiveParser(scParser) {
-		cfg := sc.cfg
-
-		sc.cfg = sc.scCfg
-		parser = scParser
-
-		defer func() { sc.cfg = cfg }()
-	}
 
 	if vfsPath.isBuild() && !sc.initialOnly {
 		s.codegen.use(vfsPath)
 	}
 
-	own, compileExtra, info, inducedBucket := s.parsedIncludes(vfsPath, parser)
+	own, compileExtra, info, inducedBucket := s.parsedIncludes(vfsPath, sc.parser)
 
 	if len(own) == 0 && len(compileExtra) == 0 && !vfsPath.isBuild() {
 		return out
@@ -657,17 +664,10 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 }
 
 func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
-	if sc.ccCfg != nil || sc.parser == IncludeDirectiveParser(scParser) || sc.scanner.parsers.registry.registeredParserFor(abs.relString()) == IncludeDirectiveParser(scParser) {
-		previous := sc.parser
+	previousParser, previousConfig := sc.parser, sc.cfg
+	sc.setFileParser(abs)
 
-		if parser := sc.scanner.parsers.registry.registeredParserFor(abs.relString()); parser != nil {
-			sc.parser = parser
-		} else if cached, ok := sc.scanner.parsers.cache.parsed.get(abs.rel()); ok {
-			sc.parser = cached.parser
-		}
-
-		defer func() { sc.parser = previous }()
-	}
+	defer func() { sc.parser, sc.cfg = previousParser, previousConfig }()
 
 	for _, id := range sc.resolvedChildren(abs).Paths {
 		fn(id)
@@ -677,17 +677,10 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 func (sc *ScanCtx) dfs(abs VFS) {
 	s := sc.scanner
 
-	if sc.ccCfg != nil || sc.parser == IncludeDirectiveParser(scParser) || sc.scanner.parsers.registry.registeredParserFor(abs.relString()) == IncludeDirectiveParser(scParser) {
-		previous := sc.parser
+	previousParser, previousConfig := sc.parser, sc.cfg
+	sc.setFileParser(abs)
 
-		if parser := s.parsers.registry.registeredParserFor(abs.relString()); parser != nil {
-			sc.parser = parser
-		} else if cached, ok := s.parsers.cache.parsed.get(abs.rel()); ok {
-			sc.parser = cached.parser
-		}
-
-		defer func() { sc.parser = previous }()
-	}
+	defer func() { sc.parser, sc.cfg = previousParser, previousConfig }()
 
 	if s.dfsActive.has(uint32(abs)) {
 		sc.tjc.runSCC(sc, abs)
