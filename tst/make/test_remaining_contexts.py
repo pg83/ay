@@ -76,7 +76,9 @@ class RemainingContextsTest(MakeTest):
         self.write("schema/ya.make", f"FBS_LIBRARY()\nADDINCL({PROJECT}/schema ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/schema)\nSRCS(answer.fbs native.cpp)\nEND()\n")
         self.write("schema/answer.fbs", "namespace e2e; table Answer { value:int; }\n")
         self.write("schema/native.cpp", '#include "answer.fbs.h"\nint answer() { return 42; }\n')
-        self.node(self.graph(), "native/native")
+        graph = self.graph()
+        for output in ("native/native", "java/answer.tar"):
+            self.assertIn(self.node(graph, output)["uid"], graph["result"])
 
     def test_unquoted_global_flag_expression(self):
         self.write("ya.make", 'LIBRARY()\nCFLAGS(GLOBAL -DVALUE=${quo:"a b"} -DCOMMA=${comma:"unused"})\nSRCS(answer.cpp)\nEND()\n')

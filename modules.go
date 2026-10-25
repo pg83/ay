@@ -2304,7 +2304,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 			return ModuleUnit{Type: tokGoLibrary, Tag: strGoFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 		}
 
-		return ModuleUnit{Type: name, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+		return ModuleUnit{Type: name, Tag: strCppFbs, CCTag: tagCppFbs, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokProtoLibrary:
 		if language == LangProtoDescriptions {
 			return resolveModuleUnitBare(tokProtoDescriptions, kind, language)

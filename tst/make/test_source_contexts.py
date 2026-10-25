@@ -24,7 +24,11 @@ END()
         self.write("answer.fbs", "namespace e2e; table Answer { value:int; } root_type Answer;\n")
         self.write("value.cpp", '#include "answer.fbs.h"\nint answer() { return 42; }\n')
         graph = self.graph()
-        self.assertTrue(any(f"$(S)/{PROJECT}/value.cpp" in node["inputs"] for node in graph["graph"]))
+        compiled = self.node(graph, "value.cpp.o")
+        generated = self.node(graph, "answer.fbs.h")
+        self.assertIn(f"$(S)/{PROJECT}/value.cpp", compiled["inputs"])
+        self.assertIn(f"$(B)/{PROJECT}/answer.fbs.h", compiled["inputs"])
+        self.assertIn(generated["uid"], compiled["deps"])
 
     def test_native_java_generator(self):
         self.write("ya.make", f"LIBRARY()\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/generator OUT answer.cpp)\nEND()\n")

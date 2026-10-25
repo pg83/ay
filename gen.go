@@ -267,7 +267,10 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 
 	for i, t := range targets {
 		discovered[i] = discoverRecursedTargets(ctx, filepath.Clean(t))
-		all = append(all, discovered[i].Root)
+
+		if discovered[i].Root.Declaration != nil {
+			all = append(all, discovered[i].Root)
+		}
 	}
 
 	for _, targets := range discovered {
@@ -444,13 +447,15 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 		return
 	}
 
-	root := genModule(ctx, ctx.rootInstanceForDeclaration(targetDir, rootDemand, target.Declaration))
+	if target.Declaration != nil {
+		root := genModule(ctx, ctx.rootInstanceForDeclaration(targetDir, rootDemand, target.Declaration))
 
-	for _, ref := range ctx.moduleResultRefs(ctx.rootInstanceForDeclaration(targetDir, rootDemand, target.Declaration), root) {
-		ctx.emit.result(ref)
+		for _, ref := range ctx.moduleResultRefs(ctx.rootInstanceForDeclaration(targetDir, rootDemand, target.Declaration), root) {
+			ctx.emit.result(ref)
+		}
+
+		ctx.collectConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, root.ModuleVariants, rootDemand), root)...)
 	}
-
-	ctx.collectConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, root.ModuleVariants, rootDemand), root)...)
 
 	for _, target := range targets.Recursed {
 		dir := target.Path

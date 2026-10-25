@@ -222,6 +222,7 @@ var (
 	strCp                                                                                    = internStr("-cp")
 	strCpp                                                                                   = internStr(".cpp")
 	strCpp2                                                                                  = internStr("cpp")
+	strCppFbs                                                                                = internStr("CPP_FBS")
 	strCppParts                                                                              = internStr("--cpp-parts")
 	strCppRos                                                                                = internStr("CPP_ROS")
 	strCppRos2                                                                               = internStr("cpp_ros")
