@@ -1,9 +1,8 @@
 import argparse
-import contextlib
-import fcntl
-import hashlib
+import json
 import os
 from pathlib import Path
+import sys
 import unittest
 
 
@@ -12,7 +11,10 @@ def main():
     parser.add_argument("--backend", choices=("ay", "ya"), required=True)
     parser.add_argument("--arcadia", required=True)
     parser.add_argument("--binary")
+    parser.add_argument("--overlay-binary", type=Path, help="ay binary providing dev overlay for upstream ya")
+    parser.add_argument("--parent-mount-namespace", help=argparse.SUPPRESS)
     parser.add_argument("--work-dir", type=Path, required=True)
+    parser.add_argument("--result-file", type=Path, help="collect test status for the build gate; assertion failures do not fail collection")
     parser.add_argument("modules", nargs="*")
     args = parser.parse_args()
     if not args.arcadia:
@@ -25,6 +27,24 @@ def main():
         parser.error("--binary is required for ay")
     if not binary.is_file():
         parser.error(f"binary not found: {binary}")
+    if args.backend == "ya":
+        namespace = os.readlink("/proc/self/ns/mnt")
+        if args.parent_mount_namespace:
+            if namespace == args.parent_mount_namespace:
+                parser.error("ya tests must run inside a private mount namespace")
+            # Arc's metadata symlink points outside the overlay to the live
+            # mount's database. An arc status in this view can deadlock that
+            # database against FUSE. Fixtures are not an Arc working copy.
+            (arcadia / ".arc").unlink(missing_ok=True)
+        else:
+            if not args.overlay_binary:
+                parser.error("--overlay-binary is required for ya")
+            overlay = str(args.overlay_binary.resolve())
+            os.execv(overlay, [
+                overlay, "dev", "overlay", str(arcadia), "--",
+                sys.executable, "-m", "tst.make", "--parent-mount-namespace", namespace,
+                *sys.argv[1:],
+            ])
     args.work_dir.mkdir(parents=True, exist_ok=True)
     os.environ.update(
         AY_E2E_BACKEND=args.backend,
@@ -36,16 +56,17 @@ def main():
         "tst.make." + path.stem for path in sorted(Path(__file__).parent.glob("test_*.py"))
     ]
     suite = unittest.defaultTestLoader.loadTestsFromNames(modules)
-    # Also serialize independent invocations against the same Arcadia. The
-    # lock lives outside the tree and is never unlinked while a waiter exists.
-    with contextlib.ExitStack() as stack:
-        if args.backend == "ya":
-            lock_key = hashlib.sha256(os.fsencode(arcadia)).hexdigest()
-            lock_path = Path.home() / ".ya/ay-e2e-locks" / (lock_key + ".lock")
-            lock_path.parent.mkdir(parents=True, exist_ok=True)
-            lock = stack.enter_context(lock_path.open("a"))
-            fcntl.flock(lock, fcntl.LOCK_EX)
-        result = unittest.TextTestRunner(verbosity=2).run(suite)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    if args.result_file:
+        args.result_file.parent.mkdir(parents=True, exist_ok=True)
+        args.result_file.write_text(json.dumps({
+            "modules": modules,
+            "tests": result.testsRun,
+            "success": result.wasSuccessful(),
+            "failures": [{"test": str(test), "traceback": trace} for test, trace in result.failures],
+            "errors": [{"test": str(test), "traceback": trace} for test, trace in result.errors],
+        }, indent=2))
+        return 0
     return 0 if result.wasSuccessful() else 1
 
 

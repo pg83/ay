@@ -23,7 +23,7 @@ class MakeTest(unittest.TestCase):
             self.root = self.work / "src"
             self.root.mkdir()
             for entry in arcadia.iterdir():
-                if entry.name != PROJECT:
+                if entry.name not in (PROJECT, ".arc"):
                     (self.root / entry.name).symlink_to(entry)
         else:
             self.root = arcadia
@@ -38,10 +38,12 @@ class MakeTest(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
-    def graph(self, *flags):
-        cmd = [self.binary, "make", "-j0", "-G", "--sandboxing"]
+    def make(self, *flags, dump_graph=True):
+        cmd = [self.binary, "make", "-j0", "--sandboxing"]
+        if dump_graph:
+            cmd.append("-G")
         if self.backend == "ya":
-            cmd += ["-xx", "--no-ymake-tool-servermode", "--no-ymake-pic-servermode", "--no-ymake-multiconfig"]
+            cmd += ["--build-dir", str(self.work / "build"), "-xx", "--no-locked", "--no-prefetch", "--no-ymake-tool-servermode", "--no-ymake-pic-servermode", "--no-ymake-multiconfig"]
         cmd += [*flags, PROJECT]
         env = os.environ.copy()
         for key in ("CC", "CXX", "CPP", "LD", "AR", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS"):
@@ -64,8 +66,12 @@ class MakeTest(unittest.TestCase):
         self.calls += 1
         (self.work / f"graph-{self.calls}.json").write_text(stdout)
         (self.work / f"graph-{self.calls}.stderr").write_text(stderr)
-        self.assertEqual(proc.returncode, 0, f"{cmd!r}\n{stderr}")
-        graph = json.loads(stdout)
+        return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+
+    def graph(self, *flags):
+        result = self.make(*flags)
+        self.assertEqual(result.returncode, 0, f"{result.args!r}\n{result.stderr}")
+        graph = json.loads(result.stdout)
         # The two CLIs spell source/build root placeholders differently.
         for node in graph["graph"]:
             for field in ("inputs", "outputs"):
@@ -76,5 +82,6 @@ class MakeTest(unittest.TestCase):
     def node(self, graph, output):
         expected = f"$(B)/{PROJECT}/{output}"
         matches = [node for node in graph["graph"] if expected in node["outputs"]]
-        self.assertEqual(len(matches), 1, f"expected one producer of {expected}")
+        outputs = [path for node in graph["graph"] for path in node["outputs"] if f"/{PROJECT}/" in path]
+        self.assertEqual(len(matches), 1, f"expected one producer of {expected}; fixture outputs: {outputs[:80]}")
         return matches[0]

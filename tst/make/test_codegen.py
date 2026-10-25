@@ -1,0 +1,50 @@
+from tst.make.lib import MakeTest, PROJECT
+
+
+class CodegenTest(MakeTest):
+    def generated(self, source, output, text, macros=""):
+        self.write("ya.make", f"LIBRARY()\n{macros}\nSRCS({source})\nEND()\n")
+        self.write(source, text)
+        graph = self.graph()
+        producer = self.node(graph, output)
+        self.assertIn(f"$(S)/{PROJECT}/{source}", producer["inputs"])
+        return graph
+
+    def test_bison(self):
+        self.generated("parser.y", "parser.y.cpp", "%token NUMBER\n%%\nexpression: NUMBER;\n%%\n")
+
+    def test_flex(self):
+        self.generated("lexer.l", "lexer.l.cpp", '%option noyywrap\n%%\n[0-9]+ return 1;\n. ;\n%%\n')
+
+    def test_ragel(self):
+        self.generated("machine.rl6", "machine.rl6.cpp", '%%{ machine scanner; main := any*; }%%\n%% write data;\n')
+
+    def test_gperf(self):
+        self.generated("keywords.gperf", "keywords.gperf.cpp", "%%\nhello\nworld\n%%\n")
+
+    def test_flatbuffers_import(self):
+        self.write("base.fbs", "namespace e2e; table Base { value:int; }\n")
+        self.generated("message.fbs", "message.fbs.h", f'include "{PROJECT}/base.fbs";\nnamespace e2e; table Message {{ base:Base; }}\nroot_type Message;\n', "SRCS(base.fbs)")
+
+    def test_configure_file(self):
+        self.write("ya.make", "LIBRARY()\nSET(E2E_VALUE 42)\nCONFIGURE_FILE(config.h.in config.h)\nSRCS(main.cpp)\nEND()\n")
+        self.write("config.h.in", "#define E2E_VALUE @E2E_VALUE@\n")
+        self.write("main.cpp", '#include "config.h"\nint answer() { return E2E_VALUE; }\n')
+        graph = self.graph()
+        self.node(graph, "config.h")
+        self.assertIn(f"$(B)/{PROJECT}/config.h", self.node(graph, "main.cpp.o")["inputs"])
+
+    def test_run_python_generates_source(self):
+        self.write("ya.make", "LIBRARY()\nRUN_PYTHON3(generate.py IN value.txt OUT answer.cpp)\nEND()\n")
+        self.write("generate.py", 'from pathlib import Path\nPath("answer.cpp").write_text("int answer() { return 42; }\\n")\n')
+        self.write("value.txt", "42\n")
+        graph = self.graph()
+        producer = self.node(graph, "answer.cpp")
+        self.assertIn(f"$(S)/{PROJECT}/value.txt", producer["inputs"])
+        self.node(graph, "answer.cpp.o")
+
+    def test_cython(self):
+        self.write("ya.make", "PY3_LIBRARY()\nPY_SRCS(answer.pyx)\nEND()\n")
+        self.write("answer.pyx", "def answer():\n    return 42\n")
+        graph = self.graph()
+        self.assertTrue(any(f"$(S)/{PROJECT}/answer.pyx" in node["inputs"] and any(path.endswith((".cpp", ".c")) for path in node["outputs"]) for node in graph["graph"]))

@@ -2,6 +2,9 @@
 /ay
 /ay_test
 /coverage
+/cli_coverage
+/ay_e2e_*
+/ya_e2e_*
 /vet
 /unit_*
 /python_test

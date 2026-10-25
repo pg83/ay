@@ -39,6 +39,11 @@ var commands = []Command{
 			"process subtree. --hz N sets samples per second (default 1).",
 	},
 	{
+		path: []string{"dev", "overlay"}, run: cmdOverlay,
+		help: "Run a command with a private writable overlay over a source directory.\n" +
+			"Usage: ay dev overlay <directory> -- <command> [args...]. Keeps the current UID/GID.",
+	},
+	{
 		path: []string{"dev", "dump", "normalize"}, run: cmdDumpNormalize,
 		help: "🧼 Normalize a raw graph dump (fold producers, canonicalize paths, prune\n" +
 			"ref-only artifacts) to one JSON node per line for byte-exact comparison.",
