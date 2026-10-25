@@ -90,7 +90,7 @@ class ProtoDescGeneratedTest(unittest.TestCase):
                     producer = lib.node_by_output(graph, "$(B)/ochre/schemas/catalog.proto")
                     self.assertIn(producer["uid"], node["deps"])
 
-    def test_generated_gzt_input_keeps_build_namespace_with_a_physical_shadow(self):
+    def test_gazetteer_cpp_and_python_keep_native_shadow_namespaces(self):
         for token, srcdir, resolved in (("g.gztproto", "", "p/g"),
                                        ("proto/g.gztproto", "", "p/proto/g"),
                                        ("g.gztproto", "SRCDIR(ochre/gzt_src)\n", "ochre/gzt_src/g")):
@@ -107,12 +107,17 @@ class ProtoDescGeneratedTest(unittest.TestCase):
                 graph = lib.make(sources, "py3", "p")
                 converter = lib.node_by_output(graph, "$(B)/" + resolved + ".proto")
                 self.assertIn("$(S)/" + resolved + ".gztproto", converter["inputs"])
-                for out in ("$(B)/" + resolved + ".pb.h", "$(B)/" + resolved + "__intpy3___pb2.py"):
-                    node = lib.node_by_output(graph, out)
-                    self.assertIn("$(B)/" + resolved + ".proto", node["inputs"])
-                    self.assertNotIn("$(S)/" + resolved + ".proto", node["inputs"])
-                    self.assertNotIn("$(S)/q/b.proto", node["inputs"])
-                    self.assertIn(converter["uid"], node["deps"])
+                cpp = lib.node_by_output(graph, "$(B)/" + resolved + ".pb.h")
+                self.assertIn("$(B)/" + resolved + ".proto", cpp["inputs"])
+                self.assertNotIn("$(S)/" + resolved + ".proto", cpp["inputs"])
+                self.assertNotIn("$(S)/q/b.proto", cpp["inputs"])
+                self.assertIn(converter["uid"], cpp["deps"])
+                python = lib.node_by_output(graph, "$(B)/" + resolved + "__intpy3___pb2.py")
+                self.assertIn("$(S)/" + resolved + ".proto", python["inputs"])
+                self.assertIn("$(S)/q/b.proto", python["inputs"])
+                self.assertNotIn("$(B)/" + resolved + ".proto", python["inputs"])
+                self.assertNotIn(converter["uid"], python["deps"])
+                self.assertEqual(python["cmds"][0]["cwd"], "$(S)")
 
     def test_srcdir_source_precedes_the_registered_shadow(self):
         sources = files(tags="CPP_PROTO JAVA_PROTO DESC_PROTO")
