@@ -60,3 +60,10 @@ class JavaExtendedTest(MakeTest):
         self.write("processor/ya.make", "JAVA_LIBRARY(processor)\nJDK_VERSION(17)\nJAVA_SRCS(Processor.java)\nEND()\n")
         self.write("processor/Processor.java", "public class Processor {}\n")
         self.node(self.graph(), "answer.jar")
+
+    def test_annotation_processor_nested_class(self):
+        self.write("ya.make", 'JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Answer.java)\nANNOTATION_PROCESSOR(Outer${"$"}Processor)\nEND()\n')
+        self.write("Answer.java", "public class Answer {}\n")
+        node = self.node(self.graph(), "answer.jar")
+        args = [arg for cmd in node["cmds"] for arg in cmd["cmd_args"]]
+        self.assertIn("Outer$Processor", args)

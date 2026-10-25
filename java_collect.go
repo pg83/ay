@@ -1260,7 +1260,7 @@ func javaDropUnresolved(args []string, preserveEmpty bool) []string {
 	out := args[:0:0]
 
 	for _, arg := range args {
-		a := strings.ReplaceAll(arg, "${$}", "$")
+		a := strings.ReplaceAll(arg, `${"$"}`, "$")
 
 		for {
 			start := strings.Index(a, "${")

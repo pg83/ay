@@ -551,7 +551,7 @@ func (l *Lexer) isWordByte(b byte) bool {
 	}
 
 	switch b {
-	case ';', '&', '`', '^', '|', '<', '>':
+	case ';', '&', '`', '^', '|', '<', '>', '"', '\'':
 		return true
 	}
 
@@ -773,7 +773,7 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 	for pos < len(l.src) {
 		b := l.src[pos]
 
-		if (b == '\\' && pos+1 < len(l.src)) || b == '"' || b == '\'' {
+		if (b == '\\' && pos+1 < len(l.src)) || !l.inArgs && (b == '"' || b == '\'') {
 			complex = true
 
 			break
@@ -868,7 +868,7 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 	for pos < len(l.src) {
 		b := l.src[pos]
 
-		if (b == '\\' && pos+1 < len(l.src)) || (b == '"' || b == '\'') && pos > start {
+		if (b == '\\' && pos+1 < len(l.src)) || !l.inArgs && (b == '"' || b == '\'') && pos > start {
 			complex = true
 
 			break
@@ -901,7 +901,7 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 			continue
 		}
 
-		if (b == '"' || b == '\'') && len(buf) > 0 {
+		if !l.inArgs && (b == '"' || b == '\'') && len(buf) > 0 {
 			buf = l.appendQuotedSegment(buf, b, startLine, startCol)
 
 			continue

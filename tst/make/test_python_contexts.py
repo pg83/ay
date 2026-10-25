@@ -24,13 +24,17 @@ class PythonContextsTest(MakeTest):
                 self.graph("-t")
 
     def test_lint_extra_sources(self):
-        sources = json.dumps([f"$S/{PROJECT}/extra.py", f"${{ARCADIA_ROOT}}/{PROJECT}/nested/other.py"], separators=(",", ":"))
+        sources = json.dumps([f"$S/{PROJECT}/seed.py", f"${{ARCADIA_ROOT}}/{PROJECT}/nested/seed.py"], separators=(",", ":"))
         self.write("ya.make", f"PY3_LIBRARY()\nSET(PY_LINTER_FILES {sources})\nPY_EXTRA_LINT_FILES(extra.py nested/other.py)\nPY_SRCS(answer.py)\nEND()\n")
         self.write("answer.py", "answer = 42\n")
         self.write("extra.py", "extra = 17\n")
         self.write("nested/other.py", "other = 12\n")
+        self.write("seed.py", "seed = 17\n")
+        self.write("nested/seed.py", "seed = 12\n")
         graph = self.graph("-t")
-        self.assertTrue(any("extra.py" in json.dumps(node.get("cmds", [])) for node in graph["graph"]))
+        commands = json.dumps([node.get("cmds", []) for node in graph["graph"]])
+        for file in ("extra.py", "nested/other.py", "seed.py", "nested/seed.py"):
+            self.assertIn(f"/{PROJECT}/{file}", commands)
 
     def test_absolute_python_source_is_rejected(self):
         self.write("ya.make", f"PY3_LIBRARY()\nPY_SRCS(TOP_LEVEL ${{ARCADIA_ROOT}}/{PROJECT}/answer.py ./nested/other.py=other)\nEND()\n")
