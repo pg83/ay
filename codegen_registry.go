@@ -228,7 +228,7 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 
 	for _, member := range members {
 		if info := r.lookup(member); info != nil {
-			if info.SourcePath != 0 {
+			if info.SourcePath != 0 && info.SourcePath.isSource() {
 				sources = append(sources, info.SourcePath)
 			}
 

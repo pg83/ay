@@ -85,9 +85,9 @@ func (p *NodeInputs) evaluate() InputChunks {
 	})
 
 	for _, root := range p.sourceRoots {
-		closure := p.scanner.establishedClosure(root)
-
-		includedSources = append(includedSources, closure.collect(p.na, VFS.isSource))
+		if info := p.scanner.codegen.lookup(root); info != nil {
+			includedSources = append(includedSources, info.InputLoopSources)
+		}
 	}
 
 	var result InputChunks
