@@ -14,10 +14,12 @@ class RareGeneratorsTest(MakeTest):
         self.node(self.graph(), "devlink.o")
 
     def test_antlr_split_grammar(self):
-        self.write("ya.make", "LIBRARY()\nRUN_ANTLR4_CPP_SPLIT(AnswerLexer.g4 AnswerParser.g4 VISITOR LISTENER)\nADDINCL(contrib/libs/antlr4_cpp_runtime/src)\nEND()\n")
+        self.write("ya.make", "LIBRARY()\nRUN_ANTLR4_CPP_SPLIT(AnswerLexer.g4 AnswerParser.g4 VISITOR LISTENER)\nEND()\n")
         self.write("AnswerLexer.g4", "lexer grammar AnswerLexer;\nNUMBER: [0-9]+;\n")
         self.write("AnswerParser.g4", "parser grammar AnswerParser;\noptions { tokenVocab=AnswerLexer; }\nanswer: NUMBER EOF;\n")
-        self.node(self.graph(), "AnswerParser.cpp")
+        node = self.node(self.graph(), "AnswerParser.cpp")
+        self.assertIn(f"$(B)/{PROJECT}/AnswerParserListener.h", node["outputs"])
+        self.assertIn(f"$(B)/{PROJECT}/AnswerParserBaseVisitor.h", node["outputs"])
 
     def test_enum_noexcept(self):
         self.write("ya.make", f"LIBRARY()\nADDINCL({PROJECT} ${{ARCADIA_BUILD_ROOT}}/{PROJECT})\nALICE_GENERATE_NOEXCEPT_ENUM_SERIALIZATION(value.h)\nSRCS(answer.cpp)\nEND()\n")

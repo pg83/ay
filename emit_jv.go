@@ -116,6 +116,8 @@ func (e *EmitContext) emitJVReserved(
 
 	if visitor {
 		cmdArgs = append(cmdArgs, argVisitor.any())
+	} else {
+		cmdArgs = append(cmdArgs, argNoVisitor.any())
 	}
 
 	if !listener {
@@ -138,8 +140,10 @@ func (e *EmitContext) emitJVReserved(
 		build(outPrefix, "Lexer.h"),
 		build(outPrefix, "Parser.cpp"),
 		build(outPrefix, "Parser.h"),
-		build(outPrefix, "Visitor.h"),
-		build(outPrefix, "BaseVisitor.h"),
+	}
+
+	for _, header := range antlr4OptionalHeaders(base, visitor, listener) {
+		outputs = append(outputs, build(instance.Path.relString(), "/", header))
 	}
 
 	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, id)
@@ -175,6 +179,8 @@ func (e *EmitContext) emitJVSplitReserved(
 
 	if visitor {
 		cmdArgs = append(cmdArgs, argVisitor.any())
+	} else {
+		cmdArgs = append(cmdArgs, argNoVisitor.any())
 	}
 
 	if !listener {
@@ -190,7 +196,6 @@ func (e *EmitContext) emitJVSplitReserved(
 
 	lexerBase := strings.TrimSuffix(filepath.Base(lexer), ".g4")
 	parserBase := strings.TrimSuffix(filepath.Base(parser), ".g4")
-	visitorBase := parserBase
 	outPrefix := instance.Path.relString() + "/"
 
 	outputs := []VFS{
@@ -198,8 +203,10 @@ func (e *EmitContext) emitJVSplitReserved(
 		build(outPrefix, lexerBase, ".h"),
 		build(outPrefix, parserBase, ".cpp"),
 		build(outPrefix, parserBase, ".h"),
-		build(outPrefix, visitorBase, "Visitor.h"),
-		build(outPrefix, visitorBase, "BaseVisitor.h"),
+	}
+
+	for _, header := range antlr4OptionalHeaders(parserBase, visitor, listener) {
+		outputs = append(outputs, build(outPrefix, header))
 	}
 
 	e.emitJVNodeReserved(cmdArgs, inputs, outputs, outDir, id)

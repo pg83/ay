@@ -4,6 +4,33 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class TypescriptContextsTest(MakeTest):
+    def test_proto_tag_selection(self):
+        self.write("answer.proto", 'syntax = "proto3"; package e2e; message Answer { int32 value = 1; }\n')
+        for selectors, enabled in (
+            ("ONLY_TAGS(DESC_PROTO TS_PROTO TS_PREPARE_DEPS)", True),
+            ("ONLY_TAGS(DESC_PROTO)\nINCLUDE_TAGS(TS_PROTO TS_PREPARE_DEPS)", True),
+            ("ONLY_TAGS(DESC_PROTO TS_PROTO TS_PREPARE_DEPS)\nEXCLUDE_TAGS(TS_PROTO TS_PREPARE_DEPS)", False),
+            ("ONLY_TAGS(DESC_PROTO TS_PROTO TS_PREPARE_DEPS)\nONLY_TAGS(DESC_PROTO)", False),
+        ):
+            with self.subTest(selectors=selectors):
+                self.write("ya.make", f"PROTO_LIBRARY()\n{selectors}\nSRCS(answer.proto)\nEND()\n")
+                graph = self.graph()
+                roots = [n for n in graph["graph"] if n["uid"] in graph["result"]]
+                self.assertEqual(any(f"$(B)/{PROJECT}/output.tar" in n["outputs"] for n in roots), enabled)
+                self.assertFalse(any(f"$(B)/{PROJECT}/package.json" in n["outputs"] for n in roots))
+
+    def test_proto_non_recursive(self):
+        self.write("ya.make", f"PROTO_LIBRARY()\nONLY_TAGS(DESC_PROTO TS_PROTO TS_PREPARE_DEPS)\nPEERDIR({PROJECT}/peer {PROJECT}/raw)\nTS_PROTO_NON_RECURSIVE()\nSRCS(answer.proto)\nEND()\n")
+        self.write("answer.proto", f'syntax = "proto3";\npackage e2e;\nimport "{PROJECT}/peer/base.proto";\nimport "{PROJECT}/raw/base.proto";\nmessage Answer {{ Peer peer = 1; Raw raw = 2; }}\n')
+        for directory, tags, name in (("peer", "DESC_PROTO TS_PROTO TS_PREPARE_DEPS", "Peer"), ("raw", "DESC_PROTO", "Raw")):
+            self.write(f"{directory}/ya.make", f"PROTO_LIBRARY()\nONLY_TAGS({tags})\nSRCS(base.proto)\nEND()\n")
+            self.write(f"{directory}/base.proto", f'syntax = "proto3"; package e2e; message {name} {{ int32 value = 1; }}\n')
+        graph = self.graph()
+        root = self.node(graph, "output.tar")
+        peer = self.node(graph, "peer/output.tar")
+        self.assertIn(peer["uid"], root["deps"])
+        self.assertFalse(any(f"$(B)/{PROJECT}/raw/output.tar" in n["outputs"] for n in graph["graph"]))
+
     def test_proto_opt_in(self):
         self.write("ya.make", "PROTO_LIBRARY()\nINCLUDE_TAGS(TS_PROTO TS_PREPARE_DEPS)\nONLY_TAGS(TS_PROTO TS_PREPARE_DEPS)\nTS_PROTO_PACKAGE_NAME(@e2e/answer)\nTS_PROTO_OPT(outputJsonMethods=false)\nGRPC()\nUSE_COMMON_GOOGLE_APIS()\nSRCS(answer.proto)\nEND()\n")
         self.write("answer.proto", 'syntax = "proto3";\npackage e2e;\nmessage Answer { int32 value = 1; }\n')

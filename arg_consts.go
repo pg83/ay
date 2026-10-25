@@ -182,6 +182,7 @@ var (
 	argNoListener                                           = internArg("-no-listener")
 	argNoOutlineAtomics                                     = internArg("-mno-outline-atomics")
 	argNoShadow                                             = internArg("-Wno-shadow")
+	argNoVisitor                                            = internArg("-no-visitor")
 	argNoWarnings                                           = internArg("--no-warnings")
 	argNodeTimeout                                          = internArg("--node-timeout")
 	argNone                                                 = internArg("None")

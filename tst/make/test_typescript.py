@@ -22,6 +22,16 @@ class TypescriptTest(MakeTest):
     def test_package(self):
         self.package("TS_PACKAGE")
 
+    def test_package_source_exclusions(self):
+        self.package("TS_PACKAGE", prepare_only=True)
+        self.write("a.yaml", "service: e2e\n")
+        self.write("src/cache.tsbuildinfo", "{}\n")
+        self.write(".npmrc", "ignore-scripts=true\n")
+        node = self.node(self.graph(), "output.tar")
+        self.assertIn(f"$(S)/{PROJECT}/a.yaml", node["inputs"])
+        self.assertNotIn(f"$(S)/{PROJECT}/src/cache.tsbuildinfo", node["inputs"])
+        self.assertNotIn(f"$(S)/{PROJECT}/.npmrc", node["inputs"])
+
     def test_typescript_compiler(self):
         self.package("TS_TSC", "TS_BUILD_OUTPUTS(dist)")
 
@@ -94,4 +104,5 @@ snapshots:
     def test_typescript_proto(self):
         self.write("ya.make", "PROTO_LIBRARY()\nONLY_TAGS(TS_PROTO TS_PREPARE_DEPS)\nTS_PROTO_PACKAGE_NAME(@e2e/answer)\nTS_PROTO_OPT(outputJsonMethods=false)\nSRCS(answer.proto)\nEND()\n")
         self.write("answer.proto", 'syntax = "proto3"; package e2e; message Answer { int32 value = 1; }\n')
-        self.node(self.graph(), "output.tar")
+        graph = self.graph()
+        self.assertEqual(graph["result"], [self.node(graph, "output.tar")["uid"]])

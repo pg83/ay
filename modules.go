@@ -1871,6 +1871,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		case *CreateBuildInfoStmt:
 			d.createBuildInfoFor = ptr(internStr(v.OutputHeader).any())
 		case *RunAntlr4CppStmt:
+			d.peerdirs = append(d.peerdirs, strContribLibsAntlr4CppRuntime.any())
+
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        false,
 				Grammar:        expandStmtToken(v.Grammar.string(), env),
@@ -1880,6 +1882,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				OutputIncludes: anyStrs(expandStmtTokens(v.OutputIncludes, env)),
 			})
 		case *RunAntlr4CppSplitStmt:
+			d.peerdirs = append(d.peerdirs, strContribLibsAntlr4CppRuntime.any())
+
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        true,
 				Lexer:          expandStmtToken(v.Lexer.string(), env),
@@ -2895,6 +2899,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.collectCPPStyle(v, env)
 		env.setBool(envUseAllSrcs, true)
 		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
+	case tokTsProtoNonRecursive:
+		env.setBool(envTsProtoNonRecursive, true)
 	case tokTsProtoPackageName:
 		if len(v.Args) != 1 {
 			throwFmt("TS_PROTO_PACKAGE_NAME expects one package name")

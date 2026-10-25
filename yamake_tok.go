@@ -314,6 +314,7 @@ var tokName = [...]STR{
 	tokRunProtoShaperStub:              internStr("RUN_PROTO_SHAPER_STUB"),
 	tokSourceGroup:                     internStr("SOURCE_GROUP"),
 	tokTsProtoOpt:                      internStr("TS_PROTO_OPT"),
+	tokTsProtoNonRecursive:             internStr("TS_PROTO_NON_RECURSIVE"),
 	tokResourcesLibrary:                kwRESOURCES_LIBRARY,
 	tokRestrictPath:                    internStr("RESTRICT_PATH"),
 	tokSetAppend:                       internStr("SET_APPEND"),
@@ -707,6 +708,7 @@ const (
 	tokRunProtoShaperStub
 	tokSourceGroup
 	tokTsProtoOpt
+	tokTsProtoNonRecursive
 	tokSetAppend
 	tokSetListPreSuf
 	tokDepends

@@ -610,6 +610,8 @@ group(
         "p12_java",
         "feature_java_sources_debug",
         "feature_java_sbom",
+        "feature_ts_proto",
+        "feature_antlr4_cpp",
         "p12_typescript",
         "p12_cuda",
         "p12_docs",

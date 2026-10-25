@@ -13,7 +13,7 @@ Common commands:
 ./build -Drace unit     # unit against a -race build
 ./build -Dcoverage coverage  # unit tests against a -cover build; see below
 ./build validate        # all validation results, then the aggregate gate
-./build -k validate_quick # 14 small canonical graph cases for iteration
+./build -k validate_quick # 16 small canonical graph cases for iteration
 ./build test            # unit + complete validation gate
 ./build validation_report
 ./build validation_resources
@@ -85,8 +85,8 @@ For routine fixes, run the fixed subset `validate_quick`:
 ```
 
 It runs the same complete generate/normalize/sort/compare pipeline and strict
-per-case gates as `validate`, using the same pinned archives. It selects 14
-existing cases with 85,784 reference nodes in total (including overlap between
+per-case gates as `validate`, using the same pinned archives. It selects 16
+existing cases with 85,819 reference nodes in total (including overlap between
 cases). It does not generate or truncate new reference graphs.
 
 | Cases | Regression checks | Reference nodes |
@@ -99,6 +99,8 @@ cases). It does not generate or truncate new reference graphs.
 | `p12_go` | Go graph generation | 18,043 |
 | `p12_java` | Java graph generation | 14,569 |
 | `feature_java_sources_debug`, `feature_java_sbom` | Debug source JARs and Java SBOM | 13 |
+| `feature_ts_proto` | TypeScript proto variants and non-recursive package dependencies | 29 |
+| `feature_antlr4_cpp` | ANTLR C++ runtime includes and generated listeners/visitors | 6 |
 | `p12_typescript` | TypeScript graph generation | 8,444 |
 | `p12_cuda` | CUDA generation and platform resources | 2,651 |
 | `p12_docs` | Documentation graphs | 18 |
@@ -180,6 +182,15 @@ roots with the original tree. Both cases use `xfail: false` and belong to
 
 ```sh
 ./build -j2 -k validate_feature_java_sources_debug validate_feature_java_sbom
+```
+
+Two more strict cases use `devtools/dummy_arcadia/typescript/proto/non_recursive/consumer`
+and `devtools/dummy_arcadia/antlr4/cppexpr`. Their complete Release graphs contain
+29 and 6 nodes respectively. Both source slices reproduce upstream's complete
+nodes and result roots. They belong to both `validate` and `validate_quick`:
+
+```sh
+./build -j2 -k validate_feature_ts_proto validate_feature_antlr4_cpp
 ```
 
 Sandbox archives are ordinary CAS outputs and do not depend on the candidate

@@ -1555,8 +1555,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	if d.nots != nil {
 		if d.moduleStmt.Name == tokProtoLibrary {
 			tag := protoModuleTag(instance.Language, d.moduleStmt.Schema)
+			_, included := d.excludeTags[internStr(tag)]
 
-			if !slices.Contains(d.nots.IncludeTags, tag) || moduleExcludesTag(d, tag) {
+			if !included || moduleExcludesTag(d, tag) {
 				result := &ModuleEmitResult{ModuleStmtName: d.moduleStmt.Name}
 
 				ctx.memoPut(instance, result)

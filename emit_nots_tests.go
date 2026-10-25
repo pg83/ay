@@ -51,7 +51,7 @@ func (e *EmitContext) notsAllFiles(dir string) []VFS {
 }
 
 func (e *EmitContext) notsFiles(dir string, outputs, excludes []string) []VFS {
-	patterns := append(slices.Clone(notsBaseExcludes), excludes...)
+	patterns := append(slices.Clone(e.d.nots.BaseExcludes), excludes...)
 
 	for _, output := range outputs {
 		patterns = append(patterns, strings.Trim(output, "/")+"/**/*")

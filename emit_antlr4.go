@@ -48,12 +48,10 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			OnUse:           pending,
 		})
 
-		for _, suffix := range []string{
+		for _, suffix := range append([]string{
 			lexerBase + ".h",
 			parserBase + ".h",
-			parserBase + "Visitor.h",
-			parserBase + "BaseVisitor.h",
-		} {
+		}, antlr4OptionalHeaders(parserBase, g.Visitor, g.Listener)...) {
 			e.register(GeneratedFileInfo{
 				OutputPath:      build(outPrefix, suffix),
 				ProducerRef:     jvRef,
@@ -101,12 +99,10 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 			OnUse:           pending,
 		})
 
-		for _, suffix := range []string{
+		for _, suffix := range append([]string{
 			base + "Lexer.h",
 			base + "Parser.h",
-			base + "Visitor.h",
-			base + "BaseVisitor.h",
-		} {
+		}, antlr4OptionalHeaders(base, g.Visitor, g.Listener)...) {
 			e.register(GeneratedFileInfo{
 				OutputPath:      build(outPrefix, suffix),
 				ProducerRef:     jvRef,
@@ -124,6 +120,20 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 
 		e.emitJVDownstreamCPCC(cpccPairs, g.OutputIncludes)
 	}
+}
+
+func antlr4OptionalHeaders(base string, visitor, listener bool) []string {
+	var headers []string
+
+	if listener {
+		headers = append(headers, base+"Listener.h", base+"BaseListener.h")
+	}
+
+	if visitor {
+		headers = append(headers, base+"Visitor.h", base+"BaseVisitor.h")
+	}
+
+	return headers
 }
 
 func antlrWitnessParsed(na *NodeArenas, witnessIncludes []VFS) []IncludeDirective {

@@ -198,6 +198,7 @@ var (
 	strCompressAll                                                                           = internStr("-compress-all")
 	strConfigFile                                                                            = internStr("--config-file")
 	strContent                                                                               = internStr("--content")
+	strContribLibsAntlr4CppRuntime                                                           = internStr("contrib/libs/antlr4_cpp_runtime")
 	strContribLibsCxxsupp                                                                    = internStr("contrib/libs/cxxsupp")
 	strContribLibsFlatbuffers                                                                = internStr("contrib/libs/flatbuffers")
 	strContribLibsFlatbuffers64                                                              = internStr("contrib/libs/flatbuffers64")

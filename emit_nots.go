@@ -7,8 +7,6 @@ import (
 	"strings"
 )
 
-var notsBaseExcludes = []string{"a.yaml", ".npmrc", "package.json", "pnpm-lock.yaml", "output.tar", "output.tar.uuid", "node_modules.layer", "workspace_node_modules.tar", "(.idea|.vscode|node_modules)/**/*"}
-
 const notsBuilderDir = "devtools/frontend_build_platform/nots/builder"
 
 type NotsModule struct {
@@ -26,12 +24,12 @@ type NotsModule struct {
 	BuildScript       string
 	BuildCommand      string
 	Outputs           []string
+	BaseExcludes      []string
 	Excludes          []string
 	Configs           []string
 	VCSInfo           string
 	OutputPrefix      string
 	HasOutputPrefix   bool
-	IncludeTags       []string
 	ProtoOptions      []string
 	ProtoPeers        []ANY
 	ProtoPackage      string
@@ -66,6 +64,7 @@ func isNotsModule(name TOK) bool {
 func newNotsModule(kind TOK, language Language, env Environment) *NotsModule {
 	c := &NotsModule{Kind: kind, Configs: []string{"tsconfig.json"}, LocalCLI: env.bool(envTsLocalCli), Prepare: language == LangTSPrepare}
 
+	c.BaseExcludes = strings.Fields(expandConfScalar(env.string(envSetTsInputsBaseExcludes), env))
 	c.Hermetic = env.bool(envAutocheck) && !env.bool(envTsDisableHermeticNodeModules) && !c.LocalCLI
 
 	switch kind {
@@ -173,16 +172,12 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
 		}
 	case "TS_TEST_DATA":
 		c.TestData = append(c.TestData, args...)
-	case "INCLUDE_TAGS":
-		c.IncludeTags = append(c.IncludeTags, args...)
 	case "TS_PROTO_OPT":
 		c.ProtoOptions = append(c.ProtoOptions, args...)
 	case "TS_PROTO_PACKAGE_NAME":
 		if len(args) > 0 {
 			c.ProtoPackage = args[0]
 		}
-	case "TS_PROTO_NON_RECURSIVE":
-		c.ProtoNonRecursive = true
 	case "TS_TEST", "TS_LINT":
 		if len(args) == 0 {
 			throwFmt("%s requires a script name", name)
@@ -255,6 +250,7 @@ func (c *NotsModule) finish(env Environment) {
 	}
 
 	c.AfterBuildCommand = env.string(envTsAfterBuildCommand)
+	c.ProtoNonRecursive = env.bool(envTsProtoNonRecursive)
 }
 
 func (e *EmitContext) notsResource(dir, name string) ResourceDecl {
@@ -302,7 +298,12 @@ func (e *EmitContext) notsBaseArgsFor(pj map[string]any, c *NotsModule) ([]strin
 		local = "yes"
 	}
 
-	args := []string{"--arcadia-root", "$(S)", "--arcadia-build-root", "$(B)", "--moddir", e.instance.Path.relString(), "--local-cli", local, "--nodejs-bin", node.Value.string() + "/node", "--pm-script", pnpm.Value.string() + "/node_modules/pnpm/dist/pnpm.cjs", "--pm-type", "pnpm"}
+	env := Environment{s: &e.frame.ifEnv}
+
+	env.setString(envPnpmRoot, pnpm.Value.string())
+
+	pmScript := expandConfScalar(env.string(envPmScript), env)
+	args := []string{"--arcadia-root", "$(S)", "--arcadia-build-root", "$(B)", "--moddir", e.instance.Path.relString(), "--local-cli", local, "--nodejs-bin", node.Value.string() + "/node", "--pm-script", pmScript, "--pm-type", "pnpm"}
 
 	if parts[0] >= 25 && e.instance.Platform.OS == OSLinux {
 		atomic := e.notsResource("build/platform/nodejs/libatomic", "LIBATOMIC_1_2_0")
@@ -345,6 +346,27 @@ func (e *EmitContext) notsRequirements() *Requirements {
 }
 
 func (e *EmitContext) emitNotsNode(n Node) NodeRef {
+	env := Environment{s: &e.frame.ifEnv}
+
+	for _, reference := range confVarRefRe.FindAllStringSubmatch(env.string(envNotsTool), -1) {
+		modifiers, _, _ := strings.Cut(reference[0], ":")
+
+		if !slices.Contains(strings.Split(strings.TrimPrefix(modifiers, "${"), ";"), "input") {
+			continue
+		}
+
+		for _, input := range strings.Fields(expandConfScalar(env.string(internEnv(reference[1])), env)) {
+			n.Inputs.files = append(n.Inputs.files, e.ctx.na.vfsList(source(input)))
+		}
+	}
+
+	if sbomActive(e.ctx, e.instance) {
+		if ref, file := pythonToolchainSbomComponent(e.ctx, e.instance.Platform); ref != nil && file != nil {
+			n.Inputs.files = append(n.Inputs.files, e.ctx.na.vfsList(*file))
+			n.DepRefs = e.ctx.na.refList(append(slices.Clone(n.DepRefs), *ref)...)
+		}
+	}
+
 	ref := e.emitNode(n)
 
 	for _, out := range n.Outputs {
@@ -473,7 +495,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 
 	prepInputs = append(prepInputs, toolPath)
 
-	if c.Hermetic {
+	if c.Hermetic || c.AutoProto {
 		prepInputs = append(prepInputs, peerInputs...)
 	}
 
@@ -532,11 +554,17 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 		prepArgs = append(prepArgs, "--ts-proto-auto-deps-path", c.ProtoDeps, "--ts-proto-auto-package-name", c.ProtoPackage)
 
 		if c.ProtoNonRecursive && len(c.ProtoPeers) > 0 {
-			peers := anyStrs(c.ProtoPeers)
+			values := anyStrs(c.ProtoPeers)
+			peers := append([]string{"$_TS_PROTO_PEERS"}, values...)
 
 			slices.Sort(peers)
+
+			env := Environment{s: &e.frame.ifEnv}
+
+			env.setString(envTsProtoPeers, strings.Join(values, " "))
+
 			prepArgs = append(prepArgs, "--ts-proto-workspace-peers")
-			prepArgs = append(prepArgs, slices.Compact(peers)...)
+			prepArgs = append(prepArgs, strings.Fields(expandConfScalar(strings.Join(slices.Compact(peers), " "), env))...)
 		}
 	}
 
@@ -553,7 +581,7 @@ func (e *EmitContext) emitNotsPrepare() *ModuleEmitResult {
 		prep.ResourceURIs[i] = internStr(uri)
 	}
 
-	if c.Hermetic {
+	if c.Hermetic || c.AutoProto {
 		prep.DepRefs = na.refList(peerRefs...)
 	}
 
@@ -673,7 +701,7 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 		}
 
 		args = append(args, "--exclude-globs")
-		args = append(args, notsBaseExcludes...)
+		args = append(args, c.BaseExcludes...)
 		args = append(args, c.Excludes...)
 
 		if c.Kind != tokTsPackage {
