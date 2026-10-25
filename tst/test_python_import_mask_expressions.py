@@ -39,7 +39,10 @@ class PythonImportMaskExpressionTest(unittest.TestCase):
             self.assertIn(tool['outputs'][0], node['inputs'])
         bytecode = lib.node_by_output(graph, f'$(B)/{name}/entry.py.yapyc3')
         self.assertEqual(bytecode['inputs'][-1], f'$(S)/{name}/entry.py')
-        packed = next(n for n in objcopy_nodes(graph, name) if bytecode['outputs'][0] in n['inputs'])
+        packed = [n for n in objcopy_nodes(graph, name) if bytecode['outputs'][0] in n['inputs']
+                  and n['outputs'][0] in linked['inputs']]
+        self.assertEqual(len(packed), 1)
+        packed = packed[0]
         self.assertIn(bytecode['uid'], packed['deps'])
         self.assertIn(packed['uid'], linked['deps'])
         return node
