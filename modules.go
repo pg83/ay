@@ -4509,8 +4509,8 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			continue
 		}
 
-		if strings.Contains(a.string(), "=") && !extIsPy(src) && !extIsProto(src) {
-			continue
+		if !extIsPy(src) && !extIsProto(src) && !extIsEv(src) {
+			throwFmt("in PY_SRCS: unrecognized arg %q", src)
 		}
 
 		scope := PyScope{TopLevel: topLevel, Namespace: namespace}

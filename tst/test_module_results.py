@@ -122,14 +122,27 @@ class ModuleResultsTest(unittest.TestCase):
             archive = lib.node_by_output(graph, '$(B)/root/child/' + name)
             self.assertIn(archive['uid'], graph['result'])
 
-    def test_requested_proto_variants_expose_global_archives(self):
+    def test_requested_python_proto_rejects_native_sources(self):
         files = target_files()
         files['p/ya.make'] = 'PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO PY3_PROTO)\nSRCS(a.proto extra.cpp)\nEND()\n'
         files['p/extra.cpp'] = 'int extra;\n'
+        result = lib.make_process(files, 'p', '--sandboxing', '--strip-packages-from-results')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('in PY_SRCS: unrecognized arg', result.stderr)
+        self.assertIn('extra.cpp', result.stderr)
+
+    def test_requested_proto_variants_expose_their_native_archives(self):
+        files = target_files()
+        files['p/ya.make'] = (
+            'PROTO_LIBRARY()\nONLY_TAGS(CPP_PROTO PY3_PROTO)\nSRCS(a.proto)\n'
+            'IF(MODULE_TAG == CPP_PROTO)\nSRCS(extra.cpp)\nENDIF()\nEND()\n'
+        )
+        files['p/extra.cpp'] = 'int extra;\n'
         graph = lib.make(files, 'p', '--sandboxing', '--strip-packages-from-results')
-        for name in ('libpy3p.a', 'libpy3p.global.a'):
+        for name in ('libp.a', 'libpy3p.global.a'):
             archive = lib.node_by_output(graph, '$(B)/p/' + name)
             self.assertIn(archive['uid'], graph['result'])
+        self.assertFalse(any('$(B)/p/libpy3p.a' in node['outputs'] for node in graph['graph']))
 
 
 if __name__ == '__main__':
