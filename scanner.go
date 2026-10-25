@@ -26,6 +26,7 @@ const (
 	includeCythonFallback
 
 	includeCythonSibling
+	includeCythonImportEnd
 	includeTypeScript
 	includeMacro
 )
@@ -64,7 +65,7 @@ func (d IncludeDirective) quotedLike() bool {
 }
 
 func (d IncludeDirective) cythonProbe() bool {
-	return d.kind == includeCythonOptional || d.kind == includeCythonModule || d.kind == includeCythonName || d.kind == includeCythonFallback || d.kind == includeCythonSibling
+	return d.kind == includeCythonOptional || d.kind == includeCythonModule || d.kind == includeCythonName || d.kind == includeCythonFallback || d.kind == includeCythonSibling || d.kind == includeCythonImportEnd
 }
 
 type IncludeScanner struct {
@@ -154,7 +155,9 @@ func (s *IncludeScanner) hasOwnDiagnostics(v VFS) bool {
 func (s *IncludeScanner) reportDiagnostics(diagnostics *IncludeDiagnostics) {
 	if diagnostics != nil {
 		for _, diagnostic := range diagnostics.Entries {
-			s.onWarn(diagnostic.Warning)
+			if diagnostic.Warning.Message != "" {
+				s.onWarn(diagnostic.Warning)
+			}
 		}
 	}
 }
@@ -174,7 +177,7 @@ func (s *IncludeScanner) reportClosureDiagnostics(input VFS, cl Closure) {
 		}
 
 		for _, diagnostic := range entry.Diagnostics.Entries {
-			if info.providesSourceInclude(v, diagnostic.Directive) {
+			if diagnostic.Warning.Message == "" || info.providesSourceInclude(v, diagnostic.Directive) {
 				continue
 			}
 
@@ -438,12 +441,25 @@ func (sc *ScanCtx) appendResolvedChildren(out []VFS, vfsPath VFS) []VFS {
 
 	suppressCimportNames := false
 	prevProbeMissed := false
+	cimportStart := len(out)
 	entries := own
 
 	for pass := 0; pass < 2; pass++ {
 		for _, entry := range entries {
 			if entry.kind == includeCythonSibling {
 				out = sc.resolve(out, vfsPath, incDir, entry)
+
+				continue
+			}
+
+			if entry.kind == includeCythonOptional {
+				cimportStart = len(out)
+			}
+
+			if entry.kind == includeCythonImportEnd {
+				if sc.initialOnly && len(out) == cimportStart {
+					sc.diagnostics = append(sc.diagnostics, IncludeDiagnostic{Directive: entry})
+				}
 
 				continue
 			}

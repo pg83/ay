@@ -116,6 +116,8 @@ func buildExtClassMatcher() *ExtMatcher[ExtClass] {
 		".lpp":      srcExtFlex,
 		".lex":      srcExtFlex,
 		".l":        srcExtFlex,
+		".pxd":      srcExtHeader,
+		".pxi":      srcExtHeader,
 		".h":        srcExtHeader,
 		".hh":       srcExtHeader,
 		".hpp":      srcExtHeader,

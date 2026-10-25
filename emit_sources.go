@@ -53,6 +53,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 
 		if header.isSource() {
 			e.moduleIncludeRoots = append(e.moduleIncludeRoots, header)
+			e.scanner.discoverInput(header, e.d.scanCtx)
 		}
 
 		return

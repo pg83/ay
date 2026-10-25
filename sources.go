@@ -196,6 +196,10 @@ func (scanner *IncludeScanner) discoverInput(input VFS, ctx *ScanContext) {
 		return
 	}
 
+	if _, cached := scanner.closure(input); cached {
+		return
+	}
+
 	sc := scanner.getFileScanCtx(input, ctx, scanDomainCC, nil)
 
 	defer scanner.putScanCtx(sc)

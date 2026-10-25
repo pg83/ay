@@ -163,6 +163,7 @@ func addCythonPxdCandidates(add func(IncludeDirective), path string) {
 
 	add(IncludeDirective{kind: includeCythonOptional, target: includeTarget(internV(path, ".pxd").any())})
 	add(IncludeDirective{kind: includeCythonFallback, target: includeTarget(internV(path, "/__init__.pxd").any())})
+	add(IncludeDirective{kind: includeCythonImportEnd, target: includeTarget(internV(path, ".pxd").any())})
 }
 
 func addCythonCimportFrom(add func(IncludeDirective), module, names string) {
@@ -193,6 +194,12 @@ func addCythonCimportFrom(add func(IncludeDirective), module, names string) {
 		emit(includeCythonName, base+"/__init__.pxd")
 		emit(includeCythonFallback, base+".pxd")
 	})
+
+	if searchPath == "" {
+		emit(includeCythonImportEnd, "__init__.pxd")
+	} else {
+		emit(includeCythonImportEnd, searchPath+".pxd")
+	}
 }
 
 func cythonFromSearchPath(module string) string {
