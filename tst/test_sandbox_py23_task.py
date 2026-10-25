@@ -194,7 +194,7 @@ class SandboxPy23TaskTest(unittest.TestCase):
         self.assertIn(binary["uid"], bundle["deps"])
         self.assertIn(BUILD + "/mint", bundle["inputs"])
 
-    def test_first_context_selects_variants_for_root_and_depends(self):
+    def test_first_library_context_ignores_later_binary_selectors_for_root_and_depends(self):
         selection = 'IF(MODULE_TAG == "SB_TASK_BIN")\nONLY_TAGS(PY3)\nENDIF()'
         for depends in (False, True):
             with self.subTest(depends=depends):
@@ -203,8 +203,8 @@ class SandboxPy23TaskTest(unittest.TestCase):
                 graph = lib.make(files, "checks" if depends else TASK, "-t")
                 outputs = {out for node in graph["graph"] for out in node["outputs"]}
                 self.assertIn(BUILD + "/" + OUTPUTS["PY3"], outputs)
-                self.assertNotIn(BUILD + "/" + OUTPUTS["PY2"], outputs)
-                self.assertNotIn(BUILD + "/mint", outputs)
+                self.assertIn(BUILD + "/" + OUTPUTS["PY2"], outputs)
+                self.assertIn(BUILD + "/mint", outputs)
 
     def test_platform_excluded_submodule_is_not_a_root_or_depends_result(self):
         for depends in (False, True):
