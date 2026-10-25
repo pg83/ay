@@ -2554,6 +2554,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokSdcResourceInfo, tokSdcSbResourceInfo, tokSdcRosnodeInfo, tokSdcSolibInfo:
 		d.sdcMetas = append(d.sdcMetas, parseSdcMeta(v.Name, anyStrs(v.Args)))
 	case tokFromArchive:
+		if len(v.Args) == 0 {
+			throwFmt("FROM_ARCHIVE expects a source archive")
+		}
+
 		options := parseFromSandbox(v.Args, v.Line)
 
 		d.fromArchives = append(d.fromArchives, FromArchiveEntry{Source: options.ResourceId, ArchiveExtraction: options.ArchiveExtraction})
