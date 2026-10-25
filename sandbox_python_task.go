@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const sandboxPythonBinaryVariant = uint16(1) << LangNone
+
 func isSandboxPythonTask(name TOK) bool {
 	return name == tokSandboxPy3Task || hasSandboxPython2Library(name)
 }
@@ -29,34 +31,64 @@ func sandboxPythonTaskVariant(name TOK, kind ModuleKind, language Language) stri
 	return "PY3"
 }
 
-func sandboxPythonTaskInstances(instance ModuleInstance, name TOK) []ModuleInstance {
-	instance.Kind, instance.Language = KindBin, LangCPP
-
-	instances := []ModuleInstance{instance}
-
-	instance.Kind = KindLib
+func sandboxPythonTaskFirstInstance(instance ModuleInstance, name TOK) ModuleInstance {
+	instance.Kind, instance.Language = KindLib, LangCPP
 
 	if hasSandboxPython2Library(name) {
 		instance.Language = LangPy2
-		instances = append(instances, instance)
-
-		if name == tokSandboxTask {
-			return instances
-		}
-
-		instance.Language = LangCPP
 	}
 
+	return instance
+}
+
+func sandboxPythonTaskInstances(instance ModuleInstance, name TOK) []ModuleInstance {
+	instance = sandboxPythonTaskFirstInstance(instance, name)
+
+	instances := []ModuleInstance{instance}
+
+	if hasSandboxPython2Library(name) && name != tokSandboxTask {
+		instance.Language = LangCPP
+		instances = append(instances, instance)
+	}
+
+	instance.Kind, instance.Language = KindBin, LangCPP
 	instances = append(instances, instance)
 
-	if name == tokSandboxPy233Task {
-		binary := instances[0]
+	return instances
+}
 
-		copy(instances, instances[1:])
-		instances[len(instances)-1] = binary
+func sandboxPythonTaskVariantBit(instance ModuleInstance) uint16 {
+	if instance.Kind == KindBin {
+		return sandboxPythonBinaryVariant
 	}
 
-	return instances
+	if instance.Language == LangPy2 {
+		return uint16(1) << LangPy2
+	}
+
+	return uint16(1) << LangCPP
+}
+
+func selectedSandboxPythonTaskVariants(instance ModuleInstance, name TOK, d *ModuleData) uint16 {
+	excluded := strings.Fields(instance.Platform.ifEnv.string(envExcludeSubmodules))
+
+	var variants uint16
+
+	for _, sub := range sandboxPythonTaskInstances(instance, name) {
+		tag := sandboxPythonTaskVariant(name, sub.Kind, sub.Language)
+
+		if !moduleExcludesTag(d, tag) && !slices.Contains(excluded, tag) {
+			variants |= sandboxPythonTaskVariantBit(sub)
+		}
+	}
+
+	return variants
+}
+
+func (ctx *GenCtx) sandboxPythonTaskVariants(instance ModuleInstance, name TOK) uint16 {
+	first := sandboxPythonTaskFirstInstance(instance, name)
+
+	return genSiblingModule(ctx, first).ModuleVariants
 }
 
 func sandboxPythonTaskUnit(name TOK, kind ModuleKind, language Language) ModuleUnit {
@@ -178,13 +210,20 @@ func (e *EmitContext) sandboxMixedTaskPeer(peer ModuleInstance) ModuleInstance {
 		py2, py3 = slices.Contains(allowed, "PY2"), slices.Contains(allowed, "PY3")
 	}
 
-	if py2 {
-		peer.Language = LangPy2
-	} else if py3 {
-		peer.Language = LangCPP
-	} else {
-		throwFmt("gen: %s: PEERDIR to %s is prohibited by incompatible tags", e.instance.Path.relString(), peer.Path.relString())
+	variants := e.ctx.sandboxPythonTaskVariants(peer, tokSandboxPy233Task)
+
+	for _, candidate := range []struct {
+		language Language
+		allowed  bool
+	}{{LangPy2, py2}, {LangCPP, py3}} {
+		peer.Language = candidate.language
+
+		if candidate.allowed && variants&sandboxPythonTaskVariantBit(peer) != 0 {
+			return peer
+		}
 	}
+
+	throwFmt("gen: %s: PEERDIR to %s is prohibited by incompatible tags", e.instance.Path.relString(), peer.Path.relString())
 
 	return peer
 }

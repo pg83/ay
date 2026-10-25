@@ -18,6 +18,21 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 
 	instance := ctx.rootInstanceForDeclaration(dir, demandSelf, declaration)
 	name := declaration.Name
+
+	if isSandboxPythonTask(name) {
+		variants := ctx.sandboxPythonTaskVariants(instance, name)
+		instances := sandboxPythonTaskInstances(instance, name)
+		selected := instances[:0]
+
+		for _, sub := range instances {
+			if variants&sandboxPythonTaskVariantBit(sub) != 0 {
+				selected = append(selected, sub)
+			}
+		}
+
+		return selected
+	}
+
 	frame := ctx.pushFrame()
 
 	defer ctx.popFrame()
@@ -142,18 +157,10 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 		}
 	}
 
-	if isSandboxPythonTask(name) {
-		instances = sandboxPythonTaskInstances(instance, name)
-	}
-
 	selected := instances[:0]
 
 	for _, peer := range instances {
 		tag := multimoduleVariantTag(name, peer.Language)
-
-		if isSandboxPythonTask(name) {
-			tag = sandboxPythonTaskVariant(name, peer.Kind, peer.Language)
-		}
 
 		if tag == "" {
 			tag = resolveModuleUnit(name, peer.Kind, peer.Language).Tag.string()

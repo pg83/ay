@@ -1266,7 +1266,7 @@ func genModuleRecover(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	return r
 }
 
-func genSiblingModule(ctx *GenCtx, instance ModuleInstance) {
+func genSiblingModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
 	parent := ctx.warningSink
 
 	ctx.warningSink = nil
@@ -1274,7 +1274,8 @@ func genSiblingModule(ctx *GenCtx, instance ModuleInstance) {
 	defer func() { ctx.warningSink = parent }()
 
 	instance.Demand = demandNone
-	genModule(ctx, instance)
+
+	return genModule(ctx, instance)
 }
 
 func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResult) {
@@ -1305,6 +1306,24 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
 	moduleName := stmtsModuleName(stmts)
+
+	var sandboxVariants uint16
+
+	if isSandboxPythonTask(moduleName) {
+		first := sandboxPythonTaskFirstInstance(instance, moduleName)
+
+		if instance.Kind != first.Kind || instance.Language != first.Language {
+			sandboxVariants = ctx.sandboxPythonTaskVariants(instance, moduleName)
+
+			if sandboxVariants&sandboxPythonTaskVariantBit(instance) == 0 {
+				result = &ModuleEmitResult{ModuleVariants: sandboxVariants}
+
+				ctx.memoPut(instance, result)
+
+				return result
+			}
+		}
+	}
 
 	if moduleName == tokPy23Library || moduleName == tokPy23NativeLibrary {
 		if instance.Language == LangPy2 {
@@ -1409,6 +1428,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	if isSandboxPythonTask(moduleName) {
 		tag = sandboxPythonTaskVariant(moduleName, instance.Kind, instance.Language)
+
+		first := sandboxPythonTaskFirstInstance(instance, moduleName)
+
+		if instance.Kind == first.Kind && instance.Language == first.Language {
+			sandboxVariants = selectedSandboxPythonTaskVariants(instance, moduleName, d)
+		}
+
+		d.moduleVariants = sandboxVariants
 	}
 
 	if d.moduleStmt != nil && (d.moduleStmt.Schema || d.moduleStmt.Name == tokProtoLibrary && (instance.Language == LangPy || instance.Language == LangPy2)) {
@@ -1420,6 +1447,10 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	excluded := moduleExcludesTag(d, tag)
+
+	if isSandboxPythonTask(moduleName) {
+		excluded = d.moduleVariants&sandboxPythonTaskVariantBit(instance) == 0
+	}
 
 	if tag != "" && excluded {
 		result := &ModuleEmitResult{ModuleVariants: d.moduleVariants, protoExcluded: moduleName == tokProtoLibrary}

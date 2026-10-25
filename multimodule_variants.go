@@ -60,10 +60,12 @@ func (ctx *GenCtx) genMultimoduleTargets(target DiscoveredModule, variants uint1
 		instance := ctx.rootInstanceForDeclaration(target.Path, demand, target.Declaration)
 
 		for _, sub := range sandboxPythonTaskInstances(instance, target.Declaration.Name) {
-			if sub.Kind != instance.Kind || sub.Language != instance.Language {
+			if (sub.Kind != instance.Kind || sub.Language != instance.Language) && variants&sandboxPythonTaskVariantBit(sub) != 0 {
 				instances = append(instances, sub)
 			}
 		}
+
+		variants = 0
 	}
 
 	if target.Declaration != nil && target.Declaration.Name == tokYqlUdf {
