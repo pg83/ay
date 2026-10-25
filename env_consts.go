@@ -307,6 +307,7 @@ var (
 	envYA_TC                                  = internEnv("YA_TC")
 	envYA_TEST_RUNNER                         = internEnv("YA_TEST_RUNNER")
 	envYaml2jsonBin                           = internEnv("_YAML2JSON_BIN")
+	envYamlLintSrcs                           = internEnv("YAML_LINT_SRCS")
 	envYqlAbiPeerdirTag                       = internEnv("YQL_ABI_PEERDIR_TAG")
 	envYqlAbiStatedCurrent                    = internEnv("_YQL_ABI_STATED_CURRENT")
 	envYqlAbiStatedStable                     = internEnv("_YQL_ABI_STATED_STABLE")

@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"path"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -165,49 +166,76 @@ func (d *ModuleData) collectExplicitPythonStyle(stmt UnknownStmt, env Environmen
 	d.styleChecks = append(d.styleChecks, check)
 }
 
-func (d *ModuleData) collectYAMLStyleWithConfig(module string, env Environment) {
-	if value := env.string(envNoLintValue); value == "none" || value == "none_internal" {
-		return
-	}
+func styleChecksDisabled(env Environment) bool {
+	value := env.string(envNoLintValue)
 
-	if value, _ := env.lookup("TIDY"); value == "yes" {
-		return
-	}
-
-	d.peerdirs = append(d.peerdirs, internStr(yamlfmtResourcePeer).any())
-
-	if files, _ := env.lookup("YAML_LINT_SRCS"); strings.TrimSpace(files) != "" {
-		throwFmt("%s: STYLE_YAML_WITH_CONFIG over YAML_LINT_SRCS is not modelled", module)
-	}
+	return value == "none" || value == "none_internal" || env.string(envTidy) == "yes"
 }
 
-func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, env Environment) {
-	if value := env.string(envNoLintValue); value == "none" || value == "none_internal" {
-		return
-	}
+func yamlStyleCheck(env Environment) StyleCheck {
+	check := StyleCheck{Name: "yamlfmt", ConfigMap: "build/config/tests/yaml_style/default_configs.json", Wrapper: "tools/yamlfmt_linter/wrapper.py", Resource: "YAMLFMT_RESOURCE_GLOBAL", Peer: yamlfmtResourcePeer}
 
-	if value, _ := env.lookup("TIDY"); value == "yes" {
-		return
-	}
-
-	check := StyleCheck{Name: "clang_format_json", ConfigMap: "build/config/tests/json_style/default_configs.json", Wrapper: "tools/clang_format_json_linter/wrapper.py", Resource: "CLANG_FORMAT_RESOURCE_GLOBAL"}
-	peer, configVar := "build/platform/clang/clang-format", "JSON_LINTER_DEFAULT_CONFIGS"
-	ext := ".json"
-	yaml := stmt.Name == tokStyleYAML
-
-	if yaml {
-		check = StyleCheck{Name: "yamlfmt", ConfigMap: "build/config/tests/yaml_style/default_configs.json", Wrapper: "tools/yamlfmt_linter/wrapper.py", Resource: "YAMLFMT_RESOURCE_GLOBAL"}
-		peer, configVar = yamlfmtResourcePeer, "YAML_LINTER_DEFAULT_CONFIGS"
-	} else if stmt.Name == tokStyleYQL {
-		check = StyleCheck{Name: "yqlfmt", Wrapper: "tools/yqlfmt_linter/wrapper.py"}
-		peer, configVar, ext = "", "", ".yql"
-	}
-
-	if value, ok := env.lookup(configVar); ok && value != "" {
+	if value, ok := env.lookup("YAML_LINTER_DEFAULT_CONFIGS"); ok && value != "" {
 		check.ConfigMap = value
 	}
 
-	var dirs, recursive []string
+	return check
+}
+
+func (d *ModuleData) collectYAMLStyleWithConfig(module string, stmt UnknownStmt, env Environment) {
+	if styleChecksDisabled(env) {
+		return
+	}
+
+	check := yamlStyleCheck(env)
+	files, _ := env.lookup("YAML_LINT_SRCS")
+
+	for _, file := range strings.Fields(files) {
+		check.Files = append(check.Files, styleSourcePath(module, file))
+	}
+
+	args := stmt.Args
+
+	if len(args) > 0 && args[0].string() == "CONFIG_TYPE" {
+		check.ConfigType = strings.Join(anyStrs(args[1:]), " ")
+		check.ConfigDir, _ = env.lookup("MODULE_COMMON_CONFIGS_DIR")
+	}
+
+	d.addFileStyleCheck(check)
+}
+
+func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, env Environment) {
+	if styleChecksDisabled(env) {
+		return
+	}
+
+	check := StyleCheck{Name: "clang_format_json", ConfigMap: "build/config/tests/json_style/default_configs.json", Wrapper: "tools/clang_format_json_linter/wrapper.py", Resource: "CLANG_FORMAT_RESOURCE_GLOBAL", Peer: "build/platform/clang/clang-format"}
+
+	switch stmt.Name {
+	case tokStyleYAML:
+		check = yamlStyleCheck(env)
+	case tokStyleYQL:
+		check = StyleCheck{Name: "yqlfmt", Wrapper: "tools/yqlfmt_linter/wrapper.py"}
+	default:
+		if value, ok := env.lookup("JSON_LINTER_DEFAULT_CONFIGS"); ok && value != "" {
+			check.ConfigMap = value
+		}
+	}
+
+	check.Files = collectStyleFiles(fs, module, stmt)
+	d.addFileStyleCheck(check)
+}
+
+func collectStyleFiles(fs FS, module string, stmt UnknownStmt) []string {
+	var dirs, recursive, files []string
+	var excludes []*regexp.Regexp
+
+	ext := ".json"
+	yaml := stmt.Name == tokStyleYAML || stmt.Name == tokCollectYAML
+
+	if stmt.Name == tokStyleYQL {
+		ext = ".yql"
+	}
 
 	dst := &dirs
 
@@ -217,8 +245,14 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 			dst = &dirs
 		case "DIRS_RECURSE":
 			dst = &recursive
+		case "EXCLUDE":
+			dst = nil
 		default:
-			*dst = append(*dst, arg.string())
+			if dst == nil {
+				excludes = append(excludes, globExcludeRegex(arg.string()))
+			} else {
+				*dst = append(*dst, arg.string())
+			}
 		}
 	}
 
@@ -240,31 +274,35 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 		for _, file := range globMatch(fs, pattern) {
 			rel := strings.TrimPrefix(file, module+"/")
 
-			if rel == "ya.make" || strings.HasPrefix(rel, "canondata/") {
+			if rel == "ya.make" || strings.HasPrefix(rel, "canondata/") || globExcluded(excludes, rel, false) {
 				continue
 			}
 
 			if path.Base(file) == "ya.make" {
-				throwFmt("STYLE: nested module %s", file)
-			}
-
-			if yaml {
-				if path.Base(file) == "a.yaml" || path.Base(file) == "t.yaml" || (path.Ext(file) != ".yaml" && path.Ext(file) != ".yml") {
+			} else if yaml {
+				if stmt.Name == tokStyleYAML && (path.Base(file) == "a.yaml" || path.Base(file) == "t.yaml") || (path.Ext(file) != ".yaml" && path.Ext(file) != ".yml") {
 					continue
 				}
 			} else if path.Ext(file) != ext {
 				continue
 			}
 
-			check.Files = append(check.Files, file)
+			files = append(files, file)
 		}
 	}
 
-	slices.Sort(check.Files)
-	check.Files = slices.Compact(check.Files)
+	return sortedUnique(files)
+}
 
-	if peer != "" {
-		d.peerdirs = append(d.peerdirs, internStr(peer).any())
+func (d *ModuleData) addFileStyleCheck(check StyleCheck) {
+	for _, file := range check.Files {
+		if path.Base(file) == "ya.make" {
+			throwFmt("STYLE: nested module %s", file)
+		}
+	}
+
+	if check.Peer != "" {
+		d.peerdirs = append(d.peerdirs, internStr(check.Peer).any())
 	}
 
 	if len(check.Files) == 0 {
@@ -318,7 +356,12 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 		}
 
 		if check.ConfigType != "" {
-			if check.CPP && check.ConfigType != ".clang-format" || !check.CPP && check.ConfigType != "pyproject.toml" && (check.Name != "ruff" || check.ConfigType != "ruff.toml") {
+			validType := check.ConfigType == ".clang-format" && check.CPP ||
+				check.ConfigType == "pyproject.toml" && !check.CPP ||
+				check.ConfigType == "ruff.toml" && check.Name == "ruff" ||
+				check.ConfigType == ".yamlfmt.yml" && check.Name == "yamlfmt"
+
+			if !validType {
 				throwFmt("STYLE: unknown %s config type %s", check.Name, check.ConfigType)
 			}
 

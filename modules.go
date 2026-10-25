@@ -3595,7 +3595,15 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.peerdirs = append(d.peerdirs, internStr(javaDetekt.resourcePeer).any())
 		}
 	case tokStyleYAMLConf:
-		d.collectYAMLStyleWithConfig(modulePath, env)
+		d.collectYAMLStyleWithConfig(modulePath, v, env)
+	case tokCollectYAML:
+		files := collectStyleFiles(fs, modulePath, v)
+
+		for i, file := range files {
+			files[i] = source(file).string()
+		}
+
+		env.setString(envYamlLintSrcs, strings.Join(files, " "))
 	case tokUsrvBuild:
 		d.collectUsrvFiles(anyStrs(v.Args))
 	case tokUsrvAllSrcs:
