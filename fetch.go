@@ -64,7 +64,7 @@ func cmdFetch(_ GlobalFlags, args []string) int {
 
 		descriptor := decodeResourceDescriptor(args[1], args[3])
 
-		fetchResource(args[5], descriptor.URI, args[6])
+		fetchResource(args[5], descriptor.URI, args[6], descriptor.StripPrefix)
 
 		return 0
 	}
@@ -82,7 +82,7 @@ func cmdFetch(_ GlobalFlags, args []string) int {
 		out = args[3]
 	}
 
-	fetchResource(sourceRoot, uri, out)
+	fetchResource(sourceRoot, uri, out, 0)
 
 	return 0
 }
@@ -120,7 +120,7 @@ func forceRemoveAll(path string) error {
 	return os.RemoveAll(path)
 }
 
-func fetchResource(sourceRoot, uri, out string) {
+func fetchResource(sourceRoot, uri, out string, stripPrefix uint32) {
 	throw(forceRemoveAll(out))
 	throw(os.MkdirAll(out, 0o755))
 
@@ -131,7 +131,7 @@ func fetchResource(sourceRoot, uri, out string) {
 	archivePath := filepath.Join(tmp, "resource")
 
 	downloadResourceArchive(sourceRoot, uri, archivePath)
-	unpackResourceArchive(archivePath, out)
+	unpackResourceArchive(archivePath, out, stripPrefix)
 }
 
 func downloadResourceArchive(sourceRoot, uri, archivePath string) {
@@ -239,7 +239,7 @@ func placeSandboxResource(fetched, copyToDir, untarTo string, renames, outs []st
 	}
 
 	if untarTo != "" {
-		unpackResourceArchive(fetched, untarTo)
+		unpackResourceArchive(fetched, untarTo, 0)
 	}
 
 	for idx, src := range renames {
@@ -476,8 +476,14 @@ func querySandboxResource(id, token string) SandboxResource {
 	return info
 }
 
-func unpackResourceArchive(archivePath, out string) {
+func unpackResourceArchive(archivePath, out string, stripPrefix uint32) {
 	throw(os.MkdirAll(out, 0o755))
+
+	if stripPrefix != 0 {
+		unpackStrippedResourceArchive(archivePath, out, stripPrefix)
+
+		return
+	}
 
 	cmd := exec.Command("tar", "-xf", archivePath, "-C", out)
 

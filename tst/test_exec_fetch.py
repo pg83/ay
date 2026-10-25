@@ -362,6 +362,106 @@ class FetchURLTest(FetchCase):
 
 
 class ResourceDescriptorFetchTest(unittest.TestCase):
+    def fetch_local_archive(self, root, archive):
+        source = root / "src"
+        script = source / "build/scripts/fetch_from_sandbox.py"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text(
+            "import shutil, sys\n"
+            f"shutil.copyfile({str(archive)!r}, sys.argv[sys.argv.index('--copy-to') + 1])\n"
+        )
+        descriptor = {"pattern": "TOOL", "resource": "sbr:1", "strip_prefix": 1}
+        output = root / "output"
+        result = lib.run_process(
+            "fetch", "--resource-json", json.dumps(descriptor), "--host-platform", "linux-x86_64",
+            root / "bld", source, output,
+            env={**os.environ, "HOME": str(root / "home"), "YA_TOKEN": "", "SSH_AUTH_SOCK": "",
+                 "AY_TEST_SSH_OAUTH": ""},
+        )
+        return result, output
+
+    def test_strip_prefix_streams_native_confirmed_archive_formats(self):
+        with tempfile.TemporaryDirectory(prefix="ay-strip-formats-") as directory:
+            root = Path(directory)
+            for kind, mode in (("tar", "w"), ("gz", "w:gz"), ("bz2", "w:bz2"),
+                               ("xz", "w:xz"), ("zstd", "w"), ("zip", None)):
+                with self.subTest(kind=kind):
+                    archive_path = root / f"tool.{kind}"
+                    if kind == "zip":
+                        with zipfile.ZipFile(archive_path, "w") as archive:
+                            archive.writestr("prefix/bin/tool", "tool\n")
+                    else:
+                        with tarfile.open(archive_path, mode) as archive:
+                            entry = tarfile.TarInfo("prefix/bin/tool")
+                            entry.mode = 0o755
+                            entry.size = 5
+                            archive.addfile(entry, io.BytesIO(b"tool\n"))
+                        if kind == "zstd":
+                            compressed = archive_path.with_suffix(".zst")
+                            subprocess.run(["zstd", "-q", "-f", archive_path, "-o", compressed], check=True)
+                            archive_path = compressed
+                    result, output = self.fetch_local_archive(root, archive_path)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual((output / "bin/tool").read_text(), "tool\n")
+                    self.assertFalse((output / "prefix").exists())
+
+    def test_strip_prefix_applies_to_symlink_and_hardlink_targets(self):
+        # The source extract_tar algorithm strips both link targets. The pinned
+        # native Python helper has a separate bytes/PurePath error on links.
+        with tempfile.TemporaryDirectory(prefix="ay-strip-links-") as directory:
+            root = Path(directory)
+            archive_path = root / "links.tar"
+            with tarfile.open(archive_path, "w") as archive:
+                entry = tarfile.TarInfo("prefix/bin/tool")
+                entry.size = 5
+                archive.addfile(entry, io.BytesIO(b"tool\n"))
+                for name, kind in (("link", tarfile.SYMTYPE), ("hard", tarfile.LNKTYPE)):
+                    entry = tarfile.TarInfo(f"prefix/{name}")
+                    entry.type = kind
+                    entry.linkname = "prefix/bin/tool"
+                    archive.addfile(entry)
+            result, output = self.fetch_local_archive(root, archive_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(os.readlink(output / "link"), "bin/tool")
+            self.assertEqual((output / "link").read_text(), "tool\n")
+            self.assertTrue(os.path.samefile(output / "hard", output / "bin/tool"))
+
+    def test_strip_prefix_rejects_collisions_and_output_escape(self):
+        with tempfile.TemporaryDirectory(prefix="ay-strip-safety-") as directory:
+            root = Path(directory)
+            outside = root / "outside.txt"
+            outside.write_text("kept\n")
+            for kind in ("collision", "traversal", "symlink"):
+                with self.subTest(kind=kind):
+                    archive_path = root / f"{kind}.tar"
+                    with tarfile.open(archive_path, "w") as archive:
+                        if kind == "symlink":
+                            entry = tarfile.TarInfo("prefix/link")
+                            entry.type = tarfile.SYMTYPE
+                            entry.linkname = "prefix/../outside.txt"
+                            archive.addfile(entry)
+                        else:
+                            names = ("a/tool", "b/tool") if kind == "collision" else ("prefix/../outside.txt",)
+                            for name in names:
+                                entry = tarfile.TarInfo(name)
+                                entry.size = 4
+                                archive.addfile(entry, io.BytesIO(b"bad\n"))
+                    result, output = self.fetch_local_archive(root, archive_path)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("duplicated" if kind == "collision" else "escapes resource output", result.stderr)
+                    self.assertEqual(outside.read_text(), "kept\n")
+                    self.assertFalse((output / "resource").exists())
+
+    def test_strip_prefix_does_not_copy_plain_input_as_a_resource(self):
+        with tempfile.TemporaryDirectory(prefix="ay-strip-plain-") as directory:
+            root = Path(directory)
+            archive = root / "plain"
+            archive.write_bytes(b"hi")
+            result, output = self.fetch_local_archive(root, archive)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unrecognized resource archive", result.stderr)
+            self.assertEqual(list(output.iterdir()), [])
+
     def test_host_aliases_select_a_resource_when_fetch_runs(self):
         with tempfile.TemporaryDirectory(prefix="ay-resource-descriptor-") as directory:
             root = Path(directory)

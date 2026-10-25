@@ -1,7 +1,9 @@
+import io
 import json
 import os
 import re
 import tempfile
+import tarfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -359,6 +361,65 @@ class ResourceDeclsTest(unittest.TestCase):
             graph = lib.make(files, "lib")
             actions.append(lib.node_by_output(graph, "$(B)/resources/T")["cmds"])
         self.assertNotEqual(actions[0], actions[1], "FETCH loses STRIP_PREFIX 1")
+
+    def test_host_bundle_strip_prefix_extracts_a_local_tar(self):
+        with tempfile.TemporaryDirectory(prefix="ay-strip-resource-") as directory:
+            root = Path(directory)
+            archive_path = root / "tool.tar"
+            with tarfile.open(archive_path, "w") as archive:
+                directory_entry = tarfile.TarInfo("prefix/")
+                directory_entry.type = tarfile.DIRTYPE
+                directory_entry.mode = 0o755
+                archive.addfile(directory_entry)
+                entry = tarfile.TarInfo("prefix/bin/tool")
+                content = b"local tool\n"
+                entry.size = len(content)
+                entry.mode = 0o755
+                archive.addfile(entry, io.BytesIO(content))
+
+            source = root / "src"
+            script = source / "build/scripts/fetch_from_sandbox.py"
+            script.parent.mkdir(parents=True)
+            script.write_text(
+                "import shutil, sys\n"
+                f"shutil.copyfile({str(archive_path)!r}, sys.argv[sys.argv.index('--copy-to') + 1])\n"
+            )
+            env = {**os.environ, "HOME": str(root / "home"), "YA_TOKEN": "",
+                   "SSH_AUTH_SOCK": "", "AY_TEST_SSH_OAUTH": ""}
+            for kind, count in (("bundle", 0), ("bundle", 1), ("bundle", 2),
+                                ("bundle", 4294967295), ("any", 1), ("json", 1)):
+                with self.subTest(kind=kind, strip_prefix=count):
+                    declaration = (
+                        f"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 FOR "
+                        f"{'ANY' if kind == 'any' else 'LINUX'} STRIP_PREFIX {count})\n"
+                    )
+                    if kind == "json":
+                        declaration = "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(T bundle.json)\n"
+                    files = {
+                        "res/ya.make": resources_library(declaration),
+                        "res/bundle.json": json.dumps({"by_platform": {
+                            "linux-x86_64": {"uri": "sbr:1", "strip_prefix": count},
+                        }}),
+                        "lib/ya.make": (
+                            f"PROGRAM()\n{BARE}PEERDIR(res)\n"
+                            "CFLAGS(-DPROBE=${T_RESOURCE_GLOBAL})\nSRCS(main.cpp)\nEND()\n"
+                        ),
+                        "lib/main.cpp": "int main(){return 0;}\n",
+                    }
+                    graph = lib.make(files, "lib")
+                    build = root / f"{kind}-{count}"
+                    args = fetches(graph)["$(B)/resources/T"]
+                    result = lib.run_process(*[
+                        arg.replace("$(B)", str(build)).replace("$(S)", str(source)) for arg in args
+                    ], env=env)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    output = build / "resources/T"
+                    if count == 4294967295:
+                        self.assertEqual(list(output.iterdir()), [])
+                    else:
+                        target = output.joinpath(*("prefix", "bin", "tool")[count:])
+                        self.assertEqual(target.read_bytes(), content)
+                        self.assertEqual(target.stat().st_mode & 0o777, 0o755)
 
     def test_missing_host_entry_is_rejected_when_fetch_runs(self):
         for platform in ("DARWIN", "LINUX-X86_64"):
