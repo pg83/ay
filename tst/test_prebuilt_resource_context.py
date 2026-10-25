@@ -2,6 +2,7 @@ import json
 import unittest
 
 import lib
+from resource_dependencies import fetched_uri
 
 
 BARE = 'NO_PLATFORM()\nNO_UTIL()\nNO_RUNTIME()\nDISABLE(NEED_PLATFORM_PEERDIRS COMMON_LINK_SETTINGS)\n'
@@ -21,7 +22,7 @@ def files(equal=False):
 
 
 def fetch(graph, name, uri):
-    found = [n for n in graph['graph'] if n['outputs'] == [f'$(B)/resources/{name}'] and n['cmds'][0]['cmd_args'][4] == uri]
+    found = [n for n in graph['graph'] if n['outputs'] == [f'$(B)/resources/{name}'] and fetched_uri({'graph': [n]}, name) == uri]
     if len(found) != 1:
         raise AssertionError((name, uri, found))
     return found[0]
