@@ -422,7 +422,7 @@ class ResourceDeclsTest(unittest.TestCase):
                         self.assertEqual(target.stat().st_mode & 0o777, 0o755)
 
     def test_missing_host_entry_is_rejected_when_fetch_runs(self):
-        for platform in ("DARWIN", "LINUX-X86_64"):
+        for platform in ("DARWIN", "LINUX-X86_64", "any"):
             with self.subTest(platform=platform):
                 files = {
                     "res/ya.make": resources_library(
@@ -444,7 +444,8 @@ class ResourceDeclsTest(unittest.TestCase):
                     result = lib.run_process(*[
                         arg.replace("$(B)", str(root / "bld")).replace("$(S)", str(root / "src"))
                         for arg in args
-                    ])
+                    ], env={**os.environ, "HOME": str(root / "home"), "YA_TOKEN": "",
+                            "SSH_AUTH_SOCK": "", "AY_TEST_SSH_OAUTH": ""})
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn('resource "T" has no entry for host platform "linux-x86_64"', result.stderr)
                     self.assertEqual((output / "kept").read_text(), "untouched\n")

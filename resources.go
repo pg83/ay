@@ -194,7 +194,7 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 func makeHostResourceDecl(name string, bundle map[string]ResourceBundleEntry) ResourceDecl {
 	if len(bundle) == 1 {
 		for platform, resource := range bundle {
-			if strings.EqualFold(platform, "any") {
+			if platform == "ANY" {
 				return makeResourceDescriptorDecl(name, ResourceDescriptor{URI: resource.URI, StripPrefix: resource.StripPrefix})
 			}
 		}
@@ -619,7 +619,7 @@ func readResourceBundleJSON(fs FS, rel string) map[string]ResourceBundleEntry {
 			throwFmt("resources: platform %q: strip_prefix value %d is too big", platform, resource.StripPrefix)
 		}
 
-		key := canonizeResourcePlatform(platform)
+		key := strings.ToUpper(canonizeResourcePlatform(platform))
 
 		if _, exists := out[key]; !exists {
 			out[key] = resource
