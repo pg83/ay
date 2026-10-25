@@ -80,6 +80,7 @@ type ModuleCCInputs struct {
 	Variant         *string
 	IncludeInputs   []VFS
 	IncludeView     Closure
+	IncludePending  *PendingEmit
 }
 
 func newModuleCCInputs(env *ModuleCompileEnv) ModuleCCInputs {
@@ -175,10 +176,27 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef
 		return ref, out, true
 	}
 
-	in.IncludeView = e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
+	configuration := e.instance.Demand == demandLinked && ctx.emit.deferPublication > 0 && srcVFS.isSource()
+
+	if configuration {
+		sc := e.scanner.getFileScanCtx(srcVFS, e.d.scanCtx, scanDomainCC, nil)
+
+		defer e.scanner.putScanCtx(sc)
+
+		sc.initialOnly = true
+		in.IncludeView = sc.closureOf(srcVFS)
+	} else {
+		in.IncludeView = e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
+	}
 
 	if in.MainOutInducedInputs {
 		in.IncludeInputs = e.mainOutInducedInputs(ctx.na, in.IncludeView)
+	}
+
+	if configuration && in.IncludeView.incomplete {
+		in.IncludePending = e.pendingEmit(func() {
+			e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
+		})
 	}
 
 	if e.d.multimodule == tokFbsLibrary {
@@ -367,7 +385,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 		Platform: instance.Platform,
 		Cmds:     cmds,
 		Env:      env,
-		Inputs:   NodeInputs{files: allInputs, root: in.IncludeView.self},
+		Inputs:   NodeInputs{files: allInputs, root: in.IncludeView.self, pending: in.IncludePending},
 
 		Outputs:   na.vfsList(outVFS),
 		KV:        &ccKV,

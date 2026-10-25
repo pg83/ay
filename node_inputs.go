@@ -5,12 +5,13 @@ import "slices"
 type NodeInputs struct {
 	files       InputChunks
 	roots       InputChunks
-	root        VFS
 	sourceRoots []VFS
 	modulePeers []VFS
 	text        []VFS
 	scanner     *IncludeScanner
 	na          *NodeArenas
+	pending     *PendingEmit
+	root        VFS
 	deferred    bool
 }
 

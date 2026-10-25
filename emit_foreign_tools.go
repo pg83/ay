@@ -79,6 +79,13 @@ func (ctx *GenCtx) moduleBuildDeps(ref NodeRef) ([]NodeRef, bool) {
 func (ctx *GenCtx) activateNodeInputs(node *Node, activation map[*IncludeScanner]*BitSet, selectProducer func(NodeRef), modulePeers bool) {
 	plan := &node.Inputs
 
+	if !modulePeers && plan.pending != nil {
+		pending := plan.pending
+
+		plan.pending = nil
+		pending.fire()
+	}
+
 	if plan.scanner == nil {
 		return
 	}

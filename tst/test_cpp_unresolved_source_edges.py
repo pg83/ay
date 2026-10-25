@@ -1,4 +1,5 @@
 import collections
+import json
 import unittest
 
 import lib
@@ -75,6 +76,165 @@ class CppUnresolvedSourceEdgesTest(unittest.TestCase):
 
     def test_unused_tool_source_does_not_prevent_real_consumer_resolution(self):
         self.check('source-candidate')
+
+    def test_unused_tool_does_not_report_its_unconsumed_source_diagnostics(self):
+        files = fixture('source-candidate')
+        files['petal/main.cpp'] = 'int main(){return 0;}\n'
+        graph = lib.make(files, 'petal', '--sandboxing', '--add-modules-to-results',
+                         '--target-platform', 'default-linux-x86_64')
+        compiled = lib.node_by_output(graph, '$(B)/petal/main.cpp.o')
+        self.assertEqual(compiled['inputs'], ['$(S)/petal/main.cpp'])
+        self.assertEqual(compiled['deps'], [])
+        self.assertFalse([n for n in graph['graph']
+                          if any(o.startswith('$(B)/tools/gen/') for o in n['outputs'])])
+        selected = lib.make_process(files, 'tools/gen', 'petal', '--sandboxing',
+                                    '--add-modules-to-results',
+                                    '--target-platform', 'default-linux-x86_64')
+        self.assertEqual(selected.returncode, 1, selected.stderr)
+        self.assertIn('missing-include:', selected.stderr)
+        self.assertIn('$(S)/shared/mock.hpp', selected.stderr)
+        self.assertIn('unresolved include <harness/h.hpp>', selected.stderr)
+        self.assertNotIn('panic:', selected.stderr)
+
+    def test_cached_tool_source_uses_real_consumer_bindings_in_root_order(self):
+        files = fixture('source-candidate')
+        for first, last in [('tools/gen', 'petal'), ('petal', 'tools/gen')]:
+            with self.subTest(first=first):
+                result = lib.make_process(files, last, first, '--sandboxing',
+                                          '--add-modules-to-results',
+                                          '--target-platform', 'default-linux-x86_64')
+                if first == 'tools/gen':
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn('missing-include:', result.stderr)
+                    self.assertIn('$(S)/shared/mock.hpp', result.stderr)
+                    self.assertIn('unresolved include <harness/h.hpp>', result.stderr)
+                    self.assertNotIn('panic:', result.stderr)
+                    continue
+                self.assertEqual(result.returncode, 0, result.stderr)
+                graph = json.loads(result.stdout)
+                for directory in ['petal', 'tools/gen']:
+                    compiled = lib.node_by_output(graph, '$(B)/' + directory + '/main.cpp.o')
+                    self.assertCountEqual(compiled['inputs'], [
+                        '$(S)/' + directory + '/main.cpp', '$(S)/shared/mock.hpp',
+                        '$(S)/petal/support/harness/h.hpp', '$(S)/petal/support/harness/tail.hpp'])
+                    self.assertEqual(compiled['deps'], [])
+
+    def test_unparsed_generated_includes_report_missing_include_after_tool_cache_reuse(self):
+        for cached in [False, True]:
+            with self.subTest(cached=cached):
+                files = fixture('source-candidate')
+                output = 'unused.txt'
+                if cached:
+                    output = 'consumed.h'
+                    files['petal/ya.make'] = files['petal/ya.make'].replace(
+                        'SRCS(main.cpp)', 'RUN_PROGRAM(tools/gen OUT_NOAUTO consumed.h)\nSRCS(main.cpp)')
+                files['petal/main.cpp'] = files['petal/main.cpp'].replace(
+                    'int main()', '#include "' + output + '"\nint main()')
+                result = lib.make_process(files, 'petal', '--sandboxing',
+                                          '--target-platform', 'default-linux-x86_64')
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn('missing-include:', result.stderr)
+                self.assertNotIn('panic:', result.stderr)
+
+    def test_linked_tool_peer_preserves_declared_source_bindings(self):
+        for used in [False, True]:
+            with self.subTest(used=used):
+                files = fixture('source-candidate')
+                files['tools/gen/main.cpp'] = 'int main(){return 0;}\n'
+                files['tools/gen/ya.make'] = files['tools/gen/ya.make'].replace(
+                    'SRCS(main.cpp)', 'PEERDIR(toolpeer)\nSRCS(main.cpp)')
+                files['toolpeer/ya.make'] = 'LIBRARY()\n' + lib.BARE_MODULE + 'SRCS(owner.cpp)\nEND()\n'
+                files['toolpeer/owner.cpp'] = '#include "shared/mock.hpp"\nint peer(){return 0;}\n'
+                if used:
+                    files['petal/main.cpp'] = files['petal/main.cpp'].replace(
+                        'int main()', '#include "unused.txt"\nint main()')
+                result = lib.make_process(files, 'petal', '--sandboxing',
+                                          '--add-modules-to-results',
+                                          '--target-platform', 'default-linux-x86_64')
+                if used:
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn('missing-include:', result.stderr)
+                    self.assertIn('$(S)/petal/main.cpp', result.stderr)
+                    self.assertIn('unresolved include \"unused.txt\"', result.stderr)
+                    self.assertNotIn('panic:', result.stderr)
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    graph = json.loads(result.stdout)
+                    compiled = lib.node_by_output(graph, '$(B)/petal/main.cpp.o')
+                    self.assertCountEqual(compiled['inputs'], [
+                        '$(S)/petal/main.cpp', '$(S)/shared/mock.hpp',
+                        '$(S)/petal/support/harness/h.hpp', '$(S)/petal/support/harness/tail.hpp'])
+                    self.assertEqual(compiled['deps'], [])
+
+    def test_sibling_source_diagnostics_keep_their_configuration_order(self):
+        from test_sandbox_python_task import fixture as sandbox_fixture
+        name = 'work/jobs/InspectDelta'
+        for pending in [False, True]:
+            with self.subTest(pending=pending):
+                files = sandbox_fixture()
+                body = ('IF(MODULE_TAG == "SB_TASK_BIN")\nCFLAGS(-DBINARY_VARIANT)\n'
+                        'ADDINCL(work/jobs/InspectDelta/support)\nELSE()\n'
+                        'CFLAGS(-DLIBRARY_VARIANT)\nENDIF()\nSRC(extra.cpp)\n')
+                files[name + '/ya.make'] = files[name + '/ya.make'].replace(
+                    'PY_SRCS(__init__.py)', 'PY_SRCS(entry.py)').replace('END()', body + 'END()')
+                files[name + '/entry.py'] = ''
+                files[name + '/extra.cpp'] = ('#include <harness/h.hpp>\n' if pending else '') + 'int extra;\n'
+                files[name + '/support/harness/h.hpp'] = '#pragma once\n'
+                result = lib.make_process(files, name, '--sandboxing', '--add-modules-to-results',
+                                          '--target-platform', 'default-linux-aarch64', '-t')
+                self.assertEqual(result.returncode, 1 if pending else 0, result.stderr)
+                if pending:
+                    self.assertIn('missing-include:', result.stderr)
+                    self.assertIn('$(S)/' + name + '/extra.cpp', result.stderr)
+                    self.assertIn('unresolved include <harness/h.hpp>', result.stderr)
+                    self.assertNotIn('panic:', result.stderr)
+
+    def test_real_generated_source_requires_the_tool_even_after_cache_reuse(self):
+        for cached in [False, True]:
+            for bad in [False, True]:
+                with self.subTest(cached=cached, bad=bad):
+                    files = fixture('source-candidate')
+                    if not cached:
+                        files['petal/ya.make'] = files['petal/ya.make'].replace(
+                            'RUN_PROGRAM(tools/gen OUT_NOAUTO unused.txt)\n', '')
+                    files['petal/ya.make'] = files['petal/ya.make'].replace(
+                        'SRCS(main.cpp)', 'RUN_PROGRAM(tools/gen OUT generated.cpp)\nSRCS(main.cpp)')
+                    if not bad:
+                        files['tools/gen/main.cpp'] = 'int main(){return 0;}\n'
+                    result = lib.make_process(files, 'petal', '--sandboxing',
+                                              '--add-modules-to-results',
+                                              '--target-platform', 'default-linux-x86_64')
+                    self.assertEqual(result.returncode, 1 if bad else 0, result.stderr)
+                    if bad:
+                        self.assertIn('missing-include:', result.stderr)
+                        self.assertIn('$(S)/shared/mock.hpp', result.stderr)
+                        self.assertIn('unresolved include <harness/h.hpp>', result.stderr)
+                        self.assertNotIn('panic:', result.stderr)
+                        continue
+                    graph = json.loads(result.stdout)
+                    generated = lib.node_by_output(graph, '$(B)/petal/generated.cpp')
+                    compiled = lib.node_by_output(graph, '$(B)/petal/generated.cpp.o')
+                    tool = lib.node_by_output(graph, '$(B)/tools/gen/gen')
+                    self.assertEqual(compiled['inputs'], ['$(B)/petal/generated.cpp'])
+                    self.assertIn(generated['uid'], compiled['deps'])
+                    self.assertIn(tool['uid'], generated['deps'])
+                    self.assertEqual(generated['foreign_deps']['tool'], [tool['uid']])
+
+    def test_foreign_descent_keeps_only_the_selected_pic_source_command(self):
+        files = {
+            'dll/ya.make': 'DLL(plug)\n' + lib.BARE_MODULE + 'SRCS(unit.cpp)\nEND()\n',
+            'dll/unit.cpp': '#include "header.h"\nint exported;\n',
+            'dll/header.h': '#include "leaf.h"\n',
+            'dll/leaf.h': '#pragma once\n',
+        }
+        lib.tool_program(files, 'tools/fix_elf', 'fix_elf')
+        graph = lib.make(files, 'dll', '--sandboxing', '--add-modules-to-results',
+                         '--target-platform', 'default-linux-x86_64')
+        compiled = lib.node_by_output(graph, '$(B)/dll/unit.cpp.pic.o')
+        self.assertCountEqual(compiled['inputs'], [
+            '$(S)/dll/unit.cpp', '$(S)/dll/header.h', '$(S)/dll/leaf.h'])
+        self.assertEqual(compiled['deps'], [])
+        self.assertFalse([n for n in graph['graph'] if '$(B)/dll/unit.cpp.o' in n['outputs']])
 
     def test_unresolved_source_include_uses_later_real_cpp_consumer_context(self):
         self.check('source-parsed-in')
