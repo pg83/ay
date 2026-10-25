@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"math"
 	"slices"
 	"sort"
 	"strconv"
@@ -596,8 +598,34 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 	return result
 }
 
+type ResourceBundleJSONStripPrefix struct {
+	value float64
+	null  bool
+}
+
+func (p *ResourceBundleJSONStripPrefix) UnmarshalJSON(data []byte) error {
+	return p.unmarshalJSON(data)
+}
+
+func (p *ResourceBundleJSONStripPrefix) unmarshalJSON(data []byte) error {
+	*p = ResourceBundleJSONStripPrefix{}
+
+	if bytes.Equal(data, []byte("null")) {
+		p.null = true
+
+		return nil
+	}
+
+	return json.Unmarshal(data, &p.value)
+}
+
+type ResourceBundleJSONEntry struct {
+	URI         *string                       `json:"uri"`
+	StripPrefix ResourceBundleJSONStripPrefix `json:"strip_prefix"`
+}
+
 type ResourceBundleJSON struct {
-	ByPlatform NativeJSONMap[ResourceBundleEntry] `json:"by_platform"`
+	ByPlatform NativeJSONMap[ResourceBundleJSONEntry] `json:"by_platform"`
 }
 
 func moduleSourceRel(modulePath, arg string) string {
@@ -614,11 +642,22 @@ func readResourceBundleJSON(fs FS, rel string) map[string]ResourceBundleEntry {
 
 	out := make(map[string]ResourceBundleEntry, len(data.ByPlatform.members))
 
-	data.ByPlatform.each(func(platform string, resource ResourceBundleEntry) {
-		if resource.StripPrefix > 65535 {
-			throwFmt("resources: platform %q: strip_prefix value %d is too big", platform, resource.StripPrefix)
+	data.ByPlatform.each(func(platform string, wire ResourceBundleJSONEntry) {
+		if wire.URI == nil {
+			throwFmt("resources: platform %q: uri is not found or its value is not a string", platform)
 		}
 
+		prefix := wire.StripPrefix.value
+
+		if wire.StripPrefix.null || prefix < 0 || math.Trunc(prefix) != prefix {
+			throwFmt("resources: platform %q: strip_prefix value should be integral", platform)
+		}
+
+		if prefix > 65535 {
+			throwFmt("resources: platform %q: strip_prefix value %s is too big", platform, strconv.FormatFloat(prefix, 'f', -1, 64))
+		}
+
+		resource := ResourceBundleEntry{URI: *wire.URI, StripPrefix: uint32(prefix)}
 		key := strings.ToUpper(canonizeResourcePlatform(platform))
 
 		if _, exists := out[key]; !exists {
