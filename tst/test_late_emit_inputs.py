@@ -187,6 +187,54 @@ def fixture(case):
 
 
 class LateEmitInputsTest(unittest.TestCase):
+    def test_sc_input_producer_requires_host_tool_before_export(self):
+        for consumers in (1, 2):
+            with self.subTest(consumers=consumers):
+                self.check_sc_input_producer(consumers)
+
+    def check_sc_input_producer(self, consumers):
+        case = next(case for case in CASES if case.name == "sc")
+        files = fixture(case)
+        files["mod/ya.make"] = files["mod/ya.make"].replace(
+            "COPY_FILE_WITH_CONTEXT(input.h.in prepared.sc)",
+            "RUN_PROGRAM(tools/reader IN input.h.in OUT_NOAUTO prepared.sc)",
+        )
+        if consumers == 2:
+            files["mod/ya.make"] = files["mod/ya.make"].replace(
+                "RESOURCE(${BINDIR}/prepared.sc.h payload)",
+                "RESOURCE(${BINDIR}/prepared.sc.h payload)\n"
+                "RESOURCE(${BINDIR}/prepared.sc.h second_payload)",
+            )
+        graph = lib.make(files, "later", "mod", "--add-modules-to-results",
+                         "--target-platform", "default-linux-x86_64")
+        owner = lib.node_by_output(graph, "$(B)/later/owner.cpp.o")
+        self.assertIn("$(S)/mod/leaf.h", owner["inputs"])
+        reader = lib.node_by_output(graph, "$(B)/tools/reader/reader")
+        host = lib.node_by_output(graph, "$(B)/tools/reader/main.cpp.pic.o")
+        self.assertIn(host["uid"], reader["deps"])
+        self.assertFalse(any("$(B)/tools/reader/main.cpp.o" in node["outputs"]
+                             for node in graph["graph"]))
+        prepared = lib.node_by_output(graph, "$(B)/mod/prepared.sc")
+        self.assertCountEqual(prepared["inputs"], [
+            "$(B)/tools/reader/reader", "$(S)/mod/input.h.in", "$(S)/mod/leaf.h"])
+        self.assertEqual(prepared["foreign_deps"]["tool"], [reader["uid"]])
+        self.assertIn(reader["uid"], prepared["deps"])
+        header = lib.node_by_output(graph, "$(B)/mod/prepared.sc.h")
+        self.assertCountEqual(header["inputs"], [
+            "$(B)/tools/domschemec/domschemec", "$(B)/mod/prepared.sc",
+            "$(S)/mod/input.h.in", "$(S)/mod/leaf.h"])
+        self.assertIn(prepared["uid"], header["deps"])
+        resources = [node for node in graph["graph"]
+                     if any(output.startswith("$(B)/mod/objcopy_")
+                            for output in node["outputs"])]
+        self.assertEqual(len(resources), consumers)
+        for resource in resources:
+            self.assertIn(header["uid"], resource["deps"])
+            self.assertIn("$(B)/mod/prepared.sc.h", resource["inputs"])
+        ids = {node["uid"] for node in graph["graph"]}
+        self.assertLessEqual(set(graph["result"]), ids)
+        self.assertTrue(all(set(node["deps"]) <= ids for node in graph["graph"]))
+
     def check(self, case):
         # lib.make appends its target after the extra arguments: mod is first.
         graph = lib.make(fixture(case), "later", "mod",

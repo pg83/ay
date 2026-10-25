@@ -132,11 +132,8 @@ func (e *StreamingEmitter) result(r NodeRef) {
 	e.results = append(e.results, r)
 }
 
-func (e *StreamingEmitter) activateSelectedInputs() BitSet {
-	activation := map[*IncludeScanner]*BitSet{}
-	stack := e.publicationFrontier()
-
-	var selected BitSet
+func (ctx *GenCtx) activateSelectedInputs(activation map[*IncludeScanner]*BitSet, selected BitSet, stack []NodeRef) BitSet {
+	e := ctx.emit
 
 	selectProducer := func(ref NodeRef) {
 		stack = append(stack, ref)
@@ -151,27 +148,28 @@ func (e *StreamingEmitter) activateSelectedInputs() BitSet {
 			continue
 		}
 
-		selected.add(uint32(ref))
-
 		node := e.nodes.s[ref]
 
 		if node == nil {
 			continue
 		}
 
-		if plan := &node.Inputs; plan.scanner != nil {
-			seen := activation[plan.scanner]
+		selected.add(uint32(ref))
+		ctx.activateNodeInputs(node, activation, selectProducer)
+		stack = append(stack, node.DepRefs...)
 
-			if seen == nil {
-				seen = &BitSet{}
-				activation[plan.scanner] = seen
+		for _, dependency := range node.ForeignDepRefs {
+			if tool, ok := ctx.foreignTools.byRef.get(dependency); ok && tool.host != nil {
+				dependency = tool.host.LDRef
 			}
 
-			plan.activate(seen, selectProducer)
+			selectProducer(dependency)
 		}
 
-		for dependency := range node.buildDeps(e.fetchRefs) {
-			selectProducer(dependency)
+		for _, resource := range node.Resources {
+			if dependency, ok := node.resourceRef(resource, e.fetchRefs); ok {
+				selectProducer(dependency)
+			}
 		}
 	}
 
@@ -179,10 +177,8 @@ func (e *StreamingEmitter) activateSelectedInputs() BitSet {
 }
 
 func (e *StreamingEmitter) finish() []NodeRef {
-	selected := e.activateSelectedInputs()
-
 	for _, node := range e.nodes.s {
-		if node != nil && selected.has(uint32(node.Ref)) {
+		if node != nil && e.exportEligible.has(uint32(node.Ref)) {
 			node.establishedInputRefs(e.na)
 		}
 	}

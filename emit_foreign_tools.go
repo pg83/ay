@@ -1,5 +1,7 @@
 package main
 
+import "slices"
+
 type foreignToolCandidate struct {
 	path     ARG
 	instance ModuleInstance
@@ -60,30 +62,89 @@ func (ctx *GenCtx) moduleBuildDeps(ref NodeRef) ([]NodeRef, bool) {
 	return nil, false
 }
 
-func (ctx *GenCtx) bindForeignTools() {
-	bindings := &ctx.foreignTools
+func (ctx *GenCtx) activateNodeInputs(node *Node, activation map[*IncludeScanner]*BitSet, selectProducer func(NodeRef)) {
+	plan := &node.Inputs
 
-	if len(bindings.order) == 0 {
+	if plan.scanner == nil {
 		return
 	}
+
+	seen := activation[plan.scanner]
+
+	if seen == nil {
+		seen = &BitSet{}
+		activation[plan.scanner] = seen
+	}
+
+	registry := plan.scanner.codegen
+	buildDeps, module := registry.moduleBuildDeps.get(node.Ref)
+
+	var added []NodeRef
+
+	plan.activate(seen, func(ref NodeRef) {
+		selectProducer(ref)
+
+		if ref == node.Ref || slices.Contains(node.DepRefs, ref) && (!module || slices.Contains(buildDeps, ref)) {
+			return
+		}
+
+		if added == nil {
+			added = nodeRefScratches.get()
+		}
+
+		added = append(added, ref)
+	})
+
+	if len(added) == 0 {
+		return
+	}
+
+	refs := nodeRefScratches.get()
+
+	refs = append(refs, node.DepRefs...)
+	refs = append(refs, added...)
+
+	node.DepRefs = ctx.na.uniqueRefs(refs)
+
+	if module {
+		refs = append(refs[:0], buildDeps...)
+		refs = append(refs, added...)
+		registry.moduleBuildDeps.put(node.Ref, ctx.na.uniqueRefs(refs))
+	}
+
+	nodeRefScratches.put(refs)
+	nodeRefScratches.put(added)
+}
+
+func (ctx *GenCtx) bindForeignTools() {
+	bindings := &ctx.foreignTools
+	activation := map[*IncludeScanner]*BitSet{}
+	weak := nodeRefScratches.get()
+
+	defer func() { nodeRefScratches.put(weak) }()
+
+	var selected BitSet
 
 	for {
 		possible := len(bindings.order)
 
-		var visited BitSet
+		selected = BitSet{}
+		weak = weak[:0]
 
 		stack := append([]NodeRef(nil), bindings.startRefs...)
+
+		selectProducer := func(ref NodeRef) {
+			stack = append(stack, ref)
+		}
 
 		for len(stack) > 0 {
 			ref := stack[len(stack)-1]
 
 			stack = stack[:len(stack)-1]
 
-			if visited.has(uint32(ref)) {
+			if selected.has(uint32(ref)) {
 				continue
 			}
-
-			visited.add(uint32(ref))
 
 			node := ctx.emit.nodes.s[ref]
 
@@ -91,7 +152,10 @@ func (ctx *GenCtx) bindForeignTools() {
 				continue
 			}
 
-			var selected map[NodeRef]NodeRef
+			selected.add(uint32(ref))
+			ctx.activateNodeInputs(node, activation, selectProducer)
+
+			var foreign map[NodeRef]NodeRef
 
 			for _, dep := range node.ForeignDepRefs {
 				if tool, ok := bindings.byRef.get(dep); ok {
@@ -99,11 +163,11 @@ func (ctx *GenCtx) bindForeignTools() {
 						tool.host = ctx.toolResult(tool.path)
 					}
 
-					if selected == nil {
-						selected = make(map[NodeRef]NodeRef)
+					if foreign == nil {
+						foreign = make(map[NodeRef]NodeRef)
 					}
 
-					selected[dep] = tool.host.LDRef
+					foreign[dep] = tool.host.LDRef
 				} else if path, ok := bindings.hostPaths.get(dep); ok {
 					if tool, exists := bindings.candidates.get(path); exists {
 						tool.host = ctx.toolResult(path)
@@ -115,16 +179,34 @@ func (ctx *GenCtx) bindForeignTools() {
 
 			if !module {
 				deps = node.DepRefs
+			} else if !slices.Equal(deps, node.DepRefs) {
+				dedupers.with(func(seen *DeDuper) {
+					for _, dep := range deps {
+						seen.addStable(dep.strID())
+					}
+
+					for _, dep := range node.DepRefs {
+						if seen.addStable(dep.strID()) {
+							weak = append(weak, dep)
+						}
+					}
+				})
 			}
 
 			stack = append(stack, deps...)
 
 			for _, dep := range node.ForeignDepRefs {
-				if selectedRef, ok := selected[dep]; ok {
+				if selectedRef, ok := foreign[dep]; ok {
 					dep = selectedRef
 				}
 
 				stack = append(stack, dep)
+			}
+
+			for _, resource := range node.Resources {
+				if dep, ok := node.resourceRef(resource, ctx.emit.fetchRefs); ok {
+					weak = append(weak, dep)
+				}
 			}
 		}
 
@@ -132,6 +214,11 @@ func (ctx *GenCtx) bindForeignTools() {
 			break
 		}
 	}
+
+	weak = append(weak, ctx.emit.publicationRoots...)
+	weak = append(weak, ctx.emit.results...)
+
+	ctx.emit.exportEligible = ctx.activateSelectedInputs(activation, selected, weak)
 
 	for _, node := range ctx.emit.nodes.s {
 		if node == nil {
