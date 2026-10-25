@@ -61,20 +61,34 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	}
 
 	block := fs.dirNames.alloc(len(entries))
+	k := 0
 
-	for i, e := range entries {
+	for _, e := range entries {
+		isDir := e.IsDir()
+
+		if e.Type()&os.ModeSymlink != 0 {
+			info, err := os.Stat(full + "/" + e.Name())
+
+			if err != nil {
+				continue
+			}
+
+			isDir = info.IsDir()
+		}
+
 		id := internStr(e.Name())
 		packed := uint32(id) << 1
 
-		if e.IsDir() {
+		if isDir {
 			packed |= 1
 		}
 
-		block[i] = packed
-		fs.dirEntries.put(splitMix64(uint32(dir), uint32(id)), e.IsDir())
+		block[k] = packed
+		k++
+		fs.dirEntries.put(splitMix64(uint32(dir), uint32(id)), isDir)
 	}
 
-	fs.dirNames.commit(len(entries))
+	fs.dirNames.commit(k)
 
-	return DirView{dir: dir, names: block[:len(entries)]}
+	return DirView{dir: dir, names: block[:k]}
 }

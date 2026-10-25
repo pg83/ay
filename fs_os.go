@@ -225,14 +225,14 @@ func (fs *OsFS) isFile(prefix STR, suffix string) bool {
 }
 
 func (fs *OsFS) sourcePathExists(rel string) bool {
-	info, err := os.Lstat(filepath.Join(fs.srcRoot, rel))
+	_, err := os.Stat(filepath.Join(fs.srcRoot, rel))
 
 	if err != nil && !errors.Is(err, syscall.ENOENT) && !errors.Is(err, syscall.ENOTDIR) &&
-		!errors.Is(err, syscall.ENAMETOOLONG) && !errors.Is(err, syscall.EACCES) && !errors.Is(err, syscall.EPERM) {
+		!errors.Is(err, syscall.ENAMETOOLONG) && !errors.Is(err, syscall.EACCES) && !errors.Is(err, syscall.EPERM) && !errors.Is(err, syscall.ELOOP) {
 		throw(err)
 	}
 
-	return err == nil && info.Mode()&os.ModeSymlink == 0
+	return err == nil
 }
 
 func (fs *OsFS) isFileClean(prefix STR, suffix string) bool {

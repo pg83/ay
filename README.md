@@ -19,6 +19,17 @@ graphs on fixed source slices.
 ./build -Drace unit          # unit against a -race build
 ./build -Dcoverage coverage  # unit against a -cover build, per-file table and cover.out
 ./build test                 # unit plus the validation gate; needs the internal Sandbox
+./build -j4 -Darcadia=/home/pg/1 ay_e2e
+./build -Darcadia=/home/pg/1 ya_e2e
 ```
+
+The make e2e targets run the same Python tests in `tst/make/` using only graph
+generation (`make -j0 -G`). Both require `-Darcadia` pointing to an existing
+Arcadia tree. `ay_e2e` runs test modules in parallel, with each test linking
+the tree's top-level entries into its own temporary source root. `ya_e2e`
+runs sequentially through that tree's `ya`, creating and removing
+`__ay_e2e__` inside Arcadia for each test. It refuses to reuse a pre-existing
+directory and serializes concurrent runs against the same tree. Neither
+target reuses cached test results, since Arcadia can change independently.
 
 See [dev/BUILD.md](dev/BUILD.md) for the validation cases and the gate.

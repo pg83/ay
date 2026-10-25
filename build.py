@@ -4,6 +4,7 @@ import functools
 import hashlib
 import json
 import re
+import uuid
 from pathlib import Path
 
 import build
@@ -36,6 +37,10 @@ def slug(value):
 
 
 build.flags.allow({
+    "arcadia": {
+        "descr": "existing Arcadia tree required by ay_e2e and ya_e2e",
+        "default": "",
+    },
     "group": {
         "descr": "zero-based validation shard to include",
         "default": "",
@@ -255,6 +260,8 @@ def python_test_inputs(path):
     return sorted(seen)
 
 for test_path in build.glob("$(S)/tst/**/test_*.py"):
+    if test_path.startswith("$(S)/tst/make/"):
+        continue
     test_name = test_path.rsplit("/", 1)[-1][len("test_"):-len(".py")]
     test_slug = slug(test_name)
     test_module = test_path.removeprefix("$(S)/").removesuffix(".py").replace("/", ".")
@@ -293,6 +300,48 @@ for test_path in build.glob("$(S)/tst/**/test_*.py"):
         descr="BT",
         color="green",
     ))
+
+make_test_paths = sorted(build.glob("$(S)/tst/make/test_*.py"))
+make_test_inputs = sorted(build.glob("$(S)/tst/make/*.py"))
+# An external, mutable Arcadia is not an input tracked by build's CAS. Give
+# only these test invocations fresh identities; never reuse a cached pass.
+make_test_run = uuid.uuid4().hex
+ay_e2e_tests = []
+for test_path in make_test_paths:
+    name = test_path.rsplit("/", 1)[-1].removesuffix(".py")
+    stamp = f"$(B)/e2e/ay/{name}.stamp"
+    ay_e2e_tests.append(command(
+        name=f"ay_e2e_{name.removeprefix('test_')}",
+        inputs=make_test_inputs,
+        outputs=[stamp],
+        deps=[ay],
+        cmd=[
+            ["python3", "-m", "tst.make", "--backend", "ay",
+             "--arcadia", build.flags.arcadia, "--binary", ay.outputs[0],
+             "--work-dir", "$(B)/e2e/work", f"tst.make.{name}"],
+            touch(stamp),
+        ],
+        cwd="$(S)",
+        env={"AY_E2E_RUN_ID": make_test_run, "PYTHONDONTWRITEBYTECODE": "1"},
+        descr="BT", color="green", local=True,
+    ))
+
+ya_e2e_stamp = "$(B)/e2e/ya.stamp"
+ya_e2e = command(
+    name="ya_e2e_corpus",
+    inputs=make_test_inputs,
+    outputs=[ya_e2e_stamp],
+    cmd=[
+        ["python3", "-m", "tst.make", "--backend", "ya",
+         "--arcadia", build.flags.arcadia, "--work-dir", "$(B)/e2e/work"],
+        touch(ya_e2e_stamp),
+    ],
+    cwd="$(S)",
+    env={"AY_E2E_RUN_ID": make_test_run, "PYTHONDONTWRITEBYTECODE": "1"},
+    descr="BT", color="green", local=True,
+)
+group("ay_e2e", *ay_e2e_tests)
+group("ya_e2e", ya_e2e)
 
 unit_members = [python_test, *binary_tests]
 if coverage_enabled:

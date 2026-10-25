@@ -9,10 +9,7 @@ import (
 	"unsafe"
 )
 
-const (
-	direntBlock       = 1 << 16
-	atSymlinkNofollow = 0x100
-)
+const direntBlock = 1 << 16
 
 func (fs *OsFS) platformInit() {
 	for {
@@ -60,7 +57,7 @@ func openatRaw(dirFD int, path *byte, flags int) (int, syscall.Errno) {
 }
 
 func fstatatRaw(dirFD int, path *byte, st *syscall.Stat_t) syscall.Errno {
-	_, _, errno := syscall.Syscall6(sysFstatat, uintptr(dirFD), uintptr(unsafe.Pointer(path)), uintptr(unsafe.Pointer(st)), uintptr(atSymlinkNofollow), 0, 0)
+	_, _, errno := syscall.Syscall6(sysFstatat, uintptr(dirFD), uintptr(unsafe.Pointer(path)), uintptr(unsafe.Pointer(st)), 0, 0, 0)
 
 	return errno
 }
@@ -233,12 +230,14 @@ func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 
 		isDir := typ == syscall.DT_DIR
 
-		if typ == syscall.DT_UNKNOWN {
+		if typ == syscall.DT_UNKNOWN || typ == syscall.DT_LNK {
 			var st syscall.Stat_t
 
-			if fs.fstatatRel(joinRel(rel, string(name)), &st) {
-				isDir = st.Mode&syscall.S_IFMT == syscall.S_IFDIR
+			if !fs.fstatatRel(joinRel(rel, string(name)), &st) {
+				continue
 			}
+
+			isDir = st.Mode&syscall.S_IFMT == syscall.S_IFDIR
 		}
 
 		id := internBytes(name)
