@@ -597,7 +597,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 }
 
 type ResourceBundleJSON struct {
-	ByPlatform map[string]ResourceBundleEntry `json:"by_platform"`
+	ByPlatform NativeJSONMap[ResourceBundleEntry] `json:"by_platform"`
 }
 
 func moduleSourceRel(modulePath, arg string) string {
@@ -612,9 +612,9 @@ func readResourceBundleJSON(fs FS, rel string) map[string]ResourceBundleEntry {
 	var data ResourceBundleJSON
 	throw(json.Unmarshal(concatChunks(fs.read(rel)), &data))
 
-	out := make(map[string]ResourceBundleEntry, len(data.ByPlatform))
+	out := make(map[string]ResourceBundleEntry, len(data.ByPlatform.members))
 
-	for platform, resource := range data.ByPlatform {
+	data.ByPlatform.each(func(platform string, resource ResourceBundleEntry) {
 		if resource.StripPrefix > 65535 {
 			throwFmt("resources: platform %q: strip_prefix value %d is too big", platform, resource.StripPrefix)
 		}
@@ -624,7 +624,7 @@ func readResourceBundleJSON(fs FS, rel string) map[string]ResourceBundleEntry {
 		if _, exists := out[key]; !exists {
 			out[key] = resource
 		}
-	}
+	})
 
 	return out
 }
