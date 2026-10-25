@@ -7,10 +7,11 @@ var multimoduleTags = map[TOK]map[string]Language{
 		"CPP_PROTO": LangCPP, "JAVA_PROTO": LangJava, "PY3_PROTO": LangPy, "GO_PROTO": LangGo,
 		"DESC_PROTO": LangDescProto, "DOCS_PROTO": LangDocsProto, "TS_PROTO": LangTS, "TS_PREPARE_DEPS": LangTSPrepare,
 	},
-	tokFbsLibrary:      {"CPP_FBS": LangCPP, "PY3_FBS": LangPy, "GO_FBS": LangGo, "JAVA_FBS": LangJava},
-	tokRosLibrary:      {"CPP_ROS": LangCPP, "PY3_CPP_ROS": LangRosBindings, "PY3_ROS": LangPy, "GO_ROS": LangGo},
-	tokMlaunchLibrary:  {"CPP_MLAUNCH": LangCPP, "GO_MLAUNCH": LangGo, "UNION_MLAUNCH": LangPackage},
-	tokMlaunchPipeline: {"PIPELINE": LangCPP, "GOLAUNCH": LangGo, "DEPLOY": LangPackage},
+	tokFbsLibrary:       {"CPP_FBS": LangCPP, "PY3_FBS": LangPy, "GO_FBS": LangGo, "JAVA_FBS": LangJava},
+	tokRosLibrary:       {"CPP_ROS": LangCPP, "PY3_CPP_ROS": LangRosBindings, "PY3_ROS": LangPy, "GO_ROS": LangGo},
+	tokMlaunchLibrary:   {"CPP_MLAUNCH": LangCPP, "GO_MLAUNCH": LangGo, "UNION_MLAUNCH": LangPackage},
+	tokMlaunchComponent: {"CPP_MLAUNCH": LangCPP, "GO_MLAUNCH": LangGo, "UNION_MLAUNCH": LangPackage},
+	tokMlaunchPipeline:  {"PIPELINE": LangCPP, "GOLAUNCH": LangGo, "DEPLOY": LangPackage},
 }
 
 const defaultProtoVariants = 1<<LangCPP | 1<<LangJava | 1<<LangPy | 1<<LangGo | 1<<LangDescProto

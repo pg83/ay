@@ -51,9 +51,23 @@ class CodegenContextsTest(MakeTest):
                 self.node(self.graph(), suffix)
 
     def test_golaunch_component(self):
-        self.write("ya.make", "MLAUNCH_COMPONENT(answer)\nONLY_TAGS(GO_MLAUNCH)\nNO_GOLAUNCH_SRCS()\nGOLAUNCH_OVERRIDE(e2e Launch)\nGENERATE_GOLAUNCH_CALLBACKS(e2e)\nEND()\n")
-        graph = self.graph()
-        self.assertTrue(any(path.endswith(".go") and f"/{PROJECT}/" in path for node in graph["graph"] for path in node["outputs"]))
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        for selectors, go in (
+            ("ONLY_TAGS(GO_MLAUNCH)", True),
+            ("ONLY_TAGS(CPP_MLAUNCH)\nINCLUDE_TAGS(GO_MLAUNCH)\nEXCLUDE_TAGS(CPP_MLAUNCH)", True),
+            ("ONLY_TAGS(CPP_MLAUNCH GO_MLAUNCH)\nEXCLUDE_TAGS(GO_MLAUNCH)\nINCLUDE_TAGS(GO_MLAUNCH)\nEXCLUDE_TAGS(CPP_MLAUNCH)", True),
+            ("ONLY_TAGS(CPP_MLAUNCH GO_MLAUNCH)\nEXCLUDE_TAGS(GO_MLAUNCH)", False),
+        ):
+            with self.subTest(selectors=selectors):
+                self.write("ya.make", f"MLAUNCH_COMPONENT(answer)\n{selectors}\nIF(MODULE_TAG == CPP_MLAUNCH)\nSRCS(answer.cpp)\nENDIF()\nNO_GOLAUNCH_SRCS()\nGOLAUNCH_OVERRIDE(e2e Launch)\nGENERATE_GOLAUNCH_CALLBACKS(e2e)\nEND()\n")
+                graph = self.graph()
+                archive = self.node(graph, "answer.a" if go else "libanswer.a")
+                self.assertEqual(graph["result"], [archive["uid"]])
+                if go:
+                    launch = self.node(graph, "launch.go")
+                    self.assertIn(launch["uid"], archive["deps"])
+                else:
+                    self.assertFalse(any(f"$(B)/{PROJECT}/launch.go" in node["outputs"] for node in graph["graph"]))
 
     def test_golaunch_composite(self):
         self.write("ya.make", f"GOLAUNCH_COMPOSITE(answer)\nGOLAUNCH_COMPOSITE_COMPONENTS({PROJECT}/component)\nEND()\n")
