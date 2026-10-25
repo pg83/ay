@@ -1,7 +1,9 @@
 import json
 import os
 import re
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import lib
@@ -42,6 +44,20 @@ def fetches(graph):
 def fetched_uri(graph, name):
     output = f"$(B)/resources/{name}"
     args = fetches(graph)[output]
+    if args[:2] == ["fetch", "--resource-json"]:
+        _, _, raw, option, host, build_root, source_root, destination = args
+        if [option, build_root, source_root, destination] != [
+            "--host-platform", "$(B)", "$(S)", output,
+        ]:
+            raise AssertionError(f"unexpected descriptor fetch command {args!r}")
+        descriptor = json.loads(raw)
+        if descriptor["pattern"] != name:
+            raise AssertionError(descriptor)
+        if "resource" in descriptor:
+            return descriptor["resource"]
+        canonical = lambda value: value.lower().removeprefix("default-").removesuffix("-x86_64").replace("windows", "win32")
+        return next(resource["resource"] for resource in descriptor["resources"]
+                    if canonical(resource["platform"]) == canonical(host))
     self_check = args[:3] + args[4:]
     if self_check != ["fetch", "$(B)", "$(S)", output]:
         raise AssertionError(f"unexpected fetch command {args!r}")
@@ -319,9 +335,7 @@ class ResourceDeclsTest(unittest.TestCase):
             actions.append(lib.node_by_output(graph, "$(B)/resources/T")["cmds"])
         self.assertNotEqual(actions[0], actions[1], "FETCH loses STRIP_PREFIX 1")
 
-    def test_fetch_requires_a_host_entry_for_a_consumed_resource(self):
-        # Native graph generation retains a platform mapping. AY lowers the
-        # consumed resource to FETCH, which requires a concrete host entry.
+    def test_missing_host_entry_is_rejected_when_fetch_runs(self):
         files = {
             "res/ya.make": resources_library(
                 "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 FOR DARWIN)\n"
@@ -332,10 +346,20 @@ class ResourceDeclsTest(unittest.TestCase):
             ),
             "lib/main.cpp": "int main(){return 0;}\n",
         }
-        self.assertIn(
-            'resource "T" has no entry for host platform "linux-x86_64"',
-            make_error(files, "lib"),
-        )
+        graph = lib.make(files, "lib")
+        args = lib.node_by_output(graph, "$(B)/resources/T")["cmds"][0]["cmd_args"][1:]
+        with tempfile.TemporaryDirectory(prefix="ay-host-resource-") as directory:
+            root = Path(directory)
+            output = root / "bld/resources/T"
+            output.mkdir(parents=True)
+            (output / "kept").write_text("untouched\n")
+            result = lib.run_process(*[
+                arg.replace("$(B)", str(root / "bld")).replace("$(S)", str(root / "src"))
+                for arg in args
+            ])
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('resource "T" has no entry for host platform "linux-x86_64"', result.stderr)
+            self.assertEqual((output / "kept").read_text(), "untouched\n")
 
     def test_resource_uri_from_json_follows_module_platform(self):
         modules = {

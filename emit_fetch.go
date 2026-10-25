@@ -13,22 +13,26 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 	}
 
 	output := build("resources/", decl.Name.string())
+	args := []ANY{internStr(currentYatoolPath()).any(), argFetch.any()}
+	identity := decl.URI.string()
+
+	if decl.Descriptor != 0 {
+		args = append(args, strResourceJson.any(), decl.Descriptor.any(), strHostPlatform.any(), internStr(hostPlatformKey(ctx.host)).any(), argB.any(), argS.any(), output.any())
+		identity = decl.Descriptor.string() + "\x00" + resourceDescriptorPlatform(hostPlatformKey(ctx.host))
+	} else {
+		args = append(args, argB.any(), argS.any(), decl.URI.any(), output.any())
+	}
 
 	node := Node{
-		Platform: ctx.host,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(internStr(currentYatoolPath()).any(),
-			argFetch.any(),
-			argB.any(),
-			argS.any(),
-			decl.URI.any(),
-			output.any()))}),
+		Platform:     ctx.host,
+		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...))}),
 		Inputs:       NodeInputs{files: na.inputList(fetchScriptInputs(na, ctx.scripts))},
 		KV:           &fetchKV,
 		Outputs:      na.vfsList(output),
 		Requirements: &fetchRequirements,
 	}
 
-	node.PresetUID = resourceFetchUID(decl.URI.string(), output.string())
+	node.PresetUID = resourceFetchUID(identity, output.string())
 
 	ctx.emit.deferPublication++
 

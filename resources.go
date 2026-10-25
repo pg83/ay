@@ -23,26 +23,62 @@ const (
 )
 
 type ResourceDecl struct {
-	Name      STR
-	URI       STR
-	FetchKey  STR
-	GlobalVar STR
-	Value     VFS
-	Token     STR
+	Name       STR
+	URI        STR
+	Descriptor STR
+	FetchKey   STR
+	GlobalVar  STR
+	Value      VFS
+	Token      STR
 }
 
-func makeResourceDecl(name, uri string) ResourceDecl {
+type ResourceDescriptor struct {
+	Pattern     string               `json:"pattern,omitempty"`
+	Platform    string               `json:"platform,omitempty"`
+	URI         string               `json:"resource,omitempty"`
+	StripPrefix uint32               `json:"strip_prefix,omitempty"`
+	Resources   []ResourceDescriptor `json:"resources"`
+}
+
+type ResourceBundleEntry struct {
+	URI         string `json:"uri"`
+	StripPrefix uint32 `json:"strip_prefix,omitempty"`
+}
+
+func resourceDeclForName(name string) ResourceDecl {
 	value := "$(B)/resources/" + name
 	globalVar := name + resourceGlobalSuffix
 
 	return ResourceDecl{
 		Name:      internStr(name),
-		URI:       internStr(uri),
-		FetchKey:  internV(name, "\x00", uri),
 		GlobalVar: internStr(globalVar),
 		Value:     build("resources/", name),
 		Token:     internV(globalVar, "::", value),
 	}
+}
+
+func makeResourceDecl(name, uri string) ResourceDecl {
+	decl := resourceDeclForName(name)
+
+	decl.URI = internStr(uri)
+	decl.FetchKey = internV(name, "\x00", uri)
+
+	return decl
+}
+
+func makeResourceDescriptorDecl(name string, descriptor ResourceDescriptor) ResourceDecl {
+	if descriptor.Resources == nil && descriptor.StripPrefix == 0 {
+		return makeResourceDecl(name, descriptor.URI)
+	}
+
+	descriptor.Pattern = name
+
+	decl := resourceDeclForName(name)
+
+	decl.Descriptor = internStr(string(throw2(json.Marshal(descriptor))))
+	decl.FetchKey = internV(name, "\x00", decl.Descriptor.string())
+
+	return decl
 }
 
 func hostPlatformKey(host *Platform) string {
@@ -80,7 +116,7 @@ func canonizePlatformKey(key string) string {
 	return os + "-" + arch
 }
 
-func resolveResourceURIFromBundle(bundle map[string]string, env Environment) (string, bool) {
+func resolveResourceURIFromBundle(bundle map[string]ResourceBundleEntry, env Environment) (string, bool) {
 	want := resourceJSONPlatformKey(env)
 	keys := make([]string, 0, len(bundle))
 
@@ -92,7 +128,7 @@ func resolveResourceURIFromBundle(bundle map[string]string, env Environment) (st
 
 	for _, k := range keys {
 		if canonizePlatformKey(k) == want {
-			return bundle[k], true
+			return bundle[k].URI, true
 		}
 	}
 
@@ -120,46 +156,50 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 		return out
 	case tokDeclareExternalHostResourcesBundle:
 
-		bundle := map[string]string{}
+		bundle := map[string]ResourceBundleEntry{}
 		i := 1
 
 		for ; i+2 < len(stmt.Args); i += 3 {
 			uri, platform := stmt.Args[i], stmt.Args[i+2]
 
+			var stripPrefix uint64
+
 			if i+4 < len(stmt.Args) && stmt.Args[i+3].string() == "STRIP_PREFIX" {
-				if _, err := strconv.ParseUint(strings.TrimPrefix(stmt.Args[i+4].string(), "+"), 10, 32); err != nil {
+				var err error
+				stripPrefix, err = strconv.ParseUint(strings.TrimPrefix(stmt.Args[i+4].string(), "+"), 10, 32)
+
+				if err != nil {
 					throwFmt("gen: %s: STRIP_PREFIX must be integral in DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", modulePath, stmt.Args)
 				}
 
 				i += 2
 			}
 
-			bundle[platform.string()] = uri.string()
+			bundle[platform.string()] = ResourceBundleEntry{URI: uri.string(), StripPrefix: uint32(stripPrefix)}
 		}
 
 		if i != len(stmt.Args) {
 			throwFmt("gen: %s: malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", modulePath, stmt.Args)
 		}
 
-		return []ResourceDecl{selectHostResourceDecl(host, modulePath, stmt.Args[0].string(), bundle)}
+		return []ResourceDecl{makeHostResourceDecl(stmt.Args[0].string(), bundle)}
 	}
 
 	name := stmt.Args[0]
 	bundle := readResourceBundleJSON(fs, moduleSourceRel(modulePath, stmt.Args[1].string()))
 
-	return []ResourceDecl{selectHostResourceDecl(host, modulePath, name.string(), bundle)}
+	return []ResourceDecl{makeHostResourceDecl(name.string(), bundle)}
 }
 
-func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[string]string) ResourceDecl {
+func makeHostResourceDecl(name string, bundle map[string]ResourceBundleEntry) ResourceDecl {
 	if len(bundle) == 1 {
-		for platform, uri := range bundle {
+		for platform, resource := range bundle {
 			if strings.EqualFold(platform, "any") {
-				return makeResourceDecl(name, uri)
+				return makeResourceDescriptorDecl(name, ResourceDescriptor{URI: resource.URI, StripPrefix: resource.StripPrefix})
 			}
 		}
 	}
 
-	want := canonizePlatformKey(hostPlatformKey(host))
 	keys := make([]string, 0, len(bundle))
 
 	for k := range bundle {
@@ -168,15 +208,43 @@ func selectHostResourceDecl(host *Platform, modulePath, name string, bundle map[
 
 	sort.Strings(keys)
 
-	for _, k := range keys {
-		if canonizePlatformKey(k) == want {
-			return makeResourceDecl(name, bundle[k])
+	resources := make([]ResourceDescriptor, 0, len(keys))
+
+	for _, key := range keys {
+		resource := bundle[key]
+
+		resources = append(resources, ResourceDescriptor{Platform: key, URI: resource.URI, StripPrefix: resource.StripPrefix})
+	}
+
+	return makeResourceDescriptorDecl(name, ResourceDescriptor{Resources: resources})
+}
+
+func resourceDescriptorPlatform(platform string) string {
+	parts := strings.Split(strings.ToLower(platform), "-")
+
+	if len(parts) == 3 {
+		parts = parts[1:]
+	}
+
+	return canonizeResourcePlatform(strings.Join(parts, "-"))
+}
+
+func selectResourceDescriptor(descriptor ResourceDescriptor, hostPlatform string) ResourceDescriptor {
+	if descriptor.Resources == nil {
+		return descriptor
+	}
+
+	want := resourceDescriptorPlatform(hostPlatform)
+
+	for _, resource := range descriptor.Resources {
+		if strings.ToLower(resource.Platform) == want {
+			return resource
 		}
 	}
 
-	throwFmt("gen: %s: resource %q has no entry for host platform %q", modulePath, name, hostPlatformKey(host))
+	throwFmt("fetch: resource %q has no entry for host platform %q", descriptor.Pattern, hostPlatform)
 
-	return ResourceDecl{}
+	return ResourceDescriptor{}
 }
 
 func sortedResourceGlobals(in []ResourceDecl) []ResourceDecl {
@@ -529,9 +597,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 }
 
 type ResourceBundleJSON struct {
-	ByPlatform map[string]struct {
-		URI string `json:"uri"`
-	} `json:"by_platform"`
+	ByPlatform map[string]ResourceBundleEntry `json:"by_platform"`
 }
 
 func moduleSourceRel(modulePath, arg string) string {
@@ -542,17 +608,11 @@ func moduleSourceRel(modulePath, arg string) string {
 	return cleanRel(joinRel(modulePath, arg))
 }
 
-func readResourceBundleJSON(fs FS, rel string) map[string]string {
+func readResourceBundleJSON(fs FS, rel string) map[string]ResourceBundleEntry {
 	var data ResourceBundleJSON
 	throw(json.Unmarshal(concatChunks(fs.read(rel)), &data))
 
-	out := make(map[string]string, len(data.ByPlatform))
-
-	for k, v := range data.ByPlatform {
-		out[k] = v.URI
-	}
-
-	return out
+	return data.ByPlatform
 }
 
 func resourceGlobalTokenValue(args []ANY, globals []ResourceDecl) CompilerFlagValue {

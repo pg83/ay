@@ -361,6 +361,45 @@ class FetchURLTest(FetchCase):
         self.assertIn("usage: ay fetch <build-root> <source-root> <uri> [output-dir]", result.stderr)
 
 
+class ResourceDescriptorFetchTest(unittest.TestCase):
+    def test_host_aliases_select_a_resource_when_fetch_runs(self):
+        with tempfile.TemporaryDirectory(prefix="ay-resource-descriptor-") as directory:
+            root = Path(directory)
+            source = root / "src"
+            script = source / "build/scripts/fetch_from_sandbox.py"
+            script.parent.mkdir(parents=True)
+            script.write_text(
+                "import io, sys, tarfile\n"
+                "args = sys.argv[1:]\n"
+                "rid = args[args.index('--resource-id') + 1]\n"
+                "dst = args[args.index('--copy-to') + 1]\n"
+                "data = rid.encode()\n"
+                "with tarfile.open(dst, 'w') as archive:\n"
+                "    entry = tarfile.TarInfo('selected.txt')\n"
+                "    entry.size = len(data)\n"
+                "    archive.addfile(entry, io.BytesIO(data))\n"
+            )
+            descriptor = {"pattern": "TOOL", "resources": [
+                {"platform": "LINUX", "resource": "sbr:1"},
+                {"platform": "LINUX-AARCH64", "resource": "sbr:2"},
+                {"platform": "DARWIN-ARM64", "resource": "sbr:3"},
+                {"platform": "WIN32", "resource": "sbr:4"},
+            ]}
+            env = {**os.environ, "HOME": str(root / "home"), "YA_TOKEN": "", "SSH_AUTH_SOCK": "",
+                   "AY_TEST_SSH_OAUTH": ""}
+            for host, expected in (("default-linux-x86_64", "1"), ("linux-x86_64", "1"),
+                                   ("linux-aarch64", "2"), ("default-darwin-arm64", "3"),
+                                   ("default-windows-x86_64", "4")):
+                with self.subTest(host=host):
+                    output = root / host
+                    result = lib.run_process(
+                        "fetch", "--resource-json", json.dumps(descriptor), "--host-platform", host,
+                        root / "bld", source, output, env=env,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual((output / "selected.txt").read_text(), expected)
+
+
 class FetchMappedAndScriptedTest(FetchCase):
     def test_mapping_conf_redirects_sandbox_id(self):
         self.net.local("/mirror/77.tgz", tar_bytes({"mapped.txt": "m\n"}))
@@ -689,7 +728,7 @@ class ExecutorSandboxTokenTest(FetchCase):
     def test_fetch_nodes_share_one_token(self):
         self.write("build/platform/sb/ya.make", (
             "RESOURCES_LIBRARY()\n"
-            "DECLARE_EXTERNAL_RESOURCE(FIRST sbr:41)\n"
+            "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(FIRST sbr:41 FOR LINUX sbr:99 FOR DARWIN)\n"
             "DECLARE_EXTERNAL_RESOURCE(SECOND sbr:42)\n"
             "END()\n"
         ))

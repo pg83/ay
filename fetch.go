@@ -57,6 +57,18 @@ func cmdFetchBase64(_ GlobalFlags, args []string) int {
 }
 
 func cmdFetch(_ GlobalFlags, args []string) int {
+	if len(args) > 0 && args[0] == "--resource-json" {
+		if len(args) != 7 || args[2] != "--host-platform" {
+			throwFmt("fetch: usage: ay fetch --resource-json <descriptor> --host-platform <platform> <build-root> <source-root> <output-dir>")
+		}
+
+		descriptor := decodeResourceDescriptor(args[1], args[3])
+
+		fetchResource(args[5], descriptor.URI, args[6])
+
+		return 0
+	}
+
 	if len(args) != 3 && len(args) != 4 {
 		throwFmt("fetch: usage: ay fetch <build-root> <source-root> <uri> [output-dir]")
 	}
@@ -73,6 +85,14 @@ func cmdFetch(_ GlobalFlags, args []string) int {
 	fetchResource(sourceRoot, uri, out)
 
 	return 0
+}
+
+func decodeResourceDescriptor(raw, hostPlatform string) ResourceDescriptor {
+	var descriptor ResourceDescriptor
+
+	throw(json.Unmarshal([]byte(raw), &descriptor))
+
+	return selectResourceDescriptor(descriptor, hostPlatform)
 }
 
 func resourceOutputName(uri string) string {
@@ -349,6 +369,14 @@ func httpGetToFile(raw, token, out string) {
 }
 
 func argsNeedSandboxToken(args []string) bool {
+	for i, arg := range args {
+		if arg == "--resource-json" && i+3 < len(args) && args[i+2] == "--host-platform" {
+			descriptor := decodeResourceDescriptor(args[i+1], args[i+3])
+
+			return strings.HasPrefix(descriptor.URI, "sbr:")
+		}
+	}
+
 	for _, a := range args {
 		if strings.HasPrefix(a, "sbr:") {
 			return true
