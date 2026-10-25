@@ -140,10 +140,6 @@ func (p *NodeInputs) evaluate() InputChunks {
 }
 
 func (p *NodeInputs) activate(seen *BitSet, selectProducer func(NodeRef)) {
-	if p.scanner == nil {
-		return
-	}
-
 	var visit func(VFS)
 	visit = func(file VFS) {
 		if seen.has(uint32(file)) {

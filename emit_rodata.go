@@ -29,7 +29,7 @@ func composeRodataOutputs(instance ModuleInstance, srcRel, objectSuffix string) 
 	return build(base, ".asm"), build(base, objectSuffix)
 }
 
-func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs Closure, extraDepRefs []NodeRef, tc ModuleToolchain) (NodeRef, VFS, VFS) {
+func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInputs Closure, tc ModuleToolchain) (NodeRef, VFS, VFS) {
 	instance := e.instance
 	na := e.ctx.na
 	asmVFS, outVFS := composeRodataOutputs(instance, srcRel, ccObjectSuffix(instance, newModuleCCInputs(&e.d.cc)))
@@ -56,10 +56,6 @@ func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInp
 		Outputs:        na.vfsList(asmVFS, outVFS),
 		ForeignDepRefs: na.refList(yasmLD),
 		Resources:      usesPython3,
-	}
-
-	if len(extraDepRefs) > 0 {
-		node.DepRefs = na.noderefs.list(extraDepRefs...)
 	}
 
 	ref := e.emitNode(node)
@@ -98,7 +94,7 @@ func (e *EmitContext) emitLibraryRodataSource(meta SrcMeta, in ModuleCCInputs) {
 		cv = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
 	}
 
-	ref, _, outPath := e.emitRD(srcRel, srcVFS, yasmLDRef, cv, nil, in.TC)
+	ref, _, outPath := e.emitRD(srcRel, srcVFS, yasmLDRef, cv, in.TC)
 
 	e.collectObj(ref, outPath, meta)
 }
