@@ -828,7 +828,7 @@ class ExecutorSandboxTokenTest(FetchCase):
     def test_fetch_nodes_share_one_token(self):
         self.write("build/platform/sb/ya.make", (
             "RESOURCES_LIBRARY()\n"
-            "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(FIRST sbr:41 FOR LINUX sbr:99 FOR DARWIN)\n"
+            "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(FIRST sbr:41 FOR LINUX sbr:99 FOR DARWIN sbr:41 FOR LINUX-AARCH64)\n"
             "DECLARE_EXTERNAL_RESOURCE(SECOND sbr:42)\n"
             "END()\n"
         ))
