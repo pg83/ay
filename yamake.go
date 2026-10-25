@@ -183,6 +183,11 @@ type EndStmt struct {
 	Line int
 }
 
+type MissingIncludeStmt struct {
+	Path string
+	Line int
+}
+
 type UnknownStmt struct {
 	Name        TOK
 	Raw         STR
@@ -2377,6 +2382,8 @@ func (p *Parser) expandOneInclude(nameTok Token, rel string) {
 	}
 
 	if present, _ := p.fs.exists(srcRootRel, target); !present {
+		p.stmtScratch = append(p.stmtScratch, &MissingIncludeStmt{Path: target, Line: nameTok.line})
+
 		return
 	}
 
@@ -2511,4 +2518,7 @@ func (*ResourceFilesStmt) stmtMarker() {
 }
 
 func (*AllResourceFilesStmt) stmtMarker() {
+}
+
+func (*MissingIncludeStmt) stmtMarker() {
 }

@@ -519,6 +519,10 @@ func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
 	scan = func(stmts []Stmt) {
 		for _, st := range stmts {
 			switch v := st.(type) {
+			case *MissingIncludeStmt:
+				if module == nil {
+					apply(st)
+				}
 			case *ModuleStmt:
 				module = v
 				instance = ctx.rootInstanceForDeclaration(dir, demandNone, v)

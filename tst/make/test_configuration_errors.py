@@ -22,6 +22,9 @@ class ConfigurationErrorsTest(MakeTest):
         descriptions = (
             "LIBRARY()\nUNKNOWN_E2E_MACRO()\nEND()\n",
             "LIBRARY()\nSRCS(answer.cpp)\n",
+            "LIBRARY()\nSRCS(answer.cpp)\nIF(no)\nEND()\nENDIF()\n",
+            "JAVA_LIBRARY(answer)\nJDK_VERSION(17)\n",
+            "PY23_LIBRARY()\n",
             "LIBRARY()\nIF(yes)\nEND()\n",
             "LIBRARY()\nINCLUDE(missing.inc)\nEND()\n",
             "LIBRARY()\nPEERDIR(__missing_e2e_peer__)\nEND()\n",
@@ -37,6 +40,14 @@ class ConfigurationErrorsTest(MakeTest):
                 self.write("ya.make", description)
                 result = self.make()
                 self.assertNotEqual(result.returncode, 0, result.stderr)
+
+    def test_conditional_include_and_module_end(self):
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        self.write("finish.inc", "END()\n")
+        for tail in ("END()", "INCLUDE(finish.inc)", "IF(FINISH)\nEND()\nENDIF()"):
+            with self.subTest(tail=tail):
+                self.write("ya.make", f"LIBRARY()\nSET(FINISH yes)\nIF(no)\nINCLUDE(missing.inc)\nENDIF()\nSRCS(answer.cpp)\n{tail}\n")
+                self.node(self.graph(), "answer.cpp.o")
 
     def test_missing_include_fails(self):
         self.write("ya.make", "LIBRARY()\nSRCS(answer.cpp)\nEND()\n")

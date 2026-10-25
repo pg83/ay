@@ -785,7 +785,11 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	initPythonImportMask(env, d)
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
-	collectModuleAutoinclude(ctx, modulePath, kind, instance.Language, env, d, onWarn, instance.Platform)
+
+	if d.moduleStmt != nil && !d.discarded && !d.autoincluded {
+		throwFmt("%s: module declaration has no END()", modulePath)
+	}
+
 	d.finishResourcePeerPolicy()
 
 	if pd := programSourceDir(d.moduleStmt); pd != nil {
@@ -1328,6 +1332,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		}
 
 		switch v := s.(type) {
+		case *MissingIncludeStmt:
+			throwFmt("%s:%d: INCLUDE file %s not found", modulePath, v.Line, v.Path)
 		case *ModuleStmt:
 			if d.moduleStmt != nil {
 				d.conflictMod = v

@@ -199,7 +199,10 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	}
 
 	collectJavaStmts(ctx, jm, d, stmts, env)
-	collectJavaAutoinclude(ctx, jm, d, env)
+
+	if !d.autoincluded {
+		throwFmt("%s: module declaration has no END()", jm.dir)
+	}
 
 	d.sourcesJar = env.bool(envSourcesJar)
 	d.embedSbom = d.embedSbom || ctx.sbomEnabled && env.bool(envEmbedSbom)
@@ -282,6 +285,8 @@ func collectJavaAutoinclude(ctx *GenCtx, jm *JavaModule, d *JavaData, env Enviro
 func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, env Environment) {
 	for _, s := range stmts {
 		switch v := s.(type) {
+		case *MissingIncludeStmt:
+			throwFmt("%s:%d: INCLUDE file %s not found", jm.dir, v.Line, v.Path)
 		case *ModuleStmt:
 			if v.Schema {
 				env.setString(envMODULE_TAG, protoModuleTag(LangJava, true))
