@@ -124,13 +124,13 @@ class ProducerOrderTest(unittest.TestCase):
                 "GENERATE_ENUM_SERIALIZATION_WITH_HEADER(e2.h)\n"
                 "LJ_21_ARCHIVE(NAME scripts s.lua)\n"
                 "JOIN_SRCS(all.cpp a.cpp)\n"
-                "CONFIGURE_FILE(${ARCADIA_BUILD_ROOT}/lib/tpl.in cfg.h)\n"
+                "CONFIGURE_FILE(${ARCADIA_BUILD_ROOT}/lib/tpl.in producer_order_config.h)\n"
                 "RUN_PROGRAM(tools/gen OUT_NOAUTO opt.txt tpl.in)\n"
                 "SRCS(a.cpp user.cpp)\n"
                 "END()\n"
             ),
             "lib/a.cpp": "",
-            "lib/user.cpp": '#include "cfg.h"\n#include "buildinfo_data.h"\n',
+            "lib/user.cpp": '#include "producer_order_config.h"\n#include "buildinfo_data.h"\n#include "arch.inc"\n#include "LuaScripts.inc"\n',
             "lib/model.info": "",
             "lib/a.txt": "",
             "lib/b.txt": "",
@@ -152,7 +152,7 @@ class ProducerOrderTest(unittest.TestCase):
             files, "lib", "--target-platform", "default-linux-x86_64",
         )
         producer = lib.node_by_output(graph, "$(B)/lib/opt.txt")
-        configure = lib.node_by_output(graph, "$(B)/lib/cfg.h")
+        configure = lib.node_by_output(graph, "$(B)/lib/producer_order_config.h")
         self.assertEqual(configure["kv"]["p"], "CF")
         self.assertEqual(configure["inputs"], [
             '$(S)/build/scripts/configure_file.py', '$(B)/lib/tpl.in', '$(B)/lib/opt.txt',
@@ -181,6 +181,14 @@ class ProducerOrderTest(unittest.TestCase):
             "$(B)/lib/all.cpp",
         ):
             lib.node_by_output(graph, output)
+        consumer = lib.node_by_output(graph, "$(B)/lib/user.cpp.o")
+        archive_data = lib.node_by_output(graph, "$(B)/lib/arch.inc")
+        self.assertIn("$(B)/lib/arch.inc", consumer["inputs"])
+        self.assertIn(archive_data["uid"], consumer["deps"])
+        lua_archive = lib.node_by_output(graph, "$(B)/lib/LuaScripts.inc")
+        self.assertIn("$(B)/lib/LuaScripts.inc", consumer["inputs"])
+        self.assertIn(lua_archive["uid"], consumer["deps"])
+        self.assertFalse(any("$(B)/lib/LuaSources.inc" in node["outputs"] for node in graph["graph"]))
         archive = lib.node_by_output(graph, "$(B)/lib/liblib.a")
         for member in (
             "$(B)/lib/mn.mymn.cpp.o",

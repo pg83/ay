@@ -63,8 +63,9 @@ class RunProgramTest(unittest.TestCase):
     def test_archive_of_additional_output_keeps_opaque_main_output(self):
         files = library(
             "RUN_PROGRAM(tools/gen IN input.cpp OUT_NOAUTO main.cpp data.bin)\n"
-            "ARCHIVE(NAME data.inc DONTCOMPRESS data.bin data.bin)\n",
-            input__cpp='#include "private.h"\n', private__h="",
+            "ARCHIVE(NAME data.inc DONTCOMPRESS data.bin data.bin)\n"
+            "SRCS(use.cpp)\n",
+            input__cpp='#include "private.h"\n', private__h="", use__cpp='#include "data.inc"\n',
         )
         lib.tool_program(files, "tools/archiver", "archiver")
         graph = lib.make(files, "lib")
@@ -76,6 +77,9 @@ class RunProgramTest(unittest.TestCase):
         producer = lib.node_by_output(graph, "$(B)/lib/data.bin")
         self.assertIn(producer["uid"], archive["deps"])
         self.assertNotIn("$(B)/lib/main.cpp", archive["cmds"][0]["cmd_args"])
+        consumer = lib.node_by_output(graph, "$(B)/lib/use.cpp.o")
+        self.assertIn("$(B)/lib/data.inc", consumer["inputs"])
+        self.assertIn(archive["uid"], consumer["deps"])
 
     def test_swig_flags_follow_cpp_source_name_for_any_generator(self):
         files = library("RUN_PROGRAM(tools/gen OUT api.swg.cxx api.swg.cpp api.swg.c ordinary.cpp)\n")

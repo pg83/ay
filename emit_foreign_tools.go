@@ -32,6 +32,8 @@ func (e *EmitContext) foreignToolResult(path ARG) (*ModuleEmitResult, *foreignTo
 	candidate, _ := bindings.candidates.get(path)
 
 	if candidate != nil && candidate.target != nil {
+		ctx.consumeModuleWarnings(candidate.target)
+
 		return candidate.target, candidate
 	}
 
@@ -41,11 +43,15 @@ func (e *EmitContext) foreignToolResult(path ARG) (*ModuleEmitResult, *foreignTo
 
 	candidate.instance = ctx.rootInstance(path.string(), demandLinked)
 
-	ctx.emit.deferPublication++
+	result := func() *ModuleEmitResult {
+		ctx.emit.deferPublication++
 
-	defer func() { ctx.emit.deferPublication-- }()
+		defer func() { ctx.emit.deferPublication-- }()
 
-	result := genModule(ctx, candidate.instance)
+		return genModule(ctx, candidate.instance)
+	}()
+
+	ctx.consumeModuleWarnings(result)
 
 	ctx.moduleByRef.put(result.LDRef, result)
 

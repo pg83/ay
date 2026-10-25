@@ -2967,6 +2967,8 @@ func (ctx *GenCtx) toolResult(modulePath ARG) *ModuleEmitResult {
 		res = genModule(ctx, newToolInstance(ctx.host, dir))
 	}
 
+	ctx.consumeModuleWarnings(res)
+
 	if res.LDRef != NodeRef(0) {
 		ctx.tools.put(modulePath, res)
 		ctx.foreignTools.hostPaths.put(res.LDRef, modulePath)

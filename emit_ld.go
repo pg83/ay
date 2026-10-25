@@ -333,6 +333,10 @@ func emitVCSNode(emit *StreamingEmitter, host *Platform) NodeRef {
 
 	node.PresetUID = resourceFetchUID("base64:vcs.json:"+vcsJSONBase64, output.string())
 
+	emit.deferPublication++
+
+	defer func() { emit.deferPublication-- }()
+
 	return emit.emitNode(node)
 }
 

@@ -162,6 +162,26 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 
 	e.dirScratch = protoImportPbH
 
+	res, mainTool := e.foreignToolResult(internArg(filepath.Clean(stmt.ToolPath.relOrSelf().string())))
+
+	if res.LDPath == nil {
+		throwFmt("gen: tool %s has no linkable output", stmt.ToolPath.string())
+	}
+
+	auxTools, foreignTools := e.resolveRunProgramAuxTools(anyStrs(stmt.ToolPaths))
+
+	if mainTool != nil {
+		foreignTools = append(foreignTools, mainTool)
+	}
+
+	generatorRefs := []NodeRef{res.LDRef}
+
+	for _, tool := range auxTools {
+		generatorRefs = append(generatorRefs, tool.ref)
+	}
+
+	generatorRefs = ctx.na.refList(dedupRefs(generatorRefs)...)
+
 	prRef := ctx.emit.reserve()
 
 	e.collectCPPStyleInputs(inVFSs...)
@@ -178,27 +198,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	pe := func() {
-		res, mainTool := e.foreignToolResult(internArg(filepath.Clean(stmt.ToolPath.relOrSelf().string())))
-		auxTools, foreignTools := e.resolveRunProgramAuxTools(anyStrs(stmt.ToolPaths))
-
-		if mainTool != nil {
-			foreignTools = append(foreignTools, mainTool)
-		}
-
-		generatorRefs := []NodeRef{res.LDRef}
-
-		for _, tool := range auxTools {
-			generatorRefs = append(generatorRefs, tool.ref)
-		}
-
-		generatorRefs = ctx.na.refList(dedupRefs(generatorRefs)...)
-
-		for output := range registeredPROut {
-			if info := e.codegen.lookup(output); info != nil && info.ProducerRef == prRef {
-				info.GeneratorRefs = generatorRefs
-			}
-		}
-
 		inputClosure := prInputClosure(snap, stmt)
 		inputInduced := prInputInducedIncludes(ctx, e.codegen, snap.scanner, snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse])
 
@@ -238,6 +237,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			BuildInputs:     snap.inVFSs,
 			ProducerRef:     prRef,
 			ProducerMainOut: mainOutputVFS,
+			GeneratorRefs:   generatorRefs,
 			ParsedIncludes:  parsed,
 			OnUse:           pending,
 		})
@@ -447,6 +447,10 @@ func collectRunProgramAuxTools(toolPaths []string, resolve func(ARG) *ModuleEmit
 		}
 
 		res := resolve(internArg(filepath.Clean(modulePath)))
+
+		if res.LDPath == nil {
+			throwFmt("gen: tool %s has no linkable output", modulePath)
+		}
 
 		out = append(out, RunProgramAuxTool{
 			token:  toolPath,
