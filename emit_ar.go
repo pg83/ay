@@ -209,9 +209,9 @@ func composeARNode(instance ModuleInstance, archivePath VFS, objRefs []NodeRef, 
 
 	inputTail = inputTail[:len(inputTail):len(inputTail)]
 
-	objInputs := na.vfsList(objPaths...)
+	objInputs := na.dedupClosure(objPaths)
 	topEnv := hostP.toolEnv()
-	deps := na.uniqueRefs(objRefs)
+	deps := na.uniqueRefs(na.objectBuildRefs(objRefs, objPaths))
 
 	n := Node{
 		Platform: instance.Platform,

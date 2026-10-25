@@ -323,7 +323,7 @@ func (e *EmitContext) publishOwnModuleIncludedDeps() *ModuleIncludedDeps {
 		return nil
 	}
 
-	deps := &ModuleIncludedDeps{Inputs: e.ctx.na.vfsList(inputs...), Refs: e.ctx.na.refList(refs...)}
+	deps := &ModuleIncludedDeps{Inputs: e.ctx.na.vfsList(inputs...), Refs: e.ctx.na.refList(e.ctx.na.objectBuildRefs(refs, inputs)...)}
 
 	e.codegen.forwardModuleIncludedDeps(lDOutputPath(e.instance, name), deps)
 

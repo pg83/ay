@@ -1041,7 +1041,8 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	})
 
 	inputs := na.inputList(ownSourceInputs, ownBuildInputs, goToolScriptInputsChunk, embedInputs, peerArchivePaths, peerGlobalPaths, extraSources, extraBuilds)
-	depBlock := na.noderefs.alloc(1 + len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + merged)
+	objBuildRefs := na.objectBuildRefs(objRefs, objOuts)
+	depBlock := na.noderefs.alloc(1 + len(objBuildRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + merged)
 	ndep := 0
 
 	if goRes.SymabisRef != 0 {
@@ -1049,7 +1050,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 		ndep++
 	}
 
-	ndep += copy(depBlock[ndep:], objRefs)
+	ndep += copy(depBlock[ndep:], objBuildRefs)
 	ndep += copy(depBlock[ndep:], peerArchiveRefs)
 	ndep += copy(depBlock[ndep:], peerGlobalRefs)
 	ndep += copy(depBlock[ndep:], mergedSbomRefs[:merged])
@@ -1256,8 +1257,9 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		extraTailSources,
 	)
 
-	deps := na.noderefs.alloc(len(objRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + 2)
-	k := copy(deps, objRefs)
+	objBuildRefs := na.objectBuildRefs(objRefs, objOuts)
+	deps := na.noderefs.alloc(len(objBuildRefs) + len(peerArchiveRefs) + len(peerGlobalRefs) + len(peerSbomRefs) + 2)
+	k := copy(deps, objBuildRefs)
 
 	k += copy(deps[k:], peerArchiveRefs)
 

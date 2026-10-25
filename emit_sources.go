@@ -155,6 +155,10 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtSsqls:
 		e.emitSsqlsSource(meta)
 	default:
+		if e.collectObjectSource(meta) {
+			return
+		}
+
 		if meta.Global && e.collectModuleGlobalSource(src) {
 			return
 		}
@@ -168,4 +172,57 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			Message: fmt.Sprintf("%s: unsupported source extension in %q", e.instance.Path.relString(), src.string()),
 		})
 	}
+}
+
+func (e *EmitContext) collectObjectSource(meta SrcMeta) bool {
+	name := meta.Source.relOrSelf().string()
+
+	if !strings.HasSuffix(name, ".o") && !strings.HasSuffix(name, ".obj") {
+		return false
+	}
+
+	input := e.moduleSourceVFS(meta.Source)
+	info := e.codegen.lookup(input)
+
+	if input.isBuild() && info == nil {
+		return false
+	}
+
+	if e.producersOnly() {
+		return true
+	}
+
+	var ref NodeRef
+
+	if info != nil {
+		ref = info.ProducerRef
+	}
+
+	e.collectObj(ref, input, meta)
+
+	return true
+}
+
+func (na *NodeArenas) objectBuildRefs(refs []NodeRef, paths []VFS) []NodeRef {
+	for i, input := range paths {
+		if !input.isSource() {
+			continue
+		}
+
+		out := na.noderefs.alloc(len(refs))[:0]
+
+		out = append(out, refs[:i]...)
+
+		for j := i + 1; j < len(paths); j++ {
+			if !paths[j].isSource() {
+				out = append(out, refs[j])
+			}
+		}
+
+		na.noderefs.commit(len(out))
+
+		return out[:len(out):len(out)]
+	}
+
+	return refs
 }

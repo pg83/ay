@@ -235,13 +235,15 @@ func (e *EmitContext) emitLD(
 	}
 
 	inputs := composeLDInputs(na, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles, extraChunks[:nExtra]...)
-	deps := na.noderefs.alloc(len(ccRefs) + len(globalRefs) + len(peerLDRefs) + len(dynamicRefs) + len(objcopyRefs) + len(sbomRefs) + 1)[:0]
+	ccBuildRefs := na.objectBuildRefs(ccRefs, ccPaths)
+	objcopyBuildRefs := na.objectBuildRefs(objcopyRefs, objcopyPaths)
+	deps := na.noderefs.alloc(len(ccBuildRefs) + len(globalRefs) + len(peerLDRefs) + len(dynamicRefs) + len(objcopyBuildRefs) + len(sbomRefs) + 1)[:0]
 
-	deps = append(deps, ccRefs...)
+	deps = append(deps, ccBuildRefs...)
 	deps = append(deps, globalRefs...)
 	deps = append(deps, peerLDRefs...)
 	deps = append(deps, dynamicRefs...)
-	deps = append(deps, objcopyRefs...)
+	deps = append(deps, objcopyBuildRefs...)
 	deps = append(deps, sbomRefs...)
 	deps = append(deps, vcsRef)
 	na.noderefs.commit(len(deps))
