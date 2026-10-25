@@ -47,6 +47,13 @@ class ValidationContextsTest(MakeTest):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("include", result.stderr)
 
+        for file in ("IN", "OUT_NOAUTO", "extra.txt"):
+            self.write(file, "#pragma once\n")
+        graph = self.graph()
+        inputs = self.node(graph, "AnswerLexer.g4.cpp.o")["inputs"]
+        for file in ("IN", "OUT_NOAUTO", "input.txt"):
+            self.assertIn(f"$(S)/{PROJECT}/{file}", inputs)
+
     def test_python_main_without_function(self):
         self.write("ya.make", "PY3_PROGRAM(answer)\nPY_SRCS(main.py)\nPY_MAIN(main)\nNO_IMPORT_TRACING()\nEND()\n")
         self.write("main.py", "def main():\n    print(42)\n")

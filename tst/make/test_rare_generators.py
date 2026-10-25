@@ -14,10 +14,14 @@ class RareGeneratorsTest(MakeTest):
         self.node(self.graph(), "devlink.o")
 
     def test_antlr_split_grammar(self):
-        self.write("ya.make", "LIBRARY()\nRUN_ANTLR4_CPP_SPLIT(AnswerLexer.g4 AnswerParser.g4 VISITOR LISTENER)\nEND()\n")
+        self.write("ya.make", f"LIBRARY()\nADDINCL({PROJECT})\nRUN_ANTLR4_CPP_SPLIT(AnswerLexer.g4 AnswerParser.g4 -Werror OUTPUT_INCLUDES extra.h VISITOR LISTENER)\nEND()\n")
+        self.write("extra.h", "#pragma once\n")
         self.write("AnswerLexer.g4", "lexer grammar AnswerLexer;\nNUMBER: [0-9]+;\n")
         self.write("AnswerParser.g4", "parser grammar AnswerParser;\noptions { tokenVocab=AnswerLexer; }\nanswer: NUMBER EOF;\n")
-        node = self.node(self.graph(), "AnswerParser.cpp")
+        graph = self.graph()
+        node = self.node(graph, "AnswerParser.cpp")
+        self.assertIn("-Werror", [arg for cmd in node["cmds"] for arg in cmd["cmd_args"]])
+        self.assertIn(f"$(S)/{PROJECT}/extra.h", self.node(graph, "AnswerParser.g4.cpp.o")["inputs"])
         self.assertIn(f"$(B)/{PROJECT}/AnswerParserListener.h", node["outputs"])
         self.assertIn(f"$(B)/{PROJECT}/AnswerParserBaseVisitor.h", node["outputs"])
 

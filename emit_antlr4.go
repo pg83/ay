@@ -21,7 +21,7 @@ func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
 		tc := d.tc
 
 		jvPE := func() {
-			e.emitJVSplitReserved(g.Lexer, g.Parser, g.Visitor, g.Listener, tc, jvRef)
+			e.emitJVSplitReserved(g.Lexer, g.Parser, g.Options, g.Visitor, g.Listener, tc, jvRef)
 		}
 
 		pending := e.pendingEmit(jvPE)

@@ -152,6 +152,7 @@ func (e *EmitContext) emitJVReserved(
 func (e *EmitContext) emitJVSplitReserved(
 	lexer string,
 	parser string,
+	options []string,
 	visitor bool,
 	listener bool,
 	tc ModuleToolchain,
@@ -188,6 +189,8 @@ func (e *EmitContext) emitJVSplitReserved(
 	} else {
 		cmdArgs = append(cmdArgs, argListener.any())
 	}
+
+	cmdArgs = appendInternAnys(cmdArgs, options)
 
 	inputs := na.inputList(na.vfsList(lexerVFS,
 		parserVFS,

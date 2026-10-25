@@ -367,6 +367,7 @@ type RunAntlr4CppStmt struct {
 }
 
 type RunAntlr4CppSplitStmt struct {
+	Options        []ANY
 	Lexer          ANY
 	Parser         ANY
 	Visitor        bool
@@ -1470,40 +1471,22 @@ func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a
 
 func parseRunAntlr4Cpp(args []ANY, line int) *RunAntlr4CppStmt {
 	stmt := &RunAntlr4CppStmt{Grammar: args[0], Line: line}
-	i := 1
+	includes := false
 
-	for i < len(args) {
-		switch args[i] {
+	for _, arg := range args[1:] {
+		switch arg {
 		case kwVISITOR.any():
-			stmt.Visitor = true
-			i++
-		case kwNO_LISTENER.any(), kwLISTENER.any():
-
-			if args[i] == kwNO_LISTENER.any() {
-				stmt.Listener = false
-			} else {
-				stmt.Listener = true
-			}
-
-			i++
+			stmt.Visitor, includes = true, false
+		case kwLISTENER.any():
+			stmt.Listener, includes = true, false
 		case kwOUTPUT_INCLUDES.any():
-
-			i++
-
-			for i < len(args) && !isRunAntlrKeyword(args[i]) {
-				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
-				i++
-			}
-		case kwIN.any(), kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
-
-			i++
-
-			for i < len(args) && !isRunAntlrKeyword(args[i]) {
-				i++
-			}
+			includes = true
 		default:
-			stmt.Options = append(stmt.Options, args[i])
-			i++
+			if includes {
+				stmt.OutputIncludes = append(stmt.OutputIncludes, arg)
+			} else {
+				stmt.Options = append(stmt.Options, arg)
+			}
 		}
 	}
 
@@ -1511,39 +1494,13 @@ func parseRunAntlr4Cpp(args []ANY, line int) *RunAntlr4CppStmt {
 }
 
 func parseRunAntlr4CppSplit(args []ANY, line int) *RunAntlr4CppSplitStmt {
-	stmt := &RunAntlr4CppSplitStmt{Lexer: args[0], Parser: args[1], Line: line}
+	common := parseRunAntlr4Cpp(args[1:], line)
 
-	for i := 2; i < len(args); i++ {
-		switch args[i] {
-		case kwVISITOR.any():
-			stmt.Visitor = true
-		case kwLISTENER.any():
-			stmt.Listener = true
-		case kwNO_LISTENER.any():
-
-		case kwOUTPUT_INCLUDES.any():
-
-			i++
-
-			for i < len(args) && !isRunAntlrKeyword(args[i]) {
-				stmt.OutputIncludes = append(stmt.OutputIncludes, args[i])
-				i++
-			}
-
-			i--
-		case kwIN.any(), kwOUT.any(), kwOUT_NOAUTO.any(), kwINDUCED_DEPS.any(), kwTOOL.any():
-
-			i++
-
-			for i < len(args) && !isRunAntlrKeyword(args[i]) {
-				i++
-			}
-
-			i--
-		}
+	return &RunAntlr4CppSplitStmt{
+		Lexer: args[0], Parser: args[1], Line: line,
+		Visitor: common.Visitor, Listener: common.Listener,
+		OutputIncludes: common.OutputIncludes, Options: common.Options,
 	}
-
-	return stmt
 }
 
 func parseRunAntlr(args []ANY, nameTok Token) *RunAntlrStmt {
@@ -1578,18 +1535,6 @@ func parseRunAntlr(args []ANY, nameTok Token) *RunAntlrStmt {
 	}
 
 	return stmt
-}
-
-func isRunAntlrKeyword(s ANY) bool {
-	switch s {
-	case kwVISITOR.any(), kwLISTENER.any(), kwNO_LISTENER.any(), kwOUTPUT_INCLUDES.any(),
-		kwIN.any(), kwIN_NOPARSE.any(), kwIN_DEPS.any(), kwOUT.any(), kwOUT_NOAUTO.any(),
-		kwINDUCED_DEPS.any(), kwTOOL.any(), kwCWD.any(), kwENV.any(), kwSTDOUT.any(),
-		kwSTDOUT_NOAUTO.any(), kwGRAMMAR_FILES.any(), kwGRAMMAR_CWD.any():
-		return true
-	}
-
-	return false
 }
 
 func parseFromSandbox(args []ANY, line int) *FromSandboxStmt {

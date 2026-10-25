@@ -1886,6 +1886,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.antlr4Grammars = append(d.antlr4Grammars, Antlr4GrammarInfo{
 				IsSplit:        true,
+				Options:        anyStrs(expandStmtTokens(v.Options, env)),
 				Lexer:          expandStmtToken(v.Lexer.string(), env),
 				Parser:         expandStmtToken(v.Parser.string(), env),
 				Visitor:        v.Visitor,
