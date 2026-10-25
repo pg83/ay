@@ -503,7 +503,7 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRP
 
 	trailer = appendLinkerScripts(trailer, p.Linker.Script, linkerScripts)
 
-	if p != nil && !p.PIC && p.CompressDebugSections {
+	if p != nil && p.CompressDebugSections {
 		trailer = append(trailer, argWlCompressDebugSectionsZstd.any())
 	}
 

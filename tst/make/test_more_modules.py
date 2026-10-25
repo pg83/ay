@@ -53,3 +53,36 @@ class MoreModulesTest(MakeTest):
         producer = self.node(graph, "answer.c.bc")
         self.assertIn(f"$(S)/{PROJECT}/answer.c", producer["inputs"])
         self.node(graph, "answer_optimized.bc")
+
+    def test_llvm_unnamed_resource(self):
+        self.write("ya.make", "LIBRARY()\nUSE_LLVM_BC16()\nLLVM_BC(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        graph = self.graph()
+        self.node(graph, "answer.cpp.bc")
+        self.node(graph, "_optimized.bc")
+
+    def test_llvm_resource_in_program(self):
+        self.write("ya.make", "PROGRAM(answer)\nUSE_LLVM_BC16()\nLLVM_BC(answer.cpp NAME answer)\nSRCS(main.cpp)\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        self.write("main.cpp", "int main() { return 0; }\n")
+        graph = self.graph()
+        self.node(graph, "answer.cpp.bc")
+        self.node(graph, "answer_optimized.bc")
+        self.assertIn(self.node(graph, "answer")["uid"], graph["result"])
+
+    def test_llvm_ir_source(self):
+        self.write("ya.make", "LIBRARY()\nUSE_LLVM_BC16()\nLLVM_BC(answer.ll NAME answer)\nEND()\n")
+        self.write("answer.ll", "define i32 @answer() { ret i32 42 }\n")
+        graph = self.graph()
+        producer = self.node(graph, "answer.ll.bc")
+        self.assertTrue(producer["cmds"][0]["cmd_args"][0].endswith("/bin/llvm-as"))
+        self.assertIn(f"$(S)/{PROJECT}/answer.ll", producer["inputs"])
+
+    def test_llvm_precompiled_source(self):
+        self.write("ya.make", "LIBRARY()\nUSE_LLVM_BC16()\nLLVM_BC(answer.ll NAME answer NO_COMPILE)\nCOPY_FILE(prebuilt.bc answer.ll.bc)\nEND()\n")
+        self.write("answer.ll", "define i32 @answer() { ret i32 42 }\n")
+        self.write("prebuilt.bc", "precompiled bitcode\n")
+        graph = self.graph()
+        copy = self.node(graph, "answer.ll.bc")
+        self.assertIn(f"$(S)/{PROJECT}/prebuilt.bc", copy["inputs"])
+        self.assertIn(copy["uid"], self.node(graph, "answer_merged.bc")["deps"])

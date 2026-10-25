@@ -43,4 +43,9 @@ class MacroVariantsTest(MakeTest):
     def test_llvm_machine_code(self):
         self.write("ya.make", "LIBRARY()\nUSE_LLVM_BC16()\nLLVM_BC(answer.cpp NAME answer SUFFIX .e2e GENERATE_MACHINE_CODE SYMBOLS answer)\nEND()\n")
         self.write("answer.cpp", 'extern "C" int answer() { return 42; }\n')
-        self.node(self.graph(), "answer_optimized.e2e.bc")
+        graph = self.graph()
+        optimized = self.node(graph, "answer_optimized.e2e.bc")
+        obj = self.node(graph, "answer_optimized.e2e.bc.o")
+        self.assertIn(optimized["uid"], obj["deps"])
+        archive = self.node(graph, "lib__ay_e2e__.a")
+        self.assertIn(obj["uid"], archive["deps"])

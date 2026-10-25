@@ -58,7 +58,7 @@ func sbomComponentLang(moduleName TOK) string {
 	case moduleName == tokPy23NativeLibrary:
 
 		return moduleLangTokenCpp
-	case pyModuleTypeUsesPython3(moduleName):
+	case moduleName == tokPy3Module || pyModuleTypeUsesPython3(moduleName):
 		return moduleLangTokenPy3
 	default:
 		return moduleLangTokenCpp

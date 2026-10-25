@@ -6,6 +6,7 @@ var (
 	llvmBcKV  = KV{P: pkBC, PC: pcLightGreen}
 	llvmBcKV2 = KV{P: pkLD, PC: pcLightRed}
 	llvmBcKV3 = KV{P: pkOP, PC: pcYellow}
+	llvmLlcKV = KV{P: pkLC, PC: pcYellow}
 )
 
 type LlvmCompileStmt struct {
@@ -80,14 +81,18 @@ func (e *EmitContext) emitLlvmCompile(stmt LlvmCompileStmt) {
 	}
 }
 
+func (e *EmitContext) llvmBcSuffix(stmt *LlvmBcStmt) string {
+	if stmt.Suffix == "" && e.d.cc.ObjectSuffixStem != nil {
+		return "." + *e.d.cc.ObjectSuffixStem
+	}
+
+	return stmt.Suffix
+}
+
 func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-	suffix := stmt.Suffix
-
-	if suffix == "" && d.cc.ObjectSuffixStem != nil {
-		suffix = "." + *d.cc.ObjectSuffixStem
-	}
+	suffix := e.llvmBcSuffix(stmt)
 
 	const (
 		optWrapper = "$(S)/build/scripts/llvm_opt_wrapper.py"
@@ -108,6 +113,17 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	for _, src := range stmt.Sources {
 		bcOut := build(e.llvmBcRootRelArcSrc(src), suffix, ".bc")
+
+		bcPaths = append(bcPaths, bcOut)
+
+		if stmt.NoCompile {
+			if info := e.codegen.use(bcOut); info != nil {
+				bcRefs = append(bcRefs, info.ProducerRef)
+			}
+
+			continue
+		}
+
 		cxx := !strings.HasSuffix(src, ".c")
 		compiler := clangxx
 
@@ -115,7 +131,22 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			compiler = clangRoot + "/bin/clang"
 		}
 
-		node := e.llvmCompileNode(src, bcOut, compiler, cxx, nil)
+		var node Node
+
+		if strings.HasSuffix(src, ".ll") {
+			input := e.llvmBcSourceInfo(src)
+			tool := resourceGlobalArgumentValue(na.anyList(internAny(stmt.ClangBCRoot)), e.peers.ResourceGlobals)
+
+			node = Node{
+				Platform: instance.Platform,
+				Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(internV(clangRoot, "/bin/llvm-as").any(), input.any(), argDashO.any(), bcOut.any())), Env: env}),
+				Env:      env, Inputs: NodeInputs{files: na.inputList(na.vfsList(input))}, Outputs: na.vfsList(bcOut), KV: &llvmBcKV,
+				Resources: tool.Resources,
+			}
+		} else {
+			node = e.llvmCompileNode(src, bcOut, compiler, cxx, nil)
+		}
+
 		allInputs := node.Inputs.files
 
 		for _, ch := range allInputs {
@@ -131,7 +162,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		pendNodes = append(pendNodes, node)
 		pendRefs = append(pendRefs, ref)
 		bcRefs = append(bcRefs, ref)
-		bcPaths = append(bcPaths, bcOut)
 	}
 
 	mergedOut := copyFileOutputVFS(instance.Path.relString(), stmt.Name+"_merged"+suffix+".bc")
@@ -203,10 +233,6 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 
 	pending := e.pendingEmit(pe)
 
-	if stmt.GenerateMachineCode {
-		return
-	}
-
 	for _, src := range stmt.Sources {
 		e.collectCPPStyleInputs(e.llvmBcSourceInfo(src))
 	}
@@ -217,6 +243,34 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 			ProducerRef: pendRefs[i],
 			OnUse:       pending,
 		})
+	}
+
+	if stmt.GenerateMachineCode {
+		toolRef, toolBin := ctx.tool(internArg(stmt.LLCTool))
+		object := build(optOut.relString(), ".o")
+
+		node := Node{
+			Platform: instance.Platform,
+			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(toolBin.any(), optOut.any(), internAny("--filetype"), internAny("obj"), argDashO.any(), object.any(), internAny("-O2"))), Env: env}),
+			Env:      env, Inputs: NodeInputs{files: na.inputList(na.vfsList(toolBin, optOut))}, Outputs: na.vfsList(object),
+			KV: &llvmLlcKV, DepRefs: na.refList(opRef), ForeignDepRefs: na.refList(toolRef),
+		}
+
+		ref := ctx.emit.reserve()
+
+		llcPending := e.pendingEmit(func() {
+			e.codegen.use(optOut)
+			e.emitReservedNode(node, ref)
+		})
+
+		e.register(GeneratedFileInfo{OutputPath: object, ProducerRef: ref, OnUse: llcPending})
+
+		if !e.producersOnly() {
+			e.codegen.use(object)
+			e.collectObj(ref, object, SrcMeta{Source: object.any(), Prio: stmtPrioDefault})
+		}
+
+		return
 	}
 
 	e.emitResourceFile([]ResourceEntry{{

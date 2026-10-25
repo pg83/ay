@@ -28,7 +28,20 @@ class MultimodulesTest(MakeTest):
         self.node(graph, "answer")
 
     def test_python_native_module(self):
-        self.write("ya.make", "PY3MODULE(answer)\nSRCS(answer.cpp)\nEND()\n")
+        self.write("ya.make", f"PY3MODULE(answer)\nSRCS(answer.cpp)\nPEERDIR({PROJECT}/native {PROJECT}/proto)\nEND()\n")
         self.write("answer.cpp", '#include <Python.h>\nstatic PyModuleDef module = {PyModuleDef_HEAD_INIT, "answer", nullptr, -1, nullptr};\nPyMODINIT_FUNC PyInit_answer() { return PyModule_Create(&module); }\n')
+        self.write("native/ya.make", "PY23_NATIVE_LIBRARY()\nSRCS(native.cpp)\nEND()\n")
+        self.write("native/native.cpp", "#include <Python.h>\nint python_version() { return PY_MAJOR_VERSION; }\n")
+        self.write("proto/ya.make", "PROTO_LIBRARY()\nSRCS(answer.proto)\nEND()\n")
+        self.write("proto/answer.proto", 'syntax = "proto2"; package e2e; message Answer {}\n')
         graph = self.graph()
-        self.assertTrue(any(path.endswith(".so") for node in graph["graph"] if node["uid"] in graph["result"] for path in node["outputs"]))
+        self.assertIn(self.node(graph, "answer.so")["uid"], graph["result"])
+        self.node(graph, "native/native.cpp.py3.pic.o")
+        self.node(graph, "proto/answer.pb.cc")
+        self.assertFalse(any("contrib/tools/python3/" in path for node in graph["graph"] for path in node["outputs"]))
+
+    def test_python_native_module_rejects_python2_headers(self):
+        for macro in ("PYTHON2_MODULE", "PYTHON2_ADDINCL"):
+            with self.subTest(macro=macro):
+                self.write("ya.make", f"PY3MODULE(answer)\n{macro}()\nEND()\n")
+                self.assertNotEqual(self.make().returncode, 0)

@@ -1462,6 +1462,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if v.Name == tokPy2Module {
 				applyPythonModuleSelector(d, env, false)
+			} else if v.Name == tokPy3Module {
+				applyPythonModuleSelector(d, env, true)
 			} else if d.unit.HashTag == unitTagPy2Native {
 				applyPython2Addincl(d, env, true)
 			} else if d.unit.HashTag == unitTagPy3Native {
@@ -2259,6 +2261,8 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		return ModuleUnit{Type: name, Tag: unitTagPy2, ARPrefix: "libpy", GlobalARTag: tagGlobal, SbomLang: unitSbomPy2}
 	case tokPy2Module:
 		return ModuleUnit{Type: name, Tag: unitTagPy2Native, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
+	case tokPy3Module:
+		return ModuleUnit{Type: name, Tag: unitTagPy3Native, ARPrefix: "lib", GlobalARTag: tagGlobal, SbomLang: unitSbomCpp}
 	case tokPy3ProgramBin:
 		return ModuleUnit{Type: name, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
 	case tokPy3Test:
@@ -2467,7 +2471,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 	if d.moduleStmt != nil {
 		if d.moduleStmt.Name == tokPyAnyModule && (v.Name == tokUsePython2 || v.Name == tokUsePython3 || v.Name == tokPySrcs || v.Name == tokPyMain) ||
-			d.moduleStmt.Name == tokPy2Module && (v.Name == tokPython3Module || v.Name == tokPython3Addincl) {
+			d.moduleStmt.Name == tokPy2Module && (v.Name == tokPython3Module || v.Name == tokPython3Addincl) ||
+			d.moduleStmt.Name == tokPy3Module && (v.Name == tokPython2Module || v.Name == tokPython2Addincl) {
 			throwFmt("gen: %s is restricted in %s", v.Name.string(), d.moduleStmt.Name.string())
 		}
 	}
@@ -2708,12 +2713,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokStylePython, tokStyleRuff:
 		d.collectExplicitPythonStyle(v, env)
 	case tokLlvmBc:
-
-		if env.string(envCLANG_BC_ROOT) == "" || env.string(envLLVM_LLC_TOOL) == "" {
-			throwFmt("LLVM_BC requires USE_LLVM_BC16/18/20 before invocation")
-		}
-
-		stmt := &LlvmBcStmt{ClangBCRoot: env.string(envCLANG_BC_ROOT), DeclSeq: d.nextDeclSeq()}
+		stmt := &LlvmBcStmt{ClangBCRoot: env.string(envCLANG_BC_ROOT), LLCTool: env.string(envLLVM_LLC_TOOL), DeclSeq: d.nextDeclSeq()}
 		i := 0
 
 		for i < len(v.Args) {
@@ -2744,6 +2744,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				stmt.GenerateMachineCode = true
 				i++
 			case "NO_COMPILE":
+				stmt.NoCompile = true
 				i++
 			default:
 				stmt.Sources = append(stmt.Sources, v.Args[i].string())
@@ -2751,11 +2752,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			}
 		}
 
-		if stmt.Name == "" {
-			throwFmt("LLVM_BC: NAME keyword is required (got args %v)", anyStrs(v.Args))
-		}
-
 		d.llvmBc = append(d.llvmBc, stmt)
+
+		if !stmt.GenerateMachineCode {
+			ensureResourcePeer(modulePath, d)
+		}
 
 	case tokBundleOutput:
 		if len(v.Args) < 2 {
@@ -3903,6 +3904,8 @@ type LlvmBcStmt struct {
 	Symbols             []string
 	GenerateMachineCode bool
 	ClangBCRoot         string
+	LLCTool             string
+	NoCompile           bool
 }
 
 func isLlvmBcKeyword(s string) bool {

@@ -673,7 +673,7 @@ func inferModuleDeclaration(stmts []Stmt) (*ModuleStmt, bool) {
 
 func isLinkingModuleType(name TOK) bool {
 	switch name {
-	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary, tokPy2Module, tokPyAnyModule, tokYqlUdf, tokYqlUdfContrib, tokYqlPythonUdf, tokYqlPython3Udf:
+	case tokDllTool, tokDll, tokSoProgram, tokDynamicLibrary, tokPy2Module, tokPy3Module, tokPyAnyModule, tokYqlUdf, tokYqlUdfContrib, tokYqlPythonUdf, tokYqlPython3Udf:
 		return true
 	}
 
@@ -2059,7 +2059,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 
 		if ctx.sbomEnabled {
-			linkTarget := isProgramModuleType(d.moduleStmt.Name) || d.moduleStmt.Name == tokDllTool
+			linkTarget := isLinkingModuleType(d.moduleStmt.Name)
 			sbomBlockR := ctx.refSlices.alloc(sbomCap)
 			sbomBlockP := ctx.vfsSlices.alloc(sbomCap)
 			peerSbomRefsRaw, peerSbomPathsRaw, sbomInsertIdx := aggregateSbomComponents(deduper, e, d.moduleStmt.Name, linkTarget, resolved, allocatorExplicitPeers, sbomBlockR[:0], sbomBlockP[:0])

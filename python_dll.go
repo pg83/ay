@@ -1,7 +1,7 @@
 package main
 
 func isPythonDllModule(name TOK) bool {
-	return name == tokPyAnyModule || name == tokPy2Module
+	return name == tokPyAnyModule || name == tokPy2Module || name == tokPy3Module
 }
 
 func setupPythonDllModule(stmt *ModuleStmt, env Environment) {

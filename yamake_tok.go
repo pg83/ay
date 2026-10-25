@@ -290,6 +290,7 @@ var tokName = [...]STR{
 	tokPy23NativeLibrary:               kwPY23_NATIVE_LIBRARY,
 	tokPy2Library:                      kwPY2_LIBRARY,
 	tokPy2Module:                       internStr("PY2MODULE"),
+	tokPy3Module:                       internStr("PY3MODULE"),
 	tokPyAnyModule:                     internStr("PY_ANY_MODULE"),
 	tokPython2Module:                   internStr("PYTHON2_MODULE"),
 	tokPython3Module:                   internStr("PYTHON3_MODULE"),
@@ -679,6 +680,7 @@ const (
 	tokPy23NativeLibrary
 	tokPy2Library
 	tokPy2Module
+	tokPy3Module
 	tokPyAnyModule
 	tokPython2Module
 	tokPython3Module

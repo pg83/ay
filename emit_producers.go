@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const submittedProducer = -1
+
 const (
 	prodCuda = iota
 	prodImplib
@@ -66,8 +68,6 @@ type ProducerPos struct {
 	done  bool
 	end   int
 }
-
-const submittedProducer = -1
 
 func (e *EmitContext) submitOutput(output VFS) bool {
 	owner, claimed := e.producerOutputs[output]
@@ -190,6 +190,16 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 	}
 
 	switch class {
+	case srcExtFml:
+		e.prodVFS = append(e.prodVFS, build(e.instance.Path.relString(), "/", e.moduleSourceRel(tok), ".inc"))
+	case srcExtSfdl:
+		rel := e.moduleSourceRel(tok)
+
+		e.prodVFS = append(e.prodVFS, build(e.instance.Path.relString(), "/", rel, ".tmp"), build(e.instance.Path.relString(), "/", strings.TrimSuffix(rel, filepath.Ext(rel))))
+	case srcExtSc:
+		input := e.resolveModuleSourceVFS(tok, d.cc.SrcDirs)
+
+		e.prodVFS = append(e.prodVFS, build(input.relString(), ".h"))
 	case srcExtRos:
 		if d.ros != nil {
 			e.prodVFS = append(e.prodVFS, e.rosOutputPaths(src, meta.RosZeroCopy)...)
@@ -733,30 +743,41 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		})
 	}
 
-	if !isProgramModuleType(d.moduleStmt.Name) {
-		for i, stmt := range d.llvmBc {
-			outsMark := len(e.prodVFS)
+	for i, stmt := range d.llvmBc {
+		suffix := e.llvmBcSuffix(stmt)
+		outsMark := len(e.prodVFS)
 
-			e.prodVFS = append(e.prodVFS,
-				build(module, "/", stmt.Name, "_optimized", stmt.Suffix, ".bc"),
-				build(module, "/", stmt.Name, "_merged", stmt.Suffix, ".bc"))
+		e.prodVFS = append(e.prodVFS,
+			build(module, "/", stmt.Name, "_optimized", suffix, ".bc"),
+			build(module, "/", stmt.Name, "_merged", suffix, ".bc"))
 
-			outs := e.prodVFSTake(outsMark)
-			insMark := len(e.prodVFS)
-
-			for _, src := range stmt.Sources {
-				if v := runInputBuildCandidate(module, src); v != 0 {
-					e.prodVFS = append(e.prodVFS, v)
-				}
-			}
-
-			positions = append(positions, ProducerPos{
-				kind:  prodLlvmBc,
-				index: i,
-				outs:  outs,
-				ins:   e.prodVFSTake(insMark),
-			})
+		if stmt.GenerateMachineCode {
+			e.prodVFS = append(e.prodVFS, build(module, "/", stmt.Name, "_optimized", suffix, ".bc.o"))
 		}
+
+		if !stmt.NoCompile {
+			for _, src := range stmt.Sources {
+				e.prodVFS = append(e.prodVFS, build(e.llvmBcRootRelArcSrc(src), suffix, ".bc"))
+			}
+		}
+
+		outs := e.prodVFSTake(outsMark)
+		insMark := len(e.prodVFS)
+
+		for _, src := range stmt.Sources {
+			if stmt.NoCompile {
+				e.prodVFS = append(e.prodVFS, build(e.llvmBcRootRelArcSrc(src), suffix, ".bc"))
+			} else if v := runInputBuildCandidate(module, src); v != 0 {
+				e.prodVFS = append(e.prodVFS, v)
+			}
+		}
+
+		positions = append(positions, ProducerPos{
+			kind:  prodLlvmBc,
+			index: i,
+			outs:  outs,
+			ins:   e.prodVFSTake(insMark),
+		})
 	}
 
 	for i := range d.enumSrcs {
