@@ -9,7 +9,9 @@ case-insensitively; a section's body runs to the next `### ` header.
 
 Don't go into the background — `-p` kicks you out of the agent loop!!! `build` owns validation scheduling and runs independent cases in parallel!!!
 
-The canonical upstream graph gate is the source of truth. Python e2e tests are fast iteration checks, and their fixtures and assertions must follow the gate. A fast-test failure alone is not proof of a regression and must not veto behavior confirmed by the canonical gate. When they disagree, inspect the canonical graph and upstream mechanism, then correct the fast test; never change reference graphs or normalization to satisfy it. Report graph-gate results separately from fast-test failures. This rule applies to every role and takes precedence over test-first or test-pass requirements below.
+The canonical upstream graph gate is the source of truth for semantics and upstream parity. Python e2e tests establish reachability from the CLI and maintain coverage, including error paths and unusual or malformed inputs; they are not an oracle of upstream semantics. Cover reachable code through CLI scenarios. Delete code only when it is fundamentally unreachable from the CLI, with a call/data-flow proof; do not change working algorithms merely to make uncovered branches unnecessary. An e2e assertion must not veto behavior confirmed by the canonical gate: correct the assertion rather than changing reference graphs or normalization. Report graph-gate results separately from e2e and coverage results. This rule applies to every role and takes precedence over test-first or test-pass requirements below.
+
+Place Python e2e tests under `tst/{handler}/` by the first-level CLI command: `make`, `fetch`, or `dev`. Keep shared helpers and tests of top-level dispatch in `tst/`. Run a test module from the repository root with `python3 -m tst.<handler>.test_<name>` and `AY_TEST_BINARY` set, or use its `./build unit_<name>` target.
 
 ### LEAD
 
