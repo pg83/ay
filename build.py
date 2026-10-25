@@ -608,6 +608,8 @@ group(
         "p12_proto",
         "p12_go",
         "p12_java",
+        "feature_java_sources_debug",
+        "feature_java_sbom",
         "p12_typescript",
         "p12_cuda",
         "p12_docs",

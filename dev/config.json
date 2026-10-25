@@ -2666,5 +2666,67 @@
     "slice_sha256": "1ae29e827dee0947001dfa95abad1227a4c9c2afe979e93c5885e2d98e90ac78",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14124404498",
     "graph_sha256": "fb04a8d4c9216619575c83de5c29f68a87f2cf4e7cbbd65be1db582b0a065571"
+  },
+  {
+    "id": "feature_java_sources_debug",
+    "vcs": "arc",
+    "remote": "arcadia",
+    "sha": "5c011dfdff2c959d3a9e7292b8ce59ee0f397b25",
+    "command": [
+      "ya",
+      "make",
+      "--build=debug",
+      "-j0",
+      "-G",
+      "--sandboxing",
+      "--host-platform",
+      "default-linux-x86_64",
+      "--target-platform",
+      "default-linux-x86_64",
+      "devtools/dummy_arcadia/hello_java/hello"
+    ],
+    "env": {
+      "YA_TC": "no",
+      "YA_NO_RESPAWN": "yes",
+      "YA_PREFETCH": "0",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
+    "target": "devtools/dummy_arcadia/hello_java/hello",
+    "xfail": false,
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14124650365",
+    "slice_sha256": "b06f0505c2ed12bd90e62719f5f48f040f2655bd636c1184c4f3a2b053904b10",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14124650496",
+    "graph_sha256": "759cc30e7e9a0dc346e4888b4537c6a86723a07286c6350079995b7391fb23e1"
+  },
+  {
+    "id": "feature_java_sbom",
+    "vcs": "arc",
+    "remote": "arcadia",
+    "sha": "5c011dfdff2c959d3a9e7292b8ce59ee0f397b25",
+    "command": [
+      "ya",
+      "make",
+      "--build=release",
+      "-j0",
+      "-G",
+      "--sandboxing",
+      "--host-platform",
+      "default-linux-x86_64",
+      "--target-platform",
+      "default-linux-x86_64",
+      "devtools/dummy_arcadia/sbom/java/lib"
+    ],
+    "env": {
+      "YA_TC": "no",
+      "YA_NO_RESPAWN": "yes",
+      "YA_PREFETCH": "0",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
+    "target": "devtools/dummy_arcadia/sbom/java/lib",
+    "xfail": false,
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14124650611",
+    "slice_sha256": "397d9218f1de243e64a86e746d10687f37d2fec27b7a4b8028e8e8514ff2ae22",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14124650792",
+    "graph_sha256": "75f619634252dd2190dcd2fa4e21e5ccc0f05f1af5ab539e58ba4273a200e3c5"
   }
 ]

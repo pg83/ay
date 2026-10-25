@@ -13,7 +13,7 @@ Common commands:
 ./build -Drace unit     # unit against a -race build
 ./build -Dcoverage coverage  # unit tests against a -cover build; see below
 ./build validate        # all validation results, then the aggregate gate
-./build -k validate_quick # 12 small canonical graph cases for iteration
+./build -k validate_quick # 14 small canonical graph cases for iteration
 ./build test            # unit + complete validation gate
 ./build validation_report
 ./build validation_resources
@@ -85,8 +85,8 @@ For routine fixes, run the fixed subset `validate_quick`:
 ```
 
 It runs the same complete generate/normalize/sort/compare pipeline and strict
-per-case gates as `validate`, using the same pinned archives. It selects 12
-existing cases with 85,771 reference nodes in total (including overlap between
+per-case gates as `validate`, using the same pinned archives. It selects 14
+existing cases with 85,784 reference nodes in total (including overlap between
 cases). It does not generate or truncate new reference graphs.
 
 | Cases | Regression checks | Reference nodes |
@@ -98,6 +98,7 @@ cases). It does not generate or truncate new reference graphs.
 | `p12_proto` | Protobuf generators | 4,832 |
 | `p12_go` | Go graph generation | 18,043 |
 | `p12_java` | Java graph generation | 14,569 |
+| `feature_java_sources_debug`, `feature_java_sbom` | Debug source JARs and Java SBOM | 13 |
 | `p12_typescript` | TypeScript graph generation | 8,444 |
 | `p12_cuda` | CUDA generation and platform resources | 2,651 |
 | `p12_docs` | Documentation graphs | 18 |
@@ -161,6 +162,25 @@ both ay and upstream ya:
 
 The ay collection target stores assertions in `.build/e2e/ay/test_rust.json`;
 use `ay_e2e` to enforce the complete make-test suite's pass/fail status.
+
+Two small Java cases use real targets from `devtools/dummy_arcadia`:
+
+| Case ID | Target below `devtools/dummy_arcadia/` | Build type | Reference nodes |
+|---|---|---|---:|
+| `feature_java_sources_debug` | `hello_java/hello` | Debug | 9 |
+| `feature_java_sbom` | `sbom/java/lib` | Release | 4 |
+
+The first covers source JARs for a Java program and its library, plus SBOM
+dependencies. Upstream enables source JARs by default in Debug, so a Release
+graph does not cover this default. The second covers explicit `EMBED_SBOM`,
+dependency component metadata, and toolchain metadata. Each source slice is
+verified by rerunning upstream `ya` and comparing all graph nodes and result
+roots with the original tree. Both cases use `xfail: false` and belong to
+`validate` and `validate_quick`.
+
+```sh
+./build -j2 -k validate_feature_java_sources_debug validate_feature_java_sbom
+```
 
 Sandbox archives are ordinary CAS outputs and do not depend on the candidate
 `ay` binary. New resources provisioned by `dev/provision.py` are uploaded as
