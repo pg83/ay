@@ -612,7 +612,17 @@ func readResourceBundleJSON(fs FS, rel string) map[string]ResourceBundleEntry {
 	var data ResourceBundleJSON
 	throw(json.Unmarshal(concatChunks(fs.read(rel)), &data))
 
-	return data.ByPlatform
+	out := make(map[string]ResourceBundleEntry, len(data.ByPlatform))
+
+	for platform, resource := range data.ByPlatform {
+		key := canonizeResourcePlatform(platform)
+
+		if _, exists := out[key]; !exists {
+			out[key] = resource
+		}
+	}
+
+	return out
 }
 
 func resourceGlobalTokenValue(args []ANY, globals []ResourceDecl) CompilerFlagValue {

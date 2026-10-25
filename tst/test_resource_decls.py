@@ -55,9 +55,9 @@ def fetched_uri(graph, name):
             raise AssertionError(descriptor)
         if "resource" in descriptor:
             return descriptor["resource"]
-        canonical = lambda value: value.lower().removeprefix("default-").removesuffix("-x86_64").replace("windows", "win32")
+        host = host.lower().removeprefix("default-").removesuffix("-x86_64").replace("windows", "win32")
         return next(resource["resource"] for resource in descriptor["resources"]
-                    if canonical(resource["platform"]) == canonical(host))
+                    if resource["platform"].lower() == host)
     self_check = args[:3] + args[4:]
     if self_check != ["fetch", "$(B)", "$(S)", output]:
         raise AssertionError(f"unexpected fetch command {args!r}")
@@ -82,7 +82,7 @@ def toolchain_files():
         "build/platform/clang/clang20.json": bundle_json(PLATFORM_BUNDLE),
         "build/platform/lld/ya.make": resources_library(
             "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(\n"
-            "  LLD_ROOT sbr:22 FOR DARWIN-ARM64 sbr:21 FOR LINUX-X86_64\n"
+            "  LLD_ROOT sbr:22 FOR DARWIN-ARM64 sbr:21 FOR LINUX\n"
             ")\n"
         ),
         "build/platform/python/ymake_python3/ya.make": resources_library(
@@ -336,30 +336,32 @@ class ResourceDeclsTest(unittest.TestCase):
         self.assertNotEqual(actions[0], actions[1], "FETCH loses STRIP_PREFIX 1")
 
     def test_missing_host_entry_is_rejected_when_fetch_runs(self):
-        files = {
-            "res/ya.make": resources_library(
-                "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 FOR DARWIN)\n"
-            ),
-            "lib/ya.make": (
-                f"PROGRAM()\n{BARE}PEERDIR(res)\n"
-                "CFLAGS(-DPROBE=${T_RESOURCE_GLOBAL})\nSRCS(main.cpp)\nEND()\n"
-            ),
-            "lib/main.cpp": "int main(){return 0;}\n",
-        }
-        graph = lib.make(files, "lib")
-        args = lib.node_by_output(graph, "$(B)/resources/T")["cmds"][0]["cmd_args"][1:]
-        with tempfile.TemporaryDirectory(prefix="ay-host-resource-") as directory:
-            root = Path(directory)
-            output = root / "bld/resources/T"
-            output.mkdir(parents=True)
-            (output / "kept").write_text("untouched\n")
-            result = lib.run_process(*[
-                arg.replace("$(B)", str(root / "bld")).replace("$(S)", str(root / "src"))
-                for arg in args
-            ])
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn('resource "T" has no entry for host platform "linux-x86_64"', result.stderr)
-            self.assertEqual((output / "kept").read_text(), "untouched\n")
+        for platform in ("DARWIN", "LINUX-X86_64"):
+            with self.subTest(platform=platform):
+                files = {
+                    "res/ya.make": resources_library(
+                        f"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 FOR {platform})\n"
+                    ),
+                    "lib/ya.make": (
+                        f"PROGRAM()\n{BARE}PEERDIR(res)\n"
+                        "CFLAGS(-DPROBE=${T_RESOURCE_GLOBAL})\nSRCS(main.cpp)\nEND()\n"
+                    ),
+                    "lib/main.cpp": "int main(){return 0;}\n",
+                }
+                graph = lib.make(files, "lib")
+                args = lib.node_by_output(graph, "$(B)/resources/T")["cmds"][0]["cmd_args"][1:]
+                with tempfile.TemporaryDirectory(prefix="ay-host-resource-") as directory:
+                    root = Path(directory)
+                    output = root / "bld/resources/T"
+                    output.mkdir(parents=True)
+                    (output / "kept").write_text("untouched\n")
+                    result = lib.run_process(*[
+                        arg.replace("$(B)", str(root / "bld")).replace("$(S)", str(root / "src"))
+                        for arg in args
+                    ])
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('resource "T" has no entry for host platform "linux-x86_64"', result.stderr)
+                    self.assertEqual((output / "kept").read_text(), "untouched\n")
 
     def test_resource_uri_from_json_follows_module_platform(self):
         modules = {
