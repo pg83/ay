@@ -136,7 +136,7 @@ func (e *EmitContext) collectPySrcGroup(gi int, group PySrcGroup) {
 		}
 
 		if extIsProto(src.relOrSelf().string()) || extIsEv(src.relOrSelf().string()) {
-			logical := pyProtoLogicalModule(module, src.relOrSelf().string(), scope)
+			logical := pyProtoLogicalModule(module, src.string(), scope)
 
 			if isPythonProtoModule(d) && scope.ModuleName == nil {
 				logical = strings.ReplaceAll(logical, "-", "_")
