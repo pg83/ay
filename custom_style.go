@@ -47,13 +47,6 @@ func applyCustomStyle(fs FS, module string, stmt UnknownStmt, d *ModuleData, env
 	}
 
 	name := stmt.Raw.string()
-
-	if name == customExplicitLinter {
-		d.collectCustomStyle(module, stmt.Args, env)
-
-		return true
-	}
-
 	macro := platform.customStyleMacros[name]
 
 	if macro == nil {
