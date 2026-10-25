@@ -1018,6 +1018,11 @@ func buildCfgResolveIndex(cfg *ScanConfig) *CfgResolveIndex {
 }
 
 func (sc *ScanCtx) cacheSearchTier(targetID STR, out VFS) VFS {
+	// Discovery can run before generated outputs are registered.
+	if sc.initialOnly && out == 0 {
+		return out
+	}
+
 	s := sc.scanner
 	key := splitMix64(sc.cfg.num, uint32(targetID))
 

@@ -82,6 +82,22 @@ class CppUnresolvedSourceEdgesTest(unittest.TestCase):
     def test_generated_proto_header_is_linked_after_its_producer_is_configured(self):
         self.check('build-proto')
 
+    def test_header_discovery_does_not_complete_a_pending_generated_include(self):
+        for order in ('before.h seed.proto main.cpp', 'seed.proto before.h main.cpp'):
+            with self.subTest(order=order):
+                files = proto_files('SRCS(' + order + ')\n', {
+                    'lib/before.h': '#include <lib/seed.pb.h>\n',
+                    'lib/main.cpp': '#include "before.h"\n',
+                    'lib/seed.proto': 'syntax = "proto2";\nmessage Seed {}\n',
+                })
+                graph = lib.make(files, 'lib', '--sandboxing',
+                                 '--target-platform', 'default-linux-x86_64')
+                compiled = lib.node_by_output(graph, '$(B)/lib/main.cpp.o')
+                producer = lib.node_by_output(graph, '$(B)/lib/seed.pb.h')
+                self.assertCountEqual(compiled['inputs'], [
+                    '$(S)/lib/main.cpp', '$(S)/lib/before.h', '$(B)/lib/seed.pb.h'])
+                self.assertIn(producer['uid'], compiled['deps'])
+
     def test_selected_host_cpp_repair_keeps_the_configured_pb_producer(self):
         graph = lib.make(fixture('host-build-proto'), 'petal', '--sandboxing',
                          '--add-modules-to-results', '--target-platform', 'default-linux-x86_64')
