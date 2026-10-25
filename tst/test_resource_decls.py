@@ -202,23 +202,112 @@ class ResourceDeclsTest(unittest.TestCase):
             {"plain": "sbr:5", "curdir": "sbr:6", "root": "sbr:7"},
         )
 
-    def test_host_bundle_rejects_malformed_or_missing_entries(self):
-        for body, message in (
-            (
-                "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 AT LINUX)\n",
-                "malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args",
-            ),
-            (
-                "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 FOR DARWIN)\n",
-                'resource "T" has no entry for host platform "linux-x86_64"',
-            ),
+    def test_unconsumed_host_bundles_do_not_require_a_host_entry(self):
+        for body in (
+            "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 AT LINUX)\n",
+            "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 FOR DARWIN)\n",
         ):
             with self.subTest(body=body):
                 files = {
                     "res/ya.make": resources_library(body),
                     "lib/ya.make": f"LIBRARY()\n{BARE}PEERDIR(res)\nEND()\n",
                 }
+                graph = lib.make(files, "lib")
+                self.assertNotIn("$(B)/resources/T", fetches(graph))
+
+    def test_host_bundle_uses_platform_triples_with_an_arbitrary_separator(self):
+        files = {
+            "res/ya.make": resources_library(
+                "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 AT LINUX)\n"
+            ),
+            "lib/ya.make": (
+                f"LIBRARY()\n{BARE}PEERDIR(res)\n"
+                "CFLAGS(-DPROBE=${T_RESOURCE_GLOBAL})\nSRCS(main.cpp)\nEND()\n"
+            ),
+            "lib/main.cpp": "int value;\n",
+        }
+        graph = lib.make(files, "lib")
+        self.assertEqual(fetched_uri(graph, "T"), "sbr:1")
+        compiled = lib.node_by_output(graph, "$(B)/lib/main.cpp.o")
+        self.assertIn("-DPROBE=$(B)/resources/T", compiled["cmds"][0]["cmd_args"])
+
+    def test_selected_host_bundle_rejects_incomplete_platform_triples(self):
+        files = {
+            "res/ya.make": resources_library(
+                "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 FOR)\n"
+            ),
+            "lib/ya.make": (
+                f"PROGRAM()\n{BARE}PEERDIR(res)\n"
+                "CFLAGS(-DPROBE=${T_RESOURCE_GLOBAL})\nSRCS(main.cpp)\nEND()\n"
+            ),
+            "lib/main.cpp": "int main(){return 0;}\n",
+        }
+        self.assertIn(
+            "malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args",
+            make_error(files, "lib"),
+        )
+
+    def test_host_bundle_accepts_strip_prefix_pairs_between_platform_entries(self):
+        for entries in (
+            "sbr:1 FOR LINUX STRIP_PREFIX 0",
+            "sbr:1 FOR LINUX STRIP_PREFIX +0",
+            "sbr:1 AT LINUX STRIP_PREFIX 0 sbr:2 FOR DARWIN STRIP_PREFIX 2",
+        ):
+            with self.subTest(entries=entries):
+                files = {
+                    "res/ya.make": resources_library(
+                        f"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T {entries})\n"
+                    ),
+                    "lib/ya.make": (
+                        f"PROGRAM()\n{BARE}PEERDIR(res)\n"
+                        "CFLAGS(-DPROBE=${T_RESOURCE_GLOBAL})\nSRCS(main.cpp)\nEND()\n"
+                    ),
+                    "lib/main.cpp": "int main(){return 0;}\n",
+                }
+                graph = lib.make(files, "lib")
+                self.assertEqual(fetched_uri(graph, "T"), "sbr:1")
+                compiled = lib.node_by_output(graph, "$(B)/lib/main.cpp.o")
+                self.assertIn("-DPROBE=$(B)/resources/T", compiled["cmds"][0]["cmd_args"])
+
+    def test_selected_host_bundle_rejects_bad_or_missing_strip_prefix_counts(self):
+        for suffix, message in (
+            ("STRIP_PREFIX", "malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args"),
+            ("STRIP_PREFIX bad", "STRIP_PREFIX must be integral"),
+            ("STRIP_PREFIX -1", "STRIP_PREFIX must be integral"),
+            ("STRIP_PREFIX -0", "STRIP_PREFIX must be integral"),
+            ("STRIP_PREFIX 4294967296", "STRIP_PREFIX must be integral"),
+            ("STRIP_PREFIX 1.0", "STRIP_PREFIX must be integral"),
+        ):
+            with self.subTest(suffix=suffix):
+                files = {
+                    "res/ya.make": resources_library(
+                        f"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 FOR LINUX {suffix})\n"
+                    ),
+                    "lib/ya.make": (
+                        f"PROGRAM()\n{BARE}PEERDIR(res)\n"
+                        "CFLAGS(-DPROBE=${T_RESOURCE_GLOBAL})\nSRCS(main.cpp)\nEND()\n"
+                    ),
+                    "lib/main.cpp": "int main(){return 0;}\n",
+                }
                 self.assertIn(message, make_error(files, "lib"))
+
+    def test_fetch_requires_a_host_entry_for_a_consumed_resource(self):
+        # Native graph generation retains a platform mapping. AY lowers the
+        # consumed resource to FETCH, which requires a concrete host entry.
+        files = {
+            "res/ya.make": resources_library(
+                "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 FOR DARWIN)\n"
+            ),
+            "lib/ya.make": (
+                f"PROGRAM()\n{BARE}PEERDIR(res)\n"
+                "CFLAGS(-DPROBE=${T_RESOURCE_GLOBAL})\nSRCS(main.cpp)\nEND()\n"
+            ),
+            "lib/main.cpp": "int main(){return 0;}\n",
+        }
+        self.assertIn(
+            'resource "T" has no entry for host platform "linux-x86_64"',
+            make_error(files, "lib"),
+        )
 
     def test_resource_uri_from_json_follows_module_platform(self):
         modules = {

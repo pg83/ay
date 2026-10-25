@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -119,18 +120,28 @@ func resolveResourceDecls(fs FS, host *Platform, modulePath string, stmt *Declar
 		return out
 	case tokDeclareExternalHostResourcesBundle:
 
-		name := stmt.Args[0]
 		bundle := map[string]string{}
+		i := 1
 
-		for i := 1; i+2 < len(stmt.Args); i += 3 {
-			if stmt.Args[i+1].string() != "FOR" {
-				throwFmt("gen: %s: malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", modulePath, stmt.Args)
+		for ; i+2 < len(stmt.Args); i += 3 {
+			uri, platform := stmt.Args[i], stmt.Args[i+2]
+
+			if i+4 < len(stmt.Args) && stmt.Args[i+3].string() == "STRIP_PREFIX" {
+				if _, err := strconv.ParseUint(strings.TrimPrefix(stmt.Args[i+4].string(), "+"), 10, 32); err != nil {
+					throwFmt("gen: %s: STRIP_PREFIX must be integral in DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", modulePath, stmt.Args)
+				}
+
+				i += 2
 			}
 
-			bundle[stmt.Args[i+2].string()] = stmt.Args[i].string()
+			bundle[platform.string()] = uri.string()
 		}
 
-		return []ResourceDecl{selectHostResourceDecl(host, modulePath, name.string(), bundle)}
+		if i != len(stmt.Args) {
+			throwFmt("gen: %s: malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args %v", modulePath, stmt.Args)
+		}
+
+		return []ResourceDecl{selectHostResourceDecl(host, modulePath, stmt.Args[0].string(), bundle)}
 	}
 
 	name := stmt.Args[0]
