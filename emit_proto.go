@@ -759,14 +759,14 @@ func (e *EmitContext) emitPyProtoLibraryResult(resources *ObjcopyEmitResult) *Pr
 
 	globalBaseName := globalArchiveNameWithPrefixOrName(instance.Path.relString(), d.unit.ARPrefix, protoLibName)
 	gRef := e.emitARGlobalNamedTagged(instance, globalBaseName, d.unit.GlobalARTag, genRefs, genOuts, d.tc, ctx.host, ctx.emit)
-	globalPath := build(instance.Path.relString(), "/", globalBaseName)
+	globalPath := buildJoined(instance.Path.relString(), globalBaseName)
 	result := &ProtoSrcsResult{GlobalRef: &gRef, GlobalPath: &globalPath}
 
 	if cppSibling != nil && cppSibling.ARPath != nil {
 		result.WholeArchiveRefs = append(result.WholeArchiveRefs, cppSibling.ARRef)
 		result.WholeArchivePaths = append(result.WholeArchivePaths, *cppSibling.ARPath)
 	} else {
-		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, build(instance.Path.relString(), "/", e.arName(instance.Path.relString(), "lib", protoLibName)))
+		result.WholeArchiveCmdPaths = append(result.WholeArchiveCmdPaths, buildJoined(instance.Path.relString(), e.arName(instance.Path.relString(), "lib", protoLibName)))
 	}
 
 	return result

@@ -27,18 +27,66 @@ class OptionalModuleContractsTest(unittest.TestCase):
         compiled = [n for n in graph['graph'] if n['kv']['p'] == 'CC' and '$(B)/generated.cpp' in n['inputs']]
         self.assertEqual(len(compiled), 1)
         self.assertIn(generated['uid'], compiled[0]['deps'])
+        self.assertEqual(compiled[0]['outputs'], ['$(B)/generated.cpp.o'])
+        archive = lib.node_by_output(graph, '$(B)/lib.a')
+        self.assertIn(compiled[0]['uid'], archive['deps'])
+        self.assertIn('$(B)/generated.cpp.o', archive['inputs'])
+        self.assertIn(archive['uid'], graph['result'])
 
     def test_root_source_paths_stay_canonical_with_an_empty_srcdir(self):
         cases = [
-            ('.', {'ya.make': library('SRCS(root.cpp)'), 'root.cpp': 'int root;\n'}),
-            ('a', {'a/ya.make': library('SRCDIR(.)\nSRCS(root.cpp)'), 'root.cpp': 'int root;\n'}),
+            ('.', {'ya.make': library('SRCS(root.cpp)'), 'root.cpp': 'int root;\n'}, 'root.cpp.o', 'lib.a'),
+            ('a', {'a/ya.make': library('SRCDIR(.)\nSRCS(root.cpp)'), 'root.cpp': 'int root;\n'}, 'a/__/root.cpp.o', 'a/liba.a'),
         ]
-        for target, files in cases:
+        for target, files, output, archive_output in cases:
             with self.subTest(target=target):
                 graph = lib.make(files, target)
                 compiled = [n for n in graph['graph'] if n['kv']['p'] == 'CC']
                 self.assertEqual(len(compiled), 1)
                 self.assertEqual(compiled[0]['inputs'], ['$(S)/root.cpp'])
+                self.assertEqual(compiled[0]['outputs'], ['$(B)/' + output])
+                archive = lib.node_by_output(graph, '$(B)/' + archive_output)
+                self.assertIn(compiled[0]['uid'], archive['deps'])
+                self.assertIn(compiled[0]['outputs'][0], archive['inputs'])
+                self.assertIn(archive['uid'], graph['result'])
+
+    def test_root_library_output_names_and_source_directories(self):
+        for name, body, source, output in (
+            ('rootlib', 'SRCS(root.cpp)', 'root.cpp', 'root.cpp.o'),
+            ('', 'SRCS(nested/child.cpp)', 'nested/child.cpp', '_/nested/child.cpp.o'),
+            ('', 'SRCDIR(shared)\nSRCS(root.cpp)', 'shared/root.cpp', '_/shared/root.cpp.o'),
+            ('', 'SRC(nested/child.cpp)', 'nested/child.cpp', 'nested/child.cpp.o'),
+            ('', 'SRC(./nested/child.cpp)', 'nested/child.cpp', 'nested/child.cpp.o'),
+        ):
+            with self.subTest(name=name, source=source):
+                files = {'ya.make': library(body).replace('LIBRARY()', 'LIBRARY(' + name + ')'), source: 'int root;\n'}
+                graph = lib.make(files, '.', '-DPIC=no')
+                compiled = lib.node_by_output(graph, '$(B)/' + output)
+                self.assertEqual(compiled['inputs'], ['$(S)/' + source])
+                args = compiled['cmds'][0]['cmd_args']
+                self.assertEqual(args[args.index('-o') + 1], compiled['outputs'][0])
+                archive = lib.node_by_output(graph, '$(B)/lib' + name + '.a')
+                self.assertIn(compiled['uid'], archive['deps'])
+                self.assertIn(compiled['outputs'][0], archive['inputs'])
+                self.assertIn(compiled['outputs'][0], archive['cmds'][0]['cmd_args'])
+                self.assertEqual(graph['result'], [archive['uid']])
+
+    def test_root_global_and_local_archives_keep_distinct_object_dependencies(self):
+        files = {
+            'ya.make': library('SRCS(GLOBAL global.cpp)\nSRCS(local.cpp)'),
+            'global.cpp': 'int global;\n', 'local.cpp': 'int local;\n',
+        }
+        graph = lib.make(files, '.', '-DPIC=no')
+        archives = []
+        for source, archive_output in (('global.cpp', 'lib.global.a'), ('local.cpp', 'lib.a')):
+            compiled = lib.node_by_output(graph, '$(B)/' + source + '.o')
+            self.assertEqual(compiled['inputs'], ['$(S)/' + source])
+            archive = lib.node_by_output(graph, '$(B)/' + archive_output)
+            self.assertEqual(archive['inputs'], [compiled['outputs'][0], '$(S)/build/scripts/link_lib.py'])
+            self.assertEqual(archive['deps'], [compiled['uid']])
+            self.assertIn(compiled['outputs'][0], archive['cmds'][0]['cmd_args'])
+            archives.append(archive['uid'])
+        self.assertCountEqual(graph['result'], archives)
 
     def test_plain_library_accepts_golaunch_metadata(self):
         graph = lib.make({'app/ya.make': library('GOLAUNCH_OVERRIDE(component Launch)\nGENERATE_GOLAUNCH_CALLBACKS(callbacks)\nSRCS(main.cpp)'),

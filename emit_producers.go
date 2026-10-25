@@ -490,7 +490,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		start := len(backing)
 		prefix := filepath.Base(bc.Prefix.string())
 
-		backing = append(backing, build(module, "/", prefix, ".cpp"), build(module, "/", prefix, ".h"))
+		backing = append(backing, copyFileOutputVFS(module, prefix+".cpp"), copyFileOutputVFS(module, prefix+".h"))
 		push(prodBaseCodegen, i, start, len(backing))
 	}
 

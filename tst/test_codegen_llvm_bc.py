@@ -220,8 +220,15 @@ class LlvmBcTest(unittest.TestCase):
         )
         files["gen.in"] = ""
         lib.tool_program(files, "tools/codegen", "codegen")
+        python_module = "build/platform/python/ymake_python3/ya.make"
+        files[python_module] = files[python_module].replace(
+            "RESOURCES_LIBRARY()\n", "RESOURCES_LIBRARY()\nNO_YMAKE_PYTHON3()\n")
+        files["library/cpp/resource/ya.make"] = "LIBRARY()\n" + lib.BARE_MODULE + "END()\n"
+        files["library/cpp/resource/resource.h"] = ""
         graph = lib.make(files, ".", "--target-platform", "default-linux-x86_64")
-        codegen = lib.node_by_output_prefix(graph, "$(B)/./gen.cpp")
+        codegen = lib.node_by_output(graph, "$(B)/gen.cpp")
+        self.assertEqual(codegen["outputs"], ["$(B)/gen.cpp", "$(B)/gen.h"])
+        self.assertEqual(codegen["inputs"], ["$(B)/tools/codegen/codegen", "$(S)/gen.in"])
         generated = codegen["outputs"][0]
         compile_node = lib.node_by_output(graph, "$(B)/gen.cpp.bc")
         self.assertEqual(compile_node["inputs"][1], generated)
@@ -229,6 +236,19 @@ class LlvmBcTest(unittest.TestCase):
             generated, "-o", "$(B)/gen.cpp.bc",
         ])
         self.assertIn(codegen["uid"], compile_node["deps"])
+        merged = lib.node_by_output(graph, "$(B)/foo_merged.bc")
+        self.assertEqual(merged["inputs"], [compile_node["outputs"][0]])
+        self.assertIn(compile_node["uid"], merged["deps"])
+        optimized = lib.node_by_output(graph, "$(B)/foo_optimized.bc")
+        self.assertEqual(optimized["inputs"], [merged["outputs"][0], "$(S)/build/scripts/llvm_opt_wrapper.py"])
+        self.assertIn(merged["uid"], optimized["deps"])
+        resource = next(n for n in graph["graph"] if n["kv"].get("p") == "PY"
+                        and optimized["outputs"][0] in n["inputs"])
+        self.assertIn(optimized["uid"], resource["deps"])
+        archive = lib.node_by_output(graph, "$(B)/lib.global.a")
+        self.assertIn(resource["outputs"][0], archive["inputs"])
+        self.assertIn(resource["uid"], archive["deps"])
+        self.assertEqual(graph["result"], [archive["uid"]])
 
 
 if __name__ == "__main__":

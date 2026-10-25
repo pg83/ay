@@ -15,15 +15,15 @@ func (e *EmitContext) emitBaseCodegen(bc *BaseCodegenStmt) {
 	toolRes := ctx.toolResult(internArg(filepath.Clean(bc.ToolPath.string())))
 	toolLDRef := toolRes.LDRef
 	toolBin := *toolRes.LDPath
-	inputIn := source(moduleDir, "/", prefix, ".in")
+	inputIn := sourceJoinClean(moduleDir, prefix+".in")
 
 	if strings.ContainsRune(prefix, '/') {
 		inputIn = source(prefix, ".in")
 	}
 
 	base := filepath.Base(prefix)
-	prefixCpp := build(moduleDir, "/", base, ".cpp")
-	prefixH := build(moduleDir, "/", base, ".h")
+	prefixCpp := copyFileOutputVFS(moduleDir, base+".cpp")
+	prefixH := copyFileOutputVFS(moduleDir, base+".h")
 	cmdArgs := na.anys.alloc(4 + len(bc.Opts))[:0]
 
 	cmdArgs = append(cmdArgs,

@@ -460,32 +460,41 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 		return build(in.OutputStem.relString(), suffix), input
 	}
 
-	dir := instance.Path.relString()
+	dir := cleanRel(instance.Path.relString())
+	separator := "/"
+
+	if dir == "" {
+		separator = ""
+	}
 	rel := srcVFS.relString()
 	srcRelClean := srcRel != "" && srcRel != "." && pathIsClean(srcRel)
 
 	canonMatches := func() bool {
 		if srcRelClean {
+			if dir == "" {
+				return rel == srcRel
+			}
+
 			return len(rel) == len(dir)+1+len(srcRel) &&
 				rel[:len(dir)] == dir && rel[len(dir)] == '/' && rel[len(dir)+1:] == srcRel
 		}
 
-		return rel == filepath.ToSlash(filepath.Clean(dir+"/"+srcRel))
+		return rel == filepath.ToSlash(filepath.Clean(joinRel(dir, srcRel)))
 	}
 
 	if srcVFS.isSource() && !canonMatches() {
 		outputRel := composeSrcDirOutputRel(dir, rel)
 
-		out = build(dir, "/", outputRel, suffix)
+		out = build(dir, separator, outputRel, suffix)
 
 		return out, input
 	}
 
-	if srcVFS.isBuild() && !in.FlatOutput {
+	if srcVFS.isBuild() && !in.FlatOutput && dir != "" {
 		if rel != dir && !(len(rel) > len(dir) && rel[len(dir)] == '/' && rel[:len(dir)] == dir) {
 			outputRel := composeSrcDirOutputRel(dir, rel)
 
-			return build(dir, "/", outputRel, suffix), input
+			return build(dir, separator, outputRel, suffix), input
 		}
 	}
 
@@ -495,17 +504,17 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 
 	switch {
 	case in.FlatOutput:
-		return build(dir, "/", srcRel, suffix), input
+		return build(dir, separator, srcRel, suffix), input
 	case strings.Contains(srcRel, "/"):
 		body, underscore := normalizeDotDotSegments(srcRel)
 
 		if underscore {
-			return build(dir, "/_/", body, suffix), input
+			return build(dir, separator, "_/", body, suffix), input
 		}
 
-		return build(dir, "/", body, suffix), input
+		return build(dir, separator, body, suffix), input
 	default:
-		return build(dir, "/", srcRel, suffix), input
+		return build(dir, separator, srcRel, suffix), input
 	}
 }
 

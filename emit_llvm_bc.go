@@ -134,7 +134,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		bcPaths = append(bcPaths, bcOut)
 	}
 
-	mergedOut := build(instance.Path.relString(), "/", stmt.Name, "_merged", suffix, ".bc")
+	mergedOut := copyFileOutputVFS(instance.Path.relString(), stmt.Name+"_merged"+suffix+".bc")
 	ldArgs := []ANY{internStr(llvmLink).any()}
 
 	for _, p := range bcPaths {
@@ -168,7 +168,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 	pendRefs = append(pendRefs, ldRef)
 
 	optOutName := stmt.Name + "_optimized" + suffix + ".bc"
-	optOut := build(instance.Path.relString(), "/", optOutName)
+	optOut := copyFileOutputVFS(instance.Path.relString(), optOutName)
 	optArgs := []ANY{internStr(python).any(), internStr(optWrapper).any(), internStr(opt).any(), mergedOut.any(), argDashO.any(), optOut.any()}
 	passes := []string{"default<O2>", "globalopt", "globaldce"}
 

@@ -54,7 +54,7 @@ func sourceJoined(dir, rel string) VFS {
 }
 
 func buildJoined(dir, rel string) VFS {
-	return internJoined(dir, rel).build()
+	return internJoined(cleanRel(dir), rel).build()
 }
 
 func sourceBytes(rel []byte) VFS {

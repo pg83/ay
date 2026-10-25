@@ -2622,7 +2622,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		result := newResult()
 
 		if len(d.cythonAddInclGlobal) > 0 || len(frame.peerCtx.CythonInclude) > 0 {
-			result.ArchiveFile = build(instance.Path.relString(), "/", arNameFn(instance.Path.relString()))
+			result.ArchiveFile = buildJoined(instance.Path.relString(), arNameFn(instance.Path.relString()))
 		}
 
 		result.ResourceGlobalClosure = resourceGlobalsClosure
@@ -2855,7 +2855,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		p := ctx.emit.nodeArenas().vfs.one()
 
-		*p = build(instance.Path.relString(), "/", arBaseName)
+		*p = buildJoined(instance.Path.relString(), arBaseName)
 		arPath = p
 	}
 
@@ -2868,7 +2868,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	result = newResult()
 	result.ARRef = arRef
 	result.ARPath = arPath
-	result.ArchiveFile = build(instance.Path.relString(), "/", arBaseName)
+	result.ArchiveFile = buildJoined(instance.Path.relString(), arBaseName)
 	result.LDRef = arRef
 	result.LDPath = arPath
 	result.SbomComponentRef = ownSbomRef
@@ -2885,7 +2885,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		globalRef := e.emitARGlobalNamedTagged(arInstance, globalBaseName, globalTag, globalRefs, globalOutputs, d.tc, ctx.host, ctx.emit)
 
 		result.GlobalRef = &globalRef
-		result.GlobalPath = ptr(build(instance.Path.relString(), "/", globalBaseName))
+		result.GlobalPath = ptr(buildJoined(instance.Path.relString(), globalBaseName))
 	}
 
 	if protoResult := e.protoRes; protoResult != nil {
@@ -2898,7 +2898,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			result.GlobalPath = protoResult.GlobalPath
 		}
 	} else if isPythonProtoModule(d) {
-		result.WholeArchiveCmdPaths = []VFS{build(instance.Path.relString(), "/", e.arName(instance.Path.relString(), "lib", archiveName))}
+		result.WholeArchiveCmdPaths = []VFS{buildJoined(instance.Path.relString(), e.arName(instance.Path.relString(), "lib", archiveName))}
 	}
 
 	ctx.memoPut(instance, result)
