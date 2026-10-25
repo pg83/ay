@@ -240,7 +240,7 @@ func (e *EmitContext) docsRender(out VFS, peers []VFS, book bool) NodeRef {
 		args = append(args, "-f", "md", "--add-map-file", "--build-manifest", "--crawler-manifest")
 	}
 
-	config := docsSource(docs.config)
+	config := resolveSourceOrGeneratedVFS(e.ctx, e.instance, docs.config, e.d.srcDirs)
 
 	args = append(args, "-j2", "--no-strict", "--allow-html", "--allow-custom-resources", "-e", "unarchive-includer", "-q", "--config", config.string())
 

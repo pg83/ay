@@ -212,6 +212,10 @@ func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
 	for _, chunk := range node.Inputs.files {
 		for _, input := range chunk {
 			if input.isSource() {
+				if !e.ctx.fs.isFilePathClean(input.relString()) {
+					e.ctx.onWarn(Warn{Kind: WarnMissingSource, Message: "source file not found: " + input.string()})
+				}
+
 				continue
 			}
 

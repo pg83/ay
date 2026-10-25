@@ -10,7 +10,7 @@ class DocumentationContextsTest(MakeTest):
         self.write("assets/value.txt", "42\n")
         self.write("extra.txt", "extra\n")
         graph = self.graph()
-        self.node(graph, "answer.tar.gz")
+        self.assertIn(f"$(S)/{PROJECT}/config.yml", self.node(graph, "answer.tar.gz")["inputs"])
         self.assertTrue(any(f"$(S)/{PROJECT}/assets/value.txt" in node["inputs"] for node in graph["graph"]))
 
     def test_library_explicit_source_root(self):
