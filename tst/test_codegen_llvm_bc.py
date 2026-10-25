@@ -1,6 +1,7 @@
 import unittest
 
 import lib
+from resource_dependencies import fetched_uri
 
 
 PYTHON = "$(B)/resources/YMAKE_PYTHON3/bin/python3"
@@ -242,8 +243,22 @@ class LlvmBcTest(unittest.TestCase):
         optimized = lib.node_by_output(graph, "$(B)/foo_optimized.bc")
         self.assertEqual(optimized["inputs"], [merged["outputs"][0], "$(S)/build/scripts/llvm_opt_wrapper.py"])
         self.assertIn(merged["uid"], optimized["deps"])
-        resource = next(n for n in graph["graph"] if n["kv"].get("p") == "PY"
-                        and optimized["outputs"][0] in n["inputs"])
+        resource = lib.node_by_output(graph, "$(B)/objcopy_72392759cbf08fee667cb14af3.o")
+        self.assertEqual(resource["kv"]["p"], "PY")
+        self.assertCountEqual(resource["inputs"], [
+            optimized["outputs"][0], "$(B)/tools/rescompiler/rescompiler",
+            "$(B)/tools/rescompressor/rescompressor", "$(S)/build/scripts/objcopy.py",
+        ])
+        resource_args = resource["cmds"][0]["cmd_args"]
+        self.assertEqual(resource_args[resource_args.index("--output_obj") + 1], resource["outputs"][0])
+        self.assertEqual(resource_args[resource_args.index("--inputs") + 1], optimized["outputs"][0])
+        dependencies = [optimized["uid"]]
+        for tool in ("rescompiler", "rescompressor"):
+            dependencies.append(lib.node_by_output(graph, "$(B)/tools/" + tool + "/" + tool)["uid"])
+        for name, uri in (("YMAKE_PYTHON3", "sbr:2"), ("CLANG20", "sbr:1")):
+            self.assertEqual(fetched_uri(graph, name), uri)
+            dependencies.append(lib.node_by_output(graph, "$(B)/resources/" + name)["uid"])
+        self.assertCountEqual(resource["deps"], dependencies)
         self.assertIn(optimized["uid"], resource["deps"])
         archive = lib.node_by_output(graph, "$(B)/lib.global.a")
         self.assertIn(resource["outputs"][0], archive["inputs"])

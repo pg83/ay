@@ -6,7 +6,7 @@ import (
 )
 
 func (e *EmitContext) resourceHash(items []string, tag STR) string {
-	items = append(slices.Clone(items), "$S/"+e.instance.Path.relString())
+	items = append(slices.Clone(items), joinRel("$S", cleanRel(e.instance.Path.relString())))
 
 	hash, _ := resourceHashInto(nil, items, tag.string())
 

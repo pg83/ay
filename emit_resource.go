@@ -343,7 +343,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	oc := e.objcopyEmitCtx()
-	unitElem := "$S/" + instance.Path.relString()
+	unitElem := joinRel("$S", cleanRel(instance.Path.relString()))
 	tag := ""
 
 	if p.Tag != 0 {
@@ -495,7 +495,7 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 
 		hash, hashBuf = resourceHashInto(hashBuf, hashScratch, tag)
 
-		outputObj := build(instance.Path.relString(), "/objcopy_", hash, ".o")
+		outputObj := buildJoined(instance.Path.relString(), "objcopy_"+hash+".o")
 		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
 
 		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, e.resourceTextInputs(chunk), deps))
@@ -514,7 +514,7 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
-	unitElem := "$S/" + instance.Path.relString()
+	unitElem := joinRel("$S", cleanRel(instance.Path.relString()))
 	dash := str2
 	tag := ""
 
