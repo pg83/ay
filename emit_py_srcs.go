@@ -233,16 +233,14 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 	module := e.instance.Path.relString()
 	srcRel := ps.Token.string()
 
-	if e.d.usePython2 {
-		if rooted, ok := moduleRootedVFS(module, srcRel); ok {
-			suffix := e.pyYapycExt()
+	if rooted, ok := moduleRootedVFS(module, srcRel); ok {
+		suffix := e.pyYapycExt()
 
-			if strings.Contains(srcRel, "/") {
-				suffix = "." + e.d.pyYapycSuffix + suffix
-			}
-
-			return build(rooted.relString(), suffix)
+		if strings.Contains(srcRel, "/") {
+			suffix = "." + e.d.pyYapycSuffix + suffix
 		}
+
+		return build(rooted.relString(), suffix)
 	}
 
 	if ps.Kind == pySourceGenerated {
@@ -316,6 +314,10 @@ func (e *EmitContext) appendPyResEntries(out []PyGenResEntry, ps PySrc) []PyGenR
 
 	if !d.pyBuildNoPYC {
 		entry := PyGenResEntry{token: e.resStr2(srcRel, suffix), key: ps.Module, yapyc: true, path: e.pyYapycOutFor(ps)}
+
+		if rooted, ok := moduleRootedVFS(e.instance.Path.relString(), entry.token); ok {
+			entry.path = rooted
+		}
 
 		out = append(out, entry)
 	}
