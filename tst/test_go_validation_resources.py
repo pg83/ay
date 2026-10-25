@@ -1,6 +1,8 @@
+import json
 import unittest
 
 import lib
+from resource_dependencies import fetches
 from test_go_tests import args_after, go_module, go_test_world, test_node
 
 
@@ -59,7 +61,16 @@ class GoValidationResourcesTest(unittest.TestCase):
                     # The target DART consumes ALPHA; the unrelated root and
                     # the host tool only declare their private resource names.
                     fetch = lib.node_by_output(graph, "$(B)/resources/" + names["ALPHA"])
-                    self.assertIn("sbr:71", fetch["cmds"][0]["cmd_args"])
+                    fetch_args = fetches(graph)[fetch["outputs"][0]]
+                    self.assertEqual(fetch_args[:2], ["fetch", "--resource-json"])
+                    descriptor = json.loads(fetch_args[2])
+                    self.assertEqual(descriptor["pattern"], names["ALPHA"])
+                    self.assertEqual([(entry["platform"], entry["resource"]) for entry in descriptor["resources"]], [
+                        ("LINUX-AARCH64", "sbr:72"), ("LINUX-X86_64", "sbr:71"),
+                    ])
+                    self.assertEqual(fetch_args[3:], [
+                        "--host-platform", "linux-x86_64", "$(B)", "$(S)", fetch["outputs"][0],
+                    ])
                     for part in ("HOST", "OUTSIDE"):
                         self.assertFalse(any("$(B)/resources/" + names[part] in n["outputs"] for n in graph["graph"]))
                     generated = lib.node_by_output(graph, f"$(B)/{project}/generated.go")
