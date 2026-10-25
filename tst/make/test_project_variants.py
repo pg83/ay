@@ -73,6 +73,10 @@ class ProjectVariantsTest(MakeTest):
         self.node(graph, "generated/value.txt")
 
     def test_maps_sproto(self):
-        self.write("ya.make", "LIBRARY()\nSRCS(answer.proto)\nYMAPS_SPROTO(answer.proto)\nRESOURCE(answer.sproto.h /schema)\nEND()\n")
+        self.write("ya.make", "LIBRARY()\nSRCS(answer.proto helper.cpp)\nYMAPS_SPROTO(helper.cpp answer.proto)\nRESOURCE(answer.sproto.h /schema)\nEND()\n")
         self.write("answer.proto", 'syntax = "proto2"; package e2e; message Answer { optional int32 value = 1; }\n')
-        self.node(self.graph(), "answer.sproto.h")
+        self.write("helper.cpp", "int helper() { return 42; }\n")
+        graph = self.graph()
+        self.node(graph, "answer.sproto.h")
+        self.node(graph, "helper.cpp.o")
+        self.assertFalse(any(path.endswith("helper.sproto.h") for node in graph["graph"] for path in node["outputs"]))

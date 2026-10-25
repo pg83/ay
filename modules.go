@@ -3237,13 +3237,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		for _, argTok := range v.Args {
 			if !extIsProto(argTok.string()) {
-				throwFmt("gen: %s: YMAPS_SPROTO expects .proto arguments, got %q", modulePath, argTok.string())
+				continue
 			}
 
 			d.ymapsSprotoSrcs = append(d.ymapsSprotoSrcs, argTok)
 		}
 
-		if len(v.Args) > 0 {
+		if len(d.ymapsSprotoSrcs) > 0 {
 			d.peerdirs = append(d.peerdirs, strMapsLibsSproto.any())
 		}
 	case tokListProto:
