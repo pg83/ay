@@ -560,25 +560,30 @@ class PrebuiltProgramTest(unittest.TestCase):
         ):
             self.assertIn(lib.node_by_output(graph, output)["uid"], tool["deps"])
 
-    def test_prebuilt_program_requires_resolved_primary_output(self):
-        for body, message in (
+    def test_prebuilt_primary_output_preserves_native_empty_expansion(self):
+        for body, source_args in (
             (
                 "DECLARE_EXTERNAL_RESOURCE(GEN sbr:5)\n",
-                "PREBUILT_PROGRAM has no PRIMARY_OUTPUT/resource",
+                [],
             ),
             (
                 "PRIMARY_OUTPUT(${GEN_RESOURCE_GLOBAL}/gen)\n",
-                "PREBUILT_PROGRAM has no PRIMARY_OUTPUT/resource",
+                ["/gen"],
             ),
             (
                 "DECLARE_EXTERNAL_RESOURCE(GEN sbr:5)\n"
                 "PRIMARY_OUTPUT(${UNKNOWN_RESOURCE_GLOBAL}/gen)\n",
-                'PRIMARY_OUTPUT "${UNKNOWN_RESOURCE_GLOBAL}/gen" has an unresolved reference',
+                ["/gen"],
             ),
         ):
             with self.subTest(body=body):
                 files = self.prebuilt_files(f"PREBUILT_PROGRAM()\n{body}END()\n")
-                self.assertIn(message, make_error(files, "lib"))
+                graph = lib.make(files, "lib")
+                tool = lib.node_by_output(graph, "$(B)/build/prebuilt/tools/gen/gen")
+                self.assertEqual(tool["cmds"][0]["cmd_args"][2:], [
+                    "copy", *source_args, "$(B)/build/prebuilt/tools/gen/gen",
+                ])
+                self.assertNotIn("$(B)/resources/GEN", fetches(graph))
 
 
 if __name__ == "__main__":

@@ -436,32 +436,19 @@ func prebuiltModuleSuffix(p *Platform) string {
 func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
-
-	var fetchRef NodeRef
-
 	globals := e.resourceDeclarations()
+	primary := expandConfScalar(d.primaryOutput, Environment{s: &e.frame.ifEnv})
+
+	var resourceRefs []NodeRef
 
 	for _, decl := range globals {
-		fetchRef = emitResourceFetch(ctx, decl)
-	}
-
-	for _, decl := range globals {
-		if strings.HasPrefix(d.primaryOutput, decl.Value.string()+"/") {
-			fetchRef = emitResourceFetch(ctx, decl)
+		if primary == decl.Value.string() || strings.HasPrefix(primary, decl.Value.string()+"/") {
+			resourceRefs = append(resourceRefs, emitResourceFetch(ctx, decl))
 
 			break
 		}
 	}
 
-	if d.primaryOutput == "" || len(globals) == 0 {
-		throwFmt("gen: %s: PREBUILT_PROGRAM has no PRIMARY_OUTPUT/resource", instance.Path.relString())
-	}
-
-	if strings.Contains(d.primaryOutput, "${") {
-		throwFmt("gen: %s: PREBUILT_PROGRAM PRIMARY_OUTPUT %q has an unresolved reference", instance.Path.relString(), d.primaryOutput)
-	}
-
-	srcVFS := build(strings.TrimPrefix(d.primaryOutput, "$(B)/"))
 	dst := lDOutputPath(instance, programBinaryName(instance, d.moduleStmt))
 	env := envVarsVCS
 
@@ -482,7 +469,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 	depRefs := na.noderefs.alloc(3)[:0]
 
 	inputs = append(inputs, ctx.scripts[copyFsToolsVFS.rel()])
-	depRefs = append(depRefs, fetchRef)
+	depRefs = append(depRefs, resourceRefs...)
 
 	if pyRef != nil {
 		inputs = append(inputs, na.vfsList(*pyPath))
@@ -501,14 +488,20 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 
 	depRefs = depRefs[:len(depRefs):len(depRefs)]
 
+	args := na.anys.alloc(5)[:0]
+
+	args = append(args, wrapccPython3STR.any(), copyFsToolsVFS.any(), argCopy.any())
+
+	if primary != "" {
+		args = append(args, internAny(primary))
+	}
+
+	args = append(args, dst.any())
+	na.anys.commit(len(args))
+
 	node := Node{
-		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(
-			wrapccPython3STR.any(),
-			copyFsToolsVFS.any(),
-			argCopy.any(),
-			srcVFS.any(),
-			dst.any())), Env: env}),
+		Platform:  instance.Platform,
+		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(args[:len(args):len(args)]), Env: env}),
 		Env:       env,
 		inputPlan: na.nodeInputs(inputsChunks),
 		KV:        &resourcesKV,
