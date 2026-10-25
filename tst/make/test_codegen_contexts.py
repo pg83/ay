@@ -45,10 +45,17 @@ class CodegenContextsTest(MakeTest):
 
     def test_yaff(self):
         self.write("answer.proto", 'syntax = "proto2";\npackage e2e;\nmessage Answer { optional int32 value = 1; }\n')
-        for macro, suffix in (("YAFF(NAMESPACE NE2E FILES answer.proto EXPERIMENTAL answer.proto)", "answer.yaff.h"), ("YAFF_SCHEMA(example NE2E FILES answer.proto EXPERIMENTAL answer.proto)", "answer_example.yaff.h")):
+        for macro, suffix, plugin, options in (
+            ("YAFF()", "answer.yaff.h", "yaff", ("namespace=NProtoYaFF",)),
+            ("YAFF(NAMESPACE NE2E FILES answer.proto EXPERIMENTAL answer.proto)", "answer.yaff.h", "yaff", ("namespace=NE2E", "file=answer.proto", "experimental=answer.proto")),
+            ("YAFF_SCHEMA(E2E_SCHEMA NE2E_SCHEMA FILES answer.proto EXPERIMENTAL answer.proto)", "answer_E2E_SCHEMA.yaff.h", "yaff_E2E_SCHEMA", ("tag=E2E_SCHEMA", "namespace=NE2E_SCHEMA", "file=answer.proto", "experimental=answer.proto")),
+        ):
             with self.subTest(macro=macro):
                 self.write("ya.make", f"PROTO_LIBRARY()\n{macro}\nSRCS(answer.proto)\nEND()\n")
-                self.node(self.graph(), suffix)
+                producer = self.node(self.graph(), suffix)
+                args = [arg for command in producer["cmds"] for arg in command["cmd_args"]]
+                for option in options:
+                    self.assertIn(f"--{plugin}_opt={option}", args)
 
     def test_golaunch_component(self):
         self.write("answer.cpp", "int answer() { return 42; }\n")

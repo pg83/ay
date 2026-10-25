@@ -4129,12 +4129,15 @@ func parseYAFFSections(v UnknownStmt) YaffSections {
 			}
 
 			s.namespace = v.Args[i].string()
+			markUserArg(v.Args[i])
 			section = STR(0)
 		case kwFILES.any():
 			section = kwFILES
 		case kwEXPERIMENTAL.any():
 			section = kwEXPERIMENTAL
 		default:
+			markUserArg(a)
+
 			switch section {
 			case kwFILES:
 				s.files = append(s.files, a.string())
