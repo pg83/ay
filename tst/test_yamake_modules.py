@@ -224,12 +224,16 @@ class YaMakeModulesTest(unittest.TestCase):
             ("LIBRARY()\nSRCS(x.cpp)\nPROGRAM()\nEND()\n", "gen: a declares multiple modules (LIBRARY and PROGRAM); only one is allowed"),
             ("SRCS(x.cpp)\n", "gen: a has no module declaration (PROGRAM/LIBRARY)"),
             ("DYNAMIC_LIBRARY()\nSRCS(x.cpp)\nEND()\n", "gen: a DYNAMIC_LIBRARY requires a basename argument"),
-            ("PREBUILT_PROGRAM()\nEND()\n", "gen: a: PREBUILT_PROGRAM has no PRIMARY_OUTPUT/resource"),
         ]
         for text, expected in cases:
             with self.subTest(text=text):
                 code, _, stderr = ay_make({"a/ya.make": text, "a/x.cpp": ""})
                 self.assertEqual((code, stderr), (1, expected))
+
+    def test_prebuilt_program_without_primary_output_keeps_native_copy_command(self):
+        graph = self.make({"a/ya.make": "PREBUILT_PROGRAM()\nEND()\n", "a/x.cpp": ""})
+        node = lib.node_by_output(graph, "$(B)/a/a")
+        self.assertEqual(node["cmds"][0]["cmd_args"][2:], ["copy", "$(B)/a/a"])
 
 
 if __name__ == "__main__":

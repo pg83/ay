@@ -92,6 +92,14 @@ func (scanner *IncludeScanner) scanClosure(vfsPath VFS, ctx *ScanContext, domain
 }
 
 func (scanner *IncludeScanner) scanClosureWithDefaultParser(vfsPath VFS, ctx *ScanContext, domain ScanDomain, defaultParser IncludeDirectiveParser) Closure {
+	sc := scanner.getFileScanCtx(vfsPath, ctx, domain, defaultParser)
+
+	defer scanner.putScanCtx(sc)
+
+	return sc.closureOf(vfsPath)
+}
+
+func (scanner *IncludeScanner) getFileScanCtx(vfsPath VFS, ctx *ScanContext, domain ScanDomain, defaultParser IncludeDirectiveParser) *ScanCtx {
 	parser := scanner.parsers.registry.registeredParserFor(vfsPath.relString())
 
 	if parser == nil {
@@ -109,11 +117,7 @@ func (scanner *IncludeScanner) scanClosureWithDefaultParser(vfsPath VFS, ctx *Sc
 		}
 	}
 
-	sc := scanner.getScanCtx(ctx, domain, parser)
-
-	defer scanner.putScanCtx(sc)
-
-	return sc.closureOf(vfsPath)
+	return scanner.getScanCtx(ctx, domain, parser)
 }
 
 func includeScannerBasePaths() []VFS {
@@ -192,8 +196,7 @@ func (scanner *IncludeScanner) discoverInput(input VFS, ctx *ScanContext) {
 		return
 	}
 
-	parser := scanner.parsers.registry.registeredParserFor(input.relString())
-	sc := scanner.getScanCtx(ctx, scanDomainCC, parser)
+	sc := scanner.getFileScanCtx(input, ctx, scanDomainCC, nil)
 
 	defer scanner.putScanCtx(sc)
 

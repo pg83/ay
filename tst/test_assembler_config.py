@@ -166,7 +166,7 @@ class AssemblerConfigTest(unittest.TestCase):
                 for name in ('local', 'second', 'module'):
                     self.assertEqual(f'$(S)/shared/{name}.asm' in node['inputs'], not nasm)
 
-    def test_shared_preinclude_scan_uses_each_modules_assembler_include_roots(self):
+    def test_shared_preinclude_keeps_first_resolved_assembler_bindings(self):
         files = fixture('')
         files['shared/setup.asm'] = '%include "choice.asm"\n'
         for module in ('copper', 'silver'):
@@ -178,13 +178,13 @@ class AssemblerConfigTest(unittest.TestCase):
             files[f'{module}/headers/choice.asm'] = ''
         for targets in (('copper', 'silver'), ('silver', 'copper')):
             with self.subTest(targets=targets):
-                graph = lib.make(files, *targets, *X64)
+                graph = lib.make(files, targets[-1], *targets[:-1], *X64)
                 for module in targets:
                     node = lib.node_by_output(graph, f'$(B)/{module}/vector.o')
                     self.assertCountEqual(node['inputs'], ['$(B)/contrib/tools/yasm/yasm',
                                                           f'$(S)/{module}/vector.asm',
                                                           '$(S)/shared/setup.asm',
-                                                          f'$(S)/{module}/headers/choice.asm'])
+                                                          f'$(S)/{targets[0]}/headers/choice.asm'])
 
     def test_empty_assignment_replaces_preincludes_and_no_resolve_keeps_explicit_input(self):
         files = fixture('ASM_PREINCLUDE(shared/old.asm)\n'
