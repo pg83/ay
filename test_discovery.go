@@ -8,6 +8,8 @@ import (
 func (e *EmitContext) genPeerModule(instance ModuleInstance) *ModuleEmitResult {
 	result := genModule(e.ctx, instance)
 
+	e.ctx.consumeModuleWarnings(result)
+
 	if e.ctx.peerTests {
 		e.frame.testPeers = append(e.frame.testPeers, result)
 	}
