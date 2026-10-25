@@ -2,6 +2,22 @@ from tst.make.lib import MakeTest
 
 
 class ConfigurationErrorsTest(MakeTest):
+    def test_message_severity(self):
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        for severity, fatal in (("", False), ("STATUS", False), ("FATAL_ERROR", True), ("STATUS FATAL_ERROR", True)):
+            for before_module in (False, True):
+                with self.subTest(severity=severity, before_module=before_module):
+                    message = f"MESSAGE({severity} E2E_MESSAGE)\n"
+                    body = "LIBRARY()\n"
+                    body = message + body if before_module else body + message
+                    self.write("ya.make", body + "SRCS(answer.cpp)\nEND()\n")
+                    result = self.make()
+                    self.assertEqual(result.returncode != 0, fatal, result.stderr)
+                    self.assertIn("E2E_MESSAGE", result.stderr)
+
+        self.write("ya.make", "LIBRARY()\nIF(no)\nMESSAGE(FATAL_ERROR E2E_UNSELECTED)\nENDIF()\nSRCS(answer.cpp)\nEND()\n")
+        self.node(self.graph(), "answer.cpp.o")
+
     def test_invalid_descriptions_fail(self):
         descriptions = (
             "LIBRARY()\nUNKNOWN_E2E_MACRO()\nEND()\n",

@@ -2510,6 +2510,18 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}()
 
 	switch v.Name {
+	case tokMessage:
+		args := v.Args
+
+		if len(args) > 0 && args[0].string() == "STATUS" {
+			args = args[1:]
+		}
+
+		if len(args) > 0 && args[0].string() == "FATAL_ERROR" {
+			throwFmt("%s: %s", modulePath, strings.Join(anyStrs(args[1:]), " "))
+		}
+
+		onWarn(Warn{Kind: WarnPlugin, Message: modulePath + ": " + strings.Join(anyStrs(args), " ")})
 	case tokPireInline, tokPireInlineCmd:
 		if v.Name == tokPireInlineCmd && len(v.Args) != 1 {
 			throwFmt("PIRE_INLINE_CMD expects one source file")

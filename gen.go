@@ -33,7 +33,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"ENV":                             {},
 	"OWNER":                           {},
 	"SUBSCRIBER":                      {},
-	"MESSAGE":                         {},
 	"OPENSOURCE_PROJECT":              {},
 	"OPENSOURCE_EXPORT_REPLACEMENT":   {},
 	"IDE_FOLDER":                      {},

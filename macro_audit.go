@@ -15,6 +15,7 @@ var macroAudit = &MacroAuditState{
 }
 
 var macrosAcceptingUserFlags = map[TOK]struct{}{
+	tokMessage: {},
 	tokEnable:  {},
 	tokDisable: {},
 
