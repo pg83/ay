@@ -1,4 +1,3 @@
-import os
 import subprocess
 
 from tst import lib
@@ -25,13 +24,3 @@ def run_ay(*args, env=None, cwd=None, timeout=30):
 
 def fatal(message):
     return RED + message + RESET + "\n"
-
-
-def toolchain_free_env(**extra):
-    env = {
-        key: value
-        for key, value in os.environ.items()
-        if key not in lib.TOOLCHAIN_ENV_VARS
-    }
-    env.update(extra)
-    return env

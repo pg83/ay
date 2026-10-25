@@ -246,8 +246,6 @@ def python_imports(path):
 
 def python_test_inputs(path):
     pending = [path, "$(S)/tst/lib.py"]
-    if path == "$(S)/tst/make/test_chaos.py":
-        pending.extend(python_sources)
     seen = set()
     while pending:
         source = pending.pop()
