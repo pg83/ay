@@ -213,7 +213,7 @@ class AssemblerConfigTest(unittest.TestCase):
             '-D', '_x86_64_', '-D_YASM_', '--prefix=explicit_', '-g', 'trace', '-D', 'MODULE=2',
         ])
 
-    def test_registered_generated_preinclude_wins_over_source_shadow(self):
+    def test_preinclude_source_shadow_and_explicit_build_identity(self):
         for spelling in ('setup.asm', '${BINDIR}/setup.asm'):
             with self.subTest(spelling=spelling):
                 files = fixture(
@@ -223,12 +223,18 @@ class AssemblerConfigTest(unittest.TestCase):
                 files.update({'copper/incoming/setup.asm': '', 'copper/setup.asm': 'source shadow'})
                 graph = lib.make(files, 'copper', *X64)
                 node = lib.node_by_output(graph, '$(B)/copper/vector.o')
-                producer = lib.node_by_output(graph, '$(B)/copper/setup.asm')
                 self.assertEqual(args(graph)[-3:], ['-P', 'setup.asm' if spelling == 'setup.asm'
                                                    else '$(B)/copper/setup.asm', '$(S)/copper/vector.asm'])
-                self.assertIn('$(B)/copper/setup.asm', node['inputs'])
-                self.assertNotIn('$(S)/copper/setup.asm', node['inputs'])
-                self.assertIn(producer['uid'], node['deps'])
+                if spelling == 'setup.asm':
+                    self.assertIn('$(S)/copper/setup.asm', node['inputs'])
+                    self.assertNotIn('$(B)/copper/setup.asm', node['inputs'])
+                    self.assertFalse(any('$(B)/copper/setup.asm' in n['outputs'] for n in graph['graph']))
+                else:
+                    producer = lib.node_by_output(graph, '$(B)/copper/setup.asm')
+                    self.assertIn('$(B)/copper/setup.asm', node['inputs'])
+                    self.assertNotIn('$(S)/copper/setup.asm', node['inputs'])
+                    self.assertIn(producer['uid'], node['deps'])
+                    self.assertEqual(producer['inputs'], ['$(S)/copper/incoming/setup.asm'])
 
     def test_parent_relative_preinclude_keeps_command_spelling(self):
         files = fixture('ASM_PREINCLUDE(../shared/setup.asm)\nSRCS(vector.asm)')

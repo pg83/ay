@@ -39,7 +39,7 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 
 		if present {
 			if srcRelClean {
-				return sourceJoined(srcDirs[i].relString(), srcRel)
+				return sourceJoined(cleanRel(srcDirs[i].relString()), srcRel)
 			}
 
 			return source(filepath.ToSlash(filepath.Clean(srcDirs[i].relString() + "/" + srcRel)))
@@ -53,7 +53,7 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 	}
 
 	if srcRelClean {
-		return sourceJoined(srcInstance.Path.relString(), srcRel)
+		return sourceJoined(cleanRel(srcInstance.Path.relString()), srcRel)
 	}
 
 	srcRelOnDisk := filepath.ToSlash(filepath.Clean(srcInstance.Path.relString() + "/" + srcRel))

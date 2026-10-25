@@ -113,11 +113,18 @@ class CythonImportDomainsTest(unittest.TestCase):
             "RUN_PROGRAM(tools/consume IN readers/packet.pyx OUT consumed.cpp)\n"
             "SRCS(${BINDIR}/consumed.cpp)\n")
         lib.tool_program(files, "tools/consume", "consume")
-        graph, node = self.generated(files)
+        strict = lib.make_process(files, "lib")
+        self.assertNotEqual(strict.returncode, 0)
+        self.assertIn("was already added in this project", strict.stderr)
+        self.assertIn("$(B)/lib/consumed.cpp.o", strict.stderr)
+        self.assertNotIn("panic:", strict.stderr)
+        graph = lib.make(files, "lib", "-k")
+        node = lib.node_by_output(graph, "$(B)/lib/readers/packet.pyx.c")
         expected = {"$(S)/lib/readers/packet.pyx", "$(S)/lib/readers/stream.pxd"}
         self.assert_cython_inputs(node, expected)
         consumer = lib.node_by_output(graph, "$(B)/lib/consumed.cpp")
         self.assertCountEqual(consumer["inputs"], ["$(B)/tools/consume/consume", *expected])
+        self.assertEqual(sum("$(B)/lib/consumed.cpp.o" in n["outputs"] for n in graph["graph"]), 1)
 
     def test_native_only_generator_resolves_pxd_with_typed_directories(self):
         files = fixture("")

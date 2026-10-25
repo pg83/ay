@@ -649,7 +649,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		} else {
 			ins = []VFS{e.sourceInputForScheduling(m.Source.string())}
 
-			if m.Source.vfs() == 0 && m.Prio == stmtPrioSrcs && srcExtClassOf(m.Source) == srcExtCSource {
+			if m.Prio == stmtPrioSrcs && srcExtClassOf(m.Source) == srcExtCSource {
 				if _, known := moduleRootedVFS(module, m.Source.string()); known {
 					ins = nil
 				}

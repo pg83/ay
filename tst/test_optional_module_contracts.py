@@ -28,6 +28,18 @@ class OptionalModuleContractsTest(unittest.TestCase):
         self.assertEqual(len(compiled), 1)
         self.assertIn(generated['uid'], compiled[0]['deps'])
 
+    def test_root_source_paths_stay_canonical_with_an_empty_srcdir(self):
+        cases = [
+            ('.', {'ya.make': library('SRCS(root.cpp)'), 'root.cpp': 'int root;\n'}),
+            ('a', {'a/ya.make': library('SRCDIR(.)\nSRCS(root.cpp)'), 'root.cpp': 'int root;\n'}),
+        ]
+        for target, files in cases:
+            with self.subTest(target=target):
+                graph = lib.make(files, target)
+                compiled = [n for n in graph['graph'] if n['kv']['p'] == 'CC']
+                self.assertEqual(len(compiled), 1)
+                self.assertEqual(compiled[0]['inputs'], ['$(S)/root.cpp'])
+
     def test_plain_library_accepts_golaunch_metadata(self):
         graph = lib.make({'app/ya.make': library('GOLAUNCH_OVERRIDE(component Launch)\nGENERATE_GOLAUNCH_CALLBACKS(callbacks)\nSRCS(main.cpp)'),
                           'app/main.cpp': ''}, 'app')
