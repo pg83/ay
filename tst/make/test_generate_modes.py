@@ -19,7 +19,14 @@ class GenerateModesTest(MakeTest):
         self.assertIn(self.node(graph, "libanswer.a")["uid"], graph["result"])
 
     def test_cross_platform_dll(self):
-        self.write("ya.make", "DLL(answer)\nSRCS(answer.cpp)\nEND()\n")
         self.write("answer.cpp", 'extern "C" int answer() { return 42; }\n')
-        graph = self.graph("--target-platform=default-win-x86_64")
-        self.assertTrue(any(path.endswith(".dll") for node in graph["graph"] if node["uid"] in graph["result"] for path in node["outputs"]))
+        for platform, options, output in (
+            ("default-linux-x86_64", "", "libanswer.so"),
+            ("default-darwin-arm64", "", "libanswer.dylib"),
+            ("default-win-x86_64", "", "answer.dll"),
+            ("default-win-x86_64", "PREFIX custom", "customanswer.dll"),
+        ):
+            with self.subTest(platform=platform, options=options):
+                self.write("ya.make", f"DLL(answer {options})\nSRCS(answer.cpp)\nEND()\n")
+                graph = self.graph("--target-platform=" + platform)
+                self.assertIn(self.node(graph, output)["uid"], graph["result"])

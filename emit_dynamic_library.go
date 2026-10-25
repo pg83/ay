@@ -71,9 +71,21 @@ func bindDllModulePrefix(stmt *ModuleStmt, env Environment) {
 func dllOutputName(instance ModuleInstance, stmt *ModuleStmt) string {
 	args := parseDllModuleArgs(stmt.Args)
 	prefix := "lib"
+	suffix := ".so"
+	env := instance.Platform.ifEnv
+
+	if env.bool(envOS_WINDOWS) {
+		prefix, suffix = "", ".dll"
+	} else if env.bool(envOS_DARWIN) || env.bool(envOsIos) {
+		suffix = ".dylib"
+	}
 
 	if isPythonDllModule(stmt.Name) {
-		prefix = ""
+		prefix, suffix = "", ".so"
+
+		if env.bool(envOS_WINDOWS) {
+			suffix = ".pyd"
+		}
 	}
 
 	if args.prefix != nil {
@@ -86,7 +98,7 @@ func dllOutputName(instance ModuleInstance, stmt *ModuleStmt) string {
 		name = args.name.string()
 	}
 
-	return prefix + name + ".so"
+	return prefix + name + suffix
 }
 
 func dllModuleVersion(stmt *ModuleStmt) string {

@@ -311,8 +311,11 @@ func (e *EmitContext) appendPlatformPeerdirs(peers []string, instance ModuleInst
 
 	peers = append(peers, "build/platform/clang")
 
-	if isLinkingModuleType(d.unit.Type) {
-		peers = append(peers, "build/platform/lld")
+	if isLinkingModuleType(d.unit.Type) && instance.Platform.ifEnv.bool(envCLANG) {
+		switch linker := instance.Platform.ifEnv.string(envDefaultLinkerId); linker {
+		case "lld", "gold", "mold":
+			peers = append(peers, "build/platform/"+linker)
+		}
 	}
 
 	peers = append(peers, "build/platform/python/ymake_python3")
