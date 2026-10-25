@@ -12,6 +12,7 @@ var warnKindStr = [...]string{
 	WarnModuleFailed:      "module-failed",
 	WarnPlugin:            "plugin",
 	WarnTestDependency:    "test-dependency",
+	WarnToolConf:          "tool-conf",
 }
 
 const (
@@ -36,6 +37,8 @@ const (
 	WarnPlugin
 
 	WarnTestDependency
+
+	WarnToolConf
 )
 
 type Warn struct {

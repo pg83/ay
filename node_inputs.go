@@ -162,7 +162,7 @@ func (p *NodeInputs) evaluate() InputChunks {
 	return result
 }
 
-func (p *NodeInputs) activate(seen *BitSet, selectProducer func(NodeRef)) {
+func (p *NodeInputs) activate(seen *BitSet, selectProducer func(NodeRef), modulePeers bool) {
 	var visit func(VFS)
 	visit = func(file VFS) {
 		if seen.has(uint32(file)) {
@@ -188,8 +188,11 @@ func (p *NodeInputs) activate(seen *BitSet, selectProducer func(NodeRef)) {
 		}
 	}
 
-	p.eachRoot(visit)
-	p.eachModuleRoot(visit)
+	if modulePeers {
+		p.eachModuleRoot(visit)
+	} else {
+		p.eachRoot(visit)
+	}
 }
 
 func (n *Node) establishedInputRefs(na *NodeArenas) {

@@ -48,12 +48,19 @@ def producers(graph, output):
 
 
 class ForeignToolBindingTest(unittest.TestCase):
-    def graph(self, files, *targets, strip="0", add=True):
-        graph = lib.make(
+    def graph(self, files, *targets, strip="0", add=True, missing_tools=()):
+        process = lib.make_process(
             files, targets[0] if targets else "grove/app", *targets[1:], *FLAGS,
             *(["--add-modules-to-results"] if add else []),
+            *(["-k"] if missing_tools else []),
             env={"YA_STRIP_PACKAGES_FROM_RESULTS": strip},
         )
+        self.assertEqual(process.returncode, 0, process.stderr)
+        for tool in missing_tools:
+            self.assertIn(f"tool-conf: {tool}: Tool is not found in a host graph", process.stderr)
+        if not missing_tools:
+            self.assertNotIn("tool-conf:", process.stderr)
+        graph = json.loads(process.stdout)
         ids = {node["uid"] for node in graph["graph"]}
         self.assertTrue(set(graph["result"]) <= ids)
         self.assertTrue(all(set(node["deps"]) <= ids for node in graph["graph"]))
@@ -75,10 +82,13 @@ class ForeignToolBindingTest(unittest.TestCase):
         return compiled, tool, generated
 
     def test_listed_header_keeps_target_fallback_with_real_generator_inputs(self):
+        strict = lib.make_process(fixture(), "grove/app", *FLAGS)
+        self.assertEqual(strict.returncode, 1)
+        self.assertIn("tool-conf: grove/emitter: Tool is not found in a host graph", strict.stderr)
         for strip in ("0", "1"):
             for add in (False, True):
                 with self.subTest(strip=strip, add=add):
-                    graph = self.graph(fixture(), strip=strip, add=add)
+                    graph = self.graph(fixture(), strip=strip, add=add, missing_tools=("grove/emitter",))
                     _, tool, generated = self.check_tool(graph, False)
                     self.assertFalse(producers(graph, "$(B)/grove/emitter/main.cpp.pic.o"))
                     app = lib.node_by_output(graph, "$(B)/grove/app/app")
@@ -176,7 +186,7 @@ class ForeignToolBindingTest(unittest.TestCase):
                 files = fixture(used=used)
                 files["grove/emitter/ya.make"] = files["grove/emitter/ya.make"].replace("SRCS(main.cpp)", "SRCS(main.cpp)\nRUN_PROGRAM(grove/helper -o generated.cpp OUT generated.cpp)")
                 lib.tool_program(files, "grove/helper", "helper")
-                graph = self.graph(files)
+                graph = self.graph(files, missing_tools=() if used else ("grove/emitter", "grove/helper"))
                 self.check_tool(graph, used)
                 suffix = ".pic.o" if used else ".o"
                 generated = lib.node_by_output(graph, "$(B)/grove/emitter/generated.cpp" + suffix)
@@ -269,7 +279,11 @@ class ForeignToolBindingTest(unittest.TestCase):
                     with self.subTest(used=used, listed=listed, strip=strip, add=add):
                         ws = execution.Workspace(self, fixture(used=used, listed=listed))
                         flags = (*FLAGS, "-j1", *(["--add-modules-to-results"] if add else []))
+                        if not used and listed:
+                            flags += ("-k",)
                         result = ws.make(*flags, targets=("grove/app",), env=ws.env(YA_STRIP_PACKAGES_FROM_RESULTS=strip))
+                        if not used and listed:
+                            self.assertIn("tool-conf: grove/emitter: Tool is not found in a host graph", result.stderr)
                         built = execution.built_kinds(result.stderr)
                         emitter_objects = [output for kind, output in built if kind == "CC" and "/grove/emitter/" in output]
                         self.assertEqual(emitter_objects, ["$(B)/grove/emitter/main.cpp" + (".pic.o" if used else ".o")] if listed else [])

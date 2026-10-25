@@ -1,6 +1,9 @@
 package main
 
-import "slices"
+import (
+	"fmt"
+	"slices"
+)
 
 type foreignToolCandidate struct {
 	path     ARG
@@ -26,12 +29,17 @@ func (e *EmitContext) foreignToolResult(path ARG) (*ModuleEmitResult, *foreignTo
 	}
 
 	bindings := &ctx.foreignTools
+	candidate, _ := bindings.candidates.get(path)
 
-	if candidate, ok := bindings.candidates.get(path); ok {
+	if candidate != nil && candidate.target != nil {
 		return candidate.target, candidate
 	}
 
-	candidate := &foreignToolCandidate{path: path, instance: ctx.rootInstance(path.string(), demandLinked)}
+	if candidate == nil {
+		candidate = &foreignToolCandidate{path: path}
+	}
+
+	candidate.instance = ctx.rootInstance(path.string(), demandLinked)
 
 	ctx.emit.deferPublication++
 
@@ -62,7 +70,7 @@ func (ctx *GenCtx) moduleBuildDeps(ref NodeRef) ([]NodeRef, bool) {
 	return nil, false
 }
 
-func (ctx *GenCtx) activateNodeInputs(node *Node, activation map[*IncludeScanner]*BitSet, selectProducer func(NodeRef)) {
+func (ctx *GenCtx) activateNodeInputs(node *Node, activation map[*IncludeScanner]*BitSet, selectProducer func(NodeRef), modulePeers bool) {
 	plan := &node.Inputs
 
 	if plan.scanner == nil {
@@ -79,6 +87,8 @@ func (ctx *GenCtx) activateNodeInputs(node *Node, activation map[*IncludeScanner
 	registry := plan.scanner.codegen
 	buildDeps, module := registry.moduleBuildDeps.get(node.Ref)
 
+	module = module && !modulePeers
+
 	var added []NodeRef
 
 	plan.activate(seen, func(ref NodeRef) {
@@ -93,7 +103,7 @@ func (ctx *GenCtx) activateNodeInputs(node *Node, activation map[*IncludeScanner
 		}
 
 		added = append(added, ref)
-	})
+	}, modulePeers)
 
 	if len(added) == 0 {
 		return
@@ -153,7 +163,11 @@ func (ctx *GenCtx) bindForeignTools() {
 			}
 
 			selected.add(uint32(ref))
-			ctx.activateNodeInputs(node, activation, selectProducer)
+			ctx.activateNodeInputs(node, activation, selectProducer, false)
+
+			if len(node.Inputs.modulePeers) > 0 {
+				weak = append(weak, ref)
+			}
 
 			var foreign map[NodeRef]NodeRef
 
@@ -169,9 +183,14 @@ func (ctx *GenCtx) bindForeignTools() {
 
 					foreign[dep] = tool.host.LDRef
 				} else if path, ok := bindings.hostPaths.get(dep); ok {
-					if tool, exists := bindings.candidates.get(path); exists {
-						tool.host = ctx.toolResult(path)
+					tool, exists := bindings.candidates.get(path)
+
+					if !exists {
+						tool = &foreignToolCandidate{path: path}
+						bindings.candidates.put(path, tool)
 					}
+
+					tool.host = ctx.toolResult(path)
 				}
 			}
 
@@ -230,7 +249,15 @@ func (ctx *GenCtx) bindForeignTools() {
 		for i, dep := range node.ForeignDepRefs {
 			tool, ok := bindings.byRef.get(dep)
 
-			if !ok || tool.host == nil {
+			if !ok {
+				continue
+			}
+
+			if tool.host == nil {
+				if ctx.emit.exportEligible.has(uint32(node.Ref)) {
+					ctx.onWarn(Warn{Kind: WarnToolConf, Message: fmt.Sprintf("%s: Tool is not found in a host graph", tool.path.string())})
+				}
+
 				continue
 			}
 

@@ -144,18 +144,22 @@ func (ctx *GenCtx) activateSelectedInputs(activation map[*IncludeScanner]*BitSet
 
 		stack = stack[:len(stack)-1]
 
-		if selected.has(uint32(ref)) {
-			continue
-		}
-
 		node := e.nodes.s[ref]
 
 		if node == nil {
 			continue
 		}
 
+		if len(node.Inputs.modulePeers) > 0 {
+			ctx.activateNodeInputs(node, activation, selectProducer, true)
+		}
+
+		if selected.has(uint32(ref)) {
+			continue
+		}
+
 		selected.add(uint32(ref))
-		ctx.activateNodeInputs(node, activation, selectProducer)
+		ctx.activateNodeInputs(node, activation, selectProducer, false)
 		stack = append(stack, node.DepRefs...)
 
 		for _, dependency := range node.ForeignDepRefs {
