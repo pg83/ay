@@ -279,7 +279,7 @@ class DevtoolsCliTest(unittest.TestCase):
         root = self.source_root('[flags]\nOPENSOURCE = "yes"\n')
         (root / "lib/ya.make").write_text(LIBRARY_YA_MAKE.replace("SRCS(", f"CFLAGS({big})\nSRCS("))
         result = self.make(
-            root,
+            root, "--sandboxing",
             "--target-platform", "default-linux-aarch64",
             "--host-platform", "default-linux-x86_64",
         )
@@ -289,10 +289,12 @@ class DevtoolsCliTest(unittest.TestCase):
         self.assertIn(big, args)
         self.assertEqual(
             [node["kv"]["p"] for node in graph["graph"]],
-            ["CP", "CC", "CC", "AR"],
+            ["CC", "CC", "AR"],
         )
         archive = lib.node_by_output(graph, "$(B)/lib/liblib.a")
-        self.assertEqual(archive["inputs"], ["$(B)/lib/a.c.o", "$(B)/lib/b.c.o"])
+        self.assertEqual(archive["inputs"], [
+            "$(B)/lib/a.c.o", "$(B)/lib/b.c.o", "$(S)/build/scripts/link_lib.py",
+        ])
 
     def test_ya_make_syntax_error_is_fatal(self):
         root = self.source_root('[flags]\nOPENSOURCE = "yes"\n')

@@ -19,6 +19,7 @@ import zipfile
 from pathlib import Path
 
 import lib
+from test_exec_make import built_kinds
 
 
 SANDBOX_HOST = "sandbox.yandex-team.ru"
@@ -929,7 +930,7 @@ class ExecutorSandboxTokenTest(FetchCase):
             "END()\n"
         ))
         self.write("build/platform/python/ymake_python3/ya.make", (
-            "RESOURCES_LIBRARY()\nDECLARE_EXTERNAL_RESOURCE(YMAKE_PYTHON3 sbr:43)\nEND()\n"))
+            "RESOURCES_LIBRARY()\nNO_YMAKE_PYTHON3()\nDECLARE_EXTERNAL_RESOURCE(YMAKE_PYTHON3 sbr:43)\nEND()\n"))
         self.write("consumer/ya.make", (
             "UNION()\nPEERDIR(build/platform/sb build/platform/python/ymake_python3)\n"
             "RUN_PYTHON3(check.py ${FIRST_RESOURCE_GLOBAL}/r41.txt ${SECOND_RESOURCE_GLOBAL}/r42.txt "
@@ -958,8 +959,15 @@ class ExecutorSandboxTokenTest(FetchCase):
             "/api/v1.0/resource/41", "/api/v1.0/resource/42", "/api/v1.0/resource/43",
         ])
         self.assertEqual({r.headers["Authorization"] for r in api}, {"OAuth agent-token"})
-        # Three fetches, the checker, its UNION and the VCS metadata node.
-        self.assertEqual(len(list(self.bld.glob("uid/*/*"))), 6)
+        tasks = built_kinds(result.stderr)
+        self.assertCountEqual(tasks, [
+            ("FT", "$(B)/resources/FIRST"),
+            ("FT", "$(B)/resources/SECOND"),
+            ("FT", "$(B)/resources/YMAKE_PYTHON3"),
+            ("PY", "$(B)/consumer/checked.txt"),
+            ("UN", "$(B)/consumer/consumer.pkg.fake"),
+        ])
+        self.assertEqual(len(list(self.bld.glob("uid/*/*"))), len(tasks))
         self.assertEqual((self.root / "inst/consumer/checked.txt").read_text(), "checked\n")
 
     def test_from_sandbox_node_runs_fetch_sandbox(self):

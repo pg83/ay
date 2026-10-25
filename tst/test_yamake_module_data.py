@@ -141,14 +141,21 @@ class YaMakeModuleDataTest(unittest.TestCase):
     def test_luajit_archive_and_flatbuffers_sources(self):
         files = stubs({
             "a/ya.make": module("LIBRARY", "LJ_21_ARCHIVE(a.lua b.txt c.lua)\nSRCS(x.cpp)"),
-            "a/x.cpp": "int x;\n", "a/a.lua": "\n", "a/c.lua": "\n",
+            "a/x.cpp": '#include "LuaScripts.inc"\nint x;\n', "a/a.lua": "\n", "a/c.lua": "\n",
         }, tools=["contrib/libs/luajit_21/compiler", "tools/archiver"])
         graph = self.make(files)
         self.assertEqual(
             [output for kind, output in outputs_under(graph, "$(B)/a/") if kind == "LJ"],
             ["$(B)/a/a.raw", "$(B)/a/c.raw"],
         )
-        self.assertIn("-I$(B)/a", lib.node_by_output(graph, "$(B)/a/x.cpp.o")["cmds"][0]["cmd_args"])
+        compiled = lib.node_by_output(graph, "$(B)/a/x.cpp.o")
+        lua_archive = lib.node_by_output(graph, "$(B)/a/LuaScripts.inc")
+        self.assertIn("-I$(B)/a", compiled["cmds"][0]["cmd_args"])
+        self.assertIn("$(B)/a/LuaScripts.inc", compiled["inputs"])
+        self.assertIn(lua_archive["uid"], compiled["deps"])
+        for output in ("$(B)/a/a.raw", "$(B)/a/c.raw"):
+            self.assertIn(lib.node_by_output(graph, output)["uid"], lua_archive["deps"])
+        self.assertFalse(any("$(B)/a/LuaSources.inc" in node["outputs"] for node in graph["graph"]))
 
         files = stubs({
             "a/ya.make": module("LIBRARY", "SRCS(s.fbs t.fbs64)"),

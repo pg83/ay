@@ -5,7 +5,7 @@ import unittest
 from collections import Counter
 
 import lib
-from test_exec_make import Workspace, library
+from test_exec_make import Workspace, library, plain, program
 from test_go_tests import go_world, go_module
 
 
@@ -48,14 +48,19 @@ class SourceExecutorCoverageTest(unittest.TestCase):
 
     def test_keep_going_reports_failed_nonresult_vcs_after_archive_success(self):
         ws = Workspace(self, {'lib/ya.make': library(['source.cpp']),
-                              'lib/source.cpp': 'int source;\n'})
-        graph_result = ws.make('-j0', '-G', targets=('lib',))
+                              'lib/source.cpp': 'int source;\n',
+                              'app/ya.make': program('probe', ['main.cpp'], 'PEERDIR(lib)\n'),
+                              'app/main.cpp': 'int main(){return 0;}\n'})
+        graph_result = ws.make('-j0', '-G', targets=('lib', 'app'))
         graph = json.loads(graph_result.stdout)
         archive = lib.node_by_output(graph, '$(B)/lib/liblib.a')
+        linked = lib.node_by_output(graph, '$(B)/app/probe')
         vcs = next(node for node in graph['graph'] if any('base64' == arg for cmd in node['cmds'] for arg in cmd['cmd_args']))
         self.assertEqual(vcs['outputs'], ['$(B)/vcs.json'])
         self.assertNotIn(vcs['uid'], ancestors(graph, archive['uid']))
-        self.assertEqual(graph['result'], [archive['uid']])
+        self.assertIn(vcs['uid'], ancestors(graph, linked['uid']))
+        self.assertNotIn(vcs['uid'], graph['result'])
+        self.assertCountEqual(graph['result'], [archive['uid'], linked['uid']])
         wrapper = ws.root / 'reject_vcs.py'
         wrapper.write_text('import os,sys\n'
                            'args=sys.argv[1:]\n'
@@ -63,13 +68,14 @@ class SourceExecutorCoverageTest(unittest.TestCase):
                            ' sys.exit("intentional standalone vcs failure")\n'
                            'os.execv(args[0],args)\n')
         result = ws.make('-j1', '-k', '--cmd-prefix',
-                         f'{lib.AY.name}={sys.executable} {wrapper}', targets=('lib',), check=False)
+                         f'{vcs["cmds"][0]["cmd_args"][0]}={sys.executable} {wrapper}', targets=('lib', 'app'), check=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('intentional standalone vcs failure', result.stderr)
-        self.assertIn('build failed: 1 nodes failed', result.stderr)
-        self.assertNotIn('broken by dep', result.stderr)
+        self.assertIn(f"build failed: {linked['uid']}\n", plain(result.stderr))
+        self.assertIn('$(B)/app/probe broken by dep $(B)/vcs.json', plain(result.stderr))
         ws.meta_for('$(B)/lib/liblib.a')
         self.assertFalse((ws.inst / 'lib' / 'liblib.a').exists())
+        self.assertFalse((ws.inst / 'app' / 'probe').exists())
         self.assertNotIn('panic:', result.stderr)
 
 
