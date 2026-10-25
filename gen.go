@@ -2667,7 +2667,17 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	if isGoExeModuleType(d.moduleStmt.Name) {
-		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, peerSbomRefs, peerSbomPaths, resourceGlobalsClosure)
+		var ownSbomRef *NodeRef
+		var ownSbomPath *VFS
+
+		ldSbomRefs, ldSbomPaths := peerSbomRefs, peerSbomPaths
+
+		if sbomActive(ctx, instance) && sbomQualifies(d) {
+			ownSbomRef, ownSbomPath = e.emitSbomComponent(programBinaryName(instance, d.moduleStmt))
+			ldSbomRefs, ldSbomPaths = insertOwnSbomComponent(peerSbomRefs, peerSbomPaths, *ownSbomRef, *ownSbomPath, ownSbomInsertIdx)
+		}
+
+		goRef, goPath := e.emitGoExe(resolved, local.refs, local.outs, peerObjAddLibsGlobal, peerArchiveRefs, peerArchivePaths, peerGlobalRefs, peerGlobalPaths, ldSbomRefs, ldSbomPaths, resourceGlobalsClosure)
 		result := newResult()
 
 		result.isPROGRAM = true
@@ -2675,6 +2685,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		result.LDPath = ptr(goPath)
 		result.ARRef = goRef
 		result.ARPath = ptr(goPath)
+		result.SbomComponentRef = ownSbomRef
+		result.SbomComponentPath = ownSbomPath
 		result.ResourceGlobalClosure = resourceGlobalsClosure
 		result.TestSuites = append(result.TestSuites, e.goTestSuites(goRef, build(goPath.relString(), ".vet.txt"), resourceGlobalsClosure)...)
 

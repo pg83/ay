@@ -607,6 +607,7 @@ group(
         "p12_python_contexts",
         "p12_proto",
         "p12_go",
+        "feature_mlaunch_go",
         "p12_java",
         "feature_java_sources_debug",
         "feature_java_sbom",

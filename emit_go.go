@@ -1313,6 +1313,32 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		sbomObjcopyCmd = Cmd{CmdArgs: na.chunkList(composeLDCmdSbomObjcopy(na, d.tc, sbomJSON, outPath)), Env: goVcsEnv}
 	}
 
+	outputs := na.vfsList(outPath, build(dir, "/", outName, ".vet.txt"))
+
+	var copyHeaderCmd Cmd
+
+	if isDll {
+		header := build(dir, "/", strings.TrimSuffix(outName, ".so"), ".h")
+
+		copyHeaderCmd = Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), copyFsToolsVFS.any(), strFsToolsCopy.any(), build(dir, "/_cgo_export.h").any(), header.any())), Env: goVcsEnv}
+		outputs = na.vfsList(outPath, build(dir, "/", outName, ".vet.txt"), header)
+	}
+
+	node := Node{
+		Platform: instance.Platform,
+		Env:      env,
+		Inputs:   NodeInputs{files: inputs, root: outPath},
+
+		KV:        kv,
+		Outputs:   outputs,
+		DepRefs:   deps[:k:k],
+		Resources: goToolResources(na, resourceGlobals),
+	}
+
+	if !isTest {
+		e.appendSdcMeta(&node, programBinaryName(instance, d.moduleStmt))
+	}
+
 	cmds := na.cmds.alloc(8)
 	kc := 0
 	pushCmd := func(c Cmd) { cmds[kc] = c; kc++ }
@@ -1326,37 +1352,18 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	}
 
 	pushCmd(goCmd)
+	kc += copy(cmds[kc:], node.Cmds)
 
 	if sbomEmbed {
 		pushCmd(sbomObjcopyCmd)
 	}
 
-	outputs := na.vfsList(outPath, build(dir, "/", outName, ".vet.txt"))
-
 	if isDll {
-		header := build(dir, "/", strings.TrimSuffix(outName, ".so"), ".h")
-
-		pushCmd(Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), copyFsToolsVFS.any(), strFsToolsCopy.any(), build(dir, "/_cgo_export.h").any(), header.any())), Env: goVcsEnv})
-		outputs = na.vfsList(outPath, build(dir, "/", outName, ".vet.txt"), header)
+		pushCmd(copyHeaderCmd)
 	}
 
 	na.cmds.commit(kc)
-
-	node := Node{
-		Platform: instance.Platform,
-		Cmds:     cmds[:kc:kc],
-		Env:      env,
-		Inputs:   NodeInputs{files: inputs, root: outPath},
-
-		KV:        kv,
-		Outputs:   outputs,
-		DepRefs:   deps[:k:k],
-		Resources: goToolResources(na, resourceGlobals),
-	}
-
-	if !isTest {
-		e.appendSdcMeta(&node, programBinaryName(instance, d.moduleStmt))
-	}
+	node.Cmds = cmds[:kc:kc]
 
 	e.resolveGoBuildFromDeps(&node, na.inputList(ownBuilds, embedInputs))
 

@@ -2790,5 +2790,38 @@
     "slice_sha256": "6044cb48a3fb9a26019dcce4479585452dae26c74ef7d95a96028f0ebc755217",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14124733461",
     "graph_sha256": "47fa960e77227d3a4f8cba9da27204f1529fbd32893562f4c2ae95c291b992cc"
+  },
+  {
+    "id": "feature_mlaunch_go",
+    "vcs": "arc",
+    "remote": "arcadia",
+    "sha": "2cbe115fa3ec54d363936bcc3b59c04f82d30b0a",
+    "command": [
+      "ya",
+      "make",
+      "--build=release",
+      "-j0",
+      "-G",
+      "--sandboxing",
+      "--host-platform",
+      "default-linux-x86_64",
+      "--target-platform",
+      "default-linux-x86_64",
+      "-DUSE_PREBUILT_TOOLS=no",
+      "--host-platform-flag=USE_PREBUILT_TOOLS=no",
+      "sdg/sdc/ros/motion_safety/ml_postprocessing/tests/one_tick/golaunch"
+    ],
+    "env": {
+      "YA_TC": "no",
+      "YA_NO_RESPAWN": "yes",
+      "YA_PREFETCH": "0",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
+    "target": "sdg/sdc/ros/motion_safety/ml_postprocessing/tests/one_tick/golaunch",
+    "xfail": false,
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14124895852",
+    "slice_sha256": "8b62453123d990ba5ac69b8cba0d3edb5a8a4801ae4f2636db84bc5ce2bacf90",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14124896530",
+    "graph_sha256": "ad65dbe73da223a0f8ee811fc75031a3660f45cda239d2019a05ce0e954a243e"
   }
 ]

@@ -85,8 +85,8 @@ For routine fixes, run the fixed subset `validate_quick`:
 ```
 
 It runs the same complete generate/normalize/sort/compare pipeline and strict
-per-case gates as `validate`, using the same pinned archives. It selects 16
-existing cases with 85,819 reference nodes in total (including overlap between
+per-case gates as `validate`, using the same pinned archives. It selects 17
+existing cases with 90,979 reference nodes in total (including overlap between
 cases). It does not generate or truncate new reference graphs.
 
 | Cases | Regression checks | Reference nodes |
@@ -97,6 +97,7 @@ cases). It does not generate or truncate new reference graphs.
 | `p12_python_contexts` | Python module contexts, including FlatBuffers | 3,057 |
 | `p12_proto` | Protobuf generators | 4,832 |
 | `p12_go` | Go graph generation | 18,043 |
+| `feature_mlaunch_go` | Real Go consumer of MLAUNCH_COMPONENT, Go tool SBOM and SDC metadata order | 5,160 |
 | `p12_java` | Java graph generation | 14,569 |
 | `feature_java_sources_debug`, `feature_java_sbom` | Debug source JARs and Java SBOM | 13 |
 | `feature_ts_proto` | TypeScript proto variants and non-recursive package dependencies | 29 |
@@ -113,6 +114,13 @@ case when changing a mechanism outside this subset, for example
 `validate_p12_tests`, `validate_p12_codegen_tail`, `validate_p12_config`, or
 `validate_p12_packaging`. Run `validate` before concluding that the complete
 corpus still has parity.
+
+`feature_mlaunch_go` pins
+`sdg/sdc/ros/motion_safety/ml_postprocessing/tests/one_tick/golaunch` with
+`USE_PREBUILT_TOOLS=no` on host and target, as in `p12_go`. The shared make
+tests separately exercise component selection through `ONLY_TAGS`,
+`INCLUDE_TAGS` and `EXCLUDE_TAGS`. ROS component variants are not covered by
+this case.
 
 Small source-feature cases provide a quicker loop for Cython inputs, resource
 ordering, and late source-file edges. Run all four with:
