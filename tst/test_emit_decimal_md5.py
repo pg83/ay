@@ -4,6 +4,32 @@ import lib
 
 
 class EmitDecimalMD5Test(unittest.TestCase):
+    def test_source_option_keeps_text_boundary_after_another_consumer_parses_it(self):
+        files = {
+            "md5_owner/ya.make": (
+                "LIBRARY()\n" + lib.BARE_MODULE + "SRCS(input.cpp)\nEND()\n"
+            ),
+            "md5_owner/input.cpp": '#include "leaf.h"\n',
+            "md5_owner/leaf.h": "// parsed dependency\n",
+            "md5_text/ya.make": (
+                "LIBRARY()\n" + lib.BARE_MODULE
+                + "DECIMAL_MD5_LOWER_32_BITS("
+                "hash.cpp FUNCNAME hash ${ARCADIA_ROOT}/md5_owner/input.cpp)\n"
+                "END()\n"
+            ),
+        }
+        for targets in (("md5_owner", "md5_text"), ("md5_text", "md5_owner")):
+            with self.subTest(targets=targets):
+                graph = lib.make(files, targets[-1], *targets[:-1])
+                compiler = lib.node_by_output(graph, "$(B)/md5_owner/input.cpp.o")
+                self.assertIn("$(S)/md5_owner/leaf.h", compiler["inputs"])
+                producer = lib.node_by_output(graph, "$(B)/md5_text/hash.cpp")
+                self.assertEqual(set(producer["inputs"]), {
+                    "$(S)/build/scripts/decimal_md5.py",
+                    "$(S)/md5_owner/input.cpp",
+                })
+                self.assertNotIn(compiler["uid"], producer["deps"])
+
     def test_generated_source_enters_archive(self):
         graph = lib.make({
             "mod/ya.make": (

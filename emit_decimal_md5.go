@@ -62,7 +62,7 @@ func (e *EmitContext) emitDecimalMD5(stmt *DecimalMD5Lower32BitsStmt) NodeRef {
 			Platform:  instance.Platform,
 			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env, Stdout: outVFS}),
 			Env:       env,
-			Inputs:    NodeInputs{files: na.inputList(optArena, na.vfsList(decimalMD5PyVFS))},
+			Inputs:    NodeInputs{files: na.inputList(optArena, na.vfsList(decimalMD5PyVFS)), text: optArena},
 			KV:        &decimalMd5KV,
 			Outputs:   na.vfsList(outVFS),
 			Resources: usesPython3,
