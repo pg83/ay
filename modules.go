@@ -1666,6 +1666,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 				pTok = peerdirModulePath(pTok).any()
 
+				if !platform.allowPeer(internStr(modulePath), pTok.str(), onWarn) {
+					addInclNext = false
+
+					continue
+				}
+
 				if addInclNext {
 					d.addLocalIncl(prioAddIncl, parseModulePathVFS(pTok.string()))
 					addInclNext = false

@@ -194,6 +194,7 @@ var (
 	envPYTHONHASHSEED                         = internEnv("PYTHONHASHSEED")
 	envPackedPackageExt                       = internEnv("PACKED_PACKAGE_EXT")
 	envPeerdirTags                            = internEnv("PEERDIR_TAGS")
+	envPeerdirsRulesPath                      = internEnv("PEERDIRS_RULES_PATH")
 	envPerl                                   = internEnv("PERL")
 	envPerlArchlib                            = internEnv("PERL_ARCHLIB")
 	envPerlInclude                            = internEnv("PERL_INCLUDE")

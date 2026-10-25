@@ -12,12 +12,13 @@ class SdcGeneratorsTest(MakeTest):
                 graph = self.graph()
                 self.assertTrue(any(path.endswith(("LivenessCheck.cpp", "LivenessCheck.go")) for node in graph["graph"] for path in node["outputs"]))
 
-    def test_diagnostics_v3_requires_header_dependencies(self):
+    def test_diagnostics_v3_restricted_peer(self):
         output = "${ARCADIA_BUILD_ROOT}/sdg/sdc/ros/monitorings/diag_updater/gen_diags/diagnostics/v3/Diagnostics/LivenessCheck.h"
         self.write("ya.make", f"LIBRARY()\nADDINCL(sdg/sdc/ros/monitorings/diag_updater/include)\nPEERDIR(contrib/restricted/boost/hana sdg/sdc/ros/misc/protocol/msg/diagnostic)\nSDC_DIAGS_SPLIT_GENERATOR_V3({DESCRIPTIONS}/Diagnostics)\nSDC_DIAGS_SPLIT_GENERATOR_V3({DESCRIPTIONS}/Diagnostics/LivenessCheck.yaml)\nRESOURCE({output} /diagnostic)\nEND()\n")
         result = self.make()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("diagnostics/", result.stderr)
+        self.assertIn("peerdir policy", result.stderr)
+        self.assertIn("contrib/restricted/boost/hana", result.stderr)
 
     def test_tasklet_registration(self):
         for macro, args in (("TASKLET_REG", "answer cpp e2e::Answer"), ("TASKLET_REG_EXT", "answer cpp e2e::Answer e2e::Wrapper")):

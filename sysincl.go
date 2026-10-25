@@ -100,7 +100,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 
 	needed := map[string]bool{sysinclVar: true, "__COMMA__": true, importMaskVariable: true, "DEFAULT_ALLOCATOR": true, "C_AS_CXX_FLAGS": true, "YQL_PYTHON_DIR": true}
 
-	for _, name := range []string{"PM_SCRIPT", "_SET_TS_INPUTS_BASE_EXCLUDES", "NOTS_TOOL"} {
+	for _, name := range []string{"PM_SCRIPT", "_SET_TS_INPUTS_BASE_EXCLUDES", "NOTS_TOOL", "PEERDIRS_RULES_PATH"} {
 		needed[name] = true
 	}
 
@@ -145,7 +145,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 	bindConfCommandVariable("C_AS_CXX_FLAGS", env, platformEnv, map[string]bool{})
 	bindConfCommandVariable("YQL_PYTHON_DIR", env, platformEnv, map[string]bool{})
 
-	for _, name := range []string{"PM_SCRIPT", "_SET_TS_INPUTS_BASE_EXCLUDES", "NOTS_TOOL"} {
+	for _, name := range []string{"PM_SCRIPT", "_SET_TS_INPUTS_BASE_EXCLUDES", "NOTS_TOOL", "PEERDIRS_RULES_PATH"} {
 		bindConfCommandVariable(name, env, platformEnv, map[string]bool{})
 	}
 

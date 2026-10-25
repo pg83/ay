@@ -703,6 +703,10 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool)
 		inst.Demand = demandLinked
 	}
 
+	if explicit && !parent.instance.Platform.allowPeer(parent.instance.Path.rel(), inst.Path.rel(), ctx.onWarn) {
+		return nil
+	}
+
 	res := genModule(ctx, inst)
 
 	if res.java == nil && inst.Language == LangJava {

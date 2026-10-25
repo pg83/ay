@@ -42,6 +42,7 @@ type SharedParseCache struct {
 	parsed       DenseMap[STR, ParsedSource]
 	confFiles    DenseMap[STR, *ConfFile]
 	sysinclYAMLs DenseMap[STR, []SysIncl]
+	peerPolicies DenseMap[STR, *PeerPolicies]
 }
 
 func newSharedParseCache() *SharedParseCache {
