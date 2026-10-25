@@ -67,7 +67,7 @@ def go_suite_resources(case, graph, consumer, files, *, link=False, python_uri=N
     names.extend((("GO_TOOLS", "build/external_resources/go_tools"),
                   ("YOLINT", "build/external_resources/yolint")))
     declarations = [(name, python_uri if name == "YMAKE_PYTHON3" and python_uri is not None else
-                     json.loads(files[path + "/" + name.lower() + ".json"])["by_platform"]["linux"]["uri"])
+                     json.loads(files[path + "/" + name.lower() + ".json"])["by_platform"]["linux-x86_64"]["uri"])
                     for name, path in names]
     return global_resource_dependencies(case, graph, consumer, declarations)
 
