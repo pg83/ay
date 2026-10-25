@@ -598,6 +598,23 @@ group("validation_report", validation_summary)
 group("validation_cases", *validation_gates)
 group("validation_shard", *selected_validation_gates)
 group(
+    "validate_quick",
+    *[validation_gate_by_id[case_id] for case_id in (
+        "feature_cpp_generated_header",
+        "feature_resource_order",
+        "feature_cython_py3_inputs",
+        "feature_cython_py2_inputs",
+        "p12_python_contexts",
+        "p12_proto",
+        "p12_go",
+        "p12_java",
+        "p12_typescript",
+        "p12_cuda",
+        "p12_docs",
+        "devtools_ya_bin",
+    )],
+)
+group(
     "validate_source_features",
     validation_gate_by_id["feature_resource_order"],
     validation_gate_by_id["feature_cython_py3_inputs"],

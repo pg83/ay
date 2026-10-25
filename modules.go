@@ -796,6 +796,11 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	d.dontResolveIncludes = kindOfResolve != envAbsent && env.string(envDontResolveIncludes) != "no"
 	finishYqlModule(ctx, instance, env, d, onWarn)
+
+	if d.unit.Type == tokCrate && !envRustHost(env) && env.string(envSANITIZER_TYPE) == "memory" {
+		d.peerdirs = append(d.peerdirs, internAny("contrib/restricted/rust_msan"))
+	}
+
 	d.peerdirs = append(d.peerdirs, d.pluginPeerdirs...)
 	d.udfBaseSymbolic = d.udfBaseSymbolic && env.string(envMsvc) != "yes" && env.string(envDarwin) != "yes"
 	d.pyProtoMypy = env.string(envPyProtoMypyEnabled) == "yes" &&
@@ -1430,6 +1435,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			setupMlaunchModule(v, modulePath, language, env, d)
 			setupPackageModule(v, language, d)
 			setupSdcDiagsModule(v, language, env, d)
+			setupRustModule(v.Name, language, env, d)
 
 			if v.Name == tokFbsLibrary {
 				d.multimodule = v.Name
@@ -1538,6 +1544,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 		case *SrcsStmt:
+			if d.moduleStmt != nil && isRustModule(d.moduleStmt.Name) {
+				applyRustMacro(UnknownStmt{Name: tokCrateSources, Args: expandStmtTokens(v.Sources, env)}, modulePath, env, d)
+
+				continue
+			}
+
 			if d.yqlPrebuiltAliases {
 				d.yqlSourceSrcs = append(d.yqlSourceSrcs, expandStmtTokens(v.Sources, env)...)
 
@@ -2193,6 +2205,10 @@ func resolveModuleUnit(name TOK, kind ModuleKind, language Language) ModuleUnit 
 }
 
 func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleUnit {
+	if isRustModule(name) {
+		return rustModuleUnit(name, language)
+	}
+
 	if language == LangPy2 {
 		switch name {
 		case tokPy23Library:
@@ -2445,6 +2461,10 @@ func warnUnmodelledMacro(onWarn func(Warn), modulePath string, name TOK) {
 }
 
 func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
+	if applyRustMacro(v, modulePath, env, d) {
+		return
+	}
+
 	if d.moduleStmt != nil {
 		if d.moduleStmt.Name == tokPyAnyModule && (v.Name == tokUsePython2 || v.Name == tokUsePython3 || v.Name == tokPySrcs || v.Name == tokPyMain) ||
 			d.moduleStmt.Name == tokPy2Module && (v.Name == tokPython3Module || v.Name == tokPython3Addincl) {
@@ -5506,6 +5526,10 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 
 	if language == LangPy2 && !(peerYaMakeExists(ctx.fs, peerVFS) && hasPy2Variant(ctx.moduleName(peerVFS.relString()))) {
 		language = LangCPP
+	}
+
+	if isRustModule(d.moduleStmt.Name) && envRustHost(Environment{s: &e.frame.ifEnv}) && ctx.moduleName(peerVFS.relString()) == tokCrate {
+		language = LangRustHost
 	}
 
 	if isGoModuleType(d.moduleStmt.Name) && peerYaMakeExists(ctx.fs, peerVFS) {

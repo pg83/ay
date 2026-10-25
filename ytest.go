@@ -211,7 +211,13 @@ func testContextLines(mf *MakeFlags) []string {
 		}
 	}
 
-	context := map[string]any{"build_type": mf.buildType, "flags": allowed}
+	var buildType any = mf.buildType
+
+	if mf.targetPlat != "" {
+		buildType = mf.targetBuildType
+	}
+
+	context := map[string]any{"build_type": buildType, "flags": allowed}
 	text := throw2(json.MarshalIndent(context, "", "  "))
 
 	return strings.Split(string(text), "\n")
@@ -974,6 +980,10 @@ func testFlags(mf *MakeFlags) []string {
 
 	copyStatsFlags(flags, mf.dflags)
 	copyStatsFlags(flags, mf.tflags)
+
+	if mf.runTests > 0 {
+		flags["TESTS_REQUESTED"] = "yes"
+	}
 
 	if enabled, present := os.LookupEnv("YA_TEST_DISABLE_FLAKE8_MIGRATIONS"); !present || envEnabled(enabled) {
 		flags["DISABLE_FLAKE8_MIGRATIONS"] = "yes"

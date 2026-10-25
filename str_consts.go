@@ -475,6 +475,7 @@ var (
 	strRunGoFmt                                                                              = internStr("run_go_fmt")
 	strRunGoTest                                                                             = internStr("run_go_test")
 	strRunGoVet                                                                              = internStr("run_go_vet")
+	strRust                                                                                  = internStr("RUST")
 	strS                                                                                     = internStr("$(S)")
 	strS2                                                                                    = internStr("-s")
 	strS3                                                                                    = internStr("-S")

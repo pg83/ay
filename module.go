@@ -31,6 +31,7 @@ const (
 	LangPy2
 	LangProtoDescriptions
 	LangFbsJavaNative
+	LangRustHost
 )
 
 const (

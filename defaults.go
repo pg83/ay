@@ -91,6 +91,11 @@ func isRuntimeAncestor(path string) bool {
 
 func (e *EmitContext) defaultPeerdirsForModule() []string {
 	_, instance, d := e.ctx, e.instance, e.d
+
+	if isRustModule(d.moduleStmt.Name) {
+		return []string{"build/platform/python/ymake_python3"}
+	}
+
 	inst := instance
 
 	if instance.Language == LangPy && d.usePython3 &&

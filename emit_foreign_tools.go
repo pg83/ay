@@ -190,6 +190,8 @@ func (ctx *GenCtx) bindForeignTools() {
 						tool.host = ctx.toolResult(tool.path)
 					}
 
+					ctx.scannerHost.codegen.use(*tool.host.LDPath)
+
 					if foreign == nil {
 						foreign = make(map[NodeRef]NodeRef)
 					}
@@ -204,6 +206,7 @@ func (ctx *GenCtx) bindForeignTools() {
 					}
 
 					tool.host = ctx.toolResult(path)
+					ctx.scannerHost.codegen.use(*tool.host.LDPath)
 				}
 			}
 

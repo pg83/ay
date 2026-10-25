@@ -2633,5 +2633,38 @@
     "slice_sha256": "7bc153a9a377ab56223bea13134a7267e7a9ea71ee7fb659962834ee85a743b5",
     "graph_url": "https://proxy.sandbox.yandex-team.ru/14121222980",
     "graph_sha256": "082b77e6fad9e05dfab1cf548dce0a01b3c584165e15e10e4cc79e7f7566694e"
+  },
+  {
+    "id": "feature_rust_cryptography",
+    "vcs": "arc",
+    "remote": "arcadia",
+    "sha": "3b36097f9e60c6228af29a148c3bdfb615d2a1dc",
+    "command": [
+      "ya",
+      "make",
+      "-r",
+      "-t",
+      "--cache-tests",
+      "-j0",
+      "-G",
+      "--sandboxing",
+      "--target-platform",
+      "default-linux-x86_64",
+      "--host-platform",
+      "default-linux-x86_64",
+      "contrib/python/cryptography/next/tests"
+    ],
+    "env": {
+      "YA_TC": "no",
+      "YA_NO_RESPAWN": "yes",
+      "YA_PREFETCH": "0",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
+    "target": "contrib/python/cryptography/next/tests",
+    "xfail": false,
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14124404367",
+    "slice_sha256": "1ae29e827dee0947001dfa95abad1227a4c9c2afe979e93c5885e2d98e90ac78",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14124404498",
+    "graph_sha256": "fb04a8d4c9216619575c83de5c29f68a87f2cf4e7cbbd65be1db582b0a065571"
   }
 ]

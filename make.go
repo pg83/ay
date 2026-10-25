@@ -31,9 +31,10 @@ const (
 )
 
 type MakeFlags struct {
-	testRetries   int
-	testTraceback string
-	testBuildType string
+	testRetries     int
+	testTraceback   string
+	testBuildType   string
+	targetBuildType *string
 
 	addModulesToResults      bool
 	stripPackagesFromResults bool
@@ -361,8 +362,6 @@ func parseMakeFlags(args []string) *MakeFlags {
 		Func: getopt.FuncGetOptLong,
 	}
 
-	targetBuildType := ""
-
 	mf := &MakeFlags{
 		buildType:     "debug",
 		testTraceback: "short",
@@ -436,7 +435,7 @@ func parseMakeFlags(args []string) *MakeFlags {
 		case opt.Name == "build":
 			mf.buildType = opt.OptArg
 		case opt.Name == "target-platform-build-type":
-			targetBuildType = opt.OptArg
+			mf.targetBuildType = ptr(opt.OptArg)
 		case opt.Name == "target-platform-flag":
 			parseKV(mf.tflags, opt.OptArg)
 			parseKV(mf.platformFlags, opt.OptArg)
@@ -478,8 +477,8 @@ func parseMakeFlags(args []string) *MakeFlags {
 
 	mf.testBuildType = mf.buildType
 
-	if targetBuildType != "" {
-		mf.buildType = targetBuildType
+	if mf.targetBuildType != nil {
+		mf.buildType = *mf.targetBuildType
 	}
 
 	if mf.srcRoot == "" {

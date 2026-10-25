@@ -19,6 +19,7 @@ graphs on fixed source slices.
 ./build -Drace unit          # unit against a -race build
 ./build -Dcoverage coverage  # unit against a -cover build, per-file table and cover.out
 ./build test                 # unit plus the validation gate; needs the internal Sandbox
+./build -k validate_quick    # 12 small canonical graph cases for iteration
 ./build -j4 -Darcadia=/home/pg/1 ay_e2e
 ./build -Darcadia=/home/pg/1 ya_e2e
 ./build -j4 -Dcoverage -Darcadia=/home/pg/1 ay_e2e

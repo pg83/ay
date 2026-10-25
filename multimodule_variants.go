@@ -1,6 +1,7 @@
 package main
 
 var multimoduleTags = map[TOK]map[string]Language{
+	tokCrate:   {"RUST": LangCPP, "RUST_HOST": LangRustHost},
 	tokPackage: {"PACKAGE_FINAL": LangCPP, "PACKAGE_UNION": LangPackage},
 	tokProtoLibrary: {
 		"CPP_PROTO": LangCPP, "JAVA_PROTO": LangJava, "PY3_PROTO": LangPy, "GO_PROTO": LangGo,

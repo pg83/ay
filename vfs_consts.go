@@ -43,6 +43,7 @@ var (
 	buildScriptsMkverPy                      = source("build/scripts/mkver.py")
 	buildScriptsPostprocessGoFbsPy           = source("build/scripts/postprocess_go_fbs.py")
 	buildScriptsProcessCommandFilesPy        = source("build/scripts/process_command_files.py")
+	buildScriptsRustPy                       = source("build/scripts/rust.py")
 	buildScriptsTarSourcesPy                 = source("build/scripts/tar_sources.py")
 	buildScriptsTouchPy                      = source("build/scripts/touch.py")
 	buildScriptsWriterPy                     = source("build/scripts/writer.py")

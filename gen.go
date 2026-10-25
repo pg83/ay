@@ -1860,7 +1860,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		peerResult := e.genPeerModule(peerInstance)
 
-		if peerResult.isPROGRAM {
+		if peerResult.isPROGRAM && !(isRustModule(d.moduleStmt.Name) && peerResult.ModuleStmtName == tokCrateProcMacro) {
 			throwFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path.relString(), peerPath)
 		}
 
@@ -2431,6 +2431,14 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 
 		return r
+	}
+
+	if isRustModule(d.moduleStmt.Name) {
+		result := e.emitRustModule(newResult(), resolved, resourceGlobalsClosure)
+
+		ctx.memoPut(instance, result)
+
+		return result
 	}
 
 	if !effectiveNoPlatform(d.flags) && runtimeAncestorCxxConsumers[instance.Path.relString()] {

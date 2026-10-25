@@ -1,6 +1,25 @@
 package main
 
 var tokName = [...]STR{
+	tokCrate:                     internStr("CRATE"),
+	tokCrateProcMacro:            internStr("CRATE_PROC_MACRO"),
+	tokRustBuildScript:           internStr("RUST_BUILD_SCRIPT"),
+	tokRustRuntime:               internStr("RUST_RUNTIME"),
+	tokCrateRoot:                 internStr("CRATE_ROOT"),
+	tokCrateSources:              internStr("CRATE_SOURCES"),
+	tokCrateInputs:               internStr("CRATE_INPUTS"),
+	tokCrateVersion:              internStr("CRATE_VERSION"),
+	tokCrateEdition:              internStr("CRATE_EDITION"),
+	tokCrateManifest:             internStr("CRATE_MANIFEST"),
+	tokCrateManifestDir:          internStr("CRATE_MANIFEST_DIR"),
+	tokCrateFeatures:             internStr("CRATE_FEATURES"),
+	tokCrateFlags:                internStr("CRATE_FLAGS"),
+	tokCrateEnv:                  internStr("CRATE_ENV"),
+	tokCrateBuildTool:            internStr("CRATE_BUILD_TOOL"),
+	tokCrateDependencyAlias:      internStr("CRATE_DEPENDENCY_ALIAS"),
+	tokCrateProcMacros:           internStr("CRATE_PROC_MACROS"),
+	tokCrateBuildScript:          internStr("CRATE_BUILD_SCRIPT"),
+	tokCrateBuildDeps:            internStr("CRATE_BUILD_DEPS"),
 	tokCompileCAsCxx:             internStr("COMPILE_C_AS_CXX"),
 	tokValidateDataRestart:       internStr("VALIDATE_DATA_RESTART"),
 	tokPack:                      internStr("PACK"),
@@ -926,6 +945,25 @@ const (
 	tokSetCudaNodeRAMRequirement
 	tokNoCow
 	tokNoNeedCheck
+	tokCrate
+	tokCrateProcMacro
+	tokRustBuildScript
+	tokRustRuntime
+	tokCrateRoot
+	tokCrateSources
+	tokCrateInputs
+	tokCrateVersion
+	tokCrateEdition
+	tokCrateManifest
+	tokCrateManifestDir
+	tokCrateFeatures
+	tokCrateFlags
+	tokCrateEnv
+	tokCrateBuildTool
+	tokCrateDependencyAlias
+	tokCrateProcMacros
+	tokCrateBuildScript
+	tokCrateBuildDeps
 )
 
 type TOK uint16

@@ -13,6 +13,7 @@ Common commands:
 ./build -Drace unit     # unit against a -race build
 ./build -Dcoverage coverage  # unit tests against a -cover build; see below
 ./build validate        # all validation results, then the aggregate gate
+./build -k validate_quick # 12 small canonical graph cases for iteration
 ./build test            # unit + complete validation gate
 ./build validation_report
 ./build validation_resources
@@ -77,6 +78,39 @@ Each case also retains the complete differing normalized nodes in
 These files are streamed during the parity count, so diagnosing a mismatch
 does not require generating or normalizing the same graphs again.
 
+For routine fixes, run the fixed subset `validate_quick`:
+
+```sh
+./build -j24 -k validate_quick
+```
+
+It runs the same complete generate/normalize/sort/compare pipeline and strict
+per-case gates as `validate`, using the same pinned archives. It selects 12
+existing cases with 85,771 reference nodes in total (including overlap between
+cases). It does not generate or truncate new reference graphs.
+
+| Cases | Regression checks | Reference nodes |
+|---|---|---:|
+| `feature_cpp_generated_header` | Generated C++ headers and source inputs | 2,926 |
+| `feature_resource_order` | Resource objects and archive/link order | 8,491 |
+| `feature_cython_py3_inputs`, `feature_cython_py2_inputs` | Both Cython/Python variants | 7,851 |
+| `p12_python_contexts` | Python module contexts, including FlatBuffers | 3,057 |
+| `p12_proto` | Protobuf generators | 4,832 |
+| `p12_go` | Go graph generation | 18,043 |
+| `p12_java` | Java graph generation | 14,569 |
+| `p12_typescript` | TypeScript graph generation | 8,444 |
+| `p12_cuda` | CUDA generation and platform resources | 2,651 |
+| `p12_docs` | Documentation graphs | 18 |
+| `devtools_ya_bin` | Real Python program with native dependencies, aarch64/musl target | 14,889 |
+
+This subset catches regressions while fixing the shared ay/ya make tests; it
+does not cover every failing fixture or replace the full corpus. Run the
+affected make test against both backends as well. Add the relevant existing
+case when changing a mechanism outside this subset, for example
+`validate_p12_tests`, `validate_p12_codegen_tail`, `validate_p12_config`, or
+`validate_p12_packaging`. Run `validate` before concluding that the complete
+corpus still has parity.
+
 Small source-feature cases provide a quicker loop for Cython inputs, resource
 ordering, and late source-file edges. Run all four with:
 
@@ -99,6 +133,34 @@ The generated-header case also reproduces the lost-input regression from
 reusing a closure after its file edges have changed. All four cases use
 `xfail: false`; differences fail their gates normally. These focused cases
 supplement the larger corpus cases.
+
+The `feature_rust_cryptography` case uses
+`contrib/python/cryptography/next/tests`, a real Python test binary linking
+cryptography, Temporal, and librsvg with a shared Rust runtime. Its complete
+release graph includes Rust libraries, host crates, procedural macros, and
+build-script programs: 11,336 normalized nodes, including 554 Rust commands.
+Run it independently when changing Rust support:
+
+```sh
+./build validate_feature_rust_cryptography
+```
+
+It is included in the full corpus with `xfail: false`.
+
+Rust support includes `CRATE` target and host variants, `RUST_BUILD_SCRIPT`,
+`CRATE_PROC_MACRO`, `RUST_RUNTIME`, and the `CRATE_*` configuration macros.
+The Rust emitter uses the existing peer closures, tool bindings, and lazy
+module publication. Native archives, metadata `.rlib` files, and build-script
+`.build.tar` files belong to one producer; C++ links native archives and one
+shared runtime. The same graph-only tests in `tst/make/test_rust.py` run on
+both ay and upstream ya:
+
+```sh
+./build -Darcadia=/home/pg/1 ay_e2e_collect_rust ya_e2e_rust
+```
+
+The ay collection target stores assertions in `.build/e2e/ay/test_rust.json`;
+use `ay_e2e` to enforce the complete make-test suite's pass/fail status.
 
 Sandbox archives are ordinary CAS outputs and do not depend on the candidate
 `ay` binary. New resources provisioned by `dev/provision.py` are uploaded as
