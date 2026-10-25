@@ -1,3 +1,4 @@
+import json
 import unittest
 
 import lib
@@ -22,6 +23,37 @@ def header_files():
 
 
 class HeadersTest(unittest.TestCase):
+    def test_listed_peer_header_waits_for_a_real_source_consumer(self):
+        files = {
+            "petal/ya.make": f"PROGRAM(Petal)\n{BARE}ALLOCATOR(FAKE)\nPEERDIR(oak)\nADDINCL(petal/support)\nSRCS(main.cpp)\nEND()\n",
+            "petal/main.cpp": '#include "shared/mock.hpp"\nint main(){return 0;}\n',
+            "oak/ya.make": f"LIBRARY()\n{BARE}SRCS(owner.cpp ${{ARCADIA_ROOT}}/shared/mock.hpp)\nEND()\n",
+            "oak/owner.cpp": "int owner(){return 0;}\n",
+            "shared/mock.hpp": "#include <harness/h.hpp>\n",
+            "petal/support/harness/h.hpp": '#include "tail.hpp"\n',
+            "petal/support/harness/tail.hpp": "#pragma once\n",
+            "older/ya.make": f"PROGRAM(Older)\n{BARE}ALLOCATOR(FAKE)\nPEERDIR(oak)\nSRCS(main.cpp)\nEND()\n",
+            "older/main.cpp": "int main(){return 0;}\n",
+        }
+        for targets in (("older", "petal"), ("petal", "older")):
+            with self.subTest(targets=targets):
+                result = lib.make_process(files, targets[-1], *targets[:-1],
+                                          "--target-platform", "default-linux-x86_64")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stderr, "")
+                graph = json.loads(result.stdout)
+                compile = lib.node_by_output(graph, "$(B)/petal/main.cpp.o")
+                self.assertCountEqual(compile["inputs"], [
+                    "$(S)/petal/main.cpp",
+                    "$(S)/shared/mock.hpp",
+                    "$(S)/petal/support/harness/h.hpp",
+                    "$(S)/petal/support/harness/tail.hpp",
+                ])
+                self.assertEqual(compile["deps"], [])
+                link = lib.node_by_output(graph, "$(B)/older/Older")
+                self.assertNotIn("$(S)/shared/mock.hpp", link["inputs"])
+                self.assertNotIn("$(S)/petal/support/harness/h.hpp", link["inputs"])
+
     def check_export(self, files, expected):
         graph = lib.make(files, "consumer")
         link = lib.node_by_output(graph, "$(B)/consumer/consumer")

@@ -29,12 +29,18 @@ class GoSourcesTest(unittest.TestCase):
                 self.assertNotIn("$(B)/g/generated.h", consumer["inputs"])
                 self.assertFalse(any("$(B)/g/generated.h" in node["outputs"] for node in graph["graph"]))
 
-    def test_explicit_src_keeps_its_native_header_inputs(self):
-        graph = lib.make(files("SRC(ignored.h)"), "consumer")
-        consumer = lib.node_by_output(graph, "$(B)/consumer/consumer.a")
-        producer = lib.node_by_output(graph, "$(B)/g/generated.h")
-        self.assertIn("$(B)/g/generated.h", consumer["inputs"])
-        self.assertIn(producer["uid"], consumer["deps"])
+    def test_explicit_src_header_requires_a_source_processing_output(self):
+        for copy_first in (False, True):
+            with self.subTest(copy_first=copy_first):
+                sources = files("SRC(ignored.h)")
+                if copy_first:
+                    sources["g/ya.make"] = sources["g/ya.make"].replace(
+                        "SRC(ignored.h)\nCOPY_FILE(seed.txt generated.h)",
+                        "COPY_FILE(seed.txt generated.h)\nSRC(ignored.h)")
+                result = lib.make_process(sources, "consumer")
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("SRC", result.stderr)
+                self.assertIn("no outputs", result.stderr)
 
     def test_cpp_peer_keeps_its_exported_header_inputs(self):
         sources = files("SRCS(ignored.h)")

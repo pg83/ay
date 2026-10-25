@@ -58,16 +58,6 @@ func (e *EmitContext) modulePeerInputs() InputChunks {
 			if len(info.Includes) > 0 {
 				inputs = append(inputs, info.Includes)
 			}
-
-			for _, root := range info.IncludeRoots {
-				closure := e.includeClosure(root)
-
-				for _, bucket := range closure.bucketList() {
-					if len(bucket) > 0 && bucket[0].isBuild() {
-						inputs = append(inputs, bucket)
-					}
-				}
-			}
 		}
 	}
 
@@ -76,6 +66,16 @@ func (e *EmitContext) modulePeerInputs() InputChunks {
 
 func (e *EmitContext) emitModuleNode(node Node, useGlobals bool) NodeRef {
 	buildDeps := e.ctx.na.refList(node.DepRefs...)
+
+	if e.peers != nil {
+		for _, peer := range e.peers.Modules {
+			if info := e.codegen.moduleInputs(peer); info != nil && len(info.IncludeRoots) > 0 {
+				node.Inputs.modulePeers = e.peers.Modules
+
+				break
+			}
+		}
+	}
 
 	e.includeNodeInputs(&node)
 	node.Inputs.files = e.appendModuleInputs(node.Inputs.files, useGlobals)

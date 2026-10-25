@@ -7,6 +7,7 @@ type NodeInputs struct {
 	roots       InputChunks
 	root        VFS
 	sourceRoots []VFS
+	modulePeers []VFS
 	text        []VFS
 	scanner     *IncludeScanner
 	na          *NodeArenas
@@ -24,6 +25,7 @@ func (e *EmitContext) prepareNodeInputs(node *Node) {
 
 	plan.na = e.ctx.na
 	plan.scanner = e.scanner
+	plan.deferred = plan.deferred || len(plan.modulePeers) > 0
 
 	plan.eachRoot(func(root VFS) {
 		closure, cached := e.scanner.closure(root)
@@ -63,13 +65,24 @@ func (p *NodeInputs) eachRoot(visit func(VFS)) {
 	}
 }
 
+func (p *NodeInputs) eachModuleRoot(visit func(VFS)) {
+	// Peer headers are Search edges until a real source consumer establishes their includes.
+	for _, peer := range p.modulePeers {
+		if info := p.scanner.codegen.moduleInputs(peer); info != nil {
+			for _, root := range info.IncludeRoots {
+				visit(root)
+			}
+		}
+	}
+}
+
 func (p *NodeInputs) evaluate() InputChunks {
 	if p.scanner == nil || !p.deferred {
 		return p.files
 	}
 
 	var closures []Closure
-	var includedSources InputChunks
+	var includedInputs InputChunks
 
 	p.eachRoot(func(root VFS) {
 		closures = append(closures, p.scanner.establishedClosure(root))
@@ -79,30 +92,40 @@ func (p *NodeInputs) evaluate() InputChunks {
 				closure := p.scanner.establishedClosure(included)
 				sources := closure.collect(p.na, VFS.isSource)
 
-				includedSources = append(includedSources, sources)
+				includedInputs = append(includedInputs, sources)
 			}
 		}
 	})
 
 	for _, root := range p.sourceRoots {
 		if info := p.scanner.codegen.lookup(root); info != nil {
-			includedSources = append(includedSources, info.InputLoopSources)
+			includedInputs = append(includedInputs, info.InputLoopSources)
 
 			// Native loop inputs share physical included files, not sibling BuildFrom producers.
 			if info.IncludedInputs != nil {
 				for _, parsed := range info.IncludedInputs.Roots {
 					closure := p.scanner.establishedClosure(parsed)
 
-					includedSources = append(includedSources, closure.collect(p.na, VFS.isSource))
+					includedInputs = append(includedInputs, closure.collect(p.na, VFS.isSource))
 				}
 			}
 		}
 	}
 
+	p.eachModuleRoot(func(root VFS) {
+		closure := p.scanner.establishedClosure(root)
+
+		for _, bucket := range closure.bucketList() {
+			if len(bucket) > 0 && bucket[0].isBuild() {
+				includedInputs = append(includedInputs, bucket)
+			}
+		}
+	})
+
 	var result InputChunks
 
 	dedupers.with(func(seen *DeDuper) {
-		bound := len(p.files) + len(includedSources)
+		bound := len(p.files) + len(includedInputs)
 
 		for _, closure := range closures {
 			bound += len(closure.bucketList())
@@ -118,7 +141,7 @@ func (p *NodeInputs) evaluate() InputChunks {
 			}
 		}
 
-		for _, bucket := range includedSources {
+		for _, bucket := range includedInputs {
 			if extra := p.na.filterSeen(seen, bucket); len(extra) > 0 {
 				chunks = append(chunks, extra)
 			}
@@ -166,6 +189,7 @@ func (p *NodeInputs) activate(seen *BitSet, selectProducer func(NodeRef)) {
 	}
 
 	p.eachRoot(visit)
+	p.eachModuleRoot(visit)
 }
 
 func (n *Node) establishedInputRefs(na *NodeArenas) {
@@ -185,11 +209,7 @@ func (n *Node) establishedInputRefs(na *NodeArenas) {
 		}
 	}
 
-	plan.eachRoot(func(root VFS) {
-		closure := plan.scanner.establishedClosure(root)
-
-		addInput(closure.self)
-
+	addBuildRefs := func(closure Closure) {
 		for _, bucket := range closure.bucketList() {
 			if len(bucket) == 0 || !bucket[0].isBuild() {
 				continue
@@ -199,6 +219,17 @@ func (n *Node) establishedInputRefs(na *NodeArenas) {
 				addInput(input)
 			}
 		}
+	}
+
+	plan.eachRoot(func(root VFS) {
+		closure := plan.scanner.establishedClosure(root)
+
+		addInput(closure.self)
+		addBuildRefs(closure)
+	})
+
+	plan.eachModuleRoot(func(root VFS) {
+		addBuildRefs(plan.scanner.establishedClosure(root))
 	})
 
 	n.DepRefs = na.uniqueRefs(refs)

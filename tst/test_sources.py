@@ -1,3 +1,4 @@
+import json
 import unittest
 
 import lib
@@ -53,6 +54,25 @@ class SourcesTest(unittest.TestCase):
         inputs = cc_inputs(graph)
         self.assertIn("$(S)/geobase/library/abi/shared.cpp", inputs)
         self.assertNotIn("$(S)/shared.cpp", inputs)
+
+    def test_explicit_src_header_requires_a_source_processing_output(self):
+        for keyword in ("SRCS", "SRC"):
+            with self.subTest(keyword=keyword):
+                files = {
+                    "plain/ya.make": f"LIBRARY()\n{lib.BARE_MODULE}SRCS(local.cpp)\n{keyword}(header.h)\nEND()\n",
+                    "plain/local.cpp": "int local;\n",
+                    "plain/header.h": '#include "leaf.h"\n',
+                    "plain/leaf.h": "// real local leaf\n",
+                }
+                result = lib.make_process(files, "plain", "--target-platform", "default-linux-x86_64")
+                if keyword == "SRC":
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn("SRC", result.stderr)
+                    self.assertIn("no outputs", result.stderr)
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    node = lib.node_by_output(json.loads(result.stdout), "$(B)/plain/local.cpp.o")
+                    self.assertEqual(node["inputs"], ["$(S)/plain/local.cpp"])
 
 
 if __name__ == "__main__":

@@ -49,6 +49,10 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 	case srcExtRos:
 		e.emitRosSource(meta, nil)
 	case srcExtHeader:
+		if meta.Compile.FlatOutput {
+			throwFmt("SRC(%s) produced no outputs", src.string())
+		}
+
 		header := e.moduleSourceVFS(src)
 
 		if header.isSource() {
