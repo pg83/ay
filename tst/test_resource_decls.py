@@ -231,6 +231,31 @@ class ResourceDeclsTest(unittest.TestCase):
                 graph = lib.make(files, "lib")
                 self.assertNotIn("$(B)/resources/T", fetches(graph))
 
+    def test_json_host_bundle_strip_prefix_uses_uint16_limit(self):
+        files = {
+            "res/ya.make": resources_library(
+                "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(T bundle.json)\n"
+            ),
+            "lib/ya.make": (
+                f"PROGRAM()\n{BARE}PEERDIR(res)\n"
+                "CFLAGS(-DPROBE=${T_RESOURCE_GLOBAL})\nSRCS(main.cpp)\nEND()\n"
+            ),
+            "lib/main.cpp": "int main(){return 0;}\n",
+        }
+        for count in (65535, 65536):
+            with self.subTest(strip_prefix=count):
+                files["res/bundle.json"] = json.dumps({"by_platform": {
+                    "linux-x86_64": {"uri": "sbr:1", "strip_prefix": count},
+                }})
+                if count == 65536:
+                    self.assertIn("strip_prefix value 65536 is too big", make_error(files, "lib"))
+                else:
+                    graph = lib.make(files, "lib")
+                    args = fetches(graph)["$(B)/resources/T"]
+                    descriptor = json.loads(args[2])
+                    self.assertEqual(fetched_uri(graph, "T"), "sbr:1")
+                    self.assertEqual([entry["strip_prefix"] for entry in descriptor["resources"]], [65535])
+
     def test_host_bundle_uses_platform_triples_with_an_arbitrary_separator(self):
         files = {
             "res/ya.make": resources_library(

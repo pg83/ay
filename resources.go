@@ -615,6 +615,10 @@ func readResourceBundleJSON(fs FS, rel string) map[string]ResourceBundleEntry {
 	out := make(map[string]ResourceBundleEntry, len(data.ByPlatform))
 
 	for platform, resource := range data.ByPlatform {
+		if resource.StripPrefix > 65535 {
+			throwFmt("resources: platform %q: strip_prefix value %d is too big", platform, resource.StripPrefix)
+		}
+
 		key := canonizeResourcePlatform(platform)
 
 		if _, exists := out[key]; !exists {
