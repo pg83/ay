@@ -447,18 +447,42 @@ func yaToolsConfResourceFiles(fs FS, confDir string) [][]string {
 	addFormula := func(formula any) {
 		f, ok := formula.(string)
 
-		if ok && (strings.HasPrefix(f, "build/") || strings.HasPrefix(f, confDir+"/")) && fs.isFile(srcRootRel, f) {
-			formulas[f] = true
+		if !ok {
+			return
 		}
+
+		if !strings.HasPrefix(f, "build/") && !strings.HasPrefix(f, confDir+"/") {
+			throwFmt("YA_TOOLS_CONF: formula %s must be in build/ or %s/", f, confDir)
+		}
+
+		if !fs.isFile(srcRootRel, f) {
+			throwFmt("YA_TOOLS_CONF: formula %s not found", f)
+		}
+
+		formulas[f] = true
 	}
 
 	addBottles := func(conf map[string]any) {
-		bottles, _ := conf["bottles"].(map[string]any)
+		bottles, ok := conf["bottles"].(map[string]any)
 
-		for _, bottle := range bottles {
-			if b, ok := bottle.(map[string]any); ok {
-				addFormula(b["formula"])
+		if !ok {
+			throwFmt("YA_TOOLS_CONF: bottles must be an object")
+		}
+
+		for name, bottle := range bottles {
+			b, ok := bottle.(map[string]any)
+
+			if !ok {
+				throwFmt("YA_TOOLS_CONF: bottle %s must be an object", name)
 			}
+
+			formula, ok := b["formula"]
+
+			if !ok {
+				throwFmt("YA_TOOLS_CONF: bottle %s has no formula", name)
+			}
+
+			addFormula(formula)
 		}
 	}
 

@@ -46,10 +46,21 @@ class RemainingContextsTest(MakeTest):
 
     def test_invalid_tools_configuration(self):
         self.write("ya.make", f"PY3_LIBRARY()\nYA_TOOLS_CONF({PROJECT}/conf)\nEND()\n")
-        self.write("conf/ya.conf.json", json.dumps({"bottles": {"ignored": 42, "inline": {"formula": {}}}, "simple_tools": {"clang": {"resource": "clang"}, "missing": {}}}))
-        self.write("conf/tools/tools/clang.ya_tool", json.dumps({"tool": {"type": "simple", "definition": {}}}))
-        self.write("conf/tools/tools/complex.ya_tool", json.dumps({"tool": {"type": "complex", "definition": {}}}))
-        self.assertNotEqual(self.make().returncode, 0)
+        self.write("outside.json", "{}")
+        for conf in (
+            {},
+            {"bottles": {"bad": 42}},
+            {"bottles": {"bad": {}}},
+            {"bottles": {"missing": {"formula": f"{PROJECT}/conf/missing.json"}}},
+            {"bottles": {"outside": {"formula": f"{PROJECT}/outside.json"}}},
+            {"bottles": {}, "simple_tools": {"missing_e2e": {}}},
+        ):
+            with self.subTest(conf=conf):
+                self.write("conf/ya.conf.json", json.dumps(conf))
+                self.assertNotEqual(self.make().returncode, 0)
+
+        self.write("conf/ya.conf.json", json.dumps({"bottles": {"inline": {"formula": {}}}}))
+        self.graph()
 
     def test_python_gazetteer_proto(self):
         self.write("ya.make", f"PY3_PROGRAM(answer)\nPY_SRCS(MAIN main.py)\nPEERDIR({PROJECT}/proto)\nEND()\n")
