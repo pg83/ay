@@ -110,13 +110,6 @@ func (e *EmitContext) collectRunProgramObjects(rp *RunProgramStmt) {
 
 func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	ctx, instance := e.ctx, e.instance
-	res, mainTool := e.foreignToolResult(internArg(filepath.Clean(stmt.ToolPath.relOrSelf().string())))
-	auxTools, foreignTools := e.resolveRunProgramAuxTools(anyStrs(stmt.ToolPaths))
-
-	if mainTool != nil {
-		foreignTools = append(foreignTools, mainTool)
-	}
-
 	inVFSs := make([]VFS, 0, len(stmt.INFiles))
 	inSources := make([]VFS, 0, len(stmt.INFiles))
 	inBuilds := make([]VFS, 0, len(stmt.INFiles))
@@ -184,11 +177,28 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		inBuilds:  ctx.na.vfsList(inBuilds...),
 	}
 
-	for _, input := range snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse] {
-		snap.scanner.discoverInput(input, snap.scanCtx)
-	}
-
 	pe := func() {
+		res, mainTool := e.foreignToolResult(internArg(filepath.Clean(stmt.ToolPath.relOrSelf().string())))
+		auxTools, foreignTools := e.resolveRunProgramAuxTools(anyStrs(stmt.ToolPaths))
+
+		if mainTool != nil {
+			foreignTools = append(foreignTools, mainTool)
+		}
+
+		generatorRefs := []NodeRef{res.LDRef}
+
+		for _, tool := range auxTools {
+			generatorRefs = append(generatorRefs, tool.ref)
+		}
+
+		generatorRefs = ctx.na.refList(dedupRefs(generatorRefs)...)
+
+		for output := range registeredPROut {
+			if info := e.codegen.lookup(output); info != nil && info.ProducerRef == prRef {
+				info.GeneratorRefs = generatorRefs
+			}
+		}
+
 		inputClosure := prInputClosure(snap, stmt)
 		inputInduced := prInputInducedIncludes(ctx, e.codegen, snap.scanner, snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse])
 
@@ -215,13 +225,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	pending := e.pendingEmit(pe)
-	generatorRefs := []NodeRef{res.LDRef}
-
-	for _, tool := range auxTools {
-		generatorRefs = append(generatorRefs, tool.ref)
-	}
-
-	generatorRefs = ctx.na.refList(dedupRefs(generatorRefs)...)
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet) {
 		if registeredPROut[out] {
@@ -235,7 +238,6 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			BuildInputs:     snap.inVFSs,
 			ProducerRef:     prRef,
 			ProducerMainOut: mainOutputVFS,
-			GeneratorRefs:   generatorRefs,
 			ParsedIncludes:  parsed,
 			OnUse:           pending,
 		})
@@ -259,6 +261,10 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		parsed := prOutputParsedIncludes(ctx.na, *stmt.StdoutFile, stmt, protoImportPbH)
 
 		registerOutput(*stdoutVFS, parsed)
+	}
+
+	for _, input := range snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse] {
+		snap.scanner.discoverInput(input, snap.scanCtx)
 	}
 }
 
