@@ -154,15 +154,15 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 	na.inputs.commit(len(inputs))
 
 	ref := e.emitNode(Node{
-		Platform:        instance.Platform,
-		Cmds:            na.cmdList(Cmd{CmdArgs: cmd, Cwd: cwd, Env: envVarsVCS}),
-		Env:             envVarsVCS,
-		inputPlan:       na.nodeInputs(InputChunks(inputs[:len(inputs):len(inputs)])),
-		BuildFromInputs: InputChunks(inputs[1:len(inputs):len(inputs)]),
-		Outputs:         na.vfsList(outs...),
-		KV:              &pbKV,
-		ForeignDepRefs:  na.noderefs.list(tools...),
-		Resources:       usesPython3,
+		Platform: instance.Platform,
+		Cmds:     na.cmdList(Cmd{CmdArgs: cmd, Cwd: cwd, Env: envVarsVCS}),
+		Env:      envVarsVCS,
+		Inputs:   NodeInputs{files: InputChunks(inputs[:len(inputs):len(inputs)]), roots: InputChunks(inputs[1:len(inputs):len(inputs)])},
+
+		Outputs:        na.vfsList(outs...),
+		KV:             &pbKV,
+		ForeignDepRefs: na.noderefs.list(tools...),
+		Resources:      usesPython3,
 	})
 
 	for _, out := range outs {

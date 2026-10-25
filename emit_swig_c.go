@@ -74,12 +74,12 @@ func (e *EmitContext) emitSwigC() {
 				Platform: instance.Platform,
 				Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 					Env: envVarsVCS}),
-				DepRefs:         na.refList(swigRef),
-				Env:             envVarsVCS,
-				inputPlan:       na.nodeInputs(inputChunks),
-				BuildFromInputs: inputChunks[1:],
-				Outputs:         na.vfsList(cOutVFS, pyOutVFS),
-				KV:              &swigCKV,
+				DepRefs: na.refList(swigRef),
+				Env:     envVarsVCS,
+				Inputs:  NodeInputs{files: inputChunks, roots: inputChunks[1:]},
+
+				Outputs: na.vfsList(cOutVFS, pyOutVFS),
+				KV:      &swigCKV,
 			}, swRef)
 		}
 

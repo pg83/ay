@@ -209,7 +209,7 @@ func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
 	var refs []NodeRef
 	var mains []VFS
 
-	for _, chunk := range node.inputPlan.files {
+	for _, chunk := range node.Inputs.files {
 		for _, input := range chunk {
 			if input.isSource() {
 				continue
@@ -243,7 +243,7 @@ func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
 
 	if len(mains) > 0 {
 		dedupers.with(func(deduper *DeDuper) {
-			for _, chunk := range node.inputPlan.files {
+			for _, chunk := range node.Inputs.files {
 				for _, input := range chunk {
 					deduper.addStable(input.strID())
 				}
@@ -260,7 +260,7 @@ func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
 			e.ctx.na.vfs.commit(len(extra))
 
 			if len(extra) > 0 {
-				node.inputPlan.files = appendInputChunks(e.ctx.na, node.inputPlan.files, e.ctx.na.inputList(extra))
+				node.Inputs.files = appendInputChunks(e.ctx.na, node.Inputs.files, e.ctx.na.inputList(extra))
 			}
 		})
 
@@ -329,23 +329,19 @@ func (e *EmitContext) resolveNodeCodegenRefs(node *Node) {
 }
 
 func (e *EmitContext) includeNodeInputs(node *Node) {
-	if node.inputPlan == nil {
-		node.inputPlan = e.ctx.na.nodeInputs(nil)
-	}
-
-	if node.BuildFromInputs == nil {
-		node.BuildFromInputs = node.inputPlan.files
-	}
-
-	if node.InputClosure.self != 0 || node.InputClosure.buckets != nil {
+	if node.Inputs.root != 0 {
 		return
+	}
+
+	if node.Inputs.roots == nil {
+		node.Inputs.roots = node.Inputs.files
 	}
 
 	var extra []Closure
 	var included InputChunks
 	var templates, textTemplates []VFS
 
-	for _, chunk := range node.inputPlan.files {
+	for _, chunk := range node.Inputs.files {
 		for _, input := range chunk {
 			if info := e.codegen.lookup(input); info != nil && len(info.IncludedBuildInputs) > 0 {
 				included = append(included, info.IncludedBuildInputs)
@@ -353,7 +349,7 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 		}
 	}
 
-	for _, chunk := range node.buildFromInputs() {
+	for _, chunk := range node.Inputs.roots {
 		for _, input := range chunk {
 			if deps := e.codegen.moduleIncludedDeps(input); deps != nil {
 				included = append(included, deps.Inputs)
@@ -361,7 +357,7 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 			}
 
 			template := strings.HasSuffix(input.relString(), ".in")
-			text := input.isSource() && slices.Contains(node.TextInputs, input)
+			text := input.isSource() && slices.Contains(node.Inputs.text, input)
 
 			if template {
 				if text {
@@ -388,7 +384,7 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 	}
 
 	dedupers.with(func(dd *DeDuper) {
-		bound := len(node.inputPlan.files) + len(included)
+		bound := len(node.Inputs.files) + len(included)
 
 		for _, cl := range extra {
 			bound += len(cl.bucketList())
@@ -396,7 +392,7 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 
 		chunks := e.ctx.na.inputs.alloc(bound)[:0]
 
-		for _, chunk := range node.inputPlan.files {
+		for _, chunk := range node.Inputs.files {
 			chunks = append(chunks, chunk)
 
 			for _, input := range chunk {
@@ -419,7 +415,7 @@ func (e *EmitContext) includeNodeInputs(node *Node) {
 		}
 
 		e.ctx.na.inputs.commit(len(chunks))
-		node.inputPlan.files = chunks[:len(chunks):len(chunks)]
+		node.Inputs.files = chunks[:len(chunks):len(chunks)]
 	})
 }
 
@@ -537,7 +533,7 @@ func (e *EmitContext) appendModuleOutputs(node *Node) {
 		if src := meta.Source.vfs(); src != 0 && src.isBuild() {
 			if info := e.codegen.lookup(src); info != nil && info.OwnerModule == e.instance.Path && len(info.ModuleOutputs) > 0 {
 				node.Outputs = append(node.Outputs, info.ModuleOutputs...)
-				node.inputPlan.files = appendInputChunks(e.ctx.na, node.inputPlan.files, e.ctx.na.inputList(e.ctx.na.vfsList(src)))
+				node.Inputs.files = appendInputChunks(e.ctx.na, node.Inputs.files, e.ctx.na.inputList(e.ctx.na.vfsList(src)))
 				node.DepRefs = append(node.DepRefs, info.ProducerRef)
 
 				added = true

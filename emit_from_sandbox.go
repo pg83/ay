@@ -154,7 +154,7 @@ func fromSandboxNode(na *NodeArenas, instance ModuleInstance, python3 ANY, stmt 
 		Platform:     instance.Platform,
 		Cmds:         na.cmdList(Cmd{CmdArgs: na.chunkList(args), Cwd: instance.Path.rel().build(), Env: env}),
 		Env:          env,
-		inputPlan:    na.nodeInputs(na.inputList(fromSandboxScriptInputs)),
+		Inputs:       NodeInputs{files: na.inputList(fromSandboxScriptInputs)},
 		KV:           &fromSandboxKV,
 		Outputs:      na.vfsList(outVFSs...),
 		Requirements: &fromSandboxRequirements,

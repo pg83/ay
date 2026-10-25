@@ -58,12 +58,12 @@ func (ctx *GenCtx) gztProtoSource(instance ModuleInstance, gztSource VFS, scanCt
 				CmdArgs: na.chunkList(gztCmdArgs(na, converterBin, producer.ProtoInclude, gztSource, genProto)),
 				Env:     env,
 			}),
-			Env:             env,
-			inputPlan:       na.nodeInputs(InputChunks(inputChunks[:len(inputChunks):len(inputChunks)])),
-			BuildFromInputs: InputChunks(inputChunks[1:len(inputChunks):len(inputChunks)]),
-			Outputs:         na.vfsList(genProto),
-			KV:              &gztprotoKV,
-			ForeignDepRefs:  na.refList(converterRef),
+			Env:    env,
+			Inputs: NodeInputs{files: InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]), roots: InputChunks(inputChunks[1:len(inputChunks):len(inputChunks)])},
+
+			Outputs:        na.vfsList(genProto),
+			KV:             &gztprotoKV,
+			ForeignDepRefs: na.refList(converterRef),
 		}
 
 		resolver := EmitContext{ctx: ctx, instance: instance, scanner: scanner, codegen: reg, d: &ModuleData{scanCtx: scanCtx}}

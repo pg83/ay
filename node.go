@@ -27,17 +27,13 @@ type Cmd struct {
 }
 
 type Node struct {
-	DisableCache        bool                             `json:"-"`
-	ResourceURIs        []STR                            `json:"-"`
-	Module              bool                             `json:"-"`
-	Cmds                []Cmd                            `json:"cmds"`
-	Env                 EnvVars                          `json:"env"`
-	Inputs              func(*NodeInputPlan) InputChunks `json:"-"`
-	inputPlan           *NodeInputPlan
-	BuildFromInputs     InputChunks    `json:"-"`
-	TextInputs          []VFS          `json:"-"`
+	DisableCache        bool           `json:"-"`
+	ResourceURIs        []STR          `json:"-"`
+	Module              bool           `json:"-"`
+	Cmds                []Cmd          `json:"cmds"`
+	Env                 EnvVars        `json:"env"`
+	Inputs              NodeInputs     `json:"-"`
 	InputNames          []STR          `json:"-"`
-	InputClosure        Closure        `json:"-"`
 	KV                  *KV            `json:"kv"`
 	KVExts              []KVExt        `json:"-"`
 	Outputs             []VFS          `json:"outputs"`
@@ -51,14 +47,6 @@ type Node struct {
 	Resources           []STR          `json:"-"`
 	ResourceGlobals     []ResourceDecl `json:"-"`
 	foreignToolsPending bool
-}
-
-func (n *Node) buildFromInputs() InputChunks {
-	if n.BuildFromInputs != nil {
-		return n.BuildFromInputs
-	}
-
-	return n.inputPlan.files
 }
 
 func (n *Node) buildDeps(fetchRefs *DenseMap[STR, NodeRef]) func(func(NodeRef) bool) {

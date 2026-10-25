@@ -81,9 +81,9 @@ func (e *EmitContext) emitDocsProtoSubmodule() *ModuleEmitResult {
 		ref := e.emitNode(Node{
 			Platform: instance.Platform,
 			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Cwd: srcRootDirVFS, Env: envVarsVCS}),
-			Env:      envVarsVCS, inputPlan: na.nodeInputs(na.inputList(na.vfsList(src, wrapper, template, protoc, docTool), inputs...)),
-			BuildFromInputs: na.inputList(na.vfsList(src, wrapper, template), inputs...),
-			Outputs:         na.vfsList(out), KV: &protoDocsKV, ForeignDepRefs: na.refList(protocRef, docRef), Resources: usesPython3,
+			Env:      envVarsVCS, Inputs: NodeInputs{files: na.inputList(na.vfsList(src, wrapper, template, protoc, docTool), inputs...), roots: na.inputList(na.vfsList(src, wrapper, template), inputs...)},
+
+			Outputs: na.vfsList(out), KV: &protoDocsKV, ForeignDepRefs: na.refList(protocRef, docRef), Resources: usesPython3,
 		})
 
 		e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})

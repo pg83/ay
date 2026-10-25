@@ -284,7 +284,7 @@ func (e *EmitContext) emitLD(
 		Platform:  instance.Platform,
 		Cmds:      cmds,
 		Env:       envFull,
-		inputPlan: na.nodeInputs(inputs),
+		Inputs:    NodeInputs{files: inputs},
 		Outputs:   outputs,
 		KV:        kv,
 		DepRefs:   deps,

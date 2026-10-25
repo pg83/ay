@@ -98,14 +98,6 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 }
 
 func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
-	if n.Inputs == nil {
-		if n.inputPlan == nil {
-			n.inputPlan = e.na.nodeInputs(nil)
-		}
-
-		n.Inputs = (*NodeInputPlan).evaluate
-	}
-
 	assert(len(n.Outputs) > 0, "emitter: node without outputs")
 	e.commandResources(n)
 
@@ -167,7 +159,7 @@ func (e *StreamingEmitter) activateSelectedInputs() BitSet {
 			continue
 		}
 
-		if plan := node.inputPlan; plan != nil && plan.scanner != nil {
+		if plan := &node.Inputs; plan.scanner != nil {
 			seen := activation[plan.scanner]
 
 			if seen == nil {

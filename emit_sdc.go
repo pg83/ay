@@ -78,7 +78,7 @@ func (e *EmitContext) emitSdcMetas() []VFS {
 		ref := e.ctx.emit.reserve()
 
 		node := Node{Platform: e.instance.Platform, Cmds: cmds, Env: envVarsVCS,
-			inputPlan: na.nodeInputs(na.inputList(na.vfsList(tool), scripts)), BuildFromInputs: na.inputList(scripts), Outputs: outputs,
+			Inputs: NodeInputs{files: na.inputList(na.vfsList(tool), scripts), roots: na.inputList(scripts)}, Outputs: outputs,
 			KV: &sdcMetaKV, Resources: usesPython3, DepRefs: na.refList(toolRef)}
 
 		pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
@@ -113,7 +113,7 @@ func (e *EmitContext) appendSdcMeta(node *Node, name string) {
 	}
 
 	node.Cmds = append(append([]Cmd(nil), node.Cmds...), Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS})
-	node.inputPlan.files = append(append(InputChunks(nil), node.inputPlan.files...), na.vfsList(script), inputs)
+	node.Inputs.files = append(append(InputChunks(nil), node.Inputs.files...), na.vfsList(script), inputs)
 	node.Outputs = append(append([]VFS(nil), node.Outputs...), out)
 	e.resolveNodeCodegenDeps(node)
 }

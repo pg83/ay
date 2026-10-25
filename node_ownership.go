@@ -124,12 +124,10 @@ func ownershipCheckNode(n *Node) {
 	ownershipCheckSlice("ResourceGlobals", n.ResourceGlobals, outSample)
 	ownershipCheckSlice("InputNames", n.InputNames, outSample)
 
-	if n.inputPlan != nil {
-		ownershipCheckSlice("Inputs", n.inputPlan.files, outSample)
+	ownershipCheckSlice("Inputs", n.Inputs.files, outSample)
 
-		for _, ch := range n.inputPlan.files {
-			ownershipCheckSlice("Inputs.chunk", ch, outSample)
-		}
+	for _, ch := range n.Inputs.files {
+		ownershipCheckSlice("Inputs.chunk", ch, outSample)
 	}
 
 	for ci := range n.Cmds {

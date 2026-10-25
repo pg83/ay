@@ -16,8 +16,8 @@ func (e *EmitContext) genExecTest() *ModuleEmitResult {
 	na := e.ctx.na
 
 	node := Node{Module: true, Platform: e.instance.Platform, KV: &unionKV, Env: envVarsVCS, Outputs: na.vfsList(out), Resources: usesPython3,
-		inputPlan: na.nodeInputs(na.inputList(na.vfsList(buildScriptsTouchPy))),
-		Cmds:      na.cmdList(e.pythonScriptCmd("touch.py", out.string()))}
+		Inputs: NodeInputs{files: na.inputList(na.vfsList(buildScriptsTouchPy))},
+		Cmds:   na.cmdList(e.pythonScriptCmd("touch.py", out.string()))}
 
 	ref := e.emitLazyModuleNode(node, nil, out)
 	result := e.scriptModuleResult(ref, out, nil, globals)

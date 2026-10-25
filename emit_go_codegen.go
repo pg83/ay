@@ -267,15 +267,15 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 	}
 
 	ref := e.emitNode(Node{
-		Platform:        instance.Platform,
-		Cmds:            na.cmdList(cmds...),
-		Env:             env,
-		inputPlan:       na.nodeInputs(na.inputList(inputs)),
-		BuildFromInputs: na.inputList(inputs[toolEnd:]),
-		KV:              &goCodegenKVs[st.kind],
-		Outputs:         na.vfsList(out),
-		ForeignDepRefs:  toolRefs,
-		Resources:       usesPython3,
+		Platform: instance.Platform,
+		Cmds:     na.cmdList(cmds...),
+		Env:      env,
+		Inputs:   NodeInputs{files: na.inputList(inputs), roots: na.inputList(inputs[toolEnd:])},
+
+		KV:             &goCodegenKVs[st.kind],
+		Outputs:        na.vfsList(out),
+		ForeignDepRefs: toolRefs,
+		Resources:      usesPython3,
 	})
 
 	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})

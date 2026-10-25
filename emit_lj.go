@@ -48,12 +48,12 @@ func (e *EmitContext) emitLJReserved(luaSrc, rawOut, compilerBin VFS, compilerLD
 			Cwd:     cwd,
 			Env:     env,
 		}),
-		Env:             env,
-		inputPlan:       na.nodeInputs(na.inputList(na.vfsList(compilerBin), na.vfsList(luaSrc))),
-		BuildFromInputs: na.inputList(na.vfsList(luaSrc)),
-		KV:              &ljKV,
-		Outputs:         na.vfsList(rawOut),
-		ForeignDepRefs:  na.refList(compilerLDRef),
+		Env:    env,
+		Inputs: NodeInputs{files: na.inputList(na.vfsList(compilerBin), na.vfsList(luaSrc)), roots: na.inputList(na.vfsList(luaSrc))},
+
+		KV:             &ljKV,
+		Outputs:        na.vfsList(rawOut),
+		ForeignDepRefs: na.refList(compilerLDRef),
 	}
 
 	e.emitReservedNode(node, id)

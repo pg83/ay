@@ -54,5 +54,5 @@ func (e *EmitContext) bpfCompileNode(stmt LlvmCompileStmt, out VFS) Node {
 
 	inputs = na.inputList(na.vfsList(buildScriptsClangWrapperPy), inputs...)
 
-	return Node{Platform: p, Cmds: commands, Env: env, inputPlan: na.nodeInputs(inputs), Outputs: outputs, KV: &bpfKV, Resources: resources}
+	return Node{Platform: p, Cmds: commands, Env: env, Inputs: NodeInputs{files: inputs}, Outputs: outputs, KV: &bpfKV, Resources: resources}
 }

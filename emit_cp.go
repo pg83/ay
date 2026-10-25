@@ -40,11 +40,11 @@ func composeCPNode(instance ModuleInstance, src VFS, dst VFS, extraInputs []VFS,
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:        env,
-		inputPlan:  na.nodeInputs(inputs),
-		TextInputs: na.vfsList(append([]VFS{src}, ownInputs...)...),
-		KV:         &cpKV,
-		Outputs:    na.vfsList(dst),
-		Resources:  usesPython3,
+		Env:    env,
+		Inputs: NodeInputs{files: inputs, text: na.vfsList(append([]VFS{src}, ownInputs...)...)},
+
+		KV:        &cpKV,
+		Outputs:   na.vfsList(dst),
+		Resources: usesPython3,
 	}
 }

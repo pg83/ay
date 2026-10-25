@@ -496,7 +496,7 @@ func (e *EmitContext) flushGoSrcs() {
 		Platform:  instance.Platform,
 		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(goSymabisHead, e.goInclSplitArgs(), goSymabisDefs, tail[:nt:nt]), Env: goVcsEnv}),
 		Env:       goVcsEnv,
-		inputPlan: na.nodeInputs(na.inputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs)),
+		Inputs:    NodeInputs{files: na.inputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs)},
 		KV:        &goToolKV,
 		Outputs:   na.vfsList(out),
 		Resources: goToolResources(na, e.peers.ResourceGlobals),
@@ -918,7 +918,7 @@ func (e *EmitContext) goSrcList(goRes *GoSrcsResult, objOuts []VFS) (srcArgs, cg
 }
 
 func (e *EmitContext) resolveGoBuildFromDeps(node *Node, inputs InputChunks) {
-	sources := Node{inputPlan: e.ctx.na.nodeInputs(inputs), DepRefs: node.DepRefs}
+	sources := Node{Inputs: NodeInputs{files: inputs}, DepRefs: node.DepRefs}
 
 	e.resolveNodeCodegenRefs(&sources)
 	node.DepRefs = sources.DepRefs
@@ -1072,13 +1072,13 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			tail[:nt:nt],
 			goToolCmdEnd,
 		), Env: env}),
-		Env:          env,
-		inputPlan:    na.nodeInputs(inputs),
-		InputClosure: Closure{self: outPath},
-		KV:           &goKV,
-		Outputs:      na.vfsList(outPath, build(dir, "/", outName, ".a.vet.out"), build(dir, "/", outName, ".a.vet.txt")),
-		DepRefs:      depBlock[:ndep],
-		Resources:    goToolResources(na, resourceGlobals),
+		Env:    env,
+		Inputs: NodeInputs{files: inputs, root: outPath},
+
+		KV:        &goKV,
+		Outputs:   na.vfsList(outPath, build(dir, "/", outName, ".a.vet.out"), build(dir, "/", outName, ".a.vet.txt")),
+		DepRefs:   depBlock[:ndep],
+		Resources: goToolResources(na, resourceGlobals),
 	}
 
 	e.resolveGoBuildFromDeps(&node, na.inputList(ownBuildInputs, embedInputs))
@@ -1343,15 +1343,15 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	na.cmds.commit(kc)
 
 	node := Node{
-		Platform:     instance.Platform,
-		Cmds:         cmds[:kc:kc],
-		Env:          env,
-		inputPlan:    na.nodeInputs(inputs),
-		InputClosure: Closure{self: outPath},
-		KV:           kv,
-		Outputs:      outputs,
-		DepRefs:      deps[:k:k],
-		Resources:    goToolResources(na, resourceGlobals),
+		Platform: instance.Platform,
+		Cmds:     cmds[:kc:kc],
+		Env:      env,
+		Inputs:   NodeInputs{files: inputs, root: outPath},
+
+		KV:        kv,
+		Outputs:   outputs,
+		DepRefs:   deps[:k:k],
+		Resources: goToolResources(na, resourceGlobals),
 	}
 
 	if !isTest {

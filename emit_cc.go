@@ -356,14 +356,14 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 	}
 
 	node := Node{
-		Platform:     instance.Platform,
-		Cmds:         cmds,
-		Env:          env,
-		inputPlan:    na.nodeInputs(allInputs),
-		InputClosure: in.IncludeView,
-		Outputs:      na.vfsList(outVFS),
-		KV:           &ccKV,
-		Resources:    resources,
+		Platform: instance.Platform,
+		Cmds:     cmds,
+		Env:      env,
+		Inputs:   NodeInputs{files: allInputs, root: in.IncludeView.self},
+
+		Outputs:   na.vfsList(outVFS),
+		KV:        &ccKV,
+		Resources: resources,
 	}
 
 	if reserved != 0 {

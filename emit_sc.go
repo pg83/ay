@@ -46,13 +46,12 @@ func (e *EmitContext) emitSCReserved(srcVFS, headerVFS, domschemecBinary VFS, do
 			CmdArgs: na.chunkList(na.anyList(domschemecBinary.any(), argDashIn.any(), srcVFS.any(), argDashOut.any(), headerVFS.any())),
 			Env:     env,
 		}),
-		Env:             env,
-		inputPlan:       na.nodeInputs(inputs),
-		BuildFromInputs: inputs[1:],
-		InputClosure:    closure,
-		KV:              &scKV,
-		Outputs:         na.vfsList(headerVFS),
-		ForeignDepRefs:  na.refList(domschemecLDRef),
+		Env:    env,
+		Inputs: NodeInputs{files: inputs, roots: inputs[1:], root: closure.self},
+
+		KV:             &scKV,
+		Outputs:        na.vfsList(headerVFS),
+		ForeignDepRefs: na.refList(domschemecLDRef),
 	}
 
 	e.emitReservedNode(node, id)

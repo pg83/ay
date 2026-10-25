@@ -465,16 +465,15 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 	}
 
 	node := Node{
-		Platform:        instance.Platform,
-		Cmds:            na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
-		Env:             env,
-		inputPlan:       na.nodeInputs(nodeInputs),
-		BuildFromInputs: nodeInputs[1:],
-		InputClosure:    closure,
-		Outputs:         na.vfsList(outputPath),
-		KV:              &pyCodegenKV,
-		ForeignDepRefs:  toolRefs,
-		Resources:       tool.resources,
+		Platform: instance.Platform,
+		Cmds:     na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
+		Env:      env,
+		Inputs:   NodeInputs{files: nodeInputs, roots: nodeInputs[1:], root: closure.self},
+
+		Outputs:        na.vfsList(outputPath),
+		KV:             &pyCodegenKV,
+		ForeignDepRefs: toolRefs,
+		Resources:      tool.resources,
 	}
 
 	pyRef := e.emitNode(node)
@@ -797,7 +796,7 @@ func (e *EmitContext) emitPyRegistration(registration PyRegistration) {
 		Platform:  ctx.target,
 		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(pyCmdArgs), Env: env}),
 		Env:       env,
-		inputPlan: na.nodeInputs(na.inputList(scriptChunk)),
+		Inputs:    NodeInputs{files: na.inputList(scriptChunk)},
 		Outputs:   na.vfsList(regCppVFS),
 		KV:        &pyCodegenKV,
 		Resources: usesPython3,

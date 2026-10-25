@@ -308,8 +308,8 @@ func (e *EmitContext) emitUserverProtoNode(batch UserverProtoBatch, file Userver
 	e.emitReservedNode(Node{
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Cwd: cwd, Env: envVarsVCS}),
-		Env:      envVarsVCS, inputPlan: na.nodeInputs(na.inputList(inputs[0], inputs[1:]...)),
-		BuildFromInputs: na.inputList(inputs[0][2:], inputs[1:]...),
-		Outputs:         outputs, KV: kv, ForeignDepRefs: na.refList(protocRef, toolRef),
+		Env:      envVarsVCS, Inputs: NodeInputs{files: na.inputList(inputs[0], inputs[1:]...), roots: na.inputList(inputs[0][2:], inputs[1:]...)},
+
+		Outputs: outputs, KV: kv, ForeignDepRefs: na.refList(protocRef, toolRef),
 	}, ref)
 }

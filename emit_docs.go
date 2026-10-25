@@ -102,7 +102,7 @@ func (e *EmitContext) docsNode(cmds []Cmd, inputs, buildFrom, outputs, needs []V
 
 	node := Node{
 		Module: module, Cmds: na.cmdList(cmds...),
-		inputPlan: na.nodeInputs(na.inputList(na.vfsList(dedup(inputs)...))), BuildFromInputs: na.inputList(na.vfsList(dedup(buildFrom)...)), Outputs: na.vfsList(outputs...),
+		Inputs: NodeInputs{files: na.inputList(na.vfsList(dedup(inputs)...)), roots: na.inputList(na.vfsList(dedup(buildFrom)...))}, Outputs: na.vfsList(outputs...),
 		KV: &docsKV, Env: env, Platform: e.instance.Platform,
 		Resources: na.strs.list(resources...), ForeignDepRefs: na.refList(foreign...),
 	}

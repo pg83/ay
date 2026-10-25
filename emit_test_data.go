@@ -122,7 +122,7 @@ func (ctx *GenCtx) emitExternalLocalTestData(rel string) NodeRef {
 
 	src := source(rel)
 	args := []string{testYMakePython3, "$(S)/build/scripts/fs_tools.py", "copy", src.string(), out.string()}
-	ref := ctx.emit.emit(&Node{DisableCache: true, Platform: testNoPlatform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args))}), inputPlan: ctx.na.nodeInputs(ctx.na.inputList(ctx.na.vfsList(src))), Outputs: ctx.na.vfsList(out), KV: &testNodesKV})
+	ref := ctx.emit.emit(&Node{DisableCache: true, Platform: testNoPlatform, Cmds: ctx.na.cmdList(Cmd{CmdArgs: ctx.na.chunkList(testArgs(args))}), Inputs: NodeInputs{files: ctx.na.inputList(ctx.na.vfsList(src))}, Outputs: ctx.na.vfsList(out), KV: &testNodesKV})
 
 	registry.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref})
 

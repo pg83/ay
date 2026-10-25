@@ -204,10 +204,10 @@ func (ctx *GenCtx) foreignToolRef(tool *foreignToolCandidate) NodeRef {
 			CmdArgs: ctx.na.chunkList(ctx.na.anyList(strBinMv.any(), from.any(), to.any())),
 			Cwd:     bldRootDirVFS,
 		}),
-		inputPlan: ctx.na.nodeInputs(ctx.na.inputList(ctx.na.vfsList(from))),
-		Outputs:   ctx.na.vfsList(to),
-		DepRefs:   ctx.na.refList(tool.host.LDRef),
-		KV:        &KV{P: pkCP, PC: pcLightBlue},
+		Inputs:  NodeInputs{files: ctx.na.inputList(ctx.na.vfsList(from))},
+		Outputs: ctx.na.vfsList(to),
+		DepRefs: ctx.na.refList(tool.host.LDRef),
+		KV:      &KV{P: pkCP, PC: pcLightBlue},
 	})
 
 	return tool.boundRef

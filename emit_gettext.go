@@ -23,7 +23,7 @@ func (e *EmitContext) emitGettextSource(input, output VFS) {
 			Platform:  instance.Platform,
 			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(python.any(), gettextScript.any(), strO.any(), output.any(), input.any())), Env: envVarsVCS}),
 			Env:       envVarsVCS,
-			inputPlan: na.nodeInputs(na.inputList(na.vfsList(gettextScript, input))),
+			Inputs:    NodeInputs{files: na.inputList(na.vfsList(gettextScript, input))},
 			Outputs:   na.vfsList(output),
 			KV:        &gettextKV,
 			Resources: usesPython3,

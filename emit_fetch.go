@@ -22,7 +22,7 @@ func emitResourceFetch(ctx *GenCtx, decl ResourceDecl) NodeRef {
 			argS.any(),
 			decl.URI.any(),
 			output.any()))}),
-		inputPlan:    na.nodeInputs(na.inputList(fetchScriptInputs(na, ctx.scripts))),
+		Inputs:       NodeInputs{files: na.inputList(fetchScriptInputs(na, ctx.scripts))},
 		KV:           &fetchKV,
 		Outputs:      na.vfsList(output),
 		Requirements: &fetchRequirements,

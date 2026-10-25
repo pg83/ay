@@ -40,14 +40,14 @@ func (e *EmitContext) emitR5Reserved(
 	}
 
 	node := Node{
-		Platform:        instance.Platform,
-		Cmds:            na.cmdList(cmd0, cmd1),
-		Env:             env,
-		inputPlan:       na.nodeInputs(na.inputList(na.vfsList(ragel5BinPath, rlgenCdBinPath, srcVFS), closure.bucketList()...)),
-		BuildFromInputs: na.inputList(na.vfsList(srcVFS), closure.bucketList()...),
-		Outputs:         na.vfsList(tmpVFS, cppVFS),
-		KV:              &r5KV,
-		ForeignDepRefs:  na.refList(ragel5LD, rlgenCdLD),
+		Platform: instance.Platform,
+		Cmds:     na.cmdList(cmd0, cmd1),
+		Env:      env,
+		Inputs:   NodeInputs{files: na.inputList(na.vfsList(ragel5BinPath, rlgenCdBinPath, srcVFS), closure.bucketList()...), roots: na.inputList(na.vfsList(srcVFS), closure.bucketList()...)},
+
+		Outputs:        na.vfsList(tmpVFS, cppVFS),
+		KV:             &r5KV,
+		ForeignDepRefs: na.refList(ragel5LD, rlgenCdLD),
 	}
 
 	e.emitReservedNode(node, id)

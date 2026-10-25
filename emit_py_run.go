@@ -511,16 +511,15 @@ func (e *EmitContext) emitPYRun(
 	}
 
 	node := Node{
-		Platform:        e.instance.Platform,
-		Cmds:            na.cmdList(cmd),
-		Env:             env,
-		inputPlan:       na.nodeInputs(inputChunks),
-		BuildFromInputs: appendInputChunks(na, na.inputList(directSources, dataBuilds), inputClosure),
-		TextInputs:      textInputs,
-		KV:              kv,
-		Outputs:         outputs,
-		ForeignDepRefs:  toolRefs,
-		Resources:       resources,
+		Platform: e.instance.Platform,
+		Cmds:     na.cmdList(cmd),
+		Env:      env,
+		Inputs:   NodeInputs{files: inputChunks, roots: appendInputChunks(na, na.inputList(directSources, dataBuilds), inputClosure), text: textInputs},
+
+		KV:             kv,
+		Outputs:        outputs,
+		ForeignDepRefs: toolRefs,
+		Resources:      resources,
 	}
 
 	e.emitReservedNode(node, id)

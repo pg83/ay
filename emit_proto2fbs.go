@@ -26,12 +26,12 @@ func (e *EmitContext) emitProto2Fbs(stmt Proto2FbsStmt, output VFS) {
 			Cmd{CmdArgs: na.chunkList(na.anyList(tool.any(), argI.any(), str4.any(), argI.any(), srcRootDirVFS.any(), strProto.any(), input.any())), Cwd: bindir, Env: envVarsVCS},
 			Cmd{CmdArgs: na.chunkList(na.anyList(d.tc.Python3.any(), fsTools.any(), argRename.any(), temporary.any(), output.any())), Env: envVarsVCS},
 		),
-		inputPlan: na.nodeInputs(na.inputList(na.vfsList(tool, input), ctx.scripts[fsTools.rel()])),
-		Outputs:   na.vfsList(output), ForeignDepRefs: na.refList(toolRef), Resources: usesPython3,
+		Inputs:  NodeInputs{files: na.inputList(na.vfsList(tool, input), ctx.scripts[fsTools.rel()])},
+		Outputs: na.vfsList(output), ForeignDepRefs: na.refList(toolRef), Resources: usesPython3,
 	}
 
-	node.inputPlan.files = append(node.inputPlan.files, imports.bucketList()...)
-	node.BuildFromInputs = na.inputList(node.inputPlan.files[0][1:], node.inputPlan.files[1:]...)
+	node.Inputs.files = append(node.Inputs.files, imports.bucketList()...)
+	node.Inputs.roots = na.inputList(node.Inputs.files[0][1:], node.Inputs.files[1:]...)
 
 	var parsed ParsedIncludeSet
 

@@ -79,7 +79,7 @@ func (e *EmitContext) emitConfigureFile(srcVFS, outVFS VFS) NodeRef {
 			Platform:  instance.Platform,
 			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs), Env: env}),
 			Env:       env,
-			inputPlan: na.nodeInputs(InputChunks(inputs[:len(inputs):len(inputs)])),
+			Inputs:    NodeInputs{files: InputChunks(inputs[:len(inputs):len(inputs)])},
 			KV:        &cfKV,
 			Outputs:   na.vfsList(outVFS),
 			Resources: usesPython3,

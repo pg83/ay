@@ -29,7 +29,7 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 
 	needs = append([]VFS{}, needs...)
 
-	for _, chunk := range node.inputPlan.files {
+	for _, chunk := range node.Inputs.files {
 		for _, input := range chunk {
 			if input.isBuild() {
 				needs = append(needs, input)
@@ -41,7 +41,7 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 
 	refs := append([]NodeRef{}, node.DepRefs...)
 
-	for _, chunk := range node.inputPlan.files {
+	for _, chunk := range node.Inputs.files {
 		for _, input := range chunk {
 			if info := reg.lookup(input); info != nil {
 				refs = append(refs, info.ProducerRef)
@@ -76,7 +76,11 @@ func (e *EmitContext) emitLazyModuleNode(node Node, needs []VFS, ownedOutputs ..
 
 	var templates []VFS
 
-	for _, chunk := range node.buildFromInputs() {
+	if node.Inputs.roots == nil {
+		node.Inputs.roots = node.Inputs.files
+	}
+
+	for _, chunk := range node.Inputs.roots {
 		for _, input := range chunk {
 			if input.isBuild() && strings.HasSuffix(input.relString(), ".in") && reg.lookup(input) != nil {
 				templates = append(templates, input)

@@ -140,15 +140,15 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 		cmds = cmds[:len(cmds):len(cmds)]
 
 		e.emitReservedNode(Node{
-			Platform:        instance.Platform,
-			Cmds:            cmds,
-			DepRefs:         na.refList(bisonRef, m4Ref),
-			Env:             env,
-			inputPlan:       na.nodeInputs(inputs),
-			BuildFromInputs: inputs[1:],
-			Outputs:         na.vfsList(headerVFS, generatedVFS),
-			KV:              &bisonYKV,
-			Resources:       usesPython3,
+			Platform: instance.Platform,
+			Cmds:     cmds,
+			DepRefs:  na.refList(bisonRef, m4Ref),
+			Env:      env,
+			Inputs:   NodeInputs{files: inputs, roots: inputs[1:]},
+
+			Outputs:   na.vfsList(headerVFS, generatedVFS),
+			KV:        &bisonYKV,
+			Resources: usesPython3,
 		}, ycRef)
 	}
 

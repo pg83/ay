@@ -84,7 +84,7 @@ func (e *EmitContext) emitFortranSource(meta SrcMeta) {
 
 	ref := e.emitNode(Node{Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: args, Env: envVarsVCS, Resources: e.d.cc.FortranResourceUses}), Env: envVarsVCS,
-		inputPlan: na.nodeInputs(na.dedupClosureChunks(closure)), InputClosure: closure, Outputs: na.vfsList(out),
+		Inputs: NodeInputs{files: na.dedupClosureChunks(closure), root: closure.self}, Outputs: na.vfsList(out),
 		KV: &fortranKV, Resources: e.d.cc.FortranResources})
 
 	e.collectObj(ref, out, meta)

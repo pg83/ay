@@ -645,18 +645,16 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	na.vfs.commit(len(tools))
 	tools = tools[:len(tools):len(tools)]
 
-	inputNode := Node{inputPlan: na.nodeInputs(na.inputList(tools, spec.inSources, spec.inBuilds)), Outputs: outputs,
-		BuildFromInputs: na.inputList(spec.inVFSs),
-		TextInputs:      e.textInputSources(spec.inVFSs, len(spec.inVFSs)-stmt.INNoParse)}
+	inputNode := Node{Inputs: NodeInputs{files: na.inputList(tools, spec.inSources, spec.inBuilds), roots: na.inputList(spec.inVFSs), text: e.textInputSources(spec.inVFSs, len(spec.inVFSs)-stmt.INNoParse)}, Outputs: outputs}
 
 	e.includeNodeInputs(&inputNode)
 
 	var inputs InputChunks
 
 	dedupers.with(func(deduper *DeDuper) {
-		chunks := na.inputs.alloc(len(inputNode.inputPlan.files) + 2)[:0]
+		chunks := na.inputs.alloc(len(inputNode.Inputs.files) + 2)[:0]
 
-		for _, chunk := range inputNode.inputPlan.files {
+		for _, chunk := range inputNode.Inputs.files {
 			chunks = append(chunks, na.filterSeen(deduper, chunk))
 		}
 
@@ -701,16 +699,14 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	}
 
 	node := Node{
-		Platform:        instance.Platform,
-		Cmds:            na.cmdList(cmd),
-		Env:             env,
-		inputPlan:       na.nodeInputs(inputs),
-		Outputs:         outputs,
-		KV:              kv,
-		ForeignDepRefs:  toolRefs,
-		DepRefs:         inputNode.DepRefs,
-		BuildFromInputs: inputNode.BuildFromInputs,
-		TextInputs:      inputNode.TextInputs,
+		Platform:       instance.Platform,
+		Cmds:           na.cmdList(cmd),
+		Env:            env,
+		Inputs:         NodeInputs{files: inputs, roots: inputNode.Inputs.roots, text: inputNode.Inputs.text},
+		Outputs:        outputs,
+		KV:             kv,
+		ForeignDepRefs: toolRefs,
+		DepRefs:        inputNode.DepRefs,
 	}
 
 	e.resolveNodeCodegenRefs(&node)

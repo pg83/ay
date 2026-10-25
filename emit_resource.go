@@ -181,16 +181,15 @@ func (e *EmitContext) buildObjcopyNode(oc *ObjcopyEmitCtx, kv *KV, outputObj VFS
 	env := envVarsVCS
 
 	node := Node{
-		Platform:        e.instance.Platform,
-		Cmds:            na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Resources: resources, Env: env}),
-		Env:             env,
-		inputPlan:       na.nodeInputs(inputs),
-		BuildFromInputs: buildFrom,
-		TextInputs:      textInputs,
-		Outputs:         na.vfsList(outputObj),
-		KV:              kv,
-		Resources:       e.instance.Platform.UsesPython3Clang,
-		DepRefs:         deps,
+		Platform: e.instance.Platform,
+		Cmds:     na.cmdList(Cmd{CmdArgs: objcopyCmdArgs(oc, outputObj, payload), Resources: resources, Env: env}),
+		Env:      env,
+		Inputs:   NodeInputs{files: inputs, roots: buildFrom, text: textInputs},
+
+		Outputs:   na.vfsList(outputObj),
+		KV:        kv,
+		Resources: e.instance.Platform.UsesPython3Clang,
+		DepRefs:   deps,
 	}
 
 	ref := e.emitNode(node)
@@ -659,15 +658,14 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		tail = tail[:len(tail):len(tail)]
 
 		e.emitReservedNode(Node{
-			Platform:        instance.Platform,
-			Cmds:            na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Resources: resourceUses, Env: env}),
-			Env:             env,
-			inputPlan:       na.nodeInputs(na.inputList(payloadBuilds, tail)),
-			BuildFromInputs: na.inputList(payloadBuilds),
-			TextInputs:      e.resourceTextInputs(chunk),
-			Outputs:         na.vfsList(aux),
-			KV:              &rawAuxKV,
-			DepRefs:         deps,
+			Platform: instance.Platform,
+			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Resources: resourceUses, Env: env}),
+			Env:      env,
+			Inputs:   NodeInputs{files: na.inputList(payloadBuilds, tail), roots: na.inputList(payloadBuilds), text: e.resourceTextInputs(chunk)},
+
+			Outputs: na.vfsList(aux),
+			KV:      &rawAuxKV,
+			DepRefs: deps,
 		}, auxRef)
 
 		ccRef := ctx.emit.reserve()

@@ -503,7 +503,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 		Platform:  instance.Platform,
 		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(args[:len(args):len(args)]), Env: env}),
 		Env:       env,
-		inputPlan: na.nodeInputs(inputsChunks),
+		Inputs:    NodeInputs{files: inputsChunks},
 		KV:        &resourcesKV,
 		Outputs:   na.vfsList(dst),
 		DepRefs:   depRefs,

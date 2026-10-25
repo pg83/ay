@@ -154,15 +154,14 @@ func (e *EmitContext) emitAliceEnumSrcStmt(stmt *GenerateEnumSerializationStmt) 
 		info.GeneratorRefs = na.refList(toolRef)
 
 		e.emitReservedNode(Node{
-			Platform:        e.instance.Platform,
-			Cmds:            na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS}),
-			Env:             envVarsVCS,
-			inputPlan:       na.nodeInputs(inputs),
-			BuildFromInputs: na.inputList(inputs[0][1:], inputs[1:]...),
-			InputClosure:    closure,
-			Outputs:         na.vfsList(output),
-			ForeignDepRefs:  na.refList(toolRef),
-			KV:              &enKV,
+			Platform: e.instance.Platform,
+			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS}),
+			Env:      envVarsVCS,
+			Inputs:   NodeInputs{files: inputs, roots: na.inputList(inputs[0][1:], inputs[1:]...), root: closure.self},
+
+			Outputs:        na.vfsList(output),
+			ForeignDepRefs: na.refList(toolRef),
+			KV:             &enKV,
 		}, ref)
 	})
 
@@ -221,13 +220,12 @@ func (e *EmitContext) emitEN(
 		Platform: e.instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
-		Env:             env,
-		inputPlan:       na.nodeInputs(inputs),
-		BuildFromInputs: na.inputList(inputs[0][1:], inputs[1:]...),
-		InputClosure:    closure,
-		KV:              &enKV,
-		Outputs:         outputs,
-		ForeignDepRefs:  foreignDepRefs,
+		Env:    env,
+		Inputs: NodeInputs{files: inputs, roots: na.inputList(inputs[0][1:], inputs[1:]...), root: closure.self},
+
+		KV:             &enKV,
+		Outputs:        outputs,
+		ForeignDepRefs: foreignDepRefs,
 	}
 
 	e.emitReservedNode(node, id)

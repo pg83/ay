@@ -82,12 +82,12 @@ func (e *EmitContext) emitYmapsSprotoHeaderSnap(scanner *IncludeScanner, p Ymaps
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Cwd: srcRootDirVFS,
 			Env: env}),
-		Env:             env,
-		inputPlan:       na.nodeInputs(na.inputList(na.vfsList(sprotocBinary), closure)),
-		BuildFromInputs: na.inputList(closure),
-		Outputs:         na.vfsList(p.sprotoH),
-		KV:              &ymapsSprotoKV,
-		ForeignDepRefs:  na.refList(sprotocLDRef),
+		Env:    env,
+		Inputs: NodeInputs{files: na.inputList(na.vfsList(sprotocBinary), closure), roots: na.inputList(closure)},
+
+		Outputs:        na.vfsList(p.sprotoH),
+		KV:             &ymapsSprotoKV,
+		ForeignDepRefs: na.refList(sprotocLDRef),
 	}
 
 	e.emitReservedNode(node, p.ref)

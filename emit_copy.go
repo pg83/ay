@@ -134,7 +134,7 @@ func (e *EmitContext) emitCopyFileNodeSnap(entry CopyFileEntry, st CopyEmitState
 	node := composeCPNode(e.instance, st.srcVFS, st.dstVFS, closure, e.d.tc, ctx.scripts, ctx.na)
 
 	if entry.WithContext {
-		node.TextInputs = node.TextInputs[1:]
+		node.Inputs.text = node.Inputs.text[1:]
 	}
 
 	e.emitReservedNode(node, st.ref)

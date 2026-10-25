@@ -23,12 +23,12 @@ func (e *EmitContext) emitLibraryFmlSource(src ANY) {
 				strT.any(),
 				srcVFS.any(),
 			)), Env: env}),
-			Env:             env,
-			inputPlan:       na.nodeInputs(na.inputList(na.vfsList(toolBin), na.vfsList(srcVFS))),
-			BuildFromInputs: na.inputList(na.vfsList(srcVFS)),
-			KV:              &fmKV,
-			Outputs:         na.vfsList(outVFS),
-			ForeignDepRefs:  na.refList(toolRef),
+			Env:    env,
+			Inputs: NodeInputs{files: na.inputList(na.vfsList(toolBin), na.vfsList(srcVFS)), roots: na.inputList(na.vfsList(srcVFS))},
+
+			KV:             &fmKV,
+			Outputs:        na.vfsList(outVFS),
+			ForeignDepRefs: na.refList(toolRef),
 		}
 
 		e.emitReservedNode(node, ref)

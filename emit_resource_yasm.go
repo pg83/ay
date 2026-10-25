@@ -166,7 +166,7 @@ func (e *EmitContext) emitResourceJoin(files []string, suffix string, tag STR, f
 	ref := e.emitNode(Node{
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS}),
-		Env:      envVarsVCS, inputPlan: na.nodeInputs(na.inputList(na.vfsList(inputs...), e.ctx.scripts[script.rel()])),
+		Env:      envVarsVCS, Inputs: NodeInputs{files: na.inputList(na.vfsList(inputs...), e.ctx.scripts[script.rel()])},
 		Outputs: na.vfsList(out), KV: &jsNodeKV, Resources: usesPython3,
 	})
 

@@ -65,12 +65,12 @@ func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6B
 		Platform: instance.Platform,
 		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
 			Env: env}),
-		Env:             env,
-		inputPlan:       na.nodeInputs(na.inputList(head2, na.vfsList(closure...))),
-		BuildFromInputs: na.inputList(head2[1:], na.vfsList(closure...)),
-		Outputs:         na.vfsList(outVFS),
-		KV:              &r6KV,
-		ForeignDepRefs:  na.refList(ragel6LD),
+		Env:    env,
+		Inputs: NodeInputs{files: na.inputList(head2, na.vfsList(closure...)), roots: na.inputList(head2[1:], na.vfsList(closure...))},
+
+		Outputs:        na.vfsList(outVFS),
+		KV:             &r6KV,
+		ForeignDepRefs: na.refList(ragel6LD),
 	}
 
 	e.emitReservedNode(node, id)

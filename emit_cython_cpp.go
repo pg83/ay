@@ -395,12 +395,12 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 				Platform: instance.Platform,
 				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 					Env: env}),
-				Env:        env,
-				inputPlan:  na.nodeInputs(na.inputList(buildInputs)),
-				TextInputs: textInputs,
-				Outputs:    outputs,
-				KV:         &cythonCppKV,
-				Resources:  usesPython3,
+				Env:    env,
+				Inputs: NodeInputs{files: na.inputList(buildInputs), text: textInputs},
+
+				Outputs:   outputs,
+				KV:        &cythonCppKV,
+				Resources: usesPython3,
 			}, cyRef)
 		}
 

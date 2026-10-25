@@ -2,7 +2,7 @@ package main
 
 import "slices"
 
-type NodeInputPlan struct {
+type NodeInputs struct {
 	files       InputChunks
 	roots       InputChunks
 	root        VFS
@@ -13,28 +13,16 @@ type NodeInputPlan struct {
 	deferred    bool
 }
 
-func (na *NodeArenas) nodeInputs(files InputChunks) *NodeInputPlan {
-	plan := na.inputPlans.one()
-
-	*plan = NodeInputPlan{files: files, na: na}
-
-	return plan
-}
-
 func (e *EmitContext) prepareNodeInputs(node *Node) {
-	if node.inputPlan == nil {
-		node.inputPlan = e.ctx.na.nodeInputs(nil)
+	plan := &node.Inputs
+
+	if plan.root != 0 {
+		plan.roots = nil
+	} else if plan.roots == nil {
+		plan.roots = plan.files
 	}
 
-	plan := node.inputPlan
-
-	if node.InputClosure.self != 0 {
-		plan.root = node.InputClosure.self
-	} else {
-		plan.roots = node.buildFromInputs()
-	}
-
-	plan.text = node.TextInputs
+	plan.na = e.ctx.na
 	plan.scanner = e.scanner
 
 	plan.eachRoot(func(root VFS) {
@@ -59,11 +47,9 @@ func (e *EmitContext) prepareNodeInputs(node *Node) {
 	if !plan.deferred {
 		plan.scanner = nil
 	}
-
-	node.Inputs = (*NodeInputPlan).evaluate
 }
 
-func (p *NodeInputPlan) eachRoot(visit func(VFS)) {
+func (p *NodeInputs) eachRoot(visit func(VFS)) {
 	if p.root != 0 {
 		visit(p.root)
 	}
@@ -77,7 +63,7 @@ func (p *NodeInputPlan) eachRoot(visit func(VFS)) {
 	}
 }
 
-func (p *NodeInputPlan) evaluate() InputChunks {
+func (p *NodeInputs) evaluate() InputChunks {
 	if p.scanner == nil || !p.deferred {
 		return p.files
 	}
@@ -144,7 +130,7 @@ func (p *NodeInputPlan) evaluate() InputChunks {
 	return result
 }
 
-func (p *NodeInputPlan) activate(seen *BitSet, selectProducer func(NodeRef)) {
+func (p *NodeInputs) activate(seen *BitSet, selectProducer func(NodeRef)) {
 	if p.scanner == nil {
 		return
 	}
@@ -178,9 +164,9 @@ func (p *NodeInputPlan) activate(seen *BitSet, selectProducer func(NodeRef)) {
 }
 
 func (n *Node) establishedInputRefs(na *NodeArenas) {
-	plan := n.inputPlan
+	plan := &n.Inputs
 
-	if plan == nil || plan.scanner == nil || !plan.deferred {
+	if plan.scanner == nil || !plan.deferred {
 		return
 	}
 
@@ -215,10 +201,9 @@ func (n *Node) establishedInputRefs(na *NodeArenas) {
 }
 
 func (n *Node) consumeInputs() InputChunks {
-	inputs := n.Inputs(n.inputPlan)
+	inputs := n.Inputs.evaluate()
 
-	n.Inputs = nil
-	n.inputPlan = nil
+	n.Inputs = NodeInputs{}
 
 	return inputs
 }
