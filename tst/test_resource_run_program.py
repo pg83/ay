@@ -389,6 +389,19 @@ class RunProgramTest(unittest.TestCase):
         for expected in ("$(B)/lib/x.h", "$(S)/lib/other.pb.h", "$(S)/lib/dep.h"):
             self.assertIn(expected, inputs)
 
+    def test_proto_input_imports_reach_generated_headers(self):
+        files = library(
+            "RUN_PROGRAM(tools/gen IN api.proto OUT x.h x.cpp)\nSRCS(use.cpp)\n",
+            api__proto='syntax = "proto3";\nimport "lib/other.proto";\n',
+            other__proto='syntax = "proto3";\n',
+            other__pb__h='#include "lib/dep.h"\n', dep__h='', use__cpp='#include "x.h"\n',
+        )
+        graph = lib.make(files, "lib", "--sandboxing")
+        compiled = lib.node_by_output(graph, "$(B)/lib/use.cpp.o")
+        self.assertCountEqual(compiled["inputs"], [
+            "$(S)/lib/use.cpp", "$(B)/lib/x.h", "$(S)/lib/other.pb.h", "$(S)/lib/dep.h"])
+        self.assertIn(lib.node_by_output(graph, "$(B)/lib/x.h")["uid"], compiled["deps"])
+
     def test_module_dirs_render_in_the_module_that_first_uses_the_output(self):
         files = {
             "gen/ya.make": (

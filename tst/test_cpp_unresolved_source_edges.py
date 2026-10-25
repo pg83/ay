@@ -6,6 +6,19 @@ from test_resource_producers import proto_files
 
 
 def fixture(case):
+    if case == 'typed-proto':
+        files = fixture('build-proto')
+        files['petal/ya.make'] = files['petal/ya.make'].replace(
+            'OUT seeded.proto)', 'OUT seeded.proto OUTPUT_INCLUDES petal/dep.proto)').replace(
+            'SRCS(main.cpp)', 'SRCS(main.cpp dep.proto)')
+        files['petal/dep.proto'] = 'syntax = "proto2";\n'
+        files['contrib/tools/protoc/ya.make'] = files['contrib/tools/protoc/ya.make'].replace(
+            'END()', 'INDUCED_DEPS(h ${ARCADIA_ROOT}/rt/header.h)\n'
+            'INDUCED_DEPS(cpp ${ARCADIA_ROOT}/rt/impl.h)\n'
+            'INDUCED_DEPS(h+cpp ${ARCADIA_ROOT}/rt/common.h)\nEND()')
+        files.update({'rt/header.h': '#pragma once\n', 'rt/impl.h': '#pragma once\n',
+                      'rt/common.h': '#include "nested.h"\n', 'rt/nested.h': '#pragma once\n'})
+        return files
     if case in ['unresolved-source', 'unresolved-build', 'noresolve']:
         name = 'petal/absent.pb.h' if case == 'unresolved-build' else 'absent.hpp'
         body = 'SET(DONT_RESOLVE_INCLUDES yes)\n' if case == 'noresolve' else ''
@@ -83,6 +96,17 @@ class CppUnresolvedSourceEdgesTest(unittest.TestCase):
         ids = {n['uid'] for n in graph['graph']}
         self.assertLessEqual(set(graph['result']), ids)
         self.assertTrue(all(set(n['deps']) <= ids for n in graph['graph']))
+
+    def test_generated_proto_header_preserves_imports_and_header_induced_dependencies(self):
+        graph = lib.make(fixture('typed-proto'), 'petal', '--sandboxing')
+        compiled = lib.node_by_output(graph, '$(B)/petal/main.cpp.o')
+        self.assertCountEqual(compiled['inputs'], [
+            '$(S)/petal/main.cpp', '$(B)/petal/seeded.pb.h', '$(B)/petal/dep.pb.h',
+            '$(S)/rt/header.h', '$(S)/rt/common.h', '$(S)/rt/nested.h'])
+        for output in ('seeded.pb.h', 'dep.pb.h'):
+            self.assertIn(lib.node_by_output(graph, '$(B)/petal/' + output)['uid'], compiled['deps'])
+        implementation = lib.node_by_output(graph, '$(B)/petal/seeded.pb.cc.o')
+        self.assertIn('$(S)/rt/impl.h', implementation['inputs'])
 
     def test_unresolved_source_and_unconfigured_build_header_still_fail(self):
         for case, include in [('unresolved-source', 'absent.hpp'),

@@ -493,12 +493,15 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	}
 
 	e.register(GeneratedFileInfo{
-		OutputPath:     pbH,
-		PrimaryInput:   protoVFS,
-		ProducerRef:    pbRef,
-		GeneratorRefs:  pbGenRefs,
-		ParsedIncludes: ParsedIncludeSet{parsedIncludesCpp: pbHCompile},
-		OnUse:          pbPE,
+		OutputPath:    pbH,
+		PrimaryInput:  protoVFS,
+		ProducerRef:   pbRef,
+		GeneratorRefs: pbGenRefs,
+		ParsedIncludes: ParsedIncludeSet{
+			parsedIncludesHeader: pbHCompile[:len(pbHImports):len(pbHImports)],
+			parsedIncludesCpp:    pbHCompile,
+		},
+		OnUse: pbPE,
 	})
 
 	for pluginIdx, plugin := range d.cppProtoPlugins {

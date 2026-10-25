@@ -358,7 +358,7 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 				inducedBucket = parsedIncludesHeader
 			}
 
-			compileExtra = set.bucket(parsedIncludesCpp)
+			compileExtra = set.bucket(inducedBucket)
 		}
 
 		return set.bucket(parsedIncludesLocal), compileExtra, info, inducedBucket

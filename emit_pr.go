@@ -393,7 +393,9 @@ func prOutputParsedIncludes(na *NodeArenas, outFile ANY, stmt *RunProgramStmt, p
 
 	na.dirs.commit(len(compile))
 
-	return ParsedIncludeSet{parsedIncludesLocal: local, parsedIncludesCpp: compile[:len(compile):len(compile)]}
+	compile = compile[:len(compile):len(compile)]
+
+	return ParsedIncludeSet{parsedIncludesLocal: local, parsedIncludesHeader: compile, parsedIncludesCpp: compile}
 }
 
 func resolveRunProgramAuxTools(ctx *GenCtx, toolPaths []string) []RunProgramAuxTool {
