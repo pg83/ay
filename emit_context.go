@@ -457,7 +457,7 @@ func (e *EmitContext) includeClosure(input VFS) Closure {
 	}
 
 	if !cached || cl.incomplete && !deferredSource {
-		cl = e.scanner.scanClosureWithDefaultParser(input, e.d.scanCtx, scanDomainCC, emptyParser)
+		cl = e.scanner.scanClosureWithDefaultParser(input, e.d.scanCtx, scanDomainCC, nil)
 	}
 
 	return cl

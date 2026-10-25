@@ -404,7 +404,7 @@ func (sc *ScanCtx) setFileParser(file VFS) {
 		return
 	}
 
-	if parser := sc.scanner.parsers.registry.registeredParserFor(file.relString()); parser != nil {
+	if parser, registered := sc.scanner.parsers.registry.registeredParserFor(file.relString()); registered {
 		sc.parser = parser
 	} else if file.isSource() {
 		if cached, ok := sc.scanner.parsers.cache.parsed.get(file.rel()); ok {
@@ -464,13 +464,15 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 			return nil, nil, nil, parsedIncludesLocal
 		}
 
-		if _, empty := s.parsers.registry.registeredParserFor(vfsPath.relString()).(EmptyIncludeDirectiveParser); empty {
+		parser, registered := s.parsers.registry.registeredParserFor(vfsPath.relString())
+
+		if registered && parser == nil {
 			return nil, nil, info, parsedIncludesLocal
 		}
 
 		set := info.ParsedIncludes
 
-		if _, ok := s.parsers.registry.registeredParserFor(vfsPath.relString()).(CIncludeDirectiveParser); ok {
+		if _, ok := parser.(CIncludeDirectiveParser); ok {
 			inducedBucket = parsedIncludesCpp
 
 			if isHeaderSource(vfsPath.relString()) {

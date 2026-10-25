@@ -179,7 +179,7 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef
 	configuration := e.instance.Demand == demandLinked && ctx.emit.deferPublication > 0 && srcVFS.isSource()
 
 	if configuration {
-		sc := e.scanner.getFileScanCtx(srcVFS, e.d.scanCtx, scanDomainCC, nil)
+		sc := e.scanner.getFileScanCtx(srcVFS, e.d.scanCtx, scanDomainCC, e.scanner.parsers.registry.defaultParser)
 
 		defer e.scanner.putScanCtx(sc)
 
@@ -392,13 +392,9 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 		Resources: resources,
 	}
 
-	if reserved != 0 {
-		e.emitReservedNode(node, reserved)
+	e.emitReservedNode(node, reserved)
 
-		return reserved, outVFS, allInputs
-	}
-
-	return e.emitNode(node), outVFS, allInputs
+	return reserved, outVFS, allInputs
 }
 
 func (env *ModuleCompileEnv) objSufDot() string {

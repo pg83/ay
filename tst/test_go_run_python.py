@@ -15,6 +15,25 @@ def files(module, declaration):
 
 
 class GoRunPythonTest(unittest.TestCase):
+    def test_dependencies_can_reorder_generators_without_reordering_go_sources(self):
+        sources = files("GO_LIBRARY", "OUT first.go")
+        sources["g/ya.make"] = (
+            "GO_LIBRARY()\n" + lib.BARE_MODULE + "SRCS(main.go)\n"
+            "RUN_PYTHON3(gen.py IN seed.txt OUT first.go)\n"
+            "RUN_PYTHON3(second.py OUT second.go OUT_NOAUTO seed.txt)\nEND()\n"
+        )
+        sources["g/second.py"] = ""
+        graph = lib.make(sources, "g")
+        first = lib.node_by_output(graph, "$(B)/g/first.go")
+        second = lib.node_by_output(graph, "$(B)/g/second.go")
+        consumer = lib.node_by_output(graph, "$(B)/g/g.a")
+        self.assertIn(second["uid"], first["deps"])
+        self.assertLess(go_tool_args(consumer).index("$(B)/g/first.go"),
+                        go_tool_args(consumer).index("$(B)/g/second.go"))
+        for producer in (first, second):
+            self.assertIn(producer["outputs"][0], consumer["inputs"])
+            self.assertIn(producer["uid"], consumer["deps"])
+
     def test_python_auto_outputs_are_go_module_sources_and_keep_producers(self):
         for module, output in (("GO_LIBRARY", "g.a"), ("GO_PROGRAM", "g")):
             for declaration in ("OUT generated.go", "STDOUT generated.go", "OUT_NOAUTO generated.go", "STDOUT_NOAUTO generated.go"):

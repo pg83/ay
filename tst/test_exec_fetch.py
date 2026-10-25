@@ -523,6 +523,23 @@ class ResourceDescriptorFetchTest(unittest.TestCase):
             self.assertFalse((output / "link").is_symlink())
             self.assertFalse((output / "resource").exists())
 
+    def test_strip_prefix_applies_to_zip_symlink_target(self):
+        with tempfile.TemporaryDirectory(prefix="ay-strip-zip-link-") as directory:
+            root = Path(directory)
+            archive_path = root / "links.zip"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("prefix/bin/tool", "tool\n")
+                entry = zipfile.ZipInfo("prefix/link")
+                entry.create_system = 3
+                entry.external_attr = 0o120777 << 16
+                archive.writestr(entry, "prefix/bin/tool")
+            result, output = self.fetch_local_archive(root, archive_path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(os.readlink(output / "link"), "bin/tool")
+            self.assertEqual((output / "link").read_text(), "tool\n")
+            self.assertEqual((output / "bin/tool").read_text(), "tool\n")
+            self.assertFalse((output / "prefix").exists())
+
     def test_strip_prefix_rejects_collisions_and_output_escape(self):
         with tempfile.TemporaryDirectory(prefix="ay-strip-safety-") as directory:
             root = Path(directory)

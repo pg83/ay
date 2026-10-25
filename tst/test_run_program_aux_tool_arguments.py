@@ -80,6 +80,27 @@ class RunProgramAuxToolArgumentsTest(unittest.TestCase):
     def test_python_wrapper_keeps_rooted_tool_arguments(self):
         self.check(rooted=True, python=True)
 
+    def test_run_program_rejects_an_empty_main_tool(self):
+        self.check_empty_tool("RUN_PROGRAM(tools/empty OUT_NOAUTO record.bin)")
+
+    def test_run_program_rejects_an_empty_auxiliary_tool(self):
+        self.check_empty_tool("RUN_PROGRAM(tools/driver TOOL tools/empty OUT_NOAUTO record.bin)")
+
+    def test_python_wrapper_rejects_an_empty_auxiliary_tool(self):
+        self.check_empty_tool("RUN_PYTHON3(generator.py TOOL tools/empty OUT_NOAUTO record.bin)")
+
+    def check_empty_tool(self, command):
+        files = {
+            "packed/ya.make": f"UNION()\n{command}\nEND()\n",
+            "packed/generator.py": "print(1)\n",
+            "tools/empty/ya.make": "LIBRARY()\n" + lib.BARE_MODULE + "END()\n",
+            "tools/driver/ya.make": "PROGRAM(driver)\nALLOCATOR(FAKE)\n" + lib.BARE_MODULE + "SRCS(main.cpp)\nEND()\n",
+            "tools/driver/main.cpp": "int main(){return 0;}\n",
+        }
+        result = lib.make_process(files, "packed", "--sandboxing")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("tool tools/empty has no linkable output", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

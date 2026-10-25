@@ -4,6 +4,18 @@ import lib
 
 
 class EmitGperfTest(unittest.TestCase):
+    def test_gperf_rejects_a_tool_without_linkable_output(self):
+        files = {
+            "gpmod/ya.make": "LIBRARY()\n" + lib.BARE_MODULE + "SRCS(tags.gperf)\nEND()\n",
+            "gpmod/tags.gperf": "",
+            "contrib/tools/gperf/ya.make": (
+                "LIBRARY()\nVERSION(1.0)\n" + lib.BARE_MODULE + "END()\n"
+            ),
+        }
+        result = lib.make_process(files, "gpmod", "--sandboxing")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("tool contrib/tools/gperf has no linkable output", result.stderr)
+
     def test_gperf_generates_compiles_and_enters_archive(self):
         files = {
             "gpmod/ya.make": (

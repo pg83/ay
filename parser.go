@@ -78,24 +78,18 @@ func newIncludeDirectiveParserRegistry() IncludeDirectiveParserRegistry {
 	}
 }
 
-func (r *IncludeDirectiveParserRegistry) lookup(rel string) IncludeDirectiveParser {
+func (r *IncludeDirectiveParserRegistry) registeredParserFor(rel string) (IncludeDirectiveParser, bool) {
 	if extIsTemplateIn(rel) {
 		rel = rel[:len(rel)-len(".in")]
 	}
 
-	p, _ := r.matcher.match(rel)
-
-	return p
-}
-
-func (r *IncludeDirectiveParserRegistry) registeredParserFor(rel string) IncludeDirectiveParser {
-	return r.lookup(rel)
+	return r.matcher.match(rel)
 }
 
 func (r *IncludeDirectiveParserRegistry) scansIncludes(rel string) bool {
-	p := r.lookup(rel)
+	p, _ := r.registeredParserFor(rel)
 
-	return p != nil && p != IncludeDirectiveParser(emptyParser)
+	return p != nil
 }
 
 func addDirective(block []IncludeDirective, k int, d IncludeDirective) int {

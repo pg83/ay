@@ -172,7 +172,7 @@ func (e *EmitContext) collectModuleGlobalSource(src ANY) bool {
 	input := e.moduleSourceVFS(src)
 
 	if input.isSource() {
-		sc := e.scanner.getScanCtx(e.d.scanCtx, scanDomainCC, EmptyIncludeDirectiveParser{})
+		sc := e.scanner.getScanCtx(e.d.scanCtx, scanDomainCC, nil)
 		closure := sc.closureOf(input)
 
 		e.scanner.putScanCtx(sc)

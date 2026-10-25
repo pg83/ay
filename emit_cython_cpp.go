@@ -439,7 +439,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 }
 
 func (scanner *IncludeScanner) cythonPyxLangClosure(src VFS, cfg *ScanContext) []VFS {
-	sc := scanner.getScanCtx(cfg, scanDomainCython, scanner.parsers.registry.registeredParserFor(src.relString()))
+	sc := scanner.getFileScanCtx(src, cfg, scanDomainCython, scanner.parsers.registry.defaultParser)
 
 	defer scanner.putScanCtx(sc)
 

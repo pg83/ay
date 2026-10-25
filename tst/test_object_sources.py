@@ -106,6 +106,38 @@ class ObjectSourcesTest(unittest.TestCase):
         self.assertIn("$(S)/mod/prepared.obj", glob["inputs"])
         self.assertEqual(glob["deps"], [])
 
+    def test_physical_and_generated_global_objects_keep_only_real_producer_dependencies(self):
+        for objects in (
+            ("physical.o", "${BINDIR}/first.o", "${BINDIR}/second.o"),
+            ("${BINDIR}/first.o", "physical.o", "${BINDIR}/second.o"),
+        ):
+            with self.subTest(objects=objects):
+                files = {
+                    "mod/ya.make": (
+                        f"LIBRARY()\n{lib.BARE_MODULE}"
+                        "RUN_PROGRAM(tools/scribe IN input.bin OUT_NOAUTO first.o)\n"
+                        "RUN_PROGRAM(tools/scribe IN input.bin OUT_NOAUTO second.o)\n"
+                        + "SRCS(" + " ".join("GLOBAL " + name for name in objects) + ")\nEND()\n"
+                    ),
+                    "mod/physical.o": "object\n",
+                    "mod/input.bin": "object\n",
+                }
+                lib.tool_program(files, "tools/scribe", "scribe")
+                files["tools/scribe/ya.make"] = files["tools/scribe/ya.make"].replace(
+                    "SRCS(main.cpp)", "ALLOCATOR(FAKE)\nSRCS(main.cpp)",
+                )
+                graph = lib.make(files, "mod", "--sandboxing",
+                                 "--target-platform", "default-linux-x86_64",
+                                 "--host-platform", "default-linux-x86_64")
+                archive = lib.node_by_output(graph, "$(B)/mod/libmod.global.a")
+                expected = ["$(S)/mod/physical.o" if name == "physical.o" else
+                            "$(B)/mod/" + name.rsplit("/", 1)[-1] for name in objects]
+                self.assertEqual(archive["cmds"][0]["cmd_args"][10:], expected)
+                self.assertCountEqual(archive["inputs"], [*expected, "$(S)/build/scripts/link_lib.py"])
+                producers = [lib.node_by_output(graph, "$(B)/mod/" + name)
+                             for name in ("first.o", "second.o")]
+                self.assertCountEqual(archive["deps"], [node["uid"] for node in producers])
+
     def test_physical_objects_are_program_and_dll_inputs(self):
         for module, output in (("PROGRAM(app)", "app"), ("DLL(plugin)", "libplugin.so")):
             with self.subTest(module=module):

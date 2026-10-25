@@ -347,7 +347,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 	protoVFS := resolveSourceOrGeneratedVFS(ctx, e.instance, srcRel, d.srcDirs)
 	protoRel := e.protoSourceRel(protoVFS.string())
 	protoRelPath := protoRel.string()
-	scanCtx := d.scanCtx
 	generatedProto := protoVFS.isBuild()
 
 	var genProtoParsed []IncludeDirective
@@ -356,12 +355,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		if info := e.codegen.use(protoVFS); info != nil {
 			genProtoParsed = info.ParsedIncludes.bucket(parsedIncludesLocal)
 		}
-	}
-
-	var transitiveImports Closure
-
-	if !e.deferCC {
-		transitiveImports = e.scanner.walkClosure(protoVFS, scanCtx, scanDomainProto)
 	}
 
 	pbRef := ctx.emit.reserve()
@@ -486,11 +479,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 
 	pbGenRefs := pe.pbGenRefs
 	pbCCRefs := pe.pbGenRefs[:pbCCRefCount:pbCCRefCount]
-
-	if inherited := e.codegen.generatorRefsFor(transitiveImports); len(inherited) > 0 {
-		pbGenRefs = na.uniqueRefs(pbGenRefs, inherited)
-		pbCCRefs = na.uniqueRefs(pbCCRefs, inherited)
-	}
 
 	e.register(GeneratedFileInfo{
 		OutputPath:    pbH,
@@ -639,10 +627,6 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 }
 
 func (e *EmitContext) completeProtoFileInputs(input VFS, outputs []VFS) {
-	if !e.deferCC {
-		return
-	}
-
 	e.filePending = append(e.filePending, func() {
 		imports := e.scanner.walkClosure(input, e.d.scanCtx, scanDomainProto)
 		inherited := e.codegen.generatorRefsFor(imports)

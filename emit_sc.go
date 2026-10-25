@@ -5,7 +5,9 @@ var scKV = KV{P: pkSC, PC: pcYellow}
 func (e *EmitContext) collectSCInputs(inputs []VFS) {
 	for _, input := range inputs {
 		if input.isSource() {
-			if _, ok := e.ctx.parsers.registry.registeredParserFor(input.relString()).(ScIncludeDirectiveParser); ok {
+			parser, _ := e.ctx.parsers.registry.registeredParserFor(input.relString())
+
+			if _, ok := parser.(ScIncludeDirectiveParser); ok {
 				e.scInputs = append(e.scInputs, input)
 			}
 		}
@@ -18,13 +20,17 @@ func (e *EmitContext) registerSCInputs() {
 			return
 		}
 
-		if _, ok := e.ctx.parsers.registry.registeredParserFor(input.relString()).(ScIncludeDirectiveParser); ok {
+		parser, _ := e.ctx.parsers.registry.registeredParserFor(input.relString())
+
+		if _, ok := parser.(ScIncludeDirectiveParser); ok {
 			e.scanner.scanClosure(input, e.d.scanCtx, scanDomainSc)
 		}
 	}
 
 	for _, meta := range e.d.srcs {
-		if _, ok := e.ctx.parsers.registry.registeredParserFor(meta.Source.relOrSelf().string()).(ScIncludeDirectiveParser); ok {
+		parser, _ := e.ctx.parsers.registry.registeredParserFor(meta.Source.relOrSelf().string())
+
+		if _, ok := parser.(ScIncludeDirectiveParser); ok {
 			visit(e.resolveModuleSourceVFS(meta.Source, e.d.srcDirs))
 		}
 	}

@@ -76,7 +76,7 @@ func resolveSourceOrGeneratedVFS(ctx *GenCtx, instance ModuleInstance, src strin
 }
 
 func (scanner *IncludeScanner) walkClosure(vfsPath VFS, ctx *ScanContext, domain ScanDomain) Closure {
-	return scanner.walkClosureWithDefaultParser(vfsPath, ctx, domain, nil)
+	return scanner.walkClosureWithDefaultParser(vfsPath, ctx, domain, scanner.parsers.registry.defaultParser)
 }
 
 func (scanner *IncludeScanner) walkClosureWithDefaultParser(vfsPath VFS, ctx *ScanContext, domain ScanDomain, defaultParser IncludeDirectiveParser) Closure {
@@ -88,7 +88,7 @@ func (scanner *IncludeScanner) walkClosureWithDefaultParser(vfsPath VFS, ctx *Sc
 }
 
 func (scanner *IncludeScanner) scanClosure(vfsPath VFS, ctx *ScanContext, domain ScanDomain) Closure {
-	return scanner.scanClosureWithDefaultParser(vfsPath, ctx, domain, nil)
+	return scanner.scanClosureWithDefaultParser(vfsPath, ctx, domain, scanner.parsers.registry.defaultParser)
 }
 
 func (scanner *IncludeScanner) scanClosureWithDefaultParser(vfsPath VFS, ctx *ScanContext, domain ScanDomain, defaultParser IncludeDirectiveParser) Closure {
@@ -100,9 +100,9 @@ func (scanner *IncludeScanner) scanClosureWithDefaultParser(vfsPath VFS, ctx *Sc
 }
 
 func (scanner *IncludeScanner) getFileScanCtx(vfsPath VFS, ctx *ScanContext, domain ScanDomain, defaultParser IncludeDirectiveParser) *ScanCtx {
-	parser := scanner.parsers.registry.registeredParserFor(vfsPath.relString())
+	parser, registered := scanner.parsers.registry.registeredParserFor(vfsPath.relString())
 
-	if parser == nil {
+	if !registered {
 		parser = defaultParser
 	}
 
@@ -138,10 +138,6 @@ func (e *EmitContext) generatedModuleSourceVFS(srcRel string) *VFS {
 		}
 	} else {
 		id = internedPrefixed("", filepath.ToSlash(filepath.Clean(module+"/"+srcRel)))
-	}
-
-	if id == 0 {
-		return nil
 	}
 
 	buildVFS := id.build()
@@ -186,7 +182,7 @@ func (scanner *IncludeScanner) discoverInput(input VFS, ctx *ScanContext) {
 		return
 	}
 
-	sc := scanner.getFileScanCtx(input, ctx, scanDomainCC, nil)
+	sc := scanner.getFileScanCtx(input, ctx, scanDomainCC, scanner.parsers.registry.defaultParser)
 
 	defer scanner.putScanCtx(sc)
 

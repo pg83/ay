@@ -36,6 +36,45 @@ def nodes_of_kind(graph, kind):
 
 
 class LlvmBcTest(unittest.TestCase):
+    def test_root_bitcode_can_feed_another_bitcode_pipeline(self):
+        files = llvm_bc_files(
+            "LLVM_BC(base.cpp NAME first)\nLLVM_BC(base.cpp.bc NAME second)\n",
+            {"base.cpp": "int value;\n"},
+        )
+        files["ya.make"] = files.pop("mod/ya.make")
+        graph = lib.make(files, ".", "--target-platform", "default-linux-x86_64")
+        first, second = nodes_of_kind(graph, "BC")
+        self.assertIn(first["outputs"][0], second["inputs"])
+        self.assertIn(first["uid"], second["deps"])
+        self.assertNotIn("$(S)/base.cpp.bc", second["inputs"])
+
+    def test_generated_root_source_keeps_its_producer(self):
+        files = llvm_bc_files(
+            "RUN_PROGRAM(tools/seed OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/seed.cpp)\n"
+            "LLVM_BC(seed.cpp NAME generated)\n", {},
+        )
+        files["ya.make"] = files.pop("mod/ya.make")
+        lib.tool_program(files, "tools/seed", "seed")
+        graph = lib.make(files, ".", "--target-platform", "default-linux-x86_64")
+        source = lib.node_by_output(graph, "$(B)/seed.cpp")
+        compiled = lib.node_by_output(graph, "$(B)/seed.cpp.bc")
+        self.assertIn(source["outputs"][0], compiled["inputs"])
+        self.assertIn(source["uid"], compiled["deps"])
+        self.assertNotIn("$(S)/seed.cpp", compiled["inputs"])
+
+    def test_relative_generated_source_keeps_its_producer(self):
+        files = llvm_bc_files(
+            "RUN_PROGRAM(tools/seed OUT_NOAUTO seed.cpp)\n"
+            "LLVM_BC(./seed.cpp NAME generated)\n", {},
+        )
+        lib.tool_program(files, "tools/seed", "seed")
+        graph = make(files)
+        source = lib.node_by_output(graph, "$(B)/mod/seed.cpp")
+        compiled, = nodes_of_kind(graph, "BC")
+        self.assertIn(source["outputs"][0], compiled["inputs"])
+        self.assertIn(source["uid"], compiled["deps"])
+        self.assertNotIn("$(S)/mod/seed.cpp", compiled["inputs"])
+
     def test_c_bitcode_uses_c_compiler_and_platform_sdk_flags(self):
         graph = lib.make(llvm_bc_files(
             "LLVM_BC(a.c NAME c)\nNO_COMPILER_WARNINGS()\n", {"mod/a.c": ""},

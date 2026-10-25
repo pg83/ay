@@ -99,6 +99,10 @@ func (pm *IncludeParserManager) protoScanOwnPaths(outRoot VFS, includes []VFS) [
 }
 
 func (pm *IncludeParserManager) sourceParsedBuckets(vfsPath VFS, ctxParser IncludeDirectiveParser) ParsedIncludeSet {
+	if ctxParser == nil {
+		ctxParser = pm.registry.defaultParser
+	}
+
 	set, _ := pm.sourceParsed(vfsPath, ctxParser)
 
 	return set
@@ -118,22 +122,18 @@ func (pm *IncludeParserManager) sourceParsed(vfsPath VFS, ctxParser IncludeDirec
 	}
 
 	rel := key.string()
-	parser := pm.registry.registeredParserFor(rel)
+	parser, registered := pm.registry.registeredParserFor(rel)
 	bucket := parsedIncludesLocal
 
-	if parser == nil {
+	if !registered {
 		parser = ctxParser
-
-		if parser == nil {
-			parser = pm.registry.defaultParser
-		}
 	}
 
 	if _, ok := parser.(RagelIncludeDirectiveParser); ok {
 		bucket = parsedIncludesRagelNative
 	}
 
-	if parser == IncludeDirectiveParser(emptyParser) || !pm.fs.isFilePathClean(rel) {
+	if parser == nil || !pm.fs.isFilePathClean(rel) {
 		var empty ParsedIncludeSet
 
 		pm.cache.parsed.put(key, ParsedSource{includes: empty, parser: parser, bucket: bucket})
