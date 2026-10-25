@@ -2,6 +2,7 @@ import json
 import unittest
 
 import lib
+from resource_dependencies import fetched_uri
 
 
 BARE = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
@@ -49,8 +50,7 @@ class FortranTest(unittest.TestCase):
         self.assertIn("$(B)/mod/calc.f.o", linked["inputs"])
         runtime = lib.node_by_output(graph, "$(B)/contrib/libs/llvm/flang-rt/liblibs-llvm-flang-rt.a")
         self.assertIn(runtime["outputs"][0], linked["inputs"])
-        fetch = lib.node_by_output(graph, "$(B)/resources/FLANG")
-        self.assertIn("sbr:11", fetch["cmds"][0]["cmd_args"])
+        self.assertEqual(fetched_uri(graph, "FLANG"), "sbr:11")
 
     def test_copied_fortran_sources_enter_the_source_queue(self):
         graph = lib.make(world({
@@ -124,8 +124,7 @@ class FortranTest(unittest.TestCase):
             "$(B)/resources/FLANG/bin/flang-new", "-DPLATFORM_ONLY", "$(B)/resources/FLANG/extra",
             "-c", "$(S)/mod/calc.f", "-o", "$(B)/mod/calc.f.o",
         ])
-        fetch = lib.node_by_output(graph, "$(B)/resources/FLANG")
-        self.assertIn("sbr:11", fetch["cmds"][0]["cmd_args"])
+        self.assertEqual(fetched_uri(graph, "FLANG"), "sbr:11")
 
 
 if __name__ == "__main__":
