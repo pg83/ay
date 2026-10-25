@@ -126,7 +126,8 @@ END()
 
     def test_split_test_directory_outputs_are_skipped_by_accumulator(self):
         fixture = Tree(self, {'app/ya.make': 'EXECTEST()\nRUN(check)\nSPLIT_FACTOR(2)\nEND()\n'}, ya_conf='dir_outputs = true\n')
-        graph = fixture.graph('app', '-t')
+        # Native LOCAL directory outputs are disabled by sandboxing.
+        graph = fixture.graph('app', '-t', sandboxing=False)
         accumulator = next(n for n in graph['graph'] if any('results_accumulator' in c['cmd_args'] for c in n['cmds']))
         args = accumulator['cmds'][0]['cmd_args']
         self.assertEqual(args[args.index('--skip-dir') + 1], 'testing_out_stuff')

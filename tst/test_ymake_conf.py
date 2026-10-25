@@ -28,12 +28,19 @@ CLANG20_FORMULA = {
 # behaves as the fake.
 # A PIC transition configures the target a second time without FORCE_NO_PIC
 # (ya's _build_no_pic adds it); that run, neither nopic nor host, records '.pic'.
+# An unused PIC child can outlive ay. Never create directory entries after
+# fixture cleanup starts: append only to the log that Tree already created.
 RECORDER = (
     "import json as _json, os as _os, sys as _sys\n"
     "_pic = '' if {'FORCE_NO_PIC=yes', 'IS_CROSS_TOOLS=yes'} & set(_sys.argv) else '.pic'\n"
-    "_out = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'argv.' + _sys.argv[2] + _pic + '.json')\n"
-    "with open(_out, 'w') as _f:\n"
-    "    _json.dump({'argv': _sys.argv, 'env': dict(_os.environ)}, _f)\n"
+    "_out = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'argv.log')\n"
+    "_record = (_sys.argv[2] + _pic + '\\t' + _json.dumps({'argv': _sys.argv, 'env': dict(_os.environ)}) + '\\n').encode()\n"
+    "_fd = _os.open(_out, _os.O_WRONLY | _os.O_APPEND)\n"
+    "try:\n"
+    "    if _os.write(_fd, _record) != len(_record):\n"
+    "        raise RuntimeError('incomplete configuration record')\n"
+    "finally:\n"
+    "    _os.close(_fd)\n"
 ) + lib.FAKE_YMAKE_CONF
 
 
@@ -54,12 +61,15 @@ class Tree:
                 continue
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
+        self.argv_log = self.src / "build" / "argv.log"
+        self.argv_log.touch()
 
-    def make(self, *args, timeout=60):
+    def make(self, *args, timeout=60, sandboxing=True):
         env = {k: v for k, v in os.environ.items() if k not in lib.TOOLCHAIN_ENV_VARS}
         env["AY_CONF_TEST_MARKER"] = "leaks"
+        sandbox_flags = ["--sandboxing"] if sandboxing else []
         return subprocess.run(
-            [str(lib.AY), "make", "-j0", "-G", "--source-root", str(self.src),
+            [str(lib.AY), "make", "-j0", "-G", *sandbox_flags, "--source-root", str(self.src),
              "--host-platform", "default-linux-x86_64",
              "--target-platform", "default-linux-aarch64", *args],
             env=env,
@@ -70,14 +80,18 @@ class Tree:
             check=False,
         )
 
-    def graph(self, *args):
-        result = self.make(*args)
+    def graph(self, *args, sandboxing=True):
+        result = self.make(*args, sandboxing=sandboxing)
         if result.returncode != 0:
             raise AssertionError(f"exit {result.returncode}\n{result.stderr}")
         return json.loads(result.stdout)
 
     def recorded(self, build_type):
-        return json.loads((self.src / "build" / f"argv.{build_type}.json").read_text())
+        prefix = build_type.encode() + b"\t"
+        for line in reversed(self.argv_log.read_bytes().split(b"\n")[:-1]):
+            if line.startswith(prefix):
+                return json.loads(line[len(prefix):])
+        raise AssertionError(f"no complete configuration record for {build_type}")
 
 
 def compiled(graph):
@@ -235,10 +249,12 @@ class ConfCommandLineTest(unittest.TestCase):
     def test_all_configurations_start_before_any_is_awaited(self):
         barrier = (
             "import time as _time\n"
-            "_markers = [_os.path.join(_os.path.dirname(__file__), 'argv.' + _name + '.json')\n"
-            "            for _name in ('dist-release', 'dist-debug', 'dist-debug.pic')]\n"
             "_deadline = _time.monotonic() + 5\n"
-            "while not all(_os.path.exists(_marker) for _marker in _markers):\n"
+            "while True:\n"
+            "    with open(_out, 'rb') as _log:\n"
+            "        _keys = {_line.partition(b'\\t')[0] for _line in _log.read().split(b'\\n')[:-1]}\n"
+            "    if {b'dist-release', b'dist-debug', b'dist-debug.pic'} <= _keys:\n"
+            "        break\n"
             "    if _time.monotonic() > _deadline:\n"
             "        raise RuntimeError('host, target and PIC configurations did not start concurrently')\n"
             "    _time.sleep(0.01)\n"
@@ -247,7 +263,7 @@ class ConfCommandLineTest(unittest.TestCase):
             "build/ymake_conf.py": RECORDER.replace("import base64", barrier + "import base64", 1),
         })
         self.assertEqual(compiled(tree.graph("--sandboxing", "m")), ["a.cpp.o"])
-        self.assertEqual(len(list((tree.src / "build").glob("argv.*.json"))), 3)
+        self.assertEqual(len(tree.argv_log.read_bytes().split(b"\n")) - 1, 3)
         normal = dict(presets(tree.recorded("dist-debug")["argv"]))
         del normal["FORCE_NO_PIC"]
         self.assertEqual(dict(presets(tree.recorded("dist-debug.pic")["argv"])), normal)
