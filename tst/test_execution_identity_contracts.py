@@ -28,9 +28,11 @@ class ExecutionIdentityContractsTest(unittest.TestCase):
         self.assertEqual(execution.built_kinds(ws.make('-j', '1', *flags, targets=('tool', 'app')).stderr), [])
 
     def test_unparsed_input_after_large_directory_scan_keeps_its_content_identity(self):
+        payload = 'opaque source payload\n' + 'x' * ((1 << 20) + 17)
+        changed_payload = payload[:-1] + 'y'
         files = {
             'app/ya.make': 'UNION()\nSRCDIR(payload)\nCOPY_FILE(input.bin copied.bin)\nEND()\n',
-            'payload/input.bin': 'opaque source payload\n',
+            'payload/input.bin': payload,
             **{f'payload/marker_{i}': '' for i in range(4096)},
             'build/scripts/fs_tools.py': 'import shutil,sys\nassert sys.argv[1] == "copy"\nshutil.copyfile(sys.argv[2], sys.argv[3])\n',
         }
@@ -47,13 +49,13 @@ class ExecutionIdentityContractsTest(unittest.TestCase):
         self.assertEqual(copied_content(), files['payload/input.bin'])
         cached = ws.make('-j', '1', targets=targets, env=environment)
         self.assertEqual(execution.built_kinds(cached.stderr), [])
-        ws.write('payload/input.bin', 'changed unparsed payload\n')
+        ws.write('payload/input.bin', changed_payload)
         rebuilt = ws.make('-j', '1', targets=targets, env=environment)
         self.assertIn(('CP', '$(B)/app/copied.bin'), execution.built_kinds(rebuilt.stderr))
         contents = [json.loads(p.read_text()) for p in ws.uid_files()]
         payloads = {row['$(B)/app/copied.bin']['cas'] for row in contents if '$(B)/app/copied.bin' in row}
         self.assertEqual(len(payloads), 2)
-        self.assertIn('changed unparsed payload\n', [(ws.bld / 'cas' / item[:2] / item).read_text() for item in payloads])
+        self.assertIn(changed_payload, [(ws.bld / 'cas' / item[:2] / item).read_text() for item in payloads])
 
 
 if __name__ == '__main__':
