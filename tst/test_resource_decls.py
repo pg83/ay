@@ -247,6 +247,17 @@ class ResourceDeclsTest(unittest.TestCase):
             make_error(files, "lib"),
         )
 
+    def test_unconsumed_host_bundle_rejects_incomplete_platform_triples(self):
+        files = {
+            "res/ya.make": resources_library(
+                "DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 FOR)\n"
+            ),
+            "lib/ya.make": f"LIBRARY()\n{BARE}PEERDIR(res)\nEND()\n",
+        }
+        result = lib.make_process(files, "lib")
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn("malformed DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE args", result.stderr)
+
     def test_host_bundle_accepts_strip_prefix_pairs_between_platform_entries(self):
         for entries in (
             "sbr:1 FOR LINUX STRIP_PREFIX 0",
@@ -290,6 +301,23 @@ class ResourceDeclsTest(unittest.TestCase):
                     "lib/main.cpp": "int main(){return 0;}\n",
                 }
                 self.assertIn(message, make_error(files, "lib"))
+
+    def test_nonzero_host_bundle_strip_prefix_changes_fetch_action(self):
+        actions = []
+        for count in (0, 1):
+            files = {
+                "res/ya.make": resources_library(
+                    f"DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE(T sbr:1 FOR LINUX STRIP_PREFIX {count})\n"
+                ),
+                "lib/ya.make": (
+                    f"PROGRAM()\n{BARE}PEERDIR(res)\n"
+                    "CFLAGS(-DPROBE=${T_RESOURCE_GLOBAL})\nSRCS(main.cpp)\nEND()\n"
+                ),
+                "lib/main.cpp": "int main(){return 0;}\n",
+            }
+            graph = lib.make(files, "lib")
+            actions.append(lib.node_by_output(graph, "$(B)/resources/T")["cmds"])
+        self.assertNotEqual(actions[0], actions[1], "FETCH loses STRIP_PREFIX 1")
 
     def test_fetch_requires_a_host_entry_for_a_consumed_resource(self):
         # Native graph generation retains a platform mapping. AY lowers the
