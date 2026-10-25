@@ -203,6 +203,9 @@ func (e *EmitContext) emitGoCopyWithContext(srcRel ANY, dstVFS VFS, domain ScanD
 
 	pe := func() {
 		cv := scanner.scanClosure(srcVFS, scanCtx, domain)
+
+		scanner.reportClosureDiagnostics(dstVFS, cv)
+
 		block := na.vfs.alloc(len(scripts) + cv.len())
 		k := 0
 
@@ -224,7 +227,7 @@ func (e *EmitContext) emitGoCopyWithContext(srcRel ANY, dstVFS VFS, domain ScanD
 			Platform:  instance.Platform,
 			Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(goCgoCopyCmdHead, args), Env: goVcsEnv}),
 			Env:       goVcsEnv,
-			Inputs:    NodeInputs{files: na.inputList(block[:k:k])},
+			Inputs:    NodeInputs{files: na.inputList(block[:k:k]), root: cv.self},
 			KV:        &cpKV,
 			Outputs:   na.vfsList(dstVFS),
 			Resources: usesPython3,
