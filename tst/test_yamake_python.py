@@ -204,26 +204,21 @@ class YaMakePythonTest(unittest.TestCase):
         code, graph, stderr = ay_make(files)
         self.assertEqual(code, 0, stderr)
         cython = [node for node in graph["graph"] if node["kv"]["p"] == "CY"]
-        self.assertEqual([node["outputs"] for node in cython], [
-            ["$(B)/a/c2.pyx.c"],
-            ["$(B)/a/c4.c", "$(B)/a/c4.h"],
-            ["$(B)/a/c5.c", "$(B)/a/c5.h", "$(B)/a/c5_api.h"],
-            ["$(B)/a/c1.pyx.cpp"],
-            ["$(B)/a/cy.py.cpp"],
-            ["$(B)/a/c3.cpp", "$(B)/a/c3.h"],
-        ])
-        module_names = [
-            (args[args.index("--module-name") + 1], args[args.index("--init-suffix") + 1])
-            for args in (node["cmds"][0]["cmd_args"] for node in cython)
-        ]
-        self.assertEqual(module_names, [
-            ("my.ns.c2", "2my2ns2c2"),
-            ("my.ns.c4", "2my2ns2c4"),
-            ("custom.name", "6custom4name"),
-            ("my.ns.c1", "2my2ns2c1"),
-            ("cy", "cy"),
-            ("c3", "c3"),
-        ])
+        self.assertEqual(len(cython), 6)
+        module_names = {}
+        for node in cython:
+            args = node["cmds"][0]["cmd_args"]
+            module_names[tuple(node["outputs"])] = (
+                args[args.index("--module-name") + 1], args[args.index("--init-suffix") + 1],
+            )
+        self.assertEqual(module_names, {
+            ("$(B)/a/c2.pyx.c",): ("my.ns.c2", "2my2ns2c2"),
+            ("$(B)/a/c4.c", "$(B)/a/c4.h"): ("my.ns.c4", "2my2ns2c4"),
+            ("$(B)/a/c5.c", "$(B)/a/c5.h", "$(B)/a/c5_api.h"): ("custom.name", "6custom4name"),
+            ("$(B)/a/c1.pyx.cpp",): ("my.ns.c1", "2my2ns2c1"),
+            ("$(B)/a/cy.py.cpp",): ("cy", "cy"),
+            ("$(B)/a/c3.cpp", "$(B)/a/c3.h"): ("c3", "c3"),
+        })
         for node in cython:
             args = node["cmds"][0]["cmd_args"]
             self.assertEqual(args[args.index("language_level=3") - 1], "-X")
