@@ -15,7 +15,7 @@ class MacroBoundariesTest(MakeTest):
             "PROTO_NAMESPACE()", "RESOLVE_PROTO(yes)",
             "SRC()", "SRC_C_NO_LTO()", "SRCS_AVX2()", "AR_PLUGIN()", "DYNAMIC_LIBRARY_FROM()",
             "EXPORTS_SCRIPT()", "SELECT_CLANG_SA_CONFIG()", "PY_MAIN()", "PY_CONSTRUCTOR()",
-            "TASKLET(extra)", "USE_SA_PLUGINS(plugin)", "USE_UTIL()", "ADDINCL_SELF(FOR cython)", "ADDINCL_SELF(FOR asm)",
+            "TASKLET(extra)", "USE_SA_PLUGINS(plugin)", "ADDINCL_SELF(FOR cython)", "ADDINCL_SELF(FOR asm)",
             "REGISTER_YQL_PYTHON_UDF(NAME)", "REGISTER_YQL_PYTHON_UDF(NAME Wrong)",
             "REGISTER_YQL_PYTHON_UDF(UNKNOWN value)",
             "USRV_GEN_PROTO_STRUCTS(OPTS_FILE)", "USRV_GEN_PROTO_STRUCTS(OUTPUT_INCLUDES answer.h)",
@@ -26,6 +26,20 @@ class MacroBoundariesTest(MakeTest):
         for macro in macros:
             with self.subTest(macro=macro):
                 self.write("ya.make", f"LIBRARY()\n{macro}\nSRCS(answer.cpp)\nEND()\n")
+                self.assertNotEqual(self.make().returncode, 0)
+
+    def test_go_runtime_macro_context(self):
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        self.write("answer.go", "package answer\nfunc Answer() int { return 42 }\n")
+        for macro in ("USE_UTIL", "USE_CXX"):
+            with self.subTest(macro=macro):
+                self.write("ya.make", f"LIBRARY()\n{macro}()\nSRCS(answer.cpp)\nEND()\n")
+                result = self.make()
+                self.assertNotEqual(result.returncode, 0, result.stderr)
+                self.assertIn("not allowed", result.stderr)
+                self.write("ya.make", f"GO_LIBRARY()\n{macro}()\nSRCS(answer.go)\nEND()\n")
+                self.graph()
+                self.write("ya.make", f"GO_LIBRARY()\n{macro}(unexpected)\nSRCS(answer.go)\nEND()\n")
                 self.assertNotEqual(self.make().returncode, 0)
 
     def test_optional_native_settings(self):

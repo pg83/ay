@@ -2636,11 +2636,20 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.flags.NoUtil = true
 	case tokNoUtil:
 		d.flags.NoUtil = true
-	case tokUseCxx:
+	case tokUseCxx, tokUseUtil:
+		if !isGoModuleType(d.unit.Type) {
+			throwFmt("%s is not allowed for %s modules", v.Name.string(), d.unit.Type.string())
+		}
+
+		if len(v.Args) != 0 {
+			throwFmt("%s expects no arguments", v.Name.string())
+		}
+
 		d.flags.NoRuntime = false
-	case tokUseUtil:
-		d.flags.NoRuntime = false
-		d.flags.NoUtil = false
+
+		if v.Name == tokUseUtil {
+			d.flags.NoUtil = false
+		}
 	case tokNoRuntime:
 
 		d.flags.NoRuntime = true
