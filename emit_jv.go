@@ -80,7 +80,7 @@ func (e *EmitContext) emitJVNodeReserved(cmdArgs []ANY, inputs InputChunks, outp
 		Platform:  e.instance.Platform,
 		Cmds:      na.cmdList(cmd),
 		Env:       env,
-		Inputs:    inputs,
+		inputPlan: na.nodeInputs(inputs),
 		KV:        &jvKV,
 		Outputs:   na.vfsList(outputs...),
 		Resources: usesPython3JDK17,

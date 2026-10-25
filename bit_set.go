@@ -23,3 +23,11 @@ func (b *BitSet) add(v uint32) {
 
 	*unsafeAt(b.words.s, uint64(w)) |= uint64(1) << (v & 63)
 }
+
+func (b *BitSet) remove(v uint32) {
+	w := v >> 6
+
+	if w < uint32(b.words.len()) {
+		*unsafeAt(b.words.s, uint64(w)) &^= uint64(1) << (v & 63)
+	}
+}

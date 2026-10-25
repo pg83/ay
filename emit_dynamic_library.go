@@ -316,7 +316,7 @@ func (e *EmitContext) emitDynamicLibrary() *ModuleEmitResult {
 		Platform:        instance.Platform,
 		Cmds:            cmds[:len(cmds):len(cmds)],
 		Env:             envFull,
-		Inputs:          inputs,
+		inputPlan:       na.nodeInputs(inputs),
 		BuildFromInputs: appendInputChunks(na, inputs[:2], inputs[3:]),
 		Outputs:         na.vfsList(build(instance.Path.relString(), "/", outputName)),
 		KV:              &dynamicLibraryKV,

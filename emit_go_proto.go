@@ -157,7 +157,7 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 		Platform:        instance.Platform,
 		Cmds:            na.cmdList(Cmd{CmdArgs: cmd, Cwd: cwd, Env: envVarsVCS}),
 		Env:             envVarsVCS,
-		Inputs:          InputChunks(inputs[:len(inputs):len(inputs)]),
+		inputPlan:       na.nodeInputs(InputChunks(inputs[:len(inputs):len(inputs)])),
 		BuildFromInputs: InputChunks(inputs[1:len(inputs):len(inputs)]),
 		Outputs:         na.vfsList(outs...),
 		KV:              &pbKV,

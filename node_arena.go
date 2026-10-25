@@ -11,6 +11,7 @@ type NodeArenas struct {
 	inputs        *BumpAllocator[[]VFS]
 	noderefs      *BumpAllocator[NodeRef]
 	nodes         *BumpAllocator[Node]
+	inputPlans    *BumpAllocator[NodeInputPlan]
 	exts          *BumpAllocator[KVExt]
 	geninfos      *BumpAllocator[GeneratedFileInfo]
 	moduleInputs  *BumpAllocator[ModuleInputInfo]
@@ -33,6 +34,7 @@ func (na *NodeArenas) resetWindows() {
 	na.inputs.open = false
 	na.noderefs.open = false
 	na.nodes.open = false
+	na.inputPlans.open = false
 	na.exts.open = false
 	na.geninfos.open = false
 	na.moduleInputs.open = false
@@ -55,6 +57,7 @@ func (na *NodeArenas) markStrict() {
 	na.inputs.markStrict()
 	na.noderefs.markStrict()
 	na.nodes.markStrict()
+	na.inputPlans.markStrict()
 	na.exts.markStrict()
 	na.geninfos.markStrict()
 	na.moduleInputs.markStrict()
@@ -87,6 +90,7 @@ func newNodeArenas() *NodeArenas {
 		scanctxs:      newBumpAllocator[ScanContext](),
 		noderefs:      newBumpAllocator[NodeRef](),
 		nodes:         newBumpAllocator[Node](),
+		inputPlans:    newBumpAllocator[NodeInputPlan](),
 	}
 }
 

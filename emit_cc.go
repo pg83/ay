@@ -359,7 +359,7 @@ func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Plat
 		Platform:     instance.Platform,
 		Cmds:         cmds,
 		Env:          env,
-		Inputs:       allInputs,
+		inputPlan:    na.nodeInputs(allInputs),
 		InputClosure: in.IncludeView,
 		Outputs:      na.vfsList(outVFS),
 		KV:           &ccKV,

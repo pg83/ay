@@ -86,7 +86,7 @@ func (e *EmitContext) emitImplib(stmt ImplibStmt) {
 			Platform:        e.instance.Platform,
 			Cmds:            na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(args...)), Env: envVarsVCS, Resources: value.Resources}),
 			Env:             envVarsVCS,
-			Inputs:          inputs,
+			inputPlan:       na.nodeInputs(inputs),
 			BuildFromInputs: inputs[1:],
 			Outputs:         outs,
 			KV:              &implibKV,

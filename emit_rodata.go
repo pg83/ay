@@ -50,7 +50,7 @@ func (e *EmitContext) emitRD(srcRel string, srcVFS VFS, yasmLD NodeRef, extraInp
 			Env: pythonEnv}, Cmd{CmdArgs: na.chunkList(yasmConstHead, na.anyList(argD.any(), internV("_", string(instance.Platform.ISA), "_").any()), rodataYasmConstArgs, na.anyList(outVFS.any(), asmVFS.any())),
 			Env: yasmEnv}),
 		Env:             yasmEnv,
-		Inputs:          inputs,
+		inputPlan:       na.nodeInputs(inputs),
 		BuildFromInputs: inputs[1:],
 		KV:              &rodataKV,
 		Outputs:         na.vfsList(asmVFS, outVFS),

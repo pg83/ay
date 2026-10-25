@@ -3,6 +3,7 @@ package main
 type BucketList [][]VFS
 
 type Closure struct {
+	incomplete     bool
 	self           VFS
 	hasDiagnostics bool
 	buckets        *BucketList

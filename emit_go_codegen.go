@@ -270,7 +270,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		Platform:        instance.Platform,
 		Cmds:            na.cmdList(cmds...),
 		Env:             env,
-		Inputs:          na.inputList(inputs),
+		inputPlan:       na.nodeInputs(na.inputList(inputs)),
 		BuildFromInputs: na.inputList(inputs[toolEnd:]),
 		KV:              &goCodegenKVs[st.kind],
 		Outputs:         na.vfsList(out),

@@ -186,3 +186,31 @@ func (e *EmitContext) moduleSourceName(src ANY) string {
 
 	return src.string()
 }
+
+func (scanner *IncludeScanner) discoverInput(input VFS, ctx *ScanContext) {
+	if !input.isSource() || !scanner.parsers.registry.scansIncludes(input.relString()) {
+		return
+	}
+
+	parser := scanner.parsers.registry.registeredParserFor(input.relString())
+	sc := scanner.getScanCtx(ctx, scanDomainCC, parser)
+
+	defer scanner.putScanCtx(sc)
+
+	sc.initialOnly = true
+	sc.closureOf(input)
+}
+
+func (scanner *IncludeScanner) establishedClosure(input VFS) Closure {
+	if cl, ok := scanner.closure(input); ok && !cl.incomplete {
+		return cl
+	}
+
+	sc := scanner.scanCtxPool.Get().(*ScanCtx)
+
+	*sc = ScanCtx{scanner: scanner, readOnly: true, tjc: tarjans.get()}
+
+	defer scanner.putScanCtx(sc)
+
+	return sc.closureOf(input)
+}

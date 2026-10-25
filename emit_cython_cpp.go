@@ -396,7 +396,7 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 				Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 					Env: env}),
 				Env:        env,
-				Inputs:     na.inputList(buildInputs),
+				inputPlan:  na.nodeInputs(na.inputList(buildInputs)),
 				TextInputs: textInputs,
 				Outputs:    outputs,
 				KV:         &cythonCppKV,

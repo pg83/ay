@@ -73,13 +73,13 @@ func (e *EmitContext) emitGoFlatcSource(meta SrcMeta) {
 			Cmd{CmdArgs: na.chunkList(post, e.peers.FbsNamespaces), Env: envVarsVCS},
 			Cmd{CmdArgs: na.chunkList(tar), Env: envVarsVCS},
 		),
-		Inputs: na.inputList(na.vfsList(tool, src, postprocess, tarSources), ctx.scripts[postprocess.rel()], ctx.scripts[tarSources.rel()]),
-		KV:     &goFlatcKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}},
+		inputPlan: na.nodeInputs(na.inputList(na.vfsList(tool, src, postprocess, tarSources), ctx.scripts[postprocess.rel()], ctx.scripts[tarSources.rel()])),
+		KV:        &goFlatcKV, KVExts: []KVExt{{Key: "tared_kind", Val: "nodir"}},
 		ForeignDepRefs: na.refList(toolRef), Outputs: na.vfsList(out), Resources: usesPython3,
 	}
 
-	node.Inputs = append(node.Inputs, imports.bucketList()...)
-	node.BuildFromInputs = na.inputList(node.Inputs[0][1:], node.Inputs[1:]...)
+	node.inputPlan.files = append(node.inputPlan.files, imports.bucketList()...)
+	node.BuildFromInputs = na.inputList(node.inputPlan.files[0][1:], node.inputPlan.files[1:]...)
 
 	ref := e.emitNode(node)
 

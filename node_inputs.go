@@ -1,0 +1,224 @@
+package main
+
+import "slices"
+
+type NodeInputPlan struct {
+	files       InputChunks
+	roots       InputChunks
+	root        VFS
+	sourceRoots []VFS
+	text        []VFS
+	scanner     *IncludeScanner
+	na          *NodeArenas
+	deferred    bool
+}
+
+func (na *NodeArenas) nodeInputs(files InputChunks) *NodeInputPlan {
+	plan := na.inputPlans.one()
+
+	*plan = NodeInputPlan{files: files, na: na}
+
+	return plan
+}
+
+func (e *EmitContext) prepareNodeInputs(node *Node) {
+	if node.inputPlan == nil {
+		node.inputPlan = e.ctx.na.nodeInputs(nil)
+	}
+
+	plan := node.inputPlan
+
+	if node.InputClosure.self != 0 {
+		plan.root = node.InputClosure.self
+	} else {
+		plan.roots = node.buildFromInputs()
+	}
+
+	plan.text = node.TextInputs
+	plan.scanner = e.scanner
+
+	plan.eachRoot(func(root VFS) {
+		closure, cached := e.scanner.closure(root)
+
+		plan.deferred = plan.deferred || !cached || closure.incomplete
+
+		if info := e.codegen.lookup(root); info != nil && info.IncludedInputs != nil {
+			plan.deferred = true
+		}
+	})
+
+	for _, output := range node.Outputs {
+		if info := e.codegen.lookup(output); info != nil && len(info.InputLoopSources) > 0 {
+			plan.sourceRoots = node.Outputs
+			plan.deferred = true
+
+			break
+		}
+	}
+
+	if !plan.deferred {
+		plan.scanner = nil
+	}
+
+	node.Inputs = (*NodeInputPlan).evaluate
+}
+
+func (p *NodeInputPlan) eachRoot(visit func(VFS)) {
+	if p.root != 0 {
+		visit(p.root)
+	}
+
+	for _, chunk := range p.roots {
+		for _, root := range chunk {
+			if !root.isSource() || !slices.Contains(p.text, root) {
+				visit(root)
+			}
+		}
+	}
+}
+
+func (p *NodeInputPlan) evaluate() InputChunks {
+	if p.scanner == nil || !p.deferred {
+		return p.files
+	}
+
+	var closures []Closure
+	var includedSources InputChunks
+
+	p.eachRoot(func(root VFS) {
+		closures = append(closures, p.scanner.establishedClosure(root))
+
+		if info := p.scanner.codegen.lookup(root); info != nil && info.IncludedInputs != nil {
+			for _, included := range info.IncludedInputs.Roots {
+				closure := p.scanner.establishedClosure(included)
+				sources := closure.collect(p.na, VFS.isSource)
+
+				includedSources = append(includedSources, sources)
+			}
+		}
+	})
+
+	for _, root := range p.sourceRoots {
+		closure := p.scanner.establishedClosure(root)
+
+		includedSources = append(includedSources, closure.collect(p.na, VFS.isSource))
+	}
+
+	var result InputChunks
+
+	dedupers.with(func(seen *DeDuper) {
+		bound := len(p.files) + len(includedSources)
+
+		for _, closure := range closures {
+			bound += len(closure.bucketList())
+		}
+
+		chunks := p.na.inputs.alloc(bound)[:0]
+
+		for _, chunk := range p.files {
+			chunks = append(chunks, chunk)
+
+			for _, input := range chunk {
+				seen.addStable(input.strID())
+			}
+		}
+
+		for _, bucket := range includedSources {
+			if extra := p.na.filterSeen(seen, bucket); len(extra) > 0 {
+				chunks = append(chunks, extra)
+			}
+		}
+
+		for _, closure := range closures {
+			for _, bucket := range closure.bucketList() {
+				if extra := p.na.filterSeen(seen, bucket); len(extra) > 0 {
+					chunks = append(chunks, extra)
+				}
+			}
+		}
+
+		p.na.inputs.commit(len(chunks))
+		result = chunks[:len(chunks):len(chunks)]
+	})
+
+	return result
+}
+
+func (p *NodeInputPlan) activate(seen *BitSet, selectProducer func(NodeRef)) {
+	if p.scanner == nil {
+		return
+	}
+
+	var visit func(VFS)
+	visit = func(file VFS) {
+		if seen.has(uint32(file)) {
+			return
+		}
+
+		entry, bound := p.scanner.codegen.files.get1(file)
+
+		if bound && !entry.Deferred || file.isBuild() {
+			seen.add(uint32(file))
+		}
+
+		if file.isBuild() {
+			if info := p.scanner.codegen.use(file); info != nil {
+				selectProducer(info.ProducerRef)
+			}
+
+			entry, _ = p.scanner.codegen.files.get1(file)
+		}
+
+		for _, child := range entry.Paths {
+			visit(child)
+		}
+	}
+
+	p.eachRoot(visit)
+}
+
+func (n *Node) establishedInputRefs(na *NodeArenas) {
+	plan := n.inputPlan
+
+	if plan == nil || plan.scanner == nil || !plan.deferred {
+		return
+	}
+
+	refs := nodeRefScratches.get()
+
+	refs = append(refs, n.DepRefs...)
+
+	addInput := func(input VFS) {
+		if info := plan.scanner.codegen.lookup(input); info != nil && info.ProducerRef != n.Ref {
+			refs = append(refs, info.ProducerRef)
+		}
+	}
+
+	plan.eachRoot(func(root VFS) {
+		closure := plan.scanner.establishedClosure(root)
+
+		addInput(closure.self)
+
+		for _, bucket := range closure.bucketList() {
+			if len(bucket) == 0 || !bucket[0].isBuild() {
+				continue
+			}
+
+			for _, input := range bucket {
+				addInput(input)
+			}
+		}
+	})
+
+	n.DepRefs = na.uniqueRefs(refs)
+	nodeRefScratches.put(refs)
+}
+
+func (n *Node) consumeInputs() InputChunks {
+	inputs := n.Inputs(n.inputPlan)
+
+	n.Inputs = nil
+	n.inputPlan = nil
+
+	return inputs
+}

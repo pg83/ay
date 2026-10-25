@@ -131,7 +131,13 @@ func (e *EmitContext) emitCopyFileNodeSnap(entry CopyFileEntry, st CopyEmitState
 
 	closure = append(closure, e.copyLoopSources(st.dstVFS)...)
 
-	e.emitCPWithInputs(st.srcVFS, st.dstVFS, closure, st.ref, e.d.tc, ctx.scripts)
+	node := composeCPNode(e.instance, st.srcVFS, st.dstVFS, closure, e.d.tc, ctx.scripts, ctx.na)
+
+	if entry.WithContext {
+		node.TextInputs = node.TextInputs[1:]
+	}
+
+	e.emitReservedNode(node, st.ref)
 }
 
 func (e *EmitContext) copyLoopSources(dst VFS) []VFS {

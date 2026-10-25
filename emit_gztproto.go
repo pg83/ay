@@ -59,7 +59,7 @@ func (ctx *GenCtx) gztProtoSource(instance ModuleInstance, gztSource VFS, scanCt
 				Env:     env,
 			}),
 			Env:             env,
-			Inputs:          InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]),
+			inputPlan:       na.nodeInputs(InputChunks(inputChunks[:len(inputChunks):len(inputChunks)])),
 			BuildFromInputs: InputChunks(inputChunks[1:len(inputChunks):len(inputChunks)]),
 			Outputs:         na.vfsList(genProto),
 			KV:              &gztprotoKV,

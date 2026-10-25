@@ -39,7 +39,7 @@ func (e *EmitContext) llvmCompileNode(src string, out VFS, compiler string, cxx 
 	return Node{
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(args), Env: envVarsVCS, Resources: value.Resources}),
-		Env:      envVarsVCS, Inputs: inputs, Outputs: na.vfsList(out),
+		Env:      envVarsVCS, inputPlan: na.nodeInputs(inputs), Outputs: na.vfsList(out),
 		KV: &llvmBcKV, Resources: usesPython3Clang16,
 	}
 }
@@ -116,7 +116,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		}
 
 		node := e.llvmCompileNode(src, bcOut, compiler, cxx, nil)
-		allInputs := node.Inputs
+		allInputs := node.inputPlan.files
 
 		for _, ch := range allInputs {
 			for _, v := range ch {
@@ -155,7 +155,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		Platform:  instance.Platform,
 		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(ldArgs), Env: env}),
 		Env:       env,
-		Inputs:    mergeInputs,
+		inputPlan: na.nodeInputs(mergeInputs),
 		Outputs:   na.vfsList(mergedOut),
 		KV:        &llvmBcKV2,
 		DepRefs:   append([]NodeRef(nil), bcRefs...),
@@ -183,7 +183,7 @@ func (e *EmitContext) emitLlvmBcStmt(stmt *LlvmBcStmt) {
 		Platform:  instance.Platform,
 		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(optArgs), Env: env}),
 		Env:       env,
-		Inputs:    na.inputList(na.vfsList(mergedOut), na.vfsList(optWrapperVFS)),
+		inputPlan: na.nodeInputs(na.inputList(na.vfsList(mergedOut), na.vfsList(optWrapperVFS))),
 		Outputs:   na.vfsList(optOut),
 		KV:        &llvmBcKV3,
 		DepRefs:   na.refList(ldRef),

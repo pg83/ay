@@ -4,9 +4,9 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-func (c *CanonBuf) calcUID(n *Node) UID {
+func (c *CanonBuf) calcUID(n *Node, inputs InputChunks) UID {
 	c.buf = c.buf[:0]
-	c.writeNode(n)
+	c.writeNode(n, inputs)
 
 	sum := xxh3.Hash128(c.buf)
 
@@ -256,12 +256,12 @@ func (c *CanonBuf) writeEnv(env EnvVars) {
 	}
 }
 
-func (c *CanonBuf) writeNode(n *Node) {
+func (c *CanonBuf) writeNode(n *Node, inputs InputChunks) {
 	c.writeCmdSlice(n.Cmds)
 	c.writeDepRefUIDs(n)
 	c.writeEnv(n.Env)
 	c.writeRefUIDs(n.ForeignDepRefs)
-	c.writeVFSChunks(n.Inputs)
+	c.writeVFSChunks(inputs)
 	c.writeVFSSlice(n.Outputs)
 	c.writeBytes(string(n.Platform.Target))
 

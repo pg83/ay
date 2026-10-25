@@ -47,7 +47,7 @@ func (e *EmitContext) emitSCReserved(srcVFS, headerVFS, domschemecBinary VFS, do
 			Env:     env,
 		}),
 		Env:             env,
-		Inputs:          inputs,
+		inputPlan:       na.nodeInputs(inputs),
 		BuildFromInputs: inputs[1:],
 		InputClosure:    closure,
 		KV:              &scKV,

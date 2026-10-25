@@ -144,7 +144,7 @@ func (e *EmitContext) emitBisonProducer(src ANY) {
 			Cmds:            cmds,
 			DepRefs:         na.refList(bisonRef, m4Ref),
 			Env:             env,
-			Inputs:          inputs,
+			inputPlan:       na.nodeInputs(inputs),
 			BuildFromInputs: inputs[1:],
 			Outputs:         na.vfsList(headerVFS, generatedVFS),
 			KV:              &bisonYKV,

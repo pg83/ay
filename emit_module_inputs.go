@@ -78,7 +78,7 @@ func (e *EmitContext) emitModuleNode(node Node, useGlobals bool) NodeRef {
 	buildDeps := e.ctx.na.refList(node.DepRefs...)
 
 	e.includeNodeInputs(&node)
-	node.Inputs = e.appendModuleInputs(node.Inputs, useGlobals)
+	node.inputPlan.files = e.appendModuleInputs(node.inputPlan.files, useGlobals)
 	e.appendModuleOutputs(&node)
 	e.resolveNodeCodegenRefs(&node)
 

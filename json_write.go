@@ -78,7 +78,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 		}
 
 		first = false
-		buf = appendNode(buf, node, g.fetchRefs, dropSrcInputs)
+		buf = appendNode(buf, node, node.consumeInputs(), g.fetchRefs, dropSrcInputs)
 
 		if len(buf) >= 1<<20 {
 			throw2(w.Write(buf))
@@ -93,7 +93,7 @@ func writeGraphCompact(w io.Writer, g *Graph, dropSrcInputs bool) {
 	throw2(w.Write(buf))
 }
 
-func appendNode(buf []byte, n *Node, fetchRefs *DenseMap[STR, NodeRef], dropSrcInputs bool) []byte {
+func appendNode(buf []byte, n *Node, inputs InputChunks, fetchRefs *DenseMap[STR, NodeRef], dropSrcInputs bool) []byte {
 	buf = append(buf, '{')
 
 	if n.DisableCache || n.KV.DisableCache {
@@ -116,9 +116,9 @@ func appendNode(buf []byte, n *Node, fetchRefs *DenseMap[STR, NodeRef], dropSrcI
 	buf = append(buf, `,"inputs":`...)
 
 	if dropSrcInputs {
-		buf = appendBuildOnlyVFSChunks(buf, n.Inputs)
+		buf = appendBuildOnlyVFSChunks(buf, inputs)
 	} else {
-		buf = appendVFSChunks(buf, n.Inputs)
+		buf = appendVFSChunks(buf, inputs)
 	}
 
 	if len(n.InputNames) > 0 {

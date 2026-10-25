@@ -52,7 +52,7 @@ func (p *pyPBPending) emitPending() {
 		Platform:        s.instance.Platform,
 		Cmds:            na.cmdList(Cmd{CmdArgs: s.cmdArgs, Cwd: s.protoCwd, Env: envVarsVCS}),
 		Env:             envVarsVCS,
-		Inputs:          InputChunks(inputChunks[:len(inputChunks):len(inputChunks)]),
+		inputPlan:       na.nodeInputs(InputChunks(inputChunks[:len(inputChunks):len(inputChunks)])),
 		BuildFromInputs: InputChunks(inputChunks[1:len(inputChunks):len(inputChunks)]),
 		Outputs:         s.outputs,
 		KV:              &pbKV,

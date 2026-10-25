@@ -159,7 +159,7 @@ func cmdMake(g GlobalFlags, args []string) int {
 
 			writeGraph(g, !mf.sandboxing)
 		} else {
-			genStream(fs, parsers, mf.targets, hostP, targetP, func(*Node, *DenseMap[STR, NodeRef]) {}, onWarn, tests, mf.keepGoing, mf.addModulesToResults, mf.stripPackagesFromResults)
+			genStream(fs, parsers, mf.targets, hostP, targetP, func(*Node, InputChunks, *DenseMap[STR, NodeRef]) {}, onWarn, tests, mf.keepGoing, mf.addModulesToResults, mf.stripPackagesFromResults)
 		}
 
 		if mf.dumpIgnoredMacros {
@@ -337,7 +337,7 @@ func yaToolchainFlags(flags map[string]string, tc *Toolchain, tcFlags map[string
 	flags["YA"] = "yes"
 }
 
-func genStream(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, onNode func(*Node, *DenseMap[STR, NodeRef]), onWarn func(Warn), tests *TestOpts, keepGoing, addModulesToResults, stripPackagesFromResults bool) []NodeRef {
+func genStream(fs FS, parsers *IncludeParserManager, targets []string, hostP, targetP *Platform, onNode func(*Node, InputChunks, *DenseMap[STR, NodeRef]), onWarn func(Warn), tests *TestOpts, keepGoing, addModulesToResults, stripPackagesFromResults bool) []NodeRef {
 	emitter := newStreamingEmitter(onNode)
 
 	emitter.addModulesToResults = addModulesToResults

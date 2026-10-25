@@ -49,7 +49,7 @@ func (e *EmitContext) emitJSReserved(allName string, sources []string, closure [
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:        env,
-		Inputs:     inputs,
+		inputPlan:  na.nodeInputs(inputs),
 		TextInputs: srcVFSs,
 		KV:         &jsNodeKV,
 		Outputs:    na.vfsList(outVFS),

@@ -42,21 +42,7 @@ type CollectionPeerInfo struct {
 }
 
 type IncludedInputPlan struct {
-	Roots   []VFS
-	Scanner *IncludeScanner
-	Context *ScanContext
-}
-
-func (p *IncludedInputPlan) sourceInputs(na *NodeArenas) []VFS {
-	var sources []VFS
-
-	for _, root := range p.Roots {
-		cl := p.Scanner.walkClosure(root, p.Context, scanDomainCC)
-
-		sources = append(sources, cl.collect(na, VFS.isSource)...)
-	}
-
-	return na.dedupClosure(sources)
+	Roots []VFS
 }
 
 type ModuleIncludedDeps struct {
@@ -114,6 +100,7 @@ func (p *PendingEmit) fire() {
 }
 
 type CodegenRegistry struct {
+	files           DenseMap2[VFS, ScannedChildren, Closure]
 	moduleBuildDeps DenseMap[NodeRef, []NodeRef]
 	byRel           DenseMap[STR, *GeneratedFileInfo]
 	bySplit         *IntMap[splitLookup]

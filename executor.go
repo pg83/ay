@@ -67,11 +67,12 @@ type CommandResult struct {
 }
 
 type NodeFuture struct {
-	node *Node
-	ref  NodeRef
-	uid  UID
-	once sync.Once
-	err  *Exception
+	inputs InputChunks
+	node   *Node
+	ref    NodeRef
+	uid    UID
+	once   sync.Once
+	err    *Exception
 }
 
 func newExecutor(srcRoot, bldRoot string, fs FS, threads int, keepGoing bool, ninja bool, sandboxing bool, clear bool, cmdPrefixes []CmdPrefix, events *EventQueue) *Executor {
@@ -146,12 +147,12 @@ func (ex *Executor) contentHash(v VFS) uint64 {
 	return hashSourceFile(ex.srcRoot, v.sharedRel())
 }
 
-func (ex *Executor) onNode(n *Node, fetchRefs *DenseMap[STR, NodeRef]) {
+func (ex *Executor) onNode(n *Node, inputs InputChunks, fetchRefs *DenseMap[STR, NodeRef]) {
 	if ex.fetchRefs == nil {
 		ex.fetchRefs = fetchRefs
 	}
 
-	f := &NodeFuture{node: n, ref: n.Ref}
+	f := &NodeFuture{node: n, ref: n.Ref, inputs: inputs}
 
 	ex.futs.set(uint32(n.Ref), f)
 	ex.prepBatch = append(ex.prepBatch, f)
@@ -182,9 +183,10 @@ func (ex *Executor) flushPrepBatch() {
 }
 
 func (ex *Executor) prepare(f *NodeFuture) {
-	f.uid = ex.uidOf(f.node)
+	f.uid = ex.uidOf(f.node, f.inputs)
 
 	if ex.uidCached(f.uid) {
+		f.inputs = nil
 		f.once.Do(func() {})
 
 		return
@@ -208,14 +210,14 @@ func (ex *Executor) fire(f *NodeFuture) {
 	})
 }
 
-func (ex *Executor) uidOf(n *Node) UID {
+func (ex *Executor) uidOf(n *Node, inputs InputChunks) UID {
 	if n.PresetUID != nil {
 		return *n.PresetUID
 	}
 
 	ex.canon.fetchRefs = ex.fetchRefs
 
-	return ex.canon.calcUID(n)
+	return ex.canon.calcUID(n, inputs)
 }
 
 func fatalException(e *Exception) {
@@ -350,8 +352,10 @@ func (ex *Executor) execute(f *NodeFuture) {
 		bldMount = filepath.Join(tmp, "b")
 		throw(os.MkdirAll(srcMount, 0o755))
 		throw(os.MkdirAll(bldMount, 0o755))
-		ex.linkSourceInputs(n, srcMount)
+		ex.linkSourceInputs(f.inputs, srcMount)
 	}
+
+	f.inputs = nil
 
 	for r := range n.buildDeps(ex.fetchRefs) {
 		ex.restoreInto(ex.futs.get(uint32(r)).uid, bldMount, false)
@@ -570,8 +574,8 @@ func (ex *Executor) runNode(n *Node, srcMount, bldMount string) CommandResult {
 	return result
 }
 
-func (ex *Executor) linkSourceInputs(n *Node, srcMount string) {
-	for _, chunk := range n.Inputs {
+func (ex *Executor) linkSourceInputs(inputs InputChunks, srcMount string) {
+	for _, chunk := range inputs {
 		for _, in := range chunk {
 			if !in.isSource() {
 				continue

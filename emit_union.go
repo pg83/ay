@@ -65,8 +65,8 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	node := Node{
 		Module: true, Platform: e.instance.Platform, KV: &unionKV,
 		KVExts: []KVExt{{Key: "package", Val: "UNION"}}, Env: envVarsVCS,
-		Inputs:  na.inputList(na.vfsList(generated...)),
-		Outputs: na.vfsList(append([]VFS{out}, generated...)...), Resources: usesPython3,
+		inputPlan: na.nodeInputs(na.inputList(na.vfsList(generated...))),
+		Outputs:   na.vfsList(append([]VFS{out}, generated...)...), Resources: usesPython3,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), strC2.any(), internStr("open('"+out.string()+"','w').close()").any())), Env: envVarsVCS}),
 	}
 

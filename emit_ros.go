@@ -112,7 +112,7 @@ func (e *EmitContext) emitRosSource(meta SrcMeta, outputs []VFS) {
 	}
 
 	ref := ctx.emit.reserve()
-	node := Node{Platform: e.instance.Platform, Cmds: cmds, Env: envVarsVCS, Inputs: append(ctx.na.inputList(ctx.na.vfsList(tool, src)), closure.bucketList()...), BuildFromInputs: ctx.na.inputList(ctx.na.vfsList(src), closure.bucketList()...), Outputs: outs, KV: &rosKV, ForeignDepRefs: ctx.na.refList(toolRef)}
+	node := Node{Platform: e.instance.Platform, Cmds: cmds, Env: envVarsVCS, inputPlan: ctx.na.nodeInputs(append(ctx.na.inputList(ctx.na.vfsList(tool, src)), closure.bucketList()...)), BuildFromInputs: ctx.na.inputList(ctx.na.vfsList(src), closure.bucketList()...), Outputs: outs, KV: &rosKV, ForeignDepRefs: ctx.na.refList(toolRef)}
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
 	var includes []string
@@ -184,7 +184,7 @@ func (e *EmitContext) emitRosEmpty() {
 	script := buildScriptsWriterPy
 	ref := e.ctx.emit.reserve()
 	inputs := append([]VFS{script}, e.ctx.scripts[script.rel()]...)
-	node := Node{Platform: e.instance.Platform, Env: envVarsVCS, KV: &rosKV, Resources: usesPython3, Inputs: na.inputList(na.vfsList(inputs...)), Outputs: na.vfsList(out), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), script.any(), strFile.any(), out.any(), strContent.any(), strPackageGenerated.any())), Env: envVarsVCS})}
+	node := Node{Platform: e.instance.Platform, Env: envVarsVCS, KV: &rosKV, Resources: usesPython3, inputPlan: na.nodeInputs(na.inputList(na.vfsList(inputs...))), Outputs: na.vfsList(out), Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), script.any(), strFile.any(), out.any(), strContent.any(), strPackageGenerated.any())), Env: envVarsVCS})}
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
 	e.register(GeneratedFileInfo{OutputPath: out, ProducerRef: ref, OnUse: pending})

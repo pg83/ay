@@ -24,24 +24,20 @@ type StreamingEmitter struct {
 	nodes                    Vec[*Node]
 	modules                  BitSet
 	resolved                 BitSet
-	pendingIdx               []NodeRef
-	pendingSet               map[NodeRef]bool
 	results                  []NodeRef
-	deferredNodes            []NodeRef
 	deferPublication         int
 	publicationRoots         []NodeRef
 	exportEligible           BitSet
-	onNode                   func(*Node, *DenseMap[STR, NodeRef])
+	onNode                   func(*Node, InputChunks, *DenseMap[STR, NodeRef])
 	na                       *NodeArenas
 	fetchRefs                *DenseMap[STR, NodeRef]
 }
 
-func newStreamingEmitter(onNode func(*Node, *DenseMap[STR, NodeRef])) *StreamingEmitter {
+func newStreamingEmitter(onNode func(*Node, InputChunks, *DenseMap[STR, NodeRef])) *StreamingEmitter {
 	return &StreamingEmitter{
-		pendingSet: map[NodeRef]bool{},
-		onNode:     onNode,
-		na:         newStrictNodeArenas(),
-		fetchRefs:  &DenseMap[STR, NodeRef]{},
+		onNode:    onNode,
+		na:        newStrictNodeArenas(),
+		fetchRefs: &DenseMap[STR, NodeRef]{},
 	}
 }
 
@@ -102,40 +98,27 @@ func (e *StreamingEmitter) emit(n *Node) NodeRef {
 }
 
 func (e *StreamingEmitter) resolveOrPend(n *Node, id NodeRef) {
+	if n.Inputs == nil {
+		if n.inputPlan == nil {
+			n.inputPlan = e.na.nodeInputs(nil)
+		}
+
+		n.Inputs = (*NodeInputPlan).evaluate
+	}
+
 	assert(len(n.Outputs) > 0, "emitter: node without outputs")
 	e.commandResources(n)
 
 	if e.deferPublication == 0 {
 		e.publicationRoots = append(e.publicationRoots, id)
 	}
-
-	n.deferPublication = e.deferPublication > 0
-
-	if e.hasUnresolvedDeps(n) {
-		e.pendingSet[id] = true
-		e.pendingIdx = append(e.pendingIdx, id)
-
-		return
-	}
-
-	e.emitResolved(n, id)
 }
 
 func (e *StreamingEmitter) emitResolved(n *Node, id NodeRef) {
 	e.resolved.add(uint32(id))
 
 	if e.onNode != nil {
-		for dependency := range n.buildDeps(e.fetchRefs) {
-			if e.nodes.s[dependency].deferPublication {
-				n.deferPublication = true
-			}
-		}
-
-		if e.stripPackagesFromResults || n.deferPublication {
-			e.deferredNodes = append(e.deferredNodes, id)
-		} else {
-			e.onNode(n, e.fetchRefs)
-		}
+		e.onNode(n, n.consumeInputs(), e.fetchRefs)
 	}
 }
 
@@ -157,14 +140,72 @@ func (e *StreamingEmitter) result(r NodeRef) {
 	e.results = append(e.results, r)
 }
 
+func (e *StreamingEmitter) activateSelectedInputs() BitSet {
+	activation := map[*IncludeScanner]*BitSet{}
+	stack := e.publicationFrontier()
+
+	var selected BitSet
+
+	selectProducer := func(ref NodeRef) {
+		stack = append(stack, ref)
+	}
+
+	for len(stack) > 0 {
+		ref := stack[len(stack)-1]
+
+		stack = stack[:len(stack)-1]
+
+		if selected.has(uint32(ref)) {
+			continue
+		}
+
+		selected.add(uint32(ref))
+
+		node := e.nodes.s[ref]
+
+		if node == nil {
+			continue
+		}
+
+		if plan := node.inputPlan; plan != nil && plan.scanner != nil {
+			seen := activation[plan.scanner]
+
+			if seen == nil {
+				seen = &BitSet{}
+				activation[plan.scanner] = seen
+			}
+
+			plan.activate(seen, selectProducer)
+		}
+
+		for dependency := range node.buildDeps(e.fetchRefs) {
+			selectProducer(dependency)
+		}
+	}
+
+	return selected
+}
+
 func (e *StreamingEmitter) finish() []NodeRef {
+	selected := e.activateSelectedInputs()
+
+	for _, node := range e.nodes.s {
+		if node != nil && selected.has(uint32(node.Ref)) {
+			node.establishedInputRefs(e.na)
+		}
+	}
+
+	if e.stripPackagesFromResults {
+		e.stripPackageResults()
+	}
+
 	e.exportEligible = e.reachableNodes(e.publicationFrontier())
 
-	pending := make([]NodeRef, 0, len(e.pendingIdx))
+	pending := make([]NodeRef, 0, e.nodes.len())
 
-	for _, ref := range e.pendingIdx {
-		if e.exportEligible.has(uint32(ref)) {
-			pending = append(pending, ref)
+	for _, node := range e.nodes.s {
+		if node != nil && e.exportEligible.has(uint32(node.Ref)) {
+			pending = append(pending, node.Ref)
 		}
 	}
 
@@ -226,12 +267,6 @@ func (e *StreamingEmitter) finish() []NodeRef {
 			if n != nil && e.exportEligible.has(uint32(n.Ref)) && (n.Module || e.modules.has(uint32(n.Ref))) {
 				e.result(n.Ref)
 			}
-		}
-	}
-
-	for _, id := range e.deferredNodes {
-		if node := e.nodes.s[id]; node != nil && e.exportEligible.has(uint32(id)) {
-			e.onNode(node, e.fetchRefs)
 		}
 	}
 

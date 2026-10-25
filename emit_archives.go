@@ -101,7 +101,7 @@ func (e *EmitContext) emitArchive(
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:             env,
-		Inputs:          na.inputList(inputs, na.srcChunk(toolBinPath)),
+		inputPlan:       na.nodeInputs(na.inputList(inputs, na.srcChunk(toolBinPath))),
 		BuildFromInputs: na.inputList(inputs),
 		KV:              &archivesKV,
 		Outputs:         na.vfsList(archiveVFS),

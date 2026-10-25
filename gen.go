@@ -1176,6 +1176,7 @@ type ResolvedPeer struct {
 func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, ccOwn, ccPeer, fullPeer, protoInclude []VFS) *ScanContext {
 	scanCtx := newScanContext(ctx.na, ctx.parsers, ccOwn, ccPeer, fullPeer, includeScannerBasePaths())
 
+	scanCtx.dontResolveIncludes = d.dontResolveIncludes
 	scanCtx.asmAddIncl = ctx.na.vfsList(d.asmAddIncl...)
 	scanCtx.cythonAddIncl = ctx.na.vfsList(d.cythonAddIncl...)
 	scanCtx.protoInclude = ctx.na.vfsList(protoInclude...)

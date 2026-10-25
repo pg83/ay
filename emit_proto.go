@@ -888,7 +888,7 @@ func (e *EmitContext) emitPB(
 			Env: env}),
 		Env: env,
 
-		Inputs:          pbInputChunks,
+		inputPlan:       na.nodeInputs(pbInputChunks),
 		BuildFromInputs: pbInputChunks[1:],
 		Outputs:         outputs,
 		KV:              spec.kv,

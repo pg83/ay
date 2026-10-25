@@ -96,7 +96,7 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 		for _, preinclude := range preincludes {
 			input := e.moduleSourceVFS(preinclude)
 
-			closures = append(closures, e.scanner.assemblerContext(e.d.scanCtx).walkClosure(input, e.d.scanCtx, scanDomainAsm))
+			closures = append(closures, e.scanner.walkClosure(input, e.d.scanCtx, scanDomainAsm))
 		}
 	}
 
@@ -161,7 +161,7 @@ func (e *EmitContext) emitASAsm(srcVFS VFS, in ModuleCCInputs, yasmLD NodeRef, n
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
 			Env: env}),
 		Env:             env,
-		Inputs:          inputs,
+		inputPlan:       na.nodeInputs(inputs),
 		BuildFromInputs: buildFrom,
 		InputClosure:    in.IncludeView,
 		Outputs:         na.vfsList(outVFS),
@@ -195,7 +195,7 @@ func (e *EmitContext) emitLibraryYasmSource(meta SrcMeta, in ModuleCCInputs) {
 	asIn := in
 
 	asIn.AddIncl = d.asmAddIncl
-	asIn.IncludeView = e.scanner.assemblerContext(d.scanCtx).walkClosure(srcVFS, d.scanCtx, scanDomainAsm)
+	asIn.IncludeView = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainAsm)
 
 	nasm := d.useNasm && filepath.Ext(srcVFS.relString()) == ".asm"
 

@@ -218,6 +218,10 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 		inVFSs:   ctx.na.vfsList(inSnapVFSs...),
 	}
 
+	for _, input := range snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse] {
+		snap.scanner.discoverInput(input, snap.scanCtx)
+	}
+
 	pe := func() {
 		inputClosure := pyInputClosure(snap, stmt)
 
@@ -510,7 +514,7 @@ func (e *EmitContext) emitPYRun(
 		Platform:        e.instance.Platform,
 		Cmds:            na.cmdList(cmd),
 		Env:             env,
-		Inputs:          inputChunks,
+		inputPlan:       na.nodeInputs(inputChunks),
 		BuildFromInputs: appendInputChunks(na, na.inputList(directSources, dataBuilds), inputClosure),
 		TextInputs:      textInputs,
 		KV:              kv,

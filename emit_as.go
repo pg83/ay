@@ -23,7 +23,7 @@ func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (No
 			Cwd: bldRootDirVFS, Resources: flags.Resources,
 			Env: env}),
 		Env:       env,
-		Inputs:    na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.bucketList()...),
+		inputPlan: na.nodeInputs(na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.bucketList()...)),
 		Outputs:   na.vfsList(outVFS),
 		KV:        &asKV,
 		Resources: instance.Platform.UsesClangOnly,

@@ -61,7 +61,7 @@ func (e *EmitContext) emitBIReserved(
 		Platform:  instance.Platform,
 		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(cmd0Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd1Args), Env: env}, Cmd{CmdArgs: na.chunkList(cmd2Args), Env: env}),
 		Env:       env,
-		Inputs:    na.inputList(inputs),
+		inputPlan: na.nodeInputs(na.inputList(inputs)),
 		KV:        &instance.Platform.BuildInfoKV,
 		Outputs:   na.vfsList(outVFS),
 		DepRefs:   na.refList(),

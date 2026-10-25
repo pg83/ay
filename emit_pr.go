@@ -184,6 +184,10 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		inBuilds:  ctx.na.vfsList(inBuilds...),
 	}
 
+	for _, input := range snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse] {
+		snap.scanner.discoverInput(input, snap.scanCtx)
+	}
+
 	pe := func() {
 		inputClosure := prInputClosure(snap, stmt)
 		inputInduced := prInputInducedIncludes(ctx, e.codegen, snap.scanner, snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse])
@@ -641,7 +645,7 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	na.vfs.commit(len(tools))
 	tools = tools[:len(tools):len(tools)]
 
-	inputNode := Node{Inputs: na.inputList(tools, spec.inSources, spec.inBuilds), Outputs: outputs,
+	inputNode := Node{inputPlan: na.nodeInputs(na.inputList(tools, spec.inSources, spec.inBuilds)), Outputs: outputs,
 		BuildFromInputs: na.inputList(spec.inVFSs),
 		TextInputs:      e.textInputSources(spec.inVFSs, len(spec.inVFSs)-stmt.INNoParse)}
 
@@ -650,9 +654,9 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	var inputs InputChunks
 
 	dedupers.with(func(deduper *DeDuper) {
-		chunks := na.inputs.alloc(len(inputNode.Inputs) + 2)[:0]
+		chunks := na.inputs.alloc(len(inputNode.inputPlan.files) + 2)[:0]
 
-		for _, chunk := range inputNode.Inputs {
+		for _, chunk := range inputNode.inputPlan.files {
 			chunks = append(chunks, na.filterSeen(deduper, chunk))
 		}
 
@@ -697,14 +701,16 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 	}
 
 	node := Node{
-		Platform:       instance.Platform,
-		Cmds:           na.cmdList(cmd),
-		Env:            env,
-		Inputs:         inputs,
-		Outputs:        outputs,
-		KV:             kv,
-		ForeignDepRefs: toolRefs,
-		DepRefs:        inputNode.DepRefs,
+		Platform:        instance.Platform,
+		Cmds:            na.cmdList(cmd),
+		Env:             env,
+		inputPlan:       na.nodeInputs(inputs),
+		Outputs:         outputs,
+		KV:              kv,
+		ForeignDepRefs:  toolRefs,
+		DepRefs:         inputNode.DepRefs,
+		BuildFromInputs: inputNode.BuildFromInputs,
+		TextInputs:      inputNode.TextInputs,
 	}
 
 	e.resolveNodeCodegenRefs(&node)

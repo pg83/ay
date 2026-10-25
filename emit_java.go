@@ -133,7 +133,7 @@ func (b *javaNodeBuilder) emitTo(ref NodeRef) {
 		Platform:     platform,
 		Cmds:         na.cmdList(b.cmds...),
 		Env:          env,
-		Inputs:       na.inputList(dedupVFSKeepOrder(b.inputs)),
+		inputPlan:    na.nodeInputs(na.inputList(dedupVFSKeepOrder(b.inputs))),
 		KV:           kv,
 		KVExts:       b.exts,
 		Outputs:      na.vfsList(b.outputs...),

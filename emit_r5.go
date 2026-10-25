@@ -43,7 +43,7 @@ func (e *EmitContext) emitR5Reserved(
 		Platform:        instance.Platform,
 		Cmds:            na.cmdList(cmd0, cmd1),
 		Env:             env,
-		Inputs:          na.inputList(na.vfsList(ragel5BinPath, rlgenCdBinPath, srcVFS), closure.bucketList()...),
+		inputPlan:       na.nodeInputs(na.inputList(na.vfsList(ragel5BinPath, rlgenCdBinPath, srcVFS), closure.bucketList()...)),
 		BuildFromInputs: na.inputList(na.vfsList(srcVFS), closure.bucketList()...),
 		Outputs:         na.vfsList(tmpVFS, cppVFS),
 		KV:              &r5KV,

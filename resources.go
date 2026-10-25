@@ -510,7 +510,7 @@ func (e *EmitContext) genPrebuiltProgram() *ModuleEmitResult {
 			srcVFS.any(),
 			dst.any())), Env: env}),
 		Env:       env,
-		Inputs:    inputsChunks,
+		inputPlan: na.nodeInputs(inputsChunks),
 		KV:        &resourcesKV,
 		Outputs:   na.vfsList(dst),
 		DepRefs:   depRefs,
