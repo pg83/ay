@@ -1,6 +1,7 @@
 import unittest
 
 import lib
+from test_resource_producers import proto_files
 
 
 def library(sources):
@@ -18,6 +19,41 @@ def closure(graph, source):
 
 
 class IncludeCycleTest(unittest.TestCase):
+    def test_discovered_cycle_completes_before_shared_dag_consumers(self):
+        depth = 28
+        consumers = 3
+        sources = " ".join(f"consumer{i}.cpp" for i in range(consumers))
+        files = proto_files(f"SRCS(before.h seed.proto {sources})\n", {
+            "lib/before.h": '#include "cycle.h"\n#include <lib/seed.pb.h>\n',
+            "lib/cycle.h": '#include "before.h"\n',
+            "lib/seed.proto": 'syntax = "proto2";\nmessage Seed {}\n',
+        })
+        # Discovery sees this cycle before the generated header is declared.
+        # Each later diamond layer shares both children of the previous one.
+        previous = ["before.h"]
+        for level in range(depth):
+            names = [f"layer{level}_a.h", f"layer{level}_b.h"]
+            for name in names:
+                files["lib/" + name] = "".join(
+                    f'#include "{child}"\n' for child in previous)
+            previous = names
+        for i in range(consumers):
+            files[f"lib/consumer{i}.cpp"] = (
+                f'#include "{previous[i % len(previous)]}"\n')
+
+        graph = lib.make(files, "lib", "--target-platform", "default-linux-x86_64")
+        producer = lib.node_by_output(graph, "$(B)/lib/seed.pb.h")
+        shared = {"$(S)/lib/before.h", "$(S)/lib/cycle.h", "$(B)/lib/seed.pb.h"}
+        shared.update(f"$(S)/lib/layer{level}_{branch}.h"
+                      for level in range(depth - 1) for branch in ("a", "b"))
+        for i in range(consumers):
+            with self.subTest(consumer=i):
+                compiled = lib.node_by_output(graph, f"$(B)/lib/consumer{i}.cpp.o")
+                expected = shared | {
+                    f"$(S)/lib/consumer{i}.cpp", "$(S)/lib/" + previous[i % 2]}
+                self.assertCountEqual(compiled["inputs"], expected)
+                self.assertIn(producer["uid"], compiled["deps"])
+
     def test_strongly_connected_headers_share_one_closure(self):
         files = {
             "m/ya.make": library("a.cpp b.cpp c.cpp s.cpp"),

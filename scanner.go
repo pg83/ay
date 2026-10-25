@@ -786,6 +786,10 @@ func (sc *ScanCtx) emitClosure(members []VFS, fill func(block []VFS) (int, bool)
 			cl.incomplete = cl.incomplete || entry.Deferred
 
 			for _, child := range entry.Paths {
+				if sc.tjc.scratch.onStackHas(child) {
+					continue
+				}
+
 				childClosure, _ := s.closure(child)
 
 				cl.incomplete = cl.incomplete || childClosure.incomplete
