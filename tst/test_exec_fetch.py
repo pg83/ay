@@ -2,6 +2,7 @@ import base64
 import http.server
 import io
 import json
+import lzma
 import os
 import socket
 import socketserver
@@ -362,6 +363,17 @@ class FetchURLTest(FetchCase):
 
 
 class ResourceDescriptorFetchTest(unittest.TestCase):
+    def test_descriptor_command_rejects_missing_arguments_and_wrong_host_option(self):
+        for args in (("--resource-json",),
+                     ("--resource-json", "{}", "--platform", "linux-x86_64", "build", "source", "output")):
+            with self.subTest(args=args):
+                result = lib.run_process("fetch", *args)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    "fetch: usage: ay fetch --resource-json <descriptor> --host-platform <platform> "
+                    "<build-root> <source-root> <output-dir>", result.stderr,
+                )
+
     def fetch_local_archive(self, root, archive):
         source = root / "src"
         script = source / "build/scripts/fetch_from_sandbox.py"
@@ -425,6 +437,90 @@ class ResourceDescriptorFetchTest(unittest.TestCase):
             self.assertEqual(os.readlink(output / "link"), "bin/tool")
             self.assertEqual((output / "link").read_text(), "tool\n")
             self.assertTrue(os.path.samefile(output / "hard", output / "bin/tool"))
+
+    def test_strip_prefix_keeps_explicit_directories_and_strips_absolute_roots(self):
+        with tempfile.TemporaryDirectory(prefix="ay-strip-paths-") as directory:
+            root = Path(directory)
+            for kind in ("directory", "absolute"):
+                with self.subTest(kind=kind):
+                    archive_path = root / f"{kind}.tar"
+                    with tarfile.open(archive_path, "w") as archive:
+                        entry = tarfile.TarInfo("prefix/empty/" if kind == "directory" else "/prefix/absolute")
+                        if kind == "directory":
+                            entry.type = tarfile.DIRTYPE
+                            archive.addfile(entry)
+                        else:
+                            entry.size = 5
+                            archive.addfile(entry, io.BytesIO(b"tool\n"))
+                    result, output = self.fetch_local_archive(root, archive_path)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    if kind == "directory":
+                        self.assertTrue((output / "empty").is_dir())
+                        self.assertEqual(list((output / "empty").iterdir()), [])
+                    else:
+                        self.assertEqual((output / "prefix/absolute").read_text(), "tool\n")
+                        self.assertFalse((output / "absolute").exists())
+
+    def test_strip_prefix_rejects_a_regular_file_as_an_entry_parent(self):
+        with tempfile.TemporaryDirectory(prefix="ay-strip-parent-") as directory:
+            root = Path(directory)
+            archive_path = root / "parent.tar"
+            with tarfile.open(archive_path, "w") as archive:
+                for name in ("prefix/parent", "prefix/parent/child"):
+                    entry = tarfile.TarInfo(name)
+                    entry.size = 5
+                    archive.addfile(entry, io.BytesIO(b"tool\n"))
+            result, output = self.fetch_local_archive(root, archive_path)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("not a directory", result.stderr.lower())
+            self.assertEqual((output / "parent").read_text(), "tool\n")
+            self.assertFalse((output / "resource").exists())
+
+    def test_strip_prefix_rejects_truncated_tar_data_after_copying_its_prefix(self):
+        with tempfile.TemporaryDirectory(prefix="ay-strip-truncated-") as directory:
+            root = Path(directory)
+            archive_path = root / "truncated.tar"
+            entry = tarfile.TarInfo("prefix/file")
+            entry.size = 20
+            archive_path.write_bytes(entry.tobuf() + b"short")
+            result, output = self.fetch_local_archive(root, archive_path)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("unexpected EOF", result.stderr)
+            self.assertEqual((output / "file").read_bytes(), b"short")
+            self.assertFalse((output / "resource").exists())
+
+    def test_strip_prefix_rejects_malformed_tar_inside_xz_and_zstd(self):
+        with tempfile.TemporaryDirectory(prefix="ay-strip-compressed-errors-") as directory:
+            root = Path(directory)
+            raw = b"invalid tar data" * 100
+            for kind in ("xz", "zstd"):
+                with self.subTest(kind=kind):
+                    archive_path = root / f"malformed.{kind}"
+                    if kind == "xz":
+                        archive_path.write_bytes(lzma.compress(raw))
+                    else:
+                        archive_path.write_bytes(subprocess.check_output(["zstd", "-q", "-c"], input=raw))
+                    result, output = self.fetch_local_archive(root, archive_path)
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn("invalid tar header", result.stderr)
+                    self.assertEqual(list(output.iterdir()), [])
+
+    def test_strip_prefix_rejects_zip_symlink_targets_over_64_kib(self):
+        with tempfile.TemporaryDirectory(prefix="ay-strip-zip-link-") as directory:
+            root = Path(directory)
+            archive_path = root / "oversized.zip"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("prefix/bin/tool", "tool\n")
+                entry = zipfile.ZipInfo("prefix/link")
+                entry.create_system = 3
+                entry.external_attr = 0o120777 << 16
+                archive.writestr(entry, "x" * 65537)
+            result, output = self.fetch_local_archive(root, archive_path)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("symlink target exceeds 65536 bytes", result.stderr)
+            self.assertEqual((output / "bin/tool").read_text(), "tool\n")
+            self.assertFalse((output / "link").is_symlink())
+            self.assertFalse((output / "resource").exists())
 
     def test_strip_prefix_rejects_collisions_and_output_escape(self):
         with tempfile.TemporaryDirectory(prefix="ay-strip-safety-") as directory:
