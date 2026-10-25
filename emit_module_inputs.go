@@ -314,11 +314,6 @@ func (e *EmitContext) publishOwnModuleIncludedDeps() *ModuleIncludedDeps {
 		}
 	}
 
-	if objects := e.objcopyRes; objects != nil {
-		inputs = append(inputs, objects.Outputs...)
-		refs = append(refs, objects.Refs...)
-	}
-
 	if len(inputs) == 0 {
 		return nil
 	}

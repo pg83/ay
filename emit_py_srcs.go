@@ -679,11 +679,6 @@ func (e *EmitContext) emitPyNamespaceForGroup(groupIndex int, group PySrcGroup) 
 
 func (e *EmitContext) emitPyMainObjcopy() ([]NodeRef, []VFS) {
 	_, _, d := e.ctx, e.instance, e.d
-
-	if d.pyMain == nil {
-		return nil, nil
-	}
-
 	kv := "PY_MAIN=" + d.pyMain.string()
 
 	return e.emitKvOnlyResource(d.unit.HashTag, []string{kv}, []STR{internStr(kv)})
@@ -691,11 +686,6 @@ func (e *EmitContext) emitPyMainObjcopy() ([]NodeRef, []VFS) {
 
 func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 	_, _, d := e.ctx, e.instance, e.d
-
-	if d.importMask.resource == nil {
-		return nil, nil
-	}
-
 	item := *d.importMask.resource
 	env := Environment{s: &e.frame.ifEnv}
 	raw := env.string(internEnv(importMaskVariable))
@@ -707,10 +697,6 @@ func (e *EmitContext) emitNoCheckImportsObjcopy() ([]NodeRef, []VFS) {
 
 func (e *EmitContext) emitYaConfJSONObjcopy() ([]NodeRef, []VFS) {
 	ctx, _, d := e.ctx, e.instance, e.d
-
-	if len(d.yaConfJSON) == 0 {
-		return nil, nil
-	}
 
 	type yaConfResource struct {
 		sourcePath string

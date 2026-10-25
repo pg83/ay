@@ -41,10 +41,6 @@ func (e *EmitContext) bindFbsNativeSource(src VFS, in ModuleCCInputs, reserved N
 	binding := bindings.native[key]
 
 	if binding == nil {
-		if reserved == 0 {
-			reserved = ctx.emit.reserve()
-		}
-
 		binding = &fbsNativeBinding{ref: reserved}
 
 		bindings.native[key] = binding
