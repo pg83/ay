@@ -2,7 +2,7 @@ package main
 
 var asKV = KV{P: pkAS, PC: pcLightGreen}
 
-func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (NodeRef, VFS) {
+func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (NodeRef, VFS, bool) {
 	instance := e.instance
 	na := e.ctx.na
 	outVFS, inVFS := in.OutputStem, srcVFS
@@ -11,6 +11,10 @@ func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (No
 		outVFS = build(in.OutputStem.relString(), ".o")
 	} else {
 		outVFS, inVFS = composeASPaths(instance, srcVFS)
+	}
+
+	if !e.submitOutput(outVFS) {
+		return 0, outVFS, false
 	}
 
 	flags := commonCompilerFlagValue(in, instance.Platform)
@@ -29,7 +33,7 @@ func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (No
 		Resources: instance.Platform.UsesClangOnly,
 	}
 
-	return e.emitNode(node), outVFS
+	return e.emitNode(node), outVFS, true
 }
 
 func composeASPaths(instance ModuleInstance, srcVFS VFS) (out, input VFS) {
@@ -98,7 +102,9 @@ func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {
 
 	asIn.IncludeView = e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
 
-	ref, outPath := e.emitAS(srcVFS, asIn, ctx.host)
+	ref, outPath, accepted := e.emitAS(srcVFS, asIn, ctx.host)
 
-	e.collectObj(ref, outPath, meta)
+	if accepted {
+		e.collectObj(ref, outPath, meta)
+	}
 }

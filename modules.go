@@ -360,7 +360,6 @@ type ModuleData struct {
 	archiveAsm               []ArchiveAsmEntry
 	lj21                     *Lj21Archive
 	copyFiles                []CopyFileEntry
-	copyFileAutoOutputs      map[STR]CopyFileEntry
 	declSeq                  int
 	producerDeclarations     []producerDeclaration
 	producerCounts           [prodKindCount]int
@@ -422,16 +421,6 @@ func (d *ModuleData) nextDeclSeq() int {
 	d.declSeq++
 
 	return d.declSeq
-}
-
-func (d *ModuleData) hasSrc(src string) bool {
-	for _, meta := range d.srcs {
-		if meta.Source.string() == src {
-			return true
-		}
-	}
-
-	return false
 }
 
 func muslCFlags(on bool) []ANY {
@@ -3138,20 +3127,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		if entry.Auto {
 			dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
-			prefix := modulePath + "/"
 
-			if strings.HasPrefix(dstVFS.relString(), prefix) {
-				dstRel := strings.TrimPrefix(dstVFS.relString(), prefix)
-
-				if isSourceEligibleForCopyAuto(dstRel) && !d.hasSrc(dstRel) {
-					d.srcs = append(d.srcs, SrcMeta{Source: internStr(dstRel).any(), Prio: stmtPrioDefault})
-				}
-
-				if d.copyFileAutoOutputs == nil {
-					d.copyFileAutoOutputs = make(map[STR]CopyFileEntry)
-				}
-
-				d.copyFileAutoOutputs[internStr(dstRel)] = entry
+			if isSourceEligibleForCopyAuto(dstVFS.relString()) {
+				d.srcs = append(d.srcs, SrcMeta{Source: dstVFS.any(), Prio: stmtPrioDefault})
 			}
 		}
 	case tokCopy:
@@ -3163,20 +3141,9 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			if entry.Auto {
 				dstVFS := copyFileOutputVFS(modulePath, entry.Dst)
-				prefix := modulePath + "/"
 
-				if strings.HasPrefix(dstVFS.relString(), prefix) {
-					dstRel := strings.TrimPrefix(dstVFS.relString(), prefix)
-
-					if isSourceEligibleForCopyAuto(dstRel) && !d.hasSrc(dstRel) {
-						d.srcs = append(d.srcs, SrcMeta{Source: internStr(dstRel).any(), Prio: stmtPrioDefault})
-					}
-
-					if d.copyFileAutoOutputs == nil {
-						d.copyFileAutoOutputs = make(map[STR]CopyFileEntry)
-					}
-
-					d.copyFileAutoOutputs[internStr(dstRel)] = entry
+				if isSourceEligibleForCopyAuto(dstVFS.relString()) {
+					d.srcs = append(d.srcs, SrcMeta{Source: dstVFS.any(), Prio: stmtPrioDefault})
 				}
 			}
 		}

@@ -67,6 +67,23 @@ type ProducerPos struct {
 	end   int
 }
 
+const submittedProducer = -1
+
+func (e *EmitContext) submitOutput(output VFS) bool {
+	owner, claimed := e.producerOutputs[output]
+	info := e.codegen.lookup(output)
+
+	if claimed && owner == submittedProducer || info != nil && info.OwnerModule == e.instance.Path && info.OwnerSerial == e.frame.serial {
+		e.ctx.onWarn(Warn{Kind: WarnDupSrc, Message: fmt.Sprintf("%s: %s was already added in this project. Skip command", e.instance.Path.relString(), output.string())})
+
+		return false
+	}
+
+	e.producerOutputs[output] = submittedProducer
+
+	return true
+}
+
 func runInputBuildCandidate(modulePath, rel string) VFS {
 	v := moduleInputCandidateVFS(modulePath, rel)
 
@@ -601,6 +618,24 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		positions = append(positions, ProducerPos{kind: prodUserverProto, index: i, outs: outs, ins: e.prodVFSTake(start)})
 	}
 
+	if goModule {
+		for _, index := range goModuleCgoExports(d) {
+			src := d.srcs[index].Source
+			out := build(module, "/", src.string())
+			outsMark := len(e.prodVFS)
+
+			e.prodVFS = append(e.prodVFS, out)
+			srcs[index].Source = out.any()
+
+			positions = append(positions, ProducerPos{
+				kind:  prodGoCgoCopy,
+				index: index,
+				outs:  e.prodVFSTake(outsMark),
+				ins:   e.srcInsCandidate(src),
+			})
+		}
+	}
+
 	for i, m := range srcs {
 		if isPythonProtoModule(d) {
 			m.Stmt = -i - 1
@@ -614,7 +649,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		} else {
 			ins = []VFS{e.sourceInputForScheduling(m.Source.string())}
 
-			if m.Prio == stmtPrioSrcs && srcExtClassOf(m.Source) == srcExtCSource {
+			if m.Source.vfs() == 0 && m.Prio == stmtPrioSrcs && srcExtClassOf(m.Source) == srcExtCSource {
 				if _, known := moduleRootedVFS(module, m.Source.string()); known {
 					ins = nil
 				}
@@ -630,19 +665,6 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 	}
 
 	if goModule {
-		for i, srcTok := range goModuleCgoExports(d) {
-			outsMark := len(e.prodVFS)
-
-			e.prodVFS = append(e.prodVFS, build(module, "/", srcTok.string()))
-
-			positions = append(positions, ProducerPos{
-				kind:  prodGoCgoCopy,
-				index: i,
-				outs:  e.prodVFSTake(outsMark),
-				ins:   e.srcInsCandidate(srcTok),
-			})
-		}
-
 		if len(d.cgoSrcs) > 0 {
 			outsMark := len(e.prodVFS)
 
@@ -947,7 +969,7 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 				continue
 			}
 
-			if from, declared := e.producerOutputs[input]; declared && from != pi && !e.prodPos[from].done {
+			if from, declared := e.producerOutputs[input]; declared && from >= 0 && from != pi && !e.prodPos[from].done {
 				ready = false
 
 				break
@@ -1057,7 +1079,7 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 				e.emitOneSource(meta)
 			}
 		case prodGoCgoCopy:
-			e.emitGoCgoCopyStmt(goModuleCgoExports(e.d)[pos.index])
+			e.emitGoCgoCopyStmt(e.d.srcs[pos.index].Source)
 		case prodGoCgo1:
 			e.emitGoCgo1Stmt()
 		case prodGoCodegen:

@@ -2,20 +2,6 @@ package main
 
 import "strings"
 
-func copyFileAutoSourceVFS(modulePath string, d *ModuleData, src STR) *VFS {
-	if d.copyFileAutoOutputs == nil {
-		return nil
-	}
-
-	entry, ok := d.copyFileAutoOutputs[src]
-
-	if !ok {
-		return nil
-	}
-
-	return ptr(copyFileOutputVFS(modulePath, entry.Dst))
-}
-
 func copyFileParsedIncludes(na *NodeArenas, srcVFS, moduleDir VFS, entry CopyFileEntry) []IncludeDirective {
 	out := na.dirs.alloc(1 + len(entry.OutputIncludes))[:0]
 

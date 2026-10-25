@@ -154,25 +154,11 @@ func (e *EmitContext) generatedModuleSourceVFS(srcRel string) *VFS {
 }
 
 func (e *EmitContext) resolveModuleSourceVFS(srcAny ANY, srcDirs []VFS) VFS {
-	ctx, instance, d := e.ctx, e.instance, e.d
-
 	if v := srcAny.vfs(); v != 0 {
 		return v
 	}
 
-	src := srcAny.str()
-
-	if buildVFS := copyFileAutoSourceVFS(instance.Path.relString(), d, src); buildVFS != nil {
-		return *buildVFS
-	}
-
-	srcRel := src.string()
-
-	if buildVFS := e.generatedModuleSourceVFS(srcRel); buildVFS != nil {
-		return *buildVFS
-	}
-
-	return resolveSourceVFS(ctx, instance, srcRel, srcDirs)
+	return resolveSourceOrGeneratedVFS(e.ctx, e.instance, srcAny.str().string(), srcDirs)
 }
 
 func (e *EmitContext) moduleSourceRel(src ANY) string {

@@ -31,12 +31,12 @@ var goCgoLinkOPostLd = []ANY{
 	internStr("-lc").any(),
 }
 
-func goModuleCgoExports(d *ModuleData) []ANY {
-	var out []ANY
+func goModuleCgoExports(d *ModuleData) []int {
+	var out []int
 
 	export := false
 
-	for _, meta := range d.srcs {
+	for i, meta := range d.srcs {
 		if meta.Global || meta.Compile.Variant != 0 {
 			continue
 		}
@@ -50,7 +50,7 @@ func goModuleCgoExports(d *ModuleData) []ANY {
 		}
 
 		if export && slices.Contains(goCgoExportExts, path.Ext(rel)) {
-			out = append(out, meta.Source)
+			out = append(out, i)
 		}
 
 		export = false

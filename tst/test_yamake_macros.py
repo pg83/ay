@@ -198,42 +198,52 @@ class YaMakeMacrosTest(unittest.TestCase):
         ])
 
     def test_copy_file_variants(self):
-        graph = self.make({
-            "a/ya.make": module("LIBRARY", (
-                "COPY_FILE(data.txt out/data.txt)\n"
-                "COPY_FILE(AUTO gen/src.cpp copied.cpp OUTPUT_INCLUDES a/inc.h)\n"
-                "COPY_FILE(AUTO TEXT gen/t.h ${BINDIR}/t.h INDUCED_DEPS a/inc.h)\n"
-                "COPY_FILE_WITH_CONTEXT(gen/w.cpp ${ARCADIA_BUILD_ROOT}/elsewhere/w.cpp)\n"
-                "COPY_FILE(AUTO gen/src2.cpp ${ARCADIA_BUILD_ROOT}/other/c2.cpp)\n"
-                "COPY(AUTO WITH_CONTEXT FROM gen f1.cpp f2.h OUTPUT_INCLUDES a/inc.h INDUCED_DEPS a/inc.h)\n"
-                "COPY(FROM gen/../gen plain.txt)\n"
-                "SRCS(dup.cpp)\n"
-                "COPY(AUTO FROM gen dup.cpp)\n"
-                "COPY_FILE(AUTO gen/dup.cpp dup.cpp)"
-            )),
-            "a/x.cpp": "", "a/data.txt": "", "a/inc.h": "", "a/dup.cpp": "",
-            "a/gen/src.cpp": "", "a/gen/t.h": "", "a/gen/w.cpp": "",
-            "a/gen/src2.cpp": "", "a/gen/f1.cpp": '#include "f1dep.h"\n', "a/gen/f2.h": "",
-            "a/gen/plain.txt": "", "a/gen/dup.cpp": "", "a/gen/f1dep.h": "",
-        })
-        self.assertEqual(outputs_by_kind(graph, "CP"), [
-            "$(B)/a/copied.cpp", "$(B)/a/dup.cpp", "$(B)/a/f1.cpp", "$(B)/vcs.json",
-        ])
-        self.assertEqual(
-            lib.node_by_output(graph, "$(B)/a/copied.cpp")["inputs"],
-            ["$(S)/a/gen/src.cpp"],
-        )
-        # COPY(WITH_CONTEXT ...) (build/plugins/cp.py) calls COPY_FILE, a TEXT
-        # input, with the source added to OUTPUT_INCLUDES: the ydb llvm16
-        # copies list fs_tools.py, process_command_files.py and the source,
-        # their compiles the source closure.
-        self.assertEqual(sorted(lib.node_by_output(graph, "$(B)/a/f1.cpp")["inputs"]), ["$(S)/a/gen/f1.cpp"])
-        for path in ("$(S)/a/gen/f1.cpp", "$(S)/a/gen/f1dep.h", "$(S)/a/inc.h"):
-            self.assertIn(path, lib.node_by_output(graph, "$(B)/a/f1.cpp.o")["inputs"])
-        self.assertEqual(
-            lib.node_by_output(graph, "$(B)/a/liba.a")["inputs"][:-1],
-            ["$(B)/a/dup.cpp.o", "$(B)/a/x.cpp.o", "$(B)/a/copied.cpp.o", "$(B)/a/f1.cpp.o"],
-        )
+        for copy in ("COPY(AUTO FROM gen dup.cpp)", "COPY_FILE(AUTO gen/dup.cpp dup.cpp)"):
+            with self.subTest(copy=copy):
+                graph = self.make({
+                    "a/ya.make": module("LIBRARY", (
+                        "ADDINCL(a)\n"
+                        "COPY_FILE(data.txt out/data.txt)\n"
+                        "COPY_FILE(AUTO gen/src.cpp copied.cpp OUTPUT_INCLUDES a/inc.h)\n"
+                        "COPY_FILE(AUTO TEXT gen/t.h ${BINDIR}/t.h INDUCED_DEPS a/inc.h)\n"
+                        "COPY_FILE_WITH_CONTEXT(gen/w.cpp ${ARCADIA_BUILD_ROOT}/elsewhere/w.cpp)\n"
+                        "COPY_FILE(AUTO gen/src2.cpp ${ARCADIA_BUILD_ROOT}/other/c2.cpp)\n"
+                        "COPY(AUTO WITH_CONTEXT FROM gen f1.cpp f2.h OUTPUT_INCLUDES a/inc.h INDUCED_DEPS a/inc.h)\n"
+                        "COPY(FROM gen/../gen plain.txt)\n"
+                        "SRCS(source.cpp)\n"
+                        f"{copy}\n"
+                    )),
+                    "a/x.cpp": "", "a/data.txt": "", "a/inc.h": "", "a/source.cpp": "",
+                    "a/gen/src.cpp": "", "a/gen/t.h": "", "a/gen/w.cpp": "",
+                    "a/gen/src2.cpp": "", "a/gen/f1.cpp": '#include "f1dep.h"\n', "a/gen/f2.h": "",
+                    "a/gen/plain.txt": "", "a/gen/dup.cpp": "", "a/gen/f1dep.h": "",
+                })
+                self.assertEqual(outputs_by_kind(graph, "CP"), [
+                    "$(B)/a/copied.cpp", "$(B)/a/dup.cpp", "$(B)/a/f1.cpp", "$(B)/other/c2.cpp",
+                ])
+                self.assertEqual(
+                    lib.node_by_output(graph, "$(B)/a/copied.cpp")["inputs"],
+                    ["$(S)/a/gen/src.cpp"],
+                )
+                # COPY(WITH_CONTEXT ...) (build/plugins/cp.py) calls COPY_FILE, a TEXT
+                # input, with the source added to OUTPUT_INCLUDES: the ydb llvm16
+                # copies list fs_tools.py, process_command_files.py and the source,
+                # their compiles the source closure.
+                self.assertEqual(sorted(lib.node_by_output(graph, "$(B)/a/f1.cpp")["inputs"]), ["$(S)/a/gen/f1.cpp"])
+                for path in ("$(S)/a/gen/f1.cpp", "$(S)/a/gen/f1dep.h", "$(S)/a/inc.h"):
+                    self.assertIn(path, lib.node_by_output(graph, "$(B)/a/f1.cpp.o")["inputs"])
+                external_copy = lib.node_by_output(graph, "$(B)/other/c2.cpp")
+                external_compile = lib.node_by_output(graph, "$(B)/a/__/other/c2.cpp.o")
+                self.assertEqual(external_copy["inputs"], ["$(S)/a/gen/src2.cpp"])
+                self.assertIn("$(B)/other/c2.cpp", external_compile["inputs"])
+                self.assertIn(external_copy["uid"], external_compile["deps"])
+                archive = lib.node_by_output(graph, "$(B)/a/liba.a")
+                objects = [
+                    "$(B)/a/source.cpp.o", "$(B)/a/x.cpp.o", "$(B)/a/copied.cpp.o",
+                    "$(B)/a/__/other/c2.cpp.o", "$(B)/a/f1.cpp.o", "$(B)/a/dup.cpp.o",
+                ]
+                self.assertEqual(archive["inputs"][:-1], objects)
+                self.assertEqual(archive["cmds"][0]["cmd_args"][-len(objects):], objects)
 
     def test_data_only_macros_leave_a_cpp_graph_unchanged(self):
         files = {"a/ya.make": module("PROGRAM", ""), "a/x.cpp": ""}

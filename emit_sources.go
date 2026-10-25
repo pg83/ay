@@ -68,9 +68,11 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			srcVFS = e.moduleSourceVFS(src)
 		}
 
-		ref, out := e.emitCCWith(srcVFS, e.ccInputsFor(meta.Compile), meta.CompileRef)
+		ref, out, accepted := e.emitCCWith(srcVFS, e.ccInputsFor(meta.Compile), meta.CompileRef)
 
-		e.collectObj(ref, out, meta)
+		if accepted {
+			e.collectObj(ref, out, meta)
+		}
 	case srcExtGettext:
 		input := e.moduleSourceVFS(src)
 

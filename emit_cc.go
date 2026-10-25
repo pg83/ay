@@ -149,24 +149,30 @@ type CCPending struct {
 	ref    NodeRef
 }
 
-func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS) {
+func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS, bool) {
 	ctx := e.ctx
 
 	if e.deferCC {
+		srcRel := trimModulePrefix(srcVFS.relString(), e.instance.Path.relString())
+		out, _ := composeCCPaths(e.instance, srcRel, srcVFS, in, ccObjectSuffix(e.instance, in))
+
+		if !e.submitOutput(out) {
+			return 0, out, false
+		}
+
 		if reserved == 0 {
 			reserved = ctx.emit.reserve()
 		}
 
-		srcRel := trimModulePrefix(srcVFS.relString(), e.instance.Path.relString())
-		out, _ := composeCCPaths(e.instance, srcRel, srcVFS, in, ccObjectSuffix(e.instance, in))
-
 		e.ccPending = append(e.ccPending, CCPending{src: srcVFS, inputs: in, ref: reserved})
 
-		return reserved, out
+		return reserved, out, true
 	}
 
 	if e.instance.Language == LangFbsJavaNative {
-		return e.bindFbsNativeSource(srcVFS, in, reserved)
+		ref, out := e.bindFbsNativeSource(srcVFS, in, reserved)
+
+		return ref, out, true
 	}
 
 	in.IncludeView = e.scanner.walkClosure(srcVFS, e.d.scanCtx, scanDomainCC)
@@ -176,12 +182,14 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef
 	}
 
 	if e.d.multimodule == tokFbsLibrary {
-		return e.bindFbsNativeSource(srcVFS, in, reserved)
+		ref, out := e.bindFbsNativeSource(srcVFS, in, reserved)
+
+		return ref, out, true
 	}
 
 	ref, outPath, _ := e.composeCCNodeAt(srcVFS, in, ctx.host, reserved)
 
-	return ref, outPath
+	return ref, outPath, true
 }
 
 func (e *EmitContext) mainOutInducedInputs(na *NodeArenas, includeView Closure) []VFS {

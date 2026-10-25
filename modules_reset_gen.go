@@ -81,7 +81,6 @@ func (x *ModuleData) reset() {
 		archives:             scrub(x.archives),
 		archiveAsm:           scrub(x.archiveAsm),
 		copyFiles:            scrub(x.copyFiles),
-		copyFileAutoOutputs:  clearedMap(x.copyFileAutoOutputs),
 		resources:            scrub(x.resources),
 		bundles:              scrub(x.bundles),
 		noCheckImports:       x.noCheckImports[:0],
