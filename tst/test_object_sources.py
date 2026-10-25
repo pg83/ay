@@ -4,6 +4,55 @@ import lib
 
 
 class ObjectSourcesTest(unittest.TestCase):
+    def test_global_physical_library_reuses_the_first_file_binding(self):
+        files = {
+            "shared/archive.lib": '#include "shared/detail.h"\n',
+            "shared/detail.h": "// physical included header\n",
+            "first/ya.make": f"LIBRARY(first)\n{lib.BARE_MODULE}SRCS(main.cpp)\nEND()\n",
+            "first/main.cpp": '#include "shared/archive.lib"\nint first;\n',
+            "second/ya.make": (
+                f"PROGRAM(second)\n{lib.BARE_MODULE}"
+                "SRCS(main.cpp GLOBAL ${ARCADIA_ROOT}/shared/archive.lib)\nEND()\n"
+            ),
+            "second/main.cpp": "int main() { return 0; }\n",
+        }
+        fixture_sources = {"$(S)/" + path for path in files}
+        archive_source = "$(S)/shared/archive.lib"
+        detail = "$(S)/shared/detail.h"
+        link_inputs, link_dependencies = [], []
+        # Native ymake establishes one shared physical file binding: whichever
+        # root visits .lib first chooses C includes or the empty GLOBAL parser.
+        for roots in (("first", "second"), ("second", "first")):
+            with self.subTest(roots=roots):
+                graph = lib.make(files, roots[1], roots[0],
+                                 "--target-platform", "default-linux-x86_64")
+                first_cc = lib.node_by_output(graph, "$(B)/first/main.cpp.o")
+                first_ar = lib.node_by_output(graph, "$(B)/first/libfirst.a")
+                second_cc = lib.node_by_output(graph, "$(B)/second/main.cpp.o")
+                linked = lib.node_by_output(graph, "$(B)/second/second")
+                included = [detail] if roots[0] == "first" else []
+                self.assertCountEqual(first_cc["inputs"],
+                                      ["$(S)/first/main.cpp", archive_source, *included])
+                self.assertEqual(first_cc["deps"], [])
+                self.assertEqual(first_ar["inputs"],
+                                 [first_cc["outputs"][0], "$(S)/build/scripts/link_lib.py"])
+                self.assertEqual(first_ar["deps"], [first_cc["uid"]])
+                self.assertEqual(second_cc["inputs"], ["$(S)/second/main.cpp"])
+                self.assertEqual(second_cc["deps"], [])
+                for node, expected in (
+                    (first_cc, ["$(S)/first/main.cpp", archive_source, *included]),
+                    (first_ar, []),
+                    (second_cc, ["$(S)/second/main.cpp"]),
+                    (linked, [archive_source, *included]),
+                ):
+                    self.assertCountEqual(
+                        [path for path in node["inputs"] if path in fixture_sources], expected)
+                nodes = {node["uid"]: node for node in graph["graph"]}
+                link_dependencies.append([nodes[ref]["outputs"] for ref in linked["deps"]])
+                link_inputs.append(linked["inputs"])
+        self.assertEqual(link_dependencies[0], link_dependencies[1])
+        self.assertCountEqual(link_inputs[0], [*link_inputs[1], detail])
+
     def test_generated_object_declarations_keep_each_archive_scope_and_order(self):
         graph = lib.make({
             "mod/ya.make": (
