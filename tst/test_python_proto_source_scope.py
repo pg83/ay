@@ -1,5 +1,4 @@
 import hashlib
-import json
 import unittest
 
 import lib
@@ -145,14 +144,9 @@ class PythonProtoSourceScopeTest(unittest.TestCase):
         files = fixture("PY_SRCS(unrecognized.txt=unrelated.module)")
         result = lib.make_process(files, MODULE, "--sandboxing")
         self.assertNotIn("panic:", result.stderr)
-        if result.returncode:
-            self.assertIn("unrecognized", result.stderr)
-        else:
-            # Preserve the existing unsupported-alias guard too; the pinned
-            # plugin diagnoses this input, while this frontend currently skips it.
-            graph = json.loads(result.stdout)
-            self.assertFalse(any("__intpy" in o for n in graph["graph"] for o in n["outputs"]))
-            self.assertFalse(any("unrelated/module" in a for a in all_args(graph)))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("in PY_SRCS: unrecognized arg", result.stderr)
+        self.assertIn("unrecognized.txt", result.stderr)
 
     def test_only_proto_library_derived_names_normalize_hyphens(self):
         for module_type, logical in (("PY3_LIBRARY", "sub-dir.order-event"), ("PROTO_LIBRARY", "sub_dir.order_event")):
