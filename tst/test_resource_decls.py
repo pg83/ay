@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 import lib
+from resource_dependencies import fetches, fetched_uri
 
 
 BARE = "NO_LIBC()\nNO_RUNTIME()\nNO_UTIL()\n"
@@ -29,41 +30,6 @@ def bundle_json(entries):
 
 def resources_library(body):
     return f"RESOURCES_LIBRARY()\n{body}END()\n"
-
-
-def fetches(graph):
-    result = {}
-    for node in graph["graph"]:
-        if node["kv"]["p"] != "FT":
-            continue
-        [output] = node["outputs"]
-        if output in result:
-            raise AssertionError(f"duplicate fetch node for {output}")
-        result[output] = node["cmds"][0]["cmd_args"][1:]
-    return result
-
-
-def fetched_uri(graph, name):
-    output = f"$(B)/resources/{name}"
-    args = fetches(graph)[output]
-    if args[:2] == ["fetch", "--resource-json"]:
-        _, _, raw, option, host, build_root, source_root, destination = args
-        if [option, build_root, source_root, destination] != [
-            "--host-platform", "$(B)", "$(S)", output,
-        ]:
-            raise AssertionError(f"unexpected descriptor fetch command {args!r}")
-        descriptor = json.loads(raw)
-        if descriptor["pattern"] != name:
-            raise AssertionError(descriptor)
-        if "resource" in descriptor:
-            return descriptor["resource"]
-        host = host.lower().removeprefix("default-").removesuffix("-x86_64").replace("windows", "win32")
-        return next(resource["resource"] for resource in descriptor["resources"]
-                    if resource["platform"].lower() == host)
-    self_check = args[:3] + args[4:]
-    if self_check != ["fetch", "$(B)", "$(S)", output]:
-        raise AssertionError(f"unexpected fetch command {args!r}")
-    return args[3]
 
 
 def make_error(files, target):
