@@ -192,11 +192,15 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 
 	check := StyleCheck{Name: "clang_format_json", ConfigMap: "build/config/tests/json_style/default_configs.json", Wrapper: "tools/clang_format_json_linter/wrapper.py", Resource: "CLANG_FORMAT_RESOURCE_GLOBAL"}
 	peer, configVar := "build/platform/clang/clang-format", "JSON_LINTER_DEFAULT_CONFIGS"
+	ext := ".json"
 	yaml := stmt.Name == tokStyleYAML
 
 	if yaml {
 		check = StyleCheck{Name: "yamlfmt", ConfigMap: "build/config/tests/yaml_style/default_configs.json", Wrapper: "tools/yamlfmt_linter/wrapper.py", Resource: "YAMLFMT_RESOURCE_GLOBAL"}
 		peer, configVar = yamlfmtResourcePeer, "YAML_LINTER_DEFAULT_CONFIGS"
+	} else if stmt.Name == tokStyleYQL {
+		check = StyleCheck{Name: "yqlfmt", Wrapper: "tools/yqlfmt_linter/wrapper.py"}
+		peer, configVar, ext = "", "", ".yql"
 	}
 
 	if value, ok := env.lookup(configVar); ok && value != "" {
@@ -248,7 +252,7 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 				if path.Base(file) == "a.yaml" || path.Base(file) == "t.yaml" || (path.Ext(file) != ".yaml" && path.Ext(file) != ".yml") {
 					continue
 				}
-			} else if path.Ext(file) != ".json" {
+			} else if path.Ext(file) != ext {
 				continue
 			}
 
@@ -258,7 +262,10 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 
 	slices.Sort(check.Files)
 	check.Files = slices.Compact(check.Files)
-	d.peerdirs = append(d.peerdirs, internStr(peer).any())
+
+	if peer != "" {
+		d.peerdirs = append(d.peerdirs, internStr(peer).any())
+	}
 
 	if len(check.Files) == 0 {
 		return

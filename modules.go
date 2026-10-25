@@ -3585,7 +3585,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.collectStyleCheck(fs, modulePath, v, env)
-	case tokStyleJSON, tokStyleYAML:
+	case tokStyleJSON, tokStyleYAML, tokStyleYQL:
 		d.collectStyleCheck(fs, modulePath, v, env)
 	case tokStyleDetekt:
 		noLint, _ := env.lookup("_NO_LINT_VALUE")
