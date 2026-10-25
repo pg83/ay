@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 import lib
+from test_resource_producers import CYTHON_UTILITY, CYTHON_HEADERS
 
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -41,6 +42,27 @@ def python_tree(kind, body, sources):
     for path in PYTHON_TOOLS:
         lib.tool_program(files, path, path.rsplit("/", 1)[-1])
     return files
+
+
+def cython_swig_files():
+    return python_tree("PY3_LIBRARY", (
+        "PY_SRCS(\n"
+        "  NAMESPACE my.ns\n"
+        "  CYTHON_CPP c1.pyx\n"
+        "  CYTHON_C c2.pyx\n"
+        "  CYTHON_DIRECTIVE language_level=3\n"
+        "  CYTHON_C_H c4.pyx\n"
+        "  CYTHON_C_API_H c5.pyx=custom.name\n"
+        "  TOP_LEVEL\n"
+        "  CYTHON_CPP_H c3.pyx\n"
+        "  CYTHONIZE_PY CYTHON_CPP cy.py\n"
+        "  SWIG_C s.swg\n"
+        "  SWIG_CPP s2.swg\n"
+        "  stubs.pyi\n"
+        "  data.txt=ignored\n"
+        ")\n"
+        "PY_REGISTER(reg.mod plain)"
+    ), ["c1.pyx", "c2.pyx", "c3.pyx", "c4.pyx", "c5.pyx", "cy.py", "s.swg", "s2.swg", "stubs.pyi"])
 
 
 def ay_make(files, *args):
@@ -151,25 +173,36 @@ class YaMakePythonTest(unittest.TestCase):
                     for kv in resource_kvs(graph)
                 ], expected)
 
+    def test_cython_and_swig_reject_unrecognized_python_source_argument(self):
+        code, graph, stderr = ay_make(cython_swig_files())
+        self.assertEqual(code, 1)
+        self.assertIsNone(graph)
+        self.assertIn('in PY_SRCS: unrecognized arg "data.txt"', stderr)
+
     def test_cython_and_swig_variants(self):
-        graph = self.make("PY3_LIBRARY", (
-            "PY_SRCS(\n"
-            "  NAMESPACE my.ns\n"
-            "  CYTHON_CPP c1.pyx\n"
-            "  CYTHON_C c2.pyx\n"
-            "  CYTHON_DIRECTIVE language_level=3\n"
-            "  CYTHON_C_H c4.pyx\n"
-            "  CYTHON_C_API_H c5.pyx=custom.name\n"
-            "  TOP_LEVEL\n"
-            "  CYTHON_CPP_H c3.pyx\n"
-            "  CYTHONIZE_PY CYTHON_CPP cy.py\n"
-            "  SWIG_C s.swg\n"
-            "  SWIG_CPP s2.swg\n"
-            "  stubs.pyi\n"
-            "  data.txt=ignored\n"
-            ")\n"
-            "PY_REGISTER(reg.mod plain)"
-        ), ["c1.pyx", "c2.pyx", "c3.pyx", "c4.pyx", "c5.pyx", "cy.py", "s.swg", "s2.swg", "stubs.pyi"])
+        files = cython_swig_files()
+        files["a/ya.make"] = files["a/ya.make"].replace("  data.txt=ignored\n", "")
+        files["contrib/tools/cython/Cython/ya.make"] = "LIBRARY()\n" + NO_PLATFORM + "END()\n"
+        files["contrib/tools/swig/Lib/python/ya.make"] = (
+            "LIBRARY()\n" + NO_PLATFORM
+            + "ADDINCL(GLOBAL FOR swig contrib/tools/swig/Lib/python"
+            " GLOBAL FOR swig contrib/tools/swig/Lib)\nEND()\n"
+        )
+        for name in CYTHON_UTILITY:
+            files[f"contrib/tools/cython/Cython/Utility/{name}"] = ""
+        for path in CYTHON_HEADERS:
+            files[path] = ""
+        for path in ("swig.swg", "go/go.swg", "java/java.swg", "perl5/perl5.swg", "python/python.swg"):
+            files[f"contrib/tools/swig/Lib/{path}"] = ""
+        files["build/sysincl/macro.yml"] = (
+            "- includes:\n"
+            "  - go.swg: contrib/tools/swig/Lib/go/go.swg\n"
+            "  - java.swg: contrib/tools/swig/Lib/java/java.swg\n"
+            "  - perl5.swg: contrib/tools/swig/Lib/perl5/perl5.swg\n"
+            "  - python.swg: contrib/tools/swig/Lib/python/python.swg\n"
+        )
+        code, graph, stderr = ay_make(files)
+        self.assertEqual(code, 0, stderr)
         cython = [node for node in graph["graph"] if node["kv"]["p"] == "CY"]
         self.assertEqual([node["outputs"] for node in cython], [
             ["$(B)/a/c2.pyx.c"],
