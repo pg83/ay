@@ -98,6 +98,37 @@ class CppUnresolvedSourceEdgesTest(unittest.TestCase):
                     '$(S)/lib/main.cpp', '$(S)/lib/before.h', '$(B)/lib/seed.pb.h'])
                 self.assertIn(producer['uid'], compiled['deps'])
 
+    def test_peer_header_uses_generated_imports_without_a_cpp_include_consumer(self):
+        files = proto_files('PEERDIR(deps)\nSRCS(seed.proto public.h ordinary.cpp)\n', {
+            'lib/public.h': '#include <lib/seed.pb.h>\n',
+            'lib/seed.proto': 'syntax = "proto2";\nimport "deps/leaf.proto";\nmessage Seed {}\n',
+            'lib/ordinary.cpp': 'int ordinary;\n',
+            'deps/ya.make': 'LIBRARY()\n' + lib.BARE_MODULE + 'SRCS(leaf.proto)\nEND()\n',
+            'deps/leaf.proto': 'syntax = "proto2";\nmessage Leaf {}\n',
+            'petal/ya.make': 'PROGRAM(Petal)\n' + lib.BARE_MODULE + 'ALLOCATOR(FAKE)\n'
+                             'PEERDIR(lib)\nSRCS(main.cpp)\nEND()\n',
+            'petal/main.cpp': 'int main(){return 0;}\n',
+        })
+        graph = lib.make(files, 'petal', '--target-platform', 'default-linux-x86_64')
+        linked = lib.node_by_output(graph, '$(B)/petal/Petal')
+        roots = ('$(B)/lib/', '$(B)/deps/', '$(B)/petal/')
+        expected = ['$(B)/lib/seed.pb.h', '$(B)/deps/leaf.pb.h',
+                    '$(B)/lib/liblib.a', '$(B)/deps/libdeps.a', '$(B)/petal/main.cpp.o']
+        self.assertCountEqual([p for p in linked['inputs'] if p.startswith(roots)], expected)
+        expected_deps = [lib.node_by_output(graph, p)['uid'] for p in expected]
+        fixture_deps = {n['uid'] for n in graph['graph']
+                        if any(p.startswith(roots) for p in n['outputs'])}
+        self.assertCountEqual([uid for uid in linked['deps'] if uid in fixture_deps], expected_deps)
+        for output, source in [('$(B)/petal/main.cpp.o', '$(S)/petal/main.cpp'),
+                               ('$(B)/lib/ordinary.cpp.o', '$(S)/lib/ordinary.cpp')]:
+            compiled = lib.node_by_output(graph, output)
+            self.assertEqual(compiled['inputs'], [source])
+            self.assertEqual(compiled['deps'], [])
+        archive = lib.node_by_output(graph, '$(B)/lib/liblib.a')
+        objects = ['$(B)/lib/ordinary.cpp.o', '$(B)/lib/seed.pb.cc.o']
+        self.assertCountEqual(archive['inputs'], [*objects, '$(S)/build/scripts/link_lib.py'])
+        self.assertCountEqual(archive['deps'], [lib.node_by_output(graph, p)['uid'] for p in objects])
+
     def test_selected_host_cpp_repair_keeps_the_configured_pb_producer(self):
         graph = lib.make(fixture('host-build-proto'), 'petal', '--sandboxing',
                          '--add-modules-to-results', '--target-platform', 'default-linux-x86_64')

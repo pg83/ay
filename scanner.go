@@ -146,6 +146,77 @@ func (s *IncludeScanner) putChildren(v VFS, children []VFS, diagnostics []Includ
 	return entry
 }
 
+func (s *IncludeScanner) bindGeneratedIncludes(file VFS) ScannedChildren {
+	entry, bound := s.codegen.files.get1(file)
+
+	if bound && !entry.Deferred {
+		return entry
+	}
+
+	own, extra, info, bucket := s.parsedIncludes(file, nil)
+
+	if info == nil {
+		return entry
+	}
+
+	seen := dedupers.get()
+	paths := vfsScratches.get()
+
+	for _, path := range entry.Paths {
+		seen.addStable(path.strID())
+		paths = append(paths, path)
+	}
+
+	appendPath := func(path VFS) {
+		if path != 0 && seen.addStable(path.strID()) {
+			paths = append(paths, path)
+		}
+	}
+
+	appendDirective := func(d IncludeDirective) {
+		if d.kind != includeQuoted && d.kind != includeSystem {
+			return
+		}
+
+		if target := d.target.vfs(); target != 0 {
+			appendPath(target)
+		} else if target := s.codegen.lookupSTR(d.target.str()); target != nil {
+			appendPath(target.OutputPath)
+		}
+	}
+
+	for _, entries := range [][]IncludeDirective{own, extra} {
+		for _, directive := range entries {
+			appendDirective(directive)
+		}
+	}
+
+	for _, path := range info.ClosureLeaves {
+		appendPath(path)
+	}
+
+	if bucket != parsedIncludesLocal {
+		for _, ref := range info.GeneratorRefs {
+			if tool, _ := s.moduleByRef.get(ref); tool != nil {
+				for _, directive := range tool.InducedDeps.bucket(bucket) {
+					appendDirective(directive)
+				}
+			}
+		}
+	}
+
+	if len(paths) != len(entry.Paths) {
+		entry.Paths = s.childArena.list(paths...)
+		entry.Deferred = true
+		s.codegen.files.put1(file, entry)
+	}
+
+	vfsScratches.put(paths)
+	dedupers.put(seen)
+
+	return entry
+}
+
 func (s *IncludeScanner) hasOwnDiagnostics(v VFS) bool {
 	entry, _ := s.codegen.files.get1(v)
 

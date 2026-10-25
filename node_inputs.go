@@ -180,7 +180,7 @@ func (p *NodeInputs) activate(seen *BitSet, selectProducer func(NodeRef), module
 				selectProducer(info.ProducerRef)
 			}
 
-			entry, _ = p.scanner.codegen.files.get1(file)
+			entry = p.scanner.bindGeneratedIncludes(file)
 		}
 
 		for _, child := range entry.Paths {
