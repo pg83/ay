@@ -599,7 +599,7 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 	s := sc.scanner
 
-	if cached, ok := s.codegen.files.get1(abs); ok && (!cached.Deferred || sc.noResolve && abs.isSource() || sc.initialOnly || sc.readOnly) {
+	if cached, ok := s.codegen.files.get1(abs); ok && (!cached.Deferred || sc.noResolve && (abs.isSource() || cached.Diagnostics != nil) || sc.initialOnly || sc.readOnly) {
 		return cached
 	}
 
@@ -648,7 +648,7 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 
 	entry := s.putChildren(abs, children, diagnostics)
 
-	if sc.initialOnly && len(diagnostics) > 0 {
+	if (sc.initialOnly || sc.noResolve) && len(diagnostics) > 0 {
 		entry.Deferred = true
 		s.codegen.files.put1(abs, entry)
 	}
@@ -826,10 +826,10 @@ func (sc *ScanCtx) hasOwnDiagnostics(v VFS) bool {
 func (sc *ScanCtx) cachedWindow(v VFS) (Closure, bool) {
 	cl, ok := sc.scanner.closure(v)
 
-	if ok && cl.incomplete && sc.noResolve && v.isSource() {
+	if ok && cl.incomplete && sc.noResolve {
 		entry, _ := sc.scanner.codegen.files.get1(v)
 
-		if entry.Deferred {
+		if entry.Deferred && (v.isSource() || entry.Diagnostics != nil) {
 			return cl, true
 		}
 	}
@@ -878,6 +878,11 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	mark := len(out)
 
 	if sc.noResolve && (includerAbs.isSource() || d.target.vfs() == 0) {
+		if includerAbs.isBuild() {
+			// Keep the unresolved generated property for a consumer allowed to bind it.
+			sc.diagnostics = append(sc.diagnostics, IncludeDiagnostic{Directive: d})
+		}
+
 		return out
 	}
 

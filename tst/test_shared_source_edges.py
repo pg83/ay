@@ -251,6 +251,60 @@ class SharedSourceEdgesTest(unittest.TestCase):
                 for node in compiled:
                     self.assertEqual(node['inputs'], ['$(S)/grove/source.cpp', '$(S)/grove/header.h'])
 
+    def test_disabled_generated_property_is_completed_only_by_normal_consumer(self):
+        files = {
+            'gen/ya.make': (
+                'LIBRARY()\n'
+                'NO_LIBC()\n'
+                'NO_RUNTIME()\n'
+                'NO_UTIL()\n'
+                'SRCS(owner.cpp)\n'
+                'RUN_PYTHON3(generate.py ${BINDIR}/shared.cpp OUT_NOAUTO shared.cpp OUTPUT_INCLUDES dep.h)\n'
+                'END()\n'
+            ),
+            'gen/owner.cpp': 'int owner;\n',
+            'gen/generate.py': (
+                'import pathlib,sys\n'
+                'pathlib.Path(sys.argv[1]).write_text(\'#include "dep.h"\\nint generated;\\n\')\n'
+            ),
+            'gen/dep.h': '#include "leaf.h"\n',
+            'gen/leaf.h': '#pragma once\n',
+            'muted/ya.make': (
+                'LIBRARY()\n'
+                'NO_LIBC()\n'
+                'NO_RUNTIME()\n'
+                'NO_UTIL()\n'
+                'SET(DONT_RESOLVE_INCLUDES yes)\n'
+                'PEERDIR(gen)\n'
+                'ADDINCL(gen)\n'
+                'SRCS(${ARCADIA_BUILD_ROOT}/gen/shared.cpp)\n'
+                'END()\n'
+            ),
+            'normal/ya.make': (
+                'LIBRARY()\n'
+                'NO_LIBC()\n'
+                'NO_RUNTIME()\n'
+                'NO_UTIL()\n'
+                'PEERDIR(gen)\n'
+                'ADDINCL(gen)\n'
+                'SRCS(${ARCADIA_BUILD_ROOT}/gen/shared.cpp)\n'
+                'END()\n'
+            ),
+        }
+        for roots in (('muted',), ('normal',), ('muted', 'normal'), ('normal', 'muted')):
+            with self.subTest(roots=roots):
+                g = lib.make(files, roots[-1], *roots[:-1],
+                             '--target-platform', 'default-linux-x86_64',
+                             '--add-modules-to-results')
+                producer = lib.node_by_output(g, '$(B)/gen/shared.cpp')
+                expected = ['$(B)/gen/shared.cpp']
+                if 'normal' in roots:
+                    expected += ['$(S)/gen/dep.h', '$(S)/gen/leaf.h']
+                for module in roots:
+                    compiled = lib.node_by_output(g, f'$(B)/{module}/__/gen/shared.cpp.o')
+                    self.assertCountEqual(compiled['inputs'], expected)
+                    self.assertEqual(compiled['deps'], [producer['uid']])
+
     def test_established_build_edge_keeps_real_producer_and_main_output(self):
         files = fixture()
         files.update({
