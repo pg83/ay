@@ -21,6 +21,32 @@ def files_for_pairs(pairs):
 
 
 class ResourceJSONOrderTest(unittest.TestCase):
+    def test_json_resource_macros_reject_null_and_empty_platform_mappings(self):
+        for macro in ("DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(T bundle.json)",
+                      "SET_RESOURCE_URI_FROM_JSON(URI bundle.json)\nDECLARE_EXTERNAL_RESOURCE(T ${URI})"):
+            for mapping in (None, {}):
+                with self.subTest(macro=macro, mapping=mapping):
+                    files = files_for_pairs([])
+                    files["res/ya.make"] = (
+                        f"RESOURCES_LIBRARY()\n{macro}\nEND()\n"
+                    )
+                    files["res/bundle.json"] = json.dumps({"by_platform": mapping})
+                    result = lib.make_process(files, "lib")
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertIn("platform mapping is empty", result.stderr)
+                    self.assertEqual(result.stdout, "")
+
+    def test_json_bundle_rejects_non_object_mapping_and_non_string_uri(self):
+        for mapping, diagnostic in (([], "resource JSON mapping must be an object"),
+                                    ({"linux": {"uri": 17}}, "cannot unmarshal number")):
+            with self.subTest(mapping=mapping):
+                files = files_for_pairs([])
+                files["res/bundle.json"] = json.dumps({"by_platform": mapping})
+                result = lib.make_process(files, "lib")
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertEqual(result.stdout, "")
+
     def check_pairs(self, pairs, expected):
         graph = lib.make(files_for_pairs(pairs), "lib")
         self.assertEqual(fetched_uri(graph, "T"), expected)

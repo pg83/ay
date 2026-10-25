@@ -626,6 +626,10 @@ func readResourceBundleJSON(fs FS, rel string) map[string]ResourceBundleEntry {
 		}
 	})
 
+	if len(out) == 0 {
+		throwFmt("resources: platform mapping is empty")
+	}
+
 	return out
 }
 
