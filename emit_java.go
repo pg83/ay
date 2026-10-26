@@ -2,6 +2,7 @@ package main
 
 import (
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -154,9 +155,18 @@ func (b *javaNodeBuilder) emitTo(ref NodeRef) {
 	}
 
 	if b.inputContext != nil {
-		node.Inputs.roots = na.inputList(b.inputRoots)
+		node.Inputs.files = na.inputList(dedupVFSKeepOrder(b.inputRoots))
+		node.Inputs.roots = node.Inputs.files
 		node.Inputs.text = b.textInputs
 		b.inputContext.resolveNodeCodegenDeps(&node)
+
+		own := make(map[VFS]bool, len(b.inputRoots))
+
+		for _, in := range b.inputRoots {
+			own[in] = true
+		}
+
+		node.Inputs.files = na.inputList(slices.DeleteFunc(dedupVFSKeepOrder(b.inputs), func(in VFS) bool { return own[in] }), node.Inputs.files...)
 	}
 
 	b.ctx.emit.emitReservedNodePtr(&node, ref)

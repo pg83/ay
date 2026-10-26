@@ -227,6 +227,21 @@ class JavaGeneratorInputsTest(MakeTest):
         self.write("tool/ya.make", "JAVA_PROGRAM(generator)\nJDK_VERSION(17)\nJAVA_SRCS(Generator.java)\nEND()\n")
         self.write("tool/Generator.java", "public class Generator { public static void main(String[] args) {} }\n")
 
+    def test_tool_classpath_depends_on_the_tool_only(self):
+        # The tool is also a target here (RECURSE, configured before the
+        # client) and the target platform is configured apart from the host:
+        # the target build writes the same .run.cp.jar, but the command uses
+        # the host tool alone.
+        self.generator()
+        self.write("ya.make", "RECURSE(tool client)\n")
+        self.write("client/ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+        graph = self.graph("--target-platform", "default-linux-x86_64", "--target-platform-build-type", "relwithdebinfo")
+        node = self.node(graph, "client/Generated.java")
+        classpath = f"$(B)/{PROJECT}/tool/generator.run.cp.jar"
+        self.assertIn(classpath, node["inputs"])
+        producers = {producer["uid"] for producer in graph["graph"] if classpath in producer["outputs"]}
+        self.assertEqual(len(producers & set(node["deps"])), 1)
+
     def test_source_root_input(self):
         self.generator()
         self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(Generator {PROJECT}/config.txt CLASSPATH {PROJECT}/tool IN {PROJECT}/config.txt OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
