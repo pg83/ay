@@ -94,6 +94,7 @@ func (e *EmitContext) emitUsrvFile(file UsrvFile) {
 
 	e.collectCPPStyleInputs(src)
 	e.emitLazyModuleNode(n, nil)
+	e.collectScriptOutput(out)
 
 	info := e.codegen.mustInfo(out)
 

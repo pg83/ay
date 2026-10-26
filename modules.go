@@ -665,6 +665,14 @@ func moduleInputCandidateVFS(modulePath string, path string) VFS {
 
 func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 	if vfsHasPrefix(path) {
+		if rel := path[vfsPrefixLen:]; rel != "" && !pathIsClean(rel) {
+			if path[2] == 'B' {
+				return buildClean(rel), true
+			}
+
+			return sourceClean(rel), true
+		}
+
 		return intern(path), true
 	}
 
@@ -2955,7 +2963,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokGoGrpcGatewayV2OpenapiSrcs, tokGoGrpcGatewayV2Srcs, tokGoGrpcGatewaySrcs, tokGoGrpcGatewaySwagger:
 		applyGoGrpcGatewayStmt(v, d, env)
 	case tokGoMockgenFrom, tokGoMockgenContribFrom, tokGoMockgenTypes, tokGoMockgenExcludeIfaces, tokGoMockgenPackage,
-		tokGoMockgenReflect, tokGoMockgenMocks, tokGoMockgenSource, tokGoOapiCodegen, tokGoOapiCodegenV2, tokGoOapiCodegenTaxi:
+		tokGoMockgenReflect, tokGoMockgenMocks, tokGoMockgenSource, tokGoOapiCodegen, tokGoOapiCodegenV2, tokGoOapiCodegenTaxi, tokGoOapiCodegenTaxi1134:
 		applyGoCodegenStmt(modulePath, v, d, env)
 	case tokCgoSrcs:
 

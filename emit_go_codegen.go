@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 )
 
@@ -23,9 +24,10 @@ var goCodegenKVs = [...]KV{
 }
 
 var goOapiCodegenTool = map[TOK]string{
-	tokGoOapiCodegen:     "vendor/github.com/deepmap/oapi-codegen/cmd/oapi-codegen",
-	tokGoOapiCodegenV2:   "vendor/github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen",
-	tokGoOapiCodegenTaxi: "taxi/infra/go/platform/tools/pkg/deepmap/oapi-codegen/cmd/oapi-codegen",
+	tokGoOapiCodegen:         "vendor/github.com/deepmap/oapi-codegen/cmd/oapi-codegen",
+	tokGoOapiCodegenV2:       "vendor/github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen",
+	tokGoOapiCodegenTaxi:     "taxi/infra/go/platform/tools/pkg/deepmap/oapi-codegen/cmd/oapi-codegen",
+	tokGoOapiCodegenTaxi1134: "taxi/infra/go/platform/tools/pkg1134/oapi-codegen-1.13.4/cmd/oapi-codegen",
 }
 
 const (
@@ -67,6 +69,8 @@ type GoCodegenStmt struct {
 	in        string
 	generate  string
 	pkg       string
+	templates string
+	config    string
 	out       string
 	args      []ANY
 	inNoParse []ANY
@@ -74,25 +78,33 @@ type GoCodegenStmt struct {
 }
 
 func goMacroLists(args []ANY, keywords ...string) (positional []ANY, lists map[string][]ANY) {
-	lists = map[string][]ANY{}
+	return goMacroArgs(args, keywords, nil)
+}
 
-	current := ""
+func goMacroArgs(args []ANY, lists, scalars []string) (positional []ANY, keywords map[string][]ANY) {
+	keywords = map[string][]ANY{}
+
+	current, scalar := "", false
 
 	for _, a := range args {
-		if s := a.string(); s == keywords[0] || len(keywords) > 1 && s == keywords[1] {
-			current = s
+		if s := a.string(); slices.Contains(lists, s) || slices.Contains(scalars, s) {
+			current, scalar = s, !slices.Contains(lists, s)
 
 			continue
+		}
+
+		if scalar && len(keywords[current]) > 0 {
+			current, scalar = "", false
 		}
 
 		if current == "" {
 			positional = append(positional, a)
 		} else {
-			lists[current] = append(lists[current], a)
+			keywords[current] = append(keywords[current], a)
 		}
 	}
 
-	return positional, lists
+	return positional, keywords
 }
 
 func applyGoCodegenStmt(modulePath string, v UnknownStmt, d *ModuleData, env Environment) {
@@ -136,18 +148,34 @@ func applyGoCodegenStmt(modulePath string, v UnknownStmt, d *ModuleData, env Env
 			kind: goCodegenSource, tool: goMockgenTool, file: m.from + "/" + file,
 			out: strings.TrimSuffix(file, path.Ext(file)) + ".source.gen.go", args: lists["ARGS"], inNoParse: lists["IN_NOPARSE"],
 		})
+	case tokGoOapiCodegenTaxi1134:
+		positional, keywords := goMacroArgs(v.Args, []string{"IN_NOPARSE"}, []string{"GENERATE", "PACKAGE", "TEMPLATES", "CONFIG"})
+
+		scalar := func(key string) string {
+			if s := keywords[key]; len(s) > 0 {
+				return s[0].string()
+			}
+
+			return ""
+		}
+
+		d.goCodegens = append(d.goCodegens, GoCodegenStmt{seq: d.nextDeclSeq(),
+			kind: goCodegenOapi, tool: goOapiCodegenTool[v.Name],
+			generate: scalar("GENERATE"), pkg: scalar("PACKAGE"), templates: scalar("TEMPLATES"), config: scalar("CONFIG"), in: positional[0].string(),
+			out: positional[1].string() + ".gen.go", args: positional[2:], inNoParse: keywords["IN_NOPARSE"],
+		})
 	default:
-		positional, lists := goMacroLists(v.Args, "IN_NOPARSE", "OUT_SUFFIX")
+		positional, keywords := goMacroArgs(v.Args, []string{"IN_NOPARSE"}, []string{"OUT_SUFFIX"})
 		suffix := ""
 
-		if s := lists["OUT_SUFFIX"]; len(s) > 0 {
+		if s := keywords["OUT_SUFFIX"]; len(s) > 0 {
 			suffix = s[0].string()
 		}
 
 		d.goCodegens = append(d.goCodegens, GoCodegenStmt{seq: d.nextDeclSeq(),
 			kind: goCodegenOapi, tool: goOapiCodegenTool[v.Name],
 			generate: positional[0].string(), pkg: positional[1].string(), in: positional[2].string(),
-			out: positional[0].string() + suffix + ".gen.go", args: positional[3:], inNoParse: lists["IN_NOPARSE"],
+			out: positional[0].string() + suffix + ".gen.go", args: positional[3:], inNoParse: keywords["IN_NOPARSE"],
 		})
 	}
 }
@@ -264,7 +292,26 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		}
 	case goCodegenOapi:
 		in := resolveSourceVFS(ctx, instance, st.in, d.srcDirs)
-		args := []ANY{tool.any(), strGenerate.any(), internStr(st.generate).any(), strPackage.any(), internStr(st.pkg).any()}
+		args := []ANY{tool.any()}
+
+		if st.generate != "" {
+			args = append(args, strGenerate.any(), internStr(st.generate).any())
+		}
+
+		if st.pkg != "" {
+			args = append(args, strPackage.any(), internStr(st.pkg).any())
+		}
+
+		if st.templates != "" {
+			args = append(args, strTemplates.any(), internStr(st.templates).any())
+		}
+
+		if st.config != "" {
+			config := resolveSourceVFS(ctx, instance, st.config, d.srcDirs)
+
+			args = append(args, strConfig.any(), config.any())
+			inputs = append(inputs, config)
+		}
 
 		args = append(args, st.args...)
 		args = append(args, in.any())
@@ -276,6 +323,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 			inputs = append(inputs, resolveSourceVFS(ctx, instance, f.string(), d.srcDirs))
 		}
 
+		inputs = dedup(inputs)
 		cmds = []Cmd{{CmdArgs: na.chunkList(args), Cwd: bldRootDirVFS, Env: env, Stdout: out}}
 	}
 

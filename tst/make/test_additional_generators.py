@@ -60,6 +60,20 @@ class AdditionalGeneratorsTest(MakeTest):
         self.node(graph, "answer.cpp")
         self.node(graph, "answer.cpp.o")
 
+    def test_userver_unpacked_files_in_union(self):
+        self.write("ya.make", f"UNION()\nCOPY_FILE(sources.tar copy.tar)\nUSRV_BUILD(FROM sources.tar {PROJECT}/conf/answer.yaml {PROJECT}/run.sh)\nEND()\n")
+        with tarfile.open(self.project / "sources.tar", "w") as archive:
+            for name in (f"{PROJECT}/conf/answer.yaml", f"{PROJECT}/run.sh"):
+                entry = tarfile.TarInfo(name)
+                archive.addfile(entry, io.BytesIO(b""))
+        graph = self.graph()
+        unpacked = [f"$(B)/{PROJECT}/{PROJECT}/conf/answer.yaml", f"$(B)/{PROJECT}/{PROJECT}/run.sh"]
+        for path in unpacked:
+            producers = [node for node in graph["graph"] if node["outputs"] == [path]]
+            self.assertEqual([node["inputs"] for node in producers], [[f"$(S)/{PROJECT}/sources.tar"]])
+        union = self.node(graph, f"{PROJECT}.pkg.fake")
+        self.assertEqual(union["outputs"][1:], [f"$(B)/{PROJECT}/copy.tar", *unpacked])
+
     def test_userver_grpc_client(self):
         self.write("ya.make", f"LIBRARY()\nUSRV_GEN_GRPC_CLIENT_V2({PROJECT}/proto/answer.proto FROM {PROJECT}/proto)\nEND()\n")
         self.write("proto/ya.make", "PROTO_LIBRARY()\nGRPC()\nSRCS(answer.proto)\nEND()\n")

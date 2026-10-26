@@ -21,6 +21,17 @@ class GeneratedVariantsTest(MakeTest):
         self.node(graph, "generated.cpp")
         self.node(graph, "generated.cpp.o")
 
+    def test_run_program_input_dot_segment(self):
+        self.write("ya.make", f"LIBRARY()\nSET(DATA ${{ARCADIA_ROOT}}/{PROJECT}/data)\nSET_APPEND(FILES ${{DATA}}/./nested/value.txt)\n"
+                   f"RUN_PROGRAM({PROJECT}/generator \"${{FILES}}\" IN ${{FILES}} STDOUT generated.cpp)\nEND()\n")
+        self.write("data/nested/value.txt", "42\n")
+        self.write("generator/ya.make", "PY3_PROGRAM(generator)\nPY_SRCS(MAIN main.py)\nEND()\n")
+        self.write("generator/main.py", 'print("int answer() { return 42; }")\n')
+        node = self.node(self.graph(), "generated.cpp")
+        self.assertEqual([path for path in node["inputs"] if f"/{PROJECT}/data/" in path], [f"$(S)/{PROJECT}/data/nested/value.txt"])
+        args = [arg.replace("$(SOURCE_ROOT)", "$(S)") for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn(f"$(S)/{PROJECT}/data/./nested/value.txt", args)
+
     def test_enum_serialization(self):
         self.write("ya.make", "LIBRARY()\nGENERATE_ENUM_SERIALIZATION_WITH_HEADER(value.h)\nEND()\n")
         self.write("value.h", "#pragma once\nenum class Value { Answer = 42, Other = 17 };\n")

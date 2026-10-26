@@ -21,6 +21,33 @@ class GoGeneratorsTest(MakeTest):
         self.write("data.json", "{}\n")
         self.node(self.graph(), "types.gen.go")
 
+    def test_openapi_taxi_1134_generated_spec(self):
+        self.write("ya.make", f"GO_LIBRARY()\nRUN_PROGRAM({PROJECT}/generator IN api.yaml OUT_NOAUTO ${{BINDIR}}/resolved.yaml)\n"
+                   f"GO_OAPI_CODEGEN_TAXI_1134(${{BINDIR}}/resolved.yaml answer --patch-version v1 GENERATE types PACKAGE answer TEMPLATES ${{ARCADIA_ROOT}}/{PROJECT}/templates IN_NOPARSE ${{ARCADIA_ROOT}}/{PROJECT}/templates/imports.tmpl)\n"
+                   f"GO_OAPI_CODEGEN_TAXI_1134(${{BINDIR}}/resolved.yaml models --patch-version v1 PACKAGE answer CONFIG ${{ARCADIA_ROOT}}/{PROJECT}/config.yaml TEMPLATES ${{ARCADIA_ROOT}}/{PROJECT}/templates --strict\n"
+                   f"    IN_NOPARSE {PROJECT}/config.yaml ${{ARCADIA_ROOT}}/{PROJECT}/templates/imports.tmpl ${{BINDIR}}/resolved.yaml)\nEND()\n")
+        self.write("api.yaml", "openapi: 3.0.0\ninfo:\n  title: Answer\n  version: 1.0.0\npaths: {}\n")
+        self.write("config.yaml", "output-options: {}\n")
+        self.write("templates/imports.tmpl", "package {{ .PackageName }}\n")
+        self.write("generator/ya.make", "PY3_PROGRAM(generator)\nPY_SRCS(MAIN main.py)\nEND()\n")
+        self.write("generator/main.py", "print('generator')\n")
+        graph = self.graph()
+        spec = self.node(graph, "resolved.yaml")
+        for output, expected, inputs in (
+            ("answer.gen.go", ["--generate", "types", "--package", "answer", "--templates", f"$(S)/{PROJECT}/templates", "--patch-version", "v1", f"$(B)/{PROJECT}/resolved.yaml"],
+             [f"$(B)/{PROJECT}/resolved.yaml", f"$(S)/{PROJECT}/templates/imports.tmpl"]),
+            ("models.gen.go", ["--package", "answer", "--templates", f"$(S)/{PROJECT}/templates", "--config", f"$(S)/{PROJECT}/config.yaml", "--patch-version", "v1", "--strict", f"$(B)/{PROJECT}/resolved.yaml"],
+             [f"$(B)/{PROJECT}/resolved.yaml", f"$(S)/{PROJECT}/config.yaml", f"$(S)/{PROJECT}/templates/imports.tmpl"]),
+        ):
+            node = self.node(graph, output)
+            args = [arg.replace("$(SOURCE_ROOT)", "$(S)").replace("$(BUILD_ROOT)", "$(B)") for command in node["cmds"] for arg in command["cmd_args"]]
+            self.assertEqual(args[1:], expected)
+            self.assertEqual(sorted(path for path in node["inputs"] if f"/{PROJECT}/" in path), inputs)
+            self.assertIn(spec["uid"], node["deps"])
+        library = self.node(graph, f"{PROJECT}.a")
+        args = [arg.replace("$(BUILD_ROOT)", "$(B)") for command in library["cmds"] for arg in command["cmd_args"]]
+        self.assertEqual([arg for arg in args if arg.endswith(".gen.go")], [f"$(B)/{PROJECT}/answer.gen.go", f"$(B)/{PROJECT}/models.gen.go"])
+
     def test_gateway(self):
         self.write("ya.make", "PROTO_LIBRARY()\nONLY_TAGS(GO_PROTO)\nGRPC()\nGO_GRPC_GATEWAY_V2_SRCS(answer.proto)\nSRCS(answer.proto)\nEND()\n")
         self.write("answer.proto", f'syntax = "proto3"; package e2e; option go_package = "a.yandex-team.ru/{PROJECT}"; message Answer {{ int32 value = 1; }} service Answers {{ rpc Get(Answer) returns (Answer); }}\n')

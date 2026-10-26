@@ -478,6 +478,7 @@ var tokName = [...]STR{
 	tokGoOapiCodegen:                  internStr("GO_OAPI_CODEGEN"),
 	tokGoOapiCodegenV2:                internStr("GO_OAPI_CODEGEN_V2"),
 	tokGoOapiCodegenTaxi:              internStr("GO_OAPI_CODEGEN_TAXI"),
+	tokGoOapiCodegenTaxi1134:          internStr("GO_OAPI_CODEGEN_TAXI_1134"),
 	tokGoGrpcGatewayV2Srcs:            internStr("GO_GRPC_GATEWAY_V2_SRCS"),
 	tokGoGrpcGatewaySrcs:              internStr("GO_GRPC_GATEWAY_SRCS"),
 	tokGoGrpcGatewaySwagger:           internStr("GO_GRPC_GATEWAY_SWAGGER_SRCS"),
@@ -925,6 +926,7 @@ const (
 	tokGoOapiCodegen
 	tokGoOapiCodegenV2
 	tokGoOapiCodegenTaxi
+	tokGoOapiCodegenTaxi1134
 	tokGoGrpcGatewayV2Srcs
 	tokGoGrpcGatewaySrcs
 	tokGoGrpcGatewaySwagger
