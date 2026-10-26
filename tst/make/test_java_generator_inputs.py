@@ -157,6 +157,23 @@ class JavaGeneratorInputsTest(MakeTest):
             with self.subTest(body=body):
                 self.assertEqual("build-external_resources-black.pkg.fake" in self.proto_style_classpath(body), linted)
 
+    def test_proto_linter_peers_follow_statement_priority(self):
+        self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.kt)\nWITH_KOTLIN()\nPEERDIR({PROJECT}/schema)\nEND()\n")
+        self.write("Main.kt", "fun main() {}\n")
+        self.write("schema/answer.proto", 'syntax = "proto3";\npackage e2e;\nmessage Answer {}\n')
+        for styles in ("STYLE_CPP()\nSTYLE_PYTHON()", "STYLE_PYTHON()\nSTYLE_CPP()", "STYLE_RUFF()\nSTYLE_CPP()"):
+            with self.subTest(styles=styles):
+                self.write("schema/linters.inc", styles + "\n")
+                self.write("schema/ya.make", f"PROTO_LIBRARY()\nSRCS(answer.proto)\nINCLUDE(${{ARCADIA_ROOT}}/{PROJECT}/schema/linters.inc)\nEND()\n")
+                graph = self.graph("-t")
+                node = self.node(graph, "answer.run.cp.jar")
+                classpath = next(arg for command in node["cmds"] for arg in command["cmd_args"] if arg.startswith("CLASSPATH=")).split("::")
+                python = "ruff" if "STYLE_RUFF" in styles else "black"
+                peers = ["platform-clang-clang-format.pkg.fake", "platform-java-protoc.pkg.fake", f"build-external_resources-{python}.pkg.fake"]
+                self.assertEqual([entry for entry in classpath if entry in peers], peers)
+                ktlint = self.node(graph, "test-results/ktlint/meta.json")
+                self.assertIn(node["uid"], ktlint["deps"])
+
     def test_tasklet_peer_keeps_macro_order(self):
         self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")
         self.write("Main.java", "public class Main {}\n")
