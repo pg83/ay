@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bufio"
 	"os"
 	"os/user"
 	"syscall"
@@ -66,10 +65,6 @@ func chaosLink(src, dst string) error {
 
 func chaosReadDir(dir string) ([]os.DirEntry, error) {
 	return os.ReadDir(dir)
-}
-
-func chaosReadString(r *bufio.Reader) (string, error) {
-	return r.ReadString('\n')
 }
 
 func chaosTestDataRead(fd int, p []byte) (int, error) {

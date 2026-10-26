@@ -44,15 +44,6 @@ var commands = []Command{
 			"Usage: ay dev overlay <directory> -- <command> [args...]. Keeps the current UID/GID.",
 	},
 	{
-		path: []string{"dev", "dump", "normalize"}, run: cmdDumpNormalize,
-		help: "🧼 Normalize a raw graph dump (fold producers, canonicalize paths, prune\n" +
-			"ref-only artifacts) to one JSON node per line for byte-exact comparison.",
-	},
-	{
-		path: []string{"dev", "dump", "sort"}, run: cmdDumpSort,
-		help: "🔢 Stable-sort normalized graph lines so two graphs can be merge-compared.",
-	},
-	{
 		path: []string{"dev", "dump", "diff"}, run: cmdDumpDiff,
 		help: "🆚 Diff two normalized graphs — by kind/field/token, paired nodes, or roots.",
 	},

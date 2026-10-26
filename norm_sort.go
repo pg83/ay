@@ -1,3 +1,5 @@
+//go:build aynorm
+
 package main
 
 import (
@@ -12,7 +14,7 @@ import (
 
 const defaultSortChunkBytes = 256 << 20
 
-func cmdDumpSort(_ GlobalFlags, args []string) int {
+func normCmdSort(args []string) int {
 	var inPath, outPath string
 
 	chunkBytes := defaultSortChunkBytes
@@ -29,7 +31,7 @@ func cmdDumpSort(_ GlobalFlags, args []string) int {
 			i++
 			chunkBytes = int(throw2(strconv.Atoi(arg(args, i))))
 		default:
-			throwFmt("dump sort: unknown argument %q", args[i])
+			throwFmt("sort: unknown argument %q", args[i])
 		}
 	}
 
@@ -145,7 +147,7 @@ func mergeChunks(chunks []string, out io.Writer) {
 	for _, path := range chunks {
 		f := throw2(os.Open(path))
 		r := bufio.NewReaderSize(f, 1<<20)
-		line, err := chaosReadString(r)
+		line, err := r.ReadString('\n')
 
 		if err != nil && err != io.EOF {
 			throw(err)
@@ -159,7 +161,7 @@ func mergeChunks(chunks []string, out io.Writer) {
 
 		throw2(bw.WriteString(it.line))
 
-		next, err := chaosReadString(it.reader)
+		next, err := it.reader.ReadString('\n')
 
 		if err != nil && err != io.EOF {
 			throw(err)

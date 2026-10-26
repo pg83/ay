@@ -16,7 +16,7 @@ class CliDispatchTest(unittest.TestCase):
             + "\n    🛠️ Developer tooling (dump, perf, refac, probe). Pass --verbose to list.",
             text,
         )
-        self.assertNotIn("dev dump sort", text)
+        self.assertNotIn("dev dump diff", text)
         self.assertNotIn("fetch", text)
         self.assertNotIn("--probe", text)
 
@@ -28,7 +28,7 @@ class CliDispatchTest(unittest.TestCase):
             self.assertIn(ESC + "[93m--probe=map|callsite|str" + RESET, text)
             for name in (
                 "fetch:", "fetch base64:", "fetch sandbox:", "make:",
-                "dev cas:", "dev maxrss:", "dev dump normalize:",
+                "dev cas:", "dev maxrss:", "dev dump diff:",
                 "dev perf buckethash:", "dev refac case:",
                 "dev probe callsite:",
             ):

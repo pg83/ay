@@ -7,7 +7,7 @@ from tst.dev.test_devtools_dump import DumpToolTest, compact, raw_node
 class DumpDependencyAliasesTest(DumpToolTest):
     def normalize(self, nodes, *flags):
         graph = self.write("aliases.json", compact({"graph": nodes, "result": ["root"]}))
-        result = self.ok("dev", "dump", "normalize", "--in", graph, *flags)
+        result = self.norm_ok("normalize", "--in", graph, *flags)
         return sorted(map(compact, map(json.loads, result.stdout.splitlines())))
 
     def test_coalesced_producers_keep_one_dependency_and_stable_ancestor_uids(self):

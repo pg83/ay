@@ -1,3 +1,5 @@
+//go:build aynorm
+
 package main
 
 import (

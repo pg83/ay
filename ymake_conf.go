@@ -403,11 +403,12 @@ func startYmakeConf(fs FS, srcRoot, buildType string, localDistbuild bool, local
 		throwFmt("ymake conf: %s is missing in %s", ymakeConfScript, srcRoot)
 	}
 
-	script := filepath.Join(srcRoot, ymakeConfScript)
+	confRoot := fs.confRoot()
+	script := filepath.Join(confRoot, ymakeConfScript)
 	params := throw2(json.Marshal(tc.Params))
 
 	args := []string{
-		"-B", script, srcRoot, extendConfBuildType(buildType), confVerbosityQuiet,
+		"-B", script, confRoot, extendConfBuildType(buildType), confVerbosityQuiet,
 		"--toolchain-params", base64.StdEncoding.EncodeToString(params),
 	}
 

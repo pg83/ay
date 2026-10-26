@@ -102,18 +102,18 @@ class DumpTest(unittest.TestCase):
         raw = self.write("raw.json", compact({"conf": {}, "graph": nodes, "result": list(result)}))
         normalized = self.root / "normalized.jsonl"
         args = [
-            "dev", "dump", "normalize",
+            "normalize",
             "--in", raw,
             "--out", normalized,
         ]
         if reference:
             args.append("--ref-graph")
-        lib.run(*args)
+        lib.run_norm(*args)
         if not sort:
             return normalized.read_text()
         sorted_path = self.root / "sorted.jsonl"
-        lib.run(
-            "dev", "dump", "sort",
+        lib.run_norm(
+            "sort",
             "--in", normalized,
             "--out", sorted_path,
         )
@@ -163,8 +163,8 @@ class DumpTest(unittest.TestCase):
     def test_sort_merges_chunks(self):
         source = self.write("in.txt", "cherry\napple\nbanana\napple\ndate\n")
         output = self.root / "out.txt"
-        lib.run(
-            "dev", "dump", "sort",
+        lib.run_norm(
+            "sort",
             "--in", source,
             "--out", output,
             "--chunk-bytes", "8",

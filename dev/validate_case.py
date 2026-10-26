@@ -52,34 +52,6 @@ def resource_id(url: str) -> str:
     return url.rstrip("/").rsplit("/", 1)[-1]
 
 
-def resolve_slice_root(directory: Path) -> Path:
-    if (directory / ".arcadia.root").exists():
-        return directory
-    for root, _directories, files in os.walk(directory):
-        if ".arcadia.root" in files:
-            return Path(root)
-    raise RuntimeError(f"no .arcadia.root below extracted slice {directory}")
-
-
-# A --sandboxing graph can take several GB; normalizing one that size from a
-# fully loaded graph runs out of memory, so it is streamed.
-STREAMING_GRAPH_BYTES = 1 << 30
-
-
-def streaming_mode(graph: Path) -> list[str]:
-    return ["--streaming"] if graph.stat().st_size > STREAMING_GRAPH_BYTES else []
-
-
-def resolve_reference_graph(directory: Path) -> Path:
-    direct = directory / "graph.fuse.json"
-    if direct.is_file():
-        return direct
-    candidates = sorted(directory.rglob("*.json"))
-    if not candidates:
-        raise RuntimeError(f"no reference JSON below extracted resource {directory}")
-    return candidates[0]
-
-
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -89,8 +61,9 @@ def file_sha256(path: Path) -> str:
 
 
 class CaseRunner:
-    def __init__(self, ay: Path, spec: dict, output: Path, timeout: int):
+    def __init__(self, ay: Path, norm: Path, spec: dict, output: Path, timeout: int):
         self.ay = ay
+        self.norm = norm
         self.spec = spec
         self.output = output
         self.timeout = timeout
@@ -153,49 +126,26 @@ class CaseRunner:
             **extra,
         }
 
-    def execute(self, slice_archive: Path, graph_archive: Path) -> dict:
+    def execute(self, slice_indexed: Path, reference: Path) -> dict:
         self.output.mkdir(parents=True, exist_ok=True)
         with (self.output / "commands.txt").open("w", encoding="utf-8") as log:
             self.log = log
             with tempfile.TemporaryDirectory(prefix="ay-validation-") as temporary:
                 work = Path(temporary)
-                slice_dir = work / "slice"
-                graph_dir = work / "reference"
-                for phase, archive, destination, url in (
-                    ("unpack-slice", slice_archive, slice_dir, self.spec["slice_url"]),
-                    ("unpack-reference", graph_archive, graph_dir, self.spec["graph_url"]),
-                ):
-                    rc, _ = self.run_command([
-                        str(self.ay), "fetch", "sandbox",
-                        "--resource-id", resource_id(url),
-                        "--resource-file", str(archive),
-                        "--untar-to", str(destination),
-                    ], cwd=work)
-                    if rc != 0:
-                        return self.phase_failure(phase, rc)
-
-                source_root = resolve_slice_root(slice_dir)
-                reference_raw = resolve_reference_graph(graph_dir)
                 our_raw = work / "our.json"
                 our_unsorted = work / "our.norm.unsorted"
-                ref_unsorted = work / "ref.norm.unsorted"
                 our_sorted = work / "our.norm.jsonl"
-                ref_sorted = work / "ref.norm.jsonl"
 
-                generation = [str(self.ay), *self.spec["command"][1:], "--source-root", str(source_root)]
+                generation = [str(self.ay), *self.spec["command"][1:], "--source-root", str(slice_indexed)]
                 rc, generation_seconds = self.run_command(
                     generation, cwd=work, stdout=our_raw, extra_env=self.spec.get("env"),
                 )
                 if rc != 0:
                     return self.phase_failure("generate", rc, generation_seconds=generation_seconds)
 
-                our_mode = streaming_mode(our_raw)
-                ref_mode = streaming_mode(reference_raw)
                 commands = (
-                    ("normalize-our", [str(self.ay), "dev", "dump", "normalize", "--in", str(our_raw), "--out", str(our_unsorted), *our_mode]),
-                    ("sort-our", [str(self.ay), "dev", "dump", "sort", "--in", str(our_unsorted), "--out", str(our_sorted)]),
-                    ("normalize-reference", [str(self.ay), "dev", "dump", "normalize", "--in", str(reference_raw), "--out", str(ref_unsorted), "--ref-graph", *ref_mode]),
-                    ("sort-reference", [str(self.ay), "dev", "dump", "sort", "--in", str(ref_unsorted), "--out", str(ref_sorted)]),
+                    ("normalize-our", [str(self.norm), "normalize", "--auto-streaming", "--in", str(our_raw), "--out", str(our_unsorted)]),
+                    ("sort-our", [str(self.norm), "sort", "--in", str(our_unsorted), "--out", str(our_sorted)]),
                 )
                 for phase, command in commands:
                     rc, _ = self.run_command(command, cwd=work)
@@ -203,7 +153,7 @@ class CaseRunner:
                         return self.phase_failure(phase, rc, generation_seconds=generation_seconds)
 
                 parity, sample = normalized_node_parity_counts(
-                    our_sorted, ref_sorted, diff_directory=self.output,
+                    our_sorted, reference, diff_directory=self.output,
                 )
                 exact = parity["our_only"] == 0 and parity["ref_only"] == 0
                 xfail = self.spec.get("xfail", False)
@@ -250,17 +200,18 @@ def decode_spec(encoded: str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ay", required=True)
+    parser.add_argument("--norm", required=True)
     parser.add_argument("--spec-base64", required=True)
-    parser.add_argument("--slice-archive", required=True)
-    parser.add_argument("--graph-archive", required=True)
+    parser.add_argument("--slice", required=True)
+    parser.add_argument("--reference", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--timeout", type=int, default=2400)
     args = parser.parse_args()
     output = Path(args.out)
     if output.exists():
         shutil.rmtree(output)
-    runner = CaseRunner(Path(args.ay), decode_spec(args.spec_base64), output, args.timeout)
-    result = runner.execute(Path(args.slice_archive), Path(args.graph_archive))
+    runner = CaseRunner(Path(args.ay), Path(args.norm), decode_spec(args.spec_base64), output, args.timeout)
+    result = runner.execute(Path(args.slice), Path(args.reference))
     write_json_atomic(output / "result.json", result)
     for line in format_result_lines(result):
         print(line, flush=True)

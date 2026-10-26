@@ -1,7 +1,6 @@
 import hashlib
 import json
 import os
-import tarfile
 import tempfile
 import unittest
 from unittest import mock
@@ -24,25 +23,18 @@ import json
 import os
 import shutil
 import sys
-import tarfile
 from pathlib import Path
 
 args = sys.argv[1:]
 with (Path(__file__).parent / "calls.jsonl").open("a") as calls:
     calls.write(json.dumps({"args": args, "env": dict(os.environ)}) + "\n")
-if args[:2] == ["fetch", "sandbox"]:
-    archive = Path(args[args.index("--resource-file") + 1])
-    destination = Path(args[args.index("--untar-to") + 1])
-    destination.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(archive, "r:*") as stream:
-        stream.extractall(destination)
-elif args and args[0] == "make":
+if args and args[0] == "make":
     print('{"node":1}')
-elif args[:3] == ["dev", "dump", "normalize"]:
+elif args[:1] == ["normalize"]:
     source = Path(args[args.index("--in") + 1])
     destination = Path(args[args.index("--out") + 1])
     shutil.copyfile(source, destination)
-elif args[:3] == ["dev", "dump", "sort"]:
+elif args[:1] == ["sort"]:
     source = Path(args[args.index("--in") + 1])
     destination = Path(args[args.index("--out") + 1])
     destination.write_text("".join(sorted(source.read_text().splitlines(keepends=True))))
@@ -52,17 +44,6 @@ else:
 
 
 class ValidationTest(unittest.TestCase):
-    def make_archive(self, path: Path, files: dict[str, str]) -> None:
-        staging = path.parent / (path.name + ".contents")
-        staging.mkdir()
-        for name, content in files.items():
-            destination = staging / name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(content)
-        with tarfile.open(path, "w") as stream:
-            for item in sorted(staging.rglob("*")):
-                stream.add(item, arcname=item.relative_to(staging))
-
     def run_case(self, reference: str, xfail=False, **extra):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -70,10 +51,10 @@ class ValidationTest(unittest.TestCase):
         ay = root / "ay"
         ay.write_text(FAKE_AY)
         ay.chmod(0o755)
-        source = root / "slice.tar"
-        graph = root / "graph.tar"
-        self.make_archive(source, {"repo/.arcadia.root": ""})
-        self.make_archive(graph, {"graph.fuse.json": reference})
+        source = root / "slice.indexed"
+        source.write_bytes(b"")
+        graph = root / "reference.norm.jsonl"
+        graph.write_text("".join(sorted(reference.splitlines(keepends=True))))
         spec = {
             "id": "synthetic",
             "target": "pkg/app",
@@ -84,14 +65,14 @@ class ValidationTest(unittest.TestCase):
             **extra,
         }
         output = root / "output"
-        result = CaseRunner(ay, spec, output, 10).execute(source, graph)
+        result = CaseRunner(ay, ay, spec, output, 10).execute(source, graph)
         return result, output
 
     def fake_ay_calls(self, output: Path) -> dict[str, list[dict]]:
         calls: dict[str, list[dict]] = {}
         for line in (output.parent / "calls.jsonl").read_text().splitlines():
             call = json.loads(line)
-            calls.setdefault(call["args"][0] if call["args"][0] != "dev" else call["args"][2], []).append(call)
+            calls.setdefault(call["args"][0], []).append(call)
         return calls
 
     def test_parity_counts_and_sample(self):
@@ -132,8 +113,8 @@ class ValidationTest(unittest.TestCase):
         self.assertTrue(all(len(line) <= 1002 for line in sample))
         calls = self.fake_ay_calls(output)
         self.assertEqual(len(calls["make"]), 1)
-        self.assertEqual(len(calls["normalize"]), 2)
-        self.assertEqual(len(calls["sort"]), 2)
+        self.assertEqual(len(calls["normalize"]), 1)
+        self.assertEqual(len(calls["sort"]), 1)
 
     def test_case_runner_passes_targets_to_generator_and_env(self):
         env = {"AUTOCHECK": "1", "YA_NO_GEN_RENAMED_RESULTS": "1"}
@@ -150,14 +131,14 @@ class ValidationTest(unittest.TestCase):
         self.assertEqual(result["status"], "OK")
         self.assertEqual(result["target"], targets)
         calls = self.fake_ay_calls(output)
-        self.assertEqual(sorted(calls), ["fetch", "make", "normalize", "sort"])
+        self.assertEqual(sorted(calls), ["make", "normalize", "sort"])
         [make] = calls["make"]
         self.assertEqual(make["args"][:4], ["make", "-G", *targets])
         self.assertEqual({name: make["env"].get(name) for name in env}, env)
         self.assertNotIn("CC", make["env"])
         for call in calls["normalize"]:
             self.assertNotIn("--target", call["args"])
-        for name in ("fetch", "normalize", "sort"):
+        for name in ("normalize", "sort"):
             for call in calls[name]:
                 self.assertFalse(env.keys() & call["env"].keys(), call["args"])
 

@@ -1,12 +1,10 @@
 package main
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"syscall"
 )
 
 var emptyDirNames = []uint32{}
@@ -14,17 +12,11 @@ var emptyDirNames = []uint32{}
 const (
 	readChunkSize      = 1 << 20
 	sourceUnderHotMask = 1<<18 - 1
-	dirFDCacheSize     = 768
 )
 
 type sourceUnderHotEntry struct {
 	key uint64
 	val STR
-}
-
-type dirFDCacheEntry struct {
-	rel string
-	fd  int
 }
 
 func hashSourceFile(srcRoot, rel string) uint64 {
@@ -71,52 +63,25 @@ type OsFS struct {
 	dirNames       *BumpAllocator[uint32]
 	dirEntries     *IntSet
 	contentHashes  ContentHashes
-	testReadErrors map[string]error
 	sourceUnder    *IntMap[STR]
 	sourceUnderHot [sourceUnderHotMask + 1]sourceUnderHotEntry
-	readBuf        []byte
 	readResult     [2][]byte
-	fileCloseQueue chan int
-	direntBuf      []byte
-	mmapCur        []byte
-	rootFD         int
-	dirFD          int
-	dirFDRel       string
-	dirFDs         map[string]int
-	dirFDRing      [dirFDCacheSize]dirFDCacheEntry
-	dirFDNext      int
-	pathBuf        []byte
+
+	fsBackend
 }
 
 func newFS(srcRoot string) FS {
 	fs := &OsFS{
-		srcRoot:        srcRoot,
-		rootSlash:      srcRoot + "/",
-		readBuf:        make([]byte, readChunkSize),
-		dirNames:       newBumpAllocator[uint32](),
-		dirEntries:     newIntSet(1 << 17),
-		sourceUnder:    newIntMap[STR](1 << 18),
-		testReadErrors: map[string]error{},
-		fileCloseQueue: make(chan int, 256),
-		dirFD:          -1,
-		dirFDs:         make(map[string]int, dirFDCacheSize),
+		srcRoot:     srcRoot,
+		rootSlash:   srcRoot + "/",
+		dirNames:    newBumpAllocator[uint32](),
+		dirEntries:  newIntSet(1 << 17),
+		sourceUnder: newIntMap[STR](1 << 18),
 	}
 
-	fs.platformInit()
-
-	go fs.closeFiles()
+	fs.initBackend()
 
 	return fs
-}
-
-func (fs *OsFS) closeFiles() {
-	for fd := range fs.fileCloseQueue {
-		syscall.Close(fd)
-	}
-}
-
-func (fs *OsFS) closeFile(fd int) {
-	fs.fileCloseQueue <- fd
 }
 
 func (fs *OsFS) listdir(dir STR) DirView {
@@ -222,17 +187,6 @@ func (fs *OsFS) isFile(prefix STR, suffix string) bool {
 	p, d := fs.exists(prefix, suffix)
 
 	return p && !d
-}
-
-func (fs *OsFS) sourcePathExists(rel string) bool {
-	_, err := os.Stat(filepath.Join(fs.srcRoot, rel))
-
-	if err != nil && !errors.Is(err, syscall.ENOENT) && !errors.Is(err, syscall.ENOTDIR) &&
-		!errors.Is(err, syscall.ENAMETOOLONG) && !errors.Is(err, syscall.EACCES) && !errors.Is(err, syscall.EPERM) && !errors.Is(err, syscall.ELOOP) {
-		throw(err)
-	}
-
-	return err == nil
 }
 
 func (fs *OsFS) isFileClean(prefix STR, suffix string) bool {

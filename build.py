@@ -82,7 +82,13 @@ coverage_enabled = bool(build.flags.coverage)
 race_enabled = bool(build.flags.race)
 COVERAGE_MINIMUM = "95"
 
-GO_SOURCES = build.glob("$(S)/*.go")
+# ay_norm (the graph normalizer the gate compares with) is its own program:
+# the aynorm-tagged files plus the two it shares with ay. Its cache key does
+# not move when the rest of ay changes, so normalized references stay cached.
+NORM_ONLY_SOURCES = [*build.glob("$(S)/norm_*.go"), "$(S)/merge_heap.go"]
+NORM_SOURCES = sorted([*NORM_ONLY_SOURCES, "$(S)/dump.go"])
+
+GO_SOURCES = [path for path in build.glob("$(S)/*.go") if path not in NORM_ONLY_SOURCES]
 
 GENERATED_DENSE_MAPS = [
     "$(B)/generated/go/dense_map_2.go",
@@ -169,6 +175,26 @@ def go_binary(name, output, cmd):
 
 
 ay = go_binary("ay", "$(B)/bin/ay", go_overlay_build("$(B)/bin/ay", []))
+
+# The gate's ay reads the source tree from an .indexed resource (fs_indexed.go).
+ay_gate = go_binary("ay_gate", "$(B)/bin/ay-gate", go_overlay_build("$(B)/bin/ay-gate", ["aygate"]))
+
+NORM_STAGE = "$(B)/norm-src"
+ay_norm = command(
+    name="ay_norm",
+    inputs=[*NORM_SOURCES, "$(S)/go.mod", "$(S)/go.sum"],
+    outputs=["$(B)/bin/ay-norm"],
+    cmd=[
+        ["rm", "-rf", NORM_STAGE],
+        mkdir(NORM_STAGE),
+        ["cp", "--", *NORM_SOURCES, "$(S)/go.mod", "$(S)/go.sum", NORM_STAGE + "/"],
+        ["go", "build", "-C", NORM_STAGE, "-tags", "aynorm", "-trimpath", "-buildvcs=false", "-o", "$(B)/bin/ay-norm", "."],
+    ],
+    cwd="$(S)",
+    env=GO_ENV,
+    descr="GO",
+    color="cyan",
+)
 
 if coverage_enabled:
     # The cover tool opens sources by their original names and ignores
@@ -271,6 +297,7 @@ for test_path in build.glob("$(S)/tst/**/test_*.py"):
     test_outputs = [test_stamp]
     test_env = {
         "AY_TEST_BINARY": ay_test.outputs[0],
+        "AY_NORM_BINARY": ay_norm.outputs[0],
         "AY_TEST_SSH_OAUTH": "",
         "PYTHONDONTWRITEBYTECODE": "1",
     }
@@ -293,7 +320,7 @@ for test_path in build.glob("$(S)/tst/**/test_*.py"):
         name=f"unit_{test_slug}",
         inputs=test_inputs,
         outputs=test_outputs,
-        deps=[ay_test],
+        deps=[ay_test, ay_norm],
         cmd=test_commands,
         cwd="$(S)",
         env=test_env,
@@ -442,8 +469,12 @@ resource_targets = {}
 resource_specs = {}
 
 
+def resource_id(url):
+    return url.rstrip("/").rsplit("/", 1)[-1]
+
+
 def validation_resource(url, checksum):
-    resource = url.rstrip("/").rsplit("/", 1)[-1]
+    resource = resource_id(url)
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", resource):
         raise RuntimeError(f"unsafe validation resource id in {url!r}")
     checksum = checksum or "-"
@@ -471,6 +502,71 @@ def validation_resource(url, checksum):
     return resource_targets[resource]
 
 
+indexed_targets = {}
+reference_targets = {}
+
+
+def validation_indexed(archive, resource, root_marker=None):
+    """The resource tarball as one .indexed file (dev/indexed.py)."""
+    if resource not in indexed_targets:
+        output = f"$(B)/validation/indexed/{resource}.indexed"
+        indexed_targets[resource] = command(
+            name=f"validation_indexed_{slug(resource)}",
+            inputs=["$(S)/dev/indexed.py"],
+            outputs=[output],
+            deps=[archive],
+            cmd=[
+                mkdir("$(B)/validation/indexed"),
+                [
+                    "python3", "$(S)/dev/indexed.py",
+                    "--in", archive.outputs[0],
+                    "--out", output,
+                    *(["--root-marker", root_marker] if root_marker else []),
+                ],
+            ],
+            descr="IX",
+            color="blue",
+        )
+    return indexed_targets[resource]
+
+
+def validation_reference(archive, resource):
+    """The reference graph normalized and sorted once by ay_norm."""
+    if resource not in reference_targets:
+        graph = f"$(B)/validation/graphs/{resource}.json"
+        extracted = command(
+            name=f"validation_graph_{slug(resource)}",
+            inputs=["$(S)/dev/reference_graph.py"],
+            outputs=[graph],
+            deps=[archive],
+            cmd=[
+                mkdir("$(B)/validation/graphs"),
+                ["python3", "$(S)/dev/reference_graph.py", "--in", archive.outputs[0], "--out", graph],
+            ],
+            descr="RG",
+            color="blue",
+        )
+        unsorted = f"$(B)/validation/reference/{resource}.unsorted"
+        output = f"$(B)/validation/reference/{resource}.norm.jsonl"
+        reference_targets[resource] = command(
+            name=f"validation_reference_{slug(resource)}",
+            outputs=[output],
+            deps=[extracted, ay_norm],
+            cmd=[
+                mkdir("$(B)/validation/reference"),
+                [
+                    ay_norm.outputs[0], "normalize", "--ref-graph", "--auto-streaming",
+                    "--in", graph, "--out", unsorted,
+                ],
+                [ay_norm.outputs[0], "sort", "--in", unsorted, "--out", output],
+                ["rm", "-f", unsorted],
+            ],
+            descr="RN",
+            color="blue",
+        )
+    return reference_targets[resource]
+
+
 validation_results = []
 validation_gates = []
 validation_result_paths = []
@@ -481,8 +577,10 @@ for case in validation_config:
     case_slug = slug(case_id)
     if case_id != case_slug:
         raise RuntimeError(f"validation case id must be path-safe: {case_id!r}")
-    slice_resource = validation_resource(case["slice_url"], case.get("slice_sha256"))
-    graph_resource = validation_resource(case["graph_url"], case.get("graph_sha256"))
+    slice_archive = validation_resource(case["slice_url"], case.get("slice_sha256"))
+    graph_archive = validation_resource(case["graph_url"], case.get("graph_sha256"))
+    slice_indexed = validation_indexed(slice_archive, resource_id(case["slice_url"]), ".arcadia.root")
+    reference = validation_reference(graph_archive, resource_id(case["graph_url"]))
     result_directory = f"$(B)/validation/cases/{case_id}"
     result_path = result_directory + "/result.json"
     encoded_spec = base64.urlsafe_b64encode(
@@ -496,14 +594,15 @@ for case in validation_config:
             "$(S)/dev/validation_lib.py",
         ],
         outputs=[result_directory],
-        deps=[ay, slice_resource, graph_resource],
+        deps=[ay_gate, ay_norm, slice_indexed, reference],
         cmd=[
             "python3",
             "$(S)/dev/validate_case.py",
-            "--ay", ay.outputs[0],
+            "--ay", ay_gate.outputs[0],
+            "--norm", ay_norm.outputs[0],
             "--spec-base64", encoded_spec,
-            "--slice-archive", slice_resource.outputs[0],
-            "--graph-archive", graph_resource.outputs[0],
+            "--slice", slice_indexed.outputs[0],
+            "--reference", reference.outputs[0],
             "--out", result_directory,
         ],
         cwd="$(B)",

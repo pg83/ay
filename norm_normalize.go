@@ -1,3 +1,5 @@
+//go:build aynorm
+
 package main
 
 import (
@@ -12,11 +14,14 @@ import (
 	"strings"
 )
 
-const dumpUIDLen = 22
+const (
+	dumpUIDLen          = 22
+	streamingGraphBytes = 1 << 30
+)
 
-func cmdDumpNormalize(_ GlobalFlags, args []string) int {
+func normCmdNormalize(args []string) int {
 	var inPath, outPath string
-	var streaming bool
+	var streaming, autoStreaming bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -31,13 +36,20 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		case "--streaming":
 
 			streaming = true
+		case "--auto-streaming":
+
+			autoStreaming = true
 		default:
-			throwFmt("dump normalize: unknown argument %q", args[i])
+			throwFmt("normalize: unknown argument %q", args[i])
 		}
 	}
 
 	if inPath == "" {
-		throwFmt("dump normalize: --in is required")
+		throwFmt("normalize: --in is required")
+	}
+
+	if autoStreaming && graphSize(inPath) > streamingGraphBytes {
+		streaming = true
 	}
 
 	src := NodeSource{path: inPath}
@@ -98,7 +110,7 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		})
 
 	if len(result) == 0 {
-		throwFmt("dump normalize: graph has no result roots")
+		throwFmt("normalize: graph has no result roots")
 	}
 
 	roots := make([]string, 0, len(result))
@@ -107,13 +119,23 @@ func cmdDumpNormalize(_ GlobalFlags, args []string) int {
 		root := string(uid)
 
 		if _, present := contentHash[root]; !present {
-			throwFmt("dump normalize: result root %q is absent from graph", root)
+			throwFmt("normalize: result root %q is absent from graph", root)
 		}
 
 		roots = append(roots, root)
 	}
 
-	roots = dedupKeepOrder(roots)
+	seenRoot := map[string]bool{}
+
+	roots = slices.DeleteFunc(roots, func(root string) bool {
+		if seenRoot[root] {
+			return true
+		}
+
+		seenRoot[root] = true
+
+		return false
+	})
 
 	closure := map[string]bool{}
 	queue := append([]string(nil), roots...)
@@ -315,12 +337,4 @@ func reuidClosure(
 	}
 
 	return newUID
-}
-
-func arg(args []string, i int) string {
-	if i >= len(args) {
-		throwFmt("dump: missing value for flag %q", args[i-1])
-	}
-
-	return args[i]
 }

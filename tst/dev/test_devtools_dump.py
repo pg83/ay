@@ -116,6 +116,28 @@ class DumpToolTest(unittest.TestCase):
             check=False,
         )
 
+    def norm(self, *args, input=None):
+        return subprocess.run(
+            [str(lib.NORM), *map(str, args)],
+            cwd=self.root,
+            input=input,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+
+    def norm_ok(self, *args, input=None):
+        result = self.norm(*args, input=input)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result
+
+    def norm_fails(self, message, *args, input=None):
+        result = self.norm(*args, input=input)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(result.stderr, "ay_norm: " + message + "\n")
+
     def ok(self, *args, input=None):
         result = self.ay(*args, input=input)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -129,23 +151,13 @@ class DumpToolTest(unittest.TestCase):
 
 class DumpSortTest(DumpToolTest):
     def test_sort_stdin_to_stdout(self):
-        result = self.ok("dev", "dump", "sort", input="b\nc\na\n")
+        result = self.norm_ok("sort", input="b\nc\na\n")
         self.assertEqual(result.stdout, "a\nb\nc\n")
         self.assertEqual(sorted(path.name for path in self.root.iterdir()), [])
 
-    def test_sort_reports_a_failing_chunk_read(self):
-        # Two chunks: reads 0 and 1 start the merge, read 2 continues it.
-        for words in ("read-eio=0", "read-eio=2"):
-            with self.subTest(words=words):
-                self.fails(
-                    "input/output error",
-                    "dev", "dump", "sort", "--in", "-", "--out", "-", "--chunk-bytes", "2",
-                    input="b\na\n", env={**os.environ, "AY_CHAOS": words},
-                )
-
     def test_sort_dash_paths_and_exact_chunk_boundary(self):
-        result = self.ok(
-            "dev", "dump", "sort", "--in", "-", "--out", "-", "--chunk-bytes", "2",
+        result = self.norm_ok(
+            "sort", "--in", "-", "--out", "-", "--chunk-bytes", "2",
             input="b\na\n",
         )
         self.assertEqual(result.stdout, "a\nb\n")
@@ -153,7 +165,7 @@ class DumpSortTest(DumpToolTest):
     def test_sort_empty_input(self):
         source = self.write("empty.txt", "")
         output = self.root / "sorted.txt"
-        self.ok("dev", "dump", "sort", "--in", source, "--out", output)
+        self.norm_ok("sort", "--in", source, "--out", output)
         self.assertEqual(output.read_text(), "")
 
     @unittest.skipIf(os.geteuid() == 0, "root ignores directory permissions")
@@ -165,16 +177,16 @@ class DumpSortTest(DumpToolTest):
         output.write_text("stale\n")
         locked.chmod(0o555)
         self.addCleanup(locked.chmod, 0o755)
-        self.ok("dev", "dump", "sort", "--in", source, "--out", output, "--chunk-bytes", "2")
+        self.norm_ok("sort", "--in", source, "--out", output, "--chunk-bytes", "2")
         self.assertEqual(output.read_text(), "a\nb\n")
         self.assertEqual(sorted(path.name for path in self.root.iterdir()), ["in.txt", "locked"])
 
     def test_sort_argument_errors(self):
-        self.fails('dump sort: unknown argument "--bogus"', "dev", "dump", "sort", "--bogus")
-        self.fails('dump: missing value for flag "--in"', "dev", "dump", "sort", "--in")
-        self.fails(
+        self.norm_fails('sort: unknown argument "--bogus"', "sort", "--bogus")
+        self.norm_fails('dump: missing value for flag "--in"', "sort", "--in")
+        self.norm_fails(
             'strconv.Atoi: parsing "x": invalid syntax',
-            "dev", "dump", "sort", "--chunk-bytes", "x",
+            "sort", "--chunk-bytes", "x",
         )
 
 
@@ -234,9 +246,9 @@ class DumpGraphErrorsTest(DumpToolTest):
         }
         for name, (content, message) in cases.items():
             path = self.write(name, content)
-            self.fails(
+            self.norm_fails(
                 f"dump: {path}: {message}",
-                "dev", "dump", "normalize", "--in", path,
+                "normalize", "--in", path,
             )
             self.fails(
                 f"dump: {path}: {message}",
@@ -247,7 +259,7 @@ class DumpGraphErrorsTest(DumpToolTest):
 class DumpNormalizeTest(DumpToolTest):
     def normalize(self, nodes, *args, result):
         raw = self.write("raw.json", compact({"conf": {}, "graph": nodes, "result": list(result)}))
-        normalized = self.ok("dev", "dump", "normalize", "--in", raw, *args)
+        normalized = self.norm_ok("normalize", "--in", raw, *args)
         return [json.loads(line) for line in normalized.stdout.splitlines()]
 
     def test_normalize_closure_uids_fetch_and_streaming(self):
@@ -371,7 +383,7 @@ class DumpNormalizeTest(DumpToolTest):
             raw_node("cp", "CP", ["$(B)/pkg/file"]),
         ], "result": ["ld", "cp"]}))
         for flags in ((), ("--streaming",), ("--ref-graph",)):
-            result = self.ok("dev", "dump", "normalize", "--in", raw, *flags)
+            result = self.norm_ok("normalize", "--in", raw, *flags)
             self.assertEqual(result.stderr, "")
             self.assertEqual(
                 sorted(json.loads(line)["outputs"][0] for line in result.stdout.splitlines()),
@@ -561,27 +573,15 @@ class DumpNormalizeTest(DumpToolTest):
         ])
 
     def test_normalize_errors(self):
-        self.fails(
-            "dump normalize: --in is required",
-            "dev", "dump", "normalize",
-        )
-        self.fails(
-            'dump normalize: unknown argument "--bogus"',
-            "dev", "dump", "normalize", "--bogus",
-        )
-        self.fails(
-            'dump normalize: unknown argument "--target"',
-            "dev", "dump", "normalize", "--target",
-        )
+        self.norm_fails("normalize: --in is required", "normalize")
+        self.norm_fails('normalize: unknown argument "--bogus"', "normalize", "--bogus")
+        self.norm_fails('normalize: unknown argument "--target"', "normalize", "--target")
         raw = self.write("no_roots.json", compact({"graph": [], "result": []}))
-        self.fails(
-            "dump normalize: graph has no result roots",
-            "dev", "dump", "normalize", "--in", raw,
-        )
+        self.norm_fails("normalize: graph has no result roots", "normalize", "--in", raw)
         raw = self.write("missing_root.json", compact({"graph": [], "result": ["missing"]}))
-        self.fails(
-            'dump normalize: result root "missing" is absent from graph',
-            "dev", "dump", "normalize", "--in", raw,
+        self.norm_fails(
+            'normalize: result root "missing" is absent from graph',
+            "normalize", "--in", raw,
         )
 
 

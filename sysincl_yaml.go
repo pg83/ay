@@ -272,7 +272,7 @@ func unquoteYScalar(name string, lineNo int, b []byte) []byte {
 		return inner
 	}
 
-	out := inner[:0]
+	out := make([]byte, 0, len(inner))
 
 	for i := 0; i < len(inner); i++ {
 		if inner[i] != '\\' {

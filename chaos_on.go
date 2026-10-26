@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -33,7 +32,6 @@ var (
 	chaosSlotMask      = newChaosNumber("hash-source-under-slot")
 	chaosLinkEXDEV     = newChaosFault("link-exdev")
 	chaosReadDirFail   = newChaosFault("readdir-fail")
-	chaosReadEIO       = newChaosFault("read-eio")
 	chaosTestReadEINTR = newChaosFault("eintr-test-data")
 	chaosTestReadEIO   = newChaosFault("test-data-read-eio")
 	chaosReadFileEIO   = newChaosFault("readfile-eio")
@@ -161,14 +159,6 @@ func chaosReadDir(dir string) ([]os.DirEntry, error) {
 	}
 
 	return os.ReadDir(dir)
-}
-
-func chaosReadString(r *bufio.Reader) (string, error) {
-	if chaosReadEIO.fire() {
-		return "", syscall.EIO
-	}
-
-	return r.ReadString('\n')
 }
 
 func chaosTestDataRead(fd int, p []byte) (int, error) {

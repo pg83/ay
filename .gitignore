@@ -1,6 +1,8 @@
 # Build artifacts
 /ay
 /ay_test
+/ay_gate
+/ay_norm
 /coverage
 /cli_coverage
 /ay_e2e_*

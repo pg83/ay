@@ -17,45 +17,39 @@ class DevtoolsCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         text = result.stderr
         self.assertTrue(text.startswith(USAGE_HEAD + "dev dump <subcommand> [args]\n"))
-        for name in ("normalize", "sort", "diff", "grep"):
+        for name in ("diff", "grep"):
             self.assertIn(ESC + "[91mdev dump " + name + ":" + RESET, text)
         self.assertNotIn("dev perf", text)
         self.assertNotIn("make:", text)
 
+    def graph_lines(self, count):
+        source = self.root / "graph.jsonl"
+        source.write_text("".join(f'{{"self_uid":"U{i:06d}","outputs":["/o{i}"]}}\n' for i in range(count)))
+        return source
+
     def test_probe_flags_without_instrumentation_report_nothing(self):
-        source = self.root / "in.txt"
-        source.write_text("b\na\n")
+        source = self.graph_lines(2)
         for flag in ("--probe=map", "--probe=callsite", "-probe=map"):
-            output = self.root / "out.txt"
-            result = run_ay(flag, "dev", "dump", "sort", "--in", source, "--out", output)
+            result = run_ay(flag, "dev", "dump", "grep", "--in", source, "U000001")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stderr, "")
-            self.assertEqual(output.read_text(), "a\nb\n")
+            self.assertIn('"self_uid": "U000001"', result.stdout)
 
     def test_callsite_out_env_appends_nothing_without_instrumentation(self):
-        source = self.root / "in.txt"
-        source.write_text("b\na\n")
+        source = self.graph_lines(2)
         sites = self.root / "sites.txt"
         sites.write_text("pre-existing\n")
         env = dict(os.environ, CALLSITE_OUT=str(sites))
-        result = run_ay(
-            "dev", "dump", "sort", "--in", source, "--out", self.root / "o1",
-            env=env,
-        )
+        result = run_ay("dev", "dump", "grep", "--in", source, "U000000", env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(sites.read_text(), "pre-existing\n")
         env = dict(os.environ, CALLSITE_OUT=str(self.root / "missing/dir/sites"))
-        result = run_ay(
-            "dev", "dump", "sort", "--in", source, "--out", self.root / "o2",
-            env=env,
-        )
+        result = run_ay("dev", "dump", "grep", "--in", source, "U000000", env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse((self.root / "missing").exists())
 
     def test_profiling_environment_writes_profiles(self):
-        source = self.root / "in.txt"
-        source.write_text("".join(f"{i:06d}\n" for i in range(2000, 0, -1)))
-        output = self.root / "out.txt"
+        source = self.graph_lines(2000)
         cpu = self.root / "cpu.pprof"
         mem = self.root / "mem.pprof"
         env = dict(
@@ -65,13 +59,9 @@ class DevtoolsCliTest(unittest.TestCase):
             YATOOL_MEMPROFILE=str(mem),
             YATOOL_MEMPROFRATE="1",
         )
-        result = run_ay(
-            "dev", "dump", "sort", "--in", source, "--out", output,
-            "--chunk-bytes", "64",
-            env=env,
-        )
+        result = run_ay("dev", "dump", "grep", "--in", source, "U001999", env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(output.read_text().splitlines()[:2], ["000001", "000002"])
+        self.assertIn('"self_uid": "U001999"', result.stdout)
         for profile in (cpu, mem):
             self.assertEqual(profile.read_bytes()[:2], b"\x1f\x8b", profile)
 

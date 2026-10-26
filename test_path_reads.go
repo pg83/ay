@@ -1,3 +1,5 @@
+//go:build !aygate
+
 package main
 
 import (
