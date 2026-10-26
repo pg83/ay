@@ -48,6 +48,9 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	srcVFS := e.resolveModuleSourceVFS(meta.Source, d.cc.SrcDirs)
+
+	e.collectCPPStyleInputs(srcVFS, cudaCompileScriptVFS, cudaRuntimeIncludeVFS)
+
 	outVFS, inVFS := composeCCPaths(instance, e.moduleSourceRel(meta.Source), srcVFS, in, d.cc.objSufDot()+e.cudaSettings().ObjectSuffix)
 	srcCV := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
 	runtimeCV := e.scanner.walkClosure(cudaRuntimeIncludeVFS, d.scanCtx, scanDomainCC)

@@ -51,3 +51,11 @@ class CudaContextsTest(MakeTest):
         self.assertIn(f"{system}/cuda/memory_resource.h", inputs)
         self.assertIn(f"{system}/cuda/memory.h", inputs)
         self.assertIn(f"{system}/tbb/memory.h", inputs)
+
+    def test_cuda_source_runtime_header_is_cpp_style_input(self):
+        self.write("ya.make", "LIBRARY()\nSTYLE_CPP()\nSRCS(plain.cpp kernel.cu)\nEND()\n")
+        self.write("plain.cpp", "int plain() { return 42; }\n")
+        self.write("kernel.cu", "__global__ void kernel(int* value) { *value = 42; }\n")
+        node = self.node(self.graph("-t"), "test-results/clang_format/meta.json")
+        self.assertIn("$(S)/build/internal/platform/cuda/cuda_runtime_include.h", node["inputs"])
+        self.assertIn("$(S)/build/internal/platform/cuda/cuda_runtime_include.h", self.args(node))
