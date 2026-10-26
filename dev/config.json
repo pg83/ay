@@ -3501,9 +3501,22 @@
     ],
     "target": "zora",
     "xfail": true,
-    "slice_url": "https://proxy.sandbox.yandex-team.ru/14132602700",
-    "slice_sha256": "b4a239ff24e2ee8c7d1dfd82af922806e758c233767b4604bca432f38aa08d56",
-    "graph_url": "https://proxy.sandbox.yandex-team.ru/14132604263",
-    "graph_sha256": "7f8179e64a6b1264c949fa0df99501040b98ff942800c79d8e9b42bc0e29452d"
+    "env": {
+      "AUTOCHECK": "1",
+      "TOOLCHAIN": "",
+      "YA_GRAPH_GEN_DIST_PRIORITY": "-1",
+      "YA_NO_GEN_RENAMED_RESULTS": "1",
+      "YA_NO_RESPAWN": "yes",
+      "YA_PREFETCH": "0",
+      "YA_STORE_LINKS_IN_MEMORY": "1",
+      "YA_STRIP_IDLE_BUILD_RESULTS": "0",
+      "YA_STRIP_PACKAGES_FROM_RESULTS": "1",
+      "YA_TC": "no",
+      "YA_TOKEN": "AY_CANONIZATION_NO_TOKEN"
+    },
+    "slice_url": "https://proxy.sandbox.yandex-team.ru/14132736806",
+    "slice_sha256": "6082395dc7dad67f8ef90eabfb02bdf247a37370429362d1e2d7cd6ed9125975",
+    "graph_url": "https://proxy.sandbox.yandex-team.ru/14132739026",
+    "graph_sha256": "ae3e208e6ba928927806c0d916caac502e54d51bb986223dc618dcce9cb47f52"
   }
 ]
