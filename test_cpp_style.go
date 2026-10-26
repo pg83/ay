@@ -67,7 +67,7 @@ func (ctx *GenCtx) javaCPPStyleSuites(jm *JavaModule) []*TestSuite {
 	var suites []*TestSuite
 
 	for _, check := range jm.data.styleChecks {
-		if slices.ContainsFunc(suites, func(suite *TestSuite) bool { return suite.testType == check.Name }) {
+		if !check.CPP || slices.ContainsFunc(suites, func(suite *TestSuite) bool { return suite.testType == check.Name }) {
 			continue
 		}
 

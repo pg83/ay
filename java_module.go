@@ -836,7 +836,7 @@ func (jm *JavaModule) macroPeers() []string {
 	}
 
 	for _, check := range d.styleChecks {
-		if check.Peer != "" {
+		if check.CPP && check.Peer != "" {
 			out = append(out, check.Peer)
 		}
 	}
@@ -862,6 +862,12 @@ func (jm *JavaModule) macroPeers() []string {
 
 		if !d.env.bool(envUSE_SYSTEM_JDK) && !d.env.bool(envOS_ANDROID) {
 			out = append(out, strContribLibsJdk.string())
+		}
+	}
+
+	for _, check := range d.styleChecks {
+		if check.Python {
+			out = append(out, check.Peer)
 		}
 	}
 

@@ -132,15 +132,30 @@ class JavaGeneratorInputsTest(MakeTest):
                 args = [arg.replace("$(SOURCE_ROOT)", "$(S)") for command in node["cmds"] for arg in command["cmd_args"]]
                 self.assertIn(f"$(S)/{PROJECT}/schema/answer.h", args)
 
-    def test_proto_cpp_style_peer_precedes_proto_tool(self):
+    def proto_style_classpath(self, body):
         self.write("ya.make", f"EXECTEST()\nDEPENDS({PROJECT}/program)\nRUN(${{ARCADIA_BUILD_ROOT}}/{PROJECT}/program/run.sh)\nEND()\nRECURSE(program)\n")
         self.write("program/ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")
         self.write("program/Main.java", "public class Main {}\n")
-        self.write("schema/ya.make", "PROTO_LIBRARY()\nSRCS(answer.proto)\nSTYLE_CPP()\nEND()\n")
+        self.write("schema/ya.make", f"PROTO_LIBRARY()\n{body}END()\n")
         self.write("schema/answer.proto", 'syntax = "proto3";\npackage e2e;\nenum Answer { UNKNOWN = 0; VALUE = 42; }\n')
         node = self.node(self.graph("-t"), "program/answer.run.cp.jar")
-        classpath = next(arg for command in node["cmds"] for arg in command["cmd_args"] if arg.startswith("CLASSPATH=")).split("::")
+        return next(arg for command in node["cmds"] for arg in command["cmd_args"] if arg.startswith("CLASSPATH=")).split("::")
+
+    def test_proto_cpp_style_peer_precedes_proto_tool(self):
+        classpath = self.proto_style_classpath("SRCS(answer.proto)\nSTYLE_CPP()\n")
         self.assertLess(classpath.index("platform-clang-clang-format.pkg.fake"), classpath.index("platform-java-protoc.pkg.fake"))
+
+    def test_proto_python_linter_peer_follows_module_peers(self):
+        peers = ["platform-clang-clang-format.pkg.fake", "platform-java-protoc.pkg.fake", "build-external_resources-black.pkg.fake"]
+        for body in ("STYLE_PYTHON()\nSRCS(answer.proto)\nSTYLE_CPP()\n", "STYLE_CPP()\nSRCS(answer.proto)\nSTYLE_PYTHON()\n"):
+            with self.subTest(body=body):
+                classpath = self.proto_style_classpath(body)
+                self.assertEqual(sorted(peers, key=classpath.index), peers)
+
+    def test_proto_python_linter_peer_obeys_no_lint(self):
+        for body, linted in (("NO_LINT()\nSRCS(answer.proto)\nSTYLE_PYTHON()\n", False), ("NO_LINT(ktlint)\nSRCS(answer.proto)\nSTYLE_PYTHON()\n", True)):
+            with self.subTest(body=body):
+                self.assertEqual("build-external_resources-black.pkg.fake" in self.proto_style_classpath(body), linted)
 
     def test_tasklet_peer_keeps_macro_order(self):
         self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")

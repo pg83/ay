@@ -213,8 +213,10 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 
 	if ctx.testMode {
 		for i := range d.styleChecks {
-			prepareCPPStyle(&d.styleChecks[i], jm.dir)
-			ctx.resolveStyleConfig(&d.styleChecks[i], jm.dir)
+			if d.styleChecks[i].CPP {
+				prepareCPPStyle(&d.styleChecks[i], jm.dir)
+				ctx.resolveStyleConfig(&d.styleChecks[i], jm.dir)
+			}
 		}
 	}
 
@@ -976,7 +978,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 			style = "black"
 		}
 
-		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: pythonStyleCheck(style, env).Peer})
+		d.styleChecks = append(d.styleChecks, pythonStyleCheck(style, env))
 	}
 }
 
