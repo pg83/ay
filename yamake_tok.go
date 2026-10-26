@@ -488,6 +488,8 @@ var tokName = [...]STR{
 	tokGoXTestEmbedPattern:            internStr("GO_XTEST_EMBED_PATTERN"),
 	tokUseSdcMeta:                     strUSE_SDC_META,
 	tokGenerateTopology:               internStr("GENERATE_TOPOLOGY"),
+	tokGlob:                           internStr("_GLOB"),
+	tokAddCustomExplicitLinterCheck:   internStr("_ADD_CUSTOM_EXPLICIT_LINTER_CHECK"),
 	tokCompileNlg:                     internStr("COMPILE_NLG"),
 	tokAllGoTestSrcs:                  internStr("ALL_GO_TEST_SRCS"),
 }
@@ -936,6 +938,8 @@ const (
 	tokGoXTestEmbedPattern
 	tokUseSdcMeta
 	tokGenerateTopology
+	tokGlob
+	tokAddCustomExplicitLinterCheck
 	tokCompileNlg
 	tokAllGoTestSrcs
 	tokGenLibrary

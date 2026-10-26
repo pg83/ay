@@ -42,10 +42,10 @@ type ConfStmt struct {
 }
 
 type ConfFile struct {
-	rel         string
-	branches    []ConfBranch
-	stmts       []ConfStmt
-	styleMacros map[string]*ConfStyleMacro
+	rel      string
+	branches []ConfBranch
+	stmts    []ConfStmt
+	macros   map[STR]*ConfMacro
 }
 
 func readConfFile(rel, text string) *ConfFile {
@@ -83,7 +83,7 @@ func readConfFile(rel, text string) *ConfFile {
 			previous = stack[len(stack)-1]
 
 			if start, ok := macroStarts[previous]; ok {
-				conf.addStyleMacro(macroHeaders[previous], lines[start:lineNo])
+				conf.addMacro(macroHeaders[previous], lines[start:lineNo])
 			}
 
 			stack = stack[:len(stack)-1]

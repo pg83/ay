@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -192,4 +193,45 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 	}
 
 	return matches
+}
+
+func applyGlobStmt(fs FS, module string, args []ANY, env Environment, onWarn func(Warn)) {
+	if len(args) == 0 {
+		throwFmt("%s: empty argument in _GLOB", module)
+	}
+
+	var patterns, excludes, restrictions []string
+
+	section := ""
+
+	for _, arg := range anyStrs(args[1:]) {
+		switch {
+		case section == "RESTRICTIONS":
+			restrictions = append(restrictions, arg)
+		case arg == "RESTRICTIONS" || arg == "EXCLUDE":
+			section = arg
+		case section == "EXCLUDE":
+			excludes = append(excludes, styleSourcePath(module, arg))
+		default:
+			patterns = append(patterns, styleSourcePath(module, arg))
+		}
+	}
+
+	for i := 0; i < len(restrictions); i += 2 {
+		switch restrictions[i] {
+		case "MAX_MATCHES", "MAX_WATCH_DIRS", "SKIPPED_MIN_MATCHES", "SKIPPED_ERROR_PERCENT":
+		default:
+			onWarn(Warn{Kind: WarnBadMacroArgs, Message: fmt.Sprintf("%s: Unknown restriction name %s in _GLOB", module, restrictions[i])})
+		}
+	}
+
+	var files []string
+
+	for _, pattern := range patterns {
+		for _, file := range ymakeGlob(fs, pattern, excludes...) {
+			files = append(files, "${ARCADIA_ROOT}/"+file)
+		}
+	}
+
+	env.setString(internEnv(args[0].string()), strings.Join(dedupKeepOrder(files), " "))
 }

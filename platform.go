@@ -60,7 +60,7 @@ type Platform struct {
 	BuildInfoKV           KV
 	Linker                LinkerFlags
 	Sysincl               []string
-	customStyleMacros     map[string]*ConfStyleMacro
+	confMacros            map[STR]*ConfMacro
 	peerPolicies          *PeerPolicies
 	LinkPreludeExtra      []ANY
 	ClangVer              string
@@ -224,7 +224,7 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	p.updateJdkConfig(p.ifEnv, envJdkVersion, nil)
 	p.updateJdkConfig(p.ifEnv, envJdkRealVersion, nil)
 	p.Linker = pc.Linker.flags(p)
-	p.Sysincl, p.customStyleMacros = sysinclFiles(pc.Parsers, root, p.ifEnv)
+	p.Sysincl, p.confMacros = sysinclFiles(pc.Parsers, root, p.ifEnv)
 	p.peerPolicies = pc.Parsers.peerPolicies(strings.Fields(expandConfScalar(p.ifEnv.string(envPeerdirsRulesPath), p.ifEnv)))
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)

@@ -205,6 +205,7 @@ type UnknownStmt struct {
 	Args        []ANY
 	LexicalArgs []ANY
 	Line        int
+	Internal    bool
 }
 
 type IfStmt struct {
@@ -1109,13 +1110,31 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 	var lexical []ANY
 	var capture *[]ANY
 
-	if nameTok.string() == "RUN_JAVA_PROGRAM" || nameTok.id == kwSET || nameTok.id == tokSetAppend.str() || nameTok.id == tokNoCheckImports.str() {
+	if capturesLexicalArgs(nameTok.id) {
 		capture = &lexical
 	}
 
 	args := p.parseMacroArgsLexical(nameTok, capture)
 
-	if nameTok.id == tokCppEnumsSerialization.str() {
+	p.stmtScratch = appendMacroCallStmts(p.stmtScratch, nameTok.id, args, lexical, nameTok.line, func(format string, a ...any) {
+		p.lex.throwParse(nameTok.line, nameTok.col, format, a...)
+	})
+
+	if nameTok.string()[0] != '_' {
+		return
+	}
+
+	if u, ok := p.stmtScratch[len(p.stmtScratch)-1].(*UnknownStmt); ok {
+		u.Internal = true
+	}
+}
+
+func capturesLexicalArgs(nameID STR) bool {
+	return nameID.string() == "RUN_JAVA_PROGRAM" || nameID == kwSET || nameID == tokSetAppend.str() || nameID == tokNoCheckImports.str()
+}
+
+func appendMacroCallStmts(out []Stmt, nameID STR, args, lexical []ANY, line int, fail func(format string, a ...any)) []Stmt {
+	if nameID == tokCppEnumsSerialization.str() {
 		for i := 0; i < len(args); i++ {
 			if args[i].string() == "NAMESPACE" {
 				i++
@@ -1123,15 +1142,15 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 				continue
 			}
 
-			p.stmtScratch = append(p.stmtScratch, astOne(astEnumSers, GenerateEnumSerializationStmt{Header: args[i].string(), Variant: "with_header", Line: nameTok.line}))
+			out = append(out, astOne(astEnumSers, GenerateEnumSerializationStmt{Header: args[i].string(), Variant: "with_header", Line: line}))
 		}
 
-		return
+		return out
 	}
 
-	stmt := p.buildStmt(nameTok, args)
+	stmt := buildStmtForID(nameID, args, line, fail)
 
-	if len(lexical) != 0 {
+	if len(lexical) != 0 && capturesLexicalArgs(nameID) {
 		if set, ok := stmt.(*SetStmt); ok {
 			set.LexicalValue = strings.Join(anyStrs(lexical[1:]), " ")
 		} else {
@@ -1139,7 +1158,7 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 		}
 	}
 
-	p.stmtScratch = append(p.stmtScratch, stmt)
+	return append(out, stmt)
 }
 
 func (p *Parser) applyIncludeOnce(nameTok Token) {
@@ -1261,12 +1280,6 @@ type Parser struct {
 	condTokBuf   []Token
 	argScratch   []ANY
 	stmtScratch  []Stmt
-}
-
-func (p *Parser) buildStmt(nameTok Token, args []ANY) Stmt {
-	return buildStmtForID(nameTok.id, args, nameTok.line, func(format string, a ...any) {
-		p.lex.throwParse(nameTok.line, nameTok.col, format, a...)
-	})
 }
 
 func buildStmtForID(nameID STR, args []ANY, line int, fail func(format string, a ...any)) Stmt {

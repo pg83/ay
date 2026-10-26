@@ -155,6 +155,8 @@ type ModuleData struct {
 
 	discarded bool
 
+	confMacroDepth int
+
 	styleChecks []StyleCheck
 
 	usrvFiles []UsrvFile
@@ -1357,6 +1359,20 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded.Args = expandSourceArguments(v.Args, env)
 			v = &expanded
 
+			if _, local := d.setVars[envREALPRJNAME.str()]; !local {
+				for i := 0; i < len(v.Args); i++ {
+					if v.Args[i] == kwPREFIX.any() {
+						i++
+
+						continue
+					}
+
+					env.setStringID(envREALPRJNAME, v.Args[i].str())
+
+					break
+				}
+			}
+
 			if v.Name == tokPy3Program && kind == KindBin {
 				d.peerdirs = append([]ANY{internStr(modulePath).any()}, d.peerdirs...)
 			}
@@ -2055,6 +2071,12 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn, platform)
 		case *UnknownStmt:
+			if v.Internal {
+				onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: internal command %s is not allowed to appear in ya.make (line %d); skipped", modulePath, v.Raw.string(), v.Line)})
+
+				continue
+			}
+
 			if v.Raw.string() == "RUN_JAVA_PROGRAM" {
 				raw := v.Args
 
@@ -2109,7 +2131,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					expanded.Args = expandListPreSufArgs(v.Args, env)
 				} else if v.Name == tokUseRecipe {
 					expanded.Args = []ANY{internStr(collectTestRecipe(v.Args, env)).any()}
-				} else if v.Name != tokEnv && !(v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].string() == "TEST_ENV_VALUE") {
+				} else if v.Name != tokEnv && v.Name != tokAddCustomExplicitLinterCheck && !(v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].string() == "TEST_ENV_VALUE") {
 					if v.Name == tokPySrcs && d.usePython2 {
 						expanded.Args = expandRootDeferredTokens(v.Args, env, tokenExpandLazy)
 					} else if v.Name == tokCopyFile || v.Name == tokCopyFileWithContext {
@@ -2150,15 +2172,13 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 				d.recurses = appendConfigurationRecurses(d.recurses, modulePath, expanded, platform)
 
-				if applyCustomStyle(fs, modulePath, expanded, d, env, platform) {
-					continue
-				}
-
 				if expanded.Name == tokLargeFiles {
 					applyLargeFiles(fs, ctx.scannerForPlatform(platform).codegen, modulePath, expanded, d, onWarn)
 					recordHandledMacro(expanded.Name, expanded.Args)
 				} else {
-					applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn)
+					if !applyUnknownStmt(fs, modulePath, expanded, d, env, onWarn) {
+						expandConfMacro(ctx, modulePath, kind, language, expanded, env, d, onWarn, platform)
+					}
 
 					if textAppend != nil {
 						env.setTextInputs(textAppend.id, textAppend.ranges)
@@ -2501,9 +2521,9 @@ func warnUnmodelledMacro(onWarn func(Warn), modulePath string, name TOK) {
 	onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q not modelled — implement its upstream semantics (see yatool/build/conf, yatool/build/ymake.core.conf); skipped", modulePath, name.string())})
 }
 
-func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) {
+func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, env Environment, onWarn func(Warn)) bool {
 	if applyRustMacro(v, modulePath, env, d) {
-		return
+		return true
 	}
 
 	if d.moduleStmt != nil {
@@ -2515,23 +2535,21 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	}
 
 	if applyTestMacro(v, d, env) {
-		return
+		return true
 	}
 
 	if d.nots != nil && applyNotsStmt(v, d.nots, env) {
-		return
+		return true
 	}
 
 	if d.docs != nil && d.docs.apply(v, modulePath) {
 		recordHandledMacro(v.Name, v.Args)
 
-		return
+		return true
 	}
 
 	if v.Name == tokInvalid {
-		onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: macro %q is not in the modelled set (line %d); skipped", modulePath, v.Raw.string(), v.Line)})
-
-		return
+		return false
 	}
 
 	handled := true
@@ -2571,6 +2589,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		env.setString(envYtRecordPeerdir, "")
 	case tokGolaunchSrcs, tokGolaunchSrcdir, tokRuntimePeerdir, tokResourcePeerdir, tokGolaunchFunction, tokGolaunchOverride, tokNoGolaunchSrcs, tokGenerateGolaunchCallbacks, tokGolaunchCompositeComps:
 		applyMlaunchStmt(modulePath, v, env, d)
+	case tokGlob:
+		applyGlobStmt(fs, modulePath, v.Args, env, onWarn)
+	case tokAddCustomExplicitLinterCheck:
+		d.collectCustomStyle(modulePath, v.Args, env)
 	case tokSdcDiagsSplitGeneratorV3:
 		applySdcDiagsSplitGeneratorV3(fs, modulePath, v, env, d)
 	case tokSdcDiagsSplitGeneratorV4:
@@ -3467,7 +3489,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			onWarn(Warn{Kind: WarnBadMacroArgs, Message: fmt.Sprintf("%s: BUILD_MN with options is not modelled, expected (MnInfo MnName), got %d args; skipped", modulePath, len(v.Args))})
 
-			return
+			return true
 		}
 
 		d.buildMns = append(d.buildMns, &BuildMnStmt{Info: v.Args[0], Name: v.Args[1].string(), Seq: d.nextDeclSeq()})
@@ -3947,13 +3969,13 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		handled = false
 
 		if !acknowledgedTokSet.has(uint32(v.Name)) {
-			warnUnmodelledMacro(onWarn, modulePath, v.Name)
-
-			return
+			return false
 		}
 
 		recordIgnoredMacro(v.Name)
 	}
+
+	return true
 }
 
 type LlvmBcStmt struct {
