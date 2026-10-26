@@ -17,6 +17,28 @@ class ParserVariantsTest(MakeTest):
         args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
         self.assertIn("-DE2E_VERSION=2.13.1", args)
 
+    def test_single_if_argument_is_not_split_into_comparison(self):
+        # Adjacent operators stay inside one macro argument. VarExpr expands
+        # arguments starting with '$' and looks up the others as variable names.
+        self.write("ya.make", 'LIBRARY()\nSET(E2E_VERSION 3)\nIF(${E2E_VERSION}=="")\nCFLAGS(-DE2E_ADJACENT_EQUAL)\nENDIF()\nIF(${E2E_VERSION}>"4")\nCFLAGS(-DE2E_ADJACENT_GREATER)\nENDIF()\nIF(E2E_VERSION=="3")\nCFLAGS(-DE2E_UNDEFINED_NAME)\nENDIF()\nIF(${E2E_VERSION} == "")\nCFLAGS(-DE2E_SPACED_EQUAL)\nENDIF()\nSRCS(answer.cpp)\nEND()\n')
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        node = self.node(self.graph(), "answer.cpp.o")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("-DE2E_ADJACENT_EQUAL", args)
+        self.assertIn("-DE2E_ADJACENT_GREATER", args)
+        self.assertNotIn("-DE2E_UNDEFINED_NAME", args)
+        self.assertNotIn("-DE2E_SPACED_EQUAL", args)
+
+    def test_if_operands_use_variable_expression(self):
+        self.write("ya.make", 'LIBRARY()\nSET(ENABLED no)\nIF("ENABLED")\nCFLAGS(-DE2E_QUOTED_NAME)\nENDIF()\nIF("${ENABLED}")\nCFLAGS(-DE2E_QUOTED_VALUE)\nENDIF()\nIF(${ENABLED}"")\nCFLAGS(-DE2E_EMBEDDED_QUOTES)\nENDIF()\nIF(NOT ${ENABLED} AND NOT "ENABLED")\nCFLAGS(-DE2E_COMPOUND)\nENDIF()\nIF(42)\nCFLAGS(-DE2E_INTEGER_NAME)\nENDIF()\nSRCS(answer.cpp)\nEND()\n')
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        node = self.node(self.graph(), "answer.cpp.o")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("-DE2E_EMBEDDED_QUOTES", args)
+        self.assertIn("-DE2E_COMPOUND", args)
+        for flag in ("-DE2E_QUOTED_NAME", "-DE2E_QUOTED_VALUE", "-DE2E_INTEGER_NAME"):
+            self.assertNotIn(flag, args)
+
     def test_multiline_quoted_value(self):
         self.write("ya.make", 'LIBRARY()\nSET(FLAGS "\n  -DE2E_FIRST\n  -DE2E_SECOND\n")\nCFLAGS(${FLAGS})\nSRCS(answer.cpp)\nEND()\n')
         self.write("answer.cpp", "int answer() { return 42; }\n")
