@@ -969,10 +969,6 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.commonGoogleAPIs = true
 	case "TASKLET":
 		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: strTaskletV1Api.string(), explicit: true})
-	case "STYLE_CPP":
-		if d.noLint != "none" && d.noLint != "none_internal" {
-			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: strBuildPlatformClangFormat.string(), explicit: true})
-		}
 	case "STYLE_RUFF", "STYLE_PYTHON":
 		style := "ruff"
 
