@@ -90,7 +90,7 @@ func (e *EmitContext) emitPyFbsGroup(files []PyFbsSource) {
 	var imports [][]VFS
 
 	for _, f := range files {
-		src := resolveSourceVFS(ctx, instance, f.Path, d.srcDirs)
+		src := resolveSourceOrGeneratedVFS(ctx, instance, f.Path, d.srcDirs)
 
 		tail = append(tail, src.any())
 		inputs = append(inputs, src)
