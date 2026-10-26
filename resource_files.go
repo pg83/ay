@@ -101,6 +101,10 @@ func expandMakeExpression(value string, env Environment, reserved func(string) b
 }
 
 func expandMakeExpressionTracked(value string, env Environment, reserved func(string) bool, track *SourceTextTracker) string {
+	if strings.IndexAny(value, "$\\") < 0 {
+		return value
+	}
+
 	var out strings.Builder
 
 	delta := 0

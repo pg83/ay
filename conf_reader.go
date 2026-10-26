@@ -240,7 +240,9 @@ func parseConfCondition(rel, expr string) []CondNode {
 				p.condScratch[i].Kind = ckConfIdent
 				p.condScratch[i].Name = name
 				p.condScratch[i].Env = internEnv(name)
-			} else if p.condScratch[i].Name != "yes" && p.condScratch[i].Name != "no" {
+			} else if p.condScratch[i].Name == "yes" || p.condScratch[i].Name == "no" {
+				p.condScratch[i].Kind = ckString
+			} else {
 				throwFmt("conf: %s: bare configuration variable %q needs $", rel, p.condScratch[i].Name)
 			}
 		case ckEq:
@@ -263,7 +265,7 @@ func evalConfAtomString(nodes []CondNode, i int32, env Environment) string {
 	switch n.Kind {
 	case ckConfIdent:
 		return env.string(n.Env)
-	case ckIdent, ckString:
+	case ckString:
 		return n.Name
 	case ckInt:
 		return strconv.Itoa(n.Ival)

@@ -26,7 +26,7 @@ var (
 	astEnumSers  = newBumpAllocator[GenerateEnumSerializationStmt]()
 	astConds     = newBumpAllocator[CondNode]()
 	astEnds      = newBumpAllocator[EndStmt]()
-	condFalse    = []CondNode{{Kind: ckIdent, Name: "no"}}
+	condFalse    = []CondNode{{Kind: ckString, Name: "no"}}
 )
 
 var runAntlrKeywords = strKeySet(
@@ -105,6 +105,7 @@ const (
 	ckConfIdent
 	ckGt
 	ckEndsWith
+	ckIsNum
 )
 
 const (
@@ -1153,7 +1154,7 @@ func (p *Parser) parseMacroArgsLexical(nameTok Token, lexical *[]ANY) []ANY {
 
 	defer func() { p.lex.inArgs = false }()
 
-	lexicalArgs := nameTok.id == kwCFLAGS || nameTok.id == tokGlobalCflags.str() || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS || nameTok.id == kwLDFLAGS || nameTok.id == kwRESOURCE || nameTok.id == tokUseRecipe.str() || nameTok.id == tokEnv.str() || nameTok.string() == "RUN_PROGRAM" || nameTok.string() == "RUN_PY3_PROGRAM"
+	lexicalArgs := nameTok.id == kwIF || nameTok.id == kwELSEIF || nameTok.id == kwCFLAGS || nameTok.id == tokGlobalCflags.str() || nameTok.id == kwCXXFLAGS || nameTok.id == kwCONLYFLAGS || nameTok.id == kwLDFLAGS || nameTok.id == kwRESOURCE || nameTok.id == tokUseRecipe.str() || nameTok.id == tokEnv.str() || nameTok.string() == "RUN_PROGRAM" || nameTok.string() == "RUN_PY3_PROGRAM"
 
 	for {
 		start := 0
@@ -1955,8 +1956,7 @@ func splitAddInclPaths(args []ANY) *AddInclStmt {
 }
 
 func (p *Parser) parseIf(ifTok Token) *IfStmt {
-	condToks := p.readCondTokens(ifTok)
-	cond := parseCondExpr(p, ifTok, condToks)
+	cond := p.compileIfCond(p.parseMacroArgs(ifTok))
 	thenBody, endTok := p.parseStmts(termIfBody)
 	node := astOne(astIfs, IfStmt{Cond: cond, Then: thenBody, Line: ifTok.line})
 
@@ -2033,26 +2033,155 @@ type CondParser struct {
 	ifTok  Token
 }
 
-func parseCondExpr(parent *Parser, ifTok Token, toks []Token) []CondNode {
-	parent.condScratch = parent.condScratch[:0]
+type IfCondCompiler struct {
+	args  []ANY
+	pos   int
+	nodes []CondNode
+}
 
-	cp := CondParser{toks: toks, parent: parent, ifTok: ifTok}
+func (p *Parser) compileIfCond(args []ANY) []CondNode {
+	if len(args) == 0 {
+		return condFalse
+	}
+
+	c := IfCondCompiler{args: args, nodes: p.condScratch[:0]}
 
 	exc := try(func() {
-		cp.parseOr()
+		if len(args) == 1 {
+			c.varExpr(c.take())
 
-		if cp.pos != len(cp.toks) {
-			t := cp.toks[cp.pos]
-
-			parent.lex.throwParse(t.line, t.col, "unexpected %s in IF condition", describeToken(t))
+			return
 		}
+
+		c.orExpr()
 	})
+
+	p.condScratch = c.nodes
 
 	if exc != nil {
 		return condFalse
 	}
 
-	return astConds.list(parent.condScratch...)
+	return astConds.list(c.nodes...)
+}
+
+func (c *IfCondCompiler) emit(n CondNode) int32 {
+	c.nodes = append(c.nodes, n)
+
+	return int32(len(c.nodes) - 1)
+}
+
+func (c *IfCondCompiler) at(word STR) bool {
+	return c.pos < len(c.args) && c.args[c.pos].str() == word
+}
+
+func (c *IfCondCompiler) take() STR {
+	if c.pos == len(c.args) {
+		throwFmt("macros: incomplete IF condition")
+	}
+
+	word := c.args[c.pos].str()
+
+	c.pos++
+
+	return word
+}
+
+func (c *IfCondCompiler) orExpr() int32 {
+	left := c.andExpr()
+
+	if c.pos == len(c.args) {
+		return left
+	}
+
+	if !c.at(kwOR) {
+		throwFmt("macros: expected OR in IF condition, got %q", c.args[c.pos].string())
+	}
+
+	c.pos++
+
+	return c.emit(CondNode{Kind: ckOr, L: left, R: c.orExpr()})
+}
+
+func (c *IfCondCompiler) andExpr() int32 {
+	left := c.notExpr()
+
+	if !c.at(kwAND) {
+		return left
+	}
+
+	c.pos++
+
+	return c.emit(CondNode{Kind: ckAnd, L: left, R: c.andExpr()})
+}
+
+func (c *IfCondCompiler) notExpr() int32 {
+	if !c.at(kwNOT) {
+		return c.binaryExpr()
+	}
+
+	c.pos++
+
+	return c.emit(CondNode{Kind: ckNot, L: c.notExpr()})
+}
+
+func (c *IfCondCompiler) binaryExpr() int32 {
+	left := c.unaryExpr()
+
+	if c.pos == len(c.args) || c.at(kwAND) || c.at(kwOR) {
+		return left
+	}
+
+	op := c.take().string()
+	right := c.emit(CondNode{Kind: ckString, Name: c.take().string()})
+
+	switch op {
+	case "==":
+		return c.emit(CondNode{Kind: ckEq, L: left, R: right})
+	case "!=":
+		return c.emit(CondNode{Kind: ckNot, L: c.emit(CondNode{Kind: ckEq, L: left, R: right})})
+	case "MATCHES":
+		return c.emit(CondNode{Kind: ckMatches, L: left, R: right})
+	case "STARTS_WITH":
+		return c.emit(CondNode{Kind: ckStartsWith, L: left, R: right})
+	case "ENDS_WITH":
+		return c.emit(CondNode{Kind: ckEndsWith, L: left, R: right})
+	case "VERSION_GT", "VERSION_GE", "VERSION_LT", "VERSION_LE":
+		return c.emit(CondNode{Kind: ckVersionCmp, Name: op, L: left, R: right})
+	case ">":
+		return c.emit(CondNode{Kind: ckGt, L: left, R: right})
+	case "<":
+		return c.emit(CondNode{Kind: ckLt, L: left, R: right})
+	case ">=":
+		return c.emit(CondNode{Kind: ckNot, L: c.emit(CondNode{Kind: ckLt, L: left, R: right})})
+	case "<=":
+		return c.emit(CondNode{Kind: ckNot, L: c.emit(CondNode{Kind: ckGt, L: left, R: right})})
+	}
+
+	return c.emit(CondNode{Kind: ckUnsupportedOp, Name: op, L: left, R: right})
+}
+
+func (c *IfCondCompiler) unaryExpr() int32 {
+	switch word := c.take(); word {
+	case kwDEFINED:
+		name := c.take()
+
+		return c.emit(CondNode{Kind: ckDefined, Name: name.string(), Env: internEnvSTR(name)})
+	case kwISNUM:
+		name := c.take()
+
+		return c.emit(CondNode{Kind: ckIsNum, Name: name.string(), Env: internEnvSTR(name)})
+	default:
+		return c.varExpr(word)
+	}
+}
+
+func (c *IfCondCompiler) varExpr(word STR) int32 {
+	if name := word.string(); strings.HasPrefix(name, "$") {
+		return c.emit(CondNode{Kind: ckString, Name: name})
+	}
+
+	return c.emit(CondNode{Kind: ckIdent, Name: word.string(), Env: internEnvSTR(word)})
 }
 
 func (c *CondParser) emit(n CondNode) int32 {
@@ -2122,12 +2251,6 @@ func (c *CondParser) parseNot() int32 {
 		return c.emit(CondNode{Kind: ckNot, L: c.parseNot()})
 	}
 
-	if ok && t.kind == tokIdent && t.id == kwDEFINED {
-		c.consume()
-
-		return c.emit(CondNode{Kind: ckDefined, L: c.parseAtom()})
-	}
-
 	return c.parseCmp()
 }
 
@@ -2137,58 +2260,6 @@ func (c *CondParser) parseCmp() int32 {
 
 	if !ok {
 		return left
-	}
-
-	if t.kind == tokIdent && t.id == kwSTARTS_WITH {
-		c.consume()
-
-		right := c.parseAtom()
-
-		c.rejectChainedCmp(t)
-
-		return c.emit(CondNode{Kind: ckStartsWith, L: left, R: right})
-	}
-
-	if t.kind == tokIdent && t.id == kwMATCHES {
-		c.consume()
-
-		right := c.parseAtom()
-
-		c.rejectChainedCmp(t)
-
-		return c.emit(CondNode{Kind: ckMatches, L: left, R: right})
-	}
-
-	if t.kind == tokIdent && t.id == kwENDS_WITH {
-		c.consume()
-
-		right := c.parseAtom()
-
-		c.rejectChainedCmp(t)
-
-		return c.emit(CondNode{Kind: ckEndsWith, L: left, R: right})
-	}
-
-	if t.kind == tokIdent && strings.HasPrefix(t.string(), "VERSION_") {
-		value := t.string()
-
-		c.consume()
-
-		right := c.parseAtom()
-
-		c.rejectChainedCmp(t)
-
-		return c.emit(CondNode{Kind: ckVersionCmp, Name: value, L: left, R: right})
-	}
-
-	if t.kind == tokIdent && t.id != kwAND && t.id != kwOR {
-		c.consume()
-
-		right := c.parseAtom()
-
-		c.rejectChainedCmp(t)
-
-		return c.emit(CondNode{Kind: ckUnsupportedOp, Name: t.string(), L: left, R: right})
 	}
 
 	switch t.kind {

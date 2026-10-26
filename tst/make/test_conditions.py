@@ -28,6 +28,36 @@ class ConditionsTest(MakeTest):
                 self.write("ya.make", f'LIBRARY()\nSET(VALUE 42)\nSET(TEXT prefix-middle-suffix)\nSET(DISABLED no)\nIF({expression})\nSRCS(yes.cpp)\nELSE()\nSRCS(no.cpp)\nENDIF()\nEND()\n')
                 self.node(self.graph(), "yes.cpp.o")
 
+    def test_condition_operand_evaluation(self):
+        # An unquoted operand names a variable, a $-operand is expanded, quotes
+        # inside an atom are literal; DEFINED/ISNUM yield yes/no strings.
+        cases = (
+            ("", "yes", False),
+            ("", 'abc-def == ""', True),
+            ("SET(X yes)", '"X"', True),
+            ("SET(X no)", "X==yes", False),
+            ('SET(X x"y")', 'X == x"y"', True),
+            ("SET(X no)", "$X", True),
+            ("SET(X no)", "NOT ${X}", True),
+            ("SET(X no)", '"${X}"', False),
+            ("SET(X 1)", "DEFINED X == yes", True),
+            ("SET(X 5)", "ISNUM X", True),
+            ("SET(X 5x)", "ISNUM X", False),
+            ("", "ISNUM 5", True),
+            ("SET(V 1.2)", "V VERSION_LT 1.2.0", True),
+            ("", "ANDROID_API", False),
+        )
+        self.write("yes.cpp", "int answer() { return 42; }\n")
+        self.write("no.cpp", "int other() { return 17; }\n")
+        for setup, expression, taken in cases:
+            with self.subTest(setup=setup, expression=expression):
+                self.write("ya.make", f"LIBRARY()\n{setup}\nIF({expression})\nSRCS(yes.cpp)\nELSE()\nSRCS(no.cpp)\nENDIF()\nEND()\n")
+                graph = self.graph()
+                chosen, other = ("yes", "no") if taken else ("no", "yes")
+                self.node(graph, chosen + ".cpp.o")
+                outputs = [path for node in graph["graph"] for path in node["outputs"]]
+                self.assertNotIn(f"$(B)/{PROJECT}/{other}.cpp.o", outputs)
+
     def test_source_flags_and_source_directory(self):
         self.write("ya.make", f"LIBRARY()\nSRCDIR({PROJECT}/src)\nADDINCL({PROJECT}/include)\nCFLAGS(-DE2E=42)\nCXXFLAGS(-DE2E_CPP=1)\nSRCS(GLOBAL answer.cpp)\nEND()\n")
         self.write("src/answer.cpp", '#include "value.h"\nint answer() { return VALUE; }\n')

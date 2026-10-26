@@ -1,16 +1,12 @@
 package main
 
 import (
-	"os"
-	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
 
-var (
-	DefaultIfEnv = makeDefaultIfEnv()
-	ifExprRe     = regexp.MustCompile(`\\(?s:.)|\$([[:alnum:]]*)\{([^${}]+)\}`)
-)
+var DefaultIfEnv = makeDefaultIfEnv()
 
 var intSTR = func() [1024]STR {
 	var a [1024]STR
@@ -38,15 +34,7 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 
 	switch n.Kind {
 	case ckIdent:
-		if n.Name == "yes" {
-			return true
-		}
-
-		if n.Name == "no" {
-			return false
-		}
-
-		return env.boolID(n.Env, n.Name)
+		return env.bool(n.Env)
 	case ckConfIdent:
 		return env.string(n.Env) != ""
 	case ckNot:
@@ -56,9 +44,9 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	case ckOr:
 		return evalCondAt(nodes, n.L, env) || evalCondAt(nodes, n.R, env)
 	case ckString:
-		throwFmt("macros: bare string %q cannot be evaluated as a boolean condition", n.Name)
+		return stringIsTruthy(evalIfExpr(n.Name, env))
 	case ckEq:
-		return evalIfAtomString(nodes, n.L, env, true) == evalIfAtomString(nodes, n.R, env, false)
+		return evalIfAtomString(nodes, n.L, env) == evalIfAtomString(nodes, n.R, env)
 	case ckConfEq:
 		return evalConfEq(nodes, n, env)
 	case ckLt, ckGt:
@@ -66,26 +54,21 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	case ckConfLt:
 		return evalConfLt(nodes, n, env)
 	case ckStartsWith:
-		return strings.HasPrefix(evalIfAtomString(nodes, n.L, env, true), evalIfAtomString(nodes, n.R, env, false))
+		return strings.HasPrefix(evalIfAtomString(nodes, n.L, env), evalIfAtomString(nodes, n.R, env))
 	case ckEndsWith:
-		return strings.HasSuffix(evalIfAtomString(nodes, n.L, env, true), evalIfAtomString(nodes, n.R, env, false))
+		return strings.HasSuffix(evalIfAtomString(nodes, n.L, env), evalIfAtomString(nodes, n.R, env))
 	case ckVersionCmp:
 		return evalVersionCmp(nodes, n, env)
 	case ckMatches:
-
-		return strings.Contains(evalIfAtomString(nodes, n.L, env, true), evalIfAtomString(nodes, n.R, env, false))
+		return strings.Contains(evalIfAtomString(nodes, n.L, env), evalIfAtomString(nodes, n.R, env))
 	case ckUnsupportedOp:
 		throwFmt("macros: unsupported IF operator %q", n.Name)
 	case ckDefined:
-		d := &nodes[n.L]
+		return env.hasBindingID(n.Env)
+	case ckIsNum:
+		_, err := strconv.ParseInt(evalIsNumOperand(n, env), 10, 64)
 
-		if d.Kind != ckIdent {
-			throwFmt("macros: DEFINED expects a variable name, got kind %d", d.Kind)
-		}
-
-		k, _ := env.s.lookup(d.Env)
-
-		return k != envAbsent
+		return err == nil
 	}
 
 	throwFmt("macros: bare integer %d cannot be evaluated as a boolean condition", n.Ival)
@@ -93,20 +76,20 @@ func evalCondAt(nodes []CondNode, i int32, env Environment) bool {
 	return false
 }
 
-func evalIfAtomString(nodes []CondNode, i int32, env Environment, variable bool) string {
+func evalIfAtomString(nodes []CondNode, i int32, env Environment) string {
 	n := &nodes[i]
 
 	switch n.Kind {
 	case ckIdent:
-		if variable && n.Name != "yes" && n.Name != "no" {
-			return env.string(n.Env)
-		}
-
-		return n.Name
+		return env.string(n.Env)
 	case ckString:
 		return evalIfExpr(n.Name, env)
-	case ckInt:
-		return n.Name
+	case ckDefined, ckIsNum:
+		if evalCondAt(nodes, i, env) {
+			return "yes"
+		}
+
+		return "no"
 	}
 
 	throwFmt("macros: unexpected cond kind %d in comparator operand position", n.Kind)
@@ -114,34 +97,22 @@ func evalIfAtomString(nodes []CondNode, i int32, env Environment, variable bool)
 	return ""
 }
 
+func evalIsNumOperand(n *CondNode, env Environment) string {
+	if env.hasBindingID(n.Env) {
+		return env.string(n.Env)
+	}
+
+	return evalIfExpr(n.Name, env)
+}
+
 func evalIfExpr(value string, env Environment) string {
-	return ifExprRe.ReplaceAllStringFunc(value, func(expr string) string {
-		if expr[0] == '\\' {
-			return expr[1:]
-		}
-
-		parts := ifExprRe.FindStringSubmatch(expr)
-		macro, key := parts[1], parts[2]
-
-		switch macro {
-		case "":
-			if strings.HasSuffix(key, resourceGlobalSuffix) {
-				return expr
-			}
-
-			value, _ := env.lookup(key)
-
-			return value
-		case "ENV":
-			return os.Getenv(key)
-		}
-
-		return expr
+	return expandMakeExpression(value, env, func(name string) bool {
+		return strings.HasSuffix(name, resourceGlobalSuffix)
 	})
 }
 
 func evalVersionCmp(nodes []CondNode, n *CondNode, env Environment) bool {
-	cmp := compareVersions(evalIfAtomString(nodes, n.L, env, true), evalIfAtomString(nodes, n.R, env, false))
+	cmp := slices.Compare(ifVersion(evalIfAtomString(nodes, n.L, env)), ifVersion(evalIfAtomString(nodes, n.R, env)))
 
 	switch n.Name {
 	case "VERSION_LT":
@@ -150,47 +121,43 @@ func evalVersionCmp(nodes []CondNode, n *CondNode, env Environment) bool {
 		return cmp <= 0
 	case "VERSION_GT":
 		return cmp > 0
-	case "VERSION_GE":
-		return cmp >= 0
-	case "VERSION_EQ":
-		return cmp == 0
 	}
 
-	throwFmt("macros: unknown version operator %q", n.Name)
-
-	return false
+	return cmp >= 0
 }
 
-func compareVersions(a, b string) int {
-	as := strings.Split(a, ".")
-	bs := strings.Split(b, ".")
+func ifVersion(value string) []uint64 {
+	var out []uint64
 
-	for i := 0; i < len(as) || i < len(bs); i++ {
-		var av, bv int
+	for rest := value; len(out) < 3; {
+		end := strings.IndexAny(rest, ".-")
+		part := rest
 
-		if i < len(as) {
-			av, _ = strconv.Atoi(as[i])
+		if end >= 0 {
+			part = rest[:end]
 		}
 
-		if i < len(bs) {
-			bv, _ = strconv.Atoi(bs[i])
+		n, err := strconv.ParseUint(part, 10, 32)
+
+		if err != nil {
+			throwFmt("macros: cannot parse version %q", value)
 		}
 
-		if av != bv {
-			if av < bv {
-				return -1
-			}
+		out = append(out, n)
 
-			return 1
+		if end < 0 {
+			break
 		}
+
+		rest = rest[end+1:]
 	}
 
-	return 0
+	return out
 }
 
 func evalLt(nodes []CondNode, n *CondNode, env Environment) bool {
-	l := ifInteger(evalIfAtomString(nodes, n.L, env, true))
-	r := ifInteger(evalIfAtomString(nodes, n.R, env, false))
+	l := ifInteger(evalIfAtomString(nodes, n.L, env))
+	r := ifInteger(evalIfAtomString(nodes, n.R, env))
 
 	if n.Kind == ckGt {
 		return l > r

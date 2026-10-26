@@ -64,17 +64,11 @@ func (s *EnvStore) lookup(e ENV) (EnvKind, STR) {
 }
 
 func (e Environment) bool(id ENV) bool {
-	return e.boolID(id, "")
-}
-
-func (e Environment) boolID(id ENV, name string) bool {
 	switch k, v := e.s.lookup(id); k {
-	case envStr:
+	case envStr, envInt:
 		return strIsTruthy(v)
 	case envVFS:
 		return true
-	case envInt:
-		throwFmt("macros: identifier %q has int binding but is used in boolean position", name)
 	}
 
 	return false
