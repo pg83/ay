@@ -25,7 +25,7 @@ func (e *EmitContext) emitNativeJavaProgram(program NativeJavaProgram) {
 			globals[strings.TrimSuffix(decl.GlobalVar.string(), resourceGlobalSuffix)] = decl.Value
 		}
 
-		e.ctx.emitJavaRunProgram(dir, e.instance.Platform, e.d.runJavaJdk, globals, r, ref, e.runProgramInputVFS)
+		e.ctx.emitJavaRunProgram(dir, e.instance.Platform, e.d.runJavaJdk, globals, r, ref, e.runProgramInputVFS, e)
 	})
 
 	for _, output := range outputs {

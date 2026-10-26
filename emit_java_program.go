@@ -312,22 +312,25 @@ func javaEntryPaths(closure []JavaClosureEntry) []VFS {
 }
 
 type javaRunProgram struct {
-	args   []string
-	in     []string
-	out    []string
-	noauto []string
-	inDirs []string
-	outDir string
-	cwd    string
-	tool   string
-	tools  []string
-	hash   string
-	gentar VFS
+	args      []string
+	in        []string
+	inNoParse int
+	out       []string
+	noauto    []string
+	inDirs    []string
+	outDir    string
+	cwd       string
+	tool      string
+	tools     []string
+	hash      string
+	gentar    VFS
 }
 
 func parseJavaRunProgram(dir string, rp JavaRunProgram) javaRunProgram {
 	r := javaRunProgram{}
 	mode := ""
+
+	var opaque []string
 
 	for _, a := range rp.args {
 		switch a {
@@ -342,8 +345,10 @@ func parseJavaRunProgram(dir string, rp JavaRunProgram) javaRunProgram {
 		}
 
 		switch mode {
-		case "IN", "IN_NOPARSE":
+		case "IN":
 			r.in = append(r.in, a)
+		case "IN_NOPARSE":
+			opaque = append(opaque, a)
 		case "OUT":
 			r.out = append(r.out, a)
 		case "OUT_NOAUTO":
@@ -362,6 +367,9 @@ func parseJavaRunProgram(dir string, rp JavaRunProgram) javaRunProgram {
 			r.args = append(r.args, a)
 		}
 	}
+
+	r.in = append(r.in, opaque...)
+	r.inNoParse = len(opaque)
 
 	sum := md5.Sum([]byte(strings.Join(rp.raw, " ")))
 
@@ -456,11 +464,14 @@ func (ctx *GenCtx) javaRegisterRunPrograms(jm *JavaModule) {
 }
 
 func (ctx *GenCtx) javaEmitRunProgram(jm *JavaModule, r javaRunProgram, ref NodeRef) {
-	ctx.emitJavaRunProgram(jm.dir, jm.instance.Platform, jm.data.jdkReal, ctx.javaGlobals(jm), r, ref, func(name string) VFS { return ctx.javaArgVFS(jm, name) })
+	scanner := ctx.scannerFor(jm.instance)
+	e := &EmitContext{ctx: ctx, instance: jm.instance, d: &ModuleData{}, scanner: scanner, codegen: scanner.codegen}
+
+	ctx.emitJavaRunProgram(jm.dir, jm.instance.Platform, jm.data.jdkReal, ctx.javaGlobals(jm), r, ref, func(name string) VFS { return ctx.javaArgVFS(jm, name) }, e)
 }
 
-func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string, globals map[string]VFS, r javaRunProgram, ref NodeRef, input func(string) VFS) {
-	b := &javaNodeBuilder{ctx: ctx, p: platform}
+func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string, globals map[string]VFS, r javaRunProgram, ref NodeRef, input func(string) VFS, e *EmitContext) {
+	b := &javaNodeBuilder{ctx: ctx, p: platform, inputContext: e}
 	bindir := build(dir)
 	outDir := r.outDir
 	mkdir := b.python("build/scripts/mkdir.py")
@@ -550,11 +561,10 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 		file := input(in)
 
 		b.input(file)
-
-		if dep := b.use(file); dep != 0 {
-			b.deps = append(b.deps, dep)
-		}
+		b.inputRoots = append(b.inputRoots, file)
 	}
+
+	parsedCount := len(b.inputRoots) - r.inNoParse
 
 	for _, inDir := range r.inDirs {
 		pattern := inDir + "/**/*"
@@ -565,9 +575,14 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 		}
 
 		for _, f := range ctx.javaGlob(dir, pattern, newJavaExcludeMatcher(dir, nil)) {
-			b.input(source(f))
+			file := source(f)
+
+			b.input(file)
+			b.inputRoots = append(b.inputRoots, file)
 		}
 	}
+
+	b.textInputs = e.textInputSources(b.inputRoots, parsedCount)
 
 	b.setKV(pkRJ, pcBlue, false)
 	b.exts = []KVExt{{Key: "tared_kind", Val: "nodir"}}

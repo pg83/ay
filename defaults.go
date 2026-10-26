@@ -99,7 +99,7 @@ func (e *EmitContext) defaultPeerdirsForModule() []string {
 	inst := instance
 
 	if instance.Language == LangPy && d.usePython3 &&
-		d.moduleStmt.Name == tokProtoLibrary && moduleExcludesTag(d, "CPP_PROTO") {
+		d.moduleStmt.Name == tokProtoLibrary && moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
 		inst.Language = LangCPP
 	}
 

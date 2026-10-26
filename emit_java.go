@@ -11,18 +11,21 @@ var (
 )
 
 type javaNodeBuilder struct {
-	ctx         *GenCtx
-	p           *Platform
-	cmds        []Cmd
-	inputs      []VFS
-	modulePeers []VFS
-	outputs     []VFS
-	deps        []NodeRef
-	resources   []STR
-	kv          KV
-	exts        []KVExt
-	req         *Requirements
-	env         EnvVars
+	inputContext *EmitContext
+	inputRoots   []VFS
+	textInputs   []VFS
+	ctx          *GenCtx
+	p            *Platform
+	cmds         []Cmd
+	inputs       []VFS
+	modulePeers  []VFS
+	outputs      []VFS
+	deps         []NodeRef
+	resources    []STR
+	kv           KV
+	exts         []KVExt
+	req          *Requirements
+	env          EnvVars
 }
 
 func (b *javaNodeBuilder) useResource(name string) {
@@ -148,6 +151,12 @@ func (b *javaNodeBuilder) emitTo(ref NodeRef) {
 		node.Inputs.scanner = b.ctx.scannerForPlatform(platform)
 		node.Inputs.na = na
 		node.Inputs.deferred = true
+	}
+
+	if b.inputContext != nil {
+		node.Inputs.roots = na.inputList(b.inputRoots)
+		node.Inputs.text = b.textInputs
+		b.inputContext.resolveNodeCodegenDeps(&node)
 	}
 
 	b.ctx.emit.emitReservedNodePtr(&node, ref)

@@ -2,8 +2,11 @@ package main
 
 import (
 	"path"
+	"regexp"
 	"strings"
 )
+
+var javaRunProgramRefRe = regexp.MustCompile(`\$\{[^${}]+\}|\$[A-Za-z_][A-Za-z0-9_]*`)
 
 var javaKotlinAllowedVersions = []string{
 	"kotlin-allopen", "kotlin-allopen-compiler-plugin", "kotlin-annotation-processing", "kotlin-compiler",
@@ -443,6 +446,8 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 			if v.Raw.string() == "RUN_JAVA_PROGRAM" {
 				args = splitJavaCommandWords(expandStmtToken(strings.Join(rawArgs, " "), env))
+			} else if v.Raw.string() == "GENERATE_SCRIPT" {
+				args = anyStrs(expandSourceArguments(raw, env))
 			} else {
 				args = anyStrs(expandStmtTokens(v.Args, env))
 			}
@@ -559,7 +564,9 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		return
 	}
 
-	args = javaDropUnresolved(args, name == "GENERATE_SCRIPT")
+	if name != "GENERATE_SCRIPT" {
+		args = javaDropUnresolved(args)
+	}
 
 	if len(args) > 0 {
 		arg0 = args[0]
@@ -941,6 +948,12 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		}
 	case "USE_COMMON_GOOGLE_APIS":
 		d.commonGoogleAPIs = true
+	case "TASKLET":
+		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: strTaskletV1Api.string(), explicit: true})
+	case "STYLE_CPP":
+		if d.noLint != "none" && d.noLint != "none_internal" {
+			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: strBuildPlatformClangFormat.string(), explicit: true})
+		}
 	case "STYLE_RUFF", "STYLE_PYTHON":
 		style := "ruff"
 
@@ -1259,7 +1272,7 @@ func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[string]str
 	var expand func(string) string
 
 	expand = func(value string) string {
-		return confScalarRefRe.ReplaceAllStringFunc(value, func(reference string) string {
+		return javaRunProgramRefRe.ReplaceAllStringFunc(value, func(reference string) string {
 			name := strings.Trim(reference, "${}")
 
 			if javaPathVars[name] {
@@ -1305,7 +1318,7 @@ func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[string]str
 	return out
 }
 
-func javaDropUnresolved(args []string, preserveEmpty bool) []string {
+func javaDropUnresolved(args []string) []string {
 	out := args[:0:0]
 
 	for _, arg := range args {
@@ -1327,7 +1340,7 @@ func javaDropUnresolved(args []string, preserveEmpty bool) []string {
 			a = a[:start] + a[start+end+1:]
 		}
 
-		if a != "" || preserveEmpty && arg == "" {
+		if a != "" {
 			out = append(out, a)
 		}
 	}
