@@ -388,6 +388,7 @@ type JavaModule struct {
 	managedDone      bool
 	unmanageableDart []javaForeignPeer
 	unmanageableDone bool
+	included         *ModuleIncludedDeps
 	globals          []ResourceDecl
 	result           *ModuleEmitResult
 	outRef           NodeRef
@@ -716,6 +717,17 @@ func (ctx *GenCtx) javaPeerResult(parent *JavaModule, dir string, explicit bool)
 
 	if res.java == nil && inst.Language == LangJava {
 		return nil
+	}
+
+	if units := javaModuleUnits[name]; len(units) > 1 {
+		for _, u := range units {
+			if u.sub != inst.Kind {
+				sibling := inst
+
+				sibling.Kind = u.sub
+				genModule(ctx, sibling)
+			}
+		}
 	}
 
 	return res

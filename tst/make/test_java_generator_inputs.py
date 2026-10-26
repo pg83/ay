@@ -4,6 +4,18 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class JavaGeneratorInputsTest(MakeTest):
+    def test_input_jar_keeps_peer_sbom(self):
+        self.generator()
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/subject)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool IN ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/subject/subject.jar OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+        self.write("subject/ya.make", "JAVA_LIBRARY(subject)\nJDK_VERSION(17)\nJAVA_SRCS(Subject.java)\nEND()\n")
+        self.write("subject/Subject.java", "public class Subject {}\n")
+        graph = self.graph()
+        node = self.node(graph, "Generated.java")
+        output = "$(B)/build/platform/java/jdk/jdk17/toolchain.component.sbom"
+        self.assertIn(output, node["inputs"])
+        producers = {item["uid"] for item in graph["graph"] if output in item["outputs"]}
+        self.assertTrue(producers.intersection(node["deps"]))
+
     def test_input_jar_keeps_managed_transitive_version(self):
         commons = "contrib/java/org/apache/commons/commons-lang3"
         self.generator()

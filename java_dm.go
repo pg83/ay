@@ -560,6 +560,85 @@ func (ctx *GenCtx) javaManagedPeersClosure(jm *JavaModule) []JavaClosureEntry {
 	return out
 }
 
+func (ctx *GenCtx) javaIncludedDeps(jm *JavaModule) *ModuleIncludedDeps {
+	if jm.included != nil {
+		return jm.included
+	}
+
+	jm.included = &ModuleIncludedDeps{}
+
+	if !jm.passPeers {
+		return jm.included
+	}
+
+	var paths []VFS
+	var own []NodeRef
+	var chunks [][]VFS
+	var refs [][]NodeRef
+
+	for _, p := range jm.unmanageable {
+		res := p.res
+
+		if res.LDPath != nil {
+			paths = append(paths, *res.LDPath)
+			own = append(own, res.LDRef)
+
+			if res.IncludedDeps != nil {
+				chunks = append(chunks, res.IncludedDeps.Inputs)
+				refs = append(refs, res.IncludedDeps.Refs)
+			}
+
+			continue
+		}
+
+		if res.ARPath != nil {
+			paths = append(paths, *res.ARPath)
+			own = append(own, res.ARRef)
+		}
+
+		if res.GlobalPath != nil && res.GlobalRef != nil {
+			paths = append(paths, *res.GlobalPath)
+			own = append(own, *res.GlobalRef)
+		}
+
+		if res.SbomComponentRef != nil {
+			paths = append(paths, *res.SbomComponentPath)
+			own = append(own, *res.SbomComponentRef)
+		}
+
+		chunks = append(chunks, res.PeerArchiveClosurePaths, res.PeerGlobalClosurePaths, res.PeerDynamicClosurePaths, res.PeerSbomClosurePaths)
+		refs = append(refs, res.PeerArchiveClosureRefs, res.PeerGlobalClosureRefs, res.PeerDynamicClosureRefs, res.PeerSbomClosureRefs)
+	}
+
+	edges := make(map[*JavaModule]bool, len(jm.managedPeers))
+
+	for _, p := range jm.managedPeers {
+		edges[p] = true
+	}
+
+	for _, e := range ctx.javaManagedPeersClosure(jm) {
+		p := e.java
+
+		if p == nil || !edges[p] && jm.rules.lib2Ver[javaPathParent(p.dir)] != p.dir {
+			continue
+		}
+
+		if p.outRef != 0 {
+			paths = append(paths, p.target)
+			own = append(own, p.outRef)
+		}
+
+		peer := ctx.javaIncludedDeps(p)
+
+		chunks = append(chunks, peer.Inputs)
+		refs = append(refs, peer.Refs)
+	}
+
+	jm.included = &ModuleIncludedDeps{Inputs: ctx.na.dedupClosure(paths, chunks), Refs: ctx.na.uniqueRefs(append(refs, own)...)}
+
+	return jm.included
+}
+
 func (jm *JavaModule) consumesUnmanageable() bool {
 	return jm.unit.consumeNonManageable || jm.data.addDLLs
 }

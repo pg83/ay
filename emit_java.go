@@ -250,6 +250,10 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule, frame *ModuleFrame) {
 			OnUse:           pending,
 		})
 	}
+
+	if deps := ctx.javaIncludedDeps(jm); len(deps.Inputs) > 0 {
+		reg.forwardModuleIncludedDeps(jm.target, deps)
+	}
 }
 
 func (jm *JavaModule) acceptsInput(out VFS) bool {
