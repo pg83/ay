@@ -40,17 +40,18 @@ class MakeTest(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
-    def make(self, *flags, dump_graph=True):
+    def make(self, *flags, dump_graph=True, env=None):
         cmd = [self.binary, "make", "-j0", "--sandboxing"]
         if dump_graph:
             cmd.append("-G")
         if self.backend == "ya":
             cmd += ["--build-dir", str(self.work / "build"), "-xx", "--no-locked", "--no-prefetch", "--no-ymake-tool-servermode", "--no-ymake-pic-servermode", "--no-ymake-multiconfig"]
         cmd += [*flags, self.project_name]
+        extra = env or {}
         env = os.environ.copy()
         for key in ("CC", "CXX", "CPP", "LD", "AR", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS"):
             env.pop(key, None)
-        env.update(YA_TC="no", YA_NO_RESPAWN="yes", PYTHONDONTWRITEBYTECODE="1")
+        env.update(YA_TC="no", YA_NO_RESPAWN="yes", PYTHONDONTWRITEBYTECODE="1", **extra)
         proc = subprocess.Popen(
             cmd, cwd=self.root, env=env, start_new_session=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -70,8 +71,8 @@ class MakeTest(unittest.TestCase):
         (self.work / f"graph-{self.calls}.stderr").write_text(stderr)
         return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
 
-    def graph(self, *flags):
-        result = self.make(*flags)
+    def graph(self, *flags, env=None):
+        result = self.make(*flags, env=env)
         self.assertEqual(result.returncode, 0, f"{result.args!r}\n{result.stderr}")
         graph = json.loads(result.stdout)
         # The two CLIs spell source/build root placeholders differently.

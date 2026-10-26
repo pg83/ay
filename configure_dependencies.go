@@ -85,18 +85,11 @@ func (ctx *GenCtx) configureDependencies() {
 			root := ctx.roots[ctx.rootInstanceForDeclaration(dir, demandNone, declaration)]
 
 			for _, instance := range ctx.testDependencyInstances(dir) {
-				if root {
-					ctx.testRoots = append(ctx.testRoots, genModule(ctx, instance))
-
-					continue
-				}
-
-				ctx.emit.deferPublication++
-
 				result := genModule(ctx, instance)
 
-				ctx.emit.deferPublication--
-				ctx.consumeModuleWarnings(result)
+				if root {
+					ctx.testRoots = append(ctx.testRoots, result)
+				}
 			}
 		}
 

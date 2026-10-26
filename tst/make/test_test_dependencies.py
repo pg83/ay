@@ -4,31 +4,34 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class TestDependenciesTest(MakeTest):
-    def test_depends_builds_final_udf_variant(self):
+    # The gate's references are cut without ya's idle-result stripping
+    # (YA_STRIP_IDLE_BUILD_RESULTS=0), which ay does not model; under it the
+    # non-final variants of a DEPENDS multimodule stay in the results.
+    def autocheck_graph(self):
+        return self.graph('--dist', '--sandboxing', '--ignore-nodes-exit-code', '--warning-mode', 'dirloops;ChkPeers;allbadrecurses', '--cache-tests', '--output-only-tests', '--cache-namespace', 'AC', '-j', '0', '-DAUTOCHECK=yes', '-DUSE_PREBUILT_TOOLS=no', '--host-platform-flag', 'AUTOCHECK=yes', '--host-platform-flag', 'USE_PREBUILT_TOOLS=no', '--target-platform', 'default-linux-x86_64', '--target-platform-build-type', 'relwithdebinfo', '--target-platform-tests', '--target-platform-flag', 'AUTOCHECK=yes', '--target-platform-flag', 'DEBUGINFO_LINES_ONLY=yes', '--target-platform-flag', 'ADD_PEERDIRS_GEN_TESTS=yes', '--report-skipped-suites', '--tests-retries', '1', '--test-size', 'small', '--test-size', 'medium', '--build', 'release', '-k', '--backup-test-results', '--add-modules-to-results', '--do-not-output-stderrs', '--no-src-links', '--add-changed-ok-configures', '--no-yt-store', env={"YA_STRIP_IDLE_BUILD_RESULTS": "0"})
+
+    def test_depends_keeps_udf_variants(self):
         self.write("tests/test_answer.py", "def test_answer(): assert True\n")
         self.write("ya.make", "RECURSE(tests)\n")
         self.write("tests/ya.make", f"PY3TEST()\nTEST_SRCS(test_answer.py)\nDEPENDS({PROJECT}/udf)\nEND()\n")
         self.write("udf/ya.make", "YQL_UDF(answer)\nSRCS(answer.cpp)\nEND()\n")
         self.write("udf/answer.cpp", 'extern "C" int answer() { return 42; }\n')
-        graph = self.graph('--dist', '--sandboxing', '--ignore-nodes-exit-code', '--warning-mode', 'dirloops;ChkPeers;allbadrecurses', '--cache-tests', '--output-only-tests', '--cache-namespace', 'AC', '-j', '0', '-DAUTOCHECK=yes', '-DUSE_PREBUILT_TOOLS=no', '--host-platform-flag', 'AUTOCHECK=yes', '--host-platform-flag', 'USE_PREBUILT_TOOLS=no', '--target-platform', 'default-linux-x86_64', '--target-platform-build-type', 'relwithdebinfo', '--target-platform-tests', '--target-platform-flag', 'AUTOCHECK=yes', '--target-platform-flag', 'DEBUGINFO_LINES_ONLY=yes', '--target-platform-flag', 'ADD_PEERDIRS_GEN_TESTS=yes', '--report-skipped-suites', '--tests-retries', '1', '--test-size', 'small', '--test-size', 'medium', '--build', 'release', '-k', '--backup-test-results', '--add-modules-to-results', '--do-not-output-stderrs', '--no-src-links', '--add-changed-ok-configures', '--no-yt-store')
-        self.assertIn(self.node(graph, "udf/libanswer.so")["uid"], graph["result"])
-        outputs = {path for node in graph["graph"] for path in node["outputs"]}
-        for output in ("udf/libanswer.global.a", "udf/yql-abi-current-answer.global.a"):
+        graph = self.autocheck_graph()
+        for output in ("udf/libanswer.so", "udf/libanswer.global.a", "udf/yql-abi-current-answer.global.a"):
             with self.subTest(output=output):
-                self.assertFalse(f"$(B)/{PROJECT}/{output}" in outputs, output)
+                self.assertIn(self.node(graph, output)["uid"], graph["result"])
 
-    def test_depends_builds_final_proto_schema_variant(self):
+    def test_depends_keeps_proto_schema_languages(self):
         self.write("tests/test_answer.py", "def test_answer(): assert True\n")
         self.write("ya.make", "RECURSE(tests)\n")
         self.write("tests/ya.make", f"PY3TEST()\nTEST_SRCS(test_answer.py)\nDEPENDS({PROJECT}/schema)\nEND()\n")
         self.write("schema/ya.make", "PROTO_SCHEMA()\nONLY_TAGS(CPP_PROTO_FROM_SCHEMA PY3_PROTO_FROM_SCHEMA TS_PROTO_FROM_SCHEMA TS_PREPARE_DEPS)\nTS_PROTO_PACKAGE_NAME(@e2e/answer)\nSRCS(answer.proto)\nEND()\n")
         self.write("schema/answer.proto", 'syntax = "proto3"; package e2e; message Answer { int32 value = 1; }\n')
-        graph = self.graph('--dist', '--sandboxing', '--ignore-nodes-exit-code', '--warning-mode', 'dirloops;ChkPeers;allbadrecurses', '--cache-tests', '--output-only-tests', '--cache-namespace', 'AC', '-j', '0', '-DAUTOCHECK=yes', '-DUSE_PREBUILT_TOOLS=no', '--host-platform-flag', 'AUTOCHECK=yes', '--host-platform-flag', 'USE_PREBUILT_TOOLS=no', '--target-platform', 'default-linux-x86_64', '--target-platform-build-type', 'relwithdebinfo', '--target-platform-tests', '--target-platform-flag', 'AUTOCHECK=yes', '--target-platform-flag', 'DEBUGINFO_LINES_ONLY=yes', '--target-platform-flag', 'ADD_PEERDIRS_GEN_TESTS=yes', '--report-skipped-suites', '--tests-retries', '1', '--test-size', 'small', '--test-size', 'medium', '--build', 'release', '-k', '--backup-test-results', '--add-modules-to-results', '--do-not-output-stderrs', '--no-src-links', '--add-changed-ok-configures', '--no-yt-store')
+        graph = self.autocheck_graph()
         self.assertIn(self.node(graph, "schema/output.tar")["uid"], graph["result"])
-        outputs = {path for node in graph["graph"] for path in node["outputs"]}
         for output in ("schema/answer.pb.cc", "schema/answer__intpy3___pb2.py"):
             with self.subTest(output=output):
-                self.assertFalse(f"$(B)/{PROJECT}/{output}" in outputs, output)
+                self.node(graph, output)
 
     def test_reject_nonfinal_multimodule_dependencies(self):
         self.write("run.py", "print(42)\n")
