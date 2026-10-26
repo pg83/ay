@@ -823,6 +823,12 @@ func (jm *JavaModule) macroPeers() []string {
 		out = append(out, "build/platform/java/jdk", "build/platform/java/jdk/jdk"+d.jdkReal)
 	}
 
+	for _, check := range d.styleChecks {
+		if check.Peer != "" {
+			out = append(out, check.Peer)
+		}
+	}
+
 	if jm.unit.proto && len(d.protoSrcs) > 0 {
 		out = append(out, "build/platform/java/protoc")
 
@@ -837,12 +843,6 @@ func (jm *JavaModule) macroPeers() []string {
 
 	for _, l := range d.customLints {
 		out = append(out, l.linter.resourcePeer)
-	}
-
-	for _, check := range d.styleChecks {
-		if check.Peer != "" {
-			out = append(out, check.Peer)
-		}
 	}
 
 	if jm.unit.jni && len(d.swigSrcs()) > 0 {
