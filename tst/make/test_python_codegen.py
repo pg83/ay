@@ -37,3 +37,14 @@ class PythonCodegenTest(MakeTest):
         self.write("answer.pyi", "def answer() -> int: ...\n")
         graph = self.graph()
         self.assertTrue(any(f"$(S)/{PROJECT}/answer.pyi" in node["inputs"] for node in graph["graph"]))
+
+    def test_python_source_shadows_stdout_noauto_output(self):
+        self.write("ya.make", "PY3_LIBRARY()\nRUN_PYTHON3(generate.py STDOUT_NOAUTO answer.py)\nPY_SRCS(answer.py)\nEND()\n")
+        self.write("generate.py", 'print("VALUE = 42")\n')
+        self.write("answer.py", "VALUE = 42\n")
+        graph = self.graph()
+        compiled = [node for node in graph["graph"] if any(path.startswith(f"$(B)/{PROJECT}/answer.py.") and path.endswith(".yapyc3") for path in node["outputs"])]
+        self.assertEqual(len(compiled), 1)
+        self.assertIn(f"$(S)/{PROJECT}/answer.py", compiled[0]["inputs"])
+        self.assertNotIn(f"$(B)/{PROJECT}/answer.py", compiled[0]["inputs"])
+        self.assertFalse([node for node in graph["graph"] if f"$(B)/{PROJECT}/answer.py" in node["outputs"]])

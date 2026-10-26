@@ -170,6 +170,8 @@ func (e *EmitContext) collectPySrcGroup(gi int, group PySrcGroup) {
 
 			if e.codegen.lookupSplit(instance.Path, src.str()) == nil {
 				path = e.resolvePythonSourceVFS(src.string())
+			} else if source := e.resolvePythonSourceVFS(src.string()); source.isSource() && e.ctx.fs.isFile(srcRootRel, source.relString()) {
+				path = source
 			}
 		}
 
