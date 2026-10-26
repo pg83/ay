@@ -2,6 +2,14 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ParserVariantsTest(MakeTest):
+    def test_multiline_quoted_value(self):
+        self.write("ya.make", 'LIBRARY()\nSET(FLAGS "\n  -DE2E_FIRST\n  -DE2E_SECOND\n")\nCFLAGS(${FLAGS})\nSRCS(answer.cpp)\nEND()\n')
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        node = self.node(self.graph(), "answer.cpp.o")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        for flag in ("-DE2E_FIRST", "-DE2E_SECOND"):
+            self.assertIn(flag, args)
+
     def test_flatbuffers_generation_defers_syntax_validation(self):
         # -j0 builds the generator command; schema syntax is checked by flatc
         # only when that command executes. Both CLIs accept these inputs here.

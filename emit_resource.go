@@ -151,6 +151,10 @@ func (e *EmitContext) resolveResourceInput(rawPath string, fallback VFS) Resolve
 	_, instance := e.ctx, e.instance
 	output := resourceOutputVFS(instance.Path.relString(), rawPath)
 
+	if fallback.isBuild() {
+		output = fallback
+	}
+
 	if info := e.codegen.use(output); info != nil {
 		return ResolvedResource{
 			Input:           output,
@@ -263,23 +267,25 @@ func (e *EmitContext) resourceTextInputs(items []ResourceItem) []VFS {
 	return e.ctx.na.vfsList(inputs...)
 }
 
+func resourceItemCmdLen(it ResourceItem, objcopy bool) int {
+	if objcopy {
+		if it.Path == "-" {
+			return rootCmdLen + len(it.Key)
+		}
+
+		return rootCmdLen + len(it.Path) + encb64.StdEncoding.EncodedLen(len(it.Key))
+	}
+
+	return rootCmdLen + len(it.Path) + len(it.Key)
+}
+
 func resourceChunkEnds(items []ResourceItem, objcopy bool) []int {
 	var ends []int
 
 	cmdLen := 0
 
 	for i, it := range items {
-		if it.Path == "-" {
-			cmdLen += rootCmdLen + len(it.Key)
-
-			if !objcopy {
-				cmdLen += len(it.Path)
-			}
-		} else if objcopy {
-			cmdLen += rootCmdLen + len(it.Path) + encb64.StdEncoding.EncodedLen(len(it.Key))
-		} else {
-			cmdLen += rootCmdLen + len(it.Path) + len(it.Key)
-		}
+		cmdLen += resourceItemCmdLen(it, objcopy)
 
 		if cmdLen >= maxCmdLen {
 			ends = append(ends, i+1)
@@ -303,26 +309,30 @@ func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS)
 		e.rawScratch = retainMaxLen(e.rawScratch, rawItems)
 	}()
 
-	for _, it := range p.Items {
-		if resourceCanObjcopy(it.Path, it.Key) {
-			objItems = append(objItems, it)
-		} else {
-			rawItems = append(rawItems, it)
+	flushObj := func() {
+		if len(objItems) == 0 {
+			return
 		}
-	}
 
-	if len(objItems) > 0 {
 		r, o := e.packObjcopyResourceChunks(objItems, p)
 
 		refs = append(refs, r...)
 		outs = append(outs, o...)
+		e.objScratch = retainMaxLen(e.objScratch, objItems)
+		objItems = objItems[:0]
 	}
 
-	if len(rawItems) > 0 {
+	useYasm := e.instance.Platform.ISA == ISAX8664 && !p.DontCompress && !p.RawCompile.ForceCxx
+
+	flushRaw := func() {
+		if len(rawItems) == 0 {
+			return
+		}
+
 		var r []NodeRef
 		var o []VFS
 
-		if e.instance.Platform.ISA == ISAX8664 && !p.DontCompress && !p.RawCompile.ForceCxx {
+		if useYasm {
 			r, o = e.packYasmResourceChunks(rawItems, p)
 		} else {
 			if !p.RawCompile.ForceCxx {
@@ -334,7 +344,34 @@ func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS)
 
 		refs = append(refs, r...)
 		outs = append(outs, o...)
+		e.rawScratch = retainMaxLen(e.rawScratch, rawItems)
+		rawItems = rawItems[:0]
 	}
+
+	objLen, rawLen := 0, 0
+
+	for _, it := range p.Items {
+		if resourceCanObjcopy(it.Path, it.Key) {
+			objItems = append(objItems, it)
+			objLen += resourceItemCmdLen(it, true)
+
+			if objLen >= maxCmdLen {
+				flushObj()
+				objLen = 0
+			}
+		} else {
+			rawItems = append(rawItems, it)
+			rawLen += resourceItemCmdLen(it, false)
+
+			if rawLen >= maxCmdLen && !useYasm {
+				flushRaw()
+				rawLen = 0
+			}
+		}
+	}
+
+	flushObj()
+	flushRaw()
 
 	return refs, outs
 }

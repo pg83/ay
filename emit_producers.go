@@ -612,7 +612,14 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 			e.prodVFS = append(e.prodVFS, build(module, "/", name))
 		}
 
-		positions = append(positions, ProducerPos{kind: prodGoCodegen, index: i, outs: e.prodVFSTake(outsMark)})
+		outs := e.prodVFSTake(outsMark)
+		insMark := len(e.prodVFS)
+
+		for _, input := range st.files {
+			e.prodVFS = append(e.prodVFS, e.sourceInputForScheduling(input.string()))
+		}
+
+		positions = append(positions, ProducerPos{kind: prodGoCodegen, index: i, outs: outs, ins: e.prodVFSTake(insMark)})
 	}
 
 	for i, batch := range d.userverProtos {

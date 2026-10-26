@@ -2,6 +2,21 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ProtoSourceContextsTest(MakeTest):
+    def test_go_proto_consumes_generated_source(self):
+        self.write("ya.make", "RECURSE(consumer)\n")
+        self.write("consumer/ya.make", f"GO_LIBRARY()\nSRCS(answer.go)\nPEERDIR({PROJECT}/schema)\nEND()\n")
+        self.write("consumer/answer.go", f'package consumer\nimport _ "a.yandex-team.ru/{PROJECT}/schema"\n')
+        self.write("schema/ya.make", f"PROTO_LIBRARY()\nIF(GEN_PROTO)\nRUN_PROGRAM({PROJECT}/generator OUT_NOAUTO ${{BINDIR}}/answer.proto OUTPUT_INCLUDES {PROJECT}/schema/dependency.proto)\nENDIF()\nSRCS(answer.proto)\nEND()\n")
+        self.write("schema/dependency.proto", 'syntax = "proto3"; package e2e; message Dependency {}\n')
+        self.write("generator/ya.make", "PY3_PROGRAM(generator)\nPY_SRCS(main.py)\nEND()\n")
+        self.write("generator/main.py", "print('generated')\n")
+        graph = self.graph()
+        producer = self.node(graph, "schema/answer.proto")
+        generated = self.node(graph, "schema/answer.pb.go")
+        self.assertIn(f"$(B)/{PROJECT}/schema/answer.proto", generated["inputs"])
+        self.assertIn(f"$(S)/{PROJECT}/schema/dependency.proto", generated["inputs"])
+        self.assertIn(producer["uid"], generated["deps"])
+
     def test_descriptor_keeps_local_proto_addincl_in_its_module(self):
         self.write("ya.make", f"PROTO_LIBRARY()\nONLY_TAGS(DESC_PROTO)\nPEERDIR({PROJECT}/schema)\nSRCS(answer.proto)\nEND()\nRECURSE(schema)\n")
         self.write("answer.proto", 'syntax = "proto3"; package answer; message Answer {}\n')

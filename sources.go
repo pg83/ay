@@ -65,10 +65,19 @@ func resolveSourceOrGeneratedVFS(ctx *GenCtx, instance ModuleInstance, src strin
 	vfs := resolveSourceVFS(ctx, instance, src, srcDirs)
 
 	if _, rooted := moduleRootedVFS(instance.Path.relString(), src); !rooted && vfs.isSource() {
+		registry := ctx.scannerForPlatform(instance.Platform).codegen
 		candidate := vfs.rel().build()
 
-		if ctx.scannerForPlatform(instance.Platform).codegen.lookup(candidate) != nil && !ctx.fs.isFile(srcRootRel, vfs.relString()) {
+		if registry.lookup(candidate) != nil && !ctx.fs.isFile(srcRootRel, vfs.relString()) {
 			return candidate
+		}
+
+		if pathIsClean(src) {
+			candidate = build(src)
+
+			if registry.lookup(candidate) != nil && !ctx.fs.isFile(srcRootRel, vfs.relString()) {
+				return candidate
+			}
 		}
 	}
 

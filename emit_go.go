@@ -328,6 +328,22 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 		}
 	}
 
+	for _, program := range d.runPrograms {
+		for _, input := range program.INFiles[:len(program.INFiles)-program.INNoParse] {
+			if strings.HasSuffix(input.relOrSelf().string(), ".go") {
+				addImports(input)
+			}
+		}
+	}
+
+	for _, statement := range d.goCodegens {
+		for _, input := range statement.files {
+			if strings.HasSuffix(input.relOrSelf().string(), ".go") {
+				addImports(input)
+			}
+		}
+	}
+
 	for _, src := range d.cgoSrcs {
 		addImports(src)
 	}
@@ -1121,7 +1137,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	var vcsResources []STR
 
 	commandEnv := Environment{s: &e.frame.ifEnv, resourceUses: &vcsResources}
-	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(na, instance.Platform, d.tc, vcsCPath, vcsOPath, compilerCommandFlags(d.cFlags, commandEnv).Args, d.cc.PeerCFlagsGlobal, d.moduleScopeCFlags, commandEnv, d.flags.NoCompilerWarnings, d.flags.NoWShadow, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars, Resources: resourceKeyUnion(vcsResources, peerCompilerResourceKeys(d.cc.CFlagValues, len(d.cFlagsGlobal) > 0))}
+	cmd1 := Cmd{CmdArgs: na.chunkList(composeLDCmdVcsCompileForced(na, instance.Platform, d.tc, vcsCPath, vcsOPath, compilerCommandFlags(d.cFlags, commandEnv).Args, d.cc.PeerCFlagsGlobal, d.moduleScopeCFlags, compilerCommandFlags(concat(d.cc.COnlyFlags, d.cc.PeerCOnlyFlagsGlobal, d.cc.OwnCOnlyFlagsGlobal), commandEnv).Args, commandEnv, d.flags.NoCompilerWarnings, d.flags.NoWShadow, d.noOptimize, true)), Env: instance.Platform.ToolEnvVars, Resources: resourceKeyUnion(vcsResources, peerCompilerResourceKeys(d.cc.CFlagValues, len(d.cFlagsGlobal) > 0), peerCompilerResourceKeys(d.cc.COnlyFlagValues, len(d.cOnlyFlagsGlobal) > 0))}
 
 	cmd2 := Cmd{CmdArgs: na.chunkList(na.anyList(
 		wrapccPython3STR.any(),

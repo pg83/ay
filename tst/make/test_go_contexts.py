@@ -4,6 +4,47 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class GoContextsTest(MakeTest):
+    def test_resource_imports_precede_source_imports(self):
+        self.write("ya.make", "RECURSE(app/gotest)\n")
+        self.write("app/ya.make", "GO_PROGRAM(tool)\nALL_GO_SRCS()\nALL_GO_TEST_SRCS()\nEND()\n")
+        self.write("app/main.go", f'package main\nimport _ "a.yandex-team.ru/{PROJECT}/source_dep"\nfunc main() {{}}\n')
+        self.write("app/main_test.go", 'package main\nimport "testing"\nfunc TestAnswer(t *testing.T) {}\n')
+        self.write("app/gotest/ya.make", f"GO_TEST_FOR({PROJECT}/app)\nGO_PACKAGE_NAME(main)\nRESOURCE(${{ARCADIA_ROOT}}/{PROJECT}/data/embedded.go /data)\nEND()\n")
+        self.write("data/embedded.go", f'package embedded\nimport _ "a.yandex-team.ru/{PROJECT}/resource_dep"\n')
+        for name in ("source_dep", "resource_dep"):
+            self.write(name + "/ya.make", "GO_LIBRARY()\nSRCS(answer.go)\nEND()\n")
+            self.write(name + "/answer.go", f"package {name}\n")
+        node = self.node(self.graph("-t"), "app/gotest/tool")
+        args = next(command["cmd_args"] for command in node["cmds"] if "++peers" in command["cmd_args"])
+        peers = args[args.index("++peers") + 1:args.index("++non-local-peers")]
+        self.assertLess(peers.index(f"{PROJECT}/resource_dep/resource_dep.a"), peers.index(f"{PROJECT}/source_dep/source_dep.a"))
+
+    def test_program_test_resource_uses_explicit_package(self):
+        self.write("ya.make", "RECURSE(app/gotest)\n")
+        self.write("app/ya.make", f"GO_PROGRAM(tool)\nRESOURCE(${{ARCADIA_ROOT}}/{PROJECT}/app/value.txt /parent)\nALL_GO_SRCS()\nALL_GO_TEST_SRCS()\nEND()\n")
+        self.write("app/main.go", "package main\nfunc main() {}\n")
+        self.write("app/value.txt", "17\n")
+        self.write("app/main_test.go", 'package main\nimport "testing"\nfunc TestAnswer(t *testing.T) {}\n')
+        self.write("app/gotest/ya.make", f"GO_TEST_FOR({PROJECT}/app)\nGO_PACKAGE_NAME(main)\nRESOURCE(value.txt /value)\nEND()\n")
+        self.write("app/gotest/value.txt", "42\n")
+        graph = self.graph("-t")
+        node = next(node for node in graph["graph"] if f"$(S)/{PROJECT}/app/value.txt" in node["inputs"] and any(path.startswith(f"$(B)/{PROJECT}/app/gotest/") and path.endswith(".res.go") for path in node["outputs"]))
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertEqual(args[args.index("-package") + 1], "main")
+
+    def test_program_test_keeps_resource_imports(self):
+        self.write("ya.make", "RECURSE(app/gotest)\n")
+        self.write("app/ya.make", "GO_PROGRAM(tool)\nALL_GO_SRCS()\nALL_GO_TEST_SRCS()\nEND()\n")
+        self.write("app/main.go", "package main\nfunc main() {}\n")
+        self.write("app/main_test.go", 'package main\nimport "testing"\nfunc TestAnswer(t *testing.T) {}\n')
+        self.write("app/gotest/ya.make", f"GO_TEST_FOR({PROJECT}/app)\nGO_PACKAGE_NAME(main)\nRESOURCE(${{ARCADIA_ROOT}}/{PROJECT}/data/embedded.go /data)\nEND()\n")
+        self.write("data/embedded.go", f'package embedded\nimport _ "a.yandex-team.ru/{PROJECT}/dependency"\n')
+        self.write("dependency/ya.make", "GO_LIBRARY()\nSRCS(answer.go)\nEND()\n")
+        self.write("dependency/answer.go", "package dependency\nfunc Answer() int { return 42 }\n")
+        graph = self.graph("-t")
+        node = self.node(graph, "app/gotest/tool")
+        self.assertIn(f"$(B)/{PROJECT}/dependency/dependency.a", node["inputs"])
+
     def test_java_recurse_collects_proto_go_checks(self):
         self.write("ya.make", "JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nEND()\nRECURSE(schema)\n")
         self.write("Main.java", "public class Main {}\n")

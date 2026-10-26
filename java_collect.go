@@ -1299,7 +1299,7 @@ func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[string]str
 	var out []string
 
 	for _, arg := range raw {
-		out = append(out, strings.Fields(expand(arg))...)
+		out = append(out, strings.FieldsFunc(expand(arg), func(r rune) bool { return r == ' ' || r == ',' })...)
 	}
 
 	return out

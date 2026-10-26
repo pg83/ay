@@ -1392,6 +1392,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		}
 	}
 
+	if moduleName == tokProtoLibrary && instance.Language == LangGo {
+		cpp := instance
+
+		cpp.Language = LangCPP
+		genSiblingModule(ctx, cpp)
+	}
+
 	if moduleName == tokYqlUdf && instance.Kind == KindBin && !instance.Platform.PIC {
 		library := instance
 

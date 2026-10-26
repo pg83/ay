@@ -65,6 +65,8 @@ func (d *ModuleData) producerDeclarationSequence(decl producerDeclaration) int {
 		return d.pySrcGroups[decl.index].DeclSeq
 	case prodRunProgram:
 		return d.runPrograms[decl.index].DeclSeq
+	case prodGoCodegen:
+		return d.goCodegens[decl.index].seq
 	case prodRunPython:
 		return d.runPython[decl.index].DeclSeq
 	case prodRunJava:

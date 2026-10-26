@@ -44,6 +44,7 @@ const (
 	goCodegenOapi
 	goCodegenGateway
 	goCodegenYson
+	goCodegenResource
 )
 
 type GoMockgenVars struct {
@@ -166,6 +167,18 @@ func (e *EmitContext) goToolEnv() EnvVars {
 
 func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 	ctx, instance, d := e.ctx, e.instance, e.d
+
+	if st.kind == goCodegenResource {
+		out := internStr(st.out).any()
+
+		e.emitRunProgramStmt(&RunProgramStmt{
+			ToolPath: strLibraryGoCoreResourceCc.any(),
+			Args:     append([]ANY{strMockgenPkg.any(), internStr(goPackageName(instance.Path.relString(), d)).any(), strO.any(), out}, st.args...),
+			INFiles:  st.files, OUTFiles: []ANY{out}, DeclSeq: st.seq,
+		})
+
+		return
+	}
 
 	if st.kind == goCodegenYson {
 		e.emitYtOrmProtoYson(st)
@@ -463,7 +476,7 @@ func goPackageName(_ string, d *ModuleData) string {
 	return d.setVars[envREALPRJNAME.str()].string()
 }
 
-func applyGoResource(fs FS, modulePath string, entries []ResourceEntry, line int, d *ModuleData) {
+func applyGoResource(fs FS, modulePath string, entries []ResourceEntry, d *ModuleData) {
 	hashArgs := make([]string, 0, 2*len(entries))
 	args := make([]ANY, 0, 2*len(entries))
 
@@ -491,15 +504,9 @@ func applyGoResource(fs FS, modulePath string, entries []ResourceEntry, line int
 		args = append(args, file, internStr("notafile"+renderResourceKvCmd(commandKey, modulePath)).any())
 	}
 
-	out := internStr(fmt.Sprintf("resource.%x.res.go", md5.Sum([]byte(strings.Join(hashArgs, "@"))))).any()
+	out := fmt.Sprintf("resource.%x.res.go", md5.Sum([]byte(strings.Join(hashArgs, "@"))))
 
-	rp := &RunProgramStmt{
-		ToolPath: strLibraryGoCoreResourceCc.any(),
-		Args:     append([]ANY{strMockgenPkg.any(), internStr(goPackageName(modulePath, d)).any(), strO.any(), out}, args...),
-		INFiles:  inputs, OUTFiles: []ANY{out}, Line: line, DeclSeq: d.nextDeclSeq(),
-	}
-
-	d.runPrograms = append(d.runPrograms, rp)
+	d.goCodegens = append(d.goCodegens, GoCodegenStmt{kind: goCodegenResource, seq: d.nextDeclSeq(), out: out, args: args, files: inputs})
 	d.goPluginPeers = append(d.goPluginPeers, strLibraryGoCoreResource.any())
 }
 

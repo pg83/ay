@@ -1094,7 +1094,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 func applyResourceFiles(fs FS, modulePath string, args []string, line int, d *ModuleData) {
 	if isGoModuleType(d.unit.Type) {
-		applyGoResource(fs, modulePath, expandResourceFiles(d, nil, args), line, d)
+		applyGoResource(fs, modulePath, expandResourceFiles(d, nil, args), d)
 
 		return
 	}
@@ -1975,7 +1975,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					entries[i] = ResourceEntry{Path: pair.Path, Key: pair.Key}
 				}
 
-				applyGoResource(fs, modulePath, entries, v.Line, d)
+				applyGoResource(fs, modulePath, entries, d)
 
 				break
 			}
@@ -2000,7 +2000,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			if isGoModuleType(d.unit.Type) {
 				entries := expandAllResourceFiles(d, nil, fs, modulePath, env, v)
 
-				applyGoResource(fs, modulePath, entries, v.Line, d)
+				applyGoResource(fs, modulePath, entries, d)
 
 				break
 			}

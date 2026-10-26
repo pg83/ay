@@ -2,6 +2,21 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ResourceVariantsTest(MakeTest):
+    def test_source_root_relative_generated_resource(self):
+        self.write("ya.make", "RECURSE(generated)\n")
+        self.write("generated/test/ya.make", f"PY3TEST()\nSET(NLG_LIBRARY_PATH {PROJECT}/generated)\nINCLUDE(${{ARCADIA_ROOT}}/{PROJECT}/shared/resources.inc)\nTEST_SRCS(test_answer.py)\nEND()\n")
+        self.write("shared/resources.inc", "PEERDIR(${NLG_LIBRARY_PATH})\nRESOURCE(${NLG_LIBRARY_PATH}/localizable_phrases.pb.txt /phrases ${NLG_LIBRARY_PATH}/tmacros.pb.txt /macros ${NLG_LIBRARY_PATH}/config.json /config ${NLG_LIBRARY_PATH}/translations.json /translations)\n")
+        self.write("generated/test/test_answer.py", "def test_answer():\n    assert 42\n")
+        self.write("generated/ya.make", "LIBRARY()\nCOMPILE_NLG(NLG_CONFIG config.json TRANSLATIONS_JSON translations.json answer.nlg)\nEND()\nRECURSE_FOR_TESTS(test)\n")
+        self.write("generated/answer.nlg", "{% macro answer() %}42{% endmacro %}\n")
+        self.write("generated/config.json", "{}\n")
+        self.write("generated/translations.json", "{}\n")
+        graph = self.graph("-t", "--output-only-tests", "--add-modules-to-results", "-DADD_PEERDIRS_GEN_TESTS=yes", "-DAUTOCHECK=yes")
+        generated = f"$(B)/{PROJECT}/generated/localizable_phrases.pb.txt"
+        resources = [node for node in graph["graph"] if generated in node["inputs"] and any(path.endswith((".o", ".cpp")) for path in node["outputs"])]
+        self.assertTrue(resources)
+        self.assertTrue(any(f"$(B)/{PROJECT}/generated/dummy.h" in node["inputs"] for node in resources))
+
     def test_resource_conftest(self):
         self.write("ya.make", "LIBRARY()\nRESOURCE(conftest.py /conftest.py - /inline=answer)\nEND()\n")
         self.write("conftest.py", "ANSWER = 42\n")

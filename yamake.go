@@ -736,10 +736,6 @@ slow:
 			return Token{kind: tokString, id: internBytes(buf), line: startLine, col: startCol}
 		}
 
-		if b == '\n' || b == '\r' {
-			l.throwParse(startLine, startCol, "unterminated string")
-		}
-
 		if b == '\\' && l.pos+1 < len(l.src) {
 			buf = append(buf, l.advance())
 			buf = append(buf, l.advance())
@@ -765,10 +761,6 @@ func (l *Lexer) appendQuotedSegment(buf []byte, quote byte, startLine, startCol 
 			l.advance()
 
 			return buf
-		}
-
-		if b == '\n' || b == '\r' {
-			l.throwParse(startLine, startCol, "unterminated string")
 		}
 
 		if b == '\\' && l.pos+1 < len(l.src) {

@@ -2,6 +2,16 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class NativeConfigTest(MakeTest):
+    def test_global_c_flags_reach_linker(self):
+        self.write("ya.make", f"PROGRAM(answer)\nSRCS(main.cpp)\nPEERDIR({PROJECT}/lib)\nEND()\n")
+        self.write("main.cpp", "int main() { return 0; }\n")
+        self.write("lib/ya.make", "LIBRARY()\nCONLYFLAGS(GLOBAL -DE2E_FIRST GLOBAL -DE2E_SECOND)\nSRCS(value.c)\nEND()\n")
+        self.write("lib/value.c", "int value(void) { return 42; }\n")
+        node = self.node(self.graph(), "answer")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        for flag in ("-DE2E_FIRST", "-DE2E_SECOND"):
+            self.assertIn(flag, args)
+
     def test_windows_manifest(self):
         self.write("main.cpp", "int main() { return 0; }\n")
         for macros in ("WINDOWS_LONG_PATH_MANIFEST()", "WINDOWS_MANIFEST(build/long-path.manifest)"):

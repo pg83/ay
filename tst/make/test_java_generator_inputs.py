@@ -1,7 +1,22 @@
+import hashlib
+
 from tst.make.lib import MakeTest, PROJECT
 
 
 class JavaGeneratorInputsTest(MakeTest):
+    def test_multiline_generator_arguments_keep_hash_whitespace(self):
+        self.generator()
+        outputs = []
+        for value in ('"\n  --first=1\n  --second=2\n"', "--first=1 --second=2"):
+            self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nSET(FLAGS {value})\nRUN_JAVA_PROGRAM(Generator ${{FLAGS}} CLASSPATH {PROJECT}/tool OUT_DIR generated)\nJAVA_SRCS(SRCDIR ${{BINDIR}}/generated **/*.java)\nEND()\n")
+            graph = self.graph()
+            outputs.append(next(path for node in graph["graph"] for path in node["outputs"] if path.startswith(f"$(B)/{PROJECT}/generated.") and path.endswith(".gentar")))
+            raw = f"Generator {value.strip(chr(34))} CLASSPATH {PROJECT}/tool OUT_DIR generated"
+            words = [word for word in raw.replace(",", " ").split(" ") if word]
+            digest = hashlib.md5(" ".join(words).encode()).hexdigest()
+            self.assertEqual(outputs[-1], f"$(B)/{PROJECT}/generated.{digest}.gentar")
+        self.assertNotEqual(outputs[0], outputs[1])
+
     def test_proto_style_resource_reaches_java(self):
         self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")
         self.write("Main.java", "public class Main {}\n")
