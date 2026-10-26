@@ -20,3 +20,11 @@ class RecurseTest(MakeTest):
         result = self.make()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["result"], [])
+
+    def test_recursed_library_is_a_start_target(self):
+        self.write("ya.make", "RECURSE(lib)\n")
+        self.write("lib/ya.make", "LIBRARY(answer)\nSRCS(answer.cpp)\nEND()\n")
+        self.write("lib/answer.cpp", "int answer() { return 42; }\n")
+        graph = self.graph()
+        library = self.node(graph, "lib/libanswer.a")
+        self.assertIn(library["uid"], graph["result"])

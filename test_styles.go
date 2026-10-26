@@ -39,7 +39,7 @@ func (d *ModuleData) collectPythonStyleChecks(env Environment) {
 	switch d.moduleStmt.Name {
 	case tokPy2Program, tokPy2Library, tokPy2Test, tokPytestBin:
 		name = "py2_flake8"
-	case tokPy3Program, tokPy3ProgramBin, tokPy3Library, tokPy23Library, tokPy3Test:
+	case tokPy3Program, tokPy3ProgramBin, tokPy3Library, tokPy23Library, tokPy3Test, tokPy3TestBin, tokYqlUdfMinitest:
 		name = "flake8"
 	}
 

@@ -238,7 +238,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 			ProducerRef:     prRef,
 			ProducerMainOut: mainOutputVFS,
 			GeneratorRefs:   generatorRefs,
-			ParsedIncludes:  parsed,
+			ParsedIncludes:  ctx.parsers.outputIncludes(out, parsed),
 			OnUse:           pending,
 		})
 	}

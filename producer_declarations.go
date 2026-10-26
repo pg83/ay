@@ -24,7 +24,7 @@ func (d *ModuleData) recordProducerDeclarations() {
 		prodDecimalMD5: len(d.decimalMD5), prodBuildMn: len(d.buildMns), prodSplitCodegen: len(d.splitCodegens),
 		prodBaseCodegen: len(d.baseCodegens), prodRunProgram: len(d.runPrograms), prodRunPython: len(d.runPython),
 		prodArchiveAsm: len(d.archiveAsm), prodEnum: len(d.enumSrcs), prodArchive: len(d.archives),
-		prodCheckConfigH: len(d.checkConfigHeaders), prodCythonAll: min(len(d.cythonCpp), 1), prodSwigAll: min(len(d.swigC), 1),
+		prodCheckConfigH: len(d.checkConfigHeaders), prodCython: len(d.cythonCpp), prodSwigAll: min(len(d.swigC), 1),
 		prodJoinSrcs: len(d.joinSrcs), prodSproto: len(d.ymapsSprotoSrcs), prodLlvmBc: len(d.llvmBc),
 		prodGoCodegen: len(d.goCodegens), prodLlvmCompile: len(d.llvmCompile), prodLuaCompile: len(d.luaCompile),
 		prodUserverProto: len(d.userverProtos), prodListProto: len(d.listProtos), prodFromArchive: len(d.fromArchives),

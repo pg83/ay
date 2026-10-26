@@ -661,7 +661,7 @@ func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) []VFS {
 		grpc:       d.grpc && spec.modulePlugins,
 	}
 
-	pe := e.pbModuleEmission(cfg, d.cc.ProtoIncludePeers, spec)
+	pe := e.pbModuleEmission(cfg, concat(dedup(d.protoIncludeLocal), d.cc.ProtoIncludePeers), spec)
 
 	return e.emitProtoPB(srcRel, cfg, pe, spec)
 }
@@ -1029,10 +1029,6 @@ func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppSty
 		argIB2.any(),
 		argIS3.any(),
 	)
-
-	if cppOutRoot != "" {
-		mid = append(mid, internV("-I=$(S)/", cppOutRoot).any())
-	}
 
 	for _, p := range protoInclude {
 		mid = append(mid, internV("-I=", p.string()).any())

@@ -6,120 +6,55 @@ import (
 )
 
 func (e *EmitContext) emitAntlr4GrammarStmt(g Antlr4GrammarInfo) {
-	ctx, instance, d := e.ctx, e.instance, e.d
-	outPrefix := instance.Path.relString() + "/"
-	includes := []VFS{antlr4RuntimeHeaderVFS}
-
-	for _, inc := range g.OutputIncludes {
-		includes = append(includes, source(inc))
-	}
-
-	parsed := antlrWitnessParsed(ctx.na, includes)
+	module := e.instance.Path.relString()
+	base := func(name string) string { return strings.TrimSuffix(filepath.Base(name), filepath.Ext(name)) }
+	lexerBase, parserBase := base(g.Grammar)+"Lexer", base(g.Grammar)+"Parser"
+	optionalBase := base(g.Grammar)
+	grammars := []string{g.Grammar}
 
 	if g.IsSplit {
-		jvRef := ctx.emit.reserve()
-		tc := d.tc
-
-		jvPE := func() {
-			e.emitJVSplitReserved(g.Lexer, g.Parser, g.Options, g.Visitor, g.Listener, tc, jvRef)
-		}
-
-		pending := e.pendingEmit(jvPE)
-		lexerBase := strings.TrimSuffix(filepath.Base(g.Lexer), ".g4")
-		parserBase := strings.TrimSuffix(filepath.Base(g.Parser), ".g4")
-		lexerCpp := build(outPrefix, lexerBase, ".cpp")
-		parserCpp := build(outPrefix, parserBase, ".cpp")
-
-		e.register(GeneratedFileInfo{
-			OutputPath:      lexerCpp,
-			ProducerRef:     jvRef,
-			ProducerMainOut: lexerCpp,
-			GeneratorRefs:   nil,
-			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
-			OnUse:           pending,
-		})
-
-		e.register(GeneratedFileInfo{
-			OutputPath:      parserCpp,
-			ProducerRef:     jvRef,
-			ProducerMainOut: lexerCpp,
-			GeneratorRefs:   nil,
-			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
-			OnUse:           pending,
-		})
-
-		for _, suffix := range append([]string{
-			lexerBase + ".h",
-			parserBase + ".h",
-		}, antlr4OptionalHeaders(parserBase, g.Visitor, g.Listener)...) {
-			e.register(GeneratedFileInfo{
-				OutputPath:      build(outPrefix, suffix),
-				ProducerRef:     jvRef,
-				ProducerMainOut: lexerCpp,
-				GeneratorRefs:   nil,
-				ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
-				OnUse:           pending,
-			})
-		}
-
-		cpccPairs := []struct{ cpp, h VFS }{
-			{build(outPrefix, lexerBase, ".cpp"), build(outPrefix, lexerBase, ".h")},
-			{build(outPrefix, parserBase, ".cpp"), build(outPrefix, parserBase, ".h")},
-		}
-
-		e.emitJVDownstreamCPCC(cpccPairs, g.OutputIncludes)
-	} else {
-		jvRef := ctx.emit.reserve()
-		tc := d.tc
-
-		jvPE := func() {
-			e.emitJVReserved(g.Grammar, g.Options, g.Visitor, g.Listener, tc, jvRef)
-		}
-
-		pending := e.pendingEmit(jvPE)
-		base := strings.TrimSuffix(filepath.Base(g.Grammar), ".g4")
-		lexerCpp := build(outPrefix, base, "Lexer.cpp")
-		parserCpp := build(outPrefix, base, "Parser.cpp")
-
-		e.register(GeneratedFileInfo{
-			OutputPath:      lexerCpp,
-			ProducerRef:     jvRef,
-			ProducerMainOut: lexerCpp,
-			GeneratorRefs:   nil,
-			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
-			OnUse:           pending,
-		})
-
-		e.register(GeneratedFileInfo{
-			OutputPath:      parserCpp,
-			ProducerRef:     jvRef,
-			ProducerMainOut: lexerCpp,
-			GeneratorRefs:   nil,
-			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
-			OnUse:           pending,
-		})
-
-		for _, suffix := range append([]string{
-			base + "Lexer.h",
-			base + "Parser.h",
-		}, antlr4OptionalHeaders(base, g.Visitor, g.Listener)...) {
-			e.register(GeneratedFileInfo{
-				OutputPath:      build(outPrefix, suffix),
-				ProducerRef:     jvRef,
-				ProducerMainOut: lexerCpp,
-				GeneratorRefs:   nil,
-				ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
-				OnUse:           pending,
-			})
-		}
-
-		cpccPairs := []struct{ cpp, h VFS }{
-			{build(outPrefix, base, "Lexer.cpp"), build(outPrefix, base, "Lexer.h")},
-			{build(outPrefix, base, "Parser.cpp"), build(outPrefix, base, "Parser.h")},
-		}
-
-		e.emitJVDownstreamCPCC(cpccPairs, g.OutputIncludes)
+		lexerBase, parserBase = base(g.Lexer), base(g.Parser)
+		optionalBase = parserBase
+		grammars = []string{g.Lexer, g.Parser}
 	}
+
+	args := internAnys(grammars)
+
+	args = append(args, argDlanguageCpp.any(), argDashO.any(), build(module).any())
+
+	if g.Visitor {
+		args = append(args, argVisitor.any())
+	} else {
+		args = append(args, argNoVisitor.any())
+	}
+
+	if g.Listener {
+		args = append(args, argListener.any())
+	} else {
+		args = append(args, argNoListener.any())
+	}
+
+	args = appendInternAnys(args, g.Options)
+	args = append(args, kwCWD.any(), build(module).any(), kwIN.any())
+	args = appendInternAnys(args, grammars)
+	args = append(args, kwOUT_NOAUTO.any())
+	args = appendInternAnys(args, []string{lexerBase + ".cpp", lexerBase + ".h", parserBase + ".cpp", parserBase + ".h"})
+	args = appendInternAnys(args, antlr4OptionalHeaders(optionalBase, g.Visitor, g.Listener))
+	args = append(args, kwOUTPUT_INCLUDES.any(), antlr4RuntimeHeaderVFS.any())
+	args = appendInternAnys(args, g.OutputIncludes)
+
+	call := parseRunAntlr(args, Token{id: kwRUN_ANTLR4})
+
+	e.emitAntlrRunStmt(AntlrRunInfo{
+		Macro: call.Macro, Args: call.Args, INFiles: call.INFiles,
+		OUTFiles: call.OUTFiles, OUTNoAutoFiles: call.OUTNoAutoFiles,
+		CWD: call.CWD, OutputIncludes: call.OutputIncludes,
+	})
+
+	e.emitJVDownstreamCPCC([]struct{ cpp, h VFS }{
+		{build(module, "/", lexerBase, ".cpp"), build(module, "/", lexerBase, ".h")},
+		{build(module, "/", parserBase, ".cpp"), build(module, "/", parserBase, ".h")},
+	}, g.OutputIncludes)
 }
 
 func antlr4OptionalHeaders(base string, visitor, listener bool) []string {
@@ -134,16 +69,4 @@ func antlr4OptionalHeaders(base string, visitor, listener bool) []string {
 	}
 
 	return headers
-}
-
-func antlrWitnessParsed(na *NodeArenas, witnessIncludes []VFS) []IncludeDirective {
-	parsed := na.dirs.alloc(len(witnessIncludes))[:0]
-
-	for _, include := range witnessIncludes {
-		parsed = append(parsed, IncludeDirective{kind: includeQuoted, target: includeTarget(include.rel().any())})
-	}
-
-	na.dirs.commit(len(parsed))
-
-	return parsed[:len(parsed):len(parsed)]
 }

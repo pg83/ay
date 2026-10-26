@@ -213,7 +213,7 @@ func (ctx *GenCtx) javaKtlintSuite(jm *JavaModule) *TestSuite {
 	s := ctx.javaSuiteBase(jm, "ktlint", "ktlint", "style")
 	dirs := []string{editorconfig}
 
-	if d.env.string(envWithYa1931) != "yes" {
+	if !d.ktlintSkipSourceDirs {
 		dirs = append(dirs, ctx.javaSrcDirsTestData(jm)...)
 	}
 

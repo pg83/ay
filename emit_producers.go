@@ -30,7 +30,7 @@ const (
 	prodLj21
 	prodArchive
 	prodCheckConfigH
-	prodCythonAll
+	prodCython
 	prodSwigAll
 	prodJoinSrcs
 	prodSproto
@@ -277,7 +277,7 @@ func (e *EmitContext) srcInsCandidate(tok ANY) []VFS {
 	return nil
 }
 
-func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMeta) {
+func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]ProducerPos, []SrcMeta) {
 	d := e.d
 	module := e.instance.Path.relString()
 
@@ -295,7 +295,7 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		n++
 	}
 
-	if d.lj21 != nil || hasCython || len(d.swigC) > 0 {
+	if d.lj21 != nil || len(cythonPlans) > 0 || len(d.swigC) > 0 {
 		n += 3
 	}
 
@@ -852,8 +852,11 @@ func (e *EmitContext) producerPositions(hasCython bool) ([]ProducerPos, []SrcMet
 		})
 	}
 
-	if hasCython {
-		positions = append(positions, ProducerPos{kind: prodCythonAll})
+	for i, plan := range cythonPlans {
+		positions = append(positions, ProducerPos{kind: prodCython, index: i,
+			outs: append([]VFS{plan.generatedVFS}, plan.headerVFS...),
+			ins:  []VFS{e.sourceInputForScheduling(plan.stmt.Src)},
+		})
 	}
 
 	if len(d.swigC) > 0 {
@@ -902,7 +905,7 @@ func (e *EmitContext) emitDeclaredProducers(cythonPlans []CythonStmtPlan) {
 		}
 	}
 
-	positions, srcs := e.producerPositions(len(cythonPlans) > 0)
+	positions, srcs := e.producerPositions(cythonPlans)
 
 	positions = e.orderedProducerPositions(positions)
 
@@ -1117,8 +1120,8 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 			e.emitArchiveStmt(e.d.archives[pos.index])
 		case prodCheckConfigH:
 			e.emitCheckConfigHStmt(e.d.checkConfigHeaders[pos.index])
-		case prodCythonAll:
-			e.emitCythonCppPlanned(cythonPlans)
+		case prodCython:
+			e.emitCythonCppPlanned(cythonPlans[pos.index : pos.index+1])
 		case prodSwigAll:
 			e.emitSwigC()
 		case prodJoinSrcs:

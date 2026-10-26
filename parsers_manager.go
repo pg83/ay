@@ -28,6 +28,16 @@ func (set ParsedIncludeSet) bucket(bucket ParsedIncludeBucket) []IncludeDirectiv
 	return set[bucket]
 }
 
+func (pm *IncludeParserManager) outputIncludes(output VFS, set ParsedIncludeSet) ParsedIncludeSet {
+	if len(set[parsedIncludesLocal]) > 0 {
+		if parser, _ := pm.registry.registeredParserFor(output.relString()); parser == cythonParser {
+			return pm.cythonOutputIncludes(set)
+		}
+	}
+
+	return set
+}
+
 type ParsedSource struct {
 	includes ParsedIncludeSet
 	parser   IncludeDirectiveParser

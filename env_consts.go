@@ -124,6 +124,7 @@ var (
 	envJavaOptions                            = internEnv("_JAVA_OPTIONS")
 	envJavaPath                               = internEnv("JAVA_PATH")
 	envJavaProto                              = internEnv("JAVA_PROTO")
+	envJavaProtoCommonVersion                 = internEnv("JAVA_PROTO_COMMON_VERSION")
 	envJdkRealVersion                         = internEnv("JDK_REAL_VERSION")
 	envJdkResourcePeerdir                     = internEnv("JDK_RESOURCE_PEERDIR")
 	envJdkVersion                             = internEnv("JDK_VERSION")

@@ -28,7 +28,7 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 		peers = []string{"library/cpp/testing/boost_test"}
 	case tokBoosttestWithMain:
 		peers = []string{"library/cpp/testing/boost_test", "library/cpp/testing/boost_test_main"}
-	case tokPy3Test, tokPy2Test, tokPy23Test:
+	case tokPy3Test, tokPy3TestBin, tokPy2Test, tokPy23Test:
 		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
 	case tokYqlUdfTest:
 		peers = []string{"yql/essentials/tests/common/udf_test"}
@@ -42,6 +42,19 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 			"YQL_CONFIG_DIR=yql/essentials/cfg/udf_test",
 			"YQL_YQLRUN_PATH=yql/tools/yqlrun/yqlrun",
 			"YQL_SQL2YQL_PATH=yql/essentials/tools/sql2yql/sql2yql",
+			"YQL_UDFRESOLVER_PATH=yql/essentials/tools/udf_resolver/udf_resolver",
+		)
+	case tokYqlUdfMinitest:
+		peers = []string{"yql/essentials/tests/common/udf_minitest"}
+
+		d.pyMain = ptr(strLibraryPythonPytestMainMain.any())
+		d.test.depends = append(d.test.depends, "yql/essentials/tools/astdiff", "yql/essentials/tools/minirun", "yql/essentials/tools/udf_resolver")
+		d.test.data = append(d.test.data, "arcadia/yql/essentials/cfg/tests")
+
+		d.test.env = append(d.test.env,
+			"YQL_ASTDIFF_PATH=yql/essentials/tools/astdiff/astdiff",
+			"YQL_CONFIG_DIR=yql/essentials/cfg/tests",
+			"YQL_MINIRUN_PATH=yql/essentials/tools/minirun/minirun",
 			"YQL_UDFRESOLVER_PATH=yql/essentials/tools/udf_resolver/udf_resolver",
 		)
 	case tokGBenchmark:

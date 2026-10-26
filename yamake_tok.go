@@ -91,6 +91,7 @@ var tokName = [...]STR{
 	tokExectest:       internStr("EXECTEST"),
 	tokRun:            internStr("RUN"),
 	tokPy3Test:        internStr("PY3TEST"),
+	tokPy3TestBin:     internStr("PY3TEST_BIN"),
 	tokPy2Test:        internStr("PY2TEST"),
 	tokPy23Test:       internStr("PY23_TEST"),
 	tokPytestBin:      internStr("PYTEST_BIN"),
@@ -390,6 +391,7 @@ var tokName = [...]STR{
 	tokYqlUdfContrib:                   kwYQL_UDF_CONTRIB,
 	tokYqlUdfYdb:                       kwYQL_UDF_YDB,
 	tokYqlUdfTest:                      internStr("YQL_UDF_TEST"),
+	tokYqlUdfMinitest:                  internStr("YQL_UDF_MINITEST"),
 	tokGoLibrary:                       internStr("GO_LIBRARY"),
 	tokGoPackageName:                   internStr("GO_PACKAGE_NAME"),
 	tokGoGrpcGatewayV2OpenapiSrcs:      internStr("GO_GRPC_GATEWAY_V2_OPENAPI_SRCS"),
@@ -768,6 +770,7 @@ const (
 	tokExectest
 	tokRun
 	tokPy3Test
+	tokPy3TestBin
 	tokPy2Test
 	tokPy23Test
 	tokPytestBin
@@ -805,6 +808,7 @@ const (
 	tokYqlUdfContrib
 	tokYqlUdfYdb
 	tokYqlUdfTest
+	tokYqlUdfMinitest
 	tokGoLibrary
 	tokGoPackageName
 	tokGoGrpcGatewayV2OpenapiSrcs

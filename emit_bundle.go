@@ -39,19 +39,9 @@ func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
 		return 0, 0, false
 	}
 
-	if !hasModuleOpener(moduleStmts(ctx, target)) {
-		return 0, 0, false
-	}
+	bundleInstance := ctx.rootInstance(target, demandNone)
 
-	bundleInstance := e.derivePeerInstance(target)
-
-	if isSandboxPythonTask(ctx.moduleName(target)) {
-		bundleInstance.Kind, bundleInstance.Language = KindBin, LangCPP
-	}
-
-	if ctx.moduleName(target) == tokPackage {
-		bundleInstance.Language = LangCPP
-	}
+	bundleInstance.Platform = e.instance.Platform
 
 	if e.instance.Demand != demandNone {
 		bundleInstance.Demand = demandLinked
@@ -59,7 +49,7 @@ func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
 
 	res := genModule(ctx, bundleInstance)
 
-	if res.isPROGRAM && res.LDPath != nil {
+	if res.LDPath != nil {
 		return *res.LDPath, res.LDRef, true
 	}
 
@@ -68,16 +58,6 @@ func (e *EmitContext) resolveBundleSource(target string) (VFS, NodeRef, bool) {
 	}
 
 	return 0, 0, false
-}
-
-func hasModuleOpener(stmts []Stmt) bool {
-	for _, s := range stmts {
-		if _, ok := s.(*ModuleStmt); ok {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (e *EmitContext) emitBundleNode(python3 VFS, src, dst VFS, suffix string, srcRef NodeRef, resolved bool, id NodeRef) {

@@ -145,13 +145,9 @@ type CythonStmt struct {
 type CythonStmtPlan struct {
 	stmt              *CythonStmt
 	generatedExplicit bool
-	py23Variant       bool
-	generated         string
 	generatedVFS      VFS
 	headerVFS         []VFS
-	srcVFS            VFS
 	cyRef             NodeRef
-	sourceInputs      []VFS
 	toolInputs        []VFS
 	emittedInputs     []VFS
 	infos             []*GeneratedFileInfo
@@ -221,9 +217,8 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 			}
 		}
 
-		srcVFS := resolveSourceVFS(ctx, instance, stmt.Src, d.srcDirs)
 		usePy2 := d.usePython2 || stmt.Native != nil && !d.usePython3 && !stmt.Python3
-		toolInputs, emittedInputs := cythonCppInducedInputs(srcVFS, stmt.CMode, usePy2)
+		toolInputs, emittedInputs := cythonCppInducedInputs(stmt.CMode, usePy2)
 		cyRef := ctx.emit.reserve()
 
 		var infos []*GeneratedFileInfo
@@ -252,22 +247,13 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 		plans = append(plans, CythonStmtPlan{
 			stmt:              stmt,
 			generatedExplicit: generatedExplicit,
-			py23Variant:       py23Variant,
-			generated:         generated,
 			generatedVFS:      generatedVFS,
 			headerVFS:         headerVFS,
-			srcVFS:            srcVFS,
 			cyRef:             cyRef,
 			toolInputs:        toolInputs,
 			emittedInputs:     emittedInputs,
 			infos:             infos,
 		})
-	}
-
-	for i := range plans {
-		p := &plans[i]
-
-		p.sourceInputs = e.scanner.cythonPyxLangClosure(p.srcVFS, d.scanCtx)
 	}
 
 	return plans
@@ -284,7 +270,8 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 		generatedExplicit := p.generatedExplicit
 		generatedVFS := p.generatedVFS
 		headerVFS := p.headerVFS
-		srcVFS := p.srcVFS
+		srcVFS := e.resolveModuleSourceVFS(internStr(stmt.Src).any(), d.srcDirs)
+		sourceInputs := e.scanner.cythonPyxLangClosure(srcVFS, scanCtx)
 		cyRef := p.cyRef
 		emitsIncludes := p.emittedInputs
 		pxdVFS, pxdOK := resolveCythonPxd(ctx, instance, stmt.Pxd)
@@ -297,12 +284,12 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		var induced []IncludeDirective
 
-		for _, input := range p.sourceInputs {
-			induced = append(induced, ctx.parsers.sourceParsedBuckets(input, nil).bucket(parsedIncludesCpp)...)
+		for _, input := range sourceInputs {
+			induced = append(induced, e.scanner.parsedBucketForInput(input, parsedIncludesCpp, nil)...)
 		}
 
 		for _, input := range pxdInputs {
-			induced = append(induced, ctx.parsers.sourceParsedBuckets(input, nil).bucket(parsedIncludesCpp)...)
+			induced = append(induced, e.scanner.parsedBucketForInput(input, parsedIncludesCpp, nil)...)
 		}
 
 		parsed := na.dirs.alloc(len(emitsIncludes) + len(induced))[:0]
@@ -381,7 +368,6 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		outputs := na.vfsList(append([]VFS{generatedVFS}, headerVFS...)...)
 		toolInputs := p.toolInputs
-		sourceInputs := p.sourceInputs
 		buildInputs := cythonToolInputs(na, toolInputs, sourceInputs)
 
 		if pxdOK {
@@ -479,7 +465,7 @@ func isCythonLangFile(rel string) bool {
 	return strings.HasSuffix(rel, ".pyx") || strings.HasSuffix(rel, ".pxd") || strings.HasSuffix(rel, ".pxi") || strings.HasSuffix(rel, ".py")
 }
 
-func cythonCppInducedInputs(src VFS, cMode, py2 bool) (toolInputs, emittedInputs []VFS) {
+func cythonCppInducedInputs(cMode, py2 bool) (toolInputs, emittedInputs []VFS) {
 	script, outputIncludes, embedded := contribToolsCythonCythonPy, py3CythonOutputIncludes, py3CythonEmbeddedFiles
 
 	if py2 {
@@ -503,8 +489,6 @@ func cythonCppInducedInputs(src VFS, cMode, py2 bool) (toolInputs, emittedInputs
 		toolInputs = append(toolInputs, v)
 		emittedInputs = append(emittedInputs, v)
 	}
-
-	toolInputs = append(toolInputs, src)
 
 	return toolInputs, emittedInputs
 }

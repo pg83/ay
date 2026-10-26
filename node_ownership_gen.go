@@ -1,7 +1,6 @@
 package main
 
 func registerKnownGlobalChunks() {
-	registerOwnedSlice(antlrJavaConstHead)
 	registerOwnedSlice(bisonCppSkeletonInputs)
 	registerOwnedSlice(builtinMacroDateTime)
 	registerOwnedSlice(catboostOpenSourceDefine)

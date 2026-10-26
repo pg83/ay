@@ -237,7 +237,7 @@ func (e *EmitContext) emitRunPython(stmt *RunPythonStmt, resourceUses []STR) []A
 			ProducerRef:     pyRef,
 			ProducerMainOut: outputs[0],
 			GeneratorRefs:   toolRefs,
-			ParsedIncludes:  ParsedIncludeSet{parsedIncludesLocal: parsed},
+			ParsedIncludes:  ctx.parsers.outputIncludes(out, ParsedIncludeSet{parsedIncludesLocal: parsed}),
 			OnUse:           pending,
 		})
 	}

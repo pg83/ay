@@ -7,6 +7,44 @@ import (
 
 type CythonIncludeDirectiveParser struct{}
 
+func (pm *IncludeParserManager) cythonOutputIncludes(set ParsedIncludeSet) ParsedIncludeSet {
+	local := pm.cache.directives.alloc(len(set[parsedIncludesLocal]))[:0]
+
+	var cpp []IncludeDirective
+
+	for _, directive := range set[parsedIncludesLocal] {
+		parser, _ := pm.registry.matcher.match(directive.target.string())
+		cLanguage := false
+
+		switch parser.(type) {
+		case CIncludeDirectiveParser, LexIncludeDirectiveParser, FortranIncludeDirectiveParser, GoCgoIncludeDirectiveParser:
+			cLanguage = true
+		}
+
+		if !cLanguage {
+			local = append(local, directive)
+		}
+
+		if parser != cythonParser {
+			cpp = append(cpp, directive)
+		}
+	}
+
+	pm.cache.directives.commit(len(local))
+	set[parsedIncludesLocal] = local[:len(local):len(local)]
+
+	if len(cpp) > 0 {
+		stored := pm.cache.directives.alloc(len(set[parsedIncludesCpp]) + len(cpp))
+		k := copy(stored, set[parsedIncludesCpp])
+
+		k += copy(stored[k:], cpp)
+		pm.cache.directives.commit(k)
+		set[parsedIncludesCpp] = stored[:k:k]
+	}
+
+	return set
+}
+
 func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
 	block := a.alloc(directiveBlockHint)
 	k := 0

@@ -205,6 +205,8 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	}
 
 	d.sourcesJar = env.bool(envSourcesJar)
+	d.ktlintSkipSourceDirs = env.bool(envWithYa1931)
+	d.javaProtoCommonVersion = env.string(envJavaProtoCommonVersion)
 	d.embedSbom = d.embedSbom || ctx.sbomEnabled && env.bool(envEmbedSbom)
 	d.needSbomInfo = env.bool(envNeedSbomInfo)
 	d.modver = strings.Join(strings.Fields(env.string(envModver)), ".")
@@ -373,9 +375,13 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 			d.fromSandboxes = append(d.fromSandboxes, &expanded)
 		case *SrcDirStmt:
 			for _, dir := range expandStmtTokens(v.Dirs, env) {
-				d.srcDirs = append(d.srcDirs, dirKey(dir.string()).source())
+				d.srcDirs = append(d.srcDirs, parseModulePathVFS(dir.string()))
 			}
 		case *AddInclStmt:
+			for _, dir := range expandConfigVFSPaths(v.ProtoPaths, env) {
+				d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir})
+			}
+
 			for _, dir := range expandConfigVFSPaths(v.ProtoGlobalPaths, env) {
 				d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir, global: true})
 			}
@@ -874,6 +880,17 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		javaProtoPluginMacro(d, []string{"alice_typed_callback_java", "alice/library/go/java_marker_interface_protoc_plugin", "DEPS", "alice/protos/api/typed_callbacks/java_marker_interface"})
 	case "PROTO_NAMESPACE":
 		javaProtoNamespace(d, args[len(args)-1])
+	case "PROTO_ADDINCL":
+		var includes ModuleData
+		applyProtoAddIncl(&includes, internAnys(args))
+
+		for _, dir := range includes.protoAddInclGlobal {
+			d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir, global: true})
+		}
+
+		for _, dir := range includes.protoAddIncl {
+			d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir})
+		}
 	case "EXPORT_YMAPS_PROTO":
 		javaProtoNamespace(d, "maps/doc/proto")
 	case "PROTOC_FATAL_WARNINGS":
@@ -1011,7 +1028,7 @@ func (jm *JavaModule) varPeers() []string {
 			out = append(out, d.javaProtobufPeers...)
 
 			if d.commonGoogleAPIs {
-				out = append(out, "contrib/java/com/google/api/grpc/proto-google-common-protos/"+javaProtoCommonVersion)
+				out = append(out, "contrib/java/com/google/api/grpc/proto-google-common-protos/"+d.javaProtoCommonVersion)
 			}
 		}
 

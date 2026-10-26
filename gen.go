@@ -504,6 +504,22 @@ func (ctx *GenCtx) recurseClosure(root string) []string {
 
 func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
 	instance := ctx.rootInstanceForDeclaration(dir, demandNone, nil)
+
+	return ctx.scanModuleConfiguration(instance, true)
+}
+
+func (ctx *GenCtx) moduleDeclaration(instance ModuleInstance) *ModuleStmt {
+	declaration, certain := inferModuleDeclaration(moduleStmts(ctx, instance.Path.relString()))
+
+	if !certain {
+		declaration, _ = ctx.scanModuleConfiguration(instance, false)
+	}
+
+	return declaration
+}
+
+func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses bool) (*ModuleStmt, []string) {
+	dir := instance.Path.relString()
 	env := buildIfEnvInto(&ctx.ifEnvScratch, instance)
 	d := ModuleData{}
 
@@ -518,6 +534,10 @@ func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
 
 	scan = func(stmts []Stmt) {
 		for _, st := range stmts {
+			if module != nil && !recurses {
+				return
+			}
+
 			switch v := st.(type) {
 			case *MissingIncludeStmt:
 				if module == nil {
@@ -525,8 +545,11 @@ func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
 				}
 			case *ModuleStmt:
 				module = v
-				instance = ctx.rootInstanceForDeclaration(dir, demandNone, v)
-				apply(st)
+
+				if recurses {
+					instance = ctx.rootInstanceForDeclaration(dir, demandNone, v)
+					apply(st)
+				}
 			case *SetStmt, *DefaultVarStmt:
 				apply(st)
 			case *IfStmt:
@@ -568,7 +591,10 @@ func (ctx *GenCtx) recurseScan(dir string) (*ModuleStmt, []string) {
 	}
 
 	scan(moduleStmts(ctx, dir))
-	ctx.recordConfiguration(instance, children, nil)
+
+	if recurses {
+		ctx.recordConfiguration(instance, children, nil)
+	}
 
 	return module, children
 }
@@ -607,14 +633,6 @@ func picTransition(name TOK) bool {
 
 func isDllModuleType(name TOK) bool {
 	return name == tokDll || name == tokDllTool || isPythonDllModule(name)
-}
-
-func (e *EmitContext) moduleInputArg(arg *ANY) *ANY {
-	if arg == nil || !e.ctx.fs.isFile(e.instance.Path.rel(), arg.string()) {
-		return arg
-	}
-
-	return ptr(internV(e.instance.Path.relString(), "/", arg.string()).any())
 }
 
 func stmtsModuleName(stmts []Stmt) TOK {
@@ -826,7 +844,7 @@ func discoverRecursedTargets(ctx *GenCtx, targetDir string) DiscoveredTargets {
 
 		if at == 0 {
 			targets.Root = DiscoveredModule{Path: dir, Declaration: module}
-		} else if module != nil && (ctx.testMode || module.Schema || isFinalTargetModuleType(module.Name)) {
+		} else if module != nil {
 			targets.Recursed = append(targets.Recursed, DiscoveredModule{Path: dir, Declaration: module})
 		}
 
@@ -1313,7 +1331,12 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	}
 
 	stmts := moduleStmts(ctx, instance.Path.relString())
-	moduleName := stmtsModuleName(stmts)
+
+	var moduleName TOK
+
+	if declaration := ctx.moduleDeclaration(instance); declaration != nil {
+		moduleName = declaration.Name
+	}
 
 	var sandboxVariants uint16
 
@@ -2706,7 +2729,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	if isProgramModuleType(d.moduleStmt.Name) || isDllModuleType(d.moduleStmt.Name) {
 		binaryName := programBinaryName(instance, d.moduleStmt)
-		exportsScript := e.moduleInputArg(d.exportsScript)
+
+		var exportsScript VFS
+
+		if d.exportsScript != nil {
+			exportsScript = e.resolveModuleSourceVFS(*d.exportsScript, d.srcDirs)
+		}
+
 		linkerScripts := make([]VFS, len(d.linkerScripts))
 
 		for i, script := range d.linkerScripts {

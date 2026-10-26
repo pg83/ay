@@ -490,7 +490,13 @@ func (s *IncludeScanner) parsedIncludes(vfsPath VFS, ctxParser IncludeDirectiveP
 
 func (s *IncludeScanner) parsedBucketForInput(vfsPath VFS, sourceBucket ParsedIncludeBucket, ctxParser IncludeDirectiveParser) []IncludeDirective {
 	if vfsPath.isBuild() {
-		return s.codegen.buildParsedFor(vfsPath).bucket(parsedIncludesLocal)
+		set := s.codegen.buildParsedFor(vfsPath)
+
+		if parser, _ := s.parsers.registry.registeredParserFor(vfsPath.relString()); parser == cythonParser {
+			return set.bucket(sourceBucket)
+		}
+
+		return set.bucket(parsedIncludesLocal)
 	}
 
 	return s.parsers.sourceParsedBuckets(vfsPath, ctxParser).bucket(sourceBucket)

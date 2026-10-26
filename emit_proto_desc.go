@@ -139,12 +139,12 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 	applyImplicitPeerdirs(ctx, instance, d)
 
 	span := descPeerClosure(e, d.peerdirs, d.needGoogleProtoPeerdirs, d.useCommonGoogleAPIs)
-	protoInclude := dedup(d.protoAddInclGlobal, span.includes)
+	protoInclude := dedup(d.protoIncludeLocal, span.includes)
 
 	d.scanCtx = newModuleScanContext(ctx, instance, d, dedup(d.addIncl, d.addInclGlobal), nil, nil, protoInclude)
 
 	cppOutRoot := protoCPPOutRoot(d)
-	mid := descProtocIncludes(ctx.na, span.includes, cppOutRoot)
+	mid := descProtocIncludes(ctx.na, concat(dedup(d.protoIncludeLocal), span.includes), cppOutRoot)
 
 	mid = ctx.na.anyList(appendAnyLists(mid, d.protocFlags)...)
 
@@ -218,7 +218,7 @@ func (e *EmitContext) emitDescProtoSubmodule() *ModuleEmitResult {
 		ARRef:                 mergeRef,
 		ARPath:                &selfPath,
 		DescClosure:           closure,
-		ProtoInclude:          protoInclude,
+		ProtoInclude:          dedup(d.protoAddInclGlobal, span.includes),
 		ResourceGlobalClosure: span.globals,
 	}
 }
@@ -232,10 +232,6 @@ func descProtocIncludes(na *NodeArenas, peerProtoAddIncl []VFS, cppOutRoot strin
 		argIB2.any(),
 		argIS3.any(),
 	)
-
-	if cppOutRoot != "" {
-		out = append(out, internV("-I=$(S)/", cppOutRoot).any())
-	}
 
 	for _, p := range peerProtoAddIncl {
 		out = append(out, internV("-I=", p.prefix(), p.relString()).any())

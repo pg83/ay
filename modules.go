@@ -956,7 +956,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	applyPythonAddIncl(modulePath, d, env)
-	applyBuildInfoAddIncl(modulePath, d)
 	applyArchiveAddIncl(modulePath, d)
 	applyCythonHeaderAddIncl(modulePath, d)
 
@@ -1286,18 +1285,6 @@ func applyCythonHeaderAddIncl(modulePath string, d *ModuleData) {
 		d.addInclGlobal = append(d.addInclGlobal, dir)
 		d.addInclUserGlobal = append(d.addInclUserGlobal, dir)
 	}
-}
-
-func applyBuildInfoAddIncl(modulePath string, d *ModuleData) {
-	if d.createBuildInfoFor == nil {
-		return
-	}
-
-	biDir := build(modulePath)
-
-	d.addIncl = append(d.addIncl, biDir)
-	d.addInclGlobal = append(d.addInclGlobal, biDir)
-	d.addInclUserGlobal = append(d.addInclUserGlobal, biDir)
 }
 
 func pyModuleTypeUsesPython3(name TOK) bool {
@@ -1630,6 +1617,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				switch srcExtClassOf(srcTok) {
 				case srcExtHIn:
 					addGeneratedHeaderInclude(modulePath, strings.TrimSuffix(srcTok.string(), ".in"), d)
+				case srcExtCppIn, srcExtCIn:
+					addGeneratedHeaderIncludeCF(modulePath, strings.TrimSuffix(srcTok.string(), ".in"), d)
 				case srcExtY:
 					src := srcTok.string()
 
@@ -2237,7 +2226,7 @@ func resolveModuleUnitBare(name TOK, kind ModuleKind, language Language) ModuleU
 		}
 	}
 
-	if name == tokYqlUdfTest {
+	if name == tokYqlUdfTest || name == tokYqlUdfMinitest || name == tokPy3TestBin {
 		return ModuleUnit{Type: tokPy3Test, Tag: unitTagPy3, ARPrefix: "libpy3", GlobalARTag: tagGlobal, SbomLang: unitSbomPy3}
 	}
 
@@ -4447,6 +4436,27 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			}
 		}
 
+		scope := PyScope{TopLevel: topLevel, Namespace: namespace}
+
+		if explicitModule {
+			scope.ModuleName = ptr(internStr(modNameOverride).any())
+		}
+
+		if mainNext {
+			modName := scope.moduleName(modulePath, src)
+
+			d.pyMain = ptr(internV(modName, ":main").any())
+			mainNext = false
+		} else if !explicitModule && d.pyMain == nil && d.moduleStmt != nil &&
+			(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin || d.pythonSourceEntry && !d.usePython2) &&
+			(src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
+			d.pyMain = ptr(internStr(pythonModuleName(modulePath, src, topLevel, namespace)).any())
+		}
+
+		if d.unit.Tag == unitTagPy3Bin {
+			continue
+		}
+
 		lintPy = lintPy || extIsPy(src)
 
 		if strings.HasSuffix(src, ".fbs") {
@@ -4558,12 +4568,6 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			throwFmt("in PY_SRCS: unrecognized arg %q", src)
 		}
 
-		scope := PyScope{TopLevel: topLevel, Namespace: namespace}
-
-		if explicitModule {
-			scope.ModuleName = ptr(internStr(modNameOverride).any())
-		}
-
 		if !d.usePython2 && scope.moduleName(modulePath, src) == "__main__" {
 			throwFmt("TOP_LEVEL __main__.py is not allowed in PY3_PROGRAM")
 		}
@@ -4571,17 +4575,6 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		d.pySrcs = append(d.pySrcs, internStr(src).any())
 		groupSrcs = append(groupSrcs, src)
 		groupScopes = append(groupScopes, scope)
-
-		if mainNext {
-			modName := scope.moduleName(modulePath, src)
-
-			d.pyMain = ptr(internV(modName, ":main").any())
-			mainNext = false
-		} else if !explicitModule && d.pyMain == nil && d.moduleStmt != nil &&
-			(d.moduleStmt.Name == tokPy3Program || d.moduleStmt.Name == tokPy3ProgramBin || d.pythonSourceEntry && !d.usePython2) &&
-			(src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
-			d.pyMain = ptr(internStr(pythonModuleName(modulePath, src, topLevel, namespace)).any())
-		}
 	}
 
 	if len(cythonDirectives) > 0 {

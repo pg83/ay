@@ -71,21 +71,6 @@ func (e *EmitContext) emitBIReserved(
 	e.emitReservedNode(node, id)
 }
 
-func biFlagsForInstance(targetP *Platform) []ANY {
-	bundle := compileFlagBundleFor(targetP)
-	flags := make([]ANY, 0, 100)
-	cflagPrefix := append(muslCFlags(targetP.Flags[envMUSL] == strYes), sseBaseCFlags(targetP.ISA == ISAX8664)...)
-
-	flags = appendCompileFlagPipeline(flags, bundle, warningFlags, bundle.Defines, targetP.CFlags, cflagPrefix, catboostOpenSourceDefineFor(targetP))
-	flags = append(flags, cxxStandardFlag.any())
-	flags = appendAnyLists(flags, cxxStandardWarnings)
-	flags = append(flags, baseUnitCxxNostdinc.any())
-	flags = appendAnyLists(flags, catboostOpenSourceDefineFor(targetP))
-	flags = append(flags, baseUnitCxxNostdinc.any())
-
-	return flags
-}
-
 func (e *EmitContext) emitBuildInfoStmt() {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	outPrefix := instance.Path.relString() + "/"
@@ -94,7 +79,9 @@ func (e *EmitContext) emitBuildInfoStmt() {
 	tc := d.tc
 
 	pe := func() {
-		e.emitBIReserved(createFor, biFlagsForInstance(instance.Platform), tc, biRef)
+		blocks := compilerCommandBlocks(&d.cc.CCBlocks, true)
+
+		e.emitBIReserved(createFor, ctx.na.anyConcat(blocks.flags, blocks.cxxTail), tc, biRef)
 	}
 
 	pending := e.pendingEmit(pe)

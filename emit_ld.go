@@ -84,7 +84,7 @@ func (e *EmitContext) emitLD(
 	peerRPathFlagsGlobal []ANY,
 	objAddLibsGlobal []ANY,
 	linkExcludeLibraries []ANY,
-	exportsScript *ANY,
+	exportsScript VFS,
 	linkerScripts []VFS,
 	noExportDynSymbols bool,
 	noCompilerWarnings bool,
@@ -199,8 +199,8 @@ func (e *EmitContext) emitLD(
 
 	inputTail = append(inputTail, ldSvnversionHVFS)
 
-	if exportsScript != nil {
-		inputTail = append(inputTail, exportsScript.str().source())
+	if exportsScript != 0 {
+		inputTail = append(inputTail, exportsScript)
 	}
 
 	inputTail = append(inputTail, linkerScripts...)
@@ -396,7 +396,7 @@ func composeLDCmdVcsCompileForced(na *NodeArenas, p *Platform, tc ModuleToolchai
 	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
-func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, linkExcludeLibraries []ANY, exportsScript *ANY, linkerScripts []VFS, noExportDynSymbols, wantsStrip, useArcadiaLibm, useDynamicCuda bool, dyn *DynLibLink) []ANY {
+func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output, vcsO VFS, ccPaths []VFS, peerLinkCmdPaths, pluginPaths, globalPaths, wholeArchivePaths, wholeArchiveCmdPaths []VFS, objcopyPaths []VFS, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal, linkExcludeLibraries []ANY, exportsScript VFS, linkerScripts []VFS, noExportDynSymbols, wantsStrip, useArcadiaLibm, useDynamicCuda bool, dyn *DynLibLink) []ANY {
 	argCap := 2 + 6 + 1 + 2 + 1 + 1 + 3 + 1 + 2 + 2 + 3 + 16 + 1 + 7 + len(ccPaths) + len(peerLinkCmdPaths) + len(globalPaths) + len(objcopyPaths) + len(peerLDFlagsGlobal) + len(ownLDFlags) + len(ownRPathFlags) + len(peerRPathFlagsGlobal) + len(objAddLibsGlobal)
 
 	argCap += 2 + len(pluginPaths) + 2*len(wholeArchiveCmdPaths) + 2*len(wholeArchivePaths) + 2*len(linkExcludeLibraries)
@@ -488,14 +488,14 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
-func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript *ANY, linkerScripts []VFS, noExportDynSymbols, wantsStrip, useArcadiaLibm bool, dyn *DynLibLink) []ANY {
+func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, ownRPathFlags, peerRPathFlagsGlobal, objAddLibsGlobal []ANY, exportsScript VFS, linkerScripts []VFS, noExportDynSymbols, wantsStrip, useArcadiaLibm bool, dyn *DynLibLink) []ANY {
 	var trailer []ANY
 
 	if !noExportDynSymbols {
 		exports := ""
 
-		if exportsScript != nil {
-			exports = "$(S)/" + exportsScript.string()
+		if exportsScript != 0 {
+			exports = exportsScript.string()
 		}
 
 		trailer = appendLinkerTemplate(trailer, p.Linker.Exports, "${input:EXPORTS_FILE}", exports)

@@ -199,7 +199,7 @@ func (e *EmitContext) pyModuleKey(keyPrefix string, scope PyScope, src string) S
 		return internV(keyPrefix, src)
 	}
 
-	if isProgramModuleType(e.d.moduleStmt.Name) && (src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
+	if (isProgramModuleType(e.d.moduleStmt.Name) || e.d.yqlPythonUdf) && (src == "__main__.py" || strings.HasSuffix(src, "/__main__.py")) {
 		return strMain
 	}
 
