@@ -1024,12 +1024,17 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		}
 	}
 
-	evInduced, protoInduced := false, false
+	evInduced, protoInduced, cudaInduced := false, false, false
 
 	for _, meta := range d.srcs {
 		src := meta.Source
 
 		switch srcExtClassOf(src) {
+		case srcExtCuda:
+			if !cudaInduced {
+				cudaInduced = true
+				d.peerdirs = append(d.peerdirs, internAnys(strings.Fields(env.string(envSrcCuPeerdir)))...)
+			}
 		case srcExtEv:
 			if !evInduced && !isGoModuleType(d.unit.Type) {
 				evInduced = true

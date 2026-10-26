@@ -251,6 +251,7 @@ var (
 	envSoOutputs                              = internEnv("SO_OUTPUTS")
 	envSoname                                 = internEnv("_SONAME")
 	envSourcesJar                             = internEnv("SOURCES_JAR")
+	envSrcCuPeerdir                           = internEnv("_SRC_CU_PEERDIR")
 	envTESTING_SAVE_OUTPUT                    = internEnv("TESTING_SAVE_OUTPUT")
 	envTEST_NAME                              = internEnv("TEST_NAME")
 	envTRUE                                   = internEnv("TRUE")
