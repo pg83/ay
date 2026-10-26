@@ -243,6 +243,7 @@ type GenCtx struct {
 	frameSerial      uint32
 	scannerTargetPIC *IncludeScanner
 	roots            map[ModuleInstance]bool
+	targetDirs       map[string]bool
 	rootDemand       ModuleDemand
 }
 
@@ -279,7 +280,12 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 	}
 
 	ctx.roots = make(map[ModuleInstance]bool, len(all))
+	ctx.targetDirs = make(map[string]bool, len(targets))
 	ctx.rootDemand = rootDemand
+
+	for _, t := range targets {
+		ctx.targetDirs[filepath.Clean(t)] = true
+	}
 
 	for _, target := range all {
 		ctx.roots[ctx.rootInstanceForDeclaration(target.Path, demandNone, target.Declaration)] = true

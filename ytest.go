@@ -284,6 +284,7 @@ type TestSuite struct {
 	dockerImages           []string
 	depends                []string
 	dependencyProjects     []VFS
+	unpublishedDeps        []TestBuildDependency
 	data                   []string
 	sandboxResources       []string
 	externalLocalFiles     []string
@@ -398,12 +399,18 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 	for _, dep := range s.depends {
 		s.dependencyProjects = append(s.dependencyProjects, source(dep))
 
+		published := !ctx.targetDirs[dep]
+
 		for _, dependency := range ctx.runtimeTestDependencies(dep) {
 			instance, res := dependency.instance, dependency.result
 			output := testDependencyOutput(res)
 			reg := ctx.scannerFor(instance).codegen
 
-			reg.use(output)
+			if published {
+				reg.use(output)
+			} else {
+				s.unpublishedDeps = append(s.unpublishedDeps, dependency)
+			}
 
 			info, _ := reg.byRel.get(output.rel())
 
