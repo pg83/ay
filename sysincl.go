@@ -28,6 +28,14 @@ type SysinclPair struct {
 	paths []VFS
 }
 
+func (p *SysinclPair) id() STR {
+	if p.key != 0 {
+		return p.key
+	}
+
+	return internStr(p.keyCI)
+}
+
 type SysInclSet []SysIncl
 
 func (rec *SysIncl) setMapping(k []byte, paths []VFS) {

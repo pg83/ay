@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 )
 
@@ -174,19 +175,20 @@ func buildSysinclIndex(set SysInclSet) *SysinclIndex {
 
 			deduper.reset()
 
-			for i := len(rec.pairs) - 1; i >= 0; i-- {
+			for i := range rec.pairs {
 				p := &rec.pairs[i]
-				id := p.key
 
-				if id == 0 {
-					id = internStr(p.keyCI)
+				if p.key == 0 && p.keyCI == "" || deduper.add(p.id().strID()) {
+					continue
 				}
 
-				if !deduper.add(id.strID()) {
-					p.paths = nil
-					p.key = 0
-					p.keyCI = ""
-				}
+				first := &rec.pairs[slices.IndexFunc(rec.pairs, func(q SysinclPair) bool { return q.id() == p.id() })]
+
+				first.paths = append(slices.Clip(first.paths), p.paths...)
+
+				p.paths = nil
+				p.key = 0
+				p.keyCI = ""
 			}
 
 			for _, p := range rec.pairs {

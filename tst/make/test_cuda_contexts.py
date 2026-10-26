@@ -40,3 +40,14 @@ class CudaContextsTest(MakeTest):
         self.assertIn("$(B)/build/internal/platform/cuda/plugin/00-cuda.py.pyplugin", link["inputs"])
         self.assertIn("-L$(CUDA)/lib64", args)
         self.assertIn("-lcudart_static", args)
+
+    def test_repeated_sysincl_macro_header_keeps_every_target(self):
+        self.write("ya.make", "LIBRARY()\nSRCS(resource.cpp kernel.cu)\nEND()\n")
+        self.write("resource.cpp", "#include <thrust/mr/device_memory_resource.h>\n")
+        self.write("kernel.cu", "__global__ void kernel(int* value) { *value = 42; }\n")
+        graph = self.graph()
+        inputs = self.node(graph, "resource.cpp.o")["inputs"]
+        system = "$(S)/contrib/libs/nvidia/cccl/thrust/thrust/system"
+        self.assertIn(f"{system}/cuda/memory_resource.h", inputs)
+        self.assertIn(f"{system}/cuda/memory.h", inputs)
+        self.assertIn(f"{system}/tbb/memory.h", inputs)
