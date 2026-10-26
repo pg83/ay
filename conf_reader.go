@@ -9,6 +9,8 @@ import (
 var (
 	confScalarRefRe = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*`)
 	confVarRefRe    = regexp.MustCompile(`\$\{(?:[^}:]*:)?([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
+	confInRe        = regexp.MustCompile(`^\(\s*(\$[A-Za-z_][A-Za-z0-9_]*|"[^"]*")\s+in\s+\[(.*)\]\s*\)$`)
+	confInItemRe    = regexp.MustCompile(`^\s*("[^"]*")\s*(?:,|$)`)
 )
 
 const (
@@ -209,6 +211,7 @@ func confStmtAssignment(line string) (name, value string, op ConfOp, ok bool) {
 }
 
 func parseConfCondition(rel, expr string) []CondNode {
+	expr = confInCondition(rel, expr)
 	expr = strings.NewReplacer("&&", " AND ", "||", " OR ", "!=", "!=", "!", " NOT ").Replace(expr)
 
 	p := &Parser{lex: &Lexer{name: rel, src: []byte(expr), line: 1, col: 1}}
@@ -259,6 +262,33 @@ func parseConfCondition(rel, expr string) []CondNode {
 	return p.condScratch
 }
 
+func confInCondition(rel, expr string) string {
+	match := confInRe.FindStringSubmatch(strings.TrimSpace(expr))
+
+	if match == nil {
+		return expr
+	}
+
+	var alternatives []string
+
+	for rest := match[2]; strings.TrimSpace(rest) != ""; {
+		item := confInItemRe.FindStringSubmatch(rest)
+
+		if item == nil {
+			throwFmt("conf: %s: unsupported condition %s", rel, expr)
+		}
+
+		alternatives = append(alternatives, match[1]+" == "+item[1])
+		rest = rest[len(item[0]):]
+	}
+
+	if len(alternatives) == 0 {
+		throwFmt("conf: %s: unsupported condition %s", rel, expr)
+	}
+
+	return "(" + strings.Join(alternatives, " || ") + ")"
+}
+
 func evalConfAtomString(nodes []CondNode, i int32, env Environment) string {
 	n := &nodes[i]
 
@@ -277,35 +307,40 @@ func evalConfAtomString(nodes []CondNode, i int32, env Environment) string {
 }
 
 func evalConfEq(nodes []CondNode, n *CondNode, env Environment) bool {
-	l := evalConfAtomString(nodes, n.L, env)
-	r := evalConfAtomString(nodes, n.R, env)
-	left, right := &nodes[n.L], &nodes[n.R]
-
-	if left.Kind != ckInt && right.Kind != ckInt {
-		return l == r
+	if confStringOperand(&nodes[n.L]) && confStringOperand(&nodes[n.R]) {
+		return evalConfAtomString(nodes, n.L, env) == evalConfAtomString(nodes, n.R, env)
 	}
 
-	return confOrderingInteger(left, l) == confOrderingInteger(right, r)
+	return confNumber(nodes, n.L, env) == confNumber(nodes, n.R, env)
 }
 
 func evalConfLt(nodes []CondNode, n *CondNode, env Environment) bool {
-	l := evalConfAtomString(nodes, n.L, env)
-	r := evalConfAtomString(nodes, n.R, env)
-	left, right := &nodes[n.L], &nodes[n.R]
-
-	if left.Kind != ckInt && right.Kind != ckInt {
-		return l < r
+	if confStringOperand(&nodes[n.L]) && confStringOperand(&nodes[n.R]) {
+		return evalConfAtomString(nodes, n.L, env) < evalConfAtomString(nodes, n.R, env)
 	}
 
-	return confOrderingInteger(left, l) < confOrderingInteger(right, r)
+	return confNumber(nodes, n.L, env) < confNumber(nodes, n.R, env)
 }
 
-func confOrderingInteger(n *CondNode, value string) int {
-	if n.Kind == ckInt {
+func confStringOperand(n *CondNode) bool {
+	return n.Kind == ckConfIdent || n.Kind == ckString
+}
+
+func confNumber(nodes []CondNode, i int32, env Environment) int {
+	n := &nodes[i]
+
+	switch n.Kind {
+	case ckInt:
 		return n.Ival
+	case ckConfIdent, ckString:
+		if evalConfAtomString(nodes, i, env) != "" {
+			return 1
+		}
+
+		return 0
 	}
 
-	if value != "" {
+	if evalCondAt(nodes, i, env) {
 		return 1
 	}
 

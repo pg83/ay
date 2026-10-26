@@ -84,3 +84,15 @@ class ConditionsTest(MakeTest):
                 self.node(graph, chosen + ".cpp.o")
                 outputs = [path for node in graph["graph"] for path in node["outputs"]]
                 self.assertNotIn(f"$(B)/{PROJECT}/{excluded}.cpp.o", outputs)
+
+    def test_conf_condition_in_string_list(self):
+        # sdc.conf sets JETSON=yes when ($SDC_PLATFORM in [...]) lists the platform.
+        self.write("ya.make", 'LIBRARY()\nIF(JETSON == "yes")\nSRCS(yes.cpp)\nELSE()\nSRCS(no.cpp)\nENDIF()\nEND()\n')
+        self.write("yes.cpp", "int answer() { return 42; }\n")
+        self.write("no.cpp", "int other() { return 17; }\n")
+        for platform, chosen, excluded in (("car-jp6", "yes", "no"), ("x86_64", "no", "yes")):
+            with self.subTest(platform=platform):
+                graph = self.graph(f"-DSDC_PLATFORM={platform}")
+                self.node(graph, chosen + ".cpp.o")
+                outputs = [path for node in graph["graph"] for path in node["outputs"]]
+                self.assertNotIn(f"$(B)/{PROJECT}/{excluded}.cpp.o", outputs)

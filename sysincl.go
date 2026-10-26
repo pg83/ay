@@ -139,6 +139,14 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 		}
 	}
 
+	all := confVariables(stmts, platformEnv)
+
+	for _, r := range stmts {
+		if key := internEnv(r.stmt.name); r.stmt.name != "" && !platformEnv.hasBindingID(key) && all.hasBindingID(key) {
+			platformEnv.setString(key, all.string(key))
+		}
+	}
+
 	bindConfCommandVariable("__COMMA__", env, platformEnv, map[string]bool{})
 	bindConfCommandVariable(importMaskVariable, env, platformEnv, map[string]bool{})
 	bindConfCommandVariable("DEFAULT_ALLOCATOR", env, platformEnv, map[string]bool{})
@@ -594,4 +602,26 @@ func extractLiteralAnchoredPrefix(pat string) string {
 	}
 
 	return body
+}
+
+func confVariables(stmts []ConfStmtRef, platformEnv Environment) Environment {
+	all := platformEnv.clone()
+
+	for _, r := range stmts {
+		if r.stmt.branch == 0 {
+			applyConfStmt(all, r.stmt, false)
+		}
+	}
+
+	for _, r := range stmts {
+		if r.stmt.branch == 0 {
+			continue
+		}
+
+		if r.file.holds(r.stmt.branch, all) {
+			applyConfStmt(all, r.stmt, true)
+		}
+	}
+
+	return all
 }

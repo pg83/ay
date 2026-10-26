@@ -39,13 +39,7 @@ func (e *EmitContext) recordTestDependencyModule(result *ModuleEmitResult, decla
 	sharedObject, unrollBundle := testDependencySharedObject(name), false
 
 	if bundle {
-		moduleType := env.string(envMODULE_TYPE)
-
-		if !env.hasBindingID(envMODULE_TYPE) && (name == tokGoLibrary || d.nots != nil) {
-			moduleType = "LIBRARY"
-		}
-
-		sharedObject, unrollBundle = testDependencyBundleRendering(moduleType)
+		sharedObject, unrollBundle = testDependencyBundleRendering(env.string(envMODULE_TYPE))
 	}
 
 	result.testDependencyModule = TestDependencyModule{instance: e.instance, bundle: bundle, complete: complete, sharedObject: sharedObject, unrollBundle: unrollBundle, includePeers: includePeers, final: final, multimodule: multimodule,
@@ -64,9 +58,9 @@ func (ctx *GenCtx) runtimeTestDependencyModule(dependency TestBuildDependency) T
 	result := dependency.result
 
 	if jm := result.java; jm != nil {
-		sharedObject, unrollBundle := testDependencyBundleRendering(jm.data.env.string(envMODULE_TYPE))
+		sharedObject, unrollBundle := testDependencyBundleRendering(jm.data.moduleType)
 
-		return TestDependencyModule{bundle: true, sharedObject: sharedObject, unrollBundle: unrollBundle, includePeers: true, final: jm.unit.finalTarget(), multimodule: len(javaModuleUnits[jm.stmt]) > 1 || jm.unit.proto || jm.unit.fbs, fake: jm.unit.kind == juContrib && jm.data.env.bool(envFakeModule), peers: result.testDependencyModule.peers}
+		return TestDependencyModule{bundle: true, sharedObject: sharedObject, unrollBundle: unrollBundle, includePeers: true, final: jm.unit.finalTarget(), multimodule: len(javaModuleUnits[jm.stmt]) > 1 || jm.unit.proto || jm.unit.fbs, fake: jm.unit.kind == juContrib && jm.data.fakeModule, peers: result.testDependencyModule.peers}
 	}
 
 	return result.testDependencyModule

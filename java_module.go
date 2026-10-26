@@ -336,6 +336,10 @@ type JavaData struct {
 	sbomComponent          bool
 	modver                 string
 	noYmakePython3         bool
+	validateData           bool
+	fakeModule             bool
+	moduleType             string
+	sbrUIDExt              string
 	env                    Environment
 }
 

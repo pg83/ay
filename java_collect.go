@@ -263,6 +263,11 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 
 	bindRunProgramCalls(d.runPrograms, env)
 
+	d.validateData = resourceValidationEnabled(env)
+	d.fakeModule = env.bool(envFakeModule)
+	d.moduleType = env.string(envMODULE_TYPE)
+	d.sbrUIDExt = env.string(envSbrUIDExt)
+
 	if jm.unit.fbs {
 		d.env = env.cloneInto(new(EnvStore))
 	}

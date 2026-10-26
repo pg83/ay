@@ -1365,6 +1365,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 			env.setString(envPeerdirTags, expandAssignedScalarVarRef(modulePeerTags(v, d.unit, language), env))
 
+			if moduleType := confModuleType(v.Name, d); moduleType != "" {
+				env.setString(envMODULE_TYPE, moduleType)
+			}
+
 			if isDllModuleType(d.unit.Type) {
 				env.setString(envMODULE_TAG, "DLL")
 				bindDllModulePrefix(v, env)
@@ -2821,7 +2825,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		if v.Name == tokGoEmbedPattern || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
 			importPath := modulePath
 
-			if imp := env.string(env_GO_IMPORT_PATH); imp != "" {
+			if imp := expandConfScalar(env.string(env_GO_IMPORT_PATH), env); imp != "" {
 				importPath = imp
 			}
 
@@ -2829,7 +2833,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokGoEmbedBindir, tokGoTestEmbedBindir, tokGoXtestEmbedBindir:
 		if v.Name == tokGoEmbedBindir || d.moduleStmt != nil && d.moduleStmt.Name == tokGoTest {
-			importPath := env.string(env_GO_IMPORT_PATH)
+			importPath := expandConfScalar(env.string(env_GO_IMPORT_PATH), env)
 
 			if importPath == "" {
 				importPath = modulePath
@@ -2852,7 +2856,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 			importPath := modulePath
 
-			if imp := env.string(env_GO_IMPORT_PATH); imp != "" {
+			if imp := expandConfScalar(env.string(env_GO_IMPORT_PATH), env); imp != "" {
 				importPath = imp
 			}
 
@@ -2861,7 +2865,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokAllGoTestSrcs:
 		dir := modulePath
 
-		if imp := env.string(env_GO_IMPORT_PATH); imp != "" {
+		if imp := expandConfScalar(env.string(env_GO_IMPORT_PATH), env); imp != "" {
 			dir = imp
 		}
 
@@ -2877,7 +2881,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 	case tokAllGoSrcs:
 		dir := modulePath
 
-		if imp := env.string(env_GO_IMPORT_PATH); imp != "" {
+		if imp := expandConfScalar(env.string(env_GO_IMPORT_PATH), env); imp != "" {
 			dir = imp
 		}
 
@@ -4252,14 +4256,18 @@ func pythonSourceModuleType(name TOK) string {
 	return ""
 }
 
+func confModuleType(name TOK, d *ModuleData) string {
+	if name == tokGoLibrary || d.nots != nil {
+		return "LIBRARY"
+	}
+
+	return pythonSourceModuleType(d.unit.Type)
+}
+
 func collectPythonSourceEntry(d *ModuleData, env Environment) {
 	d.pythonSourceCallback = true
 
 	moduleType := env.string(envMODULE_TYPE)
-
-	if moduleType == "" {
-		moduleType = pythonSourceModuleType(d.unit.Type)
-	}
 
 	if isPyProgramType(d.moduleStmt.Name) || moduleType != "PROGRAM" && moduleType != "DLL" {
 		return
