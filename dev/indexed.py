@@ -25,6 +25,9 @@ MAGIC = b"AYIDX\x00\x00\x01"
 HEADER = 64
 ENTRY = struct.Struct("<IIIIQQ")
 KIND_FILE, KIND_DIR = 1, 2
+# Set in an entry's mode when the archive had a symlink there: a check that
+# lstat()s the unpacked tree (ay's test-data read check) skips such entries.
+MODE_SYMLINK = 1 << 16
 ALIGN = 4096
 MAX_LINK_DEPTH = 40
 
@@ -111,18 +114,26 @@ def is_zip(path: str) -> bool:
         return stream.read(2) == b"PK"
 
 
+def zip_mode(info: zipfile.ZipInfo) -> int:
+    """The mode Go's archive/zip reports (and ay's unpacking applied)."""
+    if info.create_system in (3, 19):  # unix, macOS
+        return info.external_attr >> 16
+    mode = 0o444 if info.external_attr & 0x01 else 0o666
+    return (stat.S_IFDIR | 0o777) if info.external_attr & 0x10 or info.filename.endswith("/") else (stat.S_IFREG | mode)
+
+
 def members(path: str):
     """(ordinal, name, kind, mode, size, link) for every archive entry."""
     if is_zip(path):
         with zipfile.ZipFile(path) as archive:
             for ordinal, info in enumerate(archive.infolist()):
-                mode = info.external_attr >> 16
+                mode = zip_mode(info)
                 if info.is_dir() or stat.S_ISDIR(mode):
                     yield ordinal, info.filename, "dir", mode, 0, None
                 elif stat.S_ISLNK(mode):
                     yield ordinal, info.filename, "symlink", mode, 0, archive.read(info).decode("utf-8", "surrogateescape")
                 else:
-                    yield ordinal, info.filename, "file", mode or 0o644, info.file_size, None
+                    yield ordinal, info.filename, "file", mode, info.file_size, None
         return
     with tarfile.open(path, mode="r|*") as archive:
         for ordinal, member in enumerate(archive):
@@ -164,7 +175,9 @@ def collect(path: str) -> tuple[Tree, list[tuple[str, Node]]]:
             node.size = size
             node.member = ordinal
             files.append((name, node))
-        node.mode = mode & 0o7777
+        # Unpacking made every directory 0o755 and gave files their
+        # archive mode, which decides what a reader of the tree may open.
+        node.mode = 0o755 if kind == "dir" else mode & 0o7777
         tree.add(name, node)
     return tree, files
 
@@ -209,28 +222,33 @@ def layout(top: Node):
     order = [top]
     index_of_dir = {id(top): 0}
     names = [b""]
+    links = [False]
     first_child = {}
     queue = [top]
     while queue:
         following = []
         for directory in queue:
             children = sorted(
-                ((name.encode("utf-8", "surrogateescape"), final(child)) for name, child in directory.children.items()),
+                (
+                    (name.encode("utf-8", "surrogateescape"), final(child), child.kind == "symlink")
+                    for name, child in directory.children.items()
+                ),
                 key=lambda item: item[0],
             )
             first_child[id(directory)] = (len(order), len(children))
-            for encoded, child in children:
+            for encoded, child, link in children:
                 names.append(encoded)
                 order.append(child)
+                links.append(link)
                 if child.kind == "dir" and id(child) not in index_of_dir:
                     index_of_dir[id(child)] = len(order) - 1
                     following.append(child)
         queue = following
-    return order, names, first_child
+    return order, names, links, first_child
 
 
 def write(path: str, archive_path: str, top: Node, files: list[tuple[str, Node]]) -> None:
-    order, names, first_child = layout(top)
+    order, names, links, first_child = layout(top)
 
     reachable = {id(node) for node in order if node.kind == "file"}
     data_size = 0
@@ -243,14 +261,15 @@ def write(path: str, archive_path: str, top: Node, files: list[tuple[str, Node]]
 
     names_blob = bytearray()
     entries = bytearray()
-    for node, name in zip(order, names):
+    for node, name, link in zip(order, names, links):
         offset = len(names_blob)
         names_blob += name
+        mode = node.mode | (MODE_SYMLINK if link else 0)
         if node.kind == "dir":
             first, count = first_child[id(node)]
-            entries += ENTRY.pack(offset, len(name), KIND_DIR, node.mode, first, count)
+            entries += ENTRY.pack(offset, len(name), KIND_DIR, mode, first, count)
         else:
-            entries += ENTRY.pack(offset, len(name), KIND_FILE, node.mode, node.offset, node.size)
+            entries += ENTRY.pack(offset, len(name), KIND_FILE, mode, node.offset, node.size)
 
     names_offset = HEADER + len(entries)
     data_offset = (names_offset + len(names_blob) + ALIGN - 1) // ALIGN * ALIGN

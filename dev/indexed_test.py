@@ -56,8 +56,10 @@ class IndexedTest(unittest.TestCase):
         self.addCleanup(lambda: __import__("shutil").rmtree(directory))
         archive = directory / "in.tar.zst"
         with tarfile.open(archive, "w:zst") as stream:
-            for name, kind, value in members:
+            for name, kind, value, *mode in members:
                 info = tarfile.TarInfo(name)
+                if mode:
+                    info.mode = mode[0]
                 if kind == "file":
                     info.size = len(value)
                     stream.addfile(info, io.BytesIO(value))
@@ -129,6 +131,17 @@ class IndexedTest(unittest.TestCase):
             "a/file.txt": b"data",
             "link": b"data",
         })
+
+    def test_modes_follow_unpacking(self):
+        reader = self.pack([
+            ("d/secret", "file", b"x", 0o000),
+            ("d/link", "sym", "secret"),
+        ])
+        reader_entries = {reader.name(i): reader.entries[i] for i in range(len(reader.entries))}
+        self.assertEqual(reader_entries["d"][3], 0o755)
+        self.assertEqual(reader_entries["secret"][3], 0o000)
+        self.assertTrue(reader_entries["link"][3] & indexed.MODE_SYMLINK)
+        self.assertFalse(reader_entries["secret"][3] & indexed.MODE_SYMLINK)
 
     def test_root_marker_reroots_the_tree(self):
         reader = self.pack([

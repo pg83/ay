@@ -6,8 +6,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
+)
+
+const (
+	ownerRead = 0o400
+	ownerExec = 0o100
 )
 
 type fsBackend struct {
@@ -33,7 +39,21 @@ func (fs *OsFS) lookupRel(rel string) int {
 		return -1
 	}
 
-	return fs.tree.lookup(rel)
+	i := 0
+
+	for {
+		if !fs.tree.isDir(i) || fs.tree.mode(i)&ownerExec == 0 {
+			return -1
+		}
+
+		name, rest, more := strings.Cut(rel, "/")
+
+		if i = fs.tree.child(i, name); i < 0 || !more {
+			return i
+		}
+
+		rel = rest
+	}
 }
 
 func (fs *OsFS) readFileRel(rel string) [][]byte {
@@ -41,6 +61,10 @@ func (fs *OsFS) readFileRel(rel string) [][]byte {
 
 	if i < 0 {
 		throwFmt("open %s: %v", rel, syscall.ENOENT)
+	}
+
+	if fs.tree.mode(i)&ownerRead == 0 {
+		throwFmt("open %s: %v", rel, syscall.EACCES)
 	}
 
 	if fs.tree.isDir(i) {
@@ -64,7 +88,7 @@ func (fs *OsFS) readFileRel(rel string) [][]byte {
 func (fs *OsFS) readDirViewRel(dir STR, rel string) DirView {
 	i := fs.lookupRel(rel)
 
-	if i < 0 || !fs.tree.isDir(i) {
+	if i < 0 || !fs.tree.isDir(i) || fs.tree.mode(i)&ownerRead == 0 {
 		return DirView{}
 	}
 
@@ -99,8 +123,44 @@ func (fs *OsFS) sourcePathExists(rel string) bool {
 	return fs.lookupRel(rel) >= 0
 }
 
-func (fs *OsFS) testPathReadError(string) error {
-	return nil
+func (fs *OsFS) testPathReadError(rel string) error {
+	roots := []string{rel}
+
+	if i := fs.lookupRel(rel); i >= 0 && fs.tree.isDir(i) {
+		roots = nil
+
+		for _, packed := range fs.listdirRel(rel).names {
+			roots = append(roots, joinRel(rel, STR(packed>>1).string()))
+		}
+	}
+
+	var readErr error
+
+	for _, root := range roots {
+		fs.walk(root, func(name string, isDir bool) bool {
+			if readErr != nil {
+				return false
+			}
+
+			if isDir {
+				base := baseName(name)
+
+				return base != ".svn" && base != ".cache" && base != ".idea"
+			}
+
+			if strings.HasSuffix(name, ".pyc") {
+				return false
+			}
+
+			if i := fs.lookupRel(name); i >= 0 && fs.tree.mode(i)&indexedModeLink == 0 && fs.tree.mode(i)&ownerRead == 0 {
+				readErr = &os.PathError{Op: "open", Path: fs.rootSlash + name, Err: syscall.EACCES}
+			}
+
+			return false
+		})
+	}
+
+	return readErr
 }
 
 func (fs *OsFS) confRoot() string {

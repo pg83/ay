@@ -14,6 +14,7 @@ const (
 	indexedHeaderSize = 64
 	indexedEntrySize  = 32
 	indexedKindDir    = 2
+	indexedModeLink   = 1 << 16
 )
 
 type indexedEntry struct {
@@ -97,6 +98,10 @@ func (t *IndexedTree) name(i int) string {
 	e := &t.entries[i]
 
 	return unsafe.String(unsafe.SliceData(t.names[e.nameOff:]), e.nameLen)
+}
+
+func (t *IndexedTree) mode(i int) uint32 {
+	return t.entries[i].mode
 }
 
 func (t *IndexedTree) isDir(i int) bool {
