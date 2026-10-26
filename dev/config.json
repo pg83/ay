@@ -3417,7 +3417,7 @@
       "taxi/uservices/services/insurance-subscriptions-dispatcher",
       "taxi/uservices/services/maas"
     ],
-    "xfail": true,
+    "xfail": false,
     "slice_sha256": "6694a35eae16cd6b07d194a73fbe1063ec3578485d68344f2abeae936702c0de",
     "slice_url": "https://proxy.sandbox.yandex-team.ru/14127272587",
     "graph_sha256": "086cf334f5a0e8fc22a8108486e9c3777c5fe1c14e6fa6b7323f4be60cdd974d",
