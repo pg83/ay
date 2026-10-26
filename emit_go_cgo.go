@@ -443,48 +443,7 @@ func (e *EmitContext) goCgoImportPath() string {
 }
 
 func (e *EmitContext) goCgoLinkOFlags() []ANY {
-	p := e.instance.Platform
-	na := e.ctx.na
-
-	var gdb []string
-
-	if isGoExeModuleType(e.d.moduleStmt.Name) {
-		gdb = p.linkerSelectionGDBIndexFlags()
-	}
-
-	block := na.anys.alloc(4 + len(p.LinkPreludeExtra) + len(gdb) + len(e.peers.LDFlagsGlobal))
-	k := 0
-	push := func(x ANY) { block[k] = x; k++ }
-
-	if p.CompressDebugSections {
-		push(argWlCompressDebugSectionsZstd.any())
-	}
-
-	for _, s := range p.LinkPreludeExtra {
-		push(s)
-	}
-
-	push(argWlNoAsNeeded.any())
-
-	if p.PIC {
-		push(argFPIC.any())
-	}
-
-	for _, f := range gdb {
-		push(internStr(f).any())
-	}
-
-	if p.PIC {
-		push(argFPIC.any())
-	}
-
-	for _, flag := range e.peers.LDFlagsGlobal {
-		push(flag)
-	}
-
-	na.anys.commit(k)
-
-	return block[:k:k]
+	return e.ctx.na.anyConcat(e.localLinkerFlagValue(nil, nil).Args, e.peers.LDFlagsGlobal)
 }
 
 func (e *EmitContext) flushGoCgo2() {
@@ -536,11 +495,12 @@ func (e *EmitContext) flushGoCgo2() {
 	cflagsStr := goCgoCFlags(e.d)
 	linkOFlags := e.goCgoLinkOFlags()
 	linkOScripts := ctx.scripts[linkOScriptVFS.rel()]
-	inputs := na.vfs.alloc(len(linkOScripts) + 3 + ko)
+	inputs := na.vfs.alloc(len(linkOScripts) + 3 + ko + len(d.localLDFlags.Inputs))
 	ni := copy(inputs, linkOScripts)
 
 	ni += copy(inputs[ni:], []VFS{exportH, mainC, e.goCgoOut(d.cgoSrcs[0], ".cgo1.go")})
 	ni += copy(inputs[ni:], objOrder[:ko])
+	ni += copy(inputs[ni:], d.localLDFlags.Inputs)
 	na.vfs.commit(ni)
 
 	objArgs := na.anys.alloc(1 + nObjs + len(d.cgoLdflags))
@@ -598,7 +558,7 @@ func (e *EmitContext) flushGoCgo2() {
 				linkOFlags,
 				goCgoLinkOPostLd,
 				objArgs[:kd:kd],
-			), Env: goVcsEnv, Resources: e.peers.LDResources},
+			), Env: goVcsEnv, Resources: resourceKeyUnion(e.peers.LDResources, e.d.localLDFlags.Resources)},
 			Cmd{CmdArgs: na.chunkList(cmd2Args), Env: goEnv},
 		),
 		Env:       goEnv,

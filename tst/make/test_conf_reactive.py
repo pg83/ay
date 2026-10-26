@@ -2,6 +2,14 @@ from tst.make.lib import MakeTest
 
 
 class ConfReactiveTest(MakeTest):
+    def test_go_program_link_settings(self):
+        self.write("ya.make", "GO_PROGRAM(answer)\nSRCS(main.go)\nEND()\n")
+        self.write("main.go", "package main\nfunc main() {}\n")
+        node = self.node(self.graph(), "answer")
+        args = [arg for cmd in node["cmds"] for arg in cmd["cmd_args"]]
+        self.assertEqual(args.count("-Wl,--no-as-needed"), 1)
+        self.assertEqual(args.count("-Wl,--gdb-index"), 1)
+
     def test_cuda_nvprune_macro(self):
         self.write("ya.make", "PROGRAM(answer)\nNO_CUDA_NVPRUNE()\nSRCS(main.cpp)\nEND()\n")
         self.write("main.cpp", "int main() { return 0; }\n")
@@ -9,12 +17,32 @@ class ConfReactiveTest(MakeTest):
         args = [arg for cmd in node["cmds"] for arg in cmd["cmd_args"]]
         self.assertEqual(args.count("-L/CUDA:PRUNE=False"), 1)
 
+    def test_link_flags_order_and_inheritance(self):
+        self.write("ya.make", "PROGRAM(answer)\nNO_CUDA_NVPRUNE()\nLDFLAGS(-Le2e)\nSRCS(main.cpp)\nEND()\n")
+        self.write("main.cpp", "int main() { return 0; }\n")
+        node = self.node(self.graph(), "answer")
+        args = next(cmd["cmd_args"] for cmd in node["cmds"] if "-Le2e" in cmd["cmd_args"])
+        self.assertEqual(args.count("-Wl,--no-as-needed"), 1)
+        self.assertLess(args.index("-Wl,--gdb-index"), args.index("-L/CUDA:PRUNE=False"))
+        self.assertLess(args.index("-L/CUDA:PRUNE=False"), args.index("-Le2e"))
+
+    def test_shared_library_link_flags(self):
+        self.write("ya.make", "DLL(answer)\nNO_CUDA_NVPRUNE()\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        node = self.node(self.graph(), "libanswer.so")
+        args = next(cmd["cmd_args"] for cmd in node["cmds"] if "-L/CUDA:PRUNE=False" in cmd["cmd_args"])
+        self.assertEqual(args.count("-Wl,--no-as-needed"), 1)
+        self.assertEqual(args.count("-L/CUDA:PRUNE=False"), 1)
+        self.assertLess(args.index("-Wl,--gdb-index"), args.index("-L/CUDA:PRUNE=False"))
+        self.assertLess(args.index("-L/CUDA:PRUNE=False"), args.index("-Wl,-z,notext"))
+
     def test_conditional_append_is_reset(self):
         self.write("main.cpp", "int main() { return 0; }\n")
         for setters, expected in (
             ("DISABLE(CUDA_NVPRUNE)\nDISABLE(CUDA_NVPRUNE)", 1),
             ("DISABLE(CUDA_NVPRUNE)\nENABLE(CUDA_NVPRUNE)", 0),
             ("SET(CUDA_NVPRUNE no)", 1),
+            ('SET_LIST_PRE_SUF(CUDA_NVPRUNE n "" o)', 1),
             ("SET(CUDA_NVPRUNE no)\nSET_APPEND(CUDA_NVPRUNE)", 0),
             ("SET(CUDA_NVPRUNE)\nDEFAULT(CUDA_NVPRUNE no)", 0),
         ):

@@ -72,6 +72,10 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 		return nil
 	}
 
+	if parameter == "" && !strings.ContainsAny(value, "$ ") {
+		return &SetStmt{Name: name, NameEnv: internEnv(name), Value: value, Line: v.Line}
+	}
+
 	locals := env.clone()
 
 	locals.unbind(envBINDIR)

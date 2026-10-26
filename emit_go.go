@@ -667,10 +667,9 @@ func (e *EmitContext) goClassifyClosure(resolved []ResolvedPeer, closurePaths []
 	return
 }
 
-func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadiaLibm bool, soname string, globals []VFS, ldFlagsGlobal, objAddLibsGlobal, goLDFlagsGlobal []ANY) []ANY {
-	gdb := p.linkerSelectionGDBIndexFlags()
+func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadiaLibm bool, soname string, globals []VFS, localLDFlags, ldFlagsGlobal, objAddLibsGlobal, goLDFlagsGlobal []ANY) []ANY {
 	objAddLibs := appendArgGroupStr(nil, objAddLibsGlobal)
-	bound := len(objAddLibs) + 2 + len(p.SysrootArgs) + len(goExtldWholeArchive) + len(globals) + 1 + len(p.LinkPreludeExtra) + 1 + 2 + len(gdb) + len(ldFlagsGlobal) + len(goLDFlagsGlobal) + len(p.Linker.SystemLibs) + 1
+	bound := len(objAddLibs) + 2 + len(p.SysrootArgs) + len(goExtldWholeArchive) + len(globals) + len(localLDFlags) + len(ldFlagsGlobal) + len(goLDFlagsGlobal) + len(p.Linker.SystemLibs) + 1
 	block := na.anys.alloc(bound)
 	k := 0
 	push := func(x ANY) { block[k] = x; k++ }
@@ -694,26 +693,8 @@ func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadi
 	push(goExtldWholeArchive[1])
 	push(goExtldWholeArchive[2])
 
-	if p.CompressDebugSections {
-		push(argWlCompressDebugSectionsZstd.any())
-	}
-
-	for _, x := range p.LinkPreludeExtra {
+	for _, x := range localLDFlags {
 		push(x)
-	}
-
-	push(argWlNoAsNeeded.any())
-
-	if p.PIC {
-		push(argFPIC.any())
-	}
-
-	for _, f := range gdb {
-		push(internStr(f).any())
-	}
-
-	if p.PIC {
-		push(argFPIC.any())
 	}
 
 	for _, x := range ldFlagsGlobal {
@@ -1299,6 +1280,11 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	na.noderefs.commit(k)
 
 	env := goCmdEnv(ctx, instance.Platform, d.tc)
+	localLD := e.localLinkerFlagValue(nil, nil)
+
+	if len(localLD.Inputs) > 0 {
+		inputs = appendInputChunks(na, inputs, na.inputList(localLD.Inputs))
+	}
 
 	goCmd := Cmd{CmdArgs: na.chunkList(
 		head,
@@ -1316,12 +1302,12 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		goExeCmdVcs[1:],
 		na.anyList(vcsGoPath.any()),
 		goExeCmdExtld,
-		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm, soname, peerGlobalPaths, e.peers.LDFlagsGlobal, peerObjAddLibsGlobal, e.peers.GoLDFlagsGlobal),
+		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm, soname, peerGlobalPaths, localLD.Args, e.peers.LDFlagsGlobal, peerObjAddLibsGlobal, e.peers.GoLDFlagsGlobal),
 		testArgs,
 		tail[:nt:nt],
 		testTail,
 		goToolCmdEnd,
-	), Env: env, Resources: e.peers.LDResources}
+	), Env: env, Resources: resourceKeyUnion(e.peers.LDResources, localLD.Resources)}
 
 	sbomJSON := build(dir, "/__sbomdata.json")
 

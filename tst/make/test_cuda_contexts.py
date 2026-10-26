@@ -9,6 +9,26 @@ class CudaContextsTest(MakeTest):
         roots = [arg.replace("$(SOURCE_ROOT)", "$(S)").replace("$(BUILD_ROOT)", "$(B)") for command in node["cmds"] for arg in command["cmd_args"]]
         return [re.sub(r"\$\((\w+)-[^)]*\)|\$\(B\)/resources/(\w+)", lambda m: f"$({m[1] or m[2]})", arg) for arg in roots]
 
+    def test_cuda_warning_condition(self):
+        self.write("ya.make", 'LIBRARY()\nNO_COMPILER_WARNINGS()\nIF(NO_COMPILER_WARNINGS == "yes")\nSRCS(answer.cu)\nELSE()\nSRCS(wrong.cpp)\nENDIF()\nEND()\n')
+        self.write("answer.cu", "__global__ void answer(int* value) { *value = 42; }\n")
+        self.write("wrong.cpp", "int wrong() { return 0; }\n")
+        node = self.node(self.graph(), "answer.cu.o")
+        args = [arg for cmd in node["cmds"] for arg in cmd["cmd_args"]]
+        self.assertEqual(args.count("-w"), 1)
+
+    def test_cuda_source_resources_in_test_metadata(self):
+        self.write("ya.make", f"GTEST()\nPEERDIR({PROJECT}/cuda)\nDATA(sbr://123456789)\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", "#include <library/cpp/testing/gtest/gtest.h>\nTEST(Answer, Value) {}\n")
+        self.write("cuda/ya.make", "LIBRARY()\nSRCS(answer.cu)\nEND()\n")
+        self.write("cuda/answer.cu", "__global__ void answer(int* value) { *value = 42; }\n")
+        graph = self.graph("-t")
+        for suite in ("gtest", "validate_data_sbr"):
+            meta = next(node for node in graph["graph"] if any(path.endswith(f"/test-results/{suite}/meta.json") for path in node["outputs"]))
+            args = [arg for cmd in meta["cmds"] for arg in cmd["cmd_args"]]
+            for resource in ("CUDA_HOST_TOOLCHAIN", "CUDA"):
+                self.assertTrue(any(arg.startswith(f"{resource}_RESOURCE_GLOBAL::$(") for arg in args), (suite, resource))
+
     def test_cuda_outputs_in_pic_library(self):
         self.write("ya.make", f"DLL(answer)\nPEERDIR({PROJECT}/cuda)\nEND()\n")
         self.write("cuda/ya.make", "CUDA_DEVICE_LINK_LIBRARY()\nSRCS(answer.cu)\nNVCC_DEVICE_LINK(answer.cu)\nEND()\n")

@@ -28,7 +28,9 @@ class NativeConfigTest(MakeTest):
         for macros in ("WINDOWS_LONG_PATH_MANIFEST()", "WINDOWS_MANIFEST(build/long-path.manifest)"):
             with self.subTest(macros=macros):
                 self.write("ya.make", f"PROGRAM(answer)\n{macros}\nSRCS(main.cpp)\nEND()\n")
-                self.graph("--target-platform=default-win-x86_64")
+                graph = self.graph("--target-platform=default-win-x86_64")
+                node = next(node for node in graph["graph"] if any(path.removesuffix(".exe") == f"$(B)/{PROJECT}/answer" for path in node["outputs"]))
+                self.assertIn("$(S)/build/long-path.manifest", node["inputs"])
 
     def test_compiler_features(self):
         self.write("answer.cpp", "int answer() { return 42; }\n")

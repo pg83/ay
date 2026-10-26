@@ -73,7 +73,7 @@ func (pm *IncludeParserManager) confFile(rel string) *ConfFile {
 	return f
 }
 
-func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environment) ([]string, map[STR]*ConfMacro) {
+func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environment) ([]string, map[STR]*ConfMacro, *ConfConditions) {
 	macros := map[STR]*ConfMacro{}
 
 	var (
@@ -167,7 +167,7 @@ func sysinclFiles(pm *IncludeParserManager, root *ConfFile, platformEnv Environm
 		bindConfCommandVariable(name, env, platformEnv, map[string]bool{})
 	}
 
-	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env)), macros
+	return strings.Fields(expandConfScalar(env.string(envSYSINCL), env)), macros, newConfConditions(stmts)
 }
 
 func bindConfCommandVariable(name string, values, target Environment, seen map[string]bool) {

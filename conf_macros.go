@@ -40,7 +40,13 @@ type ConfMacro struct {
 	calls []ConfMacroCall
 }
 
-func (f *ConfFile) addMacro(header string, lines []string) {
+type confMacroBody struct {
+	header      string
+	calls       []ConfMacroCall
+	unsupported bool
+}
+
+func (f *ConfFile) addMacro(header string, calls []ConfMacroCall) {
 	name, params, opened := strings.Cut(strings.TrimPrefix(header, "macro "), "(")
 	params, closed := strings.CutSuffix(strings.TrimSpace(params), ")")
 
@@ -49,7 +55,6 @@ func (f *ConfFile) addMacro(header string, lines []string) {
 	}
 
 	sig, specialized := parseConfMacroSignature(f.rel, params)
-	calls := confMacroCalls(lines)
 	key := internStr(strings.TrimSpace(name))
 
 	if !specialized && len(calls) == 0 {
@@ -71,41 +76,34 @@ func (f *ConfFile) addMacro(header string, lines []string) {
 	}
 }
 
-func confMacroCalls(lines []string) []ConfMacroCall {
-	var calls []ConfMacroCall
+func (body *confMacroBody) addLine(line string) {
+	if body.unsupported {
+		return
+	}
 
-	for _, raw := range lines {
-		line := strings.TrimSpace(raw)
+	if property, ok := strings.CutPrefix(line, "."); ok {
+		key, _, _ := strings.Cut(property, "=")
 
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+		switch strings.TrimSpace(key) {
+		case "ALLOWED_IN_LINTERS_MAKE", "SEM", "STRUCT_SEM":
+			return
 		}
-
-		if property, ok := strings.CutPrefix(line, "."); ok {
-			key, _, _ := strings.Cut(property, "=")
-
-			switch strings.TrimSpace(key) {
-			case "ALLOWED_IN_LINTERS_MAKE", "SEM", "STRUCT_SEM":
-				continue
-			}
-
-			return nil
-		}
-
+	} else {
 		name, args, opened := strings.Cut(line, "(")
 
 		name = strings.TrimSpace(name)
 
 		args, closed := strings.CutSuffix(args, ")")
 
-		if !opened || !closed || !isIdentShapedName(name) {
-			return nil
-		}
+		if opened && closed && isIdentShapedName(name) {
+			body.calls = append(body.calls, ConfMacroCall{name: internStr(name), args: strings.TrimSpace(args)})
 
-		calls = append(calls, ConfMacroCall{name: internStr(name), args: strings.TrimSpace(args)})
+			return
+		}
 	}
 
-	return calls
+	body.calls = nil
+	body.unsupported = true
 }
 
 func parseConfMacroSignature(rel, params string) (sig ConfMacroSignature, specialized bool) {

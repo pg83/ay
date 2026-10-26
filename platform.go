@@ -12,7 +12,6 @@ var (
 )
 
 type PlatformConf struct {
-	jdkConfig           *ConfFile
 	GoStdVersion        string
 	Linker              *LinkerConf
 	Parsers             *IncludeParserManager
@@ -21,7 +20,7 @@ type PlatformConf struct {
 }
 
 func readPlatformConf(fs FS, parsers *IncludeParserManager) PlatformConf {
-	return PlatformConf{jdkConfig: readJdkConfig(parsers), GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(parsers), Parsers: parsers, YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
+	return PlatformConf{GoStdVersion: confGoStdVersion(fs), Linker: readLinkerConf(parsers), Parsers: parsers, YqlStableABI: confYqlStableABI(fs), ProtoHeaderEpilogue: confProtoHeaderEpilogue(fs)}
 }
 
 func confProtoHeaderEpilogue(fs FS) bool {
@@ -31,7 +30,7 @@ func confProtoHeaderEpilogue(fs FS) bool {
 }
 
 type Platform struct {
-	jdkConfig             *ConfFile
+	conditions            *ConfConditions
 	YqlStableABI          bool
 	ProtoHeaderEpilogue   bool
 	picVariant            *Platform
@@ -139,7 +138,6 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 	}
 
 	p := &Platform{
-		jdkConfig:             pc.jdkConfig,
 		YqlStableABI:          pc.YqlStableABI,
 		ProtoHeaderEpilogue:   pc.ProtoHeaderEpilogue,
 		OS:                    os,
@@ -221,10 +219,8 @@ func newPlatform(os OS, isa ISA, buildType string, tc *Toolchain, flags map[stri
 
 	p.Go = newGoStd(goStdVersion)
 	p.ifEnv = buildPlatformIfEnv(p)
-	p.updateJdkConfig(p.ifEnv, envJdkVersion, nil)
-	p.updateJdkConfig(p.ifEnv, envJdkRealVersion, nil)
 	p.Linker = pc.Linker.flags(p)
-	p.Sysincl, p.confMacros = sysinclFiles(pc.Parsers, root, p.ifEnv)
+	p.Sysincl, p.confMacros, p.conditions = sysinclFiles(pc.Parsers, root, p.ifEnv)
 	p.peerPolicies = pc.Parsers.peerPolicies(strings.Fields(expandConfScalar(p.ifEnv.string(envPeerdirsRulesPath), p.ifEnv)))
 	p.BuildTypeUpperSTR = internStr(p.ifEnv.string(envBUILD_TYPE))
 	p.DebugInfoFlags = debugInfoFlags(p.ifEnv, flags)
@@ -262,12 +258,6 @@ func buildPlatformIfEnv(p *Platform) Environment {
 
 	for k, v := range p.Flags {
 		env.setFromStringID(k, v)
-	}
-
-	initializePerlEnv(env)
-
-	if !env.hasBindingID(envJdkRealVersion) {
-		env.setString(envJdkRealVersion, "17")
 	}
 
 	if !env.bool(envArcadiaPythonUnicodeSize) {

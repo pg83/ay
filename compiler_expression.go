@@ -142,6 +142,16 @@ func commandArgumentExpression(text string, resolve func(string, bool) ([]string
 						throwFmt("could not parse compiler command: expected identifier in %q", text)
 					}
 
+					if !literal && name == "input" && i < len(text) && text[i] == ':' {
+						i++
+
+						for i < len(text) && text[i] != '}' {
+							i++
+						}
+
+						name = text[nameStart:i]
+					}
+
 					if i == len(text) || text[i] != '}' {
 						throwFmt("could not parse compiler command: expected } in %q", text)
 					}

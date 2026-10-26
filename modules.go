@@ -265,6 +265,8 @@ type ModuleData struct {
 	flatcAddInclGlobal       []VFS
 	clangWarnings            []ANY
 	ldFlags                  []ANY
+	localLDFlags             LocalLinkerFlags
+	localLDFlagsReady        bool
 	rpathFlagsGlobal         []ANY
 	objAddLibsGlobal         []ANY
 	srcDirs                  []VFS
@@ -827,11 +829,14 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		(isPythonProtoModule(d) || d.unit.Type == tokPy2Library || d.unit.Type == tokPy3Library || d.unit.Type == tokPy23Library)
 	d.cpuCheck = env.string(envCpuCheck) == "yes"
 	d.useSSE4 = env.string(envUSE_SSE4) == "yes"
+	d.flags.NoCompilerWarnings = env.bool(envNoCompilerWarnings)
 
 	nativeSources := d.srcs[:0]
 
 	for _, meta := range d.srcs {
-		if srcExtClassOf(meta.Source) == srcExtCSource {
+		sourceClass := srcExtClassOf(meta.Source)
+
+		if sourceClass == srcExtCSource {
 			if rel, rooted := strings.CutPrefix(meta.Source.string(), "$S/"); rooted {
 				meta.Source = sourceClean(rel).any()
 			}
@@ -1380,6 +1385,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
+			platform.initConfModule(env, v.Name.string(), d.unit.Tag.string(), d.setVars)
 			env.setString(envPeerdirTags, expandAssignedScalarVarRef(modulePeerTags(v, d.unit, language), env))
 			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
@@ -1718,8 +1724,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			value, textInputs := expandSourceScalarInputValue(sourceValue, env)
-			perlMask := perlInputMask(v.NameEnv)
-			perlChanged := perlMask != 0 && env.string(v.NameEnv) != value
 
 			env.setFromString(v.NameEnv, value)
 			env.setTextInputs(v.NameEnv, textInputs)
@@ -1739,11 +1743,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.setVars[internStr(v.Name)] = internStr(value)
-			platform.updateJdkConfig(env, v.NameEnv, d.setVars)
-
-			if perlChanged {
-				recalcPerlEnv(env, platform, d.setVars, perlMask)
-			}
+			platform.recalcConf(env, v.NameEnv, d.setVars)
 
 			if v.Name == "SWIG_LANG" {
 				d.unit.SwigLang = internStr(value)
@@ -1872,27 +1872,19 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.defaultVarOrder = append(d.defaultVarOrder, internStr(v.VarName))
 			}
 
-			perlMask := perlInputMask(v.NameEnv)
-			perlChanged := perlMask != 0 && !bound
-
 			env.setDefaultString(v.NameEnv, value)
 
 			if !bound {
 				d.captureResourcePeerPolicy(v.VarName, env)
-				platform.updateJdkConfig(env, v.NameEnv, d.setVars)
-			}
 
-			if !bound && slices.Contains(perlConfigOutputs, v.NameEnv) {
 				if d.setVars == nil {
 					d.setVars = map[STR]STR{}
 				}
 
 				d.setVars[internStr(v.VarName)] = internStr(value)
+				platform.recalcConf(env, v.NameEnv, d.setVars)
 			}
 
-			if perlChanged {
-				recalcPerlEnv(env, platform, d.setVars, perlMask)
-			}
 		case *ConfigureFileStmt:
 			expanded := *v
 
@@ -2135,33 +2127,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					}
 				}
 
-				var perlMask uint16
-
-				if v.Name == tokEnable || v.Name == tokDisable || v.Name == tokSetAppend {
-					for i, arg := range expanded.Args {
-						if v.Name == tokSetAppend && i > 0 {
-							break
-						}
-
-						key := internEnv(arg.string())
-						mask := perlInputMask(key)
-
-						if mask == 0 {
-							continue
-						}
-
-						if v.Name == tokEnable && env.string(key) == "yes" || v.Name == tokDisable && env.string(key) == "no" {
-							continue
-						}
-
-						if v.Name == tokSetAppend && len(expanded.Args) < 2 {
-							continue
-						}
-
-						perlMask |= mask
-					}
-				}
-
 				d.recurses = appendConfigurationRecurses(d.recurses, modulePath, expanded, platform)
 
 				if expanded.Name == tokLargeFiles {
@@ -2179,18 +2144,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					d.captureCpuCheckMacro(expanded, env)
 				}
 
-				if expanded.Name == tokEnable || expanded.Name == tokDisable || expanded.Name == tokSetAppend {
+				if expanded.Name == tokEnable || expanded.Name == tokDisable || expanded.Name == tokSetAppend || expanded.Name == tokSetListPreSuf {
 					for i, arg := range expanded.Args {
-						if expanded.Name == tokSetAppend && i > 0 {
+						if (expanded.Name == tokSetAppend || expanded.Name == tokSetListPreSuf) && i > 0 {
 							break
 						}
 
-						platform.updateJdkConfig(env, internEnv(arg.string()), d.setVars)
+						platform.recalcConf(env, internEnv(arg.string()), d.setVars)
 					}
-				}
-
-				if perlMask != 0 {
-					recalcPerlEnv(env, platform, d.setVars, perlMask)
 				}
 			}
 		}
@@ -2709,14 +2670,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.flags.NoUtil = true
 	case tokCompileCAsCxx:
 		env.setString(envExtraCFlags, expandConfScalar("$C_AS_CXX_FLAGS", env))
-	case tokNoCompilerWarnings:
-		if !d.flags.NoCompilerWarnings {
-			id := envCudaNvccFlags
-
-			env.setString(id, env.string(id)+" -w")
-		}
-
-		d.flags.NoCompilerWarnings = true
 	case tokNoWshadow:
 		d.flags.NoWShadow = true
 	case tokNoExportDynamicSymbols:
@@ -3355,6 +3308,12 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			env.setBool(internEnv(a), true)
 			d.captureResourcePeerPolicy(a, env)
 
+			if d.setVars == nil {
+				d.setVars = map[STR]STR{}
+			}
+
+			d.setVars[internStr(a)] = strYes
+
 			switch a {
 			case "SANITIZER_TYPE":
 				setupPythonImportMask(env, d)
@@ -3893,6 +3852,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				value = expandSourceScalarVarRef(value, env)
 			}
 
+			original := value
+
 			if name == importMaskVariable {
 				value = appendPythonImportMask(value, env, d)
 			} else if prev, ok := env.lookup(name); ok && prev != "" {
@@ -3910,7 +3871,11 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				d.setVars = map[STR]STR{}
 			}
 
-			d.setVars[internStr(name)] = internStr(value)
+			if previous := d.setVars[internStr(name)]; previous != 0 {
+				original = previous.string() + " " + original
+			}
+
+			d.setVars[internStr(name)] = internStr(original)
 		}
 	case tokInducedDeps:
 

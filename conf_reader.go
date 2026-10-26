@@ -46,6 +46,8 @@ type ConfFile struct {
 	branches []ConfBranch
 	stmts    []ConfStmt
 	macros   map[STR]*ConfMacro
+	modules  map[string]string
+	variants map[string][]string
 }
 
 func readConfFile(rel, text string) *ConfFile {
@@ -53,13 +55,14 @@ func readConfFile(rel, text string) *ConfFile {
 	stack := []int{0}
 	selects := []string{""}
 	skipped := []bool{false}
+	blocks := []string{""}
+	owners := []string{""}
 	previous := 0
 	pending := ""
 	lines := strings.Split(text, "\n")
-	macroStarts := map[int]int{}
-	macroHeaders := map[int]string{}
+	macroBodies := map[int]*confMacroBody{}
 
-	for lineNo, raw := range lines {
+	for _, raw := range lines {
 		line := strings.TrimSpace(raw)
 
 		if pending != "" {
@@ -75,6 +78,10 @@ func readConfFile(rel, text string) *ConfFile {
 			continue
 		}
 
+		if body := macroBodies[stack[len(stack)-1]]; body != nil && !strings.HasPrefix(line, "}") {
+			body.addLine(line)
+		}
+
 		for strings.HasPrefix(line, "}") {
 			if len(stack) == 1 {
 				throwFmt("conf: unmatched } in %s", rel)
@@ -82,8 +89,8 @@ func readConfFile(rel, text string) *ConfFile {
 
 			previous = stack[len(stack)-1]
 
-			if start, ok := macroStarts[previous]; ok {
-				conf.addMacro(macroHeaders[previous], lines[start:lineNo])
+			if body := macroBodies[previous]; body != nil {
+				conf.addMacro(body.header, body.calls)
 			}
 
 			stack = stack[:len(stack)-1]
@@ -99,7 +106,7 @@ func readConfFile(rel, text string) *ConfFile {
 		top := stack[len(stack)-1]
 
 		if name, value, op, ok := confStmtAssignment(line); ok {
-			if !skipped[top] {
+			if !skipped[top] && blocks[top] != "macro" {
 				conf.stmts = append(conf.stmts, ConfStmt{branch: top, name: name, value: value, op: op})
 			}
 
@@ -113,17 +120,50 @@ func readConfFile(rel, text string) *ConfFile {
 		header := strings.TrimSpace(strings.TrimSuffix(line, "{"))
 		branch := ConfBranch{parent: top, cond: condFalse}
 		selectVar := ""
+		block := ""
+		owner := owners[top]
 
 		switch {
-		case strings.HasPrefix(header, "when "):
+		case strings.HasPrefix(header, "multimodule "):
+			owner = strings.TrimSpace(strings.TrimPrefix(header, "multimodule "))
+			branch.cond = nil
+		case strings.HasPrefix(header, "module "):
+			name, parent, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(header, "module ")), ":")
+
+			name, parent = strings.TrimSpace(name), strings.TrimSpace(parent)
+
+			if conf.modules == nil {
+				conf.modules = map[string]string{}
+			}
+
+			if owner != "" {
+				if conf.variants == nil {
+					conf.variants = map[string][]string{}
+				}
+
+				fullName := name + "__from__" + owner
+
+				conf.variants[owner] = append(conf.variants[owner], fullName)
+				name = fullName
+			}
+
+			conf.modules[name] = parent
+			branch.expr = `($env` + name + ` == "yes")`
+			block = "module"
+		case strings.HasPrefix(header, "macro "):
+			name, _, _ := strings.Cut(strings.TrimPrefix(header, "macro "), "(")
+
+			branch.expr = `($env` + name + ` == "yes")`
+			block = "macro"
+		case strings.HasPrefix(header, "when "), strings.HasPrefix(header, "when("):
 			branch.expr = strings.TrimSpace(strings.TrimPrefix(header, "when"))
-		case strings.HasPrefix(header, "elsewhen "):
+		case strings.HasPrefix(header, "elsewhen "), strings.HasPrefix(header, "elsewhen("):
 			branch.previous = previous
 			branch.expr = strings.TrimSpace(strings.TrimPrefix(header, "elsewhen"))
 		case header == "otherwise":
 			branch.previous = previous
 			branch.cond = nil
-		case strings.HasPrefix(header, "select "):
+		case strings.HasPrefix(header, "select "), strings.HasPrefix(header, "select("):
 			selectVar = strings.Trim(strings.TrimSpace(strings.TrimPrefix(header, "select")), "()$ ")
 			branch.cond = nil
 		case selects[top] != "" && strings.HasSuffix(header, "?"):
@@ -142,13 +182,14 @@ func readConfFile(rel, text string) *ConfFile {
 		}
 
 		conf.branches = append(conf.branches, branch)
+		blocks = append(blocks, block)
+		owners = append(owners, owner)
 		skipped = append(skipped, skip)
 		selects = append(selects, selectVar)
 		stack = append(stack, len(conf.branches)-1)
 
 		if strings.HasPrefix(header, "macro ") {
-			macroStarts[len(conf.branches)-1] = lineNo + 1
-			macroHeaders[len(conf.branches)-1] = header
+			macroBodies[len(conf.branches)-1] = &confMacroBody{header: header}
 		}
 
 		previous = 0
