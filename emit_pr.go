@@ -496,27 +496,40 @@ func replaceAuxToolArg(arg ANY, tools []PrFileToken) (ANY, bool) {
 }
 
 func (e *EmitContext) runProgramInputVFS(rel string) VFS {
-	ctx, instance, d := e.ctx, e.instance, e.d
-
 	if vfsHasPrefix(rel) {
-		return e.requireProducedInput("IN", rel, copyFileInputVFS(ctx.fs, instance.Path, rel))
+		return e.requireProducedInput("IN", rel, copyFileInputVFS(e.ctx.fs, e.instance.Path, rel))
 	}
 
+	return e.ctx.programInputVFS(e.instance, e.d.srcDirs, rel)
+}
+
+func (ctx *GenCtx) programInputVFS(instance ModuleInstance, srcDirs []VFS, rel string) VFS {
+	if vfsHasPrefix(rel) {
+		input := intern(rel)
+
+		if input.isBuild() {
+			return buildClean(input.relString())
+		}
+
+		return sourceClean(input.relString())
+	}
+
+	registry := ctx.scannerForPlatform(instance.Platform).codegen
 	buildVFS := buildJoinClean(instance.Path.relString(), rel)
 
-	if e.codegen.lookup(buildVFS) != nil {
+	if registry.lookup(buildVFS) != nil {
 		return buildVFS
 	}
 
 	if ctx.fs.isFile(srcRootRel, rel) {
-		return source(rel)
+		return sourceClean(rel)
 	}
 
-	if rootBuild := buildClean(rel); e.codegen.use(rootBuild) != nil {
+	if rootBuild := buildClean(rel); registry.use(rootBuild) != nil {
 		return rootBuild
 	}
 
-	return e.resolveModuleSourceVFS(internStr(rel).any(), d.srcDirs)
+	return resolveSourceOrGeneratedVFS(ctx, instance, rel, srcDirs)
 }
 
 func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {

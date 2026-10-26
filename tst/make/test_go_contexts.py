@@ -4,6 +4,27 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class GoContextsTest(MakeTest):
+    def test_java_recurse_collects_proto_go_checks(self):
+        self.write("ya.make", "JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nEND()\nRECURSE(schema)\n")
+        self.write("Main.java", "public class Main {}\n")
+        self.write("schema/ya.make", "PROTO_LIBRARY()\nEXCLUDE_TAGS(PY_PROTO PY3_PROTO)\nSRCS(answer.proto)\nEND()\n")
+        self.write("schema/answer.proto", f'syntax = "proto3";\npackage e2e;\noption go_package = "a.yandex-team.ru/{PROJECT}/schema";\nmessage Answer {{}}\n')
+        graph = self.graph("-t", "--add-modules-to-results")
+        self.node(graph, "schema/test-results/govet/meta.json")
+
+    def test_cgo_test_keeps_source_module_context(self):
+        self.write("ya.make", "RECURSE(lib/gotest)\n")
+        self.write("lib/gotest/ya.make", f"GO_TEST_FOR({PROJECT}/lib)\nEND()\n")
+        self.write("lib/ya.make", "GO_LIBRARY()\nCGO_SRCS(answer.go)\nGO_TEST_SRCS(answer_test.go)\nEND()\n")
+        self.write("lib/answer.go", 'package answer\n/*\n#include "answer.h"\n*/\nimport "C"\nfunc Answer() int { return int(C.answer()) }\n')
+        self.write("lib/answer.h", "int answer(void);\n")
+        self.write("lib/answer_test.go", 'package answer\nimport "testing"\nfunc TestAnswer(t *testing.T) {}\n')
+        graph = self.graph("-t")
+        node = self.node(graph, "lib/gotest/answer.cgo1.go")
+        args = [arg.replace("$(SOURCE_ROOT)", "$(S)") for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn(f"a.yandex-team.ru/{PROJECT}/lib", args)
+        self.assertIn(f"-I$(S)/{PROJECT}/lib", args)
+
     def test_library_link_flags(self):
         self.write("ya.make", "GO_LIBRARY()\nGO_LINK_FLAGS(-X e2e.version=42)\nSRCS(answer.go)\nEND()\n")
         self.write("answer.go", 'package e2e\nvar version string\n')

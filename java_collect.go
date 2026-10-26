@@ -239,7 +239,13 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 
 	if jm.unit.proto {
 		d.expandJavaProtobufPeers()
+
+		if len(d.evSrcs) > 0 {
+			d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: "library/cpp/eventlog/proto"})
+		}
 	}
+
+	bindRunProgramCalls(d.runPrograms, env)
 
 	if jm.unit.fbs {
 		d.env = env.cloneInto(new(EnvStore))
@@ -287,6 +293,8 @@ func collectJavaAutoinclude(ctx *GenCtx, jm *JavaModule, d *JavaData, env Enviro
 func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, env Environment) {
 	for _, s := range stmts {
 		switch v := s.(type) {
+		case *IncludeStmt:
+			ctx.withIncludedStmts(v, env, func(included []Stmt) { collectJavaStmts(ctx, jm, d, included, env) })
 		case *MissingIncludeStmt:
 			throwFmt("%s:%d: INCLUDE file %s not found", jm.dir, v.Line, v.Path)
 		case *ModuleStmt:
@@ -361,6 +369,8 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 					d.srcs = append(d.srcs, ss)
 				}
 			}
+		case *RunProgramStmt:
+			d.runPrograms = append(d.runPrograms, captureRunProgram(v, env))
 		case *RunPythonStmt:
 			d.runPython = append(d.runPython, expandRunPythonStmt(v, env))
 		case *FromSandboxStmt:
@@ -396,6 +406,15 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				}
 			}
 		case *UnknownStmt:
+			if v.Name == tokBundle || v.Name == tokBundleOutput {
+				expanded := *v
+
+				expanded.Args = expandStmtTokens(v.Args, env)
+				d.bundles = append(d.bundles, parseBundleEntries(expanded)...)
+
+				continue
+			}
+
 			if v.Name == tokCopyFile || v.Name == tokCopyFileWithContext {
 				args := expandStmtTokens(v.Args, env)
 
@@ -922,6 +941,14 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		}
 	case "USE_COMMON_GOOGLE_APIS":
 		d.commonGoogleAPIs = true
+	case "STYLE_RUFF", "STYLE_PYTHON":
+		style := "ruff"
+
+		if name == "STYLE_PYTHON" {
+			style = "black"
+		}
+
+		d.peerStmts = append(d.peerStmts, JavaPeerSpec{dir: pythonStyleCheck(style, env).Peer})
 	}
 }
 

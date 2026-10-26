@@ -289,6 +289,8 @@ type JavaData struct {
 	flatcFlags             []ANY
 	evSrcs                 []string
 	copyFiles              []CopyFileEntry
+	runPrograms            []*RunProgramStmt
+	bundles                []BundleEntry
 	runPython              []*RunPythonStmt
 	fromSandboxes          []*FromSandboxStmt
 	files                  []string

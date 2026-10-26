@@ -4,6 +4,15 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class TestVariantsTest(MakeTest):
+    def test_zero_ram_disk_requirement_cancels_previous_value(self):
+        self.write("test_answer.py", "def test_answer():\n    assert 6 * 7 == 42\n")
+        for size in (0, 1):
+            with self.subTest(size=size):
+                self.write("ya.make", f"PY3TEST()\nTEST_SRCS(test_answer.py)\nREQUIREMENTS(ram_disk:4)\nREQUIREMENTS(ram_disk:{size})\nEND()\n")
+                node = self.node(self.graph("-t"), "test-results/py3test/meta.json")
+                args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+                self.assertEqual("--requires-ram-disk" in args, size > 0)
+
     def test_fuzzer_dictionary(self):
         self.write("ya.make", f"FUZZ()\nSRCS(fuzz.cpp)\nFUZZ_DICTS({PROJECT}/words.dict)\nEND()\n")
         self.write("fuzz.cpp", '#include <stddef.h>\n#include <stdint.h>\nextern "C" int LLVMFuzzerTestOneInput(const uint8_t*, size_t) { return 0; }\n')

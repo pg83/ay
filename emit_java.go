@@ -11,17 +11,18 @@ var (
 )
 
 type javaNodeBuilder struct {
-	ctx       *GenCtx
-	p         *Platform
-	cmds      []Cmd
-	inputs    []VFS
-	outputs   []VFS
-	deps      []NodeRef
-	resources []STR
-	kv        KV
-	exts      []KVExt
-	req       *Requirements
-	env       EnvVars
+	ctx         *GenCtx
+	p           *Platform
+	cmds        []Cmd
+	inputs      []VFS
+	modulePeers []VFS
+	outputs     []VFS
+	deps        []NodeRef
+	resources   []STR
+	kv          KV
+	exts        []KVExt
+	req         *Requirements
+	env         EnvVars
 }
 
 func (b *javaNodeBuilder) useResource(name string) {
@@ -140,6 +141,13 @@ func (b *javaNodeBuilder) emitTo(ref NodeRef) {
 		Requirements: b.req,
 		DepRefs:      na.refList(dedupRefs(b.deps)...),
 		Resources:    b.resources,
+	}
+
+	if len(b.modulePeers) > 0 {
+		node.Inputs.modulePeers = na.vfsList(dedupVFSKeepOrder(b.modulePeers)...)
+		node.Inputs.scanner = b.ctx.scannerForPlatform(platform)
+		node.Inputs.na = na
+		node.Inputs.deferred = true
 	}
 
 	b.ctx.emit.emitReservedNodePtr(&node, ref)
@@ -289,7 +297,7 @@ func (ctx *GenCtx) javaRegisterFiles(jm *JavaModule) {
 }
 
 func (ctx *GenCtx) javaRegisterProducers(jm *JavaModule, frame *ModuleFrame) {
-	if len(jm.data.fromSandboxes) == 0 && len(jm.data.runPython) == 0 && len(jm.data.copyFiles) == 0 {
+	if len(jm.data.fromSandboxes) == 0 && len(jm.data.runPython) == 0 && len(jm.data.copyFiles) == 0 && len(jm.data.runPrograms) == 0 && len(jm.data.bundles) == 0 {
 		return
 	}
 
@@ -302,6 +310,8 @@ func (ctx *GenCtx) javaRegisterProducers(jm *JavaModule, frame *ModuleFrame) {
 	d.fromSandboxes = append(d.fromSandboxes, jm.data.fromSandboxes...)
 	d.runPython = append(d.runPython, jm.data.runPython...)
 	d.copyFiles = append(d.copyFiles, jm.data.copyFiles...)
+	d.runPrograms = append(d.runPrograms, jm.data.runPrograms...)
+	d.bundles = append(d.bundles, jm.data.bundles...)
 	d.srcDirs = append(d.srcDirs, jm.data.srcDirs...)
 	d.tc = ModuleToolchain{Python3: javaPython3}
 	d.cc.TC = d.tc
@@ -332,6 +342,18 @@ func (ctx *GenCtx) javaRegisterProducers(jm *JavaModule, frame *ModuleFrame) {
 	for _, stmt := range d.fromSandboxes {
 		add(stmt.OUTFiles)
 		add(stmt.OUTNoAutoFiles)
+	}
+
+	for _, entry := range d.bundles {
+		add([]ANY{internAny(entry.Name)})
+	}
+
+	for _, stmt := range d.runPrograms {
+		add(stmt.OUTFiles)
+
+		if stmt.StdoutFile != nil && !stmt.StdoutNoAuto {
+			add([]ANY{*stmt.StdoutFile})
+		}
 	}
 
 	for _, stmt := range d.runPython {

@@ -1,5 +1,7 @@
 package main
 
+import "path"
+
 var bundleKV = KV{P: pkBN, PC: pcLightCyan}
 
 func (e *EmitContext) emitBundle(b BundleEntry) {
@@ -99,4 +101,50 @@ func (e *EmitContext) emitBundleNode(python3 VFS, src, dst VFS, suffix string, s
 	}
 
 	e.emitReservedNode(node, id)
+}
+
+func parseBundleEntries(v UnknownStmt) []BundleEntry {
+	var entries []BundleEntry
+
+	switch v.Name {
+	case tokBundleOutput:
+		if len(v.Args) < 2 {
+			throwFmt("BUNDLE_OUTPUT expects a target and an output name")
+		}
+
+		name := v.Args[1].string()
+
+		if len(v.Args) >= 4 && v.Args[2].string() == "RENAME" {
+			name = v.Args[3].string()
+		}
+
+		entries = append(entries, BundleEntry{Target: v.Args[0].string(), Name: name, Output: v.Args[1].string()})
+	case tokBundle:
+
+		i := 0
+
+		for i < len(v.Args) {
+			target := v.Args[i].string()
+
+			i++
+
+			suffix := ""
+
+			if i+1 < len(v.Args) && v.Args[i].string() == "SUFFIX" {
+				suffix = v.Args[i+1].string()
+				i += 2
+			}
+
+			name := path.Base(target) + suffix
+
+			if i+1 < len(v.Args) && v.Args[i].string() == "NAME" {
+				name = v.Args[i+1].string()
+				i += 2
+			}
+
+			entries = append(entries, BundleEntry{Target: target, Name: name, Suffix: suffix})
+		}
+	}
+
+	return entries
 }

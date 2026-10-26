@@ -13,12 +13,20 @@ func (b *javaNodeBuilder) emitModule(jm *JavaModule) {
 		}
 
 		for _, peer := range jm.unmanageable {
+			if output := moduleOutputPath(peer.res); output != 0 {
+				b.modulePeers = append(b.modulePeers, output)
+			}
+
 			add(peer.res)
 		}
 
 		for _, entry := range b.ctx.javaManagedPeersClosure(jm) {
 			if entry.java != nil {
 				for _, peer := range entry.java.unmanageableClosure() {
+					if output := moduleOutputPath(peer.res); output != 0 {
+						b.modulePeers = append(b.modulePeers, output)
+					}
+
 					add(peer.res)
 				}
 			} else {

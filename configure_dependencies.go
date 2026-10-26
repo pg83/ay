@@ -82,8 +82,14 @@ func (ctx *GenCtx) configureDependencies() {
 		declaration, _ := ctx.recurseScan(dir)
 
 		if declaration != nil {
+			root := ctx.roots[ctx.rootInstanceForDeclaration(dir, demandNone, declaration)]
+
 			for _, instance := range ctx.testDependencyInstances(dir) {
-				genModule(ctx, instance)
+				result := genModule(ctx, instance)
+
+				if root {
+					ctx.testRoots = append(ctx.testRoots, result)
+				}
 			}
 		}
 

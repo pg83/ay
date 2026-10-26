@@ -733,7 +733,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 
 				it.Key = bytesString(e.resStrBuf[hashStart:])
 
-				r := e.resolveResourceInput(entry.SrcPath, copyFileInputVFS(ctx.fs, instance.Path, entry.SrcPath))
+				r := e.resolveResourceInput(entry.SrcPath, e.resolveModuleSourceVFS(internStr(entry.SrcPath).any(), d.srcDirs))
 				cmdStart := len(e.resStrBuf)
 
 				e.resStrBuf = append(e.resStrBuf, "resfs/src/"...)
@@ -756,7 +756,7 @@ func (e *EmitContext) emitResourceFile(entries []ResourceEntry, moduleTag STR) (
 				it.Key = entry.Key
 
 				if head, inner, tail, ok := rootrelSplit(entry.Key); ok {
-					r := e.resolveResourceInput(inner, copyFileInputVFS(ctx.fs, instance.Path, inner))
+					r := e.resolveResourceInput(inner, e.resolveModuleSourceVFS(internStr(inner).any(), d.srcDirs))
 
 					it.Cmd = internStr(renderResourceKvCmd(head+r.Input.relString()+tail, instance.Path.relString()))
 					it.setInput(r.Input)

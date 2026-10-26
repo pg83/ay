@@ -2,6 +2,12 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class PythonCodegenTest(MakeTest):
+    def test_type_stub_uses_source_directory(self):
+        self.write("ya.make", f"PY3_LIBRARY()\nSRCDIR({PROJECT}/src)\nPY_SRCS(answer.pyi)\nEND()\n")
+        self.write("src/answer.pyi", "def answer() -> int: ...\n")
+        graph = self.graph()
+        self.assertTrue(any(f"$(S)/{PROJECT}/src/answer.pyi" in node["inputs"] for node in graph["graph"]))
+
     def test_cython_output_modes(self):
         for mode in ("CYTHON_C", "CYTHON_CPP", "CYTHON_C_H", "CYTHON_CPP_H", "CYTHON_C_API_H", "CYTHON_CPP_API_H"):
             with self.subTest(mode=mode):

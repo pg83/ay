@@ -54,8 +54,8 @@ func runProgramReservedVariable(name string) bool {
 	return keepDeferredVar(name) || name == "ARCADIA_ROOT" || name == "ARCADIA_BUILD_ROOT"
 }
 
-func bindRunProgramCalls(d *ModuleData, env Environment) {
-	if len(d.runPrograms) == 0 {
+func bindRunProgramCalls(programs []*RunProgramStmt, env Environment) {
+	if len(programs) == 0 {
 		return
 	}
 
@@ -67,7 +67,7 @@ func bindRunProgramCalls(d *ModuleData, env Environment) {
 		}
 	}
 
-	for i, captured := range d.runPrograms {
+	for i, captured := range programs {
 		if captured.CallArgs == nil {
 			continue
 		}
@@ -108,7 +108,7 @@ func bindRunProgramCalls(d *ModuleData, env Environment) {
 		bound.KV, bound.DeclSeq = captured.KV, captured.DeclSeq
 		bound.CallArgs = captured.CallArgs
 
-		d.runPrograms[i] = bindRunProgramFiles(bound, env)
+		programs[i] = bindRunProgramFiles(bound, env)
 	}
 }
 

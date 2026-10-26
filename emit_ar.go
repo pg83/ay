@@ -65,6 +65,7 @@ func (e *EmitContext) emitARGlobalNamedTagged(
 
 func archiveTailFor(moduleDir string) string {
 	moduleDir = cleanRel(moduleDir)
+
 	tail := moduleDir
 
 	for i, slashes := len(moduleDir)-1, 0; i >= 0; i-- {

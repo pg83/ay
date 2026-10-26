@@ -71,3 +71,5 @@ class JavaContextsTest(MakeTest):
         self.write("proto/answer.ev", 'syntax = "proto2"; package e2e; message Answer { optional int32 value = 1; }\n')
         graph = self.graph()
         self.assertTrue(any(f"$(S)/{PROJECT}/proto/answer.ev" in node["inputs"] for node in graph["graph"]), [path for node in graph["graph"] for path in node["outputs"] if PROJECT in path])
+        proto_jars = [node for node in graph["graph"] if any(path.startswith(f"$(B)/{PROJECT}/proto/") and path.endswith(".jar") for path in node["outputs"])]
+        self.assertTrue(any("$(B)/library/cpp/eventlog/proto/cpp-eventlog-proto.jar" in node["inputs"] for node in proto_jars))

@@ -202,6 +202,10 @@ func (e *EmitContext) moduleIsFake(result *ModuleEmitResult) bool {
 func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 	output := moduleOutputPath(result)
 
+	if output == 0 && e.instance.Kind == KindForeignDescent {
+		output = lDOutputPath(e.instance, dllOutputName(e.instance, e.d.moduleStmt))
+	}
+
 	if output == 0 {
 		return
 	}
@@ -239,7 +243,7 @@ func (e *EmitContext) publishModuleIncludes(result *ModuleEmitResult) {
 
 	var ownIncludes, ownRoots []VFS
 
-	fake := e.moduleIsFake(result)
+	fake := e.moduleIsFake(result) && e.instance.Kind != KindForeignDescent
 
 	for _, root := range e.moduleIncludeRoots {
 		if root.isBuild() {

@@ -975,7 +975,13 @@ func testRequirementsOf(entries []string) map[string]string {
 
 	for _, e := range entries {
 		if k, v, ok := strings.Cut(e, ":"); ok {
-			out[strings.ToLower(k)] = strings.ToLower(v)
+			k, v = strings.ToLower(k), strings.ToLower(v)
+
+			if _, exists := out[k]; exists && v == "0" {
+				delete(out, k)
+			} else {
+				out[k] = v
+			}
 		}
 	}
 

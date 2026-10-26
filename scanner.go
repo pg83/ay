@@ -374,7 +374,6 @@ func (s *IncludeScanner) getScanCtx(ctx *ScanContext, domain ScanDomain, parser 
 	sc.domain = domain
 	sc.parser = parser
 	sc.tsImports = domain == scanDomainAux
-
 	sc.tjc = tarjans.get()
 
 	return sc
@@ -685,6 +684,7 @@ func (sc *ScanCtx) resolvedChildren(abs VFS) ScannedChildren {
 
 func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 	previousParser, previousConfig := sc.parser, sc.cfg
+
 	sc.setFileParser(abs)
 
 	defer func() { sc.parser, sc.cfg = previousParser, previousConfig }()
@@ -696,8 +696,8 @@ func (sc *ScanCtx) forEachResolvedChildID(abs VFS, fn func(VFS)) {
 
 func (sc *ScanCtx) dfs(abs VFS) {
 	s := sc.scanner
-
 	previousParser, previousConfig := sc.parser, sc.cfg
+
 	sc.setFileParser(abs)
 
 	defer func() { sc.parser, sc.cfg = previousParser, previousConfig }()
@@ -892,7 +892,6 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 
 	if sc.noResolve && (includerAbs.isSource() || d.target.vfs() == 0) {
 		if includerAbs.isBuild() {
-			// Keep the unresolved generated property for a consumer allowed to bind it.
 			sc.diagnostics = append(sc.diagnostics, IncludeDiagnostic{Directive: d})
 		}
 
@@ -1111,7 +1110,6 @@ func buildCfgResolveIndex(cfg *ScanConfig) *CfgResolveIndex {
 }
 
 func (sc *ScanCtx) cacheSearchTier(targetID STR, out VFS) VFS {
-	// Discovery can run before generated outputs are registered.
 	if sc.initialOnly && out == 0 {
 		return out
 	}

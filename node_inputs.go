@@ -67,7 +67,6 @@ func (p *NodeInputs) eachRoot(visit func(VFS)) {
 }
 
 func (p *NodeInputs) eachModuleRoot(visit func(VFS)) {
-	// Peer headers are Search edges until a real source consumer establishes their includes.
 	for _, peer := range p.modulePeers {
 		if info := p.scanner.codegen.moduleInputs(peer); info != nil {
 			for _, root := range info.IncludeRoots {
@@ -102,7 +101,6 @@ func (p *NodeInputs) evaluate() InputChunks {
 		if info := p.scanner.codegen.lookup(root); info != nil {
 			includedInputs = append(includedInputs, info.InputLoopSources)
 
-			// Native loop inputs share physical included files, not sibling BuildFrom producers.
 			if info.IncludedInputs != nil {
 				for _, parsed := range info.IncludedInputs.Roots {
 					closure := p.scanner.establishedClosure(parsed)

@@ -236,7 +236,6 @@ func (r *CodegenRegistry) shareInputLoop(members []VFS) {
 
 			sources = append(sources, info.InputLoopSources...)
 
-			// Only parsed command bindings contribute included inputs to loop commands.
 			if info.IncludedInputs != nil {
 				roots = append(roots, info.IncludedInputs.Roots...)
 			}

@@ -436,7 +436,7 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 
 func (e *EmitContext) goCgoImportPath() string {
 	if dir := e.instance.Path.relString(); goPackageName(dir, e.d) != "main" {
-		return e.instance.Platform.Go.importPath(dir)
+		return strings.TrimSuffix(e.instance.Platform.Go.importPath(dir), "/gotest")
 	}
 
 	return "main"

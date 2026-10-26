@@ -9,6 +9,7 @@ type EnvStore struct {
 	kind             []EnvKind
 	textInputs       map[ENV][]SourceTextRange
 	resourceBindings map[ENV]STR
+	included         map[string]bool
 }
 
 type Environment struct {
@@ -110,6 +111,7 @@ func (e Environment) clone() Environment {
 		kind:             append([]EnvKind(nil), e.s.kind...),
 		textInputs:       maps.Clone(e.s.textInputs),
 		resourceBindings: maps.Clone(e.s.resourceBindings),
+		included:         maps.Clone(e.s.included),
 	}}
 }
 
@@ -118,6 +120,7 @@ func (e Environment) cloneInto(dst *EnvStore) Environment {
 	dst.kind = append(dst.kind[:0], e.s.kind...)
 	dst.textInputs = maps.Clone(e.s.textInputs)
 	dst.resourceBindings = maps.Clone(e.s.resourceBindings)
+	dst.included = maps.Clone(e.s.included)
 
 	return Environment{s: dst}
 }

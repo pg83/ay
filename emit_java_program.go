@@ -141,7 +141,7 @@ func (b *javaNodeBuilder) javaScriptgenScripts(jm *JavaModule, globals map[strin
 	for _, s := range d.generateScripts {
 		for _, gs := range parseJavaGenerateScript(s) {
 			out := javaOutDirVFS(jm, gs.out)
-			tmpl := javaArgVFS(jm, gs.template)
+			tmpl := b.ctx.javaArgVFS(jm, gs.template)
 
 			args := []ANY{b.resourcePath(globals, "SCRIPTGEN", "/scriptgen"), strJava.any(), b.resourcePath(globals, jdk, "/bin/java"),
 				strOutput.any(), out.any(), strTemplate.any(), tmpl.any(),
@@ -321,6 +321,7 @@ type javaRunProgram struct {
 	outDir string
 	cwd    string
 	tool   string
+	tools  []string
 	hash   string
 	gentar VFS
 }
@@ -352,6 +353,8 @@ func parseJavaRunProgram(dir string, rp JavaRunProgram) javaRunProgram {
 			r.inDirs = append(r.inDirs, a)
 		case "OUT_DIR":
 			r.outDir = a
+		case "TOOL":
+			r.tools = append(r.tools, a)
 		case "CLASSPATH":
 			r.tool = a
 		case "CWD":
@@ -376,8 +379,8 @@ func javaOutDirVFS(jm *JavaModule, p string) VFS {
 	return copyFileOutputVFS(jm.dir, p)
 }
 
-func javaArgVFS(jm *JavaModule, p string) VFS {
-	return javaProgramArgVFS(jm.dir, p)
+func (ctx *GenCtx) javaArgVFS(jm *JavaModule, p string) VFS {
+	return ctx.programInputVFS(jm.instance, jm.data.srcDirs, p)
 }
 
 func javaProgramArgVFS(dir, p string) VFS {
@@ -454,7 +457,7 @@ func (ctx *GenCtx) javaRegisterRunPrograms(jm *JavaModule) {
 }
 
 func (ctx *GenCtx) javaEmitRunProgram(jm *JavaModule, r javaRunProgram, ref NodeRef) {
-	ctx.emitJavaRunProgram(jm.dir, jm.instance.Platform, jm.data.jdkReal, ctx.javaGlobals(jm), r, ref, func(name string) VFS { return javaArgVFS(jm, name) })
+	ctx.emitJavaRunProgram(jm.dir, jm.instance.Platform, jm.data.jdkReal, ctx.javaGlobals(jm), r, ref, func(name string) VFS { return ctx.javaArgVFS(jm, name) })
 }
 
 func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string, globals map[string]VFS, r javaRunProgram, ref NodeRef, input func(string) VFS) {
@@ -494,6 +497,14 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 		ins[in] = true
 	}
 
+	tools := resolveRunProgramAuxTools(ctx, r.tools)
+	toolTokens := prAuxToolTokens(tools)
+
+	for _, tool := range tools {
+		b.input(tool.bin)
+		b.deps = append(b.deps, tool.ref)
+	}
+
 	for _, a := range r.args {
 		if slices.Contains(r.out, a) || slices.Contains(r.noauto, a) {
 			run = append(run, copyFileOutputVFS(dir, a).any())
@@ -506,7 +517,9 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 
 			run = append(run, argument)
 		} else {
-			run = append(run, internStr(a).any())
+			argument, _ := replaceAuxToolArg(internStr(a).any(), toolTokens)
+
+			run = append(run, argument)
 		}
 	}
 

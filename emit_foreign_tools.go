@@ -14,7 +14,8 @@ type foreignToolCandidate struct {
 }
 
 type foreignToolBindings struct {
-	candidates DenseMap[ARG, *foreignToolCandidate]
+	candidates map[ModuleInstance]*foreignToolCandidate
+	hosts      DenseMap[ARG, *ModuleEmitResult]
 	byRef      DenseMap[NodeRef, *foreignToolCandidate]
 	order      []*foreignToolCandidate
 	startRefs  []NodeRef
@@ -29,7 +30,11 @@ func (e *EmitContext) foreignToolResult(path ARG) (*ModuleEmitResult, *foreignTo
 	}
 
 	bindings := &ctx.foreignTools
-	candidate, _ := bindings.candidates.get(path)
+	instance := ctx.rootInstance(path.string(), demandLinked)
+
+	instance.Platform = e.instance.Platform
+
+	candidate := bindings.candidates[instance]
 
 	if candidate != nil && candidate.target != nil {
 		ctx.consumeModuleWarnings(candidate.target)
@@ -41,7 +46,7 @@ func (e *EmitContext) foreignToolResult(path ARG) (*ModuleEmitResult, *foreignTo
 		candidate = &foreignToolCandidate{path: path}
 	}
 
-	candidate.instance = ctx.rootInstance(path.string(), demandLinked)
+	candidate.instance = instance
 
 	result := func() *ModuleEmitResult {
 		ctx.emit.deferPublication++
@@ -57,7 +62,11 @@ func (e *EmitContext) foreignToolResult(path ARG) (*ModuleEmitResult, *foreignTo
 
 	candidate.target = result
 
-	bindings.candidates.put(path, candidate)
+	if bindings.candidates == nil {
+		bindings.candidates = make(map[ModuleInstance]*foreignToolCandidate)
+	}
+
+	bindings.candidates[instance] = candidate
 	bindings.byRef.put(result.LDRef, candidate)
 	bindings.order = append(bindings.order, candidate)
 
@@ -188,6 +197,7 @@ func (ctx *GenCtx) bindForeignTools() {
 				if tool, ok := bindings.byRef.get(dep); ok {
 					if tool.host == nil {
 						tool.host = ctx.toolResult(tool.path)
+						bindings.hosts.put(tool.path, tool.host)
 					}
 
 					ctx.scannerHost.codegen.use(*tool.host.LDPath)
@@ -198,15 +208,10 @@ func (ctx *GenCtx) bindForeignTools() {
 
 					foreign[dep] = tool.host.LDRef
 				} else if path, ok := bindings.hostPaths.get(dep); ok {
-					tool, exists := bindings.candidates.get(path)
+					host := ctx.toolResult(path)
 
-					if !exists {
-						tool = &foreignToolCandidate{path: path}
-						bindings.candidates.put(path, tool)
-					}
-
-					tool.host = ctx.toolResult(path)
-					ctx.scannerHost.codegen.use(*tool.host.LDPath)
+					bindings.hosts.put(path, host)
+					ctx.scannerHost.codegen.use(*host.LDPath)
 				}
 			}
 
@@ -268,6 +273,8 @@ func (ctx *GenCtx) bindForeignTools() {
 			if !ok {
 				continue
 			}
+
+			tool.host, _ = bindings.hosts.get(tool.path)
 
 			if tool.host == nil {
 				if ctx.emit.exportEligible.has(uint32(node.Ref)) {

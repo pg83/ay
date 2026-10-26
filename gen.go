@@ -214,6 +214,7 @@ type GenCtx struct {
 	tcMemo           map[ToolchainKey]ModuleToolchain
 	moduleStmts      map[string][]Stmt
 	dllForStack      []string
+	includeStack     []string
 	ifEnvScratch     EnvStore
 	walking          map[ModuleInstance]bool
 	cyclesTolerated  int
@@ -540,6 +541,8 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses boo
 			}
 
 			switch v := st.(type) {
+			case *IncludeStmt:
+				ctx.withIncludedStmts(v, env, scan)
 			case *MissingIncludeStmt:
 				if module == nil {
 					apply(st)
@@ -620,7 +623,9 @@ func (ctx *GenCtx) genStartTarget(dir string) {
 			ctx.emit.result(*root.GlobalRef)
 		}
 
-		ctx.genMultimoduleTargets(DiscoveredModule{Path: dir, Declaration: &ModuleStmt{Name: name}}, root.ModuleVariants, demandSelf)
+		variants := ctx.genMultimoduleTargets(DiscoveredModule{Path: dir, Declaration: &ModuleStmt{Name: name}}, root.ModuleVariants, demandSelf)
+
+		ctx.collectConfiguredSubmoduleTests(dir, append(variants, root)...)
 	}
 }
 
@@ -659,6 +664,8 @@ func inferModuleDeclaration(stmts []Stmt) (*ModuleStmt, bool) {
 		var candidate *ModuleStmt
 
 		switch v := st.(type) {
+		case *IncludeStmt:
+			return nil, false
 		case *ModuleStmt:
 			return v, true
 		case *UnknownStmt:

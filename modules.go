@@ -841,7 +841,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	finishPythonImportMask(env, d)
 	d.sandboxTaskDeprecation = d.multimodule == tokSandboxTask && env.string(envFAIL_PY2) != "yes" && env.string(envOPENSOURCE) != "yes"
 
-	bindRunProgramCalls(d, env)
+	bindRunProgramCalls(d.runPrograms, env)
 
 	if len(d.runJavaPrograms) > 0 {
 		d.runJavaJdk = env.string(envJdkRealVersion)
@@ -1324,6 +1324,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		}
 
 		switch v := s.(type) {
+		case *IncludeStmt:
+			ctx.withIncludedStmts(v, env, func(included []Stmt) {
+				collectStmts(ctx, modulePath, kind, language, included, env, d, onWarn, platform)
+			})
 		case *MissingIncludeStmt:
 			throwFmt("%s:%d: INCLUDE file %s not found", modulePath, v.Line, v.Path)
 		case *ModuleStmt:
@@ -2414,27 +2418,28 @@ func addGeneratedOwnHeaderInclude(modulePath, dst string, d *ModuleData) {
 }
 
 func appendRunProgram(v *RunProgramStmt, env Environment, d *ModuleData) {
-	if v.CallArgs != nil {
-		args := runProgramSourceInputArguments(v.CallArgs, env)
+	captured := captureRunProgram(v, env)
 
-		if len(args) == 0 {
-			throwFmt("RUN_PROGRAM expects at least 1 argument (tool path)")
-		}
+	captured.DeclSeq = d.nextDeclSeq()
+	d.runPrograms = append(d.runPrograms, captured)
+}
 
-		captured := *v
-
-		captured.CallArgs = args
-		captured.DeclSeq = d.nextDeclSeq()
-
-		d.runPrograms = append(d.runPrograms, &captured)
-
-		return
+func captureRunProgram(v *RunProgramStmt, env Environment) *RunProgramStmt {
+	if v.CallArgs == nil {
+		return bindRunProgramFiles(v, env)
 	}
 
-	expanded := bindRunProgramFiles(v, env)
+	args := runProgramSourceInputArguments(v.CallArgs, env)
 
-	expanded.DeclSeq = d.nextDeclSeq()
-	d.runPrograms = append(d.runPrograms, expanded)
+	if len(args) == 0 {
+		throwFmt("RUN_PROGRAM expects at least 1 argument (tool path)")
+	}
+
+	captured := *v
+
+	captured.CallArgs = args
+
+	return &captured
 }
 
 func bindRunProgramFiles(v *RunProgramStmt, env Environment) *RunProgramStmt {
@@ -2796,42 +2801,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			ensureResourcePeer(modulePath, d)
 		}
 
-	case tokBundleOutput:
-		if len(v.Args) < 2 {
-			throwFmt("BUNDLE_OUTPUT expects a target and an output name")
-		}
-
-		name := v.Args[1].string()
-
-		if len(v.Args) >= 4 && v.Args[2].string() == "RENAME" {
-			name = v.Args[3].string()
-		}
-
-		d.bundles = append(d.bundles, BundleEntry{DeclSeq: d.nextDeclSeq(), Target: v.Args[0].string(), Name: name, Output: v.Args[1].string()})
-	case tokBundle:
-
-		i := 0
-
-		for i < len(v.Args) {
-			target := v.Args[i].string()
-
-			i++
-
-			suffix := ""
-
-			if i+1 < len(v.Args) && v.Args[i].string() == "SUFFIX" {
-				suffix = v.Args[i+1].string()
-				i += 2
-			}
-
-			name := path.Base(target) + suffix
-
-			if i+1 < len(v.Args) && v.Args[i].string() == "NAME" {
-				name = v.Args[i+1].string()
-				i += 2
-			}
-
-			d.bundles = append(d.bundles, BundleEntry{DeclSeq: d.nextDeclSeq(), Target: target, Name: name, Suffix: suffix})
+	case tokBundleOutput, tokBundle:
+		for _, entry := range parseBundleEntries(v) {
+			entry.DeclSeq = d.nextDeclSeq()
+			d.bundles = append(d.bundles, entry)
 		}
 
 	case tokGoTestSrcs:
@@ -5637,6 +5610,10 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		Language: language,
 		Platform: parent.Platform,
 		Demand:   demand,
+	}
+
+	if peerYaMakeExists(ctx.fs, peerVFS) && isYqlUdfStaticModule(ctx.moduleName(peerVFS.relString())) && slices.Contains(strings.Fields(Environment{s: &e.frame.ifEnv}.string(envPeerdirTags)), "YQL_UDF_SHARED") {
+		peer.Kind = KindBin
 	}
 
 	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokGoDll {

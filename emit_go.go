@@ -376,6 +376,10 @@ func applyGoImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData
 	}
 
 	if goModuleUsesCgoC(d) {
+		if forDir := d.setVars[strGO_TEST_IMPORT_PATH]; d.moduleStmt.Name == tokGoTest && forDir != 0 {
+			d.addIncl = append(d.addIncl, source(forDir.string()))
+		}
+
 		d.addIncl = append(d.addIncl, instance.Path)
 	}
 

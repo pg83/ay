@@ -77,7 +77,7 @@ var structCodegenPeerdirs = anysOf(
 )
 
 var includeStatePool = sync.Pool{New: func() any {
-	return &IncludeState{once: newIntSet(16), env: newEnvironment()}
+	return &IncludeState{once: newIntSet(16)}
 }}
 
 const (
@@ -139,8 +139,9 @@ func strKeySet(words ...string) BitSet {
 }
 
 type MakeFile struct {
-	Path  string
-	Stmts []Stmt
+	IncludeOnce bool
+	Path        string
+	Stmts       []Stmt
 }
 
 type Stmt interface {
@@ -181,6 +182,15 @@ type SetStmt struct {
 
 type EndStmt struct {
 	Line int
+}
+
+type IncludeStmt struct {
+	File string
+	Path string
+	Line int
+}
+
+func (*IncludeStmt) stmtMarker() {
 }
 
 type MissingIncludeStmt struct {
@@ -978,8 +988,6 @@ func parseInternalWithStack(fs FS, name string, src []byte, stack []string) *Mak
 
 	defer releaseIncludeState(st)
 
-	st.env.setString(envMODDIR, pathDir(name))
-
 	return parseInternalWithState(fs, name, src, stack, st)
 }
 
@@ -1004,26 +1012,19 @@ func parseInternalWithState(fs FS, name string, src []byte, stack []string, incl
 	mf := astOne(astFiles, MakeFile{Path: name})
 
 	mf.Stmts, _ = p.parseStmts(termTopLevel)
+	mf.IncludeOnce, _ = includes.once.get(uint64(internStr(name).strID()))
 
 	return mf
 }
 
 type IncludeState struct {
 	once *IntSet
-	env  Environment
 }
 
 func acquireIncludeState() *IncludeState {
 	st := includeStatePool.Get().(*IncludeState)
 
 	st.once.reset()
-	st.env.s.val = st.env.s.val[:0]
-	st.env.s.kind = st.env.s.kind[:0]
-	clear(st.env.s.resourceBindings)
-
-	for _, g := range javaConfGlobalEnv {
-		st.env.setStringID(g.name, g.value)
-	}
 
 	return st
 }
@@ -1117,14 +1118,6 @@ func (p *Parser) parseMacroInto(nameTok Token) {
 		} else {
 			stmt.(*UnknownStmt).LexicalArgs = lexical
 		}
-	}
-
-	if set, ok := stmt.(*SetStmt); ok {
-		p.includes.env.setFromString(set.NameEnv, expandSourceScalarVarRef(set.Value, p.includes.env))
-	}
-
-	if def, ok := stmt.(*DefaultVarStmt); ok && !p.includes.env.hasBindingID(def.NameEnv) {
-		p.includes.env.setFromString(def.NameEnv, expandSourceScalarVarRef(def.Value, p.includes.env))
 	}
 
 	p.stmtScratch = append(p.stmtScratch, stmt)
@@ -2352,7 +2345,11 @@ func (p *Parser) expandInclude(nameTok Token) {
 }
 
 func (p *Parser) expandOneInclude(nameTok Token, rel string) {
-	rel = expandScalarVarRef(rel, p.includes.env)
+	if strings.ContainsRune(strings.TrimPrefix(rel, "${ARCADIA_ROOT}/"), '$') {
+		p.stmtScratch = append(p.stmtScratch, &IncludeStmt{File: p.name, Path: rel, Line: nameTok.line})
+
+		return
+	}
 
 	var target string
 
