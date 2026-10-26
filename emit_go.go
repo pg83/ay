@@ -75,12 +75,6 @@ var goExtldWholeArchive = []ANY{
 	internStr("--cgo-peers").any(),
 }
 
-var goExtldLinkerTail = []ANY{
-	internStr("-lpthread").any(),
-	internStr("-ldl").any(),
-	internStr("-lresolv").any(),
-}
-
 var goSymabisHead = []ANY{
 	strGoAsmTool.any(),
 	internStr("-trimpath").any(),
@@ -653,10 +647,10 @@ func (e *EmitContext) goClassifyClosure(resolved []ResolvedPeer, closurePaths []
 	return
 }
 
-func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadiaLibm bool, soname string, globals []VFS, ldFlagsGlobal, objAddLibsGlobal []ANY) []ANY {
+func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadiaLibm bool, soname string, globals []VFS, ldFlagsGlobal, objAddLibsGlobal, goLDFlagsGlobal []ANY) []ANY {
 	gdb := p.linkerSelectionGDBIndexFlags()
 	objAddLibs := appendArgGroupStr(nil, objAddLibsGlobal)
-	bound := len(objAddLibs) + 2 + len(p.SysrootArgs) + len(goExtldWholeArchive) + len(globals) + 1 + len(p.LinkPreludeExtra) + 1 + 2 + len(gdb) + len(ldFlagsGlobal) + len(goExtldLinkerTail) + len(p.Linker.SystemLibs) + 1
+	bound := len(objAddLibs) + 2 + len(p.SysrootArgs) + len(goExtldWholeArchive) + len(globals) + 1 + len(p.LinkPreludeExtra) + 1 + 2 + len(gdb) + len(ldFlagsGlobal) + len(goLDFlagsGlobal) + len(p.Linker.SystemLibs) + 1
 	block := na.anys.alloc(bound)
 	k := 0
 	push := func(x ANY) { block[k] = x; k++ }
@@ -710,7 +704,7 @@ func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadi
 		push(x)
 	}
 
-	for _, x := range goExtldLinkerTail {
+	for _, x := range goLDFlagsGlobal {
 		push(x)
 	}
 
@@ -943,12 +937,13 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 	srcArgs, cgoSrcArgs, ownInputs, ownSources, ownBuilds := e.goSrcList(goRes, objOuts)
 	localARs, _, _ := e.goClassifyClosure(resolved, peerArchivePaths)
 	embedArgs, embedInputs := goEmbedArgs(na, d.goEmbeds)
-	tail := na.anys.alloc(4 + len(cgoSrcArgs) + len(embedArgs) + len(localARs))
+	tail := na.anys.alloc(4 + len(d.goLinkFlags) + len(cgoSrcArgs) + len(embedArgs) + len(localARs))
 	nt := 0
 	pushTail := func(x STR) { tail[nt] = x.any(); nt++ }
 
 	pushTail(strLinkFlags)
 	pushTail(strLinkmodeExternal)
+	nt += copy(tail[nt:], d.goLinkFlags)
 	pushTail(strCgoSrcs)
 
 	nt += copy(tail[nt:], cgoSrcArgs)
@@ -1293,7 +1288,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		goToolCmdVet,
 		srcArgs,
 		e.goToolCmdFlagsFor(),
-		goExeCmdLinkFlags,
+		na.anyConcat(goExeCmdLinkFlags[:2], d.goLinkFlags, goExeCmdLinkFlags[2:]),
 		cgoSrcArgs,
 		embedArgs,
 		goExeCmdVcs[:1],
@@ -1301,7 +1296,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		goExeCmdVcs[1:],
 		na.anyList(vcsGoPath.any()),
 		goExeCmdExtld,
-		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm, soname, peerGlobalPaths, e.peers.LDFlagsGlobal, peerObjAddLibsGlobal),
+		goExtldflagsArgs(na, instance.Platform, d.tc, d.useArcadiaLibm, soname, peerGlobalPaths, e.peers.LDFlagsGlobal, peerObjAddLibsGlobal, e.peers.GoLDFlagsGlobal),
 		testArgs,
 		tail[:nt:nt],
 		testTail,

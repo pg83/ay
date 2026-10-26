@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -462,6 +463,7 @@ func composeCCPaths(instance ModuleInstance, srcRel string, srcVFS VFS, in Modul
 	if dir == "" {
 		separator = ""
 	}
+
 	rel := srcVFS.relString()
 	srcRelClean := srcRel != "" && srcRel != "." && pathIsClean(srcRel)
 
@@ -707,6 +709,19 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 
 	if in.NoOptimize {
 		cflagsStr = suppressOptimize(p.CompileCFlags)
+	}
+
+	if in.CompilerEnv.string(envNO_DEBUGINFO) == "yes" && len(p.DebugInfoFlags) > 0 {
+		flags := na.anys.alloc(len(cflagsStr))[:0]
+
+		for _, flag := range cflagsStr {
+			if !slices.Contains(p.DebugInfoFlags, flag) {
+				flags = append(flags, flag)
+			}
+		}
+
+		na.anys.commit(len(flags))
+		cflagsStr = flags[:len(flags):len(flags)]
 	}
 
 	catboostStr := catboostOpenSourceChunk(p)

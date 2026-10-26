@@ -48,6 +48,10 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	s.applyTestMeta(meta, e.d.setVars[strADD_SRCDIR_TO_TEST_DATA] != strNo)
 
 	if testType == "fuzz" {
+		for _, file := range meta.fuzzDicts {
+			s.relatedPaths = append(s.relatedPaths, source(file).string())
+		}
+
 		corpus, ok := os.LookupEnv("YA_TEST_CORPUS_DATA_PATH")
 
 		if !ok {

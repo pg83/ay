@@ -100,6 +100,7 @@ func (p *PendingEmit) fire() {
 }
 
 type CodegenRegistry struct {
+	inducedIncludes map[VFS][]TypedInclude
 	files           DenseMap2[VFS, ScannedChildren, Closure]
 	moduleBuildDeps DenseMap[NodeRef, []NodeRef]
 	byRel           DenseMap[STR, *GeneratedFileInfo]

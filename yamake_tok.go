@@ -96,14 +96,17 @@ var tokName = [...]STR{
 	tokPy23Test:       internStr("PY23_TEST"),
 	tokPytestBin:      internStr("PYTEST_BIN"),
 
-	tokDepends:       internStr("DEPENDS"),
-	tokTestCwd:       internStr("TEST_CWD"),
-	tokUseRecipe:     internStr("USE_RECIPE"),
-	tokExplicitData:  internStr("EXPLICIT_DATA"),
-	tokDataFiles:     internStr("DATA_FILES"),
-	tokBenchmarkOpts: internStr("BENCHMARK_OPTS"),
-	tokFuzzOpts:      internStr("FUZZ_OPTS"),
-	tokForkTestFiles: internStr("FORK_TEST_FILES"),
+	tokDepends:            internStr("DEPENDS"),
+	tokTestCwd:            internStr("TEST_CWD"),
+	tokUseRecipe:          internStr("USE_RECIPE"),
+	tokExplicitData:       internStr("EXPLICIT_DATA"),
+	tokExplicitOutputs:    internStr("EXPLICIT_OUTPUTS"),
+	tokPrepareInducedDeps: internStr("PREPARE_INDUCED_DEPS"),
+	tokDataFiles:          internStr("DATA_FILES"),
+	tokBenchmarkOpts:      internStr("BENCHMARK_OPTS"),
+	tokFuzzOpts:           internStr("FUZZ_OPTS"),
+	tokFuzzDicts:          internStr("FUZZ_DICTS"),
+	tokForkTestFiles:      internStr("FORK_TEST_FILES"),
 
 	tokSetListPreSuf:                internStr("SET_LIST_PRE_SUF"),
 	tokUnittest:                     internStr("UNITTEST"),
@@ -259,6 +262,7 @@ var tokName = [...]STR{
 	tokNoLto:                           internStr("NO_LTO"),
 	tokNoMypy:                          internStr("NO_MYPY"),
 	tokNoOptimize:                      internStr("NO_OPTIMIZE"),
+	tokNoDebugInfo:                     internStr("NO_DEBUG_INFO"),
 	tokNoOptimizePyProtos:              internStr("NO_OPTIMIZE_PY_PROTOS"),
 	tokNoPlatform:                      internStr("NO_PLATFORM"),
 	tokNoPlatformResources:             internStr("NO_PLATFORM_RESOURCES"),
@@ -340,6 +344,7 @@ var tokName = [...]STR{
 	tokSrcCXop:                         internStr("SRC_C_XOP"),
 	tokStrip:                           kwSTRIP,
 	tokStyleCpp:                        internStr("STYLE_CPP"),
+	tokStyleCppMaps:                    internStr("STYLE_CPP_MAPS"),
 	tokStyleCppYt:                      internStr("STYLE_CPP_YT"),
 	tokStylePython:                     internStr("STYLE_PYTHON"),
 	tokStyleRuff:                       internStr("STYLE_RUFF"),
@@ -408,6 +413,8 @@ var tokName = [...]STR{
 	tokGoEmbedXtestDir:                 internStr("GO_EMBED_XTEST_DIR"),
 	tokCgoSrcs:                         internStr("CGO_SRCS"),
 	tokCgoLdflags:                      internStr("CGO_LDFLAGS"),
+	tokGoLdflags:                       internStr("GO_LDFLAGS"),
+	tokGoLinkFlags:                     internStr("GO_LINK_FLAGS"),
 	tokCgoCflags:                       internStr("CGO_CFLAGS"),
 
 	tokAllResourceFiles:               internStr("ALL_RESOURCE_FILES"),
@@ -651,6 +658,7 @@ const (
 	tokNoLto
 	tokNoMypy
 	tokNoOptimize
+	tokNoDebugInfo
 	tokNoOptimizePyProtos
 	tokNoPlatform
 	tokNoPlatformResources
@@ -719,9 +727,12 @@ const (
 	tokTestCwd
 	tokUseRecipe
 	tokExplicitData
+	tokExplicitOutputs
+	tokPrepareInducedDeps
 	tokDataFiles
 	tokBenchmarkOpts
 	tokFuzzOpts
+	tokFuzzDicts
 	tokForkTestFiles
 	tokSetResourceUriFromJson
 	tokSize
@@ -742,6 +753,7 @@ const (
 	tokSrcCXop
 	tokStrip
 	tokStyleCpp
+	tokStyleCppMaps
 	tokStyleCppYt
 	tokStylePython
 	tokStyleRuff
@@ -825,6 +837,8 @@ const (
 	tokGoEmbedXtestDir
 	tokCgoSrcs
 	tokCgoLdflags
+	tokGoLdflags
+	tokGoLinkFlags
 	tokCgoCflags
 
 	tokAllResourceFiles

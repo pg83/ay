@@ -291,6 +291,7 @@ type RunProgramStmt struct {
 	EnvPairs       []ANY
 	CWD            *ANY
 	OutputIncludes []ANY
+	InducedDeps    []ANY
 	ToolPaths      []ANY
 	Line           int
 	DeclSeq        int
@@ -348,6 +349,7 @@ type RunPythonStmt struct {
 	CWD            *ANY
 	ToolPaths      []ANY
 	OutputIncludes []ANY
+	InducedDeps    []ANY
 	Line           int
 }
 
@@ -1632,8 +1634,10 @@ func parseRunProgram(args []ANY, line int) *RunProgramStmt {
 			if stmt.CWD == nil {
 				stmt.CWD = &tok
 			}
-		case kwOUTPUT_INCLUDES.any(), kwINDUCED_DEPS.any():
+		case kwOUTPUT_INCLUDES.any():
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
+		case kwINDUCED_DEPS.any():
+			stmt.InducedDeps = append(stmt.InducedDeps, tok)
 		case kwTOOL.any():
 			stmt.ToolPaths = append(stmt.ToolPaths, tok)
 		}
@@ -1688,8 +1692,10 @@ func parseRunPython(args []ANY, line int) *RunPythonStmt {
 			}
 		case kwTOOL.any():
 			stmt.ToolPaths = append(stmt.ToolPaths, tok)
-		case kwOUTPUT_INCLUDES.any(), kwINDUCED_DEPS.any():
+		case kwOUTPUT_INCLUDES.any():
 			stmt.OutputIncludes = append(stmt.OutputIncludes, tok)
+		case kwINDUCED_DEPS.any():
+			stmt.InducedDeps = append(stmt.InducedDeps, tok)
 		}
 
 		i++

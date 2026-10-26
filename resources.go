@@ -477,6 +477,7 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 		ResourceGlobalClosure: globals,
 		RPathFlagsGlobal:      d.rpathFlagsGlobal,
 		LDFlagsGlobal:         e.ownLinkerFlagValues(d.ldFlags),
+		GoLDFlagsGlobal:       e.ownLinkerFlagValues(d.goLdflags),
 		CFlagsGlobal:          e.ownCompilerFlagValues(d.cFlagsGlobal, compilerFlagsCommon),
 		CXXFlagsGlobal:        e.ownCompilerFlagValues(d.cxxFlagsGlobal, compilerFlagsCxx),
 		COnlyFlagsGlobal:      e.ownCompilerFlagValues(d.cOnlyFlagsGlobal, compilerFlagsCOnly),

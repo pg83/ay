@@ -21,7 +21,7 @@ func (e *EmitContext) ownLinkerFlagValues(args []ANY) []LinkerFlagValue {
 	return e.ctx.na.compilerFlags.list(e.linkerFlagValue(args))
 }
 
-func (e *EmitContext) linkerFlagExports(seen *DeDuper, peers []ResolvedPeer, capacity int, own, flat []ANY) ([]LinkerFlagValue, []ANY) {
+func (e *EmitContext) linkerFlagExports(seen *DeDuper, peers []ResolvedPeer, capacity int, own, flat []ANY, goFlags bool) ([]LinkerFlagValue, []ANY) {
 	if capacity == 0 && len(own) == 0 {
 		return nil, flat
 	}
@@ -31,7 +31,13 @@ func (e *EmitContext) linkerFlagExports(seen *DeDuper, peers []ResolvedPeer, cap
 	seen.reset()
 
 	collect := func(peer ResolvedPeer) {
-		for _, value := range peer.result.LDFlagsGlobal {
+		flags := peer.result.LDFlagsGlobal
+
+		if goFlags {
+			flags = peer.result.GoLDFlagsGlobal
+		}
+
+		for _, value := range flags {
 			if seen.addStable(uint32(value.Name)) {
 				values = append(values, value)
 				flat = append(flat, value.Args...)

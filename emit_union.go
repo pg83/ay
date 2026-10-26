@@ -50,6 +50,16 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 
 	generated := dedup(e.outs)
 
+	if len(e.d.unionExplicitOutputs) > 0 {
+		generated = nil
+
+		for _, file := range e.d.unionExplicitOutputs {
+			generated = append(generated, e.moduleSourceVFS(file))
+		}
+
+		generated = dedup(generated)
+	}
+
 	generated = orderSdcInstallOutputs(generated, e.d.sdcInstallOutputs)
 
 	module := e.instance.Path.relString()

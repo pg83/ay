@@ -126,6 +126,7 @@ type TestMeta struct {
 	depends         []string
 	recipes         []string
 	binaryArgs      []string
+	fuzzDicts       []string
 	forkFiles       bool
 	explicitData    bool
 	size            string
@@ -195,6 +196,8 @@ type ModuleData struct {
 	goProtoOpts              []GoProtoOpt
 	cgoSrcs                  []ANY
 	cgoLdflags               []ANY
+	goLdflags                []ANY
+	goLinkFlags              []ANY
 	cgoCflags                []ANY
 	hasBisonY                bool
 	toolchainName            string
@@ -286,7 +289,8 @@ type ModuleData struct {
 	pythonModule3            bool
 	python2Headers           bool
 	python3NativeIncl        bool
-	pythonPeerTags           []string
+	peerTags                 []string
+	unionExplicitOutputs     []ANY
 	pythonHeaderEnv          Environment
 	resourcePeerOverride     STR
 	resourcePeerExplicit     bool
@@ -744,6 +748,7 @@ func expandRunPythonStmt(stmt *RunPythonStmt, env Environment) *RunPythonStmt {
 	expanded.EnvPairs = expandStmtTokens(stmt.EnvPairs, env)
 	expanded.ToolPaths = expandStmtTokens(stmt.ToolPaths, env)
 	expanded.OutputIncludes = expandStmtTokens(stmt.OutputIncludes, env)
+	expanded.InducedDeps = expandStmtTokens(stmt.InducedDeps, env)
 
 	if stmt.StdoutFile != nil {
 		stdout := expandStmtTokenAny((*stmt.StdoutFile), env)
@@ -859,8 +864,8 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		pythonHeaderEnv = d.pythonHeaderEnv
 	}
 
-	if d.python2Headers || d.python3NativeIncl {
-		d.pythonPeerTags = strings.Fields(pythonHeaderEnv.string(envPeerdirTags))
+	if _, specified := d.setVars[strPeerdirTags]; specified || d.python2Headers || d.python3NativeIncl {
+		d.peerTags = strings.Fields(pythonHeaderEnv.string(envPeerdirTags))
 	}
 
 	for _, priority := range []int{stmtPrioDefault, stmtPrioSrcs} {
@@ -1354,6 +1359,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
+			env.setString(envPeerdirTags, expandAssignedScalarVarRef(modulePeerTags(v, d.unit, language), env))
 
 			if isDllModuleType(d.unit.Type) {
 				env.setString(envMODULE_TAG, "DLL")
@@ -2439,6 +2445,7 @@ func bindRunProgramFiles(v *RunProgramStmt, env Environment) *RunProgramStmt {
 	expanded.OUTFiles = expandTokens(v.OUTFiles, env, false, tokenExpandArguments)
 	expanded.OUTNoAutoFiles = expandTokens(v.OUTNoAutoFiles, env, false, tokenExpandArguments)
 	expanded.OutputIncludes = expandTokens(v.OutputIncludes, env, false, tokenExpandArguments)
+	expanded.InducedDeps = expandTokens(v.InducedDeps, env, false, tokenExpandArguments)
 	expanded.ToolPaths = expandTokens(v.ToolPaths, env, false, tokenExpandArguments)
 
 	if v.StdoutFile != nil {
@@ -2922,7 +2929,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 	case tokHeaders:
 		applyHeaders(fs, modulePath, v.Args, d)
-	case tokStyleCppUserSessions, tokStyleCppYt:
+	case tokStyleCppUserSessions, tokStyleCppYt, tokStyleCppMaps:
 		d.collectCPPStyle(v, env)
 		env.setBool(envUseAllSrcs, true)
 		applyHeaders(fs, modulePath, []ANY{str4.any()}, d)
@@ -2971,8 +2978,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.cgoSrcs = append(d.cgoSrcs, expandStmtTokens(v.Args, env)...)
 		d.peerdirs = append(d.peerdirs, internV(env.string(envGOSTD), "/syscall").any())
 	case tokCgoLdflags:
+		expanded := expandStmtTokens(v.Args, env)
 
-		d.cgoLdflags = append(d.cgoLdflags, expandStmtTokens(v.Args, env)...)
+		d.cgoLdflags = append(d.cgoLdflags, expanded...)
+		d.goLdflags = append(d.goLdflags, expanded...)
+	case tokGoLdflags:
+		d.goLdflags = append(d.goLdflags, expandStmtTokens(v.Args, env)...)
+	case tokGoLinkFlags:
+		d.goLinkFlags = append(d.goLinkFlags, expandStmtTokens(v.Args, env)...)
 	case tokCgoCflags:
 
 		expanded := expandStmtTokens(v.Args, env)
@@ -3389,6 +3402,16 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		env.setBool(envPyProtoMypyEnabled, false)
 	case tokNoOptimize:
 		d.noOptimize = true
+	case tokExplicitOutputs:
+		d.unionExplicitOutputs = append(d.unionExplicitOutputs, expandSourceArguments(v.Args, env)...)
+	case tokPrepareInducedDeps:
+		if len(v.Args) < 2 {
+			throwFmt("PREPARE_INDUCED_DEPS expects a variable name and dependency type")
+		}
+
+		env.setString(internEnv(v.Args[0].string()), "$_FMT_INDUCED_DEPS("+strings.Join(anyStrs(v.Args[1:]), " ")+")")
+	case tokNoDebugInfo:
+		env.setStringID(envNO_DEBUGINFO, strYes)
 	case tokStrip:
 		env.setBool(envSTRIP, true)
 	case tokNoOptimizePyProtos:
@@ -5048,7 +5071,7 @@ func (phase TokenExpansion) clearsUnbound(name string) bool {
 
 func keepDeferredVar(name string) bool {
 	switch name {
-	case envBINDIR.string(), envCURDIR.string(), "S", "B", "MANAGED_PEERS", "MANAGED_PEERS_CLOSURE", "APPLIED_EXCLUDES":
+	case envBINDIR.string(), envCURDIR.string(), "S", "B", "MANAGED_PEERS", "MANAGED_PEERS_CLOSURE", "APPLIED_EXCLUDES", "_FMT_INDUCED_DEPS":
 		return true
 	}
 
@@ -5636,23 +5659,23 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		peer.YqlCurrent = name == tokYqlLibrary || isYqlUdfStaticModule(name)
 	}
 
-	if d.pythonPeerTags != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokPy23NativeLibrary {
+	if d.peerTags != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokPy23NativeLibrary {
 		switch {
-		case slices.Contains(d.pythonPeerTags, "PY2_NATIVE"):
+		case slices.Contains(d.peerTags, "PY2_NATIVE"):
 			peer.Language = LangPy2
-		case slices.Contains(d.pythonPeerTags, "PY3_NATIVE"):
+		case slices.Contains(d.peerTags, "PY3_NATIVE"):
 			peer.Language = LangCPP
 		default:
 			throwFmt("gen: %s: no compatible Python header peer in %s", parent.Path.relString(), peerVFS.relString())
 		}
 	}
 
-	if d.pythonPeerTags != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokProtoLibrary {
+	if d.peerTags != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokProtoLibrary {
 		declaration := stmtsModuleDeclaration(moduleStmts(ctx, peerVFS.relString()))
 		matched := false
 
-		for _, candidateLanguage := range []Language{LangCPP, LangPy, LangPy2} {
-			if slices.Contains(d.pythonPeerTags, protoModuleTag(candidateLanguage, declaration.Schema)) {
+		for _, candidateLanguage := range []Language{LangCPP, LangPy, LangPy2, LangGo} {
+			if slices.Contains(d.peerTags, protoModuleTag(candidateLanguage, declaration.Schema)) {
 				candidate := peer
 
 				candidate.Language = candidateLanguage
@@ -5672,7 +5695,7 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 		}
 
 		if !matched {
-			throwFmt("gen: %s: no compatible Python header peer in %s", parent.Path.relString(), peerVFS.relString())
+			throwFmt("gen: %s: no compatible proto peer in %s", parent.Path.relString(), peerVFS.relString())
 		}
 	}
 

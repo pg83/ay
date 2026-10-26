@@ -2,6 +2,22 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class GeneratedCythonTest(MakeTest):
+    def test_python3_only_source_in_py23_module(self):
+        self.write("ya.make", "PY23_LIBRARY()\nIF (PYTHON3)\nPY_SRCS(answer.pyx)\nENDIF()\nEND()\n")
+        self.write("answer.pyx", "from libcpp.vector cimport vector\ndef answer(): return 42\n")
+        node = self.node(self.graph(), "answer.pyx.py3.cpp")
+        self.assertIn("$(S)/contrib/tools/cython/Cython/Includes/libcpp/vector.pxd", node["inputs"])
+        self.assertNotIn("$(S)/contrib/tools/cython_py2/Cython/Includes/libcpp/vector.pxd", node["inputs"])
+
+    def test_parenthesized_cimport_with_comment(self):
+        self.write("ya.make", "PY3_LIBRARY()\nPY_SRCS(answer.pyx)\nEND()\n")
+        self.write("dependency.pxd", "cdef int value\n")
+        for comment in ("", "    # ignored name\n"):
+            with self.subTest(comment=bool(comment)):
+                self.write("answer.pyx", f"from dependency cimport (\n{comment}    value,\n)\ndef answer(): return 42\n")
+                node = self.node(self.graph(), "answer.pyx.cpp")
+                self.assertEqual(f"$(S)/{PROJECT}/dependency.pxd" in node["inputs"], not comment)
+
     def test_program_links_cython_objects_through_its_library(self):
         self.write("ya.make", "PY3_PROGRAM(answer)\nPY_SRCS(__main__.py value.pyx)\nEND()\n")
         self.write("__main__.py", "from .value import answer\nprint(answer())\n")

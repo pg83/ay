@@ -94,7 +94,6 @@ func (e *EmitContext) emitLD(
 	wantsSplitDwarf bool,
 	programModuleTag STR,
 	sbomLang STR,
-	hasBundles bool,
 	tc ModuleToolchain,
 	hostP *Platform,
 	scripts ScriptDeps,
@@ -234,7 +233,7 @@ func (e *EmitContext) emitLD(
 		}
 	}
 
-	inputs := composeLDInputs(na, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, hasBundles, extraChunks[:nExtra]...)
+	inputs := composeLDInputs(na, ccPaths, peerLibPaths, pluginPaths, globalPaths, wholeArchivePaths, dynamicPaths, objcopyPaths, scripts, emitCopy, extraChunks[:nExtra]...)
 	ccBuildRefs := na.objectBuildRefs(ccRefs, ccPaths)
 	objcopyBuildRefs := na.objectBuildRefs(objcopyRefs, objcopyPaths)
 	deps := na.noderefs.alloc(len(ccBuildRefs) + len(globalRefs) + len(peerLDRefs) + len(dynamicRefs) + len(objcopyBuildRefs) + len(sbomRefs) + 1)[:0]
@@ -609,7 +608,7 @@ func composeLDSplitDwarfCmds(na *NodeArenas, tc ModuleToolchain, output VFS, ena
 	return na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(tc.Objcopy.any(), argOnlyKeepDebug.any(), output.any(), debug.any()))}, Cmd{CmdArgs: na.chunkList(na.anyList(tc.Strip.any(), argStripDebug.any(), output.any()))}, Cmd{CmdArgs: na.chunkList(na.anyList(tc.Objcopy.any(), argRemoveSectionGnuDebuglink.any(), argAddGnuDebuglink.any(), debug.any(), output.any()))})
 }
 
-func composeLDInputs(na *NodeArenas, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, hasBundles bool, extra ...[]VFS) InputChunks {
+func composeLDInputs(na *NodeArenas, ccPaths []VFS, peerLibPaths []VFS, pluginPaths []VFS, globalPaths []VFS, wholeArchivePaths []VFS, dynamicPaths []VFS, objcopyPaths []VFS, scripts ScriptDeps, emitCopy bool, extra ...[]VFS) InputChunks {
 	peerLibChunk := na.vfsList(peerLibPaths...)
 
 	var buildRootBlock []VFS
@@ -646,7 +645,7 @@ func composeLDInputs(na *NodeArenas, ccPaths []VFS, peerLibPaths []VFS, pluginPa
 	nScripts := 0
 
 	for _, s := range ldScriptInputs {
-		if s == copyFsToolsVFS && !emitCopy && !hasBundles {
+		if s == copyFsToolsVFS && !emitCopy {
 			continue
 		}
 

@@ -3,12 +3,17 @@ package main
 type FlatbuffersIncludeDirectiveParser struct{}
 
 func (FlatbuffersIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
-	raw := stripComments(concatChunks(data))
 	block := a.alloc(directiveBlockHint)
 	k := 0
 
-	eachChunkLine(raw, func(line []byte) {
-		rest, ok := cutParserKeyword(trimParserSpace(line), "include")
+	eachLine(data, func(line []byte) {
+		line = trimParserSpace(line)
+
+		rest, ok := cutParserKeyword(line, "include")
+
+		if !ok {
+			rest, ok = cutParserKeyword(line, "native_include")
+		}
 
 		if !ok || rest[0] != '"' {
 			return
@@ -21,12 +26,6 @@ func (FlatbuffersIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpA
 		}
 
 		if end == 1 || end == len(rest) {
-			return
-		}
-
-		tail := trimParserSpace(rest[end+1:])
-
-		if len(tail) == 0 || tail[0] != ';' {
 			return
 		}
 

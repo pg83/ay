@@ -200,6 +200,15 @@ func (e *EmitContext) srcPosition(meta SrcMeta) ([]VFS, []VFS) {
 		input := e.resolveModuleSourceVFS(tok, d.cc.SrcDirs)
 
 		e.prodVFS = append(e.prodVFS, build(input.relString(), ".h"))
+	case srcExtFbs, srcExtFbs64:
+		if class == srcExtFbs && (isGoModuleType(d.unit.Type) || e.instance.Language == LangFbsJavaNative) {
+			break
+		}
+
+		input := resolveSourceVFS(e.ctx, e.instance, src, d.srcDirs)
+		variant := flatcVariantForExt(src)
+
+		e.prodVFS = append(e.prodVFS, build(input.relString(), ".h"), build(input.relString(), ".cpp"), build(strings.TrimSuffix(input.relString(), variant.srcExt), variant.bfbsExt))
 	case srcExtRos:
 		if d.ros != nil {
 			e.prodVFS = append(e.prodVFS, e.rosOutputPaths(src, meta.RosZeroCopy)...)

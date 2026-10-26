@@ -627,6 +627,10 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 }
 
 func (e *EmitContext) completeProtoFileInputs(input VFS, outputs []VFS) {
+	for _, output := range outputs {
+		e.scanner.inheritInducedIncludes(output, nil, []VFS{input})
+	}
+
 	e.filePending = append(e.filePending, func() {
 		imports := e.scanner.walkClosure(input, e.d.scanCtx, scanDomainProto)
 		inherited := e.codegen.generatorRefsFor(imports)

@@ -18,6 +18,7 @@ type CudaSettings struct {
 	Root                string
 	TargetRoot          string
 	Std                 string
+	ObjectSuffix        string
 	Version             string
 	SkipCompressedDebug bool
 	Sanitize            bool
@@ -54,6 +55,7 @@ func (e *EmitContext) cudaSettings() *CudaSettings {
 		Root: rootBound.Args[0].string(), TargetRoot: targetBound.Args[0].string(),
 		RootResources: rootUses, TargetResources: targetUses,
 		Version: env.string(envCUDA_VERSION), Std: env.string(envNvccStdVer),
+		ObjectSuffix:        env.string(envNvccObjExt),
 		SkipCompressedDebug: env.string(envCUDA_HOST_COMPILER_VERSION) == "14",
 		Sanitize:            env.bool(envCUDA_SANITIZE), SplitSanitize: env.string(envCUDA_SANITIZE) != "",
 	}

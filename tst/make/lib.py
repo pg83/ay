@@ -12,6 +12,8 @@ PROJECT = "__ay_e2e__"
 
 
 class MakeTest(unittest.TestCase):
+    project_name = PROJECT
+
     def setUp(self):
         self.backend = os.environ["AY_E2E_BACKEND"]
         arcadia = Path(os.environ["AY_E2E_ARCADIA"])
@@ -23,11 +25,11 @@ class MakeTest(unittest.TestCase):
             self.root = self.work / "src"
             self.root.mkdir()
             for entry in arcadia.iterdir():
-                if entry.name not in (PROJECT, ".arc"):
+                if entry.name not in (self.project_name, ".arc"):
                     (self.root / entry.name).symlink_to(entry)
         else:
             self.root = arcadia
-        self.project = self.root / PROJECT
+        self.project = self.root / self.project_name
         # Never reuse or remove a pre-existing directory in the user's tree.
         self.project.mkdir()
         self.addCleanup(shutil.rmtree, self.project)
@@ -44,7 +46,7 @@ class MakeTest(unittest.TestCase):
             cmd.append("-G")
         if self.backend == "ya":
             cmd += ["--build-dir", str(self.work / "build"), "-xx", "--no-locked", "--no-prefetch", "--no-ymake-tool-servermode", "--no-ymake-pic-servermode", "--no-ymake-multiconfig"]
-        cmd += [*flags, PROJECT]
+        cmd += [*flags, self.project_name]
         env = os.environ.copy()
         for key in ("CC", "CXX", "CPP", "LD", "AR", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS"):
             env.pop(key, None)
@@ -80,8 +82,8 @@ class MakeTest(unittest.TestCase):
         return graph
 
     def node(self, graph, output):
-        expected = f"$(B)/{PROJECT}/{output}"
+        expected = f"$(B)/{self.project_name}/{output}"
         matches = [node for node in graph["graph"] if expected in node["outputs"]]
-        outputs = [path for node in graph["graph"] for path in node["outputs"] if f"/{PROJECT}/" in path]
+        outputs = [path for node in graph["graph"] for path in node["outputs"] if f"/{self.project_name}/" in path]
         self.assertEqual(len(matches), 1, f"expected one producer of {expected}; fixture outputs: {outputs[:80]}")
         return matches[0]

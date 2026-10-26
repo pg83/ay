@@ -2,6 +2,14 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class MacroVariantsTest(MakeTest):
+    def test_no_debug_info(self):
+        self.write("ya.make", "LIBRARY()\nNO_DEBUG_INFO()\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        node = self.node(self.graph(), "answer.cpp.o")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertNotIn("-g", args)
+        self.assertNotIn("-gline-tables-only", args)
+
     def test_native_options(self):
         variants = (
             "NO_COMPILER_WARNINGS()\nNO_WSHADOW()\nNO_OPTIMIZE()\nSTRIP()",

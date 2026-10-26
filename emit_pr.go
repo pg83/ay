@@ -224,6 +224,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 	}
 
 	pending := e.pendingEmit(pe)
+	induced := preparedInducedIncludes(stmt.InducedDeps)
 
 	registerOutput := func(out VFS, parsed ParsedIncludeSet) {
 		if registeredPROut[out] {
@@ -231,6 +232,7 @@ func (e *EmitContext) emitRunProgram(stmt *RunProgramStmt) {
 		}
 
 		registeredPROut[out] = true
+		e.scanner.inheritInducedIncludes(out, induced, snap.inVFSs[:len(snap.inVFSs)-stmt.INNoParse])
 
 		e.register(GeneratedFileInfo{
 			OutputPath:      out,
@@ -622,11 +624,6 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 		outputs = append(outputs, v)
 	}
 
-	if spec.stdoutVFS != nil {
-		stdoutPath = *spec.stdoutVFS
-		appendOutput(*spec.stdoutVFS)
-	}
-
 	for _, v := range argFiles {
 		if spec.isOutput(v) {
 			appendOutput(v)
@@ -639,6 +636,11 @@ func (e *EmitContext) emitPR(spec RunProgramNodeSpec, id NodeRef) {
 
 	for _, f := range stmt.OUTNoAutoFiles {
 		appendOutput(spec.outVFSByToken[f])
+	}
+
+	if spec.stdoutVFS != nil {
+		stdoutPath = *spec.stdoutVFS
+		appendOutput(*spec.stdoutVFS)
 	}
 
 	na.vfs.commit(len(outputs))

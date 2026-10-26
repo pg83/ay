@@ -4,6 +4,14 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class TestVariantsTest(MakeTest):
+    def test_fuzzer_dictionary(self):
+        self.write("ya.make", f"FUZZ()\nSRCS(fuzz.cpp)\nFUZZ_DICTS({PROJECT}/words.dict)\nEND()\n")
+        self.write("fuzz.cpp", '#include <stddef.h>\n#include <stdint.h>\nextern "C" int LLVMFuzzerTestOneInput(const uint8_t*, size_t) { return 0; }\n')
+        self.write("words.dict", 'answer="42"\n')
+        graph = self.graph("-t")
+        commands = json.dumps([node.get("cmds", []) for node in graph["graph"]])
+        self.assertIn(f"/{PROJECT}/words.dict", commands)
+
     def test_exectest_dependencies(self):
         self.write("ya.make", f"EXECTEST()\nDEPENDS({PROJECT}/tool {PROJECT}/java)\nRUN(${{ARCADIA_BUILD_ROOT}}/{PROJECT}/tool/answer)\nDATA(arcadia/{PROJECT}/data.txt)\nENV(E2E=42)\nTEST_CWD({PROJECT})\nSIZE(SMALL)\nEND()\n")
         self.write("data.txt", "42\n")

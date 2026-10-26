@@ -153,6 +153,7 @@ type ModuleEmitResult struct {
 	LinkExcludeLibraries            []ANY
 	ObjAddLibsGlobal                []ANY
 	LDFlagsGlobal                   []LinkerFlagValue
+	GoLDFlagsGlobal                 []LinkerFlagValue
 	RPathFlagsGlobal                []ANY
 	PeerArchiveClosureRefs          []NodeRef
 	PeerArchiveClosurePaths         []VFS
@@ -1831,6 +1832,9 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	peerObjAddLibsGlobal := frame.peerObjAddLibsGlobal[:0]
 	peerLDFlagsGlobal := frame.peerLDFlagsGlobal[:0]
+
+	var peerGoLDFlagsGlobal []ANY
+
 	peerRPathFlagsGlobal := frame.peerRPathFlagsGlobal[:0]
 
 	defer func() {
@@ -1933,6 +1937,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 	conlyflagsCap := 0
 	objAddLibsCap := 0
 	ldflagsCap := 0
+	goLdflagsCap := 0
 	rpathflagsCap := 0
 	fbsCap := 0
 
@@ -1955,6 +1960,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		conlyflagsCap += len(pr.COnlyFlagsGlobal)
 		objAddLibsCap += len(pr.ObjAddLibsGlobal)
 		ldflagsCap += len(pr.LDFlagsGlobal)
+		goLdflagsCap += len(pr.GoLDFlagsGlobal)
 		rpathflagsCap += len(pr.RPathFlagsGlobal)
 		fbsCap += len(pr.FbsNamespaces)
 
@@ -1992,6 +1998,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		effectiveCFlagsGlobal, effectiveCXXFlagsGlobal, effectiveCOnlyFlagsGlobal []CompilerFlagValue
 		effectiveLDFlagsGlobal                                                    []LinkerFlagValue
+		effectiveGoLDFlagsGlobal                                                  []LinkerFlagValue
 		effectiveRPathFlagsGlobal                                                 []ANY
 
 		ownSbomInsertIdx = -1
@@ -2286,7 +2293,8 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			}
 		}
 
-		effectiveLDFlagsGlobal, peerLDFlagsGlobal = e.linkerFlagExports(deduper, resolved, ldflagsCap, d.ldFlags, peerLDFlagsGlobal)
+		effectiveLDFlagsGlobal, peerLDFlagsGlobal = e.linkerFlagExports(deduper, resolved, ldflagsCap, d.ldFlags, peerLDFlagsGlobal, false)
+		effectiveGoLDFlagsGlobal, peerGoLDFlagsGlobal = e.linkerFlagExports(deduper, resolved, goLdflagsCap, d.goLdflags, peerGoLDFlagsGlobal, true)
 
 		deduper.reset()
 
@@ -2445,6 +2453,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			LinkExcludeLibraries:            linkExcludeLibraries,
 			ObjAddLibsGlobal:                concatShared(ctx.argSlices, peerObjAddLibsGlobal, d.objAddLibsGlobal),
 			LDFlagsGlobal:                   effectiveLDFlagsGlobal,
+			GoLDFlagsGlobal:                 effectiveGoLDFlagsGlobal,
 			RPathFlagsGlobal:                effectiveRPathFlagsGlobal,
 			PeerArchiveClosureRefs:          peerArchiveRefs,
 			PeerArchiveClosurePaths:         peerArchivePaths,
@@ -2619,6 +2628,11 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		value := resourceGlobalArgumentValue(concatShared(ctx.argSlices, peerLDFlagsGlobal, ownLDFlags), resourceGlobalsClosure)
 
 		frame.peerCtx.LDFlagsGlobal, frame.peerCtx.LDResources = value.Args, value.Resources
+
+		goValue := resourceGlobalArgumentValue(concatShared(ctx.argSlices, peerGoLDFlagsGlobal, ownCompilerFlagArgs(effectiveGoLDFlagsGlobal, d.goLdflags)), resourceGlobalsClosure)
+
+		frame.peerCtx.GoLDFlagsGlobal = goValue.Args
+		frame.peerCtx.LDResources = resourceKeyUnion(frame.peerCtx.LDResources, goValue.Resources)
 	}
 
 	e = newEmitContextIn(frame, ctx, instance, d, &frame.peerCtx)
@@ -2842,7 +2856,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			d.splitDwarf,
 			programModuleTag,
 			d.unit.SbomLang,
-			len(d.bundles) > 0 && !pyModuleTypeUsesPython3(d.moduleStmt.Name),
 			d.tc,
 			ctx.host,
 			ctx.scripts,

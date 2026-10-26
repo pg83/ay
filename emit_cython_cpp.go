@@ -3,10 +3,9 @@ package main
 import "strings"
 
 var (
-	cythonCppKV           = KV{P: pkCY, PC: pcYellow}
-	cythonPy2SysIncludes  = []VFS{contribToolsCythonPy2CythonIncludes}
-	cythonPy23SysIncludes = []VFS{contribToolsCythonPy2CythonIncludes, contribToolsCythonCythonIncludes}
-	cythonPy3SysIncludes  = []VFS{contribToolsCythonCythonIncludes}
+	cythonCppKV          = KV{P: pkCY, PC: pcYellow}
+	cythonPy2SysIncludes = []VFS{contribToolsCythonPy2CythonIncludes}
+	cythonPy3SysIncludes = []VFS{contribToolsCythonCythonIncludes}
 )
 
 var cythonNumpyAddIncl = []VFS{
@@ -392,6 +391,10 @@ func (e *EmitContext) emitCythonCppPlanned(plans []CythonStmtPlan) {
 
 		pending := e.pendingEmit(pe)
 
+		for _, output := range outputs {
+			e.scanner.inheritInducedIncludes(output, nil, sourceInputs)
+		}
+
 		e.register(GeneratedFileInfo{
 			OutputPath:     generatedVFS,
 			BuildInputs:    buildInputs,
@@ -554,11 +557,8 @@ func cythonSysIncludes(d *ModuleData) []VFS {
 		}
 	}
 
-	switch {
-	case d.usePython2:
+	if d.usePython2 {
 		return cythonPy2SysIncludes
-	case cythonUsesPy23Variant(d.moduleStmt.Name):
-		return cythonPy23SysIncludes
 	}
 
 	return cythonPy3SysIncludes

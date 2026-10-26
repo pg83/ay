@@ -9,6 +9,10 @@ func (d *ModuleData) collectCPPStyle(stmt UnknownStmt, env Environment) {
 	check := StyleCheck{Name: "clang_format", CPP: true, ConfigMap: "build/config/tests/cpp_style/default_configs.json", Wrapper: testClangFormatWrapperRel, Resource: "CLANG_FORMAT_RESOURCE_GLOBAL", Peer: strBuildPlatformClangFormat.string()}
 
 	switch stmt.Name {
+	case tokStyleCppMaps:
+		check.Name = "clang_format_18_vanilla"
+		check.Depends = []string{"maps/tools/clang-format"}
+		check.ExtraParams = []string{"custom_clang_format=maps/tools/clang-format", "custom_clang_format_bin=clang-format"}
 	case tokStyleCppUserSessions:
 		check.Name = "clang_format_18_user_sessions"
 		check.Depends = []string{"quality/user_sessions/tools/clang-format"}

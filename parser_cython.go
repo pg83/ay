@@ -1,8 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"path"
+	"regexp"
 	"strings"
+)
+
+var cythonCimportPattern = regexp.MustCompile(`^[\t\v\f\r ]*(?:from[\t\v\f\r ]+(` + cythonImportName + `)[\t\v\f\r ]+)?cimport[\t\v\f\r ]+(` + cythonImportList + `|` + cythonImportParens + `)[\t\v\f\r ]*(?:#[^\n]*)?\n`)
+
+const (
+	cythonImportName   = `[^\t\v\f\r\n #,()\\]+`
+	cythonImportItem   = cythonImportName + `(?:[\t\v\f\r ]+as[\t\v\f\r ]+` + cythonImportName + `)?`
+	cythonImportWS     = `(?:[\t\v\f\r ]|\\\n)*`
+	cythonImportList   = cythonImportItem + `(?:` + cythonImportWS + `,` + cythonImportWS + cythonImportItem + `)*`
+	cythonImportParens = `\([\t\v\f\r\n ]*` + cythonImportItem + `(?:[\t\v\f\r\n ]*,[\t\v\f\r\n ]*` + cythonImportItem + `)*[\t\v\f\r\n ]*,?[\t\v\f\r\n ]*\)`
 )
 
 type CythonIncludeDirectiveParser struct{}
@@ -61,11 +73,21 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 		add(IncludeDirective{kind: includeCythonSibling, target: includeTarget(internV(path.Base(rel[:len(rel)-len(".pyx")]), ".pxd").any())})
 	}
 
-	eachLine(data, func(line []byte) {
+	raw := concatChunks(data)
+
+	for len(raw) > 0 {
+		line, rest, newline := bytes.Cut(raw, []byte{'\n'})
 		t := trimParserSpace(line)
+		statement := raw
+
+		raw = rest
 
 		if len(t) == 0 || t[0] == '#' {
-			return
+			continue
+		}
+
+		if !newline {
+			break
 		}
 
 		if rest, ok := cutParserKeyword(t, "include"); ok && (rest[0] == '"' || rest[0] == '\'') {
@@ -73,7 +95,7 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 				add(IncludeDirective{kind: kind, target: includeTarget(internBytes(target).any())})
 			}
 
-			return
+			continue
 		}
 
 		if rest, ok := cutParserKeyword(t, "cdef"); ok {
@@ -85,53 +107,32 @@ func (CythonIncludeDirectiveParser) parse(rel string, data [][]byte, a *BumpAllo
 				}
 			}
 
-			return
+			continue
 		}
 
-		if rest, ok := cutParserKeyword(t, "from"); ok {
-			moduleEnd := 0
+		_, from := cutParserKeyword(t, "from")
+		_, direct := cutParserKeyword(t, "cimport")
 
-			for moduleEnd < len(rest) && isCythonModuleByte(rest[moduleEnd]) {
-				moduleEnd++
-			}
-
-			if moduleEnd > 0 {
-				if names, ok := cutParserKeyword(trimParserSpace(rest[moduleEnd:]), "cimport"); ok {
-					addCythonCimportFrom(add, bytesString(rest[:moduleEnd]), bytesString(names))
-				}
-			}
-
-			return
+		if !from && !direct {
+			continue
 		}
 
-		if rest, ok := cutParserKeyword(t, "cimport"); ok {
-			for len(rest) > 0 {
-				part := rest
+		match := cythonCimportPattern.FindSubmatchIndex(statement)
 
-				if comma := strings.IndexByte(bytesString(part), ','); comma >= 0 {
-					part = rest[:comma]
-					rest = rest[comma+1:]
-				} else {
-					rest = nil
-				}
-
-				part = trimParserSpace(part)
-
-				if len(part) == 0 {
-					continue
-				}
-
-				partString := bytesString(part)
-
-				if idx := strings.IndexAny(partString, " \t"); idx >= 0 {
-					part = part[:idx]
-					partString = bytesString(part)
-				}
-
-				addCythonPxdCandidates(add, strings.ReplaceAll(partString, ".", "/"))
-			}
+		if match == nil {
+			continue
 		}
-	})
+
+		raw = statement[match[1]:]
+
+		names := bytesString(statement[match[4]:match[5]])
+
+		if from {
+			addCythonCimportFrom(add, bytesString(statement[match[2]:match[3]]), names)
+		} else {
+			eachCythonCimportName(names, func(name string) { addCythonPxdCandidates(add, name) })
+		}
+	}
 
 	a.commit(k)
 
@@ -188,10 +189,6 @@ func parseCythonCdefTarget(b []byte) ([]byte, bool) {
 	}
 
 	return b[:end], end > 0
-}
-
-func isCythonModuleByte(b byte) bool {
-	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == '_' || b == '.'
 }
 
 func addCythonPxdCandidates(add func(IncludeDirective), path string) {
@@ -257,10 +254,7 @@ func cythonFromSearchPath(module string) string {
 }
 
 func eachCythonCimportName(names string, fn func(string)) {
-	if i := strings.IndexByte(names, '#'); i >= 0 {
-		names = names[:i]
-	}
-
+	names = strings.ReplaceAll(names, "\\\n", "")
 	names = strings.TrimSpace(names)
 	names = strings.TrimPrefix(names, "(")
 	names = strings.TrimSuffix(names, ")")
@@ -268,7 +262,7 @@ func eachCythonCimportName(names string, fn func(string)) {
 	for _, part := range strings.Split(names, ",") {
 		part = strings.TrimSpace(part)
 
-		if idx := strings.IndexAny(part, " \t"); idx >= 0 {
+		if idx := strings.IndexAny(part, " \t\v\f\r\n"); idx >= 0 {
 			part = part[:idx]
 		}
 
@@ -276,6 +270,6 @@ func eachCythonCimportName(names string, fn func(string)) {
 			continue
 		}
 
-		fn(part)
+		fn(strings.ReplaceAll(part, ".", "/"))
 	}
 }

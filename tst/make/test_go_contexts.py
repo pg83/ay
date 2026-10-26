@@ -4,6 +4,24 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class GoContextsTest(MakeTest):
+    def test_library_link_flags(self):
+        self.write("ya.make", "GO_LIBRARY()\nGO_LINK_FLAGS(-X e2e.version=42)\nSRCS(answer.go)\nEND()\n")
+        self.write("answer.go", 'package e2e\nvar version string\n')
+        graph = self.graph()
+        node = next(node for node in graph["graph"] if f"$(S)/{PROJECT}/answer.go" in node["inputs"] and any(path.endswith(".a") for path in node["outputs"]))
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("e2e.version=42", args)
+
+    def test_cgo_link_flags_on_go_program(self):
+        self.write("ya.make", "GO_PROGRAM(answer)\nCGO_LDFLAGS(-Wl,-z,copyreloc)\nSRCS(main.go)\nEND()\n")
+        self.write("main.go", "package main\nfunc main() {}\n")
+        node = self.node(self.graph(), "answer")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("-Wl,-z,copyreloc", args)
+        extldflags = args[args.index("++extldflags") + 1:args.index("++peers")]
+        for flag in ("-lpthread", "-lresolv"):
+            self.assertEqual(extldflags.count(flag), 1, flag)
+
     def test_internal_and_external_tests(self):
         self.write("ya.make", f"GO_TEST_FOR({PROJECT}/lib)\nEND()\n")
         self.write("lib/ya.make", "GO_LIBRARY()\nGO_PACKAGE_NAME(answer)\nSRCS(answer.go)\nALL_GO_TEST_SRCS()\nGO_TEST_SRCS(answer_test.go)\nGO_XTEST_SRCS(external_test.go)\nGO_TEST_EMBED_PATTERN(data/*.txt)\nGO_XTEST_EMBED_PATTERN(data/*.txt)\nGO_EMBED_TEST_DIR(ALL data)\nGO_EMBED_XTEST_DIR(ALL data)\nEND()\n")

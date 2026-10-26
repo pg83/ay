@@ -285,6 +285,7 @@ type TestSuite struct {
 	depends                []string
 	dependencyProjects     []VFS
 	data                   []string
+	sandboxResources       []string
 	externalLocalFiles     []string
 	recipes                string
 	files                  []string
@@ -447,9 +448,11 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 		s.data = sortedUnique(append(slices.Clone(s.data), ctx.canonicalTestResources(s)...))
 	}
 
+	var externalResources []string
+
 	for _, entry := range s.data {
-		if strings.HasPrefix(entry, "sbr://") {
-			s.deps = append(s.deps, ctx.emitTestData(entry))
+		if resource, ok := strings.CutPrefix(entry, "sbr://"); ok {
+			s.sandboxResources = append(s.sandboxResources, resource)
 		} else if resource, ok := strings.CutPrefix(entry, "mds:"); ok && s.supportsCanonization {
 			s.deps = append(s.deps, ctx.emitCanonicalTestData(resource))
 		} else if file, ok := strings.CutPrefix(entry, "ext:"); ok {
@@ -458,8 +461,24 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 			if present, isDir := ctx.fs.exists(srcRootRel, rel); present && !isDir {
 				s.externalLocalFiles = append(s.externalLocalFiles, rel)
 				s.deps = append(s.deps, ctx.emitExternalLocalTestData(rel))
+			} else if present, isDir := ctx.fs.exists(srcRootRel, rel+".external"); present && !isDir {
+				storage, resource := readLargeFileDescriptor(ctx.fs, source(rel+".external"), rel+".external")
+
+				if storage == "sandbox" {
+					if dir := path.Dir(file); dir != "." {
+						resource += "=" + dir
+					}
+
+					externalResources = append(externalResources, resource)
+				}
 			}
 		}
+	}
+
+	s.sandboxResources = append(s.sandboxResources, externalResources...)
+
+	for _, resource := range s.sandboxResources {
+		s.deps = append(s.deps, ctx.emitTestData("sbr://"+resource))
 	}
 
 	split := max(s.split, 1)
@@ -693,10 +712,8 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		head = append(head, strRecipes.any(), internStr(s.recipes).any())
 	}
 
-	for _, data := range s.data {
-		if uri, ok := strings.CutPrefix(data, "sbr://"); ok {
-			head = append(head, strSandboxResource.any(), internStr(uri).any())
-		}
+	for _, resource := range s.sandboxResources {
+		head = append(head, strSandboxResource.any(), internStr(resource).any())
 	}
 
 	for _, file := range s.externalLocalFiles {

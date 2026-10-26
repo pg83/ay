@@ -69,7 +69,7 @@ func expandTestRunArgs(args []ANY, env Environment) []ANY {
 
 func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 	switch v.Name {
-	case tokDockerImage, tokRun, tokSize, tokTimeout, tokTestCwd, tokData, tokDataFiles, tokExplicitData, tokDepends, tokUseRecipe, tokTag, tokEnv, tokNoDoctests, tokConftestLoadPolicyLocal, tokConftestLoadPolicyLegacyGlobal, tokRequirements, tokForkTests, tokForkSubtests, tokForkTestFiles, tokSplitFactor, tokBenchmarkOpts, tokFuzzOpts:
+	case tokDockerImage, tokRun, tokSize, tokTimeout, tokTestCwd, tokData, tokDataFiles, tokExplicitData, tokDepends, tokUseRecipe, tokTag, tokEnv, tokNoDoctests, tokConftestLoadPolicyLocal, tokConftestLoadPolicyLegacyGlobal, tokRequirements, tokForkTests, tokForkSubtests, tokForkTestFiles, tokSplitFactor, tokBenchmarkOpts, tokFuzzOpts, tokFuzzDicts:
 	default:
 		return false
 	}
@@ -142,6 +142,8 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 		t.splitFactor = throw2(strconv.Atoi(value))
 	case tokBenchmarkOpts, tokFuzzOpts:
 		t.binaryArgs = append(t.binaryArgs, args...)
+	case tokFuzzDicts:
+		t.fuzzDicts = append(t.fuzzDicts, args...)
 	case tokRequirements:
 		t.requirements = append(t.requirements, args...)
 	}

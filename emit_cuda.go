@@ -48,7 +48,7 @@ func (e *EmitContext) emitLibraryCudaSource(meta SrcMeta, in ModuleCCInputs) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	srcVFS := e.resolveModuleSourceVFS(meta.Source, d.cc.SrcDirs)
-	outVFS, inVFS := composeCCPaths(instance, e.moduleSourceRel(meta.Source), srcVFS, in, instance.Platform.objectSuffix())
+	outVFS, inVFS := composeCCPaths(instance, e.moduleSourceRel(meta.Source), srcVFS, in, d.cc.objSufDot()+e.cudaSettings().ObjectSuffix)
 	srcCV := e.scanner.walkClosure(srcVFS, d.scanCtx, scanDomainCC)
 	runtimeCV := e.scanner.walkClosure(cudaRuntimeIncludeVFS, d.scanCtx, scanDomainCC)
 	closure := na.dedupClosureChunks(srcCV, runtimeCV)
@@ -261,7 +261,7 @@ func (e *EmitContext) emitCudaDeviceLink(archiveName string, local CollectedObjs
 	na, d := e.ctx.na, e.d
 	c := e.cudaSettings()
 	archive := build(e.instance.Path.relString(), "/", archiveName)
-	devlink := build(e.instance.Path.relString(), "/devlink", e.instance.Platform.objectSuffix())
+	devlink := build(e.instance.Path.relString(), "/devlink", d.cc.objSufDot(), c.ObjectSuffix)
 	node := composeARNode(e.instance, archive, local.refs, local.outs, plugin, d.tc, e.ctx.host, na)
 	args := []ANY{internV(c.Root, "/bin/nvcc").any()}
 
@@ -271,7 +271,7 @@ func (e *EmitContext) emitCudaDeviceLink(archiveName string, local CollectedObjs
 
 	for _, src := range d.nvccDeviceSrcs {
 		v := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
-		obj, _ := composeCCPaths(e.instance, e.moduleSourceRel(src), v, newModuleCCInputs(&d.cc), e.instance.Platform.objectSuffix())
+		obj, _ := composeCCPaths(e.instance, e.moduleSourceRel(src), v, newModuleCCInputs(&d.cc), d.cc.objSufDot()+c.ObjectSuffix)
 
 		args = append(args, obj.any())
 		inputs = append(inputs, obj)

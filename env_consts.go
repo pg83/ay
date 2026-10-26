@@ -173,6 +173,7 @@ var (
 	envNotsTool                               = internEnv("NOTS_TOOL")
 	envNoutil                                 = internEnv("NOUTIL")
 	envNvccFlags                              = internEnv("NVCC_FLAGS")
+	envNvccObjExt                             = internEnv("NVCC_OBJ_EXT")
 	envNvccStdVer                             = internEnv("NVCC_STD_VER")
 	envOBJCOPY_TOOL                           = internEnv("OBJCOPY_TOOL")
 	envOBJCOPY_TOOL_VENDOR                    = internEnv("OBJCOPY_TOOL_VENDOR")

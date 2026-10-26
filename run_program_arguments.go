@@ -90,6 +90,7 @@ func bindRunProgramCalls(d *ModuleData, env Environment) {
 		bound.OUTNoAutoFiles = prepareRunProgramArguments(bound.OUTNoAutoFiles, locals)
 		bound.ToolPaths = prepareRunProgramArguments(bound.ToolPaths, locals)
 		bound.OutputIncludes = prepareRunProgramArguments(bound.OutputIncludes, locals)
+		bound.InducedDeps = prepareRunProgramArguments(bound.InducedDeps, locals)
 		bound.EnvPairs = prepareRunProgramArguments(bound.EnvPairs, locals)
 
 		if bound.StdoutFile != nil {

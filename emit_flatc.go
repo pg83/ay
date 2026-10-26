@@ -74,24 +74,8 @@ type FlatcVariant struct {
 	runtimeVFS VFS
 }
 
-func flatcDirectImportNames(pm *IncludeParserManager, srcRel string) []string {
-	direct := pm.sourceParsedBuckets(source(srcRel), nil).bucket(parsedIncludesLocal)
-
-	if len(direct) == 0 {
-		return nil
-	}
-
-	out := make([]string, 0, len(direct))
-
-	for _, d := range direct {
-		out = append(out, d.target.string())
-	}
-
-	return out
-}
-
-func flatcDirectGeneratedHeaderIncludes(na *NodeArenas, pm *IncludeParserManager, srcRel string) []IncludeDirective {
-	direct := flatcDirectImportNames(pm, srcRel)
+func flatcDirectGeneratedHeaderIncludes(na *NodeArenas, scanner *IncludeScanner, src VFS, ext string) []IncludeDirective {
+	direct := scanner.parsedBucketForInput(src, parsedIncludesLocal, nil)
 
 	if len(direct) == 0 {
 		return nil
@@ -102,7 +86,7 @@ func flatcDirectGeneratedHeaderIncludes(na *NodeArenas, pm *IncludeParserManager
 	for _, imp := range direct {
 		out = append(out, IncludeDirective{
 			kind:   includeQuoted,
-			target: includeTarget(internV(imp, ".h").any()),
+			target: includeTarget(internStr(strings.ReplaceAll(imp.target.string(), ext, ext+".h")).any()),
 		})
 	}
 
@@ -233,7 +217,7 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 		e.emitFLReserved(srcRel, srcVFS, flatcLDRef, flatcBinary, flatcFlags, transitiveImports, ccTag, tc, v, flRef)
 	}
 
-	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.na, ctx.parsers, srcVFS.relString())
+	headerIncludes := flatcDirectGeneratedHeaderIncludes(ctx.na, e.scanner, srcVFS, v.srcExt)
 
 	var pending *PendingEmit
 
@@ -284,10 +268,11 @@ func (e *EmitContext) emitFlatcProducer(srcVFS VFS, v *FlatcVariant) {
 	}
 
 	e.register(GeneratedFileInfo{
-		OutputPath:    bfbsVFS,
-		ProducerRef:   flRef,
-		GeneratorRefs: e.ctx.na.refList(flatcLDRef),
-		OnUse:         pending,
+		OutputPath:      bfbsVFS,
+		ProducerRef:     flRef,
+		ProducerMainOut: headerVFS,
+		GeneratorRefs:   e.ctx.na.refList(flatcLDRef),
+		OnUse:           pending,
 	})
 }
 

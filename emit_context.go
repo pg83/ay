@@ -16,6 +16,7 @@ type PeerContext struct {
 	FlatcIncludeArgs  []ANY
 	CythonInclude     []VFS
 	LDFlagsGlobal     []ANY
+	GoLDFlagsGlobal   []ANY
 	LDResources       []STR
 }
 

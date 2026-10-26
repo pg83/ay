@@ -189,6 +189,12 @@ func (s *IncludeScanner) bindGeneratedIncludes(file VFS) ScannedChildren {
 		}
 	}
 
+	for _, include := range s.codegen.inducedIncludes[file] {
+		if s.usesInducedType(file, include.Type) {
+			appendDirective(include.Include)
+		}
+	}
+
 	for _, path := range info.ClosureLeaves {
 		appendPath(path)
 	}
@@ -591,6 +597,12 @@ func (sc *ScanCtx) appendResolvedInducedDeps(out []VFS, vfsPath VFS, incDir VFS,
 	}
 
 	out = append(out, info.ClosureLeaves...)
+
+	for _, include := range s.codegen.inducedIncludes[vfsPath] {
+		if s.usesInducedType(vfsPath, include.Type) {
+			out = sc.resolve(out, vfsPath, incDir, include.Include)
+		}
+	}
 
 	if len(info.GeneratorRefs) == 0 || bucket == parsedIncludesLocal {
 		return out

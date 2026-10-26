@@ -426,6 +426,7 @@ var (
 	strPartitionMode                                                                         = internStr("--partition-mode")
 	strPassPeers                                                                             = internStr("PASS_PEERS")
 	strPath                                                                                  = internStr("--path")
+	strPeerdirTags                                                                           = internStr("PEERDIR_TAGS")
 	strPerl                                                                                  = internStr("-perl")
 	strPluginOrgJetbrainsKotlinKapt3AptmodeStubsandapt                                       = internStr("plugin:org.jetbrains.kotlin.kapt3:aptMode=stubsAndApt")
 	strPluginsBegin                                                                          = internStr("--plugins-begin")
