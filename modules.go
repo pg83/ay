@@ -3027,6 +3027,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.decimalMD5 = append(d.decimalMD5, stmt)
 	case tokCythonFlags:
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokSetAppend, Args: append([]ANY{strCythonOptions.any()}, v.Args...)}, d, env, onWarn)
+	case tokFlexFlags:
+		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokSetAppend, Args: append([]ANY{envLEX_FLAGS.str().any()}, v.Args...)}, d, env, onWarn)
 	case tokBuildwithCythonCpp:
 		if len(v.Args) == 0 {
 			throwFmt("BUILDWITH_CYTHON_CPP expects at least 1 argument")

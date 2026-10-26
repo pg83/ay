@@ -43,6 +43,7 @@ var tokName = [...]STR{
 	tokUdfNoProbe:             internStr("UDF_NO_PROBE"),
 
 	tokCythonFlags: internStr("CYTHON_FLAGS"),
+	tokFlexFlags:   internStr("FLEX_FLAGS"),
 	tokDllFor:      internStr("DLL_FOR"),
 
 	tokPackageFinal:              internStr("_PACKAGE_FINAL"),
@@ -958,6 +959,7 @@ const (
 	tokDebVersion
 	tokCythonFlags
 	tokYqlUdf
+	tokFlexFlags
 	tokUdfBase
 	tokYqlPythonUdf
 	tokYqlPython3Udf

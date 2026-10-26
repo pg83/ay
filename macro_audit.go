@@ -50,6 +50,7 @@ var macrosAcceptingUserFlags = map[TOK]struct{}{
 	tokSetListPreSuf:      {},
 	tokPrepareInducedDeps: {},
 	tokGoSkipTests:        {},
+	tokFlexFlags:          {},
 	tokNoBuildIf:          {}, tokBuildOnlyIf: {},
 }
 

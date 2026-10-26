@@ -16,6 +16,15 @@ class CodegenTest(MakeTest):
     def test_flex(self):
         self.generated("lexer.l", "lexer.l.cpp", '%option noyywrap\n%%\n[0-9]+ return 1;\n. ;\n%%\n')
 
+    def test_flex_flags(self):
+        lexer = '%option noyywrap\n%%\n[0-9]+ return 1;\n. ;\n%%\n'
+        for macros, flags in (("SET(LEX_FLAGS -+)", ["-+"]), ("FLEX_FLAGS(-+ --nounistd)", ["-+", "--nounistd"])):
+            with self.subTest(macros=macros):
+                graph = self.generated("lexer.l", "lexer.l.cpp", lexer, macros)
+                args = self.node(graph, "lexer.l.cpp")["cmds"][0]["cmd_args"]
+                self.assertEqual(args[1:1 + len(flags)], flags)
+                self.assertRegex(args[1 + len(flags)], f"^-o\\$\\(B(UILD_ROOT)?\\)/{PROJECT}/lexer\\.l\\.cpp$")
+
     def test_ragel(self):
         self.generated("machine.rl6", "machine.rl6.cpp", '%%{ machine scanner; main := any*; }%%\n%% write data;\n')
 

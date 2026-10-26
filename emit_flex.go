@@ -39,8 +39,10 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	meta.Source = outVFS.any()
 	e.enqueueSrc(meta)
 
+	lexFlags := na.anyList(internAnys(splitShellWords(Environment{s: &e.frame.ifEnv}.string(envLEX_FLAGS)))...)
+
 	pe := func() {
-		e.emitFlexLX(flexRef, flexBin, srcVFS, outVFS, lxRef)
+		e.emitFlexLX(flexRef, flexBin, lexFlags, srcVFS, outVFS, lxRef)
 	}
 
 	pending := e.pendingEmit(pe)
@@ -54,11 +56,10 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	})
 }
 
-func (e *EmitContext) emitFlexLX(flexRef NodeRef, flexBin VFS, srcVFS, outVFS VFS, id NodeRef) {
+func (e *EmitContext) emitFlexLX(flexRef NodeRef, flexBin VFS, lexFlags []ANY, srcVFS, outVFS VFS, id NodeRef) {
 	na := e.ctx.na
 
-	cmdArgs := na.chunkList(na.anyList(
-		flexBin.any(),
+	cmdArgs := na.chunkList(na.anyList(flexBin.any()), lexFlags, na.anyList(
 		internV(argDashO.string(), outVFS.prefix(), outVFS.relString()).any(),
 		srcVFS.any(),
 	))

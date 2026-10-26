@@ -132,6 +132,7 @@ var (
 	envKotlinGrpcJar                          = internEnv("KOTLIN_GRPC_JAR")
 	envKotlinJvmTarget                        = internEnv("KOTLIN_JVM_TARGET")
 	envKotlinProto                            = internEnv("KOTLIN_PROTO")
+	envLEX_FLAGS                              = internEnv("LEX_FLAGS")
 	envLIBRARY_PATH                           = internEnv("LIBRARY_PATH")
 	envLINUX                                  = internEnv("LINUX")
 	envLLVM_LLC_TOOL                          = internEnv("LLVM_LLC_TOOL")
