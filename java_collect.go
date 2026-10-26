@@ -781,7 +781,7 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.test.data = append(d.test.data, args...)
 	case "DATA_FILES":
 		for _, a := range args {
-			d.test.data = append(d.test.data, "arcadia/"+a)
+			d.test.data = append(d.test.data, testDataFile(a))
 		}
 	case "JAVA_SRCS", "FULL_JAVA_SRCS":
 		if u.kind == juJar && !u.proto {

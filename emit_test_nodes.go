@@ -38,14 +38,15 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	meta := e.d.test
 	project := e.instance.Path.relString()
 	name := testType
+	benchmark := testType == "g_benchmark" || testType == "benchmark"
 
-	if testType == "g_benchmark" || testType == "boost_test" {
+	if benchmark || testType == "boost_test" {
 		name = path.Base(binary.relString())
 	}
 
-	s := &TestSuite{p: e.ctx.target, projectPath: project, name: name, testType: testType, ciType: "test", deps: depRefs(ref), globals: globals, smoothShutdown: []string{"SIGUSR2"}}
+	s := &TestSuite{p: e.ctx.target, projectPath: project, name: name, testType: testType, ciType: "test", deps: depRefs(ref), globals: globals, smoothShutdown: []string{"SIGUSR2"}, runInputs: []VFS{source(project)}}
 
-	s.applyTestMeta(meta, e.d.setVars[strADD_SRCDIR_TO_TEST_DATA] != strNo)
+	s.applyTestMeta(meta, testType != "benchmark" && e.d.setVars[strADD_SRCDIR_TO_TEST_DATA] != strNo)
 
 	if testType == "fuzz" {
 		for _, file := range meta.fuzzDicts {
@@ -72,10 +73,10 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	s.setupPythonpathEnv = python
 	s.pythonNoBytecode = python
 	s.disableLeaks = python
-	s.supportsCanonization = python || testType == "g_benchmark"
+	s.supportsCanonization = python || benchmark
 	s.supportsTestParameters = python || testType == "unittest" || testType == "gtest"
 
-	if testType == "g_benchmark" || testType == "boost_test" {
+	if benchmark || testType == "boost_test" {
 		s.split = 1
 	}
 

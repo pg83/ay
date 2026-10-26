@@ -4897,7 +4897,7 @@ func applyAllocatorStmt(v UnknownStmt, d *ModuleData, env Environment) {
 func hasCppDefaultAllocator(name TOK) bool {
 	switch name {
 	case tokProgram, tokYqlPrebuiltProgram, tokUnittest, tokUnittestFor, tokUnittestWithCustomEntryPoint,
-		tokGtest, tokGBenchmark, tokFuzz, tokBoosttest, tokBoosttestWithMain:
+		tokGtest, tokGBenchmark, tokYBenchmark, tokFuzz, tokBoosttest, tokBoosttestWithMain:
 		return true
 	}
 
@@ -4906,7 +4906,7 @@ func hasCppDefaultAllocator(name TOK) bool {
 
 func isProgramModuleType(name TOK) bool {
 	switch name {
-	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokSandboxTask, tokSandboxPy3Task, tokSandboxPy23Task, tokSandboxPy233Task, tokPy3Test, tokPy2Test, tokPytestBin, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokFuzz, tokBoosttest, tokBoosttestWithMain, tokGoProgram, tokGoTest, tokGoDll:
+	case tokProgram, tokYqlPrebuiltProgram, tokPy2Program, tokPy3Program, tokPy3ProgramBin, tokSandboxTask, tokSandboxPy3Task, tokSandboxPy23Task, tokSandboxPy233Task, tokPy3Test, tokPy2Test, tokPytestBin, tokUnittestFor, tokUnittest, tokUnittestWithCustomEntryPoint, tokYtUnittest, tokGtest, tokGBenchmark, tokYBenchmark, tokFuzz, tokBoosttest, tokBoosttestWithMain, tokGoProgram, tokGoTest, tokGoDll:
 		return true
 	}
 

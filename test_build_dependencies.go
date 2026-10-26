@@ -228,11 +228,13 @@ func (ctx *GenCtx) testDependencyClosure(dependency TestBuildDependency, seen ma
 
 	result.testDependencyModule.peers = nil
 
-	for _, ref := range ctx.moduleResultRefs(instance, result) {
-		ctx.emit.result(ref)
-	}
-
 	module := ctx.runtimeTestDependencyModule(dependency)
+
+	if !root || !module.multimodule || module.final {
+		for _, ref := range ctx.moduleResultRefs(instance, result) {
+			ctx.emit.result(ref)
+		}
+	}
 
 	if root && module.multimodule && module.bundle && !module.final {
 		return

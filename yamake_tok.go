@@ -114,6 +114,7 @@ var tokName = [...]STR{
 	tokYtUnittest:                   internStr("YT_UNITTEST"),
 	tokGtest:                        internStr("GTEST"),
 	tokGBenchmark:                   internStr("G_BENCHMARK"),
+	tokYBenchmark:                   internStr("Y_BENCHMARK"),
 	tokFuzz:                         internStr("FUZZ"),
 	tokBoosttest:                    internStr("BOOSTTEST"),
 	tokBoosttestWithMain:            internStr("BOOSTTEST_WITH_MAIN"),
@@ -791,6 +792,7 @@ const (
 	tokYtUnittest
 	tokGtest
 	tokGBenchmark
+	tokYBenchmark
 	tokFuzz
 	tokBoosttest
 	tokBoosttestWithMain

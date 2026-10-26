@@ -59,6 +59,8 @@ func applyCppTestModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 		)
 	case tokGBenchmark:
 		peers = []string{"library/cpp/testing/gbenchmark"}
+	case tokYBenchmark:
+		peers = []string{"library/cpp/testing/benchmark/main"}
 	case tokFuzz:
 		if afl, _ := env.lookup("USE_AFL"); afl == "yes" {
 			peers = []string{"contrib/libs/afl"}

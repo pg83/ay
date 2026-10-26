@@ -85,11 +85,18 @@ func (ctx *GenCtx) configureDependencies() {
 			root := ctx.roots[ctx.rootInstanceForDeclaration(dir, demandNone, declaration)]
 
 			for _, instance := range ctx.testDependencyInstances(dir) {
+				if root {
+					ctx.testRoots = append(ctx.testRoots, genModule(ctx, instance))
+
+					continue
+				}
+
+				ctx.emit.deferPublication++
+
 				result := genModule(ctx, instance)
 
-				if root {
-					ctx.testRoots = append(ctx.testRoots, result)
-				}
+				ctx.emit.deferPublication--
+				ctx.consumeModuleWarnings(result)
 			}
 		}
 
@@ -110,11 +117,7 @@ func (ctx *GenCtx) configureDependencies() {
 		}
 
 		if retain {
-			for _, built := range ctx.testBuildDependencies(dependency.to) {
-				for _, ref := range ctx.moduleResultRefs(built.instance, built.result) {
-					ctx.emit.result(ref)
-				}
-			}
+			ctx.testBuildDependencies(dependency.to)
 		}
 	}
 }

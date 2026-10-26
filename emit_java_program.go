@@ -214,13 +214,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 		b.cmd(b.fsTools(strMd.any(), cpDir.any()), 0)
 		b.cmd(b.fsTools(strLinkOrCopy.any(), self.any(), jm.target.any()), 0)
 
-		lc := b.fsTools(strLinkOrCopyToDir.any(), strYaStartCommandFile.any(), self.any())
-
-		for _, ext := range []string{".so", ".dll", ".dylib"} {
-			for _, p := range javaClosureJars(closure, ext) {
-				lc = append(lc, p.any())
-			}
-		}
+		lc, lateOuts := javaLinkToDir(b.fsTools(strLinkOrCopyToDir.any(), strYaStartCommandFile.any(), self.any()), closure, cpDir, ".so", ".dll", ".dylib")
 
 		b.cmd(append(lc, strYaEndCommandFile.any(), cpDir.any()), 0)
 
@@ -230,6 +224,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 
 		b.cmd(append(b.python("build/scripts/find_and_tar.py"), tarball.any()), cpDir)
 		b.javaScriptgenScripts(jm, globals, closure, jdk)
+		b.outputs = append(b.outputs, lateOuts...)
 		b.setKV(pkUJ, pcNone, false)
 		b.closure(closure)
 		b.macroOuts(jm)
@@ -240,16 +235,7 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 
 	b.cmd(b.fsTools(strMd.any(), cpDir.any()), 0)
 
-	lc := b.fsTools(strLinkOrCopyToDir.any(), strYaStartCommandFile.any())
-
-	var lateOuts []VFS
-
-	for _, ext := range []string{".jar", ".so", ".dll", ".dylib"} {
-		for _, p := range javaClosureJars(closure, ext) {
-			lc = append(lc, p.any())
-			lateOuts = append(lateOuts, build(cpDir.relString(), "/", path.Base(p.relString())))
-		}
-	}
+	lc, lateOuts := javaLinkToDir(b.fsTools(strLinkOrCopyToDir.any(), strYaStartCommandFile.any()), closure, cpDir, ".jar", ".so", ".dll", ".dylib")
 
 	b.cmd(append(lc, strYaEndCommandFile.any(), cpDir.any()), 0)
 
@@ -300,6 +286,19 @@ func (ctx *GenCtx) javaEmitRunnable(jm *JavaModule) {
 	b.macroOuts(jm)
 	b.setKV(pkJP, pcLightBlue, true)
 	b.emitModule(jm)
+}
+
+func javaLinkToDir(lc []ANY, closure []JavaClosureEntry, cpDir VFS, exts ...string) ([]ANY, []VFS) {
+	var lateOuts []VFS
+
+	for _, ext := range exts {
+		for _, p := range javaClosureJars(closure, ext) {
+			lc = append(lc, p.any())
+			lateOuts = append(lateOuts, build(cpDir.relString(), "/", path.Base(p.relString())))
+		}
+	}
+
+	return lc, lateOuts
 }
 
 func javaEntryPaths(closure []JavaClosureEntry) []VFS {

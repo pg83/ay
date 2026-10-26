@@ -30,6 +30,8 @@ func testSuiteName(name TOK) string {
 		return "pytest"
 	case tokGBenchmark:
 		return "g_benchmark"
+	case tokYBenchmark:
+		return "benchmark"
 	case tokFuzz:
 		return "fuzz"
 	case tokBoosttest, tokBoosttestWithMain:
@@ -104,7 +106,7 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 		}
 	case tokDataFiles:
 		for _, a := range args {
-			t.data = append(t.data, "arcadia/"+strings.TrimPrefix(strings.TrimPrefix(a, "$(S)/"), "${ARCADIA_ROOT}/"))
+			t.data = append(t.data, testDataFile(a))
 		}
 	case tokDepends:
 
@@ -149,6 +151,10 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 	}
 
 	return true
+}
+
+func testDataFile(file string) string {
+	return "arcadia/" + strings.TrimPrefix(strings.TrimPrefix(file, "$(S)/"), "${ARCADIA_ROOT}/")
 }
 
 func normalizedTestData(data []string) []string {
@@ -323,8 +329,14 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary, work string, chunk Te
 
 		return testArgs(command)
 
-	case "g_benchmark":
-		args = append(args, "run_g_benchmark", "--binary", binary, "--tracefile", trace, "--output-dir", out, "--project-path", s.projectPath, "--verbose", "--gdb-path", testGDBPath)
+	case "g_benchmark", "benchmark":
+		runner := "run_g_benchmark"
+
+		if s.testType == "benchmark" {
+			runner = "run_y_benchmark"
+		}
+
+		args = append(args, runner, "--binary", binary, "--tracefile", trace, "--output-dir", out, "--project-path", s.projectPath, "--verbose", "--gdb-path", testGDBPath)
 
 		if opts.dist {
 			args = append(args, "--truncate-logs")
