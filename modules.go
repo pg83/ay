@@ -306,6 +306,7 @@ type ModuleData struct {
 	useLightPy2cc            bool
 	useCommonGoogleAPIs      bool
 	moduleScopeCFlags        []ANY
+	cFlagsAppend             []ANY
 	pythonSQLite3            bool
 	pyNamespace              *ANY
 	pyModuleNamespace        *ANY
@@ -967,13 +968,14 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	musl := muslCFlags(d.muslEnabled && !effectiveNoPlatform(d.flags))
 	sse := sseBaseCFlags(env.bool(envARCH_X86_64) && instance.Language != LangFbsJavaNative)
 
-	if n := len(musl) + len(sse); n > 0 {
+	if n := len(d.cFlagsAppend) + len(musl) + len(sse); n > 0 {
 		scope := d.moduleScopeCFlags
 		grown := append(scope, make([]ANY, n)...)
 
 		copy(grown[n:], grown[:len(scope)])
-		copy(grown, musl)
-		copy(grown[len(musl):], sse)
+		copy(grown, d.cFlagsAppend)
+		copy(grown[len(d.cFlagsAppend):], musl)
+		copy(grown[len(d.cFlagsAppend)+len(musl):], sse)
 
 		d.moduleScopeCFlags = grown
 	}
@@ -3849,6 +3851,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 				d.cFlags = append(d.cFlags, v.Args[1:]...)
 			case "_PROTOC_FLAGS":
 				d.protocFlags = append(d.protocFlags, v.Args[1:]...)
+			case "CFLAGS":
+				d.cFlagsAppend = append(d.cFlagsAppend, v.Args[1:]...)
 			case "RPATH_GLOBAL":
 				for _, argTok := range v.Args[1:] {
 					arg := argTok.string()

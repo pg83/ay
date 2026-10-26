@@ -12,6 +12,17 @@ class NativeConfigTest(MakeTest):
         for flag in ("-DE2E_FIRST", "-DE2E_SECOND"):
             self.assertIn(flag, args)
 
+    def test_module_cflags_variable(self):
+        self.write("ya.make", "LIBRARY()\nIF (NOT MSVC)\n    SET_APPEND(CFLAGS -Wno-strict-aliasing)\nENDIF()\nSRCS(answer.cpp value.c)\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        self.write("value.c", "int value(void) { return 42; }\n")
+        graph = self.graph()
+        for output in ("answer.cpp.o", "value.c.o"):
+            with self.subTest(output=output):
+                args = self.node(graph, output)["cmds"][0]["cmd_args"]
+                self.assertIn("-Wno-strict-aliasing", args)
+                self.assertLess(args.index("-Wno-strict-aliasing"), args.index("-msse2"))
+
     def test_windows_manifest(self):
         self.write("main.cpp", "int main() { return 0; }\n")
         for macros in ("WINDOWS_LONG_PATH_MANIFEST()", "WINDOWS_MANIFEST(build/long-path.manifest)"):
