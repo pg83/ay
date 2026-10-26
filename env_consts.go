@@ -314,6 +314,7 @@ var (
 	envYamlLintSrcs                           = internEnv("YAML_LINT_SRCS")
 	envYqlAbiPeerdirTag                       = internEnv("YQL_ABI_PEERDIR_TAG")
 	envYqlAbiStatedCurrent                    = internEnv("_YQL_ABI_STATED_CURRENT")
+	envYmakeObjcopyLargeResourceThr           = internEnv("YMAKE_OBJCOPY_LARGE_RESOURCE_THR")
 	envYqlAbiStatedStable                     = internEnv("_YQL_ABI_STATED_STABLE")
 	envYqlPythonDir                           = internEnv("YQL_PYTHON_DIR")
 	envYqlPythonUdfExport                     = internEnv("YQL_PYTHON_UDF_EXPORT")

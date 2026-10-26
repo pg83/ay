@@ -113,7 +113,7 @@ func (e *EmitContext) objcopyEmitCtx() *ObjcopyEmitCtx {
 	*oc = ObjcopyEmitCtx{na: ctx.na}
 	oc.rescompilerLDRef, _ = ctx.tool(argToolsRescompiler)
 	oc.rescompressorLDRef, _ = ctx.tool(argToolsRescompressor)
-	oc.blocks = composeObjcopyArgBlocks(ctx.na, d.tc, instancePlatform(e))
+	oc.blocks = composeObjcopyArgBlocks(ctx.na, d.tc, instancePlatform(e), Environment{s: &e.frame.ifEnv}.string(envYmakeObjcopyLargeResourceThr))
 
 	return oc
 }
@@ -122,7 +122,13 @@ func instancePlatform(e *EmitContext) *Platform {
 	return e.instance.Platform
 }
 
-func composeObjcopyArgBlocks(na *NodeArenas, tc ModuleToolchain, p *Platform) ObjcopyArgBlocks {
+func composeObjcopyArgBlocks(na *NodeArenas, tc ModuleToolchain, p *Platform, largeResourceThr string) ObjcopyArgBlocks {
+	post := []ANY{argTarget.any(), internStr(p.Triple).any()}
+
+	if largeResourceThr != "" {
+		post = append(post, argLargeResourceThr.any(), internStr(largeResourceThr).any())
+	}
+
 	return ObjcopyArgBlocks{
 		pre: na.anyList(
 			tc.Python3.any(),
@@ -133,7 +139,7 @@ func composeObjcopyArgBlocks(na *NodeArenas, tc ModuleToolchain, p *Platform) Ob
 			argRescompiler.any(), rescompilerBinVFS.any(),
 			argOutputObj.any(),
 		),
-		post: na.anyList(argTarget.any(), internStr(p.Triple).any()),
+		post: na.anyList(post...),
 	}
 }
 

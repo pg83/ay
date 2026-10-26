@@ -150,6 +150,7 @@ var (
 	argKeys                                                 = internArg("--keys")
 	argKvs                                                  = internArg("--kvs")
 	argL                                                    = internArg("-L")
+	argLargeResourceThr                                     = internArg("--large_resource_thr")
 	argLegacyImplicitNoexceptTrue                           = internArg("legacy_implicit_noexcept=True")
 	argLibraryCppProtoConfigPlugin                          = internArg("library/cpp/proto_config/plugin")
 	argLinkOrCopyToDir                                      = internArg("link_or_copy_to_dir")

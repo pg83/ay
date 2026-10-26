@@ -12,3 +12,13 @@ class ResourceTest(MakeTest):
                 producers = [node for node in graph["graph"] if f"$(S)/{PROJECT}/{source}" in node["inputs"]]
                 self.assertTrue(producers, f"no command consumes {source}")
                 self.assertTrue(any(node["outputs"] for node in producers))
+
+    def test_objcopy_large_resource_threshold(self):
+        self.write("ya.make", "PY3_LIBRARY()\nSET(YMAKE_OBJCOPY_LARGE_RESOURCE_THR 0)\nPY_SRCS(answer.py)\nEND()\n")
+        self.write("answer.py", "VALUE = 42\n")
+        graph = self.graph()
+        objcopy = [node["cmds"][0]["cmd_args"] for node in graph["graph"] if any(path.startswith(f"$(B)/{PROJECT}/objcopy_") for path in node["outputs"])]
+        self.assertTrue(objcopy)
+        for args in objcopy:
+            target = args.index("--target")
+            self.assertEqual(args[target + 2:target + 4], ["--large_resource_thr", "0"])
