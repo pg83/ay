@@ -9,6 +9,18 @@ class ExtendedModulesTest(MakeTest):
         self.write("component/component.go", "package component\nfunc Build() {}\n")
         self.node(self.graph(), "answer")
 
+    def test_mlaunch_library_target_link(self):
+        self.write("ya.make", "RECURSE(component program)\n")
+        self.write("program/ya.make", f"PROGRAM(answer)\nSRCS(main.cpp)\nPEERDIR({PROJECT}/component)\nEND()\n")
+        self.write("program/main.cpp", "int main() { return 0; }\n")
+        self.write("component/ya.make", f"MLAUNCH_LIBRARY(component)\nGOLAUNCH_FUNCTION(Launch)\nGOLAUNCH_SRCS(component.go)\nRUNTIME_PEERDIR({PROJECT}/lib)\nEND()\n")
+        self.write("component/component.go", "package component\nfunc Launch() {}\n")
+        self.write("lib/ya.make", "LIBRARY()\nSRCS(GLOBAL lib.cpp)\nEND()\n")
+        self.write("lib/lib.cpp", "int lib() { return 42; }\n")
+        link = self.node(self.graph(), "program/answer")
+        self.assertIn(f"$(B)/{PROJECT}/lib/lib{PROJECT}-lib.global.a", link["inputs"])
+        self.assertNotIn(f"$(B)/{PROJECT}/component/component.pkg.fake", link["inputs"])
+
     def test_sandbox_variants(self):
         self.write("__init__.py", "from sandbox import sdk2\nclass Answer(sdk2.Task):\n    def on_execute(self):\n        pass\n")
         for kind in ("SANDBOX_TASK", "SANDBOX_PY23_TASK", "SANDBOX_PY23_3_TASK"):

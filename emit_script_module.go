@@ -138,7 +138,7 @@ func (e *EmitContext) scriptModuleResult(ref NodeRef, out VFS, peers []VFS, glob
 
 	languages := []Language{e.instance.Language, LangNone, LangCPP}
 
-	if e.d.multimodule == tokPackage && e.instance.Language == LangPackage {
+	if e.d.multimodule != 0 && e.instance.Language != LangCPP {
 		languages = languages[:1]
 	}
 
