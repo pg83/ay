@@ -15,6 +15,14 @@ class TestVariantsTest(MakeTest):
         self.assertNotIn("--test-related-path", args)
         self.assertIn(f"$(S)/{PROJECT}/benchmark", node["inputs"])
 
+    def test_explicit_data_keeps_project_input(self):
+        self.write("ya.make", "UNITTEST()\nSRCS(answer_ut.cpp)\nEXPLICIT_DATA()\nEND()\n")
+        self.write("answer_ut.cpp", "#include <library/cpp/testing/unittest/registar.h>\nY_UNIT_TEST_SUITE(Answer) { Y_UNIT_TEST(Value) { UNIT_ASSERT_VALUES_EQUAL(6 * 7, 42); } }\n")
+        node = self.node(self.graph("-t"), "test-results/unittest/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertNotIn("--test-related-path", args)
+        self.assertEqual([f"$(S)/{PROJECT}"], node["inputs"])
+
     def test_zero_ram_disk_requirement_cancels_previous_value(self):
         self.write("test_answer.py", "def test_answer():\n    assert 6 * 7 == 42\n")
         for size in (0, 1):
