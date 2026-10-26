@@ -494,15 +494,21 @@ def ya_upload(path, tar, owner, descr):
     return url
 
 
-def file_contains(path, needle):
+# A user OAuth token as ya writes it into test commands (--token y1__...).
+# The prefix alone also turns up inside random node uids ("...uOy1__XXXXXXXX"),
+# so a token must start at a token boundary and be token-long.
+OAUTH_TOKEN_RE = re.compile(rb"(?<![A-Za-z0-9_-])y1__[A-Za-z0-9_-]{20,}")
+
+
+def file_has_token(path):
     tail = b""
 
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 24), b""):
-            if needle in tail + chunk:
+            if OAUTH_TOKEN_RE.search(tail + chunk):
                 return True
 
-            tail = chunk[1 - len(needle):]
+            tail = chunk[-256:]
 
     return False
 
@@ -733,7 +739,7 @@ def main():
         print(f"[provision] OK — artifact at {slice_artifact} (--no-upload: skipped upload + config)", flush=True)
         return 0
 
-    if file_contains(graph_fuse, b"y1__"):
+    if file_has_token(graph_fuse):
         raise SystemExit(f"provision: {graph_fuse} carries an OAuth token (y1__...): not uploading")
 
     print("[provision] phase 6: upload + config", flush=True)

@@ -7,7 +7,7 @@ from unittest import mock
 from pathlib import Path
 
 from fetch_validation_resource import download
-from provision import parse_trace, parse_xfail
+from provision import OAUTH_TOKEN_RE, parse_trace, parse_xfail
 from validate_case import CaseRunner
 from validation_lib import (
     format_result_lines,
@@ -74,6 +74,10 @@ class ValidationTest(unittest.TestCase):
             call = json.loads(line)
             calls.setdefault(call["args"][0], []).append(call)
         return calls
+
+    def test_token_guard_ignores_uids_with_the_token_prefix(self):
+        self.assertIsNone(OAUTH_TOKEN_RE.search(b'"self_uid": "FSJXp6E7uOy1__ABCDEFGH",'))
+        self.assertIsNotNone(OAUTH_TOKEN_RE.search(b'"--token", "y1__AgAAAAABCDEFGHIJKLMNOPQRSTUV"'))
 
     def test_parity_counts_and_sample(self):
         with tempfile.TemporaryDirectory() as directory:
