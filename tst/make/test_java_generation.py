@@ -1,7 +1,18 @@
+import base64
+
 from tst.make.lib import MakeTest, PROJECT
 
 
 class JavaGenerationTest(MakeTest):
+    def test_script_property_keeps_escaped_variable(self):
+        self.write("ya.make", "JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nGENERATE_SCRIPT(OUT answer.sh TEMPLATE launch.tmpl CUSTOM_PROPERTY defaultJvmArgs -Ddc=\\${DC})\nEND()\n")
+        self.write("Main.java", "public class Main {}\n")
+        self.write("launch.tmpl", "#!/bin/sh\njava {{ defaultJvmArgs }}\n")
+        node = self.node(self.graph(), "answer.sh")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        value = base64.b64encode(b"defaultJvmArgs=-Ddc=${DC}").decode()
+        self.assertIn(value, args)
+
     def test_java_generator(self):
         self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(e2e.Generator CLASSPATH {PROJECT}/tool IN input.txt OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
         self.write("input.txt", "42\n")

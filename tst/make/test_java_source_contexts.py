@@ -2,6 +2,18 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class JavaSourceContextsTest(MakeTest):
+    def test_rooted_test_data_has_one_source_prefix(self):
+        self.write("ya.make", "RECURSE(test)\n")
+        self.write("test/ya.make", f"JUNIT5(answer)\nJDK_VERSION(17)\nJAVA_SRCS(AnswerTest.java)\nDATA_FILES(${{ARCADIA_ROOT}}/{PROJECT}/value.txt)\nEND()\n")
+        self.write("test/AnswerTest.java", "public class AnswerTest {}\n")
+        self.write("value.txt", "42\n")
+        node = self.node(self.graph("-t"), f"test/test-results/{PROJECT}-test/meta.json")
+        self.assertIn(f"$(S)/{PROJECT}/value.txt", node["inputs"])
+        args = [arg.replace("$(SOURCE_ROOT)", "$(S)") for command in node["cmds"] for arg in command["cmd_args"]]
+        related = [args[i + 1] for i, arg in enumerate(args[:-1]) if arg == "--test-related-path"]
+        self.assertIn(f"$(S)/{PROJECT}/value.txt", related)
+        self.assertFalse(any("$(S)/$(S)/" in value for value in related))
+
     def test_generated_source_directory(self):
         self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool OUT_DIR generated IN_DIR data CWD ${{BINDIR}})\nJAVA_SRCS(SRCDIR ${{BINDIR}}/generated **/*.java)\nEND()\n")
         self.write("data/value.txt", "42\n")

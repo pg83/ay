@@ -4,6 +4,17 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class TestVariantsTest(MakeTest):
+    def test_y_benchmark(self):
+        self.write("ya.make", "RECURSE(benchmark)\n")
+        self.write("benchmark/ya.make", "Y_BENCHMARK()\nSRCS(bench.cpp)\nEND()\n")
+        self.write("benchmark/bench.cpp", '#include <library/cpp/testing/benchmark/bench.h>\nY_CPU_BENCHMARK(Answer, iface) { for (size_t i = 0; i < iface.Iterations(); ++i) { DoNotOptimizeAway(42); } }\n')
+        graph = self.graph("--dist", "--target-platform=default-linux-x86_64", "--target-platform-build-type=relwithdebinfo", "--target-platform-tests", "--output-only-tests", "--add-modules-to-results", "-DAUTOCHECK=yes", "--target-platform-flag=AUTOCHECK=yes", "--test-size=small", "--test-size=medium")
+        node = self.node(graph, "benchmark/test-results/benchmark/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("--supports-canonization", args)
+        self.assertNotIn("--test-related-path", args)
+        self.assertIn(f"$(S)/{PROJECT}/benchmark", node["inputs"])
+
     def test_zero_ram_disk_requirement_cancels_previous_value(self):
         self.write("test_answer.py", "def test_answer():\n    assert 6 * 7 == 42\n")
         for size in (0, 1):

@@ -4,6 +4,103 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class JavaGeneratorInputsTest(MakeTest):
+    def test_input_jar_keeps_managed_transitive_version(self):
+        commons = "contrib/java/org/apache/commons/commons-lang3"
+        self.generator()
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/subject)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool IN ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/subject/subject.jar OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+        self.write("subject/ya.make", f"JAVA_PROGRAM(subject)\nJDK_VERSION(17)\nJAVA_SRCS(Subject.java)\nPEERDIR({PROJECT}/lib)\nDEPENDENCY_MANAGEMENT({commons}/3.12.0)\nEND()\n")
+        self.write("subject/Subject.java", "public class Subject {}\n")
+        self.write("lib/ya.make", f"JAVA_LIBRARY(lib)\nJDK_VERSION(17)\nJAVA_SRCS(Lib.java)\nPEERDIR({commons}/3.10)\nEND()\n")
+        self.write("lib/Lib.java", "public class Lib {}\n")
+        node = self.node(self.graph(), "Generated.java")
+        for version in ("3.10", "3.12.0"):
+            self.assertIn(f"$(B)/{commons}/{version}/commons-lang3-{version}.jar", node["inputs"])
+
+    def test_input_jar_keeps_native_peer_closure(self):
+        self.generator()
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/subject)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool IN ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/subject/subject.jar OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+        self.write("subject/ya.make", f"JAVA_PROGRAM(subject)\nJDK_VERSION(17)\nJAVA_SRCS(Subject.java)\nPEERDIR({PROJECT}/binding)\nEND()\n")
+        self.write("subject/Subject.java", "public class Subject {}\n")
+        self.write("binding/ya.make", "DLL_JAVA(binding)\nJDK_VERSION(17)\nSRCS(binding.swg)\nEND()\n")
+        self.write("binding/binding.swg", '%module binding\n%inline %{ int answer() { return 42; } %}\n')
+        graph = self.graph()
+        node = self.node(graph, "Generated.java")
+        self.assertIn("$(B)/util/libyutil.a", node["inputs"])
+        self.assertFalse([path for path in node["inputs"] if path.endswith(".pkg.fake")])
+        self.assertNotIn("$(B)/contrib/libs/jdk/libcontrib-libs-jdk.a", node["inputs"])
+        for path in ("$(B)/util/libyutil.a", f"$(B)/{PROJECT}/binding/libbinding.so"):
+            with self.subTest(dependency=path):
+                producers = {item["uid"] for item in graph["graph"] if path in item["outputs"]}
+                self.assertTrue(producers.intersection(node["deps"]), path)
+
+    def test_input_java_manifest_omits_fake_modules(self):
+        self.generator()
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/subject)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool IN ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/subject/subject.run.cp.jar OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\nRECURSE(subject)\n")
+        self.write("subject/ya.make", "JAVA_PROGRAM(subject)\nJDK_VERSION(17)\nJAVA_SRCS(Subject.java)\nEND()\n")
+        self.write("subject/Subject.java", "public class Subject {}\n")
+        node = self.node(self.graph(), "Generated.java")
+        self.assertIn(f"$(B)/{PROJECT}/subject/subject.jar", node["inputs"])
+        self.assertFalse([path for path in node["inputs"] if path.endswith(".pkg.fake")])
+
+    def test_dotted_variable_in_generator_archive_hash(self):
+        self.generator()
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nSET(generator.version 42)\nRUN_JAVA_PROGRAM(Generator ${{generator.version}} CLASSPATH {PROJECT}/tool OUT_DIR generated)\nJAVA_SRCS(SRCDIR ${{BINDIR}}/generated **/*.java)\nEND()\n")
+        raw = f"Generator 42 CLASSPATH {PROJECT}/tool OUT_DIR generated"
+        digest = hashlib.md5(raw.encode()).hexdigest()
+        self.node(self.graph(), f"generated.{digest}.gentar")
+
+    def test_input_jar_keeps_transitive_classpath(self):
+        self.generator()
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nPEERDIR({PROJECT}/subject)\nRUN_JAVA_PROGRAM(Generator ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/subject/subject.jar CLASSPATH {PROJECT}/tool IN ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/subject/subject.jar OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+        self.write("subject/ya.make", f"JAVA_LIBRARY(subject)\nJDK_VERSION(17)\nJAVA_SRCS(Subject.java)\nPEERDIR({PROJECT}/leaf)\nEND()\n")
+        self.write("subject/Subject.java", "public class Subject {}\n")
+        self.write("leaf/ya.make", "JAVA_LIBRARY(leaf)\nJDK_VERSION(17)\nJAVA_SRCS(Leaf.java)\nEND()\n")
+        self.write("leaf/Leaf.java", "public class Leaf {}\n")
+        node = self.node(self.graph(), "Generated.java")
+        for name in ("subject/subject.jar", "leaf/leaf.jar"):
+            self.assertIn(f"$(B)/{PROJECT}/{name}", node["inputs"])
+
+    def test_proto_input_keeps_imports(self):
+        self.generator()
+        self.write("data/entry.proto", f'syntax = "proto3";\nimport "{PROJECT}/schema/value.proto";\nmessage Entry {{ Value value = 1; }}\n')
+        self.write("schema/value.proto", 'syntax = "proto3";\nmessage Value { int32 answer = 1; }\n')
+        for inputs in ("IN data/entry.proto", "IN_NOPARSE data/entry.proto", "IN_DIR data"):
+            with self.subTest(inputs=inputs):
+                self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool {inputs} OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+                node = self.node(self.graph(), "Generated.java")
+                self.assertEqual(f"$(S)/{PROJECT}/schema/value.proto" in node["inputs"], inputs.startswith("IN "))
+
+    def test_proto_cpp_style_resource_reaches_java(self):
+        self.write("ya.make", f"EXECTEST()\nDEPENDS({PROJECT}/program)\nRUN(${{ARCADIA_BUILD_ROOT}}/{PROJECT}/program/run.sh)\nEND()\nRECURSE(program)\n")
+        self.write("program/ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")
+        self.write("program/Main.java", "public class Main {}\n")
+        self.write("schema/ya.make", "PROTO_LIBRARY()\nSRCS(answer.proto)\nGENERATE_ENUM_SERIALIZATION(answer.pb.h)\nSTYLE_CPP()\nEND()\n")
+        self.write("schema/answer.proto", 'syntax = "proto3";\npackage e2e;\nenum Answer { UNKNOWN = 0; VALUE = 42; }\n')
+        graph = self.graph("-t", "--target-platform=default-linux-x86_64", "--target-platform-build-type=relwithdebinfo", "--host-platform=default-linux-x86_64", "--target-platform-tests", "--add-modules-to-results", "--target-platform-flag=ADD_PEERDIRS_GEN_TESTS=yes")
+        with self.subTest(node="style"):
+            node = self.node(graph, "program/test-results/java_style/meta.json")
+            args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+            self.assertTrue(any(arg.startswith("CLANG_FORMAT_RESOURCE_GLOBAL::") for arg in args))
+        with self.subTest(node="program"):
+            node = self.node(graph, "program/answer.run.cp.jar")
+            args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+            self.assertTrue(any("::platform-clang-clang-format.pkg.fake" in arg for arg in args))
+
+    def test_tasklet_peer_keeps_macro_order(self):
+        self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")
+        self.write("Main.java", "public class Main {}\n")
+        self.write("schema/ya.make", f"PROTO_SCHEMA()\nTASKLET()\nEXCLUDE_TAGS(CPP_PROTO_FROM_SCHEMA)\nPEERDIR({PROJECT}/leaf tasklet/v1/api)\nSRCS(answer.proto)\nEND()\n")
+        self.write("schema/answer.proto", 'syntax = "proto3";\npackage e2e;\nmessage Answer {}\n')
+        self.write("leaf/ya.make", "PROTO_SCHEMA()\nSRCS(value.proto)\nEND()\n")
+        self.write("leaf/value.proto", 'syntax = "proto3";\npackage e2e;\nmessage Value {}\n')
+        graph = self.graph()
+        jars = [node for node in graph["graph"] if any(out.startswith(f"$(B)/{PROJECT}/schema/") and out.endswith(".jar") for out in node["outputs"])]
+        self.assertEqual(len(jars), 1)
+        args = [arg.replace("$(BUILD_ROOT)", "$(B)") for command in jars[0]["cmds"] for arg in command["cmd_args"]]
+        tasklet = args.index("$(B)/tasklet/v1/api/tasklet-v1-api.jar")
+        leaf = next(i for i, arg in enumerate(args) if arg.startswith(f"$(B)/{PROJECT}/leaf/") and arg.endswith(".jar"))
+        self.assertLess(tasklet, leaf)
+
     def test_multiline_generator_arguments_keep_hash_whitespace(self):
         self.generator()
         outputs = []

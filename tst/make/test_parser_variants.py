@@ -2,6 +2,21 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ParserVariantsTest(MakeTest):
+    def test_interpolated_boolean_condition(self):
+        self.write("ya.make", "LIBRARY()\nSET(ENABLED false)\nIF(${ENABLED})\nCFLAGS(-DE2E_DISABLED)\nELSE()\nCFLAGS(-DE2E_ENABLED)\nENDIF()\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        node = self.node(self.graph(), "answer.cpp.o")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("-DE2E_ENABLED", args)
+        self.assertNotIn("-DE2E_DISABLED", args)
+
+    def test_interpolated_comparison_without_spaces(self):
+        self.write("ya.make", 'LIBRARY()\nIF(${E2E_VERSION}=="")\nSET(E2E_VERSION 2.13.1)\nENDIF()\nCFLAGS(-DE2E_VERSION=${E2E_VERSION})\nSRCS(answer.cpp)\nEND()\n')
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        node = self.node(self.graph(), "answer.cpp.o")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("-DE2E_VERSION=2.13.1", args)
+
     def test_multiline_quoted_value(self):
         self.write("ya.make", 'LIBRARY()\nSET(FLAGS "\n  -DE2E_FIRST\n  -DE2E_SECOND\n")\nCFLAGS(${FLAGS})\nSRCS(answer.cpp)\nEND()\n')
         self.write("answer.cpp", "int answer() { return 42; }\n")

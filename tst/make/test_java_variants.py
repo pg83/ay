@@ -4,6 +4,14 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class JavaVariantsTest(MakeTest):
+    def test_uberjar_unpack_declares_native_libraries(self):
+        self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nUBERJAR()\nADD_DLLS_TO_JAR()\nPEERDIR({PROJECT}/native)\nEND()\n")
+        self.write("Main.java", "public class Main { public static void main(String[] args) {} }\n")
+        self.write("native/ya.make", "DLL(value)\nSRCS(value.cpp)\nEND()\n")
+        self.write("native/value.cpp", 'extern "C" int value() { return 42; }\n')
+        node = self.node(self.graph(), "answer.run.cp.jar")
+        self.assertIn(f"$(B)/{PROJECT}/answer/libvalue.so", node["outputs"])
+
     def test_uberjar(self):
         self.write("ya.make", "JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nUBERJAR()\nUBERJAR_MANIFEST_TRANSFORMER_MAIN(e2e.Main)\nUBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE(E2E 42)\nUBERJAR_SERVICES_RESOURCE_TRANSFORMER()\nEND()\n")
         self.write("Main.java", "package e2e; public class Main { public static void main(String[] args) {} }\n")

@@ -6,6 +6,37 @@ from tst.make.lib import MakeTest, PROJECT
 class MapsStyleGraphsTest(MakeTest):
     project_name = "maps__ay_e2e__"
 
+    def test_cpp_linter_merges_proto_languages(self):
+        project = self.project_name
+        self.write("java/ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({project}/schema)\nEND()\n")
+        self.write("java/Main.java", "public class Main {}\n")
+        self.write("native/ya.make", f"PROGRAM(answer)\nSRCS(main.cpp)\nPEERDIR({project}/schema)\nEND()\n")
+        self.write("native/main.cpp", "int main() { return 0; }\n")
+        self.write("schema/ya.make", f"PROTO_LIBRARY()\nSRCS(answer.proto)\nGENERATE_ENUM_SERIALIZATION(answer.pb.h)\nSET(CPP_LINTERS_DEFAULT_CONFIGS {project}/configs.json)\nSTYLE_CPP_MAPS()\nEND()\n")
+        self.write("schema/answer.proto", 'syntax = "proto3";\npackage e2e;\nenum Answer { UNKNOWN = 0; VALUE = 42; }\n')
+        self.write("configs.json", json.dumps({"clang_format_18_vanilla": project + "/.clang-format"}))
+        self.write(".clang-format", "BasedOnStyle: WebKit\n")
+        for order in ("java native", "native java"):
+            with self.subTest(order=order):
+                self.write("ya.make", f"RECURSE({order})\n")
+                graph = self.graph("-t", "--target-platform=default-linux-x86_64", "--target-platform-build-type=relwithdebinfo", "--host-platform=default-linux-x86_64", "--target-platform-tests", "--add-modules-to-results", "--target-platform-flag=ADD_PEERDIRS_GEN_TESTS=yes")
+                node = self.node(graph, "schema/test-results/clang_format_18_vanilla/meta.json")
+                args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+                self.assertEqual(any(arg.startswith("JAVA_PROTOC_RESOURCE_GLOBAL::") for arg in args), order.startswith("java"))
+
+    def test_cpp_linter_on_java_proto_uses_java_resources(self):
+        project = self.project_name
+        self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({project}/schema)\nEND()\n")
+        self.write("Main.java", "public class Main {}\n")
+        self.write("schema/ya.make", f"PROTO_LIBRARY()\nSRCS(answer.proto)\nGENERATE_ENUM_SERIALIZATION(answer.pb.h)\nSET(CPP_LINTERS_DEFAULT_CONFIGS {project}/configs.json)\nSTYLE_CPP_MAPS()\nEND()\n")
+        self.write("schema/answer.proto", 'syntax = "proto3";\npackage e2e;\nenum Answer { UNKNOWN = 0; VALUE = 42; }\n')
+        self.write("configs.json", json.dumps({"clang_format_18_vanilla": project + "/.clang-format"}))
+        self.write(".clang-format", "BasedOnStyle: WebKit\n")
+        graph = self.graph("-t", "--target-platform=default-linux-x86_64", "--target-platform-build-type=relwithdebinfo", "--host-platform=default-linux-x86_64", "--target-platform-tests", "--add-modules-to-results", "--target-platform-flag=ADD_PEERDIRS_GEN_TESTS=yes")
+        node = self.node(graph, "schema/test-results/clang_format_18_vanilla/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertTrue(any(arg.startswith("JAVA_PROTOC_RESOURCE_GLOBAL::") for arg in args))
+
     def test_maps_style_headers_reach_consumer_link(self):
         project = self.project_name
         self.write("ya.make", f"PY3_PROGRAM(answer)\nPY_SRCS(MAIN main.py binding.pyx)\nPEERDIR({project}/native)\nEND()\n")
