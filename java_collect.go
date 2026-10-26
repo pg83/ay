@@ -207,6 +207,17 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 		throwFmt("%s: module declaration has no END()", jm.dir)
 	}
 
+	if d.noLint == "none" || env.bool(envCppAnalysisMode) {
+		d.styleChecks = nil
+	}
+
+	if ctx.testMode {
+		for i := range d.styleChecks {
+			prepareCPPStyle(&d.styleChecks[i], jm.dir)
+			ctx.resolveStyleConfig(&d.styleChecks[i], jm.dir)
+		}
+	}
+
 	d.sourcesJar = env.bool(envSourcesJar)
 	d.ktlintSkipSourceDirs = env.bool(envWithYa1931)
 	d.javaProtoCommonVersion = env.string(envJavaProtoCommonVersion)
@@ -456,6 +467,14 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 
 			stmt.Args = internAnys(args)
 			d.recurses = appendConfigurationRecurses(d.recurses, jm.dir, stmt, jm.instance.Platform)
+
+			switch v.Name {
+			case tokStyleCpp, tokStyleCppMaps, tokStyleCppUserSessions, tokStyleCppYt:
+				d.collectCPPStyle(ctx.fs, jm.dir, stmt, env)
+
+				continue
+			}
+
 			applyJavaMacro(ctx, jm, d, v.Raw.string(), args, rawArgs, env)
 		}
 	}

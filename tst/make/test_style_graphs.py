@@ -100,3 +100,16 @@ class StyleGraphsTest(MakeTest):
         commands = json.dumps([node.get("cmds", []) for node in graph["graph"] if "yamlfmt" in json.dumps(node.get("cmds", []))])
         self.assertIn(f"/{PROJECT}/answer.yaml", commands)
         self.assertIn(f"/{PROJECT}/config/.yamlfmt.yml", commands)
+
+    def test_cpp_linter_on_java_proto_lints_headers(self):
+        self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")
+        self.write("Main.java", "public class Main {}\n")
+        self.write("schema/ya.make", f"PROTO_LIBRARY()\nSRCS(answer.proto)\nSET(CPP_LINTERS_DEFAULT_CONFIGS {PROJECT}/configs.json)\nSTYLE_CPP()\nEND()\n")
+        self.write("schema/answer.proto", 'syntax = "proto3";\npackage e2e;\nenum Answer { UNKNOWN = 0; VALUE = 42; }\n')
+        self.write("schema/answer.h", "#pragma once\n")
+        self.write("configs.json", json.dumps({"clang_format": PROJECT + "/.clang-format"}))
+        self.write(".clang-format", "BasedOnStyle: WebKit\n")
+        graph = self.graph("-t", "--target-platform=default-linux-x86_64", "--target-platform-build-type=relwithdebinfo", "--host-platform=default-linux-x86_64", "--target-platform-tests", "--add-modules-to-results", "--target-platform-flag=ADD_PEERDIRS_GEN_TESTS=yes")
+        node = self.node(graph, "schema/test-results/clang_format/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertTrue(any(arg.endswith(f"/{PROJECT}/schema/answer.h") for arg in args))

@@ -2,10 +2,22 @@ package main
 
 import (
 	"path"
+	"slices"
 	"strings"
 )
 
 func (d *ModuleData) collectCPPStyle(stmt UnknownStmt, env Environment) {
+	d.styleChecks = append(d.styleChecks, cppStyleCheck(stmt, env))
+}
+
+func (d *JavaData) collectCPPStyle(fs FS, dir string, stmt UnknownStmt, env Environment) {
+	check := cppStyleCheck(stmt, env)
+
+	check.Files = headerFiles(fs, dir, []ANY{str4.any()})
+	d.styleChecks = append(d.styleChecks, check)
+}
+
+func cppStyleCheck(stmt UnknownStmt, env Environment) StyleCheck {
 	check := StyleCheck{Name: "clang_format", CPP: true, ConfigMap: "build/config/tests/cpp_style/default_configs.json", Wrapper: testClangFormatWrapperRel, Resource: "CLANG_FORMAT_RESOURCE_GLOBAL", Peer: strBuildPlatformClangFormat.string()}
 
 	switch stmt.Name {
@@ -40,7 +52,29 @@ func (d *ModuleData) collectCPPStyle(stmt UnknownStmt, env Environment) {
 		}
 	}
 
-	d.styleChecks = append(d.styleChecks, check)
+	return check
+}
+
+func prepareCPPStyle(check *StyleCheck, project string) {
+	check.Files = sortedUnique(check.Files)
+
+	if len(check.Depends) != 0 && !customClangFormatAllowed(project) {
+		throwFmt("STYLE: custom clang-format is not allowed in %s", project)
+	}
+}
+
+func (ctx *GenCtx) javaCPPStyleSuites(jm *JavaModule) []*TestSuite {
+	var suites []*TestSuite
+
+	for _, check := range jm.data.styleChecks {
+		if slices.ContainsFunc(suites, func(suite *TestSuite) bool { return suite.testType == check.Name }) {
+			continue
+		}
+
+		suites = append(suites, ctx.styleSuite(check, jm.dir, jm.data.testEnv, styleCheckResources(check, ctx.javaResourceGlobals(jm))))
+	}
+
+	return suites
 }
 
 func cppLinterSource(name string) bool {

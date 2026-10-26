@@ -3,6 +3,15 @@ package main
 import "path"
 
 func applyHeaders(fs FS, modulePath string, args []ANY, d *ModuleData) {
+	files := headerFiles(fs, modulePath, args)
+	stmt := d.nextDeclSeq()
+
+	for _, file := range files {
+		d.srcs = append(d.srcs, SrcMeta{Source: source(file).any(), Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), Stmt: stmt})
+	}
+}
+
+func headerFiles(fs FS, modulePath string, args []ANY) []string {
 	dirs, lists := goMacroLists(args, "EXCLUDE")
 
 	resolve := func(arg ANY) VFS {
@@ -19,7 +28,7 @@ func applyHeaders(fs FS, modulePath string, args []ANY, d *ModuleData) {
 		excludes = append(excludes, resolve(exclude).relString())
 	}
 
-	stmt := d.nextDeclSeq()
+	var files []string
 
 	for _, dir := range dirs {
 		base := resolve(dir)
@@ -28,8 +37,8 @@ func applyHeaders(fs FS, modulePath string, args []ANY, d *ModuleData) {
 			continue
 		}
 
-		for _, file := range ymakeGlob(fs, path.Join(base.relString(), "*.(h|H|hh|hpp|hxx|ipp)"), excludes...) {
-			d.srcs = append(d.srcs, SrcMeta{Source: source(file).any(), Prio: stmtPrioSrcs, Seq: d.nextDeclSeq(), Stmt: stmt})
-		}
+		files = append(files, ymakeGlob(fs, path.Join(base.relString(), "*.(h|H|hh|hpp|hxx|ipp)"), excludes...)...)
 	}
+
+	return files
 }

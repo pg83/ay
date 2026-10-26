@@ -329,13 +329,11 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 
 	var suites []*TestSuite
 
+	project := e.instance.Path.relString()
+
 	for _, check := range e.d.styleChecks {
 		if check.CPP {
-			check.Files = sortedUnique(check.Files)
-
-			if len(check.Depends) != 0 && !customClangFormatAllowed(e.instance.Path.relString()) {
-				throwFmt("STYLE: custom clang-format is not allowed in %s", e.instance.Path.relString())
-			}
+			prepareCPPStyle(&check, project)
 		}
 
 		if check.Python {
@@ -355,42 +353,7 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 			}
 		}
 
-		if check.ConfigType != "" {
-			validType := check.ConfigType == ".clang-format" && check.CPP ||
-				check.ConfigType == "pyproject.toml" && !check.CPP ||
-				check.ConfigType == "ruff.toml" && check.Name == "ruff" ||
-				check.ConfigType == ".yamlfmt.yml" && check.Name == "yamlfmt"
-
-			if !validType {
-				throwFmt("STYLE: unknown %s config type %s", check.Name, check.ConfigType)
-			}
-
-			if check.ConfigDir == "" {
-				if inc, ok := e.ctx.autoincludeIdx.lintersMakeIncFor(e.instance.Path.relString()); ok {
-					check.ConfigDir = path.Dir(inc.relString())
-				}
-			}
-
-			if check.ConfigDir == "" {
-				throwFmt("STYLE: config type requires MODULE_COMMON_CONFIGS_DIR")
-			}
-
-			check.Config = path.Join(check.ConfigDir, check.ConfigType)
-
-			if !e.ctx.fs.isFilePathClean(check.Config) {
-				throwFmt("STYLE: missing config %s", check.Config)
-			}
-		}
-
-		if check.Config == "" && check.ConfigMap != "" {
-			config, ok := e.ctx.parsers.notsJSON(check.ConfigMap)[check.Name].(string)
-
-			if !ok {
-				throwFmt("STYLE: missing %s config in %s", check.Name, check.ConfigMap)
-			}
-
-			check.Config = config
-		}
+		e.ctx.resolveStyleConfig(&check, project)
 
 		if check.Python && (check.Name == "flake8" || check.Name == "py2_flake8") && e.d.pythonLint.disableF8 {
 			continue
@@ -404,29 +367,67 @@ func (e *EmitContext) styleSuites(globals []ResourceDecl) []*TestSuite {
 			continue
 		}
 
-		var resources []ResourceDecl
-
-		if check.Resource == "" {
-			resources = globals
-		} else {
-			for _, r := range globals {
-				if r.GlobalVar.string() == check.Resource {
-					resources = append(resources, r)
-
-					break
-				}
-			}
-		}
-
-		suites = append(suites, e.styleSuite(check, resources))
+		suites = append(suites, e.ctx.styleSuite(check, project, e.d.test.env, styleCheckResources(check, globals)))
 	}
 
 	return suites
 }
 
-func (e *EmitContext) styleSuite(check StyleCheck, resources []ResourceDecl) *TestSuite {
-	project := e.instance.Path.relString()
-	s := &TestSuite{p: e.ctx.target, depends: slices.Clone(check.Depends), projectPath: project, name: check.Name, testType: check.Name, ciType: "style", size: "small", timeout: 60, supportsTestParameters: true, globals: resources, env: e.d.test.env, runInputs: []VFS{source(project)}, styleCheck: &check}
+func (ctx *GenCtx) resolveStyleConfig(check *StyleCheck, project string) {
+	if check.ConfigType != "" {
+		validType := check.ConfigType == ".clang-format" && check.CPP ||
+			check.ConfigType == "pyproject.toml" && !check.CPP ||
+			check.ConfigType == "ruff.toml" && check.Name == "ruff" ||
+			check.ConfigType == ".yamlfmt.yml" && check.Name == "yamlfmt"
+
+		if !validType {
+			throwFmt("STYLE: unknown %s config type %s", check.Name, check.ConfigType)
+		}
+
+		if check.ConfigDir == "" {
+			if inc, ok := ctx.autoincludeIdx.lintersMakeIncFor(project); ok {
+				check.ConfigDir = path.Dir(inc.relString())
+			}
+		}
+
+		if check.ConfigDir == "" {
+			throwFmt("STYLE: config type requires MODULE_COMMON_CONFIGS_DIR")
+		}
+
+		check.Config = path.Join(check.ConfigDir, check.ConfigType)
+
+		if !ctx.fs.isFilePathClean(check.Config) {
+			throwFmt("STYLE: missing config %s", check.Config)
+		}
+	}
+
+	if check.Config == "" && check.ConfigMap != "" {
+		config, ok := ctx.parsers.notsJSON(check.ConfigMap)[check.Name].(string)
+
+		if !ok {
+			throwFmt("STYLE: missing %s config in %s", check.Name, check.ConfigMap)
+		}
+
+		check.Config = config
+	}
+}
+
+func styleCheckResources(check StyleCheck, globals []ResourceDecl) []ResourceDecl {
+	if check.Resource == "" {
+		return globals
+	}
+
+	for _, r := range globals {
+		if r.GlobalVar.string() == check.Resource {
+			return []ResourceDecl{r}
+		}
+	}
+
+	return nil
+}
+
+func (ctx *GenCtx) styleSuite(check StyleCheck, project string, env []string, resources []ResourceDecl) *TestSuite {
+	s := &TestSuite{p: ctx.target, depends: slices.Clone(check.Depends), projectPath: project, name: check.Name, testType: check.Name, ciType: "style", size: "small", timeout: 60, supportsTestParameters: true, globals: resources, env: env, runInputs: []VFS{source(project)}, styleCheck: &check}
 
 	s.mergeStyleFiles(nil)
 

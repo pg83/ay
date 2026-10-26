@@ -324,6 +324,7 @@ type JavaData struct {
 	implPeers              []string
 	collectKotlinLint      []string
 	customLints            []javaCustomLint
+	styleChecks            []StyleCheck
 	ktlintOld              bool
 	ktlintSkipSourceDirs   bool
 	checkJavaDeps          string
@@ -836,6 +837,12 @@ func (jm *JavaModule) macroPeers() []string {
 
 	for _, l := range d.customLints {
 		out = append(out, l.linter.resourcePeer)
+	}
+
+	for _, check := range d.styleChecks {
+		if check.Peer != "" {
+			out = append(out, check.Peer)
+		}
 	}
 
 	if jm.unit.jni && len(d.swigSrcs()) > 0 {
