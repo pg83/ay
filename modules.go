@@ -1395,6 +1395,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 			env.setString(envPeerdirTags, expandAssignedScalarVarRef(modulePeerTags(v, d.unit, language), env))
+			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
 			if moduleType := confModuleType(v.Name, d); moduleType != "" {
 				env.setString(envMODULE_TYPE, moduleType)

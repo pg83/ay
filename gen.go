@@ -922,6 +922,35 @@ func programBinaryName(instance ModuleInstance, moduleStmt *ModuleStmt) string {
 	return baseName(instance.Path.relString())
 }
 
+func moduleRealPrjName(dir string, stmt *ModuleStmt, unit ModuleUnit) string {
+	args := stmt.Args
+
+	if stmt.Name == tokUnittestFor && len(args) > 0 {
+		args = args[1:]
+	}
+
+	for i := 0; i < len(args); i++ {
+		if args[i] == kwPREFIX.any() {
+			i++
+
+			continue
+		}
+
+		return args[i].string()
+	}
+
+	switch {
+	case isUnitTestModule(unit.Type) || isPythonTestModule(unit.Type) || unit.Type == tokExectest:
+		return fullPathTestName(dir)
+	case isDllModuleType(unit.Type):
+		return javaRealPrjName(dir, javaNameTwoDirs)
+	case isLinkingModuleType(unit.Type):
+		return baseName(dir)
+	}
+
+	return realPrjName(dir)
+}
+
 func programSourceDir(moduleStmt *ModuleStmt) *string {
 	peerPath := unittestForPeerPath(moduleStmt)
 

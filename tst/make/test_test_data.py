@@ -1,3 +1,4 @@
+import base64
 import json
 
 from tst.make.lib import MakeTest, PROJECT
@@ -45,6 +46,22 @@ class TestDataTest(MakeTest):
         self.write("ya.make", "LIBRARY()\nFROM_SANDBOX(FILE 123456789 OUT_NOAUTO answer.txt)\nRESOURCE(answer.txt /answer)\nEND()\n")
         graph = self.graph("-t")
         self.assertTrue(any("validate_resource" in json.dumps(node.get("cmds", [])) for node in graph["graph"]))
+
+    def test_test_recipe_module_name(self):
+        self.write("ya.make", "RECURSE(unit)\n")
+        self.write("recipe/ya.make", "PY3_PROGRAM(recipe)\nPY_SRCS(MAIN main.py)\nEND()\n")
+        self.write("recipe/main.py", "pass\n")
+        self.write("unit/test.cpp", "#include <library/cpp/testing/gtest/gtest.h>\nTEST(Answer, Value) { EXPECT_EQ(42, 42); }\n")
+        self.write("unit/test_answer.py", "def test_answer():\n    assert 42 == 42\n")
+        recipe = f"DEPENDS({PROJECT}/recipe)\nUSE_RECIPE({PROJECT}/recipe/recipe ${{MODDIR}}/${{REALPRJNAME}})\n"
+        for module, sources, name in (("GTEST(answer)", "SRCS(test.cpp)", "answer"), ("GTEST()", "SRCS(test.cpp)", f"{PROJECT}-unit"), ("PY3TEST()", "TEST_SRCS(test_answer.py)", f"{PROJECT}-unit")):
+            with self.subTest(module=module):
+                self.write("unit/ya.make", f"{module}\n{recipe}{sources}\nEND()\n")
+                graph = self.graph("-t")
+                recipes = [base64.b64decode(args[args.index("--recipes") + 1]).decode() for node in graph["graph"] for args in (command["cmd_args"] for command in node["cmds"]) if "--recipes" in args]
+                self.assertTrue(recipes)
+                for value in recipes:
+                    self.assertIn(f"{PROJECT}/recipe/recipe {PROJECT}/unit/{name}", value)
 
     def test_test_recipe(self):
         self.write("ya.make", f"PY3TEST()\nTEST_SRCS(test_answer.py)\nDEPENDS({PROJECT}/recipe)\nUSE_RECIPE({PROJECT}/recipe/recipe --value 42)\nDATA_FILES({PROJECT}/data.txt)\nFORK_TESTS()\nTAG(e2e)\nREQUIREMENTS(cpu:1 ram:2)\nEND()\n")
