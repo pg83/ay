@@ -3851,10 +3851,10 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			case "USER_CFLAGS":
 
 				d.cFlags = append(d.cFlags, v.Args[1:]...)
-			case "_PROTOC_FLAGS":
-				d.protocFlags = append(d.protocFlags, v.Args[1:]...)
 			case "CFLAGS":
 				d.cFlagsAppend = append(d.cFlagsAppend, v.Args[1:]...)
+			case "_PROTOC_FLAGS":
+				d.protocFlags = append(d.protocFlags, v.Args[1:]...)
 			case "RPATH_GLOBAL":
 				for _, argTok := range v.Args[1:] {
 					arg := argTok.string()

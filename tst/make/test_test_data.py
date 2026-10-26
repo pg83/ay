@@ -18,6 +18,29 @@ class TestDataTest(MakeTest):
         graph = self.graph("-t")
         self.assertTrue(any("123456789" in json.dumps(node.get("cmds", [])) and "download" in json.dumps(node.get("cmds", [])) for node in graph["graph"]))
 
+    def test_skipped_suite_has_no_run_node(self):
+        self.write("ya.make", f'PY3TEST()\nSKIP_TEST("not in production")\nTEST_SRCS(test_answer.py)\nDATA(sbr://123456789=answer)\nDEPENDS({PROJECT}/tool)\nEND()\n')
+        self.write("test_answer.py", "def test_answer():\n    assert 42 == 42\n")
+        self.write("tool/ya.make", "PROGRAM(tool)\nSRCS(main.cpp)\nEND()\n")
+        self.write("tool/main.cpp", "int main() { return 0; }\n")
+        graph = self.graph("-t", env={"YA_STRIP_IDLE_BUILD_RESULTS": "0"})
+        commands = [json.dumps(node.get("cmds", [])) for node in graph["graph"]]
+        self.assertFalse([command for command in commands if "123456789" in command and "download" in command])
+        self.assertFalse([command for command in commands if "run_test" in command and "py3test" in command])
+        self.assertTrue([command for command in commands if "import_test" in command])
+        self.node(graph, "tool/tool")
+
+    def test_skipped_native_suites(self):
+        self.write("answer.cpp", '#include <library/cpp/testing/unittest/registar.h>\nY_UNIT_TEST_SUITE(Answer) { Y_UNIT_TEST(Value) { UNIT_ASSERT_EQUAL(42, 42); } }\n')
+        self.write("answer_test.go", 'package answer\nimport "testing"\nfunc TestAnswer(t *testing.T) {}\n')
+        for module, suite, kept in (("UNITTEST()\nSRCS(answer.cpp)", "unittest", PROJECT), ("GO_TEST()\nGO_TEST_SRCS(answer_test.go)", PROJECT, "test-results/gofmt/meta.json")):
+            with self.subTest(module=module):
+                self.write("ya.make", f"{module}\nSKIP_TEST(TODO)\nEND()\n")
+                graph = self.graph("-t", env={"YA_STRIP_IDLE_BUILD_RESULTS": "0"})
+                outputs = [path for node in graph["graph"] for path in node["outputs"]]
+                self.assertNotIn(f"$(B)/{PROJECT}/test-results/{suite}/meta.json", outputs)
+                self.node(graph, kept)
+
     def test_resource_validation(self):
         self.write("ya.make", "LIBRARY()\nFROM_SANDBOX(FILE 123456789 OUT_NOAUTO answer.txt)\nRESOURCE(answer.txt /answer)\nEND()\n")
         graph = self.graph("-t")

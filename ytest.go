@@ -329,6 +329,7 @@ type TestSuite struct {
 	prepare                [][]ANY
 	prepareInputs          []VFS
 	runCmd                 func(workDir string, chunk TestChunk) []ANY
+	skipped                bool
 }
 
 type TestChunk struct {
@@ -439,7 +440,7 @@ func (ctx *GenCtx) prepareTestDependencies(s *TestSuite) {
 }
 
 func (ctx *GenCtx) testSuiteSelected(s *TestSuite) bool {
-	return ctx.tests.sizeRequested(s.size) && ctx.tests.tagFilter.matches(s.tags)
+	return !s.skipped && ctx.tests.sizeRequested(s.size) && ctx.tests.tagFilter.matches(s.tags)
 }
 
 func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {

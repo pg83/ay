@@ -44,6 +44,7 @@ var tokName = [...]STR{
 
 	tokCythonFlags: internStr("CYTHON_FLAGS"),
 	tokFlexFlags:   internStr("FLEX_FLAGS"),
+	tokSkipTest:    internStr("SKIP_TEST"),
 	tokDllFor:      internStr("DLL_FOR"),
 
 	tokPackageFinal:              internStr("_PACKAGE_FINAL"),
@@ -958,8 +959,9 @@ const (
 	tokTsProtoPackageName
 	tokDebVersion
 	tokCythonFlags
-	tokYqlUdf
 	tokFlexFlags
+	tokSkipTest
+	tokYqlUdf
 	tokUdfBase
 	tokYqlPythonUdf
 	tokYqlPython3Udf

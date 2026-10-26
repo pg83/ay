@@ -29,6 +29,8 @@ func declarativeMacroAssignment(v *UnknownStmt, packageModule bool, env Environm
 		case tokSetCudaNodeRAMRequirement:
 			name, parameter = "_CU_NODE_MAX_RAM_REQUIREMENT", "X"
 		}
+	case tokSkipTest:
+		name, value, parameter = "SKIP_TEST_VALUE", strings.Join(anyStrs(v.Args), " "), "Reason"
 	case tokNoCow:
 		name, value = "USE_COW", "no"
 	case tokNoNeedCheck:

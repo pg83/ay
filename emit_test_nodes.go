@@ -47,6 +47,7 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 	s := &TestSuite{p: e.ctx.target, projectPath: project, name: name, testType: testType, ciType: "test", deps: depRefs(ref), globals: globals, smoothShutdown: []string{"SIGUSR2"}, runInputs: []VFS{source(project)}}
 
 	s.applyTestMeta(meta, testType != "benchmark" && e.d.setVars[strADD_SRCDIR_TO_TEST_DATA] != strNo)
+	s.skipped = Environment{s: &e.frame.ifEnv}.string(envSKIP_TEST_VALUE) != ""
 
 	if testType == "fuzz" {
 		for _, file := range meta.fuzzDicts {
