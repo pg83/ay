@@ -13,6 +13,18 @@ class JavaGenerationTest(MakeTest):
         value = base64.b64encode(b"defaultJvmArgs=-Ddc=${DC}").decode()
         self.assertIn(value, args)
 
+    def test_script_property_dereferences_variables_once(self):
+        self.write("Main.java", "public class Main {}\n")
+        self.write("launch.tmpl", "#!/bin/sh\njava {{ answer }}\n")
+        for template in ("${CURDIR}/launch.tmpl", f"${{ARCADIA_ROOT}}/{PROJECT}/launch.tmpl"):
+            with self.subTest(template=template):
+                self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nSET(PROP x)\nGENERATE_SCRIPT(OUT ${{BINDIR}}/answer.sh TEMPLATE {template} CUSTOM_PROPERTY answer ${{PROP}}-\\${{PROP}}-${{MODDIR}}-${{UNKNOWN}}-$PROP)\nEND()\n")
+                node = self.node(self.graph(), "answer.sh")
+                args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+                value = base64.b64encode(f"answer=x-${{PROP}}-{PROJECT}--$PROP".encode()).decode()
+                self.assertIn(value, args)
+                self.assertIn(f"$(S)/{PROJECT}/launch.tmpl", node["inputs"])
+
     def test_java_generator(self):
         self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(e2e.Generator CLASSPATH {PROJECT}/tool IN input.txt OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
         self.write("input.txt", "42\n")

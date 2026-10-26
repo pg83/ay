@@ -70,6 +70,24 @@ class JavaGeneratorInputsTest(MakeTest):
                 node = self.node(self.graph(), "Generated.java")
                 self.assertEqual(f"$(S)/{PROJECT}/schema/value.proto" in node["inputs"], inputs.startswith("IN "))
 
+    def test_proto_input_keeps_system_imports(self):
+        self.generator()
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool IN entry.proto OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+        self.write("entry.proto", 'syntax = "proto3";\nimport "google/protobuf/wrappers.proto";\nmessage Entry { google.protobuf.Int32Value value = 1; }\n')
+        node = self.node(self.graph(), "Generated.java")
+        for root in ("protobuf", "protobuf_old", "protobuf_std"):
+            self.assertIn(f"$(S)/contrib/libs/{root}/src/google/protobuf/wrappers.proto", node["inputs"])
+
+    def test_native_module_input_keeps_includes(self):
+        self.generator()
+        self.write("entry.h", '#include "local.h"\n')
+        self.write("local.h", "int answer();\n")
+        for inputs in ("IN entry.h", "IN_NOPARSE entry.h"):
+            with self.subTest(inputs=inputs):
+                self.write("ya.make", f"LIBRARY()\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool {inputs} OUT generated.cpp)\nEND()\n")
+                node = self.node(self.graph(), "generated.cpp")
+                self.assertEqual(f"$(S)/{PROJECT}/local.h" in node["inputs"], inputs.startswith("IN "))
+
     def test_proto_cpp_style_resource_reaches_java(self):
         self.write("ya.make", f"EXECTEST()\nDEPENDS({PROJECT}/program)\nRUN(${{ARCADIA_BUILD_ROOT}}/{PROJECT}/program/run.sh)\nEND()\nRECURSE(program)\n")
         self.write("program/ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")
@@ -85,6 +103,22 @@ class JavaGeneratorInputsTest(MakeTest):
             node = self.node(graph, "program/answer.run.cp.jar")
             args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
             self.assertTrue(any("::platform-clang-clang-format.pkg.fake" in arg for arg in args))
+
+    def test_proto_cpp_style_check_is_one_suite_per_directory(self):
+        self.write("program/ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")
+        self.write("program/Main.java", "public class Main {}\n")
+        self.write("native/ya.make", f"PROGRAM(answer)\nSRCS(main.cpp)\nPEERDIR({PROJECT}/schema)\nEND()\n")
+        self.write("native/main.cpp", "int main() { return 0; }\n")
+        self.write("schema/ya.make", "PROTO_LIBRARY()\nSRCS(answer.proto)\nSTYLE_CPP()\nEND()\n")
+        self.write("schema/answer.proto", 'syntax = "proto3";\npackage e2e;\nmessage Answer {}\n')
+        self.write("schema/answer.h", "#pragma once\n")
+        for programs in (["program"], ["program", "native"]):
+            with self.subTest(programs=programs):
+                self.write("ya.make", "EXECTEST()\n" + "".join(f"DEPENDS({PROJECT}/{p})\n" for p in programs) + f"RUN(${{ARCADIA_BUILD_ROOT}}/{PROJECT}/program/run.sh)\nEND()\nRECURSE({' '.join(programs)})\n")
+                graph = self.graph("-t", "--target-platform=default-linux-x86_64", "--target-platform-build-type=relwithdebinfo", "--host-platform=default-linux-x86_64", "--target-platform-tests", "--add-modules-to-results", "--target-platform-flag=ADD_PEERDIRS_GEN_TESTS=yes")
+                node = self.node(graph, "schema/test-results/clang_format/meta.json")
+                args = [arg.replace("$(SOURCE_ROOT)", "$(S)") for command in node["cmds"] for arg in command["cmd_args"]]
+                self.assertIn(f"$(S)/{PROJECT}/schema/answer.h", args)
 
     def test_tasklet_peer_keeps_macro_order(self):
         self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")

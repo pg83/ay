@@ -15,6 +15,19 @@ class ProtoSourceContextsTest(MakeTest):
         self.assertEqual(len(python_includes), 2)
         self.assertLess(args.index("-I$(S)/contrib/libs/libc_compat/memfd_create"), python_includes[-1])
 
+    def test_schema_without_cpp_variant_keeps_native_default_peers(self):
+        self.write("ya.make", f"PY3_PROGRAM(answer)\nPY_SRCS(MAIN main.py)\nPEERDIR({PROJECT}/schema)\nEND()\n")
+        self.write("main.py", "print(42)\n")
+        self.write("schema/ya.make", "PROTO_SCHEMA()\nEXCLUDE_TAGS(CPP_PROTO_FROM_SCHEMA)\nSRCS(answer.proto)\nEND()\n")
+        self.write("schema/answer.proto", 'syntax = "proto3"; package e2e; message Answer {}\n')
+        graph = self.graph()
+        objects = [node for node in graph["graph"] if any(path.startswith(f"$(B)/{PROJECT}/schema/") and path.endswith(".py3.o") for path in node["outputs"])]
+        self.assertEqual(len(objects), 1)
+        args = [arg.replace("$(SOURCE_ROOT)", "$(S)") for command in objects[0]["cmds"] for arg in command["cmd_args"]]
+        python_includes = [i for i, arg in enumerate(args) if arg == "-I$(S)/contrib/libs/python/Include"]
+        self.assertEqual(len(python_includes), 2)
+        self.assertLess(args.index("-I$(S)/contrib/libs/cxxsupp/libcxx/include"), python_includes[-1])
+
     def test_go_proto_consumes_generated_source(self):
         self.write("ya.make", "RECURSE(consumer)\n")
         self.write("consumer/ya.make", f"GO_LIBRARY()\nSRCS(answer.go)\nPEERDIR({PROJECT}/schema)\nEND()\n")
