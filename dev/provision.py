@@ -219,8 +219,15 @@ def ya_env():
     --output-style jsonl, which ends up in the test nodes of the graph."""
     env = {k: v for k, v in os.environ.items() if k not in TOOLCHAIN_ENV_VARS and k not in CALLER_ENV_VARS}
     env.update(YA_TC="no", YA_NO_RESPAWN="yes", YA_TOKEN=CANONIZATION_TOKEN)
+    env.update(CASE_ENV)
 
     return env
+
+
+# The environment a case's reference is cut with (--env-from): the autocheck
+# cases set AUTOCHECK=1, YA_STRIP_IDLE_BUILD_RESULTS=0 and friends, and the
+# gate replays the same env for ay.
+CASE_ENV = {}
 
 
 def strace_run(mount, ya_cmd, trace_path, graph_path, strace_bin):
@@ -635,6 +642,8 @@ def main():
     ap.add_argument("--config", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json"))
     ap.add_argument("--remote", default=None, help="provenance remote (default: git origin / arcadia)")
     ap.add_argument("--xfail", default="auto", help="gating mode for this case (false|true|auto)")
+    ap.add_argument("--env-from", default=None,
+                    help="cut with the env of this existing case and record it in the new one")
     ap.usage = "provision.py (--mount TREE | --url ZIP) --workspace W [opts] -- ya make <flags> <target>"
 
     # Split on the first `--` ourselves; argparse REMAINDER mishandles `--`
@@ -653,6 +662,14 @@ def main():
 
     if bool(args.mount) == bool(args.url):
         raise SystemExit("provision: pass exactly one of --mount or --url")
+
+    if args.env_from:
+        source = next((e for e in load_config(args.config) if e["id"] == args.env_from), None)
+
+        if source is None or not source.get("env"):
+            raise SystemExit(f"provision: --env-from {args.env_from}: no such case with an env")
+
+        CASE_ENV.update(source["env"])
 
     ws = os.path.abspath(args.workspace)
     os.makedirs(ws, exist_ok=True)
@@ -731,6 +748,9 @@ def main():
         "target": target,
         "xfail": parse_xfail(args.xfail),
     }
+
+    if CASE_ENV:
+        entry["env"] = dict(sorted(CASE_ENV.items()))
 
     with open(os.path.join(ws, "meta.json"), "w") as f:
         json.dump(entry, f, indent=2)

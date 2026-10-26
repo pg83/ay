@@ -39,6 +39,14 @@ class ParserVariantsTest(MakeTest):
         for flag in ("-DE2E_QUOTED_NAME", "-DE2E_QUOTED_VALUE", "-DE2E_INTEGER_NAME"):
             self.assertNotIn(flag, args)
 
+    def test_argument_may_start_with_dollar_paren(self):
+        # ymake's atom: '$(' NAME ')' may open an argument, plain text follows.
+        self.write("ya.make", "LIBRARY()\nSET(GEN_ROOT $(BUILD_ROOT)/gen)\nCFLAGS(-DE2E_ROOT=${GEN_ROOT})\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        node = self.node(self.graph(), "answer.cpp.o")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("-DE2E_ROOT=$(BUILD_ROOT)/gen", args)
+
     def test_multiline_quoted_value(self):
         self.write("ya.make", 'LIBRARY()\nSET(FLAGS "\n  -DE2E_FIRST\n  -DE2E_SECOND\n")\nCFLAGS(${FLAGS})\nSRCS(answer.cpp)\nEND()\n')
         self.write("answer.cpp", "int answer() { return 42; }\n")

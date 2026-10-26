@@ -107,7 +107,7 @@ func (v VFS) sharedString() string {
 }
 
 func vfsHasPrefix(s string) bool {
-	return len(s) >= vfsPrefixLen && s[0] == '$' && s[1] == '('
+	return len(s) >= vfsPrefixLen && s[0] == '$' && s[1] == '(' && (s[2] == 'S' || s[2] == 'B') && s[3] == ')' && s[4] == '/'
 }
 
 func (v VFS) any() ANY {

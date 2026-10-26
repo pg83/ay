@@ -871,9 +871,31 @@ func (l *Lexer) readIdentOrWord(startLine, startCol int) Token {
 	return Token{kind: kind, id: id, line: startLine, col: startCol}
 }
 
+func (l *Lexer) dollarParenPrefix() int {
+	if !l.inArgs || l.pos+2 >= len(l.src) || l.src[l.pos] != '$' || l.src[l.pos+1] != '(' {
+		return 0
+	}
+
+	for pos := l.pos + 2; pos < len(l.src); pos++ {
+		switch b := l.src[pos]; {
+		case b == ')':
+			if pos == l.pos+2 {
+				return 0
+			}
+
+			return pos + 1 - l.pos
+		case b == '(' || b == '#' || b == '\\' || isWhitespace(b):
+			return 0
+		}
+	}
+
+	return 0
+}
+
 func (l *Lexer) readWord(startLine, startCol int) Token {
 	start := l.pos
-	pos := start
+	prefix := l.dollarParenPrefix()
+	pos := start + prefix
 	complex := false
 
 	for pos < len(l.src) {
@@ -901,6 +923,10 @@ func (l *Lexer) readWord(startLine, startCol int) Token {
 	}
 
 	buf := l.tokBuf[:0]
+
+	for range prefix {
+		buf = append(buf, l.advance())
+	}
 
 	for l.pos < len(l.src) {
 		b := l.src[l.pos]
