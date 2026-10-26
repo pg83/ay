@@ -30,6 +30,21 @@ class ProjectVariantsTest(MakeTest):
         graph = self.graph()
         self.assertTrue(any("sdc_install/lib/answer/node" in output for node in graph["graph"] for output in node["outputs"]))
 
+    def test_sdc_union_share_variant(self):
+        self.write("ya.make", f"PACKAGE()\nPEERDIR({PROJECT}/component)\nEND()\n")
+        self.write("component/ya.make", f"MLAUNCH_LIBRARY(component)\nGOLAUNCH_SRCS(component.go)\nRESOURCE_PEERDIR({PROJECT}/install)\nEND()\n")
+        self.write("component/component.go", "package component\nfunc Answer() int { return 42 }\n")
+        self.write("install/ya.make", f"SDC_UNION(install)\nSDC_INSTALL(SHARE value.txt LIB TARGET {PROJECT}/tool)\nEND()\n")
+        self.write("install/value.txt", "42\n")
+        self.write("tool/ya.make", "PROGRAM(tool)\nUSE_SDC_META()\nSRCS(main.cpp)\nEND()\n")
+        self.write("tool/main.cpp", "int main() { return 0; }\n")
+        graph = self.graph()
+        union = self.node(graph, "install/install.share.pkg.fake")
+        self.assertTrue(any(output.endswith("sdc_install/share/install/value.txt") for output in union["outputs"]))
+        outputs = {output for node in graph["graph"] for output in node["outputs"]}
+        self.assertNotIn(f"$(B)/{PROJECT}/install/install.pkg.fake", outputs)
+        self.assertNotIn(f"$(B)/{PROJECT}/tool/tool", outputs)
+
     def test_proto_python_namespace(self):
         self.write("ya.make", f"PY3_LIBRARY()\nPEERDIR({PROJECT}/proto)\nPROTO_TO_NAMESPACE(IMPORT_ALL_IN_INIT IN_MSG answer_pb2)\nEND()\n")
         self.write("proto/ya.make", "PROTO_LIBRARY()\nPY_NAMESPACE(TOP_LEVEL)\nSRCS(answer.proto)\nEND()\n")

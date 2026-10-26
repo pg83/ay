@@ -32,7 +32,7 @@ func (e *EmitContext) recordTestDependencyModule(result *ModuleEmitResult, decla
 		final = false
 	}
 
-	if name == tokPackageFinal || name == tokCiGroup || d.nots != nil && e.instance.Language != LangTSPrepare {
+	if name == tokPackageFinal || name == tokCiGroup || d.nots != nil && e.instance.Language != LangTSPrepare || declaration == tokSdcUnion && e.instance.Language == LangCPP {
 		final = true
 	}
 

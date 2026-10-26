@@ -1446,6 +1446,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				env.setStringID(envDontResolveIncludes, strYes)
 			}
 
+			if isUnionModule(d.unit.Type) {
+				env.setString(envMODULE_SUFFIX, ".pkg.fake")
+			}
+
 			if v.Name == tokPy23Test {
 				subPath := "py3test"
 
@@ -1472,6 +1476,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			setupRosModule(v, modulePath, language, env, d)
 			setupMlaunchModule(v, modulePath, language, env, d)
 			setupPackageModule(v, language, d)
+			setupSdcUnionModule(v, language, env, d)
 			setupSdcDiagsModule(v, language, env, d)
 			setupRustModule(v.Name, language, env, d)
 
@@ -5651,6 +5656,10 @@ func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
 
 	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokPackage {
 		language = LangPackage
+	}
+
+	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokSdcUnion {
+		language = sdcUnionPeerVariant(strings.Fields(Environment{s: &e.frame.ifEnv}.string(envPeerdirTags)))
 	}
 
 	peer := ModuleInstance{

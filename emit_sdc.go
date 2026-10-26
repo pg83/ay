@@ -147,6 +147,27 @@ func sdcInstallLocation(packageName, kind, file string) string {
 	return path.Join("$(B)/sdc_install", dir, path.Base(file))
 }
 
+func setupSdcUnionModule(stmt *ModuleStmt, language Language, env Environment, d *ModuleData) {
+	if stmt.Name != tokSdcUnion {
+		return
+	}
+
+	d.multimodule = tokSdcUnion
+
+	if language == LangPackage {
+		env.setString(envMODULE_SUFFIX, ".share.pkg.fake")
+		env.setString(envSdcInstallKinds, "SHARE")
+	}
+}
+
+func sdcUnionPeerVariant(peerdirTags []string) Language {
+	if !slices.Contains(peerdirTags, "__EMPTY__") && slices.Contains(peerdirTags, "SDC_INSTALL_SHARE") {
+		return LangPackage
+	}
+
+	return LangCPP
+}
+
 func applySdcInstall(module string, tokens []ANY, d *ModuleData, env Environment) {
 	defer d.recordProducerDeclarations()
 

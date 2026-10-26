@@ -69,7 +69,7 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 		name = e.d.moduleStmt.Args[0].string()
 	}
 
-	out := build(module, "/", name, ".pkg.fake")
+	out := build(module, "/", name, Environment{s: &e.frame.ifEnv}.string(envMODULE_SUFFIX))
 	na := e.ctx.na
 
 	node := Node{

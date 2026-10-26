@@ -17,6 +17,15 @@ func modulePeerTags(stmt *ModuleStmt, unit ModuleUnit, language Language) string
 		return "DOCS_LIBRARY DOCS_PROTO"
 	}
 
+	if language == LangPackage {
+		switch stmt.Name {
+		case tokMlaunchLibrary, tokMlaunchComponent:
+			return "PACKAGE_UNION SDC_INSTALL_SHARE"
+		case tokSdcUnion:
+			return "SDC_INSTALL_SHARE"
+		}
+	}
+
 	if stmt.Name == tokProtoLibrary {
 		tag := protoModuleTag(language, false)
 		prefix := ""
