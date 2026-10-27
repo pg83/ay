@@ -38,6 +38,14 @@ class TypescriptTest(MakeTest):
     def test_custom_build(self):
         self.package("TS_LIBRARY", "TS_BUILD_SCRIPT(nots:build node build.js)\nTS_BUILD_OUTPUTS(dist)")
 
+    def test_build_env(self):
+        # Explicitly listed TS_BUILD_ENV names come first and override the
+        # TS_BUILD_ENV() defaults of the same name.
+        graph = self.package("TS_LIBRARY", "TS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\nTS_BUILD_ENV(SKIP_TRANSLATIONS_LOADING=1)\nTS_BUILD_ENV(MODE=default)\nSET(TS_BUILD_ENV MODE)\nSET(TS_ENV_MODE explicit)")
+        args = [arg for command in self.node(graph, "output.tar")["cmds"] for arg in command["cmd_args"]]
+        start = args.index("--vcs-info") + 2
+        self.assertEqual(args[start:args.index("--outputs")], ["--env", "MODE=explicit", "--env", "SKIP_TRANSLATIONS_LOADING=1"])
+
     def test_typecheck_and_lint_graph(self):
         graph = self.package("TS_TSC", "TS_BUILD_OUTPUTS(dist)", ("-t",))
         self.assertTrue(any("eslint" in json.dumps(node.get("cmds", [])) for node in graph["graph"]))

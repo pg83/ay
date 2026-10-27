@@ -28,6 +28,7 @@ type NotsModule struct {
 	Excludes          []string
 	Configs           []string
 	VCSInfo           string
+	BuildEnv          []string
 	OutputPrefix      string
 	HasOutputPrefix   bool
 	ProtoOptions      []string
@@ -251,6 +252,51 @@ func (c *NotsModule) finish(env Environment) {
 
 	c.AfterBuildCommand = env.string(envTsAfterBuildCommand)
 	c.ProtoNonRecursive = env.bool(envTsProtoNonRecursive)
+	c.setupBuildEnv(env)
+}
+
+func (c *NotsModule) setupBuildEnv(env Environment) {
+	listed := map[string]bool{}
+
+	if names, _ := env.lookup("TS_BUILD_ENV"); names != "" && notsBuildEnvFor(env) {
+		for _, name := range strings.Split(names, ",") {
+			value, ok := env.lookup("TS_ENV_" + name)
+
+			if !ok {
+				throwFmt("Env var '%s' is provided in a list, but var value is not provided", name)
+			}
+
+			c.BuildEnv = append(c.BuildEnv, "--env", name+"="+value)
+			listed[name] = true
+		}
+	}
+
+	defaults, _ := env.lookup("TS_BUILD_ENV_DEFAULTS_LIST")
+	sep, _ := env.lookup("TS_BUILD_ENV_DEFAULTS_LIST_SEP")
+
+	for _, entry := range strings.Split(strings.TrimPrefix(defaults, "$TS_BUILD_ENV_DEFAULTS_LIST"), sep) {
+		entry = strings.TrimSpace(entry)
+
+		if entry == "" {
+			continue
+		}
+
+		name, _, ok := strings.Cut(entry, "=")
+
+		if !ok {
+			throwFmt("TS_BUILD_ENV expects key=value, got %q", entry)
+		}
+
+		if !listed[name] {
+			c.BuildEnv = append(c.BuildEnv, "--env", entry)
+		}
+	}
+}
+
+func notsBuildEnvFor(env Environment) bool {
+	targets, ok := env.lookup("TS_BUILD_ENV_FOR")
+
+	return !ok || slices.Contains(strings.Split(targets, ":"), env.string(envMODDIR))
 }
 
 func (e *EmitContext) notsResource(dir, name string) ResourceDecl {
@@ -675,6 +721,8 @@ func (e *EmitContext) emitNotsBuild() *ModuleEmitResult {
 	}
 
 	args = append(args, "--output-file", output.string(), "--vcs-info", c.VCSInfo)
+	args = append(args, c.BuildEnv...)
+
 	outputs = append(outputs, build(dir, "/output.tar.uuid"))
 
 	foreignRefs := []NodeRef{toolRef}
