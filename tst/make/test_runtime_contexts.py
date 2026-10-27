@@ -37,6 +37,16 @@ class RuntimeContextsTest(MakeTest):
         self.assertIn("PY_MAIN=answer.main:main", [arg for command in producer["cmds"] for arg in command["cmd_args"]])
         self.node(graph, "test-results/import_test/meta.json")
 
+    def test_py_main_peers_follow_module_peerdirs(self):
+        self.write("lib/ya.make", "PY2_LIBRARY()\nPY_SRCS(answer.py)\nSRCS(native.cpp)\nEND()\n")
+        self.write("lib/answer.py", "answer = 42\n")
+        self.write("lib/native.cpp", "int native() { return 42; }\n")
+        self.write("ya.make", f"PROGRAM(answer)\nUSE_PYTHON2()\nPY_MAIN({PROJECT}.lib.answer)\nPEERDIR({PROJECT}/lib)\nEND()\n")
+        args = [arg for command in self.node(self.graph(), "answer")["cmds"] for arg in command["cmd_args"]]
+        lib = f"{PROJECT}/lib/libpy{PROJECT}-lib"
+        self.assertLess(args.index(lib + ".global.a"), args.index("contrib/tools/python/src/Modules/_sqlite/libsrc-Modules-_sqlite.global.a"))
+        self.assertLess(args.index(lib + ".a"), args.index("library/python/runtime/main/libpython-runtime-main.a"))
+
     def test_yql_python_runtimes(self):
         self.write("answer.py", "answer = 42\n")
         for kind in ("YQL_PYTHON_UDF", "YQL_PYTHON3_UDF"):

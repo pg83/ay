@@ -3676,7 +3676,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.pyMain = ptr(internStr(arg).any())
 		d.pyMainDeclSeq = d.nextDeclSeq()
 
-		collectPythonSourceEntry(d, env)
+		collectPythonSourceEntry(d, env, &d.macroPeerdirs)
 	case tokRegisterSandboxImport:
 
 		for _, arg := range v.Args {
@@ -4288,7 +4288,7 @@ func confModuleType(name TOK, d *ModuleData) string {
 	return pythonSourceModuleType(d.unit.Type)
 }
 
-func collectPythonSourceEntry(d *ModuleData, env Environment) {
+func collectPythonSourceEntry(d *ModuleData, env Environment, peers *[]ANY) {
 	d.pythonSourceCallback = true
 
 	moduleType := env.string(envMODULE_TYPE)
@@ -4313,15 +4313,15 @@ func collectPythonSourceEntry(d *ModuleData, env Environment) {
 			sqlitePeer = "contrib/tools/python3_prev"
 		}
 
-		d.peerdirs = append(d.peerdirs, internStr(mainPeer).any())
+		*peers = append(*peers, internStr(mainPeer).any())
 
 		if d.pythonSQLite3 {
-			d.peerdirs = append(d.peerdirs, internV(sqlitePeer, "/Modules/_sqlite").any())
+			*peers = append(*peers, internV(sqlitePeer, "/Modules/_sqlite").any())
 		}
 	}
 
 	if d.pythonSourceProgram && !d.noCheckImportsDisabled && !env.bool(envCppAnalysisMode) {
-		d.peerdirs = append(d.peerdirs, strLibraryPythonTestingImportTest.any())
+		*peers = append(*peers, strLibraryPythonTestingImportTest.any())
 	}
 }
 
@@ -4330,7 +4330,7 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		return
 	}
 
-	collectPythonSourceEntry(d, env)
+	collectPythonSourceEntry(d, env, &d.peerdirs)
 
 	v.Args = expandRootDeferredTokens(v.Args, env, tokenExpandPathArguments)
 
