@@ -1,3 +1,6 @@
+import base64
+import hashlib
+
 from tst.make.lib import MakeTest, PROJECT
 
 
@@ -48,3 +51,22 @@ class ResourceTest(MakeTest):
         self.assertEqual(args[start + 1:start + 3], [rel(peer_obj), rel(own_obj)])
         archive = next(node for node in graph["graph"] if any(path.startswith(f"$(B)/{PROJECT}/lib/") and path.endswith(".a") for path in node["outputs"]))
         self.assertNotIn(peer_obj, archive["inputs"])
+
+    def test_resources_library_object_name_hashes_module_tag(self):
+        self.write("ya.make", f"PROGRAM(answer)\nSRCS(main.cpp)\nPEERDIR({PROJECT}/res)\nEND()\n")
+        self.write("main.cpp", "int main() { return 0; }\n")
+        self.write("res/ya.make", "RESOURCES_LIBRARY()\nRESOURCE(query.sql /e2e/query)\nEND()\n")
+        self.write("res/query.sql", "SELECT 42;\n")
+        graph = self.graph()
+        key = base64.b64encode(b"/e2e/query").decode()
+        hashed = ",".join(sorted(["query.sql", key, f"$S/{PROJECT}/res"])) + "RESOURCE_LIB"
+        name = "objcopy_" + hashlib.md5(hashed.encode()).hexdigest()[:26] + ".o"
+        self.node(graph, f"res/{name}")
+
+    def test_resources_library_peers_link_transitively(self):
+        self.write("ya.make", f"PROGRAM(answer)\nSRCS(main.cpp)\nPEERDIR({PROJECT}/res)\nEND()\n")
+        self.write("main.cpp", "int main() { return 0; }\n")
+        self.write("res/ya.make", "RESOURCES_LIBRARY()\nRESOURCE(query.sql /e2e/query)\nEND()\n")
+        self.write("res/query.sql", "SELECT 42;\n")
+        executable = self.node(self.graph(), "answer")
+        self.assertIn("$(B)/library/cpp/resource/liblibrary-cpp-resource.a", executable["inputs"])

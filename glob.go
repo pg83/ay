@@ -200,6 +200,8 @@ func applyGlobStmt(fs FS, module string, args []ANY, env Environment, onWarn fun
 		throwFmt("%s: empty argument in _GLOB", module)
 	}
 
+	markUserArg(args[0])
+
 	var patterns, excludes, restrictions []string
 
 	section := ""

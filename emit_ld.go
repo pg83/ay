@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"path"
+	"strings"
 )
 
 var (
@@ -106,6 +107,8 @@ func (e *EmitContext) emitLD(
 	for _, input := range ldScriptInputs {
 		e.cppStyleSource(input.any())
 	}
+
+	globalRefs, globalPaths, objcopyRefs, objcopyPaths = splitGlobalObjects(na, globalRefs, globalPaths, objcopyRefs, objcopyPaths)
 
 	globalInputs := e.moduleGlobals
 	pluginPaths := e.globalPlugins()
@@ -308,6 +311,68 @@ func (e *EmitContext) emitLD(
 	e.appendSdcMeta(&n, binaryName)
 
 	return e.emitModuleNode(n, true)
+}
+
+func splitGlobalObjects(na *NodeArenas, globalRefs []NodeRef, globalPaths []VFS, ownRefs []NodeRef, ownPaths []VFS) ([]NodeRef, []VFS, []NodeRef, []VFS) {
+	objects := 0
+
+	for _, p := range globalPaths {
+		if isGlobalObject(p) {
+			objects++
+		}
+	}
+
+	if objects == 0 {
+		return globalRefs, globalPaths, ownRefs, ownPaths
+	}
+
+	archiveRefs := na.noderefs.alloc(len(globalRefs) - objects)[:0]
+
+	for i, p := range globalPaths {
+		if !isGlobalObject(p) {
+			archiveRefs = append(archiveRefs, globalRefs[i])
+		}
+	}
+
+	na.noderefs.commit(len(archiveRefs))
+
+	archivePaths := na.vfs.alloc(len(globalPaths) - objects)[:0]
+
+	for _, p := range globalPaths {
+		if !isGlobalObject(p) {
+			archivePaths = append(archivePaths, p)
+		}
+	}
+
+	na.vfs.commit(len(archivePaths))
+
+	objRefs := na.noderefs.alloc(objects + len(ownRefs))[:0]
+
+	for i, p := range globalPaths {
+		if isGlobalObject(p) {
+			objRefs = append(objRefs, globalRefs[i])
+		}
+	}
+
+	objRefs = append(objRefs, ownRefs...)
+	na.noderefs.commit(len(objRefs))
+
+	objPaths := na.vfs.alloc(objects + len(ownPaths))[:0]
+
+	for _, p := range globalPaths {
+		if isGlobalObject(p) {
+			objPaths = append(objPaths, p)
+		}
+	}
+
+	objPaths = append(objPaths, ownPaths...)
+	na.vfs.commit(len(objPaths))
+
+	return archiveRefs[:len(archiveRefs):len(archiveRefs)], archivePaths[:len(archivePaths):len(archivePaths)], objRefs[:len(objRefs):len(objRefs)], objPaths[:len(objPaths):len(objPaths)]
+}
+
+func isGlobalObject(p VFS) bool {
+	return strings.HasSuffix(p.relString(), ".o")
 }
 
 func lDOutputPath(instance ModuleInstance, binaryName string) VFS {

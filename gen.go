@@ -1238,6 +1238,34 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	}
 }
 
+func appendUserPeerAddIncl(deduper *DeDuper, out []VFS, oneLevelOnly map[VFS]struct{}, pr *ModuleEmitResult) ([]VFS, map[VFS]struct{}) {
+	for _, p := range pr.AddInclUserGlobal {
+		if deduper.addStable(p.strID()) {
+			out = append(out, p)
+		}
+	}
+
+	for _, p := range pr.AddInclOneLevel {
+		if oneLevelOnly == nil {
+			oneLevelOnly = map[VFS]struct{}{}
+		}
+
+		oneLevelOnly[p] = struct{}{}
+	}
+
+	for _, p := range pr.AddInclGlobal {
+		if deduper.addStable(p.strID()) {
+			out = append(out, p)
+		}
+
+		if oneLevelOnly != nil {
+			delete(oneLevelOnly, p)
+		}
+	}
+
+	return out, oneLevelOnly
+}
+
 type ResolvedPeer struct {
 	path   string
 	result *ModuleEmitResult
@@ -2299,29 +2327,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 					}
 				}
 			case peerKindUserPeer:
-				for _, p := range rp.result.AddInclUserGlobal {
-					if deduper.addStable(p.strID()) {
-						peerAddInclGlobal = append(peerAddInclGlobal, p)
-					}
-				}
-
-				for _, p := range rp.result.AddInclOneLevel {
-					if oneLevelOnlyPaths == nil {
-						oneLevelOnlyPaths = map[VFS]struct{}{}
-					}
-
-					oneLevelOnlyPaths[p] = struct{}{}
-				}
-
-				for _, p := range rp.result.AddInclGlobal {
-					if deduper.addStable(p.strID()) {
-						peerAddInclGlobal = append(peerAddInclGlobal, p)
-					}
-
-					if oneLevelOnlyPaths != nil {
-						delete(oneLevelOnlyPaths, p)
-					}
-				}
+				peerAddInclGlobal, oneLevelOnlyPaths = appendUserPeerAddIncl(deduper, peerAddInclGlobal, oneLevelOnlyPaths, rp.result)
 			}
 		}
 

@@ -1470,6 +1470,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				env.setStringID(envMODULE_TYPE, d.moduleStmt.Name.str())
 			}
 
+			if v.Name == tokResourcesLibrary {
+				env.setString(envMODULE_TAG, "RESOURCE_LIB")
+			}
+
 			setupRosModule(v, modulePath, language, env, d)
 			setupMlaunchModule(v, modulePath, language, env, d)
 			setupPackageModule(v, language, d)
@@ -4307,6 +4311,8 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 	}
 
 	collectPythonSourceEntry(d, env)
+
+	v.Args = expandRootDeferredTokens(v.Args, env, tokenExpandPathArguments)
 
 	topLevel := false
 	mainNext := false

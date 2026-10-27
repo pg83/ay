@@ -459,7 +459,24 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 		emitResourceFetch(ctx, decl)
 	}
 
-	e.bindCompilerFlagResources(globals)
+	closure := e.resourcesLibraryPeerClosure(globals)
+
+	e.frame.peerCtx = PeerContext{ResourceGlobals: closure.resourceGlobals}
+	e.peers = &e.frame.peerCtx
+
+	d.tc = resolveModuleToolchain(ctx, closure.resourceGlobals, instance.Platform.ClangVer)
+	d.cc.TC = d.tc
+	e.bindCompilerFlagResources(closure.resourceGlobals)
+	e.emit()
+
+	_, own := e.partitionCollected()
+
+	for _, out := range own.outs {
+		e.codegen.use(out)
+	}
+
+	globalRefs := ctx.na.refList(append(closure.globalRefs, own.refs...)...)
+	globalPaths := ctx.na.vfsList(append(closure.globalPaths, own.outs...)...)
 
 	var sbomRef *NodeRef
 	var sbomPath *VFS
@@ -473,27 +490,138 @@ func (e *EmitContext) genResourcesLibrary() *ModuleEmitResult {
 	}
 
 	result := &ModuleEmitResult{
-		ModuleStmtName:        d.moduleStmt.Name,
-		ResourceGlobalClosure: globals,
-		RPathFlagsGlobal:      d.rpathFlagsGlobal,
-		LDFlagsGlobal:         e.ownLinkerFlagValues(d.ldFlags),
-		GoLDFlagsGlobal:       e.ownLinkerFlagValues(d.goLdflags),
-		CFlagsGlobal:          e.ownCompilerFlagValues(d.cFlagsGlobal, compilerFlagsCommon),
-		CXXFlagsGlobal:        e.ownCompilerFlagValues(d.cxxFlagsGlobal, compilerFlagsCxx),
-		COnlyFlagsGlobal:      e.ownCompilerFlagValues(d.cOnlyFlagsGlobal, compilerFlagsCOnly),
-		LinkExcludeLibraries:  d.linkExcludeLibraries,
-		ObjAddLibsGlobal:      d.objAddLibsGlobal,
-		AddInclGlobal:         d.addInclGlobal,
-		OwnAddInclGlobal:      d.addInclGlobal,
-		AddInclUserGlobal:     d.addInclUserGlobal,
-		AddInclOneLevel:       d.addInclOneLevel,
-		SbomComponentRef:      sbomRef,
-		SbomComponentPath:     sbomPath,
+		ModuleStmtName:          d.moduleStmt.Name,
+		ResourceGlobalClosure:   closure.resourceGlobals,
+		PeerArchiveClosureRefs:  closure.archiveRefs,
+		PeerArchiveClosurePaths: closure.archivePaths,
+		PeerGlobalClosureRefs:   globalRefs,
+		PeerGlobalClosurePaths:  globalPaths,
+		PeerSbomClosureRefs:     closure.sbomRefs,
+		PeerSbomClosurePaths:    closure.sbomPaths,
+		RPathFlagsGlobal:        d.rpathFlagsGlobal,
+		LDFlagsGlobal:           e.ownLinkerFlagValues(d.ldFlags),
+		GoLDFlagsGlobal:         e.ownLinkerFlagValues(d.goLdflags),
+		CFlagsGlobal:            e.ownCompilerFlagValues(d.cFlagsGlobal, compilerFlagsCommon),
+		CXXFlagsGlobal:          e.ownCompilerFlagValues(d.cxxFlagsGlobal, compilerFlagsCxx),
+		COnlyFlagsGlobal:        e.ownCompilerFlagValues(d.cOnlyFlagsGlobal, compilerFlagsCOnly),
+		LinkExcludeLibraries:    d.linkExcludeLibraries,
+		ObjAddLibsGlobal:        d.objAddLibsGlobal,
+		AddInclGlobal:           closure.addInclGlobal,
+		OwnAddInclGlobal:        d.addInclGlobal,
+		AddInclUserGlobal:       d.addInclUserGlobal,
+		AddInclOneLevel:         d.addInclOneLevel,
+		SbomComponentRef:        sbomRef,
+		SbomComponentPath:       sbomPath,
 	}
 
 	ctx.memoPut(instance, result)
 
 	return result
+}
+
+type ResourcesLibraryPeerClosure struct {
+	resourceGlobals []ResourceDecl
+	archiveRefs     []NodeRef
+	archivePaths    []VFS
+	globalRefs      []NodeRef
+	globalPaths     []VFS
+	sbomRefs        []NodeRef
+	sbomPaths       []VFS
+	addInclGlobal   []VFS
+}
+
+func (e *EmitContext) resourcesLibraryPeerClosure(own []ResourceDecl) ResourcesLibraryPeerClosure {
+	c := ResourcesLibraryPeerClosure{resourceGlobals: slices.Clip(own), addInclGlobal: e.d.addInclGlobal}
+
+	if len(e.d.peerdirs) == 0 {
+		return c
+	}
+
+	peers := make([]ResolvedPeer, 0, len(e.d.peerdirs))
+
+	for _, peer := range e.d.peerdirs {
+		path := peerdirModulePath(peer).string()
+
+		peers = append(peers, ResolvedPeer{path: path, result: e.genPeerModule(e.derivePeerInstance(path)), kind: peerKindUserPeer})
+	}
+
+	dedupers.with(func(dd *DeDuper) {
+		for _, decl := range own {
+			dd.addStable(decl.GlobalVar.strID())
+		}
+
+		for _, rp := range peers {
+			for _, decl := range rp.result.ResourceGlobalClosure {
+				if dd.addStable(decl.GlobalVar.strID()) {
+					c.resourceGlobals = append(c.resourceGlobals, decl)
+				}
+			}
+		}
+
+		dd.reset()
+
+		for _, rp := range peers {
+			pr := rp.result
+
+			for i, p := range pr.PeerArchiveClosurePaths {
+				if dd.addStable(p.strID()) {
+					c.archiveRefs = append(c.archiveRefs, pr.PeerArchiveClosureRefs[i])
+					c.archivePaths = append(c.archivePaths, p)
+				}
+			}
+
+			if pr.ARPath != nil && dd.addStable(pr.ARPath.strID()) {
+				c.archiveRefs = append(c.archiveRefs, pr.ARRef)
+				c.archivePaths = append(c.archivePaths, *pr.ARPath)
+			}
+		}
+
+		dd.reset()
+
+		for _, rp := range peers {
+			pr := rp.result
+
+			for i, p := range pr.PeerGlobalClosurePaths {
+				if dd.addStable(p.strID()) {
+					c.globalRefs = append(c.globalRefs, pr.PeerGlobalClosureRefs[i])
+					c.globalPaths = append(c.globalPaths, p)
+				}
+			}
+
+			if pr.GlobalRef != nil && pr.GlobalPath != nil && dd.addStable(pr.GlobalPath.strID()) {
+				c.globalRefs = append(c.globalRefs, *pr.GlobalRef)
+				c.globalPaths = append(c.globalPaths, *pr.GlobalPath)
+			}
+		}
+
+		if e.ctx.sbomEnabled {
+			c.sbomRefs, c.sbomPaths, _ = aggregateSbomComponents(dd, e, e.d.moduleStmt.Name, false, peers, nil, nil, nil)
+		}
+
+		dd.reset()
+
+		var peerAddIncl []VFS
+		var oneLevelOnly map[VFS]struct{}
+
+		for _, rp := range peers {
+			peerAddIncl, oneLevelOnly = appendUserPeerAddIncl(dd, peerAddIncl, oneLevelOnly, rp.result)
+		}
+
+		dd.reset()
+		c.addInclGlobal = slices.Clip(e.d.addInclGlobal)
+
+		for _, p := range c.addInclGlobal {
+			dd.addStable(p.strID())
+		}
+
+		for _, p := range peerAddIncl {
+			if _, isOneLevel := oneLevelOnly[p]; !isOneLevel && dd.addStable(p.strID()) {
+				c.addInclGlobal = append(c.addInclGlobal, p)
+			}
+		}
+	})
+
+	return c
 }
 
 func prebuiltModuleSuffix(p *Platform) string {

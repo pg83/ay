@@ -687,10 +687,19 @@ func goExtldflagsArgs(na *NodeArenas, p *Platform, tc ModuleToolchain, useArcadi
 	push(goExtldWholeArchive[0])
 
 	for _, g := range globals {
-		push(g.rel().any())
+		if !isGlobalObject(g) {
+			push(g.rel().any())
+		}
 	}
 
 	push(goExtldWholeArchive[1])
+
+	for _, g := range globals {
+		if isGlobalObject(g) {
+			push(g.rel().any())
+		}
+	}
+
 	push(goExtldWholeArchive[2])
 
 	for _, x := range localLDFlags {

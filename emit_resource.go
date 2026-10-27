@@ -860,9 +860,15 @@ func (e *EmitContext) emitPySourceGroup(gi int) {
 		return
 	}
 
-	e.emitPySrcGroupObjcopy(gi, group, &ObjcopyEmitResult{})
+	if e.d.unit.Tag == unitTagPy3Bin {
+		return
+	}
 
-	if e.d.unit.Tag != unitTagPy3Bin {
-		e.emitResourceFile(e.d.pyPyiResources[group.PyiStart:group.PyiEnd], e.d.unit.HashTag)
+	e.emitPySrcGroupObjcopy(gi, group)
+
+	e.emitResourceFile(e.d.pyPyiResources[group.PyiStart:group.PyiEnd], e.d.unit.HashTag)
+
+	if len(e.d.pySrcs) > 0 {
+		e.emitPyProtoGroupResources(gi)
 	}
 }

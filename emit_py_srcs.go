@@ -491,10 +491,10 @@ func (e *EmitContext) emitPyYapyc(ps PySrc, tool PyccTool) {
 	})
 }
 
-func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *ObjcopyEmitResult) {
+func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup) {
 	_, instance, d := e.ctx, e.instance, e.d
 
-	if len(d.pySrcs) == 0 || d.unit.Tag == unitTagPy3Bin {
+	if len(d.pySrcs) == 0 {
 		return
 	}
 
@@ -503,10 +503,7 @@ func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *Objco
 		!strings.HasPrefix(instance.Path.relString(), "contrib/tools/python3")
 
 	if namespaceEnabled {
-		nsRefs, nsOuts := e.emitPyNamespaceForGroup(gi, group)
-
-		res.Refs = append(res.Refs, nsRefs...)
-		res.Outputs = append(res.Outputs, nsOuts...)
+		e.emitPyNamespaceForGroup(gi, group)
 	}
 
 	entries := e.resEntries[:0]
@@ -516,10 +513,7 @@ func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *Objco
 		e.resEntries = retainMaxLen(e.resEntries, entries)
 
 		if len(entries) > 0 {
-			groupRefs, groupOuts := e.packResources(ResourcePack{DontCompress: true, Tag: d.unit.HashTag, Items: e.pySrcResourceItems(entries)})
-
-			res.Refs = append(res.Refs, groupRefs...)
-			res.Outputs = append(res.Outputs, groupOuts...)
+			e.packResources(ResourcePack{DontCompress: true, Tag: d.unit.HashTag, Items: e.pySrcResourceItems(entries)})
 		}
 
 		entries = entries[:0]
@@ -540,11 +534,6 @@ func (e *EmitContext) emitPySrcGroupObjcopy(gi int, group PySrcGroup, res *Objco
 	}
 
 	flush()
-
-	protoRefs, protoOuts := e.emitPyProtoGroupResources(gi)
-
-	res.Refs = append(res.Refs, protoRefs...)
-	res.Outputs = append(res.Outputs, protoOuts...)
 }
 
 func (e *EmitContext) collectPyProtoGroupResEntries(group int, event bool) ([]PyGenResEntry, []int) {
