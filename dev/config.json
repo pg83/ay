@@ -4221,7 +4221,7 @@
       "yabs/server/test/ft/BSSERVER-31888"
     ],
     "target": "yabs/server/test/ft/BSSERVER-31888",
-    "xfail": true,
+    "xfail": false,
     "env": {
       "AUTOCHECK": "1",
       "TOOLCHAIN": "",
