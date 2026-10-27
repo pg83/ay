@@ -3685,7 +3685,7 @@
       "taxi/uservices/services/masstransit-signal-ingest"
     ],
     "target": "taxi/uservices/services/masstransit-signal-ingest",
-    "xfail": true,
+    "xfail": false,
     "env": {
       "AUTOCHECK": "1",
       "TOOLCHAIN": "",
