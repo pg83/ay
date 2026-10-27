@@ -1,3 +1,4 @@
+import base64
 import json
 
 from tst.make.lib import MakeTest, PROJECT
@@ -40,6 +41,43 @@ class TypescriptTests(MakeTest):
         self.write("tests/ya.make", f"TS_TEST_FOR({PROJECT})\nTS_TEST(test node --test)\nEND()\n")
         graph = self.graph("-t")
         self.assertTrue(any("run_ts_check" in json.dumps(node.get("cmds", [])) for node in graph["graph"]))
+
+    def test_libatomic_check_env(self):
+        # Node.js 25+ on Linux links libatomic from a resource: every TS check
+        # runs with only LD_LIBRARY_PATH in its environment.
+        self.package("TS_LINT(lint)")
+        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": "26.10.0"}, "scripts": {"lint": "true", "test": "true"}}))
+        self.write("tests/ya.make", f"TS_TEST_FOR({PROJECT})\nTS_TEST(test)\nENV(E2E_ANSWER=42)\nEND()\n")
+        graph = self.graph("-t", "--target-platform=default-linux-x86_64", "--host-platform=default-linux-x86_64")
+        for output in ("test-results/ts_lint_lint/meta.json", "tests/test-results/ts_test_test/meta.json"):
+            with self.subTest(output=output):
+                args = [arg for command in self.node(graph, output)["cmds"] for arg in command["cmd_args"]]
+                env = [args[i + 1] for i, arg in enumerate(args) if arg == "--env"]
+                self.assertEqual(len(env), 1)
+                self.assertRegex(env[0], r"^LD_LIBRARY_PATH=\$\((B\)/resources/)?LIBATOMIC_1_2_0\b")
+
+    def test_check_recipes_follow_module_recipes(self):
+        # TS checks set up their builder recipes in the module epilogue, after
+        # the USE_RECIPE calls of ya.make; jest sets them up before.
+        self.package("TS_LINT(lint)")
+        self.write("package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": "22.13.0"}, "scripts": {"lint": "true", "test": "true"}}))
+        self.write("jest.config.js", "module.exports = {};\n")
+        self.write("src/answer.test.ts", 'import {answer} from "./answer";\ntest("answer", () => expect(answer).toBe(42));\n')
+        self.write("recipe/ya.make", "PY3_PROGRAM(recipe)\nPY_SRCS(MAIN main.py)\nEND()\n")
+        self.write("recipe/main.py", "pass\n")
+        for module, body, output in (("TS_TEST_FOR", "TS_TEST(test)", "tests/test-results/ts_test_test/meta.json"), ("TS_TEST_JEST_FOR", "TS_TEST_SRCS(../src)\nTS_TEST_CONFIG(../jest.config.js)", "tests/test-results/jest/meta.json")):
+            with self.subTest(module=module):
+                self.write("tests/ya.make", f"{module}({PROJECT})\nDEPENDS({PROJECT}/recipe)\nUSE_RECIPE({PROJECT}/recipe/recipe --answer 42)\n{body}\nEND()\n")
+                args = [arg for command in self.node(self.graph("-t"), output)["cmds"] for arg in command["cmd_args"]]
+                recipes = [line.strip() for line in base64.b64decode(args[args.index("--recipes") + 1]).decode().splitlines() if line.strip()]
+                self.assertEqual(recipes.index(f"{PROJECT}/recipe/recipe --answer 42"), 0 if module == "TS_TEST_FOR" else len(recipes) - 1)
+        with self.subTest(module="TS_TSC"):
+            self.write("ya.make", f"TS_TSC()\nTS_BUILD_OUTPUTS(dist)\nTS_TYPECHECK(tsconfig.json)\nDEPENDS({PROJECT}/recipe)\nUSE_RECIPE({PROJECT}/recipe/recipe --answer 42)\nEND()\n")
+            self.write("tests/ya.make", f"TS_TEST_FOR({PROJECT})\nTS_TEST(test)\nEND()\n")
+            self.write(".eslintrc.js", "module.exports = {};\n")
+            args = [arg for command in self.node(self.graph("-t"), "test-results/tsc_typecheck/meta.json")["cmds"] for arg in command["cmd_args"]]
+            recipes = [line.strip() for line in base64.b64decode(args[args.index("--recipes") + 1]).decode().splitlines() if line.strip()]
+            self.assertEqual(recipes.index(f"{PROJECT}/recipe/recipe --answer 42"), 0)
 
     def test_import_scan_string_ends(self):
         # The import scanner closes a string at a quote that follows a

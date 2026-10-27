@@ -128,8 +128,12 @@ func notsRecipeArgs(args []string, globals []ResourceDecl) string {
 	return strings.Join(out, " ")
 }
 
-func (e *EmitContext) notsRecipes(target string, head []string, globals []ResourceDecl, extract, output bool) string {
+func (e *EmitContext) notsRecipes(target string, head []string, globals []ResourceDecl, extract, output, epilogue bool) string {
 	var recipes []string
+
+	if epilogue {
+		recipes = append(recipes, e.d.test.recipes...)
+	}
 
 	if extract {
 		layer := "workspace_node_modules.tar"
@@ -154,7 +158,9 @@ func (e *EmitContext) notsRecipes(target string, head []string, globals []Resour
 		recipes = append(recipes, notsBuilderDir+"/builder extract-output-tars "+target)
 	}
 
-	recipes = append(recipes, e.d.test.recipes...)
+	if !epilogue {
+		recipes = append(recipes, e.d.test.recipes...)
+	}
 
 	return testRecipes(recipes)
 }
@@ -177,6 +183,12 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 	related = sortedUnique(append(related, source(target, "/package.json").string()))
 
 	deps := e.notsSuiteDependencies(target)
+
+	var ldEnv []string
+
+	if i := slices.Index(head, "--ld-library-path"); i >= 0 {
+		ldEnv = []string{"LD_LIBRARY_PATH=" + head[i+1]}
+	}
 
 	for _, check := range e.d.nots.Checks {
 		kind, ciType := "test", "test"
@@ -207,6 +219,10 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 			s.env, s.tags, s.data, s.relatedPaths = nil, nil, nil, nil
 		}
 
+		if ldEnv != nil {
+			s.env = ldEnv
+		}
+
 		for key, value := range map[string]string{"cpu": "4", "ram": "16", "ram_disk": "4"} {
 			if _, exists := s.requirements[key]; !exists {
 				s.requirements[key] = value
@@ -214,7 +230,7 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 		}
 
 		s.relatedPaths = append(slices.Clone(related), sortedUnique(s.relatedPaths)...)
-		s.recipes = e.notsRecipes(target, head, globals, e.d.nots.Hermetic, true)
+		s.recipes = e.notsRecipes(target, head, globals, e.d.nots.Hermetic, true, true)
 		s.runCmd = func(work string, _ TestChunk) []ANY {
 			args := []string{testToolHostPath, "run_ts_check", "--source-root", testSourceRoot, "--build-root", testBuildRoot, "--output-dir", work + "/testing_out_stuff", "--tracefile", work + "/ytest.report.trace", "--log-path", work + "/testing_out_stuff/ts-check.log", "--target_path", target, "--nodejs", node.Value.string(), "--script-name", check.Script}
 
@@ -282,7 +298,7 @@ func (e *EmitContext) notsForSuites(target string, ref NodeRef, globals []Resour
 	s.supportsCanonization = true
 	s.smoothShutdown = []string{"SIGUSR2"}
 	s.inputNames = []string{target + "/package.json"}
-	s.recipes = e.notsRecipes(target, head, globals, false, true)
+	s.recipes = e.notsRecipes(target, head, globals, false, true, false)
 
 	testConfig := name + ".config.js"
 
@@ -395,7 +411,7 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 		s.runInputs = []VFS{build(dir, "/package.json")}
 		s.deps = e.notsSuiteDependencies(dir)
 		s.runCwd = build(dir).string()
-		s.recipes = e.notsRecipes(dir, head, state.Globals, false, check.name == "ts_biome")
+		s.recipes = e.notsRecipes(dir, head, state.Globals, false, check.name == "ts_biome", true)
 		s.runCmd = func(work string, _ TestChunk) []ANY {
 			args := []string{testToolHostPath, "run_" + check.name, "--source-root", testSourceRoot, "--build-root", testBuildRoot}
 
