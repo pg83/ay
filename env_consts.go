@@ -203,6 +203,7 @@ var (
 	envPYTHON3                                = internEnv("PYTHON3")
 	envPYTHONHASHSEED                         = internEnv("PYTHONHASHSEED")
 	envPackedPackageExt                       = internEnv("PACKED_PACKAGE_EXT")
+	envParallelTestsWithinNodeWorkers         = internEnv("PARALLEL_TESTS_WITHIN_NODE_WORKERS")
 	envPeerdirTags                            = internEnv("PEERDIR_TAGS")
 	envPeerdirsRulesPath                      = internEnv("PEERDIRS_RULES_PATH")
 	envPerl                                   = internEnv("PERL")

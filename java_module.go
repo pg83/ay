@@ -353,6 +353,7 @@ type javaTestData struct {
 	requirements     []string
 	forkMode         string
 	splitFactor      string
+	parallelWorkers  string
 	experimentalFork bool
 	systemProperties []string
 	classpathCmdType string

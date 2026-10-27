@@ -92,12 +92,20 @@ func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) 
 	var javaSuites []*TestSuite
 
 	for _, project := range projects {
+		javaStart := len(javaSuites)
+
 		for _, result := range groups[project] {
 			var own []*TestSuite
 
 			if result.java != nil {
 				result.testsEmitted = true
-				javaSuites = append(javaSuites, ctx.javaTestSuites(result.java)...)
+
+				for _, suite := range ctx.javaTestSuites(result.java) {
+					if !mergeCheckSuite(javaSuites[javaStart:], suite) {
+						javaSuites = append(javaSuites, suite)
+					}
+				}
+
 				own = ctx.javaCPPStyleSuites(result.java)
 			} else {
 				own = ctx.moduleTestSuites(result)

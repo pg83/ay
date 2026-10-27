@@ -269,11 +269,11 @@ func (ctx *GenCtx) javaKotlinLintFiles(jm *JavaModule) []string {
 	}
 
 	for _, d := range dirs {
-		patterns = append(patterns, "$(S)/"+path.Join(jm.dir, d)+"/*.kt")
+		patterns = append(patterns, "$(S)/"+styleSourcePath(jm.dir, d)+"/*.kt")
 	}
 
 	for _, d := range javaMacroKeyword(args, "DIRS_RECURSE", "DIRS") {
-		patterns = append(patterns, "$(S)/"+path.Join(jm.dir, d)+"/**/*.kt")
+		patterns = append(patterns, "$(S)/"+styleSourcePath(jm.dir, d)+"/**/*.kt")
 	}
 
 	ex := newJavaExcludeMatcher(jm.dir, []string{"ya.make", "canondata/**"})
@@ -282,7 +282,7 @@ func (ctx *GenCtx) javaKotlinLintFiles(jm *JavaModule) []string {
 
 	for _, p := range patterns {
 		for _, f := range ctx.javaGlob(jm.dir, p, ex) {
-			files = append(files, "$(S)/"+f)
+			files = append(files, f)
 		}
 	}
 
@@ -300,32 +300,13 @@ func (ctx *GenCtx) javaCustomLintSuite(jm *JavaModule, l javaCustomLint) *TestSu
 	configs := make([]string, 0, len(l.configTypes))
 
 	for _, c := range l.configTypes {
-		configs = append(configs, "$(S)/"+path.Join(path.Dir(inc.relString()), c))
+		configs = append(configs, path.Join(path.Dir(inc.relString()), c))
 	}
 
-	s := ctx.javaSuiteBase(jm, l.linter.name, l.linter.name, "style")
+	check := StyleCheck{Name: l.linter.name, Wrapper: l.linter.wrapper, Resource: l.linter.resource, Files: files, ExtraConfigs: configs}
+	s := ctx.styleSuite(check, jm.dir, slices.Clone(jm.data.testEnv), styleCheckResources(check, ctx.javaResourceGlobals(jm)))
 
-	s.globals = slices.DeleteFunc(s.globals, func(g ResourceDecl) bool { return g.GlobalVar.string() != l.linter.resource })
-	s.supportsTestParameters = true
-	s.relatedPaths = append(append(slices.Clone(files), configs...), "$(S)/"+l.linter.wrapper)
-	s.env = slices.Clone(jm.data.testEnv)
-
-	s.runCmd = func(work string, _ TestChunk) []ANY {
-		strs := []string{testToolHostPath, "run_custom_lint", "--source-root", "$(S)", "--build-root", "$(B)",
-			"--project-path", "$(S)/" + jm.dir, "--trace-path", work + "/ytest.report.trace",
-			"--out-path", work + "/testing_out_stuff", "--lint-name", l.linter.name, "--wrapper-script", l.linter.wrapper,
-			"--depends", jm.dir}
-
-		for _, c := range configs {
-			strs = append(strs, "--config", c)
-		}
-
-		for _, g := range sortedResourceGlobals(s.globals) {
-			strs = append(strs, "--global-resource", g.Token.string())
-		}
-
-		return testArgs(append(strs, files...))
-	}
+	s.p = jm.instance.Platform
 
 	return s
 }
@@ -463,6 +444,21 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 
 	props := javaTestProperties(t.systemProperties)
 	cpType := strings.ToLower(cmp.Or(t.classpathCmdType, "MANIFEST"))
+	workers := 0
+
+	if value := t.parallelWorkers; value != "" {
+		value = strings.ToLower(value)
+
+		if value == "auto" || value == "all" {
+			value = cmp.Or(s.requirements["cpu"], "1")
+		}
+
+		workers = throw2(strconv.Atoi(value))
+
+		if workers <= 0 {
+			throwFmt("PARALLEL_TESTS_WITHIN_NODE expects auto or a positive integer, got %s", value)
+		}
+	}
 
 	s.runCmd = func(work string, chunk TestChunk) []ANY {
 		strs := []string{testYMakePython3, "$(S)/build/scripts/run_junit.py", testYMakePython3, "$(S)/build/scripts/unpacking_jtest_runner.py",
@@ -493,6 +489,11 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 		}
 
 		strs = append(strs, "--runner-log-path", work+"/testing_out_stuff/run.log", "--properties", props)
+
+		if workers > 1 {
+			strs = append([]string{testToolHostPath, "run_jtest", "--worker-count", strconv.Itoa(workers),
+				"--temp-tracefile-dir", work + "/temporary_traces"}, strs...)
+		}
 
 		return testArgs(strs)
 	}

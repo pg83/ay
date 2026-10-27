@@ -268,6 +268,7 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	d.fakeModule = env.bool(envFakeModule)
 	d.moduleType = env.string(envMODULE_TYPE)
 	d.sbrUIDExt = env.string(envSbrUIDExt)
+	d.test.parallelWorkers = env.string(envParallelTestsWithinNodeWorkers)
 
 	if jm.unit.fbs {
 		d.env = env.cloneInto(new(EnvStore))
@@ -805,6 +806,8 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 		d.test.forkMode = "subtests"
 	case "SPLIT_FACTOR":
 		d.test.splitFactor = arg0
+	case "PARALLEL_TESTS_WITHIN_NODE":
+		env.setString(envParallelTestsWithinNodeWorkers, arg0)
 	case "EXPERIMENTAL_FORK":
 		d.test.experimentalFork = true
 	case "SYSTEM_PROPERTIES":
