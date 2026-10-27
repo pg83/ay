@@ -72,6 +72,19 @@ class TypescriptTest(MakeTest):
             with self.subTest(module=module):
                 self.package(module, macros)
 
+    def test_rspack(self):
+        # TS_RSPACK defaults to rspack.config.js and the bundle output dir;
+        # TS_RSPACK_CONFIG/TS_RSPACK_OUTPUT override them.
+        self.write("rspack.config.ts", "export default {};\n")
+        for macros, build_command, outputs in (
+            ("", "rspack --config rspack.config.js", ["bundle"]),
+            ("TS_RSPACK_CONFIG(rspack.config.ts)\nTS_RSPACK_OUTPUT(build extra)", "rspack --config rspack.config.ts", ["build", "extra"]),
+        ):
+            with self.subTest(macros=macros):
+                args = [arg for command in self.node(self.package("TS_RSPACK", macros), "output.tar")["cmds"] for arg in command["cmd_args"]]
+                self.assertEqual(args[args.index("--build-command") + 1], build_command)
+                self.assertEqual(args[args.index("--outputs") + 1:args.index("--exclude-globs")], outputs)
+
     def test_node_modules_bundle(self):
         self.package("TS_PACKAGE", "WITH_NODE_MODULES(PROD)", prepare_only=True)
         package = json.loads((self.project / "package.json").read_text())

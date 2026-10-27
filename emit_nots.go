@@ -55,7 +55,16 @@ type NotsCheck struct {
 
 func isNotsModule(name TOK) bool {
 	switch name {
-	case tokTsPackage, tokTsLibrary, tokTsNext, tokTsVite, tokTsTsc, tokTsTestFor, tokTsTestJestFor, tokTsTestVitestFor:
+	case tokTsPackage, tokTsLibrary, tokTsTestFor, tokTsTestJestFor, tokTsTestVitestFor:
+		return true
+	}
+
+	return isNotsLegacyModule(name)
+}
+
+func isNotsLegacyModule(name TOK) bool {
+	switch name {
+	case tokTsTsc, tokTsNext, tokTsVite, tokTsRspack:
 		return true
 	}
 
@@ -77,6 +86,8 @@ func newNotsModule(kind TOK, language Language, env Environment) *NotsModule {
 		c.BuildScript, c.BuildCommand, c.Outputs = "nots:build", "next build", []string{".next"}
 	case tokTsVite:
 		c.BuildScript, c.BuildCommand, c.Outputs = "nots:build", "vite build --config vite.config.ts", []string{"dist"}
+	case tokTsRspack:
+		c.BuildScript, c.BuildCommand, c.Outputs = "nots:build", "rspack --config rspack.config.js", []string{"bundle"}
 	}
 
 	return c
@@ -111,11 +122,11 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
 			return true
 		}
 
-		switch c.Kind {
-		case tokTsPackage, tokTsLibrary:
+		if c.Kind == tokTsPackage || c.Kind == tokTsLibrary {
 			throwFmt("%s does not support RUN_JAVASCRIPT_AFTER_BUILD", c.Kind.string())
-		case tokTsTsc, tokTsNext, tokTsVite:
-		default:
+		}
+
+		if !isNotsLegacyModule(c.Kind) {
 			return false
 		}
 
@@ -210,7 +221,7 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
 		if len(args) > 0 {
 			c.BuildScript, c.BuildCommand = args[0], strings.Join(args[1:], " ")
 		}
-	case "TS_BUILD_OUTPUTS", "TS_NEXT_OUTPUT", "TS_VITE_OUTPUT", "VITE_OUTPUT":
+	case "TS_BUILD_OUTPUTS", "TS_NEXT_OUTPUT", "TS_VITE_OUTPUT", "VITE_OUTPUT", "TS_RSPACK_OUTPUT":
 		c.Outputs = args
 	case "TS_EXCLUDE_FILES_GLOB":
 		c.Excludes = append(c.Excludes, args...)
@@ -226,6 +237,10 @@ func applyNotsStmt(v UnknownStmt, c *NotsModule, env Environment) bool {
 		}
 
 		c.BuildCommand = strings.Join(commands, " && ")
+	case "TS_RSPACK_CONFIG":
+		if len(args) > 0 {
+			c.BuildCommand = "rspack --config " + args[0]
+		}
 	case "TS_NEXT_BUILD_OPTIONS":
 		c.BuildCommand = strings.TrimSpace("next build " + strings.Join(args, " "))
 	case "TS_NEXT_CONFIG", "TS_FILES", "TS_FILES_GLOB", "USE_LEGACY_PNPM_VIRTUAL_STORE", "INJECT_PEERS":

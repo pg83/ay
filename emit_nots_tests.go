@@ -241,7 +241,7 @@ func (e *EmitContext) notsBuildSuites(dir string, state *NotsPrepared, files []V
 	head := state.Head[1:]
 	suites := e.notsCheckSuites(dir, state.Globals, files, head, state.Nodejs)
 
-	if kind := e.d.nots.Kind; kind != tokTsTsc && kind != tokTsVite && kind != tokTsNext {
+	if !isNotsLegacyModule(e.d.nots.Kind) {
 		return suites
 	}
 

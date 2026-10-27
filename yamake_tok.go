@@ -443,6 +443,7 @@ var tokName = [...]STR{
 	tokTsLibrary:                      internStr("TS_LIBRARY"),
 	tokTsNext:                         internStr("TS_NEXT"),
 	tokTsVite:                         internStr("TS_VITE"),
+	tokTsRspack:                       internStr("TS_RSPACK"),
 	tokTsTsc:                          internStr("TS_TSC"),
 	tokTsTestFor:                      internStr("TS_TEST_FOR"),
 	tokTsTestJestFor:                  internStr("TS_TEST_JEST_FOR"),
@@ -880,6 +881,7 @@ const (
 	tokTsLibrary
 	tokTsNext
 	tokTsVite
+	tokTsRspack
 	tokTsTsc
 	tokTsTestFor
 	tokTsTestJestFor
