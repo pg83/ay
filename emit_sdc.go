@@ -84,7 +84,7 @@ func (e *EmitContext) emitSdcMetas() []VFS {
 		pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
 
 		for _, output := range outputs {
-			e.register(GeneratedFileInfo{OutputPath: output, ProducerRef: ref, GeneratorRefs: na.refList(toolRef), OnUse: pending})
+			e.register(GeneratedFileInfo{OutputPath: output, ProducerRef: ref, ProducerMainOut: out, GeneratorRefs: na.refList(toolRef), OnUse: pending})
 		}
 
 		globals = append(globals, global)
@@ -93,9 +93,9 @@ func (e *EmitContext) emitSdcMetas() []VFS {
 	return globals
 }
 
-func (e *EmitContext) appendSdcMeta(node *Node, name string) {
+func (e *EmitContext) appendSdcMeta(node *Node, name string) bool {
 	if e.d.setVars[strUSE_SDC_META] != strYes {
-		return
+		return false
 	}
 
 	na := e.ctx.na
@@ -116,6 +116,8 @@ func (e *EmitContext) appendSdcMeta(node *Node, name string) {
 	node.Inputs.files = append(append(InputChunks(nil), node.Inputs.files...), na.vfsList(script), inputs)
 	node.Outputs = append(append([]VFS(nil), node.Outputs...), out)
 	e.resolveNodeCodegenDeps(node)
+
+	return true
 }
 
 func sdcInstallLocation(packageName, kind, file string) string {

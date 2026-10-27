@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 var unionKV = KV{P: pkUN, PC: pcLightCyan}
 
@@ -45,10 +48,13 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 
 	e.d.scanCtx.ccPeer = e.ctx.na.vfsList(dedup(peerIncludes)...)
 	e.d.scanCtx.protoInclude = e.ctx.na.vfsList(dedup(e.d.scanCtx.protoInclude, peerProtoIncludes)...)
-	e.globalSources = dedup(e.globalSources, e.emitSdcMetas())
+
+	own := e.emitSdcMetas()
+
+	e.globalSources = dedup(e.globalSources, own)
 	e.emitDeclaredProducers(nil)
 
-	generated := dedup(e.outs)
+	generated := slices.DeleteFunc(dedup(e.outs), func(out VFS) bool { return slices.Contains(own, out) })
 
 	if len(e.d.unionExplicitOutputs) > 0 {
 		generated = nil
@@ -75,7 +81,7 @@ func (e *EmitContext) genUnion() *ModuleEmitResult {
 	node := Node{
 		Module: true, Platform: e.instance.Platform, KV: &unionKV,
 		KVExts: []KVExt{{Key: "package", Val: "UNION"}}, Env: envVarsVCS,
-		Inputs:  NodeInputs{files: na.inputList(na.vfsList(generated...))},
+		Inputs:  NodeInputs{files: na.inputList(na.vfsList(own...), na.vfsList(generated...))},
 		Outputs: na.vfsList(append([]VFS{out}, generated...)...), Resources: usesPython3,
 		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(na.anyList(e.d.tc.Python3.any(), strC2.any(), internStr("open('"+out.string()+"','w').close()").any())), Env: envVarsVCS}),
 	}

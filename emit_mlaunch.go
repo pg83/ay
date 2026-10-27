@@ -133,7 +133,7 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 	}
 
 	lateOuts = dedup(lateOuts)
-	globalOuts = dedup(globalOuts)
+	globalOuts = dedup(e.globalSources, globalOuts)
 
 	globalSet := make(map[VFS]bool, len(globalOuts))
 	copyFiles := make([]VFS, 0, len(globalOuts)+len(lateOuts)+len(peers))
@@ -183,7 +183,15 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 		suffix = e.d.mlaunch.Suffix
 	}
 
-	e.appendSdcMeta(&node, name+suffix)
+	if !e.appendSdcMeta(&node, name+suffix) && len(e.globalSources) > 0 {
+		globalInputs := make([]VFS, 0, 2*len(e.globalSources))
+
+		for _, global := range e.globalSources {
+			globalInputs = append(globalInputs, global, e.codegen.lookup(global).ProducerMainOut)
+		}
+
+		node.Inputs.files = appendInputChunks(na, node.Inputs.files, na.inputList(na.vfsList(dedup(globalInputs)...)))
+	}
 
 	for _, file := range copyFiles {
 		if !strings.HasSuffix(file.relString(), ".pkg.fake") {

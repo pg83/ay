@@ -45,6 +45,23 @@ class ProjectVariantsTest(MakeTest):
         self.assertNotIn(f"$(B)/{PROJECT}/install/install.pkg.fake", outputs)
         self.assertNotIn(f"$(B)/{PROJECT}/tool/tool", outputs)
 
+    def test_sdc_union_global_meta(self):
+        self.write("install/ya.make", "SDC_UNION(install)\nSDC_RESOURCE_INFO(perception answer https://example.com/answer.tar.gz UNPACK)\nEND()\n")
+        meta, global_meta = f"$(B)/{PROJECT}/install/answer.sdcmeta", f"$(B)/{PROJECT}/install/answer.global.sdcmeta"
+        for flags in ("", "USE_SDC_META()\n"):
+            with self.subTest(flags=flags):
+                self.write("ya.make", f"PACKAGE()\n{flags}PEERDIR({PROJECT}/install)\nEND()\n")
+                graph = self.graph()
+                union = self.node(graph, "install/install.pkg.fake")
+                self.assertIn(meta, union["outputs"])
+                self.assertNotIn(global_meta, union["outputs"])
+                self.assertIn(global_meta, union["inputs"])
+                package = next(node for node in graph["graph"] if node["outputs"][0].endswith(".final.pkg.fake"))
+                self.assertLessEqual({meta, global_meta}, set(package["inputs"]))
+                copy = next(command["cmd_args"] for command in package["cmds"] if "--dest-dir" in command["cmd_args"])
+                position = {arg.rsplit("/", 1)[-1]: i for i, arg in enumerate(copy)}
+                self.assertLess(position["answer.global.sdcmeta"], position["answer.sdcmeta"])
+
     def test_proto_python_namespace(self):
         self.write("ya.make", f"PY3_LIBRARY()\nPEERDIR({PROJECT}/proto)\nPROTO_TO_NAMESPACE(IMPORT_ALL_IN_INIT IN_MSG answer_pb2)\nEND()\n")
         self.write("proto/ya.make", "PROTO_LIBRARY()\nPY_NAMESPACE(TOP_LEVEL)\nSRCS(answer.proto)\nEND()\n")
