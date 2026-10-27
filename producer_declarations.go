@@ -36,6 +36,10 @@ func (d *ModuleData) recordProducerDeclarations() {
 		counts[prodPyMain] = 1
 	}
 
+	if d.docs != nil {
+		counts[prodDocsCopy] = len(d.docs.copies)
+	}
+
 	start := len(d.producerDeclarations)
 
 	for kind, count := range counts {
@@ -93,6 +97,8 @@ func (d *ModuleData) producerDeclarationSequence(decl producerDeclaration) int {
 		return d.pyMainDeclSeq
 	case prodRagel6:
 		return d.ragel6Builds[decl.index].DeclSeq
+	case prodDocsCopy:
+		return d.docs.copies[decl.index].declSeq
 	}
 
 	return d.declSeq + 1

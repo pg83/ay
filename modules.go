@@ -2504,7 +2504,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		return true
 	}
 
-	if d.docs != nil && d.docs.apply(v, modulePath) {
+	if d.docs != nil && d.docs.apply(v, modulePath, d) {
 		recordHandledMacro(v.Name, v.Args)
 
 		return true

@@ -17,13 +17,17 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 
 	for _, p := range d.peerdirs {
 		peer := p.string()
-		name := ctx.moduleName(peer)
+		language := instance.Language
 
-		if name != tokDocs && name != tokDocsLibrary {
+		switch ctx.moduleName(peer) {
+		case tokDocs, tokDocsLibrary:
+		case tokProtoLibrary:
+			language = LangDocsProto
+		default:
 			continue
 		}
 
-		res := e.genPeerModule(ModuleInstance{Path: source(peer), Kind: KindLib, Language: instance.Language, Platform: instance.Platform})
+		res := e.genPeerModule(ModuleInstance{Path: source(peer), Kind: KindLib, Language: language, Platform: instance.Platform})
 
 		peers = append(peers, res.DocsClosure...)
 		globals = append(globals, res.ResourceGlobalClosure...)
@@ -117,7 +121,7 @@ func (e *EmitContext) docsNode(cmds []Cmd, inputs, buildFrom, outputs, needs []V
 func (e *EmitContext) emitDocsCopy(c DocsCopy) {
 	module := e.instance.Path.relString()
 	dst := buildJoinClean(module, c.namespace)
-	args := []string{"--source-root", "$(S)", "--build-root", "$(B)", "--src-dir", c.from, "--dst-dir", dst.string()}
+	args := []string{"--source-root", "$(S)", "--build-root", "$(B)", "--src-dir", c.from, "--dst-dir", build(module).string() + "/" + c.namespace}
 
 	args = append(args, c.files...)
 

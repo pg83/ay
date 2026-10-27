@@ -24,9 +24,10 @@ type DocsCopy struct {
 	from      string
 	namespace string
 	files     []string
+	declSeq   int
 }
 
-func (d *DocsData) apply(v UnknownStmt, module string) bool {
+func (d *DocsData) apply(v UnknownStmt, module string, owner *ModuleData) bool {
 	args := anyStrs(v.Args)
 
 	switch v.Name {
@@ -45,7 +46,7 @@ func (d *DocsData) apply(v UnknownStmt, module string) bool {
 	case tokUsePlantuml:
 		d.plantuml = true
 	case tokDocsCopyFiles:
-		c := DocsCopy{from: source(module).string(), namespace: "."}
+		c := DocsCopy{from: source(module).string(), namespace: ".", declSeq: owner.nextDeclSeq()}
 
 		for i := 0; i < len(args); i++ {
 			switch args[i] {
