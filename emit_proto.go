@@ -42,6 +42,7 @@ var pbDescriptorImporterHeaders = []VFS{
 const (
 	pbRuntimeBase      = "contrib/libs/protobuf/src/"
 	protoPathCacheSize = 64
+	pbIncludesChunk    = 3
 )
 
 func protoPbHIncludes(pm *IncludeParserManager, srcRel, outputRoot string, bucket ParsedIncludeBucket, dst []IncludeDirective) []IncludeDirective {
@@ -209,24 +210,39 @@ type protoPBPending struct {
 	outputs  []VFS
 	spec     *ProtoSpec
 	pbRef    NodeRef
+	scoped   ScopedCommand
 }
 
 func (p *protoPBPending) emitPending() {
 	s := *p
 
-	*p = protoPBPending{}
+	*p = protoPBPending{pbRef: s.pbRef, scoped: s.scoped}
 
 	c := s.common
+	scope := c.emit.ctx.visitScoped(&p.scoped)
+
+	if scope == nil {
+		scope = c.emit.commandScope()
+	}
 
 	c.emit.emitPB(
 		s.protoRel, s.protoSrc, c.cppStyleguideLDRef, c.protocLDRef,
 		c.grpcCppLDRef, c.cppStyleguideBinary, c.protocBinary, c.grpcCppBinary,
 		c.grpc, c.extraPlugins, c.emit.scanner.walkClosure(s.protoSrc, c.emit.d.scanCtx, scanDomainProto),
-		c.blocks, s.spec, s.outputs, s.pbRef,
+		c.blocks, scope.protoIncludeArgs(c.emit.ctx.na), s.spec, s.outputs, s.pbRef,
 	)
+
+	p.common = c
+	p.scoped.rendered = p
 }
 
-func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, spec *ProtoSpec) *PbModuleEmission {
+func (p *protoPBPending) rebindScope(scope *CommandScope) {
+	ctx := p.common.emit.ctx
+
+	ctx.emit.nodes.s[p.pbRef].Cmds[0].CmdArgs[pbIncludesChunk] = scope.protoIncludeArgs(ctx.na)
+}
+
+func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, spec *ProtoSpec) *PbModuleEmission {
 	idx := 0
 
 	if spec.modulePlugins {
@@ -327,7 +343,9 @@ func (e *EmitContext) pbModuleEmission(cfg ProtoPBConfig, protoInclude []VFS, sp
 
 	pe.blocks = composePBArgBlocks(ctx.emit.nodeArenas(), d.tc, pe.protocBinary, pe.cppStyleguideBinary, pe.grpcCppBinary,
 		cfg.grpc, cfg.cppOutRoot, pe.liteHeaders,
-		d.protocFlags, pe.extraPlugins, protoInclude)
+		d.protocFlags, pe.extraPlugins)
+
+	e.commandScope()
 
 	pe.pendingCommon = na.protoPBC.one()
 	*pe.pendingCommon = protoPBCommon{
@@ -429,6 +447,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			GeneratorRefs:  genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: spec.genHParsed},
 			OnUse:          pbPE,
+			Scoped:         &pending.scoped,
 		})
 
 		ccParsed := na.dirs.alloc(len(spec.genHParsed) + len(spec.genCCExtras))
@@ -444,6 +463,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			GeneratorRefs:  genRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: ccParsed},
 			OnUse:          pbPE,
+			Scoped:         &pending.scoped,
 		})
 
 		e.codegen.setMainOut(pbRef, pending.outputs)
@@ -489,7 +509,8 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			parsedIncludesHeader: pbHCompile[:len(pbHImports):len(pbHImports)],
 			parsedIncludesCpp:    pbHCompile,
 		},
-		OnUse: pbPE,
+		OnUse:  pbPE,
+		Scoped: &pending.scoped,
 	})
 
 	for pluginIdx, plugin := range d.cppProtoPlugins {
@@ -513,6 +534,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			GeneratorRefs:  pluginRefs,
 			ParsedIncludes: yaffParsed,
 			OnUse:          pbPE,
+			Scoped:         &pending.scoped,
 		})
 
 		e.register(GeneratedFileInfo{
@@ -521,6 +543,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: yaffParsed,
 			OnUse:          pbPE,
+			Scoped:         &pending.scoped,
 		})
 	}
 
@@ -538,6 +561,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			GeneratorRefs:  pbGenRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: depsParsed},
 			OnUse:          pbPE,
+			Scoped:         &pending.scoped,
 		})
 	}
 
@@ -549,6 +573,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 		GeneratorRefs:  pbCCRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: pbCCParsed},
 		OnUse:          pbPE,
+		Scoped:         &pending.scoped,
 	})
 
 	var grpcCCParsed, grpcHParsed []IncludeDirective
@@ -598,6 +623,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 				GeneratorRefs:  outputRefs,
 				ParsedIncludes: parsed,
 				OnUse:          pbPE,
+				Scoped:         &pending.scoped,
 			})
 		}
 	}
@@ -609,6 +635,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			GeneratorRefs:  pbCCRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: grpcCCParsed},
 			OnUse:          pbPE,
+			Scoped:         &pending.scoped,
 		})
 
 		e.register(GeneratedFileInfo{
@@ -617,6 +644,7 @@ func (e *EmitContext) emitProtoPB(srcRel string, cfg ProtoPBConfig, pe *PbModule
 			GeneratorRefs:  pe.grpcHRefs,
 			ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: grpcHParsed},
 			OnUse:          pbPE,
+			Scoped:         &pending.scoped,
 		})
 	}
 
@@ -665,7 +693,7 @@ func (e *EmitContext) cppProtoPB(srcRel string, spec *ProtoSpec) []VFS {
 		grpc:       d.grpc && spec.modulePlugins,
 	}
 
-	pe := e.pbModuleEmission(cfg, concat(dedup(d.protoIncludeLocal), d.cc.ProtoIncludePeers), spec)
+	pe := e.pbModuleEmission(cfg, spec)
 
 	return e.emitProtoPB(srcRel, cfg, pe, spec)
 }
@@ -779,6 +807,7 @@ func (e *EmitContext) emitPB(
 	extraPlugins []ResolvedCPPProtoPlugin,
 	transitiveProtoImports Closure,
 	blocks PbArgBlocks,
+	includes []ANY,
 	spec *ProtoSpec,
 	outputs []VFS,
 	id NodeRef,
@@ -787,9 +816,9 @@ func (e *EmitContext) emitPB(
 	na := e.ctx.na
 	outsChunk := na.anyChunkVFS(outputs)
 	relChunk := na.anyList(protoRel.any())
-	chunks := na.chunks.alloc(6)[:0]
+	chunks := na.chunks.alloc(8)[:0]
 
-	chunks = append(chunks, blocks.head, outsChunk, blocks.mid, relChunk)
+	chunks = append(chunks, blocks.head, outsChunk, blocks.midHead, includes, blocks.midTail, relChunk)
 
 	if len(spec.optsTail) > 0 {
 		chunks = append(chunks, spec.optsTail)
@@ -1002,15 +1031,15 @@ func (e *EmitContext) protoSourceRelPath(src string) string {
 }
 
 type PbArgBlocks struct {
-	head []ANY
-	mid  []ANY
-	tail []ANY
+	head    []ANY
+	midHead []ANY
+	midTail []ANY
+	tail    []ANY
 }
 
 func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppStyleguideBinary, grpcCppBinary VFS,
 	grpc bool, cppOutRoot string, liteHeaders bool,
-	extraProtocFlags []ANY, extraPlugins []ResolvedCPPProtoPlugin,
-	protoInclude []VFS) PbArgBlocks {
+	extraProtocFlags []ANY, extraPlugins []ResolvedCPPProtoPlugin) PbArgBlocks {
 	head := na.anyList(
 		tc.Python3.any(),
 		pbWrapperVFS.any(),
@@ -1023,9 +1052,7 @@ func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppSty
 		includeRoot = cppOutRoot
 	}
 
-	mid := na.anys.alloc(12 + len(protoInclude) + len(extraProtocFlags))[:0]
-
-	mid = append(mid,
+	midHead := na.anyList(
 		arg2.any(),
 		protocBinary.any(),
 		internV("-I=./", includeRoot).any(),
@@ -1034,9 +1061,7 @@ func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppSty
 		argIS3.any(),
 	)
 
-	for _, p := range protoInclude {
-		mid = append(mid, internV("-I=", p.string()).any())
-	}
+	mid := na.anys.alloc(6 + len(extraProtocFlags))[:0]
 
 	if liteHeaders {
 		mid = append(mid,
@@ -1095,5 +1120,5 @@ func composePBArgBlocks(na *NodeArenas, tc ModuleToolchain, protocBinary, cppSty
 
 	na.anys.commit(len(tail))
 
-	return PbArgBlocks{head: head, mid: mid, tail: tail[:len(tail):len(tail)]}
+	return PbArgBlocks{head: head, midHead: midHead, midTail: mid, tail: tail[:len(tail):len(tail)]}
 }

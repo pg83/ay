@@ -24,6 +24,7 @@ type GeneratedFileInfo struct {
 	OwnerSerial        uint32
 	ProducerRef        NodeRef
 	OnUse              *PendingEmit
+	Scoped             *ScopedCommand
 	GeneratorRefs      []NodeRef
 	ProducerMainOut    VFS
 	ClosureLeaves      []VFS

@@ -118,6 +118,7 @@ type ModuleEmitResult struct {
 	testDependencyModule            TestDependencyModule
 	ModuleVariants                  uint16
 	IncludedDeps                    *ModuleIncludedDeps
+	SearchScope                     *CommandScope
 	GlobalSources                   []VFS
 	PchFlagsGlobal                  []ANY
 	JavaClosure                     []VFS
@@ -224,6 +225,8 @@ type GenCtx struct {
 	tools            DenseMap[ARG, *ModuleEmitResult]
 	frames           []*ModuleFrame
 	frameDepth       int
+	exportTick       uint32
+	exportOrder      []*ModuleEmitResult
 	py3ccHeadChunk   []ANY
 	scripts          ScriptDeps
 	fetchRefs        *DenseMap[STR, NodeRef]
@@ -306,6 +309,7 @@ func runGenIntoWithResources(fs FS, parsers *IncludeParserManager, targets []str
 	suites := ctx.prepareDiscoveredModuleTests(discovered)
 
 	ctx.flushFbsContextBindings()
+	ctx.bindCommandScopes()
 	ctx.bindForeignTools()
 	ctx.emitDiscoveredModuleTests(suites)
 
@@ -1571,6 +1575,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 	defer func() {
 		if result != nil {
+			e.publishSearchScope(result)
 			e.publishModuleIncludes(result)
 			e.recordTestDependencyModule(result, moduleName, env)
 		}

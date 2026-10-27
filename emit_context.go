@@ -27,6 +27,8 @@ type EmitContext struct {
 	globalSources      []VFS
 	ctx                *GenCtx
 	frame              *ModuleFrame
+	scope              *CommandScope
+	serial             uint32
 	instance           ModuleInstance
 	d                  *ModuleData
 	peers              *PeerContext
@@ -149,7 +151,7 @@ func newEmitContextIn(frame *ModuleFrame, ctx *GenCtx, instance ModuleInstance, 
 	prev := &frame.emitCtx
 
 	frame.emitCtx = EmitContext{
-		ctx: ctx, frame: frame, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen,
+		ctx: ctx, frame: frame, serial: frame.serial, instance: instance, d: d, peers: peers, scanner: scanner, codegen: scanner.codegen,
 		resources: d.resources[:k:k],
 
 		ccPending:   scrub(prev.ccPending),
