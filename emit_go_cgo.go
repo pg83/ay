@@ -443,7 +443,7 @@ func (e *EmitContext) goCgoImportPath() string {
 }
 
 func (e *EmitContext) goCgoLinkOFlags() []ANY {
-	return e.ctx.na.anyConcat(e.localLinkerFlagValue(nil, nil).Args, e.peers.LDFlagsGlobal)
+	return e.ctx.na.anyConcat(e.localLinkerFlagValue(nil).Args, e.peers.LDFlagsGlobal)
 }
 
 func (e *EmitContext) flushGoCgo2() {

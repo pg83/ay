@@ -53,7 +53,6 @@ type DynLibLink struct {
 	soname    string
 	fixElf    VFS
 	fixElfRef NodeRef
-	symbolic  bool
 }
 
 func (e *EmitContext) emitLD(
@@ -80,7 +79,6 @@ func (e *EmitContext) emitLD(
 	moduleScopeCFlags []ANY,
 	peerLDValue CompilerFlagValue,
 	ownLDValue CompilerFlagValue,
-	ownRPathFlags []ANY,
 	peerRPathFlagsGlobal []ANY,
 	objAddLibsGlobal []ANY,
 	linkExcludeLibraries []ANY,
@@ -102,7 +100,7 @@ func (e *EmitContext) emitLD(
 	dyn *DynLibLink,
 ) NodeRef {
 	peerLDFlagsGlobal, ownLDFlags := peerLDValue.Args, ownLDValue.Args
-	localLDValue := e.localLinkerFlagValue(ownRPathFlags, peerRPathFlagsGlobal)
+	localLDValue := e.localLinkerFlagValue(peerRPathFlagsGlobal)
 	na := emit.nodeArenas()
 
 	for _, input := range ldScriptInputs {
@@ -484,13 +482,13 @@ func composeLDCmdLinkExe(na *NodeArenas, p *Platform, tc ModuleToolchain, output
 	}
 
 	cmdArgs = appendAnyLists(cmdArgs, p.Linker.EndGroup, p.Linker.AfterPeers)
-	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, localLDFlags, objAddLibsGlobal, exportsScript, linkerScripts, noExportDynSymbols, wantsStrip, useArcadiaLibm, dyn)...)
+	cmdArgs = append(cmdArgs, composeProgramLinkTrailer(p, peerLDFlagsGlobal, ownLDFlags, localLDFlags, objAddLibsGlobal, exportsScript, linkerScripts, noExportDynSymbols, wantsStrip, useArcadiaLibm)...)
 	na.anys.commit(len(cmdArgs))
 
 	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
 }
 
-func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, localLDFlags, objAddLibsGlobal []ANY, exportsScript VFS, linkerScripts []VFS, noExportDynSymbols, wantsStrip, useArcadiaLibm bool, dyn *DynLibLink) []ANY {
+func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, localLDFlags, objAddLibsGlobal []ANY, exportsScript VFS, linkerScripts []VFS, noExportDynSymbols, wantsStrip, useArcadiaLibm bool) []ANY {
 	var trailer []ANY
 
 	if !noExportDynSymbols {
@@ -505,11 +503,6 @@ func composeProgramLinkTrailer(p *Platform, peerLDFlagsGlobal, ownLDFlags, local
 
 	trailer = appendLinkerScripts(trailer, p.Linker.Script, linkerScripts)
 	trailer = append(trailer, localLDFlags...)
-
-	if dyn != nil && dyn.symbolic {
-		trailer = append(trailer, argWlBsymbolic.any())
-	}
-
 	trailer = appendAnyLists(trailer, peerLDFlagsGlobal, ownLDFlags)
 	trailer = appendArgGroupStr(trailer, objAddLibsGlobal)
 	trailer = appendAnyLists(trailer, p.Linker.Intercept, p.Linker.SystemLibs)

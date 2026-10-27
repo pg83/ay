@@ -3,6 +3,7 @@ package main
 var multimoduleTags = map[TOK]map[string]Language{
 	tokCrate:   {"RUST": LangCPP, "RUST_HOST": LangRustHost},
 	tokPackage: {"PACKAGE_FINAL": LangCPP, "PACKAGE_UNION": LangPackage},
+	tokDllJava: {"JNI_DLL": LangCPP, "JAR_COMPILATION": LangJava},
 	tokProtoLibrary: {
 		"CPP_PROTO": LangCPP, "JAVA_PROTO": LangJava, "PY3_PROTO": LangPy, "GO_PROTO": LangGo,
 		"DESC_PROTO": LangDescProto, "DOCS_PROTO": LangDocsProto, "TS_PROTO": LangTS, "TS_PREPARE_DEPS": LangTSPrepare,
@@ -44,7 +45,11 @@ func applyMultimoduleVariantTags(v UnknownStmt, d *ModuleData) {
 	}
 }
 
-func multimoduleVariantTag(name TOK, language Language) string {
+func multimoduleVariantTag(name TOK, kind ModuleKind, language Language) string {
+	if isSandboxPythonTask(name) {
+		return sandboxPythonTaskVariant(name, kind, language)
+	}
+
 	for tag, lang := range multimoduleTags[name] {
 		if lang == language {
 			return tag

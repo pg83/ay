@@ -164,7 +164,6 @@ type ModuleData struct {
 
 	yqlPrebuiltTool          bool
 	yqlUdfProbe              bool
-	udfBaseSymbolic          bool
 	yqlUdfShared             bool
 	yqlPythonUdf             bool
 	yqlCurrent               bool
@@ -818,7 +817,6 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	}
 
 	d.peerdirs = append(d.peerdirs, d.macroPeerdirs...)
-	d.udfBaseSymbolic = d.udfBaseSymbolic && env.string(envMsvc) != "yes" && env.string(envDarwin) != "yes"
 	d.pyProtoMypy = env.string(envPyProtoMypyEnabled) == "yes" &&
 		(isPythonProtoModule(d) || d.unit.Type == tokPy2Library || d.unit.Type == tokPy3Library || d.unit.Type == tokPy23Library)
 	d.cpuCheck = env.string(envCpuCheck) == "yes"
@@ -1379,7 +1377,14 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
-			platform.initConfModule(env, v.Name.string(), d.unit.Tag.string(), d.setVars)
+
+			confTag := multimoduleVariantTag(v.Name, kind, language)
+
+			if confTag == "" {
+				confTag = d.unit.Tag.string()
+			}
+
+			platform.initConfModule(env, v.Name.string(), confTag, d.setVars)
 			env.setString(envPeerdirTags, expandAssignedScalarVarRef(modulePeerTags(v, d.unit, language), env))
 			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
@@ -3449,8 +3454,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		}
 
 		d.arPlugin = ptr(internV(v.Args[0].string(), ".pyplugin").any())
-	case tokWithDynamicLibs:
-		env.setBool(envSoOutputs, true)
 	case tokDynamicLibraryFrom:
 		if len(v.Args) == 0 {
 			throwFmt("gen: DYNAMIC_LIBRARY_FROM expects at least 1 argument")

@@ -1280,7 +1280,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 	na.noderefs.commit(k)
 
 	env := goCmdEnv(ctx, instance.Platform, d.tc)
-	localLD := e.localLinkerFlagValue(nil, nil)
+	localLD := e.localLinkerFlagValue(nil)
 
 	if len(localLD.Inputs) > 0 {
 		inputs = appendInputChunks(na, inputs, na.inputList(localLD.Inputs))

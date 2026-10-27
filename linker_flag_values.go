@@ -74,7 +74,7 @@ type LocalLinkerFlags struct {
 	Inputs []VFS
 }
 
-func (e *EmitContext) localLinkerFlagValue(ownRPath, peerRPath []ANY) LocalLinkerFlags {
+func (e *EmitContext) localLinkerFlagValue(peerRPath []ANY) LocalLinkerFlags {
 	if e.d.localLDFlagsReady {
 		return e.d.localLDFlags
 	}
@@ -116,10 +116,6 @@ func (e *EmitContext) localLinkerFlagValue(ownRPath, peerRPath []ANY) LocalLinke
 
 			value, _ := env.lookup(name)
 			args, identity := expand(value, append(expanding, name))
-
-			if name == "_LD_FLAGS" {
-				args = append(args, anyStrs(ownRPath)...)
-			}
 
 			return args, identity
 		})

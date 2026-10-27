@@ -9,7 +9,6 @@ func setupUdfBaseModule(stmt *ModuleStmt, d *ModuleData, env Environment) {
 		throwFmt("gen: EXPORTS keyword in module header is deprecated and will be ignored. Use EXPORTS_SCRIPT macro instead.")
 	}
 
-	d.udfBaseSymbolic = true
 	env.setStringID(envMODULE_TYPE, kwDLL)
 	env.setStringID(envMODULE_TAG, kwDLL)
 	env.setBool(envDynamicLink, true)

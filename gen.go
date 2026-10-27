@@ -1503,15 +1503,13 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		return result
 	}
 
-	tag := multimoduleVariantTag(d.multimodule, instance.Language)
+	tag := multimoduleVariantTag(d.multimodule, instance.Kind, instance.Language)
 
 	if moduleName == tokPy23Library || moduleName == tokPy23NativeLibrary {
 		tag = d.unit.Tag.string()
 	}
 
 	if isSandboxPythonTask(moduleName) {
-		tag = sandboxPythonTaskVariant(moduleName, instance.Kind, instance.Language)
-
 		first := sandboxPythonTaskFirstInstance(instance, moduleName)
 
 		if instance.Kind == first.Kind && instance.Language == first.Language {
@@ -2812,7 +2810,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		if isDllModuleType(d.moduleStmt.Name) {
 			binaryName = dllOutputName(instance, d.moduleStmt)
-			dyn = &DynLibLink{soname: binaryName, symbolic: (isPythonDllModule(d.moduleStmt.Name) || d.yqlUdfShared) && instance.Platform.OS != OSDarwin && instance.Platform.OS != OSWindows || d.udfBaseSymbolic}
+			dyn = &DynLibLink{soname: binaryName}
 
 			if version := dllModuleVersion(d.moduleStmt); version != "" {
 				dyn.soname += version
@@ -2836,13 +2834,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		ldCCRefs := local.refs
 		ldCCOutputs := local.outs
 		ldObjcopyRefs, ldObjcopyPaths := globalRefs, globalOutputs
-
-		var ownRPathFlags []ANY
-
-		if len(peerDynamicPaths) > 0 {
-			ownRPathFlags = append([]ANY(nil), peerRPathFlagsGlobal...)
-		}
-
 		wantsStrip := d.strip && !d.noStrip
 
 		var programModuleTag STR
@@ -2894,7 +2885,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			d.moduleScopeCFlags,
 			resourceGlobalArgumentValue(peerLDFlagsGlobal, resourceGlobalsClosure),
 			resourceGlobalArgumentValue(ownLDFlags, resourceGlobalsClosure),
-			ownRPathFlags,
 			peerRPathFlagsGlobal,
 			peerObjAddLibsGlobal,
 			linkExcludeLibraries,

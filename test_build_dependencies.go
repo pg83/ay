@@ -162,7 +162,7 @@ func (ctx *GenCtx) testDependencyInstances(dir string) []ModuleInstance {
 	selected := instances[:0]
 
 	for _, peer := range instances {
-		tag := multimoduleVariantTag(name, peer.Language)
+		tag := multimoduleVariantTag(name, peer.Kind, peer.Language)
 
 		if tag == "" {
 			tag = resolveModuleUnit(name, peer.Kind, peer.Language).Tag.string()

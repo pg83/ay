@@ -5,7 +5,7 @@ func protoModuleTag(language Language, schema bool) string {
 		return "PROTO_DESCRIPTIONS_"
 	}
 
-	tag := multimoduleVariantTag(tokProtoLibrary, language)
+	tag := multimoduleVariantTag(tokProtoLibrary, KindLib, language)
 
 	if language == LangPy2 {
 		tag = "PY_PROTO"
