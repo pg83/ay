@@ -788,7 +788,7 @@ func (e *EmitContext) emitPyRegistration(registration PyRegistration) {
 	spec := CompileSpec{ObjSuf: d.unit.ObjSuf, EnvCFlags: d.cc.CFlags[:end:end]}
 
 	if len(d.cythonCpp) > 0 {
-		spec.EnvAddIncl = appendCythonCCAddIncl(na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
+		spec.EnvAddIncl = appendCythonCCAddIncl(na, d.cc.AddIncl)
 	}
 
 	e.register(GeneratedFileInfo{

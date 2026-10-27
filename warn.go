@@ -15,6 +15,7 @@ var warnKindStr = [...]string{
 	WarnToolConf:          "tool-conf",
 	WarnDupSrc:            "dup-src",
 	WarnMissingSource:     "missing-source",
+	WarnMisconfiguration:  "misconfiguration",
 }
 
 const (
@@ -45,6 +46,8 @@ const (
 	WarnDupSrc
 
 	WarnMissingSource
+
+	WarnMisconfiguration
 )
 
 type Warn struct {

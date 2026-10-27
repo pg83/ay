@@ -163,22 +163,13 @@ func (e *EmitContext) planCythonCpp() []CythonStmtPlan {
 
 	for _, stmt := range d.cythonCpp {
 		generatedExplicit := stmt.Generated != nil
-		py23Variant := cythonUsesPy23Variant(d.moduleStmt.Name)
-		generated := stmt.Src + ".cpp"
 		cythonSuffix := ""
-
-		if py23Variant {
-			generated = stmt.Src + ".py3.cpp"
-		}
-
-		if stmt.CMode {
-			generated = stmt.Src + ".c"
-		}
 
 		if d.usePython2 {
 			cythonSuffix = ".py2"
-			generated = stmt.Src + d.cc.objSufDot() + cythonSuffix + cythonOutExt(stmt.CMode)
 		}
+
+		generated := stmt.Src + d.cc.objSufDot() + cythonSuffix + cythonOutExt(stmt.CMode)
 
 		if stmt.Native != nil {
 			generated = e.moduleSourceRel(stmt.Native.Source) + d.cc.objSufDot() + ".cpp"
@@ -512,15 +503,6 @@ func resolveCythonPxd(ctx *GenCtx, instance ModuleInstance, pxdRel string) (VFS,
 	return 0, false
 }
 
-func cythonUsesPy23Variant(modName TOK) bool {
-	switch modName {
-	case tokPy23Library, tokPy23NativeLibrary:
-		return true
-	}
-
-	return false
-}
-
 func appendCythonAddIncl(cmdArgs []ANY, addIncl []VFS, memo InclArgMemo) []ANY {
 	for _, path := range addIncl {
 		cmdArgs = append(cmdArgs, memo.arg(path).any())
@@ -538,7 +520,7 @@ func (e *EmitContext) cythonAdjustModuleCCBlocks() []VFS {
 
 	cy := d.cc
 
-	cy.AddIncl = appendCythonCCAddIncl(ctx.na, d.cc.AddIncl, d.cythonNumpyBeforeInclude)
+	cy.AddIncl = appendCythonCCAddIncl(ctx.na, d.cc.AddIncl)
 
 	d.cc.MainOutInducedInputs = true
 	d.cc.CCBlocks = composeCCModuleArgBlocks(ctx.na, instance.Platform, &cy)
@@ -572,25 +554,12 @@ func cythonOutExt(cMode bool) string {
 	return ".cpp"
 }
 
-func appendCythonCCAddIncl(na *NodeArenas, addIncl []VFS, numpyBeforeInclude bool) []VFS {
+func appendCythonCCAddIncl(na *NodeArenas, addIncl []VFS) []VFS {
 	out := na.vfs.alloc(len(addIncl) + len(cythonNumpyAddIncl))[:0]
 
 	defer func() {
 		na.vfs.commit(len(out))
 	}()
-
-	if numpyBeforeInclude {
-		for i, path := range addIncl {
-			if path == pythonIncludeDir {
-				out = append(out, addIncl[:i]...)
-				out = append(out, cythonNumpyAddIncl...)
-				out = append(out, addIncl[i:]...)
-				out = dedupInPlace(out)
-
-				return out[:len(out):len(out)]
-			}
-		}
-	}
 
 	out = append(out, addIncl...)
 	out = append(out, cythonNumpyAddIncl...)
