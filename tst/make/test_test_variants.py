@@ -111,7 +111,7 @@ class TestVariantsTest(MakeTest):
     def test_exectest_peerdir_resource_globals(self):
         self.write("ya.make", f"EXECTEST()\nRUN(cat ${{ARCADIA_ROOT}}/{PROJECT}/data.txt)\nDATA(arcadia/{PROJECT}/data.txt)\nPEERDIR({PROJECT}/lib)\nEND()\n")
         self.write("data.txt", "42\n")
-        self.write("lib/ya.make", "LIBRARY()\nSRCS(answer.cpp)\nEND()\n")
+        self.write("lib/ya.make", "LIBRARY()\nSRCS(answer.cpp)\nIF (MODULE_LANG == CPP)\n    STYLE_CPP()\nENDIF()\nEND()\n")
         self.write("lib/answer.cpp", "int answer() { return 42; }\n")
         graph = self.graph("-t")
         self.assertEqual([], [out for node in graph["graph"] for out in node["outputs"] if f"/{PROJECT}/lib/" in out])
@@ -119,7 +119,16 @@ class TestVariantsTest(MakeTest):
         args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
         resources = [args[i + 1].split("::")[0] for i, arg in enumerate(args) if arg == "--global-resource"]
         self.assertIn("CLANG_RESOURCE_GLOBAL", resources)
+        self.assertIn("CLANG_FORMAT_RESOURCE_GLOBAL", resources)
         self.assertIn("YMAKE_PYTHON3_RESOURCE_GLOBAL", resources)
+
+    def test_exectest_has_no_module_language(self):
+        self.write("ya.make", f"EXECTEST()\nRUN(cat ${{ARCADIA_ROOT}}/{PROJECT}/data.txt)\nDATA(arcadia/{PROJECT}/data.txt)\nIF (MODULE_LANG == CPP)\n    STYLE_CPP()\nENDIF()\nEND()\n")
+        self.write("data.txt", "42\n")
+        node = self.node(self.graph("-t"), "test-results/exectest/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        resources = [args[i + 1].split("::")[0] for i, arg in enumerate(args) if arg == "--global-resource"]
+        self.assertEqual(["YMAKE_PYTHON3_RESOURCE_GLOBAL"], resources)
 
     def test_exectest_keeps_runtime_variables(self):
         self.write("ya.make", f"EXECTEST()\nINCLUDE(${{ARCADIA_ROOT}}/{PROJECT}/run.inc)\nENV(E2E_DIRECT=${{ARCADIA_ROOT}}/{PROJECT}/data.txt)\nENV(E2E_CUR=${{CURDIR}}/x E2E_SRC=${{TEST_SOURCE_ROOT}}/z E2E_PY=${{PYTHON_BIN}} E2E_U=${{E2E_UNDEFINED}}/u)\nEND()\n")

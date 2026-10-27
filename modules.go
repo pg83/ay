@@ -1586,7 +1586,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				moduleLang = moduleLangTokenPy3
 			}
 
-			if !isUnionModule(d.moduleStmt.Name) && d.moduleStmt.Name != tokCiGroup && d.moduleStmt.Name != tokGenLibrary {
+			if moduleAssignsLang(d.moduleStmt.Name) {
 				env.setString(envMODULE_LANG, moduleLang)
 			}
 
@@ -4249,6 +4249,15 @@ func parseYAFFSchema(v UnknownStmt) CppProtoPlugin {
 		OutputSuffixes: []string{"_" + schemaName + ".yaff.h", "_" + schemaName + ".yaff.cpp"},
 		ExtraOutFlag:   yaffExtraOutFlag(lead, s),
 	}
+}
+
+func moduleAssignsLang(name TOK) bool {
+	switch name {
+	case tokCiGroup, tokGenLibrary, tokExectest, tokResourcesLibrary, tokPackageFinal:
+		return false
+	}
+
+	return !isUnionModule(name)
 }
 
 func pythonSourceModuleType(name TOK) string {

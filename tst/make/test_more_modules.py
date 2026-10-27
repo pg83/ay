@@ -2,6 +2,21 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class MoreModulesTest(MakeTest):
+    def test_bare_units_have_no_module_language(self):
+        self.write("ya.make", f"UNITTEST()\nSRCS(answer_ut.cpp)\nPEERDIR({PROJECT}/resources)\nEND()\n")
+        self.write("answer_ut.cpp", "#include <library/cpp/testing/unittest/registar.h>\nY_UNIT_TEST_SUITE(Answer) { Y_UNIT_TEST(Value) { UNIT_ASSERT_VALUES_EQUAL(6 * 7, 42); } }\n")
+        self.write("resources/ya.make", "RESOURCES_LIBRARY()\nIF (MODULE_LANG == CPP)\n    DECLARE_EXTERNAL_RESOURCE(E2E_MARK sbr:123456)\nENDIF()\nEND()\n")
+        node = self.node(self.graph("-t"), "test-results/unittest/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertFalse(any(arg.startswith("E2E_MARK_RESOURCE_GLOBAL") for arg in args))
+
+        self.write("ya.make", "PACKAGE()\nIF (MODULE_LANG == CPP)\n    FILES(cpp.txt)\nENDIF()\nFILES(any.txt)\nEND()\n")
+        self.write("cpp.txt", "cpp\n")
+        self.write("any.txt", "any\n")
+        outputs = [out for node in self.graph()["graph"] for out in node["outputs"]]
+        self.assertIn(f"$(B)/{PROJECT}/any.txt", outputs)
+        self.assertNotIn(f"$(B)/{PROJECT}/cpp.txt", outputs)
+
     def test_dll(self):
         self.write("ya.make", "DLL(answer)\nSRCS(answer.cpp)\nEND()\n")
         self.write("answer.cpp", 'extern "C" int answer() { return 42; }\n')
