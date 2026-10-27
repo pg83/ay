@@ -481,6 +481,12 @@ func collectJavaStmts(ctx *GenCtx, jm *JavaModule, d *JavaData, stmts []Stmt, en
 				d.collectCPPStyle(ctx.fs, jm.dir, stmt, env)
 
 				continue
+			case tokStyleJSON, tokStyleYAML, tokStyleYAMLConf, tokStyleYQL:
+				if !styleChecksDisabled(env) {
+					d.styleChecks = append(d.styleChecks, explicitStyleCheck(v.Name, env))
+				}
+
+				continue
 			}
 
 			applyJavaMacro(ctx, jm, d, v.Raw.string(), args, rawArgs, env)

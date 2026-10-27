@@ -209,21 +209,27 @@ func (d *ModuleData) collectStyleCheck(fs FS, module string, stmt UnknownStmt, e
 		return
 	}
 
-	check := StyleCheck{Name: "clang_format_json", ConfigMap: "build/config/tests/json_style/default_configs.json", Wrapper: "tools/clang_format_json_linter/wrapper.py", Resource: "CLANG_FORMAT_RESOURCE_GLOBAL", Peer: "build/platform/clang/clang-format"}
-
-	switch stmt.Name {
-	case tokStyleYAML:
-		check = yamlStyleCheck(env)
-	case tokStyleYQL:
-		check = StyleCheck{Name: "yqlfmt", Wrapper: "tools/yqlfmt_linter/wrapper.py"}
-	default:
-		if value, ok := env.lookup("JSON_LINTER_DEFAULT_CONFIGS"); ok && value != "" {
-			check.ConfigMap = value
-		}
-	}
+	check := explicitStyleCheck(stmt.Name, env)
 
 	check.Files = collectStyleFiles(fs, module, stmt)
 	d.addFileStyleCheck(check)
+}
+
+func explicitStyleCheck(name TOK, env Environment) StyleCheck {
+	switch name {
+	case tokStyleYAML, tokStyleYAMLConf:
+		return yamlStyleCheck(env)
+	case tokStyleYQL:
+		return StyleCheck{Name: "yqlfmt", Wrapper: "tools/yqlfmt_linter/wrapper.py"}
+	}
+
+	check := StyleCheck{Name: "clang_format_json", ConfigMap: "build/config/tests/json_style/default_configs.json", Wrapper: "tools/clang_format_json_linter/wrapper.py", Resource: "CLANG_FORMAT_RESOURCE_GLOBAL", Peer: "build/platform/clang/clang-format"}
+
+	if value, ok := env.lookup("JSON_LINTER_DEFAULT_CONFIGS"); ok && value != "" {
+		check.ConfigMap = value
+	}
+
+	return check
 }
 
 func collectStyleFiles(fs FS, module string, stmt UnknownStmt) []string {

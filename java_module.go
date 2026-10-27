@@ -840,7 +840,7 @@ func (jm *JavaModule) macroPeers() []string {
 	}
 
 	for _, check := range d.styleChecks {
-		if check.CPP && check.Peer != "" {
+		if !check.Python && check.Peer != "" {
 			out = append(out, check.Peer)
 		}
 	}

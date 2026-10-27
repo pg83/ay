@@ -212,6 +212,15 @@ class JavaGeneratorInputsTest(MakeTest):
         args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
         self.assertTrue(any(arg.startswith("RUFF_RESOURCE_GLOBAL::") for arg in args))
 
+    def test_proto_yaml_style_resource_reaches_java(self):
+        self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nPEERDIR({PROJECT}/schema)\nEND()\n")
+        self.write("Main.java", "public class Main {}\n")
+        self.write("schema/ya.make", "PROTO_LIBRARY()\nSRCS(answer.proto)\nSTYLE_YAML_WITH_CONFIG()\nEND()\n")
+        self.write("schema/answer.proto", 'syntax = "proto3";\npackage e2e;\nmessage Answer {}\n')
+        node = self.node(self.graph("-t", "--target-platform=default-linux-x86_64", "--target-platform-build-type=relwithdebinfo", "--host-platform=default-linux-x86_64", "--target-platform-tests", "--add-modules-to-results", "--target-platform-flag=ADD_PEERDIRS_GEN_TESTS=yes"), "test-results/java_style/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertTrue(any(arg.startswith("YAMLFMT_RESOURCE_GLOBAL::") for arg in args))
+
     def test_bundled_proto_descriptor_is_a_generated_resource(self):
         self.write("ya.make", f"JAVA_PROGRAM(answer)\nJDK_VERSION(17)\nJAVA_SRCS(Main.java)\nBUNDLE({PROJECT}/descriptions NAME answer.protodesc)\nJAVA_SRCS(RESOURCES SRCDIR ${{BINDIR}} FILES answer.protodesc)\nEND()\n")
         self.write("Main.java", "public class Main {}\n")
