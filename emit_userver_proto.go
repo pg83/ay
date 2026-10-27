@@ -200,12 +200,7 @@ func (e *EmitContext) emitUserverProtos(batch UserverProtoBatch) {
 
 	for _, file := range batch.files {
 		file := file
-		src := source(file.path)
-
-		if e.codegen.use(build(file.path)) != nil {
-			src = build(file.path)
-		}
-
+		src := e.rootSourceOrGenerated(file.path)
 		outputs := na.vfsList(batch.outputs(file.path)...)
 		includes := []IncludeDirective{{kind: includeQuoted, target: includeTarget(internStr(strings.TrimSuffix(file.path, ".proto") + ".pb.h").any())}}
 

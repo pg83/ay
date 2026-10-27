@@ -137,11 +137,10 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 		na.anyList(args...),
 	)
 
-	protoSrc := source(protoRel)
+	protoSrc := e.rootSourceOrGenerated(protoRel)
 	cwd := srcRootDirVFS
 
-	if info := e.codegen.use(build(protoRel)); info != nil {
-		protoSrc = build(protoRel)
+	if protoSrc.isBuild() {
 		cwd = bldRootDirVFS
 	}
 

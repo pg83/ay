@@ -26,3 +26,15 @@ class SpecialCodegenTest(MakeTest):
         graph = self.graph()
         self.node(graph, "meta/value.sdcmeta")
         self.node(graph, "answer.sdcmeta")
+
+    def test_proto_structs_read_source_over_copy(self):
+        self.write("ya.make", f"LIBRARY()\nPROTO_NAMESPACE({PROJECT}/lib/src)\nPEERDIR({PROJECT}/lib {PROJECT}/schema)\nUSRV_GEN_PROTO_STRUCTS(PROTODESC {PROJECT}/descriptions FILE {PROJECT}/lib/src/answer.proto)\nEND()\n")
+        self.write("lib/ya.make", "LIBRARY()\nFILES(src/answer.proto)\nSRCS(lib.cpp)\nEND()\n")
+        self.write("lib/lib.cpp", "int lib() { return 42; }\n")
+        self.write("lib/src/answer.proto", 'syntax = "proto3"; package e2e; message Answer { int32 value = 1; }\n')
+        self.write("schema/ya.make", f"PROTO_LIBRARY()\nPROTO_NAMESPACE(GLOBAL {PROJECT}/lib/src)\nSRCDIR({PROJECT}/lib/src)\nSRCS(answer.proto)\nEND()\n")
+        self.write("descriptions/ya.make", f"PROTO_DESCRIPTIONS()\nPEERDIR({PROJECT}/schema)\nEND()\n")
+        graph = self.graph()
+        structs = self.node(graph, "lib/src/answer.structs.usrv.pb.hpp")
+        self.assertIn(f"$(S)/{PROJECT}/lib/src/answer.proto", structs["inputs"])
+        self.assertFalse(any(f"$(B)/{PROJECT}/lib/src/answer.proto" in node["outputs"] for node in graph["graph"]))

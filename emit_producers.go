@@ -117,6 +117,14 @@ func relUnderDir(rel, dir string) bool {
 	return len(rel) > len(dir) && rel[len(dir)] == '/' && rel[:len(dir)] == dir
 }
 
+func (e *EmitContext) rootSourceOrGenerated(rel string) VFS {
+	if !e.ctx.fs.isFile(srcRootRel, rel) && e.codegen.use(build(rel)) != nil {
+		return build(rel)
+	}
+
+	return source(rel)
+}
+
 func (e *EmitContext) requireProducedInput(kind, token string, vfs VFS) VFS {
 	module := e.instance.Path.relString()
 
