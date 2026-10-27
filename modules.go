@@ -3675,6 +3675,8 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		d.pyMain = ptr(internStr(arg).any())
 		d.pyMainDeclSeq = d.nextDeclSeq()
+
+		collectPythonSourceEntry(d, env)
 	case tokPyConstructor:
 
 		ensureResourcePeer(modulePath, d)

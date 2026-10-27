@@ -24,6 +24,19 @@ class RuntimeContextsTest(MakeTest):
                 self.write("ya.make", f"{declaration}\n{macros}\nPY_SRCS(answer.py)\nSRCS(answer.cpp)\nEND()\n")
                 self.graph()
 
+    def test_py_main_in_native_program(self):
+        self.write("ya.make", "PROGRAM(answer)\nUSE_PYTHON2()\nPY_MAIN(answer.main)\nEND()\n")
+        graph = self.graph("-t")
+        link = self.node(graph, "answer")
+        self.assertIn("$(B)/library/python/runtime/main/libpython-runtime-main.a", link["inputs"])
+        for archive in ("contrib/tools/python/src/Modules/_sqlite/libsrc-Modules-_sqlite.a", "contrib/tools/python/src/Modules/_sqlite/libsrc-Modules-_sqlite.global.a", "library/python/import_tracing/lib/libpypython-import_tracing-lib.global.a", "library/python/testing/import_test/libpypython-testing-import_test.global.a"):
+            self.assertIn(f"$(B)/{archive}", link["inputs"])
+        objcopy = [path for path in link["inputs"] if path.startswith(f"$(B)/{PROJECT}/objcopy_")]
+        self.assertEqual(len(objcopy), 1, link["inputs"])
+        producer = next(node for node in graph["graph"] if objcopy[0] in node["outputs"])
+        self.assertIn("PY_MAIN=answer.main:main", [arg for command in producer["cmds"] for arg in command["cmd_args"]])
+        self.node(graph, "test-results/import_test/meta.json")
+
     def test_yql_python_runtimes(self):
         self.write("answer.py", "answer = 42\n")
         for kind in ("YQL_PYTHON_UDF", "YQL_PYTHON3_UDF"):
