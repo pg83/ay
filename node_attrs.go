@@ -220,6 +220,7 @@ func (m NetworkMode) string() string {
 type Requirements struct {
 	CPU             float64
 	RAM             float64
+	KVM             bool
 	Network         NetworkMode
 	RAMDisk         float64
 	HasRAMDisk      bool
@@ -328,6 +329,7 @@ func appendRequirements(buf []byte, r *Requirements) []byte {
 		o.num("cpu", r.CPU)
 	}
 
+	o.boolTrue("kvm", r.KVM)
 	o.str("network", r.Network.string())
 
 	if r.RAM != 0 {

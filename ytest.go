@@ -32,6 +32,7 @@ const (
 	testOutputStyleJsonl    = "jsonl"
 	testDistResultFileLimit = 100 * 1024
 	testDefaultTestsLimit   = 100000
+	testKVMDefaultRAM       = 4
 )
 
 type TestOpts struct {
@@ -624,7 +625,7 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		strs = append(strs, "--test-related-path", p)
 	}
 
-	if s.noCleanEnvironment {
+	if s.noCleanEnvironment || slices.Contains(s.tags, "ya:dirty") {
 		strs = append(strs, "--no-clean-environment")
 	}
 
@@ -642,7 +643,15 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 		strs = append(strs, "--result-max-file-size", "0")
 	}
 
-	strs = append(strs, "--verify-results", "--tests-limit-in-chunk", strconv.Itoa(testDefaultTestsLimit), "--output-style", o.outputStyle, "--python-bin", testPythonBin)
+	strs = append(strs, "--verify-results")
+
+	if slices.Contains(s.tags, "ya:copydataro") {
+		strs = append(strs, "--data-to-environment", "copyro")
+	} else if slices.Contains(s.tags, "ya:copydata") {
+		strs = append(strs, "--data-to-environment", "copy")
+	}
+
+	strs = append(strs, "--tests-limit-in-chunk", strconv.Itoa(testDefaultTestsLimit), "--output-style", o.outputStyle, "--python-bin", testPythonBin)
 
 	if chunk.retry > 0 {
 		strs = append(strs, "--retry", strconv.Itoa(chunk.retry))
@@ -815,6 +824,10 @@ func testRequirements(s *TestSuite) *Requirements {
 		r.Network = nwFull
 	}
 
+	if _, ok := s.requirements["kvm"]; ok {
+		r.KVM, ram = true, testKVMDefaultRAM
+	}
+
 	if v, ok := s.requirements["ram"]; ok {
 		ram, _ = strconv.Atoi(v)
 	}
@@ -982,6 +995,10 @@ func testRequirementsOf(entries []string) map[string]string {
 	out := map[string]string{}
 
 	for _, e := range entries {
+		if e == "kvm" {
+			e = "kvm:true"
+		}
+
 		if k, v, ok := strings.Cut(e, ":"); ok {
 			k, v = strings.ToLower(k), strings.ToLower(v)
 
