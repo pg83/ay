@@ -1359,20 +1359,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded.Args = expandSourceArguments(v.Args, env)
 			v = &expanded
 
-			if _, local := d.setVars[envREALPRJNAME.str()]; !local {
-				for i := 0; i < len(v.Args); i++ {
-					if v.Args[i] == kwPREFIX.any() {
-						i++
-
-						continue
-					}
-
-					env.setStringID(envREALPRJNAME, v.Args[i].str())
-
-					break
-				}
-			}
-
 			if v.Name == tokPy3Program && kind == KindBin {
 				d.peerdirs = append([]ANY{internStr(modulePath).any()}, d.peerdirs...)
 			}
