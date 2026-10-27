@@ -1,7 +1,12 @@
+from tst.make import upstream_rust
 from tst.make.lib import MakeTest, PROJECT
 
 
 class RustTest(MakeTest):
+    def setUp(self):
+        super().setUp()
+        upstream_rust.install(self)
+
     def consumer(self, directory):
         self.write("ya.make", f"PROGRAM()\nSRCS(main.cpp)\nPEERDIR({PROJECT}/{directory})\nEND()\n")
         self.write("main.cpp", "int main() { return 0; }\n")

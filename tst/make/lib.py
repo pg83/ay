@@ -40,6 +40,46 @@ class MakeTest(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
+    def write_tree(self, path, text):
+        """Write a tree file outside the fixture for this test only.
+
+        ay sees the tree through a per-test symlink farm: every directory on
+        the way is replaced by a directory of links, so nothing is written
+        through to Arcadia. ya runs in a private overlay; the file is restored
+        when the test ends.
+        """
+        target = self.root / path
+        if self.backend == "ay":
+            current = self.root
+            for part in Path(path).parent.parts:
+                current = current / part
+                if current.is_symlink():
+                    source = Path(os.readlink(current))
+                    current.unlink()
+                    current.mkdir()
+                    for entry in source.iterdir():
+                        (current / entry.name).symlink_to(entry)
+                else:
+                    current.mkdir(exist_ok=True)
+            if target.is_symlink():
+                target.unlink()
+            target.write_text(text)
+            return
+        created = [parent for parent in target.parents if not parent.exists()]
+        original = target.read_bytes() if target.exists() else None
+
+        def restore():
+            if original is None:
+                target.unlink()
+            else:
+                target.write_bytes(original)
+            for directory in created:
+                directory.rmdir()
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+        self.addCleanup(restore)
+
     def make(self, *flags, dump_graph=True, env=None):
         cmd = [self.binary, "make", "-j0", "--sandboxing"]
         if dump_graph:

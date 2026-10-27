@@ -28,8 +28,8 @@ class TypescriptTest(MakeTest):
         self.write("src/cache.tsbuildinfo", "{}\n")
         self.write(".npmrc", "ignore-scripts=true\n")
         node = self.node(self.graph(), "output.tar")
-        self.assertIn(f"$(S)/{PROJECT}/a.yaml", node["inputs"])
-        self.assertNotIn(f"$(S)/{PROJECT}/src/cache.tsbuildinfo", node["inputs"])
+        self.assertNotIn(f"$(S)/{PROJECT}/a.yaml", node["inputs"])
+        self.assertIn(f"$(S)/{PROJECT}/src/cache.tsbuildinfo", node["inputs"])
         self.assertNotIn(f"$(S)/{PROJECT}/.npmrc", node["inputs"])
 
     def test_typescript_compiler(self):

@@ -164,10 +164,12 @@ The Rust emitter uses the existing peer closures, tool bindings, and lazy
 module publication. Native archives, metadata `.rlib` files, and build-script
 `.build.tar` files belong to one producer; C++ links native archives and one
 shared runtime. The same graph-only tests in `tst/make/test_rust.py` run on
-both ay and upstream ya:
+both ay and upstream ya. The e2e revision d02375f8 predates Rust modules, so
+each test installs the upstream Rust support of 3b36097f
+(`tst/make/upstream_rust.py`) into its private view of the tree:
 
 ```sh
-./build -Darcadia=/home/pg/1 ay_e2e_collect_rust ya_e2e_rust
+./build -Darcadia=/home/pg/2 ay_e2e_collect_rust ya_e2e_rust
 ```
 
 The ay collection target stores assertions in `.build/e2e/ay/test_rust.json`;
