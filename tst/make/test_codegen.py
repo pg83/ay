@@ -25,6 +25,40 @@ class CodegenTest(MakeTest):
                 self.assertEqual(args[1:1 + len(flags)], flags)
                 self.assertRegex(args[1 + len(flags)], f"^-o\\$\\(B(UILD_ROOT)?\\)/{PROJECT}/lexer\\.l\\.cpp$")
 
+    def flex_tool_graph(self, before, after=""):
+        self.write("ya.make", f"LIBRARY()\n{before}\nSRCS(lexer.lpp answer.cpp)\n{after}\nEND()\n")
+        self.write("lexer.lpp", '%option noyywrap\n%%\n[0-9]+ return 1;\n. ;\n%%\n')
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        graph = self.graph()
+        lexer = self.node(graph, "lexer.lpp.cpp")
+        args = [arg.replace("$(SOURCE_ROOT)", "$(S)").replace("$(BUILD_ROOT)", "$(B)") for command in lexer["cmds"] for arg in command["cmd_args"]]
+        includes = {
+            output: [arg.replace("$(SOURCE_ROOT)", "$(S)") for command in self.node(graph, output)["cmds"] for arg in command["cmd_args"] if "contrib/tools/flex" in arg]
+            for output in ("lexer.lpp.cpp.o", "answer.cpp.o")
+        }
+        return graph, lexer, args, includes
+
+    def test_flex_tool_default(self):
+        graph, lexer, args, includes = self.flex_tool_graph("")
+        self.assertEqual(args, ["$(B)/contrib/tools/flex-old/flex", f"-o$(B)/{PROJECT}/lexer.lpp.cpp", f"$(S)/{PROJECT}/lexer.lpp"])
+        self.assertNotIn("$(B)/contrib/tools/m4/m4", lexer["inputs"])
+        self.assertEqual(includes, {output: ["-I$(S)/contrib/tools/flex-old"] for output in includes})
+
+    def test_use_modern_flex(self):
+        for before, after in (("USE_MODERN_FLEX()", ""), ("", "USE_MODERN_FLEX()"), ("USE_OLD_FLEX()", "USE_MODERN_FLEX()")):
+            with self.subTest(before=before, after=after):
+                graph, lexer, args, includes = self.flex_tool_graph(before, after)
+                self.assertEqual(args, ["$(B)/contrib/tools/flex/flex", "--m4=$(B)/contrib/tools/m4/m4", f"-o$(B)/{PROJECT}/lexer.lpp.cpp", f"$(S)/{PROJECT}/lexer.lpp"])
+                self.assertIn("$(B)/contrib/tools/flex/flex", lexer["inputs"])
+                self.assertIn("$(B)/contrib/tools/m4/m4", lexer["inputs"])
+                self.assertEqual(includes, {output: ["-I$(S)/contrib/tools/flex"] for output in includes})
+                self.assertTrue(any("$(B)/contrib/tools/flex/flex" in node["outputs"] for node in graph["graph"]))
+
+    def test_use_old_flex(self):
+        graph, lexer, args, includes = self.flex_tool_graph("USE_MODERN_FLEX()", "USE_OLD_FLEX()")
+        self.assertEqual(args, ["$(B)/contrib/tools/flex-old/flex", f"-o$(B)/{PROJECT}/lexer.lpp.cpp", f"$(S)/{PROJECT}/lexer.lpp"])
+        self.assertEqual(includes, {output: ["-I$(S)/contrib/tools/flex-old"] for output in includes})
+
     def test_ragel(self):
         self.generated("machine.rl6", "machine.rl6.cpp", '%%{ machine scanner; main := any*; }%%\n%% write data;\n')
 

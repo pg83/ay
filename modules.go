@@ -363,6 +363,7 @@ type ModuleData struct {
 	cythonNumpyBeforeInclude bool
 	swigC                    []SwigSrc
 	bisonGenExt              STR
+	flexAddIncl              bool
 	grpc                     bool
 	yaConfJSON               []ANY
 	archives                 []ArchiveEntry
@@ -906,6 +907,10 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	if d.docs != nil {
 		d.docs.finish(fs, modulePath, env)
+	}
+
+	if d.flexAddIncl {
+		d.addLocalIncl(prioRuleAddIncl, source(env.string(envFlexToolDir)))
 	}
 
 	d.materializeAddIncl()
@@ -1666,8 +1671,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 					addGeneratedOwnHeaderInclude(modulePath, strings.TrimSuffix(src, filepath.Ext(src))+".h", d)
 				case srcExtFlex:
-
-					d.addLocalIncl(prioRuleAddIncl, argContribToolsFlexOld.str().source())
+					d.flexAddIncl = true
 				}
 			}
 

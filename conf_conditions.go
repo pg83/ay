@@ -112,6 +112,11 @@ func (p *Platform) initConfModule(env Environment, name, tag string, originals m
 	env.setBool(module.variable, true)
 	p.recalcConf(env, module.variable, originals)
 
+	if name == "_BASE_UNIT" {
+		env.setBool(envBisonFlexSetDefaults, true)
+		p.recalcConf(env, envBisonFlexSetDefaults, originals)
+	}
+
 	if name == "_LINK_UNIT" || name == "GO_PROGRAM" {
 		env.setString(envLinkerId, env.string(envDefaultLinkerId))
 		p.recalcConf(env, envLinkerId, originals)

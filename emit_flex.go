@@ -21,7 +21,7 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
 	srcRel := e.moduleSourceRel(src)
-	flexRef, flexBin := ctx.tool(argContribToolsFlexOld)
+	toolArgs, toolBins, toolRefs := e.flexTool()
 	srcVFS := e.resolveModuleSourceVFS(src, d.cc.SrcDirs)
 	outVFS := flexGeneratedVFS(instance, srcRel)
 	na := ctx.na
@@ -42,7 +42,7 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	lexFlags := na.anyList(internAnys(splitShellWords(Environment{s: &e.frame.ifEnv}.string(envLEX_FLAGS)))...)
 
 	pe := func() {
-		e.emitFlexLX(flexRef, flexBin, lexFlags, srcVFS, outVFS, lxRef)
+		e.emitFlexLX(toolArgs, toolBins, toolRefs, lexFlags, srcVFS, outVFS, lxRef)
 	}
 
 	pending := e.pendingEmit(pe)
@@ -50,16 +50,44 @@ func (e *EmitContext) emitLibraryFlexSource(meta SrcMeta) {
 	e.register(GeneratedFileInfo{
 		OutputPath:     outVFS,
 		ProducerRef:    lxRef,
-		GeneratorRefs:  e.ctx.na.refList(flexRef),
+		GeneratorRefs:  toolRefs,
 		ParsedIncludes: ParsedIncludeSet{parsedIncludesLocal: parsed},
 		OnUse:          pending,
 	})
 }
 
-func (e *EmitContext) emitFlexLX(flexRef NodeRef, flexBin VFS, lexFlags []ANY, srcVFS, outVFS VFS, id NodeRef) {
+func (e *EmitContext) flexTool() (args []ANY, bins []VFS, refs []NodeRef) {
+	for _, word := range strings.Fields(Environment{s: &e.frame.ifEnv}.string(envFlexTool)) {
+		prefix, tool, found := strings.Cut(word, `${tool:"`)
+
+		if !found {
+			args = append(args, internAny(word))
+
+			continue
+		}
+
+		dir, suffix, _ := strings.Cut(tool, `"}`)
+		ref, bin := e.ctx.tool(internArg(dir))
+
+		if prefix == "" && suffix == "" {
+			args = append(args, bin.any())
+		} else {
+			args = append(args, internV(prefix, bin.prefix(), bin.relString(), suffix).any())
+		}
+
+		bins = append(bins, bin)
+		refs = append(refs, ref)
+	}
+
 	na := e.ctx.na
 
-	cmdArgs := na.chunkList(na.anyList(flexBin.any()), lexFlags, na.anyList(
+	return na.anyList(args...), na.vfsList(bins...), na.refList(refs...)
+}
+
+func (e *EmitContext) emitFlexLX(toolArgs []ANY, toolBins []VFS, toolRefs []NodeRef, lexFlags []ANY, srcVFS, outVFS VFS, id NodeRef) {
+	na := e.ctx.na
+
+	cmdArgs := na.chunkList(toolArgs, lexFlags, na.anyList(
 		internV(argDashO.string(), outVFS.prefix(), outVFS.relString()).any(),
 		srcVFS.any(),
 	))
@@ -70,10 +98,10 @@ func (e *EmitContext) emitFlexLX(flexRef NodeRef, flexBin VFS, lexFlags []ANY, s
 		Platform: e.instance.Platform,
 		Cmds:     na.cmdList(Cmd{CmdArgs: cmdArgs, Env: env}),
 		Env:      env,
-		Inputs:   NodeInputs{files: na.inputList(na.vfsList(flexBin), na.vfsList(srcVFS)), roots: na.inputList(na.vfsList(srcVFS))},
+		Inputs:   NodeInputs{files: na.inputList(toolBins, na.vfsList(srcVFS)), roots: na.inputList(na.vfsList(srcVFS))},
 
 		Outputs:        na.vfsList(outVFS),
 		KV:             &flexKV,
-		ForeignDepRefs: na.refList(flexRef),
+		ForeignDepRefs: toolRefs,
 	}, id)
 }
