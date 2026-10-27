@@ -4,6 +4,21 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class EndHandlingTest(MakeTest):
+    def test_go_test_for_keeps_inherited_module_open(self):
+        self.write("ya.make", "RECURSE(lib/gotest)\n")
+        self.write("lib/answer.go", "package answer\nfunc Answer() int { return 42 }\n")
+        self.write("lib/answer_test.go", 'package answer\nimport "testing"\nfunc TestAnswer(t *testing.T) {}\n')
+        self.write("lib/finish.inc", "END()\n")
+        self.write("lib/gotest/extra_test.go", 'package answer\nimport "testing"\nfunc TestExtra(t *testing.T) {}\n')
+        for finish in ("END()", "IF(OS_LINUX)\nEND()\nENDIF()", "INCLUDE(finish.inc)"):
+            with self.subTest(finish=finish):
+                self.write("lib/ya.make", f"GO_LIBRARY(answer)\nSRCS(answer.go)\nGO_TEST_SRCS(answer_test.go)\n{finish}\n")
+                self.write("lib/gotest/ya.make", f"GO_TEST_FOR({PROJECT}/lib)\nGO_TEST_SRCS(extra_test.go)\nEND()\n")
+                graph = self.graph("-t")
+                inputs = {path for node in graph["graph"] for path in node["inputs"]}
+                for path in ("lib/answer_test.go", "lib/gotest/extra_test.go"):
+                    self.assertIn(f"$(S)/{PROJECT}/{path}", inputs)
+
     def graph_with_end_error(self):
         result = self.make("-k")
         self.assertEqual(result.returncode, 0, result.stderr)

@@ -211,7 +211,6 @@ type GenCtx struct {
 	dirSlices        *SliceCache[IncludeDirective]
 	descSlices       *SliceCache[DescProtoPeer]
 	tcMemo           map[ToolchainKey]ModuleToolchain
-	moduleStmts      map[string][]Stmt
 	dllForStack      []string
 	includeStack     []string
 	ifEnvScratch     EnvStore
@@ -345,15 +344,14 @@ func newGenCtx(fs FS, parsers *IncludeParserManager, hostP, targetP *Platform, e
 		na:        plainEmit.nodeArenas(),
 		memo:      newModuleMemo(),
 
-		refSlices:   newSliceCache[NodeRef](1 << 12),
-		vfsSlices:   newSliceCache[VFS](1 << 12),
-		argSlices:   newSliceCache[ANY](1 << 8),
-		declSlices:  newSliceCache[ResourceDecl](1 << 3),
-		results:     newBumpAllocator[ModuleEmitResult](),
-		dirSlices:   newSliceCache[IncludeDirective](1 << 6),
-		descSlices:  newSliceCache[DescProtoPeer](1 << 3),
-		tcMemo:      map[ToolchainKey]ModuleToolchain{},
-		moduleStmts: map[string][]Stmt{},
+		refSlices:  newSliceCache[NodeRef](1 << 12),
+		vfsSlices:  newSliceCache[VFS](1 << 12),
+		argSlices:  newSliceCache[ANY](1 << 8),
+		declSlices: newSliceCache[ResourceDecl](1 << 3),
+		results:    newBumpAllocator[ModuleEmitResult](),
+		dirSlices:  newSliceCache[IncludeDirective](1 << 6),
+		descSlices: newSliceCache[DescProtoPeer](1 << 3),
+		tcMemo:     map[ToolchainKey]ModuleToolchain{},
 
 		walking:   make(map[ModuleInstance]bool),
 		host:      hostP,
@@ -556,6 +554,7 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses boo
 					apply(st)
 				}
 			case *ModuleStmt:
+				v = d.moduleContentDeclaration(v)
 				module = v
 
 				if recurses {
@@ -563,7 +562,7 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses boo
 					apply(st)
 				}
 			case *EndStmt:
-				if !d.endOutsideModule(dir, v.Line, ctx.onWarn) {
+				if d.processModuleEnd(dir, v.Line, ctx.onWarn) {
 					d.moduleEnded = true
 				}
 			case *SetStmt, *DefaultVarStmt:
@@ -575,8 +574,18 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses boo
 					scan(v.Else)
 				}
 			case *UnknownStmt:
+				if d.skipModuleContentStmt(v.Name) {
+					continue
+				}
+
 				if v.Name == tokDllFor {
 					withDllForStmts(ctx, dir, v, scan)
+
+					continue
+				}
+
+				if v.Name == tokGoTestFor {
+					d.withGoTestForStmts(ctx, dir, v, scan)
 
 					continue
 				}
@@ -687,6 +696,8 @@ func inferModuleDeclaration(stmts []Stmt) (*ModuleStmt, bool) {
 		case *UnknownStmt:
 			if v.Name == tokDllFor {
 				candidate = &ModuleStmt{Name: tokDll, Line: v.Line}
+			} else if v.Name == tokGoTestFor {
+				candidate = &ModuleStmt{Name: tokGoTest, Line: v.Line}
 			}
 		case *IfStmt:
 			thenDecl, thenCertain := inferModuleDeclaration(v.Then)
@@ -994,15 +1005,7 @@ func (ctx *GenCtx) parseFileCached(rel string) []Stmt {
 }
 
 func moduleStmts(ctx *GenCtx, dir string) []Stmt {
-	if cached, ok := ctx.moduleStmts[dir]; ok {
-		return cached
-	}
-
-	stmts := expandGoTestFor(ctx, ctx.parseFileCached(internJoined(dir, "ya.make").string()))
-
-	ctx.moduleStmts[dir] = stmts
-
-	return stmts
+	return ctx.parseFileCached(internJoined(dir, "ya.make").string())
 }
 
 func (ctx *GenCtx) autoincludeStmts(dir string) []Stmt {
@@ -1011,61 +1014,6 @@ func (ctx *GenCtx) autoincludeStmts(dir string) []Stmt {
 	}
 
 	return nil
-}
-
-func expandGoTestFor(ctx *GenCtx, stmts []Stmt) []Stmt {
-	at := slices.IndexFunc(stmts, func(st Stmt) bool {
-		u, ok := st.(*UnknownStmt)
-
-		return ok && u.Name == tokGoTestFor && len(u.Args) > 0
-	})
-
-	if at < 0 {
-		return stmts
-	}
-
-	stmt := stmts[at].(*UnknownStmt)
-	forDir := path.Clean(stmt.Args[0].string())
-	out := make([]Stmt, 0, len(stmts)+8)
-
-	out = append(out, stmts[:at]...)
-
-	out = append(out,
-		&SetStmt{Name: "GO_TEST_IMPORT_PATH", NameEnv: envGO_TEST_IMPORT_PATH, Value: forDir, Line: stmt.Line},
-		&SetStmt{Name: "_GO_IMPORT_PATH", NameEnv: env_GO_IMPORT_PATH, Value: forDir, Line: stmt.Line},
-		&SrcDirStmt{Dirs: []ANY{internStr(forDir).any()}, Line: stmt.Line},
-	)
-
-	out = appendGoTestForModule(out, ctx.parseFileCached(internJoined(forDir, "ya.make").string()))
-
-	return append(out, stmts[at+1:]...)
-}
-
-func appendGoTestForModule(out, stmts []Stmt) []Stmt {
-	for _, st := range stmts {
-		switch v := st.(type) {
-		case *ModuleStmt:
-			module := *v
-
-			module.Name = tokGoTest
-			out = append(out, &module)
-		case *UnknownStmt:
-			if v.Name != tokRecurse && v.Name != tokRecurseForTests && v.Name != tokRecurseRootRelative {
-				out = append(out, v)
-			}
-		case *IfStmt:
-			branch := *v
-
-			branch.Then = appendGoTestForModule(nil, v.Then)
-			branch.Else = appendGoTestForModule(nil, v.Else)
-
-			out = append(out, &branch)
-		default:
-			out = append(out, st)
-		}
-	}
-
-	return out
 }
 
 func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) {

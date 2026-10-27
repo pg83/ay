@@ -179,6 +179,8 @@ type ModuleData struct {
 	docs                    *DocsData
 	moduleStmt              *ModuleStmt
 	moduleEnded             bool
+	readModuleContentOnly   bool
+	readModuleContentDone   bool
 	autoincluded            bool
 	modver                  string
 	hasLicense              bool
@@ -1337,14 +1339,20 @@ func collectModuleAutoinclude(ctx *GenCtx, modulePath string, kind ModuleKind, l
 	collectStmts(ctx, modulePath, kind, language, ctx.autoincludeStmts(modulePath), env, d, onWarn, platform)
 }
 
-func (d *ModuleData) endOutsideModule(modulePath string, line int, onWarn func(Warn)) bool {
-	if d.moduleStmt != nil && !d.moduleEnded {
-		return false
+func (d *ModuleData) processModuleEnd(modulePath string, line int, onWarn func(Warn)) bool {
+	if d.moduleStmt != nil && !d.moduleEnded && !(d.readModuleContentOnly && d.readModuleContentDone) {
+		if d.readModuleContentOnly {
+			d.readModuleContentDone = true
+
+			return false
+		}
+
+		return true
 	}
 
 	onWarn(Warn{Kind: WarnMisconfiguration, Message: fmt.Sprintf("%s:%d: unexpected command END outside of a module", modulePath, line)})
 
-	return true
+	return false
 }
 
 func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
@@ -1367,6 +1375,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 		case *MissingIncludeStmt:
 			throwFmt("%s:%d: INCLUDE file %s not found", modulePath, v.Line, v.Path)
 		case *ModuleStmt:
+			v = d.moduleContentDeclaration(v)
+
 			if d.moduleStmt != nil {
 				d.conflictMod = v
 
@@ -1793,7 +1803,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.ragel6Flags = internAnys(strings.Fields(value))
 			}
 		case *EndStmt:
-			if d.endOutsideModule(modulePath, v.Line, onWarn) {
+			if !d.processModuleEnd(modulePath, v.Line, onWarn) {
 				continue
 			}
 
@@ -2086,6 +2096,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			collectStmts(ctx, modulePath, kind, language, taken, env, d, onWarn, platform)
 		case *UnknownStmt:
+			if d.skipModuleContentStmt(v.Name) {
+				continue
+			}
+
 			if v.Internal {
 				onWarn(Warn{Kind: WarnUnknownMacro, Message: fmt.Sprintf("%s: internal command %s is not allowed to appear in ya.make (line %d); skipped", modulePath, v.Raw.string(), v.Line)})
 
@@ -2133,6 +2147,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			if v.Name == tokDllFor {
 				withDllForStmts(ctx, modulePath, v, func(stmts []Stmt) {
+					collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
+				})
+			} else if v.Name == tokGoTestFor {
+				d.withGoTestForStmts(ctx, modulePath, v, func(stmts []Stmt) {
 					collectStmts(ctx, modulePath, kind, language, stmts, env, d, onWarn, platform)
 				})
 			} else {
