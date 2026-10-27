@@ -773,12 +773,18 @@ func (e *EmitContext) goCgoClosure(includedSrcs []VFS) []VFS {
 		cvs := e.cvScratch[:0]
 		extrasCap := len(includedSrcs)
 
-		for _, f := range d.cgoSrcs {
-			cv := e.scanner.walkClosure(resolveSourceVFS(ctx, instance, f.string(), d.srcDirs), d.scanCtx, scanDomainCC)
+		walk := func(v VFS) {
+			cv := e.scanner.walkClosure(v, d.scanCtx, scanDomainCC)
 
 			extrasCap += cv.len()
 			cvs = append(cvs, cv)
 		}
+
+		for _, f := range d.cgoSrcs {
+			walk(resolveSourceVFS(ctx, instance, f.string(), d.srcDirs))
+		}
+
+		walk(build(instance.Path.relString(), "/_cgo_gotypes.go"))
 
 		e.cvScratch = retainMaxLen(e.cvScratch, cvs)
 

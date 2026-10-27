@@ -66,6 +66,18 @@ class GoContextsTest(MakeTest):
         self.assertIn(f"a.yandex-team.ru/{PROJECT}/lib", args)
         self.assertIn(f"-I$(S)/{PROJECT}/lib", args)
 
+    def test_cgo_preamble_includes_resolve_from_generated_sources(self):
+        misc = (self.root / "build/sysincl/misc.yml").read_text()
+        self.write_tree("build/sysincl/misc.yml", misc + f'\n- source_filter: "^{PROJECT}"\n  includes:\n    - answer.h:\n      - {PROJECT}/answer.h\n      - {PROJECT}/other/answer.h\n')
+        self.write("ya.make", "GO_LIBRARY()\nCGO_SRCS(answer.go)\nEND()\n")
+        self.write("answer.go", 'package answer\n/*\n#include "answer.h"\n*/\nimport "C"\nfunc Answer() int { return int(C.answer()) }\n')
+        self.write("answer.h", "int answer(void);\n")
+        self.write("other/answer.h", "int answer(void);\n")
+        graph = self.graph()
+        self.assertNotIn(f"$(S)/{PROJECT}/other/answer.h", self.node(graph, "answer.cgo1.go")["inputs"])
+        for output in ("answer.cgo2.c.o", "_cgo_export.c.o", f"{PROJECT}.a"):
+            self.assertIn(f"$(S)/{PROJECT}/other/answer.h", self.node(graph, output)["inputs"], output)
+
     def test_library_link_flags(self):
         self.write("ya.make", "GO_LIBRARY()\nGO_LINK_FLAGS(-X e2e.version=42)\nSRCS(answer.go)\nEND()\n")
         self.write("answer.go", 'package e2e\nvar version string\n')

@@ -959,7 +959,7 @@ func (sc *ScanCtx) resolve(out []VFS, includerAbs, incDir VFS, d IncludeDirectiv
 	if d.quotedLike() && len(searchOut) > 0 {
 		bypass := !hasMultiTarget
 
-		if !bypass && searchOut[0].isSource() {
+		if !bypass && searchOut[0].isBuild() == includerAbs.isBuild() {
 			incDir := pathDir(includerRel)
 			rel := searchOut[0].relString()
 			t := d.target.string()

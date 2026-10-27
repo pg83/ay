@@ -384,31 +384,24 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	}
 
 	ref := e.emitNode(node)
-	leafCap := 2 + inputCap
-	cgoLeaves := na.vfs.alloc(leafCap)
-	nl := 0
+	leaves := na.vfsList(files[0].cgo1)
+	pm := e.scanner.parsers
+	nIncludes := 0
 
-	dedupers.with(func(deduper *DeDuper) {
-		for i, f := range files {
-			cvs[i].each(func(p VFS) {
-				if p == f.src {
-					return
-				}
+	for _, f := range files {
+		nIncludes += len(pm.sourceParsedWalkable(f.src, nil))
+	}
 
-				if p.isSource() && deduper.add(p.strID()) {
-					cgoLeaves[nl] = p
-					nl++
-				}
-			})
-		}
-	})
+	includes := na.dirs.alloc(nIncludes)
+	nd := 0
 
-	cgoLeaves[nl] = files[0].cgo1
-	nl++
+	for _, f := range files {
+		nd += copy(includes[nd:], pm.sourceParsedWalkable(f.src, nil))
+	}
 
-	na.vfs.commit(nl)
+	na.dirs.commit(nd)
 
-	leaves := cgoLeaves[:nl:nl]
+	parsed := ParsedIncludeSet{parsedIncludesLocal: includes[:nd:nd]}
 	cgoCF := goCgoCFlags(d)
 	cgo2CF := na.anys.alloc(len(cgoCF) + 1)
 	cgo2N := copy(cgo2CF, cgoCF)
@@ -419,16 +412,16 @@ func (e *EmitContext) emitGoCgo1Stmt() {
 	cgo2Spec := CompileSpec{CFlags: cgo2CF[: cgo2N+1 : cgo2N+1]}
 
 	for _, f := range files {
-		e.register(GeneratedFileInfo{OutputPath: f.cgo1, ProducerRef: ref})
-		e.register(GeneratedFileInfo{OutputPath: f.cgo2C, ProducerRef: ref, ClosureLeaves: leaves})
+		e.register(GeneratedFileInfo{OutputPath: f.cgo1, ProducerRef: ref, ParsedIncludes: parsed})
+		e.register(GeneratedFileInfo{OutputPath: f.cgo2C, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
 		e.enqueueSrc(SrcMeta{Source: f.cgo1.any(), Prio: stmtPrioDefault})
 		e.enqueueSrc(SrcMeta{Source: f.cgo2C.any(), Prio: stmtPrioDefault, Compile: cgo2Spec})
 	}
 
-	e.register(GeneratedFileInfo{OutputPath: exportH, ProducerRef: ref, ClosureLeaves: leaves})
-	e.register(GeneratedFileInfo{OutputPath: exportC, ProducerRef: ref, ClosureLeaves: leaves})
-	e.register(GeneratedFileInfo{OutputPath: gotypes, ProducerRef: ref, ClosureLeaves: leaves})
-	e.register(GeneratedFileInfo{OutputPath: mainC, ProducerRef: ref, ClosureLeaves: leaves})
+	e.register(GeneratedFileInfo{OutputPath: exportH, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
+	e.register(GeneratedFileInfo{OutputPath: exportC, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
+	e.register(GeneratedFileInfo{OutputPath: gotypes, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
+	e.register(GeneratedFileInfo{OutputPath: mainC, ProducerRef: ref, ClosureLeaves: leaves, ParsedIncludes: parsed})
 
 	e.enqueueSrc(SrcMeta{Source: exportC.any(), Prio: stmtPrioDefault})
 	e.enqueueSrc(SrcMeta{Source: gotypes.any(), Prio: stmtPrioDefault})
