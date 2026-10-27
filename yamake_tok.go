@@ -317,6 +317,7 @@ var tokName = [...]STR{
 	tokPyMain:                          internStr("PY_MAIN"),
 	tokPyNamespace:                     internStr("PY_NAMESPACE"),
 	tokPyRegister:                      internStr("PY_REGISTER"),
+	tokRegisterSandboxImport:           internStr("REGISTER_SANDBOX_IMPORT"),
 	tokPySrcs:                          internStr("PY_SRCS"),
 	tokRecurse:                         internStr("RECURSE"),
 	tokRecurseForTests:                 internStr("RECURSE_FOR_TESTS"),
@@ -1004,6 +1005,7 @@ const (
 	tokCrateProcMacros
 	tokCrateBuildScript
 	tokCrateBuildDeps
+	tokRegisterSandboxImport
 )
 
 type TOK uint16

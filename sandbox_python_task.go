@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path"
 	"slices"
 	"strings"
 )
@@ -173,9 +174,24 @@ func setupSandboxPythonTask(name TOK, modulePath string, kind ModuleKind, langua
 		d.peerdirs = append(d.peerdirs, strSandboxSdk2.any())
 	}
 
+	registerSandboxImport(modulePath, modulePath, d)
+}
+
+func registerSandboxImport(modulePath, importPath string, d *ModuleData) {
 	ensureResourcePeer(modulePath, d)
 
-	module := strings.ReplaceAll(modulePath, "/", ".")
+	parts := strings.Split(path.Clean(importPath), "/")
+	left, right := 0, len(parts)
+
+	if parts[right-1] == "__init__.py" {
+		right--
+	}
+
+	if parts[0] == "" {
+		left++
+	}
+
+	module := strings.Join(parts[left:right], ".")
 
 	d.resources = append(d.resources, ResourceEntry{
 		DeclSeq: d.nextDeclSeq(), Path: "-", EndsBatch: true,

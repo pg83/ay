@@ -14,6 +14,17 @@ class MultimodulesTest(MakeTest):
         graph = self.graph()
         self.assertTrue(any(f"$(S)/{PROJECT}/__init__.py" in node["inputs"] for node in graph["graph"]))
 
+    def test_sandbox_task_registers_explicit_import(self):
+        self.write("ya.make", f"SANDBOX_PY3_TASK(answer)\nPEERDIR({PROJECT}/task)\nREGISTER_SANDBOX_IMPORT({PROJECT}/task)\nEND()\n")
+        self.write("task/ya.make", "PY3_LIBRARY()\nPY_SRCS(__init__.py)\nEND()\n")
+        self.write("task/__init__.py", "from sandbox import sdk2\nclass Answer(sdk2.Task):\n    def on_execute(self):\n        pass\n")
+        graph = self.graph()
+        kv = f"SANDBOX_TASK_REGISTRY.{PROJECT}.task={PROJECT}.task"
+        for output in ("answer", "libpy3answer.global.a"):
+            inputs = self.node(graph, output)["inputs"]
+            registered = [node for node in graph["graph"] if any(path in inputs for path in node["outputs"]) and kv in [arg for command in node["cmds"] for arg in command["cmd_args"]]]
+            self.assertEqual(len(registered), 1, output)
+
     def test_mlaunch_library(self):
         self.write("ya.make", "MLAUNCH_LIBRARY(answer)\nSRCS(answer.cpp)\nGOLAUNCH_SRCS(answer.go)\nEND()\n")
         self.write("answer.cpp", "int answer() { return 42; }\n")
