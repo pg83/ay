@@ -53,6 +53,20 @@ class TestDependenciesTest(MakeTest):
         self.write("python/ya.make", "PY23_LIBRARY()\nONLY_TAGS(PY3)\nPY_SRCS(answer.py)\nEND()\n")
         self.graph("-t")
 
+    def test_depends_on_typescript_library_waits_for_build_only(self):
+        self.write("ya.make", f"PY3TEST()\nTEST_SRCS(test_answer.py)\nDEPENDS({PROJECT}/lib)\nEND()\n")
+        self.write("test_answer.py", "def test_answer(): assert True\n")
+        self.write("lib/ya.make", "TS_LIBRARY()\nTS_BUILD_SCRIPT(nots:build)\nTS_BUILD_OUTPUTS(dist)\nEND()\n")
+        self.write("lib/package.json", json.dumps({"name": "@e2e/answer", "version": "1.0.0", "engines": {"node": "22.13.0"}, "files": ["dist"], "scripts": {"nots:build": "tsc"}}))
+        self.write("lib/pnpm-lock.yaml", "lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .: {}\n")
+        self.write("lib/tsconfig.json", json.dumps({"compilerOptions": {"rootDir": "src", "outDir": "dist"}, "include": ["src/**/*.ts"]}))
+        self.write("lib/src/answer.ts", "export const answer = 42;\n")
+        graph = self.graph("-t")
+        deps = set(self.node(graph, "test-results/py3test/meta.json")["deps"])
+        outputs = {path for node in graph["graph"] if node["uid"] in deps for path in node["outputs"]}
+        self.assertIn(f"$(B)/{PROJECT}/lib/output.tar", outputs)
+        self.assertNotIn(f"$(B)/{PROJECT}/lib/package.json", outputs)
+
     def test_union_dependencies(self):
         self.write("ya.make", f"EXECTEST()\nDEPENDS({PROJECT}/bundle)\nRUN(${{ARCADIA_BUILD_ROOT}}/{PROJECT}/tool/answer)\nEND()\n")
         self.write("bundle/ya.make", f"UNION()\nPEERDIR({PROJECT}/tool {PROJECT}/library)\nFILES(value.txt)\nEND()\n")
