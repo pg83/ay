@@ -22,3 +22,29 @@ class ResourceTest(MakeTest):
         for args in objcopy:
             target = args.index("--target")
             self.assertEqual(args[target + 2:target + 4], ["--large_resource_thr", "0"])
+
+    def test_resources_library_objects_link_into_program(self):
+        self.write("ya.make", f"PROGRAM(answer)\nSRCS(main.cpp)\nPEERDIR({PROJECT}/lib)\nRESOURCE(own.txt /e2e/own)\nEND()\n")
+        self.write("main.cpp", "int main() { return 0; }\n")
+        self.write("own.txt", "own\n")
+        self.write("lib/ya.make", f"LIBRARY()\nSRCS(answer.cpp)\nPEERDIR({PROJECT}/res)\nEND()\n")
+        self.write("lib/answer.cpp", "int answer() { return 42; }\n")
+        self.write("res/ya.make", "RESOURCES_LIBRARY()\nRESOURCE(query.sql /e2e/query)\nEND()\n")
+        self.write("res/query.sql", "SELECT 42;\n")
+        graph = self.graph()
+        producers = [node for node in graph["graph"] if f"$(S)/{PROJECT}/res/query.sql" in node["inputs"]]
+        self.assertEqual(len(producers), 1)
+        peer_obj = producers[0]["outputs"][0]
+        self.assertTrue(peer_obj.startswith(f"$(B)/{PROJECT}/res/objcopy_"), peer_obj)
+        own = [node for node in graph["graph"] if f"$(S)/{PROJECT}/own.txt" in node["inputs"]]
+        self.assertEqual(len(own), 1)
+        own_obj = own[0]["outputs"][0]
+        executable = self.node(graph, "answer")
+        self.assertIn(peer_obj, executable["inputs"])
+        self.assertIn(producers[0]["uid"], executable["deps"])
+        args = [arg for command in executable["cmds"] for arg in command["cmd_args"]]
+        rel = lambda path: path.removeprefix("$(B)/")
+        start = args.index("-Wl,--no-whole-archive")
+        self.assertEqual(args[start + 1:start + 3], [rel(peer_obj), rel(own_obj)])
+        archive = next(node for node in graph["graph"] if any(path.startswith(f"$(B)/{PROJECT}/lib/") and path.endswith(".a") for path in node["outputs"]))
+        self.assertNotIn(peer_obj, archive["inputs"])

@@ -54,3 +54,12 @@ class ConfMacrosTest(MakeTest):
         self.assertIn(f"$(S)/{PROJECT}/answer_test.go", node["inputs"])
         self.assertIn(f"gotest=${{ARCADIA_ROOT}}/{PROJECT}/gotest/ya.make", tail)
         self.assertIn("gobench=", tail)
+
+    def test_collected_files_variable_name_is_user_data(self):
+        self.write("ya.make", f"PY3_LIBRARY()\nCOLLECT_CONFIG_FILES(E2E_COLLECTED_CONFIGS ${{ARCADIA_ROOT}}/{PROJECT}/configs yaml)\nRESOURCE_FILES(\n    PREFIX e2e/\n    STRIP ${{ARCADIA_ROOT}}/\n    ${{E2E_COLLECTED_CONFIGS}}\n)\nEND()\n")
+        self.write("configs/answer.yaml", "answer: 42\n")
+        self.write("configs/nested/value.yaml", "value: 137\n")
+        graph = self.graph()
+        inputs = {path for node in graph["graph"] for path in node["inputs"]}
+        for source in ("configs/answer.yaml", "configs/nested/value.yaml"):
+            self.assertIn(f"$(S)/{PROJECT}/{source}", inputs)

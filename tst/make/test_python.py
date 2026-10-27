@@ -18,3 +18,16 @@ class PythonTest(MakeTest):
         graph = self.graph()
         inputs = {path for node in graph["graph"] for path in node["inputs"]}
         self.assertIn(f"$(S)/{PROJECT}/module.py", inputs)
+
+    def test_stub_resources_precede_generated_proto_resources(self):
+        self.write("ya.make", "PY3_LIBRARY()\nPY_SRCS(\n    answer.py\n    answer.pyi\n    answer.proto\n)\nEND()\n")
+        self.write("answer.py", "VALUE = 42\n")
+        self.write("answer.pyi", "VALUE: int\n")
+        self.write("answer.proto", 'syntax = "proto3";\nmessage Answer { int32 value = 1; }\n')
+        graph = self.graph()
+        stub = next(node for node in graph["graph"] if f"$(S)/{PROJECT}/answer.pyi" in node["inputs"] and any("/objcopy_" in path for path in node["outputs"]))
+        archive = next(node for node in graph["graph"] if any(path.startswith(f"$(B)/{PROJECT}/") and path.endswith(".global.a") for path in node["outputs"]))
+        objects = [arg.rsplit("/", 1)[-1] for command in archive["cmds"] for arg in command["cmd_args"] if arg.endswith(".o") and f"/{PROJECT}/" in arg]
+        raw = [index for index, name in enumerate(objects) if name.endswith("_raw.auxcpp.o")]
+        self.assertTrue(raw, objects)
+        self.assertLess(objects.index(stub["outputs"][0].rsplit("/", 1)[-1]), raw[0], objects)
