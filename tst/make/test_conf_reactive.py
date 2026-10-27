@@ -2,6 +2,14 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class ConfReactiveTest(MakeTest):
+    def test_jni_dll_inherits_link_settings(self):
+        self.write("ya.make", "DLL_JAVA(answer)\nJDK_VERSION(17)\nSRCS(answer.cpp)\nEND()\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        args = [arg for cmd in self.node(self.graph(), "libanswer.so")["cmds"] for arg in cmd["cmd_args"]]
+        self.assertEqual(args.count("-Wl,--gdb-index"), 1)
+        self.assertEqual(args.count("-Wl,-z,notext"), 1)
+        self.assertNotIn("-Wl,-Bsymbolic", args)
+
     def test_symbolic_flag_is_scoped_to_module_inheritance(self):
         self.write("answer.cpp", "int answer() { return 42; }\n")
         for declaration, output, expected in (("DLL(answer)", "libanswer.so", 0), ("PY_ANY_MODULE(answer 3)", "answer.so", 1), ("PY2MODULE(answer)", "answer.so", 1), ("PY3MODULE(answer)", "answer.so", 1), ("UDF_BASE(answer)", "libanswer.so", 1), ("YQL_UDF(answer)", "libanswer.so", 1)):
