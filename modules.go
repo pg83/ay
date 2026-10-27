@@ -1330,6 +1330,14 @@ func pyModuleTypeUsesPython3(name TOK) bool {
 	return false
 }
 
+func moduleConfTag(name TOK, kind ModuleKind, language Language, unitTag STR) string {
+	if tag := multimoduleVariantTag(name, kind, language); tag != "" {
+		return tag
+	}
+
+	return unitTag.string()
+}
+
 func collectModuleAutoinclude(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	if d.autoincluded || d.moduleStmt == nil {
 		return
@@ -1410,13 +1418,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 
 			d.unit = resolveModuleUnit(v.Name, kind, language)
 
-			confTag := multimoduleVariantTag(v.Name, kind, language)
-
-			if confTag == "" {
-				confTag = d.unit.Tag.string()
-			}
-
-			platform.initConfModule(env, v.Name.string(), confTag, d.setVars)
+			platform.initConfModule(env, v.Name.string(), moduleConfTag(v.Name, kind, language, d.unit.Tag), d.setVars)
 			env.setString(envPeerdirTags, expandAssignedScalarVarRef(modulePeerTags(v, d.unit, language), env))
 			env.setString(envREALPRJNAME, moduleRealPrjName(modulePath, v, d.unit))
 
@@ -1808,6 +1810,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
+			platform.finishConfModule(env, d.moduleStmt.Name.string(), moduleConfTag(d.moduleStmt.Name, kind, language, d.unit.Tag), d.setVars)
 			d.pythonLint.bind(env)
 			d.finishResourcePeerPolicy()
 

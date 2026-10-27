@@ -16,11 +16,13 @@ type ConfConditions struct {
 type ConfModule struct {
 	parent   string
 	variable ENV
+	builder  []ENV
 }
 
 func newConfConditions(stmts []ConfStmtRef) *ConfConditions {
 	c := &ConfConditions{byVariable: map[ENV][]ENV{}, byTarget: map[ENV][]ConfStmtRef{}, modules: map[string]ConfModule{}, variants: map[string][]string{}}
 	seen := map[*ConfFile]bool{}
+	calls := map[string][]string{}
 
 	for _, r := range stmts {
 		if !seen[r.file] {
@@ -29,6 +31,7 @@ func newConfConditions(stmts []ConfStmtRef) *ConfConditions {
 			}
 
 			maps.Copy(c.variants, r.file.variants)
+			maps.Copy(calls, r.file.calls)
 			seen[r.file] = true
 		}
 
@@ -53,7 +56,30 @@ func newConfConditions(stmts []ConfStmtRef) *ConfConditions {
 		slices.SortFunc(targets, func(a, b ENV) int { return strings.Compare(a.string(), b.string()) })
 	}
 
+	for name, module := range c.modules {
+		module.builder = c.builderMacros(calls, "env"+name, map[string]bool{}, nil)
+		c.modules[name] = module
+	}
+
 	return c
+}
+
+func (c *ConfConditions) builderMacros(calls map[string][]string, guard string, seen map[string]bool, out []ENV) []ENV {
+	for _, call := range calls[guard] {
+		if seen[call] {
+			continue
+		}
+
+		seen[call] = true
+
+		if variable := internEnv(call); len(c.byVariable[variable]) > 0 {
+			out = append(out, variable)
+		}
+
+		out = c.builderMacros(calls, call, seen, out)
+	}
+
+	return out
 }
 
 func (p *Platform) recalcConf(env Environment, variable ENV, originals map[STR]STR) {
@@ -125,5 +151,39 @@ func (p *Platform) initConfModule(env Environment, name, tag string, originals m
 
 		env.setBool(common, true)
 		p.recalcConf(env, common, originals)
+	}
+}
+
+func (p *Platform) finishConfModule(env Environment, name, tag string, originals map[STR]STR) {
+	if p.conditions == nil {
+		return
+	}
+
+	if variants := p.conditions.variants[name]; len(variants) > 0 {
+		for _, variant := range variants {
+			if strings.HasPrefix(variant, tag+"__from__") {
+				name = variant
+
+				break
+			}
+		}
+	}
+
+	module, ok := p.conditions.modules[name]
+
+	if !ok {
+		return
+	}
+
+	if module.parent != "" {
+		p.finishConfModule(env, module.parent, "", originals)
+	}
+
+	for _, variable := range module.builder {
+		env.setBool(variable, true)
+
+		if slices.ContainsFunc(p.conditions.byVariable[variable], func(target ENV) bool { return originals[target.str()] != 0 }) {
+			p.recalcConf(env, variable, originals)
+		}
 	}
 }

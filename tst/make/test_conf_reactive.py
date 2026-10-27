@@ -82,6 +82,17 @@ class ConfReactiveTest(MakeTest):
         self.assertLess(args.index("-Wl,--gdb-index"), args.index("-L/CUDA:PRUNE=False"))
         self.assertLess(args.index("-L/CUDA:PRUNE=False"), args.index("-Wl,-z,notext"))
 
+    def test_module_link_flags_precede_conditional_appends(self):
+        # The builder phase recalculates LDFLAGS from its original value after
+        # the ya.make statements, so module values precede conditional appends.
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        for declaration, setter, output in (("DLL(answer)", "SET_APPEND(LDFLAGS -z noexecstack)", "libanswer.so"), ("PROGRAM(answer)", "SET(LDFLAGS -z noexecstack)", "answer")):
+            with self.subTest(declaration=declaration, setter=setter):
+                self.write("ya.make", f"{declaration}\n{setter}\nSRCS(answer.cpp)\nEND()\n")
+                args = next(cmd["cmd_args"] for cmd in self.node(self.graph(), output)["cmds"] if "noexecstack" in cmd["cmd_args"])
+                self.assertLess(args.index("-Wl,--no-as-needed"), args.index("noexecstack"))
+                self.assertLess(args.index("noexecstack"), args.index("-Wl,--gdb-index"))
+
     def test_conditional_append_is_reset(self):
         self.write("main.cpp", "int main() { return 0; }\n")
         for setters, expected in (

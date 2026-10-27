@@ -48,6 +48,7 @@ type ConfFile struct {
 	macros   map[STR]*ConfMacro
 	modules  map[string]string
 	variants map[string][]string
+	calls    map[string][]string
 }
 
 func readConfFile(rel, text string) *ConfFile {
@@ -57,6 +58,7 @@ func readConfFile(rel, text string) *ConfFile {
 	skipped := []bool{false}
 	blocks := []string{""}
 	owners := []string{""}
+	guards := []string{""}
 	previous := 0
 	pending := ""
 	lines := strings.Split(text, "\n")
@@ -114,6 +116,14 @@ func readConfFile(rel, text string) *ConfFile {
 		}
 
 		if !strings.HasSuffix(line, "{") {
+			if name, _, ok := strings.Cut(line, "("); ok && guards[top] != "" && !skipped[top] && isIdentShapedName(strings.TrimSpace(name)) {
+				if conf.calls == nil {
+					conf.calls = map[string][]string{}
+				}
+
+				conf.calls[guards[top]] = append(conf.calls[guards[top]], "env"+strings.TrimSpace(name))
+			}
+
 			continue
 		}
 
@@ -121,6 +131,7 @@ func readConfFile(rel, text string) *ConfFile {
 		branch := ConfBranch{parent: top, cond: condFalse}
 		selectVar := ""
 		block := ""
+		guard := ""
 		owner := owners[top]
 
 		switch {
@@ -150,11 +161,13 @@ func readConfFile(rel, text string) *ConfFile {
 			conf.modules[name] = parent
 			branch.expr = `($env` + name + ` == "yes")`
 			block = "module"
+			guard = "env" + name
 		case strings.HasPrefix(header, "macro "):
 			name, _, _ := strings.Cut(strings.TrimPrefix(header, "macro "), "(")
 
 			branch.expr = `($env` + name + ` == "yes")`
 			block = "macro"
+			guard = "env" + strings.TrimSpace(name)
 		case strings.HasPrefix(header, "when "), strings.HasPrefix(header, "when("):
 			branch.expr = strings.TrimSpace(strings.TrimPrefix(header, "when"))
 		case strings.HasPrefix(header, "elsewhen "), strings.HasPrefix(header, "elsewhen("):
@@ -184,6 +197,7 @@ func readConfFile(rel, text string) *ConfFile {
 		conf.branches = append(conf.branches, branch)
 		blocks = append(blocks, block)
 		owners = append(owners, owner)
+		guards = append(guards, guard)
 		skipped = append(skipped, skip)
 		selects = append(selects, selectVar)
 		stack = append(stack, len(conf.branches)-1)
