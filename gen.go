@@ -27,7 +27,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"ORIGINAL_SOURCE":                 {},
 	"PROVIDES":                        {},
 	"SUPPRESSIONS":                    {},
-	"FILES":                           {},
 	"NEED_CHECK":                      {},
 	"NEED_REVIEW":                     {},
 	"ENV":                             {},

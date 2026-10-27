@@ -19,7 +19,7 @@ func (d *ModuleData) addFiles(files []ANY) {
 			continue
 		}
 
-		d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: name, Dst: name})
+		d.copyFiles = append(d.copyFiles, CopyFileEntry{Src: name, Dst: name, DeclSeq: d.nextDeclSeq()})
 	}
 }
 

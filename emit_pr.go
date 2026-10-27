@@ -505,13 +505,7 @@ func (e *EmitContext) runProgramInputVFS(rel string) VFS {
 
 func (ctx *GenCtx) programInputVFS(instance ModuleInstance, srcDirs []VFS, rel string) VFS {
 	if vfsHasPrefix(rel) {
-		input := intern(rel)
-
-		if input.isBuild() {
-			return buildClean(input.relString())
-		}
-
-		return sourceClean(input.relString())
+		return internClean(rel)
 	}
 
 	registry := ctx.scannerForPlatform(instance.Platform).codegen

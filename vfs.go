@@ -110,6 +110,18 @@ func vfsHasPrefix(s string) bool {
 	return len(s) >= vfsPrefixLen && s[0] == '$' && s[1] == '(' && (s[2] == 'S' || s[2] == 'B') && s[3] == ')' && s[4] == '/'
 }
 
+func internClean(full string) VFS {
+	if rel := full[vfsPrefixLen:]; rel == "" || pathIsClean(rel) {
+		return intern(full)
+	}
+
+	if full[2] == 'B' {
+		return buildClean(full[vfsPrefixLen:])
+	}
+
+	return sourceClean(full[vfsPrefixLen:])
+}
+
 func (v VFS) any() ANY {
 	return ANY(uint32(v)<<1 | 1)
 }

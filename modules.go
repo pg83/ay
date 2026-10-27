@@ -669,15 +669,7 @@ func moduleInputCandidateVFS(modulePath string, path string) VFS {
 
 func moduleRootedVFS(modulePath string, path string) (VFS, bool) {
 	if vfsHasPrefix(path) {
-		if rel := path[vfsPrefixLen:]; rel != "" && !pathIsClean(rel) {
-			if path[2] == 'B' {
-				return buildClean(rel), true
-			}
-
-			return sourceClean(rel), true
-		}
-
-		return intern(path), true
+		return internClean(path), true
 	}
 
 	switch {
@@ -2591,11 +2583,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			StdoutFile: ptr(strDebianversionH.any()), KV: &debVersionKV,
 		})
 	case tokFiles:
-		if d.docs != nil || d.moduleStmt != nil && (isUnionModule(d.moduleStmt.Name) || d.moduleStmt.Name == tokCiGroup || d.moduleStmt.Name == tokPackageFinal) {
-			d.addFiles(v.Args)
-		} else {
-			handled = false
-		}
+		d.addFiles(v.Args)
 	case tokDeclareInDirs:
 		applyDeclareInDirs(fs, modulePath, v, env)
 	case tokYaToolsConf:

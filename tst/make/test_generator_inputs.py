@@ -60,3 +60,28 @@ class GeneratorInputsTest(MakeTest):
         self.write("src/sub/answer.cpp", '#include "dependency.h"\nint answer() { return 42; }\n')
         self.write("src/sub/dependency.h", "#pragma once\n")
         self.node(self.graph(), "generated/sub/answer.cpp")
+
+    def test_files_feed_generator_inputs(self):
+        self.write("ya.make", "RECURSE(queries)\n")
+        self.write("generator/ya.make", "PY3_PROGRAM(generator)\nPY_SRCS(MAIN main.py)\nEND()\n")
+        self.write("generator/main.py", "print('generator')\n")
+        self.write("schema/ya.make", "UNION()\nFILES(schema.sql)\nEND()\n")
+        self.write("schema/schema.sql", "create table answer (value int);\n")
+        self.write("queries/ya.make", f"GO_LIBRARY()\nFILES(config.yaml)\nRUN_PROGRAM({PROJECT}/generator -f ${{BINDIR}}/config.yaml IN ${{BINDIR}}/config.yaml IN ${{BINDIR}}/../schema/schema.sql OUT answer.go)\nPEERDIR({PROJECT}/schema)\nEND()\n")
+        self.write("queries/config.yaml", "version: 2\n")
+        graph = self.graph()
+        config = self.node(graph, "queries/config.yaml")
+        schema = next(node for node in graph["graph"] if node["outputs"] == [f"$(B)/{PROJECT}/schema/schema.sql"])
+        generated = self.node(graph, "queries/answer.go")
+        self.assertIn(f"$(S)/{PROJECT}/queries/config.yaml", config["inputs"])
+        for producer in (config, schema):
+            self.assertIn(producer["outputs"][0], generated["inputs"])
+            self.assertIn(producer["uid"], generated["deps"])
+
+    def test_files_without_consumer(self):
+        self.write("ya.make", "LIBRARY(answer)\nFILES(value.txt)\nSRCS(answer.cpp)\nEND()\n")
+        self.write("value.txt", "42\n")
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        graph = self.graph()
+        self.node(graph, "libanswer.a")
+        self.assertFalse(any(f"$(B)/{PROJECT}/value.txt" in node["outputs"] for node in graph["graph"]))
