@@ -27,7 +27,7 @@ func applyYtOrmProtoYson(modulePath string, args []ANY, d *ModuleData, env Envir
 		"library/go/core/xerrors", "yt/go/yson", "yt/go/yterrors",
 		"yt/yt/orm/go/codegen/yson/ytypes", "contrib/libs/protobuf",
 	} {
-		d.peerdirs = append(d.peerdirs, internStr(peer).any())
+		d.macroPeerdirs = append(d.macroPeerdirs, internStr(peer).any())
 	}
 }
 

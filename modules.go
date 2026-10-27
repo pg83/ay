@@ -173,7 +173,7 @@ type ModuleData struct {
 	yqlPrebuiltAliases       bool
 	yqlSourceSrcs            []ANY
 	yqlSourcePeers           []ANY
-	pluginPeerdirs           []ANY
+	macroPeerdirs            []ANY
 	moduleVariants           uint16
 	listProtos               []ListProtoStmt
 	nots                     *NotsModule
@@ -216,7 +216,6 @@ type ModuleData struct {
 	noExtendedPySearch       bool
 	enumSrcs                 []*GenerateEnumSerializationStmt
 	peerdirs                 []ANY
-	peerdirStmtEnd           int
 	resourcePeerDeferred     bool
 	protoCmdPeers            []ANY
 	joinSrcs                 []*JoinSrcsStmt
@@ -818,7 +817,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 		d.peerdirs = append(d.peerdirs, internAny("contrib/restricted/rust_msan"))
 	}
 
-	d.peerdirs = append(d.peerdirs, d.pluginPeerdirs...)
+	d.peerdirs = append(d.peerdirs, d.macroPeerdirs...)
 	d.udfBaseSymbolic = d.udfBaseSymbolic && env.string(envMsvc) != "yes" && env.string(envDarwin) != "yes"
 	d.pyProtoMypy = env.string(envPyProtoMypyEnabled) == "yes" &&
 		(isPythonProtoModule(d) || d.unit.Type == tokPy2Library || d.unit.Type == tokPy3Library || d.unit.Type == tokPy23Library)
@@ -1576,7 +1575,6 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				env.setString(envMODULE_LANG, moduleLang)
 			}
 
-			d.peerdirStmtEnd = len(d.peerdirs)
 		case *SrcsStmt:
 			if d.moduleStmt != nil && isRustModule(d.moduleStmt.Name) {
 				applyRustMacro(UnknownStmt{Name: tokCrateSources, Args: expandStmtTokens(v.Sources, env)}, modulePath, env, d)
@@ -1705,8 +1703,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					addInclNext = false
 				}
 
-				d.peerdirs = slices.Insert(d.peerdirs, d.peerdirStmtEnd, pTok)
-				d.peerdirStmtEnd++
+				d.peerdirs = append(d.peerdirs, pTok)
 
 				if d.nots != nil && d.nots.Kind == tokProtoLibrary {
 					d.nots.ProtoPeers = append(d.nots.ProtoPeers, pTok)
@@ -1960,10 +1957,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			expanded.OutputIncludes = expandStmtTokens(v.OutputIncludes, env)
 
 			d.baseCodegens = append(d.baseCodegens, &expanded)
-
-			for _, p := range v.Peerdirs {
-				d.peerdirs = append(d.peerdirs, p)
-			}
+			d.macroPeerdirs = append(d.macroPeerdirs, v.Peerdirs...)
 		case *RunPythonStmt:
 			expanded := expandRunPythonStmt(v, env)
 
@@ -3125,7 +3119,6 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]ANY{internStr(googleapisPeer).any()}, d.peerdirs...)
-		d.peerdirStmtEnd++
 	case tokClangWarnings:
 		d.clangWarnings = append(d.clangWarnings, expandStmtTokens(v.Args, env)...)
 	case tokFbsNamespace:
@@ -3917,7 +3910,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		d.nvccDeviceSrcs = append(d.nvccDeviceSrcs, v.Args...)
 
 		if fs.isFilePathClean("build/internal/platform/cuda/ya.make") {
-			d.peerdirs = append(d.peerdirs, strBuildInternalPlatformCuda.any())
+			d.macroPeerdirs = append(d.macroPeerdirs, strBuildInternalPlatformCuda.any())
 		}
 	case tokCudaNvccFlags:
 		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokSetAppend, Args: append([]ANY{envCudaNvccFlags.str().any()}, v.Args...)}, d, env, onWarn)

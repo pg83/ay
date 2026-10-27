@@ -327,14 +327,14 @@ func registerYqlPythonUdf(fs FS, modulePath string, stmt UnknownStmt, d *ModuleD
 	}
 
 	applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokYqlAbiVersion, Args: internAnys([]string{"2", "45", "0"})}, d, env, onWarn)
-	d.pluginPeerdirs = append(d.pluginPeerdirs, internAnys([]string{"yql/essentials/udfs/common/python/python_udf", "yql/essentials/public/udf"})...)
+	d.macroPeerdirs = append(d.macroPeerdirs, internAnys([]string{"yql/essentials/udfs/common/python/python_udf", "yql/essentials/public/udf"})...)
 
 	includes := []string{"yql/essentials/udfs/common/python/python_udf/python_udf.h", "yql/essentials/public/udf/udf_registrator.h"}
 	flag := "0"
 
 	if addLibra {
 		flag = "1"
-		d.pluginPeerdirs = append(d.pluginPeerdirs, internAnys([]string{"quality/user_sessions/libra_arc/noyql", "yql/udfs/quality/libra/module"})...)
+		d.macroPeerdirs = append(d.macroPeerdirs, internAnys([]string{"quality/user_sessions/libra_arc/noyql", "yql/udfs/quality/libra/module"})...)
 		includes = append(includes, "yql/udfs/quality/libra/module/module.h")
 	}
 
@@ -355,7 +355,7 @@ func registerYqlPythonUdf(fs FS, modulePath string, stmt UnknownStmt, d *ModuleD
 			peers = []string{"library/python/runtime_py3", "yql/essentials/udfs/common/python/main_py3"}
 		}
 
-		d.pluginPeerdirs = append(d.pluginPeerdirs, internAnys(peers)...)
+		d.macroPeerdirs = append(d.macroPeerdirs, internAnys(peers)...)
 	}
 
 	output := name + ".yql_python_udf.cpp"
