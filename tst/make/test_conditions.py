@@ -85,6 +85,23 @@ class ConditionsTest(MakeTest):
                 outputs = [path for node in graph["graph"] for path in node["outputs"]]
                 self.assertNotIn(f"$(B)/{PROJECT}/{excluded}.cpp.o", outputs)
 
+    def test_unterminated_if_extends_to_end_of_file(self):
+        # ymake keeps IF nesting in the evaluation context and never checks it
+        # at the end of a ya.make: an IF without ENDIF covers the rest of the file.
+        self.write("ya.make", "RECURSE(skipped taken otherwise nested)\n")
+        self.write("skipped/ya.make", "SUBSCRIBER(g:e2e)\n\nIF (NOT SANDBOXING)\n    LIBRARY()\n    SRCS(skipped.cpp)\nEND()\n")
+        self.write("taken/ya.make", "IF (SANDBOXING)\n    LIBRARY()\n    SRCS(taken.cpp)\nEND()\n")
+        self.write("otherwise/ya.make", "IF (NOT SANDBOXING)\nLIBRARY()\nSRCS(skipped.cpp)\nEND()\nELSE()\nLIBRARY()\nSRCS(otherwise.cpp)\nEND()\n")
+        self.write("nested/ya.make", "IF (SANDBOXING)\nLIBRARY()\nIF (NOT SANDBOXING)\nSRCS(skipped.cpp)\nELSEIF (SANDBOXING)\nSRCS(nested.cpp)\nEND()\n")
+        for name in ("skipped", "taken", "otherwise", "nested"):
+            self.write(f"{name}/{name}.cpp", f"int {name}() {{ return 42; }}\n")
+            self.write(f"{name}/skipped.cpp", "int skipped() { return 17; }\n")
+        graph = self.graph()
+        for name in ("taken", "otherwise", "nested"):
+            self.node(graph, f"{name}/{name}.cpp.o")
+        outputs = [path for node in graph["graph"] for path in node["outputs"]]
+        self.assertFalse([path for path in outputs if "skipped" in path], outputs)
+
     def test_conf_condition_in_string_list(self):
         # sdc.conf sets JETSON=yes when ($SDC_PLATFORM in [...]) lists the platform.
         self.write("ya.make", 'LIBRARY()\nIF(JETSON == "yes")\nSRCS(yes.cpp)\nELSE()\nSRCS(no.cpp)\nENDIF()\nEND()\n')

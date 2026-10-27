@@ -1070,10 +1070,6 @@ func (p *Parser) parseStmts(term StmtTerminator) (stmts []Stmt, endTok Token) {
 		tok := p.lex.next()
 
 		if tok.kind == tokEOF {
-			if term != termTopLevel {
-				p.lex.throwParse(tok.line, tok.col, "unexpected end of file inside IF block (missing ENDIF)")
-			}
-
 			return p.takeStmts(mark), tok
 		}
 
@@ -1999,6 +1995,10 @@ func (p *Parser) parseIf(ifTok Token) *IfStmt {
 	thenBody, endTok := p.parseStmts(termIfBody)
 	node := astOne(astIfs, IfStmt{Cond: cond, Then: thenBody, Line: ifTok.line})
 
+	if endTok.kind == tokEOF {
+		return node
+	}
+
 	switch endTok.id {
 	case kwENDIF:
 		p.consumeEmptyMacroArgs(endTok)
@@ -2009,12 +2009,17 @@ func (p *Parser) parseIf(ifTok Token) *IfStmt {
 
 		elseBody, endIf := p.parseStmts(termIfBody)
 
+		node.Else = elseBody
+
+		if endIf.kind == tokEOF {
+			return node
+		}
+
 		if endIf.id != kwENDIF {
 			p.lex.throwParse(endIf.line, endIf.col, "expected ENDIF after ELSE block, got %s", endIf.string())
 		}
 
 		p.consumeEmptyMacroArgs(endIf)
-		node.Else = elseBody
 
 		return node
 	}
