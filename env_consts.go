@@ -90,6 +90,7 @@ var (
 	envDontResolveIncludes                    = internEnv("DONT_RESOLVE_INCLUDES")
 	envDynamicLink                            = internEnv("DYNAMIC_LINK")
 	envEmbedSbom                              = internEnv("EMBED_SBOM")
+	envEnvBaseUnit                            = internEnv("env_BASE_UNIT")
 	envErrorProneVersion                      = internEnv("ERROR_PRONE_VERSION")
 	envExcludeSubmodules                      = internEnv("EXCLUDE_SUBMODULES")
 	envExportsFile                            = internEnv("EXPORTS_FILE")

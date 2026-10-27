@@ -178,6 +178,16 @@ func composeCompileCFlags(env Environment, flags map[string]string, debugInfo []
 	return concat(expandCompilerConfFlags(env, flags["_C_FLAGS"]), debugInfo, expandCompilerConfFlags(env, flags["_C_FOPTIONS"]))
 }
 
+func appendBaseUnitSanitizerCFlags(flags []ANY, env Environment) []ANY {
+	sanitizer := env.string(envSANITIZER_TYPE)
+
+	if sanitizer == "" || sanitizer == "no" || !env.bool(envEnvBaseUnit) {
+		return flags
+	}
+
+	return concat(flags, []ANY{internAny("-fsanitize=" + sanitizer), internAny("-D" + sanitizer + "_sanitizer_enabled"), strSanitizerCflags.any(), strFnoOmitFramePointer.any()})
+}
+
 func expandCompilerConfFlags(env Environment, value string) []ANY {
 	words := splitShellWords(value)
 	out := make([]ANY, 0, len(words))

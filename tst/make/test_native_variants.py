@@ -26,6 +26,18 @@ class NativeVariantsTest(MakeTest):
                 graph = self.graph("-DSANITIZER_TYPE=" + sanitizer)
                 self.node(graph, "answer")
 
+    def test_sanitizer_instrumentation_flags(self):
+        for macros, enabled in (("SET(SANITIZER_CFLAGS -DE2E_INSTRUMENTED)", True),
+                                ("NO_SANITIZE()", False)):
+            with self.subTest(macros=macros):
+                self.source(macros=macros)
+                graph = self.graph("-DSANITIZER_TYPE=memory")
+                args = self.node(graph, "main.cpp.o")["cmds"][0]["cmd_args"]
+                for flag in ("-fsanitize=memory", "-Dmemory_sanitizer_enabled", "-DE2E_INSTRUMENTED"):
+                    self.assertEqual(flag in args, enabled, flag)
+                if enabled:
+                    self.assertIn("-fno-omit-frame-pointer", args)
+
     def test_dll_exports(self):
         self.source("DLL(answer 1 2 PREFIX e2e)", "EXPORTS_SCRIPT(symbols.exports)")
         self.write("symbols.exports", "C main\n")

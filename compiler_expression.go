@@ -282,7 +282,7 @@ func compilerCommandBlocks(raw *CcModuleArgBlocks, cxx bool) *CcModuleArgBlocks 
 	}
 
 	in := binding.input
-	common := compilerCommandFlags(in.CFlags, in.CompilerEnv)
+	common := compilerCommandFlags(appendBaseUnitSanitizerCFlags(in.CFlags, in.CompilerEnv), in.CompilerEnv)
 	resources := resourceKeyUnion(common.Resources, in.FlagResourceUses[compilerFlagsCommon], compilerValueResourceKeys(in.CFlagValues))
 
 	in.CFlags = common.Args

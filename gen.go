@@ -46,7 +46,6 @@ var acknowledgedMacros = map[string]struct{}{
 	"NO_CLANG_TIDY":                   {},
 	"NO_PROFILE_RUNTIME":              {},
 	"NO_PYTHON_COVERAGE":              {},
-	"NO_SANITIZE":                     {},
 	"NO_SANITIZE_COVERAGE":            {},
 	"NO_JOIN_SRC":                     {},
 	"STYLE_PYTHON":                    {},
