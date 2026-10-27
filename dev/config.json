@@ -4039,7 +4039,7 @@
       "velocity"
     ],
     "target": "velocity",
-    "xfail": true,
+    "xfail": false,
     "env": {
       "AUTOCHECK": "1",
       "TOOLCHAIN": "",
