@@ -1,4 +1,5 @@
 import hashlib
+import re
 
 from tst.make.lib import MakeTest, PROJECT
 
@@ -281,3 +282,26 @@ class JavaGeneratorInputsTest(MakeTest):
         args = [arg.replace("$(BUILD_ROOT)", "$(B)") for command in node["cmds"] for arg in command["cmd_args"]]
         self.assertIn(f"tool:$(B)/{PROJECT}/native/native", args)
 
+
+    def test_docs_generator_runs_default_jdk_on_written_paths(self):
+        # The DOCS library runs the generator: DEFAULT_JDK_VERSION picks the
+        # JDK resource for $JDK_RESOURCE, and the arguments keep the paths
+        # exactly as written (the double slash of a directory variable).
+        self.write("tool/ya.make", "JAVA_PROGRAM(generator)\nDEFAULT_JDK_VERSION(21)\nWITH_JDK()\nJAVA_SRCS(Generator.java)\nEND()\n")
+        self.write("tool/Generator.java", "public class Generator { public static void main(String[] args) {} }\n")
+        self.write("ya.make", f"DOCS()\nSET(RESULT ${{ARCADIA_BUILD_ROOT}}/{PROJECT}/)\nDEFAULT_JDK_VERSION(21)\nRUN_JAVA_PROGRAM(Generator ${{RESULT}}/nested/answer.yaml OUT_NOAUTO ${{RESULT}}/nested/answer.yaml CLASSPATH {PROJECT}/tool)\nEND()\n")
+        self.write(".yfm", "strict: true\n")
+        self.write("toc.yaml", "title: Answer\nitems:\n  - name: Answer\n    href: index.md\n")
+        self.write("index.md", "# Answer\n")
+        node = self.node(self.graph(), "nested/answer.yaml")
+        # ya spells a resource root $(NAME-ID), ay $(B)/resources/NAME.
+        args = [re.sub(r"\$\((\w+)-[^)]*\)|\$\(B\)/resources/(\w+)", lambda m: f"$({m[1] or m[2]})", arg.replace("$(BUILD_ROOT)", "$(B)")) for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIn("$(JDK21)/bin/java", args)
+        self.assertIn(f"$(B)/{PROJECT}//nested/answer.yaml", args)
+
+    def test_build_root_cwd(self):
+        self.generator()
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool CWD ${{ARCADIA_BUILD_ROOT}} OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
+        node = self.node(self.graph(), "Generated.java")
+        command = next(command for command in node["cmds"] if "Generator" in command["cmd_args"])
+        self.assertEqual(command["cwd"].replace("$(BUILD_ROOT)", "$(B)"), "$(B)")

@@ -391,11 +391,8 @@ func (ctx *GenCtx) javaArgVFS(jm *JavaModule, p string) VFS {
 }
 
 func javaProgramArgVFS(dir, p string) VFS {
-	switch {
-	case strings.HasPrefix(p, "$(B)/"):
-		return build(path.Clean(strings.TrimPrefix(p, "$(B)/")))
-	case strings.HasPrefix(p, "$(S)/"):
-		return source(path.Clean(strings.TrimPrefix(p, "$(S)/")))
+	if strings.HasPrefix(p, "$(B)") || strings.HasPrefix(p, "$(S)") {
+		return cwdVFS(path.Clean(p))
 	}
 
 	return source(path.Clean(dir + "/" + p))
@@ -516,17 +513,16 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 	}
 
 	for _, a := range r.args {
-		if slices.Contains(r.out, a) || slices.Contains(r.noauto, a) {
+		output := slices.Contains(r.out, a) || slices.Contains(r.noauto, a)
+
+		switch {
+		case (output || ins[a]) && (strings.HasPrefix(a, "$(S)/") || strings.HasPrefix(a, "$(B)/")):
+			run = append(run, intern(a).any())
+		case output:
 			run = append(run, copyFileOutputVFS(dir, a).any())
-		} else if ins[a] {
-			argument := input(a).any()
-
-			if strings.HasPrefix(a, "$(S)/") || strings.HasPrefix(a, "$(B)/") {
-				argument = intern(a).any()
-			}
-
-			run = append(run, argument)
-		} else {
+		case ins[a]:
+			run = append(run, input(a).any())
+		default:
 			argument, _ := replaceAuxToolArg(internStr(a).any(), toolTokens)
 
 			run = append(run, argument)

@@ -15,6 +15,8 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 	var peers []VFS
 	var globals []ResourceDecl
 
+	resourcePeers := []string{"build/platform/python/ymake_python3"}
+
 	for _, p := range d.peerdirs {
 		peer := p.string()
 		language := instance.Language
@@ -23,6 +25,10 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 		case tokDocs, tokDocsLibrary:
 		case tokProtoLibrary:
 			language = LangDocsProto
+		case tokResourcesLibrary:
+			resourcePeers = append(resourcePeers, peer)
+
+			continue
 		default:
 			continue
 		}
@@ -32,8 +38,6 @@ func (e *EmitContext) genDocs() *ModuleEmitResult {
 		peers = append(peers, res.DocsClosure...)
 		globals = append(globals, res.ResourceGlobalClosure...)
 	}
-
-	resourcePeers := []string{"build/platform/python/ymake_python3"}
 
 	if d.moduleStmt.Name == tokDocs {
 		resourcePeers = append(resourcePeers, "build/platform/yfm")
