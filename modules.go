@@ -3919,9 +3919,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 			d.peerdirs = append(d.peerdirs, strBuildInternalPlatformCuda.any())
 		}
 	case tokCudaNvccFlags:
-		id := envCudaNvccFlags
-
-		env.setString(id, strings.TrimSpace(env.string(id)+" "+strings.Join(anyStrs(v.Args), " ")))
+		applyUnknownStmt(fs, modulePath, UnknownStmt{Name: tokSetAppend, Args: append([]ANY{envCudaNvccFlags.str().any()}, v.Args...)}, d, env, onWarn)
 	default:
 
 		handled = false

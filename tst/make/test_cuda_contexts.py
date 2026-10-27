@@ -79,3 +79,9 @@ class CudaContextsTest(MakeTest):
         node = self.node(self.graph("-t"), "test-results/clang_format/meta.json")
         self.assertIn("$(S)/build/internal/platform/cuda/cuda_runtime_include.h", node["inputs"])
         self.assertIn("$(S)/build/internal/platform/cuda/cuda_runtime_include.h", self.args(node))
+
+    def test_cuda_nvcc_flags_survive_no_compiler_warnings(self):
+        self.write("ya.make", "LIBRARY()\nCUDA_NVCC_FLAGS(-gencode=arch=compute_80,code=sm_80)\nNO_COMPILER_WARNINGS()\nSRCS(kernel.cu)\nEND()\n")
+        self.write("kernel.cu", "__global__ void kernel(int* value) { *value = 42; }\n")
+        args = self.args(self.node(self.graph(), "kernel.cu.o"))
+        self.assertLess(args.index("-gencode=arch=compute_80,code=sm_80"), args.index("-w"))
