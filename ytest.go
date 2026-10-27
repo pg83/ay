@@ -289,6 +289,9 @@ type TestSuite struct {
 	data                   []string
 	sandboxResources       []string
 	externalLocalFiles     []string
+	corpus                 string
+	corpusResources        []string
+	corpusPartsExceeded    int
 	recipes                string
 	files                  []string
 	pythonNoBytecode       bool
@@ -486,7 +489,15 @@ func (ctx *GenCtx) emitTestSuite(s *TestSuite) []NodeRef {
 
 	s.sandboxResources = append(s.sandboxResources, externalResources...)
 
+	if s.corpus != "" {
+		s.corpusResources, s.corpusPartsExceeded = ctx.fuzzCorpusResources(s.corpus)
+	}
+
 	for _, resource := range s.sandboxResources {
+		s.deps = append(s.deps, ctx.emitTestData("sbr://"+resource))
+	}
+
+	for _, resource := range s.corpusResources {
 		s.deps = append(s.deps, ctx.emitTestData("sbr://"+resource))
 	}
 
@@ -735,6 +746,10 @@ func (ctx *GenCtx) testNode(s *TestSuite, chunk TestChunk) *Node {
 
 	for _, file := range s.externalLocalFiles {
 		head = append(head, strExternalLocalFile.any(), internStr(file).any())
+	}
+
+	for _, resource := range s.corpusResources {
+		head = append(head, strSandboxResource.any(), internStr(resource).any())
 	}
 
 	req := testRequirements(s)

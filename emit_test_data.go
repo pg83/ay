@@ -1,13 +1,18 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
 var dataValidationResourceID = regexp.MustCompile(`^sbr:/?/?([0-9]+)=?.*`)
+
+const maxCorpusResourcesAllowed = 5
 
 func resourceValidationEnabled(env Environment) bool {
 	return env.string(envValidateData) != "no" && env.string(envCppAnalysisMode) != "yes"
@@ -68,6 +73,54 @@ func (ctx *GenCtx) resourceValidationSuite(project, name string, ids, env []stri
 	}
 
 	return s
+}
+
+func (ctx *GenCtx) fuzzCorpusResources(corpus string) ([]string, int) {
+	var data []byte
+
+	if path.IsAbs(corpus) {
+		var err error
+
+		if data, err = os.ReadFile(corpus); err != nil {
+			return nil, 0
+		}
+	} else if ctx.fs.isFile(srcRootRel, corpus) {
+		data = concatChunks(ctx.fs.read(corpus))
+	} else {
+		return nil, 0
+	}
+
+	if !json.Valid(data) {
+		return nil, 0
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(data))
+
+	if throw2(dec.Token()) != json.Delim('{') {
+		throwFmt("%s: corpus description is not a JSON object", corpus)
+	}
+
+	var resources []string
+
+	exceeded := 0
+
+	for dec.More() {
+		field := throw2(dec.Token()).(string)
+
+		var ids []json.Number
+
+		throw(dec.Decode(&ids))
+
+		if field == "corpus_parts" && len(ids) > 2*maxCorpusResourcesAllowed {
+			exceeded = len(ids)
+		}
+
+		for n, id := range ids {
+			resources = append(resources, strconv.Itoa(throw2(strconv.Atoi(id.String())))+"="+field+"/"+strconv.Itoa(n))
+		}
+	}
+
+	return resources, exceeded
 }
 
 func (ctx *GenCtx) emitTestData(uri string) NodeRef {

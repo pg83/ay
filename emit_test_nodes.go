@@ -60,6 +60,8 @@ func (e *EmitContext) testRunSuites(binary VFS, ref NodeRef, globals []ResourceD
 			corpus = path.Join("fuzzing", project, "corpus.json")
 		}
 
+		s.corpus = corpus
+
 		if !path.IsAbs(corpus) {
 			corpus = source(corpus).string()
 		}

@@ -71,3 +71,35 @@ class TestDataTest(MakeTest):
         self.write("recipe/main.py", 'import sys\nif sys.argv[-1] not in ("start", "stop"):\n    raise SystemExit(1)\n')
         graph = self.graph("-t", "--test-tag=e2e", "--test-tag=-ya:manual")
         self.node(graph, "recipe/recipe")
+
+    def fuzz_runs(self, corpus):
+        self.write("ya.make", "FUZZ()\nSRCS(fuzz.cpp)\nDATA(sbr://444444444=data)\nEND()\n")
+        self.write("fuzz.cpp", '#include <stddef.h>\n#include <stdint.h>\nextern "C" int LLVMFuzzerTestOneInput(const uint8_t*, size_t) { return 0; }\n')
+        self.write_tree(f"fuzzing/{PROJECT}/corpus.json", corpus)
+        graph = self.graph("-t")
+        downloads = {out.split("/")[2]: node["uid"] for node in graph["graph"] for out in node["outputs"] if out.startswith("$(B)/sandbox-storage/") and out.endswith("/resource")}
+        runs = [(node, [arg for command in node["cmds"] for arg in command["cmd_args"]]) for node in graph["graph"] if "run_fuzz" in json.dumps(node["cmds"])]
+        self.assertTrue(runs)
+        return downloads, runs
+
+    def test_fuzz_corpus_resources(self):
+        downloads, runs = self.fuzz_runs('{"seeds": [333333333], "corpus_parts": [111111111, "222222222"]}\n')
+        for node, args in runs:
+            self.assertEqual(["444444444=data", "333333333=seeds/0", "111111111=corpus_parts/0", "222222222=corpus_parts/1"], [args[i + 1] for i, arg in enumerate(args) if arg == "--sandbox-resource"])
+            self.assertNotIn("--corpus-parts-limit-exceeded", args)
+            for resource in ("444444444", "333333333", "111111111", "222222222"):
+                self.assertIn(downloads[resource], node["deps"])
+
+    def test_fuzz_corpus_parts_limit(self):
+        for count, flags in ((10, []), (11, [["--corpus-parts-limit-exceeded", "11"]])):
+            with self.subTest(count=count):
+                downloads, runs = self.fuzz_runs(json.dumps({"corpus_parts": [100000000 + i for i in range(count)]}))
+                for node, args in runs:
+                    self.assertEqual(count + 1, args.count("--sandbox-resource"))
+                    self.assertEqual(flags, [args[i:i + 2] for i, arg in enumerate(args) if arg == "--corpus-parts-limit-exceeded"])
+                    self.assertEqual(count + 1, len([uid for uid in downloads.values() if uid in node["deps"]]))
+
+    def test_fuzz_corpus_invalid(self):
+        downloads, runs = self.fuzz_runs("not json\n")
+        for node, args in runs:
+            self.assertEqual(["444444444=data"], [args[i + 1] for i, arg in enumerate(args) if arg == "--sandbox-resource"])

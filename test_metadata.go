@@ -355,6 +355,10 @@ func testInnerCommand(s *TestSuite, meta TestMeta, binary, work string, chunk Te
 		if len(meta.binaryArgs) > 0 {
 			args = append(args, "--fuzz-opts="+strings.Join(meta.binaryArgs, " "))
 		}
+
+		if s.corpusPartsExceeded > 0 {
+			args = append(args, "--corpus-parts-limit-exceeded", strconv.Itoa(s.corpusPartsExceeded))
+		}
 	default:
 		partition := meta.partition
 
