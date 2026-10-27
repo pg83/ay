@@ -3500,7 +3500,7 @@
       "zora"
     ],
     "target": "zora",
-    "xfail": true,
+    "xfail": false,
     "env": {
       "AUTOCHECK": "1",
       "TOOLCHAIN": "",
@@ -3590,7 +3590,7 @@
       "yabs/server/test/data"
     ],
     "target": "yabs/server/test/data",
-    "xfail": true,
+    "xfail": false,
     "env": {
       "AUTOCHECK": "1",
       "TOOLCHAIN": "",
