@@ -7,26 +7,30 @@ import (
 )
 
 var (
-	goKV                 = KV{P: pkGO, PC: pcLightRed, ShowOut: true}
-	goToolKV             = KV{P: pkGoTool, PC: pcLightBlue, ShowOut: true}
-	goLdKV               = KV{P: pkLD, PC: pcLightRed, ShowOut: true}
-	goVcsEnv             = envVarsVCS
-	strGoToolsRoot       = internV("$(B)/resources/", "GO_TOOLS")
-	strGoAsmTool         = internV("$(B)/resources/", "GO_TOOLS", "/pkg/tool/linux_amd64/asm")
-	strGoCgoTool         = internV("$(B)/resources/", "GO_TOOLS", "/pkg/tool/linux_amd64/cgo")
-	strGoToolsPkgInclude = internV("$(B)/resources/", "GO_TOOLS", "/pkg/include")
-	strGoYolintTool      = internV("$(B)/resources/", "YOLINT", "/yolint")
-	strGoToolScript      = internV("$(S)/", "build/scripts/go_tool.py")
-	strGoVcsInfoScript   = internV("$(S)/", "build/scripts/vcs_info.py")
-	strGoVcsJson         = bldVcsJson.any()
-	strGoMigrationsCfg   = internV("-migration.config=", "$(S)/", "build/rules/go/migrations.yaml")
-	strGoScopelintCfg    = internV("-scopelint.config=", "$(S)/", "build/rules/go/extended_lint.yaml")
-	strGoRiskyCfg        = internV("-riskyimports.config=", "$(S)/", "build/rules/go/risky_imports.yaml")
-	goToolCmdFlags       = goToolCmdFlagsChunk(false)
-	goToolCmdFlagsPic    = goToolCmdFlagsChunk(true)
-	goToolCmdPeers       = []STR{internStr("++peers")}
-	goToolCmdEnd         = []ANY{strYaEndCommandFile.any()}
-	goExeCmdExtld        = []ANY{internStr("++extld").any(), strClang.any(), internStr("++extldflags").any()}
+	goKV                  = KV{P: pkGO, PC: pcLightRed, ShowOut: true}
+	goToolKV              = KV{P: pkGoTool, PC: pcLightBlue, ShowOut: true}
+	goLdKV                = KV{P: pkLD, PC: pcLightRed, ShowOut: true}
+	goVcsEnv              = envVarsVCS
+	strGoToolsRoot        = internV("$(B)/resources/", "GO_TOOLS")
+	strGoAsmTool          = internV("$(B)/resources/", "GO_TOOLS", "/pkg/tool/linux_amd64/asm")
+	strGoCgoTool          = internV("$(B)/resources/", "GO_TOOLS", "/pkg/tool/linux_amd64/cgo")
+	strGoToolsPkgInclude  = internV("$(B)/resources/", "GO_TOOLS", "/pkg/include")
+	strGoYolintTool       = internV("$(B)/resources/", "YOLINT", "/yolint")
+	strGoToolScript       = internV("$(S)/", "build/scripts/go_tool.py")
+	strGoVcsInfoScript    = internV("$(S)/", "build/scripts/vcs_info.py")
+	strGoVcsJson          = bldVcsJson.any()
+	strGoMigrationsCfg    = internV("-migration.config=", "$(S)/", "build/rules/go/migrations.yaml")
+	strGoScopelintCfg     = internV("-scopelint.config=", "$(S)/", "build/rules/go/extended_lint.yaml")
+	strGoRiskyCfg         = internV("-riskyimports.config=", "$(S)/", "build/rules/go/risky_imports.yaml")
+	goToolCmdFlags        = goToolCmdFlagsChunk(false)
+	goToolCmdFlagsPic     = goToolCmdFlagsChunk(true)
+	goToolCmdPeers        = []STR{internStr("++peers")}
+	goToolCmdEnd          = []ANY{strYaEndCommandFile.any()}
+	goExeCmdExtld         = []ANY{internStr("++extld").any(), strClang.any(), internStr("++extldflags").any()}
+	goToolCmdVet          = goToolCmdVetChunk("source=/-S;build=/-B;tools=/-T")
+	goToolCmdVetRelative  = goToolCmdVetChunk("source=;build=;tools=")
+	goSymabisHead         = goSymabisHeadChunk("$(S)=>/-S;$(B)=>/-B;$(TOOL_ROOT)=>/-T")
+	goSymabisHeadRelative = goSymabisHeadChunk("$(S)=>;$(B)=>;$(TOOL_ROOT)=>")
 )
 
 var goToolScriptInputsChunk = []VFS{
@@ -47,17 +51,6 @@ var goToolCmdMid = []ANY{
 	internStr("++output").any(),
 }
 
-var goToolCmdVet = []ANY{
-	internStr("++vet").any(), strGoYolintTool.any(),
-	internStr("++vet-flags").any(),
-	strGoMigrationsCfg.any(),
-	strGoScopelintCfg.any(),
-	strGoRiskyCfg.any(),
-	internStr("++debug-root-map").any(), internStr("source=/-S;build=/-B;tools=/-T").any(),
-	internStr("++tools-root").any(), internStr("$(TOOL_ROOT)").any(),
-	internStr("++srcs").any(),
-}
-
 var goExeCmdLinkFlags = []ANY{
 	strLinkFlags.any(),
 	strLinkmodeExternal.any(),
@@ -73,12 +66,6 @@ var goExtldWholeArchive = []ANY{
 	internStr("-Wl,--whole-archive").any(),
 	internStr("-Wl,--no-whole-archive").any(),
 	internStr("--cgo-peers").any(),
-}
-
-var goSymabisHead = []ANY{
-	strGoAsmTool.any(),
-	internStr("-trimpath").any(),
-	internStr("$(S)=>/-S;$(B)=>/-B;$(TOOL_ROOT)=>/-T").any(),
 }
 
 var goSymabisDefs = []ANY{
@@ -97,6 +84,43 @@ const (
 	goYolintPeer    = "build/external_resources/yolint"
 	goVendorPrefix  = "vendor"
 )
+
+func goToolCmdVetChunk(debugRootMap string) []ANY {
+	return []ANY{
+		strVet.any(), strGoYolintTool.any(),
+		strVetFlags.any(),
+		strGoMigrationsCfg.any(),
+		strGoScopelintCfg.any(),
+		strGoRiskyCfg.any(),
+		strDebugRootMap.any(), internStr(debugRootMap).any(),
+		strToolsRoot.any(), strToolRoot.any(),
+		strSrcs.any(),
+	}
+}
+
+func goSymabisHeadChunk(trimpath string) []ANY {
+	return []ANY{
+		strGoAsmTool.any(),
+		strTrimpath.any(),
+		internStr(trimpath).any(),
+	}
+}
+
+func (e *EmitContext) goToolCmdVetFor() []ANY {
+	if (Environment{s: &e.frame.ifEnv}).bool(envGoDebugPathRelative) {
+		return goToolCmdVetRelative
+	}
+
+	return goToolCmdVet
+}
+
+func (e *EmitContext) goSymabisHeadFor() []ANY {
+	if (Environment{s: &e.frame.ifEnv}).bool(envGoDebugPathRelative) {
+		return goSymabisHeadRelative
+	}
+
+	return goSymabisHead
+}
 
 type GoStd struct {
 	Version        string
@@ -512,7 +536,7 @@ func (e *EmitContext) flushGoSrcs() {
 
 	node := Node{
 		Platform:  instance.Platform,
-		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(goSymabisHead, e.goInclSplitArgs(), goSymabisDefs, tail[:nt:nt]), Env: goVcsEnv}),
+		Cmds:      na.cmdList(Cmd{CmdArgs: na.chunkList(e.goSymabisHeadFor(), e.goInclSplitArgs(), goSymabisDefs, tail[:nt:nt]), Env: goVcsEnv}),
 		Env:       goVcsEnv,
 		Inputs:    NodeInputs{files: na.inputList(na.vfsList(e.goRes.AsmFiles...), e.goRes.AsmInclSrcs)},
 		KV:        &goToolKV,
@@ -1081,7 +1105,7 @@ func (e *EmitContext) emitGoPackage(resolved []ResolvedPeer, objRefs []NodeRef, 
 			na.anyList(build(dir).any()),
 			goToolCmdMid,
 			na.anyList(outPath.any()),
-			goToolCmdVet,
+			e.goToolCmdVetFor(),
 			srcArgs,
 			e.goToolCmdFlagsFor(),
 			tail[:nt:nt],
@@ -1306,7 +1330,7 @@ func (e *EmitContext) emitGoExe(resolved []ResolvedPeer, objRefs []NodeRef, objO
 		na.anyList(build(dir).any()),
 		goToolCmdMid,
 		na.anyList(outPath.any()),
-		goToolCmdVet,
+		e.goToolCmdVetFor(),
 		srcArgs,
 		e.goToolCmdFlagsFor(),
 		na.anyConcat(goExeCmdLinkFlags[:2], d.goLinkFlags, goExeCmdLinkFlags[2:]),

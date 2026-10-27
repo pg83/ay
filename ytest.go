@@ -836,6 +836,8 @@ func testRequirements(s *TestSuite) *Requirements {
 	cpu, ram := 1, 8
 	r := &Requirements{Network: nwRestricted, HasRAMDisk: true}
 
+	r.DNS = s.requirements["dns"]
+
 	if s.network == "full" || s.size == "large" {
 		r.Network = nwFull
 	}

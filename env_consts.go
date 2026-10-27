@@ -113,6 +113,7 @@ var (
 	envGO_PROTO                               = internEnv("GO_PROTO")
 	envGO_TEST_IMPORT_PATH                    = internEnv("GO_TEST_IMPORT_PATH")
 	envGettextKeepPath                        = internEnv("GETTEXT_KEEP_PATH")
+	envGoDebugPathRelative                    = internEnv("GO_DEBUG_PATH_RELATIVE")
 	envGoPackageOverride                      = internEnv("_GO_PACKAGE_VALUE")
 	envGoRos                                  = internEnv("GO_ROS")
 	envHAVE_CUDA                              = internEnv("HAVE_CUDA")

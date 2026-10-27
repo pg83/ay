@@ -357,6 +357,10 @@ func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS)
 	objLen, rawLen := 0, 0
 
 	for _, it := range p.Items {
+		if it.Path == "-" && it.ExpandedCmd.Args == nil && strings.ContainsAny(it.Cmd.string(), "\"'\\") {
+			it.ExpandedCmd.Args = e.ctx.na.anyList(internAnys(splitShellWords(it.Cmd.string()))...)
+		}
+
 		if resourceCanObjcopy(it.Path, it.Key) {
 			objItems = append(objItems, it)
 			objLen += resourceItemCmdLen(it, true)

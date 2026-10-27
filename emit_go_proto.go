@@ -86,6 +86,7 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 	ns := e.goProtoNamespace()
 	tools := []NodeRef{protocRef}
 	toolPaths := []VFS{protoc}
+	env := envVarsVCS
 	args := []ANY{internV("-I=./", ns).any(), internV("-I=$(S)/", ns).any(), argIB2.any(), argIS3.any()}
 
 	for _, p := range concat(dedup(d.protoAddInclGlobal, d.protoAddIncl, goProtobufInclude), e.peers.ProtoInclude) {
@@ -113,6 +114,10 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 			args = append(args, opt.arg)
 
 			continue
+		}
+
+		if len(env) == len(envVarsVCS) && (strings.HasSuffix(opt.plugin, "mdb-validators") || strings.HasSuffix(opt.plugin, "proto_validation") || strings.HasSuffix(opt.plugin, "mdb-dynforms")) {
+			env = e.goToolEnv(false)
 		}
 
 		ref, tool := ctx.tool(internArg(opt.tool))
@@ -154,8 +159,8 @@ func (e *EmitContext) emitGoProtoCmd(protoRel string, goOpts *string, plugins []
 
 	ref := e.emitNode(Node{
 		Platform: instance.Platform,
-		Cmds:     na.cmdList(Cmd{CmdArgs: cmd, Cwd: cwd, Env: envVarsVCS}),
-		Env:      envVarsVCS,
+		Cmds:     na.cmdList(Cmd{CmdArgs: cmd, Cwd: cwd, Env: env}),
+		Env:      env,
 		Inputs:   NodeInputs{files: InputChunks(inputs[:len(inputs):len(inputs)]), roots: InputChunks(inputs[1:len(inputs):len(inputs)])},
 
 		Outputs:        na.vfsList(outs...),

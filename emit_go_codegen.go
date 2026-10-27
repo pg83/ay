@@ -180,17 +180,25 @@ func applyGoCodegenStmt(modulePath string, v UnknownStmt, d *ModuleData, env Env
 	}
 }
 
-func (e *EmitContext) goToolEnv() EnvVars {
+func (e *EmitContext) goToolEnv(includeHome bool) EnvVars {
 	toolsRoot := strGoToolsRoot.string()
 	bindir := build(e.instance.Path.relString())
 
-	return EnvVars{
+	env := [...]EnvVar{
 		{Name: envARCADIA_ROOT_DISTBUILD, Value: strS.any()},
 		{Name: envGOCACHE, Value: internV(bindir.string(), "/.gocache").any()},
 		{Name: envGOROOT, Value: strGoToolsRoot.any()},
 		{Name: envHOME, Value: internV(bindir.string(), "/.home").any()},
 		{Name: cudaPathEnv, Value: internV(toolsRoot, "/bin").any()},
 	}
+
+	if !includeHome {
+		env[3] = env[4]
+
+		return e.ctx.na.envList(env[:4]...)
+	}
+
+	return e.ctx.na.envList(env[:]...)
 }
 
 func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
@@ -251,7 +259,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 	case goCodegenMocks:
 		mockgenRef, mockgen := ctx.tool(internArg(goMockgenTool))
 
-		env = e.goToolEnv()
+		env = e.goToolEnv(true)
 		inputs = append(inputs, mockgen)
 		toolEnd = len(inputs)
 		toolRefs = append(toolRefs, mockgenRef)
@@ -264,7 +272,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		fsTools := na.anyList(d.tc.Python3.any(), copyFsToolsVFS.any())
 		src := source(st.file)
 
-		env = e.goToolEnv()
+		env = e.goToolEnv(true)
 
 		inputs = append(inputs, src)
 		inputs = append(inputs, ctx.scripts[copyFsToolsVFS.rel()]...)
@@ -316,7 +324,7 @@ func (e *EmitContext) emitGoCodegenStmt(st GoCodegenStmt) {
 		args = append(args, st.args...)
 		args = append(args, in.any())
 
-		env = e.goToolEnv()
+		env = e.goToolEnv(true)
 		inputs = append(inputs, in)
 
 		for _, f := range st.inNoParse {
