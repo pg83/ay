@@ -50,10 +50,10 @@ func (e *EmitContext) moduleCythonIncludes(peers []VFS) []VFS {
 	return e.ctx.na.dedupClosure(nil, chunks)
 }
 
-func (e *EmitContext) modulePeerInputs() InputChunks {
+func (e *EmitContext) modulePeerInputs(peers []VFS) InputChunks {
 	var inputs InputChunks
 
-	for _, peer := range e.peers.Modules {
+	for _, peer := range peers {
 		if info := e.codegen.moduleInputs(peer); info != nil {
 			if len(info.Includes) > 0 {
 				inputs = append(inputs, info.Includes)
@@ -67,18 +67,15 @@ func (e *EmitContext) modulePeerInputs() InputChunks {
 func (e *EmitContext) emitModuleNode(node Node, useGlobals bool) NodeRef {
 	buildDeps := e.ctx.na.refList(node.DepRefs...)
 
-	if e.peers != nil {
-		for _, peer := range e.peers.Modules {
-			if info := e.codegen.moduleInputs(peer); info != nil && len(info.IncludeRoots) > 0 {
-				node.Inputs.modulePeers = e.peers.Modules
+	var peers []VFS
 
-				break
-			}
-		}
+	if e.peers != nil {
+		peers = e.peers.Modules
 	}
 
+	e.setModulePeerRoots(&node, peers)
 	e.includeNodeInputs(&node)
-	node.Inputs.files = e.appendModuleInputs(node.Inputs.files, useGlobals)
+	node.Inputs.files = e.appendModuleInputs(node.Inputs.files, peers, useGlobals)
 	e.appendModuleOutputs(&node)
 	e.resolveNodeCodegenRefs(&node)
 
@@ -89,8 +86,18 @@ func (e *EmitContext) emitModuleNode(node Node, useGlobals bool) NodeRef {
 	return ref
 }
 
-func (e *EmitContext) appendModuleInputs(inputs InputChunks, useGlobals bool) InputChunks {
-	peers := e.modulePeerInputs()
+func (e *EmitContext) setModulePeerRoots(node *Node, peers []VFS) {
+	for _, peer := range peers {
+		if info := e.codegen.moduleInputs(peer); info != nil && len(info.IncludeRoots) > 0 {
+			node.Inputs.modulePeers = peers
+
+			return
+		}
+	}
+}
+
+func (e *EmitContext) appendModuleInputs(inputs InputChunks, modules []VFS, useGlobals bool) InputChunks {
+	peers := e.modulePeerInputs(modules)
 	count := len(inputs) + len(peers)
 
 	if useGlobals && len(e.moduleGlobalInputs) > 0 {

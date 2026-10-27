@@ -199,7 +199,12 @@ func (e *EmitContext) genPackageFinal() *ModuleEmitResult {
 		}
 	}
 
+	packagePeers := dedup(peers)
+
+	e.setModulePeerRoots(&node, packagePeers)
+	node.Inputs.files = e.appendModuleInputs(node.Inputs.files, packagePeers, false)
+
 	ref := e.emitLazyModuleNode(node, peers, outputs...)
 
-	return e.scriptModuleResult(ref, out, dedup(peers), globals)
+	return e.scriptModuleResult(ref, out, packagePeers, globals)
 }
