@@ -15,6 +15,7 @@ import (
 var (
 	muslCFlagsChunk     = []ANY{argDMusl.any()}
 	confPluginDepsCache sync.Map
+	dontExpandVars      = [...]ENV{envARCADIA_BUILD_ROOT, envARCADIA_ROOT, envBINDIR, envCURDIR, envPythonBin, envTestCaseRoot, envTestOutRoot, envTestSourceRoot, envTestWorkRoot}
 )
 
 var allocatorPeers = map[string][]string{
@@ -2106,7 +2107,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				} else if v.Name == tokSetAppend && len(v.Args) > 0 && v.Args[0].string() == importMaskVariable {
 					expanded.Args = runProgramSourceArguments(v.LexicalArgs, env)
 				} else if v.Name == tokRun {
-					expanded.Args = expandTestRunArgs(v.Args, env)
+					expanded.Args = expandSourceArguments(v.Args, env)
 				} else if v.Name == tokSetListPreSuf {
 					expanded.Args = expandListPreSufArgs(v.Args, env)
 				} else if v.Name == tokUseRecipe {
@@ -5044,7 +5045,17 @@ func (phase TokenExpansion) clearsBracedUnbound(name string) bool {
 }
 
 func (phase TokenExpansion) clearsUnbound(name string) bool {
-	return phase == tokenExpandFinal || phase == tokenExpandArguments && !keepDeferredVar(name) || phase == tokenExpandAssignment && name != envBINDIR.string() && name != envCURDIR.string() && name != envARCADIA_ROOT.string() && name != envARCADIA_BUILD_ROOT.string()
+	return phase == tokenExpandFinal || phase == tokenExpandArguments && !keepDeferredVar(name) || phase == tokenExpandAssignment && !dontExpandVar(name)
+}
+
+func dontExpandVar(name string) bool {
+	for _, id := range dontExpandVars {
+		if id.string() == name {
+			return true
+		}
+	}
+
+	return false
 }
 
 func keepDeferredVar(name string) bool {

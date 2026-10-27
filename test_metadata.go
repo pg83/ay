@@ -51,22 +51,20 @@ func testExecDependencyDir(dep string) string {
 	return testBuildRoot + "/" + dir
 }
 
-func expandTestRunArgs(args []ANY, env Environment) []ANY {
-	runtimeVars := []ENV{envARCADIA_ROOT, envARCADIA_BUILD_ROOT, envTestSourceRoot, envTestWorkRoot, envTestOutRoot, envTestCaseRoot, envPythonBin}
+func expandTestEnvValue(value string, env Environment) string {
+	var kinds [len(dontExpandVars)]EnvKind
 
-	var kinds [7]EnvKind
-
-	for i, id := range runtimeVars {
+	for i, id := range dontExpandVars {
 		kinds[i] = env.unbind(id)
 	}
 
-	defer func() {
-		for i, id := range runtimeVars {
-			env.rebind(id, kinds[i])
-		}
-	}()
+	value = expandConfigMacroBody(value, env)
 
-	return expandStmtTokens(args, env)
+	for i, id := range dontExpandVars {
+		env.rebind(id, kinds[i])
+	}
+
+	return value
 }
 
 func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
@@ -119,7 +117,7 @@ func applyTestMacro(v UnknownStmt, d *ModuleData, env Environment) bool {
 		t.tags = append(t.tags, args...)
 	case tokEnv, tokNoDoctests, tokConftestLoadPolicyLocal, tokConftestLoadPolicyLegacyGlobal:
 		if v.Name == tokEnv {
-			value = expandConfigMacroBody(strings.Join(anyStrs(expandSourceArguments(v.Args, env)), " "), env)
+			value = expandTestEnvValue(strings.Join(anyStrs(expandSourceArguments(v.Args, env)), " "), env)
 		} else if v.Name == tokNoDoctests {
 			value = "YA_PYTEST_DISABLE_DOCTEST=yes"
 		} else if v.Name == tokConftestLoadPolicyLocal {
@@ -168,7 +166,7 @@ func normalizedTestData(data []string) []string {
 }
 
 func (t *TestMeta) expandValues(env Environment) {
-	words := splitShellWords(expandConfigMacroBody(env.string(envTestEnvValue), env))
+	words := splitShellWords(expandTestEnvValue(env.string(envTestEnvValue), env))
 
 	if len(words) > 0 {
 		t.env = append(t.env, strings.Split(strings.Trim(strings.Join(words, ";"), `"`), ";")...)

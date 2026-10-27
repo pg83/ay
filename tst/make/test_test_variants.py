@@ -1,3 +1,4 @@
+import base64
 import json
 
 from tst.make.lib import MakeTest, PROJECT
@@ -86,3 +87,15 @@ class TestVariantsTest(MakeTest):
         self.write("canondata/result.json", json.dumps({"test_answer.test_answer": {"uri": "file://answer.txt", "checksum": "a1b2"}}))
         self.write("canondata/answer.txt", "42\n")
         self.graph("-t")
+
+    def test_exectest_keeps_runtime_variables(self):
+        self.write("ya.make", f"EXECTEST()\nINCLUDE(${{ARCADIA_ROOT}}/{PROJECT}/run.inc)\nENV(E2E_DIRECT=${{ARCADIA_ROOT}}/{PROJECT}/data.txt)\nENV(E2E_CUR=${{CURDIR}}/x E2E_SRC=${{TEST_SOURCE_ROOT}}/z E2E_PY=${{PYTHON_BIN}} E2E_U=${{E2E_UNDEFINED}}/u)\nEND()\n")
+        self.write("run.inc", f"ENV(E2E_INCLUDED=${{ARCADIA_ROOT}}/{PROJECT}/data.txt)\nRUN(\n    cat\n    ${{ARCADIA_ROOT}}/{PROJECT}/data.txt\n    ${{E2E_UNDEFINED}}\n    ${{BINDIR}}/b ${{TEST_WORK_ROOT}}/w $E2E_UNBRACED\n)\n")
+        self.write("data.txt", "42\n")
+        node = self.node(self.graph("-t"), "test-results/exectest/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        for name in ("E2E_INCLUDED", "E2E_DIRECT"):
+            self.assertIn(f"{name}=${{ARCADIA_ROOT}}/{PROJECT}/data.txt", args)
+        self.assertIn("E2E_CUR=${CURDIR}/x E2E_SRC=${TEST_SOURCE_ROOT}/z E2E_PY=${PYTHON_BIN} E2E_U=/u", args)
+        commands = [base64.b64decode(arg.split("commands=", 1)[1]).decode() for arg in args if "commands=" in arg]
+        self.assertEqual(commands, [f"\ncat ${{ARCADIA_ROOT}}/{PROJECT}/data.txt ${{BINDIR}}/b ${{TEST_WORK_ROOT}}/w $E2E_UNBRACED"])
