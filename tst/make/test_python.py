@@ -11,3 +11,10 @@ class PythonTest(MakeTest):
         inputs = {path for node in graph["graph"] for path in node["inputs"]}
         for source in ("module.py", "package/__init__.py", "package/helper.py"):
             self.assertIn(f"$(S)/{PROJECT}/{source}", inputs)
+
+    def test_python_sources_with_unset_variable(self):
+        self.write("ya.make", "PY3_LIBRARY()\nPY_SRCS(${E2E_UNSET_SRCS} module.py)\nEND()\n")
+        self.write("module.py", "VALUE = 42\n")
+        graph = self.graph()
+        inputs = {path for node in graph["graph"] for path in node["inputs"]}
+        self.assertIn(f"$(S)/{PROJECT}/module.py", inputs)
