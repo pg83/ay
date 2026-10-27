@@ -52,3 +52,12 @@ class GoGeneratorsTest(MakeTest):
         self.write("ya.make", "PROTO_LIBRARY()\nONLY_TAGS(GO_PROTO)\nGRPC()\nGO_GRPC_GATEWAY_V2_SRCS(answer.proto)\nSRCS(answer.proto)\nEND()\n")
         self.write("answer.proto", f'syntax = "proto3"; package e2e; option go_package = "a.yandex-team.ru/{PROJECT}"; message Answer {{ int32 value = 1; }} service Answers {{ rpc Get(Answer) returns (Answer); }}\n')
         self.node(self.graph(), "answer.pb.gw.go")
+
+    def test_peerdir_statement_precedes_macro_peers(self):
+        self.write("ya.make", f"GO_LIBRARY()\nPROTO_NAMESPACE({PROJECT})\nYT_ORM_PROTO_YSON({PROJECT}/answer.proto OUT_OPTS x=y)\nPEERDIR({PROJECT}/peer)\nEND()\n")
+        self.write("answer.proto", 'syntax = "proto3"; package e2e; message Answer { int32 value = 1; }\n')
+        self.write("peer/ya.make", f"GO_LIBRARY()\nPROTO_NAMESPACE({PROJECT}/peer)\nSRCS(peer.go)\nEND()\n")
+        self.write("peer/peer.go", "package peer\n")
+        node = self.node(self.graph(), "answer.yson.go")
+        includes = [arg.replace("$(SOURCE_ROOT)", "$(S)") for command in node["cmds"] for arg in command["cmd_args"] if arg.startswith("-I=")]
+        self.assertEqual(includes[-3:], [f"-I=$(S)/{PROJECT}/peer", "-I=$(S)/contrib/libs/protobuf/src", "-I=$(S)"])

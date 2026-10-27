@@ -215,6 +215,7 @@ type ModuleData struct {
 	noExtendedPySearch       bool
 	enumSrcs                 []*GenerateEnumSerializationStmt
 	peerdirs                 []ANY
+	peerdirStmtEnd           int
 	resourcePeerDeferred     bool
 	protoCmdPeers            []ANY
 	joinSrcs                 []*JoinSrcsStmt
@@ -1574,6 +1575,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				env.setString(envMODULE_LANG, moduleLang)
 			}
 
+			d.peerdirStmtEnd = len(d.peerdirs)
 		case *SrcsStmt:
 			if d.moduleStmt != nil && isRustModule(d.moduleStmt.Name) {
 				applyRustMacro(UnknownStmt{Name: tokCrateSources, Args: expandStmtTokens(v.Sources, env)}, modulePath, env, d)
@@ -1702,7 +1704,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 					addInclNext = false
 				}
 
-				d.peerdirs = append(d.peerdirs, pTok)
+				d.peerdirs = slices.Insert(d.peerdirs, d.peerdirStmtEnd, pTok)
+				d.peerdirStmtEnd++
 
 				if d.nots != nil && d.nots.Kind == tokProtoLibrary {
 					d.nots.ProtoPeers = append(d.nots.ProtoPeers, pTok)
@@ -3121,6 +3124,7 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 
 		const googleapisPeer = "contrib/libs/googleapis-common-protos"
 		d.peerdirs = append([]ANY{internStr(googleapisPeer).any()}, d.peerdirs...)
+		d.peerdirStmtEnd++
 	case tokClangWarnings:
 		d.clangWarnings = append(d.clangWarnings, expandStmtTokens(v.Args, env)...)
 	case tokFbsNamespace:
