@@ -3951,7 +3951,7 @@
       "travel/cvp"
     ],
     "target": "travel/cvp",
-    "xfail": true,
+    "xfail": false,
     "env": {
       "AUTOCHECK": "1",
       "TOOLCHAIN": "",
