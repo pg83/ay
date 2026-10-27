@@ -804,7 +804,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 	d.finishResourcePeerPolicy()
 
 	if pd := programSourceDir(d.moduleStmt); pd != nil {
-		d.srcDirs = append(d.srcDirs, dirKey(*pd).source())
+		d.srcDirs = slices.Insert(d.srcDirs, 0, dirKey(*pd).source())
 	}
 
 	kindOfResolve, _ := env.s.lookup(envDontResolveIncludes)

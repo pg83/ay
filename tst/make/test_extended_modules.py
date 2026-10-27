@@ -46,6 +46,24 @@ class ExtendedModulesTest(MakeTest):
         self.write("test.cpp", '#include <library/cpp/testing/unittest/registar.h>\nY_UNIT_TEST_SUITE(Answer) { Y_UNIT_TEST(Value) { UNIT_ASSERT(true); } }\n')
         self.graph("-t", "-DUT_SKIP_EXCEPTIONS=yes")
 
+    def test_unittest_for_prefers_own_source(self):
+        self.write("ya.make", f"UNITTEST_FOR({PROJECT}/lib)\nSRCS(shared.cpp)\nEND()\n")
+        self.write("lib/ya.make", "LIBRARY()\nSRCS(answer.cpp)\nEND()\n")
+        self.write("lib/answer.cpp", "int answer() { return 42; }\n")
+        self.write("lib/shared.cpp", "int shared() { return 42; }\n")
+        self.write("shared.cpp", '#include <library/cpp/testing/unittest/registar.h>\nY_UNIT_TEST_SUITE(Answer) { Y_UNIT_TEST(Value) { UNIT_ASSERT(true); } }\n')
+        compiled = self.node(self.graph(), "shared.cpp.o")
+        self.assertIn(f"$(S)/{PROJECT}/shared.cpp", compiled["inputs"])
+        self.assertNotIn(f"$(S)/{PROJECT}/lib/shared.cpp", compiled["inputs"])
+
+    def test_srcdirs_searched_in_declaration_order(self):
+        self.write("ya.make", f"LIBRARY(answer)\nSRCDIR({PROJECT}/first)\nSRCDIR({PROJECT}/second)\nSRCS(shared.cpp)\nEND()\n")
+        for name in ("first", "second"):
+            self.write(f"{name}/shared.cpp", f"int {name}() {{ return 42; }}\n")
+        compiled = [node for node in self.graph()["graph"] if any(path.endswith("/shared.cpp") for path in node["inputs"]) and any(path.endswith(".o") for path in node["outputs"])]
+        self.assertEqual(len(compiled), 1)
+        self.assertIn(f"$(S)/{PROJECT}/first/shared.cpp", compiled[0]["inputs"])
+
     def test_udf_base(self):
         self.write("ya.make", "UDF_BASE(answer)\nSRCS(answer.cpp)\nEND()\n")
         self.write("answer.cpp", 'extern "C" int answer() { return 42; }\n')

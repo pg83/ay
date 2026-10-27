@@ -18,7 +18,15 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 
 	srcRelClean := srcRel != "" && pathIsClean(srcRel)
 
-	for i := len(srcDirs) - 1; i >= 1; i-- {
+	if srcRelClean {
+		if ctx.fs.isFileClean(srcInstance.Path.rel(), srcRel) {
+			return sourceJoined(cleanRel(srcInstance.Path.relString()), srcRel)
+		}
+	} else if len(srcDirs) > 1 && ctx.fs.isFile(srcInstance.Path.rel(), srcRel) {
+		return source(filepath.ToSlash(filepath.Clean(srcInstance.Path.relString() + "/" + srcRel)))
+	}
+
+	for i := 1; i < len(srcDirs); i++ {
 		if srcDirs[i].isBuild() {
 			candidate := buildJoinClean(srcDirs[i].relString(), srcRel)
 
@@ -46,9 +54,7 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 		}
 	}
 
-	if srcRelClean &&
-		!ctx.fs.isFileClean(srcInstance.Path.rel(), srcRel) &&
-		ctx.fs.isFilePathClean(srcRel) {
+	if srcRelClean && ctx.fs.isFilePathClean(srcRel) {
 		return source(srcRel)
 	}
 

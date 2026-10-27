@@ -76,14 +76,14 @@ func resolvePySrcRelKnown(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string, sr
 	if srcRelClean {
 		target := internStr(srcRel)
 
-		for i := len(srcDirs) - 1; i >= 1; i-- {
+		if resolved := fs.resolveSourceUnderClean(moduleVFS.rel(), target, true); resolved != 0 {
+			return resolved
+		}
+
+		for i := 1; i < len(srcDirs); i++ {
 			if resolved := fs.resolveSourceUnderClean(srcDirs[i].rel(), target, true); resolved != 0 {
 				return resolved
 			}
-		}
-
-		if resolved := fs.resolveSourceUnderClean(moduleVFS.rel(), target, true); resolved != 0 {
-			return resolved
 		}
 
 		if resolved := fs.resolveSourceUnderClean(srcRootRel, target, true); resolved != 0 {
@@ -93,9 +93,11 @@ func resolvePySrcRelKnown(fs FS, srcDirs []VFS, moduleVFS VFS, srcRel string, sr
 		return internV(moduleVFS.relString(), "/", srcRel)
 	}
 
-	for i := len(srcDirs) - 1; i >= 1; i-- {
-		if fs.isFile(srcDirs[i].rel(), srcRel) {
-			return internV(srcDirs[i].relString(), "/", srcRel)
+	if len(srcDirs) > 1 && !fs.isFile(moduleVFS.rel(), srcRel) {
+		for i := 1; i < len(srcDirs); i++ {
+			if fs.isFile(srcDirs[i].rel(), srcRel) {
+				return internV(srcDirs[i].relString(), "/", srcRel)
+			}
 		}
 	}
 
