@@ -80,7 +80,11 @@ func (e *StreamingEmitter) emitReservedNode(n Node, id NodeRef) {
 func (e *StreamingEmitter) emitReservedNodePtr(n *Node, id NodeRef) {
 	ownershipCheckNode(n)
 
-	p := e.na.nodes.one()
+	p := e.nodes.s[id]
+
+	if p == nil {
+		p = e.na.nodes.one()
+	}
 
 	*p = *n
 

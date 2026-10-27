@@ -220,6 +220,7 @@ var (
 	envPlantumlPath                           = internEnv("PLANTUML_PATH")
 	envPmScript                               = internEnv("PM_SCRIPT")
 	envPnpmRoot                               = internEnv("PNPM_ROOT")
+	envProtoNamespace                         = internEnv("PROTO_NAMESPACE")
 	envProtobufIncludePath                    = internEnv("PROTOBUF_INCLUDE_PATH")
 	envPy3CppRos                              = internEnv("PY3_CPP_ROS")
 	envPy3Fbs                                 = internEnv("PY3_FBS")

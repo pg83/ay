@@ -4758,7 +4758,7 @@ func protoIncludeDir(rel string) VFS {
 	return source(rel)
 }
 
-func applyProtoAddIncl(d *ModuleData, args []ANY) {
+func protoAddInclPaths(args []ANY) ([]VFS, VFS, bool) {
 	global, withGen := false, false
 
 	var rel string
@@ -4786,6 +4786,12 @@ func applyProtoAddIncl(d *ModuleData, args []ANY) {
 	if src.relString() != "" {
 		includes = append(includes, src)
 	}
+
+	return includes, bld, global
+}
+
+func applyProtoAddIncl(d *ModuleData, args []ANY) {
+	includes, bld, global := protoAddInclPaths(args)
 
 	d.addProtoInclude(includes, global)
 

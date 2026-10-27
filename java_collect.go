@@ -226,6 +226,7 @@ func collectJavaData(ctx *GenCtx, jm *JavaModule, stmts []Stmt, env Environment)
 	d.embedSbom = d.embedSbom || ctx.sbomEnabled && env.bool(envEmbedSbom)
 	d.needSbomInfo = env.bool(envNeedSbomInfo)
 	d.modver = strings.Join(strings.Fields(env.string(envModver)), ".")
+	d.protoNamespace = env.string(envProtoNamespace)
 
 	for _, name := range javaUberjarFlagVars {
 		value, _ := env.lookup(name)
@@ -931,20 +932,13 @@ func applyJavaMacro(ctx *GenCtx, jm *JavaModule, d *JavaData, name string, args,
 	case "ALICE_TYPED_CALLBACK":
 		javaProtoPluginMacro(d, []string{"alice_typed_callback_java", "alice/library/go/java_marker_interface_protoc_plugin", "DEPS", "alice/protos/api/typed_callbacks/java_marker_interface"})
 	case "PROTO_NAMESPACE":
-		javaProtoNamespace(d, args[len(args)-1])
+		env.setString(envProtoNamespace, args[len(args)-1])
+		d.addProtoInclude(args, true)
 	case "PROTO_ADDINCL":
-		var includes ModuleData
-		applyProtoAddIncl(&includes, internAnys(args))
-
-		for _, dir := range includes.protoAddInclGlobal {
-			d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir, global: true})
-		}
-
-		for _, dir := range includes.protoAddIncl {
-			d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir})
-		}
+		d.addProtoInclude(args, false)
 	case "EXPORT_YMAPS_PROTO":
-		javaProtoNamespace(d, "maps/doc/proto")
+		env.setString(envProtoNamespace, "maps/doc/proto")
+		d.addProtoInclude([]string{"maps/doc/proto"}, true)
 	case "PROTOC_FATAL_WARNINGS":
 		d.protocFlags = append(d.protocFlags, "--fatal_warnings")
 	case "ONLY_TAGS", "INCLUDE_TAGS", "EXCLUDE_TAGS":
@@ -1222,9 +1216,12 @@ func javaSrcsSalt(spec JavaSrcsSpec) string {
 	return strings.Join(parts, " ")
 }
 
-func javaProtoNamespace(d *JavaData, ns string) {
-	d.protoNamespace = ns
-	d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: source(ns), global: true})
+func (d *JavaData) addProtoInclude(args []string, exported bool) {
+	includes, _, global := protoAddInclPaths(internAnys(args))
+
+	for _, dir := range includes {
+		d.protoAddIncl = append(d.protoAddIncl, javaAddIncl{dir: dir, global: exported || global})
+	}
 }
 
 func (d *JavaData) rawExpand(s string) string {

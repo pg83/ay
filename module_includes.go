@@ -7,7 +7,7 @@ import (
 )
 
 func (ctx *GenCtx) withIncludedStmts(stmt *IncludeStmt, env Environment, visit func([]Stmt)) {
-	rel := expandScalarVarRef(stmt.Path, env)
+	rel := expandSourceScalarVarRef(stmt.Path, env)
 
 	var target string
 

@@ -251,6 +251,14 @@ func (ctx *GenCtx) javaRegisterOutputs(jm *JavaModule, frame *ModuleFrame) {
 	pending := ctx.javaPendingEmit(func() { ctx.javaEmit(jm) })
 	reg := ctx.javaReg(jm)
 
+	if jm.unit.kind == juExternal {
+		node := ctx.na.nodes.one()
+
+		*node = Node{Ref: jm.outRef, Outputs: outs, Inputs: NodeInputs{pending: pending}}
+		ctx.emit.nodes.s[jm.outRef] = node
+		pending = nil
+	}
+
 	for _, out := range outs {
 		reg.register(GeneratedFileInfo{
 			OutputPath:      out,
@@ -826,7 +834,17 @@ func (b *javaNodeBuilder) renderKotlincOpts(globals map[string]VFS, opts []strin
 			o = strings.ReplaceAll(o, javaKotlinCompilerGlobal, kc.string())
 		}
 
-		out = append(out, internStr(o).any())
+		if !strings.ContainsRune(o, '$') {
+			out = append(out, internStr(o).any())
+
+			continue
+		}
+
+		values, _ := commandArgumentExpression(o, func(name string, _ bool) ([]string, string) {
+			return nil, ""
+		})
+
+		out = append(out, internAnys(values)...)
 	}
 
 	return out
