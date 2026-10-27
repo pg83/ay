@@ -562,6 +562,10 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses boo
 					instance = ctx.rootInstanceForDeclaration(dir, demandNone, v)
 					apply(st)
 				}
+			case *EndStmt:
+				if !d.endOutsideModule(dir, v.Line, ctx.onWarn) {
+					d.moduleEnded = true
+				}
 			case *SetStmt, *DefaultVarStmt:
 				apply(st)
 			case *IfStmt:

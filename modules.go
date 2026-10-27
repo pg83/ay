@@ -178,6 +178,7 @@ type ModuleData struct {
 	nots                    *NotsModule
 	docs                    *DocsData
 	moduleStmt              *ModuleStmt
+	moduleEnded             bool
 	autoincluded            bool
 	modver                  string
 	hasLicense              bool
@@ -804,7 +805,7 @@ func collectModuleInto(ctx *GenCtx, instance ModuleInstance, stmts []Stmt, env E
 
 	collectStmts(ctx, modulePath, kind, instance.Language, stmts, env, d, onWarn, instance.Platform)
 
-	if d.moduleStmt != nil && !d.discarded && !d.autoincluded {
+	if d.moduleStmt != nil && !d.discarded && !d.moduleEnded {
 		throwFmt("%s: module declaration has no END()", modulePath)
 	}
 
@@ -1336,6 +1337,16 @@ func collectModuleAutoinclude(ctx *GenCtx, modulePath string, kind ModuleKind, l
 	collectStmts(ctx, modulePath, kind, language, ctx.autoincludeStmts(modulePath), env, d, onWarn, platform)
 }
 
+func (d *ModuleData) endOutsideModule(modulePath string, line int, onWarn func(Warn)) bool {
+	if d.moduleStmt != nil && !d.moduleEnded {
+		return false
+	}
+
+	onWarn(Warn{Kind: WarnMisconfiguration, Message: fmt.Sprintf("%s:%d: unexpected command END outside of a module", modulePath, line)})
+
+	return true
+}
+
 func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Language, stmts []Stmt, env Environment, d *ModuleData, onWarn func(Warn), platform *Platform) {
 	fs := ctx.fs
 
@@ -1782,6 +1793,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				d.ragel6Flags = internAnys(strings.Fields(value))
 			}
 		case *EndStmt:
+			if d.endOutsideModule(modulePath, v.Line, onWarn) {
+				continue
+			}
+
 			collectModuleAutoinclude(ctx, modulePath, kind, language, env, d, onWarn, platform)
 			d.pythonLint.bind(env)
 			d.finishResourcePeerPolicy()
@@ -1796,6 +1811,8 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			if d.python2Headers || d.python3NativeIncl || d.moduleStmt.Name == tokPyAnyModule {
 				d.pythonHeaderEnv = env.clone()
 			}
+
+			d.moduleEnded = true
 
 		case *JoinSrcsStmt:
 			expanded := *v
