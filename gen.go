@@ -1867,7 +1867,7 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			peer := p.string()
 			kind := peerKindUserPeer
 
-			if peer == unitTestPeer {
+			if peer == unitTestPeer && !d.unitTestPeerExplicit {
 				kind = peerKindUnitTestPeer
 			}
 
@@ -1972,12 +1972,17 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 			genModule(ctx, cppSources)
 		}
 
-		peerResult := e.genPeerModule(peerInstance)
+		peerResult := genModule(ctx, peerInstance)
 
 		if peerResult.isPROGRAM && !(isRustModule(d.moduleStmt.Name) && peerResult.ModuleStmtName == tokCrateProcMacro) {
-			throwFmt("gen: %s peers PROGRAM module %s; only LIBRARY peers are linkable", instance.Path.relString(), peerPath)
+			if kind == peerKindUserPeer {
+				ctx.onWarn(Warn{Kind: WarnModuleFailed, Message: fmt.Sprintf("PEERDIR from %s to %s is not allowed and skipped: module types are incompatible", instance.Path.relString(), peerPath)})
+			}
+
+			continue
 		}
 
+		e.recordPeerModule(peerResult)
 		resolved = append(resolved, ResolvedPeer{path: peerPath, result: peerResult, kind: kind})
 	}
 

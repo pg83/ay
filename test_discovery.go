@@ -8,13 +8,17 @@ import (
 func (e *EmitContext) genPeerModule(instance ModuleInstance) *ModuleEmitResult {
 	result := genModule(e.ctx, instance)
 
+	e.recordPeerModule(result)
+
+	return result
+}
+
+func (e *EmitContext) recordPeerModule(result *ModuleEmitResult) {
 	e.ctx.consumeModuleWarnings(result)
 
 	if e.ctx.peerTests {
 		e.frame.testPeers = append(e.frame.testPeers, result)
 	}
-
-	return result
 }
 
 func (ctx *GenCtx) prepareDiscoveredModuleTests(discovered []DiscoveredTargets) []*TestSuite {

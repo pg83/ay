@@ -215,6 +215,7 @@ type ModuleData struct {
 	noExtendedPySearch       bool
 	enumSrcs                 []*GenerateEnumSerializationStmt
 	peerdirs                 []ANY
+	unitTestPeerExplicit     bool
 	resourcePeerDeferred     bool
 	protoCmdPeers            []ANY
 	joinSrcs                 []*JoinSrcsStmt
@@ -1717,6 +1718,10 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 				}
 
 				d.peerdirs = append(d.peerdirs, pTok)
+
+				if d.confMacroDepth == 0 && pTok.string() == unittestForPeerPath(d.moduleStmt) {
+					d.unitTestPeerExplicit = true
+				}
 
 				if d.nots != nil && d.nots.Kind == tokProtoLibrary {
 					d.nots.ProtoPeers = append(d.nots.ProtoPeers, pTok)
