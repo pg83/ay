@@ -22,6 +22,7 @@ var (
 	testAgentEnvSignatures   = []string{"OPENCODE", "CLAUDECODE", "CODEX_THREAD_ID", "CURSOR_TRACE_ID", "CODEIUM_EDITOR_APP_ROOT", "AIDER_API_KEY", "AMP_CURRENT_THREAD_ID", "ANTIGRAVITY_AGENT", "AUGMENT_AGENT", "GEMINI_CLI", "QWEN_CODE", "REPL_ID"}
 	testAgentProcessNames    = []string{"opencode", "claude", "claude-code", "copilot", "codex-app", "codex", "hermes", "openclaw", "droid", "pi"}
 	testNoPlatform           = &Platform{}
+	testSecretRequirements   = []string{"sb_vault", "yav"}
 )
 
 const (
@@ -880,6 +881,7 @@ func testRequirements(s *TestSuite) *Requirements {
 		r.TestOutputLimit = 1024 * 1024 * 1024
 	}
 
+	r.SbVault, r.Yav = s.requirements["sb_vault"], s.requirements["yav"]
 	r.CPU, r.RAM = float64(cpu), float64(ram)
 
 	return r
@@ -1015,7 +1017,27 @@ func testRequirementsOf(entries []string) map[string]string {
 		}
 
 		if k, v, ok := strings.Cut(e, ":"); ok {
-			k, v = strings.ToLower(k), strings.ToLower(v)
+			k = strings.ToLower(k)
+
+			if slices.Contains(testSecretRequirements, k) {
+				items := strings.Split(out[k], ",")
+
+				if out[k] == "" {
+					items = nil
+				}
+
+				for _, item := range strings.Split(v, ",") {
+					if !slices.Contains(items, item) {
+						items = append(items, item)
+					}
+				}
+
+				out[k] = strings.Join(items, ",")
+
+				continue
+			}
+
+			v = strings.ToLower(v)
 
 			if _, exists := out[k]; exists && v == "0" {
 				delete(out, k)

@@ -138,6 +138,18 @@ func (e *EmitContext) importTestSuites(binary VFS, globals []ResourceDecl) []*Te
 	return []*TestSuite{s}
 }
 
+func (s *TestSuite) applyRequirements(entries []string) {
+	s.requirements = testRequirementsOf(entries)
+
+	for _, name := range testSecretRequirements {
+		if _, ok := s.requirements[name]; ok {
+			s.tags = sortedUnique(append(s.tags, "ya:external"))
+
+			return
+		}
+	}
+}
+
 func (s *TestSuite) applyTestMeta(meta TestMeta, addSource bool) {
 	s.size = cmp.Or(meta.size, "small")
 	s.timeout = meta.timeout
@@ -149,7 +161,7 @@ func (s *TestSuite) applyTestMeta(meta TestMeta, addSource bool) {
 	s.tags = sortedUnique(meta.tags)
 	s.canonizeSubPath = meta.canonizeSubPath
 	s.env = meta.env
-	s.requirements = testRequirementsOf(meta.requirements)
+	s.applyRequirements(meta.requirements)
 	s.depends = meta.depends
 	s.dockerImages = sortedUnique(meta.dockerImages)
 	s.recipes = testRecipes(meta.recipes)

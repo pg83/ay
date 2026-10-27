@@ -374,7 +374,7 @@ func (ctx *GenCtx) javaJunitSuite(jm *JavaModule) *TestSuite {
 	s.data = sortedUnique(normalizedTestData(t.data))
 	s.dockerImages = sortedUnique(t.dockerImages)
 	s.tags = sortedUnique(t.tags)
-	s.requirements = testRequirementsOf(t.requirements)
+	s.applyRequirements(t.requirements)
 	s.env = slices.Clone(d.testEnv)
 	s.supportsCanonization = true
 	s.canonicalData = true

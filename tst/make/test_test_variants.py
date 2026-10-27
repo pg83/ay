@@ -33,6 +33,15 @@ class TestVariantsTest(MakeTest):
                 args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
                 self.assertEqual("--requires-ram-disk" in args, size > 0)
 
+    def test_secret_requirements_mark_external(self):
+        self.write("test_answer.py", "def test_answer():\n    assert 6 * 7 == 42\n")
+        self.write("ya.make", "PY3TEST()\nTEST_SRCS(test_answer.py)\nREQUIREMENTS(yav:YT_TOKEN=value:sec-01abc:Robot-Token)\nREQUIREMENTS(yav:E2E=file:sec-01def:key yav:YT_TOKEN=value:sec-01abc:Robot-Token sb_vault:E2E_VAULT=value:Owner:Key)\nEND()\n")
+        node = self.node(self.graph("-t"), "test-results/py3test/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertEqual("YT_TOKEN=value:sec-01abc:Robot-Token,E2E=file:sec-01def:key", node["requirements"]["yav"])
+        self.assertEqual("E2E_VAULT=value:Owner:Key", node["requirements"]["sb_vault"])
+        self.assertEqual("ya:external", args[args.index("--tag") + 1])
+
     def test_kvm_requirement_and_environment_tags(self):
         self.write("ya.make", "UNITTEST()\nSRCS(answer_ut.cpp)\nTAG(ya:copydataro)\nREQUIREMENTS(kvm)\nEND()\n")
         self.write("answer_ut.cpp", "#include <library/cpp/testing/unittest/registar.h>\nY_UNIT_TEST_SUITE(Answer) { Y_UNIT_TEST(Value) { UNIT_ASSERT_VALUES_EQUAL(6 * 7, 42); } }\n")

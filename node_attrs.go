@@ -225,6 +225,8 @@ type Requirements struct {
 	RAMDisk         float64
 	HasRAMDisk      bool
 	TestOutputLimit uint64
+	SbVault         string
+	Yav             string
 }
 
 type ProcKind uint8
@@ -340,8 +342,16 @@ func appendRequirements(buf []byte, r *Requirements) []byte {
 		o.num("ram_disk", r.RAMDisk)
 	}
 
+	if r.SbVault != "" {
+		o.str("sb_vault", r.SbVault)
+	}
+
 	if r.TestOutputLimit != 0 {
 		o.num("test_output_limit", float64(r.TestOutputLimit))
+	}
+
+	if r.Yav != "" {
+		o.str("yav", r.Yav)
 	}
 
 	return append(o.buf, '}')
