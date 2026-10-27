@@ -16,6 +16,7 @@ var fromSandboxScriptInputs = []VFS{
 type SandboxRecipe struct {
 	Stmt    *FromSandboxStmt
 	Outputs []VFS
+	Auto    int
 	Python3 VFS
 }
 
@@ -51,38 +52,36 @@ func fromSandboxAutoLinkMember(name string) bool {
 	return extIsArchiveMember(name)
 }
 
+func (r *SandboxRecipe) linkMembers(ref NodeRef) (memberRefs []NodeRef, memberPaths []VFS) {
+	for _, out := range r.Outputs[:r.Auto] {
+		if fromSandboxAutoLinkMember(out.string()) {
+			memberRefs = append(memberRefs, ref)
+			memberPaths = append(memberPaths, out)
+		}
+	}
+
+	return memberRefs, memberPaths
+}
+
 func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeRef, memberPaths []VFS) {
 	if info := e.existingSandbox(stmt); info != nil {
-		for i, out := range info.Sandbox.Outputs {
+		for _, out := range info.Sandbox.Outputs {
 			local := *info
 
 			local.OutputPath = out
 
 			e.register(local)
-
-			if i < len(stmt.OUTFiles) && fromSandboxAutoLinkMember(stmt.OUTFiles[i].string()) {
-				memberRefs = append(memberRefs, info.ProducerRef)
-				memberPaths = append(memberPaths, out)
-			}
 		}
 
-		return memberRefs, memberPaths
+		return info.Sandbox.linkMembers(info.ProducerRef)
 	}
 
 	ctx := e.ctx
-	node, outVFSs := fromSandboxNode(ctx.emit.nodeArenas(), e.instance, e.d.tc.Python3.any(), stmt)
+	node, outVFSs, auto := fromSandboxNode(ctx.emit.nodeArenas(), e.instance, e.d.tc.Python3.any(), stmt)
 	ref := ctx.emit.reserve()
 	pending := e.pendingEmit(func() { e.emitReservedNode(node, ref) })
-
-	for i, f := range stmt.OUTFiles {
-		if fromSandboxAutoLinkMember(f.string()) {
-			memberRefs = append(memberRefs, ref)
-			memberPaths = append(memberPaths, outVFSs[i])
-		}
-	}
-
 	parsed := extractionOutputIncludes(ctx.na, stmt.OutputIncludes)
-	recipe := &SandboxRecipe{Stmt: stmt, Outputs: outVFSs, Python3: e.d.tc.Python3}
+	recipe := &SandboxRecipe{Stmt: stmt, Outputs: outVFSs, Auto: auto, Python3: e.d.tc.Python3}
 
 	for _, out := range outVFSs {
 		e.register(GeneratedFileInfo{
@@ -96,10 +95,18 @@ func (e *EmitContext) emitFromSandbox(stmt *FromSandboxStmt) (memberRefs []NodeR
 		})
 	}
 
-	return memberRefs, memberPaths
+	return recipe.linkMembers(ref)
 }
 
-func fromSandboxNode(na *NodeArenas, instance ModuleInstance, python3 ANY, stmt *FromSandboxStmt) (Node, []VFS) {
+func appendSandboxOutput(outs []VFS, out VFS) []VFS {
+	if slices.Contains(outs, out) {
+		return outs
+	}
+
+	return append(outs, out)
+}
+
+func fromSandboxNode(na *NodeArenas, instance ModuleInstance, python3 ANY, stmt *FromSandboxStmt) (Node, []VFS, int) {
 	id := stmt.ResourceId.string()
 	mode := "--untar-to"
 
@@ -135,12 +142,14 @@ func fromSandboxNode(na *NodeArenas, instance ModuleInstance, python3 ANY, stmt 
 
 	for _, f := range stmt.OUTFiles {
 		args = append(args, f)
-		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.relString(), f.string()))
+		outVFSs = appendSandboxOutput(outVFSs, copyFileOutputVFS(instance.Path.relString(), f.string()))
 	}
+
+	auto := len(outVFSs)
 
 	for _, f := range stmt.OUTNoAutoFiles {
 		args = append(args, f)
-		outVFSs = append(outVFSs, copyFileOutputVFS(instance.Path.relString(), f.string()))
+		outVFSs = appendSandboxOutput(outVFSs, copyFileOutputVFS(instance.Path.relString(), f.string()))
 	}
 
 	args = append(args, argYaEndCommandFile.any())
@@ -159,7 +168,7 @@ func fromSandboxNode(na *NodeArenas, instance ModuleInstance, python3 ANY, stmt 
 		Outputs:      na.vfsList(outVFSs...),
 		Requirements: &fromSandboxRequirements,
 		Resources:    usesPython3,
-	}, outVFSs
+	}, outVFSs, auto
 }
 
 func extractionOutputIncludes(na *NodeArenas, files []ANY) []IncludeDirective {

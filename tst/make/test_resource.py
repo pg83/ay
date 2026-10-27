@@ -16,6 +16,13 @@ class ResourceTest(MakeTest):
                 self.assertTrue(producers, f"no command consumes {source}")
                 self.assertTrue(any(node["outputs"] for node in producers))
 
+    def test_sandbox_repeated_output_is_one_output(self):
+        self.write("ya.make", "LIBRARY()\nFROM_SANDBOX(FILE 123456789 OUT_NOAUTO keys.json keys.json)\nRESOURCE(keys.json /keys)\nEND()\n")
+        node = self.node(self.graph(), "keys.json")
+        self.assertEqual(node["outputs"], [f"$(B)/{PROJECT}/keys.json"])
+        args = node["cmds"][0]["cmd_args"]
+        self.assertEqual(args[args.index("--") + 1:args.index("--ya-end-command-file")], ["keys.json", "keys.json"])
+
     def test_objcopy_large_resource_threshold(self):
         self.write("ya.make", "PY3_LIBRARY()\nSET(YMAKE_OBJCOPY_LARGE_RESOURCE_THR 0)\nPY_SRCS(answer.py)\nEND()\n")
         self.write("answer.py", "VALUE = 42\n")

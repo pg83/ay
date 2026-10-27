@@ -585,7 +585,7 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses boo
 				case tokEnable, tokDisable, tokSetAppend, tokSetListPreSuf,
 					tokUsePython2, tokPython2Addincl, tokUsePython3, tokPython3Addincl,
 					tokValidateDataRestart, tokPack, tokSetCudaNodeRAMRequirement, tokNoCow, tokNoNeedCheck,
-					tokWindowsManifest, tokWindowsLongPathManifest:
+					tokWindowsManifest, tokWindowsLongPathManifest, tokNoBuildIf, tokBuildOnlyIf:
 					apply(st)
 				}
 
@@ -607,6 +607,10 @@ func (ctx *GenCtx) scanModuleConfiguration(instance ModuleInstance, recurses boo
 	}
 
 	scan(moduleStmts(ctx, dir))
+
+	if d.discarded {
+		children = nil
+	}
 
 	if recurses {
 		ctx.recordConfiguration(instance, children, nil)

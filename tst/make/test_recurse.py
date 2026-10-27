@@ -28,3 +28,20 @@ class RecurseTest(MakeTest):
         graph = self.graph()
         library = self.node(graph, "lib/libanswer.a")
         self.assertIn(library["uid"], graph["result"])
+
+    def test_strict_build_exclusion_discards_directory_recurses(self):
+        self.write("ya.make", "RECURSE(group kept)\n")
+        self.write("group/answer.cpp", "int answer() { return 42; }\n")
+        for name in ("app", "tests", "kept"):
+            directory = name if name == "kept" else f"group/{name}"
+            self.write(f"{directory}/ya.make", "PY3TEST()\nTEST_SRCS(test_answer.py)\nEND()\n")
+            self.write(f"{directory}/test_answer.py", "def test_answer():\n    assert True\n")
+        for mode, discarded in (("STRICT", True), ("WARNING", False)):
+            with self.subTest(mode=mode):
+                self.write("group/discard.inc", f"LIBRARY(group)\nNO_BUILD_IF({mode} E2E_DISCARD)\nSRCS(answer.cpp)\nEND()\n")
+                self.write("group/ya.make", f"SET(E2E_DISCARD yes)\nRECURSE(app)\nRECURSE_FOR_TESTS(tests)\nINCLUDE(${{ARCADIA_ROOT}}/{PROJECT}/group/discard.inc)\n")
+                graph = self.graph("-t")
+                self.node(graph, "kept/test-results/py3test/meta.json")
+                outputs = {path for node in graph["graph"] for path in node["outputs"]}
+                for output in ("group/app/test-results/py3test/meta.json", "group/tests/test-results/py3test/meta.json"):
+                    self.assertEqual(f"$(B)/{PROJECT}/{output}" not in outputs, discarded, output)
