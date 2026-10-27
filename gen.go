@@ -119,6 +119,7 @@ type ModuleEmitResult struct {
 	ModuleVariants                  uint16
 	IncludedDeps                    *ModuleIncludedDeps
 	SearchScope                     *CommandScope
+	exportAt                        int32
 	GlobalSources                   []VFS
 	PchFlagsGlobal                  []ANY
 	JavaClosure                     []VFS
@@ -224,7 +225,8 @@ type GenCtx struct {
 	tools            DenseMap[ARG, *ModuleEmitResult]
 	frames           []*ModuleFrame
 	frameDepth       int
-	exportTick       uint32
+	exportLog        []ExportEntry
+	exportRoots      [][2]int32
 	exportOrder      []*ModuleEmitResult
 	py3ccHeadChunk   []ANY
 	scripts          ScriptDeps
@@ -445,9 +447,15 @@ func (ctx *GenCtx) rootInstanceForDeclaration(dir string, demand ModuleDemand, d
 func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand) {
 	target := targets.Root
 	targetDir := target.Path
+	start := int32(len(ctx.exportLog))
 
 	if target.Declaration != nil && isJavaModuleType(target.Declaration.Name) {
-		for _, dir := range ctx.recurseClosure(filepath.Clean(targetDir)) {
+		dirs := ctx.recurseClosure(filepath.Clean(targetDir))
+
+		ctx.genStartTarget(dirs[0])
+		ctx.markExportRoot(start)
+
+		for _, dir := range dirs[1:] {
 			ctx.genStartTarget(dir)
 		}
 
@@ -463,6 +471,8 @@ func (ctx *GenCtx) genTarget(targets DiscoveredTargets, rootDemand ModuleDemand)
 
 		ctx.collectConfiguredSubmoduleTests(target.Path, append(ctx.genMultimoduleTargets(target, root.ModuleVariants, rootDemand), root)...)
 	}
+
+	ctx.markExportRoot(start)
 
 	for _, target := range targets.Recursed {
 		dir := target.Path
@@ -1246,7 +1256,11 @@ func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, c
 	return scanCtx
 }
 
-func genModule(ctx *GenCtx, instance ModuleInstance) *ModuleEmitResult {
+func genModule(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResult) {
+	at := ctx.enterExport()
+
+	defer func() { ctx.leaveExport(at, result) }()
+
 	if instance.Demand == demandNone || ctx.emit.deferPublication > 0 {
 		parent := ctx.warningSink
 

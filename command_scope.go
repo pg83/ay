@@ -1,5 +1,11 @@
 package main
 
+const (
+	exportVisit ExportStep = iota
+	exportUse
+	exportPublish
+)
+
 type CommandScope struct {
 	tick               uint32
 	scanner            *IncludeScanner
@@ -60,10 +66,84 @@ func (s *CommandScope) protoIncludeArgs(na *NodeArenas) []ANY {
 	return s.protoArgs
 }
 
-func (ctx *GenCtx) nextExportTick() uint32 {
-	ctx.exportTick++
+type ExportStep uint8
 
-	return ctx.exportTick
+type ExportEntry struct {
+	module   *ModuleEmitResult
+	scoped   *ScopedCommand
+	end      int32
+	step     ExportStep
+	replayed bool
+}
+
+func (ctx *GenCtx) enterExport() int32 {
+	ctx.exportLog = append(ctx.exportLog, ExportEntry{})
+
+	return int32(len(ctx.exportLog) - 1)
+}
+
+func (ctx *GenCtx) leaveExport(at int32, result *ModuleEmitResult) {
+	end := int32(len(ctx.exportLog))
+
+	ctx.exportLog[at] = ExportEntry{module: result, end: end}
+
+	if result != nil && result.exportAt == 0 && end > at+1 {
+		result.exportAt = at + 1
+	}
+}
+
+func (ctx *GenCtx) logExport(entry ExportEntry) {
+	entry.end = int32(len(ctx.exportLog) + 1)
+	ctx.exportLog = append(ctx.exportLog, entry)
+}
+
+func (ctx *GenCtx) markExportRoot(start int32) {
+	ctx.exportRoots = append(ctx.exportRoots, [2]int32{start, int32(len(ctx.exportLog))})
+}
+
+func (ctx *GenCtx) replayExport() {
+	log := ctx.exportLog
+	tick := uint32(0)
+
+	var replay func(at int32)
+
+	replay = func(at int32) {
+		entry := &log[at]
+
+		if entry.replayed {
+			return
+		}
+
+		entry.replayed = true
+
+		switch entry.step {
+		case exportUse:
+			tick++
+			entry.scoped.tick = tick
+		case exportPublish:
+			tick++
+			entry.module.SearchScope.tick = tick
+			ctx.exportOrder = append(ctx.exportOrder, entry.module)
+		case exportVisit:
+			if entry.end > at+1 {
+				for next := at + 1; next < entry.end; next = log[next].end {
+					replay(next)
+				}
+			} else if module := entry.module; module != nil && module.exportAt != 0 {
+				replay(module.exportAt - 1)
+			}
+		}
+	}
+
+	for _, root := range ctx.exportRoots {
+		for at := root[0]; at < root[1]; at = log[at].end {
+			replay(at)
+		}
+	}
+
+	for at := int32(0); at < int32(len(log)); at = log[at].end {
+		replay(at)
+	}
 }
 
 func (ctx *GenCtx) visitScoped(sc *ScopedCommand) *CommandScope {
@@ -72,7 +152,7 @@ func (ctx *GenCtx) visitScoped(sc *ScopedCommand) *CommandScope {
 
 		if e := &frame.emitCtx; e.frame == frame && e.serial == frame.serial {
 			sc.scope = e.commandScope()
-			sc.tick = ctx.nextExportTick()
+			ctx.logExport(ExportEntry{scoped: sc, step: exportUse})
 		}
 	}
 
@@ -114,13 +194,14 @@ func (e *EmitContext) publishSearchScope(result *ModuleEmitResult) {
 	scope := e.commandScope()
 
 	scope.headers = headers[:len(headers):len(headers)]
-	scope.tick = e.ctx.nextExportTick()
-
 	result.SearchScope = scope
-	e.ctx.exportOrder = append(e.ctx.exportOrder, result)
+
+	e.ctx.logExport(ExportEntry{module: result, step: exportPublish})
 }
 
 func (ctx *GenCtx) bindCommandScopes() {
+	ctx.replayExport()
+
 	seen := map[*IncludeScanner]*BitSet{}
 
 	for _, result := range ctx.exportOrder {

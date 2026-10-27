@@ -49,3 +49,20 @@ class ProtoContextsTest(MakeTest):
                 self.write("user/ya.make", "LIBRARY()\nPEERDIR(" + " ".join(f"{PROJECT}/{peer}" for peer in peers.split()) + ")\nSRCS(user.cpp)\nEND()\n")
                 includes = [arg for arg in self.node(self.graph(), "owner/answer.pb.h")["cmds"][0]["cmd_args"] if arg.startswith("-I=")]
                 self.assertEqual(any(arg.endswith(f"/{PROJECT}/common/inc") for arg in includes), visitor == "common", includes)
+
+    def test_generated_header_rendered_by_later_command_line_target(self):
+        self.write("owner/ya.make", "PROTO_LIBRARY()\nSRCS(answer.proto)\nEND()\n")
+        self.write("owner/answer.proto", 'syntax = "proto3";\nmessage Answer { int32 value = 1; }\n')
+        self.write("common/inc/marker.txt", "x\n")
+        self.write("common/ya.make", f"LIBRARY()\nADDINCL(FOR proto {PROJECT}/common/inc)\nHEADERS(.)\nSRCS(common.cpp)\nEND()\n")
+        self.write("common/common.cpp", "int common() { return 1; }\n")
+        self.write("common/limit.h", f"#pragma once\n#include <{PROJECT}/owner/answer.pb.h>\n")
+        self.write("first/ya.make", "RECURSE(user)\n")
+        self.write("first/user/ya.make", f"LIBRARY()\nPEERDIR({PROJECT}/owner)\nSRCS(user.cpp)\nEND()\n")
+        self.write("first/user/user.cpp", f"#include <{PROJECT}/owner/answer.pb.h>\nint user() {{ return 1; }}\n")
+        self.write("root.cpp", "int root() { return 1; }\n")
+        for peers, visitor in (("common", "common"), ("owner common", "owner")):
+            with self.subTest(peers=peers):
+                self.write("ya.make", "LIBRARY()\nPEERDIR(" + " ".join(f"{PROJECT}/{peer}" for peer in peers.split()) + ")\nSRCS(root.cpp)\nEND()\n")
+                includes = [arg for arg in self.node(self.graph(f"{PROJECT}/first"), "owner/answer.pb.h")["cmds"][0]["cmd_args"] if arg.startswith("-I=")]
+                self.assertEqual(any(arg.endswith(f"/{PROJECT}/common/inc") for arg in includes), visitor == "common", includes)
