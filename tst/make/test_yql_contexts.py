@@ -17,6 +17,19 @@ class YqlContextsTest(MakeTest):
                 args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
                 self.assertLess(args.index("-DE2E_OWN"), args.index("-DE2E_GLOBAL"))
 
+    def test_static_udf_has_no_link_unit_peers(self):
+        # YQL_UDF_STATIC is a library: the link-unit PEERDIRs of
+        # COMMON_LINK_SETTINGS come from the program, after the UDF closure.
+        self.write("ya.make", f"PY3_PROGRAM(answer)\nPY_SRCS(MAIN main.py)\nPEERDIR({PROJECT}/py)\nEND()\n")
+        self.write("main.py", "print(42)\n")
+        self.write("py/ya.make", f"PY23_LIBRARY()\nPEERDIR({PROJECT}/udf)\nEND()\n")
+        self.write("udf/ya.make", f"YQL_UDF(answer_udf)\nYQL_ABI_VERSION(2 9 0)\nSRCS(answer.cpp)\nPEERDIR({PROJECT}/dep)\nEND()\n")
+        self.write("udf/answer.cpp", "int answer() { return 42; }\n")
+        self.write("dep/ya.make", "LIBRARY()\nSRCS(dep.cpp)\nEND()\n")
+        self.write("dep/dep.cpp", "int dep() { return 42; }\n")
+        args = [arg for cmd in self.node(self.graph(), "answer")["cmds"] for arg in cmd["cmd_args"]]
+        self.assertLess(args.index(f"{PROJECT}/dep/lib{PROJECT}-dep.a"), args.index("build/cow/on/libbuild-cow-on.a"))
+
     def test_python_udf_main_module_resource_name(self):
         self.write("ya.make", "YQL_PYTHON_UDF(answer)\nREGISTER_YQL_PYTHON_UDF()\nPY_SRCS(__main__.py)\nEND()\n")
         self.write("__main__.py", "def answer(): return 42\n")

@@ -191,7 +191,7 @@ func (e *EmitContext) defaultPeerdirsForWithState(instance ModuleInstance) []str
 
 	peers = e.appendPlatformPeerdirs(peers, instance)
 
-	if isLinkingModuleType(d.moduleStmt.Name) && !isProgramModuleType(d.moduleStmt.Name) && !isDllModuleType(d.moduleStmt.Name) && !noPlatform {
+	if (Environment{s: &e.frame.ifEnv}).bool(envCommonLinkSettings) && !isProgramModuleType(d.moduleStmt.Name) && !isDllModuleType(d.moduleStmt.Name) && !noPlatform {
 		peers = append(peers, e.defaultCommonLinkPeerdirs()...)
 	}
 
