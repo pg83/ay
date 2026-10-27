@@ -28,6 +28,19 @@ class CodegenTest(MakeTest):
     def test_ragel(self):
         self.generated("machine.rl6", "machine.rl6.cpp", '%%{ machine scanner; main := any*; }%%\n%% write data;\n')
 
+    def test_buildwith_ragel6(self):
+        self.write("ya.make", "LIBRARY(answer)\nBUILDWITH_RAGEL6(lexer.rl -e -CF1)\nSRCS(answer.cpp)\nEND()\n")
+        self.write("lexer.rl", '%%{ machine scanner; main := any*; }%%\n%% write data;\n')
+        self.write("answer.cpp", "int answer() { return 42; }\n")
+        graph = self.graph()
+        ragel = self.node(graph, "lexer.rl6.cpp")
+        args = [arg.replace("$(SOURCE_ROOT)", "$(S)").replace("$(BUILD_ROOT)", "$(B)") for command in ragel["cmds"] for arg in command["cmd_args"]]
+        self.assertEqual(args[-6:], ["-e", "-CF1", "-I$(S)", "-o", f"$(B)/{PROJECT}/lexer.rl6.cpp", f"$(S)/{PROJECT}/lexer.rl"])
+        self.assertNotIn("-L", args)
+        self.assertEqual(ragel["kv"]["p"], "R6")
+        objects = [arg.replace("$(BUILD_ROOT)", "$(B)") for command in self.node(graph, "libanswer.a")["cmds"] for arg in command["cmd_args"] if arg.endswith(".o")]
+        self.assertEqual(objects, [f"$(B)/{PROJECT}/answer.cpp.o", f"$(B)/{PROJECT}/lexer.rl6.cpp.o"])
+
     def test_gperf(self):
         self.generated("keywords.gperf", "keywords.gperf.cpp", "%%\nhello\nworld\n%%\n")
 

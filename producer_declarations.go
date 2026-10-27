@@ -29,7 +29,7 @@ func (d *ModuleData) recordProducerDeclarations() {
 		prodGoCodegen: len(d.goCodegens), prodLlvmCompile: len(d.llvmCompile), prodLuaCompile: len(d.luaCompile),
 		prodUserverProto: len(d.userverProtos), prodListProto: len(d.listProtos), prodFromArchive: len(d.fromArchives),
 		prodPchFile: len(d.pchFiles), prodProto2Fbs: len(d.proto2Fbs), prodPireInline: len(d.pireInline),
-		prodFromSandbox: len(d.fromSandboxes), prodBundle: len(d.bundles),
+		prodFromSandbox: len(d.fromSandboxes), prodBundle: len(d.bundles), prodRagel6: len(d.ragel6Builds),
 	}
 
 	if d.pyMain != nil {
@@ -91,6 +91,8 @@ func (d *ModuleData) producerDeclarationSequence(decl producerDeclaration) int {
 		return d.llvmBc[decl.index].DeclSeq
 	case prodPyMain:
 		return d.pyMainDeclSeq
+	case prodRagel6:
+		return d.ragel6Builds[decl.index].DeclSeq
 	}
 
 	return d.declSeq + 1

@@ -3,11 +3,18 @@ package main
 import "strings"
 
 var (
-	ragel6ConstArgs = []ANY{argL.any(), argIS.any(), argDashO.any()}
-	r6KV            = KV{P: pkR6, PC: pcYellow}
+	ragel6ConstArgs          = []ANY{argL.any(), argIS.any(), argDashO.any()}
+	ragel6BuildwithConstArgs = ragel6ConstArgs[1:]
+	r6KV                     = KV{P: pkR6, PC: pcYellow}
 )
 
 const ragel6DefaultOutExt = ".rl6.cpp"
+
+type Ragel6BuildStmt struct {
+	Src     string
+	Options []ANY
+	DeclSeq int
+}
 
 func ragel6OutVFS(instance ModuleInstance, srcRel string) VFS {
 	dir := instance.Path.relString() + "/"
@@ -35,7 +42,7 @@ func ragel6OutName(base string) string {
 	return stem + ragel6DefaultOutExt
 }
 
-func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags []ANY, closure []VFS, view Closure, id NodeRef) {
+func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6BinaryPath VFS, ragel6Flags, options, constArgs []ANY, closure []VFS, view Closure, id NodeRef) {
 	instance := e.instance
 	na := e.ctx.na
 	outVFS := ragel6OutVFS(instance, srcRel)
@@ -45,15 +52,15 @@ func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6B
 		effectiveFlags = instance.Platform.Ragel6Flags
 	}
 
-	head := na.anys.alloc(1 + len(effectiveFlags))[:0]
+	head := na.anys.alloc(1 + len(effectiveFlags) + len(options))[:0]
 
 	head = append(head, ragel6BinaryPath.any())
-	head = appendAnyLists(head, effectiveFlags)
+	head = appendAnyLists(head, effectiveFlags, options)
 	na.anys.commit(len(head))
 
 	head = head[:len(head):len(head)]
 
-	cmdArgs := na.chunkList(head, ragel6ConstArgs, na.anyList(outVFS.any(), inVFS.any()))
+	cmdArgs := na.chunkList(head, constArgs, na.anyList(outVFS.any(), inVFS.any()))
 	env := envVarsVCS
 	head2 := na.vfsList(ragel6BinaryPath)
 
@@ -77,6 +84,14 @@ func (e *EmitContext) emitR6(srcRel string, inVFS VFS, ragel6LD NodeRef, ragel6B
 }
 
 func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
+	e.emitRagel6Source(meta, nil, ragel6ConstArgs)
+}
+
+func (e *EmitContext) emitRagel6Build(stmt Ragel6BuildStmt) {
+	e.emitRagel6Source(SrcMeta{Source: internStr(stmt.Src).any(), Prio: stmtPrioDefault, Seq: stmt.DeclSeq}, stmt.Options, ragel6BuildwithConstArgs)
+}
+
+func (e *EmitContext) emitRagel6Source(meta SrcMeta, options, constArgs []ANY) {
 	ctx, instance, d := e.ctx, e.instance, e.d
 	src := meta.Source
 	srcRel := e.moduleSourceRel(src)
@@ -104,7 +119,7 @@ func (e *EmitContext) emitLibraryRagel6Source(meta SrcMeta) {
 		view := scanner.walkClosure(rl6SourceVFS, scanCtx, scanDomainCC)
 		rl6Closure := view.collect(ctx.na, func(VFS) bool { return true })
 
-		e.emitR6(srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, rl6Closure, view, r6Ref)
+		e.emitR6(srcRel, rl6SourceVFS, ragelLDRef, ragelBinaryVFS, ragel6Flags, options, constArgs, rl6Closure, view, r6Ref)
 	}
 
 	pending := e.pendingEmit(pe)

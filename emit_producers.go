@@ -49,6 +49,7 @@ const (
 	prodPireInline
 	prodFromSandbox
 	prodBundle
+	prodRagel6
 	prodQueuedSrc
 	prodResource
 	prodPyGroup
@@ -294,7 +295,8 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		len(d.decimalMD5) + len(d.buildMns) + len(d.splitCodegens) + len(d.baseCodegens) + len(d.runPrograms) + len(d.runPython) + len(d.runJavaPrograms) +
 		len(d.archiveAsm) + len(d.srcs) + len(d.ymapsSprotoSrcs) + len(d.llvmBc) + len(d.enumSrcs) +
 		len(d.archives) + len(d.checkConfigHeaders) + len(d.joinSrcs) + len(d.goCodegens) + len(d.cgoSrcs) +
-		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos) + len(d.listProtos) + len(d.fromArchives) + len(d.pchFiles) + len(d.proto2Fbs) + len(d.pireInline)
+		len(d.llvmCompile) + len(d.luaCompile) + len(d.userverProtos) + len(d.listProtos) + len(d.fromArchives) + len(d.pchFiles) + len(d.proto2Fbs) + len(d.pireInline) +
+		len(d.ragel6Builds)
 
 	if d.docs != nil {
 		n += len(d.docs.copies)
@@ -407,6 +409,18 @@ func (e *EmitContext) producerPositions(cythonPlans []CythonStmtPlan) ([]Produce
 		backing = append(backing, e.sourceInputForScheduling(entry.Src))
 
 		push(prodCopyFile, i, start, outEnd)
+	}
+
+	for i, stmt := range d.ragel6Builds {
+		start := len(backing)
+
+		backing = append(backing, ragel6OutVFS(e.instance, stmt.Src))
+
+		outEnd := len(backing)
+
+		backing = append(backing, e.sourceInputForScheduling(stmt.Src))
+
+		push(prodRagel6, i, start, outEnd)
 	}
 
 	for i, entry := range d.fromArchives {
@@ -1136,6 +1150,8 @@ func (e *EmitContext) drainCommands(cythonPlans []CythonStmtPlan, srcs []SrcMeta
 			e.emitArchiveStmt(e.d.archives[pos.index])
 		case prodCheckConfigH:
 			e.emitCheckConfigHStmt(e.d.checkConfigHeaders[pos.index])
+		case prodRagel6:
+			e.emitRagel6Build(e.d.ragel6Builds[pos.index])
 		case prodCython:
 			e.emitCythonCppPlanned(cythonPlans[pos.index : pos.index+1])
 		case prodSwigAll:

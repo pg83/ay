@@ -169,6 +169,7 @@ var tokName = [...]STR{
 	tokBpf:                                internStr("BPF"),
 	tokBpfStatic:                          internStr("BPF_STATIC"),
 	tokBuildwithCythonC:                   internStr("BUILDWITH_CYTHON_C"),
+	tokBuildwithRagel6:                    internStr("BUILDWITH_RAGEL6"),
 	tokBuildwithCythonCpp:                 internStr("BUILDWITH_CYTHON_CPP"),
 	tokBuildOnlyIf:                        internStr("BUILD_ONLY_IF"),
 	tokBuildMn:                            internStr("BUILD_MN"),
@@ -574,6 +575,7 @@ const (
 	tokBpf
 	tokBpfStatic
 	tokBuildwithCythonC
+	tokBuildwithRagel6
 	tokBuildwithCythonCpp
 	tokBuildOnlyIf
 	tokBuildMn

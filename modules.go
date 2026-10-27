@@ -385,6 +385,7 @@ type ModuleData struct {
 	noCheckImportsDisabled   bool
 	pyRegister               []PyRegistration
 	ragel6Flags              []ANY
+	ragel6Builds             []Ragel6BuildStmt
 	bisonFlags               []ANY
 	conflictMod              *ModuleStmt
 	resourceDeclStmts        []*DeclareResourceStmt
@@ -3017,6 +3018,14 @@ func applyUnknownStmt(fs FS, modulePath string, v UnknownStmt, d *ModuleData, en
 		})
 
 		d.cythonNumpyBeforeInclude = true
+	case tokBuildwithRagel6:
+		args := expandStmtTokens(v.Args, env)
+
+		if len(args) == 0 {
+			throwFmt("BUILDWITH_RAGEL6 expects a source")
+		}
+
+		d.ragel6Builds = append(d.ragel6Builds, Ragel6BuildStmt{Src: args[0].string(), Options: args[1:], DeclSeq: d.nextDeclSeq()})
 	case tokBisonGenC:
 		d.bisonGenExt = strC
 	case tokBisonGenCpp:
