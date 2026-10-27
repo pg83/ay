@@ -129,6 +129,11 @@ func (fs *OsFS) existsClean(prefix STR, suffix string, clean bool) (present bool
 		var jb, nb [256]byte
 
 		joined := joinRelInto(jb[:0], prefix.string(), suffix)
+
+		if pathEscapesRoot(bytesString(joined)) {
+			return false, false
+		}
+
 		normB, ok := normaliseAppend(nb[:0], bytesString(joined))
 		rel := bytesString(normB)
 

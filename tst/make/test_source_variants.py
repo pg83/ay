@@ -34,3 +34,12 @@ class SourceVariantsTest(MakeTest):
         self.write("ya.make", "LIBRARY()\nSRCS(answer.swg)\nEND()\n")
         self.write("answer.swg", '%module answer\n%inline %{ int answer() { return 42; } %}\n')
         self.node(self.graph(), "answer_wrap.swg.cpp")
+
+    def test_srcdir_candidate_outside_tree(self):
+        self.write("ya.make", "RECURSE(lib/ut)\n")
+        self.write("lib/ya.make", "LIBRARY()\nSRCS(answer.cpp)\nEND()\n")
+        self.write("lib/answer.cpp", "int answer() { return 42; }\n")
+        self.write("lib/ut/ya.make", f"UNITTEST_FOR({PROJECT}/lib)\nSRCS(../../../{PROJECT}/common/common.cpp)\nEND()\n")
+        self.write("common/common.cpp", "int common() { return 17; }\n")
+        compiled = self.node(self.graph(), "lib/ut/__/__/common/common.cpp.o")
+        self.assertIn(f"$(S)/{PROJECT}/common/common.cpp", compiled["inputs"])

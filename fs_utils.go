@@ -168,6 +168,34 @@ func joinRelInto(dst []byte, a, b string) []byte {
 	return dst
 }
 
+func pathEscapesRoot(p string) bool {
+	depth := 0
+
+	for i := 0; i <= len(p); {
+		j := i
+
+		for j < len(p) && p[j] != '/' {
+			j++
+		}
+
+		switch p[i:j] {
+		case "", ".":
+		case "..":
+			if depth == 0 {
+				return true
+			}
+
+			depth--
+		default:
+			depth++
+		}
+
+		i = j + 1
+	}
+
+	return false
+}
+
 func normaliseAppend(out []byte, p string) ([]byte, bool) {
 	var starts [64]int
 
