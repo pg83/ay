@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 )
 
 var includeScannerBasePathsSlice = []VFS{
@@ -22,7 +23,7 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 		if ctx.fs.isFileClean(srcInstance.Path.rel(), srcRel) {
 			return sourceJoined(cleanRel(srcInstance.Path.relString()), srcRel)
 		}
-	} else if len(srcDirs) > 1 && ctx.fs.isFile(srcInstance.Path.rel(), srcRel) {
+	} else if ctx.fs.isFile(srcInstance.Path.rel(), srcRel) {
 		return source(filepath.ToSlash(filepath.Clean(srcInstance.Path.relString() + "/" + srcRel)))
 	}
 
@@ -56,6 +57,12 @@ func resolveSourceVFS(ctx *GenCtx, srcInstance ModuleInstance, srcRel string, sr
 
 	if srcRelClean && ctx.fs.isFilePathClean(srcRel) {
 		return source(srcRel)
+	}
+
+	if !srcRelClean && srcRel != "" {
+		if rooted := filepath.ToSlash(filepath.Clean(srcRel)); rooted != ".." && !strings.HasPrefix(rooted, "../") && ctx.fs.isFilePathClean(rooted) {
+			return source(rooted)
+		}
 	}
 
 	if srcRelClean {

@@ -17,6 +17,16 @@ class ResourceVariantsTest(MakeTest):
         self.assertTrue(resources)
         self.assertTrue(any(f"$(B)/{PROJECT}/generated/dummy.h" in node["inputs"] for node in resources))
 
+    def test_parent_relative_resource_resolves_from_root(self):
+        self.write("lib/contexts/ya.make", "PY3_LIBRARY()\nRESOURCE(${MODDIR}/../../configs/config.yaml config.yaml)\nEND()\n")
+        self.write("configs/config.yaml", "answer: 42\n")
+        self.write("ya.make", "RECURSE(lib/contexts)\n")
+        graph = self.graph()
+        resources = [node for node in graph["graph"] if any("config.yaml" in path for path in node["inputs"])]
+        self.assertTrue(resources)
+        for node in resources:
+            self.assertIn(f"$(S)/{PROJECT}/configs/config.yaml", node["inputs"])
+
     def test_resource_conftest(self):
         self.write("ya.make", "LIBRARY()\nRESOURCE(conftest.py /conftest.py - /inline=answer)\nEND()\n")
         self.write("conftest.py", "ANSWER = 42\n")
