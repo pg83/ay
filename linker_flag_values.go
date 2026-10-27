@@ -8,7 +8,7 @@ import (
 type LinkerFlagValue = CompilerFlagValue
 
 func (e *EmitContext) linkerFlagValue(args []ANY) LinkerFlagValue {
-	args = internAnys(splitQuotedWords(strings.Join(anyStrs(args), " "), 1))
+	args = internAnys(splitQuotedWords(strings.ReplaceAll(strings.Join(anyStrs(args), " "), `${"$"}`, "$"), 1))
 
 	return LinkerFlagValue{
 		Name: internStr(strings.Join(anyStrs(args), "\x00")),

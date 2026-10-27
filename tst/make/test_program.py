@@ -14,3 +14,9 @@ class ProgramTest(MakeTest):
         executable = self.node(graph, "hello")
         self.assertIn(executable["uid"], graph["result"])
         self.assertTrue(any(path.endswith(".a") and f"/{PROJECT}/math/" in path for path in executable["inputs"]))
+
+    def test_conf_macro_ldflags_dollar_literal(self):
+        self.write("ya.make", "PROGRAM(hello)\nUSE_DYNAMIC_CUDA()\nSRCS(main.cpp)\nEND()\n")
+        self.write("main.cpp", "int main() { return 0; }\n")
+        args = [arg for cmd in self.node(self.graph(), "hello")["cmds"] for arg in cmd["cmd_args"]]
+        self.assertIn("-Wl,-rpath,$ORIGIN", args)
