@@ -5,7 +5,14 @@ func (e *EmitContext) genExecTest() *ModuleEmitResult {
 		throwFmt("EXECTEST must have at least one RUN macro")
 	}
 
-	globals := e.scriptModuleResources(nil, "build/platform/python/ymake_python3")
+	var globals []ResourceDecl
+
+	for _, p := range e.d.peerdirs {
+		globals = append(globals, e.genPeerModule(e.derivePeerInstance(p.string())).ResourceGlobalClosure...)
+	}
+
+	globals = e.scriptModuleResources(globals, "build/platform/python/ymake_python3")
+
 	name := fullPathTestName(e.instance.Path.relString())
 
 	if len(e.d.moduleStmt.Args) > 0 {

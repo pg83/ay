@@ -33,6 +33,26 @@ class TestVariantsTest(MakeTest):
                 args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
                 self.assertEqual("--requires-ram-disk" in args, size > 0)
 
+    def test_kvm_requirement_and_environment_tags(self):
+        self.write("ya.make", "UNITTEST()\nSRCS(answer_ut.cpp)\nTAG(ya:copydataro)\nREQUIREMENTS(kvm)\nEND()\n")
+        self.write("answer_ut.cpp", "#include <library/cpp/testing/unittest/registar.h>\nY_UNIT_TEST_SUITE(Answer) { Y_UNIT_TEST(Value) { UNIT_ASSERT_VALUES_EQUAL(6 * 7, 42); } }\n")
+        node = self.node(self.graph("-t"), "test-results/unittest/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIs(True, node["requirements"]["kvm"])
+        self.assertEqual(4, node["requirements"]["ram"])
+        self.assertEqual("4", args[args.index("--ram-limit-gb") + 1])
+        self.assertEqual("copyro", args[args.index("--data-to-environment") + 1])
+        self.assertNotIn("--no-clean-environment", args)
+
+        self.write("test_answer.py", "def test_answer():\n    assert 6 * 7 == 42\n")
+        self.write("ya.make", "PY3TEST()\nTEST_SRCS(test_answer.py)\nSIZE(MEDIUM)\nTAG(ya:dirty)\nREQUIREMENTS(cpu:4 ram:16)\nREQUIREMENTS(kvm)\nEND()\n")
+        node = self.node(self.graph("-tt"), "test-results/py3test/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        self.assertIs(True, node["requirements"]["kvm"])
+        self.assertEqual(16, node["requirements"]["ram"])
+        self.assertIn("--no-clean-environment", args)
+        self.assertNotIn("--data-to-environment", args)
+
     def test_fuzzer_dictionary(self):
         self.write("ya.make", f"FUZZ()\nSRCS(fuzz.cpp)\nFUZZ_DICTS({PROJECT}/words.dict)\nEND()\n")
         self.write("fuzz.cpp", '#include <stddef.h>\n#include <stdint.h>\nextern "C" int LLVMFuzzerTestOneInput(const uint8_t*, size_t) { return 0; }\n')
@@ -87,6 +107,19 @@ class TestVariantsTest(MakeTest):
         self.write("canondata/result.json", json.dumps({"test_answer.test_answer": {"uri": "file://answer.txt", "checksum": "a1b2"}}))
         self.write("canondata/answer.txt", "42\n")
         self.graph("-t")
+
+    def test_exectest_peerdir_resource_globals(self):
+        self.write("ya.make", f"EXECTEST()\nRUN(cat ${{ARCADIA_ROOT}}/{PROJECT}/data.txt)\nDATA(arcadia/{PROJECT}/data.txt)\nPEERDIR({PROJECT}/lib)\nEND()\n")
+        self.write("data.txt", "42\n")
+        self.write("lib/ya.make", "LIBRARY()\nSRCS(answer.cpp)\nEND()\n")
+        self.write("lib/answer.cpp", "int answer() { return 42; }\n")
+        graph = self.graph("-t")
+        self.assertEqual([], [out for node in graph["graph"] for out in node["outputs"] if f"/{PROJECT}/lib/" in out])
+        node = self.node(graph, "test-results/exectest/meta.json")
+        args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+        resources = [args[i + 1].split("::")[0] for i, arg in enumerate(args) if arg == "--global-resource"]
+        self.assertIn("CLANG_RESOURCE_GLOBAL", resources)
+        self.assertIn("YMAKE_PYTHON3_RESOURCE_GLOBAL", resources)
 
     def test_exectest_keeps_runtime_variables(self):
         self.write("ya.make", f"EXECTEST()\nINCLUDE(${{ARCADIA_ROOT}}/{PROJECT}/run.inc)\nENV(E2E_DIRECT=${{ARCADIA_ROOT}}/{PROJECT}/data.txt)\nENV(E2E_CUR=${{CURDIR}}/x E2E_SRC=${{TEST_SOURCE_ROOT}}/z E2E_PY=${{PYTHON_BIN}} E2E_U=${{E2E_UNDEFINED}}/u)\nEND()\n")
