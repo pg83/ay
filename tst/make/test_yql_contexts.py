@@ -4,6 +4,19 @@ from tst.make.lib import MakeTest, PROJECT
 
 
 class YqlContextsTest(MakeTest):
+    def test_dynamic_library_links_with_own_global_cflags(self):
+        self.write("ya.make", "RECURSE(udf dll)\n")
+        self.write("udf/ya.make", "YQL_UDF_CONTRIB(answer_udf)\nSRCS(answer.cpp)\nCFLAGS(-DE2E_OWN)\nIF (OS_LINUX)\n    CFLAGS(GLOBAL -DE2E_GLOBAL)\nENDIF()\nEND()\n")
+        self.write("udf/answer.cpp", 'extern "C" int answer() { return 42; }\n')
+        self.write("dll/ya.make", "DLL(answer)\nSRCS(answer.cpp)\nCFLAGS(-DE2E_OWN GLOBAL -DE2E_GLOBAL)\nEND()\n")
+        self.write("dll/answer.cpp", 'extern "C" int answer() { return 42; }\n')
+        graph = self.graph()
+        for output in ("udf/libanswer_udf.so", "dll/libanswer.so"):
+            with self.subTest(output=output):
+                node = self.node(graph, output)
+                args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+                self.assertLess(args.index("-DE2E_OWN"), args.index("-DE2E_GLOBAL"))
+
     def test_python_udf_main_module_resource_name(self):
         self.write("ya.make", "YQL_PYTHON_UDF(answer)\nREGISTER_YQL_PYTHON_UDF()\nPY_SRCS(__main__.py)\nEND()\n")
         self.write("__main__.py", "def answer(): return 42\n")
