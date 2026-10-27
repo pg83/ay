@@ -513,12 +513,10 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 	}
 
 	for _, a := range r.args {
-		output := slices.Contains(r.out, a) || slices.Contains(r.noauto, a)
-
 		switch {
-		case (output || ins[a]) && (strings.HasPrefix(a, "$(S)/") || strings.HasPrefix(a, "$(B)/")):
+		case (r.output(a) || ins[a]) && javaRootedArg(a):
 			run = append(run, intern(a).any())
-		case output:
+		case r.output(a):
 			run = append(run, copyFileOutputVFS(dir, a).any())
 		case ins[a]:
 			run = append(run, input(a).any())
@@ -586,17 +584,29 @@ func (ctx *GenCtx) emitJavaRunProgram(dir string, platform *Platform, jdk string
 	b.emitTo(ref)
 }
 
+func (r *javaRunProgram) output(a string) bool {
+	return slices.Contains(r.out, a) || slices.Contains(r.noauto, a)
+}
+
+func javaRootedArg(a string) bool {
+	return strings.HasPrefix(a, "$(S)/") || strings.HasPrefix(a, "$(B)/")
+}
+
 func javaRunProgramOutputs(dir string, r javaRunProgram) []VFS {
 	var outputs []VFS
 
-	for _, name := range concat(r.args, r.noauto, r.out) {
-		if slices.Contains(r.out, name) || slices.Contains(r.noauto, name) {
-			outputs = append(outputs, copyFileOutputVFS(dir, name))
+	for _, a := range r.args {
+		if r.output(a) && !javaRootedArg(a) {
+			outputs = append(outputs, copyFileOutputVFS(dir, a))
 		}
 	}
 
 	if r.gentar != 0 {
 		outputs = append(outputs, r.gentar)
+	}
+
+	for _, name := range concat(r.noauto, r.out) {
+		outputs = append(outputs, copyFileOutputVFS(dir, name))
 	}
 
 	return dedupVFSKeepOrder(outputs)

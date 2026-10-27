@@ -299,6 +299,33 @@ class JavaGeneratorInputsTest(MakeTest):
         self.assertIn("$(JDK21)/bin/java", args)
         self.assertIn(f"$(B)/{PROJECT}//nested/answer.yaml", args)
 
+    def test_generator_archive_precedes_rooted_outputs(self):
+        # The outputs follow the command: the OUT_DIR archive, then
+        # OUT_NOAUTO; an argument written from a root variable stays text and
+        # does not move its output ahead. The archive is the main output.
+        self.generator()
+        call = ("Generator -episode ${BINDIR}/generated/answer.episode.xml -d ${BINDIR}/generated/answer "
+                f"CLASSPATH {PROJECT}/tool OUT_NOAUTO ${{BINDIR}}/generated/answer.episode.xml OUT_DIR ${{BINDIR}}/generated/answer")
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM({call})\nJAVA_SRCS(SRCDIR ${{BINDIR}}/generated/answer **/*)\nEND()\n")
+        node = self.node(self.graph(), "generated/answer.episode.xml")
+        self.assertEqual(len(node["outputs"]), 2)
+        self.assertRegex(node["outputs"][0], rf"^\$\(B\)/{PROJECT}/generated/answer\.[0-9a-f]{{32}}\.gentar$")
+        self.assertEqual(node["outputs"][1], f"$(B)/{PROJECT}/generated/answer.episode.xml")
+
+    def test_generator_argument_outputs_lead(self):
+        # Arguments naming an OUT or OUT_NOAUTO file become outputs in place
+        # inside the arguments, ahead of the archive; the rest follow in
+        # command order: OUT_NOAUTO, then OUT.
+        self.generator()
+        call = ("Generator Second.java First.java -d ${BINDIR}/generated/answer "
+                f"CLASSPATH {PROJECT}/tool OUT Third.java First.java Second.java OUT_NOAUTO Late.txt OUT_DIR ${{BINDIR}}/generated/answer")
+        self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM({call})\nJAVA_SRCS(SRCDIR ${{BINDIR}}/generated/answer **/*)\nEND()\n")
+        node = self.node(self.graph(), "First.java")
+        self.assertEqual(len(node["outputs"]), 5)
+        self.assertEqual(node["outputs"][:2], [f"$(B)/{PROJECT}/Second.java", f"$(B)/{PROJECT}/First.java"])
+        self.assertRegex(node["outputs"][2], rf"^\$\(B\)/{PROJECT}/generated/answer\.[0-9a-f]{{32}}\.gentar$")
+        self.assertEqual(node["outputs"][3:], [f"$(B)/{PROJECT}/Late.txt", f"$(B)/{PROJECT}/Third.java"])
+
     def test_build_root_cwd(self):
         self.generator()
         self.write("ya.make", f"JAVA_LIBRARY(answer)\nJDK_VERSION(17)\nRUN_JAVA_PROGRAM(Generator CLASSPATH {PROJECT}/tool CWD ${{ARCADIA_BUILD_ROOT}} OUT Generated.java)\nJAVA_SRCS(Generated.java)\nEND()\n")
