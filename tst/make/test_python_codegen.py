@@ -1,3 +1,6 @@
+import base64
+import hashlib
+
 from tst.make.lib import MakeTest, PROJECT
 
 
@@ -7,6 +10,18 @@ class PythonCodegenTest(MakeTest):
         self.write("src/answer.pyi", "def answer() -> int: ...\n")
         graph = self.graph()
         self.assertTrue(any(f"$(S)/{PROJECT}/src/answer.pyi" in node["inputs"] for node in graph["graph"]))
+
+    def test_fbs_python_source_name_keeps_arcadia_root(self):
+        self.write("ya.make", f"PY3_PROGRAM(answer)\nPY_SRCS(MAIN main.py)\nPEERDIR({PROJECT}/schema/py)\nEND()\n")
+        self.write("main.py", "print(42)\n")
+        self.write("schema/py/ya.make", f"FBS_LIBRARY()\nSRCS(${{ARCADIA_ROOT}}/{PROJECT}/schema/answer.fbs)\nEND()\n")
+        self.write("schema/answer.fbs", "namespace e2e;\ntable Answer { value: int; }\nroot_type Answer;\n")
+        # pybuild names the archive listid([(path, module)]) of the PY_SRCS
+        # argument as written, ${ARCADIA_ROOT} included.
+        path = f"${{ARCADIA_ROOT}}/{PROJECT}/schema/answer"
+        items = [(path + ".fbs", f"{PROJECT}.schema.py." + path.replace("/", "."))]
+        name = base64.b32encode(hashlib.md5(str(items).encode()).digest()).decode().lower().rstrip("=")
+        self.node(self.graph(), f"schema/py/{name}.py3.fbs.pysrc")
 
     def test_cython_output_modes(self):
         for mode in ("CYTHON_C", "CYTHON_CPP", "CYTHON_C_H", "CYTHON_CPP_H", "CYTHON_C_API_H", "CYTHON_CPP_API_H"):

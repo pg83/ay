@@ -1604,7 +1604,7 @@ func collectStmts(ctx *GenCtx, modulePath string, kind ModuleKind, language Lang
 			}
 
 			if isPythonProtoModule(d) || d.multimodule == tokFbsLibrary && language == LangPy {
-				stmt := UnknownStmt{Name: tokPySrcs, Args: expandStmtTokens(v.Sources, env)}
+				stmt := UnknownStmt{Name: tokPySrcs, Args: expandRootDeferredTokens(v.Sources, env, tokenExpandPathArguments)}
 
 				d.pySrcGroups = append(d.pySrcGroups, PySrcGroup{DeclSeq: d.nextDeclSeq(), Statement: &stmt, ResourceOffset: len(d.resources), Prio: stmtPrioSrcs})
 
@@ -4433,6 +4433,12 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 			continue
 		}
 
+		literal := a.string()
+
+		if !d.usePython2 && strings.ContainsRune(literal, '$') {
+			a = internStr(expandToken(literal, env, tokenExpandArguments)).any()
+		}
+
 		src, modNameOverride, explicitModule := strings.Cut(a.string(), "=")
 
 		if extIsGztproto(src) {
@@ -4473,13 +4479,13 @@ func collectPySrcGroup(fs FS, modulePath string, v UnknownStmt, d *ModuleData, e
 		lintPy = lintPy || extIsPy(src)
 
 		if strings.HasSuffix(src, ".fbs") {
-			modName := modNameOverride
+			path, modName, _ := strings.Cut(literal, "=")
 
 			if modName == "" {
-				modName = pythonModuleName(modulePath, strings.TrimSuffix(src, ".fbs"), topLevel, namespace)
+				modName = pythonModuleName(modulePath, strings.TrimSuffix(path, ".fbs"), topLevel, namespace)
 			}
 
-			d.pySrcGroups[group].Fbs = append(d.pySrcGroups[group].Fbs, PyFbsSource{Path: src, Module: modName})
+			d.pySrcGroups[group].Fbs = append(d.pySrcGroups[group].Fbs, PyFbsSource{Path: path, Module: modName})
 			d.peerdirs = append(d.peerdirs, strContribPythonFlatbuffers.any())
 
 			continue
