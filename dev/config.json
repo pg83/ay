@@ -3860,7 +3860,7 @@
       "ydo/balance"
     ],
     "target": "ydo/balance",
-    "xfail": true,
+    "xfail": false,
     "env": {
       "AUTOCHECK": "1",
       "TOOLCHAIN": "",
