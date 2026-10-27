@@ -31,3 +31,18 @@ class ResourceChunksTest(MakeTest):
         resources = " ".join(f"- e2e.{i:04d}=" + "x" * 90 for i in range(160))
         self.write("ya.make", f"LIBRARY()\nRESOURCE({resources})\nEND()\n")
         self.graph("--target-platform=default-darwin-arm64")
+
+    def test_resource_files_chunk_keeps_rootrel_input(self):
+        files = [f"d{index:03d}xxxx/conftest.py" for index in range(40)]
+        for name in files:
+            self.write(name, "VALUE = 42\n")
+        self.write("ya.make", "LIBRARY()\nRESOURCE_FILES(\n" + "\n".join(files) + "\n)\nEND()\n")
+        graph = self.graph("--target-platform=default-linux-x86_64")
+        compressors = [node for node in graph["graph"] if any(path.endswith(".yasm") and "/join_" not in path for path in node["outputs"])]
+        self.assertGreaterEqual(len(compressors), 2)
+        for node in compressors:
+            args = [arg for command in node["cmds"] for arg in command["cmd_args"]]
+            values = [args[index + 1] for index, arg in enumerate(args) if arg == "-"]
+            self.assertTrue(values)
+            for value in values:
+                self.assertIn(f"$(S)/{value}", node["inputs"])

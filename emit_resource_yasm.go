@@ -31,6 +31,22 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 
 		var inputs, opaque []ANY
 
+		dedupers.with(func(seen *DeDuper) {
+			for _, item := range chunk {
+				input := item.input()
+
+				if input == 0 || !seen.add(input.strID()) {
+					continue
+				}
+
+				if slices.Contains(textInputs, input) {
+					opaque = append(opaque, input.any())
+				} else {
+					inputs = append(inputs, input.any())
+				}
+			}
+		})
+
 		for _, item := range chunk {
 			label := "ro_" + e.resourceHash([]string{item.Path, item.Key}, p.Tag)
 			output := label + ".rodata"
@@ -45,13 +61,6 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 			} else {
 				compressed = append(compressed, item.Path, output)
 				args = append(args, item.input().any(), internStr(output).any())
-
-				if slices.Contains(textInputs, item.input()) {
-					opaque = append(opaque, item.input().any())
-				} else {
-					inputs = append(inputs, item.input().any())
-				}
-
 				outputs = append(outputs, internStr(output).any())
 				srcHash = append(srcHash, label+"="+item.Key)
 			}
