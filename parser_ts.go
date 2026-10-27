@@ -53,20 +53,13 @@ func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[
 			}
 		case s[i] == '\'' || s[i] == '"' || s[i] == '`':
 			quote := s[i]
+			body := i + 1
 
-			i++
-
-			for i < len(s) {
-				c := s[i]
-
-				i++
-
-				if c == quote {
-					break
-				}
-
-				if c == '\\' && i < len(s) {
+			for i = body; i < len(s); i++ {
+				if s[i] == quote && i > body && s[i-1] != '\\' {
 					i++
+
+					break
 				}
 			}
 		case isParserIdentContinuation(s, i) || s[i] == '$':

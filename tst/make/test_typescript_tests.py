@@ -40,3 +40,21 @@ class TypescriptTests(MakeTest):
         self.write("tests/ya.make", f"TS_TEST_FOR({PROJECT})\nTS_TEST(test node --test)\nEND()\n")
         graph = self.graph("-t")
         self.assertTrue(any("run_ts_check" in json.dumps(node.get("cmds", [])) for node in graph["graph"]))
+
+    def test_import_scan_string_ends(self):
+        # The import scanner closes a string at a quote that follows a
+        # non-backslash character of its body: an empty string or one ending
+        # in an escaped backslash runs on to the next quote, hiding imports.
+        self.package()
+        self.write("vitest.config.ts", "export default {};\n")
+        self.write("tests/ya.make", f"TS_TEST_VITEST_FOR({PROJECT})\nTS_TEST_SRCS(../src)\nTS_TEST_CONFIG(../vitest.config.ts)\nEND()\n")
+        self.write("src/first.ts", "export const first = 1;\n")
+        self.write("src/later.ts", "export const later = 2;\n")
+        for literal in ("''", "'\\\\'", '""'):
+            with self.subTest(literal=literal):
+                self.write("src/answer.spec.ts", f'const first = await import("./first");\nlet value = {literal};\nconst later = await import("./later");\n')
+                graph = self.graph("-t")
+                nodes = [node for node in graph["graph"] if any(path.endswith(".ts_test.fake") for path in node["outputs"])]
+                self.assertEqual(len(nodes), 1)
+                self.assertIn(f"$(S)/{PROJECT}/src/first.ts", nodes[0]["inputs"])
+                self.assertNotIn(f"$(S)/{PROJECT}/src/later.ts", nodes[0]["inputs"])
