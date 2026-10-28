@@ -116,7 +116,11 @@ func (body *confMacroBody) addLine(line string) {
 }
 
 func parseConfMacroSignature(rel, params string) (sig ConfMacroSignature, specialized bool) {
-	for _, param := range splitConfMacroParams(params) {
+	split := splitConfMacroParams(params, confReadScratch.params[:0])
+
+	defer func() { confReadScratch.params = split[:0] }()
+
+	for _, param := range split {
 		if strings.HasPrefix(param, `"`) {
 			specialized = true
 
@@ -194,9 +198,7 @@ func parseConfMacroSignature(rel, params string) (sig ConfMacroSignature, specia
 	return sig, specialized
 }
 
-func splitConfMacroParams(params string) []string {
-	var out []string
-
+func splitConfMacroParams(params string, out []string) []string {
 	quoted, start := false, 0
 
 	for i := 0; i <= len(params); i++ {

@@ -18,6 +18,7 @@ var (
 var confReadScratch struct {
 	frames  []confParseFrame
 	pending []byte
+	params  []string
 }
 
 const (
