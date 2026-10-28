@@ -6,6 +6,7 @@ var (
 	cythonCppKV          = KV{P: pkCY, PC: pcYellow}
 	cythonPy2SysIncludes = []VFS{contribToolsCythonPy2CythonIncludes}
 	cythonPy3SysIncludes = []VFS{contribToolsCythonCythonIncludes}
+	cythonInducedInputs  [2][2]cythonInducedInputsEntry
 )
 
 var cythonNumpyAddIncl = []VFS{
@@ -463,6 +464,12 @@ func cythonCppInducedInputs(cMode, py2 bool) (toolInputs, emittedInputs []VFS) {
 		script, outputIncludes, embedded = contribToolsCythonPy2CythonPy, py2CythonOutputIncludes, py2CythonEmbeddedFiles
 	}
 
+	cache := &cythonInducedInputs[btoi(cMode)][btoi(py2)]
+
+	if cache.built {
+		return cache.tool, cache.emitted
+	}
+
 	toolInputs = []VFS{script}
 	emittedInputs = nil
 
@@ -481,7 +488,22 @@ func cythonCppInducedInputs(cMode, py2 bool) (toolInputs, emittedInputs []VFS) {
 		emittedInputs = append(emittedInputs, v)
 	}
 
+	*cache = cythonInducedInputsEntry{tool: toolInputs, emitted: emittedInputs, built: true}
+
 	return toolInputs, emittedInputs
+}
+
+type cythonInducedInputsEntry struct {
+	tool, emitted []VFS
+	built         bool
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+
+	return 0
 }
 
 func cythonToolInputs(na *NodeArenas, inputs, sourceInputs []VFS) []VFS {

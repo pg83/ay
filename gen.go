@@ -1123,10 +1123,10 @@ func applyImplicitPeerdirs(ctx *GenCtx, instance ModuleInstance, d *ModuleData) 
 	pythonProtoVariant := isPythonProtoModule(d)
 
 	if pyLibraryAutoPythonPeer(d.moduleStmt.Name) && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
-		d.peerdirs = append([]ANY{strContribLibsPython.any()}, d.peerdirs...)
+		d.peerdirs = prependAny(d.peerdirs, strContribLibsPython.any())
 	} else if pythonProtoVariant && !d.noPythonIncl && instance.Path.relString() != "contrib/libs/python" {
 		if moduleExcludesTag(d, protoModuleTag(LangCPP, d.moduleStmt.Schema)) {
-			d.peerdirs = append([]ANY{strContribLibsPython.any()}, d.peerdirs...)
+			d.peerdirs = prependAny(d.peerdirs, strContribLibsPython.any())
 		} else {
 			d.peerdirs = append(d.peerdirs, strContribLibsPython.any())
 		}

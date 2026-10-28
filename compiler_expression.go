@@ -8,7 +8,10 @@ import (
 	"unicode/utf8"
 )
 
-var commandExpressionPool = sync.Pool{New: func() any { return &commandExpressionScratch{} }}
+var (
+	commandExpressionPool = sync.Pool{New: func() any { return &commandExpressionScratch{} }}
+	compilerFlagExpanding = make([]string, 0, 32)
+)
 
 type commandExpressionScratch struct{ word, key []byte }
 
@@ -281,7 +284,8 @@ type compilerFlagBlocks struct {
 	arena    *NodeArenas
 	platform *Platform
 	input    ModuleCompileEnv
-	resolved [2]*CcModuleArgBlocks
+	resolved [2]CcModuleArgBlocks
+	built    [2]bool
 }
 
 func compilerCommandBlocks(raw *CcModuleArgBlocks, cxx bool) *CcModuleArgBlocks {
@@ -292,8 +296,8 @@ func compilerCommandBlocks(raw *CcModuleArgBlocks, cxx bool) *CcModuleArgBlocks 
 		language = 1
 	}
 
-	if blocks := binding.resolved[language]; blocks != nil {
-		return blocks
+	if binding.built[language] {
+		return &binding.resolved[language]
 	}
 
 	in := binding.input
@@ -318,15 +322,18 @@ func compilerCommandBlocks(raw *CcModuleArgBlocks, cxx bool) *CcModuleArgBlocks 
 		in.CXXFlags = nil
 	}
 
-	blocks := composeCCCommandArgBlocks(binding.arena, binding.platform, &in, raw.includes)
+	blocks := &binding.resolved[language]
+
+	*blocks = composeCCCommandArgBlocks(binding.arena, binding.platform, &in, raw.includes)
+
 	extra := compilerExtraCFlagsValue(in.CompilerEnv)
 
 	blocks.extraCFlags = extra.Args
 	blocks.resources = resourceKeyUnion(resources, extra.Resources)
 
-	binding.resolved[language] = &blocks
+	binding.built[language] = true
 
-	return &blocks
+	return blocks
 }
 
 func compilerExtraCFlags(env Environment) []ANY {

@@ -8,7 +8,10 @@ import (
 	"strings"
 )
 
-var envSYSINCL = internEnv(sysinclVar)
+var (
+	envSYSINCL          = internEnv(sysinclVar)
+	sysinclLowerScratch []byte
+)
 
 var confBindingScratch struct {
 	selected EnvStore
@@ -59,7 +62,18 @@ func (rec *SysIncl) setMapping(k []byte, paths []VFS) {
 	}
 
 	if rec.CaseInsensitive {
-		rec.pairs = append(rec.pairs, SysinclPair{keyCI: strings.ToLower(string(k)), paths: paths})
+		lower := sysinclLowerScratch[:0]
+
+		for _, c := range k {
+			if c >= 'A' && c <= 'Z' {
+				c += 'a' - 'A'
+			}
+
+			lower = append(lower, c)
+		}
+
+		sysinclLowerScratch = lower
+		rec.pairs = append(rec.pairs, SysinclPair{keyCI: internBytes(lower).string(), paths: paths})
 	} else {
 		rec.pairs = append(rec.pairs, SysinclPair{key: internBytes(k), paths: paths})
 	}

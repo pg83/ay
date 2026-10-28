@@ -111,3 +111,11 @@ func internAnyWords(args []ANY) STR {
 
 	return internBlock(block, k)
 }
+
+func prependAny(xs []ANY, x ANY) []ANY {
+	xs = append(xs, 0)
+	copy(xs[1:], xs)
+	xs[0] = x
+
+	return xs
+}

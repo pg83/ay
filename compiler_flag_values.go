@@ -89,7 +89,7 @@ func compilerCommandFlags(args []ANY, env Environment) CompilerFlagValue {
 		text := arg.relOrSelf().string()
 
 		if arg.vfs() != 0 || strings.ContainsAny(text, "$\\\"'&") || strings.ContainsFunc(text, unicode.IsSpace) {
-			values, identity := compilerFlagExpression(identity.string(), env, nil)
+			values, identity := compilerFlagExpression(identity.string(), env, compilerFlagExpanding[:0])
 
 			if parentUses != nil {
 				*parentUses = resourceKeyUnion(*parentUses, resources)

@@ -5346,7 +5346,7 @@ func expandEmbeddedDollarVars(s string, env Environment, phase TokenExpansion, t
 		return s
 	}
 
-	return string(b)
+	return internBytes(b).string()
 }
 
 func expandInFiles(files []ANY, noParse int, env Environment, evaluated bool) ([]ANY, int) {
