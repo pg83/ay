@@ -136,7 +136,10 @@ func (p *Platform) initConfModule(env Environment, name STR, tag string, origina
 
 				if assignment.clearInputs && assignment.value.kind == envAbsent {
 					delete(env.s.textInputs, assignment.key)
-					delete(env.s.resourceBindings, assignment.key)
+
+					if int(assignment.key) < len(env.s.resourceBindings) {
+						env.s.resourceBindings[assignment.key] = 0
+					}
 				}
 			}
 
