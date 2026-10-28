@@ -250,9 +250,11 @@ type GenCtx struct {
 }
 
 type moduleMemoEntry struct {
-	next    *moduleMemoEntry
-	result  *ModuleEmitResult
-	variant uint16
+	next     *moduleMemoEntry
+	result   *ModuleEmitResult
+	peer     PeerRequest
+	variant  uint16
+	resolved uint16
 }
 
 type moduleMemo struct {
@@ -1257,6 +1259,10 @@ func newModuleScanContext(ctx *GenCtx, instance ModuleInstance, d *ModuleData, c
 }
 
 func genModule(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResult) {
+	if instance.Peer != 0 {
+		return genRequestedPeer(ctx, instance)
+	}
+
 	at := ctx.enterExport()
 
 	defer func() { ctx.leaveExport(at, result) }()
@@ -1918,10 +1924,6 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 		peerVFS := source(peerPath)
 		kind := peerKinds[i]
 
-		if kind != peerKindUserPeer && !peerYaMakeExists(ctx.fs, peerVFS) {
-			continue
-		}
-
 		if instance.Language == LangFbsJavaNative {
 			parent := JavaModule{dir: instance.Path.relString(), instance: instance, unit: javaUnitFbs, data: &JavaData{}}
 
@@ -1934,15 +1936,15 @@ func genModuleImpl(ctx *GenCtx, instance ModuleInstance) (result *ModuleEmitResu
 
 		peerInstance := e.derivePeerInstanceVFS(peerVFS)
 
-		if isGoModuleType(d.moduleStmt.Name) && peerInstance.Language == LangGo && ctx.moduleName(peerPath) == tokRosLibrary {
-			cppSources := peerInstance
-
-			cppSources.Language = LangCPP
-			cppSources.Demand = demandNone
-			genModule(ctx, cppSources)
+		if kind != peerKindUserPeer {
+			peerInstance.Peer |= peerOptional
 		}
 
 		peerResult := genModule(ctx, peerInstance)
+
+		if peerResult == nil {
+			continue
+		}
 
 		if peerResult.isPROGRAM && !(isRustModule(d.moduleStmt.Name) && peerResult.ModuleStmtName == tokCrateProcMacro) {
 			if kind == peerKindUserPeer {
@@ -3095,25 +3097,41 @@ func (ctx *GenCtx) instanceVariant(in ModuleInstance) uint16 {
 }
 
 func (ctx *GenCtx) memoGet(in ModuleInstance) *ModuleEmitResult {
-	other := ctx.instanceVariant(in) &^ variantDemandMask
+	if entry := ctx.memoEntry(in); entry != nil {
+		return entry.result
+	}
+
+	return nil
+}
+
+func (ctx *GenCtx) memoEntry(in ModuleInstance) *moduleMemoEntry {
+	mask := ^uint16(0)
+
+	if in.Peer == 0 {
+		mask &^= variantDemandMask
+	}
+
+	other := ctx.instanceVariant(in) & mask
 
 	for entry := ctx.memo.heads.getSafe(uint32(in.Path.rel())); entry != nil; entry = entry.next {
-		if entry.variant&^variantDemandMask == other {
-			return entry.result
+		if entry.variant&mask == other && entry.peer == in.Peer {
+			return entry
 		}
 	}
 
 	return nil
 }
 
-func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) {
+func (ctx *GenCtx) memoPut(in ModuleInstance, result *ModuleEmitResult) *moduleMemoEntry {
 	path := uint32(in.Path.rel())
 	variant := ctx.instanceVariant(in)
 	head := ctx.memo.heads.getSafe(path)
 	entry := ctx.memo.entries.one()
 
-	*entry = moduleMemoEntry{next: head, result: result, variant: variant}
+	*entry = moduleMemoEntry{next: head, result: result, variant: variant, peer: in.Peer}
 	ctx.memo.heads.set(path, entry)
+
+	return entry
 }
 
 func (ctx *GenCtx) scannerForPlatform(p *Platform) *IncludeScanner {

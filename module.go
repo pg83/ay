@@ -74,9 +74,11 @@ type ModuleDemand uint8
 
 type ModuleInstance struct {
 	Path       VFS
+	PeerFrom   VFS
 	Kind       ModuleKind
 	Language   Language
 	Platform   *Platform
+	Peer       PeerRequest
 	Demand     ModuleDemand
 	YqlCurrent bool
 }

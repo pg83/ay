@@ -12,6 +12,7 @@ func (e *EmitContext) packagePeer(dir string) (*ModuleEmitResult, []VFS) {
 	name := e.ctx.moduleName(instance.Path.relString())
 
 	if name == tokPackage {
+		instance.Peer |= peerPackageContents
 		instance.Language = LangCPP
 	}
 

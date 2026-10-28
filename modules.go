@@ -298,6 +298,7 @@ type ModuleData struct {
 	python2Headers          bool
 	python3NativeIncl       bool
 	peerTags                []string
+	peerRequest             PeerRequest
 	unionExplicitOutputs    []ANY
 	pythonHeaderEnv         Environment
 	resourcePeerOverride    STR
@@ -5657,128 +5658,19 @@ func (e *EmitContext) derivePeerInstance(peerPath string) ModuleInstance {
 }
 
 func (e *EmitContext) derivePeerInstanceVFS(peerVFS VFS) ModuleInstance {
-	ctx, parent, d := e.ctx, e.instance, e.d
-	demand := e.peerDemand()
-	language := peerEntryLanguage(parent, d)
-
-	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokSandboxTask {
-		language = e.sandboxTaskPeerLanguage(peerVFS, language)
+	if e.d.peerRequest == 0 {
+		e.d.peerRequest = makePeerRequest(e.instance, e.d, Environment{s: &e.frame.ifEnv})
 	}
 
-	if language == LangPy2 && !(peerYaMakeExists(ctx.fs, peerVFS) && hasPy2Variant(ctx.moduleName(peerVFS.relString()))) {
-		language = LangCPP
-	}
-
-	if isRustModule(d.moduleStmt.Name) && envRustHost(Environment{s: &e.frame.ifEnv}) && ctx.moduleName(peerVFS.relString()) == tokCrate {
-		language = LangRustHost
-	}
-
-	if isGoModuleType(d.moduleStmt.Name) && peerYaMakeExists(ctx.fs, peerVFS) {
-		switch peerName := ctx.moduleName(peerVFS.relString()); {
-		case peerName == tokProtoLibrary || peerName == tokFbsLibrary || peerName == tokRosLibrary || peerName == tokMlaunchLibrary || peerName == tokMlaunchComponent || peerName == tokSdcDiagsLibrary:
-			language = LangGo
-
-			fallthrough
-		case isGoModuleType(peerName):
-			if demand == demandNone {
-				demand = demandSelf
-			}
-		}
-	}
-
-	if d.ros != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokRosLibrary {
-		language = parent.Language
-	}
-
-	if d.multimodule == tokMlaunchLibrary && parent.Language == LangPackage && ctx.moduleName(peerVFS.relString()) == tokMlaunchLibrary {
-		language = LangPackage
-	}
-
-	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokPackage {
-		language = LangPackage
-	}
-
-	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokSdcUnion {
-		language = sdcUnionPeerVariant(strings.Fields(Environment{s: &e.frame.ifEnv}.string(envPeerdirTags)))
-	}
-
-	peer := ModuleInstance{
+	return ModuleInstance{
 		Path:     peerVFS,
 		Kind:     KindLib,
-		Language: language,
-		Platform: parent.Platform,
-		Demand:   demand,
+		Language: peerEntryLanguage(e.instance, e.d),
+		Platform: e.instance.Platform,
+		Demand:   e.peerDemand(),
+		Peer:     e.d.peerRequest,
+		PeerFrom: e.instance.Path,
 	}
-
-	if peerYaMakeExists(ctx.fs, peerVFS) && isYqlUdfStaticModule(ctx.moduleName(peerVFS.relString())) && slices.Contains(strings.Fields(Environment{s: &e.frame.ifEnv}.string(envPeerdirTags)), "YQL_UDF_SHARED") {
-		peer.Kind = KindBin
-	}
-
-	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokGoDll {
-		peer.Platform = peer.Platform.pic()
-	}
-
-	if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokSandboxPy233Task {
-		peer = e.sandboxMixedTaskPeer(peer)
-	}
-
-	if isUnionModule(d.moduleStmt.Name) || d.moduleStmt.Name == tokPackageFinal || d.moduleStmt.Name == tokCiGroup {
-		if peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokPy3Program {
-			peer.Kind = KindBin
-		}
-	}
-
-	if d.yqlCurrent && peerYaMakeExists(ctx.fs, peerVFS) {
-		name := ctx.moduleName(peerVFS.relString())
-
-		peer.YqlCurrent = name == tokYqlLibrary || isYqlUdfStaticModule(name)
-	}
-
-	if d.peerTags != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokPy23NativeLibrary {
-		switch {
-		case slices.Contains(d.peerTags, "PY2_NATIVE"):
-			peer.Language = LangPy2
-		case slices.Contains(d.peerTags, "PY3_NATIVE"):
-			peer.Language = LangCPP
-		default:
-			throwFmt("gen: %s: no compatible Python header peer in %s", parent.Path.relString(), peerVFS.relString())
-		}
-	}
-
-	if d.peerTags != nil && peerYaMakeExists(ctx.fs, peerVFS) && ctx.moduleName(peerVFS.relString()) == tokProtoLibrary {
-		declaration := stmtsModuleDeclaration(moduleStmts(ctx, peerVFS.relString()))
-		matched := false
-
-		for _, candidateLanguage := range []Language{LangCPP, LangPy, LangPy2, LangGo} {
-			if slices.Contains(d.peerTags, protoModuleTag(candidateLanguage, declaration.Schema)) {
-				candidate := peer
-
-				candidate.Language = candidateLanguage
-
-				if demand == demandNone && ctx.roots[candidate] {
-					candidate.Demand = ctx.rootDemand
-				}
-
-				if genModule(ctx, candidate).protoExcluded {
-					continue
-				}
-
-				peer, matched = candidate, true
-
-				break
-			}
-		}
-
-		if !matched {
-			throwFmt("gen: %s: no compatible proto peer in %s", parent.Path.relString(), peerVFS.relString())
-		}
-	}
-
-	if demand == demandNone && ctx.roots[peer] {
-		peer.Demand = ctx.rootDemand
-	}
-
-	return peer
 }
 
 func hasPy2Variant(name TOK) bool {
