@@ -113,11 +113,13 @@ func (f *IncludeFixer) activate(id FixID, selectProducer func(NodeRef)) {
 	case fixIncludedSources, fixInputLoop:
 
 	case fixModuleRoots:
-		if info := s.codegen.moduleInputs(entry.file); info != nil {
-			for _, root := range info.IncludeRoots {
-				s.activateInclude(root, selectProducer)
-			}
+		roots := s.codegen.includeRoots(entry.file, vfsScratches.get())
+
+		for _, root := range roots {
+			s.activateInclude(root, selectProducer)
 		}
+
+		vfsScratches.put(roots)
 	default:
 		s.activateInclude(entry.file, selectProducer)
 	}
@@ -176,11 +178,13 @@ func (f *IncludeFixer) resolve(entry *includeFix, na *NodeArenas) {
 			}
 		}
 	case fixModuleRoots:
-		if info := s.codegen.moduleInputs(entry.file); info != nil {
-			for _, root := range info.IncludeRoots {
-				closure(root, true)
-			}
+		roots := s.codegen.includeRoots(entry.file, vfsScratches.get())
+
+		for _, root := range roots {
+			closure(root, true)
 		}
+
+		vfsScratches.put(roots)
 	}
 
 	entry.inputs = na.vfsList(inputs...)

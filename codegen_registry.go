@@ -77,12 +77,14 @@ type ModuleIncludedDeps struct {
 }
 
 type ModuleInputInfo struct {
-	IncludeRoots         []VFS
+	OwnRoots             []VFS
+	RootPeers            []VFS
 	Includes             []VFS
 	Globals              []VFS
 	GlobalInputs         []VFS
 	CythonGlobalIncludes []VFS
 	PassPeers            bool
+	AnyRoots             bool
 }
 
 type pendingEmitter interface {
@@ -362,7 +364,39 @@ func (r *CodegenRegistry) moduleInputs(path VFS) *ModuleInputInfo {
 	return info.moduleInputs()
 }
 
-func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, roots, globals, globalInputs, cythonIncludes []VFS, passPeers bool) {
+func (r *CodegenRegistry) includeRoots(output VFS, out []VFS) []VFS {
+	dedupers.with(func(seen *DeDuper) {
+		out = r.appendIncludeRoots(seen, output, out)
+	})
+
+	return out
+}
+
+func (r *CodegenRegistry) appendIncludeRoots(seen *DeDuper, output VFS, out []VFS) []VFS {
+	if !seen.addStable(output.strID()) {
+		return out
+	}
+
+	info := r.moduleInputs(output)
+
+	if info == nil || !info.AnyRoots {
+		return out
+	}
+
+	for _, root := range info.OwnRoots {
+		if seen.addStable(root.strID()) {
+			out = append(out, root)
+		}
+	}
+
+	for _, peer := range info.RootPeers {
+		out = r.appendIncludeRoots(seen, peer, out)
+	}
+
+	return out
+}
+
+func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, ownRoots, rootPeers, globals, globalInputs, cythonIncludes []VFS, passPeers, anyRoots bool) {
 	info, ok := r.byRel.get(output.rel())
 
 	if !ok {
@@ -378,7 +412,7 @@ func (r *CodegenRegistry) setModuleInputs(output VFS, moduleType TOK, includes, 
 		info.attributes.moduleInputs.put(info.id, inputs)
 	}
 
-	*inputs = ModuleInputInfo{Includes: includes, IncludeRoots: roots, Globals: globals, GlobalInputs: globalInputs, CythonGlobalIncludes: cythonIncludes, PassPeers: passPeers}
+	*inputs = ModuleInputInfo{Includes: includes, OwnRoots: ownRoots, RootPeers: rootPeers, Globals: globals, GlobalInputs: globalInputs, CythonGlobalIncludes: cythonIncludes, PassPeers: passPeers, AnyRoots: anyRoots}
 }
 
 func (r *CodegenRegistry) lookupSTR(id STR) *GeneratedFileInfo {
