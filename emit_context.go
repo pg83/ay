@@ -696,7 +696,7 @@ func (e *EmitContext) emit() {
 	e.filePending = scrub(e.filePending)
 
 	for _, cc := range e.ccPending {
-		e.emitCCWith(cc.src, cc.inputs, cc.ref)
+		e.emitCCWith(cc.src, cc.out, cc.inputs, cc.ref)
 	}
 
 	e.ccPending = scrub(e.ccPending)

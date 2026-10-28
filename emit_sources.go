@@ -72,7 +72,7 @@ func (e *EmitContext) emitOneSource(meta SrcMeta) {
 			srcVFS = e.sourceForEmission(meta)
 		}
 
-		ref, out, accepted := e.emitCCWith(srcVFS, e.ccInputsForSource(meta), meta.CompileRef)
+		ref, out, accepted := e.emitCCWith(srcVFS, 0, e.ccInputsForSource(meta), meta.CompileRef)
 
 		if accepted {
 			e.collectObj(ref, out, meta)

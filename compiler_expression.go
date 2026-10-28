@@ -318,7 +318,7 @@ func compilerCommandBlocks(raw *CcModuleArgBlocks, cxx bool) *CcModuleArgBlocks 
 		in.CXXFlags = nil
 	}
 
-	blocks := composeCCModuleArgBlocks(binding.arena, binding.platform, &in)
+	blocks := composeCCCommandArgBlocks(binding.arena, binding.platform, &in, raw.includes)
 	extra := compilerExtraCFlagsValue(in.CompilerEnv)
 
 	blocks.extraCFlags = extra.Args

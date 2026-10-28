@@ -147,17 +147,21 @@ func (e *EmitContext) moduleSourceVFS(src ANY) VFS {
 
 type CCPending struct {
 	src    VFS
+	out    VFS
 	inputs ModuleCCInputs
 	ref    NodeRef
 }
 
-func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS, bool) {
+func (e *EmitContext) emitCCWith(srcVFS, out VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS, bool) {
 	ctx := e.ctx
 
-	if e.deferCC {
+	if out == 0 {
 		srcRel := trimModulePrefix(srcVFS.relString(), e.instance.Path.relString())
-		out, _ := composeCCPaths(e.instance, srcRel, srcVFS, in, ccObjectSuffix(e.instance, in))
 
+		out, _ = composeCCPaths(e.instance, srcRel, srcVFS, in, ccObjectSuffix(e.instance, in))
+	}
+
+	if e.deferCC {
 		if !e.submitOutput(out) {
 			return 0, out, false
 		}
@@ -166,13 +170,13 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef
 			reserved = ctx.emit.reserve()
 		}
 
-		e.ccPending = append(e.ccPending, CCPending{src: srcVFS, inputs: in, ref: reserved})
+		e.ccPending = append(e.ccPending, CCPending{src: srcVFS, out: out, inputs: in, ref: reserved})
 
 		return reserved, out, true
 	}
 
 	if e.instance.Language == LangFbsJavaNative {
-		ref, out := e.bindFbsNativeSource(srcVFS, in, reserved)
+		ref, out := e.bindFbsNativeSource(srcVFS, out, in, reserved)
 
 		return ref, out, true
 	}
@@ -206,12 +210,12 @@ func (e *EmitContext) emitCCWith(srcVFS VFS, in ModuleCCInputs, reserved NodeRef
 	}
 
 	if e.d.multimodule == tokFbsLibrary {
-		ref, out := e.bindFbsNativeSource(srcVFS, in, reserved)
+		ref, out := e.bindFbsNativeSource(srcVFS, out, in, reserved)
 
 		return ref, out, true
 	}
 
-	ref, outPath, _ := e.composeCCNodeAt(srcVFS, in, ctx.host, reserved)
+	ref, outPath, _ := e.composeCCNodeAt(srcVFS, out, in, ctx.host, reserved)
 
 	return ref, outPath, true
 }
@@ -239,12 +243,11 @@ func (e *EmitContext) mainOutInducedInputs(na *NodeArenas, includeView Closure) 
 	return out[:len(out):len(out)]
 }
 
-func (e *EmitContext) composeCCNodeAt(srcVFS VFS, in ModuleCCInputs, hostP *Platform, reserved NodeRef) (NodeRef, VFS, InputChunks) {
+func (e *EmitContext) composeCCNodeAt(srcVFS, outVFS VFS, in ModuleCCInputs, hostP *Platform, reserved NodeRef) (NodeRef, VFS, InputChunks) {
 	instance := e.instance
 	na := e.ctx.na
 	srcRel := trimModulePrefix(srcVFS.relString(), instance.Path.relString())
-	suffix := ccObjectSuffix(instance, in)
-	outVFS, inVFS := composeCCPaths(instance, srcRel, srcVFS, in, suffix)
+	inVFS := srcVFS
 	isCxx := in.ForceCxx || isCxxSource(srcRel)
 
 	var langFlags []ANY
@@ -708,6 +711,31 @@ func suppressOptimize(cf []ANY) []ANY {
 }
 
 func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv) CcModuleArgBlocks {
+	incl := na.anys.alloc(len(ccIncludesPrefix) + len(in.AddIncl) + len(in.PeerAddInclGlobal))
+	k := copy(incl, ccIncludesPrefix)
+
+	for _, pt := range in.AddIncl {
+		incl[k] = in.InclArgs.arg(pt).any()
+		k++
+	}
+
+	for _, pt := range in.PeerAddInclGlobal {
+		incl[k] = in.InclArgs.arg(pt).any()
+		k++
+	}
+
+	na.anys.commit(k)
+
+	includes := incl[:k:k]
+	binding := na.flagBlocks.one()
+
+	*binding = compilerFlagBlocks{arena: na, platform: p, input: *in}
+	binding.input.CCBlocks = CcModuleArgBlocks{}
+
+	return CcModuleArgBlocks{compilerFlags: binding, includes: includes}
+}
+
+func composeCCCommandArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv, includes []ANY) CcModuleArgBlocks {
 	cflagsStr := p.CompileCFlags
 
 	if in.NoOptimize {
@@ -729,22 +757,6 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 
 	catboostStr := catboostOpenSourceChunk(p)
 	noLibc := p.NoLibcBlock
-	incl := na.anys.alloc(len(ccIncludesPrefix) + len(in.AddIncl) + len(in.PeerAddInclGlobal))
-	k := copy(incl, ccIncludesPrefix)
-
-	for _, pt := range in.AddIncl {
-		incl[k] = in.InclArgs.arg(pt).any()
-		k++
-	}
-
-	for _, pt := range in.PeerAddInclGlobal {
-		incl[k] = in.InclArgs.arg(pt).any()
-		k++
-	}
-
-	na.anys.commit(k)
-
-	includes := incl[:k:k]
 	warnC := cWarningChunk(na, in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
 
 	var flagBuf [13][]ANY
@@ -807,20 +819,14 @@ func composeCCModuleArgBlocks(na *NodeArenas, p *Platform, in *ModuleCompileEnv)
 			[]ANY{argSourceRoot.any(), strS.any(), argBuildRoot.any(), strB.any(), strWrapUnshareEnd.any()}, wrapHead)
 	}
 
-	binding := na.flagBlocks.one()
-
-	*binding = compilerFlagBlocks{arena: na, platform: p, input: *in}
-	binding.input.CCBlocks = CcModuleArgBlocks{}
-
 	return CcModuleArgBlocks{
-		compilerFlags: binding,
-		wrapHead:      wrapHead,
-		cHead:         na.anyList(in.TC.CC.any()),
-		cxxHead:       na.anyList(in.TC.CXX.any()),
-		includes:      includes,
-		flags:         na.anyConcat(flagParts...),
-		cxxTail:       na.anyConcat(cxxTailParts[:]...),
-		cPost:         na.anyConcat(in.COnlyFlags, in.PeerCOnlyFlagsGlobal, in.OwnCOnlyFlagsGlobal),
+		wrapHead: wrapHead,
+		cHead:    na.anyList(in.TC.CC.any()),
+		cxxHead:  na.anyList(in.TC.CXX.any()),
+		includes: includes,
+		flags:    na.anyConcat(flagParts...),
+		cxxTail:  na.anyConcat(cxxTailParts[:]...),
+		cPost:    na.anyConcat(in.COnlyFlags, in.PeerCOnlyFlagsGlobal, in.OwnCOnlyFlagsGlobal),
 	}
 }
 

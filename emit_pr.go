@@ -351,8 +351,8 @@ func prInputInducedIncludes(ctx *GenCtx, registry *CodegenRegistry, scanner *Inc
 					return
 				}
 
-				parsed = cached.includes()
-				_, passIncludes = cached.parser.(SwigIncludeDirectiveParser)
+				parsed = cached.includes(ctx.parsers.cache)
+				passIncludes = cached.parser == includeParserSwig
 			}
 
 			for _, bucket := range [...]ParsedIncludeBucket{parsedIncludesAll, parsedIncludesHeader, parsedIncludesCpp} {

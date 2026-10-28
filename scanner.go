@@ -428,7 +428,7 @@ func (sc *ScanCtx) setFileParser(file VFS) {
 		sc.parser = parser
 	} else if file.isSource() {
 		if cached, ok := sc.scanner.parsers.cache.parsed.get(file.rel()); ok {
-			sc.parser = cached.parser
+			sc.parser = sc.scanner.parsers.registry.parser(cached.parser)
 		}
 	}
 

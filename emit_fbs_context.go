@@ -28,9 +28,8 @@ type fbsContextBindings struct {
 	pins        []*PendingEmit
 }
 
-func (e *EmitContext) bindFbsNativeSource(src VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS) {
+func (e *EmitContext) bindFbsNativeSource(src, out VFS, in ModuleCCInputs, reserved NodeRef) (NodeRef, VFS) {
 	ctx := e.ctx
-	out, _ := composeCCPaths(e.instance, trimModulePrefix(src.relString(), e.instance.Path.relString()), src, in, ccObjectSuffix(e.instance, in))
 	bindings := &ctx.fbsBindings
 
 	if bindings.native == nil {
@@ -81,7 +80,7 @@ func (e *EmitContext) bindFbsNativeSource(src VFS, in ModuleCCInputs, reserved N
 				command.PerSourceCFlags = binding.localIn.PerSourceCFlags
 			}
 
-			e.composeCCNodeAt(src, command, ctx.host, binding.ref)
+			e.composeCCNodeAt(src, out, command, ctx.host, binding.ref)
 		})
 	}
 

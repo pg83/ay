@@ -26,7 +26,45 @@ var swigImplicitDirectives = func() []IncludeDirective {
 	return out
 }()
 
+var statelessIncludeParsers = [...]IncludeDirectiveParser{
+	includeParserNone:        nil,
+	includeParserC:           CIncludeDirectiveParser{},
+	includeParserGoCgo:       GoCgoIncludeDirectiveParser{},
+	includeParserRagel:       RagelIncludeDirectiveParser{},
+	includeParserFlatbuffers: FlatbuffersIncludeDirectiveParser{},
+	includeParserYasm:        YasmIncludeDirectiveParser{},
+	includeParserCython:      CythonIncludeDirectiveParser{},
+	includeParserSwig:        SwigIncludeDirectiveParser{},
+	includeParserSc:          ScIncludeDirectiveParser{},
+	includeParserLex:         LexIncludeDirectiveParser{},
+	includeParserTS:          TSIncludeDirectiveParser{},
+	includeParserRos:         RosIncludeDirectiveParser{},
+	includeParserFortran:     FortranIncludeDirectiveParser{},
+	includeParserNlg:         NlgIncludeDirectiveParser{},
+	includeParserSsqls:       SsqlsIncludeDirectiveParser{},
+}
+
 const directiveBlockHint = 1 << 14
+
+const (
+	includeParserNone IncludeParserKind = iota
+	includeParserC
+	includeParserGoCgo
+	includeParserRagel
+	includeParserFlatbuffers
+	includeParserYasm
+	includeParserCython
+	includeParserSwig
+	includeParserSc
+	includeParserLex
+	includeParserTS
+	includeParserRos
+	includeParserFortran
+	includeParserNlg
+	includeParserSsqls
+	includeParserProto
+	includeParserCfgProto
+)
 
 func isParserSpace(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\r' || b == '\n' || b == '\f' || b == '\v'
@@ -56,6 +94,60 @@ func cutParserKeyword(b []byte, keyword string) ([]byte, bool) {
 	}
 
 	return b, len(b) > 0
+}
+
+type IncludeParserKind uint8
+
+func includeParserKind(parser IncludeDirectiveParser) IncludeParserKind {
+	switch parser.(type) {
+	case nil:
+		return includeParserNone
+	case CIncludeDirectiveParser:
+		return includeParserC
+	case GoCgoIncludeDirectiveParser:
+		return includeParserGoCgo
+	case RagelIncludeDirectiveParser:
+		return includeParserRagel
+	case FlatbuffersIncludeDirectiveParser:
+		return includeParserFlatbuffers
+	case YasmIncludeDirectiveParser:
+		return includeParserYasm
+	case CythonIncludeDirectiveParser:
+		return includeParserCython
+	case SwigIncludeDirectiveParser:
+		return includeParserSwig
+	case ScIncludeDirectiveParser:
+		return includeParserSc
+	case LexIncludeDirectiveParser:
+		return includeParserLex
+	case TSIncludeDirectiveParser:
+		return includeParserTS
+	case RosIncludeDirectiveParser:
+		return includeParserRos
+	case FortranIncludeDirectiveParser:
+		return includeParserFortran
+	case NlgIncludeDirectiveParser:
+		return includeParserNlg
+	case SsqlsIncludeDirectiveParser:
+		return includeParserSsqls
+	case ProtoIncludeDirectiveParser:
+		return includeParserProto
+	case CfgProtoIncludeDirectiveParser:
+		return includeParserCfgProto
+	default:
+		panic("unregistered include parser")
+	}
+}
+
+func (r *IncludeDirectiveParserRegistry) parser(kind IncludeParserKind) IncludeDirectiveParser {
+	switch kind {
+	case includeParserProto:
+		return r.proto
+	case includeParserCfgProto:
+		return CfgProtoIncludeDirectiveParser{proto: r.proto}
+	default:
+		return statelessIncludeParsers[kind]
+	}
 }
 
 type IncludeDirectiveParser interface {
