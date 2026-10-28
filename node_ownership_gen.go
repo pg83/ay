@@ -71,6 +71,7 @@ func registerKnownGlobalChunks() {
 	registerOwnedSlice(ragel6ConstArgs)
 	registerOwnedSlice(rescompilersChunk)
 	registerOwnedSlice(rescompilersWithScriptChunk)
+	registerOwnedSlice(resourceCxxFlags)
 	registerOwnedSlice(rodataConstArgs)
 	registerOwnedSlice(rodataYasmConstArgs)
 	registerOwnedSlice(structCodegenOutputIncludes)

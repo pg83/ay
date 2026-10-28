@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	encb64 "encoding/base64"
 	enchex "encoding/hex"
-	"iter"
 	"sort"
 	"strings"
 )
@@ -17,6 +16,7 @@ var (
 	rawAuxKV                    = KV{P: pkPR, PC: pcYellow, ShowOut: true}
 	pyObjcopyKV                 = KV{P: pkPY, PC: pcYellow, ShowOut: true}
 	resKvMacroPrefix            = []byte("${")
+	resourceCxxFlags            = []ANY{argX.any(), argC.any()}
 )
 
 const (
@@ -95,6 +95,8 @@ type ObjcopyArgBlocks struct {
 }
 
 type ObjcopyEmitCtx struct {
+	unitElem           STR
+	deps               []NodeRef
 	rescompilerLDRef   NodeRef
 	rescompressorLDRef NodeRef
 	blocks             ObjcopyArgBlocks
@@ -114,6 +116,8 @@ func (e *EmitContext) objcopyEmitCtx() *ObjcopyEmitCtx {
 	*oc = ObjcopyEmitCtx{na: ctx.na}
 	oc.rescompilerLDRef, _ = ctx.tool(argToolsRescompiler)
 	oc.rescompressorLDRef, _ = ctx.tool(argToolsRescompressor)
+	oc.unitElem = internJoined("$S", cleanRel(e.instance.Path.relString()))
+	oc.deps = ctx.na.refList(oc.rescompilerLDRef, oc.rescompressorLDRef)
 	oc.blocks = composeObjcopyArgBlocks(ctx.na, d.tc, instancePlatform(e), Environment{s: &e.frame.ifEnv}.string(envYmakeObjcopyLargeResourceThr))
 
 	return oc
@@ -221,12 +225,20 @@ type ResourceItem struct {
 	AuxBuilds   []VFS
 }
 
-func (it ResourceItem) commandArgs() []ANY {
+func (it *ResourceItem) commandLen() int {
 	if it.ExpandedCmd.Args != nil {
-		return it.ExpandedCmd.Args
+		return len(it.ExpandedCmd.Args)
 	}
 
-	return []ANY{it.Cmd.any()}
+	return 1
+}
+
+func (it *ResourceItem) appendCommand(dst []ANY) []ANY {
+	if it.ExpandedCmd.Args != nil {
+		return append(dst, it.ExpandedCmd.Args...)
+	}
+
+	return append(dst, it.Cmd.any())
 }
 
 func (it ResourceItem) input() VFS {
@@ -290,31 +302,48 @@ func resourceItemCmdLen(it ResourceItem, objcopy bool) int {
 	return rootCmdLen + len(it.Path) + len(it.Key)
 }
 
-func resourceChunkEnds(items []ResourceItem, objcopy bool) iter.Seq[int] {
-	return func(yield func(int) bool) {
-		cmdLen := 0
+func resourceChunkEnd(items []ResourceItem) int {
+	cmdLen := 0
 
-		for i, it := range items {
-			cmdLen += resourceItemCmdLen(it, objcopy)
+	for i := range items {
+		cmdLen += resourceItemCmdLen(items[i], false)
 
-			if cmdLen >= maxCmdLen {
-				if !yield(i + 1) {
-					return
-				}
-
-				cmdLen = 0
-			}
-		}
-
-		if cmdLen > 0 {
-			yield(len(items))
+		if cmdLen >= maxCmdLen {
+			return i + 1
 		}
 	}
+
+	return len(items)
+}
+
+type ResourceChunkSize struct {
+	paths, kvs, args, sources, builds int
+}
+
+func (s *ResourceChunkSize) add(it *ResourceItem) {
+	if it.Path == "-" {
+		s.kvs++
+		s.args += it.commandLen()
+	} else {
+		s.paths++
+	}
+
+	if it.SourceInput != 0 {
+		s.sources++
+	}
+
+	if it.BuildInput != 0 {
+		s.builds++
+	}
+
+	s.builds += len(it.AuxBuilds)
 }
 
 func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS) {
 	objItems := e.objScratch[:0]
 	rawItems := e.rawScratch[:0]
+
+	var objSize ResourceChunkSize
 
 	defer func() {
 		e.objScratch = retainMaxLen(e.objScratch, objItems)
@@ -326,12 +355,13 @@ func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS)
 			return
 		}
 
-		r, o := e.packObjcopyResourceChunks(objItems, p)
+		r, o := e.packObjcopyResourceChunk(objItems, p, objSize)
 
-		refs = append(refs, r...)
-		outs = append(outs, o...)
+		refs = append(refs, r)
+		outs = append(outs, o)
 		e.objScratch = retainMaxLen(e.objScratch, objItems)
 		objItems = objItems[:0]
+		objSize = ResourceChunkSize{}
 	}
 
 	useYasm := e.instance.Platform.ISA == ISAX8664 && !p.DontCompress && !p.RawCompile.ForceCxx
@@ -341,21 +371,22 @@ func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS)
 			return
 		}
 
-		var r []NodeRef
-		var o []VFS
-
 		if useYasm {
-			r, o = e.packYasmResourceChunks(rawItems, p)
+			r, o := e.packYasmResourceChunks(rawItems, p)
+
+			refs = append(refs, r...)
+			outs = append(outs, o...)
 		} else {
 			if !p.RawCompile.ForceCxx {
-				p.RawCompile = CompileSpec{ForceCxx: true, CFlags: e.ctx.na.anyList(argX.any(), argC.any())}
+				p.RawCompile = CompileSpec{ForceCxx: true, CFlags: resourceCxxFlags}
 			}
 
-			r, o = e.packRawResourceChunks(rawItems, p)
+			ref, out := e.packRawResourceChunk(rawItems, p)
+
+			refs = append(refs, ref)
+			outs = append(outs, out)
 		}
 
-		refs = append(refs, r...)
-		outs = append(outs, o...)
 		e.rawScratch = retainMaxLen(e.rawScratch, rawItems)
 		rawItems = rawItems[:0]
 	}
@@ -369,6 +400,7 @@ func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS)
 
 		if resourceCanObjcopy(it.Path, it.Key) {
 			objItems = append(objItems, it)
+			objSize.add(&it)
 			objLen += resourceItemCmdLen(it, true)
 
 			if objLen >= maxCmdLen {
@@ -392,11 +424,11 @@ func (e *EmitContext) packResources(p ResourcePack) (refs []NodeRef, outs []VFS)
 	return refs, outs
 }
 
-func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p ResourcePack) (refs []NodeRef, outs []VFS) {
+func (e *EmitContext) packObjcopyResourceChunk(chunk []ResourceItem, p ResourcePack, size ResourceChunkSize) (NodeRef, VFS) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	oc := e.objcopyEmitCtx()
-	unitElem := internJoined("$S", cleanRel(instance.Path.relString())).string()
+	unitElem := oc.unitElem.string()
 	tag := ""
 
 	if p.Tag != 0 {
@@ -413,163 +445,140 @@ func (e *EmitContext) packObjcopyResourceChunks(items []ResourceItem, p Resource
 		ctx.resB64Scratch = b64Scratch
 	}()
 
-	lo := 0
+	nPaths, nKvs, nKvArgs := size.paths, size.kvs, size.args
+	sourceBound, buildBound := size.sources, size.builds
+	payloadCap := 0
 
-	for hi := range resourceChunkEnds(items, true) {
-		chunk := items[lo:hi]
-
-		lo = hi
-
-		nPaths, nKvs, nKvArgs, sourceBound, buildBound := 0, 0, 0, 0, 0
-
-		for _, it := range chunk {
-			if it.Path == "-" {
-				nKvs++
-				nKvArgs += len(it.commandArgs())
-			} else {
-				nPaths++
-			}
-
-			if it.SourceInput != 0 {
-				sourceBound++
-			}
-
-			if it.BuildInput != 0 {
-				buildBound++
-			}
-
-			buildBound += len(it.AuxBuilds)
-		}
-
-		payloadCap := 0
-
-		if nPaths > 0 {
-			payloadCap += 2 + 2*nPaths
-		}
-
-		if nKvs > 0 {
-			payloadCap += 1 + nKvArgs
-		}
-
-		payload := na.anys.alloc(payloadCap)[:0]
-
-		var resourceUses []STR
-
-		hashScratch = hashScratch[:0]
-
-		if nPaths > 0 {
-			payload = append(payload, argInputs.any())
-
-			for _, it := range chunk {
-				if it.Path != "-" {
-					payload = append(payload, it.input().any())
-					hashScratch = append(hashScratch, it.Path)
-				}
-			}
-
-			payload = append(payload, argKeys.any())
-
-			for _, it := range chunk {
-				if it.Path != "-" {
-					b64Scratch = encb64.StdEncoding.AppendEncode(b64Scratch[:0], strBytes(it.Key))
-
-					key := internBytes(b64Scratch)
-
-					payload = append(payload, key.any())
-					hashScratch = append(hashScratch, key.string())
-				}
-			}
-		}
-
-		if nKvs > 0 {
-			payload = append(payload, argKvs.any())
-
-			for _, it := range chunk {
-				if it.Path == "-" {
-					payload = append(payload, it.commandArgs()...)
-					resourceUses = resourceKeyUnion(resourceUses, it.ExpandedCmd.Resources)
-					hashScratch = append(hashScratch, it.Key)
-				}
-			}
-		}
-
-		na.anys.commit(len(payload))
-
-		payload = payload[:len(payload):len(payload)]
-
-		var adjacentSources, adjacentBuilds, tailBuilds []VFS
-
-		dedupers.with(func(deduper *DeDuper) {
-			adjacentSources = na.vfs.alloc(sourceBound)[:0]
-
-			for _, it := range chunk {
-				if it.SourceInput != 0 && deduper.add(it.SourceInput.strID()) {
-					adjacentSources = append(adjacentSources, it.SourceInput)
-				}
-			}
-
-			na.vfs.commit(len(adjacentSources))
-			adjacentSources = adjacentSources[:len(adjacentSources):len(adjacentSources)]
-			adjacentBuilds = na.vfs.alloc(buildBound)[:0]
-
-			for _, it := range chunk {
-				if it.BuildInput != 0 && deduper.add(it.BuildInput.strID()) {
-					adjacentBuilds = append(adjacentBuilds, it.BuildInput)
-				}
-			}
-
-			na.vfs.commit(len(adjacentBuilds))
-			adjacentBuilds = adjacentBuilds[:len(adjacentBuilds):len(adjacentBuilds)]
-
-			for _, v := range rescompilersWithScriptChunk {
-				deduper.add(v.strID())
-			}
-
-			tailBuilds = na.vfs.alloc(buildBound)[:0]
-
-			for _, it := range chunk {
-				for _, v := range it.AuxBuilds {
-					if v != 0 && deduper.add(v.strID()) {
-						tailBuilds = append(tailBuilds, v)
-					}
-				}
-			}
-
-			na.vfs.commit(len(tailBuilds))
-			tailBuilds = tailBuilds[:len(tailBuilds):len(tailBuilds)]
-		})
-
-		inputs := na.inputList(rescompilersChunk, adjacentSources, adjacentBuilds, objcopyScriptChunk, tailBuilds)
-		buildFrom := na.inputList(adjacentSources, adjacentBuilds, objcopyScriptChunk)
-
-		hashScratch = append(hashScratch, unitElem)
-
-		var hash string
-
-		hash, hashBuf = resourceHashInto(hashBuf, hashScratch, tag)
-
-		dir, sep := cleanRel(instance.Path.relString()), "/"
-
-		if dir == "" {
-			sep = ""
-		}
-
-		outputObj := build(dir, sep, "objcopy_", hash, ".o")
-		deps := depRefs(oc.rescompilerLDRef, oc.rescompressorLDRef)
-
-		refs = append(refs, e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, e.resourceTextInputs(chunk), deps))
-
-		meta := e.resourceSourceMeta(chunk, outputObj)
-
-		e.collectObj(refs[len(refs)-1], outputObj, meta)
-
-		outs = append(outs, outputObj)
+	if nPaths > 0 {
+		payloadCap += 2 + 2*nPaths
 	}
 
-	return refs, outs
+	if nKvs > 0 {
+		payloadCap += 1 + nKvArgs
+	}
+
+	payload := na.anys.alloc(payloadCap)
+	paths, keys, kvs := 0, 0, 0
+
+	if nPaths > 0 {
+		payload[0] = argInputs.any()
+		paths, keys, kvs = 1, nPaths+2, 2*nPaths+2
+		payload[nPaths+1] = argKeys.any()
+	}
+
+	if nKvs > 0 {
+		payload[kvs] = argKvs.any()
+		kvs++
+	}
+
+	var resourceUses []STR
+	hashScratch = hashScratch[:0]
+
+	for i := range chunk {
+		it := &chunk[i]
+
+		if it.Path == "-" {
+			args := it.ExpandedCmd.Args
+
+			if args == nil {
+				payload[kvs] = it.Cmd.any()
+				kvs++
+			} else {
+				kvs += copy(payload[kvs:], args)
+			}
+
+			resourceUses = resourceKeyUnion(resourceUses, it.ExpandedCmd.Resources)
+			hashScratch = append(hashScratch, it.Key)
+		} else {
+			payload[paths] = it.input().any()
+			paths++
+			b64Scratch = encb64.StdEncoding.AppendEncode(b64Scratch[:0], strBytes(it.Key))
+
+			key := internBytes(b64Scratch)
+
+			payload[keys] = key.any()
+			keys++
+			hashScratch = append(hashScratch, it.Path, key.string())
+		}
+	}
+
+	na.anys.commit(payloadCap)
+	payload = payload[:payloadCap:payloadCap]
+
+	var adjacentSources, adjacentBuilds, tailBuilds []VFS
+
+	dedupers.with(func(deduper *DeDuper) {
+		adjacentSources = na.vfs.alloc(sourceBound)[:0]
+
+		for i := range chunk {
+			it := &chunk[i]
+
+			if it.SourceInput != 0 && deduper.add(it.SourceInput.strID()) {
+				adjacentSources = append(adjacentSources, it.SourceInput)
+			}
+		}
+
+		na.vfs.commit(len(adjacentSources))
+		adjacentSources = adjacentSources[:len(adjacentSources):len(adjacentSources)]
+		adjacentBuilds = na.vfs.alloc(buildBound)[:0]
+
+		for i := range chunk {
+			it := &chunk[i]
+
+			if it.BuildInput != 0 && deduper.add(it.BuildInput.strID()) {
+				adjacentBuilds = append(adjacentBuilds, it.BuildInput)
+			}
+		}
+
+		na.vfs.commit(len(adjacentBuilds))
+		adjacentBuilds = adjacentBuilds[:len(adjacentBuilds):len(adjacentBuilds)]
+
+		for _, v := range rescompilersWithScriptChunk {
+			deduper.add(v.strID())
+		}
+
+		tailBuilds = na.vfs.alloc(buildBound)[:0]
+
+		for i := range chunk {
+			it := &chunk[i]
+
+			for _, v := range it.AuxBuilds {
+				if v != 0 && deduper.add(v.strID()) {
+					tailBuilds = append(tailBuilds, v)
+				}
+			}
+		}
+
+		na.vfs.commit(len(tailBuilds))
+		tailBuilds = tailBuilds[:len(tailBuilds):len(tailBuilds)]
+	})
+
+	inputs := na.inputList(rescompilersChunk, adjacentSources, adjacentBuilds, objcopyScriptChunk, tailBuilds)
+	buildFrom := na.inputList(adjacentSources, adjacentBuilds, objcopyScriptChunk)
+
+	hashScratch = append(hashScratch, unitElem)
+
+	var hash string
+
+	hash, hashBuf = resourceHashInto(hashBuf, hashScratch, tag)
+
+	dir, sep := cleanRel(instance.Path.relString()), "/"
+
+	if dir == "" {
+		sep = ""
+	}
+
+	outputObj := build(dir, sep, "objcopy_", hash, ".o")
+	deps := oc.deps
+	ref := e.buildObjcopyNode(oc, &pyObjcopyKV, outputObj, payload, resourceUses, inputs, buildFrom, e.resourceTextInputs(chunk), deps)
+	meta := e.resourceSourceMeta(chunk, outputObj)
+
+	e.collectObj(ref, outputObj, meta)
+
+	return ref, outputObj
 }
 
-func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack) (refs []NodeRef, outs []VFS) {
+func (e *EmitContext) packRawResourceChunk(chunk []ResourceItem, p ResourcePack) (NodeRef, VFS) {
 	ctx, instance := e.ctx, e.instance
 	na := ctx.na
 	rescompilerRef, _ := ctx.tool(argToolsRescompiler)
@@ -591,152 +600,149 @@ func (e *EmitContext) packRawResourceChunks(items []ResourceItem, p ResourcePack
 		ctx.resDashBuf = dashBuf[:0]
 	}()
 
-	lo := 0
+	buildBound, commandWords := 0, 2
 
-	for hi := range resourceChunkEnds(items, false) {
-		chunk := items[lo:hi]
+	for i := range chunk {
+		it := &chunk[i]
 
-		lo = hi
+		commandWords += 1 + it.commandLen()
 
-		buildBound, commandWords := 0, 2
-
-		for _, it := range chunk {
-			commandWords += 1 + len(it.commandArgs())
-
-			if it.input() != 0 {
-				buildBound++
-			}
+		if it.input() != 0 {
+			buildBound++
 		}
-
-		var payloadBuilds []VFS
-
-		hashScratch = hashScratch[:0]
-
-		for _, it := range chunk {
-			if it.Path == "-" {
-				hashScratch = append(hashScratch, "-", it.Key)
-			} else {
-				dashStart := len(dashBuf)
-
-				dashBuf = append(dashBuf, '-')
-				dashBuf = append(dashBuf, it.Key...)
-
-				hashScratch = append(hashScratch, it.Path, bytesString(dashBuf[dashStart:]))
-			}
-		}
-
-		dedupers.with(func(deduper *DeDuper) {
-			payloadBuilds = na.vfs.alloc(buildBound)[:0]
-
-			for _, it := range chunk {
-				input := it.input()
-
-				if input == 0 || !deduper.add(input.strID()) {
-					continue
-				}
-
-				payloadBuilds = append(payloadBuilds, input)
-			}
-
-			na.vfs.commit(len(payloadBuilds))
-			payloadBuilds = payloadBuilds[:len(payloadBuilds):len(payloadBuilds)]
-		})
-
-		hashScratch = append(hashScratch, unitElem)
-
-		var hash string
-
-		hash, hashBuf = resourceHashInto(hashBuf, hashScratch, tag)
-
-		aux := build(instance.Path.relString(), "/", hash, "_raw.auxcpp")
-		auxRef := ctx.emit.reserve()
-		meta := e.resourceSourceMeta(chunk, aux)
-
-		e.register(GeneratedFileInfo{
-			OutputPath:    aux,
-			ProducerRef:   auxRef,
-			GeneratorRefs: na.refList(rescompilerRef),
-		})
-
-		nodeCmd := na.anys.alloc(commandWords)[:0]
-
-		nodeCmd = append(nodeCmd, rescompilerBinVFS.any(), aux.any())
-		var resourceUses []STR
-
-		for _, it := range chunk {
-			if it.Path == "-" {
-				nodeCmd = append(nodeCmd, dash.any())
-				nodeCmd = append(nodeCmd, it.commandArgs()...)
-
-				resourceUses = resourceKeyUnion(resourceUses, it.ExpandedCmd.Resources)
-			} else {
-				key := it.Key
-
-				if it.Cmd != 0 {
-					key = it.Cmd.string()
-				}
-
-				nodeCmd = append(nodeCmd, it.input().any(), internV("-", key).any())
-			}
-		}
-
-		na.anys.commit(len(nodeCmd))
-
-		nodeCmd = nodeCmd[:len(nodeCmd):len(nodeCmd)]
-
-		deps := na.noderefs.alloc(1)
-		nd := 0
-
-		if rescompilerRef != 0 {
-			deps[nd] = rescompilerRef
-			nd++
-		}
-
-		na.noderefs.commit(nd)
-
-		deps = deps[:nd:nd]
-
-		env := envVarsVCS
-
-		var tail []VFS
-
-		dedupers.with(func(deduper *DeDuper) {
-			for _, v := range payloadBuilds {
-				deduper.add(v.strID())
-			}
-
-			tail = na.vfs.alloc(1)[:0]
-
-			if deduper.add(rescompilerBinVFS.strID()) {
-				tail = append(tail, rescompilerBinVFS)
-			}
-
-			na.vfs.commit(len(tail))
-		})
-
-		tail = tail[:len(tail):len(tail)]
-
-		e.emitReservedNode(Node{
-			Platform: instance.Platform,
-			Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Resources: resourceUses, Env: env}),
-			Env:      env,
-			Inputs:   NodeInputs{files: na.inputList(payloadBuilds, tail), roots: na.inputList(payloadBuilds), text: e.resourceTextInputs(chunk)},
-
-			Outputs: na.vfsList(aux),
-			KV:      &rawAuxKV,
-			DepRefs: deps,
-		}, auxRef)
-
-		ccRef := ctx.emit.reserve()
-
-		meta.Compile, meta.CompileRef = p.RawCompile, ccRef
-
-		e.emitOneSource(meta)
-		refs = append(refs, ccRef)
-		outs = append(outs, e.ccOutputFor(aux, p.RawCompile))
 	}
 
-	return refs, outs
+	var payloadBuilds []VFS
+
+	hashScratch = hashScratch[:0]
+
+	for i := range chunk {
+		it := &chunk[i]
+
+		if it.Path == "-" {
+			hashScratch = append(hashScratch, "-", it.Key)
+		} else {
+			dashStart := len(dashBuf)
+
+			dashBuf = append(dashBuf, '-')
+			dashBuf = append(dashBuf, it.Key...)
+
+			hashScratch = append(hashScratch, it.Path, bytesString(dashBuf[dashStart:]))
+		}
+	}
+
+	dedupers.with(func(deduper *DeDuper) {
+		payloadBuilds = na.vfs.alloc(buildBound)[:0]
+
+		for i := range chunk {
+			it := &chunk[i]
+			input := it.input()
+
+			if input == 0 || !deduper.add(input.strID()) {
+				continue
+			}
+
+			payloadBuilds = append(payloadBuilds, input)
+		}
+
+		na.vfs.commit(len(payloadBuilds))
+		payloadBuilds = payloadBuilds[:len(payloadBuilds):len(payloadBuilds)]
+	})
+
+	hashScratch = append(hashScratch, unitElem)
+
+	var hash string
+
+	hash, hashBuf = resourceHashInto(hashBuf, hashScratch, tag)
+
+	aux := build(instance.Path.relString(), "/", hash, "_raw.auxcpp")
+	auxRef := ctx.emit.reserve()
+	meta := e.resourceSourceMeta(chunk, aux)
+
+	e.register(GeneratedFileInfo{
+		OutputPath:    aux,
+		ProducerRef:   auxRef,
+		GeneratorRefs: na.refList(rescompilerRef),
+	})
+
+	nodeCmd := na.anys.alloc(commandWords)[:0]
+
+	nodeCmd = append(nodeCmd, rescompilerBinVFS.any(), aux.any())
+	var resourceUses []STR
+
+	for i := range chunk {
+		it := &chunk[i]
+
+		if it.Path == "-" {
+			nodeCmd = append(nodeCmd, dash.any())
+			nodeCmd = it.appendCommand(nodeCmd)
+
+			resourceUses = resourceKeyUnion(resourceUses, it.ExpandedCmd.Resources)
+		} else {
+			key := it.Key
+
+			if it.Cmd != 0 {
+				key = it.Cmd.string()
+			}
+
+			nodeCmd = append(nodeCmd, it.input().any(), internV("-", key).any())
+		}
+	}
+
+	na.anys.commit(len(nodeCmd))
+
+	nodeCmd = nodeCmd[:len(nodeCmd):len(nodeCmd)]
+
+	deps := na.noderefs.alloc(1)
+	nd := 0
+
+	if rescompilerRef != 0 {
+		deps[nd] = rescompilerRef
+		nd++
+	}
+
+	na.noderefs.commit(nd)
+
+	deps = deps[:nd:nd]
+
+	env := envVarsVCS
+
+	var tail []VFS
+
+	dedupers.with(func(deduper *DeDuper) {
+		for _, v := range payloadBuilds {
+			deduper.add(v.strID())
+		}
+
+		tail = na.vfs.alloc(1)[:0]
+
+		if deduper.add(rescompilerBinVFS.strID()) {
+			tail = append(tail, rescompilerBinVFS)
+		}
+
+		na.vfs.commit(len(tail))
+	})
+
+	tail = tail[:len(tail):len(tail)]
+
+	e.emitReservedNode(Node{
+		Platform: instance.Platform,
+		Cmds:     na.cmdList(Cmd{CmdArgs: na.chunkList(nodeCmd), Resources: resourceUses, Env: env}),
+		Env:      env,
+		Inputs:   NodeInputs{files: na.inputList(payloadBuilds, tail), roots: na.inputList(payloadBuilds), text: e.resourceTextInputs(chunk)},
+
+		Outputs: na.vfsList(aux),
+		KV:      &rawAuxKV,
+		DepRefs: deps,
+	}, auxRef)
+
+	ccRef := ctx.emit.reserve()
+
+	meta.Compile, meta.CompileRef = p.RawCompile, ccRef
+
+	e.emitOneSource(meta)
+
+	return ccRef, e.ccOutputFor(aux, p.RawCompile)
 }
 
 type ObjcopyEmitResult struct {

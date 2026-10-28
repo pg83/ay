@@ -17,14 +17,24 @@ func (e *EmitContext) emitAS(srcVFS VFS, in ModuleCCInputs, hostP *Platform) (No
 		return 0, outVFS, false
 	}
 
-	flags := commonCompilerFlagValue(in, instance.Platform)
-	cmdArgs := composeASCmdArgs(na, instance, outVFS, inVFS, in, flags.Args)
+	blocks := in.CCBlocks
+
+	if blocks.asHead == nil {
+		flags := commonCompilerFlagValue(in, instance.Platform)
+
+		blocks.asHead = composeASModuleArgs(na, instance, in, flags.Args)
+		blocks.asResources = flags.Resources
+	}
+
+	cmdArgs := na.chunkList(blocks.asHead, in.PerSourceCFlags,
+		na.anyList(argDashC.any(), argDashO.any(), outVFS.any(), inVFS.any()), blocks.includes)
+
 	env := hostP.toolEnv()
 
 	node := Node{
 		Platform: instance.Platform,
-		Cmds: na.cmdList(Cmd{CmdArgs: na.chunkList(cmdArgs),
-			Cwd: bldRootDirVFS, Resources: flags.Resources,
+		Cmds: na.cmdList(Cmd{CmdArgs: cmdArgs,
+			Cwd: bldRootDirVFS, Resources: blocks.asResources,
 			Env: env}),
 		Env:       env,
 		Inputs:    NodeInputs{files: na.inputList(na.vfsList(in.IncludeView.self), in.IncludeView.bucketList()...)},
@@ -42,20 +52,19 @@ func composeASPaths(instance ModuleInstance, srcVFS VFS) (out, input VFS) {
 	return build(instance.Path.relString(), "/", rel, ".o"), srcVFS
 }
 
-func composeASCmdArgs(na *NodeArenas, instance ModuleInstance, outVFS, inVFS VFS, in ModuleCCInputs, ownCFlags []ANY) []ANY {
+func composeASModuleArgs(na *NodeArenas, instance ModuleInstance, in ModuleCCInputs, ownCFlags []ANY) []ANY {
 	bundle := compileFlagBundleFor(instance.Platform)
 	prologueArgs := 2 + len(bundle.ArchArgs) + len(instance.Platform.SysrootArgs)
 	warnBundle := pickWarningFlags(in.Flags.NoCompilerWarnings, in.Flags.NoWShadow)
-	includes := composeASIncludes(in)
 	betweenBlocks := len(catboostOpenSourceDefine)
 
 	betweenBlocks += len(in.ModuleScopeCFlags)
 
 	fixed := prologueArgs + 2*len(debugPrefixMapFlags) + 2*len(xclangDebugCompilationDir) +
 		len(bundle.CFlags) + len(warnBundle) + len(bundle.Defines) + len(ownCFlags) +
-		len(bundle.NoLibcBlock) + betweenBlocks + len(bundle.NoLibcBlock) + len(in.SFlags) + len(in.PerSourceCFlags) + 4
+		len(bundle.NoLibcBlock) + betweenBlocks + len(bundle.NoLibcBlock) + len(in.SFlags)
 
-	cmdArgs := na.anys.alloc(fixed + len(includes))[:0]
+	cmdArgs := na.anys.alloc(fixed)[:0]
 
 	cmdArgs = append(cmdArgs, in.TC.CC.any(), instance.Platform.TargetArg.any())
 	cmdArgs = appendAnyLists(cmdArgs, bundle.ArchArgs)
@@ -67,22 +76,9 @@ func composeASCmdArgs(na *NodeArenas, instance ModuleInstance, outVFS, inVFS VFS
 
 	cmdArgs = appendCompileFlagPipeline(cmdArgs, bundle, warnBundle, bundle.Defines, ownCFlags, in.ModuleScopeCFlags, catboostOpenSourceDefineFor(instance.Platform))
 	cmdArgs = appendAnyLists(cmdArgs, in.SFlags)
-	cmdArgs = appendAnyLists(cmdArgs, in.PerSourceCFlags)
-	cmdArgs = append(cmdArgs, argDashC.any(), argDashO.any(), outVFS.any(), inVFS.any())
-	cmdArgs = append(cmdArgs, includes...)
 	na.anys.commit(len(cmdArgs))
 
 	return cmdArgs[:len(cmdArgs):len(cmdArgs)]
-}
-
-func composeASIncludes(in ModuleCCInputs) []ANY {
-	out := make([]ANY, 0, len(ccIncludesPrefix)+len(in.AddIncl)+len(in.PeerAddInclGlobal))
-
-	out = appendAnyLists(out, ccIncludesPrefix)
-	out = appendAddIncl(out, in.AddIncl, in.InclArgs)
-	out = appendAddIncl(out, in.PeerAddInclGlobal, in.InclArgs)
-
-	return out
 }
 
 func (e *EmitContext) emitLibraryAsmSource(meta SrcMeta, in ModuleCCInputs) {

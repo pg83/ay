@@ -21,7 +21,9 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 
 	lo := 0
 
-	for hi := range resourceChunkEnds(items, false) {
+	for lo < len(items) {
+		hi := lo + resourceChunkEnd(items[lo:])
+
 		var compressed []string
 		var args, outputs, srcgen []ANY
 		var srcHash []string
@@ -102,7 +104,7 @@ func (e *EmitContext) packYasmResourceChunks(items []ResourceItem, p ResourcePac
 
 	asmName, cppName := asmFiles[0], cppFiles[0]
 	globalAsm := len(asmFiles) > 1
-	spec := CompileSpec{ForceCxx: true, CFlags: na.anyList(argX.any(), argC.any())}
+	spec := CompileSpec{ForceCxx: true, CFlags: resourceCxxFlags}
 	ccRef := e.ctx.emit.reserve()
 
 	if globalAsm {

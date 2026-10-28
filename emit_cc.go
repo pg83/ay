@@ -651,6 +651,8 @@ func appendCompileFlagPipeline(cmdArgs []ANY, bundle CompileFlagBundle, warningB
 }
 
 type CcModuleArgBlocks struct {
+	asHead        []ANY
+	asResources   []STR
 	compilerFlags *compilerFlagBlocks
 	resources     []STR
 	extraCFlags   []ANY

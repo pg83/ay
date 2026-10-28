@@ -2,12 +2,15 @@ package main
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 )
 
-var globSegmentMemo DenseMap[STR, *regexp.Regexp]
+var (
+	globSegmentMemo = newIntValueMap[*globMatcher](0)
+	globExcludeMemo = newIntValueMap[*globMatcher](0)
+	globPartsMemo   = newIntValueMap[[]GlobPart](0)
+)
 
 const (
 	globFixed GlobPartKind = iota
@@ -21,17 +24,17 @@ type GlobPartKind uint8
 type GlobPart struct {
 	kind  GlobPartKind
 	fixed string
-	re    *regexp.Regexp
+	re    *globMatcher
 }
 
-func globSegmentMatcher(segment string) *regexp.Regexp {
-	id := internStr(segment)
+func globSegmentMatcher(segment string) *globMatcher {
+	id := mix64(uint64(internStr(segment)) + 1)
 
-	if re, ok := globSegmentMemo.get(id); ok {
-		return re
+	if re := globSegmentMemo.get(id); re != nil {
+		return *re
 	}
 
-	re := regexp.MustCompile("^" + globSegmentRegex(segment, true) + "$")
+	re := newGlobMatcher("^" + globSegmentRegex(segment, true) + "$")
 
 	globSegmentMemo.put(id, re)
 
@@ -39,6 +42,12 @@ func globSegmentMatcher(segment string) *regexp.Regexp {
 }
 
 func globParts(pattern string) []GlobPart {
+	id := mix64(uint64(internStr(pattern)) + 1)
+
+	if parts := globPartsMemo.get(id); parts != nil {
+		return *parts
+	}
+
 	var parts []GlobPart
 	var fixed []string
 
@@ -68,6 +77,8 @@ func globParts(pattern string) []GlobPart {
 
 	flush()
 
+	globPartsMemo.put(id, parts)
+
 	return parts
 }
 
@@ -94,7 +105,13 @@ func globSegmentRegex(seg string, single bool) string {
 	return b.String()
 }
 
-func globExcludeRegex(pattern string) *regexp.Regexp {
+func globExcludeMatcher(pattern string) *globMatcher {
+	id := mix64(uint64(internStr(pattern)) + 1)
+
+	if matcher := globExcludeMemo.get(id); matcher != nil {
+		return *matcher
+	}
+
 	var b strings.Builder
 
 	b.WriteByte('^')
@@ -125,20 +142,24 @@ func globExcludeRegex(pattern string) *regexp.Regexp {
 
 	b.WriteByte('$')
 
-	return regexp.MustCompile(b.String())
+	matcher := newGlobMatcher(b.String())
+
+	globExcludeMemo.put(id, matcher)
+
+	return matcher
 }
 
-func globExcluded(excludes []*regexp.Regexp, rel string, isDir bool) bool {
-	return slices.ContainsFunc(excludes, func(re *regexp.Regexp) bool {
-		return re.MatchString(rel) || isDir && re.MatchString(rel+"/")
+func globExcluded(excludes []*globMatcher, rel string, isDir bool) bool {
+	return slices.ContainsFunc(excludes, func(re *globMatcher) bool {
+		return re.match(rel) || isDir && re.match(rel+"/")
 	})
 }
 
 func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
-	excludes := make([]*regexp.Regexp, len(excludePatterns))
+	excludes := make([]*globMatcher, len(excludePatterns))
 
 	for i, p := range excludePatterns {
-		excludes[i] = globExcludeRegex(p)
+		excludes[i] = globExcludeMatcher(p)
 	}
 
 	parts := globParts(pattern)
@@ -168,7 +189,7 @@ func ymakeGlob(fs FS, pattern string, excludePatterns ...string) []string {
 				for _, packed := range fs.listdir(internStr(dir)).names {
 					name, isDir := STR(packed>>1).string(), packed&1 != 0
 
-					if !isDir && !last || part.kind == globPattern && !part.re.MatchString(name) {
+					if !isDir && !last || part.kind == globPattern && !part.re.match(name) {
 						continue
 					}
 

@@ -154,6 +154,8 @@ func (e *EmitContext) emitPyProtoOutputs(src string, srcGroup int, outputs []VFS
 }
 
 type PyPBModuleEmission struct {
+	toolInputs     []VFS
+	toolRefs       []NodeRef
 	mypyRef        NodeRef
 	mypyBinary     VFS
 	pluginRefs     []NodeRef
@@ -168,7 +170,7 @@ func (e *EmitContext) pyProtoIncludePlan() []VFS {
 	return concat(dedup(e.d.protoIncludeLocal), e.peers.ProtoInclude)
 }
 
-func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, event bool) *PyPBModuleEmission {
+func (e *EmitContext) newPyPBModuleEmission(event bool) *PyPBModuleEmission {
 	mode := 0
 
 	if event {
@@ -187,6 +189,13 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, event bool) *PyPBM
 
 	*pe = PyPBModuleEmission{}
 
+	protoc := argContribToolsProtoc
+
+	if d.usePython2 {
+		protoc = argContribToolsProtocOld
+	}
+
+	protocLDRef, protocBinary := ctx.tool(protoc)
 	plugins := d.pyProtoPlugins
 	mypy := d.pyProtoMypy && !event
 
@@ -276,6 +285,39 @@ func (e *EmitContext) newPyPBModuleEmission(protocBinary VFS, event bool) *PyPBM
 	na.anys.commit(len(tail))
 	pe.tail = tail[:len(tail):len(tail)]
 
+	toolRefs := na.noderefs.alloc(1 + len(pe.pluginRefs) + 1)[:0]
+
+	if protocLDRef != 0 {
+		toolRefs = append(toolRefs, protocLDRef)
+	}
+
+	for _, r := range pe.pluginRefs {
+		if r != 0 {
+			toolRefs = append(toolRefs, r)
+		}
+	}
+
+	if pe.mypyBinary != 0 && pe.mypyRef != 0 {
+		toolRefs = append(toolRefs, pe.mypyRef)
+	}
+
+	na.noderefs.commit(len(toolRefs))
+
+	toolRefs = toolRefs[:len(toolRefs):len(toolRefs)]
+
+	toolInputs := na.vfs.alloc(1 + len(pe.pluginBinaries) + 1)[:0]
+
+	toolInputs = append(toolInputs, protocBinary)
+	toolInputs = append(toolInputs, pe.pluginBinaries...)
+
+	if pe.mypyBinary != 0 {
+		toolInputs = append(toolInputs, pe.mypyBinary)
+	}
+
+	na.vfs.commit(len(toolInputs))
+	toolInputs = toolInputs[:len(toolInputs):len(toolInputs)]
+	pe.toolRefs, pe.toolInputs = toolRefs, toolInputs
+
 	return pe
 }
 
@@ -283,20 +325,13 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, protoSrcVFS VFS, srcGroup in
 	ctx, instance, d := e.ctx, e.instance, e.d
 	na := ctx.na
 	src := e.moduleSourceName(srcTok)
-	protoc := argContribToolsProtoc
-
-	if d.usePython2 {
-		protoc = argContribToolsProtocOld
-	}
-
-	protocLDRef, protocBinary := ctx.tool(protoc)
 	event := extIsEv(src)
 
 	if event {
 		src = srcTok.string()
 	}
 
-	pe := e.newPyPBModuleEmission(protocBinary, event)
+	pe := e.newPyPBModuleEmission(event)
 	scanCtx := d.scanCtx
 	protoRel := e.protoSourceRel(protoSrcVFS.string())
 	protoRelPath := protoRel.string()
@@ -330,22 +365,6 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, protoSrcVFS VFS, srcGroup in
 	na.chunks.commit(len(chunks))
 
 	cmdArgs := ArgChunks(chunks[:len(chunks):len(chunks)])
-	toolRefs := na.noderefs.alloc(1 + len(pe.pluginRefs) + 1)[:0]
-
-	for _, r := range append([]NodeRef{protocLDRef}, pe.pluginRefs...) {
-		if r != 0 {
-			toolRefs = append(toolRefs, r)
-		}
-	}
-
-	if pe.mypyBinary != 0 && pe.mypyRef != 0 {
-		toolRefs = append(toolRefs, pe.mypyRef)
-	}
-
-	na.noderefs.commit(len(toolRefs))
-
-	toolRefs = toolRefs[:len(toolRefs):len(toolRefs)]
-
 	protoCwd := srcRootDirVFS
 	generatedProto := protoSrcVFS.isBuild()
 
@@ -353,18 +372,6 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, protoSrcVFS VFS, srcGroup in
 		e.codegen.use(protoSrcVFS)
 		protoCwd = bldRootDirVFS
 	}
-
-	toolInputs := na.vfs.alloc(1 + len(pe.pluginBinaries) + 1)[:0]
-
-	toolInputs = append(toolInputs, protocBinary)
-	toolInputs = append(toolInputs, pe.pluginBinaries...)
-
-	if pe.mypyBinary != 0 {
-		toolInputs = append(toolInputs, pe.mypyBinary)
-	}
-
-	na.vfs.commit(len(toolInputs))
-	toolInputs = toolInputs[:len(toolInputs):len(toolInputs)]
 
 	sourceInputsHead := na.vfs.alloc(2)[:0]
 
@@ -407,9 +414,9 @@ func (e *EmitContext) emitPyProtoSource(srcTok ANY, protoSrcVFS VFS, srcGroup in
 	*pending = pyPBPending{
 		emit: e, ctx: ctx, instance: instance, scanner: e.scanner, scanCtx: scanCtx,
 		cmdArgs: cmdArgs, protoCwd: protoCwd,
-		toolInputs: toolInputs, sourceInputs: sourceInputsHead, protoInput: protoSrcVFS,
+		toolInputs: pe.toolInputs, sourceInputs: sourceInputsHead, protoInput: protoSrcVFS,
 		outputs: outputs, extOut: extOut,
-		toolRefs: toolRefs, pyPBRef: pyPBRef,
+		toolRefs: pe.toolRefs, pyPBRef: pyPBRef,
 	}
 
 	pyPBPE := e.pendingEmitter(pending)

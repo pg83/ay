@@ -82,6 +82,8 @@ type EmitContext struct {
 	pyPBOk             [2]bool
 	objcopyCtx         ObjcopyEmitCtx
 	objcopyOk          bool
+	pyccEmission       PyccTool
+	pyccOk             bool
 	protoResVal        ProtoSrcsResult
 }
 

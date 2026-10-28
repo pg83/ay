@@ -3,7 +3,6 @@ package main
 import (
 	"math"
 	"path"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -239,7 +238,7 @@ func explicitStyleCheck(name TOK, env Environment) StyleCheck {
 
 func collectStyleFiles(fs FS, module string, stmt UnknownStmt) []string {
 	var dirs, recursive, files []string
-	var excludes []*regexp.Regexp
+	var excludes []*globMatcher
 
 	ext := ".json"
 	yaml := stmt.Name == tokStyleYAML || stmt.Name == tokCollectYAML
@@ -260,7 +259,7 @@ func collectStyleFiles(fs FS, module string, stmt UnknownStmt) []string {
 			dst = nil
 		default:
 			if dst == nil {
-				excludes = append(excludes, globExcludeRegex(arg.string()))
+				excludes = append(excludes, globExcludeMatcher(arg.string()))
 			} else {
 				*dst = append(*dst, arg.string())
 			}

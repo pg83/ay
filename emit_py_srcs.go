@@ -224,7 +224,11 @@ func (e *EmitContext) pyYapycOutFor(ps PySrc) VFS {
 		token := strings.TrimPrefix(ps.Token.string(), "${ARCADIA_BUILD_ROOT}/")
 
 		if strings.Contains(token, "/") {
-			return build(rel, ".", pySrcYapycSuffix(e.instance.Path.relString()), e.pyYapycExt())
+			if e.d.pyYapycSuffix == "" {
+				e.d.pyYapycSuffix = pySrcYapycSuffix(e.instance.Path.relString())
+			}
+
+			return build(rel, ".", e.d.pyYapycSuffix, e.pyYapycExt())
 		}
 
 		return build(rel, e.pyYapycExt())
@@ -360,6 +364,15 @@ type PyccTool struct {
 }
 
 func (e *EmitContext) pyccTool() PyccTool {
+	if !e.pyccOk {
+		e.pyccEmission = e.newPyccTool()
+		e.pyccOk = true
+	}
+
+	return e.pyccEmission
+}
+
+func (e *EmitContext) newPyccTool() PyccTool {
 	ctx := e.ctx
 	na := ctx.na
 
@@ -607,7 +620,7 @@ func (e *EmitContext) packPyProtoResEntries(entries []PyGenResEntry) ([]NodeRef,
 		RawCompile: CompileSpec{
 			ForceCxx: true,
 			ObjSuf:   pyProtoAuxObjSuf(e.d),
-			CFlags:   e.ctx.na.anyList(argX.any(), argC.any()),
+			CFlags:   resourceCxxFlags,
 		},
 	})
 }
