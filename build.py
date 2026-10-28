@@ -3,6 +3,7 @@ import base64
 import functools
 import hashlib
 import json
+import os
 import re
 import uuid
 from pathlib import Path
@@ -108,6 +109,29 @@ dense_maps = command(
 
 GENERATED_SERVICE_TOKENS = ["$(B)/generated/go/service_tokens_gen.go"]
 
+# Scanners written as re2c grammars (*.re, Go code with /*!re2c*/ blocks)
+# are generated into the overlay by re2go.
+RE2GO_SOURCES = build.glob("$(S)/*.re")
+GENERATED_RE2GO = [
+    "$(B)/generated/go/" + os.path.basename(source)[: -len(".re")] + "_gen.go"
+    for source in RE2GO_SOURCES
+]
+
+re2go_commands = []
+
+for re2go_source, re2go_output in zip(RE2GO_SOURCES, GENERATED_RE2GO):
+    re2go_commands.append(command(
+        name="re2go_" + os.path.basename(re2go_source)[: -len(".re")],
+        inputs=[re2go_source],
+        outputs=[re2go_output],
+        cmd=[
+            mkdir("$(B)/generated/go"),
+            ["re2go", "--no-generation-date", "--no-version", re2go_source, "-o", re2go_output],
+        ],
+        descr="RE",
+        color="magenta",
+    ))
+
 # The macro audit's table of service keywords is mined from the Go sources at
 # build time (it used to be mined at run time from sources embedded in ay).
 service_tokens = command(
@@ -135,6 +159,7 @@ GO_INPUTS = [
     *GO_MODULE_FILES,
     *GENERATED_DENSE_MAPS,
     *GENERATED_SERVICE_TOKENS,
+    *GENERATED_RE2GO,
     "$(S)/dev/go_overlay.py",
     "$(S)/.gitignore",
     "$(S)/LICENSE",
@@ -150,6 +175,7 @@ GO_OVERLAY_CMD = [
     "--source-root", "$(S)",
     *GENERATED_DENSE_MAPS,
     *GENERATED_SERVICE_TOKENS,
+    *GENERATED_RE2GO,
 ]
 
 GO_ENV = {
@@ -184,7 +210,7 @@ def go_binary(name, output, cmd):
         name=name,
         inputs=GO_INPUTS,
         outputs=[output],
-        deps=[dense_maps, service_tokens],
+        deps=[dense_maps, service_tokens, *re2go_commands],
         cmd=cmd,
         cwd="$(S)",
         env=GO_ENV,
@@ -221,7 +247,7 @@ if coverage_enabled:
     GO_STAGED_MODULE = "$(B)/go-src"
     ay_test_cmd = [
         mkdir(GO_STAGED_MODULE),
-        ["cp", "--", *GO_MODULE_FILES, *GENERATED_DENSE_MAPS, GO_STAGED_MODULE + "/"],
+        ["cp", "--", *GO_MODULE_FILES, *GENERATED_DENSE_MAPS, *GENERATED_SERVICE_TOKENS, *GENERATED_RE2GO, GO_STAGED_MODULE + "/"],
         ["go", "build", "-C", GO_STAGED_MODULE, "-cover", "-covermode=atomic",
          *go_build_tail("$(B)/bin/ay-test", TEST_TAGS)],
     ]
@@ -236,7 +262,7 @@ vet = command(
     name="vet",
     inputs=GO_INPUTS,
     outputs=[vet_stamp],
-    deps=[dense_maps, service_tokens],
+    deps=[dense_maps, service_tokens, *re2go_commands],
     cmd=[
         GO_OVERLAY_CMD,
         ["go", "vet", "-overlay=" + GO_OVERLAY, "."],

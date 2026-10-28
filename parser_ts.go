@@ -2,29 +2,14 @@ package main
 
 import (
 	"path"
-	"regexp"
 	"strings"
 )
-
-var tsImportCall = regexp.MustCompile(`^(?:\s|/\*[\s\S]*?\*/)*\((?:\s|/\*[\s\S]*?\*/)*("[^"]*"|'[^']*')(?:\s|/\*[\s\S]*?\*/)*\)`)
-
-var tsImportDecl = func() *regexp.Regexp {
-	space := `(?:\s|/\*[\s\S]*?\*/)`
-	ident := `[a-zA-Z$_][a-zA-Z0-9$_]*`
-	alias := space + `+as` + space + `+` + ident
-	spec := ident + `(?:` + alias + `)?`
-	sep := space + `*,` + space + `*`
-	named := `\{` + space + `*(?:` + spec + `(?:` + sep + spec + `)*(?:` + sep + `)?)?` + space + `*\}`
-	namespace := `\*(?:` + alias + `)?`
-	clause := `(?:` + ident + `(?:` + sep + `(?:` + namespace + `|` + named + `))?|` + namespace + `|` + named + `)`
-
-	return regexp.MustCompile(`^` + space + `+(?:(?:type` + space + `+)?` + clause + space + `+from` + space + `+)?("[^"]*"|'[^']*')`)
-}()
 
 type TSIncludeDirectiveParser struct{}
 
 func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[IncludeDirective]) ParsedIncludeSet {
-	s := string(concatChunks(data))
+	b := concatChunksSentinel(data)
+	s := bytesString(b[:len(b)-1])
 	block := a.alloc(directiveBlockHint)
 	k := 0
 	ignore := false
@@ -75,28 +60,28 @@ func (TSIncludeDirectiveParser) parse(_ string, data [][]byte, a *BumpAllocator[
 				continue
 			}
 
-			var match []int
+			end, qs, qe, ok := 0, 0, 0, false
 
 			if word != "export" {
-				match = tsImportCall.FindStringSubmatchIndex(s[i:])
+				end, qs, qe, ok = tsImportCallMatch(b, i)
 			}
 
-			if match == nil && word != "require" {
-				match = tsImportDecl.FindStringSubmatchIndex(s[i:])
+			if !ok && word != "require" {
+				end, qs, qe, ok = tsImportDeclMatch(b, i)
 			}
 
-			if match == nil {
+			if !ok {
 				continue
 			}
 
-			target := s[i+match[2]+1 : i+match[3]-1]
+			target := s[qs+1 : qe-1]
 
 			if !ignore && (strings.HasPrefix(target, "./") || strings.HasPrefix(target, "../") || target == "." || target == "..") {
 				k = addDirective(block, k, IncludeDirective{kind: includeTypeScript, target: internStr(target).any()})
 			}
 
 			ignore = false
-			i += match[1]
+			i = end
 		default:
 			i++
 		}
@@ -139,4 +124,20 @@ func (pm *IncludeParserManager) resolveTSImport(dir, target string) VFS {
 	}
 
 	return 0
+}
+
+func concatChunksSentinel(chunks [][]byte) []byte {
+	n := 1
+
+	for _, chunk := range chunks {
+		n += len(chunk)
+	}
+
+	data := make([]byte, 0, n)
+
+	for _, chunk := range chunks {
+		data = append(data, chunk...)
+	}
+
+	return append(data, 0)
 }
