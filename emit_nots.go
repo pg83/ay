@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+var notsGlobMemo = newIntValueMap[*globMatcher](0)
+
 const notsBuilderDir = "devtools/frontend_build_platform/nots/builder"
 
 type NotsModule struct {
@@ -917,9 +919,9 @@ func (e *EmitContext) notsTestInputs(target string) []VFS {
 			}
 
 			local := strings.TrimPrefix(rel, base+"/")
-			isTest := testPattern.MatchString(local)
+			isTest := testPattern.match(local)
 
-			if isTest || mockPattern.MatchString(local) {
+			if isTest || mockPattern.match(local) {
 				files = append(files, source(rel))
 				hasTests = hasTests || isTest
 			}
@@ -973,7 +975,13 @@ func (e *EmitContext) emitNotsTouch(output VFS, refs []NodeRef, inputs []VFS, kv
 	})
 }
 
-func notsGlob(pattern string) *regexp.Regexp {
+func notsGlob(pattern string) *globMatcher {
+	id := mix64(uint64(internStr(pattern)) + 1)
+
+	if matcher := notsGlobMemo.get(id); matcher != nil {
+		return *matcher
+	}
+
 	var b strings.Builder
 	b.WriteString("^")
 
@@ -1003,7 +1011,11 @@ func notsGlob(pattern string) *regexp.Regexp {
 
 	b.WriteString("$")
 
-	return regexp.MustCompile(b.String())
+	matcher := newGlobMatcher(b.String())
+
+	notsGlobMemo.put(id, matcher)
+
+	return matcher
 }
 
 func notsAllSourceFiles(fs FS, dir string) []VFS {

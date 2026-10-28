@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -5442,7 +5441,7 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 
 	prefix := v.Args[0].string()
 	pattern := v.Args[1].string()
-	matcher := regexp.MustCompile("^(?:" + globSegmentRegex(pattern, true) + ")$")
+	matcher := newGlobMatcher("^(?:" + globSegmentRegex(pattern, true) + ")$")
 
 	var dirs, excludes []string
 
@@ -5528,7 +5527,7 @@ func applyDeclareInDirs(fs FS, modulePath string, v UnknownStmt, env Environment
 
 			dirRel, name := splitDirName(rel)
 
-			if matcher.MatchString(name) && name != "ya.make" && name != "a.yaml" && !excluded(dirRel, name) {
+			if matcher.match(name) && name != "ya.make" && name != "a.yaml" && !excluded(dirRel, name) {
 				files = append(files, filePrefix(dirRel)+name)
 			}
 

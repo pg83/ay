@@ -2,7 +2,6 @@ package main
 
 import (
 	"path"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -19,30 +18,7 @@ type javaGlobPartKind uint8
 type javaGlobPart struct {
 	kind javaGlobPartKind
 	data string
-	re   *regexp.Regexp
-}
-
-func javaGlobSegmentToRegex(b *strings.Builder, segment string, single bool) {
-	for i := 0; i < len(segment); i++ {
-		switch ch := segment[i]; ch {
-		case '*':
-			if single {
-				b.WriteString(".*")
-			} else {
-				b.WriteString("[^/]*")
-			}
-		case '?':
-			if single {
-				b.WriteString(".")
-			} else {
-				b.WriteString("[^/]")
-			}
-		case '.':
-			b.WriteString(`\.`)
-		default:
-			b.WriteByte(ch)
-		}
-	}
+	re   *globMatcher
 }
 
 func parseJavaGlob(pattern string) []javaGlobPart {
@@ -68,14 +44,7 @@ func parseJavaGlob(pattern string) []javaGlobPart {
 			parts = append(parts, javaGlobPart{kind: javaGlobRecursive})
 		case strings.ContainsAny(p, "*?"):
 			flush()
-
-			var b strings.Builder
-
-			b.WriteByte('^')
-			javaGlobSegmentToRegex(&b, p, true)
-			b.WriteByte('$')
-
-			parts = append(parts, javaGlobPart{kind: javaGlobPattern, re: regexp.MustCompile(b.String())})
+			parts = append(parts, javaGlobPart{kind: javaGlobPattern, re: globSegmentMatcher(p)})
 		default:
 			fixed = append(fixed, p)
 		}
@@ -87,41 +56,7 @@ func parseJavaGlob(pattern string) []javaGlobPart {
 }
 
 type javaExcludeMatcher struct {
-	res []*regexp.Regexp
-}
-
-func javaExcludeRegex(pattern string) *regexp.Regexp {
-	var b strings.Builder
-
-	b.WriteByte('^')
-
-	needSep := false
-
-	for _, seg := range strings.Split(pattern, "/") {
-		if seg == "" {
-			continue
-		}
-
-		if needSep {
-			b.WriteByte('/')
-		}
-
-		needSep = true
-
-		if seg == "**" {
-			b.WriteString("(.*/)?")
-
-			needSep = false
-
-			continue
-		}
-
-		javaGlobSegmentToRegex(&b, seg, false)
-	}
-
-	b.WriteByte('$')
-
-	return regexp.MustCompile(b.String())
+	res []*globMatcher
 }
 
 func newJavaExcludeMatcher(moddir string, patterns []string) *javaExcludeMatcher {
@@ -134,7 +69,7 @@ func newJavaExcludeMatcher(moddir string, patterns []string) *javaExcludeMatcher
 			p = moddir + "/" + p
 		}
 
-		m.res = append(m.res, javaExcludeRegex(p))
+		m.res = append(m.res, globExcludeMatcher(p))
 	}
 
 	return m
@@ -142,7 +77,7 @@ func newJavaExcludeMatcher(moddir string, patterns []string) *javaExcludeMatcher
 
 func (m *javaExcludeMatcher) excluded(rel string, isDir bool) bool {
 	for _, re := range m.res {
-		if re.MatchString(rel) || isDir && re.MatchString(rel+"/") {
+		if re.match(rel) || isDir && re.match(rel+"/") {
 			return true
 		}
 	}
@@ -224,7 +159,7 @@ func (ctx *GenCtx) javaGlob(moddir, pattern string, ex *javaExcludeMatcher) []st
 						continue
 					}
 
-					if part.kind == javaGlobPattern && !part.re.MatchString(javaPathBasename(e.path)) {
+					if part.kind == javaGlobPattern && !part.re.match(javaPathBasename(e.path)) {
 						continue
 					}
 

@@ -8,9 +8,30 @@ import (
 )
 
 type PeerPolicyPattern struct {
-	prefix string
-	re     *regexp.Regexp
-	exact  bool
+	prefix   string
+	contains string
+	re       *regexp.Regexp
+	exact    bool
+	suffix   bool
+}
+
+func peerPolicyLiteral(value string, exact bool) (string, bool) {
+	var b strings.Builder
+
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+
+		if c == '\\' && i+1 < len(value) && strings.IndexByte("-_./", value[i+1]) >= 0 {
+			i++
+			c = value[i]
+		} else if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '/' || c == '-' || c == '_' || c == '.' && !exact) {
+			return "", false
+		}
+
+		b.WriteByte(c)
+	}
+
+	return b.String(), true
 }
 
 func peerPolicyPattern(pattern string) PeerPolicyPattern {
@@ -20,30 +41,38 @@ func peerPolicyPattern(pattern string) PeerPolicyPattern {
 		return PeerPolicyPattern{}
 	}
 
-	literal := true
 	value, exact := strings.CutSuffix(pattern, "$")
 
-	for _, c := range value {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("/-_", c) || c == '.' && !exact) {
-			literal = false
+	if literal, ok := peerPolicyLiteral(value, exact); ok {
+		return PeerPolicyPattern{prefix: literal, exact: exact}
+	}
 
-			break
+	if head, ok := strings.CutSuffix(value, ".*"); ok {
+		if literal, ok := peerPolicyLiteral(head, false); ok {
+			return PeerPolicyPattern{prefix: literal}
 		}
 	}
 
-	if literal {
-		return PeerPolicyPattern{prefix: value, exact: exact}
+	if tail, ok := strings.CutPrefix(value, ".*"); ok {
+		if literal, ok := peerPolicyLiteral(tail, exact); ok && literal != "" {
+			return PeerPolicyPattern{contains: literal, suffix: exact}
+		}
 	}
 
-	re := throw2(regexp.Compile("^" + pattern))
+	re := regexp.MustCompile("^" + pattern)
 	prefix, _ := re.LiteralPrefix()
 
 	return PeerPolicyPattern{prefix: prefix, re: re}
 }
 
 func (p PeerPolicyPattern) matches(dir string) bool {
-	if p.exact {
+	switch {
+	case p.exact:
 		return dir == p.prefix
+	case p.suffix:
+		return strings.HasSuffix(dir, p.contains)
+	case p.contains != "":
+		return strings.Contains(dir, p.contains)
 	}
 
 	return strings.HasPrefix(dir, p.prefix) && (p.re == nil || p.re.MatchString(dir))

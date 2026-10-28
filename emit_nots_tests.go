@@ -64,7 +64,7 @@ func notsFilterFiles(files []VFS, dir string, excludes []string) []VFS {
 	for _, exclude := range excludes {
 		pattern := notsGlob(exclude)
 
-		out = slices.DeleteFunc(out, func(file VFS) bool { return pattern.MatchString(strings.TrimPrefix(file.relString(), dir+"/")) })
+		out = slices.DeleteFunc(out, func(file VFS) bool { return pattern.match(strings.TrimPrefix(file.relString(), dir+"/")) })
 	}
 
 	return out
@@ -392,7 +392,7 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 		for _, file := range candidates {
 			rel := strings.TrimPrefix(file.relString(), dir+"/")
 
-			if pattern.MatchString(rel) {
+			if pattern.match(rel) {
 				files = append(files, rel)
 				related = append(related, file.string())
 			}
