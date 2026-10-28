@@ -28,6 +28,8 @@ func (e *EmitContext) prepareNodeInputs(node *Node) {
 	plan.scanner = e.scanner
 	plan.deferred = plan.deferred || len(plan.modulePeers) > 0
 
+	e.checkDeclaredInputs(plan)
+
 	plan.eachRoot(func(root VFS) {
 		closure, cached := e.scanner.closure(root)
 
@@ -49,6 +51,26 @@ func (e *EmitContext) prepareNodeInputs(node *Node) {
 
 	if !plan.deferred {
 		plan.scanner = nil
+	}
+}
+
+func (e *EmitContext) checkDeclaredInputs(plan *NodeInputs) {
+	missing := func(v VFS) {
+		if v.isSource() && !e.ctx.fs.isFilePathClean(v.relString()) {
+			e.ctx.onWarn(Warn{Kind: WarnMissingSource, Message: "source file not found: " + v.string()})
+		}
+	}
+
+	if plan.root != 0 {
+		missing(plan.root)
+
+		return
+	}
+
+	for _, chunk := range plan.roots {
+		for _, v := range chunk {
+			missing(v)
+		}
 	}
 }
 

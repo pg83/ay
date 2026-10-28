@@ -14,6 +14,7 @@ var warnKindStr = [...]string{
 	WarnTestDependency:    "test-dependency",
 	WarnToolConf:          "tool-conf",
 	WarnDupSrc:            "dup-src",
+	WarnMissingSource:     "missing-source",
 	WarnMisconfiguration:  "misconfiguration",
 }
 
@@ -43,6 +44,8 @@ const (
 	WarnToolConf
 
 	WarnDupSrc
+
+	WarnMissingSource
 
 	WarnMisconfiguration
 )

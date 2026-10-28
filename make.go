@@ -107,7 +107,7 @@ func warnHandler(keepGoing, verbose bool, emit func(line string)) func(Warn) {
 	seen := map[string]bool{}
 
 	return func(w Warn) {
-		fatalable := w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource ||
+		fatalable := w.Kind == WarnMissingSource || w.Kind == WarnMissingInclude || w.Kind == WarnUnsupportedSource ||
 			w.Kind == WarnUnknownMacro || w.Kind == WarnBadMacroArgs ||
 			w.Kind == WarnMissingProducer || w.Kind == WarnModuleFailed || w.Kind == WarnToolConf || w.Kind == WarnDupSrc ||
 			w.Kind == WarnMisconfiguration
