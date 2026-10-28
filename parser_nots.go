@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/url"
 	"path"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,11 +12,7 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-var (
-	notsVersionRange   = regexp.MustCompile(`^\s*(>=|=)?\s*(\d+\.\d+\.\d+)\s*$`)
-	notsPackageKey     = regexp.MustCompile(`^(?:@[0-9A-Za-z._~!'()*-]+/)?[0-9A-Za-z_~!'()*-][0-9A-Za-z._~!'()*-]*$`)
-	notsPackageVersion = regexp.MustCompile(`^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
-)
+var ()
 
 const (
 	notsERMPath   = "devtools/frontend_build_platform/erm/erm-packages.json"
@@ -174,19 +169,20 @@ func (pm *IncludeParserManager) notsVersion(tool, constraint string) string {
 		return version
 	}
 
-	m := notsVersionRange.FindStringSubmatch(constraint)
+	os, oe, vs, ve, ok := notsVersionRangeMatch(constraint)
 
-	if m == nil {
+	if !ok {
 		throwFmt("nots: unsupported version range %q", constraint)
 	}
 
-	want := notsVersionParts(m[2])
+	operator := constraint[os:oe]
+	want := notsVersionParts(constraint[vs:ve])
 	selected := ""
 
 	for version := range notsObject(resource["versions"]) {
 		cmp := slices.Compare(notsVersionParts(version), want)
 
-		if cmp != 0 && !(m[1] == ">=" && cmp > 0) {
+		if cmp != 0 && !(operator == ">=" && cmp > 0) {
 			continue
 		}
 
@@ -241,7 +237,7 @@ func (pm *IncludeParserManager) notsLockfile(rel string) *NotsLockfile {
 			id, _, _ := strings.Cut(strings.TrimLeft(name, "/"), "(")
 			pos := strings.LastIndexByte(id, '@')
 
-			if pos <= 0 || !notsPackageKey.MatchString(id[:pos]) || !notsPackageVersion.MatchString(id[pos+1:]) {
+			if pos <= 0 || !notsPackageKeyValid(id[:pos]) || !notsPackageVersionValid(id[pos+1:]) {
 				throwFmt("%s: cannot infer tarball URL from %q", rel, name)
 			}
 

@@ -2,13 +2,11 @@ package main
 
 import (
 	"path"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 )
-
-var notsScriptNameSeparator = regexp.MustCompile(`[^\p{L}\p{N}]+`)
 
 func (e *EmitContext) notsTestGlobals(globals []ResourceDecl) []ResourceDecl {
 	for _, check := range e.d.styleChecks {
@@ -197,7 +195,7 @@ func (e *EmitContext) notsCheckSuites(target string, globals []ResourceDecl, fil
 			kind, ciType = "lint", "style"
 		}
 
-		name := "ts_" + kind + "_" + notsScriptNameSeparator.ReplaceAllString(check.Script, "_")
+		name := "ts_" + kind + "_" + notsScriptName(check.Script)
 		s := e.notsSuite(name, globals, false)
 
 		s.deps = slices.Clone(deps)
@@ -444,4 +442,29 @@ func (e *EmitContext) notsLegacyStyles(dir string, state *NotsPrepared, head []s
 	}
 
 	return suites
+}
+
+func notsScriptName(script string) string {
+	var b strings.Builder
+
+	separator := false
+
+	for _, r := range script {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			if separator {
+				b.WriteByte('_')
+			}
+
+			b.WriteRune(r)
+			separator = false
+		} else {
+			separator = true
+		}
+	}
+
+	if separator {
+		b.WriteByte('_')
+	}
+
+	return b.String()
 }

@@ -2,11 +2,8 @@ package main
 
 import (
 	"path"
-	"regexp"
 	"strings"
 )
-
-var javaRunProgramRefRe = regexp.MustCompile(`\$\{[^${}]+\}|\$[A-Za-z_][A-Za-z0-9_]*`)
 
 var javaKotlinAllowedVersions = []string{
 	"kotlin-allopen", "kotlin-allopen-compiler-plugin", "kotlin-annotation-processing", "kotlin-compiler",
@@ -1300,7 +1297,7 @@ func javaRunProgramRawArgs(raw []string, env Environment, rawVars map[string]str
 	var expand func(string) string
 
 	expand = func(value string) string {
-		return javaRunProgramRefRe.ReplaceAllStringFunc(value, func(reference string) string {
+		return replaceJavaRunProgramRefs(value, func(reference string) string {
 			name := strings.Trim(reference, "${}")
 
 			if javaPathVars[name] {
@@ -1374,4 +1371,27 @@ func javaDropUnresolved(args []string) []string {
 	}
 
 	return out
+}
+
+func replaceJavaRunProgramRefs(value string, fn func(string) string) string {
+	rs, re, ok := javaRunProgramRefNext(value, 0)
+
+	if !ok {
+		return value
+	}
+
+	var b strings.Builder
+
+	from := 0
+
+	for ok {
+		b.WriteString(value[from:rs])
+		b.WriteString(fn(value[rs:re]))
+		from = re
+		rs, re, ok = javaRunProgramRefNext(value, from)
+	}
+
+	b.WriteString(value[from:])
+
+	return b.String()
 }

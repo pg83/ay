@@ -1,16 +1,11 @@
 package main
 
 import (
-	"regexp"
 	"sort"
 	"strings"
 )
 
-var (
-	cfgVarRefRe      = regexp.MustCompile(`@([A-Z_][A-Z0-9_]*)@`)
-	cfgCmakeDefineRe = regexp.MustCompile(`#cmakedefine(?:01)?[ \t]+([A-Z_][A-Z0-9_]*)`)
-	cfKV             = KV{P: pkCF, PC: pcYellow}
-)
+var cfKV = KV{P: pkCF, PC: pcYellow}
 
 func (e *EmitContext) emitExplicitCF(cf *ConfigureFileStmt) {
 	ctx, instance := e.ctx, e.instance
@@ -104,9 +99,16 @@ func buildCFGVars(fs FS, rel string, setVars, defaultVars map[STR]STR, buildType
 	referenced := map[string]bool{}
 	data := concatChunks(fs.read(rel))
 
-	for _, re := range []*regexp.Regexp{cfgVarRefRe, cfgCmakeDefineRe} {
-		for _, m := range re.FindAllSubmatch(data, -1) {
-			referenced[string(m[1])] = true
+	for _, next := range [...]func([]byte, int) (int, int, int, bool){cfgVarRefNext, cfgCmakeDefineNext} {
+		for pos := 0; ; {
+			ns, ne, end, ok := next(data, pos)
+
+			if !ok {
+				break
+			}
+
+			referenced[string(data[ns:ne])] = true
+			pos = end
 		}
 	}
 
