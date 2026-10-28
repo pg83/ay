@@ -113,14 +113,14 @@ func warnHandler(keepGoing, verbose bool, emit func(line string)) func(Warn) {
 			w.Kind == WarnMisconfiguration
 
 		if fatalable && !keepGoing {
-			throwFmt("%s: %s", w.Kind, w.Message)
+			throwFmt("%s: %s", w.Kind, w.text())
 		}
 
 		if !(fatalable || w.Kind == WarnMissingAddincl || w.Kind == WarnPlugin || w.Kind == WarnTestDependency || verbose) {
 			return
 		}
 
-		line := fmt.Sprintf("\x1b[33m%s: %s\x1b[0m", w.Kind, w.Message)
+		line := fmt.Sprintf("\x1b[33m%s: %s\x1b[0m", w.Kind, w.text())
 
 		if seen[line] {
 			return

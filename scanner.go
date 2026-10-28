@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 )
@@ -99,16 +98,11 @@ type IncludeDiagnostic struct {
 }
 
 func (d IncludeDiagnostic) warn() Warn {
-	open, close := `<`, `>`
-
-	if d.Directive.kind == includeQuoted || d.Directive.kind == includeMacro {
-		open, close = `"`, `"`
-	}
-
 	return Warn{
-		Kind: WarnMissingInclude,
-		Message: fmt.Sprintf("%s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
-			d.Includer.string(), open, d.Directive.target.string(), close),
+		Kind:     WarnMissingInclude,
+		includer: d.Includer,
+		target:   d.Directive.target,
+		quoted:   d.Directive.kind == includeQuoted || d.Directive.kind == includeMacro,
 	}
 }
 

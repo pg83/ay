@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 var warnKindStr = [...]string{
 	WarnSysIncl:           "sysincl",
 	WarnMissingInclude:    "missing-include",
@@ -51,8 +53,26 @@ const (
 )
 
 type Warn struct {
-	Kind    WarnKind
-	Message string
+	Kind     WarnKind
+	Message  string
+	includer VFS
+	target   ANY
+	quoted   bool
+}
+
+func (w Warn) text() string {
+	if w.includer == 0 {
+		return w.Message
+	}
+
+	open, close := `<`, `>`
+
+	if w.quoted {
+		open, close = `"`, `"`
+	}
+
+	return fmt.Sprintf("%s: unresolved include %s%s%s — not found in source, build, search path, or sysincl",
+		w.includer.string(), open, w.target.string(), close)
 }
 
 type moduleWarnings struct {
